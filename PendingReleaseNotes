@@ -1,35 +1,5 @@
 >= 12.0.0
 ------
-* The original librados rados_objects_list_open (C) and objects_begin
-  (C++) object listing API, deprecated in Hammer, has finally been
-  removed.  Users of this interface must update their software to use
-  either the rados_nobjects_list_open (C) and nobjects_begin (C++) API or
-  the new rados_object_list_begin (C) and object_list_begin (C++) API
-  before updating the client-side librados library to Luminous.
-
-  Object enumeration (via any API) with the latest librados version
-  and pre-Hammer OSDs is no longer supported.  Note that no in-tree
-  Ceph services rely on object enumeration via the deprecated APIs, so
-  only external librados users might be affected.
-
-  The newest (and recommended) rados_object_list_begin (C) and
-  object_list_begin (C++) API is only usable on clusters with the
-  SORTBITWISE flag enabled (Jewel and later).  (Note that this flag is
-  required to be set before upgrading beyond Jewel.)
-* CephFS clients without the 'p' flag in their authentication capability
-  string will no longer be able to set quotas or any layout fields.  This
-  flag previously only restricted modification of the pool and namespace
-  fields in layouts.
-* CephFS directory fragmentation (large directory support) is enabled
-  by default on new filesystems.  To enable it on existing filesystems
-  use "ceph fs set <fs_name> allow_dirfrags".
-* CephFS will generate a health warning if you have fewer standby daemons
-  than it thinks you wanted.  By default this will be 1 if you ever had
-  a standby, and 0 if you did not.  You can customize this using
-  ``ceph fs set <fs> standby_count_wanted <number>``.  Setting it
-  to zero will effectively disable the health check.
-* The "ceph mds tell ..." command has been removed.  It is superceded
-  by "ceph tell mds.<id> ..."
 * The "journaler allow split entries" config setting has been removed.
 
 12.0.0
@@ -133,3 +103,37 @@
   before::
 
      ceph osd rm osd.123
+
+12.0.2
+------
+
+* The original librados rados_objects_list_open (C) and objects_begin
+  (C++) object listing API, deprecated in Hammer, has finally been
+  removed.  Users of this interface must update their software to use
+  either the rados_nobjects_list_open (C) and nobjects_begin (C++) API or
+  the new rados_object_list_begin (C) and object_list_begin (C++) API
+  before updating the client-side librados library to Luminous.
+
+  Object enumeration (via any API) with the latest librados version
+  and pre-Hammer OSDs is no longer supported.  Note that no in-tree
+  Ceph services rely on object enumeration via the deprecated APIs, so
+  only external librados users might be affected.
+
+  The newest (and recommended) rados_object_list_begin (C) and
+  object_list_begin (C++) API is only usable on clusters with the
+  SORTBITWISE flag enabled (Jewel and later).  (Note that this flag is
+  required to be set before upgrading beyond Jewel.)
+* CephFS clients without the 'p' flag in their authentication capability
+  string will no longer be able to set quotas or any layout fields.  This
+  flag previously only restricted modification of the pool and namespace
+  fields in layouts.
+* CephFS directory fragmentation (large directory support) is enabled
+  by default on new filesystems.  To enable it on existing filesystems
+  use "ceph fs set <fs_name> allow_dirfrags".
+* CephFS will generate a health warning if you have fewer standby daemons
+  than it thinks you wanted.  By default this will be 1 if you ever had
+  a standby, and 0 if you did not.  You can customize this using
+  ``ceph fs set <fs> standby_count_wanted <number>``.  Setting it
+  to zero will effectively disable the health check.
+* The "ceph mds tell ..." command has been removed.  It is superceded
+  by "ceph tell mds.<id> ..."
