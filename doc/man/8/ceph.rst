@@ -1265,6 +1265,13 @@ Usage::
 
 	ceph tell <name (type.id)> <args> [<args>...]
 
+
+List all available commands.
+
+Usage::
+
+ 	ceph tell <name (type.id)> help
+
 version
 -------
 
