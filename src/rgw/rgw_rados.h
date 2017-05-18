@@ -3483,6 +3483,8 @@ public:
 			  RGWQuotaInfo& bucket_quota, uint64_t num_shards,
 			  bool& need_resharding);
 
+  int add_bucket_to_reshard(const RGWBucketInfo& bucket_info);
+
   uint64_t instance_id();
   const string& zone_id() {
     return get_zone_params().get_id();
