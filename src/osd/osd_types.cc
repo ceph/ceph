@@ -306,6 +306,8 @@ void objectstore_perf_stat_t::generate_test_instances(std::list<objectstore_perf
 // -- osd_stat_t --
 void osd_stat_t::dump(Formatter *f) const
 {
+  f->dump_unsigned("up_from", up_from);
+  f->dump_unsigned("seq", seq);
   f->dump_unsigned("kb", kb);
   f->dump_unsigned("kb_used", kb_used);
   f->dump_unsigned("kb_avail", kb_avail);
@@ -325,7 +327,7 @@ void osd_stat_t::dump(Formatter *f) const
 
 void osd_stat_t::encode(bufferlist &bl) const
 {
-  ENCODE_START(5, 2, bl);
+  ENCODE_START(6, 2, bl);
   ::encode(kb, bl);
   ::encode(kb_used, bl);
   ::encode(kb_avail, bl);
@@ -335,12 +337,14 @@ void osd_stat_t::encode(bufferlist &bl) const
   ::encode((uint32_t)0, bl);
   ::encode(op_queue_age_hist, bl);
   ::encode(os_perf_stat, bl);
+  ::encode(up_from, bl);
+  ::encode(seq, bl);
   ENCODE_FINISH(bl);
 }
 
 void osd_stat_t::decode(bufferlist::iterator &bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(5, 2, 2, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(6, 2, 2, bl);
   ::decode(kb, bl);
   ::decode(kb_used, bl);
   ::decode(kb_avail, bl);
@@ -353,6 +357,10 @@ void osd_stat_t::decode(bufferlist::iterator &bl)
     ::decode(op_queue_age_hist, bl);
   if (struct_v >= 4)
     ::decode(os_perf_stat, bl);
+  if (struct_v >= 6) {
+    ::decode(up_from, bl);
+    ::decode(seq, bl);
+  }
   DECODE_FINISH(bl);
 }
 
