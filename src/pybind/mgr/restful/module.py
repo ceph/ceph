@@ -233,7 +233,7 @@ class Module(MgrModule):
         # Create the HTTPS werkzeug server serving pecan app
         self.server = make_server(
             host='0.0.0.0',
-            port=8002,
+            port=8003,
             app=make_app('restful.api.Root'),
             ssl_context=(cert, pkey),
         )
