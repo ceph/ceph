@@ -106,7 +106,6 @@ protected:
     int remove(cls_rgw_reshard_entry& entry);
     int list(string& marker, uint32_t max, list<cls_rgw_reshard_entry>& entries, bool& is_truncated);
     int clear_bucket_resharding(const string& bucket_instance_oid, cls_rgw_reshard_entry& entry);
-    int block_while_resharding(RGWRados::BucketShard *bs, string *new_bucket_id);
 
     int reshard_bucket(Formatter *formatter,
 		       int num_shards,
@@ -123,6 +122,29 @@ protected:
     bool going_down();
     void start_processor();
     void stop_processor();
+};
+
+
+class RGWReshardWait {
+  RGWRados *store;
+  Mutex lock{"RGWReshardWait::lock"};
+  Cond cond;
+
+  bool going_down{false};
+
+  int do_wait();
+public:
+  RGWReshardWait(RGWRados *_store) : store(_store) {}
+  ~RGWReshardWait() {
+    assert(going_down);
+  }
+  int block_while_resharding(RGWRados::BucketShard *bs, string *new_bucket_id);
+
+  void stop() {
+    Mutex::Locker l(lock);
+    going_down = true;
+    cond.SignalAll();
+  }
 };
 
 #endif
