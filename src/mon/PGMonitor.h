@@ -39,6 +39,9 @@ class PGMonitor : public PaxosService {
   PGMap pg_map;
   std::unique_ptr<PGStatService> pgservice;
 
+  bool do_delete = false;   ///< propose deleting pgmap data
+  bool did_delete = false;  ///< we already deleted pgmap data
+
 private:
   PGMap::Incremental pending_inc;
 
