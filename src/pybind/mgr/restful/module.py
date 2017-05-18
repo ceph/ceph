@@ -17,6 +17,7 @@ from pecan import jsonify, make_app
 from pecan.rest import RestController
 from werkzeug.serving import make_server, make_ssl_devcert
 
+from hooks import ErrorHook
 from mgr_module import MgrModule, CommandResult
 
 # Global instance to share
@@ -234,7 +235,10 @@ class Module(MgrModule):
         self.server = make_server(
             host='0.0.0.0',
             port=8003,
-            app=make_app('restful.api.Root'),
+            app=make_app(
+                root='restful.api.Root',
+                hooks = lambda: [ErrorHook()],
+            ),
             ssl_context=(cert, pkey),
         )
 

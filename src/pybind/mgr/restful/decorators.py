@@ -34,19 +34,6 @@ def auth(f):
     return decorated
 
 
-# Helper function to catch and log the exceptions
-def catch(f):
-    @wraps(f)
-    def decorated(*args, **kwargs):
-        try:
-            return f(*args, **kwargs)
-        except:
-            module.instance.log.error(str(traceback.format_exc()))
-            response.status = 500
-            return {'message': str(traceback.format_exc()).split('\n')}
-    return decorated
-
-
 # Helper function to lock the function
 def lock(f):
     @wraps(f)

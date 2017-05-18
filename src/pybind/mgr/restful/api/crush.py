@@ -4,12 +4,11 @@ from pecan.rest import RestController
 from restful import common, module
 from collections import defaultdict
 
-from restful.decorators import auth, catch
+from restful.decorators import auth
 
 
 class CrushRuleset(RestController):
     @expose(template='json')
-    @catch
     @auth
     def get(self, **kwargs):
         """
@@ -29,7 +28,6 @@ class CrushRuleset(RestController):
 
 class CrushRule(RestController):
     @expose(template='json')
-    @catch
     @auth
     def get(self, **kwargs):
         """

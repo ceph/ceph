@@ -2,7 +2,7 @@ from pecan import expose, request, response
 from pecan.rest import RestController
 
 from restful import module
-from restful.decorators import auth, catch, lock
+from restful.decorators import auth, lock
 
 
 class RequestId(RestController):
@@ -11,7 +11,6 @@ class RequestId(RestController):
 
 
     @expose(template='json')
-    @catch
     @auth
     def get(self, **kwargs):
         """
@@ -31,7 +30,6 @@ class RequestId(RestController):
 
 
     @expose(template='json')
-    @catch
     @auth
     @lock
     def delete(self, **kwargs):
@@ -50,7 +48,6 @@ class RequestId(RestController):
 
 class Request(RestController):
     @expose(template='json')
-    @catch
     @auth
     def get(self, **kwargs):
         """
@@ -64,7 +61,6 @@ class Request(RestController):
 
 
     @expose(template='json')
-    @catch
     @auth
     @lock
     def delete(self, **kwargs):
@@ -86,7 +82,6 @@ class Request(RestController):
 
 
     @expose(template='json')
-    @catch
     @auth
     def post(self, **kwargs):
         """
