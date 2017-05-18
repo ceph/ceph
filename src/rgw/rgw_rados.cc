@@ -1,15 +1,27 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
-#include "include/compat.h"
 #include <errno.h>
 #include <stdlib.h>
+
+#include <map>
+#include <list>
+#include <vector>
+#include <atomic>
+#include <cerrno>
+#include <string>
+#include <cstdlib>
+#include <iostream>
+
 #include <sys/types.h>
-#include <boost/algorithm/string.hpp>
 
 #include <boost/format.hpp>
 #include <boost/optional.hpp>
+#include <boost/algorithm/string.hpp>
 #include <boost/utility/in_place_factory.hpp>
+
+#include "include/compat.h"
+#include "include/random.h"
 
 #include "common/ceph_json.h"
 #include "common/utf8.h"
@@ -60,6 +72,8 @@ using namespace librados;
 #include <list>
 #include <map>
 #include "include/random.h"
+
+#include "auth/Crypto.h" // get_random_bytes()
 
 #include "rgw_log.h"
 
@@ -1719,7 +1733,7 @@ rgw_pool fix_zone_pool_dup(set<rgw_pool> pools,
     return pool;
   } else {
     while(true) {
-      pool =  prefix + "_" + std::to_string(std::rand()) + suffix;
+      pool= prefix + "_" + std::to_string(ceph::util::generate_random_number(RAND_MAX)) + suffix;
       if (pools.find(pool) == pools.end()) {
 	return pool;
       }

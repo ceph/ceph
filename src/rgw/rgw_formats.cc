@@ -16,6 +16,8 @@
 
 #include "common/escape.h"
 #include "common/Formatter.h"
+#include "common/backport_std.h"
+
 #include "rgw/rgw_common.h"
 #include "rgw/rgw_formats.h"
 #include "rgw/rgw_rest.h"
