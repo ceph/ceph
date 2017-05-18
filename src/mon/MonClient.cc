@@ -29,6 +29,9 @@
 
 #include "messages/MMonSubscribe.h"
 #include "messages/MMonSubscribeAck.h"
+
+#include "include/random.h"
+
 #include "common/errno.h"
 #include "common/LogClient.h"
 
@@ -48,6 +51,7 @@
 MonClient::MonClient(CephContext *cct_) :
   Dispatcher(cct_),
   messenger(NULL),
+  cur_con(NULL),
   monc_lock("MonClient::monc_lock"),
   timer(cct_, monc_lock),
   finisher(cct_),

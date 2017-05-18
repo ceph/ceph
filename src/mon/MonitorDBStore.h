@@ -25,13 +25,15 @@
 #include "include/buffer.h"
 #include "kv/KeyValueDB.h"
 
-#include "include/assert.h"
+#include "include/random.h"
+
 #include "common/Formatter.h"
 #include "common/Finisher.h"
 #include "common/errno.h"
 #include "common/debug.h"
 #include "common/safe_io.h"
 
+#include "include/assert.h"
 #define dout_context g_ceph_context
 
 class MonitorDBStore
