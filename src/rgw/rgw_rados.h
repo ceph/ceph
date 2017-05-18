@@ -39,6 +39,7 @@ class RGWRESTConn;
 struct RGWZoneGroup;
 struct RGWZoneParams;
 class RGWReshard;
+class RGWReshardWait;
 
 /* flags for put_obj_meta() */
 #define PUT_OBJ_CREATE      0x01
@@ -2456,6 +2457,7 @@ public:
   RGWDataChangesLog *data_log;
 
   RGWReshard *reshard;
+  std::shared_ptr<RGWReshardWait> reshard_wait;
 
   virtual ~RGWRados() = default;
 
@@ -3252,6 +3254,7 @@ public:
   int obj_operate(const RGWBucketInfo& bucket_info, const rgw_obj& obj, librados::ObjectReadOperation *op);
 
   int guard_reshard(BucketShard *bs, const rgw_obj& obj_instance, std::function<int(BucketShard *)> call);
+  int block_while_resharding(RGWRados::BucketShard *bs, string *new_bucket_id);
 
   void bucket_index_guard_olh_op(RGWObjState& olh_state, librados::ObjectOperation& op);
   int olh_init_modification(const RGWBucketInfo& bucket_info, RGWObjState& state, const rgw_obj& olh_obj, string *op_tag);
