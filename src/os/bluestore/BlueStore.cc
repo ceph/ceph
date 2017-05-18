@@ -3297,6 +3297,16 @@ BlueStore::BlueStore(CephContext *cct, const string& path)
     Finisher *f = new Finisher(cct, oss.str(), "finisher");
     finishers.push_back(f);
   }
+
+  if (cct->_conf->osd_async_queue_transaction) {
+    assert(cct->_conf->osd_async_queue_transaction_worker);
+    m_tran_worker_num = cct->_conf->osd_async_queue_transaction_worker;
+  }
+
+  for (int i=0; i < m_tran_worker_num; ++i) {
+    TransactionWorker* worker = new BlueStoreTransactionWorker(cct, this);
+    tran_workers.push_back(worker);
+  }
 }
 
 BlueStore::BlueStore(CephContext *cct,
@@ -3327,10 +3337,25 @@ BlueStore::BlueStore(CephContext *cct,
     Finisher *f = new Finisher(cct, oss.str(), "finisher");
     finishers.push_back(f);
   }
+
+  if (cct->_conf->osd_async_queue_transaction) {
+    assert(cct->_conf->osd_async_queue_transaction_worker);
+    m_tran_worker_num = cct->_conf->osd_async_queue_transaction_worker;
+  }
+
+  for (int i=0; i < m_tran_worker_num; ++i) {
+    TransactionWorker* worker = new BlueStoreTransactionWorker(cct, this);
+    tran_workers.push_back(worker);
+  }
 }
 
 BlueStore::~BlueStore()
 {
+  for (auto w : tran_workers) {
+    delete w;
+  }
+  tran_workers.clear();
+
   for (auto f : finishers) {
     delete f;
   }
@@ -5008,6 +5033,10 @@ int BlueStore::_mount(bool kv_only)
       goto out_coll;
   }
 
+  for (auto w : tran_workers) {
+    w->start();
+  }
+
   for (auto f : finishers) {
     f->start();
   }
@@ -5024,6 +5053,10 @@ int BlueStore::_mount(bool kv_only)
   return 0;
 
  out_stop:
+ for (auto w : tran_workers) {
+   w->wait_for_empty();
+   w->stop();
+ }
   _kv_stop();
   for (auto f : finishers) {
     f->wait_for_empty();
@@ -5055,6 +5088,11 @@ int BlueStore::umount()
   _osr_unregister_all();
 
   mempool_thread.shutdown();
+
+  for (auto w : tran_workers) {
+    w->wait_for_empty();
+    w->stop();
+  }
 
   dout(20) << __func__ << " stopping kv thread" << dendl;
   _kv_stop();
@@ -8357,13 +8395,12 @@ int BlueStore::_deferred_replay()
 // ---------------------------
 // transactions
 
-int BlueStore::queue_transactions(
-    Sequencer *posr,
-    vector<Transaction>& tls,
-    TrackedOpRef op,
-    ThreadPool::TPHandle *handle)
-{
-  FUNCTRACE();
+// async queue transaction
+int BlueStore::queue_transactions_async(
+	    Sequencer *posr,
+	    vector<Transaction>& tls,
+	    TrackedOpRef op,
+	    ThreadPool::TPHandle *handle) {
   Context *onreadable;
   Context *ondisk;
   Context *onreadable_sync;
@@ -8372,13 +8409,13 @@ int BlueStore::queue_transactions(
 
   if (cct->_conf->objectstore_blackhole) {
     dout(0) << __func__ << " objectstore_blackhole = TRUE, dropping transaction"
-	    << dendl;
+            << dendl;
     delete ondisk;
     delete onreadable;
     delete onreadable_sync;
     return 0;
   }
-  utime_t start = ceph_clock_now();
+
   // set up the sequencer
   OpSequencer *osr;
   assert(posr);
@@ -8391,6 +8428,65 @@ int BlueStore::queue_transactions(
     posr->p = osr;
     dout(10) << __func__ << " new " << osr << " " << *osr << dendl;
   }
+
+  unsigned n = posr->shard_hint.hash_to_shard(m_tran_worker_num);
+
+
+  assert((int)n < m_tran_worker_num);
+  struct ObjectStoreTransaction* tran = new ObjectStoreTransaction((void *)osr, tls, onreadable,
+					ondisk, onreadable_sync);
+  tran_workers[n]->queue(tran);
+
+  return 0;
+}
+
+// transaction worker fun
+void * BlueStore::BlueStoreTransactionWorker::worker_thread_entry() {
+    tran_lock.Lock();
+
+    while (!worker_stop) {
+        while (!worker_queue.empty()) {
+            vector<ObjectStoreTransaction*> ls;
+            ls.swap(worker_queue);
+            worker_running = true;
+            tran_lock.Unlock();
+
+            //Now process the transactions
+            for (vector<ObjectStoreTransaction*>::iterator p = ls.begin();
+                 p != ls.end(); ++p) {
+                assert(*p);
+                store->process_transaction((*p)->osr, (*p)->tls, (*p)->onreadable,
+                                    (*p)->ondisk, (*p)->onreadable_sync, NULL);
+                delete(*p);
+            }
+
+            ls.clear();
+
+            tran_lock.Lock();
+            worker_running = false;
+        }
+
+        if (unlikely(worker_empty_wait))
+            tran_empty_cond.Signal();
+        if (worker_stop)
+            break;
+
+        tran_cond.Wait(tran_lock);
+    }
+
+    // if exit, signal the thread waiting in stop()
+    tran_empty_cond.Signal();
+
+    worker_stop = false;
+    tran_lock.Unlock();
+    return 0;
+}
+
+void BlueStore::process_transaction(void* posr, vector<Transaction>& tls,
+	Context *onreadable, Context *ondisk, Context *onreadable_sync,
+	ThreadPool::TPHandle *handle) {
+
+  OpSequencer* osr = (OpSequencer*)posr;
 
   // prepare
   TransContext *txc = _txc_create(osr);
@@ -8440,8 +8536,45 @@ int BlueStore::queue_transactions(
   // execute (start)
   _txc_state_proc(txc);
 
-  logger->tinc(l_bluestore_submit_lat, ceph_clock_now() - start);
   logger->tinc(l_bluestore_throttle_lat, tend - tstart);
+}
+
+int BlueStore::queue_transactions(
+    Sequencer *posr,
+    vector<Transaction>& tls,
+    TrackedOpRef op,
+    ThreadPool::TPHandle *handle)
+{
+  FUNCTRACE();
+  Context *onreadable;
+  Context *ondisk;
+  Context *onreadable_sync;
+  ObjectStore::Transaction::collect_contexts(
+    tls, &onreadable, &ondisk, &onreadable_sync);
+
+  if (cct->_conf->objectstore_blackhole) {
+    dout(0) << __func__ << " objectstore_blackhole = TRUE, dropping transaction"
+	    << dendl;
+    delete ondisk;
+    delete onreadable;
+    delete onreadable_sync;
+    return 0;
+  }
+  // set up the sequencer
+  OpSequencer *osr;
+  assert(posr);
+  if (posr->p) {
+    osr = static_cast<OpSequencer *>(posr->p.get());
+    dout(10) << __func__ << " existing " << osr << " " << *osr << dendl;
+  } else {
+    osr = new OpSequencer(cct, this);
+    osr->parent = posr;
+    posr->p = osr;
+    dout(10) << __func__ << " new " << osr << " " << *osr << dendl;
+  }
+
+  process_transaction((void *)osr, tls, onreadable, ondisk, onreadable_sync, handle);
+
   return 0;
 }
 
