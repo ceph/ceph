@@ -23,8 +23,6 @@ int do_list(librbd::RBD &rbd, librados::IoCtx& io_ctx, bool lflag,
                    Formatter *f) {
   std::vector<std::string> names;
   int r = rbd.list(io_ctx, names);
-  if (r == -ENOENT)
-    r = 0;
   if (r < 0)
     return r;
 
