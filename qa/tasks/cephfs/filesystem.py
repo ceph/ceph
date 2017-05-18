@@ -456,8 +456,12 @@ class Filesystem(MDSCluster):
                                          data_pool_name, pgs_per_fs_pool.__str__())
         self.mon_manager.raw_cluster_cmd('fs', 'new',
                                          self.name, self.metadata_pool_name, data_pool_name)
-        # Turn off spurious standby count warnings from modifying max_mds in tests.
-        self.mon_manager.raw_cluster_cmd('fs', 'set', self.name, 'standby_count_wanted', '0')
+        try:
+            # Turn off spurious standby count warnings from modifying max_mds in tests.
+            self.mon_manager.raw_cluster_cmd('fs', 'set', self.name, 'standby_count_wanted', '0')
+        except CommandFailedError:
+            # jewel does not support this option yet
+            pass
 
         self.getinfo(refresh = True)
 
