@@ -1140,15 +1140,29 @@ public:
     const std::string& first,    ///< [in] first key in range
     const std::string& last      ///< [in] first key past range, range is [first,last)
     ) {
-      using ceph::encode;
-	Op* _op = _get_next_op();
-	_op->op = OP_OMAP_RMKEYRANGE;
-	_op->cid = _get_coll_id(cid);
-	_op->oid = _get_object_id(oid);
-	encode(first, data_bl);
-	encode(last, data_bl);
-	data.ops++;
-    }
+    using ceph::encode;
+    Op* _op = _get_next_op();
+    _op->op = OP_OMAP_RMKEYRANGE;
+    _op->cid = _get_coll_id(cid);
+    _op->oid = _get_object_id(oid);
+    encode(first, data_bl);
+    encode(last, data_bl);
+    data.ops++;
+  }
+
+  /// Remove key range from oid omap
+  void omap_rmkeyrange(
+    const coll_t cid,       ///< [in] Collection containing oid
+    const ghobject_t &oid,  ///< [in] Object from which to remove the omap keys
+    const bufferlist &keys_bl ///< [in] range of keys to clear
+    ) {
+    Op* _op = _get_next_op();
+    _op->op = OP_OMAP_RMKEYRANGE;
+    _op->cid = _get_coll_id(cid);
+    _op->oid = _get_object_id(oid);
+    data_bl.append(keys_bl);
+    data.ops++;
+  }
 
   /// Set omap header
   void omap_setheader(
