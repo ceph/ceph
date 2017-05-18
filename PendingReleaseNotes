@@ -1,5 +1,7 @@
 >= 12.0.0
 ------
+* RGW now supports S3 server-side encryption (SSE-C, SSE-KMS) on x86_64
+  (platforms other than x86_64 do not support this feature)
 * The original librados rados_objects_list_open (C) and objects_begin
   (C++) object listing API, deprecated in Hammer, has finally been
   removed.  Users of this interface must update their software to use
