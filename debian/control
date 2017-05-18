@@ -51,6 +51,7 @@ Build-Depends: bc,
                pkg-config,
                python (>= 2.7),
                python-all-dev,
+               python-cherrypy3,
                python-nose,
 	       python-prettytable,
 	       python-setuptools,
@@ -162,6 +163,7 @@ Architecture: linux-any
 Depends: ceph-base (= ${binary:Version}),
          ${misc:Depends},
          ${python:Depends},
+	 python-cherrypy3,
          ${shlibs:Depends}
 Replaces: ceph (<< 0.93-417)
 Breaks: ceph (<< 0.93-417)
