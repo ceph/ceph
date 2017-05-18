@@ -775,6 +775,18 @@ public:
   }
 
   /**
+   * Put integer value @v into the key @p key.
+   *
+   * @param t A transaction to which we will add this put operation
+   * @param key The key to which we will add the value
+   * @param v An integer
+   */
+  void put_value(MonitorDBStore::TransactionRef t,
+		 const string& key, version_t v) {
+    t->put(get_service_name(), key, v);
+  }
+
+  /**
    * @}
    */
 
