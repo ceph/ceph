@@ -1148,6 +1148,35 @@ class CephManager:
                   "-w"],
             wait=False, stdout=StringIO(), stdin=run.PIPE)
 
+    def flush_pg_stats(self, osds, wait_for_mon=3*5):
+        """
+        Flush pg stats from a list of OSD ids, ensuring they are reflected
+        all the way to the monitor.  Luminous and later only.
+
+        :param osds: list of OSDs to flush
+        :param wait_for_mon: wait for mon to be synced with mgr. 0 to disable
+                             it. (3 * mon_mgr_digest_period, by default)
+        """
+        seq = {osd: self.raw_cluster_cmd('tell', 'osd.%d' % osd, 'flush_pg_stats')
+               for osd in osds}
+        if not wait_for_mon:
+            return
+        for osd, need in seq.iteritems():
+            got = 0
+            while wait_for_mon > 0:
+                got = self.raw_cluster_cmd('osd', 'last-stat-seq', 'osd.%d' % osd)
+                self.log('need seq {need} got {got} for osd.{osd}'.format(
+                    need=need, got=got, osd=osd))
+                if got >= need:
+                    break
+                A_WHILE = 1
+                time.sleep(A_WHILE)
+                wait_for_mon -= A_WHILE
+            else:
+                raise Exception('timed out waiting for mon to be updated with '
+                                'osd.{osd}: {got} < {need}'.
+                                format(osd=osd, got=got, need=need))
+
     def do_rados(self, remote, cmd, check_status=True):
         """
         Execute a remote rados command.
