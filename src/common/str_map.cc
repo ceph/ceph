@@ -14,8 +14,6 @@
  * 
  */
 
-#include <errno.h>
-
 #include "include/str_map.h"
 #include "include/str_list.h"
 
