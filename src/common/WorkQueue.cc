@@ -12,17 +12,9 @@
  * 
  */
 
-#include "include/compat.h"
-
-#include <sstream>
-
-#include "include/types.h"
-#include "include/utime.h"
-#include "common/errno.h"
 #include "WorkQueue.h"
-
-#include "common/config.h"
-#include "common/HeartbeatMap.h"
+#include "include/compat.h"
+#include "common/errno.h"
 
 #define dout_subsys ceph_subsys_tp
 #undef dout_prefix

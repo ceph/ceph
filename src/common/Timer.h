@@ -17,9 +17,6 @@
 
 #include "Cond.h"
 #include "Mutex.h"
-#include "RWLock.h"
-
-#include <map>
 
 class CephContext;
 class Context;

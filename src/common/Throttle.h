@@ -4,15 +4,8 @@
 #ifndef CEPH_THROTTLE_H
 #define CEPH_THROTTLE_H
 
-#include "Mutex.h"
 #include "Cond.h"
-#include <list>
-#include <map>
-#include <iostream>
 #include <condition_variable>
-#include <chrono>
-#include "include/atomic.h"
-#include "include/Context.h"
 
 class CephContext;
 class PerfCounters;

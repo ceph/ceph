@@ -14,9 +14,7 @@
 
 #include "strtol.h"
 
-#include <cerrno>
 #include <climits>
-#include <cstdlib>
 #include <limits>
 #include <sstream>
 
