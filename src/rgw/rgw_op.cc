@@ -3118,6 +3118,16 @@ void RGWPutObj::execute()
       ldout(s->cct, 20) << "check_quota() returned ret=" << op_ret << dendl;
       goto done;
     }
+    bool need_resharding = false;
+    op_ret = store->check_bucket_shards(s->bucket_owner.get_id(), s->bucket,
+					bucket_quota, s->bucket_info.num_shards, need_resharding);
+    if (op_ret < 0) {
+      ldout(s->cct, 20) << "check_bucket_shards() returned ret=" << op_ret << dendl;
+      goto done;
+    } else if (need_resharding) {
+      /* Add to resharding queue */
+      ldout(s->cct, 20) << s->bucket << " needs resharding " << dendl;
+    }
   }
 
   if (supplied_etag) {
