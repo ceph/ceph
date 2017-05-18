@@ -51,13 +51,9 @@ class Request(RestController):
     @auth
     def get(self, **kwargs):
         """
-        List all the available requests and their state
+        List all the available requests
         """
-        states = {}
-        for _request in module.instance.requests:
-            states[_request.id] = _request.get_state()
-
-        return states
+        return module.instance.requests
 
 
     @expose(template='json')
