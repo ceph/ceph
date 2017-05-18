@@ -239,6 +239,12 @@ public:
   void diff(const md_config_t *other,
             map<string,pair<string,string> > *diff, set<string> *unknown);
 
+  /// obtain a diff between config values and another md_config_t 
+  /// values for a specific setting. 
+  void diff(const md_config_t *other,
+            map<string,pair<string,string>> *diff, set<string> *unknown, 
+            const string& setting);
+
   /// print/log warnings/errors from parsing the config
   void complain_about_parse_errors(CephContext *cct);
 
@@ -270,6 +276,11 @@ private:
 
   bool expand_meta(std::string &val,
 		   std::ostream *oss) const;
+
+  void diff_helper(const md_config_t* other,
+                   map<string, pair<string, string>>* diff,
+                   set<string>* unknown, const string& setting = string{});
+
 public:  // for global_init
   bool early_expand_meta(std::string &val,
 			 std::ostream *oss) const {
