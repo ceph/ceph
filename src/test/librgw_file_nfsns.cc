@@ -706,19 +706,40 @@ TEST(LibRGW, READ_DIRS1)
 
 TEST(LibRGW, READF_SETUP1)
 {
-  struct stat st;
   if (do_dirs1) {
-    if (do_create) {
-      if ((! stat(readf_out_name.c_str(), &st)) &&
-	  (S_ISREG(st.st_mode)) &&
-	  (st.st_size == 6291456))
-	return;
-      ofstream of;
-      of.open(readf_out_name, ios::out|ios::app|ios::binary);
-      for (int ix1 = 0; ix1 < 6; ++ix1) {
-	for (int ix2 = 0; ix2 < 1024*1024; ++ix2) {
-	  of << ix1;
-	}
+    if (do_readf) {
+      obj_rec fobj{readf_name, nullptr, dirs1_b.fh, nullptr};
+
+      (void) rgw_lookup(fs, dirs1_b.fh, fobj.name.c_str(), &fobj.fh,
+                        RGW_LOOKUP_FLAG_NONE);
+      if (! fobj.fh) {
+        if (do_create) {
+          int rc = rgw_lookup(fs, fobj.parent_fh, fobj.name.c_str(), &fobj.fh,
+                              RGW_LOOKUP_FLAG_CREATE);
+          ASSERT_NE(fobj.fh, nullptr);
+          fobj.sync();
+
+          rc = rgw_open(fs, fobj.fh, 0 /* posix flags */, 0 /* flags */);
+          ASSERT_EQ(rc, 0);
+          ASSERT_TRUE(fobj.rgw_fh->is_open());
+
+          uint64_t offset = 0;
+          uint64_t length;
+          size_t nwritten = 0;
+          for (int ix1 = 0; ix1 < 6; ++ix1) {
+            for (int ix2 = 0; ix2 < 1024*1024; ++ix2) {
+              length = sizeof(ix1);
+              rc = rgw_write(fs, fobj.fh, offset, length, &nwritten, (void *)&ix1,
+                             RGW_WRITE_FLAG_NONE);
+              ASSERT_EQ(rc, 0);
+              ASSERT_EQ(nwritten, length);
+              offset += length;
+            }
+          }
+          rc = rgw_close(fs, fobj.fh, RGW_CLOSE_FLAG_NONE);
+          ASSERT_EQ(rc, 0);
+          rgw_fh_rele(fs, fobj.fh, 0 /* flags */);
+        }
       }
     }
   }
