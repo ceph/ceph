@@ -1295,7 +1295,7 @@ public:
 			 const OSDMap& osdmap,
 			 Formatter *f,
 			 stringstream *ss,
-			 bufferlist *odata) override {
+			 bufferlist *odata) const override {
     return process_pg_map_command(prefix, cmdmap, pgmap, osdmap, f, ss, odata);
   }
 
@@ -1308,7 +1308,7 @@ public:
 			      mempool::osdmap::map<int32_t, uint32_t>* new_weights,
 			      std::stringstream *ss,
 			      std::string *out_str,
-			      Formatter *f) override {
+			      Formatter *f) const override {
     return reweight::by_utilization(osd_map, pgmap, oload, max_changef,
 				    max_osds, by_pg, pools, no_increasing,
 				    new_weights, ss, out_str, f);

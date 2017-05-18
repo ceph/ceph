@@ -93,7 +93,7 @@ public:
 				 const OSDMap& osdmap,
 				 Formatter *f,
 				 stringstream *ss,
-				 bufferlist *odata) {
+				 bufferlist *odata) const {
     ceph_abort();
   }
 
@@ -106,7 +106,7 @@ public:
 			      mempool::osdmap::map<int32_t, uint32_t>* new_weights,
 			      std::stringstream *ss,
 			      std::string *out_str,
-				      Formatter *f) {
+				      Formatter *f) const {
     ceph_abort();
   }
 };
