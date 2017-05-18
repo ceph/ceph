@@ -2855,15 +2855,6 @@ int main(int argc, const char **argv)
       ++i;
     }
   }
-  if (tenant.empty()) {
-    tenant = user_id.tenant;
-  } else {
-    if (user_id.empty()) {
-      cerr << "ERROR: --tenant is set, but there's no user ID" << std::endl;
-      return EINVAL;
-    }
-    user_id.tenant = tenant;
-  }
 
   if (args.empty()) {
     return usage();
@@ -2903,6 +2894,23 @@ int main(int argc, const char **argv)
       }
     }
 
+    if (tenant.empty()) {
+      tenant = user_id.tenant;
+    } else {
+      if (user_id.empty() && opt_cmd != OPT_ROLE_CREATE
+                          && opt_cmd != OPT_ROLE_DELETE
+                          && opt_cmd != OPT_ROLE_GET
+                          && opt_cmd != OPT_ROLE_MODIFY
+                          && opt_cmd != OPT_ROLE_LIST
+                          && opt_cmd != OPT_ROLE_POLICY_PUT
+                          && opt_cmd != OPT_ROLE_POLICY_LIST
+                          && opt_cmd != OPT_ROLE_POLICY_GET
+                          && opt_cmd != OPT_ROLE_POLICY_DELETE) {
+        cerr << "ERROR: --tenant is set, but there's no user ID" << std::endl;
+        return EINVAL;
+      }
+      user_id.tenant = tenant;
+    }
     /* check key parameter conflict */
     if ((!access_key.empty()) && gen_access_key) {
         cerr << "ERROR: key parameter conflict, --access-key & --gen-access-key" << std::endl;
@@ -4634,10 +4642,13 @@ int main(int argc, const char **argv)
     return 0;
   case OPT_ROLE_CREATE:
     {
-      string uid;
-      user_id.to_str(uid);
-      if (role_name.empty() || assume_role_doc.empty() || uid.empty()) {
-        cerr << "ERROR: one of role name or assume role policy document or uid is empty" << std::endl;
+      if (role_name.empty()) {
+        cerr << "ERROR: role name is empty" << std::endl;
+        return -EINVAL;
+      }
+
+      if (assume_role_doc.empty()) {
+        cerr << "ERROR: assume role policy document is empty" << std::endl;
         return -EINVAL;
       }
       /* The following two calls will be replaced by read_decode_json or something
@@ -4654,7 +4665,7 @@ int main(int argc, const char **argv)
         return -EINVAL;
       }
       string trust_policy = bl.to_str();
-      RGWRole role(g_ceph_context, store, role_name, path, trust_policy, uid);
+      RGWRole role(g_ceph_context, store, role_name, path, trust_policy, tenant);
       ret = role.create(true);
       if (ret < 0) {
         return -ret;
@@ -4668,7 +4679,7 @@ int main(int argc, const char **argv)
         cerr << "ERROR: empty role name" << std::endl;
         return -EINVAL;
       }
-      RGWRole role(g_ceph_context, store, role_name);
+      RGWRole role(g_ceph_context, store, role_name, tenant);
       ret = role.delete_obj();
       if (ret < 0) {
         return -ret;
@@ -4682,7 +4693,7 @@ int main(int argc, const char **argv)
         cerr << "ERROR: empty role name" << std::endl;
         return -EINVAL;
       }
-      RGWRole role(g_ceph_context, store, role_name);
+      RGWRole role(g_ceph_context, store, role_name, tenant);
       ret = role.get();
       if (ret < 0) {
         return -ret;
@@ -4692,10 +4703,16 @@ int main(int argc, const char **argv)
     }
   case OPT_ROLE_MODIFY:
     {
-      if (role_name.empty() || assume_role_doc.empty()) {
-        cerr << "ERROR: one of role name or assume role policy document is empty" << std::endl;
+      if (role_name.empty()) {
+        cerr << "ERROR: role name is empty" << std::endl;
         return -EINVAL;
       }
+
+      if (assume_role_doc.empty()) {
+        cerr << "ERROR: assume role policy document is empty" << std::endl;
+        return -EINVAL;
+      }
+
       /* The following two calls will be replaced by read_decode_json or something
          similar when the code for AWS Policies is in place */
       bufferlist bl;
@@ -4710,7 +4727,7 @@ int main(int argc, const char **argv)
         return -EINVAL;
       }
       string trust_policy = bl.to_str();
-      RGWRole role(g_ceph_context, store, role_name);
+      RGWRole role(g_ceph_context, store, role_name, tenant);
       ret = role.get();
       if (ret < 0) {
         return -ret;
@@ -4726,7 +4743,7 @@ int main(int argc, const char **argv)
   case OPT_ROLE_LIST:
     {
       vector<RGWRole> result;
-      ret = RGWRole::get_roles_by_path_prefix(store, g_ceph_context, path_prefix, result);
+      ret = RGWRole::get_roles_by_path_prefix(store, g_ceph_context, path_prefix, tenant, result);
       if (ret < 0) {
         return -ret;
       }
@@ -4735,10 +4752,21 @@ int main(int argc, const char **argv)
     }
   case OPT_ROLE_POLICY_PUT:
     {
-      if (role_name.empty() || policy_name.empty() || perm_policy_doc.empty()) {
-        cerr << "One of role name, policy name or permission policy document is empty" << std::endl;
+      if (role_name.empty()) {
+        cerr << "role name is empty" << std::endl;
         return -EINVAL;
       }
+
+      if (policy_name.empty()) {
+        cerr << "policy name is empty" << std::endl;
+        return -EINVAL;
+      }
+
+      if (perm_policy_doc.empty()) {
+        cerr << "permission policy document is empty" << std::endl;
+        return -EINVAL;
+      }
+
       /* The following two calls will be replaced by read_decode_json or something
          similar, when code for AWS Policies is in place.*/
       bufferlist bl;
@@ -4755,7 +4783,7 @@ int main(int argc, const char **argv)
       string perm_policy;
       perm_policy = bl.c_str();
 
-      RGWRole role(g_ceph_context, store, role_name);
+      RGWRole role(g_ceph_context, store, role_name, tenant);
       ret = role.get();
       if (ret < 0) {
         return -ret;
@@ -4774,7 +4802,7 @@ int main(int argc, const char **argv)
         cerr << "ERROR: Role name is empty" << std::endl;
         return -EINVAL;
       }
-      RGWRole role(g_ceph_context, store, role_name);
+      RGWRole role(g_ceph_context, store, role_name, tenant);
       ret = role.get();
       if (ret < 0) {
         return -ret;
@@ -4785,11 +4813,16 @@ int main(int argc, const char **argv)
     }
   case OPT_ROLE_POLICY_GET:
     {
-      if (role_name.empty() || policy_name.empty()) {
-        cerr << "ERROR: One of role name or policy name is empty" << std::endl;
+      if (role_name.empty()) {
+        cerr << "ERROR: role name is empty" << std::endl;
         return -EINVAL;
       }
-      RGWRole role(g_ceph_context, store, role_name);
+
+      if (policy_name.empty()) {
+        cerr << "ERROR: policy name is empty" << std::endl;
+        return -EINVAL;
+      }
+      RGWRole role(g_ceph_context, store, role_name, tenant);
       int ret = role.get();
       if (ret < 0) {
         return -ret;
@@ -4804,11 +4837,16 @@ int main(int argc, const char **argv)
     }
   case OPT_ROLE_POLICY_DELETE:
     {
-      if (role_name.empty() || policy_name.empty()) {
-        cerr << "ERROR: One of role name or policy name is empty" << std::endl;
+      if (role_name.empty()) {
+        cerr << "ERROR: role name is empty" << std::endl;
         return -EINVAL;
       }
-      RGWRole role(g_ceph_context, store, role_name);
+
+      if (policy_name.empty()) {
+        cerr << "ERROR: policy name is empty" << std::endl;
+        return -EINVAL;
+      }
+      RGWRole role(g_ceph_context, store, role_name, tenant);
       ret = role.get();
       if (ret < 0) {
         return -ret;

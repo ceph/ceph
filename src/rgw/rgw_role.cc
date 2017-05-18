@@ -1,5 +1,6 @@
 #include <errno.h>
 #include <ctime>
+#include <regex>
 
 #include "common/errno.h"
 #include "common/Formatter.h"
@@ -38,7 +39,7 @@ int RGWRole::store_name(bool exclusive)
   RGWNameToId nameToId;
   nameToId.obj_id = id;
 
-  string oid = get_names_oid_prefix() + name;
+  string oid = tenant + get_names_oid_prefix() + name;
 
   bufferlist bl;
   ::encode(nameToId, bl);
@@ -48,7 +49,7 @@ int RGWRole::store_name(bool exclusive)
 
 int RGWRole::store_path(bool exclusive)
 {
-  string oid = get_path_oid_prefix() + path + get_info_oid_prefix() + id;
+  string oid = tenant + get_path_oid_prefix() + path + get_info_oid_prefix() + id;
 
   return rgw_put_system_obj(store, store->get_zone_params().roles_pool, oid,
               NULL, 0, exclusive, NULL, real_time(), NULL);
@@ -58,8 +59,12 @@ int RGWRole::create(bool exclusive)
 {
   int ret;
 
+  if (! validate_input()) {
+    return -EINVAL;
+  }
+
   /* check to see the name is not used */
-  ret = read_id(name, id);
+  ret = read_id(name, tenant, id);
   if (exclusive && ret == 0) {
     ldout(cct, 0) << "ERROR: name " << name << " already in use for role id "
                     << id << dendl;
@@ -78,7 +83,7 @@ int RGWRole::create(bool exclusive)
   id = uuid_str;
 
   //arn
-  arn = role_arn_prefix + uid + ":role" + path + name;
+  arn = role_arn_prefix + tenant + ":role" + path + name;
 
   // Creation time
   real_clock::time_point t = real_clock::now();
@@ -128,7 +133,7 @@ int RGWRole::create(bool exclusive)
                   << id << ": " << cpp_strerror(-info_ret) << dendl;
     }
     //Delete role name that was stored in previous call
-    oid = get_names_oid_prefix() + name;
+    oid = tenant + get_names_oid_prefix() + name;
     int name_ret = rgw_delete_system_obj(store, pool, oid, NULL);
     if (name_ret < 0) {
       ldout(cct, 0) << "ERROR: cleanup of role name from pool: " << pool.name << ": "
@@ -166,7 +171,7 @@ int RGWRole::delete_obj()
   }
 
   // Delete name
-  oid = get_names_oid_prefix() + name;
+  oid = tenant + get_names_oid_prefix() + name;
   ret = rgw_delete_system_obj(store, pool, oid, NULL);
   if (ret < 0) {
     ldout(cct, 0) << "ERROR: deleting role name from pool: " << pool.name << ": "
@@ -174,7 +179,7 @@ int RGWRole::delete_obj()
   }
 
   // Delete path
-  oid = get_path_oid_prefix() + path + get_info_oid_prefix() + id;
+  oid = tenant + get_path_oid_prefix() + path + get_info_oid_prefix() + id;
   ret = rgw_delete_system_obj(store, pool, oid, NULL);
   if (ret < 0) {
     ldout(cct, 0) << "ERROR: deleting role path from pool: " << pool.name << ": "
@@ -191,6 +196,16 @@ int RGWRole::get()
   }
 
   ret = read_info();
+  if (ret < 0) {
+    return ret;
+  }
+
+  return 0;
+}
+
+int RGWRole::get_by_id()
+{
+  int ret = read_info();
   if (ret < 0) {
     return ret;
   }
@@ -272,10 +287,10 @@ void RGWRole::decode_json(JSONObj *obj)
   JSONDecoder::decode_json("assume_role_policy_document", trust_policy, obj);
 }
 
-int RGWRole::read_id(const string& role_name, string& role_id)
+int RGWRole::read_id(const string& role_name, const string& tenant, string& role_id)
 {
   auto& pool = store->get_zone_params().roles_pool;
-  string oid = get_names_oid_prefix() + role_name;
+  string oid = tenant + get_names_oid_prefix() + role_name;
   bufferlist bl;
   RGWObjectCtx obj_ctx(store);
 
@@ -326,7 +341,7 @@ int RGWRole::read_info()
 int RGWRole::read_name()
 {
   auto& pool = store->get_zone_params().roles_pool;
-  string oid = get_names_oid_prefix() + name;
+  string oid = tenant + get_names_oid_prefix() + name;
   bufferlist bl;
   RGWObjectCtx obj_ctx(store);
 
@@ -350,21 +365,61 @@ int RGWRole::read_name()
   return 0;
 }
 
+bool RGWRole::validate_input()
+{
+  if (name.length() > MAX_ROLE_NAME_LEN) {
+    ldout(cct, 0) << "ERROR: Invalid name length " << dendl;
+    return false;
+  }
+
+  if (path.length() > MAX_PATH_NAME_LEN) {
+    ldout(cct, 0) << "ERROR: Invalid path length " << dendl;
+    return false;
+  }
+
+  std::regex regex_name("[A-Za-z0-9:=,.@-]+");
+  if (! std::regex_match(name, regex_name)) {
+    ldout(cct, 0) << "ERROR: Invalid chars in name " << dendl;
+    return false;
+  }
+
+  std::regex regex_path("(/[!-~]+/)|(/)");
+  if (! std::regex_match(path,regex_path)) {
+    ldout(cct, 0) << "ERROR: Invalid chars in path " << dendl;
+    return false;
+  }
+
+  return true;
+}
+
+void RGWRole::extract_name_tenant(const std::string& str)
+{
+  size_t pos = str.find('$');
+  if (pos != std::string::npos) {
+    tenant = str.substr(0, pos);
+    name = str.substr(pos + 1);
+  }
+}
+
 void RGWRole::update_trust_policy(string& trust_policy)
 {
   this->trust_policy = trust_policy;
 }
 
-int RGWRole::get_roles_by_path_prefix(RGWRados *store, CephContext *cct, const string& path_prefix, vector<RGWRole>& roles)
+int RGWRole::get_roles_by_path_prefix(RGWRados *store,
+                                      CephContext *cct,
+                                      const string& path_prefix,
+                                      const string& tenant,
+                                      vector<RGWRole>& roles)
 {
   auto pool = store->get_zone_params().roles_pool;
   string prefix;
 
   // List all roles if path prefix is empty
   if (! path_prefix.empty()) {
-    prefix = role_path_oid_prefix + path_prefix;
+    prefix = tenant + role_path_oid_prefix + path_prefix;
   } else {
-    prefix = role_path_oid_prefix;
+    prefix = tenant + role_path_oid_prefix;
   }
 
   //Get the filtered objects
