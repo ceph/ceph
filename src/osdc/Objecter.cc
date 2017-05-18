@@ -1277,8 +1277,7 @@ void Objecter::handle_osd_map(MOSDMap *m)
     || _osdmap_has_pool_full();
 
   // was/is paused?
-  if (was_pauserd || was_pausewr || pauserd || pausewr ||
-      osdmap->get_epoch() < epoch_barrier) {
+  if (pauserd || pausewr || osdmap->get_epoch() < epoch_barrier) {
     _maybe_request_map();
   }
 
