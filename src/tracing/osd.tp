@@ -749,6 +749,16 @@ TRACEPOINT_EVENT(osd, do_osd_op_pre_omaprmkeys,
     )
 )
 
+TRACEPOINT_EVENT(osd, do_osd_op_pre_omaprmkeyrange,
+    TP_ARGS(
+        const char*, oid,
+        uint64_t, snap),
+    TP_FIELDS(
+        ctf_string(oid, oid)
+        ctf_integer(uint64_t, snap, snap)
+    )
+)
+
 TRACEPOINT_EVENT(osd, do_osd_op_pre_copy_get_classic,
     TP_ARGS(
         const char*, oid,
