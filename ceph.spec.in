@@ -158,6 +158,7 @@ BuildRequires:	keyutils-devel
 BuildRequires:  libopenssl-devel
 BuildRequires:  lsb-release
 BuildRequires:  openldap2-devel
+BuildRequires:	python-CherryPy
 BuildRequires:	python-Cython
 BuildRequires:	python-PrettyTable
 BuildRequires:	python-Sphinx
@@ -174,6 +175,7 @@ BuildRequires:  openldap-devel
 BuildRequires:  openssl-devel
 BuildRequires:  redhat-lsb-core
 BuildRequires:	Cython
+BuildRequires:	python-cherrypy
 BuildRequires:	python-prettytable
 BuildRequires:	python-sphinx
 %endif
@@ -325,6 +327,12 @@ License:        LGPL-2.1 and CC-BY-SA-1.0 and GPL-2.0 and BSL-1.0 and GPL-2.0-wi
 Group:          System/Filesystems
 %endif
 Requires:       ceph-base = %{version}-%{release}
+%if 0%{?fedora} || 0%{?rhel}
+Requires:	python-cherrypy
+%endif
+%if 0%{?suse_version}
+Requires: 	python-CherryPy
+%endif
 
 %description mgr
 ceph-mgr enables python modules that provide services (such as the REST
