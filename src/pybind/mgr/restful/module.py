@@ -155,19 +155,35 @@ class CommandsRequest(object):
         return {
             'id': self.id,
             'running': map(
-                lambda x: (x.command, x.outs, x.outb),
+                lambda x: {
+                    'command': x.command,
+                    'outs': x.outs,
+                    'outb': x.outb,
+                },
                 self.running
             ),
             'finished': map(
-                lambda x: (x.command, x.outs, x.outb),
+                lambda x: {
+                    'command': x.command,
+                    'outs': x.outs,
+                    'outb': x.outb,
+                },
                 self.finished
             ),
             'waiting': map(
-                lambda x: (x.command, x.outs, x.outb),
+                lambda x: {
+                    'command': x.command,
+                    'outs': x.outs,
+                    'outb': x.outb,
+                },
                 self.waiting
             ),
             'failed': map(
-                lambda x: (x.command, x.outs, x.outb),
+                lambda x: {
+                    'command': x.command,
+                    'outs': x.outs,
+                    'outb': x.outb,
+                },
                 self.failed
             ),
             'is_waiting': self.is_waiting(),
