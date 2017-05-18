@@ -3044,8 +3044,8 @@ void RGWPutObj::execute()
       hash.Update((const byte *)data.c_str(), data.length());
     }
 
-    /* save data for producing torrent data */
-    torrent.save_data(data_in);
+    /* update torrrent */
+    torrent.update(data_in);
 
     /* do we need this operation to be synchronous? if we're dealing with an object with immutable
      * head, e.g., multipart object we need to make sure we're the first one writing to this object
@@ -3236,7 +3236,7 @@ void RGWPutObj::execute()
   {
     torrent.init(s, store);
     torrent.set_create_date(mtime);
-    op_ret =  torrent.handle_data();
+    op_ret =  torrent.complete();
     if (0 != op_ret)
     {
       ldout(s->cct, 0) << "ERROR: torrent.handle_data() returned " << op_ret << dendl;
