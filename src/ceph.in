@@ -303,8 +303,8 @@ def do_extended_help(parser, args):
             help_for_sigs(outbuf.decode('utf-8'), partial)
 
     partial = ' '.join(args)
-    if (cluster_handle.state == "connected"):
-        help_for_target(target=('mon', ''), partial=partial)
+    assert(cluster_handle.state == "connected")
+    help_for_target(target=('mon', ''), partial=partial)
     return 0
 
 DONTSPLIT = string.ascii_letters + '{[<>]}'
