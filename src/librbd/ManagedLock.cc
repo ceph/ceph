@@ -256,8 +256,9 @@ void ManagedLock<I>::break_lock(const managed_lock::Locker &locker,
     } else {
       on_finish = new C_Tracked(m_async_op_tracker, on_finish);
       auto req = managed_lock::BreakRequest<I>::create(
-        m_ioctx, m_work_queue, m_oid, locker, m_blacklist_on_break_lock,
-        m_blacklist_expire_seconds, force_break_lock, on_finish);
+        m_ioctx, m_work_queue, m_oid, locker, m_mode == EXCLUSIVE,
+        m_blacklist_on_break_lock, m_blacklist_expire_seconds, force_break_lock,
+        on_finish);
       req->send();
       return;
     }
