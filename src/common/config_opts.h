@@ -1735,3 +1735,5 @@ OPTION(rgw_swift_custom_header, OPT_STR, "") // option to enable swift custom he
 /* resharding tunables */
 OPTION(rgw_reshard_max_jobs, OPT_INT, 1024)
 OPTION(rgw_reshard_bucket_lock_duration, OPT_INT, 120) // duration of lock on bucket obj during resharding
+OPTION(rgw_dynamic_resharding, OPT_BOOL, true)
+OPTION(rgw_max_objs_per_shard, OPT_INT, 100000)

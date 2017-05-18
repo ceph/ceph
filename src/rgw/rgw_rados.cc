@@ -13080,6 +13080,18 @@ int RGWRados::cls_user_remove_bucket(rgw_raw_obj& obj, const cls_user_bucket& bu
   return 0;
 }
 
+int RGWRados::check_bucket_shards(const rgw_user& bucket_owner, rgw_bucket& bucket,
+				  RGWQuotaInfo& bucket_quota, uint64_t num_shards,  bool& need_resharding)
+{
+  if (!cct->_conf->rgw_dynamic_resharding) {
+      return 0;
+  }
+
+  return quota_handler->check_bucket_shards((uint64_t)cct->_conf->rgw_max_objs_per_shard, num_shards,
+					    bucket_owner, bucket, bucket_quota, 1, need_resharding);
+}
+
+
 int RGWRados::check_quota(const rgw_user& bucket_owner, rgw_bucket& bucket,
                           RGWQuotaInfo& user_quota, RGWQuotaInfo& bucket_quota, uint64_t obj_size)
 {

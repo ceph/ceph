@@ -3479,6 +3479,10 @@ public:
   int check_quota(const rgw_user& bucket_owner, rgw_bucket& bucket,
                   RGWQuotaInfo& user_quota, RGWQuotaInfo& bucket_quota, uint64_t obj_size);
 
+  int check_bucket_shards(const rgw_user& bucket_owner, rgw_bucket& bucket,
+			  RGWQuotaInfo& bucket_quota, uint64_t num_shards,
+			  bool& need_resharding);
+
   uint64_t instance_id();
   const string& zone_id() {
     return get_zone_params().get_id();
