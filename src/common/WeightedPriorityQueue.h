@@ -23,9 +23,19 @@
 #include <boost/intrusive/rbtree.hpp>
 #include <boost/intrusive/avl_set.hpp>
 
+#include "OpQueue.h"
+
+#include "include/random.h"
+
+// clobber other asserts:
+#include "include/assert.h"
+
 namespace bi = boost::intrusive;
 
 using ceph::util::generate_random_number;
+
+// Re-include our assert to clobber boost's:
+#include "include/assert.h"
 
 template <typename T, typename S>
 class MapKey
@@ -231,7 +241,7 @@ class WeightedPriorityQueue :  public OpQueue <T, K>
 	  if (queues.size() > 1) {
 	    while (true) {
 	      // Pick a new priority out of the total priority.
-	      unsigned prio = generate_random_number() % total_prio + 1;
+	      unsigned prio = generate_random_number(1, total_prio - 1);
 	      unsigned tp = total_prio - i->key;
 	      // Find the priority coresponding to the picked number.
 	      // Subtract high priorities to low priorities until the picked number

@@ -15,9 +15,22 @@
  * try and bench on a pool you don't have permission to access
  * it will just loop forever.
  */
-#include "include/compat.h"
+
+#include <ctime>
+#include <vector>
+#include <cerrno>
+#include <cstdlib>
+#include <fstream>
+#include <sstream>
+#include <iostream>
+
 #include <pthread.h>
+
+#include "include/compat.h"
+#include "include/random.h"
+
 #include "common/Cond.h"
+
 #include "obj_bencher.h"
 
 const std::string BENCH_LASTRUN_METADATA = "benchmark_last_metadata";
@@ -987,7 +1000,7 @@ int ObjBencher::rand_read_bench(int seconds_to_run, int num_objects, int concurr
       }
     } 
 
-    rand_id = rand() % num_objects;
+    rand_id = ceph::util::generate_random_number(num_objects);
     newName = generate_object_name(rand_id / writes_per_object, pid);
     index[slot] = rand_id;
     release_completion(slot);

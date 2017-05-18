@@ -26,6 +26,7 @@
 
 #include "include/mempool.h"
 #include "include/encoding.h"
+#include "include/random.h"
 
 static const std::size_t bits_per_char = 0x08;    // 8 bits in 1 char(unsigned)
 static const unsigned char bit_mask[bits_per_char] = {
@@ -430,10 +431,14 @@ protected:
     {
       std::copy(predef_salt,predef_salt + predef_salt_count,
 		std::back_inserter(salt_));
-      srand(static_cast<unsigned int>(random_seed_));
+   
+      // Since we have special seeding, we use a unique RNG: 
+      auto rng = ceph::util::random_number_generator<int>(random_seed_); 
+ 
       while (salt_.size() < salt_count_)
       {
-        bloom_type current_salt = static_cast<bloom_type>(rand()) * static_cast<bloom_type>(rand());
+        bloom_type current_salt = static_cast<bloom_type>(rng()) * 
+                                  static_cast<bloom_type>(rng());
         if (0 == current_salt)
 	  continue;
         if (salt_.end() == std::find(salt_.begin(), salt_.end(), current_salt))

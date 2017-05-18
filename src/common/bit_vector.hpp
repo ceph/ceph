@@ -11,10 +11,19 @@
 #ifndef BIT_VECTOR_HPP
 #define BIT_VECTOR_HPP
 
+#include <list>
+#include <cmath>
+#include <vector>
+#include <utility>
+#include <cstdint>
+
+#include <boost/static_assert.hpp>
+
 #include "common/Formatter.h"
+
+#include "include/random.h"
 #include "include/assert.h"
 #include "include/encoding.h"
-#include <utility>
 
 namespace ceph {
 
@@ -503,7 +512,6 @@ void BitVector<_b>::generate_test_instances(std::list<BitVector *> &o) {
 
   b->resize(size);
   for (uint64_t i = 0; i < size; ++i) {
-    // mod appears to be required here:
     (*b)[i] = ceph::util::generate_random_number<uint64_t>() % radix;
   }
   o.push_back(b);

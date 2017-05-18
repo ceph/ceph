@@ -5,13 +5,16 @@
  * Thin C++ wrapper around libuuid.
  */
 
-#include "encoding.h"
 #include <ostream>
 #include <algorithm>
 
 #include <boost/uuid/uuid.hpp>
 #include <boost/uuid/uuid_generators.hpp>
 #include <boost/uuid/uuid_io.hpp>
+
+#include "encoding.h"
+
+#include "include/random.h"
 
 struct uuid_d {
   boost::uuids::uuid uuid;
