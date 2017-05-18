@@ -22,6 +22,7 @@
 class CephContext;
 
 extern utime_t ceph_clock_now(CephContext *cct);
+extern utime_t ceph_clock_now2(CephContext *cct);
 extern time_t ceph_clock_gettime(CephContext *cct);
 
 #endif
