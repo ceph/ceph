@@ -1910,8 +1910,10 @@ void OSD::handle_signal(int signum)
 int OSD::pre_init()
 {
   Mutex::Locker lock(osd_lock);
-  if (is_stopping())
+  if (is_stopping()) {
+    cct->_conf->add_observer(this);
     return 0;
+  }
 
   if (store->test_mount_in_use()) {
     derr << "OSD::pre_init: object store '" << dev_path << "' is "
