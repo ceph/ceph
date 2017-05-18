@@ -2854,8 +2854,8 @@ cdef class SnapIterator(object):
         self.num_snaps = 10
         while True:
             self.snaps = <rbd_snap_info_t*>realloc_chk(self.snaps,
-                                                   self.num_snaps *
-                                                   sizeof(rbd_snap_info_t))
+                                                       self.num_snaps *
+                                                       sizeof(rbd_snap_info_t))
             with nogil:
                 ret = rbd_snap_list(image.image, self.snaps, &self.num_snaps)
             if ret >= 0:
@@ -2905,12 +2905,18 @@ cdef class TrashIterator(object):
     def __init__(self, ioctx):
         self.ioctx = convert_ioctx(ioctx)
         self.num_entries = 1024
-        self.entries = <rbd_trash_image_info_t *>realloc_chk(NULL,
-            sizeof(rbd_trash_image_info_t) * self.num_entries)
-        with nogil:
-            ret = rbd_trash_list(self.ioctx, self.entries, &self.num_entries)
-        if ret < 0:
-            raise make_ex(ret, 'error listing trash entries')
+        self.entries = NULL
+        while True:
+            self.entries = <rbd_trash_image_info_t*>realloc_chk(self.entries,
+                                                                self.num_entries *
+                                                                sizeof(rbd_trash_image_info_t))
+            with nogil:
+                ret = rbd_trash_list(self.ioctx, self.entries, &self.num_entries)
+            if ret >= 0:
+                self.num_entries = ret
+                break
+            elif ret != -errno.ERANGE:
+                raise make_ex(ret, 'error listing trash entries')
 
     __source_string = ['USER', 'MIRRORING']
 
