@@ -7703,6 +7703,32 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
       obs.oi.clear_omap_digest();
       break;
 
+    case CEPH_OSD_OP_OMAPRMKEYRANGE:
+      tracepoint(osd, do_osd_op_pre_omaprmkeyrange, soid.oid.name.c_str(), soid.snap.val);
+      if (!pool.info.supports_omap()) {
+	result = -EOPNOTSUPP;
+	break;
+      }
+      ++ctx->num_write;
+      {
+	if (!obs.exists || oi.is_whiteout()) {
+	  result = -ENOENT;
+	  break;
+	}
+	std::string key_begin, key_end;
+	try {
+	  decode(key_begin, bp);
+	  decode(key_end, bp);
+	} catch (buffer::error& e) {
+	  result = -EINVAL;
+	  goto fail;
+	}
+	t->omap_rmkeyrange(soid, key_begin, key_end);
+	ctx->delta_stats.num_wr++;
+      }
+      obs.oi.clear_omap_digest();
+      break;
+
     case CEPH_OSD_OP_COPY_GET:
       ++ctx->num_read;
       tracepoint(osd, do_osd_op_pre_copy_get, soid.oid.name.c_str(),
