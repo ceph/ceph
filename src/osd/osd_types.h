@@ -3666,8 +3666,6 @@ public:
 
   template <typename missing_type>
   pg_missing_set(const missing_type &m) {
-    for (auto &&i: missing)
-      tracker.changed(i.first);
     missing = m.get_items();
     rmissing = m.get_rmissing();
     for (auto &&i: missing)
