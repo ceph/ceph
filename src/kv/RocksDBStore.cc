@@ -623,11 +623,18 @@ void RocksDBStore::RocksDBTransactionImpl::rm_single_key(const string &prefix,
 
 void RocksDBStore::RocksDBTransactionImpl::rmkeys_by_prefix(const string &prefix)
 {
-  KeyValueDB::Iterator it = db->get_iterator(prefix);
-  for (it->seek_to_first();
-       it->valid();
-       it->next()) {
-    bat.Delete(combine_strings(prefix, it->key()));
+  if (db->enable_rmrange) {
+    string endprefix = prefix;
+    endprefix.push_back('\x01');
+    bat.DeleteRange(combine_strings(prefix, string()),
+		    combine_strings(endprefix, string()));
+  } else {
+    KeyValueDB::Iterator it = db->get_iterator(prefix);
+    for (it->seek_to_first();
+	 it->valid();
+	 it->next()) {
+      bat.Delete(combine_strings(prefix, it->key()));
+    }
   }
 }
 
