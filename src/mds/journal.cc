@@ -329,13 +329,20 @@ void EMetaBlob::add_dir_context(CDir *dir, int mode)
 
     if (mode == TO_AUTH_SUBTREE_ROOT) {
       // subtree root?
-      if (dir->is_subtree_root() &&
-	  !dir->state_test(CDir::STATE_EXPORTBOUND)) {
-	if (dir->is_auth() && !dir->is_ambiguous_auth() ) {
-	  if (dir->state_test(CDir::STATE_AUXSUBTREE) &&
-	      dir->get_dir_auth().first == diri->authority().first) {
-	    // auxiliary subtree. treat it as normal dirfrag
-	    dout(20) << "EMetaBlob::add_dir_context(" << dir << ") auxiliary subtree " << dendl;
+      if (dir->is_subtree_root()) {
+	// match logic in MDCache::create_subtree_map()
+	if (dir->get_dir_auth().first == mds->get_nodeid()) {
+	  mds_authority_t parent_auth = parent ? parent->authority() : CDIR_AUTH_UNDEF;
+	  if (parent_auth.first == dir->get_dir_auth().first) {
+	    if (parent_auth.second == CDIR_AUTH_UNKNOWN &&
+		!dir->is_ambiguous_dir_auth() &&
+		!dir->state_test(CDir::STATE_EXPORTBOUND) &&
+		!dir->state_test(CDir::STATE_AUXSUBTREE) &&
+		!diri->state_test(CInode::STATE_AMBIGUOUSAUTH)) {
+	      dout(0) << "EMetaBlob::add_dir_context unexpected subtree " << *dir << dendl;
+	      assert(0);
+	    }
+	    dout(20) << "EMetaBlob::add_dir_context(" << dir << ") ambiguous or transient subtree " << dendl;
 	  } else {
 	    // it's an auth subtree, we don't need maybe (if any), and we're done.
 	    dout(20) << "EMetaBlob::add_dir_context(" << dir << ") reached unambig auth subtree, don't need " << maybe
@@ -351,7 +358,7 @@ void EMetaBlob::add_dir_context(CDir *dir, int mode)
 	  maybenot = false;
 	}
       }
-      
+
       // was the inode journaled in this blob?
       if (event_seq && diri->last_journaled == event_seq) {
 	dout(20) << "EMetaBlob::add_dir_context(" << dir << ") already have diri this blob " << *diri << dendl;

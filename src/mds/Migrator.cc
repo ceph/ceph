@@ -1683,17 +1683,13 @@ void Migrator::handle_export_ack(MExportDirAck *m)
   set<CDir*> bounds;
   cache->get_subtree_bounds(dir, bounds);
 
-  // list us second, them first.
-  // this keeps authority().first in sync with subtree auth state in the journal.
-  cache->adjust_subtree_auth(dir, it->second.peer, mds->get_nodeid());
-
   // log completion. 
   //  include export bounds, to ensure they're in the journal.
   EExport *le = new EExport(mds->mdlog, dir, it->second.peer);;
   mds->mdlog->start_entry(le);
 
   le->metablob.add_dir_context(dir, EMetaBlob::TO_ROOT);
-  le->metablob.add_dir( dir, false );
+  le->metablob.add_dir(dir, false);
   for (set<CDir*>::iterator p = bounds.begin();
        p != bounds.end();
        ++p) {
@@ -1702,6 +1698,10 @@ void Migrator::handle_export_ack(MExportDirAck *m)
     le->metablob.add_dir_context(bound);
     le->metablob.add_dir(bound, false);
   }
+
+  // list us second, them first.
+  // this keeps authority().first in sync with subtree auth state in the journal.
+  cache->adjust_subtree_auth(dir, it->second.peer, mds->get_nodeid());
 
   // log export completion, then finish (unfreeze, trigger finish context, etc.)
   mds->mdlog->submit_entry(le, new C_MDS_ExportFinishLogged(this, dir));
