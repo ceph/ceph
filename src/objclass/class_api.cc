@@ -612,6 +612,23 @@ int cls_cxx_map_remove_key(cls_method_context_t hctx, const string &key)
   return (*pctx)->pg->do_osd_ops(*pctx, ops);
 }
 
+int cls_cxx_map_remove_range(cls_method_context_t hctx,
+                             const std::string& key_begin,
+                             const std::string& key_end)
+{
+  PrimaryLogPG::OpContext **pctx = (PrimaryLogPG::OpContext **)hctx;
+  vector<OSDOp> ops(1);
+  OSDOp& op = ops[0];
+  bufferlist& update_bl = op.indata;
+
+  ::encode(key_begin, update_bl);
+  ::encode(key_end, update_bl);
+
+  op.op.op = CEPH_OSD_OP_OMAPRMKEYRANGE;
+
+  return (*pctx)->pg->do_osd_ops(*pctx, ops);
+}
+
 int cls_cxx_list_watchers(cls_method_context_t hctx,
 			  obj_list_watch_response_t *watchers)
 {
