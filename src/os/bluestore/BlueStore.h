@@ -140,6 +140,14 @@ public:
     virtual ~AioContext() {}
   };
 
+  // BlueStore transaction worker implementation
+  class BlueStoreTransactionWorker : public TransactionWorker {
+  public:
+	BlueStoreTransactionWorker(CephContext *cct_, ObjectStore* store) : TransactionWorker(cct_, store) {}
+	~BlueStoreTransactionWorker() {}
+	void *worker_thread_entry();
+  };
+
   /// cached buffer
   struct Buffer {
     MEMPOOL_CLASS_HELPERS();
@@ -1798,6 +1806,9 @@ private:
 
   int m_finisher_num = 1;
   vector<Finisher*> finishers;
+  /*add a thread pool for handling transactions at objectstore*/
+  int m_tran_worker_num = 0;
+  vector<TransactionWorker*> tran_workers;
 
   KVSyncThread kv_sync_thread;
   std::mutex kv_lock;
@@ -2317,6 +2328,16 @@ public:
     vector<Transaction>& tls,
     TrackedOpRef op = TrackedOpRef(),
     ThreadPool::TPHandle *handle = NULL) override;
+
+  int queue_transactions_async(
+      Sequencer *osr,
+      vector<Transaction>& tls,
+      TrackedOpRef op = TrackedOpRef(),
+      ThreadPool::TPHandle *handle = NULL) override;
+
+  void process_transaction(void* osr, vector<Transaction>& tls,
+        Context *onreadable, Context *ondisk, Context *onreadable_sync,
+        ThreadPool::TPHandle *handle);
 
   // error injection
   void inject_data_error(const ghobject_t& o) override {

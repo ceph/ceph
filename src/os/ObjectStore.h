@@ -21,6 +21,9 @@
 #include "common/TrackedOp.h"
 #include "common/WorkQueue.h"
 #include "ObjectMap.h"
+#include "common/Mutex.h"
+#include "common/Cond.h"
+#include "common/Thread.h"
 
 #include <errno.h>
 #include <sys/stat.h>
@@ -1455,6 +1458,88 @@ public:
     static void generate_test_instances(list<Transaction*>& o);
   };
 
+   struct ObjectStoreTransaction {
+ 	   void *osr;
+ 	   vector<Transaction> tls;
+ 	   Context *onreadable;
+ 	   Context *ondisk;
+ 	   Context *onreadable_sync;
+ 	   ObjectStoreTransaction(void* osr, vector<Transaction>& tls, Context *onreadable,
+ 			   Context *ondisk, Context *onreadable_sync)
+ 	   : osr(osr), tls(std::move(tls)), onreadable(onreadable), ondisk(ondisk), onreadable_sync(onreadable_sync) {}
+   };
+
+   class TransactionWorker {
+   public:
+ 	  TransactionWorker(CephContext *cct_, ObjectStore* store) :
+               transaction_worker_thread(this),
+ 	      cct(cct_), store(store), tran_lock("TransactionWorker::tran_lock"),
+ 	      worker_stop(false), worker_running(false), worker_empty_wait(false),
+ 	      thread_name("fn_anonymous") {}
+ 	  virtual ~TransactionWorker() {}
+
+ 	  struct TransactionWorkerThread : public Thread {
+ 		  TransactionWorker *tran_worker;
+ 	  	  explicit TransactionWorkerThread(TransactionWorker *w) : tran_worker(w) {}
+ 	  	  void* entry() override { return (void*)tran_worker->worker_thread_entry(); }
+ 	  } transaction_worker_thread;
+
+   	  virtual void *worker_thread_entry() {
+   		assert(0 == "Unsupported transaction worker");
+   		return NULL;
+   	  };
+
+   	  void queue(struct ObjectStoreTransaction* tran) {
+   		tran_lock.Lock();
+   		if (worker_queue.empty()) {
+   		    tran_cond.Signal();
+   		}
+   		worker_queue.push_back(tran);
+   		tran_lock.Unlock();
+   	  }
+
+   	  void start() {
+   		transaction_worker_thread.create(thread_name.c_str());
+   	  }
+
+   	  void stop() {
+   		tran_lock.Lock();
+   		worker_stop = true;
+   		// we don't have any new work to do, but we want the worker to wake up anyway
+   		// to process the stop condition.
+   		tran_cond.Signal();
+   		tran_lock.Unlock();
+   		transaction_worker_thread.join(); // wait until the worker exits completely
+   	  }
+
+   	  void wait_for_empty() {
+   		tran_lock.Lock();
+   		while (!worker_queue.empty() || worker_running) {
+   			worker_empty_wait = true;
+   		    tran_empty_cond.Wait(tran_lock);
+   		}
+   		worker_empty_wait = false;
+   		tran_lock.Unlock();
+   	  }
+
+
+
+   protected:
+   	  CephContext *cct;
+           ObjectStore* store;
+
+   	  Mutex        tran_lock; ///< Protects access to queues.
+   	  Cond         tran_cond;
+   	  Cond         tran_empty_cond;
+
+   	  bool         worker_stop; ///< Set when the worker should stop.
+   	  bool         worker_running; ///< True when the worker is currently executing contexts.
+   	  bool	       worker_empty_wait; ///< True mean someone wait worker empty.
+           string thread_name;
+
+   	  vector<ObjectStoreTransaction*> worker_queue;
+   };
+
   // synchronous wrappers
   unsigned apply_transaction(Sequencer *osr, Transaction&& t, Context *ondisk=0) {
     vector<Transaction> tls;
@@ -1482,7 +1567,10 @@ public:
     tls.back().register_on_applied(onreadable);
     tls.back().register_on_commit(ondisk);
     tls.back().register_on_applied_sync(onreadable_sync);
-    return queue_transactions(osr, tls, op, handle);
+    if (g_conf->osd_async_queue_transaction && !handle)
+        return queue_transactions_async(osr, tls, op, handle);
+    else
+        return queue_transactions(osr, tls, op, handle);
   }
 
   virtual int queue_transactions(
@@ -1490,6 +1578,20 @@ public:
     TrackedOpRef op = TrackedOpRef(),
     ThreadPool::TPHandle *handle = NULL) = 0;
 
+  virtual int queue_transactions_async(
+    Sequencer *osr,
+    vector<Transaction>& tls,
+	TrackedOpRef op = TrackedOpRef(),
+	ThreadPool::TPHandle *handle = NULL) {
+	  assert(0 == "Unsupported transaction worker");
+	  return 0;
+  }
+
+  virtual void process_transaction(void* osr, vector<Transaction>& tls,
+        Context *onreadable, Context *ondisk, Context *onreadable_sync,
+        ThreadPool::TPHandle *handle) {
+      assert(0 == "rely on objectstore instance to implement");
+  }
 
   int queue_transactions(
     Sequencer *osr,
