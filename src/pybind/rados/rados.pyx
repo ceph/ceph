@@ -798,7 +798,7 @@ Rados object in state %s." % self.state)
         mon_id = cstr(mon_id, 'mon_id')
         cdef:
             char *_mon_id = mon_id
-            size_t outstrlen
+            size_t outstrlen = 0
             char *outstr
 
         with nogil:
