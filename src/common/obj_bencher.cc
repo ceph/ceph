@@ -886,7 +886,7 @@ int ObjBencher::rand_read_bench(int seconds_to_run, int num_objects, int concurr
   if (data.op_size)
     writes_per_object = data.object_size / data.op_size;
 
-  srand (time(NULL));
+  ceph::util::randomize_rng();
 
   r = completions_init(concurrentios);
   if (r < 0)
