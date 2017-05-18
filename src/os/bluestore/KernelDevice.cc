@@ -145,14 +145,16 @@ int KernelDevice::open(const string& p)
     }
   }
 
+  r = _aio_start();
+  if (r < 0) {
+    goto out_fail;
+  }
+
   fs = FS::create_by_fd(fd_direct);
   assert(fs);
 
   // round size down to an even block
   size &= ~(block_size - 1);
-
-  r = _aio_start();
-  assert(r == 0);
 
   dout(1) << __func__
 	  << " size " << size
@@ -308,7 +310,12 @@ int KernelDevice::_aio_start()
     dout(10) << __func__ << dendl;
     int r = aio_queue.init();
     if (r < 0) {
-      derr << __func__ << " failed: " << cpp_strerror(r) << dendl;
+      if (r == -EAGAIN) {
+	derr << __func__ << " io_setup(2) failed with EAGAIN; "
+	     << "try increasing /proc/sys/fs/aio-max-nr" << dendl;
+      } else {
+	derr << __func__ << " io_setup(2) failed: " << cpp_strerror(r) << dendl;
+      }
       return r;
     }
     aio_thread.create("bstore_aio");
