@@ -54,6 +54,11 @@ public:
 		  CephContext *cct) const override;
   void tick() override;
 
+  uint64_t get_last_osd_stat_seq(int osd) {
+    return digest.get_last_osd_stat_seq(osd);
+  }
+
+
   void print_summary(Formatter *f, std::ostream *ss) const;
 
   PGStatService *get_pg_stat_service();
