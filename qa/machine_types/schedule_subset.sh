@@ -26,17 +26,17 @@
 echo "Scheduling " $2 " branch"
 if [ $2 = "master" ] ; then
         # run master branch with --newest option looking for good sha1 7 builds back
-        teuthology-suite -v -c $2 -m $3 -k distro -s $4 --subset $(echo "(($(date +%U) % 4) * 7) + $1" | bc)/28 --newest 7 -e $5 $6
+        teuthology-suite -v -c $2 -m $3 -k distro -s $4 --subset $(echo "(($(date +%U) % 4) * 7) + $1" | bc)/28 --newest 7 -e $5 $6 /home/teuthology/shaman.yaml
 elif [ $2 = "hammer" ] ; then
         # run hammer branch with less jobs
-        teuthology-suite -v -c $2 -m $3 -k distro -s $4 --subset $(echo "(($(date +%U) % 4) * 7) + $1" | bc)/56 -e $5 $6
+        teuthology-suite -v -c $2 -m $3 -k distro -s $4 --subset $(echo "(($(date +%U) % 4) * 7) + $1" | bc)/56 -e $5 $6 /home/teuthology/shaman.yaml
 elif [ $2 = "jewel" ] ; then
         # run jewel branch with /40 jobs
-        teuthology-suite -v -c $2 -m $3 -k distro -s $4 --subset $(echo "(($(date +%U) % 4) * 7) + $1" | bc)/40 -e $5 $6
+        teuthology-suite -v -c $2 -m $3 -k distro -s $4 --subset $(echo "(($(date +%U) % 4) * 7) + $1" | bc)/40 -e $5 $6 /home/teuthology/shaman.yaml
 elif [ $2 = "kraken" ] ; then
         # run kraken branch with /40 jobs
-        teuthology-suite -v -c $2 -m $3 -k distro -s $4 --subset $(echo "(($(date +%U) % 4) * 7) + $1" | bc)/40 -e $5 $6
+        teuthology-suite -v -c $2 -m $3 -k distro -s $4 --subset $(echo "(($(date +%U) % 4) * 7) + $1" | bc)/40 -e $5 $6 /home/teuthology/shaman.yaml
 else
         # run NON master branches without --newest 
-        teuthology-suite -v -c $2 -m $3 -k distro -s $4 --subset $(echo "(($(date +%U) % 4) * 7) + $1" | bc)/28 -e $5 $6
+        teuthology-suite -v -c $2 -m $3 -k distro -s $4 --subset $(echo "(($(date +%U) % 4) * 7) + $1" | bc)/28 -e $5 $6 /home/teuthology/shaman.yaml
 fi
