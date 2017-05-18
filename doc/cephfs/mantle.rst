@@ -76,7 +76,6 @@ Mantle with `vstart.sh`
 
 ::
 
-    bin/ceph fs set cephfs allow_multimds true --yes-i-really-mean-it
     bin/ceph fs set cephfs max_mds 5
     bin/ceph fs set cephfs_a balancer greedyspill.lua
 

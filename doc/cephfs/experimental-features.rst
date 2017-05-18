@@ -23,22 +23,7 @@ failures within it are unlikely to make non-inlined data inaccessible
 Inline data has always been off by default and requires setting
 the "inline_data" flag.
 
-Multi-MDS filesystem clusters
------------------------------
-CephFS has been designed from the ground up to support fragmenting the metadata
-hierarchy across multiple active metadata servers, to allow horizontal scaling
-to arbitrary throughput requirements. Unfortunately, doing so requires a lot
-more working code than having a single MDS which is authoritative over the
-entire filesystem namespace.
 
-Multiple active MDSes are generally stable under trivial workloads, but often
-break in the presence of any failure, and do not have enough testing to offer
-any stability guarantees. If a filesystem with multiple active MDSes does
-experience failure, it will require (generally extensive) manual intervention.
-There are serious known bugs.
-
-Multi-MDS filesystems have always required explicitly increasing the "max_mds"
-value and have been further protected with the "allow_multimds" flag for Jewel.
 
 Mantle: Programmable Metadata Load Balancer
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -101,4 +86,22 @@ the ``allow_dirfrags`` flag on the filesystem:
 ::
 
     ceph fs set <filesystem name> allow_dirfrags
+
+Multiple active metadata servers
+--------------------------------
+
+Prior to the *Luminous* (12.2.x) release, running multiple active metadata
+servers within a single filesystem was considered experimental.  Creating
+multiple active metadata servers is now permitted by default on new
+filesystems.
+
+Filesystems created with older versions of Ceph still require explicitly
+enabling multiple active metadata servers as follows:
+
+::
+
+    ceph fs set <filesystem name> allow_multimds
+
+Note that the default size of the active mds cluster (``max_mds``) is
+still set to 1 initially.
 
