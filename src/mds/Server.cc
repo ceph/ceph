@@ -12,9 +12,14 @@
  *
  */
 
-#include <boost/lexical_cast.hpp>
-#include "include/assert.h"  // lexical_cast includes system assert.h
+#include <list>
+#include <cerrno>
+#include <iostream>
+#include <string_view>
 
+#include <fcntl.h>
+
+#include <boost/lexical_cast.hpp>
 #include <boost/config/warning_disable.hpp>
 #include <boost/fusion/include/std_pair.hpp>
 
@@ -50,20 +55,20 @@
 #include "events/EOpen.h"
 #include "events/ECommitted.h"
 
+#include "include/random.h"
 #include "include/filepath.h"
 #include "common/errno.h"
 #include "common/Timer.h"
 #include "common/perf_counters.h"
 #include "include/compat.h"
 #include "osd/OSDMap.h"
-
-#include <errno.h>
-
-#include <list>
-#include <iostream>
-#include <string_view>
+#include "include/random.h"
 
 #include "common/config.h"
+
+#include "include/assert.h"  // clobber boost's assert()
+
+using namespace std;
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_mds
@@ -1519,7 +1524,7 @@ void Server::set_trace_dist(Session *session, MClientReply *reply,
   // skip doing this for debugging purposes?
   if (g_conf->mds_inject_traceless_reply_probability &&
       mdr->ls && !mdr->o_trunc &&
-      (rand() % 10000 < g_conf->mds_inject_traceless_reply_probability * 10000.0)) {
+      (ceph::util::generate_random_number(10000) < g_conf->mds_inject_traceless_reply_probability * 10000.0)) {
     dout(5) << "deliberately skipping trace for " << *reply << dendl;
     return;
   }

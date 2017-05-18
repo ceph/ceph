@@ -36,6 +36,7 @@
 #include "common/HeartbeatMap.h"
 #include "ScrubStack.h"
 
+#include "include/random.h"
 
 #include "MDSRank.h"
 
@@ -605,7 +606,7 @@ bool MDSRank::_dispatch(Message *m, bool new_msg)
     in->get_dirfrags(ls);
     if (!ls.empty()) {	// must be an open dir.
       list<CDir*>::iterator p = ls.begin();
-      int n = rand() % ls.size();
+      int n = ceph::util::generate_random_number(ls.size());
       while (n--)
         ++p;
       CDir *dir = *p;
@@ -614,7 +615,7 @@ bool MDSRank::_dispatch(Message *m, bool new_msg)
 
       mds_rank_t dest;
       do {
-        int k = rand() % s.size();
+        int k = ceph::util::generate_random_number(s.size());
         set<mds_rank_t>::iterator p = s.begin();
         while (k--) ++p;
         dest = *p;
@@ -639,7 +640,7 @@ bool MDSRank::_dispatch(Message *m, bool new_msg)
     if (!dir->is_auth()) continue;           // must be auth.
     frag_t fg = dir->get_frag();
     if (mdsmap->allows_dirfrags()) {
-      if ((fg == frag_t() || (rand() % (1 << fg.bits()) == 0))) {
+      if (fg == frag_t() || (ceph::util::generate_random_number(1 << fg.bits()) == 0)) {
         mdcache->split_dir(dir, 1);
       } else {
         balancer->queue_merge(dir);
