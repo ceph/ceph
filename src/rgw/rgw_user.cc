@@ -1092,6 +1092,15 @@ int RGWAccessKeyPool::add(RGWUserAdminOpState& op_state, std::string *err_msg, b
   int ret; 
   std::string subprocess_msg;
 
+  if (op_state.get_key_type() == KEY_TYPE_SWIFT && !op_state.will_gen_access()) {
+    if (op_state.get_access_key().empty()) {
+      op_state.set_gen_access();
+    } else {
+      set_err_msg(err_msg, "access key was specified during SWIFT key creation");
+      return -EINVAL;
+    }
+  }
+
   ret = check_op(op_state, &subprocess_msg);
   if (ret < 0) {
     set_err_msg(err_msg, "unable to parse request, " + subprocess_msg);
