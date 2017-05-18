@@ -145,6 +145,10 @@ extern int cls_cxx_map_set_vals(cls_method_context_t hctx,
                                 const std::map<std::string, ceph::buffer::list> *map);
 extern int cls_cxx_map_write_header(cls_method_context_t hctx, ceph::buffer::list *inbl);
 extern int cls_cxx_map_remove_key(cls_method_context_t hctx, const std::string &key);
+/* remove keys in the range [key_begin, key_end) */
+extern int cls_cxx_map_remove_range(cls_method_context_t hctx,
+                                    const std::string& key_begin,
+                                    const std::string& key_end);
 extern int cls_cxx_map_update(cls_method_context_t hctx, ceph::buffer::list *inbl);
 
 extern int cls_cxx_list_watchers(cls_method_context_t hctx,
