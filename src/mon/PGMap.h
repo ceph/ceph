@@ -38,6 +38,7 @@ public:
   MEMPOOL_CLASS_HELPERS();
   virtual ~PGMapDigest() {}
 
+  mempool::pgmap::vector<uint64_t> osd_last_seq;
   mempool::pgmap::unordered_map<int32_t,osd_stat_t> osd_stat;
 
   // aggregate state, populated by PGMap child
@@ -170,6 +171,12 @@ public:
   // kill me post-luminous:
   virtual float get_fallback_full_ratio() const {
     return .95;
+  }
+
+  uint64_t get_last_osd_stat_seq(int osd) {
+    if (osd < (int)osd_last_seq.size())
+      return osd_last_seq[osd];
+    return 0;
   }
 
   void encode(bufferlist& bl, uint64_t features) const;
@@ -379,8 +386,8 @@ public:
   void stat_pg_sub(const pg_t &pgid, const pg_stat_t &s,
 		   bool sameosds=false);
   void stat_pg_update(const pg_t pgid, pg_stat_t &prev, bufferlist::iterator& blp);
-  void stat_osd_add(const osd_stat_t &s);
-  void stat_osd_sub(const osd_stat_t &s);
+  void stat_osd_add(int osd, const osd_stat_t &s);
+  void stat_osd_sub(int osd, const osd_stat_t &s);
   
   void encode(bufferlist &bl, uint64_t features=-1) const;
   void decode(bufferlist::iterator &bl);
