@@ -13,14 +13,16 @@
 #ifndef CEPH_MONITOR_DB_STORE_H
 #define CEPH_MONITOR_DB_STORE_H
 
-#include "include/types.h"
-#include "include/buffer.h"
 #include <set>
 #include <map>
 #include <string>
-#include <boost/scoped_ptr.hpp>
 #include <sstream>
 #include <fstream>
+
+#include <boost/scoped_ptr.hpp>
+
+#include "include/types.h"
+#include "include/buffer.h"
 #include "kv/KeyValueDB.h"
 
 #include "include/assert.h"
@@ -331,10 +333,10 @@ class MonitorDBStore
        * to applying the transaction as it won't break the model.
        */
       double delay_prob = g_conf->mon_inject_transaction_delay_probability;
-      if (delay_prob && (rand() % 10000 < delay_prob * 10000.0)) {
+      if (delay_prob && (ceph::util::generate_random_number(10000) < delay_prob * 10000.0)) {
         utime_t delay;
         double delay_max = g_conf->mon_inject_transaction_delay_max;
-        delay.set_from_double(delay_max * (double)(rand() % 10000) / 10000.0);
+        delay.set_from_double(delay_max * ceph::util::generate_random_number<double>(10000.0) / 10000.0);
         lsubdout(g_ceph_context, mon, 1)
           << "apply_transaction will be delayed for " << delay
           << " seconds" << dendl;

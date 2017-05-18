@@ -15,7 +15,10 @@
 #ifndef CEPH_MON_SESSION_H
 #define CEPH_MON_SESSION_H
 
+#include "include/util.h"
 #include "include/xlist.h"
+#include "include/random.h"
+
 #include "msg/msg_types.h"
 #include "mon/mon_types.h"
 
@@ -157,7 +160,7 @@ struct MonSessionMap {
     if (by_osd.empty())
       return 0;
     int n = by_osd.rbegin()->first + 1;
-    int r = rand() % n;
+    int r = ceph::util::generate_random_number(n);
 
     multimap<int,MonSession*>::iterator p = by_osd.lower_bound(r);
     if (p == by_osd.end())
