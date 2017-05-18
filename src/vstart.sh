@@ -456,6 +456,7 @@ $extra_conf
         mgr data = $CEPH_DEV_DIR/mgr.\$id
         mgr module path = $MGR_PYTHON_PATH
         mon reweight min pgs per osd = 4
+        mon pg warn min per osd = 3
 $DAEMONOPTS
 $CMGRDEBUG
 $extra_conf
