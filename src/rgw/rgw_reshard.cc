@@ -40,7 +40,7 @@ class BucketReshardShard {
     c->release();
 
     if (ret < 0) {
-      cerr << "ERROR: reshard rados operation failed: " << cpp_strerror(-ret) << std::endl;
+      derr << "ERROR: reshard rados operation failed: " << cpp_strerror(-ret) << dendl;
       return ret;
     }
 
@@ -109,7 +109,7 @@ public:
     }
     ret = bs.index_ctx.aio_operate(bs.bucket_obj, c, &op);
     if (ret < 0) {
-      std::cerr << "ERROR: failed to store entries in target bucket shard (bs=" << bs.bucket << "/" << bs.shard_id << ") error=" << cpp_strerror(-ret) << std::endl;
+      derr << "ERROR: failed to store entries in target bucket shard (bs=" << bs.bucket << "/" << bs.shard_id << ") error=" << cpp_strerror(-ret) << dendl;
       return ret;
     }
     entries.clear();
@@ -159,7 +159,7 @@ public:
                 const rgw_bucket_category_stats& entry_stats) {
     int ret = target_shards[shard_index]->add_entry(entry, account, category, entry_stats);
     if (ret < 0) {
-      cerr << "ERROR: target_shards.add_entry(" << entry.idx << ") returned error: " << cpp_strerror(-ret) << std::endl;
+      derr << "ERROR: target_shards.add_entry(" << entry.idx << ") returned error: " << cpp_strerror(-ret) << dendl;
       return ret;
     }
     return 0;
@@ -170,14 +170,14 @@ public:
     for (auto& shard : target_shards) {
       int r = shard->flush();
       if (r < 0) {
-        cerr << "ERROR: target_shards[" << shard->get_num_shard() << "].flush() returned error: " << cpp_strerror(-r) << std::endl;
+        derr << "ERROR: target_shards[" << shard->get_num_shard() << "].flush() returned error: " << cpp_strerror(-r) << dendl;
         ret = r;
       }
     }
     for (auto& shard : target_shards) {
       int r = shard->wait_all_aio();
       if (r < 0) {
-        cerr << "ERROR: target_shards[" << shard->get_num_shard() << "].wait_all_aio() returned error: " << cpp_strerror(-r) << std::endl;
+        derr << "ERROR: target_shards[" << shard->get_num_shard() << "].wait_all_aio() returned error: " << cpp_strerror(-r) << dendl;
         ret = r;
       }
       delete shard;
@@ -265,13 +265,13 @@ int RGWBucketReshard::create_new_bucket_instance(int new_num_shards,
 
   int ret = store->init_bucket_index(new_bucket_info, new_bucket_info.num_shards);
   if (ret < 0) {
-    cerr << "ERROR: failed to init new bucket indexes: " << cpp_strerror(-ret) << std::endl;
+    derr << "ERROR: failed to init new bucket indexes: " << cpp_strerror(-ret) << dendl;
     return -ret;
   }
 
   ret = store->put_bucket_instance_info(new_bucket_info, true, real_time(), &bucket_attrs);
   if (ret < 0) {
-    cerr << "ERROR: failed to store new bucket instance info: " << cpp_strerror(-ret) << std::endl;
+    derr << "ERROR: failed to store new bucket instance info: " << cpp_strerror(-ret) << dendl;
     return -ret;
   }
 
@@ -776,7 +776,6 @@ void  RGWReshard::get_shard(int shard_num, string& shard)
 
 int RGWReshard::inspect_all_shards()
 {
-  CephContext * const cct = store->ctx();
   int ret = 0;
 
   for (int i = 0; i < num_shards; i++) {
