@@ -243,7 +243,7 @@ int RGWBucketReshard::set_resharding_status(const string& new_instance_id, int32
 int RGWBucketReshard::clear_resharding()
 {
   cls_rgw_bucket_instance_entry instance_entry;
-  
+
   int ret = store->bucket_set_reshard(bucket_info, instance_entry);
   if (ret < 0) {
     ldout(store->ctx(), 0) << "RGWReshard::" << __func__ << " ERROR: error setting bucket resharding flag on bucket index: "
@@ -710,7 +710,6 @@ int RGWReshardWait::block_while_resharding(RGWRados::BucketShard *bs, string *ne
   return -ERR_BUSY_RESHARDING;
 }
 
-
 int RGWReshard::process_single_logshard(int logshard_num)
 {
   string marker;
@@ -719,7 +718,7 @@ int RGWReshard::process_single_logshard(int logshard_num)
   CephContext *cct = store->ctx();
   int max_entries = 1000;
   int max_secs = 60;
-  
+
   rados::cls::lock::Lock l(reshard_lock_name);
 
   utime_t time(max_secs, 0);
