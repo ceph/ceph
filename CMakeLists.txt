@@ -512,7 +512,9 @@ endif()
 option(WITH_SYSTEM_BOOST "require and build with system Boost" OFF)
 
 set(BOOST_COMPONENTS
-	container thread system regex random program_options date_time iostreams coroutine context)
+	thread system regex random program_options date_time iostreams coroutine context)
+set(BOOST_HEADER_COMPONENTS container)
+
 if(WITH_MGR)
 	list(APPEND BOOST_COMPONENTS python)
 endif()
@@ -532,6 +534,7 @@ else()
   set(BOOST_SOURCE_DIR "${PROJECT_SOURCE_DIR}/src/boost")
   set(BOOST_PREFIX "${PROJECT_BINARY_DIR}/boost")
   set(BOOST_BUILD "${PROJECT_BINARY_DIR}/boost-build")
+  list(APPEND BOOST_COMPONENTS ${BOOST_HEADER_COMPONENTS})
   string(REPLACE ";" "," BOOST_WITH_LIBS "${BOOST_COMPONENTS}")
   execute_process(COMMAND "./bootstrap.sh"
     "--prefix=${BOOST_PREFIX}"
