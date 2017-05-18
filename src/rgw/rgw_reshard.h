@@ -14,6 +14,7 @@ class CephContext;
 class RGWRados;
 
 
+#if 0
 /* gets a locked lock , release it when exiting context */
 class BucketIndexLockGuard
 {
@@ -33,6 +34,7 @@ protected:
   int lock();
   int unlock();
 };
+#endif
 
 
 class RGWBucketReshard {
@@ -70,13 +72,10 @@ public:
 class RGWReshard {
     RGWRados *store;
     string lock_name;
-    int max_jobs;
     rados::cls::lock::Lock instance_lock;
-    int num_shards;
+    int num_logshards;
 
-    int lock_bucket_index_shared(const string& oid);
-    int unlock_bucket_index(const string& oid);
-    void get_shard(int shard_num, string& shard);
+    void get_logshard_oid(int shard_num, string *shard);
 protected:
   class ReshardWorker : public Thread {
     CephContext *cct;
@@ -99,29 +98,32 @@ protected:
   ReshardWorker *worker;
   std::atomic<bool> down_flag = { false };
 
-  public:
-    RGWReshard(RGWRados* _store);
-    int add(cls_rgw_reshard_entry& entry);
-    int get(cls_rgw_reshard_entry& entry);
-    int remove(cls_rgw_reshard_entry& entry);
-    int list(string& marker, uint32_t max, list<cls_rgw_reshard_entry>& entries, bool& is_truncated);
-    int clear_bucket_resharding(const string& bucket_instance_oid, cls_rgw_reshard_entry& entry);
+  string get_logshard_key(const string& tenant, const string& bucket_name);
+  void get_bucket_logshard_oid(const string& tenant, const string& bucket_name, string *oid);
 
-    int reshard_bucket(Formatter *formatter,
-		       int num_shards,
-		       rgw_bucket& bucket,
-		       RGWBucketInfo& bucket_info,
-		       RGWBucketInfo& new_bucket_info,
-		       int max_entries,
-		       RGWBucketAdminOpState& bucket_op,
-		       bool verbose = false);
+public:
+  RGWReshard(RGWRados* _store);
+  int add(cls_rgw_reshard_entry& entry);
+  int get(cls_rgw_reshard_entry& entry);
+  int remove(cls_rgw_reshard_entry& entry);
+  int list(int logshard_num, string& marker, uint32_t max, std::list<cls_rgw_reshard_entry>& entries, bool *is_truncated);
+  int clear_bucket_resharding(const string& bucket_instance_oid, cls_rgw_reshard_entry& entry);
 
-    /* reshard thread */
-    int process_single_shard(const std::string& shard);
-    int inspect_all_shards();
-    bool going_down();
-    void start_processor();
-    void stop_processor();
+  int reshard_bucket(Formatter *formatter,
+                     int num_shards,
+                     rgw_bucket& bucket,
+                     RGWBucketInfo& bucket_info,
+                     RGWBucketInfo& new_bucket_info,
+                     int max_entries,
+                     RGWBucketAdminOpState& bucket_op,
+                     bool verbose = false);
+
+  /* reshard thread */
+  int process_single_logshard(int logshard_num);
+  int inspect_all_logshards();
+  bool going_down();
+  void start_processor();
+  void stop_processor();
 };
 
 
