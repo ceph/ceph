@@ -13091,6 +13091,22 @@ int RGWRados::check_bucket_shards(const rgw_user& bucket_owner, rgw_bucket& buck
 					    bucket_owner, bucket, bucket_quota, 1, need_resharding);
 }
 
+int RGWRados::add_bucket_to_reshard(const RGWBucketInfo& bucket_info)
+{
+  RGWReshard reshard(this);
+
+  int num_source_shards = (bucket_info.num_shards > 0 ? bucket_info.num_shards : 1);
+
+  cls_rgw_reshard_entry entry;
+  entry.time = real_clock::now();
+  entry.tenant = bucket_info.owner.tenant;
+  entry.bucket_name = bucket_info.bucket.name;
+  entry.bucket_id = bucket_info.bucket.bucket_id;
+  entry.old_num_shards = num_source_shards;
+  entry.new_num_shards = num_source_shards >> 1;
+
+  return reshard.add(entry);
+}
 
 int RGWRados::check_quota(const rgw_user& bucket_owner, rgw_bucket& bucket,
                           RGWQuotaInfo& user_quota, RGWQuotaInfo& bucket_quota, uint64_t obj_size)
