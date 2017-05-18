@@ -227,12 +227,15 @@ class Module(MgrModule):
             separators=(',', ': '),
         )
 
+        cert = self.get_config_json("cert") or '/etc/ceph/ceph-mgr-restful.crt'
+        pkey = self.get_config_json("pkey") or '/etc/ceph/ceph-mgr-restful.key'
+
         # Create the HTTPS werkzeug server serving pecan app
         self.server = make_server(
             host='0.0.0.0',
             port=8002,
             app=make_app('restful.api.Root'),
-            ssl_context=self.load_cert(),
+            ssl_context=(cert, pkey),
         )
 
         self.server.serve_forever()
@@ -315,43 +318,6 @@ class Module(MgrModule):
                 "",
                 "Command not found '{0}'".format(command['prefix'])
             )
-
-
-    def load_cert(self):
-        cert_base = self.get("config").get("mgr_data", "/tmp") + "/ceph-mgr-restful"
-        cert_file = cert_base + '.crt'
-        pkey_file = cert_base + '.key'
-
-        # If the files are already there, we are good
-        if os.access(cert_file, os.R_OK) and os.access(pkey_file, os.R_OK):
-            return (cert_file, pkey_file)
-
-        # If the certificate is in the ceph config db, write it to the files
-        cert = self.get_config_json('cert')
-        pkey = self.get_config_json('pkey')
-
-        if cert and pkey:
-            f = file(cert_file, 'w')
-            f.write(cert)
-            f.close()
-
-            f = file(pkey_file, 'w')
-            f.write(pkey)
-            f.close()
-            return (cert_file, pkey_file)
-
-        # Otherwise, generate the certificate and save it in the config db
-        make_ssl_devcert(cert_base, host='localhost')
-
-        f = file(cert_file, 'r')
-        self.set_config_json('cert', f.read())
-        f.close()
-
-        f = file(pkey_file, 'r')
-        self.set_config_json('pkey', f.read())
-        f.close()
-
-        return (cert_file, pkey_file)
 
 
     def get_doc_api(self, root, prefix=''):
