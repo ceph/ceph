@@ -929,16 +929,6 @@ epoch_t PGMonitor::send_pg_creates(int osd, Connection *con, epoch_t next)
   return last + 1;
 }
 
-void PGMonitor::dump_info(Formatter *f) const
-{
-  f->open_object_section("pgmap");
-  pg_map.dump(f);
-  f->close_section();
-
-  f->dump_unsigned("pgmap_first_committed", get_first_committed());
-  f->dump_unsigned("pgmap_last_committed", get_last_committed());
-}
-
 bool PGMonitor::preprocess_command(MonOpRequestRef op)
 {
   op->mark_pgmon_event(__func__);
@@ -1279,6 +1269,11 @@ public:
 
   void print_summary(Formatter *f, ostream *out) const override {
     pgmap.print_summary(f, out);
+  }
+  void dump_info(Formatter *f) const override {
+    f->dump_object("pgmap", pgmap);
+    f->dump_unsigned("pgmap_first_committed", pgmon->get_first_committed());
+    f->dump_unsigned("pgmap_last_committed", pgmon->get_last_committed());
   }
   void dump_fs_stats(stringstream *ss,
 		     Formatter *f,

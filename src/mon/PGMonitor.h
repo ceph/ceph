@@ -115,8 +115,6 @@ public:
 
   void check_osd_map(epoch_t epoch);
 
-  void dump_info(Formatter *f) const;
-
   int _warn_slow_request_histogram(const pow2_hist_t& h, string suffix,
 				   list<pair<health_status_t,string> >& summary,
 				   list<pair<health_status_t,string> > *detail) const;
