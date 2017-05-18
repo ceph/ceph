@@ -121,9 +121,12 @@ void OpRequest::set_rmw_flags(int flags) {
   int old_rmw_flags = rmw_flags;
 #endif
   rmw_flags |= flags;
-  tracepoint(oprequest, set_rmw_flags, reqid.name._type,
-	     reqid.name._num, reqid.tid, reqid.inc,
-	     flags, old_rmw_flags, rmw_flags);
+
+  int64_t num = reqid.name.num();
+  int type = reqid.name.type();
+
+  tracepoint(oprequest, set_rmw_flags, type, num, reqid.tid, reqid.inc,
+    flags, old_rmw_flags, rmw_flags);
 }
 
 void OpRequest::set_read() { set_rmw_flags(CEPH_OSD_RMW_FLAG_READ); }
@@ -144,9 +147,12 @@ void OpRequest::mark_flag_point(uint8_t flag, const char *s) {
   mark_event(s);
   hit_flag_points |= flag;
   latest_flag_point = flag;
-  tracepoint(oprequest, mark_flag_point, reqid.name._type,
-	     reqid.name._num, reqid.tid, reqid.inc, rmw_flags,
-	     flag, s, old_flags, hit_flag_points);
+
+  int64_t num = reqid.name.num();
+  int type = reqid.name.type();
+
+  tracepoint(oprequest, mark_flag_point, type, num, reqid.tid, reqid.inc,
+    rmw_flags, flag, s, old_flags, hit_flag_points);
 }
 
 void OpRequest::mark_flag_point_string(uint8_t flag, const string& s) {
@@ -156,9 +162,12 @@ void OpRequest::mark_flag_point_string(uint8_t flag, const string& s) {
   mark_event_string(s);
   hit_flag_points |= flag;
   latest_flag_point = flag;
-  tracepoint(oprequest, mark_flag_point, reqid.name._type,
-	     reqid.name._num, reqid.tid, reqid.inc, rmw_flags,
-	     flag, s.c_str(), old_flags, hit_flag_points);
+
+  int64_t num = reqid.name.num();
+  int type = reqid.name.type();
+
+  tracepoint(oprequest, mark_flag_point, type, num, reqid.tid, reqid.inc,
+    rmw_flags, flag, s.c_str(), old_flags, hit_flag_points);
 }
 
 ostream& operator<<(ostream& out, const OpRequest::ClassInfo& i)

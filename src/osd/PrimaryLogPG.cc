@@ -3095,8 +3095,10 @@ void PrimaryLogPG::execute_ctx(OpContext *ctx)
 #ifdef WITH_LTTNG
     osd_reqid_t reqid = ctx->op->get_reqid();
 #endif
-    tracepoint(osd, prepare_tx_enter, reqid.name._type,
-        reqid.name._num, reqid.tid, reqid.inc);
+    int64_t num = reqid.name.num();
+    int type = reqid.name.type();
+
+    tracepoint(osd, prepare_tx_enter, type, num, reqid.tid, reqid.inc);
   }
 
   int result = prepare_transaction(ctx);
@@ -3105,8 +3107,10 @@ void PrimaryLogPG::execute_ctx(OpContext *ctx)
 #ifdef WITH_LTTNG
     osd_reqid_t reqid = ctx->op->get_reqid();
 #endif
-    tracepoint(osd, prepare_tx_exit, reqid.name._type,
-        reqid.name._num, reqid.tid, reqid.inc);
+    int64_t num = reqid.name.num();
+    int type = reqid.name.type();
+
+    tracepoint(osd, prepare_tx_exit, type, num, reqid.tid, reqid.inc);
   }
 
   if (op->may_read()) {
