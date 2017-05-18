@@ -892,6 +892,9 @@ struct osd_stat_t {
 
   objectstore_perf_stat_t os_perf_stat;
 
+  epoch_t up_from = 0;
+  uint64_t seq = 0;
+
   osd_stat_t() : kb(0), kb_used(0), kb_avail(0),
 		 snap_trim_queue_len(0), num_snap_trimming(0) {}
 

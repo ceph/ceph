@@ -1151,6 +1151,8 @@ public:
   void update_osd_stat(vector<int>& hb_peers);
   osd_stat_t get_osd_stat() {
     Mutex::Locker l(stat_lock);
+    osd_stat.up_from = up_epoch;
+    ++osd_stat.seq;
     return osd_stat;
   }
 
