@@ -942,51 +942,86 @@ void OSDMonitor::create_pending()
 creating_pgs_t
 OSDMonitor::update_pending_pgs(const OSDMap::Incremental& inc)
 {
+  dout(10) << __func__ << dendl;
   creating_pgs_t pending_creatings;
   {
     std::lock_guard<std::mutex> l(creating_pgs_lock);
     pending_creatings = creating_pgs;
   }
-  if (pending_creatings.last_scan_epoch > inc.epoch) {
-    return pending_creatings;
+  // check for new or old pools
+  if (pending_creatings.last_scan_epoch < inc.epoch) {
+    if (osdmap.get_epoch() &&
+	osdmap.require_osd_release < CEPH_RELEASE_LUMINOUS) {
+      const unsigned total = pending_creatings.pgs.size();
+      mon->pgservice->maybe_add_creating_pgs(creating_pgs.last_scan_epoch,
+					     &pending_creatings);
+      dout(7) << __func__ << total - pending_creatings.pgs.size()
+	      << " pgs added from pgmap" << dendl;
+    }
+    scan_for_creating_pgs(osdmap.get_pools(),
+			  inc.old_pools,
+			  inc.modified,
+			  &pending_creatings);
+    scan_for_creating_pgs(inc.new_pools,
+			  inc.old_pools,
+			  inc.modified,
+			  &pending_creatings);
+    for (auto deleted_pool : inc.old_pools) {
+      auto removed = pending_creatings.remove_pool(deleted_pool);
+      dout(10) << __func__ << removed
+               << " pg removed because containing pool deleted: "
+               << deleted_pool << dendl;
+      last_epoch_clean.remove_pool(deleted_pool);
+    }
+    // pgmon updates its creating_pgs in check_osd_map() which is called by
+    // on_active() and check_osd_map() could be delayed if lease expires, so its
+    // creating_pgs could be stale in comparison with the one of osdmon. let's
+    // trim them here. otherwise, they will be added back after being erased.
+    unsigned removed = 0;
+    for (auto& pg : pending_created_pgs) {
+      pending_creatings.created_pools.insert(pg.pool());
+      removed += pending_creatings.pgs.erase(pg);
+    }
+    pending_created_pgs.clear();
+    dout(10) << __func__ << removed << " pgs removed because they're created"
+             << dendl;
+    pending_creatings.last_scan_epoch = osdmap.get_epoch();
   }
-  if (osdmap.get_epoch() &&
-      !osdmap.test_flag(CEPH_OSDMAP_REQUIRE_LUMINOUS)) {
-    const unsigned total = pending_creatings.pgs.size();
-    mon->pgservice->maybe_add_creating_pgs(creating_pgs.last_scan_epoch,
-					   &pending_creatings);
-    dout(7) << __func__ << total - pending_creatings.pgs.size()
-	    << " pgs added from pgmap" << dendl;
+
+  // process queue
+  unsigned max = MAX(1, g_conf->mon_osd_max_creating_pgs);
+  while (pending_creatings.pgs.size() < max &&
+	 !pending_creatings.queue.empty()) {
+    auto p = pending_creatings.queue.begin();
+    int64_t poolid = p->first;
+    dout(10) << __func__ << " pool " << poolid
+	     << " created " << p->second.created
+	     << " modified " << p->second.modified
+	     << " [" << p->second.start << "-" << p->second.end << ")"
+	     << dendl;
+    int n = MIN(max - pending_creatings.pgs.size(),
+		p->second.end - p->second.start);
+    ps_t first = p->second.start;
+    ps_t end = first + n;
+    for (ps_t ps = first; ps < end; ++ps) {
+      const pg_t pgid{ps, static_cast<uint64_t>(poolid)};
+      pending_creatings.pgs.emplace(pgid, make_pair(p->second.created,
+						    p->second.modified));
+      dout(10) << __func__ << " adding " << pgid << dendl;
+    }
+    p->second.start = end;
+    if (p->second.done()) {
+      dout(10) << __func__ << " done with queue for " << poolid << dendl;
+      pending_creatings.queue.erase(p);
+    } else {
+      dout(10) << __func__ << " pool " << poolid
+	       << " now [" << p->second.start << "-" << p->second.end << ")"
+	       << dendl;
+    }
   }
-  unsigned added = 0;
-  added += scan_for_creating_pgs(osdmap.get_pools(),
-				 inc.old_pools,
-				 inc.modified,
-				 &pending_creatings);
-  added += scan_for_creating_pgs(inc.new_pools,
-				 inc.old_pools,
-				 inc.modified,
-				 &pending_creatings);
-  dout(10) << __func__ << added << " pg added for new pools" << dendl;
-  for (auto deleted_pool : inc.old_pools) {
-    auto removed = pending_creatings.remove_pool(deleted_pool);
-    dout(10) << __func__ << removed
-	     << " pg removed because containing pool deleted: "
-	     << deleted_pool << dendl;
-  }
-  // pgmon updates its creating_pgs in check_osd_map() which is called by
-  // on_active() and check_osd_map() could be delayed if lease expires, so its
-  // creating_pgs could be stale in comparison with the one of osdmon. let's
-  // trim them here. otherwise, they will be added back after being erased.
-  unsigned removed = 0;
-  for (auto& pg : pending_created_pgs) {
-    pending_creatings.created_pools.insert(pg.pool());
-    removed += pending_creatings.pgs.erase(pg);
-  }
-  pending_created_pgs.clear();
-  dout(10) << __func__ << removed << " pgs removed because they're created"
-	   << dendl;
-  pending_creatings.last_scan_epoch = osdmap.get_epoch();
+  dout(10) << __func__ << " queue remaining: " << pending_creatings.queue.size()
+	   << " pools" << dendl;
+
   return pending_creatings;
 }
 
@@ -1337,7 +1372,6 @@ void OSDMonitor::trim_creating_pgs(creating_pgs_t* creating_pgs,
       dout(20) << __func__ << " pgmap shows " << p->first << " is created"
 	       << dendl;
       p = creating_pgs->pgs.erase(p);
-      creating_pgs->created_pools.insert(q->first.pool());
     } else {
       ++p;
     }
@@ -3203,13 +3237,12 @@ void OSDMonitor::check_pg_creates_sub(Subscription *sub)
   }
 }
 
-unsigned OSDMonitor::scan_for_creating_pgs(
+void OSDMonitor::scan_for_creating_pgs(
   const mempool::osdmap::map<int64_t,pg_pool_t>& pools,
   const mempool::osdmap::set<int64_t>& removed_pools,
   utime_t modified,
   creating_pgs_t* creating_pgs) const
 {
-  unsigned total = 0;
   for (auto& p : pools) {
     int64_t poolid = p.first;
     const pg_pool_t& pool = p.second;
@@ -3230,17 +3263,16 @@ unsigned OSDMonitor::scan_for_creating_pgs(
 	       << " " << pool << dendl;
       continue;
     }
-    unsigned added = creating_pgs->create_pool(poolid, pool.get_pg_num(),
-					       created, modified);
-    dout(10) << __func__ << added << " pgs added for pool "<< poolid
+    dout(10) << __func__ << " queueing pool create for " << poolid
 	     << " " << pool << dendl;
-    total += added;
+    creating_pgs->create_pool(poolid, pool.get_pg_num(), created, modified);
   }
-  return total;
 }
 
 void OSDMonitor::update_creating_pgs()
 {
+  dout(10) << __func__ << " " << creating_pgs.pgs.size() << " pgs creating, "
+	   << creating_pgs.queue.size() << " pools in queue" << dendl;
   decltype(creating_pgs_by_osd_epoch) new_pgs_by_osd_epoch;
   std::lock_guard<std::mutex> l(creating_pgs_lock);
   for (auto& pg : creating_pgs.pgs) {
@@ -3264,7 +3296,10 @@ void OSDMonitor::update_creating_pgs()
 	    mapped = mapping.get_epoch();
           }
           break;
-        }
+        } else {
+	  // newly creating
+	  mapped = mapping.get_epoch();
+	}
       }
     }
     dout(10) << __func__ << " will instruct osd." << acting_primary
