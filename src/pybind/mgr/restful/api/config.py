@@ -2,12 +2,11 @@ from pecan import expose, request
 from pecan.rest import RestController
 
 from restful import common, module
-from restful.decorators import auth, catch
+from restful.decorators import auth
 
 
 class ConfigOsd(RestController):
     @expose(template='json')
-    @catch
     @auth
     def get(self, **kwargs):
         """
@@ -22,7 +21,6 @@ class ConfigOsd(RestController):
 
 
     @expose(template='json')
-    @catch
     @auth
     def patch(self, **kwargs):
         """
@@ -58,7 +56,6 @@ class ConfigClusterKey(RestController):
 
 
     @expose(template='json')
-    @catch
     @auth
     def get(self, **kwargs):
         """
@@ -70,7 +67,6 @@ class ConfigClusterKey(RestController):
 
 class ConfigCluster(RestController):
     @expose(template='json')
-    @catch
     @auth
     def get(self, **kwargs):
         """

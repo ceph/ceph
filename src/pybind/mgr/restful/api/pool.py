@@ -2,7 +2,7 @@ from pecan import expose, request, response
 from pecan.rest import RestController
 
 from restful import common, module
-from restful.decorators import auth, catch
+from restful.decorators import auth
 
 
 class PoolId(RestController):
@@ -11,7 +11,6 @@ class PoolId(RestController):
 
 
     @expose(template='json')
-    @catch
     @auth
     def get(self, **kwargs):
         """
@@ -30,7 +29,6 @@ class PoolId(RestController):
 
 
     @expose(template='json')
-    @catch
     @auth
     def patch(self, **kwargs):
         """
@@ -55,7 +53,6 @@ class PoolId(RestController):
 
 
     @expose(template='json')
-    @catch
     @auth
     def delete(self, **kwargs):
         """
@@ -78,7 +75,6 @@ class PoolId(RestController):
 
 class Pool(RestController):
     @expose(template='json')
-    @catch
     @auth
     def get(self, **kwargs):
         """
@@ -95,7 +91,6 @@ class Pool(RestController):
 
 
     @expose(template='json')
-    @catch
     @auth
     def post(self, **kwargs):
         """

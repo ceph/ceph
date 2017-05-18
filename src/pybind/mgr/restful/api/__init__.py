@@ -10,8 +10,6 @@ from pool import Pool
 from request import Request
 from server import Server
 
-from restful.decorators import catch
-
 
 class Root(RestController):
     config = Config()
@@ -24,7 +22,6 @@ class Root(RestController):
     server = Server()
 
     @expose(template='json')
-    @catch
     def get(self, **kwargs):
         """
         Show the basic information for the REST API

@@ -2,7 +2,7 @@ from pecan import expose, request, response
 from pecan.rest import RestController
 
 from restful import common, module
-from restful.decorators import auth, catch
+from restful.decorators import auth
 
 
 class OsdIdCommand(RestController):
@@ -11,7 +11,6 @@ class OsdIdCommand(RestController):
 
 
     @expose(template='json')
-    @catch
     @auth
     def get(self, **kwargs):
         """
@@ -30,7 +29,6 @@ class OsdIdCommand(RestController):
 
 
     @expose(template='json')
-    @catch
     @auth
     def post(self, **kwargs):
         """
@@ -62,7 +60,6 @@ class OsdId(RestController):
 
 
     @expose(template='json')
-    @catch
     @auth
     def get(self, **kwargs):
         """
@@ -77,7 +74,6 @@ class OsdId(RestController):
 
 
     @expose(template='json')
-    @catch
     @auth
     def patch(self, **kwargs):
         """
@@ -122,7 +118,6 @@ class OsdId(RestController):
 
 class Osd(RestController):
     @expose(template='json')
-    @catch
     @auth
     def get(self, **kwargs):
         """

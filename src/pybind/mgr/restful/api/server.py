@@ -2,7 +2,7 @@ from pecan import expose
 from pecan.rest import RestController
 
 from restful import module
-from restful.decorators import auth, catch
+from restful.decorators import auth
 
 
 class ServerFqdn(RestController):
@@ -11,7 +11,6 @@ class ServerFqdn(RestController):
 
 
     @expose(template='json')
-    @catch
     @auth
     def get(self, **kwargs):
         """
@@ -23,7 +22,6 @@ class ServerFqdn(RestController):
 
 class Server(RestController):
     @expose(template='json')
-    @catch
     @auth
     def get(self, **kwargs):
         """
