@@ -713,7 +713,7 @@ function TEST_corrupt_scrub_replicated() {
             },
             {
               "Base64": true,
-              "value": "AgIZAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAA==",
+              "value": "AwIdAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
               "name": "snapset"
             }
           ],
@@ -725,7 +725,7 @@ function TEST_corrupt_scrub_replicated() {
           "attrs": [
             {
               "Base64": true,
-              "value": "AgIZAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAA==",
+              "value": "AwIdAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
               "name": "snapset"
             }
           ],
@@ -799,7 +799,7 @@ function TEST_corrupt_scrub_replicated() {
             },
             {
               "Base64": true,
-              "value": "AgIZAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAA==",
+              "value": "AwIdAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
               "name": "snapset"
             }
           ],
@@ -826,7 +826,7 @@ function TEST_corrupt_scrub_replicated() {
             },
             {
               "Base64": true,
-              "value": "AgIZAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAA==",
+              "value": "AwIdAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
               "name": "snapset"
             }
           ],
@@ -860,7 +860,7 @@ function TEST_corrupt_scrub_replicated() {
             },
             {
               "Base64": true,
-              "value": "AgIZAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAA==",
+              "value": "AwIdAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
               "name": "snapset"
             }
           ],
@@ -878,7 +878,7 @@ function TEST_corrupt_scrub_replicated() {
             },
             {
               "Base64": true,
-              "value": "AgIZAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAA==",
+              "value": "AwIdAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
               "name": "snapset"
             }
           ],
@@ -1170,7 +1170,7 @@ EOF
             },
             {
               "Base64": true,
-              "value": "AgIZAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAA==",
+              "value": "AwIdAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
               "name": "snapset"
             }
           ],
@@ -1184,7 +1184,7 @@ EOF
           "attrs": [
             {
               "Base64": true,
-              "value": "AgIZAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAA==",
+              "value": "AwIdAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
               "name": "snapset"
             }
           ],
@@ -1432,7 +1432,7 @@ EOF
             },
             {
               "Base64": true,
-              "value": "AgIZAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAA==",
+              "value": "AwIdAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
               "name": "snapset"
             }
           ],
@@ -1461,7 +1461,7 @@ EOF
             },
             {
               "Base64": true,
-              "value": "AgIZAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAA==",
+              "value": "AwIdAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
               "name": "snapset"
             }
           ],
@@ -1497,7 +1497,7 @@ EOF
             },
             {
               "Base64": true,
-              "value": "AgIZAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAA==",
+              "value": "AwIdAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
               "name": "snapset"
             }
           ],
@@ -1517,7 +1517,7 @@ EOF
             },
             {
               "Base64": true,
-              "value": "AgIZAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAA==",
+              "value": "AwIdAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
               "name": "snapset"
             }
           ],
@@ -1751,7 +1751,7 @@ function corrupt_scrub_erasure() {
             },
             {
               "Base64": true,
-              "value": "AgIZAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAA==",
+              "value": "AwIdAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
               "name": "snapset"
             }
           ],
@@ -1784,7 +1784,7 @@ function corrupt_scrub_erasure() {
             },
             {
               "Base64": true,
-              "value": "AgIZAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAA==",
+              "value": "AwIdAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
               "name": "snapset"
             }
           ],
@@ -1817,7 +1817,7 @@ function corrupt_scrub_erasure() {
             },
             {
               "Base64": true,
-              "value": "AgIZAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAA==",
+              "value": "AwIdAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
               "name": "snapset"
             }
           ],
@@ -2060,7 +2060,7 @@ EOF
             },
             {
               "Base64": true,
-              "value": "AgIZAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAA==",
+              "value": "AwIdAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
               "name": "snapset"
             }
           ],
@@ -2095,7 +2095,7 @@ EOF
             },
             {
               "Base64": true,
-              "value": "AgIZAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAA==",
+              "value": "AwIdAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
               "name": "snapset"
             }
           ],
@@ -2130,7 +2130,7 @@ EOF
             },
             {
               "Base64": true,
-              "value": "AgIZAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAA==",
+              "value": "AwIdAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
               "name": "snapset"
             }
           ],
