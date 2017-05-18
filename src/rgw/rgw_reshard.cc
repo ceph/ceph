@@ -604,15 +604,28 @@ int RGWReshard::unlock_bucket_index(const string& oid)
 const int num_retries = 10;
 const int default_reshard_sleep_duration = 5;
 
-int RGWReshard::block_while_resharding(RGWRados::BucketShard *bs, string *new_bucket_id)
+int RGWReshardWait::do_wait()
+{
+  Mutex::Locker l(lock);
+
+  cond.WaitInterval(lock, utime_t(default_reshard_sleep_duration, 0));
+
+  if (going_down) {
+    return -ECANCELED;
+  }
+
+  return 0;
+}
+
+int RGWReshardWait::block_while_resharding(RGWRados::BucketShard *bs, string *new_bucket_id)
 {
   int ret = 0;
   cls_rgw_bucket_instance_entry entry;
 
-  for (int i=0; i< num_retries;i++) {
+  for (int i=0; i < num_retries;i++) {
     ret = cls_rgw_get_bucket_resharding(bs->index_ctx, bs->bucket_obj, &entry);
     if (ret < 0) {
-      ldout(store->ctx(), 0) << "RGWReshard::" << __func__ << " ERROR: failed to get bucket resharding :"  <<
+      ldout(store->ctx(), 0) << __func__ << " ERROR: failed to get bucket resharding :"  <<
 	cpp_strerror(-ret)<< dendl;
       return ret;
     }
@@ -622,10 +635,18 @@ int RGWReshard::block_while_resharding(RGWRados::BucketShard *bs, string *new_bu
     }
     ldout(store->ctx(), 20) << "NOTICE: reshard still in progress; " << (i < num_retries - 1 ? "retrying" : "too many retries") << dendl;
     /* needed to unlock as clear resharding uses the same lock */
-#warning replace sleep with interruptible condition
-    sleep(default_reshard_sleep_duration);
+
+    if (i == num_retries - 1) {
+      break;
+    }
+
+    ret = do_wait();
+    if (ret < 0) {
+      ldout(store->ctx(), 0) << __func__ << " ERROR: bucket is still resharding, please retry" << dendl;
+      return ret;
+    }
   }
-  ldout(store->ctx(), 0) << "RGWReshard::" << __func__ << " ERROR: bucket is still resharding, please retry" << dendl;
+  ldout(store->ctx(), 0) << __func__ << " ERROR: bucket is still resharding, please retry" << dendl;
   return -ERR_BUSY_RESHARDING;
 }
 
