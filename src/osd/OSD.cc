@@ -4421,13 +4421,12 @@ void OSD::maybe_update_heartbeat_peers()
       PG *pg = i->second;
       pg->heartbeat_peer_lock.Lock();
       dout(20) << i->first << " heartbeat_peers " << pg->heartbeat_peers << dendl;
-      for (set<int>::iterator p = pg->heartbeat_peers.begin();
-	   p != pg->heartbeat_peers.end();
-	   ++p)
-	if (osdmap->is_up(*p))
-	  _add_heartbeat_peer(*p);
-      for (set<int>::iterator p = pg->probe_targets.begin();
-	   p != pg->probe_targets.end();
+      set<int> heartbeat_peers;
+      std::set_union(pg->heartbeat_peers.begin(), pg->heartbeat_peers.end(),
+                     pg->probe_targets.begin(), pg->probe_targets.end(),
+                     inserter(heartbeat_peers, heartbeat_peers.begin()));
+      for (set<int>::iterator p = heartbeat_peers.begin();
+	   p != heartbeat_peers.end();
 	   ++p)
 	if (osdmap->is_up(*p))
 	  _add_heartbeat_peer(*p);
