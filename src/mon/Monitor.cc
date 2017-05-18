@@ -2939,7 +2939,8 @@ void Monitor::handle_command(MonOpRequestRef op)
     mdsmon()->dispatch(op);
     return;
   }
-  if (module == "osd" || prefix == "pg map") {
+  if ((module == "osd" || prefix == "pg map") &&
+      prefix != "osd last-stat-seq") {
     osdmon()->dispatch(op);
     return;
   }
@@ -3125,6 +3126,19 @@ void Monitor::handle_command(MonOpRequestRef op)
     ostringstream ss2;
     ss2 << "report " << rdata.crc32c(CEPH_MON_PORT);
     rs = ss2.str();
+    r = 0;
+  } else if (prefix == "osd last-stat-seq") {
+    int64_t osd;
+    cmd_getval(g_ceph_context, cmdmap, "id", osd);
+    uint64_t seq = mgrstatmon()->get_last_osd_stat_seq(osd);
+    if (f) {
+      f->dump_unsigned("seq", seq);
+      f->flush(ds);
+    } else {
+      ds << seq;
+      rdata.append(ds);
+    }
+    rs = "";
     r = 0;
   } else if (prefix == "node ls") {
     string node_type("all");
