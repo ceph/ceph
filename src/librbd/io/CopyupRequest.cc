@@ -167,7 +167,8 @@ bool CopyupRequest::send_copyup() {
     for (size_t i=0; i<m_pending_requests.size(); ++i) {
       ObjectRequest<> *req = m_pending_requests[i];
       ldout(m_ictx->cct, 20) << "add_copyup_ops " << req << dendl;
-      req->add_copyup_ops(&write_op);
+      bool set_hints = (i == 0);
+      req->add_copyup_ops(&write_op, set_hints);
     }
     assert(write_op.size() != 0);
 
