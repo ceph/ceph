@@ -358,10 +358,9 @@ void generate_transaction(
     le.mark_unrollbackable();
     auto oiter = pgt->op_map.find(le.soid);
     if (oiter != pgt->op_map.end() && oiter->second.updated_snaps) {
-      vector<snapid_t> snaps(
-	oiter->second.updated_snaps->second.begin(),
-	oiter->second.updated_snaps->second.end());
-      ::encode(snaps, le.snaps);
+      bufferlist bl(oiter->second.updated_snaps->second.size() * 8 + 8);
+      ::encode(oiter->second.updated_snaps->second, bl);
+      le.snaps.swap(bl);
     }
   }
 

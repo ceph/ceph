@@ -166,10 +166,9 @@ void ECTransaction::generate_transactions(
       if (entry &&
 	  entry->is_modify() &&
 	  op.updated_snaps) {
-	vector<snapid_t> snaps(
-	  op.updated_snaps->second.begin(),
-	  op.updated_snaps->second.end());
-	::encode(snaps, entry->snaps);
+	bufferlist bl(op.updated_snaps->second.size() * 8 + 8);
+	::encode(op.updated_snaps->second, bl);
+	entry->snaps.swap(bl);
       }
 
       ldpp_dout(dpp, 20) << "generate_transactions: "

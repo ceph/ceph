@@ -5994,7 +5994,8 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
       return -EINVAL;
     }
     stringstream err;
-    if (!is_pool_currently_all_bluestore(pool, p, &err)) {
+    if (!g_conf->mon_debug_no_require_bluestore_for_ec_overwrites &&
+	!is_pool_currently_all_bluestore(pool, p, &err)) {
       ss << "pool must only be stored on bluestore for scrubbing to work: " << err.str();
       return -EINVAL;
     }
