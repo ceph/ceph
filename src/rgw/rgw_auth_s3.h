@@ -9,6 +9,7 @@
 #include <string>
 #include <tuple>
 
+#include <boost/algorithm/string.hpp>
 #include <boost/container/static_vector.hpp>
 #include <boost/utility/string_ref.hpp>
 #include <boost/utility/string_view.hpp>
@@ -322,6 +323,11 @@ static constexpr char AWS4_HMAC_SHA256_STR[] = "AWS4-HMAC-SHA256";
 static constexpr char AWS4_EMPTY_PAYLOAD_HASH[] = \
   "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
 
+static constexpr char AWS4_UNSIGNED_PAYLOAD_HASH[] = "UNSIGNED-PAYLOAD";
+
+static constexpr char AWS4_STREAMING_PAYLOAD_HASH[] = \
+  "STREAMING-AWS4-HMAC-SHA256-PAYLOAD";
+
 int parse_credentials(const req_info& info,                     /* in */
                       boost::string_view& access_key_id,        /* out */
                       boost::string_view& credential_scope,     /* out */
@@ -365,7 +371,7 @@ static inline const char* get_v4_exp_payload_hash(const req_info& info)
      *  when you create a presigned URL, you don't know the payload content
      *  because the URL is used to upload an arbitrary payload. Instead, you
      *  use a constant string UNSIGNED-PAYLOAD. */
-    expected_request_payload_hash = "UNSIGNED-PAYLOAD";
+    expected_request_payload_hash = AWS4_UNSIGNED_PAYLOAD_HASH;
   }
 
   return expected_request_payload_hash;
@@ -373,7 +379,7 @@ static inline const char* get_v4_exp_payload_hash(const req_info& info)
 
 static inline bool is_v4_payload_unsigned(const char* const exp_payload_hash)
 {
-  return boost::string_ref("UNSIGNED-PAYLOAD").compare(exp_payload_hash) == 0;
+  return boost::equals(exp_payload_hash, AWS4_UNSIGNED_PAYLOAD_HASH);
 }
 
 static inline bool is_v4_payload_empty(const req_state* const s)
@@ -389,7 +395,7 @@ static inline bool is_v4_payload_empty(const req_state* const s)
 
 static inline bool is_v4_payload_streamed(const char* const exp_payload_hash)
 {
-  return boost::string_ref("STREAMING-AWS4-HMAC-SHA256-PAYLOAD").compare(exp_payload_hash) == 0;
+  return boost::equals(exp_payload_hash, AWS4_STREAMING_PAYLOAD_HASH);
 }
 
 std::string get_v4_canonical_qs(const req_info& info, bool using_qs);

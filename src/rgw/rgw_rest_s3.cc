@@ -1507,8 +1507,9 @@ int RGWPostObj_ObjStore_S3::get_policy()
     bool aws4_auth = false;
 
     /* x-amz-algorithm handling */
+    using rgw::auth::s3::AWS4_HMAC_SHA256_STR;
     if ((part_str(parts, "x-amz-algorithm", &s->auth.s3_postobj_creds.x_amz_algorithm)) &&
-        (s->auth.s3_postobj_creds.x_amz_algorithm.compare("AWS4-HMAC-SHA256") == 0)) {
+        (s->auth.s3_postobj_creds.x_amz_algorithm == AWS4_HMAC_SHA256_STR)) {
       ldout(s->cct, 0) << "Signature verification algorithm AWS v4 (AWS4-HMAC-SHA256)" << dendl;
       aws4_auth = true;
     } else {
@@ -3640,7 +3641,7 @@ AWSGeneralAbstractor::get_auth_data_v4(const req_state* const s,
 
   auto string_to_sign = \
     rgw::auth::s3::get_v4_string_to_sign(s->cct,
-                                         "AWS4-HMAC-SHA256",
+                                         AWS4_HMAC_SHA256_STR,
                                          date,
                                          credential_scope,
                                          std::move(canonical_req_hash));
@@ -3869,7 +3870,7 @@ std::tuple<AWSVerAbstractor::access_key_id_t,
            AWSVerAbstractor::completer_factory_t>
 AWSBrowserUploadAbstractor::get_auth_data(const req_state* const s) const
 {
-  if (s->auth.s3_postobj_creds.x_amz_algorithm == "AWS4-HMAC-SHA256") {
+  if (s->auth.s3_postobj_creds.x_amz_algorithm == AWS4_HMAC_SHA256_STR) {
     ldout(s->cct, 0) << "Signature verification algorithm AWS v4"
                      << " (AWS4-HMAC-SHA256)" << dendl;
     return get_auth_data_v2(s);
