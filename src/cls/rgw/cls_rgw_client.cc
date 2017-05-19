@@ -844,6 +844,9 @@ void cls_rgw_reshard_remove(librados::ObjectWriteOperation& op, const cls_rgw_re
 {
   bufferlist in;
   struct cls_rgw_reshard_remove_op call;
+  call.tenant = entry.tenant;
+  call.bucket_name = entry.bucket_name;
+  call.bucket_id = entry.bucket_id;
   ::encode(call, in);
   op.exec("rgw", "reshard_remove", in);
 }
