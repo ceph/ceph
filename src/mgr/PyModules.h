@@ -44,7 +44,7 @@ class PyModules
   std::string get_site_packages();
 
 public:
-  static constexpr auto config_prefix = "mgr.";
+  static std::string config_prefix;
 
   PyModules(DaemonStateIndex &ds, ClusterState &cs, MonClient &mc,
             Objecter &objecter_, Client &client_,
