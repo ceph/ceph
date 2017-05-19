@@ -291,6 +291,7 @@ public:
 
   void deleted_pool(int64_t pool) {
     pg_pool_sum.erase(pool);
+    num_pg_by_pool.erase(pool);
     per_pool_sum_deltas.erase(pool);
     per_pool_sum_deltas_stamps.erase(pool);
     per_pool_sum_delta.erase(pool);
