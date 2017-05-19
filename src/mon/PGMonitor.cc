@@ -280,6 +280,8 @@ void PGMonitor::handle_osd_timeouts()
 
 void PGMonitor::create_pending()
 {
+  if (did_delete)
+    return;
   do_delete = false;
   pending_inc = PGMap::Incremental();
   pending_inc.version = pg_map.version + 1;
@@ -446,6 +448,9 @@ void PGMonitor::apply_pgmap_delta(bufferlist& bl)
 
 void PGMonitor::encode_pending(MonitorDBStore::TransactionRef t)
 {
+  if (did_delete)
+    return;
+
   string prefix = pgmap_meta_prefix;
   if (do_delete) {
     dout(1) << __func__ << " clearing pgmap data at v" << pending_inc.version
