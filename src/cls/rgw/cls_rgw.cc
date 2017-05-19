@@ -3485,14 +3485,14 @@ static int rgw_cls_lc_get_head(cls_method_context_t hctx, bufferlist *in,  buffe
   return 0;
 }
 
-static void generate_reshard_key(const string& bucket_name, const string& bucket_id, string *key)
+static void generate_reshard_key(const string& tenant, const string& bucket_name, string *key)
 {
-  *key = bucket_name + "." + bucket_id;
+  *key = tenant + ":" + bucket_name;
 }
 
 static void generate_reshard_key(const cls_rgw_reshard_entry& entry, string *key)
 {
-  generate_reshard_key(entry.bucket_name, entry.bucket_id, key);
+  generate_reshard_key(entry.tenant, entry.bucket_name, key);
 }
 
 static int rgw_reshard_add(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
