@@ -1310,13 +1310,6 @@ int RGWBucketAdminOp::check_index(RGWRados *store, RGWBucketAdminOpState& op_sta
   Formatter *formatter = flusher.get_formatter();
   flusher.start(0);
 
-  ret = bucket.check_bad_index_multipart(op_state, objs_to_unlink);
-  if (ret < 0)
-    return ret;
-
-  dump_mulipart_index_results(objs_to_unlink, formatter);
-  flusher.flush();
-
   ret = bucket.check_object_index(op_state, flusher);
   if (ret < 0)
     return ret;
@@ -1326,6 +1319,13 @@ int RGWBucketAdminOp::check_index(RGWRados *store, RGWBucketAdminOpState& op_sta
     return ret;
 
   dump_index_check(existing_stats, calculated_stats, formatter);
+  flusher.flush();
+
+  ret = bucket.check_bad_index_multipart(op_state, objs_to_unlink);
+  if (ret < 0)
+    return ret;
+
+  dump_mulipart_index_results(objs_to_unlink, formatter);
   flusher.flush();
 
   return 0;
