@@ -13135,7 +13135,7 @@ int RGWRados::add_bucket_to_reshard(const RGWBucketInfo& bucket_info)
   entry.bucket_name = bucket_info.bucket.name;
   entry.bucket_id = bucket_info.bucket.bucket_id;
   entry.old_num_shards = num_source_shards;
-  entry.new_num_shards = num_source_shards >> 1;
+  entry.new_num_shards = num_source_shards << 1;
 
   return reshard.add(entry);
 }

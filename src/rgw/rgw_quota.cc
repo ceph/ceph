@@ -952,7 +952,7 @@ public:
     }
 
     if (bucket_stats.num_objects  + num_objs > num_shards * max_objs_per_shard) {
-      dout(10) << "resharding needed: stats.num_objects=" << bucket_stats.num_objects
+      ldout(store->ctx(), 0) << __func__ << ": resharding needed: stats.num_objects=" << bucket_stats.num_objects
              << " shard max_objects=" <<  max_objs_per_shard * num_shards << dendl;
       need_resharding = true;
     } else {
