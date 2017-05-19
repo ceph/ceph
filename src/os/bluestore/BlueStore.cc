@@ -8221,7 +8221,8 @@ void BlueStore::_kv_finalize_thread()
 	}
 	delete b;
       }
-
+      deferred_stable.clear();
+      
       if (!deferred_aggressive) {
 	std::lock_guard<std::mutex> l(deferred_lock);
 	if (deferred_queue_size >= deferred_batch_ops ||
