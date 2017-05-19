@@ -1148,6 +1148,24 @@ void OSDMap::get_full_osd_util(
   }
 }
 
+void OSDMap::get_full_osd_counts(set<int> *full, set<int> *backfill,
+				 set<int> *nearfull) const
+{
+  full->clear();
+  backfill->clear();
+  nearfull->clear();
+  for (int i = 0; i < max_osd; ++i) {
+    if (exists(i) && is_up(i) && is_in(i)) {
+      if (osd_state[i] & CEPH_OSD_FULL)
+	full->emplace(i);
+      else if (osd_state[i] & CEPH_OSD_BACKFILLFULL)
+	backfill->emplace(i);
+      else if (osd_state[i] & CEPH_OSD_NEARFULL)
+	nearfull->emplace(i);
+    }
+  }
+}
+
 void OSDMap::get_all_osds(set<int32_t>& ls) const
 {
   for (int i=0; i<max_osd; i++)

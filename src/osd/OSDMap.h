@@ -611,6 +611,10 @@ public:
     map<int, float> *backfill,
     map<int, float> *nearfull) const;
 
+  void get_full_osd_counts(set<int> *full, set<int> *backfill,
+			   set<int> *nearfull) const;
+
+
   /***** cluster state *****/
   /* osds */
   int get_max_osd() const { return max_osd; }

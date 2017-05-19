@@ -3749,8 +3749,8 @@ void OSDMonitor::get_health(list<pair<health_status_t,string> >& summary,
 	summary.push_back(make_pair(HEALTH_ERR, ss.str()));
       }
 
-      map<int, float> full, backfillfull, nearfull;
-      osdmap.get_full_osd_util(mon->pgservice->get_osd_stat(), &full, &backfillfull, &nearfull);
+      set<int> full, backfillfull, nearfull;
+      osdmap.get_full_osd_counts(&full, &backfillfull, &nearfull);
       if (full.size()) {
 	ostringstream ss;
 	ss << full.size() << " full osd(s)";
@@ -3769,17 +3769,17 @@ void OSDMonitor::get_health(list<pair<health_status_t,string> >& summary,
       if (detail) {
         for (auto& i: full) {
           ostringstream ss;
-          ss << "osd." << i.first << " is full at " << roundf(i.second * 100) << "%";
+          ss << "osd." << i << " is full";
 	  detail->push_back(make_pair(HEALTH_ERR, ss.str()));
         }
         for (auto& i: backfillfull) {
           ostringstream ss;
-          ss << "osd." << i.first << " is backfill full at " << roundf(i.second * 100) << "%";
+          ss << "osd." << i << " is backfill full";
 	  detail->push_back(make_pair(HEALTH_WARN, ss.str()));
         }
         for (auto& i: nearfull) {
           ostringstream ss;
-          ss << "osd." << i.first << " is near full at " << roundf(i.second * 100) << "%";
+          ss << "osd." << i << " is near full";
 	  detail->push_back(make_pair(HEALTH_WARN, ss.str()));
         }
       }
