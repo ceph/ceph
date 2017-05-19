@@ -118,6 +118,15 @@ void MgrStatMonitor::encode_pending(MonitorDBStore::TransactionRef t)
   put_last_committed(t, version);
 }
 
+version_t MgrStatMonitor::get_trim_to()
+{
+  // we don't actually need *any* old states, but keep a few.
+  if (version > 5) {
+    return version - 5;
+  }
+  return 0;
+}
+
 void MgrStatMonitor::on_active()
 {
 }
