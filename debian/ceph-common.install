@@ -1,5 +1,6 @@
 #! /usr/bin/dh-exec --with=install
 
+etc/bash_completion.d/ceph
 etc/bash_completion.d/rados
 etc/bash_completion.d/radosgw-admin
 etc/bash_completion.d/rbd
