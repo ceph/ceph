@@ -4646,7 +4646,8 @@ TEST_P(StoreTest, OMapTest) {
     t.omap_clear(cid, hoid);
     map<string, bufferlist> start_set;
     t.omap_setkeys(cid, hoid, start_set);
-    apply_transaction(store, &osr, std::move(t));
+    r = apply_transaction(store, &osr, std::move(t));
+    ASSERT_EQ(r, 0);
   }
 
   for (int i = 0; i < 100; i++) {
@@ -4681,7 +4682,8 @@ TEST_P(StoreTest, OMapTest) {
     to_add.insert(pair<string, bufferlist>("key-" + string(buf), bl));
     attrs.insert(pair<string, bufferlist>("key-" + string(buf), bl));
     t.omap_setkeys(cid, hoid, to_add);
-    apply_transaction(store, &osr, std::move(t));
+    r = apply_transaction(store, &osr, std::move(t));
+    ASSERT_EQ(r, 0);
   }
 
   int i = 0;
@@ -4711,7 +4713,8 @@ TEST_P(StoreTest, OMapTest) {
     set<string> keys_to_remove;
     keys_to_remove.insert(to_remove);
     t.omap_rmkeys(cid, hoid, keys_to_remove);
-    apply_transaction(store, &osr, std::move(t));
+    r = apply_transaction(store, &osr, std::move(t));
+    ASSERT_EQ(r, 0);
 
     attrs.erase(to_remove);
 
@@ -4723,7 +4726,8 @@ TEST_P(StoreTest, OMapTest) {
     bl1.append("omap_header");
     ObjectStore::Transaction t;
     t.omap_setheader(cid, hoid, bl1);
-    apply_transaction(store, &osr, std::move(t));
+    r = apply_transaction(store, &osr, std::move(t));
+    ASSERT_EQ(r, 0);
     t = ObjectStore::Transaction();
  
     bufferlist bl2;
@@ -4731,7 +4735,8 @@ TEST_P(StoreTest, OMapTest) {
     map<string, bufferlist> to_add;
     to_add.insert(pair<string, bufferlist>("key", bl2));
     t.omap_setkeys(cid, hoid, to_add);
-    apply_transaction(store, &osr, std::move(t));
+    r = apply_transaction(store, &osr, std::move(t));
+    ASSERT_EQ(r, 0);
 
     bufferlist bl3;
     map<string, bufferlist> cur_attrs;
@@ -4760,12 +4765,14 @@ TEST_P(StoreTest, OMapTest) {
       t.touch(cid, hoid);
       t.omap_setheader(cid, hoid, h);
       t.omap_setkeys(cid, hoid, to_set);
-      apply_transaction(store, &osr, std::move(t));
+      r = apply_transaction(store, &osr, std::move(t));
+      ASSERT_EQ(r, 0);
     }
     {
       ObjectStore::Transaction t;
       t.omap_rmkeyrange(cid, hoid, "3", "7");
-      apply_transaction(store, &osr, std::move(t));
+      r = apply_transaction(store, &osr, std::move(t));
+      ASSERT_EQ(r, 0);
     }
     {
       bufferlist hdr;
@@ -4783,7 +4790,8 @@ TEST_P(StoreTest, OMapTest) {
     {
       ObjectStore::Transaction t;
       t.omap_clear(cid, hoid);
-      apply_transaction(store, &osr, std::move(t));
+      r = apply_transaction(store, &osr, std::move(t));
+      ASSERT_EQ(r, 0);
     }
     {
       bufferlist hdr;
@@ -4821,7 +4829,8 @@ TEST_P(StoreTest, OMapIterator) {
     t.omap_clear(cid, hoid);
     map<string, bufferlist> start_set;
     t.omap_setkeys(cid, hoid, start_set);
-    apply_transaction(store, &osr, std::move(t));
+    r = apply_transaction(store, &osr, std::move(t));
+    ASSERT_EQ(r, 0);
   }
   ObjectMap::ObjectMapIterator iter;
   bool correct;
@@ -4864,7 +4873,8 @@ TEST_P(StoreTest, OMapIterator) {
     attrs.insert(pair<string, bufferlist>("key-" + string(buf), bl));
     ObjectStore::Transaction t;
     t.omap_setkeys(cid, hoid, to_add);
-    apply_transaction(store, &osr, std::move(t));
+    r = apply_transaction(store, &osr, std::move(t));
+    ASSERT_EQ(r, 0);
   }
 
   iter = store->get_omap_iterator(cid, hoid);
@@ -6324,6 +6334,7 @@ TEST_P(StoreTestSpecificAUSize, SmallWriteOnShardedExtents) {
     t.write(cid, hoid1, 0, bl2.length(), bl2, 0);
     t.zero(cid, hoid1, 0, 0x50000);
     r = apply_transaction(store, &osr, std::move(t));
+    ASSERT_EQ(r, 0);
 
   }
   store->umount();
