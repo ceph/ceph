@@ -1384,8 +1384,10 @@ public:
       if (target.base_oloc.key == o)
 	target.base_oloc.key.clear();
 
-      if (parent_trace && parent_trace->valid())
+      if (parent_trace && parent_trace->valid()) {
         trace.init("op", nullptr, parent_trace);
+        trace.event("start");
+      }
     }
 
     bool operator<(const Op& other) const {
@@ -1404,6 +1406,7 @@ public:
 	delete out_handler.back();
 	out_handler.pop_back();
       }
+      trace.event("finish");
     }
   };
 
