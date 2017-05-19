@@ -21,7 +21,7 @@ repository and build Ceph yourself.
 	Get Tarballs <get-tarballs>
 	Clone Source <clone-source>
 	Build Ceph <build-ceph>
-    Ceph Mirrors <mirrors>
+    	Ceph Mirrors <mirrors>
 
 
 Install Software
@@ -38,7 +38,7 @@ QEMU.
    :maxdepth: 1
 
 	Install ceph-deploy <install-ceph-deploy>
-   Install Ceph Storage Cluster <install-storage-cluster>
+    	Install Ceph Storage Cluster <install-storage-cluster>
 	Install Ceph Object Gateway <install-ceph-gateway>
 	Install Virtualization for Block <install-vm-cloud>
 
@@ -52,7 +52,8 @@ deployment scripts with Chef, Juju, Puppet, etc.
 
 .. toctree::
 
-   Manual Deployment <manual-deployment>
+	Manual Deployment <manual-deployment>
+	Manual Deployment on FreeBSD <manual-freebsd-deployment>
 
 Upgrade Software
 ================
