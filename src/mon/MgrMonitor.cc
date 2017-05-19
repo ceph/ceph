@@ -455,8 +455,60 @@ void MgrMonitor::drop_standby(uint64_t gid)
 
 bool MgrMonitor::preprocess_command(MonOpRequestRef op)
 {
-  return false;
+  MMonCommand *m = static_cast<MMonCommand*>(op->get_req());
+  std::stringstream ss;
+  bufferlist rdata;
 
+  std::map<std::string, cmd_vartype> cmdmap;
+  if (!cmdmap_from_json(m->cmd, &cmdmap, ss)) {
+    string rs = ss.str();
+    mon->reply_command(op, -EINVAL, rs, rdata, get_last_committed());
+    return true;
+  }
+
+  MonSession *session = m->get_session();
+  if (!session) {
+    mon->reply_command(op, -EACCES, "access denied", rdata,
+		       get_last_committed());
+    return true;
+  }
+
+  string format;
+  cmd_getval(g_ceph_context, cmdmap, "format", format, string("json-pretty"));
+  boost::scoped_ptr<Formatter> f(Formatter::create(format));
+
+  string prefix;
+  cmd_getval(g_ceph_context, cmdmap, "prefix", prefix);
+  int r = 0;
+
+  if (prefix == "mgr dump") {
+    int64_t epoch = 0;
+    cmd_getval(g_ceph_context, cmdmap, "epoch", epoch, (int64_t)map.get_epoch());
+    if (epoch == (int64_t)map.get_epoch()) {
+      f->dump_object("mgrmap", map);
+    } else {
+      bufferlist bl;
+      int err = get_version(epoch, bl);
+      if (err == -ENOENT) {
+	r = -ENOENT;
+	ss << "there is no map for epoch " << epoch;
+	goto reply;
+      }
+      MgrMap m;
+      auto p = bl.begin();
+      m.decode(p);
+      f->dump_object("mgrmap", m);
+    }
+    f->flush(rdata);
+  } else {
+    return false;
+  }
+
+reply:
+  string rs;
+  getline(ss, rs);
+  mon->reply_command(op, r, rs, rdata, get_last_committed());
+  return true;
 }
 
 bool MgrMonitor::prepare_command(MonOpRequestRef op)
