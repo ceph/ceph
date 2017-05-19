@@ -107,7 +107,7 @@ Ceph configuration file.
 :Description: Seconds of inactivity before we reset the pg delta to 0. We keep
               track of the delta of the used space of each pool, so, for
               example, it would be easier for us to understand the progress of
-              recovery or the performance of cache tier. But if the is no
+              recovery or the performance of cache tier. But if there's no
               activity reported for a certain pool, we just reset the history of
               deltas of that pool.
 :Type: Integer
