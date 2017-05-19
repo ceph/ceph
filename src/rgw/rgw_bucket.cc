@@ -1743,6 +1743,8 @@ int RGWDataChangesLog::list_entries(int shard, const real_time& start_time, cons
 				    const string& marker,
 				    string *out_marker,
 				    bool *truncated) {
+  if (shard >= num_shards)
+    return -EINVAL;
 
   list<cls_log_entry> log_entries;
 
