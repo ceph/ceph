@@ -282,7 +282,7 @@ namespace rgw {
 	variant_type = directory();
 	flags |= FLAG_BUCKET;
       } else {
-	bucket = (parent->flags & FLAG_BUCKET) ? parent
+	bucket = parent->is_bucket() ? parent
 	  : parent->bucket;
 	if (flags & FLAG_DIRECTORY) {
 	  fh.fh_type = RGW_FS_TYPE_DIRECTORY;
@@ -410,7 +410,7 @@ namespace rgw {
     const std::string& bucket_name() const {
       if (is_root())
 	return root_name;
-      if (flags & FLAG_BUCKET)
+      if (is_bucket())
 	return name;
       return bucket->object_name();
     }
@@ -506,7 +506,7 @@ namespace rgw {
 
     int open(uint32_t gsh_flags) {
       lock_guard guard(mtx);
-      if (! (flags & FLAG_OPEN)) {
+      if (! is_open()) {
 	if (gsh_flags & RGW_OPEN_FLAG_V3) {
 	  flags |= FLAG_STATELESS_OPEN;
 	}
