@@ -3381,7 +3381,7 @@ void RGWPutObj::execute()
    * processing any input from user in order to prohibit overwriting. */
   if (slo_info) {
     bufferlist slo_userindicator_bl;
-    ::encode("True", slo_userindicator_bl);
+    slo_userindicator_bl.append("True", 4);
     emplace_attr(RGW_ATTR_SLO_UINDICATOR, std::move(slo_userindicator_bl));
   }
 
