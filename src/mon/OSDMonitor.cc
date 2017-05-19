@@ -3603,10 +3603,10 @@ void OSDMonitor::get_health(list<pair<health_status_t,string> >& summary,
 
     if (!osds.empty()) {
       ostringstream ss;
-      ss << "osds were removed from osdmap, but still kept in crushmap";
+      ss << osds.size() << " osds exist in the crush map but not in the osdmap";
       summary.push_back(make_pair(HEALTH_WARN, ss.str()));
       if (detail) {
-        ss << " osds: [" << osds << "]";
+        ss << " (osds: " << osds << ")";
         detail->push_back(make_pair(HEALTH_WARN, ss.str()));
       }
     }
