@@ -2206,7 +2206,7 @@ bid_t BlueStore::ExtentMap::allocate_spanning_blob_id()
   if (bid >= 0)
     return bid;
   // Find next unused bid;
-  bid = rand() % (numeric_limits<bid_t>::max() + 1);
+  bid = ceph::util::generate_random_number(0, numeric_limits<bid_t>::max());
   const auto begin_bid = bid;
   do {
     if (!spanning_blob_map.count(bid))
@@ -4394,7 +4394,7 @@ int BlueStore::_open_fm(bool create)
       bool stop = false;
 
       while (!stop && start < end) {
-	uint64_t l = (rand() % max_b + 1) * min_alloc_size;
+	uint64_t l = ceph::util::generate_random_number(max_b + 1) * min_alloc_size;
 	if (start + l > end) {
 	  l = end - start;
           l = p2align(l, min_alloc_size);
@@ -6623,9 +6623,8 @@ int BlueStore::read(
     r = -EIO;
     derr << __func__ << " " << c->cid << " " << oid << " INJECT EIO" << dendl;
   } else if (oid.hobj.pool > 0 &&  /* FIXME, see #23029 */
-	     cct->_conf->bluestore_debug_random_read_err &&
-	     (rand() % (int)(cct->_conf->bluestore_debug_random_read_err *
-			     100.0)) == 0) {
+    cct->_conf->bluestore_debug_random_read_err &&
+    ceph::util::generate_random_number((int)(cct->_conf->bluestore_debug_random_read_err * 100.0) - 1) == 0) {
     dout(0) << __func__ << ": inject random EIO" << dendl;
     r = -EIO;
   }
@@ -7940,7 +7939,7 @@ void BlueStore::_txc_state_proc(TransContext *txc)
 	  dout(20) << __func__ << " prior txc(s) with unstable ios "
 		   << txc->osr->txc_with_unstable_io.load() << dendl;
 	} else if (cct->_conf->bluestore_debug_randomize_serial_transaction &&
-		   rand() % cct->_conf->bluestore_debug_randomize_serial_transaction
+           ceph::util::generate_random_number(cct->_conf->bluestore_debug_randomize_serial_transaction - 1)
 		   == 0) {
 	  dout(20) << __func__ << " DEBUG randomly forcing submit via kv thread"
 		   << dendl;
