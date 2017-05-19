@@ -1403,7 +1403,14 @@ int MemStore::_destroy_collection(const coll_t& cid)
     cp->second->exists = false;
   }
   used_bytes -= cp->second->used_bytes();
+
   coll_map.erase(cp);
+  // remove data file if it is existed
+  string fn = path + "/" + stringify(cp->first);
+  int r = ::unlink(fn.c_str());
+  if (r < 0)
+    return -errno;
+
   return 0;
 }
 
