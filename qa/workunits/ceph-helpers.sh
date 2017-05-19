@@ -1649,6 +1649,41 @@ function test_wait_background() {
     if [ ! -z "$pids" ]; then return 1; fi
 }
 
+function flush_pg_stats()
+{
+    ids=`ceph osd ls`
+    seqs=''
+    for osd in $ids; do
+	    seq=`ceph tell osd.$osd flush_pg_stats`
+	    seqs="$seqs $osd-$seq"
+    done
+    for s in $seqs; do
+	    osd=`echo $s | cut -d - -f 1`
+	    seq=`echo $s | cut -d - -f 2`
+	    echo "waiting osd.$osd seq $seq"
+	    while test $(ceph osd last-stat-seq $osd) -lt $seq; do
+            sleep 1
+        done
+    done
+}
+
+function test_flush_pg_stats()
+{
+    local dir=$1
+
+    setup $dir || return 1
+    run_mon $dir a --osd_pool_default_size=1 || return 1
+    run_mgr $dir x || return 1
+    run_osd $dir 0 || return 1
+    rados -p rbd put obj /etc/group
+    flush_pg_stats
+    local jq_filter='.pools | .[] | select(.name == "rbd") | .stats'
+    raw_bytes_used=`ceph df detail --format=json | jq "$jq_filter.raw_bytes_used"`
+    bytes_used=`ceph df detail --format=json | jq "$jq_filter.bytes_used"`
+    test $raw_bytes_used > 0 || return 1
+    test $raw_bytes_used == $bytes_used || return 1
+}
+
 #######################################################################
 
 ##
