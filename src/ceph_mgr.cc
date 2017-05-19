@@ -24,6 +24,12 @@
 
 #include "mgr/MgrStandby.h"
 
+static void usage()
+{
+  cout << "usage: ceph-mgr -i <ID> [flags]\n"
+       << std::endl;
+  generic_server_usage();
+}
 
 /**
  * A short main() which just instantiates a MgrStandby and
@@ -43,9 +49,7 @@ int main(int argc, const char **argv)
 
   // Handle --help
   if ((args.size() == 1 && (std::string(args[0]) == "--help" || std::string(args[0]) == "-h"))) {
-    MgrStandby mgr;
-    mgr.usage();
-    return 0;
+    usage();
   }
 
   global_init_daemonize(g_ceph_context);
