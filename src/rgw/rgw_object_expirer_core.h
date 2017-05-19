@@ -4,11 +4,11 @@
 #ifndef CEPH_OBJEXP_H
 #define CEPH_OBJEXP_H
 
-#include <errno.h>
-#include <iostream>
-#include <sstream>
-#include <string>
 #include <atomic>
+#include <string>
+#include <cerrno>
+#include <sstream>
+#include <iostream>
 
 #include "auth/Crypto.h"
 
@@ -37,8 +37,6 @@
 #include "rgw_formats.h"
 #include "rgw_usage.h"
 #include "rgw_replica_log.h"
-
-#include <atomic>
 
 class RGWObjectExpirer {
 protected:

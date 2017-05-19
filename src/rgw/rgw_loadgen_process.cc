@@ -39,7 +39,7 @@ void RGWLoadGenProcess::run()
 
   vector<string> buckets(num_buckets);
 
-  std::atomic<long int> failed = { 0 };
+  std::atomic<bool> failed = { false };
 
   for (i = 0; i < num_buckets; i++) {
     buckets[i] = "/loadgen";
@@ -104,7 +104,7 @@ done:
 
 void RGWLoadGenProcess::gen_request(const string& method,
 				    const string& resource,
-				    int content_length, std::atomic<long int>* fail_flag)
+				    int content_length, std::atomic<bool>* fail_flag)
 {
   RGWLoadGenRequest* req =
     new RGWLoadGenRequest(store->get_new_req_id(), method, resource,
