@@ -21,209 +21,6 @@ from util.rados import (rados, create_ec_pool,
 log = logging.getLogger(__name__)
 
 @contextlib.contextmanager
-def create_apache_dirs(ctx, config):
-    """
-    Remotely create apache directories.  Delete when finished.
-    """
-    log.info('Creating apache directories...')
-    testdir = teuthology.get_testdir(ctx)
-    for client in config.keys():
-    	cluster_name, daemon_type, client_id = teuthology.split_role(client)
-        client_with_cluster = cluster_name + '.' + daemon_type + '.' + client_id
-        ctx.cluster.only(client).run(
-            args=[
-                'mkdir',
-                '-p',
-                '{tdir}/apache/htdocs.{client}'.format(tdir=testdir,
-                                                       client=client_with_cluster),
-                '{tdir}/apache/tmp.{client}/fastcgi_sock'.format(
-                    tdir=testdir,
-                    client=client_with_cluster),
-                run.Raw('&&'),
-                'mkdir',
-                '{tdir}/archive/apache.{client}'.format(tdir=testdir,
-                                                        client=client_with_cluster),
-                ],
-            )
-    try:
-        yield
-    finally:
-        log.info('Cleaning up apache directories...')
-        for client in config.keys():
-            cluster_name, daemon_type, client_id = teuthology.split_role(client)
-            client_with_cluster = cluster_name + '.' + daemon_type + '.' + client_id
-            ctx.cluster.only(client).run(
-                args=[
-                    'rm',
-                    '-rf',
-                    '{tdir}/apache/tmp.{client}'.format(tdir=testdir,
-                                                        client=client_with_cluster),
-                    run.Raw('&&'),
-                    'rmdir',
-                    '{tdir}/apache/htdocs.{client}'.format(tdir=testdir,
-                                                           client=client_with_cluster),
-                    ],
-                )
-            ctx.cluster.only(client).run(
-                args=[
-                    'rmdir',
-                    '{tdir}/apache'.format(tdir=testdir),
-                    ],
-                check_status=False,  # only need to remove once per host
-                )
-
-
-def _use_uds_with_fcgi(remote):
-    """
-    Returns true if this node supports the usage of
-    unix domain sockets with mod_proxy_fcgi.
-
-    FIXME: returns False always for now until we know for
-    sure what distros will support UDS. RHEL 7.0 is the only one
-    currently I know of, but we can't install that version of apache
-    yet in the labs.
-    """
-    return False
-
-
-@contextlib.contextmanager
-def ship_apache_configs(ctx, config, role_endpoints):
-    """
-    Ship apache config and rgw.fgci to all clients.  Clean up on termination
-    """
-    assert isinstance(config, dict)
-    assert isinstance(role_endpoints, dict)
-    testdir = teuthology.get_testdir(ctx)
-    log.info('Shipping apache config and rgw.fcgi...')
-    src = os.path.join(os.path.dirname(__file__), 'apache.conf.template')
-    for client in config.keys():
-    	cluster_name, daemon_type, client_id = teuthology.split_role(client)
-    	client_with_id = daemon_type + '.' + client_id
-    	client_with_cluster = cluster_name + '.' + client_with_id
-        (remote,) = ctx.cluster.only(client).remotes.keys()
-        system_type = teuthology.get_system_type(remote)
-        conf = config.get(client)
-        if not conf:
-            conf = {}
-        idle_timeout = conf.get('idle_timeout', ctx.rgw.default_idle_timeout)
-        if system_type == 'deb':
-            mod_path = '/usr/lib/apache2/modules'
-            print_continue = 'on'
-            user = 'www-data'
-            group = 'www-data'
-            apache24_modconfig = '''
-  IncludeOptional /etc/apache2/mods-available/mpm_event.conf
-  IncludeOptional /etc/apache2/mods-available/mpm_event.load
-'''
-        else:
-            mod_path = '/usr/lib64/httpd/modules'
-            print_continue = 'off'
-            user = 'apache'
-            group = 'apache'
-            apache24_modconfig = \
-                'IncludeOptional /etc/httpd/conf.modules.d/00-mpm.conf'
-        host, port = role_endpoints[client]
-
-        # decide if we want to use mod_fastcgi or mod_proxy_fcgi
-        template_dir = os.path.dirname(__file__)
-        fcgi_config = os.path.join(template_dir,
-                                   'mod_proxy_fcgi.tcp.conf.template')
-        if ctx.rgw.use_fastcgi:
-            log.info("Apache is configured to use mod_fastcgi")
-            fcgi_config = os.path.join(template_dir,
-                                       'mod_fastcgi.conf.template')
-        elif _use_uds_with_fcgi(remote):
-            log.info("Apache is configured to use mod_proxy_fcgi with UDS")
-            fcgi_config = os.path.join(template_dir,
-                                       'mod_proxy_fcgi.uds.conf.template')
-        else:
-            log.info("Apache is configured to use mod_proxy_fcgi with TCP")
-
-        with file(fcgi_config, 'rb') as f:
-            fcgi_config = f.read()
-        with file(src, 'rb') as f:
-            conf = f.read() + fcgi_config
-            conf = conf.format(
-                testdir=testdir,
-                mod_path=mod_path,
-                print_continue=print_continue,
-                host=host,
-                port=port,
-                client=client_with_cluster,
-                idle_timeout=idle_timeout,
-                user=user,
-                group=group,
-                apache24_modconfig=apache24_modconfig,
-                )
-            teuthology.write_file(
-                remote=remote,
-                path='{tdir}/apache/apache.{client_with_cluster}.conf'.format(
-                    tdir=testdir,
-                    client_with_cluster=client_with_cluster),
-                data=conf,
-                )
-        rgw_options = []
-        if ctx.rgw.use_fastcgi or _use_uds_with_fcgi(remote):
-            rgw_options = [
-                '--rgw-socket-path',
-                '{tdir}/apache/tmp.{client_with_cluster}/fastcgi_sock/rgw_sock'.format(
-                    tdir=testdir,
-                    client_with_cluster=client_with_cluster
-                ),
-                '--rgw-frontends',
-                'fastcgi',
-            ]
-        else:
-            rgw_options = [
-                '--rgw-socket-path', '""',
-                '--rgw-print-continue', 'false',
-                '--rgw-frontends',
-                'fastcgi socket_port=9000 socket_host=0.0.0.0',
-            ]
-
-        teuthology.write_file(
-            remote=remote,
-            path='{tdir}/apache/htdocs.{client_with_cluster}/rgw.fcgi'.format(
-                tdir=testdir,
-                client_with_cluster=client_with_cluster),
-            data="""#!/bin/sh
-ulimit -c unlimited
-exec radosgw -f -n {client_with_id} --cluster {cluster_name} -k /etc/ceph/{client_with_cluster}.keyring {rgw_options}
-
-""".format(tdir=testdir, client_with_id=client_with_id, client_with_cluster=client_with_cluster, cluster_name=cluster_name, rgw_options=" ".join(rgw_options))
-            )
-        remote.run(
-            args=[
-                'chmod',
-                'a=rx',
-                '{tdir}/apache/htdocs.{client_with_cluster}/rgw.fcgi'.format(tdir=testdir,
-                                                                client_with_cluster=client_with_cluster),
-                ],
-            )
-    try:
-        yield
-    finally:
-        log.info('Removing apache config...')
-        for client in config.keys():
-            cluster_name, daemon_type, client_id = teuthology.split_role(client)
-            client_with_cluster = '.'.join((cluster_name, daemon_type, client_id))
-            ctx.cluster.only(client).run(
-                args=[
-                    'rm',
-                    '-f',
-                    '{tdir}/apache/apache.{client_with_cluster}.conf'.format(tdir=testdir,
-                                                                client_with_cluster=client_with_cluster),
-                    run.Raw('&&'),
-                    'rm',
-                    '-f',
-                    '{tdir}/apache/htdocs.{client_with_cluster}/rgw.fcgi'.format(
-                        tdir=testdir,
-                        client_with_cluster=client_with_cluster),
-                    ],
-                )
-
-
-@contextlib.contextmanager
 def start_rgw(ctx, config):
     """
     Start rgw on remote sites.
@@ -252,35 +49,11 @@ def start_rgw(ctx, config):
         rgw_cmd = ['radosgw']
 
         log.info("Using %s as radosgw frontend", ctx.rgw.frontend)
-        if ctx.rgw.frontend == 'apache':
-            if ctx.rgw.use_fastcgi or _use_uds_with_fcgi(remote):
-                rgw_cmd.extend([
-                    '--rgw-socket-path',
-                    '{tdir}/apache/tmp.{client_with_cluster}/fastcgi_sock/rgw_sock'.format(
-                        tdir=testdir,
-                        client_with_cluster=client_with_cluster,
-                    ),
-                    '--rgw-frontends',
-                    'fastcgi',
-                ])
-            else:
-                log.info("Using mod_proxy_fcgi instead of mod_fastcgi...")
-                # for mod_proxy_fcgi, using tcp
-                rgw_cmd.extend([
-                    '--rgw-socket-path', '',
-                    '--rgw-print-continue', 'false',
-                    '--rgw-frontends',
-                    'fastcgi socket_port=9000 socket_host=0.0.0.0',
-                ])
 
-        else:
-            host, port = ctx.rgw.role_endpoints[client]
-            rgw_cmd.extend([
-                '--rgw-frontends',
-                '{frontend} port={port}'.format(frontend=ctx.rgw.frontend, port=port),
-            ])
-
+        host, port = ctx.rgw.role_endpoints[client]
         rgw_cmd.extend([
+            '--rgw-frontends',
+            '{frontend} port={port}'.format(frontend=ctx.rgw.frontend, port=port),
             '-n', client_with_id,
             '--cluster', cluster_name,
             '-k', '/etc/ceph/{client_with_cluster}.keyring'.format(client_with_cluster=client_with_cluster),
@@ -342,60 +115,6 @@ def start_rgw(ctx, config):
                     ],
                 )
 
-
-@contextlib.contextmanager
-def start_apache(ctx, config):
-    """
-    Start apache on remote sites.
-    """
-    log.info('Starting apache...')
-    testdir = teuthology.get_testdir(ctx)
-    apaches = {}
-    for client in config.keys():
-        cluster_name, daemon_type, client_id = teuthology.split_role(client)
-        client_with_cluster = cluster_name + '.' + daemon_type + '.' + client_id
-        (remote,) = ctx.cluster.only(client).remotes.keys()
-        system_type = teuthology.get_system_type(remote)
-        if system_type == 'deb':
-            apache_name = 'apache2'
-        else:
-            try:
-                remote.run(
-                    args=[
-                        'stat',
-                        '/usr/sbin/httpd.worker',
-                    ],
-                )
-                apache_name = '/usr/sbin/httpd.worker'
-            except CommandFailedError:
-                apache_name = '/usr/sbin/httpd'
-
-        proc = remote.run(
-            args=[
-                'adjust-ulimits',
-                'daemon-helper',
-                'kill',
-                apache_name,
-                '-X',
-                '-f',
-                '{tdir}/apache/apache.{client_with_cluster}.conf'.format(tdir=testdir,
-                                                            client_with_cluster=client_with_cluster),
-                ],
-            logger=log.getChild(client),
-            stdin=run.PIPE,
-            wait=False,
-            )
-        apaches[client_with_cluster] = proc
-
-    try:
-        yield
-    finally:
-        log.info('Stopping apache...')
-        for client, proc in apaches.iteritems():
-            proc.stdin.close()
-
-        run.wait(apaches.itervalues())
-
 def assign_ports(ctx, config):
     """
     Assign port numberst starting with port 7280.
@@ -450,11 +169,6 @@ def configure_compression(ctx, config, compression):
 @contextlib.contextmanager
 def task(ctx, config):
     """
-    Either use configure apache to run a rados gateway, or use the built-in
-    civetweb server.
-    Only one should be run per machine, since it uses a hard-coded port for
-    now.
-
     For example, to run rgw on all clients::
 
         tasks:
@@ -475,14 +189,6 @@ def task(ctx, config):
             client.0:
             client.3:
 
-    You can adjust the idle timeout for fastcgi (default is 30 seconds):
-
-        tasks:
-        - ceph:
-        - rgw:
-            client.0:
-              idle_timeout: 90
-
     To run radosgw through valgrind:
 
         tasks:
@@ -492,33 +198,6 @@ def task(ctx, config):
               valgrind: [--tool=memcheck]
             client.3:
               valgrind: [--tool=memcheck]
-
-    To use civetweb instead of apache:
-
-        tasks:
-        - ceph:
-        - rgw:
-          - client.0
-        overrides:
-          rgw:
-            frontend: civetweb
-
-    Note that without a modified fastcgi module e.g. with the default
-    one on CentOS, you must have rgw print continue = false in ceph.conf::
-
-        tasks:
-        - ceph:
-            conf:
-              global:
-                rgw print continue: false
-        - rgw: [client.0]
-
-    To use mod_proxy_fcgi instead of mod_fastcgi:
-
-        overrides:
-          rgw:
-            use_fcgi: true
-
     """
     if config is None:
         config = dict(('client.{id}'.format(id=id_), None)
@@ -536,25 +215,14 @@ def task(ctx, config):
 
     ctx.rgw.ec_data_pool = bool(config.pop('ec-data-pool', False))
     ctx.rgw.erasure_code_profile = config.pop('erasure_code_profile', {})
-    ctx.rgw.default_idle_timeout = int(config.pop('default_idle_timeout', 30))
     ctx.rgw.cache_pools = bool(config.pop('cache-pools', False))
     ctx.rgw.frontend = config.pop('frontend', 'civetweb')
-    ctx.rgw.use_fastcgi = not config.pop('use_fcgi', True)
     ctx.rgw.compression_type = config.pop('compression type', None)
     ctx.rgw.config = config
 
-    subtasks = []
-    if ctx.rgw.frontend == 'apache':
-        subtasks.extend([
-            lambda: create_apache_dirs(ctx=ctx, config=config),
-            lambda: ship_apache_configs(ctx=ctx, config=config,
-                                        role_endpoints=role_endpoints),
-            lambda: start_apache(ctx=ctx, config=config),
-            ])
-
-    subtasks.extend([
+    subtasks = [
         lambda: create_pools(ctx=ctx, config=config),
-    ])
+    ]
     if ctx.rgw.compression_type:
         subtasks.extend([
             lambda: configure_compression(ctx=ctx, config=config,
