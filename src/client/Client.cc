@@ -3271,6 +3271,19 @@ void Client::send_cap(Inode *in, MetaSession *session, Cap *cap,
   session->con->send_message(m);
 }
 
+static bool is_max_size_approaching(Inode *in)
+{
+  /* mds will adjust max size according to the reported size */
+  if (in->flushing_caps & CEPH_CAP_FILE_WR)
+    return false;
+  if (in->size >= in->max_size)
+    return true;
+  /* half of previous max_size increment has been used */
+  if (in->max_size > in->reported_size &&
+      (in->size << 1) >= in->max_size + in->reported_size)
+    return true;
+  return false;
+}
 
 void Client::check_caps(Inode *in, bool is_delayed)
 {
@@ -3352,11 +3365,10 @@ void Client::check_caps(Inode *in, bool is_delayed)
 
     /* approaching file_max? */
     if ((cap->issued & CEPH_CAP_FILE_WR) &&
-	(in->size << 1) >= in->max_size &&
-	(in->reported_size << 1) < in->max_size &&
-	cap == in->auth_cap) {
+	cap == in->auth_cap &&
+	is_max_size_approaching(in)) {
       ldout(cct, 10) << "size " << in->size << " approaching max_size " << in->max_size
-	       << ", reported " << in->reported_size << dendl;
+		     << ", reported " << in->reported_size << dendl;
       goto ack;
     }
 
@@ -8633,10 +8645,8 @@ success:
 
     if (is_quota_bytes_approaching(in)) {
       check_caps(in, true);
-    } else {
-      if ((in->size << 1) >= in->max_size &&
-          (in->reported_size << 1) < in->max_size)
-        check_caps(in, false);
+    } else if (is_max_size_approaching(in)) {
+      check_caps(in, false);
     }
 
     ldout(cct, 7) << "wrote to " << totalwritten+offset << ", extending file size" << dendl;
@@ -11734,10 +11744,8 @@ int Client::_fallocate(Fh *fh, int mode, int64_t offset, int64_t length)
 
       if (is_quota_bytes_approaching(in)) {
         check_caps(in, true);
-      } else {
-        if ((in->size << 1) >= in->max_size &&
-            (in->reported_size << 1) < in->max_size)
-          check_caps(in, false);
+      } else if (is_max_size_approaching(in)) {
+        check_caps(in, false);
       }
     }
   }
