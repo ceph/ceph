@@ -13,8 +13,8 @@
 
 #include "DaemonServer.h"
 
+#include "include/str_list.h"
 #include "auth/RotatingKeyRing.h"
-
 #include "json_spirit/json_spirit_writer.h"
 
 #include "messages/MMgrOpen.h"
@@ -611,6 +611,67 @@ bool DaemonServer::handle_command(MCommand *m)
     }
     ss << "instructing pg " << pgid << " on osd." << acting_primary
        << " to " << scrubop;
+    cmdctx->reply(0, ss);
+    return true;
+  } else if (prefix == "osd scrub" ||
+	      prefix == "osd deep-scrub" ||
+	      prefix == "osd repair") {
+    string whostr;
+    cmd_getval(g_ceph_context, cmdctx->cmdmap, "who", whostr);
+    vector<string> pvec;
+    get_str_vec(prefix, pvec);
+
+    set<int> osds;
+    if (whostr == "*") {
+      cluster_state.with_osdmap([&](const OSDMap& osdmap) {
+	  for (int i = 0; i < osdmap.get_max_osd(); i++)
+	    if (osdmap.is_up(i)) {
+	      osds.insert(i);
+	    }
+	});
+    } else {
+      long osd = parse_osd_id(whostr.c_str(), &ss);
+      if (osd < 0) {
+	ss << "invalid osd '" << whostr << "'";
+	cmdctx->reply(-EINVAL, ss);
+	return true;
+      }
+      cluster_state.with_osdmap([&](const OSDMap& osdmap) {
+	  if (osdmap.is_up(osd)) {
+	    osds.insert(osd);
+	  }
+	});
+      if (osds.empty()) {
+	ss << "osd." << osd << " is not up";
+	cmdctx->reply(-EAGAIN, ss);
+	return true;
+      }
+    }
+    set<int> sent_osds, failed_osds;
+    for (auto osd : osds) {
+      auto p = osd_cons.find(osd);
+      if (p == osd_cons.end()) {
+	failed_osds.insert(osd);
+      } else {
+	sent_osds.insert(osd);
+	for (auto& con : p->second) {
+	  con->send_message(new MOSDScrub(monc->get_fsid(),
+					  pvec.back() == "repair",
+					  pvec.back() == "deep-scrub"));
+	}
+      }
+    }
+    if (failed_osds.size() == osds.size()) {
+      ss << "failed to instruct osd(s) " << osds << " to " << pvec.back()
+	 << " (not connected)";
+      r = -EAGAIN;
+    } else {
+      ss << "instructed osd(s) " << sent_osds << " to " << pvec.back();
+      if (!failed_osds.empty()) {
+	ss << "; osd(s) " << failed_osds << " were not connected";
+      }
+      r = 0;
+    }
     cmdctx->reply(0, ss);
     return true;
   } else if (prefix == "osd reweight-by-pg" ||
