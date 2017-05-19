@@ -3549,12 +3549,12 @@ void OSDMonitor::get_health(list<pair<health_status_t,string> >& summary,
     num_down_in_osds = down_in_osds.size();
     assert(num_down_in_osds <= num_in_osds);
     if (num_down_in_osds > 0) {
-      ostringstream ss;
-      ss << "\n";
       // summary of down subtree types and osds
       for (int type = max_type; type > 0; type--) {
 	if (subtree_type_down[type].size() > 0) {
-	  ss << subtree_type_down[type].size() << " " << osdmap.crush->get_type_name(type);
+	  ostringstream ss;
+	  ss << subtree_type_down[type].size() << " "
+	     << osdmap.crush->get_type_name(type);
 	  if (subtree_type_down[type].size() > 1) {
 	    ss << "s";
 	  }
@@ -3564,19 +3564,21 @@ void OSDMonitor::get_health(list<pair<health_status_t,string> >& summary,
 	       ++j) {
 	    sum_down_osds = sum_down_osds + num_osds_subtree[*j];
 	  }
-          ss << " (" << sum_down_osds << " osds) down\n";
+          ss << " (" << sum_down_osds << " osds) down";
+	  summary.push_back(make_pair(HEALTH_WARN, ss.str()));
 	}
       }
-      ss << down_in_osds.size() << " osds down\n";
+      ostringstream ss;
+      ss << down_in_osds.size() << " osds down";
       summary.push_back(make_pair(HEALTH_WARN, ss.str()));
 
       if (detail) {
-	ostringstream ss;
 	// details of down subtree types
 	for (int type = max_type; type > 0; type--) {
 	  for (auto j = subtree_type_down[type].rbegin();
 	       j != subtree_type_down[type].rend();
 	       ++j) {
+	    ostringstream ss;
 	    ss << osdmap.crush->get_type_name(type);
 	    ss << " ";
 	    ss << osdmap.crush->get_item_name(*j);
@@ -3588,16 +3590,18 @@ void OSDMonitor::get_health(list<pair<health_status_t,string> >& summary,
 	    }
 	    int num = num_osds_subtree[*j];
 	    ss << " (" << num << " osds)";
-	    ss << " is down\n";
+	    ss << " is down";
+	    detail->push_back(make_pair(HEALTH_WARN, ss.str()));
 	  }
         }
 	// details of down osds
 	for (auto it = down_in_osds.begin(); it != down_in_osds.end(); ++it) {
+	  ostringstream ss;
 	  ss << "osd." << *it << " (";
 	  ss << osdmap.crush->get_full_location_ordered_string(*it);
-          ss << ") is down\n";
+          ss << ") is down";
+	  detail->push_back(make_pair(HEALTH_WARN, ss.str()));
 	}
-        detail->push_back(make_pair(HEALTH_WARN, ss.str()));
       }
     }
 
