@@ -4,9 +4,9 @@
 #include "cls_log_types.h"
 
 namespace librados {
-    class ObjectWriteOperation;
-    class ObjectReadOperation;
-    class IoCtx;
+  class ObjectWriteOperation;
+  class ObjectReadOperation;
+  class IoCtx;
 }
 
 /*

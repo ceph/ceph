@@ -4,9 +4,9 @@
 #include "cls_statelog_ops.h"
 
 namespace librados {
-        class ObjectWriteOperation;
-        class ObjectReadOperation;
-        class ObjectOperation;
+  class ObjectWriteOperation;
+  class ObjectReadOperation;
+  class ObjectOperation;
 }
 
 /*

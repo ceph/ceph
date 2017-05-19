@@ -4,10 +4,10 @@
 #include "cls_version_ops.h"
 
 namespace librados {
-        class ObjectWriteOperation;
-        class ObjectReadOperation;
-        class ObjectOperation;
-        class IoCtx;
+  class ObjectWriteOperation;
+  class ObjectReadOperation;
+  class ObjectOperation;
+  class IoCtx;
 }
 
 /*

@@ -4,6 +4,8 @@
 #ifndef CEPH_CLS_TIMEINDEX_CLIENT_H
 #define CEPH_CLS_TIMEINDEX_CLIENT_H
 
+#include "include/rados/librados.hpp"
+
 #include "cls_timeindex_ops.h"
 
 namespace librados {

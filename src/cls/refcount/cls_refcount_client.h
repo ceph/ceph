@@ -4,8 +4,8 @@
 #include "include/types.h"
 
 namespace librados {
-        class ObjectWriteOperation;
-        class IoCtx;
+  class ObjectWriteOperation;
+  class IoCtx;
 }
 
 /*

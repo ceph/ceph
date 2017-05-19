@@ -15,8 +15,8 @@
 #include "cls_replica_log_ops.h"
 
 namespace librados {
-    class ObjectWriteOperation;
-    class IoCtx;
+  class ObjectWriteOperation;
+  class IoCtx;
 }
 
 /**
