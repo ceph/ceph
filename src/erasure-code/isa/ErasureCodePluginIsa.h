@@ -28,7 +28,7 @@ public:
   int factory(const std::string &directory,
 		      ErasureCodeProfile &profile,
 		      ErasureCodeInterfaceRef *erasure_code,
-		      ostream *ss) override;
+		      std::ostream *ss) override;
 };
 
 #endif

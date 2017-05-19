@@ -26,7 +26,6 @@
 // -----------------------------------------------------------------------------
 #include "ceph_ver.h"
 #include "ErasureCodePluginIsa.h"
-#include "ErasureCodeIsaTableCache.h"
 #include "ErasureCodeIsa.h"
 // -----------------------------------------------------------------------------
 
