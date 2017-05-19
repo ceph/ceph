@@ -11,25 +11,30 @@
  * Foundation.  See file COPYING.
  */
 
+#include <cmath>
+#include <string>
+#include <cassert>
+#include <climits>
+#include <sstream>
+#include <cstdlib>
+#include <iostream>
+#include <iterator>
+
+#include "include/types.h"
+#include "include/random.h"
+#include "include/rados/librados.hpp"
+
+#include "common/ceph_context.h"
+#include "common/Clock.h"
+
 #include "key_value_store/key_value_structure.h"
 #include "key_value_store/kv_flat_btree_async.h"
 #include "key_value_store/kvs_arg_types.h"
-#include "include/rados/librados.hpp"
+
 #include "/usr/include/asm-generic/errno.h"
 #include "/usr/include/asm-generic/errno-base.h"
-#include "common/ceph_context.h"
-#include "common/Clock.h"
-#include "include/types.h"
 
-
-#include <string>
-#include <iostream>
-#include <cassert>
-#include <climits>
-#include <cmath>
-#include <sstream>
-#include <stdlib.h>
-#include <iterator>
+using namespace std;
 
 using ceph::bufferlist;
 
@@ -154,14 +159,14 @@ int KvFlatBtreeAsync::nothing() {
 }
 
 int KvFlatBtreeAsync::wait() {
-  if (rand() % 10 == 0) {
+  if (ceph::util::generate_random_number(10) == 0) {
     usleep(wait_ms);
   }
   return 0;
 }
 
 int KvFlatBtreeAsync::suicide() {
-  if (rand() % 10 == 0) {
+  if (ceph::util::generate_random_number(10) == 0) {
     if (verbose) cout << client_name << " is suiciding" << std::endl;
     return 1;
   }
