@@ -7,10 +7,6 @@
 #include "include/encoding.h"
 #include "common/Formatter.h"
 
-#include <list>
-#include <map>
-#include <ostream>
-
 /**
  * SloppyCRCMap
  *
