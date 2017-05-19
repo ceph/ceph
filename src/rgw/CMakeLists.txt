@@ -25,10 +25,14 @@ add_custom_target(civetweb_h
   "${CMAKE_BINARY_DIR}/src/include/civetweb"
   COMMENT "keep civetweb.h up-to-date")
 
+find_program(GPERF gperf)
+if(NOT GPERF)
+  message(FATAL_ERROR "Can't find gperf")
+endif()
 function(gperf_generate input output)
   add_custom_command(
     OUTPUT ${output}
-    COMMAND gperf ${input} > ${output}
+    COMMAND ${GPERF} ${input} > ${output}
     DEPENDS ${input}
     COMMENT "Generate ${output}"
     )
