@@ -25,7 +25,7 @@ MEMPOOL_DEFINE_OBJECT_FACTORY(PGMap::Incremental, pgmap_inc, pgmap);
 void PGMapDigest::encode(bufferlist& bl, uint64_t features) const
 {
   // NOTE: see PGMap::encode_digest
-  ENCODE_START(2, 1, bl);
+  ENCODE_START(3, 1, bl);
   ::encode(num_pg, bl);
   ::encode(num_pg_active, bl);
   ::encode(num_osd, bl);
@@ -36,12 +36,13 @@ void PGMapDigest::encode(bufferlist& bl, uint64_t features) const
   ::encode(num_pg_by_state, bl);
   ::encode(num_pg_by_osd, bl);
   ::encode(osd_last_seq, bl);
+  ::encode(num_pg_by_pool, bl);
   ENCODE_FINISH(bl);
 }
 
 void PGMapDigest::decode(bufferlist::iterator& p)
 {
-  DECODE_START(2, p);
+  DECODE_START(3, p);
   ::decode(num_pg, p);
   ::decode(num_pg_active, p);
   ::decode(num_osd, p);
@@ -62,6 +63,9 @@ void PGMapDigest::decode(bufferlist::iterator& p)
     }
     osd_last_seq.resize(s);
   }
+  if (struct_v >= 3) {
+    ::decode(num_pg_by_pool, p);
+  }
   DECODE_FINISH(p);
 }
 
@@ -76,6 +80,9 @@ void PGMapDigest::dump(Formatter *f) const
   for (auto& p : pg_pool_sum) {
     f->open_object_section("pool_stat");
     f->dump_int("poolid", p.first);
+    auto q = num_pg_by_pool.find(p.first);
+    if (q != num_pg_by_pool.end())
+      f->dump_unsigned("num_pg", q->second);
     p.second.dump(f);
     f->close_section();
   }
@@ -1246,6 +1253,7 @@ void PGMap::stat_pg_add(const pg_t &pgid, const pg_stat_t &s,
 
   num_pg++;
   num_pg_by_state[s.state]++;
+  num_pg_by_pool[pgid.pool()]++;
 
   if ((s.state & PG_STATE_CREATING) &&
       s.parent_split_bits == 0) {
@@ -1287,8 +1295,6 @@ void PGMap::stat_pg_sub(const pg_t &pgid, const pg_stat_t &s,
 {
   pool_stat_t& ps = pg_pool_sum[pgid.pool()];
   ps.sub(s);
-  if (ps.is_zero())
-    pg_pool_sum.erase(pgid.pool());
   pg_sum.sub(s);
 
   num_pg--;
@@ -1296,6 +1302,11 @@ void PGMap::stat_pg_sub(const pg_t &pgid, const pg_stat_t &s,
   assert(end >= 0);
   if (end == 0)
     num_pg_by_state.erase(s.state);
+  end = --num_pg_by_pool[pgid.pool()];
+  if (end == 0) {
+    num_pg_by_pool.erase(pgid.pool());
+    pg_pool_sum.erase(pgid.pool());
+  }
 
   if ((s.state & PG_STATE_CREATING) &&
       s.parent_split_bits == 0) {
@@ -1580,6 +1591,9 @@ void PGMap::dump_pool_stats(Formatter *f) const
        ++p) {
     f->open_object_section("pool_stat");
     f->dump_int("poolid", p->first);
+    auto q = num_pg_by_pool.find(p->first);
+    if (q != num_pg_by_pool.end())
+      f->dump_unsigned("num_pg", q->second);
     p->second.dump(f);
     f->close_section();
   }
