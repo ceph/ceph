@@ -172,6 +172,14 @@ bool DaemonServer::ms_verify_authorizer(Connection *con,
       }
     }
     con->set_priv(s->get());
+
+    if (peer_type == CEPH_ENTITY_TYPE_OSD) {
+      Mutex::Locker l(lock);
+      s->osd_id = atoi(s->entity_name.get_id().c_str());
+      dout(10) << __func__ << " registering osd." << s->osd_id << " session "
+	       << s << " con " << con << dendl;
+      osd_cons[s->osd_id].insert(con);
+    }
   }
 
   return true;
@@ -195,6 +203,22 @@ bool DaemonServer::ms_get_authorizer(int dest_type,
   *authorizer = monc->build_authorizer(dest_type);
   dout(20) << "got authorizer " << *authorizer << dendl;
   return *authorizer != NULL;
+}
+
+bool DaemonServer::ms_handle_reset(Connection *con)
+{
+  if (con->get_peer_type() == CEPH_ENTITY_TYPE_OSD) {
+    MgrSessionRef session(static_cast<MgrSession*>(con->get_priv()));
+    if (!session) {
+      return false;
+    }
+    session->put(); // SessionRef takes a ref
+    Mutex::Locker l(lock);
+    dout(10) << __func__ << " unregistering osd." << session->osd_id
+	     << "  session " << session << " con " << con << dendl;
+    osd_cons[session->osd_id].erase(con);
+  }
+  return false;
 }
 
 bool DaemonServer::ms_handle_refused(Connection *con)
