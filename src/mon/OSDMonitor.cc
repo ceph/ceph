@@ -5873,28 +5873,6 @@ bool OSDMonitor::prepare_unset_flag(MonOpRequestRef op, int flag)
   return true;
 }
 
-int OSDMonitor::parse_osd_id(const char *s, stringstream *pss)
-{
-  // osd.NNN?
-  if (strncmp(s, "osd.", 4) == 0) {
-    s += 4;
-  }
-
-  // NNN?
-  ostringstream ss;
-  long id = parse_pos_long(s, &ss);
-  if (id < 0) {
-    *pss << ss.str();
-    return id;
-  }
-  if (id > 0xffff) {
-    *pss << "osd id " << id << " is too large";
-    return -ERANGE;
-  }
-  return id;
-}
-
-
 int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
                                          stringstream& ss)
 {
