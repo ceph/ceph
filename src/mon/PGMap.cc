@@ -2293,8 +2293,10 @@ void PGMap::dump_filtered_pg_stats(ostream& ss, set<pg_t>& pgs) const
 static void note_stuck_detail(
   int what,
   mempool::pgmap::unordered_map<pg_t,pg_stat_t>& stuck_pgs,
+  int max_detail,
   list<pair<health_status_t,string> > *detail)
 {
+  int n = 0;
   for (auto p = stuck_pgs.begin();
        p != stuck_pgs.end();
        ++p) {
@@ -2325,6 +2327,13 @@ static void note_stuck_detail(
     default:
       ceph_abort();
     }
+    if (--max_detail == 0) {
+      ostringstream ss;
+      ss << (stuck_pgs.size() - n) << " more pgs are also stuck " << whatname;
+      detail->push_back(make_pair(HEALTH_WARN, ss.str()));
+      break;
+    }
+    ++n;
     ss << "pg " << p->first << " is stuck " << whatname;
     if (since == utime_t()) {
       ss << " since forever";
@@ -2353,11 +2362,12 @@ static int _warn_slow_request_histogram(
     float ub = (float)(1 << i) / 1000.0;
     if (ub < cct->_conf->mon_osd_max_op_age)
       break;
-    ostringstream ss;
     if (h.h[i]) {
-      ss << h.h[i] << " ops are blocked > " << ub << " sec" << suffix;
-      if (detail)
+      if (detail) {
+	ostringstream ss;
+	ss << h.h[i] << " ops are blocked > " << ub << " sec" << suffix;
 	detail->push_back(make_pair(HEALTH_WARN, ss.str()));
+      }
       sum += h.h[i];
     }
   }
@@ -2501,28 +2511,32 @@ void PGMap::get_health(
         get_stuck_stats(PGMap::STUCK_INACTIVE, cutoff, stuck_pgs);
         note["stuck inactive"] = stuck_pgs.size();
         num_inactive_pgs += stuck_pgs.size();
-        note_stuck_detail(PGMap::STUCK_INACTIVE, stuck_pgs, detail);
+        note_stuck_detail(PGMap::STUCK_INACTIVE, stuck_pgs,
+			  cct->_conf->mon_health_max_detail, detail);
         stuck_pgs.clear();
       }
 
       if (note.find("stuck unclean") != note.end()) {
         get_stuck_stats(PGMap::STUCK_UNCLEAN, cutoff, stuck_pgs);
         note["stuck unclean"] = stuck_pgs.size();
-        note_stuck_detail(PGMap::STUCK_UNCLEAN, stuck_pgs, detail);
+        note_stuck_detail(PGMap::STUCK_UNCLEAN, stuck_pgs,
+			  cct->_conf->mon_health_max_detail,  detail);
         stuck_pgs.clear();
       }
 
       if (note.find("stuck undersized") != note.end()) {
         get_stuck_stats(PGMap::STUCK_UNDERSIZED, cutoff, stuck_pgs);
         note["stuck undersized"] = stuck_pgs.size();
-        note_stuck_detail(PGMap::STUCK_UNDERSIZED, stuck_pgs, detail);
+        note_stuck_detail(PGMap::STUCK_UNDERSIZED, stuck_pgs,
+			  cct->_conf->mon_health_max_detail,  detail);
         stuck_pgs.clear();
       }
 
       if (note.find("stuck degraded") != note.end()) {
         get_stuck_stats(PGMap::STUCK_DEGRADED, cutoff, stuck_pgs);
         note["stuck degraded"] = stuck_pgs.size();
-        note_stuck_detail(PGMap::STUCK_DEGRADED, stuck_pgs, detail);
+        note_stuck_detail(PGMap::STUCK_DEGRADED, stuck_pgs,
+			  cct->_conf->mon_health_max_detail,  detail);
         stuck_pgs.clear();
       }
 
@@ -2530,7 +2544,8 @@ void PGMap::get_health(
         get_stuck_stats(PGMap::STUCK_STALE, cutoff, stuck_pgs);
         note["stuck stale"] = stuck_pgs.size();
         num_inactive_pgs += stuck_pgs.size();
-        note_stuck_detail(PGMap::STUCK_STALE, stuck_pgs, detail);
+        note_stuck_detail(PGMap::STUCK_STALE, stuck_pgs,
+			  cct->_conf->mon_health_max_detail,  detail);
       }
     }
   } else {
@@ -2557,6 +2572,8 @@ void PGMap::get_health(
       summary.push_back(make_pair(HEALTH_WARN, ss.str()));
     }
     if (detail) {
+      int n = 0, more = 0;
+      int max = cct->_conf->mon_health_max_detail;
       for (auto p = pg_stat.begin();
            p != pg_stat.end();
            ++p) {
@@ -2575,6 +2592,13 @@ void PGMap::get_health(
 	                        PG_STATE_BACKFILL |
 	                        PG_STATE_BACKFILL_TOOFULL)) &&
 	    stuck_pgs.count(p->first) == 0) {
+	  if (max > 0) {
+	    --max;
+	  } else {
+	    ++more;
+	    continue;
+	  }
+	  ++n;
 	  ostringstream ss;
 	  ss << "pg " << p->first << " is " << pg_state_string(p->second.state);
 	  ss << ", acting " << p->second.acting;
@@ -2584,11 +2608,17 @@ void PGMap::get_health(
 	    const pg_pool_t *pi = osdmap.get_pg_pool(p->first.pool());
 	    if (pi && pi->min_size > 1) {
 	      ss << " (reducing pool " << osdmap.get_pool_name(p->first.pool())
-	         << " min_size from " << (int)pi->min_size << " may help; search ceph.com/docs for 'incomplete')";
+	         << " min_size from " << (int)pi->min_size
+		 << " may help; search ceph.com/docs for 'incomplete')";
 	    }
 	  }
 	  detail->push_back(make_pair(HEALTH_WARN, ss.str()));
 	}
+      }
+      if (more) {
+	ostringstream ss;
+	ss << more << " more pgs are also unhealthy";
+	detail->push_back(make_pair(HEALTH_WARN, ss.str()));
       }
     }
   }
