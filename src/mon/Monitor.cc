@@ -3856,15 +3856,6 @@ void Monitor::remove_all_sessions()
     logger->set(l_mon_num_sessions, session_map.get_size());
 }
 
-void Monitor::send_command(const entity_inst_t& inst,
-			   const vector<string>& com)
-{
-  dout(10) << "send_command " << inst << "" << com << dendl;
-  MMonCommand *c = new MMonCommand(monmap->fsid);
-  c->cmd = com;
-  try_send_message(c, inst);
-}
-
 void Monitor::waitlist_or_zap_client(MonOpRequestRef op)
 {
   /**

@@ -801,9 +801,6 @@ public:
   void remove_all_sessions();
   void waitlist_or_zap_client(MonOpRequestRef op);
 
-  void send_command(const entity_inst_t& inst,
-		    const vector<string>& com);
-
 public:
   struct C_Command : public C_MonOp {
     Monitor *mon;
