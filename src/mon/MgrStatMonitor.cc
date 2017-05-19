@@ -27,17 +27,6 @@ public:
   const pool_stat_t& get_pg_sum() const override { return digest.pg_sum; }
   const osd_stat_t& get_osd_sum() const override { return digest.osd_sum; }
 
-  const osd_stat_t *get_osd_stat(int osd) const override {
-    auto i = digest.osd_stat.find(osd);
-    if (i == digest.osd_stat.end()) {
-      return nullptr;
-    }
-    return &i->second;
-  }
-  const mempool::pgmap::unordered_map<int32_t,osd_stat_t> &get_osd_stat() const override {
-    return digest.osd_stat;
-  }
-
   size_t get_num_pg_by_osd(int osd) const override {
     return digest.get_num_pg_by_osd(osd);
   }

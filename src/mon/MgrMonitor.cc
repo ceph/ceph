@@ -33,7 +33,6 @@ static ostream& _prefix(std::ostream *_dout, Monitor *mon,
 }
 
 
-
 void MgrMonitor::create_initial()
 {
 }
