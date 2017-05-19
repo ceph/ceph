@@ -158,25 +158,26 @@ int check_mon_data_empty()
 
 static void usage()
 {
-  cerr << "usage: ceph-mon -i monid [flags]" << std::endl;
-  cerr << "  --debug_mon n\n";
-  cerr << "        debug monitor level (e.g. 10)\n";
-  cerr << "  --mkfs\n";
-  cerr << "        build fresh monitor fs\n";
-  cerr << "  --force-sync\n";
-  cerr << "        force a sync from another mon by wiping local data (BE CAREFUL)\n";
-  cerr << "  --yes-i-really-mean-it\n";
-  cerr << "        mandatory safeguard for --force-sync\n";
-  cerr << "  --compact\n";
-  cerr << "        compact the monitor store\n";
-  cerr << "  --osdmap <filename>\n";
-  cerr << "        only used when --mkfs is provided: load the osdmap from <filename>\n";
-  cerr << "  --inject-monmap <filename>\n";
-  cerr << "        write the <filename> monmap to the local monitor store and exit\n";
-  cerr << "  --extract-monmap <filename>\n";
-  cerr << "        extract the monmap from the local monitor store and exit\n";
-  cerr << "  --mon-data <directory>\n";
-  cerr << "        where the mon store and keyring are located\n";
+  cout << "usage: ceph-mon -i <ID> [flags]\n"
+       << "  --debug_mon n\n"
+       << "        debug monitor level (e.g. 10)\n"
+       << "  --mkfs\n"
+       << "        build fresh monitor fs\n"
+       << "  --force-sync\n"
+       << "        force a sync from another mon by wiping local data (BE CAREFUL)\n"
+       << "  --yes-i-really-mean-it\n"
+       << "        mandatory safeguard for --force-sync\n"
+       << "  --compact\n"
+       << "        compact the monitor store\n"
+       << "  --osdmap <filename>\n"
+       << "        only used when --mkfs is provided: load the osdmap from <filename>\n"
+       << "  --inject-monmap <filename>\n"
+       << "        write the <filename> monmap to the local monitor store and exit\n"
+       << "  --extract-monmap <filename>\n"
+       << "        extract the monmap from the local monitor store and exit\n"
+       << "  --mon-data <directory>\n"
+       << "        where the mon store and keyring are located\n"
+       << std::endl;
   generic_server_usage();
 }
 
