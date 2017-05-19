@@ -63,6 +63,9 @@ protected:
 
   AuthAuthorizeHandlerRegistry auth_registry;
 
+  /// connections for osds
+  ceph::unordered_map<int,set<ConnectionRef>> osd_cons;
+
   Mutex lock;
 
   static void _generate_command_map(map<string,cmd_vartype>& cmdmap,
@@ -96,7 +99,7 @@ public:
   ~DaemonServer() override;
 
   bool ms_dispatch(Message *m) override;
-  bool ms_handle_reset(Connection *con) override { return false; }
+  bool ms_handle_reset(Connection *con) override;
   void ms_handle_remote_reset(Connection *con) override {}
   bool ms_handle_refused(Connection *con) override;
   bool ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer,
