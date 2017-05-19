@@ -1729,6 +1729,14 @@ public:
       return NULL;
     }
   };
+  struct KVFinalizeThread : public Thread {
+    BlueStore *store;
+    explicit KVFinalizeThread(BlueStore *s) : store(s) {}
+    void *entry() {
+      store->_kv_finalize_thread();
+      return NULL;
+    }
+  };
 
   struct DBHistogram {
     struct value_dist {
@@ -1808,6 +1816,12 @@ private:
   deque<TransContext*> kv_committing;        ///< currently syncing
   deque<DeferredBatch*> deferred_done_queue;   ///< deferred ios done
   deque<DeferredBatch*> deferred_stable_queue; ///< deferred ios done + stable
+
+  KVFinalizeThread kv_finalize_thread;
+  std::mutex kv_finalize_lock;
+  std::condition_variable kv_finalize_cond;
+  deque<TransContext*> kv_committing_to_finalize;   ///< pending finalization
+  deque<DeferredBatch*> deferred_stable_to_finalize; ///< pending finalization
 
   PerfCounters *logger = nullptr;
 
@@ -1968,13 +1982,20 @@ private:
   void _osr_unregister_all();
 
   void _kv_sync_thread();
+  void _kv_finalize_thread();
   void _kv_stop() {
     {
       std::lock_guard<std::mutex> l(kv_lock);
       kv_stop = true;
       kv_cond.notify_all();
     }
+    {
+      std::lock_guard<std::mutex> l(kv_finalize_lock);
+      kv_finalize_cond.notify_all();
+    }
+
     kv_sync_thread.join();
+    kv_finalize_thread.join();
     {
       std::lock_guard<std::mutex> l(kv_lock);
       kv_stop = false;
