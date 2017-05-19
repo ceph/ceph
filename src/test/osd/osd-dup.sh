@@ -70,6 +70,8 @@ function TEST_filestore_to_bluestore() {
 
     # give it some time
     sleep 15
+    # and make sure mon is sync'ed
+    flush_pg_stats
 
     ceph -s | grep '20 active+clean' || return 1
 }
