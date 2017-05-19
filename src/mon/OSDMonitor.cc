@@ -3486,7 +3486,7 @@ void OSDMonitor::get_health(list<pair<health_status_t,string> >& summary,
     set<int> subtree_up;
     unordered_map<int, set<int> > subtree_type_down;
     unordered_map<int, int> num_osds_subtree;
-    int max_type = osdmap.crush->get_num_type_names() - 1;
+    int max_type = osdmap.crush->get_max_type_id();
 
     for (int i = 0; i < osdmap.get_max_osd(); i++) {
       if (!osdmap.exists(i)) {
@@ -3505,6 +3505,8 @@ void OSDMonitor::get_health(list<pair<health_status_t,string> >& summary,
 	int parent_id = 0;
 	int current = i;
 	for (int type = 0; type <= max_type; type++) {
+	  if (!osdmap.crush->get_type_name(type))
+	    continue;
 	  int r = osdmap.crush->get_immediate_parent_id(current, &parent_id);
 	  if (r == -ENOENT)
 	    break;
@@ -3524,6 +3526,8 @@ void OSDMonitor::get_health(list<pair<health_status_t,string> >& summary,
     // calculate the number of down osds in each down subtree and
     // store it in num_osds_subtree
     for (int type = 1; type <= max_type; type++) {
+      if (!osdmap.crush->get_type_name(type))
+	continue;
       for (auto j = subtree_type_down[type].begin();
 	   j != subtree_type_down[type].end();
 	   ++j) {
@@ -3551,6 +3555,8 @@ void OSDMonitor::get_health(list<pair<health_status_t,string> >& summary,
     if (num_down_in_osds > 0) {
       // summary of down subtree types and osds
       for (int type = max_type; type > 0; type--) {
+	if (!osdmap.crush->get_type_name(type))
+	  continue;
 	if (subtree_type_down[type].size() > 0) {
 	  ostringstream ss;
 	  ss << subtree_type_down[type].size() << " "
@@ -3575,6 +3581,8 @@ void OSDMonitor::get_health(list<pair<health_status_t,string> >& summary,
       if (detail) {
 	// details of down subtree types
 	for (int type = max_type; type > 0; type--) {
+	  if (!osdmap.crush->get_type_name(type))
+	    continue;
 	  for (auto j = subtree_type_down[type].rbegin();
 	       j != subtree_type_down[type].rend();
 	       ++j) {

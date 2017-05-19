@@ -356,6 +356,11 @@ public:
   int get_num_type_names() const {
     return type_map.size();
   }
+  int get_max_type_id() const {
+    if (type_map.empty())
+      return 0;
+    return type_map.rbegin()->first;
+  }
   int get_type_id(const string& name) const {
     build_rmaps();
     if (type_rmap.count(name))
