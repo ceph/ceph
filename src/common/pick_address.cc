@@ -13,15 +13,12 @@
  */
 
 #include "common/pick_address.h"
-
-#include <netdb.h>
-#include <errno.h>
-#include <ifaddrs.h>
-
 #include "include/ipaddr.h"
 #include "include/str_list.h"
 #include "common/debug.h"
 #include "common/errno.h"
+
+#include <netdb.h>
 
 #define dout_subsys ceph_subsys_
 

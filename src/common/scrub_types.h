@@ -4,10 +4,7 @@
 #ifndef CEPH_SCRUB_TYPES_H
 #define CEPH_SCRUB_TYPES_H
 
-#include "include/rados/rados_types.hpp"
-#include "common/hobject.h"
 #include "osd/osd_types.h"
-
 
 // wrappers around scrub types to offer the necessary bits other than
 // the minimal set that the lirados requires
