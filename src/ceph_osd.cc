@@ -69,7 +69,7 @@ void handle_osd_signal(int signum)
 
 static void usage()
 {
-  cout << "usage: ceph-osd -i <osdid>\n"
+  cout << "usage: ceph-osd -i <ID> [flags]\n"
        << "  --osd-data PATH data directory\n"
        << "  --osd-journal PATH\n"
        << "                    journal file or block device\n"
