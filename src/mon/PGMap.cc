@@ -3246,6 +3246,49 @@ void PGMapUpdater::check_osd_map(const OSDMap::Incremental &osd_inc,
   }
 }
 
+void PGMapUpdater::check_osd_map(
+  CephContext *cct,
+  const OSDMap& osdmap,
+  const PGMap& pgmap,
+  PGMap::Incremental *pending_inc)
+{
+  for (auto& p : pgmap.osd_stat) {
+    if (!osdmap.exists(p.first)) {
+      // remove osd_stat
+      pending_inc->rm_stat(p.first);
+    } else if (osdmap.is_out(p.first)) {
+      // zero osd_stat
+      if (p.second.kb != 0) {
+	pending_inc->stat_osd_out(p.first);
+      }
+    } else if (!osdmap.is_up(p.first)) {
+      // zero the op_queue_age_hist
+      if (!p.second.op_queue_age_hist.empty()) {
+	pending_inc->stat_osd_down_up(p.first, pgmap);
+      }
+    }
+  }
+  for (auto& p : pgmap.pg_pool_sum) {
+    if (!osdmap.have_pg_pool(p.first)) {
+      ldout(cct, 10) << __func__ << " pool " << p.first << " gone, removing pgs"
+		     << dendl;
+      for (auto& q : pgmap.pg_stat) {
+	if (q.first.pool() == (uint64_t)p.first) {
+	  pending_inc->pg_remove.insert(q.first);
+	}
+      }
+      auto q = pending_inc->pg_stat_updates.begin();
+      while (q != pending_inc->pg_stat_updates.end()) {
+	if (q->first.pool() == (uint64_t)p.first) {
+	  q = pending_inc->pg_stat_updates.erase(q);
+	} else {
+	  ++q;
+	}
+      }
+    }
+  }
+}
+
 void PGMapUpdater::register_pg(
     const OSDMap &osd_map,
     pg_t pgid, epoch_t epoch,
