@@ -41,8 +41,12 @@ public:
   virtual const pool_stat_t& get_pg_sum() const = 0;
   virtual const osd_stat_t& get_osd_sum() const = 0;
 
-  virtual const osd_stat_t *get_osd_stat(int osd) const = 0;
-  virtual const mempool::pgmap::unordered_map<int32_t,osd_stat_t>& get_osd_stat() const = 0;
+  virtual const osd_stat_t *get_osd_stat(int osd) const {
+    ceph_abort();
+  }
+  virtual const mempool::pgmap::unordered_map<int32_t,osd_stat_t>& get_osd_stat() const {
+    ceph_abort();
+  }
   virtual float get_full_ratio() const {
     ceph_abort();
   }
