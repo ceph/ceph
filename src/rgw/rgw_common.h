@@ -275,7 +275,7 @@ struct rgw_err {
 
   int http_ret;
   int ret;
-  std::string s3_code;
+  std::string err_code;
   std::string message;
 };
 

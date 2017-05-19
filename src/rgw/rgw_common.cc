@@ -163,7 +163,7 @@ clear()
 {
   http_ret = 200;
   ret = 0;
-  s3_code.clear();
+  err_code.clear();
 }
 
 bool rgw_err::
@@ -315,20 +315,20 @@ void set_req_state_err(struct rgw_err& err,	/* out */
   bool is_website_redirect = false;
 
   if (prot_flags & RGW_REST_SWIFT) {
-    if (search_err(rgw_http_swift_errors, err_no, is_website_redirect, err.http_ret, err.s3_code))
+    if (search_err(rgw_http_swift_errors, err_no, is_website_redirect, err.http_ret, err.err_code))
       return;
   }
 
   //Default to searching in s3 errors
   is_website_redirect |= (prot_flags & RGW_REST_WEBSITE)
 		&& err_no == ERR_WEBSITE_REDIRECT && err.is_clear();
-  if (search_err(rgw_http_s3_errors, err_no, is_website_redirect, err.http_ret, err.s3_code))
+  if (search_err(rgw_http_s3_errors, err_no, is_website_redirect, err.http_ret, err.err_code))
       return;
   dout(0) << "WARNING: set_req_state_err err_no=" << err_no
 	<< " resorting to 500" << dendl;
 
   err.http_ret = 500;
-  err.s3_code = "UnknownError";
+  err.err_code = "UnknownError";
 }
 
 void set_req_state_err(struct req_state* s, int err_no, const string& err_msg)
@@ -350,8 +350,8 @@ void dump(struct req_state* s)
 {
   if (s->format != RGW_FORMAT_HTML)
     s->formatter->open_object_section("Error");
-  if (!s->err.s3_code.empty())
-    s->formatter->dump_string("Code", s->err.s3_code);
+  if (!s->err.err_code.empty())
+    s->formatter->dump_string("Code", s->err.err_code);
   if (!s->err.message.empty())
     s->formatter->dump_string("Message", s->err.message);
   if (!s->bucket_name.empty())	// TODO: connect to expose_bucket
@@ -434,7 +434,7 @@ void req_info::init_meta_info(bool *found_bad_meta)
 
 std::ostream& operator<<(std::ostream& oss, const rgw_err &err)
 {
-  oss << "rgw_err(http_ret=" << err.http_ret << ", s3='" << err.s3_code << "') ";
+  oss << "rgw_err(http_ret=" << err.http_ret << ", err_code='" << err.err_code << "') ";
   return oss;
 }
 

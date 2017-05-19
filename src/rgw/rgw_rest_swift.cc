@@ -1979,7 +1979,7 @@ void RGWFormPost::send_response()
   }
 
   set_req_state_err(s, op_ret);
-  s->err.s3_code = err_msg;
+  s->err.err_code = err_msg;
   dump_errno(s);
   if (! redirect.empty()) {
     dump_redirect(s, redirect);
