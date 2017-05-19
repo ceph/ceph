@@ -3493,7 +3493,7 @@ void OSDMonitor::get_health(list<pair<health_status_t,string> >& summary,
         if (osdmap.crush->item_exists(i)) {
           osds.insert(i);
         }
-	 continue;
+	continue;
       } 
       if (osdmap.is_out(i))
         continue;
@@ -3512,16 +3512,21 @@ void OSDMonitor::get_health(list<pair<health_status_t,string> >& summary,
 	  if (subtree_up.count(parent_id))
 	    break;
 	  type = osdmap.crush->get_bucket_type(parent_id);
-	  if (!osdmap.subtree_type_is_down(g_ceph_context, parent_id, type, &down_in_osds, &up_in_osds, &subtree_up, &subtree_type_down))
+	  if (!osdmap.subtree_type_is_down(
+		g_ceph_context, parent_id, type,
+		&down_in_osds, &up_in_osds, &subtree_up, &subtree_type_down))
 	    break;
 	  current = parent_id;
 	}
       }
     }
 
-    // calculate the number of down osds in each down subtree and store it in num_osds_subtree
+    // calculate the number of down osds in each down subtree and
+    // store it in num_osds_subtree
     for (int type = 1; type <= max_type; type++) {
-      for (auto j = subtree_type_down[type].begin(); j != subtree_type_down[type].end(); ++j) {
+      for (auto j = subtree_type_down[type].begin();
+	   j != subtree_type_down[type].end();
+	   ++j) {
 	if (type == 1) {
           list<int> children;
           int num = osdmap.crush->get_children(*j, &children);
@@ -3554,7 +3559,9 @@ void OSDMonitor::get_health(list<pair<health_status_t,string> >& summary,
 	    ss << "s";
 	  }
 	  int sum_down_osds = 0;
-	  for (auto j = subtree_type_down[type].begin(); j != subtree_type_down[type].end(); ++j) {
+	  for (auto j = subtree_type_down[type].begin();
+	       j != subtree_type_down[type].end();
+	       ++j) {
 	    sum_down_osds = sum_down_osds + num_osds_subtree[*j];
 	  }
           ss << " (" << sum_down_osds << " osds) down\n";
@@ -3567,7 +3574,9 @@ void OSDMonitor::get_health(list<pair<health_status_t,string> >& summary,
 	ostringstream ss;
 	// details of down subtree types
 	for (int type = max_type; type > 0; type--) {
-	  for (auto j = subtree_type_down[type].rbegin(); j != subtree_type_down[type].rend(); ++j) {
+	  for (auto j = subtree_type_down[type].rbegin();
+	       j != subtree_type_down[type].rend();
+	       ++j) {
 	    ss << osdmap.crush->get_type_name(type);
 	    ss << " ";
 	    ss << osdmap.crush->get_item_name(*j);
