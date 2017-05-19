@@ -112,4 +112,17 @@ sview2cstr(const boost::string_view& sv)
   return cstr;
 }
 
+/* We need this helper function because the interface of std::string::reserve
+ * doesn't provide the chaining ability in the type append(). It's required
+ * to concatenate string without reallocations in a way const-correct manner. */
+template <class StringT>
+static inline StringT create_n_reserve(const size_t reserve_len)
+{
+  StringT ret;
+  /* I would love to see reserve() returning "basic_string&" instead of "void"
+   * in the standard library! */
+  ret.reserve(reserve_len);
+  return ret;
+}
+
 #endif
