@@ -24,13 +24,16 @@
 #endif
 
 #include "osd/osd_types.h"
-#include "include/object.h"
 #include "common/config.h"
 #include "common/debug.h"
-#include "include/buffer.h"
 #include "common/ceph_crypto.h"
 #include "include/compat.h"
 #include "chain_xattr.h"
+
+#include "include/util.h"
+#include "include/buffer.h"
+#include "include/object.h"
+#include "include/random.h"
 
 #include "LFNIndex.h"
 using ceph::crypto::SHA1;
@@ -51,9 +54,8 @@ const int LFNIndex::FILENAME_PREFIX_LEN =  FILENAME_SHORT_LEN - FILENAME_HASH_LE
 void LFNIndex::maybe_inject_failure()
 {
   if (error_injection_enabled) {
-    if (current_failure > last_failure &&
-	(((double)(rand() % 10000))/((double)(10000))
-	 < error_injection_probability)) {
+    if (current_failure > last_failure && 
+        (ceph::util::generate_random_number(10000.0) / 10000.0) < error_injection_probability) {
       last_failure = current_failure;
       current_failure = 0;
       throw RetryException();
