@@ -7,10 +7,11 @@
 #include "cls/lock/cls_lock_types.h"
 
 namespace librados {
-    class ObjectWriteOperation;
-    class IoCtx;
-    class ObjectReadOperation;
-    class ObjectOperation;
+  class AioCompletion;
+  class ObjectWriteOperation;
+  class IoCtx;
+  class ObjectReadOperation;
+  class ObjectOperation;
 }
 
 namespace rados {

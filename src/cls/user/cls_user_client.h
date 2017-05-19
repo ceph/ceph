@@ -8,9 +8,9 @@
 #include "common/RefCountedObj.h"
 
 namespace librados {
-        class ObjectWriteOperation;
-        class ObjectReadOperation;
-        class IoCtx;
+  class ObjectWriteOperation;
+  class ObjectReadOperation;
+  class IoCtx;
 }
 
 class RGWGetUserHeader_CB : public RefCountedObject {
