@@ -178,6 +178,9 @@ void PGMonitor::update_from_paxos(bool *need_bootstrap)
     did_delete = true;
     dout(10) << __func__ << " deleted, clearing in-memory PGMap" << dendl;
     pg_map = PGMap();
+    pending_inc = PGMap::Incremental();
+    pgservice.reset();
+    last_osd_report.clear();
     return;
   }
 
