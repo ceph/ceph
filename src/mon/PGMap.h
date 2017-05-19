@@ -245,7 +245,7 @@ public:
       // 0 the stats for the osd
       osd_stat_updates[osd] = osd_stat_t();
     }
-    void stat_osd_down_up(int32_t osd, PGMap& pg_map) {
+    void stat_osd_down_up(int32_t osd, const PGMap& pg_map) {
       // 0 the op_queue_age_hist for this osd
       auto p = osd_stat_updates.find(osd);
       if (p != osd_stat_updates.end()) {
@@ -485,6 +485,11 @@ public:
       PGMap *pg_map,
       PGMap::Incremental *pending_inc);
 
+  static void check_osd_map(
+    CephContext *cct,
+    const OSDMap &osdmap,
+    const PGMap& pg_map,
+    PGMap::Incremental *pending_inc);
   /**
    * check latest osdmap for new pgs to register
    */
