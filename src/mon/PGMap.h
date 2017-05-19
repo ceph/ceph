@@ -44,15 +44,15 @@ public:
   // aggregate state, populated by PGMap child
   int64_t num_pg = 0, num_osd = 0;
   int64_t num_pg_active = 0;
-  mempool::pgmap::unordered_map<int,pool_stat_t> pg_pool_sum;
+  mempool::pgmap::unordered_map<int32_t,pool_stat_t> pg_pool_sum;
   mempool::pgmap::map<int64_t,int64_t> num_pg_by_pool;
   pool_stat_t pg_sum;
   osd_stat_t osd_sum;
-  mempool::pgmap::unordered_map<int,int> num_pg_by_state;
+  mempool::pgmap::unordered_map<int32_t,int32_t> num_pg_by_state;
   struct pg_count {
-    int acting = 0;
-    int up = 0;
-    int primary = 0;
+    int32_t acting = 0;
+    int32_t up = 0;
+    int32_t primary = 0;
     void encode(bufferlist& bl) const {
       ::encode(acting, bl);
       ::encode(up, bl);
@@ -64,10 +64,7 @@ public:
       ::decode(primary, p);
     }
   };
-  mempool::pgmap::unordered_map<int,pg_count> num_pg_by_osd;
-
-  void print_summary(Formatter *f, ostream *out) const;
-  void print_oneline_summary(Formatter *f, ostream *out) const;
+  mempool::pgmap::unordered_map<int32_t,pg_count> num_pg_by_osd;
 
   // recent deltas, and summation
   /**
@@ -92,6 +89,9 @@ public:
   pool_stat_t pg_sum_delta;
   utime_t stamp_delta;
 
+
+  void print_summary(Formatter *f, ostream *out) const;
+  void print_oneline_summary(Formatter *f, ostream *out) const;
 
   void recovery_summary(Formatter *f, list<string> *psl,
                         const pool_stat_t& delta_sum) const;
