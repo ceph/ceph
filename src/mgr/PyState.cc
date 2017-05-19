@@ -196,10 +196,10 @@ ceph_config_get(PyObject *self, PyObject *args)
   std::string value;
   bool found = global_handle->get_config(handle, what, &value);
   if (found) {
-    derr << "Found" << dendl;
+    derr << "ceph_config_get " << what << " found: " << value.c_str() << dendl;
     return PyString_FromString(value.c_str());
   } else {
-    derr << "Not found" << dendl;
+    derr << "ceph_config_get " << what << " not found " << dendl;
     Py_RETURN_NONE;
   }
 }

@@ -6013,6 +6013,11 @@ COMMAND("list_missing " \
 	"name=offset,type=CephString,req=false",
 	"list missing objects on this pg, perhaps starting at an offset given in JSON",
 	"osd", "r", "cli,rest")
+COMMAND("perf histogram dump "
+        "name=logger,type=CephString,req=false "
+        "name=counter,type=CephString,req=false",
+	"Get histogram data",
+	"osd", "r", "cli,rest")
 
 // tell <osd.n> commands.  Validation of osd.n must be special-cased in client
 COMMAND("version", "report version of OSD", "osd", "r", "cli,rest")
@@ -6447,6 +6452,18 @@ void OSD::do_command(Connection *con, ceph_tid_t tid, vector<string>& cmd, buffe
   else if (prefix == "reset_pg_recovery_stats") {
     ss << "reset pg recovery stats";
     pg_recovery_stats.reset();
+  }
+
+  else if (prefix == "perf histogram dump") {
+    std::string logger;
+    std::string counter;
+    cmd_getval(cct, cmdmap, "logger", logger);
+    cmd_getval(cct, cmdmap, "counter", counter);
+    if (f) {
+      cct->get_perfcounters_collection()->dump_formatted_histograms(
+          f.get(), false, logger, counter);
+      f->flush(ds);
+    }
   }
 
   else {

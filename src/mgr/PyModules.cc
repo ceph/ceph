@@ -33,6 +33,9 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "mgr[py] "
 
+// definition for non-const static member
+std::string PyModules::config_prefix;
+
 namespace {
   PyObject* log_write(PyObject*, PyObject* args) {
     char* m = nullptr;
@@ -60,16 +63,17 @@ namespace {
 #undef dout_prefix
 #define dout_prefix *_dout << "mgr " << __func__ << " "
 
-PyModules::PyModules(DaemonStateIndex &ds, ClusterState &cs, MonClient &mc,
-                     Objecter &objecter_, Client &client_,
-		     Finisher &f)
+// constructor/destructor implementations cannot be in .h,
+// because ServeThread is still an "incomplete" type there
+
+PyModules::PyModules(DaemonStateIndex &ds, ClusterState &cs,
+	  MonClient &mc, Objecter &objecter_, Client &client_,
+	  Finisher &f)
   : daemon_state(ds), cluster_state(cs), monc(mc),
-    objecter(objecter_), client(client_),
-    finisher(f)
+    objecter(objecter_), client(client_), finisher(f),
+    lock("PyModules")
 {}
 
-// we can not have the default destructor in header, because ServeThread is
-// still an "incomplete" type. so we need to define the destructor here.
 PyModules::~PyModules() = default;
 
 void PyModules::dump_server(const std::string &hostname,
@@ -361,6 +365,9 @@ int PyModules::init()
   Mutex::Locker locker(lock);
 
   global_handle = this;
+  // namespace in config-key prefixed by "mgr/<id>/"
+  config_prefix = std::string(g_conf->name.get_type_str()) + "/" +
+	          g_conf->name.get_id() + "/";
 
   // Set up global python interpreter
   Py_SetProgramName(const_cast<char*>(PYTHON_EXECUTABLE));
@@ -424,6 +431,8 @@ class ServeThread : public Thread
   MgrPyModule *mod;
 
 public:
+  bool running;
+
   ServeThread(MgrPyModule *mod_)
     : mod(mod_) {}
 
@@ -431,12 +440,14 @@ public:
   {
     PyGILState_STATE gstate;
     gstate = PyGILState_Ensure();
+    running = true;
 
     dout(4) << "Entering thread for " << mod->get_name() << dendl;
     mod->serve();
 
     PyGILState_Release(gstate);
 
+    running = false;
     return nullptr;
   }
 };
@@ -499,6 +510,8 @@ void PyModules::notify_all(const std::string &notify_type,
   dout(10) << __func__ << ": notify_all " << notify_type << dendl;
   for (auto& i : modules) {
     auto module = i.second.get();
+    if (!serve_threads[i.first]->running)
+      continue;
     // Send all python calls down a Finisher to avoid blocking
     // C++ code, and avoid any potential lock cycles.
     finisher.queue(new FunctionContext([module, notify_type, notify_id](int r){
@@ -514,6 +527,8 @@ void PyModules::notify_all(const LogEntry &log_entry)
   dout(10) << __func__ << ": notify_all (clog)" << dendl;
   for (auto& i : modules) {
     auto module = i.second.get();
+    if (!serve_threads[i.first]->running)
+      continue;
     // Send all python calls down a Finisher to avoid blocking
     // C++ code, and avoid any potential lock cycles.
     //
@@ -533,7 +548,9 @@ bool PyModules::get_config(const std::string &handle,
   Mutex::Locker l(lock);
   PyEval_RestoreThread(tstate);
 
-  const std::string global_key = config_prefix + handle + "." + key;
+  const std::string global_key = config_prefix + handle + "/" + key;
+
+  dout(4) << __func__ << "key: " << global_key << dendl;
 
   if (config_cache.count(global_key)) {
     *val = config_cache.at(global_key);
@@ -546,7 +563,7 @@ bool PyModules::get_config(const std::string &handle,
 void PyModules::set_config(const std::string &handle,
     const std::string &key, const std::string &val)
 {
-  const std::string global_key = config_prefix + handle + "." + key;
+  const std::string global_key = config_prefix + handle + "/" + key;
 
   Command set_cmd;
   {
