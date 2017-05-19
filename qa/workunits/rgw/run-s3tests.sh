@@ -11,6 +11,14 @@ port=$2
 
 ##
 
+if [ -e CMakeCache.txt ]; then
+    BIN_PATH=$PWD/bin
+elif [ -e $root_path/../build/CMakeCache.txt ]; then
+    cd $root_path/../build
+    BIN_PATH=$PWD/bin
+fi
+PATH=$PATH:$BIN_PATH
+
 dir=tmp.s3-tests.$$
 
 # clone and bootstrap
@@ -19,7 +27,7 @@ cd $dir
 git clone https://github.com/ceph/s3-tests
 cd s3-tests
 git checkout ceph-$branch
-./bootstrap
+VIRTUALENV_PYTHON=/usr/bin/python2 ./bootstrap
 cd ../..
 
 # users
@@ -31,7 +39,7 @@ radosgw-admin user create --uid=s3test1 --display-name='tester1' \
 akey2=access2
 skey2=secret2
 radosgw-admin user create --uid=s3test2 --display-name='tester2' \
-	      --access-key=$akey2 --secret=$skey2 --email=teester2@ceph.com
+        --access-key=$akey2 --secret=$skey2 --email=tester2@ceph.com
 
 cat <<EOF > s3.conf
 [DEFAULT]
