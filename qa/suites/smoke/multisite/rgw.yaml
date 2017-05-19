@@ -130,5 +130,4 @@ tasks:
         zones:
         - z-1
         - z-2
-- interactive:
 
