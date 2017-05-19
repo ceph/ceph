@@ -41,3 +41,37 @@ def lock(f):
         with module.instance.requests_lock:
             return f(*args, **kwargs)
     return decorated
+
+
+# Support ?page=N argument
+def paginate(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        _out = f(*args, **kwargs)
+
+        # Do not modify anything without a specific request
+        if not 'page' in kwargs:
+            return _out
+
+        # A pass-through for errors, etc
+        if not isinstance(_out, list):
+            return _out
+
+        # Parse the page argument
+        _page = kwargs['page']
+        try:
+            _page = int(_page)
+        except ValueError:
+            response.status = 500
+            return {'message': 'The requested page is not an integer'}
+
+        # Raise _page so that 0 is the first page and -1 is the last
+        _page += 1
+
+        if _page > 0:
+            _page *= 100
+        else:
+            _page = len(_out) - (_page*100)
+
+        return _out[_page - 100: _page]
+    return decorated

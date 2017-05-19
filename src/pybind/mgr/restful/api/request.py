@@ -2,7 +2,7 @@ from pecan import expose, request, response
 from pecan.rest import RestController
 
 from restful import module
-from restful.decorators import auth, lock
+from restful.decorators import auth, lock, paginate
 
 
 class RequestId(RestController):
@@ -48,6 +48,7 @@ class RequestId(RestController):
 
 class Request(RestController):
     @expose(template='json')
+    @paginate
     @auth
     def get(self, **kwargs):
         """
