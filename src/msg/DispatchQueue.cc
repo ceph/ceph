@@ -13,8 +13,12 @@
  */
 
 #include "msg/Message.h"
+
 #include "DispatchQueue.h"
 #include "Messenger.h"
+
+#include "include/random.h"
+
 #include "common/ceph_context.h"
 
 #define dout_subsys ceph_subsys_ms
@@ -161,7 +165,7 @@ void DispatchQueue::entry()
       if (qitem.is_code()) {
 	if (cct->_conf->ms_inject_internal_delays &&
 	    cct->_conf->ms_inject_delay_probability &&
-	    (rand() % 10000)/10000.0 < cct->_conf->ms_inject_delay_probability) {
+	    (ceph::util::generate_random_number(10000))/10000.0 < cct->_conf->ms_inject_delay_probability) {
 	  utime_t t;
 	  t.set_from_double(cct->_conf->ms_inject_internal_delays);
 	  ldout(cct, 1) << "DispatchQueue::entry  inject delay of " << t
