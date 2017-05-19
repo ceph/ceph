@@ -411,6 +411,12 @@ int IoCtx::aio_operate(const std::string& oid, AioCompletion *c,
 }
 
 int IoCtx::aio_operate(const std::string& oid, AioCompletion *c,
+                       ObjectReadOperation *op, int flags,
+                       bufferlist *pbl, const blkin_trace_info *trace_info) {
+  return aio_operate(oid, c, op, flags, pbl);
+}
+
+int IoCtx::aio_operate(const std::string& oid, AioCompletion *c,
                        ObjectWriteOperation *op) {
   TestIoCtxImpl *ctx = reinterpret_cast<TestIoCtxImpl*>(io_ctx_impl);
   TestObjectOperationImpl *ops = reinterpret_cast<TestObjectOperationImpl*>(op->impl);
@@ -430,6 +436,13 @@ int IoCtx::aio_operate(const std::string& oid, AioCompletion *c,
   SnapContext snapc(seq, snv);
 
   return ctx->aio_operate(oid, *ops, c->pc, &snapc, 0);
+}
+
+int IoCtx::aio_operate(const std::string& oid, AioCompletion *c,
+                       ObjectWriteOperation *op, snap_t seq,
+                       std::vector<snap_t>& snaps,
+		       const blkin_trace_info *trace_info) {
+  return aio_operate(oid, c, op, seq, snaps);
 }
 
 int IoCtx::aio_remove(const std::string& oid, AioCompletion *c) {

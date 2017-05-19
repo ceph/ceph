@@ -16,6 +16,7 @@
 #include "test/librbd/mock/io/MockImageRequestWQ.h"
 #include "common/RWLock.h"
 #include "common/WorkQueue.h"
+#include "common/zipkin_trace.h"
 #include "librbd/ImageCtx.h"
 #include "gmock/gmock.h"
 #include <string>
@@ -86,6 +87,7 @@ struct MockImageCtx {
       state(new MockImageState()),
       image_watcher(NULL), object_map(NULL),
       exclusive_lock(NULL), journal(NULL),
+      trace_endpoint(image_ctx.trace_endpoint),
       concurrent_management_ops(image_ctx.concurrent_management_ops),
       blacklist_on_break_lock(image_ctx.blacklist_on_break_lock),
       blacklist_expire_seconds(image_ctx.blacklist_expire_seconds),
@@ -192,10 +194,10 @@ struct MockImageCtx {
   MOCK_CONST_METHOD0(get_journal_policy, journal::Policy*());
   MOCK_CONST_METHOD1(set_journal_policy, void(journal::Policy*));
 
-  MOCK_METHOD7(aio_read_from_cache, void(object_t, uint64_t, bufferlist *,
-                                         size_t, uint64_t, Context *, int));
-  MOCK_METHOD7(write_to_cache, void(object_t, const bufferlist&, size_t,
-                                    uint64_t, Context *, int, uint64_t));
+  MOCK_METHOD8(aio_read_from_cache, void(object_t, uint64_t, bufferlist *,
+                                         size_t, uint64_t, Context *, int, ZTracer::Trace *));
+  MOCK_METHOD8(write_to_cache, void(object_t, const bufferlist&, size_t,
+                                    uint64_t, Context *, int, uint64_t, ZTracer::Trace *));
 
   ImageCtx *image_ctx;
   CephContext *cct;
@@ -271,6 +273,8 @@ struct MockImageCtx {
   MockObjectMap *object_map;
   MockExclusiveLock *exclusive_lock;
   MockJournal *journal;
+
+  ZTracer::Endpoint trace_endpoint;
 
   int concurrent_management_ops;
   bool blacklist_on_break_lock;

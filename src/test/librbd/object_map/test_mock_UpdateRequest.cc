@@ -68,7 +68,7 @@ TEST_F(TestMockObjectMapUpdateRequest, UpdateInMemory) {
   C_SaferCond cond_ctx;
   AsyncRequest<> *req = new UpdateRequest<>(
     *ictx, &object_map, CEPH_NOSNAP, 0, object_map.size(), OBJECT_NONEXISTENT,
-    OBJECT_EXISTS, &cond_ctx);
+    OBJECT_EXISTS, {}, &cond_ctx);
   {
     RWLock::RLocker snap_locker(ictx->snap_lock);
     RWLock::WLocker object_map_locker(ictx->object_map_lock);
@@ -100,7 +100,7 @@ TEST_F(TestMockObjectMapUpdateRequest, UpdateHeadOnDisk) {
   C_SaferCond cond_ctx;
   AsyncRequest<> *req = new UpdateRequest<>(
     *ictx, &object_map, CEPH_NOSNAP, 0, object_map.size(), OBJECT_NONEXISTENT,
-    OBJECT_EXISTS, &cond_ctx);
+    OBJECT_EXISTS, {}, &cond_ctx);
   {
     RWLock::RLocker snap_locker(ictx->snap_lock);
     RWLock::WLocker object_map_locker(ictx->object_map_lock);
@@ -130,7 +130,7 @@ TEST_F(TestMockObjectMapUpdateRequest, UpdateSnapOnDisk) {
   C_SaferCond cond_ctx;
   AsyncRequest<> *req = new UpdateRequest<>(
     *ictx, &object_map, snap_id, 0, object_map.size(), OBJECT_NONEXISTENT,
-    OBJECT_EXISTS, &cond_ctx);
+    OBJECT_EXISTS, {}, &cond_ctx);
   {
     RWLock::RLocker snap_locker(ictx->snap_lock);
     RWLock::WLocker object_map_locker(ictx->object_map_lock);
@@ -157,7 +157,7 @@ TEST_F(TestMockObjectMapUpdateRequest, UpdateOnDiskError) {
   C_SaferCond cond_ctx;
   AsyncRequest<> *req = new UpdateRequest<>(
     *ictx, &object_map, CEPH_NOSNAP, 0, object_map.size(), OBJECT_NONEXISTENT,
-    OBJECT_EXISTS, &cond_ctx);
+    OBJECT_EXISTS, {}, &cond_ctx);
   {
     RWLock::RLocker snap_locker(ictx->snap_lock);
     RWLock::WLocker object_map_locker(ictx->object_map_lock);
@@ -187,7 +187,7 @@ TEST_F(TestMockObjectMapUpdateRequest, RebuildSnapOnDisk) {
   C_SaferCond cond_ctx;
   AsyncRequest<> *req = new UpdateRequest<>(
     *ictx, &object_map, snap_id, 0, object_map.size(), OBJECT_EXISTS_CLEAN,
-    boost::optional<uint8_t>(), &cond_ctx);
+    boost::optional<uint8_t>(), {}, &cond_ctx);
   {
     RWLock::RLocker snap_locker(ictx->snap_lock);
     RWLock::WLocker object_map_locker(ictx->object_map_lock);

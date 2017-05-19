@@ -15,6 +15,7 @@
 #include "common/Readahead.h"
 #include "common/RWLock.h"
 #include "common/snap_types.h"
+#include "common/zipkin_trace.h"
 
 #include "include/buffer_fwd.h"
 #include "include/rbd/librbd.hpp"
@@ -200,6 +201,8 @@ namespace librbd {
     exclusive_lock::Policy *exclusive_lock_policy = nullptr;
     journal::Policy *journal_policy = nullptr;
 
+    ZTracer::Endpoint trace_endpoint;
+
     static bool _filter_metadata_confs(const string &prefix, std::map<string, bool> &configs,
                                        const map<string, bufferlist> &pairs, map<string, bufferlist> *res);
 
@@ -278,10 +281,10 @@ namespace librbd {
 			   uint64_t *overlap) const;
     void aio_read_from_cache(object_t o, uint64_t object_no, bufferlist *bl,
 			     size_t len, uint64_t off, Context *onfinish,
-			     int fadvise_flags);
+			     int fadvise_flags, ZTracer::Trace *trace);
     void write_to_cache(object_t o, const bufferlist& bl, size_t len,
 			uint64_t off, Context *onfinish, int fadvise_flags,
-                        uint64_t journal_tid);
+                        uint64_t journal_tid, ZTracer::Trace *trace);
     void user_flushed();
     void flush_cache(Context *onfinish);
     void shut_down_cache(Context *on_finish);

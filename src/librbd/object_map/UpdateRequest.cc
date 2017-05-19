@@ -42,7 +42,10 @@ void UpdateRequest<I>::send() {
 				m_new_state, m_current_state);
 
   librados::AioCompletion *rados_completion = create_callback_completion();
-  int r = m_image_ctx.md_ctx.aio_operate(oid, rados_completion, &op);
+  std::vector<librados::snap_t> snaps;
+  int r = m_image_ctx.md_ctx.aio_operate(
+    oid, rados_completion, &op, 0, snaps,
+    (m_trace.valid() ? m_trace.get_info() : nullptr));
   assert(r == 0);
   rados_completion->release();
 }
