@@ -1,4 +1,6 @@
 #!/bin/bash -x
+# -*- mode:shell-script; tab-width:8; sh-basic-offset:2; indent-tabs-mode:t -*-
+# vim: ts=8 sw=8 ft=bash smarttab
 
 source $(dirname $0)/../ceph-helpers.sh
 
@@ -2061,7 +2063,9 @@ function test_mon_cephdf_commands()
     rados -p cephdf_for_test ls - | grep -q cephdf_for_test && break
     sleep 1
   done
-
+  # "rados ls" goes straight to osd, but "ceph df" is served by mon. so we need
+  # to sync mon with osd
+  flush_pg_stats
   cal_raw_used_size=`ceph df detail | grep cephdf_for_test | awk -F ' ' '{printf "%d\n", 2 * $3}'`
   raw_used_size=`ceph df detail | grep cephdf_for_test | awk -F ' '  '{print $10}'`
 
