@@ -3567,6 +3567,22 @@ static int rgw_reshard_list(cls_method_context_t hctx, bufferlist *in, bufferlis
   return 0;
 }
 
+static int get_reshard_entry(cls_method_context_t hctx, const string& key, cls_rgw_reshard_entry *entry)
+{
+  bufferlist bl;
+  int ret = cls_cxx_map_get_val(hctx, key, &bl);
+  if (ret < 0)
+    return ret;
+  bufferlist::iterator iter = bl.begin();
+  try {
+    ::decode(*entry, iter);
+  } catch (buffer::error& err) {
+    CLS_LOG(0, "ERROR: %s : failed to decode entry %s\n", __func__, err.what());
+    return -EIO;
+  }
+  return 0;
+}
+
 static int rgw_reshard_get(cls_method_context_t hctx, bufferlist *in,  bufferlist *out)
 {
   bufferlist::iterator in_iter = in->begin();
@@ -3579,19 +3595,12 @@ static int rgw_reshard_get(cls_method_context_t hctx, bufferlist *in,  bufferlis
     return -EINVAL;
   }
 
-  bufferlist bl;
   string key;
-  generate_reshard_key(op.entry, &key);
-  int ret = cls_cxx_map_get_val(hctx, key, &bl);
-  if (ret < 0)
-    return ret;
   cls_rgw_reshard_entry  entry;
-  bufferlist::iterator iter = bl.begin();
-  try {
-    ::decode(entry, iter);
-  } catch (buffer::error& err) {
-    CLS_LOG(0, "ERROR: rgw_cls_reshard_get : failed to decode entry %s\n",err.what());
-    return -EIO;
+  generate_reshard_key(op.entry, &key);
+  int ret = get_reshard_entry(hctx, key, &entry);
+  if (ret < 0) {
+    return ret;
   }
 
   cls_rgw_reshard_get_ret op_ret;
@@ -3613,8 +3622,23 @@ static int rgw_reshard_remove(cls_method_context_t hctx, bufferlist *in, bufferl
   }
 
   string key;
-  generate_reshard_key(op.bucket_name, op.bucket_id, &key);
-  int ret = cls_cxx_map_remove_key(hctx, key);
+  cls_rgw_reshard_entry  entry;
+  generate_reshard_key(op.tenant, op.bucket_name, &key);
+  int ret = get_reshard_entry(hctx, key, &entry);
+  if (ret < 0) {
+    return ret;
+  }
+
+  if (!op.bucket_id.empty() &&
+      entry.bucket_id != op.bucket_id) {
+    return 0;
+  }
+
+  ret = cls_cxx_map_remove_key(hctx, key);
+  if (ret < 0) {
+    CLS_LOG(0, "ERROR: failed to remove key: key=%s ret=%d", key.c_str(), ret);
+    return 0;
+  }
   return ret;
 }
 
