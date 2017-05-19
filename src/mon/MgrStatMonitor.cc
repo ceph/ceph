@@ -78,12 +78,14 @@ PGStatService *MgrStatMonitor::get_pg_stat_service()
 
 void MgrStatMonitor::create_initial()
 {
+  dout(10) << __func__ << dendl;
   version = 0;
 }
 
 void MgrStatMonitor::update_from_paxos(bool *need_bootstrap)
 {
-  version_t version = get_last_committed();
+  version = get_last_committed();
+  dout(10) << __func__ << " " << version << dendl;
   bufferlist bl;
   get_version(version, bl);
   if (version) {
@@ -100,6 +102,7 @@ void MgrStatMonitor::update_from_paxos(bool *need_bootstrap)
 
 void MgrStatMonitor::create_pending()
 {
+  dout(10) << __func__ << " " << version << dendl;
   pending_digest = digest;
   pending_health_summary = health_summary;
   pending_health_detail = health_detail;
