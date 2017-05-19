@@ -51,6 +51,9 @@ public:
   void clear() {
     h.clear();
   }
+  bool empty() const {
+    return h.empty();
+  }
   void set_bin(int bin, int32_t count) {
     _expand_to(bin + 1);
     h[bin] = count;
