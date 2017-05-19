@@ -2,6 +2,8 @@ from cStringIO import StringIO
 import logging
 import json
 import requests
+
+from requests.packages.urllib3 import PoolManager
 from requests.packages.urllib3.util import Retry
 from urlparse import urlparse
 
@@ -16,7 +18,7 @@ def multi_region_enabled(ctx):
     return 'radosgw_agent' in ctx
 
 def rgwadmin(ctx, client, cmd, stdin=StringIO(), check_status=False,
-             format='json'):
+             format='json', decode=True, log_level=logging.DEBUG):
     log.info('rgwadmin: {client} : {cmd}'.format(client=client,cmd=cmd))
     testdir = teuthology.get_testdir(ctx)
     cluster_name, daemon_type, client_id = teuthology.split_role(client)
@@ -32,7 +34,7 @@ def rgwadmin(ctx, client, cmd, stdin=StringIO(), check_status=False,
         '--cluster', cluster_name,
         ]
     pre.extend(cmd)
-    log.info('rgwadmin: cmd=%s' % pre)
+    log.log(log_level, 'rgwadmin: cmd=%s' % pre)
     (remote,) = ctx.cluster.only(client).remotes.iterkeys()
     proc = remote.run(
         args=pre,
@@ -43,14 +45,16 @@ def rgwadmin(ctx, client, cmd, stdin=StringIO(), check_status=False,
         )
     r = proc.exitstatus
     out = proc.stdout.getvalue()
+    if not decode:
+        return (r, out)
     j = None
     if not r and out != '':
         try:
             j = json.loads(out)
-            log.info(' json result: %s' % j)
+            log.log(log_level, ' json result: %s' % j)
         except ValueError:
             j = out
-            log.info(' raw result: %s' % j)
+            log.log(log_level, ' raw result: %s' % j)
     return (r, j)
 
 def get_user_summary(out, user):
@@ -302,3 +306,12 @@ def get_config_master_client(ctx, config, regions):
 
     return None
 
+def wait_for_radosgw(url):
+    """ poll the given url until it starts accepting connections
+
+    add_daemon() doesn't wait until radosgw finishes startup, so this is used
+    to avoid racing with later tasks that expect radosgw to be up and listening
+    """
+    # use a connection pool with retry/backoff to poll until it starts listening
+    http = PoolManager(retries=Retry(connect=8, backoff_factor=1))
+    http.request('GET', url)
