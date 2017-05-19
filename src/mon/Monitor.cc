@@ -125,29 +125,6 @@ MonCommand mon_commands[] = {
 };
 
 
-long parse_pos_long(const char *s, ostream *pss)
-{
-  if (*s == '-' || *s == '+') {
-    if (pss)
-      *pss << "expected numerical value, got: " << s;
-    return -EINVAL;
-  }
-
-  string err;
-  long r = strict_strtol(s, 10, &err);
-  if ((r == 0) && !err.empty()) {
-    if (pss)
-      *pss << err;
-    return -1;
-  }
-  if (r < 0) {
-    if (pss)
-      *pss << "unable to parse positive integer '" << s << "'";
-    return -1;
-  }
-  return r;
-}
-
 void C_MonContext::finish(int r) {
   if (mon->is_shutdown())
     return;

@@ -950,8 +950,6 @@ public:
 #define CEPH_MON_FEATURE_INCOMPAT_KRAKEN CompatSet::Feature(8, "support monmap features")
 // make sure you add your feature to Monitor::get_supported_features
 
-long parse_pos_long(const char *s, ostream *pss = NULL);
-
 struct MonCommand {
   string cmdstring;
   string helpstring;

@@ -469,8 +469,6 @@ public:
 
   void tick() override;  // check state, take actions
 
-  int parse_osd_id(const char *s, stringstream *pss);
-
   void get_health(list<pair<health_status_t,string> >& summary,
 		  list<pair<health_status_t,string> > *detail,
 		  CephContext *cct) const override;
