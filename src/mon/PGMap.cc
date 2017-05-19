@@ -3267,6 +3267,8 @@ void PGMapUpdater::check_osd_map(
       }
     }
   }
+
+  // deleted pgs (pools)?
   for (auto& p : pgmap.pg_pool_sum) {
     if (!osdmap.have_pg_pool(p.first)) {
       ldout(cct, 10) << __func__ << " pool " << p.first << " gone, removing pgs"
@@ -3282,6 +3284,36 @@ void PGMapUpdater::check_osd_map(
 	  q = pending_inc->pg_stat_updates.erase(q);
 	} else {
 	  ++q;
+	}
+      }
+    }
+  }
+
+  // new pgs (split or new pool)?
+  for (auto& p : osdmap.get_pools()) {
+    int64_t poolid = p.first;
+    const pg_pool_t& pi = p.second;
+    auto q = pgmap.num_pg_by_pool.find(poolid);
+    unsigned my_pg_num = 0;
+    if (q != pgmap.num_pg_by_pool.end())
+      my_pg_num = q->second;
+    unsigned pg_num = pi.get_pg_num();
+    if (my_pg_num != pg_num) {
+      for (unsigned ps = my_pg_num; ps < pg_num; ++ps) {
+	pg_t pgid(ps, poolid);
+	if (pending_inc->pg_stat_updates.count(pgid) == 0) {
+	  pg_stat_t &stats = pending_inc->pg_stat_updates[pgid];
+	  stats.last_fresh = osdmap.get_modified();
+	  stats.last_active = osdmap.get_modified();
+	  stats.last_change = osdmap.get_modified();
+	  stats.last_peered = osdmap.get_modified();
+	  stats.last_clean = osdmap.get_modified();
+	  stats.last_unstale = osdmap.get_modified();
+	  stats.last_undegraded = osdmap.get_modified();
+	  stats.last_fullsized = osdmap.get_modified();
+	  stats.last_scrub_stamp = osdmap.get_modified();
+	  stats.last_deep_scrub_stamp = osdmap.get_modified();
+	  stats.last_clean_scrub_stamp = osdmap.get_modified();
 	}
       }
     }
