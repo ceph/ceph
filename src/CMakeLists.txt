@@ -886,17 +886,19 @@ add_subdirectory(compressor)
 
 add_subdirectory(tools)
 
-# dmClock
+# dmClock (after gmock)
 
-add_subdirectory(dmclock) # after gmock
-add_dependencies(tests dmclock-tests dmclock-data-struct-tests)
+add_subdirectory(dmclock/src)
 
-if(WITH_TESTS)
-  install(PROGRAMS
-    ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/dmclock-tests
-    ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/dmclock-data-struct-tests
-    DESTINATION bin)
-endif(WITH_TESTS)
+option(WITH_DMCLOCK_TESTS
+  "enable the build of dmclock-tests and dmclock-data-struct tests binaries"
+  OFF)
+if(WITH_TESTS AND WITH_DMCLOCK_TESTS)
+  # note: add_test is not being called, so dmclock tests aren't part
+  # of ceph tests
+  add_subdirectory(dmclock/test)
+  add_subdirectory(dmclock/support/test)
+endif(WITH_TESTS AND WITH_DMCLOCK_TESTS)
 
 if(HAVE_INTEL)
   add_subdirectory(crypto/isa-l)
