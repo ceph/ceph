@@ -736,6 +736,7 @@ else
     CMGRDEBUG='
         debug ms = 1
         debug monc = 20
+	debug mon = 20
         debug mgr = 20'
 fi
 
