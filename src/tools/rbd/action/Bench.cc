@@ -1,18 +1,24 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
-#include "tools/rbd/ArgumentTypes.h"
-#include "tools/rbd/Shell.h"
-#include "tools/rbd/Utils.h"
-#include "common/errno.h"
-#include "common/strtol.h"
-#include "common/Cond.h"
-#include "common/Mutex.h"
 #include <iostream>
+
 #include <boost/accumulators/accumulators.hpp>
 #include <boost/accumulators/statistics/stats.hpp>
 #include <boost/accumulators/statistics/rolling_sum.hpp>
 #include <boost/program_options.hpp>
+
+#include "tools/rbd/ArgumentTypes.h"
+#include "tools/rbd/Shell.h"
+#include "tools/rbd/Utils.h"
+
+#include "include/util.h"
+#include "include/random.h"
+
+#include "common/errno.h"
+#include "common/strtol.h"
+#include "common/Cond.h"
+#include "common/Mutex.h"
 
 using namespace std::chrono;
 
@@ -124,7 +130,7 @@ struct rbd_bencher {
   {
     if (io_type == IO_TYPE_WRITE || io_type == IO_TYPE_RW) {
       bufferptr bp(io_size);
-      memset(bp.c_str(), rand() & 0xff, io_size);
+      memset(bp.c_str(), ceph::util::generate_random_number() & 0xff, io_size);
       write_bl.push_back(bp);
     }
   }
@@ -228,7 +234,7 @@ int do_bench(librbd::Image& image, io_type_t io_type,
        << " pattern " << (random ? "random" : "sequential")
        << std::endl;
 
-  srand(time(NULL) % (unsigned long) -1);
+  ceph::util::randomize_rng();
 
   coarse_mono_time start = coarse_mono_clock::now();
   chrono::duration<double> last = chrono::duration<double>::zero();
@@ -242,7 +248,7 @@ int do_bench(librbd::Image& image, io_type_t io_type,
   // disturb all thread's offset
   for (i = 0; i < io_threads; i++) {
     if (random) {
-      start_pos = (rand() % (size / io_size)) * io_size;
+      start_pos = ceph::util::generate_random_number(size / io_size) * io_size;
     } else {
       start_pos = unit_len * i * io_size;
     }
@@ -284,7 +290,7 @@ int do_bench(librbd::Image& image, io_type_t io_type,
       b.start_io(io_threads, thread_offset[i], io_size, op_flags, read_flag);
 
       if (random) {
-        thread_offset[i] = (rand() % (size / io_size)) * io_size;
+        thread_offset[i] = ceph::util::generate_random_number(size / io_size) * io_size;
       } else {
         thread_offset[i] += io_size;
         if (thread_offset[i] + io_size > size)

@@ -15,6 +15,9 @@
 #include <string>
 #include <sys/stat.h>
 
+#include "include/util.h"
+#include "include/random.h"
+
 #include "common/ceph_argparse.h"
 #include "common/errno.h"
 #include "common/safe_io.h"
@@ -485,7 +488,7 @@ int main(int argc, const char **argv)
     vector<int> primary_count(n, 0);
     vector<int> size(30, 0);
     if (test_random)
-      srand(getpid());
+      ceph::util::randomize_rng();
     auto& pools = osdmap.get_pools();
     for (auto p = pools.begin(); p != pools.end(); ++p) {
       if (pool != -1 && p->first != pool)
@@ -503,7 +506,7 @@ int main(int argc, const char **argv)
 	if (test_random) {
 	  osds.resize(p->second.size);
 	  for (unsigned i=0; i<osds.size(); ++i) {
-	    osds[i] = rand() % osdmap.get_max_osd();
+	    osds[i] = ceph::util::generate_random_number(osdmap.get_max_osd());
 	  }
 	  primary = osds[0];
 	} else if (test_map_pgs_dump_all) {

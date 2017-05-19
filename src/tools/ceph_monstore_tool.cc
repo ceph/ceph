@@ -10,28 +10,38 @@
 * License version 2.1, as published by the Free Software
 * Foundation. See file COPYING.
 */
+#include <string>
+#include <cstdlib>
+
 #include <boost/program_options/variables_map.hpp>
 #include <boost/program_options/parsers.hpp>
 #include <boost/scope_exit.hpp>
 
-#include <stdlib.h>
-#include <string>
+#include "include/util.h"
+#include "include/random.h"
+#include "include/stringify.h"
 
 #include "common/Formatter.h"
 #include "common/errno.h"
 
 #include "auth/KeyRing.h"
 #include "auth/cephx/CephxKeyServer.h"
+
 #include "global/global_init.h"
-#include "include/stringify.h"
+
 #include "mgr/mgr_commands.h"
+
 #include "mon/AuthMonitor.h"
 #include "mon/MonitorDBStore.h"
 #include "mon/Paxos.h"
 #include "mon/MonMap.h"
-#include "mds/FSMap.h"
 #include "mon/MgrMap.h"
+
+#include "mds/MDSMap.h"
+#include "mds/FSMap.h"
+
 #include "osd/OSDMap.h"
+
 #include "crush/CrushCompiler.h"
 
 namespace po = boost::program_options;
@@ -1261,7 +1271,7 @@ int main(int argc, char **argv) {
 	stringstream os;
 	os << num;
 	bufferlist bl;
-	for (unsigned k = 0; k < tvalsize; ++k) bl.append(rand());
+	for (unsigned k = 0; k < tvalsize; ++k) bl.append(ceph::util::generate_random_number());
 	t->put(prefix, os.str(), bl);
 	++num;
       }
