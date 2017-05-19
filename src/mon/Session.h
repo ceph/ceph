@@ -152,6 +152,15 @@ struct MonSessionMap {
     return s;
   }
 
+  void get_osd_sessions(int osd, list<MonSession*> *ls) {
+    auto p = by_osd.find(osd);
+    while (p != by_osd.end() &&
+	   p->first == osd) {
+      ls->push_back(p->second);
+      ++p;
+    }
+  }
+
   MonSession *get_random_osd_session(OSDMap *osdmap) {
     // ok, this isn't actually random, but close enough.
     if (by_osd.empty())

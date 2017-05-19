@@ -3670,7 +3670,16 @@ void Monitor::try_send_message(Message *m, const entity_inst_t& to)
   bufferlist bl;
   encode_message(m, quorum_con_features, bl);
 
-  messenger->send_message(m, to);
+  list<MonSession*> sls;
+  session_map.get_osd_sessions(to.name.num(), &sls);
+  for (auto s : sls) {
+    if (s->con) {
+      dout(10) << __func__ << " " << to.name << " have session " << s
+	       << ", sending " << *m << dendl;
+      s->con->send_message(m);
+      break;
+    }
+  }
 
   for (int i=0; i<(int)monmap->size(); i++) {
     if (i != rank)
@@ -3777,8 +3786,19 @@ void Monitor::handle_route(MonOpRequestRef op)
   } else {
     dout(10) << " not a routed request, trying to send anyway" << dendl;
     if (m->msg) {
-      messenger->send_message(m->msg, m->dest);
-      m->msg = NULL;
+      if (m->dest.name.is_osd()) {
+	list<MonSession*> sls;
+	session_map.get_osd_sessions(m->dest.name.num(), &sls);
+	if (!sls.empty()) {
+	  // arbitrarily send to the first osd
+	  sls.front()->con->send_message(m->msg);
+	  m->msg = NULL;
+	}
+      }
+      if (m->msg) {
+	m->msg->put();
+	m->msg = NULL;
+      }
     }
   }
 }
