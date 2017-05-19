@@ -871,7 +871,7 @@ are not synchronized, it can lead to a number of anomalies. For example:
 - Daemons ignoring received messages (e.g., timestamps outdated)
 - Timeouts triggered too soon/late when a message wasn't received in time.
 
-See `Monitor Store Synchronization`_ and `Slurp`_ for details.
+See `Monitor Store Synchronization`_ for details.
 
 
 .. tip:: You SHOULD install NTP on your Ceph monitor hosts to 
