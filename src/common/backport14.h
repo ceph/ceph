@@ -58,7 +58,20 @@ template<typename T, class... Args>
 typename uniquity<T>::verboten
 make_unique(Args&&...) = delete;
 } // namespace _backport14
+
+namespace _backport17 {
+template <class C>
+constexpr auto size(const C& c) -> decltype(c.size()) {
+  return c.size();
+}
+
+template <typename T, std::size_t N>
+constexpr std::size_t size(const T (&array)[N]) noexcept {
+  return N;
+}
+} // namespace _backport17
 using _backport14::make_unique;
+using _backport17::size;
 } // namespace ceph
 
 #endif // CEPH_COMMON_BACKPORT14_H
