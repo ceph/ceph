@@ -17,19 +17,28 @@
 
 using namespace librados;
 
-librados::Rados rados;
-librados::IoCtx ioctx;
-string pool_name;
+// creates a temporary pool and initializes an IoCtx shared by all tests
+class cls_rgw : public ::testing::Test {
+  static librados::Rados rados;
+  static std::string pool_name;
+ protected:
+  static librados::IoCtx ioctx;
 
-
-/* must be the first test! */
-TEST(cls_rgw, init)
-{
-  pool_name = get_temp_pool_name();
-  /* create pool */
-  ASSERT_EQ("", create_one_pool_pp(pool_name, rados));
-  ASSERT_EQ(0, rados.ioctx_create(pool_name.c_str(), ioctx));
-}
+  static void SetUpTestCase() {
+    pool_name = get_temp_pool_name();
+    /* create pool */
+    ASSERT_EQ("", create_one_pool_pp(pool_name, rados));
+    ASSERT_EQ(0, rados.ioctx_create(pool_name.c_str(), ioctx));
+  }
+  static void TearDownTestCase() {
+    /* remove pool */
+    ioctx.close();
+    ASSERT_EQ(0, destroy_one_pool_pp(pool_name, rados));
+  }
+};
+librados::Rados cls_rgw::rados;
+std::string cls_rgw::pool_name;
+librados::IoCtx cls_rgw::ioctx;
 
 
 string str_int(string s, int i)
@@ -109,7 +118,7 @@ void index_complete(OpMgr& mgr, librados::IoCtx& ioctx, string& oid, RGWModifyOp
   ASSERT_EQ(0, ioctx.operate(oid, op));
 }
 
-TEST(cls_rgw, index_basic)
+TEST_F(cls_rgw, index_basic)
 {
   string bucket_oid = str_int("bucket", 0);
 
@@ -144,7 +153,7 @@ TEST(cls_rgw, index_basic)
 	     obj_size * NUM_OBJS);
 }
 
-TEST(cls_rgw, index_multiple_obj_writers)
+TEST_F(cls_rgw, index_multiple_obj_writers)
 {
   string bucket_oid = str_int("bucket", 1);
 
@@ -182,7 +191,7 @@ TEST(cls_rgw, index_multiple_obj_writers)
   }
 }
 
-TEST(cls_rgw, index_remove_object)
+TEST_F(cls_rgw, index_remove_object)
 {
   string bucket_oid = str_int("bucket", 2);
 
@@ -275,7 +284,7 @@ TEST(cls_rgw, index_remove_object)
 	     total_size);
 }
 
-TEST(cls_rgw, index_suggest)
+TEST_F(cls_rgw, index_suggest)
 {
   string bucket_oid = str_int("bucket", 3);
 
@@ -386,7 +395,7 @@ TEST(cls_rgw, index_suggest)
  * return all validate utf8 objnames and filter out those
  * in BI_PREFIX_CHAR private namespace.
  */
-TEST(cls_rgw, index_list)
+TEST_F(cls_rgw, index_list)
 {
   string bucket_oid = str_int("bucket", 4);
 
@@ -454,7 +463,7 @@ TEST(cls_rgw, index_list)
 }
 
 
-TEST(cls_rgw, bi_list)
+TEST_F(cls_rgw, bi_list)
 {
   string bucket_oid = str_int("bucket", 5);
 
@@ -572,7 +581,7 @@ static bool cmp_objs(cls_rgw_obj& obj1, cls_rgw_obj& obj2)
 }
 
 
-TEST(cls_rgw, gc_set)
+TEST_F(cls_rgw, gc_set)
 {
   /* add chains */
   string oid = "obj";
@@ -648,7 +657,7 @@ TEST(cls_rgw, gc_set)
   }
 }
 
-TEST(cls_rgw, gc_list)
+TEST_F(cls_rgw, gc_list)
 {
   /* add chains */
   string oid = "obj";
@@ -726,7 +735,7 @@ TEST(cls_rgw, gc_list)
   }
 }
 
-TEST(cls_rgw, gc_defer)
+TEST_F(cls_rgw, gc_defer)
 {
   librados::IoCtx ioctx;
   librados::Rados rados;
@@ -828,7 +837,7 @@ auto gen_usage_log_info(std::string payer, std::string bucket, int total_usage_e
   return info;
 }
 
-TEST(cls_rgw, usage_basic)
+TEST_F(cls_rgw, usage_basic)
 {
   string oid="usage.1";
   string user="user1";
@@ -888,7 +897,7 @@ TEST(cls_rgw, usage_basic)
   ASSERT_EQ(0, cls_rgw_usage_log_trim(ioctx, oid, "", bucket2, start_epoch, end_epoch));
 }
 
-TEST(cls_rgw, usage_clear_no_obj)
+TEST_F(cls_rgw, usage_clear_no_obj)
 {
   string user="user1";
   string oid="usage.10";
@@ -899,7 +908,7 @@ TEST(cls_rgw, usage_clear_no_obj)
 
 }
 
-TEST(cls_rgw, usage_clear)
+TEST_F(cls_rgw, usage_clear)
 {
   string user="user1";
   string payer;
@@ -926,14 +935,4 @@ TEST(cls_rgw, usage_clear)
   ASSERT_EQ(0, ret);
   ASSERT_EQ(0u, usage.size());
 
-}
-
-
-/* must be last test! */
-
-TEST(cls_rgw, finalize)
-{
-  /* remove pool */
-  ioctx.close();
-  ASSERT_EQ(0, destroy_one_pool_pp(pool_name, rados));
 }
