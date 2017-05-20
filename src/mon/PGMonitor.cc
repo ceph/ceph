@@ -216,17 +216,7 @@ void PGMonitor::on_upgrade()
 void PGMonitor::upgrade_format()
 {
   unsigned current = 1;
-  assert(format_version <= current);
-  if (format_version == current)
-    return;
-
-  dout(1) << __func__ << " to " << current << dendl;
-
-  // upgrade by dirtying it all
-  pg_map.dirty_all(pending_inc);
-
-  format_version = current;
-  propose_pending();
+  assert(format_version == current);
 }
 
 void PGMonitor::post_paxos_update()
