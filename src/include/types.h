@@ -90,6 +90,29 @@ typedef off_t loff_t;
 
 // -- io helpers --
 
+// Forward declare all the I/O helpers so strict ADL can find them in
+// the case of containers of containers. I'm tempted to abstract this
+// stuff using template templates like I did for denc.
+
+template<class A, class B>
+inline ostream& operator<<(ostream&out, const pair<A,B>& v);
+template<class A, class Alloc>
+inline ostream& operator<<(ostream& out, const vector<A,Alloc>& v);
+template<class A, class Comp, class Alloc>
+inline ostream& operator<<(ostream& out, const deque<A,Alloc>& v);
+template<class A, class B, class C>
+inline ostream& operator<<(ostream&out, const boost::tuple<A, B, C> &t);
+template<class A, class Alloc>
+inline ostream& operator<<(ostream& out, const list<A,Alloc>& ilist);
+template<class A, class Comp, class Alloc>
+inline ostream& operator<<(ostream& out, const set<A, Comp, Alloc>& iset);
+template<class A, class Comp, class Alloc>
+inline ostream& operator<<(ostream& out, const multiset<A,Comp,Alloc>& iset);
+template<class A, class B, class Comp, class Alloc>
+inline ostream& operator<<(ostream& out, const map<A,B,Comp,Alloc>& m);
+template<class A, class B, class Comp, class Alloc>
+inline ostream& operator<<(ostream& out, const multimap<A,B,Comp,Alloc>& m);
+
 template<class A, class B>
 inline ostream& operator<<(ostream& out, const pair<A,B>& v) {
   return out << v.first << "," << v.second;
