@@ -241,11 +241,12 @@ public:
       osd_epochs[osd] = epoch;
       assert(osd_epochs.size() == osd_stat_updates.size());
     }
-    void stat_osd_out(int32_t osd) {
+    void stat_osd_out(int32_t osd, epoch_t epoch) {
       // 0 the stats for the osd
       osd_stat_updates[osd] = osd_stat_t();
+      osd_epochs[osd] = epoch;
     }
-    void stat_osd_down_up(int32_t osd, const PGMap& pg_map) {
+    void stat_osd_down_up(int32_t osd, epoch_t epoch, const PGMap& pg_map) {
       // 0 the op_queue_age_hist for this osd
       auto p = osd_stat_updates.find(osd);
       if (p != osd_stat_updates.end()) {
@@ -256,6 +257,7 @@ public:
       if (q != pg_map.osd_stat.end()) {
 	osd_stat_t& t = osd_stat_updates[osd] = q->second;
 	t.op_queue_age_hist.clear();
+	osd_epochs[osd] = epoch;
       }
     }
     void rm_stat(int32_t osd) {

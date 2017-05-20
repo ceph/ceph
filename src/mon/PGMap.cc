@@ -3208,7 +3208,7 @@ void PGMapUpdater::check_osd_map(const OSDMap::Incremental &osd_inc,
   for (const auto &p : osd_inc.new_weight) {
     if (p.second == CEPH_OSD_OUT) {
       dout(10) << __func__ << "  osd." << p.first << " went OUT" << dendl;
-      pending_inc->stat_osd_out(p.first);
+      pending_inc->stat_osd_out(p.first, osd_inc.epoch);
     }
   }
 
@@ -3228,7 +3228,7 @@ void PGMapUpdater::check_osd_map(const OSDMap::Incremental &osd_inc,
       // clear out osd_stat slow request histogram
       dout(20) << __func__ << " clearing osd." << p.first
                << " request histogram" << dendl;
-      pending_inc->stat_osd_down_up(p.first, *pg_map);
+      pending_inc->stat_osd_down_up(p.first, osd_inc.epoch, *pg_map);
     }
 
     if (p.second & CEPH_OSD_EXISTS) {
@@ -3258,12 +3258,12 @@ void PGMapUpdater::check_osd_map(
     } else if (osdmap.is_out(p.first)) {
       // zero osd_stat
       if (p.second.kb != 0) {
-	pending_inc->stat_osd_out(p.first);
+	pending_inc->stat_osd_out(p.first, osdmap.get_epoch());
       }
     } else if (!osdmap.is_up(p.first)) {
       // zero the op_queue_age_hist
       if (!p.second.op_queue_age_hist.empty()) {
-	pending_inc->stat_osd_down_up(p.first, pgmap);
+	pending_inc->stat_osd_down_up(p.first, osdmap.get_epoch(), pgmap);
       }
     }
   }
