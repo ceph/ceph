@@ -758,7 +758,7 @@ bool PGMonitor::prepare_pg_stats(MonOpRequestRef op)
 
   // osd stat
   if (mon->osdmon()->osdmap.is_in(from)) {
-    pending_inc.update_stat(from, stats->epoch, stats->osd_stat);
+    pending_inc.update_stat(from, stats->epoch, std::move(stats->osd_stat));
   } else {
     pending_inc.update_stat(from, stats->epoch, osd_stat_t());
   }

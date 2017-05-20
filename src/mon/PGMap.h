@@ -77,8 +77,9 @@ public:
       return osd_epochs;
     }
 
-    void update_stat(int32_t osd, epoch_t epoch, const osd_stat_t &stat) {
-      osd_stat_updates[osd] = stat;
+    template<typename OsdStat>
+    void update_stat(int32_t osd, epoch_t epoch, OsdStat&& stat) {
+      osd_stat_updates[osd] = std::forward<OsdStat>(stat);
       osd_epochs[osd] = epoch;
       assert(osd_epochs.size() == osd_stat_updates.size());
     }
