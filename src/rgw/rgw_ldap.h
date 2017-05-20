@@ -67,9 +67,9 @@ namespace rgw {
 
     int rebind() {
       if (ldap) {
-	(void) ldap_unbind(ldap);
-	(void) init();
-	return bind();
+        (void) ldap_unbind(ldap);
+        (void) init();
+        return bind();
       }
       return -EINVAL;
     }
