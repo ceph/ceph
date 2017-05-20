@@ -282,8 +282,6 @@ public:
   void encode(bufferlist &bl, uint64_t features=-1) const;
   void decode(bufferlist::iterator &bl);
 
-  void dirty_all(Incremental& inc);
-
   void dump(Formatter *f) const; 
   void dump_pool_stats(const OSDMap &osd_map, stringstream *ss, Formatter *f,
       bool verbose) const;

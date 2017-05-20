@@ -674,24 +674,6 @@ void PGMap::decode(bufferlist::iterator &bl)
   calc_stats();
 }
 
-void PGMap::dirty_all(Incremental& inc)
-{
-  inc.osdmap_epoch = last_osdmap_epoch;
-  inc.pg_scan = last_pg_scan;
-  inc.full_ratio = full_ratio;
-  inc.nearfull_ratio = nearfull_ratio;
-
-  for (ceph::unordered_map<pg_t,pg_stat_t>::const_iterator p = pg_stat.begin(); p != pg_stat.end(); ++p) {
-    inc.pg_stat_updates[p->first] = p->second;
-  }
-  for (ceph::unordered_map<int32_t, osd_stat_t>::const_iterator p = osd_stat.begin(); p != osd_stat.end(); ++p) {
-    assert(osd_epochs.count(p->first));
-    inc.update_stat(p->first,
-                    inc.get_osd_epochs().find(p->first)->second,
-                    p->second);
-  }
-}
-
 void PGMap::dump(Formatter *f) const
 {
   dump_basic(f);
