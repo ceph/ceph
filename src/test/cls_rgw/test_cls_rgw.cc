@@ -68,21 +68,22 @@ void test_stats(librados::IoCtx& ioctx, string& oid, RGWObjCategory category, ui
   ASSERT_EQ(num_entries, entries);
 }
 
-void index_prepare(librados::IoCtx& ioctx, string& oid, RGWModifyOp index_op, string& tag,
-		   string& obj, string& loc, uint16_t bi_flags = 0, bool log_op = true)
+void index_prepare(librados::IoCtx& ioctx, string& oid, RGWModifyOp index_op,
+                   string& tag, const cls_rgw_obj_key& key, string& loc,
+                   uint16_t bi_flags = 0, bool log_op = true)
 {
   ObjectWriteOperation op;
-  cls_rgw_obj_key key(obj, string());
   rgw_zone_set zones_trace;
   cls_rgw_bucket_prepare_op(op, index_op, tag, key, loc, log_op, bi_flags, zones_trace);
   ASSERT_EQ(0, ioctx.operate(oid, &op));
 }
 
-void index_complete(librados::IoCtx& ioctx, string& oid, RGWModifyOp index_op, string& tag,
-		    int epoch, string& obj, rgw_bucket_dir_entry_meta& meta, uint16_t bi_flags = 0, bool log_op = true)
+void index_complete(librados::IoCtx& ioctx, string& oid, RGWModifyOp index_op,
+                    string& tag, int epoch, const cls_rgw_obj_key& key,
+                    rgw_bucket_dir_entry_meta& meta, uint16_t bi_flags = 0,
+                    bool log_op = true)
 {
   ObjectWriteOperation op;
-  cls_rgw_obj_key key(obj, string());
   rgw_bucket_entry_ver ver;
   ver.pool = ioctx.get_id();
   ver.epoch = epoch;
@@ -105,7 +106,7 @@ TEST_F(cls_rgw, index_basic)
 
 #define NUM_OBJS 10
   for (int i = 0; i < NUM_OBJS; i++) {
-    string obj = str_int("obj", i);
+    cls_rgw_obj_key obj = str_int("obj", i);
     string tag = str_int("tag", i);
     string loc = str_int("loc", i);
 
@@ -133,7 +134,7 @@ TEST_F(cls_rgw, index_multiple_obj_writers)
 
   uint64_t obj_size = 1024;
 
-  string obj = str_int("obj", 0);
+  cls_rgw_obj_key obj = str_int("obj", 0);
   string loc = str_int("loc", 0);
   /* multi prepare on a single object */
   for (int i = 0; i < NUM_OBJS; i++) {
@@ -174,7 +175,7 @@ TEST_F(cls_rgw, index_remove_object)
 
   /* prepare multiple objects */
   for (int i = 0; i < NUM_OBJS; i++) {
-    string obj = str_int("obj", i);
+    cls_rgw_obj_key obj = str_int("obj", i);
     string tag = str_int("tag", i);
     string loc = str_int("loc", i);
 
@@ -195,7 +196,7 @@ TEST_F(cls_rgw, index_remove_object)
   int i = NUM_OBJS / 2;
   string tag_remove = "tag-rm";
   string tag_modify = "tag-mod";
-  string obj = str_int("obj", i);
+  cls_rgw_obj_key obj = str_int("obj", i);
   string loc = str_int("loc", i);
 
   /* prepare both removal and modification on the same object */
@@ -268,7 +269,7 @@ TEST_F(cls_rgw, index_suggest)
 
   /* create multiple objects */
   for (int i = 0; i < num_objs; i++) {
-    string obj = str_int("obj", i);
+    cls_rgw_obj_key obj = str_int("obj", i);
     string tag = str_int("tag", i);
     string loc = str_int("loc", i);
 
@@ -288,7 +289,7 @@ TEST_F(cls_rgw, index_suggest)
 
   /* prepare (without completion) some of the objects */
   for (int i = 0; i < num_objs; i += 2) {
-    string obj = str_int("obj", i);
+    cls_rgw_obj_key obj = str_int("obj", i);
     string tag = str_int("tag-prepare", i);
     string loc = str_int("loc", i);
 
@@ -300,7 +301,7 @@ TEST_F(cls_rgw, index_suggest)
   int actual_num_objs = num_objs;
   /* remove half of the objects */
   for (int i = num_objs / 2; i < num_objs; i++) {
-    string obj = str_int("obj", i);
+    cls_rgw_obj_key obj = str_int("obj", i);
     string tag = str_int("tag-rm", i);
     string loc = str_int("loc", i);
 
@@ -319,12 +320,12 @@ TEST_F(cls_rgw, index_suggest)
   bufferlist updates;
 
   for (int i = 0; i < num_objs; i += 2) { 
-    string obj = str_int("obj", i);
+    cls_rgw_obj_key obj = str_int("obj", i);
     string tag = str_int("tag-rm", i);
     string loc = str_int("loc", i);
 
     rgw_bucket_dir_entry dirent;
-    dirent.key.name = obj;
+    dirent.key.name = obj.name;
     dirent.locator = loc;
     dirent.exists = (i < num_objs / 2); // we removed half the objects
     dirent.meta.size = 1024;
