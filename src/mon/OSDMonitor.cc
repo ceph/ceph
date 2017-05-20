@@ -6724,6 +6724,9 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 	wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, 0, rs,
 						  get_last_committed() + 1));
 	return true;
+      } else {
+        ss << "can not create-or-move updated item name '" << name << "' weight " << weight
+           << " at location " << loc << " to crush map";
       }
     } while (false);
 
