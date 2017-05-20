@@ -221,7 +221,8 @@ public:
     mempool::pgmap::map<int32_t,osd_stat_t> osd_stat_updates;
     mempool::pgmap::set<int32_t> osd_stat_rm;
 
-    // mapping of osd to most recently reported osdmap epoch
+    // mapping of osd to most recently reported osdmap epoch.
+    // 1:1 with osd_stat_updates.
     mempool::pgmap::map<int32_t,epoch_t> osd_epochs;
   public:
 
@@ -244,7 +245,13 @@ public:
     void stat_osd_out(int32_t osd, epoch_t epoch) {
       // 0 the stats for the osd
       osd_stat_updates[osd] = osd_stat_t();
-      osd_epochs[osd] = epoch;
+      // only fill in the epoch if the osd didn't already report htis
+      // epoch.  that way we zero the stat but still preserve a reported
+      // new epoch...
+      if (!osd_epochs.count(osd))
+	osd_epochs[osd] = epoch;
+      // ...and maintain our invariant.
+      assert(osd_epochs.size() == osd_stat_updates.size());
     }
     void stat_osd_down_up(int32_t osd, epoch_t epoch, const PGMap& pg_map) {
       // 0 the op_queue_age_hist for this osd
