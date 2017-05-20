@@ -3208,7 +3208,9 @@ void PGMapUpdater::check_osd_map(const OSDMap::Incremental &osd_inc,
   for (const auto &p : osd_inc.new_weight) {
     if (p.second == CEPH_OSD_OUT) {
       dout(10) << __func__ << "  osd." << p.first << " went OUT" << dendl;
-      pending_inc->stat_osd_out(p.first, osd_inc.epoch);
+      auto j = pg_map->osd_epochs.find(p.first);
+      if (j != pg_map->osd_epochs.end())
+	pending_inc->stat_osd_out(p.first, j->second);
     }
   }
 
@@ -3258,7 +3260,10 @@ void PGMapUpdater::check_osd_map(
     } else if (osdmap.is_out(p.first)) {
       // zero osd_stat
       if (p.second.kb != 0) {
-	pending_inc->stat_osd_out(p.first, osdmap.get_epoch());
+	auto j = pgmap.osd_epochs.find(p.first);
+	if (j != pgmap.osd_epochs.end()) {
+	  pending_inc->stat_osd_out(p.first, j->second);
+	}
       }
     } else if (!osdmap.is_up(p.first)) {
       // zero the op_queue_age_hist
