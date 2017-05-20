@@ -16,6 +16,26 @@
 #include <string>
 #include <vector>
 
+/// creates a temporary pool and initializes an IoCtx for each test
+class cls_log : public ::testing::Test {
+  librados::Rados rados;
+  std::string pool_name;
+ protected:
+  librados::IoCtx ioctx;
+
+  void SetUp() {
+    pool_name = get_temp_pool_name();
+    /* create pool */
+    ASSERT_EQ("", create_one_pool_pp(pool_name, rados));
+    ASSERT_EQ(0, rados.ioctx_create(pool_name.c_str(), ioctx));
+  }
+  void TearDown() {
+    /* remove pool */
+    ioctx.close();
+    ASSERT_EQ(0, destroy_one_pool_pp(pool_name, rados));
+  }
+};
+
 static librados::ObjectWriteOperation *new_op() {
   return new librados::ObjectWriteOperation();
 }
@@ -105,16 +125,8 @@ void check_entry(cls_log_entry& entry, utime_t& start_time, int i, bool modified
 }
 
 
-TEST(cls_rgw, test_log_add_same_time)
+TEST_F(cls_log, test_log_add_same_time)
 {
-  librados::Rados rados;
-  librados::IoCtx ioctx;
-  string pool_name = get_temp_pool_name();
-
-  /* create pool */
-  ASSERT_EQ("", create_one_pool_pp(pool_name, rados));
-  ASSERT_EQ(0, rados.ioctx_create(pool_name.c_str(), ioctx));
-
   /* add chains */
   string oid = "obj";
 
@@ -188,20 +200,10 @@ TEST(cls_rgw, test_log_add_same_time)
 
   delete rop;
 
-  /* destroy pool */
-  ASSERT_EQ(0, destroy_one_pool_pp(pool_name, rados));
 }
 
-TEST(cls_rgw, test_log_add_different_time)
+TEST_F(cls_log, test_log_add_different_time)
 {
-  librados::Rados rados;
-  librados::IoCtx ioctx;
-  string pool_name = get_temp_pool_name();
-
-  /* create pool */
-  ASSERT_EQ("", create_one_pool_pp(pool_name, rados));
-  ASSERT_EQ(0, rados.ioctx_create(pool_name.c_str(), ioctx));
-
   /* add chains */
   string oid = "obj";
 
@@ -282,22 +284,10 @@ TEST(cls_rgw, test_log_add_different_time)
   } while (truncated);
 
   ASSERT_EQ(10, i);
-  delete rop;
-
-  /* destroy pool */
-  ASSERT_EQ(0, destroy_one_pool_pp(pool_name, rados));
 }
 
-TEST(cls_rgw, test_log_trim)
+TEST_F(cls_log, test_log_trim)
 {
-  librados::Rados rados;
-  librados::IoCtx ioctx;
-  string pool_name = get_temp_pool_name();
-
-  /* create pool */
-  ASSERT_EQ("", create_one_pool_pp(pool_name, rados));
-  ASSERT_EQ(0, rados.ioctx_create(pool_name.c_str(), ioctx));
-
   /* add chains */
   string oid = "obj";
 
@@ -336,8 +326,4 @@ TEST(cls_rgw, test_log_trim)
     ASSERT_EQ(9 - i, (int)entries.size());
     ASSERT_EQ(0, (int)truncated);
   }
-  delete rop;
-
-  /* destroy pool */
-  ASSERT_EQ(0, destroy_one_pool_pp(pool_name, rados));
 }
