@@ -718,10 +718,6 @@ bool MonmapMonitor::should_propose(double& delay)
   return true;
 }
 
-void MonmapMonitor::tick()
-{
-}
-
 void MonmapMonitor::get_health(list<pair<health_status_t, string> >& summary,
 			       list<pair<health_status_t, string> > *detail,
 			       CephContext *cct) const

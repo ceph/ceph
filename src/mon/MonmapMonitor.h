@@ -80,8 +80,6 @@ class MonmapMonitor : public PaxosService {
    */
   bool should_propose(double& delay) override;
 
-  void tick() override;
-
   void check_sub(Subscription *sub);
 
 private:
