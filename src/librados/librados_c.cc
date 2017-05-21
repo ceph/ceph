@@ -3362,6 +3362,20 @@ extern "C" void _rados_write_op_omap_rm_keys2(rados_write_op_t write_op,
 }
 LIBRADOS_C_API_BASE_DEFAULT(rados_write_op_omap_rm_keys2);
 
+extern "C" void _rados_write_op_omap_rm_range2(rados_write_op_t write_op,
+                                               const char *key_begin,
+                                               size_t key_begin_len,
+                                               const char *key_end,
+                                               size_t key_end_len)
+{
+  tracepoint(librados, rados_write_op_omap_rm_range_enter,
+             write_op, key_begin, key_end);
+  ((::ObjectOperation *)write_op)->omap_rm_range({key_begin, key_begin_len},
+                                                 {key_end, key_end_len});
+  tracepoint(librados, rados_write_op_omap_rm_range_exit);
+}
+LIBRADOS_C_API_BASE_DEFAULT(rados_write_op_omap_rm_range2);
+
 extern "C" void _rados_write_op_omap_clear(rados_write_op_t write_op)
 {
   tracepoint(librados, rados_write_op_omap_clear_enter, write_op);
