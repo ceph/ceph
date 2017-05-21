@@ -651,7 +651,7 @@ Description: debugging symbols for radosgw
 
 Package: ceph-test
 Architecture: linux-any
-Depends: ceph-common, curl, xmlstarlet, ${misc:Depends}, ${shlibs:Depends}
+Depends: ceph-common, curl, xmlstarlet, jq, ${misc:Depends}, ${shlibs:Depends}
 Description: Ceph test and benchmarking tools
  This package contains tools for testing and benchmarking Ceph.
 
