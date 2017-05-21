@@ -3723,6 +3723,10 @@ void RGWRados::finalize()
     reshard_wait->stop();
     reshard_wait.reset();
   }
+
+  if (run_reshard_thread) {
+    reshard->stop_processor();
+  }
   delete reshard;
   delete index_completion_manager;
 }
@@ -4512,10 +4516,10 @@ int RGWRados::init_complete()
 
   lc = new RGWLC();
   lc->initialize(cct, this);
-  
+
   if (use_lc_thread)
     lc->start_processor();
-  
+
   quota_handler = RGWQuotaHandler::generate_handler(this, quota_threads);
 
   bucket_index_max_shards = (cct->_conf->rgw_override_bucket_index_max_shards ? cct->_conf->rgw_override_bucket_index_max_shards :
@@ -4539,6 +4543,10 @@ int RGWRados::init_complete()
   reshard_wait = std::make_shared<RGWReshardWait>(this);
 
   reshard = new RGWReshard(this);
+  if (run_reshard_thread) {
+    reshard->start_processor();
+  }
+
   index_completion_manager = new RGWIndexCompletionManager(this);
   ret = index_completion_manager->start();
 
@@ -13534,7 +13542,7 @@ uint64_t RGWRados::next_bucket_id()
   return ++max_bucket_id;
 }
 
-RGWRados *RGWStoreManager::init_storage_provider(CephContext *cct, bool use_gc_thread, bool use_lc_thread, bool quota_threads, bool run_sync_thread)
+RGWRados *RGWStoreManager::init_storage_provider(CephContext *cct, bool use_gc_thread, bool use_lc_thread, bool quota_threads, bool run_sync_thread, bool run_reshard_thread)
 {
   int use_cache = cct->_conf->rgw_cache_enabled;
   RGWRados *store = NULL;
@@ -13544,7 +13552,7 @@ RGWRados *RGWStoreManager::init_storage_provider(CephContext *cct, bool use_gc_t
     store = new RGWCache<RGWRados>; 
   }
 
-  if (store->initialize(cct, use_gc_thread, use_lc_thread, quota_threads, run_sync_thread) < 0) {
+  if (store->initialize(cct, use_gc_thread, use_lc_thread, quota_threads, run_sync_thread, run_reshard_thread) < 0) {
     delete store;
     return NULL;
   }
