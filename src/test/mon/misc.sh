@@ -122,7 +122,7 @@ function TEST_mon_add_to_single_mon() {
     # wait for the quorum
     timeout 120 ceph -s > /dev/null || return 1
     local num_mons
-    num_mons=$(ceph mon dump --format=xml 2>/dev/null | $XMLSTARLET sel -t -v "count(//mons/mon)") || return 1
+    num_mons=$(ceph mon dump --format=json 2>/dev/null | jq ".mons | length") || return 1
     [ $num_mons == 2 ] || return 1
     # no reason to take more than 120 secs to get this submitted
     timeout 120 ceph mon add b $MONB || return 1
