@@ -3347,6 +3347,23 @@ TRACEPOINT_EVENT(librados, rados_write_op_omap_rm_keys_exit,
     TP_FIELDS()
 )
 
+TRACEPOINT_EVENT(librados, rados_write_op_omap_rm_range_enter,
+    TP_ARGS(
+        rados_write_op_t, op,
+        const char*, key_begin,
+        const char*, key_end),
+    TP_FIELDS(
+        ctf_integer_hex(rados_write_op_t, op, op)
+        ceph_ctf_string(key_begin, key_begin)
+        ceph_ctf_string(key_end, key_end)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_write_op_omap_rm_range_exit,
+    TP_ARGS(),
+    TP_FIELDS()
+)
+
 TRACEPOINT_EVENT(librados, rados_write_op_omap_clear_enter,
     TP_ARGS(
         rados_write_op_t, op),
