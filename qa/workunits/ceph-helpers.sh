@@ -761,8 +761,8 @@ function get_osds() {
     local poolname=$1
     local objectname=$2
 
-    local osds=$(ceph --format xml osd map $poolname $objectname 2>/dev/null | \
-        $XMLSTARLET sel -t -m "//acting/osd" -v . -o ' ')
+    local osds=$(ceph --format json osd map $poolname $objectname 2>/dev/null | \
+        jq '.acting | .[]')
     # get rid of the trailing space
     echo $osds
 }
@@ -831,8 +831,7 @@ function get_pg() {
     local poolname=$1
     local objectname=$2
 
-    ceph --format xml osd map $poolname $objectname 2>/dev/null | \
-        $XMLSTARLET sel -t -m "//pgid" -v . -n
+    ceph --format json osd map $poolname $objectname 2>/dev/null | jq -r '.pgid'
 }
 
 function test_get_pg() {
@@ -865,9 +864,9 @@ function get_config() {
     local config=$3
 
     CEPH_ARGS='' \
-        ceph --format xml daemon $dir/ceph-$daemon.$id.asok \
+        ceph --format json daemon $dir/ceph-$daemon.$id.asok \
         config get $config 2> /dev/null | \
-        $XMLSTARLET sel -t -m "//$config" -v . -n
+        jq -r ".$config"
 }
 
 function test_get_config() {
@@ -901,10 +900,9 @@ function set_config() {
     local config=$3
     local value=$4
 
-    CEPH_ARGS='' \
-        ceph --format xml daemon $dir/ceph-$daemon.$id.asok \
-        config set $config $value 2> /dev/null | \
-        $XMLSTARLET sel -Q -t -m "//success" -v .
+    test $(env CEPH_ARGS='' ceph --format json daemon $dir/ceph-$daemon.$id.asok \
+               config set $config $value 2> /dev/null | \
+           jq 'has("success")') == true
 }
 
 function test_set_config() {
@@ -935,8 +933,8 @@ function get_primary() {
     local poolname=$1
     local objectname=$2
 
-    ceph --format xml osd map $poolname $objectname 2>/dev/null | \
-        $XMLSTARLET sel -t -m "//acting_primary" -v . -n
+    ceph --format json osd map $poolname $objectname 2>/dev/null | \
+        jq '.acting_primary'
 }
 
 function test_get_primary() {
@@ -968,9 +966,8 @@ function get_not_primary() {
     local objectname=$2
 
     local primary=$(get_primary $poolname $objectname)
-    ceph --format xml osd map $poolname $objectname 2>/dev/null | \
-        $XMLSTARLET sel -t -m "//acting/osd[not(.='$primary')]" -v . -n | \
-        head -1
+    ceph --format json osd map $poolname $objectname 2>/dev/null | \
+        jq ".acting | map(select (. != $primary)) | first"
 }
 
 function test_get_not_primary() {
@@ -1058,12 +1055,13 @@ function test_objectstore_tool() {
 # @return 0 if recovery in progress, 1 otherwise
 #
 function get_is_making_recovery_progress() {
-    local progress=$(ceph --format xml status 2>/dev/null | \
-        $XMLSTARLET sel \
-        -t -m "//pgmap/recovering_keys_per_sec" -v . -o ' ' \
-        -t -m "//pgmap/recovering_bytes_per_sec" -v . -o ' ' \
-        -t -m "//pgmap/recovering_objects_per_sec" -v .)
-    test -n "$progress"
+    local recovery_progress
+    recovery_progress+=".recovering_keys_per_sec + "
+    recovery_progress+=".recovering_bytes_per_sec + "
+    recovery_progress+=".recovering_objects_per_sec"
+    local progress=$(ceph --format json status 2>/dev/null | \
+                     jq -r ".pgmap | $recovery_progress")
+    test "$progress" != null
 }
 
 function test_get_is_making_recovery_progress() {
@@ -1087,17 +1085,11 @@ function test_get_is_making_recovery_progress() {
 # @return 0 on success, 1 on error
 #
 function get_num_active_clean() {
-    local expression="("
-    expression+="contains(.,'active') and "
-    expression+="contains(.,'clean') and "
-    expression+="not(contains(.,'stale'))"
-    expression+=")"
-    # xmlstarlet 1.3.0 (which is on Ubuntu precise)
-    # add extra new lines that must be ignored with
-    # grep -v '^$' 
-    ceph --format xml pg dump pgs 2>/dev/null | \
-        $XMLSTARLET sel -t -m "//pg_stat/state[$expression]" -v . -n | \
-        grep -cv '^$'
+    local expression
+    expression+="select(contains(\"active\") and contains(\"clean\")) | "
+    expression+="select(contains(\"stale\") | not)"
+    ceph --format json pg dump pgs 2>/dev/null | \
+        jq "[.[] | .state | $expression] | length"
 }
 
 function test_get_num_active_clean() {
@@ -1123,8 +1115,7 @@ function test_get_num_active_clean() {
 # @return 0 on success, 1 on error
 #
 function get_num_pgs() {
-    ceph --format xml status 2>/dev/null | \
-        $XMLSTARLET sel -t -m "//pgmap/num_pgs" -v .
+    ceph --format json status 2>/dev/null | jq '.pgmap.num_pgs'
 }
 
 function test_get_num_pgs() {
@@ -1154,8 +1145,8 @@ function test_get_num_pgs() {
 function get_last_scrub_stamp() {
     local pgid=$1
     local sname=${2:-last_scrub_stamp}
-    ceph --format xml pg dump pgs 2>/dev/null | \
-        $XMLSTARLET sel -t -m "//pg_stat[pgid='$pgid']/$sname" -v .
+    ceph --format json pg dump pgs 2>/dev/null | \
+        jq -r ".[] | select(.pgid==\"$pgid\") | .$sname"
 }
 
 function test_get_last_scrub_stamp() {
