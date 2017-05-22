@@ -35,6 +35,7 @@ struct RGWRequest
 
   void log_format(struct req_state *s, const char *fmt, ...);
   void log_init();
+  utime_t get_elapsed_time();
   void log(struct req_state *s, const char *msg);
 }; /* RGWRequest */
 

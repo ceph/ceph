@@ -25,6 +25,10 @@ void RGWRequest::log_init() {
   ts = ceph_clock_now();
 }
 
+utime_t RGWRequest::get_elapsed_time() {
+  return ceph_clock_now() - ts;
+}
+
 void RGWRequest::log(struct req_state *s, const char *msg) {
   if (s->info.method && req_str.size() == 0) {
     req_str = s->info.method;

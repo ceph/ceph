@@ -123,7 +123,7 @@ int process_request(RGWRados* const store,
 
   req->log_init();
 
-  dout(1) << "====== starting new request req=" << hex << req << dec
+  dout(2) << "====== starting new request req=" << hex << req << dec
 	  << " =====" << dendl;
   perfcounter->inc(l_rgw_req);
 
@@ -229,10 +229,18 @@ done:
     handler->put_op(op);
   rest->put_handler(handler);
 
-  dout(1) << "====== req done req=" << hex << req << dec
-	  << " op status=" << op_ret
-	  << " http_status=" << http_ret
+  dout(2) << "====== req done req=" << hex << req << dec
 	  << " ======"
+	  << dendl;
+  dout(1) << "processed op status=" << op_ret
+	  << " op_name=" << (op ? op->name() : "unknown")
+	  << " user_id=" << (s->user ? s->user->user_id.to_str() : "")
+	  << " http_status=" << http_ret
+	  << " domain=" << s->info.domain
+	  << " request_uri=" << s->info.request_uri
+	  << " request_params=" << s->info.request_params
+	  << " obj_size=" << s->obj_size
+	  << " duration=" << req->get_elapsed_time()
 	  << dendl;
 
   return (ret < 0 ? ret : s->err.ret);
