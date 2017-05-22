@@ -1869,6 +1869,9 @@ int librados::IoCtxImpl::notify(const object_t& oid, bufferlist& bl,
   objecter->linger_cancel(linger_op);
 
   set_sync_op_version(objver);
+
+  delete notify_finish;
+
   return r;
 }
 
