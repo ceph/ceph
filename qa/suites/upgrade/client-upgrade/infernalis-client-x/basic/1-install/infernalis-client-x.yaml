@@ -1,6 +1,6 @@
 tasks:
 - install:
-    branch: infernalis 
+    ref: baf17c90980f3c61f75775f561ced5b2a1d2141c
 - print: "**** done install infernalis"
 upgrade_workload:
   sequential:
