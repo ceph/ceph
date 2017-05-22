@@ -170,6 +170,9 @@ def generate_iso(ctx, config):
   /mnt/cdrom/test.sh > /mnt/log/test.log 2>&1 && touch /mnt/log/success
 """ + test_teardown
 
+        user_data = user_data.format(
+            ceph_branch=ctx.config.get('branch'),
+            ceph_sha1=ctx.config.get('sha1'))
         teuthology.write_file(remote, userdata_path, StringIO(user_data))
 
         with file(os.path.join(src_dir, 'metadata.yaml'), 'rb') as f:
