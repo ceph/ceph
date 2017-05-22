@@ -13,10 +13,8 @@
 #ifndef CEPH_HISTOGRAM_H
 #define CEPH_HISTOGRAM_H
 
-#include <vector>
 #include <list>
 
-#include "include/intarith.h"
 #include "include/encoding.h"
 
 namespace ceph {

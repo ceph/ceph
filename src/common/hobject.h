@@ -15,9 +15,7 @@
 #ifndef __CEPH_OS_HOBJECT_H
 #define __CEPH_OS_HOBJECT_H
 
-#include <string.h>
 #include "include/types.h"
-#include "include/object.h"
 #include "include/cmp.h"
 
 #include "json_spirit/json_spirit_value.h"

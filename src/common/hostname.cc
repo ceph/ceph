@@ -14,7 +14,6 @@
 
 #include "common/hostname.h"
 
-#include <string>
 #include <unistd.h>
 
 std::string ceph_get_hostname()
