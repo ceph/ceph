@@ -146,8 +146,8 @@ void AcquireRequest<I>::send_break_lock() {
   Context *ctx = create_context_callback<
     AcquireRequest<I>, &AcquireRequest<I>::handle_break_lock>(this);
   auto req = BreakRequest<I>::create(
-    m_ioctx, m_work_queue, m_oid, m_locker, m_blacklist_on_break_lock,
-    m_blacklist_expire_seconds, false, ctx);
+    m_ioctx, m_work_queue, m_oid, m_locker, m_exclusive,
+    m_blacklist_on_break_lock, m_blacklist_expire_seconds, false, ctx);
   req->send();
 }
 
@@ -165,7 +165,8 @@ void AcquireRequest<I>::handle_break_lock(int r) {
     return;
   }
 
-  send_get_locker();
+  m_locker = {};
+  send_lock();
 }
 
 template <typename I>
