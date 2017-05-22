@@ -30,6 +30,3 @@ else()
 endif()
   
 add_dependencies(dmclock-tests dmclock)
-
-add_test(NAME dmclock-tests
-  COMMAND $<TARGET_FILE:dmclock-tests>)
