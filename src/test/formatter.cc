@@ -19,6 +19,7 @@
 #include <sstream>
 #include <string>
 
+using namespace ceph;
 using std::ostringstream;
 
 TEST(JsonFormatter, Simple1) {

@@ -19,7 +19,7 @@
 
 class MOSDPGBackfill : public MOSDFastDispatchOp {
   static const int HEAD_VERSION = 3;
-  static const int COMPAT_VERSION = 1;
+  static const int COMPAT_VERSION = 3;
 public:
   enum {
     OP_BACKFILL_PROGRESS = 2,
@@ -39,11 +39,13 @@ public:
   epoch_t map_epoch, query_epoch;
   spg_t pgid;
   hobject_t last_backfill;
-  bool compat_stat_sum;
   pg_stat_t stats;
 
   epoch_t get_map_epoch() const override {
     return map_epoch;
+  }
+  epoch_t get_min_epoch() const override {
+    return query_epoch;
   }
   spg_t get_spg() const override {
     return pgid;
@@ -60,20 +62,13 @@ public:
     // For compatibility with version 1
     ::decode(stats.stats, p);
 
-    if (header.version >= 2) {
-      ::decode(stats, p);
-    } else {
-      compat_stat_sum = true;
-    }
+    ::decode(stats, p);
 
     // Handle hobject_t format change
     if (!last_backfill.is_max() &&
 	last_backfill.pool == -1)
       last_backfill.pool = pgid.pool();
-    if (header.version >= 3)
-      ::decode(pgid.shard, p);
-    else
-      pgid.shard = shard_id_t::NO_SHARD;
+    ::decode(pgid.shard, p);
   }
 
   void encode_payload(uint64_t features) override {
@@ -92,14 +87,12 @@ public:
   }
 
   MOSDPGBackfill()
-    : MOSDFastDispatchOp(MSG_OSD_PG_BACKFILL, HEAD_VERSION, COMPAT_VERSION),
-      compat_stat_sum(false) {}
+    : MOSDFastDispatchOp(MSG_OSD_PG_BACKFILL, HEAD_VERSION, COMPAT_VERSION) {}
   MOSDPGBackfill(__u32 o, epoch_t e, epoch_t qe, spg_t p)
     : MOSDFastDispatchOp(MSG_OSD_PG_BACKFILL, HEAD_VERSION, COMPAT_VERSION),
       op(o),
       map_epoch(e), query_epoch(e),
-      pgid(p),
-      compat_stat_sum(false) {}
+      pgid(p) {}
 private:
   ~MOSDPGBackfill() override {}
 

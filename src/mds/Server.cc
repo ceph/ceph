@@ -58,7 +58,6 @@
 #include "osd/OSDMap.h"
 
 #include <errno.h>
-#include <fcntl.h>
 
 #include <list>
 #include <iostream>
@@ -119,6 +118,62 @@ void Server::create_logger()
       "Client session messages", "hcs");
   plb.add_u64_counter(l_mdss_dispatch_client_request, "dispatch_client_request", "Client requests dispatched");
   plb.add_u64_counter(l_mdss_dispatch_slave_request, "dispatch_server_request", "Server requests dispatched");
+  plb.add_u64_counter(l_mdss_req_lookuphash, "req_lookuphash",
+      "Request type lookup hash of inode");
+  plb.add_u64_counter(l_mdss_req_lookupino, "req_lookupino",
+      "Request type lookup inode");
+  plb.add_u64_counter(l_mdss_req_lookupparent, "req_lookupparent",
+      "Request type lookup parent");
+  plb.add_u64_counter(l_mdss_req_lookupname, "req_lookupname",
+      "Request type lookup name");
+  plb.add_u64_counter(l_mdss_req_lookup, "req_lookup",
+      "Request type lookup");
+  plb.add_u64_counter(l_mdss_req_lookupsnap, "req_lookupsnap",
+      "Request type lookup snapshot");
+  plb.add_u64_counter(l_mdss_req_getattr, "req_getattr",
+      "Request type get attribute");
+  plb.add_u64_counter(l_mdss_req_setattr, "req_setattr",
+      "Request type set attribute");
+  plb.add_u64_counter(l_mdss_req_setlayout, "req_setlayout",
+      "Request type set file layout");
+  plb.add_u64_counter(l_mdss_req_setdirlayout, "req_setdirlayout",
+      "Request type set directory layout");
+  plb.add_u64_counter(l_mdss_req_setxattr, "req_setxattr",
+      "Request type set extended attribute");
+  plb.add_u64_counter(l_mdss_req_rmxattr, "req_rmxattr",
+      "Request type remove extended attribute");
+  plb.add_u64_counter(l_mdss_req_readdir, "req_readdir",
+      "Request type read directory");
+  plb.add_u64_counter(l_mdss_req_setfilelock, "req_setfilelock",
+      "Request type set file lock");
+  plb.add_u64_counter(l_mdss_req_getfilelock, "req_getfilelock",
+      "Request type get file lock");
+  plb.add_u64_counter(l_mdss_req_create, "req_create",
+      "Request type create");
+  plb.add_u64_counter(l_mdss_req_open, "req_open",
+      "Request type open");
+  plb.add_u64_counter(l_mdss_req_mknod, "req_mknod",
+      "Request type make node");
+  plb.add_u64_counter(l_mdss_req_link, "req_link",
+      "Request type link");
+  plb.add_u64_counter(l_mdss_req_unlink, "req_unlink",
+      "Request type unlink");
+  plb.add_u64_counter(l_mdss_req_rmdir, "req_rmdir",
+      "Request type remove directory");
+  plb.add_u64_counter(l_mdss_req_rename, "req_rename",
+      "Request type rename");
+  plb.add_u64_counter(l_mdss_req_mkdir, "req_mkdir",
+      "Request type make directory");
+  plb.add_u64_counter(l_mdss_req_symlink, "req_symlink",
+      "Request type symbolic link");
+  plb.add_u64_counter(l_mdss_req_lssnap, "req_lssnap",
+      "Request type list snapshot");
+  plb.add_u64_counter(l_mdss_req_mksnap, "req_mksnap",
+      "Request type make snapshot");
+  plb.add_u64_counter(l_mdss_req_rmsnap, "req_rmsnap",
+      "Request type remove snapshot");
+  plb.add_u64_counter(l_mdss_req_renamesnap, "req_renamesnap",
+      "Request type rename snapshot");
   logger = plb.create_perf_counters();
   g_ceph_context->get_perfcounters_collection()->add(logger);
 }
@@ -651,6 +706,13 @@ void Server::find_idle_sessions()
     return;
   }
 
+  if (mds->sessionmap.get_sessions().size() == 1 &&
+      mds->mdsmap->get_num_in_mds() == 1) {
+    dout(20) << "not evicting a slow client, because there is only one"
+             << dendl;
+    return;
+  }
+
   while (1) {
     Session *session = mds->sessionmap.get_oldest_session(Session::STATE_STALE);
     if (!session)
@@ -1032,6 +1094,93 @@ void Server::respond_to_request(MDRequestRef& mdr, int r)
 {
   if (mdr->client_request) {
     reply_client_request(mdr, new MClientReply(mdr->client_request, r));
+
+    // add here to avoid counting ops multiple times (e.g., locks, loading)
+    switch(mdr->client_request->get_op()) {
+    case CEPH_MDS_OP_LOOKUPHASH:
+      logger->inc(l_mdss_req_lookuphash);
+      break;
+    case CEPH_MDS_OP_LOOKUPINO:
+      logger->inc(l_mdss_req_lookupino);
+      break;
+    case CEPH_MDS_OP_LOOKUPPARENT:
+      logger->inc(l_mdss_req_lookupparent);
+      break;
+    case CEPH_MDS_OP_LOOKUPNAME:
+      logger->inc(l_mdss_req_lookupname);
+      break;
+    case CEPH_MDS_OP_LOOKUP:
+      logger->inc(l_mdss_req_lookup);
+      break;
+    case CEPH_MDS_OP_LOOKUPSNAP:
+      logger->inc(l_mdss_req_lookupsnap);
+      break;
+    case CEPH_MDS_OP_GETATTR:
+      logger->inc(l_mdss_req_getattr);
+      break;
+    case CEPH_MDS_OP_SETATTR:
+      logger->inc(l_mdss_req_setattr);
+      break;
+    case CEPH_MDS_OP_SETLAYOUT:
+      logger->inc(l_mdss_req_setlayout);
+      break;
+    case CEPH_MDS_OP_SETDIRLAYOUT:
+      logger->inc(l_mdss_req_setdirlayout);
+      break;
+    case CEPH_MDS_OP_SETXATTR:
+      logger->inc(l_mdss_req_setxattr);
+      break;
+    case CEPH_MDS_OP_RMXATTR:
+      logger->inc(l_mdss_req_rmxattr);
+      break;
+    case CEPH_MDS_OP_READDIR:
+      logger->inc(l_mdss_req_readdir);
+      break;
+    case CEPH_MDS_OP_SETFILELOCK:
+      logger->inc(l_mdss_req_setfilelock);
+      break;
+    case CEPH_MDS_OP_GETFILELOCK:
+      logger->inc(l_mdss_req_getfilelock);
+      break;
+    case CEPH_MDS_OP_CREATE:
+      logger->inc(l_mdss_req_create);
+    case CEPH_MDS_OP_OPEN:
+      logger->inc(l_mdss_req_open);
+      break;
+    case CEPH_MDS_OP_MKNOD:
+      logger->inc(l_mdss_req_mknod);
+      break;
+    case CEPH_MDS_OP_LINK:
+      logger->inc(l_mdss_req_link);
+      break;
+    case CEPH_MDS_OP_UNLINK:
+      logger->inc(l_mdss_req_unlink);
+      break;
+    case CEPH_MDS_OP_RMDIR:
+      logger->inc(l_mdss_req_rmdir);
+      break;
+    case CEPH_MDS_OP_RENAME:
+      logger->inc(l_mdss_req_rename);
+      break;
+    case CEPH_MDS_OP_MKDIR:
+      logger->inc(l_mdss_req_mkdir);
+      break;
+    case CEPH_MDS_OP_SYMLINK:
+      logger->inc(l_mdss_req_symlink);
+      break;
+    case CEPH_MDS_OP_LSSNAP:
+      logger->inc(l_mdss_req_lssnap);
+      break;
+    case CEPH_MDS_OP_MKSNAP:
+      logger->inc(l_mdss_req_mksnap);
+      break;
+    case CEPH_MDS_OP_RMSNAP:
+      logger->inc(l_mdss_req_rmsnap);
+      break;
+    case CEPH_MDS_OP_RENAMESNAP:
+      logger->inc(l_mdss_req_renamesnap);
+      break;
+    }
   } else if (mdr->internal_op > -1) {
     dout(10) << "respond_to_request on internal request " << mdr << dendl;
     if (!mdr->internal_op_finish)
@@ -2945,7 +3094,7 @@ void Server::handle_client_open(MDRequestRef& mdr)
     return;
   }
   
-  bool need_auth = !file_mode_is_readonly(cmode) || (flags & O_TRUNC);
+  bool need_auth = !file_mode_is_readonly(cmode) || (flags & CEPH_O_TRUNC);
 
   if ((cmode & CEPH_FILE_MODE_WR) && mdcache->is_readonly()) {
     dout(7) << "read-only FS" << dendl;
@@ -2970,8 +3119,8 @@ void Server::handle_client_open(MDRequestRef& mdr)
     // can only open non-regular inode with mode FILE_MODE_PIN, at least for now.
     cmode = CEPH_FILE_MODE_PIN;
     // the inode is symlink and client wants to follow it, ignore the O_TRUNC flag.
-    if (cur->inode.is_symlink() && !(flags & O_NOFOLLOW))
-      flags &= ~O_TRUNC;
+    if (cur->inode.is_symlink() && !(flags & CEPH_O_NOFOLLOW))
+      flags &= ~CEPH_O_TRUNC;
   }
 
   dout(10) << "open flags = " << flags
@@ -2985,13 +3134,13 @@ void Server::handle_client_open(MDRequestRef& mdr)
     respond_to_request(mdr, -ENXIO);                 // FIXME what error do we want?
     return;
     }*/
-  if ((flags & O_DIRECTORY) && !cur->inode.is_dir() && !cur->inode.is_symlink()) {
+  if ((flags & CEPH_O_DIRECTORY) && !cur->inode.is_dir() && !cur->inode.is_symlink()) {
     dout(7) << "specified O_DIRECTORY on non-directory " << *cur << dendl;
     respond_to_request(mdr, -EINVAL);
     return;
   }
 
-  if ((flags & O_TRUNC) && !cur->inode.is_file()) {
+  if ((flags & CEPH_O_TRUNC) && !cur->inode.is_file()) {
     dout(7) << "specified O_TRUNC on !(file|symlink) " << *cur << dendl;
     // we should return -EISDIR for directory, return -EINVAL for other non-regular
     respond_to_request(mdr, cur->inode.is_dir() ? -EISDIR : -EINVAL);
@@ -3029,7 +3178,7 @@ void Server::handle_client_open(MDRequestRef& mdr)
   }
 
   // O_TRUNC
-  if ((flags & O_TRUNC) && !mdr->has_completed) {
+  if ((flags & CEPH_O_TRUNC) && !mdr->has_completed) {
     assert(cur->is_auth());
 
     xlocks.insert(&cur->filelock);
@@ -3167,7 +3316,7 @@ void Server::handle_client_openc(MDRequestRef& mdr)
     return;
   }
 
-  if (!(req->head.args.open.flags & O_EXCL)) {
+  if (!(req->head.args.open.flags & CEPH_O_EXCL)) {
     int r = mdcache->path_traverse(mdr, NULL, NULL, req->get_filepath(),
 				   &mdr->dn[0], NULL, MDS_TRAVERSE_FORWARD);
     if (r > 0) return;
@@ -3190,7 +3339,7 @@ void Server::handle_client_openc(MDRequestRef& mdr)
     // r == -ENOENT
   }
 
-  bool excl = (req->head.args.open.flags & O_EXCL);
+  bool excl = (req->head.args.open.flags & CEPH_O_EXCL);
   set<SimpleLock*> rdlocks, wrlocks, xlocks;
   file_layout_t *dir_layout = NULL;
   CDentry *dn = rdlock_path_xlock_dentry(mdr, 0, rdlocks, wrlocks, xlocks,
@@ -3264,7 +3413,7 @@ void Server::handle_client_openc(MDRequestRef& mdr)
 
   if (!dnl->is_null()) {
     // it existed.  
-    assert(req->head.args.open.flags & O_EXCL);
+    assert(req->head.args.open.flags & CEPH_O_EXCL);
     dout(10) << "O_EXCL, target exists, failing with -EEXIST" << dendl;
     mdr->tracei = dnl->get_inode();
     mdr->tracedn = dn;
@@ -3365,12 +3514,15 @@ void Server::handle_client_readdir(MDRequestRef& mdr)
   frag_t fg = (__u32)req->head.args.readdir.frag;
   unsigned req_flags = (__u32)req->head.args.readdir.flags;
   string offset_str = req->get_path2();
-  dout(10) << " frag " << fg << " offset '" << offset_str << "'"
-	   << " flags " << req_flags << dendl;
 
   __u32 offset_hash = 0;
   if (!offset_str.empty())
     offset_hash = ceph_frag_value(diri->hash_dentry_name(offset_str));
+  else
+    offset_hash = (__u32)req->head.args.readdir.offset_hash;
+
+  dout(10) << " frag " << fg << " offset '" << offset_str << "'"
+	   << " offset_hash " << offset_hash << " flags " << req_flags << dendl;
 
   // does the frag exist?
   if (diri->dirfragtree[fg.value()] != fg) {
@@ -3444,10 +3596,11 @@ void Server::handle_client_readdir(MDRequestRef& mdr)
   // build dir contents
   bufferlist dnbl;
   __u32 numfiles = 0;
+  bool start = !offset_hash && offset_str.empty();
   bool end = (dir->begin() == dir->end());
   // skip all dns < dentry_key_t(snapid, offset_str, offset_hash)
   dentry_key_t skip_key(snapid, offset_str.c_str(), offset_hash);
-  for (CDir::map_t::iterator it = offset_str.empty() ? dir->begin() : dir->lower_bound(skip_key);
+  for (CDir::map_t::iterator it = start ? dir->begin() : dir->lower_bound(skip_key);
        !end && numfiles < max;
        end = (it == dir->end())) {
     CDentry *dn = it->second;
@@ -3467,7 +3620,7 @@ void Server::handle_client_readdir(MDRequestRef& mdr)
       continue;
     }
 
-    if (!offset_str.empty()) {
+    if (!start) {
       dentry_key_t offset_key(dn->last, offset_str.c_str(), offset_hash);
       if (!(offset_key < dn->key()))
 	continue;
@@ -3539,17 +3692,15 @@ void Server::handle_client_readdir(MDRequestRef& mdr)
     mdcache->lru.lru_touch(dn);
   }
   
-  bool complete = false;
   __u16 flags = 0;
   if (end) {
     flags = CEPH_READDIR_FRAG_END;
-    complete = offset_str.empty(); // FIXME: what purpose does this serve
-    if (complete)
-      flags |= CEPH_READDIR_FRAG_COMPLETE;
+    if (start)
+      flags |= CEPH_READDIR_FRAG_COMPLETE; // FIXME: what purpose does this serve
   }
   // client only understand END and COMPLETE flags ?
   if (req_flags & CEPH_READDIR_REPLY_BITFLAGS) {
-    flags |= CEPH_READDIR_HASH_ORDER;
+    flags |= CEPH_READDIR_HASH_ORDER | CEPH_READDIR_OFFSET_HASH;
   }
   
   // finish final blob
@@ -3560,8 +3711,8 @@ void Server::handle_client_readdir(MDRequestRef& mdr)
   // yay, reply
   dout(10) << "reply to " << *req << " readdir num=" << numfiles
 	   << " bytes=" << dirbl.length()
+	   << " start=" << (int)start
 	   << " end=" << (int)end
-	   << " complete=" << (int)complete
 	   << dendl;
   mdr->reply_extra_bl = dirbl;
 
@@ -4408,12 +4559,36 @@ void Server::handle_set_vxattr(MDRequestRef& mdr, CInode *cur,
 
     pi = cur->project_inode();
     pi->quota = quota;
+  } else if (name.find("ceph.dir.pin") == 0) {
+    if (!cur->is_dir() || cur->is_root()) {
+      respond_to_request(mdr, -EINVAL);
+      return;
+    }
+
+    mds_rank_t rank;
+    try {
+      rank = boost::lexical_cast<mds_rank_t>(value);
+      if (rank < 0) rank = MDS_RANK_NONE;
+    } catch (boost::bad_lexical_cast const&) {
+      dout(10) << "bad vxattr value, unable to parse int for " << name << dendl;
+      respond_to_request(mdr, -EINVAL);
+      return;
+    }
+
+    xlocks.insert(&cur->policylock);
+    if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
+      return;
+
+    pi = cur->project_inode();
+    cur->set_export_pin(rank);
   } else {
     dout(10) << " unknown vxattr " << name << dendl;
     respond_to_request(mdr, -EINVAL);
     return;
   }
 
+  pi->change_attr++;
+  pi->ctime = mdr->get_op_stamp();
   pi->version = cur->pre_dirty();
   if (cur->is_file())
     pi->update_backtrace();
@@ -4780,9 +4955,6 @@ void Server::handle_client_mknod(MDRequestRef& mdr)
       newi->filelock.set_state(LOCK_EXCL);
       newi->authlock.set_state(LOCK_EXCL);
       newi->xattrlock.set_state(LOCK_EXCL);
-      cap->issue_norevoke(CEPH_CAP_AUTH_EXCL|CEPH_CAP_AUTH_SHARED|
-			  CEPH_CAP_XATTR_EXCL|CEPH_CAP_XATTR_SHARED|
-			  CEPH_CAP_ANY_FILE_WR);
     }
   }
 
@@ -4879,8 +5051,6 @@ void Server::handle_client_mkdir(MDRequestRef& mdr)
     newi->filelock.set_state(LOCK_EXCL);
     newi->authlock.set_state(LOCK_EXCL);
     newi->xattrlock.set_state(LOCK_EXCL);
-    cap->issue_norevoke(CEPH_CAP_AUTH_EXCL|CEPH_CAP_AUTH_SHARED|
-			CEPH_CAP_XATTR_EXCL|CEPH_CAP_XATTR_SHARED);
   }
 
   // make sure this inode gets into the journal

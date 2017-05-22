@@ -226,9 +226,8 @@ vinodeno_t Client::map_faked_ino(ino_t ino)
 
 // cons/des
 
-Client::Client(Messenger *m, MonClient *mc)
+Client::Client(Messenger *m, MonClient *mc, Objecter *objecter_)
   : Dispatcher(m->cct),
-    logger(NULL),
     m_command_hook(this),
     timer(m->cct, client_lock),
     callback_handle(NULL),
@@ -246,17 +245,16 @@ Client::Client(Messenger *m, MonClient *mc)
     remount_finisher(m->cct),
     objecter_finisher(m->cct),
     tick_event(NULL),
-    monclient(mc), messenger(m), whoami(mc->get_global_id()),
-    cap_epoch_barrier(0),
+    messenger(m), monclient(mc),
+    objecter(objecter_),
+    whoami(mc->get_global_id()), cap_epoch_barrier(0),
     last_tid(0), oldest_tid(0), last_flush_tid(1),
-    initialized(false), authenticated(false),
+    initialized(false),
     mounted(false), unmounting(false),
     local_osd(-1), local_osd_epoch(0),
     unsafe_sync_write(0),
     client_lock("Client::client_lock")
 {
-  monclient->set_messenger(m);
-
   _reset_faked_inos();
   //
   root = 0;
@@ -279,14 +277,12 @@ Client::Client(Messenger *m, MonClient *mc)
   // file handles
   free_fd_set.insert(10, 1<<30);
 
-  // osd interfaces
   mdsmap.reset(new MDSMap);
-  objecter = new Objecter(cct, messenger, monclient, NULL,
-			  0, 0);
-  objecter->set_client_incarnation(0);  // client always 0, for now.
-  writeback_handler = new ObjecterWriteback(objecter, &objecter_finisher,
-					    &client_lock);
-  objectcacher = new ObjectCacher(cct, "libcephfs", *writeback_handler, client_lock,
+
+  // osd interfaces
+  writeback_handler.reset(new ObjecterWriteback(objecter, &objecter_finisher,
+					    &client_lock));
+  objectcacher.reset(new ObjectCacher(cct, "libcephfs", *writeback_handler, client_lock,
 				  client_flush_set_callback,    // all commit callback
 				  (void*)this,
 				  cct->_conf->client_oc_size,
@@ -294,9 +290,9 @@ Client::Client(Messenger *m, MonClient *mc)
 				  cct->_conf->client_oc_max_dirty,
 				  cct->_conf->client_oc_target_dirty,
 				  cct->_conf->client_oc_max_dirty_age,
-				  true);
+				  true));
   objecter_finisher.start();
-  filer = new Filer(objecter, &objecter_finisher);
+  filer.reset(new Filer(objecter, &objecter_finisher));
 }
 
 
@@ -305,14 +301,6 @@ Client::~Client()
   assert(!client_lock.is_locked());
 
   tear_down_cache();
-
-  delete objectcacher;
-  delete writeback_handler;
-
-  delete filer;
-  delete objecter;
-
-  delete logger;
 }
 
 void Client::tear_down_cache()
@@ -467,35 +455,27 @@ int Client::init()
 {
   timer.init();
   objectcacher->start();
-  objecter->init();
 
   client_lock.Lock();
   assert(!initialized);
 
-  // ok!
-  messenger->add_dispatcher_tail(objecter);
   messenger->add_dispatcher_tail(this);
+  client_lock.Unlock();
 
-  monclient->set_want_keys(CEPH_ENTITY_TYPE_MDS | CEPH_ENTITY_TYPE_OSD);
-  int r = monclient->init();
-  if (r < 0) {
-    // need to do cleanup because we're in an intermediate init state
-    timer.shutdown();
-    client_lock.Unlock();
-    objecter->shutdown();
-    objectcacher->stop();
-    monclient->shutdown();
-    return r;
-  }
-  objecter->start();
+  _finish_init();
+  return 0;
+}
 
+void Client::_finish_init()
+{
+  client_lock.Lock();
   // logger
   PerfCountersBuilder plb(cct, "client", l_c_first, l_c_last);
   plb.add_time_avg(l_c_reply, "reply", "Latency of receiving a reply on metadata request");
   plb.add_time_avg(l_c_lat, "lat", "Latency of processing a metadata request");
   plb.add_time_avg(l_c_wrlat, "wrlat", "Latency of a file data write operation");
-  logger = plb.create_perf_counters();
-  cct->get_perfcounters_collection()->add(logger);
+  logger.reset(plb.create_perf_counters());
+  cct->get_perfcounters_collection()->add(logger.get());
 
   client_lock.Unlock();
 
@@ -546,7 +526,6 @@ int Client::init()
   client_lock.Lock();
   initialized = true;
   client_lock.Unlock();
-  return r;
 }
 
 void Client::shutdown() 
@@ -600,20 +579,14 @@ void Client::shutdown()
   timer.shutdown();
   client_lock.Unlock();
 
-  objecter->shutdown();
   objecter_finisher.wait_for_empty();
   objecter_finisher.stop();
 
-  monclient->shutdown();
-
   if (logger) {
-    cct->get_perfcounters_collection()->remove(logger);
-    delete logger;
-    logger = NULL;
+    cct->get_perfcounters_collection()->remove(logger.get());
+    logger.reset();
   }
 }
-
-
 
 
 // ===================
@@ -1115,10 +1088,17 @@ void Client::insert_readdir_results(MetaRequest *request, MetaSession *session, 
     frag_t fg = (unsigned)request->head.args.readdir.frag;
     unsigned readdir_offset = dirp->next_offset;
     string readdir_start = dirp->last_name;
+    assert(!readdir_start.empty() || readdir_offset == 2);
 
     unsigned last_hash = 0;
-    if (!readdir_start.empty())
-      last_hash = ceph_frag_value(diri->hash_dentry_name(readdir_start));
+    if (hash_order) {
+      if (!readdir_start.empty()) {
+	last_hash = ceph_frag_value(diri->hash_dentry_name(readdir_start));
+      } else if (flags & CEPH_READDIR_OFFSET_HASH) {
+	/* mds understands offset_hash */
+	last_hash = (unsigned)request->head.args.readdir.offset_hash;
+      }
+    }
 
     if (fg != dst.frag) {
       ldout(cct, 10) << "insert_trace got new frag " << fg << " -> " << dst.frag << dendl;
@@ -1131,11 +1111,14 @@ void Client::insert_readdir_results(MetaRequest *request, MetaSession *session, 
     }
 
     ldout(cct, 10) << __func__ << " " << numdn << " readdir items, end=" << end
-		   << ", hash_order=" << hash_order << ", offset " << readdir_offset
-		   << ", readdir_start " << readdir_start << dendl;
+		   << ", hash_order=" << hash_order
+		   << ", readdir_start " << readdir_start
+		   << ", last_hash " << last_hash
+		   << ", next_offset " << readdir_offset << dendl;
 
     if (diri->snapid != CEPH_SNAPDIR &&
-	fg.is_leftmost() && readdir_offset == 2 && readdir_start.empty()) {
+	fg.is_leftmost() && readdir_offset == 2 &&
+	!(hash_order && last_hash)) {
       dirp->release_count = diri->dir_release_count;
       dirp->ordered_count = diri->dir_ordered_count;
       dirp->start_shared_gen = diri->shared_gen;
@@ -2108,6 +2091,19 @@ void Client::handle_client_session(MClientSession *m)
   }
 
   m->put();
+}
+
+bool Client::_any_stale_sessions() const
+{
+  assert(client_lock.is_locked_by_me());
+
+  for (const auto &i : mds_sessions) {
+    if (i.second->state == MetaSession::STATE_STALE) {
+      return true;
+    }
+  }
+
+  return false;
 }
 
 void Client::_kick_stale_sessions()
@@ -5413,7 +5409,7 @@ int Client::authenticate()
 {
   assert(client_lock.is_locked_by_me());
 
-  if (authenticated) {
+  if (monclient->is_authenticated()) {
     return 0;
   }
 
@@ -5426,7 +5422,6 @@ int Client::authenticate()
 
   whoami = monclient->get_global_id();
   messenger->set_myname(entity_name_t::CLIENT(whoami.v));
-  authenticated = true;
 
   return 0;
 }
@@ -7393,6 +7388,8 @@ int Client::_readdir_get_frag(dir_result_t *dirp)
   req->head.args.readdir.flags = CEPH_READDIR_REPLY_BITFLAGS;
   if (dirp->last_name.length()) {
     req->path2.set_path(dirp->last_name.c_str());
+  } else if (dirp->hash_order()) {
+    req->head.args.readdir.offset_hash = dirp->offset_high();
   }
   req->dirp = dirp;
   
@@ -7883,11 +7880,11 @@ int Client::open(const char *relpath, int flags, const UserPerm& perms,
 		 mode_t mode, int stripe_unit, int stripe_count,
 		 int object_size, const char *data_pool)
 {
-  ldout(cct, 3) << "open enter(" << relpath << ", " << flags << "," << mode << ")" << dendl;
+  ldout(cct, 3) << "open enter(" << relpath << ", " << ceph_flags_sys2wire(flags) << "," << mode << ")" << dendl;
   Mutex::Locker lock(client_lock);
   tout(cct) << "open" << std::endl;
   tout(cct) << relpath << std::endl;
-  tout(cct) << flags << std::endl;
+  tout(cct) << ceph_flags_sys2wire(flags) << std::endl;
 
   Fh *fh = NULL;
 
@@ -7957,7 +7954,7 @@ int Client::open(const char *relpath, int flags, const UserPerm& perms,
   
  out:
   tout(cct) << r << std::endl;
-  ldout(cct, 3) << "open exit(" << path << ", " << flags << ") = " << r << dendl;
+  ldout(cct, 3) << "open exit(" << path << ", " << ceph_flags_sys2wire(flags) << ") = " << r << dendl;
   return r;
 }
 
@@ -8173,7 +8170,8 @@ int Client::_open(Inode *in, int flags, mode_t mode, Fh **fhp,
     return -EROFS;
   }
 
-  int cmode = ceph_flags_to_mode(flags);
+  // use normalized flags to generate cmode
+  int cmode = ceph_flags_to_mode(ceph_flags_sys2wire(flags));
   if (cmode < 0)
     return -EINVAL;
   int want = ceph_caps_for_mode(cmode);
@@ -8189,8 +8187,8 @@ int Client::_open(Inode *in, int flags, mode_t mode, Fh **fhp,
     MetaRequest *req = new MetaRequest(CEPH_MDS_OP_OPEN);
     filepath path;
     in->make_nosnap_relative_path(path);
-    req->set_filepath(path); 
-    req->head.args.open.flags = flags & ~O_CREAT;
+    req->set_filepath(path);
+    req->head.args.open.flags = ceph_flags_sys2wire(flags & ~O_CREAT);
     req->head.args.open.mode = mode;
     req->head.args.open.pool = -1;
     if (cct->_conf->client_debug_getattr_caps)
@@ -9338,11 +9336,26 @@ int Client::statfs(const char *path, struct statvfs *stbuf,
   assert(root != nullptr);
   Inode *quota_root = root->quota.is_enable() ? root : get_quota_root(root, perms);
 
-  // get_quota_root should always give us something if client quotas are
-  // enabled
-  assert(cct->_conf->client_quota == false || quota_root != nullptr);
+  // get_quota_root should always give us something
+  // because client quotas are always enabled
+  assert(quota_root != nullptr);
 
   if (quota_root && cct->_conf->client_quota_df && quota_root->quota.max_bytes) {
+
+    // Skip the getattr if any sessions are stale, as we don't want to
+    // block `df` if this client has e.g. been evicted, or if the MDS cluster
+    // is unhealthy.
+    if (!_any_stale_sessions()) {
+      int r = _getattr(quota_root, 0, perms, true);
+      if (r != 0) {
+        // Ignore return value: error getting latest inode metadata is not a good
+        // reason to break "df".
+        lderr(cct) << "Error in getattr on quota root 0x"
+                   << std::hex << quota_root->ino << std::dec
+                   << " statfs result may be outdated" << dendl;
+      }
+    }
+
     // Special case: if there is a size quota set on the Inode acting
     // as the root for this client mount, then report the quota status
     // as the filesystem statistics.
@@ -10359,10 +10372,21 @@ int Client::_getxattr(Inode *in, const char *name, void *value, size_t size,
   if (vxattr) {
     r = -ENODATA;
 
-    char buf[256];
+    // Do a force getattr to get the latest quota before returning
+    // a value to userspace.
+    r = _getattr(in, 0, perms, true);
+    if (r != 0) {
+      // Error from getattr!
+      return r;
+    }
+
     // call pointer-to-member function
-    if (!(vxattr->exists_cb && !(this->*(vxattr->exists_cb))(in)))
+    char buf[256];
+    if (!(vxattr->exists_cb && !(this->*(vxattr->exists_cb))(in))) {
       r = (this->*(vxattr->getxattr_cb))(in, buf, sizeof(buf));
+    } else {
+      r = -ENODATA;
+    }
 
     if (size != 0) {
       if (r > (int)size) {
@@ -11119,7 +11143,8 @@ int Client::_create(Inode *dir, const char *name, int flags, mode_t mode,
     return -EDQUOT;
   }
 
-  int cmode = ceph_flags_to_mode(flags);
+  // use normalized flags to generate cmode
+  int cmode = ceph_flags_to_mode(ceph_flags_sys2wire(flags));
   if (cmode < 0)
     return -EINVAL;
 
@@ -11140,7 +11165,7 @@ int Client::_create(Inode *dir, const char *name, int flags, mode_t mode,
   path.push_dentry(name);
   req->set_filepath(path);
   req->set_inode(dir);
-  req->head.args.open.flags = flags | O_CREAT;
+  req->head.args.open.flags = ceph_flags_sys2wire(flags | O_CREAT);
 
   req->head.args.open.stripe_unit = stripe_unit;
   req->head.args.open.stripe_count = stripe_count;
@@ -11582,8 +11607,7 @@ int Client::_rename(Inode *fromdir, const char *fromname, Inode *todir, const ch
     else
       return -EROFS;
   }
-  if (cct->_conf->client_quota &&
-      fromdir != todir) {
+  if (fromdir != todir) {
     Inode *fromdir_root =
       fromdir->quota.is_enable() ? fromdir : get_quota_root(fromdir, perm);
     Inode *todir_root =
@@ -11912,10 +11936,10 @@ int Client::ll_open(Inode *in, int flags, Fh **fhp, const UserPerm& perms)
 
   vinodeno_t vino = _get_vino(in);
 
-  ldout(cct, 3) << "ll_open " << vino << " " << flags << dendl;
+  ldout(cct, 3) << "ll_open " << vino << " " << ceph_flags_sys2wire(flags) << dendl;
   tout(cct) << "ll_open" << std::endl;
   tout(cct) << vino.ino.val << std::endl;
-  tout(cct) << flags << std::endl;
+  tout(cct) << ceph_flags_sys2wire(flags) << std::endl;
 
   int r;
   if (!cct->_conf->fuse_default_permissions) {
@@ -11932,8 +11956,8 @@ int Client::ll_open(Inode *in, int flags, Fh **fhp, const UserPerm& perms)
     ll_unclosed_fh_set.insert(fhptr);
   }
   tout(cct) << (unsigned long)fhptr << std::endl;
-  ldout(cct, 3) << "ll_open " << vino << " " << flags << " = " << r << " (" <<
-    fhptr << ")" << dendl;
+  ldout(cct, 3) << "ll_open " << vino << " " << ceph_flags_sys2wire(flags) <<
+      " = " << r << " (" << fhptr << ")" << dendl;
   return r;
 }
 
@@ -11946,13 +11970,13 @@ int Client::_ll_create(Inode *parent, const char *name, mode_t mode,
   vinodeno_t vparent = _get_vino(parent);
 
   ldout(cct, 3) << "_ll_create " << vparent << " " << name << " 0" << oct <<
-    mode << dec << " " << flags << ", uid " << perms.uid()
+    mode << dec << " " << ceph_flags_sys2wire(flags) << ", uid " << perms.uid()
 		<< ", gid " << perms.gid() << dendl;
   tout(cct) << "ll_create" << std::endl;
   tout(cct) << vparent.ino.val << std::endl;
   tout(cct) << name << std::endl;
   tout(cct) << mode << std::endl;
-  tout(cct) << flags << std::endl;
+  tout(cct) << ceph_flags_sys2wire(flags) << std::endl;
 
   bool created = false;
   int r = _lookup(parent, name, caps, in, perms);
@@ -12013,8 +12037,8 @@ out:
   tout(cct) << (unsigned long)*fhp << std::endl;
   tout(cct) << ino << std::endl;
   ldout(cct, 3) << "_ll_create " << parent << " " << name << " 0" << oct <<
-    mode << dec << " " << flags << " = " << r << " (" << *fhp << " " <<
-    hex << ino << dec << ")" << dendl;
+    mode << dec << " " << ceph_flags_sys2wire(flags) << " = " << r << " (" <<
+    *fhp << " " << hex << ino << dec << ")" << dendl;
 
   return r;
 }
@@ -12052,6 +12076,7 @@ int Client::ll_createx(Inode *parent, const char *name, mode_t mode,
   unsigned caps = statx_to_mask(lflags, want);
   Mutex::Locker lock(client_lock);
   InodeRef in;
+
 
   int r = _ll_create(parent, name, mode, oflags, &in, caps, fhp, perms);
   if (r >= 0) {
@@ -12790,9 +12815,6 @@ bool Client::ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer, bool 
 
 Inode *Client::get_quota_root(Inode *in, const UserPerm& perms)
 {
-  if (!cct->_conf->client_quota)
-    return NULL;
-
   Inode *cur = in;
   utime_t now = ceph_clock_now();
 
@@ -12864,9 +12886,6 @@ Inode *Client::get_quota_root(Inode *in, const UserPerm& perms)
 bool Client::check_quota_condition(Inode *in, const UserPerm& perms,
 				   std::function<bool (const Inode &in)> test)
 {
-  if (!cct->_conf->client_quota)
-    return false;
-
   while (true) {
     assert(in != NULL);
     if (test(*in)) {
@@ -13204,5 +13223,57 @@ mds_rank_t Client::_get_random_up_mds() const
   for (int n = rand() % up.size(); n; n--)
     ++p;
   return *p;
+}
+
+
+StandaloneClient::StandaloneClient(Messenger *m, MonClient *mc)
+    : Client(m, mc, new Objecter(m->cct, m, mc, NULL, 0, 0))
+{
+  monclient->set_messenger(m);
+  objecter->set_client_incarnation(0);
+}
+
+StandaloneClient::~StandaloneClient()
+{
+  delete objecter;
+  objecter = nullptr;
+}
+
+int StandaloneClient::init()
+{
+  timer.init();
+  objectcacher->start();
+  objecter->init();
+
+  client_lock.Lock();
+  assert(!initialized);
+
+  messenger->add_dispatcher_tail(objecter);
+  messenger->add_dispatcher_tail(this);
+
+  monclient->set_want_keys(CEPH_ENTITY_TYPE_MDS | CEPH_ENTITY_TYPE_OSD);
+  int r = monclient->init();
+  if (r < 0) {
+    // need to do cleanup because we're in an intermediate init state
+    timer.shutdown();
+    client_lock.Unlock();
+    objecter->shutdown();
+    objectcacher->stop();
+    monclient->shutdown();
+    return r;
+  }
+  objecter->start();
+
+  client_lock.Unlock();
+  _finish_init();
+
+  return 0;
+}
+
+void StandaloneClient::shutdown()
+{
+  Client::shutdown();
+  objecter->shutdown();
+  monclient->shutdown();
 }
 

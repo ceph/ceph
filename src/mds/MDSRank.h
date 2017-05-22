@@ -15,9 +15,10 @@
 #ifndef MDS_RANK_H_
 #define MDS_RANK_H_
 
-#include "common/TrackedOp.h"
+#include "common/DecayCounter.h"
 #include "common/LogClient.h"
 #include "common/Timer.h"
+#include "common/TrackedOp.h"
 
 #include "messages/MCommand.h"
 
@@ -271,6 +272,8 @@ class MDSRank {
     void bcast_mds_map();  // to mounted clients
     epoch_t      last_client_mdsmap_bcast;
 
+    map<mds_rank_t,DecayCounter> export_targets; /* targets this MDS is exporting to or wants/tries to */
+
     void create_logger();
   public:
 
@@ -397,6 +400,12 @@ class MDSRank {
 
     void dump_status(Formatter *f) const;
 
+    void hit_export_target(utime_t now, mds_rank_t rank, double amount=-1.0);
+    bool is_export_target(mds_rank_t rank) {
+      const set<mds_rank_t>& map_targets = mdsmap->get_mds_info(get_nodeid()).export_targets;
+      return map_targets.count(rank);
+    }
+
   protected:
     void dump_clientreplay_status(Formatter *f) const;
     void command_scrub_path(Formatter *f, const string& path, vector<string>& scrubop_vec);
@@ -488,6 +497,9 @@ class MDSRank {
     void handle_mds_recovery(mds_rank_t who);
     void handle_mds_failure(mds_rank_t who);
     // <<<
+
+    /* Update MDSMap export_targets for this rank. Called on ::tick(). */
+    void update_targets(utime_t now);
 };
 
 /* This expects to be given a reference which it is responsible for.

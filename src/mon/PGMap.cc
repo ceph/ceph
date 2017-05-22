@@ -337,11 +337,13 @@ void PGMap::calc_stats()
 {
   num_pg_by_state.clear();
   num_pg = 0;
+  num_pg_active = 0;
   num_osd = 0;
   pg_pool_sum.clear();
   pg_sum = pool_stat_t();
   osd_sum = osd_stat_t();
   pg_by_osd.clear();
+  num_primary_pg_by_osd.clear();
 
   for (ceph::unordered_map<pg_t,pg_stat_t>::iterator p = pg_stat.begin();
        p != pg_stat.end();
@@ -457,6 +459,10 @@ void PGMap::stat_pg_add(const pg_t &pgid, const pg_stat_t &s,
     }
   }
 
+  if (s.state & PG_STATE_ACTIVE) {
+    ++num_pg_active;
+  }
+
   if (sameosds)
     return;
 
@@ -470,6 +476,9 @@ void PGMap::stat_pg_add(const pg_t &pgid, const pg_stat_t &s,
     pg_by_osd[*p].insert(pgid);
   for (vector<int>::const_iterator p = s.up.begin(); p != s.up.end(); ++p)
     pg_by_osd[*p].insert(pgid);
+
+  if (s.up_primary >= 0)
+    num_primary_pg_by_osd[s.up_primary]++;
 }
 
 void PGMap::stat_pg_sub(const pg_t &pgid, const pg_stat_t &s,
@@ -500,6 +509,10 @@ void PGMap::stat_pg_sub(const pg_t &pgid, const pg_stat_t &s,
     }
   }
 
+  if (s.state & PG_STATE_ACTIVE) {
+    --num_pg_active;
+  }
+
   if (sameosds)
     return;
 
@@ -525,6 +538,12 @@ void PGMap::stat_pg_sub(const pg_t &pgid, const pg_stat_t &s,
     if (oset.empty())
       pg_by_osd.erase(*p);
   }
+
+  if (s.up_primary >= 0) {
+    auto it = num_primary_pg_by_osd.find(s.up_primary);
+    if (it != num_primary_pg_by_osd.end() && it->second > 0)
+      it->second--;
+  }
 }
 
 void PGMap::stat_pg_update(const pg_t pgid, pg_stat_t& s,
@@ -539,6 +558,13 @@ void PGMap::stat_pg_update(const pg_t pgid, pg_stat_t& s,
     s.blocked_by == n.blocked_by;
 
   stat_pg_sub(pgid, s, sameosds);
+
+  // if acting_primary has shift to an just restored osd, and pg yet to finish
+  // peering, many attributes in current stats remain stale. others seem don't
+  // mater much while faulty last_active will make "pg stuck in" check unhappy.
+  if (!(n.state & (PG_STATE_ACTIVE | PG_STATE_PEERED)) &&
+      n.last_active < s.last_active)
+    n.last_active = s.last_active;
   s = n;
   stat_pg_add(pgid, n, sameosds);
 }
@@ -692,7 +718,7 @@ void PGMap::dump_basic(Formatter *f) const
   osd_sum.dump(f);
   f->close_section();
 
-  f->open_object_section("osd_epochs");
+  f->open_array_section("osd_epochs");
   for (ceph::unordered_map<int32_t,epoch_t>::const_iterator p =
          osd_epochs.begin(); p != osd_epochs.end(); ++p) {
     f->open_object_section("osd");
@@ -956,6 +982,7 @@ void PGMap::dump_osd_stats(ostream& ss) const
   tab.define_column("TOTAL", TextTable::LEFT, TextTable::RIGHT);
   tab.define_column("HB_PEERS", TextTable::LEFT, TextTable::RIGHT);
   tab.define_column("PG_SUM", TextTable::LEFT, TextTable::RIGHT);
+  tab.define_column("PRIMARY_PG_SUM", TextTable::LEFT, TextTable::RIGHT);
 
   for (ceph::unordered_map<int32_t,osd_stat_t>::const_iterator p = osd_stat.begin();
        p != osd_stat.end();
@@ -966,6 +993,7 @@ void PGMap::dump_osd_stats(ostream& ss) const
         << si_t(p->second.kb << 10)
         << p->second.hb_peers
         << get_num_pg_by_osd(p->first)
+        << get_num_primary_pg_by_osd(p->first)
         << TextTable::endrow;
   }
 
@@ -1650,6 +1678,18 @@ void PGMap::print_summary(Formatter *f, ostream *out) const
          << kb_t(osd_sum.kb) << " avail\n";
   }
 
+
+  if (num_pg_active < num_pg) {
+    float p = (float)num_pg_active / (float)num_pg;
+    if (f) {
+      f->dump_float("active_pgs_ratio", p);
+    } else {
+      char b[20];
+      snprintf(b, sizeof(b), "%.3lf", (1.0 - p) * 100.0);
+      *out << "            " << b << "% pgs inactive\n";
+    }
+  }
+
   list<string> sl;
   overall_recovery_summary(f, &sl);
   if (!f && !sl.empty()) {
@@ -1983,10 +2023,10 @@ void PGMap::dump_pool_stats(const OSDMap &osd_map, stringstream *ss,
       break;
     case pg_pool_t::TYPE_ERASURE:
     {
-      const map<string,string>& ecp =
+      auto& ecp =
         osd_map.get_erasure_code_profile(pool->erasure_code_profile);
-      map<string,string>::const_iterator pm = ecp.find("m");
-      map<string,string>::const_iterator pk = ecp.find("k");
+      auto pm = ecp.find("m");
+      auto pk = ecp.find("k");
       if (pm != ecp.end() && pk != ecp.end()) {
 	int k = atoi(pk->second.c_str());
 	int m = atoi(pm->second.c_str());
@@ -2860,7 +2900,7 @@ int reweight::by_utilization(
     int max_osds,
     bool by_pg, const set<int64_t> *pools,
     bool no_increasing,
-    map<int32_t, uint32_t>* new_weights,
+    mempool::osdmap::map<int32_t, uint32_t>* new_weights,
     std::stringstream *ss,
     std::string *out_str,
     Formatter *f)

@@ -61,8 +61,11 @@ namespace {
 #define dout_prefix *_dout << "mgr " << __func__ << " "
 
 PyModules::PyModules(DaemonStateIndex &ds, ClusterState &cs, MonClient &mc,
+                     Objecter &objecter_, Client &client_,
 		     Finisher &f)
-  : daemon_state(ds), cluster_state(cs), monc(mc), finisher(f)
+  : daemon_state(ds), cluster_state(cs), monc(mc),
+    objecter(objecter_), client(client_),
+    finisher(f)
 {}
 
 // we can not have the default destructor in header, because ServeThread is
@@ -360,7 +363,8 @@ int PyModules::init()
   global_handle = this;
 
   // Set up global python interpreter
-  Py_Initialize();
+  Py_SetProgramName(const_cast<char*>(PYTHON_EXECUTABLE));
+  Py_InitializeEx(0);
 
   // Some python modules do not cope with an unpopulated argv, so lets
   // fake one.  This step also picks up site-packages into sys.path.
@@ -458,22 +462,15 @@ void PyModules::start()
 void PyModules::shutdown()
 {
   Mutex::Locker locker(lock);
+  assert(global_handle);
 
   // Signal modules to drop out of serve() and/or tear down resources
-  C_SaferCond shutdown_called;
-  C_GatherBuilder gather(g_ceph_context);
   for (auto &i : modules) {
     auto module = i.second.get();
-    auto shutdown_cb = gather.new_sub();
-    finisher.queue(new FunctionContext([module, shutdown_cb](int r){
-      module->shutdown();
-      shutdown_cb->complete(0);
-    }));
-  }
-
-  if (gather.has_subs()) {
-    gather.set_finisher(&shutdown_called);
-    gather.activate();
+    const auto& name = i.first;
+    dout(10) << "waiting for module " << name << " to shutdown" << dendl;
+    module->shutdown();
+    dout(10) << "module " << name << " shutdown" << dendl;
   }
 
   // For modules implementing serve(), finish the threads where we
@@ -485,17 +482,13 @@ void PyModules::shutdown()
   }
   serve_threads.clear();
 
-  // Wait for the module's shutdown() to complete before
-  // we proceed to destroy the module.
-  if (!modules.empty()) {
-    dout(4) << "waiting for module shutdown calls" << dendl;
-    shutdown_called.wait();
-  }
-
   modules.clear();
 
   PyGILState_Ensure();
   Py_Finalize();
+
+  // nobody needs me anymore.
+  global_handle = nullptr;
 }
 
 void PyModules::notify_all(const std::string &notify_type,
@@ -576,8 +569,14 @@ void PyModules::set_config(const std::string &handle,
   }
   set_cmd.wait();
 
-  // FIXME: is config-key put ever allowed to fail?
-  assert(set_cmd.r == 0);
+  if (set_cmd.r != 0) {
+    // config-key put will fail if mgr's auth key has insufficient
+    // permission to set config keys
+    // FIXME: should this somehow raise an exception back into Python land?
+    dout(0) << "`config-key put " << global_key << " " << val << "` failed: "
+      << cpp_strerror(set_cmd.r) << dendl;
+    dout(0) << "mon returned " << set_cmd.r << ": " << set_cmd.outs << dendl;
+  }
 }
 
 std::vector<ModuleCommand> PyModules::get_commands()
@@ -659,5 +658,18 @@ PyObject* PyModules::get_counter_python(
   }
   f.close_section();
   return f.get();
+}
+
+PyObject *PyModules::get_context()
+{
+  PyThreadState *tstate = PyEval_SaveThread();
+  Mutex::Locker l(lock);
+  PyEval_RestoreThread(tstate);
+
+  // Construct a capsule containing ceph context.
+  // Not incrementing/decrementing ref count on the context because
+  // it's the global one and it has process lifetime.
+  auto capsule = PyCapsule_New(g_ceph_context, nullptr, nullptr);
+  return capsule;
 }
 

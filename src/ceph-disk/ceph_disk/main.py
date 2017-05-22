@@ -206,15 +206,19 @@ class Ptype(object):
         return False
 
 
-DEFAULT_FS_TYPE = 'xfs'
 SYSFS = '/sys'
 
 if platform.system() == 'FreeBSD':
     FREEBSD = True
+    DEFAULT_FS_TYPE = 'zfs'
     PROCDIR = '/compat/linux/proc'
+    # FreeBSD does not have blockdevices any more
+    BLOCKDIR = '/dev'
 else:
     FREEBSD = False
+    DEFAULT_FS_TYPE = 'xfs'
     PROCDIR = '/proc'
+    BLOCKDIR = '/sys/block'
 
 """
 OSD STATUS Definition
@@ -232,7 +236,6 @@ MOUNT_OPTIONS = dict(
     # that user_xattr helped
     ext4='noatime,user_xattr',
     xfs='noatime,inode64',
-    zfs='atime=off',
 )
 
 MKFS_ARGS = dict(
@@ -249,6 +252,9 @@ MKFS_ARGS = dict(
         # so we'll see ghosts of filesystems past
         '-f',
         '-i', 'size=2048',
+    ],
+    zfs=[
+        '-o', 'atime=off'
     ],
 )
 
@@ -456,7 +462,7 @@ def command(arguments, **kwargs):
     executables *will* be found and will error nicely otherwise.
 
     This returns the output of the command and the return code of the
-    process in a tuple: (output, returncode).
+    process in a tuple: (stdout, stderr, returncode).
     """
 
     arguments = list(map(_bytes2str, _get_command_executable(arguments)))
@@ -554,7 +560,7 @@ def platform_information():
         distro = platform.system()
         release = platform.version().split()[1]
         codename = platform.version().split()[3]
-        version = platform.version().split('-')[0]
+        version = platform.version().split('-')[0][:-1]
         major_version = version.split('.')[0]
         major, minor = release.split('.')
     else:
@@ -640,7 +646,7 @@ def is_mpath(dev):
     True if the path is managed by multipath
     """
     if FREEBSD:
-        return True
+        return False
     uuid = get_dm_uuid(dev)
     return (uuid and
             (re.match('part\d+-mpath-', uuid) or
@@ -651,7 +657,7 @@ def get_dev_name(path):
     """
     get device name from path.  e.g.::
 
-        /dev/sda -> sdas, /dev/cciss/c0d1 -> cciss!c0d1
+        /dev/sda -> sda, /dev/cciss/c0d1 -> cciss!c0d1
 
     a device "name" is something like::
 
@@ -734,7 +740,7 @@ def get_partition_dev(dev, pnum):
             partname = get_partition_mpath(dev, pnum)
         else:
             name = get_dev_name(os.path.realpath(dev))
-            sys_entry = os.path.join('/sys/block', name)
+            sys_entry = os.path.join(BLOCKDIR, name)
             error_msg = " in %s" % sys_entry
             for f in os.listdir(sys_entry):
                 if f.startswith(name) and f.endswith(str(pnum)):
@@ -763,7 +769,7 @@ def list_all_partitions():
     Return a list of devices and partitions
     """
     if not FREEBSD:
-        names = os.listdir('/sys/block')
+        names = os.listdir(BLOCKDIR)
         dev_part_list = {}
         for name in names:
             # /dev/fd0 may hang http://tracker.ceph.com/issues/6827
@@ -864,7 +870,7 @@ def is_partition(dev):
         raise Error('not a block device', dev)
 
     name = get_dev_name(dev)
-    if os.path.exists(os.path.join('/sys/block', name)):
+    if os.path.exists(os.path.join(BLOCKDIR, name)):
         return False
 
     # make sure it is a partition of something else
@@ -1514,6 +1520,7 @@ def check_journal_reqs(args):
     _, _, allows_journal = command([
         'ceph-osd', '--check-allows-journal',
         '-i', '0',
+        '--log-file', '$run_dir/$cluster-osd-check.log',
         '--cluster', args.cluster,
         '--setuser', get_ceph_user(),
         '--setgroup', get_ceph_group(),
@@ -1521,6 +1528,7 @@ def check_journal_reqs(args):
     _, _, wants_journal = command([
         'ceph-osd', '--check-wants-journal',
         '-i', '0',
+        '--log-file', '$run_dir/$cluster-osd-check.log',
         '--cluster', args.cluster,
         '--setuser', get_ceph_user(),
         '--setgroup', get_ceph_group(),
@@ -1528,6 +1536,7 @@ def check_journal_reqs(args):
     _, _, needs_journal = command([
         'ceph-osd', '--check-needs-journal',
         '-i', '0',
+        '--log-file', '$run_dir/$cluster-osd-check.log',
         '--cluster', args.cluster,
         '--setuser', get_ceph_user(),
         '--setgroup', get_ceph_group(),
@@ -1913,6 +1922,9 @@ class DevicePartitionCryptLuks(DevicePartitionCrypt):
 
 class Prepare(object):
 
+    def __init__(self, args):
+        self.args = args
+
     @staticmethod
     def parser():
         parser = argparse.ArgumentParser(add_help=False)
@@ -1953,6 +1965,11 @@ class Prepare(object):
             help='bootstrap-osd keyring path template (%(default)s)',
             default='{statedir}/bootstrap-osd/{cluster}.keyring',
             dest='prepare_key_template',
+        )
+        parser.add_argument(
+            '--no-locking',
+            action='store_true', default=None,
+            help='let many prepare\'s run in parallel',
         )
         return parser
 
@@ -2014,8 +2031,11 @@ class Prepare(object):
         return parser
 
     def prepare(self):
-        with prepare_lock:
-            self.prepare_locked()
+        if self.args.no_locking:
+            self._prepare()
+        else:
+            with prepare_lock:
+                self._prepare()
 
     @staticmethod
     def factory(args):
@@ -2032,6 +2052,7 @@ class Prepare(object):
 class PrepareFilestore(Prepare):
 
     def __init__(self, args):
+        super(PrepareFilestore, self).__init__(args)
         if args.dmcrypt:
             self.lockbox = Lockbox(args)
         self.data = PrepareFilestoreData(args)
@@ -2043,7 +2064,7 @@ class PrepareFilestore(Prepare):
             PrepareJournal.parser(),
         ]
 
-    def prepare_locked(self):
+    def _prepare(self):
         if self.data.args.dmcrypt:
             self.lockbox.prepare()
         self.data.prepare(self.journal)
@@ -2052,6 +2073,7 @@ class PrepareFilestore(Prepare):
 class PrepareBluestore(Prepare):
 
     def __init__(self, args):
+        super(PrepareBluestore, self).__init__(args)
         if args.dmcrypt:
             self.lockbox = Lockbox(args)
         self.data = PrepareBluestoreData(args)
@@ -2078,7 +2100,7 @@ class PrepareBluestore(Prepare):
             PrepareBluestoreBlockWAL.parser(),
         ]
 
-    def prepare_locked(self):
+    def _prepare(self):
         if self.data.args.dmcrypt:
             self.lockbox.prepare()
         to_prepare_list = []
@@ -3361,20 +3383,27 @@ def stop_daemon(
         raise Error('ceph osd stop failed', e)
 
 
-def detect_fstype(
-    dev,
-):
-    fstype = _check_output(
-        args=[
-            '/sbin/blkid',
-            # we don't want stale cached results
-            '-p',
-            '-s', 'TYPE',
-            '-o', 'value',
-            '--',
-            dev,
-        ],
-    )
+def detect_fstype(dev):
+    if FREEBSD:
+        fstype = _check_output(
+            args=[
+                'fstyp',
+                '-u',
+                dev,
+            ],
+        )
+    else:
+        fstype = _check_output(
+            args=[
+                '/sbin/blkid',
+                # we don't want stale cached results
+                '-p',
+                '-s', 'TYPE',
+                '-o', 'value',
+                '--',
+                dev,
+            ],
+        )
     fstype = must_be_one_line(fstype)
     return fstype
 
@@ -4215,19 +4244,29 @@ def get_oneliner(base, name):
 
 
 def get_dev_fs(dev):
-    fscheck, _, _ = command(
-        [
-            'blkid',
-            '-s',
-            'TYPE',
-            dev,
-        ],
-    )
-    if 'TYPE' in fscheck:
-        fstype = fscheck.split()[1].split('"')[1]
-        return fstype
+    if FREEBSD:
+        fstype, _, ret = command(
+            [
+                'fstyp',
+                '-u',
+                dev,
+            ],
+        )
+        if ret == 0:
+            return fstype
     else:
-        return None
+        fscheck, _, _ = command(
+            [
+                'blkid',
+                '-s',
+                'TYPE',
+                dev,
+            ],
+        )
+        if 'TYPE' in fscheck:
+            fstype = fscheck.split()[1].split('"')[1]
+            return fstype
+    return None
 
 
 def split_dev_base_partnum(dev):
@@ -4573,11 +4612,11 @@ def list_zfs():
                  'fails.\n (Error: %s)' % e)
         raise
     lines = out.splitlines()
-    for line in lines[2:]:
+    for line in lines[1:]:
         vdevline = line.split()
         if os.path.exists(os.path.join(vdevline[1], 'active')):
             elems = os.path.split(vdevline[1])
-            print(vdevline[0], "ceph data, active, cluster ceph,", elems[5],
+            print(vdevline[0], "ceph data, active, cluster ceph,", elems[1],
                   "mounted on:", vdevline[1])
         else:
             print(vdevline[0] + " other, zfs, mounted on: " + vdevline[1])

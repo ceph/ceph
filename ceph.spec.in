@@ -110,7 +110,7 @@ BuildRequires:	fuse-devel
 BuildRequires:	gcc-c++
 BuildRequires:	gdbm
 %if 0%{with tcmalloc}
-BuildRequires:	gperftools-devel
+BuildRequires:	gperftools-devel >= 2.4
 %endif
 BuildRequires:  jq
 BuildRequires:	leveldb-devel > 1.2
@@ -129,8 +129,8 @@ BuildRequires:  procps
 BuildRequires:	python
 BuildRequires:	python-devel
 BuildRequires:	python-nose
+BuildRequires:	python-prettytable
 BuildRequires:	python-requests
-BuildRequires:	python-sphinx
 BuildRequires:	python-virtualenv
 BuildRequires:	snappy-devel
 BuildRequires:	udev
@@ -160,6 +160,7 @@ BuildRequires:  libopenssl-devel
 BuildRequires:  lsb-release
 BuildRequires:  openldap2-devel
 BuildRequires:	python-Cython
+BuildRequires:	python-Sphinx
 %endif
 %if 0%{?fedora} || 0%{?rhel} 
 Requires:	systemd
@@ -171,6 +172,7 @@ BuildRequires:  openldap-devel
 BuildRequires:  openssl-devel
 BuildRequires:  redhat-lsb-core
 BuildRequires:	Cython
+BuildRequires:	python-sphinx
 %endif
 # python34-... for RHEL, python3-... for all other supported distros
 %if 0%{?rhel}
@@ -257,13 +259,14 @@ Summary:	Ceph Common
 %if 0%{?suse_version}
 Group:		System/Filesystems
 %endif
-Requires:	librbd1 = %{version}-%{release}
-Requires:	librados2 = %{version}-%{release}
-Requires:	libcephfs2 = %{version}-%{release}
-Requires:	python-rados = %{version}-%{release}
-Requires:	python-rbd = %{version}-%{release}
-Requires:	python-cephfs = %{version}-%{release}
-Requires:	python-rgw = %{version}-%{release}
+Requires:	librbd1 = %{epoch}:%{version}-%{release}
+Requires:	librados2 = %{epoch}:%{version}-%{release}
+Requires:	libcephfs2 = %{epoch}:%{version}-%{release}
+Requires:	python-rados = %{epoch}:%{version}-%{release}
+Requires:	python-rbd = %{epoch}:%{version}-%{release}
+Requires:	python-cephfs = %{epoch}:%{version}-%{release}
+Requires:	python-rgw = %{epoch}:%{version}-%{release}
+Requires:	python-prettytable
 Requires:	python-requests
 %{?systemd_requires}
 %if 0%{?suse_version}
@@ -727,6 +730,15 @@ This package contains the Java libraries for the Ceph File System.
 
 %endif
 
+%package -n rados-objclass-devel
+Summary:        RADOS object class development kit
+Group:          Development/Libraries
+License:        LGPL-2.0
+Requires:       librados2-devel = %{epoch}:%{version}-%{release}
+%description -n rados-objclass-devel
+This package contains libraries and headers needed to develop RADOS object
+class plugins.
+
 %if 0%{with selinux}
 
 %package selinux
@@ -936,6 +948,7 @@ mkdir -p %{buildroot}%{_localstatedir}/lib/ceph/radosgw
 mkdir -p %{buildroot}%{_localstatedir}/lib/ceph/bootstrap-osd
 mkdir -p %{buildroot}%{_localstatedir}/lib/ceph/bootstrap-mds
 mkdir -p %{buildroot}%{_localstatedir}/lib/ceph/bootstrap-rgw
+mkdir -p %{buildroot}%{_localstatedir}/lib/ceph/bootstrap-mgr
 
 %if 0%{?suse_version}
 # create __pycache__ directories and their contents
@@ -1010,6 +1023,7 @@ rm -rf %{buildroot}
 %attr(750,ceph,ceph) %dir %{_localstatedir}/lib/ceph/bootstrap-osd
 %attr(750,ceph,ceph) %dir %{_localstatedir}/lib/ceph/bootstrap-mds
 %attr(750,ceph,ceph) %dir %{_localstatedir}/lib/ceph/bootstrap-rgw
+%attr(750,ceph,ceph) %dir %{_localstatedir}/lib/ceph/bootstrap-mgr
 
 %post base
 /sbin/ldconfig
@@ -1053,6 +1067,7 @@ DISABLE_RESTART_ON_UPDATE="yes"
 %{_bindir}/ceph-syn
 %{_bindir}/ceph-crush-location
 %{_bindir}/rados
+%{_bindir}/radosgw-admin
 %{_bindir}/rbd
 %{_bindir}/rbd-replay
 %{_bindir}/rbd-replay-many
@@ -1076,6 +1091,7 @@ DISABLE_RESTART_ON_UPDATE="yes"
 %{_mandir}/man8/ceph.8*
 %{_mandir}/man8/mount.ceph.8*
 %{_mandir}/man8/rados.8*
+%{_mandir}/man8/radosgw-admin.8*
 %{_mandir}/man8/rbd.8*
 %{_mandir}/man8/rbdmap.8*
 %{_mandir}/man8/rbd-replay.8*
@@ -1088,6 +1104,7 @@ DISABLE_RESTART_ON_UPDATE="yes"
 %dir %{_sysconfdir}/ceph/
 %config %{_sysconfdir}/bash_completion.d/rados
 %config %{_sysconfdir}/bash_completion.d/rbd
+%config %{_sysconfdir}/bash_completion.d/radosgw-admin
 %config(noreplace) %{_sysconfdir}/ceph/rbdmap
 %{_unitdir}/rbdmap.service
 %{python_sitelib}/ceph_argparse.py*
@@ -1353,12 +1370,9 @@ fi
 %files radosgw
 %defattr(-,root,root,-)
 %{_bindir}/radosgw
-%{_bindir}/radosgw-admin
 %{_bindir}/radosgw-token
 %{_bindir}/radosgw-object-expirer
 %{_mandir}/man8/radosgw.8*
-%{_mandir}/man8/radosgw-admin.8*
-%config %{_sysconfdir}/bash_completion.d/radosgw-admin
 %dir %{_localstatedir}/lib/ceph/radosgw
 %{_unitdir}/ceph-radosgw@.service
 %{_unitdir}/ceph-radosgw.target
@@ -1666,6 +1680,8 @@ ln -sf %{_libdir}/librbd.so.1 /usr/lib64/qemu/librbd.so.1
 %{_bindir}/ceph-osdomap-tool
 %{_bindir}/ceph-kvstore-tool
 %{_bindir}/ceph-debugpack
+%{_bindir}/dmclock-tests
+%{_bindir}/dmclock-data-struct-tests
 %{_mandir}/man8/ceph-debugpack.8*
 %dir %{_libdir}/ceph
 %{_libdir}/ceph/ceph-monstore-update-crush.sh
@@ -1689,6 +1705,11 @@ ln -sf %{_libdir}/librbd.so.1 /usr/lib64/qemu/librbd.so.1
 %{_javadir}/libcephfs.jar
 %{_javadir}/libcephfs-test.jar
 %endif
+
+%files -n rados-objclass-devel
+%defattr(-,root,root,-)
+%dir %{_includedir}/rados
+%{_includedir}/rados/objclass.h
 
 %if 0%{with selinux}
 %files selinux

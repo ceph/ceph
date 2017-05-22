@@ -157,8 +157,8 @@
 /* define if leveldb is enabled */
 #cmakedefine WITH_LEVELDB
 
-/* define if radosgw's asio frontend enabled */
-#cmakedefine WITH_RADOSGW_ASIO_FRONTEND
+/* define if radosgw's beast frontend enabled */
+#cmakedefine WITH_RADOSGW_BEAST_FRONTEND
 
 /* define if HAVE_THREAD_SAFE_RES_QUERY */
 #cmakedefine HAVE_THREAD_SAFE_RES_QUERY
@@ -301,6 +301,9 @@
 /* Defined if pthread_setname_np() is available */
 #cmakedefine HAVE_PTHREAD_SETNAME_NP 1
 
+/* Defined if blkin enabled */
+#cmakedefine WITH_BLKIN
+
 /* Defined if pthread_set_name_np() is available */
 #cmakedefine HAVE_PTHREAD_SET_NAME_NP
 
@@ -309,5 +312,13 @@
 
 /* Support POWER8 instructions */
 #cmakedefine HAVE_POWER8
+
+/* Define if endian type is big endian */
+#cmakedefine CEPH_BIG_ENDIAN
+
+/* Define if endian type is little endian */
+#cmakedefine CEPH_LITTLE_ENDIAN
+
+#cmakedefine PYTHON_EXECUTABLE "@PYTHON_EXECUTABLE@"
 
 #endif /* CONFIG_H */

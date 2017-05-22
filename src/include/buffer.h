@@ -17,6 +17,7 @@
 #if defined(__linux__) || defined(__FreeBSD__)
 #include <stdlib.h>
 #endif
+#include <limits.h>
 
 #ifndef _XOPEN_SOURCE
 # define _XOPEN_SOURCE 600
@@ -115,6 +116,8 @@ namespace buffer CEPH_BUFFER_API {
   int get_cached_crc();
   /// count of cached crc hits (mismatching input, required adjustment)
   int get_cached_crc_adjusted();
+  /// count of crc cache misses
+  int get_missed_crc();
   /// enable/disable tracking of cached crcs
   void track_cached_crc(bool b);
 
@@ -867,7 +870,17 @@ namespace buffer CEPH_BUFFER_API {
     int write_fd(int fd) const;
     int write_fd(int fd, uint64_t offset) const;
     int write_fd_zero_copy(int fd) const;
-    void prepare_iov(std::vector<iovec> *piov) const;
+    template<typename VectorT>
+    void prepare_iov(VectorT *piov) const {
+      assert(_buffers.size() <= IOV_MAX);
+      piov->resize(_buffers.size());
+      unsigned n = 0;
+      for (auto& p : _buffers) {
+	(*piov)[n].iov_base = (void *)p.c_str();
+	(*piov)[n].iov_len = p.length();
+	++n;
+      }
+    }
     uint32_t crc32c(uint32_t crc) const;
     void invalidate_crc();
   };

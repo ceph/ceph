@@ -82,11 +82,18 @@ static PyObject*
 ceph_send_command(PyObject *self, PyObject *args)
 {
   char *handle = nullptr;
+
+  // Like mon, osd, mds
+  char *type = nullptr;
+
+  // Like "23" for an OSD or "myid" for an MDS
+  char *name = nullptr;
+
   char *cmd_json = nullptr;
   char *tag = nullptr;
   PyObject *completion = nullptr;
-  if (!PyArg_ParseTuple(args, "sOss:ceph_send_command",
-        &handle, &completion, &cmd_json, &tag)) {
+  if (!PyArg_ParseTuple(args, "sOssss:ceph_send_command",
+        &handle, &completion, &type, &name, &cmd_json, &tag)) {
     return nullptr;
   }
 
@@ -99,12 +106,49 @@ ceph_send_command(PyObject *self, PyObject *args)
   Py_DECREF(set_fn);
 
   auto c = new MonCommandCompletion(completion, tag);
-  global_handle->get_monc().start_mon_command(
-      {cmd_json},
-      {},
-      &c->outbl,
-      &c->outs,
-      c);
+  if (std::string(type) == "mon") {
+    global_handle->get_monc().start_mon_command(
+        {cmd_json},
+        {},
+        &c->outbl,
+        &c->outs,
+        c);
+  } else if (std::string(type) == "osd") {
+    std::string err;
+    uint64_t osd_id = strict_strtoll(name, 10, &err);
+    if (!err.empty()) {
+      // TODO: raise exception
+      return nullptr;
+    }
+
+    ceph_tid_t tid;
+    global_handle->get_objecter().osd_command(
+        osd_id,
+        {cmd_json},
+        {},
+        &tid,
+        &c->outbl,
+        &c->outs,
+        c);
+  } else if (std::string(type) == "mds") {
+    int r = global_handle->get_client().mds_command(
+        name,
+        {cmd_json},
+        {},
+        &c->outbl,
+        &c->outs,
+        c);
+    if (r != 0) {
+      // TODO: raise exception
+      return nullptr;
+    }
+  } else if (std::string(type) == "pg") {
+    // TODO: expose objecter::pg_command
+    return nullptr;
+  } else {
+    // TODO: raise exception
+    return nullptr;
+  }
 
   Py_RETURN_NONE;
 }
@@ -229,6 +273,12 @@ ceph_get_version(PyObject *self, PyObject *args)
   return PyString_FromString(pretty_version_to_str().c_str());
 }
 
+static PyObject *
+ceph_get_context(PyObject *self, PyObject *args)
+{
+  return global_handle->get_context();
+}
+
 static PyObject*
 get_counter(PyObject *self, PyObject *args)
 {
@@ -270,6 +320,8 @@ PyMethodDef CephStateMethods[] = {
      "Emit a (local) log message"},
     {"get_version", ceph_get_version, METH_VARARGS,
      "Get the ceph version of this process"},
+    {"get_context", ceph_get_context, METH_NOARGS,
+      "Get a CephContext* in a python capsule"},
     {NULL, NULL, 0, NULL}
 };
 

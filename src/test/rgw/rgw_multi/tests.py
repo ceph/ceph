@@ -8,6 +8,7 @@ try:
     from itertools import izip_longest as zip_longest
 except ImportError:
     from itertools import zip_longest
+from itertools import combinations
 
 import boto
 import boto.s3.connection
@@ -52,6 +53,17 @@ def get_zone_connection(zone, credentials):
         credentials = credentials[0]
     return get_gateway_connection(zone.gateways[0], credentials)
 
+def mdlog_list(zone, period = None):
+    cmd = ['mdlog', 'list']
+    if period:
+        cmd += ['--period', period]
+    (mdlog_json, _) = zone.cluster.admin(cmd, read_only=True)
+    mdlog_json = mdlog_json.decode('utf-8')
+    return json.loads(mdlog_json)
+
+def mdlog_autotrim(zone):
+    zone.cluster.admin(['mdlog', 'autotrim'])
+
 def meta_sync_status(zone):
     while True:
         cmd = ['metadata', 'sync', 'status'] + zone.zone_args()
@@ -65,15 +77,25 @@ def meta_sync_status(zone):
     log.debug('current meta sync status=%s', meta_sync_status_json)
     sync_status = json.loads(meta_sync_status_json)
 
-    global_sync_status=sync_status['sync_status']['info']['status']
-    num_shards=sync_status['sync_status']['info']['num_shards']
+    sync_info = sync_status['sync_status']['info']
+    global_sync_status = sync_info['status']
+    num_shards = sync_info['num_shards']
+    period = sync_info['period']
+    realm_epoch = sync_info['realm_epoch']
 
     sync_markers=sync_status['sync_status']['markers']
     log.debug('sync_markers=%s', sync_markers)
     assert(num_shards == len(sync_markers))
 
-    markers = {i: m['val']['marker'] for i, m in enumerate(sync_markers)}
-    return (num_shards, markers)
+    markers={}
+    for i in range(num_shards):
+        # get marker, only if it's an incremental marker for the same realm epoch
+        if realm_epoch > sync_markers[i]['val']['realm_epoch'] or sync_markers[i]['val']['state'] == 0:
+            markers[i] = ''
+        else:
+            markers[i] = sync_markers[i]['val']['marker']
+
+    return period, realm_epoch, num_shards, markers
 
 def meta_master_log_status(master_zone):
     cmd = ['mdlog', 'status'] + master_zone.zone_args()
@@ -108,14 +130,21 @@ def zone_meta_checkpoint(zone, meta_master_zone = None, master_status = None):
     if not master_status:
         master_status = meta_master_log_status(meta_master_zone)
 
+    current_realm_epoch = realm.current_period.data['realm_epoch']
+
     log.info('starting meta checkpoint for zone=%s', zone.name)
 
     while True:
-        num_shards, sync_status = meta_sync_status(zone)
-        log.debug('log_status=%s', master_status)
-        log.debug('sync_status=%s', sync_status)
-        if compare_meta_status(zone, master_status, sync_status):
-            break
+        period, realm_epoch, num_shards, sync_status = meta_sync_status(zone)
+        if realm_epoch < current_realm_epoch:
+            log.warning('zone %s is syncing realm epoch=%d, behind current realm epoch=%d',
+                        zone.name, realm_epoch, current_realm_epoch)
+        else:
+            log.debug('log_status=%s', master_status)
+            log.debug('sync_status=%s', sync_status)
+            if compare_meta_status(zone, master_status, sync_status):
+                break
+
         time.sleep(5)
 
     log.info('finish meta checkpoint for zone=%s', zone.name)
@@ -312,6 +341,8 @@ def set_master_zone(zone):
     zonegroup = zone.zonegroup
     zonegroup.period.update(zone, commit=True)
     zonegroup.master_zone = zone
+    # wait for reconfiguration, so that later metadata requests go to the new master
+    time.sleep(5)
 
 def gen_bucket_name():
     global num_buckets
@@ -634,12 +665,18 @@ def test_multi_period_incremental_sync():
     if len(zonegroup.zones) < 3:
         raise SkipTest("test_multi_period_incremental_sync skipped. Requires 3 or more zones in master zonegroup.")
 
-    buckets, zone_bucket = create_bucket_per_zone(zonegroup)
+    # periods to include in mdlog comparison
+    mdlog_periods = [realm.current_period.id]
 
-    for zone, bucket_name in zone_bucket.items():
-        for objname in [ 'p1', '_p1' ]:
-            k = new_key(zone, bucket_name, objname)
-            k.set_contents_from_string('asdasd')
+    # create a bucket in each zone
+    buckets = []
+    for zone in zonegroup.zones:
+        conn = get_zone_connection(zone, user.credentials)
+        bucket_name = gen_bucket_name()
+        log.info('create bucket zone=%s name=%s', zone.name, bucket_name)
+        bucket = conn.create_bucket(bucket_name)
+        buckets.append(bucket_name)
+
     zonegroup_meta_checkpoint(zonegroup)
 
     z1, z2, z3 = zonegroup.zones[0:3]
@@ -650,39 +687,68 @@ def test_multi_period_incremental_sync():
 
     # change master to zone 2 -> period 2
     set_master_zone(z2)
+    mdlog_periods += [realm.current_period.id]
 
-    for zone, bucket_name in zone_bucket.items():
+    # create another bucket in each zone, except for z3
+    for zone in zonegroup.zones:
         if zone == z3:
             continue
-        for objname in [ 'p2', '_p2' ]:
-            k = new_key(zone, bucket_name, objname)
-            k.set_contents_from_string('qweqwe')
+        conn = get_zone_connection(zone, user.credentials)
+        bucket_name = gen_bucket_name()
+        log.info('create bucket zone=%s name=%s', zone.name, bucket_name)
+        bucket = conn.create_bucket(bucket_name)
+        buckets.append(bucket_name)
 
     # wait for zone 1 to sync
     zone_meta_checkpoint(z1)
 
     # change master back to zone 1 -> period 3
     set_master_zone(z1)
+    mdlog_periods += [realm.current_period.id]
 
-    for zone, bucket_name in zone_bucket.items():
+    # create another bucket in each zone, except for z3
+    for zone in zonegroup.zones:
         if zone == z3:
             continue
-        for objname in [ 'p3', '_p3' ]:
-            k = new_key(zone, bucket_name, objname)
-            k.set_contents_from_string('zxczxc')
+        conn = get_zone_connection(zone, user.credentials)
+        bucket_name = gen_bucket_name()
+        log.info('create bucket zone=%s name=%s', zone.name, bucket_name)
+        bucket = conn.create_bucket(bucket_name)
+        buckets.append(bucket_name)
 
     # restart zone 3 gateway and wait for sync
     z3.start()
     zonegroup_meta_checkpoint(zonegroup)
 
-    # verify that we end up with the same objects
-    for source_zone, bucket in zone_bucket.items():
-        for target_zone in zonegroup.zones:
-            if source_zone == target_zone:
-                continue
+    # verify that we end up with the same buckets
+    for bucket_name in buckets:
+        for source_zone, target_zone in combinations(zonegroup.zones, 2):
+            check_bucket_eq(source_zone, target_zone, bucket_name)
 
-            zone_bucket_checkpoint(target_zone, source_zone, bucket.name)
-            check_bucket_eq(source_zone, target_zone, bucket)
+    # verify that mdlogs are not empty and match for each period
+    for period in mdlog_periods:
+        master_mdlog = mdlog_list(z1, period)
+        assert len(master_mdlog) > 0
+        for zone in zonegroup.zones:
+            if zone == z1:
+                continue
+            mdlog = mdlog_list(zone, period)
+            assert len(mdlog) == len(master_mdlog)
+
+    # autotrim mdlogs for master zone
+    mdlog_autotrim(z1)
+
+    # autotrim mdlogs for peers
+    for zone in zonegroup.zones:
+        if zone == z1:
+            continue
+        mdlog_autotrim(zone)
+
+    # verify that mdlogs are empty for each period
+    for period in mdlog_periods:
+        for zone in zonegroup.zones:
+            mdlog = mdlog_list(zone, period)
+            assert len(mdlog) == 0
 
 def test_zonegroup_remove():
     zonegroup = realm.master_zonegroup()

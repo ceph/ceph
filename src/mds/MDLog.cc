@@ -33,8 +33,6 @@
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_mds
-#undef DOUT_COND
-#define DOUT_COND(cct, l) l<=cct->_conf->debug_mds || l <= cct->_conf->debug_mds_log
 #undef dout_prefix
 #define dout_prefix *_dout << "mds." << mds->get_nodeid() << ".log "
 
@@ -280,14 +278,6 @@ void MDLog::_submit_entry(LogEvent *le, MDSLogContextBase *c)
   assert(le == cur_event);
   cur_event = NULL;
 
-  if (!g_conf->mds_log) {
-    // hack: log is disabled.
-    if (c) {
-      mds->finisher->queue(c, 0);
-    }
-    return;
-  }
-
   // let the event register itself in the segment
   assert(!segments.empty());
   LogSegment *ls = segments.rbegin()->second;
@@ -446,12 +436,6 @@ void MDLog::_submit_thread()
 
 void MDLog::wait_for_safe(MDSInternalContextBase *c)
 {
-  if (!g_conf->mds_log) {
-    // hack: bypass.
-    c->complete(0);
-    return;
-  }
-
   submit_mutex.Lock();
 
   bool no_pending = true;

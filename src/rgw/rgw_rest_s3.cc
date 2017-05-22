@@ -1494,265 +1494,6 @@ int RGWPutObj_ObjStore_S3::get_encrypt_filter(
   }
   return res;
 }
-/*
- * parses params in the format: 'first; param1=foo; param2=bar'
- */
-static void parse_params(const string& params_str, string& first,
-			 map<string, string>& params)
-{
-  size_t pos = params_str.find(';');
-  if (pos == string::npos) {
-    first = rgw_trim_whitespace(params_str);
-    return;
-  }
-
-  first = rgw_trim_whitespace(params_str.substr(0, pos));
-
-  pos++;
-
-  while (pos < params_str.size()) {
-    size_t end = params_str.find(';', pos);
-    if (end == string::npos)
-      end = params_str.size();
-
-    string param = params_str.substr(pos, end - pos);
-
-    size_t eqpos = param.find('=');
-    if (eqpos != string::npos) {
-      params[rgw_trim_whitespace(param.substr(0, eqpos))] =
-        rgw_trim_quotes(param.substr(eqpos + 1));
-    } else {
-      params[rgw_trim_whitespace(param)] = "";
-    }
-
-    pos = end + 1;
-  }
-}
-
-static int parse_part_field(const string& line, string& field_name,
-			    struct post_part_field& field)
-{
-  size_t pos = line.find(':');
-  if (pos == string::npos)
-    return -EINVAL;
-
-  field_name = line.substr(0, pos);
-  if (pos >= line.size() - 1)
-    return 0;
-
-  parse_params(line.substr(pos + 1), field.val, field.params);
-
-  return 0;
-}
-
-bool is_crlf(const char *s)
-{
-  return (*s == '\r' && *(s + 1) == '\n');
-}
-
-/*
- * find the index of the boundary, if exists, or optionally the next end of line
- * also returns how many bytes to skip
- */
-static int index_of(bufferlist& bl, int max_len, const string& str,
-		    bool check_crlf,
-		    bool *reached_boundary, int *skip)
-{
-  *reached_boundary = false;
-  *skip = 0;
-
-  if (str.size() < 2) // we assume boundary is at least 2 chars (makes it easier with crlf checks)
-    return -EINVAL;
-
-  if (bl.length() < str.size())
-    return -1;
-
-  const char *buf = bl.c_str();
-  const char *s = str.c_str();
-
-  if (max_len > (int)bl.length())
-    max_len = bl.length();
-
-  int i;
-  for (i = 0; i < max_len; i++, buf++) {
-    if (check_crlf &&
-	i >= 1 &&
-	is_crlf(buf - 1)) {
-      return i + 1; // skip the crlf
-    }
-    if ((i < max_len - (int)str.size() + 1) &&
-	(buf[0] == s[0] && buf[1] == s[1]) &&
-	(strncmp(buf, s, str.size()) == 0)) {
-      *reached_boundary = true;
-      *skip = str.size();
-
-      /* oh, great, now we need to swallow the preceding crlf
-       * if exists
-       */
-      if ((i >= 2) &&
-	  is_crlf(buf - 2)) {
-	i -= 2;
-	*skip += 2;
-      }
-      return i;
-    }
-  }
-
-  return -1;
-}
-
-int RGWPostObj_ObjStore_S3::read_with_boundary(bufferlist& bl, uint64_t max,
-					       bool check_crlf,
-					       bool *reached_boundary,
-					       bool *done)
-{
-  uint64_t cl = max + 2 + boundary.size();
-
-  if (max > in_data.length()) {
-    uint64_t need_to_read = cl - in_data.length();
-
-    bufferptr bp(need_to_read);
-
-    const auto read_len = recv_body(s, bp.c_str(), need_to_read);
-    in_data.append(bp, 0, read_len);
-  }
-
-  *done = false;
-  int skip;
-  int index = index_of(in_data, cl, boundary, check_crlf, reached_boundary,
-		       &skip);
-  if (index >= 0)
-    max = index;
-
-  if (max > in_data.length())
-    max = in_data.length();
-
-  bl.substr_of(in_data, 0, max);
-
-  bufferlist new_read_data;
-
-  /*
-   * now we need to skip boundary for next time, also skip any crlf, or
-   * check to see if it's the last final boundary (marked with "--" at the end
-   */
-  if (*reached_boundary) {
-    int left = in_data.length() - max;
-    if (left < skip + 2) {
-      int need = skip + 2 - left;
-      bufferptr boundary_bp(need);
-      recv_body(s, boundary_bp.c_str(), need);
-      in_data.append(boundary_bp);
-    }
-    max += skip; // skip boundary for next time
-    if (in_data.length() >= max + 2) {
-      const char *data = in_data.c_str();
-      if (is_crlf(data + max)) {
-	max += 2;
-      } else {
-	if (*(data + max) == '-' &&
-	    *(data + max + 1) == '-') {
-	  *done = true;
-	  max += 2;
-	}
-      }
-    }
-  }
-
-  new_read_data.substr_of(in_data, max, in_data.length() - max);
-  in_data = new_read_data;
-
-  return 0;
-}
-
-int RGWPostObj_ObjStore_S3::read_line(bufferlist& bl, uint64_t max,
-				  bool *reached_boundary, bool *done)
-{
-  return read_with_boundary(bl, max, true, reached_boundary, done);
-}
-
-int RGWPostObj_ObjStore_S3::read_data(bufferlist& bl, uint64_t max,
-				  bool *reached_boundary, bool *done)
-{
-  return read_with_boundary(bl, max, false, reached_boundary, done);
-}
-
-
-int RGWPostObj_ObjStore_S3::read_form_part_header(struct post_form_part *part,
-						  bool *done)
-{
-  bufferlist bl;
-  bool reached_boundary;
-  uint64_t chunk_size = s->cct->_conf->rgw_max_chunk_size;
-  int r = read_line(bl, chunk_size, &reached_boundary, done);
-  if (r < 0)
-    return r;
-
-  if (*done) {
-    return 0;
-  }
-
-  if (reached_boundary) { // skip the first boundary
-    r = read_line(bl, chunk_size, &reached_boundary, done);
-    if (r < 0)
-      return r;
-    if (*done)
-      return 0;
-  }
-
-  while (true) {
-  /*
-   * iterate through fields
-   */
-    string line = rgw_trim_whitespace(string(bl.c_str(), bl.length()));
-
-    if (line.empty())
-      break;
-
-    struct post_part_field field;
-
-    string field_name;
-    r = parse_part_field(line, field_name, field);
-    if (r < 0)
-      return r;
-
-    part->fields[field_name] = field;
-
-    if (stringcasecmp(field_name, "Content-Disposition") == 0) {
-      part->name = field.params["name"];
-    }
-
-    if (reached_boundary)
-      break;
-
-    r = read_line(bl, chunk_size, &reached_boundary, done);
-  }
-
-  return 0;
-}
-
-bool RGWPostObj_ObjStore_S3::part_str(const string& name, string *val)
-{
-  map<string, struct post_form_part, ltstr_nocase>::iterator iter
-    = parts.find(name);
-  if (iter == parts.end())
-    return false;
-
-  bufferlist& data = iter->second.data;
-  string str = string(data.c_str(), data.length());
-  *val = rgw_trim_whitespace(str);
-  return true;
-}
-
-bool RGWPostObj_ObjStore_S3::part_bl(const string& name, bufferlist *pbl)
-{
-  map<string, struct post_form_part, ltstr_nocase>::iterator iter =
-    parts.find(name);
-  if (iter == parts.end())
-    return false;
-
-  *pbl = iter->second.data;
-  return true;
-}
 
 void RGWPostObj_ObjStore_S3::rebuild_key(string& key)
 {
@@ -1768,74 +1509,47 @@ void RGWPostObj_ObjStore_S3::rebuild_key(string& key)
   key = new_key;
 }
 
+std::string RGWPostObj_ObjStore_S3::get_current_filename() const
+{
+  return s->object.name;
+}
+
+std::string RGWPostObj_ObjStore_S3::get_current_content_type() const
+{
+  return content_type;
+}
+
 int RGWPostObj_ObjStore_S3::get_params()
 {
-  // get the part boundary
-  string req_content_type_str = s->info.env->get("CONTENT_TYPE", "");
-  string req_content_type;
-  map<string, string> params;
-
-  if (s->expect_cont) {
-    /* ok, here it really gets ugly. With POST, the params are embedded in the
-     * request body, so we need to continue before being able to actually look
-     * at them. This diverts from the usual request flow.
-     */
-    dump_continue(s);
-    s->expect_cont = false;
-  }
-
-  parse_params(req_content_type_str, req_content_type, params);
-
-  if (req_content_type.compare("multipart/form-data") != 0) {
-    err_msg = "Request Content-Type is not multipart/form-data";
-    return -EINVAL;
-  }
-
-  if (s->cct->_conf->subsys.should_gather(ceph_subsys_rgw, 20)) {
-    ldout(s->cct, 20) << "request content_type_str="
-		      << req_content_type_str << dendl;
-    ldout(s->cct, 20) << "request content_type params:" << dendl;
-    map<string, string>::iterator iter;
-    for (iter = params.begin(); iter != params.end(); ++iter) {
-      ldout(s->cct, 20) << " " << iter->first << " -> " << iter->second
-			<< dendl;
-    }
+  op_ret = RGWPostObj_ObjStore::get_params();
+  if (op_ret < 0) {
+    return op_ret;
   }
 
   ldout(s->cct, 20) << "adding bucket to policy env: " << s->bucket.name
 		    << dendl;
   env.add_var("bucket", s->bucket.name);
 
-  map<string, string>::iterator iter = params.find("boundary");
-  if (iter == params.end()) {
-    err_msg = "Missing multipart boundary specification";
-    return -EINVAL;
-  }
-
-  // create the boundary
-  boundary = "--";
-  boundary.append(iter->second);
-
   bool done;
   do {
     struct post_form_part part;
-    int r = read_form_part_header(&part, &done);
+    int r = read_form_part_header(&part, done);
     if (r < 0)
       return r;
 
     if (s->cct->_conf->subsys.should_gather(ceph_subsys_rgw, 20)) {
-      map<string, struct post_part_field, ltstr_nocase>::iterator piter;
-      for (piter = part.fields.begin(); piter != part.fields.end(); ++piter) {
-	ldout(s->cct, 20) << "read part header: name=" << part.name
-			  << " content_type=" << part.content_type << dendl;
-	ldout(s->cct, 20) << "name=" << piter->first << dendl;
-	ldout(s->cct, 20) << "val=" << piter->second.val << dendl;
-	ldout(s->cct, 20) << "params:" << dendl;
-	map<string, string>& params = piter->second.params;
-	for (iter = params.begin(); iter != params.end(); ++iter) {
-	  ldout(s->cct, 20) << " " << iter->first << " -> " << iter->second
-			    << dendl;
-	}
+      ldout(s->cct, 20) << "read part header -- part.name="
+                        << part.name << dendl;
+
+      for (const auto& pair : part.fields) {
+        ldout(s->cct, 20) << "field.name=" << pair.first << dendl;
+        ldout(s->cct, 20) << "field.val=" << pair.second.val << dendl;
+        ldout(s->cct, 20) << "field.params:" << dendl;
+
+        for (const auto& param_pair : pair.second.params) {
+          ldout(s->cct, 20) << " " << param_pair.first
+                            << " -> " << param_pair.second << dendl;
+        }
       }
     }
 
@@ -1851,13 +1565,12 @@ int RGWPostObj_ObjStore_S3::get_params()
 	filename = iter->second;
       }
       parts[part.name] = part;
-      data_pending = true;
       break;
     }
 
     bool boundary;
     uint64_t chunk_size = s->cct->_conf->rgw_max_chunk_size;
-    r = read_data(part.data, chunk_size, &boundary, &done);
+    r = read_data(part.data, chunk_size, boundary, done);
     if (!boundary) {
       err_msg = "Couldn't find boundary";
       return -EINVAL;
@@ -1868,7 +1581,7 @@ int RGWPostObj_ObjStore_S3::get_params()
   } while (!done);
 
   string object_str;
-  if (!part_str("key", &object_str)) {
+  if (!part_str(parts, "key", &object_str)) {
     err_msg = "Key not specified";
     return -EINVAL;
   }
@@ -1884,7 +1597,7 @@ int RGWPostObj_ObjStore_S3::get_params()
 
   env.add_var("key", s->object.name);
 
-  part_str("Content-Type", &content_type);
+  part_str(parts, "Content-Type", &content_type);
   env.add_var("Content-Type", content_type);
 
   map<string, struct post_form_part, ltstr_nocase>::iterator piter =
@@ -1935,16 +1648,16 @@ int RGWPostObj_ObjStore_S3::get_params()
 
 int RGWPostObj_ObjStore_S3::get_policy()
 {
-  if (part_bl("policy", &s->auth.s3_postobj_creds.encoded_policy)) {
-
+  if (part_bl(parts, "policy", &s->auth.s3_postobj_creds.encoded_policy)) {
     // check that the signature matches the encoded policy
-    if (! part_str("AWSAccessKeyId", &s->auth.s3_postobj_creds.access_key)) {
+    if (!part_str(parts, "AWSAccessKeyId",
+                  &s->auth.s3_postobj_creds.access_key)) {
       ldout(s->cct, 0) << "No S3 access key found!" << dendl;
       err_msg = "Missing access key";
       return -EINVAL;
     }
-    string received_signature_str;
-    if (! part_str("signature", &s->auth.s3_postobj_creds.signature)) {
+
+    if (!part_str(parts, "signature", &s->auth.s3_postobj_creds.signature)) {
       ldout(s->cct, 0) << "No signature found!" << dendl;
       err_msg = "Missing signature";
       return -EINVAL;
@@ -2020,7 +1733,7 @@ int RGWPostObj_ObjStore_S3::get_policy()
   }
 
   string canned_acl;
-  part_str("acl", &canned_acl);
+  part_str(parts, "acl", &canned_acl);
 
   RGWAccessControlPolicy_S3 s3policy(s->cct);
   ldout(s->cct, 20) << "canned_acl=" << canned_acl << dendl;
@@ -2039,44 +1752,47 @@ int RGWPostObj_ObjStore_S3::complete_get_params()
   bool done;
   do {
     struct post_form_part part;
-    int r = read_form_part_header(&part, &done);
-    if (r < 0)
+    int r = read_form_part_header(&part, done);
+    if (r < 0) {
       return r;
+    }
 
-    bufferlist part_data;
+    ceph::bufferlist part_data;
     bool boundary;
     uint64_t chunk_size = s->cct->_conf->rgw_max_chunk_size;
-    r = read_data(part.data, chunk_size, &boundary, &done);
+    r = read_data(part.data, chunk_size, boundary, done);
     if (!boundary) {
       return -EINVAL;
     }
 
-    parts[part.name] = part;
+    /* Just reading the data but not storing any results of that. */
   } while (!done);
 
   return 0;
 }
 
-int RGWPostObj_ObjStore_S3::get_data(bufferlist& bl)
+int RGWPostObj_ObjStore_S3::get_data(ceph::bufferlist& bl, bool& again)
 {
   bool boundary;
   bool done;
 
-  uint64_t chunk_size = s->cct->_conf->rgw_max_chunk_size;
-  int r = read_data(bl, chunk_size, &boundary, &done);
-  if (r < 0)
+  const uint64_t chunk_size = s->cct->_conf->rgw_max_chunk_size;
+  int r = read_data(bl, chunk_size, boundary, done);
+  if (r < 0) {
     return r;
+  }
 
   if (boundary) {
-    data_pending = false;
-
-    if (!done) {  /* reached end of data, let's drain the rest of the params */
+    if (!done) {
+      /* Reached end of data, let's drain the rest of the params */
       r = complete_get_params();
-      if (r < 0)
-	return r;
+      if (r < 0) {
+       return r;
+      }
     }
   }
 
+  again = !boundary;
   return bl.length();
 }
 
@@ -2085,7 +1801,7 @@ void RGWPostObj_ObjStore_S3::send_response()
   if (op_ret == 0 && parts.count("success_action_redirect")) {
     string redirect;
 
-    part_str("success_action_redirect", &redirect);
+    part_str(parts, "success_action_redirect", &redirect);
 
     string tenant;
     string bucket;
@@ -2135,7 +1851,7 @@ void RGWPostObj_ObjStore_S3::send_response()
     string status_string;
     uint32_t status_int;
 
-    part_str("success_action_status", &status_string);
+    part_str(parts, "success_action_status", &status_string);
 
     int r = stringtoul(status_string, &status_int);
     if (r < 0) {

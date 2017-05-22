@@ -13,6 +13,10 @@ Get Usage
 
 Request bandwidth usage information.
 
+Note: this feature is disabled by default, can be enabled by setting ``rgw
+enable usage log = true`` in the appropriate section of ceph.conf. For changes
+in ceph.conf to take effect, radosgw process restart is needed.
+
 :caps: usage=read
 
 Syntax
@@ -163,6 +167,10 @@ Trim Usage
 Remove usage information. With no dates specified, removes all usage
 information.
 
+Note: this feature is disabled by default, can be enabled by setting ``rgw
+enable usage log = true`` in the appropriate section of ceph.conf. For changes
+in ceph.conf to take effect, radosgw process restart is needed.
+
 :caps: usage=write
 
 Syntax
@@ -215,8 +223,7 @@ TBD.
 Get User Info
 =============
 
-Get user information. If no user is specified returns the list of all users along with suspension
-information.
+Get user information.
 
 :caps: users=read
 

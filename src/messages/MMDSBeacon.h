@@ -125,7 +125,7 @@ WRITE_CLASS_ENCODER(MDSHealth)
 class MMDSBeacon : public PaxosServiceMessage {
 
   static const int HEAD_VERSION = 7;
-  static const int COMPAT_VERSION = 2;
+  static const int COMPAT_VERSION = 6;
 
   uuid_d fsid;
   mds_gid_t global_id;
@@ -225,21 +225,13 @@ public:
     ::decode(name, p);
     ::decode(standby_for_rank, p);
     ::decode(standby_for_name, p);
-    if (header.version >= 2)
-      ::decode(compat, p);
-    if (header.version >= 3) {
-      ::decode(health, p);
-    }
-    if (state == MDSMap::STATE_BOOT &&
-	header.version >= 4) {
+    ::decode(compat, p);
+    ::decode(health, p);
+    if (state == MDSMap::STATE_BOOT) {
       ::decode(sys_info, p);
     }
-    if (header.version >= 5) {
-      ::decode(mds_features, p);
-    }
-    if (header.version >= 6) {
-      ::decode(standby_for_fscid, p);
-    }
+    ::decode(mds_features, p);
+    ::decode(standby_for_fscid, p);
     if (header.version >= 7) {
       ::decode(standby_replay, p);
     }

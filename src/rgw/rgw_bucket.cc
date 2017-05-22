@@ -51,18 +51,9 @@ void rgw_get_buckets_obj(const rgw_user& user_id, string& buckets_obj_id)
  * acceptable in bucket names and thus qualified buckets cannot conflict
  * with the legacy or S3 buckets.
  */
-void rgw_make_bucket_entry_name(const string& tenant_name, const string& bucket_name, string& bucket_entry) {
-  if (bucket_name.empty()) {
-    bucket_entry.clear();
-  } else if (tenant_name.empty()) {
-    bucket_entry = bucket_name;
-  } else {
-    bucket_entry = tenant_name + "/" + bucket_name;
-  }
-}
-
-string rgw_make_bucket_entry_name(const string& tenant_name, const string& bucket_name) {
-  string bucket_entry;
+std::string rgw_make_bucket_entry_name(const std::string& tenant_name,
+                                       const std::string& bucket_name) {
+  std::string bucket_entry;
 
   if (bucket_name.empty()) {
     bucket_entry.clear();
@@ -1959,11 +1950,11 @@ int RGWDataChangesLog::trim_entries(const real_time& start_time, const real_time
 
 bool RGWDataChangesLog::going_down()
 {
-  return (down_flag.read() != 0);
+  return down_flag;
 }
 
 RGWDataChangesLog::~RGWDataChangesLog() {
-  down_flag.set(1);
+  down_flag = true;
   renew_thread->stop();
   renew_thread->join();
   delete renew_thread;
@@ -2243,7 +2234,7 @@ public:
       bci.info.bucket.name = bucket_name;
       bci.info.bucket.bucket_id = bucket_instance;
       bci.info.bucket.tenant = tenant_name;
-      ret = store->select_bucket_location_by_rule(bci.info.placement_rule, bci.info.bucket, &rule_info);
+      ret = store->select_bucket_location_by_rule(bci.info.placement_rule, &rule_info);
       if (ret < 0) {
         ldout(store->ctx(), 0) << "ERROR: select_bucket_placement() returned " << ret << dendl;
         return ret;

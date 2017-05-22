@@ -107,3 +107,35 @@ When a daemon finishes stopping, it will respawn itself and go
 back to being a standby.
 
 
+Manually pinning directory trees to a particular rank
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+In multiple active metadata server configurations, a balancer runs which works
+to spread metadata load evenly across the cluster. This usually works well
+enough for most users but sometimes it is desirable to override the dynamic
+balancer with explicit mappings of metadata to particular ranks. This can allow
+the administrator or users to evenly spread application load or limit impact of
+users' metadata requests on the entire cluster.
+
+The mechanism provided for this purpose is called an ``export pin``, an
+extended attribute of directories. The name of this extended attribute is
+``ceph.dir.pin``.  Users can set this attribute using standard commands:
+
+::
+    setfattr -n ceph.dir.pin -v 2 path/to/dir
+
+The value of the extended attribute is the rank to assign the directory subtree
+to. A default value of ``-1`` indicates the directory is not pinned.
+
+A directory's export pin is inherited from its closest parent with a set export
+pin.  In this way, setting the export pin on a directory affects all of its
+children. However, the parents pin can be overriden by setting the child
+directory's export pin. For example:
+
+::
+    mkdir -p a/b
+    # "a" and "a/b" both start without an export pin set
+    setfattr -n ceph.dir.pin -v 1 a/
+    # a and b are now pinned to rank 1
+    setfattr -n ceph.dir.pin -v 0 a/b
+    # a/b is now pinned to rank 0 and a/ and the rest of its children are still pinned to rank 1

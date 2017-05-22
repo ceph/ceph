@@ -121,10 +121,10 @@
   Optional arguments
     -p [ --pool ] arg    pool name
     --image arg          image name
-    --io-size arg        IO size (in B/K/M/G/T)
-    --io-threads arg     ios in flight
-    --io-total arg       total size for IO (in B/K/M/G/T)
-    --io-pattern arg     IO pattern (rand or seq)
+    --io-size arg        IO size (in B/K/M/G/T) [default: 4K]
+    --io-threads arg     ios in flight [default: 16]
+    --io-total arg       total size for IO (in B/K/M/G/T) [default: 1G]
+    --io-pattern arg     IO pattern (rand or seq) [default: seq]
     --io-type arg        IO type (read or write)
   
   rbd help children
@@ -874,7 +874,7 @@
   
   rbd help map
   usage: rbd map [--pool <pool>] [--image <image>] [--snap <snap>] 
-                 [--options <options>] [--read-only] 
+                 [--options <options>] [--read-only] [--exclusive] 
                  <image-or-snap-spec> 
   
   Map image to a block device using the kernel.
@@ -889,6 +889,7 @@
     --snap arg            snapshot name
     -o [ --options ] arg  map options
     --read-only           map read-only
+    --exclusive           disable automatic exclusive lock transitions
   
   rbd help merge-diff
   usage: rbd merge-diff [--path <path>] [--no-progress] 

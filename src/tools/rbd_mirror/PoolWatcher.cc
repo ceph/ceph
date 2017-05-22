@@ -479,7 +479,7 @@ void PoolWatcher<I>::notify_listener() {
   }
 
   if (!removed_image_ids.empty()) {
-    m_listener.handle_update(mirror_uuid, {}, removed_image_ids);
+    m_listener.handle_update(mirror_uuid, {}, std::move(removed_image_ids));
     removed_image_ids.clear();
   }
 
@@ -529,7 +529,8 @@ void PoolWatcher<I>::notify_listener() {
     mirror_uuid = m_mirror_uuid;
   }
 
-  m_listener.handle_update(mirror_uuid, added_image_ids, removed_image_ids);
+  m_listener.handle_update(mirror_uuid, std::move(added_image_ids),
+                           std::move(removed_image_ids));
 
   {
     Mutex::Locker locker(m_lock);

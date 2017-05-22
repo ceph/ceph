@@ -47,8 +47,6 @@
 
 #define dout_subsys ceph_subsys_mds
 #undef dout_prefix
-#undef DOUT_COND
-#define DOUT_COND(cct, l) l<=cct->_conf->debug_mds || l <= cct->_conf->debug_mds_locker
 #define dout_context g_ceph_context
 #define dout_prefix _prefix(_dout, mds)
 static ostream& _prefix(std::ostream *_dout, MDSRank *mds) {
@@ -1052,8 +1050,8 @@ public:
     p->get(MDSCacheObject::PIN_PTRWAITER);    
   }
   void finish(int r) override {
-    p->put(MDSCacheObject::PIN_PTRWAITER);
     locker->try_eval(p, mask);
+    p->put(MDSCacheObject::PIN_PTRWAITER);
   }
 };
 
@@ -1755,30 +1753,29 @@ version_t Locker::issue_file_data_version(CInode *in)
 class C_Locker_FileUpdate_finish : public LockerLogContext {
   CInode *in;
   MutationRef mut;
-  bool share;
+  bool share_max;
+  bool need_issue;
   client_t client;
-  Capability *cap;
   MClientCaps *ack;
 public:
   C_Locker_FileUpdate_finish(Locker *l, CInode *i, MutationRef& m,
-				bool e=false, client_t c=-1,
-				Capability *cp = 0,
+				bool sm=false, bool ni=false, client_t c=-1,
 				MClientCaps *ac = 0)
-    : LockerLogContext(l), in(i), mut(m), share(e), client(c), cap(cp),
-      ack(ac) {
+    : LockerLogContext(l), in(i), mut(m), share_max(sm), need_issue(ni),
+      client(c), ack(ac) {
     in->get(CInode::PIN_PTRWAITER);
   }
   void finish(int r) override {
-    locker->file_update_finish(in, mut, share, client, cap, ack);
+    locker->file_update_finish(in, mut, share_max, need_issue, client, ack);
+    in->put(CInode::PIN_PTRWAITER);
   }
 };
 
-void Locker::file_update_finish(CInode *in, MutationRef& mut, bool share, client_t client,
-				Capability *cap, MClientCaps *ack)
+void Locker::file_update_finish(CInode *in, MutationRef& mut, bool share_max, bool issue_client_cap,
+				client_t client, MClientCaps *ack)
 {
   dout(10) << "file_update_finish on " << *in << dendl;
   in->pop_and_dirty_projected_inode(mut->ls);
-  in->put(CInode::PIN_PTRWAITER);
 
   mut->apply();
   
@@ -1823,12 +1820,13 @@ void Locker::file_update_finish(CInode *in, MutationRef& mut, bool share, client
       eval_cap_gather(in, &need_issue);
     }
   } else {
-    if (cap && (cap->wanted() & ~cap->pending()) &&
-	need_issue.count(in) == 0) {  // if we won't issue below anyway
-      issue_caps(in, cap);
+    if (issue_client_cap && need_issue.count(in) == 0) {
+      Capability *cap = in->get_client_cap(client);
+      if (cap && (cap->wanted() & ~cap->pending()))
+	issue_caps(in, cap);
     }
   
-    if (share && in->is_auth() &&
+    if (share_max && in->is_auth() &&
 	(in->filelock.gcaps_allowed(CAP_LONER) & (CEPH_CAP_GWR|CEPH_CAP_GBUFFER)))
       share_inode_max_size(in);
   }
@@ -1968,10 +1966,12 @@ bool Locker::issue_caps(CInode *in, Capability *only_cap)
 	     << " wanted " << ccap_string(wanted)
 	     << dendl;
 
-    // skip if suppress, and not revocation
-    if (cap->is_suppress() && !(pending & ~allowed)) {
-      dout(20) << "  suppressed and !revoke, skipping client." << it->first << dendl;
-      continue;
+    if (!(pending & ~allowed)) {
+      // skip if suppress or new, and not revocation
+      if (cap->is_new() || cap->is_suppress()) {
+	dout(20) << "  !revoke and new|suppressed, skipping client." << it->first << dendl;
+	continue;
+      }
     }
 
     // notify clients about deleted inode, to make sure they release caps ASAP.
@@ -2146,9 +2146,9 @@ public:
     in->get(CInode::PIN_PTRWAITER);
   }
   void finish(int r) override {
-    in->put(CInode::PIN_PTRWAITER);
     if (!in->is_auth())
       locker->request_inode_file_caps(in);
+    in->put(CInode::PIN_PTRWAITER);
   }
 };
 
@@ -2225,9 +2225,9 @@ public:
     in->get(CInode::PIN_PTRWAITER);
   }
   void finish(int r) override {
-    in->put(CInode::PIN_PTRWAITER);
     if (in->is_auth())
       locker->check_inode_max_size(in, false, new_max_size, newsize, mtime);
+    in->put(CInode::PIN_PTRWAITER);
   }
 };
 
@@ -3073,10 +3073,8 @@ void Locker::_do_snap_update(CInode *in, snapid_t snap, int dirty, snapid_t foll
     le->metablob.add_client_flush(metareqid_t(m->get_source(), ack->get_client_tid()),
 				  ack->get_oldest_flush_tid());
 
-  mds->mdlog->submit_entry(le, new C_Locker_FileUpdate_finish(this, in, mut,
-								 false,
-								 client, NULL,
-								 ack));
+  mds->mdlog->submit_entry(le, new C_Locker_FileUpdate_finish(this, in, mut, false, false,
+							      client, ack));
 }
 
 void Locker::_update_cap_fields(CInode *in, int dirty, MClientCaps *m, inode_t *pi)
@@ -3346,9 +3344,8 @@ bool Locker::_do_cap_update(CInode *in, Capability *cap,
 				  ack->get_oldest_flush_tid());
 
   mds->mdlog->submit_entry(le, new C_Locker_FileUpdate_finish(this, in, mut,
-								 change_max,
-								 client, cap,
-								 ack));
+							      change_max, !!cap,
+							      client, ack));
   if (need_flush && !*need_flush &&
       ((change_max && new_max) || // max INCREASE
        _need_flush_mdlog(in, dirty)))

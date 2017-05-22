@@ -188,17 +188,26 @@ int main(int argc, char **argv)
 
     vector<string> dirs;
     r = fs.readdir("", &dirs);
-    assert(r == 0);
+    if (r < 0) {
+      cerr << "readdir in root failed: " << cpp_strerror(r) << std::endl;
+      exit(1);
+    }
     for (auto& dir : dirs) {
       if (dir[0] == '.')
 	continue;
       cout << dir << "/" << std::endl;
       vector<string> ls;
       r = fs.readdir(dir, &ls);
-      assert(r == 0);
+      if (r < 0) {
+	cerr << "readdir " << dir << " failed: " << cpp_strerror(r) << std::endl;
+	exit(1);
+      }
       string full = out_dir + "/" + dir;
       r = ::mkdir(full.c_str(), 0755);
-      assert(r == 0);
+      if (r < 0) {
+	cerr << "mkdir " << full << " failed: " << cpp_strerror(r) << std::endl;
+	exit(1);
+      }
       for (auto& file : ls) {
 	if (file[0] == '.')
 	  continue;
@@ -206,22 +215,42 @@ int main(int argc, char **argv)
 	uint64_t size;
 	utime_t mtime;
 	r = fs.stat(dir, file, &size, &mtime);
-	assert(r == 0);
+	if (r < 0) {
+	  cerr << "stat " << file << " failed: " << cpp_strerror(r) << std::endl;
+	  exit(1);
+	}
 	string path = out_dir + "/" + dir + "/" + file;
 	int fd = ::open(path.c_str(), O_CREAT|O_WRONLY|O_TRUNC, 0644);
+	if (fd < 0) {
+	  r = -errno;
+	  cerr << "open " << path << " failed: " << cpp_strerror(r) << std::endl;
+	  exit(1);
+	}
 	assert(fd >= 0);
 	if (size > 0) {
 	  BlueFS::FileReader *h;
 	  r = fs.open_for_read(dir, file, &h, false);
-	  assert(r == 0);
+	  if (r < 0) {
+	    cerr << "open_for_read " << dir << "/" << file << " failed: "
+		 << cpp_strerror(r) << std::endl;
+	    exit(1);
+	  }
 	  int pos = 0;
 	  int left = size;
 	  while (left) {
 	    bufferlist bl;
 	    r = fs.read(h, &h->buf, pos, left, &bl, NULL);
-	    assert(r > 0);
+	    if (r <= 0) {
+	      cerr << "read " << dir << "/" << file << " from " << pos
+		   << " failed: " << cpp_strerror(r) << std::endl;
+	      exit(1);
+	    }
 	    int rc = bl.write_fd(fd);
-	    assert(rc == 0);
+	    if (rc < 0) {
+	      cerr << "write to " << path << " failed: "
+		   << cpp_strerror(r) << std::endl;
+	      exit(1);
+	    }
 	    pos += r;
 	    left -= r;
 	  }

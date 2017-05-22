@@ -1,6 +1,6 @@
 #!/bin/bash
 
-set -e
+set -ex
 
 #
 # SUSE-specific hack to install iozone from OBS (begin)

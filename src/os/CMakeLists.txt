@@ -24,6 +24,7 @@ set(libos_srcs
   kstore/KStore.cc
   kstore/kstore_types.cc
   fs/FS.cc
+  fs/aio.cc
   ${libos_xfs_srcs})
 
 if(HAVE_LIBAIO)
@@ -36,7 +37,6 @@ if(HAVE_LIBAIO)
     bluestore/BlueRocksEnv.cc
     bluestore/BlueStore.cc
     bluestore/bluestore_types.cc
-    bluestore/ExtentFreelistManager.cc
     bluestore/FreelistManager.cc
     bluestore/KernelDevice.cc
     bluestore/StupidAllocator.cc
@@ -83,7 +83,7 @@ endif()
 target_link_libraries(os kv)
 
 add_dependencies(os compressor_plugins)
-add_dependencies(os ceph_crypto_isal)
+add_dependencies(os crypto_plugins)
 
 
 if(HAVE_LIBAIO)

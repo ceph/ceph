@@ -103,13 +103,13 @@
 
 /// default object layout
 struct ceph_file_layout default_file_layout = {
- fl_stripe_unit: init_le32(1<<22),
- fl_stripe_count: init_le32(1),
- fl_object_size: init_le32(1<<22),
- fl_cas_hash: init_le32(0),
- fl_object_stripe_unit: init_le32(0),
- fl_unused: init_le32(-1),
- fl_pg_pool : init_le32(-1),
+  init_le32(1<<22),	// fl_stripe_unit
+  init_le32(1),		// fl_stripe_count
+  init_le32(1<<22),	// fl_object_size
+  init_le32(0),		// fl_cas_hash
+  init_le32(0),		// fl_object_stripe_unit
+  init_le32(-1),	// fl_unused
+  init_le32(-1),	// fl_pg_pool
 };
 
 
@@ -1169,10 +1169,13 @@ int libradosstriper::RadosStriperImpl::internal_get_layout_and_size(
   // deal with size
   size_t ssize;
   rc = extract_sizet_attr(attrs, XATTR_SIZE, &ssize);
+  if (rc) {
+    return rc;
+  }
   *size = ssize;
   // make valgrind happy by setting unused fl_pg_pool
   layout->fl_pg_pool = 0;
-  return rc;
+  return 0;
 }
 
 int libradosstriper::RadosStriperImpl::openStripedObjectForRead(

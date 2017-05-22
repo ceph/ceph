@@ -26,6 +26,7 @@
 
 #include "include/buffer.h"
 #include "include/utime.h"
+#include "include/coredumpctl.h"
 #include "include/encoding.h"
 #include "common/environment.h"
 #include "common/Clock.h"
@@ -484,6 +485,7 @@ TEST(BufferPtr, constructors) {
     EXPECT_EQ(original.get_raw(), ptr.get_raw());
     EXPECT_EQ(2, ptr.raw_nref());
     EXPECT_EQ(0, ::memcmp(original.c_str(), ptr.c_str(), len));
+    PrCtl unset_dumpable;
     EXPECT_DEATH(bufferptr(original, 0, original.length() + 1), "");
     EXPECT_DEATH(bufferptr(bufferptr(), 0, 0), "");
   }
@@ -678,12 +680,14 @@ TEST(BufferPtr, accessors) {
   EXPECT_EQ('X', ptr.c_str()[0]);
   {
     bufferptr ptr;
+    PrCtl unset_dumpable;
     EXPECT_DEATH(ptr.c_str(), "");
     EXPECT_DEATH(ptr[0], "");
   }
   EXPECT_EQ('X', const_ptr.c_str()[0]);
   {
     const bufferptr const_ptr;
+    PrCtl unset_dumpable;
     EXPECT_DEATH(const_ptr.c_str(), "");
     EXPECT_DEATH(const_ptr[0], "");
   }
@@ -702,10 +706,14 @@ TEST(BufferPtr, accessors) {
     bufferptr ptr;
     EXPECT_EQ((unsigned)0, ptr.unused_tail_length());
   }
-  EXPECT_DEATH(ptr[len], "");
-  EXPECT_DEATH(const_ptr[len], "");
+  {
+    PrCtl unset_dumpable;
+    EXPECT_DEATH(ptr[len], "");
+    EXPECT_DEATH(const_ptr[len], "");
+  }
   {
     const bufferptr const_ptr;
+    PrCtl unset_dumpable;
     EXPECT_DEATH(const_ptr.raw_c_str(), "");
     EXPECT_DEATH(const_ptr.raw_length(), "");
     EXPECT_DEATH(const_ptr.raw_nref(), "");
@@ -754,6 +762,7 @@ TEST(BufferPtr, is_zero) {
 TEST(BufferPtr, copy_out) {
   {
     const bufferptr ptr;
+    PrCtl unset_dumpable;
     EXPECT_DEATH(ptr.copy_out((unsigned)0, (unsigned)0, NULL), "");
   }
   {
@@ -789,13 +798,17 @@ TEST(BufferPtr, copy_out_bench) {
 TEST(BufferPtr, copy_in) {
   {
     bufferptr ptr;
+    PrCtl unset_dumpable;
     EXPECT_DEATH(ptr.copy_in((unsigned)0, (unsigned)0, NULL), "");
   }
   {
     char in[] = "ABCD";
     bufferptr ptr(2);
-    EXPECT_DEATH(ptr.copy_in((unsigned)0, strlen(in) + 1, NULL), "");
-    EXPECT_DEATH(ptr.copy_in(strlen(in) + 1, (unsigned)0, NULL), "");
+    {
+      PrCtl unset_dumpable;
+      EXPECT_DEATH(ptr.copy_in((unsigned)0, strlen(in) + 1, NULL), "");
+      EXPECT_DEATH(ptr.copy_in(strlen(in) + 1, (unsigned)0, NULL), "");
+    }
     ptr.copy_in((unsigned)0, (unsigned)2, in);
     EXPECT_EQ(in[0], ptr[0]);
     EXPECT_EQ(in[1], ptr[1]);
@@ -823,13 +836,17 @@ TEST(BufferPtr, copy_in_bench) {
 TEST(BufferPtr, append) {
   {
     bufferptr ptr;
+    PrCtl unset_dumpable;
     EXPECT_DEATH(ptr.append('A'), "");
     EXPECT_DEATH(ptr.append("B", (unsigned)1), "");
   }
   {
     bufferptr ptr(2);
-    EXPECT_DEATH(ptr.append('A'), "");
-    EXPECT_DEATH(ptr.append("B", (unsigned)1), "");
+    {
+      PrCtl unset_dumpable;
+      EXPECT_DEATH(ptr.append('A'), "");
+      EXPECT_DEATH(ptr.append("B", (unsigned)1), "");
+    }
     ptr.set_length(0);
     ptr.append('A');
     EXPECT_EQ((unsigned)1, ptr.length());
@@ -864,7 +881,10 @@ TEST(BufferPtr, append_bench) {
 TEST(BufferPtr, zero) {
   char str[] = "XXXX";
   bufferptr ptr(buffer::create_static(strlen(str), str));
-  EXPECT_DEATH(ptr.zero(ptr.length() + 1, 0), "");
+  {
+    PrCtl unset_dumpable;
+    EXPECT_DEATH(ptr.zero(ptr.length() + 1, 0), "");
+  }
   ptr.zero(1, 1);
   EXPECT_EQ('X', ptr[0]);
   EXPECT_EQ('\0', ptr[1]);
@@ -2207,7 +2227,10 @@ TEST(BufferList, append) {
     bufferptr in(back);
     EXPECT_EQ((unsigned)1, bl.get_num_buffers());
     EXPECT_EQ((unsigned)1, bl.length());
-    EXPECT_DEATH(bl.append(in, (unsigned)100, (unsigned)100), "");
+    {
+      PrCtl unset_dumpable;
+      EXPECT_DEATH(bl.append(in, (unsigned)100, (unsigned)100), "");
+    }
     EXPECT_LT((unsigned)0, in.unused_tail_length());
     in.append('B');
     bl.append(in, back.end(), 1);
@@ -2764,7 +2787,10 @@ TEST(BufferList, zero) {
       bufferptr ptr(s[i], strlen(s[i]));
       bl.push_back(ptr);
     }
-    EXPECT_DEATH(bl.zero((unsigned)0, (unsigned)2000), "");
+    {
+      PrCtl unset_dumpable;
+      EXPECT_DEATH(bl.zero((unsigned)0, (unsigned)2000), "");
+    }
     bl.zero((unsigned)2, (unsigned)5);
     EXPECT_EQ(0, ::memcmp("AB\0\0\0\0\0HIKLM", bl.c_str(), 9));
   }

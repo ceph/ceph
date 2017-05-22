@@ -25,6 +25,7 @@ set(rbd_mirror_internal
   image_replayer/IsPrimaryRequest.cc
   image_replayer/OpenImageRequest.cc
   image_replayer/OpenLocalImageRequest.cc
+  image_replayer/PrepareLocalImageRequest.cc
   image_replayer/ReplayStatusFormatter.cc
   image_sync/ImageCopyRequest.cc
   image_sync/ObjectCopyRequest.cc

@@ -55,28 +55,33 @@ struct rgw_meta_sync_marker {
   uint64_t total_entries;
   uint64_t pos;
   real_time timestamp;
+  epoch_t realm_epoch{0}; //< realm_epoch of period marker
 
   rgw_meta_sync_marker() : state(FullSync), total_entries(0), pos(0) {}
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(1, 1, bl);
+    ENCODE_START(2, 1, bl);
     ::encode(state, bl);
     ::encode(marker, bl);
     ::encode(next_step_marker, bl);
     ::encode(total_entries, bl);
     ::encode(pos, bl);
     ::encode(timestamp, bl);
+    ::encode(realm_epoch, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::iterator& bl) {
-    DECODE_START(1, bl);
+    DECODE_START(2, bl);
     ::decode(state, bl);
     ::decode(marker, bl);
     ::decode(next_step_marker, bl);
     ::decode(total_entries, bl);
     ::decode(pos, bl);
     ::decode(timestamp, bl);
+    if (struct_v >= 2) {
+      ::decode(realm_epoch, bl);
+    }
     DECODE_FINISH(bl);
   }
 

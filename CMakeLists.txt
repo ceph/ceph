@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 2.8.11)
 
 project(ceph)
-set(VERSION 12.0.2)
+set(VERSION 12.0.3)
 
 if(POLICY CMP0046)
   # Tweak policies (this one disables "missing" dependency warning)
@@ -75,11 +75,6 @@ if(FREEBSD)
   link_directories(/usr/local/lib)
   list(APPEND CMAKE_REQUIRED_INCLUDES /usr/local/include)
 endif(FREEBSD)
-
-#put all the libs and binaries in one place
-set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
-set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
-set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 
 #Check Includes
 include(CheckIncludeFiles)
@@ -342,10 +337,16 @@ find_package(dpdk)
 set(HAVE_DPDK ${DPDK_FOUND})
 endif(WITH_DPDK)
 
+option(WITH_BLKIN "Use blkin to emit LTTng tracepoints for Zipkin" OFF)
+if(WITH_BLKIN)
+  set(BLKIN_LIBRARIES blkin lttng-ust)
+  include_directories(src/blkin/blkin-lib)
+endif(WITH_BLKIN)
+
 #option for RGW
 option(WITH_RADOSGW "Rados Gateway is enabled" ON)
 option(WITH_RADOSGW_FCGI_FRONTEND "Rados Gateway's FCGI frontend is enabled" ON)
-option(WITH_RADOSGW_ASIO_FRONTEND "Rados Gateway's ASIO frontend is enabled" ON)
+option(WITH_RADOSGW_BEAST_FRONTEND "Rados Gateway's Beast frontend is enabled" ON)
 if(WITH_RADOSGW)
   find_package(EXPAT REQUIRED)
   if(WITH_RADOSGW_FCGI_FRONTEND)
@@ -512,6 +513,12 @@ endif()
 # Boost
 option(WITH_SYSTEM_BOOST "require and build with system Boost" OFF)
 
+set(BOOST_COMPONENTS
+	container thread system regex random program_options date_time iostreams coroutine context)
+if(WITH_MGR)
+	list(APPEND BOOST_COMPONENTS python)
+endif()
+
 if (WITH_SYSTEM_BOOST)
   if(ENABLE_SHARED)
     set(Boost_USE_STATIC_LIBS OFF)
@@ -527,35 +534,51 @@ else()
   set(BOOST_SOURCE_DIR "${PROJECT_SOURCE_DIR}/src/boost")
   set(BOOST_PREFIX "${PROJECT_BINARY_DIR}/boost")
   set(BOOST_BUILD "${PROJECT_BINARY_DIR}/boost-build")
-  set(Boost_USE_STATIC_LIBS ON)
+  string(REPLACE ";" "," BOOST_WITH_LIBS "${BOOST_COMPONENTS}")
   execute_process(COMMAND "./bootstrap.sh"
     "--prefix=${BOOST_PREFIX}"
-    "--with-libraries=atomic,container,context,coroutine,coroutine2,date_time,filesystem,iostreams,program_options,python,random,regex,system,thread"
+    "--with-libraries=${BOOST_WITH_LIBS}"
     WORKING_DIRECTORY ${BOOST_SOURCE_DIR})
-  # 2. install headers
   set(BOOST_ROOT "${BOOST_PREFIX}")
-  execute_process(COMMAND "./b2"
-    #"--buildid=ceph" # changes lib names--can omit for static
-    "--variant=release" # could override
-    "--link=static" # avoid library versioning issues
-    "--threading=multi"
-    "--build-dir=${BOOST_BUILD}"
-    "-j${BOOST_J}"
-    "cxxflags=${BOOST_CFLAGS}"
-    "headers"
+  set(b2 ./b2
+    --build-dir=${BOOST_BUILD} -j${BOOST_J})
+  if(CMAKE_VERBOSE_MAKEFILE)
+    list(APPEND b2 -d1)
+  else()
+    list(APPEND b2 -d0)
+  endif()
+  list(APPEND b2
+    variant=release link=static threading=multi cxxflags=${BOOST_CFLAGS})
+  if(NOT CMAKE_HOST_SYSTEM_PROCESSOR STREQUAL CMAKE_SYSTEM_PROCESSOR)
+    # we are crosscompiling
+    if(CMAKE_CXX_COMPILER_ID STREQUAL GNU)
+      set(b2_cc gcc)
+    elseif(CMAKE_CXX_COMPILER_ID STREQUAL Clang)
+      set(b2_cc clang)
+    else()
+      message(SEND_ERROR "unknown compiler: ${CMAKE_CXX_COMPILER_ID}")
+    endif()
+    # edit the config.jam so, b2 will be able to use the specified toolset
+    execute_process(
+      COMMAND
+      sed -i
+      "s|using ${b2_cc} ;|using ${b2_cc} : ${CMAKE_SYSTEM_PROCESSOR} : ${CMAKE_CXX_COMPILER} ;|"
+      ${PROJECT_SOURCE_DIR}/src/boost/project-config.jam)
+    # use ${CMAKE_SYSTEM_PROCESSOR} as the version identifier of compiler
+    list(APPEND b2 toolset=${b2_cc}-${CMAKE_SYSTEM_PROCESSOR})
+  endif()
+  # 2. install headers
+  execute_process(COMMAND
+    ${b2}
+    headers
     WORKING_DIRECTORY ${BOOST_SOURCE_DIR})
   # 3. build and install libs
-  execute_process(COMMAND "./b2"
-    #"--buildid=ceph" # changes lib names--can omit for static
-    "--variant=release" # could override
-    "--link=static" # avoid library versioning issues
-    "--threading=multi"
-    "--build-dir=${BOOST_BUILD}"
-    "-j${BOOST_J}"
-    "cxxflags=${BOOST_CFLAGS}"
-    "install"
+  execute_process(COMMAND
+    ${b2}
+    install
     WORKING_DIRECTORY ${BOOST_SOURCE_DIR})
   # 4. set hints for FindBoost.cmake
+  set(Boost_USE_STATIC_LIBS ON)
   set(Boost_NO_SYSTEM_PATHS ON)
   include_directories(BEFORE ${BOOST_PREFIX}/include)
   # fixup for CheckIncludeFileCXX
@@ -566,12 +589,6 @@ else()
 endif()
 
 set(Boost_USE_MULTITHREADED ON)
-
-set(BOOST_COMPONENTS
-	thread system regex random program_options date_time iostreams)
-if(WITH_MGR)
-	list(APPEND BOOST_COMPONENTS python)
-endif()
 
 # require minimally the bundled version
 find_package(Boost 1.61 COMPONENTS ${BOOST_COMPONENTS} REQUIRED)

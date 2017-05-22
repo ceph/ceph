@@ -45,25 +45,6 @@ ostream& operator<<(ostream& out, const class CDir& dir);
 class CDir : public MDSCacheObject, public Counter<CDir> {
   friend ostream& operator<<(ostream& out, const class CDir& dir);
 
-  /*
-   * This class uses a boost::pool to handle allocation. This is *not*
-   * thread-safe, so don't do allocations from multiple threads!
-   *
-   * Alternatively, switch the pool to use a boost::singleton_pool.
-   */
-private:
-  static boost::pool<> pool;
-public:
-  static void *operator new(size_t num_bytes) { 
-    void *n = pool.malloc();
-    if (!n)
-      throw std::bad_alloc();
-    return n;
-  }
-  void operator delete(void *p) {
-    pool.free(p);
-  }
-
 public:
   // -- pins --
   static const int PIN_DNWAITER =     1;
@@ -111,6 +92,7 @@ public:
   static const unsigned STATE_ASSIMRSTAT =    (1<<17);  // assimilating inode->frag rstats
   static const unsigned STATE_DIRTYDFT =      (1<<18);  // dirty dirfragtree
   static const unsigned STATE_BADFRAG =       (1<<19);  // bad dirfrag
+  static const unsigned STATE_AUXSUBTREE =    (1<<20);  // no subtree merge
 
   // common states
   static const unsigned STATE_CLEAN =  0;
@@ -136,6 +118,7 @@ public:
   (STATE_DIRTY|
    STATE_EXPORTBOUND |
    STATE_IMPORTBOUND |
+   STATE_AUXSUBTREE |
    STATE_REJOINUNDEF);
 
   // -- rep spec --

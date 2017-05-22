@@ -248,8 +248,8 @@ public:
 protected:
   void handle_inode_file_caps(class MInodeFileCaps *m);
 
-  void file_update_finish(CInode *in, MutationRef& mut, bool share, client_t client, Capability *cap,
-			  MClientCaps *ack);
+  void file_update_finish(CInode *in, MutationRef& mut, bool share_max, bool issue_client_cap,
+			  client_t client, MClientCaps *ack);
 public:
   void calc_new_client_ranges(CInode *in, uint64_t size,
 			      map<client_t, client_writeable_range_t>* new_ranges,

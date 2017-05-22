@@ -20,9 +20,10 @@
 #include <atomic>
 #include <condition_variable>
 #include <mutex>
+#include <list>
 
 #include "acconfig.h"
-#include "os/fs/FS.h"
+#include "os/fs/aio.h"
 
 #define SPDK_PREFIX "spdk:"
 
@@ -38,12 +39,10 @@ struct IOContext {
   std::mutex lock;
   std::condition_variable cond;
 
-  list<FS::aio_t> pending_aios;    ///< not yet submitted
-  list<FS::aio_t> running_aios;    ///< submitting or submitted
+  std::list<aio_t> pending_aios;    ///< not yet submitted
+  std::list<aio_t> running_aios;    ///< submitting or submitted
   std::atomic_int num_pending = {0};
   std::atomic_int num_running = {0};
-  std::atomic_int num_reading = {0};
-  std::atomic_int num_waiting = {0};
 
   explicit IOContext(CephContext* cct, void *p)
     : cct(cct), priv(p)
@@ -60,10 +59,10 @@ struct IOContext {
   void aio_wait();
 
   void aio_wake() {
-    if (num_waiting.load()) {
-      std::lock_guard<std::mutex> l(lock);
-      cond.notify_all();
-    }
+    std::lock_guard<std::mutex> l(lock);
+    cond.notify_all();
+    --num_running;
+    assert(num_running == 0);
   }
 };
 
@@ -73,7 +72,7 @@ public:
   CephContext* cct;
 private:
   std::mutex ioc_reap_lock;
-  vector<IOContext*> ioc_reap_queue;
+  std::vector<IOContext*> ioc_reap_queue;
   std::atomic_int ioc_reap_count = {0};
 
 protected:
@@ -85,7 +84,7 @@ public:
   typedef void (*aio_callback_t)(void *handle, void *aio);
 
   static BlockDevice *create(
-    CephContext* cct, const string& path, aio_callback_t cb, void *cbpriv);
+    CephContext* cct, const std::string& path, aio_callback_t cb, void *cbpriv);
   virtual bool supported_bdev_label() { return true; }
   virtual bool is_rotational() { return rotational; }
 
@@ -94,7 +93,7 @@ public:
   virtual uint64_t get_size() const = 0;
   virtual uint64_t get_block_size() const = 0;
 
-  virtual int collect_metadata(string prefix, map<string,string> *pm) const = 0;
+  virtual int collect_metadata(std::string prefix, std::map<std::string,std::string> *pm) const = 0;
 
   virtual int read(
     uint64_t off,
@@ -106,6 +105,10 @@ public:
     uint64_t off,
     uint64_t len,
     char *buf,
+    bool buffered) = 0;
+  virtual int write(
+    uint64_t off,
+    bufferlist& bl,
     bool buffered) = 0;
 
   virtual int aio_read(
@@ -125,7 +128,7 @@ public:
 
   // for managing buffered readers/writers
   virtual int invalidate_cache(uint64_t off, uint64_t len) = 0;
-  virtual int open(const string& path) = 0;
+  virtual int open(const std::string& path) = 0;
   virtual void close() = 0;
 };
 

@@ -36,6 +36,7 @@
 #include "common/Cond.h"
 #include "common/errno.h"
 #include "include/stringify.h"
+#include "include/coredumpctl.h"
 
 #include "include/unordered_map.h"
 #include "store_test_fixture.h"
@@ -461,6 +462,7 @@ TEST_P(StoreTest, FiemapHoles) {
     ASSERT_EQ(r, 0);
   }
   {
+    //fiemap test from 0 to SKIP_STEP * (MAX_EXTENTS - 1) + 3
     bufferlist bl;
     store->fiemap(cid, oid, 0, SKIP_STEP * (MAX_EXTENTS - 1) + 3, bl);
     map<uint64_t,uint64_t> m, e;
@@ -477,6 +479,26 @@ TEST_P(StoreTest, FiemapHoles) {
     ASSERT_TRUE((m.size() == 1 &&
 		 m[0] > SKIP_STEP * (MAX_EXTENTS - 1)) ||
 		 (m.size() == MAX_EXTENTS && extents_exist));
+
+    // fiemap test from SKIP_STEP to SKIP_STEP * (MAX_EXTENTS - 2) + 3
+    // reset bufferlist and map
+    bl.clear();
+    m.clear();
+    e.clear();
+    store->fiemap(cid, oid, SKIP_STEP, SKIP_STEP * (MAX_EXTENTS - 2) + 3, bl);
+    p = bl.begin();
+    ::decode(m, p);
+    cout << " got " << m << std::endl;
+    ASSERT_TRUE(!m.empty());
+    ASSERT_GE(m[SKIP_STEP], 3u);
+    extents_exist = true;
+    if (m.size() == (MAX_EXTENTS - 2)) {
+      for (uint64_t i = 1; i < MAX_EXTENTS - 1; i++)
+	extents_exist = extents_exist && m.count(SKIP_STEP*i);
+    }
+    ASSERT_TRUE((m.size() == 1 &&
+		 m[SKIP_STEP] > SKIP_STEP * (MAX_EXTENTS - 2)) ||
+		 (m.size() == (MAX_EXTENTS - 1) && extents_exist));
   }
   {
     ObjectStore::Transaction t;
@@ -2826,8 +2848,8 @@ TEST_P(StoreTest, SimpleCloneTest) {
     ObjectStore::Transaction t;
     t.remove_collection(cid);
     cerr << "Invalid rm coll" << std::endl;
+    PrCtl unset_dumpable;
     EXPECT_DEATH(apply_transaction(store, &osr, std::move(t)), ".*Directory not empty.*");
-
   }
   {
     ObjectStore::Transaction t;
@@ -2848,6 +2870,7 @@ TEST_P(StoreTest, SimpleCloneTest) {
     t.remove(cid, hoid);
     t.remove(cid, hoid2);
     t.remove_collection(cid);
+    PrCtl unset_dumpable;
     EXPECT_DEATH(apply_transaction(store, &osr, std::move(t)), ".*Directory not empty.*");
   }
   {

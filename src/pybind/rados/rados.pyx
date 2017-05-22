@@ -14,6 +14,7 @@ method.
 # Copyright 2016 Mehdi Abaakouk <sileht@redhat.com>
 
 from cpython cimport PyObject, ref
+from cpython.pycapsule cimport *
 from libc cimport errno
 from libc.stdint cimport *
 from libc.stdlib cimport malloc, realloc, free
@@ -28,9 +29,7 @@ from functools import partial, wraps
 from itertools import chain
 
 # Are we running Python 2.x
-_python2 = sys.hexversion < 0x03000000
-
-if _python2:
+if sys.version_info[0] < 3:
     str_type = basestring
 else:
     str_type = str
@@ -126,6 +125,7 @@ cdef extern from "rados/librados.h" nogil:
     void rados_version(int *major, int *minor, int *extra)
     int rados_create2(rados_t *pcluster, const char *const clustername,
                       const char * const name, uint64_t flags)
+    int rados_create_with_context(rados_t *cluster, rados_config_t cct)
     int rados_connect(rados_t cluster)
     void rados_shutdown(rados_t cluster)
     int rados_conf_read_file(rados_t cluster, const char *path)
@@ -297,59 +297,68 @@ LIBRADOS_CREATE_IDEMPOTENT = _LIBRADOS_CREATE_IDEMPOTENT
 ANONYMOUS_AUID = 0xffffffffffffffff
 ADMIN_AUID = 0
 
+
 class Error(Exception):
     """ `Error` class, derived from `Exception` """
-
-
-class InvalidArgument(Error):
     pass
 
 
-class InterruptedOrTimeoutError(Error):
-    """ `InterruptedOrTimeoutError` class, derived from `Error` """
+class InvalidArgumentError(Error):
     pass
 
 
-class PermissionError(Error):
-    """ `PermissionError` class, derived from `Error` """
+class OSError(Error):
+    """ `OSError` class, derived from `Error` """
+    def __init__(self, errno, strerror):
+        self.errno = errno
+        self.strerror = strerror
+
+    def __str__(self):
+        return '[Errno {0}] {1}'.format(self.errno, self.strerror)
+
+
+class InterruptedOrTimeoutError(OSError):
+    """ `InterruptedOrTimeoutError` class, derived from `OSError` """
     pass
 
-class PermissionDeniedError(Error):
+
+class PermissionError(OSError):
+    """ `PermissionError` class, derived from `OSError` """
+    pass
+
+
+class PermissionDeniedError(OSError):
     """ deal with EACCES related. """
     pass
 
-class ObjectNotFound(Error):
-    """ `ObjectNotFound` class, derived from `Error` """
+
+class ObjectNotFound(OSError):
+    """ `ObjectNotFound` class, derived from `OSError` """
     pass
 
 
-class NoData(Error):
-    """ `NoData` class, derived from `Error` """
+class NoData(OSError):
+    """ `NoData` class, derived from `OSError` """
     pass
 
 
-class ObjectExists(Error):
-    """ `ObjectExists` class, derived from `Error` """
+class ObjectExists(OSError):
+    """ `ObjectExists` class, derived from `OSError` """
     pass
 
 
-class ObjectBusy(Error):
-    """ `ObjectBusy` class, derived from `Error` """
+class ObjectBusy(OSError):
+    """ `ObjectBusy` class, derived from `IOError` """
     pass
 
 
-class IOError(Error):
-    """ `IOError` class, derived from `Error` """
+class IOError(OSError):
+    """ `ObjectBusy` class, derived from `OSError` """
     pass
 
 
-class NoSpace(Error):
-    """ `NoSpace` class, derived from `Error` """
-    pass
-
-
-class IncompleteWriteError(Error):
-    """ `IncompleteWriteError` class, derived from `Error` """
+class NoSpace(OSError):
+    """ `NoSpace` class, derived from `OSError` """
     pass
 
 
@@ -362,6 +371,7 @@ class IoctxStateError(Error):
     """ `IoctxStateError` class, derived from `Error` """
     pass
 
+
 class ObjectStateError(Error):
     """ `ObjectStateError` class, derived from `Error` """
     pass
@@ -372,8 +382,8 @@ class LogicError(Error):
     pass
 
 
-class TimedOut(Error):
-    """ `TimedOut` class, derived from `Error` """
+class TimedOut(OSError):
+    """ `TimedOut` class, derived from `OSError` """
     pass
 
 
@@ -388,7 +398,8 @@ IF UNAME_SYSNAME == "FreeBSD":
         errno.ENOATTR   : NoData,
         errno.EINTR     : InterruptedOrTimeoutError,
         errno.ETIMEDOUT : TimedOut,
-        errno.EACCES    : PermissionDeniedError
+        errno.EACCES    : PermissionDeniedError,
+        errno.EINVAL    : InvalidArgumentError,
     }
 ELSE:
     cdef errno_to_exception = {
@@ -401,7 +412,8 @@ ELSE:
         errno.ENODATA   : NoData,
         errno.EINTR     : InterruptedOrTimeoutError,
         errno.ETIMEDOUT : TimedOut,
-        errno.EACCES    : PermissionDeniedError
+        errno.EACCES    : PermissionDeniedError,
+        errno.EINVAL    : InvalidArgumentError,
     }
 
 
@@ -417,9 +429,9 @@ cdef make_ex(ret, msg):
     """
     ret = abs(ret)
     if ret in errno_to_exception:
-        return errno_to_exception[ret](msg)
+        return errno_to_exception[ret](ret, msg)
     else:
-        return Error(msg + (": error code %d" % ret))
+        return Error(ret, msg + (": error code %d" % ret))
 
 
 # helper to specify an optional argument, where in addition to `cls`, `None`
@@ -566,7 +578,8 @@ cdef class Rados(object):
     @requires(('rados_id', opt(str_type)), ('name', opt(str_type)), ('clustername', opt(str_type)),
               ('conffile', opt(str_type)))
     def __setup(self, rados_id=None, name=None, clustername=None,
-                conf_defaults=None, conffile=None, conf=None, flags=0):
+                conf_defaults=None, conffile=None, conf=None, flags=0,
+                context=None):
         self.monitor_callback = None
         self.parsed_args = []
         self.conf_defaults = conf_defaults
@@ -590,8 +603,14 @@ cdef class Rados(object):
             int _flags = flags
             int ret
 
-        with nogil:
-            ret = rados_create2(&self.cluster, _clustername, _name, _flags)
+        if context:
+            # Unpack void* (aka rados_config_t) from capsule
+            rados_config = <rados_config_t> PyCapsule_GetPointer(context, NULL)
+            with nogil:
+                ret = rados_create_with_context(&self.cluster, rados_config)
+        else:
+            with nogil:
+                ret = rados_create2(&self.cluster, _clustername, _name, _flags)
         if ret != 0:
             raise Error("rados_initialize failed with error code: %d" % ret)
 

@@ -20,6 +20,10 @@
 #include "common/Timer.h"
 #include "common/LogClient.h"
 
+#include "client/Client.h"
+#include "mon/MonClient.h"
+#include "osdc/Objecter.h"
+
 #include "DaemonServer.h"
 #include "PyModules.h"
 
@@ -38,9 +42,10 @@ public:
                          const std::set <std::string> &changed) override;
 
 protected:
-  MonClient *monc;
-  Messenger *client_messenger;
-  Objecter *objecter;
+  MonClient monc;
+  std::unique_ptr<Messenger> client_messenger;
+  Objecter objecter;
+  Client client;
 
   LogClient log_client;
   LogChannelRef clog, audit_clog;

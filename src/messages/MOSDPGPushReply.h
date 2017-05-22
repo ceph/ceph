@@ -18,18 +18,21 @@
 #include "MOSDFastDispatchOp.h"
 
 class MOSDPGPushReply : public MOSDFastDispatchOp {
-  static const int HEAD_VERSION = 2;
-  static const int COMPAT_VERSION = 1;
+  static const int HEAD_VERSION = 3;
+  static const int COMPAT_VERSION = 2;
 
 public:
   pg_shard_t from;
   spg_t pgid;
-  epoch_t map_epoch;
+  epoch_t map_epoch, min_epoch;
   vector<PushReplyOp> replies;
   uint64_t cost;
 
   epoch_t get_map_epoch() const override {
     return map_epoch;
+  }
+  epoch_t get_min_epoch() const override {
+    return min_epoch;
   }
   spg_t get_spg() const override {
     return pgid;
@@ -59,13 +62,12 @@ public:
     ::decode(map_epoch, p);
     ::decode(replies, p);
     ::decode(cost, p);
-
-    if (header.version >= 2) {
-      ::decode(pgid.shard, p);
-      ::decode(from, p);
+    ::decode(pgid.shard, p);
+    ::decode(from, p);
+    if (header.version >= 3) {
+      ::decode(min_epoch, p);
     } else {
-      pgid.shard = shard_id_t::NO_SHARD;
-      from = pg_shard_t(get_source().num(), shard_id_t::NO_SHARD);
+      min_epoch = map_epoch;
     }
   }
 
@@ -76,11 +78,12 @@ public:
     ::encode(cost, payload);
     ::encode(pgid.shard, payload);
     ::encode(from, payload);
+    ::encode(min_epoch, payload);
   }
 
   void print(ostream& out) const override {
     out << "MOSDPGPushReply(" << pgid
-	<< " " << map_epoch
+	<< " " << map_epoch << "/" << min_epoch
 	<< " " << replies;
     out << ")";
   }

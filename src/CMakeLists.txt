@@ -286,6 +286,10 @@ endif()
 set(heap_profiler_files ${TCMALLOC_srcs})
 add_library(heap_profiler_objs OBJECT ${heap_profiler_files})
 
+if (WITH_BLKIN)
+  add_subdirectory(blkin/blkin-lib)
+endif(WITH_BLKIN)
+
 # Common infrastructure
 configure_file(
   ${CMAKE_SOURCE_DIR}/src/ceph_ver.h.in.cmake
@@ -326,11 +330,22 @@ set(crush_srcs
   crush/CrushTester.cc
   crush/CrushLocation.cc)
 
-add_library(crush STATIC ${crush_srcs})
+add_library(crush_objs OBJECT ${crush_srcs})
 
 add_subdirectory(json_spirit)
 
 include_directories("${CMAKE_SOURCE_DIR}/src/xxHash")
+
+set(GMOCK_INCLUDE_DIRS
+  "${CMAKE_SOURCE_DIR}/src/googletest/googletest/include/gmock")
+set(GTEST_INCLUDE_DIRS
+  "${CMAKE_SOURCE_DIR}/src/googletest/googletest/include/gtest")
+
+include_directories("${CMAKE_SOURCE_DIR}/src/dmclock/src")
+include_directories("${CMAKE_SOURCE_DIR}/src/dmclock/support/src")
+
+# needed for source files that friend unit tests (e.g., using FRIEND_TEST)
+include_directories("${CMAKE_SOURCE_DIR}/src/googletest/googletest/include")
 
 set(xio_common_srcs)
 if(HAVE_XIO)
@@ -339,8 +354,7 @@ if(HAVE_XIO)
     msg/xio/XioMsg.cc
     msg/xio/XioPool.cc
     msg/xio/XioMessenger.cc
-    msg/xio/XioPortal.cc
-    msg/xio/QueueStrategy.cc)
+    msg/xio/XioPortal.cc)
 endif(HAVE_XIO)
 
 set(async_rdma_common_srcs)
@@ -396,9 +410,9 @@ set(libcommon_files
   common/admin_socket_client.cc
   common/bloom_filter.cc
   common/Readahead.cc
-  ${crush_srcs}
   common/cmdparse.cc
   common/escape.c
+  common/url_escape.cc
   common/io_priority.cc
   common/Clock.cc
   common/ceph_time.cc
@@ -448,6 +462,7 @@ set(libcommon_files
   msg/async/Stack.cc
   msg/async/PosixStack.cc
   msg/async/net_handler.cc
+  msg/QueueStrategy.cc
   ${xio_common_srcs}
   ${async_rdma_common_srcs}
   ${dpdk_common_srcs}
@@ -570,7 +585,8 @@ set(ceph_common_objs
   $<TARGET_OBJECTS:compressor_objs>
   $<TARGET_OBJECTS:common-objs>
   $<TARGET_OBJECTS:common_mountcephfs_objs>
-  $<TARGET_OBJECTS:global_common_objs>)
+  $<TARGET_OBJECTS:global_common_objs>
+  $<TARGET_OBJECTS:crush_objs>)
 set(ceph_common_deps
   json_spirit erasure_code rt ${LIB_RESOLV}
   ${Boost_THREAD_LIBRARY}
@@ -580,8 +596,12 @@ set(ceph_common_deps
   ${Boost_PROGRAM_OPTIONS_LIBRARY}
   ${Boost_DATE_TIME_LIBRARY}
   ${Boost_IOSTREAMS_LIBRARY}
-  ${BLKID_LIBRARIES} ${Backtrace_LIBRARIES}
-  ${CRYPTO_LIBS} ${CMAKE_THREAD_LIBS_INIT} ${CMAKE_DL_LIBS})
+  ${BLKID_LIBRARIES}
+  ${Backtrace_LIBRARIES}
+  ${BLKIN_LIBRARIES}
+  ${CRYPTO_LIBS}
+  ${CMAKE_THREAD_LIBS_INIT}
+  ${CMAKE_DL_LIBS})
 if(HAVE_RDMA)
   list(APPEND ceph_common_deps ${RDMA_LIBRARY})
 endif()
@@ -613,6 +633,7 @@ install(TARGETS ceph-common DESTINATION ${CMAKE_INSTALL_PKGLIBDIR})
 
 add_library(common_utf8 STATIC common/utf8.c)
 
+target_link_libraries(common json_spirit common_utf8 erasure_code rt uuid resolv ${CRYPTO_LIBS} ${Boost_LIBRARIES} ${BLKID_LIBRARIES} ${EXECINFO_LIBRARIES} ${BLKIN_LIBRARIES})
 if(${WITH_LTTNG})
   add_subdirectory(tracing)
   add_dependencies(common-objs oprequest-tp)
@@ -650,7 +671,7 @@ if (WITH_MGR)
   add_executable(ceph-mgr ${mgr_srcs}
                  $<TARGET_OBJECTS:heap_profiler_objs>)
   target_include_directories(ceph-mgr PRIVATE "${PYTHON_INCLUDE_DIRS}")
-  target_link_libraries(ceph-mgr mds osdc global-static common
+  target_link_libraries(ceph-mgr osdc client global-static common
       ${Boost_PYTHON_LIBRARY} ${PYTHON_LIBRARIES} ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS} ${ALLOC_LIBS})
   set_target_properties(ceph-mgr PROPERTIES
     INSTALL_RPATH "")
@@ -807,6 +828,12 @@ if (NOT WITH_SYSTEM_ROCKSDB)
 
 endif(NOT WITH_SYSTEM_ROCKSDB)
 
+include(TestBigEndian)
+test_big_endian(CEPH_BIG_ENDIAN)
+if(NOT CEPH_BIG_ENDIAN)
+  set(CEPH_LITTLE_ENDIAN 1)
+endif()
+
 add_subdirectory(kv)
 add_subdirectory(os)
 
@@ -814,6 +841,7 @@ set(cls_references_files objclass/class_api.cc)
 add_library(cls_references_objs OBJECT ${cls_references_files})
 
 add_subdirectory(osd)
+
 set(ceph_osd_srcs
   ceph_osd.cc)
 add_executable(ceph-osd ${ceph_osd_srcs}
@@ -850,6 +878,18 @@ endif(WITH_TESTS)
 add_subdirectory(compressor)
 
 add_subdirectory(tools)
+
+# dmClock
+
+add_subdirectory(dmclock) # after gmock
+add_dependencies(tests dmclock-tests dmclock-data-struct-tests)
+
+if(WITH_TESTS)
+  install(PROGRAMS
+    ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/dmclock-tests
+    ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/dmclock-data-struct-tests
+    DESTINATION bin)
+endif(WITH_TESTS)
 
 if(HAVE_INTEL)
   add_subdirectory(crypto/isa-l)

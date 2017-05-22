@@ -354,6 +354,12 @@ typedef void *rados_read_op_t;
 typedef void *rados_completion_t;
 
 /**
+ * @struct blkin_trace_info
+ * blkin trace information for Zipkin tracing
+ */
+struct blkin_trace_info;
+
+/**
  * Get the version of librados.
  *
  * The version number is major.minor.extra. Note that this is
@@ -648,6 +654,8 @@ CEPH_RADOS_API int rados_wait_for_latest_osdmap(rados_t cluster);
  *
  * If len is too short to fit all the pool name entries we need, we will fill
  * as much as we can.
+ *
+ * Buf may be null to determine the buffer size needed to list all pools.
  *
  * @param cluster cluster handle
  * @param buf output buffer

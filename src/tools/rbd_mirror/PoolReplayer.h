@@ -4,16 +4,10 @@
 #ifndef CEPH_RBD_MIRROR_POOL_REPLAYER_H
 #define CEPH_RBD_MIRROR_POOL_REPLAYER_H
 
-#include <map>
-#include <memory>
-#include <set>
-#include <string>
-
 #include "common/AsyncOpTracker.h"
 #include "common/Cond.h"
 #include "common/Mutex.h"
 #include "common/WorkQueue.h"
-#include "include/atomic.h"
 #include "include/rados/librados.hpp"
 
 #include "ClusterWatcher.h"
@@ -21,6 +15,12 @@
 #include "PoolWatcher.h"
 #include "ImageDeleter.h"
 #include "types.h"
+
+#include <set>
+#include <map>
+#include <memory>
+#include <atomic>
+#include <string>
 
 class AdminSocketHook;
 
@@ -63,24 +63,24 @@ public:
 private:
   struct PoolWatcherListener : public PoolWatcher<>::Listener {
     PoolReplayer *pool_replayer;
+    bool local;
 
-    PoolWatcherListener(PoolReplayer *pool_replayer)
-      : pool_replayer(pool_replayer) {
+    PoolWatcherListener(PoolReplayer *pool_replayer, bool local)
+      : pool_replayer(pool_replayer), local(local) {
     }
 
     void handle_update(const std::string &mirror_uuid,
-                       const ImageIds &added_image_ids,
-                       const ImageIds &removed_image_ids) override {
-      pool_replayer->handle_update(mirror_uuid, added_image_ids,
-				   removed_image_ids);
+                       ImageIds &&added_image_ids,
+                       ImageIds &&removed_image_ids) override {
+      pool_replayer->handle_update((local ? "" : mirror_uuid),
+				   std::move(added_image_ids),
+                                   std::move(removed_image_ids));
     }
   };
 
-  struct C_RefreshLocalImages;
-
   void handle_update(const std::string &mirror_uuid,
-                     const ImageIds &added_image_ids,
-                     const ImageIds &removed_image_ids);
+                     ImageIds &&added_image_ids,
+                     ImageIds &&removed_image_ids);
 
   int init_rados(const std::string &cluster_name,
                  const std::string &client_name,
@@ -89,13 +89,13 @@ private:
   void handle_post_acquire_leader(Context *on_finish);
   void handle_pre_release_leader(Context *on_finish);
 
-  void refresh_local_images(Context *on_finish);
-  void handle_refresh_local_images(int r, ImageIds &&image_ids,
-                                   Context *on_finish);
+  void init_local_pool_watcher(Context *on_finish);
+  void handle_init_local_pool_watcher(int r, Context *on_finish);
 
-  void init_pool_watcher(Context *on_finish);
-  void shut_down_pool_watcher(Context *on_finish);
-  void handle_shut_down_pool_watcher(int r, Context *on_finish);
+  void init_remote_pool_watcher(Context *on_finish);
+
+  void shut_down_pool_watchers(Context *on_finish);
+  void handle_shut_down_pool_watchers(int r, Context *on_finish);
 
   void wait_for_update_ops(Context *on_finish);
   void handle_wait_for_update_ops(int r, Context *on_finish);
@@ -105,7 +105,7 @@ private:
   ImageSyncThrottlerRef<> m_image_sync_throttler;
   mutable Mutex m_lock;
   Cond m_cond;
-  atomic_t m_stopping;
+  std::atomic<bool> m_stopping = { false };
   bool m_manual_stop = false;
   bool m_blacklisted = false;
 
@@ -119,15 +119,18 @@ private:
 
   int64_t m_local_pool_id = -1;
 
-  PoolWatcherListener m_pool_watcher_listener;
-  std::unique_ptr<PoolWatcher<> > m_pool_watcher;
+  PoolWatcherListener m_local_pool_watcher_listener;
+  std::unique_ptr<PoolWatcher<> > m_local_pool_watcher;
+
+  PoolWatcherListener m_remote_pool_watcher_listener;
+  std::unique_ptr<PoolWatcher<> > m_remote_pool_watcher;
 
   std::unique_ptr<InstanceReplayer<librbd::ImageCtx>> m_instance_replayer;
 
   std::string m_asok_hook_name;
   AdminSocketHook *m_asok_hook;
 
-  std::set<ImageId> m_init_image_ids;
+  std::map<std::string, ImageIds> m_initial_mirror_image_ids;
 
   class PoolReplayerThread : public Thread {
     PoolReplayer *m_pool_replayer;

@@ -4,6 +4,7 @@ tasks:
     ops: 4000
     objects: 50
     ec_pool: true
+    min_size: 2
     write_append_excl: false
     erasure_code_profile:
       name: isaprofile

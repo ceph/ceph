@@ -12,6 +12,7 @@
 import argparse
 import base64
 import errno
+import json
 import logging
 import os
 import random
@@ -47,11 +48,20 @@ SIZES = [
     (8192, -errno.EFBIG)
 ]
 
+# tests will be randomly selected from the keys here, and the test
+# suboperation will be randomly selected from the list in the values
+# here.  i.e. 'exists/existing' would test that a key the test put into
+# the store earlier actually does still exist in the config store,
+# and that's a separate test case from 'exists/enoent', which tests
+# nonexistence of a key known to not be present.
+
 OPS = {
     'put': ['existing', 'new'],
     'del': ['existing', 'enoent'],
     'exists': ['existing', 'enoent'],
-    'get': ['existing', 'enoent']
+    'get': ['existing', 'enoent'],
+    'list': ['existing', 'enoent'],
+    'dump': ['existing', 'enoent'],
 }
 
 CONFIG_PUT = []  # list: keys
@@ -385,6 +395,67 @@ def main():
                     "wrong size from store for key '{k}': {sz}, expected {es}".format(
                         k=key, sz=cnt, es=CONFIG_EXISTING[key])
                 destroy_tmp_file(file_path)
+            continue
+
+        elif op == 'list' or op == 'dump':
+            expected = 0
+            cmd = [op]
+            key = None
+
+            if sop == 'existing':
+                if len(CONFIG_EXISTING) == 0:
+                    op_log.debug('no existing keys; continue')
+                    continue
+                key = rnd.choice(CONFIG_PUT)
+                assert key in CONFIG_EXISTING, \
+                    "key '{k_}' not in CONFIG_EXISTING".format(k_=key)
+
+            if sop == 'enoent':
+                for x in range(0, 10):
+                    key = base64.b64encode(os.urandom(20)).decode()
+                    if key not in CONFIG_EXISTING:
+                        break
+                    key = None
+                if key is None:
+                    op_log.error('unable to generate an unique key -- try again later.')
+                    continue
+                assert key not in CONFIG_PUT and key not in CONFIG_EXISTING, \
+                    'key {k} was not supposed to exist!'.format(k=key)
+
+            assert key is not None, \
+                'key must be != None'
+
+            file_path = gen_tmp_file_path(rnd)
+            cmd += ['-o', file_path]
+            op_log.debug('key: {k}'.format(k=key))
+            run_cmd(cmd, expects=expected)
+            try:
+                temp_file = open(file_path, 'r+')
+            except IOError as err:
+                if err.errno == errno.ENOENT:
+                    assert CONFIG_EXISTING[key] == 0, \
+                        "error opening '{fp}': {e}".format(fp=file_path, e=err)
+                    continue
+                else:
+                    assert False, \
+                        'some error occurred: {e}'.format(e=err)
+            cnt = 0
+            try:
+                read_data = json.load(temp_file)
+            except ValueError:
+                temp_file.seek(0)
+                assert False, "{op} output was not valid JSON:\n{filedata}".format(op, temp_file.readlines())
+
+            if sop == 'existing':
+                assert key in read_data, "key '{k}' not found in list/dump output".format(k=key)
+                if op == 'dump':
+                    cnt = len(read_data[key])
+                    assert cnt == CONFIG_EXISTING[key], \
+                        "wrong size from list for key '{k}': {sz}, expected {es}".format(
+                        k=key, sz=cnt, es=CONFIG_EXISTING[key])
+            elif sop == 'enoent':
+                assert key not in read_data, "key '{k}' found in list/dump output".format(k=key)
+            destroy_tmp_file(file_path)
             continue
         else:
             assert False, 'unknown op {o}'.format(o=op)

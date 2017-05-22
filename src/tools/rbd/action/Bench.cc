@@ -314,10 +314,10 @@ void add_bench_common_options(po::options_description *positional,
   at::add_image_spec_options(positional, options, at::ARGUMENT_MODIFIER_NONE);
 
   options->add_options()
-    ("io-size", po::value<Size>(), "IO size (in B/K/M/G/T)")
-    ("io-threads", po::value<uint32_t>(), "ios in flight")
-    ("io-total", po::value<Size>(), "total size for IO (in B/K/M/G/T)")
-    ("io-pattern", po::value<IOPattern>(), "IO pattern (rand or seq)");
+    ("io-size", po::value<Size>(), "IO size (in B/K/M/G/T) [default: 4K]")
+    ("io-threads", po::value<uint32_t>(), "ios in flight [default: 16]")
+    ("io-total", po::value<Size>(), "total size for IO (in B/K/M/G/T) [default: 1G]")
+    ("io-pattern", po::value<IOPattern>(), "IO pattern (rand or seq) [default: seq]");
 }
 
 void get_arguments_for_write(po::options_description *positional,

@@ -49,11 +49,14 @@ extern int rgw_bucket_delete_bucket_obj(RGWRados *store,
 extern int rgw_bucket_sync_user_stats(RGWRados *store, const rgw_user& user_id, const RGWBucketInfo& bucket_info);
 extern int rgw_bucket_sync_user_stats(RGWRados *store, const string& tenant_name, const string& bucket_name);
 
-extern void rgw_make_bucket_entry_name(const string& tenant_name,
-                                       const string& bucket_name,
-                                       string& bucket_entry);
-extern string rgw_make_bucket_entry_name(const string& tenant_name,
-                                       const string& bucket_name);
+extern std::string rgw_make_bucket_entry_name(const std::string& tenant_name,
+                                              const std::string& bucket_name);
+static inline void rgw_make_bucket_entry_name(const string& tenant_name,
+                                              const string& bucket_name,
+                                              std::string& bucket_entry) {
+  bucket_entry = rgw_make_bucket_entry_name(tenant_name, bucket_name);
+}
+
 extern void rgw_parse_url_bucket(const string& bucket,
                                  const string& auth_tenant,
                                  string &tenant_name, string &bucket_name);
@@ -401,7 +404,7 @@ class RGWDataChangesLog {
   RWLock modified_lock;
   map<int, set<string> > modified_shards;
 
-  atomic_t down_flag;
+  std::atomic<bool> down_flag = { false };
 
   struct ChangeStatus {
     real_time cur_expiration;

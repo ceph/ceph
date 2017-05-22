@@ -23,7 +23,7 @@
 class MOSDBoot : public PaxosServiceMessage {
 
   static const int HEAD_VERSION = 6;
-  static const int COMPAT_VERSION = 2;
+  static const int COMPAT_VERSION = 6;
 
  public:
   OSDSuperblock sb;
@@ -77,18 +77,11 @@ public:
     paxos_decode(p);
     ::decode(sb, p);
     ::decode(hb_back_addr, p);
-    if (header.version >= 2)
-      ::decode(cluster_addr, p);
-    if (header.version >= 3)
-      ::decode(boot_epoch, p);
-    if (header.version >= 4)
-      ::decode(hb_front_addr, p);
-    if (header.version >= 5)
-      ::decode(metadata, p);
-    if (header.version >= 6)
-      ::decode(osd_features, p);
-    else
-      osd_features = 0;
+    ::decode(cluster_addr, p);
+    ::decode(boot_epoch, p);
+    ::decode(hb_front_addr, p);
+    ::decode(metadata, p);
+    ::decode(osd_features, p);
   }
 };
 
