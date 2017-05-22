@@ -43,18 +43,20 @@ namespace rgw {
   ceph::timer<ceph::mono_clock> RGWLibFS::write_timer{
     ceph::construct_suspended};
 
-  LookupFHResult RGWLibFS::stat_bucket(RGWFileHandle* parent,
-				       const char *path, uint32_t flags)
+  LookupFHResult RGWLibFS::stat_bucket(RGWFileHandle* parent, const char *path,
+				       RGWLibFS::BucketStats& bs,
+				       uint32_t flags)
   {
     LookupFHResult fhr{nullptr, 0};
     std::string bucket_name{path};
-    RGWStatBucketRequest req(cct, get_user(), bucket_name);
+    RGWStatBucketRequest req(cct, get_user(), bucket_name, bs);
 
     int rc = rgwlib.get_fe()->execute_req(&req);
     if ((rc == 0) &&
 	(req.get_ret() == 0) &&
 	(req.matched())) {
       fhr = lookup_fh(parent, path,
+		      (flags & RGWFileHandle::FLAG_LOCKED)|
 		      RGWFileHandle::FLAG_CREATE|
 		      RGWFileHandle::FLAG_BUCKET);
       if (get<0>(fhr)) {
@@ -224,7 +226,9 @@ namespace rgw {
   int RGWLibFS::unlink(RGWFileHandle* rgw_fh, const char* name, uint32_t flags)
   {
     int rc = 0;
+    BucketStats bs;
     RGWFileHandle* parent = nullptr;
+    RGWFileHandle* bkt_fh = nullptr;
 
     if (unlikely(flags & RGWFileHandle::FLAG_UNLINK_THIS)) {
       /* LOCKED */
@@ -238,6 +242,28 @@ namespace rgw {
     }
 
     if (parent->is_root()) {
+      /* a bucket may have an object storing Unix attributes, check
+       * for and delete it */
+      LookupFHResult fhr;
+      fhr = stat_bucket(parent, name, bs, RGWFileHandle::FLAG_LOCKED);
+      bkt_fh = get<0>(fhr);
+      if (unlikely(! bkt_fh)) {
+	/* implies !rgw_fh, so also !LOCKED */
+	return -ENOENT;
+      }
+
+      if (bs.num_entries > 1) {
+	unref(bkt_fh); /* return extra ref */
+	return -ENOTEMPTY;
+      } else {
+	/* delete object w/key "<bucket>/" (uxattrs), if any */
+	string oname{"/"};
+	RGWDeleteObjRequest req(cct, get_user(), bkt_fh->bucket_name(), oname);
+	rc = rgwlib.get_fe()->execute_req(&req);
+	/* don't care if ENOENT */
+	unref(bkt_fh);
+      }
+
       /* XXXX remove uri and deal with bucket and object names */
       string uri = "/";
       uri += name;
@@ -1490,7 +1516,8 @@ int rgw_lookup(struct rgw_fs *rgw_fs,
 		 (strcmp(path, "/") == 0))) {
       rgw_fh = parent;
     } else {
-      fhr = fs->stat_bucket(parent, path, RGWFileHandle::FLAG_NONE);
+      RGWLibFS::BucketStats bstat;
+      fhr = fs->stat_bucket(parent, path, bstat, RGWFileHandle::FLAG_NONE);
       rgw_fh = get<0>(fhr);
       if (! rgw_fh)
 	return -ENOENT;
