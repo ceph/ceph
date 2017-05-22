@@ -37,6 +37,7 @@ public class CephStat {
   public long blocks;
   public long a_time;
   public long m_time;
+  public long inode;
 
   public boolean isFile() {
     return is_file;
