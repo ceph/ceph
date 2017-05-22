@@ -187,7 +187,7 @@ private:
    * @remarks We only create a pending state we our Monitor is the Leader.
    *
    * @pre Paxos is active
-   * @post have_pending is true iif our Monitor is the Leader and Paxos is
+   * @post have_pending is true if our Monitor is the Leader and Paxos is
    *	   active
    */
   void _active();
