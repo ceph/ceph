@@ -149,9 +149,19 @@ struct bluestore_pextent_t : public AllocExtent {
     return offset != INVALID_OFFSET;
   }
 
-  DENC(bluestore_pextent_t, v, p) {
-    denc_lba(v.offset, p);
-    denc_varint_lowz(v.length, p);
+  void bound_encode(size_t& p) const {
+    denc_lba(decltype(offset){}, p);
+    denc_varint_lowz(decltype(length){}, p);
+  }
+
+  void encode(bufferlist::contiguous_appender& p) const {
+    denc_lba(offset, p);
+    denc_varint_lowz(length, p);
+  }
+
+  void decode(bufferptr::iterator& p) {
+    denc_lba(offset, p);
+    denc_varint_lowz(length, p);
   }
 
   void dump(Formatter *f) const;
@@ -202,9 +212,20 @@ struct bluestore_extent_ref_map_t {
     uint32_t length;
     uint32_t refs;
     record_t(uint32_t l=0, uint32_t r=0) : length(l), refs(r) {}
-    DENC(bluestore_extent_ref_map_t::record_t, v, p) {
-      denc_varint_lowz(v.length, p);
-      denc_varint(v.refs, p);
+
+    void bound_encode(size_t& p) const {
+      denc_varint_lowz(decltype(length){}, p);
+      denc_varint(decltype(refs){}, p);
+    }
+
+    void encode(bufferlist::contiguous_appender& p) const {
+      denc_varint_lowz(length, p);
+      denc_varint(refs, p);
+    }
+
+    void decode(bufferptr::iterator& p) {
+      denc_varint_lowz(length, p);
+      denc_varint(refs, p);
     }
   };
 
