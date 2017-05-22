@@ -140,7 +140,6 @@ BuildRequires:	xfsprogs
 BuildRequires:	xfsprogs-devel
 BuildRequires:	xmlstarlet
 BuildRequires:	yasm
-BuildRequires:	libibverbs-devel
 
 #################################################################################
 # distro-conditional dependencies
@@ -161,6 +160,7 @@ BuildRequires:  lsb-release
 BuildRequires:  openldap2-devel
 BuildRequires:	python-Cython
 BuildRequires:	python-Sphinx
+BuildRequires:  rdma-core-devel
 %endif
 %if 0%{?fedora} || 0%{?rhel} 
 Requires:	systemd
@@ -168,6 +168,7 @@ BuildRequires:  boost-random
 BuildRequires:	btrfs-progs
 BuildRequires:	nss-devel
 BuildRequires:	keyutils-libs-devel
+BuildRequires:	libibverbs-devel
 BuildRequires:  openldap-devel
 BuildRequires:  openssl-devel
 BuildRequires:  redhat-lsb-core
