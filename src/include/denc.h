@@ -212,35 +212,43 @@ struct denc_traits {
 
 // ---------------------------------------------------------------------
 // raw types
+namespace _denc {
+  template<class T, class...> struct is_any_of : std::false_type
+  {};
+  template<class T, class Head, class... Tail>
+  struct is_any_of<T, Head, Tail...> : std::conditional<
+    std::is_same<T, Head>::value,
+    std::true_type,
+    is_any_of<T, Tail...>>::type
+  {};
+}
 
-#define WRITE_RAW_DENC(type)						\
-  template<>								\
-  struct denc_traits<type> {						\
-    static constexpr bool supported = true;				\
-    static constexpr bool featured = false;				\
-    static constexpr bool bounded = true;				\
-    static void bound_encode(const type &o, size_t& p, uint64_t f=0) {	\
-      p += sizeof(type);						\
-    }									\
-    static void encode(const type &o,					\
-		       buffer::list::contiguous_appender& p,		\
-		       uint64_t f=0) {					\
-      p.append((const char*)&o, sizeof(o));				\
-    }									\
-    static void decode(type& o, buffer::ptr::iterator &p,		\
-		       uint64_t f=0) {					\
-      o = *(type *)p.get_pos_add(sizeof(o));				\
-    }									\
-  };
 
-WRITE_RAW_DENC(ceph_le64)
-WRITE_RAW_DENC(ceph_le32)
-WRITE_RAW_DENC(ceph_le16)
-WRITE_RAW_DENC(uint8_t);
+template<typename T>
+struct denc_traits<
+  T,
+  typename std::enable_if<
+    _denc::is_any_of<T, ceph_le64, ceph_le32, ceph_le16, uint8_t
 #ifndef _CHAR_IS_SIGNED
-WRITE_RAW_DENC(int8_t);
+		     , int8_t
 #endif
-
+		     >::value>::type> {
+  static constexpr bool supported = true;
+  static constexpr bool featured = false;
+  static constexpr bool bounded = true;
+  static void bound_encode(const T &o, size_t& p, uint64_t f=0) {
+    p += sizeof(T);
+  }
+  static void encode(const T &o,
+		     buffer::list::contiguous_appender& p,
+		     uint64_t f=0) {
+    p.append((const char*)&o, sizeof(o));
+  }
+  static void decode(T& o, buffer::ptr::iterator &p,
+		     uint64_t f=0) {
+    o = *(T *)p.get_pos_add(sizeof(o));
+  }
+};
 
 
 // -----------------------------------------------------------------------
@@ -254,34 +262,59 @@ WRITE_RAW_DENC(int8_t);
 // template, and hence get selected. This machinary prevents these these from
 // getting glued into the legacy encode/decode methods; the overhead of setting
 // up a contiguous_appender etc is likely to be slower.
+namespace _denc {
 
-#define WRITE_INT_DENC(itype, etype)					\
-  template<>								\
-  struct denc_traits<itype> {						\
-    static constexpr bool supported = true;				\
-    static constexpr bool featured = false;				\
-    static constexpr bool bounded = true;				\
-    static void bound_encode(const itype &o, size_t& p, uint64_t f=0) {	\
-      p += sizeof(etype);						\
-    }									\
-    static void encode(const itype &o, buffer::list::contiguous_appender& p, \
-		       uint64_t f=0) {					\
-      *(etype *)p.get_pos_add(sizeof(etype)) = o;			\
-    }									\
-    static void decode(itype& o, buffer::ptr::iterator &p,		\
-		       uint64_t f=0) {					\
-      o = *(etype*)p.get_pos_add(sizeof(etype));			\
-    }									\
-  };
+template<typename T, typename=void> struct ExtType {
+  using type = void;
+};
 
-WRITE_INT_DENC(uint16_t, __le16);
-WRITE_INT_DENC(int16_t, __le16);
-WRITE_INT_DENC(uint32_t, __le32);
-WRITE_INT_DENC(int32_t, __le32);
-WRITE_INT_DENC(uint64_t, __le64);
-WRITE_INT_DENC(int64_t, __le64);
-WRITE_INT_DENC(bool, uint8_t);
+template<typename T> struct ExtType<
+  T,
+  typename std::enable_if<std::is_same<T, int16_t>::value ||
+			  std::is_same<T, uint16_t>::value>::type> {
+  using type = __le16;
+};
 
+template<typename T> struct ExtType<
+  T,
+  typename std::enable_if<std::is_same<T, int32_t>::value ||
+			  std::is_same<T, uint32_t>::value>::type> {
+  using type = __le32;
+};
+
+template<typename T> struct ExtType<
+  T,
+  typename std::enable_if<std::is_same<T, int64_t>::value ||
+			  std::is_same<T, uint64_t>::value>::type> {
+  using type = __le64;
+};
+
+template<> struct ExtType<bool> {
+  using type = uint8_t;
+};
+} // namespace _denc
+
+template<typename T>
+struct denc_traits<
+  T,
+  typename std::enable_if<!std::is_void<typename _denc::ExtType<T>::type>::value>::type>
+{
+  static constexpr bool supported = true;
+  static constexpr bool featured = false;
+  static constexpr bool bounded = true;
+  using etype = typename _denc::ExtType<T>::type;
+  static void bound_encode(const T &o, size_t& p, uint64_t f=0) {
+    p += sizeof(etype);
+  }
+  static void encode(const T &o, buffer::list::contiguous_appender& p,
+		     uint64_t f=0) {
+    *(etype *)p.get_pos_add(sizeof(etype)) = o;
+  }
+  static void decode(T& o, buffer::ptr::iterator &p,
+		     uint64_t f=0) {
+    o = *(etype*)p.get_pos_add(sizeof(etype));
+  }
+};
 
 // varint
 //
