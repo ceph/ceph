@@ -38,3 +38,14 @@ tasks:
         mkdir /mnt/log/stack
         chmod a+rwx /mnt/log/stack
         chown -R stack:stack /mnt/log/stack
+
+        apt-get install -y ceph-common librbd1
+
+        mkdir /mnt/log/stack/ceph
+        chown -R stack:stack /mnt/log/stack/ceph
+        chmod a+rwx /mnt/log/stack/ceph
+
+        # sanity check that the cluster is reachable from the VM
+        echo '[client]' >> /etc/ceph/ceph.conf
+        echo 'log file = /mnt/log/stack/ceph/$name.$pid.log' >> /etc/ceph/ceph.conf
+        rbd --debug-ms=10 --debug-rbd=20 info client.0.1
