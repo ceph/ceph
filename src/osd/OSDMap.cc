@@ -2861,6 +2861,13 @@ void OSDMap::post_decode()
     name_pool[pname.second] = pname.first;
   }
 
+  if (require_osd_release >= CEPH_RELEASE_MIMIC) {
+    assert(osd_addrs->hb_front_addr.empty());
+    assert(osd_addrs->hb_back_addr.empty());
+  } else {
+    assert(osd_addrs->hb_front_addr.size() == osd_addrs->cluster_addr.size());
+    assert(osd_addrs->hb_back_addr.size() == osd_addrs->cluster_addr.size());
+  }
   calc_num_osds();
   _calc_up_osd_features();
 }
