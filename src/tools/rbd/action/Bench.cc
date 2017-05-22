@@ -254,6 +254,9 @@ int do_bench(librbd::Image& image, io_type_t io_type,
     b.wait_for(io_threads - 1);
     i = 0;
     while (i < io_threads && off < io_bytes) {
+      if (!b.start_io(io_threads, thread_offset[i], io_size, op_flags)) {
+        break;
+      }
       if (random) {
         thread_offset[i] = (rand() % (size / io_size)) * io_size;
       } else {
@@ -261,10 +264,6 @@ int do_bench(librbd::Image& image, io_type_t io_type,
         if (thread_offset[i] + io_size > size)
           thread_offset[i] = 0;
       }
-
-      if (!b.start_io(io_threads, thread_offset[i], io_size, op_flags))
-        break;
-
       ++i;
       ++ios;
       off += io_size;
