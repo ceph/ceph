@@ -189,7 +189,7 @@ in the registry. The `ErasureCodePluginExample <https://github.com/ceph/ceph/blo
 
 The *ErasureCodePlugin* derived object must provide a factory method
 from which the concrete implementation of the *ErasureCodeInterface*
-object can be generated. The `ErasureCodePluginExample plugin <https://github.com/ceph/ceph/blob/v0.78/src/test/osd/ErasureCodePluginExample.cc>`_ reads:
+object can be generated. The `ErasureCodePluginExample plugin <https://github.com/ceph/ceph/blob/v0.78/src/test/erasure-code/ErasureCodePluginExample.cc>`_ reads:
 
 ::
  
