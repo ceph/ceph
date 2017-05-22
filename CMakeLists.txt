@@ -425,7 +425,17 @@ find_package(ZLIB REQUIRED)
 option(WITH_EVENTTRACE "Event tracing support" OFF)
 
 #option for LTTng
-option(WITH_LTTNG "LTTng tracing is enabled" ON)
+execute_process(COMMAND "source /etc/os_release; test $ID = opensuse"
+    TIMEOUT 2
+    RESULT_VARIABLE IS_OPENSUSE
+    ERROR_QUIET
+    )
+if(IS_OPENSUSE)
+  option(WITH_LTTNG "LTTng tracing is disabled" OFF)
+  message(STATUS "Opensuse detected...setting lttng default to off")
+else(IS_OPENSUSE)
+  option(WITH_LTTNG "LTTng tracing is enabled" ON)
+endif(IS_OPENSUSE)
 if(${WITH_LTTNG})
   find_package(LTTngUST REQUIRED)
   find_program(LTTNG_GEN_TP
