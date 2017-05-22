@@ -256,6 +256,8 @@ OSDService::OSDService(OSD *osd) :
   next_notif_id(0),
   recovery_request_lock("OSDService::recovery_request_lock"),
   recovery_request_timer(cct, recovery_request_lock, false),
+  recovery_sleep_lock("OSDService::recovery_sleep_lock"),
+  recovery_sleep_timer(cct, recovery_sleep_lock, false),
   reserver_finisher(cct),
   local_reserver(&reserver_finisher, cct->_conf->osd_max_backfills,
 		 cct->_conf->osd_min_recovery_priority),
@@ -496,6 +498,11 @@ void OSDService::shutdown()
   {
     Mutex::Locker l(recovery_request_lock);
     recovery_request_timer.shutdown();
+  }
+
+  {
+    Mutex::Locker l(recovery_sleep_lock);
+    recovery_sleep_timer.shutdown();
   }
 
   {
@@ -2225,6 +2232,7 @@ int OSD::init()
   tick_timer.init();
   tick_timer_without_osd_lock.init();
   service.recovery_request_timer.init();
+  service.recovery_sleep_timer.init();
 
   // mount.
   dout(2) << "mounting " << dev_path << " "
@@ -8881,18 +8889,35 @@ void OSD::do_recovery(
   ThreadPool::TPHandle &handle)
 {
   uint64_t started = 0;
-  if (cct->_conf->osd_recovery_sleep > 0) {
-    handle.suspend_tp_timeout();
-    pg->unlock();
-    utime_t t;
-    t.set_from_double(cct->_conf->osd_recovery_sleep);
-    t.sleep();
-    dout(20) << __func__ << " slept for " << t << dendl;
-    pg->lock();
-    handle.reset_tp_timeout();
+  if (cct->_conf->osd_recovery_sleep > 0 && service.recovery_needs_sleep) {
+    auto recovery_requeue_callback = new FunctionContext([this, pg](int r) {
+      pg->lock();
+      dout(20) << "do_recovery wake up at "
+               << ceph_clock_now()
+	       << ", re-queuing recovery" << dendl;
+      service.recovery_needs_sleep = false;
+      pg->recovery_queued = false;
+      pg->queue_recovery();
+      pg->unlock();
+    });
+    Mutex::Locker l(service.recovery_sleep_lock);
+
+    // This is true for the first recovery op and when the previous recovery op
+    // has been scheduled in the past. The next recovery op is scheduled after
+    // completing the sleep from now.
+    if (service.recovery_schedule_time < ceph_clock_now()) {
+      service.recovery_schedule_time = ceph_clock_now();
+    }
+    service.recovery_schedule_time += cct->_conf->osd_recovery_sleep;
+    service.recovery_sleep_timer.add_event_at(service.recovery_schedule_time,
+	                                      recovery_requeue_callback);
+    dout(20) << "Recovery event scheduled at "
+             << service.recovery_schedule_time << dendl;
+    return;
   }
 
   {
+    service.recovery_needs_sleep = true;
     if (pg->pg_has_reset_since(queued)) {
       goto out;
     }

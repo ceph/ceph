@@ -923,6 +923,13 @@ public:
   Mutex recovery_request_lock;
   SafeTimer recovery_request_timer;
 
+  // For async recovery sleep
+  bool recovery_needs_sleep = true;
+  utime_t recovery_schedule_time = utime_t();
+
+  Mutex recovery_sleep_lock;
+  SafeTimer recovery_sleep_timer;
+
   // -- tids --
   // for ops i issue
   std::atomic_uint last_tid{0};
