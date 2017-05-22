@@ -1120,13 +1120,15 @@ bool MDSMonitor::fail_mds_gid(mds_gid_t gid)
 
 mds_gid_t MDSMonitor::gid_from_arg(const std::string& arg, std::ostream &ss)
 {
+  const FSMap *relevant_fsmap = mon->is_leader() ? &pending_fsmap : &fsmap;
+
   // Try parsing as a role
   mds_role_t role;
   std::ostringstream ignore_err;  // Don't spam 'ss' with parse_role errors
   int r = parse_role(arg, &role, ignore_err);
   if (r == 0) {
     // See if a GID is assigned to this role
-    auto fs = pending_fsmap.get_filesystem(role.fscid);
+    auto fs = relevant_fsmap->get_filesystem(role.fscid);
     assert(fs != nullptr);  // parse_role ensures it exists
     if (fs->mds_map.is_up(role.rank)) {
       dout(10) << __func__ << ": validated rank/GID " << role
@@ -1140,7 +1142,7 @@ mds_gid_t MDSMonitor::gid_from_arg(const std::string& arg, std::ostream &ss)
   unsigned long long maybe_gid = strict_strtoll(arg.c_str(), 10, &err);
   if (!err.empty()) {
     // Not a role or a GID, try as a daemon name
-    const MDSMap::mds_info_t *mds_info = fsmap.find_by_name(arg);
+    const MDSMap::mds_info_t *mds_info = relevant_fsmap->find_by_name(arg);
     if (!mds_info) {
       ss << "MDS named '" << arg
 	 << "' does not exist, or is not up";
@@ -1153,14 +1155,9 @@ mds_gid_t MDSMonitor::gid_from_arg(const std::string& arg, std::ostream &ss)
     // Not a role, but parses as a an integer, might be a GID
     dout(10) << __func__ << ": treating MDS reference '" << arg
 	     << "' as an integer " << maybe_gid << dendl;
-    if (mon->is_leader()) {
-      if (pending_fsmap.gid_exists(mds_gid_t(maybe_gid))) {
-        return mds_gid_t(maybe_gid);
-      }
-    } else {
-      if (fsmap.gid_exists(mds_gid_t(maybe_gid))) {
-        return mds_gid_t(maybe_gid);
-      }
+
+    if (relevant_fsmap->gid_exists(mds_gid_t(maybe_gid))) {
+      return mds_gid_t(maybe_gid);
     }
   }
 
