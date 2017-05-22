@@ -1105,6 +1105,9 @@ static void dump_object_metadata(struct req_state * const s,
 
     if (aiter != std::end(rgw_to_http_attrs)) {
       response_attrs[aiter->second] = kv.second.c_str();
+    } else if (strcmp(name, RGW_ATTR_SLO_UINDICATOR) == 0) {
+      // this attr has an extra length prefix from ::encode() in prior versions
+      dump_header(s, "X-Object-Meta-Static-Large-Object", "True");
     } else if (strncmp(name, RGW_ATTR_META_PREFIX,
 		       sizeof(RGW_ATTR_META_PREFIX)-1) == 0) {
       name += sizeof(RGW_ATTR_META_PREFIX) - 1;
@@ -1976,7 +1979,7 @@ void RGWFormPost::send_response()
   }
 
   set_req_state_err(s, op_ret);
-  s->err.s3_code = err_msg;
+  s->err.err_code = err_msg;
   dump_errno(s);
   if (! redirect.empty()) {
     dump_redirect(s, redirect);

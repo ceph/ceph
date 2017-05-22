@@ -152,6 +152,7 @@ BuildRequires:	keyutils-devel
 BuildRequires:  libopenssl-devel
 BuildRequires:  lsb-release
 BuildRequires:  openldap2-devel
+BuildRequires:	python-CherryPy
 BuildRequires:	python-Cython
 BuildRequires:	python-Sphinx
 %endif
@@ -165,6 +166,7 @@ BuildRequires:  openldap-devel
 BuildRequires:  openssl-devel
 BuildRequires:  redhat-lsb-core
 BuildRequires:	Cython
+BuildRequires:	python-cherrypy
 BuildRequires:	python-sphinx
 %endif
 # python34-... for RHEL, python3-... for all other supported distros
@@ -309,6 +311,12 @@ License:        LGPL-2.1 and CC-BY-SA-1.0 and GPL-2.0 and BSL-1.0 and GPL-2.0-wi
 Group:          System/Filesystems
 %endif
 Requires:       ceph-base = %{epoch}:%{version}-%{release}
+%if 0%{?fedora} || 0%{?rhel}
+Requires:      python-cherrypy
+%endif
+%if 0%{?suse_version}
+Requires: 	python-CherryPy
+%endif
 
 %description mgr
 ceph-mgr enables python modules that provide services (such as the REST
@@ -951,7 +959,6 @@ rm -rf %{buildroot}
 %{_libdir}/libos_tp.so*
 %{_libdir}/libosd_tp.so*
 %endif
-%config %{_sysconfdir}/bash_completion.d/ceph
 %config(noreplace) %{_sysconfdir}/logrotate.d/ceph
 %if 0%{?fedora} || 0%{?rhel}
 %config(noreplace) %{_sysconfdir}/sysconfig/ceph
@@ -1059,6 +1066,7 @@ DISABLE_RESTART_ON_UPDATE="yes"
 %{_datadir}/ceph/id_rsa_drop.ceph.com
 %{_datadir}/ceph/id_rsa_drop.ceph.com.pub
 %dir %{_sysconfdir}/ceph/
+%config %{_sysconfdir}/bash_completion.d/ceph
 %config %{_sysconfdir}/bash_completion.d/rados
 %config %{_sysconfdir}/bash_completion.d/rbd
 %config %{_sysconfdir}/bash_completion.d/radosgw-admin

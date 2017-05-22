@@ -1818,11 +1818,6 @@ Special Error Responses
 :Description: User does not possess specified capability.
 :Code: 404 Not Found
 
-Special Error Responses
-~~~~~~~~~~~~~~~~~~~~~~~
-
-None.
-
 
 Quotas
 ======

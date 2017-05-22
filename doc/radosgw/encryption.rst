@@ -25,7 +25,7 @@ Key Management Service
 ======================
 
 This mode allows keys to be stored in a secure key management service and
-retrieved on demand by the Ceph Object Gateway to service requests to encrypt
+retrieved on demand by the Ceph Object Gateway to serve requests to encrypt
 or decrypt data.
 
 This is implemented in S3 according to the `Amazon SSE-KMS`_ specification.
