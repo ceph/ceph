@@ -265,6 +265,9 @@ OSDService::OSDService(OSD *osd) :
   snap_sleep_lock("OSDService::snap_sleep_lock"),
   snap_sleep_timer(
     osd->client_messenger->cct, snap_sleep_lock, false /* relax locking */),
+  scrub_sleep_lock("OSDService::scrub_sleep_lock"),
+  scrub_sleep_timer(
+    osd->client_messenger->cct, scrub_sleep_lock, false /* relax locking */),
   snap_reserver(&reserver_finisher,
 		cct->_conf->osd_max_trimming_pgs),
   recovery_lock("OSDService::recovery_lock"),
@@ -503,6 +506,11 @@ void OSDService::shutdown()
     snap_sleep_timer.shutdown();
   }
 
+  {
+    Mutex::Locker l(scrub_sleep_lock);
+    scrub_sleep_timer.shutdown();
+  }
+
   osdmap = OSDMapRef();
   next_osdmap = OSDMapRef();
 }
@@ -519,6 +527,7 @@ void OSDService::init()
   watch_timer.init();
   agent_timer.init();
   snap_sleep_timer.init();
+  scrub_sleep_timer.init();
 
   agent_thread.create("osd_srv_agent");
 
@@ -3642,6 +3651,11 @@ PG *OSD::_lookup_lock_pg(spg_t pgid)
   PG *pg = pg_map_entry->second;
   pg->lock();
   return pg;
+}
+
+PG *OSD::lookup_lock_pg(spg_t pgid)
+{
+  return _lookup_lock_pg(pgid);
 }
 
 PG *OSD::_lookup_lock_pg_with_map_lock_held(spg_t pgid)

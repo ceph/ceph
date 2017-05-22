@@ -954,6 +954,9 @@ public:
   Mutex snap_sleep_lock;
   SafeTimer snap_sleep_timer;
 
+  Mutex scrub_sleep_lock;
+  SafeTimer scrub_sleep_timer;
+
   AsyncReserver<spg_t> snap_reserver;
   void queue_for_snap_trim(PG *pg);
 
@@ -2033,6 +2036,11 @@ protected:
 
   PG   *_lookup_lock_pg_with_map_lock_held(spg_t pgid);
   PG   *_lookup_lock_pg(spg_t pgid);
+
+public:
+  PG   *lookup_lock_pg(spg_t pgid);
+
+protected:
   PG   *_open_lock_pg(OSDMapRef createmap,
 		      spg_t pg, bool no_lockdep_check=false);
   enum res_result {
