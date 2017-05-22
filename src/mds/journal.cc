@@ -549,6 +549,7 @@ void EMetaBlob::fullbit::update_inode(MDSRank *mds, CInode *in)
 {
   in->inode = inode;
   in->xattrs = xattrs;
+  in->maybe_export_pin();
   if (in->inode.is_dir()) {
     if (!(in->dirfragtree == dirfragtree)) {
       dout(10) << "EMetaBlob::fullbit::update_inode dft " << in->dirfragtree << " -> "
