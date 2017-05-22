@@ -323,13 +323,6 @@ namespace rgw {
     fh_cache.remove(rgw_fh->fh.fh_hk.object, rgw_fh,
 		    RGWFileHandle::FHCache::FLAG_LOCK);
 
-#if 1 /* XXX verify clear cache */
-    fh_key fhk(rgw_fh->fh.fh_hk);
-    LookupFHResult tfhr = lookup_fh(fhk, RGWFileHandle::FLAG_LOCKED);
-    RGWFileHandle* nfh = get<0>(tfhr);
-    assert(!nfh);
-#endif
-
     if (! rc) {
       real_time t = real_clock::now();
       parent->set_mtime(real_clock::to_timespec(t));
