@@ -12,20 +12,13 @@
  * 
  */
 
-#include <time.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <fcntl.h>
-#include <errno.h>
-#include <pthread.h>
 #include <signal.h>
 
 #include "HeartbeatMap.h"
 #include "ceph_context.h"
 #include "common/errno.h"
-#include "common/valgrind.h"
-
 #include "debug.h"
+
 #define dout_subsys ceph_subsys_heartbeatmap
 #undef dout_prefix
 #define dout_prefix *_dout << "heartbeat_map "
