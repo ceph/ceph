@@ -106,7 +106,7 @@ template <>
 struct BreakRequest<MockManagedLockImageCtx> {
   static BreakRequest* create(librados::IoCtx& ioctx, ContextWQ *work_queue,
                               const std::string& oid, const Locker &locker,
-                              bool blacklist_locker,
+                              bool exclusive, bool blacklist_locker,
                               uint32_t blacklist_expire_seconds,
                               bool force_break_lock, Context *on_finish) {
     assert(0 == "unexpected call");

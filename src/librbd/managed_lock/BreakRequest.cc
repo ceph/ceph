@@ -10,6 +10,7 @@
 #include "cls/lock/cls_lock_types.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/Utils.h"
+#include "librbd/managed_lock/GetLockerRequest.h"
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
@@ -48,12 +49,12 @@ struct C_BlacklistClient : public Context {
 template <typename I>
 BreakRequest<I>::BreakRequest(librados::IoCtx& ioctx, ContextWQ *work_queue,
                               const std::string& oid, const Locker &locker,
-                              bool blacklist_locker,
+                              bool exclusive, bool blacklist_locker,
                               uint32_t blacklist_expire_seconds,
                               bool force_break_lock, Context *on_finish)
   : m_ioctx(ioctx), m_cct(reinterpret_cast<CephContext *>(m_ioctx.cct())),
     m_work_queue(work_queue), m_oid(oid), m_locker(locker),
-    m_blacklist_locker(blacklist_locker),
+    m_exclusive(exclusive), m_blacklist_locker(blacklist_locker),
     m_blacklist_expire_seconds(blacklist_expire_seconds),
     m_force_break_lock(force_break_lock), m_on_finish(on_finish) {
 }
@@ -108,6 +109,43 @@ void BreakRequest<I>::handle_get_watchers(int r) {
   }
 
   if (!m_force_break_lock && found_alive_locker) {
+    finish(-EAGAIN);
+    return;
+  }
+
+  send_get_locker();
+}
+
+template <typename I>
+void BreakRequest<I>::send_get_locker() {
+  ldout(m_cct, 10) << dendl;
+
+  using klass = BreakRequest<I>;
+  Context *ctx = create_context_callback<klass, &klass::handle_get_locker>(
+    this);
+  auto req = GetLockerRequest<I>::create(m_ioctx, m_oid, m_exclusive,
+                                         &m_refreshed_locker, ctx);
+  req->send();
+}
+
+template <typename I>
+void BreakRequest<I>::handle_get_locker(int r) {
+  ldout(m_cct, 10) << "r=" << r << dendl;
+
+  if (r == -ENOENT) {
+    ldout(m_cct, 5) << "no lock owner" << dendl;
+    finish(0);
+    return;
+  } else if (r < 0 && r != -EBUSY) {
+    lderr(m_cct) << "failed to retrieve lockers: " << cpp_strerror(r) << dendl;
+    finish(r);
+    return;
+  } else if (r < 0) {
+    m_refreshed_locker = {};
+  }
+
+  if (m_refreshed_locker != m_locker || m_refreshed_locker == Locker{}) {
+    ldout(m_cct, 5) << "no longer lock owner" << dendl;
     finish(-EAGAIN);
     return;
   }

@@ -4,6 +4,7 @@
 #ifndef CEPH_LIBRBD_WATCHER_H
 #define CEPH_LIBRBD_WATCHER_H
 
+#include "common/AsyncOpTracker.h"
 #include "common/Mutex.h"
 #include "common/RWLock.h"
 #include "include/rados/librados.hpp"
@@ -36,8 +37,12 @@ public:
   virtual ~Watcher();
 
   void register_watch(Context *on_finish);
-  void unregister_watch(Context *on_finish);
+  virtual void unregister_watch(Context *on_finish);
   void flush(Context *on_finish);
+
+  bool notifications_blocked() const;
+  virtual void block_notifies(Context *on_finish);
+  void unblock_notifies();
 
   std::string get_oid() const;
   void set_oid(const string& oid);
@@ -73,6 +78,7 @@ protected:
   uint64_t m_watch_handle;
   watcher::Notifier m_notifier;
   WatchState m_watch_state;
+  AsyncOpTracker m_async_op_tracker;
 
   void send_notify(bufferlist &payload,
                    watcher::NotifyResponse *response = nullptr,
@@ -148,6 +154,8 @@ private:
 
   WatchCtx m_watch_ctx;
   Context *m_unregister_watch_ctx = nullptr;
+
+  uint32_t m_blocked_count = 0;
 
   void handle_register_watch(int r, Context *on_finish);
 
