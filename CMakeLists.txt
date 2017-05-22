@@ -592,7 +592,11 @@ endif()
 set(Boost_USE_MULTITHREADED ON)
 
 # require minimally the bundled version
-find_package(Boost 1.61 COMPONENTS ${BOOST_COMPONENTS} REQUIRED)
+if (FREEBSD)
+  find_package(Boost 1.55 COMPONENTS ${BOOST_COMPONENTS} REQUIRED)
+else()
+  find_package(Boost 1.61 COMPONENTS ${BOOST_COMPONENTS} REQUIRED)
+endif()
 include_directories(SYSTEM ${Boost_INCLUDE_DIRS})
 include_directories(SYSTEM ${PROJECT_BINARY_DIR}/include)
 
