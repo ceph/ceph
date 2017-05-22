@@ -1,7 +1,6 @@
 include_directories(../src)
 include_directories(../support/src)
 include_directories(../sim/src)
-include_directories(${BOOST_INCLUDE_DIR})
 
 set(support_srcs ../sim/src/test_dmclock.cc)
 set(test_srcs
@@ -26,10 +25,7 @@ if (TARGET gtest AND TARGET gtest_main)
     $<TARGET_FILE:gtest_main>)
 else()
   target_link_libraries(dmclock-tests
-    LINK_PRIVATE $<TARGET_FILE:dmclock> pthread ${GTEST_LIBRARY} ${GTEST_MAIN_LIBRARY})
+    LINK_PRIVATE $<TARGET_FILE:dmclock> pthread ${GTEST_LIBRARIES} ${GTEST_MAIN_LIBRARIES})
 endif()
   
 add_dependencies(dmclock-tests dmclock)
-
-add_test(NAME dmclock-tests
-  COMMAND $<TARGET_FILE:dmclock-tests>)
