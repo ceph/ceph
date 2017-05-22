@@ -1,15 +1,6 @@
-set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "../cmake/modules/")
-
-if (NOT(TARGET gtest AND TARGET gtest_main))
-  find_package(gtest REQUIRED)
-  include_directories(${GTEST_INCLUDE_DIRS})
-endif()
-
-find_package(Boost REQUIRED)
+include_directories(${GTEST_INCLUDE_DIRS})
 include_directories(${Boost_INCLUDE_DIRS})
-
 include_directories(../support/src)
-include_directories(${BOOST_INCLUDE_DIR})
 
 set(local_flags "-std=c++11 -Wno-write-strings -Wall -pthread")
 
