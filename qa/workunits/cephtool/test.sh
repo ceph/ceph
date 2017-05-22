@@ -788,7 +788,7 @@ function without_test_dup_command()
 
 function test_mds_tell()
 {
-  FS_NAME=cephfs
+  local FS_NAME=cephfs
   if ! mds_exists ; then
       echo "Skipping test, no MDS found"
       return
@@ -834,7 +834,7 @@ function test_mds_tell()
 
 function test_mon_mds()
 {
-  FS_NAME=cephfs
+  local FS_NAME=cephfs
   remove_all_fs
 
   ceph osd pool create fs_data 10
@@ -2053,7 +2053,7 @@ function test_osd_tell_help_command()
 
 function test_mds_tell_help_command()
 {
-  FS_NAME=cephfs
+  local FS_NAME=cephfs
   if ! mds_exists ; then
       echo "Skipping test, no MDS found"
       return
