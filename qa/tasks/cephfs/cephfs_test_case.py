@@ -193,8 +193,10 @@ class CephFSTestCase(CephTestCase):
         if ls_data is None:
             ls_data = self.fs.mds_asok(['session', 'ls'], mds_id=mds_id)
 
-        self.assertEqual(expected, len(ls_data), "Expected {0} sessions, found {1}".format(
-            expected, len(ls_data)
+        alive_count = len([s for s in ls_data if s['state'] != 'killing'])
+
+        self.assertEqual(expected, alive_count, "Expected {0} sessions, found {1}".format(
+            expected, alive_count
         ))
 
     def assert_session_state(self, client_id,  expected_state):
