@@ -13,9 +13,8 @@ class TestExports(CephFSTestCase):
         for i in range(timeout/pause):
             subtrees = self.fs.mds_asok(["get", "subtrees"], mds_id=status.get_rank(self.fs.id, rank)['name'])
             subtrees = filter(lambda s: s['dir']['path'].startswith('/'), subtrees)
-            log.info(subtrees)
             filtered = sorted([(s['dir']['path'], s['auth_first']) for s in subtrees])
-            log.info(filtered)
+            log.info("%s =?= %s", filtered, test)
             if filtered == test:
                 return subtrees
             time.sleep(pause)
