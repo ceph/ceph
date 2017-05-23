@@ -364,7 +364,6 @@ if(HAVE_RDMA)
     msg/async/rdma/Infiniband.cc
     msg/async/rdma/Device.cc
     msg/async/rdma/RDMAConnectedSocketImpl.cc
-    msg/async/rdma/RDMAConnTCP.cc
     msg/async/rdma/RDMAServerSocketImpl.cc
     msg/async/rdma/RDMAStack.cc)
 endif(HAVE_RDMA)
