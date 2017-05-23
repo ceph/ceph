@@ -250,7 +250,7 @@ Client::Client(Messenger *m, MonClient *mc, Objecter *objecter_)
     whoami(mc->get_global_id()), cap_epoch_barrier(0),
     last_tid(0), oldest_tid(0), last_flush_tid(1),
     initialized(false),
-    mounted(false), unmounting(false),
+    mounted(false), unmounting(false), blacklisted(false),
     local_osd(-1), local_osd_epoch(0),
     unsafe_sync_write(0),
     client_lock("Client::client_lock")
@@ -293,6 +293,7 @@ Client::Client(Messenger *m, MonClient *mc, Objecter *objecter_)
 				  true));
   objecter_finisher.start();
   filer.reset(new Filer(objecter, &objecter_finisher));
+  objecter->enable_blacklist_events();
 }
 
 
@@ -300,7 +301,12 @@ Client::~Client()
 {
   assert(!client_lock.is_locked());
 
+  // It is necessary to hold client_lock, because any inode destruction
+  // may call into ObjectCacher, which asserts that it's lock (which is
+  // client_lock) is held.
+  client_lock.Lock();
   tear_down_cache();
+  client_lock.Unlock();
 }
 
 void Client::tear_down_cache()
@@ -1649,6 +1655,11 @@ int Client::make_request(MetaRequest *request,
     if (request->aborted())
       break;
 
+    if (blacklisted) {
+      request->abort(-EBLACKLISTED);
+      break;
+    }
+
     // set up wait cond
     Cond caller_cond;
     request->caller_cond = &caller_cond;
@@ -2398,6 +2409,51 @@ void Client::_handle_full_flag(int64_t pool)
 
 void Client::handle_osd_map(MOSDMap *m)
 {
+  std::set<entity_addr_t> new_blacklists;
+  objecter->consume_blacklist_events(&new_blacklists);
+
+  const auto myaddr = messenger->get_myaddr();
+  if (!blacklisted && new_blacklists.count(myaddr)) {
+    auto epoch = objecter->with_osdmap([](const OSDMap &o){
+        return o.get_epoch();
+        });
+    lderr(cct) << "I was blacklisted at osd epoch " << epoch << dendl;
+    blacklisted = true;
+    for (std::map<ceph_tid_t, MetaRequest*>::iterator p = mds_requests.begin();
+         p != mds_requests.end(); ) {
+      auto req = p->second;
+      ++p;
+      req->abort(-EBLACKLISTED);
+      if (req->caller_cond) {
+	req->kick = true;
+	req->caller_cond->Signal();
+      }
+    }
+
+    // Progress aborts on any requests that were on this waitlist.  Any
+    // requests that were on a waiting_for_open session waitlist
+    // will get kicked during close session below.
+    signal_cond_list(waiting_for_mdsmap);
+
+    // Force-close all sessions: assume this is not abandoning any state
+    // on the MDS side because the MDS will have seen the blacklist too.
+    while(!mds_sessions.empty()) {
+      auto i = mds_sessions.begin();
+      auto session = i->second;
+      _closed_mds_session(session);
+    }
+
+    // Since we know all our OSD ops will fail, cancel them all preemtively,
+    // so that on an unhealthy cluster we can umount promptly even if e.g.
+    // some PGs were inaccessible.
+    objecter->op_cancel_writes(-EBLACKLISTED);
+
+  } else if (blacklisted) {
+    // Handle case where we were blacklisted but no longer are
+    blacklisted = objecter->with_osdmap([myaddr](const OSDMap &o){
+        return o.is_blacklisted(myaddr);});
+  }
+
   if (objecter->osdmap_full_flag()) {
     _handle_full_flag(-1);
   } else {
@@ -5763,6 +5819,23 @@ void Client::unmount()
   }
 
   _ll_drop_pins();
+
+  if (blacklisted) {
+    ldout(cct, 0) << " skipping clean shutdown, we are blacklisted" << dendl;
+
+    if (cct->_conf->client_oc) {
+      // Purge all cached data so that ObjectCacher doesn't get hung up
+      // trying to flush it.  ObjectCacher's behaviour on EBLACKLISTED
+      // is to just leave things marked dirty
+      // (http://tracker.ceph.com/issues/9105)
+      for (const auto &i : inode_map) {
+        objectcacher->purge_set(&(i.second->oset));
+      }
+    }
+
+    mounted = false;
+    return;
+  }
 
   while (unsafe_sync_write > 0) {
     ldout(cct, 0) << unsafe_sync_write << " unsafe_sync_writes, waiting"  << dendl;

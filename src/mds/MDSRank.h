@@ -406,6 +406,9 @@ class MDSRank {
       return map_targets.count(rank);
     }
 
+    bool evict_client(int64_t session_id, bool wait, bool blacklist,
+                      std::stringstream& ss, Context *on_killed=nullptr);
+
   protected:
     void dump_clientreplay_status(Formatter *f) const;
     void command_scrub_path(Formatter *f, const string& path, vector<string>& scrubop_vec);
@@ -535,7 +538,6 @@ public:
                            Formatter *f, std::ostream& ss);
   void handle_mds_map(MMDSMap *m, MDSMap *oldmap);
   void handle_osd_map();
-  bool kill_session(int64_t session_id, bool wait, std::stringstream& ss);
   void update_log_config();
 
   bool handle_command(
@@ -547,7 +549,7 @@ public:
     bool *need_reply);
 
   void dump_sessions(const SessionFilter &filter, Formatter *f) const;
-  void evict_sessions(const SessionFilter &filter, MCommand *m);
+  void evict_clients(const SessionFilter &filter, MCommand *m);
 
   // Call into me from MDS::ms_dispatch
   bool ms_dispatch(Message *m);
