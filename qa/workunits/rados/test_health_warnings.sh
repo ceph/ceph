@@ -7,26 +7,49 @@ crushtool -o crushmap --build --num_osds 10 host straw 2 rack straw 2 row straw 
 ceph osd setcrushmap -i crushmap
 ceph osd tree
 
+wait_for_healthy() {
+  while ceph health | grep down
+  do
+    sleep 1
+  done
+}
+
 test_mark_two_osds_same_host_down() {
+  ceph osd set noup
   ceph osd down osd.0 osd.1
   ceph health detail
-  ceph health | grep "host"
+  ceph health | grep "1 host"
+  ceph health | grep "2 osds"
   ceph health detail | grep "osd.0"
   ceph health detail | grep "osd.1"
+  ceph osd unset noup
+  wait_for_healthy
 }
 
 test_mark_two_osds_same_rack_down() {
+  ceph osd set noup
   ceph osd down osd.8 osd.9
   ceph health detail
-  ceph health | grep "rack"
+  ceph health | grep "1 host"
+  ceph health | grep "1 rack"
+  ceph health | grep "1 row"
+  ceph health | grep "2 osds"
   ceph health detail | grep "osd.8"
   ceph health detail | grep "osd.9"
+  ceph osd unset noup
+  wait_for_healthy
 }
 
 test_mark_all_osds_down() {
+  ceph osd set noup
   ceph osd down `ceph osd ls`
   ceph health detail
-  ceph health | grep "row"
+  ceph health | grep "2 rows"
+  ceph health | grep "3 racks"
+  ceph health | grep "5 hosts"
+  ceph health | grep "10 osds"
+  ceph osd unset noup
+  wait_for_healthy
 }
 
 test_mark_two_osds_same_host_down
