@@ -591,7 +591,7 @@ int Infiniband::MemoryManager::get_channel_buffers(std::vector<Chunk*> &chunks, 
 
 
 Infiniband::Infiniband(CephContext *cct, const std::string &device_name, uint8_t port_num)
-  : device_list(new DeviceList(cct, this))
+  : device_list(new DeviceList(cct))
 {
   device = device_list->get_device(device_name.c_str());
 
@@ -794,14 +794,4 @@ int Infiniband::poll_blocking(bool &done)
 void Infiniband::rearm_notify()
 {
   device_list->rearm_notify();
-}
-
-void Infiniband::handle_async_event()
-{
-  device_list->handle_async_event();
-}
-
-void Infiniband::process_async_event(ibv_async_event &async_event)
-{
-  dispatcher->process_async_event(async_event);
 }

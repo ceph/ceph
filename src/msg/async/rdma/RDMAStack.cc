@@ -44,7 +44,7 @@ RDMADispatcher::~RDMADispatcher()
 }
 
 RDMADispatcher::RDMADispatcher(CephContext* c, RDMAStack* s)
-  : cct(c), lock("RDMADispatcher::lock"),
+  : cct(c), async_handler(new C_handle_cq_async(this)), lock("RDMADispatcher::lock"),
   w_lock("RDMADispatcher::for worker pending list"), stack(s)
 {
   PerfCountersBuilder plb(cct, "AsyncMessenger::RDMADispatcher", l_msgr_rdma_dispatcher_first, l_msgr_rdma_dispatcher_last);
@@ -91,29 +91,40 @@ void RDMADispatcher::polling_stop()
   t.join();
 }
 
-void RDMADispatcher::process_async_event(ibv_async_event &async_event)
+void RDMADispatcher::handle_async_event()
 {
-  perf_logger->inc(l_msgr_rdma_total_async_events);
-  // FIXME: Currently we must ensure no other factor make QP in ERROR state,
-  // otherwise this qp can't be deleted in current cleanup flow.
-  if (async_event.event_type == IBV_EVENT_QP_LAST_WQE_REACHED) {
-    perf_logger->inc(l_msgr_rdma_async_last_wqe_events);
-    uint64_t qpn = async_event.element.qp->qp_num;
-    ldout(cct, 10) << __func__ << " event associated qp=" << async_event.element.qp
-      << " evt: " << ibv_event_type_str(async_event.event_type) << dendl;
-    Mutex::Locker l(lock);
-    RDMAConnectedSocketImpl *conn = get_conn_lockless(qpn);
-    if (!conn) {
-      ldout(cct, 1) << __func__ << " missing qp_num=" << qpn << " discard event" << dendl;
-    } else {
-      ldout(cct, 1) << __func__ << " it's not forwardly stopped by us, reenable=" << conn << dendl;
-      conn->fault();
-      erase_qpn_lockless(qpn);
+  ldout(cct, 30) << __func__ << dendl;
+  while (1) {
+    ibv_async_event async_event;
+    if (ibv_get_async_event(global_infiniband->get_device()->ctxt, &async_event)) {
+      if (errno != EAGAIN)
+       lderr(cct) << __func__ << " ibv_get_async_event failed. (errno=" << errno
+                  << " " << cpp_strerror(errno) << ")" << dendl;
+      return;
     }
-  } else {
-    ldout(cct, 1) << __func__ << " ibv_get_async_event: dev=" << global_infiniband->get_device()->ctxt
-      << " evt: " << ibv_event_type_str(async_event.event_type)
-      << dendl;
+    perf_logger->inc(l_msgr_rdma_total_async_events);
+    // FIXME: Currently we must ensure no other factor make QP in ERROR state,
+    // otherwise this qp can't be deleted in current cleanup flow.
+    if (async_event.event_type == IBV_EVENT_QP_LAST_WQE_REACHED) {
+      perf_logger->inc(l_msgr_rdma_async_last_wqe_events);
+      uint64_t qpn = async_event.element.qp->qp_num;
+      ldout(cct, 10) << __func__ << " event associated qp=" << async_event.element.qp
+                     << " evt: " << ibv_event_type_str(async_event.event_type) << dendl;
+      Mutex::Locker l(lock);
+      RDMAConnectedSocketImpl *conn = get_conn_lockless(qpn);
+      if (!conn) {
+        ldout(cct, 1) << __func__ << " missing qp_num=" << qpn << " discard event" << dendl;
+      } else {
+        ldout(cct, 1) << __func__ << " it's not forwardly stopped by us, reenable=" << conn << dendl;
+        conn->fault();
+        erase_qpn_lockless(qpn);
+      }
+    } else {
+      ldout(cct, 1) << __func__ << " ibv_get_async_event: dev=" << global_infiniband->get_device()->ctxt
+                    << " evt: " << ibv_event_type_str(async_event.event_type)
+                    << dendl;
+    }
+    ibv_ack_async_event(&async_event);
   }
 }
 
@@ -209,7 +220,7 @@ void RDMADispatcher::polling()
         break;
 
       if ((ceph_clock_now() - last_inactive).to_nsec() / 1000 > cct->_conf->ms_async_rdma_polling_us) {
-        global_infiniband->handle_async_event();
+        handle_async_event();
         if (!rearmed) {
           // Clean up cq events after rearm notify ensure no new incoming event
           // arrived between polling and rearm

@@ -287,8 +287,6 @@ class Infiniband {
   int poll_rx(int n, Device **d, ibv_wc *wc);
   int poll_blocking(bool &done);
   void rearm_notify();
-  void handle_async_event();
-  void process_async_event(ibv_async_event &async_event);
 };
 
 #endif
