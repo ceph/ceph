@@ -2065,7 +2065,7 @@ void AsyncConnection::fault()
   outcoming_bl.clear();
   if (!once_ready && !is_queued() &&
       state >=STATE_ACCEPTING && state <= STATE_ACCEPTING_WAIT_CONNECT_MSG_AUTH) {
-    ldout(async_msgr->cct, 0) << __func__ << " with nothing to send and in the half "
+    ldout(async_msgr->cct, 10) << __func__ << " with nothing to send and in the half "
                               << " accept state just closed" << dendl;
     write_lock.unlock();
     _stop();
@@ -2074,7 +2074,7 @@ void AsyncConnection::fault()
   }
   reset_recv_state();
   if (policy.standby && !is_queued() && state != STATE_WAIT) {
-    ldout(async_msgr->cct,0) << __func__ << " with nothing to send, going to standby" << dendl;
+    ldout(async_msgr->cct, 10) << __func__ << " with nothing to send, going to standby" << dendl;
     state = STATE_STANDBY;
     write_lock.unlock();
     return;
