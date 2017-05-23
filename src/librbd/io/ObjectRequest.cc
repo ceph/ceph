@@ -217,8 +217,6 @@ bool ObjectReadRequest<I>::should_complete(int r)
         RWLock::RLocker parent_locker(image_ctx->parent_lock);
         if (image_ctx->parent == NULL) {
           ldout(image_ctx->cct, 20) << "parent is gone; do nothing" << dendl;
-          m_state = LIBRBD_AIO_READ_FLAT;
-          finished = false;
           break;
         }
 
