@@ -29,8 +29,7 @@ class RGWBucketReshard {
   int set_resharding_status(const string& new_instance_id, int32_t num_shards, cls_rgw_reshard_status status);
   int clear_resharding();
 
-  int create_new_bucket_instance(int new_num_shards,
-                                 RGWBucketInfo& new_bucket_info);
+  int create_new_bucket_instance(int new_num_shards, RGWBucketInfo& new_bucket_info);
   int do_reshard(int num_shards,
 		 const RGWBucketInfo& new_bucket_info,
 		 int max_entries,
@@ -43,7 +42,8 @@ public:
 
   int execute(int num_shards, int max_op_entries,
               bool verbose = false, ostream *out = nullptr,
-              Formatter *formatter = nullptr);
+              Formatter *formatter = nullptr,
+	      RGWReshard *reshard_log = nullptr);
   int abort();
   int get_status(std::list<cls_rgw_bucket_instance_entry> *status);
 };
@@ -87,6 +87,7 @@ protected:
 public:
   RGWReshard(RGWRados* _store, bool _verbose = false, ostream *_out = nullptr, Formatter *_formatter = nullptr);
   int add(cls_rgw_reshard_entry& entry);
+  int update(const RGWBucketInfo& bucket_info, const RGWBucketInfo& new_bucket_info);
   int get(cls_rgw_reshard_entry& entry);
   int remove(cls_rgw_reshard_entry& entry);
   int list(int logshard_num, string& marker, uint32_t max, std::list<cls_rgw_reshard_entry>& entries, bool *is_truncated);
