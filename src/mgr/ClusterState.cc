@@ -49,8 +49,6 @@ void ClusterState::load_digest(MMgrDigest *m)
 void ClusterState::ingest_pgstats(MPGStats *stats)
 {
   Mutex::Locker l(lock);
-  PGMap::Incremental pending_inc;
-  pending_inc.version = pg_map.version + 1; // to make apply_incremental happy
 
   const int from = stats->get_orig_source().num();
   bool is_in = false;
@@ -87,7 +85,13 @@ void ClusterState::ingest_pgstats(MPGStats *stats)
 
     pending_inc.pg_stat_updates[pgid] = pg_stats;
   }
+}
 
+void ClusterState::update_delta_stats()
+{
+  pending_inc.stamp = ceph_clock_now();
+  pending_inc.version = pg_map.version + 1; // to make apply_incremental happy
+  dout(10) << " v" << pending_inc.version << dendl;
   pg_map.apply_incremental(g_ceph_context, pending_inc);
 }
 
@@ -95,8 +99,9 @@ void ClusterState::notify_osdmap(const OSDMap &osd_map)
 {
   Mutex::Locker l(lock);
 
-  PGMap::Incremental pending_inc;
+  pending_inc.stamp = ceph_clock_now();
   pending_inc.version = pg_map.version + 1; // to make apply_incremental happy
+  dout(10) << " v" << pending_inc.version << dendl;
 
   PGMapUpdater::check_osd_map(g_ceph_context, osd_map, pg_map, &pending_inc);
 
