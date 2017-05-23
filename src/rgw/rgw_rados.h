@@ -1121,7 +1121,7 @@ struct RGWZonePlacementInfo {
     }
     DECODE_FINISH(bl);
   }
-  const rgw_pool& get_data_extra_pool() {
+  const rgw_pool& get_data_extra_pool() const {
     if (data_extra_pool.empty()) {
       return data_pool;
     }
@@ -1293,7 +1293,7 @@ struct RGWZoneParams : RGWSystemMetaObj {
     if (!obj.in_extra_data) {
       *pool = iter->second.data_pool;
     } else {
-      *pool = iter->second.data_extra_pool;
+      *pool = iter->second.get_data_extra_pool();
     }
     return true;
   }
