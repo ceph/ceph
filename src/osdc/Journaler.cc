@@ -246,21 +246,18 @@ void Journaler::_finish_read_head(int r, bufferlist& bl)
 
   assert(state == STATE_READHEAD);
 
-  if (r!=0) {
-    ldout(cct, 0) << "error getting journal off disk" << dendl;
-    list<Context*> ls;
-    ls.swap(waitfor_recover);
-    finish_contexts(cct, ls, r);
-    return;
-  }
+  {
+    if (r != 0)
+      ldout(cct, 0) << "error getting journal off disk" << dendl;
+    if (bl.length() == 0) {
+      ldout(cct, 1) << "_finish_read_head r=" << r
+        << " read 0 bytes, assuming empty log" << dendl;
+      state = STATE_ACTIVE;
+    }
 
-  if (bl.length() == 0) {
-    ldout(cct, 1) << "_finish_read_head r=" << r
-		  << " read 0 bytes, assuming empty log" << dendl;
-    state = STATE_ACTIVE;
     list<Context*> ls;
     ls.swap(waitfor_recover);
-    finish_contexts(cct, ls, 0);
+    finish_contexts(cct, ls, (r != 0 ? r : 0));
     return;
   }
 
