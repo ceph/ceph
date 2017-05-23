@@ -43,6 +43,7 @@ enum ACLGroupTypeEnum {
   ACL_GROUP_NONE                = 0,
   ACL_GROUP_ALL_USERS           = 1,
   ACL_GROUP_AUTHENTICATED_USERS = 2,
+  ACL_GROUP_LOG_DELIVERY        = 3,
 };
 
 class ACLPermission

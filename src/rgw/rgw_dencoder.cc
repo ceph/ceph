@@ -254,9 +254,11 @@ void ACLGranteeType::generate_test_instances(list<ACLGranteeType*>& o)
 
 #define RGW_URI_ALL_USERS	"http://acs.amazonaws.com/groups/global/AllUsers"
 #define RGW_URI_AUTH_USERS	"http://acs.amazonaws.com/groups/global/AuthenticatedUsers"
+#define RGW_URI_LOG_DELIVERY    "http://acs.amazonaws.com/groups/s3/LogDelivery"
 
 static string rgw_uri_all_users = RGW_URI_ALL_USERS;
 static string rgw_uri_auth_users = RGW_URI_AUTH_USERS;
+static string rgw_uri_log_delivery = RGW_URI_LOG_DELIVERY;
 
 ACLGroupTypeEnum ACLGrant::uri_to_group(string& uri)
 {
