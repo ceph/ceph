@@ -255,6 +255,9 @@ bool ACLGrant_S3::group_to_uri(ACLGroupTypeEnum group, string& uri)
   case ACL_GROUP_AUTHENTICATED_USERS:
     uri = rgw_uri_auth_users;
     return true;
+  case ACL_GROUP_LOG_DELIVERY:
+    uri = rgw_uri_log_delivery;
+    return true;
   default:
     return false;
   }
