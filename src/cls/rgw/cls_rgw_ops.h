@@ -841,20 +841,24 @@ WRITE_CLASS_ENCODER(cls_rgw_gc_list_op)
 
 struct cls_rgw_gc_list_ret {
   list<cls_rgw_gc_obj_info> entries;
+  string next_marker;
   bool truncated;
 
   cls_rgw_gc_list_ret() : truncated(false) {}
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(1, 1, bl);
+    ENCODE_START(2, 1, bl);
     ::encode(entries, bl);
+    ::encode(next_marker, bl);
     ::encode(truncated, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::iterator& bl) {
-    DECODE_START(1, bl);
+    DECODE_START(2, bl);
     ::decode(entries, bl);
+    if (struct_v >= 2)
+      ::decode(next_marker, bl);
     ::decode(truncated, bl);
     DECODE_FINISH(bl);
   }
