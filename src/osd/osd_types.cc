@@ -838,7 +838,7 @@ std::string pg_state_string(int state)
   if (ret.length() > 0)
     ret.resize(ret.length() - 1);
   else
-    ret = "inactive";
+    ret = "unknown";
   return ret;
 }
 
