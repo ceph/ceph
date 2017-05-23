@@ -721,12 +721,10 @@ int RGWReshard::process_single_logshard(int logshard_num)
 	  return ret;
 	}
 
-	Formatter* formatter = new JSONFormatter(false);
-	auto formatter_ptr = std::unique_ptr<Formatter>(formatter);
-	RGWBucketAdminOpState bucket_op;
-	ret = reshard_bucket(formatter, entry.new_num_shards, bucket, bucket_info, new_bucket_info,
-			     max_entries, bucket_op, true);
-	formatter->flush(cout);
+        RGWBucketAdminOpState bucket_op;
+        RGWBucketReshard reshard_op(store, bucket_info, attrs);
+        ret = reshard_op.do_reshard(entry.new_num_shards, new_bucket_info,
+                                    max_entries, false, nullptr, nullptr);
 	if (ret < 0) {
 	  return ret;
 	}
@@ -835,51 +833,4 @@ void RGWReshard::ReshardWorker::stop()
 {
   Mutex::Locker l(lock);
   cond.Signal();
-}
-
-#if 0
-BucketIndexLockGuard::BucketIndexLockGuard(RGWRados* _store,
-					   const string& bucket_instance_id, const string& _oid, const librados::IoCtx& _io_ctx) :
-  store(_store),
-  l(create_bucket_index_lock_name(bucket_instance_id)),
-  oid(_oid), io_ctx(_io_ctx),locked(false)
-{
-}
-
-int BucketIndexLockGuard::lock()
-{
-  if (!locked) {
-    int ret = l.lock_shared(&store->reshard_pool_ctx, oid);
-    if (ret == -EBUSY) {
-      ldout(store->ctx(), 0) << "RGWReshardLog::add failed to acquire lock on " << oid << dendl;
-      return 0;
-    }
-    if (ret < 0) {
-      return ret;
-    }
-    locked = true;
-    return ret;
-  } else {
-    ldout(store->ctx(), 0) << " % alread lock" << oid << dendl;
-    return -EBUSY;
-  }
-}
-
-int BucketIndexLockGuard::unlock()
-{
-  if (locked) {
-    int ret = l.unlock(&io_ctx, oid);
-    if (ret <0) {
-      ldout(store->ctx(), 0) << "failed to unlock " << oid << dendl;
-    } else {
-      locked = false;
-    }
-    return ret;
-  }
-  return 0;
-}
-
-BucketIndexLockGuard::~BucketIndexLockGuard()
-{
-  unlock();
 }
