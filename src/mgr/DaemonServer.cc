@@ -819,6 +819,8 @@ void DaemonServer::send_report()
 {
   auto m = new MMonMgrReport();
   cluster_state.with_pgmap([&](const PGMap& pg_map) {
+      cluster_state.update_delta_stats();
+
       // FIXME: no easy way to get mon features here.  this will do for
       // now, though, as long as we don't make a backward-incompat change.
       pg_map.encode_digest(m->get_data(), CEPH_FEATURES_ALL);
