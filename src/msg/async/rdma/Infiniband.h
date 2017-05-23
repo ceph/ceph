@@ -147,16 +147,12 @@ class Infiniband {
   };
 
  private:
-  CephContext *cct;
-  Mutex lock;
-  bool initialized = false;
-  DeviceList *device_list = nullptr;
+  DeviceList *device_list;
   RDMADispatcher *dispatcher = nullptr;
 
  public:
   explicit Infiniband(CephContext *c);
   ~Infiniband();
-  void init();
 
   void set_dispatcher(RDMADispatcher *d);
 

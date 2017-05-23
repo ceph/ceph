@@ -63,7 +63,7 @@ enum {
 };
 
 
-class RDMADispatcher {
+class RDMADispatcher : public CephContext::ForkWatcher {
   typedef Infiniband::MemoryManager::Chunk Chunk;
   typedef Infiniband::QueuePair QueuePair;
 
@@ -126,6 +126,8 @@ class RDMADispatcher {
   void erase_qpn_lockless(uint32_t qpn);
   void erase_qpn(uint32_t qpn);
   void notify_pending_workers();
+  virtual void handle_pre_fork() override;
+  virtual void handle_post_fork() override;
   void handle_tx_event(Device *ibdev, ibv_wc *cqe, int n);
   void post_tx_buffer(Device *ibdev, std::vector<Chunk*> &chunks);
 
