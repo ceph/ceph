@@ -702,6 +702,7 @@ int RGWReshard::process_single_logshard(int logshard_num)
 	  ldout(cct, 0) <<  __func__ << ": Error in get_bucket_info: " << cpp_strerror(-ret) << dendl;
 	  return -ret;
 	}
+        bucket = bucket_info.bucket;
 
 	RGWBucketInfo new_bucket_info(bucket_info);
 	ret = create_new_bucket_instance(store, entry.new_num_shards, bucket_info, attrs,
