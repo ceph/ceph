@@ -50,14 +50,14 @@ function TEST_pool_quota() {
 
     objects=`ceph df detail | grep -w $poolname|awk '{print $3}'`
     bytes=`ceph df detail | grep -w $poolname|awk '{print $4}'`
+   
+    if [ $objects != '1000' ] || [ $bytes != '1K' ] ;
+      then
+      return 1
+    fi
 
-     if [ $objects != '1000' ] || [ $bytes != '1024' ] ;
-       then
-       return 1
-     fi
-
-     ceph osd pool delete  $poolname $poolname  --yes-i-really-really-mean-it
-     teardown $dir || return 1
+    ceph osd pool delete  $poolname $poolname  --yes-i-really-really-mean-it
+    teardown $dir || return 1
 }
 
 main testpoolquota
