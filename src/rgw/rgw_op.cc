@@ -2408,7 +2408,7 @@ void RGWPutBL::execute()
 
      string tbucket_name = status->get_target_bucket();
      if (tbucket_name.empty()) {
-       ldout(s->cct, 0) << "PutBL TargetBucket should be empty." << dendl;
+       ldout(s->cct, 0) << "PutBL TargetBucket should not be empty." << dendl;
        op_ret = -ERR_INVALID_TARGET_BUCKET_FOR_LOGGING;
        s->err.message = "The target bucket for logging does not exist";
        return;
