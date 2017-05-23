@@ -2183,7 +2183,7 @@ void PrimaryLogPG::do_op(OpRequestRef& op)
       fill_in_copy_get_noent(op, oid, m->ops[0]);
       return;
     }
-    dout(20) << __func__ << "find_object_context got error " << r << dendl;
+    dout(20) << __func__ << ": find_object_context got error " << r << dendl;
     if (op->may_write() &&
 	get_osdmap()->require_osd_release >= CEPH_RELEASE_KRAKEN) {
       record_write_error(op, oid, nullptr, r);
@@ -10312,7 +10312,6 @@ eversion_t PrimaryLogPG::pick_newest_available(const hobject_t& oid)
     if (*i == get_primary()) continue;
     pg_shard_t peer = *i;
     if (!peer_missing[peer].is_missing(oid)) {
-      assert(is_backfill_targets(peer));
       continue;
     }
     eversion_t h = peer_missing[peer].get_items().at(oid).have;
@@ -10413,6 +10412,7 @@ void PrimaryLogPG::mark_all_unfound_lost(
   ceph_tid_t tid)
 {
   dout(3) << __func__ << " " << pg_log_entry_t::get_op_name(what) << dendl;
+  list<hobject_t> oids;
 
   dout(30) << __func__ << ": log before:\n";
   pg_log.get_log().print(*_dout);
@@ -10477,6 +10477,7 @@ void PrimaryLogPG::mark_all_unfound_lost(
 	} // otherwise, just do what we used to do
 	dout(10) << e << dendl;
 	log_entries.push_back(e);
+        oids.push_back(oid);
 
 	++v.version;
 	++m;
@@ -10494,7 +10495,9 @@ void PrimaryLogPG::mark_all_unfound_lost(
     log_entries,
     std::move(manager),
     boost::optional<std::function<void(void)> >(
-      [=]() {
+      [this, oids, con, num_unfound, tid]() {
+	  for (auto oid: oids)
+	    missing_loc.recovered(oid);
 	for (auto& p : waiting_for_unreadable_object) {
 	  release_backoffs(p.first);
 	}
