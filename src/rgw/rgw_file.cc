@@ -245,7 +245,9 @@ namespace rgw {
       /* a bucket may have an object storing Unix attributes, check
        * for and delete it */
       LookupFHResult fhr;
-      fhr = stat_bucket(parent, name, bs, RGWFileHandle::FLAG_LOCKED);
+      fhr = stat_bucket(parent, name, bs, (rgw_fh) ?
+			RGWFileHandle::FLAG_LOCKED :
+			RGWFileHandle::FLAG_NONE);
       bkt_fh = get<0>(fhr);
       if (unlikely(! bkt_fh)) {
 	/* implies !rgw_fh, so also !LOCKED */
@@ -253,7 +255,14 @@ namespace rgw {
       }
 
       if (bs.num_entries > 1) {
-	unref(bkt_fh); /* return extra ref */
+	unref(bkt_fh); /* return stat_bucket ref */
+	if (likely(!! rgw_fh)) { /* return lock and ref from
+				  * lookup_fh (or caller in the
+				  * special case of
+				  * RGWFileHandle::FLAG_UNLINK_THIS) */
+	  rgw_fh->mtx.unlock();
+	  unref(rgw_fh);
+	}
 	return -ENOTEMPTY;
       } else {
 	/* delete object w/key "<bucket>/" (uxattrs), if any */
