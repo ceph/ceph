@@ -153,7 +153,6 @@ class DeviceList {
   ~DeviceList();
 
   Device* get_device(const char* device_name);
-  Device* get_device(const struct ibv_context *ctxt);
 
   void uninit();
 

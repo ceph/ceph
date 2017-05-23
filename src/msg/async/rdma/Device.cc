@@ -456,21 +456,6 @@ Device* DeviceList::get_device(const char* device_name)
   return NULL;
 }
 
-
-Device* DeviceList::get_device(const struct ibv_context *ctxt)
-{
-  ibv_device *device = ctxt->device;
-
-  assert(devices);
-  for (int i = 0; i < num; ++i) {
-    if (devices[i]->ctxt->device == device) {
-      return devices[i];
-    }
-  }
-
-  return NULL;
-}
-
 int DeviceList::poll_tx(int num_entries, Device **d, ibv_wc *wc)
 {
   int n = 0;

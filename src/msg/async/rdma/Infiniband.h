@@ -277,7 +277,6 @@ class Infiniband {
   void handle_pre_fork();
 
   Device* get_device(const char* device_name);
-  Device* get_device(const struct ibv_context *ctxt);
 
   int poll_tx(int n, Device **d, ibv_wc *wc);
   int poll_rx(int n, Device **d, ibv_wc *wc);
