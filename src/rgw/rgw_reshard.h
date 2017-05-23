@@ -14,30 +14,9 @@ class CephContext;
 class RGWRados;
 
 
-#if 0
-/* gets a locked lock , release it when exiting context */
-class BucketIndexLockGuard
-{
-   RGWRados *store;
-   rados::cls::lock::Lock l;
-   string oid;
-   librados::IoCtx io_ctx;
-   bool locked;
-
-public:
-  BucketIndexLockGuard(RGWRados* store, const string& bucket_instance_id,
-		                         const string& oid, const librados::IoCtx& io_ctx);
-  /* unlocks the lock */
-  ~BucketIndexLockGuard();
-protected:
-  friend class RGWReshard;
-  int lock();
-  int unlock();
-};
-#endif
-
-
 class RGWBucketReshard {
+  friend class RGWReshard;
+
   RGWRados *store;
   RGWBucketInfo bucket_info;
   std::map<string, bufferlist> bucket_attrs;
@@ -108,15 +87,6 @@ public:
   int remove(cls_rgw_reshard_entry& entry);
   int list(int logshard_num, string& marker, uint32_t max, std::list<cls_rgw_reshard_entry>& entries, bool *is_truncated);
   int clear_bucket_resharding(const string& bucket_instance_oid, cls_rgw_reshard_entry& entry);
-
-  int reshard_bucket(Formatter *formatter,
-                     int num_shards,
-                     rgw_bucket& bucket,
-                     RGWBucketInfo& bucket_info,
-                     RGWBucketInfo& new_bucket_info,
-                     int max_entries,
-                     RGWBucketAdminOpState& bucket_op,
-                     bool verbose = false);
 
   /* reshard thread */
   int process_single_logshard(int logshard_num);
