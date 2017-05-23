@@ -123,7 +123,7 @@ from ceph_argparse import \
     matchnum, validate_command, find_cmd_target, \
     send_command, json_command, run_in_thread
 
-from ceph_daemon import DaemonWatcher, admin_socket
+from ceph_daemon import admin_socket, DaemonWatcher, Termsize
 
 # just a couple of globals
 
@@ -359,11 +359,12 @@ def wrap(s, width, indent):
 
     raise StopIteration
 
+
 def format_help(cmddict, partial=None):
     """
     Formats all the cmdsigs and helptexts from cmddict into a sorted-by-
     cmdsig 2-column display, with each column wrapped and indented to
-    fit into 40 characters.
+    fit into (terminal_width / 2) characters.
     """
 
     fullusage = ''
@@ -371,15 +372,18 @@ def format_help(cmddict, partial=None):
 
         if not cmd['help']:
             continue
-        flags = cmd.get('flags')
-        if (flags is not None and
-            (flags & (FLAG_OBSOLETE | FLAG_DEPRECATED)) != 0):
+        flags = cmd.get('flags', 0)
+        if flags & (FLAG_OBSOLETE | FLAG_DEPRECATED):
             continue
         concise = concise_sig(cmd['sig'])
         if partial and not concise.startswith(partial):
             continue
-        siglines = [l for l in wrap(concise, 40, 1)]
-        helplines = [l for l in wrap(cmd['help'], 39, 1)]
+        width = Termsize().cols - 1  # 1 for the line between sig and help
+        sig_width = int(width / 2)
+        # make sure width == sig_width + help_width, even (width % 2 > 0)
+        help_width = int(width / 2) + (width % 2)
+        siglines = [l for l in wrap(concise, sig_width, 1)]
+        helplines = [l for l in wrap(cmd['help'], help_width, 1)]
 
         # make lists the same length
         maxlen = max(len(siglines), len(helplines))
@@ -387,8 +391,8 @@ def format_help(cmddict, partial=None):
         helplines.extend([''] * (maxlen - len(helplines)))
 
         # so we can zip them for output
-        for (s, h) in zip(siglines, helplines):
-            fullusage += '{0:40s} {1}\n'.format(s, h)
+        for s, h in zip(siglines, helplines):
+            fullusage += '{s:{w}s} {h}\n'.format(s=s, h=h, w=sig_width)
 
     return fullusage
 
