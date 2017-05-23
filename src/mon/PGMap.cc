@@ -25,7 +25,7 @@ MEMPOOL_DEFINE_OBJECT_FACTORY(PGMap::Incremental, pgmap_inc, pgmap);
 void PGMapDigest::encode(bufferlist& bl, uint64_t features) const
 {
   // NOTE: see PGMap::encode_digest
-  ENCODE_START(3, 1, bl);
+  ENCODE_START(4, 1, bl);
   ::encode(num_pg, bl);
   ::encode(num_pg_active, bl);
   ::encode(num_osd, bl);
@@ -37,12 +37,16 @@ void PGMapDigest::encode(bufferlist& bl, uint64_t features) const
   ::encode(num_pg_by_osd, bl);
   ::encode(osd_last_seq, bl);
   ::encode(num_pg_by_pool, bl);
+  ::encode(per_pool_sum_delta, bl, features);
+  ::encode(per_pool_sum_deltas_stamps, bl);
+  ::encode(pg_sum_delta, bl, features);
+  ::encode(stamp_delta, bl);
   ENCODE_FINISH(bl);
 }
 
 void PGMapDigest::decode(bufferlist::iterator& p)
 {
-  DECODE_START(3, p);
+  DECODE_START(4, p);
   ::decode(num_pg, p);
   ::decode(num_pg_active, p);
   ::decode(num_osd, p);
@@ -65,6 +69,12 @@ void PGMapDigest::decode(bufferlist::iterator& p)
   }
   if (struct_v >= 3) {
     ::decode(num_pg_by_pool, p);
+  }
+  if (struct_v >= 4) {
+    ::decode(per_pool_sum_delta, p);
+    ::decode(per_pool_sum_deltas_stamps, p);
+    ::decode(pg_sum_delta, p);
+    ::decode(stamp_delta, p);
   }
   DECODE_FINISH(p);
 }
