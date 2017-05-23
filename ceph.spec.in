@@ -554,6 +554,9 @@ Group:		System/Libraries
 %endif
 License:	LGPL-2.0
 Requires:	librados2 = %{version}-%{release}
+%if 0%{?suse_version}
+Requires(post): coreutils
+%endif
 %if 0%{?rhel} || 0%{?fedora}
 Obsoletes:	ceph-libs < %{version}-%{release}
 %endif
