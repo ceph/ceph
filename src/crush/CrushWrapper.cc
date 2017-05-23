@@ -112,7 +112,7 @@ bool CrushWrapper::has_choose_args() const
 
 bool CrushWrapper::has_incompat_choose_args() const
 {
-  if (choose_args.size() != 1)
+  if (choose_args.size() > 1)
     return true;
   crush_choose_arg_map arg_map = choose_args.begin()->second;
   for (__u32 i = 0; i < arg_map.size; i++) {
