@@ -408,7 +408,10 @@ void MonClient::shutdown()
     delete version_requests.begin()->second;
     version_requests.erase(version_requests.begin());
   }
-
+  while (!mon_commands.empty()) {
+    auto tid = mon_commands.begin()->first;
+    _cancel_mon_command(tid);
+  }
   while (!waiting_for_session.empty()) {
     ldout(cct, 20) << __func__ << " discarding pending message " << *waiting_for_session.front() << dendl;
     waiting_for_session.front()->put();
