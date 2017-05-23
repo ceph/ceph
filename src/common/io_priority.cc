@@ -12,14 +12,13 @@
  *
  */
 
+#include "io_priority.h"
+
 #include <unistd.h>
 #ifdef __linux__
 #include <sys/syscall.h>   /* For SYS_xxx definitions */
 #endif
 #include <algorithm>
-#include <errno.h>
-
-#include "io_priority.h"
 
 pid_t ceph_gettid(void)
 {

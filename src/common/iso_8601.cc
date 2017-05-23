@@ -1,25 +1,15 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
-#include <cctype>
-#include <chrono>
-#include <ctime>
-#include <cstdint>
-#include <iostream>
-#include <stdexcept>
-#include <string>
-#include <sstream>
-#include <utility>
-
-#include "include/timegm.h"
 #include "iso_8601.h"
+#include "include/timegm.h"
 
+#include <sstream>
 
 namespace ceph {
 using std::chrono::duration_cast;
 using std::chrono::nanoseconds;
 using std::chrono::seconds;
-using std::setfill;
 using std::setw;
 using std::size_t;
 using std::stringstream;
