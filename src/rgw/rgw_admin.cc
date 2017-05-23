@@ -2386,6 +2386,7 @@ int main(int argc, const char **argv)
   common_init_finish(g_ceph_context);
 
   rgw_user user_id;
+  std::string uid_str;
   string tenant;
   std::string access_key, secret_key, user_email, display_name;
   std::string bucket_name, pool_name, object;
@@ -2533,7 +2534,7 @@ int main(int argc, const char **argv)
       usage();
       return 0;
     } else if (ceph_argparse_witharg(args, i, &val, "-i", "--uid", (char*)NULL)) {
-      user_id.from_str(val);
+      uid_str = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--tenant", (char*)NULL)) {
       tenant = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--access-key", (char*)NULL)) {
@@ -4373,6 +4374,11 @@ int main(int argc, const char **argv)
       break;
     }
     return 0;
+  }
+
+  if (user_id.validate_str(uid_str) < 0) {
+    cerr << "'$' is an reserved letter, --uid can't start with '$'" << std::endl;
+    return -EINVAL;
   }
 
   if (!user_id.empty()) {
