@@ -2942,9 +2942,9 @@ static int usage_iterate_range(cls_method_context_t hctx, uint64_t start, uint64
 	continue;
 
       if (by_user && by_subuser && (e.subuser != subuser)) {
-        CLS_LOG(0, "usage by_subuser found critical error, subuser=%s but entry.subuser=%s.",
+        CLS_LOG(0, "usage by_subuser subuser mismatched, subuser=%s but entry.subuser=%s.",
 		subuser.c_str(), e.subuser.c_str());
-	assert(0);
+        return -EINVAL;
       }
 
       /* keys are sorted by epoch, so once we're past end we're done */
