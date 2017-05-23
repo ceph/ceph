@@ -115,6 +115,7 @@ filestore_path=
 VSTART_SEC="client.vstart.sh"
 
 MON_ADDR=""
+DASH_URLS=""
 
 conf_fn="$CEPH_CONF_PATH/ceph.conf"
 keyring_fn="$CEPH_CONF_PATH/keyring"
@@ -608,6 +609,8 @@ EOF
 
 start_mgr() {
     local mgr=0
+    # avoid monitors on nearby ports (which test/*.sh use extensively)
+    DASH_PORT=$(($CEPH_PORT + 1000))
     for name in x y z a b c d e f g h i j k l m n o p
     do
         [ $mgr -eq $CEPH_NUM_MGR ] && break
@@ -623,6 +626,11 @@ start_mgr() {
 [mgr.$name]
         host = $HOSTNAME
 EOF
+
+        $SUDO $CEPH_BIN/ceph config-key put mgr/$name/dashboard/server_addr $IP
+	$SUDO $CEPH_BIN/ceph config-key put mgr/$name/dashboard/server_port $DASH_PORT
+	DASH_URLS="$DASH_URLS http://$IP:$DASH_PORT/"
+	DASH_PORT=$(($DASH_PORT - 1))
 
         echo "Starting mgr.${name}"
         run 'mgr' $CEPH_BIN/ceph-mgr -i $name $ARGS
@@ -954,6 +962,9 @@ if [ "$CEPH_NUM_RGW" -gt 0 ]; then
 fi
 
 echo "started.  stop.sh to stop.  see out/* (e.g. 'tail -f out/????') for debug output."
+
+echo ""
+echo "dashboard urls: $DASH_URLS"
 
 echo ""
 echo "export PYTHONPATH=./pybind:$PYTHONPATH"
