@@ -116,7 +116,7 @@ Port::~Port()
 Device::Device(CephContext *cct, Infiniband *ib, ibv_device* d)
   : cct(cct), device(d), lock("ibdev_lock"),
     async_handler(new C_handle_cq_async(this)), infiniband(ib),
-    device_attr(new ibv_device_attr)
+    device_attr(new ibv_device_attr), active_port(nullptr)
 {
   if (device == NULL) {
     lderr(cct) << __func__ << " device == NULL" << cpp_strerror(errno) << dendl;
@@ -134,15 +134,6 @@ Device::Device(CephContext *cct, Infiniband *ib, ibv_device* d)
     ceph_abort();
   }
 
-  port_cnt = device_attr->phys_port_cnt;
-  ports = new Port *[port_cnt + 1];
-  assert(ports);
-
-  for (int i = 1; i <= port_cnt; i++) {
-    ports[i] = new Port(cct, ctxt, i);
-    assert(ports[i]);
-  }
-
   tx_cc = create_comp_channel(cct);
   assert(tx_cc);
 
@@ -155,8 +146,6 @@ Device::Device(CephContext *cct, Infiniband *ib, ibv_device* d)
 void Device::init(int ibport)
 {
   Mutex::Locker l(lock);
-
-  verify_port(ibport);
 
   if (initialized)
     return;
@@ -185,6 +174,8 @@ void Device::init(int ibport)
 
   rx_cq = create_comp_queue(cct, rx_cc);
   assert(rx_cq);
+
+  binding_port(cct, ibport);
 
   initialized = true;
 
@@ -219,35 +210,31 @@ Device::~Device()
 
   uninit();
 
-  for (int i = 1; i <= port_cnt; i++)
-    delete ports[i];
-  delete[] ports;
+  if (active_port) {
+    delete active_port;
+    assert(ibv_close_device(ctxt) == 0);
+  }
 
-  assert(ibv_close_device(ctxt) == 0);
   delete device_attr;
 }
 
-void Device::verify_port(int port_num) {
-  if (port_num < 0 || port_num > port_cnt) {
+void Device::binding_port(CephContext *cct, int port_num) {
+  port_cnt = device_attr->phys_port_cnt;
+  for (uint8_t i = 0; i < port_cnt; ++i) {
+    Port *port = new Port(cct, ctxt, i+1);
+    if (i + 1 == port_num && port->get_port_attr()->state == IBV_PORT_ACTIVE) {
+      active_port = port;
+      ldout(cct, 1) << __func__ << " found active port " << i+1 << dendl;
+      break;
+    } else {
+      ldout(cct, 10) << __func__ << " port " << i+1 << " is not what we want. state: " << port->get_port_attr()->state << ")"<< dendl;
+    }
+    delete port;
+  }
+  if (nullptr == active_port) {
     lderr(cct) << __func__ << "  port not found" << dendl;
-    ceph_abort();
+    assert(active_port);
   }
-
-  Port *port = ports[port_num];
-
-  if (port->get_port_attr()->state == IBV_PORT_ACTIVE) {
-    ldout(cct, 1) << __func__ << " found active port " << port_num << dendl;
-  } else {
-    ldout(cct, 10) << __func__ << " port " << port_num <<
-      " is not what we want. state: " << port->get_port_attr()->state << ")"<< dendl;
-    ceph_abort();
-  }
-}
-
-Port *Device::get_port(int ibport)
-{
-  assert(ibport > 0 && ibport <= port_cnt);
-  return ports[ibport];
 }
 
 /**
@@ -260,11 +247,11 @@ Port *Device::get_port(int ibport)
  *      QueuePair on success or NULL if init fails
  * See QueuePair::QueuePair for parameter documentation.
  */
-Infiniband::QueuePair* Device::create_queue_pair(int port,
+Infiniband::QueuePair* Device::create_queue_pair(CephContext *cct,
 						 ibv_qp_type type)
 {
   Infiniband::QueuePair *qp = new QueuePair(
-      cct, *this, type, port, srq, tx_cq, rx_cq, max_send_wr, max_recv_wr);
+      cct, *this, type, active_port->get_port_num(), srq, tx_cq, rx_cq, max_send_wr, max_recv_wr);
   if (qp->init()) {
     delete qp;
     return NULL;
