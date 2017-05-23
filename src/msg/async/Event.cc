@@ -355,7 +355,7 @@ int EventCenter::process_time_events()
   return processed;
 }
 
-int EventCenter::process_events(int timeout_microseconds)
+int EventCenter::process_events(int timeout_microseconds,  ceph::timespan *working_dur)
 {
   struct timeval tv;
   int numevents;
@@ -393,6 +393,7 @@ int EventCenter::process_events(int timeout_microseconds)
   ldout(cct, 30) << __func__ << " wait second " << tv.tv_sec << " usec " << tv.tv_usec << dendl;
   vector<FiredFileEvent> fired_events;
   numevents = driver->event_wait(fired_events, &tv);
+  auto working_start = ceph::mono_clock::now();
   for (int j = 0; j < numevents; j++) {
     int rfired = 0;
     FileEvent *event;
@@ -441,6 +442,8 @@ int EventCenter::process_events(int timeout_microseconds)
       numevents += pollers[i]->poll();
   }
 
+  if (working_dur)
+    *working_dur = ceph::mono_clock::now() - working_start;
   return numevents;
 }
 
