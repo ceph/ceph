@@ -16,7 +16,6 @@
 
 #include "msg/async/net_handler.h"
 #include "RDMAStack.h"
-#include "Device.h"
 
 #define dout_subsys ceph_subsys_ms
 #undef dout_prefix
@@ -25,13 +24,6 @@
 RDMAServerSocketImpl::RDMAServerSocketImpl(CephContext *cct, Infiniband* i, RDMADispatcher *s, RDMAWorker *w, entity_addr_t& a)
   : cct(cct), net(cct), server_setup_socket(-1), infiniband(i), dispatcher(s), worker(w), sa(a)
 {
-  ibdev = infiniband->get_device(cct->_conf->ms_async_rdma_device_name.c_str());
-  ibport = cct->_conf->ms_async_rdma_port_num;
-
-  assert(ibdev);
-  assert(ibport > 0);
-
-  ibdev->init(ibport);
 }
 
 int RDMAServerSocketImpl::listen(entity_addr_t &sa, const SocketOptions &opt)
