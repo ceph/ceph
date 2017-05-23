@@ -39,6 +39,7 @@ protected:
   mutable Mutex lock;
 
   PGMap pg_map;
+  PGMap::Incremental pending_inc;
 
   bufferlist health_json;
   bufferlist mon_status_json;
@@ -47,6 +48,8 @@ public:
 
   void load_digest(MMgrDigest *m);
   void ingest_pgstats(MPGStats *stats);
+
+  void update_delta_stats();
 
   const bufferlist &get_health() const {return health_json;}
   const bufferlist &get_mon_status() const {return mon_status_json;}
