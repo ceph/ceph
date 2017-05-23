@@ -7579,6 +7579,8 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 
     bool any = false;
 
+    string force;
+    cmd_getval(g_ceph_context, cmdmap, "force", force);
     vector<string> idvec;
     cmd_getval(g_ceph_context, cmdmap, "ids", idvec);
     for (unsigned j = 0; j < idvec.size(); j++) {
@@ -7595,7 +7597,11 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 	if (osdmap.is_down(osd)) {
 	  ss << "osd." << osd << " is already down. ";
 	} else {
-	  pending_inc.new_state[osd] = CEPH_OSD_UP;
+          if (force == "--force") {
+	    pending_inc.new_state[osd] = CEPH_OSD_UP | CEPH_OSD_FORCEDOWN;
+          } else {
+            pending_inc.new_state[osd] = CEPH_OSD_UP;
+          }
 	  ss << "marked down osd." << osd << ". ";
 	  any = true;
 	}

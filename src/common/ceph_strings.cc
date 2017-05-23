@@ -44,6 +44,8 @@ const char *ceph_osd_state_name(int s)
 		return "nearfull";
 	case CEPH_OSD_BACKFILLFULL:
 		return "backfillfull";
+	case CEPH_OSD_FORCEDOWN:
+		return "forcedown";
 	default:
 		return "???";
 	}	
