@@ -251,6 +251,11 @@ void MgrStandby::handle_mgr_map(MMgrMap* mmap)
       derr << "I was active but no longer am" << dendl;
       active_mgr->shutdown();
       active_mgr.reset();
+
+      // FIXME: reset monc connection so that our old subscriptions go away
+      // and we stop getting MLog and MMgrDigest messages.  (We do something
+      // similar in Mgr::init().)
+      monc.reopen_session();
     }
   }
 
