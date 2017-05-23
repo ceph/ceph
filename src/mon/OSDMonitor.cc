@@ -6433,6 +6433,108 @@ int OSDMonitor::prepare_command_osd_remove(int32_t id)
   return 0;
 }
 
+void OSDMonitor::do_osd_create(
+    const int32_t id,
+    const uuid_d& uuid,
+    int32_t* new_id)
+{
+  dout(10) << __func__ << " id " << id << " uuid " << uuid << dendl;
+  assert(new_id);
+
+  *new_id = id;
+
+  if (id < 0) {
+    // allocate a new id
+    for (int32_t i = 0; i < osdmap.get_max_osd(); ++i) {
+      if (!osdmap.exists(i) &&
+          pending_inc.new_up_client.count(i) == 0 &&
+          (pending_inc.new_state.count(i) == 0 ||
+           (pending_inc.new_state[i] & CEPH_OSD_EXISTS) == 0)) {
+        pending_inc.new_weight[i] = CEPH_OSD_OUT;
+        *new_id = i;
+        break;
+      }
+    }
+    if (*new_id < 0) {
+      // raise max_osd
+      if (pending_inc.new_max_osd < 0) {
+        pending_inc.new_max_osd = osdmap.get_max_osd() + 1;
+      } else {
+        ++pending_inc.new_max_osd;
+      }
+      *new_id = pending_inc.new_max_osd - 1;
+    }
+    dout(10) << __func__ << " using id " << *new_id << dendl;
+  } else if (osdmap.get_max_osd() <= id && pending_inc.new_max_osd <= id) {
+    pending_inc.new_max_osd = id + 1;
+  }
+
+  pending_inc.new_state[*new_id] |= CEPH_OSD_EXISTS | CEPH_OSD_NEW;
+  if (!uuid.is_zero())
+    pending_inc.new_uuid[*new_id] = uuid;
+}
+
+int OSDMonitor::prepare_command_osd_create(
+    const int32_t id,
+    const uuid_d& uuid,
+    int32_t* existing_id,
+    stringstream& ss)
+{
+  dout(10) << __func__ << " id " << id << " uuid " << uuid << dendl;
+  assert(existing_id);
+
+  /*
+   * This function will be used to validate whether we are able to
+   * create a new osd when the `uuid` is specified.
+   *
+   * It will be used by both `osd create` and `osd new`, as the checks
+   * are basically the same when it pertains to osd id and uuid validation.
+   * However, `osd create` presumes an `uuid` is optional, for legacy
+   * reasons, while `osd new` requires the `uuid` to be provided. This
+   * means that `osd create` will not be idempotent if an `uuid` is not
+   * provided, but we will always guarantee the idempotency of `osd new`.
+   */
+
+  if (uuid.is_zero()) {
+    dout(10) << __func__ << " no uuid; assuming legacy `osd create`" << dendl;
+    assert(id == -1);
+    return 0;
+  }
+
+  int32_t i = osdmap.identify_osd(uuid);
+  if (i >= 0) {
+    // osd already exists
+    if (id >= 0 && i != id) {
+      ss << "uuid " << uuid << " already in use for different id " << i;
+      return -EEXIST;
+    }
+    // return a positive errno to distinguish between a blocking error
+    // and an error we consider to not be a problem (i.e., this would be
+    // an idempotent operation).
+    *existing_id = i;
+    return EEXIST;
+  }
+  // i < 0
+  if (id >= 0) {
+    if (osdmap.exists(id)) {
+      ss << "id " << id << " already in use and does not match uuid "
+         << uuid;
+      return -EINVAL;
+    }
+    if (pending_inc.new_state.count(id)) {
+      // osd is about to exist
+      return -EAGAIN;
+    }
+  }
+
+  if (pending_inc.identify_osd(uuid) >= 0) {
+    // osd is about to exist
+    return -EAGAIN;
+  }
+
+  return 0;
+}
+
 bool OSDMonitor::prepare_command(MonOpRequestRef op)
 {
   op->mark_osdmon_event(__func__);
@@ -8479,111 +8581,70 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     return true;
 
   } else if (prefix == "osd create") {
-    int i = -1;
 
     // optional id provided?
-    int64_t id = -1;
-    if (cmd_getval(g_ceph_context, cmdmap, "id", id)) {
-      if (id < 0) {
-	ss << "invalid osd id value '" << id << "'";
+    int64_t id = -1, cmd_id = -1;
+    if (cmd_getval(g_ceph_context, cmdmap, "id", cmd_id)) {
+      if (cmd_id < 0) {
+	ss << "invalid osd id value '" << cmd_id << "'";
 	err = -EINVAL;
 	goto reply;
       }
-      dout(10) << " osd create got id " << id << dendl;
+      dout(10) << " osd create got id " << cmd_id << dendl;
     }
 
-    // optional uuid provided?
     uuid_d uuid;
     string uuidstr;
     if (cmd_getval(g_ceph_context, cmdmap, "uuid", uuidstr)) {
       if (!uuid.parse(uuidstr.c_str())) {
-	ss << "invalid uuid value '" << uuidstr << "'";
-	err = -EINVAL;
-	goto reply;
+        ss << "invalid uuid value '" << uuidstr << "'";
+        err = -EINVAL;
+        goto reply;
       }
-      dout(10) << " osd create got uuid " << uuid << dendl;
-      i = osdmap.identify_osd(uuid);
-      if (i >= 0) {
-	// osd already exists
-	if (id >= 0 && i != id) {
-	  ss << "uuid " << uuidstr << " already in use for different id " << i;
-	  err = -EINVAL;
-	  goto reply;
-	}
-	err = 0;
-	if (f) {
-	  f->open_object_section("created_osd");
-	  f->dump_int("osdid", i);
-	  f->close_section();
-	  f->flush(rdata);
-	} else {
-	  ss << i;
-	  rdata.append(ss);
-	}
-	goto reply;
-      }
-      // i < 0
-      if (id >= 0) {
-	if (osdmap.exists(id)) {
-	  ss << "id " << id << " already in use and does not match uuid "
-	     << uuid;
-	  err = -EINVAL;
-	  goto reply;
-	}
-	if (pending_inc.new_state.count(id)) {
-	  // osd is about to exist
-	  wait_for_finished_proposal(op, new C_RetryMessage(this, op));
-	  return true;
-	}
-	i = id;
-      }
-      if (pending_inc.identify_osd(uuid) >= 0) {
-	// osd is about to exist
-	wait_for_finished_proposal(op, new C_RetryMessage(this, op));
-	return true;
-      }
-      if (i >= 0) {
-	// raise max_osd
-	if (osdmap.get_max_osd() <= i && pending_inc.new_max_osd <= i)
-	  pending_inc.new_max_osd = i + 1;
-	goto done;
-      }
+      // we only care about the id if we also have the uuid, to
+      // ensure the operation's idempotency.
+      id = cmd_id;
     }
 
-    // allocate a new id
-    for (i=0; i < osdmap.get_max_osd(); i++) {
-      if (!osdmap.exists(i) &&
-	  pending_inc.new_up_client.count(i) == 0 &&
-	  (pending_inc.new_state.count(i) == 0 ||
-	   (pending_inc.new_state[i] & CEPH_OSD_EXISTS) == 0)) {
-        pending_inc.new_weight[i] = CEPH_OSD_OUT;
-	goto done;
+    int32_t new_id = -1;
+    err = prepare_command_osd_create(id, uuid, &new_id, ss);
+    if (err < 0) {
+      if (err == -EAGAIN) {
+        wait_for_finished_proposal(op, new C_RetryMessage(this, op));
+        return true;
       }
+      // a check has failed; reply to the user.
+      goto reply;
+
+    } else if (err == EEXIST) {
+      // this is an idempotent operation; we can go ahead and reply.
+      if (f) {
+        f->open_object_section("created_osd");
+        f->dump_int("osdid", new_id);
+        f->close_section();
+        f->flush(rdata);
+      } else {
+        ss << new_id;
+        rdata.append(ss);
+      }
+      err = 0;
+      goto reply;
     }
 
-    // raise max_osd
-    if (pending_inc.new_max_osd < 0)
-      pending_inc.new_max_osd = osdmap.get_max_osd() + 1;
-    else
-      pending_inc.new_max_osd++;
-    i = pending_inc.new_max_osd - 1;
+    do_osd_create(id, uuid, &new_id);
 
-done:
-    dout(10) << " creating osd." << i << dendl;
-    pending_inc.new_state[i] |= CEPH_OSD_EXISTS | CEPH_OSD_NEW;
-    if (!uuid.is_zero())
-      pending_inc.new_uuid[i] = uuid;
     if (f) {
       f->open_object_section("created_osd");
-      f->dump_int("osdid", i);
+      f->dump_int("osdid", new_id);
       f->close_section();
       f->flush(rdata);
     } else {
-      ss << i;
+      ss << new_id;
       rdata.append(ss);
     }
-    wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, 0, rs, rdata,
-					      get_last_committed() + 1));
+    wait_for_finished_proposal(op,
+        new Monitor::C_Command(mon, op, 0, rs, rdata,
+                               get_last_committed() + 1));
     return true;
 
   } else if (prefix == "osd blacklist clear") {
