@@ -649,6 +649,11 @@ int main(int argc, const char **argv)
     }
   }
 
+  if (g_conf->daemonize) {
+    global_init_postfork_finish(g_ceph_context);
+    prefork.daemonize();
+  }
+
   // bind
   int rank = monmap.get_rank(g_conf->name.get_id());
   std::string public_msgr_type = g_conf->ms_public_type.empty() ? g_conf->get_val<std::string>("ms_type") : g_conf->ms_public_type;
@@ -736,11 +741,6 @@ int main(int argc, const char **argv)
     derr << "compacting monitor store ..." << dendl;
     mon->store->compact();
     derr << "done compacting" << dendl;
-  }
-
-  if (g_conf->daemonize) {
-    global_init_postfork_finish(g_ceph_context);
-    prefork.daemonize();
   }
 
   msgr->start();

@@ -143,6 +143,8 @@ int main(int argc, const char **argv)
       << "' is invalid and will be forbidden in a future version.  "
       "MDS names may not start with a numeric digit." << dendl;
   }
+  // daemonize
+  global_init_daemonize(g_ceph_context);
 
   uint64_t nonce = 0;
   get_random_bytes((char*)&nonce, sizeof(nonce));
@@ -173,7 +175,6 @@ int main(int argc, const char **argv)
   if (r < 0)
     exit(1);
 
-  global_init_daemonize(g_ceph_context);
   common_init_finish(g_ceph_context);
 
   // get monmap

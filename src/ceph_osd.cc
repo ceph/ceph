@@ -446,6 +446,8 @@ flushjournal_out:
 	 << " **          you specify neither or both.                             **"
 	 << TEXT_NORMAL << dendl;
   }
+  // daemonize
+  global_init_daemonize(g_ceph_context);
 
   std::string public_msgr_type = g_conf->ms_public_type.empty() ? g_conf->get_val<std::string>("ms_type") : g_conf->ms_public_type;
   std::string cluster_msgr_type = g_conf->ms_cluster_type.empty() ? g_conf->get_val<std::string>("ms_type") : g_conf->ms_cluster_type;
@@ -576,8 +578,7 @@ flushjournal_out:
   if (r < 0)
     exit(1);
 
-  // Set up crypto, daemonize, etc.
-  global_init_daemonize(g_ceph_context);
+  // Set up crypto etc.
   common_init_finish(g_ceph_context);
 
   TracepointProvider::initialize<osd_tracepoint_traits>(g_ceph_context);
