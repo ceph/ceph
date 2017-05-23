@@ -38,6 +38,7 @@ protected:
   FSMap fsmap;
   mutable Mutex lock;
 
+  set<int64_t> existing_pools; ///< pools that exist, as of PGMap epoch
   PGMap pg_map;
   PGMap::Incremental pending_inc;
 

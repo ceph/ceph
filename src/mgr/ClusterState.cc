@@ -68,17 +68,20 @@ void ClusterState::ingest_pgstats(MPGStats *stats)
 
     // In case we're hearing about a PG that according to last
     // OSDMap update should not exist
-    if (pg_map.pg_stat.count(pgid) == 0) {
-      dout(15) << " got " << pgid << " reported at " << pg_stats.reported_epoch << ":"
+    if (existing_pools.count(pgid.pool()) == 0) {
+      dout(15) << " got " << pgid
+	       << " reported at " << pg_stats.reported_epoch << ":"
                << pg_stats.reported_seq
                << " state " << pg_state_string(pg_stats.state)
-               << " but DNE in pg_map; pool was probably deleted."
+               << " but pool not in " << existing_pools
                << dendl;
       continue;
-     // In case we already heard about more recent stats from this PG
-     // from another OSD
-    } else if (pg_map.pg_stat[pgid].get_version_pair() > pg_stats.get_version_pair()) {
-      dout(15) << " had " << pgid << " from " << pg_map.pg_stat[pgid].reported_epoch << ":"
+    }
+    // In case we already heard about more recent stats from this PG
+    // from another OSD
+    if (pg_map.pg_stat[pgid].get_version_pair() > pg_stats.get_version_pair()) {
+      dout(15) << " had " << pgid << " from "
+	       << pg_map.pg_stat[pgid].reported_epoch << ":"
                << pg_map.pg_stat[pgid].reported_seq << dendl;
       continue;
     }
@@ -104,6 +107,13 @@ void ClusterState::notify_osdmap(const OSDMap &osd_map)
   dout(10) << " v" << pending_inc.version << dendl;
 
   PGMapUpdater::check_osd_map(g_ceph_context, osd_map, pg_map, &pending_inc);
+
+  // update our list of pools that exist, so that we can filter pg_map updates
+  // in synchrony with this OSDMap.
+  existing_pools.clear();
+  for (auto& p : osd_map.get_pools()) {
+    existing_pools.insert(p.first);
+  }
 
   // brute force this for now (don't bother being clever by only
   // checking osds that went up/down)
