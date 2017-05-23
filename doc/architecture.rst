@@ -207,10 +207,10 @@ of failure or bottleneck when using ``cephx``. The monitor returns an
 authentication data structure similar to a Kerberos ticket that contains a
 session key for use in obtaining Ceph services.  This session key is itself
 encrypted with the user's permanent  secret key, so that only the user can
-request services from the Ceph monitor(s). The client then uses the session key
+request services from the Ceph Monitor(s). The client then uses the session key
 to request its desired services from the monitor, and the monitor provides the
 client with a ticket that will authenticate the client to the OSDs that actually
-handle data. Ceph monitors and OSDs share a secret, so the client can use the
+handle data. Ceph Monitors and OSDs share a secret, so the client can use the
 ticket provided by the monitor with any OSD or metadata server in the cluster.
 Like Kerberos, ``cephx`` tickets expire, so an attacker cannot use an expired
 ticket or session key obtained surreptitiously. This form of authentication will
@@ -338,7 +338,7 @@ dispatch--which is a **huge** bottleneck at the petabyte-to-exabyte scale.
 Ceph eliminates the bottleneck: Ceph's OSD Daemons AND Ceph Clients are cluster
 aware. Like Ceph clients, each Ceph OSD Daemon knows about other Ceph OSD
 Daemons in the cluster.  This enables Ceph OSD Daemons to interact directly with
-other Ceph OSD Daemons and Ceph monitors. Additionally, it enables Ceph Clients
+other Ceph OSD Daemons and Ceph Monitors. Additionally, it enables Ceph Clients
 to interact directly with Ceph OSD Daemons.
 
 The ability of Ceph Clients, Ceph Monitors and Ceph OSD Daemons to interact with
