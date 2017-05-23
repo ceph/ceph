@@ -2420,26 +2420,84 @@ void RGWPutBL::execute()
        s->err.message = "The XML you provided was not well-formed or did not validate against our published schema";
        return;
      }
+ 
+     map<string, bufferlist> tbucket_attrs;
+     RGWBucketInfo tbucket_info;
+     RGWObjectCtx tobj_ctx(store);
+     int ret = store->get_bucket_info(tobj_ctx, s->bucket_tenant, tbucket_name,
+                                      tbucket_info, NULL, &tbucket_attrs);
+     if (ret < 0) {
+       ldout(s->cct, 0) << "PutBL:get_bucket_info failed, target_bucket_name="
+                        << tbucket_name << dendl;
+       op_ret = -ERR_INVALID_TARGET_BUCKET_FOR_LOGGING;
+       s->err.message = "The target bucket for logging does not exist";
+       return;
+     }
 
      if (tbucket_name != s->bucket_name) { // if target bucket isn't same as source bucket,
                                            // we need to check target bucket ownership.
-       RGWBucketInfo tbucket_info;
-       map<string, bufferlist> tbucket_attrs;
-       RGWObjectCtx tobj_ctx(store);
-       int ret = store->get_bucket_info(tobj_ctx, s->bucket_tenant, tbucket_name,
-                                        tbucket_info, NULL, &tbucket_attrs);
-       if (ret < 0) {
-         ldout(s->cct, 0) << "RGWBL:get_bucket_info failed, target_bucket_name="
-                          << tbucket_name << dendl;
-         op_ret = -ERR_INVALID_TARGET_BUCKET_FOR_LOGGING;
-         s->err.message = "The target bucket for logging does not exist";
-         return;
-       } else if (s->auth.identity->is_owner_of(tbucket_info.owner) == false) {
+       if (s->auth.identity->is_owner_of(tbucket_info.owner) == false) {
          op_ret = -ERR_INVALID_TARGET_BUCKET_FOR_LOGGING;
          s->err.message = "The owner for the bucket to be logged and the target bucket must be the same.";
          return;
        }
      }
+ 
+     // AWS S3
+     // It will return error if LDG is not granted WRITE and READ_ACP
+     // to target bucket when enable bucket logging of source bucket.
+     // So check bl_deliver's permission in target bucket here.
+     std::string bl_deliver_accesskey = store->get_zone_params().bl_deliver_key.id;
+     RGWUserInfo bl_deliver;
+     if (bl_deliver.user_id.empty() && 
+         rgw_get_user_info_by_access_key(store, bl_deliver_accesskey, bl_deliver) < 0) {
+       ldout(s->cct, 0) << "bl deliver does not exist:" << bl_deliver_accesskey << dendl;
+       return;
+     } else {
+       map<string, bufferlist>::iterator aiter = tbucket_attrs.find(RGW_ATTR_ACL);
+       if (aiter == tbucket_attrs.end()) {
+         ldout(s->cct, 0) << __func__ << " can't find tbucket ACL attr"
+                          << " tbucket_name=" << tbucket_name << dendl;
+         op_ret = -ERR_INVALID_TARGET_BUCKET_FOR_LOGGING;
+         s->err.message = "You must give the log-delivery group WRITE and READ_ACP permissions to the target bucket";
+         return;
+       } else {
+         bufferlist::iterator piter(&aiter->second); 
+         RGWAccessControlPolicy tbucket_policy;
+         tbucket_policy.decode(piter);
+ 
+         std::multimap<string, ACLGrant> tbucket_grant_map = tbucket_policy.get_acl().get_grant_map();
+         std::multimap<string, ACLGrant>::iterator giter = tbucket_grant_map.find(bl_deliver.user_id.id);
+         if (giter == tbucket_grant_map.end()) {
+           ldout(s->cct, 0) << "PutBL: bl_deliver has no op permission to the target bucket, target_bucket_name="
+                            << tbucket_name << dendl;
+           op_ret = -ERR_INVALID_TARGET_BUCKET_FOR_LOGGING;
+           s->err.message = "You must give the log-delivery group WRITE and READ_ACP permissions to the target bucket";
+           return;
+         } else {
+           bool is_write = false;
+           bool is_read_acp = false;
+           std::pair<std::multimap<string, ACLGrant>::iterator, std::multimap<string, ACLGrant>::iterator> grant_ret;
+           grant_ret = tbucket_grant_map.equal_range(bl_deliver.user_id.id);
+           for (std::multimap<string, ACLGrant>::iterator iter = grant_ret.first;
+                iter != grant_ret.second; iter++) {
+             if (iter->second.get_permission().get_permissions() == RGW_PERM_WRITE) {
+               is_write = true;
+             } else if (iter->second.get_permission().get_permissions() == RGW_PERM_READ_ACP) {
+               is_read_acp = true;
+             }
+           }
+ 
+           if (is_write == false || is_read_acp == false) {
+             ldout(s->cct, 0) << "PutBL: bl_deliver has no write or read_acp permission to the target bucket, target_bucket_name="
+                              << tbucket_name << dendl;
+             op_ret = -ERR_INVALID_TARGET_BUCKET_FOR_LOGGING;
+             s->err.message = "You must give the log-delivery group WRITE and READ_ACP permissions to the target bucket";
+             return;
+           }
+         }
+       }
+     } 
   }
 
   if (s->cct->_conf->subsys.should_gather(ceph_subsys_rgw, 15)) {
@@ -3147,11 +3205,6 @@ void RGWDeleteBucket::execute()
 
 int RGWPutObj::verify_permission()
 {
-  if (s->user->bl_deliver) {
-    ldout(s->cct, 20) << "overriding permissions due to bl_deliver operation" << dendl;     
-    return 0;
-  }
-
   if (copy_source) {
 
     RGWAccessControlPolicy cs_acl(s->cct);
