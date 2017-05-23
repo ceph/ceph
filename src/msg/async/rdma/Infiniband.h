@@ -144,6 +144,9 @@ class Infiniband {
   DeviceList *device_list;
   RDMADispatcher *dispatcher = nullptr;
 
+  void wire_gid_to_gid(const char *wgid, union ibv_gid *gid);
+  void gid_to_wire_gid(const union ibv_gid *gid, char wgid[]);
+
  public:
   explicit Infiniband(CephContext *c);
   ~Infiniband();
@@ -265,6 +268,8 @@ class Infiniband {
   };
 
  public:
+  int send_msg(CephContext *cct, int sd, IBSYNMsg& msg);
+  int recv_msg(CephContext *cct, int sd, IBSYNMsg& msg);
   static const char* wc_status_to_string(int status);
   static const char* qp_state_string(int status);
 
@@ -279,10 +284,5 @@ class Infiniband {
   void handle_async_event();
   RDMADispatcher *get_dispatcher() { return dispatcher; }
 };
-
-inline ostream& operator<<(ostream& out, const Infiniband::QueuePair &qp)
-{
-    return out << qp.get_local_qp_number();
-}
 
 #endif

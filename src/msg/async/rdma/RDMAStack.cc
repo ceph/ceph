@@ -21,7 +21,6 @@
 #include "common/deleter.h"
 #include "common/Tub.h"
 #include "RDMAStack.h"
-#include "RDMAConnTCP.h"
 #include "Device.h"
 
 #define dout_subsys ceph_subsys_ms
@@ -414,7 +413,7 @@ void RDMAWorker::initialize()
 
 int RDMAWorker::listen(entity_addr_t &sa, const SocketOptions &opt,ServerSocket *sock)
 {
-  auto p = new RDMAServerConnTCP(cct, global_infiniband.get(), get_stack()->get_dispatcher(), this, sa);
+  auto p = new RDMAServerSocketImpl(cct, global_infiniband.get(), get_stack()->get_dispatcher(), this, sa);
   int r = p->listen(sa, opt);
   if (r < 0) {
     delete p;
