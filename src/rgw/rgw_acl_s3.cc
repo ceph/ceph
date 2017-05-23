@@ -550,15 +550,31 @@ int RGWAccessControlPolicy_S3::rebuild(RGWRados *store, ACLOwner *owner, RGWAcce
       break;
     case ACL_TYPE_GROUP:
       {
-        string uri;
-        if (ACLGrant_S3::group_to_uri(src_grant.get_group(), uri)) {
-          new_grant = src_grant;
-          grant_ok = true;
-          ldout(cct, 10) << "new grant: " << uri << dendl;
-        } else {
-          ldout(cct, 10) << "bad grant group:" << (int)src_grant.get_group() << dendl;
-          return -EINVAL;
-        }
+	if (src_grant.get_group() == ACL_GROUP_LOG_DELIVERY) {
+            std::string bl_deliver_accesskey = store->get_zone_params().bl_deliver_key.id;
+	    
+	    if (grant_user.user_id.empty() && rgw_get_user_info_by_access_key(store, bl_deliver_accesskey, grant_user) < 0) {
+                ldout(cct, 10) << "bl_deliver --> grant user does not exist:" << bl_deliver_accesskey << dendl;
+                return -EINVAL;
+            } else { 
+                ACLPermission& perm = src_grant.get_permission();
+                new_grant.set_canon(grant_user.user_id, grant_user.display_name, perm.get_permissions());
+                grant_ok = true;
+                rgw_user new_id;
+                new_grant.get_id(new_id);
+                ldout(cct, 10) << "new grant: " << new_id << ":" << grant_user.display_name << dendl;
+	    }
+	} else {
+            string uri;
+            if (ACLGrant_S3::group_to_uri(src_grant.get_group(), uri)) {
+              new_grant = src_grant;
+              grant_ok = true;
+              ldout(cct, 10) << "new grant: " << uri << dendl;
+            } else {
+              ldout(cct, 10) << "bad grant group:" << (int)src_grant.get_group() << dendl;
+              return -EINVAL;
+            }
+	}
       }
     default:
       break;
