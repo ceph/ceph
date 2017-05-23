@@ -108,9 +108,8 @@ Port::Port(CephContext *cct, struct ibv_context* ictxt, uint8_t ipn): ctxt(ictxt
 }
 
 
-Device::Device(CephContext *cct, Infiniband *ib, ibv_device* d)
+Device::Device(CephContext *cct, ibv_device* d)
   : cct(cct), device(d), lock("ibdev_lock"),
-    async_handler(new C_handle_cq_async(this)), infiniband(ib),
     device_attr(new ibv_device_attr), active_port(nullptr)
 {
   if (device == NULL) {
@@ -357,26 +356,8 @@ void Device::rearm_cqs()
   assert(!ret);
 }
 
-void Device::handle_async_event()
-{
-  ibv_async_event async_event;
 
-  ldout(cct, 30) << __func__ << dendl;
-
-  while (!ibv_get_async_event(ctxt, &async_event)) {
-    infiniband->process_async_event(async_event);
-
-    ibv_ack_async_event(&async_event);
-  }
-
-  if (errno != EAGAIN) {
-    lderr(cct) << __func__ << " ibv_get_async_event failed. (errno=" << errno
-      << " " << cpp_strerror(errno) << ")" << dendl;
-  }
-}
-
-
-DeviceList::DeviceList(CephContext *cct, Infiniband *ib)
+DeviceList::DeviceList(CephContext *cct)
   : cct(cct), device_list(ibv_get_device_list(&num))
 {
   if (device_list == NULL || num == 0) {
@@ -391,7 +372,7 @@ DeviceList::DeviceList(CephContext *cct, Infiniband *ib)
     struct pollfd *pfd = &poll_fds[i * 2];
     struct Device *d;
 
-    d = new Device(cct, ib, device_list[i]);
+    d = new Device(cct, device_list[i]);
     devices[i] = d;
 
     pfd[0].fd = d->tx_cc->get_fd();
@@ -488,10 +469,4 @@ void DeviceList::rearm_notify()
 {
   for (int i = 0; i < num; i++)
     devices[i]->rearm_cqs();
-}
-
-void DeviceList::handle_async_event()
-{
-  for (int i = 0; i < num; i++)
-    devices[i]->handle_async_event();
 }
