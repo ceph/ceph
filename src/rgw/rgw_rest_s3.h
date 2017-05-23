@@ -10,6 +10,8 @@
 
 #include <boost/utility/string_view.hpp>
 
+#include "common/backport14.h"
+#include "common/sstring.hh"
 #include "rgw_op.h"
 #include "rgw_rest.h"
 #include "rgw_http_errors.h"
@@ -659,24 +661,33 @@ namespace rgw {
 namespace auth {
 namespace s3 {
 
-
 class AWSEngine : public rgw::auth::Engine {
 public:
   class VersionAbstractor {
+    static constexpr size_t DIGEST_SIZE_V2 = CEPH_CRYPTO_HMACSHA1_DIGESTSIZE;
+    static constexpr size_t DIGEST_SIZE_V4 = CEPH_CRYPTO_HMACSHA256_DIGESTSIZE;
+
+    /* Knowing the signature max size allows us to employ the sstring, and thus
+     * avoid dynamic allocations. The multiplier comes from representing digest
+     * in the base64-encoded form. */
+    static constexpr size_t SIGNATURE_MAX_SIZE = \
+      ceph::max(DIGEST_SIZE_V2, DIGEST_SIZE_V4) * 2 + sizeof('\0');
+
   public:
     virtual ~VersionAbstractor() {};
 
     using access_key_id_t = boost::string_view;
-    using signature_t = boost::string_view;
+    using client_signature_t = boost::string_view;
+    using server_signature_t = basic_sstring<char, uint16_t, SIGNATURE_MAX_SIZE>;
     using string_to_sign_t = std::string;
 
     /* Transformation for crafting the AWS signature at server side which is
      * used later to compare with the user-provided one. The methodology for
      * doing that depends on AWS auth version. */
     using signature_factory_t = \
-      std::function<std::string(CephContext* cct,
-                                const std::string& secret_key,
-                                const std::string& string_to_sign)>;
+      std::function<server_signature_t(CephContext* cct,
+                                       const std::string& secret_key,
+                                       const std::string& string_to_sign)>;
 
     /* Return an instance of Completer for verifying the payload's fingerprint
      * if necessary. Otherwise caller gets nullptr. Caller may provide secret
@@ -686,7 +697,7 @@ public:
         const boost::optional<std::string>& secret_key)>;
 
     virtual std::tuple<access_key_id_t,
-                       signature_t,
+                       client_signature_t,
                        string_to_sign_t,
                        signature_factory_t,
                        completer_factory_t>
@@ -748,14 +759,14 @@ class AWSGeneralAbstractor : public AWSEngine::VersionAbstractor {
                        const bool qsr) const;
 
   std::tuple<access_key_id_t,
-             signature_t,
+             client_signature_t,
              string_to_sign_t,
              signature_factory_t,
              completer_factory_t>
   get_auth_data_v2(const req_state* s) const;
 
   std::tuple<access_key_id_t,
-             signature_t,
+             client_signature_t,
              string_to_sign_t,
              signature_factory_t,
              completer_factory_t>
@@ -767,7 +778,7 @@ public:
   }
 
   std::tuple<access_key_id_t,
-             signature_t,
+             client_signature_t,
              string_to_sign_t,
              signature_factory_t,
              completer_factory_t>
@@ -782,7 +793,7 @@ class AWSBrowserUploadAbstractor : public AWSEngine::VersionAbstractor {
   }
 
   using auth_data_t = std::tuple<access_key_id_t,
-                                 signature_t,
+                                 client_signature_t,
                                  string_to_sign_t,
                                  signature_factory_t,
                                  completer_factory_t>;
@@ -795,7 +806,7 @@ public:
   }
 
   std::tuple<access_key_id_t,
-             signature_t,
+             client_signature_t,
              string_to_sign_t,
              signature_factory_t,
              completer_factory_t>
@@ -823,7 +834,7 @@ protected:
   result_t authenticate(const boost::string_view& access_key_id,
                         const boost::string_view& signature,
                         const std::string& string_to_sign,
-                        const signature_factory_t& signature_factory,
+                        const signature_factory_t&,
                         const completer_factory_t& completer_factory,
                         const req_state* s) const override;
 public:

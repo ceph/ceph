@@ -147,30 +147,6 @@ void rgw_create_s3_canonical_header(
   dest_str = dest;
 }
 
-int rgw_get_s3_header_digest(const std::string& auth_hdr,
-                             const std::string& key,
-                             std::string& dest)
-{
-  if (key.empty())
-    return -EINVAL;
-
-  char hmac_sha1[CEPH_CRYPTO_HMACSHA1_DIGESTSIZE];
-  calc_hmac_sha1(key.c_str(), key.size(), auth_hdr.c_str(), auth_hdr.size(), hmac_sha1);
-
-  char b64[64]; /* 64 is really enough */
-  int ret = ceph_armor(b64, b64 + 64, hmac_sha1,
-		       hmac_sha1 + CEPH_CRYPTO_HMACSHA1_DIGESTSIZE);
-  if (ret < 0) {
-    dout(10) << "ceph_armor failed" << dendl;
-    return ret;
-  }
-  b64[ret] = '\0';
-
-  dest = b64;
-
-  return 0;
-}
-
 static inline bool is_base64_for_content_md5(unsigned char c) {
   return (isalnum(c) || isspace(c) || (c == '+') || (c == '/') || (c == '='));
 }
@@ -716,7 +692,7 @@ std::string get_v4_string_to_sign(CephContext* const cct,
     .append(hexed_cr_hash.data(), hexed_cr_hash.size() - 1);
 
   ldout(cct, 10) << "string to sign = "
-                 << rgw::crypt_sanitize::log_content{string_to_sign.c_str()}
+                 << rgw::crypt_sanitize::log_content{string_to_sign}
                  << dendl;
 
   return string_to_sign;
@@ -799,18 +775,51 @@ sha256_digest_t get_v4_signing_key(CephContext* const cct,
 
  * http://docs.aws.amazon.com/general/latest/gr/sigv4-calculate-signature.html
  */
-std::array<char, CEPH_CRYPTO_HMACSHA256_DIGESTSIZE * 2 + 1>
+AWSEngine::VersionAbstractor::server_signature_t
 get_v4_signature(CephContext* const cct,
                  const sha256_digest_t& signing_key,
                  const boost::string_view& string_to_sign)
 {
-  /* The server-side generated signature for comparison. */
-  const auto signature = \
-    buf_to_hex(calc_hmac_sha256(signing_key, string_to_sign));
+  /* The server-side generated digest for comparison. */
+  const auto digest = calc_hmac_sha256(signing_key, string_to_sign);
 
-  ldout(cct, 10) << "generated signature = " << signature.data() << dendl;
+  /* TODO(rzarzynski): I would love to see our sstring having reserve() and
+   * the non-const data() variant like C++17's std::string. */
+  using srv_signature_t = AWSEngine::VersionAbstractor::server_signature_t;
+  srv_signature_t signature(srv_signature_t::initialized_later(),
+                            digest.size() * 2);
+  buf_to_hex(digest.data(), digest.size(), signature.begin());
+
+  ldout(cct, 10) << "generated signature = " << signature << dendl;
 
   return signature;
+}
+
+AWSEngine::VersionAbstractor::server_signature_t
+get_v2_signature(CephContext* const cct,
+                 const std::string& secret_key,
+                 const std::string& string_to_sign)
+{
+  if (secret_key.empty()) {
+    throw -EINVAL;
+  }
+
+  const auto digest = calc_hmac_sha1(secret_key, string_to_sign);
+
+  /* 64 is really enough */;
+  char buf[64];
+  const int ret = ceph_armor(std::begin(buf),
+                             std::begin(buf) + 64,
+                             std::begin(digest),
+                             std::begin(digest) + digest.size());
+  if (ret < 0) {
+    ldout(cct, 10) << "ceph_armor failed" << dendl;
+    throw ret;
+  } else {
+    buf[ret] = '\0';
+    using srv_signature_t = AWSEngine::VersionAbstractor::server_signature_t;
+    return srv_signature_t(buf, ret);
+  }
 }
 
 bool AWSv4ComplMulti::ChunkMeta::is_new_chunk_in_stream(size_t stream_pos) const
