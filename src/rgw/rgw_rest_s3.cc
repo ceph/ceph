@@ -1076,6 +1076,7 @@ int RGWPutObj_ObjStore_S3::get_params()
   /* handle x-amz-copy-source */
 
   if (copy_source) {
+    if (*copy_source == '/') ++copy_source;
     copy_source_bucket_name = copy_source;
     pos = copy_source_bucket_name.find("/");
     if (pos == std::string::npos) {
