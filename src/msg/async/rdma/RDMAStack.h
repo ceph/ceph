@@ -198,8 +198,6 @@ class RDMAStack : public NetworkStack {
   RDMADispatcher *dispatcher;
   PerfCounters *perf_counter;
 
-  std::atomic<bool> fork_finished = {false};
-
  public:
   explicit RDMAStack(CephContext *cct, const string &t);
   virtual ~RDMAStack();
@@ -209,8 +207,5 @@ class RDMAStack : public NetworkStack {
   virtual void spawn_worker(unsigned i, std::function<void ()> &&func) override;
   virtual void join_worker(unsigned i) override;
   RDMADispatcher *get_dispatcher() { return dispatcher; }
-
-  virtual bool is_ready() override { return fork_finished.load(); };
-  virtual void ready() override { fork_finished = true; };
 };
 #endif
