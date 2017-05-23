@@ -309,6 +309,8 @@ int SimpleMessenger::rebind(const set<int>& avoid_ports)
 
 int SimpleMessenger::client_bind(const entity_addr_t &bind_addr)
 {
+  if (!cct->_conf->ms_bind_before_connect)
+    return 0;
   Mutex::Locker l(lock);
   if (did_bind) {
     assert(my_inst.addr == bind_addr);
