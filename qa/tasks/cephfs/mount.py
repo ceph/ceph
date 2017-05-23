@@ -230,10 +230,30 @@ class CephFSMount(object):
 
         pyscript = dedent(script_builder).format(path=path)
 
-        log.info("lock file {0}".format(basename))
+        log.info("lock_background file {0}".format(basename))
         rproc = self._run_python(pyscript)
         self.background_procs.append(rproc)
         return rproc
+
+    def lock_and_release(self, basename="background_file"):
+        assert(self.is_mounted())
+
+        path = os.path.join(self.mountpoint, basename)
+
+        script = """
+            import time
+            import fcntl
+            import struct
+            f1 = open("{path}-1", 'w')
+            fcntl.flock(f1, fcntl.LOCK_EX)
+            f2 = open("{path}-2", 'w')
+            lockdata = struct.pack('hhllhh', fcntl.F_WRLCK, 0, 0, 0, 0, 0)
+            fcntl.fcntl(f2, fcntl.F_SETLK, lockdata)
+            """
+        pyscript = dedent(script).format(path=path)
+
+        log.info("lock_and_release file {0}".format(basename))
+        return self._run_python(pyscript)
 
     def check_filelock(self, basename="background_file", do_flock=True):
         assert(self.is_mounted())

@@ -1182,11 +1182,20 @@ void Objecter::handle_osd_map(MOSDMap *m)
 			<< dendl;
 	  OSDMap::Incremental inc(m->incremental_maps[e]);
 	  osdmap->apply_incremental(inc);
+
+          emit_blacklist_events(inc);
+
 	  logger->inc(l_osdc_map_inc);
 	}
 	else if (m->maps.count(e)) {
 	  ldout(cct, 3) << "handle_osd_map decoding full epoch " << e << dendl;
-	  osdmap->decode(m->maps[e]);
+          OSDMap *new_osdmap = new OSDMap();
+          new_osdmap->decode(m->maps[e]);
+
+          emit_blacklist_events(*osdmap, *new_osdmap);
+
+          osdmap = new_osdmap;
+
 	  logger->inc(l_osdc_map_full);
 	}
 	else {
@@ -1359,6 +1368,58 @@ void Objecter::handle_osd_map(MOSDMap *m)
   if (!waiting_for_map.empty()) {
     _maybe_request_map();
   }
+}
+
+void Objecter::enable_blacklist_events()
+{
+  unique_lock wl(rwlock);
+
+  blacklist_events_enabled = true;
+}
+
+void Objecter::consume_blacklist_events(std::set<entity_addr_t> *events)
+{
+  unique_lock wl(rwlock);
+
+  if (events->empty()) {
+    events->swap(blacklist_events);
+  } else {
+    for (const auto &i : blacklist_events) {
+      events->insert(i);
+    }
+    blacklist_events.clear();
+  }
+}
+
+void Objecter::emit_blacklist_events(const OSDMap::Incremental &inc)
+{
+  if (!blacklist_events_enabled) {
+    return;
+  }
+
+  for (const auto &i : inc.new_blacklist) {
+    blacklist_events.insert(i.first);
+  }
+}
+
+void Objecter::emit_blacklist_events(const OSDMap &old_osd_map,
+                                     const OSDMap &new_osd_map)
+{
+  if (!blacklist_events_enabled) {
+    return;
+  }
+
+  std::set<entity_addr_t> old_set;
+  std::set<entity_addr_t> new_set;
+
+  old_osd_map.get_blacklist(&old_set);
+  new_osd_map.get_blacklist(&new_set);
+
+  std::set<entity_addr_t> delta_set;
+  std::set_difference(
+      new_set.begin(), new_set.end(), old_set.begin(), old_set.end(),
+      std::inserter(delta_set, delta_set.begin()));
+  blacklist_events.insert(delta_set.begin(), delta_set.end());
 }
 
 // op pool check
