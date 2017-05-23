@@ -36,6 +36,8 @@
 #undef dout_prefix
 #define dout_prefix _prefix(_dout)
 
+using namespace std;
+
 static ostream& _prefix(std::ostream* _dout)
 {
   return *_dout << "ErasureCodeLrc: ";

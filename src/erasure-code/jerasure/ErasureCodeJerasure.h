@@ -32,8 +32,8 @@ public:
   int w;
   std::string DEFAULT_W;
   const char *technique;
-  string ruleset_root;
-  string ruleset_failure_domain;
+  std::string ruleset_root;
+  std::string ruleset_failure_domain;
   bool per_chunk_alignment;
 
   explicit ErasureCodeJerasure(const char *_technique) :
@@ -51,9 +51,9 @@ public:
 
   ~ErasureCodeJerasure() override {}
   
-  int create_ruleset(const string &name,
+  int create_ruleset(const std::string &name,
 			     CrushWrapper &crush,
-			     ostream *ss) const override;
+			     std::ostream *ss) const override;
 
   unsigned int get_chunk_count() const override {
     return k + m;
@@ -65,14 +65,14 @@ public:
 
   unsigned int get_chunk_size(unsigned int object_size) const override;
 
-  int encode_chunks(const set<int> &want_to_encode,
-			    map<int, bufferlist> *encoded) override;
+  int encode_chunks(const std::set<int> &want_to_encode,
+			    std::map<int, bufferlist> *encoded) override;
 
-  int decode_chunks(const set<int> &want_to_read,
-			    const map<int, bufferlist> &chunks,
-			    map<int, bufferlist> *decoded) override;
+  int decode_chunks(const std::set<int> &want_to_read,
+			    const std::map<int, bufferlist> &chunks,
+			    std::map<int, bufferlist> *decoded) override;
 
-  int init(ErasureCodeProfile &profile, ostream *ss) override;
+  int init(ErasureCodeProfile &profile, std::ostream *ss) override;
 
   virtual void jerasure_encode(char **data,
                                char **coding,
@@ -85,7 +85,7 @@ public:
   virtual void prepare() = 0;
   static bool is_prime(int value);
 protected:
-  virtual int parse(ErasureCodeProfile &profile, ostream *ss);
+  virtual int parse(ErasureCodeProfile &profile, std::ostream *ss);
 };
 
 class ErasureCodeJerasureReedSolomonVandermonde : public ErasureCodeJerasure {
@@ -115,7 +115,7 @@ public:
   unsigned get_alignment() const override;
   void prepare() override;
 private:
-  int parse(ErasureCodeProfile &profile, ostream *ss) override;
+  int parse(ErasureCodeProfile &profile, std::ostream *ss) override;
 };
 
 class ErasureCodeJerasureReedSolomonRAID6 : public ErasureCodeJerasure {
@@ -144,7 +144,7 @@ public:
   unsigned get_alignment() const override;
   void prepare() override;
 private:
-  int parse(ErasureCodeProfile &profile, ostream *ss) override;
+  int parse(ErasureCodeProfile &profile, std::ostream *ss) override;
 };
 
 #define DEFAULT_PACKETSIZE "2048"
@@ -182,7 +182,7 @@ public:
   unsigned get_alignment() const override;
   void prepare_schedule(int *matrix);
 private:
-  int parse(ErasureCodeProfile &profile, ostream *ss) override;
+  int parse(ErasureCodeProfile &profile, std::ostream *ss) override;
 };
 
 class ErasureCodeJerasureCauchyOrig : public ErasureCodeJerasureCauchy {
@@ -229,15 +229,15 @@ public:
                                char **coding,
                                int blocksize) override;
   unsigned get_alignment() const override;
-  virtual bool check_k(ostream *ss) const;
-  virtual bool check_w(ostream *ss) const;
-  virtual bool check_packetsize_set(ostream *ss) const;
-  virtual bool check_packetsize(ostream *ss) const;
+  virtual bool check_k(std::ostream *ss) const;
+  virtual bool check_w(std::ostream *ss) const;
+  virtual bool check_packetsize_set(std::ostream *ss) const;
+  virtual bool check_packetsize(std::ostream *ss) const;
   virtual int revert_to_default(ErasureCodeProfile &profile,
-				ostream *ss);
+				std::ostream *ss);
   void prepare() override;
 private:
-  int parse(ErasureCodeProfile &profile, ostream *ss) override;
+  int parse(ErasureCodeProfile &profile, std::ostream *ss) override;
 };
 
 class ErasureCodeJerasureBlaumRoth : public ErasureCodeJerasureLiberation {
@@ -247,7 +247,7 @@ public:
   {
   }
 
-  bool check_w(ostream *ss) const override;
+  bool check_w(std::ostream *ss) const override;
   void prepare() override;
 };
 
@@ -263,7 +263,7 @@ public:
 
   void prepare() override;
 private:
-  int parse(ErasureCodeProfile &profile, ostream *ss) override;
+  int parse(ErasureCodeProfile &profile, std::ostream *ss) override;
 };
 
 #endif
