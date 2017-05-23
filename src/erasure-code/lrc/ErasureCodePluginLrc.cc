@@ -20,9 +20,6 @@
 #include "ErasureCodePluginLrc.h"
 #include "ErasureCodeLrc.h"
 
-// re-include our assert
-#include "include/assert.h"
-
 #define dout_subsys ceph_subsys_osd
 #undef dout_prefix
 #define dout_prefix _prefix(_dout)
@@ -30,7 +27,7 @@
 int ErasureCodePluginLrc::factory(const std::string &directory,
 		      ErasureCodeProfile &profile,
 		      ErasureCodeInterfaceRef *erasure_code,
-		      ostream *ss) {
+		      std::ostream *ss) {
     ErasureCodeLrc *interface;
     interface = new ErasureCodeLrc(directory);
     int r = interface->init(profile, ss);
