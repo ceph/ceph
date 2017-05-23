@@ -44,12 +44,11 @@ class Port {
   int port_num;
   struct ibv_port_attr* port_attr;
   uint16_t lid;
-  int gid_idx = 0;
+  int gid_idx;
   union ibv_gid gid;
 
  public:
   explicit Port(CephContext *cct, struct ibv_context* ictxt, uint8_t ipn);
-  ~Port();
   uint16_t get_lid() { return lid; }
   ibv_gid  get_gid() { return gid; }
   int get_port_num() { return port_num; }
