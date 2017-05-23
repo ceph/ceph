@@ -438,10 +438,36 @@ public:
 class LocalApplier : public IdentityApplier {
   using aclspec_t = rgw::auth::Identity::aclspec_t;
 
+  const struct subuser_t {
+    std::string name;
+    uint32_t perm_mask;
+  } subuser;
+
+  const subuser_t
+  parse_subuser_info(const std::string& subuser_name,
+                     const RGWUserInfo &uinfo)
+  {
+    uint32_t perm_mask;
+    std::string name;
+    if (subuser_name != NO_SUBUSER) {
+      const auto iter = uinfo.subusers.find(subuser_name);
+
+      if (iter != std::end(uinfo.subusers)) {
+        perm_mask = iter->second.perm_mask;
+        name = iter->second.name;
+      } else {
+        /* Subuser specified but not found. */
+        perm_mask = RGW_PERM_NONE;
+      }
+    } else {
+      /* Due to backward compatibility. */
+      perm_mask = RGW_PERM_FULL_CONTROL;
+    }
+    return subuser_t { name, perm_mask };
+  }
+
 protected:
   const RGWUserInfo user_info;
-  std::string subuser;
-  uint32_t perm_mask;
 
 public:
   static const std::string NO_SUBUSER;
@@ -449,22 +475,19 @@ public:
   LocalApplier(CephContext* const cct,
                const RGWUserInfo& user_info,
                std::string subuser)
-    : user_info(user_info) {
-    parse_subuser_info(subuser, user_info);
-  }
+    : subuser(parse_subuser_info(subuser, user_info)),
+      user_info(user_info) { }
 
-
-  void parse_subuser_info(const std::string& subuser_name, const RGWUserInfo &uinfo);
   uint32_t get_perms_from_aclspec(const aclspec_t& aclspec) const override;
   bool is_admin_of(const rgw_user& uid) const override;
   bool is_owner_of(const rgw_user& uid) const override;
   bool is_identity(const idset_t& ids) const override;
   uint32_t get_perm_mask() const override {
-    return perm_mask;
+    return subuser.perm_mask;
   }
 
   const boost::optional<const std::string&> get_subuser_name() const override {
-    return subuser;
+    return subuser.name;
   }
 
   void to_str(std::ostream& out) const override;

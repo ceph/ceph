@@ -445,25 +445,6 @@ void rgw::auth::LocalApplier::to_str(std::ostream& out) const {
       << ", is_admin=" << static_cast<bool>(user_info.admin) << ")";
 }
 
-void rgw::auth::LocalApplier::parse_subuser_info(const std::string& subuser_name,
-                                                 const RGWUserInfo &uinfo)
-{
-  if (subuser_name != NO_SUBUSER) {
-    const auto iter = uinfo.subusers.find(subuser_name);
-
-    if (iter != std::end(uinfo.subusers)) {
-      perm_mask = iter->second.perm_mask;
-      subuser = iter->second.name;
-    } else {
-      /* Subuser specified but not found. */
-      perm_mask = RGW_PERM_NONE;
-    }
-  } else {
-    /* Due to backward compatibility. */
-    perm_mask = RGW_PERM_FULL_CONTROL;
-  }
-}
-
 void rgw::auth::LocalApplier::load_acct_info(RGWUserInfo& user_info) const /* out */
 {
   /* Load the account that belongs to the authenticated identity. An extra call
