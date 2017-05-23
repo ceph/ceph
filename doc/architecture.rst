@@ -360,13 +360,15 @@ ability to leverage this computing power leads to several major benefits:
    Ceph Client requests. If a Ceph OSD Daemon is ``down`` and ``in`` the Ceph 
    Storage Cluster, this status may indicate the failure of the Ceph OSD 
    Daemon. If a Ceph OSD Daemon is not running (e.g., it crashes), the Ceph OSD 
-   Daemon cannot notify the Ceph Monitor that it is ``down``. The Ceph Monitor 
-   can ping a Ceph OSD Daemon periodically to ensure that it is running. 
-   However, Ceph also empowers Ceph OSD Daemons to determine if a neighboring 
-   OSD is ``down``, to update the cluster map and to report it to the Ceph 
-   monitor(s). This means that Ceph monitors can remain light weight processes. 
-   See `Monitoring OSDs`_ and `Heartbeats`_ for additional details.
-   
+   Daemon cannot notify the Ceph Monitor that it is ``down``. The OSDs
+   periodically send messages to the Ceph Monitor (``MPGStats`` pre-luminous,
+   and a new ``MOSDBeacon`` in luminous).  If the Ceph Monitor doesn't see that
+   message after a configurable period of time then it marks the OSD down.
+   This mechanism is a failsafe, however. Normally, Ceph OSD Daemons will
+   determine if a neighboring OSD is down and report it to the Ceph Monitor(s).
+   This assures that Ceph Monitors are lightweight processes.  See `Monitoring
+   OSDs`_ and `Heartbeats`_ for additional details.
+
 #. **Data Scrubbing:** As part of maintaining data consistency and cleanliness, 
    Ceph OSD Daemons can scrub objects within placement groups. That is, Ceph 
    OSD Daemons can compare object metadata in one placement group with its 
