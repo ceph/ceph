@@ -514,11 +514,15 @@ endif()
 option(WITH_SYSTEM_BOOST "require and build with system Boost" OFF)
 
 set(BOOST_COMPONENTS
-	thread system regex random program_options date_time iostreams coroutine context)
+	thread system regex random program_options date_time iostreams coroutine)
 set(BOOST_HEADER_COMPONENTS container)
 
 if(WITH_MGR)
 	list(APPEND BOOST_COMPONENTS python)
+endif()
+
+if(WITH_RADOSGW_BEAST_FRONTEND)
+	list(APPEND BOOST_COMPONENTS context)
 endif()
 
 if (WITH_SYSTEM_BOOST)
