@@ -488,6 +488,12 @@ class AddDataPoolHandler : public FileSystemCommandHandler
       return r;
     }
 
+    // no-op when the data_pool already on fs
+    if (fs->mds_map.is_data_pool(poolid)) {
+      ss << "data pool " << poolid << " is already on fs " << fs_name;
+      return 0;
+    }
+
     fsmap.modify_filesystem(
         fs->fscid,
         [poolid](std::shared_ptr<Filesystem> fs)
