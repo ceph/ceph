@@ -118,8 +118,8 @@ int RDMAServerConnTCP::accept(ConnectedSocket *sock, const SocketOptions &opt, e
 
   RDMAConnectedSocketImpl *server;
   //Worker* w = dispatcher->get_stack()->get_worker();
-  RDMAConnTCPInfo conn_info = { sd };
-  server = new RDMAConnectedSocketImpl(cct, infiniband, dispatcher, dynamic_cast<RDMAWorker*>(w), &conn_info);
+  server = new RDMAConnectedSocketImpl(cct, infiniband, dispatcher, dynamic_cast<RDMAWorker*>(w));
+  server->set_accept_fd(sd);
   ldout(cct, 20) << __func__ << " accepted a new QP, tcp_fd: " << sd << dendl;
   std::unique_ptr<RDMAConnectedSocketImpl> csi(server);
   *sock = ConnectedSocket(std::move(csi));
