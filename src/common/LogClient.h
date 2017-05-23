@@ -18,10 +18,6 @@
 #include "common/LogEntry.h"
 #include "common/Mutex.h"
 
-#include <iosfwd>
-#include <sstream>
-#include <atomic>
-
 class LogClient;
 class MLog;
 class MLogAck;

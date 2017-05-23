@@ -14,8 +14,8 @@
 
 #define LARGE_SIZE 1024
 
-#include "Formatter.h"
 #include "HTMLFormatter.h"
+#include "Formatter.h"
 
 #include <sstream>
 #include <stdarg.h>
