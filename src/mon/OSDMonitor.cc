@@ -1005,7 +1005,9 @@ OSDMonitor::update_pending_pgs(const OSDMap::Incremental& inc)
     ps_t end = first + n;
     for (ps_t ps = first; ps < end; ++ps) {
       const pg_t pgid{ps, static_cast<uint64_t>(poolid)};
-      pending_creatings.pgs.emplace(pgid, make_pair(p->second.created,
+      // NOTE: use the *current* epoch as the PG creation epoch so that the
+      // OSD does not have to generate a long set of PastIntervals.
+      pending_creatings.pgs.emplace(pgid, make_pair(inc.epoch,
 						    p->second.modified));
       dout(10) << __func__ << " adding " << pgid << dendl;
     }
