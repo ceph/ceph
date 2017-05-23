@@ -16,6 +16,11 @@ cleanup() {
   # ensure teuthology can clean up the logs
   [ -d ${STACK_LOG_PATH} ] && chmod -R a+rwx ${STACK_LOG_PATH}
 
+  mkdir ${STACK_LOG_PATH}/etc
+  cp -dpr /etc/cinder ${STACK_LOG_PATH}/etc || true
+  cp -dpr /etc/glance ${STACK_LOG_PATH}/etc || true
+  cp -dpr /etc/nova ${STACK_LOG_PATH}/etc || true
+
   # kill all OpenStack services
   if [ -d ${STACK_OPT_PATH}/devstack ]; then
     cd ${STACK_OPT_PATH}/devstack
