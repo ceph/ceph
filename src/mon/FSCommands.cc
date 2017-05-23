@@ -152,9 +152,9 @@ class FsNewHandler : public FileSystemCommandHandler
     }
 
     for (auto fs : fsmap.get_filesystems()) {
-      const set<int64_t>& data_pools = fs->mds_map.get_data_pools();
+      const std::vector<int64_t> &data_pools = fs->mds_map.get_data_pools();
       string sure;
-      if ((data_pools.find(data) != data_pools.end()
+      if ((std::find(data_pools.begin(), data_pools.end(), data) != data_pools.end()
 	   || fs->mds_map.get_metadata_pool() == metadata)
 	  && ((!cmd_getval(g_ceph_context, cmdmap, "sure", sure)
 	       || sure != "--allow-dangerous-metadata-overlay"))) {
