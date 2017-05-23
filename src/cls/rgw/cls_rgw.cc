@@ -2724,22 +2724,22 @@ static int rgw_bi_log_trim(cls_method_context_t hctx, bufferlist *in, bufferlist
   return 0;
 }
 
-static void usage_record_prefix_by_time(uint64_t epoch, string& key)
+static void usage_record_prefix_by_time(const uint64_t epoch, string& key)
 {
   char buf[32];
   snprintf(buf, sizeof(buf), "%011llu", (long long unsigned)epoch);
   key = buf;
 }
 
-static void usage_record_prefix_by_user(string& user, uint64_t epoch, string& key)
+static void usage_record_prefix_by_user(const string& user, const uint64_t epoch, string& key)
 {
   char buf[user.size() + 32];
   snprintf(buf, sizeof(buf), "%s_%011llu_", user.c_str(), (long long unsigned)epoch);
   key = buf;
 }
 
-static void usage_record_prefix_by_subuser(string& user, string& subuser,
-                                           uint64_t epoch, string& key)
+static void usage_record_prefix_by_subuser(const string& user, const string& subuser,
+                                           const uint64_t epoch, string& key)
 {
   char buf[user.size() + subuser.size() + 32];
   snprintf(buf, sizeof(buf), "$%s:%s_%011llu_",
@@ -2747,14 +2747,16 @@ static void usage_record_prefix_by_subuser(string& user, string& subuser,
   key = buf;
 }
 
-static void usage_record_name_by_time(uint64_t epoch, const string& user, string& bucket, string& key)
+static void usage_record_name_by_time(const uint64_t epoch, const string& user,
+                                      const string& bucket, string& key)
 {
   char buf[32 + user.size() + bucket.size()];
   snprintf(buf, sizeof(buf), "%011llu_%s_%s", (long long unsigned)epoch, user.c_str(), bucket.c_str());
   key = buf;
 }
 
-static void usage_record_name_by_user(const string& user, uint64_t epoch, string& bucket, string& key)
+static void usage_record_name_by_user(const string& user, const uint64_t epoch,
+                                      const string& bucket, string& key)
 {
   char buf[32 + user.size() + bucket.size()];
   snprintf(buf, sizeof(buf), "%s_%011llu_%s", user.c_str(), (long long unsigned)epoch, bucket.c_str());
@@ -2762,7 +2764,8 @@ static void usage_record_name_by_user(const string& user, uint64_t epoch, string
 }
 
 static void usage_record_name_by_subuser(const string& user, const string& subuser,
-					 uint64_t epoch, string& bucket, string& key)
+                                         const uint64_t epoch, const string& bucket,
+                                         string& key)
 {
   char buf[32 + user.size() + subuser.size() + bucket.size()];
   snprintf(buf, sizeof(buf), "$%s:%s_%011llu_%s", user.c_str(), subuser.c_str(),
@@ -2850,7 +2853,7 @@ int rgw_user_usage_log_add(cls_method_context_t hctx, bufferlist *in, bufferlist
 }
 
 static int usage_iterate_range(cls_method_context_t hctx, uint64_t start, uint64_t end,
-			       string& user, string& subuser, bool subuser_specified,
+			       const string& user, const string& subuser, bool subuser_specified,
 			       string& key_iter, uint32_t max_entries, bool *truncated,
 			       int (*cb)(cls_method_context_t, const string&,
 					 rgw_usage_log_entry&, void *),
