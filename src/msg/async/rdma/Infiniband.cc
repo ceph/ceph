@@ -585,7 +585,7 @@ int Infiniband::MemoryManager::get_channel_buffers(std::vector<Chunk*> &chunks, 
 
 
 Infiniband::Infiniband(CephContext *cct)
-  : cct(cct), lock("IB lock")
+  : device_list(new DeviceList(cct, this))
 {
 }
 
@@ -595,19 +595,6 @@ Infiniband::~Infiniband()
     dispatcher->polling_stop();
 
   delete device_list;
-}
-
-void Infiniband::init()
-{
-  Mutex::Locker l(lock);
-
-  if (initialized)
-    return;
-
-  device_list = new DeviceList(cct, this);
-  initialized = true;
-
-  dispatcher->polling_start();
 }
 
 void Infiniband::set_dispatcher(RDMADispatcher *d)
