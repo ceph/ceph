@@ -85,7 +85,6 @@ public:
    */
   mempool::pgmap::unordered_map<uint64_t, pair<pool_stat_t,utime_t> > per_pool_sum_delta;
 
-  mempool::pgmap::list< pair<pool_stat_t, utime_t> > pg_sum_deltas;
   pool_stat_t pg_sum_delta;
   utime_t stamp_delta;
 
@@ -286,6 +285,7 @@ public:
   mutable epoch_t min_last_epoch_clean = 0;
   mempool::pgmap::unordered_map<int,set<pg_t> > pg_by_osd;
   mempool::pgmap::unordered_map<int,int> blocked_by_sum;
+  mempool::pgmap::list< pair<pool_stat_t, utime_t> > pg_sum_deltas;
 
   utime_t stamp;
 
