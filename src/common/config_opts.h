@@ -1686,7 +1686,7 @@ OPTION(rgw_swift_versioning_enabled, OPT_BOOL, false) // whether swift object ve
 OPTION(mgr_module_path, OPT_STR, CEPH_PKGLIBDIR "/mgr") // where to load python modules from
 OPTION(mgr_modules, OPT_STR, "restful")  // Which modules to load
 OPTION(mgr_data, OPT_STR, "/var/lib/ceph/mgr/$cluster-$id") // where to find keyring etc
-OPTION(mgr_tick_period, OPT_INT, 5)  // How frequently to tick
+OPTION(mgr_tick_period, OPT_INT, 2)  // How frequently to tick
 OPTION(mgr_stats_period, OPT_INT, 5) // How frequently clients send stats
 OPTION(mgr_client_bytes, OPT_U64, 128*1048576) // bytes from clients
 OPTION(mgr_client_messages, OPT_U64, 512)      // messages from clients
