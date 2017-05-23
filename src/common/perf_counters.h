@@ -79,10 +79,7 @@ public:
       : name(NULL),
         description(NULL),
         nick(NULL),
-	type(PERFCOUNTER_NONE),
-	u64(0),
-	avgcount(0),
-	avgcount2(0)
+	type(PERFCOUNTER_NONE)
     {}
     perf_counter_data_any_d(const perf_counter_data_any_d& other)
       : name(other.name),

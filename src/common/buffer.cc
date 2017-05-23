@@ -50,9 +50,10 @@ static std::atomic_flag buffer_debug_lock = ATOMIC_FLAG_INIT;
 # define bendl std::endl; }
 #endif
 
-  static atomic_t buffer_total_alloc;
-  static atomic64_t buffer_history_alloc_bytes;
-  static atomic64_t buffer_history_alloc_num;
+  static std::atomic<uint64_t> buffer_total_alloc { 0 };
+  static std::atomic<uint64_t> buffer_history_alloc_bytes { 0 };
+  static std::atomic<uint64_t> buffer_history_alloc_num { 0 };
+
   const bool buffer_track_alloc = get_env_bool("CEPH_BUFFER_TRACK");
 
   namespace {
@@ -76,13 +77,13 @@ static std::atomic_flag buffer_debug_lock = ATOMIC_FLAG_INIT;
 
 
   int buffer::get_total_alloc() {
-    return buffer_total_alloc.read();
+    return buffer_total_alloc;
   }
   uint64_t buffer::get_history_alloc_bytes() {
-    return buffer_history_alloc_bytes.read();
+    return buffer_history_alloc_bytes;
   }
   uint64_t buffer::get_history_alloc_num() {
-    return buffer_history_alloc_num.read();
+    return buffer_history_alloc_num;
   }
 
   static atomic_t buffer_cached_crc;
@@ -94,10 +95,10 @@ static std::atomic_flag buffer_debug_lock = ATOMIC_FLAG_INIT;
     buffer_track_crc = b;
   }
   int buffer::get_cached_crc() {
-    return buffer_cached_crc.read();
+    return buffer_cached_crc;
   }
   int buffer::get_cached_crc_adjusted() {
-    return buffer_cached_crc_adjusted.read();
+    return buffer_cached_crc_adjusted;
   }
 
   int buffer::get_missed_crc() {
@@ -111,7 +112,7 @@ static std::atomic_flag buffer_debug_lock = ATOMIC_FLAG_INIT;
     buffer_track_c_str = b;
   }
   int buffer::get_c_str_accesses() {
-    return buffer_c_str_accesses.read();
+    return buffer_c_str_accesses;
   }
 
   static atomic_t buffer_max_pipe_size;
@@ -131,18 +132,18 @@ static std::atomic_flag buffer_debug_lock = ATOMIC_FLAG_INIT;
     size_t size = strict_strtol(buf, 10, &err);
     if (!err.empty())
       return -EIO;
-    buffer_max_pipe_size.set(size);
+    buffer_max_pipe_size = size;
 #endif
     return 0;
   }
 
   size_t get_max_pipe_size() {
 #ifdef CEPH_HAVE_SETPIPE_SZ
-    size_t size = buffer_max_pipe_size.read();
+    size_t size = buffer_max_pipe_size;
     if (size)
       return size;
     if (update_max_pipe_size() == 0)
-      return buffer_max_pipe_size.read();
+      return buffer_max_pipe_size;
 #endif
     // this is the max size hardcoded in linux before 2.6.35
     return 65536;
@@ -852,8 +853,8 @@ static std::atomic_flag buffer_debug_lock = ATOMIC_FLAG_INIT;
     if (_raw && !_raw->is_shareable()) {
       buffer::raw *tr = _raw;
       _raw = tr->clone();
-      _raw->nref.set(1);
-      if (unlikely(tr->nref.dec() == 0)) {
+      _raw->nref = 1;
+      if (unlikely(--tr->nref == 0)) {
         ANNOTATE_HAPPENS_AFTER(&tr->nref);
         ANNOTATE_HAPPENS_BEFORE_FORGET_ALL(&tr->nref);
         delete tr;
@@ -942,7 +943,7 @@ static std::atomic_flag buffer_debug_lock = ATOMIC_FLAG_INIT;
 
   const char *buffer::ptr::raw_c_str() const { assert(_raw); return _raw->data; }
   unsigned buffer::ptr::raw_length() const { assert(_raw); return _raw->len; }
-  int buffer::ptr::raw_nref() const { assert(_raw); return _raw->nref.read(); }
+  int buffer::ptr::raw_nref() const { assert(_raw); return _raw->nref; }
 
   void buffer::ptr::copy_out(unsigned o, unsigned l, char *dest) const {
     assert(_raw);

@@ -54,7 +54,7 @@ Throttle::Throttle(CephContext *cct, const std::string& n, int64_t m, bool _use_
 
     logger = b.create_perf_counters();
     cct->get_perfcounters_collection()->add(logger);
-    logger->set(l_throttle_max, max.read());
+    logger->set(l_throttle_max, max);
   }
 }
 
@@ -78,13 +78,13 @@ Throttle::~Throttle()
 void Throttle::_reset_max(int64_t m)
 {
   assert(lock.is_locked());
-  if ((int64_t)max.read() == m)
+  if (static_cast<int64_t>(max) == m)
     return;
   if (!cond.empty())
     cond.front()->SignalOne();
   if (logger)
     logger->set(l_throttle_max, m);
-  max.set((size_t)m);
+  max = m;
 }
 
 bool Throttle::_wait(int64_t c)
@@ -121,7 +121,7 @@ bool Throttle::_wait(int64_t c)
 
 bool Throttle::wait(int64_t m)
 {
-  if (0 == max.read() && 0 == m) {
+  if (0 == max && 0 == m) {
     return false;
   }
 
@@ -136,7 +136,7 @@ bool Throttle::wait(int64_t m)
 
 int64_t Throttle::take(int64_t c)
 {
-  if (0 == max.read()) {
+  if (0 == max) {
     return 0;
   }
   assert(c >= 0);
@@ -148,14 +148,14 @@ int64_t Throttle::take(int64_t c)
   if (logger) {
     logger->inc(l_throttle_take);
     logger->inc(l_throttle_take_sum, c);
-    logger->set(l_throttle_val, count.read());
+    logger->set(l_throttle_val, count);
   }
-  return count.read();
+  return count;
 }
 
 bool Throttle::get(int64_t c, int64_t m)
 {
-  if (0 == max.read() && 0 == m) {
+  if (0 == max && 0 == m) {
     return false;
   }
 
@@ -177,7 +177,7 @@ bool Throttle::get(int64_t c, int64_t m)
   if (logger) {
     logger->inc(l_throttle_get);
     logger->inc(l_throttle_get_sum, c);
-    logger->set(l_throttle_val, count.read());
+    logger->set(l_throttle_val, count);
   }
   return waited;
 }
@@ -187,7 +187,7 @@ bool Throttle::get(int64_t c, int64_t m)
  */
 bool Throttle::get_or_fail(int64_t c)
 {
-  if (0 == max.read()) {
+  if (0 == max) {
     return true;
   }
 
@@ -206,7 +206,7 @@ bool Throttle::get_or_fail(int64_t c)
       logger->inc(l_throttle_get_or_fail_success);
       logger->inc(l_throttle_get);
       logger->inc(l_throttle_get_sum, c);
-      logger->set(l_throttle_val, count.read());
+      logger->set(l_throttle_val, count);
     }
     return true;
   }
@@ -214,7 +214,7 @@ bool Throttle::get_or_fail(int64_t c)
 
 int64_t Throttle::put(int64_t c)
 {
-  if (0 == max.read()) {
+  if (0 == max) {
     return 0;
   }
 
@@ -224,15 +224,15 @@ int64_t Throttle::put(int64_t c)
   if (c) {
     if (!cond.empty())
       cond.front()->SignalOne();
-    assert(((int64_t)count.read()) >= c); //if count goes negative, we failed somewhere!
-    count.sub(c);
+    assert(static_cast<int64_t>(count) >= c); // if count goes negative, we failed somewhere!
+    count -= c;
     if (logger) {
       logger->inc(l_throttle_put);
       logger->inc(l_throttle_put_sum, c);
-      logger->set(l_throttle_val, count.read());
+      logger->set(l_throttle_val, count);
     }
   }
-  return count.read();
+  return count;
 }
 
 void Throttle::reset()
