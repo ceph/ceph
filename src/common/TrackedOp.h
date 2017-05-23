@@ -62,7 +62,7 @@ public:
 struct ShardedTrackingData;
 class OpTracker {
   friend class OpHistory;
-  atomic64_t seq;
+  std::atomic<int64_t> seq = { 0 };
   vector<ShardedTrackingData*> sharded_in_flight_list;
   uint32_t num_optracker_shards;
   OpHistory history;

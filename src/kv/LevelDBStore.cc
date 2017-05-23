@@ -5,11 +5,17 @@
 #include <set>
 #include <map>
 #include <string>
-#include "include/memory.h"
-#include <errno.h>
+#include <cerrno>
+
 using std::string;
+
+#include "include/memory.h"
+
 #include "common/debug.h"
 #include "common/perf_counters.h"
+
+// re-include our assert to clobber the system one; fix dout:
+#include "include/assert.h"
 
 #define dout_context cct
 #define dout_subsys ceph_subsys_leveldb

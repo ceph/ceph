@@ -17,9 +17,16 @@
 #ifndef CEPH_COMMON_PERF_COUNTERS_H
 #define CEPH_COMMON_PERF_COUNTERS_H
 
+#include <string>
+#include <vector>
+#include <memory>
+#include <atomic>
+#include <cstdint>
+
 #include "common/perf_histogram.h"
 #include "include/utime.h"
 #include "common/Mutex.h"
+#include "common/ceph_time.h"
 
 class CephContext;
 class PerfCountersBuilder;
@@ -69,21 +76,18 @@ public:
       : name(NULL),
         description(NULL),
         nick(NULL),
-	type(PERFCOUNTER_NONE),
-	u64(0),
-	avgcount(0),
-	avgcount2(0)
+	    type(PERFCOUNTER_NONE)
     {}
     perf_counter_data_any_d(const perf_counter_data_any_d& other)
       : name(other.name),
         description(other.description),
         nick(other.nick),
 	type(other.type),
-	u64(other.u64.read()) {
+	u64(other.u64.load()) {
       pair<uint64_t,uint64_t> a = other.read_avg();
-      u64.set(a.first);
-      avgcount.set(a.second);
-      avgcount2.set(a.second);
+      u64 = a.first;
+      avgcount = a.second;
+      avgcount2 = a.second;
       if (other.histogram) {
         histogram.reset(new PerfHistogram<>(*other.histogram));
       }
@@ -94,17 +98,17 @@ public:
     const char *nick;
     int prio = 0;
     enum perfcounter_type_d type;
-    atomic64_t u64;
-    atomic64_t avgcount;
-    atomic64_t avgcount2;
+    std::atomic<uint64_t> u64 = { 0 };
+    std::atomic<uint64_t> avgcount = { 0 };
+    std::atomic<uint64_t> avgcount2 = { 0 };
     std::unique_ptr<PerfHistogram<>> histogram;
 
     void reset()
     {
       if (type != PERFCOUNTER_U64) {
-	u64.set(0);
-	avgcount.set(0);
-	avgcount2.set(0);
+	    u64 = 0;
+	    avgcount = 0;
+	    avgcount2 = 0;
       }
       if (histogram) {
         histogram->reset();
@@ -117,9 +121,9 @@ public:
     pair<uint64_t,uint64_t> read_avg() const {
       uint64_t sum, count;
       do {
-	count = avgcount2.read();
-	sum = u64.read();
-      } while (avgcount.read() != count);
+	count = avgcount;
+	sum = u64;
+      } while (avgcount2 != count);
       return make_pair(sum, count);
     }
   };
