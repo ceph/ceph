@@ -628,6 +628,9 @@ void SessionMap::touch_session(Session *session)
 
 void SessionMap::_mark_dirty(Session *s)
 {
+  if (dirty_sessions.count(s->info.inst.name))
+    return;
+
   if (dirty_sessions.size() >= g_conf->mds_sessionmap_keys_per_op) {
     // Pre-empt the usual save() call from journal segment trim, in
     // order to avoid building up an oversized OMAP update operation
@@ -635,6 +638,7 @@ void SessionMap::_mark_dirty(Session *s)
     save(new C_MDSInternalNoop, version);
   }
 
+  null_sessions.erase(s->info.inst.name);
   dirty_sessions.insert(s->info.inst.name);
 }
 

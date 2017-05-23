@@ -5327,6 +5327,7 @@ void Server::_link_remote(MDRequestRef& mdr, bool inc, CDentry *dn, CInode *targ
     mdcache->predirty_journal_parents(mdr, &le->metablob, targeti, dn->get_dir(), PREDIRTY_DIR, -1);
     mdcache->journal_cow_dentry(mdr.get(), &le->metablob, dn);
     le->metablob.add_null_dentry(dn, true);
+    dn->push_projected_linkage();
   }
 
   journal_and_reply(mdr, targeti, dn, le, new C_MDS_link_remote_finish(this, mdr, inc, dn, targeti));
@@ -5352,6 +5353,7 @@ void Server::_link_remote_finish(MDRequestRef& mdr, bool inc,
   } else {
     // unlink main dentry
     dn->get_dir()->unlink_inode(dn);
+    dn->pop_projected_linkage();
     dn->mark_dirty(dn->get_projected_version(), mdr->ls);  // dirty old dentry
   }
 
@@ -5994,10 +5996,11 @@ struct C_MDS_SlaveRmdirPrep : public ServerLogContext {
 
 struct C_MDS_SlaveRmdirCommit : public ServerContext {
   MDRequestRef mdr;
-  C_MDS_SlaveRmdirCommit(Server *s, MDRequestRef& r)
-    : ServerContext(s), mdr(r) { }
+  CDentry *straydn;
+  C_MDS_SlaveRmdirCommit(Server *s, MDRequestRef& r, CDentry *sd)
+    : ServerContext(s), mdr(r), straydn(sd) { }
   void finish(int r) override {
-    server->_commit_slave_rmdir(mdr, r);
+    server->_commit_slave_rmdir(mdr, r, straydn);
   }
 };
 
@@ -6040,7 +6043,7 @@ void Server::handle_slave_rmdir_prep(MDRequestRef& mdr)
   dout(20) << " rollback is " << mdr->more()->rollback_bl.length() << " bytes" << dendl;
 
   // set up commit waiter
-  mdr->more()->slave_commit = new C_MDS_SlaveRmdirCommit(this, mdr);
+  mdr->more()->slave_commit = new C_MDS_SlaveRmdirCommit(this, mdr, straydn);
 
   if (!in->has_subtree_root_dirfrag(mds->get_nodeid())) {
     dout(10) << " no auth subtree in " << *in << ", skipping journal" << dendl;
@@ -6141,11 +6144,17 @@ void Server::handle_slave_rmdir_prep_ack(MDRequestRef& mdr, MMDSSlaveRequest *ac
     dout(10) << "still waiting on slaves " << mdr->more()->waiting_on_slave << dendl;
 }
 
-void Server::_commit_slave_rmdir(MDRequestRef& mdr, int r)
+void Server::_commit_slave_rmdir(MDRequestRef& mdr, int r, CDentry *straydn)
 {
   dout(10) << "_commit_slave_rmdir " << *mdr << " r=" << r << dendl;
   
   if (r == 0) {
+    if (mdr->more()->slave_update_journaled) {
+      CInode *strayin = straydn->get_projected_linkage()->get_inode();
+      if (strayin && !strayin->snaprealm)
+	mdcache->clear_dirty_bits_for_stray(strayin);
+    }
+
     mdr->cleanup();
 
     if (mdr->more()->slave_update_journaled) {
@@ -7204,7 +7213,7 @@ void Server::_rename_apply(MDRequestRef& mdr, CDentry *srcdn, CDentry *destdn, C
     if (destdnl->is_primary()) {
       assert(straydn);
       dout(10) << "straydn is " << *straydn << dendl;
-      destdn->get_dir()->unlink_inode(destdn);
+      destdn->get_dir()->unlink_inode(destdn, false);
 
       straydn->pop_projected_linkage();
       if (mdr->is_slave() && !mdr->more()->slave_update_journaled)
@@ -7223,7 +7232,7 @@ void Server::_rename_apply(MDRequestRef& mdr, CDentry *srcdn, CDentry *destdn, C
 	//oldin->open_snaprealm();  might be sufficient..	
       }
     } else if (destdnl->is_remote()) {
-      destdn->get_dir()->unlink_inode(destdn);
+      destdn->get_dir()->unlink_inode(destdn, false);
       if (oldin->is_auth())
   	oldin->pop_and_dirty_projected_inode(mdr->ls);
     }
@@ -7257,7 +7266,7 @@ void Server::_rename_apply(MDRequestRef& mdr, CDentry *srcdn, CDentry *destdn, C
   } else { // primary
     if (linkmerge) {
       dout(10) << "merging primary onto remote link" << dendl;
-      destdn->get_dir()->unlink_inode(destdn);
+      destdn->get_dir()->unlink_inode(destdn, false);
     }
     destdnl = destdn->pop_projected_linkage();
     if (mdr->is_slave() && !mdr->more()->slave_update_journaled)
@@ -7701,6 +7710,11 @@ void Server::_commit_slave_rename(MDRequestRef& mdr, int r,
       mdr->more()->is_ambiguous_auth = false;
     }
 
+    if (straydn && mdr->more()->slave_update_journaled) {
+      CInode *strayin = straydn->get_projected_linkage()->get_inode();
+      if (strayin && !strayin->snaprealm)
+	mdcache->clear_dirty_bits_for_stray(strayin);
+    }
 
     mds->queue_waiters(finished);
     mdr->cleanup();

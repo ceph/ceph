@@ -114,6 +114,7 @@ class MDCache {
 
   // -- my cache --
   LRU lru;   // dentry lru for expiring items from cache
+  LRU bottom_lru; // dentries that should be trimmed ASAP
  protected:
   ceph::unordered_map<vinodeno_t,CInode*> inode_map;  // map of inodes by ino
   CInode *root;                            // root inode
@@ -154,6 +155,8 @@ public:
   }
 
   void maybe_eval_stray(CInode *in, bool delay=false);
+  void clear_dirty_bits_for_stray(CInode* diri);
+
   bool is_readonly() { return readonly; }
   void force_readonly();
 
@@ -206,20 +209,20 @@ public:
     frag_t frag;
     snapid_t snap;
     filepath want_path;
-    MDSCacheObject *base;
+    CInode *basei;
     bool want_base_dir;
     bool want_xlocked;
 
     discover_info_t() :
-      tid(0), mds(-1), snap(CEPH_NOSNAP), base(NULL),
+      tid(0), mds(-1), snap(CEPH_NOSNAP), basei(NULL),
       want_base_dir(false), want_xlocked(false) {}
     ~discover_info_t() {
-      if (base)
-	base->put(MDSCacheObject::PIN_DISCOVERBASE);
+      if (basei)
+	basei->put(MDSCacheObject::PIN_DISCOVERBASE);
     }
-    void pin_base(MDSCacheObject *b) {
-      base = b;
-      base->get(MDSCacheObject::PIN_DISCOVERBASE);
+    void pin_base(CInode *b) {
+      basei = b;
+      basei->get(MDSCacheObject::PIN_DISCOVERBASE);
     }
   };
 
@@ -766,28 +769,19 @@ public:
   }
 public:
   void touch_dentry(CDentry *dn) {
-    // touch ancestors
-    if (dn->get_dir()->get_inode()->get_projected_parent_dn())
-      touch_dentry(dn->get_dir()->get_inode()->get_projected_parent_dn());
-    
-    // touch me
-    if (dn->is_auth())
-      lru.lru_touch(dn);
-    else
-      lru.lru_midtouch(dn);
+    if (dn->state_test(CDentry::STATE_BOTTOMLRU)) {
+      bottom_lru.lru_midtouch(dn);
+    } else {
+      if (dn->is_auth())
+	lru.lru_touch(dn);
+      else
+	lru.lru_midtouch(dn);
+    }
   }
   void touch_dentry_bottom(CDentry *dn) {
+    if (dn->state_test(CDentry::STATE_BOTTOMLRU))
+      return;
     lru.lru_bottouch(dn);
-    if (dn->get_projected_linkage()->is_primary() &&
-	dn->get_dir()->inode->is_stray()) {
-      CInode *in = dn->get_projected_linkage()->get_inode();
-      if (in->has_dirfrags()) {
-	list<CDir*> ls;
-	in->get_dirfrags(ls);
-	for (list<CDir*>::iterator p = ls.begin(); p != ls.end(); ++p)
-	  (*p)->touch_dentries_bottom();
-      }
-    }
   }
 protected:
 

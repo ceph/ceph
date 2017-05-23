@@ -1328,6 +1328,10 @@ int MDSMonitor::filesystem_command(
       ss << "can't tell the root (" << fs->mds_map.get_root()
 	 << ") or tableserver (" << fs->mds_map.get_tableserver()
 	 << ") to deactivate";
+    } else if (role.rank != fs->mds_map.get_last_in_mds()) {
+      r = -EINVAL;
+      ss << "mds." << role << " doesn't have the max rank ("
+	 << fs->mds_map.get_last_in_mds() << ")";
     } else if (fs->mds_map.get_num_in_mds() <= size_t(fs->mds_map.get_max_mds())) {
       r = -EBUSY;
       ss << "must decrease max_mds or else MDS will immediately reactivate";

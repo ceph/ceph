@@ -86,8 +86,10 @@ public:
   static const int STATE_BADREMOTEINO = (1<<3);
   static const int STATE_EVALUATINGSTRAY = (1<<4);
   static const int STATE_PURGINGPINNED =  (1<<5);
+  static const int STATE_BOTTOMLRU =    (1<<6);
   // stray dentry needs notification of releasing reference
   static const int STATE_STRAY =	STATE_NOTIFYREF;
+  static const int MASK_STATE_IMPORT_KEPT = STATE_BOTTOMLRU;
 
   // -- pins --
   static const int PIN_INODEPIN =     1;  // linked inode is pinned
@@ -289,7 +291,7 @@ public:
     ::decode(replica_map, blp);
 
     // twiddle
-    state = 0;
+    state &= MASK_STATE_IMPORT_KEPT;
     state_set(CDentry::STATE_AUTH);
     if (nstate & STATE_DIRTY)
       _mark_dirty(ls);
