@@ -422,19 +422,99 @@ TEST(cls_rgw, gc_set)
   bool truncated;
   list<cls_rgw_gc_obj_info> entries;
   string marker;
+  string next_marker;
 
   /* list chains, verify truncated */
-  ASSERT_EQ(0, cls_rgw_gc_list(ioctx, oid, marker, 8, true, entries, &truncated));
+  ASSERT_EQ(0, cls_rgw_gc_list(ioctx, oid, marker, 8, true, entries, &truncated, next_marker));
   ASSERT_EQ(8, (int)entries.size());
   ASSERT_EQ(1, truncated);
 
   entries.clear();
+  next_marker.clear();
 
   /* list all chains, verify not truncated */
-  ASSERT_EQ(0, cls_rgw_gc_list(ioctx, oid, marker, 10, true, entries, &truncated));
+  ASSERT_EQ(0, cls_rgw_gc_list(ioctx, oid, marker, 10, true, entries, &truncated, next_marker));
   ASSERT_EQ(10, (int)entries.size());
   ASSERT_EQ(0, truncated);
  
+  /* verify all chains are valid */
+  list<cls_rgw_gc_obj_info>::iterator iter = entries.begin();
+  for (int i = 0; i < 10; i++, ++iter) {
+    cls_rgw_gc_obj_info& entry = *iter;
+
+    /* create expected chain name */
+    char buf[32];
+    snprintf(buf, sizeof(buf), "chain-%d", i);
+    string tag = buf;
+
+    /* verify chain name as expected */
+    ASSERT_EQ(entry.tag, tag);
+
+    /* verify expected num of objects in chain */
+    ASSERT_EQ(2, (int)entry.chain.objs.size());
+
+    list<cls_rgw_obj>::iterator oiter = entry.chain.objs.begin();
+    cls_rgw_obj obj1, obj2;
+
+    /* create expected objects */
+    create_obj(obj1, i, 1);
+    create_obj(obj2, i, 2);
+
+    /* assign returned object names */
+    cls_rgw_obj& ret_obj1 = *oiter++;
+    cls_rgw_obj& ret_obj2 = *oiter;
+
+    /* verify objects are as expected */
+    ASSERT_EQ(1, (int)cmp_objs(obj1, ret_obj1));
+    ASSERT_EQ(1, (int)cmp_objs(obj2, ret_obj2));
+  }
+}
+
+TEST(cls_rgw, gc_list)
+{
+  /* add chains */
+  string oid = "obj";
+  for (int i = 0; i < 10; i++) {
+    char buf[32];
+    snprintf(buf, sizeof(buf), "chain-%d", i);
+    string tag = buf;
+    librados::ObjectWriteOperation op;
+    cls_rgw_gc_obj_info info;
+
+    cls_rgw_obj obj1, obj2;
+    create_obj(obj1, i, 1);
+    create_obj(obj2, i, 2);
+    info.chain.objs.push_back(obj1);
+    info.chain.objs.push_back(obj2);
+
+    op.create(false); // create object
+
+    info.tag = tag;
+    cls_rgw_gc_set_entry(op, 0, info);
+
+    ASSERT_EQ(0, ioctx.operate(oid, &op));
+  }
+
+  bool truncated;
+  list<cls_rgw_gc_obj_info> entries;
+  list<cls_rgw_gc_obj_info> entries2;
+  string marker;
+  string next_marker;
+
+  /* list chains, verify truncated */
+  ASSERT_EQ(0, cls_rgw_gc_list(ioctx, oid, marker, 8, true, entries, &truncated, next_marker));
+  ASSERT_EQ(8, (int)entries.size());
+  ASSERT_EQ(1, truncated);
+
+  marker = next_marker;
+  next_marker.clear();
+
+  ASSERT_EQ(0, cls_rgw_gc_list(ioctx, oid, marker, 8, true, entries2, &truncated, next_marker));
+  ASSERT_EQ(2, (int)entries2.size());
+  ASSERT_EQ(0, truncated);
+
+  entries.splice(entries.end(), entries2);
+
   /* verify all chains are valid */
   list<cls_rgw_gc_obj_info>::iterator iter = entries.begin();
   for (int i = 0; i < 10; i++, ++iter) {
@@ -496,9 +576,10 @@ TEST(cls_rgw, gc_defer)
   bool truncated;
   list<cls_rgw_gc_obj_info> entries;
   string marker;
+  string next_marker;
 
   /* list chains, verify num entries as expected */
-  ASSERT_EQ(0, cls_rgw_gc_list(ioctx, oid, marker, 1, true, entries, &truncated));
+  ASSERT_EQ(0, cls_rgw_gc_list(ioctx, oid, marker, 1, true, entries, &truncated, next_marker));
   ASSERT_EQ(1, (int)entries.size());
   ASSERT_EQ(0, truncated);
 
@@ -509,17 +590,19 @@ TEST(cls_rgw, gc_defer)
   ASSERT_EQ(0, ioctx.operate(oid, &op2));
 
   entries.clear();
+  next_marker.clear();
 
   /* verify list doesn't show deferred entry (this may fail if cluster is thrashing) */
-  ASSERT_EQ(0, cls_rgw_gc_list(ioctx, oid, marker, 1, true, entries, &truncated));
+  ASSERT_EQ(0, cls_rgw_gc_list(ioctx, oid, marker, 1, true, entries, &truncated, next_marker));
   ASSERT_EQ(0, (int)entries.size());
   ASSERT_EQ(0, truncated);
 
   /* wait enough */
   sleep(5);
+  next_marker.clear();
 
   /* verify list shows deferred entry */
-  ASSERT_EQ(0, cls_rgw_gc_list(ioctx, oid, marker, 1, true, entries, &truncated));
+  ASSERT_EQ(0, cls_rgw_gc_list(ioctx, oid, marker, 1, true, entries, &truncated, next_marker));
   ASSERT_EQ(1, (int)entries.size());
   ASSERT_EQ(0, truncated);
 
@@ -532,9 +615,10 @@ TEST(cls_rgw, gc_defer)
   ASSERT_EQ(0, ioctx.operate(oid, &op3));
 
   entries.clear();
+  next_marker.clear();
 
   /* verify entry was removed */
-  ASSERT_EQ(0, cls_rgw_gc_list(ioctx, oid, marker, 1, true, entries, &truncated));
+  ASSERT_EQ(0, cls_rgw_gc_list(ioctx, oid, marker, 1, true, entries, &truncated, next_marker));
   ASSERT_EQ(0, (int)entries.size());
   ASSERT_EQ(0, truncated);
 

@@ -64,6 +64,7 @@ void cls_rgw_gc_list_op::generate_test_instances(list<cls_rgw_gc_list_op*>& ls)
 void cls_rgw_gc_list_ret::dump(Formatter *f) const
 {
   encode_json("entries", entries, f);
+  f->dump_string("next_marker", next_marker);
   f->dump_int("truncated", (int)truncated);
 }
 
