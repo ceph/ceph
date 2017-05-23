@@ -178,8 +178,8 @@ void MDSMap::dump(Formatter *f) const
   }
   f->close_section();
   f->open_array_section("data_pools");
-  for (set<int64_t>::const_iterator p = data_pools.begin(); p != data_pools.end(); ++p)
-    f->dump_int("pool", *p);
+  for (const auto p: data_pools)
+    f->dump_int("pool", p);
   f->close_section();
   f->dump_int("metadata_pool", metadata_pool);
   f->dump_bool("enabled", enabled);
@@ -192,7 +192,7 @@ void MDSMap::generate_test_instances(list<MDSMap*>& ls)
 {
   MDSMap *m = new MDSMap();
   m->max_mds = 1;
-  m->data_pools.insert(0);
+  m->data_pools.push_back(0);
   m->metadata_pool = 1;
   m->cas_pool = 2;
   m->compat = get_mdsmap_compat_set_all();
@@ -498,8 +498,8 @@ void MDSMap::encode(bufferlist& bl, uint64_t features) const
     }
     n = data_pools.size();
     ::encode(n, bl);
-    for (set<int64_t>::const_iterator p = data_pools.begin(); p != data_pools.end(); ++p) {
-      n = *p;
+    for (const auto p: data_pools) {
+      n = p;
       ::encode(n, bl);
     }
 
@@ -603,7 +603,7 @@ void MDSMap::decode(bufferlist::iterator& p)
     while (n--) {
       __u32 m;
       ::decode(m, p);
-      data_pools.insert(m);
+      data_pools.push_back(m);
     }
     __s32 s;
     ::decode(s, p);
