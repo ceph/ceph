@@ -68,6 +68,9 @@ class RDMADispatcher : public CephContext::ForkWatcher {
 
   std::thread t;
   CephContext *cct;
+  Infiniband::CompletionQueue* tx_cq;
+  Infiniband::CompletionQueue* rx_cq;
+  Infiniband::CompletionChannel *tx_cc, *rx_cc;
   EventCallbackRef async_handler;
   bool done = false;
   std::atomic<uint64_t> num_dead_queue_pair = {0};
@@ -116,13 +119,8 @@ class RDMADispatcher : public CephContext::ForkWatcher {
 
   explicit RDMADispatcher(CephContext* c, RDMAStack* s);
   virtual ~RDMADispatcher();
-
   void handle_async_event();
-
-  void polling_start();
-  void polling_stop();
   void polling();
-
   int register_qp(QueuePair *qp, RDMAConnectedSocketImpl* csi);
   void make_pending_worker(RDMAWorker* w) {
     Mutex::Locker l(w_lock);
@@ -135,11 +133,13 @@ class RDMADispatcher : public CephContext::ForkWatcher {
   RDMAConnectedSocketImpl* get_conn_lockless(uint32_t qp);
   void erase_qpn_lockless(uint32_t qpn);
   void erase_qpn(uint32_t qpn);
+  Infiniband::CompletionQueue* get_tx_cq() const { return tx_cq; }
+  Infiniband::CompletionQueue* get_rx_cq() const { return rx_cq; }
   void notify_pending_workers();
   virtual void handle_pre_fork() override;
   virtual void handle_post_fork() override;
-  void handle_tx_event(Device *ibdev, ibv_wc *cqe, int n);
-  void post_tx_buffer(Device *ibdev, std::vector<Chunk*> &chunks);
+  void handle_tx_event(ibv_wc *cqe, int n);
+  void post_tx_buffer(std::vector<Chunk*> &chunks);
 
   std::atomic<uint64_t> inflight = {0};
 };
@@ -239,8 +239,6 @@ class RDMAConnectedSocketImpl : public ConnectedSocketImpl {
   RDMAConnectedSocketImpl(CephContext *cct, Infiniband* ib, RDMADispatcher* s,
                           RDMAWorker *w);
   virtual ~RDMAConnectedSocketImpl();
-
-  Device *get_device() { return ibdev; }
 
   void pass_wc(std::vector<ibv_wc> &&v);
   void get_wc(std::vector<ibv_wc> &w);
