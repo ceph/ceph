@@ -44,6 +44,7 @@ public:
   // aggregate state, populated by PGMap child
   int64_t num_pg = 0, num_osd = 0;
   int64_t num_pg_active = 0;
+  int64_t num_pg_unknown = 0;
   mempool::pgmap::unordered_map<int32_t,pool_stat_t> pg_pool_sum;
   mempool::pgmap::map<int64_t,int64_t> num_pg_by_pool;
   pool_stat_t pg_sum;
