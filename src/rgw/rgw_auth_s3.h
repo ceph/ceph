@@ -14,6 +14,7 @@
 #include <boost/utility/string_ref.hpp>
 #include <boost/utility/string_view.hpp>
 
+#include "common/sstring.hh"
 #include "rgw_common.h"
 #include "rgw_rest_s3.h"
 
@@ -310,10 +311,6 @@ rgw_create_s3_canonical_header(const req_info& info, const bool qsr) {
   return std::make_tuple(ok, dest, header_time);
 }
 
-int rgw_get_s3_header_digest(const std::string& auth_hdr,
-                             const std::string& key,
-                             std::string& dest);
-
 namespace rgw {
 namespace auth {
 namespace s3 {
@@ -426,24 +423,15 @@ get_v4_signing_key(CephContext* const cct,
                    const boost::string_view& credential_scope,
                    const boost::string_view& access_key_secret);
 
-extern std::array<char, CEPH_CRYPTO_HMACSHA256_DIGESTSIZE * 2 + 1>
+extern AWSEngine::VersionAbstractor::server_signature_t
 get_v4_signature(CephContext* cct,
                  const sha256_digest_t& signing_key,
                  const boost::string_view& string_to_sign);
 
-static inline
-std::string get_v2_signature(CephContext*,
-                             const std::string& secret_key,
-                             const std::string& string_to_sign) {
-  std::string signature_dest;
-  const int ret = rgw_get_s3_header_digest(string_to_sign, secret_key,
-                                           signature_dest);
-  if (ret < 0) {
-    throw ret;
-  } else {
-    return signature_dest;
-  }
-}
+extern AWSEngine::VersionAbstractor::server_signature_t
+get_v2_signature(CephContext*,
+                 const std::string& secret_key,
+                 const std::string& string_to_sign);
 
 } /* namespace s3 */
 } /* namespace auth */

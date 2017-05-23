@@ -94,7 +94,7 @@ class EC2Engine : public rgw::auth::s3::AWSEngine {
   result_t authenticate(const boost::string_view& access_key_id,
                         const boost::string_view& signature,
                         const std::string& string_to_sign,
-                        const signature_factory_t& signature_factory,
+                        const signature_factory_t&,
                         const completer_factory_t& completer_factory,
                         const req_state* s) const override;
 public:

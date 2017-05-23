@@ -2223,6 +2223,17 @@ extern std::string url_encode(const std::string& src);
 /* destination should be CEPH_CRYPTO_HMACSHA1_DIGESTSIZE bytes long */
 extern void calc_hmac_sha1(const char *key, int key_len,
                           const char *msg, int msg_len, char *dest);
+
+using sha1_digest_t = \
+  std::array<char, CEPH_CRYPTO_HMACSHA1_DIGESTSIZE>;
+
+static inline sha1_digest_t
+calc_hmac_sha1(const boost::string_view& key, const boost::string_view& msg) {
+  sha1_digest_t dest;
+  calc_hmac_sha1(key.data(), key.size(), msg.data(), msg.size(), dest.data());
+  return dest;
+}
+
 /* destination should be CEPH_CRYPTO_HMACSHA256_DIGESTSIZE bytes long */
 extern void calc_hmac_sha256(const char *key, int key_len,
                              const char *msg, int msg_len,

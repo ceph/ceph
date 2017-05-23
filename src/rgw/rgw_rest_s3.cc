@@ -3545,7 +3545,7 @@ null_completer_factory(const boost::optional<std::string>& secret_key)
 using AWSVerAbstractor = AWSEngine::VersionAbstractor;
 
 std::tuple<AWSVerAbstractor::access_key_id_t,
-           AWSVerAbstractor::signature_t,
+           AWSVerAbstractor::client_signature_t,
            AWSVerAbstractor::string_to_sign_t,
            AWSVerAbstractor::signature_factory_t,
            AWSVerAbstractor::completer_factory_t>
@@ -3565,12 +3565,15 @@ AWSGeneralAbstractor::get_auth_data(const req_state* const s) const
   }
 }
 
-static inline
-std::string v4_signature(const boost::string_view& credential_scope,
+/* srv_signature_t is an alias over Ceph's basic_sstring. We're using
+ * it to keep everything within the stack boundaries instead of doing
+ * dynamic allocations. */
+static inline AWSVerAbstractor::server_signature_t
+v4_signature(const boost::string_view& credential_scope,
 
-                         CephContext* const cct,
-                         const boost::string_view& secret_key,
-                         const boost::string_view& string_to_sign)
+             CephContext* const cct,
+             const boost::string_view& secret_key,
+             const boost::string_view& string_to_sign)
 {
   auto signing_key = \
     rgw::auth::s3::get_v4_signing_key(cct, credential_scope, secret_key);
@@ -3578,12 +3581,11 @@ std::string v4_signature(const boost::string_view& credential_scope,
   auto server_signature = \
     rgw::auth::s3::get_v4_signature(cct, std::move(signing_key),
                                     string_to_sign);
-
-  return std::string(server_signature.data(), server_signature.size() - 1);
+  return server_signature;
 }
 
 std::tuple<AWSVerAbstractor::access_key_id_t,
-           AWSVerAbstractor::signature_t,
+           AWSVerAbstractor::client_signature_t,
            AWSVerAbstractor::string_to_sign_t,
            AWSVerAbstractor::signature_factory_t,
            AWSVerAbstractor::completer_factory_t>
@@ -3753,7 +3755,7 @@ AWSGeneralAbstractor::get_auth_data_v4(const req_state* const s,
 
 
 std::tuple<AWSVerAbstractor::access_key_id_t,
-           AWSVerAbstractor::signature_t,
+           AWSVerAbstractor::client_signature_t,
            AWSVerAbstractor::string_to_sign_t,
            AWSVerAbstractor::signature_factory_t,
            AWSVerAbstractor::completer_factory_t>
@@ -3819,7 +3821,7 @@ AWSGeneralAbstractor::get_auth_data_v2(const req_state* const s) const
 
 
 std::tuple<AWSVerAbstractor::access_key_id_t,
-           AWSVerAbstractor::signature_t,
+           AWSVerAbstractor::client_signature_t,
            AWSVerAbstractor::string_to_sign_t,
            AWSVerAbstractor::signature_factory_t,
            AWSVerAbstractor::completer_factory_t>
@@ -3833,7 +3835,7 @@ AWSBrowserUploadAbstractor::get_auth_data_v2(const req_state* const s) const
 }
 
 std::tuple<AWSVerAbstractor::access_key_id_t,
-           AWSVerAbstractor::signature_t,
+           AWSVerAbstractor::client_signature_t,
            AWSVerAbstractor::string_to_sign_t,
            AWSVerAbstractor::signature_factory_t,
            AWSVerAbstractor::completer_factory_t>
@@ -3864,7 +3866,7 @@ AWSBrowserUploadAbstractor::get_auth_data_v4(const req_state* const s) const
 }
 
 std::tuple<AWSVerAbstractor::access_key_id_t,
-           AWSVerAbstractor::signature_t,
+           AWSVerAbstractor::client_signature_t,
            AWSVerAbstractor::string_to_sign_t,
            AWSVerAbstractor::signature_factory_t,
            AWSVerAbstractor::completer_factory_t>
@@ -3938,7 +3940,7 @@ rgw::auth::s3::LDAPEngine::authenticate(
   const boost::string_view& access_key_id,
   const boost::string_view& signature,
   const std::string& string_to_sign,
-  const signature_factory_t& signature_factory,
+  const signature_factory_t&,
   const completer_factory_t& completer_factory,
   const req_state* const s) const
 {
@@ -3998,7 +4000,8 @@ rgw::auth::s3::LocalEngine::authenticate(
   //TODO: Uncomment, when we have a migration plan in place.
   /*else {
     if (s->user->type != TYPE_RGW) {
-      ldout(cct, 10) << "ERROR: User id of type: " << s->user->type << " is present" << dendl;
+      ldout(cct, 10) << "ERROR: User id of type: " << s->user->type
+                     << " is present" << dendl;
       throw -EPERM;
     }
   }*/
@@ -4010,14 +4013,17 @@ rgw::auth::s3::LocalEngine::authenticate(
   }
   const RGWAccessKey& k = iter->second;
 
-  std::string digest = signature_factory(cct, k.key, string_to_sign);
+  const VersionAbstractor::server_signature_t server_signature = \
+    signature_factory(cct, k.key, string_to_sign);
 
-  ldout(cct, 15) << "string_to_sign=" << rgw::crypt_sanitize::log_content{string_to_sign.c_str()} << dendl;
-  ldout(cct, 15) << "calculated digest=" << digest << dendl;
-  ldout(cct, 15) << "auth signature=" << signature << dendl;
-  ldout(cct, 15) << "compare=" << signature.compare(digest) << dendl;
+  ldout(cct, 15) << "string_to_sign="
+                 << rgw::crypt_sanitize::log_content{string_to_sign}
+                 << dendl;
+  ldout(cct, 15) << "server signature=" << server_signature << dendl;
+  ldout(cct, 15) << "client signature=" << signature << dendl;
+  ldout(cct, 15) << "compare=" << signature.compare(server_signature) << dendl;
 
-  if (signature != digest) {
+  if (static_cast<boost::string_view>(server_signature) != signature) {
     return result_t::deny(-ERR_SIGNATURE_NO_MATCH);
   }
 
