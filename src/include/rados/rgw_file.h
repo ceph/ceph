@@ -279,6 +279,8 @@ int rgw_truncate(struct rgw_fs *rgw_fs,
 #define RGW_OPEN_FLAG_CREATE       0x0001
 #define RGW_OPEN_FLAG_V3           0x0002 /* ops have v3 semantics */
 #define RGW_OPEN_FLAG_STATELESS    0x0002 /* alias it */
+#define RGW_OPEN_FLAG_READ         0x0004
+#define RGW_OPEN_FLAG_WRITE        0x0008
 
 int rgw_open(struct rgw_fs *rgw_fs, struct rgw_file_handle *parent_fh,
 	     uint32_t posix_flags, uint32_t flags);

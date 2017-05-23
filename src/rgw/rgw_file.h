@@ -260,6 +260,8 @@ namespace rgw {
     static constexpr uint32_t FLAG_STATELESS_OPEN = 0x0400;
     static constexpr uint32_t FLAG_EXACT_MATCH = 0x0800;
     static constexpr uint32_t FLAG_MOUNT = 0x1000;
+    static constexpr uint32_t FLAG_READ_OPEN = 0x2000;
+    static constexpr uint32_t FLAG_WRITE_OPEN = 0x4000;
 
 #define CREATE_FLAGS(x) \
     ((x) & ~(RGWFileHandle::FLAG_CREATE|RGWFileHandle::FLAG_LOCK))
@@ -571,17 +573,34 @@ namespace rgw {
     bool creating() const { return flags & FLAG_CREATING; }
     bool deleted() const { return flags & FLAG_DELETED; }
     bool stateless_open() const { return flags & FLAG_STATELESS_OPEN; }
+    bool read_open() const { return flags & FLAG_READ_OPEN; }
+    bool write_open() const { return flags & FLAG_WRITE_OPEN; }
     bool has_children() const;
 
     int open(uint32_t gsh_flags) {
       lock_guard guard(mtx);
+	  
       if (! is_open()) {
 	if (gsh_flags & RGW_OPEN_FLAG_V3) {
 	  flags |= FLAG_STATELESS_OPEN;
 	}
+	if (gsh_flags & RGW_OPEN_FLAG_READ) {
+	  flags |= FLAG_READ_OPEN;
+	}
+	if (gsh_flags & RGW_OPEN_FLAG_WRITE) {
+	  flags |= FLAG_WRITE_OPEN;
+	}
 	flags |= FLAG_OPEN;
 	return 0;
       }
+	  
+      if(read_open() && ! write_open()){
+	if (gsh_flags & RGW_OPEN_FLAG_WRITE)
+	  return -EPERM;
+	if (gsh_flags & RGW_OPEN_FLAG_READ)
+	  return 0;
+      }
+	  
       return -EPERM;
     }
 

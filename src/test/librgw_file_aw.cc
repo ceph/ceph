@@ -318,6 +318,36 @@ TEST (LibRGW, LARGE2) {
   } /* do_large */
 }
 
+TEST(LibRGW, OPEN3) {
+  int ret = rgw_open(fs, object_fh, 0 /* posix flags */, RGW_OPEN_FLAG_READ);
+  ASSERT_EQ(ret, 0);
+}
+
+TEST(LibRGW, CLOSE3) {
+  int ret = rgw_close(fs, object_fh, RGW_CLOSE_FLAG_NONE);
+  ASSERT_EQ(ret, 0);
+}
+
+TEST(LibRGW, OPEN4) {
+  int ret = rgw_open(fs, object_fh, 0 /* posix flags */, RGW_OPEN_FLAG_WRITE);
+  ASSERT_EQ(ret, 0);
+}
+
+TEST(LibRGW, CLOSE4) {
+  int ret = rgw_close(fs, object_fh, RGW_CLOSE_FLAG_NONE);
+  ASSERT_EQ(ret, 0);
+}
+
+TEST(LibRGW, OPEN5) {
+  int ret = rgw_open(fs, object_fh, 0 /* posix flags */, RGW_OPEN_FLAG_WRITE | RGW_OPEN_FLAG_READ);
+  ASSERT_EQ(ret, 0);
+}
+
+TEST(LibRGW, CLOSE5) {
+  int ret = rgw_close(fs, object_fh, RGW_CLOSE_FLAG_NONE);
+  ASSERT_EQ(ret, 0);
+}
+
 TEST(LibRGW, STAT_OBJECT) {
   struct stat st;
   int ret = rgw_getattr(fs, object_fh, &st, RGW_GETATTR_FLAG_NONE);
