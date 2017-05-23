@@ -90,6 +90,7 @@
 #include "MetaRequest.h"
 #include "ObjecterWriteback.h"
 #include "posix_acl.h"
+#include "rich_acl.h"
 
 #include "include/assert.h"
 #include "include/stat.h"
@@ -270,6 +271,10 @@ Client::Client(Messenger *m, MonClient *mc, Objecter *objecter_)
   acl_type = NO_ACL;
   if (cct->_conf->client_acl_type == "posix_acl")
     acl_type = POSIX_ACL;
+#ifdef HAVE_LIBRICHACL
+  else if (cct->_conf->client_acl_type == "rich_acl")
+    acl_type = RICH_ACL;
+#endif
 
   lru.lru_set_max(cct->_conf->client_cache_size);
   lru.lru_set_midpoint(cct->_conf->client_cache_mid);
@@ -5096,29 +5101,34 @@ int Client::inode_permission(Inode *in, const UserPerm& perms, unsigned want)
   if (perms.uid() == 0)
     return 0;
   
-  if (perms.uid() != in->uid && (in->mode & S_IRWXG)) {
-    int ret = _posix_acl_permission(in, perms, want);
-    if (ret != -EAGAIN)
-      return ret;
-  }
+  int r = _acl_permission(in, perms, want);
+    if (r != -EAGAIN)
+      return r;
 
   // check permissions before doing anything else
+  want &= MAY_READ | MAY_WRITE | MAY_EXEC;
   if (!in->check_mode(perms, want))
     return -EACCES;
   return 0;
 }
 
-int Client::xattr_permission(Inode *in, const char *name, unsigned want,
-			     const UserPerm& perms)
+int Client::xattr_permission(Inode *in, const char *name,
+			     const UserPerm& perms, unsigned want)
 {
   int r = _getattr_for_perm(in, perms);
   if (r < 0)
     goto out;
 
-  r = 0;
   if (strncmp(name, "system.", 7) == 0) {
-    if ((want & MAY_WRITE) && (perms.uid() != 0 && perms.uid() != in->uid))
-      r = -EPERM;
+    if ((want & MAY_WRITE) && (perms.uid() != 0 && perms.uid() != in->uid)) {
+      if (acl_type == RICH_ACL && !strcmp(name, SYSTEM_RICHACL) &&
+	  inode_permission(in, perms, MAY_CHMOD) == 0)
+	r = 0;
+      else
+	r = -EPERM;
+    } else {
+      r = 0;
+    }
   } else {
     r = inode_permission(in, perms, want);
   }
@@ -5136,6 +5146,7 @@ int Client::may_setattr(Inode *in, struct ceph_statx *stx, int mask,
 			const UserPerm& perms)
 {
   ldout(cct, 20) << __func__ << *in << "; " << perms << dendl;
+  int richacl_want = 0;
   int r = _getattr_for_perm(in, perms);
   if (r < 0)
     goto out;
@@ -5148,22 +5159,31 @@ int Client::may_setattr(Inode *in, struct ceph_statx *stx, int mask,
 
   r = -EPERM;
   if (mask & CEPH_SETATTR_UID) {
-    if (perms.uid() != 0 && (perms.uid() != in->uid || stx->stx_uid != in->uid))
-      goto out;
+    if (perms.uid() != 0 && (perms.uid() != in->uid || stx->stx_uid != in->uid)) {
+      if (acl_type == RICH_ACL && perms.uid() == stx->stx_uid)
+	richacl_want |= MAY_SET_OWNER;
+      else
+	goto out;
+    }
   }
   if (mask & CEPH_SETATTR_GID) {
-    if (perms.uid() != 0 && (perms.uid() != in->uid ||
-      	       (!perms.gid_in_groups(stx->stx_gid) && stx->stx_gid != in->gid)))
-      goto out;
+    if (perms.uid() != 0 &&
+	(perms.uid() != in->uid ||
+	 (!perms.gid_in_groups(stx->stx_gid) && stx->stx_gid != in->gid))) {
+      if (acl_type == RICH_ACL && perms.gid_in_groups(stx->stx_gid))
+	richacl_want |= MAY_SET_OWNER;
+      else
+	goto out;
+    }
   }
 
   if (mask & CEPH_SETATTR_MODE) {
-    if (perms.uid() != 0 && perms.uid() != in->uid)
-      goto out;
-
-    gid_t i_gid = (mask & CEPH_SETATTR_GID) ? stx->stx_gid : in->gid;
-    if (perms.uid() != 0 && !perms.gid_in_groups(i_gid))
-      stx->stx_mode &= ~S_ISGID;
+    if (perms.uid() != 0 && perms.uid() != in->uid) {
+      if (acl_type == RICH_ACL)
+	richacl_want |= MAY_CHMOD;
+      else
+	goto out;
+    }
   }
 
   if (mask & (CEPH_SETATTR_CTIME | CEPH_SETATTR_BTIME |
@@ -5174,8 +5194,12 @@ int Client::may_setattr(Inode *in, struct ceph_statx *stx, int mask,
 	check_mask |= CEPH_SETATTR_MTIME;
       if (!(mask & CEPH_SETATTR_ATIME_NOW))
 	check_mask |= CEPH_SETATTR_ATIME;
+
       if (check_mask & mask) {
-	goto out;
+	if (acl_type == RICH_ACL)
+	  richacl_want |= MAY_SET_TIMES;
+	else
+	  goto out;
       } else {
 	r = inode_permission(in, perms, MAY_WRITE);
 	if (r < 0)
@@ -5183,7 +5207,16 @@ int Client::may_setattr(Inode *in, struct ceph_statx *stx, int mask,
       }
     }
   }
+
+  if (richacl_want && inode_permission(in, perms, richacl_want) < 0)
+      goto out;
+
   r = 0;
+  if (mask & CEPH_SETATTR_MODE) {
+    gid_t i_gid = (mask & CEPH_SETATTR_GID) ? stx->stx_gid : in->gid;
+    if (perms.uid() != 0 && !perms.gid_in_groups(i_gid))
+      stx->stx_mode &= ~S_ISGID;
+  }
 out:
   ldout(cct, 3) << __func__ << " " << in << " = " << r <<  dendl;
   return r;
@@ -5202,6 +5235,8 @@ int Client::may_open(Inode *in, int flags, const UserPerm& perms)
     want = MAY_READ;
   if (flags & O_TRUNC)
     want |= MAY_WRITE;
+  if (flags & O_APPEND)
+    want |= MAY_APPEND;
 
   int r = 0;
   switch (in->mode & S_IFMT) {
@@ -5239,41 +5274,92 @@ out:
   return r;
 }
 
-int Client::may_create(Inode *dir, const UserPerm& perms)
+int Client::may_create(Inode *dir, const char *name, const UserPerm& perms,
+		       bool isdir, bool replace)
 {
   ldout(cct, 20) << __func__ << *dir << "; " << perms << dendl;
+
+  InodeRef otherin;
+  int extra_want;
   int r = _getattr_for_perm(dir, perms);
   if (r < 0)
     goto out;
 
-  r = inode_permission(dir, perms, MAY_EXEC | MAY_WRITE);
+  if (replace) {
+    int mask = CEPH_STAT_CAP_MODE;
+    if (acl_type != NO_ACL)
+      mask |= CEPH_STAT_CAP_XATTR;
+    r = _lookup(dir, name, mask, &otherin, perms);
+    if (r < 0) {
+      if (r != -ENOENT)
+	goto out;
+    } else {
+      if (isdir && !otherin->is_dir()) {
+	r = -ENOTDIR;
+	goto out;
+      }
+      if (!isdir && otherin->is_dir()) {
+	r = -EISDIR;
+	goto out;
+      }
+      r = _may_delete(dir, otherin.get(), perms);
+      if (r < 0)
+	goto out;
+    }
+  }
+
+  extra_want = isdir ? MAY_CREATE_DIR : MAY_CREATE_FILE;
+  r = inode_permission(dir, perms, extra_want | MAY_EXEC | MAY_WRITE);
 out:
   ldout(cct, 3) << __func__ << " " << dir << " = " << r <<  dendl;
   return r;
 }
 
-int Client::may_delete(Inode *dir, const char *name, const UserPerm& perms)
+int Client::may_delete(Inode *dir, const char *name, const UserPerm& perms, bool *isdir)
 {
   ldout(cct, 20) << __func__ << *dir << "; " << "; name " << name << "; " << perms << dendl;
+
+  InodeRef in;
   int r = _getattr_for_perm(dir, perms);
   if (r < 0)
     goto out;
 
-  r = inode_permission(dir, perms, MAY_EXEC | MAY_WRITE);
-  if (r < 0)
-    goto out;
-
   /* 'name == NULL' means rmsnap */
-  if (perms.uid() != 0 && name && (dir->mode & S_ISVTX)) {
-    InodeRef otherin;
-    r = _lookup(dir, name, CEPH_CAP_AUTH_SHARED, &otherin, perms);
+  if (name) {
+    int mask = CEPH_STAT_CAP_MODE;
+    if (acl_type != NO_ACL)
+      mask |= CEPH_STAT_CAP_XATTR;
+    r = _lookup(dir, name, mask, &in, perms);
     if (r < 0)
       goto out;
-    if (dir->uid != perms.uid() && otherin->uid != perms.uid())
-      r = -EPERM;
+    if (isdir)
+      *isdir = in->is_dir();
+    r = _may_delete(dir, in.get(), perms);
   }
 out:
   ldout(cct, 3) << __func__ << " " << dir << " = " << r <<  dendl;
+  return r;
+}
+
+int Client::_may_delete(Inode *dir, Inode *victim, const UserPerm& perms)
+{
+  int r = inode_permission(dir, perms, MAY_EXEC | MAY_WRITE | MAY_DELETE_CHILD);
+  if (r >= 0) {
+    if (perms.uid() != 0 && (dir->mode & S_ISVTX)) {
+      if (dir->uid != perms.uid() && victim->uid != perms.uid())
+	r = -EPERM;
+    }
+  }
+  if (acl_type == RICH_ACL && r < 0) {
+    int ret = _getattr_for_perm(victim, perms);
+    if (ret < 0)
+      goto out;
+    ret = inode_permission(victim, perms, MAY_DELETE_SELF);
+    if (ret < 0)
+      goto out;
+    r = ret;
+  }
+out:
   return r;
 }
 
@@ -5935,7 +6021,7 @@ void Client::renew_caps(MetaSession *session)
 
 
 // ===============================================================
-// high level (POSIXy) interface
+// high level (POSIX) interface
 
 int Client::_do_lookup(Inode *dir, const string& name, int mask,
 		       InodeRef *target, const UserPerm& perms)
@@ -6209,7 +6295,7 @@ int Client::link(const char *relexisting, const char *relpath, const UserPerm& p
     r = may_hardlink(in.get(), perm);
     if (r < 0)
       return r;
-    r = may_create(dir.get(), perm);
+    r = may_create(dir.get(), name.c_str(), perm);
     if (r < 0)
       return r;
   }
@@ -6267,10 +6353,11 @@ int Client::rename(const char *relfrom, const char *relto, const UserPerm& perm)
     goto out;
 
   if (cct->_conf->client_permissions) {
-    int r = may_delete(fromdir.get(), fromname.c_str(), perm);
+    bool isdir = false;
+    int r = may_delete(fromdir.get(), fromname.c_str(), perm, &isdir);
     if (r < 0)
       return r;
-    r = may_delete(todir.get(), toname.c_str(), perm);
+    r = may_create(todir.get(), toname.c_str(), perm, isdir, true);
     if (r < 0 && r != -ENOENT)
       return r;
   }
@@ -6300,7 +6387,7 @@ int Client::mkdir(const char *relpath, mode_t mode, const UserPerm& perm)
   if (r < 0)
     return r;
   if (cct->_conf->client_permissions) {
-    r = may_create(dir.get(), perm);
+    r = may_create(dir.get(), name.c_str(), perm, true);
     if (r < 0)
       return r;
   }
@@ -6334,13 +6421,13 @@ int Client::mkdirs(const char *relpath, mode_t mode, const UserPerm& perms)
     cur.swap(next);
   }
   //check that we have work left to do
-  if (i==path.depth()) return -EEXIST;
-  if (r!=-ENOENT) return r;
+  if (i == path.depth()) return -EEXIST;
+  if (r != -ENOENT) return r;
   ldout(cct, 20) << "mkdirs got through " << i << " directories on path " << relpath << dendl;
   //make new directory at each level
   for (; i<path.depth(); ++i) {
     if (cct->_conf->client_permissions) {
-      r = may_create(cur.get(), perms);
+      r = may_create(cur.get(), path[i].c_str(), perms, true);
       if (r < 0)
 	return r;
     }
@@ -6399,7 +6486,7 @@ int Client::mknod(const char *relpath, mode_t mode, const UserPerm& perms, dev_t
   if (r < 0)
     return r;
   if (cct->_conf->client_permissions) {
-    int r = may_create(dir.get(), perms);
+    int r = may_create(dir.get(), name.c_str(), perms, S_ISDIR(mode));
     if (r < 0)
       return r;
   }
@@ -6426,7 +6513,7 @@ int Client::symlink(const char *target, const char *relpath, const UserPerm& per
   if (r < 0)
     return r;
   if (cct->_conf->client_permissions) {
-    int r = may_create(dir.get(), perms);
+    int r = may_create(dir.get(), name.c_str(), perms);
     if (r < 0)
       return r;
   }
@@ -6695,7 +6782,7 @@ int Client::__setattrx(Inode *in, struct ceph_statx *stx, int mask,
   if (ret < 0)
    return ret;
   if (mask & CEPH_SETATTR_MODE)
-    ret = _posix_acl_chmod(in, stx->stx_mode, perms);
+    ret = _acl_chmod(in, stx->stx_mode, perms);
   return ret;
 }
 
@@ -7923,7 +8010,7 @@ int Client::open(const char *relpath, int flags, const UserPerm& perms,
     if (r < 0)
       goto out;
     if (cct->_conf->client_permissions) {
-      r = may_create(dir.get(), perms);
+      r = may_create(dir.get(), dname.c_str(), perms);
       if (r < 0)
 	goto out;
     }
@@ -9831,7 +9918,7 @@ int Client::mksnap(const char *relpath, const char *name, const UserPerm& perm)
   if (r < 0)
     return r;
   if (cct->_conf->client_permissions) {
-    r = may_create(in.get(), perm);
+    r = may_create(in.get(), name, perm, true);
     if (r < 0)
       return r;
   }
@@ -10426,7 +10513,7 @@ int Client::_getxattr(InodeRef &in, const char *name, void *value, size_t size,
 		      const UserPerm& perms)
 {
   if (cct->_conf->client_permissions) {
-    int r = xattr_permission(in.get(), name, MAY_READ, perms);
+    int r = xattr_permission(in.get(), name, perms, MAY_READ);
     if (r < 0)
       return r;
   }
@@ -10446,7 +10533,7 @@ int Client::ll_getxattr(Inode *in, const char *name, void *value,
   tout(cct) << name << std::endl;
 
   if (!cct->_conf->fuse_default_permissions) {
-    int r = xattr_permission(in, name, MAY_READ, perms);
+    int r = xattr_permission(in, name, perms, MAY_READ);
     if (r < 0)
       return r;
   }
@@ -10554,19 +10641,23 @@ int Client::_setxattr(Inode *in, const char *name, const void *value,
   }
 
   bool posix_acl_xattr = false;
+  bool rich_acl_xattr = false;
   if (acl_type == POSIX_ACL)
     posix_acl_xattr = !strncmp(name, "system.", 7);
+  else if (acl_type == RICH_ACL)
+    rich_acl_xattr = !strcmp(name, SYSTEM_RICHACL);
 
   if (strncmp(name, "user.", 5) &&
       strncmp(name, "security.", 9) &&
       strncmp(name, "trusted.", 8) &&
       strncmp(name, "ceph.", 5) &&
-      !posix_acl_xattr)
+      !posix_acl_xattr && !rich_acl_xattr)
     return -EOPNOTSUPP;
 
-  if (posix_acl_xattr) {
-    if (!strcmp(name, ACL_EA_ACCESS)) {
-      mode_t new_mode = in->mode;
+
+  if (posix_acl_xattr || rich_acl_xattr) {
+    mode_t new_mode = in->mode;
+    if (posix_acl_xattr && !strcmp(name, ACL_EA_ACCESS)) {
       if (value) {
 	int ret = posix_acl_equiv_mode(value, size, &new_mode);
 	if (ret < 0)
@@ -10575,15 +10666,8 @@ int Client::_setxattr(Inode *in, const char *name, const void *value,
 	  value = NULL;
 	  size = 0;
 	}
-	if (new_mode != in->mode) {
-	  struct ceph_statx stx;
-	  stx.stx_mode = new_mode;
-	  ret = _do_setattr(in, &stx, CEPH_SETATTR_MODE, perms, NULL);
-	  if (ret < 0)
-	    return ret;
-	}
       }
-    } else if (!strcmp(name, ACL_EA_DEFAULT)) {
+    } else if (posix_acl_xattr && !strcmp(name, ACL_EA_DEFAULT)) {
       if (value) {
 	if (!S_ISDIR(in->mode))
 	  return -EACCES;
@@ -10595,8 +10679,27 @@ int Client::_setxattr(Inode *in, const char *name, const void *value,
 	  size = 0;
 	}
       }
+#ifdef HAVE_LIBRICHACL
+    } else if (rich_acl_xattr) {
+      if (value) {
+	int ret = rich_acl_setxattr(value, size, &new_mode);
+	if (ret < 0)
+	  return ret;
+	if (ret == 0) {
+	  value = NULL;
+	  size = 0;
+	}
+      }
+#endif
     } else {
       return -EOPNOTSUPP;
+    }
+    if (new_mode != in->mode) {
+      struct ceph_statx stx;
+      stx.stx_mode = new_mode;
+      int ret = _do_setattr(in, &stx, CEPH_SETATTR_MODE, perms, NULL);
+      if (ret < 0)
+	return ret;
     }
   } else {
     const VXattr *vxattr = _match_vxattr(in, name);
@@ -10611,7 +10714,7 @@ int Client::_setxattr(InodeRef &in, const char *name, const void *value,
 		      size_t size, int flags, const UserPerm& perms)
 {
   if (cct->_conf->client_permissions) {
-    int r = xattr_permission(in.get(), name, MAY_WRITE, perms);
+    int r = xattr_permission(in.get(), name, perms, MAY_WRITE);
     if (r < 0)
       return r;
   }
@@ -10694,7 +10797,7 @@ int Client::ll_setxattr(Inode *in, const char *name, const void *value,
   tout(cct) << name << std::endl;
 
   if (!cct->_conf->fuse_default_permissions) {
-    int r = xattr_permission(in, name, MAY_WRITE, perms);
+    int r = xattr_permission(in, name, perms, MAY_WRITE);
     if (r < 0)
       return r;
   }
@@ -10736,7 +10839,7 @@ int Client::_removexattr(Inode *in, const char *name, const UserPerm& perms)
 int Client::_removexattr(InodeRef &in, const char *name, const UserPerm& perms)
 {
   if (cct->_conf->client_permissions) {
-    int r = xattr_permission(in.get(), name, MAY_WRITE, perms);
+    int r = xattr_permission(in.get(), name, perms, MAY_WRITE);
     if (r < 0)
       return r;
   }
@@ -10755,7 +10858,7 @@ int Client::ll_removexattr(Inode *in, const char *name, const UserPerm& perms)
   tout(cct) << name << std::endl;
 
   if (!cct->_conf->fuse_default_permissions) {
-    int r = xattr_permission(in, name, MAY_WRITE, perms);
+    int r = xattr_permission(in, name, perms, MAY_WRITE);
     if (r < 0)
       return r;
   }
@@ -11031,7 +11134,7 @@ int Client::_mknod(Inode *dir, const char *name, mode_t mode, dev_t rdev,
   req->dentry_unless = CEPH_CAP_FILE_EXCL;
 
   bufferlist xattrs_bl;
-  int res = _posix_acl_create(dir, &mode, xattrs_bl, perms);
+  int res = _acl_create(dir, &mode, xattrs_bl, perms);
   if (res < 0)
     goto fail;
   req->head.args.mknod.mode = mode;
@@ -11072,7 +11175,7 @@ int Client::ll_mknod(Inode *parent, const char *name, mode_t mode,
   tout(cct) << rdev << std::endl;
 
   if (!cct->_conf->fuse_default_permissions) {
-    int r = may_create(parent, perms);
+    int r = may_create(parent, name, perms, S_ISDIR(mode));
     if (r < 0)
       return r;
   }
@@ -11108,7 +11211,7 @@ int Client::ll_mknodx(Inode *parent, const char *name, mode_t mode,
   tout(cct) << rdev << std::endl;
 
   if (!cct->_conf->fuse_default_permissions) {
-    int r = may_create(parent, perms);
+    int r = may_create(parent, name, perms, S_ISDIR(mode));
     if (r < 0)
       return r;
   }
@@ -11180,7 +11283,7 @@ int Client::_create(Inode *dir, const char *name, int flags, mode_t mode,
 
   mode |= S_IFREG;
   bufferlist xattrs_bl;
-  int res = _posix_acl_create(dir, &mode, xattrs_bl, perms);
+  int res = _acl_create(dir, &mode, xattrs_bl, perms);
   if (res < 0)
     goto fail;
   req->head.args.open.mode = mode;
@@ -11249,7 +11352,7 @@ int Client::_mkdir(Inode *dir, const char *name, mode_t mode, const UserPerm& pe
 
   mode |= S_IFDIR;
   bufferlist xattrs_bl;
-  int res = _posix_acl_create(dir, &mode, xattrs_bl, perm);
+  int res = _acl_create(dir, &mode, xattrs_bl, perm);
   if (res < 0)
     goto fail;
   req->head.args.mkdir.mode = mode;
@@ -11290,7 +11393,7 @@ int Client::ll_mkdir(Inode *parent, const char *name, mode_t mode,
   tout(cct) << mode << std::endl;
 
   if (!cct->_conf->fuse_default_permissions) {
-    int r = may_create(parent, perm);
+    int r = may_create(parent, name, perm, true);
     if (r < 0)
       return r;
   }
@@ -11323,7 +11426,7 @@ int Client::ll_mkdirx(Inode *parent, const char *name, mode_t mode, Inode **out,
   tout(cct) << mode << std::endl;
 
   if (!cct->_conf->fuse_default_permissions) {
-    int r = may_create(parent, perms);
+    int r = may_create(parent, name, perms, true);
     if (r < 0)
       return r;
   }
@@ -11405,7 +11508,7 @@ int Client::ll_symlink(Inode *parent, const char *name, const char *value,
   tout(cct) << value << std::endl;
 
   if (!cct->_conf->fuse_default_permissions) {
-    int r = may_create(parent, perms);
+    int r = may_create(parent, name, perms);
     if (r < 0)
       return r;
   }
@@ -11439,7 +11542,7 @@ int Client::ll_symlinkx(Inode *parent, const char *name, const char *value,
   tout(cct) << value << std::endl;
 
   if (!cct->_conf->fuse_default_permissions) {
-    int r = may_create(parent, perms);
+    int r = may_create(parent, name, perms);
     if (r < 0)
       return r;
   }
@@ -11701,10 +11804,11 @@ int Client::ll_rename(Inode *parent, const char *name, Inode *newparent,
   tout(cct) << newname << std::endl;
 
   if (!cct->_conf->fuse_default_permissions) {
-    int r = may_delete(parent, name, perm);
+    bool isdir=false;
+    int r = may_delete(parent, name, perm, &isdir);
     if (r < 0)
       return r;
-    r = may_delete(newparent, newname, perm);
+    r = may_create(newparent, newname, perm, isdir, true);
     if (r < 0 && r != -ENOENT)
       return r;
   }
@@ -11782,7 +11886,7 @@ int Client::ll_link(Inode *in, Inode *newparent, const char *newname,
     if (r < 0)
       return r;
 
-    r = may_create(newparent, perm);
+    r = may_create(newparent, newname, perm);
     if (r < 0)
       return r;
   }
@@ -11986,7 +12090,7 @@ int Client::_ll_create(Inode *parent, const char *name, mode_t mode,
 
   if (r == -ENOENT && (flags & O_CREAT)) {
     if (!cct->_conf->fuse_default_permissions) {
-      r = may_create(parent, perms);
+      r = may_create(parent, name, perms);
       if (r < 0)
 	goto out;
     }
@@ -13051,19 +13155,95 @@ int Client::check_pool_perm(Inode *in, int need)
   return 0;
 }
 
-int Client::_posix_acl_permission(Inode *in, const UserPerm& perms, unsigned want)
+unsigned Client::_get_richacl_mask(unsigned want)
 {
-  if (acl_type == POSIX_ACL) {
-    if (in->xattrs.count(ACL_EA_ACCESS)) {
-      const bufferptr& access_acl = in->xattrs[ACL_EA_ACCESS];
+  unsigned int mask = 0;
+#ifdef HAVE_LIBRICHACL
+  if (want & MAY_EXEC)
+    mask |= RICHACE_EXECUTE;
+  if (want & MAY_READ)
+    mask |= RICHACE_READ_DATA;
+  if (want & MAY_DELETE_SELF)
+    mask |= RICHACE_DELETE;
+  if (want & MAY_SET_OWNER)
+    mask |= RICHACE_WRITE_OWNER;
+  if (want & MAY_CHMOD)
+    mask |= RICHACE_WRITE_ACL;
+  if (want & MAY_SET_TIMES)
+    mask |= RICHACE_WRITE_ATTRIBUTES;
 
-      return posix_acl_permits(access_acl, in->uid, in->gid, perms, want);
+  if (want & (MAY_APPEND | MAY_DELETE_CHILD |
+	      MAY_CREATE_FILE | MAY_CREATE_DIR)) {
+    if (want & MAY_APPEND)
+      mask |= RICHACE_APPEND_DATA;
+    if (want & MAY_DELETE_CHILD)
+      mask |= RICHACE_DELETE_CHILD;
+    if (want & MAY_CREATE_FILE)
+      mask |= RICHACE_ADD_FILE;
+    if (want & MAY_CREATE_DIR)
+      mask |= RICHACE_ADD_SUBDIRECTORY;
+  } else if (want & MAY_WRITE)
+    mask |= RICHACE_WRITE_DATA;
+#endif
+  return mask;
+}
+
+int Client::_get_richacl(Inode *in)
+{
+  int r = 0;
+#ifdef HAVE_LIBRICHACL
+  if (in->xattrs.count(SYSTEM_RICHACL)) {
+    if (in->cached_richacl && in->richacl_version != in->xattr_version) {
+      rich_acl_free(in->cached_richacl);
+      in->cached_richacl = NULL;
     }
+    if (!in->cached_richacl) {
+      const bufferptr& xattr = in->xattrs[SYSTEM_RICHACL];
+      r = rich_acl_from_xattr(xattr.c_str(), xattr.length(),
+			      &in->cached_richacl);
+      if (r == 0)
+	in->richacl_version = in->xattr_version;
+    }
+  } else if (in->cached_richacl) {
+    rich_acl_free(in->cached_richacl);
+    in->cached_richacl = NULL;
+  }
+#endif
+  return r;
+}
+
+int Client::_acl_permission(Inode *in, const UserPerm& perms, unsigned want)
+{
+  if (acl_type == NO_ACL) {
+    // do nothing
+  } else if (acl_type == POSIX_ACL) {
+    if (perms.uid() != in->uid && (in->mode & S_IRWXG)) {
+      want &= MAY_READ | MAY_WRITE | MAY_EXEC;
+      if (in->xattrs.count(ACL_EA_ACCESS)) {
+	const bufferptr& access_acl = in->xattrs[ACL_EA_ACCESS];
+	return posix_acl_permits(access_acl, in->uid, in->gid, perms, want);
+      }
+    }
+#ifdef HAVE_LIBRICHACL
+  } else if (acl_type == RICH_ACL) {
+    int r = _get_richacl(in);
+    if (r < 0)
+      return r;
+    if (in->cached_richacl) {
+      return rich_acl_permits(in->cached_richacl, in->uid, in->gid, perms,
+			      _get_richacl_mask(want));
+    } else if (want & (MAY_CHMOD | MAY_SET_OWNER |
+		       MAY_SET_TIMES | MAY_DELETE_SELF)) {
+      return -EPERM;
+    }
+#endif
+  } else {
+    assert(0);
   }
   return -EAGAIN;
 }
 
-int Client::_posix_acl_chmod(Inode *in, mode_t mode, const UserPerm& perms)
+int Client::_acl_chmod(Inode *in, mode_t mode, const UserPerm& perms)
 {
   if (acl_type == NO_ACL)
     return 0;
@@ -13083,14 +13263,31 @@ int Client::_posix_acl_chmod(Inode *in, mode_t mode, const UserPerm& perms)
     } else {
       r = 0;
     }
+#ifdef HAVE_LIBRICHACL
+  } else if (acl_type == RICH_ACL) {
+    r = _get_richacl(in);
+    if (r < 0)
+      goto out;
+    if (in->cached_richacl) {
+      bufferptr buf;
+      r = rich_acl_chmod(in->cached_richacl, buf, mode);
+      if (r < 0)
+	goto out;
+      r = _do_setxattr(in, SYSTEM_RICHACL, buf.c_str(), buf.length(), 0, perms);
+    } else {
+      r = 0;
+    }
+#endif
+  } else {
+    assert(0);
   }
 out:
   ldout(cct, 10) << __func__ << " ino " << in->ino << " result=" << r << dendl;
   return r;
 }
 
-int Client::_posix_acl_create(Inode *dir, mode_t *mode, bufferlist& xattrs_bl,
-			      const UserPerm& perms)
+int Client::_acl_create(Inode *dir, mode_t *mode, bufferlist& xattrs_bl,
+			const UserPerm& perms)
 {
   if (acl_type == NO_ACL)
     return 0;
@@ -13131,6 +13328,29 @@ int Client::_posix_acl_create(Inode *dir, mode_t *mode, bufferlist& xattrs_bl,
 	*mode &= ~umask_cb(callback_handle);
       r = 0;
     }
+#ifdef HAVE_LIBRICHACL
+  } else if (acl_type == RICH_ACL) {
+    r = _get_richacl(dir);
+    if (r < 0)
+      goto out;
+    if (dir->cached_richacl) {
+      bufferptr buf;
+      r = rich_acl_inherit(dir->cached_richacl, buf, mode,
+			   umask_cb, callback_handle);
+      if (r < 0)
+	goto out;
+      if (r > 0) {
+	map<string, bufferptr> xattrs;
+	xattrs[SYSTEM_RICHACL] = buf;
+	::encode(xattrs, xattrs_bl);
+      }
+    } else {
+      if (umask_cb)
+	*mode &= ~umask_cb(callback_handle);
+    }
+#endif
+  } else {
+    assert(0);
   }
 out:
   ldout(cct, 10) << __func__ << " dir ino " << dir->ino << " result=" << r << dendl;
@@ -13190,6 +13410,10 @@ void Client::handle_conf_change(const struct md_config_t *conf,
     acl_type = NO_ACL;
     if (cct->_conf->client_acl_type == "posix_acl")
       acl_type = POSIX_ACL;
+#ifdef HAVE_LIBRICHACL
+    else if (cct->_conf->client_acl_type == "rich_acl")
+      acl_type = RICH_ACL;
+#endif
   }
 }
 

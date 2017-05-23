@@ -46,6 +46,7 @@ using std::fstream;
 
 #include "osdc/ObjectCacher.h"
 
+#include "rich_acl.h"
 #include "InodeRef.h"
 #include "UserPerm.h"
 #include "include/cephfs/ceph_statx.h"
@@ -843,25 +844,36 @@ private:
   enum {
     NO_ACL = 0,
     POSIX_ACL,
+    RICH_ACL,
   };
 
   enum {
-    MAY_EXEC = 1,
-    MAY_WRITE = 2,
-    MAY_READ = 4,
+    MAY_EXEC		= 1 << 0,
+    MAY_WRITE		= 1 << 1,
+    MAY_READ		= 1 << 2,
+    MAY_APPEND		= 1 << 3,
+    MAY_DELETE_SELF	= 1 << 4,
+    MAY_DELETE_CHILD	= 1 << 5,
+    MAY_CHMOD		= 1 << 6,
+    MAY_SET_OWNER	= 1 << 7,
+    MAY_SET_TIMES	= 1 << 8,
+    MAY_CREATE_FILE	= 1 << 9,
+    MAY_CREATE_DIR	= 1 << 10,
   };
 
   void init_groups(UserPerm *groups);
 
   int inode_permission(Inode *in, const UserPerm& perms, unsigned want);
-  int xattr_permission(Inode *in, const char *name, unsigned want,
-		       const UserPerm& perms);
+  int xattr_permission(Inode *in, const char *name,
+		       const UserPerm& perms, unsigned want);
   int may_setattr(Inode *in, struct ceph_statx *stx, int mask,
 		  const UserPerm& perms);
   int may_open(Inode *in, int flags, const UserPerm& perms);
   int may_lookup(Inode *dir, const UserPerm& perms);
-  int may_create(Inode *dir, const UserPerm& perms);
-  int may_delete(Inode *dir, const char *name, const UserPerm& perms);
+  int may_create(Inode *dir, const char *name, const UserPerm& perms,
+		 bool isdir=false, bool replace=false);
+  int may_delete(Inode *dir, const char *name, const UserPerm& perms, bool *isdir=NULL);
+  int _may_delete(Inode *dir, Inode *victim, const UserPerm& perms);
   int may_hardlink(Inode *in, const UserPerm& perms);
 
   int _getattr_for_perm(Inode *in, const UserPerm& perms);
@@ -926,15 +938,15 @@ private:
   void _release_filelocks(Fh *fh);
   void _update_lock_state(struct flock *fl, uint64_t owner, ceph_lock_state_t *lock_state);
 
-  int _posix_acl_create(Inode *dir, mode_t *mode, bufferlist& xattrs_bl,
-			const UserPerm& perms);
-  int _posix_acl_chmod(Inode *in, mode_t mode, const UserPerm& perms);
-  int _posix_acl_permission(Inode *in, const UserPerm& perms, unsigned want);
+  int _acl_create(Inode *dir, mode_t *mode, bufferlist& xattrs_bl, const UserPerm& perms);
+  int _acl_chmod(Inode *in, mode_t mode, const UserPerm& perms);
+  int _acl_permission(Inode *in, const UserPerm& perms, unsigned want);
+  int _get_richacl(Inode *in);
+  unsigned _get_richacl_mask(unsigned want);
 
   mds_rank_t _get_random_up_mds() const;
 
   int _ll_getattr(Inode *in, int caps, const UserPerm& perms);
-
 public:
   int mount(const std::string &mount_root, const UserPerm& perms,
 	    bool require_mds=false);

@@ -29,6 +29,10 @@ Inode::~Inode()
 
   delete fcntl_locks;
   delete flock_locks;
+
+#ifdef HAVE_LIBRICHACL
+  rich_acl_free(cached_richacl);
+#endif
 }
 
 ostream& operator<<(ostream &out, const Inode &in)

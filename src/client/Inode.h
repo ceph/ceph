@@ -25,6 +25,7 @@ class ceph_lock_state_t;
 class MetaRequest;
 class filepath;
 class Fh;
+struct richacl;
 
 struct Cap {
   MetaSession *session;
@@ -230,6 +231,11 @@ struct Inode {
 
   std::set<Fh*> fhs;
 
+#ifdef HAVE_LIBRICHACL
+  richacl *cached_richacl;
+  version_t richacl_version;
+#endif
+
   Inode(Client *c, vinodeno_t vino, file_layout_t *newlayout)
     : client(c), ino(vino.ino), snapid(vino.snapid), faked_ino(0),
       rdev(0), mode(0), uid(0), gid(0), nlink(0),
@@ -247,6 +253,9 @@ struct Inode {
       reported_size(0), wanted_max_size(0), requested_max_size(0),
       _ref(0), ll_ref(0), dn_set(),
       fcntl_locks(NULL), flock_locks(NULL)
+#ifdef HAVE_LIBRICHACL
+      , cached_richacl(NULL), richacl_version(0)
+#endif
   {
     memset(&dir_layout, 0, sizeof(dir_layout));
     memset(&quota, 0, sizeof(quota));

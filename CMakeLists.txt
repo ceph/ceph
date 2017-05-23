@@ -204,6 +204,12 @@ find_package(fuse)
 set(HAVE_LIBFUSE ${FUSE_FOUND})
 endif(${WITH_FUSE})
 
+option(WITH_RICHACL "Richacl is here" OFF)
+if(${WITH_RICHACL})
+find_package(richacl REQUIRED)
+set(HAVE_LIBRICHACL ${RICHACL_FOUND})
+endif(${WITH_RICHACL})
+
 option(WITH_XFS "XFS is here" ON)
 if(${WITH_XFS})
 find_package(xfs)

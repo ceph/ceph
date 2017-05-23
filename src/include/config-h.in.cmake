@@ -315,4 +315,7 @@
 
 #cmakedefine PYTHON_EXECUTABLE "@PYTHON_EXECUTABLE@"
 
+/* Define if librichacl is available */
+#cmakedefine HAVE_LIBRICHACL 1
+
 #endif /* CONFIG_H */
