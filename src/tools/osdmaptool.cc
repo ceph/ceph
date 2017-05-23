@@ -46,6 +46,7 @@ void usage()
   cout << "   --upmap-deviation <max-deviation>" << std::endl;
   cout << "                           max deviation from target [default: .01]" << std::endl;
   cout << "   --upmap-pool <poolname> restrict upmap balancing to 1 or more pools" << std::endl;
+  cout << "   --upmap-save            write modified OSDMap with upmap changes" << std::endl;
   exit(1);
 }
 
@@ -117,6 +118,7 @@ int main(int argc, const char **argv)
   bool test_random = false;
   bool upmap_cleanup = false;
   bool upmap = false;
+  bool upmap_save = false;
   std::string upmap_file = "-";
   int upmap_max = 100;
   float upmap_deviation = .01;
@@ -145,6 +147,8 @@ int main(int argc, const char **argv)
       }
     } else if (ceph_argparse_witharg(args, i, &upmap_file, "--upmap-cleanup", (char*)NULL)) {
       upmap_cleanup = true;
+    } else if (ceph_argparse_witharg(args, i, &upmap_file, "--upmap-save", (char*)NULL)) {
+      upmap_save = true;
     } else if (ceph_argparse_witharg(args, i, &upmap_file, "--upmap", (char*)NULL)) {
       upmap_cleanup = true;
       upmap = true;
@@ -350,9 +354,11 @@ int main(int argc, const char **argv)
       &pending_inc);
     if (changed) {
       print_inc_upmaps(pending_inc, upmap_fd);
-      int r = osdmap.apply_incremental(pending_inc);
-      assert(r == 0);
-      modified = true;
+      if (upmap_save) {
+	int r = osdmap.apply_incremental(pending_inc);
+	assert(r == 0);
+	modified = true;
+      }
     } else {
       cout << "no upmaps proposed" << std::endl;
     }
