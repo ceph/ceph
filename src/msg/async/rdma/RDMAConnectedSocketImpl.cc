@@ -44,7 +44,7 @@ QueuePair *RDMAConnectedSocketImpl::create_queue_pair(Device *d, int p)
   ibdev = d;
   ibport = p;
 
-  qp = ibdev->create_queue_pair(ibport, IBV_QPT_RC);
+  qp = ibdev->create_queue_pair(cct, IBV_QPT_RC);
 
   local_qpn = qp->get_local_qp_number();
 
@@ -67,9 +67,9 @@ RDMAConnTCP::RDMAConnTCP(CephContext *cct, RDMAConnectedSocketImpl *sock,
 
   my_msg.qpn = socket->local_qpn;
   my_msg.psn = qp->get_initial_psn();
-  my_msg.lid = ibdev->get_lid(ibport);
+  my_msg.lid = ibdev->get_lid();
   my_msg.peer_qpn = 0;
-  my_msg.gid = ibdev->get_gid(ibport);
+  my_msg.gid = ibdev->get_gid();
   socket->register_qp(qp);
 }
 
@@ -134,9 +134,6 @@ int RDMAConnTCP::activate()
   ibv_qp_attr qpa;
   int r;
 
-  Device *ibdev = socket->get_device();
-  int ibport = socket->get_ibport();
-
   socket->remote_qpn = peer_msg.qpn;
 
   // now connect up the qps and switch to RTR
@@ -152,12 +149,12 @@ int RDMAConnTCP::activate()
   qpa.ah_attr.grh.hop_limit = 6;
   qpa.ah_attr.grh.dgid = peer_msg.gid;
 
-  qpa.ah_attr.grh.sgid_index = ibdev->get_gid_idx(ibport);
+  qpa.ah_attr.grh.sgid_index = socket->get_device()->get_gid_idx();
 
   qpa.ah_attr.dlid = peer_msg.lid;
   qpa.ah_attr.sl = cct->_conf->ms_async_rdma_sl;
   qpa.ah_attr.src_path_bits = 0;
-  qpa.ah_attr.port_num = (uint8_t)ibport;
+  qpa.ah_attr.port_num = (uint8_t)socket->get_ibport();
 
   ldout(cct, 20) << __func__ << " Choosing gid_index " << (int)qpa.ah_attr.grh.sgid_index << ", sl " << (int)qpa.ah_attr.sl << dendl;
 

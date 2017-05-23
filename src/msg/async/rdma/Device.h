@@ -71,11 +71,7 @@ class Device {
   CephContext *cct;
   ibv_device *device;
   const char *name;
-
-  Port **ports; // Array of Port objects. index is 1 based (IB port #1 is in
-                // index 1). Index 0 is not used
-
-  int port_cnt;
+  uint8_t  port_cnt;
 
   uint32_t max_send_wr;
   uint32_t max_recv_wr;
@@ -85,8 +81,6 @@ class Device {
   bool initialized = false;
   EventCallbackRef async_handler;
   Infiniband *infiniband;
-
-  void verify_port(int port_num);
 
  public:
   explicit Device(CephContext *c, Infiniband *ib, ibv_device* d);
@@ -98,14 +92,12 @@ class Device {
   void handle_async_event();
 
   const char* get_name() const { return name;}
+  uint16_t get_lid() { return active_port->get_lid(); }
+  ibv_gid get_gid() { return active_port->get_gid(); }
+  int get_gid_idx() { return active_port->get_gid_idx(); }
+  void binding_port(CephContext *c, int port_num);
 
-  Port *get_port(int ibport);
-  uint16_t get_lid(int p) { return get_port(p)->get_lid(); }
-  ibv_gid get_gid(int p) { return get_port(p)->get_gid(); }
-  int get_gid_idx(int p) { return get_port(p)->get_gid_idx(); }
-
-  QueuePair *create_queue_pair(int port,
-			       ibv_qp_type type);
+  QueuePair* create_queue_pair(CephContext *c, ibv_qp_type type);
   ibv_srq* create_shared_receive_queue(uint32_t max_wr, uint32_t max_sge);
   CompletionChannel *create_comp_channel(CephContext *c);
   CompletionQueue *create_comp_queue(CephContext *c, CompletionChannel *cc=NULL);
@@ -123,6 +115,7 @@ class Device {
 
   struct ibv_context *ctxt;
   ibv_device_attr *device_attr;
+  Port* active_port;
 
   MemoryManager* memory_manager = nullptr;
   ibv_srq *srq = nullptr;
