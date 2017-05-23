@@ -91,7 +91,7 @@ void RDMADispatcher::polling_stop()
   t.join();
 }
 
-void RDMADispatcher::process_async_event(Device *ibdev, ibv_async_event &async_event)
+void RDMADispatcher::process_async_event(ibv_async_event &async_event)
 {
   perf_logger->inc(l_msgr_rdma_total_async_events);
   // FIXME: Currently we must ensure no other factor make QP in ERROR state,
@@ -111,7 +111,7 @@ void RDMADispatcher::process_async_event(Device *ibdev, ibv_async_event &async_e
       erase_qpn_lockless(qpn);
     }
   } else {
-    ldout(cct, 1) << __func__ << " ibv_get_async_event: dev=" << *ibdev
+    ldout(cct, 1) << __func__ << " ibv_get_async_event: dev=" << global_infiniband->get_device()->ctxt
       << " evt: " << ibv_event_type_str(async_event.event_type)
       << dendl;
   }
@@ -299,9 +299,12 @@ void RDMADispatcher::handle_pre_fork()
 void RDMADispatcher::handle_post_fork()
 {
   if (!global_infiniband) {
-    global_infiniband.construct(cct);
+    global_infiniband.construct(
+      cct, cct->_conf->ms_async_rdma_device_name, cct->_conf->ms_async_rdma_port_num);
     global_infiniband->set_dispatcher(this);
   }
+
+  global_infiniband->handle_post_fork();
 
   polling_start();
 }
@@ -506,7 +509,8 @@ RDMAStack::RDMAStack(CephContext *cct, const string &t): NetworkStack(cct, t)
   }
 
   if (!global_infiniband)
-    global_infiniband.construct(cct);
+    global_infiniband.construct(
+      cct, cct->_conf->ms_async_rdma_device_name, cct->_conf->ms_async_rdma_port_num);
   ldout(cct, 20) << __func__ << " constructing RDMAStack..." << dendl;
   dispatcher = new RDMADispatcher(cct, this);
   global_infiniband->set_dispatcher(dispatcher);

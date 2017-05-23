@@ -85,7 +85,7 @@ class Device {
   explicit Device(CephContext *c, Infiniband *ib, ibv_device* d);
   ~Device();
 
-  void init(int ibport = -1);
+  void init();
   void uninit();
 
   void handle_async_event();
@@ -145,8 +145,6 @@ class DeviceList {
   ~DeviceList();
 
   Device* get_device(const char* device_name);
-
-  void uninit();
 
   void rearm_notify();
   int poll_tx(int n, Device **d, ibv_wc *wc);

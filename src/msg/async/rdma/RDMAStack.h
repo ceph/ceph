@@ -106,7 +106,7 @@ class RDMADispatcher : public CephContext::ForkWatcher {
   explicit RDMADispatcher(CephContext* c, RDMAStack* s);
   virtual ~RDMADispatcher();
 
-  void process_async_event(Device *ibdev, ibv_async_event &async_event);
+  void process_async_event(ibv_async_event &async_event);
 
   void polling_start();
   void polling_stop();
@@ -268,8 +268,6 @@ class RDMAConnectedSocketImpl : public ConnectedSocketImpl {
 
 class RDMAServerSocketImpl : public ServerSocketImpl {
   CephContext *cct;
-  Device *ibdev;
-  int ibport;
   NetHandler net;
   int server_setup_socket;
   Infiniband* infiniband;

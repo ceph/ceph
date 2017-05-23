@@ -437,6 +437,11 @@ void Infiniband::MemoryManager::Chunk::clear()
   bound = 0;
 }
 
+void Infiniband::MemoryManager::Chunk::post_srq(Infiniband *ib)
+{
+  ib->device->post_chunk(this);
+}
+
 Infiniband::MemoryManager::Cluster::Cluster(MemoryManager& m, uint32_t s)
   : manager(m), buffer_size(s), lock("cluster_lock")
 {
@@ -585,9 +590,16 @@ int Infiniband::MemoryManager::get_channel_buffers(std::vector<Chunk*> &chunks, 
 }
 
 
-Infiniband::Infiniband(CephContext *cct)
+Infiniband::Infiniband(CephContext *cct, const std::string &device_name, uint8_t port_num)
   : device_list(new DeviceList(cct, this))
 {
+  device = device_list->get_device(device_name.c_str());
+
+  device->init();
+
+  device->binding_port(cct, port_num);
+  assert(device);
+  ib_physical_port = device->active_port->get_port_num();
 }
 
 Infiniband::~Infiniband()
@@ -603,11 +615,6 @@ void Infiniband::set_dispatcher(RDMADispatcher *d)
   assert(!d ^ !dispatcher);
 
   dispatcher = d;
-}
-
-Device* Infiniband::get_device(const char* device_name)
-{
-  return device_list->get_device(device_name);
 }
 
 // 1 means no valid buffer read, 0 means got enough buffer
@@ -761,7 +768,12 @@ const char* Infiniband::qp_state_string(int status) {
 
 void Infiniband::handle_pre_fork()
 {
-  device_list->uninit();
+  device->uninit();
+}
+
+void Infiniband::handle_post_fork()
+{
+  device->init();
 }
 
 int Infiniband::poll_tx(int n, Device **d, ibv_wc *wc)
@@ -787,4 +799,9 @@ void Infiniband::rearm_notify()
 void Infiniband::handle_async_event()
 {
   device_list->handle_async_event();
+}
+
+void Infiniband::process_async_event(ibv_async_event &async_event)
+{
+  dispatcher->process_async_event(async_event);
 }

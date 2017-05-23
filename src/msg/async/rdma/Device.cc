@@ -138,7 +138,7 @@ Device::Device(CephContext *cct, Infiniband *ib, ibv_device* d)
   assert(NetHandler(cct).set_nonblock(ctxt->async_fd) == 0);
 }
 
-void Device::init(int ibport)
+void Device::init()
 {
   Mutex::Locker l(lock);
 
@@ -170,10 +170,7 @@ void Device::init(int ibport)
   rx_cq = create_comp_queue(cct, rx_cc);
   assert(rx_cq);
 
-  binding_port(cct, ibport);
-
   initialized = true;
-
   ldout(cct, 5) << __func__ << ":" << __LINE__ << " device " << *this << " is initialized" << dendl;
 }
 
@@ -367,8 +364,7 @@ void Device::handle_async_event()
   ldout(cct, 30) << __func__ << dendl;
 
   while (!ibv_get_async_event(ctxt, &async_event)) {
-    RDMADispatcher *d = infiniband->get_dispatcher();
-    d->process_async_event(this, async_event);
+    infiniband->process_async_event(async_event);
 
     ibv_ack_async_event(&async_event);
   }
@@ -498,10 +494,4 @@ void DeviceList::handle_async_event()
 {
   for (int i = 0; i < num; i++)
     devices[i]->handle_async_event();
-}
-
-void DeviceList::uninit()
-{
-  for (int i = 0; i < num; i++)
-    devices[i]->uninit();
 }
