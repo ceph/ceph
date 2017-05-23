@@ -3041,7 +3041,7 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
 			     unsigned max_bytes,
 			     int getattr_caps)
 {
-  int client = session->info.inst.name.num();
+  client_t client = session->info.inst.name.num();
   assert(snapid);
   assert(session->connection);
   
