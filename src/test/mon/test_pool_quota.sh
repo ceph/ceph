@@ -52,7 +52,7 @@ function TEST_pool_quota() {
     objects=`ceph df detail | grep -w $poolname|awk '{print $3}'`
     bytes=`ceph df detail | grep -w $poolname|awk '{print $4}'`
    
-     if [ $objects != '1000' ] || [ $bytes != '1024' ] ;
+     if [ $objects != '1000' ] || [ $bytes != '1K' ] ;
        then
        return 1
      fi
