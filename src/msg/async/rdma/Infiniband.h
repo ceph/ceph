@@ -30,12 +30,6 @@
 #include "msg/async/net_handler.h"
 #include "common/Mutex.h"
 
-#define RDMA_DEBUG 0
-
-#if RDMA_DEBUG
-#include "ib_dbg.h"
-#endif
-
 #define HUGE_PAGE_SIZE (2 * 1024 * 1024)
 #define ALIGN_TO_PAGE_SIZE(x) \
   (((x) + HUGE_PAGE_SIZE -1) / HUGE_PAGE_SIZE * HUGE_PAGE_SIZE)
