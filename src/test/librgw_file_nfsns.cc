@@ -610,19 +610,15 @@ TEST(LibRGW, BAD_DELETES_DIRS1) {
       rc = rgw_unlink(fs, dirs1_b.parent_fh, dirs1_b.name.c_str(),
 		      RGW_UNLINK_FLAG_NONE);
       ASSERT_NE(rc, 0);
+      /* try to unlink a non-empty directory (non-bucket) */
+      obj_rec& dir_0 = get<0>(dirs_vec[0]);
+
+      ASSERT_EQ(dir_0.name, "dir_0");
+      ASSERT_TRUE(dir_0.rgw_fh->is_dir());
+      rc = rgw_unlink(fs, dir_0.parent_fh, dir_0.name.c_str(),
+		      RGW_UNLINK_FLAG_NONE);
+      ASSERT_NE(rc, 0);
     }
-    /* try to unlink a non-empty directory (non-bucket) */
-    obj_rec& sdir_0 = get<1>(dirs_vec[0])[0];
-    ASSERT_EQ(sdir_0.name, "sdir_0");
-    ASSERT_TRUE(sdir_0.rgw_fh->is_dir());
-    /* XXX we can't enforce this currently */
-#if 0
-    ASSERT_EQ(sdir_0.name, "sdir_0");
-    ASSERT_TRUE(sdir_0.rgw_fh->is_dir());
-    rc = rgw_unlink(fs, sdir_0.parent_fh, sdir_0.name.c_str(),
-		    RGW_UNLINK_FLAG_NONE);
-    ASSERT_NE(rc, 0);
-#endif
   }
 }
 
