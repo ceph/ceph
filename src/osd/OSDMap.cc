@@ -298,10 +298,12 @@ bool OSDMap::subtree_type_is_down(CephContext *cct, int id, int subtree_type, se
 {
   if (id >= 0) {
     bool is_down_ret = is_down(id);
-    if (is_down_ret) {
-      down_in_osds->insert(id);
-    } else {
-      up_in_osds->insert(id);
+    if (!is_out(id)) {
+      if (is_down_ret) {
+        down_in_osds->insert(id);
+      } else {
+        up_in_osds->insert(id);
+      }
     }
     return is_down_ret;
   }
