@@ -411,10 +411,10 @@ DeviceList::DeviceList(CephContext *cct, Infiniband *ib)
   }
   devices = new Device*[num];
 
-  poll_fds = new struct pollfd[3 * num];
+  poll_fds = new struct pollfd[2 * num];
 
   for (int i = 0; i < num; ++i) {
-    struct pollfd *pfd = &poll_fds[i * 3];
+    struct pollfd *pfd = &poll_fds[i * 2];
     struct Device *d;
 
     d = new Device(cct, ib, device_list[i]);
@@ -427,10 +427,6 @@ DeviceList::DeviceList(CephContext *cct, Infiniband *ib)
     pfd[1].fd = d->rx_cc->get_fd();
     pfd[1].events = POLLIN | POLLERR | POLLNVAL | POLLHUP;
     pfd[1].revents = 0;
-
-    pfd[2].fd = d->ctxt->async_fd;
-    pfd[2].events = POLLIN | POLLERR | POLLNVAL | POLLHUP;
-    pfd[2].revents = 0;
   }
 }
 
@@ -490,7 +486,7 @@ int DeviceList::poll_blocking(bool &done)
 {
   int r = 0;
   while (!done && r == 0) {
-    r = poll(poll_fds, num * 3, 100);
+    r = poll(poll_fds, num * 2, 100);
     if (r < 0) {
       r = -errno;
       lderr(cct) << __func__ << " poll failed " << r << dendl;
@@ -509,8 +505,6 @@ int DeviceList::poll_blocking(bool &done)
 
     if (d->rx_cc->get_cq_event())
       ldout(cct, 20) << __func__ << " " << *d << ": got rx cq event" << dendl;
-
-    d->handle_async_event();
   }
 
   return r;
