@@ -25,7 +25,7 @@ MEMPOOL_DEFINE_OBJECT_FACTORY(PGMap::Incremental, pgmap_inc, pgmap);
 void PGMapDigest::encode(bufferlist& bl, uint64_t features) const
 {
   // NOTE: see PGMap::encode_digest
-  ENCODE_START(4, 1, bl);
+  ENCODE_START(5, 1, bl);
   ::encode(num_pg, bl);
   ::encode(num_pg_active, bl);
   ::encode(num_osd, bl);
@@ -41,12 +41,13 @@ void PGMapDigest::encode(bufferlist& bl, uint64_t features) const
   ::encode(per_pool_sum_deltas_stamps, bl);
   ::encode(pg_sum_delta, bl, features);
   ::encode(stamp_delta, bl);
+  ::encode(num_pg_unknown, bl);
   ENCODE_FINISH(bl);
 }
 
 void PGMapDigest::decode(bufferlist::iterator& p)
 {
-  DECODE_START(4, p);
+  DECODE_START(5, p);
   ::decode(num_pg, p);
   ::decode(num_pg_active, p);
   ::decode(num_osd, p);
@@ -76,6 +77,9 @@ void PGMapDigest::decode(bufferlist::iterator& p)
     ::decode(pg_sum_delta, p);
     ::decode(stamp_delta, p);
   }
+  if (struct_v >= 5) {
+    ::decode(num_pg_unknown, p);
+  }
   DECODE_FINISH(p);
 }
 
@@ -83,6 +87,7 @@ void PGMapDigest::dump(Formatter *f) const
 {
   f->dump_unsigned("num_pg", num_pg);
   f->dump_unsigned("num_pg_active", num_pg_active);
+  f->dump_unsigned("num_pg_unknown", num_pg_unknown);
   f->dump_unsigned("num_osd", num_osd);
   f->dump_object("pool_sum", pg_sum);
   f->dump_object("osd_sum", osd_sum);
@@ -190,14 +195,26 @@ void PGMapDigest::print_summary(Formatter *f, ostream *out) const
          << kb_t(osd_sum.kb) << " avail\n";
   }
 
-  if (num_pg_active < num_pg) {
-    float p = (float)num_pg_active / (float)num_pg;
+  if (num_pg_unknown > 0) {
+    float p = (float)num_pg_unknown / (float)num_pg;
     if (f) {
-      f->dump_float("active_pgs_ratio", p);
+      f->dump_float("unknown_pgs_ratio", p);
     } else {
       char b[20];
-      snprintf(b, sizeof(b), "%.3lf", (1.0 - p) * 100.0);
-      *out << "            " << b << "% pgs inactive\n";
+      snprintf(b, sizeof(b), "%.3lf", p * 100.0);
+      *out << "            " << b << "% pgs unknown\n";
+    }
+
+  }
+  int num_pg_inactive = num_pg - num_pg_active - num_pg_unknown;
+  if (num_pg_inactive > 0) {
+    float p = (float)num_pg_inactive / (float)num_pg;
+    if (f) {
+      f->dump_float("inactive_pgs_ratio", p);
+    } else {
+      char b[20];
+      snprintf(b, sizeof(b), "%.3lf", p * 100.0);
+      *out << "            " << b << "% pgs not active\n";
     }
   }
 
@@ -1148,6 +1165,7 @@ void PGMap::calc_stats()
 {
   num_pg = 0;
   num_pg_active = 0;
+  num_pg_unknown = 0;
   num_osd = 0;
   pg_pool_sum.clear();
   num_pg_by_pool.clear();
@@ -1275,6 +1293,9 @@ void PGMap::stat_pg_add(const pg_t &pgid, const pg_stat_t &s,
   if (s.state & PG_STATE_ACTIVE) {
     ++num_pg_active;
   }
+  if (s.state == 0) {
+    ++num_pg_unknown;
+  }
 
   if (sameosds)
     return;
@@ -1332,6 +1353,9 @@ void PGMap::stat_pg_sub(const pg_t &pgid, const pg_stat_t &s,
 
   if (s.state & PG_STATE_ACTIVE) {
     --num_pg_active;
+  }
+  if (s.state == 0) {
+    --num_pg_unknown;
   }
 
   if (sameosds)
