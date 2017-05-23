@@ -445,8 +445,10 @@ int RGWBucketReshard::do_reshard(
 	}
 	if (verbose) {
 	  formatter->close_section();
-	  formatter->flush(*out);
-	  formatter->flush(*out);
+	  if (out) {
+	    formatter->flush(*out);
+	    formatter->flush(*out);
+	  }
 	} else if (out && !(total_entries % 1000)) {
 	  (*out) << " " << total_entries;
 	}
@@ -455,7 +457,9 @@ int RGWBucketReshard::do_reshard(
   }
   if (verbose) {
     formatter->close_section();
-    formatter->flush(*out);
+    if (out) {
+      formatter->flush(*out);
+    }
   } else if (out) {
     (*out) << " " << total_entries << std::endl;
   }
