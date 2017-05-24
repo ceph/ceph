@@ -3485,16 +3485,6 @@ static int rgw_cls_lc_get_head(cls_method_context_t hctx, bufferlist *in,  buffe
   return 0;
 }
 
-static void generate_reshard_key(const string& tenant, const string& bucket_name, string *key)
-{
-  *key = tenant + ":" + bucket_name;
-}
-
-static void generate_reshard_key(const cls_rgw_reshard_entry& entry, string *key)
-{
-  generate_reshard_key(entry.tenant, entry.bucket_name, key);
-}
-
 static int rgw_reshard_add(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
   bufferlist::iterator in_iter = in->begin();
@@ -3509,7 +3499,7 @@ static int rgw_reshard_add(cls_method_context_t hctx, bufferlist *in, bufferlist
 
 
   string key;
-  generate_reshard_key(op.entry, &key);
+  op.entry.get_key(&key);
 
   bufferlist bl;
   ::encode(op.entry, bl);
@@ -3589,7 +3579,7 @@ static int rgw_reshard_get(cls_method_context_t hctx, bufferlist *in,  bufferlis
 
   string key;
   cls_rgw_reshard_entry  entry;
-  generate_reshard_key(op.entry, &key);
+  op.entry.get_key(&key);
   int ret = get_reshard_entry(hctx, key, &entry);
   if (ret < 0) {
     return ret;
@@ -3615,7 +3605,7 @@ static int rgw_reshard_remove(cls_method_context_t hctx, bufferlist *in, bufferl
 
   string key;
   cls_rgw_reshard_entry  entry;
-  generate_reshard_key(op.tenant, op.bucket_name, &key);
+  cls_rgw_reshard_entry::generate_key(op.tenant, op.bucket_name, &key);
   int ret = get_reshard_entry(hctx, key, &entry);
   if (ret < 0) {
     return ret;

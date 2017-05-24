@@ -1105,8 +1105,11 @@ struct cls_rgw_reshard_entry
     DECODE_FINISH(bl);
   }
 
-   void dump(Formatter *f) const;
+  void dump(Formatter *f) const;
   static void generate_test_instances(list<cls_rgw_reshard_entry*>& o);
+
+  static void generate_key(const string& tenant, const string& bucket_name, string *key);
+  void get_key(string *key) const;
 };
 WRITE_CLASS_ENCODER(cls_rgw_reshard_entry)
 
