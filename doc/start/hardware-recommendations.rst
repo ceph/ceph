@@ -12,7 +12,6 @@ running Ceph daemons of a specific type on a host configured for that type
 of daemon. We recommend using other hosts for processes that utilize your 
 data cluster (e.g., OpenStack, CloudStack, etc).
 
-
 .. tip:: Check out the Ceph blog too. Articles like `Ceph Write Throughput 1`_,
    `Ceph Write Throughput 2`_, `Argonaut v. Bobtail Performance Preview`_, 
    `Bobtail Performance - I/O Scheduler Comparison`_ and others are an
@@ -110,10 +109,11 @@ Solid State Drives
 ------------------
 
 One opportunity for performance improvement is to use solid-state drives (SSDs)
-to reduce random access time and read latency while accelerating throughput.
-SSDs often cost more than 10x as much per gigabyte when compared to a hard disk
-drive, but SSDs often exhibit access times that are at least 100x faster than a
-hard disk drive.
+to reduce access time and latency while accelerating throughput. 
+SSDs often cost from 2x to more than 10x as much per gigabyte when compared to a
+hard disk drive, but SSDs often exhibit access times that are at least 100x faster
+than a hard disk drive. To maximize performance look for SSDs that connect via
+high speed interfaces like PCIe NVMe vs SATA or SAS.
 
 SSDs do not have moving mechanical parts so they aren't necessarily subject to
 the same types of limitations as hard disk drives. SSDs do have significant
@@ -121,6 +121,8 @@ limitations though. When evaluating SSDs, it is important to consider the
 performance of sequential reads and writes. An SSD that has 400MB/s sequential
 write throughput may have much better performance than an SSD with 120MB/s of
 sequential write throughput when storing multiple journals for multiple OSDs.
+Be sure to compare SSD performance vs the workload you will deploy. For example
+an OLTP workload may require more write performance than media streaming.
 
 .. important:: We recommend exploring the use of SSDs to improve performance. 
    However, before making a significant investment in SSDs, we **strongly
@@ -128,17 +130,14 @@ sequential write throughput when storing multiple journals for multiple OSDs.
    SSD in a test configuration to gauge performance. 
 
 Since SSDs have no moving mechanical parts, it makes sense to use them in the
-areas of Ceph that do not use a lot of storage space (e.g., journals).
+areas of Ceph that are most performance sensitive (e.g., journals).
 Relatively inexpensive SSDs may appeal to your sense of economy. Use caution.
 Acceptable IOPS are not enough when selecting an SSD for use with Ceph. There
 are a few important performance considerations for journals and SSDs:
 
 - **Write-intensive semantics:** Journaling involves write-intensive semantics, 
   so you should ensure that the SSD you choose to deploy will perform equal to
-  or better than a hard disk drive when writing data. Inexpensive SSDs may 
-  introduce write latency even as they accelerate access time, because 
-  sometimes high performance hard drives can write as fast or faster than 
-  some of the more economical SSDs available on the market!
+  or better than a hard disk drive when writing data.
   
 - **Sequential Writes:** When you store multiple journals on an SSD you must 
   consider the sequential write limitations of the SSD too, since they may be 
@@ -149,10 +148,10 @@ are a few important performance considerations for journals and SSDs:
   proper partition alignment with SSDs, which can cause SSDs to transfer data 
   much more slowly. Ensure that SSD partitions are properly aligned.
 
-While SSDs are cost prohibitive for object storage, OSDs may see a significant
-performance improvement by storing an OSD's journal on an SSD and the OSD's
-object data on a separate hard disk drive. The ``osd journal`` configuration
-setting defaults to ``/var/lib/ceph/osd/$cluster-$id/journal``. You can mount
+While SSDs may be cost prohibitive for some object storage, OSDs may see a
+large performance improvement by storing an OSD's journal on an SSD and the OSD's
+object data on a separate hard disk drive or lower cost SSD. The ``osd journal``
+configuration defaults to ``/var/lib/ceph/osd/$cluster-$id/journal``. You can mount
 this path to an SSD or to an SSD partition so that it is not merely a file on
 the same disk as the object data.
 
