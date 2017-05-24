@@ -756,7 +756,7 @@ void  RGWReshard::get_logshard_oid(int shard_num, string *logshard)
   *logshard =  objname + buf;
 }
 
-int RGWReshard::inspect_all_logshards()
+int RGWReshard::process_all_logshards()
 {
   int ret = 0;
 
@@ -802,7 +802,7 @@ void *RGWReshard::ReshardWorker::entry() {
   do {
     utime_t start = ceph_clock_now();
     ldout(cct, 2) << "object expiration: start" << dendl;
-    if (reshard->inspect_all_logshards()) {
+    if (reshard->process_all_logshards()) {
       /* All shards have been processed properly. Next time we can start
        * from this moment. */
       last_run = start;

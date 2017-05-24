@@ -120,7 +120,7 @@ public:
 
   /* reshard thread */
   int process_single_logshard(int logshard_num);
-  int inspect_all_logshards();
+  int process_all_logshards();
   bool going_down();
   void start_processor();
   void stop_processor();
