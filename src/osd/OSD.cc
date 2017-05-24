@@ -7727,7 +7727,7 @@ bool OSD::advance_pg(
   epoch_t osd_epoch, PG *pg,
   ThreadPool::TPHandle &handle,
   PG::RecoveryCtx *rctx,
-  set<boost::intrusive_ptr<PG> > *new_pgs)
+  set<PGRef> *new_pgs)
 {
   assert(pg->is_locked());
   epoch_t next_epoch = pg->get_osdmap()->get_epoch() + 1;
@@ -8032,7 +8032,7 @@ bool OSD::require_same_or_newer_map(OpRequestRef& op, epoch_t epoch,
 
 void OSD::split_pgs(
   PG *parent,
-  const set<spg_t> &childpgids, set<boost::intrusive_ptr<PG> > *out_pgs,
+  const set<spg_t> &childpgids, set<PGRef> *out_pgs,
   OSDMapRef curmap,
   OSDMapRef nextmap,
   PG::RecoveryCtx *rctx)
@@ -9064,20 +9064,21 @@ void OSD::dequeue_op(
 
 struct C_CompleteSplits : public Context {
   OSD *osd;
-  set<boost::intrusive_ptr<PG> > pgs;
-  C_CompleteSplits(OSD *osd, const set<boost::intrusive_ptr<PG> > &in)
+  set<PGRef> pgs;
+  C_CompleteSplits(OSD *osd, const set<PGRef> &in)
     : osd(osd), pgs(in) {}
   void finish(int r) override {
     Mutex::Locker l(osd->osd_lock);
     if (osd->is_stopping())
       return;
     PG::RecoveryCtx rctx = osd->create_context();
-    for (set<boost::intrusive_ptr<PG> >::iterator i = pgs.begin();
+    for (set<PGRef>::iterator i = pgs.begin();
 	 i != pgs.end();
 	 ++i) {
       osd->pg_map_lock.get_write();
       (*i)->lock();
-      osd->add_newly_split_pg(&**i, &rctx);
+      PG *pg = (*i).get();
+      osd->add_newly_split_pg(pg, &rctx);
       if (!((*i)->deleting)) {
         set<spg_t> to_complete;
         to_complete.insert((*i)->info.pgid);
@@ -9106,7 +9107,7 @@ void OSD::process_peering_events(
   for (list<PG*>::const_iterator i = pgs.begin();
        i != pgs.end();
        ++i) {
-    set<boost::intrusive_ptr<PG> > split_pgs;
+    set<PGRef> split_pgs;
     PG *pg = *i;
     pg->lock_suspend_timeout(handle);
     curmap = service.get_osdmap();
