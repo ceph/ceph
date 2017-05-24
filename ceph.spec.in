@@ -22,11 +22,10 @@
 %endif
 %bcond_with make_check
 %bcond_with xio
-%ifnarch s390 s390x
-%bcond_without tcmalloc
-%else
-# no gperftools/tcmalloc on s390(x)
+%ifarch s390 s390x
 %bcond_with tcmalloc
+%else
+%bcond_without tcmalloc
 %endif
 %bcond_without lowmem_builder
 %bcond_with minimal_debugging_information
