@@ -17,11 +17,7 @@
  
 #include "common/Mutex.h"
 #include "common/Cond.h"
-#include "include/atomic.h"
-#include "common/ceph_context.h"
 #include "common/valgrind.h"
-
-#include <atomic>
 
 // re-include our assert to clobber the system one; fix dout:
 #include "include/assert.h"

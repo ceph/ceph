@@ -15,8 +15,6 @@
 #ifndef CEPH_OBJ_BENCHER_H
 #define CEPH_OBJ_BENCHER_H
 
-#include "common/config.h"
-#include "common/Cond.h"
 #include "common/ceph_context.h"
 #include "common/Formatter.h"
 #include <cfloat>

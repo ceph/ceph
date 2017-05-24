@@ -15,11 +15,7 @@
 #ifndef CEPH_SIMPLECACHE_H
 #define CEPH_SIMPLECACHE_H
 
-#include <map>
-#include <list>
-#include <memory>
 #include "common/Mutex.h"
-#include "common/Cond.h"
 #include "include/unordered_map.h"
 
 template <class K, class V, class C = std::less<K>, class H = std::hash<K> >

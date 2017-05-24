@@ -15,16 +15,12 @@
  * 
  */
 
-#include <errno.h>
-#include <dlfcn.h>
-
 #include "PluginRegistry.h"
 #include "ceph_ver.h"
-#include "common/ceph_context.h"
 #include "common/errno.h"
-#include "include/str_list.h"
-
 #include "common/debug.h"
+
+#include <dlfcn.h>
 
 #define PLUGIN_PREFIX "libceph_"
 #define PLUGIN_SUFFIX ".so"
