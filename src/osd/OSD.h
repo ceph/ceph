@@ -1993,7 +1993,7 @@ private:
     epoch_t advance_to, PG *pg,
     ThreadPool::TPHandle &handle,
     PG::RecoveryCtx *rctx,
-    set<boost::intrusive_ptr<PG> > *split_pgs
+    set<PGRef> *split_pgs
   );
   void consume_map();
   void activate_map();
@@ -2110,7 +2110,7 @@ protected:
 
   void split_pgs(
     PG *parent,
-    const set<spg_t> &childpgids, set<boost::intrusive_ptr<PG> > *out_pgs,
+    const set<spg_t> &childpgids, set<PGRef> *out_pgs,
     OSDMapRef curmap,
     OSDMapRef nextmap,
     PG::RecoveryCtx *rctx);
