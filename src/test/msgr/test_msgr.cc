@@ -1370,9 +1370,9 @@ class MarkdownDispatcher : public Dispatcher {
   set<ConnectionRef> conns;
   bool last_mark;
  public:
-  atomic_t count;
+  std::atomic<int64_t> count = { 0 };
   explicit MarkdownDispatcher(bool s): Dispatcher(g_ceph_context), lock("MarkdownDispatcher::lock"),
-                              last_mark(false), count(0) {}
+                              last_mark(false) {}
   bool ms_can_fast_dispatch_any() const override { return false; }
   bool ms_can_fast_dispatch(const Message *m) const override {
     switch (m->get_type()) {
@@ -1395,7 +1395,7 @@ class MarkdownDispatcher : public Dispatcher {
   bool ms_dispatch(Message *m) override {
     lderr(g_ceph_context) << __func__ << " conn: " << m->get_connection() << dendl;
     Mutex::Locker l(lock);
-    count.inc();
+    count++;
     conns.insert(m->get_connection());
     if (conns.size() < 2 && !last_mark) {
       m->put();
@@ -1471,8 +1471,8 @@ TEST_P(MessengerTest, MarkdownTest) {
     ASSERT_EQ(conn1->send_message(m), 0);
     m = new MPing();
     ASSERT_EQ(conn2->send_message(m), 0);
-    CHECK_AND_WAIT_TRUE(srv_dispatcher.count.read() > last + 1);
-    if (srv_dispatcher.count.read() == last) {
+    CHECK_AND_WAIT_TRUE(srv_dispatcher.count > last + 1);
+    if (srv_dispatcher.count == last) {
       lderr(g_ceph_context) << __func__ << " last is " << last << dendl;
       equal = true;
       equal_count++;
@@ -1480,7 +1480,7 @@ TEST_P(MessengerTest, MarkdownTest) {
       equal = false;
       equal_count = 0;
     }
-    last = srv_dispatcher.count.read();
+    last = srv_dispatcher.count;
     if (equal_count)
       usleep(1000*500);
     ASSERT_FALSE(equal && equal_count > 3);

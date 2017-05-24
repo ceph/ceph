@@ -84,7 +84,7 @@ ceph_tid_t FakeWriteback::write(const object_t& oid,
   C_Delay *wrapper = new C_Delay(m_cct, oncommit, m_lock, off, NULL,
 				 m_delay_ns);
   m_finisher->queue(wrapper, 0);
-  return m_tid.inc();
+  return ++m_tid;
 }
 
 bool FakeWriteback::may_copy_on_write(const object_t&, uint64_t, uint64_t,
