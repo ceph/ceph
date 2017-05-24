@@ -4490,9 +4490,7 @@ int main(int argc, const char **argv)
     break;
   case OPT_USER_RM:
     ret = user.remove(user_op, &err_msg);
-    if (ret == -ENOENT) {
-      cerr << err_msg << std::endl;
-    } else if (ret < 0) {
+    if (ret < 0) {
       cerr << "could not remove user: " << err_msg << std::endl;
       return -ret;
     }
