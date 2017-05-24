@@ -200,6 +200,7 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
   static const int STATE_REPAIRSTATS = (1<<19);
   static const int STATE_MISSINGOBJS = (1<<20);
   static const int STATE_EVALSTALECAPS = (1<<21);
+  static const int STATE_QUEUEDEXPORTPIN = (1<<22);
   // orphan inode needs notification of releasing reference
   static const int STATE_ORPHAN =	STATE_NOTIFYREF;
 
@@ -627,7 +628,6 @@ public:
   friend class StrayManager;
   friend class CDir;
   friend class CInodeExport;
-  friend class C_CInode_ExportPin;
 
   // ---------------------------
   CInode(MDCache *c, bool auth=true, snapid_t f=2, snapid_t l=CEPH_NOSNAP) : 
@@ -1069,7 +1069,7 @@ public:
   }
 
 private:
-  void maybe_export_pin();
+  void maybe_export_pin(bool update=false);
 public:
   void set_export_pin(mds_rank_t rank);
   mds_rank_t get_export_pin(bool inherit=true) const;

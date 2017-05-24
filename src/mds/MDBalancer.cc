@@ -83,31 +83,50 @@ void MDBalancer::handle_export_pins(void)
   auto it = q.begin();
   dout(20) << "export_pin_queue size=" << q.size() << dendl;
   while (it != q.end()) {
-    auto current = it++;
-    CInode *in = *current;
+    auto cur = it++;
+    CInode *in = *cur;
     assert(in->is_dir());
-    mds_rank_t export_pin = in->get_export_pin();
-    if (!in->is_exportable(export_pin)) {
-      dout(10) << "can no longer export " << *in << " because export pins have since changed" << dendl;
-      q.erase(current);
-      continue;
-    }
-    dout(10) << "exporting dirfrags of " << *in << " to " << export_pin << dendl;
-    bool has_auth = false;
-    list<frag_t> ls;
-    in->dirfragtree.get_leaves(ls);
-    for (const auto &fg : ls) {
-      CDir *cd = in->get_dirfrag(fg);
-      if (cd && cd->is_auth()) {
-        /* N.B. when we are no longer auth after exporting, this function will remove the inode from the queue */
-        mds->mdcache->migrator->export_dir(cd, export_pin);
-        has_auth = true;
+    mds_rank_t export_pin = in->get_export_pin(false);
+
+    bool remove = true;
+    list<CDir*> dfls;
+    in->get_dirfrags(dfls);
+    for (auto dir : dfls) {
+      if (!dir->is_auth())
+	continue;
+
+      if (export_pin == MDS_RANK_NONE) {
+	if (dir->state_test(CDir::STATE_AUXSUBTREE)) {
+	  if (dir->is_frozen() || dir->is_freezing()) {
+	    // try again later
+	    remove = false;
+	    continue;
+	  }
+	  dout(10) << " clear auxsubtree on " << *dir << dendl;
+	  dir->state_clear(CDir::STATE_AUXSUBTREE);
+	  mds->mdcache->try_subtree_merge(dir);
+	}
+      } else if (export_pin == mds->get_nodeid()) {
+	if (!dir->is_subtree_root()) {
+	  if (dir->state_test(CDir::STATE_CREATING) ||
+	      dir->is_frozen() || dir->is_freezing()) {
+	    // try again later
+	    remove = false;
+	    continue;
+	  }
+	  dir->state_set(CDir::STATE_AUXSUBTREE);
+	  mds->mdcache->adjust_subtree_auth(dir, mds->get_nodeid());
+	  dout(10) << " create aux subtree on " << *dir << dendl;
+	}
+      } else {
+	mds->mdcache->migrator->export_dir(dir, export_pin);
+	remove = false;
       }
     }
-    if (!has_auth) {
-      dout(10) << "can no longer export " << *in << " because I am not auth for any dirfrags" << dendl;
-      q.erase(current);
-      continue;
+
+    if (remove) {
+      in->state_clear(CInode::STATE_QUEUEDEXPORTPIN);
+      q.erase(cur);
     }
   }
 

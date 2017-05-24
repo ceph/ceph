@@ -298,7 +298,8 @@ void MDCache::remove_inode(CInode *o)
 
   o->item_open_file.remove_myself();
 
-  export_pin_queue.erase(o);
+  if (o->state_test(CInode::STATE_QUEUEDEXPORTPIN))
+    export_pin_queue.erase(o);
 
   // remove from inode map
   inode_map.erase(o->vino());    
