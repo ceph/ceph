@@ -2511,20 +2511,18 @@ bool BlueStore::exists(CollectionHandle &c_, const ghobject_t& oid)
 int BlueStore::stat(
     const coll_t& cid,
     const ghobject_t& oid,
-    struct stat *st,
-    bool allow_eio)
+    struct stat *st)
 {
   CollectionHandle c = _get_collection(cid);
   if (!c)
     return -ENOENT;
-  return stat(c, oid, st, allow_eio);
+  return stat(c, oid, st);
 }
 
 int BlueStore::stat(
   CollectionHandle &c_,
   const ghobject_t& oid,
-  struct stat *st,
-  bool allow_eio)
+  struct stat *st)
 {
   Collection *c = static_cast<Collection*>(c_.get());
   if (!c->exists)
@@ -2547,13 +2545,12 @@ int BlueStore::read(
   uint64_t offset,
   size_t length,
   bufferlist& bl,
-  uint32_t op_flags,
-  bool allow_eio)
+  uint32_t op_flags)
 {
   CollectionHandle c = _get_collection(cid);
   if (!c)
     return -ENOENT;
-  return read(c, oid, offset, length, bl, op_flags, allow_eio);
+  return read(c, oid, offset, length, bl, op_flags);
 }
 
 int BlueStore::read(
@@ -2562,8 +2559,7 @@ int BlueStore::read(
   uint64_t offset,
   size_t length,
   bufferlist& bl,
-  uint32_t op_flags,
-  bool allow_eio)
+  uint32_t op_flags)
 {
   Collection *c = static_cast<Collection*>(c_.get());
   const coll_t &cid = c->get_cid();
@@ -3270,21 +3266,19 @@ int BlueStore::omap_get(
 int BlueStore::omap_get_header(
   const coll_t& cid,                ///< [in] Collection containing oid
   const ghobject_t &oid,   ///< [in] Object containing omap
-  bufferlist *header,      ///< [out] omap header
-  bool allow_eio ///< [in] don't assert on eio
+  bufferlist *header      ///< [out] omap header
   )
 {
   CollectionHandle c = _get_collection(cid);
   if (!c)
     return -ENOENT;
-  return omap_get_header(c, oid, header, allow_eio);
+  return omap_get_header(c, oid, header);
 }
 
 int BlueStore::omap_get_header(
   CollectionHandle &c_,                ///< [in] Collection containing oid
   const ghobject_t &oid,   ///< [in] Object containing omap
-  bufferlist *header,      ///< [out] omap header
-  bool allow_eio ///< [in] don't assert on eio
+  bufferlist *header       ///< [out] omap header
   )
 {
   Collection *c = static_cast<Collection*>(c_.get());

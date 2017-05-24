@@ -933,8 +933,7 @@ void ECBackend::handle_sub_read(
 	ghobject_t(i->first, ghobject_t::NO_GEN, shard),
 	j->get<0>(),
 	j->get<1>(),
-	bl, j->get<2>(),
-	true); // Allow EIO return
+	bl, j->get<2>());
       if (r < 0) {
 	get_parent()->clog_error() << __func__
 				   << ": Error " << r
@@ -2086,7 +2085,7 @@ void ECBackend::be_deep_scrub(
 	poid, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard),
       pos,
       stride, bl,
-      fadvise_flags, true);
+      fadvise_flags);
     if (r < 0)
       break;
     if (bl.length() % sinfo.get_chunk_size()) {

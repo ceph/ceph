@@ -759,7 +759,7 @@ void ReplicatedBackend::be_deep_scrub(
 	    poid, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard),
 	  pos,
 	  cct->_conf->osd_deep_scrub_stride, bl,
-	  fadvise_flags, true);
+	  fadvise_flags);
     if (r <= 0)
       break;
 
@@ -781,7 +781,7 @@ void ReplicatedBackend::be_deep_scrub(
     coll,
     ghobject_t(
       poid, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard),
-    &hdrbl, true);
+    &hdrbl);
   // NOTE: bobtail to giant, we would crc the head as (len, head).
   // that changes at the same time we start using a non-zero seed.
   if (r == 0 && hdrbl.length()) {

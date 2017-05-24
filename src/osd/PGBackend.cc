@@ -365,8 +365,7 @@ void PGBackend::be_scan_list(
       ch,
       ghobject_t(
 	poid, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard),
-      &st,
-      true);
+      &st);
     if (r == 0) {
       ScrubMap::object &o = map.objects[poid];
       o.size = st.st_size;
