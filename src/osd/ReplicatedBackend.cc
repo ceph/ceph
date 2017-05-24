@@ -725,7 +725,7 @@ void ReplicatedBackend::be_deep_scrub(
 	    poid, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard),
 	  pos,
 	  cct->_conf->osd_deep_scrub_stride, bl,
-	  fadvise_flags, true);
+	  fadvise_flags);
     if (r <= 0)
       break;
 
