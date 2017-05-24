@@ -380,7 +380,7 @@ void KernelDevice::_aio_thread()
 	    aio_callback(aio_callback_priv, ioc->priv);
 	  }
 	} else {
-            ioc->try_aio_wake();
+          ioc->try_aio_wake();
 	}
       }
     }
