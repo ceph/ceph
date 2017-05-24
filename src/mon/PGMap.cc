@@ -1542,7 +1542,11 @@ void PGMap::update_delta(CephContext *cct,
   delta_t -= *last_ts;  // take the last timestamp we saw
   *last_ts = ts;        // @p ts becomes the last timestamp we saw
 
-  // calculate a delta, and average over the last 2 deltas.
+  // adjust delta_t, quick start if there is no update in a long period
+  delta_t = std::min(delta_t,
+                    utime_t(2 * (cct ? cct->_conf->mon_delta_reset_interval : 10), 0));
+
+  // calculate a delta, and average over the last 6 deltas by default.
   /* start by taking a copy of our current @p result_pool_sum, and by
    * taking out the stats from @p old_pool_sum.  This generates a stats
    * delta.  Stash this stats delta in @p delta_avg_list, along with the
