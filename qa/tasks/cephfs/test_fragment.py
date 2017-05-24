@@ -99,7 +99,7 @@ class TestFragmentation(CephFSTestCase):
             mds_bal_split_size=split_size,
             mds_bal_merge_size=merge_size,
             mds_bal_split_bits=3,
-            mds_bal_fragment_size_max=(split_size * 1.5 + 2)
+            mds_bal_fragment_size_max=int(split_size * 1.5 + 2)
         )
 
         # We test this only at a single split level.  If a client was sending
