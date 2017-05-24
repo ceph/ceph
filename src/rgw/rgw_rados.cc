@@ -5195,17 +5195,13 @@ int RGWRados::Bucket::List::list_objects(int max, vector<rgw_bucket_dir_entry> *
   result->clear();
 
   rgw_obj_key marker_obj(params.marker.name, params.marker.instance, params.ns);
-
-  rgw_obj_key end_marker_obj;
-  rgw_obj_index_key cur_end_marker;
-  if (!params.ns.empty()) {
-    end_marker_obj = rgw_obj_key(params.end_marker.name, params.end_marker.instance, params.ns);
-    end_marker_obj.ns = params.ns;
-    end_marker_obj.get_index_key(&cur_end_marker);
-  }
   rgw_obj_index_key cur_marker;
   marker_obj.get_index_key(&cur_marker);
 
+  rgw_obj_key end_marker_obj(params.end_marker.name, params.end_marker.instance,
+                             params.ns);
+  rgw_obj_index_key cur_end_marker;
+  end_marker_obj.get_index_key(&cur_end_marker);
   const bool cur_end_marker_valid = !params.end_marker.empty();
 
   rgw_obj_key prefix_obj(params.prefix);
