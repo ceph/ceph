@@ -890,6 +890,7 @@ void CDir::prepare_new_fragment(bool replay)
     _freeze_dir();
     mark_complete();
   }
+  inode->add_dirfrag(this);
 }
 
 void CDir::finish_old_fragment(list<MDSInternalContextBase*>& waiters, bool replay)
@@ -994,7 +995,6 @@ void CDir::split(int bits, list<CDir*>& subs, list<MDSInternalContextBase*>& wai
     dout(10) << " subfrag " << *p << " " << *f << dendl;
     subfrags[n++] = f;
     subs.push_back(f);
-    inode->add_dirfrag(f);
 
     f->set_dir_auth(get_dir_auth());
     f->prepare_new_fragment(replay);
