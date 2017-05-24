@@ -8269,7 +8269,12 @@ int RGWRados::set_bucket_owner(rgw_bucket& bucket, ACLOwner& owner)
   RGWBucketInfo info;
   map<string, bufferlist> attrs;
   RGWObjectCtx obj_ctx(this);
-  int r = get_bucket_info(obj_ctx, bucket.tenant, bucket.name, info, NULL, &attrs);
+  int r;
+  if (bucket.bucket_id.empty()) {
+    r = get_bucket_info(obj_ctx, bucket.tenant, bucket.name, info, NULL, &attrs);
+  } else {
+    r = get_bucket_instance_info(obj_ctx, bucket, info, nullptr, &attrs);
+  }
   if (r < 0) {
     ldout(cct, 0) << "NOTICE: get_bucket_info on bucket=" << bucket.name << " returned err=" << r << dendl;
     return r;

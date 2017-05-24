@@ -253,8 +253,11 @@ int RGWBucketReshard::clear_resharding()
   return 0;
 }
 
-int RGWBucketReshard::create_new_bucket_instance(int new_num_shards,
-                                                 RGWBucketInfo& new_bucket_info)
+static int create_new_bucket_instance(RGWRados *store,
+				      int new_num_shards,
+				      const RGWBucketInfo& bucket_info,
+				      map<string, bufferlist>& attrs,
+				      RGWBucketInfo& new_bucket_info)
 {
   new_bucket_info = bucket_info;
 
@@ -264,20 +267,80 @@ int RGWBucketReshard::create_new_bucket_instance(int new_num_shards,
   new_bucket_info.num_shards = new_num_shards;
   new_bucket_info.objv_tracker.clear();
 
+  new_bucket_info.new_bucket_instance_id.clear();
+  new_bucket_info.reshard_status = 0;
+
   int ret = store->init_bucket_index(new_bucket_info, new_bucket_info.num_shards);
   if (ret < 0) {
-    derr << "ERROR: failed to init new bucket indexes: " << cpp_strerror(-ret) << dendl;
+    cerr << "ERROR: failed to init new bucket indexes: " << cpp_strerror(-ret) << std::endl;
     return -ret;
   }
 
-  ret = store->put_bucket_instance_info(new_bucket_info, true, real_time(), &bucket_attrs);
+  ret = store->put_bucket_instance_info(new_bucket_info, true, real_time(), &attrs);
   if (ret < 0) {
-    derr << "ERROR: failed to store new bucket instance info: " << cpp_strerror(-ret) << dendl;
+    cerr << "ERROR: failed to store new bucket instance info: " << cpp_strerror(-ret) << std::endl;
     return -ret;
   }
 
   return 0;
 }
+
+int RGWBucketReshard::create_new_bucket_instance(int new_num_shards,
+                                                 RGWBucketInfo& new_bucket_info)
+{
+  return ::create_new_bucket_instance(store, new_num_shards, bucket_info, bucket_attrs, new_bucket_info);
+}
+
+class BucketInfoReshardUpdate
+{
+  RGWRados *store;
+  RGWBucketInfo bucket_info;
+  std::map<string, bufferlist> bucket_attrs;
+
+  bool in_progress{false};
+
+  int set_status(cls_rgw_reshard_status s) {
+    bucket_info.reshard_status = s;
+    int ret = store->put_bucket_instance_info(bucket_info, false, real_time(), &bucket_attrs);
+    if (ret < 0) {
+      ldout(store->ctx(), 0) << "ERROR: failed to write bucket info, ret=" << ret << dendl;
+      return ret;
+    }
+    return 0;
+  }
+
+public:
+  BucketInfoReshardUpdate(RGWRados *_store, RGWBucketInfo& _bucket_info,
+                          map<string, bufferlist>& _bucket_attrs, const string& new_bucket_id) : store(_store), 
+                                                                                                 bucket_info(_bucket_info),
+                                                                                                 bucket_attrs(_bucket_attrs) {
+    bucket_info.new_bucket_instance_id = new_bucket_id;
+  }
+  ~BucketInfoReshardUpdate() {
+    if (in_progress) {
+      bucket_info.new_bucket_instance_id.clear();
+      set_status(CLS_RGW_RESHARD_NONE);
+    }
+  }
+
+  int start() {
+    int ret = set_status(CLS_RGW_RESHARD_IN_PROGRESS);
+    if (ret < 0) {
+      return ret;
+    }
+    in_progress = true;
+    return 0;
+  }
+
+  int complete() {
+    int ret = set_status(CLS_RGW_RESHARD_DONE);
+    if (ret < 0) {
+      return ret;
+    }
+    in_progress = false;
+    return 0;
+  }
+};
 
 int RGWBucketReshard::do_reshard(
 		   int num_shards,
@@ -300,11 +363,20 @@ int RGWBucketReshard::do_reshard(
     (*out) << "new bucket instance id: " << new_bucket_info.bucket.bucket_id << std::endl;
   }
 
+  /* update bucket info  -- in progress*/
   list<rgw_cls_bi_entry> entries;
 
   if (max_entries < 0) {
     ldout(store->ctx(), 0) << __func__ << ": can't reshard, negative max_entries" << dendl;
     return -EINVAL;
+  }
+
+  BucketInfoReshardUpdate bucket_info_updater(store, bucket_info, bucket_attrs, new_bucket_info.bucket.bucket_id);
+
+  ret = bucket_info_updater.start();
+  if (ret < 0) {
+    ldout(store->ctx(), 0) << __func__ << ": failed to update bucket info ret=" << ret << dendl;
+    return ret;
   }
 
   int num_target_shards = (new_bucket_info.num_shards > 0 ? new_bucket_info.num_shards : 1);
@@ -403,6 +475,12 @@ int RGWBucketReshard::do_reshard(
     lderr(store->ctx()) << "failed to link new bucket instance (bucket_id=" << new_bucket_info.bucket.bucket_id << ": " << err << "; " << cpp_strerror(-r) << ")" << dendl;
     return -r;
   }
+
+  ret = bucket_info_updater.complete();
+  if (ret < 0) {
+    ldout(store->ctx(), 0) << __func__ << ": failed to update bucket info ret=" << ret << dendl;
+    /* don't error out, reshard process succeeded */
+  }
   return 0;
 }
 
@@ -447,7 +525,6 @@ int RGWBucketReshard::execute(int num_shards, int max_op_entries,
     unlock_bucket();
     return ret;
   }
-
   ret = set_resharding_status(new_bucket_info.bucket.bucket_id, num_shards, CLS_RGW_RESHARD_IN_PROGRESS);
   if (ret < 0) {
     unlock_bucket();
@@ -633,34 +710,6 @@ int RGWReshardWait::block_while_resharding(RGWRados::BucketShard *bs, string *ne
   return -ERR_BUSY_RESHARDING;
 }
 
-
-static  int create_new_bucket_instance(RGWRados *store,
-				      int new_num_shards,
-				      const RGWBucketInfo& bucket_info,
-				      map<string, bufferlist>& attrs,
-				      RGWBucketInfo& new_bucket_info)
-{
-
-  store->create_bucket_id(&new_bucket_info.bucket.bucket_id);
-  new_bucket_info.bucket.oid.clear();
-
-  new_bucket_info.num_shards = new_num_shards;
-  new_bucket_info.objv_tracker.clear();
-
-  int ret = store->init_bucket_index(new_bucket_info, new_bucket_info.num_shards);
-  if (ret < 0) {
-    cerr << "ERROR: failed to init new bucket indexes: " << cpp_strerror(-ret) << std::endl;
-    return -ret;
-  }
-
-  ret = store->put_bucket_instance_info(new_bucket_info, true, real_time(), &attrs);
-  if (ret < 0) {
-    cerr << "ERROR: failed to store new bucket instance info: " << cpp_strerror(-ret) << std::endl;
-    return -ret;
-  }
-
-  return 0;
-}
 
 int RGWReshard::process_single_logshard(int logshard_num)
 {
