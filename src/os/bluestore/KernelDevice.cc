@@ -263,7 +263,7 @@ int KernelDevice::collect_metadata(string prefix, map<string,string> *pm) const
 
 int KernelDevice::flush()
 {
-  // protect flush with a mutex.  not that we are not really protected
+  // protect flush with a mutex.  note that we are not really protecting
   // data here.  instead, we're ensuring that if any flush() caller
   // sees that io_since_flush is true, they block any racing callers
   // until the flush is observed.  that allows racing threads to be
