@@ -3526,7 +3526,7 @@ static int rgw_reshard_list(cls_method_context_t hctx, bufferlist *in, bufferlis
   bufferlist::iterator iter;
   map<string, bufferlist> vals;
   string filter_prefix;
-  #define MAX_RESHARD_LIST_ENTRIES 1000
+#define MAX_RESHARD_LIST_ENTRIES 1000
   /* one extra entry for identifying truncation */
   int32_t max = (op.max < MAX_RESHARD_LIST_ENTRIES ? op.max : MAX_RESHARD_LIST_ENTRIES) + 1;
   int ret = cls_cxx_map_get_vals(hctx, op.marker, filter_prefix, max, &vals);
@@ -3534,7 +3534,8 @@ static int rgw_reshard_list(cls_method_context_t hctx, bufferlist *in, bufferlis
     return ret;
   map<string, bufferlist>::iterator it;
   cls_rgw_reshard_entry entry;
-  for (it = vals.begin(); it != vals.end(); ++it) {
+  int i = 0;
+  for (it = vals.begin(); i < (int)op.max && it != vals.end(); ++it, ++i) {
     iter = it->second.begin();
     try {
       ::decode(entry, iter);
@@ -3544,7 +3545,7 @@ static int rgw_reshard_list(cls_method_context_t hctx, bufferlist *in, bufferlis
    }
     op_ret.entries.push_back(entry);
   }
-  op_ret.is_truncated = op.max && (op_ret.entries.size() >= op.max);
+  op_ret.is_truncated = op.max && (vals.size() > op.max);
   ::encode(op_ret, *out);
   return 0;
 }
