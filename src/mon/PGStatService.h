@@ -59,9 +59,10 @@ public:
    * For upgrades. If the PGMap has newer data than the monitor's new
    * creating_pgs (scan_epoch), insert them into the passed pending_creates.
    */
-  virtual void maybe_add_creating_pgs(epoch_t scan_epoch,
-				      creating_pgs_t *pending_creates) const {
+  virtual unsigned maybe_add_creating_pgs(epoch_t scan_epoch,
+					  creating_pgs_t *pending_creates) const {
     ceph_abort();
+    return 0;
   }
   /**
    * For upgrades. If some PGs are created before all OSDs are luminous

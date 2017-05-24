@@ -1299,18 +1299,23 @@ public:
   bool is_creating_pg(pg_t pgid) const override {
     return pgmap.creating_pgs.count(pgid);
   }
-  void maybe_add_creating_pgs(epoch_t scan_epoch,
+  unsigned maybe_add_creating_pgs(epoch_t scan_epoch,
 			      creating_pgs_t *pending_creates) const override {
-    if (pgmap.last_pg_scan >= scan_epoch) {
-      for (auto& pgid : pgmap.creating_pgs) {
-	auto st = pgmap.pg_stat.find(pgid);
-	assert(st != pgmap.pg_stat.end());
-	auto created = make_pair(st->second.created,
-				 st->second.last_scrub_stamp);
-	// no need to add the pg, if it already exists in creating_pgs
-	pending_creates->pgs.emplace(pgid, created);
+    if (pgmap.last_pg_scan < scan_epoch) {
+      return 0;
+    }
+    unsigned added = 0;
+    for (auto& pgid : pgmap.creating_pgs) {
+      auto st = pgmap.pg_stat.find(pgid);
+      assert(st != pgmap.pg_stat.end());
+      auto created = make_pair(st->second.created,
+			       st->second.last_scrub_stamp);
+      // no need to add the pg, if it already exists in creating_pgs
+      if (pending_creates->pgs.emplace(pgid, created).second) {
+	added++;
       }
     }
+    return added;
   }
   void maybe_trim_creating_pgs(creating_pgs_t *creates) const override {
     auto p = creates->pgs.begin();
