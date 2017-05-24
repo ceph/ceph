@@ -13,16 +13,8 @@
 #ifndef COHORT_LRU_H
 #define COHORT_LRU_H
 
-#include <stdint.h>
-#include <atomic>
 #include <boost/intrusive/list.hpp>
-#include <boost/intrusive/rbtree.hpp>
-#include <boost/intrusive/avltree.hpp>
-#include <mutex>
-#include <atomic>
-#include <vector>
-#include <algorithm>
-#include <iostream>
+
 #include "common/likely.h"
 
 #ifndef CACHE_LINE_SIZE

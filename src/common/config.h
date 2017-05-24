@@ -15,19 +15,11 @@
 #ifndef CEPH_CONFIG_H
 #define CEPH_CONFIG_H
 
-#include <iosfwd>
-#include <functional>
-#include <vector>
-#include <map>
-#include <set>
-#include <boost/variant.hpp>
-
 #include "common/ConfUtils.h"
 #include "common/entity_name.h"
 #include "common/Mutex.h"
 #include "log/SubsystemMap.h"
 #include "common/config_obs.h"
-#include "msg/msg_types.h"
 
 enum {
   CEPH_DEFAULT_CRUSH_REPLICATED_RULESET,

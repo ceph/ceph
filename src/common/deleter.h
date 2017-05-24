@@ -23,11 +23,6 @@
 #define CEPH_COMMON_DELETER_H
 
 #include <atomic>
-#include <memory>
-#include <cstdlib>
-#include <type_traits>
-
-#include "include/assert.h"
 
 /// \addtogroup memory-module
 /// @{

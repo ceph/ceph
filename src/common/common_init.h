@@ -16,9 +16,6 @@
 #define CEPH_COMMON_INIT_H
 
 #include <deque>
-#include <stdint.h>
-#include <string>
-#include <vector>
 
 #include "common/code_environment.h"
 
