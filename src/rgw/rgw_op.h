@@ -1032,6 +1032,7 @@ public:
 class RGWPutCORS : public RGWOp {
 protected:
   bufferlist cors_bl;
+  bufferlist in_data;
 
 public:
   RGWPutCORS() {}
