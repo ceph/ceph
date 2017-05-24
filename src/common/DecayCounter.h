@@ -17,8 +17,6 @@
 
 #include "include/utime.h"
 
-#include <math.h>
-
 /**
  *
  * TODO: normalize value based on some fucntion of half_life, 

@@ -11,15 +11,10 @@
  * Foundation.  See file COPYING.
  *
  */
-#include "acconfig.h"
 
 #include "common/code_environment.h"
 
-#include <errno.h>
 #include <iostream>
-#include <stdlib.h>
-#include <string.h>
-#include <string>
 
 #ifdef HAVE_SYS_PRCTL_H
 #include <sys/prctl.h>
