@@ -11,6 +11,31 @@ struct creating_pgs_t {
   epoch_t last_scan_epoch = 0;
   std::map<pg_t, std::pair<epoch_t, utime_t> > pgs;
   std::set<int64_t> created_pools;
+
+  unsigned create_pool(int64_t poolid, uint32_t pg_num,
+		       epoch_t created, utime_t modified) {
+    if (created_pools.count(poolid)) {
+      return 0;
+    }
+    const unsigned total = pgs.size();
+    for (ps_t ps = 0; ps < pg_num; ps++) {
+      const pg_t pgid{ps, static_cast<uint64_t>(poolid)};
+      if (pgs.count(pgid)) {
+	continue;
+      }
+      pgs.emplace(pgid, make_pair(created, modified));
+    }
+    return pgs.size() - total;
+  }
+
+  unsigned remove_pool(int64_t removed_pool) {
+    const unsigned total = pgs.size();
+    auto first = pgs.lower_bound(pg_t{0, (uint64_t)removed_pool});
+    auto last = pgs.lower_bound(pg_t{0, (uint64_t)removed_pool + 1});
+    pgs.erase(first, last);
+    created_pools.erase(removed_pool);
+    return total - pgs.size();
+  }
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
     ::encode(last_scan_epoch, bl);
