@@ -183,14 +183,9 @@ class Thrasher:
 
     def _set_config(self, service_type, service_id, name, value):
         opt_arg = '--{name} {value}'.format(name=name, value=value)
-        try:
-            whom = '.'.join([service_type, service_id])
-            self.ceph_manager.raw_cluster_cmd('--', 'tell', whom,
-                                              'injectargs', opt_arg)
-        except Exception:
-            self.ceph_manager.raw_cluster_cmd('--', service_type,
-                                              'tell', service_id,
-                                              'injectargs', opt_arg)
+        whom = '.'.join([service_type, service_id])
+        self.ceph_manager.raw_cluster_cmd('--', 'tell', whom,
+                                          'injectargs', opt_arg)
 
 
     def cmd_exists_on_osds(self, cmd):
