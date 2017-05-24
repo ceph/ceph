@@ -119,6 +119,7 @@ tasks:
       osd.0:
         - sleep 300 # http://tracker.ceph.com/issues/17808
         - ceph osd set require_jewel_osds
+        - ceph osd set sortbitwise
   - ceph.healthy:
   - ceph_manager.wait_for_clean: null
   - ceph.restart: [osd.0, osd.1, osd.2]
