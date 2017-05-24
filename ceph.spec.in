@@ -24,10 +24,8 @@
 %bcond_with xio
 %ifarch s390 s390x
 %bcond_with tcmalloc
-%bcond_with rgw_beast
 %else
 %bcond_without tcmalloc
-%bcond_without rgw_beast
 %endif
 %bcond_without lowmem_builder
 %bcond_with minimal_debugging_information
