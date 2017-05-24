@@ -5694,82 +5694,15 @@ next:
     formatter->flush(cout);
   }
 
-#if 0
   if (opt_cmd == OPT_RESHARD_EXECUTE) {
     RGWReshard reshard(store);
-    if (bucket_name.empty()) {
-      cerr << "ERROR: bucket not specified" << std::endl;
-      return EINVAL;
-    }
 
-    rgw_bucket bucket;
-    RGWBucketInfo bucket_info;
-    map<string, bufferlist> attrs;
-    ret = init_bucket(tenant, bucket_name, bucket_id, bucket_info, bucket, &attrs);
+    int ret = reshard.process_all_logshards();
     if (ret < 0) {
-      cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
+      cerr << "ERROR: failed to process reshard logs, error=" << cpp_strerror(-ret) << std::endl;
       return -ret;
     }
-
-    RGWBucketReshard bucket_reshard(store, bucket_info);
-
-    cls_rgw_reshard_entry entry;
-    entry.tenant = tenant;
-    entry.bucket_name = bucket_name;
-    entry.bucket_id = bucket_info.bucket.bucket_id;
-
-    int ret = reshard.get(entry);
-    if (ret < 0) {
-      cerr << "Error in getting entry for bucket " << bucket_name << ": " << cpp_strerror(-ret) << std::endl;
-      return ret;
-    }
-
-    RGWBucketInfo new_bucket_info(bucket_info);
-    ret = create_new_bucket_instance(store, entry.new_num_shards, bucket_info, attrs,
-				     new_bucket_info);
-    if (ret < 0) {
-      return ret;
-    }
-
-    entry.new_instance_id = entry.bucket_name + ":" + new_bucket_info.bucket.bucket_id;
-    ret = reshard.add(entry);
-    if (ret < 0) {
-      cerr << "Error in updateing entry bucket " << bucket_name << ": " << cpp_strerror(-ret) << std::endl;
-      return ret;
-    }
-
-    ret = reshard.set_bucket_resharding(bucket_info.bucket.oid, entry);
-    if (ret < 0) {
-      cerr << "Error in setting resharding flag for bucket " << bucket_name << ": " << cpp_strerror(-ret)
-	   << std::endl;
-      return ret;
-    }
-
-    ret = reshard.reshard_bucket(formatter, entry.new_num_shards, bucket, bucket_info, new_bucket_info,
-				 max_entries, bucket_op, verbose);
-    formatter->flush(cout);
-    if (ret < 0) {
-      return ret;
-    }
-
-    ret = reshard.clear_bucket_resharding(new_bucket_info.bucket.oid,
-					entry);
-    if (ret < 0) {
-      cerr << "Error in clearing resharding flag for bucket " << bucket_name << ": " << cpp_strerror(-ret)
-	   << std::endl;
-      return ret;
-    }
-
-    ret =reshard.remove(entry);
-    if (ret < 0) {
-      cerr << "Error removing bucket " << bucket_name << " for resharding queue: " << cpp_strerror(-ret) <<
-	std::endl;
-      return ret;
-    }
-
-    return 0;
   }
-#endif
 
   if (opt_cmd == OPT_RESHARD_CANCEL) {
     RGWReshard reshard(store);
