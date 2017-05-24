@@ -20,9 +20,12 @@
 
 #include <map>
 #include <deque>
-#include <boost/scoped_ptr.hpp>
+#include <atomic>
 #include <fstream>
+
 using namespace std;
+
+#include <boost/scoped_ptr.hpp>
 
 #include "include/unordered_map.h"
 
@@ -364,7 +367,7 @@ private:
   FDCache fdcache;
   WBThrottle wbthrottle;
 
-  atomic_t next_osr_id;
+  std::atomic<int64_t> next_osr_id = { 0 };
   bool m_disable_wbthrottle;
   deque<OpSequencer*> op_queue;
   BackoffThrottle throttle_ops, throttle_bytes;
@@ -766,7 +769,7 @@ private:
   bool m_filestore_do_dump;
   std::ofstream m_filestore_dump;
   JSONFormatter m_filestore_dump_fmt;
-  atomic_t m_filestore_kill_at;
+  std::atomic<int64_t> m_filestore_kill_at = { 0 };
   bool m_filestore_sloppy_crc;
   int m_filestore_sloppy_crc_block_size;
   uint64_t m_filestore_max_alloc_hint_size;
