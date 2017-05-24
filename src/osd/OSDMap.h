@@ -114,6 +114,91 @@ WRITE_CLASS_ENCODER(osd_xinfo_t)
 ostream& operator<<(ostream& out, const osd_xinfo_t& xi);
 
 
+struct PGTempMap {
+  mempool::osdmap::map<pg_t,mempool::osdmap::vector<int32_t> > pg_temp;
+
+  void encode(bufferlist& bl) const {
+    ::encode(pg_temp, bl);
+  }
+  void decode(bufferlist::iterator& p) {
+    ::decode(pg_temp, p);
+  }
+  friend bool operator==(const PGTempMap& l, const PGTempMap& r) {
+    return
+      l.pg_temp.size() == r.pg_temp.size() &&
+      l.pg_temp == r.pg_temp;
+  }
+
+  class iterator {
+    mempool::osdmap::map<pg_t,mempool::osdmap::vector<int32_t> >::const_iterator it;
+  public:
+    iterator(mempool::osdmap::map<pg_t,
+	     mempool::osdmap::vector<int32_t> >::const_iterator p)
+      : it(p) {}
+
+    pair<pg_t,const mempool::osdmap::vector<int32_t>&> operator*() const {
+      return *it;
+    }
+    const pair<const pg_t,mempool::osdmap::vector<int32_t>>* operator->() const {
+      return &*it;
+    }
+    friend bool operator==(const iterator& l, const iterator& r) {
+      return l.it == r.it;
+    }
+    friend bool operator!=(const iterator& l, const iterator& r) {
+      return l.it != r.it;
+    }
+    iterator& operator++() {
+      ++it;
+      return *this;
+    }
+    iterator operator++(int) {
+      iterator r = *this;
+      ++it;
+      return r;
+    }
+  };
+  iterator begin() const {
+    return iterator(pg_temp.cbegin());
+  }
+  iterator end() const {
+    return iterator(pg_temp.cend());
+  }
+  iterator find(pg_t pgid) const {
+    return iterator(pg_temp.find(pgid));
+  }
+  size_t size() const {
+    return pg_temp.size();
+  }
+  size_t count(pg_t pgid) const {
+    return pg_temp.count(pgid);
+  }
+  void erase(pg_t pgid) {
+    pg_temp.erase(pgid);
+  }
+  void clear() {
+    pg_temp.clear();
+  }
+  void set(pg_t pgid, const mempool::osdmap::vector<int32_t>& v) {
+    pg_temp[pgid] = v;
+  }
+  const mempool::osdmap::vector<int32_t>& get(pg_t pgid) {
+    return pg_temp.at(pgid);
+  }
+  void dump(Formatter *f) const {
+    for (const auto &pg : *this) {
+      f->open_object_section("osds");
+      f->dump_stream("pgid") << pg.first;
+      f->open_array_section("osds");
+      for (const auto osd : pg.second)
+	f->dump_int("osd", osd);
+      f->close_section();
+      f->close_section();
+    }
+  }
+};
+WRITE_CLASS_ENCODER(PGTempMap)
+
 /** OSDMap
  */
 class OSDMap {
@@ -248,7 +333,7 @@ private:
 
   mempool::osdmap::vector<__u32>   osd_weight;   // 16.16 fixed point, 0x10000 = "in", 0 = "out"
   mempool::osdmap::vector<osd_info_t> osd_info;
-  ceph::shared_ptr< mempool::osdmap::map<pg_t,mempool::osdmap::vector<int32_t> > > pg_temp;  // temp pg mapping (e.g. while we rebuild)
+  ceph::shared_ptr<PGTempMap> pg_temp;  // temp pg mapping (e.g. while we rebuild)
   ceph::shared_ptr< mempool::osdmap::map<pg_t,int32_t > > primary_temp;  // temp primary mapping (e.g. while we rebuild)
   ceph::shared_ptr< mempool::osdmap::vector<__u32> > osd_primary_affinity; ///< 16.16 fixed point, 0x10000 = baseline
 
@@ -297,7 +382,7 @@ private:
 	     num_osd(0), num_up_osd(0), num_in_osd(0),
 	     max_osd(0),
 	     osd_addrs(std::make_shared<addrs_s>()),
-	     pg_temp(std::make_shared<mempool::osdmap::map<pg_t,mempool::osdmap::vector<int32_t>>>()),
+	     pg_temp(std::make_shared<PGTempMap>()),
 	     primary_temp(std::make_shared<mempool::osdmap::map<pg_t,int32_t>>()),
 	     osd_uuid(std::make_shared<mempool::osdmap::vector<uuid_d>>()),
 	     cluster_snapshot_epoch(0),
@@ -317,7 +402,7 @@ public:
   void deepish_copy_from(const OSDMap& o) {
     *this = o;
     primary_temp.reset(new mempool::osdmap::map<pg_t,int32_t>(*o.primary_temp));
-    pg_temp.reset(new mempool::osdmap::map<pg_t,mempool::osdmap::vector<int32_t> >(*o.pg_temp));
+    pg_temp.reset(new PGTempMap(*o.pg_temp));
     osd_uuid.reset(new mempool::osdmap::vector<uuid_d>(*o.osd_uuid));
 
     if (o.osd_primary_affinity)
