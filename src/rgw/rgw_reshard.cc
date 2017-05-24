@@ -405,7 +405,7 @@ int RGWBucketReshard::do_reshard(
     while (is_truncated) {
       entries.clear();
       ret = store->bi_list(bucket, i, string(), marker, max_entries, &entries, &is_truncated);
-      if (ret < 0) {
+      if (ret < 0 && ret != -ENOENT) {
 	derr << "ERROR: bi_list(): " << cpp_strerror(-ret) << dendl;
 	return -ret;
       }
