@@ -63,9 +63,10 @@ public:
   };
 
 private:
+  atomic_t connected __attribute__((align(64)));
+  char pad_after[56]; 	//Padding to isolate the frequently accessed atomic variable 'connected' on a separate cache line
   XioConnection::type xio_conn_type;
   XioPortal *portal;
-  atomic_t connected;
   entity_inst_t peer;
   struct xio_session *session;
   struct xio_connection	*conn;
