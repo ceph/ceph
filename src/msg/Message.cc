@@ -190,6 +190,9 @@ using namespace std;
 
 #define DEBUGLVL  10    // debug level of output
 
+// reinclude our assert to clobber the system one
+#include "include/assert.h"
+
 #define dout_subsys ceph_subsys_ms
 
 void Message::encode(uint64_t features, int crcflags)

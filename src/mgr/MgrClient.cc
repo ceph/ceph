@@ -25,6 +25,9 @@
 #include "messages/MCommandReply.h"
 #include "messages/MPGStats.h"
 
+// reinclude our assert to clobber the system one
+#include "include/assert.h"
+
 #define dout_subsys ceph_subsys_mgrc
 #undef dout_prefix
 #define dout_prefix *_dout << "mgrc " << __func__ << " "
