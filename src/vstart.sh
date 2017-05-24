@@ -106,6 +106,8 @@ bluestore=0
 rgw_frontend="civetweb"
 lockdep=${LOCKDEP:-1}
 
+filestore_path=
+
 VSTART_SEC="client.vstart.sh"
 
 MON_ADDR=""
@@ -249,6 +251,10 @@ case $1 in
             rgw_frontend=$2
             shift
             ;;
+    --filestore_path )
+	filestore_path=$2
+	shift
+	;;
     -m )
 	    [ -z "$2" ] && usage_exit
 	    MON_ADDR=$2
@@ -575,7 +581,11 @@ EOF
             if command -v btrfs > /dev/null; then
                 for f in $CEPH_DEV_DIR/osd$osd/*; do btrfs sub delete $f &> /dev/null || true; done
             fi
-            mkdir -p $CEPH_DEV_DIR/osd$osd
+	    if [ -n "$filestore_path" ]; then
+		ln -s $filestore_path $CEPH_DEV_DIR/osd$osd
+	    else
+		mkdir -p $CEPH_DEV_DIR/osd$osd
+	    fi
 
             local uuid=`uuidgen`
             echo "add osd$osd $uuid"
