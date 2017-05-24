@@ -711,11 +711,11 @@ int RGWReshard::process_single_logshard(int logshard_num)
 	  return ret;
 	}
 
-	entry.new_instance_id = entry.bucket_name + ":" + new_bucket_info.bucket.bucket_id;
+	entry.new_instance_id = new_bucket_info.bucket.bucket_id;
 
 	ret = add(entry);
 	if (ret < 0) {
-	  ldout(cct, 0) << __func__ << ":Error in updateing entry bucket " << entry.bucket_name << ": " <<
+	  ldout(cct, 0) << __func__ << ":Error in updating entry bucket " << entry.bucket_name << ": " <<
 	    cpp_strerror(-ret) << dendl;
 	  return ret;
 	}
