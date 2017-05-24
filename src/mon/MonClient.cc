@@ -39,6 +39,8 @@
 #include "auth/AuthMethodList.h"
 #include "auth/RotatingKeyRing.h"
 
+// reinclude our assert to clobber the system one
+#include "include/assert.h"
 
 #define dout_subsys ceph_subsys_monc
 #undef dout_prefix

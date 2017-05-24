@@ -14,6 +14,9 @@
 #include "msg/xio/XioMessenger.h"
 #endif
 
+// reinclude our assert to clobber the system one
+#include "include/assert.h"
+
 Messenger *Messenger::create_client_messenger(CephContext *cct, string lname)
 {
   std::string public_msgr_type = cct->_conf->ms_public_type.empty() ? cct->_conf->get_val<std::string>("ms_type") : cct->_conf->ms_public_type;
