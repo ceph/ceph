@@ -2734,9 +2734,7 @@ void PG::publish_stats_to_osd()
 void PG::clear_publish_stats()
 {
   dout(15) << "clear_stats" << dendl;
-  pg_stats_publish_lock.Lock();
   pg_stats_publish_valid = false;
-  pg_stats_publish_lock.Unlock();
 
   osd->pg_stat_queue_dequeue(this);
 }
@@ -5208,9 +5206,7 @@ void PG::start_peering_interval(
     info.stats.mapping_epoch = osdmap->get_epoch();
   }
 
-  pg_stats_publish_lock.Lock();
   pg_stats_publish_valid = false;
-  pg_stats_publish_lock.Unlock();
 
   // This will now be remapped during a backfill in cases
   // that it would not have been before.

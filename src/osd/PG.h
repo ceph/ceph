@@ -928,7 +928,7 @@ protected:
 
   // publish stats
   Mutex pg_stats_publish_lock;
-  bool pg_stats_publish_valid;
+  std::atomic_bool pg_stats_publish_valid;
   pg_stat_t pg_stats_publish;
 
   // for ordering writes
