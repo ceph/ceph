@@ -15,13 +15,6 @@
 #ifndef CEPH_COMMON_ADMIN_SOCKET_H
 #define CEPH_COMMON_ADMIN_SOCKET_H
 
-#include "common/Thread.h"
-#include "common/Mutex.h"
-
-#include <string>
-#include <map>
-#include "include/buffer_fwd.h"
-#include "common/cmdparse.h"
 #include "common/Cond.h"
 
 class AdminSocket;

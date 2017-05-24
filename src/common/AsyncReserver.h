@@ -15,11 +15,6 @@
 #ifndef ASYNC_RESERVER_H
 #define ASYNC_RESERVER_H
 
-#include <map>
-#include <utility>
-#include <list>
-
-#include "common/Mutex.h"
 #include "common/Finisher.h"
 #include "common/Formatter.h"
 
