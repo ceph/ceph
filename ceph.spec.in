@@ -24,8 +24,10 @@
 %bcond_with xio
 %ifarch s390 s390x
 %bcond_with tcmalloc
+%bcond_with rgw_beast
 %else
 %bcond_without tcmalloc
+%bcond_without rgw_beast
 %endif
 %bcond_without lowmem_builder
 %bcond_with minimal_debugging_information
@@ -867,6 +869,11 @@ cmake .. \
     $CEPH_EXTRA_CMAKE_ARGS \
 %if 0%{with ocf}
     -DWITH_OCF=ON \
+%endif
+%if 0%{with rgw_beast}
+    -DWITH_RADOSGW_BEAST_FRONTEND=ON \
+%else
+    -DWITH_RADOSGW_BEAST_FRONTEND=OFF \
 %endif
     -DBOOST_J=%{_smp_ncpus}
 
