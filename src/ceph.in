@@ -183,6 +183,67 @@ def mdsids():
         l.append(mdsdict['name'])
     return l
 
+def mgrids():
+    ret, outbuf, outs = json_command(cluster_handle, prefix='mgr dump',
+                                     argdict={'format': 'json'})
+    if ret == -errno.EINVAL:
+        # try old mon
+        ret, outbuf, outs = send_command(cluster_handle,
+                                         cmd=['mgr', 'dump', '--format=json'])
+    if ret:
+        raise RuntimeError('Can\'t contact mon for mgr list')
+
+    d = json.loads(outbuf.decode('utf-8'))
+    l = []
+    l.append(d['active_name'])
+    for i in d['standbys']:
+        l.append(i['name'])  
+    return l
+
+def validate_target(target):
+    """
+      this function will return true iff target is a correct
+      target, such as mon.a/osd.2/mds.a/mgr.
+
+      target: str
+      return: bool, or raise RuntimeError
+    """
+    _target = target.split('.')
+    ret = False
+
+    if len(_target) == 2:
+        # for case "service.id"
+        service_name, service_id = _target[0], _target[1]
+        exist_ids = []
+        if service_name == "mon":
+            exist_ids = monids()
+        elif service_name == "osd":
+            exist_ids = osdids()
+        elif service_name == "mds":
+            exist_ids = mdsids()
+        elif service_name == "mgr":
+            exist_ids = mgrids()
+        else:
+          if verbose:
+            print('WARN: {0} is not a legal service name, should be one of mon/osd/mds/mgr'.format(service_name),
+                  file=sys.stderr)
+          return False
+
+        if service_id in exist_ids:
+            ret = True
+
+        if not ret and verbose:
+            print('WARN: the service id you provided does not exist. service id should '
+                  'be one of {0}.'.format('/'.join(exist_ids)), file=sys.stderr)
+
+    elif len(_target) == 1 and _target[0] == "mgr":
+        ret = True
+    else:
+        if verbose:
+            print('WARN: \"{0}\" is not a legal target. it should be one of mon.<id>/osd.<int>/mds.<id>/mgr.'.format(target), file=sys.stderr)
+
+    return ret
+
 # these args must be passed to all child programs
 GLOBAL_ARGS = {
     'client_id': '--id',
@@ -856,7 +917,12 @@ def main():
 
     # implement "tell service.id help"
     if len(childargs) >= 3 and childargs[0] == 'tell' and childargs[2] == 'help':
-        return do_extended_help(parser, childargs, childargs[1].split('.'), None)
+        if validate_target(childargs[1]):
+            return do_extended_help(parser, childargs, childargs[1].split('.'), None)
+        else:
+            print('target {0} doesn\'t exists, please pass correct target to tell command, such as mon.a/'
+              'osd.1/mds.a/mgr'.format(childargs[1]), file=sys.stderr)
+            return 1
 
     # implement -w/--watch_*
     # This is ugly, but Namespace() isn't quite rich enough.
