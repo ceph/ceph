@@ -3,12 +3,8 @@
 #ifndef CEPH_COMMON_CMDPARSE_H
 #define CEPH_COMMON_CMDPARSE_H
 
-#include <string>
-#include <sstream>
-#include <map>
 #include <boost/variant.hpp>
-#include <vector>
-#include <stdexcept>
+
 #include "common/Formatter.h"
 #include "common/BackTrace.h"
 
