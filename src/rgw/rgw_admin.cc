@@ -5650,10 +5650,10 @@ next:
         for (auto iter=entries.begin(); iter != entries.end(); ++iter) {
           cls_rgw_reshard_entry& entry = *iter;
           encode_json("entry", entry, formatter);
+          entry.get_key(&marker);
         }
         count += entries.size();
         formatter->flush(cout);
-#warning marker?
       } while (is_truncated && count < max_entries);
 
       if (count >= max_entries) {
