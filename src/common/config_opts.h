@@ -999,6 +999,7 @@ OPTION(bluestore_debug_freelist, OPT_BOOL, false)
 OPTION(bluestore_debug_prefill, OPT_FLOAT, 0)
 OPTION(bluestore_debug_prefragment_max, OPT_INT, 1048576)
 OPTION(bluestore_inject_wal_apply_delay, OPT_FLOAT, 0)
+OPTION(bluestore_debug_random_read_err, OPT_DOUBLE, 0)
 
 OPTION(kstore_max_ops, OPT_U64, 512)
 OPTION(kstore_max_bytes, OPT_U64, 64*1024*1024)
@@ -1041,6 +1042,7 @@ OPTION(filestore_index_retry_probability, OPT_DOUBLE, 0)
 
 // Allow object read error injection
 OPTION(filestore_debug_inject_read_err, OPT_BOOL, false)
+OPTION(filestore_debug_random_read_err, OPT_DOUBLE, 0)
 
 OPTION(filestore_debug_omap_check, OPT_BOOL, 0) // Expensive debugging check on sync
 OPTION(filestore_omap_header_cache_size, OPT_INT, 1024)

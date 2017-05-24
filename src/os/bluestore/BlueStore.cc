@@ -2586,6 +2586,11 @@ int BlueStore::read(
   r = _do_read(o, offset, length, bl, op_flags);
 
  out:
+  if (cct->_conf->bluestore_debug_random_read_err &&
+    (rand() % (int)(cct->_conf->bluestore_debug_random_read_err * 100.0)) == 0) {
+    dout(0) << __func__ << ": inject random EIO" << dendl;
+    r = -EIO;
+  }
   dout(10) << __func__ << " " << cid << " " << oid
 	   << " " << offset << "~" << length
 	   << " = " << r << dendl;

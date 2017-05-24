@@ -3049,6 +3049,10 @@ int FileStore::read(
   if (g_conf->filestore_debug_inject_read_err &&
       debug_data_eio(oid)) {
     return -EIO;
+  } else if (g_conf->filestore_debug_random_read_err &&
+    (rand() % (int)(g_conf->filestore_debug_random_read_err * 100.0)) == 0) {
+    dout(0) << __func__ << ": inject random EIO" << dendl;
+    return -EIO;
   } else {
     tracepoint(objectstore, read_exit, got);
     return got;
