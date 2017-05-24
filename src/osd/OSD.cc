@@ -7763,12 +7763,7 @@ void OSD::_committed_osd_maps(epoch_t first, epoch_t last, MOSDMap *m)
     activate_map();
   }
 
-  if (m->newest_map && m->newest_map > last) {
-    dout(10) << " msg say newest map is " << m->newest_map
-	     << ", requesting more" << dendl;
-    osdmap_subscribe(osdmap->get_epoch()+1, false);
-  }
-  else if (do_shutdown) {
+  if (do_shutdown) {
     if (network_error) {
       Mutex::Locker l(heartbeat_lock);
       map<int,pair<utime_t,entity_inst_t>>::iterator it =
@@ -7783,6 +7778,11 @@ void OSD::_committed_osd_maps(epoch_t first, epoch_t last, MOSDMap *m)
     // trigger shutdown in a different thread
     dout(0) << __func__ << " shutdown OSD via async signal" << dendl;
     queue_async_signal(SIGINT);
+  }
+  else if (m->newest_map && m->newest_map > last) {
+    dout(10) << " msg say newest map is " << m->newest_map
+	     << ", requesting more" << dendl;
+    osdmap_subscribe(osdmap->get_epoch()+1, false);
   }
   else if (is_preboot()) {
     if (m->get_source().is_mon())
