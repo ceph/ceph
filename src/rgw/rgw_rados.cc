@@ -12377,6 +12377,9 @@ int RGWRados::bi_list(rgw_bucket& bucket, const string& obj_name, const string& 
   }
 
   ret = cls_rgw_bi_list(bs.index_ctx, bs.bucket_obj, obj_name, marker, max, entries, is_truncated);
+  if (ret == -ENOENT) {
+    *is_truncated = false;
+  }
   if (ret < 0)
     return ret;
 
