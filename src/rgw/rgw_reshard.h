@@ -54,6 +54,10 @@ class RGWReshard {
     rados::cls::lock::Lock instance_lock;
     int num_logshards;
 
+    bool verbose;
+    ostream *out;
+    Formatter *formatter;
+
     void get_logshard_oid(int shard_num, string *shard);
 protected:
   class ReshardWorker : public Thread {
@@ -81,7 +85,7 @@ protected:
   void get_bucket_logshard_oid(const string& tenant, const string& bucket_name, string *oid);
 
 public:
-  RGWReshard(RGWRados* _store);
+  RGWReshard(RGWRados* _store, bool _verbose = false, ostream *_out = nullptr, Formatter *_formatter = nullptr);
   int add(cls_rgw_reshard_entry& entry);
   int get(cls_rgw_reshard_entry& entry);
   int remove(cls_rgw_reshard_entry& entry);

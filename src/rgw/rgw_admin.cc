@@ -493,7 +493,6 @@ static int get_cmd(const char *cmd, const char *prev_cmd, const char *prev_prev_
   // NOTE: please keep the checks in alphabetical order !!!
   if (strcmp(cmd, "bi") == 0 ||
       strcmp(cmd, "bilog") == 0 ||
-      strcmp(cmd, "bucket") == 0 ||
       strcmp(cmd, "buckets") == 0 ||
       strcmp(cmd, "caps") == 0 ||
       strcmp(cmd, "data") == 0 ||
@@ -531,8 +530,16 @@ static int get_cmd(const char *cmd, const char *prev_cmd, const char *prev_prev_
     return 0;
   }
 
+  /*
+   * can do both radosgw-admin bucket reshard, and radosgw-admin reshard bucket
+   */
   if (strcmp(cmd, "reshard") == 0 &&
       !(prev_cmd && strcmp(prev_cmd, "bucket") == 0)) {
+    *need_more = true;
+    return 0;
+  }
+  if (strcmp(cmd, "bucket") == 0 &&
+      !(prev_cmd && strcmp(prev_cmd, "reshard") == 0)) {
     *need_more = true;
     return 0;
   }
@@ -910,6 +917,8 @@ static int get_cmd(const char *cmd, const char *prev_cmd, const char *prev_prev_
     if (strcmp(cmd, "delete") == 0)
       return OPT_ROLE_POLICY_DELETE;
   } else if (strcmp(prev_cmd, "reshard") == 0) {
+    if (strcmp(cmd, "bucket") == 0)
+      return OPT_BUCKET_RESHARD;
     if (strcmp(cmd, "add") == 0)
       return OPT_RESHARD_ADD;
     if (strcmp(cmd, "list") == 0)
@@ -5695,7 +5704,7 @@ next:
   }
 
   if (opt_cmd == OPT_RESHARD_EXECUTE) {
-    RGWReshard reshard(store);
+    RGWReshard reshard(store, true, &cout);
 
     int ret = reshard.process_all_logshards();
     if (ret < 0) {

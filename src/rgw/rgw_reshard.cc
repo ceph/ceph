@@ -294,6 +294,8 @@ int RGWBucketReshard::do_reshard(
   if (out) {
     (*out) << "*** NOTICE: operation will not remove old bucket index objects ***" << std::endl;
     (*out) << "***         these will need to be removed manually             ***" << std::endl;
+    (*out) << "tenant: " << bucket_info.bucket.tenant << std::endl;
+    (*out) << "bucket name: " << bucket_info.bucket.name << std::endl;
     (*out) << "old bucket instance id: " << bucket_info.bucket.bucket_id << std::endl;
     (*out) << "new bucket instance id: " << new_bucket_info.bucket.bucket_id << std::endl;
   }
@@ -477,7 +479,9 @@ sleep(10);
 }
 
 
-RGWReshard::RGWReshard(RGWRados* _store): store(_store), instance_lock(bucket_instance_lock_name)
+RGWReshard::RGWReshard(RGWRados* _store, bool _verbose, ostream *_out,
+                       Formatter *_formatter) : store(_store), instance_lock(bucket_instance_lock_name),
+                                                verbose(_verbose), out(_out), formatter(_formatter)
 {
   num_logshards = store->ctx()->_conf->rgw_reshard_num_logs;
 }
@@ -736,7 +740,7 @@ int RGWReshard::process_single_logshard(int logshard_num)
       RGWBucketAdminOpState bucket_op;
       RGWBucketReshard reshard_op(store, bucket_info, attrs);
       ret = reshard_op.do_reshard(entry.new_num_shards, new_bucket_info,
-                                  max_entries, false, nullptr, nullptr);
+                                  max_entries, verbose, out, formatter);
       if (ret < 0) {
         return ret;
       }
