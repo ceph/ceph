@@ -468,7 +468,7 @@ public:
 
   mds_gid_t find_standby_for(mds_role_t mds, const std::string& name) const;
 
-  mds_gid_t find_unused(fs_cluster_id_t fscid, bool force_standby_active) const;
+  mds_gid_t find_unused_for(mds_role_t mds, bool force_standby_active) const;
 
   mds_gid_t find_replacement_for(mds_role_t mds, const std::string& name,
                                  bool force_standby_active) const;
