@@ -161,60 +161,6 @@ TEST_F(PrioritizedQueueTest, fairness_by_class) {
   }
 }
 
-template <typename T>
-struct Greater {
-  const T rhs;
-  std::list<T> *removed;
-  explicit Greater(const T& v, std::list<T> *removed) : rhs(v), removed(removed)
-  {}
-  bool operator()(const T& lhs) {
-    if (lhs > rhs) {
-      if (removed)
-	removed->push_back(lhs);
-      return true;
-    } else {
-      return false;
-    }
-  }
-};
-
-TEST_F(PrioritizedQueueTest, remove_by_filter) {
-  const unsigned min_cost = 1;
-  const unsigned max_tokens_per_subqueue = 50;
-  PQ pq(max_tokens_per_subqueue, min_cost);
-
-  Greater<Item> pred(item_size/2, nullptr);
-  unsigned num_to_remove = 0;
-  for (unsigned i = 0; i < item_size; i++) {
-    const Item& item = items[i];
-    pq.enqueue(Klass(1), 0, 10, item);
-    if (pred(item)) {
-      num_to_remove++;
-    }
-  }
-  std::list<Item> removed;
-  Greater<Item> pred2(item_size/2, &removed);
-  pq.remove_by_filter(pred2);
-
-  // see if the removed items are expected ones.
-  for (std::list<Item>::iterator it = removed.begin();
-       it != removed.end();
-       ++it) {
-    const Item& item = *it;
-    EXPECT_TRUE(pred(item));
-    items.erase(remove(items.begin(), items.end(), item), items.end());
-  }
-  EXPECT_EQ(num_to_remove, removed.size());
-  EXPECT_EQ(item_size - num_to_remove, pq.length());
-  EXPECT_EQ(item_size - num_to_remove, items.size());
-  // see if the remainder are expeceted also.
-  while (!pq.empty()) {
-    const Item item = pq.dequeue();
-    EXPECT_FALSE(pred(item));
-    items.erase(remove(items.begin(), items.end(), item), items.end());
-  }
-  EXPECT_TRUE(items.empty());
-}
 
 TEST_F(PrioritizedQueueTest, remove_by_class) {
   const unsigned min_cost = 1;
