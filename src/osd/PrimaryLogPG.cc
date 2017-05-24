@@ -10444,6 +10444,8 @@ void PrimaryLogPG::on_shutdown()
   cancel_proxy_ops(false);
   apply_and_flush_repops(false);
   cancel_log_updates();
+  // we must remove PGRefs, so do this this prior to release_backoffs() callers
+  clear_backoffs(); 
 
   pgbackend->on_change();
 
