@@ -566,6 +566,16 @@ void rgw_bucket_dir::dump(Formatter *f) const
   f->close_section();
 }
 
+void cls_rgw_reshard_entry::generate_key(const string& tenant, const string& bucket_name, string *key)
+{
+  *key = tenant + ":" + bucket_name;
+}
+
+void cls_rgw_reshard_entry::get_key(string *key) const
+{
+  generate_key(tenant, bucket_name, key);
+}
+
 void cls_rgw_reshard_entry::dump(Formatter *f) const
 {
   utime_t ut(time);
