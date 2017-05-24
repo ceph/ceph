@@ -4678,6 +4678,14 @@ void RGWPutCORS::execute()
   if (op_ret < 0)
     return;
 
+  if (!store->is_meta_master()) {
+    op_ret = forward_request_to_master(s, NULL, store, in_data, nullptr);
+    if (op_ret < 0) {
+      ldout(s->cct, 20) << __func__ << "forward_request_to_master returned ret=" << op_ret << dendl;
+      return;
+    }
+  }
+
   map<string, bufferlist> attrs = s->bucket_attrs;
   attrs[RGW_ATTR_CORS] = cors_bl;
   op_ret = rgw_bucket_set_attrs(store, s->bucket_info, attrs, &s->bucket_info.objv_tracker);
