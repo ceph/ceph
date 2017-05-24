@@ -134,6 +134,7 @@ BuildRequires:	xfsprogs-devel
 BuildRequires:	xmlstarlet
 BuildRequires:	yasm
 BuildRequires:	libibverbs-devel
+BuildRequires:	librdmacm-devel
 
 #################################################################################
 # distro-conditional dependencies

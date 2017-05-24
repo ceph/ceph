@@ -65,7 +65,8 @@ Build-Depends: bc,
                xfsprogs,
                xmlstarlet,
                yasm [amd64],
-               zlib1g-dev
+               zlib1g-dev,
+               librdmacm-dev
 Standards-Version: 3.9.3
 
 Package: ceph
