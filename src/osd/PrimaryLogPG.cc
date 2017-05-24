@@ -2887,6 +2887,9 @@ void PrimaryLogPG::do_proxy_write(OpRequestRef op, const hobject_t& missing_oid,
   }
 
   unsigned flags = CEPH_OSD_FLAG_IGNORE_CACHE | CEPH_OSD_FLAG_IGNORE_OVERLAY;
+  if (!(op->may_write() || op->may_cache())) {
+    flags |= CEPH_OSD_FLAG_RWORDERED;
+  }
   dout(10) << __func__ << " Start proxy write for " << *m << dendl;
 
   ProxyWriteOpRef pwop(std::make_shared<ProxyWriteOp>(op, soid, m->ops, m->get_reqid()));
