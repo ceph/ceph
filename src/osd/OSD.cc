@@ -5495,10 +5495,21 @@ void OSD::_preboot(epoch_t oldest, epoch_t newest)
   }
 
   // get all the latest maps
-  if (osdmap->get_epoch() + 1 >= oldest)
-    osdmap_subscribe(osdmap->get_epoch() + 1, false);
-  else
+  if (osdmap->get_epoch() + 1 >= oldest) {
+    epoch_t e = osdmap->get_epoch() + 1;
+    if (g_conf->osd_map_request_full_on_boot) {
+      e++;
+      request_full_map(e, e);
+    }
+    osdmap_subscribe(e, false);
+  } else {
+    epoch_t e = oldest - 1;
+    if (g_conf->osd_map_request_full_on_boot) {
+      e++;
+      request_full_map(e, e);
+    }
     osdmap_subscribe(oldest - 1, true);
+  }
 }
 
 void OSD::send_full_update()
@@ -7356,10 +7367,12 @@ void OSD::handle_osd_map(MOSDMap *m)
 	dout(20) << "my encoded map was:\n";
 	fbl.hexdump(*_dout);
 	*_dout << dendl;
-	delete o;
-	request_full_map(e, last);
-	last = e - 1;
-	break;
+	if (!g_conf->osd_ignore_bad_map_crc) {
+	  delete o;
+	  request_full_map(e, last);
+	  last = e - 1;
+	  break;
+	}
       }
       got_full_map(e);
 

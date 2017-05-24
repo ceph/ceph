@@ -734,11 +734,13 @@ OPTION(osd_tier_default_cache_min_write_recency_for_promote, OPT_INT, 1) // numb
 OPTION(osd_tier_default_cache_hit_set_grade_decay_rate, OPT_INT, 20)
 OPTION(osd_tier_default_cache_hit_set_search_last_n, OPT_INT, 1)
 
+OPTION(osd_map_request_full_on_boot, OPT_BOOL, false)
 OPTION(osd_map_dedup, OPT_BOOL, true)
 OPTION(osd_map_max_advance, OPT_INT, 150) // make this < cache_size!
 OPTION(osd_map_cache_size, OPT_INT, 200)
 OPTION(osd_map_message_max, OPT_INT, 100)  // max maps per MOSDMap message
 OPTION(osd_map_share_max_epochs, OPT_INT, 100)  // cap on # of inc maps we send to peers, clients
+OPTION(osd_ignore_bad_map_crc, OPT_BOOL, false) // do not ask for full map upon CRC mismatch
 OPTION(osd_inject_bad_map_crc_probability, OPT_FLOAT, 0)
 OPTION(osd_inject_failure_on_pg_removal, OPT_BOOL, false)
 // shutdown the OSD if stuatus flipping more than max_markdown_count times in recent max_markdown_period seconds

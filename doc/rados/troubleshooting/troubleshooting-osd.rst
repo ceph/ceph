@@ -418,6 +418,33 @@ Possible solutions
 - Restart OSDs
 
 
+``failed to encode map e42 with expected crc``
+==============================================
+
+To be more efficient, monitor tends to send incremental maps instead of full
+maps to OSDs to keep them updated as long as the recipients have any prior full
+osdmap. And OSD always re-encodes the full map after applying its incremental
+version and calculates the CRC checksum of the restored full map, so it is able
+to verify if the checksum matches with the one comes along with the incremental
+map. If it does not, OSD will print cluster log messages looks like::
+
+  cluster [WRN] failed to encode map e727238 with expected crc
+
+and ask for the full map from monitor. In most cases, this machinary works just
+fine. But when we change the encoding of osdmap in a new Ceph release, it is
+expected that the CRCs of a full osdmap encoded with different Ceph versions
+won't match. So in a large deployment of a Ceph cluster, any change of the
+related to osdmap could lead to the saturation of cluster network and might
+slow down the monitors. Hence slow requests are observed.
+
+In this case, we need to
+
+#. disable the ``clog_to_monitors`` option on OSD side, so they won't
+   complain to the monitor.
+#. enable the ``osd_ignore_bad_map_crc`` option on OSD side, so they won't
+   request for the full map at seeing mismatched CRCs of osdmaps.
+#. restore these settings once the OSD node is upgraded.
+
 
 Flapping OSDs
 =============
