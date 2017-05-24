@@ -3510,18 +3510,10 @@ static int rgw_reshard_add(cls_method_context_t hctx, bufferlist *in, bufferlist
 
   string key;
   generate_reshard_key(op.entry, &key);
-  bufferlist bl;
-  int ret = cls_cxx_map_get_val(hctx, key, &bl);
-  if (ret < 0 && ret != -ENOENT) {
-    CLS_ERR("error adding reshard job for bucket %s with key %s: %d",op.entry.bucket_name.c_str(), key.c_str()
-	    , ret);
-    return ret;
-  } else if (ret != -ENOENT) {
-    return -EEXIST;
-  }
 
+  bufferlist bl;
   ::encode(op.entry, bl);
-  ret = cls_cxx_map_set_val(hctx, key, &bl);
+  int ret = cls_cxx_map_set_val(hctx, key, &bl);
   if (ret < 0) {
     CLS_ERR("error adding reshard job for bucket %s with key %s",op.entry.bucket_name.c_str(), key.c_str());
     return ret;
