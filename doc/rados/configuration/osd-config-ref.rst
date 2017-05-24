@@ -664,6 +664,14 @@ perform well in a degraded state.
 :Default: ``8 << 20`` 
 
 
+``osd recovery max single start``
+
+:Description: The maximum number of recovery operations per OSD that will be
+              newly started when an OSD is recovering.
+:Type: 64-bit Integer Unsigned
+:Default: ``1``
+
+
 ``osd recovery thread timeout`` 
 
 :Description: The maximum time in seconds before timing out a recovery thread.
