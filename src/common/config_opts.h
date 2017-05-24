@@ -1178,6 +1178,7 @@ OPTION(bluestore_debug_fsck_abort, OPT_BOOL, false)
 OPTION(bluestore_debug_omit_kv_commit, OPT_BOOL, false)
 OPTION(bluestore_debug_permit_any_bdev_label, OPT_BOOL, false)
 OPTION(bluestore_shard_finishers, OPT_BOOL, false)
+OPTION(bluestore_debug_random_read_err, OPT_DOUBLE, 0)
 
 OPTION(kstore_max_ops, OPT_U64, 512)
 OPTION(kstore_max_bytes, OPT_U64, 64*1024*1024)
@@ -1221,6 +1222,7 @@ OPTION(filestore_index_retry_probability, OPT_DOUBLE, 0)
 
 // Allow object read error injection
 OPTION(filestore_debug_inject_read_err, OPT_BOOL, false)
+OPTION(filestore_debug_random_read_err, OPT_DOUBLE, 0)
 
 OPTION(filestore_debug_omap_check, OPT_BOOL, false) // Expensive debugging check on sync
 OPTION(filestore_omap_header_cache_size, OPT_INT, 1024)
