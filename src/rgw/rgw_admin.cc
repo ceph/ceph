@@ -4994,7 +4994,11 @@ int main(int argc, const char **argv)
   if (opt_cmd == OPT_BUCKET_STATS) {
     bucket_op.set_fetch_stats(true);
 
-    RGWBucketAdminOp::info(store, bucket_op, f);
+    int r = RGWBucketAdminOp::info(store, bucket_op, f);
+    if (r < 0) {
+      cerr << "failure: " << cpp_strerror(-r) << ": " << err << std::endl;
+      return -r;
+    }
   }
 
   if (opt_cmd == OPT_BUCKET_LINK) {
