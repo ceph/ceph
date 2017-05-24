@@ -12,7 +12,6 @@
  *
  */
 
-#include <errno.h>
 #include "include/types.h"
 
 

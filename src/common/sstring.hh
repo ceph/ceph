@@ -26,15 +26,6 @@
 #ifndef SSTRING_HH_
 #define SSTRING_HH_
 
-#include <stdint.h>
-#include <algorithm>
-#include <string>
-#include <cstring>
-#include <stdexcept>
-#include <initializer_list>
-#include <iostream>
-#include <functional>
-#include <cstdio>
 #include <type_traits>
 #include <boost/utility/string_ref.hpp>
 
