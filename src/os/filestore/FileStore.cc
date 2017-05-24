@@ -711,6 +711,10 @@ int FileStore::statfs(struct store_statfs_t *buf0)
 {
   struct statfs buf;
   buf0->reset();
+  struct stat stbuf;
+  dev_t data_device;
+  bool journal_on_same_fs = false;
+  memset(&stbuf, 0, sizeof(stbuf));
   if (::statfs(basedir.c_str(), &buf) < 0) {
     int r = -errno;
     assert(!m_filestore_fail_eio || r != -EIO);
@@ -719,13 +723,32 @@ int FileStore::statfs(struct store_statfs_t *buf0)
   }
   buf0->total = buf.f_blocks * buf.f_bsize;
   buf0->available = buf.f_bavail * buf.f_bsize;
+
+  if (::stat(basedir.c_str(), &stbuf) < 0) {
+    int r = -errno;
+    assert(!m_filestore_fail_eio || r != -EIO);
+    assert(r != -ENOENT);
+    return r;
+  }
+  data_device = stbuf.st_dev;
+
   // Adjust for writes pending in the journal
   if (journal) {
+    if (::stat(journalpath.c_str(), &stbuf) < 0) {
+      derr << "FileStore::statfs: failed to stat journal "
+           << journalpath << ":  " << cpp_strerror(errno) << dendl;
+    } else {
+      journal_on_same_fs = S_ISREG(stbuf.st_mode) && stbuf.st_dev == data_device;
+    }
     uint64_t estimate = journal->get_journal_size_estimate();
-    if (buf0->available > estimate)
-      buf0->available -= estimate;
-    else
-      buf0->available = 0;
+    if (journal_on_same_fs) {
+      // the statfs() above has already accounted for the journal space
+    } else {
+      if (buf0->available > estimate)
+	buf0->available -= estimate;
+      else
+	buf0->available = 0;
+    }
   }
   return 0;
 }
