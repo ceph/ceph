@@ -137,7 +137,7 @@ TEST(TestFileJournal, WriteSmall) {
     FileJournal j(g_ceph_context, fsid, finisher, &sync_cond, path,
 		  subtests[i].directio, subtests[i].aio, subtests[i].faio);
     ASSERT_EQ(0, j.create());
-    j.make_writeable();
+    ASSERT_EQ(0, j.make_writeable());
 
     vector<ObjectStore::Transaction> tls;
     bufferlist bl;
@@ -162,7 +162,7 @@ TEST(TestFileJournal, WriteBig) {
     FileJournal j(g_ceph_context, fsid, finisher, &sync_cond, path,
 		  subtests[i].directio, subtests[i].aio, subtests[i].faio);
     ASSERT_EQ(0, j.create());
-    j.make_writeable();
+    ASSERT_EQ(0, j.make_writeable());
 
     bufferlist bl;
     while (bl.length() < size_mb*1000/2) {
@@ -190,7 +190,7 @@ TEST(TestFileJournal, WriteMany) {
     FileJournal j(g_ceph_context, fsid, finisher, &sync_cond, path,
 		  subtests[i].directio, subtests[i].aio, subtests[i].faio);
     ASSERT_EQ(0, j.create());
-    j.make_writeable();
+    ASSERT_EQ(0, j.make_writeable());
 
     C_GatherBuilder gb(g_ceph_context, new C_SafeCond(&wait_lock, &cond, &done));
 
@@ -223,7 +223,7 @@ TEST(TestFileJournal, WriteManyVecs) {
     FileJournal j(g_ceph_context, fsid, finisher, &sync_cond, path,
 		  subtests[i].directio, subtests[i].aio, subtests[i].faio);
     ASSERT_EQ(0, j.create());
-    j.make_writeable();
+    ASSERT_EQ(0, j.make_writeable());
 
     C_GatherBuilder gb(g_ceph_context, new C_SafeCond(&wait_lock, &cond, &done));
 
@@ -256,7 +256,7 @@ TEST(TestFileJournal, WriteManyVecs) {
     ASSERT_EQ(true, j.read_entry(inbl, seq));
     ASSERT_EQ(seq, 2ull);
     ASSERT_TRUE(inbl.contents_equal(origbl));
-    j.make_writeable();
+    ASSERT_EQ(0, j.make_writeable());
     j.close();
 
   }
@@ -275,7 +275,7 @@ TEST(TestFileJournal, ReplaySmall) {
     FileJournal j(g_ceph_context, fsid, finisher, &sync_cond, path,
 		  subtests[i].directio, subtests[i].aio, subtests[i].faio);
     ASSERT_EQ(0, j.create());
-    j.make_writeable();
+    ASSERT_EQ(0, j.make_writeable());
 
     C_GatherBuilder gb(g_ceph_context, new C_SafeCond(&wait_lock, &cond, &done));
 
@@ -318,7 +318,7 @@ TEST(TestFileJournal, ReplaySmall) {
 
     ASSERT_TRUE(!j.read_entry(inbl, seq));
 
-    j.make_writeable();
+    ASSERT_EQ(0, j.make_writeable());
     j.close();
   }
 }
@@ -335,7 +335,7 @@ TEST(TestFileJournal, ReplayCorrupt) {
     FileJournal j(g_ceph_context, fsid, finisher, &sync_cond, path,
 		  subtests[i].directio, subtests[i].aio, subtests[i].faio);
     ASSERT_EQ(0, j.create());
-    j.make_writeable();
+    ASSERT_EQ(0, j.make_writeable());
 
     C_GatherBuilder gb(g_ceph_context, new C_SafeCond(&wait_lock, &cond, &done));
 
@@ -404,7 +404,7 @@ TEST(TestFileJournal, ReplayCorrupt) {
     ASSERT_FALSE(j.read_entry(inbl, seq, &corrupt));
     ASSERT_TRUE(corrupt);
 
-    j.make_writeable();
+    ASSERT_EQ(0, j.make_writeable());
     j.close();
   }
 }
@@ -420,7 +420,7 @@ TEST(TestFileJournal, WriteTrim) {
     FileJournal j(g_ceph_context, fsid, finisher, &sync_cond, path,
 		  subtests[i].directio, subtests[i].aio, subtests[i].faio);
     ASSERT_EQ(0, j.create());
-    j.make_writeable();
+    ASSERT_EQ(0, j.make_writeable());
 
     list<C_Sync*> ls;
 
@@ -472,7 +472,7 @@ TEST(TestFileJournal, WriteTrimSmall) {
     FileJournal j(g_ceph_context, fsid, finisher, &sync_cond, path,
 		  subtests[i].directio, subtests[i].aio, subtests[i].faio);
     ASSERT_EQ(0, j.create());
-    j.make_writeable();
+    ASSERT_EQ(0, j.make_writeable());
 
     list<C_Sync*> ls;
 
@@ -522,7 +522,7 @@ TEST(TestFileJournal, ReplayDetectCorruptFooterMagic) {
     FileJournal j(g_ceph_context, fsid, finisher, &sync_cond, path,
 		  subtests[i].directio, subtests[i].aio, subtests[i].faio);
     ASSERT_EQ(0, j.create());
-    j.make_writeable();
+    ASSERT_EQ(0, j.make_writeable());
 
     C_GatherBuilder gb(g_ceph_context, new C_SafeCond(&wait_lock, &cond, &done));
 
@@ -563,7 +563,7 @@ TEST(TestFileJournal, ReplayDetectCorruptFooterMagic) {
     ASSERT_FALSE(result);
     ASSERT_TRUE(corrupt);
 
-    j.make_writeable();
+    ASSERT_EQ(0, j.make_writeable());
     j.close();
     ::close(fd);
   }
@@ -581,7 +581,7 @@ TEST(TestFileJournal, ReplayDetectCorruptPayload) {
     FileJournal j(g_ceph_context, fsid, finisher, &sync_cond, path,
 		  subtests[i].directio, subtests[i].aio, subtests[i].faio);
     ASSERT_EQ(0, j.create());
-    j.make_writeable();
+    ASSERT_EQ(0, j.make_writeable());
 
     C_GatherBuilder gb(g_ceph_context, new C_SafeCond(&wait_lock, &cond, &done));
 
@@ -622,7 +622,7 @@ TEST(TestFileJournal, ReplayDetectCorruptPayload) {
     ASSERT_FALSE(result);
     ASSERT_TRUE(corrupt);
 
-    j.make_writeable();
+    ASSERT_EQ(0, j.make_writeable());
     j.close();
     ::close(fd);
   }
@@ -640,7 +640,7 @@ TEST(TestFileJournal, ReplayDetectCorruptHeader) {
     FileJournal j(g_ceph_context, fsid, finisher, &sync_cond, path,
 		  subtests[i].directio, subtests[i].aio, subtests[i].faio);
     ASSERT_EQ(0, j.create());
-    j.make_writeable();
+    ASSERT_EQ(0, j.make_writeable());
 
     C_GatherBuilder gb(g_ceph_context, new C_SafeCond(&wait_lock, &cond, &done));
 
@@ -681,7 +681,7 @@ TEST(TestFileJournal, ReplayDetectCorruptHeader) {
     ASSERT_FALSE(result);
     ASSERT_TRUE(corrupt);
 
-    j.make_writeable();
+    ASSERT_EQ(0, j.make_writeable());
     j.close();
     ::close(fd);
   }
