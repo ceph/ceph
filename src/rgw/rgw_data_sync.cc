@@ -1491,7 +1491,11 @@ public:
 
       if  ((rgw_data_sync_info::SyncState)sync_status.sync_info.state == rgw_data_sync_info::StateBuildingFullSyncMaps) {
         /* call sync module init here */
-        call(data_sync_module->init_sync(sync_env));
+        yield call(data_sync_module->init_sync(sync_env));
+        if (retcode < 0) {
+          ldout(sync_env->cct, 0) << "ERROR: sync module init_sync() failed, retcode=" << retcode << dendl;
+          return set_cr_error(retcode);
+        }
         /* state: building full sync maps */
         ldout(sync_env->cct, 20) << __func__ << "(): building full sync maps" << dendl;
         yield call(new RGWListBucketIndexesCR(sync_env, &sync_status));
