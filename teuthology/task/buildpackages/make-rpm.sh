@@ -36,7 +36,8 @@ suse=false
 [[ $codename =~ sle ]] && suse=true
 
 if [ "$suse" = true ] ; then
-    sudo zypper -n install --no-recommends git
+    sudo zypper --non-interactive --no-gpg-checks refresh
+    sudo zypper --non-interactive install --no-recommends git
 else
     sudo yum install -y git
 fi
