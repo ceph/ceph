@@ -105,7 +105,7 @@ class Termsize(object):
     def update(self):
         rows, cols = self._gettermsize()
         if not self.changed:
-            self.changed = (self.raw,self.col) != (rows, cols)
+            self.changed = (self.rows, self.cols) != (rows, cols)
         self.rows, self.cols = rows, cols
 
     def reset_changed(self):
