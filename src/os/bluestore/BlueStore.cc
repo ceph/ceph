@@ -8370,9 +8370,9 @@ void BlueStore::_deferred_aio_finish(OpSequencer *osr)
     for (auto& i : b->txcs) {
       TransContext *txc = &i;
       txc->state = TransContext::STATE_DEFERRED_CLEANUP;
-      txc->osr->qcond.notify_all();
       costs += txc->cost;
     }
+    osr->qcond.notify_all();
     throttle_deferred_bytes.put(costs);
     std::lock_guard<std::mutex> l(kv_lock);
     deferred_done_queue.emplace_back(b);
