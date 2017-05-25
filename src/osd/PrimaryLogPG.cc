@@ -5803,6 +5803,10 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  result = -ENOENT;
 	  break;
 	}
+	if (!get_osdmap()->test_flag(CEPH_OSDMAP_REQUIRE_LUMINOUS)) {
+	  result = -EOPNOTSUPP;
+	  break;
+	}
 
 	object_t target_name;
 	object_locator_t target_oloc;
