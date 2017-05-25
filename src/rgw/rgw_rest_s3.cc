@@ -876,13 +876,31 @@ void RGWGetBL_ObjStore_S3::send_response()
 
 void RGWPutBL_ObjStore_S3::send_response()
 {
-  if (op_ret)
+  if (op_ret) {
     set_req_state_err(s, op_ret);
-  dump_errno(s);
-  end_header(s, this, "application/xml");
-  dump_start(s);
-}
 
+    dump_errno(s);
+    end_header(s, this, "application/xml", NO_CONTENT_LENGTH, false, true);
+    dump_start(s);
+
+    s->formatter->open_object_section("Error");
+    s->formatter->dump_string("Code", s->err.err_code);
+    s->formatter->dump_string("Message", s->err.message);
+    if (bl_status.enabled.target_bucket_specified && 
+        bl_status.enabled.target_prefix_specified) {
+      s->formatter->dump_string("BucketName", s->bucket_name);
+      s->formatter->dump_string("TargetBucket", bl_status.get_target_bucket());
+    }
+    s->formatter->dump_string("RequestId", s->trans_id);
+    s->formatter->dump_string("HostId", s->host_id);
+    s->formatter->close_section();
+  } else {
+    dump_errno(s);
+    end_header(s, this, "application/xml");
+  }
+
+  rgw_flush_formatter_and_reset(s, s->formatter);
+}
 
 void RGWGetBucketLocation_ObjStore_S3::send_response()
 {
