@@ -258,8 +258,9 @@ bool MgrStandby::ms_dispatch(Message *m)
 
     default:
       if (active_mgr) {
+	auto am = active_mgr;
         lock.Unlock();
-        active_mgr->ms_dispatch(m);
+        am->ms_dispatch(m);
         lock.Lock();
       } else {
         return false;
