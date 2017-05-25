@@ -161,7 +161,7 @@ void RGWMetadataSearchOp::execute()
 
   list<pair<string, string> > conds;
 
-  if (s->user->system) {
+  if (!s->user->system) {
     conds.push_back(make_pair("permissions", s->user->user_id.to_str()));
   }
 
