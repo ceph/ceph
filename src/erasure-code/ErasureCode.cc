@@ -107,6 +107,23 @@ int ErasureCode::minimum_to_decode(const set<int> &want_to_read,
   return 0;
 }
 
+int ErasureCode::minimum_to_decode(const set<int> &want_to_read,
+                                   const set<int> &available_chunks,
+                                   map<int, vector<pair<int, int>>> *minimum)
+{
+  set<int> minimum_shard_ids;
+  int r = minimum_to_decode(want_to_read, available_chunks, &minimum_shard_ids);
+  if (r != 0) {
+    return r;
+  }
+  vector<pair<int, int>> default_subchunks;
+  default_subchunks.push_back(make_pair(0, get_sub_chunk_count()));
+  for(auto &&id:minimum_shard_ids){
+    minimum->insert(make_pair(id, default_subchunks));
+  }
+  return 0;
+}
+
 int ErasureCode::minimum_to_decode_with_cost(const set<int> &want_to_read,
                                              const map<int, int> &available,
                                              set<int> *minimum)
@@ -213,6 +230,13 @@ int ErasureCode::decode(const set<int> &want_to_read,
     }
   }
   return decode_chunks(want_to_read, chunks, decoded);
+}
+
+int ErasureCode::decode(const set<int> &want_to_read,
+                        const map<int, bufferlist> &chunks,
+                        map<int, bufferlist> *decoded, int chunk_size)
+{
+  return decode(want_to_read, chunks, decoded);
 }
 
 int ErasureCode::decode_chunks(const set<int> &want_to_read,
