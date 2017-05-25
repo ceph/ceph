@@ -122,7 +122,6 @@ BuildRequires:	pkgconfig
 BuildRequires:	python
 BuildRequires:	python-devel
 BuildRequires:	python-nose
-BuildRequires:	python-prettytable
 BuildRequires:	python-requests
 BuildRequires:	python-virtualenv
 BuildRequires:	snappy-devel
@@ -133,7 +132,6 @@ BuildRequires:	xfsprogs
 BuildRequires:	xfsprogs-devel
 BuildRequires:	xmlstarlet
 BuildRequires:	yasm
-BuildRequires:	libibverbs-devel
 
 #################################################################################
 # distro-conditional dependencies
@@ -154,7 +152,9 @@ BuildRequires:  lsb-release
 BuildRequires:  openldap2-devel
 BuildRequires:	python-CherryPy
 BuildRequires:	python-Cython
+BuildRequires:	python-PrettyTable
 BuildRequires:	python-Sphinx
+BuildRequires:  rdma-core-devel
 %endif
 %if 0%{?fedora} || 0%{?rhel} 
 Requires:	systemd
@@ -162,11 +162,13 @@ BuildRequires:  boost-random
 BuildRequires:	btrfs-progs
 BuildRequires:	nss-devel
 BuildRequires:	keyutils-libs-devel
+BuildRequires:	libibverbs-devel
 BuildRequires:  openldap-devel
 BuildRequires:  openssl-devel
 BuildRequires:  redhat-lsb-core
 BuildRequires:	Cython
 BuildRequires:	python-cherrypy
+BuildRequires:	python-prettytable
 BuildRequires:	python-sphinx
 %endif
 # python34-... for RHEL, python3-... for all other supported distros
@@ -261,7 +263,12 @@ Requires:	python-rados = %{epoch}:%{version}-%{release}
 Requires:	python-rbd = %{epoch}:%{version}-%{release}
 Requires:	python-cephfs = %{epoch}:%{version}-%{release}
 Requires:	python-rgw = %{epoch}:%{version}-%{release}
+%if 0%{?fedora} || 0%{?rhel}
 Requires:	python-prettytable
+%endif
+%if 0%{?suse_version}
+Requires:	python-PrettyTable
+%endif
 Requires:	python-requests
 %{?systemd_requires}
 %if 0%{?suse_version}
