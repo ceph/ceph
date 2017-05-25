@@ -583,6 +583,24 @@ int main(int argc, const char **argv)
     if (err >= 0) {
       try {
         monmap.decode(mapbl);
+        
+        list<entity_addr_t> ls;
+        monmap.list_addrs(ls);
+        entity_addr_t local;
+
+        if (have_local_addr(g_ceph_context, ls, &local)) {
+	  string name;
+          monmap.get_addr_name(local, name);
+            
+          if (name.compare(0, 7, "noname-") == 0) {
+            dout(0) << argv[0] << ": mon." << name << " " << local
+            << " is local, renaming to mon." << g_conf->name.get_id() << dendl;
+            monmap.rename(name, g_conf->name.get_id());
+          } else {
+            dout(0) << argv[0] << ": mon." << name << " " << local
+            << " is local, but not 'noname-'" << dendl;
+          }
+        }
       } catch (const buffer::error& e) {
         cerr << "can't decode monmap: " << e.what() << std::endl;
       }
