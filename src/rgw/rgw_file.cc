@@ -84,13 +84,18 @@ namespace rgw {
 		      RGWFileHandle::FLAG_BUCKET);
       if (get<0>(fhr)) {
 	RGWFileHandle* rgw_fh = get<0>(fhr);
-	lock_guard guard(rgw_fh->mtx);
+	if (! (flags & RGWFileHandle::FLAG_LOCKED)) {
+	  rgw_fh->mtx.lock();
+	}
 	rgw_fh->set_times(req.get_ctime());
 	/* restore attributes */
 	auto ux_key = req.get_attr(RGW_ATTR_UNIX_KEY1);
 	auto ux_attrs = req.get_attr(RGW_ATTR_UNIX1);
 	if (ux_key && ux_attrs) {
 	  rgw_fh->decode_attrs(ux_key, ux_attrs);
+	}
+	if (! (flags & RGWFileHandle::FLAG_LOCKED)) {
+	  rgw_fh->mtx.unlock();
 	}
       }
     }
