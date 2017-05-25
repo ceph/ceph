@@ -1087,7 +1087,7 @@ void ReplicatedBackend::do_repop(OpRequestRef op)
   assert(m->map_epoch >= get_info().history.same_interval_since);
 
   // we better not be missing this.
-  assert(!parent->get_log().get_missing().is_missing(soid));
+  assert(rm->opt.empty() || !parent->get_log().get_missing().is_missing(soid));
 
   int ackerosd = m->get_source().num();
 
