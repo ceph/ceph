@@ -7980,10 +7980,12 @@ void BlueStore::_kv_sync_thread()
       dout(30) << __func__ << " deferred_stable " << deferred_stable << dendl;
 
       int num_aios = 0;
+      uint64_t total_cost = 0;
       for (auto txc : kv_committing) {
 	if (txc->had_ios) {
 	  ++num_aios;
 	}
+	total_cost += txc->cost;
       }
 
       bool force_flush = false;
@@ -8063,14 +8065,15 @@ void BlueStore::_kv_sync_thread()
 	  --txc->osr->txc_with_unstable_io;
 	}
 	txc->log_state_latency(logger, l_bluestore_state_kv_queued_lat);
-	// release throttle *before* we commit.  this allows new ops
-	// to be prepared and enter pipeline while we are waiting on
-	// the kv commit sync/flush.  then hopefully on the next
-	// iteration there will already be ops awake.  otherwise, we
-	// end up going to sleep, and then wake up when the very first
-	// transaction is ready for commit.
-	throttle_bytes.put(txc->cost);
       }
+
+      // release throttle *before* we commit.  this allows new ops
+      // to be prepared and enter pipeline while we are waiting on
+      // the kv commit sync/flush.  then hopefully on the next
+      // iteration there will already be ops awake.  otherwise, we
+      // end up going to sleep, and then wake up when the very first
+      // transaction is ready for commit.
+      throttle_bytes.put(total_cost);
 
       PExtentVector bluefs_gift_extents;
       if (bluefs &&
@@ -8362,13 +8365,15 @@ void BlueStore::_deferred_aio_finish(OpSequencer *osr)
   }
 
   {
+    uint64_t costs = 0;
     std::lock_guard<std::mutex> l2(osr->qlock);
     for (auto& i : b->txcs) {
       TransContext *txc = &i;
       txc->state = TransContext::STATE_DEFERRED_CLEANUP;
       txc->osr->qcond.notify_all();
-      throttle_deferred_bytes.put(txc->cost);
+      costs += txc->cost;
     }
+    throttle_deferred_bytes.put(costs);
     std::lock_guard<std::mutex> l(kv_lock);
     deferred_done_queue.emplace_back(b);
   }
