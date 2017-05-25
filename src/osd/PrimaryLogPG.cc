@@ -6728,7 +6728,8 @@ void PrimaryLogPG::make_writeable(OpContext *ctx)
       dout(20) << " clearing DIRTY flag" << dendl;
       assert(ctx->new_obs.oi.is_dirty());
       ctx->new_obs.oi.clear_flag(object_info_t::FLAG_DIRTY);
-      --ctx->delta_stats.num_objects_dirty;
+      if (ctx->delta_stats.num_objects_dirty > 0)
+        --ctx->delta_stats.num_objects_dirty;
       osd->logger->inc(l_osd_tier_clean);
     } else if (!was_dirty && !ctx->undirty) {
       dout(20) << " setting DIRTY flag" << dendl;
@@ -6740,7 +6741,8 @@ void PrimaryLogPG::make_writeable(OpContext *ctx)
     if (was_dirty) {
       dout(20) << " deletion, decrementing num_dirty and clearing flag" << dendl;
       ctx->new_obs.oi.clear_flag(object_info_t::FLAG_DIRTY);
-      --ctx->delta_stats.num_objects_dirty;
+      if (ctx->delta_stats.num_objects_dirty > 0)
+        --ctx->delta_stats.num_objects_dirty;
     }
   }
 
@@ -12657,7 +12659,8 @@ bool PrimaryLogPG::agent_maybe_evict(ObjectContextRef& obc, bool after_flush)
     ctx->delta_stats.num_objects_omap--;
   ctx->delta_stats.num_evict++;
   ctx->delta_stats.num_evict_kb += SHIFT_ROUND_UP(obc->obs.oi.size, 10);
-  if (obc->obs.oi.is_dirty())
+  if (obc->obs.oi.is_dirty() &&
+     (ctx->delta_stats.num_objects_dirty > 0))
     --ctx->delta_stats.num_objects_dirty;
   assert(r == 0);
   finish_ctx(ctx.get(), pg_log_entry_t::DELETE, false);
