@@ -192,14 +192,11 @@ BuildRequires:	lttng-ust-devel
 BuildRequires:  babeltrace-devel
 %endif
 %endif
-# expat and fastcgi for RGW
 %if 0%{?suse_version}
 BuildRequires:	libexpat-devel
-BuildRequires:	FastCGI-devel
 %endif
 %if 0%{?rhel} || 0%{?fedora}
 BuildRequires:	expat-devel
-BuildRequires:	fcgi-devel
 %endif
 #hardened-cc1
 %if 0%{?fedora} || 0%{?rhel}
