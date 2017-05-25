@@ -227,7 +227,7 @@ public:
     KeyValueDB::Transaction t; ///< then we will commit this
     Context *oncommit;         ///< signal on commit
     Context *onreadable;         ///< signal on readable
-    Context *onreadable_sync;         ///< signal on readable
+    Context *onreadable_sync;         ///< signal on readable sync to disk
     list<Context*> oncommits;  ///< more commit completions
     list<CollectionRef> removed_collections; ///< colls we removed
 

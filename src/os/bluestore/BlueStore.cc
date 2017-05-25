@@ -8520,11 +8520,11 @@ void BlueStore::_txc_add_transaction(TransContext *txc, Transaction *t)
 
   _dump_transaction(t);
 
-  vector<CollectionRef> cvec(i.colls.size());
+  size_t coll_size = i.colls.size();
+  vector<CollectionRef> cvec(coll_size);
   unsigned j = 0;
-  for (vector<coll_t>::iterator p = i.colls.begin(); p != i.colls.end();
-       ++p, ++j) {
-    cvec[j] = _get_collection(*p);
+  for (; j < coll_size; j++) {
+    cvec[j] = _get_collection(i.colls[j]);
 
     // note first collection we reference
     if (!txc->first_collection)
