@@ -15,6 +15,7 @@
 #include "rgw_rest.h"
 #include "rgw_crypt_sanitize.h"
 
+#include <boost/container/small_vector.hpp>
 #include <boost/utility/string_view.hpp>
 
 #define dout_context g_ceph_context
@@ -320,10 +321,11 @@ static bool get_next_token(const boost::string_view& s,
   return true;
 }
 
-std::vector<boost::string_view> get_str_vec(const boost::string_view& str,
-                                            const char* const delims)
+template<std::size_t ExpectedStrNum>
+boost::container::small_vector<boost::string_view, ExpectedStrNum>
+get_str_vec(const boost::string_view& str, const char* const delims)
 {
-  std::vector<boost::string_view> str_vec;
+  boost::container::small_vector<boost::string_view, ExpectedStrNum> str_vec;
 
   size_t pos = 0;
   boost::string_view token;
@@ -338,10 +340,12 @@ std::vector<boost::string_view> get_str_vec(const boost::string_view& str,
   return str_vec;
 }
 
-std::vector<boost::string_view> get_str_vec(const boost::string_view& str)
+template<std::size_t ExpectedStrNum>
+boost::container::small_vector<boost::string_view, ExpectedStrNum>
+get_str_vec(const boost::string_view& str)
 {
   const char delims[] = ";,= \t";
-  return get_str_vec(str, delims);
+  return get_str_vec<ExpectedStrNum>(str, delims);
 }
 };
 
@@ -362,7 +366,7 @@ static inline int parse_v4_auth_header(const req_info& info,               /* in
   }
 
   std::map<boost::string_view, boost::string_view> kv;
-  for (const auto& s : get_str_vec(input, ",")) {
+  for (const auto& s : get_str_vec<4>(input, ",")) {
     const auto parsed_pair = parse_key_value(s);
     if (parsed_pair) {
       kv[parsed_pair->first] = parsed_pair->second;
@@ -511,7 +515,7 @@ std::string get_v4_canonical_qs(const req_info& info, const bool using_qs)
   /* Handle case when query string exists. Step 3 described in: http://docs.
    * aws.amazon.com/general/latest/gr/sigv4-create-canonical-request.html */
   std::map<std::string, std::string> canonical_qs_map;
-  for (const auto& s : get_str_vec(info.request_params, "&")) {
+  for (const auto& s : get_str_vec<5>(info.request_params, "&")) {
     boost::string_view key, val;
     const auto parsed_pair = parse_key_value(s);
     if (parsed_pair) {
@@ -563,7 +567,7 @@ get_v4_canonical_headers(const req_info& info,
                          const bool force_boto2_compat)
 {
   std::map<boost::string_view, std::string> canonical_hdrs_map;
-  for (const auto& token : get_str_vec(signedheaders, ";")) {
+  for (const auto& token : get_str_vec<5>(signedheaders, ";")) {
     /* TODO(rzarzynski): we'd like to switch to sstring here but it should
      * get push_back() and reserve() first. */
     std::string token_env = "HTTP_";
