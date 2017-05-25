@@ -347,9 +347,12 @@ namespace rgw {
       }
     }
 
-    rgw_fh->flags |= RGWFileHandle::FLAG_DELETED;
-    fh_cache.remove(rgw_fh->fh.fh_hk.object, rgw_fh,
-		    RGWFileHandle::FHCache::FLAG_LOCK);
+    /* ENOENT when raced with other s3 gateway */
+    if (! rc || rc == -ENOENT) {
+      rgw_fh->flags |= RGWFileHandle::FLAG_DELETED;
+      fh_cache.remove(rgw_fh->fh.fh_hk.object, rgw_fh,
+		      RGWFileHandle::FHCache::FLAG_LOCK);
+    }
 
     if (! rc) {
       real_time t = real_clock::now();
