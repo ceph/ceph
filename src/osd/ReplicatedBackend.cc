@@ -2067,6 +2067,11 @@ int ReplicatedBackend::build_push_op(const ObjectRecoveryInfo &recovery_info,
     int r = store->read(ch, ghobject_t(recovery_info.soid),
 		p.get_start(), p.get_len(), bit,
                 cache_dont_need ? CEPH_OSD_OP_FLAG_FADVISE_DONTNEED: 0);
+    if (cct->_conf->osd_debug_random_push_read_error &&
+        (rand() % (int)(cct->_conf->osd_debug_random_push_read_error * 100.0)) == 0) {
+      dout(0) << __func__ << ": inject EIO " << recovery_info.soid << dendl;
+      r = -EIO;
+    }
     if (r < 0) {
       return r;
     }
