@@ -107,6 +107,7 @@ struct ECSubRead {
   ceph_tid_t tid;
   map<hobject_t, list<boost::tuple<uint64_t, uint64_t, uint32_t> >> to_read;
   set<hobject_t> attrs_to_read;
+  map<hobject_t, vector<pair<int, int>>> subchunks;
   void encode(bufferlist &bl, uint64_t features) const;
   void decode(bufferlist::iterator &bl);
   void dump(Formatter *f) const;
