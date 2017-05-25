@@ -503,6 +503,7 @@ bool MDSMonitor::prepare_beacon(MonOpRequestRef op)
           mon->osdmon()->wait_for_writeable(op, new C_RetryMessage(this, op));
           return false;
         }
+        mon->clog->info() << "MDS daemon '" << m->get_name() << "' restarted";
 	fail_mds_gid(existing);
         failed_mds = true;
       }
@@ -1904,6 +1905,11 @@ void MDSMonitor::maybe_replace_gid(mds_gid_t gid,
       << " " << ceph_mds_state_name(info.state)
       << " with " << sgid << "/" << si.name << " " << si.addr << dendl;
 
+    mon->clog->warn() << "MDS daemon '" << info.name << "'"
+                      << " is not responding, replacing it "
+                      << "as rank " << info.rank
+                      << " with standby '" << si.name << "'";
+
     // Remember what NS the old one was in
     const fs_cluster_id_t fscid = pending_fsmap.mds_roles.at(gid);
 
@@ -1920,6 +1926,9 @@ void MDSMonitor::maybe_replace_gid(mds_gid_t gid,
     dout(10) << " failing and removing " << gid << " " << info.addr << " mds." << info.rank 
       << "." << info.inc << " " << ceph_mds_state_name(info.state)
       << dendl;
+    mon->clog->info() << "MDS standby '"  << info.name
+                      << "' is not responding, removing it from the set of "
+                      << "standbys";
     fail_mds_gid(gid);
     *mds_propose = true;
   } else if (!info.laggy()) {
