@@ -14,6 +14,7 @@ class BitMapAllocator : public Allocator {
   CephContext* cct;
 
   int64_t m_block_size;
+  int64_t m_total_size;
 
   BitAllocator *m_bit_alloc; // Bit allocator instance
 
