@@ -1403,7 +1403,8 @@ bool OSDService::_get_map_bl(epoch_t e, bufferlist& bl)
   if (logger)
     logger->inc(l_osd_map_bl_cache_miss);
   found = store->read(coll_t::meta(),
-		      OSD::get_osdmap_pobject_name(e), 0, 0, bl) >= 0;
+		      OSD::get_osdmap_pobject_name(e), 0, 0, bl,
+		      CEPH_OSD_OP_FLAG_FADVISE_WILLNEED) >= 0;
   if (found)
     _add_map_bl(e, bl);
   return found;
@@ -1421,7 +1422,8 @@ bool OSDService::get_inc_map_bl(epoch_t e, bufferlist& bl)
   if (logger)
     logger->inc(l_osd_map_bl_cache_miss);
   found = store->read(coll_t::meta(),
-		      OSD::get_inc_osdmap_pobject_name(e), 0, 0, bl) >= 0;
+		      OSD::get_inc_osdmap_pobject_name(e), 0, 0, bl,
+		      CEPH_OSD_OP_FLAG_FADVISE_WILLNEED) >= 0;
   if (found)
     _add_map_inc_bl(e, bl);
   return found;
