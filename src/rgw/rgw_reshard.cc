@@ -544,9 +544,6 @@ int RGWBucketReshard::execute(int num_shards, int max_op_entries,
     return ret;
   }
 
-#warning remove me
-sleep(10);
-
   ret = do_reshard(num_shards,
 		   new_bucket_info,
 		   max_op_entries,
