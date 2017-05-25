@@ -587,6 +587,7 @@ RGWRESTMgr *RGWElasticSyncModuleInstance::get_rest_filter(int dialect, RGWRESTMg
   if (dialect != RGW_REST_S3) {
     return orig;
   }
+  delete orig;
   return new RGWRESTMgr_MDSearch_S3();
 }
 
