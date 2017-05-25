@@ -1618,6 +1618,10 @@ int OSDMap::apply_incremental(const Incremental &inc)
     else
       pg_temp->set(pg.first, pg.second);
   }
+  if (!inc.new_pg_temp.empty()) {
+    // make sure pg_temp is efficiently stored
+    pg_temp->rebuild();
+  }
 
   for (const auto &pg : inc.new_primary_temp) {
     if (pg.second == -1)
