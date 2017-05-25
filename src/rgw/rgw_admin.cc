@@ -192,7 +192,7 @@ void _usage()
   cout << "  role-policy delete         delete policy attached to a role\n";
   cout << "  reshard add                schedule a resharding of a bucket\n";
   cout << "  reshard list               list all bucket resharding or scheduled to be reshared\n";
-  cout << "  reshard execute            execute resharding of  a bucket \n";
+  cout << "  reshard process            process of scheduled reshard jobs\n";
   cout << "  reshard cancel             cancel resharding a bucket\n";
   cout << "options:\n";
   cout << "   --tenant=<tenant>         tenant name\n";
@@ -483,7 +483,7 @@ enum {
   OPT_RESHARD_ADD,
   OPT_RESHARD_LIST,
   OPT_RESHARD_STATUS,
-  OPT_RESHARD_EXECUTE,
+  OPT_RESHARD_PROCESS,
   OPT_RESHARD_CANCEL,
 };
 
@@ -926,7 +926,7 @@ static int get_cmd(const char *cmd, const char *prev_cmd, const char *prev_prev_
     if (strcmp(cmd, "status") == 0)
       return OPT_RESHARD_STATUS;
     if (strcmp(cmd, "execute") == 0)
-      return OPT_RESHARD_EXECUTE;
+      return OPT_RESHARD_PROCESS;
     if (strcmp(cmd, "cancel") == 0)
       return OPT_RESHARD_CANCEL;
   }
@@ -5703,7 +5703,7 @@ next:
     formatter->flush(cout);
   }
 
-  if (opt_cmd == OPT_RESHARD_EXECUTE) {
+  if (opt_cmd == OPT_RESHARD_PROCESS) {
     RGWReshard reshard(store, true, &cout);
 
     int ret = reshard.process_all_logshards();
