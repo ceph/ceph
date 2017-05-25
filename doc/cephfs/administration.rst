@@ -158,6 +158,11 @@ filesystem.
 Legacy
 ------
 
+The ``ceph mds set`` command is the deprecated version of ``ceph fs set``,
+from before there was more than one filesystem per cluster. It operates
+on whichever filesystem is marked as the default (see ``ceph fs
+set-default``.)
+
 ::
 
     mds stat
