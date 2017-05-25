@@ -7423,7 +7423,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     double n;
     if (!cmd_getval(g_ceph_context, cmdmap, "ratio", n)) {
       ss << "unable to parse 'ratio' value '"
-         << cmd_vartype_stringify(cmdmap["who"]) << "'";
+         << cmd_vartype_stringify(cmdmap["ratio"]) << "'";
       err = -EINVAL;
       goto reply;
     }
@@ -7526,10 +7526,10 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 	ss << "the sortbitwise flag must be set before require_kraken_osds";
 	err = -EPERM;
       } else if (HAVE_FEATURE(osdmap.get_up_osd_features(), SERVER_KRAKEN)) {
-	bool r = prepare_set_flag(op, CEPH_OSDMAP_REQUIRE_KRAKEN);
-	// ensure JEWEL is also set
-	pending_inc.new_flags |= CEPH_OSDMAP_REQUIRE_JEWEL;
-	return r;
+        int flags = CEPH_OSDMAP_REQUIRE_KRAKEN;
+        // ensure JEWEL is also set
+        flags |= CEPH_OSDMAP_REQUIRE_JEWEL;
+	return prepare_set_flag(op, flags);
       } else {
 	ss << "not all up OSDs have CEPH_FEATURE_SERVER_KRAKEN feature";
 	err = -EPERM;
@@ -7539,11 +7539,11 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 	ss << "the sortbitwise flag must be set before require_luminous_osds";
 	err = -EPERM;
       } else if (HAVE_FEATURE(osdmap.get_up_osd_features(), SERVER_LUMINOUS)) {
-	bool r = prepare_set_flag(op, CEPH_OSDMAP_REQUIRE_LUMINOUS);
-	// ensure JEWEL and KRAKEN are also set
-	pending_inc.new_flags |= CEPH_OSDMAP_REQUIRE_JEWEL;
-	pending_inc.new_flags |= CEPH_OSDMAP_REQUIRE_KRAKEN;
-	return r;
+        int flags = CEPH_OSDMAP_REQUIRE_LUMINOUS;
+        // ensure JEWEL and KRAKEN are also set
+        flags |= CEPH_OSDMAP_REQUIRE_JEWEL;
+        flags |= CEPH_OSDMAP_REQUIRE_KRAKEN;
+	return prepare_set_flag(op, flags);
       } else {
 	ss << "not all up OSDs have CEPH_FEATURE_SERVER_LUMINOUS feature";
 	err = -EPERM;
