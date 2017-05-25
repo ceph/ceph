@@ -228,7 +228,7 @@ void RGWMetadataSearchOp::execute()
 
   string resource = es_module->get_index_path() + "/_search";
   param_vec_t params;
-#define BUFSIZE 32
+  static constexpr int BUFSIZE = 32;
   char buf[BUFSIZE];
   snprintf(buf, sizeof(buf), "%lld", (long long)max_keys);
   params.push_back(param_pair_t("size", buf));
@@ -246,7 +246,7 @@ void RGWMetadataSearchOp::execute()
 
   JSONParser jparser;
   if (!jparser.parse(out.c_str(), out.length())) {
-    ldout(s->cct, 0) << "ERROR: failed to parser elasticsearch response" << dendl;
+    ldout(s->cct, 0) << "ERROR: failed to parse elasticsearch response" << dendl;
     op_ret = -EINVAL;
     return;
   }
@@ -291,6 +291,7 @@ public:
       }
     }
     uint64_t nm = marker + max_keys;
+    static constexpr int BUFSIZE = 32;
     char buf[BUFSIZE];
     snprintf(buf, sizeof(buf), "%lld", (long long)nm);
     next_marker = buf;
