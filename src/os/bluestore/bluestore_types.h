@@ -168,6 +168,7 @@ struct denc_traits<PExtentVector> {
   static constexpr bool supported = true;
   static constexpr bool bounded = false;
   static constexpr bool featured = false;
+  static constexpr bool need_contiguous = true;
   static void bound_encode(const PExtentVector& v, size_t& p) {
     p += sizeof(uint32_t);
     const auto size = v.size();

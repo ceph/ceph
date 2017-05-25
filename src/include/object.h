@@ -127,6 +127,7 @@ struct denc_traits<snapid_t> {
   static constexpr bool supported = true;
   static constexpr bool featured = false;
   static constexpr bool bounded = true;
+  static constexpr bool need_contiguous = true;
   static void bound_encode(const snapid_t& o, size_t& p) {
     denc(o.val, p);
   }
