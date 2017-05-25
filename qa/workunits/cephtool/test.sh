@@ -292,7 +292,7 @@ function test_tiering_agent()
   ceph osd pool delete $slow $slow --yes-i-really-really-mean-it
 }
 
-function test_tiering()
+function test_tiering_1()
 {
   # tiering
   ceph osd pool create slow 2
@@ -372,9 +372,14 @@ function test_tiering()
   ceph osd pool ls detail | grep cache2
   ceph osd pool ls detail -f json-pretty | grep cache2
 
+  ceph osd pool delete slow slow --yes-i-really-really-mean-it
+  ceph osd pool delete slow2 slow2 --yes-i-really-really-mean-it
   ceph osd pool delete cache cache --yes-i-really-really-mean-it
   ceph osd pool delete cache2 cache2 --yes-i-really-really-mean-it
+}
 
+function test_tiering_2()
+{
   # make sure we can't clobber snapshot state
   ceph osd pool create snap_base 2
   ceph osd pool create snap_cache 2
@@ -382,7 +387,10 @@ function test_tiering()
   expect_false ceph osd tier add snap_base snap_cache
   ceph osd pool delete snap_base snap_base --yes-i-really-really-mean-it
   ceph osd pool delete snap_cache snap_cache --yes-i-really-really-mean-it
+}
 
+function test_tiering_3()
+{
   # make sure we can't create snapshot on tier
   ceph osd pool create basex 2
   ceph osd pool create cachex 2
@@ -391,7 +399,10 @@ function test_tiering()
   ceph osd tier remove basex cachex
   ceph osd pool delete basex basex --yes-i-really-really-mean-it
   ceph osd pool delete cachex cachex --yes-i-really-really-mean-it
+}
 
+function test_tiering_4()
+{
   # make sure we can't create an ec pool tier
   ceph osd pool create eccache 2 2 erasure
   expect_false ceph osd set-require-min-compat-client bobtail
@@ -399,8 +410,12 @@ function test_tiering()
   expect_false ceph osd tier add repbase eccache
   ceph osd pool delete repbase repbase --yes-i-really-really-mean-it
   ceph osd pool delete eccache eccache --yes-i-really-really-mean-it
+}
 
+function test_tiering_5()
+{
   # convenient add-cache command
+  ceph osd pool create slow 2
   ceph osd pool create cache3 2
   ceph osd tier add-cache slow cache3 1024000
   ceph osd dump | grep cache3 | grep bloom | grep 'false_positive_probability: 0.05' | grep 'target_bytes 1024000' | grep '1200s x4'
@@ -411,10 +426,11 @@ function test_tiering()
   ceph osd pool ls | grep cache3
   ceph osd pool delete cache3 cache3 --yes-i-really-really-mean-it
   ! ceph osd pool ls | grep cache3 || exit 1
-
-  ceph osd pool delete slow2 slow2 --yes-i-really-really-mean-it
   ceph osd pool delete slow slow --yes-i-really-really-mean-it
+}
 
+function test_tiering_6()
+{
   # check add-cache whether work
   ceph osd pool create datapool 2
   ceph osd pool create cachepool 2
@@ -428,7 +444,10 @@ function test_tiering()
   ceph osd tier remove datapool cachepool
   ceph osd pool delete cachepool cachepool --yes-i-really-really-mean-it
   ceph osd pool delete datapool datapool --yes-i-really-really-mean-it
+}
 
+function test_tiering_7()
+{
   # protection against pool removal when used as tiers
   ceph osd pool create datapool 2
   ceph osd pool create cachepool 2
@@ -441,7 +460,10 @@ function test_tiering()
   ceph osd tier remove datapool cachepool
   ceph osd pool delete cachepool cachepool --yes-i-really-really-mean-it
   ceph osd pool delete datapool datapool --yes-i-really-really-mean-it
+}
 
+function test_tiering_8()
+{
   ## check health check
   ceph osd set notieragent
   ceph osd pool create datapool 2
@@ -462,8 +484,10 @@ function test_tiering()
   ceph osd pool delete cache4 cache4 --yes-i-really-really-mean-it
   ceph osd pool delete datapool datapool --yes-i-really-really-mean-it
   ceph osd unset notieragent
+}
 
-
+function test_tiering_9()
+{
   # make sure 'tier remove' behaves as we expect
   # i.e., removing a tier from a pool that's not its base pool only
   # results in a 'pool foo is now (or already was) not a tier of bar'
@@ -2032,7 +2056,9 @@ function test_mon_cephdf_commands()
 set +x
 MON_TESTS+=" mon_injectargs"
 MON_TESTS+=" mon_injectargs_SI"
-MON_TESTS+=" tiering"
+for i in `seq 9`; do
+    MON_TESTS+=" tiering_$i";
+done
 MON_TESTS+=" auth"
 MON_TESTS+=" auth_profiles"
 MON_TESTS+=" mon_misc"
