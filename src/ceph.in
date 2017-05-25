@@ -186,10 +186,6 @@ def mdsids():
 def mgrids():
     ret, outbuf, outs = json_command(cluster_handle, prefix='mgr dump',
                                      argdict={'format': 'json'})
-    if ret == -errno.EINVAL:
-        # try old mon
-        ret, outbuf, outs = send_command(cluster_handle,
-                                         cmd=['mgr', 'dump', '--format=json'])
     if ret:
         raise RuntimeError('Can\'t contact mon for mgr list')
 
@@ -224,23 +220,20 @@ def validate_target(target):
         elif service_name == "mgr":
             exist_ids = mgrids()
         else:
-          if verbose:
             print('WARN: {0} is not a legal service name, should be one of mon/osd/mds/mgr'.format(service_name),
                   file=sys.stderr)
-          return False
+            return False
 
         if service_id in exist_ids:
             ret = True
-
-        if not ret and verbose:
+        else:
             print('WARN: the service id you provided does not exist. service id should '
                   'be one of {0}.'.format('/'.join(exist_ids)), file=sys.stderr)
 
-    elif len(_target) == 1 and _target[0] == "mgr":
+    elif len(_target) == 1 and _target[0] == 'mgr':
         ret = True
     else:
-        if verbose:
-            print('WARN: \"{0}\" is not a legal target. it should be one of mon.<id>/osd.<int>/mds.<id>/mgr.'.format(target), file=sys.stderr)
+        print('WARN: \"{0}\" is not a legal target. it should be one of mon.<id>/osd.<int>/mds.<id>/mgr.'.format(target), file=sys.stderr)
 
     return ret
 
