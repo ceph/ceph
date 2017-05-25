@@ -2394,6 +2394,15 @@ void RGWCreateBucket::execute()
   if (op_ret < 0)
     return;
 
+  if (!location_constraint.empty() &&
+      !store->has_zonegroup_api(location_constraint)) {
+      ldout(s->cct, 0) << "location constraint (" << location_constraint << ")"
+                       << " can't be found." << dendl;
+      op_ret = -ERR_INVALID_LOCATION_CONSTRAINT;
+      s->err.message = "The specified location-constraint is not valid";
+      return;
+  }
+
   if (!store->get_zonegroup().is_master_zonegroup() &&
       store->get_zonegroup().api_name != location_constraint) {
     ldout(s->cct, 0) << "location constraint (" << location_constraint << ")"

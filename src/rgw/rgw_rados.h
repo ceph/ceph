@@ -2465,6 +2465,16 @@ public:
   const string& get_current_period_id() {
     return current_period.get_id();
   }
+
+  bool has_zonegroup_api(const std::string& api) const {
+    if (!current_period.get_id().empty()) {
+      const auto& zonegroups_by_api = current_period.get_map().zonegroups_by_api;
+      if (zonegroups_by_api.find(api) != zonegroups_by_api.end())
+        return true;
+    }
+    return false;
+  }
+
   // pulls missing periods for period_history
   std::unique_ptr<RGWPeriodPuller> period_puller;
   // maintains a connected history of periods
