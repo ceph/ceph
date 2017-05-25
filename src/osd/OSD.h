@@ -1057,6 +1057,10 @@ public:
     }
     _maybe_queue_recovery();
   }
+  void queue_recovery_after_sleep(PG *pg, epoch_t queued, uint64_t reserved_pushes) {
+    Mutex::Locker l(recovery_lock);
+    _queue_for_recovery(make_pair(queued, pg), reserved_pushes);
+  }
 
 
   // osd map cache (past osd maps)

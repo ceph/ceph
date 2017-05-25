@@ -480,6 +480,11 @@ void OSDService::start_shutdown()
     Mutex::Locker l(agent_timer_lock);
     agent_timer.shutdown();
   }
+
+  {
+    Mutex::Locker l(recovery_sleep_lock);
+    recovery_sleep_timer.shutdown();
+  }
 }
 
 void OSDService::shutdown()
@@ -498,11 +503,6 @@ void OSDService::shutdown()
   {
     Mutex::Locker l(recovery_request_lock);
     recovery_request_timer.shutdown();
-  }
-
-  {
-    Mutex::Locker l(recovery_sleep_lock);
-    recovery_sleep_timer.shutdown();
   }
 
   {
@@ -8889,16 +8889,21 @@ void OSD::do_recovery(
   ThreadPool::TPHandle &handle)
 {
   uint64_t started = 0;
+
+  /*
+   * When the value of osd_recovery_sleep is set greater than zero, recovery
+   * ops are scheduled after osd_recovery_sleep amount of time from the previous
+   * recovery event's schedule time. This is done by adding a
+   * recovery_requeue_callback event, which re-queues the recovery op using
+   * queue_recovery_after_sleep.
+   */
   if (cct->_conf->osd_recovery_sleep > 0 && service.recovery_needs_sleep) {
-    auto recovery_requeue_callback = new FunctionContext([this, pg](int r) {
-      pg->lock();
+    auto recovery_requeue_callback = new FunctionContext([this, pg, queued, reserved_pushes](int r) {
       dout(20) << "do_recovery wake up at "
                << ceph_clock_now()
 	       << ", re-queuing recovery" << dendl;
       service.recovery_needs_sleep = false;
-      pg->recovery_queued = false;
-      pg->queue_recovery();
-      pg->unlock();
+      service.queue_recovery_after_sleep(pg, queued, reserved_pushes);
     });
     Mutex::Locker l(service.recovery_sleep_lock);
 
