@@ -738,10 +738,10 @@ OPTION(osd_tier_default_cache_hit_set_grade_decay_rate, OPT_INT, 20)
 OPTION(osd_tier_default_cache_hit_set_search_last_n, OPT_INT, 1)
 
 OPTION(osd_map_dedup, OPT_BOOL, true)
-OPTION(osd_map_max_advance, OPT_INT, 150) // make this < cache_size!
-OPTION(osd_map_cache_size, OPT_INT, 200)
-OPTION(osd_map_message_max, OPT_INT, 100)  // max maps per MOSDMap message
-OPTION(osd_map_share_max_epochs, OPT_INT, 100)  // cap on # of inc maps we send to peers, clients
+OPTION(osd_map_max_advance, OPT_INT, 40) // make this < cache_size!
+OPTION(osd_map_cache_size, OPT_INT, 50)
+OPTION(osd_map_message_max, OPT_INT, 40)  // max maps per MOSDMap message
+OPTION(osd_map_share_max_epochs, OPT_INT, 40)  // cap on # of inc maps we send to peers, clients
 OPTION(osd_inject_bad_map_crc_probability, OPT_FLOAT, 0)
 OPTION(osd_inject_failure_on_pg_removal, OPT_BOOL, false)
 // shutdown the OSD if stuatus flipping more than max_markdown_count times in recent max_markdown_period seconds
@@ -857,7 +857,7 @@ OPTION(osd_default_notify_timeout, OPT_U32, 30) // default notify timeout in sec
 OPTION(osd_kill_backfill_at, OPT_INT, 0)
 
 // Bounds how infrequently a new map epoch will be persisted for a pg
-OPTION(osd_pg_epoch_persisted_max_stale, OPT_U32, 150) // make this < map_cache_size!
+OPTION(osd_pg_epoch_persisted_max_stale, OPT_U32, 40) // make this < map_cache_size!
 
 OPTION(osd_min_pg_log_entries, OPT_U32, 3000)  // number of entries to keep in the pg log when trimming it
 OPTION(osd_max_pg_log_entries, OPT_U32, 10000) // max entries, say when degraded, before we trim
