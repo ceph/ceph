@@ -295,7 +295,10 @@ public:
         });
       }
     } else if (var == "balancer") {
-      ss << "setting the metadata load balancer to " << val;
+      if (val.empty())
+        ss << "unsetting the metadata load balancer";
+      else 
+        ss << "setting the metadata load balancer to " << val;
         fsmap.modify_filesystem(
             fs->fscid,
             [val](std::shared_ptr<Filesystem> fs)
