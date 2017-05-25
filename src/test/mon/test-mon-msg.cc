@@ -224,6 +224,7 @@ protected:
   Cond cond;
 
   MonMsgTest() :
+    reply_msg(NULL),
     MonClientHelper(g_ceph_context),
     lock("lock") { }
 
