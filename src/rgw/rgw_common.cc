@@ -85,6 +85,7 @@ rgw_http_errors rgw_http_s3_errors({
     { ERR_NO_SUCH_UPLOAD, {404, "NoSuchUpload" }},
     { ERR_NOT_FOUND, {404, "Not Found"}},
     { ERR_NO_SUCH_LC, {404, "NoSuchLifecycleConfiguration"}},
+    { ERR_NO_SUCH_BUCKET_POLICY, {404, "NoSuchBucketPolicy"}},
     { ERR_METHOD_NOT_ALLOWED, {405, "MethodNotAllowed" }},
     { ETIMEDOUT, {408, "RequestTimeout" }},
     { EEXIST, {409, "BucketAlreadyExists" }},
