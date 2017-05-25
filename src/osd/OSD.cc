@@ -1575,9 +1575,6 @@ void OSDService::handle_misdirected_op(PG *pg, OpRequestRef op)
 	       << " to osd." << whoami
 	       << " not " << pg->acting
 	       << " in e" << m->get_map_epoch() << "/" << osdmap->get_epoch();
-  if (g_conf->osd_enxio_on_misdirected_op) {
-    reply_op_error(op, -ENXIO);
-  }
 }
 
 void OSDService::enqueue_back(spg_t pgid, PGQueueable qi)
