@@ -434,3 +434,19 @@ TEST_F(OSDMapTest, PrimaryAffinity) {
     osdmap.set_primary_affinity(1, 0x10000);
   }
 }
+
+TEST(PGTempMap, basic)
+{
+  PGTempMap m;
+  pg_t a(1,1);
+  for (unsigned i=3; i<1000; ++i) {
+    pg_t x(i, 1);
+    m.set(x, {i});
+  }
+  pg_t b(2,1);
+  m.set(a, {1, 2});
+  ASSERT_NE(m.find(a), m.end());
+  ASSERT_EQ(m.find(a), m.begin());
+  ASSERT_EQ(m.find(b), m.end());
+  ASSERT_EQ(998u, m.size());
+}
