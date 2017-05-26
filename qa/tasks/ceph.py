@@ -1073,8 +1073,7 @@ def osd_scrub_pgs(ctx, config):
         else:
             gap_cnt += 1
             if gap_cnt > retries:
-                log.info('Exiting scrub checking -- not all pgs scrubbed.')
-                return
+                raise RuntimeError('Exiting scrub checking -- not all pgs scrubbed.')
         if loop:
             log.info('Still waiting for all pgs to be scrubbed.')
             time.sleep(delays)
