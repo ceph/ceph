@@ -22,38 +22,39 @@ BitMapAllocator::BitMapAllocator(CephContext* cct, int64_t device_size,
 				 int64_t block_size)
   : cct(cct)
 {
-  assert(ISP2(block_size));
   if (!ISP2(block_size)) {
     derr << __func__ << " block_size " << block_size
          << " not power of 2 aligned!"
          << dendl;
+    assert(ISP2(block_size));
     return;
   }
 
   int64_t zone_size_blks = cct->_conf->bluestore_bitmapallocator_blocks_per_zone;
-  assert(ISP2(zone_size_blks));
   if (!ISP2(zone_size_blks)) {
     derr << __func__ << " zone_size " << zone_size_blks
          << " not power of 2 aligned!"
          << dendl;
+    assert(ISP2(zone_size_blks));
     return;
   }
 
   int64_t span_size = cct->_conf->bluestore_bitmapallocator_span_size;
-  assert(ISP2(span_size));
   if (!ISP2(span_size)) {
     derr << __func__ << " span_size " << span_size
          << " not power of 2 aligned!"
          << dendl;
+    assert(ISP2(span_size));
     return;
   }
 
   m_block_size = block_size;
+  m_total_size = P2ALIGN(device_size, block_size);
   m_bit_alloc = new BitAllocator(cct, device_size / block_size,
 				 zone_size_blks, CONCURRENT, true);
-  assert(m_bit_alloc);
   if (!m_bit_alloc) {
     derr << __func__ << " Unable to intialize Bit Allocator" << dendl;
+    assert(m_bit_alloc);
   }
   dout(10) << __func__ << " instance " << (uint64_t) this
            << " size 0x" << std::hex << device_size << std::dec
@@ -123,7 +124,7 @@ int64_t BitMapAllocator::allocate(
      << " alloc_unit " << alloc_unit
      << " hint " << hint
      << dendl;
-
+  hint = hint % m_total_size; // make hint error-tolerant
   return allocate_dis(want_size, alloc_unit / m_block_size,
                       max_alloc_size, hint / m_block_size, extents);
 }
