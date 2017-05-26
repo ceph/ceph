@@ -3,35 +3,82 @@
 
 #pragma once
 
-typedef enum {
-  OPT_INT, OPT_LONGLONG, OPT_STR, OPT_DOUBLE, OPT_FLOAT, OPT_BOOL,
-  OPT_ADDR, OPT_U32, OPT_U64, OPT_UUID
-} ceph_option_type_t;
+#include <string>
+#include "include/uuid.h"
+#include "msg/msg_types.h"
 
-typedef enum {
-  OPT_BASIC,      ///< basic option
-  OPT_ADVANCED,   ///< advanced users only
-  OPT_DEV,        ///< developer only  (make this 0, the default)
-} ceph_option_level_t;
+struct Option {
+  typedef enum {
+    TYPE_INT,
+    TYPE_STR,
+    TYPE_DOUBLE,
+    TYPE_BOOL,
+    TYPE_ADDR,
+    TYPE_UUID,
+  } type_t;
 
-struct ceph_option {
-  const char *name;
-  ceph_option_type_t type;
-  ceph_option_level_t level;
-  const char *value;             ///< default value for everyone
-  const char *daemon_value;      ///< default for daemons
-  const char *nondaemon_value;   ///< default for non-daemons
+  typedef enum {
+    LEVEL_BASIC,
+    LEVEL_ADVANCED,
+    LEVEL_DEV,
+  };
 
-  const char *description;
-  const char *long_description;
-  const char *see_also;
+  typedef boost::variant<std::string, int64_t, double, bool,
+			 entity_addr_t, uuid_d> value_t;
 
-  const char *min_value;
-  const char *max_value;
-  const char *enum_values;
+  value_t value;
+  value_t daemon_value;
+  value_t nondaemon_value;
 
-  const char *tags;
+  string name;
+  string desc;
+  string long_desc;
+
+  list<std::string> tags;
+
+  value_t min, max;
+  list<std::string> enum_allowed;
+
+  Option(const char* name)
+    : name(name)
+  {}
+
+  template<typename T>
+  Option& set_default(const T& v) {
+    value = v;
+    return *this;
+  }
+  Option& set_daemon_default(const T& v) {
+    daemon_value = v;
+    return *this;
+  }
+  Option& set_nondaemon_default(const T& v) {
+    daemon_value = v;
+    return *this;
+  }
+  Option& add_tag(const char* t) {
+    tags.push_back(t);
+    return *this;
+  }
+  Option& set_description(const char* new_desc) {
+    desc = new_desc;
+    return *this;
+  }
+  Option& set_long_description(const char* new_desc) {
+    desc = new_desc;
+    return *this;
+  }
+  template<typename T>
+  Option& set_min(const char* v) {
+    min = v;
+    return *this;
+  }
+  template<typename T>
+  Option& set_max(const char* v) {
+    min = v;
+    return *this;
+  }
 };
 
 // array of ceph options.  the last one will have a blank name.
-extern struct ceph_option *ceph_options;
+extern struct Option *ceph_options;
