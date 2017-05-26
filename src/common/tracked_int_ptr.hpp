@@ -44,18 +44,14 @@ public:
     TrackedIntPtr o(rhs.ptr);
     swap(o);
   }
-  const T &operator*() const {
+  T &operator*() const {
     return *ptr;
   }
-  T &operator*() {
-    return *ptr;
-  }
-  const T *operator->() const {
+  T *operator->() const {
     return ptr;
   }
-  T *operator->() {
-    return ptr;
-  }
+  T *get() const { return ptr; }
+
   operator bool() const {
     return ptr != NULL;
   }
@@ -64,6 +60,13 @@ public:
   }
   bool operator==(const TrackedIntPtr &lhs) const {
     return ptr == lhs.ptr;
+  }
+
+  void reset() {
+    if (ptr) 
+      put_with_id(ptr, id);
+    ptr = nullptr;
+    id = 0;
   }
 };
 
