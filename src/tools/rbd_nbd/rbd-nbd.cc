@@ -224,7 +224,7 @@ private:
       ctx->data.append_zero(pad_byte_count);
       dout(20) << __func__ << ": " << *ctx << ": Pad byte count: "
                << pad_byte_count << dendl;
-      ctx->reply.error = 0;
+      ctx->reply.error = htonl(0);
     } else {
       ctx->reply.error = htonl(0);
     }
