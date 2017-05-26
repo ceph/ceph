@@ -10446,6 +10446,8 @@ void PrimaryLogPG::on_shutdown()
   cancel_log_updates();
   // we must remove PGRefs, so do this this prior to release_backoffs() callers
   clear_backoffs(); 
+  // clean up snap trim references
+  snap_trimmer_machine.process_event(Reset());
 
   pgbackend->on_change();
 
