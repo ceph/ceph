@@ -42,6 +42,38 @@ creation of multiple filesystems use ``ceph fs flag set enable_multiple true``.
     fs rm_data_pool <filesystem name> <pool name/id>
 
 
+Settings
+--------
+
+::
+
+    fs set <fs name> max_file_size <size in bytes>
+
+CephFS has a configurable maximum file size, and it's 1TB by default.
+You may wish to set this limit higher if you expect to store large files
+in CephFS. It is a 64-bit field.
+
+Setting ``max_file_size`` to 0 does not disable the limit. It would
+simply limit clients to only creating empty files.
+
+
+Maximum file sizes and performance
+----------------------------------
+
+CephFS enforces the maximum file size limit at the point of appending to
+files or setting their size. It does not affect how anything is stored.
+
+When users create a file of an enormous size (without necessarily
+writing any data to it), some operations (such as deletes) cause the MDS
+to have to do a large number of operations to check if any of the RADOS
+objects within the range that could exist (according to the file size)
+really existed.
+
+The ``max_file_size`` setting prevents users from creating files that
+appear to be eg. exabytes in size, causing load on the MDS as it tries
+to enumerate the objects during operations like stats or deletes.
+
+
 Daemons
 -------
 
@@ -125,6 +157,11 @@ filesystem.
 
 Legacy
 ------
+
+The ``ceph mds set`` command is the deprecated version of ``ceph fs set``,
+from before there was more than one filesystem per cluster. It operates
+on whichever filesystem is marked as the default (see ``ceph fs
+set-default``.)
 
 ::
 
