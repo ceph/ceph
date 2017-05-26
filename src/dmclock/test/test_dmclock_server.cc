@@ -16,6 +16,10 @@
 #include "dmclock_util.h"
 #include "gtest/gtest.h"
 
+#include <dmtest-config.h>
+#ifdef HAVE_SYS_PRCTL_H
+#include <sys/prctl.h>
+#endif
 
 namespace dmc = crimson::dmclock;
 
@@ -64,6 +68,14 @@ namespace crimson {
       Request req;
       ReqParams req_params(1,1);
 
+#if defined(HAVE_SYS_PRCTL_H)
+      int ret;
+      if ((ret = prctl(PR_SET_DUMPABLE, 0)) == -1) {
+        std::cerr << "warning: unable to unset dumpable flag: "
+                  << strerror(errno) << std::endl;
+      }
+#endif
+
       EXPECT_DEATH_IF_SUPPORTED(pq->add_request(req, client1, req_params),
 				"Assertion.*reservation.*max_tag.*"
 				"proportion.*max_tag") <<
@@ -76,6 +88,13 @@ namespace crimson {
 				"proportion.*max_tag") <<
 	"we should fail if a client tries to generate a reservation tag "
 	"where reservation and proportion are both 0";
+
+#if defined(HAVE_SYS_PRCTL_H)
+      if (prctl(PR_SET_DUMPABLE, ret) == -1) {
+      std::cerr << "warning: unable to reset dumpable flag: "
+                << strerror(errno) << std::endl;
+      }
+#endif
     }
 
 

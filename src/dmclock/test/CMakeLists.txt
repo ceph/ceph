@@ -1,3 +1,8 @@
+INCLUDE (CheckIncludeFiles)
+CHECK_INCLUDE_FILES("sys/prctl.h" HAVE_SYS_PRCTL_H)
+CONFIGURE_FILE(dmtest-config.h.in dmtest-config.h)
+
+include_directories(${CMAKE_CURRENT_BINARY_DIR})
 include_directories(../src)
 include_directories(../support/src)
 include_directories(../sim/src)
