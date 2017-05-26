@@ -1,5 +1,4 @@
 import json
-import urllib
 import logging
 
 import boto
