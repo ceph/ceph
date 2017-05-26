@@ -93,7 +93,7 @@ public:
       http_status(HTTP_STATUS_NOSTATUS),
       req_data(nullptr),
       user_info(nullptr),
-      verify_ssl(true),
+      verify_ssl(cct->_conf->rgw_verify_ssl),
       cct(cct) {
   }
 
