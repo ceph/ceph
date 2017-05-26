@@ -5,6 +5,7 @@
 #include "common/dout.h"
 #include "common/errno.h"
 #include "common/WorkQueue.h"
+#include "librbd/ExclusiveLock.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/ImageState.h"
 #include "librbd/internal.h"
@@ -118,6 +119,14 @@ struct ExecuteOp : public Context {
 
     ldout(cct, 20) << ": ExecuteOp::" << __func__ << dendl;
     RWLock::RLocker owner_locker(image_ctx.owner_lock);
+
+    if (image_ctx.exclusive_lock == nullptr ||
+        !image_ctx.exclusive_lock->accept_ops()) {
+      ldout(cct, 5) << ": lost exclusive lock -- skipping op" << dendl;
+      on_op_complete->complete(-ECANCELED);
+      return;
+    }
+
     execute(event);
   }
 };
@@ -197,6 +206,14 @@ void Replay<I>::process(const EventEntry &event_entry,
   on_ready = util::create_async_context_callback(m_image_ctx, on_ready);
 
   RWLock::RLocker owner_lock(m_image_ctx.owner_lock);
+  if (m_image_ctx.exclusive_lock == nullptr ||
+      !m_image_ctx.exclusive_lock->accept_ops()) {
+    ldout(cct, 5) << ": lost exclusive lock -- skipping event" << dendl;
+    m_image_ctx.op_work_queue->queue(on_safe, -ECANCELED);
+    on_ready->complete(0);
+    return;
+  }
+
   boost::apply_visitor(EventVisitor(this, on_ready, on_safe),
                        event_entry.event);
 }

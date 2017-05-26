@@ -1168,9 +1168,14 @@ void ImageReplayer<I>::handle_preprocess_entry_safe(int r) {
   dout(20) << "r=" << r << dendl;
 
   if (r < 0) {
-    derr << "failed to preprocess journal event" << dendl;
     m_event_replay_tracker.finish_op();
-    handle_replay_complete(r, "failed to preprocess journal event");
+
+    if (r == -ECANCELED) {
+      handle_replay_complete(0, "lost exclusive lock");
+    } else {
+      derr << "failed to preprocess journal event" << dendl;
+      handle_replay_complete(r, "failed to preprocess journal event");
+    }
     return;
   }
 
