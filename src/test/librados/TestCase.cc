@@ -47,7 +47,8 @@ void RadosTestNS::SetUp()
 
 void RadosTestNS::TearDown()
 {
-  cleanup_all_objects(ioctx);
+  if (cleanup)
+    cleanup_all_objects(ioctx);
   rados_ioctx_destroy(ioctx);
 }
 
@@ -97,7 +98,8 @@ void RadosTestPPNS::SetUp()
 
 void RadosTestPPNS::TearDown()
 {
-  cleanup_all_objects(ioctx);
+  if (cleanup)
+    cleanup_all_objects(ioctx);
   ioctx.close();
 }
 
@@ -179,7 +181,8 @@ void RadosTestParamPPNS::SetUp()
 
 void RadosTestParamPPNS::TearDown()
 {
-  cleanup_all_objects(ioctx);
+  if (cleanup)
+    cleanup_all_objects(ioctx);
   ioctx.close();
 }
 
@@ -223,7 +226,8 @@ void RadosTestECNS::SetUp()
 
 void RadosTestECNS::TearDown()
 {
-  cleanup_all_objects(ioctx);
+  if (cleanup)
+    cleanup_all_objects(ioctx);
   rados_ioctx_destroy(ioctx);
 }
 
@@ -253,7 +257,8 @@ void RadosTestECPPNS::SetUp()
 
 void RadosTestECPPNS::TearDown()
 {
-  cleanup_all_objects(ioctx);
+  if (cleanup)
+    cleanup_all_objects(ioctx);
   ioctx.close();
 }
 
@@ -284,8 +289,10 @@ void RadosTest::SetUp()
 
 void RadosTest::TearDown()
 {
-  cleanup_default_namespace(ioctx);
-  cleanup_namespace(ioctx, nspace);
+  if (cleanup) {
+    cleanup_default_namespace(ioctx);
+    cleanup_namespace(ioctx, nspace);
+  }
   rados_ioctx_destroy(ioctx);
 }
 
@@ -343,8 +350,10 @@ void RadosTestPP::SetUp()
 
 void RadosTestPP::TearDown()
 {
-  cleanup_default_namespace(ioctx);
-  cleanup_namespace(ioctx, nspace);
+  if (cleanup) {
+    cleanup_default_namespace(ioctx);
+    cleanup_namespace(ioctx, nspace);
+  }
   ioctx.close();
 }
 
@@ -442,8 +451,10 @@ void RadosTestParamPP::SetUp()
 
 void RadosTestParamPP::TearDown()
 {
-  cleanup_default_namespace(ioctx);
-  cleanup_namespace(ioctx, nspace);
+  if (cleanup) {
+    cleanup_default_namespace(ioctx);
+    cleanup_namespace(ioctx, nspace);
+  }
   ioctx.close();
 }
 
@@ -494,8 +505,10 @@ void RadosTestEC::SetUp()
 
 void RadosTestEC::TearDown()
 {
-  cleanup_default_namespace(ioctx);
-  cleanup_namespace(ioctx, nspace);
+  if (cleanup) {
+    cleanup_default_namespace(ioctx);
+    cleanup_namespace(ioctx, nspace);
+  }
   rados_ioctx_destroy(ioctx);
 }
 
@@ -527,8 +540,10 @@ void RadosTestECPP::SetUp()
 
 void RadosTestECPP::TearDown()
 {
-  cleanup_default_namespace(ioctx);
-  cleanup_namespace(ioctx, nspace);
+  if (cleanup) {
+    cleanup_default_namespace(ioctx);
+    cleanup_namespace(ioctx, nspace);
+  }
   ioctx.close();
 }
 

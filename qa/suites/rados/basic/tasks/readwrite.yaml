@@ -2,11 +2,11 @@ overrides:
   ceph:
     crush_tunables: optimal
     conf:
+      mon:
+        mon osd initial require min compat client: luminous
       osd:
         osd_discard_disconnected_ops: false
 tasks:
-- install:
-- ceph:
 - rados:
     clients: [client.0]
     ops: 4000

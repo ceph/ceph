@@ -110,6 +110,7 @@ public:
 
   bool check_send_map = true; ///< true until we check if sender needs a map
   epoch_t sent_epoch = 0;     ///< client's map epoch
+  epoch_t min_epoch = 0;      ///< min epoch needed to handle this msg
 
   bool hitset_inserted;
   const Message *get_req() const { return request; }

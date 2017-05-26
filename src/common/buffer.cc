@@ -91,6 +91,7 @@ static std::atomic_flag buffer_debug_lock = ATOMIC_FLAG_INIT;
 
   static atomic_t buffer_cached_crc;
   static atomic_t buffer_cached_crc_adjusted;
+  static atomic_t buffer_missed_crc;
   static bool buffer_track_crc = get_env_bool("CEPH_BUFFER_TRACK");
 
   void buffer::track_cached_crc(bool b) {
@@ -101,6 +102,10 @@ static std::atomic_flag buffer_debug_lock = ATOMIC_FLAG_INIT;
   }
   int buffer::get_cached_crc_adjusted() {
     return buffer_cached_crc_adjusted.read();
+  }
+
+  int buffer::get_missed_crc() {
+    return buffer_missed_crc.read();
   }
 
   static atomic_t buffer_c_str_accesses;
@@ -2338,19 +2343,6 @@ int buffer::list::write_fd(int fd, uint64_t offset) const
   return 0;
 }
 
-void buffer::list::prepare_iov(std::vector<iovec> *piov) const
-{
-  assert(_buffers.size() <= IOV_MAX);
-  piov->resize(_buffers.size());
-  unsigned n = 0;
-  for (std::list<buffer::ptr>::const_iterator p = _buffers.begin();
-       p != _buffers.end();
-       ++p, ++n) {
-    (*piov)[n].iov_base = (void *)p->c_str();
-    (*piov)[n].iov_len = p->length();
-  }
-}
-
 int buffer::list::write_fd_zero_copy(int fd) const
 {
   if (!can_zero_copy())
@@ -2404,6 +2396,8 @@ __u32 buffer::list::crc32c(__u32 crc) const
 	    buffer_cached_crc_adjusted.inc();
 	}
       } else {
+	if (buffer_track_crc)
+	  buffer_missed_crc.inc();
 	uint32_t base = crc;
 	crc = ceph_crc32c(crc, (unsigned char*)it->c_str(), it->length());
 	r->set_crc(ofs, make_pair(base, crc));

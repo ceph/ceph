@@ -268,8 +268,10 @@ Message *LogClient::get_mon_log_message(bool flush)
 {
   Mutex::Locker l(log_lock);
   if (flush) {
+    if (log_queue.empty())
+      return nullptr;
     // reset session
-    last_log_sent = last_log - log_queue.size();
+    last_log_sent = log_queue.front().seq;
   }
   return _get_mon_log_message();
 }

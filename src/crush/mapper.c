@@ -849,7 +849,7 @@ void crush_init_workspace(const struct crush_map *m, void *v) {
 	struct crush_work *w = (struct crush_work *)v;
 	char *point = (char *)v;
 	__s32 b;
-	point += sizeof(struct crush_work *);
+	point += sizeof(struct crush_work);
 	w->work = (struct crush_work_bucket **)point;
 	point += m->max_buckets * sizeof(struct crush_work_bucket *);
 	for (b = 0; b < m->max_buckets; ++b) {
@@ -994,11 +994,6 @@ int crush_do_rule(const struct crush_map *map,
 
 			for (i = 0; i < wsize; i++) {
 				int bno;
-				/*
-				 * see CRUSH_N, CRUSH_N_MINUS macros.
-				 * basically, numrep <= 0 means relative to
-				 * the provided result_max
-				 */
 				numrep = curstep->arg1;
 				if (numrep <= 0) {
 					numrep += result_max;

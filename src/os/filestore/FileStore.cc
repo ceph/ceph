@@ -547,6 +547,7 @@ FileStore::FileStore(CephContext* cct, const std::string &base,
   op_wq(this, cct->_conf->filestore_op_thread_timeout,
 	cct->_conf->filestore_op_thread_suicide_timeout, &op_tp),
   logger(NULL),
+  trace_endpoint("0.0.0.0", 0, "FileStore"),
   read_error_lock("FileStore::read_error_lock"),
   m_filestore_commit_timeout(cct->_conf->filestore_commit_timeout),
   m_filestore_journal_parallel(cct->_conf->filestore_journal_parallel ),
@@ -1963,6 +1964,7 @@ void FileStore::queue_op(OpSequencer *osr, Op *o)
   // sequencer, the op order will be preserved.
 
   osr->queue(o);
+  o->trace.event("queued");
 
   logger->inc(l_filestore_ops);
   logger->inc(l_filestore_bytes, o->bytes);
@@ -2008,9 +2010,12 @@ void FileStore::_do_op(OpSequencer *osr, ThreadPool::TPHandle &handle)
 
   osr->apply_lock.Lock();
   Op *o = osr->peek_queue();
+  o->trace.event("op_apply_start");
   apply_manager.op_apply_start(o->op);
   dout(5) << "_do_op " << o << " seq " << o->op << " " << *osr << "/" << osr->parent << " start" << dendl;
+  o->trace.event("_do_transactions start");
   int r = _do_transactions(o->tls, o->op, &handle);
+  o->trace.event("op_apply_finish");
   apply_manager.op_apply_finish(o->op);
   dout(10) << "_do_op " << o << " seq " << o->op << " r = " << r
 	   << ", finisher " << o->onreadable << " " << o->onreadable_sync << dendl;
@@ -2029,6 +2034,7 @@ void FileStore::_finish_op(OpSequencer *osr)
 
   dout(10) << "_finish_op " << o << " seq " << o->op << " " << *osr << "/" << osr->parent << " lat " << lat << dendl;
   osr->apply_lock.Unlock();  // locked in _do_op
+  o->trace.event("_finish_op");
 
   // called with tp lock held
   op_queue_release_throttle(o);
@@ -2100,6 +2106,12 @@ int FileStore::queue_transactions(Sequencer *posr, vector<Transaction>& tls,
     (*i).set_osr(osr);
   }
 
+  ZTracer::Trace trace;
+  if (osd_op && osd_op->pg_trace) {
+    osd_op->store_trace.init("filestore op", &trace_endpoint, &osd_op->pg_trace);
+    trace = osd_op->store_trace;
+  }
+
   if (journal && journal->is_writeable() && !m_filestore_journal_trailing) {
     Op *o = build_op(tls, onreadable, onreadable_sync, osd_op);
 
@@ -2118,6 +2130,7 @@ int FileStore::queue_transactions(Sequencer *posr, vector<Transaction>& tls,
 
     uint64_t op_num = submit_manager.op_submit_start();
     o->op = op_num;
+    trace.keyval("opnum", op_num);
 
     if (m_filestore_do_dump)
       dump_transactions(o->tls, o->op, osr);
@@ -2125,15 +2138,20 @@ int FileStore::queue_transactions(Sequencer *posr, vector<Transaction>& tls,
     if (m_filestore_journal_parallel) {
       dout(5) << "queue_transactions (parallel) " << o->op << " " << o->tls << dendl;
 
+      trace.keyval("journal mode", "parallel");
+      trace.event("journal started");
       _op_journal_transactions(tbl, orig_len, o->op, ondisk, osd_op);
 
       // queue inside submit_manager op submission lock
       queue_op(osr, o);
+      trace.event("op queued");
     } else if (m_filestore_journal_writeahead) {
       dout(5) << "queue_transactions (writeahead) " << o->op << " " << o->tls << dendl;
 
       osr->queue_journal(o->op);
 
+      trace.keyval("journal mode", "writeahead");
+      trace.event("journal started");
       _op_journal_transactions(tbl, orig_len, o->op,
 			       new C_JournaledAhead(this, osr, o, ondisk),
 			       osd_op);
@@ -2165,6 +2183,9 @@ int FileStore::queue_transactions(Sequencer *posr, vector<Transaction>& tls,
       dump_transactions(o->tls, o->op, osr);
 
     queue_op(osr, o);
+    trace.keyval("opnum", op_num);
+    trace.keyval("journal mode", "none");
+    trace.event("op queued");
 
     if (ondisk)
       apply_manager.add_waiter(op_num, ondisk);
@@ -2187,10 +2208,15 @@ int FileStore::queue_transactions(Sequencer *posr, vector<Transaction>& tls,
   if (m_filestore_do_dump)
     dump_transactions(tls, op, osr);
 
+  trace.event("op_apply_start");
+  trace.keyval("opnum", op);
+  trace.keyval("journal mode", "trailing");
   apply_manager.op_apply_start(op);
+  trace.event("do_transactions");
   int r = do_transactions(tls, op);
 
   if (r >= 0) {
+    trace.event("journal started");
     _op_journal_transactions(tbl, orig_len, op, ondisk, osd_op);
   } else {
     delete ondisk;
@@ -2204,6 +2230,7 @@ int FileStore::queue_transactions(Sequencer *posr, vector<Transaction>& tls,
   apply_finishers[osr->id % m_apply_finisher_num]->queue(onreadable, r);
 
   submit_manager.op_submit_finish(op);
+  trace.event("op_apply_finish");
   apply_manager.op_apply_finish(op);
 
   utime_t end = ceph_clock_now();
@@ -2214,6 +2241,8 @@ int FileStore::queue_transactions(Sequencer *posr, vector<Transaction>& tls,
 void FileStore::_journaled_ahead(OpSequencer *osr, Op *o, Context *ondisk)
 {
   dout(5) << "_journaled_ahead " << o << " seq " << o->op << " " << *osr << " " << o->tls << dendl;
+
+  o->trace.event("writeahead journal finished");
 
   // this should queue in order because the journal does it's completions in order.
   queue_op(osr, o);
@@ -3257,16 +3286,13 @@ more:
     i++;
     last = extent++;
   }
-  const bool is_last = last->fe_flags & FIEMAP_EXTENT_LAST;
+  uint64_t xoffset = last->fe_logical + last->fe_length - offset;
+  offset = last->fe_logical + last->fe_length;
+  len -= xoffset;
+  const bool is_last = (last->fe_flags & FIEMAP_EXTENT_LAST) || (len == 0);
+  free(fiemap);
   if (!is_last) {
-    uint64_t xoffset = last->fe_logical + last->fe_length - offset;
-    offset = last->fe_logical + last->fe_length;
-    len -= xoffset;
-    free(fiemap); /* fix clang warn: use-after-free */
     goto more;
-  }
-  else {
-    free(fiemap);
   }
 
   return r;

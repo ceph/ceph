@@ -60,31 +60,42 @@ void BlueFS::_init_logger()
   b.add_u64_counter(l_bluefs_reclaim_bytes, "reclaim_bytes",
 		    "Bytes reclaimed by BlueStore");
   b.add_u64(l_bluefs_db_total_bytes, "db_total_bytes",
-	    "Total bytes (main db device)");
+	    "Total bytes (main db device)",
+	    "b", PerfCountersBuilder::PRIO_USEFUL);
   b.add_u64(l_bluefs_db_used_bytes, "db_used_bytes",
-	    "Used bytes (main db device)");
+	    "Used bytes (main db device)",
+	    "u", PerfCountersBuilder::PRIO_USEFUL);
   b.add_u64(l_bluefs_wal_total_bytes, "wal_total_bytes",
-	    "Total bytes (wal device)");
+	    "Total bytes (wal device)",
+	    "walb", PerfCountersBuilder::PRIO_USEFUL);
   b.add_u64(l_bluefs_wal_used_bytes, "wal_used_bytes",
-	    "Used bytes (wal device)");
+	    "Used bytes (wal device)",
+	    "walu", PerfCountersBuilder::PRIO_USEFUL);
   b.add_u64(l_bluefs_slow_total_bytes, "slow_total_bytes",
-	    "Total bytes (slow device)");
+	    "Total bytes (slow device)",
+	    "slob", PerfCountersBuilder::PRIO_USEFUL);
   b.add_u64(l_bluefs_slow_used_bytes, "slow_used_bytes",
-	    "Used bytes (slow device)");
-  b.add_u64(l_bluefs_num_files, "num_files", "File count");
-  b.add_u64(l_bluefs_log_bytes, "log_bytes", "Size of the metadata log");
+	    "Used bytes (slow device)",
+	    "slou", PerfCountersBuilder::PRIO_USEFUL);
+  b.add_u64(l_bluefs_num_files, "num_files", "File count",
+	    "f", PerfCountersBuilder::PRIO_USEFUL);
+  b.add_u64(l_bluefs_log_bytes, "log_bytes", "Size of the metadata log",
+	    "jlen", PerfCountersBuilder::PRIO_INTERESTING);
   b.add_u64_counter(l_bluefs_log_compactions, "log_compactions",
 		    "Compactions of the metadata log");
   b.add_u64_counter(l_bluefs_logged_bytes, "logged_bytes",
-		    "Bytes written to the metadata log", "j");
+		    "Bytes written to the metadata log", "j",
+		    PerfCountersBuilder::PRIO_CRITICAL);
   b.add_u64_counter(l_bluefs_files_written_wal, "files_written_wal",
 		    "Files written to WAL");
   b.add_u64_counter(l_bluefs_files_written_sst, "files_written_sst",
 		    "Files written to SSTs");
   b.add_u64_counter(l_bluefs_bytes_written_wal, "bytes_written_wal",
-		    "Bytes written to WAL", "wal");
+		    "Bytes written to WAL", "wal",
+		    PerfCountersBuilder::PRIO_CRITICAL);
   b.add_u64_counter(l_bluefs_bytes_written_sst, "bytes_written_sst",
-		    "Bytes written to SSTs", "sst");
+		    "Bytes written to SSTs", "sst",
+		    PerfCountersBuilder::PRIO_CRITICAL);
   logger = b.create_perf_counters();
   cct->get_perfcounters_collection()->add(logger);
 }
@@ -466,9 +477,7 @@ int BlueFS::_write_super()
   assert(bl.length() <= get_super_length());
   bl.append_zero(get_super_length() - bl.length());
 
-  bdev[BDEV_DB]->aio_write(get_super_offset(), bl, ioc[BDEV_DB], false);
-  bdev[BDEV_DB]->aio_submit(ioc[BDEV_DB]);
-  ioc[BDEV_DB]->aio_wait();
+  bdev[BDEV_DB]->write(get_super_offset(), bl, false);
   dout(20) << __func__ << " v " << super.version
            << " crc 0x" << std::hex << crc
            << " offset 0x" << get_super_offset() << std::dec
@@ -1399,14 +1408,7 @@ int BlueFS::_flush_and_sync_log(std::unique_lock<std::mutex>& l,
     log_writer->file->fnode.size = jump_to;
   }
 
-  // drop lock while we wait for io
-  list<FS::aio_t> completed_ios;
-  _claim_completed_aios(log_writer, &completed_ios);
-  l.unlock();
-  wait_for_aio(log_writer);
-  completed_ios.clear();
-  flush_bdev();
-  l.lock();
+  _flush_bdev_safely(log_writer);
 
   log_flushing = false;
   log_cond.notify_all();
@@ -1622,7 +1624,11 @@ int BlueFS::_flush_range(FileWriter *h, uint64_t offset, uint64_t length)
 	t.append_zero(zlen);
       }
     }
-    bdev[p->bdev]->aio_write(p->offset + x_off, t, h->iocv[p->bdev], buffered);
+    if (cct->_conf->bluefs_sync_write) {
+      bdev[p->bdev]->write(p->offset + x_off, t, buffered);
+    } else {
+      bdev[p->bdev]->aio_write(p->offset + x_off, t, h->iocv[p->bdev], buffered);
+    }
     bloff += x_len;
     length -= x_len;
     ++p;
@@ -1643,7 +1649,7 @@ int BlueFS::_flush_range(FileWriter *h, uint64_t offset, uint64_t length)
 
 // we need to retire old completed aios so they don't stick around in
 // memory indefinitely (along with their bufferlist refs).
-void BlueFS::_claim_completed_aios(FileWriter *h, list<FS::aio_t> *ls)
+void BlueFS::_claim_completed_aios(FileWriter *h, list<aio_t> *ls)
 {
   for (auto p : h->iocv) {
     if (p) {
@@ -1742,13 +1748,7 @@ int BlueFS::_fsync(FileWriter *h, std::unique_lock<std::mutex>& l)
      return r;
   uint64_t old_dirty_seq = h->file->dirty_seq;
 
-  list<FS::aio_t> completed_ios;
-  _claim_completed_aios(h, &completed_ios);
-  lock.unlock();
-  wait_for_aio(h);
-  completed_ios.clear();
-  flush_bdev();
-  lock.lock();
+  _flush_bdev_safely(h);
 
   if (old_dirty_seq) {
     uint64_t s = log_seq;
@@ -1759,6 +1759,23 @@ int BlueFS::_fsync(FileWriter *h, std::unique_lock<std::mutex>& l)
 	   h->file->dirty_seq > s);    // or redirtied by someone else
   }
   return 0;
+}
+
+void BlueFS::_flush_bdev_safely(FileWriter *h)
+{
+  if (!cct->_conf->bluefs_sync_write) {
+    list<aio_t> completed_ios;
+    _claim_completed_aios(h, &completed_ios);
+    lock.unlock();
+    wait_for_aio(h);
+    completed_ios.clear();
+    flush_bdev();
+    lock.lock();
+  } else {
+    lock.unlock();
+    flush_bdev();
+    lock.lock();
+  }
 }
 
 void BlueFS::flush_bdev()

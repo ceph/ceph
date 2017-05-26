@@ -230,7 +230,7 @@ bool RGWObjectExpirer::inspect_all_shards(const utime_t& last_run,
 
 bool RGWObjectExpirer::going_down()
 {
-  return (down_flag.read() != 0);
+  return down_flag;
 }
 
 void RGWObjectExpirer::start_processor()
@@ -241,7 +241,7 @@ void RGWObjectExpirer::start_processor()
 
 void RGWObjectExpirer::stop_processor()
 {
-  down_flag.set(1);
+  down_flag = true;
   if (worker) {
     worker->stop();
     worker->join();

@@ -16,10 +16,10 @@
 
 using namespace librados;
 
-typedef RadosTestNS LibRadosList;
-typedef RadosTestPPNS LibRadosListPP;
-typedef RadosTestECNS LibRadosListEC;
-typedef RadosTestECPPNS LibRadosListECPP;
+typedef RadosTestNSCleanup LibRadosList;
+typedef RadosTestPPNSCleanup LibRadosListPP;
+typedef RadosTestECNSCleanup LibRadosListEC;
+typedef RadosTestECPPNSCleanup LibRadosListECPP;
 typedef RadosTestNP LibRadosListNP;
 
 
@@ -138,16 +138,14 @@ TEST_F(LibRadosListPP, ListObjectsEndIter) {
   ASSERT_TRUE(iter2 == iter_end2);
 }
 
-static void check_list(std::set<std::string>& myset, rados_list_ctx_t& ctx, std::string check_nspace)
+static void check_list(
+  std::set<std::string>& myset,
+  rados_list_ctx_t& ctx,
+  std::string check_nspace)
 {
   const char *entry, *nspace;
-  std::set<std::string> orig_set(myset);
-  /**
-   * During splitting, we might see duplicate items.
-   * We assert that every object returned is in myset and that
-   * we don't hit ENOENT until we have hit every item in myset
-   * at least once.
-   */
+  cout << "myset " << myset << std::endl;
+  // we should see every item exactly once.
   int ret;
   while ((ret = rados_nobjects_list_next(ctx, &entry, NULL, &nspace)) == 0) {
     std::string test_name;
@@ -157,8 +155,9 @@ static void check_list(std::set<std::string>& myset, rados_list_ctx_t& ctx, std:
       ASSERT_TRUE(std::string(nspace) == check_nspace);
       test_name = std::string(entry);
     }
+    cout << test_name << std::endl;
 
-    ASSERT_TRUE(orig_set.end() != orig_set.find(test_name));
+    ASSERT_TRUE(myset.end() != myset.find(test_name));
     myset.erase(test_name);
   }
   ASSERT_EQ(-ENOENT, ret);
@@ -965,7 +964,17 @@ TEST_F(LibRadosListNP, ListObjectsError) {
   memset(buf, 0xcc, sizeof(buf));
   rados_ioctx_set_namespace(ioctx, "");
   ASSERT_EQ(0, rados_write(ioctx, "foo", buf, sizeof(buf), 0));
-  ASSERT_EQ(0, rados_pool_delete(cluster, pool_name.c_str()));
+
+  //ASSERT_EQ(0, rados_pool_delete(cluster, pool_name.c_str()));
+  {
+    char *buf, *st;
+    size_t buflen, stlen;
+    string c = "{\"prefix\":\"osd pool rm\",\"pool\": \"" + pool_name +
+      "\",\"pool2\":\"" + pool_name +
+      "\",\"sure\": \"--yes-i-really-really-mean-it-not-faking\"}";
+    const char *cmd[2] = { c.c_str(), 0 };
+    ASSERT_EQ(0, rados_mon_command(cluster, (const char **)cmd, 1, "", 0, &buf, &buflen, &st, &stlen));
+  }
 
   rados_list_ctx_t ctx;
   ASSERT_EQ(0, rados_nobjects_list_open(ioctx, &ctx));

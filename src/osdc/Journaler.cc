@@ -543,41 +543,6 @@ uint64_t Journaler::append_entry(bufferlist& bl)
   assert(!readonly);
   uint32_t s = bl.length();
 
-  if (!cct->_conf->journaler_allow_split_entries) {
-    // will we span a stripe boundary?
-    int p = layout.stripe_unit;
-    if (write_pos / p != (write_pos + (int64_t)(bl.length() + sizeof(s))) / p) {
-      // yes.
-      // move write_pos forward.
-      int64_t owp = write_pos;
-      write_pos += p;
-      write_pos -= (write_pos % p);
-
-      // pad with zeros.
-      bufferptr bp(write_pos - owp);
-      bp.zero();
-      assert(bp.length() >= 4);
-      if (!write_buf_throttle.get_or_fail(bp.length())) {
-        l.unlock();
-        ldout(cct, 10) << "write_buf_throttle wait, bp len " 
-                       << bp.length() << dendl;
-        write_buf_throttle.get(bp.length());
-        l.lock();
-      }
-      ldout(cct, 20) << "write_buf_throttle get, bp len " 
-                     << bp.length() << dendl;
-      write_buf.push_back(bp);
-
-      // now flush.
-      flush();
-
-      ldout(cct, 12) << "append_entry skipped " << (write_pos-owp)
-		     << " bytes to " << write_pos
-		     << " to avoid spanning stripe boundary" << dendl;
-    }
-  }
-
-
   // append
   size_t delta = bl.length() + journal_stream.get_envelope_size();
   // write_buf space is nearly full
@@ -640,7 +605,7 @@ void Journaler::_do_flush(unsigned amount)
       waiting_for_zero = true;
       return;
     }
-    if (newlen < len) {
+    if (static_cast<uint64_t>(newlen) < len) {
       ldout(cct, 10) << "_do_flush wanted to do " << flush_pos << "~" << len
 		     << " but hit prezero_pos " << prezero_pos
 		     << ", will do " << flush_pos << "~" << newlen << dendl;

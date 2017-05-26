@@ -99,22 +99,6 @@ class WeightedPriorityQueue :  public OpQueue <T, K>
       unsigned get_size() const {
 	return lp.size();
       }
-      unsigned filter_list_pairs(std::function<bool (T)>& f) {
-        unsigned count = 0;
-        // intrusive containers can't erase with a reverse_iterator
-        // so we have to walk backwards on our own. Since there is
-        // no iterator before begin, we have to test at the end.
-        for (Lit i = --lp.end();; --i) {
-          if (f(i->item)) {
-            i = lp.erase_and_dispose(i, DelItem<ListPair>());
-            ++count;
-          }
-          if (i == lp.begin()) {
-            break;
-          }
-        }
-        return count;
-      }
       unsigned filter_class(std::list<T>* out) {
         unsigned count = 0;
         for (Lit i = --lp.end();; --i) {
@@ -179,25 +163,6 @@ class WeightedPriorityQueue :  public OpQueue <T, K>
 	}
         check_end();
 	return ret;
-      }
-      unsigned filter_list_pairs(std::function<bool (T)>& f) {
-	unsigned count = 0;
-        // intrusive containers can't erase with a reverse_iterator
-        // so we have to walk backwards on our own. Since there is
-        // no iterator before begin, we have to test at the end.
-        for (Kit i = klasses.begin(); i != klasses.end();) {
-          count += i->filter_list_pairs(f);
-          if (i->empty()) {
-	    if (next == i) {
-	      ++next;
-	    }
-            i = klasses.erase_and_dispose(i, DelItem<Klass>());
-          } else {
-            ++i;
-          }
-        }
-        check_end();
-	return count;
       }
       unsigned filter_class(K& cl, std::list<T>* out) {
 	unsigned count = 0;
@@ -291,17 +256,6 @@ class WeightedPriorityQueue :  public OpQueue <T, K>
 	  }
 	  return ret;
 	}
-       void filter_list_pairs(std::function<bool (T)>& f) {
-	  for (Sit i = queues.begin(); i != queues.end();) {
-            size -= i->filter_list_pairs(f);
-	    if (i->empty()) {
-	      total_prio -= i->key;
-	      i = queues.erase_and_dispose(i, DelItem<SubQueue>());
-	    } else {
-	      ++i;
-	    }
-      	  }
-	}
 	void filter_class(K& cl, std::list<T>* out) {
 	  for (Sit i = queues.begin(); i != queues.end();) {
 	    size -= i->filter_class(cl, out);
@@ -337,10 +291,6 @@ class WeightedPriorityQueue :  public OpQueue <T, K>
       }
     unsigned length() const final {
       return strict.size + normal.size;
-    }
-    void remove_by_filter(std::function<bool (T)> f) final {
-      strict.filter_list_pairs(f);
-      normal.filter_list_pairs(f);
     }
     void remove_by_class(K cl, std::list<T>* removed = 0) final {
       strict.filter_class(cl, removed);

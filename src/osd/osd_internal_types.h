@@ -14,6 +14,17 @@
   * replicas ack.
   */
 
+struct SnapSetContext {
+  hobject_t oid;
+  SnapSet snapset;
+  int ref;
+  bool registered : 1;
+  bool exists : 1;
+
+  explicit SnapSetContext(const hobject_t& o) :
+    oid(o), ref(0), registered(false), exists(true) { }
+};
+
 struct ObjectContext;
 
 struct ObjectState {

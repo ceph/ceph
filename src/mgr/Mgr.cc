@@ -14,6 +14,7 @@
 #include <Python.h>
 
 #include "osdc/Objecter.h"
+#include "client/Client.h"
 #include "common/errno.h"
 #include "mon/MonClient.h"
 #include "include/stringify.h"
@@ -39,16 +40,19 @@
 
 
 Mgr::Mgr(MonClient *monc_, Messenger *clientm_, Objecter *objecter_,
-	 LogChannelRef clog_, LogChannelRef audit_clog_) :
+	 Client* client_, LogChannelRef clog_, LogChannelRef audit_clog_) :
   monc(monc_),
   objecter(objecter_),
+  client(client_),
   client_messenger(clientm_),
   lock("Mgr::lock"),
   timer(g_ceph_context, lock),
   finisher(g_ceph_context, "Mgr", "mgr-fin"),
-  py_modules(daemon_state, cluster_state, *monc, finisher),
+  py_modules(daemon_state, cluster_state, *monc, *objecter, *client,
+             finisher),
   cluster_state(monc, nullptr),
-  server(monc, daemon_state, cluster_state, py_modules, clog_, audit_clog_),
+  server(monc, finisher, daemon_state, cluster_state, py_modules,
+         clog_, audit_clog_),
   initialized(false),
   initializing(false)
 {
@@ -70,12 +74,19 @@ class MetadataUpdate : public Context
   DaemonStateIndex &daemon_state;
   DaemonKey key;
 
+  std::map<std::string, std::string> defaults;
+
 public:
   bufferlist outbl;
   std::string outs;
 
   MetadataUpdate(DaemonStateIndex &daemon_state_, const DaemonKey &key_)
     : daemon_state(daemon_state_), key(key_) {}
+
+  void set_default(const std::string &k, const std::string &v)
+  {
+    defaults[k] = v;
+  }
 
   void finish(int r) override
   {
@@ -93,6 +104,13 @@ public:
         }
 
         json_spirit::mObject daemon_meta = json_result.get_obj();
+
+        // Apply any defaults
+        for (const auto &i : defaults) {
+          if (daemon_meta.find(i.first) == daemon_meta.end()) {
+            daemon_meta[i.first] = i.second;
+          }
+        }
 
         DaemonStatePtr state;
         if (daemon_state.exists(key)) {
@@ -339,15 +357,19 @@ void Mgr::load_config()
 
 void Mgr::shutdown()
 {
-  // FIXME: pre-empt init() if it is currently running, so that it will
-  // give up the lock for us.
-  Mutex::Locker l(lock);
-
-  // First stop the server so that we're not taking any more incoming requests
-  server.shutdown();
-
-  // after the messenger is stopped, signal modules to shutdown via finisher
-  py_modules.shutdown();
+  finisher.queue(new FunctionContext([&](int) {
+    {
+      Mutex::Locker l(lock);
+      monc->sub_unwant("log-info");
+      monc->sub_unwant("mgrdigest");
+      monc->sub_unwant("fsmap");
+      // First stop the server so that we're not taking any more incoming
+      // requests
+      server.shutdown();
+    }
+    // after the messenger is stopped, signal modules to shutdown via finisher
+    py_modules.shutdown();
+  }));
 
   // Then stop the finisher to ensure its enqueued contexts aren't going
   // to touch references to the things we're about to tear down
@@ -421,7 +443,7 @@ void Mgr::handle_osd_map()
     cluster_state.notify_osdmap(osd_map);
   });
 
-  // TODO: same culling for MonMap and FSMap
+  // TODO: same culling for MonMap
   daemon_state.cull(CEPH_ENTITY_TYPE_OSD, names_exist);
 }
 
@@ -430,6 +452,8 @@ void Mgr::handle_log(MLog *m)
   for (const auto &e : m->entries) {
     py_modules.notify_all(e);
   }
+
+  m->put();
 }
 
 bool Mgr::ms_dispatch(Message *m)
@@ -453,11 +477,12 @@ bool Mgr::ms_dispatch(Message *m)
       ceph_abort();
 
       py_modules.notify_all("mon_map", "");
+      m->put();
       break;
     case CEPH_MSG_FS_MAP:
       py_modules.notify_all("fs_map", "");
       handle_fs_map((MFSMap*)m);
-      m->put();
+      return false; // I shall let this pass through for Client
       break;
     case CEPH_MSG_OSD_MAP:
       handle_osd_map();
@@ -471,7 +496,6 @@ bool Mgr::ms_dispatch(Message *m)
       break;
     case MSG_LOG:
       handle_log(static_cast<MLog *>(m));
-      m->put();
       break;
 
     default:
@@ -485,6 +509,8 @@ void Mgr::handle_fs_map(MFSMap* m)
 {
   assert(lock.is_locked_by_me());
 
+  std::set<std::string> names_exist;
+  
   const FSMap &new_fsmap = m->get_fsmap();
 
   fs_map_cond.Signal();
@@ -500,6 +526,13 @@ void Mgr::handle_fs_map(MFSMap* m)
   for (const auto &i : mds_info) {
     const auto &info = i.second;
 
+    if (!new_fsmap.gid_exists(i.first)){
+      continue;
+    }
+
+    // Remember which MDS exists so that we can cull any that don't
+    names_exist.insert(info.name);
+
     const auto k = DaemonKey(CEPH_ENTITY_TYPE_MDS, info.name);
     if (daemon_state.is_updating(k)) {
       continue;
@@ -508,9 +541,6 @@ void Mgr::handle_fs_map(MFSMap* m)
     bool update = false;
     if (daemon_state.exists(k)) {
       auto metadata = daemon_state.get(k);
-      // FIXME: nothing stopping old daemons being here, they won't have
-      // addr: need to handle case of pre-ceph-mgr daemons that don't have
-      // the fields we expect
       if (metadata->metadata.empty() ||
 	  metadata->metadata.count("addr") == 0) {
         update = true;
@@ -530,6 +560,11 @@ void Mgr::handle_fs_map(MFSMap* m)
     if (update) {
       daemon_state.notify_updating(k);
       auto c = new MetadataUpdate(daemon_state, k);
+
+      // Older MDS daemons don't have addr in the metadata, so
+      // fake it if the returned metadata doesn't have the field.
+      c->set_default("addr", stringify(info.addr));
+
       std::ostringstream cmd;
       cmd << "{\"prefix\": \"mds metadata\", \"who\": \""
           << info.name << "\"}";
@@ -538,6 +573,7 @@ void Mgr::handle_fs_map(MFSMap* m)
           {}, &c->outbl, &c->outs, c);
     }
   }
+  daemon_state.cull(CEPH_ENTITY_TYPE_MDS, names_exist);
 }
 
 
@@ -553,6 +589,7 @@ void Mgr::handle_mgr_digest(MMgrDigest* m)
   // the pgmap might have changed since last time we were here.
   py_modules.notify_all("pg_summary", "");
   dout(10) << "done." << dendl;
+
   m->put();
 }
 

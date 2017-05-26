@@ -4,18 +4,18 @@
 #ifndef CEPH_RBD_MIRROR_H
 #define CEPH_RBD_MIRROR_H
 
-#include <map>
-#include <memory>
-#include <set>
-
 #include "common/ceph_context.h"
 #include "common/Mutex.h"
-#include "include/atomic.h"
 #include "include/rados/librados.hpp"
 #include "ClusterWatcher.h"
 #include "PoolReplayer.h"
 #include "ImageDeleter.h"
 #include "types.h"
+
+#include <set>
+#include <map>
+#include <memory>
+#include <atomic>
 
 namespace librbd { struct ImageCtx; }
 
@@ -67,7 +67,7 @@ private:
   std::shared_ptr<ImageDeleter> m_image_deleter;
   ImageSyncThrottlerRef<> m_image_sync_throttler;
   std::map<PoolPeer, std::unique_ptr<PoolReplayer> > m_pool_replayers;
-  atomic_t m_stopping;
+  std::atomic<bool> m_stopping = { false };
   bool m_manual_stop = false;
   MirrorAdminSocketHook *m_asok_hook;
 };

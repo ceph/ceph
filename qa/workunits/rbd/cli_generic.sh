@@ -290,7 +290,7 @@ test_pool_image_args() {
 
     ceph osd pool delete test test --yes-i-really-really-mean-it || true
     ceph osd pool create test 100
-    truncate -s 1 /tmp/empty
+    truncate -s 1 /tmp/empty /tmp/empty@snap
 
     rbd ls | wc -l | grep 0
     rbd create -s 1 test1
@@ -301,6 +301,12 @@ test_pool_image_args() {
     rbd ls | grep -q test3
     rbd import /tmp/empty foo
     rbd ls | grep -q foo
+
+    # should fail due to "destination snapname specified"
+    rbd import --dest test/empty@snap /tmp/empty && exit 1 || true
+    rbd import /tmp/empty test/empty@snap && exit 1 || true
+    rbd import --image test/empty@snap /tmp/empty && exit 1 || true
+    rbd import /tmp/empty@snap && exit 1 || true
 
     rbd ls test | wc -l | grep 0
     rbd import /tmp/empty test/test1
@@ -336,7 +342,7 @@ test_pool_image_args() {
     rbd ls | grep test12
     rbd ls test | grep -qv test12
 
-    rm -f /tmp/empty
+    rm -f /tmp/empty /tmp/empty@snap
     ceph osd pool delete test test --yes-i-really-really-mean-it
 
     for f in foo test1 test10 test12 test2 test3 ; do
@@ -408,7 +414,7 @@ test_trash() {
     rbd ls | wc -l | grep 1
     rbd ls -l | grep 'test2.*2.*'
 
-    rbd trash mv test2 --delay 10
+    rbd trash mv test2 --delay 3600
     rbd trash ls | grep test2
     rbd trash ls | wc -l | grep 1
     rbd trash ls -l | grep 'test2.*USER.*protected until'

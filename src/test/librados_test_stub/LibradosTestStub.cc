@@ -170,7 +170,7 @@ extern "C" int rados_conf_read_file(rados_t cluster, const char *path) {
     conf->parse_env();
     conf->apply_changes(NULL);
     conf->complain_about_parse_errors(client->cct());
-  } else if (ret == -EINVAL) {
+  } else if (ret == -ENOENT) {
     // ignore missing client config
     return 0;
   }

@@ -5,28 +5,8 @@
 #include "common/Formatter.h"
 #include "include/uuid.h"
 #include "include/stringify.h"
-#include "include/small_encoding.h"
 
 // bluefs_extent_t
-
-void bluefs_extent_t::encode(bufferlist& bl) const
-{
-  ENCODE_START(1, 1, bl);
-  small_encode_lba(offset, bl);
-  small_encode_varint_lowz(length, bl);
-  ::encode(bdev, bl);
-  ENCODE_FINISH(bl);
-}
-
-void bluefs_extent_t::decode(bufferlist::iterator& p)
-{
-  DECODE_START(1, p);
-  small_decode_lba(offset, p);
-  small_decode_varint_lowz(length, p);
-  ::decode(bdev, p);
-  DECODE_FINISH(p);
-}
-
 void bluefs_extent_t::dump(Formatter *f) const
 {
   f->dump_unsigned("offset", offset);
@@ -116,29 +96,6 @@ mempool::bluefs::vector<bluefs_extent_t>::iterator bluefs_fnode_t::seek(
   }
   *x_off = offset;
   return p;
-}
-
-void bluefs_fnode_t::encode(bufferlist& bl) const
-{
-  ENCODE_START(1, 1, bl);
-  small_encode_varint(ino, bl);
-  small_encode_varint(size, bl);
-  ::encode(mtime, bl);
-  ::encode(prefer_bdev, bl);
-  ::encode(extents, bl);
-  ENCODE_FINISH(bl);
-}
-
-void bluefs_fnode_t::decode(bufferlist::iterator& p)
-{
-  DECODE_START(1, p);
-  small_decode_varint(ino, p);
-  small_decode_varint(size, p);
-  ::decode(mtime, p);
-  ::decode(prefer_bdev, p);
-  ::decode(extents, p);
-  DECODE_FINISH(p);
-  recalc_allocated();
 }
 
 void bluefs_fnode_t::dump(Formatter *f) const

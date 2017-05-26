@@ -33,20 +33,19 @@ TEST(SimpleSpin, Test1)
   pthread_t thread1;
   pthread_t thread2;
   ret = pthread_create(&thread1, NULL, mythread, NULL);
-  ASSERT_EQ(ret, 0);
+  ASSERT_EQ(0, ret);
   ret = pthread_create(&thread2, NULL, mythread, NULL);
-  ASSERT_EQ(ret, 0);
+  ASSERT_EQ(0, ret);
   ret = pthread_join(thread1, NULL);
-  ASSERT_EQ(ret, 0);
+  ASSERT_EQ(0, ret);
   ret = pthread_join(thread2, NULL);
-  ASSERT_EQ(ret, 0);
-  ASSERT_EQ(counter, n);
+  ASSERT_EQ(0, ret);
+  ASSERT_EQ(n, counter);
 
 
   // Should also work with pass-by-reference:
   // (Note that we don't care about cross-threading here as-such.)
   counter = 0;
-  ASSERT_EQ(counter, 0);
   async(std::launch::async, []() {
         for(int i = 0; n != i; ++i) {
             simple_spin_lock(lock);
@@ -54,6 +53,6 @@ TEST(SimpleSpin, Test1)
             simple_spin_unlock(lock);
         }
        });
-  ASSERT_EQ(counter, n);
+  ASSERT_EQ(n, counter);
 }
 

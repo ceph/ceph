@@ -394,6 +394,7 @@ function test_tiering()
 
   # make sure we can't create an ec pool tier
   ceph osd pool create eccache 2 2 erasure
+  expect_false ceph osd set-require-min-compat-client bobtail
   ceph osd pool create repbase 2
   expect_false ceph osd tier add repbase eccache
   ceph osd pool delete repbase repbase --yes-i-really-really-mean-it
@@ -1131,6 +1132,12 @@ function test_mon_osd()
   ceph osd crush get-tunable straw_calc_version | grep 0
   ceph osd crush set-tunable straw_calc_version 1
   ceph osd crush get-tunable straw_calc_version | grep 1
+
+  #
+  # require-min-compat-client
+  expect_false ceph osd set-require-min-compat-client dumpling  # firefly tunables
+  ceph osd set-require-min-compat-client luminous
+  ceph osd dump | grep 'require_min_compat_client luminous'
 
   #
   # osd scrub

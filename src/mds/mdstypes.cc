@@ -244,7 +244,7 @@ void inline_data_t::decode(bufferlist::iterator &p)
  */
 void inode_t::encode(bufferlist &bl, uint64_t features) const
 {
-  ENCODE_START(14, 6, bl);
+  ENCODE_START(15, 6, bl);
 
   ::encode(ino, bl);
   ::encode(rdev, bl);
@@ -294,12 +294,14 @@ void inode_t::encode(bufferlist &bl, uint64_t features) const
   ::encode(btime, bl);
   ::encode(change_attr, bl);
 
+  ::encode(export_pin, bl);
+
   ENCODE_FINISH(bl);
 }
 
 void inode_t::decode(bufferlist::iterator &p)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(14, 6, 6, p);
+  DECODE_START_LEGACY_COMPAT_LEN(15, 6, 6, p);
 
   ::decode(ino, p);
   ::decode(rdev, p);
@@ -380,6 +382,12 @@ void inode_t::decode(bufferlist::iterator &p)
     change_attr = 0;
   }
 
+  if (struct_v >= 15) {
+    ::decode(export_pin, p);
+  } else {
+    export_pin = MDS_RANK_NONE;
+  }
+
   DECODE_FINISH(p);
 }
 
@@ -416,6 +424,7 @@ void inode_t::dump(Formatter *f) const
   f->dump_stream("atime") << atime;
   f->dump_unsigned("time_warp_seq", time_warp_seq);
   f->dump_unsigned("change_attr", change_attr);
+  f->dump_int("export_pin", export_pin);
 
   f->open_array_section("client_ranges");
   for (map<client_t,client_writeable_range_t>::const_iterator p = client_ranges.begin(); p != client_ranges.end(); ++p) {

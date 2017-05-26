@@ -1176,7 +1176,9 @@ int ObjBencher::clean_up(int num_objects, int prevPid, int concurrentios) {
   lock.Unlock();
 
   // don't start more completions than files
-  if (num_objects < concurrentios) {
+  if (num_objects == 0) {
+    return 0;
+  } else if (num_objects < concurrentios) {
     concurrentios = num_objects;
   }
 

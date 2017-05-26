@@ -42,6 +42,13 @@ add_executable(unittest_prioritized_queue
 add_ceph_unittest(unittest_prioritized_queue ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_prioritized_queue)
 target_link_libraries(unittest_prioritized_queue global ${BLKID_LIBRARIES})
 
+# unittest_mclock_priority_queue
+add_executable(unittest_mclock_priority_queue EXCLUDE_FROM_ALL
+  test_mclock_priority_queue.cc
+  )
+add_ceph_unittest(unittest_mclock_priority_queue ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_mclock_priority_queue)
+target_link_libraries(unittest_mclock_priority_queue global ${BLKID_LIBRARIES} dmclock)
+
 # unittest_str_map
 add_executable(unittest_str_map
   test_str_map.cc
@@ -138,6 +145,13 @@ add_executable(unittest_safe_io
   )
 add_ceph_unittest(unittest_safe_io ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_safe_io)
 target_link_libraries(unittest_safe_io global)
+
+# unittest_url_escape
+add_executable(unittest_url_escape
+  test_url_escape.cc
+  )
+add_ceph_unittest(unittest_url_escape ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_url_escape)
+target_link_libraries(unittest_url_escape ceph-common)
 
 # unittest_readahead
 add_executable(unittest_readahead

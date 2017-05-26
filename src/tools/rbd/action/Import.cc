@@ -871,13 +871,19 @@ int execute(const po::variables_map &vm) {
 
   std::string deprecated_image_name;
   if (vm.count(at::IMAGE_NAME)) {
-    utils::extract_spec(vm[at::IMAGE_NAME].as<std::string>(),
-                        &deprecated_pool_name, &deprecated_image_name, nullptr,
-                        utils::SPEC_VALIDATION_FULL);
+    deprecated_image_name = vm[at::IMAGE_NAME].as<std::string>();
     std::cerr << "rbd: --image is deprecated for import, use --dest"
               << std::endl;
   } else {
     deprecated_image_name = path.substr(path.find_last_of("/") + 1);
+  }
+
+  std::string deprecated_snap_name;
+  r = utils::extract_spec(deprecated_image_name, &deprecated_pool_name,
+                          &deprecated_image_name, &deprecated_snap_name,
+                          utils::SPEC_VALIDATION_FULL);
+  if (r < 0) {
+    return r;
   }
 
   size_t sparse_size = utils::RBD_DEFAULT_SPARSE_SIZE;
@@ -888,7 +894,7 @@ int execute(const po::variables_map &vm) {
   size_t arg_index = 1;
   std::string pool_name = deprecated_pool_name;
   std::string image_name;
-  std::string snap_name;
+  std::string snap_name = deprecated_snap_name;
   r = utils::get_pool_image_snapshot_names(
     vm, at::ARGUMENT_MODIFIER_DEST, &arg_index, &pool_name, &image_name,
     &snap_name, utils::SNAPSHOT_PRESENCE_NONE, utils::SPEC_VALIDATION_FULL,

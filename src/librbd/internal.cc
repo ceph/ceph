@@ -1045,7 +1045,8 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
   }
 
   int get_parent_info(ImageCtx *ictx, string *parent_pool_name,
-		      string *parent_name, string *parent_snap_name)
+                      string *parent_name, string *parent_id,
+                      string *parent_snap_name)
   {
     int r = ictx->state->refresh_if_required();
     if (r < 0)
@@ -1064,7 +1065,8 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
     } else {
       r = ictx->get_parent_spec(ictx->snap_id, &parent_spec);
       if (r < 0) {
-	lderr(ictx->cct) << "Can't find snapshot id = " << ictx->snap_id << dendl;
+	lderr(ictx->cct) << "Can't find snapshot id = " << ictx->snap_id
+                         << dendl;
 	return r;
       }
       if (parent_spec.pool_id == -1)
@@ -1093,13 +1095,11 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
     }
 
     if (parent_name) {
-      r = cls_client::dir_get_name(&ictx->parent->md_ctx, RBD_DIRECTORY,
-				   parent_spec.image_id, parent_name);
-      if (r < 0) {
-	lderr(ictx->cct) << "error getting parent image name: "
-			 << cpp_strerror(r) << dendl;
-	return r;
-      }
+      RWLock::RLocker snap_locker(ictx->parent->snap_lock);
+      *parent_name = ictx->parent->name;
+    }
+    if (parent_id) {
+      *parent_id = ictx->parent->id;
     }
 
     return 0;
@@ -1350,10 +1350,21 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
     ImageCtx *ictx = new ImageCtx(image_name, "", nullptr, io_ctx, false);
     int r = ictx->state->open(true);
     if (r < 0) {
-      ldout(cct, 2) << "error opening image: " << cpp_strerror(-r) << dendl;
-      delete ictx;
+      ictx = nullptr;
+
       if (r != -ENOENT) {
-	return r;
+        ldout(cct, 2) << "error opening image: " << cpp_strerror(-r) << dendl;
+        return r;
+      }
+
+      // try to get image id from the directory
+      r = cls_client::dir_get_id(&io_ctx, RBD_DIRECTORY, image_name, &image_id);
+      if (r < 0) {
+        if (r != -ENOENT) {
+          ldout(cct, 2) << "error reading image id from dirctory: "
+                        << cpp_strerror(-r) << dendl;
+        }
+        return r;
       }
     } else {
       if (ictx->old_format) {
@@ -1376,6 +1387,9 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
     }
 
     BOOST_SCOPE_EXIT_ALL(ictx, cct) {
+      if (ictx == nullptr)
+        return;
+
       bool is_locked = ictx->exclusive_lock != nullptr &&
                        ictx->exclusive_lock->is_lock_owner();
       if (is_locked) {
@@ -1430,6 +1444,28 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
       return r;
     }
 
+    return 0;
+  }
+
+  int trash_get(IoCtx &io_ctx, const std::string &id,
+                trash_image_info_t *info) {
+    CephContext *cct((CephContext *)io_ctx.cct());
+    ldout(cct, 20) << __func__ << " " << &io_ctx << dendl;
+
+    cls::rbd::TrashImageSpec spec;
+    int r = cls_client::trash_get(&io_ctx, id, &spec);
+    if (r == -ENOENT) {
+      return r;
+    } else if (r < 0) {
+      lderr(cct) << "error retrieving trash entry: " << cpp_strerror(r)
+                 << dendl;
+      return r;
+    }
+
+    rbd_trash_image_source_t source = static_cast<rbd_trash_image_source_t>(
+      spec.source);
+    *info = trash_image_info_t{id, spec.name, source, spec.deletion_time.sec(),
+                               spec.deferment_end_time.sec()};
     return 0;
   }
 

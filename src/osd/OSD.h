@@ -25,6 +25,7 @@
 #include "common/WorkQueue.h"
 #include "common/AsyncReserver.h"
 #include "common/ceph_context.h"
+#include "common/zipkin_trace.h"
 
 #include "mgr/MgrClient.h"
 
@@ -39,6 +40,8 @@
 #include "OpRequest.h"
 #include "Session.h"
 
+#include "osd/PGQueueable.h"
+
 #include <atomic>
 #include <map>
 #include <memory>
@@ -52,6 +55,8 @@ using namespace std;
 #include "common/sharedptr_registry.hpp"
 #include "common/WeightedPriorityQueue.h"
 #include "common/PrioritizedQueue.h"
+#include "osd/mClockOpClassQueue.h"
+#include "osd/mClockClientQueue.h"
 #include "messages/MOSDOp.h"
 #include "include/Spinlock.h"
 #include "common/EventTrace.h"
@@ -113,6 +118,7 @@ enum {
   l_osd_history_alloc_num,
   l_osd_cached_crc,
   l_osd_cached_crc_adjusted,
+  l_osd_missed_crc,
 
   l_osd_pg,
   l_osd_pg_primary,
@@ -333,123 +339,6 @@ typedef ceph::shared_ptr<DeletingState> DeletingStateRef;
 
 class OSD;
 
-struct PGScrub {
-  epoch_t epoch_queued;
-  explicit PGScrub(epoch_t e) : epoch_queued(e) {}
-  ostream &operator<<(ostream &rhs) {
-    return rhs << "PGScrub";
-  }
-};
-
-struct PGSnapTrim {
-  epoch_t epoch_queued;
-  explicit PGSnapTrim(epoch_t e) : epoch_queued(e) {}
-  ostream &operator<<(ostream &rhs) {
-    return rhs << "PGSnapTrim";
-  }
-};
-
-struct PGRecovery {
-  epoch_t epoch_queued;
-  uint64_t reserved_pushes;
-  PGRecovery(epoch_t e, uint64_t reserved_pushes)
-    : epoch_queued(e), reserved_pushes(reserved_pushes) {}
-  ostream &operator<<(ostream &rhs) {
-    return rhs << "PGRecovery(epoch=" << epoch_queued
-	       << ", reserved_pushes: " << reserved_pushes << ")";
-  }
-};
-
-class PGQueueable {
-  typedef boost::variant<
-    OpRequestRef,
-    PGSnapTrim,
-    PGScrub,
-    PGRecovery
-    > QVariant;
-  QVariant qvariant;
-  int cost; 
-  unsigned priority;
-  utime_t start_time;
-  entity_inst_t owner;
-  epoch_t map_epoch;    ///< an epoch we expect the PG to exist in
-
-  struct RunVis : public boost::static_visitor<> {
-    OSD *osd;
-    PGRef &pg;
-    ThreadPool::TPHandle &handle;
-    RunVis(OSD *osd, PGRef &pg, ThreadPool::TPHandle &handle)
-      : osd(osd), pg(pg), handle(handle) {}
-    void operator()(const OpRequestRef &op);
-    void operator()(const PGSnapTrim &op);
-    void operator()(const PGScrub &op);
-    void operator()(const PGRecovery &op);
-  };
-
-  struct StringifyVis : public boost::static_visitor<std::string> {
-    std::string operator()(const OpRequestRef &op) {
-      return stringify(op);
-    }
-    std::string operator()(const PGSnapTrim &op) {
-      return "PGSnapTrim";
-    }
-    std::string operator()(const PGScrub &op) {
-      return "PGScrub";
-    }
-    std::string operator()(const PGRecovery &op) {
-      return "PGRecovery";
-    }
-  };
-  friend ostream& operator<<(ostream& out, const PGQueueable& q) {
-    StringifyVis v;
-    return out << "PGQueueable(" << boost::apply_visitor(v, q.qvariant)
-	       << " prio " << q.priority << " cost " << q.cost
-	       << " e" << q.map_epoch << ")";
-  }
-
-public:
-  // cppcheck-suppress noExplicitConstructor
-  PGQueueable(OpRequestRef op, epoch_t e)
-    : qvariant(op), cost(op->get_req()->get_cost()),
-      priority(op->get_req()->get_priority()),
-      start_time(op->get_req()->get_recv_stamp()),
-      owner(op->get_req()->get_source_inst()),
-      map_epoch(e)
-    {}
-  PGQueueable(
-    const PGSnapTrim &op, int cost, unsigned priority, utime_t start_time,
-    const entity_inst_t &owner, epoch_t e)
-    : qvariant(op), cost(cost), priority(priority), start_time(start_time),
-      owner(owner), map_epoch(e) {}
-  PGQueueable(
-    const PGScrub &op, int cost, unsigned priority, utime_t start_time,
-    const entity_inst_t &owner, epoch_t e)
-    : qvariant(op), cost(cost), priority(priority), start_time(start_time),
-      owner(owner), map_epoch(e) {}
-  PGQueueable(
-    const PGRecovery &op, int cost, unsigned priority, utime_t start_time,
-    const entity_inst_t &owner, epoch_t e)
-    : qvariant(op), cost(cost), priority(priority), start_time(start_time),
-      owner(owner), map_epoch(e)  {}
-  const boost::optional<OpRequestRef> maybe_get_op() const {
-    const OpRequestRef *op = boost::get<OpRequestRef>(&qvariant);
-    return op ? OpRequestRef(*op) : boost::optional<OpRequestRef>();
-  }
-  uint64_t get_reserved_pushes() const {
-    const PGRecovery *op = boost::get<PGRecovery>(&qvariant);
-    return op ? op->reserved_pushes : 0;
-  }
-  void run(OSD *osd, PGRef &pg, ThreadPool::TPHandle &handle) {
-    RunVis v(osd, pg, handle);
-    boost::apply_visitor(v, qvariant);
-  }
-  unsigned get_priority() const { return priority; }
-  int get_cost() const { return cost; }
-  utime_t get_start_time() const { return start_time; }
-  entity_inst_t get_owner() const { return owner; }
-  epoch_t get_map_epoch() const { return map_epoch; }
-};
-
 class OSDService {
 public:
   OSD *osd;
@@ -471,7 +360,6 @@ public:
   MonClient   *&monc;
   ThreadPool::BatchWorkQueue<PG> &peering_wq;
   GenContextWQ recovery_gen_wq;
-  GenContextWQ op_gen_wq;
   ClassHandler  *&class_handler;
 
   void enqueue_back(spg_t pgid, PGQueueable qi);
@@ -1321,6 +1209,7 @@ protected:
   int whoami;
   std::string dev_path, journal_path;
 
+  ZTracer::Endpoint trace_endpoint;
   void create_logger();
   void create_recoverystate_perf();
   void tick();
@@ -1685,10 +1574,14 @@ private:
   friend struct C_OpenPGs;
 
   // -- op queue --
-  enum io_queue {
+  enum class io_queue {
     prioritized,
-    weightedpriority
+    weightedpriority,
+    mclock_opclass,
+    mclock_client,
   };
+  friend std::ostream& operator<<(std::ostream& out, const OSD::io_queue& q);
+
   const io_queue op_queue;
   const unsigned int op_prio_cutoff;
 
@@ -1713,6 +1606,7 @@ private:
    * and already requeued the items.
    */
   friend class PGQueueable;
+
   class ShardedOpWQ
     : public ShardedThreadPool::ShardedWQ<pair<spg_t,PGQueueable>>
   {
@@ -1765,19 +1659,25 @@ private:
 	: sdata_lock(lock_name.c_str(), false, true, false, cct),
 	  sdata_op_ordering_lock(ordering_lock.c_str(), false, true,
 				 false, cct) {
-	if (opqueue == weightedpriority) {
+	if (opqueue == io_queue::weightedpriority) {
 	  pqueue = std::unique_ptr
 	    <WeightedPriorityQueue<pair<spg_t,PGQueueable>,entity_inst_t>>(
 	      new WeightedPriorityQueue<pair<spg_t,PGQueueable>,entity_inst_t>(
 		max_tok_per_prio, min_cost));
-	} else if (opqueue == prioritized) {
+	} else if (opqueue == io_queue::prioritized) {
 	  pqueue = std::unique_ptr
 	    <PrioritizedQueue<pair<spg_t,PGQueueable>,entity_inst_t>>(
 	      new PrioritizedQueue<pair<spg_t,PGQueueable>,entity_inst_t>(
 		max_tok_per_prio, min_cost));
+	} else if (opqueue == io_queue::mclock_opclass) {
+	  pqueue = std::unique_ptr
+	    <ceph::mClockOpClassQueue>(new ceph::mClockOpClassQueue(cct));
+	} else if (opqueue == io_queue::mclock_client) {
+	  pqueue = std::unique_ptr
+	    <ceph::mClockClientQueue>(new ceph::mClockClientQueue(cct));
 	}
       }
-    };
+    }; // struct ShardData
 
     vector<ShardData*> shard_list;
     OSD *osd;
@@ -1968,7 +1868,7 @@ private:
   OSDMapRef get_osdmap() {
     return osdmap;
   }
-  epoch_t get_osdmap_epoch() {
+  epoch_t get_osdmap_epoch() const {
     return osdmap ? osdmap->get_epoch() : 0;
   }
 
@@ -2050,7 +1950,7 @@ protected:
     vector<int>& up, int up_primary,
     vector<int>& acting, int acting_primary,
     pg_history_t history,
-    const pg_interval_map_t& pi,
+    const PastIntervals& pi,
     ObjectStore::Transaction& t);
 
   PG* _make_pg(OSDMapRef createmap, spg_t pgid);
@@ -2060,12 +1960,20 @@ protected:
   int handle_pg_peering_evt(
     spg_t pgid,
     const pg_history_t& orig_history,
-    const pg_interval_map_t& pi,
+    const PastIntervals& pi,
     epoch_t epoch,
     PG::CephPeeringEvtRef evt);
   
   void load_pgs();
   void build_past_intervals_parallel();
+
+  /// build initial pg history and intervals on create
+  void build_initial_pg_history(
+    spg_t pgid,
+    epoch_t created,
+    utime_t created_stamp,
+    pg_history_t *h,
+    PastIntervals *pi);
 
   /// project pg history from from to now
   bool project_pg_history(
@@ -2202,13 +2110,13 @@ protected:
   void dispatch_context_transaction(PG::RecoveryCtx &ctx, PG *pg,
                                     ThreadPool::TPHandle *handle = NULL);
   void do_notifies(map<int,
-		       vector<pair<pg_notify_t, pg_interval_map_t> > >&
+		       vector<pair<pg_notify_t, PastIntervals> > >&
 		       notify_list,
 		   OSDMapRef map);
   void do_queries(map<int, map<spg_t,pg_query_t> >& query_map,
 		  OSDMapRef map);
   void do_infos(map<int,
-		    vector<pair<pg_notify_t, pg_interval_map_t> > >& info_map,
+		    vector<pair<pg_notify_t, PastIntervals> > >& info_map,
 		OSDMapRef map);
 
   bool require_mon_peer(const Message *m);
@@ -2346,7 +2254,7 @@ protected:
     }
   } remove_wq;
 
- private:
+private:
   bool ms_can_fast_dispatch_any() const override { return true; }
   bool ms_can_fast_dispatch(const Message *m) const override {
     switch (m->get_type()) {
@@ -2392,12 +2300,21 @@ protected:
 
   io_queue get_io_queue() const {
     if (cct->_conf->osd_op_queue == "debug_random") {
+      static io_queue index_lookup[] = { io_queue::prioritized,
+					 io_queue::weightedpriority,
+					 io_queue::mclock_opclass,
+					 io_queue::mclock_client };
       srand(time(NULL));
-      return (rand() % 2 < 1) ? prioritized : weightedpriority;
+      unsigned which = rand() % (sizeof(index_lookup) / sizeof(index_lookup[0]));
+      return index_lookup[which];
     } else if (cct->_conf->osd_op_queue == "wpq") {
-      return weightedpriority;
+      return io_queue::weightedpriority;
+    } else if (cct->_conf->osd_op_queue == "mclock_opclass") {
+      return io_queue::mclock_opclass;
+    } else if (cct->_conf->osd_op_queue == "mclock_client") {
+      return io_queue::mclock_client;
     } else {
-      return prioritized;
+      return io_queue::prioritized;
     }
   }
 
@@ -2482,9 +2399,13 @@ public:
   friend class OSDService;
 };
 
+
+std::ostream& operator<<(std::ostream& out, const OSD::io_queue& q);
+
+
 //compatibility of the executable
 extern const CompatSet::Feature ceph_osd_feature_compat[];
 extern const CompatSet::Feature ceph_osd_feature_ro_compat[];
 extern const CompatSet::Feature ceph_osd_feature_incompat[];
 
-#endif
+#endif // CEPH_OSD_H

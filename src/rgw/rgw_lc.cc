@@ -2,11 +2,13 @@
 #include <iostream>
 #include <map>
 
+#include <boost/algorithm/string/split.hpp>
+#include <boost/algorithm/string.hpp>
+
 #include "common/Formatter.h"
 #include <common/errno.h>
 #include "auth/Crypto.h"
 #include "cls/rgw/cls_rgw_client.h"
-#include "cls/refcount/cls_refcount_client.h"
 #include "cls/lock/cls_lock_client.h"
 #include "rgw_common.h"
 #include "rgw_bucket.h"
@@ -198,21 +200,6 @@ bool RGWLC::if_already_run_today(time_t& start_date)
     return false;
 }
 
-static std::vector<std::string> &split(const std::string &s, char delim, std::vector<std::string> &elems) {
-  std::stringstream ss(s);
-  std::string item;
-  while (std::getline(ss, item, delim)) {
-      elems.push_back(item);
-  }
-  return elems;
-}
-
-static std::vector<std::string> split(const std::string &s, char delim) {
-  std::vector<std::string> elems;
-  split(s, delim, elems);
-  return elems;
-}
-
 int RGWLC::bucket_lc_prepare(int index)
 {
   map<string, int > entries;
@@ -324,7 +311,7 @@ int RGWLC::bucket_lc_process(string& shard_id)
   vector<rgw_bucket_dir_entry> objs;
   RGWObjectCtx obj_ctx(store);
   vector<std::string> result;
-  result = split(shard_id, ':');
+  boost::split(result, shard_id, boost::is_any_of(":"));
   string bucket_tenant = result[0];
   string bucket_name = result[1];
   string bucket_id = result[2];
@@ -496,8 +483,7 @@ int RGWLC::bucket_lc_process(string& shard_id)
   return ret;
 }
 
-int RGWLC::bucket_lc_post(int index, int max_lock_sec, cls_rgw_lc_obj_head& head,
-                                                              pair<string, int >& entry, int& result)
+int RGWLC::bucket_lc_post(int index, int max_lock_sec, pair<string, int >& entry, int& result)
 {
   utime_t lock_duration(cct->_conf->rgw_lc_lock_max_time, 0);
 
@@ -637,7 +623,7 @@ int RGWLC::process(int index, int max_lock_secs)
     }
     l.unlock(&store->lc_pool_ctx, obj_names[index]);
     ret = bucket_lc_process(entry.first);
-    ret = bucket_lc_post(index, max_lock_secs, head, entry, ret);
+    bucket_lc_post(index, max_lock_secs, entry, ret);
     return 0;
 exit:
     l.unlock(&store->lc_pool_ctx, obj_names[index]);
@@ -655,7 +641,7 @@ void RGWLC::start_processor()
 
 void RGWLC::stop_processor()
 {
-  down_flag.set(1);
+  down_flag = true;
   if (worker) {
     worker->stop();
     worker->join();
@@ -672,7 +658,7 @@ void RGWLC::LCWorker::stop()
 
 bool RGWLC::going_down()
 {
-  return (down_flag.read() != 0);
+  return down_flag;
 }
 
 bool RGWLC::LCWorker::should_work(utime_t& now)

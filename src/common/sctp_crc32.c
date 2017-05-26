@@ -43,7 +43,7 @@ __FBSDID("$FreeBSD: src/sys/netinet/sctp_crc32.c,v 1.8 2007/05/08 17:01:10 rrs E
 
 #include <stdint.h>
 
-#include "include/byteorder.h"
+#include "acconfig.h"
 
 #ifndef SCTP_USE_ADLER32
 

@@ -69,7 +69,6 @@ static int do_show_info(librados::IoCtx &io_ctx, librbd::Image& image,
                         const std::string &snapname, Formatter *f)
 {
   librbd::image_info_t info;
-  std::string parent_pool, parent_name, parent_snapname;
   uint8_t old_format;
   uint64_t overlap, features, flags, snap_limit;
   bool snap_protected = false;
@@ -207,18 +206,33 @@ static int do_show_info(librados::IoCtx &io_ctx, librbd::Image& image,
   }
 
   // parent info, if present
-  if ((image.parent_info(&parent_pool, &parent_name, &parent_snapname) == 0) &&
+  std::string parent_pool, parent_name, parent_id, parent_snapname;
+  if ((image.parent_info2(&parent_pool, &parent_name, &parent_id,
+                          &parent_snapname) == 0) &&
       parent_name.length() > 0) {
+
+    librbd::trash_image_info_t trash_image_info;
+    librbd::RBD rbd;
+    r = rbd.trash_get(io_ctx, parent_id.c_str(), &trash_image_info);
+    bool trash_image_info_valid = (r == 0);
+
     if (f) {
       f->open_object_section("parent");
       f->dump_string("pool", parent_pool);
       f->dump_string("image", parent_name);
       f->dump_string("snapshot", parent_snapname);
+      if (trash_image_info_valid) {
+        f->dump_string("trash", parent_id);
+      }
       f->dump_unsigned("overlap", overlap);
       f->close_section();
     } else {
       std::cout << "\tparent: " << parent_pool << "/" << parent_name
-                << "@" << parent_snapname << std::endl;
+                << "@" << parent_snapname;
+      if (trash_image_info_valid) {
+        std::cout << " (trash " << parent_id << ")";
+      }
+      std::cout << std::endl;
       std::cout << "\toverlap: " << prettybyte_t(overlap) << std::endl;
     }
   }

@@ -56,6 +56,52 @@ struct denc_traits {
 //#include <iostream>
 //using std::cout;
 
+// Define this to compile in a dump of all encoded objects to disk to
+// populate ceph-object-corpus.  Note that there is an almost
+// identical implementation in encoding.h, but you only need to define
+// ENCODE_DUMP_PATH here.
+//
+// See src/test/encoding/generate-corpus-objects.sh.
+//
+//#define ENCODE_DUMP_PATH /tmp/something
+
+#ifdef ENCODE_DUMP_PATH
+# include <stdio.h>
+# include <sys/types.h>
+# include <sys/stat.h>
+# include <fcntl.h>
+# define ENCODE_STR(x) #x
+# define ENCODE_STRINGIFY(x) ENCODE_STR(x)
+# define DENC_DUMP_PRE(Type)			\
+  char *__denc_dump_pre = p.get_pos();
+  // this hackery with bits below is just to get a semi-reasonable
+  // distribution across time.  it is somewhat exponential but not
+  // quite.
+# define DENC_DUMP_POST(Type)			\
+  do {									\
+    static int i = 0;							\
+    i++;								\
+    int bits = 0;							\
+    for (unsigned t = i; t; bits++)					\
+      t &= t - 1;							\
+    if (bits > 2)							\
+      break;								\
+    char fn[PATH_MAX];							\
+    snprintf(fn, sizeof(fn),						\
+	     ENCODE_STRINGIFY(ENCODE_DUMP_PATH) "/%s__%d.%x", #Type,		\
+	     getpid(), i++);						\
+    int fd = ::open(fn, O_WRONLY|O_TRUNC|O_CREAT, 0644);		\
+    if (fd >= 0) {							\
+      size_t len = p.get_pos() - __denc_dump_pre;			\
+      int r = ::write(fd, __denc_dump_pre, len);			\
+      (void)r;								\
+      ::close(fd);							\
+    }									\
+  } while (0)
+#else
+# define DENC_DUMP_PRE(Type)
+# define DENC_DUMP_POST(Type)
+#endif
 
 
 /*
@@ -344,7 +390,7 @@ inline void denc_signed_varint_lowz(int64_t v,
     v = -v;
     negative = true;
   }
-  int lowznib = v ? (ctz(v) / 4) : 0;
+  unsigned lowznib = v ? (ctz(v) / 4) : 0u;
   if (lowznib > 3)
     lowznib = 3;
   v >>= lowznib * 4;
@@ -1511,7 +1557,9 @@ inline typename std::enable_if<traits::supported &&
     _denc_friend(*this, p);						\
   }									\
   void encode(bufferlist::contiguous_appender& p) const {		\
+    DENC_DUMP_PRE(Type);						\
     _denc_friend(*this, p);						\
+    DENC_DUMP_POST(Type);						\
   }									\
   void decode(buffer::ptr::iterator& p) {				\
     _denc_friend(*this, p);						\
@@ -1527,7 +1575,9 @@ inline typename std::enable_if<traits::supported &&
     _denc_friend(*this, p, f);						\
   }									\
   void encode(bufferlist::contiguous_appender& p, uint64_t f) const {	\
+    DENC_DUMP_PRE(Type);						\
     _denc_friend(*this, p, f);						\
+    DENC_DUMP_POST(Type);						\
   }									\
   void decode(buffer::ptr::iterator& p, uint64_t f=0) {			\
     _denc_friend(*this, p, f);						\

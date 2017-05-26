@@ -66,9 +66,6 @@ public:
 };
 
 
-boost::pool<> CInode::pool(sizeof(CInode));
-boost::pool<> Capability::pool(sizeof(Capability));
-
 LockType CInode::versionlock_type(CEPH_LOCK_IVERSION);
 LockType CInode::authlock_type(CEPH_LOCK_IAUTH);
 LockType CInode::linklock_type(CEPH_LOCK_ILINK);
@@ -245,6 +242,10 @@ ostream& operator<<(ostream& out, const CInode& in)
   if (in.get_num_ref()) {
     out << " |";
     in.print_pin_set(out);
+  }
+
+  if (in.inode.export_pin != MDS_RANK_NONE) {
+    out << " export_pin=" << in.inode.export_pin;
   }
 
   out << " " << &in;
@@ -650,6 +651,8 @@ CDir *CInode::add_dirfrag(CDir *dir)
     dir->state_set(CDir::STATE_STICKY);
     dir->get(CDir::PIN_STICKY);
   }
+
+  maybe_export_pin();
 
   return dir;
 }
@@ -1543,6 +1546,7 @@ void CInode::encode_lock_state(int type, bufferlist& bl)
       ::encode(inode.ctime, bl);
       ::encode(inode.layout, bl, mdcache->mds->mdsmap->get_up_features());
       ::encode(inode.quota, bl);
+      ::encode(inode.export_pin, bl);
     }
     break;
   
@@ -1805,6 +1809,8 @@ void CInode::decode_lock_state(int type, bufferlist& bl)
       if (inode.ctime < tm) inode.ctime = tm;
       ::decode(inode.layout, p);
       ::decode(inode.quota, p);
+      ::decode(inode.export_pin, p);
+      maybe_export_pin();
     }
     break;
 
@@ -4398,5 +4404,110 @@ int64_t CInode::get_backtrace_pool() const
     // a pool
     assert(inode.layout.pool_id != -1);
     return inode.layout.pool_id;
+  }
+}
+
+class C_CInode_ExportPin : public MDSInternalContext {
+public:
+  explicit C_CInode_ExportPin(CInode *in) : MDSInternalContext(in->mdcache->mds), in(in) {
+    in->get(MDSCacheObject::PIN_PTRWAITER);
+  }
+  ~C_CInode_ExportPin() {
+    in->put(MDSCacheObject::PIN_PTRWAITER);
+  }
+
+  void finish(int r) override {
+    in->maybe_export_pin();
+  }
+private:
+  CInode *in;
+};
+
+void CInode::maybe_export_pin()
+{
+  if (g_conf->mds_bal_export_pin && is_dir() && is_normal()) {
+    mds_rank_t pin = get_export_pin(false);
+    dout(20) << "maybe_export_pin export_pin=" << pin << " on " << *this << dendl;
+    if (pin == mdcache->mds->get_nodeid()) {
+      for (auto it = dirfrags.begin(); it != dirfrags.end(); it++) {
+        CDir *cd = it->second;
+        dout(20) << "dirfrag: " << *cd << dendl;
+        if (cd->state_test(CDir::STATE_CREATING)) {
+          /* inode is not journaled yet */
+          cd->add_waiter(CDir::WAIT_CREATED, new C_CInode_ExportPin(this));
+          dout(15) << "aux subtree pin of " << *cd << " delayed for finished creation" << dendl;
+          continue;
+        }
+        if (cd->state_test(CDir::STATE_AUXSUBTREE)) continue;
+        CDir *subtree = mdcache->get_subtree_root(cd);
+        assert(subtree);
+        if (subtree->is_ambiguous_auth()) {
+          subtree->add_waiter(MDSCacheObject::WAIT_SINGLEAUTH, new C_CInode_ExportPin(this));
+          dout(15) << "aux subtree pin of " << *cd << " delayed for single auth on subtree " << *subtree << dendl;
+        } else if (subtree->is_auth()) {
+          assert(cd->is_auth());
+          if (subtree->is_frozen() || subtree->is_freezing()) {
+            subtree->add_waiter(MDSCacheObject::WAIT_UNFREEZE, new C_CInode_ExportPin(this));
+            dout(15) << "aux subtree pin of " << *cd << " delayed for unfreeze on subtree " << *subtree << dendl;
+          } else {
+            cd->state_set(CDir::STATE_AUXSUBTREE);
+            mdcache->adjust_subtree_auth(cd, mdcache->mds->get_nodeid());
+            dout(15) << "aux subtree pinned " << *cd << dendl;
+          }
+        } else {
+          assert(!cd->is_auth());
+          dout(15) << "not setting aux subtree pin for " << *cd << " because not auth" << dendl;
+        }
+      }
+    } else if (pin != MDS_RANK_NONE) {
+      for (auto it = dirfrags.begin(); it != dirfrags.end(); it++) {
+        CDir *cd = it->second;
+        if (cd->is_auth() && cd->state_test(CDir::STATE_AUXSUBTREE)) {
+          assert(!(cd->is_frozen() || cd->is_freezing()));
+          assert(!cd->state_test(CDir::STATE_EXPORTBOUND));
+          cd->state_clear(CDir::STATE_AUXSUBTREE); /* merge will happen eventually */
+          dout(15) << "cleared aux subtree pin " << *cd << dendl;
+        }
+      }
+      dout(20) << "adding to export_pin_queue " << *this << dendl;
+      mdcache->export_pin_queue.insert(this);
+    }
+  }
+}
+
+void CInode::set_export_pin(mds_rank_t rank)
+{
+  assert(is_dir());
+  assert(is_projected());
+  get_projected_inode()->export_pin = rank;
+  maybe_export_pin();
+}
+
+mds_rank_t CInode::get_export_pin(bool inherit) const
+{
+  /* An inode that is export pinned may not necessarily be a subtree root, we
+   * need to traverse the parents. A base or system inode cannot be pinned.
+   * N.B. inodes not yet linked into a dir (i.e. anonymous inodes) will not
+   * have a parent yet.
+   */
+  for (const CInode *in = this; !in->is_base() && !in->is_system() && in->get_projected_parent_dn(); in = in->get_projected_parent_dn()->dir->inode) {
+    mds_rank_t pin = in->get_projected_inode()->export_pin;
+    if (pin >= 0) {
+      return pin;
+    }
+    if (!inherit) break;
+  }
+  return MDS_RANK_NONE;
+}
+
+bool CInode::is_exportable(mds_rank_t dest) const
+{
+  mds_rank_t pin = get_export_pin();
+  if (pin == dest) {
+    return true;
+  } else if (pin >= 0) {
+    return false;
+  } else {
+    return true;
   }
 }

@@ -33,6 +33,7 @@
 #include <sys/socket.h>
 
 #include <iostream>
+#include <fstream>
 #include <boost/regex.hpp>
 
 #include "mon/MonClient.h"
@@ -85,7 +86,7 @@ static int nbd = -1;
 #ifdef CEPH_BIG_ENDIAN
 #define ntohll(a) (a)
 #elif defined(CEPH_LITTLE_ENDIAN)
-#define ntohll(a) swab64(a)
+#define ntohll(a) swab(a)
 #else
 #error "Could not determine endianess"
 #endif
@@ -113,7 +114,6 @@ public:
   NBDServer(int _fd, librbd::Image& _image)
     : fd(_fd)
     , image(_image)
-    , terminated(false)
     , lock("NBDServer::Locker")
     , reader_thread(*this, &NBDServer::reader_entry)
     , writer_thread(*this, &NBDServer::writer_entry)
@@ -121,11 +121,12 @@ public:
   {}
 
 private:
-  atomic_t terminated;
+  std::atomic<bool> terminated = { false };
 
   void shutdown()
   {
-    if (terminated.compare_and_swap(false, true)) {
+    bool expected = false;
+    if (terminated.compare_exchange_strong(expected, true)) {
       ::shutdown(fd, SHUT_RDWR);
 
       Mutex::Locker l(lock);
@@ -172,7 +173,7 @@ private:
   IOContext *wait_io_finish()
   {
     Mutex::Locker l(lock);
-    while(io_finished.empty() && !terminated.read())
+    while(io_finished.empty() && !terminated)
       cond.Wait(lock);
 
     if (io_finished.empty())
@@ -234,7 +235,7 @@ private:
 
   void reader_entry()
   {
-    while (!terminated.read()) {
+    while (!terminated) {
       ceph::unique_ptr<IOContext> ctx(new IOContext());
       ctx->server = this;
 
@@ -309,7 +310,7 @@ private:
 
   void writer_entry()
   {
-    while (!terminated.read()) {
+    while (!terminated) {
       dout(20) << __func__ << ": waiting for io request" << dendl;
       ceph::unique_ptr<IOContext> ctx(wait_io_finish());
       if (!ctx) {
@@ -500,6 +501,10 @@ static int open_device(const char* path, bool try_load_module = false)
 
 static int check_device_size(int nbd_index, unsigned long expected_size)
 {
+  // There are bugs with some older kernel versions that result in an
+  // overflow for large image sizes. This check is to ensure we are
+  // not affected.
+
   unsigned long size = 0;
   std::string path = "/sys/block/nbd" + stringify(nbd_index) + "/size";
   std::ifstream ifs;
@@ -510,6 +515,12 @@ static int check_device_size(int nbd_index, unsigned long expected_size)
   }
   ifs >> size;
   size *= RBD_NBD_BLKSIZE;
+
+  if (size == 0) {
+    // Newer kernel versions will report real size only after nbd
+    // connect. Assume this is the case and return success.
+    return 0;
+  }
 
   if (size != expected_size) {
     cerr << "rbd-nbd: kernel reported invalid device size (" << size

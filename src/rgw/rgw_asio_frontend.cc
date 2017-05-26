@@ -7,13 +7,11 @@
 #include <vector>
 
 #include <boost/asio.hpp>
-#include <boost/optional.hpp>
+#include <boost/asio/spawn.hpp>
 
 #include <beast/core/placeholders.hpp>
-#include <beast/core/streambuf.hpp>
-#include <beast/http/empty_body.hpp>
-#include <beast/http/parse_error.hpp>
 #include <beast/http/read.hpp>
+#include <beast/http/string_body.hpp>
 #include <beast/http/write.hpp>
 
 #include "rgw_asio_frontend.h"
@@ -71,28 +69,47 @@ void Pauser::wait()
 
 using tcp = boost::asio::ip::tcp;
 
-class AsioConnection : public std::enable_shared_from_this<AsioConnection> {
-  RGWProcessEnv& env;
-  boost::asio::io_service::strand strand;
-  tcp::socket socket;
-  tcp::endpoint endpoint;
-  beast::streambuf buf;
-  beast::http::request_v1<RGWBufferlistBody> request;
+// coroutine to handle a client connection to completion
+static void handle_connection(RGWProcessEnv& env, tcp::socket socket,
+                              boost::asio::yield_context yield)
+{
+  auto cct = env.store->ctx();
+  boost::system::error_code ec;
 
- public:
-  void on_read(boost::system::error_code ec) {
-    auto cct = env.store->ctx();
-    if (ec) {
-      if (ec.category() == beast::http::get_parse_error_category()) {
-        ldout(cct, 1) << "parse failed: " << ec.message() << dendl;
-      } else {
-        ldout(cct, 1) << "read failed: " << ec.message() << dendl;
-      }
-      write_bad_request();
+  beast::flat_streambuf buffer{1024};
+
+  // read messages from the socket until eof
+  for (;;) {
+    // parse the header
+    rgw::asio::parser_type parser;
+    do {
+      auto bytes = beast::http::async_read_some(socket, buffer, parser, yield[ec]);
+      buffer.consume(bytes);
+    } while (!ec && !parser.got_header());
+
+    if (ec == boost::asio::error::connection_reset ||
+        ec == boost::asio::error::eof) {
       return;
     }
+    if (ec) {
+      auto& message = parser.get();
+      ldout(cct, 1) << "read failed: " << ec.message() << dendl;
+      ldout(cct, 1) << "====== req done http_status=400 ======" << dendl;
+      beast::http::response<beast::http::string_body> response;
+      response.status = 400;
+      response.reason = "Bad Request";
+      response.version = message.version == 10 ? 10 : 11;
+      beast::http::prepare(response);
+      beast::http::async_write(socket, std::move(response), yield[ec]);
+      // ignore ec
+      return;
+    }
+
+    // process the request
     RGWRequest req{env.store->get_new_req_id()};
-    RGWAsioClientIO real_client{std::move(socket), std::move(request)};
+
+    rgw::asio::ClientIO real_client{socket, parser, buffer};
+
     auto real_client_io = rgw::io::add_reordering(
                             rgw::io::add_buffering(
                               rgw::io::add_chunking(
@@ -101,40 +118,12 @@ class AsioConnection : public std::enable_shared_from_this<AsioConnection> {
     RGWRestfulIO client(&real_client_io);
     process_request(env.store, env.rest, &req, env.uri_prefix,
                     *env.auth_registry, &client, env.olog);
-  }
 
-  void write_bad_request() {
-    beast::http::response_v1<beast::http::empty_body> response;
-    response.status = 400;
-    response.reason = "Bad Request";
-    /* If the request is so terribly malformed that we can't extract even
-     * the protocol version, we will use HTTP/1.1 as a fallback. */
-    response.version = request.version ? request.version : 11;
-    beast::http::prepare(response);
-    beast::http::async_write(socket, std::move(response),
-                             std::bind(&AsioConnection::on_write,
-                                       shared_from_this(),
-                                       beast::asio::placeholders::error));
-  }
-
-  void on_write(boost::system::error_code ec) {
-    auto cct = env.store->ctx();
-    if (ec) {
-      ldout(cct, 1) << "write failed: " << ec.message() << dendl;
+    if (real_client.get_conn_close()) {
+      return;
     }
   }
-
- public:
-  AsioConnection(RGWProcessEnv& env, tcp::socket&& socket)
-    : env(env), strand(socket.get_io_service()), socket(std::move(socket))
-  {}
-
-  void read() {
-    beast::http::async_read(socket, buf, request, strand.wrap(
-            std::bind(&AsioConnection::on_read, shared_from_this(),
-                      beast::asio::placeholders::error)));
-  }
-};
+}
 
 class AsioFrontend {
   RGWProcessEnv env;
@@ -168,9 +157,19 @@ int AsioFrontend::init()
   auto ep = tcp::endpoint{tcp::v4(), static_cast<unsigned short>(env.port)};
   ldout(ctx(), 4) << "frontend listening on " << ep << dendl;
 
-  acceptor.open(ep.protocol());
+  boost::system::error_code ec;
+  acceptor.open(ep.protocol(), ec);
+  if (ec) {
+    lderr(ctx()) << "failed to open socket: " << ec.message() << dendl;
+    return -ec.value();
+  }
   acceptor.set_option(tcp::acceptor::reuse_address(true));
-  acceptor.bind(ep);
+  acceptor.bind(ep, ec);
+  if (ec) {
+    lderr(ctx()) << "failed to bind address " << ep <<
+        ": " << ec.message() << dendl;
+    return -ec.value();
+  }
   acceptor.listen(boost::asio::socket_base::max_connections);
   acceptor.async_accept(peer_socket,
                         [this] (boost::system::error_code ec) {
@@ -189,13 +188,15 @@ void AsioFrontend::accept(boost::system::error_code ec)
     throw ec;
   }
   auto socket = std::move(peer_socket);
-
+  // spawn a coroutine to handle the connection
+  boost::asio::spawn(service,
+                     [&] (boost::asio::yield_context yield) {
+                       handle_connection(env, std::move(socket), yield);
+                     });
   acceptor.async_accept(peer_socket,
                         [this] (boost::system::error_code ec) {
                           return accept(ec);
                         });
-
-  std::make_shared<AsioConnection>(env, std::move(socket))->read();
 }
 
 int AsioFrontend::run()

@@ -162,6 +162,7 @@ void SnapMapper::clear_snaps(
   const hobject_t &oid,
   MapCacher::Transaction<std::string, bufferlist> *t)
 {
+  dout(20) << __func__ << " " << oid << dendl;
   assert(check(oid));
   set<string> to_remove;
   to_remove.insert(to_object_key(oid));
@@ -178,6 +179,7 @@ void SnapMapper::set_snaps(
   bufferlist bl;
   ::encode(in, bl);
   to_set[to_object_key(oid)] = bl;
+  dout(20) << __func__ << " " << oid << " " << in.snaps << dendl;
   backend.set_keys(to_set, t);
 }
 
@@ -297,6 +299,7 @@ int SnapMapper::_remove_oid(
   const hobject_t &oid,
   MapCacher::Transaction<std::string, bufferlist> *t)
 {
+  dout(20) << __func__ << " " << oid << dendl;
   object_snaps out;
   int r = get_snaps(oid, &out);
   if (r < 0)

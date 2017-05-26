@@ -1861,9 +1861,8 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
 
   // open rados
   ret = rados.init_with_context(g_ceph_context);
-  if (ret) {
+  if (ret < 0) {
      cerr << "couldn't initialize rados: " << cpp_strerror(ret) << std::endl;
-     ret = -1;
      goto out;
   }
 

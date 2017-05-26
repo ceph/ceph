@@ -603,6 +603,10 @@ COMMAND("osd set-nearfull-ratio " \
 	"name=ratio,type=CephFloat,range=0.0|1.0", \
 	"set usage ratio at which OSDs are marked near-full",
 	"osd", "rw", "cli,rest")
+COMMAND("osd set-require-min-compat-client " \
+	"name=version,type=CephString",
+	"set the minimum client version we will maintain compatibility with",
+	"osd", "rw", "cli,rest")
 COMMAND("osd pause", "pause osd", "osd", "rw", "cli,rest")
 COMMAND("osd unpause", "unpause osd", "osd", "rw", "cli,rest")
 COMMAND("osd erasure-code-profile set " \
@@ -727,7 +731,7 @@ COMMAND("osd pool delete " \
 COMMAND("osd pool rm " \
 	"name=pool,type=CephPoolname " \
 	"name=pool2,type=CephPoolname,req=false " \
-	"name=sure,type=CephChoices,strings=--yes-i-really-really-mean-it,req=false", \
+	"name=sure,type=CephString,req=false", \
 	"remove pool", \
 	"osd", "rw", "cli,rest")
 COMMAND("osd pool rename " \
@@ -824,6 +828,7 @@ COMMAND("config-key exists " \
 	"name=key,type=CephString", \
 	"check for <key>'s existence", "config-key", "r", "cli,rest")
 COMMAND("config-key list ", "list keys", "config-key", "r", "cli,rest")
+COMMAND("config-key dump", "dump keys and values", "config-key", "r", "cli,rest")
 
 
 /*

@@ -811,10 +811,15 @@ void io_complete(void *t, const struct spdk_nvme_cpl *completion)
              << queue->queue_op_seq - queue->completed_op_seq << dendl;
     // check waiting count before doing callback (which may
     // destroy this ioc).
-    if (!--ctx->num_running) {
-      ctx->aio_wake();
-      if (task->device->aio_callback && ctx->priv) {
+    if (ctx->priv) {
+      if (!--ctx->num_running) {
         task->device->aio_callback(task->device->aio_callback_priv, ctx->priv);
+      }
+    } else {
+      if (ctx->num_running == 1) {
+	ctx->aio_wake();
+      } else {
+	--ctx->num_running;
       }
     }
     task->release_segs(queue);
@@ -827,16 +832,21 @@ void io_complete(void *t, const struct spdk_nvme_cpl *completion)
     task->release_segs(queue);
     // read submitted by AIO
     if(!task->return_code) {
-      if (!--ctx->num_running) {
-        ctx->aio_wake();
-        if (task->device->aio_callback && ctx->priv) {
+      if (ctx->priv) {
+	if (!--ctx->num_running) {
           task->device->aio_callback(task->device->aio_callback_priv, ctx->priv);
-        }
+	}
+      } else {
+	if (ctx->num_running == 1) {
+	  ctx->aio_wake();
+	} else {
+	  --ctx->num_running;
+	}
       }
       delete task;
     } else {
       task->return_code = 0;
-      if(!--ctx->num_reading) {
+      if (!--ctx->num_running) {
         task->io_wake();
       }
     }
@@ -846,7 +856,6 @@ void io_complete(void *t, const struct spdk_nvme_cpl *completion)
     queue->logger->tinc(l_bluestore_nvmedevice_flush_lat, dur);
     dout(20) << __func__ << " flush op successfully" << dendl;
     task->return_code = 0;
-    ctx->aio_wake();
   }
 }
 
@@ -1024,6 +1033,15 @@ int NVMEDevice::aio_write(
   return 0;
 }
 
+int NVMEDevice::write(uint64_t off, bufferlist &bl, bool buffered)
+{
+  // FIXME: there is presumably a more efficient way to do this...
+  IOContext ioc(NULL);
+  aio_write(off, bl, &ioc, buffered);
+  ioc.aio_wait();
+  return 0;
+}
+
 int NVMEDevice::read(uint64_t off, uint64_t len, bufferlist *pbl,
                      IOContext *ioc,
                      bool buffered)
@@ -1043,7 +1061,7 @@ int NVMEDevice::read(uint64_t off, uint64_t len, bufferlist *pbl,
   t->fill_cb = [buf, t]() {
     t->copy_to_buf(buf, 0, t->len);
   };
-  ++ioc->num_reading;
+  ++ioc->num_running;
   if(queue_id == -1)
     queue_id = ceph_gettid();
   driver->get_queue(queue_id)->queue_task(t);
@@ -1109,7 +1127,7 @@ int NVMEDevice::read_random(uint64_t off, uint64_t len, char *buf, bool buffered
   t->fill_cb = [buf, t, off, len]() {
     t->copy_to_buf(buf, off-t->offset, len);
   };
-  ++ioc.num_reading;
+  ++ioc.num_running;
   if(queue_id == -1)
     queue_id = ceph_gettid();
   driver->get_queue(queue_id)->queue_task(t);

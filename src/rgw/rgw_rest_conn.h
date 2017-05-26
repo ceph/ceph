@@ -9,6 +9,7 @@
 #include "common/ceph_json.h"
 #include "common/RefCountedObj.h"
 
+#include <atomic>
 
 class CephContext;
 class RGWRados;
@@ -55,11 +56,15 @@ class RGWRESTConn
   RGWAccessKey key;
   string self_zone_group;
   string remote_id;
-  atomic_t counter;
+  std::atomic<int64_t> counter = { 0 };
 
 public:
 
   RGWRESTConn(CephContext *_cct, RGWRados *store, const string& _remote_id, const list<string>& endpoints);
+  // custom move needed for atomic
+  RGWRESTConn(RGWRESTConn&& other);
+  RGWRESTConn& operator=(RGWRESTConn&& other);
+
   int get_url(string& endpoint);
   string get_url();
   const string& get_self_zonegroup() {

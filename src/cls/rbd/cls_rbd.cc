@@ -1554,6 +1554,12 @@ int snapshot_add(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
     return -EINVAL;
   }
 
+  if (boost::get<cls::rbd::UnknownSnapshotNamespace>(
+        &snap_meta.snapshot_namespace.snapshot_namespace) != nullptr) {
+    CLS_ERR("Unknown snapshot namespace provided");
+    return -EINVAL;
+  }
+
   CLS_LOG(20, "snapshot_add name=%s id=%llu", snap_meta.name.c_str(),
 	 (unsigned long long)snap_meta.id.val);
 
@@ -1610,7 +1616,7 @@ int snapshot_add(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 
     total_read += vals.size();
     if (total_read >= snap_limit) {
-      CLS_ERR("Attempt to create snapshot over limit of %lu", snap_limit);
+      CLS_ERR("Attempt to create snapshot over limit of %" PRIu64, snap_limit);
       return -EDQUOT;
     }
 
@@ -2752,7 +2758,7 @@ int snapshot_get_limit(cls_method_context_t hctx, bufferlist *in,
     return r;
   }
 
-  CLS_LOG(20, "read snapshot limit %lu", snap_limit);
+  CLS_LOG(20, "read snapshot limit %" PRIu64, snap_limit);
   ::encode(snap_limit, *out);
 
   return 0;
@@ -2776,7 +2782,7 @@ int snapshot_set_limit(cls_method_context_t hctx, bufferlist *in,
     CLS_LOG(20, "remove snapshot limit\n");
     rc = cls_cxx_map_remove_key(hctx, "snap_limit");
   } else {
-    CLS_LOG(20, "set snapshot limit to %lu\n", new_limit);
+    CLS_LOG(20, "set snapshot limit to %" PRIu64 "\n", new_limit);
     ::encode(new_limit, bl);
     rc = cls_cxx_map_set_val(hctx, "snap_limit", &bl);
   }

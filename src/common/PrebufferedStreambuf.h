@@ -1,7 +1,6 @@
 #ifndef CEPH_COMMON_PREBUFFEREDSTREAMBUF_H
 #define CEPH_COMMON_PREBUFFEREDSTREAMBUF_H
 
-#include <iosfwd>
 #include <string>
 #include <streambuf>
 

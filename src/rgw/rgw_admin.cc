@@ -421,6 +421,7 @@ enum {
   OPT_METADATA_SYNC_INIT,
   OPT_METADATA_SYNC_RUN,
   OPT_MDLOG_LIST,
+  OPT_MDLOG_AUTOTRIM,
   OPT_MDLOG_TRIM,
   OPT_MDLOG_FETCH,
   OPT_MDLOG_STATUS,
@@ -819,6 +820,8 @@ static int get_cmd(const char *cmd, const char *prev_cmd, const char *prev_prev_
   } else if (strcmp(prev_cmd, "mdlog") == 0) {
     if (strcmp(cmd, "list") == 0)
       return OPT_MDLOG_LIST;
+    if (strcmp(cmd, "autotrim") == 0)
+      return OPT_MDLOG_AUTOTRIM;
     if (strcmp(cmd, "trim") == 0)
       return OPT_MDLOG_TRIM;
     if (strcmp(cmd, "fetch") == 0)
@@ -1511,32 +1514,46 @@ int do_check_object_locator(const string& tenant_name, const string& bucket_name
   return 0;
 }
 
+/// search for a matching zone/zonegroup id and return a connection if found
+static boost::optional<RGWRESTConn> get_remote_conn(RGWRados *store,
+                                                    const RGWZoneGroup& zonegroup,
+                                                    const std::string& remote)
+{
+  boost::optional<RGWRESTConn> conn;
+  if (remote == zonegroup.get_id()) {
+    conn.emplace(store->ctx(), store, remote, zonegroup.endpoints);
+  } else {
+    for (const auto& z : zonegroup.zones) {
+      const auto& zone = z.second;
+      if (remote == zone.id) {
+        conn.emplace(store->ctx(), store, remote, zone.endpoints);
+        break;
+      }
+    }
+  }
+  return conn;
+}
+
+/// search each zonegroup for a connection
+static boost::optional<RGWRESTConn> get_remote_conn(RGWRados *store,
+                                                    const RGWPeriodMap& period_map,
+                                                    const std::string& remote)
+{
+  boost::optional<RGWRESTConn> conn;
+  for (const auto& zg : period_map.zonegroups) {
+    conn = get_remote_conn(store, zg.second, remote);
+    if (conn) {
+      break;
+    }
+  }
+  return conn;
+}
+
 #define MAX_REST_RESPONSE (128 * 1024) // we expect a very small response
-static int send_to_remote_gateway(const string& remote, req_info& info,
+static int send_to_remote_gateway(RGWRESTConn* conn, req_info& info,
                                   bufferlist& in_data, JSONParser& parser)
 {
   bufferlist response;
-  RGWRESTConn *conn;
-  if (remote.empty()) {
-    if (!store->rest_master_conn) {
-      cerr << "Invalid rest master connection" << std::endl;
-      return -EINVAL;
-    }
-    conn = store->rest_master_conn;
-  } else {
-    // check zonegroups
-    auto iter = store->zonegroup_conn_map.find(remote);
-    if (iter == store->zonegroup_conn_map.end()) {
-      // check zones
-      iter = store->zone_conn_map.find(remote);
-      if (iter == store->zone_conn_map.end()) {
-        cerr << "could not find connection for zone or zonegroup id: "
-            << remote << std::endl;
-        return -ENOENT;
-      }
-    }
-    conn = iter->second;
-  }
   rgw_user user;
   int ret = conn->forward(user, info, NULL, MAX_REST_RESPONSE, &in_data, &response);
 
@@ -1574,20 +1591,21 @@ static int send_to_url(const string& url, const string& access,
   return ret;
 }
 
-static int send_to_remote_or_url(const string& remote, const string& url,
+static int send_to_remote_or_url(RGWRESTConn *conn, const string& url,
                                  const string& access, const string& secret,
                                  req_info& info, bufferlist& in_data,
                                  JSONParser& parser)
 {
   if (url.empty()) {
-    return send_to_remote_gateway(remote, info, in_data, parser);
+    return send_to_remote_gateway(conn, info, in_data, parser);
   }
   return send_to_url(url, access, secret, info, in_data, parser);
 }
 
 static int commit_period(RGWRealm& realm, RGWPeriod& period,
                          string remote, const string& url,
-                         const string& access, const string& secret)
+                         const string& access, const string& secret,
+                         bool force)
 {
   const string& master_zone = period.get_master_zone();
   if (master_zone.empty()) {
@@ -1605,7 +1623,7 @@ static int commit_period(RGWRealm& realm, RGWPeriod& period,
       return ret;
     }
     // the master zone can commit locally
-    ret = period.commit(realm, current_period, cerr);
+    ret = period.commit(realm, current_period, cerr, force);
     if (ret < 0) {
       cerr << "failed to commit period: " << cpp_strerror(-ret) << std::endl;
     }
@@ -1616,6 +1634,17 @@ static int commit_period(RGWRealm& realm, RGWPeriod& period,
     // use the new master zone's connection
     remote = master_zone;
     cout << "Sending period to new master zone " << remote << std::endl;
+  }
+  boost::optional<RGWRESTConn> conn;
+  RGWRESTConn *remote_conn = nullptr;
+  if (!remote.empty()) {
+    conn = get_remote_conn(store, period.get_map(), remote);
+    if (!conn) {
+      cerr << "failed to find a zone or zonegroup for remote "
+          << remote << std::endl;
+      return -ENOENT;
+    }
+    remote_conn = &*conn;
   }
 
   // push period to the master with an empty period id
@@ -1633,7 +1662,7 @@ static int commit_period(RGWRealm& realm, RGWPeriod& period,
   jf.flush(bl);
 
   JSONParser p;
-  int ret = send_to_remote_or_url(remote, url, access, secret, info, bl, p);
+  int ret = send_to_remote_or_url(remote_conn, url, access, secret, info, bl, p);
   if (ret < 0) {
     cerr << "request failed: " << cpp_strerror(-ret) << std::endl;
 
@@ -1682,7 +1711,7 @@ static int update_period(const string& realm_id, const string& realm_name,
                          const string& period_id, const string& period_epoch,
                          bool commit, const string& remote, const string& url,
                          const string& access, const string& secret,
-                         Formatter *formatter)
+                         Formatter *formatter, bool force)
 {
   RGWRealm realm(realm_id, realm_name);
   int ret = realm.init(g_ceph_context, store);
@@ -1713,7 +1742,7 @@ static int update_period(const string& realm_id, const string& realm_name,
     return ret;
   }
   if (commit) {
-    ret = commit_period(realm, period, remote, url, access, secret);
+    ret = commit_period(realm, period, remote, url, access, secret, force);
     if (ret < 0) {
       cerr << "failed to commit period: " << cpp_strerror(-ret) << std::endl;
       return ret;
@@ -1739,8 +1768,10 @@ static int init_bucket_for_sync(const string& tenant, const string& bucket_name,
   return 0;
 }
 
-static int do_period_pull(const string& remote, const string& url, const string& access_key, const string& secret_key,
-                          const string& realm_id, const string& realm_name, const string& period_id, const string& period_epoch,
+static int do_period_pull(RGWRESTConn *remote_conn, const string& url,
+                          const string& access_key, const string& secret_key,
+                          const string& realm_id, const string& realm_name,
+                          const string& period_id, const string& period_epoch,
                           RGWPeriod *period)
 {
   RGWEnv env;
@@ -1760,7 +1791,7 @@ static int do_period_pull(const string& remote, const string& url, const string&
 
   bufferlist bl;
   JSONParser p;
-  int ret = send_to_remote_or_url(remote, url, access_key, secret_key,
+  int ret = send_to_remote_or_url(remote_conn, url, access_key, secret_key,
                                   info, bl, p);
   if (ret < 0) {
     cerr << "request failed: " << cpp_strerror(-ret) << std::endl;
@@ -1826,13 +1857,12 @@ static void get_md_sync_status(list<string>& status)
     return;
   }
 
-  ret = sync.read_sync_status();
+  rgw_meta_sync_status sync_status;
+  ret = sync.read_sync_status(&sync_status);
   if (ret < 0) {
     status.push_back(string("failed to read sync status: ") + cpp_strerror(-ret));
     return;
   }
-
-  const rgw_meta_sync_status& sync_status = sync.get_sync_status();
 
   string status_str;
   switch (sync_status.sync_info.state) {
@@ -1912,7 +1942,8 @@ static void get_md_sync_status(list<string>& status)
         continue;
       }
       auto master_marker = iter->second.marker;
-      if (master_marker > local_iter.second.marker) {
+      if (local_iter.second.state == rgw_meta_sync_marker::SyncState::IncrementalSync &&
+          master_marker > local_iter.second.marker) {
         shards_behind[shard_id] = local_iter.second.marker;
       }
     }
@@ -2059,7 +2090,8 @@ static void get_data_sync_status(const string& source_zone, list<string>& status
       continue;
     }
     auto master_marker = iter->second.marker;
-    if (master_marker > local_iter.second.marker) {
+    if (local_iter.second.state == rgw_data_sync_marker::SyncState::IncrementalSync &&
+        master_marker > local_iter.second.marker) {
       shards_behind[shard_id] = local_iter.second.marker;
     }
   }
@@ -2905,9 +2937,6 @@ int main(int argc, const char **argv)
 
   // not a raw op if 'period update' needs to commit to master
   bool raw_period_update = opt_cmd == OPT_PERIOD_UPDATE && !commit;
-  // not a raw op if 'period pull' needs to look up remotes
-  bool raw_period_pull = opt_cmd == OPT_PERIOD_PULL && remote.empty() && !url.empty();
-
   std::set<int> raw_storage_ops_list = {OPT_ZONEGROUP_ADD, OPT_ZONEGROUP_CREATE, OPT_ZONEGROUP_DELETE,
 			 OPT_ZONEGROUP_GET, OPT_ZONEGROUP_LIST,
                          OPT_ZONEGROUP_SET, OPT_ZONEGROUP_DEFAULT,
@@ -2923,6 +2952,7 @@ int main(int argc, const char **argv)
 			 OPT_ZONE_PLACEMENT_MODIFY, OPT_ZONE_PLACEMENT_LIST,
 			 OPT_REALM_CREATE,
 			 OPT_PERIOD_DELETE, OPT_PERIOD_GET,
+			 OPT_PERIOD_PULL,
 			 OPT_PERIOD_GET_CURRENT, OPT_PERIOD_LIST,
 			 OPT_GLOBAL_QUOTA_GET, OPT_GLOBAL_QUOTA_SET,
 			 OPT_GLOBAL_QUOTA_ENABLE, OPT_GLOBAL_QUOTA_DISABLE,
@@ -2934,7 +2964,7 @@ int main(int argc, const char **argv)
 
 
   bool raw_storage_op = (raw_storage_ops_list.find(opt_cmd) != raw_storage_ops_list.end() ||
-                         raw_period_update || raw_period_pull);
+                         raw_period_update);
 
   if (raw_storage_op) {
     store = RGWStoreManager::get_raw_storage(g_ceph_context);
@@ -3040,20 +3070,45 @@ int main(int argc, const char **argv)
       {
         int ret = update_period(realm_id, realm_name, period_id, period_epoch,
                                 commit, remote, url, access_key, secret_key,
-                                formatter);
+                                formatter, yes_i_really_mean_it);
 	if (ret < 0) {
 	  return -ret;
 	}
       }
       break;
-    case OPT_PERIOD_PULL: // period pull --url
+    case OPT_PERIOD_PULL:
       {
+        boost::optional<RGWRESTConn> conn;
+        RGWRESTConn *remote_conn = nullptr;
         if (url.empty()) {
-          cerr << "A --url or --remote must be provided." << std::endl;
-          return EINVAL;
+          // load current period for endpoints
+          RGWRealm realm(realm_id, realm_name);
+          int ret = realm.init(g_ceph_context, store);
+          if (ret < 0) {
+            cerr << "failed to init realm: " << cpp_strerror(-ret) << std::endl;
+            return -ret;
+          }
+          RGWPeriod current_period(realm.get_current_period());
+          ret = current_period.init(g_ceph_context, store);
+          if (ret < 0) {
+            cerr << "failed to init current period: " << cpp_strerror(-ret) << std::endl;
+            return -ret;
+          }
+          if (remote.empty()) {
+            // use realm master zone as remote
+            remote = current_period.get_master_zone();
+          }
+          conn = get_remote_conn(store, current_period.get_map(), remote);
+          if (!conn) {
+            cerr << "failed to find a zone or zonegroup for remote "
+                << remote << std::endl;
+            return -ENOENT;
+          }
+          remote_conn = &*conn;
         }
+
         RGWPeriod period;
-        int ret = do_period_pull(remote, url, access_key, secret_key,
+        int ret = do_period_pull(remote_conn, url, access_key, secret_key,
                                  realm_id, realm_name, period_id, period_epoch,
                                  &period);
         if (ret < 0) {
@@ -3399,7 +3454,7 @@ int main(int argc, const char **argv)
         auto& current_period = realm.get_current_period();
         if (!current_period.empty()) {
           // pull the latest epoch of the realm's current period
-          ret = do_period_pull(remote, url, access_key, secret_key,
+          ret = do_period_pull(nullptr, url, access_key, secret_key,
                                realm_id, realm_name, current_period, "",
                                &period);
           if (ret < 0) {
@@ -3642,7 +3697,6 @@ int main(int argc, const char **argv)
         }
 
         if (need_update) {
-          zonegroup.post_process_params();
 	  ret = zonegroup.update();
 	  if (ret < 0) {
 	    cerr << "failed to update zonegroup: " << cpp_strerror(-ret) << std::endl;
@@ -4533,7 +4587,7 @@ int main(int argc, const char **argv)
       jf.flush(bl);
 
       JSONParser p;
-      ret = send_to_remote_or_url(remote, url, access_key, secret_key,
+      ret = send_to_remote_or_url(nullptr, url, access_key, secret_key,
                                   info, bl, p);
       if (ret < 0) {
         cerr << "request failed: " << cpp_strerror(-ret) << std::endl;
@@ -4541,43 +4595,11 @@ int main(int argc, const char **argv)
       }
     }
     return 0;
-  case OPT_PERIOD_PULL: // period pull --remote
-    {
-      if (remote.empty()) {
-	/* use realm master zonegroup as remote */
-	RGWRealm realm(realm_id, realm_name);
-	int ret = realm.init(g_ceph_context, store);
-	if (ret < 0) {
-	  cerr << "failed to init realm: " << cpp_strerror(-ret) << std::endl;
-	  return -ret;
-	}
-	RGWPeriod current_period(realm.get_current_period());
-	ret = current_period.init(g_ceph_context, store);
-	if (ret < 0) {
-	  cerr << "failed to init current period: " << cpp_strerror(-ret) << std::endl;
-	  return -ret;
-	}
-	remote = current_period.get_master_zonegroup();
-      }
-      RGWPeriod period;
-      int ret = do_period_pull(remote, url, access_key, secret_key,
-                               realm_id, realm_name, period_id, period_epoch,
-                               &period);
-      if (ret < 0) {
-        cerr << "period pull failed: " << cpp_strerror(-ret) << std::endl;
-        return -ret;
-      }
-
-      encode_json("period", period, formatter);
-      formatter->flush(cout);
-      cout << std::endl;
-    }
-    return 0;
   case OPT_PERIOD_UPDATE:
     {
       int ret = update_period(realm_id, realm_name, period_id, period_epoch,
                               commit, remote, url, access_key, secret_key,
-                              formatter);
+                              formatter, yes_i_really_mean_it);
       if (ret < 0) {
 	return -ret;
       }
@@ -4598,7 +4620,8 @@ int main(int argc, const char **argv)
         cerr << "period init failed: " << cpp_strerror(-ret) << std::endl;
         return -ret;
       }
-      ret = commit_period(realm, period, remote, url, access_key, secret_key);
+      ret = commit_period(realm, period, remote, url, access_key, secret_key,
+                          yes_i_really_mean_it);
       if (ret < 0) {
         cerr << "failed to commit period: " << cpp_strerror(-ret) << std::endl;
         return -ret;
@@ -6170,6 +6193,26 @@ next:
     formatter->flush(cout);
   }
 
+  if (opt_cmd == OPT_MDLOG_AUTOTRIM) {
+    // need a full history for purging old mdlog periods
+    store->meta_mgr->init_oldest_log_period();
+
+    RGWCoroutinesManager crs(store->ctx(), store->get_cr_registry());
+    RGWHTTPManager http(store->ctx(), crs.get_completion_mgr());
+    int ret = http.set_threaded();
+    if (ret < 0) {
+      cerr << "failed to initialize http client with " << cpp_strerror(ret) << std::endl;
+      return -ret;
+    }
+
+    auto num_shards = g_conf->rgw_md_log_max_shards;
+    ret = crs.run(create_admin_meta_log_trim_cr(store, &http, num_shards));
+    if (ret < 0) {
+      cerr << "automated mdlog trim failed with " << cpp_strerror(ret) << std::endl;
+      return -ret;
+    }
+  }
+
   if (opt_cmd == OPT_MDLOG_TRIM) {
     utime_t start_time, end_time;
 
@@ -6212,13 +6255,12 @@ next:
       return -ret;
     }
 
-    ret = sync.read_sync_status();
+    rgw_meta_sync_status sync_status;
+    ret = sync.read_sync_status(&sync_status);
     if (ret < 0) {
       cerr << "ERROR: sync.read_sync_status() returned ret=" << ret << std::endl;
       return -ret;
     }
-
-    const rgw_meta_sync_status& sync_status = sync.get_sync_status();
 
     formatter->open_object_section("summary");
     encode_json("sync_status", sync_status, formatter);
@@ -6255,7 +6297,7 @@ next:
     }
     ret = sync.init_sync_status();
     if (ret < 0) {
-      cerr << "ERROR: sync.get_sync_status() returned ret=" << ret << std::endl;
+      cerr << "ERROR: sync.init_sync_status() returned ret=" << ret << std::endl;
       return -ret;
     }
   }
@@ -6336,7 +6378,7 @@ next:
 
     ret = sync.init_sync_status();
     if (ret < 0) {
-      cerr << "ERROR: sync.get_sync_status() returned ret=" << ret << std::endl;
+      cerr << "ERROR: sync.init_sync_status() returned ret=" << ret << std::endl;
       return -ret;
     }
   }
@@ -6384,7 +6426,7 @@ next:
     }
     ret = sync.init_sync_status();
     if (ret < 0) {
-      cerr << "ERROR: sync.get_sync_status() returned ret=" << ret << std::endl;
+      cerr << "ERROR: sync.init_sync_status() returned ret=" << ret << std::endl;
       return -ret;
     }
   }

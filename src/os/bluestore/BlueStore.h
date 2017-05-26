@@ -47,6 +47,7 @@ class FreelistManager;
 class BlueFS;
 
 //#define DEBUG_CACHE
+//#define DEBUG_DEFERRED
 
 enum {
   l_bluestore_first = 732430,
@@ -133,6 +134,11 @@ public:
   struct BufferSpace;
   struct Collection;
   typedef boost::intrusive_ptr<Collection> CollectionRef;
+
+  struct AioContext {
+    virtual void aio_finish(BlueStore *store) = 0;
+    virtual ~AioContext() {}
+  };
 
   /// cached buffer
   struct Buffer {
@@ -982,7 +988,6 @@ public:
     std::atomic<int> flushing_count = {0};
     std::mutex flush_lock;  ///< protect flush_txns
     std::condition_variable flush_cond;   ///< wait here for uncommitted txns
-    set<TransContext*> flush_txns;        ///< unapplied txns
 
     Onode(Collection *c, const ghobject_t& o,
 	  const mempool::bluestore_meta_other::string& k)
@@ -1369,7 +1374,7 @@ public:
   class OpSequencer;
   typedef boost::intrusive_ptr<OpSequencer> OpSequencerRef;
 
-  struct TransContext {
+  struct TransContext : public AioContext {
     typedef enum {
       STATE_PREPARE,
       STATE_AIO_WAIT,
@@ -1377,8 +1382,7 @@ public:
       STATE_KV_QUEUED,     // queued for kv_sync_thread submission
       STATE_KV_SUBMITTED,  // submitted to kv; not yet synced
       STATE_KV_DONE,
-      STATE_DEFERRED_QUEUED,    // in deferred_queue
-      STATE_DEFERRED_AIO_WAIT,  // aio in flight, waiting for completion
+      STATE_DEFERRED_QUEUED,    // in deferred_queue (pending or running)
       STATE_DEFERRED_CLEANUP,   // remove deferred kv record
       STATE_DEFERRED_DONE,
       STATE_FINISHING,
@@ -1396,7 +1400,6 @@ public:
       case STATE_KV_SUBMITTED: return "kv_submitted";
       case STATE_KV_DONE: return "kv_done";
       case STATE_DEFERRED_QUEUED: return "deferred_queued";
-      case STATE_DEFERRED_AIO_WAIT: return "deferred_aio_wait";
       case STATE_DEFERRED_CLEANUP: return "deferred_cleanup";
       case STATE_DEFERRED_DONE: return "deferred_done";
       case STATE_FINISHING: return "finishing";
@@ -1415,7 +1418,6 @@ public:
       case l_bluestore_state_kv_committing_lat: return "kv_committing";
       case l_bluestore_state_kv_done_lat: return "kv_done";
       case l_bluestore_state_deferred_queued_lat: return "deferred_queued";
-      case l_bluestore_state_deferred_aio_wait_lat: return "deferred_aio_wait";
       case l_bluestore_state_deferred_cleanup_lat: return "deferred_cleanup";
       case l_bluestore_state_finishing_lat: return "finishing";
       case l_bluestore_state_done_lat: return "done";
@@ -1547,6 +1549,45 @@ public:
       onodes.erase(o);
       modified_objects.erase(o);
     }
+
+    void aio_finish(BlueStore *store) override {
+      store->txc_aio_finish(this);
+    }
+  };
+
+  typedef boost::intrusive::list<
+    TransContext,
+    boost::intrusive::member_hook<
+      TransContext,
+      boost::intrusive::list_member_hook<>,
+      &TransContext::deferred_queue_item> > deferred_queue_t;
+
+  struct DeferredBatch : public AioContext {
+    OpSequencer *osr;
+    struct deferred_io {
+      bufferlist bl;    ///< data
+      uint64_t seq;     ///< deferred transaction seq
+    };
+    map<uint64_t,deferred_io> iomap; ///< map of ios in this batch
+    deferred_queue_t txcs;           ///< txcs in this batch
+    IOContext ioc;                   ///< our aios
+    /// bytes of pending io for each deferred seq (may be 0)
+    map<uint64_t,int> seq_bytes;
+
+    void _discard(CephContext *cct, uint64_t offset, uint64_t length);
+    void _audit(CephContext *cct);
+
+    DeferredBatch(CephContext *cct, OpSequencer *osr)
+      : osr(osr), ioc(cct, this) {}
+
+    /// prepare a write
+    void prepare_write(CephContext *cct,
+		       uint64_t seq, uint64_t offset, uint64_t length,
+		       bufferlist::const_iterator& p);
+
+    void aio_finish(BlueStore *store) override {
+      store->_deferred_aio_finish(osr);
+    }
   };
 
   class OpSequencer : public Sequencer_impl {
@@ -1561,18 +1602,10 @@ public:
 	&TransContext::sequencer_item> > q_list_t;
     q_list_t q;  ///< transactions
 
-    typedef boost::intrusive::list<
-      TransContext,
-      boost::intrusive::member_hook<
-	TransContext,
-	boost::intrusive::list_member_hook<>,
-	&TransContext::deferred_queue_item> > deferred_queue_t;
-    deferred_queue_t deferred_pending;      ///< waiting
-    deferred_queue_t deferred_running;      ///< in flight ios
-    interval_set<uint64_t> deferred_blocks; ///< blocks in flight
-    TransContext *deferred_txc;             ///< txc carrying this batch
-
     boost::intrusive::list_member_hook<> deferred_osr_queue_item;
+
+    DeferredBatch *deferred_running = nullptr;
+    DeferredBatch *deferred_pending = nullptr;
 
     Sequencer *parent;
     BlueStore *store;
@@ -1601,7 +1634,7 @@ public:
     void discard() override {
       // Note that we may have txc's in flight when the parent Sequencer
       // goes away.  Reflect this with zombie==registered==true and let
-      // _osr_reap_done or _osr_drain_all clean up later.
+      // _osr_drain_all clean up later.
       assert(!zombie);
       zombie = true;
       parent = nullptr;
@@ -1768,13 +1801,13 @@ private:
 
   KVSyncThread kv_sync_thread;
   std::mutex kv_lock;
-  std::condition_variable kv_cond, kv_sync_cond;
+  std::condition_variable kv_cond;
   bool kv_stop = false;
   deque<TransContext*> kv_queue;             ///< ready, already submitted
   deque<TransContext*> kv_queue_unsubmitted; ///< ready, need submit by kv thread
   deque<TransContext*> kv_committing;        ///< currently syncing
-  deque<TransContext*> deferred_done_queue;    ///< deferred ios done
-  deque<TransContext*> deferred_stable_queue;  ///< deferred ios done + stable
+  deque<DeferredBatch*> deferred_done_queue;   ///< deferred ios done
+  deque<DeferredBatch*> deferred_stable_queue; ///< deferred ios done + stable
 
   PerfCounters *logger = nullptr;
 
@@ -1795,8 +1828,11 @@ private:
   int deferred_batch_ops = 0; ///< deferred batch size
 
   ///< bits for min_alloc_size
-  std::atomic<size_t> min_alloc_size_order = {0};
-  
+  std::atomic<uint8_t> min_alloc_size_order = {0};
+  static_assert(std::numeric_limits<uint8_t>::max() >
+		std::numeric_limits<decltype(min_alloc_size)>::digits,
+		"not enough bits for min_alloc_size");
+
   ///< size threshold for forced deferred writes
   std::atomic<uint64_t> prefer_deferred_size = {0};
 
@@ -1916,7 +1952,7 @@ private:
   void _txc_state_proc(TransContext *txc);
   void _txc_aio_submit(TransContext *txc);
 public:
-  void _txc_aio_finish(void *p) {
+  void txc_aio_finish(void *p) {
     _txc_state_proc(static_cast<TransContext*>(p));
   }
 private:
@@ -1927,7 +1963,6 @@ private:
   void _txc_finish(TransContext *txc);
   void _txc_release_alloc(TransContext *txc);
 
-  bool _osr_reap_done(OpSequencer *osr);
   void _osr_drain_preceding(TransContext *txc);
   void _osr_drain_all();
   void _osr_unregister_all();
@@ -1953,8 +1988,8 @@ private:
     _deferred_try_submit();
   }
   void _deferred_try_submit();
-  void _deferred_try_submit(OpSequencer *osr);
-  int _deferred_finish(TransContext *txc);
+  void _deferred_submit(OpSequencer *osr);
+  void _deferred_aio_finish(OpSequencer *osr);
   int _deferred_replay();
 
 public:
@@ -2031,8 +2066,21 @@ public:
 
   bool test_mount_in_use() override;
 
-  int mount() override;
+private:
+  int _mount(bool kv_only);
+public:
+  int mount() override {
+    return _mount(false);
+  }
   int umount() override;
+
+  int start_kv_only(KeyValueDB **pdb) {
+    int r = _mount(true);
+    if (r < 0)
+      return r;
+    *pdb = db;
+    return 0;
+  }
 
   int fsck(bool deep) override;
 

@@ -16,6 +16,8 @@
 
 #include "rgw_coroutine.h"
 
+#include <atomic>
+
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
 
@@ -24,7 +26,7 @@ struct rgw_http_req_data : public RefCountedObject {
   curl_slist *h;
   uint64_t id;
   int ret;
-  atomic_t done;
+  std::atomic<bool> done = { false };
   RGWHTTPClient *client;
   void *user_info;
   bool registered;
@@ -58,12 +60,12 @@ struct rgw_http_req_data : public RefCountedObject {
 
     easy_handle = NULL;
     h = NULL;
-    done.set(1);
+    done = true;
     cond.Signal();
   }
 
   bool is_done() {
-    return done.read() != 0;
+    return done;
   }
 
   int get_retcode() {
@@ -900,14 +902,14 @@ int RGWHTTPManager::set_threaded()
 
 void RGWHTTPManager::stop()
 {
-  if (is_stopped.read()) {
+  if (is_stopped) {
     return;
   }
 
-  is_stopped.set(1);
+  is_stopped = true;
 
   if (is_threaded) {
-    going_down.set(1);
+    going_down = true;
     signal_thread();
     reqs_thread->join();
     delete reqs_thread;
@@ -935,7 +937,7 @@ void *RGWHTTPManager::reqs_thread_entry()
 
   ldout(cct, 20) << __func__ << ": start" << dendl;
 
-  while (!going_down.read()) {
+  while (!going_down) {
     int ret = do_curl_wait(cct, (CURLM *)multi_handle, thread_pipe[0]);
     if (ret < 0) {
       dout(0) << "ERROR: do_curl_wait() returned: " << ret << dendl;

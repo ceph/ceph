@@ -20,7 +20,6 @@
 #include "librbd/Journal.h"
 #include "librbd/Utils.h"
 #include "librbd/journal/Types.h"
-#include "tools/rbd_mirror/ImageSync.h"
 #include "tools/rbd_mirror/ProgressContext.h"
 #include "tools/rbd_mirror/ImageSyncThrottler.h"
 
@@ -79,7 +78,7 @@ template <typename I>
 void BootstrapRequest<I>::send() {
   *m_do_resync = false;
 
-  get_local_image_id();
+  get_remote_tag_class();
 }
 
 template <typename I>
@@ -90,45 +89,6 @@ void BootstrapRequest<I>::cancel() {
   m_canceled = true;
 
   m_image_sync_throttler->cancel_sync(m_local_io_ctx, m_local_image_id);
-}
-
-template <typename I>
-void BootstrapRequest<I>::get_local_image_id() {
-  dout(20) << dendl;
-
-  update_progress("GET_LOCAL_IMAGE_ID");
-
-  // attempt to cross-reference a local image by the global image id
-  librados::ObjectReadOperation op;
-  librbd::cls_client::mirror_image_get_image_id_start(&op, m_global_image_id);
-
-  librados::AioCompletion *aio_comp = create_rados_callback<
-    BootstrapRequest<I>, &BootstrapRequest<I>::handle_get_local_image_id>(
-      this);
-  int r = m_local_io_ctx.aio_operate(RBD_MIRRORING, aio_comp, &op, &m_out_bl);
-  assert(r == 0);
-  aio_comp->release();
-}
-
-template <typename I>
-void BootstrapRequest<I>::handle_get_local_image_id(int r) {
-  dout(20) << ": r=" << r << dendl;
-
-  if (r == 0) {
-    bufferlist::iterator iter = m_out_bl.begin();
-    r = librbd::cls_client::mirror_image_get_image_id_finish(
-      &iter, &m_local_image_id);
-  }
-
-  if (r == -ENOENT) {
-    dout(10) << ": image not registered locally" << dendl;
-  } else if (r < 0) {
-    derr << ": failed to retrieve local image id: " << cpp_strerror(r) << dendl;
-    finish(r);
-    return;
-  }
-
-  get_remote_tag_class();
 }
 
 template <typename I>
@@ -453,7 +413,6 @@ void BootstrapRequest<I>::handle_create_local_image(int r) {
     return;
   }
 
-  m_created_local_image = true;
   open_local_image();
 }
 
@@ -472,8 +431,8 @@ void BootstrapRequest<I>::update_client_image() {
 
   dout(20) << dendl;
 
-  librbd::journal::MirrorPeerClientMeta client_meta;
-  client_meta.image_id = m_local_image_id;
+  librbd::journal::MirrorPeerClientMeta client_meta{m_local_image_id};
+  client_meta.state = librbd::journal::MIRROR_PEER_STATE_SYNCING;
 
   librbd::journal::ClientData client_data(client_meta);
   bufferlist data_bl;
@@ -503,7 +462,8 @@ void BootstrapRequest<I>::handle_update_client_image(int r) {
     return;
   }
 
-  m_client_meta->image_id = m_local_image_id;
+  *m_client_meta = {m_local_image_id};
+  m_client_meta->state = librbd::journal::MIRROR_PEER_STATE_SYNCING;
   get_remote_tags();
 }
 
@@ -513,8 +473,7 @@ void BootstrapRequest<I>::get_remote_tags() {
 
   update_progress("GET_REMOTE_TAGS");
 
-  if (m_created_local_image ||
-      m_client_meta->state == librbd::journal::MIRROR_PEER_STATE_SYNCING) {
+  if (m_client_meta->state == librbd::journal::MIRROR_PEER_STATE_SYNCING) {
     // optimization -- no need to compare remote tags if we just created
     // the image locally or sync was interrupted
     image_sync();

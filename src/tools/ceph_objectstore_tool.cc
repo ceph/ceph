@@ -401,7 +401,7 @@ int mark_pg_for_removal(ObjectStore *fs, spg_t pgid, ObjectStore::Transaction *t
   int r = PG::peek_map_epoch(fs, pgid, &map_epoch, &bl);
   if (r < 0)
     cerr << __func__ << " warning: peek_map_epoch reported error" << std::endl;
-  map<epoch_t,pg_interval_t> past_intervals;
+  PastIntervals past_intervals;
   __u8 struct_v;
   r = PG::read_info(fs, pgid, coll, bl, info, past_intervals, struct_v);
   if (r < 0) {
@@ -442,7 +442,7 @@ int initiate_new_remove_pg(ObjectStore *store, spg_t r_pgid,
 }
 
 int write_info(ObjectStore::Transaction &t, epoch_t epoch, pg_info_t &info,
-    map<epoch_t,pg_interval_t> &past_intervals)
+    PastIntervals &past_intervals)
 {
   //Empty for this
   coll_t coll(info.pgid);
@@ -464,7 +464,7 @@ int write_info(ObjectStore::Transaction &t, epoch_t epoch, pg_info_t &info,
 typedef map<eversion_t, hobject_t> divergent_priors_t;
 
 int write_pg(ObjectStore::Transaction &t, epoch_t epoch, pg_info_t &info,
-	     pg_log_t &log, map<epoch_t,pg_interval_t> &past_intervals,
+	     pg_log_t &log, PastIntervals &past_intervals,
 	     divergent_priors_t &divergent,
 	     pg_missing_t &missing)
 {
@@ -528,7 +528,7 @@ int ObjectStoreTool::export_file(ObjectStore *store, coll_t cid, ghobject_t &obj
       cerr << "object_info: " << objb.oi << std::endl;
   }
 
-  // XXX: Should we be checking for WHITEOUT or LOST in objb.oi.flags and skip?
+  // NOTE: we include whiteouts, lost, etc.
 
   ret = write_section(TYPE_OBJECT_BEGIN, objb, file_fd);
   if (ret < 0)
@@ -747,7 +747,7 @@ int add_osdmap(ObjectStore *store, metadata_section &ms)
 int ObjectStoreTool::do_export(ObjectStore *fs, coll_t coll, spg_t pgid,
     pg_info_t &info, epoch_t map_epoch, __u8 struct_ver,
     const OSDSuperblock& superblock,
-    map<epoch_t,pg_interval_t> &past_intervals)
+    PastIntervals &past_intervals)
 {
   PGLog::IndexedLog log;
   pg_missing_t missing;
@@ -817,9 +817,12 @@ int get_data(ObjectStore *store, coll_t coll, ghobject_t hoid,
   return 0;
 }
 
-int get_attrs(ObjectStore *store, coll_t coll, ghobject_t hoid,
-    ObjectStore::Transaction *t, bufferlist &bl,
-    OSDriver &driver, SnapMapper &snap_mapper)
+int get_attrs(
+  ObjectStore *store, coll_t coll, ghobject_t hoid,
+  ObjectStore::Transaction *t, bufferlist &bl,
+  OSDriver &driver, SnapMapper &snap_mapper,
+  const ghobject_t& last_head,
+  const set<ghobject_t>& last_clones)
 {
   bufferlist::iterator ebliter = bl.begin();
   attr_section as;
@@ -831,17 +834,47 @@ int get_attrs(ObjectStore *store, coll_t coll, ghobject_t hoid,
 
   // This could have been handled in the caller if we didn't need to
   // support exports that didn't include object_info_t in object_begin.
-  if (hoid.hobj.snap < CEPH_MAXSNAP && hoid.generation == ghobject_t::NO_GEN) {
-    map<string,bufferlist>::iterator mi = as.data.find(OI_ATTR);
-    if (mi != as.data.end()) {
-      object_info_t oi(mi->second);
+  if (hoid.generation == ghobject_t::NO_GEN) {
+    if (hoid.hobj.snap < CEPH_MAXSNAP) {
+      map<string,bufferlist>::iterator mi = as.data.find(OI_ATTR);
+      if (mi != as.data.end()) {
+	object_info_t oi(mi->second);
 
-      if (debug)
-        cerr << "object_info " << oi << std::endl;
+	if (debug)
+	  cerr << "object_info " << oi << std::endl;
 
-      OSDriver::OSTransaction _t(driver.get_transaction(t));
-      set<snapid_t> oi_snaps(oi.snaps.begin(), oi.snaps.end());
-      snap_mapper.add_oid(hoid.hobj, oi_snaps, &_t);
+	OSDriver::OSTransaction _t(driver.get_transaction(t));
+	set<snapid_t> oi_snaps(oi.legacy_snaps.begin(), oi.legacy_snaps.end());
+	if (!oi_snaps.empty()) {
+	  if (debug)
+	    cerr << "\tsetting legacy snaps " << oi_snaps << std::endl;
+	  snap_mapper.add_oid(hoid.hobj, oi_snaps, &_t);
+	}
+      }
+    } else {
+      if (hoid == last_head) {
+	map<string,bufferlist>::iterator mi = as.data.find(SS_ATTR);
+	if (mi != as.data.end()) {
+	  SnapSet snapset;
+	  auto p = mi->second.begin();
+	  snapset.decode(p);
+	  cout << "snapset " << snapset << std::endl;
+	  if (!snapset.is_legacy()) {
+	    for (auto& p : snapset.clone_snaps) {
+	      hobject_t clone = hoid.hobj;
+	      clone.snap = p.first;
+	      set<snapid_t> snaps(p.second.begin(), p.second.end());
+	      if (debug)
+		cerr << "\tsetting " << clone << " snaps " << snaps << std::endl;
+	      OSDriver::OSTransaction _t(driver.get_transaction(t));
+	      assert(!snaps.empty());
+	      snap_mapper.add_oid(clone, snaps, &_t);
+	    }
+	  }
+	} else {
+	  cerr << "missing SS_ATTR on " << hoid << std::endl;
+	}
+      }
     }
   }
 
@@ -878,7 +911,9 @@ int get_omap(ObjectStore *store, coll_t coll, ghobject_t hoid,
 int ObjectStoreTool::get_object(ObjectStore *store, coll_t coll,
 				bufferlist &bl, OSDMap &curmap,
 				bool *skipped_objects,
-				ObjectStore::Sequencer &osr)
+				ObjectStore::Sequencer &osr,
+				ghobject_t *last_head,
+				set<ghobject_t> *last_clones)
 {
   ObjectStore::Transaction tran;
   ObjectStore::Transaction *t = &tran;
@@ -928,6 +963,19 @@ int ObjectStoreTool::get_object(ObjectStore *store, coll_t coll,
 
   cout << "Write " << ob.hoid << std::endl;
 
+  // manage snap collection
+  if (ob.hoid.hobj.is_snap()) {
+    ghobject_t head = ob.hoid;
+    head.hobj = head.hobj.get_head();
+    if (head == *last_head) {
+      last_clones->insert(ob.hoid);
+    } else {
+      *last_head = head;
+      last_clones->clear();
+    }
+    last_clones->insert(ob.hoid);
+  }
+
   bufferlist ebl;
   bool done = false;
   while(!done) {
@@ -950,7 +998,8 @@ int ObjectStoreTool::get_object(ObjectStore *store, coll_t coll,
       break;
     case TYPE_ATTRS:
       if (dry_run) break;
-      ret = get_attrs(store, coll, ob.hoid, t, ebl, driver, mapper);
+      ret = get_attrs(store, coll, ob.hoid, t, ebl, driver, mapper,
+		      *last_head, *last_clones);
       if (ret) return ret;
       break;
     case TYPE_OMAP_HDR:
@@ -1279,6 +1328,8 @@ int ObjectStoreTool::do_import(ObjectStore *store, OSDSuperblock& sb,
   bool done = false;
   bool found_metadata = false;
   metadata_section ms;
+  ghobject_t last_head;
+  set<ghobject_t> last_clones;
   while(!done) {
     ret = read_section(&type, &ebl);
     if (ret)
@@ -1291,7 +1342,8 @@ int ObjectStoreTool::do_import(ObjectStore *store, OSDSuperblock& sb,
     }
     switch(type) {
     case TYPE_OBJECT_BEGIN:
-      ret = get_object(store, coll, ebl, curmap, &skipped_objects, osr);
+      ret = get_object(store, coll, ebl, curmap, &skipped_objects, osr,
+		       &last_head, &last_clones);
       if (ret) return ret;
       break;
     case TYPE_PG_METADATA:
@@ -3412,7 +3464,7 @@ int main(int argc, char **argv)
       cerr << "map_epoch " << map_epoch << std::endl;
 
     pg_info_t info(pgid);
-    map<epoch_t,pg_interval_t> past_intervals;
+    PastIntervals past_intervals;
     __u8 struct_ver;
     ret = PG::read_info(fs, pgid, coll, bl, info, past_intervals,
 		      struct_ver);

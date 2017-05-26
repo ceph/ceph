@@ -243,7 +243,7 @@ TEST(LibRadosCWriteOps, CmpExt) {
   ASSERT_EQ(0, rados_write_op_operate(op, ioctx, "test", NULL, 0));
   rados_release_write_op(op);
   char hi[4];
-  ASSERT_EQ(sizeof(hi), rados_read(ioctx, "test", hi, sizeof(hi), 0));
+  ASSERT_EQ(sizeof(hi), static_cast<std::size_t>(rados_read(ioctx, "test", hi, sizeof(hi), 0)));
   ASSERT_EQ(0, memcmp("four", hi, sizeof(hi)));
 
   // compare and overwrite on (expected) match
@@ -255,7 +255,7 @@ TEST(LibRadosCWriteOps, CmpExt) {
   ASSERT_EQ(0, rados_write_op_operate(op, ioctx, "test", NULL, 0));
   ASSERT_EQ(0, val);
   rados_release_write_op(op);
-  ASSERT_EQ(sizeof(hi), rados_read(ioctx, "test", hi, sizeof(hi), 0));
+  ASSERT_EQ(sizeof(hi), static_cast<std::size_t>(rados_read(ioctx, "test", hi, sizeof(hi), 0)));
   ASSERT_EQ(0, memcmp("five", hi, sizeof(hi)));
 
   // compare and bail before write due to mismatch

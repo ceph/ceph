@@ -14,19 +14,15 @@
 
 #ifndef _CEPH_INCLUDE_MEMPOOL_H
 #define _CEPH_INCLUDE_MEMPOOL_H
-#include <iostream>
-#include <fstream>
 
 #include <cstddef>
 #include <map>
 #include <unordered_map>
 #include <set>
 #include <vector>
-#include <assert.h>
 #include <list>
 #include <mutex>
 #include <atomic>
-#include <climits>
 #include <typeinfo>
 
 #include <common/Formatter.h>
@@ -149,6 +145,7 @@ namespace mempool {
   f(buffer_meta)		      \
   f(buffer_data)		      \
   f(osd)			      \
+  f(osdmap)			      \
   f(osdmap_mapping)		      \
   f(unittest_1)			      \
   f(unittest_2)

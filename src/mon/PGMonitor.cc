@@ -866,6 +866,8 @@ void PGMonitor::check_osd_map(epoch_t epoch)
   set<int> need_check_down_pg_osds;
 
   // apply latest map(s)
+  const OSDMap& osdmap = mon->osdmon()->osdmap;
+  epoch = std::max(epoch, osdmap.get_epoch());
   for (epoch_t e = pg_map.last_osdmap_epoch+1;
        e <= epoch;
        e++) {
@@ -881,7 +883,6 @@ void PGMonitor::check_osd_map(epoch_t epoch)
                                 &last_osd_report, &pg_map, &pending_inc);
   }
 
-  const OSDMap& osdmap = mon->osdmon()->osdmap;
   assert(pg_map.last_osdmap_epoch < epoch);
   pending_inc.osdmap_epoch = epoch;
   PGMapUpdater::update_creating_pgs(osdmap, pg_map, &pending_inc);
@@ -1459,21 +1460,26 @@ void PGMonitor::get_health(list<pair<health_status_t,string> >& summary,
     }
   }
 
-  if (g_conf->mon_warn_osd_usage_percent) {
-    float max_osd_perc_avail = 0.0, min_osd_perc_avail = 1.0;
+  if (g_conf->mon_warn_osd_usage_min_max_delta) {
+    float max_osd_usage = 0.0, min_osd_usage = 1.0;
     for (auto p = pg_map.osd_stat.begin(); p != pg_map.osd_stat.end(); ++p) {
       // kb should never be 0, but avoid divide by zero in case of corruption
       if (p->second.kb <= 0)
         continue;
-      float perc_avail = ((float)(p->second.kb - p->second.kb_avail)) / ((float)p->second.kb);
-      if (perc_avail > max_osd_perc_avail)
-        max_osd_perc_avail = perc_avail;
-      if (perc_avail < min_osd_perc_avail)
-        min_osd_perc_avail = perc_avail;
+      float usage = ((float)p->second.kb_used) / ((float)p->second.kb);
+      if (usage > max_osd_usage)
+        max_osd_usage = usage;
+      if (usage < min_osd_usage)
+        min_osd_usage = usage;
     }
-    if ((max_osd_perc_avail - min_osd_perc_avail) > g_conf->mon_warn_osd_usage_percent) {
+    float diff = max_osd_usage - min_osd_usage;
+    if (diff > g_conf->mon_warn_osd_usage_min_max_delta) {
       ostringstream ss;
-      ss << "Difference in osd space utilization " << ((max_osd_perc_avail - min_osd_perc_avail) *100) << "% greater than " << (g_conf->mon_warn_osd_usage_percent * 100) << "%";
+      ss << "difference between min (" << roundf(min_osd_usage*1000.0)/100.0
+	 << "%) and max (" << roundf(max_osd_usage*1000.0)/100.0
+	 << "%) osd usage " << roundf(diff*1000.0)/100.0 << "% > "
+	 << roundf(g_conf->mon_warn_osd_usage_min_max_delta*1000.0)/100.0
+	 << " (mon_warn_osd_usage_min_max_delta)";
       summary.push_back(make_pair(HEALTH_WARN, ss.str()));
       if (detail)
         detail->push_back(make_pair(HEALTH_WARN, ss.str()));
@@ -1498,8 +1504,8 @@ void PGMonitor::get_health(list<pair<health_status_t,string> >& summary,
   }
 
   // near-target max pools
-  const map<int64_t,pg_pool_t>& pools = mon->osdmon()->osdmap.get_pools();
-  for (map<int64_t,pg_pool_t>::const_iterator p = pools.begin();
+  auto& pools = mon->osdmon()->osdmap.get_pools();
+  for (auto p = pools.begin();
        p != pools.end(); ++p) {
     if ((!p->second.target_max_objects && !p->second.target_max_bytes) ||
         !pg_map.pg_pool_sum.count(p->first))
@@ -1582,7 +1588,9 @@ void PGMonitor::get_health(list<pair<health_status_t,string> >& summary,
       if (!pi)
 	continue;   // in case osdmap changes haven't propagated to PGMap yet
       const string& name = mon->osdmon()->osdmap.get_pool_name(p->first);
-      if (pi->get_pg_num() > pi->get_pgp_num()) {
+      if (pi->get_pg_num() > pi->get_pgp_num() &&
+	  !(name.find(".DELETED") != string::npos &&
+	    g_conf->mon_fake_pool_delete)) {
 	ostringstream ss;
 	ss << "pool " << name << " pg_num "
 	   << pi->get_pg_num() << " > pgp_num " << pi->get_pgp_num();

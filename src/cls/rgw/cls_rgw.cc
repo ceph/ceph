@@ -95,11 +95,15 @@ static void get_index_ver_key(cls_method_context_t hctx, uint64_t index_ver, str
   *key = buf;
 }
 
-static void bi_log_index_key(cls_method_context_t hctx, string& key, string& id, uint64_t index_ver)
+static void bi_log_prefix(string& key)
 {
   key = BI_PREFIX_CHAR;
   key.append(bucket_index_prefixes[BI_BUCKET_LOG_INDEX]);
+}
 
+static void bi_log_index_key(cls_method_context_t hctx, string& key, string& id, uint64_t index_ver)
+{
+  bi_log_prefix(key);
   get_index_ver_key(hctx, index_ver, &id);
   key.append(id);
 }
@@ -2257,9 +2261,8 @@ static int list_plain_entries(cls_method_context_t hctx, const string& name, con
   string filter = name;
   string start_key = marker;
 
-  string first_instance_idx;
-  encode_obj_versioned_data_key(string(), &first_instance_idx);
-  string end_key = first_instance_idx;
+  string end_key; // stop listing at bi_log_prefix
+  bi_log_prefix(end_key);
 
   int count = 0;
   map<string, bufferlist> keys;
@@ -2507,7 +2510,7 @@ static int rgw_bi_list_op(cls_method_context_t hctx, bufferlist *in, bufferlist 
 
   ret = list_olh_entries(hctx, op.name, op.marker, max - count, &op_ret.entries);
   if (ret < 0) {
-    CLS_LOG(0, "ERROR: %s(): list_instance_entries retured ret=%d", __func__, ret);
+    CLS_LOG(0, "ERROR: %s(): list_olh_entries retured ret=%d", __func__, ret);
     return ret;
   }
 
@@ -3370,7 +3373,7 @@ static int rgw_cls_lc_get_next_entry(cls_method_context_t hctx, bufferlist *in, 
   try {
     ::decode(op, in_iter);
   } catch (buffer::error& err) {
-    CLS_LOG(1, "ERROR: rgw_cls_lc_rm_entry(): failed to decode entry\n");
+    CLS_LOG(1, "ERROR: rgw_cls_lc_get_next_entry: failed to decode op\n");
     return -EINVAL;
   }
 
@@ -3403,10 +3406,11 @@ static int rgw_cls_lc_list_entries(cls_method_context_t hctx, bufferlist *in, bu
   try {
     ::decode(op, in_iter);
   } catch (buffer::error& err) {
-    CLS_LOG(1, "ERROR: rgw_cls_lc_rm_entry(): failed to decode entry\n");
+    CLS_LOG(1, "ERROR: rgw_cls_lc_list_entries(): failed to decode op\n");
     return -EINVAL;
   }
-    cls_rgw_lc_list_entries_ret op_ret;
+
+  cls_rgw_lc_list_entries_ret op_ret;
   bufferlist::iterator iter;
   map<string, bufferlist> vals;
   string filter_prefix;
@@ -3437,7 +3441,7 @@ static int rgw_cls_lc_put_head(cls_method_context_t hctx, bufferlist *in, buffer
   try {
     ::decode(op, in_iter);
   } catch (buffer::error& err) {
-    CLS_LOG(1, "ERROR: rgw_cls_lc_set_entry(): failed to decode entry\n");
+    CLS_LOG(1, "ERROR: rgw_cls_lc_put_head(): failed to decode entry\n");
     return -EINVAL;
   }
 

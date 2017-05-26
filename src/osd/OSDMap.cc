@@ -30,6 +30,10 @@
  
 #define dout_subsys ceph_subsys_osd
 
+MEMPOOL_DEFINE_OBJECT_FACTORY(OSDMap, osdmap, osdmap);
+MEMPOOL_DEFINE_OBJECT_FACTORY(OSDMap::Incremental, osdmap_inc, osdmap);
+
+
 // ----------------------------------
 // osd_info_t
 
@@ -441,7 +445,7 @@ void OSDMap::Incremental::encode(bufferlist& bl, uint64_t features) const
   }
 
   {
-    uint8_t target_v = 4;
+    uint8_t target_v = 5;
     if (!HAVE_FEATURE(features, SERVER_LUMINOUS)) {
       target_v = 2;
     }
@@ -462,6 +466,7 @@ void OSDMap::Incremental::encode(bufferlist& bl, uint64_t features) const
       ::encode(new_nearfull_ratio, bl);
       ::encode(new_full_ratio, bl);
       ::encode(new_backfillfull_ratio, bl);
+      ::encode(new_require_min_compat_client, bl);
     }
     ENCODE_FINISH(bl); // osd-only data
   }
@@ -646,7 +651,7 @@ void OSDMap::Incremental::decode(bufferlist::iterator& bl)
   }
 
   {
-    DECODE_START(4, bl); // extended, osd-only data
+    DECODE_START(5, bl); // extended, osd-only data
     ::decode(new_hb_back_up, bl);
     ::decode(new_up_thru, bl);
     ::decode(new_last_clean_interval, bl);
@@ -674,6 +679,8 @@ void OSDMap::Incremental::decode(bufferlist::iterator& bl)
     } else {
       new_backfillfull_ratio = -1;
     }
+    if (struct_v >= 5)
+      ::decode(new_require_min_compat_client, bl);
     DECODE_FINISH(bl); // osd-only data
   }
 
@@ -718,6 +725,7 @@ void OSDMap::Incremental::dump(Formatter *f) const
   f->dump_float("new_full_ratio", new_full_ratio);
   f->dump_float("new_nearfull_ratio", new_nearfull_ratio);
   f->dump_float("new_backfillfull_ratio", new_backfillfull_ratio);
+  f->dump_string("new_require_min_compat_client", new_require_min_compat_client);
 
   if (fullmap.length()) {
     f->open_object_section("full_map");
@@ -1158,11 +1166,13 @@ uint64_t OSDMap::get_features(int entity_type, uint64_t *pmask) const
     features |= CEPH_FEATURE_CRUSH_V4;
   if (crush->has_nondefault_tunables5())
     features |= CEPH_FEATURE_CRUSH_TUNABLES5;
+  if (crush->has_incompat_chooseargs())
+    features |= CEPH_FEATURE_CRUSH_CHOOSEARGS;
   mask |= CEPH_FEATURES_CRUSH;
 
   if (!pg_upmap.empty() || !pg_upmap_items.empty())
-    features |= CEPH_FEATUREMASK_OSDMAP_REMAP;
-  mask |= CEPH_FEATUREMASK_OSDMAP_REMAP;
+    features |= CEPH_FEATUREMASK_OSDMAP_PG_UPMAP;
+  mask |= CEPH_FEATUREMASK_OSDMAP_PG_UPMAP;
 
   for (auto &pool: pools) {
     if (pool.second.has_flag(pg_pool_t::FLAG_HASHPSPOOL)) {
@@ -1190,8 +1200,8 @@ uint64_t OSDMap::get_features(int entity_type, uint64_t *pmask) const
   }
   if (entity_type == CEPH_ENTITY_TYPE_OSD) {
     for (auto &erasure_code_profile : erasure_code_profiles) {
-      const map<string,string> &profile = erasure_code_profile.second;
-      const auto &plugin = profile.find("plugin");
+      auto& profile = erasure_code_profile.second;
+      const auto& plugin = profile.find("plugin");
       if (plugin != profile.end()) {
 	if (plugin->second == "isa" || plugin->second == "lrc")
 	  features |= CEPH_FEATURE_ERASURE_CODE_PLUGINS_V2;
@@ -1232,6 +1242,36 @@ uint64_t OSDMap::get_features(int entity_type, uint64_t *pmask) const
   if (pmask)
     *pmask = mask;
   return features;
+}
+
+pair<string,string> OSDMap::get_min_compat_client() const
+{
+  uint64_t f = get_features(CEPH_ENTITY_TYPE_CLIENT, nullptr);
+
+  if (HAVE_FEATURE(f, OSDMAP_PG_UPMAP) ||      // v12.0.0-1733-g27d6f43
+      HAVE_FEATURE(f, CRUSH_CHOOSEARGS)) {     // v12.0.1-2172-gef1ef28
+    return make_pair("luminous", "12.2.0");
+  }
+  if (HAVE_FEATURE(f, CRUSH_TUNABLES5)) {      // v10.0.0-612-g043a737
+    return make_pair("jewel", "10.2.0");
+  }
+  if (HAVE_FEATURE(f, CRUSH_V4)) {             // v0.91-678-g325fc56
+    return make_pair("hammer", "0.94");
+  }
+  if (HAVE_FEATURE(f, OSD_PRIMARY_AFFINITY) || // v0.76-553-gf825624
+      HAVE_FEATURE(f, CRUSH_TUNABLES3) ||      // v0.76-395-ge20a55d
+      HAVE_FEATURE(f, OSD_ERASURE_CODES) ||    // v0.73-498-gbfc86a8
+      HAVE_FEATURE(f, OSD_CACHEPOOL)) {        // v0.67-401-gb91c1c5
+    return make_pair("firefly", "0.80");
+  }
+  if (HAVE_FEATURE(f, CRUSH_TUNABLES2) ||      // v0.54-684-g0cc47ff
+      HAVE_FEATURE(f, OSDHASHPSPOOL)) {        // v0.57-398-g8cc2b0f
+    return make_pair("dumpling", "0.67");
+  }
+  if (HAVE_FEATURE(f, CRUSH_TUNABLES)) {       // v0.48argonaut-206-g6f381af
+    return make_pair("argonaut", "0.48argonaut-207");
+  }
+  return make_pair("argonaut", "0.48");
 }
 
 void OSDMap::_calc_up_osd_features()
@@ -1355,7 +1395,7 @@ void OSDMap::clean_temps(CephContext *cct,
     vector<int> raw_up;
     int primary;
     tmpmap.pg_to_raw_up(pg.first, &raw_up, &primary);
-    if (raw_up == pg.second) {
+    if (vectors_equal(raw_up, pg.second)) {
       ldout(cct, 10) << __func__ << "  removing pg_temp " << pg.first << " "
 		     << pg.second << " that matches raw_up mapping" << dendl;
       if (osdmap.pg_temp->count(pg.first))
@@ -1586,6 +1626,9 @@ int OSDMap::apply_incremental(const Incremental &inc)
   if (inc.new_full_ratio >= 0) {
     full_ratio = inc.new_full_ratio;
   }
+  if (inc.new_require_min_compat_client.length()) {
+    require_min_compat_client = inc.new_require_min_compat_client;
+  }
 
   // do new crush map last (after up/down stuff)
   if (inc.crush.length()) {
@@ -1663,7 +1706,7 @@ void OSDMap::_remove_nonexistent_osds(const pg_pool_t& pool,
     if (removed)
       osds.resize(osds.size() - removed);
   } else {
-    for (auto osd : osds) {
+    for (auto& osd : osds) {
       if (!exists(osd))
 	osd = CRUSH_ITEM_NONE;
     }
@@ -1714,7 +1757,7 @@ void OSDMap::_apply_remap(const pg_pool_t& pi, pg_t raw_pg, vector<int> *raw) co
 	return;
       }
     }
-    *raw = p->second;
+    *raw = vector<int>(p->second.begin(), p->second.end());
     return;
   }
 
@@ -2104,7 +2147,7 @@ void OSDMap::encode(bufferlist& bl, uint64_t features) const
 
   {
     uint8_t v = 4;
-    if (!HAVE_FEATURE(features, OSDMAP_REMAP)) {
+    if (!HAVE_FEATURE(features, OSDMAP_PG_UPMAP)) {
       v = 3;
     }
     ENCODE_START(v, 1, bl); // client-usable data
@@ -2151,7 +2194,7 @@ void OSDMap::encode(bufferlist& bl, uint64_t features) const
   }
 
   {
-    uint8_t target_v = 3;
+    uint8_t target_v = 4;
     if (!HAVE_FEATURE(features, SERVER_LUMINOUS)) {
       target_v = 1;
     }
@@ -2176,6 +2219,7 @@ void OSDMap::encode(bufferlist& bl, uint64_t features) const
       ::encode(nearfull_ratio, bl);
       ::encode(full_ratio, bl);
       ::encode(backfillfull_ratio, bl);
+      ::encode(require_min_compat_client, bl);
     }
     ENCODE_FINISH(bl); // osd-only data
   }
@@ -2364,7 +2408,7 @@ void OSDMap::decode(bufferlist::iterator& bl)
     ::decode(*pg_temp, bl);
     ::decode(*primary_temp, bl);
     if (struct_v >= 2) {
-      osd_primary_affinity.reset(new vector<__u32>);
+      osd_primary_affinity.reset(new mempool::osdmap::vector<__u32>);
       ::decode(*osd_primary_affinity, bl);
       if (osd_primary_affinity->empty())
 	osd_primary_affinity.reset();
@@ -2393,7 +2437,7 @@ void OSDMap::decode(bufferlist::iterator& bl)
   }
 
   {
-    DECODE_START(3, bl); // extended, osd-only data
+    DECODE_START(4, bl); // extended, osd-only data
     ::decode(osd_addrs->hb_back_addr, bl);
     ::decode(osd_info, bl);
     ::decode(blacklist, bl);
@@ -2415,6 +2459,8 @@ void OSDMap::decode(bufferlist::iterator& bl)
     } else {
       backfillfull_ratio = 0;
     }
+    if (struct_v >= 4)
+      ::decode(require_min_compat_client, bl);
     DECODE_FINISH(bl); // osd-only data
   }
 
@@ -2461,8 +2507,9 @@ void OSDMap::post_decode()
   _calc_up_osd_features();
 }
 
-void OSDMap::dump_erasure_code_profiles(const map<string,map<string,string> > &profiles,
-					Formatter *f)
+void OSDMap::dump_erasure_code_profiles(
+  const mempool::osdmap::map<string,map<string,string>>& profiles,
+  Formatter *f)
 {
   f->open_object_section("erasure_code_profiles");
   for (const auto &profile : profiles) {
@@ -2488,6 +2535,10 @@ void OSDMap::dump(Formatter *f) const
   f->dump_string("cluster_snapshot", get_cluster_snapshot());
   f->dump_int("pool_max", get_pool_max());
   f->dump_int("max_osd", get_max_osd());
+  f->dump_string("require_min_compat_client", require_min_compat_client);
+  auto mv = get_min_compat_client();
+  f->dump_string("min_compat_client", mv.first);
+  f->dump_string("min_compat_client_version", mv.second);
 
   f->open_array_section("pools");
   for (const auto &pool : pools) {
@@ -2701,6 +2752,11 @@ void OSDMap::print(ostream& out) const
   out << "full_ratio " << full_ratio << "\n";
   out << "backfillfull_ratio " << backfillfull_ratio << "\n";
   out << "nearfull_ratio " << nearfull_ratio << "\n";
+  if (require_min_compat_client.length()) {
+    out << "require_min_compat_client " << require_min_compat_client << "\n";
+  }
+  auto mv = get_min_compat_client();
+  out << "min_compat_client " << mv.first << " " << mv.second << "\n";
   if (get_cluster_snapshot().length())
     out << "cluster_snapshot " << get_cluster_snapshot() << "\n";
   out << "\n";
@@ -3321,7 +3377,7 @@ int OSDMap::clean_pg_upmaps(
     vector<int> raw;
     int primary;
     pg_to_raw_osds(p.first, &raw, &primary);
-    if (raw == p.second) {
+    if (vectors_equal(raw, p.second)) {
       ldout(cct, 10) << " removing redundant pg_upmap " << p.first << " "
 		     << p.second << dendl;
       pending_inc->old_pg_upmap.insert(p.first);
@@ -3332,7 +3388,7 @@ int OSDMap::clean_pg_upmaps(
     vector<int> raw;
     int primary;
     pg_to_raw_osds(p.first, &raw, &primary);
-    vector<pair<int,int>> newmap;
+    mempool::osdmap::vector<pair<int,int>> newmap;
     for (auto& q : p.second) {
       if (std::find(raw.begin(), raw.end(), q.first) != raw.end()) {
 	newmap.push_back(q);
@@ -3530,7 +3586,7 @@ int OSDMap::calc_pg_upmaps(
 	  continue;
 	}
 	assert(orig != out);
-	vector<pair<int,int>>& rmi = tmp.pg_upmap_items[pg];
+	auto& rmi = tmp.pg_upmap_items[pg];
 	for (unsigned i = 0; i < out.size(); ++i) {
 	  if (orig[i] != out[i]) {
 	    rmi.push_back(make_pair(orig[i], out[i]));

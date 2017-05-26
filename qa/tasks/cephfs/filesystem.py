@@ -456,6 +456,8 @@ class Filesystem(MDSCluster):
                                          data_pool_name, pgs_per_fs_pool.__str__())
         self.mon_manager.raw_cluster_cmd('fs', 'new',
                                          self.name, self.metadata_pool_name, data_pool_name)
+        # Turn off spurious standby count warnings from modifying max_mds in tests.
+        self.mon_manager.raw_cluster_cmd('fs', 'set', self.name, 'standby_count_wanted', '0')
 
         self.getinfo(refresh = True)
 
@@ -788,7 +790,7 @@ class Filesystem(MDSCluster):
 
         return result
 
-    def wait_for_state(self, goal_state, reject=None, timeout=None, mds_id=None):
+    def wait_for_state(self, goal_state, reject=None, timeout=None, mds_id=None, rank=None):
         """
         Block until the MDS reaches a particular state, or a failure condition
         is met.
@@ -805,7 +807,11 @@ class Filesystem(MDSCluster):
         started_at = time.time()
         while True:
             status = self.status()
-            if mds_id is not None:
+            if rank is not None:
+                mds_info = status.get_rank(self.id, rank)
+                current_state = mds_info['state'] if mds_info else None
+                log.info("Looked up MDS state for mds.{0}: {1}".format(rank, current_state))
+            elif mds_id is not None:
                 # mds_info is None if no daemon with this ID exists in the map
                 mds_info = status.get_mds(mds_id)
                 current_state = mds_info['state'] if mds_info else None

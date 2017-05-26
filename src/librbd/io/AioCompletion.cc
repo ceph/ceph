@@ -23,7 +23,8 @@
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
-#define dout_prefix *_dout << "librbd::io::AioCompletion: "
+#define dout_prefix *_dout << "librbd::io::AioCompletion: " << this \
+                           << " " << __func__ << ": "
 
 namespace librbd {
 namespace io {
@@ -44,7 +45,7 @@ void AioCompletion::finalize(ssize_t rval)
   assert(ictx != nullptr);
   CephContext *cct = ictx->cct;
 
-  ldout(cct, 20) << this << " " << __func__ << ": r=" << rval << dendl;
+  ldout(cct, 20) << "r=" << rval << dendl;
   if (rval >= 0 && aio_type == AIO_TYPE_READ) {
     read_result.assemble_result(cct);
   }
@@ -133,8 +134,7 @@ void AioCompletion::fail(int r)
   assert(ictx != nullptr);
   CephContext *cct = ictx->cct;
 
-  lderr(cct) << this << " " << __func__ << ": " << cpp_strerror(r)
-             << dendl;
+  lderr(cct) << cpp_strerror(r) << dendl;
   assert(pending_count == 0);
   rval = r;
   complete();
@@ -146,7 +146,7 @@ void AioCompletion::set_request_count(uint32_t count) {
   assert(ictx != nullptr);
   CephContext *cct = ictx->cct;
 
-  ldout(cct, 20) << this << " " << __func__ << ": pending=" << count << dendl;
+  ldout(cct, 20) << "pending=" << count << dendl;
   assert(pending_count == 0);
   pending_count = count;
   lock.Unlock();
@@ -170,7 +170,7 @@ void AioCompletion::complete_request(ssize_t r)
   assert(pending_count);
   int count = --pending_count;
 
-  ldout(cct, 20) << this << " " << __func__ << ": cb=" << complete_cb << ", "
+  ldout(cct, 20) << "cb=" << complete_cb << ", "
                  << "pending=" << pending_count << dendl;
   if (!count && blockers == 0) {
     finalize(rval);

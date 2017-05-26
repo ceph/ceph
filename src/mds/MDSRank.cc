@@ -16,7 +16,9 @@
 #include "common/errno.h"
 
 #include "messages/MClientRequestForward.h"
+#include "messages/MMDSLoadTargets.h"
 #include "messages/MMDSMap.h"
+#include "messages/MMDSTableRequest.h"
 #include "messages/MCommand.h"
 #include "messages/MCommandReply.h"
 
@@ -25,7 +27,6 @@
 #include "SnapClient.h"
 #include "SnapServer.h"
 #include "MDBalancer.h"
-#include "messages/MMDSTableRequest.h"
 #include "Locker.h"
 #include "Server.h"
 #include "InoTable.h"
@@ -180,6 +181,62 @@ void MDSRankDispatcher::init()
   finisher->start();
 }
 
+void MDSRank::update_targets(utime_t now)
+{
+  // get MonMap's idea of my export_targets
+  const set<mds_rank_t>& map_targets = mdsmap->get_mds_info(get_nodeid()).export_targets;
+
+  dout(20) << "updating export targets, currently " << map_targets.size() << " ranks are targets" << dendl;
+
+  bool send = false;
+  set<mds_rank_t> new_map_targets;
+
+  auto it = export_targets.begin();
+  while (it != export_targets.end()) {
+    mds_rank_t rank = it->first;
+    double val = it->second.get(now);
+    dout(20) << "export target mds." << rank << " value is " << val << " @ " << now << dendl;
+
+    if (val <= 0.01) {
+      dout(15) << "export target mds." << rank << " is no longer an export target" << dendl;
+      export_targets.erase(it++);
+      send = true;
+      continue;
+    }
+    if (!map_targets.count(rank)) {
+      dout(15) << "export target mds." << rank << " not in map's export_targets" << dendl;
+      send = true;
+    }
+    new_map_targets.insert(rank);
+    it++;
+  }
+  if (new_map_targets.size() < map_targets.size()) {
+    dout(15) << "export target map holds stale targets, sending update" << dendl;
+    send = true;
+  }
+
+  if (send) {
+    dout(15) << "updating export_targets, now " << new_map_targets.size() << " ranks are targets" << dendl;
+    MMDSLoadTargets* m = new MMDSLoadTargets(mds_gid_t(monc->get_global_id()), new_map_targets);
+    monc->send_mon_message(m);
+  }
+}
+
+void MDSRank::hit_export_target(utime_t now, mds_rank_t rank, double amount)
+{
+  double rate = g_conf->mds_bal_target_decay;
+  if (amount < 0.0) {
+    amount = 100.0/g_conf->mds_bal_target_decay; /* a good default for "i am trying to keep this export_target active" */
+  }
+  auto em = export_targets.emplace(std::piecewise_construct, std::forward_as_tuple(rank), std::forward_as_tuple(now, DecayRate(rate)));
+  if (em.second) {
+    dout(15) << "hit export target (new) " << amount << " @ " << now << dendl;
+  } else {
+    dout(15) << "hit export target " << amount << " @ " << now << dendl;
+  }
+  em.first->second.hit(now, amount);
+}
+
 void MDSRankDispatcher::tick()
 {
   heartbeat_reset();
@@ -206,8 +263,7 @@ void MDSRankDispatcher::tick()
   }
 
   // log
-  utime_t now = ceph_clock_now();
-  mds_load_t load = balancer->get_load(now);
+  mds_load_t load = balancer->get_load(ceph_clock_now());
 
   if (logger) {
     logger->set(l_mds_load_cent, 100 * load.mds_load());
@@ -232,6 +288,10 @@ void MDSRankDispatcher::tick()
     mdcache->migrator->find_stale_export_freeze();
     if (snapserver)
       snapserver->check_osd_map(false);
+  }
+
+  if (is_active() || is_stopping()) {
+    update_targets(ceph_clock_now());
   }
 
   // shut down?
@@ -1671,9 +1731,6 @@ void MDSRankDispatcher::handle_mds_map(
 	mdcache->migrator->handle_mds_failure_or_stop(*p);
   }
 
-  if (!is_any_replay())
-    balancer->try_rebalance();
-
   {
     map<epoch_t,list<MDSInternalContextBase*> >::iterator p = waiting_for_mdsmap.begin();
     while (p != waiting_for_mdsmap.end() && p->first <= mdsmap->get_epoch()) {
@@ -2429,43 +2486,60 @@ void MDSRank::create_logger()
   {
     PerfCountersBuilder mds_plb(g_ceph_context, "mds", l_mds_first, l_mds_last);
 
-    mds_plb.add_u64_counter(l_mds_request, "request", "Requests");
+    mds_plb.add_u64_counter(
+      l_mds_request, "request", "Requests", "req",
+      PerfCountersBuilder::PRIO_CRITICAL);
     mds_plb.add_u64_counter(l_mds_reply, "reply", "Replies");
-    mds_plb.add_time_avg(l_mds_reply_latency, "reply_latency",
-        "Reply latency", "rlat");
-    mds_plb.add_u64_counter(l_mds_forward, "forward", "Forwarding request");
-
+    mds_plb.add_time_avg(
+      l_mds_reply_latency, "reply_latency", "Reply latency", "rlat",
+      PerfCountersBuilder::PRIO_CRITICAL);
+    mds_plb.add_u64_counter(
+      l_mds_forward, "forward", "Forwarding request", "fwd",
+      PerfCountersBuilder::PRIO_INTERESTING);
     mds_plb.add_u64_counter(l_mds_dir_fetch, "dir_fetch", "Directory fetch");
     mds_plb.add_u64_counter(l_mds_dir_commit, "dir_commit", "Directory commit");
     mds_plb.add_u64_counter(l_mds_dir_split, "dir_split", "Directory split");
     mds_plb.add_u64_counter(l_mds_dir_merge, "dir_merge", "Directory merge");
 
     mds_plb.add_u64(l_mds_inode_max, "inode_max", "Max inodes, cache size");
-    mds_plb.add_u64(l_mds_inodes, "inodes", "Inodes", "inos");
+    mds_plb.add_u64(l_mds_inodes, "inodes", "Inodes", "inos",
+		    PerfCountersBuilder::PRIO_CRITICAL);
     mds_plb.add_u64(l_mds_inodes_top, "inodes_top", "Inodes on top");
     mds_plb.add_u64(l_mds_inodes_bottom, "inodes_bottom", "Inodes on bottom");
-    mds_plb.add_u64(l_mds_inodes_pin_tail, "inodes_pin_tail", "Inodes on pin tail");
+    mds_plb.add_u64(
+      l_mds_inodes_pin_tail, "inodes_pin_tail", "Inodes on pin tail");
     mds_plb.add_u64(l_mds_inodes_pinned, "inodes_pinned", "Inodes pinned");
     mds_plb.add_u64(l_mds_inodes_expired, "inodes_expired", "Inodes expired");
-    mds_plb.add_u64(l_mds_inodes_with_caps, "inodes_with_caps", "Inodes with capabilities");
-    mds_plb.add_u64(l_mds_caps, "caps", "Capabilities", "caps");
+    mds_plb.add_u64(
+      l_mds_inodes_with_caps, "inodes_with_caps", "Inodes with capabilities");
+    mds_plb.add_u64(l_mds_caps, "caps", "Capabilities", "caps",
+		    PerfCountersBuilder::PRIO_INTERESTING);
     mds_plb.add_u64(l_mds_subtrees, "subtrees", "Subtrees");
 
     mds_plb.add_u64_counter(l_mds_traverse, "traverse", "Traverses");
     mds_plb.add_u64_counter(l_mds_traverse_hit, "traverse_hit", "Traverse hits");
-    mds_plb.add_u64_counter(l_mds_traverse_forward, "traverse_forward", "Traverse forwards");
-    mds_plb.add_u64_counter(l_mds_traverse_discover, "traverse_discover", "Traverse directory discovers");
-    mds_plb.add_u64_counter(l_mds_traverse_dir_fetch, "traverse_dir_fetch", "Traverse incomplete directory content fetchings");
-    mds_plb.add_u64_counter(l_mds_traverse_remote_ino, "traverse_remote_ino", "Traverse remote dentries");
-    mds_plb.add_u64_counter(l_mds_traverse_lock, "traverse_lock", "Traverse locks");
+    mds_plb.add_u64_counter(l_mds_traverse_forward, "traverse_forward",
+			    "Traverse forwards");
+    mds_plb.add_u64_counter(l_mds_traverse_discover, "traverse_discover",
+			    "Traverse directory discovers");
+    mds_plb.add_u64_counter(l_mds_traverse_dir_fetch, "traverse_dir_fetch",
+			    "Traverse incomplete directory content fetchings");
+    mds_plb.add_u64_counter(l_mds_traverse_remote_ino, "traverse_remote_ino",
+			    "Traverse remote dentries");
+    mds_plb.add_u64_counter(l_mds_traverse_lock, "traverse_lock",
+			    "Traverse locks");
 
     mds_plb.add_u64(l_mds_load_cent, "load_cent", "Load per cent");
     mds_plb.add_u64(l_mds_dispatch_queue_len, "q", "Dispatch queue length");
 
     mds_plb.add_u64_counter(l_mds_exported, "exported", "Exports");
-    mds_plb.add_u64_counter(l_mds_exported_inodes, "exported_inodes", "Exported inodes");
+    mds_plb.add_u64_counter(
+      l_mds_exported_inodes, "exported_inodes", "Exported inodes", "exi",
+      PerfCountersBuilder::PRIO_INTERESTING);
     mds_plb.add_u64_counter(l_mds_imported, "imported", "Imports");
-    mds_plb.add_u64_counter(l_mds_imported_inodes, "imported_inodes", "Imported inodes");
+    mds_plb.add_u64_counter(
+      l_mds_imported_inodes, "imported_inodes", "Imported inodes", "imi",
+      PerfCountersBuilder::PRIO_INTERESTING);
     logger = mds_plb.create_perf_counters();
     g_ceph_context->get_perfcounters_collection()->add(logger);
   }

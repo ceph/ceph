@@ -1851,11 +1851,13 @@ TRACEPOINT_EVENT(librbd, get_parent_info_exit,
         int, retval,
         const char*, parent_pool_name,
         const char*, parent_name,
+        const char*, parent_id,
         const char*, parent_snap_name),
     TP_FIELDS(
         ctf_integer(int, retval, retval)
         ceph_ctf_string(parent_pool_name, parent_pool_name)
         ceph_ctf_string(parent_name, parent_name)
+        ceph_ctf_string(parent_id, parent_id)
         ceph_ctf_string(parent_snap_name, parent_snap_name)
     )
 )

@@ -74,8 +74,6 @@ public:
 // PINS
 //int cdir_pins[CDIR_NUM_PINS] = { 0,0,0,0,0,0,0,0,0,0,0,0,0,0 };
 
-boost::pool<> CDir::pool(sizeof(CDir));
-
 
 ostream& operator<<(ostream& out, const CDir& dir)
 {
@@ -117,6 +115,7 @@ ostream& operator<<(ostream& out, const CDir& dir)
   if (dir.state_test(CDir::STATE_COMPLETE)) out << "|complete";
   if (dir.state_test(CDir::STATE_FREEZINGTREE)) out << "|freezingtree";
   if (dir.state_test(CDir::STATE_FROZENTREE)) out << "|frozentree";
+  if (dir.state_test(CDir::STATE_AUXSUBTREE)) out << "|auxsubtree";
   //if (dir.state_test(CDir::STATE_FROZENTREELEAF)) out << "|frozentreeleaf";
   if (dir.state_test(CDir::STATE_FROZENDIR)) out << "|frozendir";
   if (dir.state_test(CDir::STATE_FREEZINGDIR)) out << "|freezingdir";
@@ -1011,7 +1010,16 @@ void CDir::merge(list<CDir*>& subs, list<MDSInternalContextBase*>& waiters, bool
 {
   dout(10) << "merge " << subs << dendl;
 
-  set_dir_auth(subs.front()->get_dir_auth());
+  mds_authority_t new_auth = CDIR_AUTH_DEFAULT;
+  for (auto dir : subs) {
+    if (dir->get_dir_auth() != CDIR_AUTH_DEFAULT &&
+	dir->get_dir_auth() != new_auth) {
+      assert(new_auth == CDIR_AUTH_DEFAULT);
+      new_auth = dir->get_dir_auth();
+    }
+  }
+
+  set_dir_auth(new_auth);
   prepare_new_fragment(replay);
 
   nest_info_t rstatdiff;
@@ -1020,8 +1028,7 @@ void CDir::merge(list<CDir*>& subs, list<MDSInternalContextBase*>& waiters, bool
   version_t rstat_version = inode->get_projected_inode()->rstat.version;
   version_t dirstat_version = inode->get_projected_inode()->dirstat.version;
 
-  for (list<CDir*>::iterator p = subs.begin(); p != subs.end(); ++p) {
-    CDir *dir = *p;
+  for (auto dir : subs) {
     dout(10) << " subfrag " << dir->get_frag() << " " << *dir << dendl;
     assert(!dir->is_auth() || dir->is_complete() || replay);
 
@@ -1230,10 +1237,7 @@ void CDir::add_waiter(uint64_t tag, MDSInternalContextBase *c)
     }
   }
 
-  if (tag & WAIT_CREATED) {
-    assert(state_test(STATE_CREATING));
-    assert(state_test(STATE_FRAGMENTING));
-  }
+  assert(!(tag & WAIT_CREATED) || state_test(STATE_CREATING));
 
   MDSCacheObject::add_waiter(tag, c);
 }
@@ -1348,11 +1352,9 @@ void CDir::mark_new(LogSegment *ls)
   ls->new_dirfrags.push_back(&item_new);
   state_clear(STATE_CREATING);
 
-  if (state_test(CDir::STATE_FRAGMENTING)) {
-    list<MDSInternalContextBase*> ls;
-    take_waiting(CDir::WAIT_CREATED, ls);
-    cache->mds->queue_waiters(ls);
-  }
+  list<MDSInternalContextBase*> waiters;
+  take_waiting(CDir::WAIT_CREATED, waiters);
+  cache->mds->queue_waiters(waiters);
 }
 
 void CDir::mark_clean()

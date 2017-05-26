@@ -299,7 +299,7 @@ private:
       int64_t base_pool_id, const pg_pool_t *base_pool, const pg_pool_t *tier_pool,
       int *err, ostream *ss) const;
 
-  int _prepare_remove_pool(int64_t pool, ostream *ss);
+  int _prepare_remove_pool(int64_t pool, ostream *ss, bool no_fake);
   int _prepare_rename_pool(int64_t pool, string newname);
 
   bool preprocess_pool_op (MonOpRequestRef op);
@@ -331,9 +331,10 @@ private:
 				 const string &ruleset_name,
 				 int *crush_ruleset,
 				 ostream *ss);
-  bool erasure_code_profile_in_use(const map<int64_t, pg_pool_t> &pools,
-				   const string &profile,
-				   ostream *ss);
+  bool erasure_code_profile_in_use(
+    const mempool::osdmap::map<int64_t, pg_pool_t> &pools,
+    const string &profile,
+    ostream *ss);
   int parse_erasure_code_profile(const vector<string> &erasure_code_profile,
 				 map<string,string> *erasure_code_profile_map,
 				 ostream *ss);
@@ -452,10 +453,11 @@ private:
 
   creating_pgs_t update_pending_pgs(const OSDMap::Incremental& inc);
   void trim_creating_pgs(creating_pgs_t *creating_pgs, const PGMap& pgm);
-  void scan_for_creating_pgs(const std::map<int64_t,pg_pool_t>& pools,
-			     const std::set<int64_t>& removed_pools,
-			     utime_t modified,
-			     creating_pgs_t* creating_pgs) const;
+  void scan_for_creating_pgs(
+    const mempool::osdmap::map<int64_t,pg_pool_t>& pools,
+    const mempool::osdmap::set<int64_t>& removed_pools,
+    utime_t modified,
+    creating_pgs_t* creating_pgs) const;
   pair<int32_t, pg_t> get_parent_pg(pg_t pgid) const;
   void update_creating_pgs();
   void check_pg_creates_subs();

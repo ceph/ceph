@@ -484,6 +484,8 @@ Per mapping (block device) `rbd map` options:
 * lock_on_read - Acquire exclusive lock on reads, in addition to writes and
   discards (since 4.9).
 
+* exclusive - Disable automatic exclusive lock transitions (since 4.12).
+
 `rbd unmap` options:
 
 * force - Force the unmapping of a block device that is open (since 4.9).  The
