@@ -1100,6 +1100,7 @@ public:
   void init();
   void final_init();  
   void start_shutdown();
+  void shutdown_reserver();
   void shutdown();
 
 private:
