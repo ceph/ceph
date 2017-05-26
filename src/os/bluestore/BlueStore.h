@@ -1408,6 +1408,12 @@ public:
     void reset() {
       *this = volatile_statfs();
     }
+    volatile_statfs& operator+=(const volatile_statfs& other) {
+      for (size_t i = 0; i < STATFS_LAST; ++i) {
+	values[i] += other.values[i];
+      }
+      return *this;
+    }
     int64_t& allocated() {
       return values[STATFS_ALLOCATED];
     }
@@ -1896,6 +1902,9 @@ private:
 
   // cache trim control
 
+  std::mutex vstatfs_lock;
+  volatile_statfs vstatfs;
+
   struct MempoolThread : public Thread {
     BlueStore *store;
     Cond cond;
@@ -1959,6 +1968,8 @@ private:
 			       bool create);
 
   int _open_super_meta();
+
+  void open_statfs();
 
   int _reconcile_bluefs_freespace();
   int _balance_bluefs_freespace(PExtentVector *extents);
