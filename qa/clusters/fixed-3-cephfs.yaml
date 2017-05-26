@@ -9,3 +9,8 @@ openstack:
 log-rotate:
   ceph-mds: 10G
   ceph-osd: 10G
+overrides:
+  ceph:
+    conf:
+      osd:
+        osd shutdown pgref assert: true
