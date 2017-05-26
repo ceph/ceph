@@ -1107,7 +1107,7 @@ int RGWPutObj_ObjStore_S3::get_params()
   if (!s->length)
     return -ERR_LENGTH_REQUIRED;
 
-  ret = create_s3_policy(s, store, s3policy, s->owner);
+  ret = create_s3_policy(s, store, s3policy, s->bucket_owner);
   if (ret < 0)
     return ret;
 
