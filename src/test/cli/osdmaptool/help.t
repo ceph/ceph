@@ -19,4 +19,5 @@
      --upmap-deviation <max-deviation>
                              max deviation from target [default: .01]
      --upmap-pool <poolname> restrict upmap balancing to 1 or more pools
+     --upmap-save            write modified OSDMap with upmap changes
   [1]
