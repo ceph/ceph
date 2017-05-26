@@ -1347,11 +1347,54 @@ int CrushWrapper::remove_rule(int ruleno)
 
 int CrushWrapper::bucket_add_item(crush_bucket *bucket, int item, int weight)
 {
+  __u32 new_size = bucket->size + 1;
+  for (auto w : choose_args) {
+    crush_choose_arg_map arg_map = w.second;
+    crush_choose_arg *arg = &arg_map.args[-1-bucket->id];
+    for (__u32 j = 0; j < arg->weight_set_size; j++) {
+      crush_weight_set *weight_set = &arg->weight_set[j];
+      weight_set->weights = (__u32*)realloc(weight_set->weights, new_size * sizeof(__u32));
+      assert(weight_set->size + 1 == new_size);
+      weight_set->weights[weight_set->size] = weight;
+      weight_set->size = new_size;
+    }
+    if (arg->ids_size) {
+      arg->ids = (int*)realloc(arg->ids, new_size * sizeof(int));
+      assert(arg->ids_size + 1 == new_size);
+      arg->ids[arg->ids_size] = item;
+      arg->ids_size = new_size;
+    }
+  }
   return crush_bucket_add_item(crush, bucket, item, weight);
 }
 
 int CrushWrapper::bucket_remove_item(crush_bucket *bucket, int item)
 {
+  __u32 new_size = bucket->size - 1;
+  unsigned position;
+  for (position = 0; position < bucket->size; position++)
+    if (bucket->items[position] == item)
+      break;
+  assert(position != bucket->size);
+  for (auto w : choose_args) {
+    crush_choose_arg_map arg_map = w.second;
+    crush_choose_arg *arg = &arg_map.args[-1-bucket->id];
+    for (__u32 j = 0; j < arg->weight_set_size; j++) {
+      crush_weight_set *weight_set = &arg->weight_set[j];
+      assert(weight_set->size - 1 == new_size);
+      for (__u32 k = position; k < new_size; k++)
+	weight_set->weights[k] = weight_set->weights[k+1];
+      weight_set->weights = (__u32*)realloc(weight_set->weights, new_size * sizeof(__u32));
+      weight_set->size = new_size;
+    }
+    if (arg->ids_size) {
+      assert(arg->ids_size - 1 == new_size);
+      for (__u32 k = position; k < new_size; k++)
+	arg->ids[k] = arg->ids[k+1];
+      arg->ids = (int*)realloc(arg->ids, new_size * sizeof(int));
+      arg->ids_size = new_size;
+    }
+  }
   return crush_bucket_remove_item(crush, bucket, item);
 }
 
