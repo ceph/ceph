@@ -1488,7 +1488,8 @@ int RGWBucketAdminOp::limit_check(RGWRados *store,
 	}
 
 	num_shards = info.num_shards;
-	uint64_t objs_per_shard = num_objects / num_shards;
+	uint64_t objs_per_shard =
+	  (num_shards) ? num_objects/num_shards : num_objects;
 	{
 	  bool warn = false;
 	  stringstream ss;
