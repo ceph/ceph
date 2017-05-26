@@ -5795,7 +5795,7 @@ int BlueStore::statfs(struct store_statfs_t *buf)
   bufferlist bl;
   int r = db->get(PREFIX_STAT, "bluestore_statfs", &bl);
   if (r >= 0) {
-       TransContext::volatile_statfs vstatfs;
+     volatile_statfs vstatfs;
      if (size_t(bl.length()) >= sizeof(vstatfs.values)) {
        auto it = bl.begin();
        vstatfs.decode(it);
