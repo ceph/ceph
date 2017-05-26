@@ -919,16 +919,6 @@ OSDMonitor::update_pending_pgs(const OSDMap::Incremental& inc)
   if (pending_creatings.last_scan_epoch > inc.epoch) {
     return pending_creatings;
   }
-  unsigned removed = 0;
-  for (auto& pg : pending_created_pgs) {
-    pending_creatings.created_pools.insert(pg.pool());
-    removed += pending_creatings.pgs.erase(pg);
-  }
-  pending_created_pgs.clear();
-  dout(10) << __func__ << removed << " pgs removed because they're created"
-	   << dendl;
-  // PAXOS_PGMAP is less than PAXOS_OSDMAP, so PGMonitor::update_from_paxos()
-  // should have prepared the latest pgmap if any
   const auto& pgm = mon->pgmon()->pg_map;
   if (pgm.last_pg_scan >= creating_pgs.last_scan_epoch) {
     // TODO: please stop updating pgmap with pgstats once the upgrade is completed
@@ -943,12 +933,6 @@ OSDMonitor::update_pending_pgs(const OSDMap::Incremental& inc)
     dout(7) << __func__ << total - pending_creatings.pgs.size()
 	    << " pgs added from pgmap" << dendl;
   }
-  for (auto old_pool : inc.old_pools) {
-    auto removed = pending_creatings.remove_pool(old_pool);
-    dout(10) << __func__ << removed
-	     << " pg removed because containing pool deleted: "
-	     << old_pool << dendl;
-  }
   unsigned added = 0;
   added += scan_for_creating_pgs(osdmap.get_pools(),
 				 inc.old_pools,
@@ -959,6 +943,24 @@ OSDMonitor::update_pending_pgs(const OSDMap::Incremental& inc)
 				 inc.modified,
 				 &pending_creatings);
   dout(10) << __func__ << added << " pg added for new pools" << dendl;
+  for (auto deleted_pool : inc.old_pools) {
+    auto removed = pending_creatings.remove_pool(deleted_pool);
+    dout(10) << __func__ << removed
+	     << " pg removed because containing pool deleted: "
+	     << deleted_pool << dendl;
+  }
+  // pgmon updates its creating_pgs in check_osd_map() which is called by
+  // on_active() and check_osd_map() could be delayed if lease expires, so its
+  // creating_pgs could be stale in comparison with the one of osdmon. let's
+  // trim them here. otherwise, they will be added back after being erased.
+  unsigned removed = 0;
+  for (auto& pg : pending_created_pgs) {
+    pending_creatings.created_pools.insert(pg.pool());
+    removed += pending_creatings.pgs.erase(pg);
+  }
+  pending_created_pgs.clear();
+  dout(10) << __func__ << removed << " pgs removed because they're created"
+	   << dendl;
   pending_creatings.last_scan_epoch = osdmap.get_epoch();
   return pending_creatings;
 }
