@@ -350,7 +350,7 @@ int CrushWrapper::remove_item(CephContext *cct, int item, bool unlink_only)
       if (id == item) {
 	ldout(cct, 5) << "remove_item removing item " << item
 		      << " from bucket " << b->id << dendl;
-	crush_bucket_remove_item(crush, b, item);
+	bucket_remove_item(b, item);
 	adjust_item_weight(cct, b->id, b->weight);
 	ret = 0;
       }
@@ -422,7 +422,7 @@ int CrushWrapper::_remove_item_under(CephContext *cct, int item, int ancestor, b
     int id = b->items[i];
     if (id == item) {
       ldout(cct, 5) << "_remove_item_under removing item " << item << " from bucket " << b->id << dendl;
-      crush_bucket_remove_item(crush, b, item);
+      bucket_remove_item(b, item);
       adjust_item_weight(cct, b->id, b->weight);
       ret = 0;
     } else if (id < 0) {
@@ -774,7 +774,7 @@ int CrushWrapper::insert_item(CephContext *cct, int item, float weight, string n
 
     ldout(cct, 5) << "insert_item adding " << cur << " weight " << weight
 		  << " to bucket " << id << dendl;
-    int r = crush_bucket_add_item(crush, b, cur, 0);
+    int r = bucket_add_item(b, cur, 0);
     assert (!r);
     break;
   }
@@ -839,20 +839,20 @@ int CrushWrapper::swap_bucket(CephContext *cct, int src, int dst)
     int item = a->items[0];
     int itemw = crush_get_bucket_item_weight(a, 0);
     tmp[item] = itemw;
-    crush_bucket_remove_item(crush, a, item);
+    bucket_remove_item(a, item);
   }
   assert(a->size == 0);
   assert(b->size == bs);
   for (unsigned i = 0; i < bs; ++i) {
     int item = b->items[0];
     int itemw = crush_get_bucket_item_weight(b, 0);
-    crush_bucket_remove_item(crush, b, item);
-    crush_bucket_add_item(crush, a, item, itemw);
+    bucket_remove_item(b, item);
+    bucket_add_item(a, item, itemw);
   }
   assert(a->size == bs);
   assert(b->size == 0);
   for (auto t : tmp) {
-    crush_bucket_add_item(crush, b, t.first, t.second);
+    bucket_add_item(b, t.first, t.second);
   }
   assert(a->size == bs);
   assert(b->size == as);
@@ -1375,6 +1375,16 @@ int CrushWrapper::remove_rule(int ruleno)
   return 0;
 }
 
+int CrushWrapper::bucket_add_item(crush_bucket *bucket, int item, int weight)
+{
+  return crush_bucket_add_item(crush, bucket, item, weight);
+}
+
+int CrushWrapper::bucket_remove_item(crush_bucket *bucket, int item)
+{
+  return crush_bucket_remove_item(crush, bucket, item);
+}
+
 int CrushWrapper::update_device_class(CephContext *cct, int id, const string& class_name, const string& name)
 {
   int class_id = get_class_id(class_name);
@@ -1429,7 +1439,7 @@ int CrushWrapper::device_class_clone(int original_id, int device_class, int *clo
     int weight = crush_get_bucket_item_weight(original, i);
     if (item >= 0) {
       if (class_map.count(item) != 0 && class_map[item] == device_class) {
-	int res = crush_bucket_add_item(crush, copy, item, weight);
+	int res = bucket_add_item(copy, item, weight);
 	if (res)
 	  return res;
       }
@@ -1441,7 +1451,7 @@ int CrushWrapper::device_class_clone(int original_id, int device_class, int *clo
       crush_bucket *child_copy = get_bucket(child_copy_id);
       if (IS_ERR(child_copy))
 	return -ENOENT;
-      res = crush_bucket_add_item(crush, copy, child_copy_id, child_copy->weight);
+      res = bucket_add_item(copy, child_copy_id, child_copy->weight);
       if (res)
 	return res;
     }
