@@ -5216,7 +5216,17 @@ int BlueStore::fsck(bool deep)
 
   mempool_thread.init();
 
+  // we need finishrs and kv_sync_thread *just* for replay.
+  for (auto f : finishers) {
+    f->start();
+  }
+  kv_sync_thread.create("bstore_kv_sync");
   r = _deferred_replay();
+  _kv_stop();
+  for (auto f : finishers) {
+    f->wait_for_empty();
+    f->stop();
+  }
   if (r < 0)
     goto out_scan;
 
