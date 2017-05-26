@@ -2520,7 +2520,6 @@ void AsyncConnection::tick(uint64_t id)
   auto now = ceph::coarse_mono_clock::now();
   ldout(async_msgr->cct, 20) << __func__ << " last_id=" << last_tick_id
                              << " last_active" << last_active << dendl;
-  assert(last_tick_id == id);
   std::lock_guard<std::mutex> l(lock);
   last_tick_id = 0;
   auto idle_period = std::chrono::duration_cast<std::chrono::microseconds>(now - last_active).count();
