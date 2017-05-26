@@ -948,13 +948,15 @@ protected:
   void get_obc_watchers(ObjectContextRef obc, list<obj_watch_item_t> &pg_watchers);
 public:
   void handle_watch_timeout(WatchRef watch);
+  void check_object_context_and_purge(const hobject_t& oid);
 protected:
 
   ObjectContextRef create_object_context(const object_info_t& oi, SnapSetContext *ssc);
   ObjectContextRef get_object_context(
     const hobject_t& soid,
     bool can_create,
-    const map<string, bufferlist> *attrs = 0
+    const map<string, bufferlist> *attrs = 0,
+    bool lookup_only = false
     );
 
   void context_registry_on_change();

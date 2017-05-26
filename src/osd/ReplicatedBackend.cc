@@ -22,6 +22,7 @@
 #include "messages/MOSDPGPull.h"
 #include "messages/MOSDPGPushReply.h"
 #include "common/EventTrace.h"
+#include "PrimaryLogPG.h"
 
 #define dout_context cct
 #define dout_subsys ceph_subsys_osd
@@ -1076,6 +1077,8 @@ void ReplicatedBackend::do_repop(OpRequestRef op)
   assert(MSG_OSD_REPOP == msg_type);
 
   const hobject_t& soid = m->poid;
+  PrimaryLogPG *_rPG = dynamic_cast<PrimaryLogPG *>(get_parent());
+  _rPG->check_object_context_and_purge(soid);
 
   dout(10) << __func__ << " " << soid
            << " v " << m->version
