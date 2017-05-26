@@ -92,10 +92,10 @@ namespace rgw {
 	auto ux_key = req.get_attr(RGW_ATTR_UNIX_KEY1);
 	auto ux_attrs = req.get_attr(RGW_ATTR_UNIX1);
 	if (ux_key && ux_attrs) {
-	  bool old_key = rgw_fh->decode_attrs(ux_key, ux_attrs);
-	  if (old_key) {
-	    update_fhk(rgw_fh);
-	  }
+	  DecodeAttrsResult dar = rgw_fh->decode_attrs(ux_key, ux_attrs);
+	  if (get<0>(dar) || get<1>(dar)) {
+	    update_fh(rgw_fh);
+          }
 	}
 	if (! (flags & RGWFileHandle::FLAG_LOCKED)) {
 	  rgw_fh->mtx.unlock();
@@ -147,10 +147,10 @@ namespace rgw {
 	    auto ux_key = req.get_attr(RGW_ATTR_UNIX_KEY1);
 	    auto ux_attrs = req.get_attr(RGW_ATTR_UNIX1);
 	    if (ux_key && ux_attrs) {
-	      bool old_key = rgw_fh->decode_attrs(ux_key, ux_attrs);
-	      if (old_key) {
-		update_fhk(rgw_fh);
-	      }
+              DecodeAttrsResult dar = rgw_fh->decode_attrs(ux_key, ux_attrs);
+              if (get<0>(dar) || get<1>(dar)) {
+                update_fh(rgw_fh);
+              }
 	    }
 	  }
 	  goto done;
@@ -181,10 +181,10 @@ namespace rgw {
 	    auto ux_key = req.get_attr(RGW_ATTR_UNIX_KEY1);
 	    auto ux_attrs = req.get_attr(RGW_ATTR_UNIX1);
 	    if (ux_key && ux_attrs) {
-	      bool old_key = rgw_fh->decode_attrs(ux_key, ux_attrs);
-	      if (old_key) {
-		update_fhk(rgw_fh);
-	      }
+              DecodeAttrsResult dar = rgw_fh->decode_attrs(ux_key, ux_attrs);
+              if (get<0>(dar) || get<1>(dar)) {
+                update_fh(rgw_fh);
+              }
 	    }
 	  }
 	  goto done;
@@ -744,7 +744,7 @@ namespace rgw {
   } /* RGWLibFS::setattr */
 
   /* called under rgw_fh->mtx held */
-  void RGWLibFS::update_fhk(RGWFileHandle *rgw_fh)
+  void RGWLibFS::update_fh(RGWFileHandle *rgw_fh)
   {
     int rc, rc2;
     string obj_name{rgw_fh->relative_object_name()};
@@ -757,15 +757,15 @@ namespace rgw {
 
     lsubdout(get_context(), rgw, 17)
       << __func__
-      << " update old versioned fhk : " << obj_name
+      << " update old versioned fh : " << obj_name
       << dendl;
 
     RGWSetAttrsRequest req(cct, get_user(), rgw_fh->bucket_name(), obj_name);
 
     rgw_fh->encode_attrs(ux_key, ux_attrs);
 
-    /* update ux_key only */
     req.emplace_attr(RGW_ATTR_UNIX_KEY1, std::move(ux_key));
+    req.emplace_attr(RGW_ATTR_UNIX1, std::move(ux_attrs));
 
     rc = rgwlib.get_fe()->execute_req(&req);
     rc2 = req.get_ret();
@@ -773,10 +773,10 @@ namespace rgw {
     if ((rc != 0) || (rc2 != 0)) {
       lsubdout(get_context(), rgw, 17)
 	<< __func__
-	<< " update fhk failed : " << obj_name
+	<< " update fh failed : " << obj_name
 	<< dendl;
     }
-  } /* RGWLibFS::update_fhk */
+  } /* RGWLibFS::update_fh */
 
   void RGWLibFS::close()
   {
@@ -786,7 +786,7 @@ namespace rgw {
     {
       RGWLibFS* fs;
     public:
-      ObjUnref(RGWLibFS* fs) : fs(fs) {}
+      ObjUnref(RGWLibFS* _fs) : fs(_fs) {}
       void operator()(RGWFileHandle* fh) const {
 	lsubdout(fs->get_context(), rgw, 5)
 	  << __func__
@@ -976,23 +976,26 @@ namespace rgw {
     rgw::encode(*this, ux_attrs1);
   } /* RGWFileHandle::encode_attrs */
 
-  bool RGWFileHandle::decode_attrs(const ceph::buffer::list* ux_key1,
-				   const ceph::buffer::list* ux_attrs1)
+  DecodeAttrsResult RGWFileHandle::decode_attrs(const ceph::buffer::list* ux_key1,
+                                                const ceph::buffer::list* ux_attrs1)
   {
-    bool old_key = false;
+    DecodeAttrsResult dar { false, false };
     fh_key fhk;
     auto bl_iter_key1  = const_cast<buffer::list*>(ux_key1)->begin();
     rgw::decode(fhk, bl_iter_key1);
     if (fhk.version >= 2) {
       assert(this->fh.fh_hk == fhk.fh_hk);
     } else {
-      old_key = true;
+      get<0>(dar) = true;
     }
 
     auto bl_iter_unix1 = const_cast<buffer::list*>(ux_attrs1)->begin();
     rgw::decode(*this, bl_iter_unix1);
+    if (this->state.version < 2) {
+      get<1>(dar) = true;
+    }
 
-    return old_key;
+    return dar;
   } /* RGWFileHandle::decode_attrs */
 
   bool RGWFileHandle::reclaim() {
@@ -1579,8 +1582,8 @@ int rgw_statfs(struct rgw_fs *rgw_fs,
   vfs_st->f_bavail = UINT64_MAX;
   vfs_st->f_files = 1024; /* object count, do we have an est? */
   vfs_st->f_ffree = UINT64_MAX;
-  vfs_st->f_fsid[0] = fs->get_inst();
-  vfs_st->f_fsid[1] = fs->get_inst();
+  vfs_st->f_fsid[0] = fs->get_fsid();
+  vfs_st->f_fsid[1] = fs->get_fsid();
   vfs_st->f_flag = 0;
   vfs_st->f_namemax = 4096;
   return 0;
