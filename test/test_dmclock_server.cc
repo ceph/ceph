@@ -16,6 +16,46 @@
 #include "dmclock_util.h"
 #include "gtest/gtest.h"
 
+#include <dmtest-config.h>
+#ifdef HAVE_SYS_PRCTL_H
+#include <iostream>
+#include <sys/prctl.h>
+#include <errno.h>
+
+struct PrCtl {
+  int saved_state = -1;
+  int set_dumpable(int new_state) {
+    int r = prctl(PR_SET_DUMPABLE, new_state);
+    if (r) {
+      r = -errno;
+      std::cerr << "warning: unable to " << (new_state ? "set" : "unset")
+                << " dumpable flag: " << strerror(r)
+                << std::endl;
+    }
+    return r;
+  }
+  PrCtl(int new_state = 0) {
+    int r = prctl(PR_GET_DUMPABLE);
+    if (r == -1) {
+      r = errno;
+      std::cerr << "warning: unable to get dumpable flag: " << strerror(r)
+                << std::endl;
+    } else if (r != new_state) {
+      if (!set_dumpable(new_state)) {
+        saved_state = r;
+      }
+    }
+  }
+  ~PrCtl() {
+    if (saved_state < 0) {
+      return;
+    }
+    set_dumpable(saved_state);
+  }
+};
+#else
+struct PrCtl {};
+#endif
 
 namespace dmc = crimson::dmclock;
 
@@ -63,6 +103,9 @@ namespace crimson {
       QueueRef pq(new Queue(client_info_f, false));
       Request req;
       ReqParams req_params(1,1);
+
+      // Disable coredumps
+      PrCtl unset_dumpable;
 
       EXPECT_DEATH_IF_SUPPORTED(pq->add_request(req, client1, req_params),
 				"Assertion.*reservation.*max_tag.*"
