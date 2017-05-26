@@ -1863,6 +1863,9 @@ private:
 
   std::atomic<uint64_t> max_blob_size = {0};  ///< maximum blob size
 
+  uint64_t kv_ios = 0;
+  uint64_t kv_throttle_costs = 0;
+
   // cache trim control
 
   // note that these update in a racy way, but we don't *really* care if
