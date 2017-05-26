@@ -26,11 +26,13 @@ class ISALCryptoPlugin : public CryptoPlugin {
 
   CryptoAccelRef cryptoaccel;
 public:
+  explicit ISALCryptoPlugin(CephContext* cct)
+  : CryptoPlugin(cct) {}
+  ~ISALCryptoPlugin() {
+    assert(cryptoaccel.use_count() <= 1);
+    cryptoaccel = nullptr;
+  }
 
-  explicit ISALCryptoPlugin(CephContext* cct) : CryptoPlugin(cct)
-  {}
-  ~ISALCryptoPlugin()
-  {}
   virtual int factory(CryptoAccelRef *cs,
                       ostream *ss)
   {

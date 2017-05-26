@@ -145,20 +145,22 @@ public:
                      bufferptr& key,
                      bool encrypt)
   {
-    static std::atomic<bool> failed_to_get_crypto(false);
-    CryptoAccelRef crypto_accel;
-    if (! failed_to_get_crypto.load())
+    struct CryptoAccelRefWrapper
     {
-      crypto_accel = get_crypto_accel(cct);
-      if (!crypto_accel)
-        failed_to_get_crypto = true;
-    }
+      CryptoAccelRef crypto_accel;
+      CryptoAccelRefWrapper(CephContext* cct)
+      : crypto_accel(get_crypto_accel(cct)) {}
+      ~CryptoAccelRefWrapper() { crypto_accel = nullptr;}
+    };
+    CryptoAccelRefWrapper* ref;
+    cct->lookup_or_create_singleton_object(ref, "CBC_transform_accel");
+
     if (key.length() != AES_256_KEYSIZE) {
       return false;
     }
     unsigned char iv_arr[AES_256_IVSIZE];
     unsigned char key_arr[AES_256_KEYSIZE];
-    if (crypto_accel != nullptr) {
+    if (ref->crypto_accel != nullptr) {
       memcpy(key_arr, key.c_str(), AES_256_KEYSIZE);
     }
     bool result = true;
@@ -167,7 +169,7 @@ public:
       size_t process_size = offset + CHUNK_SIZE <= size ? CHUNK_SIZE : size - offset;
       bufferptr iv = prepare_iv(stream_offset + offset);
       assert(iv.length() == AES_256_IVSIZE);
-      if (crypto_accel != nullptr) {
+      if (ref->crypto_accel != nullptr) {
         memcpy(key_arr, key.c_str(), AES_256_KEYSIZE);
         memcpy(iv_arr, iv.c_str(), AES_256_IVSIZE);
         bufferptr out_buf(process_size);
@@ -176,10 +178,10 @@ public:
         const unsigned char* in_ptr =
           reinterpret_cast<unsigned char*>(input.get_contiguous(offset, process_size));
         if (encrypt) {
-          result = crypto_accel->cbc_encrypt(out_ptr, in_ptr,
+          result = ref->crypto_accel->cbc_encrypt(out_ptr, in_ptr,
                                              process_size, iv_arr, key_arr);
         } else {
-          result = crypto_accel->cbc_decrypt(out_ptr, in_ptr,
+          result = ref->crypto_accel->cbc_decrypt(out_ptr, in_ptr,
                                              process_size, iv_arr, key_arr);
         }
         output.append(out_buf);
