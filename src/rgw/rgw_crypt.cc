@@ -202,10 +202,10 @@ CryptoAccelRef get_crypto_accel(CephContext *cct)
 {
   CryptoAccelRef ca_impl = nullptr;
   stringstream ss;
-  PluginRegistry *reg = cct->get_plugin_registry();
+  auto reg = cct->get_plugin_registry();
   string crypto_accel_type = cct->_conf->plugin_crypto_accelerator;
 
-  CryptoPlugin *factory = dynamic_cast<CryptoPlugin*>(reg->get_with_load("crypto", crypto_accel_type));
+  auto factory = dynamic_cast<CryptoPlugin*>(reg->get_with_load("crypto", crypto_accel_type));
   if (factory == nullptr) {
     lderr(cct) << __func__ << " cannot load crypto accelerator of type " << crypto_accel_type << dendl;
     return nullptr;
@@ -359,25 +359,26 @@ public:
                      const unsigned char (&key)[AES_256_KEYSIZE],
                      bool encrypt)
   {
-    static std::atomic<bool> failed_to_get_crypto(false);
-    CryptoAccelRef crypto_accel;
-    if (! failed_to_get_crypto.load())
+    struct CryptoAccelRefWrapper
     {
-      crypto_accel = get_crypto_accel(cct);
-      if (!crypto_accel)
-        failed_to_get_crypto = true;
-    }
+      CryptoAccelRef crypto_accel;
+      CryptoAccelRefWrapper(CephContext* cct)
+      : crypto_accel(get_crypto_accel(cct)) {}
+      ~CryptoAccelRefWrapper() { crypto_accel = nullptr;}
+    };
+    CryptoAccelRefWrapper* ref;
+    cct->lookup_or_create_singleton_object(ref, "CBC_transform_accel");
     bool result = true;
     unsigned char iv[AES_256_IVSIZE];
     for (size_t offset = 0; result && (offset < size); offset += CHUNK_SIZE) {
       size_t process_size = offset + CHUNK_SIZE <= size ? CHUNK_SIZE : size - offset;
       prepare_iv(iv, stream_offset + offset);
-      if (crypto_accel != nullptr) {
+      if (ref->crypto_accel != nullptr) {
         if (encrypt) {
-          result = crypto_accel->cbc_encrypt(out + offset, in + offset,
+          result = ref->crypto_accel->cbc_encrypt(out + offset, in + offset,
                                              process_size, iv, key);
         } else {
-          result = crypto_accel->cbc_decrypt(out + offset, in + offset,
+          result = ref->crypto_accel->cbc_decrypt(out + offset, in + offset,
                                              process_size, iv, key);
         }
       } else {
