@@ -264,13 +264,13 @@ Summary:	Ceph Common
 %if 0%{?suse_version}
 Group:		System/Filesystems
 %endif
-Requires:	librbd1 = %{epoch}:%{version}-%{release}
-Requires:	librados2 = %{epoch}:%{version}-%{release}
-Requires:	libcephfs2 = %{epoch}:%{version}-%{release}
-Requires:	python-rados = %{epoch}:%{version}-%{release}
-Requires:	python-rbd = %{epoch}:%{version}-%{release}
-Requires:	python-cephfs = %{epoch}:%{version}-%{release}
-Requires:	python-rgw = %{epoch}:%{version}-%{release}
+Requires:	librbd1 = %{version}-%{release}
+Requires:	librados2 = %{version}-%{release}
+Requires:	libcephfs2 = %{version}-%{release}
+Requires:	python-rados = %{version}-%{release}
+Requires:	python-rbd = %{version}-%{release}
+Requires:	python-cephfs = %{version}-%{release}
+Requires:	python-rgw = %{version}-%{release}
 %if 0%{?fedora} || 0%{?rhel}
 Requires:	python-prettytable
 %endif
