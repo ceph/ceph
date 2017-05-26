@@ -679,6 +679,7 @@ OPTION(osd_client_message_size_cap, OPT_U64, 500*1024L*1024L) // client data all
 OPTION(osd_client_message_cap, OPT_U64, 100)              // num client messages allowed in-memory
 OPTION(osd_pg_bits, OPT_INT, 6)  // bits per osd
 OPTION(osd_pgp_bits, OPT_INT, 6)  // bits per osd
+OPTION(osd_crush_update_weight_set, OPT_BOOL, true) // update weight set while updating weights
 OPTION(osd_crush_chooseleaf_type, OPT_INT, 1) // 1 = host
 OPTION(osd_pool_use_gmt_hitset, OPT_BOOL, true) // try to use gmt for hitset archive names if all osds in cluster support it.
 OPTION(osd_crush_update_on_start, OPT_BOOL, true)
