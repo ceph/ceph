@@ -18,7 +18,7 @@ public:
 
   ExclusiveLock(ImageCtxT &image_ctx);
 
-  bool accept_requests(int *ret_val) const;
+  bool accept_requests(int *ret_val = nullptr) const;
 
   void block_requests(int r);
   void unblock_requests();

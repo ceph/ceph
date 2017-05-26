@@ -42,7 +42,9 @@ bool ExclusiveLock<I>::accept_requests(int *ret_val) const {
   bool accept_requests = (!ML<I>::is_state_shutdown() &&
                           ML<I>::is_state_locked() &&
                           m_request_blocked_count == 0);
-  *ret_val = m_request_blocked_ret_val;
+  if (ret_val != nullptr) {
+    *ret_val = m_request_blocked_ret_val;
+  }
 
   ldout(m_image_ctx.cct, 20) << "=" << accept_requests << dendl;
   return accept_requests;
