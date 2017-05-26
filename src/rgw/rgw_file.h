@@ -173,6 +173,8 @@ namespace rgw {
   using boost::variant;
   using boost::container::flat_map;
 
+  typedef std::tuple<bool, bool> DecodeAttrsResult;
+
   class RGWFileHandle : public cohort::lru::Object
   {
     struct rgw_file_handle fh;
@@ -204,8 +206,9 @@ namespace rgw {
       struct timespec ctime;
       struct timespec mtime;
       struct timespec atime;
+      uint32_t version;
       State() : dev(0), size(0), nlink(1), owner_uid(0), owner_gid(0),
-		ctime{0,0}, mtime{0,0}, atime{0,0} {}
+		ctime{0,0}, mtime{0,0}, atime{0,0}, version(0) {}
     } state;
 
     struct file {
@@ -257,7 +260,7 @@ namespace rgw {
     friend class RGWLibFS;
 
   private:
-    RGWFileHandle(RGWLibFS* _fs, uint32_t fs_inst)
+    RGWFileHandle(RGWLibFS* _fs)
       : fs(_fs), bucket(nullptr), parent(nullptr), variant_type{directory()},
 	depth(0), flags(FLAG_ROOT)
       {
@@ -265,11 +268,14 @@ namespace rgw {
 	fh.fh_type = RGW_FS_TYPE_DIRECTORY;
 	variant_type = directory();
 	/* stat */
-	state.dev = fs_inst;
 	state.unix_mode = RGW_RWXMODE|S_IFDIR;
 	/* pointer to self */
 	fh.fh_private = this;
       }
+
+    uint64_t init_fsid(std::string& uid) {
+      return XXH64(uid.c_str(), uid.length(), fh_key::seed);
+    }
 
     void init_rootfs(std::string& fsid, const std::string& object_name) {
       /* fh_key */
@@ -278,12 +284,14 @@ namespace rgw {
 			      fh_key::seed);
       fhk = fh.fh_hk;
       name = object_name;
+
+      state.dev = init_fsid(fsid);
     }
 
   public:
-    RGWFileHandle(RGWLibFS* fs, uint32_t fs_inst, RGWFileHandle* _parent,
+    RGWFileHandle(RGWLibFS* _fs, RGWFileHandle* _parent,
 		  const fh_key& _fhk, std::string& _name, uint32_t _flags)
-      : fs(fs), bucket(nullptr), parent(_parent), name(std::move(_name)),
+      : fs(_fs), bucket(nullptr), parent(_parent), name(std::move(_name)),
 	fhk(_fhk), flags(_flags) {
 
       if (parent->is_root()) {
@@ -307,8 +315,8 @@ namespace rgw {
       /* save constant fhk */
       fh.fh_hk = fhk.fh_hk; /* XXX redundant in fh_hk */
 
-      /* stat */
-      state.dev = fs_inst;
+      /* inherits parent's fsid */
+      state.dev = parent->state.dev;
 
       switch (fh.fh_type) {
       case RGW_FS_TYPE_DIRECTORY:
@@ -594,7 +602,7 @@ namespace rgw {
     }
 
     void encode(buffer::list& bl) const {
-      ENCODE_START(1, 1, bl);
+      ENCODE_START(2, 1, bl);
       ::encode(uint32_t(fh.fh_type), bl);
       ::encode(state.dev, bl);
       ::encode(state.size, bl);
@@ -605,11 +613,12 @@ namespace rgw {
       for (const auto& t : { state.ctime, state.mtime, state.atime }) {
 	::encode(real_clock::from_timespec(t), bl);
       }
+      ::encode((uint32_t)2, bl);
       ENCODE_FINISH(bl);
     }
 
     void decode(bufferlist::iterator& bl) {
-      DECODE_START(1, bl);
+      DECODE_START(2, bl);
       uint32_t fh_type;
       ::decode(fh_type, bl);
       assert(fh.fh_type == fh_type);
@@ -624,14 +633,17 @@ namespace rgw {
 	::decode(enc_time, bl);
 	*t = real_clock::to_timespec(enc_time);
       }
+      if (struct_v >= 2) {
+        ::decode(state.version, bl);
+      }
       DECODE_FINISH(bl);
     }
 
     void encode_attrs(ceph::buffer::list& ux_key1,
 		      ceph::buffer::list& ux_attrs1);
 
-    bool decode_attrs(const ceph::buffer::list* ux_key1,
-		      const ceph::buffer::list* ux_attrs1);
+    DecodeAttrsResult decode_attrs(const ceph::buffer::list* ux_key1,
+                                   const ceph::buffer::list* ux_attrs1);
 
     void invalidate();
 
@@ -694,7 +706,6 @@ namespace rgw {
     {
     public:
       RGWLibFS* fs;
-      uint32_t fs_inst;
       RGWFileHandle* parent;
       const fh_key& fhk;
       std::string& name;
@@ -702,20 +713,20 @@ namespace rgw {
 
       Factory() = delete;
 
-      Factory(RGWLibFS* fs, uint32_t fs_inst, RGWFileHandle* parent,
-	      const fh_key& fhk, std::string& name, uint32_t flags)
-	: fs(fs), fs_inst(fs_inst), parent(parent), fhk(fhk), name(name),
-	  flags(flags) {}
+      Factory(RGWLibFS* _fs, RGWFileHandle* _parent,
+	      const fh_key& _fhk, std::string& _name, uint32_t _flags)
+	: fs(_fs), parent(_parent), fhk(_fhk), name(_name),
+	  flags(_flags) {}
 
       void recycle (cohort::lru::Object* o) override {
 	/* re-use an existing object */
 	o->~Object(); // call lru::Object virtual dtor
 	// placement new!
-	new (o) RGWFileHandle(fs, fs_inst, parent, fhk, name, flags);
+	new (o) RGWFileHandle(fs, parent, fhk, name, flags);
       }
 
       cohort::lru::Object* alloc() override {
-	return new RGWFileHandle(fs, fs_inst, parent, fhk, name, flags);
+	return new RGWFileHandle(fs, parent, fhk, name, flags);
       }
     }; /* Factory */
 
@@ -768,7 +779,6 @@ namespace rgw {
     static std::atomic<uint32_t> fs_inst_counter;
 
     static uint32_t write_completion_interval_s;
-    std::string fsid;
 
     using lock_guard = std::lock_guard<std::mutex>;
     using unique_lock = std::unique_lock<std::mutex>;
@@ -838,7 +848,7 @@ namespace rgw {
 
     RGWLibFS(CephContext* _cct, const char *_uid, const char *_user_id,
 	    const char* _key)
-      : cct(_cct), root_fh(this, new_inst()), invalidate_cb(nullptr),
+      : cct(_cct), root_fh(this), invalidate_cb(nullptr),
 	invalidate_arg(nullptr), shutdown(false), refcnt(1),
 	fh_cache(cct->_conf->rgw_nfs_fhcache_partitions,
 		 cct->_conf->rgw_nfs_fhcache_size),
@@ -846,17 +856,15 @@ namespace rgw {
 	       cct->_conf->rgw_nfs_lru_lane_hiwat),
 	uid(_uid), key(_user_id, _key) {
 
-      /* no bucket may be named rgw_fs_inst-(.*) */
-      fsid = RGWFileHandle::root_name + "rgw_fs_inst-" +
-	std::to_string(get_inst());
-
-      root_fh.init_rootfs(fsid /* bucket */, RGWFileHandle::root_name);
+      root_fh.init_rootfs(uid, RGWFileHandle::root_name);
 
       /* pointer to self */
       fs.fs_private = this;
 
       /* expose public root fh */
       fs.root_fh = root_fh.get_fh();
+
+      new_inst();
     }
 
     friend void intrusive_ptr_add_ref(const RGWLibFS* fs) {
@@ -1031,7 +1039,7 @@ namespace rgw {
 	    fh->mtx.unlock(); /* ! LOCKED */
       } else {
 	/* make or re-use handle */
-	RGWFileHandle::Factory prototype(this, get_inst(), parent, fhk,
+	RGWFileHandle::Factory prototype(this, parent, fhk,
 					 obj_name, CREATE_FLAGS(flags));
 	fh = static_cast<RGWFileHandle*>(
 	  fh_lru.insert(&prototype,
@@ -1083,8 +1091,7 @@ namespace rgw {
     int setattr(RGWFileHandle* rgw_fh, struct stat* st, uint32_t mask,
 		uint32_t flags);
 
-    void update_fhk(RGWFileHandle *rgw_fh);
-
+    void update_fh(RGWFileHandle *rgw_fh);
 
     LookupFHResult stat_bucket(RGWFileHandle* parent, const char *path,
 			       RGWLibFS::BucketStats& bs,
@@ -1166,7 +1173,7 @@ namespace rgw {
 
     struct rgw_fs* get_fs() { return &fs; }
 
-    uint32_t get_inst() { return root_fh.state.dev; }
+    uint64_t get_fsid() { return root_fh.state.dev; }
 
     RGWUserInfo* get_user() { return &user; }
 
