@@ -49,6 +49,10 @@ fi
 export PYTHONPATH=$PYBIND:$CEPH_LIB/cython_modules/lib.2:$PYTHONPATH
 export LD_LIBRARY_PATH=$CEPH_LIB:$LD_LIBRARY_PATH
 export DYLD_LIBRARY_PATH=$CEPH_LIB:$DYLD_LIBRARY_PATH
+# Suppress logging for regular use that indicated that we are using a
+# development version. vstart.sh is only used during testing and 
+# development
+export CEPH_DEV=1
 
 [ -z "$CEPH_NUM_MON" ] && CEPH_NUM_MON="$MON"
 [ -z "$CEPH_NUM_OSD" ] && CEPH_NUM_OSD="$OSD"
@@ -959,3 +963,6 @@ if [ "$CEPH_DIR" != "$PWD" ]; then
     echo "export CEPH_CONF=$conf_fn"
     echo "export CEPH_KEYRING=$keyring_fn"
 fi
+
+echo "CEPH_DEV=1"
+
