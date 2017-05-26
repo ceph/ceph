@@ -1,5 +1,5 @@
 import json
-import urllib
+import requests.compat
 import logging
 
 import boto
@@ -75,7 +75,7 @@ class MDSearch:
 
     def raw_search(self):
         q = self.query or ''
-        query_args = append_query_arg(self.query_args, 'query', urllib.quote_plus(q))
+        query_args = append_query_arg(self.query_args, 'query', requests.compat.quote_plus(q))
         if self.max_keys is not None:
             query_args = append_query_arg(query_args, 'max-keys', self.max_keys)
         if self.marker:
