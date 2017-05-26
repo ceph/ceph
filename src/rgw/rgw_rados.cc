@@ -130,7 +130,7 @@ static bool rgw_get_obj_data_pool(const RGWZoneGroup& zonegroup, const RGWZonePa
     if (!obj.in_extra_data) {
       *pool = placement.data_pool;
     } else {
-      *pool = placement.data_extra_pool;
+      *pool = placement.get_data_extra_pool();
     }
   }
 
