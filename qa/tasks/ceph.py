@@ -1044,8 +1044,7 @@ def osd_scrub_pgs(ctx, config):
         log.info("Waiting for all osds to be active and clean.")
         time.sleep(delays)
     if not all_clean:
-        log.info("Scrubbing terminated -- not all pgs were active and clean.")
-        return
+        raise RuntimeError("Scrubbing terminated -- not all pgs were active and clean.")
     check_time_now = time.localtime()
     time.sleep(1)
     all_roles = teuthology.all_roles(ctx.cluster)
