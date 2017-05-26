@@ -5202,6 +5202,12 @@ def make_activate_parser(subparsers):
         """.format(statedir=STATEDIR))),
         help='Activate a Ceph OSD')
     activate_parser.add_argument(
+        '--cluster',
+        metavar='NAME',
+        default='ceph',
+        help='ceph cluster name (default: ceph)',
+    )
+    activate_parser.add_argument(
         '--mount',
         action='store_true', default=None,
         help='mount a block device [deprecated, ignored]',
