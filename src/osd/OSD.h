@@ -1100,6 +1100,7 @@ public:
   void init();
   void final_init();  
   void start_shutdown();
+  void shutdown_reserver();
   void shutdown();
 
 private:
@@ -1248,33 +1249,9 @@ public:
   Mutex pgid_lock;
   map<spg_t, int> pgid_tracker;
   map<spg_t, PG*> live_pgs;
-  void add_pgid(spg_t pgid, PG *pg) {
-    Mutex::Locker l(pgid_lock);
-    if (!pgid_tracker.count(pgid)) {
-      live_pgs[pgid] = pg;
-    }
-    pgid_tracker[pgid]++;
-  }
-  void remove_pgid(spg_t pgid, PG *pg) {
-    Mutex::Locker l(pgid_lock);
-    assert(pgid_tracker.count(pgid));
-    assert(pgid_tracker[pgid] > 0);
-    pgid_tracker[pgid]--;
-    if (pgid_tracker[pgid] == 0) {
-      pgid_tracker.erase(pgid);
-      live_pgs.erase(pgid);
-    }
-  }
-  void dump_live_pgids() {
-    Mutex::Locker l(pgid_lock);
-    derr << "live pgids:" << dendl;
-    for (map<spg_t, int>::const_iterator i = pgid_tracker.cbegin();
-	 i != pgid_tracker.cend();
-	 ++i) {
-      derr << "\t" << *i << dendl;
-      live_pgs[i->first]->dump_live_ids();
-    }
-  }
+  void add_pgid(spg_t pgid, PG *pg);
+  void remove_pgid(spg_t pgid, PG *pg);
+  void dump_live_pgids();
 #endif
 
   explicit OSDService(OSD *osd);
@@ -1993,7 +1970,7 @@ private:
     epoch_t advance_to, PG *pg,
     ThreadPool::TPHandle &handle,
     PG::RecoveryCtx *rctx,
-    set<boost::intrusive_ptr<PG> > *split_pgs
+    set<PGRef> *split_pgs
   );
   void consume_map();
   void activate_map();
@@ -2097,7 +2074,7 @@ protected:
 
   void split_pgs(
     PG *parent,
-    const set<spg_t> &childpgids, set<boost::intrusive_ptr<PG> > *out_pgs,
+    const set<spg_t> &childpgids, set<PGRef> *out_pgs,
     OSDMapRef curmap,
     OSDMapRef nextmap,
     PG::RecoveryCtx *rctx);

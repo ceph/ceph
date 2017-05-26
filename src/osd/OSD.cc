@@ -295,6 +295,41 @@ OSDService::~OSDService()
   delete objecter;
 }
 
+
+
+#ifdef PG_DEBUG_REFS
+void OSDService::add_pgid(spg_t pgid, PG *pg){
+  Mutex::Locker l(pgid_lock);
+  if (!pgid_tracker.count(pgid)) {
+    live_pgs[pgid] = pg;
+  }
+  pgid_tracker[pgid]++;
+}
+void OSDService::remove_pgid(spg_t pgid, PG *pg)
+{
+  Mutex::Locker l(pgid_lock);
+  assert(pgid_tracker.count(pgid));
+  assert(pgid_tracker[pgid] > 0);
+  pgid_tracker[pgid]--;
+  if (pgid_tracker[pgid] == 0) {
+    pgid_tracker.erase(pgid);
+    live_pgs.erase(pgid);
+  }
+}
+void OSDService::dump_live_pgids()
+{
+  Mutex::Locker l(pgid_lock);
+  derr << "live pgids:" << dendl;
+  for (map<spg_t, int>::const_iterator i = pgid_tracker.cbegin();
+       i != pgid_tracker.cend();
+       ++i) {
+    derr << "\t" << *i << dendl;
+    live_pgs[i->first]->dump_live_ids();
+  }
+}
+#endif
+
+
 void OSDService::_start_split(spg_t parent, const set<spg_t> &children)
 {
   for (set<spg_t>::const_iterator i = children.begin();
@@ -480,10 +515,14 @@ void OSDService::start_shutdown()
   }
 }
 
-void OSDService::shutdown()
+void OSDService::shutdown_reserver()
 {
   reserver_finisher.wait_for_empty();
   reserver_finisher.stop();
+}
+
+void OSDService::shutdown()
+{
   {
     Mutex::Locker l(watch_lock);
     watch_timer.shutdown();
@@ -3175,6 +3214,8 @@ int OSD::shutdown()
     assert(pg_stat_queue.empty());
   }
 
+  service.shutdown_reserver();
+
   // Remove PGs
 #ifdef PG_DEBUG_REFS
   service.dump_live_pgids();
@@ -3192,7 +3233,9 @@ int OSD::shutdown()
 #ifdef PG_DEBUG_REFS
 	p->second->dump_live_ids();
 #endif
-        ceph_abort();
+	if (cct->_conf->osd_shutdown_pgref_assert) {
+	  ceph_abort();
+	}
       }
       p->second->unlock();
       p->second->put("PGMap");
@@ -7747,7 +7790,7 @@ bool OSD::advance_pg(
   epoch_t osd_epoch, PG *pg,
   ThreadPool::TPHandle &handle,
   PG::RecoveryCtx *rctx,
-  set<boost::intrusive_ptr<PG> > *new_pgs)
+  set<PGRef> *new_pgs)
 {
   assert(pg->is_locked());
   epoch_t next_epoch = pg->get_osdmap()->get_epoch() + 1;
@@ -8052,7 +8095,7 @@ bool OSD::require_same_or_newer_map(OpRequestRef& op, epoch_t epoch,
 
 void OSD::split_pgs(
   PG *parent,
-  const set<spg_t> &childpgids, set<boost::intrusive_ptr<PG> > *out_pgs,
+  const set<spg_t> &childpgids, set<PGRef> *out_pgs,
   OSDMapRef curmap,
   OSDMapRef nextmap,
   PG::RecoveryCtx *rctx)
@@ -9084,27 +9127,28 @@ void OSD::dequeue_op(
 
 struct C_CompleteSplits : public Context {
   OSD *osd;
-  set<boost::intrusive_ptr<PG> > pgs;
-  C_CompleteSplits(OSD *osd, const set<boost::intrusive_ptr<PG> > &in)
+  set<PGRef> pgs;
+  C_CompleteSplits(OSD *osd, const set<PGRef> &in)
     : osd(osd), pgs(in) {}
   void finish(int r) override {
     Mutex::Locker l(osd->osd_lock);
     if (osd->is_stopping())
       return;
     PG::RecoveryCtx rctx = osd->create_context();
-    for (set<boost::intrusive_ptr<PG> >::iterator i = pgs.begin();
+    for (set<PGRef>::iterator i = pgs.begin();
 	 i != pgs.end();
 	 ++i) {
       osd->pg_map_lock.get_write();
       (*i)->lock();
-      osd->add_newly_split_pg(&**i, &rctx);
+      PG *pg = i->get();
+      osd->add_newly_split_pg(pg, &rctx);
       if (!((*i)->deleting)) {
         set<spg_t> to_complete;
         to_complete.insert((*i)->info.pgid);
         osd->service.complete_split(to_complete);
       }
       osd->pg_map_lock.put_write();
-      osd->dispatch_context_transaction(rctx, &**i);
+      osd->dispatch_context_transaction(rctx, pg);
       osd->wake_pg_waiters(*i);
       (*i)->unlock();
     }
@@ -9126,7 +9170,7 @@ void OSD::process_peering_events(
   for (list<PG*>::const_iterator i = pgs.begin();
        i != pgs.end();
        ++i) {
-    set<boost::intrusive_ptr<PG> > split_pgs;
+    set<PGRef> split_pgs;
     PG *pg = *i;
     pg->lock_suspend_timeout(handle);
     curmap = service.get_osdmap();
