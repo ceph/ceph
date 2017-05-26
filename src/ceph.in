@@ -201,15 +201,13 @@ def validate_target(target):
       this function will return true iff target is a correct
       target, such as mon.a/osd.2/mds.a/mgr.
 
-      target: str
+      target: array, likes ['osd', '2']
       return: bool, or raise RuntimeError
     """
-    _target = target.split('.')
-    ret = False
 
-    if len(_target) == 2:
+    if len(target) == 2:
         # for case "service.id"
-        service_name, service_id = _target[0], _target[1]
+        service_name, service_id = target[0], target[1]
         exist_ids = []
         if service_name == "mon":
             exist_ids = monids()
@@ -225,17 +223,18 @@ def validate_target(target):
             return False
 
         if service_id in exist_ids:
-            ret = True
+            return True
         else:
             print('WARN: the service id you provided does not exist. service id should '
                   'be one of {0}.'.format('/'.join(exist_ids)), file=sys.stderr)
+            return False
 
-    elif len(_target) == 1 and _target[0] == 'mgr':
-        ret = True
+    elif len(target) == 1 and target[0] in ['mgr', 'mon']:
+        return True
     else:
-        print('WARN: \"{0}\" is not a legal target. it should be one of mon.<id>/osd.<int>/mds.<id>/mgr.'.format(target), file=sys.stderr)
+        print('WARN: \"{0}\" is not a legal target. it should be one of mon.<id>/osd.<int>/mds.<id>/mgr'.format('.'.join(target)), file=sys.stderr)
+        return False
 
-    return ret
 
 # these args must be passed to all child programs
 GLOBAL_ARGS = {
@@ -910,8 +909,13 @@ def main():
 
     # implement "tell service.id help"
     if len(childargs) >= 3 and childargs[0] == 'tell' and childargs[2] == 'help':
-        if validate_target(childargs[1]):
-            return do_extended_help(parser, childargs, childargs[1].split('.'), None)
+        target = childargs[1].split('.')
+        if validate_target(target):
+            if len(target) == 1: 
+                # TODO(Chang Liu): for "mon" target only, we should remove this
+                # patch after pybind supports this target format.
+                target.append("")
+            return do_extended_help(parser, childargs, target, None)
         else:
             print('target {0} doesn\'t exists, please pass correct target to tell command, such as mon.a/'
               'osd.1/mds.a/mgr'.format(childargs[1]), file=sys.stderr)
