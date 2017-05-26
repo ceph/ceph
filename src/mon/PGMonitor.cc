@@ -216,17 +216,7 @@ void PGMonitor::on_upgrade()
 void PGMonitor::upgrade_format()
 {
   unsigned current = 1;
-  assert(format_version <= current);
-  if (format_version == current)
-    return;
-
-  dout(1) << __func__ << " to " << current << dendl;
-
-  // upgrade by dirtying it all
-  pg_map.dirty_all(pending_inc);
-
-  format_version = current;
-  propose_pending();
+  assert(format_version == current);
 }
 
 void PGMonitor::post_paxos_update()
@@ -758,7 +748,7 @@ bool PGMonitor::prepare_pg_stats(MonOpRequestRef op)
 
   // osd stat
   if (mon->osdmon()->osdmap.is_in(from)) {
-    pending_inc.update_stat(from, stats->epoch, stats->osd_stat);
+    pending_inc.update_stat(from, stats->epoch, std::move(stats->osd_stat));
   } else {
     pending_inc.update_stat(from, stats->epoch, osd_stat_t());
   }
