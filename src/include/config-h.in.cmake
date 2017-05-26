@@ -315,4 +315,7 @@
 
 #cmakedefine PYTHON_EXECUTABLE "@PYTHON_EXECUTABLE@"
 
+/* Define to 1 if you have the `getprogname' function. */
+#cmakedefine HAVE_GETPROGNAME 1
+
 #endif /* CONFIG_H */
