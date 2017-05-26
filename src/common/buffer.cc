@@ -952,9 +952,8 @@ static std::atomic_flag buffer_debug_lock = ATOMIC_FLAG_INIT;
     maybe_inline_memcpy(dest, src, l, 8);
   }
 
-  unsigned buffer::ptr::wasted()
+  unsigned buffer::ptr::wasted() const
   {
-    assert(_raw);
     return _raw->len - _len;
   }
 

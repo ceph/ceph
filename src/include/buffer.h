@@ -310,7 +310,7 @@ namespace buffer CEPH_BUFFER_API {
     bool can_zero_copy() const;
     int zero_copy_to_fd(int fd, int64_t *offset) const;
 
-    unsigned wasted();
+    unsigned wasted() const;
 
     int cmp(const ptr& o) const;
     bool is_zero() const;
