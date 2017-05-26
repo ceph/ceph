@@ -816,11 +816,7 @@ void io_complete(void *t, const struct spdk_nvme_cpl *completion)
         task->device->aio_callback(task->device->aio_callback_priv, ctx->priv);
       }
     } else {
-      if (ctx->num_running == 1) {
-	ctx->aio_wake();
-      } else {
-	--ctx->num_running;
-      }
+      ctx->try_aio_wake();
     }
     task->release_segs(queue);
     delete task;
@@ -837,11 +833,7 @@ void io_complete(void *t, const struct spdk_nvme_cpl *completion)
           task->device->aio_callback(task->device->aio_callback_priv, ctx->priv);
 	}
       } else {
-	if (ctx->num_running == 1) {
-	  ctx->aio_wake();
-	} else {
-	  --ctx->num_running;
-	}
+	ctx->try_aio_wake();
       }
       delete task;
     } else {

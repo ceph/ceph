@@ -29,6 +29,11 @@
 
 /// track in-flight io
 struct IOContext {
+private:
+  std::mutex lock;
+  std::condition_variable cond;
+
+public:
   CephContext* cct;
   void *priv;
 #ifdef HAVE_SPDK
@@ -36,8 +41,6 @@ struct IOContext {
   void *nvme_task_last = nullptr;
 #endif
 
-  std::mutex lock;
-  std::condition_variable cond;
 
   std::list<aio_t> pending_aios;    ///< not yet submitted
   std::list<aio_t> running_aios;    ///< submitting or submitted
@@ -58,11 +61,20 @@ struct IOContext {
 
   void aio_wait();
 
-  void aio_wake() {
-    std::lock_guard<std::mutex> l(lock);
-    cond.notify_all();
-    --num_running;
-    assert(num_running == 0);
+  void try_aio_wake() {
+    if (num_running == 1) {
+
+      // we might have some pending IOs submitted after the check
+      // as there is no lock protection for aio_submit.
+      // Hence we might have false conditional trigger.
+      // aio_wait has to handle that hence do not care here.
+      std::lock_guard<std::mutex> l(lock);
+      cond.notify_all();
+      --num_running;
+      assert(num_running >= 0);
+    } else {
+      --num_running;
+    }
   }
 };
 
