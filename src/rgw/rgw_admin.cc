@@ -1037,8 +1037,9 @@ int bucket_stats(rgw_bucket& bucket, int shard_id, Formatter *formatter)
   }
   formatter->open_object_section("stats");
   formatter->dump_string("bucket", bucket.name);
+  formatter->dump_string("zonegroup", bucket_info.zonegroup);
+  formatter->dump_string("placement_rule", bucket_info.placement_rule);
   ::encode_json("explicit_placement", bucket.explicit_placement, formatter);
-
   formatter->dump_string("id", bucket.bucket_id);
   formatter->dump_string("marker", bucket.marker);
   formatter->dump_stream("index_type") << bucket_info.index_type;
