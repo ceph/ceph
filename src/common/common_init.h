@@ -40,6 +40,9 @@ enum common_init_flags_t {
 
   // don't drop privileges
   CINIT_FLAG_DEFER_DROP_PRIVILEGES = 0x10,
+
+  // don't do pidfiles
+  CINIT_FLAG_NO_PIDFILES = 0x20,
 };
 
 /*

@@ -354,8 +354,9 @@ int global_init_prefork(CephContext *cct)
   const md_config_t *conf = cct->_conf;
   if (!conf->daemonize) {
 
-    if (pidfile_write(conf) < 0)
-      exit(1);
+    if (!(cct->get_init_flags() & CINIT_FLAG_NO_PIDFILES))
+      if (pidfile_write(conf) < 0)
+        exit(1);
 
     if ((cct->get_init_flags() & CINIT_FLAG_DEFER_DROP_PRIVILEGES) &&
 	(cct->get_set_uid() || cct->get_set_gid())) {
@@ -424,8 +425,9 @@ void global_init_postfork_start(CephContext *cct)
   }
 
   const md_config_t *conf = cct->_conf;
-  if (pidfile_write(conf) < 0)
-    exit(1);
+  if (!(cct->get_init_flags() & CINIT_FLAG_NO_PIDFILES))
+    if (pidfile_write(conf) < 0)
+      exit(1);
 
   if ((cct->get_init_flags() & CINIT_FLAG_DEFER_DROP_PRIVILEGES) &&
       (cct->get_set_uid() || cct->get_set_gid())) {
