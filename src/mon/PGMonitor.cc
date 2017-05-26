@@ -1000,12 +1000,12 @@ bool PGMonitor::preprocess_command(MonOpRequestRef op)
       r = -ENOENT;
       goto reply;
     }
-    if (pg_map.pg_stat[pgid].acting_primary == -1) {
+    int osd = pg_map.pg_stat[pgid].acting_primary;
+    if (osd == -1) {
       ss << "pg " << pgid << " has no primary osd";
       r = -EAGAIN;
       goto reply;
     }
-    int osd = pg_map.pg_stat[pgid].acting_primary;
     if (!mon->osdmon()->osdmap.is_up(osd)) {
       ss << "pg " << pgid << " primary osd." << osd << " not up";
       r = -EAGAIN;
