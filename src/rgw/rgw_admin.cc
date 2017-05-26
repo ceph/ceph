@@ -343,7 +343,7 @@ enum {
   OPT_KEY_CREATE,
   OPT_KEY_RM,
   OPT_BUCKETS_LIST,
-  OPT_BUCKETS_LIMIT_CHECK,
+  OPT_BUCKET_LIMIT_CHECK,
   OPT_BUCKET_LINK,
   OPT_BUCKET_UNLINK,
   OPT_BUCKET_STATS,
@@ -562,10 +562,6 @@ static int get_cmd(const char *cmd, const char *prev_cmd, const char *prev_prev_
   } else if (strcmp(prev_cmd, "buckets") == 0) {
     if (strcmp(cmd, "list") == 0)
       return OPT_BUCKETS_LIST;
-    if (strcmp(cmd, "limit") == 0) {
-      *need_more = true;
-      return 0;
-    }
   } else if (strcmp(prev_cmd, "bucket") == 0) {
     if (strcmp(cmd, "list") == 0)
       return OPT_BUCKETS_LIST;
@@ -587,6 +583,10 @@ static int get_cmd(const char *cmd, const char *prev_cmd, const char *prev_prev_
       *need_more = true;
       return 0;
     }
+    if (strcmp(cmd, "limit") == 0) {
+      *need_more = true;
+      return 0;
+    }
   } else if (prev_prev_cmd && strcmp(prev_prev_cmd, "bucket") == 0) {
     if (strcmp(prev_cmd, "sync") == 0) {
       if (strcmp(cmd, "status") == 0)
@@ -597,7 +597,7 @@ static int get_cmd(const char *cmd, const char *prev_cmd, const char *prev_prev_
 	return OPT_BUCKET_SYNC_RUN;
     } else if ((strcmp(prev_cmd, "limit") == 0) &&
 	       (strcmp(cmd, "check") == 0)) {
-      return OPT_BUCKETS_LIMIT_CHECK;
+      return OPT_BUCKET_LIMIT_CHECK;
     }
   } else if (strcmp(prev_cmd, "log") == 0) {
     if (strcmp(cmd, "list") == 0)
@@ -4894,7 +4894,7 @@ int main(int argc, const char **argv)
     }
   }
 
-  if (opt_cmd == OPT_BUCKETS_LIMIT_CHECK) {
+  if (opt_cmd == OPT_BUCKET_LIMIT_CHECK) {
     void *handle;
     std::list<std::string> user_ids;
     metadata_key = "user";
@@ -4937,7 +4937,7 @@ int main(int argc, const char **argv)
       store->meta_mgr->list_keys_complete(handle);
     }
     return -ret;
-  } /* OPT_BUCKETS_LIMIT_CHECK */
+  } /* OPT_BUCKET_LIMIT_CHECK */
 
   if (opt_cmd == OPT_BUCKETS_LIST) {
     if (bucket_name.empty()) {
