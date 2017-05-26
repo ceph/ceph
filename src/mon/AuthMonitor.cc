@@ -994,8 +994,10 @@ bool AuthMonitor::prepare_command(MonOpRequestRef op)
 
     ss << "updated caps for " << auth_inc.name;
     getline(ss, rs);
+    ds << auth_inc.auth.key;
+    rdata.append(ds);
     wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, 0, rs,
-					      get_last_committed() + 1));
+					rdata, get_last_committed() + 1));
     return true;
   } else if ((prefix == "auth del" || prefix == "auth rm") &&
              !entity_name.empty()) {
