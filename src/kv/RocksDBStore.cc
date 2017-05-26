@@ -438,6 +438,11 @@ void RocksDBStore::get_statistics(Formatter *f)
 
 int RocksDBStore::submit_transaction(KeyValueDB::Transaction t)
 {
+  RocksDBTransactionImpl * _t =
+    static_cast<RocksDBTransactionImpl *>(t.get());
+  if (_t->bat.Count() == 0) {
+    return 0; // nothing to do
+  }
   utime_t start = ceph_clock_now();
   // enable rocksdb breakdown
   // considering performance overhead, default is disabled
@@ -446,8 +451,6 @@ int RocksDBStore::submit_transaction(KeyValueDB::Transaction t)
     rocksdb::perf_context.Reset();
   }
 
-  RocksDBTransactionImpl * _t =
-    static_cast<RocksDBTransactionImpl *>(t.get());
   rocksdb::WriteOptions woptions;
   woptions.disableWAL = disableWAL;
   lgeneric_subdout(cct, rocksdb, 30) << __func__;
@@ -491,6 +494,11 @@ int RocksDBStore::submit_transaction(KeyValueDB::Transaction t)
 
 int RocksDBStore::submit_transaction_sync(KeyValueDB::Transaction t)
 {
+  RocksDBTransactionImpl * _t =
+    static_cast<RocksDBTransactionImpl *>(t.get());
+  if (_t->bat.Count() == 0) {
+    return 0; // nothing to do
+  }
   utime_t start = ceph_clock_now();
   // enable rocksdb breakdown
   // considering performance overhead, default is disabled
@@ -499,8 +507,6 @@ int RocksDBStore::submit_transaction_sync(KeyValueDB::Transaction t)
     rocksdb::perf_context.Reset();
   }
 
-  RocksDBTransactionImpl * _t =
-    static_cast<RocksDBTransactionImpl *>(t.get());
   rocksdb::WriteOptions woptions;
   woptions.sync = true;
   woptions.disableWAL = disableWAL;
