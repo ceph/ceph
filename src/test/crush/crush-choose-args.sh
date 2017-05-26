@@ -26,6 +26,8 @@ function run() {
     export CEPH_ARGS
     CEPH_ARGS+="--fsid=$(uuidgen) --auth-supported=none "
     CEPH_ARGS+="--mon-host=$CEPH_MON "
+    CEPH_ARGS+="--crush-location=root=default,host=HOST "
+    CEPH_ARGS+="--osd-crush-initial-weight=3 "
 
     local funcs=${@:-$(set | sed -n -e 's/^\(TEST_[0-9a-z_]*\) .*/\1/p')}
     for func in $funcs ; do
@@ -35,7 +37,10 @@ function run() {
     done
 }
 
-function TEST_choose_args() {
+function TEST_choose_args_update() {
+    #
+    # adding a weighted OSD updates the weight up to the top
+    #
     local dir=$1
 
     run_mon $dir a || return 1
@@ -43,16 +48,23 @@ function TEST_choose_args() {
 
     ceph osd getcrushmap > $dir/map || return 1
     crushtool -d $dir/map -o $dir/map.txt || return 1
-    cat $dir/map.txt
     sed -i -e '/end crush map/d' $dir/map.txt
     cat >> $dir/map.txt <<EOF
 # choose_args
 choose_args 0 {
   {
+    bucket_id -1
+    weight_set [
+      [ 3.000 ]
+      [ 3.000 ]
+    ]
+    ids [ -10 ]
+  }
+  {
     bucket_id -2
     weight_set [
-      [ 1.000 ]
-      [ 1.000 ]
+      [ 2.000 ]
+      [ 2.000 ]
     ]
     ids [ -20 ]
   }
@@ -67,12 +79,68 @@ EOF
     ceph osd getcrushmap > $dir/map-one-more || return 1
     crushtool -d $dir/map-one-more -o $dir/map-one-more.txt || return 1
     cat $dir/map-one-more.txt
-    diff -u $dir/map-one-more.txt $CEPH_ROOT/src/test/crush/crush-choose-args-expected-one-more.txt || return 1
+    diff -u $dir/map-one-more.txt $CEPH_ROOT/src/test/crush/crush-choose-args-expected-one-more-3.txt || return 1
 
     destroy_osd $dir 1 || return 1
     ceph osd getcrushmap > $dir/map-one-less || return 1
     crushtool -d $dir/map-one-less -o $dir/map-one-less.txt || return 1
     diff -u $dir/map-one-less.txt $dir/map.txt || return 1    
+}
+
+function TEST_no_update_weight_set() {
+    #
+    # adding a zero weight OSD does not update the weight set at all
+    #
+    local dir=$1
+
+    ORIG_CEPH_ARGS="$CEPH_ARGS"
+    CEPH_ARGS+="--osd-crush-update-weight-set=false "
+
+    run_mon $dir a || return 1
+    run_osd $dir 0 || return 1
+
+    ceph osd getcrushmap > $dir/map || return 1
+    crushtool -d $dir/map -o $dir/map.txt || return 1
+    sed -i -e '/end crush map/d' $dir/map.txt
+    cat >> $dir/map.txt <<EOF
+# choose_args
+choose_args 0 {
+  {
+    bucket_id -1
+    weight_set [
+      [ 6.000 ]
+      [ 7.000 ]
+    ]
+    ids [ -10 ]
+  }
+  {
+    bucket_id -2
+    weight_set [
+      [ 2.000 ]
+      [ 2.000 ]
+    ]
+    ids [ -20 ]
+  }
+}
+
+# end crush map
+EOF
+    crushtool -c $dir/map.txt -o $dir/map-new || return 1
+    ceph osd setcrushmap -i $dir/map-new || return 1
+
+
+    run_osd $dir 1 || return 1
+    ceph osd getcrushmap > $dir/map-one-more || return 1
+    crushtool -d $dir/map-one-more -o $dir/map-one-more.txt || return 1
+    cat $dir/map-one-more.txt
+    diff -u $dir/map-one-more.txt $CEPH_ROOT/src/test/crush/crush-choose-args-expected-one-more-0.txt || return 1
+
+    destroy_osd $dir 1 || return 1
+    ceph osd getcrushmap > $dir/map-one-less || return 1
+    crushtool -d $dir/map-one-less -o $dir/map-one-less.txt || return 1
+    diff -u $dir/map-one-less.txt $dir/map.txt || return 1
+
+    CEPH_ARGS="$ORIG_CEPH_ARGS"
 }
 
 main crush-choose-args "$@"
