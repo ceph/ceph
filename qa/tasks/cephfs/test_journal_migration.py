@@ -9,19 +9,41 @@ JOURNAL_FORMAT_RESILIENT = 1
 
 class TestJournalMigration(CephFSTestCase):
     CLIENTS_REQUIRED = 1
+    MDSS_REQUIRED = 2
 
     def test_journal_migration(self):
         old_journal_version = JOURNAL_FORMAT_LEGACY
         new_journal_version = JOURNAL_FORMAT_RESILIENT
 
-        self.fs.set_ceph_conf('mds', 'mds journal format', old_journal_version)
+        # Pick out two daemons to use
+        mds_a, mds_b = sorted(self.mds_cluster.mds_ids[0:2]) 
 
-        # Create a filesystem using the older journal format.
         self.mount_a.umount_wait()
         self.fs.mds_stop()
+
+        # Enable standby replay, to cover the bug case #8811 where
+        # a standby replay might mistakenly end up trying to rewrite
+        # the journal at the same time as an active daemon.
+        self.fs.set_ceph_conf('mds', 'mds standby replay', "true")
+        self.fs.set_ceph_conf('mds', 'mds standby for rank', "0")
+
+        # Create a filesystem using the older journal format.
+        self.fs.set_ceph_conf('mds', 'mds journal format', old_journal_version)
         self.fs.recreate()
-        self.fs.mds_restart()
+        self.fs.mds_restart(mds_id=mds_a)
         self.fs.wait_for_daemons()
+        self.assertEqual(self.fs.get_active_names(), [mds_a])
+
+        def replay_names():
+            return [s['name']
+                    for s in self.fs.status().get_replays(fscid = self.fs.id)]
+
+        # Start the standby and wait for it to come up
+        self.fs.mds_restart(mds_id=mds_b)
+        self.wait_until_equal(
+                replay_names,
+                [mds_b],
+                timeout = 30)
 
         # Do some client work so that the log is populated with something.
         with self.mount_a.mounted():
@@ -41,8 +63,8 @@ class TestJournalMigration(CephFSTestCase):
         self.fs.set_ceph_conf('mds', 'mds journal format', new_journal_version)
 
         # Restart the MDS.
-        self.fs.mds_fail_restart()
-        self.fs.wait_for_daemons()
+        self.fs.mds_fail_restart(mds_id=mds_a)
+        self.fs.mds_fail_restart(mds_id=mds_b)
 
         # This ensures that all daemons come up into a valid state
         self.fs.wait_for_daemons()
@@ -79,7 +101,7 @@ class TestJournalMigration(CephFSTestCase):
             # Approximate value of "lots", expected from having run fsstress
             raise RuntimeError("Unexpectedly few journal events: {0}".format(event_count))
 
-        # Do some client work so that the log is populated with something.
+        # Do some client work to check that writing the log is still working
         with self.mount_a.mounted():
             workunit(self.ctx, {
                 'clients': {
@@ -87,3 +109,10 @@ class TestJournalMigration(CephFSTestCase):
                 },
                 "timeout": "3h"
             })
+
+        # Check that both an active and a standby replay are still up
+        self.assertEqual(len(replay_names()), 1)
+        self.assertEqual(len(self.fs.get_active_names()), 1)
+        self.assertTrue(self.mds_cluster.mds_daemons[mds_a].running())
+        self.assertTrue(self.mds_cluster.mds_daemons[mds_b].running())
+
