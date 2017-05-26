@@ -1879,12 +1879,13 @@ TEST_F(TestLibRBD, TestEmptyDiscard)
   int order = 0;
   std::string name = get_temp_image_name();
   uint64_t size = 20 << 20;
-  
+
   ASSERT_EQ(0, create_image(ioctx, name.c_str(), size, &order));
   ASSERT_EQ(0, rbd_open(ioctx, name.c_str(), &image, NULL));
 
   ASSERT_PASSED(aio_discard_test_data, image, 0, 1*1024*1024);
   ASSERT_PASSED(aio_discard_test_data, image, 0, 4*1024*1024);
+  ASSERT_PASSED(aio_discard_test_data, image, 3*1024*1024, 1*1024*1024);
 
   ASSERT_PASSED(validate_object_map, image);
   ASSERT_EQ(0, rbd_close(image));
