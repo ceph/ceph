@@ -49,6 +49,12 @@ class BlueFS;
 //#define DEBUG_CACHE
 //#define DEBUG_DEFERRED
 
+
+
+// constants for Buffer::optimize()
+#define MAX_BUFFER_SLOP_RATIO_DEN  8  // so actually 1/N
+
+
 enum {
   l_bluestore_first = 732430,
   l_bluestore_kv_flush_lat,
@@ -209,6 +215,13 @@ public:
 	data.claim(t);
       }
       length = newlen;
+    }
+    void maybe_rebuild() {
+      if (data.length() &&
+	  (data.get_num_buffers() > 1 ||
+	   data.front().wasted() > data.length() / MAX_BUFFER_SLOP_RATIO_DEN)) {
+	data.rebuild();
+      }
     }
 
     void dump(Formatter *f) const {

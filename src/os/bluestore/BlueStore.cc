@@ -1270,14 +1270,18 @@ int BlueStore::BufferSpace::_discard(Cache* cache, uint32_t offset, uint32_t len
 	if (b->data.length()) {
 	  bufferlist bl;
 	  bl.substr_of(b->data, b->length - tail, tail);
-	  _add_buffer(cache, new Buffer(this, b->state, b->seq, end, bl), 0, b);
+	  Buffer *nb = new Buffer(this, b->state, b->seq, end, bl);
+	  nb->maybe_rebuild();
+	  _add_buffer(cache, nb, 0, b);
 	} else {
-	  _add_buffer(cache, new Buffer(this, b->state, b->seq, end, tail), 0, b);
+	  _add_buffer(cache, new Buffer(this, b->state, b->seq, end, tail),
+		      0, b);
 	}
 	if (!b->is_writing()) {
 	  cache->_adjust_buffer_size(b, front - (int64_t)b->length);
 	}
 	b->truncate(front);
+	b->maybe_rebuild();
 	cache->_audit("discard end 1");
 	break;
       } else {
@@ -1286,6 +1290,7 @@ int BlueStore::BufferSpace::_discard(Cache* cache, uint32_t offset, uint32_t len
 	  cache->_adjust_buffer_size(b, front - (int64_t)b->length);
 	}
 	b->truncate(front);
+	b->maybe_rebuild();
 	++i;
 	continue;
       }
@@ -1300,7 +1305,9 @@ int BlueStore::BufferSpace::_discard(Cache* cache, uint32_t offset, uint32_t len
     if (b->data.length()) {
       bufferlist bl;
       bl.substr_of(b->data, b->length - keep, keep);
-      _add_buffer(cache, new Buffer(this, b->state, b->seq, end, bl), 0, b);
+      Buffer *nb = new Buffer(this, b->state, b->seq, end, bl);
+      nb->maybe_rebuild();
+      _add_buffer(cache, nb, 0, b);
     } else {
       _add_buffer(cache, new Buffer(this, b->state, b->seq, end, keep), 0, b);
     }
