@@ -510,10 +510,14 @@ void OSDService::start_shutdown()
   }
 }
 
-void OSDService::shutdown()
+void OSDService::shutdown_reserver()
 {
   reserver_finisher.wait_for_empty();
   reserver_finisher.stop();
+}
+
+void OSDService::shutdown()
+{
   {
     Mutex::Locker l(watch_lock);
     watch_timer.shutdown();
@@ -2848,6 +2852,8 @@ int OSD::shutdown()
     Mutex::Locker l(pg_stat_queue_lock);
     assert(pg_stat_queue.empty());
   }
+
+  service.shutdown_reserver();
 
   // Remove PGs
 #ifdef PG_DEBUG_REFS
