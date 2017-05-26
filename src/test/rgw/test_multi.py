@@ -159,7 +159,7 @@ def init(parse_args):
     try:
         path = os.environ['RGW_MULTI_TEST_CONF']
     except KeyError:
-        path = tpath('test_multi.conf')
+        path = test_path + 'test_multi.conf'
 
     try:
         with open(path) as f:
