@@ -212,7 +212,7 @@ endif(${WITH_XFS})
 
 option(WITH_SPDK "Enable SPDK" OFF)
 if(WITH_SPDK)
-  find_package(dpdk REQUIRED)
+  find_package(dpdk 2.0 REQUIRED)
   set(HAVE_SPDK TRUE)
 endif(WITH_SPDK)
 
@@ -331,8 +331,8 @@ endif(WITH_XIO)
 
 option(WITH_DPDK "Enable DPDK messaging" OFF)
 if(WITH_DPDK)
-find_package(dpdk)
-set(HAVE_DPDK ${DPDK_FOUND})
+  find_package(dpdk 2.0 REQUIRED)
+  set(HAVE_DPDK TRUE)
 endif(WITH_DPDK)
 
 option(WITH_BLKIN "Use blkin to emit LTTng tracepoints for Zipkin" OFF)

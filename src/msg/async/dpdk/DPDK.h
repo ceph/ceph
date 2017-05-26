@@ -65,10 +65,12 @@ struct free_deleter {
 
 enum {
   l_dpdk_dev_first = 58800,
+#if RTE_VERSION < RTE_VERSION_NUM(16,7,0,0)
   l_dpdk_dev_rx_mcast,
+  l_dpdk_dev_rx_badcrc_errors,
+#endif
   l_dpdk_dev_rx_total_errors,
   l_dpdk_dev_tx_total_errors,
-  l_dpdk_dev_rx_badcrc_errors,
   l_dpdk_dev_rx_dropped_errors,
   l_dpdk_dev_rx_nombuf_errors,
   l_dpdk_dev_last
@@ -835,9 +837,10 @@ class DPDKDevice {
     string name(std::string("port") + std::to_string(port_idx));
     PerfCountersBuilder plb(cct, name, l_dpdk_dev_first, l_dpdk_dev_last);
 
+#if RTE_VERSION < RTE_VERSION_NUM(16,7,0,0)
     plb.add_u64_counter(l_dpdk_dev_rx_mcast, "dpdk_device_receive_multicast_packets", "DPDK received multicast packets");
     plb.add_u64_counter(l_dpdk_dev_rx_badcrc_errors, "dpdk_device_receive_badcrc_errors", "DPDK received bad crc errors");
-
+#endif
     plb.add_u64_counter(l_dpdk_dev_rx_total_errors, "dpdk_device_receive_total_errors", "DPDK received total_errors");
     plb.add_u64_counter(l_dpdk_dev_tx_total_errors, "dpdk_device_send_total_errors", "DPDK sendd total_errors");
     plb.add_u64_counter(l_dpdk_dev_rx_dropped_errors, "dpdk_device_receive_dropped_errors", "DPDK received dropped errors");
