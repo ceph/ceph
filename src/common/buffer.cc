@@ -191,6 +191,12 @@ static std::atomic_flag buffer_debug_lock = ATOMIC_FLAG_INIT;
     virtual raw* clone_empty() = 0;
     raw *clone() {
       raw *c = clone_empty();
+#ifdef CEPH_HAVE_SPLICE
+      // raw_pipe::clone_empty() returns NULL
+      if (!c) {
+        return NULL;
+      }
+#endif
       memcpy(c->data, data, len);
       return c;
     }
