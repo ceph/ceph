@@ -385,6 +385,13 @@ Ceph configuration file, the default value will be set automatically.
 :Default: ``-1``
 
 
+``rgw verify ssl``
+
+:Description: Verify SSL certificates while making requests.
+:Type: Boolean
+:Default: ``true``
+
+
 Regions
 =======
 
