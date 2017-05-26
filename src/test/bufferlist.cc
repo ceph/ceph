@@ -1764,6 +1764,17 @@ TEST(BufferList, is_zero) {
     bl.append_zero(1);
     EXPECT_TRUE(bl.is_zero());
   }
+
+  for (size_t i = 1; i <= 256; ++i) {
+    bufferlist bl;
+    bl.append_zero(i);
+    EXPECT_TRUE(bl.is_zero());
+    bl.append('A');
+    // ensure buffer is a single, contiguous before testing
+    bl.rebuild();
+    EXPECT_FALSE(bl.is_zero());
+  }
+
 }
 
 TEST(BufferList, clear) {
