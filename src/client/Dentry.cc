@@ -17,12 +17,12 @@ void Dentry::dump(Formatter *f) const
   if (inode)
     f->dump_stream("ino") << inode->ino;
   f->dump_int("ref", ref);
-  f->dump_unsigned("offset", offset);
+  f->dump_int("offset", offset);
   if (lease_mds >= 0) {
     f->dump_int("lease_mds", lease_mds);
     f->dump_stream("lease_ttl") << lease_ttl;
-    f->dump_int("lease_gen", lease_gen);
-    f->dump_int("lease_seq", lease_seq);
+    f->dump_unsigned("lease_gen", lease_gen);
+    f->dump_unsigned("lease_seq", lease_seq);
   }
   f->dump_int("cap_shared_gen", cap_shared_gen);
 }
