@@ -1,4 +1,7 @@
 overrides:
+  ceph:
+    log-whitelist:
+      - not responding, replacing
   ceph-fuse:
     disabled: true
 tasks:
