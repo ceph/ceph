@@ -46,7 +46,7 @@ def syslog(ctx, config):
         for rem in ctx.cluster.remotes.iterkeys():
             log_context = 'system_u:object_r:var_log_t:s0'
             for log_path in (kern_log, misc_log):
-                rem.run(args='touch %s' % log_path)
+                rem.run(args=['install', '-m', '666', '/dev/null', log_path])
                 rem.chcon(log_path, log_context)
             misc.sudo_write_file(
                 remote=rem,
