@@ -1332,9 +1332,11 @@ void Journal<I>::handle_replay_process_safe(ReplayEntry replay_entry, int r) {
 
   ldout(cct, 20) << this << " " << __func__ << ": r=" << r << dendl;
   if (r < 0) {
-    lderr(cct) << this << " " << __func__ << ": "
-               << "failed to commit journal event to disk: " << cpp_strerror(r)
-               << dendl;
+    if (r != -ECANCELED) {
+      lderr(cct) << this << " " << __func__ << ": "
+                 << "failed to commit journal event to disk: "
+                 << cpp_strerror(r) << dendl;
+    }
 
     if (m_state == STATE_REPLAYING) {
       // abort the replay if we have an error

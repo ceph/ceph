@@ -54,7 +54,6 @@ template <typename I>
 bool ExclusiveLock<I>::accept_ops() const {
   Mutex::Locker locker(ML<I>::m_lock);
   bool accept_ops = (!ML<I>::is_state_shutdown() &&
-                     !ML<I>::is_state_pre_releasing() &&
                      (ML<I>::is_state_locked() ||
                       ML<I>::is_state_post_acquiring()));
 
