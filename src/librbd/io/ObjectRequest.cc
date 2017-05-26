@@ -635,14 +635,34 @@ void ObjectRemoveRequest::guard_write() {
   }
 }
 void ObjectRemoveRequest::send_write() {
-  ldout(m_ictx->cct, 20) << m_oid << " " << m_object_off
-                         << "~" << m_object_len << dendl;
-  send_pre_object_map_update();
+  ldout(m_ictx->cct, 20) << m_oid << " remove " << " object exist "
+                         << m_object_exist << dendl;
+  if (!m_object_exist && !has_parent()) {
+    m_state = LIBRBD_AIO_WRITE_FLAT;
+    Context *ctx = util::create_context_callback<ObjectRequest>(this);
+    m_ictx->op_work_queue->queue(ctx, 0);
+  } else {
+    send_pre_object_map_update();
+  }
 }
 
 void ObjectTruncateRequest::send_write() {
-  ldout(m_ictx->cct, 20) << m_oid << " truncate " << m_object_off << dendl;
-  if (!m_object_exist && ! has_parent()) {
+  ldout(m_ictx->cct, 20) << m_oid << " truncate " << m_object_off
+                         << " object exist " << m_object_exist << dendl;
+  if (!m_object_exist && !has_parent()) {
+    m_state = LIBRBD_AIO_WRITE_FLAT;
+    Context *ctx = util::create_context_callback<ObjectRequest>(this);
+    m_ictx->op_work_queue->queue(ctx, 0);
+  } else {
+    AbstractObjectWriteRequest::send_write();
+  }
+}
+
+void ObjectZeroRequest::send_write() {
+  ldout(m_ictx->cct, 20) << m_oid << " zero " << m_object_off << "~"
+                         << m_object_len << " object exist " << m_object_exist
+                         << dendl;
+  if (!m_object_exist && !has_parent()) {
     m_state = LIBRBD_AIO_WRITE_FLAT;
     Context *ctx = util::create_context_callback<ObjectRequest>(this);
     m_ictx->op_work_queue->queue(ctx, 0);
