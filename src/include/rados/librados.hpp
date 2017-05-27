@@ -267,6 +267,7 @@ namespace librados
     OPERATION_FULL_TRY           = LIBRADOS_OPERATION_FULL_TRY,
     //mainly for delete
     OPERATION_FULL_FORCE	 = LIBRADOS_OPERATION_FULL_FORCE,
+    OPERATION_IGNORE_REDIRECT	 = LIBRADOS_OPERATION_IGNORE_REDIRECT,
   };
 
   /*
@@ -462,6 +463,14 @@ namespace librados
      */
     void cache_pin();
     void cache_unpin();
+
+    /**
+     * Extensible tier
+     *
+     * Set redirect target
+     */
+    void set_redirect(const std::string& tgt_obj, const IoCtx& tgt_ioctx,
+		      uint64_t tgt_version);
 
     friend class IoCtx;
   };
