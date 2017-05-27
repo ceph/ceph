@@ -1117,6 +1117,18 @@ protected:
 					   bool must_promote,
 					   bool in_hit_set,
 					   ObjectContextRef *promote_obc);
+  cache_result_t maybe_handle_manifest_detail(OpRequestRef op,
+						     bool write_ordered,
+						     ObjectContextRef obc);
+  bool maybe_handle_manifest(OpRequestRef op,
+			      bool write_ordered,
+			      ObjectContextRef obc) {
+    return cache_result_t::NOOP != maybe_handle_manifest_detail(
+      op,
+      write_ordered,
+      obc);
+  }
+
   /**
    * This helper function is called from do_op if the ObjectContext lookup fails.
    * @returns true if the caching code is handling the Op, false otherwise.
@@ -1329,7 +1341,7 @@ protected:
   // -- proxyread --
   map<ceph_tid_t, ProxyReadOpRef> proxyread_ops;
 
-  void do_proxy_read(OpRequestRef op);
+  void do_proxy_read(OpRequestRef op, ObjectContextRef obc = NULL);
   void finish_proxy_read(hobject_t oid, ceph_tid_t tid, int r);
   void cancel_proxy_read(ProxyReadOpRef prdop);
 
@@ -1338,7 +1350,7 @@ protected:
   // -- proxywrite --
   map<ceph_tid_t, ProxyWriteOpRef> proxywrite_ops;
 
-  void do_proxy_write(OpRequestRef op, const hobject_t& missing_oid);
+  void do_proxy_write(OpRequestRef op, const hobject_t& missing_oid, ObjectContextRef obc = NULL);
   void finish_proxy_write(hobject_t oid, ceph_tid_t tid, int r);
   void cancel_proxy_write(ProxyWriteOpRef pwop);
 
