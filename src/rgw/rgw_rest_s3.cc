@@ -3493,18 +3493,12 @@ int RGW_Auth_S3::authorize_v4(RGWRados *store, struct req_state *s, bool force_b
         if (key != "X-Amz-Credential") {
           string key_decoded;
           url_decode(key, key_decoded);
-          if (key.length() != key_decoded.length()) {
-            encoded_key = key;
-          } else {
-            aws4_uri_encode(key, encoded_key);
-          }
+	  aws4_uri_encode(key_decoded, encoded_key);
+          
           string val_decoded;
           url_decode(val, val_decoded);
-          if (val.length() != val_decoded.length()) {
-            encoded_val = val;
-          } else {
-            aws4_uri_encode(val, encoded_val);
-          }
+          aws4_uri_encode(val_decoded, encoded_val);
+
         } else {
           encoded_key = key;
           encoded_val = val;
@@ -3832,7 +3826,7 @@ RGWHandler_REST* RGWRESTMgr_S3::get_handler(struct req_state* const s,
       handler = new RGWHandler_REST_Obj_S3(auth_registry);
     }
   }
-
+ 
   ldout(s->cct, 20) << __func__ << " handler=" << typeid(*handler).name()
 		    << dendl;
   return handler;
