@@ -230,7 +230,12 @@ void OSDMonitor::create_initial()
     if (newmap.backfillfull_ratio > 1.0) newmap.backfillfull_ratio /= 100;
     newmap.nearfull_ratio = g_conf->mon_osd_nearfull_ratio;
     if (newmap.nearfull_ratio > 1.0) newmap.nearfull_ratio /= 100;
-    newmap.require_min_compat_client = g_conf->mon_osd_initial_require_min_compat_client;
+    int r = ceph_release_from_name(
+      g_conf->mon_osd_initial_require_min_compat_client.c_str());
+    if (r <= 0) {
+      assert(0 == "mon_osd_initial_require_min_compat_client is not valid");
+    }
+    newmap.require_min_compat_client = r;
   }
 
   // encode into pending incremental
@@ -1189,13 +1194,13 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
       }
 
       // min_compat_client?
-      if (tmp.require_min_compat_client.empty()) {
+      if (tmp.require_min_compat_client == 0) {
 	auto mv = tmp.get_min_compat_client();
-	dout(1) << __func__ << " setting require_min_compat_client to current " << mv
-		<< dendl;
-	mon->clog->info() << "setting require_min_compat_client to currently required "
-			  << mv;
-	pending_inc.new_require_min_compat_client = mv.first;
+	dout(1) << __func__ << " setting require_min_compat_client to currently "
+		<< "required " << ceph_release_name(mv) << dendl;
+	mon->clog->info() << "setting require_min_compat_client to currently "
+			  << "required " << ceph_release_name(mv);
+	pending_inc.new_require_min_compat_client = mv;
       }
     }
   }
@@ -5392,12 +5397,12 @@ bool OSDMonitor::validate_crush_against_features(const CrushWrapper *newcrush,
   newmap.apply_incremental(new_pending);
 
   // client compat
-  if (newmap.require_min_compat_client.length()) {
+  if (newmap.require_min_compat_client > 0) {
     auto mv = newmap.get_min_compat_client();
-    if (mv.first > newmap.require_min_compat_client) {
-      ss << "new crush map requires client version " << mv
+    if (mv > newmap.require_min_compat_client) {
+      ss << "new crush map requires client version " << ceph_release_name(mv)
 	 << " but require_min_compat_client is "
-	 << newmap.require_min_compat_client;
+	 << ceph_release_name(newmap.require_min_compat_client);
       return false;
     }
   }
@@ -7483,9 +7488,8 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     }
     string v;
     cmd_getval(g_ceph_context, cmdmap, "version", v);
-    if (v != "luminous" && v != "kraken" && v != "jewel" && v != "infernalis" &&
-	v != "hammer" && v != "giant" && v != "firefly" && v != "emperor" &&
-	v != "dumpling" && v != "cuttlefish" && v != "bobtail" && v != "argonaut") {
+    int vno = ceph_release_from_name(v.c_str());
+    if (vno <= 0) {
       ss << "version " << v << " is not recognized";
       err = -EINVAL;
       goto reply;
@@ -7493,16 +7497,18 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     OSDMap newmap;
     newmap.deepish_copy_from(osdmap);
     newmap.apply_incremental(pending_inc);
-    newmap.require_min_compat_client = v;
-    auto mv = newmap.get_min_compat_client();
-    if (v < mv.first) {
-      ss << "osdmap current utilizes features that require " << mv
-	 << "; cannot set require_min_compat_client below that to " << v;
+    newmap.require_min_compat_client = vno;
+    auto mvno = newmap.get_min_compat_client();
+    if (vno < mvno) {
+      ss << "osdmap current utilizes features that require "
+	 << ceph_release_name(mvno)
+	 << "; cannot set require_min_compat_client below that to "
+	 << ceph_release_name(vno);
       err = -EPERM;
       goto reply;
     }
-    ss << "set require_min_compat_client to " << v;
-    pending_inc.new_require_min_compat_client = v;
+    ss << "set require_min_compat_client to " << ceph_release_name(vno);
+    pending_inc.new_require_min_compat_client = vno;
     getline(ss, rs);
     wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, 0, rs,
 							  get_last_committed() + 1));
@@ -7629,17 +7635,26 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       err = -EPERM;
       goto reply;
     }
-    int rel = -1;
-    if (release == "luminous") {
+    int rel = ceph_release_from_name(release.c_str());
+    if (rel <= 0) {
+      ss << "unrecognized release " << release;
+      err = -EINVAL;
+      goto reply;
+    }
+    if (rel < CEPH_RELEASE_LUMINOUS) {
+      ss << "use this command only for luminous and later";
+      err = -EINVAL;
+      goto reply;
+    }
+    if (rel == CEPH_RELEASE_LUMINOUS) {
       if (!HAVE_FEATURE(osdmap.get_up_osd_features(), SERVER_LUMINOUS)) {
 	ss << "not all up OSDs have CEPH_FEATURE_SERVER_LUMINOUS feature";
 	err = -EPERM;
 	goto reply;
       }
-      rel = CEPH_RELEASE_LUMINOUS;
     } else {
-      ss << "unrecognized release " << release;
-      err = -EINVAL;
+      ss << "not supported for this release yet";
+      err = -EPERM;
       goto reply;
     }
     if (rel < osdmap.require_osd_release) {
@@ -7816,9 +7831,10 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       goto reply;
     }
 
-    if (osdmap.require_min_compat_client.length() &&
-	osdmap.require_min_compat_client < "firefly") {
-      ss << "require_min_compat_client " << osdmap.require_min_compat_client
+    if (osdmap.require_min_compat_client > 0 &&
+	osdmap.require_min_compat_client < CEPH_RELEASE_FIREFLY) {
+      ss << "require_min_compat_client "
+	 << ceph_release_name(osdmap.require_min_compat_client)
 	 << " < firefly, which is required for primary-temp";
       err = -EPERM;
       goto reply;
@@ -7838,8 +7854,9 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       err = -EPERM;
       goto reply;
     }
-    if (osdmap.require_min_compat_client < "luminous") {
-      ss << "min_compat_client " << osdmap.require_min_compat_client
+    if (osdmap.require_min_compat_client < CEPH_RELEASE_LUMINOUS) {
+      ss << "min_compat_client "
+	 << ceph_release_name(osdmap.require_min_compat_client)
 	 << " < luminous, which is required for pg-upmap";
       err = -EPERM;
       goto reply;
@@ -7901,8 +7918,9 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       err = -EPERM;
       goto reply;
     }
-    if (osdmap.require_min_compat_client < "luminous") {
-      ss << "require_min_compat_client " << osdmap.require_min_compat_client
+    if (osdmap.require_min_compat_client < CEPH_RELEASE_LUMINOUS) {
+      ss << "require_min_compat_client "
+	 << ceph_release_name(osdmap.require_min_compat_client)
 	 << " < luminous, which is required for pg-upmap";
       err = -EPERM;
       goto reply;
@@ -7942,8 +7960,9 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       err = -EPERM;
       goto reply;
     }
-    if (osdmap.require_min_compat_client < "luminous") {
-      ss << "require_min_compat_client " << osdmap.require_min_compat_client
+    if (osdmap.require_min_compat_client < CEPH_RELEASE_LUMINOUS) {
+      ss << "require_min_compat_client "
+	 << ceph_release_name(osdmap.require_min_compat_client)
 	 << " < luminous, which is required for pg-upmap";
       err = -EPERM;
       goto reply;
@@ -8018,8 +8037,9 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       err = -EPERM;
       goto reply;
     }
-    if (osdmap.require_min_compat_client < "luminous") {
-      ss << "require_min_compat_client " << osdmap.require_min_compat_client
+    if (osdmap.require_min_compat_client < CEPH_RELEASE_LUMINOUS) {
+      ss << "require_min_compat_client "
+	 << ceph_release_name(osdmap.require_min_compat_client)
 	 << " < luminous, which is required for pg-upmap";
       err = -EPERM;
       goto reply;
@@ -8073,9 +8093,10 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       err = -EINVAL;
       goto reply;
     }
-    if (osdmap.require_min_compat_client.length() &&
-	osdmap.require_min_compat_client < "firefly") {
-      ss << "require_min_compat_client " << osdmap.require_min_compat_client
+    if (osdmap.require_min_compat_client > 0 &&
+	osdmap.require_min_compat_client < CEPH_RELEASE_FIREFLY) {
+      ss << "require_min_compat_client "
+	 << ceph_release_name(osdmap.require_min_compat_client)
 	 << " < firefly, which is required for primary-affinity";
       err = -EPERM;
       goto reply;
