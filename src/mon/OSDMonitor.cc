@@ -974,22 +974,18 @@ void OSDMonitor::maybe_prime_pg_temp()
 
   // check for interesting OSDs
   set<int> osds;
-  for (map<int32_t,uint8_t>::iterator p = pending_inc.new_state.begin();
-       !all && p != pending_inc.new_state.end();
-       ++p) {
-    if ((p->second & CEPH_OSD_UP) &&
-	osdmap.is_up(p->first)) {
-      osds.insert(p->first);
+  for ( auto &p : pending_inc.new_weight) {
+    if ((p.second & CEPH_OSD_UP) &&
+	osdmap.is_up(p.first)) {
+      osds.insert(p.first);
     }
   }
-  for (map<int32_t,uint32_t>::iterator p = pending_inc.new_weight.begin();
-       !all && p != pending_inc.new_weight.end();
-       ++p) {
-    if (p->second < osdmap.get_weight(p->first)) {
+  for ( auto &p : pending_inc.new_weight) {
+    if (p.second < osdmap.get_weight(p.first)) {
       // weight reduction
-      osds.insert(p->first);
+      osds.insert(p.first);
     } else {
-      dout(10) << __func__ << " osd." << p->first << " weight increase, all"
+      dout(10) << __func__ << " osd." << p.first << " weight increase, all"
 	       << dendl;
       all = true;
     }
