@@ -492,17 +492,14 @@ bool DaemonServer::handle_command(MCommand *m)
 			   "mgr", pyc.perm, "cli", 0);
       cmdnum++;
     }
-#if 0
-    for (MgrCommand *cp = mgr_commands;
-	 cp < &mgr_commands[ARRAY_SIZE(mgr_commands)]; cp++) {
 
+    for (const auto &cp : mgr_commands) {
       ostringstream secname;
       secname << "cmd" << setfill('0') << std::setw(3) << cmdnum;
-      dump_cmddesc_to_json(f, secname.str(), cp->cmdstring, cp->helpstring,
-			   cp->module, cp->perm, cp->availability, 0);
+      dump_cmddesc_to_json(&f, secname.str(), cp.cmdstring, cp.helpstring,
+			   cp.module, cp.perm, cp.availability, 0);
       cmdnum++;
     }
-#endif
     f.close_section();	// command_descriptions
     f.flush(cmdctx->odata);
     cmdctx->reply(0, ss);

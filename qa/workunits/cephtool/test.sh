@@ -788,7 +788,7 @@ function without_test_dup_command()
 
 function test_mds_tell()
 {
-  FS_NAME=cephfs
+  local FS_NAME=cephfs
   if ! mds_exists ; then
       echo "Skipping test, no MDS found"
       return
@@ -834,7 +834,7 @@ function test_mds_tell()
 
 function test_mon_mds()
 {
-  FS_NAME=cephfs
+  local FS_NAME=cephfs
   remove_all_fs
 
   ceph osd pool create fs_data 10
@@ -2037,6 +2037,48 @@ function test_mon_cephdf_commands()
   expect_false test $cal_raw_used_size != $raw_used_size
 }
 
+function test_mon_tell_help_command()
+{
+  ceph tell mon.a help
+
+  # wrong target
+  expect_false ceph tell mon.zzz help
+}
+
+function test_osd_tell_help_command()
+{
+  ceph tell osd.1 help
+  expect_false ceph tell osd.100 help
+}
+
+function test_mds_tell_help_command()
+{
+  local FS_NAME=cephfs
+  if ! mds_exists ; then
+      echo "Skipping test, no MDS found"
+      return
+  fi
+
+  remove_all_fs
+  ceph osd pool create fs_data 10
+  ceph osd pool create fs_metadata 10
+  ceph fs new $FS_NAME fs_metadata fs_data
+  wait_mds_active $FS_NAME
+
+
+  ceph tell mds.a help
+  expect_false ceph tell mds.z help
+
+  remove_all_fs
+  ceph osd pool delete fs_data fs_data --yes-i-really-really-mean-it
+  ceph osd pool delete fs_metadata fs_metadata --yes-i-really-really-mean-it
+}
+
+function test_mgr_tell_help_command()
+{
+  ceph tell mgr help
+}
+
 #
 # New tests should be added to the TESTS array below
 #
@@ -2078,18 +2120,25 @@ MON_TESTS+=" mon_ping"
 MON_TESTS+=" mon_deprecated_commands"
 MON_TESTS+=" mon_caps"
 MON_TESTS+=" mon_cephdf_commands"
+MON_TESTS+=" mon_tell_help_command"
+
 OSD_TESTS+=" osd_bench"
 OSD_TESTS+=" osd_negative_filestore_merge_threshold"
 OSD_TESTS+=" tiering_agent"
 OSD_TESTS+=" admin_heap_profiler"
+OSD_TESTS+=" osd_tell_help_command"
 
 MDS_TESTS+=" mds_tell"
 MDS_TESTS+=" mon_mds"
 MDS_TESTS+=" mon_mds_metadata"
+MDS_TESTS+=" mds_tell_help_command"
+
+MGR_TESTS+=" mgr_tell_help_command"
 
 TESTS+=$MON_TESTS
 TESTS+=$OSD_TESTS
 TESTS+=$MDS_TESTS
+TESTS+=$MGR_TESTS
 
 #
 # "main" follows
@@ -2133,6 +2182,9 @@ while [[ $# -gt 0 ]]; do
       ;;
     "--test-mds" )
       tests_to_run+="$MDS_TESTS"
+      ;;
+    "--test-mgr" )
+      tests_to_run+="$MGR_TESTS"
       ;;
     "-t" )
       shift

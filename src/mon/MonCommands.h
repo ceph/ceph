@@ -29,7 +29,7 @@
  * helpstring: displays in CLI help, API help (nice if it refers to
  *             parameter names from signature, 40-a few hundred chars)
  * modulename: the monitor module or daemon this applies to:
- *             mds, osd, pg (osd), mon, auth, log, config-key
+ *             mds, osd, pg (osd), mon, auth, log, config-key, mgr
  * req perms:  required permission in that modulename space to execute command
  *             this also controls what type of REST command is accepted
  * availability: cli, rest, or both

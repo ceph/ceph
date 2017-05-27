@@ -185,6 +185,59 @@ def mdsids():
         l.append(mdsdict['name'])
     return l
 
+def mgrids():
+    ret, outbuf, outs = json_command(cluster_handle, prefix='mgr dump',
+                                     argdict={'format': 'json'})
+    if ret:
+        raise RuntimeError('Can\'t contact mon for mgr list')
+
+    d = json.loads(outbuf.decode('utf-8'))
+    l = []
+    l.append(d['active_name'])
+    for i in d['standbys']:
+        l.append(i['name'])  
+    return l
+
+def validate_target(target):
+    """
+      this function will return true iff target is a correct
+      target, such as mon.a/osd.2/mds.a/mgr.
+
+      target: array, likes ['osd', '2']
+      return: bool, or raise RuntimeError
+    """
+
+    if len(target) == 2:
+        # for case "service.id"
+        service_name, service_id = target[0], target[1]
+        exist_ids = []
+        if service_name == "mon":
+            exist_ids = monids()
+        elif service_name == "osd":
+            exist_ids = osdids()
+        elif service_name == "mds":
+            exist_ids = mdsids()
+        elif service_name == "mgr":
+            exist_ids = mgrids()
+        else:
+            print('WARN: {0} is not a legal service name, should be one of mon/osd/mds/mgr'.format(service_name),
+                  file=sys.stderr)
+            return False
+
+        if service_id in exist_ids:
+            return True
+        else:
+            print('WARN: the service id you provided does not exist. service id should '
+                  'be one of {0}.'.format('/'.join(exist_ids)), file=sys.stderr)
+            return False
+
+    elif len(target) == 1 and target[0] in ['mgr', 'mon']:
+        return True
+    else:
+        print('WARN: \"{0}\" is not a legal target. it should be one of mon.<id>/osd.<int>/mds.<id>/mgr'.format('.'.join(target)), file=sys.stderr)
+        return False
+
+
 # these args must be passed to all child programs
 GLOBAL_ARGS = {
     'client_id': '--id',
@@ -289,7 +342,7 @@ daemonperf {type.id | path} list|ls [stat-pats] [priority]
     """, file=sys.stdout)
 
 
-def do_extended_help(parser, args):
+def do_extended_help(parser, args, target, partial):
     def help_for_sigs(sigs, partial=None):
         sys.stdout.write(format_help(parse_json_funcsigs(sigs, 'cli'),
                          partial=partial))
@@ -301,13 +354,12 @@ def do_extended_help(parser, args):
         if ret:
             print("couldn't get command descriptions for {0}: {1}".\
                 format(target, outs), file=sys.stderr)
+            return 1
         else:
-            help_for_sigs(outbuf.decode('utf-8'), partial)
+            return help_for_sigs(outbuf.decode('utf-8'), partial)
 
-    partial = ' '.join(args)
     assert(cluster_handle.state == "connected")
-    help_for_target(target=('mon', ''), partial=partial)
-    return 0
+    return help_for_target(target, partial)
 
 DONTSPLIT = string.ascii_letters + '{[<>]}'
 
@@ -855,7 +907,21 @@ def main():
         return 1
 
     if parsed_args.help:
-        return do_extended_help(parser, childargs)
+        return do_extended_help(parser, childargs, ('mon', ''), ' '.join(childargs))
+
+    # implement "tell service.id help"
+    if len(childargs) >= 3 and childargs[0] == 'tell' and childargs[2] == 'help':
+        target = childargs[1].split('.')
+        if validate_target(target):
+            if len(target) == 1: 
+                # TODO(Chang Liu): for "mon" target only, we should remove this
+                # patch after pybind supports this target format.
+                target.append("")
+            return do_extended_help(parser, childargs, target, None)
+        else:
+            print('target {0} doesn\'t exists, please pass correct target to tell command, such as mon.a/'
+              'osd.1/mds.a/mgr'.format(childargs[1]), file=sys.stderr)
+            return 1
 
     # implement -w/--watch_*
     # This is ugly, but Namespace() isn't quite rich enough.
