@@ -1012,6 +1012,7 @@ namespace rgw {
 	inc_nlink(req.d_count);
 	*eof = req.eof();
 	event ev(event::type::READDIR, get_key(), state.atime);
+	lock_guard sguard(fs->state.mtx);
 	fs->state.push_event(ev);
       }
     } else {
@@ -1026,6 +1027,7 @@ namespace rgw {
 	inc_nlink(req.d_count);
 	*eof = req.eof();
 	event ev(event::type::READDIR, get_key(), state.atime);
+	lock_guard sguard(fs->state.mtx);
 	fs->state.push_event(ev);
       }
     }
