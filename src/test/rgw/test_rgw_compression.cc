@@ -36,15 +36,15 @@ TEST(Decompress, FixupRangePartial)
   RGWGetObj_Decompress decompress(g_ceph_context, &cs_info, partial, &cb);
 
   // test translation from logical ranges to compressed ranges
-  ASSERT_EQ(range_t(0, 6), fixup_range(&decompress, 0, 1));
-  ASSERT_EQ(range_t(0, 6), fixup_range(&decompress, 1, 7));
-  ASSERT_EQ(range_t(0, 6), fixup_range(&decompress, 7, 8));
-  ASSERT_EQ(range_t(0, 12), fixup_range(&decompress, 0, 9));
-  ASSERT_EQ(range_t(0, 12), fixup_range(&decompress, 7, 9));
-  ASSERT_EQ(range_t(6, 12), fixup_range(&decompress, 8, 9));
-  ASSERT_EQ(range_t(6, 12), fixup_range(&decompress, 8, 16));
-  ASSERT_EQ(range_t(6, 18), fixup_range(&decompress, 8, 17));
-  ASSERT_EQ(range_t(12, 18), fixup_range(&decompress, 16, 24));
-  ASSERT_EQ(range_t(12, 24), fixup_range(&decompress, 16, 999));
-  ASSERT_EQ(range_t(18, 24), fixup_range(&decompress, 998, 999));
+  ASSERT_EQ(range_t(0, 5), fixup_range(&decompress, 0, 1));
+  ASSERT_EQ(range_t(0, 5), fixup_range(&decompress, 1, 7));
+  ASSERT_EQ(range_t(0, 11), fixup_range(&decompress, 7, 8));
+  ASSERT_EQ(range_t(0, 11), fixup_range(&decompress, 0, 9));
+  ASSERT_EQ(range_t(0, 11), fixup_range(&decompress, 7, 9));
+  ASSERT_EQ(range_t(6, 11), fixup_range(&decompress, 8, 9));
+  ASSERT_EQ(range_t(6, 17), fixup_range(&decompress, 8, 16));
+  ASSERT_EQ(range_t(6, 17), fixup_range(&decompress, 8, 17));
+  ASSERT_EQ(range_t(12, 23), fixup_range(&decompress, 16, 24));
+  ASSERT_EQ(range_t(12, 23), fixup_range(&decompress, 16, 999));
+  ASSERT_EQ(range_t(18, 23), fixup_range(&decompress, 998, 999));
 }
