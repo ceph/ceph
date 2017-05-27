@@ -3137,7 +3137,7 @@ void RGWPutObj::execute()
                                           s->bucket_info,
                                           obj);
     if (op_ret < 0) {
-      return;
+      goto done;
     }
   }
 
