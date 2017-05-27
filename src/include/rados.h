@@ -163,12 +163,22 @@ extern const char *ceph_osd_state_name(int s);
 /*
  * major ceph release numbers
  */
-#define CEPH_RELEASE_JEWEL    10
-#define CEPH_RELEASE_KRAKEN   11
-#define CEPH_RELEASE_LUMINOUS 12
-#define CEPH_RELEASE_MIMIC    13
+#define CEPH_RELEASE_ARGONAUT    1
+#define CEPH_RELEASE_BOBTAIL     2
+#define CEPH_RELEASE_CUTTLEFISH  3
+#define CEPH_RELEASE_DUMPLING    4
+#define CEPH_RELEASE_EMPEROR     5
+#define CEPH_RELEASE_FIREFLY     6
+#define CEPH_RELEASE_GIANT       7
+#define CEPH_RELEASE_HAMMER      8
+#define CEPH_RELEASE_INFERNALIS  9
+#define CEPH_RELEASE_JEWEL      10
+#define CEPH_RELEASE_KRAKEN     11
+#define CEPH_RELEASE_LUMINOUS   12
+#define CEPH_RELEASE_MIMIC      13
 
-extern const char *ceph_osd_release_name(int r);
+extern const char *ceph_release_name(int r);
+extern int ceph_release_from_name(const char *s);
 
 /*
  * The error code to return when an OSD can't handle a write

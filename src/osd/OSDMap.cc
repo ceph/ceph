@@ -2658,8 +2658,8 @@ void OSDMap::dump(Formatter *f) const
   f->dump_string("min_compat_client", mv.first);
   f->dump_string("min_compat_client_version", mv.second);
   f->dump_int("require_osd_release", require_osd_release);
-  f->dump_string("require_osd_release_name",
-		 ceph_osd_release_name(require_osd_release));
+  f->dump_string("require_osd_release",
+		 ceph_release_name(require_osd_release));
 
   f->open_array_section("pools");
   for (const auto &pool : pools) {
