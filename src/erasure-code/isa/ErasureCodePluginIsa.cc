@@ -25,6 +25,7 @@
 
 // -----------------------------------------------------------------------------
 #include "ceph_ver.h"
+#include "include/buffer.h"
 #include "ErasureCodePluginIsa.h"
 #include "ErasureCodeIsa.h"
 // -----------------------------------------------------------------------------
