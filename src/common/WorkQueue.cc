@@ -120,8 +120,8 @@ void ThreadPool::worker(WorkThread *wt)
 	  tp_handle.reset_tp_timeout();
 	  _lock.Unlock();
 	  wq->_void_process(item, tp_handle);
-	  _lock.Lock();
 	  wq->_void_process_finish(item);
+	  _lock.Lock();
 	  processing--;
 	  ldout(cct,15) << "worker wq " << wq->name << " done processing " << item
 			<< " (" << processing << " active)" << dendl;
