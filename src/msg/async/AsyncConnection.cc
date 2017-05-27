@@ -1679,7 +1679,6 @@ ssize_t AsyncConnection::handle_connect_msg(ceph_msg_connect &connect, bufferlis
       existing->delay_state->flush();
       assert(!delay_state);
     }
-    existing->requeue_sent();
     existing->reset_recv_state();
 
     auto temp_cs = std::move(cs);
@@ -1706,8 +1705,11 @@ ssize_t AsyncConnection::handle_connect_msg(ceph_msg_connect &connect, bufferlis
       // we need to delete time event in original thread
       {
         std::lock_guard<std::mutex> l(existing->lock);
+        existing->write_lock.lock();
+        existing->requeue_sent();
         existing->outcoming_bl.clear();
         existing->open_write = false;
+        existing->write_lock.unlock();
         if (existing->state == STATE_NONE) {
           existing->shutdown_socket();
           existing->cs = std::move(cs);
