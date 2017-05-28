@@ -256,6 +256,15 @@ void OSDMonitor::update_from_paxos(bool *need_bootstrap)
   dout(15) << "update_from_paxos paxos e " << version
 	   << ", my e " << osdmap.epoch << dendl;
 
+  if (mapping_job) {
+    if (!mapping_job->is_done()) {
+      dout(1) << __func__ << " mapping job "
+	      << mapping_job.get() << " did not complete, "
+	      << mapping_job->shards << " left, canceling" << dendl;
+      mapping_job->abort();
+    }
+    mapping_job.reset();
+  }
 
   /*
    * We will possibly have a stashed latest that *we* wrote, and we will
