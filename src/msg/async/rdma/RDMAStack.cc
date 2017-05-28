@@ -499,7 +499,7 @@ void RDMAWorker::handle_pending_message()
       ldout(cct, 20) << __func__ << " sent pending bl socket=" << o << " r=" << r << dendl;
       if (r < 0) {
         if (r == -EAGAIN) {
-          pending_sent_conns.push_front(o);
+          pending_sent_conns.push_back(o);
           dispatcher->make_pending_worker(this);
           return ;
         }
