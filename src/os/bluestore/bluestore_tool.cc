@@ -31,7 +31,7 @@ int main(int argc, char **argv)
   vector<string> devs;
   string path;
   string action;
-  bool fsck_deep;
+  bool fsck_deep = false;
   po::options_description po_options("Options");
   po_options.add_options()
     ("help,h", "produce help message")
