@@ -4385,7 +4385,7 @@ int RGWRados::init_complete()
     zone_id_by_name[z.name] = id;
     zone_by_id[id] = z;
   }
-  
+
   if (zone_by_id.find(zone_id()) == zone_by_id.end()) {
     ldout(cct, 0) << "WARNING: could not find zone config in zonegroup for local zone (" << zone_id() << "), will use defaults" << dendl;
   }
@@ -4543,7 +4543,10 @@ int RGWRados::init_complete()
   reshard_wait = std::make_shared<RGWReshardWait>(this);
 
   reshard = new RGWReshard(this);
-  if (run_reshard_thread) {
+
+  /* only the master zone in the zonegroup reshards buckets */
+  run_reshard_thread = run_reshard_thread && (get_zonegroup().master_zone == zone_public_config.id);
+  if (run_reshard_thread)  {
     reshard->start_processor();
   }
 
