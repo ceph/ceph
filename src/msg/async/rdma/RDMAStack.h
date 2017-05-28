@@ -127,10 +127,11 @@ class RDMADispatcher {
   int register_qp(QueuePair *qp, RDMAConnectedSocketImpl* csi);
   void make_pending_worker(RDMAWorker* w) {
     Mutex::Locker l(w_lock);
-    if (pending_workers.back() != w) {
-      pending_workers.push_back(w);
-      ++num_pending_workers;
-    }
+    auto it = std::find(pending_workers.begin(), pending_workers.end(), w);
+    if (it != pending_workers.end())
+      return;
+    pending_workers.push_back(w);
+    ++num_pending_workers;
   }
   RDMAStack* get_stack() { return stack; }
   RDMAConnectedSocketImpl* get_conn_lockless(uint32_t qp);
