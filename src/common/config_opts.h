@@ -900,6 +900,7 @@ OPTION(osd_fast_fail_on_connection_refused, OPT_BOOL, true) // immediately mark 
 
 OPTION(osd_pg_object_context_cache_count, OPT_INT, 64)
 OPTION(osd_tracing, OPT_BOOL, false) // true if LTTng-UST tracepoints should be enabled
+OPTION(osd_function_tracing, OPT_BOOL, false) // true if function instrumentation should use LTTng
 
 OPTION(osd_fast_info, OPT_BOOL, true) // use fast info attr, if we can
 
