@@ -1434,10 +1434,16 @@ void OSDService::send_incremental_map(epoch_t since, Connection *con,
 bool OSDService::_get_map_bl(epoch_t e, bufferlist& bl)
 {
   bool found = map_bl_cache.lookup(e, &bl);
-  if (found)
+  if (found) {
+    if (logger)
+      logger->inc(l_osd_map_bl_cache_hit);
     return true;
+  }
+  if (logger)
+    logger->inc(l_osd_map_bl_cache_miss);
   found = store->read(coll_t::meta(),
-		      OSD::get_osdmap_pobject_name(e), 0, 0, bl) >= 0;
+		      OSD::get_osdmap_pobject_name(e), 0, 0, bl,
+		      CEPH_OSD_OP_FLAG_FADVISE_WILLNEED) >= 0;
   if (found)
     _add_map_bl(e, bl);
   return found;
@@ -1447,10 +1453,16 @@ bool OSDService::get_inc_map_bl(epoch_t e, bufferlist& bl)
 {
   Mutex::Locker l(map_cache_lock);
   bool found = map_bl_inc_cache.lookup(e, &bl);
-  if (found)
+  if (found) {
+    if (logger)
+      logger->inc(l_osd_map_bl_cache_hit);
     return true;
+  }
+  if (logger)
+    logger->inc(l_osd_map_bl_cache_miss);
   found = store->read(coll_t::meta(),
-		      OSD::get_inc_osdmap_pobject_name(e), 0, 0, bl) >= 0;
+		      OSD::get_inc_osdmap_pobject_name(e), 0, 0, bl,
+		      CEPH_OSD_OP_FLAG_FADVISE_WILLNEED) >= 0;
   if (found)
     _add_map_inc_bl(e, bl);
   return found;
@@ -1567,6 +1579,10 @@ void OSDService::reply_op_error(OpRequestRef op, int err, eversion_t v,
 
 void OSDService::handle_misdirected_op(PG *pg, OpRequestRef op)
 {
+  if (!cct->_conf->osd_debug_misdirected_ops) {
+    return;
+  }
+
   const MOSDOp *m = static_cast<const MOSDOp*>(op->get_req());
   assert(m->get_type() == CEPH_MSG_OSD_OP);
 
@@ -1614,9 +1630,6 @@ void OSDService::handle_misdirected_op(PG *pg, OpRequestRef op)
 	       << " to osd." << whoami
 	       << " not " << pg->acting
 	       << " in e" << m->get_map_epoch() << "/" << osdmap->get_epoch();
-  if (g_conf->osd_enxio_on_misdirected_op) {
-    reply_op_error(op, -ENXIO);
-  }
 }
 
 void OSDService::enqueue_back(spg_t pgid, PGQueueable qi)
@@ -2953,6 +2966,7 @@ void OSD::create_logger()
   osd_plb.add_u64_counter(
     l_osd_waiting_for_map, "messages_delayed_for_map",
     "Operations waiting for OSD map");
+
   osd_plb.add_u64_counter(
     l_osd_map_cache_hit, "osd_map_cache_hit", "osdmap cache hit");
   osd_plb.add_u64_counter(
@@ -2963,6 +2977,12 @@ void OSD::create_logger()
   osd_plb.add_u64_avg(
     l_osd_map_cache_miss_low_avg, "osd_map_cache_miss_low_avg",
     "osdmap cache miss, avg distance below cache lower bound");
+  osd_plb.add_u64_counter(
+    l_osd_map_bl_cache_hit, "osd_map_bl_cache_hit",
+    "OSDMap buffer cache hits");
+  osd_plb.add_u64_counter(
+    l_osd_map_bl_cache_miss, "osd_map_bl_cache_miss",
+    "OSDMap buffer cache misses");
 
   osd_plb.add_u64(l_osd_stat_bytes, "stat_bytes", "OSD size");
   osd_plb.add_u64(l_osd_stat_bytes_used, "stat_bytes_used", "Used space");
