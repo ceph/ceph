@@ -435,6 +435,8 @@ if(${WITH_LTTNG})
   endif()
 endif(${WITH_LTTNG})
 
+option(WITH_OSD_INSTRUMENT_FUNCTIONS OFF)
+
 #option for Babeltrace
 option(HAVE_BABELTRACE "Babeltrace libraries are enabled" ON)
 if(${HAVE_BABELTRACE})

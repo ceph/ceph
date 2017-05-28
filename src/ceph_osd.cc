@@ -56,6 +56,10 @@ TracepointProvider::Traits osd_tracepoint_traits("libosd_tp.so",
                                                  "osd_tracing");
 TracepointProvider::Traits os_tracepoint_traits("libos_tp.so",
                                                 "osd_objectstore_tracing");
+#ifdef WITH_OSD_INSTRUMENT_FUNCTIONS
+TracepointProvider::Traits cyg_profile_traits("libcyg_profile_tp.so",
+                                                 "osd_function_tracing");
+#endif
 
 } // anonymous namespace
 
@@ -579,6 +583,9 @@ flushjournal_out:
 
   TracepointProvider::initialize<osd_tracepoint_traits>(g_ceph_context);
   TracepointProvider::initialize<os_tracepoint_traits>(g_ceph_context);
+#ifdef WITH_OSD_INSTRUMENT_FUNCTIONS
+  TracepointProvider::initialize<cyg_profile_traits>(g_ceph_context);
+#endif
 
   MonClient mc(g_ceph_context);
   if (mc.build_initial_monmap() < 0)
