@@ -53,7 +53,7 @@ protected:
   Mutex lock;
   SafeTimer timer;
 
-  std::unique_ptr<Mgr> active_mgr;
+  std::shared_ptr<Mgr> active_mgr;
 
   std::string state_str();
 
