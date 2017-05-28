@@ -2268,6 +2268,20 @@ class CephManager:
             self.make_admin_daemon_dir(remote)
         self.ctx.daemons.get_daemon('mon', mon, self.cluster).restart()
 
+    def revive_mgr(self, mgr):
+        """
+        Restart by either power cycling (if the config says so),
+        or by doing a normal restart.
+        """
+        if self.config.get('powercycle'):
+            remote = self.find_remote('mgr', mgr)
+            self.log('revive_mgr on mgr.{m} doing powercycle of {s}'.
+                     format(m=mgr, s=remote.name))
+            self._assert_ipmi(remote)
+            remote.console.power_on()
+            self.make_admin_daemon_dir(remote)
+        self.ctx.daemons.get_daemon('mgr', mgr, self.cluster).restart()
+
     def get_mon_status(self, mon):
         """
         Extract all the monitor status information from the cluster
