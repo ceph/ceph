@@ -7870,11 +7870,6 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       err = -EINVAL;
       goto reply;
     }
-    if (!osdmap.pg_exists(pgid)) {
-      ss << "pg " << pgid << " does not exist";
-      err = -ENOENT;
-      goto reply;
-    }
     if (pending_inc.new_pg_upmap.count(pgid) ||
 	pending_inc.old_pg_upmap.count(pgid)) {
       dout(10) << __func__ << " waiting for pending update on " << pgid << dendl;
@@ -7988,11 +7983,6 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     if (!pgid.parse(pgidstr.c_str())) {
       ss << "invalid pgid '" << pgidstr << "'";
       err = -EINVAL;
-      goto reply;
-    }
-    if (!osdmap.pg_exists(pgid)) {
-      ss << "pg " << pgid << " does not exist";
-      err = -ENOENT;
       goto reply;
     }
     if (pending_inc.new_pg_upmap_items.count(pgid) ||
