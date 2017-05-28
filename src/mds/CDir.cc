@@ -1820,6 +1820,10 @@ void CDir::_omap_fetched(bufferlist& hdrbl, map<string, bufferlist>& omap,
   dout(10) << "_fetched header " << hdrbl.length() << " bytes "
 	   << omap.size() << " keys for " << *this << dendl;
 
+#if defined(ENOATTR)
+  static_assert( ENODATA == ENOATTR, "ENODATA and ENOATRR need to be equal");
+#endif
+
   assert(r == 0 || r == -ENOENT || r == -ENODATA);
   assert(is_auth());
   assert(!is_frozen());

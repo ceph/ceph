@@ -399,6 +399,11 @@ int MemStore::getattr(CollectionHandle &c_, const ghobject_t& oid,
 {
   Collection *c = static_cast<Collection*>(c_.get());
   dout(10) << __func__ << " " << c->cid << " " << oid << " " << name << dendl;
+
+#if defined(ENOATTR)
+  static_assert( ENODATA == ENOATTR, "ENODATA and ENOATRR need to be equal");
+#endif
+
   if (!c->exists)
     return -ENOENT;
   ObjectRef o = c->get_object(oid);

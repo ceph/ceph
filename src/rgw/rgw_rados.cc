@@ -10,6 +10,7 @@
 #include <boost/optional.hpp>
 #include <boost/utility/in_place_factory.hpp>
 
+#include "include/compat.h"
 #include "common/ceph_json.h"
 #include "common/utf8.h"
 
@@ -130,7 +131,7 @@ static bool rgw_get_obj_data_pool(const RGWZoneGroup& zonegroup, const RGWZonePa
     if (!obj.in_extra_data) {
       *pool = placement.data_pool;
     } else {
-      *pool = placement.get_data_extra_pool();
+      *pool = placement.data_extra_pool;
     }
   }
 
@@ -8855,6 +8856,11 @@ int RGWRados::Object::get_manifest(RGWObjManifest **pmanifest)
 int RGWRados::Object::Read::get_attr(const char *name, bufferlist& dest)
 {
   RGWObjState *state;
+
+#if defined(ENOATTR)
+  static_assert( ENODATA == ENOATTR, "ENODATA and ENOATRR need to be equal");
+#endif
+
   int r = source->get_state(&state, true);
   if (r < 0)
     return r;

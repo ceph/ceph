@@ -10451,6 +10451,10 @@ int Client::_getxattr(Inode *in, const char *name, void *value, size_t size,
 {
   int r;
 
+#if defined(ENOATTR)
+  static_assert( ENODATA == ENOATTR, "ENODATA and ENOATRR need to be equal");
+#endif 
+
   const VXattr *vxattr = _match_vxattr(in, name);
   if (vxattr) {
     r = -ENODATA;

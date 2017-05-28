@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "include/types.h"
+#include "include/compat.h"
 #include "include/rados/librados.h"
 #include "include/rados/librados.hpp"
 #include "include/radosstriper/libradosstriper.h"
@@ -245,6 +246,9 @@ TEST_P(StriperTestRT, StripedRoundtrip) {
     // check that stat fails
     uint64_t size;
     time_t mtime;   
+#if defined(ENOATTR)
+  static_assert( ENODATA == ENOATTR, "ENODATA and ENOATRR need to be equal");
+#endif
     ASSERT_EQ(-ENODATA, striper.stat(soid, &size, &mtime));
     // call remove
     ASSERT_EQ(0, striper.remove(soid));

@@ -712,6 +712,10 @@ int LFNIndex::lfn_get_name(const vector<string> &path,
   string full_name = lfn_generate_object_name(oid);
   int r;
 
+#if defined(ENOATTR)
+  static_assert( ENODATA == ENOATTR, "ENODATA and ENOATRR need to be equal");
+#endif
+
   if (!lfn_must_hash(full_name)) {
     if (mangled_name)
       *mangled_name = full_name;
