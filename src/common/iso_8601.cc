@@ -41,7 +41,8 @@ optional<real_time> calculate(const tm& t, uint32_t n = 0) {
     return none;
   }
 
-  return real_clock::from_time_t(tt) + nanoseconds(n);
+  return boost::make_optional<real_time>(real_clock::from_time_t(tt)
+                                         + nanoseconds(n));
 }
 }
 
