@@ -86,6 +86,8 @@ function TEST_config_track() {
     ceph tell osd.0 injectargs "--osd-map-cache-size $cache" || return 1
     CEPH_ARGS='' ceph --admin-daemon $dir/ceph-osd.0.asok log flush || return 1
     ! grep 'is not > osd_map_max_advance' $dir/osd.0.log || return 1
+    rm $dir/osd.0.log
+    CEPH_ARGS='' ceph --admin-daemon $dir/ceph-osd.0.asok log reopen || return 1
 
     #
     # increase the osd_map_max_advance above the default cache_size
@@ -95,6 +97,8 @@ function TEST_config_track() {
     ceph tell osd.0 injectargs "--osd-map-max-advance $advance" || return 1
     CEPH_ARGS='' ceph --admin-daemon $dir/ceph-osd.0.asok log flush || return 1
     grep 'is not > osd_map_max_advance' $dir/osd.0.log || return 1
+    rm $dir/osd.0.log
+    CEPH_ARGS='' ceph --admin-daemon $dir/ceph-osd.0.asok log reopen || return 1
 
     #
     # increase the osd_pg_epoch_persisted_max_stale above the default cache_size
@@ -104,6 +108,8 @@ function TEST_config_track() {
     ceph tell osd.0 injectargs "--osd-pg-epoch-persisted-max-stale $stale" || return 1
     CEPH_ARGS='' ceph --admin-daemon $dir/ceph-osd.0.asok log flush || return 1
     grep 'is not > osd_pg_epoch_persisted_max_stale' $dir/osd.0.log || return 1
+    rm $dir/osd.0.log
+    CEPH_ARGS='' ceph --admin-daemon $dir/ceph-osd.0.asok log reopen || return 1
 }
 
 main osd-config "$@"
