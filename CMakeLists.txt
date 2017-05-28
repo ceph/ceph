@@ -597,6 +597,10 @@ set(Boost_USE_MULTITHREADED ON)
 find_package(Boost 1.61 COMPONENTS ${BOOST_COMPONENTS} REQUIRED)
 include_directories(SYSTEM ${Boost_INCLUDE_DIRS})
 include_directories(SYSTEM ${PROJECT_BINARY_DIR}/include)
+if(FREEBSD)
+  list(REMOVE_ITEM Boost_LIBRARIES "/usr/local/lib/libboost_python.so")
+  message(STATUS "Modified Standard Boost_LIBRARIES: ${Boost_LIBRARIES}")
+endif()
 
 CHECK_INCLUDE_FILE_CXX("boost/asio/coroutine.hpp" HAVE_BOOST_ASIO_COROUTINE)
 
