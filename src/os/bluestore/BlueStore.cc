@@ -17,6 +17,8 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 
+#include "include/cpp-btree/btree_set.h"
+
 #include "BlueStore.h"
 #include "os/kv.h"
 #include "include/compat.h"
@@ -5144,10 +5146,15 @@ int BlueStore::fsck(bool deep)
 {
   dout(1) << __func__ << (deep ? " (deep)" : " (shallow)") << " start" << dendl;
   int errors = 0;
-  mempool::bluestore_fsck::set<uint64_t> used_nids;
-  mempool::bluestore_fsck::set<uint64_t> used_omap_head;
+
+  typedef btree::btree_set<
+    uint64_t,std::less<uint64_t>,
+    mempool::bluestore_fsck::pool_allocator<uint64_t>> uint64_t_btree_t;
+  uint64_t_btree_t used_nids;
+  uint64_t_btree_t used_omap_head;
+  uint64_t_btree_t used_sbids;
+
   mempool_dynamic_bitset used_blocks;
-  mempool::bluestore_fsck::set<uint64_t> used_sbids;
   KeyValueDB::Iterator it;
   store_statfs_t expected_statfs, actual_statfs;
   struct sb_info_t {
