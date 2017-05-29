@@ -415,6 +415,11 @@ void PerfCounters::dump_formatted_generic(Formatter *f, bool schema,
 	  f->dump_format_unquoted("sum", "%" PRId64 ".%09" PRId64,
 				  a.first / 1000000000ull,
 				  a.first % 1000000000ull);
+	  if (a.second) {
+	    f->dump_float("avglat", (double)a.first / (double)(a.second * 1000000ull));
+	  } else {
+	    f->dump_float("avglat", 0.000000);
+	  }
 	} else {
 	  ceph_abort();
 	}
