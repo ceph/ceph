@@ -218,6 +218,8 @@ public:
   size_t allocated_bytes() const;
   size_t allocated_items() const;
 
+  void adjust_count(ssize_t items, ssize_t bytes);
+
   shard_t* pick_a_shard() {
     // Dirt cheap, see:
     //   http://fossies.org/dox/glibc-2.24/pthread__self_8c_source.html

@@ -77,6 +77,13 @@ size_t mempool::pool_t::allocated_items() const
   return (size_t) result;
 }
 
+void mempool::pool_t::adjust_count(ssize_t items, ssize_t bytes)
+{
+  shard_t *shard = pick_a_shard();
+  shard->items += items;
+  shard->bytes += bytes;
+}
+
 void mempool::pool_t::get_stats(
   stats_t *total,
   std::map<std::string, stats_t> *by_type) const
