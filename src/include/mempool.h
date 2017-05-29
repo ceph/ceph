@@ -146,6 +146,7 @@ namespace mempool {
   f(buffer_anon)		      \
   f(buffer_meta)		      \
   f(osd)			      \
+  f(osd_mapbl)			      \
   f(osdmap)			      \
   f(osdmap_mapping)
 
