@@ -348,6 +348,7 @@ namespace buffer CEPH_BUFFER_API {
     unsigned _len;
     unsigned _memcopy_count; //the total of memcopy using rebuild().
     ptr append_buffer;  // where i put small appends.
+    int _mempool = -1;
 
   public:
     class iterator;
@@ -681,6 +682,7 @@ namespace buffer CEPH_BUFFER_API {
       _memcopy_count = other._memcopy_count;
       last_p = begin();
       append_buffer.swap(other.append_buffer);
+      _mempool = other._mempool;
       other.clear();
       return *this;
     }
@@ -688,6 +690,9 @@ namespace buffer CEPH_BUFFER_API {
     unsigned get_num_buffers() const { return _buffers.size(); }
     const ptr& front() const { return _buffers.front(); }
     const ptr& back() const { return _buffers.back(); }
+
+    void reassign_to_mempool(int pool);
+    void try_assign_to_mempool(int pool);
 
     size_t get_append_buffer_unused_tail_length() const {
       return append_buffer.unused_tail_length();
@@ -774,12 +779,7 @@ namespace buffer CEPH_BUFFER_API {
 					 unsigned align_memory);
     bool rebuild_page_aligned();
 
-    void reserve(size_t prealloc) {
-      if (append_buffer.unused_tail_length() < prealloc) {
-	append_buffer = buffer::create(prealloc);
-	append_buffer.set_length(0);   // unused, so far.
-      }
-    }
+    void reserve(size_t prealloc);
 
     // assignment-op with move semantics
     const static unsigned int CLAIM_DEFAULT = 0;

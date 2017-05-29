@@ -168,17 +168,46 @@ static std::atomic_flag buffer_debug_lock = ATOMIC_FLAG_INIT;
     char *data;
     unsigned len;
     atomic_t nref;
+    int mempool = mempool::mempool_buffer_anon;
 
     mutable std::atomic_flag crc_spinlock = ATOMIC_FLAG_INIT;
     map<pair<size_t, size_t>, pair<uint32_t, uint32_t> > crc_map;
 
     explicit raw(unsigned l)
-      : data(NULL), len(l), nref(0)
-    { }
+      : data(NULL), len(l), nref(0) {
+      mempool::get_pool(mempool::pool_index_t(mempool)).adjust_count(1, len);
+    }
     raw(char *c, unsigned l)
-      : data(c), len(l), nref(0)
-    { }
-    virtual ~raw() {}
+      : data(c), len(l), nref(0) {
+      mempool::get_pool(mempool::pool_index_t(mempool)).adjust_count(1, len);
+    }
+    virtual ~raw() {
+      mempool::get_pool(mempool::pool_index_t(mempool)).adjust_count(
+	-1, -(int)len);
+    }
+
+    void _set_len(unsigned l) {
+      mempool::get_pool(mempool::pool_index_t(mempool)).adjust_count(
+	-1, -(int)len);
+      len = l;
+      mempool::get_pool(mempool::pool_index_t(mempool)).adjust_count(1, len);
+    }
+
+    void reassign_to_mempool(int pool) {
+      if (pool == mempool) {
+	return;
+      }
+      mempool::get_pool(mempool::pool_index_t(mempool)).adjust_count(
+	-1, -(int)len);
+      mempool = pool;
+      mempool::get_pool(mempool::pool_index_t(pool)).adjust_count(1, len);
+    }
+
+    void try_assign_to_mempool(int pool) {
+      if (mempool == mempool::mempool_buffer_anon) {
+	reassign_to_mempool(pool);
+      }
+    }
 
     // no copying.
     // cppcheck-suppress noExplicitConstructor
@@ -462,7 +491,7 @@ static std::atomic_flag buffer_debug_lock = ATOMIC_FLAG_INIT;
 	return r;
       }
       // update length with actual amount read
-      len = r;
+      _set_len(r);
       return 0;
     }
 
@@ -1455,6 +1484,7 @@ static std::atomic_flag buffer_debug_lock = ATOMIC_FLAG_INIT;
   {
     std::swap(_len, other._len);
     std::swap(_memcopy_count, other._memcopy_count);
+    std::swap(_mempool, other._mempool);
     _buffers.swap(other._buffers);
     append_buffer.swap(other.append_buffer);
     //last_p.swap(other.last_p);
@@ -1627,6 +1657,28 @@ static std::atomic_flag buffer_debug_lock = ATOMIC_FLAG_INIT;
     return is_aligned(CEPH_PAGE_SIZE);
   }
 
+  void buffer::list::reassign_to_mempool(int pool)
+  {
+    _mempool = pool;
+    if (append_buffer.get_raw()) {
+      append_buffer.get_raw()->reassign_to_mempool(pool);
+    }
+    for (auto& p : _buffers) {
+      p.get_raw()->reassign_to_mempool(pool);
+    }
+  }
+
+  void buffer::list::try_assign_to_mempool(int pool)
+  {
+    _mempool = pool;
+    if (append_buffer.get_raw()) {
+      append_buffer.get_raw()->try_assign_to_mempool(pool);
+    }
+    for (auto& p : _buffers) {
+      p.get_raw()->try_assign_to_mempool(pool);
+    }
+  }
+
   void buffer::list::rebuild()
   {
     if (_len == 0) {
@@ -1712,6 +1764,17 @@ static std::atomic_flag buffer_debug_lock = ATOMIC_FLAG_INIT;
   bool buffer::list::rebuild_page_aligned()
   {
    return  rebuild_aligned(CEPH_PAGE_SIZE);
+  }
+
+  void buffer::list::reserve(size_t prealloc)
+  {
+    if (append_buffer.unused_tail_length() < prealloc) {
+      append_buffer = buffer::create(prealloc);
+      if (_mempool) {
+	append_buffer.get_raw()->reassign_to_mempool(_mempool);
+      }
+      append_buffer.set_length(0);   // unused, so far.
+    }
   }
 
   // sort-of-like-assignment-op
