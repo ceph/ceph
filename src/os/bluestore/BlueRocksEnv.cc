@@ -99,13 +99,13 @@ class BlueRocksRandomAccessFile : public rocksdb::RandomAccessFile {
 
   // Used by the file_reader_writer to decide if the ReadAhead wrapper
   // should simply forward the call and do not enact buffering or locking.
-  bool ShouldForwardRawRequest() const override {
+  bool ShouldForwardRawRequest() {
     return false;
   }
 
   // For cases when read-ahead is implemented in the platform dependent
   // layer
-  void EnableReadAhead() override {}
+  void EnableReadAhead() {}
 
   // Tries to get an unique ID for this file that will be the same each time
   // the file is opened (and will stay the same while the file is open).
