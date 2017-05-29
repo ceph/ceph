@@ -341,7 +341,17 @@ void set_req_state_err(struct req_state* s, int err_no, const string& err_msg)
 {
   if (s) {
     set_req_state_err(s, err_no);
-    s->err.message = err_msg;
+    if (s->prot_flags & RGW_REST_SWIFT && !err_msg.empty()) {
+      /* TODO(rzarzynski): there never ever should be a check like this one.
+       * It's here only for the sake of the patch's backportability. Further
+       * commits will move the logic to a per-RGWHandler replacement of
+       * the end_header() function. Alternativaly, we might consider making
+       * that just for the dump(). Please take a look on @cbodley's comments
+       * in PR #10690 (https://github.com/ceph/ceph/pull/10690). */
+      s->err.err_code = err_msg;
+    } else {
+      s->err.message = err_msg;
+    }
   }
 }
 
