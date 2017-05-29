@@ -839,24 +839,16 @@ namespace rgw {
       fs.root_fh = root_fh.get_fh();
     }
 
-    friend void intrusive_ptr_add_ref(const RGWLibFS* fs) {
-      fs->refcnt.fetch_add(1, std::memory_order_relaxed);
-    }
-
-    friend void intrusive_ptr_release(const RGWLibFS* fs) {
-      if (fs->refcnt.fetch_sub(1, std::memory_order_release) == 0) {
-	std::atomic_thread_fence(std::memory_order_acquire);
-	delete fs;
-      }
-    }
-
-    RGWLibFS* ref() {
-      intrusive_ptr_add_ref(this);
+    RGWLibFS* intrusive_ptr_add_ref() {
+      refcnt.fetch_add(1, std::memory_order_relaxed);
       return this;
     }
 
-    inline void rele() {
-      intrusive_ptr_release(this);
+    void intrusive_ptr_release() {
+      if (refcnt.fetch_sub(1, std::memory_order_release) == 0) {
+	std::atomic_thread_fence(std::memory_order_acquire);
+	delete this;
+      }
     }
 
     void stop() { shutdown = true; }

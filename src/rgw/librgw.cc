@@ -108,10 +108,10 @@ namespace rgw {
       int cur_gen = gen;
       for (auto iter = mounted_fs.begin(); iter != mounted_fs.end();
 	   ++iter) {
-	RGWLibFS* fs = iter->first->ref();
+	RGWLibFS* fs = iter->first->intrusive_ptr_add_ref();
 	uniq.unlock();
 	fs->gc();
-	fs->rele();
+	fs->intrusive_ptr_release();
 	uniq.lock();
 	if (cur_gen != gen)
 	  goto restart; /* invalidated */
