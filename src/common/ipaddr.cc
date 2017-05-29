@@ -1,9 +1,15 @@
-#include "include/ipaddr.h"
 
 #include <arpa/inet.h>
 #include <ifaddrs.h>
 #include <stdlib.h>
 #include <string.h>
+#if defined(__FreeBSD__)
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#endif
+
+#include "include/ipaddr.h"
 
 static void netmask_ipv4(const struct in_addr *addr,
 			 unsigned int prefix_len,
