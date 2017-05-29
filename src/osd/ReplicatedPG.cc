@@ -1414,7 +1414,11 @@ void ReplicatedPG::do_op(OpRequestRef& op)
 
   // missing object?
   if (is_unreadable_object(head)) {
-    wait_for_unreadable_object(head, op);
+    if(is_primary()){
+      wait_for_unreadable_object(head, op);
+    }else{
+      osd->reply_op_error(op, -ERECOVERING);
+    }
     return;
   }
 

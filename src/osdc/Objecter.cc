@@ -2956,8 +2956,12 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
 
   int rc = m->get_result();
 
-  if (m->is_redirect_reply()) {
-    ldout(cct, 5) << " got redirect reply; redirecting" << dendl;
+  if (m->is_redirect_reply() || rc == -ERECOVERING) {
+    if (m->is_redirect_reply())
+      ldout(cct, 5) << " got redirect reply; redirecting" << dendl;
+    if (rc == -ERECOVERING)
+      ldout(cct, 5) << " got -ERECOVERING; resubmitting without balance_read" << dendl;
+
     if (op->onack)
       num_unacked.dec();
     if (op->oncommit || op->oncommit_sync)
@@ -2969,9 +2973,21 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
     // FIXME: two redirects could race and reorder
 
     op->tid = 0;
-    m->get_redirect().combine_with_locator(op->target.target_oloc,
-					   op->target.target_oid.name);
-    op->target.flags |= CEPH_OSD_FLAG_REDIRECTED;
+    if (m->is_redirect_reply()){
+      m->get_redirect().combine_with_locator(op->target.target_oloc,
+					    op->target.target_oid.name);
+      op->target.flags |= CEPH_OSD_FLAG_REDIRECTED;
+    }
+
+    if (rc == -ERECOVERING){
+      if (op->target.flags & CEPH_OSD_FLAG_BALANCE_READS){
+        op->target.flags &= ~CEPH_OSD_FLAG_BALANCE_READS;
+        op->target.pgid = pg_t();
+      }else{
+        assert(0 == "shouldn't got -ERECOVERING here");
+      }
+    }
+
     _op_submit(op, lc);
     m->put();
     return;
