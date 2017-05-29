@@ -6735,8 +6735,10 @@ bool OSD::ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer, bool for
 {
   dout(10) << "OSD::ms_get_authorizer type=" << ceph_entity_type_name(dest_type) << dendl;
 
-  if (is_stopping())
+  if (is_stopping()) {
     dout(10) << __func__ << " bailing, we are shutting down" << dendl;
+    return false;
+  }
 
   if (dest_type == CEPH_ENTITY_TYPE_MON)
     return true;
