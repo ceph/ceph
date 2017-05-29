@@ -245,7 +245,7 @@ class StoreTool
 
 void usage(const char *pname)
 {
-  std::cerr << "Usage: " << pname << " <leveldb|rocksdb|...> <store path> command [args...]\n"
+  std::cerr << "Usage: " << pname << " <leveldb|rocksdb|bluestore-kv> <store path> command [args...]\n"
     << "\n"
     << "Commands:\n"
     << "  list [prefix]\n"
