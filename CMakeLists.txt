@@ -25,6 +25,10 @@ endif()
 
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake/modules/")
 
+if(${CMAKE_BUILD_TYPE} MATCHES "Debug")
+  add_definitions(-DDEBUG)
+endif()
+
 if(CMAKE_SYSTEM_NAME MATCHES "Linux")
   set(LINUX ON)
   FIND_PACKAGE(Threads)
