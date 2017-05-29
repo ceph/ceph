@@ -4926,6 +4926,56 @@ void watch_info_t::generate_test_instances(list<watch_info_t*>& o)
   o.back()->addr = ea;
 }
 
+// -- object_manifest_t --
+
+void object_manifest_t::encode(bufferlist& bl) const
+{
+  ENCODE_START(1, 1, bl);
+  ::encode(type, bl);
+  switch (type) {
+    case TYPE_NONE: break;
+    case TYPE_REDIRECT: 
+      ::encode(redirect_target, bl);
+      break;
+    default:
+      ceph_abort();
+  }
+  ENCODE_FINISH(bl);
+}
+
+void object_manifest_t::decode(bufferlist::iterator& bl)
+{
+  DECODE_START(1, bl);
+  ::decode(type, bl);
+  switch (type) {
+    case TYPE_NONE: break;
+    case TYPE_REDIRECT: 
+      ::decode(redirect_target, bl);
+      break;
+    default:
+      ceph_abort();
+  }
+  DECODE_FINISH(bl);
+}
+
+void object_manifest_t::dump(Formatter *f) const
+{
+  f->dump_unsigned("type", type);
+  f->open_object_section("redirect_target");
+  redirect_target.dump(f);
+  f->close_section();
+}
+
+void object_manifest_t::generate_test_instances(list<object_manifest_t*>& o)
+{
+  o.push_back(new object_manifest_t());
+  o.back()->type = TYPE_REDIRECT;
+}
+
+ostream& operator<<(ostream& out, const object_manifest_t& om)
+{
+  return out << "type:" << om.type << " redirect_target:" << om.redirect_target;
+}
 
 // -- object_info_t --
 
@@ -4967,7 +5017,7 @@ void object_info_t::encode(bufferlist& bl, uint64_t features) const
        ++i) {
     old_watchers.insert(make_pair(i->first.second, i->second));
   }
-  ENCODE_START(16, 8, bl);
+  ENCODE_START(17, 8, bl);
   ::encode(soid, bl);
   ::encode(myoloc, bl);	//Retained for compatibility
   ::encode((__u32)0, bl); // was category, no longer used
@@ -4998,6 +5048,7 @@ void object_info_t::encode(bufferlist& bl, uint64_t features) const
   ::encode(expected_object_size, bl);
   ::encode(expected_write_size, bl);
   ::encode(alloc_hint_flags, bl);
+  ::encode(manifest, bl);
   ENCODE_FINISH(bl);
 }
 
@@ -5086,6 +5137,9 @@ void object_info_t::decode(bufferlist::iterator& bl)
     expected_write_size = 0;
     alloc_hint_flags = 0;
   }
+  if (struct_v >= 17) {
+    ::decode(manifest, bl);
+  }
   DECODE_FINISH(bl);
 }
 
@@ -5115,6 +5169,7 @@ void object_info_t::dump(Formatter *f) const
   f->dump_unsigned("expected_object_size", expected_object_size);
   f->dump_unsigned("expected_write_size", expected_write_size);
   f->dump_unsigned("alloc_hint_flags", alloc_hint_flags);
+  f->dump_object("manifest", manifest);
   f->open_object_section("watchers");
   for (map<pair<uint64_t, entity_name_t>,watch_info_t>::const_iterator p =
          watchers.begin(); p != watchers.end(); ++p) {
@@ -5152,6 +5207,8 @@ ostream& operator<<(ostream& out, const object_info_t& oi)
   out << " alloc_hint [" << oi.expected_object_size
       << " " << oi.expected_write_size
       << " " << oi.alloc_hint_flags << "]";
+  if (oi.has_manifest())
+    out << " " << oi.manifest;
 
   out << ")";
   return out;

@@ -272,6 +272,9 @@ extern const char *ceph_osd_state_name(int s);
 	f(WRITESAME,	__CEPH_OSD_OP(WR, DATA, 38),	"write-same")	    \
 	f(CMPEXT,	__CEPH_OSD_OP(RD, DATA, 32),	"cmpext")	    \
 									    \
+	/* Extensible */						    \
+	f(SET_REDIRECT,	__CEPH_OSD_OP(WR, DATA, 39),	"set-redirect")	    \
+									    \
 	/** attrs **/							    \
 	/* read */							    \
 	f(GETXATTR,	__CEPH_OSD_OP(RD, ATTR, 1),	"getxattr")	    \
@@ -414,6 +417,7 @@ enum {
 	CEPH_OSD_FLAG_KNOWN_REDIR = 0x400000,  /* redirect bit is authoritative */
 	CEPH_OSD_FLAG_FULL_TRY =    0x800000,  /* try op despite full flag */
 	CEPH_OSD_FLAG_FULL_FORCE = 0x1000000,  /* force op despite full flag */
+	CEPH_OSD_FLAG_IGNORE_REDIRECT = 0x2000000,  /* ignore redirection */
 };
 
 enum {

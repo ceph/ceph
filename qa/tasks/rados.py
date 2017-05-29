@@ -143,6 +143,8 @@ def task(ctx, config):
             args.extend(['--ec-pool'])
     if config.get('write_fadvise_dontneed', False):
         args.extend(['--write-fadvise-dontneed'])
+    if config.get('set_redirect', False):
+        args.extend(['--set_redirect'])
     if config.get('pool_snaps', False):
         args.extend(['--pool-snaps'])
     args.extend([
