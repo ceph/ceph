@@ -1922,6 +1922,13 @@ static inline int rgw_get_request_metadata(CephContext* const cct,
         return -ENAMETOOLONG;
       }
 
+      /* Similar remarks apply to the check for value size. We're veryfing
+       * it early at the RGW's side as it's being claimed in /info. */
+      if (cct->_conf->osd_max_attr_size &&
+          xattr.length() > cct->_conf->osd_max_attr_size) {
+        return -EFBIG;
+      }
+
       auto rval = attrs.emplace(std::move(attr_name), ceph::bufferlist());
       /* At the moment the value of the freshly created attribute key-value
        * pair is an empty bufferlist. */

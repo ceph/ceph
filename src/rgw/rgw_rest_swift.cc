@@ -647,13 +647,35 @@ int RGWCreateBucket_ObjStore_SWIFT::get_params()
   return get_swift_versioning_settings(s, swift_ver_location);
 }
 
+static inline int handle_metadata_errors(req_state* const s, const int op_ret)
+{
+  if (op_ret == -EFBIG) {
+    /* Handle the custom error message of exceeding maximum custom attribute
+     * (stored as xattr) size. */
+    const auto error_message = boost::str(
+      boost::format("Metadata value longer than %lld")
+        % int(s->cct->_conf->osd_max_attr_size));
+    set_req_state_err(s, EINVAL, error_message);
+    return -EINVAL;
+  }
+
+  return op_ret;
+}
+
 void RGWCreateBucket_ObjStore_SWIFT::send_response()
 {
-  if (! op_ret)
-    op_ret = STATUS_CREATED;
-  else if (op_ret == -ERR_BUCKET_EXISTS)
-    op_ret = STATUS_ACCEPTED;
-  set_req_state_err(s, op_ret);
+  const auto meta_ret = handle_metadata_errors(s, op_ret);
+  if (meta_ret != op_ret) {
+    op_ret = meta_ret;
+  } else {
+    if (!op_ret) {
+      op_ret = STATUS_CREATED;
+    } else if (op_ret == -ERR_BUCKET_EXISTS) {
+      op_ret = STATUS_ACCEPTED;
+    }
+    set_req_state_err(s, op_ret);
+  }
+
   dump_errno(s);
   /* Propose ending HTTP header with 0 Content-Length header. */
   end_header(s, NULL, NULL, 0);
@@ -820,8 +842,14 @@ int RGWPutObj_ObjStore_SWIFT::get_params()
 
 void RGWPutObj_ObjStore_SWIFT::send_response()
 {
-  if (! op_ret) {
-    op_ret = STATUS_CREATED;
+  const auto meta_ret = handle_metadata_errors(s, op_ret);
+  if (meta_ret) {
+    op_ret = meta_ret;
+  } else {
+    if (!op_ret) {
+      op_ret = STATUS_CREATED;
+    }
+    set_req_state_err(s, op_ret);
   }
 
   if (! lo_etag.empty()) {
@@ -893,10 +921,16 @@ int RGWPutMetadataAccount_ObjStore_SWIFT::get_params()
 
 void RGWPutMetadataAccount_ObjStore_SWIFT::send_response()
 {
-  if (! op_ret) {
-    op_ret = STATUS_NO_CONTENT;
+  const auto meta_ret = handle_metadata_errors(s, op_ret);
+  if (meta_ret != op_ret) {
+    op_ret = meta_ret;
+  } else {
+    if (!op_ret) {
+      op_ret = STATUS_NO_CONTENT;
+    }
+    set_req_state_err(s, op_ret);
   }
-  set_req_state_err(s, op_ret);
+
   dump_errno(s);
   end_header(s, this);
   rgw_flush_formatter_and_reset(s, s->formatter);
@@ -923,10 +957,16 @@ int RGWPutMetadataBucket_ObjStore_SWIFT::get_params()
 
 void RGWPutMetadataBucket_ObjStore_SWIFT::send_response()
 {
-  if (!op_ret && (op_ret != -EINVAL)) {
-    op_ret = STATUS_NO_CONTENT;
+  const auto meta_ret = handle_metadata_errors(s, op_ret);
+  if (meta_ret != op_ret) {
+    op_ret = meta_ret;
+  } else {
+    if (!op_ret && (op_ret != -EINVAL)) {
+      op_ret = STATUS_NO_CONTENT;
+    }
+    set_req_state_err(s, op_ret);
   }
-  set_req_state_err(s, op_ret);
+
   dump_errno(s);
   end_header(s, this);
   rgw_flush_formatter_and_reset(s, s->formatter);
@@ -953,13 +993,20 @@ int RGWPutMetadataObject_ObjStore_SWIFT::get_params()
 
 void RGWPutMetadataObject_ObjStore_SWIFT::send_response()
 {
-  if (! op_ret) {
-    op_ret = STATUS_ACCEPTED;
+  const auto meta_ret = handle_metadata_errors(s, op_ret);
+  if (meta_ret != op_ret) {
+    op_ret = meta_ret;
+  } else {
+    if (!op_ret) {
+      op_ret = STATUS_ACCEPTED;
+    }
+    set_req_state_err(s, op_ret);
   }
-  set_req_state_err(s, op_ret);
+
   if (!s->is_err()) {
     dump_content_length(s, 0);
   }
+
   dump_errno(s);
   end_header(s, this);
   rgw_flush_formatter_and_reset(s, s->formatter);
@@ -1665,6 +1712,11 @@ void RGWInfo_ObjStore_SWIFT::list_swift_data(Formatter& formatter,
   const size_t meta_name_limit = g_conf->osd_max_attr_name_len
     - strlen(RGW_ATTR_PREFIX RGW_AMZ_META_PREFIX);
   formatter.dump_int("max_meta_name_length", meta_name_limit);
+
+  const size_t meta_value_limit = g_conf->osd_max_attr_size;
+  if (meta_value_limit) {
+    formatter.dump_int("max_meta_value_length", meta_value_limit);
+  }
 
   formatter.open_array_section("policies");
   RGWZoneGroup& zonegroup = store.get_zonegroup();
