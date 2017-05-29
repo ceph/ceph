@@ -128,6 +128,7 @@ enum {
    * Mainly for delete op
    */
   LIBRADOS_OPERATION_FULL_FORCE		= 128,
+  LIBRADOS_OPERATION_IGNORE_REDIRECT	= 256,
 };
 /** @} */
 
