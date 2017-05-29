@@ -96,6 +96,7 @@ void ClusterState::update_delta_stats()
   pending_inc.version = pg_map.version + 1; // to make apply_incremental happy
   dout(10) << " v" << pending_inc.version << dendl;
   pg_map.apply_incremental(g_ceph_context, pending_inc);
+  pending_inc = PGMap::Incremental();
 }
 
 void ClusterState::notify_osdmap(const OSDMap &osd_map)
@@ -122,7 +123,7 @@ void ClusterState::notify_osdmap(const OSDMap &osd_map)
 			       need_check_down_pg_osds, &pending_inc);
 
   pg_map.apply_incremental(g_ceph_context, pending_inc);
-
+  pending_inc = PGMap::Incremental();
   // TODO: Complete the separation of PG state handling so
   // that a cut-down set of functionality remains in PGMonitor
   // while the full-blown PGMap lives only here.
