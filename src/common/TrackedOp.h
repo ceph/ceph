@@ -17,6 +17,7 @@
 #include "common/histogram.h"
 #include "msg/Message.h"
 #include "common/RWLock.h"
+#include <atomic>
 
 #define OPTRACKER_PREALLOC_EVENTS 20
 
