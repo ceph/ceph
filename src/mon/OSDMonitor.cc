@@ -6388,40 +6388,80 @@ int OSDMonitor::prepare_command_osd_remove(int32_t id)
   return 0;
 }
 
+int32_t OSDMonitor::_allocate_osd_id(int32_t* existing_id)
+{
+  assert(existing_id);
+  *existing_id = -1;
+
+  for (int32_t i = 0; i < osdmap.get_max_osd(); ++i) {
+    if (!osdmap.exists(i) &&
+        pending_inc.new_up_client.count(i) == 0 &&
+        (pending_inc.new_state.count(i) == 0 ||
+         (pending_inc.new_state[i] & CEPH_OSD_EXISTS) == 0)) {
+      *existing_id = i;
+      return -1;
+    }
+  }
+
+  if (pending_inc.new_max_osd < 0) {
+    return osdmap.get_max_osd();
+  }
+  return pending_inc.new_max_osd;
+}
+
 void OSDMonitor::do_osd_create(
     const int32_t id,
     const uuid_d& uuid,
     int32_t* new_id)
 {
-  dout(10) << __func__ << " id " << id << " uuid " << uuid << dendl;
+  dout(10) << __func__ << " uuid " << uuid << dendl;
   assert(new_id);
 
-  *new_id = id;
+  // We presume validation has been performed prior to calling this
+  // function. We assert with prejudice.
 
-  if (id < 0) {
-    // allocate a new id
-    for (int32_t i = 0; i < osdmap.get_max_osd(); ++i) {
-      if (!osdmap.exists(i) &&
-          pending_inc.new_up_client.count(i) == 0 &&
-          (pending_inc.new_state.count(i) == 0 ||
-           (pending_inc.new_state[i] & CEPH_OSD_EXISTS) == 0)) {
-        pending_inc.new_weight[i] = CEPH_OSD_OUT;
-        *new_id = i;
-        break;
-      }
+  int32_t allocated_id = -1; // declare here so we can jump
+  int32_t existing_id = osdmap.identify_osd(uuid);
+  if (existing_id >= 0) {
+    assert(id < 0 || id == existing_id);
+    *new_id = existing_id;
+    goto out;
+  } else if (id >= 0) {
+    *new_id = id;
+    goto out;
+  }
+
+  // if we reached this stage, given we must have previously validated
+  // that the `id` does not exist (or, if it does, the `uuid` matches),
+  // then we can safely assume the `id` must be negative.
+  assert(id < 0);
+
+  // allocate a new id
+  allocated_id = _allocate_osd_id(&existing_id);
+  if (existing_id >= 0) {
+    assert(existing_id < osdmap.get_max_osd());
+    assert(allocated_id < 0);
+    pending_inc.new_weight[existing_id] = CEPH_OSD_OUT;
+    *new_id = existing_id;
+
+  } else if (allocated_id >= 0) {
+    assert(existing_id < 0);
+    // raise max_osd
+    if (pending_inc.new_max_osd < 0) {
+      pending_inc.new_max_osd = osdmap.get_max_osd() + 1;
+    } else {
+      ++pending_inc.new_max_osd;
     }
-    if (*new_id < 0) {
-      // raise max_osd
-      if (pending_inc.new_max_osd < 0) {
-        pending_inc.new_max_osd = osdmap.get_max_osd() + 1;
-      } else {
-        ++pending_inc.new_max_osd;
-      }
-      *new_id = pending_inc.new_max_osd - 1;
-    }
-    dout(10) << __func__ << " using id " << *new_id << dendl;
-  } else if (osdmap.get_max_osd() <= id && pending_inc.new_max_osd <= id) {
-    pending_inc.new_max_osd = id + 1;
+    *new_id = pending_inc.new_max_osd - 1;
+    assert(*new_id == allocated_id);
+  } else {
+    assert(0 == "unexpected condition");
+  }
+
+out:
+  dout(10) << __func__ << " using id " << *new_id << dendl;
+  if (osdmap.get_max_osd() <= *new_id && pending_inc.new_max_osd <= *new_id) {
+    pending_inc.new_max_osd = *new_id + 1;
   }
 
   pending_inc.new_state[*new_id] |= CEPH_OSD_EXISTS | CEPH_OSD_NEW;
@@ -6429,13 +6469,18 @@ void OSDMonitor::do_osd_create(
     pending_inc.new_uuid[*new_id] = uuid;
 }
 
-int OSDMonitor::prepare_command_osd_create(
+int OSDMonitor::validate_osd_create(
     const int32_t id,
     const uuid_d& uuid,
+    const bool check_osd_exists,
     int32_t* existing_id,
     stringstream& ss)
 {
-  dout(10) << __func__ << " id " << id << " uuid " << uuid << dendl;
+
+  dout(10) << __func__ << " id " << id << " uuid " << uuid
+           << " check_osd_exists " << check_osd_exists << dendl;
+
+  assert(!uuid.is_zero());
   assert(existing_id);
 
   /*
@@ -6450,10 +6495,9 @@ int OSDMonitor::prepare_command_osd_create(
    * provided, but we will always guarantee the idempotency of `osd new`.
    */
 
-  if (uuid.is_zero()) {
-    dout(10) << __func__ << " no uuid; assuming legacy `osd create`" << dendl;
-    assert(id == -1);
-    return 0;
+  if (pending_inc.identify_osd(uuid) >= 0) {
+    // osd is about to exist
+    return -EAGAIN;
   }
 
   int32_t i = osdmap.identify_osd(uuid);
@@ -6471,22 +6515,37 @@ int OSDMonitor::prepare_command_osd_create(
   }
   // i < 0
   if (id >= 0) {
-    if (osdmap.exists(id)) {
-      ss << "id " << id << " already in use and does not match uuid "
-         << uuid;
-      return -EINVAL;
-    }
     if (pending_inc.new_state.count(id)) {
       // osd is about to exist
       return -EAGAIN;
     }
-  }
-
-  if (pending_inc.identify_osd(uuid) >= 0) {
-    // osd is about to exist
-    return -EAGAIN;
+    // we may not care if an osd exists if we are recreating a previously
+    // destroyed osd.
+    if (check_osd_exists && osdmap.exists(id)) {
+      ss << "id " << id << " already in use and does not match uuid "
+         << uuid;
+      return -EINVAL;
+    }
   }
   return 0;
+}
+
+int OSDMonitor::prepare_command_osd_create(
+    const int32_t id,
+    const uuid_d& uuid,
+    int32_t* existing_id,
+    stringstream& ss)
+{
+  dout(10) << __func__ << " id " << id << " uuid " << uuid << dendl;
+  assert(existing_id);
+
+  if (uuid.is_zero()) {
+    dout(10) << __func__ << " no uuid; assuming legacy `osd create`" << dendl;
+    assert(id == -1);
+    return 0;
+  }
+
+  return validate_osd_create(id, uuid, true, existing_id, ss);
 }
 
 int OSDMonitor::prepare_command_osd_new(
@@ -6504,84 +6563,209 @@ int OSDMonitor::prepare_command_osd_new(
   dout(10) << __func__ << " " << op << dendl;
 
   /* validate command. abort now if something's wrong. */
+
+  /* `osd new` will expect a `uuid` to be supplied; `id` is optional.
+   *
+   * If `id` is not specified, we will identify any existing osd based
+   * on `uuid`. Operation will be idempotent iff secrets match.
+   *
+   * If `id` is specified, we will identify any existing osd based on
+   * `uuid` and match against `id`. If they match, operation will be
+   * idempotent iff secrets match.
+   *
+   * `-i secrets.json` will be optional. If supplied, will be used
+   * to check for idempotency when `id` and `uuid` match.
+   *
+   * If `id` is not specified, and `uuid` does not exist, an id will
+   * be found or allocated for the osd.
+   *
+   * If `id` is specified, and the osd has been previously marked
+   * as destroyed, then the `id` will be reused.
+   */
   if (!cmd_getval(g_ceph_context, cmdmap, "uuid", uuidstr)) {
     ss << "requires the OSD's UUID to be specified.";
     return -EINVAL;
-  }
-
-  if (!uuid.parse(uuidstr.c_str())) {
+  } else if (!uuid.parse(uuidstr.c_str())) {
     ss << "invalid UUID value '" << uuidstr << "'.";
     return -EINVAL;
-  } else if (osdmap.identify_osd(uuid) >= 0) {
-    ss << "UUID already exists; please provide a unique UUID.";
-    return -EEXIST;
   }
 
-  if (!cmd_getval(g_ceph_context, cmdmap, "replace_id", id)) {
-    ss << "requires an existing OSD id.";
+  if (cmd_getval(g_ceph_context, cmdmap, "id", id) &&
+      (id < 0)) {
+    ss << "invalid OSD id; must be greater or equal than zero.";
     return -EINVAL;
-  } else if (id < 0) {
-    ss << "requires an existing OSD id, greater or equal than 0.";
-    return -ENOENT;
-  } else if (!osdmap.exists(id)) {
-    ss << "osd." << id << " does not exist.";
-    return -ENOENT;
-  } else if (!osdmap.is_destroyed(id)) {
-    ss << "osd." << id << " has not been destroyed.";
-    return -EBUSY;
+  }
+
+  // are we running an `osd create`-like command, or recreating
+  // a previously destroyed osd?
+
+  bool is_recreate_destroyed = (id >= 0 && osdmap.is_destroyed(id));
+
+  // we will care about `id` to assess whether osd is `destroyed`, or
+  // to create a new osd.
+  // we will need an `id` by the time we reach auth.
+
+  int32_t existing_id = -1;
+  int err = validate_osd_create(id, uuid, !is_recreate_destroyed,
+                                &existing_id, ss);
+
+  bool may_be_idempotent = false;
+  if (err == EEXIST) {
+    // this is idempotent from the osdmon's point-of-view
+    may_be_idempotent = true;
+    assert(existing_id >= 0);
+    id = existing_id;
+  } else if (err < 0) {
+    return err;
+  }
+
+  if (!may_be_idempotent) {
+    // idempotency is out of the window. We are either creating a new
+    // osd or recreating a destroyed osd.
+    //
+    // We now need to figure out if we have an `id` (and if it's valid),
+    // of find an `id` if we don't have one.
+
+    // NOTE: we need to consider the case where the `id` is specified for
+    // `osd create`, and we must honor it. So this means checking if
+    // the `id` is destroyed, and if so assume the destroy; otherwise,
+    // check if it `exists` - in which case we complain about not being
+    // `destroyed`. In the end, if nothing fails, we must allow the
+    // creation, so that we are compatible with `create`.
+    if (id >= 0 && osdmap.exists(id) && !osdmap.is_destroyed(id)) {
+      dout(10) << __func__ << " osd." << id << " isn't destroyed" << dendl;
+      ss << "OSD " << id << " has not yet been destroyed";
+      return -EINVAL;
+    } else if (id < 0) {
+      // find an `id`
+      id = _allocate_osd_id(&existing_id);
+      if (id < 0) {
+        assert(existing_id >= 0);
+        id = existing_id;
+      }
+      dout(10) << __func__ << " found id " << id << " to use" << dendl;
+    } else if (id >= 0 && osdmap.is_destroyed(id)) {
+      dout(10) << __func__ << " recreating osd." << id << dendl;
+    } else {
+      dout(10) << __func__ << " creating new osd." << id << dendl;
+    }
+  } else {
+    assert(id >= 0);
+    assert(osdmap.exists(id));
+  }
+
+  // we are now able to either create a brand new osd or reuse an existing
+  // osd that has been previously destroyed.
+
+  dout(10) << __func__ << " id " << id << " uuid " << uuid << dendl;
+
+  if (may_be_idempotent && secrets.empty()) {
+    // nothing to do, really.
+    dout(10) << __func__ << " idempotent and no secrets -- no op." << dendl;
+    assert(id >= 0);
+    ss << "new osd." << id << " uuid " << uuid;
+    return EEXIST;
   }
 
   string cephx_secret, lockbox_secret, dmcrypt_key;
   bool has_lockbox = false;
+  bool has_secrets = (!secrets.empty());
 
-  if (secrets.count("cephx_secret") == 0) {
-    ss << "requires a cephx secret.";
-    return -EINVAL;
-  }
-  cephx_secret = secrets.at("cephx_secret");
+  ConfigKeyService *svc = nullptr;
+  AuthMonitor::auth_entity_t cephx_entity, lockbox_entity;
 
-  if (secrets.count("cephx_lockbox_secret") > 0) {
-    if (secrets.count("dmcrypt_key") == 0) {
-      ss << "requires both a cephx lockbox secret and a dm-crypt key.";
+  if (has_secrets) {
+    if (secrets.count("cephx_secret") == 0) {
+      ss << "requires a cephx secret.";
       return -EINVAL;
     }
-    has_lockbox = true;
-    lockbox_secret = secrets.at("cephx_lockbox_secret");
-    dmcrypt_key = secrets.at("dmcrypt_key");
-  }
+    cephx_secret = secrets.at("cephx_secret");
 
-  AuthMonitor::auth_entity_t cephx_entity, lockbox_entity;
-  int err = mon->authmon()->validate_osd_new(id, uuid,
-                                             cephx_secret,
-                                             lockbox_secret,
-                                             cephx_entity,
-                                             lockbox_entity,
-                                             ss);
-  if (err < 0) {
-    return err;
-  }
+    if (secrets.count("cephx_lockbox_secret") > 0) {
+      if (secrets.count("dmcrypt_key") == 0) {
+        ss << "requires both a cephx lockbox secret and a dm-crypt key.";
+        return -EINVAL;
+      }
+      has_lockbox = true;
+      lockbox_secret = secrets.at("cephx_lockbox_secret");
+      dmcrypt_key = secrets.at("dmcrypt_key");
+    }
 
-  ConfigKeyService* svc = (ConfigKeyService*)mon->config_key_service;
-  if (has_lockbox) {
-    err = svc->validate_osd_new(uuid, dmcrypt_key, ss);
+    dout(10) << __func__ << " validate secrets using osd id " << id << dendl;
+
+    err = mon->authmon()->validate_osd_new(id, uuid,
+        cephx_secret,
+        lockbox_secret,
+        cephx_entity,
+        lockbox_entity,
+        ss);
     if (err < 0) {
       return err;
+    } else if (may_be_idempotent && err != EEXIST) {
+      // for this to be idempotent, `id` should already be >= 0; no need
+      // to use validate_id.
+      assert(id >= 0);
+      ss << "osd." << id << " exists but secrets do not match";
+      return -EEXIST;
+    }
+
+    if (has_lockbox) {
+      svc = (ConfigKeyService*)mon->config_key_service;
+      err = svc->validate_osd_new(uuid, dmcrypt_key, ss);
+      if (err < 0) {
+        return err;
+      } else if (may_be_idempotent && err != EEXIST) {
+        assert(id >= 0);
+        ss << "osd." << id << " exists but dm-crypt key does not match.";
+        return -EEXIST;
+      }
+    }
+  }
+  assert(!has_secrets || !cephx_secret.empty());
+  assert(!has_lockbox || !lockbox_secret.empty());
+
+  if (may_be_idempotent) {
+    // we have nothing to do for either the osdmon or the authmon,
+    // and we have no lockbox - so the config key service will not be
+    // touched. This is therefore an idempotent operation, and we can
+    // just return right away.
+    dout(10) << __func__ << " idempotent -- no op." << dendl;
+    assert(id >= 0);
+    ss << "new osd." << id << " uuid " << uuid;
+    return EEXIST;
+  }
+  assert(!may_be_idempotent);
+
+  // perform updates.
+  if (has_secrets) {
+    assert(!cephx_secret.empty());
+    assert((lockbox_secret.empty() && dmcrypt_key.empty()) ||
+           (!lockbox_secret.empty() && !dmcrypt_key.empty()));
+
+    err = mon->authmon()->do_osd_new(cephx_entity,
+        lockbox_entity,
+        has_lockbox);
+    assert(0 == err);
+
+    if (has_lockbox) {
+      assert(nullptr != svc);
+      svc->do_osd_new(uuid, dmcrypt_key);
     }
   }
 
-  // perform updates.
-  err = mon->authmon()->do_osd_new(cephx_entity,
-                                       lockbox_entity,
-                                       has_lockbox);
-  assert(0 == err);
-
-  if (has_lockbox) {
-    svc->do_osd_new(uuid, dmcrypt_key);
+  if (is_recreate_destroyed) {
+    assert(id >= 0);
+    assert(osdmap.is_destroyed(id));
+    pending_inc.new_weight[id] = CEPH_OSD_OUT;
+    pending_inc.new_state[id] |= CEPH_OSD_DESTROYED | CEPH_OSD_NEW;
+    pending_inc.new_uuid[id] = uuid;
+  } else {
+    assert(id >= 0);
+    int32_t new_id = -1;
+    do_osd_create(id, uuid, &new_id);
+    assert(new_id >= 0);
+    assert(id == new_id);
   }
-
-  pending_inc.new_weight[id] = CEPH_OSD_OUT;
-  pending_inc.new_state[id] |= CEPH_OSD_DESTROYED | CEPH_OSD_NEW;
-  pending_inc.new_uuid[id] = uuid;
 
   ss << "new osd." << id << " uuid " << uuid;
   return 0;
@@ -8652,12 +8836,6 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     if (err < 0)
       goto reply;
 
-    if (secrets_map.empty()) {
-      ss << "'osd new' requires a populated json file as input.";
-      err = -EINVAL;
-      goto reply;
-    }
-
     dout(20) << __func__ << " osd new secrets " << secrets_map << dendl;
 
     paxos->plug();
@@ -8665,6 +8843,10 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     paxos->unplug();
 
     if (err < 0) {
+      goto reply;
+    } else if (err == EEXIST) {
+      // idempotent operation
+      err = 0;
       goto reply;
     }
 

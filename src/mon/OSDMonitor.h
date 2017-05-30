@@ -463,6 +463,8 @@ private:
   void check_pg_creates_subs();
   epoch_t send_pg_creates(int osd, Connection *con, epoch_t next);
 
+  int32_t _allocate_osd_id(int32_t* existing_id);
+
 public:
   OSDMonitor(CephContext *cct, Monitor *mn, Paxos *p, const string& service_name);
 
@@ -477,6 +479,12 @@ public:
   bool prepare_command(MonOpRequestRef op);
   bool prepare_command_impl(MonOpRequestRef op, map<string,cmd_vartype>& cmdmap);
 
+  int validate_osd_create(
+      const int32_t id,
+      const uuid_d& uuid,
+      const bool check_osd_exists,
+      int32_t* existing_id,
+      stringstream& ss);
   int prepare_command_osd_create(
       const int32_t id,
       const uuid_d& uuid,
