@@ -253,6 +253,20 @@ public:
     return pool_stat_t();
   }
 
+  vector<string> get_pg_list_by_osd(int osd) const {
+    vector<string> pgs;
+    ceph::unordered_map<int,set<pg_t> >::const_iterator p = pg_by_osd.find(osd);
+    set<pg_t>::iterator i = p->second.begin();
+    while(i != p->second.end())
+    {
+      char buf[pg_t::calc_name_buf_size];
+      buf[pg_t::calc_name_buf_size -1 ] = '\0';
+      pgs.insert(pgs.begin(), i->calc_name(buf+pg_t::calc_name_buf_size -1,""));
+      i++;
+    }
+    return pgs;
+  }
+
   int get_num_primary_pg_by_osd(int osd) const {
     assert(osd >= 0);
     int num = 0;
