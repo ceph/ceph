@@ -144,7 +144,10 @@ target_compile_definitions(rgw_a PUBLIC BOOST_COROUTINES_NO_DEPRECATION_WARNING)
 target_link_libraries(rgw_a librados cls_lock_client cls_rgw_client cls_refcount_client
   cls_log_client cls_statelog_client cls_timeindex_client cls_version_client
   cls_replica_log_client cls_user_client ceph-common common_utf8 global
-  ${CURL_LIBRARIES} ${Boost_LIBRARIES}
+  Boost::program_options
+  Boost::system
+  Boost::thread
+  ${CURL_LIBRARIES}
   ${EXPAT_LIBRARIES}
   ${OPENLDAP_LIBRARIES} ${CRYPTO_LIBS})
 
@@ -167,6 +170,10 @@ endif (WITH_RADOSGW_BEAST_FRONTEND)
 add_library(radosgw_a STATIC ${radosgw_srcs}
   $<TARGET_OBJECTS:civetweb_common_objs>)
 target_link_libraries(radosgw_a rgw_a ${SSL_LIBRARIES})
+if(WITH_RADOSGW_BEAST_FRONTEND)
+  target_link_libraries(radosgw_a LINK_PRIVATE
+    Boost::coroutine Boost::context)
+endif()
 
 add_executable(radosgw rgw_main.cc)
 target_link_libraries(radosgw radosgw_a librados
