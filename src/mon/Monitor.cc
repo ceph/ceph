@@ -1091,6 +1091,7 @@ void Monitor::_reset()
   }
   quorum.clear();
   outside_quorum.clear();
+  quorum_feature_map.clear();
 
   scrub_reset();
 
