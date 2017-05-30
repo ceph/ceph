@@ -576,6 +576,8 @@ public:
   void apply_monmap_to_compatset_features();
   void calc_quorum_requirements();
 
+  void get_combined_feature_map(FeatureMap *fm);
+
 private:
   void _reset();   ///< called from bootstrap, start_, or join_election
   void wait_for_paxos_write();
