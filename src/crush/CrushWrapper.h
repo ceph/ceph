@@ -169,7 +169,7 @@ public:
     crush->straw_calc_version = 1;
   }
   void set_tunables_default() {
-    set_tunables_hammer();
+    set_tunables_jewel();
     crush->straw_calc_version = 1;
   }
 
