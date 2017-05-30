@@ -41,12 +41,14 @@ const char *mempool::get_pool_name(mempool::pool_index_t ix) {
 
 void mempool::dump(ceph::Formatter *f)
 {
+  stats_t total;
   for (size_t i = 0; i < num_pools; ++i) {
     const pool_t &pool = mempool::get_pool((pool_index_t)i);
     f->open_object_section(get_pool_name((pool_index_t)i));
-    pool.dump(f);
+    pool.dump(f, &total);
     f->close_section();
   }
+  f->dump_object("total", total);
 }
 
 void mempool::set_debug_mode(bool d)
@@ -103,11 +105,14 @@ void mempool::pool_t::get_stats(
   }
 }
 
-void mempool::pool_t::dump(ceph::Formatter *f) const
+void mempool::pool_t::dump(ceph::Formatter *f, stats_t *ptotal) const
 {
   stats_t total;
   std::map<std::string, stats_t> by_type;
   get_stats(&total, &by_type);
+  if (ptotal) {
+    *ptotal += total;
+  }
   f->dump_object("total", total);
   if (!by_type.empty()) {
     for (auto &i : by_type) {

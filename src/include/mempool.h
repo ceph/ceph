@@ -190,6 +190,12 @@ struct stats_t {
     f->dump_int("items", items);
     f->dump_int("bytes", bytes);
   }
+
+  stats_t& operator+=(const stats_t& o) {
+    items += o.items;
+    bytes += o.bytes;
+    return *this;
+  }
 };
 
 pool_t& get_pool(pool_index_t ix);
@@ -246,7 +252,7 @@ public:
   void get_stats(stats_t *total,
 		 std::map<std::string, stats_t> *by_type) const;
 
-  void dump(ceph::Formatter *f) const;
+  void dump(ceph::Formatter *f, stats_t *ptotal=0) const;
 };
 
 void dump(ceph::Formatter *f);
