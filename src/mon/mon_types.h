@@ -20,7 +20,6 @@
 #include "common/Formatter.h"
 #include "common/bit_str.h"
 #include "include/Context.h"
-#include "mon/MonOpRequest.h"
 
 #define PAXOS_PGMAP      0  // before osd, for pg kick to behave
 #define PAXOS_MDSMAP     1
@@ -210,32 +209,6 @@ static inline ostream& operator<<(ostream& out, const ScrubResult& r) {
 
 /// for information like os, kernel, hostname, memory info, cpu model.
 typedef map<string, string> Metadata;
-
-struct C_MonOp : public Context
-{
-  MonOpRequestRef op;
-
-  explicit C_MonOp(MonOpRequestRef o) :
-    op(o) { }
-
-  void finish(int r) override {
-    if (op && r == -ECANCELED) {
-      op->mark_event("callback canceled");
-    } else if (op && r == -EAGAIN) {
-      op->mark_event("callback retry");
-    } else if (op && r == 0) {
-      op->mark_event("callback finished");
-    }
-    _finish(r);
-  }
-
-  void mark_op_event(const string &event) {
-    if (op)
-      op->mark_event_string(event);
-  }
-
-  virtual void _finish(int r) = 0;
-};
 
 namespace ceph {
   namespace features {
