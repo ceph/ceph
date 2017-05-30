@@ -1898,7 +1898,7 @@ bool ECBackend::try_reads_to_commit()
       op->plan,
       ec_impl,
       get_parent()->get_info().pgid.pgid,
-      !get_osdmap()->test_flag(CEPH_OSDMAP_REQUIRE_KRAKEN),
+      (get_osdmap()->require_osd_release < CEPH_RELEASE_KRAKEN),
       sinfo,
       op->remote_read_result,
       op->log_entries,
@@ -2030,7 +2030,7 @@ bool ECBackend::try_finish_rmw()
   if (op->version > committed_to)
     committed_to = op->version;
 
-  if (get_osdmap()->test_flag(CEPH_OSDMAP_REQUIRE_KRAKEN)) {
+  if (get_osdmap()->require_osd_release >= CEPH_RELEASE_KRAKEN) {
     if (op->version > get_parent()->get_log().get_can_rollback_to() &&
 	waiting_reads.empty() &&
 	waiting_commit.empty()) {

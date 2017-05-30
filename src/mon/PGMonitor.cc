@@ -1088,7 +1088,7 @@ bool PGMonitor::prepare_command(MonOpRequestRef op)
     goto update;
   } else if (prefix == "pg set_full_ratio" ||
              prefix == "pg set_nearfull_ratio") {
-    if (mon->osdmon()->osdmap.test_flag(CEPH_OSDMAP_REQUIRE_LUMINOUS)) {
+    if (mon->osdmon()->osdmap.require_osd_release >= CEPH_RELEASE_LUMINOUS) {
       ss << "please use the new luminous interfaces"
 	 << " ('osd set-full-ratio' and 'osd set-nearfull-ratio')";
       r = -EPERM;
@@ -1486,7 +1486,7 @@ void PGMonitor::get_health(list<pair<health_status_t,string> >& summary,
   }
 
   // full/nearfull
-  if (!mon->osdmon()->osdmap.test_flag(CEPH_OSDMAP_REQUIRE_LUMINOUS)) {
+  if (mon->osdmon()->osdmap.require_osd_release < CEPH_RELEASE_LUMINOUS) {
     check_full_osd_health(summary, detail, pg_map.full_osds, "full",
 			  HEALTH_ERR);
     check_full_osd_health(summary, detail, pg_map.nearfull_osds, "near full",

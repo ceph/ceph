@@ -479,7 +479,7 @@ void OSDMap::Incremental::encode(bufferlist& bl, uint64_t features) const
   }
 
   {
-    uint8_t target_v = 5;
+    uint8_t target_v = 6;
     if (!HAVE_FEATURE(features, SERVER_LUMINOUS)) {
       target_v = 2;
     }
@@ -500,7 +500,12 @@ void OSDMap::Incremental::encode(bufferlist& bl, uint64_t features) const
       ::encode(new_nearfull_ratio, bl);
       ::encode(new_full_ratio, bl);
       ::encode(new_backfillfull_ratio, bl);
+    }
+    if (target_v >= 5) {
       ::encode(new_require_min_compat_client, bl);
+    }
+    if (target_v >= 6) {
+      ::encode(new_require_osd_release, bl);
     }
     ENCODE_FINISH(bl); // osd-only data
   }
@@ -685,7 +690,7 @@ void OSDMap::Incremental::decode(bufferlist::iterator& bl)
   }
 
   {
-    DECODE_START(5, bl); // extended, osd-only data
+    DECODE_START(6, bl); // extended, osd-only data
     ::decode(new_hb_back_up, bl);
     ::decode(new_up_thru, bl);
     ::decode(new_last_clean_interval, bl);
@@ -713,8 +718,24 @@ void OSDMap::Incremental::decode(bufferlist::iterator& bl)
     } else {
       new_backfillfull_ratio = -1;
     }
-    if (struct_v >= 5)
+    if (struct_v >= 5) {
       ::decode(new_require_min_compat_client, bl);
+    }
+    if (struct_v >= 6) {
+      ::decode(new_require_osd_release, bl);
+    } else {
+      if (new_flags >= 0 && (new_flags & CEPH_OSDMAP_REQUIRE_LUMINOUS)) {
+	// only for compat with post-kraken pre-luminous test clusters
+	new_require_osd_release = CEPH_RELEASE_LUMINOUS;
+	new_flags &= ~(CEPH_OSDMAP_LEGACY_REQUIRE_FLAGS);
+      } else if (new_flags >= 0 && (new_flags & CEPH_OSDMAP_REQUIRE_KRAKEN)) {
+	new_require_osd_release = CEPH_RELEASE_KRAKEN;
+      } else if (new_flags >= 0 && (new_flags & CEPH_OSDMAP_REQUIRE_JEWEL)) {
+	new_require_osd_release = CEPH_RELEASE_JEWEL;
+      } else {
+	new_require_osd_release = -1;
+      }
+    }
     DECODE_FINISH(bl); // osd-only data
   }
 
@@ -760,6 +781,7 @@ void OSDMap::Incremental::dump(Formatter *f) const
   f->dump_float("new_nearfull_ratio", new_nearfull_ratio);
   f->dump_float("new_backfillfull_ratio", new_backfillfull_ratio);
   f->dump_string("new_require_min_compat_client", new_require_min_compat_client);
+  f->dump_int("new_require_osd_release", new_require_osd_release);
 
   if (fullmap.length()) {
     f->open_object_section("full_map");
@@ -1267,14 +1289,14 @@ uint64_t OSDMap::get_features(int entity_type, uint64_t *pmask) const
 
   if (entity_type == CEPH_ENTITY_TYPE_OSD) {
     const uint64_t jewel_features = CEPH_FEATURE_SERVER_JEWEL;
-    if (test_flag(CEPH_OSDMAP_REQUIRE_JEWEL)) {
+    if (require_osd_release >= CEPH_RELEASE_JEWEL) {
       features |= jewel_features;
     }
     mask |= jewel_features;
 
     const uint64_t kraken_features = CEPH_FEATUREMASK_SERVER_KRAKEN
       | CEPH_FEATURE_MSG_ADDR2;
-    if (test_flag(CEPH_OSDMAP_REQUIRE_KRAKEN)) {
+    if (require_osd_release >= CEPH_RELEASE_KRAKEN) {
       features |= kraken_features;
     }
     mask |= kraken_features;
@@ -1493,8 +1515,22 @@ int OSDMap::apply_incremental(const Incremental &inc)
   }
 
   // nope, incremental.
-  if (inc.new_flags >= 0)
+  if (inc.new_flags >= 0) {
     flags = inc.new_flags;
+    // the below is just to cover a newly-upgraded luminous mon
+    // cluster that has to set require_jewel_osds or
+    // require_kraken_osds before the osds can be upgraded to
+    // luminous.
+    if (flags & CEPH_OSDMAP_REQUIRE_KRAKEN) {
+      if (require_osd_release < CEPH_RELEASE_KRAKEN) {
+	require_osd_release = CEPH_RELEASE_KRAKEN;
+      }
+    } else if (flags & CEPH_OSDMAP_REQUIRE_JEWEL) {
+      if (require_osd_release < CEPH_RELEASE_JEWEL) {
+	require_osd_release = CEPH_RELEASE_JEWEL;
+      }
+    }
+  }
 
   if (inc.new_max_osd >= 0)
     set_max_osd(inc.new_max_osd);
@@ -1669,6 +1705,12 @@ int OSDMap::apply_incremental(const Incremental &inc)
   }
   if (inc.new_require_min_compat_client.length()) {
     require_min_compat_client = inc.new_require_min_compat_client;
+  }
+  if (inc.new_require_osd_release >= 0) {
+    require_osd_release = inc.new_require_osd_release;
+    if (require_osd_release >= CEPH_RELEASE_LUMINOUS) {
+      flags &= ~(CEPH_OSDMAP_LEGACY_REQUIRE_FLAGS);
+    }
   }
 
   // do new crush map last (after up/down stuff)
@@ -2188,7 +2230,7 @@ void OSDMap::encode(bufferlist& bl, uint64_t features) const
 
   {
     uint8_t v = 4;
-    if (!HAVE_FEATURE(features, OSDMAP_PG_UPMAP)) {
+    if (!HAVE_FEATURE(features, SERVER_LUMINOUS)) {
       v = 3;
     }
     ENCODE_START(v, 1, bl); // client-usable data
@@ -2202,7 +2244,18 @@ void OSDMap::encode(bufferlist& bl, uint64_t features) const
     ::encode(pool_name, bl);
     ::encode(pool_max, bl);
 
-    ::encode(flags, bl);
+    if (v < 4) {
+      decltype(flags) f = flags;
+      if (require_osd_release >= CEPH_RELEASE_LUMINOUS)
+	f |= CEPH_OSDMAP_REQUIRE_LUMINOUS;
+      else if (require_osd_release == CEPH_RELEASE_KRAKEN)
+	f |= CEPH_OSDMAP_REQUIRE_KRAKEN;
+      else if (require_osd_release == CEPH_RELEASE_JEWEL)
+	f |= CEPH_OSDMAP_REQUIRE_JEWEL;
+      ::encode(f, bl);
+    } else {
+      ::encode(flags, bl);
+    }
 
     ::encode(max_osd, bl);
     ::encode(osd_state, bl);
@@ -2235,7 +2288,7 @@ void OSDMap::encode(bufferlist& bl, uint64_t features) const
   }
 
   {
-    uint8_t target_v = 4;
+    uint8_t target_v = 5;
     if (!HAVE_FEATURE(features, SERVER_LUMINOUS)) {
       target_v = 1;
     }
@@ -2260,7 +2313,12 @@ void OSDMap::encode(bufferlist& bl, uint64_t features) const
       ::encode(nearfull_ratio, bl);
       ::encode(full_ratio, bl);
       ::encode(backfillfull_ratio, bl);
+    }
+    if (target_v >= 4) {
       ::encode(require_min_compat_client, bl);
+    }
+    if (target_v >= 5) {
+      ::encode(require_osd_release, bl);
     }
     ENCODE_FINISH(bl); // osd-only data
   }
@@ -2478,7 +2536,7 @@ void OSDMap::decode(bufferlist::iterator& bl)
   }
 
   {
-    DECODE_START(4, bl); // extended, osd-only data
+    DECODE_START(5, bl); // extended, osd-only data
     ::decode(osd_addrs->hb_back_addr, bl);
     ::decode(osd_info, bl);
     ::decode(blacklist, bl);
@@ -2500,8 +2558,27 @@ void OSDMap::decode(bufferlist::iterator& bl)
     } else {
       backfillfull_ratio = 0;
     }
-    if (struct_v >= 4)
+    if (struct_v >= 4) {
       ::decode(require_min_compat_client, bl);
+    }
+    if (struct_v >= 5) {
+      ::decode(require_osd_release, bl);
+      if (require_osd_release >= CEPH_RELEASE_LUMINOUS) {
+	flags &= ~(CEPH_OSDMAP_LEGACY_REQUIRE_FLAGS);
+      }
+    } else {
+      if (flags & CEPH_OSDMAP_REQUIRE_LUMINOUS) {
+	// only for compat with post-kraken pre-luminous test clusters
+	require_osd_release = CEPH_RELEASE_LUMINOUS;
+	flags &= ~(CEPH_OSDMAP_LEGACY_REQUIRE_FLAGS);
+      } else if (flags & CEPH_OSDMAP_REQUIRE_KRAKEN) {
+	require_osd_release = CEPH_RELEASE_KRAKEN;
+      } else if (flags & CEPH_OSDMAP_REQUIRE_JEWEL) {
+	require_osd_release = CEPH_RELEASE_JEWEL;
+      } else {
+	require_osd_release = 0;
+      }
+    }
     DECODE_FINISH(bl); // osd-only data
   }
 
@@ -2580,6 +2657,9 @@ void OSDMap::dump(Formatter *f) const
   auto mv = get_min_compat_client();
   f->dump_string("min_compat_client", mv.first);
   f->dump_string("min_compat_client_version", mv.second);
+  f->dump_int("require_osd_release", require_osd_release);
+  f->dump_string("require_osd_release_name",
+		 ceph_osd_release_name(require_osd_release));
 
   f->open_array_section("pools");
   for (const auto &pool : pools) {

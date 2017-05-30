@@ -2792,7 +2792,7 @@ void Monitor::handle_command(MonOpRequestRef op)
     Formatter *f = Formatter::create("json");
     // hide mgr commands until luminous upgrade is complete
     bool hide_mgr_flag =
-      !osdmon()->osdmap.test_flag(CEPH_OSDMAP_REQUIRE_LUMINOUS);
+      osdmon()->osdmap.require_osd_release < CEPH_RELEASE_LUMINOUS;
     format_command_descriptions(leader_supported_mon_commands,
 				leader_supported_mon_commands_size, f, &rdata,
 				hide_mgr_flag);
@@ -2907,7 +2907,7 @@ void Monitor::handle_command(MonOpRequestRef op)
     << "cmd=" << m->cmd << ": dispatch";
 
   if (mon_cmd->is_mgr() &&
-      osdmon()->osdmap.test_flag(CEPH_OSDMAP_REQUIRE_LUMINOUS)) {
+      osdmon()->osdmap.require_osd_release >= CEPH_RELEASE_LUMINOUS) {
     const auto& hdr = m->get_header();
     uint64_t size = hdr.front_len + hdr.middle_len + hdr.data_len;
     uint64_t max =

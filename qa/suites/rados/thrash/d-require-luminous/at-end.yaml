@@ -5,7 +5,7 @@ tasks:
 - full_sequential_finally:
   - exec:
       mon.a:
-        - ceph osd set require_luminous_osds
+        - ceph osd require-osd-release luminous
 # make sure osds have latest map
         - rados -p rbd bench 5 write -b 4096
   - ceph.healthy:
