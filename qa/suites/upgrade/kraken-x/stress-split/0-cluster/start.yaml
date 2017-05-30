@@ -6,6 +6,9 @@ meta:
 overrides:
   ceph:
     fs: xfs
+    conf:
+      global:
+        enable experimental unrecoverable data corrupting features: "*"
 roles:
 - - mon.a
   - mon.b
