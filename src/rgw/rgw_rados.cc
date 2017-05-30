@@ -2144,9 +2144,10 @@ void RGWObjVersionTracker::generate_new_write_ver(CephContext *cct)
 
 int RGWPutObjProcessor::complete(string& etag, real_time *mtime, real_time set_mtime,
                                  map<string, bufferlist>& attrs, real_time delete_at,
-                                 const char *if_match, const char * if_nomatch)
+                                 const char *if_match, const char * if_nomatch,
+				 const string *user_data)
 {
-  int r = do_complete(etag, mtime, set_mtime, attrs, delete_at, if_match, if_nomatch);
+  int r = do_complete(etag, mtime, set_mtime, attrs, delete_at, if_match, if_nomatch, user_data);
   if (r < 0)
     return r;
 
@@ -2490,7 +2491,8 @@ int RGWPutObjProcessor_Atomic::complete_writing_data()
 int RGWPutObjProcessor_Atomic::do_complete(string& etag, real_time *mtime, real_time set_mtime,
                                            map<string, bufferlist>& attrs, real_time delete_at,
                                            const char *if_match,
-                                           const char *if_nomatch) {
+                                           const char *if_nomatch,
+					   const string *user_data) {
   int r = complete_writing_data();
   if (r < 0)
     return r;
@@ -2515,6 +2517,7 @@ int RGWPutObjProcessor_Atomic::do_complete(string& etag, real_time *mtime, real_
   obj_op.meta.flags = PUT_OBJ_CREATE;
   obj_op.meta.olh_epoch = olh_epoch;
   obj_op.meta.delete_at = delete_at;
+  obj_op.meta.user_data = user_data;
 
   r = obj_op.write_meta(obj_len, attrs);
   if (r < 0) {
@@ -6279,7 +6282,7 @@ int RGWRados::Object::Write::write_meta(uint64_t size,
 
   r = index_op.complete(poolid, epoch, size,
                         meta.set_mtime, etag, content_type, &acl_bl,
-                        meta.category, meta.remove_objs);
+                        meta.category, meta.remove_objs, meta.user_data);
   if (r < 0)
     goto done_cancel;
 
@@ -8967,7 +8970,8 @@ int RGWRados::Bucket::UpdateIndex::prepare(RGWModifyOp op)
 
 int RGWRados::Bucket::UpdateIndex::complete(int64_t poolid, uint64_t epoch, uint64_t size,
                                     ceph::real_time& ut, string& etag, string& content_type, bufferlist *acl_bl, RGWObjCategory category,
-                                    list<rgw_obj_key> *remove_objs)
+					    list<rgw_obj_key> *remove_objs,
+					    const string *user_data)
 {
   if (blind) {
     return 0;
@@ -8985,6 +8989,9 @@ int RGWRados::Bucket::UpdateIndex::complete(int64_t poolid, uint64_t epoch, uint
   ent.size = size;
   ent.mtime = ut;
   ent.etag = etag;
+  if (user_data)
+    ent.user_data = *user_data; // XXX ent.meta.user_data
+
   ACLOwner owner;
   if (acl_bl && acl_bl->length()) {
     int ret = store->decode_policy(*acl_bl, &owner);
@@ -11525,6 +11532,7 @@ int RGWRados::cls_obj_complete_op(BucketShard& bs, RGWModifyOp op, string& tag,
   dir_meta.owner = ent.owner.to_str();
   dir_meta.owner_display_name = ent.owner_display_name;
   dir_meta.content_type = ent.content_type;
+  dir_meta.user_data = ent.user_data;
   dir_meta.category = category;
 
   rgw_bucket_entry_ver ver;
