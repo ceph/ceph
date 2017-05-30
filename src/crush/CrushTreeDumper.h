@@ -76,10 +76,10 @@ namespace CrushTreeDumper {
       clear();
     }
 
-    virtual bool should_dump_leaf(int i) {
+    virtual bool should_dump_leaf(int i) const {
       return true;
     }
-    virtual bool should_dump_empty_bucket() {
+    virtual bool should_dump_empty_bucket() const {
       return true;
     }
 
