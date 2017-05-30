@@ -96,6 +96,8 @@ struct FeatureMap {
       for (auto& q : p.second) {
 	f->open_object_section("group");
 	f->dump_unsigned("features", q.first);
+	f->dump_string("release", ceph_release_name(
+			 ceph_release_from_features(q.first)));
 	f->dump_unsigned("num", q.second);
 	f->close_section();
       }
