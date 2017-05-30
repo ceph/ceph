@@ -3396,6 +3396,7 @@ struct complete_op_data {
   list<cls_rgw_obj_key> remove_objs;
   bool log_op;
   uint16_t bilog_op;
+  rgw_zone_set zones_trace;
 
   bool stopped{false};
 
@@ -3461,7 +3462,7 @@ int RGWIndexCompletionThread::process()
                              librados::ObjectWriteOperation o;
                              cls_rgw_guard_bucket_resharding(o, -ERR_BUSY_RESHARDING);
                              cls_rgw_bucket_complete_op(o, c->op, c->tag, c->ver, c->key, c->dir_meta, &c->remove_objs,
-                                                        c->log_op, c->bilog_op);
+                                                        c->log_op, c->bilog_op, c->zones_trace);
 
                              return bs->index_ctx.operate(bs->bucket_obj, &o);
                              });
@@ -3522,8 +3523,9 @@ public:
                          rgw_bucket_entry_ver& ver,
                          const cls_rgw_obj_key& key,
                          rgw_bucket_dir_entry_meta& dir_meta,
-                         list<cls_rgw_obj_key>& remove_objs, bool log_op,
+                         list<cls_rgw_obj_key> *remove_objs, bool log_op,
                          uint16_t bilog_op,
+                         rgw_zone_set *zones_trace,
                          complete_op_data **result);
   bool handle_completion(completion_t cb, complete_op_data *arg);
 
@@ -3575,8 +3577,9 @@ void RGWIndexCompletionManager::create_completion(const rgw_obj& obj,
                                                   rgw_bucket_entry_ver& ver,
                                                   const cls_rgw_obj_key& key,
                                                   rgw_bucket_dir_entry_meta& dir_meta,
-                                                  list<cls_rgw_obj_key>& remove_objs, bool log_op,
+                                                  list<cls_rgw_obj_key> *remove_objs, bool log_op,
                                                   uint16_t bilog_op,
+                                                  rgw_zone_set *zones_trace,
                                                   complete_op_data **result)
 {
   complete_op_data *entry = new complete_op_data;
@@ -3593,7 +3596,18 @@ void RGWIndexCompletionManager::create_completion(const rgw_obj& obj,
   entry->dir_meta = dir_meta;
   entry->log_op = log_op;
   entry->bilog_op = bilog_op;
-  entry->remove_objs = remove_objs;
+
+  if (remove_objs) {
+    for (auto iter = remove_objs->begin(); iter != remove_objs->end(); ++iter) {
+      entry->remove_objs.push_back(*iter);
+    }
+  }
+
+  if (zones_trace) {
+    entry->zones_trace = *zones_trace;
+  } else {
+    entry->zones_trace.insert(store->get_zone().id);
+  }
 
   *result = entry;
 
@@ -10839,9 +10853,9 @@ int RGWRados::bucket_index_link_olh(const RGWBucketInfo& bucket_info, RGWObjStat
   rgw_zone_set zones_trace;
   if (_zones_trace) {
     zones_trace = *_zones_trace;
-  }
-  else {
+  } else {
     zones_trace.insert(get_zone().id);
+  }
 
   BucketShard bs(this);
 
@@ -12511,40 +12525,20 @@ int RGWRados::cls_obj_complete_op(BucketShard& bs, const rgw_obj& obj, RGWModify
                                   rgw_bucket_dir_entry& ent, RGWObjCategory category,
 				  list<rgw_obj_index_key> *remove_objs, uint16_t bilog_flags, rgw_zone_set *_zones_trace)
 {
-  list<cls_rgw_obj_key> *pro = NULL;
-  list<cls_rgw_obj_key> ro;
-
-  if (remove_objs) {
-    for (auto iter = remove_objs->begin(); iter != remove_objs->end(); ++iter) {
-      ro.push_back(*iter);
-    }
-    pro = &ro;
-  }
-
   ObjectWriteOperation o;
   rgw_bucket_dir_entry_meta dir_meta;
   dir_meta = ent.meta;
   dir_meta.category = category;
 
-  rgw_zone_set zones_trace;
-  if (_zones_trace) {
-    zones_trace = *_zones_trace;
-  }
-  else {
-    zones_trace.insert(get_zone().id);
-  }
-  
   rgw_bucket_entry_ver ver;
   ver.pool = pool;
   ver.epoch = epoch;
   cls_rgw_obj_key key(ent.key.name, ent.key.instance);
   cls_rgw_guard_bucket_resharding(o, -ERR_BUSY_RESHARDING);
-  cls_rgw_bucket_complete_op(o, op, tag, ver, key, dir_meta, pro,
-                             get_zone().log_data, bilog_flags, zones_trace);
 
   complete_op_data *arg;
-  index_completion_manager->create_completion(obj, op, tag, ver, key, dir_meta, ro,
-                                              get_zone().log_data, bilog_flags, &arg);
+  index_completion_manager->create_completion(obj, op, tag, ver, key, dir_meta, remove_objs,
+                                              get_zone().log_data, bilog_flags, _zones_trace, &arg);
   int ret = bs.index_ctx.aio_operate(bs.bucket_obj, arg->rados_completion, &o);
   arg->rados_completion->release();
   return ret;
