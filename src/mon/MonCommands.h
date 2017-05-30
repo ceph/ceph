@@ -206,6 +206,8 @@ COMMAND("df name=detail,type=CephChoices,strings=detail,req=false", \
 COMMAND("report name=tags,type=CephString,n=N,req=false", \
 	"report full status of cluster, optional title tag strings", \
 	"mon", "r", "cli,rest")
+COMMAND("features", "report of connected features", \
+        "mon", "r", "cli,rest")
 COMMAND("quorum_status", "report status of monitor quorum", \
 	"mon", "r", "cli,rest")
 
