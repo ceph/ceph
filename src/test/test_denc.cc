@@ -666,7 +666,7 @@ TEST(denc, no_copy_if_segmented_and_lengthy)
     bufferlist segmented;
     segmented.append(large_bl);
     segmented.append(small_bl);
-    ASSERT_GT(segmented.get_num_buffers(), 1);
+    ASSERT_GT(segmented.get_num_buffers(), 1u);
     ASSERT_GT(segmented.length(), CEPH_PAGE_SIZE);
     auto p = segmented.begin();
     p.advance(large_bl.length());
@@ -684,7 +684,7 @@ TEST(denc, no_copy_if_segmented_and_lengthy)
     bufferlist segmented;
     segmented.append(small_bl);
     segmented.append(large_bl);
-    ASSERT_GT(segmented.get_num_buffers(), 1);
+    ASSERT_GT(segmented.get_num_buffers(), 1u);
     ASSERT_GT(segmented.length(), CEPH_PAGE_SIZE);
     auto p = segmented.begin();
     p.advance(small_bl.length());
