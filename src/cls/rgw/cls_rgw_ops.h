@@ -1123,4 +1123,234 @@ struct cls_rgw_lc_list_entries_ret {
 };
 WRITE_CLASS_ENCODER(cls_rgw_lc_list_entries_ret)
 
+struct cls_rgw_reshard_add_op {
+ cls_rgw_reshard_entry entry;
+
+  cls_rgw_reshard_add_op() {}
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    ::encode(entry, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::iterator& bl) {
+    DECODE_START(1, bl);
+    ::decode(entry, bl);
+    DECODE_FINISH(bl);
+  }
+  static void generate_test_instances(list<cls_rgw_reshard_add_op*>& o);
+  void dump(Formatter *f) const;
+};
+WRITE_CLASS_ENCODER(cls_rgw_reshard_add_op)
+
+struct cls_rgw_reshard_list_op {
+  uint32_t max;
+  string marker;
+
+  cls_rgw_reshard_list_op() {}
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    ::encode(max, bl);
+    ::encode(marker, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::iterator& bl) {
+    DECODE_START(1, bl);
+    ::decode(max, bl);
+    ::decode(marker, bl);
+    DECODE_FINISH(bl);
+  }
+  static void generate_test_instances(list<cls_rgw_reshard_list_op*>& o);
+  void dump(Formatter *f) const;
+};
+WRITE_CLASS_ENCODER(cls_rgw_reshard_list_op)
+
+
+struct cls_rgw_reshard_list_ret {
+  list<cls_rgw_reshard_entry> entries;
+  bool is_truncated;
+
+  cls_rgw_reshard_list_ret() {}
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    ::encode(entries, bl);
+    ::encode(is_truncated, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::iterator& bl) {
+    DECODE_START(1, bl);
+    ::decode(entries, bl);
+    ::decode(is_truncated, bl);
+    DECODE_FINISH(bl);
+  }
+  static void generate_test_instances(list<cls_rgw_reshard_list_ret*>& o);
+  void dump(Formatter *f) const;
+};
+WRITE_CLASS_ENCODER(cls_rgw_reshard_list_ret)
+
+struct cls_rgw_reshard_get_op {
+  cls_rgw_reshard_entry entry;
+
+  cls_rgw_reshard_get_op() {}
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    ::encode(entry, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::iterator& bl) {
+    DECODE_START(1, bl);
+    ::decode(entry, bl);
+    DECODE_FINISH(bl);
+  }
+  static void generate_test_instances(list<cls_rgw_reshard_get_op*>& o);
+  void dump(Formatter *f) const;
+};
+WRITE_CLASS_ENCODER(cls_rgw_reshard_get_op)
+
+struct cls_rgw_reshard_get_ret {
+  cls_rgw_reshard_entry entry;
+
+  cls_rgw_reshard_get_ret() {}
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    ::encode(entry, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::iterator& bl) {
+    DECODE_START(1, bl);
+    ::decode(entry, bl);
+    DECODE_FINISH(bl);
+  }
+  static void generate_test_instances(list<cls_rgw_reshard_get_ret*>& o);
+  void dump(Formatter *f) const;
+};
+WRITE_CLASS_ENCODER(cls_rgw_reshard_get_ret)
+
+struct cls_rgw_reshard_remove_op {
+  string tenant;
+  string bucket_name;
+  string bucket_id;
+
+  cls_rgw_reshard_remove_op() {}
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    ::encode(tenant, bl);
+    ::encode(bucket_name, bl);
+    ::encode(bucket_id, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::iterator& bl) {
+    DECODE_START(1, bl);
+    ::decode(tenant, bl);
+    ::decode(bucket_name, bl);
+    ::decode(bucket_id, bl);
+    DECODE_FINISH(bl);
+  }
+  static void generate_test_instances(list<cls_rgw_reshard_remove_op*>& o);
+  void dump(Formatter *f) const;
+};
+WRITE_CLASS_ENCODER(cls_rgw_reshard_remove_op)
+
+struct cls_rgw_set_bucket_resharding_op  {
+  cls_rgw_bucket_instance_entry entry;
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    ::encode(entry, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::iterator& bl) {
+    DECODE_START(1, bl);
+    ::decode(entry, bl);
+    DECODE_FINISH(bl);
+  }
+  static void generate_test_instances(list<cls_rgw_set_bucket_resharding_op*>& o);
+  void dump(Formatter *f) const;
+};
+WRITE_CLASS_ENCODER(cls_rgw_set_bucket_resharding_op)
+
+struct cls_rgw_clear_bucket_resharding_op {
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::iterator& bl) {
+    DECODE_START(1, bl);
+    DECODE_FINISH(bl);
+  }
+  static void generate_test_instances(list<cls_rgw_clear_bucket_resharding_op*>& o);
+  void dump(Formatter *f) const;
+};
+WRITE_CLASS_ENCODER(cls_rgw_clear_bucket_resharding_op)
+
+struct cls_rgw_guard_bucket_resharding_op  {
+  int ret_err{0};
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    ::encode(ret_err, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::iterator& bl) {
+    DECODE_START(1, bl);
+    ::decode(ret_err, bl);
+    DECODE_FINISH(bl);
+  }
+
+  static void generate_test_instances(list<cls_rgw_guard_bucket_resharding_op*>& o);
+  void dump(Formatter *f) const;
+};
+WRITE_CLASS_ENCODER(cls_rgw_guard_bucket_resharding_op)
+
+struct cls_rgw_get_bucket_resharding_op  {
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::iterator& bl) {
+    DECODE_START(1, bl);
+    DECODE_FINISH(bl);
+  }
+
+  static void generate_test_instances(list<cls_rgw_get_bucket_resharding_op*>& o);
+  void dump(Formatter *f) const;
+};
+WRITE_CLASS_ENCODER(cls_rgw_get_bucket_resharding_op)
+
+struct cls_rgw_get_bucket_resharding_ret  {
+  cls_rgw_bucket_instance_entry new_instance;
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    ::encode(new_instance, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::iterator& bl) {
+    DECODE_START(1, bl);
+    ::decode(new_instance, bl);
+    DECODE_FINISH(bl);
+  }
+
+  static void generate_test_instances(list<cls_rgw_get_bucket_resharding_ret*>& o);
+  void dump(Formatter *f) const;
+};
+WRITE_CLASS_ENCODER(cls_rgw_get_bucket_resharding_ret)
+
 #endif /* CEPH_CLS_RGW_OPS_H */

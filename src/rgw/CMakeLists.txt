@@ -79,6 +79,7 @@ set(rgw_a_srcs
   rgw_period_pusher.cc
   rgw_realm_reloader.cc
   rgw_realm_watcher.cc
+  rgw_reshard.cc
   rgw_coroutine.cc
   rgw_cr_rados.cc
   rgw_object_expirer_core.cc

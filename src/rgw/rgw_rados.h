@@ -38,6 +38,8 @@ class RGWSyncLogTrimThread;
 class RGWRESTConn;
 struct RGWZoneGroup;
 struct RGWZoneParams;
+class RGWReshard;
+class RGWReshardWait;
 
 /* flags for put_obj_meta() */
 #define PUT_OBJ_CREATE      0x01
@@ -1147,6 +1149,7 @@ struct RGWZoneParams : RGWSystemMetaObj {
   rgw_pool user_swift_pool;
   rgw_pool user_uid_pool;
   rgw_pool roles_pool;
+  rgw_pool reshard_pool;
 
   RGWAccessKey system_key;
 
@@ -1180,7 +1183,7 @@ struct RGWZoneParams : RGWSystemMetaObj {
   const string& get_compression_type(const string& placement_rule) const;
   
   void encode(bufferlist& bl) const override {
-    ENCODE_START(9, 1, bl);
+    ENCODE_START(10, 1, bl);
     ::encode(domain_root, bl);
     ::encode(control_pool, bl);
     ::encode(gc_pool, bl);
@@ -1199,11 +1202,12 @@ struct RGWZoneParams : RGWSystemMetaObj {
     ::encode(lc_pool, bl);
     ::encode(tier_config, bl);
     ::encode(roles_pool, bl);
+    ::encode(reshard_pool, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::iterator& bl) override {
-    DECODE_START(9, bl);
+    DECODE_START(10, bl);
     ::decode(domain_root, bl);
     ::decode(control_pool, bl);
     ::decode(gc_pool, bl);
@@ -1241,6 +1245,11 @@ struct RGWZoneParams : RGWSystemMetaObj {
       ::decode(roles_pool, bl);
     } else {
       roles_pool = name + ".rgw.roles";
+    }
+    if (struct_v >= 10) {
+      ::decode(reshard_pool, bl);
+    } else {
+      reshard_pool = name + ".rgw.reshard";
     }
     DECODE_FINISH(bl);
   }
@@ -2161,6 +2170,8 @@ struct tombstone_entry {
       pg_ver(state.pg_ver) {}
 };
 
+class RGWIndexCompletionManager;
+
 class RGWRados
 {
   friend class RGWGC;
@@ -2172,12 +2183,16 @@ class RGWRados
   friend class RGWDataSyncProcessorThread;
   friend class RGWStateLog;
   friend class RGWReplicaLogger;
+  friend class RGWReshard;
+  friend class RGWBucketReshard;
+  friend class BucketIndexLockGuard;
 
   /** Open the pool used as root for this gateway */
   int open_root_pool_ctx();
   int open_gc_pool_ctx();
   int open_lc_pool_ctx();
   int open_objexp_pool_ctx();
+  int open_reshard_pool_ctx();
 
   int open_pool_ctx(const rgw_pool& pool, librados::IoCtx&  io_ctx);
   int open_bucket_index_ctx(const RGWBucketInfo& bucket_info, librados::IoCtx& index_ctx);
@@ -2211,6 +2226,7 @@ class RGWRados
   bool use_lc_thread;
   bool quota_threads;
   bool run_sync_thread;
+  bool run_reshard_thread;
 
   RGWAsyncRadosProcessor* async_rados;
 
@@ -2274,6 +2290,7 @@ protected:
   librados::IoCtx gc_pool_ctx;        // .rgw.gc
   librados::IoCtx lc_pool_ctx;        // .rgw.lc
   librados::IoCtx objexp_pool_ctx;
+  librados::IoCtx reshard_pool_ctx;
 
   bool pools_initialized;
 
@@ -2284,7 +2301,7 @@ protected:
   RGWQuotaHandler *quota_handler;
 
   Finisher *finisher;
-  
+
   RGWCoroutinesManagerRegistry *cr_registry;
 
   RGWSyncModulesManager *sync_modules_manager{nullptr};
@@ -2297,10 +2314,12 @@ protected:
   uint32_t zone_short_id;
 
   RGWPeriod current_period;
+
+  RGWIndexCompletionManager *index_completion_manager{nullptr};
 public:
   RGWRados() : lock("rados_timer_lock"), watchers_lock("watchers_lock"), timer(NULL),
                gc(NULL), lc(NULL), obj_expirer(NULL), use_gc_thread(false), use_lc_thread(false), quota_threads(false),
-               run_sync_thread(false), async_rados(nullptr), meta_notifier(NULL),
+               run_sync_thread(false), run_reshard_thread(false), async_rados(nullptr), meta_notifier(NULL),
                data_notifier(NULL), meta_sync_processor_thread(NULL),
                meta_sync_thread_lock("meta_sync_thread_lock"), data_sync_thread_lock("data_sync_thread_lock"),
                num_watchers(0), watchers(NULL),
@@ -2317,7 +2336,7 @@ public:
                cr_registry(NULL),
                zone_short_id(0),
                rest_master_conn(NULL),
-               meta_mgr(NULL), data_log(NULL) {}
+               meta_mgr(NULL), data_log(NULL), reshard(NULL) {}
 
   uint64_t get_new_req_id() {
     return ++max_req_id;
@@ -2438,6 +2457,9 @@ public:
 
   RGWDataChangesLog *data_log;
 
+  RGWReshard *reshard;
+  std::shared_ptr<RGWReshardWait> reshard_wait;
+
   virtual ~RGWRados() = default;
 
   tombstone_cache_t *get_tombstone_cache() {
@@ -2476,12 +2498,13 @@ public:
 
   CephContext *ctx() { return cct; }
   /** do all necessary setup of the storage device */
-  int initialize(CephContext *_cct, bool _use_gc_thread, bool _use_lc_thread, bool _quota_threads, bool _run_sync_thread) {
+  int initialize(CephContext *_cct, bool _use_gc_thread, bool _use_lc_thread, bool _quota_threads, bool _run_sync_thread, bool _run_reshard_thread) {
     set_context(_cct);
     use_gc_thread = _use_gc_thread;
     use_lc_thread = _use_lc_thread;
     quota_threads = _quota_threads;
     run_sync_thread = _run_sync_thread;
+    run_reshard_thread = _run_reshard_thread;
     return initialize();
   }
   /** Initialize the RADOS instance and prepare to do other ops */
@@ -2834,6 +2857,8 @@ public:
     rgw_bucket& get_bucket() { return bucket; }
     RGWBucketInfo& get_bucket_info() { return bucket_info; }
 
+    int update_bucket_id(const string& new_bucket_id);
+
     int get_shard_id() { return shard_id; }
     void set_shard_id(int id) {
       shard_id = id;
@@ -2848,6 +2873,21 @@ public:
       bool bs_initialized{false};
       bool blind;
       bool prepared{false};
+
+      int init_bs() {
+        int r = bs.init(target->get_bucket(), obj);
+        if (r < 0) {
+          return r;
+        }
+        bs_initialized = true;
+        return 0;
+      }
+
+      void invalidate_bs() {
+        bs_initialized = false;
+      }
+
+      int guard_reshard(BucketShard **pbs, std::function<int(BucketShard *)> call);
     public:
 
       UpdateIndex(RGWRados::Bucket *_target, const rgw_obj& _obj) : target(_target), obj(_obj),
@@ -2857,11 +2897,10 @@ public:
 
       int get_bucket_shard(BucketShard **pbs) {
         if (!bs_initialized) {
-          int r = bs.init(target->get_bucket(), obj);
+          int r = init_bs();
           if (r < 0) {
             return r;
           }
-          bs_initialized = true;
         }
         *pbs = &bs;
         return 0;
@@ -3207,6 +3246,9 @@ public:
   int obj_operate(const RGWBucketInfo& bucket_info, const rgw_obj& obj, librados::ObjectWriteOperation *op);
   int obj_operate(const RGWBucketInfo& bucket_info, const rgw_obj& obj, librados::ObjectReadOperation *op);
 
+  int guard_reshard(BucketShard *bs, const rgw_obj& obj_instance, std::function<int(BucketShard *)> call);
+  int block_while_resharding(RGWRados::BucketShard *bs, string *new_bucket_id);
+
   void bucket_index_guard_olh_op(RGWObjState& olh_state, librados::ObjectOperation& op);
   int olh_init_modification(const RGWBucketInfo& bucket_info, RGWObjState& state, const rgw_obj& olh_obj, string *op_tag);
   int olh_init_modification_impl(const RGWBucketInfo& bucket_info, RGWObjState& state, const rgw_obj& olh_obj, string *op_tag);
@@ -3291,7 +3333,7 @@ public:
                                  ceph::real_time *pmtime, map<string, bufferlist> *pattrs, rgw_cache_entry_info *cache_info = NULL);
   int get_bucket_instance_info(RGWObjectCtx& obj_ctx, const string& meta_key, RGWBucketInfo& info, ceph::real_time *pmtime, map<string, bufferlist> *pattrs);
   int get_bucket_instance_info(RGWObjectCtx& obj_ctx, const rgw_bucket& bucket, RGWBucketInfo& info, ceph::real_time *pmtime, map<string, bufferlist> *pattrs);
-  int get_bucket_instance_from_oid(RGWObjectCtx& obj_ctx, string& oid, RGWBucketInfo& info, ceph::real_time *pmtime, map<string, bufferlist> *pattrs,
+  int get_bucket_instance_from_oid(RGWObjectCtx& obj_ctx, const string& oid, RGWBucketInfo& info, ceph::real_time *pmtime, map<string, bufferlist> *pattrs,
                                    rgw_cache_entry_info *cache_info = NULL);
 
   int convert_old_bucket_info(RGWObjectCtx& obj_ctx, const string& tenant_name, const string& bucket_name);
@@ -3305,9 +3347,9 @@ public:
 
   int cls_rgw_init_index(librados::IoCtx& io_ctx, librados::ObjectWriteOperation& op, string& oid);
   int cls_obj_prepare_op(BucketShard& bs, RGWModifyOp op, string& tag, rgw_obj& obj, uint16_t bilog_flags);
-  int cls_obj_complete_op(BucketShard& bs, RGWModifyOp op, string& tag, int64_t pool, uint64_t epoch,
+  int cls_obj_complete_op(BucketShard& bs, const rgw_obj& obj, RGWModifyOp op, string& tag, int64_t pool, uint64_t epoch,
                           rgw_bucket_dir_entry& ent, RGWObjCategory category, list<rgw_obj_index_key> *remove_objs, uint16_t bilog_flags);
-  int cls_obj_complete_add(BucketShard& bs, string& tag, int64_t pool, uint64_t epoch, rgw_bucket_dir_entry& ent,
+  int cls_obj_complete_add(BucketShard& bs, const rgw_obj& obj, string& tag, int64_t pool, uint64_t epoch, rgw_bucket_dir_entry& ent,
                            RGWObjCategory category, list<rgw_obj_index_key> *remove_objs, uint16_t bilog_flags);
   int cls_obj_complete_del(BucketShard& bs, string& tag, int64_t pool, uint64_t epoch, rgw_obj& obj,
                            ceph::real_time& removed_mtime, list<rgw_obj_index_key> *remove_objs, uint16_t bilog_flags);
@@ -3404,6 +3446,7 @@ public:
                          map<RGWObjCategory, RGWStorageStats> *existing_stats,
                          map<RGWObjCategory, RGWStorageStats> *calculated_stats);
   int bucket_rebuild_index(RGWBucketInfo& bucket_info);
+  int bucket_set_reshard(RGWBucketInfo& bucket_info, const cls_rgw_bucket_instance_entry& entry);
   int remove_objs_from_index(RGWBucketInfo& bucket_info, list<rgw_obj_index_key>& oid_list);
   int move_rados_obj(librados::IoCtx& src_ioctx,
 		     const string& src_oid, const string& src_locator,
@@ -3431,6 +3474,11 @@ public:
 
   int check_quota(const rgw_user& bucket_owner, rgw_bucket& bucket,
                   RGWQuotaInfo& user_quota, RGWQuotaInfo& bucket_quota, uint64_t obj_size);
+
+  int check_bucket_shards(const RGWBucketInfo& bucket_info, rgw_bucket& bucket,
+			  RGWQuotaInfo& bucket_quota);
+
+  int add_bucket_to_reshard(const RGWBucketInfo& bucket_info);
 
   uint64_t instance_id();
   const string& zone_id() {
@@ -3564,15 +3612,16 @@ public:
 class RGWStoreManager {
 public:
   RGWStoreManager() {}
-  static RGWRados *get_storage(CephContext *cct, bool use_gc_thread, bool use_lc_thread, bool quota_threads, bool run_sync_thread) {
-    RGWRados *store = init_storage_provider(cct, use_gc_thread, use_lc_thread, quota_threads, run_sync_thread);
+  static RGWRados *get_storage(CephContext *cct, bool use_gc_thread, bool use_lc_thread, bool quota_threads, bool run_sync_thread, bool run_reshard_thread) {
+    RGWRados *store = init_storage_provider(cct, use_gc_thread, use_lc_thread, quota_threads, run_sync_thread,
+					    run_reshard_thread);
     return store;
   }
   static RGWRados *get_raw_storage(CephContext *cct) {
     RGWRados *store = init_raw_storage_provider(cct);
     return store;
   }
-  static RGWRados *init_storage_provider(CephContext *cct, bool use_gc_thread, bool use_lc_thread, bool quota_threads, bool run_sync_thread);
+  static RGWRados *init_storage_provider(CephContext *cct, bool use_gc_thread, bool use_lc_thread, bool quota_threads, bool run_sync_thread, bool run_reshard_thread);
   static RGWRados *init_raw_storage_provider(CephContext *cct);
   static void close_storage(RGWRados *store);
 

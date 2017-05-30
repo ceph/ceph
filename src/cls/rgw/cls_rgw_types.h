@@ -597,26 +597,80 @@ struct rgw_bucket_category_stats {
 };
 WRITE_CLASS_ENCODER(rgw_bucket_category_stats)
 
+enum cls_rgw_reshard_status {
+  CLS_RGW_RESHARD_NONE        = 0,
+  CLS_RGW_RESHARD_IN_PROGRESS = 1,
+  CLS_RGW_RESHARD_DONE        = 2,
+};
+
+struct cls_rgw_bucket_instance_entry {
+  cls_rgw_reshard_status reshard_status{CLS_RGW_RESHARD_NONE};
+  string new_bucket_instance_id;
+  int32_t num_shards{-1};
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    ::encode((uint8_t)reshard_status, bl);
+    ::encode(new_bucket_instance_id, bl);
+    ::encode(num_shards, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::iterator& bl) {
+    DECODE_START(1, bl);
+    uint8_t s;
+    ::decode(s, bl);
+    reshard_status = (cls_rgw_reshard_status)s;
+    ::decode(new_bucket_instance_id, bl);
+    ::decode(num_shards, bl);
+    DECODE_FINISH(bl);
+  }
+
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<cls_rgw_bucket_instance_entry*>& o);
+
+  void clear() {
+    reshard_status = CLS_RGW_RESHARD_NONE;
+    new_bucket_instance_id.clear();
+  }
+
+  void set_status(const string& new_instance_id, int32_t new_num_shards, cls_rgw_reshard_status s) {
+    reshard_status = s;
+    new_bucket_instance_id = new_instance_id;
+    num_shards = new_num_shards;
+  }
+
+  bool resharding() const {
+    return reshard_status != CLS_RGW_RESHARD_NONE;
+  }
+  bool resharding_in_progress() const {
+    return reshard_status == CLS_RGW_RESHARD_IN_PROGRESS;
+  }
+};
+WRITE_CLASS_ENCODER(cls_rgw_bucket_instance_entry)
+
 struct rgw_bucket_dir_header {
   map<uint8_t, rgw_bucket_category_stats> stats;
   uint64_t tag_timeout;
   uint64_t ver;
   uint64_t master_ver;
   string max_marker;
+  cls_rgw_bucket_instance_entry new_instance;
 
   rgw_bucket_dir_header() : tag_timeout(0), ver(0), master_ver(0) {}
 
   void encode(bufferlist &bl) const {
-    ENCODE_START(5, 2, bl);
+    ENCODE_START(6, 2, bl);
     ::encode(stats, bl);
     ::encode(tag_timeout, bl);
     ::encode(ver, bl);
     ::encode(master_ver, bl);
     ::encode(max_marker, bl);
+    ::encode(new_instance, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator &bl) {
-    DECODE_START_LEGACY_COMPAT_LEN(3, 2, 2, bl);
+    DECODE_START_LEGACY_COMPAT_LEN(6, 2, 2, bl);
     ::decode(stats, bl);
     if (struct_v > 2) {
       ::decode(tag_timeout, bl);
@@ -632,10 +686,22 @@ struct rgw_bucket_dir_header {
     if (struct_v >= 5) {
       ::decode(max_marker, bl);
     }
+    if (struct_v >= 6) {
+      ::decode(new_instance, bl);
+    } else {
+      new_instance = cls_rgw_bucket_instance_entry();
+    }
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
   static void generate_test_instances(list<rgw_bucket_dir_header*>& o);
+
+  bool resharding() const {
+    return new_instance.resharding();
+  }
+  bool resharding_in_progress() const {
+    return new_instance.resharding_in_progress();
+  }
 };
 WRITE_CLASS_ENCODER(rgw_bucket_dir_header)
 
@@ -992,5 +1058,49 @@ struct cls_rgw_lc_obj_head
 
 };
 WRITE_CLASS_ENCODER(cls_rgw_lc_obj_head)
+
+struct cls_rgw_reshard_entry
+{
+  ceph::real_time time;
+  string tenant;
+  string bucket_name;
+  string bucket_id;
+  string new_instance_id;
+  uint32_t old_num_shards;
+  uint32_t new_num_shards;
+
+  cls_rgw_reshard_entry() {}
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+     ::encode(time, bl);
+    ::encode(tenant, bl);
+    ::encode(bucket_name, bl);
+    ::encode(bucket_id, bl);
+    ::encode(new_instance_id, bl);
+    ::encode(old_num_shards, bl);
+    ::encode(new_num_shards, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::iterator& bl) {
+    DECODE_START(1, bl);
+    ::decode(time, bl);
+    ::decode(tenant, bl);
+    ::decode(bucket_name, bl);
+    ::decode(bucket_id, bl);
+    ::decode(new_instance_id, bl);
+    ::decode(old_num_shards, bl);
+    ::decode(new_num_shards, bl);
+    DECODE_FINISH(bl);
+  }
+
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<cls_rgw_reshard_entry*>& o);
+
+  static void generate_key(const string& tenant, const string& bucket_name, string *key);
+  void get_key(string *key) const;
+};
+WRITE_CLASS_ENCODER(cls_rgw_reshard_entry)
 
 #endif
