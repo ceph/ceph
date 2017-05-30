@@ -118,6 +118,7 @@ rgw_http_errors rgw_http_s3_errors({
 rgw_http_errors rgw_http_swift_errors({
     { EACCES, {403, "AccessDenied" }},
     { EPERM, {401, "AccessDenied" }},
+    { ENAMETOOLONG, {400, "Metadata name too long" }},
     { ERR_USER_SUSPENDED, {401, "UserSuspended" }},
     { ERR_INVALID_UTF8, {412, "Invalid UTF8" }},
     { ERR_BAD_URL, {412, "Bad URL" }},
