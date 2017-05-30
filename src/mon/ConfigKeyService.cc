@@ -285,7 +285,7 @@ int ConfigKeyService::validate_osd_new(
     }
     if (existing_value.contents_equal(value)) {
       // both values match; this will be an idempotent op.
-      return 0;
+      return EEXIST;
     }
     ss << "dm-crypt key already exists and does not match";
     return -EEXIST;
