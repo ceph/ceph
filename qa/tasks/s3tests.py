@@ -141,11 +141,12 @@ def download(ctx, config):
         else:
             log.info("Using branch '%s' for s3tests", branch)
         sha1 = cconf.get('sha1')
+        git_remote = cconf.get('git_remote', None) or teuth_config.ceph_git_base_url
         ctx.cluster.only(client).run(
             args=[
                 'git', 'clone',
                 '-b', branch,
-                teuth_config.ceph_git_base_url + 's3-tests.git',
+                git_remote + 's3-tests.git',
                 '{tdir}/s3-tests'.format(tdir=testdir),
                 ],
             )
@@ -267,6 +268,9 @@ def configure(ctx, config):
         if properties is not None and 'slow_backend' in properties:
 	    s3tests_conf['fixtures']['slow backend'] = properties['slow_backend']
 
+        if properties is not None and 'calling_format' in properties:
+            s3tests_conf['DEFAULT']['calling_format'] = properties['calling_format']
+
         (remote,) = ctx.cluster.only(client).remotes.keys()
         remote.run(
             args=[
@@ -328,6 +332,41 @@ def sync_users(ctx, config):
     yield
 
 @contextlib.contextmanager
+def setup_dnsmasq(ctx, config):
+    assert isinstance(config, dict)
+    for client, properties in config['clients'].iteritems():
+        s3tests_conf = config['s3tests_conf'][client]
+        calling_format = s3tests_conf.get('calling_format','ordinary')
+        if calling_format in ['absolute','subdomain','vhost']:
+            rgws = ctx.cluster.only(misc.is_type('rgw'))
+            rgw_node = rgw.remotes.keys()[0]
+            rgw_ip = rgw_node.ip_address
+            resolv_conf = "nameserver 127.0.0.1\n"
+            dnsmasq_template = """address=/{name}/{ip_address}
+server=8.8.8.8
+server=8.8.4.4
+            """.format(name=name, ip_address=client.ip_address)
+            dnsmasq_config_path = '/etc/dnsmasq.d/ceph'
+            # point resolv.conf to local dnsmasq
+            misc.sudo_write_file(
+                remote=client,
+                path='/etc/resolv.conf',
+                data=resolv_conf,
+            )
+            misc.sudo_write_file(
+                remote=client,
+                path=dnsmasq_config_path,
+                data=dnsmasq_template,
+            )
+            client.run(args=['cat', dnsmasq_config_path])
+            # restart dnsmasq
+            client.run(args=['sudo', 'systemctl', 'restart', 'dnsmasq'])
+            client.run(args=['sudo', 'systemctl', 'status', 'dnsmasq'])
+            # verify dns name is set
+            client.run(args=['ping', '-c', '4', name])
+    yield
+
+@contextlib.contextmanager
 def run_tests(ctx, config):
     """
     Run the s3tests after everything is set up.
@@ -341,6 +380,8 @@ def run_tests(ctx, config):
     if not ctx.rgw.use_fastcgi:
         attrs.append("!fails_on_mod_proxy_fcgi")
     for client, client_config in config.iteritems():
+        if client_config is not None and 'extra_attrs' in client_config:
+            attrs.append(client_config['extra_attrs'])
         args = [
             'S3TEST_CONF={tdir}/archive/s3-tests.{client}.conf'.format(tdir=testdir, client=client),
             'BOTO_CONFIG={tdir}/boto.cfg'.format(tdir=testdir),
@@ -494,6 +535,10 @@ def task(ctx, config):
                 clients=config,
                 s3tests_conf=s3tests_conf,
                 )),
+        lambda: setup_dnsmasq(ctx=ctx, config=dict(
+            clients=config,
+            s3tests_conf=s3tests_conf,
+        )),
         lambda: run_tests(ctx=ctx, config=config),
         lambda: scan_for_leaked_encryption_keys(ctx=ctx, config=config),
         ):
