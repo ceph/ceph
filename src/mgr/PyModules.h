@@ -43,6 +43,8 @@ class PyModules
 
   std::string get_site_packages();
 
+  PyThreadState *pMainThreadState = nullptr;
+
 public:
   static std::string config_prefix;
 
