@@ -8,6 +8,7 @@
 #include "include/rados/librados.h"
 #include "test/librados/test.h"
 #include "test/librados/TestCase.h"
+#include "include/scope_guard.h"
 
 const char *data = "testdata";
 const char *obj = "testobj";
@@ -158,10 +159,10 @@ TEST_F(CReadOpsTest, AssertExists) {
 
   rados_completion_t completion;
   ASSERT_EQ(0, rados_aio_create_completion(NULL, NULL, NULL, &completion));
+  auto sg = make_scope_guard([&] { rados_aio_release(completion); });
   ASSERT_EQ(0, rados_aio_read_op_operate(op, ioctx, completion, obj, 0));
   rados_aio_wait_for_complete(completion);
   ASSERT_EQ(-ENOENT, rados_aio_get_return_value(completion));
-  rados_aio_release(completion);
   rados_release_read_op(op);
 
   write_object();
