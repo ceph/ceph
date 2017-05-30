@@ -70,6 +70,7 @@ tasks:
       branch: jewel
 - print: "**** done branch: jewel install.upgrade on client.1"
 - install.upgrade:
+    exclude_packages: ['ceph-test']
     mon.a:
     mon.b:
 - print: "**** done branch: -x install.upgrade on mon.a and mon.b"
@@ -79,6 +80,7 @@ tasks:
 - print: "**** done parallel -x branch"
 # Run librados tests on the -x upgraded cluster
 - install.upgrade:
+    exclude_packages: ['ceph-test']
     client.1:
 - workunit:
     branch: jewel
