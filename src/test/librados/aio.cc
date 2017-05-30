@@ -4,6 +4,7 @@
 #include "test/librados/test.h"
 #include "include/types.h"
 #include "include/stringify.h"
+#include "include/scope_guard.h"
 
 #include "gtest/gtest.h"
 #include <errno.h>
@@ -256,6 +257,7 @@ TEST(LibRadosAio, SimpleWrite) {
   ASSERT_EQ("", test_data.init());
   ASSERT_EQ(0, rados_aio_create_completion((void*)&test_data,
 	      set_completion_complete, set_completion_safe, &my_completion));
+  auto sg = make_scope_guard([&] { rados_aio_release(my_completion); });
   char buf[128];
   memset(buf, 0xcc, sizeof(buf));
   ASSERT_EQ(0, rados_aio_write(test_data.m_ioctx, "foo",
@@ -271,6 +273,7 @@ TEST(LibRadosAio, SimpleWrite) {
   rados_completion_t my_completion2;
   ASSERT_EQ(0, rados_aio_create_completion((void*)&test_data,
 	      set_completion_complete, set_completion_safe, &my_completion2));
+  auto sg2 = make_scope_guard([&] { rados_aio_release(my_completion2); });
   ASSERT_EQ(0, rados_aio_write(test_data.m_ioctx, "foo",
 			       my_completion2, buf, sizeof(buf), 0));
   {
@@ -279,8 +282,6 @@ TEST(LibRadosAio, SimpleWrite) {
     sem_wait(test_data.m_sem);
   }
   ASSERT_EQ(0, rados_aio_get_return_value(my_completion2));
-  rados_aio_release(my_completion);
-  rados_aio_release(my_completion2);
 }
 
 TEST(LibRadosAio, SimpleWritePP) {
@@ -2612,6 +2613,7 @@ TEST(LibRadosAioEC, SimpleWrite) {
   ASSERT_EQ("", test_data.init());
   ASSERT_EQ(0, rados_aio_create_completion((void*)&test_data,
 	      set_completion_completeEC, set_completion_safeEC, &my_completion));
+  auto sg = make_scope_guard([&] { rados_aio_release(my_completion); });
   char buf[128];
   memset(buf, 0xcc, sizeof(buf));
   ASSERT_EQ(0, rados_aio_write(test_data.m_ioctx, "foo",
@@ -2627,6 +2629,7 @@ TEST(LibRadosAioEC, SimpleWrite) {
   rados_completion_t my_completion2;
   ASSERT_EQ(0, rados_aio_create_completion((void*)&test_data,
 	      set_completion_completeEC, set_completion_safeEC, &my_completion2));
+  auto sg2 = make_scope_guard([&] { rados_aio_release(my_completion2); });
   ASSERT_EQ(0, rados_aio_write(test_data.m_ioctx, "foo",
 			       my_completion2, buf, sizeof(buf), 0));
   {
@@ -2635,8 +2638,6 @@ TEST(LibRadosAioEC, SimpleWrite) {
     sem_wait(test_data.m_sem);
   }
   ASSERT_EQ(0, rados_aio_get_return_value(my_completion2));
-  rados_aio_release(my_completion);
-  rados_aio_release(my_completion2);
 }
 
 TEST(LibRadosAioEC, SimpleWritePP) {
