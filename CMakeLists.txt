@@ -513,8 +513,9 @@ endif()
 # Boost
 option(WITH_SYSTEM_BOOST "require and build with system Boost" OFF)
 
+# Boost::thread depends on Boost::atomic, so list it explicitly.
 set(BOOST_COMPONENTS
-	thread system regex random program_options date_time iostreams coroutine)
+  atomic thread system regex random program_options date_time iostreams)
 set(BOOST_HEADER_COMPONENTS container)
 
 if(WITH_MGR)
@@ -522,7 +523,7 @@ if(WITH_MGR)
 endif()
 
 if(WITH_RADOSGW_BEAST_FRONTEND)
-	list(APPEND BOOST_COMPONENTS context)
+  list(APPEND BOOST_COMPONENTS context coroutine)
 endif()
 
 if (WITH_SYSTEM_BOOST)
