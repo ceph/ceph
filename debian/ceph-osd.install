@@ -1,7 +1,6 @@
 lib/udev/rules.d/95-ceph-osd.rules
 lib/udev/rules.d/60-ceph-by-parttypeuuid.rules
 usr/sbin/ceph-disk
-usr/sbin/ceph-disk-udev
 usr/bin/ceph-clsinfo
 usr/bin/ceph-objectstore-tool
 usr/bin/ceph-bluestore-tool
