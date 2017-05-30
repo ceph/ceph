@@ -1085,6 +1085,7 @@ int cls_get_request_origin(cls_method_context_t hctx, entity_inst_t *origin) {
     ctx->io_ctx_impl->get_rados_client();
 
   struct sockaddr_in sin;
+  memset(&sin, 0, sizeof(sin));
   sin.sin_family = AF_INET;
   sin.sin_port = 0;
   inet_pton(AF_INET, "127.0.0.1", &sin.sin_addr);
