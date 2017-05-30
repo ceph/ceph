@@ -125,7 +125,7 @@ TEST(BlueFS, small_appends) {
     ASSERT_EQ(0, fs.open_for_write("dir", "file_sync", &h, false));
     for (unsigned i = 0; i < 1000; ++i) {
       h->append("abcdeabcdeabcdeabcdeabcdeabc", 23);
-      fs.fsync(h);
+      ASSERT_EQ(0, fs.fsync(h));
     }
     fs.close_writer(h);
   }
