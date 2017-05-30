@@ -143,7 +143,6 @@ namespace mempool {
   f(bluestore_fsck)		      \
   f(bluefs)			      \
   f(buffer_anon)		      \
-  f(buffer_data)		      \
   f(buffer_meta)		      \
   f(osd)			      \
   f(osdmap)			      \

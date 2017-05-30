@@ -269,8 +269,6 @@ static std::atomic_flag buffer_debug_lock = ATOMIC_FLAG_INIT;
     }
   };
 
-  MEMPOOL_DEFINE_FACTORY(char, char, buffer_data);
-
   /*
    * raw_combined is always placed within a single allocation along
    * with the data buffer.  the data goes at the beginning, and
@@ -299,8 +297,14 @@ static std::atomic_flag buffer_debug_lock = ATOMIC_FLAG_INIT;
 				  alignof(buffer::raw_combined));
       size_t datalen = ROUND_UP_TO(len, alignof(buffer::raw_combined));
 
-      char *ptr = mempool::buffer_data::alloc_char.allocate_aligned(
-	rawlen + datalen, align);
+#ifdef DARWIN
+      char *ptr = (char *) valloc(rawlen + datalen);
+#else
+      char *ptr = 0;
+      int r = ::posix_memalign((void**)(void*)&ptr, align, rawlen + datalen);
+      if (r)
+	throw bad_alloc();
+#endif /* DARWIN */
       if (!ptr)
 	throw bad_alloc();
 
@@ -311,11 +315,7 @@ static std::atomic_flag buffer_debug_lock = ATOMIC_FLAG_INIT;
 
     static void operator delete(void *ptr) {
       raw_combined *raw = (raw_combined *)ptr;
-      size_t rawlen = ROUND_UP_TO(sizeof(buffer::raw_combined),
-				  alignof(buffer::raw_combined));
-      size_t datalen = ROUND_UP_TO(raw->len, alignof(buffer::raw_combined));
-      mempool::buffer_data::alloc_char.deallocate_aligned(
-	raw->data, rawlen + datalen);
+      ::free((void *)raw->data);
     }
   };
 
@@ -380,7 +380,13 @@ static std::atomic_flag buffer_debug_lock = ATOMIC_FLAG_INIT;
     raw_posix_aligned(unsigned l, unsigned _align) : raw(l) {
       align = _align;
       assert((align >= sizeof(void *)) && (align & (align - 1)) == 0);
-      data = mempool::buffer_data::alloc_char.allocate_aligned(len, align);
+#ifdef DARWIN
+      data = (char *) valloc(len);
+#else
+      int r = ::posix_memalign((void**)(void*)&data, align, len);
+      if (r)
+	throw bad_alloc();
+#endif /* DARWIN */
       if (!data)
 	throw bad_alloc();
       inc_total_alloc(len);
@@ -388,7 +394,7 @@ static std::atomic_flag buffer_debug_lock = ATOMIC_FLAG_INIT;
       bdout << "raw_posix_aligned " << this << " alloc " << (void *)data << " l=" << l << ", align=" << align << " total_alloc=" << buffer::get_total_alloc() << bendl;
     }
     ~raw_posix_aligned() override {
-      mempool::buffer_data::alloc_char.deallocate_aligned(data, len);
+      ::free(data);
       dec_total_alloc(len);
       bdout << "raw_posix_aligned " << this << " free " << (void *)data << " " << buffer::get_total_alloc() << bendl;
     }
@@ -614,7 +620,7 @@ static std::atomic_flag buffer_debug_lock = ATOMIC_FLAG_INIT;
 
     explicit raw_char(unsigned l) : raw(l) {
       if (len)
-	data = mempool::buffer_data::alloc_char.allocate(len);
+	data = new char[len];
       else
 	data = 0;
       inc_total_alloc(len);
@@ -626,8 +632,7 @@ static std::atomic_flag buffer_debug_lock = ATOMIC_FLAG_INIT;
       bdout << "raw_char " << this << " alloc " << (void *)data << " " << l << " " << buffer::get_total_alloc() << bendl;
     }
     ~raw_char() override {
-      if (data)
-	mempool::buffer_data::alloc_char.deallocate(data, len);
+      delete[] data;
       dec_total_alloc(len);
       bdout << "raw_char " << this << " free " << (void *)data << " " << buffer::get_total_alloc() << bendl;
     }

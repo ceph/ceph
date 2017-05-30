@@ -269,10 +269,10 @@ TEST(mempool, bufferlist)
 {
   bufferlist bl;
   int len = 1048576;
-  size_t before = mempool::buffer_data::allocated_bytes();
+  size_t before = mempool::buffer_anon::allocated_bytes();
   cout << "before " << before << std::endl;
   bl.append(buffer::create_aligned(len, 4096));
-  size_t after = mempool::buffer_data::allocated_bytes();
+  size_t after = mempool::buffer_anon::allocated_bytes();
   cout << "after " << after << std::endl;
   ASSERT_GE(after, before + len);
 }
