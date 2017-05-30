@@ -963,7 +963,14 @@ public:
   void print_pools(ostream& out) const;
   void print_summary(Formatter *f, ostream& out) const;
   void print_oneline_summary(ostream& out) const;
-  void print_tree(Formatter *f, ostream *out) const;
+
+  enum {
+    DUMP_IN = 1,     // only 'in' osds
+    DUMP_OUT = 2,    // only 'out' osds
+    DUMP_UP = 4,     // only 'up' osds
+    DUMP_DOWN = 8,   // only 'down' osds
+  };
+  void print_tree(Formatter *f, ostream *out, unsigned dump_flags=0) const;
 
   int summarize_mapping_stats(
     OSDMap *newmap,

@@ -2929,8 +2929,24 @@ void OSDMap::print(ostream& out) const
 class OSDTreePlainDumper : public CrushTreeDumper::Dumper<TextTable> {
 public:
   typedef CrushTreeDumper::Dumper<TextTable> Parent;
-  OSDTreePlainDumper(const CrushWrapper *crush, const OSDMap *osdmap_)
-    : Parent(crush), osdmap(osdmap_) {}
+
+  OSDTreePlainDumper(const CrushWrapper *crush, const OSDMap *osdmap_,
+		     unsigned f)
+    : Parent(crush), osdmap(osdmap_), filter(f) { }
+
+  bool should_dump_leaf(int i) const override {
+    if (((filter & OSDMap::DUMP_UP) && !osdmap->is_up(i)) ||
+	((filter & OSDMap::DUMP_DOWN) && !osdmap->is_down(i)) ||
+	((filter & OSDMap::DUMP_IN) && !osdmap->is_in(i)) ||
+	((filter & OSDMap::DUMP_OUT) && !osdmap->is_out(i))) {
+      return false;
+    }
+    return true;
+  }
+
+  bool should_dump_empty_bucket() const override {
+    return !filter;
+  }
 
   void dump(TextTable *tbl) {
     tbl->define_column("ID", TextTable::LEFT, TextTable::RIGHT);
@@ -2943,8 +2959,9 @@ public:
     Parent::dump(tbl);
 
     for (int i = 0; i < osdmap->get_max_osd(); i++) {
-      if (osdmap->exists(i) && !is_touched(i))
+      if (osdmap->exists(i) && !is_touched(i) && should_dump_leaf(i)) {
 	dump_item(CrushTreeDumper::Item(i, 0, 0), tbl);
+      }
     }
   }
 
@@ -2980,14 +2997,30 @@ protected:
 
 private:
   const OSDMap *osdmap;
+  const unsigned filter;
 };
 
 class OSDTreeFormattingDumper : public CrushTreeDumper::FormattingDumper {
 public:
   typedef CrushTreeDumper::FormattingDumper Parent;
 
-  OSDTreeFormattingDumper(const CrushWrapper *crush, const OSDMap *osdmap_)
-    : Parent(crush), osdmap(osdmap_) {}
+  OSDTreeFormattingDumper(const CrushWrapper *crush, const OSDMap *osdmap_,
+			  unsigned f)
+    : Parent(crush), osdmap(osdmap_), filter(f) { }
+
+  bool should_dump_leaf(int i) const override {
+    if (((filter & OSDMap::DUMP_UP) && !osdmap->is_up(i)) ||
+	((filter & OSDMap::DUMP_DOWN) && !osdmap->is_down(i)) ||
+	((filter & OSDMap::DUMP_IN) && !osdmap->is_in(i)) ||
+	((filter & OSDMap::DUMP_OUT) && !osdmap->is_out(i))) {
+      return false;
+    }
+    return true;
+  }
+
+  bool should_dump_empty_bucket() const override {
+    return !filter;
+  }
 
   void dump(Formatter *f) {
     f->open_array_section("nodes");
@@ -2995,7 +3028,7 @@ public:
     f->close_section();
     f->open_array_section("stray");
     for (int i = 0; i < osdmap->get_max_osd(); i++) {
-      if (osdmap->exists(i) && !is_touched(i))
+      if (osdmap->exists(i) && !is_touched(i) && should_dump_leaf(i))
 	dump_item(CrushTreeDumper::Item(i, 0, 0), f);
     }
     f->close_section();
@@ -3015,16 +3048,17 @@ protected:
 
 private:
   const OSDMap *osdmap;
+  const unsigned filter;
 };
 
-void OSDMap::print_tree(Formatter *f, ostream *out) const
+void OSDMap::print_tree(Formatter *f, ostream *out, unsigned filter) const
 {
-  if (f)
-    OSDTreeFormattingDumper(crush.get(), this).dump(f);
-  else {
+  if (f) {
+    OSDTreeFormattingDumper(crush.get(), this, filter).dump(f);
+  } else {
     assert(out);
     TextTable tbl;
-    OSDTreePlainDumper(crush.get(), this).dump(&tbl);
+    OSDTreePlainDumper(crush.get(), this, filter).dump(&tbl);
     *out << tbl;
   }
 }
