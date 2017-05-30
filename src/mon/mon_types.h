@@ -15,6 +15,8 @@
 #ifndef CEPH_MON_TYPES_H
 #define CEPH_MON_TYPES_H
 
+#include <map>
+
 #include "include/utime.h"
 #include "include/util.h"
 #include "common/Formatter.h"
@@ -44,6 +46,64 @@ inline const char *get_paxos_name(int p) {
 }
 
 #define CEPH_MON_ONDISK_MAGIC "ceph mon volume v012"
+
+// map of entity_type -> features -> count
+struct FeatureMap {
+  std::map<uint32_t,std::map<uint64_t,uint64_t>> m;
+
+  void add(uint32_t type, uint64_t features) {
+    m[type][features]++;
+  }
+
+  void rm(uint32_t type, uint64_t features) {
+    auto p = m.find(type);
+    assert(p != m.end());
+    auto q = p->second.find(features);
+    assert(q != p->second.end());
+    if (--q->second == 0) {
+      p->second.erase(q);
+      if (p->second.empty()) {
+	m.erase(p);
+      }
+    }
+  }
+
+  FeatureMap& operator+=(const FeatureMap& o) {
+    for (auto& p : o.m) {
+      auto &v = m[p.first];
+      for (auto& q : p.second) {
+	v[q.first] += q.second;
+      }
+    }
+    return *this;
+  }
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    ::encode(m, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::iterator& p) {
+    DECODE_START(1, p);
+    ::decode(m, p);
+    DECODE_FINISH(p);
+  }
+
+  void dump(Formatter *f) const {
+    for (auto& p : m) {
+      f->open_object_section(ceph_entity_type_name(p.first));
+      for (auto& q : p.second) {
+	f->open_object_section("group");
+	f->dump_unsigned("features", q.first);
+	f->dump_unsigned("num", q.second);
+	f->close_section();
+      }
+      f->close_section();
+    }
+  }
+};
+WRITE_CLASS_ENCODER(FeatureMap)
 
 /**
  * leveldb store stats

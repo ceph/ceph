@@ -2242,6 +2242,7 @@ void Monitor::get_mon_status(Formatter *f, ostream& ss)
   monmap->dump(f);
   f->close_section();
 
+  f->dump_object("feature_map", session_map.feature_map);
   f->close_section(); // mon_status
 
   if (free_formatter) {
