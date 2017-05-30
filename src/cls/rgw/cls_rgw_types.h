@@ -21,6 +21,8 @@ namespace ceph {
   class Formatter;
 }
 
+using rgw_zone_set = std::set<std::string>;
+
 enum RGWPendingState {
   CLS_RGW_STATE_PENDING_MODIFY = 0,
   CLS_RGW_STATE_COMPLETE       = 1,
@@ -510,11 +512,12 @@ struct rgw_bi_log_entry {
   uint16_t bilog_flags;
   string owner; /* only being set if it's a delete marker */
   string owner_display_name; /* only being set if it's a delete marker */
+  rgw_zone_set zones_trace;
 
   rgw_bi_log_entry() : op(CLS_RGW_OP_UNKNOWN), state(CLS_RGW_STATE_PENDING_MODIFY), index_ver(0), bilog_flags(0) {}
 
   void encode(bufferlist &bl) const {
-    ENCODE_START(3, 1, bl);
+    ENCODE_START(4, 1, bl);
     ::encode(id, bl);
     ::encode(object, bl);
     ::encode(timestamp, bl);
@@ -529,10 +532,11 @@ struct rgw_bi_log_entry {
     ::encode(bilog_flags, bl);
     ::encode(owner, bl);
     ::encode(owner_display_name, bl);
+    ::encode(zones_trace, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator &bl) {
-    DECODE_START(2, bl);
+    DECODE_START(4, bl);
     ::decode(id, bl);
     ::decode(object, bl);
     ::decode(timestamp, bl);
@@ -551,6 +555,9 @@ struct rgw_bi_log_entry {
     if (struct_v >= 3) {
       ::decode(owner, bl);
       ::decode(owner_display_name, bl);
+    }
+    if (struct_v >= 4) {
+      ::decode(zones_trace, bl);
     }
     DECODE_FINISH(bl);
   }

@@ -2832,7 +2832,7 @@ int RGWPutObjProcessor_Multipart::do_complete(size_t accounted_size,
                                               map<string, bufferlist>& attrs,
                                               real_time delete_at,
                                               const char *if_match,
-                                              const char *if_nomatch, const string *user_data)
+                                              const char *if_nomatch, const string *user_data, rgw_zone_set *zones_trace)
 {
   complete_writing_data();
 
@@ -2843,6 +2843,7 @@ int RGWPutObjProcessor_Multipart::do_complete(size_t accounted_size,
   head_obj_op.meta.mtime = mtime;
   head_obj_op.meta.owner = s->owner.get_id();
   head_obj_op.meta.delete_at = delete_at;
+  head_obj_op.meta.zones_trace = zones_trace;
 
   int r = head_obj_op.write_meta(obj_len, accounted_size, attrs);
   if (r < 0)

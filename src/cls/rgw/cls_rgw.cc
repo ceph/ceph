@@ -111,7 +111,7 @@ static void bi_log_index_key(cls_method_context_t hctx, string& key, string& id,
 static int log_index_operation(cls_method_context_t hctx, cls_rgw_obj_key& obj_key, RGWModifyOp op,
                                string& tag, real_time& timestamp,
                                rgw_bucket_entry_ver& ver, RGWPendingState state, uint64_t index_ver,
-                               string& max_marker, uint16_t bilog_flags, string *owner, string *owner_display_name)
+                               string& max_marker, uint16_t bilog_flags, string *owner, string *owner_display_name, rgw_zone_set *zones_trace)
 {
   bufferlist bl;
 
@@ -131,6 +131,9 @@ static int log_index_operation(cls_method_context_t hctx, cls_rgw_obj_key& obj_k
   }
   if (owner_display_name) {
     entry.owner_display_name = *owner_display_name;
+  }
+  if (zones_trace) {
+    entry.zones_trace = std::move(*zones_trace);
   }
 
   string key;
@@ -689,7 +692,7 @@ int rgw_bucket_prepare_op(cls_method_context_t hctx, bufferlist *in, bufferlist 
 
   if (op.log_op) {
     rc = log_index_operation(hctx, op.key, op.op, op.tag, entry.meta.mtime,
-                             entry.ver, info.state, header.ver, header.max_marker, op.bilog_flags, NULL, NULL);
+                             entry.ver, info.state, header.ver, header.max_marker, op.bilog_flags, NULL, NULL, &op.zones_trace);
     if (rc < 0)
       return rc;
   }
@@ -846,7 +849,7 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
   if (cancel) {
     if (op.log_op) {
       rc = log_index_operation(hctx, op.key, op.op, op.tag, entry.meta.mtime, entry.ver,
-                               CLS_RGW_STATE_COMPLETE, header.ver, header.max_marker, op.bilog_flags, NULL, NULL);
+                               CLS_RGW_STATE_COMPLETE, header.ver, header.max_marker, op.bilog_flags, NULL, NULL, &op.zones_trace);
       if (rc < 0)
         return rc;
     }
@@ -908,7 +911,7 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
 
   if (op.log_op) {
     rc = log_index_operation(hctx, op.key, op.op, op.tag, entry.meta.mtime, entry.ver,
-                             CLS_RGW_STATE_COMPLETE, header.ver, header.max_marker, op.bilog_flags, NULL, NULL);
+                             CLS_RGW_STATE_COMPLETE, header.ver, header.max_marker, op.bilog_flags, NULL, NULL, &op.zones_trace);
     if (rc < 0)
       return rc;
   }
@@ -933,7 +936,7 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
 
     if (op.log_op) {
       rc = log_index_operation(hctx, remove_key, CLS_RGW_OP_DEL, op.tag, remove_entry.meta.mtime,
-                               remove_entry.ver, CLS_RGW_STATE_COMPLETE, header.ver, header.max_marker, op.bilog_flags, NULL, NULL);
+                               remove_entry.ver, CLS_RGW_STATE_COMPLETE, header.ver, header.max_marker, op.bilog_flags, NULL, NULL, &op.zones_trace);
       if (rc < 0)
         continue;
     }
@@ -1536,7 +1539,7 @@ static int rgw_bucket_link_olh(cls_method_context_t hctx, bufferlist *in, buffer
     ret = log_index_operation(hctx, op.key, operation, op.op_tag,
                               entry.meta.mtime, ver,
                               CLS_RGW_STATE_COMPLETE, header.ver, header.max_marker, op.bilog_flags | RGW_BILOG_FLAG_VERSIONED_OP,
-                              powner, powner_display_name);
+                              powner, powner_display_name, &op.zones_trace);
     if (ret < 0)
       return ret;
   }
@@ -1682,7 +1685,7 @@ static int rgw_bucket_unlink_instance(cls_method_context_t hctx, bufferlist *in,
     ret = log_index_operation(hctx, op.key, CLS_RGW_OP_UNLINK_INSTANCE, op.op_tag,
                               mtime, ver,
                               CLS_RGW_STATE_COMPLETE, header.ver, header.max_marker,
-                              op.bilog_flags | RGW_BILOG_FLAG_VERSIONED_OP, NULL, NULL);
+                              op.bilog_flags | RGW_BILOG_FLAG_VERSIONED_OP, NULL, NULL, &op.zones_trace);
     if (ret < 0)
       return ret;
   }
@@ -1942,7 +1945,7 @@ int rgw_dir_suggest_changes(cls_method_context_t hctx, bufferlist *in, bufferlis
 	  return ret;
         if (log_op && cur_disk.exists) {
           ret = log_index_operation(hctx, cur_disk.key, CLS_RGW_OP_DEL, cur_disk.tag, cur_disk.meta.mtime,
-                                    cur_disk.ver, CLS_RGW_STATE_COMPLETE, header.ver, header.max_marker, 0, NULL, NULL);
+                                    cur_disk.ver, CLS_RGW_STATE_COMPLETE, header.ver, header.max_marker, 0, NULL, NULL, NULL);
           if (ret < 0) {
             CLS_LOG(0, "ERROR: %s(): failed to log operation ret=%d", __func__, ret);
             return ret;
@@ -1965,7 +1968,7 @@ int rgw_dir_suggest_changes(cls_method_context_t hctx, bufferlist *in, bufferlis
 	  return ret;
         if (log_op) {
           ret = log_index_operation(hctx, cur_change.key, CLS_RGW_OP_ADD, cur_change.tag, cur_change.meta.mtime,
-                                    cur_change.ver, CLS_RGW_STATE_COMPLETE, header.ver, header.max_marker, 0, NULL, NULL);
+                                    cur_change.ver, CLS_RGW_STATE_COMPLETE, header.ver, header.max_marker, 0, NULL, NULL, NULL);
           if (ret < 0) {
             CLS_LOG(0, "ERROR: %s(): failed to log operation ret=%d", __func__, ret);
             return ret;
