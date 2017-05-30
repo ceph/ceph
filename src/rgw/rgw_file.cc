@@ -1449,7 +1449,10 @@ namespace rgw {
       attrbl.append(val.c_str(), val.size() + 1);
     }
 
-    rgw_get_request_metadata(s->cct, s->info, attrs);
+    op_ret = rgw_get_request_metadata(s->cct, s->info, attrs);
+    if (op_ret < 0) {
+      goto done;
+    }
     encode_delete_at_attr(delete_at, attrs);
 
     /* Add a custom metadata to expose the information whether an object
