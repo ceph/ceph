@@ -327,7 +327,7 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
     }
   }
 
-  std::ostream &operator<<(std::ostream &os, rbd_image_options_t &opts) {
+  std::ostream &operator<<(std::ostream &os, const rbd_image_options_t &opts) {
     image_options_ref* opts_ = static_cast<image_options_ref*>(opts);
 
     os << "[";
@@ -343,7 +343,7 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
     return os;
   }
 
-  std::ostream &operator<<(std::ostream &os, ImageOptions &opts) {
+  std::ostream &operator<<(std::ostream &os, const ImageOptions &opts) {
     os << "[";
 
     const char *delimiter = "";

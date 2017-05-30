@@ -28,7 +28,7 @@ public:
 };
 WRITE_CLASS_DENC(bluefs_extent_t)
 
-ostream& operator<<(ostream& out, bluefs_extent_t e);
+ostream& operator<<(ostream& out, const bluefs_extent_t& e);
 
 
 struct bluefs_fnode_t {

@@ -69,7 +69,7 @@ inline tcp_state operator|(tcp_state s1, tcp_state s2) {
   return tcp_state(uint16_t(s1) | uint16_t(s2));
 }
 
-inline std::ostream & operator<<(std::ostream & str, tcp_state s) {
+inline std::ostream & operator<<(std::ostream & str, const tcp_state& s) {
   switch (s) {
     case tcp_state::CLOSED: return str << "CLOSED";
     case tcp_state::LISTEN: return str << "LISTEN";
@@ -154,7 +154,7 @@ tcp_sequence hton(tcp_sequence ts) {
   return tcp_sequence { ::hton(ts.raw) };
 }
 
-inline std::ostream& operator<<(std::ostream& os, tcp_sequence s) {
+inline std::ostream& operator<<(std::ostream& os, const tcp_sequence& s) {
   return os << s.raw;
 }
 

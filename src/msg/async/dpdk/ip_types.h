@@ -95,7 +95,7 @@ struct ipv4_address {
 
 static inline bool is_unspecified(ipv4_address addr) { return addr.ip == 0; }
 
-std::ostream& operator<<(std::ostream& os, ipv4_address a);
+std::ostream& operator<<(std::ostream& os, const ipv4_address& a);
 
 namespace std {
 
