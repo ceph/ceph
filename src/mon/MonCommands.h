@@ -613,7 +613,8 @@ COMMAND("osd set-nearfull-ratio " \
 	"set usage ratio at which OSDs are marked near-full",
 	"osd", "rw", "cli,rest")
 COMMAND("osd set-require-min-compat-client " \
-	"name=version,type=CephString",
+	"name=version,type=CephString " \
+	"name=sure,type=CephChoices,strings=--yes-i-really-mean-it,req=false", \
 	"set the minimum client version we will maintain compatibility with",
 	"osd", "rw", "cli,rest")
 COMMAND("osd pause", "pause osd", "osd", "rw", "cli,rest")

@@ -7511,6 +7511,45 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       err = -EPERM;
       goto reply;
     }
+    string sure;
+    cmd_getval(g_ceph_context, cmdmap, "sure", sure);
+    if (sure != "--yes-i-really-mean-it") {
+      FeatureMap m;
+      mon->get_combined_feature_map(&m);
+      uint64_t features = ceph_release_features(vno);
+      bool first = true;
+      bool ok = true;
+      for (int type : {
+	    CEPH_ENTITY_TYPE_CLIENT,
+	    CEPH_ENTITY_TYPE_MDS,
+	    CEPH_ENTITY_TYPE_MGR }) {
+	auto p = m.m.find(type);
+	if (p == m.m.end()) {
+	  continue;
+	}
+	for (auto& q : p->second) {
+	  uint64_t missing = ~q.first & features;
+	  if (missing) {
+	    if (first) {
+	      ss << "cannot set require_min_compat_client to " << v << ": ";
+	    } else {
+	      ss << "; ";
+	    }
+	    first = false;
+	    ss << q.second << " connected " << ceph_entity_type_name(type)
+	       << "(s) look like " << ceph_release_name(
+		 ceph_release_from_features(q.first))
+	       << " (missing 0x" << std::hex << missing << std::dec << ")";
+	    ok = false;
+	  }
+	}
+      }
+      if (!ok) {
+	ss << "; add --yes-i-really-mean-it to do it anyway";
+	err = -EPERM;
+	goto reply;
+      }
+    }
     ss << "set require_min_compat_client to " << ceph_release_name(vno);
     pending_inc.new_require_min_compat_client = vno;
     getline(ss, rs);
