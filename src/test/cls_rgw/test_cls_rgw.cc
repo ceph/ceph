@@ -12,6 +12,7 @@
 #include <string>
 #include <vector>
 #include <map>
+#include <set>
 
 using namespace librados;
 
@@ -88,7 +89,8 @@ void index_prepare(OpMgr& mgr, librados::IoCtx& ioctx, string& oid, RGWModifyOp 
 {
   ObjectWriteOperation *op = mgr.write_op();
   cls_rgw_obj_key key(obj, string());
-  cls_rgw_bucket_prepare_op(*op, index_op, tag, key, loc, true, 0);
+  rgw_zone_set zones_trace;
+  cls_rgw_bucket_prepare_op(*op, index_op, tag, key, loc, true, 0, zones_trace);
   ASSERT_EQ(0, ioctx.operate(oid, op));
 }
 
@@ -100,7 +102,8 @@ void index_complete(OpMgr& mgr, librados::IoCtx& ioctx, string& oid, RGWModifyOp
   ver.pool = ioctx.get_id();
   ver.epoch = epoch;
   meta.accounted_size = meta.size;
-  cls_rgw_bucket_complete_op(*op, index_op, tag, ver, key, meta, NULL, true, 0);
+  rgw_zone_set zones_trace;
+  cls_rgw_bucket_complete_op(*op, index_op, tag, ver, key, meta, NULL, true, 0, zones_trace);
   ASSERT_EQ(0, ioctx.operate(oid, op));
 }
 
