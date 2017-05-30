@@ -138,6 +138,18 @@ Pool specific commands
 
 :command:`cleanup`
 
+:command:`listxattr` *name*
+  List all extended attributes of an object.
+
+:command:`getxattr` *name* *attr*
+  Dump the extended attribute value of *attr* of an object.
+
+:command:`setxattr` *name* *attr* *value*
+  Set the value of *attr* in the extended attributes of an object.
+
+:command:`rmxattr` *name* *attr*
+  Remove *attr* from the extended attributes of an object.
+
 :command:`listomapkeys` *name*
   List all the keys stored in the object map of object name.
 
