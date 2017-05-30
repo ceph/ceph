@@ -713,6 +713,9 @@ int AuthMonitor::exists_and_matches_entity(
     stringstream& ss)
 {
 
+  dout(20) << __func__ << " entity " << name << " auth " << auth
+           << " caps " << caps << " has_secret " << has_secret << dendl;
+
   EntityAuth existing_auth;
   // does entry already exist?
   if (mon->key_server.get_auth(name, existing_auth)) {
@@ -922,6 +925,7 @@ int AuthMonitor::validate_osd_new(
   int err = _create_auth(cephx_entity.auth, cephx_secret, cephx_caps);
   assert(0 == err);
 
+  bool cephx_is_idempotent = false, lockbox_is_idempotent = false;
   err = exists_and_matches_entity(cephx_entity, true, ss);
 
   if (err != -ENOENT) {
@@ -929,6 +933,7 @@ int AuthMonitor::validate_osd_new(
       return err;
     }
     assert(0 == err);
+    cephx_is_idempotent = true;
   }
 
   if (has_lockbox) {
@@ -940,7 +945,12 @@ int AuthMonitor::validate_osd_new(
         return err;
       }
       assert(0 == err);
+      lockbox_is_idempotent = true;
     }
+  }
+
+  if (cephx_is_idempotent && (!has_lockbox || lockbox_is_idempotent)) {
+    return EEXIST;
   }
 
   return 0;
