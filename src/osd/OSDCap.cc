@@ -24,7 +24,7 @@
 using std::ostream;
 using std::vector;
 
-ostream& operator<<(ostream& out, osd_rwxa_t p)
+ostream& operator<<(ostream& out, const osd_rwxa_t& p)
 { 
   if (p == OSD_CAP_ANY)
     return out << "*";
