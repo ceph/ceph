@@ -21,16 +21,16 @@
 #include "arch/probe.h"
 // -----------------------------------------------------------------------------
 
-
 class ISALCryptoPlugin : public CryptoPlugin {
-
   CryptoAccelRef cryptoaccel;
 public:
+  explicit ISALCryptoPlugin(CephContext* cct)
+  : CryptoPlugin(cct) {}
+  ~ISALCryptoPlugin() {
+    assert(cryptoaccel.use_count() <= 1);
+    cryptoaccel = nullptr;
+  }
 
-  explicit ISALCryptoPlugin(CephContext* cct) : CryptoPlugin(cct)
-  {}
-  ~ISALCryptoPlugin()
-  {}
   virtual int factory(CryptoAccelRef *cs,
                       ostream *ss)
   {
@@ -38,7 +38,7 @@ public:
     {
       ceph_arch_probe();
       if (ceph_arch_intel_aesni && ceph_arch_intel_sse41) {
-        cryptoaccel = CryptoAccelRef(new ISALCryptoAccel);
+        cryptoaccel = CryptoAccelRef(new ISALCryptoAccel());
       }
     }
     *cs = cryptoaccel;
