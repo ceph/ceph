@@ -544,7 +544,7 @@ if(HAVE_INTEL)
 elseif(HAVE_POWER8)
   list(APPEND libcommon_files
     common/crc32c_ppc.c
-    common/crc32c_ppc_asm.s)
+    common/crc32c_ppc_asm.sx)
 endif(HAVE_INTEL)
 
 if(LINUX)
