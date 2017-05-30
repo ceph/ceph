@@ -421,7 +421,8 @@ COMMAND("osd dump " \
 	"name=epoch,type=CephInt,range=0,req=false",
 	"print summary of OSD map", "osd", "r", "cli,rest")
 COMMAND("osd tree " \
-	"name=epoch,type=CephInt,range=0,req=false", \
+	"name=epoch,type=CephInt,range=0,req=false " \
+	"name=states,type=CephChoices,strings=up|down|in|out,n=N,req=false", \
 	"print OSD tree", "osd", "r", "cli,rest")
 COMMAND("osd ls " \
 	"name=epoch,type=CephInt,range=0,req=false", \

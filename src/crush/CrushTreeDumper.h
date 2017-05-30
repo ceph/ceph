@@ -76,8 +76,31 @@ namespace CrushTreeDumper {
       clear();
     }
 
+    virtual bool should_dump_leaf(int i) const {
+      return true;
+    }
+    virtual bool should_dump_empty_bucket() const {
+      return true;
+    }
+
+    bool should_dump(int id) {
+      if (id >= 0)
+	return should_dump_leaf(id);
+      if (should_dump_empty_bucket())
+	return true;
+      int s = crush->get_bucket_size(id);
+      for (int k = s - 1; k >= 0; k--) {
+	int c = crush->get_bucket_item(id, k);
+	if (should_dump(c))
+	  return true;
+      }
+      return false;
+    }
+
     bool next(Item &qi) {
       if (empty()) {
+	while (root != roots.end() && !should_dump(*root))
+	  ++root;
 	if (root == roots.end())
 	  return false;
 	push_back(Item(*root, 0, crush->get_bucket_weightf(*root)));
@@ -93,9 +116,11 @@ namespace CrushTreeDumper {
 	int s = crush->get_bucket_size(qi.id);
 	for (int k = s - 1; k >= 0; k--) {
 	  int id = crush->get_bucket_item(qi.id, k);
-	  qi.children.push_back(id);
-	  push_front(Item(id, qi.depth + 1,
-			  crush->get_bucket_item_weightf(qi.id, k)));
+	  if (should_dump(id)) {
+	    qi.children.push_back(id);
+	    push_front(Item(id, qi.depth + 1,
+			    crush->get_bucket_item_weightf(qi.id, k)));
+	  }
 	}
       }
       return true;

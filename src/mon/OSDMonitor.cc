@@ -4022,13 +4022,39 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
       }
       rdata.append(ds);
     } else if (prefix == "osd tree") {
+      vector<string> states;
+      cmd_getval(g_ceph_context, cmdmap, "states", states);
+      unsigned filter = 0;
+      for (auto& s : states) {
+	if (s == "up") {
+	  filter |= OSDMap::DUMP_UP;
+	} else if (s == "down") {
+	  filter |= OSDMap::DUMP_DOWN;
+	} else if (s == "in") {
+	  filter |= OSDMap::DUMP_IN;
+	} else if (s == "out") {
+	  filter |= OSDMap::DUMP_OUT;
+	} else {
+	  ss << "unrecognized state '" << s << "'";
+	  r = -EINVAL;
+	  goto reply;
+	}
+      }
+      if ((filter & (OSDMap::DUMP_IN|OSDMap::DUMP_OUT)) ==
+	  (OSDMap::DUMP_IN|OSDMap::DUMP_OUT) ||
+	  (filter & (OSDMap::DUMP_UP|OSDMap::DUMP_DOWN)) ==
+	  (OSDMap::DUMP_UP|OSDMap::DUMP_DOWN)) {
+	ss << "cannot specify both up and down or both in and out";
+	r = -EINVAL;
+	goto reply;
+      }
       if (f) {
 	f->open_object_section("tree");
-	p->print_tree(f.get(), NULL);
+	p->print_tree(f.get(), NULL, filter);
 	f->close_section();
 	f->flush(ds);
       } else {
-	p->print_tree(NULL, &ds);
+	p->print_tree(NULL, &ds, filter);
       }
       rdata.append(ds);
     } else if (prefix == "osd getmap") {
