@@ -57,7 +57,7 @@ public:
    * setting safe_callbacks = false eliminates the lock cycle issue.
    * */
   SafeTimer(CephContext *cct, Mutex &l, bool safe_callbacks=true);
-  ~SafeTimer();
+  virtual ~SafeTimer();
 
   /* Call with the event_lock UNLOCKED.
    *
