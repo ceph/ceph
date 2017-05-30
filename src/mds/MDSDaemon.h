@@ -40,7 +40,7 @@
 #include "Beacon.h"
 
 
-#define CEPH_MDS_PROTOCOL    29 /* cluster internal */
+#define CEPH_MDS_PROTOCOL    30 /* cluster internal */
 
 class MonClient;
 
