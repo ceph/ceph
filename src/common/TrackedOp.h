@@ -14,6 +14,7 @@
 #ifndef TRACKEDREQUEST_H_
 #define TRACKEDREQUEST_H_
 
+#include <atomic>
 #include "common/histogram.h"
 #include "msg/Message.h"
 #include "common/RWLock.h"
