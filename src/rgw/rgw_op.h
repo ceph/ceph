@@ -1899,6 +1899,7 @@ static inline int rgw_get_request_metadata(CephContext* const cct,
       "x-amz-server-side-encryption-customer-key-md5"
   };
 
+  size_t valid_meta_count = 0;
   for (auto& kv : info.x_meta_map) {
     const std::string& name = kv.first;
     std::string& xattr = kv.second;
@@ -1927,6 +1928,15 @@ static inline int rgw_get_request_metadata(CephContext* const cct,
       if (cct->_conf->osd_max_attr_size &&
           xattr.length() > cct->_conf->osd_max_attr_size) {
         return -EFBIG;
+      }
+
+      /* Swift allows administrators to limit the number of metadats items
+       * send _in a single request_. */
+      const auto rgw_max_attrs_num_in_req = \
+        cct->_conf->get_val<size_t>("rgw_max_attrs_num_in_req");
+      if (rgw_max_attrs_num_in_req &&
+          ++valid_meta_count > rgw_max_attrs_num_in_req) {
+        return -E2BIG;
       }
 
       auto rval = attrs.emplace(std::move(attr_name), ceph::bufferlist());

@@ -657,6 +657,12 @@ static inline int handle_metadata_errors(req_state* const s, const int op_ret)
         % int(s->cct->_conf->osd_max_attr_size));
     set_req_state_err(s, EINVAL, error_message);
     return -EINVAL;
+  } else if (op_ret == -E2BIG) {
+    const auto error_message = boost::str(
+      boost::format("Too many metadata items; max %lld")
+        % s->cct->_conf->get_val<size_t>("rgw_max_attrs_num_in_req"));
+    set_req_state_err(s, EINVAL, error_message);
+    return -EINVAL;
   }
 
   return op_ret;
@@ -1716,6 +1722,12 @@ void RGWInfo_ObjStore_SWIFT::list_swift_data(Formatter& formatter,
   const size_t meta_value_limit = g_conf->osd_max_attr_size;
   if (meta_value_limit) {
     formatter.dump_int("max_meta_value_length", meta_value_limit);
+  }
+
+  const size_t meta_num_limit = \
+    g_conf->get_val<size_t>("rgw_max_attrs_num_in_req");
+  if (meta_num_limit) {
+    formatter.dump_int("max_meta_count", meta_num_limit);
   }
 
   formatter.open_array_section("policies");
