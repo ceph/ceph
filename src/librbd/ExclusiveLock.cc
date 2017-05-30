@@ -51,6 +51,18 @@ bool ExclusiveLock<I>::accept_requests(int *ret_val) const {
 }
 
 template <typename I>
+bool ExclusiveLock<I>::accept_ops() const {
+  Mutex::Locker locker(ML<I>::m_lock);
+  bool accept_ops = (!ML<I>::is_state_shutdown() &&
+                     !ML<I>::is_state_pre_releasing() &&
+                     (ML<I>::is_state_locked() ||
+                      ML<I>::is_state_post_acquiring()));
+
+  ldout(m_image_ctx.cct, 20) << "=" << accept_ops << dendl;
+  return accept_ops;
+}
+
+template <typename I>
 void ExclusiveLock<I>::block_requests(int r) {
   Mutex::Locker locker(ML<I>::m_lock);
 
