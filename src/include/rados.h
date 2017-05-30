@@ -156,6 +156,19 @@ extern const char *ceph_osd_state_name(int s);
 				      CEPH_OSDMAP_REQUIRE_KRAKEN |	\
 				      CEPH_OSDMAP_REQUIRE_LUMINOUS |	\
 				      CEPH_OSDMAP_SORTBITWISE)
+#define CEPH_OSDMAP_LEGACY_REQUIRE_FLAGS (CEPH_OSDMAP_REQUIRE_JEWEL |	\
+					  CEPH_OSDMAP_REQUIRE_KRAKEN |	\
+					  CEPH_OSDMAP_REQUIRE_LUMINOUS)
+
+/*
+ * major ceph release numbers
+ */
+#define CEPH_RELEASE_JEWEL    10
+#define CEPH_RELEASE_KRAKEN   11
+#define CEPH_RELEASE_LUMINOUS 12
+#define CEPH_RELEASE_MIMIC    13
+
+extern const char *ceph_osd_release_name(int r);
 
 /*
  * The error code to return when an OSD can't handle a write

@@ -513,7 +513,7 @@ void ReplicatedBackend::submit_transaction(
   generate_transaction(
     t,
     coll,
-    !get_osdmap()->test_flag(CEPH_OSDMAP_REQUIRE_KRAKEN),
+    (get_osdmap()->require_osd_release < CEPH_RELEASE_KRAKEN),
     log_entries,
     &op_t,
     &added,

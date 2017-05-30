@@ -49,6 +49,22 @@ const char *ceph_osd_state_name(int s)
 	}	
 }
 
+const char *ceph_osd_release_name(int r)
+{
+	switch (r) {
+	case CEPH_RELEASE_JEWEL:
+		return "jewel";
+	case CEPH_RELEASE_KRAKEN:
+		return "kraken";
+	case CEPH_RELEASE_LUMINOUS:
+		return "luminous";
+	case CEPH_RELEASE_MIMIC:
+		return "mimic";
+	default:
+		return "unknown";
+	}
+}
+
 const char *ceph_osd_watch_op_name(int o)
 {
 	switch (o) {

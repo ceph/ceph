@@ -771,7 +771,7 @@ void OSDService::check_full_status(const osd_stat_t &osd_stat)
   float full_ratio = std::max(osdmap->get_full_ratio(), backfillfull_ratio);
   float failsafe_ratio = std::max(get_failsafe_full_ratio(), full_ratio);
 
-  if (!osdmap->test_flag(CEPH_OSDMAP_REQUIRE_LUMINOUS)) {
+  if (osdmap->require_osd_release < CEPH_RELEASE_LUMINOUS) {
     // use the failsafe for nearfull and full; the mon isn't using the
     // flags anyway because we're mid-upgrade.
     full_ratio = failsafe_ratio;
@@ -5541,7 +5541,7 @@ void OSD::_preboot(epoch_t oldest, epoch_t newest)
   } else if (!osdmap->test_flag(CEPH_OSDMAP_SORTBITWISE)) {
     derr << "osdmap SORTBITWISE OSDMap flag is NOT set; please set it"
 	 << dendl;
-  } else if (!osdmap->test_flag(CEPH_OSDMAP_REQUIRE_JEWEL)) {
+  } else if (osdmap->require_osd_release < CEPH_RELEASE_JEWEL) {
     derr << "osdmap REQUIRE_JEWEL OSDMap flag is NOT set; please set it"
 	 << dendl;
   } else if (!monc->monmap.get_required_features().contains_all(
