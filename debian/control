@@ -89,7 +89,6 @@ Depends: binutils,
          gdisk,
          grep,
          logrotate,
-         psmisc,
          ${python:Depends},
          xfsprogs,
          ${misc:Depends},
@@ -363,6 +362,7 @@ Description: debugging symbols for rbd-nbd
 Package: ceph-common
 Architecture: linux-any
 Depends: librbd1 (= ${binary:Version}), ${misc:Depends}, ${shlibs:Depends},
+         psmisc,
          python-rados (= ${binary:Version}),
          python-cephfs (= ${binary:Version}),
          python-rbd (= ${binary:Version}),
