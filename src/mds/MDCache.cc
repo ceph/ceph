@@ -2938,6 +2938,13 @@ void MDCache::handle_mds_failure(mds_rank_t who)
 	dout(10) << " slave request " << *mdr << " uncommitted, will resolve shortly" << dendl;
 	add_ambiguous_slave_update(p->first, mdr->slave_to_mds);
       }
+    } else if (mdr->slave_request) {
+      MMDSSlaveRequest *slave_req = mdr->slave_request;
+      // FIXME: Slave rename request can arrive after we notice mds failure.
+      // 	This can cause mds to crash (does not affect integrity of FS).
+      if (slave_req->get_op() == MMDSSlaveRequest::OP_RENAMEPREP &&
+	  slave_req->srcdn_auth == who)
+	slave_req->mark_interrupted();
     }
     
     // failed node is slave?
