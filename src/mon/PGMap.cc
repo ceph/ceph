@@ -57,29 +57,13 @@ void PGMapDigest::decode(bufferlist::iterator& p)
   ::decode(pg_sum, p);
   ::decode(num_pg_by_state, p);
   ::decode(num_pg_by_osd, p);
-  if (struct_v >= 2) {
-    ::decode(osd_last_seq, p);
-  } else {
-    int s = 0;
-    for (auto& p : osd_stat) {
-      if (p.first >= s) {
-	s = p.first + 1;
-      }
-    }
-    osd_last_seq.resize(s);
-  }
-  if (struct_v >= 3) {
-    ::decode(num_pg_by_pool, p);
-  }
-  if (struct_v >= 4) {
-    ::decode(per_pool_sum_delta, p);
-    ::decode(per_pool_sum_deltas_stamps, p);
-    ::decode(pg_sum_delta, p);
-    ::decode(stamp_delta, p);
-  }
-  if (struct_v >= 5) {
-    ::decode(num_pg_unknown, p);
-  }
+  ::decode(osd_last_seq, p);
+  ::decode(num_pg_by_pool, p);
+  ::decode(per_pool_sum_delta, p);
+  ::decode(per_pool_sum_deltas_stamps, p);
+  ::decode(pg_sum_delta, p);
+  ::decode(stamp_delta, p);
+  ::decode(num_pg_unknown, p);
   DECODE_FINISH(p);
 }
 
