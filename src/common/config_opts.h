@@ -1234,6 +1234,11 @@ OPTION(rbd_mirror_journal_max_fetch_bytes, OPT_U32, 32768) // maximum bytes to r
 OPTION(rbd_mirror_sync_point_update_age, OPT_DOUBLE, 30) // number of seconds between each update of the image sync point object number
 OPTION(rbd_mirror_concurrent_image_syncs, OPT_U32, 5) // maximum number of image syncs in parallel
 
+/**
+ * RBD Mirror options
+ */
+OPTION(rbd_mirror_sync_point_update_age, OPT_DOUBLE, 30) // number of seconds between each update of the image sync point object number
+
 OPTION(nss_db_path, OPT_STR, "") // path to nss db
 
 
