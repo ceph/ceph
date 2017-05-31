@@ -782,15 +782,16 @@ void PGBackend::be_compare_scrubmaps(
 				   object_error,
 				   ss);
 	// Some errors might have already been set in be_select_auth_object()
-	if (found || shard_map[j->first].errors != 0) {
+	if (shard_map[j->first].errors != 0) {
 	  cur_inconsistent.insert(j->first);
           if (shard_map[j->first].has_deep_errors())
 	    ++deep_errors;
-	  else if (shard_map[j->first].has_shallow_errors())
+	  else
 	    ++shallow_errors;
 	  // Only true if be_compare_scrub_objects() found errors and put something
 	  // in ss.
-	  errorstream << pgid << " shard " << j->first << ": soid " << *k
+	  if (found)
+	    errorstream << pgid << " shard " << j->first << ": soid " << *k
 		      << " " << ss.str() << "\n";
 	} else {
 	  // XXX: The auth shard might get here that we don't know
