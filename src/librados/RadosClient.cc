@@ -980,7 +980,7 @@ void librados::RadosClient::handle_log(MLog *m)
       for (std::deque<LogEntry>::iterator it = m->entries.begin(); it != m->entries.end(); ++it) {
         LogEntry e = *it;
         ostringstream ss;
-        ss << e.stamp << " " << e.who.name << " " << e.prio << " " << e.msg;
+        ss << e.stamp << " " << e.name << " " << e.prio << " " << e.msg;
         string line = ss.str();
         string who = stringify(e.who);
         string level = stringify(e.prio);
