@@ -135,6 +135,7 @@ BuildRequires:	snappy-devel
 BuildRequires:	udev
 BuildRequires:	util-linux
 BuildRequires:	valgrind-devel
+BuildRequires:	which
 BuildRequires:	xfsprogs
 BuildRequires:	xfsprogs-devel
 BuildRequires:	xmlstarlet
