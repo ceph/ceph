@@ -3375,8 +3375,18 @@ extern "C" int rados_monitor_log(rados_t cluster, const char *level, rados_log_c
 {
   tracepoint(librados, rados_monitor_log_enter, cluster, level, cb, arg);
   librados::RadosClient *client = (librados::RadosClient *)cluster;
-  int retval = client->monitor_log(level, cb, arg);
+  int retval = client->monitor_log(level, cb, nullptr, arg);
   tracepoint(librados, rados_monitor_log_exit, retval);
+  return retval;
+}
+
+extern "C" int rados_monitor_log2(rados_t cluster, const char *level,
+				  rados_log_callback2_t cb, void *arg)
+{
+  tracepoint(librados, rados_monitor_log2_enter, cluster, level, cb, arg);
+  librados::RadosClient *client = (librados::RadosClient *)cluster;
+  int retval = client->monitor_log(level, nullptr, cb, arg);
+  tracepoint(librados, rados_monitor_log2_exit, retval);
   return retval;
 }
 
