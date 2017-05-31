@@ -1186,6 +1186,9 @@ class CephManager:
                                 'osd.{osd}: {got} < {need}'.
                                 format(osd=osd, got=got, need=need))
 
+    def flush_all_pg_stats(self):
+        self.flush_pg_stats(range(len(self.get_osd_dump())))
+
     def do_rados(self, remote, cmd, check_status=True):
         """
         Execute a remote rados command.
