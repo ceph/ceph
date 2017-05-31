@@ -1978,8 +1978,12 @@ bool OSDMonitor::check_failure(utime_t now, int target_osd, failure_info_t& fi)
 	    << " down" << dendl;
     pending_inc.new_state[target_osd] = CEPH_OSD_UP;
 
-    mon->clog->info() << osdmap.get_inst(target_osd) << " failed ("
-		      << (int)reporters_by_subtree.size() << " reporters from different "
+    mon->clog->info() << "osd." << target_osd << " failed ("
+		      << osdmap.crush->get_full_location_ordered_string(
+			target_osd)
+		      << ") ("
+		      << (int)reporters_by_subtree.size()
+		      << " reporters from different "
 		      << reporter_subtree_level << " after "
 		      << failed_for << " >= grace " << grace << ")";
     return true;
@@ -1987,7 +1991,7 @@ bool OSDMonitor::check_failure(utime_t now, int target_osd, failure_info_t& fi)
   return false;
 }
 
-void OSDMonitor::force_failure(utime_t now, int target_osd)
+void OSDMonitor::force_failure(utime_t now, int target_osd, int by)
 {
   // already pending failure?
   if (pending_inc.new_state.count(target_osd) &&
@@ -1999,7 +2003,9 @@ void OSDMonitor::force_failure(utime_t now, int target_osd)
   dout(1) << " we're forcing failure of osd." << target_osd << dendl;
   pending_inc.new_state[target_osd] = CEPH_OSD_UP;
 
-  mon->clog->info() << osdmap.get_inst(target_osd) << " failed (forced)";
+  mon->clog->info() << "osd." << target_osd << " failed ("
+		    << osdmap.crush->get_full_location_ordered_string(target_osd)
+		    << ") (connection refused reported by osd." << by << ")";
   return;
 }
 
@@ -2026,7 +2032,7 @@ bool OSDMonitor::prepare_failure(MonOpRequestRef op)
     if (m->is_immediate()) {
       mon->clog->debug() << m->get_target() << " reported immediately failed by "
             << m->get_orig_source_inst();
-      force_failure(now, target_osd);
+      force_failure(now, target_osd, reporter);
       return true;
     }
     mon->clog->debug() << m->get_target() << " reported failed by "
@@ -3473,7 +3479,9 @@ bool OSDMonitor::handle_osd_timeouts(const utime_t &now,
     } else if (can_mark_down(i)) {
       utime_t diff = now - t->second;
       if (diff > timeo) {
-	mon->clog->info() << "osd." << i << " marked down after no pg stats for " << diff << "seconds";
+	mon->clog->info() << "osd." << i << " failed ("
+			  << osdmap.crush->get_full_location_ordered_string(i)
+			  << ") (pg stats for " << diff << "seconds)";
 	derr << "no osd or pg stats from osd." << i << " since " << t->second << ", " << diff
 	     << " seconds ago.  marking down" << dendl;
 	pending_inc.new_state[i] = CEPH_OSD_UP;
