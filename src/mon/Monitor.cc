@@ -36,6 +36,7 @@
 #include "messages/MGenericMessage.h"
 #include "messages/MMonCommand.h"
 #include "messages/MMonCommandAck.h"
+#include "messages/MMonHealth.h"
 #include "messages/MMonMetadata.h"
 #include "messages/MMonSync.h"
 #include "messages/MMonScrub.h"
@@ -51,7 +52,6 @@
 #include "messages/MAuthReply.h"
 
 #include "messages/MTimeCheck.h"
-#include "messages/MMonHealth.h"
 #include "messages/MPing.h"
 
 #include "common/strtol.h"
@@ -3812,12 +3812,13 @@ void Monitor::dispatch_op(MonOpRequestRef op)
       paxos_service[PAXOS_MGR]->dispatch(op);
       break;
 
+    // MgrStat
     case MSG_MON_MGR_REPORT:
+    case CEPH_MSG_STATFS:
       paxos_service[PAXOS_MGRSTAT]->dispatch(op);
       break;
 
     // pg
-    case CEPH_MSG_STATFS:
     case MSG_PGSTATS:
     case MSG_GETPOOLSTATS:
       paxos_service[PAXOS_PGMAP]->dispatch(op);
