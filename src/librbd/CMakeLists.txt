@@ -6,7 +6,6 @@ add_library(rbd_types STATIC
 
 set(librbd_internal_srcs
   AsyncObjectThrottle.cc
-  AsyncOperation.cc
   AsyncRequest.cc
   ExclusiveLock.cc
   ImageCtx.cc
@@ -44,6 +43,7 @@ set(librbd_internal_srcs
   image/SetSnapRequest.cc
   image_watcher/NotifyLockOwner.cc
   io/AioCompletion.cc
+  io/AsyncOperation.cc
   io/CopyupRequest.cc
   io/ImageRequest.cc
   io/ImageRequestWQ.cc

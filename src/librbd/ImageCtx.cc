@@ -11,7 +11,6 @@
 #include "common/WorkQueue.h"
 #include "common/Timer.h"
 
-#include "librbd/AsyncOperation.h"
 #include "librbd/AsyncRequest.h"
 #include "librbd/ExclusiveLock.h"
 #include "librbd/internal.h"
@@ -28,6 +27,7 @@
 #include "librbd/exclusive_lock/AutomaticPolicy.h"
 #include "librbd/exclusive_lock/StandardPolicy.h"
 #include "librbd/io/AioCompletion.h"
+#include "librbd/io/AsyncOperation.h"
 #include "librbd/io/ImageRequestWQ.h"
 #include "librbd/journal/StandardPolicy.h"
 
