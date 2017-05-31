@@ -39,6 +39,7 @@ using ::testing::InSequence;
 using ::testing::Invoke;
 using ::testing::InvokeWithoutArgs;
 using ::testing::Return;
+using ::testing::ReturnNew;
 using ::testing::StrEq;
 using ::testing::WithArg;
 
@@ -52,6 +53,11 @@ public:
     librbd::RBD rbd;
     ASSERT_EQ(0, create_image(rbd, m_local_io_ctx, m_image_name, m_image_size));
     ASSERT_EQ(0, open_image(m_local_io_ctx, m_image_name, &m_local_image_ctx));
+  }
+
+  void expect_start_op(librbd::MockExclusiveLock &mock_exclusive_lock) {
+    EXPECT_CALL(mock_exclusive_lock, start_op()).WillOnce(
+      ReturnNew<FunctionContext>([](int) {}));
   }
 
   void expect_test_features(librbd::MockTestImageCtx &mock_image_ctx,
@@ -120,9 +126,13 @@ public:
 
 TEST_F(TestMockImageSyncSnapshotCreateRequest, Resize) {
   librbd::MockTestImageCtx mock_local_image_ctx(*m_local_image_ctx);
+  librbd::MockExclusiveLock mock_exclusive_lock;
+  mock_local_image_ctx.exclusive_lock = &mock_exclusive_lock;
 
   InSequence seq;
+  expect_start_op(mock_exclusive_lock);
   expect_set_size(mock_local_image_ctx, 0);
+  expect_start_op(mock_exclusive_lock);
   expect_snap_create(mock_local_image_ctx, "snap1", 10, 0);
   expect_test_features(mock_local_image_ctx, RBD_FEATURE_OBJECT_MAP, false);
 
@@ -138,8 +148,11 @@ TEST_F(TestMockImageSyncSnapshotCreateRequest, Resize) {
 
 TEST_F(TestMockImageSyncSnapshotCreateRequest, ResizeError) {
   librbd::MockTestImageCtx mock_local_image_ctx(*m_local_image_ctx);
+  librbd::MockExclusiveLock mock_exclusive_lock;
+  mock_local_image_ctx.exclusive_lock = &mock_exclusive_lock;
 
   InSequence seq;
+  expect_start_op(mock_exclusive_lock);
   expect_set_size(mock_local_image_ctx, -EINVAL);
 
   C_SaferCond ctx;
@@ -154,10 +167,15 @@ TEST_F(TestMockImageSyncSnapshotCreateRequest, ResizeError) {
 
 TEST_F(TestMockImageSyncSnapshotCreateRequest, RemoveParent) {
   librbd::MockTestImageCtx mock_local_image_ctx(*m_local_image_ctx);
+  librbd::MockExclusiveLock mock_exclusive_lock;
+  mock_local_image_ctx.exclusive_lock = &mock_exclusive_lock;
+
   mock_local_image_ctx.parent_md.spec.pool_id = 213;
 
   InSequence seq;
+  expect_start_op(mock_exclusive_lock);
   expect_remove_parent(mock_local_image_ctx, 0);
+  expect_start_op(mock_exclusive_lock);
   expect_snap_create(mock_local_image_ctx, "snap1", 10, 0);
   expect_test_features(mock_local_image_ctx, RBD_FEATURE_OBJECT_MAP, false);
 
@@ -173,9 +191,13 @@ TEST_F(TestMockImageSyncSnapshotCreateRequest, RemoveParent) {
 
 TEST_F(TestMockImageSyncSnapshotCreateRequest, RemoveParentError) {
   librbd::MockTestImageCtx mock_local_image_ctx(*m_local_image_ctx);
+  librbd::MockExclusiveLock mock_exclusive_lock;
+  mock_local_image_ctx.exclusive_lock = &mock_exclusive_lock;
+
   mock_local_image_ctx.parent_md.spec.pool_id = 213;
 
   InSequence seq;
+  expect_start_op(mock_exclusive_lock);
   expect_remove_parent(mock_local_image_ctx, -EINVAL);
 
   C_SaferCond ctx;
@@ -190,11 +212,17 @@ TEST_F(TestMockImageSyncSnapshotCreateRequest, RemoveParentError) {
 
 TEST_F(TestMockImageSyncSnapshotCreateRequest, RemoveSetParent) {
   librbd::MockTestImageCtx mock_local_image_ctx(*m_local_image_ctx);
+  librbd::MockExclusiveLock mock_exclusive_lock;
+  mock_local_image_ctx.exclusive_lock = &mock_exclusive_lock;
+
   mock_local_image_ctx.parent_md.spec.pool_id = 213;
 
   InSequence seq;
+  expect_start_op(mock_exclusive_lock);
   expect_remove_parent(mock_local_image_ctx, 0);
+  expect_start_op(mock_exclusive_lock);
   expect_set_parent(mock_local_image_ctx, 0);
+  expect_start_op(mock_exclusive_lock);
   expect_snap_create(mock_local_image_ctx, "snap1", 10, 0);
   expect_test_features(mock_local_image_ctx, RBD_FEATURE_OBJECT_MAP, false);
 
@@ -211,9 +239,13 @@ TEST_F(TestMockImageSyncSnapshotCreateRequest, RemoveSetParent) {
 
 TEST_F(TestMockImageSyncSnapshotCreateRequest, SetParentSpec) {
   librbd::MockTestImageCtx mock_local_image_ctx(*m_local_image_ctx);
+  librbd::MockExclusiveLock mock_exclusive_lock;
+  mock_local_image_ctx.exclusive_lock = &mock_exclusive_lock;
 
   InSequence seq;
+  expect_start_op(mock_exclusive_lock);
   expect_set_parent(mock_local_image_ctx, 0);
+  expect_start_op(mock_exclusive_lock);
   expect_snap_create(mock_local_image_ctx, "snap1", 10, 0);
   expect_test_features(mock_local_image_ctx, RBD_FEATURE_OBJECT_MAP, false);
 
@@ -230,10 +262,15 @@ TEST_F(TestMockImageSyncSnapshotCreateRequest, SetParentSpec) {
 
 TEST_F(TestMockImageSyncSnapshotCreateRequest, SetParentOverlap) {
   librbd::MockTestImageCtx mock_local_image_ctx(*m_local_image_ctx);
+  librbd::MockExclusiveLock mock_exclusive_lock;
+  mock_local_image_ctx.exclusive_lock = &mock_exclusive_lock;
+
   mock_local_image_ctx.parent_md.spec = {123, "test", 0};
 
   InSequence seq;
+  expect_start_op(mock_exclusive_lock);
   expect_set_parent(mock_local_image_ctx, 0);
+  expect_start_op(mock_exclusive_lock);
   expect_snap_create(mock_local_image_ctx, "snap1", 10, 0);
   expect_test_features(mock_local_image_ctx, RBD_FEATURE_OBJECT_MAP, false);
 
@@ -250,8 +287,11 @@ TEST_F(TestMockImageSyncSnapshotCreateRequest, SetParentOverlap) {
 
 TEST_F(TestMockImageSyncSnapshotCreateRequest, SetParentError) {
   librbd::MockTestImageCtx mock_local_image_ctx(*m_local_image_ctx);
+  librbd::MockExclusiveLock mock_exclusive_lock;
+  mock_local_image_ctx.exclusive_lock = &mock_exclusive_lock;
 
   InSequence seq;
+  expect_start_op(mock_exclusive_lock);
   expect_set_parent(mock_local_image_ctx, -ESTALE);
 
   C_SaferCond ctx;
@@ -267,8 +307,11 @@ TEST_F(TestMockImageSyncSnapshotCreateRequest, SetParentError) {
 
 TEST_F(TestMockImageSyncSnapshotCreateRequest, SnapCreate) {
   librbd::MockTestImageCtx mock_local_image_ctx(*m_local_image_ctx);
+  librbd::MockExclusiveLock mock_exclusive_lock;
+  mock_local_image_ctx.exclusive_lock = &mock_exclusive_lock;
 
   InSequence seq;
+  expect_start_op(mock_exclusive_lock);
   expect_snap_create(mock_local_image_ctx, "snap1", 10, 0);
   expect_test_features(mock_local_image_ctx, RBD_FEATURE_OBJECT_MAP, false);
 
@@ -284,8 +327,11 @@ TEST_F(TestMockImageSyncSnapshotCreateRequest, SnapCreate) {
 
 TEST_F(TestMockImageSyncSnapshotCreateRequest, SnapCreateError) {
   librbd::MockTestImageCtx mock_local_image_ctx(*m_local_image_ctx);
+  librbd::MockExclusiveLock mock_exclusive_lock;
+  mock_local_image_ctx.exclusive_lock = &mock_exclusive_lock;
 
   InSequence seq;
+  expect_start_op(mock_exclusive_lock);
   expect_snap_create(mock_local_image_ctx, "snap1", 10, -EINVAL);
 
   C_SaferCond ctx;
@@ -300,10 +346,14 @@ TEST_F(TestMockImageSyncSnapshotCreateRequest, SnapCreateError) {
 
 TEST_F(TestMockImageSyncSnapshotCreateRequest, ResizeObjectMap) {
   librbd::MockTestImageCtx mock_local_image_ctx(*m_local_image_ctx);
+  librbd::MockExclusiveLock mock_exclusive_lock;
+  mock_local_image_ctx.exclusive_lock = &mock_exclusive_lock;
 
   InSequence seq;
+  expect_start_op(mock_exclusive_lock);
   expect_snap_create(mock_local_image_ctx, "snap1", 10, 0);
   expect_test_features(mock_local_image_ctx, RBD_FEATURE_OBJECT_MAP, true);
+  expect_start_op(mock_exclusive_lock);
   expect_object_map_resize(mock_local_image_ctx, 10, 0);
 
   C_SaferCond ctx;
@@ -318,10 +368,14 @@ TEST_F(TestMockImageSyncSnapshotCreateRequest, ResizeObjectMap) {
 
 TEST_F(TestMockImageSyncSnapshotCreateRequest, ResizeObjectMapError) {
   librbd::MockTestImageCtx mock_local_image_ctx(*m_local_image_ctx);
+  librbd::MockExclusiveLock mock_exclusive_lock;
+  mock_local_image_ctx.exclusive_lock = &mock_exclusive_lock;
 
   InSequence seq;
+  expect_start_op(mock_exclusive_lock);
   expect_snap_create(mock_local_image_ctx, "snap1", 10, 0);
   expect_test_features(mock_local_image_ctx, RBD_FEATURE_OBJECT_MAP, true);
+  expect_start_op(mock_exclusive_lock);
   expect_object_map_resize(mock_local_image_ctx, 10, -EINVAL);
 
   C_SaferCond ctx;
