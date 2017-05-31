@@ -17,6 +17,9 @@ TYPE(compressible_bloom_filter)
 #include "test_ceph_time.h"
 TYPE(real_time_wrapper)
 
+#include "test_sstring.h"
+TYPE(sstring_wrapper)
+
 #include "common/snap_types.h"
 TYPE(SnapContext)
 TYPE(SnapRealmInfo)
