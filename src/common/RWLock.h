@@ -167,8 +167,8 @@ public:
     }
     void unlock() {
       assert(locked);
-      m_lock.unlock();
       locked = false;
+      m_lock.unlock();
     }
     ~RLocker() {
       if (locked) {
@@ -189,8 +189,8 @@ public:
     }
     void unlock() {
       assert(locked);
-      m_lock.unlock();
       locked = false;
+      m_lock.unlock();
     }
     ~WLocker() {
       if (locked) {
