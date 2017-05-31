@@ -128,6 +128,7 @@ enum {
    * Mainly for delete op
    */
   LIBRADOS_OPERATION_FULL_FORCE		= 128,
+  LIBRADOS_OPERATION_IGNORE_REDIRECT	= 256,
 };
 /** @} */
 
@@ -742,7 +743,7 @@ CEPH_RADOS_API int rados_ioctx_create2(rados_t cluster, int64_t pool_id,
 CEPH_RADOS_API void rados_ioctx_destroy(rados_ioctx_t io);
 
 /**
- * Get configuration hadnle for a pool handle
+ * Get configuration handle for a pool handle
  *
  * @param io pool handle
  * @returns rados_config_t for this cluster

@@ -256,8 +256,9 @@ void ManagedLock<I>::break_lock(const managed_lock::Locker &locker,
     } else {
       on_finish = new C_Tracked(m_async_op_tracker, on_finish);
       auto req = managed_lock::BreakRequest<I>::create(
-        m_ioctx, m_work_queue, m_oid, locker, m_blacklist_on_break_lock,
-        m_blacklist_expire_seconds, force_break_lock, on_finish);
+        m_ioctx, m_work_queue, m_oid, locker, m_mode == EXCLUSIVE,
+        m_blacklist_on_break_lock, m_blacklist_expire_seconds, force_break_lock,
+        on_finish);
       req->send();
       return;
     }
@@ -326,6 +327,11 @@ void  ManagedLock<I>::pre_release_lock_handler(bool shutting_down,
 template <typename I>
 void  ManagedLock<I>::post_release_lock_handler(bool shutting_down, int r,
                                                 Context *on_finish) {
+  on_finish->complete(r);
+}
+
+template <typename I>
+void ManagedLock<I>::post_reacquire_lock_handler(int r, Context *on_finish) {
   on_finish->complete(r);
 }
 
@@ -565,11 +571,15 @@ void ManagedLock<I>::send_reacquire_lock() {
   ldout(m_cct, 10) << dendl;
   m_state = STATE_REACQUIRING;
 
+  auto ctx = create_context_callback<
+    ManagedLock, &ManagedLock<I>::handle_reacquire_lock>(this);
+  ctx = new FunctionContext([this, ctx](int r) {
+      post_reacquire_lock_handler(r, ctx);
+    });
+
   using managed_lock::ReacquireRequest;
   ReacquireRequest<I>* req = ReacquireRequest<I>::create(m_ioctx, m_oid,
-      m_cookie, m_new_cookie, m_mode == EXCLUSIVE,
-      create_context_callback<
-        ManagedLock, &ManagedLock<I>::handle_reacquire_lock>(this));
+      m_cookie, m_new_cookie, m_mode == EXCLUSIVE, ctx);
   m_work_queue->queue(new C_SendLockRequest<ReacquireRequest<I>>(req));
 }
 

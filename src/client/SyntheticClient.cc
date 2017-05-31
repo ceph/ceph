@@ -261,7 +261,7 @@ void parse_syn_options(vector<const char*>& args)
 }
 
 
-SyntheticClient::SyntheticClient(Client *client, int w)
+SyntheticClient::SyntheticClient(StandaloneClient *client, int w)
 {
   this->client = client;
   whoami = w;
@@ -3353,7 +3353,6 @@ int SyntheticClient::chunk_file(string &filename)
   }
   uint64_t size = st.st_size;
   dout(0) << "file " << filename << " size is " << size << dendl;
-
 
   inode_t inode;
   memset(&inode, 0, sizeof(inode));

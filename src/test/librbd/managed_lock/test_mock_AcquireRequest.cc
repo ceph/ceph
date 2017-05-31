@@ -30,7 +30,7 @@ struct BreakRequest<librbd::MockImageCtx> {
   static BreakRequest *s_instance;
   static BreakRequest* create(librados::IoCtx& ioctx, ContextWQ *work_queue,
                               const std::string& oid, const Locker &locker,
-                              bool blacklist_locker,
+                              bool exclusive, bool blacklist_locker,
                               uint32_t blacklist_expire_seconds,
                               bool force_break_lock, Context *on_finish) {
     CephContext *cct = reinterpret_cast<CephContext *>(ioctx.cct());
@@ -195,7 +195,6 @@ TEST_F(TestMockManagedLockAcquireRequest, LockBusy) {
                     0);
   expect_lock(mock_image_ctx, -EBUSY);
   expect_break_lock(mock_image_ctx, mock_break_request, 0);
-  expect_get_locker(mock_image_ctx, mock_get_locker_request, {}, 0);
   expect_lock(mock_image_ctx, -ENOENT);
 
   C_SaferCond ctx;

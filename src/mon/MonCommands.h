@@ -29,7 +29,7 @@
  * helpstring: displays in CLI help, API help (nice if it refers to
  *             parameter names from signature, 40-a few hundred chars)
  * modulename: the monitor module or daemon this applies to:
- *             mds, osd, pg (osd), mon, auth, log, config-key
+ *             mds, osd, pg (osd), mon, auth, log, config-key, mgr
  * req perms:  required permission in that modulename space to execute command
  *             this also controls what type of REST command is accepted
  * availability: cli, rest, or both
@@ -421,7 +421,8 @@ COMMAND("osd dump " \
 	"name=epoch,type=CephInt,range=0,req=false",
 	"print summary of OSD map", "osd", "r", "cli,rest")
 COMMAND("osd tree " \
-	"name=epoch,type=CephInt,range=0,req=false", \
+	"name=epoch,type=CephInt,range=0,req=false " \
+	"name=states,type=CephChoices,strings=up|down|in|out,n=N,req=false", \
 	"print OSD tree", "osd", "r", "cli,rest")
 COMMAND("osd ls " \
 	"name=epoch,type=CephInt,range=0,req=false", \
@@ -511,6 +512,12 @@ COMMAND("osd crush move " \
 	"name=name,type=CephString,goodchars=[A-Za-z0-9-_.] " \
 	"name=args,type=CephString,n=N,goodchars=[A-Za-z0-9-_.=]", \
 	"move existing entry for <name> to location <args>", \
+	"osd", "rw", "cli,rest")
+COMMAND("osd crush swap-bucket " \
+	"name=source,type=CephString,goodchars=[A-Za-z0-9-_.] " \
+	"name=dest,type=CephString,goodchars=[A-Za-z0-9-_.] " \
+	"name=force,type=CephChoices,strings=--yes-i-really-mean-it,req=false", \
+	"swap existing bucket contents from (orphan) bucket <source> and <target>", \
 	"osd", "rw", "cli,rest")
 COMMAND("osd crush link " \
 	"name=name,type=CephString " \
@@ -626,11 +633,15 @@ COMMAND("osd erasure-code-profile ls", \
 	"list all erasure code profiles", \
 	"osd", "r", "cli,rest")
 COMMAND("osd set " \
-	"name=key,type=CephChoices,strings=full|pause|noup|nodown|noout|noin|nobackfill|norebalance|norecover|noscrub|nodeep-scrub|notieragent|sortbitwise|require_jewel_osds|require_kraken_osds|require_luminous_osds", \
+	"name=key,type=CephChoices,strings=full|pause|noup|nodown|noout|noin|nobackfill|norebalance|norecover|noscrub|nodeep-scrub|notieragent|sortbitwise|require_jewel_osds|require_kraken_osds", \
 	"set <key>", "osd", "rw", "cli,rest")
 COMMAND("osd unset " \
 	"name=key,type=CephChoices,strings=full|pause|noup|nodown|noout|noin|nobackfill|norebalance|norecover|noscrub|nodeep-scrub|notieragent", \
 	"unset <key>", "osd", "rw", "cli,rest")
+COMMAND("osd require-osd-release "\
+	"name=release,type=CephChoices,strings=luminous",
+	"set the minimum allowed OSD release to participate in the cluster",
+	"osd", "rw", "cli,rest")
 COMMAND("osd cluster_snap", "take cluster snapshot (disabled)", \
 	"osd", "r", "")
 COMMAND("osd down " \
@@ -834,5 +845,9 @@ COMMAND("config-key dump", "dump keys and values", "config-key", "r", "cli,rest"
 /*
  * mon/MgrMonitor.cc
  */
+COMMAND("mgr dump "				     \
+	"name=epoch,type=CephInt,range=0,req=false", \
+	"dump the latest MgrMap",		     \
+	"mgr", "rw", "cli,rest")
 COMMAND("mgr fail name=who,type=CephString", \
 	"treat the named manager daemon as failed", "mgr", "rw", "cli,rest")

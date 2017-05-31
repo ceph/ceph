@@ -1,4 +1,4 @@
-// -*- mode:C; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 /**
  * All operations via the rados gateway are carried out by
@@ -22,6 +22,7 @@
 
 #include <boost/optional.hpp>
 #include <boost/utility/in_place_factory.hpp>
+#include <boost/function.hpp>
 
 #include "common/armor.h"
 #include "common/mime.h"
@@ -43,7 +44,6 @@
 
 #include "include/assert.h"
 
-using namespace std;
 using ceph::crypto::SHA1;
 
 struct req_state;
@@ -93,6 +93,7 @@ public:
   virtual int authorize() = 0;
   virtual int postauth_init() = 0;
   virtual int error_handler(int err_no, std::string* error_content);
+  virtual void dump(const string& code, const string& message) const {}
 };
 
 
@@ -211,6 +212,7 @@ protected:
   bool first_data;
   uint64_t cur_ofs;
   bufferlist waiting;
+  uint64_t action = 0;
 
   int init_common();
 public:
@@ -249,11 +251,13 @@ public:
   int verify_permission() override;
   void pre_exec() override;
   void execute() override;
-  int read_user_manifest_part(rgw_bucket& bucket,
-                              const rgw_bucket_dir_entry& ent,
-                              RGWAccessControlPolicy *bucket_policy,
-                              off_t start_ofs,
-                              off_t end_ofs);
+  int read_user_manifest_part(
+    rgw_bucket& bucket,
+    const rgw_bucket_dir_entry& ent,
+    RGWAccessControlPolicy * const bucket_acl,
+    const boost::optional<rgw::IAM::Policy>& bucket_policy,
+    const off_t start_ofs,
+    const off_t end_ofs);
   int handle_user_manifest(const char *prefix);
   int handle_slo_manifest(bufferlist& bl);
 
@@ -432,7 +436,8 @@ protected:
   handle_upload_path(struct req_state *s);
 
   bool handle_file_verify_permission(RGWBucketInfo& binfo,
-                                     std::map<std::string, ceph::bufferlist>& battrs,
+				     const rgw_obj& obj,
+				     std::map<std::string, ceph::bufferlist>& battrs,
                                      ACLOwner& bucket_owner /* out */);
   int handle_file(boost::string_ref path,
                   size_t size,
@@ -1695,6 +1700,7 @@ protected:
   rgw_bucket bucket;
   bool quiet;
   bool status_dumped;
+  bool acl_allowed = false;
 
 public:
   RGWDeleteMultiObj() {
@@ -1732,7 +1738,9 @@ public:
 
 extern int rgw_build_bucket_policies(RGWRados* store, struct req_state* s);
 extern int rgw_build_object_policies(RGWRados *store, struct req_state *s,
-				    bool prefetch_data);
+				     bool prefetch_data);
+extern rgw::IAM::Environment rgw_build_iam_environment(RGWRados* store,
+						       struct req_state* s);
 
 static inline int put_data_and_throttle(RGWPutObjDataProcessor *processor,
 					bufferlist& data, off_t ofs,
@@ -1942,6 +1950,66 @@ public:
   virtual uint32_t op_mask() { return RGW_OP_TYPE_READ; }
 };
 
+class RGWPutBucketPolicy : public RGWOp {
+  int len;
+  char *data = nullptr;
+public:
+  RGWPutBucketPolicy() = default;
+  ~RGWPutBucketPolicy() {
+    if (data) {
+      free(static_cast<void*>(data));
+    }
+  }
+  void send_response() override;
+  int verify_permission() override;
+  uint32_t op_mask() override {
+    return RGW_OP_TYPE_WRITE;
+  }
+  void execute() override;
+  int get_params();
+  const std::string name() override {
+    return "put_bucket_policy";
+  }
+  RGWOpType get_type() override {
+    return RGW_OP_PUT_BUCKET_POLICY;
+  }
+};
+
+class RGWGetBucketPolicy : public RGWOp {
+  buffer::list policy;
+public:
+  RGWGetBucketPolicy() = default;
+  void send_response() override;
+  int verify_permission() override;
+  uint32_t op_mask() override {
+    return RGW_OP_TYPE_READ;
+  }
+  void execute() override;
+  const std::string name() override {
+    return "get_bucket_policy";
+  }
+  RGWOpType get_type() override {
+    return RGW_OP_GET_BUCKET_POLICY;
+  }
+};
+
+class RGWDeleteBucketPolicy : public RGWOp {
+public:
+  RGWDeleteBucketPolicy() = default;
+  void send_response() override;
+  int verify_permission() override;
+  uint32_t op_mask() override {
+    return RGW_OP_TYPE_WRITE;
+  }
+  void execute() override;
+  int get_params();
+  const std::string name() override {
+    return "delete_bucket_policy";
+  }
+  RGWOpType get_type() override {
+    return RGW_OP_DELETE_BUCKET_POLICY;
+  }
+};
 
 
 #endif /* CEPH_RGW_OP_H */

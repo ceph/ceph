@@ -301,7 +301,7 @@ osd() {
 	depends="ceph-base parted gptfdisk"
 
 	_pkg $_bindir ceph-clsinfo ceph-bluefs-tool ceph-objectstore-tool ceph-osd
-	_pkg $_sbindir ceph-disk ceph-disk-udev
+	_pkg $_sbindir ceph-disk
 	_pkg $_libexecdir/ceph ceph-osd-prestart.sh
 	_pkg $_udevrulesdir 60-ceph-by-parttypeuuid.rules 95-ceph-osd.rules
 	install -m 750 -o $_ceph_uid -g $_ceph_gid -d \

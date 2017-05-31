@@ -282,7 +282,7 @@ namespace rgw {
 	variant_type = directory();
 	flags |= FLAG_BUCKET;
       } else {
-	bucket = (parent->flags & FLAG_BUCKET) ? parent
+	bucket = parent->is_bucket() ? parent
 	  : parent->bucket;
 	if (flags & FLAG_DIRECTORY) {
 	  fh.fh_type = RGW_FS_TYPE_DIRECTORY;
@@ -410,7 +410,7 @@ namespace rgw {
     const std::string& bucket_name() const {
       if (is_root())
 	return root_name;
-      if (flags & FLAG_BUCKET)
+      if (is_bucket())
 	return name;
       return bucket->object_name();
     }
@@ -506,7 +506,7 @@ namespace rgw {
 
     int open(uint32_t gsh_flags) {
       lock_guard guard(mtx);
-      if (! (flags & FLAG_OPEN)) {
+      if (! is_open()) {
 	if (gsh_flags & RGW_OPEN_FLAG_V3) {
 	  flags |= FLAG_STATELESS_OPEN;
 	}
@@ -778,7 +778,7 @@ namespace rgw {
       }
 
       void operator()() {
-	rgw_fh.write_finish();
+	rgw_fh.close(); /* will finish in-progress write */
 	rgw_fh.get_fs()->unref(&rgw_fh);
       }
     };
@@ -808,6 +808,13 @@ namespace rgw {
 
     static constexpr uint32_t FLAG_NONE =      0x0000;
     static constexpr uint32_t FLAG_CLOSED =    0x0001;
+
+    struct BucketStats {
+      size_t size;
+      size_t size_rounded;
+      real_time creation_time;
+      uint64_t num_entries;
+    };
 
     RGWLibFS(CephContext* _cct, const char *_uid, const char *_user_id,
 	    const char* _key)
@@ -914,6 +921,7 @@ namespace rgw {
       LookupFHResult fhr { nullptr, uint32_t(RGWFileHandle::FLAG_NONE) };
 
       RGWFileHandle::FHCache::Latch lat;
+      bool fh_locked = flags & RGWFileHandle::FLAG_LOCKED;
 
     retry:
       RGWFileHandle* fh =
@@ -922,11 +930,13 @@ namespace rgw {
 			    RGWFileHandle::FHCache::FLAG_LOCK);
       /* LATCHED */
       if (fh) {
-	fh->mtx.lock(); // XXX !RAII because may-return-LOCKED
+	if (likely(! fh_locked))
+	    fh->mtx.lock(); // XXX !RAII because may-return-LOCKED
 	/* need initial ref from LRU (fast path) */
 	if (! fh_lru.ref(fh, cohort::lru::FLAG_INITIAL)) {
 	  lat.lock->unlock();
-	  fh->mtx.unlock();
+	  if (likely(! fh_locked))
+	    fh->mtx.unlock();
 	  goto retry; /* !LATCHED */
 	}
 	/* LATCHED, LOCKED */
@@ -958,6 +968,7 @@ namespace rgw {
 	return fhr;
 
       RGWFileHandle::FHCache::Latch lat;
+      bool fh_locked = flags & RGWFileHandle::FLAG_LOCKED;
 
       std::string obj_name{name};
       std::string key_name{parent->make_key_name(name)};
@@ -977,23 +988,27 @@ namespace rgw {
 			    RGWFileHandle::FHCache::FLAG_LOCK);
       /* LATCHED */
       if (fh) {
-	fh->mtx.lock(); // XXX !RAII because may-return-LOCKED
+	if (likely(! fh_locked))
+	  fh->mtx.lock(); // XXX !RAII because may-return-LOCKED
 	if (fh->flags & RGWFileHandle::FLAG_DELETED) {
 	  /* for now, delay briefly and retry */
 	  lat.lock->unlock();
-	  fh->mtx.unlock();
+	  if (likely(! fh_locked))
+	    fh->mtx.unlock();
 	  std::this_thread::sleep_for(std::chrono::milliseconds(20));
 	  goto retry; /* !LATCHED */
 	}
 	/* need initial ref from LRU (fast path) */
 	if (! fh_lru.ref(fh, cohort::lru::FLAG_INITIAL)) {
 	  lat.lock->unlock();
-	  fh->mtx.unlock();
+	  if (likely(! fh_locked))
+	    fh->mtx.unlock();
 	  goto retry; /* !LATCHED */
 	}
 	/* LATCHED, LOCKED */
 	if (! (flags & RGWFileHandle::FLAG_LOCK))
-	  fh->mtx.unlock(); /* ! LOCKED */
+	  if (likely(! fh_locked))
+	    fh->mtx.unlock(); /* ! LOCKED */
       } else {
 	/* make or re-use handle */
 	RGWFileHandle::Factory prototype(this, get_inst(), parent, fhk,
@@ -1048,8 +1063,9 @@ namespace rgw {
     int setattr(RGWFileHandle* rgw_fh, struct stat* st, uint32_t mask,
 		uint32_t flags);
 
-    LookupFHResult stat_bucket(RGWFileHandle* parent,
-			       const char *path, uint32_t flags);
+    LookupFHResult stat_bucket(RGWFileHandle* parent, const char *path,
+			       RGWLibFS::BucketStats& bs,
+			       uint32_t flags);
 
     LookupFHResult stat_leaf(RGWFileHandle* parent, const char *path,
 			     enum rgw_fh_type type = RGW_FS_TYPE_NIL,
@@ -1975,10 +1991,12 @@ class RGWStatBucketRequest : public RGWLibRequest,
 public:
   std::string uri;
   std::map<std::string, buffer::list> attrs;
+  RGWLibFS::BucketStats& bs;
 
   RGWStatBucketRequest(CephContext* _cct, RGWUserInfo *_user,
-		       const std::string& _path)
-    : RGWLibRequest(_cct, _user) {
+		       const std::string& _path,
+		       RGWLibFS::BucketStats& _stats)
+    : RGWLibRequest(_cct, _user), bs(_stats) {
     uri = "/" + _path;
     op = this;
   }
@@ -2030,6 +2048,10 @@ public:
 
   void send_response() override {
     bucket.creation_time = get_state()->bucket_info.creation_time;
+    bs.size = bucket.size;
+    bs.size_rounded = bucket.size_rounded;
+    bs.creation_time = bucket.creation_time;
+    bs.num_entries = bucket.count;
     std::swap(attrs, get_state()->bucket_attrs);
   }
 

@@ -110,6 +110,7 @@ BuildRequires:	selinux-policy-devel
 BuildRequires:	/usr/share/selinux/devel/policyhelp
 %endif
 BuildRequires:	bc
+BuildRequires:	gperf
 BuildRequires:  cmake
 BuildRequires:	cryptsetup
 BuildRequires:	fuse-devel
@@ -1024,7 +1025,6 @@ rm -rf %{buildroot}
 %{_libdir}/libos_tp.so*
 %{_libdir}/libosd_tp.so*
 %endif
-%config %{_sysconfdir}/bash_completion.d/ceph
 %config(noreplace) %{_sysconfdir}/logrotate.d/ceph
 %if 0%{?fedora} || 0%{?rhel}
 %config(noreplace) %{_sysconfdir}/sysconfig/ceph
@@ -1128,6 +1128,7 @@ DISABLE_RESTART_ON_UPDATE="yes"
 %{_datadir}/ceph/id_rsa_drop.ceph.com
 %{_datadir}/ceph/id_rsa_drop.ceph.com.pub
 %dir %{_sysconfdir}/ceph/
+%config %{_sysconfdir}/bash_completion.d/ceph
 %config %{_sysconfdir}/bash_completion.d/rados
 %config %{_sysconfdir}/bash_completion.d/rbd
 %config %{_sysconfdir}/bash_completion.d/radosgw-admin
@@ -1451,7 +1452,6 @@ fi
 %{_bindir}/ceph-objectstore-tool
 %{_bindir}/ceph-osd
 %{_sbindir}/ceph-disk
-%{_sbindir}/ceph-disk-udev
 %{_libexecdir}/ceph/ceph-osd-prestart.sh
 %dir %{_udevrulesdir}
 %{_udevrulesdir}/60-ceph-by-parttypeuuid.rules
@@ -1460,7 +1460,7 @@ fi
 %{_mandir}/man8/ceph-disk.8*
 %{_mandir}/man8/ceph-osd.8*
 %if 0%{?rhel} && ! 0%{?centos}
-%{_sysconfdir}/cron.hourly/subman
+%attr(0755,-,-) %{_sysconfdir}/cron.hourly/subman
 %endif
 %{_unitdir}/ceph-osd@.service
 %{_unitdir}/ceph-osd.target

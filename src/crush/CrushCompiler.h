@@ -8,8 +8,7 @@
 #include "crush/grammar.h"
 
 #include <map>
-#include <ostream>
-#include <functional>
+#include <iostream>
 
 class CrushCompiler {
   CrushWrapper& crush;

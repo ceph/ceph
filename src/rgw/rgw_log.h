@@ -3,7 +3,6 @@
 
 #ifndef CEPH_RGW_LOG_H
 #define CEPH_RGW_LOG_H
-
 #include <boost/container/flat_map.hpp>
 #include "rgw_common.h"
 #include "include/utime.h"

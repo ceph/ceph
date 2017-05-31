@@ -15,11 +15,8 @@
 #ifndef CEPH_WORKQUEUE_H
 #define CEPH_WORKQUEUE_H
 
-#include "Mutex.h"
 #include "Cond.h"
-#include "Thread.h"
 #include "include/unordered_map.h"
-#include "common/config_obs.h"
 #include "common/HeartbeatMap.h"
 
 class CephContext;

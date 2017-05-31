@@ -3,62 +3,11 @@
 
 #include "acconfig.h"
 
-/*
- * Get 64b integers either from inttypes.h or glib.h
- */
-#ifdef HAVE_INTTYPES_H
-#  include <inttypes.h>
-//#else
-//#  ifdef HAVE_GLIB
-//#    include <glib.h>
-//#  endif
-#endif
+#include <inttypes.h>
 
-/*
- * C99 says inttypes.h includes stdint.h, but that's not true on all
- * systems. If it's there, include it always - just in case.
- */
-#ifdef HAVE_STDINT_H
-#include <stdint.h>
-#endif
-
-/*
- * Include types.h after stdint.h to accomodate for older distributions
- *
- */
 #ifdef HAVE_LINUX_TYPES_H
 #include <linux/types.h>
-#endif
-
-/*
- * Emergency replacements for PRI*64 modifiers. Some systems have
- * an inttypes.h that doesn't define all the PRI[doxu]64 macros.
- */
-#if !defined(PRIu64)
-#  if defined(HAVE_INTTYPES_H) || defined(HAVE_GLIB)
-/* If we have inttypes or glib, assume we have 64-bit long long int */
-#    define PRIu64 "llu"
-#    define PRIi64 "lli"
-#    define PRIx64 "llx"
-#    define PRIX64 "llX"
-#    define PRIo64 "llo"
-#    define PRId64 "lld"
-#  else
-/* Assume that we don't have long long, so use long int modifiers */
-#    define PRIu64 "lu"
-#    define PRIi64 "li"
-#    define PRIx64 "lx"
-#    define PRIX64 "lX"
-#    define PRIo64 "lo"
-#    define PRId64 "ld"
-#  endif
-#endif
-
-#ifdef HAVE_SYS_TYPES_H
-#include <sys/types.h>
-#endif
-
-#ifndef HAVE_LINUX_TYPES_H
+#else
 #ifndef HAVE___U8
 typedef uint8_t __u8;
 #endif

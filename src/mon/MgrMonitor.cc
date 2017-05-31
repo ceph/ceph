@@ -187,7 +187,7 @@ bool MgrMonitor::prepare_beacon(MonOpRequestRef op)
     }
   }
 
-  last_beacon[m->get_gid()] = ceph_clock_now();
+  last_beacon[m->get_gid()] = ceph::coarse_mono_clock::now();
 
   // Track whether we modified pending_map
   bool updated = false;
@@ -263,7 +263,7 @@ void MgrMonitor::check_sub(Subscription *sub)
     }
   } else {
     assert(sub->type == "mgrdigest");
-    if (digest_callback == nullptr) {
+    if (digest_event == nullptr) {
       send_digests();
     }
   }
@@ -275,7 +275,11 @@ void MgrMonitor::check_sub(Subscription *sub)
  */
 void MgrMonitor::send_digests()
 {
-  digest_callback = nullptr;
+  cancel_timer();
+
+  if (!is_active()) {
+    return;
+  }
 
   const std::string type = "mgrdigest";
   if (mon->session_map.subs.count(type) == 0)
@@ -298,10 +302,18 @@ void MgrMonitor::send_digests()
     sub->session->con->send_message(mdigest);
   }
 
-  digest_callback = new C_MonContext(mon, [this](int){
+  digest_event = new C_MonContext(mon, [this](int){
       send_digests();
   });
-  mon->timer.add_event_after(g_conf->mon_mgr_digest_period, digest_callback);
+  mon->timer.add_event_after(g_conf->mon_mgr_digest_period, digest_event);
+}
+
+void MgrMonitor::cancel_timer()
+{
+  if (digest_event) {
+    mon->timer.cancel_event(digest_event);
+    digest_event = nullptr;
+  }
 }
 
 void MgrMonitor::on_active()
@@ -329,7 +341,7 @@ void MgrMonitor::get_health(
   if (!map.available) {
     auto level = HEALTH_WARN;
     // do not escalate to ERR if they are still upgrading to jewel.
-    if (mon->osdmon()->osdmap.test_flag(CEPH_OSDMAP_REQUIRE_LUMINOUS)) {
+    if (mon->osdmon()->osdmap.require_osd_release >= CEPH_RELEASE_LUMINOUS) {
       utime_t now = ceph_clock_now();
       if (first_seen_inactive != utime_t() &&
 	  now - first_seen_inactive > g_conf->mon_mgr_inactive_grace) {
@@ -345,9 +357,8 @@ void MgrMonitor::tick()
   if (!is_active() || !mon->is_leader())
     return;
 
-  const utime_t now = ceph_clock_now();
-  utime_t cutoff = now;
-  cutoff -= g_conf->mon_mgr_beacon_grace;
+  const auto now = ceph::coarse_mono_clock::now();
+  const auto cutoff = now - std::chrono::seconds(g_conf->mon_mgr_beacon_grace);
 
   // Populate any missing beacons (i.e. no beacon since MgrMonitor
   // instantiation) with the current time, so that they will
@@ -444,8 +455,60 @@ void MgrMonitor::drop_standby(uint64_t gid)
 
 bool MgrMonitor::preprocess_command(MonOpRequestRef op)
 {
-  return false;
+  MMonCommand *m = static_cast<MMonCommand*>(op->get_req());
+  std::stringstream ss;
+  bufferlist rdata;
 
+  std::map<std::string, cmd_vartype> cmdmap;
+  if (!cmdmap_from_json(m->cmd, &cmdmap, ss)) {
+    string rs = ss.str();
+    mon->reply_command(op, -EINVAL, rs, rdata, get_last_committed());
+    return true;
+  }
+
+  MonSession *session = m->get_session();
+  if (!session) {
+    mon->reply_command(op, -EACCES, "access denied", rdata,
+		       get_last_committed());
+    return true;
+  }
+
+  string format;
+  cmd_getval(g_ceph_context, cmdmap, "format", format, string("json-pretty"));
+  boost::scoped_ptr<Formatter> f(Formatter::create(format));
+
+  string prefix;
+  cmd_getval(g_ceph_context, cmdmap, "prefix", prefix);
+  int r = 0;
+
+  if (prefix == "mgr dump") {
+    int64_t epoch = 0;
+    cmd_getval(g_ceph_context, cmdmap, "epoch", epoch, (int64_t)map.get_epoch());
+    if (epoch == (int64_t)map.get_epoch()) {
+      f->dump_object("mgrmap", map);
+    } else {
+      bufferlist bl;
+      int err = get_version(epoch, bl);
+      if (err == -ENOENT) {
+	r = -ENOENT;
+	ss << "there is no map for epoch " << epoch;
+	goto reply;
+      }
+      MgrMap m;
+      auto p = bl.begin();
+      m.decode(p);
+      f->dump_object("mgrmap", m);
+    }
+    f->flush(rdata);
+  } else {
+    return false;
+  }
+
+reply:
+  string rs;
+  getline(ss, rs);
+  mon->reply_command(op, r, rs, rdata, get_last_committed());
+  return true;
 }
 
 bool MgrMonitor::prepare_command(MonOpRequestRef op)
@@ -538,15 +601,12 @@ bool MgrMonitor::prepare_command(MonOpRequestRef op)
 
 void MgrMonitor::init()
 {
-  if (digest_callback == nullptr) {
+  if (digest_event == nullptr) {
     send_digests();  // To get it to schedule its own event
   }
 }
 
 void MgrMonitor::on_shutdown()
 {
-  if (digest_callback) {
-    mon->timer.cancel_event(digest_callback);
-  }
+  cancel_timer();
 }
-

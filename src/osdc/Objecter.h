@@ -1122,6 +1122,18 @@ struct ObjectOperation {
     add_op(CEPH_OSD_OP_CACHE_EVICT);
   }
 
+  /*
+   * Extensible tier
+   */
+  void set_redirect(object_t tgt, snapid_t snapid, object_locator_t tgt_oloc, 
+		    version_t tgt_version) {
+    OSDOp& osd_op = add_op(CEPH_OSD_OP_SET_REDIRECT);
+    osd_op.op.copy_from.snapid = snapid;
+    osd_op.op.copy_from.src_version = tgt_version;
+    ::encode(tgt, osd_op.indata);
+    ::encode(tgt_oloc, osd_op.indata);
+  }
+
   void set_alloc_hint(uint64_t expected_object_size,
                       uint64_t expected_write_size,
 		      uint32_t flags) {
@@ -1193,8 +1205,15 @@ private:
   bool honor_osdmap_full;
   bool osdmap_full_try;
 
+  // If this is true, accumulate a set of blacklisted entities
+  // to be drained by consume_blacklist_events.
+  bool blacklist_events_enabled;
+  std::set<entity_addr_t> blacklist_events;
+
 public:
   void maybe_request_map();
+
+  void enable_blacklist_events();
 private:
 
   void _maybe_request_map();
@@ -1384,8 +1403,10 @@ public:
       if (target.base_oloc.key == o)
 	target.base_oloc.key.clear();
 
-      if (parent_trace && parent_trace->valid())
+      if (parent_trace && parent_trace->valid()) {
         trace.init("op", nullptr, parent_trace);
+        trace.event("start");
+      }
     }
 
     bool operator<(const Op& other) const {
@@ -1404,6 +1425,7 @@ public:
 	delete out_handler.back();
 	out_handler.pop_back();
       }
+      trace.event("finish");
     }
   };
 
@@ -1977,6 +1999,7 @@ private:
     osdmap(new OSDMap), initialized(0), last_tid(0), client_inc(-1),
     max_linger_id(0), num_in_flight(0), global_op_flags(0),
     keep_balanced_budget(false), honor_osdmap_full(true), osdmap_full_try(false),
+    blacklist_events_enabled(false),
     last_seen_osdmap_version(0), last_seen_pgmap_version(0),
     logger(NULL), tick_event(0), m_request_state_hook(NULL),
     num_homeless_ops(0),
@@ -2070,6 +2093,17 @@ private:
   void handle_osd_map(class MOSDMap *m);
   void wait_for_osd_map();
 
+  /**
+   * Get list of entities blacklisted since this was last called,
+   * and reset the list.
+   *
+   * Uses a std::set because typical use case is to compare some
+   * other list of clients to see which overlap with the blacklisted
+   * addrs.
+   *
+   */
+  void consume_blacklist_events(std::set<entity_addr_t> *events);
+
   int pool_snap_by_name(int64_t poolid,
 			const char *snap_name,
 			snapid_t *snap) const;
@@ -2077,6 +2111,10 @@ private:
 			 pool_snap_info_t *info) const;
   int pool_snap_list(int64_t poolid, vector<uint64_t> *snaps);
 private:
+
+  void emit_blacklist_events(const OSDMap::Incremental &inc);
+  void emit_blacklist_events(const OSDMap &old_osd_map,
+                             const OSDMap &new_osd_map);
 
   // low-level
   void _op_submit(Op *op, shunique_lock& lc, ceph_tid_t *ptid);

@@ -135,7 +135,6 @@ class MDSMonitor : public PaxosService {
 
   int dump_metadata(const string& who, Formatter *f, ostream& err);
 
-  MDSMap *generate_mds_map(fs_cluster_id_t fscid);
   void update_metadata(mds_gid_t gid, const Metadata& metadata);
   void remove_from_metadata(MonitorDBStore::TransactionRef t);
   int load_metadata(map<mds_gid_t, Metadata>& m);

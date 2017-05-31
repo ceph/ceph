@@ -216,17 +216,7 @@ void PGMonitor::on_upgrade()
 void PGMonitor::upgrade_format()
 {
   unsigned current = 1;
-  assert(format_version <= current);
-  if (format_version == current)
-    return;
-
-  dout(1) << __func__ << " to " << current << dendl;
-
-  // upgrade by dirtying it all
-  pg_map.dirty_all(pending_inc);
-
-  format_version = current;
-  propose_pending();
+  assert(format_version == current);
 }
 
 void PGMonitor::post_paxos_update()
@@ -758,7 +748,7 @@ bool PGMonitor::prepare_pg_stats(MonOpRequestRef op)
 
   // osd stat
   if (mon->osdmon()->osdmap.is_in(from)) {
-    pending_inc.update_stat(from, stats->epoch, stats->osd_stat);
+    pending_inc.update_stat(from, stats->epoch, std::move(stats->osd_stat));
   } else {
     pending_inc.update_stat(from, stats->epoch, osd_stat_t());
   }
@@ -1000,12 +990,12 @@ bool PGMonitor::preprocess_command(MonOpRequestRef op)
       r = -ENOENT;
       goto reply;
     }
-    if (pg_map.pg_stat[pgid].acting_primary == -1) {
+    int osd = pg_map.pg_stat[pgid].acting_primary;
+    if (osd == -1) {
       ss << "pg " << pgid << " has no primary osd";
       r = -EAGAIN;
       goto reply;
     }
-    int osd = pg_map.pg_stat[pgid].acting_primary;
     if (!mon->osdmon()->osdmap.is_up(osd)) {
       ss << "pg " << pgid << " primary osd." << osd << " not up";
       r = -EAGAIN;
@@ -1098,7 +1088,7 @@ bool PGMonitor::prepare_command(MonOpRequestRef op)
     goto update;
   } else if (prefix == "pg set_full_ratio" ||
              prefix == "pg set_nearfull_ratio") {
-    if (mon->osdmon()->osdmap.test_flag(CEPH_OSDMAP_REQUIRE_LUMINOUS)) {
+    if (mon->osdmon()->osdmap.require_osd_release >= CEPH_RELEASE_LUMINOUS) {
       ss << "please use the new luminous interfaces"
 	 << " ('osd set-full-ratio' and 'osd set-nearfull-ratio')";
       r = -EPERM;
@@ -1496,7 +1486,7 @@ void PGMonitor::get_health(list<pair<health_status_t,string> >& summary,
   }
 
   // full/nearfull
-  if (!mon->osdmon()->osdmap.test_flag(CEPH_OSDMAP_REQUIRE_LUMINOUS)) {
+  if (mon->osdmon()->osdmap.require_osd_release < CEPH_RELEASE_LUMINOUS) {
     check_full_osd_health(summary, detail, pg_map.full_osds, "full",
 			  HEALTH_ERR);
     check_full_osd_health(summary, detail, pg_map.nearfull_osds, "near full",

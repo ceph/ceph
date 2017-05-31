@@ -432,7 +432,7 @@ private:
 
   void _send_command(MonCommand *r);
   void _resend_mon_commands();
-  int _cancel_mon_command(uint64_t tid, int r);
+  int _cancel_mon_command(uint64_t tid);
   void _finish_command(MonCommand *r, int ret, string rs);
   void _finish_auth();
   void handle_mon_command_ack(MMonCommandAck *ack);

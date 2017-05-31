@@ -49,6 +49,12 @@ class BlueFS;
 //#define DEBUG_CACHE
 //#define DEBUG_DEFERRED
 
+
+
+// constants for Buffer::optimize()
+#define MAX_BUFFER_SLOP_RATIO_DEN  8  // so actually 1/N
+
+
 enum {
   l_bluestore_first = 732430,
   l_bluestore_kv_flush_lat,
@@ -209,6 +215,13 @@ public:
 	data.claim(t);
       }
       length = newlen;
+    }
+    void maybe_rebuild() {
+      if (data.length() &&
+	  (data.get_num_buffers() > 1 ||
+	   data.front().wasted() > data.length() / MAX_BUFFER_SLOP_RATIO_DEN)) {
+	data.rebuild();
+      }
     }
 
     void dump(Formatter *f) const {
@@ -1729,6 +1742,14 @@ public:
       return NULL;
     }
   };
+  struct KVFinalizeThread : public Thread {
+    BlueStore *store;
+    explicit KVFinalizeThread(BlueStore *s) : store(s) {}
+    void *entry() {
+      store->_kv_finalize_thread();
+      return NULL;
+    }
+  };
 
   struct DBHistogram {
     struct value_dist {
@@ -1802,12 +1823,21 @@ private:
   KVSyncThread kv_sync_thread;
   std::mutex kv_lock;
   std::condition_variable kv_cond;
+  bool kv_sync_started = false;
   bool kv_stop = false;
+  bool kv_finalize_started = false;
+  bool kv_finalize_stop = false;
   deque<TransContext*> kv_queue;             ///< ready, already submitted
   deque<TransContext*> kv_queue_unsubmitted; ///< ready, need submit by kv thread
   deque<TransContext*> kv_committing;        ///< currently syncing
   deque<DeferredBatch*> deferred_done_queue;   ///< deferred ios done
   deque<DeferredBatch*> deferred_stable_queue; ///< deferred ios done + stable
+
+  KVFinalizeThread kv_finalize_thread;
+  std::mutex kv_finalize_lock;
+  std::condition_variable kv_finalize_cond;
+  deque<TransContext*> kv_committing_to_finalize;   ///< pending finalization
+  deque<DeferredBatch*> deferred_stable_to_finalize; ///< pending finalization
 
   PerfCounters *logger = nullptr;
 
@@ -1848,6 +1878,9 @@ private:
   std::atomic<uint64_t> comp_max_blob_size = {0};
 
   std::atomic<uint64_t> max_blob_size = {0};  ///< maximum blob size
+
+  uint64_t kv_ios = 0;
+  uint64_t kv_throttle_costs = 0;
 
   // cache trim control
 
@@ -1967,19 +2000,10 @@ private:
   void _osr_drain_all();
   void _osr_unregister_all();
 
+  void _kv_start();
+  void _kv_stop();
   void _kv_sync_thread();
-  void _kv_stop() {
-    {
-      std::lock_guard<std::mutex> l(kv_lock);
-      kv_stop = true;
-      kv_cond.notify_all();
-    }
-    kv_sync_thread.join();
-    {
-      std::lock_guard<std::mutex> l(kv_lock);
-      kv_stop = false;
-    }
-  }
+  void _kv_finalize_thread();
 
   bluestore_deferred_op_t *_get_deferred_op(TransContext *txc, OnodeRef o);
   void _deferred_queue(TransContext *txc);

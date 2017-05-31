@@ -220,17 +220,22 @@ void OSDMonitor::create_initial()
   newmap.set_flag(CEPH_OSDMAP_SORTBITWISE);
 
   // new cluster should require latest by default
-  newmap.set_flag(CEPH_OSDMAP_REQUIRE_JEWEL);
-  newmap.set_flag(CEPH_OSDMAP_REQUIRE_KRAKEN);
-  if (!g_conf->mon_debug_no_require_luminous) {
-    newmap.set_flag(CEPH_OSDMAP_REQUIRE_LUMINOUS);
+  if (g_conf->mon_debug_no_require_luminous) {
+    newmap.require_osd_release = CEPH_RELEASE_KRAKEN;
+  } else {
+    newmap.require_osd_release = CEPH_RELEASE_LUMINOUS;
     newmap.full_ratio = g_conf->mon_osd_full_ratio;
     if (newmap.full_ratio > 1.0) newmap.full_ratio /= 100;
     newmap.backfillfull_ratio = g_conf->mon_osd_backfillfull_ratio;
     if (newmap.backfillfull_ratio > 1.0) newmap.backfillfull_ratio /= 100;
     newmap.nearfull_ratio = g_conf->mon_osd_nearfull_ratio;
     if (newmap.nearfull_ratio > 1.0) newmap.nearfull_ratio /= 100;
-    newmap.require_min_compat_client = g_conf->mon_osd_initial_require_min_compat_client;
+    int r = ceph_release_from_name(
+      g_conf->mon_osd_initial_require_min_compat_client.c_str());
+    if (r <= 0) {
+      assert(0 == "mon_osd_initial_require_min_compat_client is not valid");
+    }
+    newmap.require_min_compat_client = r;
   }
 
   // encode into pending incremental
@@ -256,6 +261,15 @@ void OSDMonitor::update_from_paxos(bool *need_bootstrap)
   dout(15) << "update_from_paxos paxos e " << version
 	   << ", my e " << osdmap.epoch << dendl;
 
+  if (mapping_job) {
+    if (!mapping_job->is_done()) {
+      dout(1) << __func__ << " mapping job "
+	      << mapping_job.get() << " did not complete, "
+	      << mapping_job->shards << " left, canceling" << dendl;
+      mapping_job->abort();
+    }
+    mapping_job.reset();
+  }
 
   /*
    * We will possibly have a stashed latest that *we* wrote, and we will
@@ -876,7 +890,7 @@ void OSDMonitor::create_pending()
     dout(1) << __func__ << " setting backfillfull_ratio = "
 	    << pending_inc.new_backfillfull_ratio << dendl;
   }
-  if (!osdmap.test_flag(CEPH_OSDMAP_REQUIRE_LUMINOUS)) {
+  if (osdmap.require_osd_release < CEPH_RELEASE_LUMINOUS) {
     // transition full ratios from PGMap to OSDMap (on upgrade)
     PGMap *pg_map = &mon->pgmon()->pg_map;
     if (osdmap.full_ratio != pg_map->full_ratio) {
@@ -1151,7 +1165,7 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
     tmp.deepish_copy_from(osdmap);
     tmp.apply_incremental(pending_inc);
 
-    if (tmp.test_flag(CEPH_OSDMAP_REQUIRE_LUMINOUS)) {
+    if (tmp.require_osd_release >= CEPH_RELEASE_LUMINOUS) {
       // set or clear full/nearfull?
       int full, backfill, nearfull;
       tmp.count_full_nearfull_osds(&full, &backfill, &nearfull);
@@ -1180,13 +1194,13 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
       }
 
       // min_compat_client?
-      if (tmp.require_min_compat_client.empty()) {
+      if (tmp.require_min_compat_client == 0) {
 	auto mv = tmp.get_min_compat_client();
-	dout(1) << __func__ << " setting require_min_compat_client to current " << mv
-		<< dendl;
-	mon->clog->info() << "setting require_min_compat_client to currently required "
-			  << mv;
-	pending_inc.new_require_min_compat_client = mv.first;
+	dout(1) << __func__ << " setting require_min_compat_client to currently "
+		<< "required " << ceph_release_name(mv) << dendl;
+	mon->clog->info() << "setting require_min_compat_client to currently "
+			  << "required " << ceph_release_name(mv);
+	pending_inc.new_require_min_compat_client = mv;
       }
     }
   }
@@ -1229,20 +1243,20 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
     tmp.apply_incremental(pending_inc);
 
     // determine appropriate features
-    if (!tmp.test_flag(CEPH_OSDMAP_REQUIRE_LUMINOUS)) {
+    if (tmp.require_osd_release < CEPH_RELEASE_LUMINOUS) {
       dout(10) << __func__ << " encoding without feature SERVER_LUMINOUS"
 	       << dendl;
       features &= ~CEPH_FEATURE_SERVER_LUMINOUS;
     }
-    if (!tmp.test_flag(CEPH_OSDMAP_REQUIRE_JEWEL)) {
-      dout(10) << __func__ << " encoding without feature SERVER_JEWEL" << dendl;
-      features &= ~CEPH_FEATURE_SERVER_JEWEL;
-    }
-    if (!tmp.test_flag(CEPH_OSDMAP_REQUIRE_KRAKEN)) {
+    if (tmp.require_osd_release < CEPH_RELEASE_KRAKEN) {
       dout(10) << __func__ << " encoding without feature SERVER_KRAKEN | "
 	       << "MSG_ADDR2" << dendl;
       features &= ~(CEPH_FEATURE_SERVER_KRAKEN |
 		    CEPH_FEATURE_MSG_ADDR2);
+    }
+    if (tmp.require_osd_release < CEPH_RELEASE_JEWEL) {
+      dout(10) << __func__ << " encoding without feature SERVER_JEWEL" << dendl;
+      features &= ~CEPH_FEATURE_SERVER_JEWEL;
     }
     dout(10) << __func__ << " encoding full map with " << features << dendl;
 
@@ -1283,7 +1297,7 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
   if (mon->monmap->get_required_features().contains_all(
 	ceph::features::mon::FEATURE_LUMINOUS)) {
     auto pending_creatings = update_pending_pgs(pending_inc);
-    if (!osdmap.test_flag(CEPH_OSDMAP_REQUIRE_LUMINOUS)) {
+    if (osdmap.require_osd_release < CEPH_RELEASE_LUMINOUS) {
       dout(7) << __func__ << " in the middle of upgrading, "
 	      << " trimming pending creating_pgs using pgmap" << dendl;
       trim_creating_pgs(&pending_creatings, mon->pgmon()->pg_map);
@@ -1964,8 +1978,12 @@ bool OSDMonitor::check_failure(utime_t now, int target_osd, failure_info_t& fi)
 	    << " down" << dendl;
     pending_inc.new_state[target_osd] = CEPH_OSD_UP;
 
-    mon->clog->info() << osdmap.get_inst(target_osd) << " failed ("
-		      << (int)reporters_by_subtree.size() << " reporters from different "
+    mon->clog->info() << "osd." << target_osd << " failed ("
+		      << osdmap.crush->get_full_location_ordered_string(
+			target_osd)
+		      << ") ("
+		      << (int)reporters_by_subtree.size()
+		      << " reporters from different "
 		      << reporter_subtree_level << " after "
 		      << failed_for << " >= grace " << grace << ")";
     return true;
@@ -1973,7 +1991,7 @@ bool OSDMonitor::check_failure(utime_t now, int target_osd, failure_info_t& fi)
   return false;
 }
 
-void OSDMonitor::force_failure(utime_t now, int target_osd)
+void OSDMonitor::force_failure(utime_t now, int target_osd, int by)
 {
   // already pending failure?
   if (pending_inc.new_state.count(target_osd) &&
@@ -1985,7 +2003,9 @@ void OSDMonitor::force_failure(utime_t now, int target_osd)
   dout(1) << " we're forcing failure of osd." << target_osd << dendl;
   pending_inc.new_state[target_osd] = CEPH_OSD_UP;
 
-  mon->clog->info() << osdmap.get_inst(target_osd) << " failed (forced)";
+  mon->clog->info() << "osd." << target_osd << " failed ("
+		    << osdmap.crush->get_full_location_ordered_string(target_osd)
+		    << ") (connection refused reported by osd." << by << ")";
   return;
 }
 
@@ -2012,7 +2032,7 @@ bool OSDMonitor::prepare_failure(MonOpRequestRef op)
     if (m->is_immediate()) {
       mon->clog->debug() << m->get_target() << " reported immediately failed by "
             << m->get_orig_source_inst();
-      force_failure(now, target_osd);
+      force_failure(now, target_osd, reporter);
       return true;
     }
     mon->clog->debug() << m->get_target() << " reported failed by "
@@ -2149,7 +2169,7 @@ bool OSDMonitor::preprocess_boot(MonOpRequestRef op)
     goto ignore;
   }
 
-  if (osdmap.test_flag(CEPH_OSDMAP_REQUIRE_LUMINOUS) &&
+  if (osdmap.require_osd_release >= CEPH_RELEASE_LUMINOUS &&
       !HAVE_FEATURE(m->osd_features, SERVER_LUMINOUS)) {
     mon->clog->info() << "disallowing boot of OSD "
 		      << m->get_orig_source_inst()
@@ -2159,7 +2179,7 @@ bool OSDMonitor::preprocess_boot(MonOpRequestRef op)
     goto ignore;
   }
 
-  if (osdmap.test_flag(CEPH_OSDMAP_REQUIRE_JEWEL) &&
+  if (osdmap.require_osd_release >= CEPH_RELEASE_JEWEL &&
       !(m->osd_features & CEPH_FEATURE_SERVER_JEWEL)) {
     mon->clog->info() << "disallowing boot of OSD "
 		      << m->get_orig_source_inst()
@@ -2169,7 +2189,7 @@ bool OSDMonitor::preprocess_boot(MonOpRequestRef op)
     goto ignore;
   }
 
-  if (osdmap.test_flag(CEPH_OSDMAP_REQUIRE_KRAKEN) &&
+  if (osdmap.require_osd_release >= CEPH_RELEASE_KRAKEN &&
       !HAVE_FEATURE(m->osd_features, SERVER_KRAKEN)) {
     mon->clog->info() << "disallowing boot of OSD "
 		      << m->get_orig_source_inst()
@@ -2203,19 +2223,19 @@ bool OSDMonitor::preprocess_boot(MonOpRequestRef op)
 
   // make sure upgrades stop at luminous
   if (HAVE_FEATURE(m->osd_features, SERVER_M) &&
-      !osdmap.test_flag(CEPH_OSDMAP_REQUIRE_LUMINOUS)) {
+      osdmap.require_osd_release < CEPH_RELEASE_LUMINOUS) {
     mon->clog->info() << "disallowing boot of post-luminous OSD "
 		      << m->get_orig_source_inst()
-		      << " because require_luminous_osds is not set";
+		      << " because require_osd_release < luminous";
     goto ignore;
   }
 
   // make sure upgrades stop at jewel
   if (HAVE_FEATURE(m->osd_features, SERVER_KRAKEN) &&
-      !osdmap.test_flag(CEPH_OSDMAP_REQUIRE_JEWEL)) {
+      osdmap.require_osd_release < CEPH_RELEASE_JEWEL) {
     mon->clog->info() << "disallowing boot of post-jewel OSD "
 		      << m->get_orig_source_inst()
-		      << " because require_jewel_osds is not set";
+		      << " because require_osd_release < jewel";
     goto ignore;
   }
 
@@ -2362,6 +2382,7 @@ bool OSDMonitor::prepare_boot(MonOpRequestRef op)
     bufferlist osd_metadata;
     ::encode(m->metadata, osd_metadata);
     pending_metadata[from] = osd_metadata;
+    pending_metadata_rm.erase(from);
 
     // adjust last clean unmount epoch?
     const osd_info_t& info = osdmap.get_info(from);
@@ -2674,7 +2695,7 @@ bool OSDMonitor::preprocess_pgtemp(MonOpRequestRef op)
 
   for (auto p = m->pg_temp.begin(); p != m->pg_temp.end(); ++p) {
     dout(20) << " " << p->first
-	     << (osdmap.pg_temp->count(p->first) ? (*osdmap.pg_temp)[p->first] : empty)
+	     << (osdmap.pg_temp->count(p->first) ? osdmap.pg_temp->get(p->first) : empty)
              << " -> " << p->second << dendl;
 
     // does the pool exist?
@@ -2718,7 +2739,7 @@ bool OSDMonitor::preprocess_pgtemp(MonOpRequestRef op)
     //        an existing pg_primary field to imply a change
     if (p->second.size() &&
 	(osdmap.pg_temp->count(p->first) == 0 ||
-	 !vectors_equal((*osdmap.pg_temp)[p->first], p->second) ||
+	 !vectors_equal(osdmap.pg_temp->get(p->first), p->second) ||
 	 osdmap.primary_temp->count(p->first)))
       return false;
   }
@@ -3296,7 +3317,7 @@ void OSDMonitor::tick()
   bool do_propose = false;
   utime_t now = ceph_clock_now();
 
-  if (osdmap.test_flag(CEPH_OSDMAP_REQUIRE_LUMINOUS) &&
+  if (osdmap.require_osd_release >= CEPH_RELEASE_LUMINOUS &&
       mon->monmap->get_required_features().contains_all(
 	ceph::features::mon::FEATURE_LUMINOUS)) {
     if (handle_osd_timeouts(now, last_osd_report)) {
@@ -3399,7 +3420,7 @@ void OSDMonitor::tick()
   }
 
   // if map full setting has changed, get that info out there!
-  if (!osdmap.test_flag(CEPH_OSDMAP_REQUIRE_LUMINOUS) &&
+  if (osdmap.require_osd_release < CEPH_RELEASE_LUMINOUS &&
       mon->pgmon()->is_readable()) {
     // for pre-luminous compat only!
     if (!mon->pgmon()->pg_map.full_osds.empty()) {
@@ -3458,7 +3479,9 @@ bool OSDMonitor::handle_osd_timeouts(const utime_t &now,
     } else if (can_mark_down(i)) {
       utime_t diff = now - t->second;
       if (diff > timeo) {
-	mon->clog->info() << "osd." << i << " marked down after no pg stats for " << diff << "seconds";
+	mon->clog->info() << "osd." << i << " failed ("
+			  << osdmap.crush->get_full_location_ordered_string(i)
+			  << ") (pg stats for " << diff << "seconds)";
 	derr << "no osd or pg stats from osd." << i << " since " << t->second << ", " << diff
 	     << " seconds ago.  marking down" << dendl;
 	pending_inc.new_state[i] = CEPH_OSD_UP;
@@ -3481,45 +3504,149 @@ void OSDMonitor::get_health(list<pair<health_status_t,string> >& summary,
     int num_in_osds = 0;
     int num_down_in_osds = 0;
     set<int> osds;
+    set<int> down_in_osds;
+    set<int> up_in_osds;
+    set<int> subtree_up;
+    unordered_map<int, set<int> > subtree_type_down;
+    unordered_map<int, int> num_osds_subtree;
+    int max_type = osdmap.crush->get_max_type_id();
+
     for (int i = 0; i < osdmap.get_max_osd(); i++) {
       if (!osdmap.exists(i)) {
         if (osdmap.crush->item_exists(i)) {
           osds.insert(i);
         }
-	 continue;
+	continue;
       } 
       if (osdmap.is_out(i))
         continue;
       ++num_in_osds;
+      if (down_in_osds.count(i) || up_in_osds.count(i))
+	continue;
       if (!osdmap.is_up(i)) {
-	++num_down_in_osds;
-	if (detail) {
-	  const osd_info_t& info = osdmap.get_info(i);
+	down_in_osds.insert(i);
+	int parent_id = 0;
+	int current = i;
+	for (int type = 0; type <= max_type; type++) {
+	  if (!osdmap.crush->get_type_name(type))
+	    continue;
+	  int r = osdmap.crush->get_immediate_parent_id(current, &parent_id);
+	  if (r == -ENOENT)
+	    break;
+	  // break early if this parent is already marked as up
+	  if (subtree_up.count(parent_id))
+	    break;
+	  type = osdmap.crush->get_bucket_type(parent_id);
+	  if (!osdmap.subtree_type_is_down(
+		g_ceph_context, parent_id, type,
+		&down_in_osds, &up_in_osds, &subtree_up, &subtree_type_down))
+	    break;
+	  current = parent_id;
+	}
+      }
+    }
+
+    // calculate the number of down osds in each down subtree and
+    // store it in num_osds_subtree
+    for (int type = 1; type <= max_type; type++) {
+      if (!osdmap.crush->get_type_name(type))
+	continue;
+      for (auto j = subtree_type_down[type].begin();
+	   j != subtree_type_down[type].end();
+	   ++j) {
+	if (type == 1) {
+          list<int> children;
+          int num = osdmap.crush->get_children(*j, &children);
+          num_osds_subtree[*j] = num;
+        } else {
+          list<int> children;
+          int num = 0;
+          int num_children = osdmap.crush->get_children(*j, &children);
+          if (num_children == 0)
+	    continue;
+          for (auto l = children.begin(); l != children.end(); ++l) {
+            if (num_osds_subtree[*l] > 0) {
+              num = num + num_osds_subtree[*l];
+            }
+          }
+          num_osds_subtree[*j] = num;
+	}
+      }
+    }
+    num_down_in_osds = down_in_osds.size();
+    assert(num_down_in_osds <= num_in_osds);
+    if (num_down_in_osds > 0) {
+      // summary of down subtree types and osds
+      for (int type = max_type; type > 0; type--) {
+	if (!osdmap.crush->get_type_name(type))
+	  continue;
+	if (subtree_type_down[type].size() > 0) {
 	  ostringstream ss;
-	  ss << "osd." << i << " is down since epoch " << info.down_at
-	     << ", last address " << osdmap.get_addr(i);
+	  ss << subtree_type_down[type].size() << " "
+	     << osdmap.crush->get_type_name(type);
+	  if (subtree_type_down[type].size() > 1) {
+	    ss << "s";
+	  }
+	  int sum_down_osds = 0;
+	  for (auto j = subtree_type_down[type].begin();
+	       j != subtree_type_down[type].end();
+	       ++j) {
+	    sum_down_osds = sum_down_osds + num_osds_subtree[*j];
+	  }
+          ss << " (" << sum_down_osds << " osds) down";
+	  summary.push_back(make_pair(HEALTH_WARN, ss.str()));
+	}
+      }
+      ostringstream ss;
+      ss << down_in_osds.size() << " osds down";
+      summary.push_back(make_pair(HEALTH_WARN, ss.str()));
+
+      if (detail) {
+	// details of down subtree types
+	for (int type = max_type; type > 0; type--) {
+	  if (!osdmap.crush->get_type_name(type))
+	    continue;
+	  for (auto j = subtree_type_down[type].rbegin();
+	       j != subtree_type_down[type].rend();
+	       ++j) {
+	    ostringstream ss;
+	    ss << osdmap.crush->get_type_name(type);
+	    ss << " ";
+	    ss << osdmap.crush->get_item_name(*j);
+	    // at the top level, do not print location
+	    if (type != max_type) {
+              ss << " (";
+              ss << osdmap.crush->get_full_location_ordered_string(*j);
+              ss << ")";
+	    }
+	    int num = num_osds_subtree[*j];
+	    ss << " (" << num << " osds)";
+	    ss << " is down";
+	    detail->push_back(make_pair(HEALTH_WARN, ss.str()));
+	  }
+        }
+	// details of down osds
+	for (auto it = down_in_osds.begin(); it != down_in_osds.end(); ++it) {
+	  ostringstream ss;
+	  ss << "osd." << *it << " (";
+	  ss << osdmap.crush->get_full_location_ordered_string(*it);
+          ss << ") is down";
 	  detail->push_back(make_pair(HEALTH_WARN, ss.str()));
 	}
       }
     }
-    assert(num_down_in_osds <= num_in_osds);
-    if (num_down_in_osds > 0) {
-      ostringstream ss;
-      ss << num_down_in_osds << "/" << num_in_osds << " in osds are down";
-      summary.push_back(make_pair(HEALTH_WARN, ss.str()));
-    }
 
     if (!osds.empty()) {
       ostringstream ss;
-      ss << "osds were removed from osdmap, but still kept in crushmap";
+      ss << osds.size() << " osds exist in the crush map but not in the osdmap";
       summary.push_back(make_pair(HEALTH_WARN, ss.str()));
       if (detail) {
-        ss << " osds: [" << osds << "]";
+        ss << " (osds: " << osds << ")";
         detail->push_back(make_pair(HEALTH_WARN, ss.str()));
       }
     }
 
-    if (osdmap.test_flag(CEPH_OSDMAP_REQUIRE_LUMINOUS)) {
+    if (osdmap.require_osd_release >= CEPH_RELEASE_LUMINOUS) {
       // An osd could configure failsafe ratio, to something different
       // but for now assume it is the same here.
       float fsr = g_conf->osd_failsafe_full_ratio;
@@ -3714,25 +3841,25 @@ void OSDMonitor::get_health(list<pair<health_status_t,string> >& summary,
     if (g_conf->mon_debug_no_require_luminous) {
       // ignore these checks
     } else if (HAVE_FEATURE(osdmap.get_up_osd_features(), SERVER_LUMINOUS) &&
-	!osdmap.test_flag(CEPH_OSDMAP_REQUIRE_LUMINOUS)) {
-      string msg = "all OSDs are running luminous or later but the"
-	" 'require_luminous_osds' osdmap flag is not set";
+	       osdmap.require_osd_release < CEPH_RELEASE_LUMINOUS) {
+      string msg = "all OSDs are running luminous or later but"
+	" require_osd_release < luminous";
       summary.push_back(make_pair(HEALTH_WARN, msg));
       if (detail) {
 	detail->push_back(make_pair(HEALTH_WARN, msg));
       }
     } else if (HAVE_FEATURE(osdmap.get_up_osd_features(), SERVER_KRAKEN) &&
-	!osdmap.test_flag(CEPH_OSDMAP_REQUIRE_KRAKEN)) {
-      string msg = "all OSDs are running kraken or later but the"
-	" 'require_kraken_osds' osdmap flag is not set";
+	       osdmap.require_osd_release < CEPH_RELEASE_KRAKEN) {
+      string msg = "all OSDs are running kraken or later but"
+	" require_osd_release < kraken";
       summary.push_back(make_pair(HEALTH_WARN, msg));
       if (detail) {
 	detail->push_back(make_pair(HEALTH_WARN, msg));
       }
     } else if (HAVE_FEATURE(osdmap.get_up_osd_features(), SERVER_JEWEL) &&
-	       !osdmap.test_flag(CEPH_OSDMAP_REQUIRE_JEWEL)) {
-      string msg = "all OSDs are running jewel or later but the"
-	" 'require_jewel_osds' osdmap flag is not set";
+	       osdmap.require_osd_release < CEPH_RELEASE_JEWEL) {
+      string msg = "all OSDs are running jewel or later but"
+	" require_osd_release < jewel";
       summary.push_back(make_pair(HEALTH_WARN, msg));
       if (detail) {
 	detail->push_back(make_pair(HEALTH_WARN, msg));
@@ -3908,13 +4035,39 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
       }
       rdata.append(ds);
     } else if (prefix == "osd tree") {
+      vector<string> states;
+      cmd_getval(g_ceph_context, cmdmap, "states", states);
+      unsigned filter = 0;
+      for (auto& s : states) {
+	if (s == "up") {
+	  filter |= OSDMap::DUMP_UP;
+	} else if (s == "down") {
+	  filter |= OSDMap::DUMP_DOWN;
+	} else if (s == "in") {
+	  filter |= OSDMap::DUMP_IN;
+	} else if (s == "out") {
+	  filter |= OSDMap::DUMP_OUT;
+	} else {
+	  ss << "unrecognized state '" << s << "'";
+	  r = -EINVAL;
+	  goto reply;
+	}
+      }
+      if ((filter & (OSDMap::DUMP_IN|OSDMap::DUMP_OUT)) ==
+	  (OSDMap::DUMP_IN|OSDMap::DUMP_OUT) ||
+	  (filter & (OSDMap::DUMP_UP|OSDMap::DUMP_DOWN)) ==
+	  (OSDMap::DUMP_UP|OSDMap::DUMP_DOWN)) {
+	ss << "cannot specify both up and down or both in and out";
+	r = -EINVAL;
+	goto reply;
+      }
       if (f) {
 	f->open_object_section("tree");
-	p->print_tree(f.get(), NULL);
+	p->print_tree(f.get(), NULL, filter);
 	f->close_section();
 	f->flush(ds);
       } else {
-	p->print_tree(NULL, &ds);
+	p->print_tree(NULL, &ds, filter);
       }
       rdata.append(ds);
     } else if (prefix == "osd getmap") {
@@ -5252,12 +5405,12 @@ bool OSDMonitor::validate_crush_against_features(const CrushWrapper *newcrush,
   newmap.apply_incremental(new_pending);
 
   // client compat
-  if (newmap.require_min_compat_client.length()) {
+  if (newmap.require_min_compat_client > 0) {
     auto mv = newmap.get_min_compat_client();
-    if (mv.first > newmap.require_min_compat_client) {
-      ss << "new crush map requires client version " << mv
+    if (mv > newmap.require_min_compat_client) {
+      ss << "new crush map requires client version " << ceph_release_name(mv)
 	 << " but require_min_compat_client is "
-	 << newmap.require_min_compat_client;
+	 << ceph_release_name(newmap.require_min_compat_client);
       return false;
     }
   }
@@ -5994,7 +6147,8 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
       return -EINVAL;
     }
     stringstream err;
-    if (!is_pool_currently_all_bluestore(pool, p, &err)) {
+    if (!g_conf->mon_debug_no_require_bluestore_for_ec_overwrites &&
+	!is_pool_currently_all_bluestore(pool, p, &err)) {
       ss << "pool must only be stored on bluestore for scrubbing to work: " << err.str();
       return -EINVAL;
     }
@@ -6685,7 +6839,52 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 	err = 0;
       }
     } while (false);
-
+  } else if (prefix == "osd crush swap-bucket") {
+    string source, dest, force;
+    cmd_getval(g_ceph_context, cmdmap, "source", source);
+    cmd_getval(g_ceph_context, cmdmap, "dest", dest);
+    cmd_getval(g_ceph_context, cmdmap, "force", force);
+    CrushWrapper newcrush;
+    _get_pending_crush(newcrush);
+    if (!newcrush.name_exists(source)) {
+      ss << "source item " << source << " does not exist";
+      err = -ENOENT;
+      goto reply;
+    }
+    if (!newcrush.name_exists(dest)) {
+      ss << "dest item " << dest << " does not exist";
+      err = -ENOENT;
+      goto reply;
+    }
+    int sid = newcrush.get_item_id(source);
+    int did = newcrush.get_item_id(dest);
+    int sparent;
+    if (newcrush.get_immediate_parent_id(sid, &sparent) == 0 &&
+	force != "--yes-i-really-mean-it") {
+      ss << "source item " << source << " is not an orphan bucket; pass --yes-i-really-mean-it to proceed anyway";
+      err = -EPERM;
+      goto reply;
+    }
+    if (newcrush.get_bucket_alg(sid) != newcrush.get_bucket_alg(did) &&
+	force != "--yes-i-really-mean-it") {
+      ss << "source bucket alg " << crush_alg_name(newcrush.get_bucket_alg(sid)) << " != "
+	 << "dest bucket alg " << crush_alg_name(newcrush.get_bucket_alg(did))
+	 << "; pass --yes-i-really-mean-it to proceed anyway";
+      err = -EPERM;
+      goto reply;
+    }
+    int r = newcrush.swap_bucket(g_ceph_context, sid, did);
+    if (r < 0) {
+      ss << "failed to swap bucket contents: " << cpp_strerror(r);
+      goto reply;
+    }
+    ss << "swapped bucket of " << source << " to " << dest;
+    pending_inc.crush.clear();
+    newcrush.encode(pending_inc.crush, mon->get_quorum_con_features());
+    wait_for_finished_proposal(op,
+			       new Monitor::C_Command(mon, op, err, ss.str(),
+						      get_last_committed() + 1));
+    return true;
   } else if (prefix == "osd crush link") {
     // osd crush link <name> <loc1> [<loc2> ...]
     string name;
@@ -7264,9 +7463,9 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
   } else if (prefix == "osd set-full-ratio" ||
 	     prefix == "osd set-backfillfull-ratio" ||
              prefix == "osd set-nearfull-ratio") {
-    if (!osdmap.test_flag(CEPH_OSDMAP_REQUIRE_LUMINOUS)) {
-      ss << "you must complete the upgrade and set require_luminous_osds before"
-	 << " using the new interface";
+    if (osdmap.require_osd_release < CEPH_RELEASE_LUMINOUS) {
+      ss << "you must complete the upgrade and set require_osd_release ="
+	 << "luminous before using the new interface";
       err = -EPERM;
       goto reply;
     }
@@ -7289,17 +7488,16 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 					      get_last_committed() + 1));
     return true;
   } else if (prefix == "osd set-require-min-compat-client") {
-    if (!osdmap.test_flag(CEPH_OSDMAP_REQUIRE_LUMINOUS)) {
-      ss << "you must complete the upgrade and set require_luminous_osds before"
-	 << " using the new interface";
+    if (osdmap.require_osd_release < CEPH_RELEASE_LUMINOUS) {
+      ss << "you must complete the upgrade and set require_osd_release ="
+	 << "luminous before using the new interface";
       err = -EPERM;
       goto reply;
     }
     string v;
     cmd_getval(g_ceph_context, cmdmap, "version", v);
-    if (v != "luminous" && v != "kraken" && v != "jewel" && v != "infernalis" &&
-	v != "hammer" && v != "giant" && v != "firefly" && v != "emperor" &&
-	v != "dumpling" && v != "cuttlefish" && v != "bobtail" && v != "argonaut") {
+    int vno = ceph_release_from_name(v.c_str());
+    if (vno <= 0) {
       ss << "version " << v << " is not recognized";
       err = -EINVAL;
       goto reply;
@@ -7307,16 +7505,18 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     OSDMap newmap;
     newmap.deepish_copy_from(osdmap);
     newmap.apply_incremental(pending_inc);
-    newmap.require_min_compat_client = v;
-    auto mv = newmap.get_min_compat_client();
-    if (v < mv.first) {
-      ss << "osdmap current utilizes features that require " << mv
-	 << "; cannot set require_min_compat_client below that to " << v;
+    newmap.require_min_compat_client = vno;
+    auto mvno = newmap.get_min_compat_client();
+    if (vno < mvno) {
+      ss << "osdmap current utilizes features that require "
+	 << ceph_release_name(mvno)
+	 << "; cannot set require_min_compat_client below that to "
+	 << ceph_release_name(vno);
       err = -EPERM;
       goto reply;
     }
-    ss << "set require_min_compat_client to " << v;
-    pending_inc.new_require_min_compat_client = v;
+    ss << "set require_min_compat_client to " << ceph_release_name(vno);
+    pending_inc.new_require_min_compat_client = vno;
     getline(ss, rs);
     wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, 0, rs,
 							  get_last_committed() + 1));
@@ -7360,11 +7560,17 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       } else {
 	ss << "not all up OSDs have OSD_BITWISE_HOBJ_SORT feature";
 	err = -EPERM;
+	goto reply;
       }
     } else if (key == "require_jewel_osds") {
       if (!osdmap.test_flag(CEPH_OSDMAP_SORTBITWISE)) {
 	ss << "the sortbitwise flag must be set before require_jewel_osds";
 	err = -EPERM;
+	goto reply;
+      } else if (osdmap.require_osd_release >= CEPH_RELEASE_JEWEL) {
+	ss << "require_osd_release is already >= jewel";
+	err = 0;
+	goto reply;
       } else if (HAVE_FEATURE(osdmap.get_up_osd_features(), SERVER_JEWEL)) {
 	return prepare_set_flag(op, CEPH_OSDMAP_REQUIRE_JEWEL);
       } else {
@@ -7375,6 +7581,11 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       if (!osdmap.test_flag(CEPH_OSDMAP_SORTBITWISE)) {
 	ss << "the sortbitwise flag must be set before require_kraken_osds";
 	err = -EPERM;
+	goto reply;
+      } else if (osdmap.require_osd_release >= CEPH_RELEASE_KRAKEN) {
+	ss << "require_osd_release is already >= kraken";
+	err = 0;
+	goto reply;
       } else if (HAVE_FEATURE(osdmap.get_up_osd_features(), SERVER_KRAKEN)) {
 	bool r = prepare_set_flag(op, CEPH_OSDMAP_REQUIRE_KRAKEN);
 	// ensure JEWEL is also set
@@ -7382,20 +7593,6 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 	return r;
       } else {
 	ss << "not all up OSDs have CEPH_FEATURE_SERVER_KRAKEN feature";
-	err = -EPERM;
-      }
-    } else if (key == "require_luminous_osds") {
-      if (!osdmap.test_flag(CEPH_OSDMAP_SORTBITWISE)) {
-	ss << "the sortbitwise flag must be set before require_luminous_osds";
-	err = -EPERM;
-      } else if (HAVE_FEATURE(osdmap.get_up_osd_features(), SERVER_LUMINOUS)) {
-	bool r = prepare_set_flag(op, CEPH_OSDMAP_REQUIRE_LUMINOUS);
-	// ensure JEWEL and KRAKEN are also set
-	pending_inc.new_flags |= CEPH_OSDMAP_REQUIRE_JEWEL;
-	pending_inc.new_flags |= CEPH_OSDMAP_REQUIRE_KRAKEN;
-	return r;
-      } else {
-	ss << "not all up OSDs have CEPH_FEATURE_SERVER_LUMINOUS feature";
 	err = -EPERM;
       }
     } else {
@@ -7438,6 +7635,43 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       err = -EINVAL;
     }
 
+  } else if (prefix == "osd require-osd-release") {
+    string release;
+    cmd_getval(g_ceph_context, cmdmap, "release", release);
+    if (!osdmap.test_flag(CEPH_OSDMAP_SORTBITWISE)) {
+      ss << "the sortbitwise flag must be set first";
+      err = -EPERM;
+      goto reply;
+    }
+    int rel = ceph_release_from_name(release.c_str());
+    if (rel <= 0) {
+      ss << "unrecognized release " << release;
+      err = -EINVAL;
+      goto reply;
+    }
+    if (rel < CEPH_RELEASE_LUMINOUS) {
+      ss << "use this command only for luminous and later";
+      err = -EINVAL;
+      goto reply;
+    }
+    if (rel == CEPH_RELEASE_LUMINOUS) {
+      if (!HAVE_FEATURE(osdmap.get_up_osd_features(), SERVER_LUMINOUS)) {
+	ss << "not all up OSDs have CEPH_FEATURE_SERVER_LUMINOUS feature";
+	err = -EPERM;
+	goto reply;
+      }
+    } else {
+      ss << "not supported for this release yet";
+      err = -EPERM;
+      goto reply;
+    }
+    if (rel < osdmap.require_osd_release) {
+      ss << "require_osd_release cannot be lowered once it has been set";
+      err = -EPERM;
+      goto reply;
+    }
+    pending_inc.new_require_osd_release = rel;
+    goto update;
   } else if (prefix == "osd cluster_snap") {
     // ** DISABLE THIS FOR NOW **
     ss << "cluster snapshot currently disabled (broken implementation)";
@@ -7510,6 +7744,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 	  pending_inc.new_state[osd] = osdmap.get_state(osd);
           pending_inc.new_uuid[osd] = uuid_d();
 	  pending_metadata_rm.insert(osd);
+	  pending_metadata.erase(osd);
 	  if (any) {
 	    ss << ", osd." << osd;
           } else {
@@ -7604,9 +7839,10 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       goto reply;
     }
 
-    if (osdmap.require_min_compat_client.length() &&
-	osdmap.require_min_compat_client < "firefly") {
-      ss << "require_min_compat_client " << osdmap.require_min_compat_client
+    if (osdmap.require_min_compat_client > 0 &&
+	osdmap.require_min_compat_client < CEPH_RELEASE_FIREFLY) {
+      ss << "require_min_compat_client "
+	 << ceph_release_name(osdmap.require_min_compat_client)
 	 << " < firefly, which is required for primary-temp";
       err = -EPERM;
       goto reply;
@@ -7620,13 +7856,15 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     ss << "set " << pgid << " primary_temp mapping to " << osd;
     goto update;
   } else if (prefix == "osd pg-upmap") {
-    if (!osdmap.test_flag(CEPH_OSDMAP_REQUIRE_LUMINOUS)) {
-      ss << "you must set the require_luminous_osds flag to use this feature";
+    if (osdmap.require_osd_release < CEPH_RELEASE_LUMINOUS) {
+      ss << "you must complete the upgrade and set require_osd_release ="
+	 << "luminous before using the new interface";
       err = -EPERM;
       goto reply;
     }
-    if (osdmap.require_min_compat_client < "luminous") {
-      ss << "min_compat_client " << osdmap.require_min_compat_client
+    if (osdmap.require_min_compat_client < CEPH_RELEASE_LUMINOUS) {
+      ss << "min_compat_client "
+	 << ceph_release_name(osdmap.require_min_compat_client)
 	 << " < luminous, which is required for pg-upmap";
       err = -EPERM;
       goto reply;
@@ -7682,13 +7920,15 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     ss << "set " << pgid << " pg_upmap mapping to " << new_pg_upmap;
     goto update;
   } else if (prefix == "osd rm-pg-upmap") {
-    if (!osdmap.test_flag(CEPH_OSDMAP_REQUIRE_LUMINOUS)) {
-      ss << "you must set the require_luminous_osds flag to use this feature";
+    if (osdmap.require_osd_release < CEPH_RELEASE_LUMINOUS) {
+      ss << "you must complete the upgrade and set require_osd_release ="
+	 << "luminous before using the new interface";
       err = -EPERM;
       goto reply;
     }
-    if (osdmap.require_min_compat_client < "luminous") {
-      ss << "require_min_compat_client " << osdmap.require_min_compat_client
+    if (osdmap.require_min_compat_client < CEPH_RELEASE_LUMINOUS) {
+      ss << "require_min_compat_client "
+	 << ceph_release_name(osdmap.require_min_compat_client)
 	 << " < luminous, which is required for pg-upmap";
       err = -EPERM;
       goto reply;
@@ -7711,11 +7951,6 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       err = -EINVAL;
       goto reply;
     }
-    if (!osdmap.pg_exists(pgid)) {
-      ss << "pg " << pgid << " does not exist";
-      err = -ENOENT;
-      goto reply;
-    }
     if (pending_inc.new_pg_upmap.count(pgid) ||
 	pending_inc.old_pg_upmap.count(pgid)) {
       dout(10) << __func__ << " waiting for pending update on " << pgid << dendl;
@@ -7727,13 +7962,15 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     ss << "clear " << pgid << " pg_upmap mapping";
     goto update;
   } else if (prefix == "osd pg-upmap-items") {
-    if (!osdmap.test_flag(CEPH_OSDMAP_REQUIRE_LUMINOUS)) {
-      ss << "you must set the require_luminous_osds flag to use this feature";
+    if (osdmap.require_osd_release < CEPH_RELEASE_LUMINOUS) {
+      ss << "you must complete the upgrade and set require_osd_release ="
+	 << "luminous before using the new interface";
       err = -EPERM;
       goto reply;
     }
-    if (osdmap.require_min_compat_client < "luminous") {
-      ss << "require_min_compat_client " << osdmap.require_min_compat_client
+    if (osdmap.require_min_compat_client < CEPH_RELEASE_LUMINOUS) {
+      ss << "require_min_compat_client "
+	 << ceph_release_name(osdmap.require_min_compat_client)
 	 << " < luminous, which is required for pg-upmap";
       err = -EPERM;
       goto reply;
@@ -7802,13 +8039,15 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     ss << "set " << pgid << " pg_upmap_items mapping to " << new_pg_upmap_items;
     goto update;
   } else if (prefix == "osd rm-pg-upmap-items") {
-    if (!osdmap.test_flag(CEPH_OSDMAP_REQUIRE_LUMINOUS)) {
-      ss << "you must set the require_luminous_osds flag to use this feature";
+    if (osdmap.require_osd_release < CEPH_RELEASE_LUMINOUS) {
+      ss << "you must complete the upgrade and set require_osd_release ="
+	 << "luminous before using the new interface";
       err = -EPERM;
       goto reply;
     }
-    if (osdmap.require_min_compat_client < "luminous") {
-      ss << "require_min_compat_client " << osdmap.require_min_compat_client
+    if (osdmap.require_min_compat_client < CEPH_RELEASE_LUMINOUS) {
+      ss << "require_min_compat_client "
+	 << ceph_release_name(osdmap.require_min_compat_client)
 	 << " < luminous, which is required for pg-upmap";
       err = -EPERM;
       goto reply;
@@ -7829,11 +8068,6 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     if (!pgid.parse(pgidstr.c_str())) {
       ss << "invalid pgid '" << pgidstr << "'";
       err = -EINVAL;
-      goto reply;
-    }
-    if (!osdmap.pg_exists(pgid)) {
-      ss << "pg " << pgid << " does not exist";
-      err = -ENOENT;
       goto reply;
     }
     if (pending_inc.new_pg_upmap_items.count(pgid) ||
@@ -7867,9 +8101,10 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       err = -EINVAL;
       goto reply;
     }
-    if (osdmap.require_min_compat_client.length() &&
-	osdmap.require_min_compat_client < "firefly") {
-      ss << "require_min_compat_client " << osdmap.require_min_compat_client
+    if (osdmap.require_min_compat_client > 0 &&
+	osdmap.require_min_compat_client < CEPH_RELEASE_FIREFLY) {
+      ss << "require_min_compat_client "
+	 << ceph_release_name(osdmap.require_min_compat_client)
 	 << " < firefly, which is required for primary-affinity";
       err = -EPERM;
       goto reply;

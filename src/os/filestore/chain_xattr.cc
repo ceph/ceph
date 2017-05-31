@@ -2,28 +2,16 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "chain_xattr.h"
-
-#include "include/int_types.h"
-
-#include <unistd.h>
-#include <stdlib.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <fcntl.h>
-#include <sys/file.h>
-#include <errno.h>
-#include <dirent.h>
-#include <sys/ioctl.h>
-#include <string.h>
-#include <stdio.h>
-#include "include/assert.h"
+#include <errno.h>           // for ERANGE, ENODATA, ENOMEM
+#include <stdio.h>           // for size_t, snprintf
+#include <stdlib.h>          // for free, malloc
+#include <string.h>          // for strcpy, strlen
+#include "include/assert.h"  // for assert
+#include "include/buffer.h"
 
 #if defined(__linux__)
 #include <linux/fs.h>
 #endif
-
-#include "common/xattr.h"
-#include "include/compat.h"
 
 /*
  * chaining xattrs

@@ -20,9 +20,6 @@
 #include "common/ceph_time.h"
 #include "rgw_formats.h"
 
-
-using namespace std;
-
 // define as static when RGWBucket implementation compete
 extern void rgw_get_buckets_obj(const rgw_user& user_id, string& buckets_obj_id);
 

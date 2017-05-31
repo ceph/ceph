@@ -976,11 +976,11 @@ public:
     epoch_t oldest_map) {
     epoch_t start = MAX(
       info.history.last_epoch_clean ? info.history.last_epoch_clean :
-       info.history.epoch_created,
+       info.history.epoch_pool_created,
       oldest_map);
     epoch_t end = MAX(
       info.history.same_interval_since,
-      info.history.epoch_created);
+      info.history.epoch_pool_created);
     return make_pair(start, end);
   }
   void check_past_interval_bounds() const;
@@ -1080,7 +1080,6 @@ public:
     const vector<int> &up,
     pg_shard_t up_primary,
     const map<pg_shard_t, pg_info_t> &all_info,
-    bool compat_mode,
     bool restrict_to_up_acting,
     vector<int> *want,
     set<pg_shard_t> *backfill,
@@ -1095,7 +1094,6 @@ public:
     const vector<int> &up,
     pg_shard_t up_primary,
     const map<pg_shard_t, pg_info_t> &all_info,
-    bool compat_mode,
     bool restrict_to_up_acting,
     vector<int> *want,
     set<pg_shard_t> *backfill,

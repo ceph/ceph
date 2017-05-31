@@ -233,7 +233,6 @@ OPTION(ms_async_set_affinity, OPT_BOOL, true)
 // If ms_async_affinity_cores is empty, all threads will be bind to current running
 // core
 OPTION(ms_async_affinity_cores, OPT_STR, "")
-OPTION(ms_async_send_inline, OPT_BOOL, false)
 OPTION(ms_async_rdma_device_name, OPT_STR, "")
 OPTION(ms_async_rdma_enable_hugepage, OPT_BOOL, false)
 OPTION(ms_async_rdma_buffer_size, OPT_INT, 128 << 10)
@@ -337,8 +336,6 @@ OPTION(mon_max_log_epochs, OPT_INT, 500)
 OPTION(mon_max_mdsmap_epochs, OPT_INT, 500)
 OPTION(mon_max_osd, OPT_INT, 10000)
 OPTION(mon_probe_timeout, OPT_DOUBLE, 2.0)
-OPTION(mon_slurp_timeout, OPT_DOUBLE, 10.0)
-OPTION(mon_slurp_bytes, OPT_INT, 256*1024)    // limit size of slurp messages
 OPTION(mon_client_bytes, OPT_U64, 100ul << 20)  // client msg data allowed in memory (in bytes)
 OPTION(mon_mgr_proxy_client_bytes_ratio, OPT_FLOAT, .3) // ratio of mon_client_bytes that can be consumed by proxied mgr commands before we error out to client
 OPTION(mon_daemon_bytes, OPT_U64, 400ul << 20)  // mds, osd message memory cap (in bytes)
@@ -365,9 +362,6 @@ OPTION(mon_config_key_max_entry_size, OPT_INT, 4096) // max num bytes per config
 OPTION(mon_sync_timeout, OPT_DOUBLE, 60.0)
 OPTION(mon_sync_max_payload_size, OPT_U32, 1048576) // max size for a sync chunk payload (say, 1MB)
 OPTION(mon_sync_debug, OPT_BOOL, false) // enable sync-specific debug
-OPTION(mon_sync_debug_leader, OPT_INT, -1) // monitor to be used as the sync leader
-OPTION(mon_sync_debug_provider, OPT_INT, -1) // monitor to be used as the sync provider
-OPTION(mon_sync_debug_provider_fallback, OPT_INT, -1) // monitor to be used as fallback if sync provider fails
 OPTION(mon_inject_sync_get_chunk_delay, OPT_DOUBLE, 0)  // inject N second delay on each get_chunk request
 OPTION(mon_osd_min_down_reporters, OPT_INT, 2)   // number of OSDs from different subtrees who need to report a down OSD for it to count
 OPTION(mon_osd_reporter_subtree_level , OPT_STR, "host")   // in which level of parent bucket the reporters are counted
@@ -383,6 +377,7 @@ OPTION(mon_debug_dump_transactions, OPT_BOOL, false)
 OPTION(mon_debug_dump_json, OPT_BOOL, false)
 OPTION(mon_debug_dump_location, OPT_STR, "/var/log/ceph/$cluster-$name.tdump")
 OPTION(mon_debug_no_require_luminous, OPT_BOOL, false)
+OPTION(mon_debug_no_require_bluestore_for_ec_overwrites, OPT_BOOL, false)
 OPTION(mon_inject_transaction_delay_max, OPT_DOUBLE, 10.0)      // seconds
 OPTION(mon_inject_transaction_delay_probability, OPT_DOUBLE, 0) // range [0, 1]
 
@@ -515,7 +510,11 @@ OPTION(mds_beacon_interval, OPT_FLOAT, 4)
 OPTION(mds_beacon_grace, OPT_FLOAT, 15)
 OPTION(mds_enforce_unique_name, OPT_BOOL, true)
 OPTION(mds_blacklist_interval, OPT_FLOAT, 24.0*60.0)  // how long to blacklist failed nodes
+
 OPTION(mds_session_timeout, OPT_FLOAT, 60)    // cap bits and leases time out if client idle
+OPTION(mds_session_blacklist_on_timeout, OPT_BOOL, true)    // whether to blacklist clients whose sessions are dropped due to timeout
+OPTION(mds_session_blacklist_on_evict, OPT_BOOL, true)  // whether to blacklist clients whose sessions are dropped via admin commands
+
 OPTION(mds_sessionmap_keys_per_op, OPT_U32, 1024)    // how many sessions should I try to load/store in a single OMAP operation?
 OPTION(mds_revoke_cap_timeout, OPT_FLOAT, 60)    // detect clients which aren't revoking caps
 OPTION(mds_recall_state_timeout, OPT_FLOAT, 60)    // detect clients which aren't trimming caps
@@ -628,6 +627,9 @@ OPTION(mds_max_scrub_ops_in_progress, OPT_INT, 5) // the number of simultaneous 
 // Maximum number of damaged frags/dentries before whole MDS rank goes damaged
 OPTION(mds_damage_table_max_entries, OPT_INT, 10000)
 
+// Maximum increment for client writable range, counted by number of objects
+OPTION(mds_client_writeable_range_max_inc_objs, OPT_U32, 1024)
+
 // verify backend can support configured max object name length
 OPTION(osd_check_max_object_name_len_on_startup, OPT_BOOL, true)
 
@@ -736,10 +738,10 @@ OPTION(osd_tier_default_cache_hit_set_grade_decay_rate, OPT_INT, 20)
 OPTION(osd_tier_default_cache_hit_set_search_last_n, OPT_INT, 1)
 
 OPTION(osd_map_dedup, OPT_BOOL, true)
-OPTION(osd_map_max_advance, OPT_INT, 150) // make this < cache_size!
-OPTION(osd_map_cache_size, OPT_INT, 200)
-OPTION(osd_map_message_max, OPT_INT, 100)  // max maps per MOSDMap message
-OPTION(osd_map_share_max_epochs, OPT_INT, 100)  // cap on # of inc maps we send to peers, clients
+OPTION(osd_map_max_advance, OPT_INT, 40) // make this < cache_size!
+OPTION(osd_map_cache_size, OPT_INT, 50)
+OPTION(osd_map_message_max, OPT_INT, 40)  // max maps per MOSDMap message
+OPTION(osd_map_share_max_epochs, OPT_INT, 40)  // cap on # of inc maps we send to peers, clients
 OPTION(osd_inject_bad_map_crc_probability, OPT_FLOAT, 0)
 OPTION(osd_inject_failure_on_pg_removal, OPT_BOOL, false)
 // shutdown the OSD if stuatus flipping more than max_markdown_count times in recent max_markdown_period seconds
@@ -879,7 +881,7 @@ OPTION(osd_default_notify_timeout, OPT_U32, 30) // default notify timeout in sec
 OPTION(osd_kill_backfill_at, OPT_INT, 0)
 
 // Bounds how infrequently a new map epoch will be persisted for a pg
-OPTION(osd_pg_epoch_persisted_max_stale, OPT_U32, 150) // make this < map_cache_size!
+OPTION(osd_pg_epoch_persisted_max_stale, OPT_U32, 40) // make this < map_cache_size!
 
 OPTION(osd_min_pg_log_entries, OPT_U32, 3000)  // number of entries to keep in the pg log when trimming it
 OPTION(osd_max_pg_log_entries, OPT_U32, 10000) // max entries, say when degraded, before we trim
@@ -909,7 +911,6 @@ OPTION(osd_debug_reject_backfill_probability, OPT_DOUBLE, 0)
 OPTION(osd_debug_inject_copyfrom_error, OPT_BOOL, false)  // inject failure during copyfrom completion
 OPTION(osd_debug_misdirected_ops, OPT_BOOL, false)
 OPTION(osd_debug_skip_full_check_in_recovery, OPT_BOOL, false)
-OPTION(osd_enxio_on_misdirected_op, OPT_BOOL, false)
 OPTION(osd_debug_verify_cached_snaps, OPT_BOOL, false)
 OPTION(osd_enable_op_tracker, OPT_BOOL, true) // enable/disable OSD op tracking
 OPTION(osd_num_op_tracker_shard, OPT_U32, 32) // The number of shards for holding the ops
@@ -923,6 +924,7 @@ OPTION(osd_fast_fail_on_connection_refused, OPT_BOOL, true) // immediately mark 
 
 OPTION(osd_pg_object_context_cache_count, OPT_INT, 64)
 OPTION(osd_tracing, OPT_BOOL, false) // true if LTTng-UST tracepoints should be enabled
+OPTION(osd_function_tracing, OPT_BOOL, false) // true if function instrumentation should use LTTng
 
 OPTION(osd_fast_info, OPT_BOOL, true) // use fast info attr, if we can
 
@@ -1002,6 +1004,7 @@ OPTION(osd_recovery_op_warn_multiple, OPT_U32, 16)
 
 // Max time to wait between notifying mon of shutdown and shutting down
 OPTION(osd_mon_shutdown_timeout, OPT_DOUBLE, 5)
+OPTION(osd_shutdown_pgref_assert, OPT_BOOL, false) // crash if the OSD has stray PG refs on shutdown
 
 OPTION(osd_max_object_size, OPT_U64, 100*1024L*1024L*1024L) // OSD's maximum object size
 OPTION(osd_max_object_name_len, OPT_U32, 2048) // max rados object name len
@@ -1014,9 +1017,6 @@ OPTION(osd_max_omap_bytes_per_request, OPT_U64, 1<<30)
 
 OPTION(osd_objectstore, OPT_STR, "filestore")  // ObjectStore backend type
 OPTION(osd_objectstore_tracing, OPT_BOOL, false) // true if LTTng-UST tracepoints should be enabled
-// Override maintaining compatibility with older OSDs
-// Set to true for testing.  Users should NOT set this.
-OPTION(osd_debug_override_acting_compat, OPT_BOOL, false)
 OPTION(osd_objectstore_fuse, OPT_BOOL, false)
 
 OPTION(osd_bench_small_size_max_iops, OPT_U32, 100) // 100 IOPS
@@ -1184,6 +1184,7 @@ OPTION(bluestore_debug_prefragment_max, OPT_INT, 1048576)
 OPTION(bluestore_debug_inject_read_err, OPT_BOOL, false)
 OPTION(bluestore_debug_randomize_serial_transaction, OPT_INT, 0)
 OPTION(bluestore_debug_omit_block_device_write, OPT_BOOL, false)
+OPTION(bluestore_debug_fsck_abort, OPT_BOOL, false)
 OPTION(bluestore_shard_finishers, OPT_BOOL, false)
 
 OPTION(kstore_max_ops, OPT_U64, 512)
@@ -1384,6 +1385,7 @@ OPTION(rbd_request_timed_out_seconds, OPT_INT, 30) // number of seconds before m
 OPTION(rbd_skip_partial_discard, OPT_BOOL, false) // when trying to discard a range inside an object, set to true to skip zeroing the range.
 OPTION(rbd_enable_alloc_hint, OPT_BOOL, true) // when writing a object, it will issue a hint to osd backend to indicate the expected size object need
 OPTION(rbd_tracing, OPT_BOOL, false) // true if LTTng-UST tracepoints should be enabled
+OPTION(rbd_blkin_trace_all, OPT_BOOL, false) // create a blkin trace for all RBD requests
 OPTION(rbd_validate_pool, OPT_BOOL, true) // true if empty pools should be validated for RBD compatibility
 OPTION(rbd_validate_names, OPT_BOOL, true) // true if image specs should be validated
 OPTION(rbd_auto_exclusive_lock_until_manual_request, OPT_BOOL, true) // whether to automatically acquire/release exclusive lock until it is explicitly requested, i.e. before we know the user of librbd is properly using the lock API

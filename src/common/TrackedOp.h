@@ -13,17 +13,9 @@
 
 #ifndef TRACKEDREQUEST_H_
 #define TRACKEDREQUEST_H_
-#include <sstream>
-#include <stdint.h>
-#include <boost/intrusive/list.hpp>
-#include <atomic>
 
-#include "include/utime.h"
-#include "common/Mutex.h"
 #include "common/histogram.h"
-#include "common/zipkin_trace.h"
 #include "msg/Message.h"
-#include "include/memory.h"
 #include "common/RWLock.h"
 
 #define OPTRACKER_PREALLOC_EVENTS 20

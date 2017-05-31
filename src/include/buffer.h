@@ -310,7 +310,7 @@ namespace buffer CEPH_BUFFER_API {
     bool can_zero_copy() const;
     int zero_copy_to_fd(int fd, int64_t *offset) const;
 
-    unsigned wasted();
+    unsigned wasted() const;
 
     int cmp(const ptr& o) const;
     bool is_zero() const;
@@ -688,6 +688,10 @@ namespace buffer CEPH_BUFFER_API {
     const ptr& front() const { return _buffers.front(); }
     const ptr& back() const { return _buffers.back(); }
 
+    size_t get_append_buffer_unused_tail_length() const {
+      return append_buffer.unused_tail_length();
+    }
+
     unsigned get_memcopy_count() const {return _memcopy_count; }
     const std::list<ptr>& buffers() const { return _buffers; }
     void swap(list& other);
@@ -883,6 +887,13 @@ namespace buffer CEPH_BUFFER_API {
     }
     uint32_t crc32c(uint32_t crc) const;
     void invalidate_crc();
+
+    // These functions return a bufferlist with a pointer to a single
+    // static buffer. They /must/ not outlive the memory they
+    // reference.
+    static list static_from_mem(char* c, size_t l);
+    static list static_from_cstring(char* c);
+    static list static_from_string(std::string& s);
   };
 
   /*

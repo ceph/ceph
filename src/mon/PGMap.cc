@@ -674,24 +674,6 @@ void PGMap::decode(bufferlist::iterator &bl)
   calc_stats();
 }
 
-void PGMap::dirty_all(Incremental& inc)
-{
-  inc.osdmap_epoch = last_osdmap_epoch;
-  inc.pg_scan = last_pg_scan;
-  inc.full_ratio = full_ratio;
-  inc.nearfull_ratio = nearfull_ratio;
-
-  for (ceph::unordered_map<pg_t,pg_stat_t>::const_iterator p = pg_stat.begin(); p != pg_stat.end(); ++p) {
-    inc.pg_stat_updates[p->first] = p->second;
-  }
-  for (ceph::unordered_map<int32_t, osd_stat_t>::const_iterator p = osd_stat.begin(); p != osd_stat.end(); ++p) {
-    assert(osd_epochs.count(p->first));
-    inc.update_stat(p->first,
-                    inc.get_osd_epochs().find(p->first)->second,
-                    p->second);
-  }
-}
-
 void PGMap::dump(Formatter *f) const
 {
   dump_basic(f);
@@ -1542,7 +1524,11 @@ void PGMap::update_delta(CephContext *cct,
   delta_t -= *last_ts;  // take the last timestamp we saw
   *last_ts = ts;        // @p ts becomes the last timestamp we saw
 
-  // calculate a delta, and average over the last 2 deltas.
+  // adjust delta_t, quick start if there is no update in a long period
+  delta_t = std::min(delta_t,
+                    utime_t(2 * (cct ? cct->_conf->mon_delta_reset_interval : 10), 0));
+
+  // calculate a delta, and average over the last 6 deltas by default.
   /* start by taking a copy of our current @p result_pool_sum, and by
    * taking out the stats from @p old_pool_sum.  This generates a stats
    * delta.  Stash this stats delta in @p delta_avg_list, along with the
@@ -1919,7 +1905,8 @@ int64_t PGMap::get_rule_avail(const OSDMap& osdmap, int ruleno) const
   }
 
   float fratio;
-  if (osdmap.test_flag(CEPH_OSDMAP_REQUIRE_LUMINOUS) && osdmap.get_full_ratio() > 0) {
+  if (osdmap.require_osd_release >= CEPH_RELEASE_LUMINOUS &&
+      osdmap.get_full_ratio() > 0) {
     fratio = osdmap.get_full_ratio();
   } else if (full_ratio > 0) {
     fratio = full_ratio;

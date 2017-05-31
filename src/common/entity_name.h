@@ -15,6 +15,8 @@
 #ifndef CEPH_COMMON_ENTITY_NAME_H
 #define CEPH_COMMON_ENTITY_NAME_H
 
+#include <ifaddrs.h>
+#include <netinet/in.h>
 #include <iosfwd>
 #include <stdint.h>
 #include <string>

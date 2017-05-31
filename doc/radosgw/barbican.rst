@@ -67,7 +67,8 @@ In the response, ``d1e7ef3b-f841-4b7c-90b2-b7d90ca2d723`` is the key id that
 can be used in any `SSE-KMS`_ request.
 
 This newly created key is not accessible by user ``rgwcrypt-user``. This
-privilege must be added with an ACL.
+privilege must be added with an ACL. See `How to Set/Replace ACL`_ for more
+details.
 
 Example request (assuming that the Keystone id of ``rgwcrypt-user`` is
 ``906aa90bd8a946c89cdff80d0869460f``)::

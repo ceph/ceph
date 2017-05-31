@@ -1342,15 +1342,35 @@ bool md_config_t::expand_meta(std::string &origval,
 }
 
 void md_config_t::diff(
+  const md_config_t *other,
+  map<string, pair<string, string> > *diff,
+  set<string> *unknown) 
+{
+  diff_helper(other, diff, unknown);
+}
+void md_config_t::diff(
+  const md_config_t *other,
+  map<string, pair<string, string> > *diff,
+  set<string> *unknown, const string& setting) 
+{
+  diff_helper(other, diff, unknown, setting);
+}
+
+void md_config_t::diff_helper(
     const md_config_t *other,
     map<string,pair<string,string> > *diff,
-    set<string> *unknown)
+    set<string> *unknown, const string& setting)
 {
   Mutex::Locker l(lock);
 
   char local_buf[4096];
   char other_buf[4096];
-  for (auto& opt: *config_options) {
+  for (auto& opt : *config_options) {
+    if (!setting.empty()) {
+      if (setting != opt.name) {
+        continue;
+      }
+    }
     memset(local_buf, 0, sizeof(local_buf));
     memset(other_buf, 0, sizeof(other_buf));
 
@@ -1370,6 +1390,10 @@ void md_config_t::diff(
 
     if (strcmp(local_val, other_val))
       diff->insert(make_pair(opt.name, make_pair(local_val, other_val)));
+    else if (!setting.empty()) {
+        diff->insert(make_pair(opt.name, make_pair(local_val, other_val)));
+        break;
+    }
   }
 }
 

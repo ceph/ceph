@@ -18,9 +18,6 @@
 #include "common/Formatter.h"
 #include "common/OpQueue.h"
 
-#include <map>
-#include <list>
-
 /**
  * Manages queue for normal and strict priority items
  *

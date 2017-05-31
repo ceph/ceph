@@ -1,4 +1,3 @@
-etc/bash_completion.d/ceph
 etc/init.d/ceph
 usr/sbin/ceph-create-keys
 usr/bin/ceph-detect-init

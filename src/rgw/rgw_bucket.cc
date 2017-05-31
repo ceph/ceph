@@ -1379,6 +1379,9 @@ static int bucket_stats(RGWRados *store, const std::string& tenant_name, std::st
 
   formatter->open_object_section("stats");
   formatter->dump_string("bucket", bucket.name);
+  formatter->dump_string("zonegroup", bucket_info.zonegroup);
+  formatter->dump_string("placement_rule", bucket_info.placement_rule);
+  ::encode_json("explicit_placement", bucket.explicit_placement, formatter);
   formatter->dump_string("id", bucket.bucket_id);
   formatter->dump_string("marker", bucket.marker);
   formatter->dump_stream("index_type") << bucket_info.index_type;
@@ -1467,7 +1470,8 @@ int RGWBucketAdminOp::limit_check(RGWRados *store,
 	}
 
 	num_shards = info.num_shards;
-	uint64_t objs_per_shard = num_objects / num_shards;
+	uint64_t objs_per_shard =
+	  (num_shards) ? num_objects/num_shards : num_objects;
 	{
 	  bool warn = false;
 	  stringstream ss;
@@ -1844,6 +1848,8 @@ int RGWDataChangesLog::list_entries(int shard, const real_time& start_time, cons
 				    const string& marker,
 				    string *out_marker,
 				    bool *truncated) {
+  if (shard >= num_shards)
+    return -EINVAL;
 
   list<cls_log_entry> log_entries;
 

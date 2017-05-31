@@ -65,14 +65,13 @@ void dump_bucket(struct req_state *s, RGWBucketEnt& obj)
   s->formatter->close_section();
 }
 
-void rgw_get_errno_s3(rgw_http_errors *e , int err_no)
+void rgw_get_errno_s3(rgw_http_error *e , int err_no)
 {
-  const struct rgw_http_errors *r;
-  r = search_err(err_no, RGW_HTTP_ERRORS, ARRAY_LEN(RGW_HTTP_ERRORS));
+  rgw_http_errors::const_iterator r = rgw_http_s3_errors.find(err_no);
 
-  if (r) {
-    e->http_ret = r->http_ret;
-    e->s3_code = r->s3_code;
+  if (r != rgw_http_s3_errors.end()) {
+    e->http_ret = r->second.first;
+    e->s3_code = r->second.second;
   } else {
     e->http_ret = 500;
     e->s3_code = "UnknownError";
@@ -173,7 +172,7 @@ int RGWGetObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t bl_ofs,
     dump_errno(s, custom_http_ret);
   } else {
     set_req_state_err(s, (partial_content && !op_ret) ? STATUS_PARTIAL_CONTENT
-          	  : op_ret);
+                  : op_ret);
     dump_errno(s);
   }
 
@@ -276,6 +275,9 @@ int RGWGetObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t bl_ofs,
         if (!content_type) {
           content_type = iter->second.c_str();
         }
+      } else if (strcmp(name, RGW_ATTR_SLO_UINDICATOR) == 0) {
+        // this attr has an extra length prefix from ::encode() in prior versions
+        dump_header(s, "X-Object-Meta-Static-Large-Object", "True");
       } else if (strncmp(name, RGW_ATTR_META_PREFIX,
 			 sizeof(RGW_ATTR_META_PREFIX)-1) == 0) {
         /* User custom metadata. */
@@ -1406,7 +1408,6 @@ static inline int get_obj_attrs(RGWRados *store, struct req_state *s, rgw_obj& o
   RGWRados::Object::Read read_op(&op_target);
 
   read_op.params.attrs = &attrs;
-  read_op.params.perr = &s->err;
 
   return read_op.prepare();
 }
@@ -2654,7 +2655,7 @@ void RGWDeleteMultiObj_ObjStore_S3::send_partial_response(rgw_obj_key& key,
       }
       s->formatter->close_section();
     } else if (op_ret < 0) {
-      struct rgw_http_errors r;
+      struct rgw_http_error r;
       int err_no;
 
       s->formatter->open_object_section("Error");
@@ -2789,6 +2790,8 @@ RGWOp *RGWHandler_REST_Bucket_S3::op_get()
     return new RGWListBucketMultiparts_ObjStore_S3;
   } else if(is_lc_op()) {
     return new RGWGetLC_ObjStore_S3;
+  } else if(is_policy_op()) {
+    return new RGWGetBucketPolicy;
   }
   return get_obj_op(true);
 }
@@ -2823,6 +2826,8 @@ RGWOp *RGWHandler_REST_Bucket_S3::op_put()
     return new RGWSetRequestPayment_ObjStore_S3;
   } else if(is_lc_op()) {
     return new RGWPutLC_ObjStore_S3;
+  } else if(is_policy_op()) {
+    return new RGWPutBucketPolicy;
   }
   return new RGWCreateBucket_ObjStore_S3;
 }
@@ -2833,6 +2838,8 @@ RGWOp *RGWHandler_REST_Bucket_S3::op_delete()
     return new RGWDeleteCORS_ObjStore_S3;
   } else if(is_lc_op()) {
     return new RGWDeleteLC_ObjStore_S3;
+  } else if(is_policy_op()) {
+    return new RGWDeleteBucketPolicy;
   }
 
   if (s->info.args.sub_resource_exists("website")) {
@@ -3652,7 +3659,8 @@ int RGW_Auth_S3::authorize_v4(RGWRados *store, struct req_state *s, bool force_b
         case RGW_OP_DELETE_MULTI_OBJ:
         case RGW_OP_ADMIN_SET_METADATA:
         case RGW_OP_SET_BUCKET_WEBSITE:
-          break;
+        case RGW_OP_PUT_BUCKET_POLICY:
+	  break;
         default:
           dout(10) << "ERROR: AWS4 completion for this operation NOT IMPLEMENTED" << dendl;
           return -ERR_NOT_IMPLEMENTED;
@@ -3969,11 +3977,11 @@ int RGWHandler_REST_S3Website::serve_errordoc(int http_ret, const string& errord
 int RGWHandler_REST_S3Website::error_handler(int err_no,
 					    string* error_content) {
   int new_err_no = -1;
-  const struct rgw_http_errors* r;
+  rgw_http_errors::const_iterator r = rgw_http_s3_errors.find(err_no > 0 ? err_no : -err_no);
   int http_error_code = -1;
-  r = search_err(err_no > 0 ? err_no : -err_no, RGW_HTTP_ERRORS, ARRAY_LEN(RGW_HTTP_ERRORS));
-  if (r) {
-    http_error_code = r->http_ret;
+
+  if (r != rgw_http_s3_errors.end()) {
+    http_error_code = r->second.first;
   }
   ldout(s->cct, 10) << "RGWHandler_REST_S3Website::error_handler err_no=" << err_no << " http_ret=" << http_error_code << dendl;
 

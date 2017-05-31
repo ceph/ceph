@@ -17,19 +17,9 @@
 #ifndef CEPH_COMMON_PERF_COUNTERS_H
 #define CEPH_COMMON_PERF_COUNTERS_H
 
-#include "common/config_obs.h"
 #include "common/perf_histogram.h"
-#include "common/Mutex.h"
 #include "include/utime.h"
-
-#include "common/config_obs.h"
 #include "common/Mutex.h"
-#include "common/ceph_time.h"
-
-#include <stdint.h>
-#include <string>
-#include <vector>
-#include <memory>
 
 class CephContext;
 class PerfCountersBuilder;
@@ -37,11 +27,11 @@ class PerfCountersBuilder;
 enum perfcounter_type_d : uint8_t
 {
   PERFCOUNTER_NONE = 0,
-  PERFCOUNTER_TIME = 0x1,
-  PERFCOUNTER_U64 = 0x2,
-  PERFCOUNTER_LONGRUNAVG = 0x4,
-  PERFCOUNTER_COUNTER = 0x8,
-  PERFCOUNTER_HISTOGRAM = 0x10,
+  PERFCOUNTER_TIME = 0x1,       // float (measuring seconds)
+  PERFCOUNTER_U64 = 0x2,        // integer (note: either TIME or U64 *must* be set)
+  PERFCOUNTER_LONGRUNAVG = 0x4, // paired counter + sum (time)
+  PERFCOUNTER_COUNTER = 0x8,    // counter (vs guage)
+  PERFCOUNTER_HISTOGRAM = 0x10, // histogram (vector) of values
 };
 
 
@@ -313,12 +303,14 @@ public:
 		    const char *description=NULL,
 		    const char *nick = NULL,
 		    int prio=0);
-  void add_histogram(int key, const char* name,
-		     PerfHistogramCommon::axis_config_d x_axis_config,
-		     PerfHistogramCommon::axis_config_d y_axis_config,
-		     const char *description=NULL,
-		     const char* nick = NULL,
-		     int prio=0);
+  void add_u64_counter_histogram(
+    int key, const char* name,
+    PerfHistogramCommon::axis_config_d x_axis_config,
+    PerfHistogramCommon::axis_config_d y_axis_config,
+    const char *description=NULL,
+    const char* nick = NULL,
+    int prio=0);
+
   PerfCounters* create_perf_counters();
 private:
   PerfCountersBuilder(const PerfCountersBuilder &rhs);

@@ -154,6 +154,9 @@ public:
       .WillOnce(Invoke([r](bool open_parent, Context *on_ready) {
 		  on_ready->complete(r);
                 }));
+    if (r < 0) {
+      EXPECT_CALL(mock_image_ctx, destroy());
+    }
   }
 
   void expect_state_close(MockImageCtx &mock_image_ctx) {
@@ -161,6 +164,7 @@ public:
       .WillOnce(Invoke([](Context *on_ready) {
                   on_ready->complete(0);
                 }));
+    EXPECT_CALL(mock_image_ctx, destroy());
   }
 
   void expect_wq_queue(ContextWQ &wq, int r) {

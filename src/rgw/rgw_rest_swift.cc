@@ -956,7 +956,7 @@ void RGWPutMetadataObject_ObjStore_SWIFT::send_response()
     op_ret = STATUS_ACCEPTED;
   }
   set_req_state_err(s, op_ret);
-  if (!s->err.is_err()) {
+  if (!s->is_err()) {
     dump_content_length(s, 0);
   }
   dump_errno(s);
@@ -982,7 +982,6 @@ static void bulkdelete_respond(const unsigned num_deleted,
         reason = fail_desc.err;
       }
     }
-
     rgw_err err;
     set_req_state_err(err, reason, prot_flags);
     dump_errno(err, resp_status);
@@ -1106,6 +1105,9 @@ static void dump_object_metadata(struct req_state * const s,
 
     if (aiter != std::end(rgw_to_http_attrs)) {
       response_attrs[aiter->second] = kv.second.c_str();
+    } else if (strcmp(name, RGW_ATTR_SLO_UINDICATOR) == 0) {
+      // this attr has an extra length prefix from ::encode() in prior versions
+      dump_header(s, "X-Object-Meta-Static-Large-Object", "True");
     } else if (strncmp(name, RGW_ATTR_META_PREFIX,
 		       sizeof(RGW_ATTR_META_PREFIX)-1) == 0) {
       name += sizeof(RGW_ATTR_META_PREFIX) - 1;
@@ -1296,7 +1298,7 @@ int RGWGetObj_ObjStore_SWIFT::send_response_data(bufferlist& bl,
 		    : op_ret);
     dump_errno(s);
 
-    if (s->err.is_err()) {
+    if (s->is_err()) {
       end_header(s, NULL);
       return 0;
     }
@@ -1306,7 +1308,7 @@ int RGWGetObj_ObjStore_SWIFT::send_response_data(bufferlist& bl,
     dump_range(s, ofs, end, s->obj_size);
   }
 
-  if (s->err.is_err()) {
+  if (s->is_err()) {
     end_header(s, NULL);
     return 0;
   }
@@ -1977,7 +1979,7 @@ void RGWFormPost::send_response()
   }
 
   set_req_state_err(s, op_ret);
-  s->err.s3_code = err_msg;
+  s->err.err_code = err_msg;
   dump_errno(s);
   if (! redirect.empty()) {
     dump_redirect(s, redirect);
@@ -2073,9 +2075,8 @@ int RGWSwiftWebsiteHandler::error_handler(const int err_no,
   const auto& ws_conf = s->bucket_info.website_conf;
 
   if (can_be_website_req() && ! ws_conf.error_doc.empty()) {
-    struct rgw_err err;
-    set_req_state_err(err, err_no, s->prot_flags);
-    return serve_errordoc(err.http_ret, ws_conf.error_doc);
+    set_req_state_err(s, err_no);
+    return serve_errordoc(s->err.http_ret, ws_conf.error_doc);
   }
 
   /* Let's go to the default, no-op handler. */

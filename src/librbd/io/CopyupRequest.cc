@@ -35,9 +35,9 @@ class UpdateObjectMap : public C_AsyncObjectThrottle<> {
 public:
   UpdateObjectMap(AsyncObjectThrottle<> &throttle, ImageCtx *image_ctx,
                   uint64_t object_no, const std::vector<uint64_t> *snap_ids,
-                  size_t snap_id_idx)
-    : C_AsyncObjectThrottle(throttle, *image_ctx),
-      m_object_no(object_no), m_snap_ids(*snap_ids), m_snap_id_idx(snap_id_idx)
+                  const ZTracer::Trace &trace, size_t snap_id_idx)
+    : C_AsyncObjectThrottle(throttle, *image_ctx), m_object_no(object_no),
+      m_snap_ids(*snap_ids), m_trace(trace), m_snap_id_idx(snap_id_idx)
   {
   }
 
@@ -49,7 +49,7 @@ public:
       assert(m_image_ctx.exclusive_lock->is_lock_owner());
       assert(m_image_ctx.object_map != nullptr);
       bool sent = m_image_ctx.object_map->aio_update<Context>(
-        CEPH_NOSNAP, m_object_no, OBJECT_EXISTS, {}, this);
+        CEPH_NOSNAP, m_object_no, OBJECT_EXISTS, {}, m_trace, this);
       return (sent ? 0 : 1);
     }
 
@@ -66,7 +66,7 @@ public:
     }
 
     bool sent = m_image_ctx.object_map->aio_update<Context>(
-      snap_id, m_object_no, state, {}, this);
+      snap_id, m_object_no, state, {}, m_trace, this);
     assert(sent);
     return 0;
   }
@@ -74,6 +74,7 @@ public:
 private:
   uint64_t m_object_no;
   const std::vector<uint64_t> &m_snap_ids;
+  const ZTracer::Trace &m_trace;
   size_t m_snap_id_idx;
 };
 
@@ -81,9 +82,12 @@ private:
 
 
 CopyupRequest::CopyupRequest(ImageCtx *ictx, const std::string &oid,
-                             uint64_t objectno, Extents &&image_extents)
+                             uint64_t objectno, Extents &&image_extents,
+			     const ZTracer::Trace &parent_trace)
   : m_ictx(ictx), m_oid(oid), m_object_no(objectno),
-    m_image_extents(image_extents), m_state(STATE_READ_FROM_PARENT)
+    m_image_extents(image_extents),
+    m_trace(util::create_trace(*m_ictx, "copy-up", parent_trace)),
+    m_state(STATE_READ_FROM_PARENT)
 {
   m_async_op.start_op(*m_ictx);
 }
@@ -151,7 +155,9 @@ bool CopyupRequest::send_copyup() {
     r = rados.ioctx_create2(m_ictx->data_ctx.get_id(), m_data_ctx);
     assert(r == 0);
 
-    r = m_data_ctx.aio_operate(m_oid, comp, &copyup_op, 0, snaps);
+    r = m_data_ctx.aio_operate(
+      m_oid, comp, &copyup_op, 0, snaps,
+      (m_trace.valid() ? m_trace.get_info() : nullptr));
     assert(r == 0);
     comp->release();
   }
@@ -167,13 +173,16 @@ bool CopyupRequest::send_copyup() {
     for (size_t i=0; i<m_pending_requests.size(); ++i) {
       ObjectRequest<> *req = m_pending_requests[i];
       ldout(m_ictx->cct, 20) << "add_copyup_ops " << req << dendl;
-      req->add_copyup_ops(&write_op);
+      bool set_hints = (i == 0);
+      req->add_copyup_ops(&write_op, set_hints);
     }
     assert(write_op.size() != 0);
 
     snaps.insert(snaps.end(), snapc.snaps.begin(), snapc.snaps.end());
     librados::AioCompletion *comp = util::create_rados_callback(this);
-    r = m_ictx->data_ctx.aio_operate(m_oid, comp, &write_op);
+    r = m_ictx->data_ctx.aio_operate(
+      m_oid, comp, &write_op, snapc.seq, snaps,
+      (m_trace.valid() ? m_trace.get_info() : nullptr));
     assert(r == 0);
     comp->release();
   }
@@ -203,7 +212,7 @@ void CopyupRequest::send()
                          << ", extents " << m_image_extents
                          << dendl;
   ImageRequest<>::aio_read(m_ictx->parent, comp, std::move(m_image_extents),
-                           ReadResult{&m_copyup_data}, 0);
+                           ReadResult{&m_copyup_data}, 0, m_trace);
 }
 
 void CopyupRequest::complete(int r)
@@ -327,7 +336,8 @@ bool CopyupRequest::send_object_map_head() {
 
       if (may_update && (new_state != current_state) &&
           m_ictx->object_map->aio_update<CopyupRequest>(
-            CEPH_NOSNAP, m_object_no, new_state, current_state, this)) {
+            CEPH_NOSNAP, m_object_no, new_state, current_state, m_trace,
+            this)) {
         return false;
       }
     }
@@ -349,7 +359,7 @@ bool CopyupRequest::send_object_map() {
     RWLock::RLocker owner_locker(m_ictx->owner_lock);
     AsyncObjectThrottle<>::ContextFactory context_factory(
       boost::lambda::bind(boost::lambda::new_ptr<UpdateObjectMap>(),
-      boost::lambda::_1, m_ictx, m_object_no, &m_snap_ids,
+      boost::lambda::_1, m_ictx, m_object_no, &m_snap_ids, m_trace,
       boost::lambda::_2));
     AsyncObjectThrottle<> *throttle = new AsyncObjectThrottle<>(
       NULL, *m_ictx, context_factory, util::create_context_callback(this),

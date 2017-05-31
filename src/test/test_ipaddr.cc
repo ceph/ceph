@@ -4,8 +4,10 @@
 #if defined(__FreeBSD__)
 #include <sys/types.h>
 #include <sys/socket.h>
+#include <netinet/in.h>
 #endif
 #include <arpa/inet.h>
+#include <ifaddrs.h>
 
 static void ipv4(struct sockaddr_in *addr, const char *s) {
   int err;

@@ -346,7 +346,8 @@ Then, download them from a mirror and install them. For example::
 	sudo yum install ditaa-0.9-13.r74.fc21.noarch.rpm
 
 Once you have installed all these packages, build the documentation by following
-the steps given in ``Build the Source``.
+the steps given in `Build the Source`_.
+
 
 Commit the Change
 -----------------

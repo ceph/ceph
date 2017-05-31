@@ -20,7 +20,6 @@
 
 #include <atomic>
 
-using namespace std;
 #define HASH_PRIME 7877
 #define MAX_ID_LEN 255
 static string lc_oid_prefix = "lc";

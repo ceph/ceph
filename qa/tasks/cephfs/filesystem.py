@@ -457,7 +457,14 @@ class Filesystem(MDSCluster):
         self.mon_manager.raw_cluster_cmd('fs', 'new',
                                          self.name, self.metadata_pool_name, data_pool_name)
         # Turn off spurious standby count warnings from modifying max_mds in tests.
-        self.mon_manager.raw_cluster_cmd('fs', 'set', self.name, 'standby_count_wanted', '0')
+        try:
+            self.mon_manager.raw_cluster_cmd('fs', 'set', self.name, 'standby_count_wanted', '0')
+        except CommandFailedError as e:
+            if e.exitstatus == 22:
+                # standby_count_wanted not available prior to luminous (upgrade tests would fail otherwise)
+                pass
+            else:
+                raise
 
         self.getinfo(refresh = True)
 

@@ -15,14 +15,9 @@
 #ifndef CEPH_HEARTBEATMAP_H
 #define CEPH_HEARTBEATMAP_H
 
-#include <pthread.h>
-
-#include <string>
 #include <list>
-#include <time.h>
 
 #include "include/atomic.h"
-
 #include "RWLock.h"
 
 class CephContext;

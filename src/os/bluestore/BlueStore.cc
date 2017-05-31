@@ -17,6 +17,8 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 
+#include "include/cpp-btree/btree_set.h"
+
 #include "BlueStore.h"
 #include "os/kv.h"
 #include "include/compat.h"
@@ -1270,14 +1272,18 @@ int BlueStore::BufferSpace::_discard(Cache* cache, uint32_t offset, uint32_t len
 	if (b->data.length()) {
 	  bufferlist bl;
 	  bl.substr_of(b->data, b->length - tail, tail);
-	  _add_buffer(cache, new Buffer(this, b->state, b->seq, end, bl), 0, b);
+	  Buffer *nb = new Buffer(this, b->state, b->seq, end, bl);
+	  nb->maybe_rebuild();
+	  _add_buffer(cache, nb, 0, b);
 	} else {
-	  _add_buffer(cache, new Buffer(this, b->state, b->seq, end, tail), 0, b);
+	  _add_buffer(cache, new Buffer(this, b->state, b->seq, end, tail),
+		      0, b);
 	}
 	if (!b->is_writing()) {
 	  cache->_adjust_buffer_size(b, front - (int64_t)b->length);
 	}
 	b->truncate(front);
+	b->maybe_rebuild();
 	cache->_audit("discard end 1");
 	break;
       } else {
@@ -1286,6 +1292,7 @@ int BlueStore::BufferSpace::_discard(Cache* cache, uint32_t offset, uint32_t len
 	  cache->_adjust_buffer_size(b, front - (int64_t)b->length);
 	}
 	b->truncate(front);
+	b->maybe_rebuild();
 	++i;
 	continue;
       }
@@ -1300,7 +1307,9 @@ int BlueStore::BufferSpace::_discard(Cache* cache, uint32_t offset, uint32_t len
     if (b->data.length()) {
       bufferlist bl;
       bl.substr_of(b->data, b->length - keep, keep);
-      _add_buffer(cache, new Buffer(this, b->state, b->seq, end, bl), 0, b);
+      Buffer *nb = new Buffer(this, b->state, b->seq, end, bl);
+      nb->maybe_rebuild();
+      _add_buffer(cache, nb, 0, b);
     } else {
       _add_buffer(cache, new Buffer(this, b->state, b->seq, end, keep), 0, b);
     }
@@ -3122,7 +3131,7 @@ BlueStore::OnodeRef BlueStore::Collection::get_onode(
     assert(r >= 0);
     on = new Onode(this, oid, key);
     on->exists = true;
-    bufferptr::iterator p = v.front().begin();
+    bufferptr::iterator p = v.front().begin_deep();
     on->onode.decode(p);
 
     // initialize extent_map
@@ -3281,6 +3290,7 @@ BlueStore::BlueStore(CephContext *cct, const string& path)
 		       cct->_conf->bluestore_throttle_bytes +
 		       cct->_conf->bluestore_throttle_deferred_bytes),
     kv_sync_thread(this),
+    kv_finalize_thread(this),
     mempool_thread(this)
 {
   _init_logger();
@@ -3309,6 +3319,7 @@ BlueStore::BlueStore(CephContext *cct,
 		       cct->_conf->bluestore_throttle_bytes +
 		       cct->_conf->bluestore_throttle_deferred_bytes),
     kv_sync_thread(this),
+    kv_finalize_thread(this),
     min_alloc_size(_min_alloc_size),
     min_alloc_size_order(ctz(_min_alloc_size)),
     mempool_thread(this)
@@ -4242,9 +4253,11 @@ int BlueStore::_open_db(bool create)
       initial = MAX(initial, cct->_conf->bluestore_bluefs_min);
       // align to bluefs's alloc_size
       initial = P2ROUNDUP(initial, cct->_conf->bluefs_alloc_size);
-      initial += cct->_conf->bluefs_alloc_size - SUPER_RESERVED;
-      bluefs->add_block_extent(bluefs_shared_bdev, SUPER_RESERVED, initial);
-      bluefs_extents.insert(SUPER_RESERVED, initial);
+      // put bluefs in the middle of the device in case it is an HDD
+      uint64_t start = P2ALIGN((bdev->get_size() - initial) / 2,
+			       cct->_conf->bluefs_alloc_size);
+      bluefs->add_block_extent(bluefs_shared_bdev, start, initial);
+      bluefs_extents.insert(start, initial);
     }
 
     bfn = path + "/block.wal";
@@ -4878,12 +4891,6 @@ int BlueStore::mkfs()
     }
   }
 
-  // indicate success by writing the 'mkfs_done' file
-  r = write_meta("mkfs_done", "yes");
-  if (r < 0)
-    goto out_close_alloc;
-  dout(10) << __func__ << " success" << dendl;
-
  out_close_alloc:
   _close_alloc();
  out_close_fm:
@@ -4907,8 +4914,16 @@ int BlueStore::mkfs()
       r = -EIO;
     }
   }
+
+  if (r == 0) {
+    // indicate success by writing the 'mkfs_done' file
+    r = write_meta("mkfs_done", "yes");
+  }
+
   if (r < 0) {
     derr << __func__ << " failed, " << cpp_strerror(r) << dendl;
+  } else {
+    dout(0) << __func__ << " success" << dendl;
   }
   return r;
 }
@@ -5006,10 +5021,7 @@ int BlueStore::_mount(bool kv_only)
       goto out_coll;
   }
 
-  for (auto f : finishers) {
-    f->start();
-  }
-  kv_sync_thread.create("bstore_kv_sync");
+  _kv_start();
 
   r = _deferred_replay();
   if (r < 0)
@@ -5023,10 +5035,6 @@ int BlueStore::_mount(bool kv_only)
 
  out_stop:
   _kv_stop();
-  for (auto f : finishers) {
-    f->wait_for_empty();
-    f->stop();
-  }
  out_coll:
   flush_cache();
  out_alloc:
@@ -5056,12 +5064,6 @@ int BlueStore::umount()
 
   dout(20) << __func__ << " stopping kv thread" << dendl;
   _kv_stop();
-  for (auto f : finishers) {
-    dout(20) << __func__ << " draining finisher" << dendl;
-    f->wait_for_empty();
-    dout(20) << __func__ << " stopping finisher" << dendl;
-    f->stop();
-  }
   _reap_collections();
   flush_cache();
   dout(20) << __func__ << " closing" << dendl;
@@ -5144,10 +5146,15 @@ int BlueStore::fsck(bool deep)
 {
   dout(1) << __func__ << (deep ? " (deep)" : " (shallow)") << " start" << dendl;
   int errors = 0;
-  mempool::bluestore_fsck::set<uint64_t> used_nids;
-  mempool::bluestore_fsck::set<uint64_t> used_omap_head;
+
+  typedef btree::btree_set<
+    uint64_t,std::less<uint64_t>,
+    mempool::bluestore_fsck::pool_allocator<uint64_t>> uint64_t_btree_t;
+  uint64_t_btree_t used_nids;
+  uint64_t_btree_t used_omap_head;
+  uint64_t_btree_t used_sbids;
+
   mempool_dynamic_bitset used_blocks;
-  mempool::bluestore_fsck::set<uint64_t> used_sbids;
   KeyValueDB::Iterator it;
   store_statfs_t expected_statfs, actual_statfs;
   struct sb_info_t {
@@ -5209,7 +5216,10 @@ int BlueStore::fsck(bool deep)
 
   mempool_thread.init();
 
+  // we need finishrs and kv_{sync,fainlize}_thread *just* for replay
+  _kv_start();
   r = _deferred_replay();
+  _kv_stop();
   if (r < 0)
     goto out_scan;
 
@@ -5252,6 +5262,9 @@ int BlueStore::fsck(bool deep)
     spg_t pgid;
     mempool::bluestore_fsck::list<string> expecting_shards;
     for (it->lower_bound(string()); it->valid(); it->next()) {
+      if (g_conf->bluestore_debug_fsck_abort) {
+	goto out_scan;
+      }
       dout(30) << " key " << pretty_binary_string(it->key()) << dendl;
       if (is_extent_shard_key(it->key())) {
 	while (!expecting_shards.empty() &&
@@ -7509,6 +7522,9 @@ void BlueStore::_txc_state_proc(TransContext *txc)
 	  kv_queue_unsubmitted.push_back(txc);
 	  ++txc->osr->kv_committing_serially;
 	}
+	if (txc->had_ios)
+	  kv_ios++;
+	kv_throttle_costs += txc->cost;
       }
       return;
     case TransContext::STATE_KV_SUBMITTED:
@@ -7899,6 +7915,10 @@ void BlueStore::_osr_drain_all()
     std::lock_guard<std::mutex> l(kv_lock);
     kv_cond.notify_one();
   }
+  {
+    std::lock_guard<std::mutex> l(kv_finalize_lock);
+    kv_finalize_cond.notify_one();
+  }
   for (auto osr : s) {
     dout(20) << __func__ << " drain " << osr << dendl;
     osr->drain();
@@ -7934,10 +7954,60 @@ void BlueStore::_osr_unregister_all()
   }
 }
 
+void BlueStore::_kv_start()
+{
+  dout(10) << __func__ << dendl;
+  for (auto f : finishers) {
+    f->start();
+  }
+  kv_sync_thread.create("bstore_kv_sync");
+  kv_finalize_thread.create("bstore_kv_final");
+}
+
+void BlueStore::_kv_stop()
+{
+  dout(10) << __func__ << dendl;
+  {
+    std::unique_lock<std::mutex> l(kv_lock);
+    while (!kv_sync_started) {
+      kv_cond.wait(l);
+    }
+    kv_stop = true;
+    kv_cond.notify_all();
+  }
+  {
+    std::unique_lock<std::mutex> l(kv_finalize_lock);
+    while (!kv_finalize_started) {
+      kv_finalize_cond.wait(l);
+    }
+    kv_finalize_stop = true;
+    kv_finalize_cond.notify_all();
+  }
+  kv_sync_thread.join();
+  kv_finalize_thread.join();
+  {
+    std::lock_guard<std::mutex> l(kv_lock);
+    kv_stop = false;
+  }
+  {
+    std::lock_guard<std::mutex> l(kv_finalize_lock);
+    kv_finalize_stop = false;
+  }
+  dout(10) << __func__ << " stopping finishers" << dendl;
+  for (auto f : finishers) {
+    f->wait_for_empty();
+    f->stop();
+  }
+  dout(10) << __func__ << " stopped" << dendl;
+}
+
 void BlueStore::_kv_sync_thread()
 {
   dout(10) << __func__ << " start" << dendl;
   std::unique_lock<std::mutex> l(kv_lock);
+  assert(!kv_sync_started);
+  kv_sync_started = true;
+  kv_cond.notify_all();
   while (true) {
     assert(kv_committing.empty());
     if (kv_queue.empty() &&
@@ -7951,6 +8021,8 @@ void BlueStore::_kv_sync_thread()
     } else {
       deque<TransContext*> kv_submitting;
       deque<DeferredBatch*> deferred_done, deferred_stable;
+      uint64_t aios = 0, costs = 0;
+
       dout(20) << __func__ << " committing " << kv_queue.size()
 	       << " submitting " << kv_queue_unsubmitted.size()
 	       << " deferred done " << deferred_done_queue.size()
@@ -7960,6 +8032,10 @@ void BlueStore::_kv_sync_thread()
       kv_submitting.swap(kv_queue_unsubmitted);
       deferred_done.swap(deferred_done_queue);
       deferred_stable.swap(deferred_stable_queue);
+      aios = kv_ios;
+      costs = kv_throttle_costs;
+      kv_ios = 0;
+      kv_throttle_costs = 0;
       utime_t start = ceph_clock_now();
       l.unlock();
 
@@ -7968,20 +8044,13 @@ void BlueStore::_kv_sync_thread()
       dout(30) << __func__ << " deferred_done " << deferred_done << dendl;
       dout(30) << __func__ << " deferred_stable " << deferred_stable << dendl;
 
-      int num_aios = 0;
-      for (auto txc : kv_committing) {
-	if (txc->had_ios) {
-	  ++num_aios;
-	}
-      }
-
       bool force_flush = false;
       // if bluefs is sharing the same device as data (only), then we
       // can rely on the bluefs commit to flush the device and make
       // deferred aios stable.  that means that if we do have done deferred
       // txcs AND we are not on a single device, we need to force a flush.
       if (bluefs_single_shared_device && bluefs) {
-	if (num_aios) {
+	if (aios) {
 	  force_flush = true;
 	} else if (kv_committing.empty() && kv_submitting.empty() &&
 		   deferred_stable.empty()) {
@@ -7993,7 +8062,7 @@ void BlueStore::_kv_sync_thread()
 	force_flush = true;
 
       if (force_flush) {
-	dout(20) << __func__ << " num_aios=" << num_aios
+	dout(20) << __func__ << " num_aios=" << aios
 		 << " force_flush=" << (int)force_flush
 		 << ", flushing, deferred done->stable" << dendl;
 	// flush/barrier on block device
@@ -8052,14 +8121,15 @@ void BlueStore::_kv_sync_thread()
 	  --txc->osr->txc_with_unstable_io;
 	}
 	txc->log_state_latency(logger, l_bluestore_state_kv_queued_lat);
-	// release throttle *before* we commit.  this allows new ops
-	// to be prepared and enter pipeline while we are waiting on
-	// the kv commit sync/flush.  then hopefully on the next
-	// iteration there will already be ops awake.  otherwise, we
-	// end up going to sleep, and then wake up when the very first
-	// transaction is ready for commit.
-	throttle_bytes.put(txc->cost);
       }
+
+      // release throttle *before* we commit.  this allows new ops
+      // to be prepared and enter pipeline while we are waiting on
+      // the kv commit sync/flush.  then hopefully on the next
+      // iteration there will already be ops awake.  otherwise, we
+      // end up going to sleep, and then wake up when the very first
+      // transaction is ready for commit.
+      throttle_bytes.put(costs);
 
       PExtentVector bluefs_gift_extents;
       if (bluefs &&
@@ -8126,32 +8196,6 @@ void BlueStore::_kv_sync_thread()
 	logger->tinc(l_bluestore_kv_commit_lat, dur_kv);
 	logger->tinc(l_bluestore_kv_lat, dur);
       }
-      while (!kv_committing.empty()) {
-	TransContext *txc = kv_committing.front();
-	assert(txc->state == TransContext::STATE_KV_SUBMITTED);
-	_txc_state_proc(txc);
-	kv_committing.pop_front();
-      }
-      for (auto b : deferred_stable) {
-	auto p = b->txcs.begin();
-	while (p != b->txcs.end()) {
-	  TransContext *txc = &*p;
-	  p = b->txcs.erase(p); // unlink here because
-	  _txc_state_proc(txc); // this may destroy txc
-	}
-	delete b;
-      }
-
-      if (!deferred_aggressive) {
-	std::lock_guard<std::mutex> l(deferred_lock);
-	if (deferred_queue_size >= deferred_batch_ops ||
-	    throttle_deferred_bytes.past_midpoint()) {
-	  _deferred_try_submit();
-	}
-      }
-
-      // this is as good a place as any ...
-      _reap_collections();
 
       if (bluefs) {
 	if (!bluefs_gift_extents.empty()) {
@@ -8168,6 +8212,29 @@ void BlueStore::_kv_sync_thread()
 	bluefs_extents_reclaiming.clear();
       }
 
+      {
+	std::unique_lock<std::mutex> m(kv_finalize_lock);
+	if (kv_committing_to_finalize.empty()) {
+	  kv_committing_to_finalize.swap(kv_committing);
+	} else {
+	  kv_committing_to_finalize.insert(
+	    kv_committing_to_finalize.end(),
+	    kv_committing.begin(),
+	    kv_committing.end());
+	  kv_committing.clear();
+	}
+	if (deferred_stable_to_finalize.empty()) {
+	  deferred_stable_to_finalize.swap(deferred_stable);
+	} else {
+	  deferred_stable_to_finalize.insert(
+	    deferred_stable_to_finalize.end(),
+	    deferred_stable.begin(),
+	    deferred_stable.end());
+          deferred_stable.clear();
+	}
+	kv_finalize_cond.notify_one();
+      }
+
       l.lock();
       // previously deferred "done" are now "stable" by virtue of this
       // commit cycle.
@@ -8175,6 +8242,68 @@ void BlueStore::_kv_sync_thread()
     }
   }
   dout(10) << __func__ << " finish" << dendl;
+  kv_sync_started = false;
+}
+
+void BlueStore::_kv_finalize_thread()
+{
+  deque<TransContext*> kv_committed;
+  deque<DeferredBatch*> deferred_stable;
+  dout(10) << __func__ << " start" << dendl;
+  std::unique_lock<std::mutex> l(kv_finalize_lock);
+  assert(!kv_finalize_started);
+  kv_finalize_started = true;
+  kv_finalize_cond.notify_all();
+  while (true) {
+    assert(kv_committed.empty());
+    assert(deferred_stable.empty());
+    if (kv_committing_to_finalize.empty() &&
+	deferred_stable_to_finalize.empty()) {
+      if (kv_finalize_stop)
+	break;
+      dout(20) << __func__ << " sleep" << dendl;
+      kv_finalize_cond.wait(l);
+      dout(20) << __func__ << " wake" << dendl;
+    } else {
+      kv_committed.swap(kv_committing_to_finalize);
+      deferred_stable.swap(deferred_stable_to_finalize);
+      l.unlock();
+      dout(20) << __func__ << " kv_committed " << kv_committed << dendl;
+      dout(20) << __func__ << " deferred_stable " << deferred_stable << dendl;
+
+      while (!kv_committed.empty()) {
+	TransContext *txc = kv_committed.front();
+	assert(txc->state == TransContext::STATE_KV_SUBMITTED);
+	_txc_state_proc(txc);
+	kv_committed.pop_front();
+      }
+      for (auto b : deferred_stable) {
+	auto p = b->txcs.begin();
+	while (p != b->txcs.end()) {
+	  TransContext *txc = &*p;
+	  p = b->txcs.erase(p); // unlink here because
+	  _txc_state_proc(txc); // this may destroy txc
+	}
+	delete b;
+      }
+      deferred_stable.clear();
+
+      if (!deferred_aggressive) {
+	std::lock_guard<std::mutex> l(deferred_lock);
+	if (deferred_queue_size >= deferred_batch_ops ||
+	    throttle_deferred_bytes.past_midpoint()) {
+	  _deferred_try_submit();
+	}
+      }
+
+      // this is as good a place as any ...
+      _reap_collections();
+
+      l.lock();
+    }
+  }
+  dout(10) << __func__ << " finish" << dendl;
+  kv_finalize_started = false;
 }
 
 bluestore_deferred_op_t *BlueStore::_get_deferred_op(
@@ -8297,13 +8426,15 @@ void BlueStore::_deferred_aio_finish(OpSequencer *osr)
   }
 
   {
+    uint64_t costs = 0;
     std::lock_guard<std::mutex> l2(osr->qlock);
     for (auto& i : b->txcs) {
       TransContext *txc = &i;
       txc->state = TransContext::STATE_DEFERRED_CLEANUP;
-      txc->osr->qcond.notify_all();
-      throttle_deferred_bytes.put(txc->cost);
+      costs += txc->cost;
     }
+    osr->qcond.notify_all();
+    throttle_deferred_bytes.put(costs);
     std::lock_guard<std::mutex> l(kv_lock);
     deferred_done_queue.emplace_back(b);
   }

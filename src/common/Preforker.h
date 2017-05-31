@@ -3,15 +3,10 @@
 #ifndef CEPH_COMMON_PREFORKER_H
 #define CEPH_COMMON_PREFORKER_H
 
-#include "acconfig.h"
-#include <sys/types.h>
 #include <sys/socket.h>
 #include <sys/wait.h>
-#include <errno.h>
-#include <stdlib.h>
 #include <unistd.h>
 #include <sstream>
-#include <string>
 
 #include "include/assert.h"
 #include "common/safe_io.h"

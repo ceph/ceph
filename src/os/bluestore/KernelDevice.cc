@@ -145,14 +145,16 @@ int KernelDevice::open(const string& p)
     }
   }
 
+  r = _aio_start();
+  if (r < 0) {
+    goto out_fail;
+  }
+
   fs = FS::create_by_fd(fd_direct);
   assert(fs);
 
   // round size down to an even block
   size &= ~(block_size - 1);
-
-  r = _aio_start();
-  assert(r == 0);
 
   dout(1) << __func__
 	  << " size " << size
@@ -261,7 +263,7 @@ int KernelDevice::collect_metadata(string prefix, map<string,string> *pm) const
 
 int KernelDevice::flush()
 {
-  // protect flush with a mutex.  not that we are not really protected
+  // protect flush with a mutex.  note that we are not really protecting
   // data here.  instead, we're ensuring that if any flush() caller
   // sees that io_since_flush is true, they block any racing callers
   // until the flush is observed.  that allows racing threads to be
@@ -308,7 +310,12 @@ int KernelDevice::_aio_start()
     dout(10) << __func__ << dendl;
     int r = aio_queue.init();
     if (r < 0) {
-      derr << __func__ << " failed: " << cpp_strerror(r) << dendl;
+      if (r == -EAGAIN) {
+	derr << __func__ << " io_setup(2) failed with EAGAIN; "
+	     << "try increasing /proc/sys/fs/aio-max-nr" << dendl;
+      } else {
+	derr << __func__ << " io_setup(2) failed: " << cpp_strerror(r) << dendl;
+      }
       return r;
     }
     aio_thread.create("bstore_aio");
@@ -373,11 +380,7 @@ void KernelDevice::_aio_thread()
 	    aio_callback(aio_callback_priv, ioc->priv);
 	  }
 	} else {
-	  if (ioc->num_running == 1) {
-	    ioc->aio_wake();
-	  } else {
-	    --ioc->num_running;
-	  }
+          ioc->try_aio_wake();
 	}
       }
     }
@@ -559,6 +562,9 @@ int KernelDevice::_sync_write(uint64_t off, bufferlist &bl, bool buffered)
       return r;
     }
   }
+
+  io_since_flush.store(true);
+
   return 0;
 }
 

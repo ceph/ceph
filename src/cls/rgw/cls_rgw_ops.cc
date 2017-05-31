@@ -64,6 +64,7 @@ void cls_rgw_gc_list_op::generate_test_instances(list<cls_rgw_gc_list_op*>& ls)
 void cls_rgw_gc_list_ret::dump(Formatter *f) const
 {
   encode_json("entries", entries, f);
+  f->dump_string("next_marker", next_marker);
   f->dump_int("truncated", (int)truncated);
 }
 
@@ -108,6 +109,7 @@ void rgw_cls_obj_prepare_op::dump(Formatter *f) const
   f->dump_string("locator", locator);
   f->dump_bool("log_op", log_op);
   f->dump_int("bilog_flags", bilog_flags);
+  ::encode_json("zones_trace", zones_trace, f);
 }
 
 void rgw_cls_obj_complete_op::generate_test_instances(list<rgw_cls_obj_complete_op*>& o)
@@ -145,6 +147,7 @@ void rgw_cls_obj_complete_op::dump(Formatter *f) const
   f->dump_string("tag", tag);
   f->dump_bool("log_op", log_op);
   f->dump_int("bilog_flags", bilog_flags);
+  ::encode_json("zones_trace", zones_trace, f);
 }
 
 void rgw_cls_link_olh_op::generate_test_instances(list<rgw_cls_link_olh_op*>& o)
@@ -179,6 +182,7 @@ void rgw_cls_link_olh_op::dump(Formatter *f) const
   utime_t ut(unmod_since);
   ::encode_json("unmod_since", ut, f);
   ::encode_json("high_precision_time", high_precision_time, f);
+  ::encode_json("zones_trace", zones_trace, f);
 }
 
 void rgw_cls_unlink_instance_op::generate_test_instances(list<rgw_cls_unlink_instance_op*>& o)
@@ -201,6 +205,7 @@ void rgw_cls_unlink_instance_op::dump(Formatter *f) const
   ::encode_json("olh_epoch", olh_epoch, f);
   ::encode_json("log_op", log_op, f);
   ::encode_json("bilog_flags", (uint32_t)bilog_flags, f);
+  ::encode_json("zones_trace", zones_trace, f);
 }
 
 void rgw_cls_read_olh_log_op::generate_test_instances(list<rgw_cls_read_olh_log_op*>& o)

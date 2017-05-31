@@ -22,8 +22,10 @@
 #include "common/version.h"
 
 #include "PyState.h"
+#include "Gil.h"
 
 #define dout_context g_ceph_context
+#define dout_subsys ceph_subsys_mgr
 
 PyModules *global_handle = NULL;
 
@@ -32,13 +34,14 @@ class MonCommandCompletion : public Context
 {
   PyObject *python_completion;
   const std::string tag;
+  PyThreadState *pThreadState;
 
 public:
   std::string outs;
   bufferlist outbl;
 
-  MonCommandCompletion(PyObject* ev, const std::string &tag_)
-    : python_completion(ev), tag(tag_)
+  MonCommandCompletion(PyObject* ev, const std::string &tag_, PyThreadState *ts_)
+    : python_completion(ev), tag(tag_), pThreadState(ts_)
   {
     assert(python_completion != nullptr);
     Py_INCREF(python_completion);
@@ -51,28 +54,28 @@ public:
 
   void finish(int r) override
   {
-    PyGILState_STATE gstate;
-    gstate = PyGILState_Ensure();
+    dout(10) << "MonCommandCompletion::finish()" << dendl;
+    {
+      // Scoped so the Gil is released before calling notify_all()
+      Gil gil(pThreadState);
 
-    auto set_fn = PyObject_GetAttrString(python_completion, "complete");
-    assert(set_fn != nullptr);
+      auto set_fn = PyObject_GetAttrString(python_completion, "complete");
+      assert(set_fn != nullptr);
 
-    auto pyR = PyInt_FromLong(r);
-    auto pyOutBl = PyString_FromString(outbl.to_str().c_str());
-    auto pyOutS = PyString_FromString(outs.c_str());
-    auto args = PyTuple_Pack(3, pyR, pyOutBl, pyOutS);
-    Py_DECREF(pyR);
-    Py_DECREF(pyOutBl);
-    Py_DECREF(pyOutS);
+      auto pyR = PyInt_FromLong(r);
+      auto pyOutBl = PyString_FromString(outbl.to_str().c_str());
+      auto pyOutS = PyString_FromString(outs.c_str());
+      auto args = PyTuple_Pack(3, pyR, pyOutBl, pyOutS);
+      Py_DECREF(pyR);
+      Py_DECREF(pyOutBl);
+      Py_DECREF(pyOutS);
 
-    auto rtn = PyObject_CallObject(set_fn, args);
-    if (rtn != nullptr) {
-      Py_DECREF(rtn);
+      auto rtn = PyObject_CallObject(set_fn, args);
+      if (rtn != nullptr) {
+	Py_DECREF(rtn);
+      }
+      Py_DECREF(args);
     }
-    Py_DECREF(args);
-
-    PyGILState_Release(gstate);
-
     global_handle->notify_all("command", tag);
   }
 };
@@ -105,7 +108,7 @@ ceph_send_command(PyObject *self, PyObject *args)
   }
   Py_DECREF(set_fn);
 
-  auto c = new MonCommandCompletion(completion, tag);
+  auto c = new MonCommandCompletion(completion, tag, PyThreadState_Get());
   if (std::string(type) == "mon") {
     global_handle->get_monc().start_mon_command(
         {cmd_json},
@@ -196,10 +199,10 @@ ceph_config_get(PyObject *self, PyObject *args)
   std::string value;
   bool found = global_handle->get_config(handle, what, &value);
   if (found) {
-    derr << "Found" << dendl;
+    derr << "ceph_config_get " << what << " found: " << value.c_str() << dendl;
     return PyString_FromString(value.c_str());
   } else {
-    derr << "Not found" << dendl;
+    derr << "ceph_config_get " << what << " not found " << dendl;
     Py_RETURN_NONE;
   }
 }

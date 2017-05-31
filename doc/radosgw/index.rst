@@ -13,7 +13,7 @@ Ceph Storage Clusters. :term:`Ceph Object Storage` supports two interfaces:
    that is compatible with a large subset of the OpenStack Swift API.
 
 Ceph Object Storage uses the Ceph Object Gateway daemon (``radosgw``), which is
-a FastCGI module for interacting with a Ceph Storage Cluster. Since it
+an HTTP server for interacting with a Ceph Storage Cluster. Since it
 provides interfaces compatible with OpenStack Swift and Amazon S3, the Ceph
 Object Gateway has its own user management. Ceph Object Gateway can store data
 in the same Ceph Storage Cluster used to store data from Ceph Filesystem clients
@@ -37,7 +37,6 @@ you may write data with one API and retrieve it with the other.
    :maxdepth: 1
 
    Manual Install w/Civetweb <../../install/install-ceph-gateway>
-   Simple Configuration w/Apache/FastCGI <config-fcgi>
    Federated Configuration (Deprecated) <federated-config>
    Multisite Configuration <multisite>
    Config Reference <config-ref>
@@ -51,6 +50,7 @@ you may write data with one API and retrieve it with the other.
    Multi-tenancy <multitenancy>
    Compression <compression>
    Server-Side Encryption <encryption>
+   Bucket Policy <bucketpolicy>
    Data Layout in RADOS <layout>
    Upgrade to Older Versions of Jewel <upgrade_to_jewel>
    troubleshooting
