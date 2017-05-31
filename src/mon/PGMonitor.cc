@@ -23,8 +23,6 @@
 
 #include "messages/MPGStats.h"
 #include "messages/MPGStatsAck.h"
-#include "messages/MGetPoolStats.h"
-#include "messages/MGetPoolStatsReply.h"
 
 #include "messages/MOSDPGCreate.h"
 #include "messages/MMonCommand.h"
@@ -565,9 +563,6 @@ bool PGMonitor::preprocess_query(MonOpRequestRef op)
   PaxosServiceMessage *m = static_cast<PaxosServiceMessage*>(op->get_req());
   dout(10) << "preprocess_query " << *m << " from " << m->get_orig_source_inst() << dendl;
   switch (m->get_type()) {
-  case MSG_GETPOOLSTATS:
-    return preprocess_getpoolstats(op);
-
   case MSG_PGSTATS:
     return preprocess_pg_stats(op);
 
@@ -602,46 +597,6 @@ bool PGMonitor::prepare_update(MonOpRequestRef op)
     return false;
   }
 }
-
-bool PGMonitor::preprocess_getpoolstats(MonOpRequestRef op)
-{
-  op->mark_pgmon_event(__func__);
-  MGetPoolStats *m = static_cast<MGetPoolStats*>(op->get_req());
-  MGetPoolStatsReply *reply;
-
-  MonSession *session = m->get_session();
-  if (!session)
-    goto out;
-  if (!session->is_capable("pg", MON_CAP_R)) {
-    dout(0) << "MGetPoolStats received from entity with insufficient caps "
-            << session->caps << dendl;
-    goto out;
-  }
-
-  if (m->fsid != mon->monmap->fsid) {
-    dout(0) << "preprocess_getpoolstats on fsid " << m->fsid << " != " << mon->monmap->fsid << dendl;
-    goto out;
-  }
-
-  reply = new MGetPoolStatsReply(m->fsid, m->get_tid(), get_last_committed());
-
-  for (list<string>::iterator p = m->pools.begin();
-       p != m->pools.end();
-       ++p) {
-    int64_t poolid = mon->osdmon()->osdmap.lookup_pg_pool_name(p->c_str());
-    if (poolid < 0)
-      continue;
-    if (pg_map.pg_pool_sum.count(poolid) == 0)
-      continue;
-    reply->pool_stats[*p] = pg_map.pg_pool_sum[poolid];
-  }
-
-  mon->send_reply(op, reply);
-
-out:
-  return true;
-}
-
 
 bool PGMonitor::preprocess_pg_stats(MonOpRequestRef op)
 {
