@@ -37,7 +37,6 @@ if(HAS_VTA)
     PROPERTIES COMPILE_FLAGS -fno-var-tracking-assignments)
 endif()
 add_library(osd STATIC ${osd_srcs}
-  $<TARGET_OBJECTS:osd_mon_objs>
   $<TARGET_OBJECTS:cls_references_objs>
   $<TARGET_OBJECTS:global_common_objs>
   $<TARGET_OBJECTS:heap_profiler_objs>
