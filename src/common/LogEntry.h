@@ -17,6 +17,7 @@
 
 #include "include/utime.h"
 #include "msg/msg_types.h" // for entity_inst_t
+#include "common/entity_name.h"
 
 namespace ceph {
   class Formatter;
@@ -73,6 +74,7 @@ static inline bool operator==(const LogEntryKey& l, const LogEntryKey& r) {
 
 struct LogEntry {
   entity_inst_t who;
+  EntityName name;
   utime_t stamp;
   uint64_t seq;
   clog_type prio;
@@ -139,7 +141,8 @@ inline ostream& operator<<(ostream& out, clog_type t)
 
 inline ostream& operator<<(ostream& out, const LogEntry& e)
 {
-  return out << e.stamp << " " << e.who << " " << e.seq << " : "
+  return out << e.stamp << " " << e.name << " " << e.who
+	     << " " << e.seq << " : "
              << e.channel << " " << e.prio << " " << e.msg;
 }
 
