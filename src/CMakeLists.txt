@@ -202,6 +202,8 @@ endif(USE_NSS)
 
 set(GCOV_PREFIX_STRIP 4)
 
+# the src/.git_version file may be written out by make-dist; otherwise
+# we pull the git version from .git
 option(ENABLE_GIT_VERSION "build Ceph with git version string" ON)
 if(${ENABLE_GIT_VERSION})
   get_git_head_revision(GIT_REFSPEC CEPH_GIT_VER)
@@ -219,6 +221,17 @@ else(${ENABLE_GIT_VERSION})
   set(CEPH_GIT_VER "no_version")
   set(CEPH_GIT_NICE_VER "Development")
 endif(${ENABLE_GIT_VERSION})
+
+# the src/ceph_release file is 3 lines,
+#   <release number, e.g. '12' for luminous>
+#   <release name, e.g. 'luminous'>
+#   <release type: 'dev' for x.0.z, 'rc' or x.1.z, or 'stable' or x.2.z>
+# note that the release name is semi-redundant and must match CEPH_RELEASE_*
+# definitions in include/rados.h and common/ceph_strings.c.
+file(STRINGS ${CMAKE_CURRENT_SOURCE_DIR}/ceph_release CEPH_RELEASE_FILE)
+list(GET CEPH_RELEASE_FILE 0 CEPH_RELEASE)
+list(GET CEPH_RELEASE_FILE 1 CEPH_RELEASE_NAME)
+list(GET CEPH_RELEASE_FILE 2 CEPH_RELEASE_TYPE)
 
 option(WITH_OCF "build OCF-compliant cluster resource agent" OFF)
 if(WITH_OCF)
