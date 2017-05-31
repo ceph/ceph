@@ -44,9 +44,11 @@ const char *ceph_osd_state_name(int s)
 		return "nearfull";
 	case CEPH_OSD_BACKFILLFULL:
 		return "backfillfull";
+        case CEPH_OSD_DESTROYED:
+                return "destroyed";
 	default:
 		return "???";
-	}	
+	}
 }
 
 const char *ceph_release_name(int r)
