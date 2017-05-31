@@ -3815,12 +3815,12 @@ void Monitor::dispatch_op(MonOpRequestRef op)
     // MgrStat
     case MSG_MON_MGR_REPORT:
     case CEPH_MSG_STATFS:
+    case MSG_GETPOOLSTATS:
       paxos_service[PAXOS_MGRSTAT]->dispatch(op);
       break;
 
     // pg
     case MSG_PGSTATS:
-    case MSG_GETPOOLSTATS:
       paxos_service[PAXOS_PGMAP]->dispatch(op);
       break;
 
