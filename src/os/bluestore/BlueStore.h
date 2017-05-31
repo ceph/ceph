@@ -130,6 +130,9 @@ public:
   void handle_conf_change(const struct md_config_t *conf,
                                   const std::set<std::string> &changed) override;
 
+  //handler for discard event
+  void handle_discard(interval_set<uint64_t>& to_release);
+
   void _set_csum();
   void _set_compression();
   void _set_throttle_params();
