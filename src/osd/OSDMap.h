@@ -173,7 +173,7 @@ public:
     float new_backfillfull_ratio = -1;
     float new_full_ratio = -1;
 
-    string new_require_min_compat_client;
+    int8_t new_require_min_compat_client = -1;
 
     mutable bool have_crc;      ///< crc values are defined
     uint32_t full_crc;  ///< crc of the resulting OSDMap
@@ -274,11 +274,11 @@ private:
   float full_ratio = 0, backfillfull_ratio = 0, nearfull_ratio = 0;
 
   /// min compat client we want to support
-  string require_min_compat_client;
+  uint8_t require_min_compat_client = 0;  // CEPH_RELEASE_*
 
 public:
   /// require osds to run at least this release
-  uint8_t require_osd_release = 0;
+  uint8_t require_osd_release = 0;    // CEPH_RELEASE_*
 
 private:
   mutable uint64_t cached_up_osd_features;
@@ -625,7 +625,7 @@ public:
    * get oldest *client* version (firefly, hammer, etc.) that can connect given
    * the feature bits required (according to get_features()).
    */
-  pair<string,string> get_min_compat_client() const;
+  uint8_t get_min_compat_client() const;
 
   /**
    * get intersection of features supported by up osds

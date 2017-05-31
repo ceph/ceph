@@ -501,10 +501,9 @@ void OSDMap::Incremental::encode(bufferlist& bl, uint64_t features) const
       ::encode(new_full_ratio, bl);
       ::encode(new_backfillfull_ratio, bl);
     }
-    if (target_v >= 5) {
-      ::encode(new_require_min_compat_client, bl);
-    }
+    // 5 was string-based new_require_min_compat_client
     if (target_v >= 6) {
+      ::encode(new_require_min_compat_client, bl);
       ::encode(new_require_osd_release, bl);
     }
     ENCODE_FINISH(bl); // osd-only data
@@ -718,10 +717,15 @@ void OSDMap::Incremental::decode(bufferlist::iterator& bl)
     } else {
       new_backfillfull_ratio = -1;
     }
-    if (struct_v >= 5) {
-      ::decode(new_require_min_compat_client, bl);
+    if (struct_v == 5) {
+      string r;
+      ::decode(r, bl);
+      if (r.length()) {
+	new_require_min_compat_client = ceph_release_from_name(r.c_str());
+      }
     }
     if (struct_v >= 6) {
+      ::decode(new_require_min_compat_client, bl);
       ::decode(new_require_osd_release, bl);
     } else {
       if (new_flags >= 0 && (new_flags & CEPH_OSDMAP_REQUIRE_LUMINOUS)) {
@@ -780,7 +784,7 @@ void OSDMap::Incremental::dump(Formatter *f) const
   f->dump_float("new_full_ratio", new_full_ratio);
   f->dump_float("new_nearfull_ratio", new_nearfull_ratio);
   f->dump_float("new_backfillfull_ratio", new_backfillfull_ratio);
-  f->dump_string("new_require_min_compat_client", new_require_min_compat_client);
+  f->dump_int("new_require_min_compat_client", new_require_min_compat_client);
   f->dump_int("new_require_osd_release", new_require_osd_release);
 
   if (fullmap.length()) {
@@ -1307,34 +1311,34 @@ uint64_t OSDMap::get_features(int entity_type, uint64_t *pmask) const
   return features;
 }
 
-pair<string,string> OSDMap::get_min_compat_client() const
+uint8_t OSDMap::get_min_compat_client() const
 {
   uint64_t f = get_features(CEPH_ENTITY_TYPE_CLIENT, nullptr);
 
   if (HAVE_FEATURE(f, OSDMAP_PG_UPMAP) ||      // v12.0.0-1733-g27d6f43
-      HAVE_FEATURE(f, CRUSH_CHOOSE_ARGS)) {     // v12.0.1-2172-gef1ef28
-    return make_pair("luminous", "12.2.0");
+      HAVE_FEATURE(f, CRUSH_CHOOSE_ARGS)) {    // v12.0.1-2172-gef1ef28
+    return CEPH_RELEASE_LUMINOUS;  // v12.2.0
   }
   if (HAVE_FEATURE(f, CRUSH_TUNABLES5)) {      // v10.0.0-612-g043a737
-    return make_pair("jewel", "10.2.0");
+    return CEPH_RELEASE_JEWEL;     // v10.2.0
   }
   if (HAVE_FEATURE(f, CRUSH_V4)) {             // v0.91-678-g325fc56
-    return make_pair("hammer", "0.94");
+    return CEPH_RELEASE_HAMMER;    // v0.94.0
   }
   if (HAVE_FEATURE(f, OSD_PRIMARY_AFFINITY) || // v0.76-553-gf825624
       HAVE_FEATURE(f, CRUSH_TUNABLES3) ||      // v0.76-395-ge20a55d
       HAVE_FEATURE(f, OSD_ERASURE_CODES) ||    // v0.73-498-gbfc86a8
       HAVE_FEATURE(f, OSD_CACHEPOOL)) {        // v0.67-401-gb91c1c5
-    return make_pair("firefly", "0.80");
+    return CEPH_RELEASE_FIREFLY;   // v0.80.0
   }
   if (HAVE_FEATURE(f, CRUSH_TUNABLES2) ||      // v0.54-684-g0cc47ff
       HAVE_FEATURE(f, OSDHASHPSPOOL)) {        // v0.57-398-g8cc2b0f
-    return make_pair("dumpling", "0.67");
+    return CEPH_RELEASE_DUMPLING;  // v0.67.0
   }
   if (HAVE_FEATURE(f, CRUSH_TUNABLES)) {       // v0.48argonaut-206-g6f381af
-    return make_pair("argonaut", "0.48argonaut-207");
+    return CEPH_RELEASE_ARGONAUT;  // v0.48argonaut-206-g6f381af
   }
-  return make_pair("argonaut", "0.48");
+  return CEPH_RELEASE_ARGONAUT;    // v0.48argonaut-206-g6f381af
 }
 
 void OSDMap::_calc_up_osd_features()
@@ -1703,7 +1707,7 @@ int OSDMap::apply_incremental(const Incremental &inc)
   if (inc.new_full_ratio >= 0) {
     full_ratio = inc.new_full_ratio;
   }
-  if (inc.new_require_min_compat_client.length()) {
+  if (inc.new_require_min_compat_client > 0) {
     require_min_compat_client = inc.new_require_min_compat_client;
   }
   if (inc.new_require_osd_release >= 0) {
@@ -2314,10 +2318,9 @@ void OSDMap::encode(bufferlist& bl, uint64_t features) const
       ::encode(full_ratio, bl);
       ::encode(backfillfull_ratio, bl);
     }
-    if (target_v >= 4) {
-      ::encode(require_min_compat_client, bl);
-    }
+    // 4 was string-based new_require_min_compat_client
     if (target_v >= 5) {
+      ::encode(require_min_compat_client, bl);
       ::encode(require_osd_release, bl);
     }
     ENCODE_FINISH(bl); // osd-only data
@@ -2558,10 +2561,14 @@ void OSDMap::decode(bufferlist::iterator& bl)
     } else {
       backfillfull_ratio = 0;
     }
-    if (struct_v >= 4) {
-      ::decode(require_min_compat_client, bl);
+    if (struct_v == 4) {
+      string r;
+      ::decode(r, bl);
+      if (r.length())
+	require_min_compat_client = ceph_release_from_name(r.c_str());
     }
     if (struct_v >= 5) {
+      ::decode(require_min_compat_client, bl);
       ::decode(require_osd_release, bl);
       if (require_osd_release >= CEPH_RELEASE_LUMINOUS) {
 	flags &= ~(CEPH_OSDMAP_LEGACY_REQUIRE_FLAGS);
@@ -2653,13 +2660,12 @@ void OSDMap::dump(Formatter *f) const
   f->dump_string("cluster_snapshot", get_cluster_snapshot());
   f->dump_int("pool_max", get_pool_max());
   f->dump_int("max_osd", get_max_osd());
-  f->dump_string("require_min_compat_client", require_min_compat_client);
-  auto mv = get_min_compat_client();
-  f->dump_string("min_compat_client", mv.first);
-  f->dump_string("min_compat_client_version", mv.second);
-  f->dump_int("require_osd_release", require_osd_release);
-  f->dump_string("require_osd_release_name",
-		 ceph_osd_release_name(require_osd_release));
+  f->dump_string("require_min_compat_client",
+		 ceph_release_name(require_min_compat_client));
+  f->dump_string("min_compat_client",
+		 ceph_release_name(get_min_compat_client()));
+  f->dump_string("require_osd_release",
+		 ceph_release_name(require_osd_release));
 
   f->open_array_section("pools");
   for (const auto &pool : pools) {
@@ -2873,11 +2879,12 @@ void OSDMap::print(ostream& out) const
   out << "full_ratio " << full_ratio << "\n";
   out << "backfillfull_ratio " << backfillfull_ratio << "\n";
   out << "nearfull_ratio " << nearfull_ratio << "\n";
-  if (require_min_compat_client.length()) {
-    out << "require_min_compat_client " << require_min_compat_client << "\n";
+  if (require_min_compat_client > 0) {
+    out << "require_min_compat_client "
+	<< ceph_release_name(require_min_compat_client) << "\n";
   }
-  auto mv = get_min_compat_client();
-  out << "min_compat_client " << mv.first << " " << mv.second << "\n";
+  out << "min_compat_client " << ceph_release_name(get_min_compat_client())
+      << "\n";
   if (get_cluster_snapshot().length())
     out << "cluster_snapshot " << get_cluster_snapshot() << "\n";
   out << "\n";
