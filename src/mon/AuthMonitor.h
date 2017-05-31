@@ -158,6 +158,9 @@ private:
   bool prepare_command(MonOpRequestRef op);
 
   bool check_rotate();
+
+  int remove_entity(const EntityName &entity);
+
  public:
   AuthMonitor(Monitor *mn, Paxos *p, const string& service_name)
     : PaxosService(mn, p, service_name),
@@ -167,8 +170,18 @@ private:
   {}
 
   void pre_auth(MAuth *m);
-  
+
   void tick() override;  // check state, take actions
+
+  int validate_osd_destroy(
+      int32_t id,
+      const uuid_d& uuid,
+      EntityName& cephx_entity,
+      EntityName& lockbox_entity,
+      stringstream& ss);
+  int do_osd_destroy(
+      const EntityName& cephx_entity,
+      const EntityName& lockbox_entity);
 
   void dump_info(Formatter *f);
 };

@@ -17,6 +17,7 @@
 #include "mon/AuthMonitor.h"
 #include "mon/Monitor.h"
 #include "mon/MonitorDBStore.h"
+#include "mon/ConfigKeyService.h"
 
 #include "messages/MMonCommand.h"
 #include "messages/MAuth.h"
@@ -26,6 +27,7 @@
 
 #include "auth/AuthServiceHandler.h"
 #include "auth/KeyRing.h"
+#include "include/stringify.h"
 #include "include/assert.h"
 
 #define dout_subsys ceph_subsys_mon
@@ -664,6 +666,88 @@ int AuthMonitor::import_keyring(KeyRing& keyring)
     dout(30) << "    " << auth_inc.auth << dendl;
     push_cephx_inc(auth_inc);
   }
+  return 0;
+}
+
+int AuthMonitor::remove_entity(const EntityName &entity)
+{
+  dout(10) << __func__ << " " << entity << dendl;
+  if (!mon->key_server.contains(entity))
+    return -ENOENT;
+
+  KeyServerData::Incremental auth_inc;
+  auth_inc.name = entity;
+  auth_inc.op = KeyServerData::AUTH_INC_DEL;
+  push_cephx_inc(auth_inc);
+
+  return 0;
+}
+
+int AuthMonitor::validate_osd_destroy(
+    int32_t id,
+    const uuid_d& uuid,
+    EntityName& cephx_entity,
+    EntityName& lockbox_entity,
+    stringstream& ss)
+{
+  assert(paxos->is_plugged());
+
+  dout(10) << __func__ << " id " << id << " uuid " << uuid << dendl;
+
+  string cephx_str = "osd." + stringify(id);
+  string lockbox_str = "client.osd-lockbox." + stringify(uuid);
+
+  if (!cephx_entity.from_str(cephx_str)) {
+    dout(10) << __func__ << " invalid cephx entity '"
+             << cephx_str << "'" << dendl;
+    ss << "invalid cephx key entity '" << cephx_str << "'";
+    return -EINVAL;
+  }
+
+  if (!lockbox_entity.from_str(lockbox_str)) {
+    dout(10) << __func__ << " invalid lockbox entity '"
+             << lockbox_str << "'" << dendl;
+    ss << "invalid lockbox key entity '" << lockbox_str << "'";
+    return -EINVAL;
+  }
+
+  return 0;
+}
+
+int AuthMonitor::do_osd_destroy(
+    const EntityName& cephx_entity,
+    const EntityName& lockbox_entity)
+{
+  assert(paxos->is_plugged());
+
+  dout(10) << __func__ << " cephx " << cephx_entity
+                       << " lockbox " << lockbox_entity << dendl;
+
+  bool removed = false;
+
+  int err = remove_entity(cephx_entity);
+  if (err == -ENOENT) {
+    dout(10) << __func__ << " " << cephx_entity << " does not exist" << dendl;
+  } else {
+    removed = true;
+  }
+
+  err = remove_entity(lockbox_entity);
+  if (err == -ENOENT) {
+    dout(10) << __func__ << " " << lockbox_entity << " does not exist" << dendl;
+  } else {
+    removed = true;
+  }
+
+  if (!removed) {
+    dout(10) << __func__ << " entities do not exist -- no-op." << dendl;
+    return 0;
+  }
+
+  // given we have paxos plugged, this will not result in a proposal
+  // being triggered, but it will still be needed so that we get our
+  // pending state encoded into the paxos' pending transaction.
+  propose_pending();
   return 0;
 }
 

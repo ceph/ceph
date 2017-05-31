@@ -23,6 +23,8 @@
 #include "Monitor.h"
 #include "MDSMonitor.h"
 #include "PGMonitor.h"
+#include "mon/AuthMonitor.h"
+#include "mon/ConfigKeyService.h"
 
 #include "MonitorDBStore.h"
 #include "Session.h"
@@ -6385,6 +6387,40 @@ static int parse_reweights(CephContext *cct,
   return 0;
 }
 
+int OSDMonitor::prepare_command_osd_destroy(
+    int32_t id,
+    stringstream& ss)
+{
+  assert(paxos->is_plugged());
+  uuid_d uuid = osdmap.get_uuid(id);
+  dout(10) << __func__ << " destroying osd." << id
+           << " uuid " << uuid << dendl;
+
+  if (osdmap.is_destroyed(id)) {
+    ss << "destroyed osd." << id;
+    return 0;
+  }
+
+  EntityName cephx_entity, lockbox_entity;
+
+  int err = mon->authmon()->validate_osd_destroy(id, uuid,
+                                                 cephx_entity,
+                                                 lockbox_entity,
+                                                 ss);
+  if (err < 0) {
+    return err;
+  }
+
+  err = mon->authmon()->do_osd_destroy(cephx_entity, lockbox_entity);
+  assert(0 == err);
+
+  ((ConfigKeyService*)mon->config_key_service)->do_osd_destroy(id, uuid);
+
+  pending_inc.new_state[id] = CEPH_OSD_DESTROYED;
+  pending_inc.new_uuid[id] = uuid_d();
+  return 0;
+}
+
 bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 				      map<string,cmd_vartype> &cmdmap)
 {
@@ -8199,6 +8235,72 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 						get_last_committed() + 1));
       return true;
     }
+
+  } else if (prefix == "osd destroy") {
+    /* Destroying an OSD means that we don't expect to further make use of
+     * the OSDs data (which may even become unreadable after this operation),
+     * and that we are okay with scrubbing all its cephx keys and config-key
+     * data (which may include lockbox keys, thus rendering the osd's data
+     * unreadable).
+     *
+     * The OSD will not be removed. Instead, we will mark it as destroyed,
+     * such that a subsequent call to `create` will not reuse the osd id.
+     * This will play into being able to recreate the OSD, at the same
+     * crush location, with minimal data movement.
+     */
+
+    // make sure authmon is writeable.
+    if (!mon->authmon()->is_writeable()) {
+      dout(10) << __func__ << " waiting for auth mon to be writeable for "
+               << "osd destroy" << dendl;
+      mon->authmon()->wait_for_writeable(op, new C_RetryMessage(this, op));
+      return false;
+    }
+
+    int64_t id;
+    if (!cmd_getval(g_ceph_context, cmdmap, "id", id)) {
+      ss << "unable to parse osd id value '"
+         << cmd_vartype_stringify(cmdmap["id"]) << "";
+      err = -EINVAL;
+      goto reply;
+    }
+
+    string sure;
+    if (!cmd_getval(g_ceph_context, cmdmap, "sure", sure) ||
+        sure != "--yes-i-really-mean-it") {
+      ss << "Are you SURE? This will mean real, permanent data loss, as well "
+         << "as cephx and lockbox keys. Pass --yes-i-really-mean-it if you "
+         << "really do.";
+      err = -EPERM;
+      goto reply;
+    } else if (!osdmap.exists(id)) {
+      ss << "osd." << id << " does not exist";
+      err = -ENOENT;
+      goto reply;
+    } else if (osdmap.is_up(id)) {
+      ss << "osd." << id << " is not `down`.";
+      err = -EBUSY;
+      goto reply;
+    } else if (osdmap.is_destroyed(id)) {
+      ss << "destroyed osd." << id;
+      err = 0;
+      goto reply;
+    }
+
+    paxos->plug();
+    err = prepare_command_osd_destroy(id, ss);
+    paxos->unplug();
+
+    if (err < 0) {
+      goto reply;
+    }
+
+    ss << "destroyed osd." << id;
+    getline(ss, rs);
+    wait_for_finished_proposal(op,
+        new Monitor::C_Command(mon, op, 0, rs, get_last_committed() + 1));
+    force_immediate_propose();
+    return true;
 
   } else if (prefix == "osd create") {
     int i = -1;
