@@ -2182,7 +2182,13 @@ void OSDMap::encode_client_old(bufferlist& bl) const
   ::encode(flags, bl);
 
   ::encode(max_osd, bl);
-  ::encode(osd_state, bl);
+  {
+    uint32_t n = osd_state.size();
+    ::encode(n, bl);
+    for (auto s : osd_state) {
+      ::encode((uint8_t)s, bl);
+    }
+  }
   ::encode(osd_weight, bl);
   ::encode(osd_addrs->client_addr, bl, 0);
 
@@ -2224,7 +2230,13 @@ void OSDMap::encode_classic(bufferlist& bl, uint64_t features) const
   ::encode(flags, bl);
 
   ::encode(max_osd, bl);
-  ::encode(osd_state, bl);
+  {
+    uint32_t n = osd_state.size();
+    ::encode(n, bl);
+    for (auto s : osd_state) {
+      ::encode((uint8_t)s, bl);
+    }
+  }
   ::encode(osd_weight, bl);
   ::encode(osd_addrs->client_addr, bl, features);
 
@@ -2271,7 +2283,7 @@ void OSDMap::encode(bufferlist& bl, uint64_t features) const
   ENCODE_START(8, 7, bl);
 
   {
-    uint8_t v = 4;
+    uint8_t v = 5;
     if (!HAVE_FEATURE(features, SERVER_LUMINOUS)) {
       v = 3;
     }
@@ -2300,7 +2312,15 @@ void OSDMap::encode(bufferlist& bl, uint64_t features) const
     }
 
     ::encode(max_osd, bl);
-    ::encode(osd_state, bl);
+    if (v >= 5) {
+      ::encode(osd_state, bl);
+    } else {
+      uint32_t n = osd_state.size();
+      ::encode(n, bl);
+      for (auto s : osd_state) {
+	::encode((uint8_t)s, bl);
+      }
+    }
     ::encode(osd_weight, bl);
     ::encode(osd_addrs->client_addr, bl, features);
 
@@ -2442,7 +2462,14 @@ void OSDMap::decode_classic(bufferlist::iterator& p)
   ::decode(flags, p);
 
   ::decode(max_osd, p);
-  ::decode(osd_state, p);
+  {
+    vector<uint8_t> os;
+    ::decode(os, p);
+    osd_state.resize(os.size());
+    for (unsigned i = 0; i < os.size(); ++i) {
+      osd_state[i] = os[i];
+    }
+  }
   ::decode(osd_weight, p);
   ::decode(osd_addrs->client_addr, p);
   if (v <= 5) {
@@ -2527,7 +2554,7 @@ void OSDMap::decode(bufferlist::iterator& bl)
    * Since we made it past that hurdle, we can use our normal paths.
    */
   {
-    DECODE_START(4, bl); // client-usable data
+    DECODE_START(5, bl); // client-usable data
     // base
     ::decode(fsid, bl);
     ::decode(epoch, bl);
@@ -2541,7 +2568,16 @@ void OSDMap::decode(bufferlist::iterator& bl)
     ::decode(flags, bl);
 
     ::decode(max_osd, bl);
-    ::decode(osd_state, bl);
+    if (struct_v >= 5) {
+      ::decode(osd_state, bl);
+    } else {
+      vector<uint8_t> os;
+      ::decode(os, bl);
+      osd_state.resize(os.size());
+      for (unsigned i = 0; i < os.size(); ++i) {
+	osd_state[i] = os[i];
+      }
+    }
     ::decode(osd_weight, bl);
     ::decode(osd_addrs->client_addr, bl);
 
