@@ -1471,12 +1471,14 @@ bool OSDService::get_inc_map_bl(epoch_t e, bufferlist& bl)
 void OSDService::_add_map_bl(epoch_t e, bufferlist& bl)
 {
   dout(10) << "add_map_bl " << e << " " << bl.length() << " bytes" << dendl;
+  bl.try_assign_to_mempool(mempool::mempool_osd_mapbl);
   map_bl_cache.add(e, bl);
 }
 
 void OSDService::_add_map_inc_bl(epoch_t e, bufferlist& bl)
 {
   dout(10) << "add_map_inc_bl " << e << " " << bl.length() << " bytes" << dendl;
+  bl.try_assign_to_mempool(mempool::mempool_osd_mapbl);
   map_bl_inc_cache.add(e, bl);
 }
 

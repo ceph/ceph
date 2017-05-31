@@ -265,6 +265,7 @@ public:
       } else {
 	cache->_add_buffer(b, level, near);
       }
+      b->data.reassign_to_mempool(mempool::mempool_bluestore_data);
       cache->_audit("_add_buffer end");
     }
     void _rm_buffer(Cache* cache, Buffer *b) {
