@@ -6,6 +6,7 @@
 #include "common/errno.h"
 #include "common/WorkQueue.h"
 #include "journal/Journaler.h"
+#include "librbd/ExclusiveLock.h"
 #include "librbd/Operations.h"
 #include "librbd/Utils.h"
 #include "librbd/journal/Types.h"
@@ -169,13 +170,20 @@ void SnapshotCopyRequest<I>::send_snap_unprotect() {
            << "snap_name=" << m_snap_name << ", "
            << "snap_id=" << m_prev_snap_id << dendl;
 
-  Context *ctx = create_context_callback<
-    SnapshotCopyRequest<I>, &SnapshotCopyRequest<I>::handle_snap_unprotect>(
-      this);
+  auto finish_op_ctx = start_local_op();
+  if (finish_op_ctx == nullptr) {
+    derr << ": lost exclusive lock" << dendl;
+    finish(-EROFS);
+    return;
+  }
+
+  auto ctx = new FunctionContext([this, finish_op_ctx](int r) {
+      handle_snap_unprotect(r);
+      finish_op_ctx->complete(0);
+    });
   RWLock::RLocker owner_locker(m_local_image_ctx->owner_lock);
-  m_local_image_ctx->operations->execute_snap_unprotect(cls::rbd::UserSnapshotNamespace(),
-							m_snap_name.c_str(),
-                                                        ctx);
+  m_local_image_ctx->operations->execute_snap_unprotect(
+    cls::rbd::UserSnapshotNamespace(), m_snap_name.c_str(), ctx);
 }
 
 template <typename I>
@@ -208,7 +216,8 @@ void SnapshotCopyRequest<I>::send_snap_remove() {
 
     cls::rbd::SnapshotNamespace snap_namespace;
     m_local_image_ctx->snap_lock.get_read();
-    int r = m_local_image_ctx->get_snap_namespace(local_snap_id, &snap_namespace);
+    int r = m_local_image_ctx->get_snap_namespace(local_snap_id,
+                                                  &snap_namespace);
     m_local_image_ctx->snap_lock.put_read();
     if (r < 0) {
       derr << ": failed to retrieve local snap namespace: " << m_snap_name
@@ -217,7 +226,8 @@ void SnapshotCopyRequest<I>::send_snap_remove() {
       return;
     }
 
-    if (boost::get<cls::rbd::UserSnapshotNamespace>(&snap_namespace) == nullptr) {
+    if (boost::get<cls::rbd::UserSnapshotNamespace>(&snap_namespace) ==
+          nullptr) {
       continue;
     }
 
@@ -247,13 +257,20 @@ void SnapshotCopyRequest<I>::send_snap_remove() {
            << "snap_name=" << m_snap_name << ", "
            << "snap_id=" << m_prev_snap_id << dendl;
 
-  Context *ctx = create_context_callback<
-    SnapshotCopyRequest<I>, &SnapshotCopyRequest<I>::handle_snap_remove>(
-      this);
+  auto finish_op_ctx = start_local_op();
+  if (finish_op_ctx == nullptr) {
+    derr << ": lost exclusive lock" << dendl;
+    finish(-EROFS);
+    return;
+  }
+
+  auto ctx = new FunctionContext([this, finish_op_ctx](int r) {
+      handle_snap_remove(r);
+      finish_op_ctx->complete(0);
+    });
   RWLock::RLocker owner_locker(m_local_image_ctx->owner_lock);
-  m_local_image_ctx->operations->execute_snap_remove(cls::rbd::UserSnapshotNamespace(),
-						     m_snap_name.c_str(),
-						     ctx);
+  m_local_image_ctx->operations->execute_snap_remove(
+    cls::rbd::UserSnapshotNamespace(), m_snap_name.c_str(), ctx);
 }
 
 template <typename I>
@@ -343,11 +360,20 @@ void SnapshotCopyRequest<I>::send_snap_create() {
            << "snap_id=" << parent_spec.snap_id << ", "
            << "overlap=" << parent_overlap << "]" << dendl;
 
-  Context *ctx = create_context_callback<
-    SnapshotCopyRequest<I>, &SnapshotCopyRequest<I>::handle_snap_create>(
-      this);
+  Context *finish_op_ctx = start_local_op();
+  if (finish_op_ctx == nullptr) {
+    derr << ": lost exclusive lock" << dendl;
+    finish(-EROFS);
+    return;
+  }
+
+  auto ctx = new FunctionContext([this, finish_op_ctx](int r) {
+      handle_snap_create(r);
+      finish_op_ctx->complete(0);
+    });
   SnapshotCreateRequest<I> *req = SnapshotCreateRequest<I>::create(
-    m_local_image_ctx, m_snap_name, m_snap_namespace, size, parent_spec, parent_overlap, ctx);
+    m_local_image_ctx, m_snap_name, m_snap_namespace, size, parent_spec,
+    parent_overlap, ctx);
   req->send();
 }
 
@@ -445,13 +471,20 @@ void SnapshotCopyRequest<I>::send_snap_protect() {
            << "snap_name=" << m_snap_name << ", "
            << "snap_id=" << m_prev_snap_id << dendl;
 
-  Context *ctx = create_context_callback<
-    SnapshotCopyRequest<I>, &SnapshotCopyRequest<I>::handle_snap_protect>(
-      this);
+  auto finish_op_ctx = start_local_op();
+  if (finish_op_ctx == nullptr) {
+    derr << ": lost exclusive lock" << dendl;
+    finish(-EROFS);
+    return;
+  }
+
+  auto ctx = new FunctionContext([this, finish_op_ctx](int r) {
+      handle_snap_protect(r);
+      finish_op_ctx->complete(0);
+    });
   RWLock::RLocker owner_locker(m_local_image_ctx->owner_lock);
-  m_local_image_ctx->operations->execute_snap_protect(cls::rbd::UserSnapshotNamespace(),
-						      m_snap_name.c_str(),
-						      ctx);
+  m_local_image_ctx->operations->execute_snap_protect(
+    cls::rbd::UserSnapshotNamespace(), m_snap_name.c_str(), ctx);
 }
 
 template <typename I>
@@ -563,6 +596,15 @@ int SnapshotCopyRequest<I>::validate_parent(I *image_ctx,
     }
   }
   return 0;
+}
+
+template <typename I>
+Context *SnapshotCopyRequest<I>::start_local_op() {
+  RWLock::RLocker owner_locker(m_local_image_ctx->owner_lock);
+  if (m_local_image_ctx->exclusive_lock == nullptr) {
+    return nullptr;
+  }
+  return m_local_image_ctx->exclusive_lock->start_op();
 }
 
 } // namespace image_sync
