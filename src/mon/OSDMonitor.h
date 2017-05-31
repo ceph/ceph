@@ -453,7 +453,7 @@ private:
 
   creating_pgs_t update_pending_pgs(const OSDMap::Incremental& inc);
   void trim_creating_pgs(creating_pgs_t *creating_pgs, const PGMap& pgm);
-  void scan_for_creating_pgs(
+  unsigned scan_for_creating_pgs(
     const mempool::osdmap::map<int64_t,pg_pool_t>& pools,
     const mempool::osdmap::set<int64_t>& removed_pools,
     utime_t modified,
