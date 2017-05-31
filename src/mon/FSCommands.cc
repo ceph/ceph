@@ -90,7 +90,7 @@ class FsNewHandler : public FileSystemCommandHandler
       FSMap &fsmap,
       MonOpRequestRef op,
       map<string, cmd_vartype> &cmdmap,
-      std::stringstream &ss)
+      std::stringstream &ss) override
   {
     string metadata_name;
     cmd_getval(g_ceph_context, cmdmap, "metadata", metadata_name);
