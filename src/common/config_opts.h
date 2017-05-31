@@ -211,7 +211,7 @@ OPTION(ms_bind_retry_delay, OPT_INT, 5) // Delay between attemps to bind
 OPTION(ms_bind_retry_count, OPT_INT, 6) // If binding fails, how many times do we retry to bind
 OPTION(ms_bind_retry_delay, OPT_INT, 6) // Delay between attemps to bind
 #endif
-OPTION(ms_bind_before_connect, OPT_BOOL, true)
+OPTION(ms_bind_before_connect, OPT_BOOL, false)
 OPTION(ms_rwthread_stack_bytes, OPT_U64, 1024 << 10)
 OPTION(ms_tcp_read_timeout, OPT_U64, 900)
 OPTION(ms_pq_max_tokens_per_priority, OPT_U64, 16777216)
