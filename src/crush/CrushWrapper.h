@@ -1044,11 +1044,11 @@ private:
 
     if (!IS_ERR(parent_bucket)) {
       // zero out the bucket weight
-      crush_bucket_adjust_item_weight(crush, parent_bucket, item, 0);
+      bucket_adjust_item_weight(cct, parent_bucket, item, 0);
       adjust_item_weight(cct, parent_bucket->id, parent_bucket->weight);
 
       // remove the bucket from the parent
-      crush_bucket_remove_item(crush, parent_bucket, item);
+      bucket_remove_item(parent_bucket, item);
     } else if (PTR_ERR(parent_bucket) != -ENOENT) {
       return PTR_ERR(parent_bucket);
     }
@@ -1140,7 +1140,11 @@ public:
     assert(b);
     return crush_add_bucket(crush, bucketno, b, idout);
   }
-  
+
+  int bucket_add_item(crush_bucket *bucket, int item, int weight);
+  int bucket_remove_item(struct crush_bucket *bucket, int item);
+  int bucket_adjust_item_weight(CephContext *cct, struct crush_bucket *bucket, int item, int weight);
+
   void finalize() {
     assert(crush);
     crush_finalize(crush);
