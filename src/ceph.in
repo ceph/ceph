@@ -920,10 +920,6 @@ def main():
     if len(childargs) >= 3 and childargs[0] == 'tell' and childargs[2] == 'help':
         target = childargs[1].split('.')
         if validate_target(target):
-            if len(target) == 1: 
-                # TODO(Chang Liu): for "mon" target only, we should remove this
-                # patch after pybind supports this target format.
-                target.append("")
             return do_extended_help(parser, childargs, target, None)
         else:
             print('target {0} doesn\'t exists, please pass correct target to tell command, such as mon.a/'
