@@ -588,26 +588,29 @@ bool DaemonServer::handle_command(MCommand *m)
       return true;
     }
     int acting_primary = -1;
-    entity_inst_t inst;
     cluster_state.with_osdmap([&](const OSDMap& osdmap) {
 	acting_primary = osdmap.get_pg_acting_primary(pgid);
-	if (acting_primary >= 0) {
-	  inst = osdmap.get_inst(acting_primary);
-	}
       });
     if (acting_primary == -1) {
       ss << "pg " << pgid << " has no primary osd";
       cmdctx->reply(-EAGAIN, ss);
       return true;
     }
+    auto p = osd_cons.find(acting_primary);
+    if (p == osd_cons.end()) {
+      ss << "pg " << pgid << " primary osd." << acting_primary
+	 << " is not currently connected";
+      cmdctx->reply(-EAGAIN, ss);
+    }
     vector<pg_t> pgs = { pgid };
-    msgr->send_message(new MOSDScrub(monc->get_fsid(),
-				     pgs,
-				     scrubop == "repair",
-				     scrubop == "deep-scrub"),
-		       inst);
+    for (auto& con : p->second) {
+      con->send_message(new MOSDScrub(monc->get_fsid(),
+				      pgs,
+				      scrubop == "repair",
+				      scrubop == "deep-scrub"));
+    }
     ss << "instructing pg " << pgid << " on osd." << acting_primary
-       << " (" << inst << ") to " << scrubop;
+       << " to " << scrubop;
     cmdctx->reply(0, ss);
     return true;
   } else if (prefix == "osd reweight-by-pg" ||
