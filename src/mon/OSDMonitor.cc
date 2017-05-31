@@ -19,16 +19,16 @@
 #include <algorithm>
 #include <sstream>
 
-#include "OSDMonitor.h"
-#include "Monitor.h"
-#include "MDSMonitor.h"
-#include "PGMonitor.h"
-#include "MgrStatMonitor.h"
+#include "mon/OSDMonitor.h"
+#include "mon/Monitor.h"
+#include "mon/MDSMonitor.h"
+#include "mon/PGMonitor.h"
+#include "mon/MgrStatMonitor.h"
 #include "mon/AuthMonitor.h"
 #include "mon/ConfigKeyService.h"
 
-#include "MonitorDBStore.h"
-#include "Session.h"
+#include "mon/MonitorDBStore.h"
+#include "mon/Session.h"
 
 #include "crush/CrushWrapper.h"
 #include "crush/CrushTester.h"
