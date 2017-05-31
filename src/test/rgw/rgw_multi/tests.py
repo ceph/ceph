@@ -20,7 +20,7 @@ from nose.plugins.skip import SkipTest
 
 from .multisite import Zone
 
-from rgw_multi_conn import get_gateway_connection
+from .conn import get_gateway_connection
 
 class Config:
     """ test configuration """
