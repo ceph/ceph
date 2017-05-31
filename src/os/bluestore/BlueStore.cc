@@ -7575,6 +7575,9 @@ void BlueStore::_txc_finish_io(TransContext *txc)
   std::lock_guard<std::mutex> l(osr->qlock);
   txc->state = TransContext::STATE_IO_DONE;
 
+  // release aio contexts (including pinned buffers).
+  txc->ioc.running_aios.clear();
+
   OpSequencer::q_list_t::iterator p = osr->q.iterator_to(*txc);
   while (p != osr->q.begin()) {
     --p;
