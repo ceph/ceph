@@ -1615,7 +1615,6 @@ void PGMap::clear_delta()
 
 void PGMap::print_summary(Formatter *f, ostream *out) const
 {
-  std::stringstream ss;
   if (f)
     f->open_array_section("pgs_by_state");
 
@@ -1626,19 +1625,15 @@ void PGMap::print_summary(Formatter *f, ostream *out) const
        ++p) {
     state_by_count.insert(make_pair(p->second, p->first));
   }
-  for (multimap<int,int>::reverse_iterator p = state_by_count.rbegin();
-       p != state_by_count.rend();
-       ++p) {
-    if (f) {
+  if (f) {
+    for (multimap<int,int>::reverse_iterator p = state_by_count.rbegin();
+         p != state_by_count.rend();
+         ++p)
+    {
       f->open_object_section("pgs_by_state_element");
       f->dump_string("state_name", pg_state_string(p->second));
       f->dump_unsigned("count", p->first);
       f->close_section();
-    } else {
-      ss.setf(std::ios::right);
-      ss << "             " << std::setw(7) << p->first
-         << " " << pg_state_string(p->second) << "\n";
-      ss.unsetf(std::ios::right);
     }
   }
   if (f)
@@ -1654,57 +1649,89 @@ void PGMap::print_summary(Formatter *f, ostream *out) const
     f->dump_unsigned("bytes_avail", osd_sum.kb_avail * 1024ull);
     f->dump_unsigned("bytes_total", osd_sum.kb * 1024ull);
   } else {
-    *out << "      pgmap v" << version << ": "
-         << pg_stat.size() << " pgs, " << pg_pool_sum.size() << " pools, "
-         << prettybyte_t(pg_sum.stats.sum.num_bytes) << " data, "
-         << si_t(pg_sum.stats.sum.num_objects) << " objects\n";
-    *out << "            "
+    *out << "    pools:   " << pg_pool_sum.size() << " pools, "
+         << pg_stat.size() << " pgs\n";
+    *out << "    objects: " << si_t(pg_sum.stats.sum.num_objects) << " objects, "
+         << prettybyte_t(pg_sum.stats.sum.num_bytes) << "\n";
+    *out << "    usage:   "
          << kb_t(osd_sum.kb_used) << " used, "
          << kb_t(osd_sum.kb_avail) << " / "
          << kb_t(osd_sum.kb) << " avail\n";
+    *out << "    pgs:     ";
   }
 
 
+  bool pad = false;
   if (num_pg_active < num_pg) {
     float p = (float)num_pg_active / (float)num_pg;
     if (f) {
       f->dump_float("active_pgs_ratio", p);
     } else {
       char b[20];
-      snprintf(b, sizeof(b), "%.3lf", (1.0 - p) * 100.0);
-      *out << "            " << b << "% pgs inactive\n";
+      snprintf(b, sizeof(b), "%.3f", (1.0 - p) * 100.0);
+      *out << b << "% pgs inactive\n";
+      pad = true;
     }
   }
 
   list<string> sl;
   overall_recovery_summary(f, &sl);
   if (!f && !sl.empty()) {
-    for (list<string>::iterator p = sl.begin(); p != sl.end(); ++p)
-      *out << "            " << *p << "\n";
+    for (list<string>::iterator p = sl.begin(); p != sl.end(); ++p) {
+      if (pad) {
+        *out << "             ";
+      }
+      *out << *p << "\n";
+      pad = true;
+    }
   }
   sl.clear();
 
-  if (!f)
-    *out << ss.str();   // pgs by state
+  if (!f) {
+    unsigned max_width = 1;
+    for (multimap<int,int>::reverse_iterator p = state_by_count.rbegin();
+         p != state_by_count.rend();
+         ++p)
+    {
+      std::stringstream ss;
+      ss << p->first;
+      max_width = MAX(ss.str().size(), max_width);
+    }
 
-  ostringstream ssr;
-  overall_recovery_rate_summary(f, &ssr);
-  if (!f && ssr.str().length())
-    *out << "recovery io " << ssr.str() << "\n";
+    for (multimap<int,int>::reverse_iterator p = state_by_count.rbegin();
+         p != state_by_count.rend();
+         ++p)
+    {
+      if (pad) {
+        *out << "             ";
+      }
+      pad = true;
+      out->setf(std::ios::left);
+      *out << std::setw(max_width) << p->first
+           << " " << pg_state_string(p->second) << "\n";
+      out->unsetf(std::ios::left);
+    }
+  }
 
-  ssr.clear();
-  ssr.str("");
+  ostringstream ss_rec_io;
+  overall_recovery_rate_summary(f, &ss_rec_io);
+  ostringstream ss_client_io;
+  overall_client_io_rate_summary(f, &ss_client_io);
+  ostringstream ss_cache_io;
+  overall_cache_io_rate_summary(f, &ss_cache_io);
 
-  overall_client_io_rate_summary(f, &ssr);
-  if (!f && ssr.str().length())
-    *out << "  client io " << ssr.str() << "\n";
+  if (!f && (ss_client_io.str().length() || ss_rec_io.str().length()
+             || ss_cache_io.str().length())) {
+    *out << "\n \n";
+    *out << "  io:\n";
+  }
 
-  ssr.clear();
-  ssr.str("");
-
-  overall_cache_io_rate_summary(f, &ssr);
-  if (!f && ssr.str().length())
-    *out << "   cache io " << ssr.str() << "\n";
+  if (!f && ss_client_io.str().length())
+    *out << "    client:   " << ss_client_io.str() << "\n";
+  if (!f && ss_rec_io.str().length())
+    *out << "    recovery: " << ss_rec_io.str() << "\n";
+  if (!f && ss_cache_io.str().length())
+    *out << "    cache:    " << ss_cache_io.str() << "\n";
 }
 
 void PGMap::print_oneline_summary(Formatter *f, ostream *out) const
