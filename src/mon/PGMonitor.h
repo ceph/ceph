@@ -77,7 +77,6 @@ private:
 
   struct C_Stats;
 
-  void handle_statfs(MonOpRequestRef op);
   bool preprocess_getpoolstats(MonOpRequestRef op);
 
   bool preprocess_command(MonOpRequestRef op);

@@ -26,8 +26,6 @@
 #include "messages/MGetPoolStats.h"
 #include "messages/MGetPoolStatsReply.h"
 
-#include "messages/MStatfs.h"
-#include "messages/MStatfsReply.h"
 #include "messages/MOSDPGCreate.h"
 #include "messages/MMonCommand.h"
 #include "messages/MOSDScrub.h"
@@ -567,10 +565,6 @@ bool PGMonitor::preprocess_query(MonOpRequestRef op)
   PaxosServiceMessage *m = static_cast<PaxosServiceMessage*>(op->get_req());
   dout(10) << "preprocess_query " << *m << " from " << m->get_orig_source_inst() << dendl;
   switch (m->get_type()) {
-  case CEPH_MSG_STATFS:
-    handle_statfs(op);
-    return true;
-
   case MSG_GETPOOLSTATS:
     return preprocess_getpoolstats(op);
 
@@ -607,45 +601,6 @@ bool PGMonitor::prepare_update(MonOpRequestRef op)
     ceph_abort();
     return false;
   }
-}
-
-void PGMonitor::handle_statfs(MonOpRequestRef op)
-{
-  op->mark_pgmon_event(__func__);
-  MStatfs *statfs = static_cast<MStatfs*>(op->get_req());
-  // check caps
-  MonSession *session = statfs->get_session();
-  if (!session)
-    return;
-
-  if (!session->is_capable("pg", MON_CAP_R)) {
-    dout(0) << "MStatfs received from entity with insufficient privileges "
-            << session->caps << dendl;
-    return;
-  }
-
-  if (statfs->fsid != mon->monmap->fsid) {
-    dout(0) << "handle_statfs on fsid " << statfs->fsid
-            << " != " << mon->monmap->fsid << dendl;
-    return;
-  }
-
-
-  dout(10) << "handle_statfs " << *statfs
-           << " from " << statfs->get_orig_source() << dendl;
-
-  // fill out stfs
-  MStatfsReply *reply = new MStatfsReply(mon->monmap->fsid, statfs->get_tid(),
-    get_last_committed());
-
-  // these are in KB.
-  reply->h.st.kb = pg_map.osd_sum.kb;
-  reply->h.st.kb_used = pg_map.osd_sum.kb_used;
-  reply->h.st.kb_avail = pg_map.osd_sum.kb_avail;
-  reply->h.st.num_objects = pg_map.pg_sum.stats.sum.num_objects;
-
-  // reply
-  mon->send_reply(op, reply);
 }
 
 bool PGMonitor::preprocess_getpoolstats(MonOpRequestRef op)
@@ -1343,7 +1298,14 @@ public:
   size_t get_num_pg_by_osd(int osd) const override {
     return pgmap.get_num_pg_by_osd(osd);
   }
-
+  ceph_statfs get_statfs() const override {
+    ceph_statfs statfs;
+    statfs.kb = pgmap.osd_sum.kb;
+    statfs.kb_used = pgmap.osd_sum.kb_used;
+    statfs.kb_avail = pgmap.osd_sum.kb_avail;
+    statfs.num_objects = pgmap.pg_sum.stats.sum.num_objects;
+    return statfs;
+  }
   void print_summary(Formatter *f, ostream *out) const override {
     pgmap.print_summary(f, out);
   }
