@@ -167,6 +167,16 @@ public:
       return p->second.primary;
   }
 
+  ceph_statfs get_statfs() const {
+    ceph_statfs statfs;
+    // these are in KB.
+    statfs.kb = osd_sum.kb;
+    statfs.kb_used = osd_sum.kb_used;
+    statfs.kb_avail = osd_sum.kb_avail;
+    statfs.num_objects = pg_sum.stats.sum.num_objects;
+    return statfs;
+  }
+
   int64_t get_rule_avail(const OSDMap& osdmap, int ruleno) const;
 
   // kill me post-luminous:
