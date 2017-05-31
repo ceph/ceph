@@ -2695,7 +2695,7 @@ bool OSDMonitor::preprocess_pgtemp(MonOpRequestRef op)
 
   for (auto p = m->pg_temp.begin(); p != m->pg_temp.end(); ++p) {
     dout(20) << " " << p->first
-	     << (osdmap.pg_temp->count(p->first) ? (*osdmap.pg_temp)[p->first] : empty)
+	     << (osdmap.pg_temp->count(p->first) ? osdmap.pg_temp->get(p->first) : empty)
              << " -> " << p->second << dendl;
 
     // does the pool exist?
@@ -2739,7 +2739,7 @@ bool OSDMonitor::preprocess_pgtemp(MonOpRequestRef op)
     //        an existing pg_primary field to imply a change
     if (p->second.size() &&
 	(osdmap.pg_temp->count(p->first) == 0 ||
-	 !vectors_equal((*osdmap.pg_temp)[p->first], p->second) ||
+	 !vectors_equal(osdmap.pg_temp->get(p->first), p->second) ||
 	 osdmap.primary_temp->count(p->first)))
       return false;
   }

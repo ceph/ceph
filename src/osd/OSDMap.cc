@@ -1409,10 +1409,8 @@ void OSDMap::dedup(const OSDMap *o, OSDMap *n)
   }
 
   // does pg_temp match?
-  if (o->pg_temp->size() == n->pg_temp->size()) {
-    if (*o->pg_temp == *n->pg_temp)
-      n->pg_temp = o->pg_temp;
-  }
+  if (*o->pg_temp == *n->pg_temp)
+    n->pg_temp = o->pg_temp;
 
   // does primary_temp match?
   if (o->primary_temp->size() == n->primary_temp->size()) {
@@ -1658,7 +1656,11 @@ int OSDMap::apply_incremental(const Incremental &inc)
     if (pg.second.empty())
       pg_temp->erase(pg.first);
     else
-      (*pg_temp)[pg.first] = pg.second;
+      pg_temp->set(pg.first, pg.second);
+  }
+  if (!inc.new_pg_temp.empty()) {
+    // make sure pg_temp is efficiently stored
+    pg_temp->rebuild();
   }
 
   for (const auto &pg : inc.new_primary_temp) {
@@ -2413,7 +2415,9 @@ void OSDMap::decode_classic(bufferlist::iterator& p)
     while (n--) {
       old_pg_t opg;
       ::decode_raw(opg, p);
-      ::decode((*pg_temp)[pg_t(opg)], p);
+      mempool::osdmap::vector<int32_t> v;
+      ::decode(v, p);
+      pg_temp->set(pg_t(opg), v);
     }
   } else {
     ::decode(*pg_temp, p);
@@ -2747,15 +2751,7 @@ void OSDMap::dump(Formatter *f) const
   }
   f->close_section();
   f->open_array_section("pg_temp");
-  for (const auto &pg : *pg_temp) {
-    f->open_object_section("osds");
-    f->dump_stream("pgid") << pg.first;
-    f->open_array_section("osds");
-    for (const auto osd : pg.second)
-      f->dump_int("osd", osd);
-    f->close_section();
-    f->close_section();
-  }
+  pg_temp->dump(f);
   f->close_section();
 
   f->open_array_section("primary_temp");

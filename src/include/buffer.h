@@ -688,6 +688,10 @@ namespace buffer CEPH_BUFFER_API {
     const ptr& front() const { return _buffers.front(); }
     const ptr& back() const { return _buffers.back(); }
 
+    size_t get_append_buffer_unused_tail_length() const {
+      return append_buffer.unused_tail_length();
+    }
+
     unsigned get_memcopy_count() const {return _memcopy_count; }
     const std::list<ptr>& buffers() const { return _buffers; }
     void swap(list& other);
