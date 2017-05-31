@@ -1,5 +1,6 @@
 overrides:
   ceph:
+    wait-for-scrub: false
     log-whitelist:
       - candidate had a stat error
       - candidate had a read error
