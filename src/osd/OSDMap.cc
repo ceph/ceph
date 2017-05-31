@@ -366,7 +366,15 @@ void OSDMap::Incremental::encode_client_old(bufferlist& bl) const
     ::encode(n, bl);
   }
   ::encode(new_up_client, bl, 0);
-  ::encode(new_state, bl);
+  {
+    // legacy is map<int32_t,uint8_t>
+    uint32_t n = new_state.size();
+    ::encode(n, bl);
+    for (auto p : new_state) {
+      ::encode(p.first, bl);
+      ::encode((uint8_t)p.second, bl);
+    }
+  }
   ::encode(new_weight, bl);
   // for ::encode(new_pg_temp, bl);
   n = new_pg_temp.size();
@@ -402,7 +410,14 @@ void OSDMap::Incremental::encode_classic(bufferlist& bl, uint64_t features) cons
   ::encode(new_pool_names, bl);
   ::encode(old_pools, bl);
   ::encode(new_up_client, bl, features);
-  ::encode(new_state, bl);
+  {
+    uint32_t n = new_state.size();
+    ::encode(n, bl);
+    for (auto p : new_state) {
+      ::encode(p.first, bl);
+      ::encode((uint8_t)p.second, bl);
+    }
+  }
   ::encode(new_weight, bl);
   ::encode(new_pg_temp, bl);
 
@@ -444,7 +459,7 @@ void OSDMap::Incremental::encode(bufferlist& bl, uint64_t features) const
   ENCODE_START(8, 7, bl);
 
   {
-    uint8_t v = 4;
+    uint8_t v = 5;
     if (!HAVE_FEATURE(features, SERVER_LUMINOUS)) {
       v = 3;
     }
@@ -462,7 +477,16 @@ void OSDMap::Incremental::encode(bufferlist& bl, uint64_t features) const
     ::encode(new_pool_names, bl);
     ::encode(old_pools, bl);
     ::encode(new_up_client, bl, features);
-    ::encode(new_state, bl);
+    if (v >= 5) {
+      ::encode(new_state, bl);
+    } else {
+      uint32_t n = new_state.size();
+      ::encode(n, bl);
+      for (auto p : new_state) {
+	::encode(p.first, bl);
+	::encode((uint8_t)p.second, bl);
+      }
+    }
     ::encode(new_weight, bl);
     ::encode(new_pg_temp, bl);
     ::encode(new_primary_temp, bl);
@@ -581,7 +605,13 @@ void OSDMap::Incremental::decode_classic(bufferlist::iterator &p)
     ::decode(old_pools, p);
   }
   ::decode(new_up_client, p);
-  ::decode(new_state, p);
+  {
+    map<int32_t,uint8_t> ns;
+    ::decode(ns, p);
+    for (auto q : ns) {
+      new_state[q.first] = q.second;
+    }
+  }
   ::decode(new_weight, p);
 
   if (v < 6) {
@@ -650,7 +680,7 @@ void OSDMap::Incremental::decode(bufferlist::iterator& bl)
     return;
   }
   {
-    DECODE_START(4, bl); // client-usable data
+    DECODE_START(5, bl); // client-usable data
     ::decode(fsid, bl);
     ::decode(epoch, bl);
     ::decode(modified, bl);
@@ -664,7 +694,15 @@ void OSDMap::Incremental::decode(bufferlist::iterator& bl)
     ::decode(new_pool_names, bl);
     ::decode(old_pools, bl);
     ::decode(new_up_client, bl);
-    ::decode(new_state, bl);
+    if (struct_v >= 5) {
+      ::decode(new_state, bl);
+    } else {
+      map<int32_t,uint8_t> ns;
+      ::decode(ns, bl);
+      for (auto q : ns) {
+	new_state[q.first] = q.second;
+      }
+    }
     ::decode(new_weight, bl);
     ::decode(new_pg_temp, bl);
     ::decode(new_primary_temp, bl);
