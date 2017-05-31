@@ -7,6 +7,7 @@
 #include "librbd/ImageCtx.h"
 #include <string>
 
+class AsyncOpTracker;
 class Context;
 
 namespace librbd {
@@ -19,6 +20,7 @@ template <typename ImageCtxT = ImageCtx>
 class PreReleaseRequest {
 public:
   static PreReleaseRequest* create(ImageCtxT &image_ctx, bool shutting_down,
+                                   AsyncOpTracker &async_op_tracker,
                                    Context *on_finish);
 
   ~PreReleaseRequest();
@@ -40,6 +42,9 @@ private:
    * BLOCK_WRITES
    *    |
    *    v
+   * WAIT_FOR_OPS
+   *    |
+   *    v
    * INVALIDATE_CACHE
    *    |
    *    v
@@ -58,16 +63,17 @@ private:
    */
 
   PreReleaseRequest(ImageCtxT &image_ctx, bool shutting_down,
-                    Context *on_finish);
+                    AsyncOpTracker &async_op_tracker, Context *on_finish);
 
   ImageCtxT &m_image_ctx;
-  Context *m_on_finish;
   bool m_shutting_down;
+  AsyncOpTracker &m_async_op_tracker;
+  Context *m_on_finish;
 
-  int m_error_result;
+  int m_error_result = 0;
 
-  decltype(m_image_ctx.object_map) m_object_map;
-  decltype(m_image_ctx.journal) m_journal;
+  decltype(m_image_ctx.object_map) m_object_map = nullptr;
+  decltype(m_image_ctx.journal) m_journal = nullptr;
 
   void send_prepare_lock();
   void handle_prepare_lock(int r);
@@ -77,6 +83,9 @@ private:
 
   void send_block_writes();
   void handle_block_writes(int r);
+
+  void send_wait_for_ops();
+  void handle_wait_for_ops(int r);
 
   void send_invalidate_cache(bool purge_on_error);
   void handle_invalidate_cache(int r);

@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "librbd/ExclusiveLock.h"
+#include "librbd/ImageCtx.h"
 #include "librbd/ImageWatcher.h"
 #include "librbd/ImageState.h"
 #include "librbd/exclusive_lock/PreAcquireRequest.h"
@@ -53,12 +54,15 @@ bool ExclusiveLock<I>::accept_requests(int *ret_val) const {
 template <typename I>
 bool ExclusiveLock<I>::accept_ops() const {
   Mutex::Locker locker(ML<I>::m_lock);
-  bool accept_ops = (!ML<I>::is_state_shutdown() &&
-                     (ML<I>::is_state_locked() ||
-                      ML<I>::is_state_post_acquiring()));
+  bool accept = accept_ops(ML<I>::m_lock);
+  ldout(m_image_ctx.cct, 20) << "=" << accept << dendl;
+  return accept;
+}
 
-  ldout(m_image_ctx.cct, 20) << "=" << accept_ops << dendl;
-  return accept_ops;
+template <typename I>
+bool ExclusiveLock<I>::accept_ops(const Mutex &lock) const {
+  return (!ML<I>::is_state_shutdown() &&
+          (ML<I>::is_state_locked() || ML<I>::is_state_post_acquiring()));
 }
 
 template <typename I>
@@ -122,6 +126,21 @@ void ExclusiveLock<I>::handle_peer_notification(int r) {
 
   m_acquire_lock_peer_ret_val = r;
   ML<I>::execute_next_action();
+}
+
+template <typename I>
+Context *ExclusiveLock<I>::start_op() {
+  assert(m_image_ctx.owner_lock.is_locked());
+  Mutex::Locker locker(ML<I>::m_lock);
+
+  if (!accept_ops(ML<I>::m_lock)) {
+    return nullptr;
+  }
+
+  m_async_op_tracker.start_op();
+  return new FunctionContext([this](int r) {
+      m_async_op_tracker.finish_op();
+    });
 }
 
 template <typename I>
@@ -264,7 +283,7 @@ void ExclusiveLock<I>::pre_release_lock_handler(bool shutting_down,
   Mutex::Locker locker(ML<I>::m_lock);
 
   PreReleaseRequest<I> *req = PreReleaseRequest<I>::create(
-    m_image_ctx, shutting_down, on_finish);
+    m_image_ctx, shutting_down, m_async_op_tracker, on_finish);
   m_image_ctx.op_work_queue->queue(new FunctionContext([req](int r) {
     req->send();
   }));

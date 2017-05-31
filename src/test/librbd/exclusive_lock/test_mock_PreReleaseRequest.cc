@@ -7,6 +7,7 @@
 #include "test/librbd/mock/MockJournal.h"
 #include "test/librbd/mock/MockObjectMap.h"
 #include "test/librados_test_stub/MockTestMemIoCtxImpl.h"
+#include "common/AsyncOpTracker.h"
 #include "librbd/exclusive_lock/PreReleaseRequest.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
@@ -118,6 +119,7 @@ public:
     EXPECT_CALL(*mock_image_ctx.state, handle_prepare_lock_complete());
   }
 
+  AsyncOpTracker m_async_op_tracker;
 };
 
 TEST_F(TestMockExclusiveLockPreReleaseRequest, Success) {
@@ -149,7 +151,7 @@ TEST_F(TestMockExclusiveLockPreReleaseRequest, Success) {
 
   C_SaferCond ctx;
   MockPreReleaseRequest *req = MockPreReleaseRequest::create(
-    mock_image_ctx, false, &ctx);
+    mock_image_ctx, false, m_async_op_tracker, &ctx);
   req->send();
   ASSERT_EQ(0, ctx.wait());
 }
@@ -179,7 +181,7 @@ TEST_F(TestMockExclusiveLockPreReleaseRequest, SuccessJournalDisabled) {
 
   C_SaferCond ctx;
   MockPreReleaseRequest *req = MockPreReleaseRequest::create(
-    mock_image_ctx, false, &ctx);
+    mock_image_ctx, false, m_async_op_tracker, &ctx);
   req->send();
   ASSERT_EQ(0, ctx.wait());
 }
@@ -203,7 +205,7 @@ TEST_F(TestMockExclusiveLockPreReleaseRequest, SuccessObjectMapDisabled) {
   C_SaferCond release_ctx;
   C_SaferCond ctx;
   MockPreReleaseRequest *req = MockPreReleaseRequest::create(
-    mock_image_ctx, true, &ctx);
+    mock_image_ctx, true, m_async_op_tracker, &ctx);
   req->send();
   ASSERT_EQ(0, ctx.wait());
 }
@@ -239,7 +241,7 @@ TEST_F(TestMockExclusiveLockPreReleaseRequest, Blacklisted) {
 
   C_SaferCond ctx;
   MockPreReleaseRequest *req = MockPreReleaseRequest::create(
-    mock_image_ctx, false, &ctx);
+    mock_image_ctx, false, m_async_op_tracker, &ctx);
   req->send();
   ASSERT_EQ(0, ctx.wait());
 }
@@ -261,7 +263,7 @@ TEST_F(TestMockExclusiveLockPreReleaseRequest, BlockWritesError) {
 
   C_SaferCond ctx;
   MockPreReleaseRequest *req = MockPreReleaseRequest::create(
-    mock_image_ctx, true, &ctx);
+    mock_image_ctx, true, m_async_op_tracker, &ctx);
   req->send();
   ASSERT_EQ(-EINVAL, ctx.wait());
 }
@@ -284,7 +286,7 @@ TEST_F(TestMockExclusiveLockPreReleaseRequest, UnlockError) {
 
   C_SaferCond ctx;
   MockPreReleaseRequest *req = MockPreReleaseRequest::create(
-    mock_image_ctx, true, &ctx);
+    mock_image_ctx, true, m_async_op_tracker, &ctx);
   req->send();
   ASSERT_EQ(0, ctx.wait());
 }
