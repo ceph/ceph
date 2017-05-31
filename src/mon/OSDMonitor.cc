@@ -988,7 +988,7 @@ void OSDMonitor::maybe_prime_pg_temp()
 
   // check for interesting OSDs
   set<int> osds;
-  for (map<int32_t,uint8_t>::iterator p = pending_inc.new_state.begin();
+  for (auto p = pending_inc.new_state.begin();
        !all && p != pending_inc.new_state.end();
        ++p) {
     if ((p->second & CEPH_OSD_UP) &&
@@ -1206,7 +1206,7 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
   }
 
   // tell me about it
-  for (map<int32_t,uint8_t>::iterator i = pending_inc.new_state.begin();
+  for (auto i = pending_inc.new_state.begin();
        i != pending_inc.new_state.end();
        ++i) {
     int s = i->second ? i->second : CEPH_OSD_UP;
