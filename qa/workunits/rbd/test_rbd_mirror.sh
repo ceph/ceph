@@ -1,8 +1,8 @@
 #!/bin/sh -e
 
 if [ -n "${VALGRIND}" ]; then
-  valgrind --tool=${VALGRIND} --suppressions=${TESTDIR}/valgrind.supp \
-    ceph_test_rbd_mirror
+  valgrind ${VALGRIND} --suppressions=${TESTDIR}/valgrind.supp \
+    --error-exitcode=1 ceph_test_rbd_mirror
 else
   ceph_test_rbd_mirror
 fi

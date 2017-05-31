@@ -8,4 +8,4 @@ overrides:
     valgrind: ["--tool=memcheck"]
   workunit:
     env:
-      VALGRIND: "memcheck"
+      VALGRIND: "--tool=memcheck --leak-check=full"
