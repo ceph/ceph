@@ -29,7 +29,8 @@ void PGMapDigest::encode(bufferlist& bl, uint64_t features) const
   ::encode(num_pg, bl);
   ::encode(num_pg_active, bl);
   ::encode(num_osd, bl);
-  ::encode(osd_stat, bl);
+  unordered_map<int32_t,osd_stat_t> osd_stat_temp;
+  ::encode(osd_stat_temp, bl);
   ::encode(pg_pool_sum, bl, features);
   ::encode(osd_sum, bl);
   ::encode(pg_sum, bl, features);
@@ -52,7 +53,8 @@ void PGMapDigest::decode(bufferlist::iterator& p)
   ::decode(num_pg, p);
   ::decode(num_pg_active, p);
   ::decode(num_osd, p);
-  ::decode(osd_stat, p);
+  unordered_map<int32_t,osd_stat_t> osd_stat_temp;
+  ::decode(osd_stat_temp, p);
   ::decode(pg_pool_sum, p);
   ::decode(osd_sum, p);
   ::decode(pg_sum, p);
@@ -89,12 +91,15 @@ void PGMapDigest::dump(Formatter *f) const
   }
   f->close_section();
   f->open_array_section("osd_stats");
-  for (auto& p : osd_stat) {
+  int i = 0;
+  // TODO: this isn't really correct since we can dump non-existent OSDs
+  // I dunno what osd_last_seq is set to in that case...
+  for (auto& p : osd_last_seq) {
     f->open_object_section("osd_stat");
-    f->dump_int("osd", p.first);
-    f->dump_unsigned("seq", osd_last_seq[p.first]);
-    p.second.dump(f);
+    f->dump_int("osd", i);
+    f->dump_unsigned("seq", p);
     f->close_section();
+    ++i;
   }
   f->close_section();
   f->open_array_section("num_pg_by_state");
