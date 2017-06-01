@@ -6,8 +6,6 @@ overrides:
         # this line to address issue #1017 
         mon lease: 15
         mon lease ack timeout: 25
-  rgw:
-    default_idle_timeout: 1200
   s3tests:
     idle_timeout: 1200
   ceph-fuse:
