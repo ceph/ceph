@@ -13113,26 +13113,33 @@ int RGWRados::check_bucket_shards(const RGWBucketInfo& bucket_info, rgw_bucket& 
 
   bool need_resharding = false;
   int num_source_shards = (bucket_info.num_shards > 0 ? bucket_info.num_shards : 1);
+  uint32_t suggested_num_shards;
 
   int ret =  quota_handler->check_bucket_shards((uint64_t)cct->_conf->rgw_max_objs_per_shard,
 						num_source_shards,  bucket_info.owner, bucket, bucket_quota,
-						1, need_resharding);
+						1, need_resharding, &suggested_num_shards);
   if (ret < 0) {
     return ret;
   }
 
   if (need_resharding) {
-    return add_bucket_to_reshard(bucket_info);
+    return add_bucket_to_reshard(bucket_info, suggested_num_shards);
   }
 
   return ret;
 }
 
-int RGWRados::add_bucket_to_reshard(const RGWBucketInfo& bucket_info)
+int RGWRados::add_bucket_to_reshard(const RGWBucketInfo& bucket_info, uint32_t new_num_shards)
 {
   RGWReshard reshard(this);
 
-  int num_source_shards = (bucket_info.num_shards > 0 ? bucket_info.num_shards : 1);
+  uint32_t num_source_shards = (bucket_info.num_shards > 0 ? bucket_info.num_shards : 1);
+
+  new_num_shards = min(new_num_shards, get_max_bucket_shards());
+  if (new_num_shards <= num_source_shards) {
+    ldout(cct, 20) << "not resharding bucket name=" << bucket_info.bucket.name << ", orig_num=" << num_source_shards << ", new_num_shards=" << new_num_shards << dendl;
+    return 0;
+  }
 
   cls_rgw_reshard_entry entry;
   entry.time = real_clock::now();
@@ -13140,7 +13147,7 @@ int RGWRados::add_bucket_to_reshard(const RGWBucketInfo& bucket_info)
   entry.bucket_name = bucket_info.bucket.name;
   entry.bucket_id = bucket_info.bucket.bucket_id;
   entry.old_num_shards = num_source_shards;
-  entry.new_num_shards = num_source_shards << 1;
+  entry.new_num_shards = new_num_shards;
 
   return reshard.add(entry);
 }
