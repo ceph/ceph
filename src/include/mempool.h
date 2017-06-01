@@ -142,6 +142,7 @@ namespace mempool {
   f(bluestore_cache_onode)	      \
   f(bluestore_cache_other)	      \
   f(bluestore_fsck)		      \
+  f(bluestore_txc)		      \
   f(bluefs)			      \
   f(buffer_anon)		      \
   f(buffer_meta)		      \
