@@ -1187,7 +1187,6 @@ public:
     return nullptr;
   }
 
-  const pool_stat_t& get_pg_sum() const override { return pgmap.pg_sum; }
   const osd_stat_t& get_osd_sum() const override { return pgmap.osd_sum; }
 
   const osd_stat_t *get_osd_stat(int osd) const override {
