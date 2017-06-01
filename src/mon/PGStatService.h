@@ -87,7 +87,9 @@ public:
     ceph_abort();
   }
 
-  virtual size_t get_num_pg_by_osd(int osd) const = 0;
+  virtual size_t get_num_pg_by_osd(int osd) const {
+    ceph_abort();
+  }
   virtual ceph_statfs get_statfs() const = 0;
   virtual void print_summary(Formatter *f, ostream *out) const = 0;
   virtual void dump_info(Formatter *f) const = 0;
