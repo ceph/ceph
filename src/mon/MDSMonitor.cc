@@ -1071,9 +1071,8 @@ bool MDSMonitor::preprocess_command(MonOpRequestRef op)
         
         ds << "name: " << mds_map.fs_name << ", metadata pool: "
            << md_pool_name << ", data pools: [";
-        for (std::set<int64_t>::iterator dpi = mds_map.data_pools.begin();
-           dpi != mds_map.data_pools.end(); ++dpi) {
-          const string &pool_name = mon->osdmon()->osdmap.get_pool_name(*dpi);
+        for (auto dpi : mds_map.data_pools) {
+          const string &pool_name = mon->osdmon()->osdmap.get_pool_name(dpi);
           ds << pool_name << " ";
         }
         ds << "]" << std::endl;
