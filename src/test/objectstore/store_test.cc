@@ -5744,11 +5744,11 @@ TEST_P(StoreTestSpecificAUSize, TooManyBlobsTest) {
 #if defined(HAVE_LIBAIO)
 void get_mempool_stats(uint64_t* total_bytes, uint64_t* total_items)
 {
-  uint64_t onode_allocated = mempool::bluestore_meta_onode::allocated_bytes();
-  uint64_t other_allocated = mempool::bluestore_meta_other::allocated_bytes();
+  uint64_t onode_allocated = mempool::bluestore_cache_onode::allocated_bytes();
+  uint64_t other_allocated = mempool::bluestore_cache_other::allocated_bytes();
 
-  uint64_t onode_items = mempool::bluestore_meta_onode::allocated_items();
-  uint64_t other_items = mempool::bluestore_meta_other::allocated_items();
+  uint64_t onode_items = mempool::bluestore_cache_onode::allocated_items();
+  uint64_t other_items = mempool::bluestore_cache_other::allocated_items();
   cout << "onode(" << onode_allocated << "/" << onode_items
        << ") other(" << other_allocated << "/" << other_items
        << ")" << std::endl;
