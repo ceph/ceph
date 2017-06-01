@@ -181,7 +181,7 @@ function activate_virtualenv() {
         rm -rf ${env_dir}_tmp
 
         . $env_dir/bin/activate
-        if ! populate_wheelhouse install ; then
+        if ! populate_wheelhouse "install --upgrade" ; then
             rm -rf $env_dir
             return 1
         fi
