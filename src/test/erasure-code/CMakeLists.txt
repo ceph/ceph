@@ -78,6 +78,7 @@ target_link_libraries(unittest_erasure_code
   )
 
 # unittest_erasure_code_plugin_jerasure
+if(0)
 add_executable(unittest_erasure_code_plugin_jerasure
   TestErasureCodePluginJerasure.cc
   $<TARGET_OBJECTS:unit-main>
@@ -88,6 +89,7 @@ target_link_libraries(unittest_erasure_code_plugin_jerasure
   ceph-common)
 add_dependencies(unittest_erasure_code_plugin_jerasure
   ec_jerasure)
+endif(0)
 
 if(HAVE_BETTER_YASM_ELF64)
 
