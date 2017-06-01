@@ -68,7 +68,7 @@ function run() {
     $DRY_RUN ./do_cmake.sh $@ || return 1
     $DRY_RUN cd build
     $DRY_RUN make $BUILD_MAKEOPTS tests || return 1
-    $DRY_RUN ctest $CHECK_MAKEOPTS --output-on-failure || return 1
+    $DRY_RUN ctest -R unittest_erasure_code_plugin_jerasure -VV $CHECK_MAKEOPTS || return 1
 }
 
 function main() {
