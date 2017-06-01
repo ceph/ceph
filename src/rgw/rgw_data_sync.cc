@@ -469,11 +469,11 @@ class RGWInitDataSyncStatusCoroutine : public RGWCoroutine {
   rgw_data_sync_status *status;
   map<int, RGWDataChangesLogInfo> shards_info;
 public:
-  RGWInitDataSyncStatusCoroutine(RGWDataSyncEnv *_sync_env, uint32_t num_shards,
-                                 rgw_data_sync_status *status)
+  RGWInitDataSyncStatusCoroutine(RGWDataSyncEnv *_sync_env, uint32_t _num_shards,
+                                 rgw_data_sync_status *_status)
     : RGWCoroutine(_sync_env->cct), sync_env(_sync_env), store(sync_env->store),
       pool(store->get_zone_params().log_pool),
-      num_shards(num_shards), status(status) {
+      num_shards(_num_shards), status(_status) {
     lock_name = "sync_lock";
 
 #define COOKIE_LEN 16
