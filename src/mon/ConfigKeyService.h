@@ -15,6 +15,7 @@
 #define CEPH_MON_CONFIG_KEY_SERVICE_H
 
 #include "mon/QuorumService.h"
+#include "mon/MonitorDBStore.h"
 
 class Paxos;
 class Monitor;
@@ -28,7 +29,11 @@ class ConfigKeyService : public QuorumService
 
   int store_get(const string &key, bufferlist &bl);
   void store_put(const string &key, bufferlist &bl, Context *cb = NULL);
+  void store_delete(MonitorDBStore::TransactionRef t, const string &key);
   void store_delete(const string &key, Context *cb = NULL);
+  void store_delete_prefix(
+      MonitorDBStore::TransactionRef t,
+      const string &prefix);
   void store_list(stringstream &ss);
   void store_dump(stringstream &ss);
   bool store_exists(const string &key);
@@ -60,6 +65,13 @@ public:
   void finish_epoch() override { }
   void cleanup() override { }
   void service_tick() override { }
+
+  void do_osd_destroy(int32_t id, uuid_d& uuid);
+  int validate_osd_new(
+      const uuid_d& uuid,
+      const string& dmcrypt_key,
+      stringstream& ss);
+  void do_osd_new(const uuid_d& uuid, const string& dmcrypt_key);
 
   int get_type() override {
     return QuorumService::SERVICE_CONFIG_KEY;

@@ -1283,8 +1283,8 @@ function test_mon_osd()
   max_osd=$((max_osd + 1))
   ceph osd getmaxosd | grep "max_osd = $max_osd"
 
-  ceph osd create $uuid $((id - 1)) 2>&1 | grep 'EINVAL'
-  ceph osd create $uuid $((id + 1)) 2>&1 | grep 'EINVAL'
+  ceph osd create $uuid $((id - 1)) 2>&1 | grep 'EEXIST'
+  ceph osd create $uuid $((id + 1)) 2>&1 | grep 'EEXIST'
   id2=`ceph osd create $uuid`
   [ "$id" = "$id2" ]
   id2=`ceph osd create $uuid $id`
@@ -1297,7 +1297,7 @@ function test_mon_osd()
   max_osd=$((id + 1))
   ceph osd getmaxosd | grep "max_osd = $max_osd"
 
-  ceph osd create $uuid $gap_start 2>&1 | grep 'EINVAL'
+  ceph osd create $uuid $gap_start 2>&1 | grep 'EEXIST'
 
   #
   # When CEPH_CLI_TEST_DUP_COMMAND is set, osd create

@@ -117,6 +117,7 @@ struct ceph_eversion {
 #define CEPH_OSD_FULL    (1<<4)  /* osd is at or above full threshold */
 #define CEPH_OSD_NEARFULL (1<<5) /* osd is at or above nearfull threshold */
 #define CEPH_OSD_BACKFILLFULL (1<<6) /* osd is at or above backfillfull threshold */
+#define CEPH_OSD_DESTROYED (1<<7) /* osd has been destroyed */
 
 extern const char *ceph_osd_state_name(int s);
 
