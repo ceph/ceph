@@ -41,6 +41,8 @@ public:
   mempool::pgmap::vector<uint64_t> osd_last_seq;
   mempool::pgmap::unordered_map<int32_t,osd_stat_t> osd_stat;
 
+  mutable std::map<int, int64_t> avail_space_by_rule;
+
   // aggregate state, populated by PGMap child
   int64_t num_pg = 0, num_osd = 0;
   int64_t num_pg_active = 0;
@@ -177,7 +179,13 @@ public:
     return statfs;
   }
 
-  int64_t get_rule_avail(const OSDMap& osdmap, int ruleno) const;
+  int64_t get_rule_avail(int ruleno) const {
+    auto i = avail_space_by_rule.find(ruleno);
+    if (i != avail_space_by_rule.end())
+      return avail_space_by_rule[ruleno];
+    else
+      return 0;
+  }
 
   // kill me post-luminous:
   virtual float get_fallback_full_ratio() const {
@@ -415,10 +423,14 @@ public:
   void decode(bufferlist::iterator &bl);
 
   /// encode subset of our data to a PGMapDigest
-  void encode_digest(bufferlist& bl, uint64_t features) const;
+  void encode_digest(const OSDMap& osdmap,
+		     bufferlist& bl, uint64_t features) const;
 
   void dirty_all(Incremental& inc);
 
+  int64_t get_rule_avail(const OSDMap& osdmap, int ruleno) const;
+  void get_rules_avail(const OSDMap& osdmap,
+		       std::map<int,int64_t> *avail_map) const;
   void dump(Formatter *f) const; 
   void dump_basic(Formatter *f) const;
   void dump_pg_stats(Formatter *f, bool brief) const;
