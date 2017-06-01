@@ -38,8 +38,9 @@ public:
    */
   virtual bool is_readable() const { return true; }
   virtual const pool_stat_t* get_pool_stat(int poolid) const = 0;
-  virtual const osd_stat_t& get_osd_sum() const = 0;
-
+  virtual const osd_stat_t& get_osd_sum() const {
+    ceph_abort();
+  }
   virtual const osd_stat_t *get_osd_stat(int osd) const {
     ceph_abort();
   }
