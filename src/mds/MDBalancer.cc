@@ -396,7 +396,7 @@ void MDBalancer::handle_heartbeat(MHeartbeat *m)
       /* avoid spamming ceph -w if user does not turn mantle on */
       if (mds->mdsmap->get_balancer() != "") {
         int r = mantle_prep_rebalance();
-        if (!r) return;
+        if (!r) goto out;
 	mds->clog->warn() << "using old balancer; mantle failed for "
                           << "balancer=" << mds->mdsmap->get_balancer()
                           << " : " << cpp_strerror(r);
