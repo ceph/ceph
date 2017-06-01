@@ -920,12 +920,12 @@ def validate(args, signature, flags=0, partial=False):
 
             # no arg, but not required?  Continue consuming mysig
             # in case there are later required args
-            if not myarg and not desc.req:
+            if myarg == None and not desc.req:
                 break
 
             # out of arguments for a required param?
             # Either return (if partial validation) or raise
-            if not myarg and desc.req:
+            if myarg == None and desc.req:
                 if desc.N and desc.numseen < 1:
                     # wanted N, didn't even get 1
                     if partial:
