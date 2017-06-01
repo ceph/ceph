@@ -104,7 +104,9 @@ TEST_F(TestMockObjectMapSnapshotRollbackRequest, ReadMapError) {
     ASSERT_EQ(0, ictx->get_flags(snap_id, &flags));
     ASSERT_NE(0U, flags & RBD_FLAG_OBJECT_MAP_INVALID);
   }
-  ASSERT_TRUE(ictx->test_flags(RBD_FLAG_OBJECT_MAP_INVALID));
+  bool flags_set;
+  ASSERT_EQ(0, ictx->test_flags(RBD_FLAG_OBJECT_MAP_INVALID, &flags_set));
+  ASSERT_TRUE(flags_set);
   expect_unlock_exclusive_lock(*ictx);
 }
 
@@ -133,7 +135,9 @@ TEST_F(TestMockObjectMapSnapshotRollbackRequest, WriteMapError) {
     ASSERT_EQ(0, ictx->get_flags(snap_id, &flags));
     ASSERT_EQ(0U, flags & RBD_FLAG_OBJECT_MAP_INVALID);
   }
-  ASSERT_TRUE(ictx->test_flags(RBD_FLAG_OBJECT_MAP_INVALID));
+  bool flags_set;
+  ASSERT_EQ(0, ictx->test_flags(RBD_FLAG_OBJECT_MAP_INVALID, &flags_set));
+  ASSERT_TRUE(flags_set);
   expect_unlock_exclusive_lock(*ictx);
 }
 
