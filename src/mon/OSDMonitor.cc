@@ -6918,10 +6918,6 @@ int OSDMonitor::prepare_command_osd_purge(
     assert(0 == err);
   }
 
-  err = prepare_command_osd_remove(id);
-  // we should not be busy, as we should have made sure this id is not up.
-  assert(0 == err);
-
   do_osd_crush_remove(newcrush);
   return 0;
 }
