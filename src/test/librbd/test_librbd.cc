@@ -1038,26 +1038,28 @@ TEST_F(TestLibRBD, TestGetSnapShotTimeStamp)
   rados_ioctx_create(_cluster, m_pool_name.c_str(), &ioctx);
 
   rbd_image_t image;
-  int order = 0; 
+  int order = 0;
   std::string name = get_temp_image_name();
   uint64_t size = 2 << 20;
   int num_snaps, max_size = 10;
   rbd_snap_info_t snaps[max_size];
-  
+
   ASSERT_EQ(0, create_image(ioctx, name.c_str(), size, &order));
   ASSERT_EQ(0, rbd_open(ioctx, name.c_str(), &image, NULL));
 
   ASSERT_EQ(0, rbd_snap_create(image, "snap1"));
   num_snaps = rbd_snap_list(image, snaps, &max_size);
-  ASSERT_EQ(1, num_snaps); 
+  ASSERT_EQ(1, num_snaps);
   ASSERT_EQ(0, test_get_snapshot_timestamp(image, snaps[0].id));
- 
+  free((void *)snaps[0].name);
 
   ASSERT_EQ(0, rbd_snap_create(image, "snap2"));
   num_snaps = rbd_snap_list(image, snaps, &max_size);
   ASSERT_EQ(2, num_snaps);
-  ASSERT_EQ(0, test_get_snapshot_timestamp(image, snaps[0].id)); 
+  ASSERT_EQ(0, test_get_snapshot_timestamp(image, snaps[0].id));
   ASSERT_EQ(0, test_get_snapshot_timestamp(image, snaps[1].id));
+  free((void *)snaps[0].name);
+  free((void *)snaps[1].name);
 
   ASSERT_EQ(0, rbd_close(image));
 
@@ -4438,6 +4440,7 @@ TEST_F(TestLibRBD, Metadata)
   ASSERT_EQ(0, rbd_close(image));
   ASSERT_EQ(0, rbd_close(image1));
   ASSERT_EQ(0, rbd_close(image2));
+  rados_ioctx_destroy(ioctx);
 }
 
 TEST_F(TestLibRBD, MetadataPP)

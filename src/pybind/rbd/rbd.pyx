@@ -2798,6 +2798,10 @@ cdef class MetadataIterator(object):
                 break
             self.get_next_chunk()
 
+    def __dealloc__(self):
+        if self.last_read:
+            free(self.last_read)
+
     def get_next_chunk(self):
         cdef:
             char *c_keys = NULL
