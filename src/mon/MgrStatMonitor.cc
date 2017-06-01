@@ -24,7 +24,6 @@ public:
     return nullptr;
   }
 
-  const pool_stat_t& get_pg_sum() const override { return digest.pg_sum; }
   const osd_stat_t& get_osd_sum() const override { return digest.osd_sum; }
 
   ceph_statfs get_statfs() const override {
