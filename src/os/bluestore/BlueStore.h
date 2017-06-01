@@ -1389,6 +1389,8 @@ public:
   typedef boost::intrusive_ptr<OpSequencer> OpSequencerRef;
 
   struct TransContext : public AioContext {
+    MEMPOOL_CLASS_HELPERS();
+
     typedef enum {
       STATE_PREPARE,
       STATE_AIO_WAIT,

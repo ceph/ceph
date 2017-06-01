@@ -50,6 +50,11 @@ MEMPOOL_DEFINE_OBJECT_FACTORY(BlueStore::Blob, bluestore_blob,
 MEMPOOL_DEFINE_OBJECT_FACTORY(BlueStore::SharedBlob, bluestore_shared_blob,
 			      bluestore_cache_other);
 
+// bluestore_txc
+MEMPOOL_DEFINE_OBJECT_FACTORY(BlueStore::TransContext, bluestore_transcontext,
+			      bluestore_txc);
+
+
 // kv store prefixes
 const string PREFIX_SUPER = "S";   // field -> value
 const string PREFIX_STAT = "T";    // field -> value(int64 array)
