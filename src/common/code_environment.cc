@@ -41,7 +41,7 @@ extern "C" const char *code_environment_to_str(enum code_environment_t e)
   }
 }
 
-std::ostream &operator<<(std::ostream &oss, enum code_environment_t e)
+std::ostream &operator<<(std::ostream &oss, const enum code_environment_t e)
 {
   oss << code_environment_to_str(e);
   return oss;

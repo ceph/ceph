@@ -119,7 +119,7 @@ struct LogSummary {
 };
 WRITE_CLASS_ENCODER_FEATURES(LogSummary)
 
-inline ostream& operator<<(ostream& out, clog_type t)
+inline ostream& operator<<(ostream& out, const clog_type t)
 {
   switch (t) {
   case CLOG_DEBUG:
