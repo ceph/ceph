@@ -749,7 +749,7 @@ OPTION(osd_inject_failure_on_pg_removal, OPT_BOOL, false)
 OPTION(osd_max_markdown_period , OPT_INT, 600)
 OPTION(osd_max_markdown_count, OPT_INT, 5)
 
-OPTION(osd_op_threads, OPT_INT, 2)    // 0 == no threading
+OPTION(osd_peering_wq_threads, OPT_INT, 2)
 OPTION(osd_peering_wq_batch_size, OPT_U64, 20)
 OPTION(osd_op_pq_max_tokens_per_priority, OPT_U64, 4194304)
 OPTION(osd_op_pq_min_cost, OPT_U64, 65536)
