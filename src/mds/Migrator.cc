@@ -755,11 +755,11 @@ void Migrator::get_export_lock_set(CDir *dir, set<SimpleLock*>& locks)
 }
 
 
-class C_M_ExportTargetWait : public MigratorContext {
+class C_M_ExportDirWait : public MigratorContext {
   MDRequestRef mdr;
   int count;
 public:
-  C_M_ExportTargetWait(Migrator *m, MDRequestRef mdr, int count)
+  C_M_ExportDirWait(Migrator *m, MDRequestRef mdr, int count)
    : MigratorContext(m), mdr(mdr), count(count) {}
   void finish(int r) override {
     mig->dispatch_export_dir(mdr, count);
@@ -884,13 +884,13 @@ void Migrator::dispatch_export_dir(MDRequestRef& mdr, int count)
       export_try_cancel(dir);
       return;
     }
-    mds->wait_for_mdsmap(mds->mdsmap->get_epoch(), new C_M_ExportTargetWait(this, mdr, count+1));
+    mds->wait_for_mdsmap(mds->mdsmap->get_epoch(), new C_M_ExportDirWait(this, mdr, count+1));
     return;
   }
 
   if (!dir->inode->get_parent_dn()) {
     dout(7) << "waiting for dir to become stable before export: " << *dir << dendl;
-    dir->add_waiter(CDir::WAIT_CREATED, new C_M_ExportTargetWait(this, mdr, 1));
+    dir->add_waiter(CDir::WAIT_CREATED, new C_M_ExportDirWait(this, mdr, 1));
     return;
   }
 
