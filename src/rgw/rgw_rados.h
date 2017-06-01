@@ -3487,7 +3487,7 @@ public:
   int check_bucket_shards(const RGWBucketInfo& bucket_info, rgw_bucket& bucket,
 			  RGWQuotaInfo& bucket_quota);
 
-  int add_bucket_to_reshard(const RGWBucketInfo& bucket_info);
+  int add_bucket_to_reshard(const RGWBucketInfo& bucket_info, uint32_t new_num_shards);
 
   uint64_t instance_id();
   const string& zone_id() {
