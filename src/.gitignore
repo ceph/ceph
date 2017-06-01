@@ -1,3 +1,4 @@
 # local directory specific entries
 /.git_version
 /ceph_ver.h
+/gf_vect_dot_prod_avx2.o

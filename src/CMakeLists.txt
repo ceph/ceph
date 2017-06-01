@@ -115,8 +115,8 @@ else(no_yasm)
       message(STATUS " we are not x32")
       set(HAVE_GOOD_YASM_ELF64 1)
       execute_process(COMMAND yasm -f elf64 -i
-        ${CMAKE_SOURCE_DIR}/src/erasure-code/isa/isa-l/include/
-        ${CMAKE_SOURCE_DIR}/src/erasure-code/isa/isa-l/erasure_code/gf_vect_dot_prod_avx2.asm.s
+        ${CMAKE_SOURCE_DIR}/src/isa-l/include/
+        ${CMAKE_SOURCE_DIR}/src/isa-l/erasure_code/gf_vect_dot_prod_avx2.asm
         -o /dev/null
         RESULT_VARIABLE rc
         OUTPUT_QUIET)
