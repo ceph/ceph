@@ -7,6 +7,7 @@ import json
 import time
 import errno
 import inspect
+import tempfile
 import threading
 import traceback
 
@@ -244,18 +245,38 @@ class Module(MgrModule):
             separators=(',', ': '),
         )
 
-        cert = self.get_config_json("cert") or '/etc/ceph/ceph-mgr-restful.crt'
-        pkey = self.get_config_json("pkey") or '/etc/ceph/ceph-mgr-restful.key'
+        server_addr = self.get_config('server_addr') or '127.0.0.1'
+        server_port = int(self.get_config('server_port') or '8003')
+        self.log.info('server_addr: %s server_port: %d',
+                      server_addr, server_port)
+
+        cert = self.get_config("cert")
+        if cert is not None:
+            cert_tmp = tempfile.NamedTemporaryFile()
+            cert_tmp.write(cert)
+            cert_tmp.flush()
+            cert_fname = cert_tmp.name
+        else:
+            cert_fname = self.get_config('cert_file') or '/etc/ceph/ceph-mgr-restful.crt'
+
+        pkey = self.get_config("pkey")
+        if pkey is not None:
+            pkey_tmp = tempfile.NamedTemporaryFile()
+            pkey_tmp.write(pkey)
+            pkey_tmp.flush()
+            pkey_fname = pkey_tmp.name
+        else:
+            pkey_fname = self.get_config('pkey_file') or '/etc/ceph/ceph-mgr-restful.key'
 
         # Create the HTTPS werkzeug server serving pecan app
         self.server = make_server(
-            host='0.0.0.0',
-            port=8003,
+            host=server_addr,
+            port=server_port,
             app=make_app(
                 root='restful.api.Root',
                 hooks = lambda: [ErrorHook()],
             ),
-            ssl_context=(cert, pkey),
+            ssl_context=(cert_fname, pkey_fname),
         )
 
         self.server.serve_forever()
