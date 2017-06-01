@@ -55,9 +55,9 @@ A: See the authentication question.  You can always configure your own SSL gatew
 
 Q: Why CherryPy?
 A: ceph-mgr is a pure CPython environment, which means that anything gevent based doesn't work (gevent relies on C-level hacks).  CherryPy
-   includes a 
+   includes a web server based on standard python threads, making it a convenient choice.  There are other web frameworks of course.
 
-Q: Does this use the `rest` module?
+Q: Does this use the `restful` module?
 A: No.  This module loads everything it needs directly via the interfaces available to ceph-mgr modules, and sends it straight to your browser.
 
 Q: My browser says "connection refused"
