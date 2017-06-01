@@ -28,6 +28,7 @@ private:
   bool m_filestore_seek_data_hole;
   bool m_filestore_fsync_flushes_journal_data;
   bool m_filestore_splice;
+  bool m_rotational = true;
 public:
   explicit GenericFileStoreBackend(FileStore *fs);
   ~GenericFileStoreBackend() override {}
@@ -38,6 +39,9 @@ public:
   int detect_features() override;
   int create_current() override;
   bool can_checkpoint() override { return false; }
+  bool is_rotational() override {
+    return m_rotational;
+  }
   int list_checkpoints(list<string>& ls) override { return 0; }
   int create_checkpoint(const string& name, uint64_t *cid) override { return -EOPNOTSUPP; }
   int sync_checkpoint(uint64_t id) override { return -EOPNOTSUPP; }
