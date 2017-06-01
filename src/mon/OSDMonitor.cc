@@ -3290,6 +3290,7 @@ void OSDMonitor::update_creating_pgs()
     int acting_primary = -1;
     auto pgid = pg.first;
     auto mapped = pg.second.first;
+    dout(20) << __func__ << " looking up " << pgid << dendl;
     mapping.get(pgid, nullptr, nullptr, nullptr, &acting_primary);
     // check the previous creating_pgs, look for the target to whom the pg was
     // previously mapped
