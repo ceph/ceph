@@ -4429,10 +4429,12 @@ void CInode::maybe_export_pin(bool update)
       continue;
     if (export_pin != MDS_RANK_NONE) {
       if (dir->is_subtree_root()) {
-	// export subtrees ?
-	queue = (export_pin != dir->get_dir_auth().first);
+	// set auxsubtree bit or export it
+	if (!dir->state_test(CDir::STATE_AUXSUBTREE) ||
+	    export_pin != dir->get_dir_auth().first)
+	  queue = true;
       } else {
-	// create aux subtrees
+	// create aux subtree or export it
 	queue = true;
       }
     } else {
