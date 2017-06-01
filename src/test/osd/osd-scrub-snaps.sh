@@ -17,6 +17,15 @@
 source $(dirname $0)/../detect-build-env-vars.sh
 source $CEPH_ROOT/qa/workunits/ceph-helpers.sh
 
+if [ `uname` = FreeBSD ]; then
+    DIFFCOLOPTS=""
+else
+    termwidth=$(stty -a | head -1 | sed -e 's/.*columns \([0-9]*\).*/\1/')
+    if test -n "$termwidth" -a "$termwidth" != "0"; then termwidth="-W ${termwidth}"; fi
+    DIFCOLOPTS="-y -W $termwidth"
+fi
+
+
 function run() {
     local dir=$1
     shift
@@ -400,7 +409,7 @@ function TEST_scrub_snaps() {
 EOF
 
     jq "$jqfilter" $dir/json | python -c "$sortkeys" > $dir/csjson
-    diff -y $dir/checkcsjson $dir/csjson || return 1
+    diff ${DIFFCOLOPTS} $dir/checkcsjson $dir/csjson || return 1
 
     if which jsonschema > /dev/null;
     then
