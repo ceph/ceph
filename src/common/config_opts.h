@@ -318,7 +318,7 @@ OPTION(mon_cache_target_full_warn_ratio, OPT_FLOAT, .66) // position between poo
 OPTION(mon_osd_full_ratio, OPT_FLOAT, .95) // what % full makes an OSD "full"
 OPTION(mon_osd_backfillfull_ratio, OPT_FLOAT, .90) // what % full makes an OSD backfill full (backfill halted)
 OPTION(mon_osd_nearfull_ratio, OPT_FLOAT, .85) // what % full makes an OSD near full
-OPTION(mon_osd_initial_require_min_compat_client, OPT_STR, "hammer")
+OPTION(mon_osd_initial_require_min_compat_client, OPT_STR, "jewel")
 OPTION(mon_allow_pool_delete, OPT_BOOL, false) // allow pool deletion
 OPTION(mon_fake_pool_delete, OPT_BOOL, false)  // fake pool deletion (add _DELETED suffix)
 OPTION(mon_globalid_prealloc, OPT_U32, 10000)   // how many globalids to prealloc
