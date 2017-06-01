@@ -12,9 +12,9 @@
 #include "rgw_tools.h"
 
 #include "rgw_cr_rados.h"
-#include "rgw_boost_asio_yield.h"
 
 #include "include/assert.h"
+#include <boost/asio/yield.hpp>
 
 #define dout_subsys ceph_subsys_rgw
 
