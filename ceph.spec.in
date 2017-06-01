@@ -864,18 +864,20 @@ cmake .. \
 %endif
     -DBOOST_J=%{_smp_ncpus}
 
+# set PORTABLE=1 on aarch64 so rocksdb doesn't use -march=native
+# http://tracker.ceph.com/issues/18065
+%ifarch aarch64
+PORTABLE=1 make %{?_smp_mflags}
+%else
 make %{?_smp_mflags}
-
+%endif
 
 %if 0%{with make_check}
 %check
 # run in-tree unittests
 cd build
 ctest %{?_smp_mflags}
-
 %endif
-
-
 
 %install
 pushd build
