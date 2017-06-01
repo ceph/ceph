@@ -9,19 +9,13 @@ from requests.packages.urllib3.exceptions import InsecureRequestWarning
 requests.packages.urllib3.disable_warnings(category=InsecureRequestWarning)
 
 if len(sys.argv) < 3:
-    print("Usage: %s <node> <admin_key>" % sys.argv[0])
+    print("Usage: %s <url> <admin_key>" % sys.argv[0])
     sys.exit(1)
 
-host = sys.argv[1]
-addr = 'https://' + host + ':8003'
-
+addr = sys.argv[1]
 auth = ('admin', sys.argv[2])
 
 request = None
-
-repeat = 1
-if len(sys.argv) > 2:
-    repeat = int(sys.argv[2])
 
 # Create a pool and get its id
 request = requests.post(addr + '/pool?wait=yes', json={'name': 'supertestfriends', 'pg_num': 128}, verify=False, auth=auth)
@@ -30,6 +24,17 @@ request = requests.get(addr + '/pool', verify=False, auth=auth)
 assert(request.json()[-1]['pool_name'] == 'supertestfriends')
 pool_id = request.json()[-1]['pool']
 
+# get a mon name
+request = requests.get(addr + '/mon', verify=False, auth=auth)
+firstmon = request.json()[0]['name']
+print('first mon is %s' % firstmon)
+
+# get a server name
+request = requests.get(addr + '/osd', verify=False, auth=auth)
+aserver = request.json()[0]['server']
+print('a server is %s' % aserver)
+
+
 screenplay = [
     ('get',    '/', {}),
     ('get',    '/config/cluster', {}),
@@ -37,13 +42,13 @@ screenplay = [
     ('get',    '/crush/ruleset', {}),
     ('get',    '/doc', {}),
     ('get',    '/mon', {}),
-    ('get',    '/mon/' + host, {}),
+    ('get',    '/mon/' + firstmon, {}),
     ('get',    '/osd', {}),
     ('get',    '/osd/0', {}),
     ('get',    '/osd/0/command', {}),
     ('get',    '/pool/0', {}),
     ('get',    '/server', {}),
-    ('get',    '/server/' + host, {}),
+    ('get',    '/server/' + aserver, {}),
     ('post',   '/osd/0/command', {'command': 'scrub'}),
     ('post',   '/pool?wait=1', {'name': 'supertestfriends', 'pg_num': 128}),
     ('patch',  '/osd/0', {'in': False}),
@@ -70,3 +75,5 @@ for method, endpoint, args in screenplay:
     if request.status_code != 200 or 'error' in request.json():
         print('ERROR: %s request for URL "%s" failed' % (method, url))
         sys.exit(1)
+
+print('OK')
