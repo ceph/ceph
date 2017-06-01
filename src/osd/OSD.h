@@ -1462,7 +1462,7 @@ public:
 
 private:
 
-  ThreadPool osd_tp;
+  ThreadPool peering_tp;
   ShardedThreadPool osd_op_tp;
   ThreadPool disk_tp;
   ThreadPool command_tp;

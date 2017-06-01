@@ -1877,7 +1877,9 @@ OSD::OSD(CephContext *cct_, ObjectStore *store_,
   trace_endpoint("0.0.0.0", 0, "osd"),
   asok_hook(NULL),
   osd_compat(get_osd_compat_set()),
-  osd_tp(cct, "OSD::osd_tp", "tp_osd", cct->_conf->osd_op_threads, "osd_op_threads"),
+  peering_tp(cct, "OSD::peering_tp", "tp_peering",
+	     cct->_conf->osd_peering_wq_threads,
+	     "osd_peering_tp_threads"),
   osd_op_tp(cct, "OSD::osd_op_tp", "tp_osd_tp",
     cct->_conf->osd_op_num_threads_per_shard * cct->_conf->osd_op_num_shards),
   disk_tp(cct, "OSD::disk_tp", "tp_osd_disk", cct->_conf->osd_disk_threads, "osd_disk_threads"),
@@ -1908,7 +1910,7 @@ OSD::OSD(CephContext *cct_, ObjectStore *store_,
     this,
     cct->_conf->osd_op_thread_timeout,
     cct->_conf->osd_op_thread_suicide_timeout,
-    &osd_tp),
+    &peering_tp),
   map_lock("OSD::map_lock"),
   pg_map_lock("OSD::pg_map_lock"),
   last_pg_create_epoch(0),
@@ -2500,7 +2502,7 @@ int OSD::init()
   monc->set_log_client(&log_client);
   update_log_config();
 
-  osd_tp.start();
+  peering_tp.start();
   osd_op_tp.start();
   disk_tp.start();
   command_tp.start();
@@ -3195,9 +3197,9 @@ int OSD::shutdown()
   heartbeat_lock.Unlock();
   heartbeat_thread.join();
 
-  osd_tp.drain();
+  peering_tp.drain();
   peering_wq.clear();
-  osd_tp.stop();
+  peering_tp.stop();
   dout(10) << "osd tp stopped" << dendl;
 
   osd_op_tp.drain();
