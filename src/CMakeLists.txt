@@ -378,9 +378,7 @@ set(async_rdma_common_srcs)
 if(HAVE_RDMA)
   list(APPEND async_rdma_common_srcs
     msg/async/rdma/Infiniband.cc
-    msg/async/rdma/Device.cc
     msg/async/rdma/RDMAConnectedSocketImpl.cc
-    msg/async/rdma/RDMAConnTCP.cc
     msg/async/rdma/RDMAServerSocketImpl.cc
     msg/async/rdma/RDMAStack.cc)
 endif(HAVE_RDMA)
