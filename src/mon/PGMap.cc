@@ -25,7 +25,7 @@ MEMPOOL_DEFINE_OBJECT_FACTORY(PGMap::Incremental, pgmap_inc, pgmap);
 void PGMapDigest::encode(bufferlist& bl, uint64_t features) const
 {
   // NOTE: see PGMap::encode_digest
-  ENCODE_START(5, 1, bl);
+  ENCODE_START(6, 1, bl);
   ::encode(num_pg, bl);
   ::encode(num_pg_active, bl);
   ::encode(num_osd, bl);
@@ -42,12 +42,13 @@ void PGMapDigest::encode(bufferlist& bl, uint64_t features) const
   ::encode(pg_sum_delta, bl, features);
   ::encode(stamp_delta, bl);
   ::encode(num_pg_unknown, bl);
+  ::encode(avail_space_by_rule, bl);
   ENCODE_FINISH(bl);
 }
 
 void PGMapDigest::decode(bufferlist::iterator& p)
 {
-  DECODE_START(5, p);
+  DECODE_START(6, p);
   ::decode(num_pg, p);
   ::decode(num_pg_active, p);
   ::decode(num_osd, p);
@@ -64,6 +65,7 @@ void PGMapDigest::decode(bufferlist::iterator& p)
   ::decode(pg_sum_delta, p);
   ::decode(stamp_delta, p);
   ::decode(num_pg_unknown, p);
+  ::decode(avail_space_by_rule, p);
   DECODE_FINISH(p);
 }
 
@@ -623,7 +625,8 @@ void PGMapDigest::dump_pool_stats_full(
     int64_t avail;
     float raw_used_rate;
     if (avail_by_rule.count(ruleno) == 0) {
-      avail = get_rule_avail(osd_map, ruleno);
+      // FIXME: we don't guarantee avail_space_by_rule is up-to-date before this function is invoked
+      avail = get_rule_avail(ruleno);
       if (avail < 0)
 	avail = 0;
       avail_by_rule[ruleno] = avail;
@@ -781,7 +784,7 @@ void PGMapDigest::dump_object_stat_sum(
   }
 }
 
-int64_t PGMapDigest::get_rule_avail(const OSDMap& osdmap, int ruleno) const
+int64_t PGMap::get_rule_avail(const OSDMap& osdmap, int ruleno) const
 {
   map<int,float> wm;
   int r = osdmap.crush->get_rule_weight_osd_map(ruleno, &wm);
@@ -827,7 +830,22 @@ int64_t PGMapDigest::get_rule_avail(const OSDMap& osdmap, int ruleno) const
   return min;
 }
 
-
+void PGMap::get_rules_avail(const OSDMap& osdmap,
+			    std::map<int,int64_t> *avail_map) const
+{
+  avail_map->clear();
+  for (auto p : osdmap.get_pools()) {
+    int64_t pool_id = p.first;
+    if ((pool_id < 0) || (pg_pool_sum.count(pool_id) == 0))
+      continue;
+    const pg_pool_t *pool = osdmap.get_pg_pool(pool_id);
+    int ruleno = osdmap.crush->find_rule(pool->get_crush_ruleset(),
+					 pool->get_type(),
+					 pool->get_size());
+    if (avail_map->count(ruleno) == 0)
+      (*avail_map)[ruleno] = get_rule_avail(osdmap, ruleno);
+  }
+}
 
 // ---------------------
 // PGMap
@@ -1445,8 +1463,10 @@ epoch_t PGMap::calc_min_last_epoch_clean() const
   return min;
 }
 
-void PGMap::encode_digest(bufferlist& bl, uint64_t features) const
+void PGMap::encode_digest(const OSDMap& osdmap,
+			  bufferlist& bl, uint64_t features) const
 {
+  get_rules_avail(osdmap, &avail_space_by_rule);
   PGMapDigest::encode(bl, features);
 }
 
