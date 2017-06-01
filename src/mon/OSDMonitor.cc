@@ -6735,7 +6735,7 @@ int OSDMonitor::prepare_command_osd_new(
     // just return right away.
     dout(10) << __func__ << " idempotent -- no op." << dendl;
     assert(id >= 0);
-    ss << "new osd." << id << " uuid " << uuid;
+    ss << id;
     return EEXIST;
   }
   assert(!may_be_idempotent);
@@ -6771,7 +6771,7 @@ int OSDMonitor::prepare_command_osd_new(
     assert(id == new_id);
   }
 
-  ss << "new osd." << id << " uuid " << uuid;
+  ss << id;
   return 0;
 }
 
@@ -8850,9 +8850,10 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       goto reply;
     }
 
-    getline(ss, rs);
+    rdata.append(ss);
     wait_for_finished_proposal(op,
-        new Monitor::C_Command(mon, op, 0, rs, get_last_committed() + 1));
+			       new Monitor::C_Command(mon, op, 0, rs, rdata,
+						      get_last_committed() + 1));
     force_immediate_propose();
     return true;
 
