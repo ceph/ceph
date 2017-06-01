@@ -159,8 +159,10 @@ template <typename I>
 class ImageReplayerAdminSocketHook : public AdminSocketHook {
 public:
   ImageReplayerAdminSocketHook(CephContext *cct, const std::string &name,
-			       ImageReplayer<I> *replayer) :
-    admin_socket(cct->get_admin_socket()) {
+			       ImageReplayer<I> *replayer)
+    : admin_socket(cct->get_admin_socket()),
+      lock("ImageReplayerAdminSocketHook::lock " +
+             replayer->get_global_image_id()) {
     std::string command;
     int r;
 
@@ -201,15 +203,18 @@ public:
   }
 
   ~ImageReplayerAdminSocketHook() override {
+    Mutex::Locker locker(lock);
     for (Commands::const_iterator i = commands.begin(); i != commands.end();
 	 ++i) {
       (void)admin_socket->unregister_command(i->first);
       delete i->second;
     }
+    commands.clear();
   }
 
   bool call(std::string command, cmdmap_t& cmdmap, std::string format,
 	    bufferlist& out) override {
+    Mutex::Locker locker(lock);
     Commands::const_iterator i = commands.find(command);
     assert(i != commands.end());
     Formatter *f = Formatter::create(format);
@@ -224,6 +229,7 @@ private:
   typedef std::map<std::string, ImageReplayerAdminSocketCommand*> Commands;
 
   AdminSocket *admin_socket;
+  Mutex lock;
   Commands commands;
 };
 
