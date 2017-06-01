@@ -36,19 +36,19 @@
 #define dout_context cct
 #define dout_subsys ceph_subsys_bluestore
 
-// bluestore_meta_onode
+// bluestore_cache_onode
 MEMPOOL_DEFINE_OBJECT_FACTORY(BlueStore::Onode, bluestore_onode,
-			      bluestore_meta_onode);
+			      bluestore_cache_onode);
 
-// bluestore_meta_other
+// bluestore_cache_other
 MEMPOOL_DEFINE_OBJECT_FACTORY(BlueStore::Buffer, bluestore_buffer,
-			      bluestore_meta_other);
+			      bluestore_cache_other);
 MEMPOOL_DEFINE_OBJECT_FACTORY(BlueStore::Extent, bluestore_extent,
-			      bluestore_meta_other);
+			      bluestore_cache_other);
 MEMPOOL_DEFINE_OBJECT_FACTORY(BlueStore::Blob, bluestore_blob,
-			      bluestore_meta_other);
+			      bluestore_cache_other);
 MEMPOOL_DEFINE_OBJECT_FACTORY(BlueStore::SharedBlob, bluestore_shared_blob,
-			      bluestore_meta_other);
+			      bluestore_cache_other);
 
 // kv store prefixes
 const string PREFIX_SUPER = "S";   // field -> value
@@ -1523,7 +1523,7 @@ void BlueStore::OnodeSpace::rename(
   OnodeRef& oldo,
   const ghobject_t& old_oid,
   const ghobject_t& new_oid,
-  const mempool::bluestore_meta_other::string& new_okey)
+  const mempool::bluestore_cache_other::string& new_okey)
 {
   std::lock_guard<std::recursive_mutex> l(cache->lock);
   ldout(cache->cct, 30) << __func__ << " " << old_oid << " -> " << new_oid
@@ -3109,7 +3109,7 @@ BlueStore::OnodeRef BlueStore::Collection::get_onode(
   if (o)
     return o;
 
-  mempool::bluestore_meta_other::string key;
+  mempool::bluestore_cache_other::string key;
   get_object_key(store->cct, oid, &key);
 
   ldout(store->cct, 20) << __func__ << " oid " << oid << " key "
@@ -3258,9 +3258,9 @@ void *BlueStore::MempoolThread::entry()
 {
   Mutex::Locker l(lock);
   while (!stop) {
-    store->mempool_bytes = mempool::bluestore_meta_other::allocated_bytes() +
-      mempool::bluestore_meta_onode::allocated_bytes();
-    store->mempool_onodes = mempool::bluestore_meta_onode::allocated_items();
+    store->mempool_bytes = mempool::bluestore_cache_other::allocated_bytes() +
+      mempool::bluestore_cache_onode::allocated_bytes();
+    store->mempool_onodes = mempool::bluestore_cache_onode::allocated_items();
     ++store->mempool_seq;
     utime_t wait;
     wait += store->cct->_conf->bluestore_cache_trim_interval;
@@ -6527,7 +6527,7 @@ int BlueStore::getattr(
   int r;
   {
     RWLock::RLocker l(c->lock);
-    mempool::bluestore_meta_other::string k(name);
+    mempool::bluestore_cache_other::string k(name);
 
     OnodeRef o = c->get_onode(oid, false);
     if (!o || !o->exists) {
@@ -10677,7 +10677,7 @@ int BlueStore::_rename(TransContext *txc,
 	   << new_oid << dendl;
   int r;
   ghobject_t old_oid = oldo->oid;
-  mempool::bluestore_meta_other::string new_okey;
+  mempool::bluestore_cache_other::string new_okey;
 
   if (newo) {
     if (newo->exists) {

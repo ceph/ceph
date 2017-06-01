@@ -161,7 +161,7 @@ WRITE_CLASS_DENC(bluestore_pextent_t)
 
 ostream& operator<<(ostream& out, const bluestore_pextent_t& o);
 
-typedef mempool::bluestore_meta_other::vector<bluestore_pextent_t> PExtentVector;
+typedef mempool::bluestore_cache_other::vector<bluestore_pextent_t> PExtentVector;
 
 template<>
 struct denc_traits<PExtentVector> {
@@ -209,7 +209,7 @@ struct bluestore_extent_ref_map_t {
     }
   };
 
-  typedef mempool::bluestore_meta_other::map<uint64_t,record_t> map_t;
+  typedef mempool::bluestore_cache_other::map<uint64_t,record_t> map_t;
   map_t ref_map;
 
   void _check() const;
@@ -940,7 +940,7 @@ ostream& operator<<(ostream& out, const bluestore_shared_blob_t& o);
 struct bluestore_onode_t {
   uint64_t nid = 0;                    ///< numeric id (locally unique)
   uint64_t size = 0;                   ///< object size
-  map<mempool::bluestore_meta_other::string, bufferptr> attrs;        ///< attrs
+  map<mempool::bluestore_cache_other::string, bufferptr> attrs;        ///< attrs
 
   struct shard_info {
     uint32_t offset = 0;  ///< logical offset for start of shard
