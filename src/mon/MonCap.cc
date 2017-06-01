@@ -44,7 +44,7 @@ using std::vector;
 
 #define dout_subsys ceph_subsys_mon
 
-ostream& operator<<(ostream& out, mon_rwxa_t p)
+ostream& operator<<(ostream& out, const mon_rwxa_t& p)
 { 
   if (p == MON_CAP_ANY)
     return out << "*";

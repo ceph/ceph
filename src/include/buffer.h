@@ -909,7 +909,7 @@ namespace buffer CEPH_BUFFER_API {
     // cppcheck-suppress noExplicitConstructor
     hash(uint32_t init) : crc(init) { }
 
-    void update(buffer::list& bl) {
+    void update(const buffer::list& bl) {
       crc = bl.crc32c(crc);
     }
 
@@ -961,7 +961,7 @@ std::ostream& operator<<(std::ostream& out, const buffer::list& bl);
 
 std::ostream& operator<<(std::ostream& out, const buffer::error& e);
 
-inline bufferhash& operator<<(bufferhash& l, bufferlist &r) {
+inline bufferhash& operator<<(bufferhash& l, const bufferlist &r) {
   l.update(r);
   return l;
 }

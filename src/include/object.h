@@ -139,7 +139,7 @@ struct denc_traits<snapid_t> {
   }
 };
 
-inline ostream& operator<<(ostream& out, snapid_t s) {
+inline ostream& operator<<(ostream& out, const snapid_t& s) {
   if (s == CEPH_NOSNAP)
     return out << "head";
   else if (s == CEPH_SNAPDIR)
