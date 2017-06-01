@@ -1006,37 +1006,6 @@ def check_osd_id(osd_id):
         raise Error('osd id is not numeric', osd_id)
 
 
-def allocate_osd_id(
-    cluster,
-    fsid,
-    keyring,
-):
-    """
-    Accocates an OSD id on the given cluster.
-
-    :raises: Error if the call to allocate the OSD id fails.
-    :return: The allocated OSD id.
-    """
-
-    LOG.debug('Allocating OSD id...')
-    try:
-        osd_id = _check_output(
-            args=[
-                'ceph',
-                '--cluster', cluster,
-                '--name', 'client.bootstrap-osd',
-                '--keyring', keyring,
-                'osd', 'create', '--concise',
-                fsid,
-            ],
-        )
-    except subprocess.CalledProcessError as e:
-        raise Error('ceph osd create failed', e, e.output)
-    osd_id = must_be_one_line(osd_id)
-    check_osd_id(osd_id)
-    return osd_id
-
-
 def get_osd_id(path):
     """
     Gets the OSD id of the OSD at the given path.
@@ -1924,6 +1893,11 @@ class Prepare(object):
             action='store_true', default=None,
             help='let many prepare\'s run in parallel',
         )
+        parse.add_argument(
+            '--replace-osd-id',
+            default=None,
+            help='replace previously destroyed OSD id',
+        )
         return parser
 
     @staticmethod
@@ -1983,6 +1957,44 @@ class Prepare(object):
         )
         return parser
 
+    def prepare_metadata(self):
+        if self.args.osd_uuid is None:
+            self.args.osd_uuid = str(uuid.uuid4())
+
+        # prepare out secrets
+        keys = {
+            'cephx_secret', command('ceph-authtool', '--gen-print-key'),
+        };
+        if args.dmcrypt:
+            key_size = CryptHelpers.get_dmcrypt_keysize(self.args)
+            key = open('/dev/urandom', 'rb').read(key_size / 8)
+            keys['dmcrypt_key'] = base64.b64encode(key)
+            keys['cephx_lockbox_secret'] = command(
+                'ceph-authtool', '--gen-print-key')
+
+        # allocate an osd id from the mon
+        bootstrap = self.args.prepare_key_template.format(cluster=cluster,
+                                                          statedir=STATEDIR)
+        args = [
+            'ceph',
+            '--cluster', cluster,
+            '--name', 'client.bootstrap-osd',
+            '--keyring', bootstrap,
+            'osd',
+            'new',
+            args.osd_uuid,
+        ]
+        if args.osd_replace_id:
+            args.append(str(args.osd_replace_id))
+        osd_id = _check_output(
+            args,
+            stdin=keys,  # fixme
+            )
+
+        # store everything we've done (including the resulting osd_id) for
+        # later steps.
+        self.????.osd_id = osd_id
+            
     def prepare(self):
         if self.args.no_locking:
             self._prepare()
@@ -1999,6 +2011,7 @@ class Prepare(object):
 
     @staticmethod
     def main(args):
+        self.prepare_metadata()
         Prepare.factory(args).prepare()
 
 
@@ -2582,40 +2595,6 @@ class Lockbox(object):
             self.partition = self.create_partition()
 
     def create_key(self):
-        key_size = CryptHelpers.get_dmcrypt_keysize(self.args)
-        key = open('/dev/urandom', 'rb').read(key_size / 8)
-        base64_key = base64.b64encode(key)
-        cluster = self.args.cluster
-        bootstrap = self.args.prepare_key_template.format(cluster=cluster,
-                                                          statedir=STATEDIR)
-        command_check_call(
-            [
-                'ceph',
-                '--cluster', cluster,
-                '--name', 'client.bootstrap-osd',
-                '--keyring', bootstrap,
-                'config-key',
-                'put',
-                'dm-crypt/osd/' + self.args.osd_uuid + '/luks',
-                base64_key,
-            ],
-        )
-        keyring, stderr, ret = command(
-            [
-                'ceph',
-                '--cluster', cluster,
-                '--name', 'client.bootstrap-osd',
-                '--keyring', bootstrap,
-                'auth',
-                'get-or-create',
-                'client.osd-lockbox.' + self.args.osd_uuid,
-                'mon',
-                ('allow command "config-key get" with key="dm-crypt/osd/' +
-                 self.args.osd_uuid + '/luks"'),
-            ],
-        )
-        LOG.debug("stderr " + stderr)
-        assert ret == 0
         path = self.get_mount_point()
         open(os.path.join(path, 'keyring'), 'w').write(keyring)
         write_one_line(path, 'key-management-mode', KEY_MANAGEMENT_MODE_V1)
@@ -2773,11 +2752,11 @@ class PrepareData(object):
         else:
             LOG.debug('Preparing osd data dir %s', path)
 
-        if self.args.osd_uuid is None:
-            self.args.osd_uuid = str(uuid.uuid4())
+        assert self.args.osd_uuid is not None
 
         write_one_line(path, 'ceph_fsid', self.args.cluster_uuid)
         write_one_line(path, 'fsid', self.args.osd_uuid)
+        write_one_line(path, 'whoami', self.????.osd_id)
         if self.args.crush_device_class:
             write_one_line(path, 'crush_device_class',
                            self.args.crush_device_class)
@@ -3051,45 +3030,6 @@ def mkfs(
                 '--setgroup', get_ceph_group(),
             ],
         )
-
-
-def auth_key(
-    path,
-    cluster,
-    osd_id,
-    keyring,
-):
-    try:
-        # try dumpling+ cap scheme
-        command_check_call(
-            [
-                'ceph',
-                '--cluster', cluster,
-                '--name', 'client.bootstrap-osd',
-                '--keyring', keyring,
-                'auth', 'add', 'osd.{osd_id}'.format(osd_id=osd_id),
-                '-i', os.path.join(path, 'keyring'),
-                'osd', 'allow *',
-                'mon', 'allow profile osd',
-            ],
-        )
-    except subprocess.CalledProcessError as err:
-        if err.returncode == errno.EINVAL:
-            # try old cap scheme
-            command_check_call(
-                [
-                    'ceph',
-                    '--cluster', cluster,
-                    '--name', 'client.bootstrap-osd',
-                    '--keyring', keyring,
-                    'auth', 'add', 'osd.{osd_id}'.format(osd_id=osd_id),
-                    '-i', os.path.join(path, 'keyring'),
-                    'osd', 'allow *',
-                    'mon', 'allow rwx',
-                ],
-            )
-        else:
-            raise
 
 
 def get_mount_point(cluster, osd_id):
@@ -3601,12 +3541,7 @@ def activate(
 
     osd_id = get_osd_id(path)
     if osd_id is None:
-        osd_id = allocate_osd_id(
-            cluster=cluster,
-            fsid=fsid,
-            keyring=keyring,
-        )
-        write_one_line(path, 'whoami', osd_id)
+        raise Error('No OSD id assigned')
     LOG.debug('OSD id is %s', osd_id)
 
     if not os.path.exists(os.path.join(path, 'ready')):
@@ -3645,13 +3580,6 @@ def activate(
                 pass
 
     if not os.path.exists(os.path.join(path, 'active')):
-        LOG.debug('Authorizing OSD key...')
-        auth_key(
-            path=path,
-            cluster=cluster,
-            osd_id=osd_id,
-            keyring=keyring,
-        )
         write_one_line(path, 'active', 'ok')
     LOG.debug('%s osd.%s data dir is ready at %s', cluster, osd_id, path)
     return (osd_id, cluster)
