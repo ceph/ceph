@@ -3935,52 +3935,7 @@ def main_deactivate_locked(args):
 ###########################
 
 
-def _remove_from_crush_map(cluster, osd_id):
-    LOG.info("Prepare to remove osd.%s from crush map..." % osd_id)
-    command([
-        'ceph',
-        'osd',
-        'crush',
-        'remove',
-        'osd.%s' % osd_id,
-    ])
-
-
-def _delete_osd_auth_key(cluster, osd_id):
-    LOG.info("Prepare to delete osd.%s cephx key..." % osd_id)
-    command([
-        'ceph',
-        'auth',
-        'del',
-        'osd.%s' % osd_id,
-    ])
-
-
-def _deallocate_osd_id(cluster, osd_id):
-    LOG.info("Prepare to deallocate the osd-id: %s..." % osd_id)
-    command([
-        'ceph',
-        'osd',
-        'rm',
-        '%s' % osd_id,
-    ])
-
-
 def _remove_lockbox(uuid, cluster):
-    command([
-        'ceph',
-        '--cluster', cluster,
-        'auth',
-        'del',
-        'client.osd-lockbox.' + uuid,
-    ])
-    command([
-        'ceph',
-        '--cluster', cluster,
-        'config-key',
-        'del',
-        'dm-crypt/osd/' + uuid + '/luks',
-    ])
     lockbox = os.path.join(STATEDIR, 'osd-lockbox')
     if not os.path.exists(lockbox):
         return
@@ -4060,14 +4015,18 @@ def main_destroy_locked(args):
         raise Error("Could not destroy the active osd. (osd-id: %s)" %
                     osd_id)
 
-    # Remove OSD from crush map
-    _remove_from_crush_map(args.cluster, osd_id)
-
-    # Remove OSD cephx key
-    _delete_osd_auth_key(args.cluster, osd_id)
-
-    # Deallocate OSD ID
-    _deallocate_osd_id(args.cluster, osd_id)
+    if args.purge:
+        action = 'purge'
+    else:
+        action = 'destroy'
+    LOG.info("Prepare to %s osd.%s" % (action, osd_id))
+    command([
+        'ceph',
+        'osd',
+        action,
+        'osd.%s' % osd_id,
+        '--yes-i-really-mean-it',
+    ])
 
     # we remove the crypt map and device mapper (if dmcrypt is True)
     if dmcrypt:
@@ -5572,12 +5531,13 @@ def make_destroy_parser(subparsers):
     destroy_parser = subparsers.add_parser(
         'destroy',
         formatter_class=argparse.RawDescriptionHelpFormatter,
-        description=textwrap.fill(textwrap.dedent("""\
-        Destroy the OSD located at PATH.
-        It removes the OSD from the cluster, the crushmap and
-        deallocates the OSD id. An OSD must be down before it
-        can be destroyed.
-        """)),
+        description=textwrap.fill(textwrap.dedent("""\ Destroy the OSD located at PATH.  It removes the OSD from the
+        cluster and marks it destroyed. An OSD must be down before it
+        can be destroyed. Once it is destroy, a new OSD can be created
+        in its place, resuing the same OSD id and position (e.g. after
+        a failed HDD or SSD is replaced).  Alternatively, if the
+        --purge option is also specified, the OSD is removed from the
+        CRUSH map and the OSD id is deallocated.""")),
         help='Destroy a Ceph OSD')
     destroy_parser.add_argument(
         '--cluster',
@@ -5608,6 +5568,11 @@ def make_destroy_parser(subparsers):
         '--zap',
         action='store_true', default=False,
         help='option to erase data and partition',
+    )
+    destroy_parser.add_argument(
+        '--purge',
+        action='store_true', default=False,
+        help='option to remove OSD from CRUSH map and deallocate the id',
     )
     destroy_parser.set_defaults(
         func=main_destroy,
