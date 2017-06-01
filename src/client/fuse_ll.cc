@@ -33,6 +33,7 @@
 #include "common/config.h"
 #include "include/assert.h"
 #include "include/cephfs/ceph_statx.h"
+#include "fs_action_scheduler.cc"
 
 #include "fuse_ll.h"
 #include <fuse.h>
@@ -50,6 +51,70 @@
 #define MAJOR(dev)	((unsigned int) ((dev) >> MINORBITS))
 #define MINOR(dev)	((unsigned int) ((dev) & MINORMASK))
 #define MKDEV(ma,mi)	(((ma) << MINORBITS) | (mi))
+
+void log_ceph_sock(char *string){
+    FILE *fptr;
+	fptr = fopen("program.txt", "a");
+	if (fptr == NULL) {
+		printf("Error!");
+		exit(1);
+	}
+	fprintf(fptr, "%s\n", string);
+	fclose(fptr);
+}
+
+void push_to_server(int ch, const char * sentence) {
+	log_ceph_sock("in pushing to server\n");
+	static char *type;
+
+	static char MKNOD[] = "mknod\t";
+	static char MKDIR[] = "mkdir\t";
+	static char RMDIR[] = "rmdir\t";
+	static char RENAME[] = "rename\t";
+	static char WRITE[] = "write\t";
+	static char UNLINK[] = "unlink\t";
+	static char LOOKUP[] = "lookup\t";
+
+	switch (ch) {
+    case 0:
+            type=MKNOD;
+            break;
+    case 1:
+            type=MKDIR;
+            break;
+    case 2:
+            type=RMDIR;
+            break;
+    case 3:
+            type=RENAME;
+            break;
+    case 4:
+            type=WRITE;
+            break;
+    case 5:
+            type=UNLINK;
+            break;
+    case 6:
+            type=LOOKUP;
+            break;
+	}
+	log_ceph_sock("in pushing to server\n");
+	write_to_sock(type,sentence);
+}
+
+void print_parent(fuse_ino_t parent_no){
+   FILE *fptr;
+
+   fptr = fopen("program.txt", "a");
+   if(fptr == NULL)
+   {
+      printf("Error!");
+      exit(1);
+   }
+
+   fprintf(fptr,"%ld\n", parent_no);
+   fclose(fptr);
+}
 
 static uint32_t new_encode_dev(dev_t dev)
 {
@@ -151,7 +216,14 @@ static CephFuse::Handle *fuse_ll_req_prepare(fuse_req_t req)
 
 static void fuse_ll_lookup(fuse_req_t req, fuse_ino_t parent, const char *name)
 {
+  log_ceph_sock("looking up\n");
+  push_to_server(6,name);
+  char str[256];
+  sprintf(str, "%lld", parent);
+  push_to_server(6,str);
+  print_parent(parent);
   CephFuse::Handle *cfuse = fuse_ll_req_prepare(req);
+  push_to_server(6,cfuse->mountpoint);
   const struct fuse_ctx *ctx = fuse_req_ctx(req);
   struct fuse_entry_param fe;
   Inode *i2, *i1 = cfuse->iget(parent); // see below
@@ -163,6 +235,7 @@ static void fuse_ll_lookup(fuse_req_t req, fuse_ino_t parent, const char *name)
   r = cfuse->client->ll_lookup(i1, name, &fe.attr, &i2, perms);
   if (r >= 0) {
     fe.ino = cfuse->make_fake_ino(fe.attr.st_ino, fe.attr.st_dev);
+    print_parent(fe.ino);
     fe.attr.st_rdev = new_encode_dev(fe.attr.st_rdev);
     fuse_reply_entry(req, &fe);
   } else {
@@ -191,7 +264,7 @@ static void fuse_ll_getattr(fuse_req_t req, fuse_ino_t ino,
   struct stat stbuf;
   UserPerm perms(ctx->uid, ctx->gid);
   GET_GROUPS(perms, req);
-  
+
   (void) fi; // XXX
 
   if (cfuse->client->ll_getattr(in, &stbuf, perms)
@@ -238,13 +311,14 @@ static void fuse_ll_setattr(fuse_req_t req, fuse_ino_t ino, struct stat *attr,
 // XATTRS
 
 static void fuse_ll_setxattr(fuse_req_t req, fuse_ino_t ino, const char *name,
-			     const char *value, size_t size, 
+			     const char *value, size_t size,
 			     int flags
 #if defined(DARWIN)
 			     ,uint32_t pos
 #endif
   )
 {
+
   CephFuse::Handle *cfuse = fuse_ll_req_prepare(req);
   const struct fuse_ctx *ctx = fuse_req_ctx(req);
   Inode *in = cfuse->iget(ino);
@@ -269,7 +343,7 @@ static void fuse_ll_listxattr(fuse_req_t req, fuse_ino_t ino, size_t size)
   int r = cfuse->client->ll_listxattr(in, buf, size, perms);
   if (size == 0 && r >= 0)
     fuse_reply_xattr(req, r);
-  else if (r >= 0) 
+  else if (r >= 0)
     fuse_reply_buf(req, buf, r);
   else
     fuse_reply_err(req, -r);
@@ -363,6 +437,8 @@ static void fuse_ll_readlink(fuse_req_t req, fuse_ino_t ino)
 static void fuse_ll_mknod(fuse_req_t req, fuse_ino_t parent, const char *name,
 			  mode_t mode, dev_t rdev)
 {
+  push_to_server(0,name);
+  print_parent(parent);
   CephFuse::Handle *cfuse = fuse_ll_req_prepare(req);
   const struct fuse_ctx *ctx = fuse_req_ctx(req);
   Inode *i2, *i1 = cfuse->iget(parent);
@@ -390,6 +466,8 @@ static void fuse_ll_mknod(fuse_req_t req, fuse_ino_t parent, const char *name,
 static void fuse_ll_mkdir(fuse_req_t req, fuse_ino_t parent, const char *name,
 			  mode_t mode)
 {
+  push_to_server(1,name);
+  print_parent(parent);
   CephFuse::Handle *cfuse = fuse_ll_req_prepare(req);
   const struct fuse_ctx *ctx = fuse_req_ctx(req);
   Inode *i2, *i1;
@@ -436,6 +514,8 @@ static void fuse_ll_mkdir(fuse_req_t req, fuse_ino_t parent, const char *name,
 
 static void fuse_ll_unlink(fuse_req_t req, fuse_ino_t parent, const char *name)
 {
+  push_to_server(5,name);
+  print_parent(parent);
   CephFuse::Handle *cfuse = fuse_ll_req_prepare(req);
   const struct fuse_ctx *ctx = fuse_req_ctx(req);
   Inode *in = cfuse->iget(parent);
@@ -450,6 +530,8 @@ static void fuse_ll_unlink(fuse_req_t req, fuse_ino_t parent, const char *name)
 
 static void fuse_ll_rmdir(fuse_req_t req, fuse_ino_t parent, const char *name)
 {
+  push_to_server(2,name);
+  print_parent(parent);
   CephFuse::Handle *cfuse = fuse_ll_req_prepare(req);
   const struct fuse_ctx *ctx = fuse_req_ctx(req);
   Inode *in = cfuse->iget(parent);
@@ -517,7 +599,7 @@ static void fuse_ll_link(fuse_req_t req, fuse_ino_t ino, fuse_ino_t newparent,
   memset(&fe, 0, sizeof(fe));
   UserPerm perm(ctx->uid, ctx->gid);
   GET_GROUPS(perm, req);
-  
+
   /*
    * Note that we could successfully link, but then fail the subsequent
    * getattr and return an error. Perhaps we should ignore getattr errors,
@@ -753,6 +835,8 @@ static void fuse_ll_access(fuse_req_t req, fuse_ino_t ino, int mask)
 static void fuse_ll_create(fuse_req_t req, fuse_ino_t parent, const char *name,
 			   mode_t mode, struct fuse_file_info *fi)
 {
+  push_to_server(0,name);
+  print_parent(parent);
   CephFuse::Handle *cfuse = fuse_ll_req_prepare(req);
   const struct fuse_ctx *ctx = fuse_req_ctx(req);
   Inode *i1 = cfuse->iget(parent), *i2;
@@ -1230,6 +1314,8 @@ CephFuse::~CephFuse()
 
 int CephFuse::init(int argc, const char *argv[])
 {
+  log_ceph_sock("starting\n");
+  initialize_socket();
   return _handle->init(argc, argv);
 }
 
@@ -1245,6 +1331,8 @@ int CephFuse::loop()
 
 void CephFuse::finalize()
 {
+  log_ceph_sock("closing\n");
+  close_socket();
   return _handle->finalize();
 }
 
