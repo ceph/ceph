@@ -155,17 +155,14 @@ int ErasureCodeJerasure::decode_chunks(const set<int> &want_to_read,
 
 bool ErasureCodeJerasure::is_prime(int value)
 {
-  int prime55[] = {
+  static const std::array<int, 55> prime55{
     2,3,5,7,11,13,17,19,23,29,31,37,41,43,47,53,59,61,67,71,
     73,79,83,89,97,101,103,107,109,113,127,131,137,139,149,
     151,157,163,167,173,179,
     181,191,193,197,199,211,223,227,229,233,239,241,251,257
   };
-  int i;
-  for (i = 0; i < 55; i++)
-    if (value == prime55[i])
-      return true;
-  return false;
+
+  return std::binary_search(std::begin(prime55), std::end(prime55), value);
 }
 
 // 
