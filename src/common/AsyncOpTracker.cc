@@ -2,7 +2,6 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "common/AsyncOpTracker.h"
-#include "include/assert.h"
 #include "include/Context.h"
 
 AsyncOpTracker::AsyncOpTracker()

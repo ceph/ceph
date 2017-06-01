@@ -9,15 +9,11 @@
  * Foundation.  See file COPYING.
  * 
  */
+
 #include <errno.h>
-#include <sys/types.h>
 #include <sys/ioctl.h>
 #include <sys/stat.h>
-#include <stdio.h>
-#include <string.h>
-#include <ctype.h>
 #include <dirent.h>
-#include <stdlib.h>
 #include "include/uuid.h"
 
 #ifdef __linux__

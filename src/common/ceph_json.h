@@ -1,9 +1,7 @@
 #ifndef CEPH_JSON_H
 #define CEPH_JSON_H
 
-#include <iosfwd>
 #include <include/types.h>
-#include <list>
 
 #ifdef _ASSERT_H
 #define NEED_ASSERT_H
@@ -18,7 +16,6 @@
 #endif
 
 #include "Formatter.h"
-
 
 using namespace json_spirit;
 
