@@ -24,6 +24,5 @@ add_library(mon STATIC
   ${lib_mon_srcs}
   $<TARGET_OBJECTS:mon_common_objs>
   $<TARGET_OBJECTS:kv_objs>
-  $<TARGET_OBJECTS:common_util_obj>
   $<TARGET_OBJECTS:heap_profiler_objs>)
 target_link_libraries(mon ${ALLOC_LIBS})

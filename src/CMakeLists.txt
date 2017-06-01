@@ -534,6 +534,7 @@ set(libcommon_files
   common/fs_types.cc
   common/dns_resolve.cc
   common/hostname.cc
+  common/util.cc
   arch/probe.cc
   ${auth_files}
   ${mds_files})
@@ -769,10 +770,6 @@ target_link_libraries(ceph-dencoder
 install(TARGETS ceph-dencoder DESTINATION bin)
 
 # Monitor
-set(common_util_src
-  common/util.cc)
-add_library(common_util_obj OBJECT ${common_util_src})
-
 add_subdirectory(mon)
 set(ceph_mon_srcs
   ceph_mon.cc)
@@ -857,8 +854,7 @@ add_subdirectory(osd)
 
 set(ceph_osd_srcs
   ceph_osd.cc)
-add_executable(ceph-osd ${ceph_osd_srcs}
-  $<TARGET_OBJECTS:common_util_obj>)
+add_executable(ceph-osd ${ceph_osd_srcs})
 add_dependencies(ceph-osd erasure_code_plugins)
 target_link_libraries(ceph-osd osd os global-static common
   ${BLKID_LIBRARIES} ${RDMA_LIBRARIES})
@@ -870,8 +866,7 @@ install(TARGETS ceph-osd DESTINATION bin)
 add_subdirectory(mds)
 set(ceph_mds_srcs
   ceph_mds.cc)
-add_executable(ceph-mds ${ceph_mds_srcs}
-  $<TARGET_OBJECTS:common_util_obj>)
+add_executable(ceph-mds ${ceph_mds_srcs})
 target_link_libraries(ceph-mds mds ${CMAKE_DL_LIBS} global-static common
   Boost::thread)
 install(TARGETS ceph-mds DESTINATION bin)
