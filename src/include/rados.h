@@ -156,6 +156,29 @@ extern const char *ceph_osd_state_name(int s);
 				      CEPH_OSDMAP_REQUIRE_KRAKEN |	\
 				      CEPH_OSDMAP_REQUIRE_LUMINOUS |	\
 				      CEPH_OSDMAP_SORTBITWISE)
+#define CEPH_OSDMAP_LEGACY_REQUIRE_FLAGS (CEPH_OSDMAP_REQUIRE_JEWEL |	\
+					  CEPH_OSDMAP_REQUIRE_KRAKEN |	\
+					  CEPH_OSDMAP_REQUIRE_LUMINOUS)
+
+/*
+ * major ceph release numbers
+ */
+#define CEPH_RELEASE_ARGONAUT    1
+#define CEPH_RELEASE_BOBTAIL     2
+#define CEPH_RELEASE_CUTTLEFISH  3
+#define CEPH_RELEASE_DUMPLING    4
+#define CEPH_RELEASE_EMPEROR     5
+#define CEPH_RELEASE_FIREFLY     6
+#define CEPH_RELEASE_GIANT       7
+#define CEPH_RELEASE_HAMMER      8
+#define CEPH_RELEASE_INFERNALIS  9
+#define CEPH_RELEASE_JEWEL      10
+#define CEPH_RELEASE_KRAKEN     11
+#define CEPH_RELEASE_LUMINOUS   12
+#define CEPH_RELEASE_MIMIC      13
+
+extern const char *ceph_release_name(int r);
+extern int ceph_release_from_name(const char *s);
 
 /*
  * The error code to return when an OSD can't handle a write
@@ -271,6 +294,9 @@ extern const char *ceph_osd_state_name(int s);
 	/* ESX/SCSI */							    \
 	f(WRITESAME,	__CEPH_OSD_OP(WR, DATA, 38),	"write-same")	    \
 	f(CMPEXT,	__CEPH_OSD_OP(RD, DATA, 32),	"cmpext")	    \
+									    \
+	/* Extensible */						    \
+	f(SET_REDIRECT,	__CEPH_OSD_OP(WR, DATA, 39),	"set-redirect")	    \
 									    \
 	/** attrs **/							    \
 	/* read */							    \
@@ -414,6 +440,7 @@ enum {
 	CEPH_OSD_FLAG_KNOWN_REDIR = 0x400000,  /* redirect bit is authoritative */
 	CEPH_OSD_FLAG_FULL_TRY =    0x800000,  /* try op despite full flag */
 	CEPH_OSD_FLAG_FULL_FORCE = 0x1000000,  /* force op despite full flag */
+	CEPH_OSD_FLAG_IGNORE_REDIRECT = 0x2000000,  /* ignore redirection */
 };
 
 enum {

@@ -11,7 +11,6 @@
 #include "rgw_rados.h"
 #include "rgw_common.h"
 
-using namespace std;
 using ceph::crypto::SHA1;
 
 struct req_state;
@@ -104,10 +103,10 @@ private:
   uint64_t sha_len;  // sha1 length
   bool is_torrent;  // flag
   bufferlist bl;  // bufflist ready to send
-  list<bufferlist> torrent_bl;   // meate data
 
   struct req_state *s;
   RGWRados *store;
+  SHA1 h;
 
   TorrentBencode dencode;
 public:
@@ -122,17 +121,16 @@ public:
   off_t get_data_len();
   bool get_flag();
 
-  int handle_data();
-  void save_data(bufferlist &bl);
   void set_create_date(ceph::real_time& value);
-  void set_info_name(const string& value); 
+  void set_info_name(const string& value);
+  void update(bufferlist &bl);
+  int complete();
 
 private:
   void do_encode ();
   void set_announce();
   void set_exist(bool exist);
   void set_info_pieces(char *buff);
-  int sha1_process();
   void sha1(SHA1 *h, bufferlist &bl, off_t bl_len);
   int save_torrent_file();
 };

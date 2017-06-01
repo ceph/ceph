@@ -152,11 +152,14 @@ def init(parse_args):
                                          'log_file': None,
                                          'file_log_level': 20,
                                          'tenant': None,
+                                         'checkpoint_retries': 60,
+                                         'checkpoint_delay': 5,
+                                         'reconfigure_delay': 5,
                                          })
     try:
         path = os.environ['RGW_MULTI_TEST_CONF']
     except KeyError:
-        path = tpath('test_multi.conf')
+        path = test_path + 'test_multi.conf'
 
     try:
         with open(path) as f:
@@ -178,6 +181,9 @@ def init(parse_args):
     parser.add_argument('--log-file', type=str, default=cfg.get(section, 'log_file'))
     parser.add_argument('--file-log-level', type=int, default=cfg.getint(section, 'file_log_level'))
     parser.add_argument('--tenant', type=str, default=cfg.get(section, 'tenant'))
+    parser.add_argument('--checkpoint-retries', type=int, default=cfg.getint(section, 'checkpoint_retries'))
+    parser.add_argument('--checkpoint-delay', type=int, default=cfg.getint(section, 'checkpoint_delay'))
+    parser.add_argument('--reconfigure-delay', type=int, default=cfg.getint(section, 'reconfigure_delay'))
 
     argv = []
 
@@ -297,7 +303,10 @@ def init(parse_args):
     if not bootstrap:
         period.get(c1)
 
-    init_multi(realm, user)
+    config = Config(checkpoint_retries=args.checkpoint_retries,
+                    checkpoint_delay=args.checkpoint_delay,
+                    reconfigure_delay=args.reconfigure_delay)
+    init_multi(realm, user, config)
 
 def setup_module():
     init(False)

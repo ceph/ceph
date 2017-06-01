@@ -315,7 +315,7 @@ class TestClientRecovery(CephFSTestCase):
             self.mount_a.run_shell(["touch", "f{0}".format(i)])
 
         # Populate mount_b's cache
-        self.mount_b.run_shell(["ls"])
+        self.mount_b.run_shell(["ls", "-l"])
 
         client_id = self.mount_b.get_global_id()
         num_caps = self._session_num_caps(client_id)
@@ -331,10 +331,7 @@ class TestClientRecovery(CephFSTestCase):
                             count, num_caps
                         ))
 
-    def test_filelock(self):
-        """
-        Check that file lock doesn't get lost after an MDS restart
-        """
+    def _is_flockable(self):
         a_version_str = get_package_version(self.mount_a.client_remote, "fuse")
         b_version_str = get_package_version(self.mount_b.client_remote, "fuse")
         flock_version_str = "2.9"
@@ -348,14 +345,20 @@ class TestClientRecovery(CephFSTestCase):
         b_version = version.StrictVersion(b_result.group())
         flock_version=version.StrictVersion(flock_version_str)
 
-        flockable = False
         if (a_version >= flock_version and b_version >= flock_version):
-            log.info("testing flock locks")
-            flockable = True
+            log.info("flock locks are available")
+            return True
         else:
             log.info("not testing flock locks, machines have versions {av} and {bv}".format(
                 av=a_version_str,bv=b_version_str))
+            return False
 
+    def test_filelock(self):
+        """
+        Check that file lock doesn't get lost after an MDS restart
+        """
+
+        flockable = self._is_flockable()
         lock_holder = self.mount_a.lock_background(do_flock=flockable)
 
         self.mount_b.wait_for_visible("background_file-2")
@@ -373,6 +376,33 @@ class TestClientRecovery(CephFSTestCase):
         except (CommandFailedError, ConnectionLostError):
             # We killed it, so it raises an error
             pass
+
+    def test_filelock_eviction(self):
+        """
+        Check that file lock held by evicted client is given to
+        waiting client.
+        """
+        if not self._is_flockable():
+            self.skipTest("flock is not available")
+
+        lock_holder = self.mount_a.lock_background()
+        self.mount_b.wait_for_visible("background_file-2")
+        self.mount_b.check_filelock()
+
+        lock_taker = self.mount_b.lock_and_release()
+        # Check the taker is waiting (doesn't get it immediately)
+        time.sleep(2)
+        self.assertFalse(lock_holder.finished)
+        self.assertFalse(lock_taker.finished)
+
+        mount_a_client_id = self.mount_a.get_global_id()
+        self.fs.mds_asok(['session', 'evict', "%s" % mount_a_client_id])
+
+        # Evicting mount_a should let mount_b's attepmt to take the lock
+        # suceed
+        self.wait_until_true(
+            lambda: lock_taker.finished,
+            timeout=10)
 
     def test_dir_fsync(self):
 	self._test_fsync(True);

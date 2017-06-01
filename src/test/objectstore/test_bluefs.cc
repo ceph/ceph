@@ -562,7 +562,7 @@ TEST(BlueFS, test_replay) {
   }
   fs.umount();
   // remount and check log can replay safe?
-  fs.mount();
+  ASSERT_EQ(0, fs.mount());
   fs.umount();
   rm_temp_bdev(fn);
 }

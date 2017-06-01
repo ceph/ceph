@@ -2549,7 +2549,7 @@ void pool_stat_t::generate_test_instances(list<pool_stat_t*>& o)
 
 void pg_history_t::encode(bufferlist &bl) const
 {
-  ENCODE_START(8, 4, bl);
+  ENCODE_START(9, 4, bl);
   ::encode(epoch_created, bl);
   ::encode(last_epoch_started, bl);
   ::encode(last_epoch_clean, bl);
@@ -2565,12 +2565,13 @@ void pg_history_t::encode(bufferlist &bl) const
   ::encode(last_epoch_marked_full, bl);
   ::encode(last_interval_started, bl);
   ::encode(last_interval_clean, bl);
+  ::encode(epoch_pool_created, bl);
   ENCODE_FINISH(bl);
 }
 
 void pg_history_t::decode(bufferlist::iterator &bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(8, 4, 4, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(9, 4, 4, bl);
   ::decode(epoch_created, bl);
   ::decode(last_epoch_started, bl);
   if (struct_v >= 3)
@@ -2610,12 +2611,18 @@ void pg_history_t::decode(bufferlist::iterator &bl)
       last_interval_clean = last_epoch_clean; // best guess
     }
   }
+  if (struct_v >= 9) {
+    ::decode(epoch_pool_created, bl);
+  } else {
+    epoch_pool_created = epoch_created;
+  }
   DECODE_FINISH(bl);
 }
 
 void pg_history_t::dump(Formatter *f) const
 {
   f->dump_int("epoch_created", epoch_created);
+  f->dump_int("epoch_pool_created", epoch_pool_created);
   f->dump_int("last_epoch_started", last_epoch_started);
   f->dump_int("last_interval_started", last_interval_started);
   f->dump_int("last_epoch_clean", last_epoch_clean);
@@ -2637,6 +2644,7 @@ void pg_history_t::generate_test_instances(list<pg_history_t*>& o)
   o.push_back(new pg_history_t);
   o.push_back(new pg_history_t);
   o.back()->epoch_created = 1;
+  o.back()->epoch_pool_created = 1;
   o.back()->last_epoch_started = 2;
   o.back()->last_interval_started = 2;
   o.back()->last_epoch_clean = 3;
@@ -3259,7 +3267,7 @@ PastIntervals::PastIntervals(const PastIntervals &rhs)
 PastIntervals &PastIntervals::operator=(const PastIntervals &rhs)
 {
   PastIntervals other(rhs);
-  ::swap(other, *this);
+  swap(other);
   return *this;
 }
 
@@ -3355,7 +3363,7 @@ void PastIntervals::update_type(bool ec_pool, bool compact)
 
 void PastIntervals::update_type_from_map(bool ec_pool, const OSDMap &osdmap)
 {
-  update_type(ec_pool, osdmap.test_flag(CEPH_OSDMAP_REQUIRE_LUMINOUS));
+  update_type(ec_pool, osdmap.require_osd_release >= CEPH_RELEASE_LUMINOUS);
 }
 
 bool PastIntervals::is_new_interval(
@@ -4918,6 +4926,56 @@ void watch_info_t::generate_test_instances(list<watch_info_t*>& o)
   o.back()->addr = ea;
 }
 
+// -- object_manifest_t --
+
+void object_manifest_t::encode(bufferlist& bl) const
+{
+  ENCODE_START(1, 1, bl);
+  ::encode(type, bl);
+  switch (type) {
+    case TYPE_NONE: break;
+    case TYPE_REDIRECT: 
+      ::encode(redirect_target, bl);
+      break;
+    default:
+      ceph_abort();
+  }
+  ENCODE_FINISH(bl);
+}
+
+void object_manifest_t::decode(bufferlist::iterator& bl)
+{
+  DECODE_START(1, bl);
+  ::decode(type, bl);
+  switch (type) {
+    case TYPE_NONE: break;
+    case TYPE_REDIRECT: 
+      ::decode(redirect_target, bl);
+      break;
+    default:
+      ceph_abort();
+  }
+  DECODE_FINISH(bl);
+}
+
+void object_manifest_t::dump(Formatter *f) const
+{
+  f->dump_unsigned("type", type);
+  f->open_object_section("redirect_target");
+  redirect_target.dump(f);
+  f->close_section();
+}
+
+void object_manifest_t::generate_test_instances(list<object_manifest_t*>& o)
+{
+  o.push_back(new object_manifest_t());
+  o.back()->type = TYPE_REDIRECT;
+}
+
+ostream& operator<<(ostream& out, const object_manifest_t& om)
+{
+  return out << "type:" << om.type << " redirect_target:" << om.redirect_target;
+}
 
 // -- object_info_t --
 
@@ -4959,7 +5017,7 @@ void object_info_t::encode(bufferlist& bl, uint64_t features) const
        ++i) {
     old_watchers.insert(make_pair(i->first.second, i->second));
   }
-  ENCODE_START(16, 8, bl);
+  ENCODE_START(17, 8, bl);
   ::encode(soid, bl);
   ::encode(myoloc, bl);	//Retained for compatibility
   ::encode((__u32)0, bl); // was category, no longer used
@@ -4990,6 +5048,7 @@ void object_info_t::encode(bufferlist& bl, uint64_t features) const
   ::encode(expected_object_size, bl);
   ::encode(expected_write_size, bl);
   ::encode(alloc_hint_flags, bl);
+  ::encode(manifest, bl);
   ENCODE_FINISH(bl);
 }
 
@@ -5078,6 +5137,9 @@ void object_info_t::decode(bufferlist::iterator& bl)
     expected_write_size = 0;
     alloc_hint_flags = 0;
   }
+  if (struct_v >= 17) {
+    ::decode(manifest, bl);
+  }
   DECODE_FINISH(bl);
 }
 
@@ -5107,6 +5169,7 @@ void object_info_t::dump(Formatter *f) const
   f->dump_unsigned("expected_object_size", expected_object_size);
   f->dump_unsigned("expected_write_size", expected_write_size);
   f->dump_unsigned("alloc_hint_flags", alloc_hint_flags);
+  f->dump_object("manifest", manifest);
   f->open_object_section("watchers");
   for (map<pair<uint64_t, entity_name_t>,watch_info_t>::const_iterator p =
          watchers.begin(); p != watchers.end(); ++p) {
@@ -5144,6 +5207,8 @@ ostream& operator<<(ostream& out, const object_info_t& oi)
   out << " alloc_hint [" << oi.expected_object_size
       << " " << oi.expected_write_size
       << " " << oi.alloc_hint_flags << "]";
+  if (oi.has_manifest())
+    out << " " << oi.manifest;
 
   out << ")";
   return out;

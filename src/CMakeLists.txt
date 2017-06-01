@@ -39,7 +39,9 @@ set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wno-unknown-pragmas")
 if(CMAKE_CXX_COMPILER_ID STREQUAL GNU)
   set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -rdynamic")
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wstrict-null-sentinel -Woverloaded-virtual")
-  set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -pie")
+  if(NOT WITH_OSD_INSTRUMENT_FUNCTIONS)
+    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -pie")
+  endif()
 elseif(CMAKE_CXX_COMPILER_ID STREQUAL Clang)
   set(CMAKE_EXE_LINKER_FLAGS "-Wl,-export-dynamic")
   set(CMAKE_LINKER_FLAGS "${CMAKE_LINKER_FLAGS} -rdynamic -Wl,-export-dynamic -export-dynamic")
@@ -69,11 +71,11 @@ endif()
 
 include(CheckCCompilerFlag)
 if(CMAKE_CXX_COMPILER_ID STREQUAL GNU)
-  CHECK_C_COMPILER_FLAG("-Wp,-U_FORTIFY_SOURCE,-D_FORTIFY_SOURCE=2" HAS_FORTIFY_SOURCE)
+  CHECK_C_COMPILER_FLAG("-U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=2" HAS_FORTIFY_SOURCE)
   if(NOT CMAKE_BUILD_TYPE STREQUAL Debug)
     if(HAS_FORTIFY_SOURCE)
-      set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wp,-U_FORTIFY_SOURCE,-D_FORTIFY_SOURCE=2")
-      set(CMAKE_CXX_FLAGS "${CMAKE_C_FLAGS} -Wp,-U_FORTIFY_SOURCE,-D_FORTIFY_SOURCE=2")
+      set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=2")
+      set(CMAKE_CXX_FLAGS "${CMAKE_C_FLAGS} -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=2")
     endif()
   endif()
   CHECK_C_COMPILER_FLAG(-fstack-protector-strong HAS_STACK_PROTECT)
@@ -90,7 +92,7 @@ if(HAVE_INTEL)
 endif()
 
 execute_process(
-  COMMAND yasm -f elf64 ${CMAKE_SOURCE_DIR}/src/common/crc32c_intel_fast_asm.S -o /dev/null
+  COMMAND yasm -f elf64 ${CMAKE_SOURCE_DIR}/src/common/crc32c_intel_fast_asm.s -o /dev/null
   RESULT_VARIABLE no_yasm
   OUTPUT_QUIET)
 if(no_yasm)
@@ -200,6 +202,8 @@ endif(USE_NSS)
 
 set(GCOV_PREFIX_STRIP 4)
 
+# the src/.git_version file may be written out by make-dist; otherwise
+# we pull the git version from .git
 option(ENABLE_GIT_VERSION "build Ceph with git version string" ON)
 if(${ENABLE_GIT_VERSION})
   get_git_head_revision(GIT_REFSPEC CEPH_GIT_VER)
@@ -217,6 +221,17 @@ else(${ENABLE_GIT_VERSION})
   set(CEPH_GIT_VER "no_version")
   set(CEPH_GIT_NICE_VER "Development")
 endif(${ENABLE_GIT_VERSION})
+
+# the src/ceph_release file is 3 lines,
+#   <release number, e.g. '12' for luminous>
+#   <release name, e.g. 'luminous'>
+#   <release type: 'dev' for x.0.z, 'rc' or x.1.z, or 'stable' or x.2.z>
+# note that the release name is semi-redundant and must match CEPH_RELEASE_*
+# definitions in include/rados.h and common/ceph_strings.c.
+file(STRINGS ${CMAKE_CURRENT_SOURCE_DIR}/ceph_release CEPH_RELEASE_FILE)
+list(GET CEPH_RELEASE_FILE 0 CEPH_RELEASE)
+list(GET CEPH_RELEASE_FILE 1 CEPH_RELEASE_NAME)
+list(GET CEPH_RELEASE_FILE 2 CEPH_RELEASE_TYPE)
 
 option(WITH_OCF "build OCF-compliant cluster resource agent" OFF)
 if(WITH_OCF)
@@ -335,6 +350,7 @@ add_library(crush_objs OBJECT ${crush_srcs})
 add_subdirectory(json_spirit)
 
 include_directories("${CMAKE_SOURCE_DIR}/src/xxHash")
+include_directories(SYSTEM "${CMAKE_SOURCE_DIR}/src/rapidjson/include")
 
 set(GMOCK_INCLUDE_DIRS
   "${CMAKE_SOURCE_DIR}/src/googletest/googletest/include/gmock")
@@ -439,6 +455,7 @@ set(libcommon_files
   common/TrackedOp.cc
   common/SloppyCRCMap.cc
   common/types.cc
+  common/iso_8601.cc
   log/Log.cc
   log/SubsystemMap.cc
   mon/MonCap.cc
@@ -534,8 +551,8 @@ if(HAVE_INTEL)
     common/crc32c_intel_fast.c)
   if(HAVE_GOOD_YASM_ELF64)
     list(APPEND libcommon_files
-      common/crc32c_intel_fast_asm.S
-      common/crc32c_intel_fast_zero_asm.S)
+      common/crc32c_intel_fast_asm.s
+      common/crc32c_intel_fast_zero_asm.s)
   endif(HAVE_GOOD_YASM_ELF64)
 elseif(HAVE_POWER8)
   list(APPEND libcommon_files
@@ -951,7 +968,6 @@ install(PROGRAMS
 install(PROGRAMS
   ${CMAKE_SOURCE_DIR}/src/ceph-create-keys
 #  ${CMAKE_SOURCE_DIR}/src/ceph-disk
-  ${CMAKE_SOURCE_DIR}/src/ceph-disk-udev
   DESTINATION sbin)
 
 add_subdirectory(bash_completion)

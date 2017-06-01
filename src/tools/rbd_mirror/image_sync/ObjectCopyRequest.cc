@@ -334,7 +334,7 @@ void ObjectCopyRequest<I>::send_update_object_map() {
   bool sent = m_local_image_ctx->object_map->template aio_update<
     ObjectCopyRequest<I>, &ObjectCopyRequest<I>::handle_update_object_map>(
       snap_object_state.first, m_object_number, snap_object_state.second, {},
-      this);
+      {}, this);
   assert(sent);
   m_local_image_ctx->snap_lock.put_read();
 }

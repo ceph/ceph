@@ -3,8 +3,8 @@
 #ifndef COMMON_ZIPKIN_TRACE_H
 #define COMMON_ZIPKIN_TRACE_H
 
-#include <string>
 #include "acconfig.h"
+#include "include/encoding.h"
 
 #ifdef WITH_BLKIN
 

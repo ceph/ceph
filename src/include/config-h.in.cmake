@@ -169,6 +169,9 @@
 /* Define if you want to use LTTng */
 #cmakedefine WITH_LTTNG
 
+/* Define if you want to OSD function instrumentation */
+#cmakedefine WITH_OSD_INSTRUMENT_FUNCTIONS
+
 /* Define if you want to use Babeltrace */
 #cmakedefine WITH_BABELTRACE
 
@@ -205,17 +208,11 @@
 /* Define to 1 if you have fdatasync. */
 #cmakedefine HAVE_FDATASYNC 1
 
-/* Define to 1 if you have the <inttypes.h> header file. */
-#cmakedefine HAVE_INTTYPES_H 1
-
 /* Defined if you have librocksdb enabled */
 #cmakedefine HAVE_LIBROCKSDB
 
 /* Define to 1 if you have the <valgrind/helgrind.h> header file. */
 #cmakedefine HAVE_VALGRIND_HELGRIND_H 1
-
-/* Define to 1 if you have the <stdint.h> header file. */
-#cmakedefine HAVE_STDINT_H 1
 
 /* Define to 1 if you have the <sys/prctl.h> header file. */
 #cmakedefine HAVE_SYS_PRCTL_H 1
@@ -320,5 +317,8 @@
 #cmakedefine CEPH_LITTLE_ENDIAN
 
 #cmakedefine PYTHON_EXECUTABLE "@PYTHON_EXECUTABLE@"
+
+/* Define to 1 if you have the `getprogname' function. */
+#cmakedefine HAVE_GETPROGNAME 1
 
 #endif /* CONFIG_H */

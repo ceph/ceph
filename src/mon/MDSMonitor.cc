@@ -53,19 +53,19 @@ static ostream& _prefix(std::ostream *_dout, Monitor *mon, FSMap const& fsmap) {
  * out strongly-typedef'd types
  */
 template<> bool cmd_getval(CephContext *cct, const cmdmap_t& cmdmap,
-                std::string k, mds_gid_t &val)
+			   const std::string& k, mds_gid_t &val)
 {
   return cmd_getval(cct, cmdmap, k, (int64_t&)val);
 }
 
 template<> bool cmd_getval(CephContext *cct, const cmdmap_t& cmdmap,
-                std::string k, mds_rank_t &val)
+			   const std::string& k, mds_rank_t &val)
 {
   return cmd_getval(cct, cmdmap, k, (int64_t&)val);
 }
 
 template<> bool cmd_getval(CephContext *cct, const cmdmap_t& cmdmap,
-                std::string k, MDSMap::DaemonState &val)
+			   const std::string& k, MDSMap::DaemonState &val)
 {
   return cmd_getval(cct, cmdmap, k, (int64_t&)val);
 }
@@ -1120,13 +1120,15 @@ bool MDSMonitor::fail_mds_gid(mds_gid_t gid)
 
 mds_gid_t MDSMonitor::gid_from_arg(const std::string& arg, std::ostream &ss)
 {
+  const FSMap *relevant_fsmap = mon->is_leader() ? &pending_fsmap : &fsmap;
+
   // Try parsing as a role
   mds_role_t role;
   std::ostringstream ignore_err;  // Don't spam 'ss' with parse_role errors
   int r = parse_role(arg, &role, ignore_err);
   if (r == 0) {
     // See if a GID is assigned to this role
-    auto fs = pending_fsmap.get_filesystem(role.fscid);
+    auto fs = relevant_fsmap->get_filesystem(role.fscid);
     assert(fs != nullptr);  // parse_role ensures it exists
     if (fs->mds_map.is_up(role.rank)) {
       dout(10) << __func__ << ": validated rank/GID " << role
@@ -1140,7 +1142,7 @@ mds_gid_t MDSMonitor::gid_from_arg(const std::string& arg, std::ostream &ss)
   unsigned long long maybe_gid = strict_strtoll(arg.c_str(), 10, &err);
   if (!err.empty()) {
     // Not a role or a GID, try as a daemon name
-    const MDSMap::mds_info_t *mds_info = fsmap.find_by_name(arg);
+    const MDSMap::mds_info_t *mds_info = relevant_fsmap->find_by_name(arg);
     if (!mds_info) {
       ss << "MDS named '" << arg
 	 << "' does not exist, or is not up";
@@ -1153,14 +1155,9 @@ mds_gid_t MDSMonitor::gid_from_arg(const std::string& arg, std::ostream &ss)
     // Not a role, but parses as a an integer, might be a GID
     dout(10) << __func__ << ": treating MDS reference '" << arg
 	     << "' as an integer " << maybe_gid << dendl;
-    if (mon->is_leader()) {
-      if (pending_fsmap.gid_exists(mds_gid_t(maybe_gid))) {
-        return mds_gid_t(maybe_gid);
-      }
-    } else {
-      if (fsmap.gid_exists(mds_gid_t(maybe_gid))) {
-        return mds_gid_t(maybe_gid);
-      }
+
+    if (relevant_fsmap->gid_exists(mds_gid_t(maybe_gid))) {
+      return mds_gid_t(maybe_gid);
     }
   }
 
@@ -1328,6 +1325,10 @@ int MDSMonitor::filesystem_command(
       ss << "can't tell the root (" << fs->mds_map.get_root()
 	 << ") or tableserver (" << fs->mds_map.get_tableserver()
 	 << ") to deactivate";
+    } else if (role.rank != fs->mds_map.get_last_in_mds()) {
+      r = -EINVAL;
+      ss << "mds." << role << " doesn't have the max rank ("
+	 << fs->mds_map.get_last_in_mds() << ")";
     } else if (fs->mds_map.get_num_in_mds() <= size_t(fs->mds_map.get_max_mds())) {
       r = -EBUSY;
       ss << "must decrease max_mds or else MDS will immediately reactivate";

@@ -21,6 +21,7 @@
 #include "acconfig.h"
 #include "rgw_acl.h"
 #include "rgw_cors.h"
+#include "rgw_iam_policy.h"
 #include "rgw_quota.h"
 #include "rgw_string.h"
 #include "rgw_website.h"
@@ -28,8 +29,6 @@
 #include "cls/user/cls_user_types.h"
 #include "cls/rgw/cls_rgw_types.h"
 #include "include/rados/librados.hpp"
-
-using namespace std;
 
 namespace ceph {
   class Formatter;
@@ -98,6 +97,10 @@ using ceph::crypto::MD5;
 #define RGW_ATTR_OLH_PENDING_PREFIX RGW_ATTR_OLH_PREFIX "pending."
 
 #define RGW_ATTR_COMPRESSION    RGW_ATTR_PREFIX "compression"
+
+/* IAM Policy */
+#define RGW_ATTR_IAM_POLICY	RGW_ATTR_PREFIX "iam-policy"
+
 
 /* RGW File Attributes */
 #define RGW_ATTR_UNIX_KEY1      RGW_ATTR_PREFIX "unix-key1"
@@ -202,6 +205,8 @@ using ceph::crypto::MD5;
 #define UINT32_MAX (0xffffffffu)
 #endif
 
+struct req_state;
+
 typedef void *RGWAccessHandle;
 
 
@@ -263,7 +268,6 @@ enum RGWObjCategory {
 /** Store error returns for output at a different point in the program */
 struct rgw_err {
   rgw_err();
-  rgw_err(int http, const std::string &s3);
   void clear();
   bool is_clear() const;
   bool is_err() const;
@@ -271,9 +275,11 @@ struct rgw_err {
 
   int http_ret;
   int ret;
-  std::string s3_code;
+  std::string err_code;
   std::string message;
 };
+
+
 
 /* Helper class used for RGWHTTPArgs parsing */
 class NameVal
@@ -451,6 +457,9 @@ enum RGWOpType {
   RGW_OP_GET_ROLE_POLICY,
   RGW_OP_LIST_ROLE_POLICIES,
   RGW_OP_DELETE_ROLE_POLICY,
+  RGW_OP_PUT_BUCKET_POLICY,
+  RGW_OP_GET_BUCKET_POLICY,
+  RGW_OP_DELETE_BUCKET_POLICY,
 
   /* rgw specific */
   RGW_OP_ADMIN_SET_METADATA,
@@ -1338,8 +1347,6 @@ struct RGWStorageStats
   void dump(Formatter *f) const;
 };
 
-struct req_state;
-
 class RGWEnv;
 
 /* Namespaced forward declarations. */
@@ -1348,11 +1355,13 @@ namespace rgw {
     namespace s3 {
       class RGWGetPolicyV2Extractor;
     }
+    class Completer;
   }
   namespace io {
     class BasicClient;
   }
 }
+
 
 struct req_info {
   RGWEnv *env;
@@ -1701,7 +1710,7 @@ struct req_state {
   const char *length;
   int64_t content_length;
   map<string, string> generic_attrs;
-  struct rgw_err err;
+  rgw_err err;
   bool expect_cont;
   bool header_ended;
   uint64_t obj_size;
@@ -1770,6 +1779,9 @@ struct req_state {
   RGWAccessControlPolicy *bucket_acl;
   RGWAccessControlPolicy *object_acl;
 
+  rgw::IAM::Environment env;
+  boost::optional<rgw::IAM::Policy> iam_policy;
+
   /* Is the request made by an user marked as a system one?
    * Being system user means we also have the admin status. */
   bool system_request;
@@ -1805,7 +1817,14 @@ struct req_state {
 
   req_state(CephContext* _cct, RGWEnv* e, RGWUserInfo* u);
   ~req_state();
+
+  bool is_err() const { return err.is_err(); }
 };
+
+void set_req_state_err(struct req_state*, int);
+void set_req_state_err(struct req_state*, int, const string&);
+void set_req_state_err(struct rgw_err&, int, const int);
+void dump(struct req_state*);
 
 /** Store basic data on bucket */
 struct RGWBucketEnt {
@@ -2132,17 +2151,38 @@ bool verify_user_permission(struct req_state * const s,
                             const int perm);
 bool verify_user_permission(struct req_state * const s,
                             const int perm);
-extern bool verify_bucket_permission(struct req_state * s,
-                                     RGWAccessControlPolicy * user_acl,
-                                     RGWAccessControlPolicy * bucket_acl,
-                                     int perm);
-extern bool verify_bucket_permission(struct req_state *s, int perm);
-extern bool verify_object_permission(struct req_state *s,
-                                     RGWAccessControlPolicy * user_acl,
-                                     RGWAccessControlPolicy * bucket_acl,
-                                     RGWAccessControlPolicy * object_acl,
-                                     int perm);
-extern bool verify_object_permission(struct req_state *s, int perm);
+bool verify_bucket_permission(
+  struct req_state * const s,
+  const rgw_bucket& bucket,
+  RGWAccessControlPolicy * const user_acl,
+  RGWAccessControlPolicy * const bucket_acl,
+  const boost::optional<rgw::IAM::Policy>& bucket_policy,
+  const uint64_t op);
+bool verify_bucket_permission(struct req_state * const s, const uint64_t op);
+bool verify_bucket_permission_no_policy(
+  struct req_state * const s,
+  RGWAccessControlPolicy * const user_acl,
+  RGWAccessControlPolicy * const bucket_acl,
+  const int perm);
+bool verify_bucket_permission_no_policy(struct req_state * const s,
+					const int perm);
+extern bool verify_object_permission(
+  struct req_state * const s,
+  const rgw_obj& obj,
+  RGWAccessControlPolicy * const user_acl,
+  RGWAccessControlPolicy * const bucket_acl,
+  RGWAccessControlPolicy * const object_acl,
+  const boost::optional<rgw::IAM::Policy>& bucket_policy,
+  const uint64_t op);
+extern bool verify_object_permission(struct req_state *s, uint64_t op);
+extern bool verify_object_permission_no_policy(
+  struct req_state * const s,
+  RGWAccessControlPolicy * const user_acl,
+  RGWAccessControlPolicy * const bucket_acl,
+  RGWAccessControlPolicy * const object_acl,
+  int perm);
+extern bool verify_object_permission_no_policy(struct req_state *s,
+					       int perm);
 /** Convert an input URL into a sane object name
  * by converting %-escaped strings into characters, etc*/
 extern void rgw_uri_escape_char(char c, string& dst);
@@ -2168,5 +2208,12 @@ extern string  calc_hash_sha256_close_stream(SHA256 **hash);
 
 extern int rgw_parse_op_type_list(const string& str, uint32_t *perm);
 
-int match(const string& pattern, const string& input, int flag);
+namespace {
+  constexpr uint32_t MATCH_POLICY_ACTION = 0x01;
+  constexpr uint32_t MATCH_POLICY_RESOURCE = 0x02;
+  constexpr uint32_t MATCH_POLICY_ARN = 0x04;
+  constexpr uint32_t MATCH_POLICY_STRING = 0x08;
+}
+
+int match(const std::string& pattern, const std::string& input, uint32_t flag);
 #endif

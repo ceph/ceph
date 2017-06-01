@@ -26,7 +26,6 @@
 #include "include/atomic.h"
 #include "common/RWLock.h"
 #include "include/types.h"
-#include "include/compat.h"
 #include "include/inline_memory.h"
 #include "include/scope_guard.h"
 #if defined(HAVE_XIO)
@@ -34,13 +33,10 @@
 #endif
 
 #include <errno.h>
-#include <fstream>
-#include <sstream>
 #include <sys/uio.h>
 #include <limits.h>
 
 #include <atomic>
-#include <ostream>
 
 #define CEPH_BUFFER_ALLOC_UNIT  (MIN(CEPH_PAGE_SIZE, 4096))
 #define CEPH_BUFFER_APPEND_SIZE (CEPH_BUFFER_ALLOC_UNIT - sizeof(raw_combined))
@@ -956,9 +952,8 @@ static std::atomic_flag buffer_debug_lock = ATOMIC_FLAG_INIT;
     maybe_inline_memcpy(dest, src, l, 8);
   }
 
-  unsigned buffer::ptr::wasted()
+  unsigned buffer::ptr::wasted() const
   {
-    assert(_raw);
     return _raw->len - _len;
   }
 
@@ -2500,6 +2495,25 @@ void buffer::list::hexdump(std::ostream &out, bool trailing_newline) const
   }
 
   out.flags(original_flags);
+}
+
+
+buffer::list buffer::list::static_from_mem(char* c, size_t l) {
+  list bl;
+  bl.push_back(ptr(create_static(l, c)));
+  return bl;
+}
+
+buffer::list buffer::list::static_from_cstring(char* c) {
+  return static_from_mem(c, std::strlen(c));
+}
+
+buffer::list buffer::list::static_from_string(string& s) {
+  // C++14 just has string::data return a char* from a non-const
+  // string.
+  return static_from_mem(const_cast<char*>(s.data()), s.length());
+  // But the way buffer::list mostly doesn't work in a sane way with
+  // const makes me generally sad.
 }
 
 std::ostream& buffer::operator<<(std::ostream& out, const buffer::raw &r) {

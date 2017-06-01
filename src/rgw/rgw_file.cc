@@ -66,18 +66,20 @@ namespace rgw {
     return 0;
   }
 
-  LookupFHResult RGWLibFS::stat_bucket(RGWFileHandle* parent,
-				       const char *path, uint32_t flags)
+  LookupFHResult RGWLibFS::stat_bucket(RGWFileHandle* parent, const char *path,
+				       RGWLibFS::BucketStats& bs,
+				       uint32_t flags)
   {
     LookupFHResult fhr{nullptr, 0};
     std::string bucket_name{path};
-    RGWStatBucketRequest req(cct, get_user(), bucket_name);
+    RGWStatBucketRequest req(cct, get_user(), bucket_name, bs);
 
     int rc = rgwlib.get_fe()->execute_req(&req);
     if ((rc == 0) &&
 	(req.get_ret() == 0) &&
 	(req.matched())) {
       fhr = lookup_fh(parent, path,
+		      (flags & RGWFileHandle::FLAG_LOCKED)|
 		      RGWFileHandle::FLAG_CREATE|
 		      RGWFileHandle::FLAG_BUCKET);
       if (get<0>(fhr)) {
@@ -252,7 +254,9 @@ namespace rgw {
   int RGWLibFS::unlink(RGWFileHandle* rgw_fh, const char* name, uint32_t flags)
   {
     int rc = 0;
+    BucketStats bs;
     RGWFileHandle* parent = nullptr;
+    RGWFileHandle* bkt_fh = nullptr;
 
     if (unlikely(flags & RGWFileHandle::FLAG_UNLINK_THIS)) {
       /* LOCKED */
@@ -266,6 +270,37 @@ namespace rgw {
     }
 
     if (parent->is_root()) {
+      /* a bucket may have an object storing Unix attributes, check
+       * for and delete it */
+      LookupFHResult fhr;
+      fhr = stat_bucket(parent, name, bs, (rgw_fh) ?
+			RGWFileHandle::FLAG_LOCKED :
+			RGWFileHandle::FLAG_NONE);
+      bkt_fh = get<0>(fhr);
+      if (unlikely(! bkt_fh)) {
+	/* implies !rgw_fh, so also !LOCKED */
+	return -ENOENT;
+      }
+
+      if (bs.num_entries > 1) {
+	unref(bkt_fh); /* return stat_bucket ref */
+	if (likely(!! rgw_fh)) { /* return lock and ref from
+				  * lookup_fh (or caller in the
+				  * special case of
+				  * RGWFileHandle::FLAG_UNLINK_THIS) */
+	  rgw_fh->mtx.unlock();
+	  unref(rgw_fh);
+	}
+	return -ENOTEMPTY;
+      } else {
+	/* delete object w/key "<bucket>/" (uxattrs), if any */
+	string oname{"/"};
+	RGWDeleteObjRequest req(cct, get_user(), bkt_fh->bucket_name(), oname);
+	rc = rgwlib.get_fe()->execute_req(&req);
+	/* don't care if ENOENT */
+	unref(bkt_fh);
+      }
+
       /* XXXX remove uri and deal with bucket and object names */
       string uri = "/";
       uri += name;
@@ -315,13 +350,6 @@ namespace rgw {
     rgw_fh->flags |= RGWFileHandle::FLAG_DELETED;
     fh_cache.remove(rgw_fh->fh.fh_hk.object, rgw_fh,
 		    RGWFileHandle::FHCache::FLAG_LOCK);
-
-#if 1 /* XXX verify clear cache */
-    fh_key fhk(rgw_fh->fh.fh_hk);
-    LookupFHResult tfhr = lookup_fh(fhk, RGWFileHandle::FLAG_LOCKED);
-    RGWFileHandle* nfh = get<0>(tfhr);
-    assert(!nfh);
-#endif
 
     if (! rc) {
       real_time t = real_clock::now();
@@ -667,7 +695,8 @@ namespace rgw {
 
     string obj_name{rgw_fh->relative_object_name()};
 
-    if (rgw_fh->is_dir()) {
+    if (rgw_fh->is_dir() &&
+	(likely(! rgw_fh->is_bucket()))) {
       obj_name += "/";
     }
 
@@ -1150,6 +1179,8 @@ namespace rgw {
     int rc = write_finish(FLAG_LOCKED);
 
     flags &= ~FLAG_OPEN;
+    flags &= ~FLAG_STATELESS_OPEN;
+
     return rc;
   } /* RGWFileHandle::close */
 
@@ -1419,7 +1450,6 @@ int rgw_umount(struct rgw_fs *rgw_fs, uint32_t flags)
 {
   RGWLibFS *fs = static_cast<RGWLibFS*>(rgw_fs->fs_private);
   fs->close();
-  fs->rele();
   return 0;
 }
 
@@ -1558,7 +1588,8 @@ int rgw_lookup(struct rgw_fs *rgw_fs,
 		 (strcmp(path, "/") == 0))) {
       rgw_fh = parent;
     } else {
-      fhr = fs->stat_bucket(parent, path, RGWFileHandle::FLAG_NONE);
+      RGWLibFS::BucketStats bstat;
+      fhr = fs->stat_bucket(parent, path, bstat, RGWFileHandle::FLAG_NONE);
       rgw_fh = get<0>(fhr);
       if (! rgw_fh)
 	return -ENOENT;

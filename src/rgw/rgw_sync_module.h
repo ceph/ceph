@@ -16,11 +16,11 @@ public:
   RGWDataSyncModule() {}
   virtual ~RGWDataSyncModule() {}
 
-  virtual RGWCoroutine *sync_object(RGWDataSyncEnv *sync_env, RGWBucketInfo& bucket_info, rgw_obj_key& key, uint64_t versioned_epoch) = 0;
+  virtual RGWCoroutine *sync_object(RGWDataSyncEnv *sync_env, RGWBucketInfo& bucket_info, rgw_obj_key& key, uint64_t versioned_epoch, rgw_zone_set *zones_trace) = 0;
   virtual RGWCoroutine *remove_object(RGWDataSyncEnv *sync_env, RGWBucketInfo& bucket_info, rgw_obj_key& key, real_time& mtime,
-                                      bool versioned, uint64_t versioned_epoch) = 0;
+                                      bool versioned, uint64_t versioned_epoch, rgw_zone_set *zones_trace) = 0;
   virtual RGWCoroutine *create_delete_marker(RGWDataSyncEnv *sync_env, RGWBucketInfo& bucket_info, rgw_obj_key& key, real_time& mtime,
-                                             rgw_bucket_entry_owner& owner, bool versioned, uint64_t versioned_epoch) = 0;
+                                             rgw_bucket_entry_owner& owner, bool versioned, uint64_t versioned_epoch, rgw_zone_set *zones_trace) = 0;
 };
 
 class RGWSyncModuleInstance {

@@ -11,13 +11,6 @@
  */
 
 #include "TrackedOp.h"
-#include "common/Formatter.h"
-#include <iostream>
-#include <vector>
-#include "common/debug.h"
-#include "common/config.h"
-#include "msg/Message.h"
-#include "include/assert.h"
 
 #define dout_context cct
 #define dout_subsys ceph_subsys_optracker

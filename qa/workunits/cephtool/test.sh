@@ -292,7 +292,7 @@ function test_tiering_agent()
   ceph osd pool delete $slow $slow --yes-i-really-really-mean-it
 }
 
-function test_tiering()
+function test_tiering_1()
 {
   # tiering
   ceph osd pool create slow 2
@@ -372,9 +372,14 @@ function test_tiering()
   ceph osd pool ls detail | grep cache2
   ceph osd pool ls detail -f json-pretty | grep cache2
 
+  ceph osd pool delete slow slow --yes-i-really-really-mean-it
+  ceph osd pool delete slow2 slow2 --yes-i-really-really-mean-it
   ceph osd pool delete cache cache --yes-i-really-really-mean-it
   ceph osd pool delete cache2 cache2 --yes-i-really-really-mean-it
+}
 
+function test_tiering_2()
+{
   # make sure we can't clobber snapshot state
   ceph osd pool create snap_base 2
   ceph osd pool create snap_cache 2
@@ -382,7 +387,10 @@ function test_tiering()
   expect_false ceph osd tier add snap_base snap_cache
   ceph osd pool delete snap_base snap_base --yes-i-really-really-mean-it
   ceph osd pool delete snap_cache snap_cache --yes-i-really-really-mean-it
+}
 
+function test_tiering_3()
+{
   # make sure we can't create snapshot on tier
   ceph osd pool create basex 2
   ceph osd pool create cachex 2
@@ -391,7 +399,10 @@ function test_tiering()
   ceph osd tier remove basex cachex
   ceph osd pool delete basex basex --yes-i-really-really-mean-it
   ceph osd pool delete cachex cachex --yes-i-really-really-mean-it
+}
 
+function test_tiering_4()
+{
   # make sure we can't create an ec pool tier
   ceph osd pool create eccache 2 2 erasure
   expect_false ceph osd set-require-min-compat-client bobtail
@@ -399,8 +410,12 @@ function test_tiering()
   expect_false ceph osd tier add repbase eccache
   ceph osd pool delete repbase repbase --yes-i-really-really-mean-it
   ceph osd pool delete eccache eccache --yes-i-really-really-mean-it
+}
 
+function test_tiering_5()
+{
   # convenient add-cache command
+  ceph osd pool create slow 2
   ceph osd pool create cache3 2
   ceph osd tier add-cache slow cache3 1024000
   ceph osd dump | grep cache3 | grep bloom | grep 'false_positive_probability: 0.05' | grep 'target_bytes 1024000' | grep '1200s x4'
@@ -411,10 +426,11 @@ function test_tiering()
   ceph osd pool ls | grep cache3
   ceph osd pool delete cache3 cache3 --yes-i-really-really-mean-it
   ! ceph osd pool ls | grep cache3 || exit 1
-
-  ceph osd pool delete slow2 slow2 --yes-i-really-really-mean-it
   ceph osd pool delete slow slow --yes-i-really-really-mean-it
+}
 
+function test_tiering_6()
+{
   # check add-cache whether work
   ceph osd pool create datapool 2
   ceph osd pool create cachepool 2
@@ -428,7 +444,10 @@ function test_tiering()
   ceph osd tier remove datapool cachepool
   ceph osd pool delete cachepool cachepool --yes-i-really-really-mean-it
   ceph osd pool delete datapool datapool --yes-i-really-really-mean-it
+}
 
+function test_tiering_7()
+{
   # protection against pool removal when used as tiers
   ceph osd pool create datapool 2
   ceph osd pool create cachepool 2
@@ -441,7 +460,10 @@ function test_tiering()
   ceph osd tier remove datapool cachepool
   ceph osd pool delete cachepool cachepool --yes-i-really-really-mean-it
   ceph osd pool delete datapool datapool --yes-i-really-really-mean-it
+}
 
+function test_tiering_8()
+{
   ## check health check
   ceph osd set notieragent
   ceph osd pool create datapool 2
@@ -462,8 +484,10 @@ function test_tiering()
   ceph osd pool delete cache4 cache4 --yes-i-really-really-mean-it
   ceph osd pool delete datapool datapool --yes-i-really-really-mean-it
   ceph osd unset notieragent
+}
 
-
+function test_tiering_9()
+{
   # make sure 'tier remove' behaves as we expect
   # i.e., removing a tier from a pool that's not its base pool only
   # results in a 'pool foo is now (or already was) not a tier of bar'
@@ -680,6 +704,8 @@ function test_mon_misc()
   ceph log "$mymsg"
   ceph_watch_wait "$mymsg"
 
+  ceph mgr dump
+
   ceph mon metadata a
   ceph mon metadata
   ceph node ls
@@ -762,7 +788,7 @@ function without_test_dup_command()
 
 function test_mds_tell()
 {
-  FS_NAME=cephfs
+  local FS_NAME=cephfs
   if ! mds_exists ; then
       echo "Skipping test, no MDS found"
       return
@@ -808,7 +834,7 @@ function test_mds_tell()
 
 function test_mon_mds()
 {
-  FS_NAME=cephfs
+  local FS_NAME=cephfs
   remove_all_fs
 
   ceph osd pool create fs_data 10
@@ -1155,10 +1181,13 @@ function test_mon_osd()
   expect_false ceph osd unset sortbitwise  # cannot be unset
   expect_false ceph osd set bogus
   expect_false ceph osd unset bogus
+  ceph osd require-osd-release luminous
+  # can't lower (or use new command for anything but jewel)
+  expect_false ceph osd require-osd-release jewel
+  # these are no-ops but should succeed.
   ceph osd set require_jewel_osds
-  expect_false ceph osd unset require_jewel_osds
   ceph osd set require_kraken_osds
-  expect_false ceph osd unset require_kraken_osds
+  expect_false ceph osd unset require_jewel_osds
 
   ceph osd set noup
   ceph osd down 0
@@ -1310,6 +1339,19 @@ function test_mon_osd()
   ceph osd unpause
 
   ceph osd tree
+  ceph osd tree up
+  ceph osd tree down
+  ceph osd tree in
+  ceph osd tree out
+  ceph osd tree up in
+  ceph osd tree up out
+  ceph osd tree down in
+  ceph osd tree down out
+  ceph osd tree out down
+  expect_false ceph osd tree up down
+  expect_false ceph osd tree in out
+  expect_false ceph osd tree up foo
+
   ceph osd perf
   ceph osd blocked-by
 
@@ -2011,6 +2053,48 @@ function test_mon_cephdf_commands()
   expect_false test $cal_raw_used_size != $raw_used_size
 }
 
+function test_mon_tell_help_command()
+{
+  ceph tell mon.a help
+
+  # wrong target
+  expect_false ceph tell mon.zzz help
+}
+
+function test_osd_tell_help_command()
+{
+  ceph tell osd.1 help
+  expect_false ceph tell osd.100 help
+}
+
+function test_mds_tell_help_command()
+{
+  local FS_NAME=cephfs
+  if ! mds_exists ; then
+      echo "Skipping test, no MDS found"
+      return
+  fi
+
+  remove_all_fs
+  ceph osd pool create fs_data 10
+  ceph osd pool create fs_metadata 10
+  ceph fs new $FS_NAME fs_metadata fs_data
+  wait_mds_active $FS_NAME
+
+
+  ceph tell mds.a help
+  expect_false ceph tell mds.z help
+
+  remove_all_fs
+  ceph osd pool delete fs_data fs_data --yes-i-really-really-mean-it
+  ceph osd pool delete fs_metadata fs_metadata --yes-i-really-really-mean-it
+}
+
+function test_mgr_tell_help_command()
+{
+  ceph tell mgr help
+}
+
 #
 # New tests should be added to the TESTS array below
 #
@@ -2030,7 +2114,9 @@ function test_mon_cephdf_commands()
 set +x
 MON_TESTS+=" mon_injectargs"
 MON_TESTS+=" mon_injectargs_SI"
-MON_TESTS+=" tiering"
+for i in `seq 9`; do
+    MON_TESTS+=" tiering_$i";
+done
 MON_TESTS+=" auth"
 MON_TESTS+=" auth_profiles"
 MON_TESTS+=" mon_misc"
@@ -2050,18 +2136,25 @@ MON_TESTS+=" mon_ping"
 MON_TESTS+=" mon_deprecated_commands"
 MON_TESTS+=" mon_caps"
 MON_TESTS+=" mon_cephdf_commands"
+MON_TESTS+=" mon_tell_help_command"
+
 OSD_TESTS+=" osd_bench"
 OSD_TESTS+=" osd_negative_filestore_merge_threshold"
 OSD_TESTS+=" tiering_agent"
 OSD_TESTS+=" admin_heap_profiler"
+OSD_TESTS+=" osd_tell_help_command"
 
 MDS_TESTS+=" mds_tell"
 MDS_TESTS+=" mon_mds"
 MDS_TESTS+=" mon_mds_metadata"
+MDS_TESTS+=" mds_tell_help_command"
+
+MGR_TESTS+=" mgr_tell_help_command"
 
 TESTS+=$MON_TESTS
 TESTS+=$OSD_TESTS
 TESTS+=$MDS_TESTS
+TESTS+=$MGR_TESTS
 
 #
 # "main" follows
@@ -2105,6 +2198,9 @@ while [[ $# -gt 0 ]]; do
       ;;
     "--test-mds" )
       tests_to_run+="$MDS_TESTS"
+      ;;
+    "--test-mgr" )
+      tests_to_run+="$MGR_TESTS"
       ;;
     "-t" )
       shift

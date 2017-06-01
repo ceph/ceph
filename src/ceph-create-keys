@@ -136,6 +136,19 @@ def get_key(cluster, mon_id):
                             ],
                         stdout=f,
                         )
+                else:
+                    returncode = subprocess.call(
+                        args=args_prefix + [
+                            'auth',
+                            'caps',
+                            'client.admin',
+                            'mon', 'allow *',
+                            'osd', 'allow *',
+                            'mds', 'allow *',
+                            'mgr', 'allow *',
+                            ],
+                        stdout=f,
+                        )
 
             if returncode != 0:
                 if returncode == errno.EPERM or returncode == errno.EACCES:

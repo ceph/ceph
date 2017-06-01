@@ -11,17 +11,11 @@
  * Foundation.  See file COPYING.
  *
  */
-#include <string>
-
-#include <boost/uuid/uuid.hpp>
-#include <boost/uuid/uuid_generators.hpp>
-#include <boost/uuid/uuid_io.hpp>
 
 #include "common/mutex_debug.h"
 #include "common/perf_counters.h"
 #include "common/ceph_context.h"
 #include "common/config.h"
-#include "include/stringify.h"
 
 namespace ceph {
 namespace mutex_debug_detail {

@@ -1,11 +1,8 @@
-
 #include <syslog.h>
-
 #include <boost/algorithm/string/predicate.hpp>
 
 #include "LogEntry.h"
 #include "Formatter.h"
-
 #include "include/stringify.h"
 
 // ----

@@ -496,6 +496,35 @@ void CephContext::do_command(std::string command, cmdmap_t& cmdmap,
         f->dump_string("option", *p);
       }
       f->close_section(); // unknown
+    } else if (command == "config diff get") {
+      std::string setting;
+      if (!cmd_getval(this, cmdmap, "var", setting)) {
+        f->dump_string("error", "syntax error: 'config diff get <var>'");
+      } else {
+        md_config_t def_conf;
+        def_conf.set_val("cluster", _conf->cluster);
+        def_conf.name = _conf->name;
+        def_conf.set_val("host", _conf->host);
+        def_conf.apply_changes(NULL);
+
+        map<string, pair<string, string>> diff;
+        set<string> unknown;
+        def_conf.diff(_conf, &diff, &unknown, setting);
+        f->open_object_section("diff");
+        f->open_object_section("current");
+
+        for (const auto& p : diff) {
+          f->dump_string(p.first.c_str(), p.second.second);
+        } 
+        f->close_section();   //-- current
+
+        f->open_object_section("defaults");
+        for (const auto& p : diff) {
+          f->dump_string(p.first.c_str(), p.second.first);
+        } 
+        f->close_section();   //-- defaults
+        f->close_section();   //-- diff
+      } 
     } else if (command == "log flush") {
       _log->flush();
     }
@@ -582,6 +611,9 @@ CephContext::CephContext(uint32_t module_type_, int init_flags_)
   _admin_socket->register_command("config diff",
       "config diff", _admin_hook,
       "dump diff of current config and default config");
+  _admin_socket->register_command("config diff get",
+      "config diff get name=var,type=CephString", _admin_hook,
+      "dump diff get <field>: dump diff of current and default config setting <field>");
   _admin_socket->register_command("log flush", "log flush", _admin_hook, "flush log entries to log file");
   _admin_socket->register_command("log dump", "log dump", _admin_hook, "dump recent log entries to log file");
   _admin_socket->register_command("log reopen", "log reopen", _admin_hook, "reopen log file");
@@ -610,16 +642,19 @@ CephContext::~CephContext()
   delete _plugin_registry;
 
   _admin_socket->unregister_command("perfcounters_dump");
-  _admin_socket->unregister_command("perf dump");
   _admin_socket->unregister_command("1");
+  _admin_socket->unregister_command("perf dump");
   _admin_socket->unregister_command("perfcounters_schema");
-  _admin_socket->unregister_command("perf schema");
+  _admin_socket->unregister_command("perf histogram dump");
   _admin_socket->unregister_command("2");
+  _admin_socket->unregister_command("perf schema");
+  _admin_socket->unregister_command("perf histogram schema");
   _admin_socket->unregister_command("perf reset");
   _admin_socket->unregister_command("config show");
   _admin_socket->unregister_command("config set");
   _admin_socket->unregister_command("config get");
   _admin_socket->unregister_command("config diff");
+  _admin_socket->unregister_command("config diff get");
   _admin_socket->unregister_command("log flush");
   _admin_socket->unregister_command("log dump");
   _admin_socket->unregister_command("log reopen");

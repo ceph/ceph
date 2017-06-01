@@ -22,7 +22,6 @@
 
 using namespace std;
 
-#include "include/atomic.h"
 #include "common/ceph_argparse.h"
 #include "common/debug.h"
 #include "global/global_init.h"

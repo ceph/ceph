@@ -4,14 +4,9 @@
 #ifndef CEPH_TRACEPOINT_PROVIDER_H
 #define CEPH_TRACEPOINT_PROVIDER_H
 
-#include "include/int_types.h"
-#include "common/ceph_context.h"
 #include "common/config_obs.h"
 #include "common/Mutex.h"
 #include <dlfcn.h>
-#include <set>
-#include <string>
-#include <boost/noncopyable.hpp>
 
 struct md_config_t;
 

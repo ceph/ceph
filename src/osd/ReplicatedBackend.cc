@@ -358,10 +358,9 @@ void generate_transaction(
     le.mark_unrollbackable();
     auto oiter = pgt->op_map.find(le.soid);
     if (oiter != pgt->op_map.end() && oiter->second.updated_snaps) {
-      vector<snapid_t> snaps(
-	oiter->second.updated_snaps->second.begin(),
-	oiter->second.updated_snaps->second.end());
-      ::encode(snaps, le.snaps);
+      bufferlist bl(oiter->second.updated_snaps->second.size() * 8 + 8);
+      ::encode(oiter->second.updated_snaps->second, bl);
+      le.snaps.swap(bl);
     }
   }
 
@@ -514,7 +513,7 @@ void ReplicatedBackend::submit_transaction(
   generate_transaction(
     t,
     coll,
-    !get_osdmap()->test_flag(CEPH_OSDMAP_REQUIRE_KRAKEN),
+    (get_osdmap()->require_osd_release < CEPH_RELEASE_KRAKEN),
     log_entries,
     &op_t,
     &added,

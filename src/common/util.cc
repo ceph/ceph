@@ -12,7 +12,6 @@
  * 
  */
 
-#include <errno.h>
 #include <sys/utsname.h>
 #include <boost/lexical_cast.hpp>
 
@@ -20,7 +19,6 @@
 #include "include/util.h"
 #include "common/debug.h"
 #include "common/errno.h"
-#include "common/strtol.h"
 #include "common/version.h"
 
 #ifdef HAVE_SYS_VFS_H

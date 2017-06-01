@@ -80,6 +80,11 @@ public:
     return get_decoratee().get_perm_mask();
   }
 
+  bool is_identity(
+    const boost::container::flat_set<Principal>& ids) const override {
+    return get_decoratee().is_identity(ids);
+  }
+
   void to_str(std::ostream& out) const override {
     get_decoratee().to_str(out);
   }

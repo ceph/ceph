@@ -80,6 +80,8 @@ private:
   // State for while in reconnect
   MDSInternalContext *reconnect_done;
   int failed_reconnects;
+  bool reconnect_evicting;  // true if I am waiting for evictions to complete
+                            // before proceeding to reconnect_gather_finish
 
   friend class MDSContinuation;
   friend class ServerContext;
@@ -122,6 +124,7 @@ public:
   void terminate_sessions();
   void find_idle_sessions();
   void kill_session(Session *session, Context *on_safe);
+  size_t apply_blacklist(const std::set<entity_addr_t> &blacklist);
   void journal_close_session(Session *session, int state, Context *on_safe);
   void reconnect_clients(MDSInternalContext *reconnect_done_);
   void handle_client_reconnect(class MClientReconnect *m);
@@ -260,7 +263,7 @@ public:
   bool _rmdir_prepare_witness(MDRequestRef& mdr, mds_rank_t who, vector<CDentry*>& trace, CDentry *straydn);
   void handle_slave_rmdir_prep(MDRequestRef& mdr);
   void _logged_slave_rmdir(MDRequestRef& mdr, CDentry *srcdn, CDentry *straydn);
-  void _commit_slave_rmdir(MDRequestRef& mdr, int r);
+  void _commit_slave_rmdir(MDRequestRef& mdr, int r, CDentry *straydn);
   void handle_slave_rmdir_prep_ack(MDRequestRef& mdr, MMDSSlaveRequest *ack);
   void do_rmdir_rollback(bufferlist &rbl, mds_rank_t master, MDRequestRef& mdr);
   void _rmdir_rollback_finish(MDRequestRef& mdr, metareqid_t reqid, CDentry *dn, CDentry *straydn);

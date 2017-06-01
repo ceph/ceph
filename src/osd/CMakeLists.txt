@@ -2,6 +2,13 @@ set(osdc_osd_srcs
   ${CMAKE_SOURCE_DIR}/src/osdc/Objecter.cc
   ${CMAKE_SOURCE_DIR}/src/osdc/Striper.cc)
 
+if(WITH_OSD_INSTRUMENT_FUNCTIONS AND CMAKE_CXX_COMPILER_ID STREQUAL GNU)
+  set(GCC_C_FLAGS "-finstrument-functions")
+  set(GCC_C_FLAGS "${GCC_C_FLAGS} -finstrument-functions-exclude-function-list=_mm_loadu_si128,_mm_cmpeq_epi32,_mm_movemask_epi8")
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${GCC_C_FLAGS}")
+  set(osd_cyg_functions_src ${CMAKE_SOURCE_DIR}/src/tracing/cyg_profile_functions.c)
+endif()
+
 set(osd_srcs
   OSD.cc
   Watch.cc
@@ -26,6 +33,7 @@ set(osd_srcs
   mClockClientQueue.cc
   PGQueueable.cc
   ${CMAKE_SOURCE_DIR}/src/common/TrackedOp.cc
+  ${osd_cyg_functions_src}
   ${osdc_osd_srcs})
 if(HAS_VTA)
   set_source_files_properties(osdcap.cc
@@ -43,4 +51,7 @@ if(WITH_LTTNG)
 endif()
 if(WITH_LTTNG AND WITH_EVENTTRACE)
   add_dependencies(osd eventtrace_tp)
+endif()
+if(WITH_OSD_INSTRUMENT_FUNCTIONS)
+  add_dependencies(osd cyg_profile_tp)
 endif()

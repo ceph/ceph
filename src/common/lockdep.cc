@@ -11,15 +11,9 @@
  * Foundation.  See file COPYING.
  *
  */
-#include "BackTrace.h"
-#include "Clock.h"
-#include "common/dout.h"
-#include "common/environment.h"
-#include "common/valgrind.h"
-#include "include/types.h"
 #include "lockdep.h"
-
-#include "include/unordered_map.h"
+#include "common/dout.h"
+#include "common/valgrind.h"
 
 #if defined(__FreeBSD__) && defined(__LP64__)	// On FreeBSD pthread_t is a pointer.
 namespace std {

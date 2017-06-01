@@ -7,7 +7,6 @@
   writing upmap command output to: c
   checking for upmap cleanups
   upmap, max-count 11, max deviation 0.01
-  osdmaptool: writing epoch 3 to om
   $ cat c
   ceph osd pg-upmap-items 0.3 54 52 156 155
   ceph osd pg-upmap-items 0.1b 158 155 231 227 143 142

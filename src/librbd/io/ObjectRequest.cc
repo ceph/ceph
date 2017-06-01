@@ -35,9 +35,10 @@ ObjectRequest<I>*
 ObjectRequest<I>::create_remove(I *ictx, const std::string &oid,
                                 uint64_t object_no,
                                 const ::SnapContext &snapc,
+				const ZTracer::Trace &parent_trace,
                                 Context *completion) {
   return new ObjectRemoveRequest(util::get_image_ctx(ictx), oid, object_no,
-                                 snapc, completion);
+                                 snapc, parent_trace, completion);
 }
 
 template <typename I>
@@ -45,9 +46,10 @@ ObjectRequest<I>*
 ObjectRequest<I>::create_truncate(I *ictx, const std::string &oid,
                                   uint64_t object_no, uint64_t object_off,
                                   const ::SnapContext &snapc,
-                                  Context *completion) {
+                                  const ZTracer::Trace &parent_trace,
+				  Context *completion) {
   return new ObjectTruncateRequest(util::get_image_ctx(ictx), oid, object_no,
-                                   object_off, snapc, completion);
+                                   object_off, snapc, parent_trace, completion);
 }
 
 template <typename I>
@@ -55,10 +57,12 @@ ObjectRequest<I>*
 ObjectRequest<I>::create_write(I *ictx, const std::string &oid,
                                uint64_t object_no, uint64_t object_off,
                                const ceph::bufferlist &data,
-                               const ::SnapContext &snapc,
-                               Context *completion, int op_flags) {
+                               const ::SnapContext &snapc, int op_flags,
+			       const ZTracer::Trace &parent_trace,
+                               Context *completion) {
   return new ObjectWriteRequest(util::get_image_ctx(ictx), oid, object_no,
-                                object_off, data, snapc, completion, op_flags);
+                                object_off, data, snapc, op_flags, parent_trace,
+				completion);
 }
 
 template <typename I>
@@ -67,9 +71,11 @@ ObjectRequest<I>::create_zero(I *ictx, const std::string &oid,
                               uint64_t object_no, uint64_t object_off,
                               uint64_t object_len,
                               const ::SnapContext &snapc,
+			      const ZTracer::Trace &parent_trace,
                               Context *completion) {
   return new ObjectZeroRequest(util::get_image_ctx(ictx), oid, object_no,
-                               object_off, object_len, snapc, completion);
+                               object_off, object_len, snapc, parent_trace,
+			       completion);
 }
 
 template <typename I>
@@ -78,21 +84,29 @@ ObjectRequest<I>::create_writesame(I *ictx, const std::string &oid,
                                    uint64_t object_no, uint64_t object_off,
                                    uint64_t object_len,
                                    const ceph::bufferlist &data,
-                                   const ::SnapContext &snapc,
-                                   Context *completion, int op_flags) {
+                                   const ::SnapContext &snapc, int op_flags,
+				   const ZTracer::Trace &parent_trace,
+                                   Context *completion) {
   return new ObjectWriteSameRequest(util::get_image_ctx(ictx), oid, object_no,
                                     object_off, object_len, data, snapc,
-                                    completion, op_flags);
+                                    op_flags, parent_trace, completion);
 }
 
 template <typename I>
 ObjectRequest<I>::ObjectRequest(ImageCtx *ictx, const std::string &oid,
                                 uint64_t objectno, uint64_t off,
                                 uint64_t len, librados::snap_t snap_id,
-                                Context *completion, bool hide_enoent)
+                                bool hide_enoent, const char *trace_name,
+				const ZTracer::Trace &trace,
+				Context *completion)
   : m_ictx(ictx), m_oid(oid), m_object_no(objectno), m_object_off(off),
     m_object_len(len), m_snap_id(snap_id), m_completion(completion),
-    m_hide_enoent(hide_enoent) {
+    m_hide_enoent(hide_enoent),
+    m_trace(util::create_trace(*ictx, "", trace)) {
+  if (m_trace.valid()) {
+    m_trace.copy_name(trace_name + std::string(" ") + oid);
+    m_trace.event("start");
+  }
 
   Striper::extent_to_file(m_ictx->cct, &m_ictx->layout, m_object_no,
                           0, m_ictx->layout.object_size, m_parent_extents);
@@ -159,9 +173,11 @@ ObjectReadRequest<I>::ObjectReadRequest(I *ictx, const std::string &oid,
                                         uint64_t objectno, uint64_t offset,
                                         uint64_t len, Extents& be,
                                         librados::snap_t snap_id, bool sparse,
-                                        Context *completion, int op_flags)
+					int op_flags,
+					const ZTracer::Trace &parent_trace,
+                                        Context *completion)
   : ObjectRequest<I>(util::get_image_ctx(ictx), oid, objectno, offset, len,
-                     snap_id, completion, false),
+                     snap_id, false, "read", parent_trace, completion),
     m_buffer_extents(be), m_tried_parent(false), m_sparse(sparse),
     m_op_flags(op_flags), m_state(LIBRBD_AIO_READ_FLAT) {
   guard_read();
@@ -201,8 +217,6 @@ bool ObjectReadRequest<I>::should_complete(int r)
         RWLock::RLocker parent_locker(image_ctx->parent_lock);
         if (image_ctx->parent == NULL) {
           ldout(image_ctx->cct, 20) << "parent is gone; do nothing" << dendl;
-          m_state = LIBRBD_AIO_READ_FLAT;
-          finished = false;
           break;
         }
 
@@ -289,8 +303,9 @@ void ObjectReadRequest<I>::send() {
 
   librados::AioCompletion *rados_completion =
     util::create_rados_callback(this);
-  int r = image_ctx->data_ctx.aio_operate(this->m_oid, rados_completion, &op,
-                                          flags, nullptr);
+  int r = image_ctx->data_ctx.aio_operate(
+    this->m_oid, rados_completion, &op, flags, nullptr,
+    (this->m_trace.valid() ? this->m_trace.get_info() : nullptr));
   assert(r == 0);
 
   rados_completion->release();
@@ -320,7 +335,7 @@ void ObjectReadRequest<I>::send_copyup()
     // create and kick off a CopyupRequest
     CopyupRequest *new_req = new CopyupRequest(
       image_ctx, this->m_oid, this->m_object_no,
-      std::move(this->m_parent_extents));
+      std::move(this->m_parent_extents), this->m_trace);
     this->m_parent_extents.clear();
 
     image_ctx->copyup_list[this->m_object_no] = new_req;
@@ -339,7 +354,7 @@ void ObjectReadRequest<I>::read_from_parent(Extents&& parent_extents)
                             << " extents " << parent_extents << dendl;
   ImageRequest<>::aio_read(image_ctx->parent, parent_completion,
                            std::move(parent_extents),
-                           ReadResult{&m_read_data}, 0);
+                           ReadResult{&m_read_data}, 0, this->m_trace);
 }
 
 /** write **/
@@ -350,10 +365,12 @@ AbstractObjectWriteRequest::AbstractObjectWriteRequest(ImageCtx *ictx,
                                                        uint64_t object_off,
                                                        uint64_t len,
                                                        const ::SnapContext &snapc,
-                                                       Context *completion,
-                                                       bool hide_enoent)
+						       bool hide_enoent,
+						       const char *trace_name,
+						       const ZTracer::Trace &parent_trace,
+                                                       Context *completion)
   : ObjectRequest(ictx, oid, object_no, object_off, len, CEPH_NOSNAP,
-                  completion, hide_enoent),
+                  hide_enoent, trace_name, parent_trace, completion),
     m_state(LIBRBD_AIO_WRITE_FLAT), m_snap_seq(snapc.seq.val)
 {
   m_snaps.insert(m_snaps.end(), snapc.snaps.begin(), snapc.snaps.end());
@@ -470,7 +487,7 @@ void AbstractObjectWriteRequest::send_pre_object_map_update() {
       m_state = LIBRBD_AIO_WRITE_PRE;
 
       if (m_ictx->object_map->aio_update<ObjectRequest>(
-            CEPH_NOSNAP, m_object_no, new_state, {}, this)) {
+            CEPH_NOSNAP, m_object_no, new_state, {}, this->m_trace, this)) {
         return;
       }
     }
@@ -496,7 +513,8 @@ bool AbstractObjectWriteRequest::send_post_object_map_update() {
   m_state = LIBRBD_AIO_WRITE_POST;
 
   if (m_ictx->object_map->aio_update<ObjectRequest>(
-        CEPH_NOSNAP, m_object_no, OBJECT_NONEXISTENT, OBJECT_PENDING, this)) {
+        CEPH_NOSNAP, m_object_no, OBJECT_NONEXISTENT, OBJECT_PENDING,
+        this->m_trace, this)) {
     return false;
   }
 
@@ -527,7 +545,8 @@ void AbstractObjectWriteRequest::send_copyup()
   if (it == m_ictx->copyup_list.end()) {
     CopyupRequest *new_req = new CopyupRequest(m_ictx, m_oid,
                                                m_object_no,
-                                               std::move(m_parent_extents));
+                                               std::move(m_parent_extents),
+					       this->m_trace);
     m_parent_extents.clear();
 
     // make sure to wait on this CopyupRequest
@@ -548,13 +567,14 @@ void AbstractObjectWriteRequest::send_write_op()
     guard_write();
   }
 
-  add_write_ops(&m_write);
+  add_write_ops(&m_write, true);
   assert(m_write.size() != 0);
 
   librados::AioCompletion *rados_completion =
     util::create_rados_callback(this);
-  int r = m_ictx->data_ctx.aio_operate(m_oid, rados_completion, &m_write,
-                                       m_snap_seq, m_snaps);
+  int r = m_ictx->data_ctx.aio_operate(
+    m_oid, rados_completion, &m_write, m_snap_seq, m_snaps,
+    (this->m_trace.valid() ? this->m_trace.get_info() : nullptr));
   assert(r == 0);
   rados_completion->release();
 }
@@ -577,9 +597,10 @@ void AbstractObjectWriteRequest::handle_write_guard()
   }
 }
 
-void ObjectWriteRequest::add_write_ops(librados::ObjectWriteOperation *wr) {
+void ObjectWriteRequest::add_write_ops(librados::ObjectWriteOperation *wr,
+                                       bool set_hints) {
   RWLock::RLocker snap_locker(m_ictx->snap_lock);
-  if (m_ictx->enable_alloc_hint &&
+  if (set_hints && m_ictx->enable_alloc_hint &&
       (m_ictx->object_map == nullptr || !m_object_exist)) {
     wr->set_alloc_hint(m_ictx->get_object_size(), m_ictx->get_object_size());
   }
@@ -612,14 +633,21 @@ void ObjectRemoveRequest::guard_write() {
   }
 }
 void ObjectRemoveRequest::send_write() {
-  ldout(m_ictx->cct, 20) << m_oid << " " << m_object_off
-                         << "~" << m_object_len << dendl;
-  send_pre_object_map_update();
+  ldout(m_ictx->cct, 20) << m_oid << " remove " << " object exist "
+                         << m_object_exist << dendl;
+  if (!m_object_exist && !has_parent()) {
+    m_state = LIBRBD_AIO_WRITE_FLAT;
+    Context *ctx = util::create_context_callback<ObjectRequest>(this);
+    m_ictx->op_work_queue->queue(ctx, 0);
+  } else {
+    send_pre_object_map_update();
+  }
 }
 
 void ObjectTruncateRequest::send_write() {
-  ldout(m_ictx->cct, 20) << m_oid << " truncate " << m_object_off << dendl;
-  if (!m_object_exist && ! has_parent()) {
+  ldout(m_ictx->cct, 20) << m_oid << " truncate " << m_object_off
+                         << " object exist " << m_object_exist << dendl;
+  if (!m_object_exist && !has_parent()) {
     m_state = LIBRBD_AIO_WRITE_FLAT;
     Context *ctx = util::create_context_callback<ObjectRequest>(this);
     m_ictx->op_work_queue->queue(ctx, 0);
@@ -628,9 +656,23 @@ void ObjectTruncateRequest::send_write() {
   }
 }
 
-void ObjectWriteSameRequest::add_write_ops(librados::ObjectWriteOperation *wr) {
+void ObjectZeroRequest::send_write() {
+  ldout(m_ictx->cct, 20) << m_oid << " zero " << m_object_off << "~"
+                         << m_object_len << " object exist " << m_object_exist
+                         << dendl;
+  if (!m_object_exist && !has_parent()) {
+    m_state = LIBRBD_AIO_WRITE_FLAT;
+    Context *ctx = util::create_context_callback<ObjectRequest>(this);
+    m_ictx->op_work_queue->queue(ctx, 0);
+  } else {
+    AbstractObjectWriteRequest::send_write();
+  }
+}
+
+void ObjectWriteSameRequest::add_write_ops(librados::ObjectWriteOperation *wr,
+                                           bool set_hints) {
   RWLock::RLocker snap_locker(m_ictx->snap_lock);
-  if (m_ictx->enable_alloc_hint &&
+  if (set_hints && m_ictx->enable_alloc_hint &&
       (m_ictx->object_map == nullptr || !m_object_exist)) {
     wr->set_alloc_hint(m_ictx->get_object_size(), m_ictx->get_object_size());
   }

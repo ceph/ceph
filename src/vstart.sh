@@ -49,6 +49,10 @@ fi
 export PYTHONPATH=$PYBIND:$CEPH_LIB/cython_modules/lib.2:$PYTHONPATH
 export LD_LIBRARY_PATH=$CEPH_LIB:$LD_LIBRARY_PATH
 export DYLD_LIBRARY_PATH=$CEPH_LIB:$DYLD_LIBRARY_PATH
+# Suppress logging for regular use that indicated that we are using a
+# development version. vstart.sh is only used during testing and 
+# development
+export CEPH_DEV=1
 
 [ -z "$CEPH_NUM_MON" ] && CEPH_NUM_MON="$MON"
 [ -z "$CEPH_NUM_OSD" ] && CEPH_NUM_OSD="$OSD"
@@ -105,6 +109,8 @@ memstore=0
 bluestore=0
 rgw_frontend="civetweb"
 lockdep=${LOCKDEP:-1}
+
+filestore_path=
 
 VSTART_SEC="client.vstart.sh"
 
@@ -249,6 +255,10 @@ case $1 in
             rgw_frontend=$2
             shift
             ;;
+    --filestore_path )
+	filestore_path=$2
+	shift
+	;;
     -m )
 	    [ -z "$2" ] && usage_exit
 	    MON_ADDR=$2
@@ -442,7 +452,7 @@ $CMDSDEBUG
         mds root ino gid = `id -g`
 $extra_conf
 [mgr]
-        mgr modules = rest fsstatus
+        mgr modules = rest fsstatus dashboard
         mgr data = $CEPH_DEV_DIR/mgr.\$id
         mgr module path = $MGR_PYTHON_PATH
         mon reweight min pgs per osd = 4
@@ -575,7 +585,11 @@ EOF
             if command -v btrfs > /dev/null; then
                 for f in $CEPH_DEV_DIR/osd$osd/*; do btrfs sub delete $f &> /dev/null || true; done
             fi
-            mkdir -p $CEPH_DEV_DIR/osd$osd
+	    if [ -n "$filestore_path" ]; then
+		ln -s $filestore_path $CEPH_DEV_DIR/osd$osd
+	    else
+		mkdir -p $CEPH_DEV_DIR/osd$osd
+	    fi
 
             local uuid=`uuidgen`
             echo "add osd$osd $uuid"
@@ -684,6 +698,8 @@ if [ "$debug" -eq 0 ]; then
     COSDDEBUG='
         debug ms = 1'
     CMDSDEBUG='
+        debug ms = 1'
+    CMGRDEBUG='
         debug ms = 1'
 else
     echo "** going verbose **"
@@ -896,6 +912,13 @@ do_rgw()
         --secret nopqrstuvwxyzabcdefghijklmnabcdefghijklm \
         --display-name john.doe \
         --email john.doe@example.com -c $conf_fn > /dev/null
+    $CEPH_BIN/radosgw-admin user create \
+	--tenant testx \
+        --uid 9876543210abcdef0123456789abcdef0123456789abcdef0123456789abcdef \
+        --access-key HIJKLMNOPQRSTUVWXYZA \
+        --secret opqrstuvwxyzabcdefghijklmnopqrstuvwxyzab \
+        --display-name tenanteduser \
+        --email tenanteduser@example.com -c $conf_fn > /dev/null
 
     # Create Swift user
     echo "setting up user tester"
@@ -940,3 +963,6 @@ if [ "$CEPH_DIR" != "$PWD" ]; then
     echo "export CEPH_CONF=$conf_fn"
     echo "export CEPH_KEYRING=$keyring_fn"
 fi
+
+echo "CEPH_DEV=1"
+

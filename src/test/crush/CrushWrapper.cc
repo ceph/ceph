@@ -128,6 +128,69 @@ TEST(CrushWrapper, move_bucket) {
   delete c;
 }
 
+TEST(CrushWrapper, swap_bucket) {
+  CrushWrapper *c = new CrushWrapper;
+
+  const int ROOT_TYPE = 2;
+  c->set_type_name(ROOT_TYPE, "root");
+  const int HOST_TYPE = 1;
+  c->set_type_name(HOST_TYPE, "host");
+  const int OSD_TYPE = 0;
+  c->set_type_name(OSD_TYPE, "osd");
+
+  int root;
+  EXPECT_EQ(0, c->add_bucket(0, CRUSH_BUCKET_STRAW2, CRUSH_HASH_RJENKINS1,
+			     ROOT_TYPE, 0, NULL, NULL, &root));
+  EXPECT_EQ(0, c->set_item_name(root, "root"));
+
+  int a, b;
+  EXPECT_EQ(0, c->add_bucket(0, CRUSH_BUCKET_STRAW2, CRUSH_HASH_RJENKINS1,
+			     HOST_TYPE, 0, NULL, NULL, &a));
+  EXPECT_EQ(0, c->set_item_name(a, "a"));
+  EXPECT_EQ(0, c->add_bucket(0, CRUSH_BUCKET_STRAW2, CRUSH_HASH_RJENKINS1,
+			     HOST_TYPE, 0, NULL, NULL, &b));
+  EXPECT_EQ(0, c->set_item_name(b, "b"));
+
+  {
+    map<string,string> loc;
+    loc["root"] = "root";
+    EXPECT_EQ(0, c->move_bucket(g_ceph_context, a, loc));
+  }
+  {
+    map<string,string> loc;
+    loc["root"] = "root";
+    loc["host"] = "a";
+    EXPECT_EQ(0, c->insert_item(g_ceph_context, 0, 1.0, "osd.0", loc));
+    EXPECT_EQ(0, c->insert_item(g_ceph_context, 1, 1.0, "osd.1", loc));
+    EXPECT_EQ(0, c->insert_item(g_ceph_context, 2, 1.0, "osd.2", loc));
+  }
+  {
+    map<string,string> loc;
+    loc["host"] = "b";
+    EXPECT_EQ(0, c->insert_item(g_ceph_context, 3, 1.0, "osd.3", loc));
+  }
+  ASSERT_EQ(0x30000, c->get_item_weight(a));
+  ASSERT_EQ(string("a"), c->get_item_name(a));
+  ASSERT_EQ(0x10000, c->get_item_weight(b));
+  ASSERT_EQ(string("b"), c->get_item_name(b));
+  ASSERT_EQ(a, c->get_bucket_item(root, 0));
+  ASSERT_EQ(0, c->get_bucket_item(a, 0));
+  ASSERT_EQ(1, c->get_bucket_item(a, 1));
+  ASSERT_EQ(2, c->get_bucket_item(a, 2));
+  ASSERT_EQ(3, c->get_bucket_item(b, 0));
+
+  c->swap_bucket(g_ceph_context, a, b);
+  ASSERT_EQ(0x30000, c->get_item_weight(b));
+  ASSERT_EQ(string("a"), c->get_item_name(b));
+  ASSERT_EQ(0x10000, c->get_item_weight(a));
+  ASSERT_EQ(string("b"), c->get_item_name(a));
+  ASSERT_EQ(a, c->get_bucket_item(root, 0));
+  ASSERT_EQ(0, c->get_bucket_item(b, 0));
+  ASSERT_EQ(1, c->get_bucket_item(b, 1));
+  ASSERT_EQ(2, c->get_bucket_item(b, 2));
+  ASSERT_EQ(3, c->get_bucket_item(a, 0));
+}
+
 TEST(CrushWrapper, rename_bucket_or_item) {
   CrushWrapper *c = new CrushWrapper;
 
@@ -959,6 +1022,77 @@ TEST(CrushWrapper, distance) {
   p.insert(make_pair("host","b1"));
   ASSERT_EQ(1, c.get_common_ancestor_distance(g_ceph_context, 2, p));
   ASSERT_EQ(1, c.get_common_ancestor_distance(g_ceph_context, 3, p));
+}
+
+TEST(CrushWrapper, choose_args_compat) {
+  CrushWrapper c;
+  c.create();
+  c.set_type_name(1, "host");
+  c.set_type_name(2, "rack");
+  c.set_type_name(3, "root");
+
+  int weight = 12;
+
+  map<string,string> loc;
+  loc["host"] = "b1";
+  loc["rack"] = "r11";
+  loc["root"] = "default";
+  int item = 1;
+  c.insert_item(g_ceph_context, item, weight, "osd.1", loc);
+
+  loc["host"] = "b2";
+  loc["rack"] = "r12";
+  loc["root"] = "default";
+  item = 2;
+  c.insert_item(g_ceph_context, item, weight, "osd.2", loc);
+
+  assert(c.add_simple_ruleset("rule1", "r11", "host", "firstn", pg_pool_t::TYPE_ERASURE) >= 0);
+
+  int id = c.get_item_id("b1");
+
+  __u32 weights = 666 * 0x10000;
+  crush_weight_set weight_set;
+  weight_set.size = 1;
+  weight_set.weights = &weights;
+  int maxbuckets = c.get_max_buckets();
+  assert(maxbuckets > 0);
+  crush_choose_arg choose_args[maxbuckets];
+  memset(choose_args, '\0', sizeof(crush_choose_arg) * maxbuckets);
+  choose_args[-1-id].ids_size = 0;
+  choose_args[-1-id].weight_set_size = 1;
+  choose_args[-1-id].weight_set = &weight_set;
+  crush_choose_arg_map arg_map;
+  arg_map.size = c.get_max_buckets();
+  arg_map.args = choose_args;
+
+  uint64_t features = CEPH_FEATURE_CRUSH_TUNABLES5|CEPH_FEATURE_INCARNATION_2;
+
+  // if the client is capable, encode choose_args
+  {
+    c.choose_args[0] = arg_map;
+    bufferlist bl;
+    c.encode(bl, features|CEPH_FEATURE_CRUSH_CHOOSE_ARGS);
+    bufferlist::iterator i(bl.begin());
+    CrushWrapper c_new;
+    c_new.decode(i);
+    ASSERT_EQ(1u, c_new.choose_args.size());
+    ASSERT_EQ(1u, c_new.choose_args[0].args[-1-id].weight_set_size);
+    ASSERT_EQ(weights, c_new.choose_args[0].args[-1-id].weight_set[0].weights[0]);
+    ASSERT_EQ(weight, c_new.get_bucket_item_weightf(id, 0));
+  }
+
+  // if the client is not compatible, copy choose_arg in the weights
+  {
+    c.choose_args[0] = arg_map;
+    bufferlist bl;
+    c.encode(bl, features);
+    c.choose_args.clear();
+    bufferlist::iterator i(bl.begin());
+    CrushWrapper c_new;
+    c_new.decode(i);
+    ASSERT_EQ(0u, c_new.choose_args.size());
+    ASSERT_EQ((int)weights, c_new.get_bucket_item_weight(id, 0));
+  }
 }
 
 TEST(CrushWrapper, remove_unused_root) {

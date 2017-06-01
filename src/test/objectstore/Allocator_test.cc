@@ -259,6 +259,18 @@ TEST_P(AllocTest, test_alloc_hint_bmap)
   ASSERT_EQ(zone_size, allocated);
   EXPECT_EQ(zone_size, (int)extents.size());
   EXPECT_EQ(extents[0].offset, (uint64_t) 0);
+  /*
+   * Verify out-of-bound hint
+   */
+  extents.clear();
+  allocated = alloc->allocate(1, 1, 1, blocks, &extents);
+  ASSERT_EQ(1, allocated);
+  EXPECT_EQ(1, (int)extents.size());
+
+  extents.clear();
+  allocated = alloc->allocate(1, 1, 1, blocks * 3 + 1 , &extents);
+  ASSERT_EQ(1, allocated);
+  EXPECT_EQ(1, (int)extents.size());
 }
 
 

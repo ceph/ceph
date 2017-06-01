@@ -391,6 +391,7 @@ void rgw_bi_log_entry::decode_json(JSONObj *obj)
   bilog_flags = (uint16_t)f;
   JSONDecoder::decode_json("owner", owner, obj);
   JSONDecoder::decode_json("owner_display_name", owner_display_name, obj);
+  JSONDecoder::decode_json("zones_trace", zones_trace, obj);
 }
 
 void rgw_bi_log_entry::dump(Formatter *f) const
@@ -449,6 +450,7 @@ void rgw_bi_log_entry::dump(Formatter *f) const
   f->dump_bool("versioned", (bilog_flags & RGW_BILOG_FLAG_VERSIONED_OP) != 0);
   f->dump_string("owner", owner);
   f->dump_string("owner_display_name", owner_display_name);
+  encode_json("zones_trace", zones_trace, f);
 }
 
 void rgw_bi_log_entry::generate_test_instances(list<rgw_bi_log_entry*>& ls)

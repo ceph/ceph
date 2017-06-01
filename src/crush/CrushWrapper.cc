@@ -105,17 +105,29 @@ bool CrushWrapper::is_v5_rule(unsigned ruleid) const
   return false;
 }
 
-bool CrushWrapper::has_chooseargs() const
+bool CrushWrapper::has_choose_args() const
 {
   return !choose_args.empty();
 }
 
-bool CrushWrapper::has_incompat_chooseargs() const
+bool CrushWrapper::has_incompat_choose_args() const
 {
-  // FIXME: if the chooseargs all have 1 position *and* do not remap IDs then
-  // we can fabricate a compatible crush map for legacy clients by swapping the
-  // choose_args weights in for the real weights.  until then,
-  return has_chooseargs();
+  if (choose_args.empty())
+    return false;
+  if (choose_args.size() > 1)
+    return true;
+  crush_choose_arg_map arg_map = choose_args.begin()->second;
+  for (__u32 i = 0; i < arg_map.size; i++) {
+    crush_choose_arg *arg = &arg_map.args[i];
+    if (arg->weight_set_size == 0 &&
+	arg->ids_size == 0)
+	continue;
+    if (arg->weight_set_size != 1)
+      return true;
+    if (arg->ids_size != 0)
+      return true;
+  }
+  return false;
 }
 
 int CrushWrapper::split_id_class(int i, int *idout, int *classout) const
@@ -600,6 +612,20 @@ int CrushWrapper::get_full_location_ordered(int id, vector<pair<string, string> 
   return 0;
 }
 
+string CrushWrapper::get_full_location_ordered_string(int id)
+{
+  vector<pair<string, string> > full_location_ordered;
+  string full_location;
+  get_full_location_ordered(id, full_location_ordered);
+  reverse(begin(full_location_ordered), end(full_location_ordered));
+  for(auto i = full_location_ordered.begin(); i != full_location_ordered.end(); i++) {
+    full_location = full_location + i->first + "=" + i->second;
+    if (i != full_location_ordered.end() - 1) {
+      full_location = full_location + ",";
+    }
+  }
+  return full_location;
+}
 
 map<int, string> CrushWrapper::get_parent_hierarchy(int id)
 {
@@ -788,6 +814,52 @@ int CrushWrapper::move_bucket(CephContext *cct, int id, const map<string,string>
 
   // insert the bucket back into the hierarchy
   return insert_item(cct, id, bucket_weight / (float)0x10000, id_name, loc);
+}
+
+int CrushWrapper::swap_bucket(CephContext *cct, int src, int dst)
+{
+  if (src >= 0 || dst >= 0)
+    return -EINVAL;
+  if (!item_exists(src) || !item_exists(dst))
+    return -EINVAL;
+  crush_bucket *a = get_bucket(src);
+  crush_bucket *b = get_bucket(dst);
+  unsigned aw = a->weight;
+  unsigned bw = b->weight;
+
+  // swap weights
+  adjust_item_weight(cct, a->id, bw);
+  adjust_item_weight(cct, b->id, aw);
+
+  // swap items
+  map<int,unsigned> tmp;
+  unsigned as = a->size;
+  unsigned bs = b->size;
+  for (unsigned i = 0; i < as; ++i) {
+    int item = a->items[0];
+    int itemw = crush_get_bucket_item_weight(a, 0);
+    tmp[item] = itemw;
+    crush_bucket_remove_item(crush, a, item);
+  }
+  assert(a->size == 0);
+  assert(b->size == bs);
+  for (unsigned i = 0; i < bs; ++i) {
+    int item = b->items[0];
+    int itemw = crush_get_bucket_item_weight(b, 0);
+    crush_bucket_remove_item(crush, b, item);
+    crush_bucket_add_item(crush, a, item, itemw);
+  }
+  assert(a->size == bs);
+  assert(b->size == 0);
+  for (auto t : tmp) {
+    crush_bucket_add_item(crush, b, t.first, t.second);
+  }
+  assert(a->size == bs);
+  assert(b->size == as);
+
+  // swap names
+  swap_names(src, dst);
+  return 0;
 }
 
 int CrushWrapper::link_bucket(CephContext *cct, int id, const map<string,string>& loc)
@@ -1057,6 +1129,17 @@ int CrushWrapper::get_immediate_parent_id(int id, int *parent) const
   return -ENOENT;
 }
 
+int CrushWrapper::get_parent_of_type(int item, int type) const
+{
+  do {
+    int r = get_immediate_parent_id(item, &item);
+    if (r < 0) {
+      return 0;
+    }
+  } while (get_bucket_type(item) != type);
+  return item;
+}
+
 bool CrushWrapper::class_is_in_use(int class_id)
 {
   for (auto &i : class_bucket)
@@ -1231,6 +1314,11 @@ int CrushWrapper::get_rule_weight_osd_map(unsigned ruleno, map<int,float> *pmap)
   crush_rule *rule = crush->rules[ruleno];
 
   // build a weight map for each TAKE in the rule, and then merge them
+
+  // FIXME: if there are multiple takes that place a different number of
+  // objects we do not take that into account.  (Also, note that doing this
+  // right is also a function of the pool, since the crush rule
+  // might choose 2 + choose 2 but pool size may only be 3.)
   for (unsigned i=0; i<rule->len; ++i) {
     map<int,float> m;
     float sum = 0;
@@ -1394,6 +1482,16 @@ void CrushWrapper::encode(bufferlist& bl, uint64_t features) const
   ::encode(crush->max_rules, bl);
   ::encode(crush->max_devices, bl);
 
+  bool encode_compat_choose_args = false;
+  crush_choose_arg_map arg_map;
+  memset(&arg_map, '\0', sizeof(arg_map));
+  if (has_choose_args() &&
+      !HAVE_FEATURE(features, CRUSH_CHOOSE_ARGS)) {
+    assert(!has_incompat_choose_args());
+    encode_compat_choose_args = true;
+    arg_map = choose_args.begin()->second;
+  }
+
   // buckets
   for (int i=0; i<crush->max_buckets; i++) {
     __u32 alg = 0;
@@ -1437,8 +1535,17 @@ void CrushWrapper::encode(bufferlist& bl, uint64_t features) const
       break;
 
     case CRUSH_BUCKET_STRAW2:
-      for (unsigned j=0; j<crush->buckets[i]->size; j++) {
-	::encode((reinterpret_cast<crush_bucket_straw2*>(crush->buckets[i]))->item_weights[j], bl);
+      {
+	__u32 *weights;
+	if (encode_compat_choose_args &&
+	    arg_map.args[i].weight_set_size > 0) {
+	  weights = arg_map.args[i].weight_set[0].weights;
+	} else {
+	  weights = (reinterpret_cast<crush_bucket_straw2*>(crush->buckets[i]))->item_weights;
+	}
+	for (unsigned j=0; j<crush->buckets[i]->size; j++) {
+	  ::encode(weights[j], bl);
+	}
       }
       break;
 
@@ -2221,6 +2328,29 @@ int CrushWrapper::_choose_type_stack(
   ldout(cct, 10) << __func__ << " cumulative_fanout " << cumulative_fanout
 		 << dendl;
 
+  // identify underful targets for each intermediate level.
+  // this serves two purposes:
+  //   1. we can tell when we are selecting a bucket that does not have any underfull
+  //      devices beneath it.  that means that if the current input includes an overfull
+  //      device, we won't be able to find an underfull device with this parent to
+  //      swap for it.
+  //   2. when we decide we should reject a bucket due to the above, this list gives us
+  //      a list of peers to consider that *do* have underfull devices available..  (we
+  //      are careful to pick one that has the same parent.)
+  vector<set<int>> underfull_buckets; // level -> set of buckets with >0 underfull item(s)
+  underfull_buckets.resize(stack.size() - 1);
+  for (auto osd : underfull) {
+    int item = osd;
+    for (int j = (int)stack.size() - 2; j >= 0; --j) {
+      int type = stack[j].first;
+      item = get_parent_of_type(item, type);
+      ldout(cct, 10) << __func__ << " underfull " << osd << " type " << type
+		     << " is " << item << dendl;
+      underfull_buckets[j].insert(item);
+    }
+  }
+  ldout(cct, 20) << __func__ << " underfull_buckets " << underfull_buckets << dendl;
+
   for (unsigned j = 0; j < stack.size(); ++j) {
     int type = stack[j].first;
     int fanout = stack[j].second;
@@ -2232,25 +2362,22 @@ int CrushWrapper::_choose_type_stack(
     auto tmpi = i;
     for (auto from : w) {
       ldout(cct, 10) << " from " << from << dendl;
-
+      // identify leaves under each choice.  we use this to check whether any of these
+      // leaves are overfull.  (if so, we need to make sure there are underfull candidates
+      // to swap for them.)
+      vector<set<int>> leaves;
+      leaves.resize(fanout);
       for (int pos = 0; pos < fanout; ++pos) {
 	if (type > 0) {
 	  // non-leaf
-	  int item = *tmpi;
-	  do {
-	    int r = get_immediate_parent_id(item, &item);
-	    if (r < 0) {
-	      ldout(cct, 10) << __func__ << " parent of " << item << " got "
-			     << cpp_strerror(r) << dendl;
-	      return -EINVAL;
-	    }
-	  } while (get_bucket_type(item) != type);
+	  int item = get_parent_of_type(*tmpi, type);
 	  o.push_back(item);
-	  ldout(cct, 10) << __func__ << "   from " << *tmpi << " got " << item
-			 << " of type " << type << dendl;
 	  int n = cum_fanout;
-	  while (n-- && tmpi != orig.end())
-	    ++tmpi;
+	  while (n-- && tmpi != orig.end()) {
+	    leaves[pos].insert(*tmpi++);
+	  }
+	  ldout(cct, 10) << __func__ << "   from " << *tmpi << " got " << item
+			 << " of type " << type << " over leaves " << leaves[pos] << dendl;
 	} else {
 	  // leaf
 	  bool replaced = false;
@@ -2289,6 +2416,50 @@ int CrushWrapper::_choose_type_stack(
 	  if (i == orig.end()) {
 	    ldout(cct, 10) << __func__ << " end of orig, break 1" << dendl;
 	    break;
+	  }
+	}
+      }
+      if (j + 1 < stack.size()) {
+	// check if any buckets have overfull leaves but no underfull candidates
+	for (int pos = 0; pos < fanout; ++pos) {
+	  if (underfull_buckets[j].count(o[pos]) == 0) {
+	    // are any leaves overfull?
+	    bool any_overfull = false;
+	    for (auto osd : leaves[pos]) {
+	      if (overfull.count(osd)) {
+		any_overfull = true;
+	      }
+	    }
+	    if (any_overfull) {
+	      ldout(cct, 10) << " bucket " << o[pos] << " has no underfull targets and "
+			     << ">0 leaves " << leaves[pos] << " is overfull; alts "
+			     << underfull_buckets[j]
+			     << dendl;
+	      for (auto alt : underfull_buckets[j]) {
+		if (std::find(o.begin(), o.end(), alt) == o.end()) {
+		  // see if alt has the same parent
+		  if (j == 0 ||
+		      get_parent_of_type(o[pos], stack[j-1].first) ==
+		      get_parent_of_type(alt, stack[j-1].first)) {
+		    if (j)
+		      ldout(cct, 10) << "  replacing " << o[pos]
+				     << " (which has no underfull leaves) with " << alt
+				     << " (same parent "
+				     << get_parent_of_type(alt, stack[j-1].first) << " type "
+				     << type << ")" << dendl;
+		    else
+		      ldout(cct, 10) << "  replacing " << o[pos]
+				     << " (which has no underfull leaves) with " << alt
+				     << " (first level)" << dendl;
+		    o[pos] = alt;
+		    break;
+		  } else {
+		    ldout(cct, 30) << "  alt " << alt << " for " << o[pos]
+				   << " has different parent, skipping" << dendl;
+		  }
+		}
+	      }
+	    }
 	  }
 	}
       }

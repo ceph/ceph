@@ -137,8 +137,12 @@ int Group<I>::list(IoCtx& io_ctx, vector<string> *names)
     r = cls_client::group_dir_list(&io_ctx, RBD_GROUP_DIRECTORY, last_read,
                                    max_read, &groups);
     if (r < 0) {
-      lderr(cct) << "error listing group in directory: "
-		 << cpp_strerror(r) << dendl;
+      if (r != -ENOENT) {
+        lderr(cct) << "error listing group in directory: "
+                   << cpp_strerror(r) << dendl;
+      } else {
+        r = 0;
+      }
       return r;
     }
     for (pair<string, string> group : groups) {

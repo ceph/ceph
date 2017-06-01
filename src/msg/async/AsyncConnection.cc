@@ -124,7 +124,7 @@ AsyncConnection::AsyncConnection(CephContext *cct, AsyncMessenger *m, DispatchQu
     logger(w->get_perf_counter()), global_seq(0), connect_seq(0), peer_global_seq(0),
     out_seq(0), ack_left(0), in_seq(0), state(STATE_NONE), state_after_send(STATE_NONE), port(-1),
     dispatch_queue(q), can_write(WriteStatus::NOWRITE),
-    open_write(false), keepalive(false), recv_buf(NULL),
+    keepalive(false), recv_buf(NULL),
     recv_max_prefetch(MAX(msgr->cct->_conf->ms_tcp_prefetch_max_size, TCP_PREFETCH_MIN_SIZE)),
     recv_start(0), recv_end(0),
     last_active(ceph::coarse_mono_clock::now()),
@@ -203,6 +203,7 @@ ssize_t AsyncConnection::_try_send(bool more)
     }
   }
 
+  assert(center->in_thread());
   ssize_t r = cs.send(outcoming_bl, more);
   if (r < 0) {
     ldout(async_msgr->cct, 1) << __func__ << " send error: " << cpp_strerror(r) << dendl;
@@ -213,21 +214,13 @@ ssize_t AsyncConnection::_try_send(bool more)
                              << " remaining bytes " << outcoming_bl.length() << dendl;
 
   if (!open_write && is_queued()) {
-    if (center->in_thread()) {
-      center->create_file_event(cs.fd(), EVENT_WRITABLE, write_handler);
-      open_write = true;
-    } else {
-      center->dispatch_event_external(write_handler);
-    }
+    center->create_file_event(cs.fd(), EVENT_WRITABLE, write_handler);
+    open_write = true;
   }
 
   if (open_write && !is_queued()) {
-    if (center->in_thread()) {
-      center->delete_file_event(cs.fd(), EVENT_WRITABLE);
-      open_write = false;
-    } else {
-      center->dispatch_event_external(write_handler);
-    }
+    center->delete_file_event(cs.fd(), EVENT_WRITABLE);
+    open_write = false;
     if (state_after_send != STATE_NONE)
       center->dispatch_event_external(read_handler);
   }
@@ -336,6 +329,7 @@ void AsyncConnection::process()
   bool need_dispatch_writer = false;
   std::lock_guard<std::mutex> l(lock);
   last_active = ceph::coarse_mono_clock::now();
+  auto recv_start_time = ceph::mono_clock::now();
   do {
     ldout(async_msgr->cct, 20) << __func__ << " prev state is " << get_state_name(prev_state) << dendl;
     prev_state = state;
@@ -781,6 +775,8 @@ void AsyncConnection::process()
           logger->inc(l_msgr_recv_bytes, cur_msg_size + sizeof(ceph_msg_header) + sizeof(ceph_msg_footer));
 
           async_msgr->ms_fast_preprocess(message);
+          auto fast_dispatch_time = ceph::mono_clock::now();
+          logger->tinc(l_msgr_running_recv_time, fast_dispatch_time - recv_start_time);
           if (delay_state) {
             utime_t release = message->get_recv_stamp();
             double delay_period = 0;
@@ -794,6 +790,9 @@ void AsyncConnection::process()
           } else if (async_msgr->ms_can_fast_dispatch(message)) {
             lock.unlock();
             dispatch_queue->fast_dispatch(message);
+            recv_start_time = ceph::mono_clock::now();
+            logger->tinc(l_msgr_running_fast_dispatch_time,
+                         recv_start_time - fast_dispatch_time);
             lock.lock();
           } else {
             dispatch_queue->enqueue(message, message->get_priority(), conn_id);
@@ -845,6 +844,8 @@ void AsyncConnection::process()
 
   if (need_dispatch_writer && is_connected())
     center->dispatch_event_external(write_handler);
+
+  logger->tinc(l_msgr_running_recv_time, ceph::mono_clock::now() - recv_start_time);
   return;
 
  fail:
@@ -1418,6 +1419,8 @@ int AsyncConnection::handle_connect_reply(ceph_msg_connect &connect, ceph_msg_co
   if (reply.tag == CEPH_MSGR_TAG_RESETSESSION) {
     ldout(async_msgr->cct, 0) << __func__ << " connect got RESETSESSION" << dendl;
     was_session_reset();
+    // see was_session_reset
+    outcoming_bl.clear();
     state = STATE_CONNECTING_SEND_CONNECT_MSG;
   }
   if (reply.tag == CEPH_MSGR_TAG_RETRY_GLOBAL) {
@@ -1672,13 +1675,10 @@ ssize_t AsyncConnection::handle_connect_msg(ceph_msg_connect &connect, bufferlis
 
     center->delete_file_event(cs.fd(), EVENT_READABLE|EVENT_WRITABLE);
 
-    // Clean up output buffer
-    existing->outcoming_bl.clear();
     if (existing->delay_state) {
       existing->delay_state->flush();
       assert(!delay_state);
     }
-    existing->requeue_sent();
     existing->reset_recv_state();
 
     auto temp_cs = std::move(cs);
@@ -1691,7 +1691,6 @@ ssize_t AsyncConnection::handle_connect_msg(ceph_msg_connect &connect, bufferlis
     dispatch_queue->queue_reset(this);
     ldout(async_msgr->cct, 1) << __func__ << " stop myself to swap existing" << dendl;
     existing->can_write = WriteStatus::REPLACING;
-    existing->open_write = false;
     existing->replacing = true;
     existing->state_offset = 0;
     // avoid previous thread modify event
@@ -1706,6 +1705,11 @@ ssize_t AsyncConnection::handle_connect_msg(ceph_msg_connect &connect, bufferlis
       // we need to delete time event in original thread
       {
         std::lock_guard<std::mutex> l(existing->lock);
+        existing->write_lock.lock();
+        existing->requeue_sent();
+        existing->outcoming_bl.clear();
+        existing->open_write = false;
+        existing->write_lock.unlock();
         if (existing->state == STATE_NONE) {
           existing->shutdown_socket();
           existing->cs = std::move(cs);
@@ -1934,16 +1938,7 @@ int AsyncConnection::send_message(Message *m)
     ldout(async_msgr->cct, 5) << __func__ << " clear encoded buffer previous "
                               << f << " != " << get_features() << dendl;
   }
-  if (!is_queued() && can_write == WriteStatus::CANWRITE && async_msgr->cct->_conf->ms_async_send_inline) {
-    if (!bl.length())
-      prepare_send_message(get_features(), m, bl);
-    logger->inc(l_msgr_send_messages_inline);
-    if (write_message(m, bl, false) < 0) {
-      ldout(async_msgr->cct, 1) << __func__ << " send msg failed" << dendl;
-      // we want to handle fault within internal thread
-      center->dispatch_event_external(write_handler);
-    }
-  } else if (can_write == WriteStatus::CLOSED) {
+  if (can_write == WriteStatus::CLOSED) {
     ldout(async_msgr->cct, 10) << __func__ << " connection closed."
                                << " Drop message " << m << dendl;
     m->put();
@@ -1996,7 +1991,7 @@ void AsyncConnection::discard_requeued_up_to(uint64_t seq)
 
 /*
  * Tears down the AsyncConnection's message queues, and removes them from the DispatchQueue
- * Must hold pipe_lock prior to calling.
+ * Must hold write_lock prior to calling.
  */
 void AsyncConnection::discard_out_queue()
 {
@@ -2013,7 +2008,6 @@ void AsyncConnection::discard_out_queue()
       r->second->put();
     }
   out_q.clear();
-  outcoming_bl.clear();
 }
 
 int AsyncConnection::randomize_out_seq()
@@ -2065,7 +2059,7 @@ void AsyncConnection::fault()
   outcoming_bl.clear();
   if (!once_ready && !is_queued() &&
       state >=STATE_ACCEPTING && state <= STATE_ACCEPTING_WAIT_CONNECT_MSG_AUTH) {
-    ldout(async_msgr->cct, 0) << __func__ << " with nothing to send and in the half "
+    ldout(async_msgr->cct, 10) << __func__ << " with nothing to send and in the half "
                               << " accept state just closed" << dendl;
     write_lock.unlock();
     _stop();
@@ -2074,7 +2068,7 @@ void AsyncConnection::fault()
   }
   reset_recv_state();
   if (policy.standby && !is_queued() && state != STATE_WAIT) {
-    ldout(async_msgr->cct,0) << __func__ << " with nothing to send, going to standby" << dendl;
+    ldout(async_msgr->cct, 10) << __func__ << " with nothing to send, going to standby" << dendl;
     state = STATE_STANDBY;
     write_lock.unlock();
     return;
@@ -2121,6 +2115,9 @@ void AsyncConnection::was_session_reset()
     delay_state->discard();
   dispatch_queue->discard_queue(conn_id);
   discard_out_queue();
+  // note: we need to clear outcoming_bl here, but was_session_reset may be
+  // called by other thread, so let caller clear this itself!
+  // outcoming_bl.clear();
 
   dispatch_queue->queue_remote_reset(this);
 
@@ -2184,14 +2181,8 @@ void AsyncConnection::prepare_send_message(uint64_t features, Message *m, buffer
 ssize_t AsyncConnection::write_message(Message *m, bufferlist& bl, bool more)
 {
   FUNCTRACE();
-  assert(can_write == WriteStatus::CANWRITE);
+  assert(center->in_thread());
   m->set_seq(out_seq.inc());
-
-  if (!policy.lossy) {
-    // put on sent list
-    sent.push_back(m);
-    m->get();
-  }
 
   if (msgr->crcflags & MSG_CRC_HEADER)
     m->calc_header_crc();
@@ -2441,25 +2432,36 @@ void AsyncConnection::handle_write()
       keepalive = false;
     }
 
-    while (1) {
+    auto start = ceph::mono_clock::now();
+    bool more;
+    do {
       bufferlist data;
       Message *m = _get_next_outgoing(&data);
       if (!m)
         break;
 
+      if (!policy.lossy) {
+        // put on sent list
+        sent.push_back(m);
+        m->get();
+      }
+      more = _has_next_outgoing();
+      write_lock.unlock();
+
       // send_message or requeue messages may not encode message
       if (!data.length())
         prepare_send_message(get_features(), m, data);
 
-      r = write_message(m, data, _has_next_outgoing());
+      r = write_message(m, data, more);
       if (r < 0) {
         ldout(async_msgr->cct, 1) << __func__ << " send msg failed" << dendl;
-        write_lock.unlock();
         goto fail;
-      } else if (r > 0) {
-        break;
       }
-    }
+      write_lock.lock();
+      if (r > 0)
+        break;
+    } while (can_write == WriteStatus::CANWRITE);
+    write_lock.unlock();
 
     uint64_t left = ack_left.read();
     if (left) {
@@ -2475,7 +2477,7 @@ void AsyncConnection::handle_write()
       r = _try_send();
     }
 
-    write_lock.unlock();
+    logger->tinc(l_msgr_running_send_time, ceph::mono_clock::now() - start);
     if (r < 0) {
       ldout(async_msgr->cct, 1) << __func__ << " send msg failed" << dendl;
       goto fail;
@@ -2522,7 +2524,6 @@ void AsyncConnection::tick(uint64_t id)
   auto now = ceph::coarse_mono_clock::now();
   ldout(async_msgr->cct, 20) << __func__ << " last_id=" << last_tick_id
                              << " last_active" << last_active << dendl;
-  assert(last_tick_id == id);
   std::lock_guard<std::mutex> l(lock);
   last_tick_id = 0;
   auto idle_period = std::chrono::duration_cast<std::chrono::microseconds>(now - last_active).count();
