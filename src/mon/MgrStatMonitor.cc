@@ -27,10 +27,6 @@ public:
   const pool_stat_t& get_pg_sum() const override { return digest.pg_sum; }
   const osd_stat_t& get_osd_sum() const override { return digest.osd_sum; }
 
-  size_t get_num_pg_by_osd(int osd) const override {
-    return digest.get_num_pg_by_osd(osd);
-  }
-
   ceph_statfs get_statfs() const override {
     return digest.get_statfs();
   }
