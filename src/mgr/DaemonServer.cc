@@ -821,11 +821,12 @@ void DaemonServer::send_report()
   cluster_state.with_pgmap([&](const PGMap& pg_map) {
       cluster_state.update_delta_stats();
 
-      // FIXME: no easy way to get mon features here.  this will do for
-      // now, though, as long as we don't make a backward-incompat change.
-      pg_map.encode_digest(m->get_data(), CEPH_FEATURES_ALL);
       // FIXME: reporting health detail here might be a bad idea?
       cluster_state.with_osdmap([&](const OSDMap& osdmap) {
+	  // FIXME: no easy way to get mon features here.  this will do for
+	  // now, though, as long as we don't make a backward-incompat change.
+	  pg_map.encode_digest(osdmap, m->get_data(), CEPH_FEATURES_ALL);
+
 	  pg_map.get_health(g_ceph_context, osdmap,
 			    m->health_summary,
 			    &m->health_detail);
