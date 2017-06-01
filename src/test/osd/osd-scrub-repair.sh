@@ -1908,7 +1908,268 @@ EOF
     # Get epoch for repair-get requests
     epoch=$(jq .epoch $dir/json)
 
-    jq "$jqfilter" << EOF | python -c "$sortkeys" | sed -e "$sedfilter" > $dir/checkcsjson
+    if [ "$allow_overwrites" = "true" ]
+    then
+      jq "$jqfilter" << EOF | python -c "$sortkeys" | sed -e "$sedfilter" > $dir/checkcsjson
+{
+  "inconsistents": [
+    {
+      "shards": [
+        {
+          "data_digest": "0x00000000",
+          "omap_digest": "0xffffffff",
+          "size": 2048,
+          "errors": [],
+          "shard": 2,
+          "osd": 0
+        },
+        {
+          "size": 9,
+          "errors": [
+            "read_error",
+            "size_mismatch_oi"
+          ],
+          "shard": 1,
+          "osd": 1
+        },
+        {
+          "data_digest": "0x00000000",
+          "omap_digest": "0xffffffff",
+          "size": 2048,
+          "errors": [],
+          "shard": 0,
+          "osd": 2
+        }
+      ],
+      "selected_object_info": "2:9175b684:::EOBJ1:head(27'1 client.4155.0:1 dirty|data_digest|omap_digest s 7 uv 1 dd 2ddbf8f5 od ffffffff alloc_hint [0 0 0])",
+      "union_shard_errors": [
+        "read_error",
+        "size_mismatch_oi"
+      ],
+      "errors": [
+        "size_mismatch"
+      ],
+      "object": {
+        "version": 1,
+        "snap": "head",
+        "locator": "",
+        "nspace": "",
+        "name": "EOBJ1"
+      }
+    },
+    {
+      "shards": [
+        {
+          "data_digest": "0x00000000",
+          "omap_digest": "0xffffffff",
+          "size": 2048,
+          "errors": [],
+          "shard": 2,
+          "osd": 0
+        },
+        {
+          "errors": [
+            "missing"
+          ],
+          "shard": 1,
+          "osd": 1
+        },
+        {
+          "data_digest": "0x00000000",
+          "omap_digest": "0xffffffff",
+          "size": 2048,
+          "errors": [],
+          "shard": 0,
+          "osd": 2
+        }
+      ],
+      "selected_object_info": "2:b197b25d:::EOBJ3:head(41'3 client.4199.0:1 dirty|data_digest|omap_digest s 7 uv 3 dd 2ddbf8f5 od ffffffff alloc_hint [0 0 0])",
+      "union_shard_errors": [
+        "missing"
+      ],
+      "errors": [],
+      "object": {
+        "version": 3,
+        "snap": "head",
+        "locator": "",
+        "nspace": "",
+        "name": "EOBJ3"
+      }
+    },
+    {
+      "shards": [
+        {
+          "attrs": [
+            {
+              "Base64": true,
+              "value": "",
+              "name": "_"
+            },
+            {
+              "Base64": false,
+              "value": "bad-val",
+              "name": "_key1-EOBJ4"
+            },
+            {
+              "Base64": false,
+              "value": "val3-EOBJ4",
+              "name": "_key3-EOBJ4"
+            },
+            {
+              "Base64": true,
+              "value": "AQEYAAAAAAgAAAAAAAADAAAAL6fPBLB8dlsvp88E",
+              "name": "hinfo_key"
+            },
+            {
+              "Base64": true,
+              "value": "AwIdAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+              "name": "snapset"
+            }
+          ],
+          "data_digest": "0x00000000",
+          "omap_digest": "0xffffffff",
+          "size": 2048,
+          "errors": [],
+          "shard": 2,
+          "osd": 0
+        },
+        {
+          "attrs": [
+            {
+              "Base64": true,
+              "value": "",
+              "name": "_"
+            },
+            {
+              "Base64": false,
+              "value": "val1-EOBJ4",
+              "name": "_key1-EOBJ4"
+            },
+            {
+              "Base64": false,
+              "value": "val2-EOBJ4",
+              "name": "_key2-EOBJ4"
+            },
+            {
+              "Base64": true,
+              "value": "AQEYAAAAAAgAAAAAAAADAAAAL6fPBLB8dlsvp88E",
+              "name": "hinfo_key"
+            },
+            {
+              "Base64": true,
+              "value": "AwIdAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+              "name": "snapset"
+            }
+          ],
+          "data_digest": "0x00000000",
+          "omap_digest": "0xffffffff",
+          "size": 2048,
+          "errors": [],
+          "shard": 1,
+          "osd": 1
+        },
+        {
+          "attrs": [
+            {
+              "Base64": true,
+              "value": "",
+              "name": "_"
+            },
+            {
+              "Base64": false,
+              "value": "val1-EOBJ4",
+              "name": "_key1-EOBJ4"
+            },
+            {
+              "Base64": false,
+              "value": "val2-EOBJ4",
+              "name": "_key2-EOBJ4"
+            },
+            {
+              "Base64": true,
+              "value": "AQEYAAAAAAgAAAAAAAADAAAAL6fPBLB8dlsvp88E",
+              "name": "hinfo_key"
+            },
+            {
+              "Base64": true,
+              "value": "AwIdAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+              "name": "snapset"
+            }
+          ],
+          "data_digest": "0x00000000",
+          "omap_digest": "0xffffffff",
+          "size": 2048,
+          "errors": [],
+          "shard": 0,
+          "osd": 2
+        }
+      ],
+      "selected_object_info": "2:5e723e06:::EOBJ4:head(48'6 client.4223.0:1 dirty|data_digest|omap_digest s 7 uv 6 dd 2ddbf8f5 od ffffffff alloc_hint [0 0 0])",
+      "union_shard_errors": [],
+      "errors": [
+        "attr_value_mismatch",
+        "attr_name_mismatch"
+      ],
+      "object": {
+        "version": 6,
+        "snap": "head",
+        "locator": "",
+        "nspace": "",
+        "name": "EOBJ4"
+      }
+    },
+    {
+      "shards": [
+        {
+          "data_digest": "0x00000000",
+          "omap_digest": "0xffffffff",
+          "size": 2048,
+          "errors": [],
+          "shard": 2,
+          "osd": 0
+        },
+        {
+          "data_digest": "0x00000000",
+          "omap_digest": "0xffffffff",
+          "size": 4096,
+          "errors": [
+            "size_mismatch_oi"
+          ],
+          "shard": 1,
+          "osd": 1
+        },
+        {
+          "data_digest": "0x00000000",
+          "omap_digest": "0xffffffff",
+          "size": 2048,
+          "errors": [],
+          "shard": 0,
+          "osd": 2
+        }
+      ],
+      "selected_object_info": "2:8549dfb5:::EOBJ5:head(65'7 client.4288.0:1 dirty|data_digest|omap_digest s 7 uv 7 dd 2ddbf8f5 od ffffffff alloc_hint [0 0 0])",
+      "union_shard_errors": [
+        "size_mismatch_oi"
+      ],
+      "errors": [
+        "size_mismatch"
+      ],
+      "object": {
+        "version": 7,
+        "snap": "head",
+        "locator": "",
+        "nspace": "",
+        "name": "EOBJ5"
+      }
+    }
+  ],
+  "epoch": 0
+}
+EOF
+
+    else
+
+      jq "$jqfilter" << EOF | python -c "$sortkeys" | sed -e "$sedfilter" > $dir/checkcsjson
 {
   "inconsistents": [
     {
@@ -2205,16 +2466,19 @@ EOF
 }
 EOF
 
-    jq "$jqfilter" $dir/json | python -c "$sortkeys" | sed -e "$sedfilter" > $dir/csjson
-    if [ "$allow_overwrites" = "true" ]
-    then
-        grep -v data_digest $dir/csjson | grep -v ec_size_error > $dir/csjson
-        grep -v data_digest $dir/checkcsjson | grep -v ec_size_error > $dir/checkcsjson
     fi
+
+    jq "$jqfilter" $dir/json | python -c "$sortkeys" | sed -e "$sedfilter" > $dir/csjson
     diff -y $termwidth $dir/checkcsjson $dir/csjson || test $getjson = "yes" || return 1
     if test $getjson = "yes"
     then
-        jq '.' $dir/json > save4.json
+      if [ "$allow_overwrites" = "true" ]
+      then
+        num=4
+      else
+        num=5
+      fi
+      jq '.' $dir/json > save${num}.json
     fi
 
     if which jsonschema > /dev/null;
