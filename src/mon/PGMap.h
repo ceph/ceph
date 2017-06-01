@@ -39,7 +39,6 @@ public:
   virtual ~PGMapDigest() {}
 
   mempool::pgmap::vector<uint64_t> osd_last_seq;
-  mempool::pgmap::unordered_map<int32_t,osd_stat_t> osd_stat;
 
   mutable std::map<int, int64_t> avail_space_by_rule;
 
@@ -145,8 +144,8 @@ public:
   void pool_cache_io_rate_summary(Formatter *f, ostream *out,
                                   uint64_t poolid) const;
 
-  void dump_pool_stats_full(const OSDMap &osd_map, stringstream *ss, Formatter *f,
-      bool verbose) const;
+  virtual void dump_pool_stats_full(const OSDMap &osd_map, stringstream *ss,
+				    Formatter *f, bool verbose) const;
   void dump_fs_stats(stringstream *ss, Formatter *f, bool verbose) const;
   static void dump_object_stat_sum(TextTable &tbl, Formatter *f,
 			    const object_stat_sum_t &sum,
@@ -214,6 +213,7 @@ public:
   version_t version;
   epoch_t last_osdmap_epoch;   // last osdmap epoch i applied to the pgmap
   epoch_t last_pg_scan;  // osdmap epoch
+  mempool::pgmap::unordered_map<int32_t,osd_stat_t> osd_stat;
   mempool::pgmap::unordered_map<pg_t,pg_stat_t> pg_stat;
   mempool::pgmap::set<int32_t> full_osds;     // for pre-luminous only
   mempool::pgmap::set<int32_t> nearfull_osds; // for pre-luminous only
@@ -438,6 +438,11 @@ public:
   void dump_osd_stats(Formatter *f) const;
   void dump_delta(Formatter *f) const;
   void dump_filtered_pg_stats(Formatter *f, set<pg_t>& pgs) const;
+  void dump_pool_stats_full(const OSDMap &osd_map, stringstream *ss,
+			    Formatter *f, bool verbose) const override {
+    get_rules_avail(osd_map, &avail_space_by_rule);
+    PGMapDigest::dump_pool_stats_full(osd_map, ss, f, verbose);
+  }
 
   void dump_pg_stats_plain(
     ostream& ss,
