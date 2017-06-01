@@ -10002,7 +10002,8 @@ int Client::ll_lookup(Inode *parent, const char *name, struct stat *attr,
 		      Inode **out, const UserPerm& perms)
 {
   Mutex::Locker lock(client_lock);
-  ldout(cct, 3) << "ll_lookup " << parent << " " << name << dendl;
+  vinodeno_t vparent = _get_vino(parent);
+  ldout(cct, 3) << "ll_lookup " << vparent << " " << name << dendl;
   tout(cct) << "ll_lookup" << std::endl;
   tout(cct) << name << std::endl;
 
@@ -10027,7 +10028,7 @@ int Client::ll_lookup(Inode *parent, const char *name, struct stat *attr,
   _ll_get(in.get());
 
  out:
-  ldout(cct, 3) << "ll_lookup " << parent << " " << name
+  ldout(cct, 3) << "ll_lookup " << vparent << " " << name
 	  << " -> " << r << " (" << hex << attr->st_ino << dec << ")" << dendl;
   tout(cct) << attr->st_ino << std::endl;
   *out = in.get();
@@ -10039,7 +10040,8 @@ int Client::ll_lookupx(Inode *parent, const char *name, Inode **out,
 		       const UserPerm& perms)
 {
   Mutex::Locker lock(client_lock);
-  ldout(cct, 3) << "ll_lookupx " << parent << " " << name << dendl;
+  vinodeno_t vparent = _get_vino(parent);
+  ldout(cct, 3) << "ll_lookupx " << vparent << " " << name << dendl;
   tout(cct) << "ll_lookupx" << std::endl;
   tout(cct) << name << std::endl;
 
@@ -10064,7 +10066,7 @@ int Client::ll_lookupx(Inode *parent, const char *name, Inode **out,
     _ll_get(in.get());
   }
 
-  ldout(cct, 3) << "ll_lookupx " << parent << " " << name
+  ldout(cct, 3) << "ll_lookupx " << vparent << " " << name
 	  << " -> " << r << " (" << hex << stx->stx_ino << dec << ")" << dendl;
   tout(cct) << stx->stx_ino << std::endl;
   *out = in.get();
@@ -11847,7 +11849,7 @@ int Client::ll_link(Inode *in, Inode *newparent, const char *newname,
   vinodeno_t vino = _get_vino(in);
   vinodeno_t vnewparent = _get_vino(newparent);
 
-  ldout(cct, 3) << "ll_link " << in << " to " << vnewparent << " " <<
+  ldout(cct, 3) << "ll_link " << vino << " to " << vnewparent << " " <<
     newname << dendl;
   tout(cct) << "ll_link" << std::endl;
   tout(cct) << vino.ino.val << std::endl;
@@ -12119,7 +12121,7 @@ out:
 
   tout(cct) << (unsigned long)*fhp << std::endl;
   tout(cct) << ino << std::endl;
-  ldout(cct, 3) << "_ll_create " << parent << " " << name << " 0" << oct <<
+  ldout(cct, 3) << "_ll_create " << vparent << " " << name << " 0" << oct <<
     mode << dec << " " << ceph_flags_sys2wire(flags) << " = " << r << " (" <<
     *fhp << " " << hex << ino << dec << ")" << dendl;
 
