@@ -2095,9 +2095,9 @@ void PGMap::dump_fs_stats(
         << stringify(si_t(osd_sum.kb_used*1024));
     float used = 0.0;
     if (osd_sum.kb > 0) {
-      used = ((float)osd_sum.kb_used / osd_sum.kb);
+      used = ((float)(osd_sum.kb - osd_sum.kb_avail) / osd_sum.kb);
     }
-    tbl << percentify(used*100);
+    tbl << percentify(roundf(used*100));
     if (verbose) {
       tbl << stringify(si_t(pg_sum.stats.sum.num_objects));
     }
