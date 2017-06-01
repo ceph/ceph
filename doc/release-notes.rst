@@ -1819,7 +1819,7 @@ Upgrading from Jewel
   to Kraken 11.2.z (or, eventually, Luminous 12.2.z).
 
 * The ``sortbitwise`` flag must be set on the Jewel cluster before upgrading
-  to Kraken.  The latest Jewel (10.2.4+) releases issue a health warning if
+  to Kraken.  The latest Jewel (10.2.8+) releases issue a health warning if
   the flag is not set, so this is probably already set.  If it is not, Kraken
   OSDs will refuse to start and will print and error message in their log.
 
