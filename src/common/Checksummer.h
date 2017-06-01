@@ -4,7 +4,6 @@
 #ifndef CEPH_OS_BLUESTORE_CHECKSUMMER
 #define CEPH_OS_BLUESTORE_CHECKSUMMER
 
-#include "include/buffer.h"
 #include "xxHash/xxhash.h"
 
 class Checksummer {

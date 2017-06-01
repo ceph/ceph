@@ -13,36 +13,19 @@
  *
  */
 
-#include <time.h>
-
 #include <boost/algorithm/string.hpp>
 
 #include "include/mempool.h"
 #include "common/admin_socket.h"
 #include "common/perf_counters.h"
-#include "common/Thread.h"
 #include "common/code_environment.h"
-#include "common/ceph_context.h"
 #include "common/ceph_crypto.h"
-#include "common/config.h"
-#include "common/debug.h"
 #include "common/HeartbeatMap.h"
 #include "common/errno.h"
-#include "common/lockdep.h"
-#include "common/Formatter.h"
 #include "common/Graylog.h"
-#include "log/Log.h"
 #include "auth/Crypto.h"
 #include "include/str_list.h"
-#include "common/Mutex.h"
-#include "common/Cond.h"
 #include "common/PluginRegistry.h"
-#include "common/valgrind.h"
-
-#include <iostream>
-#include <pthread.h>
-
-#include "include/Spinlock.h"
 
 using ceph::HeartbeatMap;
 
