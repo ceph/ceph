@@ -237,7 +237,7 @@ void FSMap::create_filesystem(const std::string &name,
   auto fs = std::make_shared<Filesystem>();
   fs->mds_map.fs_name = name;
   fs->mds_map.max_mds = 1;
-  fs->mds_map.data_pools.insert(data_pool);
+  fs->mds_map.data_pools.push_back(data_pool);
   fs->mds_map.metadata_pool = metadata_pool;
   fs->mds_map.cas_pool = -1;
   fs->mds_map.max_file_size = g_conf->mds_max_file_size;
@@ -408,7 +408,7 @@ void FSMap::decode(bufferlist::iterator& p)
       while (n--) {
         __u32 m;
         ::decode(m, p);
-        legacy_mds_map.data_pools.insert(m);
+        legacy_mds_map.data_pools.push_back(m);
       }
       __s32 s;
       ::decode(s, p);
