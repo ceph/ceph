@@ -925,6 +925,13 @@ public:
   Mutex recovery_request_lock;
   SafeTimer recovery_request_timer;
 
+  // For async recovery sleep
+  bool recovery_needs_sleep = true;
+  utime_t recovery_schedule_time = utime_t();
+
+  Mutex recovery_sleep_lock;
+  SafeTimer recovery_sleep_timer;
+
   // -- tids --
   // for ops i issue
   std::atomic_uint last_tid{0};
@@ -1051,6 +1058,10 @@ public:
       awaiting_throttle.push_back(make_pair(pg->get_osdmap()->get_epoch(), pg));
     }
     _maybe_queue_recovery();
+  }
+  void queue_recovery_after_sleep(PG *pg, epoch_t queued, uint64_t reserved_pushes) {
+    Mutex::Locker l(recovery_lock);
+    _queue_for_recovery(make_pair(queued, pg), reserved_pushes);
   }
 
 

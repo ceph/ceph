@@ -687,6 +687,16 @@ perform well in a degraded state.
 :Type: Boolean
 :Default: ``true``
 
+
+``osd recovery sleep``
+
+:Description: Time to sleep before next recovery. Increasing this value will
+              slow down recovery operation while client operations will be
+              less impacted.
+
+:Type: Float
+:Default: ``0.01``
+
 Tiering
 =======
 
