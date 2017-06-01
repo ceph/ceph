@@ -143,6 +143,8 @@ namespace mempool {
   f(bluestore_cache_other)	      \
   f(bluestore_fsck)		      \
   f(bluestore_txc)		      \
+  f(bluestore_writing_deferred)	      \
+  f(bluestore_writing)		      \
   f(bluefs)			      \
   f(buffer_anon)		      \
   f(buffer_meta)		      \

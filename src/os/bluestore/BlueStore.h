@@ -261,17 +261,19 @@ public:
       cache->_audit("_add_buffer start");
       buffer_map[b->offset].reset(b);
       if (b->is_writing()) {
+	b->data.reassign_to_mempool(mempool::mempool_bluestore_writing);
         writing.push_back(*b);
       } else {
+	b->data.reassign_to_mempool(mempool::mempool_bluestore_cache_data);
 	cache->_add_buffer(b, level, near);
       }
-      b->data.reassign_to_mempool(mempool::mempool_bluestore_cache_data);
       cache->_audit("_add_buffer end");
     }
     void _rm_buffer(Cache* cache, Buffer *b) {
       _rm_buffer(cache, buffer_map.find(b->offset));
     }
-    void _rm_buffer(Cache* cache, map<uint32_t, std::unique_ptr<Buffer>>::iterator p) {
+    void _rm_buffer(Cache* cache,
+		    map<uint32_t, std::unique_ptr<Buffer>>::iterator p) {
       assert(p != buffer_map.end());
       cache->_audit("_rm_buffer start");
       if (p->second->is_writing()) {
