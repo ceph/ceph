@@ -2970,7 +2970,9 @@ void Monitor::handle_command(MonOpRequestRef op)
       prefix != "mon compact" &&
       prefix != "mon scrub" &&
       prefix != "mon sync force" &&
-      prefix != "mon metadata") {
+      prefix != "mon metadata" &&
+      prefix != "mon versions" &&
+      prefix != "mon count-metadata") {
     monmon()->dispatch(op);
     return;
   }
@@ -3205,6 +3207,24 @@ void Monitor::handle_command(MonOpRequestRef op)
     f->flush(ds);
     rdata.append(ds);
     rs = "";
+  } else if (prefix == "mon versions") {
+    if (!f)
+      f.reset(Formatter::create("json-pretty"));
+    count_metadata("ceph_version", f.get());
+    f->flush(ds);
+    rdata.append(ds);
+    rs = "";
+    r = 0;
+  } else if (prefix == "mon count-metadata") {
+    if (!f)
+      f.reset(Formatter::create("json-pretty"));
+    string field;
+    cmd_getval(g_ceph_context, cmdmap, "property", field);
+    count_metadata(field, f.get());
+    f->flush(ds);
+    rdata.append(ds);
+    rs = "";
+    r = 0;
   } else if (prefix == "quorum_status") {
     // make sure our map is readable and up to date
     if (!is_leader() && !is_peon()) {
@@ -4699,6 +4719,26 @@ int Monitor::get_mon_metadata(int mon, Formatter *f, ostream& err)
     f->dump_string(p->first.c_str(), p->second);
   }
   return 0;
+}
+
+void Monitor::count_metadata(const string& field, Formatter *f)
+{
+  map<int, Metadata> meta;
+  load_metadata(meta);
+  map<string,int> by_val;
+  for (auto& p : meta) {
+    auto q = p.second.find(field);
+    if (q == p.second.end()) {
+      by_val["unknown"]++;
+    } else {
+      by_val[q->second]++;
+    }
+  }
+  f->open_object_section(field.c_str());
+  for (auto& p : by_val) {
+    f->dump_int(p.first.c_str(), p.second);
+  }
+  f->close_section();
 }
 
 int Monitor::print_nodes(Formatter *f, ostream& err)
