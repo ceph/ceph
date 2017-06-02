@@ -9,6 +9,7 @@
 #include "common/RWLock.h"
 #include "common/WorkQueue.h"
 #include "include/Context.h"
+#include "include/err.h"
 
 #include "librbd/ExclusiveLock.h"
 #include "librbd/ImageCtx.h"
@@ -90,6 +91,23 @@ ObjectRequest<I>::create_writesame(I *ictx, const std::string &oid,
   return new ObjectWriteSameRequest(util::get_image_ctx(ictx), oid, object_no,
                                     object_off, object_len, data, snapc,
                                     op_flags, parent_trace, completion);
+}
+
+template <typename I>
+ObjectRequest<I>*
+ObjectRequest<I>::create_compare_and_write(I *ictx, const std::string &oid,
+                                           uint64_t object_no, uint64_t object_off,
+                                           const ceph::bufferlist &cmp_data,
+                                           const ceph::bufferlist &write_data,
+                                           const ::SnapContext &snapc,
+                                           uint64_t *mismatch_offset,
+                                           int op_flags,
+                                           const ZTracer::Trace &parent_trace,
+                                           Context *completion) {
+  return new ObjectCompareAndWriteRequest(util::get_image_ctx(ictx), oid,
+                                          object_no, object_off, cmp_data,
+                                          write_data, snapc, mismatch_offset,
+                                          op_flags, parent_trace, completion);
 }
 
 template <typename I>
@@ -690,6 +708,72 @@ void ObjectWriteSameRequest::send_write() {
   }
 
   AbstractObjectWriteRequest::send_write();
+}
+
+void ObjectCompareAndWriteRequest::add_write_ops(librados::ObjectWriteOperation *wr,
+                                                 bool set_hints) {
+  RWLock::RLocker snap_locker(m_ictx->snap_lock);
+
+  if (set_hints && m_ictx->enable_alloc_hint &&
+      (m_ictx->object_map == nullptr || !m_object_exist)) {
+    wr->set_alloc_hint(m_ictx->get_object_size(), m_ictx->get_object_size());
+  }
+
+  // add cmpext ops
+  wr->cmpext(m_object_off, m_cmp_bl, nullptr);
+
+  if (m_object_off == 0 && m_object_len == m_ictx->get_object_size()) {
+    wr->write_full(m_write_bl);
+  } else {
+    wr->write(m_object_off, m_write_bl);
+  }
+  wr->set_op_flags2(m_op_flags);
+}
+
+void ObjectCompareAndWriteRequest::send_write() {
+  bool write_full = (m_object_off == 0 &&
+                     m_object_len == m_ictx->get_object_size());
+  ldout(m_ictx->cct, 20) << "send_write " << this << " " << m_oid << " "
+                         << m_object_off << "~" << m_object_len
+                         << " object exist " << m_object_exist
+                         << " write_full " << write_full << dendl;
+  if (write_full && !has_parent()) {
+    m_guard = false;
+  }
+
+  AbstractObjectWriteRequest::send_write();
+}
+
+void ObjectCompareAndWriteRequest::complete(int r)
+{
+  if (should_complete(r)) {
+    ImageCtx *image_ctx = this->m_ictx;
+    ldout(m_ictx->cct, 20) << "complete " << this << dendl;
+
+    if (this->m_hide_enoent && r == -ENOENT) {
+      r = 0;
+    }
+
+    vector<pair<uint64_t,uint64_t> > file_extents;
+    if (r <= -MAX_ERRNO) {
+      // object extent compare mismatch
+      uint64_t offset = -MAX_ERRNO - r;
+      Striper::extent_to_file(image_ctx->cct, &image_ctx->layout,
+                              this->m_object_no, offset, this->m_object_len,
+                              file_extents);
+
+      assert(file_extents.size() == 1);
+
+      uint64_t mismatch_offset = file_extents[0].first;
+      if (this->m_mismatch_offset)
+        *this->m_mismatch_offset = mismatch_offset;
+      r = -EILSEQ;
+    }
+
+    //compare and write object extent error
+    m_completion->complete(r);
+    delete this;
+  }
 }
 
 } // namespace io
