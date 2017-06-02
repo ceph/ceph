@@ -258,6 +258,12 @@ endif(NOT ${ATOMIC_OPS_FOUND})
 
 find_package(snappy REQUIRED)
 
+option(WITH_LZ4 "LZ4 compression support" OFF)
+if(WITH_LZ4)
+  find_package(LZ4 REQUIRED)
+  set(HAVE_LZ4 ${LZ4_FOUND})
+endif(WITH_LZ4)
+
 #if allocator is set on command line make sure it matches below strings
 if(ALLOCATOR)
   if(${ALLOCATOR} MATCHES "tcmalloc(_minimal)?")
