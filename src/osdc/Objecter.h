@@ -1141,6 +1141,16 @@ struct ObjectOperation {
     ::encode(tgt_oloc, osd_op.indata);
   }
 
+  void set_chunk(uint64_t src_offset, uint64_t src_length, object_locator_t tgt_oloc,
+		 object_t tgt_oid, uint64_t tgt_offset) {
+    OSDOp& osd_op = add_op(CEPH_OSD_OP_SET_CHUNK);
+    ::encode(src_offset, osd_op.indata);
+    ::encode(src_length, osd_op.indata);
+    ::encode(tgt_oloc, osd_op.indata);
+    ::encode(tgt_oid, osd_op.indata);
+    ::encode(tgt_offset, osd_op.indata);
+  }
+
   void set_alloc_hint(uint64_t expected_object_size,
                       uint64_t expected_write_size,
 		      uint32_t flags) {
