@@ -954,7 +954,6 @@ rm -rf %{buildroot}
 %files
 
 %files base
-%defattr(-,root,root,-)
 %docdir %{_docdir}
 %dir %{_docdir}/ceph
 %{_docdir}/ceph/sample.ceph.conf
@@ -1058,7 +1057,6 @@ if [ $FIRST_ARG -ge 1 ] ; then
 fi
 
 %files common
-%defattr(-,root,root,-)
 %{_bindir}/ceph
 %{_bindir}/ceph-authtool
 %{_bindir}/ceph-conf
@@ -1312,7 +1310,6 @@ if [ $FIRST_ARG -ge 1 ] ; then
 fi
 
 %files fuse
-%defattr(-,root,root,-)
 %{_bindir}/ceph-fuse
 %{_mandir}/man8/ceph-fuse.8*
 %{_sbindir}/mount.fuse.ceph
@@ -1320,12 +1317,10 @@ fi
 %{_unitdir}/ceph-fuse.target
 
 %files -n rbd-fuse
-%defattr(-,root,root,-)
 %{_bindir}/rbd-fuse
 %{_mandir}/man8/rbd-fuse.8*
 
 %files -n rbd-mirror
-%defattr(-,root,root,-)
 %{_bindir}/rbd-mirror
 %{_mandir}/man8/rbd-mirror.8*
 %{_unitdir}/ceph-rbd-mirror@.service
@@ -1374,12 +1369,10 @@ if [ $FIRST_ARG -ge 1 ] ; then
 fi
 
 %files -n rbd-nbd
-%defattr(-,root,root,-)
 %{_bindir}/rbd-nbd
 %{_mandir}/man8/rbd-nbd.8*
 
 %files radosgw
-%defattr(-,root,root,-)
 %{_bindir}/radosgw
 %{_bindir}/radosgw-token
 %{_bindir}/radosgw-es
@@ -1494,7 +1487,6 @@ fi
 %if %{with ocf}
 
 %files resource-agents
-%defattr(0755,root,root,-)
 %dir %{_prefix}/lib/ocf
 %dir %{_prefix}/lib/ocf/resource.d
 %dir %{_prefix}/lib/ocf/resource.d/ceph
@@ -1503,7 +1495,6 @@ fi
 %endif
 
 %files -n librados2
-%defattr(-,root,root,-)
 %{_libdir}/librados.so.*
 %dir %{_libdir}/ceph
 %{_libdir}/ceph/libceph-common.so*
@@ -1516,7 +1507,6 @@ fi
 %postun -n librados2 -p /sbin/ldconfig
 
 %files -n librados-devel
-%defattr(-,root,root,-)
 %dir %{_includedir}/rados
 %{_includedir}/rados/librados.h
 %{_includedir}/rados/librados.hpp
@@ -1536,17 +1526,14 @@ fi
 %{_mandir}/man8/librados-config.8*
 
 %files -n python-rados
-%defattr(-,root,root,-)
 %{python_sitearch}/rados.so
 %{python_sitearch}/rados-*.egg-info
 
 %files -n python%{python3_pkgversion}-rados
-%defattr(-,root,root,-)
 %{python3_sitearch}/rados.cpython*.so
 %{python3_sitearch}/rados-*.egg-info
 
 %files -n libradosstriper1
-%defattr(-,root,root,-)
 %{_libdir}/libradosstriper.so.*
 
 %post -n libradosstriper1 -p /sbin/ldconfig
@@ -1554,14 +1541,12 @@ fi
 %postun -n libradosstriper1 -p /sbin/ldconfig
 
 %files -n libradosstriper-devel
-%defattr(-,root,root,-)
 %dir %{_includedir}/radosstriper
 %{_includedir}/radosstriper/libradosstriper.h
 %{_includedir}/radosstriper/libradosstriper.hpp
 %{_libdir}/libradosstriper.so
 
 %files -n librbd1
-%defattr(-,root,root,-)
 %{_libdir}/librbd.so.*
 %if %{with lttng}
 %{_libdir}/librbd_tp.so.*
@@ -1575,7 +1560,6 @@ ln -sf %{_libdir}/librbd.so.1 /usr/lib64/qemu/librbd.so.1
 %postun -n librbd1 -p /sbin/ldconfig
 
 %files -n librbd-devel
-%defattr(-,root,root,-)
 %dir %{_includedir}/rbd
 %{_includedir}/rbd/librbd.h
 %{_includedir}/rbd/librbd.hpp
@@ -1586,7 +1570,6 @@ ln -sf %{_libdir}/librbd.so.1 /usr/lib64/qemu/librbd.so.1
 %endif
 
 %files -n librgw2
-%defattr(-,root,root,-)
 %{_libdir}/librgw.so.*
 
 %post -n librgw2 -p /sbin/ldconfig
@@ -1594,34 +1577,28 @@ ln -sf %{_libdir}/librbd.so.1 /usr/lib64/qemu/librbd.so.1
 %postun -n librgw2 -p /sbin/ldconfig
 
 %files -n librgw-devel
-%defattr(-,root,root,-)
 %dir %{_includedir}/rados
 %{_includedir}/rados/librgw.h
 %{_includedir}/rados/rgw_file.h
 %{_libdir}/librgw.so
 
 %files -n python-rgw
-%defattr(-,root,root,-)
 %{python_sitearch}/rgw.so
 %{python_sitearch}/rgw-*.egg-info
 
 %files -n python%{python3_pkgversion}-rgw
-%defattr(-,root,root,-)
 %{python3_sitearch}/rgw.cpython*.so
 %{python3_sitearch}/rgw-*.egg-info
 
 %files -n python-rbd
-%defattr(-,root,root,-)
 %{python_sitearch}/rbd.so
 %{python_sitearch}/rbd-*.egg-info
 
 %files -n python%{python3_pkgversion}-rbd
-%defattr(-,root,root,-)
 %{python3_sitearch}/rbd.cpython*.so
 %{python3_sitearch}/rbd-*.egg-info
 
 %files -n libcephfs2
-%defattr(-,root,root,-)
 %{_libdir}/libcephfs.so.*
 
 %post -n libcephfs2 -p /sbin/ldconfig
@@ -1629,27 +1606,23 @@ ln -sf %{_libdir}/librbd.so.1 /usr/lib64/qemu/librbd.so.1
 %postun -n libcephfs2 -p /sbin/ldconfig
 
 %files -n libcephfs-devel
-%defattr(-,root,root,-)
 %dir %{_includedir}/cephfs
 %{_includedir}/cephfs/libcephfs.h
 %{_includedir}/cephfs/ceph_statx.h
 %{_libdir}/libcephfs.so
 
 %files -n python-cephfs
-%defattr(-,root,root,-)
 %{python_sitearch}/cephfs.so
 %{python_sitearch}/cephfs-*.egg-info
 %{python_sitelib}/ceph_volume_client.py*
 
 %files -n python%{python3_pkgversion}-cephfs
-%defattr(-,root,root,-)
 %{python3_sitearch}/cephfs.cpython*.so
 %{python3_sitearch}/cephfs-*.egg-info
 %{python3_sitelib}/ceph_volume_client.py
 %{python3_sitelib}/__pycache__/ceph_volume_client.cpython*.py*
 
 %files -n python%{python3_pkgversion}-ceph-argparse
-%defattr(-,root,root,-)
 %{python3_sitelib}/ceph_argparse.py
 %{python3_sitelib}/__pycache__/ceph_argparse.cpython*.py*
 %{python3_sitelib}/ceph_daemon.py
@@ -1657,7 +1630,6 @@ ln -sf %{_libdir}/librbd.so.1 /usr/lib64/qemu/librbd.so.1
 
 %if 0%{with ceph_test_package}
 %files -n ceph-test
-%defattr(-,root,root,-)
 %{_bindir}/ceph-client-debug
 %{_bindir}/ceph_bench_log
 %{_bindir}/ceph_kvstorebench
@@ -1695,7 +1667,6 @@ ln -sf %{_libdir}/librbd.so.1 /usr/lib64/qemu/librbd.so.1
 
 %if 0%{with cephfs_java}
 %files -n libcephfs_jni1
-%defattr(-,root,root,-)
 %{_libdir}/libcephfs_jni.so.*
 
 %post -n libcephfs_jni1 -p /sbin/ldconfig
@@ -1703,23 +1674,19 @@ ln -sf %{_libdir}/librbd.so.1 /usr/lib64/qemu/librbd.so.1
 %postun -n libcephfs_jni1 -p /sbin/ldconfig
 
 %files -n libcephfs_jni-devel
-%defattr(-,root,root,-)
 %{_libdir}/libcephfs_jni.so
 
 %files -n cephfs-java
-%defattr(-,root,root,-)
 %{_javadir}/libcephfs.jar
 %{_javadir}/libcephfs-test.jar
 %endif
 
 %files -n rados-objclass-devel
-%defattr(-,root,root,-)
 %dir %{_includedir}/rados
 %{_includedir}/rados/objclass.h
 
 %if 0%{with selinux}
 %files selinux
-%defattr(-,root,root,-)
 %attr(0600,root,root) %{_datadir}/selinux/packages/ceph.pp
 %{_datadir}/selinux/devel/include/contrib/ceph.if
 %{_mandir}/man8/ceph_selinux.8*
