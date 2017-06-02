@@ -1768,7 +1768,7 @@ static std::atomic_flag buffer_debug_lock = ATOMIC_FLAG_INIT;
   {
     if (append_buffer.unused_tail_length() < prealloc) {
       append_buffer = buffer::create(prealloc);
-      if (_mempool) {
+      if (_mempool >= 0) {
 	append_buffer.get_raw()->reassign_to_mempool(_mempool);
       }
       append_buffer.set_length(0);   // unused, so far.
@@ -1860,6 +1860,9 @@ static std::atomic_flag buffer_debug_lock = ATOMIC_FLAG_INIT;
       // make a new append_buffer!
       append_buffer = raw_combined::create(CEPH_BUFFER_APPEND_SIZE);
       append_buffer.set_length(0);   // unused, so far.
+      if (_mempool >= 0) {
+	append_buffer.get_raw()->reassign_to_mempool(_mempool);
+      }
     }
     append(append_buffer, append_buffer.append(c) - 1, 1);	// add segment to the list
   }
@@ -1887,6 +1890,9 @@ static std::atomic_flag buffer_debug_lock = ATOMIC_FLAG_INIT;
 	sizeof(raw_combined);
       append_buffer = raw_combined::create(alen);
       append_buffer.set_length(0);   // unused, so far.
+      if (_mempool >= 0) {
+	append_buffer.get_raw()->reassign_to_mempool(_mempool);
+      }
     }
   }
 

@@ -265,6 +265,18 @@ TEST(mempool, unordered_map)
   h[2] = obj(1);
 }
 
+TEST(mempool, string_test)
+{
+  mempool::osdmap::string s;
+  s.reserve(100);
+  EXPECT_GE(mempool::osdmap::allocated_items(), s.capacity() + 1u); // +1 for zero-byte termination :
+  for (size_t i = 0; i < 10; ++i) {
+    s += '1';
+    s.append(s);
+    EXPECT_GE(mempool::osdmap::allocated_items(), s.capacity() + 1u);
+  }
+}
+
 TEST(mempool, bufferlist)
 {
   bufferlist bl;
@@ -277,16 +289,37 @@ TEST(mempool, bufferlist)
   ASSERT_GE(after, before + len);
 }
 
-TEST(mempool, string_test)
+TEST(mempool, bufferlist_reassign)
 {
-  mempool::osdmap::string s;
-  s.reserve(100);
-  EXPECT_GE(mempool::osdmap::allocated_items(), s.capacity() + 1u); // +1 for zero-byte termination :
-  for (size_t i = 0; i < 10; ++i) {
-    s += '1';
-    s.append(s);
-    EXPECT_GE(mempool::osdmap::allocated_items(), s.capacity() + 1u);
+  bufferlist bl;
+  size_t items_before = mempool::buffer_anon::allocated_items();
+  size_t bytes_before = mempool::buffer_anon::allocated_bytes();
+  bl.append("fooo");
+  ASSERT_EQ(items_before + 1, mempool::buffer_anon::allocated_items());
+  ASSERT_LT(bytes_before, mempool::buffer_anon::allocated_bytes());
+
+  // move existing bl
+  bl.reassign_to_mempool(mempool::mempool_osd);
+  ASSERT_EQ(items_before, mempool::buffer_anon::allocated_items());
+  ASSERT_EQ(bytes_before, mempool::buffer_anon::allocated_bytes());
+
+  // additional appends should go to the same pool
+  items_before = mempool::osd::allocated_items();
+  bytes_before = mempool::osd::allocated_bytes();
+  cout << "anon b " << mempool::buffer_anon::allocated_bytes() << std::endl;
+  for (unsigned i = 0; i < 1000; ++i) {
+    bl.append("asdfddddddddddddddddddddddasfdasdfasdfasdfasdfasdf");
   }
+  cout << "anon a " << mempool::buffer_anon::allocated_bytes() << std::endl;
+  ASSERT_LT(items_before, mempool::osd::allocated_items());
+  ASSERT_LT(bytes_before, mempool::osd::allocated_bytes());
+
+  // try_.. won't
+  items_before = mempool::osd::allocated_items();
+  bytes_before = mempool::osd::allocated_bytes();
+  bl.try_assign_to_mempool(mempool::mempool_bloom_filter);
+  ASSERT_EQ(items_before, mempool::osd::allocated_items());
+  ASSERT_EQ(bytes_before, mempool::osd::allocated_bytes());
 }
 
 int main(int argc, char **argv)
