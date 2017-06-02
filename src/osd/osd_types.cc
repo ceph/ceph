@@ -4834,6 +4834,44 @@ void watch_info_t::generate_test_instances(list<watch_info_t*>& o)
   o.back()->addr = ea;
 }
 
+// -- chunk_info_t --
+
+void chunk_info_t::encode(bufferlist& bl) const
+{
+  ENCODE_START(1, 1, bl);
+  ::encode(offset, bl);
+  ::encode(length, bl);
+  ::encode(oid, bl);
+  ::encode(flags, bl);
+  ENCODE_FINISH(bl);
+}
+
+void chunk_info_t::decode(bufferlist::iterator& bl)
+{
+  DECODE_START(1, bl);
+  ::decode(offset, bl);
+  ::decode(length, bl);
+  ::decode(oid, bl);
+  ::decode(flags, bl);
+  DECODE_FINISH(bl);
+}
+
+void chunk_info_t::dump(Formatter *f) const
+{
+  f->dump_unsigned("length", length);
+  f->open_object_section("oid");
+  oid.dump(f);
+  f->close_section();
+  f->dump_unsigned("flags", flags);
+}
+
+ostream& operator<<(ostream& out, const chunk_info_t& ci)
+{
+  return out << "(len: " << ci.length << " oid: " << ci.oid
+	     << " offset: " << ci.offset
+	     << " flags: " << ci.get_flag_string(ci.flags) << ")";
+}
+
 // -- object_manifest_t --
 
 void object_manifest_t::encode(bufferlist& bl) const
@@ -4844,6 +4882,9 @@ void object_manifest_t::encode(bufferlist& bl) const
     case TYPE_NONE: break;
     case TYPE_REDIRECT: 
       ::encode(redirect_target, bl);
+      break;
+    case TYPE_CHUNKED:
+      ::encode(chunk_map, bl);      
       break;
     default:
       ceph_abort();
@@ -4860,6 +4901,9 @@ void object_manifest_t::decode(bufferlist::iterator& bl)
     case TYPE_REDIRECT: 
       ::decode(redirect_target, bl);
       break;
+    case TYPE_CHUNKED:
+      ::decode(chunk_map, bl);
+      break;
     default:
       ceph_abort();
   }
@@ -4869,9 +4913,20 @@ void object_manifest_t::decode(bufferlist::iterator& bl)
 void object_manifest_t::dump(Formatter *f) const
 {
   f->dump_unsigned("type", type);
-  f->open_object_section("redirect_target");
-  redirect_target.dump(f);
-  f->close_section();
+  if (type == TYPE_REDIRECT) {
+    f->open_object_section("redirect_target");
+    redirect_target.dump(f);
+    f->close_section();
+  } else if (type == TYPE_CHUNKED) {
+    f->open_array_section("chunk_map");
+    for (auto& p : chunk_map) {
+      f->open_object_section("chunk");
+      f->dump_unsigned("offset", p.first);
+      p.second.dump(f);
+      f->close_section();
+    }
+    f->close_section();
+  }
 }
 
 void object_manifest_t::generate_test_instances(list<object_manifest_t*>& o)
@@ -4882,7 +4937,14 @@ void object_manifest_t::generate_test_instances(list<object_manifest_t*>& o)
 
 ostream& operator<<(ostream& out, const object_manifest_t& om)
 {
-  return out << "type:" << om.type << " redirect_target:" << om.redirect_target;
+  out << "manifest(" << om.get_type_name();
+  if (om.is_redirect()) {
+    out << " " << om.redirect_target;
+  } else if (om.is_chunked()) {
+    out << " " << om.chunk_map;
+  }
+  out << ")";
+  return out;
 }
 
 // -- object_info_t --
