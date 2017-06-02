@@ -92,7 +92,10 @@ namespace rgw {
 	auto ux_key = req.get_attr(RGW_ATTR_UNIX_KEY1);
 	auto ux_attrs = req.get_attr(RGW_ATTR_UNIX1);
 	if (ux_key && ux_attrs) {
-	  rgw_fh->decode_attrs(ux_key, ux_attrs);
+	  bool old_key = rgw_fh->decode_attrs(ux_key, ux_attrs);
+	  if (old_key) {
+	    update_fhk(rgw_fh);
+	  }
 	}
 	if (! (flags & RGWFileHandle::FLAG_LOCKED)) {
 	  rgw_fh->mtx.unlock();
@@ -144,7 +147,10 @@ namespace rgw {
 	    auto ux_key = req.get_attr(RGW_ATTR_UNIX_KEY1);
 	    auto ux_attrs = req.get_attr(RGW_ATTR_UNIX1);
 	    if (ux_key && ux_attrs) {
-	      rgw_fh->decode_attrs(ux_key, ux_attrs);
+	      bool old_key = rgw_fh->decode_attrs(ux_key, ux_attrs);
+	      if (old_key) {
+		update_fhk(rgw_fh);
+	      }
 	    }
 	  }
 	  goto done;
@@ -175,7 +181,10 @@ namespace rgw {
 	    auto ux_key = req.get_attr(RGW_ATTR_UNIX_KEY1);
 	    auto ux_attrs = req.get_attr(RGW_ATTR_UNIX1);
 	    if (ux_key && ux_attrs) {
-	      rgw_fh->decode_attrs(ux_key, ux_attrs);
+	      bool old_key = rgw_fh->decode_attrs(ux_key, ux_attrs);
+	      if (old_key) {
+		update_fhk(rgw_fh);
+	      }
 	    }
 	  }
 	  goto done;
@@ -734,6 +743,41 @@ namespace rgw {
     return 0;
   } /* RGWLibFS::setattr */
 
+  /* called under rgw_fh->mtx held */
+  void RGWLibFS::update_fhk(RGWFileHandle *rgw_fh)
+  {
+    int rc, rc2;
+    string obj_name{rgw_fh->relative_object_name()};
+    buffer::list ux_key, ux_attrs;
+
+    if (rgw_fh->is_dir() &&
+	(likely(! rgw_fh->is_bucket()))) {
+      obj_name += "/";
+    }
+
+    lsubdout(get_context(), rgw, 17)
+      << __func__
+      << " update old versioned fhk : " << obj_name
+      << dendl;
+
+    RGWSetAttrsRequest req(cct, get_user(), rgw_fh->bucket_name(), obj_name);
+
+    rgw_fh->encode_attrs(ux_key, ux_attrs);
+
+    /* update ux_key only */
+    req.emplace_attr(RGW_ATTR_UNIX_KEY1, std::move(ux_key));
+
+    rc = rgwlib.get_fe()->execute_req(&req);
+    rc2 = req.get_ret();
+
+    if ((rc != 0) || (rc2 != 0)) {
+      lsubdout(get_context(), rgw, 17)
+	<< __func__
+	<< " update fhk failed : " << obj_name
+	<< dendl;
+    }
+  } /* RGWLibFS::update_fhk */
+
   void RGWLibFS::close()
   {
     state.flags |= FLAG_CLOSED;
@@ -933,16 +977,23 @@ namespace rgw {
     rgw::encode(*this, ux_attrs1);
   } /* RGWFileHandle::encode_attrs */
 
-  void RGWFileHandle::decode_attrs(const ceph::buffer::list* ux_key1,
+  bool RGWFileHandle::decode_attrs(const ceph::buffer::list* ux_key1,
 				   const ceph::buffer::list* ux_attrs1)
   {
+    bool old_key = false;
     fh_key fhk;
     auto bl_iter_key1  = const_cast<buffer::list*>(ux_key1)->begin();
     rgw::decode(fhk, bl_iter_key1);
-    assert(this->fh.fh_hk == fhk.fh_hk);
+    if (fhk.version >= 2) {
+      assert(this->fh.fh_hk == fhk.fh_hk);
+    } else {
+      old_key = true;
+    }
 
     auto bl_iter_unix1 = const_cast<buffer::list*>(ux_attrs1)->begin();
     rgw::decode(*this, bl_iter_unix1);
+
+    return old_key;
   } /* RGWFileHandle::decode_attrs */
 
   bool RGWFileHandle::reclaim() {
