@@ -322,6 +322,9 @@ INSTANTIATE_TEST_CASE_P(
   Compressor,
   CompressorTest,
   ::testing::Values(
+#ifdef HAVE_LZ4
+    "lz4",
+#endif
 #ifdef __x86_64__
     "zlib/isal",
 #endif
