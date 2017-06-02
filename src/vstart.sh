@@ -629,8 +629,8 @@ start_mgr() {
         host = $HOSTNAME
 EOF
 
-	ceph_adm config-key put mgr/$name/dashboard/server_addr $IP
-	ceph_adm config-key put mgr/$name/dashboard/server_port $MGR_PORT
+	ceph_adm config-key put mgr/dashboard/$name/server_addr $IP
+	ceph_adm config-key put mgr/dashboard/$name/server_port $MGR_PORT
 	DASH_URLS+="http://$IP:$MGR_PORT/"
 	MGR_PORT=$(($MGR_PORT + 1000))
 
@@ -639,10 +639,10 @@ EOF
 	openssl req -new -nodes -x509 \
 		-subj "/O=IT/CN=ceph-mgr-restful" \
 		-days 3650 -keyout "$PKEY" -out "$CERT" -extensions v3_ca
-	ceph_adm config-key put mgr/$name/restful/server_addr $IP
-	ceph_adm config-key put mgr/$name/restful/server_port $MGR_PORT
-	ceph_adm config-key put mgr/$name/restful/cert -i $CERT
-	ceph_adm config-key put mgr/$name/restful/pkey -i $PKEY
+	ceph_adm config-key put mgr/restful/$name/server_addr $IP
+	ceph_adm config-key put mgr/restful/$name/server_port $MGR_PORT
+	ceph_adm config-key put mgr/restful/$name/crt -i $CERT
+	ceph_adm config-key put mgr/restful/$name/key -i $PKEY
 	rm $CERT $PKEY
 
 	RESTFUL_URLS+="https://$IP:$MGR_PORT"

@@ -234,6 +234,11 @@ class Module(MgrModule):
         except:
             self.log.error(str(traceback.format_exc()))
 
+    def get_localized_config(self, key):
+        r = self.get_config(self.get_mgr_id() + '/' + key)
+        if r is None:
+            r = self.get_config(key)
+        return r
 
     def _serve(self):
         # Load stored authentication keys
@@ -245,28 +250,28 @@ class Module(MgrModule):
             separators=(',', ': '),
         )
 
-        server_addr = self.get_config('server_addr') or '127.0.0.1'
-        server_port = int(self.get_config('server_port') or '8003')
+        server_addr = self.get_localized_config('server_addr') or '127.0.0.1'
+        server_port = int(self.get_localized_config('server_port') or '8003')
         self.log.info('server_addr: %s server_port: %d',
                       server_addr, server_port)
 
-        cert = self.get_config("cert")
+        cert = self.get_localized_config("crt")
         if cert is not None:
             cert_tmp = tempfile.NamedTemporaryFile()
             cert_tmp.write(cert)
             cert_tmp.flush()
             cert_fname = cert_tmp.name
         else:
-            cert_fname = self.get_config('cert_file') or '/etc/ceph/ceph-mgr-restful.crt'
+            cert_fname = self.get_localized_config('crt_file') or '/etc/ceph/ceph-mgr-restful.crt'
 
-        pkey = self.get_config("pkey")
+        pkey = self.get_localized_config("key")
         if pkey is not None:
             pkey_tmp = tempfile.NamedTemporaryFile()
             pkey_tmp.write(pkey)
             pkey_tmp.flush()
             pkey_fname = pkey_tmp.name
         else:
-            pkey_fname = self.get_config('pkey_file') or '/etc/ceph/ceph-mgr-restful.key'
+            pkey_fname = self.get_localized_config('key_file') or '/etc/ceph/ceph-mgr-restful.key'
 
         # Create the HTTPS werkzeug server serving pecan app
         self.server = make_server(
