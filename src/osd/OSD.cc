@@ -7608,6 +7608,9 @@ void OSD::_committed_osd_maps(epoch_t first, epoch_t last, MOSDMap *m)
       if (!osdmap->is_up(whoami)) {
 	if (service.is_preparing_to_stop() || service.is_stopping()) {
 	  service.got_stop_ack();
+        } else if (osdmap->get_state(whoami) & CEPH_OSD_FORCEDOWN) {
+          dout(0) << "manually marked down by user. shutting down." << dendl;
+          do_shutdown = true;
 	} else {
 	  clog->warn() << "map e" << osdmap->get_epoch()
 		       << " wrongly marked me down at e"
@@ -7641,7 +7644,7 @@ void OSD::_committed_osd_maps(epoch_t first, epoch_t last, MOSDMap *m)
 		      << ")";
       }
 
-      if (!service.is_stopping()) {
+      if (!service.is_stopping() && !do_shutdown) {
         epoch_t up_epoch = 0;
         epoch_t bind_epoch = osdmap->get_epoch();
         service.set_epochs(NULL,&up_epoch, &bind_epoch);

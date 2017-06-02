@@ -645,7 +645,8 @@ COMMAND("osd require-osd-release "\
 COMMAND("osd cluster_snap", "take cluster snapshot (disabled)", \
 	"osd", "r", "")
 COMMAND("osd down " \
-	"type=CephString,name=ids,n=N", \
+        "name=force,type=CephChoices,strings=--force,req=false " \
+        "type=CephString,name=ids,n=N", \
 	"set osd(s) <id> [<id>...] down", "osd", "rw", "cli,rest")
 COMMAND("osd out " \
 	"name=ids,type=CephString,n=N", \

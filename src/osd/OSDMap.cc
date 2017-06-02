@@ -1613,6 +1613,8 @@ int OSDMap::apply_incremental(const Incremental &inc)
 
   for (const auto &client : inc.new_up_client) {
     osd_state[client.first] |= CEPH_OSD_EXISTS | CEPH_OSD_UP;
+    // cancel FORCEDOWN flag too, in case there is any.
+    osd_state[client.first] &= ~CEPH_OSD_FORCEDOWN;
     osd_addrs->client_addr[client.first].reset(new entity_addr_t(client.second));
     if (inc.new_hb_back_up.empty())
       osd_addrs->hb_back_addr[client.first].reset(new entity_addr_t(client.second)); //this is a backward-compatibility hack
