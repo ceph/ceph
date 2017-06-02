@@ -861,6 +861,7 @@ public:
 
   void update_mon_metadata(int from, Metadata&& m);
   int load_metadata(map<int, Metadata>& m);
+  void count_metadata(const string& field, Formatter *f);
 
   // features
   static CompatSet get_initial_supported_features();

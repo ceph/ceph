@@ -708,6 +708,9 @@ function test_mon_misc()
 
   ceph mon metadata a
   ceph mon metadata
+  ceph mon count-metadata ceph_version
+  ceph mon versions
+
   ceph node ls
 }
 
@@ -864,6 +867,8 @@ function test_mon_mds()
       ceph mds metadata $mds_id
   done
   ceph mds metadata
+  ceph mds versions
+  ceph mds count-metadata os
 
   # XXX mds fail, but how do you undo it?
   mdsmapfile=$TEMP_DIR/mdsmap.$$
@@ -1351,6 +1356,10 @@ function test_mon_osd()
   expect_false ceph osd tree up down
   expect_false ceph osd tree in out
   expect_false ceph osd tree up foo
+
+  ceph osd metadata
+  ceph osd count-metadata os
+  ceph osd versions
 
   ceph osd perf
   ceph osd blocked-by

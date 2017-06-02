@@ -253,6 +253,12 @@ COMMAND_WITH_FLAG("mon sync force " \
 COMMAND("mon metadata name=id,type=CephString,req=false",
 	"fetch metadata for mon <id>",
 	"mon", "r", "cli,rest")
+COMMAND("mon count-metadata name=property,type=CephString",
+	"count mons by metadata field property",
+	"mon", "r", "cli,rest")
+COMMAND("mon versions",
+	"check running versions of monitors",
+	"mon", "r", "cli,rest")
 
 
 /*
@@ -272,6 +278,12 @@ COMMAND_WITH_FLAG("mds getmap " \
 	"get MDS map, optionally from epoch", "mds", "r", "cli,rest", FLAG(DEPRECATED))
 COMMAND("mds metadata name=who,type=CephString,req=false",
 	"fetch metadata for mds <who>",
+	"mds", "r", "cli,rest")
+COMMAND("mds count-metadata name=property,type=CephString",
+	"count MDSs by metadata field property",
+	"mds", "r", "cli,rest")
+COMMAND("mds versions",
+	"check running versions of MDSs",
 	"mds", "r", "cli,rest")
 COMMAND_WITH_FLAG("mds tell " \
 	"name=who,type=CephString " \
@@ -441,6 +453,12 @@ COMMAND("osd find " \
 COMMAND("osd metadata " \
 	"name=id,type=CephOsdName,req=false", \
 	"fetch metadata for osd {id} (default all)", \
+	"osd", "r", "cli,rest")
+COMMAND("osd count-metadata name=property,type=CephString",
+	"count OSDs by metadata field property",
+	"osd", "r", "cli,rest")
+COMMAND("osd versions", \
+	"check running versions of OSDs",
 	"osd", "r", "cli,rest")
 COMMAND("osd map " \
 	"name=pool,type=CephPoolname " \
