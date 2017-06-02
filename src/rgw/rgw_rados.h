@@ -53,7 +53,26 @@ class RGWReshardWait;
 
 #define RGW_NO_SHARD -1
 
-#define MAX_BUCKET_INDEX_SHARDS_PRIME 7877
+#define RGW_SHARDS_PRIME_0 7877
+#define RGW_SHARDS_PRIME_1 65521
+
+static inline int rgw_shards_mod(unsigned hval, int max_shards)
+{
+  if (max_shards <= RGW_SHARDS_PRIME_0) {
+    return hval % RGW_SHARDS_PRIME_0 % max_shards;
+  }
+  return hval % RGW_SHARDS_PRIME_1 % max_shards;
+}
+
+static inline int rgw_shards_hash(const string& key, int max_shards)
+{
+  return rgw_shards_mod(ceph_str_hash_linux(key.c_str(), key.size()), max_shards);
+}
+
+static inline int rgw_shards_max()
+{
+  return RGW_SHARDS_PRIME_1;
+}
 
 static inline void prepend_bucket_marker(const rgw_bucket& bucket, const string& orig_oid, string& oid)
 {
@@ -2478,7 +2497,7 @@ public:
   int get_max_chunk_size(const string& placement_rule, const rgw_obj& obj, uint64_t *max_chunk_size);
 
   uint32_t get_max_bucket_shards() {
-    return MAX_BUCKET_INDEX_SHARDS_PRIME;
+    return rgw_shards_max();
   }
 
   int get_raw_obj_ref(const rgw_raw_obj& obj, rgw_rados_ref *ref, rgw_pool *pool = NULL);
