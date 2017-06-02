@@ -4548,7 +4548,7 @@ struct chunk_info_t {
   hobject_t oid;
   uint32_t flags;   // FLAG_*
 
-  chunk_info_t() : length(0), flags(0) { }
+  chunk_info_t() : offset(0), length(0), flags(0) { }
 
   static string get_flag_string(uint64_t flags) {
     string r;

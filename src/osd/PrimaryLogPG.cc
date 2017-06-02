@@ -6105,6 +6105,68 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 
       break;
 
+    case CEPH_OSD_OP_SET_CHUNK:
+      ++ctx->num_write;
+      {
+	if (pool.info.is_tier()) {
+	  result = -EINVAL;
+	  break;
+	}
+	if (!obs.exists) {
+	  result = -ENOENT;
+	  break;
+	}
+	if (get_osdmap()->require_osd_release < CEPH_RELEASE_LUMINOUS) {
+	  result = -EOPNOTSUPP;
+	  break;
+	}
+
+	object_locator_t tgt_oloc;
+	uint64_t src_offset, src_length, tgt_offset;
+	object_t tgt_name;
+	try {
+	  ::decode(src_offset, bp);
+	  ::decode(src_length, bp);
+	  ::decode(tgt_oloc, bp);
+	  ::decode(tgt_name, bp);
+	  ::decode(tgt_offset, bp);
+	}
+	catch (buffer::error& e) {
+	  result = -EINVAL;
+	  goto fail;
+	}
+	
+	if (!src_length) {
+	  result = -EINVAL;
+	  goto fail;
+	}
+
+        if (!oi.manifest.is_chunked()) {
+          oi.manifest.clear();
+        }
+
+        pg_t raw_pg;
+	chunk_info_t chunk_info;
+	hobject_t target(tgt_name, tgt_oloc.key, snapid_t(),
+			 raw_pg.ps(), raw_pg.pool(),
+			 tgt_oloc.nspace);
+	get_osdmap()->object_locator_to_pg(tgt_name, tgt_oloc, raw_pg);
+	chunk_info.flags = chunk_info_t::FLAG_MISSING;
+	chunk_info.oid = target;
+	chunk_info.offset = tgt_offset;
+	chunk_info.length= src_length;
+	oi.manifest.chunk_map[src_offset] = chunk_info;
+
+        oi.set_flag(object_info_t::FLAG_MANIFEST);
+        oi.manifest.type = object_manifest_t::TYPE_CHUNKED;
+        ctx->modify = true;
+
+	dout(10) << "set-chunked oid:" << oi.soid << " user_version: " << oi.user_version 
+		 << " chunk_info: " << chunk_info << dendl;
+      }
+
+      break;
+
       // -- object attrs --
       
     case CEPH_OSD_OP_SETXATTR:
