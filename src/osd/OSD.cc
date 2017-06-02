@@ -5728,6 +5728,7 @@ void OSD::_collect_metadata(map<string,string> *pm)
 
   // backend
   (*pm)["osd_objectstore"] = store->get_type();
+  (*pm)["rotational"] = store_is_rotational ? "1" : "0";
   store->collect_metadata(pm);
 
   collect_sys_info(pm, cct);
