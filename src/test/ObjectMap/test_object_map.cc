@@ -680,7 +680,7 @@ TEST_F(ObjectMapTest, CreateOneObject) {
   bufferlist bl;
   bl.append(bp);
   to_set.insert(make_pair(key, bl));
-  ASSERT_FALSE(db->set_keys(hoid, to_set));
+  ASSERT_EQ(db->set_keys(hoid, to_set), 0);
 
   map<string, bufferlist> got;
   set<string> to_get;
