@@ -45,7 +45,7 @@ class Base(object):
 
 class TestPrepare(Base):
 
-    def test_init_dir(self):
+    def test_init_filestore_dir(self):
         parser = argparse.ArgumentParser('ceph-disk')
         subparsers = parser.add_subparsers()
         main.Prepare.set_subparser(subparsers)
@@ -55,6 +55,7 @@ class TestPrepare(Base):
         args = parser.parse_args([
             'prepare',
             data,
+            '--filestore',
         ])
 
         def set_type(self):
@@ -72,7 +73,7 @@ class TestPrepare(Base):
 
     @mock.patch('stat.S_ISBLK')
     @mock.patch('ceph_disk.main.is_partition')
-    def test_init_dev(self, m_is_partition, m_s_isblk):
+    def test_init_filestore_dev(self, m_is_partition, m_s_isblk):
         m_s_isblk.return_value = True
 
         parser = argparse.ArgumentParser('ceph-disk')
@@ -85,12 +86,36 @@ class TestPrepare(Base):
         args = parser.parse_args([
             'prepare',
             data,
+            '--filestore',
         ])
         prepare = main.Prepare.factory(args)
         assert isinstance(prepare.data, main.PrepareData)
         assert prepare.data.is_device()
         assert isinstance(prepare.journal, main.PrepareJournal)
         assert prepare.journal.is_device()
+
+    def test_init_default_dir(self):
+        parser = argparse.ArgumentParser('ceph-disk')
+        subparsers = parser.add_subparsers()
+        main.Prepare.set_subparser(subparsers)
+
+        data = tempfile.mkdtemp()
+        main.setup_statedir(data)
+        args = parser.parse_args([
+            'prepare',
+            data,
+        ])
+
+        def set_type(self):
+            self.type = self.FILE
+        with mock.patch.multiple(main.PrepareData,
+                                 set_type=set_type):
+            prepare = main.Prepare.factory(args)
+        assert isinstance(prepare.data, main.PrepareBluestoreData)
+        assert prepare.data.is_file()
+        prepare.prepare()
+        assert os.path.exists(os.path.join(data, 'fsid'))
+        shutil.rmtree(data)
 
     def test_set_subparser(self):
         parser = argparse.ArgumentParser('ceph-disk')
