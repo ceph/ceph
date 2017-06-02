@@ -64,7 +64,8 @@ public:
    * creating_pgs (scan_epoch), insert them into the passed pending_creates.
    */
   virtual unsigned maybe_add_creating_pgs(epoch_t scan_epoch,
-					  creating_pgs_t *pending_creates) const {
+     const mempool::osdmap::map<int64_t,pg_pool_t>& pools,
+     creating_pgs_t *pending_creates) const {
     ceph_abort();
     return 0;
   }

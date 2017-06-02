@@ -955,6 +955,7 @@ OSDMonitor::update_pending_pgs(const OSDMap::Incremental& inc)
 	osdmap.require_osd_release < CEPH_RELEASE_LUMINOUS) {
       auto added =
 	mon->pgservice->maybe_add_creating_pgs(creating_pgs.last_scan_epoch,
+					       osdmap.get_pools(),
 					       &pending_creatings);
       dout(7) << __func__ << " " << added << " pgs added from pgmap" << dendl;
     }
