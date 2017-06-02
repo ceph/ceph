@@ -271,6 +271,7 @@ OPTION(mon_osd_cache_size, OPT_INT, 10)  // the size of osdmaps cache, not to re
 
 OPTION(mon_cpu_threads, OPT_INT, 4)
 OPTION(mon_osd_mapping_pgs_per_chunk, OPT_INT, 4096)
+OPTION(mon_osd_max_creating_pgs, OPT_INT, 1024)
 OPTION(mon_tick_interval, OPT_INT, 5)
 OPTION(mon_session_timeout, OPT_INT, 300)    // must send keepalive or subscribe
 OPTION(mon_subscribe_interval, OPT_DOUBLE, 24*3600)  // for legacy clients only
@@ -307,6 +308,7 @@ OPTION(mon_clock_drift_warn_backoff, OPT_FLOAT, 5) // exponential backoff for cl
 OPTION(mon_timecheck_interval, OPT_FLOAT, 300.0) // on leader, timecheck (clock drift check) interval (seconds)
 OPTION(mon_timecheck_skew_interval, OPT_FLOAT, 30.0) // on leader, timecheck (clock drift check) interval when in presence of a skew (seconds)
 OPTION(mon_pg_stuck_threshold, OPT_INT, 300) // number of seconds after which pgs can be considered inactive, unclean, or stale (see doc/control.rst under dump_stuck for more info)
+OPTION(mon_health_max_detail, OPT_INT, 50) // max detailed pgs to report in health detail
 OPTION(mon_pg_min_inactive, OPT_U64, 1) // the number of PGs which have to be inactive longer than 'mon_pg_stuck_threshold' before health goes into ERR. 0 means disabled, never go into ERR.
 OPTION(mon_pg_warn_min_per_osd, OPT_INT, 30)  // min # pgs per (in) osd before we warn the admin
 OPTION(mon_pg_warn_max_per_osd, OPT_INT, 300)  // max # pgs per (in) osd before we warn the admin
@@ -378,6 +380,7 @@ OPTION(mon_debug_dump_json, OPT_BOOL, false)
 OPTION(mon_debug_dump_location, OPT_STR, "/var/log/ceph/$cluster-$name.tdump")
 OPTION(mon_debug_no_require_luminous, OPT_BOOL, false)
 OPTION(mon_debug_no_require_bluestore_for_ec_overwrites, OPT_BOOL, false)
+OPTION(mon_debug_no_initial_persistent_features, OPT_BOOL, false)
 OPTION(mon_inject_transaction_delay_max, OPT_DOUBLE, 10.0)      // seconds
 OPTION(mon_inject_transaction_delay_probability, OPT_DOUBLE, 0) // range [0, 1]
 
@@ -1684,8 +1687,8 @@ OPTION(rgw_swift_versioning_enabled, OPT_BOOL, false) // whether swift object ve
 OPTION(mgr_module_path, OPT_STR, CEPH_PKGLIBDIR "/mgr") // where to load python modules from
 OPTION(mgr_modules, OPT_STR, "restful")  // Which modules to load
 OPTION(mgr_data, OPT_STR, "/var/lib/ceph/mgr/$cluster-$id") // where to find keyring etc
-OPTION(mgr_beacon_period, OPT_INT, 5)  // How frequently to send beacon
-OPTION(mgr_stats_period, OPT_INT, 5) // How frequently to send stats
+OPTION(mgr_tick_period, OPT_INT, 2)  // How frequently to tick
+OPTION(mgr_stats_period, OPT_INT, 5) // How frequently clients send stats
 OPTION(mgr_client_bytes, OPT_U64, 128*1048576) // bytes from clients
 OPTION(mgr_client_messages, OPT_U64, 512)      // messages from clients
 OPTION(mgr_osd_bytes, OPT_U64, 512*1048576)   // bytes from osds

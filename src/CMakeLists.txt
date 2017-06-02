@@ -464,6 +464,7 @@ set(libcommon_files
   msg/simple/Accepter.cc
   msg/DispatchQueue.cc
   msg/Message.cc
+  mon/PGMap.cc
   osd/ECMsgTypes.cc
   osd/HitSet.cc
   common/RefCountedObj.cc

@@ -18,6 +18,8 @@ struct MgrSession : public RefCountedObject {
   EntityName entity_name;
   entity_inst_t inst;
 
+  int osd_id = -1;  ///< osd id (if an osd)
+
   // mon caps are suitably generic for mgr
   MonCap caps;
 

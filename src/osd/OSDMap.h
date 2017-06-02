@@ -606,10 +606,14 @@ public:
   }
   void count_full_nearfull_osds(int *full, int *backfill, int *nearfull) const;
   void get_full_osd_util(
-    const ceph::unordered_map<int32_t,osd_stat_t> &osd_stat,
+    const mempool::pgmap::unordered_map<int32_t,osd_stat_t> &osd_stat,
     map<int, float> *full,
     map<int, float> *backfill,
     map<int, float> *nearfull) const;
+
+  void get_full_osd_counts(set<int> *full, set<int> *backfill,
+			   set<int> *nearfull) const;
+
 
   /***** cluster state *****/
   /* osds */

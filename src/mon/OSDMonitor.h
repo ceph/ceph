@@ -452,7 +452,8 @@ private:
   std::mutex creating_pgs_lock;
 
   creating_pgs_t update_pending_pgs(const OSDMap::Incremental& inc);
-  void trim_creating_pgs(creating_pgs_t *creating_pgs, const PGMap& pgm);
+  void trim_creating_pgs(creating_pgs_t *creating_pgs,
+			 const ceph::unordered_map<pg_t,pg_stat_t>& pgm);
   unsigned scan_for_creating_pgs(
     const mempool::osdmap::map<int64_t,pg_pool_t>& pools,
     const mempool::osdmap::set<int64_t>& removed_pools,
@@ -467,8 +468,6 @@ public:
   OSDMonitor(CephContext *cct, Monitor *mn, Paxos *p, const string& service_name);
 
   void tick() override;  // check state, take actions
-
-  int parse_osd_id(const char *s, stringstream *pss);
 
   void get_health(list<pair<health_status_t,string> >& summary,
 		  list<pair<health_status_t,string> > *detail,

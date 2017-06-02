@@ -2718,7 +2718,10 @@ void PG::publish_stats_to_osd()
     if ((info.stats.state & PG_STATE_UNDERSIZED) == 0)
       info.stats.last_fullsized = now;
 
-    publish = true;
+    // do not send pgstat to mon anymore once we are luminous, since mgr takes
+    // care of this by sending MMonMgrReport to mon.
+    publish =
+      osd->osd->get_osdmap()->require_osd_release < CEPH_RELEASE_LUMINOUS;
     pg_stats_publish_valid = true;
     pg_stats_publish = pre_publish;
 
