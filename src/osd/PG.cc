@@ -6782,6 +6782,7 @@ PG::RecoveryState::Recovered::Recovered(my_context ctx)
   if (pg->get_osdmap()->get_pg_size(pg->info.pgid.pgid) <=
       pg->actingbackfill.size()) {
     pg->state_clear(PG_STATE_DEGRADED);
+    pg->state_clear(PG_STATE_UNDERSIZED);
     pg->publish_stats_to_osd();
   }
 
