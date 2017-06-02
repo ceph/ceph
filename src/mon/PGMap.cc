@@ -25,48 +25,44 @@ MEMPOOL_DEFINE_OBJECT_FACTORY(PGMap::Incremental, pgmap_inc, pgmap);
 void PGMapDigest::encode(bufferlist& bl, uint64_t features) const
 {
   // NOTE: see PGMap::encode_digest
-  ENCODE_START(6, 1, bl);
+  ENCODE_START(1, 1, bl);
   ::encode(num_pg, bl);
   ::encode(num_pg_active, bl);
+  ::encode(num_pg_unknown, bl);
   ::encode(num_osd, bl);
-  unordered_map<int32_t,osd_stat_t> osd_stat_temp;
-  ::encode(osd_stat_temp, bl);
   ::encode(pg_pool_sum, bl, features);
-  ::encode(osd_sum, bl);
   ::encode(pg_sum, bl, features);
+  ::encode(osd_sum, bl);
   ::encode(num_pg_by_state, bl);
   ::encode(num_pg_by_osd, bl);
-  ::encode(osd_last_seq, bl);
   ::encode(num_pg_by_pool, bl);
+  ::encode(osd_last_seq, bl);
   ::encode(per_pool_sum_delta, bl, features);
   ::encode(per_pool_sum_deltas_stamps, bl);
   ::encode(pg_sum_delta, bl, features);
   ::encode(stamp_delta, bl);
-  ::encode(num_pg_unknown, bl);
   ::encode(avail_space_by_rule, bl);
   ENCODE_FINISH(bl);
 }
 
 void PGMapDigest::decode(bufferlist::iterator& p)
 {
-  DECODE_START(6, p);
+  DECODE_START(1, p);
   ::decode(num_pg, p);
   ::decode(num_pg_active, p);
+  ::decode(num_pg_unknown, p);
   ::decode(num_osd, p);
-  unordered_map<int32_t,osd_stat_t> osd_stat_temp;
-  ::decode(osd_stat_temp, p);
   ::decode(pg_pool_sum, p);
-  ::decode(osd_sum, p);
   ::decode(pg_sum, p);
+  ::decode(osd_sum, p);
   ::decode(num_pg_by_state, p);
   ::decode(num_pg_by_osd, p);
-  ::decode(osd_last_seq, p);
   ::decode(num_pg_by_pool, p);
+  ::decode(osd_last_seq, p);
   ::decode(per_pool_sum_delta, p);
   ::decode(per_pool_sum_deltas_stamps, p);
   ::decode(pg_sum_delta, p);
   ::decode(stamp_delta, p);
-  ::decode(num_pg_unknown, p);
   ::decode(avail_space_by_rule, p);
   DECODE_FINISH(p);
 }
