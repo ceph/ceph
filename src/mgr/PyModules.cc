@@ -338,9 +338,8 @@ int PyModules::init()
   Mutex::Locker locker(lock);
 
   global_handle = this;
-  // namespace in config-key prefixed by "mgr/<id>/"
-  config_prefix = std::string(g_conf->name.get_type_str()) + "/" +
-	          g_conf->name.get_id() + "/";
+  // namespace in config-key prefixed by "mgr/"
+  config_prefix = std::string(g_conf->name.get_type_str()) + "/";
 
   // Set up global python interpreter
   Py_SetProgramName(const_cast<char*>(PYTHON_EXECUTABLE));
