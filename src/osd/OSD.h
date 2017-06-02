@@ -1312,6 +1312,8 @@ protected:
   int whoami;
   std::string dev_path, journal_path;
 
+  bool store_is_rotational = true;
+
   ZTracer::Endpoint trace_endpoint;
   void create_logger();
   void create_recoverystate_perf();
@@ -2456,6 +2458,9 @@ private:
   void handle_osd_ping(class MOSDPing *m);
 
   int init_op_flags(OpRequestRef& op);
+
+  int get_num_op_shards();
+  int get_num_op_threads();
 
 public:
   static int peek_meta(ObjectStore *store, string& magic,

@@ -1706,7 +1706,7 @@ int OSD::mkfs(CephContext *cct, ObjectStore *store, const string &dev,
     goto free_store;
   }
 
-  store->set_cache_shards(cct->_conf->osd_op_num_shards);
+  store->set_cache_shards(1);  // doesn't matter for mkfs!
 
   ret = store->mount();
   if (ret) {
@@ -1874,6 +1874,7 @@ OSD::OSD(CephContext *cct_, ObjectStore *store_,
   clog(log_client.create_channel()),
   whoami(id),
   dev_path(dev), journal_path(jdev),
+  store_is_rotational(store->is_rotational()),
   trace_endpoint("0.0.0.0", 0, "osd"),
   asok_hook(NULL),
   osd_compat(get_osd_compat_set()),
@@ -1881,7 +1882,7 @@ OSD::OSD(CephContext *cct_, ObjectStore *store_,
 	     cct->_conf->osd_peering_wq_threads,
 	     "osd_peering_tp_threads"),
   osd_op_tp(cct, "OSD::osd_op_tp", "tp_osd_tp",
-    cct->_conf->osd_op_num_threads_per_shard * cct->_conf->osd_op_num_shards),
+	    get_num_op_threads()),
   disk_tp(cct, "OSD::disk_tp", "tp_osd_disk", cct->_conf->osd_disk_threads, "osd_disk_threads"),
   command_tp(cct, "OSD::command_tp", "tp_osd_cmd",  1),
   session_waiting_lock("OSD::session_waiting_lock"),
@@ -1901,7 +1902,7 @@ OSD::OSD(CephContext *cct_, ObjectStore *store_,
   op_queue(get_io_queue()),
   op_prio_cutoff(get_io_prio_cut()),
   op_shardedwq(
-    cct->_conf->osd_op_num_shards,
+    get_num_op_shards(),
     this,
     cct->_conf->osd_op_thread_timeout,
     cct->_conf->osd_op_thread_suicide_timeout,
@@ -2278,6 +2279,26 @@ int OSD::enable_disable_fuse(bool stop)
   return 0;
 }
 
+int OSD::get_num_op_shards()
+{
+  if (cct->_conf->osd_op_num_shards)
+    return cct->_conf->osd_op_num_shards;
+  if (store_is_rotational)
+    return cct->_conf->osd_op_num_shards_hdd;
+  else
+    return cct->_conf->osd_op_num_shards_ssd;
+}
+
+int OSD::get_num_op_threads()
+{
+  if (cct->_conf->osd_op_num_threads_per_shard)
+    return get_num_op_shards() * cct->_conf->osd_op_num_threads_per_shard;
+  if (store_is_rotational)
+    return get_num_op_shards() * cct->_conf->osd_op_num_threads_per_shard_hdd;
+  else
+    return get_num_op_shards() * cct->_conf->osd_op_num_threads_per_shard_ssd;
+}
+
 int OSD::init()
 {
   CompatSet initial, diff;
@@ -2291,11 +2312,12 @@ int OSD::init()
   service.recovery_sleep_timer.init();
 
   // mount.
-  dout(2) << "mounting " << dev_path << " "
-	  << (journal_path.empty() ? "(no journal)" : journal_path) << dendl;
+  dout(2) << "init " << dev_path
+	  << " (looks like " << (store_is_rotational ? "hdd" : "ssd") << ")"
+	  << dendl;
   assert(store);  // call pre_init() first!
 
-  store->set_cache_shards(cct->_conf->osd_op_num_shards);
+  store->set_cache_shards(get_num_op_shards());
 
   int r = store->mount();
   if (r < 0) {

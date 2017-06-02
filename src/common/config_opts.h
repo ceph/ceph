@@ -757,8 +757,12 @@ OPTION(osd_disk_threads, OPT_INT, 1)
 OPTION(osd_disk_thread_ioprio_class, OPT_STR, "") // rt realtime be best effort idle
 OPTION(osd_disk_thread_ioprio_priority, OPT_INT, -1) // 0-7
 OPTION(osd_recover_clone_overlap, OPT_BOOL, true)   // preserve clone_overlap during recovery/migration
-OPTION(osd_op_num_threads_per_shard, OPT_INT, 2)
-OPTION(osd_op_num_shards, OPT_INT, 5)
+OPTION(osd_op_num_threads_per_shard, OPT_INT, 0)
+OPTION(osd_op_num_threads_per_shard_hdd, OPT_INT, 1)
+OPTION(osd_op_num_threads_per_shard_ssd, OPT_INT, 2)
+OPTION(osd_op_num_shards, OPT_INT, 0)
+OPTION(osd_op_num_shards_hdd, OPT_INT, 5)
+OPTION(osd_op_num_shards_ssd, OPT_INT, 8)
 OPTION(osd_op_queue, OPT_STR, "wpq") // PrioritzedQueue (prio), Weighted Priority Queue (wpq), or debug_random
 OPTION(osd_op_queue_cut_off, OPT_STR, "low") // Min priority to go to strict queue. (low, high, debug_random)
 
