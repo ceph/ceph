@@ -380,6 +380,7 @@ OPTION(mon_debug_dump_json, OPT_BOOL, false)
 OPTION(mon_debug_dump_location, OPT_STR, "/var/log/ceph/$cluster-$name.tdump")
 OPTION(mon_debug_no_require_luminous, OPT_BOOL, false)
 OPTION(mon_debug_no_require_bluestore_for_ec_overwrites, OPT_BOOL, false)
+OPTION(mon_debug_no_initial_persistent_features, OPT_BOOL, false)
 OPTION(mon_inject_transaction_delay_max, OPT_DOUBLE, 10.0)      // seconds
 OPTION(mon_inject_transaction_delay_probability, OPT_DOUBLE, 0) // range [0, 1]
 

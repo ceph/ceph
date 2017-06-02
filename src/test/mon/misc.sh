@@ -192,6 +192,8 @@ function TEST_mon_features() {
     CEPH_ARGS="--fsid=$fsid --auth-supported=none "
     CEPH_ARGS+="--mon-initial-members=a,b,c "
     CEPH_ARGS+="--mon-host=$MONA,$MONB,$MONC "
+    CEPH_ARGS+="--mon-debug-no-initial-persistent-features "
+    CEPH_ARGS+="--mon-debug-no-require-luminous "
 
     run_mon $dir a --public-addr $MONA || return 1
     run_mon $dir b --public-addr $MONB || return 1
