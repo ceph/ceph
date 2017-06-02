@@ -223,6 +223,7 @@ void LogChannel::do_log(clog_type prio, const std::string& s)
   e.stamp = ceph_clock_now();
   // seq and who should be set for syslog/graylog/log_to_mon
   e.who = parent->get_myinst();
+  e.name = parent->get_myname();
   e.seq = parent->get_next_seq();
   e.prio = prio;
   e.msg = s;
@@ -340,6 +341,11 @@ uint64_t LogClient::get_next_seq()
 const entity_inst_t& LogClient::get_myinst()
 {
   return messenger->get_myinst();
+}
+
+const EntityName& LogClient::get_myname()
+{
+  return cct->_conf->name;
 }
 
 bool LogClient::handle_log_ack(MLogAck *m)
