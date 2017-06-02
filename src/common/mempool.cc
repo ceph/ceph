@@ -113,12 +113,14 @@ void mempool::pool_t::dump(ceph::Formatter *f, stats_t *ptotal) const
   if (ptotal) {
     *ptotal += total;
   }
-  f->dump_object("total", total);
+  total.dump(f);
   if (!by_type.empty()) {
+    f->open_object_section("by_type");
     for (auto &i : by_type) {
       f->open_object_section(i.first.c_str());
       i.second.dump(f);
       f->close_section();
     }
+    f->close_section();
   }
 }
