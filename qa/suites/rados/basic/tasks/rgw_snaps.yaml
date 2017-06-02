@@ -9,7 +9,6 @@ overrides:
 tasks:
 - rgw:
     client.0:
-      default_idle_timeout: 3600
 - thrash_pool_snaps:
     pools:
     - .rgw.buckets
