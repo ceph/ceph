@@ -3412,6 +3412,11 @@ public:
   mempool::osd::list<pg_log_entry_t> log;  // the actual log.
   
   pg_log_t() = default;
+  pg_log_t(const pg_log_t& other) = default;
+  pg_log_t& operator=(const pg_log_t& other) = default;
+  pg_log_t(pg_log_t&& other) = default;
+  pg_log_t& operator=(pg_log_t&& other) = default;
+
   pg_log_t(const eversion_t &last_update,
 	   const eversion_t &log_tail,
 	   const eversion_t &can_rollback_to,
