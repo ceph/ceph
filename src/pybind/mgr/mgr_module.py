@@ -182,6 +182,15 @@ class MgrModule(object):
         """
         return ceph_state.get_config(self._handle, key)
 
+    def get_config_prefix(self, key_prefix):
+        """
+        Retrieve a dict of config values with the given prefix
+
+        :param key_prefix: str
+        :return: str
+        """
+        return ceph_state.get_config_prefix(self._handle, key_prefix)
+
     def set_config(self, key, val):
         """
         Set the value of a persistent configuration setting
