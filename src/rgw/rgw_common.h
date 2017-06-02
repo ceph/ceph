@@ -357,6 +357,10 @@ class RGWHTTPArgs
   }
 };
 
+const char *rgw_conf_get(const map<string, string, ltstr_nocase>& conf_map, const char *name, const char *def_val);
+int rgw_conf_get_int(const map<string, string, ltstr_nocase>& conf_map, const char *name, int def_val);
+bool rgw_conf_get_bool(const map<string, string, ltstr_nocase>& conf_map, const char *name, bool def_val);
+
 class RGWEnv;
 
 class RGWConf {
@@ -464,8 +468,11 @@ enum RGWOpType {
   /* rgw specific */
   RGW_OP_ADMIN_SET_METADATA,
   RGW_OP_GET_OBJ_LAYOUT,
-
-  RGW_OP_BULK_UPLOAD
+  RGW_OP_BULK_UPLOAD,
+  RGW_OP_METADATA_SEARCH,
+  RGW_OP_CONFIG_BUCKET_META_SEARCH,
+  RGW_OP_GET_BUCKET_META_SEARCH,
+  RGW_OP_DEL_BUCKET_META_SEARCH,
 };
 
 class RGWAccessControlPolicy;
@@ -1168,9 +1175,11 @@ struct RGWBucketInfo
   bool swift_versioning;
   string swift_ver_location;
 
+  map<string, uint32_t> mdsearch_config;
+
 
   void encode(bufferlist& bl) const {
-     ENCODE_START(17, 4, bl);
+     ENCODE_START(18, 4, bl);
      ::encode(bucket, bl);
      ::encode(owner.id, bl);
      ::encode(flags, bl);
@@ -1194,10 +1203,11 @@ struct RGWBucketInfo
        ::encode(swift_ver_location, bl);
      }
      ::encode(creation_time, bl);
+     ::encode(mdsearch_config, bl);
      ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator& bl) {
-    DECODE_START_LEGACY_COMPAT_LEN_32(17, 4, 4, bl);
+    DECODE_START_LEGACY_COMPAT_LEN_32(18, 4, 4, bl);
      ::decode(bucket, bl);
      if (struct_v >= 2) {
        string s;
@@ -1253,6 +1263,9 @@ struct RGWBucketInfo
      }
      if (struct_v >= 17) {
        ::decode(creation_time, bl);
+     }
+     if (struct_v >= 18) {
+       ::decode(mdsearch_config, bl);
      }
      DECODE_FINISH(bl);
   }

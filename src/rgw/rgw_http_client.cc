@@ -314,7 +314,7 @@ int RGWHTTPClient::get_req_retcode()
 /*
  * init request, will be used later with RGWHTTPManager
  */
-int RGWHTTPClient::init_request(const char *method, const char *url, rgw_http_req_data *_req_data)
+int RGWHTTPClient::init_request(const char *method, const char *url, rgw_http_req_data *_req_data, bool send_data_hint)
 {
   assert(!req_data);
   _req_data->get();
@@ -349,7 +349,7 @@ int RGWHTTPClient::init_request(const char *method, const char *url, rgw_http_re
   }
   curl_easy_setopt(easy_handle, CURLOPT_READFUNCTION, send_http_data);
   curl_easy_setopt(easy_handle, CURLOPT_READDATA, (void *)req_data);
-  if (is_upload_request(method)) {
+  if (send_data_hint || is_upload_request(method)) {
     curl_easy_setopt(easy_handle, CURLOPT_UPLOAD, 1L);
   }
   if (has_send_len) {
@@ -746,11 +746,11 @@ void RGWHTTPManager::manage_pending_requests()
   }
 }
 
-int RGWHTTPManager::add_request(RGWHTTPClient *client, const char *method, const char *url)
+int RGWHTTPManager::add_request(RGWHTTPClient *client, const char *method, const char *url, bool send_data_hint)
 {
   rgw_http_req_data *req_data = new rgw_http_req_data;
 
-  int ret = client->init_request(method, url, req_data);
+  int ret = client->init_request(method, url, req_data, send_data_hint);
   if (ret < 0) {
     req_data->put();
     req_data = NULL;

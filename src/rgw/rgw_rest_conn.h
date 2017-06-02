@@ -100,8 +100,12 @@ public:
   int get_resource(const string& resource,
 		   param_vec_t *extra_params,
                    map<string, string>* extra_headers,
-                   bufferlist& bl, RGWHTTPManager *mgr = NULL);
+                   bufferlist& bl,
+                   bufferlist *send_data = nullptr,
+                   RGWHTTPManager *mgr = nullptr);
 
+  template <class T>
+  int get_json_resource(const string& resource, param_vec_t *params, bufferlist *in_data, T& t);
   template <class T>
   int get_json_resource(const string& resource, param_vec_t *params, T& t);
   template <class T>
@@ -110,10 +114,10 @@ public:
 
 
 template<class T>
-int RGWRESTConn::get_json_resource(const string& resource, param_vec_t *params, T& t)
+int RGWRESTConn::get_json_resource(const string& resource, param_vec_t *params, bufferlist *in_data, T& t)
 {
   bufferlist bl;
-  int ret = get_resource(resource, params, NULL, bl);
+  int ret = get_resource(resource, params, nullptr, bl, in_data);
   if (ret < 0) {
     return ret;
   }
@@ -124,6 +128,12 @@ int RGWRESTConn::get_json_resource(const string& resource, param_vec_t *params, 
   }
 
   return 0;
+}
+
+template<class T>
+int RGWRESTConn::get_json_resource(const string& resource, param_vec_t *params, T& t)
+{
+  return get_json_resource(resource, params, nullptr, t);
 }
 
 template<class T>

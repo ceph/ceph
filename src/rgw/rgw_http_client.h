@@ -42,7 +42,8 @@ protected:
 
   int init_request(const char *method,
                    const char *url,
-                   rgw_http_req_data *req_data);
+                   rgw_http_req_data *req_data,
+                   bool send_data_hint = false);
 
   virtual int receive_header(void *ptr, size_t len) {
     return 0;
@@ -264,7 +265,8 @@ public:
   int set_threaded();
   void stop();
 
-  int add_request(RGWHTTPClient *client, const char *method, const char *url);
+  int add_request(RGWHTTPClient *client, const char *method, const char *url,
+                  bool send_data_hint = false);
   int remove_request(RGWHTTPClient *client);
 
   /* only for non threaded case */
