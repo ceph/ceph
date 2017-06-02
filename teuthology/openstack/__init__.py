@@ -340,7 +340,7 @@ class OpenStack(object):
         """
         Return true if the image exists in OpenStack.
         """
-        found = self.run("image list -f json --property name='" +
+        found = self.run("image list -f json --private --property name='" +
                         self.image_name(image) + "'")
         return len(json.loads(found)) > 0
 
