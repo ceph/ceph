@@ -240,9 +240,15 @@ class Module(MgrModule):
             r = self.get_config(key)
         return r
 
+    def refresh_keys(self):
+        self.keys = {}
+        rawkeys = self.get_config_prefix('keys/') or {}
+        for k, v in rawkeys.iteritems():
+            self.keys[k[5:]] = v  # strip of keys/ prefix
+
     def _serve(self):
         # Load stored authentication keys
-        self.keys = self.get_config_json("keys") or {}
+        self.refresh_keys()
 
         jsonify._instance = jsonify.GenericJSON(
             sort_keys=True,
@@ -331,8 +337,9 @@ class Module(MgrModule):
                 return 0, self.keys[command['key_name']], ""
 
             else:
-                self.keys[command['key_name']] = str(uuid4())
-                self.set_config_json('keys', self.keys)
+                key = str(uuid4())
+                self.keys[command['key_name']] = key
+                self.set_config('keys/' + command['key_name'], key)
 
             return (
                 0,
@@ -343,7 +350,7 @@ class Module(MgrModule):
         elif command['prefix'] == "restful delete-key":
             if command['key_name'] in self.keys:
                 del self.keys[command['key_name']]
-                self.set_config_json('keys', self.keys)
+                self.set_config('keys/' + command['key_name'], None)
 
             return (
                 0,
@@ -352,9 +359,10 @@ class Module(MgrModule):
             )
 
         elif command['prefix'] == "restful list-keys":
+            self.refresh_keys()
             return (
                 0,
-                json.dumps(self.get_config_json('keys'), indent=2),
+                json.dumps(self.keys, indent=2),
                 "",
             )
 
