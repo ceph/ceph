@@ -1221,7 +1221,7 @@ void Journaler::wait_for_readable(Context *onreadable)
 {
   lock_guard l(lock);
   if (stopping) {
-    onreadable->complete(-EAGAIN);
+    finisher->queue(onreadable, -EAGAIN);
     return;
   }
 
