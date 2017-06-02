@@ -377,6 +377,7 @@ public:
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
+  void decode_json(JSONObj *obj);
   static void generate_test_instances(list<ACLOwner*>& o);
   void set_id(const rgw_user& _id) { id = _id; }
   void set_name(const string& name) { display_name = name; }

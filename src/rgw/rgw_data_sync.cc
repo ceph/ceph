@@ -22,6 +22,8 @@
 
 #include "cls/lock/cls_lock_client.h"
 
+#include "auth/Crypto.h"
+
 #define dout_subsys ceph_subsys_rgw
 
 #undef dout_prefix
@@ -470,11 +472,14 @@ class RGWInitDataSyncStatusCoroutine : public RGWCoroutine {
   map<int, RGWDataChangesLogInfo> shards_info;
 public:
   RGWInitDataSyncStatusCoroutine(RGWDataSyncEnv *_sync_env, uint32_t num_shards,
+                                 uint64_t instance_id,
                                  rgw_data_sync_status *status)
     : RGWCoroutine(_sync_env->cct), sync_env(_sync_env), store(sync_env->store),
       pool(store->get_zone_params().log_pool),
       num_shards(num_shards), status(status) {
     lock_name = "sync_lock";
+
+    status->sync_info.instance_id = instance_id;
 
 #define COOKIE_LEN 16
     char buf[COOKIE_LEN + 1];
@@ -680,7 +685,9 @@ int RGWRemoteDataLog::init_sync_status(int num_shards)
   }
   RGWDataSyncEnv sync_env_local = sync_env;
   sync_env_local.http_manager = &http_manager;
-  ret = crs.run(new RGWInitDataSyncStatusCoroutine(&sync_env_local, num_shards, &sync_status));
+  uint64_t instance_id;
+  get_random_bytes((char *)&instance_id, sizeof(instance_id));
+  ret = crs.run(new RGWInitDataSyncStatusCoroutine(&sync_env_local, num_shards, instance_id, &sync_status));
   http_manager.stop();
   return ret;
 }
@@ -1432,6 +1439,8 @@ class RGWDataSyncCR : public RGWCoroutine {
   bool *reset_backoff;
 
   RGWDataSyncDebugLogger logger;
+
+  RGWDataSyncModule *data_sync_module{nullptr};
 public:
   RGWDataSyncCR(RGWDataSyncEnv *_sync_env, uint32_t _num_shards, bool *_reset_backoff) : RGWCoroutine(_sync_env->cct),
                                                       sync_env(_sync_env),
@@ -1439,6 +1448,7 @@ public:
                                                       marker_tracker(NULL),
                                                       shard_crs_lock("RGWDataSyncCR::shard_crs_lock"),
                                                       reset_backoff(_reset_backoff), logger(sync_env, "Data", "all") {
+
   }
 
   ~RGWDataSyncCR() override {
@@ -1453,6 +1463,8 @@ public:
       /* read sync status */
       yield call(new RGWReadDataSyncStatusCoroutine(sync_env, &sync_status));
 
+      data_sync_module = sync_env->sync_module->get_data_handler();
+
       if (retcode == -ENOENT) {
         sync_status.sync_info.num_shards = num_shards;
       } else if (retcode < 0 && retcode != -ENOENT) {
@@ -1463,7 +1475,9 @@ public:
       /* state: init status */
       if ((rgw_data_sync_info::SyncState)sync_status.sync_info.state == rgw_data_sync_info::StateInit) {
         ldout(sync_env->cct, 20) << __func__ << "(): init" << dendl;
-        yield call(new RGWInitDataSyncStatusCoroutine(sync_env, num_shards, &sync_status));
+        uint64_t instance_id;
+        get_random_bytes((char *)&instance_id, sizeof(instance_id));
+        yield call(new RGWInitDataSyncStatusCoroutine(sync_env, num_shards, instance_id, &sync_status));
         if (retcode < 0) {
           ldout(sync_env->cct, 0) << "ERROR: failed to init sync, retcode=" << retcode << dendl;
           return set_cr_error(retcode);
@@ -1473,7 +1487,15 @@ public:
         *reset_backoff = true;
       }
 
+      data_sync_module->init(sync_env, sync_status.sync_info.instance_id);
+
       if  ((rgw_data_sync_info::SyncState)sync_status.sync_info.state == rgw_data_sync_info::StateBuildingFullSyncMaps) {
+        /* call sync module init here */
+        yield call(data_sync_module->init_sync(sync_env));
+        if (retcode < 0) {
+          ldout(sync_env->cct, 0) << "ERROR: sync module init_sync() failed, retcode=" << retcode << dendl;
+          return set_cr_error(retcode);
+        }
         /* state: building full sync maps */
         ldout(sync_env->cct, 20) << __func__ << "(): building full sync maps" << dendl;
         yield call(new RGWListBucketIndexesCR(sync_env, &sync_status));
@@ -1550,7 +1572,7 @@ public:
   }
 };
 
-int RGWDefaultSyncModule::create_instance(CephContext *cct, map<string, string>& config, RGWSyncModuleInstanceRef *instance)
+int RGWDefaultSyncModule::create_instance(CephContext *cct, map<string, string, ltstr_nocase>& config, RGWSyncModuleInstanceRef *instance)
 {
   instance->reset(new RGWDefaultSyncModuleInstance());
   return 0;

@@ -97,6 +97,9 @@ public:
 };
 
 
+
+void rgw_bucket_object_pre_exec(struct req_state *s);
+
 /**
  * Provide the base class for all ops.
  */
@@ -2011,5 +2014,50 @@ public:
   }
 };
 
+
+class RGWConfigBucketMetaSearch : public RGWOp {
+protected:
+  std::map<std::string, uint32_t> mdsearch_config;
+public:
+  RGWConfigBucketMetaSearch() {}
+
+  int verify_permission();
+  void pre_exec();
+  void execute();
+
+  virtual int get_params() = 0;
+  virtual void send_response() = 0;
+  virtual const string name() { return "config_bucket_meta_search"; }
+  virtual RGWOpType get_type() { return RGW_OP_CONFIG_BUCKET_META_SEARCH; }
+  virtual uint32_t op_mask() { return RGW_OP_TYPE_WRITE; }
+};
+
+class RGWGetBucketMetaSearch : public RGWOp {
+public:
+  RGWGetBucketMetaSearch() {}
+
+  int verify_permission();
+  void pre_exec();
+  void execute() {}
+
+  virtual void send_response() = 0;
+  virtual const string name() { return "get_bucket_meta_search"; }
+  virtual RGWOpType get_type() { return RGW_OP_GET_BUCKET_META_SEARCH; }
+  virtual uint32_t op_mask() { return RGW_OP_TYPE_READ; }
+};
+
+class RGWDelBucketMetaSearch : public RGWOp {
+public:
+  RGWDelBucketMetaSearch() {}
+
+  int verify_permission();
+  void pre_exec();
+  void execute();
+
+  virtual void send_response() = 0;
+  virtual const string name() { return "delete_bucket_meta_search"; }
+  virtual RGWOpType delete_type() { return RGW_OP_DEL_BUCKET_META_SEARCH; }
+  virtual uint32_t op_mask() { return RGW_OP_TYPE_WRITE; }
+};
 
 #endif /* CEPH_RGW_OP_H */

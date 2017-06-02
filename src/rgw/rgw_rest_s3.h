@@ -418,6 +418,30 @@ public:
   void send_response();
 };
 
+class RGWConfigBucketMetaSearch_ObjStore_S3 : public RGWConfigBucketMetaSearch {
+public:
+  RGWConfigBucketMetaSearch_ObjStore_S3() {}
+  ~RGWConfigBucketMetaSearch_ObjStore_S3() {}
+
+  int get_params() override;
+  void send_response() override;
+};
+
+class RGWGetBucketMetaSearch_ObjStore_S3 : public RGWGetBucketMetaSearch {
+public:
+  RGWGetBucketMetaSearch_ObjStore_S3() {}
+  ~RGWGetBucketMetaSearch_ObjStore_S3() {}
+
+  void send_response() override;
+};
+
+class RGWDelBucketMetaSearch_ObjStore_S3 : public RGWDelBucketMetaSearch {
+public:
+  RGWDelBucketMetaSearch_ObjStore_S3() {}
+  ~RGWDelBucketMetaSearch_ObjStore_S3() {}
+
+  void send_response() override;
+};
 
 class RGW_Auth_S3 {
 private:

@@ -292,7 +292,7 @@ radosgw() {
 	pkgdesc="Rados REST gateway which implements Amazon's S3 and OpenStack's Swift APIs."
 	depends="ceph-common"
 
-	_pkg $_bindir radosgw radosgw-admin radosgw-token radosgw-object-expirer
+	_pkg $_bindir radosgw radosgw-admin radosgw-token radosgw-es radosgw-object-expirer
 	mkdir -p $subpkgdir$_localstatedir/lib/ceph/radosgw
 }
 

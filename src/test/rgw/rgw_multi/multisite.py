@@ -2,6 +2,8 @@ from abc import ABCMeta, abstractmethod
 from cStringIO import StringIO
 import json
 
+from conn import get_gateway_connection
+
 class Cluster:
     """ interface to run commands against a distinct ceph cluster """
     __metaclass__ = ABCMeta
@@ -154,6 +156,40 @@ class Zone(SystemObject, SystemObject.CreateDelete, SystemObject.GetSet, SystemO
     def realm(self):
         return self.zonegroup.realm() if self.zonegroup else None
 
+    def is_read_only(self):
+        return False
+
+    def tier_type(self):
+        raise NotImplementedError
+
+    def has_buckets(self):
+        return True
+
+    def get_conn(self, credentials):
+        return ZoneConn(self, credentials) # not implemented, but can be used
+
+class ZoneConn(object):
+    def __init__(self, zone, credentials):
+        self.zone = zone
+        self.name = zone.name
+        """ connect to the zone's first gateway """
+        if isinstance(credentials, list):
+            self.credentials = credentials[0]
+        else:
+            self.credentials = credentials
+
+        if self.zone.gateways is not None:
+            self.conn = get_gateway_connection(self.zone.gateways[0], self.credentials)
+
+    def get_connection(self):
+        return self.conn
+
+    def get_bucket(self, bucket_name, credentials):
+        raise NotImplementedError
+
+    def check_bucket_eq(self, zone, bucket_name):
+        raise NotImplementedError
+
 class ZoneGroup(SystemObject, SystemObject.CreateDelete, SystemObject.GetSet, SystemObject.Modify):
     def __init__(self, name, period = None, data = None, zonegroup_id = None, zones = None, master_zone  = None):
         self.name = name
@@ -161,6 +197,14 @@ class ZoneGroup(SystemObject, SystemObject.CreateDelete, SystemObject.GetSet, Sy
         self.zones = zones or []
         self.master_zone = master_zone
         super(ZoneGroup, self).__init__(data, zonegroup_id)
+        self.rw_zones = []
+        self.ro_zones = []
+        self.zones_by_type = {}
+        for z in self.zones:
+            if z.is_read_only():
+                self.ro_zones.append(z)
+            else:
+                self.rw_zones.append(z)
 
     def zonegroup_arg(self):
         """ command-line argument to specify this zonegroup """

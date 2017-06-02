@@ -10,6 +10,7 @@ from copy import deepcopy
 from util.rgw import rgwadmin, wait_for_radosgw
 from util.rados import create_ec_pool, create_replicated_pool
 from rgw_multi import multisite
+from rgw_multi.zone_rados import RadosZone as RadosZone
 
 from teuthology.orchestra import run
 from teuthology import misc
@@ -366,6 +367,7 @@ def create_zonegroup(cluster, gateways, period, config):
 def create_zone(ctx, cluster, gateways, creds, zonegroup, config):
     """ create a zone with the given configuration """
     zone = multisite.Zone(config['name'], zonegroup, cluster)
+    zone = RadosZone(config['name'], zonegroup, cluster)
 
     # collect Gateways for the zone's endpoints
     endpoints = config.get('endpoints')
@@ -389,6 +391,14 @@ def create_zone(ctx, cluster, gateways, creds, zonegroup, config):
     create_zone_pools(ctx, zone)
     if ctx.rgw.compression_type:
         configure_zone_compression(zone, ctx.rgw.compression_type)
+
+    zonegroup.zones_by_type.setdefault(zone.tier_type(), []).append(zone)
+
+    if zone.is_read_only():
+        zonegroup.ro_zones.append(zone)
+    else:
+        zonegroup.rw_zones.append(zone)
+
     return zone
 
 def create_zone_pools(ctx, zone):
