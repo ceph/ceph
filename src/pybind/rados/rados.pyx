@@ -98,6 +98,8 @@ cdef extern from "rados/librados.h" nogil:
     ctypedef void (*rados_callback_t)(rados_completion_t cb, void *arg)
     ctypedef void (*rados_log_callback_t)(void *arg, const char *line, const char *who,
                                           uint64_t sec, uint64_t nsec, uint64_t seq, const char *level, const char *msg)
+    ctypedef void (*rados_log_callback2_t)(void *arg, const char *line, const char *who, const char *name,
+                                          uint64_t sec, uint64_t nsec, uint64_t seq, const char *level, const char *msg)
 
 
     cdef struct rados_cluster_stat_t:
@@ -172,6 +174,7 @@ cdef extern from "rados/librados.h" nogil:
                          char **outbuf, size_t *outbuflen,
                          char **outs, size_t *outslen)
     int rados_monitor_log(rados_t cluster, const char *level, rados_log_callback_t cb, void *arg)
+    int rados_monitor_log2(rados_t cluster, const char *level, rados_log_callback2_t cb, void *arg)
 
     int rados_wait_for_latest_osdmap(rados_t cluster)
 
@@ -555,6 +558,14 @@ cdef int __monitor_callback(void *arg, const char *line, const char *who,
     cb_info[0](cb_info[1], line, who, sec, nsec, seq, level, msg)
     return 0
 
+cdef int __monitor_callback2(void *arg, const char *line, const char *who,
+                             const char *name,
+                             uint64_t sec, uint64_t nsec, uint64_t seq,
+                             const char *level, const char *msg) with gil:
+    cdef object cb_info = <object>arg
+    cb_info[0](cb_info[1], line, name, who, sec, nsec, seq, level, msg)
+    return 0
+
 
 class Version(object):
     """ Version information """
@@ -581,6 +592,7 @@ cdef class Rados(object):
                 conf_defaults=None, conffile=None, conf=None, flags=0,
                 context=None):
         self.monitor_callback = None
+        self.monitor_callback2 = None
         self.parsed_args = []
         self.conf_defaults = conf_defaults
         self.conffile = conffile
@@ -1389,6 +1401,7 @@ Rados object in state %s." % self.state)
             with nogil:
                 r = rados_monitor_log(self.cluster, <const char*>_level, NULL, NULL)
             self.monitor_callback = None
+            self.monitor_callback2 = None
             return
 
         cb = (callback, arg)
@@ -1401,6 +1414,35 @@ Rados object in state %s." % self.state)
             raise make_ex(r, 'error calling rados_monitor_log')
         # NOTE(sileht): Prevents the callback method from being garbage collected
         self.monitor_callback = cb
+        self.monitor_callback2 = None
+
+    def monitor_log2(self, level, callback, arg):
+        if level not in MONITOR_LEVELS:
+            raise LogicError("invalid monitor level " + level)
+        if callback is not None and not callable(callback):
+            raise LogicError("callback must be a callable function or None")
+
+        level = cstr(level, 'level')
+        cdef char *_level = level
+
+        if callback is None:
+            with nogil:
+                r = rados_monitor_log2(self.cluster, <const char*>_level, NULL, NULL)
+            self.monitor_callback = None
+            self.monitor_callback2 = None
+            return
+
+        cb = (callback, arg)
+        cdef PyObject* _arg = <PyObject*>cb
+        with nogil:
+            r = rados_monitor_log2(self.cluster, <const char*>_level,
+                                  <rados_log_callback2_t>&__monitor_callback2, _arg)
+
+        if r:
+            raise make_ex(r, 'error calling rados_monitor_log')
+        # NOTE(sileht): Prevents the callback method from being garbage collected
+        self.monitor_callback = None
+        self.monitor_callback2 = cb
 
 
 cdef class OmapIterator(object):
