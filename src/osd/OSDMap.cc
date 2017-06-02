@@ -3079,8 +3079,7 @@ void OSDMap::print_summary(Formatter *f, ostream& out) const
     f->dump_unsigned("num_remapped_pgs", get_num_pg_temp());
     f->close_section();
   } else {
-    out << "     osdmap e" << get_epoch() << ": "
-	<< get_num_osds() << " osds: "
+    out << get_num_osds() << " osds: "
 	<< get_num_up_osds() << " up, "
 	<< get_num_in_osds() << " in";
     if (get_num_pg_temp())
@@ -3095,7 +3094,7 @@ void OSDMap::print_summary(Formatter *f, ostream& out) const
 void OSDMap::print_oneline_summary(ostream& out) const
 {
   out << "e" << get_epoch() << ": "
-      << get_num_osds() << " osds: "
+      << get_num_osds() << " total, "
       << get_num_up_osds() << " up, "
       << get_num_in_osds() << " in";
   if (test_flag(CEPH_OSDMAP_FULL))
