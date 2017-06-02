@@ -223,6 +223,7 @@ void OSDMonitor::create_initial()
   // new cluster should require latest by default
   if (g_conf->mon_debug_no_require_luminous) {
     newmap.require_osd_release = CEPH_RELEASE_KRAKEN;
+    derr << __func__ << " mon_debug_no_require_luminous=true" << dendl;
   } else {
     newmap.require_osd_release = CEPH_RELEASE_LUMINOUS;
     newmap.full_ratio = g_conf->mon_osd_full_ratio;
