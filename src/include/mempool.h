@@ -138,10 +138,13 @@ namespace mempool {
 #define DEFINE_MEMORY_POOLS_HELPER(f) \
   f(bloom_filter)		      \
   f(bluestore_alloc)		      \
-  f(bluestore_data)		      \
+  f(bluestore_cache_data)	      \
+  f(bluestore_cache_onode)	      \
+  f(bluestore_cache_other)	      \
   f(bluestore_fsck)		      \
-  f(bluestore_meta_onode)	      \
-  f(bluestore_meta_other)	      \
+  f(bluestore_txc)		      \
+  f(bluestore_writing_deferred)	      \
+  f(bluestore_writing)		      \
   f(bluefs)			      \
   f(buffer_anon)		      \
   f(buffer_meta)		      \
