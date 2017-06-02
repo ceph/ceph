@@ -81,8 +81,8 @@ public:
 
 
 template <class AbstractorT>
-class AWSv2AuthStrategy : public rgw::auth::Strategy,
-                          public rgw::auth::LocalApplier::Factory {
+class AWSAuthStrategy : public rgw::auth::Strategy,
+                        public rgw::auth::LocalApplier::Factory {
   typedef rgw::auth::IdentityApplier::aplptr_t aplptr_t;
 
   static_assert(std::is_base_of<rgw::auth::s3::AWSEngine::VersionAbstractor,
@@ -106,8 +106,8 @@ class AWSv2AuthStrategy : public rgw::auth::Strategy,
   }
 
 public:
-  AWSv2AuthStrategy(CephContext* const cct,
-                    RGWRados* const store)
+  AWSAuthStrategy(CephContext* const cct,
+                  RGWRados* const store)
     : store(store),
       ver_abstractor(cct),
       external_engines(cct, store, &ver_abstractor),
@@ -129,7 +129,7 @@ public:
   }
 
   const char* get_name() const noexcept override {
-    return "rgw::auth::s3::AWSv2AuthStrategy";
+    return "rgw::auth::s3::AWSAuthStrategy";
   }
 };
 
