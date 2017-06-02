@@ -214,6 +214,19 @@ ceph_config_get(PyObject *self, PyObject *args)
 }
 
 static PyObject*
+ceph_config_get_prefix(PyObject *self, PyObject *args)
+{
+  char *handle = nullptr;
+  char *prefix = nullptr;
+  if (!PyArg_ParseTuple(args, "ss:ceph_config_get", &handle, &prefix)) {
+    derr << "Invalid args!" << dendl;
+    return nullptr;
+  }
+
+  return global_handle->get_config_prefix(handle, prefix);
+}
+
+static PyObject*
 ceph_config_set(PyObject *self, PyObject *args)
 {
   char *handle = nullptr;
@@ -323,6 +336,8 @@ PyMethodDef CephStateMethods[] = {
      "Get the mgr id"},
     {"get_config", ceph_config_get, METH_VARARGS,
      "Get a configuration value"},
+    {"get_config_prefix", ceph_config_get_prefix, METH_VARARGS,
+     "Get all configuration values with a given prefix"},
     {"set_config", ceph_config_set, METH_VARARGS,
      "Set a configuration value"},
     {"get_counter", get_counter, METH_VARARGS,
