@@ -198,17 +198,17 @@ class CommandsRequest(object):
 class Module(MgrModule):
     COMMANDS = [
         {
-            "cmd": "create_key name=key_name,type=CephString",
+            "cmd": "restful create-key name=key_name,type=CephString",
             "desc": "Create an API key with this name",
             "perm": "rw"
         },
         {
-            "cmd": "delete_key name=key_name,type=CephString",
+            "cmd": "restful delete-key name=key_name,type=CephString",
             "desc": "Delete an API key with this name",
             "perm": "rw"
         },
         {
-            "cmd": "list_keys",
+            "cmd": "restful list-keys",
             "desc": "List all API keys",
             "perm": "rw"
         },
@@ -326,7 +326,7 @@ class Module(MgrModule):
 
     def handle_command(self, command):
         self.log.warn("Handling command: '%s'" % str(command))
-        if command['prefix'] == "create_key":
+        if command['prefix'] == "restful create-key":
             if command['key_name'] in self.keys:
                 return 0, self.keys[command['key_name']], ""
 
@@ -340,7 +340,7 @@ class Module(MgrModule):
                 "",
             )
 
-        elif command['prefix'] == "delete_key":
+        elif command['prefix'] == "restful delete-key":
             if command['key_name'] in self.keys:
                 del self.keys[command['key_name']]
                 self.set_config_json('keys', self.keys)
@@ -351,7 +351,7 @@ class Module(MgrModule):
                 "",
             )
 
-        elif command['prefix'] == "list_keys":
+        elif command['prefix'] == "restful list-keys":
             return (
                 0,
                 json.dumps(self.get_config_json('keys'), indent=2),

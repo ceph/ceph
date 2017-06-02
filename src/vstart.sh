@@ -653,7 +653,7 @@ EOF
     done
 
     SF=`mktemp`
-    ceph_adm --debug-ms 1 tell mgr.x create_key admin -o $SF
+    ceph_adm tell mgr.x restful create-key admin -o $SF
     RESTFUL_SECRET=`cat $SF`
     rm $SF
 }
