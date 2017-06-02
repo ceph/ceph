@@ -1928,11 +1928,11 @@ function test_mon_tell()
 
   ceph_watch_start debug
   ceph tell mon.a version
-  ceph_watch_wait 'mon.0 \[DBG\] from.*cmd=\[{"prefix": "version"}\]: dispatch'
+  ceph_watch_wait 'mon.a \[DBG\] from.*cmd=\[{"prefix": "version"}\]: dispatch'
 
   ceph_watch_start debug
   ceph tell mon.b version
-  ceph_watch_wait 'mon.1 \[DBG\] from.*cmd=\[{"prefix": "version"}\]: dispatch'
+  ceph_watch_wait 'mon.b \[DBG\] from.*cmd=\[{"prefix": "version"}\]: dispatch'
 }
 
 function test_mon_crushmap_validation()
