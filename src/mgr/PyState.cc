@@ -187,6 +187,12 @@ ceph_get_server(PyObject *self, PyObject *args)
 }
 
 static PyObject*
+ceph_get_mgr_id(PyObject *self, PyObject *args)
+{
+  return PyString_FromString(g_conf->name.get_id().c_str());
+}
+
+static PyObject*
 ceph_config_get(PyObject *self, PyObject *args)
 {
   char *handle = nullptr;
@@ -313,6 +319,8 @@ PyMethodDef CephStateMethods[] = {
      "Get a service's metadata"},
     {"send_command", ceph_send_command, METH_VARARGS,
      "Send a mon command"},
+    {"get_mgr_id", ceph_get_mgr_id, METH_NOARGS,
+     "Get the mgr id"},
     {"get_config", ceph_config_get, METH_VARARGS,
      "Get a configuration value"},
     {"set_config", ceph_config_set, METH_VARARGS,
