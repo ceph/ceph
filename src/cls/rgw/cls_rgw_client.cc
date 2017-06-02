@@ -173,7 +173,7 @@ void cls_rgw_bucket_complete_op(ObjectWriteOperation& o, RGWModifyOp op, string&
                                 rgw_bucket_dir_entry_meta& dir_meta,
 				list<cls_rgw_obj_key> *remove_objs, bool log_op,
                                 uint16_t bilog_flags,
-                                rgw_zone_set& zones_trace)
+                                rgw_zone_set *zones_trace)
 {
 
   bufferlist in;
@@ -187,7 +187,9 @@ void cls_rgw_bucket_complete_op(ObjectWriteOperation& o, RGWModifyOp op, string&
   call.bilog_flags = bilog_flags;
   if (remove_objs)
     call.remove_objs = *remove_objs;
-  call.zones_trace = zones_trace;
+  if (zones_trace) {
+    call.zones_trace = *zones_trace;
+  }
   ::encode(call, in);
   o.exec(RGW_CLASS, RGW_BUCKET_COMPLETE_OP, in);
 }
