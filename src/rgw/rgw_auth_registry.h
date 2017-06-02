@@ -22,7 +22,7 @@ namespace auth {
  * responsible for handling the dynamic reconfiguration on e.g. realm update. */
 class StrategyRegistry {
   template <class ExtractorT>
-  using s3_strategy_t = rgw::auth::s3::AWSv2AuthStrategy<ExtractorT>;
+  using s3_strategy_t = rgw::auth::s3::AWSAuthStrategy<ExtractorT>;
 
   using s3_main_strategy_t = \
     s3_strategy_t<rgw::auth::s3::AWSGeneralAbstractor>;
