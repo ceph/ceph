@@ -102,8 +102,7 @@ void index_complete(OpMgr& mgr, librados::IoCtx& ioctx, string& oid, RGWModifyOp
   ver.pool = ioctx.get_id();
   ver.epoch = epoch;
   meta.accounted_size = meta.size;
-  rgw_zone_set zones_trace;
-  cls_rgw_bucket_complete_op(*op, index_op, tag, ver, key, meta, NULL, true, 0, zones_trace);
+  cls_rgw_bucket_complete_op(*op, index_op, tag, ver, key, meta, nullptr, true, 0, nullptr);
   ASSERT_EQ(0, ioctx.operate(oid, op));
 }
 

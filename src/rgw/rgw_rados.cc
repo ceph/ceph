@@ -3462,7 +3462,7 @@ int RGWIndexCompletionThread::process()
                              librados::ObjectWriteOperation o;
                              cls_rgw_guard_bucket_resharding(o, -ERR_BUSY_RESHARDING);
                              cls_rgw_bucket_complete_op(o, c->op, c->tag, c->ver, c->key, c->dir_meta, &c->remove_objs,
-                                                        c->log_op, c->bilog_op, c->zones_trace);
+                                                        c->log_op, c->bilog_op, &c->zones_trace);
 
                              return bs->index_ctx.operate(bs->bucket_obj, &o);
                              });
@@ -12530,7 +12530,8 @@ int RGWRados::cls_obj_complete_op(BucketShard& bs, const rgw_obj& obj, RGWModify
   ver.epoch = epoch;
   cls_rgw_obj_key key(ent.key.name, ent.key.instance);
   cls_rgw_guard_bucket_resharding(o, -ERR_BUSY_RESHARDING);
-
+  cls_rgw_bucket_complete_op(o, op, tag, ver, key, dir_meta, remove_objs,
+                             get_zone().log_data, bilog_flags, _zones_trace);
   complete_op_data *arg;
   index_completion_manager->create_completion(obj, op, tag, ver, key, dir_meta, remove_objs,
                                               get_zone().log_data, bilog_flags, _zones_trace, &arg);
