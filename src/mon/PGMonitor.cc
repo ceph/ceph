@@ -1209,12 +1209,17 @@ public:
     return pgmap.creating_pgs.count(pgid);
   }
   unsigned maybe_add_creating_pgs(epoch_t scan_epoch,
-			      creating_pgs_t *pending_creates) const override {
+     const mempool::osdmap::map<int64_t,pg_pool_t>& pools,
+     creating_pgs_t *pending_creates) const override
+  {
     if (pgmap.last_pg_scan < scan_epoch) {
       return 0;
     }
     unsigned added = 0;
     for (auto& pgid : pgmap.creating_pgs) {
+      if (!pools.count(pgid.pool())) {
+	continue;
+      }
       auto st = pgmap.pg_stat.find(pgid);
       assert(st != pgmap.pg_stat.end());
       auto created = make_pair(st->second.created,
