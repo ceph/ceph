@@ -1148,12 +1148,17 @@ class CephManager:
                   "-w"],
             wait=False, stdout=StringIO(), stdin=run.PIPE)
 
-    def flush_pg_stats(self, osds, wait_for_mon=3*5):
+    def flush_pg_stats(self, osds, no_wait=None, wait_for_mon=3*5):
         """
         Flush pg stats from a list of OSD ids, ensuring they are reflected
         all the way to the monitor.  Luminous and later only.
 
         :param osds: list of OSDs to flush
+        :param no_wait: list of OSDs not to wait for seq id. by default, we
+                        wait for all specified osds, but some of them could be
+                        moved out of osdmap, so we cannot get their updated
+                        stat seq from monitor anymore. in that case, you need
+                        to pass a blacklist.
         :param wait_for_mon: wait for mon to be synced with mgr. 0 to disable
                              it. (3 * mon_mgr_digest_period, by default)
         """
@@ -1161,7 +1166,11 @@ class CephManager:
                for osd in osds}
         if not wait_for_mon:
             return
+        if no_wait is None:
+            no_wait = []
         for osd, need in seq.iteritems():
+            if osd in no_wait:
+                continue
             got = 0
             while wait_for_mon > 0:
                 got = self.raw_cluster_cmd('osd', 'last-stat-seq', 'osd.%d' % osd)

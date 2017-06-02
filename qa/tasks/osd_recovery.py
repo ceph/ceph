@@ -141,7 +141,7 @@ def test_incomplete_pgs(ctx, config):
 
     # move data off of osd.0, osd.1
     manager.raw_cluster_cmd('osd', 'out', '0', '1')
-    manager.flush_pg_stats([0, 1, 2, 3])
+    manager.flush_pg_stats([0, 1, 2, 3], [0, 1])
     manager.wait_for_clean()
 
     # lots of objects in rbd (no pg log, will backfill)
@@ -160,7 +160,7 @@ def test_incomplete_pgs(ctx, config):
     manager.raw_cluster_cmd('osd', 'in', '0', '1')
     manager.raw_cluster_cmd('osd', 'out', '2', '3')
     time.sleep(10)
-    manager.flush_pg_stats([0, 1, 2, 3])
+    manager.flush_pg_stats([0, 1, 2, 3], [2, 3])
     time.sleep(10)
     manager.wait_for_active()
 
