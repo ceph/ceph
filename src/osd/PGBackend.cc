@@ -666,6 +666,7 @@ void PGBackend::be_compare_scrubmaps(
       be_select_auth_object(*k, maps, &auth_oi, shard_map, object_error);
 
     list<pg_shard_t> auth_list;
+    set<pg_shard_t> object_errors;
     if (auth == maps.end()) {
       object_error.set_version(0);
       object_error.set_auth_missing(*k, maps, shard_map, shallow_errors, deep_errors);
@@ -709,6 +710,10 @@ void PGBackend::be_compare_scrubmaps(
 	  if (found)
 	    errorstream << pgid << " shard " << j->first << ": soid " << *k
 		      << " " << ss.str() << "\n";
+	} else if (found) {
+	  // Track possible shard to use as authoritative, if needed
+	  // There are errors, without identifying the shard
+	  object_errors.insert(j->first);
 	} else {
 	  // XXX: The auth shard might get here that we don't know
 	  // that it has the "correct" data.
@@ -726,10 +731,25 @@ void PGBackend::be_compare_scrubmaps(
     }
 
     if (auth_list.empty()) {
-      errorstream << pgid.pgid << " soid " << *k
+      if (object_errors.empty()) {
+        errorstream << pgid.pgid << " soid " << *k
 		  << ": failed to pick suitable auth object\n";
-      goto out;
+        goto out;
+      }
+      // Object errors exist and we haven't found an authortative shard
+      // Prefer the primary shard otherwise take first from list.
+      pg_shard_t auth_shard;
+      if (object_errors.count(get_parent()->whoami_shard())) {
+	auth_shard = get_parent()->whoami_shard();
+      } else {
+	auth_shard = *(object_errors.begin());
+      }
+      auth_list.push_back(auth_shard);
+      object_errors.erase(auth_shard);
     }
+    // At this point auth_list is populated, so we add the object errors shards
+    // as inconsistent.
+    cur_inconsistent.insert(object_errors.begin(), object_errors.end());
     if (!cur_missing.empty()) {
       missing[*k] = cur_missing;
     }
