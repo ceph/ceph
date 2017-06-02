@@ -73,7 +73,6 @@ public:
 
   int init();
   void shutdown();
-  void usage() {}
   int main(vector<const char *> args);
   void handle_signal(int signum);
   void send_beacon();
