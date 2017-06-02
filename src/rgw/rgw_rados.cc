@@ -4538,10 +4538,10 @@ int RGWRados::init_complete()
 
   bucket_index_max_shards = (cct->_conf->rgw_override_bucket_index_max_shards ? cct->_conf->rgw_override_bucket_index_max_shards :
                              get_zone().bucket_index_max_shards);
-  if (bucket_index_max_shards > MAX_BUCKET_INDEX_SHARDS_PRIME) {
-    bucket_index_max_shards = MAX_BUCKET_INDEX_SHARDS_PRIME;
+  if (bucket_index_max_shards > get_max_bucket_shards()) {
+    bucket_index_max_shards = get_max_bucket_shards();
     ldout(cct, 1) << __func__ << " bucket index max shards is too large, reset to value: "
-      << MAX_BUCKET_INDEX_SHARDS_PRIME << dendl;
+      << get_max_bucket_shards() << dendl;
   }
   ldout(cct, 20) << __func__ << " bucket index max shards: " << bucket_index_max_shards << dendl;
 
@@ -5117,12 +5117,9 @@ next:
   return 0;
 }
 
-#define MAX_SHARDS_PRIME 7877
-
 int RGWRados::key_to_shard_id(const string& key, int max_shards)
 {
-  uint32_t val = ceph_str_hash_linux(key.c_str(), key.size()) % MAX_SHARDS_PRIME;
-  return val % max_shards;
+  return rgw_shards_hash(key, max_shards);
 }
 
 void RGWRados::shard_name(const string& prefix, unsigned max_shards, const string& key, string& name, int *shard_id)
@@ -5299,16 +5296,14 @@ string RGWRados::objexp_hint_get_shardname(int shard_num)
   return objname + buf;
 }
 
-#define MAX_OBJEXP_SHARDS_PRIME 7877
-
 int RGWRados::objexp_key_shard(const rgw_obj_index_key& key)
 {
   string obj_key = key.name + key.instance;
   int num_shards = cct->_conf->rgw_objexp_hints_num_shards;
   uint32_t sid = ceph_str_hash_linux(obj_key.c_str(), obj_key.size());
   uint32_t sid2 = sid ^ ((sid & 0xFF) << 24);
-  sid = sid2 % MAX_OBJEXP_SHARDS_PRIME % num_shards;
-  return sid % num_shards;
+  sid = rgw_shards_mod(sid2, num_shards);
+  return sid;
 }
 
 static string objexp_hint_get_keyext(const string& tenant_name,
@@ -13216,7 +13211,7 @@ int RGWRados::get_target_shard_id(const RGWBucketInfo& bucket_info, const string
       } else {
         uint32_t sid = ceph_str_hash_linux(obj_key.c_str(), obj_key.size());
         uint32_t sid2 = sid ^ ((sid & 0xFF) << 24);
-        sid = sid2 % MAX_BUCKET_INDEX_SHARDS_PRIME % bucket_info.num_shards;
+        sid = rgw_shards_mod(sid2, bucket_info.num_shards);
         if (shard_id) {
           *shard_id = (int)sid;
         }
@@ -13256,7 +13251,7 @@ int RGWRados::get_bucket_index_object(const string& bucket_oid_base, const strin
       } else {
         uint32_t sid = ceph_str_hash_linux(obj_key.c_str(), obj_key.size());
         uint32_t sid2 = sid ^ ((sid & 0xFF) << 24);
-        sid = sid2 % MAX_BUCKET_INDEX_SHARDS_PRIME % num_shards;
+        sid = rgw_shards_mod(sid2, num_shards);
         char buf[bucket_oid_base.size() + 32];
         snprintf(buf, sizeof(buf), "%s.%d", bucket_oid_base.c_str(), sid);
         (*bucket_obj) = buf;
