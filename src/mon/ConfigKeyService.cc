@@ -92,6 +92,22 @@ void ConfigKeyService::store_list(stringstream &ss)
   f.flush(ss);
 }
 
+bool ConfigKeyService::store_has_prefix(const string &prefix)
+{
+  KeyValueDB::Iterator iter =
+    mon->store->get_iterator(STORE_PREFIX);
+
+  while (iter->valid()) {
+    string key(iter->key());
+    size_t p = key.find(prefix);
+    if (p != string::npos && p == 0) {
+      return true;
+    }
+    iter->next();
+  }
+  return false;
+}
+
 void ConfigKeyService::store_dump(stringstream &ss)
 {
   KeyValueDB::Iterator iter =
@@ -250,6 +266,21 @@ out:
 string _get_dmcrypt_prefix(const uuid_d& uuid, const string k)
 {
   return "dm-crypt/osd/" + stringify(uuid) + "/" + k;
+}
+
+int ConfigKeyService::validate_osd_destroy(
+    const int32_t id,
+    const uuid_d& uuid)
+{
+  string dmcrypt_prefix = _get_dmcrypt_prefix(uuid, "");
+  string daemon_prefix =
+    "daemon-private/osd." + stringify(id) + "/";
+
+  if (!store_has_prefix(dmcrypt_prefix) &&
+      !store_has_prefix(daemon_prefix)) {
+    return -ENOENT;
+  }
+  return 0;
 }
 
 void ConfigKeyService::do_osd_destroy(int32_t id, uuid_d& uuid)
