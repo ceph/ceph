@@ -5929,6 +5929,7 @@ void MDCache::rejoin_send_acks()
 	in = dir->get_inode();
 	if (in->is_replica(p->first))
 	  break;
+	in->add_replica(p->first);
 	if (in->is_base())
 	  break;
       }
