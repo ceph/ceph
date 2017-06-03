@@ -843,6 +843,34 @@ if (NOT WITH_SYSTEM_ROCKSDB)
 
 endif(NOT WITH_SYSTEM_ROCKSDB)
 
+# make lmdb statically
+
+if (NOT WITH_SYSTEM_LMDB)
+  # we use an external project and copy the sources to bin directory to ensure
+  # that object files are built outside of the source tree.
+  include(ExternalProject)
+  ExternalProject_Add(lmdb_ext
+    SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/liblmdb/libraries/liblmdb
+    BUILD_IN_SOURCE 1
+    CONFIGURE_COMMAND "true"
+    BUILD_COMMAND $(MAKE)
+    INSTALL_COMMAND "true")
+
+  # force lmdb make to be called on each time
+  ExternalProject_Add_Step(lmdb_ext forcebuild
+    DEPENDERS build
+    COMMAND "true"
+    ALWAYS 1)
+
+  set(LMDB_INCLUDE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/liblmdb/libraries/liblmdb)
+
+  add_library(lmdb STATIC IMPORTED)
+  add_dependencies(lmdb lmdb_ext)
+  set_property(TARGET lmdb PROPERTY IMPORTED_LOCATION "${CMAKE_CURRENT_SOURCE_DIR}/liblmdb/libraries/liblmdb/liblmdb.a")
+  set(LMDB_LIBRARIES lmdb)
+
+endif(NOT WITH_SYSTEM_LMDB)
+
 include(TestBigEndian)
 test_big_endian(CEPH_BIG_ENDIAN)
 if(NOT CEPH_BIG_ENDIAN)

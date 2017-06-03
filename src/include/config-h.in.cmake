@@ -211,6 +211,9 @@
 /* Defined if you have librocksdb enabled */
 #cmakedefine HAVE_LIBROCKSDB
 
+/* Defined if you have liblmdb enabled */
+#cmakedefine HAVE_LIBLMDB
+
 /* Define to 1 if you have the <valgrind/helgrind.h> header file. */
 #cmakedefine HAVE_VALGRIND_HELGRIND_H 1
 

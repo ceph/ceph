@@ -438,6 +438,7 @@ if(WITH_REENTRANT_STRSIGNAL)
 endif(WITH_REENTRANT_STRSIGNAL)
 
 set(HAVE_LIBROCKSDB 1)
+set(HAVE_LIBLMDB 1)
 
 # -lz link into kv
 find_package(ZLIB REQUIRED)
@@ -528,6 +529,12 @@ endif()
 option(WITH_SYSTEM_ROCKSDB "require and build with system rocksdb" OFF)
 if (WITH_SYSTEM_ROCKSDB)
   find_package(rocksdb REQUIRED)
+endif()
+
+# LibLMDB
+option(WITH_SYSTEM_LMDB "require and build with system liblmdb" OFF)
+if (WITH_SYSTEM_LMDB)
+  find_package(lmdb REQUIRED)
 endif()
 
 # Boost
