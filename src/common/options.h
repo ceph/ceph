@@ -4,43 +4,66 @@
 #pragma once
 
 #include <string>
-#include "include/uuid.h"
-#include "msg/msg_types.h"
+#include <list>
+#include <boost/variant.hpp>
+
+//#include "include/uuid.h"
+//#include "msg/msg_types.h"
 
 struct Option {
   typedef enum {
     TYPE_INT,
     TYPE_STR,
-    TYPE_DOUBLE,
+    TYPE_FLOAT,
     TYPE_BOOL,
     TYPE_ADDR,
     TYPE_UUID,
   } type_t;
 
+  const char *type_to_str(type_t t) {
+    switch (t) {
+    case TYPE_INT: return "int64_t";
+    case TYPE_STR: return "std::string";
+    case TYPE_FLOAT: return "double";
+    case TYPE_BOOL: return "bool";
+    case TYPE_ADDR: return "entity_addr_t";
+    case TYPE_UUID: return "uuid_d";
+    default: return "unknown";
+    }
+  }      
+
   typedef enum {
     LEVEL_BASIC,
     LEVEL_ADVANCED,
     LEVEL_DEV,
-  };
+  } level_t;
 
-  typedef boost::variant<std::string, int64_t, double, bool,
-			 entity_addr_t, uuid_d> value_t;
+  typedef boost::variant<
+    std::string,
+    int64_t,
+    double,
+    bool//,
+    //entity_addr_t,
+    /*uuid_d*/> value_t;
+  std::string name;
+  type_t type;
+  level_t level;
+
+  std::string desc;
+  std::string long_desc;
 
   value_t value;
   value_t daemon_value;
   value_t nondaemon_value;
 
-  string name;
-  string desc;
-  string long_desc;
-
-  list<std::string> tags;
+  std::list<std::string> tags;
+  std::list<std::string> see_also;
 
   value_t min, max;
-  list<std::string> enum_allowed;
+  std::list<std::string> enum_allowed;
 
-  Option(const char* name)
-    : name(name)
+  Option(const char* name, type_t t, level_t l)
+    : name(name), type(t), level(l)
   {}
 
   template<typename T>
@@ -48,16 +71,22 @@ struct Option {
     value = v;
     return *this;
   }
+  template<typename T>
   Option& set_daemon_default(const T& v) {
     daemon_value = v;
     return *this;
   }
+  template<typename T>
   Option& set_nondaemon_default(const T& v) {
     daemon_value = v;
     return *this;
   }
   Option& add_tag(const char* t) {
     tags.push_back(t);
+    return *this;
+  }
+  Option& add_see_also(const char* t) {
+    see_also.push_back(t);
     return *this;
   }
   Option& set_description(const char* new_desc) {
@@ -69,13 +98,9 @@ struct Option {
     return *this;
   }
   template<typename T>
-  Option& set_min(const char* v) {
-    min = v;
-    return *this;
-  }
-  template<typename T>
-  Option& set_max(const char* v) {
-    min = v;
+  Option& set_min_max(const T& mi, const T& ma) {
+    min = mi;
+    max = ma;
     return *this;
   }
 };
