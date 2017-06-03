@@ -138,7 +138,7 @@ int64_t BitMapAllocator::allocate_dis(
   int64_t num = 0;
 
   num = m_bit_alloc->alloc_blocks_dis_res(nblks, alloc_unit, hint, &block_list);
-  if (num == 0) {
+  if (num < nblks) {
     return -ENOSPC;
   }
 
