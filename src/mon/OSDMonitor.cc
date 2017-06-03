@@ -3093,7 +3093,7 @@ void OSDMonitor::send_incremental(epoch_t first,
 	  << " to " << session->inst << dendl;
 
   if (first <= session->osd_epoch) {
-    dout(10) << __func__ << session->inst << " should already have epoch "
+    dout(10) << __func__ << " " << session->inst << " should already have epoch "
 	     << session->osd_epoch << dendl;
     first = session->osd_epoch + 1;
   }
