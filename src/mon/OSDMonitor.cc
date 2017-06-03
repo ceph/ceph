@@ -5102,6 +5102,30 @@ void OSDMonitor::get_pools_health(
 	detail->push_back(make_pair(HEALTH_WARN, ss.str()));
     }
 
+    if (pool.size <= g_conf->mon_pool_warn_size) {
+      stringstream ss;
+      ss << "pool '" << pool_name << "' size below mon_pool_warn_size";
+      summary.push_back(make_pair(HEALTH_WARN, ss.str()));
+      if (detail) {
+        stringstream ss;
+        ss << "pool '" << pool_name << "' size " << pool.size 
+           << " <= mon_pool_warn_size " << g_conf->mon_pool_warn_size;
+        detail->push_back(make_pair(HEALTH_WARN, ss.str()));
+      }
+    }
+
+    if (pool.min_size <= g_conf->mon_pool_warn_min_size) {
+      stringstream ss;
+      ss << "pool '" << pool_name << "' min_size below mon_pool_warn_min_size";
+      summary.push_back(make_pair(HEALTH_WARN, ss.str()));
+      if (detail) {
+        stringstream ss;
+        ss << "pool '" << pool_name << "' min_size " << pool.min_size
+           << " <= mon_pool_warn_min_size " << g_conf->mon_pool_warn_min_size;
+        detail->push_back(make_pair(HEALTH_WARN, ss.str()));
+      }
+    }
+
     float warn_threshold = (float)g_conf->mon_pool_quota_warn_threshold/100;
     float crit_threshold = (float)g_conf->mon_pool_quota_crit_threshold/100;
 
