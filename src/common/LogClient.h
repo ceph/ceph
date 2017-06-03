@@ -17,6 +17,7 @@
 
 #include "common/LogEntry.h"
 #include "common/Mutex.h"
+#include <atomic>
 
 class LogClient;
 class MLog;

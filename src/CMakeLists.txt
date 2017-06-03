@@ -605,13 +605,13 @@ set(ceph_common_objs
   $<TARGET_OBJECTS:crush_objs>)
 set(ceph_common_deps
   json_spirit erasure_code rt ${LIB_RESOLV}
-  ${Boost_THREAD_LIBRARY}
-  ${Boost_SYSTEM_LIBRARY}
-  ${Boost_REGEX_LIBRARY}
-  ${Boost_RANDOM_LIBRARY}
-  ${Boost_PROGRAM_OPTIONS_LIBRARY}
-  ${Boost_DATE_TIME_LIBRARY}
-  ${Boost_IOSTREAMS_LIBRARY}
+  Boost::thread
+  Boost::system
+  Boost::regex
+  Boost::random
+  Boost::program_options
+  Boost::date_time
+  Boost::iostreams
   ${BLKID_LIBRARIES}
   ${Backtrace_LIBRARIES}
   ${BLKIN_LIBRARIES}
@@ -687,7 +687,7 @@ if (WITH_MGR)
                  $<TARGET_OBJECTS:heap_profiler_objs>)
   target_include_directories(ceph-mgr PRIVATE "${PYTHON_INCLUDE_DIRS}")
   target_link_libraries(ceph-mgr osdc client global-static common
-      ${Boost_PYTHON_LIBRARY} ${PYTHON_LIBRARIES} ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS} ${ALLOC_LIBS})
+      Boost::python ${PYTHON_LIBRARIES} ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS} ${ALLOC_LIBS})
   install(TARGETS ceph-mgr DESTINATION bin)
 endif (WITH_MGR)
 
@@ -871,7 +871,7 @@ set(ceph_mds_srcs
 add_executable(ceph-mds ${ceph_mds_srcs}
   $<TARGET_OBJECTS:common_util_obj>)
 target_link_libraries(ceph-mds mds ${CMAKE_DL_LIBS} global-static common
-  ${Boost_THREAD_LIBRARY})
+  Boost::thread)
 install(TARGETS ceph-mds DESTINATION bin)
 
 add_subdirectory(erasure-code)
