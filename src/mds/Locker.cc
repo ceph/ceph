@@ -2270,6 +2270,7 @@ void Locker::calc_new_client_ranges(CInode *in, uint64_t size,
 	nr.range.last = MAX(ms, oldr.range.last);
 	nr.follows = oldr.follows;
       } else {
+	*max_increased = true;
 	nr.range.last = ms;
 	nr.follows = in->first - 1;
       }
