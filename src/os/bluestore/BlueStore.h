@@ -869,6 +869,10 @@ public:
 
     /// split a blob (and referring extents)
     BlobRef split_blob(BlobRef lb, uint32_t blob_offset, uint32_t pos);
+    void trim_bl() {
+      if (inline_bl.length() > 0)
+	inline_bl.rebuild();
+    }
   };
 
   /// Compressed Blob Garbage collector

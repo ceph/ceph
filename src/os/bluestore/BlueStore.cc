@@ -3153,6 +3153,7 @@ BlueStore::OnodeRef BlueStore::Collection::get_onode(
     }
   }
   o.reset(on);
+  o->extent_map.trim_bl();
   return onode_map.add(oid, o);
 }
 
