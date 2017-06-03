@@ -252,21 +252,11 @@ private:
 public:
   void encode(bufferlist& bl) const {
     ::encode(held_locks, bl);
-    ::encode(waiting_locks, bl);
     ::encode(client_held_lock_counts, bl);
-    ::encode(client_waiting_lock_counts, bl);
   }
   void decode(bufferlist::iterator& bl) {
     ::decode(held_locks, bl);
-    ::decode(waiting_locks, bl);
     ::decode(client_held_lock_counts, bl);
-    ::decode(client_waiting_lock_counts, bl);
-  }
-  void clear() {
-    held_locks.clear();
-    waiting_locks.clear();
-    client_held_lock_counts.clear();
-    client_waiting_lock_counts.clear();
   }
   bool empty() const {
     return held_locks.empty() && waiting_locks.empty() &&
