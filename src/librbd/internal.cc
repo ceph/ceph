@@ -327,22 +327,6 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
     }
   }
 
-  std::ostream &operator<<(std::ostream &os, const rbd_image_options_t &opts) {
-    image_options_ref* opts_ = static_cast<image_options_ref*>(opts);
-
-    os << "[";
-
-    for (image_options_t::const_iterator i = (*opts_)->begin();
-	 i != (*opts_)->end(); ++i) {
-      os << (i == (*opts_)->begin() ? "" : ", ") << image_option_name(i->first)
-	 << "=" << i->second;
-    }
-
-    os << "]";
-
-    return os;
-  }
-
   std::ostream &operator<<(std::ostream &os, const ImageOptions &opts) {
     os << "[";
 
