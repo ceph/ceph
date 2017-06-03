@@ -400,7 +400,7 @@ function TEST_scrub_snaps() {
 EOF
 
     jq "$jqfilter" $dir/json | python -c "$sortkeys" > $dir/csjson
-    diff -y $dir/checkcsjson $dir/csjson || return 1
+    diff ${DIFFCOLOPTS} $dir/checkcsjson $dir/csjson || return 1
 
     if which jsonschema > /dev/null;
     then

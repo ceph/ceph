@@ -29,11 +29,18 @@ else
 	echo "Missing xmlstarlet binary!"
 	exit 1
 fi
+
 if [ `uname` = FreeBSD ]; then
     SED=gsed
+    DIFFCOLOPTS=""
 else
     SED=sed
-fi 
+    termwidth=$(stty -a | head -1 | sed -e 's/.*columns \([0-9]*\).*/\1/')
+    if [ -n "$termwidth" -a "$termwidth" != "0" ]; then 
+        termwidth="-W ${termwidth}" 
+    fi
+    DIFFCOLOPTS="-y $termwidth"
+fi
 
 #! @file ceph-helpers.sh
 #  @brief Toolbox to manage Ceph cluster dedicated to testing
