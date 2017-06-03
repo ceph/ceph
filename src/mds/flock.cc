@@ -141,6 +141,7 @@ bool ceph_lock_state_t::is_deadlock(const ceph_filelock& fl,
 void ceph_lock_state_t::add_waiting(const ceph_filelock& fl)
 {
   waiting_locks.insert(pair<uint64_t, ceph_filelock>(fl.start, fl));
+  ++client_waiting_lock_counts[(client_t)fl.client];
   if (type == CEPH_LOCK_FCNTL) {
     global_waiting_locks.insert(pair<ceph_filelock,ceph_lock_state_t*>(fl, this));
   }
@@ -200,8 +201,6 @@ bool ceph_lock_state_t::add_lock(ceph_filelock& new_lock,
   if (ret) {
     ++client_held_lock_counts[(client_t)new_lock.client];
   }
-  else if (wait_on_fail && !replay)
-    ++client_waiting_lock_counts[(client_t)new_lock.client];
   return ret;
 }
 
