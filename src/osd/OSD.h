@@ -812,6 +812,13 @@ public:
   Mutex recovery_request_lock;
   SafeTimer recovery_request_timer;
 
+  // For async recovery sleep
+  bool recovery_needs_sleep = true;
+  utime_t recovery_schedule_time = utime_t();
+
+  Mutex recovery_sleep_lock;
+  SafeTimer recovery_sleep_timer;
+
   // -- tids --
   // for ops i issue
   std::atomic_uint last_tid{0};
@@ -842,6 +849,9 @@ public:
 
   Mutex snap_sleep_lock;
   SafeTimer snap_sleep_timer;
+
+  Mutex scrub_sleep_lock;
+  SafeTimer scrub_sleep_timer;
 
   AsyncReserver<spg_t> snap_reserver;
   void queue_for_snap_trim(PG *pg);
@@ -938,6 +948,10 @@ public:
       awaiting_throttle.push_back(make_pair(pg->get_osdmap()->get_epoch(), pg));
     }
     _maybe_queue_recovery();
+  }
+  void queue_recovery_after_sleep(PG *pg, epoch_t queued, uint64_t reserved_pushes) {
+    Mutex::Locker l(recovery_lock);
+    _queue_for_recovery(make_pair(queued, pg), reserved_pushes);
   }
 
 
@@ -1910,6 +1924,11 @@ protected:
 
   PG   *_lookup_lock_pg_with_map_lock_held(spg_t pgid);
   PG   *_lookup_lock_pg(spg_t pgid);
+
+public:
+  PG   *lookup_lock_pg(spg_t pgid);
+
+protected:
   PG   *_open_lock_pg(OSDMapRef createmap,
 		      spg_t pg, bool no_lockdep_check=false);
   enum res_result {

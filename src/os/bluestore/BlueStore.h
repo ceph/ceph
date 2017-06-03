@@ -244,7 +244,7 @@ public:
 	boost::intrusive::list_member_hook<>,
 	&Buffer::state_item> > state_list_t;
 
-    mempool::bluestore_meta_other::map<uint32_t, std::unique_ptr<Buffer>>
+    mempool::bluestore_cache_other::map<uint32_t, std::unique_ptr<Buffer>>
       buffer_map;
 
     // we use a bare intrusive list here instead of std::map because
@@ -261,8 +261,10 @@ public:
       cache->_audit("_add_buffer start");
       buffer_map[b->offset].reset(b);
       if (b->is_writing()) {
+	b->data.reassign_to_mempool(mempool::mempool_bluestore_writing);
         writing.push_back(*b);
       } else {
+	b->data.reassign_to_mempool(mempool::mempool_bluestore_cache_data);
 	cache->_add_buffer(b, level, near);
       }
       cache->_audit("_add_buffer end");
@@ -270,7 +272,8 @@ public:
     void _rm_buffer(Cache* cache, Buffer *b) {
       _rm_buffer(cache, buffer_map.find(b->offset));
     }
-    void _rm_buffer(Cache* cache, map<uint32_t, std::unique_ptr<Buffer>>::iterator p) {
+    void _rm_buffer(Cache* cache,
+		    map<uint32_t, std::unique_ptr<Buffer>>::iterator p) {
       assert(p != buffer_map.end());
       cache->_audit("_rm_buffer start");
       if (p->second->is_writing()) {
@@ -409,7 +412,7 @@ public:
 
     // we use a bare pointer because we don't want to affect the ref
     // count
-    mempool::bluestore_meta_other::unordered_map<uint64_t,SharedBlob*> sb_map;
+    mempool::bluestore_cache_other::unordered_map<uint64_t,SharedBlob*> sb_map;
 
     SharedBlobRef lookup(uint64_t sbid) {
       std::lock_guard<std::mutex> l(lock);
@@ -614,7 +617,7 @@ public:
 #endif
   };
   typedef boost::intrusive_ptr<Blob> BlobRef;
-  typedef mempool::bluestore_meta_other::map<int,BlobRef> blob_map_t;
+  typedef mempool::bluestore_cache_other::map<int,BlobRef> blob_map_t;
 
   /// a logical extent, pointing to (some portion of) a blob
   typedef boost::intrusive::set_base_hook<boost::intrusive::optimize_size<true> > ExtentBase; //making an alias to avoid build warnings
@@ -719,7 +722,7 @@ public:
       bool loaded = false;   ///< true if shard is loaded
       bool dirty = false;    ///< true if shard is dirty and needs reencoding
     };
-    mempool::bluestore_meta_other::vector<Shard> shards;    ///< shards
+    mempool::bluestore_cache_other::vector<Shard> shards;    ///< shards
 
     bufferlist inline_bl;    ///< cached encoded map, if unsharded; empty=>dirty
 
@@ -987,7 +990,7 @@ public:
     ghobject_t oid;
 
     /// key under PREFIX_OBJ where we are stored
-    mempool::bluestore_meta_other::string key;
+    mempool::bluestore_cache_other::string key;
 
     boost::intrusive::list_member_hook<> lru_item;
 
@@ -1003,7 +1006,7 @@ public:
     std::condition_variable flush_cond;   ///< wait here for uncommitted txns
 
     Onode(Collection *c, const ghobject_t& o,
-	  const mempool::bluestore_meta_other::string& k)
+	  const mempool::bluestore_cache_other::string& k)
       : nref(0),
 	c(c),
 	oid(o),
@@ -1278,7 +1281,7 @@ public:
     Cache *cache;
 
     /// forward lookups
-    mempool::bluestore_meta_other::unordered_map<ghobject_t,OnodeRef> onode_map;
+    mempool::bluestore_cache_other::unordered_map<ghobject_t,OnodeRef> onode_map;
 
     friend class Collection; // for split_cache()
 
@@ -1295,7 +1298,7 @@ public:
     }
     void rename(OnodeRef& o, const ghobject_t& old_oid,
 		const ghobject_t& new_oid,
-		const mempool::bluestore_meta_other::string& new_okey);
+		const mempool::bluestore_cache_other::string& new_okey);
     void clear();
     bool empty();
 
@@ -1388,6 +1391,8 @@ public:
   typedef boost::intrusive_ptr<OpSequencer> OpSequencerRef;
 
   struct TransContext : public AioContext {
+    MEMPOOL_CLASS_HELPERS();
+
     typedef enum {
       STATE_PREPARE,
       STATE_AIO_WAIT,
@@ -1793,7 +1798,7 @@ private:
   bool mounted = false;
 
   RWLock coll_lock = {"BlueStore::coll_lock"};  ///< rwlock to protect coll_map
-  mempool::bluestore_meta_other::unordered_map<coll_t, CollectionRef> coll_map;
+  mempool::bluestore_cache_other::unordered_map<coll_t, CollectionRef> coll_map;
 
   vector<Cache*> cache_shards;
 

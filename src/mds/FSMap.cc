@@ -124,16 +124,15 @@ void FSMap::print_summary(Formatter *f, ostream *out) const
       f->dump_unsigned("max", fs->mds_map.max_mds);
     }
   } else {
-    *out << "e" << get_epoch() << ":";
     if (filesystems.size() == 1) {
       auto fs = filesystems.begin()->second;
-      *out << " " << fs->mds_map.up.size() << "/" << fs->mds_map.in.size() << "/"
+      *out << fs->mds_map.up.size() << "/" << fs->mds_map.in.size() << "/"
            << fs->mds_map.max_mds << " up";
     } else {
       for (auto i : filesystems) {
         auto fs = i.second;
-        *out << " " << fs->mds_map.fs_name << "-" << fs->mds_map.up.size() << "/"
-             << fs->mds_map.in.size() << "/" << fs->mds_map.max_mds << " up";
+        *out << fs->mds_map.fs_name << "-" << fs->mds_map.up.size() << "/"
+             << fs->mds_map.in.size() << "/" << fs->mds_map.max_mds << " up ";
       }
     }
   }
@@ -237,7 +236,7 @@ void FSMap::create_filesystem(const std::string &name,
   auto fs = std::make_shared<Filesystem>();
   fs->mds_map.fs_name = name;
   fs->mds_map.max_mds = 1;
-  fs->mds_map.data_pools.insert(data_pool);
+  fs->mds_map.data_pools.push_back(data_pool);
   fs->mds_map.metadata_pool = metadata_pool;
   fs->mds_map.cas_pool = -1;
   fs->mds_map.max_file_size = g_conf->mds_max_file_size;
@@ -408,7 +407,7 @@ void FSMap::decode(bufferlist::iterator& p)
       while (n--) {
         __u32 m;
         ::decode(m, p);
-        legacy_mds_map.data_pools.insert(m);
+        legacy_mds_map.data_pools.push_back(m);
       }
       __s32 s;
       ::decode(s, p);

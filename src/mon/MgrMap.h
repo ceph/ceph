@@ -126,10 +126,12 @@ public:
       dump(f);
     } else {
       if (get_active_gid() != 0) {
-	*ss << "active: " << get_active_name();
+	*ss << get_active_name();
         if (!available) {
           // If the daemon hasn't gone active yet, indicate that.
-          *ss << "(starting)";
+          *ss << "(active, starting)";
+        } else {
+          *ss << "(active)";
         }
         *ss << " ";
       } else {

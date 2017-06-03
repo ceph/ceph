@@ -48,10 +48,10 @@ struct mdsco_db_line_prefix {
   MDSCacheObject *object;
   explicit mdsco_db_line_prefix(MDSCacheObject *o) : object(o) {}
 };
-std::ostream& operator<<(std::ostream& out, mdsco_db_line_prefix o);
+std::ostream& operator<<(std::ostream& out, const mdsco_db_line_prefix& o);
 
 // printer
-std::ostream& operator<<(std::ostream& out, MDSCacheObject &o);
+std::ostream& operator<<(std::ostream& out, const MDSCacheObject &o);
 
 class MDSCacheObject {
  public:
@@ -406,7 +406,7 @@ inline std::ostream& operator<<(std::ostream& out, MDSCacheObject &o) {
   return out;
 }
 
-inline std::ostream& operator<<(std::ostream& out, mdsco_db_line_prefix o) {
+inline std::ostream& operator<<(std::ostream& out, const mdsco_db_line_prefix& o) {
   o.object->print_db_line_prefix(out);
   return out;
 }

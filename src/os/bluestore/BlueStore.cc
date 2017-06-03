@@ -36,19 +36,24 @@
 #define dout_context cct
 #define dout_subsys ceph_subsys_bluestore
 
-// bluestore_meta_onode
+// bluestore_cache_onode
 MEMPOOL_DEFINE_OBJECT_FACTORY(BlueStore::Onode, bluestore_onode,
-			      bluestore_meta_onode);
+			      bluestore_cache_onode);
 
-// bluestore_meta_other
+// bluestore_cache_other
 MEMPOOL_DEFINE_OBJECT_FACTORY(BlueStore::Buffer, bluestore_buffer,
-			      bluestore_meta_other);
+			      bluestore_cache_other);
 MEMPOOL_DEFINE_OBJECT_FACTORY(BlueStore::Extent, bluestore_extent,
-			      bluestore_meta_other);
+			      bluestore_cache_other);
 MEMPOOL_DEFINE_OBJECT_FACTORY(BlueStore::Blob, bluestore_blob,
-			      bluestore_meta_other);
+			      bluestore_cache_other);
 MEMPOOL_DEFINE_OBJECT_FACTORY(BlueStore::SharedBlob, bluestore_shared_blob,
-			      bluestore_meta_other);
+			      bluestore_cache_other);
+
+// bluestore_txc
+MEMPOOL_DEFINE_OBJECT_FACTORY(BlueStore::TransContext, bluestore_transcontext,
+			      bluestore_txc);
+
 
 // kv store prefixes
 const string PREFIX_SUPER = "S";   // field -> value
@@ -1406,6 +1411,8 @@ void BlueStore::BufferSpace::finish_write(Cache* cache, uint64_t seq)
     } else {
       b->state = Buffer::STATE_CLEAN;
       writing.erase(i++);
+      b->maybe_rebuild();
+      b->data.reassign_to_mempool(mempool::mempool_bluestore_cache_data);
       cache->_add_buffer(b, 1, nullptr);
       ldout(cache->cct, 20) << __func__ << " added " << *b << dendl;
     }
@@ -1522,7 +1529,7 @@ void BlueStore::OnodeSpace::rename(
   OnodeRef& oldo,
   const ghobject_t& old_oid,
   const ghobject_t& new_oid,
-  const mempool::bluestore_meta_other::string& new_okey)
+  const mempool::bluestore_cache_other::string& new_okey)
 {
   std::lock_guard<std::recursive_mutex> l(cache->lock);
   ldout(cache->cct, 30) << __func__ << " " << old_oid << " -> " << new_oid
@@ -2914,6 +2921,8 @@ void BlueStore::DeferredBatch::prepare_write(
   assert(i.second);  // this should be a new insertion
   i.first->second.seq = seq;
   blp.copy(length, i.first->second.bl);
+  i.first->second.bl.reassign_to_mempool(
+    mempool::mempool_bluestore_writing_deferred);
   dout(20) << __func__ << " seq " << seq
 	   << " 0x" << std::hex << offset << "~" << length
 	   << " crc " << i.first->second.bl.crc32c(-1)
@@ -3108,7 +3117,7 @@ BlueStore::OnodeRef BlueStore::Collection::get_onode(
   if (o)
     return o;
 
-  mempool::bluestore_meta_other::string key;
+  mempool::bluestore_cache_other::string key;
   get_object_key(store->cct, oid, &key);
 
   ldout(store->cct, 20) << __func__ << " oid " << oid << " key "
@@ -3257,9 +3266,9 @@ void *BlueStore::MempoolThread::entry()
 {
   Mutex::Locker l(lock);
   while (!stop) {
-    store->mempool_bytes = mempool::bluestore_meta_other::allocated_bytes() +
-      mempool::bluestore_meta_onode::allocated_bytes();
-    store->mempool_onodes = mempool::bluestore_meta_onode::allocated_items();
+    store->mempool_bytes = mempool::bluestore_cache_other::allocated_bytes() +
+      mempool::bluestore_cache_onode::allocated_bytes();
+    store->mempool_onodes = mempool::bluestore_cache_onode::allocated_items();
     ++store->mempool_seq;
     utime_t wait;
     wait += store->cct->_conf->bluestore_cache_trim_interval;
@@ -3374,9 +3383,9 @@ const char **BlueStore::get_tracked_conf_keys() const
     "bluestore_compression_max_blob_size_hdd",
     "bluestore_max_alloc_size",
     "bluestore_prefer_deferred_size",
-    "bleustore_deferred_batch_ops",
-    "bleustore_deferred_batch_ops_hdd",
-    "bleustore_deferred_batch_ops_ssd",
+    "bluestore_deferred_batch_ops",
+    "bluestore_deferred_batch_ops_hdd",
+    "bluestore_deferred_batch_ops_ssd",
     "bluestore_throttle_bytes",
     "bluestore_throttle_deferred_bytes",
     "bluestore_throttle_cost_per_io_hdd",
@@ -6526,7 +6535,7 @@ int BlueStore::getattr(
   int r;
   {
     RWLock::RLocker l(c->lock);
-    mempool::bluestore_meta_other::string k(name);
+    mempool::bluestore_cache_other::string k(name);
 
     OnodeRef o = c->get_onode(oid, false);
     if (!o || !o->exists) {
@@ -7575,6 +7584,9 @@ void BlueStore::_txc_finish_io(TransContext *txc)
   std::lock_guard<std::mutex> l(osr->qlock);
   txc->state = TransContext::STATE_IO_DONE;
 
+  // release aio contexts (including pinned buffers).
+  txc->ioc.running_aios.clear();
+
   OpSequencer::q_list_t::iterator p = osr->q.iterator_to(*txc);
   while (p != osr->q.begin()) {
     --p;
@@ -7800,6 +7812,7 @@ void BlueStore::_txc_finish(TransContext *txc)
   OpSequencerRef osr = txc->osr;
   CollectionRef c;
   bool empty = false;
+  bool submit_deferred = false;
   OpSequencer::q_list_t releasing_txc;
   {
     std::lock_guard<std::mutex> l(osr->qlock);
@@ -7814,6 +7827,10 @@ void BlueStore::_txc_finish(TransContext *txc)
 	  deferred_aggressive) {
 	  // for _osr_drain_preceding()
           notify = true;
+	}
+	if (txc->state == TransContext::STATE_DEFERRED_QUEUED &&
+	    osr->q.size() > g_conf->bluestore_max_deferred_txc) {
+	  submit_deferred = true;
 	}
         break;
       }
@@ -7848,6 +7865,11 @@ void BlueStore::_txc_finish(TransContext *txc)
     c->trim_cache();
   }
 
+  if (submit_deferred) {
+    // we're pinning memory; flush!  we could be more fine-grained here but
+    // i'm not sure it's worth the bother.
+    deferred_try_submit();
+  }
 
   if (empty && osr->zombie) {
     dout(10) << __func__ << " reaping empty zombie osr " << osr << dendl;
@@ -10676,7 +10698,7 @@ int BlueStore::_rename(TransContext *txc,
 	   << new_oid << dendl;
   int r;
   ghobject_t old_oid = oldo->oid;
-  mempool::bluestore_meta_other::string new_okey;
+  mempool::bluestore_cache_other::string new_okey;
 
   if (newo) {
     if (newo->exists) {

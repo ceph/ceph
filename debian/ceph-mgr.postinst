@@ -24,6 +24,13 @@ set -e
 
 case "$1" in
     configure)
+	CERT="/etc/ceph/ceph-mgr-restful.crt"
+	PKEY="/etc/ceph/ceph-mgr-restful.key"
+	if [ ! -e "$CERT" -o ! -e "$PKEY" ]; then
+	    openssl req -new -nodes -x509 \
+		-subj "/O=IT/CN=ceph-mgr-restful" \
+		-days 3650 -keyout "$PKEY" -out "$CERT" -extensions v3_ca
+	fi
 	[ -x /sbin/start ] && start ceph-mgr-all || :
 
 	if ! dpkg-statoverride --list /var/lib/ceph/mgr >/dev/null

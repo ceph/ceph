@@ -2182,7 +2182,7 @@ static void sync_status(Formatter *formatter)
   tab_dump("data sync", width, data_status);
 }
 
-static void parse_tier_config_param(const string& s, map<string, string>& out)
+static void parse_tier_config_param(const string& s, map<string, string, ltstr_nocase>& out)
 {
   list<string> confs;
   get_str_list(s, ",", confs);
@@ -2514,8 +2514,8 @@ int main(int argc, const char **argv)
   string tier_type;
   bool tier_type_specified = false;
 
-  map<string, string> tier_config_add;
-  map<string, string> tier_config_rm;
+  map<string, string, ltstr_nocase> tier_config_add;
+  map<string, string, ltstr_nocase> tier_config_rm;
 
   boost::optional<string> index_pool;
   boost::optional<string> data_pool;
@@ -3935,6 +3935,7 @@ int main(int argc, const char **argv)
         zone.system_key.id = access_key;
         zone.system_key.key = secret_key;
 	zone.realm_id = realm_id;
+        zone.tier_config = tier_config_add;
 
 	ret = zone.create();
 	if (ret < 0) {

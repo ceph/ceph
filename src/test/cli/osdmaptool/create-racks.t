@@ -11,6 +11,7 @@
   tunable choose_total_tries 50
   tunable chooseleaf_descend_once 1
   tunable chooseleaf_vary_r 1
+  tunable chooseleaf_stable 1
   tunable straw_calc_version 1
   tunable allowed_bucket_algs 54
   
@@ -793,7 +794,7 @@
   full_ratio 0
   backfillfull_ratio 0
   nearfull_ratio 0
-  min_compat_client hammer
+  min_compat_client jewel
   
   pool 0 'rbd' replicated size 3 min_size 2 crush_ruleset 0 object_hash rjenkins pg_num 15296 pgp_num 15296 last_change 0 flags hashpspool stripe_width 0
   

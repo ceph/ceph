@@ -23,20 +23,13 @@
 #include "common/likely.h"
 #include "common/valgrind.h"
 #include "common/deleter.h"
-#include "include/atomic.h"
 #include "common/RWLock.h"
 #include "include/types.h"
-#include "include/inline_memory.h"
 #include "include/scope_guard.h"
+
 #if defined(HAVE_XIO)
 #include "msg/xio/XioMsg.h"
 #endif
-
-#include <errno.h>
-#include <sys/uio.h>
-#include <limits.h>
-
-#include <atomic>
 
 #define CEPH_BUFFER_ALLOC_UNIT  (MIN(CEPH_PAGE_SIZE, 4096))
 #define CEPH_BUFFER_APPEND_SIZE (CEPH_BUFFER_ALLOC_UNIT - sizeof(raw_combined))
@@ -168,17 +161,46 @@ static std::atomic_flag buffer_debug_lock = ATOMIC_FLAG_INIT;
     char *data;
     unsigned len;
     atomic_t nref;
+    int mempool = mempool::mempool_buffer_anon;
 
     mutable std::atomic_flag crc_spinlock = ATOMIC_FLAG_INIT;
     map<pair<size_t, size_t>, pair<uint32_t, uint32_t> > crc_map;
 
     explicit raw(unsigned l)
-      : data(NULL), len(l), nref(0)
-    { }
+      : data(NULL), len(l), nref(0) {
+      mempool::get_pool(mempool::pool_index_t(mempool)).adjust_count(1, len);
+    }
     raw(char *c, unsigned l)
-      : data(c), len(l), nref(0)
-    { }
-    virtual ~raw() {}
+      : data(c), len(l), nref(0) {
+      mempool::get_pool(mempool::pool_index_t(mempool)).adjust_count(1, len);
+    }
+    virtual ~raw() {
+      mempool::get_pool(mempool::pool_index_t(mempool)).adjust_count(
+	-1, -(int)len);
+    }
+
+    void _set_len(unsigned l) {
+      mempool::get_pool(mempool::pool_index_t(mempool)).adjust_count(
+	-1, -(int)len);
+      len = l;
+      mempool::get_pool(mempool::pool_index_t(mempool)).adjust_count(1, len);
+    }
+
+    void reassign_to_mempool(int pool) {
+      if (pool == mempool) {
+	return;
+      }
+      mempool::get_pool(mempool::pool_index_t(mempool)).adjust_count(
+	-1, -(int)len);
+      mempool = pool;
+      mempool::get_pool(mempool::pool_index_t(pool)).adjust_count(1, len);
+    }
+
+    void try_assign_to_mempool(int pool) {
+      if (mempool == mempool::mempool_buffer_anon) {
+	reassign_to_mempool(pool);
+      }
+    }
 
     // no copying.
     // cppcheck-suppress noExplicitConstructor
@@ -240,8 +262,6 @@ static std::atomic_flag buffer_debug_lock = ATOMIC_FLAG_INIT;
     }
   };
 
-  MEMPOOL_DEFINE_FACTORY(char, char, buffer_data);
-
   /*
    * raw_combined is always placed within a single allocation along
    * with the data buffer.  the data goes at the beginning, and
@@ -270,8 +290,14 @@ static std::atomic_flag buffer_debug_lock = ATOMIC_FLAG_INIT;
 				  alignof(buffer::raw_combined));
       size_t datalen = ROUND_UP_TO(len, alignof(buffer::raw_combined));
 
-      char *ptr = mempool::buffer_data::alloc_char.allocate_aligned(
-	rawlen + datalen, align);
+#ifdef DARWIN
+      char *ptr = (char *) valloc(rawlen + datalen);
+#else
+      char *ptr = 0;
+      int r = ::posix_memalign((void**)(void*)&ptr, align, rawlen + datalen);
+      if (r)
+	throw bad_alloc();
+#endif /* DARWIN */
       if (!ptr)
 	throw bad_alloc();
 
@@ -282,11 +308,7 @@ static std::atomic_flag buffer_debug_lock = ATOMIC_FLAG_INIT;
 
     static void operator delete(void *ptr) {
       raw_combined *raw = (raw_combined *)ptr;
-      size_t rawlen = ROUND_UP_TO(sizeof(buffer::raw_combined),
-				  alignof(buffer::raw_combined));
-      size_t datalen = ROUND_UP_TO(raw->len, alignof(buffer::raw_combined));
-      mempool::buffer_data::alloc_char.deallocate_aligned(
-	raw->data, rawlen + datalen);
+      ::free((void *)raw->data);
     }
   };
 
@@ -351,7 +373,13 @@ static std::atomic_flag buffer_debug_lock = ATOMIC_FLAG_INIT;
     raw_posix_aligned(unsigned l, unsigned _align) : raw(l) {
       align = _align;
       assert((align >= sizeof(void *)) && (align & (align - 1)) == 0);
-      data = mempool::buffer_data::alloc_char.allocate_aligned(len, align);
+#ifdef DARWIN
+      data = (char *) valloc(len);
+#else
+      int r = ::posix_memalign((void**)(void*)&data, align, len);
+      if (r)
+	throw bad_alloc();
+#endif /* DARWIN */
       if (!data)
 	throw bad_alloc();
       inc_total_alloc(len);
@@ -359,7 +387,7 @@ static std::atomic_flag buffer_debug_lock = ATOMIC_FLAG_INIT;
       bdout << "raw_posix_aligned " << this << " alloc " << (void *)data << " l=" << l << ", align=" << align << " total_alloc=" << buffer::get_total_alloc() << bendl;
     }
     ~raw_posix_aligned() override {
-      mempool::buffer_data::alloc_char.deallocate_aligned(data, len);
+      ::free(data);
       dec_total_alloc(len);
       bdout << "raw_posix_aligned " << this << " free " << (void *)data << " " << buffer::get_total_alloc() << bendl;
     }
@@ -462,7 +490,7 @@ static std::atomic_flag buffer_debug_lock = ATOMIC_FLAG_INIT;
 	return r;
       }
       // update length with actual amount read
-      len = r;
+      _set_len(r);
       return 0;
     }
 
@@ -585,7 +613,7 @@ static std::atomic_flag buffer_debug_lock = ATOMIC_FLAG_INIT;
 
     explicit raw_char(unsigned l) : raw(l) {
       if (len)
-	data = mempool::buffer_data::alloc_char.allocate(len);
+	data = new char[len];
       else
 	data = 0;
       inc_total_alloc(len);
@@ -597,10 +625,28 @@ static std::atomic_flag buffer_debug_lock = ATOMIC_FLAG_INIT;
       bdout << "raw_char " << this << " alloc " << (void *)data << " " << l << " " << buffer::get_total_alloc() << bendl;
     }
     ~raw_char() override {
-      if (data)
-	mempool::buffer_data::alloc_char.deallocate(data, len);
+      delete[] data;
       dec_total_alloc(len);
       bdout << "raw_char " << this << " free " << (void *)data << " " << buffer::get_total_alloc() << bendl;
+    }
+    raw* clone_empty() override {
+      return new raw_char(len);
+    }
+  };
+
+  class buffer::raw_claimed_char : public buffer::raw {
+  public:
+    MEMPOOL_CLASS_HELPERS();
+
+    explicit raw_claimed_char(unsigned l, char *b) : raw(b, l) {
+      inc_total_alloc(len);
+      bdout << "raw_claimed_char " << this << " alloc " << (void *)data
+	    << " " << l << " " << buffer::get_total_alloc() << bendl;
+    }
+    ~raw_claimed_char() override {
+      dec_total_alloc(len);
+      bdout << "raw_claimed_char " << this << " free " << (void *)data
+	    << " " << buffer::get_total_alloc() << bendl;
     }
     raw* clone_empty() override {
       return new raw_char(len);
@@ -715,7 +761,7 @@ static std::atomic_flag buffer_debug_lock = ATOMIC_FLAG_INIT;
     return buffer::create_aligned(len, sizeof(size_t));
   }
   buffer::raw* buffer::claim_char(unsigned len, char *buf) {
-    return new raw_char(len, buf);
+    return new raw_claimed_char(len, buf);
   }
   buffer::raw* buffer::create_malloc(unsigned len) {
     return new raw_malloc(len);
@@ -1436,6 +1482,7 @@ static std::atomic_flag buffer_debug_lock = ATOMIC_FLAG_INIT;
   {
     std::swap(_len, other._len);
     std::swap(_memcopy_count, other._memcopy_count);
+    std::swap(_mempool, other._mempool);
     _buffers.swap(other._buffers);
     append_buffer.swap(other.append_buffer);
     //last_p.swap(other.last_p);
@@ -1608,6 +1655,28 @@ static std::atomic_flag buffer_debug_lock = ATOMIC_FLAG_INIT;
     return is_aligned(CEPH_PAGE_SIZE);
   }
 
+  void buffer::list::reassign_to_mempool(int pool)
+  {
+    _mempool = pool;
+    if (append_buffer.get_raw()) {
+      append_buffer.get_raw()->reassign_to_mempool(pool);
+    }
+    for (auto& p : _buffers) {
+      p.get_raw()->reassign_to_mempool(pool);
+    }
+  }
+
+  void buffer::list::try_assign_to_mempool(int pool)
+  {
+    _mempool = pool;
+    if (append_buffer.get_raw()) {
+      append_buffer.get_raw()->try_assign_to_mempool(pool);
+    }
+    for (auto& p : _buffers) {
+      p.get_raw()->try_assign_to_mempool(pool);
+    }
+  }
+
   void buffer::list::rebuild()
   {
     if (_len == 0) {
@@ -1695,6 +1764,17 @@ static std::atomic_flag buffer_debug_lock = ATOMIC_FLAG_INIT;
    return  rebuild_aligned(CEPH_PAGE_SIZE);
   }
 
+  void buffer::list::reserve(size_t prealloc)
+  {
+    if (append_buffer.unused_tail_length() < prealloc) {
+      append_buffer = buffer::create(prealloc);
+      if (_mempool >= 0) {
+	append_buffer.get_raw()->reassign_to_mempool(_mempool);
+      }
+      append_buffer.set_length(0);   // unused, so far.
+    }
+  }
+
   // sort-of-like-assignment-op
   void buffer::list::claim(list& bl, unsigned int flags)
   {
@@ -1780,6 +1860,9 @@ static std::atomic_flag buffer_debug_lock = ATOMIC_FLAG_INIT;
       // make a new append_buffer!
       append_buffer = raw_combined::create(CEPH_BUFFER_APPEND_SIZE);
       append_buffer.set_length(0);   // unused, so far.
+      if (_mempool >= 0) {
+	append_buffer.get_raw()->reassign_to_mempool(_mempool);
+      }
     }
     append(append_buffer, append_buffer.append(c) - 1, 1);	// add segment to the list
   }
@@ -1807,6 +1890,9 @@ static std::atomic_flag buffer_debug_lock = ATOMIC_FLAG_INIT;
 	sizeof(raw_combined);
       append_buffer = raw_combined::create(alen);
       append_buffer.set_length(0);   // unused, so far.
+      if (_mempool >= 0) {
+	append_buffer.get_raw()->reassign_to_mempool(_mempool);
+      }
     }
   }
 
@@ -2560,6 +2646,8 @@ MEMPOOL_DEFINE_OBJECT_FACTORY(buffer::raw_posix_aligned,
 MEMPOOL_DEFINE_OBJECT_FACTORY(buffer::raw_pipe, buffer_raw_pipe, buffer_meta);
 #endif
 MEMPOOL_DEFINE_OBJECT_FACTORY(buffer::raw_char, buffer_raw_char, buffer_meta);
+MEMPOOL_DEFINE_OBJECT_FACTORY(buffer::raw_claimed_char, buffer_raw_claimed_char,
+			      buffer_meta);
 MEMPOOL_DEFINE_OBJECT_FACTORY(buffer::raw_unshareable, buffer_raw_unshareable,
 			      buffer_meta);
 MEMPOOL_DEFINE_OBJECT_FACTORY(buffer::raw_static, buffer_raw_static,

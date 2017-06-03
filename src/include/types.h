@@ -418,7 +418,7 @@ enum health_status_t {
 };
 
 #ifdef __cplusplus
-inline ostream& operator<<(ostream &oss, health_status_t status) {
+inline ostream& operator<<(ostream &oss, const health_status_t status) {
   switch (status) {
     case HEALTH_ERR:
       oss << "HEALTH_ERR";

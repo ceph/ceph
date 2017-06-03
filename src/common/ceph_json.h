@@ -1,9 +1,7 @@
 #ifndef CEPH_JSON_H
 #define CEPH_JSON_H
 
-#include <iosfwd>
 #include <include/types.h>
-#include <list>
 
 #ifdef _ASSERT_H
 #define NEED_ASSERT_H
@@ -18,7 +16,6 @@
 #endif
 
 #include "Formatter.h"
-
 
 using namespace json_spirit;
 
@@ -210,8 +207,8 @@ void decode_json_obj(vector<T>& l, JSONObj *obj)
   }
 }
 
-template<class K, class V>
-void decode_json_obj(map<K, V>& m, JSONObj *obj)
+template<class K, class V, class C = std::less<K> >
+void decode_json_obj(map<K, V, C>& m, JSONObj *obj)
 {
   m.clear();
 
@@ -384,11 +381,11 @@ static void encode_json(const char *name, const std::vector<T>& l, ceph::Formatt
   f->close_section();
 }
 
-template<class K, class V>
-static void encode_json(const char *name, const std::map<K, V>& m, ceph::Formatter *f)
+template<class K, class V, class C = std::less<K> >
+static void encode_json(const char *name, const std::map<K, V, C>& m, ceph::Formatter *f)
 {
   f->open_array_section(name);
-  for (typename std::map<K, V>::const_iterator i = m.begin(); i != m.end(); ++i) {
+  for (typename std::map<K, V, C>::const_iterator i = m.begin(); i != m.end(); ++i) {
     f->open_object_section("entry");
     encode_json("key", i->first, f);
     encode_json("val", i->second, f);

@@ -182,6 +182,12 @@ static RGWRESTMgr *set_logging(RGWRESTMgr *mgr)
   return mgr;
 }
 
+static RGWRESTMgr *rest_filter(RGWRados *store, int dialect, RGWRESTMgr *orig)
+{
+  RGWSyncModuleInstanceRef sync_module = store->get_sync_module();
+  return sync_module->get_rest_filter(dialect, orig);
+}
+
 RGWRealmReloader *preloader = NULL;
 
 static void reloader_handler(int signum)
@@ -377,7 +383,8 @@ int main(int argc, const char **argv)
   const bool swift_at_root = g_conf->rgw_swift_url_prefix == "/";
   if (apis_map.count("s3") > 0 || s3website_enabled) {
     if (! swift_at_root) {
-      rest.register_default_mgr(set_logging(new RGWRESTMgr_S3(s3website_enabled)));
+      rest.register_default_mgr(set_logging(rest_filter(store, RGW_REST_S3,
+                                                        new RGWRESTMgr_S3(s3website_enabled))));
     } else {
       derr << "Cannot have the S3 or S3 Website enabled together with "
            << "Swift API placed in the root of hierarchy" << dendl;
@@ -401,7 +408,8 @@ int main(int argc, const char **argv)
 
     if (! swift_at_root) {
       rest.register_resource(g_conf->rgw_swift_url_prefix,
-                          set_logging(swift_resource));
+                          set_logging(rest_filter(store, RGW_REST_SWIFT,
+                                                  swift_resource)));
     } else {
       if (store->get_zonegroup().zones.size() > 1) {
         derr << "Placing Swift API in the root of URL hierarchy while running"

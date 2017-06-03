@@ -34,6 +34,7 @@ set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wpointer-arith -Werror=format-security -fno
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -ftemplate-depth-1024 -Wno-invalid-offsetof")
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wnon-virtual-dtor")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wvla")
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-unknown-pragmas")
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wno-unknown-pragmas")
 if(CMAKE_CXX_COMPILER_ID STREQUAL GNU)
@@ -115,8 +116,8 @@ else(no_yasm)
       message(STATUS " we are not x32")
       set(HAVE_GOOD_YASM_ELF64 1)
       execute_process(COMMAND yasm -f elf64 -i
-        ${CMAKE_SOURCE_DIR}/src/erasure-code/isa/isa-l/include/
-        ${CMAKE_SOURCE_DIR}/src/erasure-code/isa/isa-l/erasure_code/gf_vect_dot_prod_avx2.asm.s
+        ${CMAKE_SOURCE_DIR}/src/isa-l/include/
+        ${CMAKE_SOURCE_DIR}/src/isa-l/erasure_code/gf_vect_dot_prod_avx2.asm
         -o /dev/null
         RESULT_VARIABLE rc
         OUTPUT_QUIET)
@@ -377,9 +378,7 @@ set(async_rdma_common_srcs)
 if(HAVE_RDMA)
   list(APPEND async_rdma_common_srcs
     msg/async/rdma/Infiniband.cc
-    msg/async/rdma/Device.cc
     msg/async/rdma/RDMAConnectedSocketImpl.cc
-    msg/async/rdma/RDMAConnTCP.cc
     msg/async/rdma/RDMAServerSocketImpl.cc
     msg/async/rdma/RDMAStack.cc)
 endif(HAVE_RDMA)
