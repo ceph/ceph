@@ -2763,11 +2763,19 @@ void Client::kick_requests(MetaSession *session)
   for (map<ceph_tid_t, MetaRequest*>::iterator p = mds_requests.begin();
        p != mds_requests.end();
        ++p) {
-    if (p->second->got_unsafe)
+    MetaRequest *req = p->second;
+    if (req->got_unsafe)
       continue;
-    if (p->second->retry_attempt > 0)
+    if (req->aborted()) {
+      if (req->caller_cond) {
+	req->kick = true;
+	req->caller_cond->Signal();
+      }
+      continue;
+    }
+    if (req->retry_attempt > 0)
       continue; // new requests only
-    if (p->second->mds == session->mds_num) {
+    if (req->mds == session->mds_num) {
       send_request(p->second, session);
     }
   }
@@ -2787,6 +2795,8 @@ void Client::resend_unsafe_requests(MetaSession *session)
        ++p) {
     MetaRequest *req = p->second;
     if (req->got_unsafe)
+      continue;
+    if (req->aborted())
       continue;
     if (req->retry_attempt == 0)
       continue; // old requests only
@@ -9511,9 +9521,12 @@ int Client::_do_filelock(Inode *in, Fh *fh, int lock_type, int op, int sleep,
     // enable interrupt
     switch_interrupt_cb(callback_handle, req->get());
     ret = make_request(req, fh->actor_perms, NULL, NULL, -1, &bl);
-
     // disable interrupt
     switch_interrupt_cb(callback_handle, NULL);
+    if (ret == 0 && req->aborted()) {
+      // effect of this lock request has been revoked by the 'lock intr' request
+      ret = req->get_abort_code();
+    }
     put_request(req);
   } else {
     ret = make_request(req, fh->actor_perms, NULL, NULL, -1, &bl);
@@ -9572,6 +9585,12 @@ int Client::_do_filelock(Inode *in, Fh *fh, int lock_type, int op, int sleep,
 
 int Client::_interrupt_filelock(MetaRequest *req)
 {
+  // Set abort code, but do not kick. The abort code prevents the request
+  // from being re-sent.
+  req->abort(-EINTR);
+  if (req->mds < 0)
+    return 0; // haven't sent the request
+
   Inode *in = req->inode();
 
   int lock_type;
