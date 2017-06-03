@@ -6913,29 +6913,62 @@ int OSDMonitor::prepare_command_osd_destroy(
     stringstream& ss)
 {
   assert(paxos->is_plugged());
+
+  // we check if the osd exists for the benefit of `osd purge`, which may
+  // have previously removed the osd. If the osd does not exist, return
+  // -ENOENT to convey this, and let the caller deal with it.
+  //
+  // we presume that all auth secrets and config keys were removed prior
+  // to this command being called. if they exist by now, we also assume
+  // they must have been created by some other command and do not pertain
+  // to this non-existent osd.
+  if (!osdmap.exists(id)) {
+    dout(10) << __func__ << " osd." << id << " does not exist." << dendl;
+    return -ENOENT;
+  }
+
   uuid_d uuid = osdmap.get_uuid(id);
   dout(10) << __func__ << " destroying osd." << id
            << " uuid " << uuid << dendl;
 
+  // if it has been destroyed, we assume our work here is done.
   if (osdmap.is_destroyed(id)) {
     ss << "destroyed osd." << id;
     return 0;
   }
 
   EntityName cephx_entity, lockbox_entity;
+  bool idempotent_auth = false, idempotent_cks = false;
 
   int err = mon->authmon()->validate_osd_destroy(id, uuid,
                                                  cephx_entity,
                                                  lockbox_entity,
                                                  ss);
   if (err < 0) {
-    return err;
+    if (err == -ENOENT) {
+      idempotent_auth = true;
+      err = 0;
+    } else {
+      return err;
+    }
   }
 
-  err = mon->authmon()->do_osd_destroy(cephx_entity, lockbox_entity);
-  assert(0 == err);
+  ConfigKeyService *svc = (ConfigKeyService*)mon->config_key_service;
+  err = svc->validate_osd_destroy(id, uuid);
+  if (err < 0) {
+    assert(err == -ENOENT);
+    err = 0;
+    idempotent_cks = true;
+  }
 
-  ((ConfigKeyService*)mon->config_key_service)->do_osd_destroy(id, uuid);
+  if (!idempotent_auth) {
+    err = mon->authmon()->do_osd_destroy(cephx_entity, lockbox_entity);
+    assert(0 == err);
+  }
+
+  if (!idempotent_cks) {
+    svc->do_osd_destroy(id, uuid);
+  }
 
   pending_inc.new_state[id] = CEPH_OSD_DESTROYED;
   pending_inc.new_uuid[id] = uuid_d();
@@ -6977,9 +7010,12 @@ int OSDMonitor::prepare_command_osd_purge(
   CrushWrapper newcrush;
   _get_pending_crush(newcrush);
 
+  bool may_be_idempotent = false;
+
   int err = _prepare_command_osd_crush_remove(newcrush, id, 0, false, false);
   if (err == -ENOENT) {
     err = 0;
+    may_be_idempotent = true;
   } else if (err < 0) {
     ss << "error removing osd." << id << " from crush";
     return err;
@@ -6989,9 +7025,21 @@ int OSDMonitor::prepare_command_osd_purge(
   if (!osdmap.is_destroyed(id)) {
     err = prepare_command_osd_destroy(id, ss);
     if (err < 0) {
-      return err;
+      if (err == -ENOENT) {
+        err = 0;
+      } else {
+        return err;
+      }
+    } else {
+      may_be_idempotent = false;
     }
     assert(0 == err);
+  }
+
+  if (may_be_idempotent && !osdmap.exists(id)) {
+    dout(10) << __func__ << " osd." << id << " does not exist and "
+             << "we are idempotent." << dendl;
+    return -ENOENT;
   }
 
   err = prepare_command_osd_remove(id);
@@ -8859,7 +8907,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
          << "really do.";
       err = -EPERM;
       goto reply;
-    } else if (!osdmap.exists(id)) {
+    } else if (is_destroy && !osdmap.exists(id)) {
       ss << "osd." << id << " does not exist";
       err = -ENOENT;
       goto reply;
@@ -8873,15 +8921,24 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       goto reply;
     }
 
+    bool goto_reply = false;
+
     paxos->plug();
     if (is_destroy) {
       err = prepare_command_osd_destroy(id, ss);
+      // we checked above that it should exist.
+      assert(err != -ENOENT);
     } else {
       err = prepare_command_osd_purge(id, ss);
+      if (err == -ENOENT) {
+        err = 0;
+        ss << "osd." << id << " does not exist.";
+        goto_reply = true;
+      }
     }
     paxos->unplug();
 
-    if (err < 0) {
+    if (err < 0 || goto_reply) {
       goto reply;
     }
 
@@ -8890,6 +8947,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     } else {
       ss << "purged osd." << id;
     }
+
     getline(ss, rs);
     wait_for_finished_proposal(op,
         new Monitor::C_Command(mon, op, 0, rs, get_last_committed() + 1));
@@ -8924,16 +8982,18 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 
     if (err < 0) {
       goto reply;
-    } else if (err == EEXIST) {
-      // idempotent operation
-      err = 0;
-      goto reply;
     }
 
     if (f) {
       f->flush(rdata);
     } else {
       rdata.append(ss);
+    }
+
+    if (err == EEXIST) {
+      // idempotent operation
+      err = 0;
+      goto reply;
     }
 
     wait_for_finished_proposal(op,

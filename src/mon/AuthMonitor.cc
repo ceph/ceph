@@ -792,6 +792,11 @@ int AuthMonitor::validate_osd_destroy(
     return -EINVAL;
   }
 
+  if (!mon->key_server.contains(cephx_entity) &&
+      !mon->key_server.contains(lockbox_entity)) {
+    return -ENOENT;
+  }
+
   return 0;
 }
 

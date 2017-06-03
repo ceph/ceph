@@ -37,6 +37,7 @@ class ConfigKeyService : public QuorumService
   void store_list(stringstream &ss);
   void store_dump(stringstream &ss);
   bool store_exists(const string &key);
+  bool store_has_prefix(const string &prefix);
 
   static const string STORE_PREFIX;
 
@@ -66,6 +67,7 @@ public:
   void cleanup() override { }
   void service_tick() override { }
 
+  int validate_osd_destroy(const int32_t id, const uuid_d& uuid);
   void do_osd_destroy(int32_t id, uuid_d& uuid);
   int validate_osd_new(
       const uuid_d& uuid,
