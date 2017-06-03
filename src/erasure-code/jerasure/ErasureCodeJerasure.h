@@ -26,11 +26,11 @@
 class ErasureCodeJerasure : public ErasureCode {
 public:
   int k;
-  std::string DEFAULT_K;
+  static constexpr int DEFAULT_K = 2;
   int m;
-  std::string DEFAULT_M;
+  static constexpr int DEFAULT_M = 1;
   int w;
-  std::string DEFAULT_W;
+  static constexpr int DEFAULT_W = 8;
   const char *technique;
   std::string ruleset_root;
   std::string ruleset_failure_domain;
@@ -38,11 +38,8 @@ public:
 
   explicit ErasureCodeJerasure(const char *_technique) :
     k(0),
-    DEFAULT_K("2"),
     m(0),
-    DEFAULT_M("1"),
     w(0),
-    DEFAULT_W("8"),
     technique(_technique),
     ruleset_root(DEFAULT_RULESET_ROOT),
     ruleset_failure_domain(DEFAULT_RULESET_FAILURE_DOMAIN),
@@ -92,14 +89,14 @@ class ErasureCodeJerasureReedSolomonVandermonde : public ErasureCodeJerasure {
 public:
   int *matrix;
 
+  static constexpr int DEFAULT_K = 7;
+  static constexpr int DEFAULT_M = 3;
+  static constexpr int DEFAULT_W = 8;
+
   ErasureCodeJerasureReedSolomonVandermonde() :
     ErasureCodeJerasure("reed_sol_van"),
     matrix(0)
-  {
-    DEFAULT_K = "7";
-    DEFAULT_M = "3";
-    DEFAULT_W = "8";
-  }
+  {}
   ~ErasureCodeJerasureReedSolomonVandermonde() override {
     if (matrix)
       free(matrix);
@@ -121,13 +118,14 @@ private:
 class ErasureCodeJerasureReedSolomonRAID6 : public ErasureCodeJerasure {
 public:
   int *matrix;
+  static constexpr int DEFAULT_K = 7;
+  static constexpr int DEFAULT_M = 1;
+  static constexpr int DEFAULT_W = 8;
 
   ErasureCodeJerasureReedSolomonRAID6() :
     ErasureCodeJerasure("reed_sol_r6_op"),
     matrix(0)
   {
-    DEFAULT_K = "7";
-    DEFAULT_W = "8";
   }
   ~ErasureCodeJerasureReedSolomonRAID6() override {
     if (matrix)
@@ -147,24 +145,22 @@ private:
   int parse(ErasureCodeProfile &profile, std::ostream *ss) override;
 };
 
-#define DEFAULT_PACKETSIZE "2048"
-
 class ErasureCodeJerasureCauchy : public ErasureCodeJerasure {
 public:
   int *bitmatrix;
   int **schedule;
   int packetsize;
 
+  static constexpr int DEFAULT_K = 7;
+  static constexpr int DEFAULT_M = 3;
+  static constexpr int DEFAULT_W = 8;
+
   explicit ErasureCodeJerasureCauchy(const char *technique) :
     ErasureCodeJerasure(technique),
     bitmatrix(0),
     schedule(0),
     packetsize(0)
-  {
-    DEFAULT_K = "7";
-    DEFAULT_M = "3";
-    DEFAULT_W = "8";
-  }
+  {}
   ~ErasureCodeJerasureCauchy() override {
     if (bitmatrix)
       free(bitmatrix);
@@ -208,6 +204,9 @@ public:
   int *bitmatrix;
   int **schedule;
   int packetsize;
+  static constexpr int DEFAULT_K = 2;
+  static constexpr int DEFAULT_M = 2;
+  static constexpr int DEFAULT_W = 7;
 
   explicit ErasureCodeJerasureLiberation(const char *technique = "liberation") :
     ErasureCodeJerasure(technique),
@@ -215,9 +214,6 @@ public:
     schedule(0),
     packetsize(0)
   {
-    DEFAULT_K = "2";
-    DEFAULT_M = "2";
-    DEFAULT_W = "7";
   }
   ~ErasureCodeJerasureLiberation() override;
 
@@ -253,13 +249,12 @@ public:
 
 class ErasureCodeJerasureLiber8tion : public ErasureCodeJerasureLiberation {
 public:
+  static constexpr int DEFAULT_K = 2;
+  static constexpr int DEFAULT_M = 2;
+  static constexpr int DEFAULT_W = 8;
   ErasureCodeJerasureLiber8tion() :
     ErasureCodeJerasureLiberation("liber8tion")
-  {
-    DEFAULT_K = "2";
-    DEFAULT_M = "2";
-    DEFAULT_W = "8";
-  }
+  {}
 
   void prepare() override;
 private:

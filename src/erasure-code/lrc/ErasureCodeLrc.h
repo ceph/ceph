@@ -46,7 +46,7 @@
 
 class ErasureCodeLrc : public ErasureCode {
 public:
-  static const std::string DEFAULT_KML;
+  static constexpr int DEFAULT_KML = -1;
 
   struct Layer {
     explicit Layer(std::string _chunks_map) : chunks_map(_chunks_map) { }

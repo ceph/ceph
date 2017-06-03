@@ -84,7 +84,7 @@ namespace ceph {
     static int to_int(const std::string &name,
 		      ErasureCodeProfile &profile,
 		      int *value,
-		      const std::string &default_value,
+		      int default_value,
 		      std::ostream *ss);
 
     static int to_bool(const std::string &name,

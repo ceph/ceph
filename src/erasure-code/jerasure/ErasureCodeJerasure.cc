@@ -15,12 +15,15 @@
  * 
  */
 
+#include <boost/container/small_vector.hpp>
+
 #include "common/debug.h"
 #include "ErasureCodeJerasure.h"
 #include "crush/CrushWrapper.h"
 #include "osd/osd_types.h"
 
 using namespace std;
+using boost::container::small_vector;
 
 extern "C" {
 #include "jerasure.h"
@@ -121,7 +124,7 @@ unsigned int ErasureCodeJerasure::get_chunk_size(unsigned int object_size) const
 int ErasureCodeJerasure::encode_chunks(const set<int> &want_to_encode,
 				       map<int, bufferlist> *encoded)
 {
-  char *chunks[k + m];
+  small_vector<char*, DEFAULT_K+DEFAULT_M> chunks(k + m);
   for (int i = 0; i < k + m; i++)
     chunks[i] = (*encoded)[i].c_str();
   jerasure_encode(&chunks[0], &chunks[k], (*encoded)[0].length());
@@ -133,10 +136,10 @@ int ErasureCodeJerasure::decode_chunks(const set<int> &want_to_read,
 				       map<int, bufferlist> *decoded)
 {
   unsigned blocksize = (*chunks.begin()).second.length();
-  int erasures[k + m + 1];
+  small_vector<int, DEFAULT_K+DEFAULT_M+1> erasures(k + m + 1);
   int erasures_count = 0;
-  char *data[k];
-  char *coding[m];
+  small_vector<char*, DEFAULT_K> data(k);
+  small_vector<char*, DEFAULT_M> coding(m);
   for (int i =  0; i < k + m; i++) {
     if (chunks.find(i) == chunks.end()) {
       erasures[erasures_count] = i;
@@ -150,7 +153,8 @@ int ErasureCodeJerasure::decode_chunks(const set<int> &want_to_read,
   erasures[erasures_count] = -1;
 
   assert(erasures_count > 0);
-  return jerasure_decode(erasures, data, coding, blocksize);
+  return jerasure_decode(erasures.data(), data.data(), coding.data(),
+			 blocksize);
 }
 
 bool ErasureCodeJerasure::is_prime(int value)
@@ -308,6 +312,8 @@ unsigned ErasureCodeJerasureCauchy::get_alignment() const
   }  
 }
 
+static constexpr int DEFAULT_PACKETSIZE = 2048;
+
 int ErasureCodeJerasureCauchy::parse(ErasureCodeProfile &profile,
 				     ostream *ss)
 {
@@ -427,11 +433,11 @@ int ErasureCodeJerasureLiberation::revert_to_default(ErasureCodeProfile &profile
   int err = 0;
   *ss << "reverting to k=" << DEFAULT_K << ", w="
       << DEFAULT_W << ", packetsize=" << DEFAULT_PACKETSIZE << std::endl;
-  profile["k"] = DEFAULT_K;
+  profile["k"] = std::to_string(DEFAULT_K);
   err |= to_int("k", profile, &k, DEFAULT_K, ss);
-  profile["w"] = DEFAULT_W;
+  profile["w"] = std::to_string(DEFAULT_W);
   err |= to_int("w", profile, &w, DEFAULT_W, ss);
-  profile["packetsize"] = DEFAULT_PACKETSIZE;
+  profile["packetsize"] = std::to_string(DEFAULT_PACKETSIZE);
   err |= to_int("packetsize", profile, &packetsize, DEFAULT_PACKETSIZE, ss);
   return err;
 }
