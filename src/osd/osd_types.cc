@@ -1263,6 +1263,12 @@ void pg_pool_t::build_removed_snaps(interval_set<snapid_t>& rs) const
 	rs.insert(s);
   } else {
     rs = removed_snaps;
+    if (rs.contains(snapid_t(1)))
+      rs.erase(snapid_t(1));
+    if (rs.contains(snapid_t(2)))
+      rs.erase(snapid_t(2));
+    if (rs.contains(snapid_t(3)))
+      rs.erase(snapid_t(3));
   }
 }
 
