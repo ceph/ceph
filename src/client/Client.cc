@@ -8934,7 +8934,7 @@ int Client::statfs(const char *path, struct statvfs *stbuf)
     // block `df` if this client has e.g. been evicted, or if the MDS cluster
     // is unhealthy.
     if (!_any_stale_sessions()) {
-      int r = _getattr(quota_root, 0, perms, true);
+      int r = _getattr(quota_root, 0, -1, -1, true);
       if (r != 0) {
         // Ignore return value: error getting latest inode metadata is not a good
         // reason to break "df".
@@ -9857,7 +9857,7 @@ int Client::_getxattr(Inode *in, const char *name, void *value, size_t size,
 
     // Do a force getattr to get the latest quota before returning
     // a value to userspace.
-    r = _getattr(in, 0, perms, true);
+    r = _getattr(in, 0, uid, gid, true);
     if (r != 0) {
       // Error from getattr!
       return r;
