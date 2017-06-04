@@ -15,8 +15,7 @@
 #include "messages/MMgrMap.h"
 #include "messages/MMgrDigest.h"
 
-#include "PGMap.h"
-#include "PGMonitor.h"
+#include "PGStatService.h"
 #include "include/stringify.h"
 #include "mgr/MgrContext.h"
 #include "OSDMonitor.h"
@@ -32,6 +31,7 @@ static ostream& _prefix(std::ostream *_dout, Monitor *mon,
 		<< "(" << mon->get_state_name()
 		<< ").mgr e" << mgrmap.get_epoch() << " ";
 }
+
 
 void MgrMonitor::create_initial()
 {
@@ -610,3 +610,5 @@ void MgrMonitor::on_shutdown()
 {
   cancel_timer();
 }
+
+

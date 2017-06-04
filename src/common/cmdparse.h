@@ -4,7 +4,9 @@
 #define CEPH_COMMON_CMDPARSE_H
 
 #include <boost/variant.hpp>
-
+#include <vector>
+#include <stdexcept>
+#include <ostream>
 #include "common/Formatter.h"
 #include "common/BackTrace.h"
 
@@ -73,4 +75,8 @@ cmd_putval(CephContext *cct, cmdmap_t& cmdmap, const std::string& k, const T& va
 {
   cmdmap[k] = val;
 }
+
+extern int parse_osd_id(const char *s, std::ostream *pss);
+extern long parse_pos_long(const char *s, std::ostream *pss = NULL);
+
 #endif

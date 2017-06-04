@@ -125,6 +125,7 @@ public:
     if (f) {
       dump(f);
     } else {
+      *ss << "e" << get_epoch() << ": ";
       if (get_active_gid() != 0) {
 	*ss << get_active_name();
         if (!available) {
@@ -133,12 +134,11 @@ public:
         } else {
           *ss << "(active)";
         }
-        *ss << " ";
       } else {
-	*ss << "no daemons active ";
+	*ss << "no daemons active";
       }
       if (standbys.size()) {
-	*ss << "standbys: ";
+	*ss << ", standbys: ";
 	bool first = true;
 	for (const auto &i : standbys) {
 	  if (!first) {

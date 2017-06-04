@@ -1,4 +1,6 @@
 #!/bin/bash -x
+# -*- mode:shell-script; tab-width:8; sh-basic-offset:2; indent-tabs-mode:t -*-
+# vim: ts=8 sw=8 ft=bash smarttab
 
 source $(dirname $0)/../ceph-helpers.sh
 
@@ -292,6 +294,24 @@ function test_tiering_agent()
   ceph osd pool delete $slow $slow --yes-i-really-really-mean-it
 }
 
+function flush_pg_stats()
+{
+    ids=`ceph osd ls`
+    seqs=''
+    for osd in $ids
+    do
+	seq=`ceph tell osd.$osd flush_pg_stats`
+	seqs="$seqs $osd-$seq"
+    done
+    for s in $seqs
+    do
+	osd=`echo $s | cut -d - -f 1`
+	seq=`echo $s | cut -d - -f 2`
+	echo "waiting osd.$osd seq $seq"
+	while test $(ceph osd last-stat-seq $osd) -lt $seq; do sleep 1 ; done
+    done
+}
+
 function test_tiering_1()
 {
   # tiering
@@ -319,7 +339,7 @@ function test_tiering_1()
   # test with dirty objects in the tier pool
   # tier pool currently set to 'writeback'
   rados -p cache put /etc/passwd /etc/passwd
-  ceph tell osd.\* flush_pg_stats || true
+  flush_pg_stats
   # 1 dirty object in pool 'cache'
   ceph osd tier cache-mode cache proxy
   expect_false ceph osd tier cache-mode cache none
@@ -328,7 +348,7 @@ function test_tiering_1()
   # remove object from tier pool
   rados -p cache rm /etc/passwd
   rados -p cache cache-flush-evict-all
-  ceph tell osd.\* flush_pg_stats || true
+  flush_pg_stats
   # no dirty objects in pool 'cache'
   ceph osd tier cache-mode cache proxy
   ceph osd tier cache-mode cache none
@@ -477,7 +497,7 @@ function test_tiering_8()
   rados -p cache4 put foo1 $tmpfile
   rados -p cache4 put foo2 $tmpfile
   rm -f $tmpfile
-  ceph tell osd.\* flush_pg_stats || true
+  flush_pg_stats
   ceph df | grep datapool | grep ' 2 '
   ceph osd tier remove-overlay datapool
   ceph osd tier remove datapool cache4
@@ -2043,9 +2063,12 @@ function test_mon_cephdf_commands()
     rados -p cephdf_for_test ls - | grep -q cephdf_for_test && break
     sleep 1
   done
-
-  cal_raw_used_size=`ceph df detail | grep cephdf_for_test | awk -F ' ' '{printf "%d\n", 2 * $3}'`
-  raw_used_size=`ceph df detail | grep cephdf_for_test | awk -F ' '  '{print $10}'`
+  # "rados ls" goes straight to osd, but "ceph df" is served by mon. so we need
+  # to sync mon with osd
+  flush_pg_stats
+  local jq_filter='.pools | .[] | select(.name == "cephdf_for_test") | .stats'
+  cal_raw_used_size=`ceph df detail --format=json | jq "$jq_filter.raw_bytes_used"`
+  raw_used_size=`ceph df detail --format=json | jq "$jq_filter.bytes_used * 2"`
 
   ceph osd pool delete cephdf_for_test cephdf_for_test --yes-i-really-really-mean-it
   rm ./cephdf_for_test

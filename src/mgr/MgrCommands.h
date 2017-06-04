@@ -94,3 +94,13 @@ COMMAND("osd test-reweight-by-pg " \
 	"name=pools,type=CephPoolname,n=N,req=false",			\
 	"dry run of reweight OSDs by PG distribution [overload-percentage-for-consideration, default 120]", \
 	"osd", "rw", "cli,rest")
+
+COMMAND("osd scrub " \
+	"name=who,type=CephString", \
+	"initiate scrub on osd <who>", "osd", "rw", "cli,rest")
+COMMAND("osd deep-scrub " \
+	"name=who,type=CephString", \
+	"initiate deep scrub on osd <who>", "osd", "rw", "cli,rest")
+COMMAND("osd repair " \
+	"name=who,type=CephString", \
+	"initiate repair on osd <who>", "osd", "rw", "cli,rest")

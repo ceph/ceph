@@ -259,9 +259,13 @@ void MgrClient::send_report()
     timer.add_event_after(stats_period, report_callback);
   }
 
+  send_pgstats();
+}
+
+void MgrClient::send_pgstats()
+{
   if (pgstats_cb) {
-    MPGStats *m_stats = pgstats_cb();
-    session->con->send_message(m_stats);
+    session->con->send_message(pgstats_cb());
   }
 }
 
