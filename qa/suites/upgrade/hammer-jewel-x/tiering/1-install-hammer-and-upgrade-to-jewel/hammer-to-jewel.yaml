@@ -9,3 +9,4 @@ tasks:
 - print: '**** done hammer'
 - ceph:
     fs: xfs
+    skip_mgr_daemons: true
