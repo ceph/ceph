@@ -4622,8 +4622,12 @@ void PG::scrub_clear_state()
   publish_stats_to_osd();
 
   // active -> nothing.
-  if (scrubber.active)
+  if (scrubber.active) {
     osd->dec_scrubs_active();
+  } else if (scrubber.reserved) {
+    // pending scrub not yet turn to active
+    osd->dec_scrubs_pending();
+  }
 
   requeue_ops(waiting_for_scrub);
 
