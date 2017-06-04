@@ -695,6 +695,7 @@ Group:		System/Benchmark
 License:	LGPL-2.0
 Requires:	ceph-common
 Requires:	xmlstarlet
+Requires:	jq
 %description -n ceph-test
 This package contains Ceph benchmarks and test tools.
 %endif

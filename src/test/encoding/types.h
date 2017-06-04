@@ -145,6 +145,7 @@ TYPE_FEATUREFUL(AuthMonitor::Incremental)
 #include "mon/PGMap.h"
 TYPE_FEATUREFUL(PGMap::Incremental)
 TYPE_FEATUREFUL_NONDETERMINISTIC(PGMap)
+TYPE_FEATUREFUL_NONDETERMINISTIC(PGMapDigest)
 
 #include "mon/MonitorDBStore.h"
 TYPE(MonitorDBStore::Transaction)

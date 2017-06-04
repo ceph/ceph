@@ -59,6 +59,7 @@ protected:
 
   void handle_mgr_map(MMgrMap *m);
   void _update_log_config();
+  void send_beacon();
 
 public:
   MgrStandby();
@@ -75,7 +76,7 @@ public:
   void shutdown();
   int main(vector<const char *> args);
   void handle_signal(int signum);
-  void send_beacon();
+  void tick();
 };
 
 #endif

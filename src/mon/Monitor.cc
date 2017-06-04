@@ -36,6 +36,7 @@
 #include "messages/MGenericMessage.h"
 #include "messages/MMonCommand.h"
 #include "messages/MMonCommandAck.h"
+#include "messages/MMonHealth.h"
 #include "messages/MMonMetadata.h"
 #include "messages/MMonSync.h"
 #include "messages/MMonScrub.h"
@@ -51,7 +52,6 @@
 #include "messages/MAuthReply.h"
 
 #include "messages/MTimeCheck.h"
-#include "messages/MMonHealth.h"
 #include "messages/MPing.h"
 
 #include "common/strtol.h"
@@ -75,6 +75,7 @@
 #include "LogMonitor.h"
 #include "AuthMonitor.h"
 #include "MgrMonitor.h"
+#include "MgrStatMonitor.h"
 #include "mon/QuorumService.h"
 #include "mon/HealthMonitor.h"
 #include "mon/ConfigKeyService.h"
@@ -124,29 +125,6 @@ MonCommand mon_commands[] = {
 };
 
 
-long parse_pos_long(const char *s, ostream *pss)
-{
-  if (*s == '-' || *s == '+') {
-    if (pss)
-      *pss << "expected numerical value, got: " << s;
-    return -EINVAL;
-  }
-
-  string err;
-  long r = strict_strtol(s, 10, &err);
-  if ((r == 0) && !err.empty()) {
-    if (pss)
-      *pss << err;
-    return -1;
-  }
-  if (r < 0) {
-    if (pss)
-      *pss << "unable to parse positive integer '" << s << "'";
-    return -1;
-  }
-  return r;
-}
-
 void C_MonContext::finish(int r) {
   if (mon->is_shutdown())
     return;
@@ -179,6 +157,7 @@ Monitor::Monitor(CephContext* cct_, string nm, MonitorDBStore *s,
   leader_supported_mon_commands_size(0),
   mgr_messenger(mgr_m),
   mgr_client(cct_, mgr_m),
+  pgservice(nullptr),
   store(s),
   
   state(STATE_PROBING),
@@ -224,6 +203,7 @@ Monitor::Monitor(CephContext* cct_, string nm, MonitorDBStore *s,
   paxos_service[PAXOS_LOG] = new LogMonitor(this, paxos, "logm");
   paxos_service[PAXOS_AUTH] = new AuthMonitor(this, paxos, "auth");
   paxos_service[PAXOS_MGR] = new MgrMonitor(this, paxos, "mgr");
+  paxos_service[PAXOS_MGRSTAT] = new MgrStatMonitor(this, paxos, "mgrstat");
 
   health_monitor = new HealthMonitor(this);
   config_key_service = new ConfigKeyService(this, paxos);
@@ -242,6 +222,9 @@ Monitor::Monitor(CephContext* cct_, string nm, MonitorDBStore *s,
   int cmdsize;
   get_locally_supported_monitor_commands(&cmds, &cmdsize);
   set_leader_supported_commands(cmds, cmdsize);
+
+  // note: OSDMonitor may update this based on the luminous flag.
+  pgservice = mgrstatmon()->get_pg_stat_service();
 }
 
 PaxosService *Monitor::get_paxos_service_by_name(const string& name)
@@ -2576,7 +2559,7 @@ void Monitor::get_cluster_status(stringstream &ss, Formatter *f)
     osdmon()->osdmap.print_summary(f, cout);
     f->close_section();
     f->open_object_section("pgmap");
-    pgmon()->pg_map.print_summary(f, NULL);
+    pgservice->print_summary(f, NULL);
     f->close_section();
     f->open_object_section("fsmap");
     mdsmon()->get_fsmap().print_summary(f, NULL);
@@ -2620,7 +2603,7 @@ void Monitor::get_cluster_status(stringstream &ss, Formatter *f)
     osdmon()->osdmap.print_summary(NULL, ss);
 
     ss << "\n \n  data:\n";
-    pgmon()->pg_map.print_summary(NULL, &ss);
+    pgservice->print_summary(NULL, &ss);
     ss << "\n ";
   }
 }
@@ -2952,7 +2935,8 @@ void Monitor::handle_command(MonOpRequestRef op)
     mdsmon()->dispatch(op);
     return;
   }
-  if (module == "osd" || prefix == "pg map") {
+  if ((module == "osd" || prefix == "pg map") &&
+      prefix != "osd last-stat-seq") {
     osdmon()->dispatch(op);
     return;
   }
@@ -3086,10 +3070,10 @@ void Monitor::handle_command(MonOpRequestRef op)
       if (f)
         f->open_object_section("stats");
 
-      pgmon()->pg_map.dump_fs_stats(&ds, f.get(), verbose);
+      pgservice->dump_fs_stats(&ds, f.get(), verbose);
       if (!f)
         ds << '\n';
-      pgmon()->pg_map.dump_pool_stats(osdmon()->osdmap, &ds, f.get(), verbose);
+      pgservice->dump_pool_stats(osdmon()->osdmap, &ds, f.get(), verbose);
 
       if (f) {
         f->close_section();
@@ -3127,8 +3111,8 @@ void Monitor::handle_command(MonOpRequestRef op)
     monmon()->dump_info(f.get());
     osdmon()->dump_info(f.get());
     mdsmon()->dump_info(f.get());
-    pgmon()->dump_info(f.get());
     authmon()->dump_info(f.get());
+    pgservice->dump_info(f.get());
 
     paxos->dump_info(f.get());
 
@@ -3138,6 +3122,19 @@ void Monitor::handle_command(MonOpRequestRef op)
     ostringstream ss2;
     ss2 << "report " << rdata.crc32c(CEPH_MON_PORT);
     rs = ss2.str();
+    r = 0;
+  } else if (prefix == "osd last-stat-seq") {
+    int64_t osd;
+    cmd_getval(g_ceph_context, cmdmap, "id", osd);
+    uint64_t seq = mgrstatmon()->get_last_osd_stat_seq(osd);
+    if (f) {
+      f->dump_unsigned("seq", seq);
+      f->flush(ds);
+    } else {
+      ds << seq;
+      rdata.append(ds);
+    }
+    rs = "";
     r = 0;
   } else if (prefix == "node ls") {
     string node_type("all");
@@ -3834,10 +3831,15 @@ void Monitor::dispatch_op(MonOpRequestRef op)
       paxos_service[PAXOS_MGR]->dispatch(op);
       break;
 
-    // pg
+    // MgrStat
+    case MSG_MON_MGR_REPORT:
     case CEPH_MSG_STATFS:
-    case MSG_PGSTATS:
     case MSG_GETPOOLSTATS:
+      paxos_service[PAXOS_MGRSTAT]->dispatch(op);
+      break;
+
+    // pg
+    case MSG_PGSTATS:
       paxos_service[PAXOS_PGMAP]->dispatch(op);
       break;
 

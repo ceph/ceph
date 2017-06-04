@@ -18,7 +18,7 @@
 source $(dirname $0)/detect-build-env-vars.sh
 
 CEPH_CLI_TEST_DUP_COMMAND=1 \
-MDS=1 MON=1 OSD=3 MGR=0 CEPH_PORT=7200 CEPH_OBJECTSTORE="bluestore" $CEPH_ROOT/src/test/vstart_wrapper.sh \
+MDS=1 MON=1 OSD=3 MGR=1 CEPH_PORT=7200 CEPH_OBJECTSTORE="bluestore" $CEPH_ROOT/src/test/vstart_wrapper.sh \
     $CEPH_ROOT/qa/workunits/cephtool/test.sh \
     --test-mds \
     --asok-does-not-need-root

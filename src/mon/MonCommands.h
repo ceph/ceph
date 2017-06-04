@@ -133,6 +133,9 @@ COMMAND("pg set_nearfull_ratio name=ratio,type=CephFloat,range=0.0|1.0", \
 
 COMMAND("pg map name=pgid,type=CephPgid", "show mapping of pg to osds", \
 	"pg", "r", "cli,rest")
+COMMAND("osd last-stat-seq name=id,type=CephOsdName", \
+	"get the last pg stats sequence number reported for this osd", \
+	"osd", "r", "cli,rest")
 
 /*
  * auth commands AuthMonitor.cc
@@ -447,15 +450,6 @@ COMMAND("osd map " \
 	"name=object,type=CephObjectname " \
 	"name=nspace,type=CephString,req=false", \
 	"find pg for <object> in <pool> with [namespace]", "osd", "r", "cli,rest")
-COMMAND("osd scrub " \
-	"name=who,type=CephString", \
-	"initiate scrub on osd <who>", "osd", "rw", "cli,rest")
-COMMAND("osd deep-scrub " \
-	"name=who,type=CephString", \
-	"initiate deep scrub on osd <who>", "osd", "rw", "cli,rest")
-COMMAND("osd repair " \
-	"name=who,type=CephString", \
-	"initiate repair on osd <who>", "osd", "rw", "cli,rest")
 COMMAND("osd lspools " \
 	"name=auid,type=CephInt,req=false", \
 	"list pools", "osd", "r", "cli,rest")

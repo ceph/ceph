@@ -1,6 +1,7 @@
 /etc/rc\.d/init\.d/ceph		--	gen_context(system_u:object_r:ceph_initrc_exec_t,s0)
 /etc/rc\.d/init\.d/radosgw	--	gen_context(system_u:object_r:ceph_initrc_exec_t,s0)
 
+/usr/bin/ceph-mgr		--	gen_context(system_u:object_r:ceph_exec_t,s0)
 /usr/bin/ceph-mon		--	gen_context(system_u:object_r:ceph_exec_t,s0)
 /usr/bin/ceph-mds		--	gen_context(system_u:object_r:ceph_exec_t,s0)
 /usr/bin/ceph-osd		--	gen_context(system_u:object_r:ceph_exec_t,s0)

@@ -35,6 +35,7 @@
 #include "Elector.h"
 #include "Paxos.h"
 #include "Session.h"
+#include "PGStatService.h"
 
 #include "common/LogClient.h"
 #include "auth/cephx/CephxKeyServer.h"
@@ -168,6 +169,8 @@ public:
   Messenger *mgr_messenger;
   MgrClient mgr_client;
   uint64_t mgr_proxy_bytes = 0;  // in-flight proxied mgr command message bytes
+
+  const PGStatService *pgservice;
 
 private:
   void new_tick();
@@ -632,6 +635,10 @@ public:
     return (class MgrMonitor*) paxos_service[PAXOS_MGR];
   }
 
+  class MgrStatMonitor *mgrstatmon() {
+    return (class MgrStatMonitor*) paxos_service[PAXOS_MGRSTAT];
+  }
+
   friend class Paxos;
   friend class OSDMonitor;
   friend class MDSMonitor;
@@ -942,8 +949,6 @@ public:
 #define CEPH_MON_FEATURE_INCOMPAT_ERASURE_CODE_PLUGINS_V3 CompatSet::Feature(7, "support shec erasure code")
 #define CEPH_MON_FEATURE_INCOMPAT_KRAKEN CompatSet::Feature(8, "support monmap features")
 // make sure you add your feature to Monitor::get_supported_features
-
-long parse_pos_long(const char *s, ostream *pss = NULL);
 
 struct MonCommand {
   string cmdstring;

@@ -20,7 +20,7 @@ source $(dirname $0)/detect-build-env-vars.sh
 CEPH_CLI_TEST_DUP_COMMAND=1 \
 # uses CEPH_PORT going from 7202 7203 and 7204 because
 # it starts at 7202 and runs 3 mons (see vstart.sh)
-MON=3 OSD=3 MDS=0 MGR=1 CEPH_PORT=7202 $CEPH_ROOT/src/test/vstart_wrapper.sh \
+MON=3 OSD=4 MDS=0 MGR=1 CEPH_PORT=7202 $CEPH_ROOT/src/test/vstart_wrapper.sh \
     $CEPH_ROOT/qa/workunits/cephtool/test.sh \
     --test-mon \
     --asok-does-not-need-root

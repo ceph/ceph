@@ -52,9 +52,7 @@ def task(ctx, config):
 
     while len(manager.get_osd_status()['up']) < 3:
         time.sleep(10)
-    manager.raw_cluster_cmd('tell', 'osd.0', 'flush_pg_stats')
-    manager.raw_cluster_cmd('tell', 'osd.1', 'flush_pg_stats')
-    manager.raw_cluster_cmd('tell', 'osd.2', 'flush_pg_stats')
+    manager.flush_pg_stats([0, 1, 2])
     manager.wait_for_clean()
 
     # test some osdmap flags
@@ -86,8 +84,7 @@ def task(ctx, config):
     log.info('err is %d' % err)
 
     # cluster must repeer
-    manager.raw_cluster_cmd('tell', 'osd.0', 'flush_pg_stats')
-    manager.raw_cluster_cmd('tell', 'osd.1', 'flush_pg_stats')
+    manager.flush_pg_stats([0, 1])
     manager.wait_for_active_or_down()
 
     # write some more (make sure osd.2 really is divergent)
@@ -103,9 +100,7 @@ def task(ctx, config):
     log.info('3 are up!')
 
     # cluster must recover
-    manager.raw_cluster_cmd('tell', 'osd.0', 'flush_pg_stats')
-    manager.raw_cluster_cmd('tell', 'osd.1', 'flush_pg_stats')
-    manager.raw_cluster_cmd('tell', 'osd.2', 'flush_pg_stats')
+    manager.flush_pg_stats([0, 1, 2])
     manager.wait_for_clean()
 
 
@@ -134,10 +129,7 @@ def test_incomplete_pgs(ctx, config):
     while len(manager.get_osd_status()['up']) < 4:
         time.sleep(10)
 
-    manager.raw_cluster_cmd('tell', 'osd.0', 'flush_pg_stats')
-    manager.raw_cluster_cmd('tell', 'osd.1', 'flush_pg_stats')
-    manager.raw_cluster_cmd('tell', 'osd.2', 'flush_pg_stats')
-    manager.raw_cluster_cmd('tell', 'osd.3', 'flush_pg_stats')
+    manager.flush_pg_stats([0, 1, 2, 3])
     manager.wait_for_clean()
 
     log.info('Testing incomplete pgs...')
@@ -149,10 +141,7 @@ def test_incomplete_pgs(ctx, config):
 
     # move data off of osd.0, osd.1
     manager.raw_cluster_cmd('osd', 'out', '0', '1')
-    manager.raw_cluster_cmd('tell', 'osd.0', 'flush_pg_stats')
-    manager.raw_cluster_cmd('tell', 'osd.1', 'flush_pg_stats')
-    manager.raw_cluster_cmd('tell', 'osd.2', 'flush_pg_stats')
-    manager.raw_cluster_cmd('tell', 'osd.3', 'flush_pg_stats')
+    manager.flush_pg_stats([0, 1, 2, 3], [0, 1])
     manager.wait_for_clean()
 
     # lots of objects in rbd (no pg log, will backfill)
@@ -171,10 +160,7 @@ def test_incomplete_pgs(ctx, config):
     manager.raw_cluster_cmd('osd', 'in', '0', '1')
     manager.raw_cluster_cmd('osd', 'out', '2', '3')
     time.sleep(10)
-    manager.raw_cluster_cmd('tell', 'osd.0', 'flush_pg_stats')
-    manager.raw_cluster_cmd('tell', 'osd.1', 'flush_pg_stats')
-    manager.raw_cluster_cmd('tell', 'osd.2', 'flush_pg_stats')
-    manager.raw_cluster_cmd('tell', 'osd.3', 'flush_pg_stats')
+    manager.flush_pg_stats([0, 1, 2, 3], [2, 3])
     time.sleep(10)
     manager.wait_for_active()
 
@@ -187,8 +173,7 @@ def test_incomplete_pgs(ctx, config):
     manager.kill_osd(3)
     log.info('...')
     manager.raw_cluster_cmd('osd', 'down', '2', '3')
-    manager.raw_cluster_cmd('tell', 'osd.0', 'flush_pg_stats')
-    manager.raw_cluster_cmd('tell', 'osd.1', 'flush_pg_stats')
+    manager.flush_pg_stats([0, 1])
     manager.wait_for_active_or_down()
 
     assert manager.get_num_down() > 0
