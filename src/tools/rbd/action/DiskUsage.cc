@@ -209,7 +209,8 @@ static int do_disk_usage(librbd::RBD &rbd, librados::IoCtx &io_ctx,
     }
   }
   if (!found) {
-    std::cerr << "specified image " << imgname << " is not found." << std::endl;
+    std::cerr << "rbd: specified image " << imgname << " is not found" << ": "
+              << cpp_strerror (ENOENT) << std::endl;
     return -ENOENT;
   }
 
