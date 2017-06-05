@@ -2,16 +2,15 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "include/crc32c.h"
-
 #include "arch/probe.h"
 #include "arch/intel.h"
 #include "arch/arm.h"
 #include "arch/ppc.h"
 #include "common/sctp_crc32.h"
-#include "common/crc32c_intel_baseline.h"
 #include "common/crc32c_intel_fast.h"
 #include "common/crc32c_aarch64.h"
 #include "common/crc32c_ppc.h"
+
 /*
  * choose best implementation based on the CPU architecture.
  */
