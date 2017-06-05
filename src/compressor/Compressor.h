@@ -34,6 +34,9 @@ public:
     COMP_ALG_SNAPPY = 1,
     COMP_ALG_ZLIB = 2,
     COMP_ALG_ZSTD = 3,
+#if defined(HAVE_QATZIP)
+    COMP_ALG_QATZIP = 4,
+#endif
     COMP_ALG_LAST	//the last value for range checks
   };
   // compression options

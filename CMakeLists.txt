@@ -217,6 +217,12 @@ if(WITH_SPDK)
   set(HAVE_SPDK TRUE)
 endif(WITH_SPDK)
 
+option(WITH_QATZIP "Enable QATZIP" OFF)
+if(WITH_QATZIP)
+  find_package(qatzip REQUIRED)
+  set(HAVE_QATZIP ${QATZIP_FOUND})
+endif(WITH_QATZIP)
+
 # needs mds and? XXX
 option(WITH_LIBCEPHFS "libcephfs client library" ON)
 
