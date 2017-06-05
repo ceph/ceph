@@ -476,8 +476,10 @@ ostream &operator<<(ostream &lhs, const shard_id_t &rhs);
 
 #if defined(__sun) || defined(_AIX) || defined(DARWIN)
 __s32  ceph_to_host_errno(__s32 e);
+__s32  host_to_ceph_errno(__s32 e);
 #else
 #define  ceph_to_host_errno(e) (e)
+#define  host_to_ceph_errno(e) (e)
 #endif
 
 struct errorcode32_t {
@@ -493,7 +495,8 @@ struct errorcode32_t {
   }
 
   void encode(bufferlist &bl) const {
-    ::encode(code, bl);
+    __s32 newcode = host_to_ceph_errno(code);
+    ::encode(newcode, bl);
   }
   void decode(bufferlist::iterator &bl) {
     ::decode(code, bl);
