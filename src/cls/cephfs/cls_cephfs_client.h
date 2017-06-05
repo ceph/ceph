@@ -1,10 +1,11 @@
 
-#include "include/rados/librados.hpp"
 #include "mds/mdstypes.h"
-
 #include "cls_cephfs.h"
 
 class AccumulateArgs;
+namespace librados {
+  class IoCtx;
+}
 
 class ClsCephFSClient
 {

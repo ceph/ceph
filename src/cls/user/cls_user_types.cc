@@ -4,6 +4,7 @@
 #include "cls/user/cls_user_types.h"
 #include "common/Formatter.h"
 #include "common/ceph_json.h"
+#include "include/utime.h"
 
 void cls_user_gen_test_bucket(cls_user_bucket *bucket, int i)
 {
