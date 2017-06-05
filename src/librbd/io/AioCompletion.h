@@ -64,6 +64,8 @@ struct AioCompletion {
   xlist<AioCompletion*>::item m_xlist_item;
   bool event_notify;
 
+  Context *on_complete = nullptr;
+
   template <typename T, void (T::*MF)(int)>
   static void callback_adapter(completion_t cb, void *arg) {
     AioCompletion *comp = reinterpret_cast<AioCompletion *>(cb);
@@ -131,6 +133,13 @@ struct AioCompletion {
   void set_complete_cb(void *cb_arg, callback_t cb) {
     complete_cb = cb;
     complete_arg = cb_arg;
+  }
+
+  void set_on_complete(Context *ctx) {
+    Mutex::Locker locker(lock);
+    assert(!async_op.started());
+    assert(on_complete == nullptr);
+    on_complete = ctx;
   }
 
   void set_request_count(uint32_t num);
