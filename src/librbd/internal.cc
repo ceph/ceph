@@ -2110,7 +2110,9 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
     // might have been blacklisted by peer -- ensure we still own
     // the lock by pinging the OSD
     int r = ictx->exclusive_lock->assert_header_locked();
-    if (r < 0) {
+    if (r == -EBUSY || r == -ENOENT) {
+      return 0;
+    } else if (r < 0) {
       return r;
     }
 
