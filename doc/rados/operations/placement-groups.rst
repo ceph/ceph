@@ -296,6 +296,9 @@ resources. However, if 1,000 pools were created with 512 placement
 groups each, the OSDs will handle ~50,000 placement groups each and it
 would require significantly more resources and time for peering.
 
+You may find the `PGCalc`_ tool helpful.
+
+
 .. _setting the number of placement groups:
 
 Set the Number of Placement Groups
