@@ -22,7 +22,6 @@
 
 AsyncCompressor::AsyncCompressor(CephContext *c):
   compressor(Compressor::create(c, c->_conf->async_compressor_type)), cct(c),
-  job_id(0),
   compress_tp(cct, "AsyncCompressor::compressor_tp", "tp_async_compr", cct->_conf->async_compressor_threads, "async_compressor_threads"),
   job_lock("AsyncCompressor::job_lock"),
   compress_wq(this, c->_conf->async_compressor_thread_timeout, c->_conf->async_compressor_thread_suicide_timeout, &compress_tp) {
@@ -42,7 +41,7 @@ void AsyncCompressor::terminate()
 
 uint64_t AsyncCompressor::async_compress(bufferlist &data)
 {
-  uint64_t id = job_id.inc();
+  uint64_t id = ++job_id;
   pair<unordered_map<uint64_t, Job>::iterator, bool> it;
   {
     Mutex::Locker l(job_lock);
@@ -56,7 +55,7 @@ uint64_t AsyncCompressor::async_compress(bufferlist &data)
 
 uint64_t AsyncCompressor::async_decompress(bufferlist &data)
 {
-  uint64_t id = job_id.inc();
+  uint64_t id = ++job_id;
   pair<unordered_map<uint64_t, Job>::iterator, bool> it;
   {
     Mutex::Locker l(job_lock);
@@ -77,25 +76,25 @@ int AsyncCompressor::get_compress_data(uint64_t compress_id, bufferlist &data, b
     ldout(cct, 10) << __func__ << " missing to get compress job id=" << compress_id << dendl;
     return -ENOENT;
   }
-  int status;
 
  retry:
-  status = it->second.status.read();
-  if (status == DONE) {
+  auto status = it->second.status.load();
+  if (status == status_t::DONE) {
     ldout(cct, 20) << __func__ << " successfully getting compressed data, job id=" << compress_id << dendl;
     *finished = true;
     data.swap(it->second.data);
     jobs.erase(it);
-  } else if (status == ERROR) {
+  } else if (status == status_t::ERROR) {
     ldout(cct, 20) << __func__ << " compressed data failed, job id=" << compress_id << dendl;
     jobs.erase(it);
     return -EIO;
   } else if (blocking) {
-    if (it->second.status.compare_and_swap(WAIT, DONE)) {
+    auto expected = status_t::WAIT;
+    if (it->second.status.compare_exchange_strong(expected, status_t::DONE)) {
       ldout(cct, 10) << __func__ << " compress job id=" << compress_id << " hasn't finished, abort!"<< dendl;
       if (compressor->compress(it->second.data, data)) {
         ldout(cct, 1) << __func__ << " compress job id=" << compress_id << " failed!"<< dendl;
-        it->second.status.set(ERROR);
+        it->second.status = status_t::ERROR;
         return -EIO;
       }
       *finished = true;
@@ -121,25 +120,24 @@ int AsyncCompressor::get_decompress_data(uint64_t decompress_id, bufferlist &dat
     ldout(cct, 10) << __func__ << " missing to get decompress job id=" << decompress_id << dendl;
     return -ENOENT;
   }
-  int status;
-
  retry:
-  status = it->second.status.read();
-  if (status == DONE) {
+  auto status = it->second.status.load();
+  if (status == status_t::DONE) {
     ldout(cct, 20) << __func__ << " successfully getting decompressed data, job id=" << decompress_id << dendl;
     *finished = true;
     data.swap(it->second.data);
     jobs.erase(it);
-  } else if (status == ERROR) {
+  } else if (status == status_t::ERROR) {
     ldout(cct, 20) << __func__ << " compressed data failed, job id=" << decompress_id << dendl;
     jobs.erase(it);
     return -EIO;
   } else if (blocking) {
-    if (it->second.status.compare_and_swap(WAIT, DONE)) {
+    auto expected = status_t::WAIT;
+    if (it->second.status.compare_exchange_strong(expected, status_t::DONE)) {
       ldout(cct, 10) << __func__ << " decompress job id=" << decompress_id << " hasn't started, abort!"<< dendl;
       if (compressor->decompress(it->second.data, data)) {
         ldout(cct, 1) << __func__ << " decompress job id=" << decompress_id << " failed!"<< dendl;
-        it->second.status.set(ERROR);
+        it->second.status = status_t::ERROR;
         return -EIO;
       }
       *finished = true;
