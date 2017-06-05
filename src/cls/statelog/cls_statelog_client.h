@@ -1,9 +1,13 @@
 #ifndef CEPH_CLS_STATELOG_CLIENT_H
 #define CEPH_CLS_STATELOG_CLIENT_H
 
-#include "include/types.h"
-#include "include/rados/librados.hpp"
-#include "cls_statelog_types.h"
+#include "cls_statelog_ops.h"
+
+namespace librados {
+  class ObjectWriteOperation;
+  class ObjectReadOperation;
+  class ObjectOperation;
+}
 
 /*
  * log objclass
