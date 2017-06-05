@@ -165,6 +165,7 @@ void LogMonitor::update_from_paxos(bool *need_bootstrap)
     }
 
     summary.version++;
+    summary.prune(g_conf->mon_log_max_summary);
   }
 
   dout(15) << __func__ << " logging for "
@@ -345,6 +346,7 @@ bool LogMonitor::prepare_log(MonOpRequestRef op)
       pending_log.insert(pair<utime_t,LogEntry>(p->stamp, *p));
     }
   }
+  pending_summary.prune(g_conf->mon_log_max_summary);
   wait_for_finished_proposal(op, new C_Log(this, op));
   return true;
 }
@@ -421,6 +423,7 @@ bool LogMonitor::prepare_command(MonOpRequestRef op)
     le.prio = CLOG_INFO;
     le.msg = str_join(logtext, " ");
     pending_summary.add(le);
+    pending_summary.prune(g_conf->mon_log_max_summary);
     pending_log.insert(pair<utime_t,LogEntry>(le.stamp, le));
     wait_for_finished_proposal(op, new Monitor::C_Command(
           mon, op, 0, string(), get_last_committed() + 1));
