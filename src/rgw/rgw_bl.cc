@@ -29,6 +29,7 @@
 #include "rgw_rados.h"
 #include "common/Clock.h"
 #include "rgw_rest_client.h"
+#include "rgw_user.h"
 
 
 #define dout_context g_ceph_context
@@ -429,8 +430,7 @@ int RGWBL::bucket_bl_process(string& shard_id)
 		    << cpp_strerror(-ret) << dendl;
       return ret;
     }
-
-    rgw_bucket tbucket;
+ 
     string tbucket_name = status.get_target_bucket();
     RGWBucketInfo tbucket_info;
     map<string, bufferlist> tbucket_attrs;
@@ -444,22 +444,74 @@ int RGWBL::bucket_bl_process(string& shard_id)
                     << tbucket_name << dendl;
       return ret;
     } else {
-      if (ret == 0) {
-         tbucket = tbucket_info.bucket;
-         // TODO(jiaying) check tbucket deliver group acl
+      if (ret == 0) { 
          map<string, bufferlist>::iterator piter = tbucket_attrs.find(RGW_ATTR_ACL);
          if (piter == tbucket_attrs.end()) {
            ldout(cct, 0) << __func__ << " can't find tbucket ACL attr"
 	                 << " tbucket_name=" << tbucket_name << dendl;
-           return -1;
-         } else {
-           tobject_attrs[piter->first] = piter->second;
+           return -EACCES;
          }
+
+         // check LDG(bl_deliver) permission in target bucket acl
+         bufferlist::iterator bpiter(&piter->second);
+         RGWAccessControlPolicy tbucket_policy;
+         try {
+           tbucket_policy.decode(bpiter);
+         } catch (const buffer::error& e) {
+           ldout(cct, 0) << __func__
+                         << "ERROR: caught buffer::error, could not decode tbucket policy"
+                         << dendl;
+           return -EIO;
+         }
+
+         std::string bl_deliver_accesskey = store->get_zone_params().bl_deliver_key.id;
+         RGWUserInfo bl_deliver;
+         if (bl_deliver.user_id.empty() && 
+           rgw_get_user_info_by_access_key(store, bl_deliver_accesskey, bl_deliver) < 0) {
+           ldout(cct, 0) << __func__ 
+                         << "get bl deliver user info failed, bl_deliver_accesskey = " 
+                         << bl_deliver_accesskey << dendl;
+           return -EPERM;
+         }
+ 
+         std::multimap<string, ACLGrant> tbucket_grant_map = tbucket_policy.get_acl().get_grant_map(); 
+         auto giter = tbucket_grant_map.find(bl_deliver.user_id.id);
+         if (giter == tbucket_grant_map.end()) {
+           ldout(cct, 0) << __func__ 
+                         << "bl_deliver has no op permission to the target bucket, tbucket name = " 
+                         << tbucket_name << dendl;
+           return -EACCES; 
+         }
+
+         bool is_write = false;
+         bool is_read_acp = false;
+
+         std::pair<std::multimap<string, ACLGrant>::iterator, 
+                   std::multimap<string, ACLGrant>::iterator> grant_ret;
+         grant_ret = tbucket_grant_map.equal_range(bl_deliver.user_id.id);
+         for (std::multimap<string, ACLGrant>::iterator iter = grant_ret.first;
+              iter != grant_ret.second; iter++) {
+             if (iter->second.get_permission().get_permissions() == RGW_PERM_WRITE) {
+               is_write = true;
+             } else if (iter->second.get_permission().get_permissions() == RGW_PERM_READ_ACP) {
+               is_read_acp = true;
+             }
+         }
+
+         if (is_write == false || is_read_acp == false){
+           ldout(cct, 0) << __func__ 
+                         << "bl_deliver has no write or read_acp permission to the target bucket, tbucket name = " 
+                         << tbucket_name << dendl;
+           return -EACCES;
+         } 
+
+         tobject_attrs[piter->first] = piter->second;
       }
     }
 
     string tprefix = status.get_target_prefix(); // prefix is optional
-
+    rgw_bucket tbucket;
+    tbucket = tbucket_info.bucket;
     string opslog_obj;
     while (true) {
       opslog_obj.clear();
