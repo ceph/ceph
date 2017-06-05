@@ -415,6 +415,16 @@ void PerfCounters::dump_formatted_generic(Formatter *f, bool schema,
 	  f->dump_format_unquoted("sum", "%" PRId64 ".%09" PRId64,
 				  a.first / 1000000000ull,
 				  a.first % 1000000000ull);
+          uint64_t count = a.second;
+          uint64_t sum_ns = a.first;
+          if (count) {
+            uint64_t avg_ns = sum_ns / count;
+            f->dump_format_unquoted("avgtime", "%" PRId64 ".%09" PRId64,
+                                    avg_ns / 1000000000ull,
+                                    avg_ns % 1000000000ull);
+          } else {
+            f->dump_format_unquoted("avgtime", "%" PRId64 ".%09" PRId64, 0, 0);
+          }
 	} else {
 	  ceph_abort();
 	}
