@@ -45,6 +45,7 @@ typedef enum {
   bl_processing,
   bl_failed,
   bl_perm_error,
+  bl_acl_error,
   bl_complete,
 }BL_BUCKET_STATUS;
 

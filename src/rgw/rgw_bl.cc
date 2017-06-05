@@ -43,6 +43,7 @@ const char* BL_STATUS[] = {
   "PROCESSING",
   "FAILED",
   "PERM_ERROR",
+  "ACL_ERROR",
   "COMPLETE"
 };
 
@@ -599,6 +600,8 @@ int RGWBL::bucket_bl_post(int index, int max_lock_sec,
     } else if (result < 0) {
       if (result == -EPERM)
         entry.second = bl_perm_error;
+      else if (result == -EACCES)
+        entry.second = bl_acl_error;
       else  
         entry.second = bl_failed;
     } else {
