@@ -7632,6 +7632,12 @@ void OSD::_committed_osd_maps(epoch_t first, epoch_t last, MOSDMap *m)
       dout(1) << "state: booting -> active" << dendl;
       set_state(STATE_ACTIVE);
 
+      outstanding_pg_stats.clear();
+      utime_t now = ceph_clock_now();
+      last_mon_report = now;
+      send_pg_stats(now);
+      send_beacon(ceph::coarse_mono_clock::now());
+
       // set incarnation so that osd_reqid_t's we generate for our
       // objecter requests are unique across restarts.
       service.objecter->set_client_incarnation(osdmap->get_epoch());
