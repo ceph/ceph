@@ -1122,7 +1122,7 @@ OPTION(bluestore_extent_map_shard_target_size, OPT_U32, 500)
 OPTION(bluestore_extent_map_shard_min_size, OPT_U32, 150)
 OPTION(bluestore_extent_map_shard_target_size_slop, OPT_DOUBLE, .2)
 OPTION(bluestore_extent_map_inline_shard_prealloc_size, OPT_U32, 256)
-OPTION(bluestore_cache_trim_interval, OPT_DOUBLE, .1)
+OPTION(bluestore_cache_trim_interval, OPT_DOUBLE, .2)
 OPTION(bluestore_cache_trim_max_skip_pinned, OPT_U32, 64) // skip this many onodes pinned in cache before we give up
 OPTION(bluestore_cache_type, OPT_STR, "2q")   // lru, 2q
 OPTION(bluestore_2q_cache_kin_ratio, OPT_DOUBLE, .5)    // kin page slot size / max page slot size
