@@ -94,6 +94,12 @@ void AioCompletion::complete() {
     lock.Lock();
   }
 
+  if (on_complete != nullptr) {
+    lock.Unlock();
+    on_complete->complete(rval);
+    lock.Lock();
+  }
+
   if (event_notify && ictx->event_socket.is_valid()) {
     ictx->completed_reqs_lock.Lock();
     ictx->completed_reqs.push_back(&m_xlist_item);
