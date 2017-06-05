@@ -290,6 +290,7 @@ PG::PG(OSDService *o, OSDMapRef curmap,
   _ref_id_lock("PG::_ref_id_lock"), _ref_id(0),
   #endif
   deleting(false),
+  allow_uncommitted_replicas(0),
   trace_endpoint("0.0.0.0", 0, "PG"),
   dirty_info(false), dirty_big_info(false),
   info(p),
@@ -1926,7 +1927,7 @@ void PG::all_activated_and_committed()
   assert(peer_activated.size() == actingbackfill.size());
   assert(!actingbackfill.empty());
   assert(blocked_by.empty());
-
+  allow_uncommitted_replicas = (pool.info.min_size>0)?(pool.info.min_size-1):(0);
   queue_peering_event(
     CephPeeringEvtRef(
       std::make_shared<CephPeeringEvt>(

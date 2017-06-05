@@ -613,10 +613,17 @@ void ReplicatedBackend::op_commit(
   }
 
   op->waiting_for_commit.erase(get_parent()->whoami_shard());
-
-  if (op->waiting_for_commit.empty()) {
-    op->on_commit->complete(0);
-    op->on_commit = 0;
+  if (cct->_conf->osd_commit_majority && parent->can_commit_majority()) {
+    if (op->waiting_for_commit.size() <= parent->get_allow_uncommitted_replicas() &&
+            op->on_commit){
+        op->on_commit->complete(0);
+        op->on_commit = 0;
+    }
+  }else{
+    if (op->waiting_for_commit.empty()) {
+      op->on_commit->complete(0);
+      op->on_commit = 0;
+    }
   }
   if (op->done()) {
     assert(!op->on_commit && !op->on_applied);
@@ -686,10 +693,18 @@ void ReplicatedBackend::do_repop_reply(OpRequestRef op)
       ip_op.on_applied->complete(0);
       ip_op.on_applied = 0;
     }
-    if (ip_op.waiting_for_commit.empty() &&
-        ip_op.on_commit) {
-      ip_op.on_commit->complete(0);
-      ip_op.on_commit= 0;
+    if (cct->_conf->osd_commit_majority && parent->can_commit_majority()) {
+      if (ip_op.waiting_for_commit.size() <= parent->get_allow_uncommitted_replicas() && 
+          ip_op.on_commit) {
+        ip_op.on_commit->complete(0);
+        ip_op.on_commit= 0;
+      }    
+    }else{
+      if (ip_op.waiting_for_commit.empty() &&
+          ip_op.on_commit) {
+        ip_op.on_commit->complete(0);
+        ip_op.on_commit= 0;
+      }
     }
     if (ip_op.done()) {
       assert(!ip_op.on_commit && !ip_op.on_applied);

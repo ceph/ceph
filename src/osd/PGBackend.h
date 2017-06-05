@@ -245,6 +245,9 @@ typedef ceph::shared_ptr<const OSDMap> OSDMapRef;
 
      virtual uint64_t min_peer_features() const = 0;
 
+     virtual bool can_commit_majority() const = 0;
+     virtual unsigned get_allow_uncommitted_replicas() const = 0;
+
      virtual hobject_t get_temp_recovery_object(const hobject_t& target,
 						eversion_t version) = 0;
 

@@ -310,6 +310,7 @@ protected:
 
 public:
   bool deleting;  // true while in removing or OSD is shutting down
+  unsigned allow_uncommitted_replicas;
 
   ZTracer::Endpoint trace_endpoint;
 
