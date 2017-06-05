@@ -32,6 +32,9 @@ class OSDMapTest : public testing::Test {
 public:
   OSDMap osdmap;
   OSDMapMapping mapping;
+  const uint64_t my_ec_pool = 1;
+  const uint64_t my_rep_pool = 2;
+
 
   OSDMapTest() {}
 
@@ -65,7 +68,9 @@ public:
     new_pool_inc.new_pool_max = osdmap.get_pool_max();
     new_pool_inc.fsid = osdmap.get_fsid();
     pg_pool_t empty;
+    // make an ec pool
     uint64_t pool_id = ++new_pool_inc.new_pool_max;
+    assert(pool_id == my_ec_pool);
     pg_pool_t *p = new_pool_inc.get_new_pool(pool_id, &empty);
     p->size = 3;
     p->set_pg_num(64);
@@ -73,6 +78,17 @@ public:
     p->type = pg_pool_t::TYPE_ERASURE;
     p->crush_rule = r;
     new_pool_inc.new_pool_names[pool_id] = "ec";
+    // and a replicated pool
+    pool_id = ++new_pool_inc.new_pool_max;
+    assert(pool_id == my_rep_pool);
+    p = new_pool_inc.get_new_pool(pool_id, &empty);
+    p->size = 3;
+    p->set_pg_num(64);
+    p->set_pgp_num(64);
+    p->type = pg_pool_t::TYPE_REPLICATED;
+    p->crush_rule = 0;
+    p->set_flag(pg_pool_t::FLAG_HASHPSPOOL);
+    new_pool_inc.new_pool_names[pool_id] = "reppool";
     osdmap.apply_incremental(new_pool_inc);
   }
   unsigned int get_num_osds() { return num_osds; }
@@ -160,7 +176,8 @@ TEST_F(OSDMapTest, Features) {
 TEST_F(OSDMapTest, MapPG) {
   set_up_map();
 
-  pg_t rawpg(0, 0, -1);
+  std::cerr << " osdmap.pool_max==" << osdmap.get_pool_max() << std::endl;
+  pg_t rawpg(0, my_rep_pool, -1);
   pg_t pgid = osdmap.raw_pg_to_pg(rawpg);
   vector<int> up_osds, acting_osds;
   int up_primary, acting_primary;
@@ -173,14 +190,13 @@ TEST_F(OSDMapTest, MapPG) {
   ASSERT_EQ(old_up_osds, up_osds);
   ASSERT_EQ(old_acting_osds, acting_osds);
 
-  ASSERT_EQ(osdmap.get_pg_pool(0)->get_size(), up_osds.size());
+  ASSERT_EQ(osdmap.get_pg_pool(my_rep_pool)->get_size(), up_osds.size());
 }
 
 TEST_F(OSDMapTest, MapFunctionsMatch) {
   // TODO: make sure pg_to_up_acting_osds and pg_to_acting_osds match
   set_up_map();
-
-  pg_t rawpg(0, 0, -1);
+  pg_t rawpg(0, my_rep_pool, -1);
   pg_t pgid = osdmap.raw_pg_to_pg(rawpg);
   vector<int> up_osds, acting_osds;
   int up_primary, acting_primary;
@@ -208,7 +224,7 @@ TEST_F(OSDMapTest, MapFunctionsMatch) {
 TEST_F(OSDMapTest, PrimaryIsFirst) {
   set_up_map();
 
-  pg_t rawpg(0, 0, -1);
+  pg_t rawpg(0, my_rep_pool, -1);
   pg_t pgid = osdmap.raw_pg_to_pg(rawpg);
   vector<int> up_osds, acting_osds;
   int up_primary, acting_primary;
@@ -222,7 +238,7 @@ TEST_F(OSDMapTest, PrimaryIsFirst) {
 TEST_F(OSDMapTest, PGTempRespected) {
   set_up_map();
 
-  pg_t rawpg(0, 0, -1);
+  pg_t rawpg(0, my_rep_pool, -1);
   pg_t pgid = osdmap.raw_pg_to_pg(rawpg);
   vector<int> up_osds, acting_osds;
   int up_primary, acting_primary;
@@ -250,7 +266,7 @@ TEST_F(OSDMapTest, PGTempRespected) {
 TEST_F(OSDMapTest, PrimaryTempRespected) {
   set_up_map();
 
-  pg_t rawpg(0, 0, -1);
+  pg_t rawpg(0, my_rep_pool, -1);
   pg_t pgid = osdmap.raw_pg_to_pg(rawpg);
   vector<int> up_osds;
   vector<int> acting_osds;
@@ -274,7 +290,7 @@ TEST_F(OSDMapTest, CleanTemps) {
 
   OSDMap::Incremental pgtemp_map(osdmap.get_epoch() + 1);
   OSDMap::Incremental pending_inc(osdmap.get_epoch() + 2);
-  pg_t pga = osdmap.raw_pg_to_pg(pg_t(0, 0));
+  pg_t pga = osdmap.raw_pg_to_pg(pg_t(0, my_rep_pool));
   {
     vector<int> up_osds, acting_osds;
     int up_primary, acting_primary;
@@ -284,7 +300,7 @@ TEST_F(OSDMapTest, CleanTemps) {
       up_osds.begin(), up_osds.end());
     pgtemp_map.new_primary_temp[pga] = up_primary;
   }
-  pg_t pgb = osdmap.raw_pg_to_pg(pg_t(1, 0));
+  pg_t pgb = osdmap.raw_pg_to_pg(pg_t(1, my_rep_pool));
   {
     vector<int> up_osds, acting_osds;
     int up_primary, acting_primary;
@@ -310,7 +326,7 @@ TEST_F(OSDMapTest, CleanTemps) {
 TEST_F(OSDMapTest, KeepsNecessaryTemps) {
   set_up_map();
 
-  pg_t rawpg(0, 0, -1);
+  pg_t rawpg(0, my_rep_pool, -1);
   pg_t pgid = osdmap.raw_pg_to_pg(rawpg);
   vector<int> up_osds, acting_osds;
   int up_primary, acting_primary;

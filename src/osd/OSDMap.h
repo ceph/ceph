@@ -569,7 +569,7 @@ private:
 
  public:
   OSDMap() : epoch(0), 
-	     pool_max(-1),
+	     pool_max(0),
 	     flags(0),
 	     num_osd(0), num_up_osd(0), num_in_osd(0),
 	     max_osd(0),
