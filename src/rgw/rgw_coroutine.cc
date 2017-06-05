@@ -629,6 +629,7 @@ int RGWCoroutinesManager::run(RGWCoroutine *op)
   }
   op->put();
 
+  delete stack;
   return r;
 }
 
