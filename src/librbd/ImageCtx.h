@@ -38,6 +38,7 @@ class SafeTimer;
 
 namespace librbd {
 
+  class ApiOpTracker;
   template <typename> class ExclusiveLock;
   template <typename> class ImageState;
   template <typename> class ImageWatcher;
@@ -208,6 +209,8 @@ namespace librbd {
 
     ZTracer::Endpoint trace_endpoint;
 
+    ApiOpTracker *api_op_tracker;
+
     static bool _filter_metadata_confs(const string &prefix, std::map<string, bool> &configs,
                                        const map<string, bufferlist> &pairs, map<string, bufferlist> *res);
 
@@ -332,6 +335,12 @@ namespace librbd {
 
     journal::Policy *get_journal_policy() const;
     void set_journal_policy(journal::Policy *policy);
+
+    void start_api_op();
+    void start_api_op(Context *on_start);
+    void finish_api_op();
+    void block_api(Context *on_start);
+    void unblock_api();
 
     static void get_thread_pool_instance(CephContext *cct,
                                          ThreadPool **thread_pool,

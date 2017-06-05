@@ -4,12 +4,13 @@
 #include <boost/assign/list_of.hpp>
 #include <stddef.h>
 
+#include "common/AsyncOpTracker.h"
+#include "common/Timer.h"
+#include "common/WorkQueue.h"
 #include "common/ceph_context.h"
 #include "common/dout.h"
 #include "common/errno.h"
 #include "common/perf_counters.h"
-#include "common/WorkQueue.h"
-#include "common/Timer.h"
 
 #include "librbd/AsyncRequest.h"
 #include "librbd/ExclusiveLock.h"
@@ -41,6 +42,7 @@
 
 using std::map;
 using std::pair;
+using std::queue;
 using std::set;
 using std::string;
 using std::vector;
@@ -163,6 +165,68 @@ struct C_InvalidateCache : public Context {
 
 } // anonymous namespace
 
+class ApiOpTracker {
+public:
+  ApiOpTracker()
+    : m_lock(util::unique_lock_name("librbd::ApiOpTracker::m_lock", this)) {
+  }
+
+  ~ApiOpTracker() {
+    Mutex::Locker locker(m_lock);
+    assert(!m_blocked);
+    assert(m_op_tracker.empty());
+  }
+
+  void start_op(Context *on_start) {
+    {
+      Mutex::Locker locker(m_lock);
+      if (m_blocked) {
+        m_blocked_ops.push(on_start);
+        return;
+      }
+      m_op_tracker.start_op();
+    }
+    on_start->complete(0);
+  }
+
+  void finish_op() {
+    m_op_tracker.finish_op();
+  }
+
+  void block_api(Context *on_block) {
+    Mutex::Locker locker(m_lock);
+    assert(!m_blocked);
+
+    m_blocked = true;
+    m_op_tracker.wait_for_ops(on_block);
+  }
+
+  void unblock_api() {
+    Mutex::Locker locker(m_lock);
+    assert(m_blocked);
+    assert(m_op_tracker.empty());
+
+    while (!m_blocked_ops.empty())
+    {
+      auto on_start = m_blocked_ops.front();
+      m_blocked_ops.pop();
+      m_op_tracker.start_op();
+      m_lock.Unlock();
+      on_start->complete(0);
+      m_lock.Lock();
+      assert(m_blocked);
+    }
+
+    m_blocked = false;
+  }
+
+private:
+  Mutex m_lock;
+  bool m_blocked = false;
+  std::queue<Context *> m_blocked_ops;
+  AsyncOpTracker m_op_tracker;
+};
+
   const string ImageCtx::METADATA_CONF_PREFIX = "conf_";
 
   ImageCtx::ImageCtx(const string &image_name, const string &image_id,
@@ -200,7 +264,8 @@ struct C_InvalidateCache : public Context {
       exclusive_lock(nullptr), object_map(nullptr),
       io_work_queue(nullptr), op_work_queue(nullptr),
       asok_hook(nullptr),
-      trace_endpoint("librbd")
+      trace_endpoint("librbd"),
+      api_op_tracker(new ApiOpTracker())
   {
     md_ctx.dup(p);
     data_ctx.dup(p);
@@ -257,6 +322,7 @@ struct C_InvalidateCache : public Context {
     delete io_work_queue;
     delete operations;
     delete state;
+    delete api_op_tracker;
   }
 
   void ImageCtx::init() {
@@ -1152,6 +1218,39 @@ struct C_InvalidateCache : public Context {
     assert(policy != nullptr);
     delete journal_policy;
     journal_policy = policy;
+  }
+
+  void ImageCtx::start_api_op() {
+    ldout(cct, 20) << __func__ << dendl;
+
+    C_SaferCond on_start;
+    api_op_tracker->start_op(&on_start);
+    int r = on_start.wait();
+    assert(r == 0);
+  }
+
+  void ImageCtx::start_api_op(Context *on_start) {
+    ldout(cct, 20) << __func__ << dendl;
+
+    api_op_tracker->start_op(on_start);
+  }
+
+  void ImageCtx::finish_api_op() {
+    ldout(cct, 20) << __func__ << dendl;
+
+    api_op_tracker->finish_op();
+  }
+
+  void ImageCtx::block_api(Context *on_block) {
+    ldout(cct, 20) << __func__ << dendl;
+
+    api_op_tracker->block_api(on_block);
+  }
+
+  void ImageCtx::unblock_api() {
+    ldout(cct, 20) << __func__ << dendl;
+
+    api_op_tracker->unblock_api();
   }
 
   void ImageCtx::get_thread_pool_instance(CephContext *cct,
