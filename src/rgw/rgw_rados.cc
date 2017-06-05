@@ -12535,8 +12535,9 @@ int RGWRados::cls_obj_complete_op(BucketShard& bs, const rgw_obj& obj, RGWModify
   complete_op_data *arg;
   index_completion_manager->create_completion(obj, op, tag, ver, key, dir_meta, remove_objs,
                                               get_zone().log_data, bilog_flags, _zones_trace, &arg);
+  librados::AioCompletion *completion = arg->rados_completion;
   int ret = bs.index_ctx.aio_operate(bs.bucket_obj, arg->rados_completion, &o);
-  arg->rados_completion->release();
+  completion->release(); /* can't reference arg here, as it might have already been released */
   return ret;
 }
 
