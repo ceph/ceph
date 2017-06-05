@@ -251,6 +251,13 @@ void RGWObjectExpirer::stop_processor()
 }
 
 void *RGWObjectExpirer::OEWorker::entry() {
+
+  /* startup barrier */
+  RGWRados::init_result ires = oe->store->init_barrier();
+  if (ires != RGWRados::init_result::INIT_SUCCESS) {
+    return NULL;
+  }
+
   utime_t last_run;
   do {
     utime_t start = ceph_clock_now();

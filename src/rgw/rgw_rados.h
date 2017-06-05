@@ -5,6 +5,7 @@
 #define CEPH_RGWRADOS_H
 
 #include <functional>
+#include <condition_variable>
 
 #include "include/rados/librados.hpp"
 #include "include/Context.h"
@@ -2231,6 +2232,16 @@ class RGWRados
   librados::IoCtx control_pool_ctx;   // .rgw.control
   bool watch_initialized;
 
+  std::mutex init_mtx;
+  std::condition_variable init_cond;
+  enum class init_result : uint32_t {
+    INIT_SUCCESS = 0,
+    INIT_WAIT,
+    INIT_FAIL,
+  };
+  init_result i_result;
+  init_result init_barrier();
+
   friend class RGWWatcher;
 
   Mutex bucket_id_lock;
@@ -2305,6 +2316,7 @@ public:
                meta_sync_thread_lock("meta_sync_thread_lock"), data_sync_thread_lock("data_sync_thread_lock"),
                num_watchers(0), watchers(NULL),
                watch_initialized(false),
+	       i_result(init_result::INIT_WAIT),
                bucket_id_lock("rados_bucket_id"),
                bucket_index_max_shards(0),
                max_bucket_id(0), cct(NULL),

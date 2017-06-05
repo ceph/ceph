@@ -278,6 +278,13 @@ void RGWGC::stop_processor()
 }
 
 void *RGWGC::GCWorker::entry() {
+
+  /* startup barrier */
+  RGWRados::init_result ires = gc->store->init_barrier();
+  if (ires != RGWRados::init_result::INIT_SUCCESS) {
+    return NULL;
+  }
+
   do {
     utime_t start = ceph_clock_now();
     dout(2) << "garbage collection: start" << dendl;

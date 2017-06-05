@@ -1,6 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
+#include <thread>
 #include <errno.h>
 #include <stdlib.h>
 #include <sys/types.h>
@@ -4274,11 +4275,38 @@ int RGWRados::initialize()
 {
   int ret;
 
-  ret = init_rados();
-  if (ret < 0)
-    return ret;
+  struct Guard {
+    init_result& i_result;
+    std::unique_lock<std::mutex> ul;
+    std::condition_variable& cond;
+    Guard(init_result& _i_result,
+	  std::mutex& mtx,
+	  std::condition_variable& _cond)
+      : i_result(_i_result), ul(mtx), cond(_cond) {}
+    ~Guard() {
+      cond.notify_all();
+      /* minimize the temporal window for threads to finish
+       * executing init_barrier() */
+      if (i_result != init_result::INIT_SUCCESS) {
+	std::this_thread::sleep_for(std::chrono::seconds(120));
+      }
+    }
+  } guard(i_result, init_mtx, init_cond);
 
-  return init_complete();
+  ret = init_rados();
+  if (ret < 0) {
+    i_result = init_result::INIT_FAIL;
+    return ret;
+  }
+
+  ret = init_complete();
+  if (ret < 0) {
+    i_result = init_result::INIT_FAIL;
+    return ret;
+  }
+
+  i_result = init_result::INIT_SUCCESS;
+  return ret;
 }
 
 void RGWRados::finalize_watch()
@@ -4291,6 +4319,15 @@ void RGWRados::finalize_watch()
 
   delete[] notify_oids;
   delete[] watchers;
+}
+
+RGWRados::init_result RGWRados::init_barrier(void)
+{
+  std::unique_lock<std::mutex> guard(init_mtx);
+  while (i_result == init_result::INIT_WAIT) {
+    init_cond.wait(guard);
+  }
+  return i_result;
 }
 
 void RGWRados::schedule_context(Context *c) {
