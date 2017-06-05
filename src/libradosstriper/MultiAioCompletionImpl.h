@@ -177,4 +177,7 @@ struct libradosstriper::MultiAioCompletionImpl {
 
 };
 
+void intrusive_ptr_add_ref(libradosstriper::MultiAioCompletionImpl*);
+void intrusive_ptr_release(libradosstriper::MultiAioCompletionImpl*);
+
 #endif // CEPH_LIBRADOSSTRIPERSTRIPER_MULTIAIOCOMPLETIONIMPL_H
