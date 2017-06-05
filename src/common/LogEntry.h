@@ -102,8 +102,11 @@ struct LogSummary {
 
   void add(const LogEntry& e) {
     tail.push_back(e);
-    while (tail.size() > 50)
+  }
+  void prune(size_t max) {
+    while (tail.size() > max) {
       tail.pop_front();
+    }
   }
   bool contains(const LogEntryKey& k) const {
     for (list<LogEntry>::const_iterator p = tail.begin();
