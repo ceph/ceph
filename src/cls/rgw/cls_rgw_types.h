@@ -1073,8 +1073,8 @@ struct cls_rgw_reshard_entry
   string bucket_name;
   string bucket_id;
   string new_instance_id;
-  uint32_t old_num_shards;
-  uint32_t new_num_shards;
+  uint32_t old_num_shards{0};
+  uint32_t new_num_shards{0};
 
   cls_rgw_reshard_entry() {}
 

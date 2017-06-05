@@ -1167,7 +1167,7 @@ struct cls_rgw_reshard_add_op {
 WRITE_CLASS_ENCODER(cls_rgw_reshard_add_op)
 
 struct cls_rgw_reshard_list_op {
-  uint32_t max;
+  uint32_t max{0};
   string marker;
 
   cls_rgw_reshard_list_op() {}
@@ -1193,7 +1193,7 @@ WRITE_CLASS_ENCODER(cls_rgw_reshard_list_op)
 
 struct cls_rgw_reshard_list_ret {
   list<cls_rgw_reshard_entry> entries;
-  bool is_truncated;
+  bool is_truncated{false};
 
   cls_rgw_reshard_list_ret() {}
 
