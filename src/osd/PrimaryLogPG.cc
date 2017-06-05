@@ -1989,6 +1989,10 @@ void PrimaryLogPG::do_op(OpRequestRef& op)
 
   // missing object?
   if (is_unreadable_object(head)) {
+    if (!is_primary()) {
+      osd->reply_op_error(op, -EAGAIN);
+      return;
+    }
     if (can_backoff &&
 	(g_conf->osd_backoff_on_degraded ||
 	 (g_conf->osd_backoff_on_unfound && missing_loc.is_unfound(head)))) {
