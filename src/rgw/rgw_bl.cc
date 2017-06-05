@@ -505,7 +505,38 @@ int RGWBL::bucket_bl_process(string& shard_id)
            return -EACCES;
          } 
 
-         tobject_attrs[piter->first] = piter->second;
+         // Log obj acl granting 
+         // The owner of log obj is LDG(bl_deliver), so LDG has full control permission in default
+         // According to S3, target bucket has full control permission in default 
+         // http://docs.aws.amazon.com/AmazonS3/latest/dev/ServerLogs.html
+         RGWAccessControlPolicy tobject_policy(cct);
+         bufferlist bl;
+         RGWUserInfo tbucket_owner;
+         RGWAccessControlList& tobject_acl = tobject_policy.get_acl();
+         ACLOwner& tobject_owner = tobject_policy.get_owner();
+
+         if (tbucket_owner.user_id.empty() && 
+           rgw_get_user_info_by_uid(store, tbucket_info.owner, tbucket_owner) < 0) {
+           ldout(cct, 0) << __func__ 
+                         << "get target bucket owner failed, target bucket owner id = " 
+                         << tbucket_info.owner.id << dendl;
+           return -ENOENT;
+         }
+
+         tobject_owner.set_id(bl_deliver.user_id);
+         tobject_owner.set_name(bl_deliver.display_name);
+         ldout(cct, 20) << __func__ << "policy owner id = " << tobject_owner.get_id() << dendl;
+          
+         ACLGrant ldg_new_grant;
+         ACLGrant tbucket_owner_new_grant;
+         // add LDG(bl_deliver) full control permission in default
+         ldg_new_grant.set_canon(bl_deliver.user_id, bl_deliver.display_name, RGW_PERM_FULL_CONTROL);
+         tobject_acl.add_grant(&ldg_new_grant);
+         // add owner of target bucket full control permission in default
+         tbucket_owner_new_grant.set_canon(tbucket_owner.user_id, tbucket_owner.display_name, RGW_PERM_FULL_CONTROL);
+         tobject_acl.add_grant(&tbucket_owner_new_grant);
+         tobject_policy.encode(bl);
+         tobject_attrs[RGW_ATTR_ACL] = bl;
       }
     }
 
