@@ -747,8 +747,6 @@ void BlueStore::Cache::trim_all()
 {
   std::lock_guard<std::recursive_mutex> l(lock);
   _trim(0, 0);
-  assert(_get_num_onodes() == 0);
-  assert(_get_buffer_bytes() == 0);
 }
 
 void BlueStore::Cache::trim(
@@ -5045,7 +5043,7 @@ int BlueStore::_mount(bool kv_only)
  out_stop:
   _kv_stop();
  out_coll:
-  flush_cache();
+  _flush_cache();
  out_alloc:
   _close_alloc();
  out_fm:
@@ -5074,7 +5072,7 @@ int BlueStore::umount()
   dout(20) << __func__ << " stopping kv thread" << dendl;
   _kv_stop();
   _reap_collections();
-  flush_cache();
+  _flush_cache();
   dout(20) << __func__ << " closing" << dendl;
 
   mounted = false;
@@ -5697,7 +5695,7 @@ int BlueStore::fsck(bool deep)
 
  out_scan:
   mempool_thread.shutdown();
-  flush_cache();
+  _flush_cache();
  out_alloc:
   _close_alloc();
  out_fm:
@@ -11059,17 +11057,30 @@ void BlueStore::generate_db_histogram(Formatter *f)
 
 }
 
-void BlueStore::flush_cache()
+void BlueStore::_flush_cache()
 {
   dout(10) << __func__ << dendl;
   for (auto i : cache_shards) {
     i->trim_all();
+    assert(i->empty());
   }
   for (auto& p : coll_map) {
     assert(p.second->onode_map.empty());
     assert(p.second->shared_blob_set.empty());
   }
   coll_map.clear();
+}
+
+// For external caller.
+// We use a best-effort policy instead, e.g.,
+// we don't care if there are still some pinned onodes/data in the cache
+// after this command is completed.
+void BlueStore::flush_cache()
+{
+  dout(10) << __func__ << dendl;
+  for (auto i : cache_shards) {
+    i->trim_all();
+  }
 }
 
 void BlueStore::_apply_padding(uint64_t head_pad,

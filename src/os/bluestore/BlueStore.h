@@ -1082,6 +1082,11 @@ public:
 			   uint64_t *buffers,
 			   uint64_t *bytes) = 0;
 
+    bool empty() {
+      std::lock_guard<std::recursive_mutex> l(lock);
+      return _get_num_onodes() == 0 && _get_buffer_bytes() == 0;
+    }
+
 #ifdef DEBUG_CACHE
     virtual void _audit(const char *s) = 0;
 #else
@@ -2129,6 +2134,7 @@ public:
 
   void get_db_statistics(Formatter *f) override;
   void generate_db_histogram(Formatter *f) override;
+  void _flush_cache();
   void flush_cache() override;
   void dump_perf_counters(Formatter *f) override {
     f->open_object_section("perf_counters");
