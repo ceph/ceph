@@ -34,7 +34,8 @@
 
 libradosstriper::MultiAioCompletion::~MultiAioCompletion()
 {
-  delete pc;
+  assert(pc->ref == 1);
+  pc->put();
 }
 
 int libradosstriper::MultiAioCompletion::set_complete_callback
