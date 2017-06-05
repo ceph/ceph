@@ -395,6 +395,10 @@ class CephName(CephArgtype):
             self.nametype = "mgr"
             self.val = s
             return
+        elif s == "mon":
+            self.nametype = "mon"
+            self.val = s
+            return
         if s.find('.') == -1:
             raise ArgumentFormat('CephName: no . in {0}'.format(s))
         else:
@@ -1262,7 +1266,7 @@ def send_command(cluster, target=('mon', ''), cmd=None, inbuf=b'', timeout=0,
             if verbose:
                 print('{0} to {1}'.format(cmd, target[0]),
                       file=sys.stderr)
-            if target[1] == '':
+            if len(target) < 2 or target[1] == '':
                 ret, outbuf, outs = run_in_thread(
                     cluster.mon_command, cmd, inbuf, timeout)
             else:
