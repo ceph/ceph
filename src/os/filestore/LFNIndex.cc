@@ -448,7 +448,12 @@ int LFNIndex::list_objects(const vector<string> &to_list, int max_objs,
   }
 
   if (handle && !end) {
-    *handle = telldir(dir);
+    long cur_pos  = telldir(dir);
+    if (cur_pos < 0) {
+      r = -errno;
+      goto cleanup;
+    }
+    *handle = cur_pos;
   }
 
   r = 0;
