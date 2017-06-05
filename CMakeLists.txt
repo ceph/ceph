@@ -454,6 +454,7 @@ option(ENABLE_COVERAGE "Coverage is enabled" OFF)
 option(PG_DEBUG_REFS "PG Ref debugging is enabled" OFF)
 
 option(WITH_TESTS "enable the build of ceph-test package scripts/binaries" ON)
+option(WITH_DMCLOCK_TESTS "enable the build of dmclock-tests and dmclock-data-struct tests binaries" OFF)
 
 option(WITH_FIO "Support for fio engines" OFF)
 if(WITH_FIO)
