@@ -250,6 +250,10 @@ void LogSummary::decode(bufferlist::iterator& bl)
   ::decode(version, bl);
   ::decode(tail, bl);
   DECODE_FINISH(bl);
+  keys.clear();
+  for (auto& p : tail) {
+    keys.insert(p.key());
+  }
 }
 
 void LogSummary::dump(Formatter *f) const

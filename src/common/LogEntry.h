@@ -71,6 +71,14 @@ WRITE_CLASS_ENCODER_FEATURES(LogEntryKey)
 static inline bool operator==(const LogEntryKey& l, const LogEntryKey& r) {
   return l.who == r.who && l.stamp == r.stamp && l.seq == r.seq;
 }
+namespace std {
+  template<> struct hash<LogEntryKey> {
+    size_t operator()(const LogEntryKey& r) const {
+      hash<entity_inst_t> h;
+      return r.seq + h(r.who);
+    }
+  };
+} // namespace std
 
 struct LogEntry {
   entity_inst_t who;
@@ -97,24 +105,22 @@ WRITE_CLASS_ENCODER_FEATURES(LogEntry)
 struct LogSummary {
   version_t version;
   list<LogEntry> tail;
+  ceph::unordered_set<LogEntryKey> keys;
 
   LogSummary() : version(0) {}
 
   void add(const LogEntry& e) {
     tail.push_back(e);
+    keys.insert(tail.back().key());
   }
   void prune(size_t max) {
     while (tail.size() > max) {
+      keys.erase(tail.front().key());
       tail.pop_front();
     }
   }
   bool contains(const LogEntryKey& k) const {
-    for (list<LogEntry>::const_iterator p = tail.begin();
-	 p != tail.end();
-	 ++p)
-      if (p->key() == k)
-	return true;
-    return false;
+    return keys.count(k);
   }
 
   void encode(bufferlist& bl, uint64_t features) const;
