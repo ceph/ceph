@@ -16,7 +16,7 @@
 
 
 // converts from linux errno values to host values
-__s32 ceph_to_host_errno(__s32 r) 
+__s32 ceph_to_hostos_errno(__s32 r) 
 {
   if (r < -34) {
     switch (r) {
