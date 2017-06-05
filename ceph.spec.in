@@ -110,7 +110,7 @@ BuildRequires:	fuse-devel
 BuildRequires:	gcc-c++
 BuildRequires:	gdbm
 %if 0%{with tcmalloc}
-BuildRequires:	gperftools-devel >= 2.4
+BuildRequires:	gperftools-devel
 %endif
 BuildRequires:  jq
 BuildRequires:	leveldb-devel > 1.2
