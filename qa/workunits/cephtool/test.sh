@@ -2454,6 +2454,8 @@ if [[ $do_list -eq 1 ]]; then
   exit 0
 fi
 
+ceph osd pool create rbd 10
+
 if test -z "$tests_to_run" ; then
   tests_to_run="$TESTS"
 fi
