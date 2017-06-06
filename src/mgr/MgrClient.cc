@@ -144,7 +144,7 @@ void MgrClient::reconnect()
   // command-sending, not stats etc)
   if (g_conf && !g_conf->name.is_client()) {
     auto open = new MMgrOpen();
-    open->daemon_name = g_conf->name.get_id();
+    open->daemon_name = g_conf->name.to_str();
     session->con->send_message(open);
   }
 
@@ -250,7 +250,7 @@ void MgrClient::send_report()
 
   ldout(cct, 20) << "encoded " << report->packed.length() << " bytes" << dendl;
 
-  report->daemon_name = g_conf->name.get_id();
+  report->daemon_name = g_conf->name.to_str();
 
   session->con->send_message(report);
 
