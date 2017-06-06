@@ -2123,6 +2123,7 @@ int BlueFS::mkdir(const string& dirname)
 
 int BlueFS::rmdir(const string& dirname)
 {
+  bool hasbusy=false;
   std::lock_guard<std::mutex> l(lock);
   dout(10) << __func__ << " " << dirname << dendl;
   map<string,DirRef>::iterator p = dir_map.find(dirname);
@@ -2132,8 +2133,16 @@ int BlueFS::rmdir(const string& dirname)
   }
   DirRef dir = p->second;
   if (!dir->file_map.empty()) {
-    dout(20) << __func__ << " dir " << dirname << " not empty" << dendl;
-    return -ENOTEMPTY;
+     map<string,FileRef>::iterator q = dir->file_map.begin();
+     for(;q!=dir->file_map.end();q++)
+     {
+        if(q->second->locked)
+           hasbusy=true;
+        else
+           dir->file_map.erase(q->first);
+     }
+     if(hasbusy==true)
+        return -EBUSY;
   }
   dir_map.erase(dirname);
   log_t.op_dir_remove(dirname);
