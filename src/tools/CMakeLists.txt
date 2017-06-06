@@ -27,7 +27,7 @@ target_link_libraries(ceph-osdomap-tool os global ${Boost_PROGRAM_OPTIONS_LIBRAR
 install(TARGETS ceph-osdomap-tool DESTINATION bin)
 
 add_executable(ceph-monstore-tool ceph_monstore_tool.cc)
-target_link_libraries(ceph-monstore-tool os global ${Boost_PROGRAM_OPTIONS_LIBRARY})
+target_link_libraries(ceph-monstore-tool os global ${Boost_PROGRAM_OPTIONS_LIBRARY} mon)
 install(TARGETS ceph-monstore-tool DESTINATION bin)
 install(PROGRAMS
   ceph-monstore-update-crush.sh

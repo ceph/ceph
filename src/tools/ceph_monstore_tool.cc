@@ -30,6 +30,7 @@
 #include "mon/MonMap.h"
 #include "mds/MDSMap.h"
 #include "osd/OSDMap.h"
+#include "mon/PGMap.h"
 #include "crush/CrushCompiler.h"
 
 namespace po = boost::program_options;
@@ -709,6 +710,35 @@ int rebuild_monstore(const char* progname,
   return 0;
 }
 
+
+/*
+ * Get the pgmap in the mon db store
+ * 
+ */
+void read_pgmap_full(PGMap &pg_map, MonitorDBStore *store) {
+
+  string prefix = "pgmap_pg";
+  for (KeyValueDB::Iterator i = store->get_iterator(prefix); i->valid(); i->next()) {
+    string key = i->key();
+    pg_t pgid;
+    if (!pgid.parse(key.c_str())) {
+      continue;
+    }
+    bufferlist bl = i->value();
+    pg_map.update_pg(pgid, bl);
+  }
+
+  prefix = "pgmap_osd";
+  for (KeyValueDB::Iterator i = store->get_iterator(prefix); i->valid(); i->next()) {
+    string key = i->key();
+    int osd = atoi(key.c_str());
+    bufferlist bl = i->value();
+    pg_map.update_osd(osd, bl);
+  }
+}
+
+
+
 int main(int argc, char **argv) {
   int err = 0;
   po::options_description desc("Allowed options");
@@ -892,6 +922,7 @@ int main(int argc, char **argv) {
 
     bufferlist bl;
     r = 0;
+    PGMap pgmap;
     if (map_type == "osdmap") {
       r = st.get(map_type, st.combine_strings("full", v), bl);
     } else if (map_type == "crushmap") {
@@ -902,6 +933,8 @@ int main(int argc, char **argv) {
         osdmap.decode(tmp);
         osdmap.crush->encode(bl, CEPH_FEATURES_SUPPORTED_DEFAULT);
       }
+    } else if (map_type == "pgmap") {
+      read_pgmap_full(pgmap, &st);
     } else {
       r = st.get(map_type, v, bl);
     }
@@ -932,6 +965,8 @@ int main(int argc, char **argv) {
         cw.decode(it);
         CrushCompiler cc(cw, std::cerr, 0);
         cc.decompile(ss);
+      } else if (map_type == "pgmap") {
+        pgmap.dump(ss);   
       } else {
         std::cerr << "This type of readable map does not exist: " << map_type << std::endl
                   << "You can only specify[osdmap|monmap|mdsmap|crushmap]" << std::endl;
