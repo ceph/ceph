@@ -374,7 +374,7 @@ TEST_F(OSDMapTest, PrimaryAffinity) {
       vector<int> any(n, 0);
       vector<int> first(n, 0);
       vector<int> primary(n, 0);
-      test_mappings(0, 10000, &any, &first, &primary);
+      test_mappings(pool, 10000, &any, &first, &primary);
       for (int i=0; i<n; ++i) {
 	//cout << "osd." << i << " " << any[i] << " " << first[i] << " " << primary[i] << std::endl;
 	ASSERT_LT(0, any[i]);
