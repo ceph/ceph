@@ -160,12 +160,6 @@ int safe_write_file(const char *base, const char *file,
   char tmp[PATH_MAX];
   int fd;
 
-  // does the file already have correct content?
-  char oldval[80];
-  ret = safe_read_file(base, file, oldval, sizeof(oldval));
-  if (ret == (int)vallen && memcmp(oldval, val, vallen) == 0)
-    return 0;  // yes.
-
   snprintf(fn, sizeof(fn), "%s/%s", base, file);
   snprintf(tmp, sizeof(tmp), "%s/%s.tmp", base, file);
   fd = open(tmp, O_WRONLY|O_CREAT|O_TRUNC, 0644);
