@@ -7782,20 +7782,6 @@ PG::RecoveryState::Incomplete::Incomplete(my_context ctx)
   pg->publish_stats_to_osd();
 }
 
-boost::statechart::result PG::RecoveryState::Incomplete::react(const AdvMap &advmap) {
-  PG *pg = context< RecoveryMachine >().pg;
-  int64_t poolnum = pg->info.pgid.pool();
-
-  // Reset if min_size turn smaller than previous value, pg might now be able to go active
-  if (advmap.lastmap->get_pools().find(poolnum)->second.min_size >
-      advmap.osdmap->get_pools().find(poolnum)->second.min_size) {
-    post_event(advmap);
-    return transit< Reset >();
-  }
-
-  return forward_event();
-}
-
 boost::statechart::result PG::RecoveryState::Incomplete::react(const MNotifyRec& notevt) {
   PG *pg = context< RecoveryMachine >().pg;
   ldout(pg->cct, 7) << "handle_pg_notify from osd." << notevt.from << dendl;
