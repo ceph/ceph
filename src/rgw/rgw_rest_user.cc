@@ -50,6 +50,14 @@ void RGWOp_User_Info::execute()
   op_state.set_user_id(uid);
   op_state.set_fetch_stats(fetch_stats);
 
+  if(fetch_stats) {
+    http_ret = rgw_user_sync_all_stats(store, uid);
+    if (http_ret < 0) {
+      ldout(store->ctx(), 0) << "ERROR: failed to sync user stats: " << dendl;
+      return ;
+    }
+  }
+
   http_ret = RGWUserAdminOp_User::info(store, op_state, flusher);
 }
 
