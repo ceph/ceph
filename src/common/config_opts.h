@@ -1380,6 +1380,9 @@ OPTION(rbd_auto_exclusive_lock_until_manual_request, OPT_BOOL, true) // whether 
 OPTION(rbd_mirroring_resync_after_disconnect, OPT_BOOL, false) // automatically start image resync after mirroring is disconnected due to being laggy
 OPTION(rbd_mirroring_replay_delay, OPT_INT, 0) // time-delay in seconds for rbd-mirror asynchronous replication
 
+OPTION(rbd_default_pool, OPT_STR, "rbd") // default pool for storing images
+OPTION_VALIDATOR(rbd_default_pool)
+
 /*
  * The following options change the behavior for librbd's image creation methods that
  * don't require all of the parameters. These are provided so that older programs
@@ -1401,6 +1404,7 @@ OPTION(rbd_default_order, OPT_INT, 22)
 OPTION(rbd_default_stripe_count, OPT_U64, 0) // changing requires stripingv2 feature
 OPTION(rbd_default_stripe_unit, OPT_U64, 0) // changing to non-object size requires stripingv2 feature
 OPTION(rbd_default_data_pool, OPT_STR, "") // optional default pool for storing image data blocks
+OPTION_VALIDATOR(rbd_default_data_pool)
 
 /**
  * RBD features are only applicable for v2 images. This setting accepts either
