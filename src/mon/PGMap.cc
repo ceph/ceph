@@ -2870,6 +2870,10 @@ void PGMap::get_health(
   // pg skew
   int num_in = osdmap.get_num_in_osds();
   int sum_pg_up = MAX(pg_sum.up, static_cast<int32_t>(pg_stat.size()));
+  int sum_objects = pg_sum.stats.sum.num_objects;
+  if (sum_objects < cct->_conf->mon_pg_warn_min_objects) {
+    return;
+  }
   if (num_in && cct->_conf->mon_pg_warn_min_per_osd > 0) {
     int per = sum_pg_up / num_in;
     if (per < cct->_conf->mon_pg_warn_min_per_osd && per) {
