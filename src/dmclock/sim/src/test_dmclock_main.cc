@@ -226,6 +226,8 @@ int main(int argc, char* argv[]) {
     simulation->display_stats(std::cout,
                               &test::server_data, &test::client_data,
                               server_disp_filter, client_disp_filter);
+
+    delete simulation;
 } // main
 
 
