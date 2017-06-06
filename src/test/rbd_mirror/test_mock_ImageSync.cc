@@ -169,6 +169,7 @@ using ::testing::_;
 using ::testing::InSequence;
 using ::testing::Invoke;
 using ::testing::Return;
+using ::testing::ReturnNew;
 using ::testing::WithArg;
 using ::testing::InvokeWithoutArgs;
 
@@ -189,6 +190,11 @@ public:
 
     ASSERT_EQ(0, create_image(rbd, m_local_io_ctx, m_image_name, m_image_size));
     ASSERT_EQ(0, open_image(m_local_io_ctx, m_image_name, &m_local_image_ctx));
+  }
+
+  void expect_start_op(librbd::MockExclusiveLock &mock_exclusive_lock) {
+    EXPECT_CALL(mock_exclusive_lock, start_op()).WillOnce(
+      ReturnNew<FunctionContext>([](int) {}));
   }
 
   void expect_create_sync_point(librbd::MockTestImageCtx &mock_local_image_ctx,
@@ -286,6 +292,9 @@ TEST_F(TestMockImageSync, SimpleSync) {
   MockSyncPointCreateRequest mock_sync_point_create_request;
   MockSyncPointPruneRequest mock_sync_point_prune_request;
 
+  librbd::MockExclusiveLock mock_exclusive_lock;
+  mock_local_image_ctx.exclusive_lock = &mock_exclusive_lock;
+
   librbd::MockObjectMap *mock_object_map = new librbd::MockObjectMap();
   mock_local_image_ctx.object_map = mock_object_map;
   expect_test_features(mock_local_image_ctx);
@@ -294,6 +303,7 @@ TEST_F(TestMockImageSync, SimpleSync) {
   expect_create_sync_point(mock_local_image_ctx, mock_sync_point_create_request, 0);
   expect_copy_snapshots(mock_snapshot_copy_request, 0);
   expect_copy_image(mock_image_copy_request, 0);
+  expect_start_op(mock_exclusive_lock);
   expect_rollback_object_map(*mock_object_map, 0);
   expect_create_object_map(mock_local_image_ctx, mock_object_map);
   expect_open_object_map(mock_local_image_ctx, *mock_object_map);
@@ -321,6 +331,9 @@ TEST_F(TestMockImageSync, RestartSync) {
   mock_local_image_ctx.snap_ids[{cls::rbd::UserSnapshotNamespace(), "snap1"}] = 123;
   mock_local_image_ctx.snap_ids[{cls::rbd::UserSnapshotNamespace(), "snap2"}] = 234;
 
+  librbd::MockExclusiveLock mock_exclusive_lock;
+  mock_local_image_ctx.exclusive_lock = &mock_exclusive_lock;
+
   librbd::MockObjectMap *mock_object_map = new librbd::MockObjectMap();
   mock_local_image_ctx.object_map = mock_object_map;
   expect_test_features(mock_local_image_ctx);
@@ -329,6 +342,7 @@ TEST_F(TestMockImageSync, RestartSync) {
   expect_prune_sync_point(mock_sync_point_prune_request, false, 0);
   expect_copy_snapshots(mock_snapshot_copy_request, 0);
   expect_copy_image(mock_image_copy_request, 0);
+  expect_start_op(mock_exclusive_lock);
   expect_rollback_object_map(*mock_object_map, 0);
   expect_create_object_map(mock_local_image_ctx, mock_object_map);
   expect_open_object_map(mock_local_image_ctx, *mock_object_map);
@@ -350,6 +364,9 @@ TEST_F(TestMockImageSync, CancelImageCopy) {
   MockSnapshotCopyRequest mock_snapshot_copy_request;
   MockSyncPointCreateRequest mock_sync_point_create_request;
   MockSyncPointPruneRequest mock_sync_point_prune_request;
+
+  librbd::MockExclusiveLock mock_exclusive_lock;
+  mock_local_image_ctx.exclusive_lock = &mock_exclusive_lock;
 
   m_client_meta.sync_points = {{cls::rbd::UserSnapshotNamespace(), "snap1", boost::none}};
 
@@ -387,6 +404,9 @@ TEST_F(TestMockImageSync, CancelAfterCopySnapshots) {
   MockSnapshotCopyRequest mock_snapshot_copy_request;
   MockSyncPointCreateRequest mock_sync_point_create_request;
 
+  librbd::MockExclusiveLock mock_exclusive_lock;
+  mock_local_image_ctx.exclusive_lock = &mock_exclusive_lock;
+
   librbd::MockObjectMap *mock_object_map = new librbd::MockObjectMap();
   mock_local_image_ctx.object_map = mock_object_map;
   expect_test_features(mock_local_image_ctx);
@@ -418,6 +438,9 @@ TEST_F(TestMockImageSync, CancelAfterCopyImage) {
   MockSnapshotCopyRequest mock_snapshot_copy_request;
   MockSyncPointCreateRequest mock_sync_point_create_request;
   MockSyncPointPruneRequest mock_sync_point_prune_request;
+
+  librbd::MockExclusiveLock mock_exclusive_lock;
+  mock_local_image_ctx.exclusive_lock = &mock_exclusive_lock;
 
   librbd::MockObjectMap *mock_object_map = new librbd::MockObjectMap();
   mock_local_image_ctx.object_map = mock_object_map;

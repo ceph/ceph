@@ -5,6 +5,7 @@
 #include "ProgressContext.h"
 #include "common/errno.h"
 #include "journal/Journaler.h"
+#include "librbd/ExclusiveLock.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/ObjectMap.h"
 #include "librbd/Utils.h"
@@ -244,10 +245,12 @@ template <typename I>
 void ImageSync<I>::send_copy_object_map() {
   update_progress("COPY_OBJECT_MAP");
 
+  m_local_image_ctx->owner_lock.get_read();
   m_local_image_ctx->snap_lock.get_read();
   if (!m_local_image_ctx->test_features(RBD_FEATURE_OBJECT_MAP,
                                         m_local_image_ctx->snap_lock)) {
     m_local_image_ctx->snap_lock.put_read();
+    m_local_image_ctx->owner_lock.put_read();
     send_prune_sync_points();
     return;
   }
@@ -257,20 +260,35 @@ void ImageSync<I>::send_copy_object_map() {
   assert(!m_client_meta->sync_points.empty());
   librbd::journal::MirrorPeerSyncPoint &sync_point =
     m_client_meta->sync_points.front();
-  auto snap_id_it = m_local_image_ctx->snap_ids.find({cls::rbd::UserSnapshotNamespace(),
-						      sync_point.snap_name});
+  auto snap_id_it = m_local_image_ctx->snap_ids.find(
+    {cls::rbd::UserSnapshotNamespace(), sync_point.snap_name});
   assert(snap_id_it != m_local_image_ctx->snap_ids.end());
   librados::snap_t snap_id = snap_id_it->second;
 
   dout(20) << ": snap_id=" << snap_id << ", "
            << "snap_name=" << sync_point.snap_name << dendl;
 
+  Context *finish_op_ctx = nullptr;
+  if (m_local_image_ctx->exclusive_lock != nullptr) {
+    finish_op_ctx = m_local_image_ctx->exclusive_lock->start_op();
+  }
+  if (finish_op_ctx == nullptr) {
+    derr << ": lost exclusive lock" << dendl;
+    m_local_image_ctx->snap_lock.put_read();
+    m_local_image_ctx->owner_lock.put_read();
+    finish(-EROFS);
+    return;
+  }
+
   // rollback the object map (copy snapshot object map to HEAD)
   RWLock::WLocker object_map_locker(m_local_image_ctx->object_map_lock);
-  Context *ctx = create_context_callback<
-    ImageSync<I>, &ImageSync<I>::handle_copy_object_map>(this);
+  auto ctx = new FunctionContext([this, finish_op_ctx](int r) {
+      handle_copy_object_map(r);
+      finish_op_ctx->complete(0);
+    });
   m_local_image_ctx->object_map->rollback(snap_id, ctx);
   m_local_image_ctx->snap_lock.put_read();
+  m_local_image_ctx->owner_lock.put_read();
 }
 
 template <typename I>

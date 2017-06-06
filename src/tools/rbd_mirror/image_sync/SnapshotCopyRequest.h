@@ -134,6 +134,8 @@ private:
 
   int validate_parent(ImageCtxT *image_ctx, librbd::ParentSpec *spec);
 
+  Context *start_local_op();
+
 };
 
 } // namespace image_sync

@@ -87,6 +87,7 @@ using ::testing::_;
 using ::testing::InSequence;
 using ::testing::Invoke;
 using ::testing::Return;
+using ::testing::ReturnNew;
 using ::testing::WithArg;
 using ::testing::InvokeWithoutArgs;
 
@@ -104,6 +105,11 @@ public:
 
     ASSERT_EQ(0, create_image(rbd, m_local_io_ctx, m_image_name, m_image_size));
     ASSERT_EQ(0, open_image(m_local_io_ctx, m_image_name, &m_local_image_ctx));
+  }
+
+  void expect_start_op(librbd::MockExclusiveLock &mock_exclusive_lock) {
+    EXPECT_CALL(mock_exclusive_lock, start_op()).WillOnce(
+      ReturnNew<FunctionContext>([](int) {}));
   }
 
   void expect_get_snap_id(librbd::MockTestImageCtx &mock_image_ctx) {
@@ -216,12 +222,16 @@ TEST_F(TestMockImageSyncImageCopyRequest, SimpleImage) {
   journal::MockJournaler mock_journaler;
   MockObjectCopyRequest mock_object_copy_request;
 
+  librbd::MockExclusiveLock mock_exclusive_lock;
+  mock_local_image_ctx.exclusive_lock = &mock_exclusive_lock;
+
   expect_get_snap_id(mock_remote_image_ctx);
 
   InSequence seq;
   expect_get_object_count(mock_remote_image_ctx, 1);
   expect_get_object_count(mock_remote_image_ctx, 0);
   expect_update_client(mock_journaler, 0);
+  expect_start_op(mock_exclusive_lock);
   expect_object_copy_send(mock_object_copy_request);
   expect_update_client(mock_journaler, 0);
 
@@ -263,11 +273,16 @@ TEST_F(TestMockImageSyncImageCopyRequest, Throttled) {
   journal::MockJournaler mock_journaler;
   MockObjectCopyRequest mock_object_copy_request;
 
+  librbd::MockExclusiveLock mock_exclusive_lock;
+  mock_local_image_ctx.exclusive_lock = &mock_exclusive_lock;
+
   expect_get_snap_id(mock_remote_image_ctx);
 
   expect_get_object_count(mock_remote_image_ctx, object_count);
   expect_get_object_count(mock_remote_image_ctx, 0);
 
+  EXPECT_CALL(mock_exclusive_lock, start_op())
+    .Times(object_count).WillRepeatedly(ReturnNew<FunctionContext>([](int) {}));
   EXPECT_CALL(mock_object_copy_request, send()).Times(object_count);
 
   boost::optional<uint64_t> expected_object_number(boost::none);
@@ -326,6 +341,9 @@ TEST_F(TestMockImageSyncImageCopyRequest, SnapshotSubset) {
   journal::MockJournaler mock_journaler;
   MockObjectCopyRequest mock_object_copy_request;
 
+  librbd::MockExclusiveLock mock_exclusive_lock;
+  mock_local_image_ctx.exclusive_lock = &mock_exclusive_lock;
+
   expect_get_snap_id(mock_remote_image_ctx);
 
   InSequence seq;
@@ -334,6 +352,7 @@ TEST_F(TestMockImageSyncImageCopyRequest, SnapshotSubset) {
   expect_get_object_count(mock_remote_image_ctx, 1);
   expect_get_object_count(mock_remote_image_ctx, 1);
   expect_update_client(mock_journaler, 0);
+  expect_start_op(mock_exclusive_lock);
   expect_object_copy_send(mock_object_copy_request);
   expect_update_client(mock_journaler, 0);
 
@@ -364,6 +383,9 @@ TEST_F(TestMockImageSyncImageCopyRequest, RestartCatchup) {
   journal::MockJournaler mock_journaler;
   MockObjectCopyRequest mock_object_copy_request;
 
+  librbd::MockExclusiveLock mock_exclusive_lock;
+  mock_local_image_ctx.exclusive_lock = &mock_exclusive_lock;
+
   expect_get_snap_id(mock_remote_image_ctx);
 
   InSequence seq;
@@ -371,6 +393,7 @@ TEST_F(TestMockImageSyncImageCopyRequest, RestartCatchup) {
   expect_get_object_count(mock_remote_image_ctx, 0);
   expect_get_object_count(mock_remote_image_ctx, 0);
   expect_update_client(mock_journaler, 0);
+  expect_start_op(mock_exclusive_lock);
   expect_object_copy_send(mock_object_copy_request);
   expect_update_client(mock_journaler, 0);
 
@@ -398,12 +421,16 @@ TEST_F(TestMockImageSyncImageCopyRequest, RestartPartialSync) {
   journal::MockJournaler mock_journaler;
   MockObjectCopyRequest mock_object_copy_request;
 
+  librbd::MockExclusiveLock mock_exclusive_lock;
+  mock_local_image_ctx.exclusive_lock = &mock_exclusive_lock;
+
   expect_get_snap_id(mock_remote_image_ctx);
 
   InSequence seq;
   expect_get_object_count(mock_remote_image_ctx, 1);
   expect_get_object_count(mock_remote_image_ctx, 2);
   expect_update_client(mock_journaler, 0);
+  expect_start_op(mock_exclusive_lock);
   expect_object_copy_send(mock_object_copy_request);
   expect_update_client(mock_journaler, 0);
 
@@ -435,12 +462,16 @@ TEST_F(TestMockImageSyncImageCopyRequest, Cancel) {
   journal::MockJournaler mock_journaler;
   MockObjectCopyRequest mock_object_copy_request;
 
+  librbd::MockExclusiveLock mock_exclusive_lock;
+  mock_local_image_ctx.exclusive_lock = &mock_exclusive_lock;
+
   expect_get_snap_id(mock_remote_image_ctx);
 
   InSequence seq;
   expect_get_object_count(mock_remote_image_ctx, 2);
   expect_get_object_count(mock_remote_image_ctx, 2);
   expect_update_client(mock_journaler, 0);
+  expect_start_op(mock_exclusive_lock);
   expect_object_copy_send(mock_object_copy_request);
 
   C_SaferCond ctx;
@@ -481,11 +512,16 @@ TEST_F(TestMockImageSyncImageCopyRequest, Cancel_Inflight_Sync) {
   journal::MockJournaler mock_journaler;
   MockObjectCopyRequest mock_object_copy_request;
 
+  librbd::MockExclusiveLock mock_exclusive_lock;
+  mock_local_image_ctx.exclusive_lock = &mock_exclusive_lock;
+
   expect_get_snap_id(mock_remote_image_ctx);
 
   expect_get_object_count(mock_remote_image_ctx, 10);
   expect_get_object_count(mock_remote_image_ctx, 0);
 
+  EXPECT_CALL(mock_exclusive_lock, start_op())
+    .Times(6).WillRepeatedly(ReturnNew<FunctionContext>([](int) {}));
   EXPECT_CALL(mock_object_copy_request, send()).Times(6);
 
   EXPECT_CALL(mock_journaler, update_client(_, _))
@@ -529,6 +565,9 @@ TEST_F(TestMockImageSyncImageCopyRequest, Cancel1) {
   journal::MockJournaler mock_journaler;
   MockObjectCopyRequest mock_object_copy_request;
 
+  librbd::MockExclusiveLock mock_exclusive_lock;
+  mock_local_image_ctx.exclusive_lock = &mock_exclusive_lock;
+
   C_SaferCond ctx;
   MockImageCopyRequest *request = create_request(mock_remote_image_ctx,
                                                  mock_local_image_ctx,
@@ -559,6 +598,9 @@ TEST_F(TestMockImageSyncImageCopyRequest, MissingSnap) {
   librbd::MockTestImageCtx mock_local_image_ctx(*m_local_image_ctx);
   journal::MockJournaler mock_journaler;
 
+  librbd::MockExclusiveLock mock_exclusive_lock;
+  mock_local_image_ctx.exclusive_lock = &mock_exclusive_lock;
+
   expect_get_snap_id(mock_remote_image_ctx);
 
   C_SaferCond ctx;
@@ -581,6 +623,9 @@ TEST_F(TestMockImageSyncImageCopyRequest, MissingFromSnap) {
   librbd::MockTestImageCtx mock_remote_image_ctx(*m_remote_image_ctx);
   librbd::MockTestImageCtx mock_local_image_ctx(*m_local_image_ctx);
   journal::MockJournaler mock_journaler;
+
+  librbd::MockExclusiveLock mock_exclusive_lock;
+  mock_local_image_ctx.exclusive_lock = &mock_exclusive_lock;
 
   expect_get_snap_id(mock_remote_image_ctx);
 
@@ -607,6 +652,9 @@ TEST_F(TestMockImageSyncImageCopyRequest, EmptySnapMap) {
   librbd::MockTestImageCtx mock_local_image_ctx(*m_local_image_ctx);
   journal::MockJournaler mock_journaler;
 
+  librbd::MockExclusiveLock mock_exclusive_lock;
+  mock_local_image_ctx.exclusive_lock = &mock_exclusive_lock;
+
   expect_get_snap_id(mock_remote_image_ctx);
 
   C_SaferCond ctx;
@@ -631,6 +679,9 @@ TEST_F(TestMockImageSyncImageCopyRequest, EmptySnapSeqs) {
   librbd::MockTestImageCtx mock_remote_image_ctx(*m_remote_image_ctx);
   librbd::MockTestImageCtx mock_local_image_ctx(*m_local_image_ctx);
   journal::MockJournaler mock_journaler;
+
+  librbd::MockExclusiveLock mock_exclusive_lock;
+  mock_local_image_ctx.exclusive_lock = &mock_exclusive_lock;
 
   expect_get_snap_id(mock_remote_image_ctx);
 
