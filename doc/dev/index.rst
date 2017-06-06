@@ -1132,11 +1132,14 @@ Reducing the number of tests
 ----------------------------
 
 The ``rados`` suite generates thousands of tests out of a few hundred
-files. For instance, all tests in the `rados/thrash suite
-<https://github.com/ceph/ceph/tree/master/qa/suites/rados/thrash>`_
-run for ``xfs``, ``btrfs`` and ``ext4`` because they are combined (via
-special file ``%``) with the `fs directory
-<https://github.com/ceph/ceph/tree/master/qa/suites/rados/thrash/fs>`_
+files. This happens because teuthology constructs test matrices from
+subdirectories wherever it encounters a file named ``%``. For instance,
+all tests in the `rados/basic suite
+<https://github.com/ceph/ceph/tree/master/qa/suites/rados/basic>`_
+run with different messenger types: ``simple``, ``async`` and
+``random``, because they are combined (via the special file ``%``) with
+the `msgr directory
+<https://github.com/ceph/ceph/tree/master/qa/suites/rados/basic/msgr>`_
 
 All integration tests are required to be run before a Ceph release is published. 
 When merely verifying whether a contribution can be merged without
