@@ -3982,6 +3982,7 @@ void pg_log_entry_t::decode(bufferlist::iterator &bl)
     ::decode(snaps, bl);
     // ensure snaps does not pin a larger buffer in memory
     snaps.rebuild();
+    snaps.reassign_to_mempool(mempool::mempool_osd_pglog);
   }
 
   if (struct_v >= 8)
