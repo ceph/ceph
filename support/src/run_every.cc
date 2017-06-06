@@ -1,11 +1,9 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 /*
- * Copyright (C) 2016 Red Hat Inc.
+ * Copyright (C) 2017 Red Hat Inc.
  */
 
-
-#include <iostream>
 
 #include "run_every.h"
 
@@ -53,8 +51,17 @@ crimson::RunEvery& crimson::RunEvery::operator=(crimson::RunEvery&& other)
 
 
 crimson::RunEvery::~RunEvery() {
-  finishing = true;
-  cv.notify_all();
+  join();
+}
+
+
+void crimson::RunEvery::join() {
+  {
+    Guard l(mtx);
+    if (finishing) return;
+    finishing = true;
+    cv.notify_all();
+  }
   thd.join();
 }
 
