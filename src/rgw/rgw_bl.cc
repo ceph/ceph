@@ -206,12 +206,14 @@ int RGWBL::bucket_bl_fetch(const string opslog_obj, bufferlist *buffer)
      return r;
     }
 
+    if (r == 0) {
+      ldout(cct, 20) << "RGWBL::bucket_bl_fetch log_show_next reached end." << dendl;
+      break;
+    }
+
     if (!entry.http_status.empty())
       format_opslog_entry(entry, buffer);
 
-    if (r == 0) {
-      ldout(cct, 20) << "RGWBL::bucket_bl_fetch log_show_next reached end." << dendl;
-    }
   } while (r > 0);
 
   return 0;
