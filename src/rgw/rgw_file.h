@@ -1133,7 +1133,6 @@ namespace rgw {
       if (! fh) {
 	if (unlikely(fh_hk == root_fh.fh.fh_hk)) {
 	  fh = &root_fh;
-	  ref(fh);
 	}
       }
 
