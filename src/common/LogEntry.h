@@ -54,28 +54,44 @@ string clog_type_to_string(clog_type t);
 
 
 struct LogEntryKey {
+private:
+  uint64_t _hash;
+
+  void _calc_hash() {
+    hash<entity_inst_t> h;
+    _hash = seq + h(who);
+  }
+
   entity_inst_t who;
   utime_t stamp;
-  uint64_t seq;
+  uint64_t seq = 0;
 
-  LogEntryKey() : seq(0) {}
-  LogEntryKey(const entity_inst_t& w, utime_t t, uint64_t s) : who(w), stamp(t), seq(s) {}
+public:
+  LogEntryKey() {}
+  LogEntryKey(const entity_inst_t& w, utime_t t, uint64_t s)
+    : who(w), stamp(t), seq(s) {
+    _calc_hash();
+  }
+
+  uint64_t get_hash() const {
+    return _hash;
+  }
 
   void encode(bufferlist& bl, uint64_t features) const;
   void decode(bufferlist::iterator& bl);
   void dump(Formatter *f) const;
   static void generate_test_instances(list<LogEntryKey*>& o);
+
+  friend bool operator==(const LogEntryKey& l, const LogEntryKey& r) {
+    return l.who == r.who && l.stamp == r.stamp && l.seq == r.seq;
+  }
 };
 WRITE_CLASS_ENCODER_FEATURES(LogEntryKey)
 
-static inline bool operator==(const LogEntryKey& l, const LogEntryKey& r) {
-  return l.who == r.who && l.stamp == r.stamp && l.seq == r.seq;
-}
 namespace std {
   template<> struct hash<LogEntryKey> {
     size_t operator()(const LogEntryKey& r) const {
-      hash<entity_inst_t> h;
-      return r.seq + h(r.who);
+      return r.get_hash();
     }
   };
 } // namespace std
