@@ -8311,7 +8311,7 @@ int RGWRados::Object::Delete::delete_obj()
         store->gen_rand_obj_instance_name(&marker);
       }
 
-      result.version_id = marker.key.instance;
+      result.version_id = (!marker.key.instance.empty() ? marker.key.instance : "null");
       result.delete_marker = true;
 
       struct rgw_bucket_dir_entry_meta meta;
@@ -8337,6 +8337,7 @@ int RGWRados::Object::Delete::delete_obj()
         return r;
       }
       result.delete_marker = dirent.is_delete_marker();
+      result.version_id = obj.key.instance;
       r = store->unlink_obj_instance(target->get_ctx(), target->get_bucket_info(), obj, params.olh_epoch, params.zones_trace);
       if (r < 0) {
         return r;
