@@ -323,6 +323,8 @@ public:
     return auth_stack.empty();
   }
 
+  static int apply(const Strategy& auth_strategy, req_state* s) noexcept;
+
 private:
   /* Using the reference wrapper here to explicitly point out we are not
    * interested in storing nulls while preserving the dynamic polymorphism. */

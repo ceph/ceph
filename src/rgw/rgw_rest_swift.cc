@@ -2471,49 +2471,7 @@ RGWOp *RGWHandler_REST_Obj_SWIFT::op_options()
 
 int RGWHandler_REST_SWIFT::authorize()
 {
-  try {
-    auto result = auth_strategy.authenticate(s);
-
-    if (result.get_status() != decltype(result)::Status::GRANTED) {
-      /* Access denied is acknowledged by returning a std::unique_ptr with
-       * nullptr inside. */
-      ldout(s->cct, 5) << "auth engine refused to authenicate" << dendl;
-      return -EPERM;
-    }
-
-    try {
-      rgw::auth::IdentityApplier::aplptr_t applier = result.get_applier();
-      rgw::auth::Completer::cmplptr_t completer = result.get_completer();
-
-      /* Account used by a given RGWOp is decoupled from identity employed
-       * in the authorization phase (RGWOp::verify_permissions). */
-      applier->load_acct_info(*s->user);
-      s->perm_mask = applier->get_perm_mask();
-
-      /* This is the signle place where we pass req_state as a pointer
-       * to non-const and thus its modification is allowed. In the time
-       * of writing only RGWTempURLEngine needed that feature. */
-      applier->modify_request_state(s);
-      if (completer) {
-        completer->modify_request_state(s);
-      }
-
-      s->auth.identity = std::move(applier);
-      s->auth.completer = std::move(completer);
-
-      return 0;
-    } catch (int err) {
-      ldout(s->cct, 5) << "applier throwed err=" << err << dendl;
-      return err;
-    }
-  } catch (int err) {
-    ldout(s->cct, 5) << "auth engine throwed err=" << err << dendl;
-    return err;
-  }
-
-  /* All engines refused to handle this authentication request by
-   * returning RGWAuthEngine::Status::UNKKOWN. Rather rare case. */
-  return -EPERM;
+  return rgw::auth::Strategy::apply(auth_strategy, s);
 }
 
 int RGWHandler_REST_SWIFT::postauth_init()

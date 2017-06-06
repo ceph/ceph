@@ -1564,42 +1564,15 @@ int RGWPostObj_ObjStore_S3::get_policy()
     /* FIXME: this is a makeshift solution. The browser upload authentication will be
      * handled by an instance of rgw::auth::Completer spawned in Handler's authorize()
      * method. */
-    const auto& strategy = auth_registry_ptr->get_s3_post();
-    try {
-      auto result = strategy.authenticate(s);
-      if (result.get_status() != decltype(result)::Status::GRANTED) {
-        return -EACCES;
-      }
-
-      try {
-        auto applier = result.get_applier();
-        auto completer = result.get_completer();
-
-        applier->load_acct_info(*s->user);
-        s->perm_mask = applier->get_perm_mask();
-
-        /* This is the signle place where we pass req_state as a pointer
-         * to non-const and thus its modification is allowed. In the time
-         * of writing only RGWTempURLEngine needed that feature. */
-        applier->modify_request_state(s);
-        if (completer) {
-          completer->modify_request_state(s);
-        }
-
-        s->auth.identity = std::move(applier);
-        s->auth.completer = std::move(completer);
-
-        s->owner.set_id(s->user->user_id);
-        s->owner.set_name(s->user->display_name);
-        /* OK, fall through. */
-      } catch (int err) {
-        return -EACCES;
-      }
-    } catch (int err) {
+    const int ret = rgw::auth::Strategy::apply(auth_registry_ptr->get_s3_post(), s);
+    if (ret != 0) {
       return -EACCES;
+    } else {
+      /* Populate the owner info. */
+      s->owner.set_id(s->user->user_id);
+      s->owner.set_name(s->user->display_name);
+      ldout(s->cct, 0) << "Successful Signature Verification!" << dendl;
     }
-
-    ldout(s->cct, 0) << "Successful Signature Verification!" << dendl;
 
     ceph::bufferlist decoded_policy;
     try {
@@ -3192,48 +3165,13 @@ int RGW_Auth_S3::authorize_v2(RGWRados* const store,
                               const rgw::auth::StrategyRegistry& auth_registry,
                               struct req_state* const s)
 {
-  const auto& auth_strategy = auth_registry.get_s3_main();
-  try {
-    auto result = auth_strategy.authenticate(s);
-    if (result.get_status() != decltype(result)::Status::GRANTED) {
-      ldout(s->cct, 5) << "Failed the S3 auth strategy, reason="
-                       << result.get_reason() << dendl;
-      return result.get_reason();
-    }
-    try {
-      auto applier = result.get_applier();
-      auto completer = result.get_completer();
-
-      applier->load_acct_info(*s->user);
-      s->perm_mask = applier->get_perm_mask();
-
-      /* This is the signle place where we pass req_state as a pointer
-       * to non-const and thus its modification is allowed. In the time
-       * of writing only RGWTempURLEngine needed that feature. */
-      applier->modify_request_state(s);
-      if (completer) {
-        completer->modify_request_state(s);
-      }
-
-      s->auth.identity = std::move(applier);
-      s->auth.completer = std::move(completer);
-
-      /* Populate the owner info. */
-      s->owner.set_id(s->user->user_id);
-      s->owner.set_name(s->user->display_name);
-
-      /* Success - not throwed. */
-      return 0;
-    } catch (const int err) {
-      ldout(s->cct, 5) << "applier threw err=" << err << dendl;
-      return err;
-    }
-  } catch (const int err) {
-    ldout(s->cct, 5) << "local auth engine threw err=" << err << dendl;
-    return err;
+  const auto ret = rgw::auth::Strategy::apply(auth_registry.get_s3_main(), s);
+  if (ret == 0) {
+    /* Populate the owner info. */
+    s->owner.set_id(s->user->user_id);
+    s->owner.set_name(s->user->display_name);
   }
-
-  return -ERR_SIGNATURE_NO_MATCH;
+  return ret;
 }
 
 int RGWHandler_Auth_S3::init(RGWRados *store, struct req_state *state,
