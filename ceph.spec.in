@@ -765,6 +765,7 @@ Group:		System/Filesystems
 %endif
 Requires:	ceph-base = %{_epoch_prefix}%{version}-%{release}
 Requires:	policycoreutils, libselinux-utils
+Requires(post):	ceph-base = %{_epoch_prefix}%{version}-%{release}
 Requires(post): selinux-policy-base >= %{_selinux_policy_version}, policycoreutils, gawk
 Requires(postun): policycoreutils
 %description selinux
