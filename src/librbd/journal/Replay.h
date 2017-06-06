@@ -126,6 +126,7 @@ private:
   OpEvents m_op_events;
   uint64_t m_in_flight_op_events = 0;
 
+  bool m_shut_down = false;
   Context *m_flush_ctx = nullptr;
   Context *m_on_aio_ready = nullptr;
 

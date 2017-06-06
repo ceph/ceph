@@ -38,7 +38,6 @@ class SafeTimer;
 
 namespace librbd {
 
-  class AsyncOperation;
   template <typename> class ExclusiveLock;
   template <typename> class ImageState;
   template <typename> class ImageWatcher;
@@ -52,6 +51,7 @@ namespace librbd {
   namespace exclusive_lock { struct Policy; }
   namespace io {
   class AioCompletion;
+  class AsyncOperation;
   class ImageRequestWQ;
   class CopyupRequest;
   }
@@ -141,7 +141,7 @@ namespace librbd {
 
     std::map<uint64_t, io::CopyupRequest*> copyup_list;
 
-    xlist<AsyncOperation*> async_ops;
+    xlist<io::AsyncOperation*> async_ops;
     xlist<AsyncRequest<>*> async_requests;
     std::list<Context*> async_requests_waiters;
 

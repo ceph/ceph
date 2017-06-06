@@ -1,7 +1,8 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
-#ifndef LIBRBD_ASYNC_OPERATION_H
-#define LIBRBD_ASYNC_OPERATION_H
+
+#ifndef LIBRBD_IO_ASYNC_OPERATION_H
+#define LIBRBD_IO_ASYNC_OPERATION_H
 
 #include "include/assert.h"
 #include "include/xlist.h"
@@ -12,6 +13,8 @@ class Context;
 namespace librbd {
 
 class ImageCtx;
+
+namespace io {
 
 class AsyncOperation {
 public:
@@ -43,6 +46,7 @@ private:
 
 };
 
+} // namespace io
 } // namespace librbd
 
-#endif // LIBRBD_ASYNC_OPERATION_H
+#endif // LIBRBD_IO_ASYNC_OPERATION_H

@@ -1,6 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
-#include "librbd/AsyncOperation.h"
+
+#include "librbd/io/AsyncOperation.h"
 #include "librbd/ImageCtx.h"
 #include "common/dout.h"
 #include "common/WorkQueue.h"
@@ -8,9 +9,10 @@
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
-#define dout_prefix *_dout << "librbd::AsyncOperation: "
+#define dout_prefix *_dout << "librbd::io::AsyncOperation: "
 
 namespace librbd {
+namespace io {
 
 namespace {
 
@@ -78,4 +80,5 @@ void AsyncOperation::add_flush_context(Context *on_finish) {
   m_flush_contexts.push_back(on_finish);
 }
 
+} // namespace io
 } // namespace librbd
