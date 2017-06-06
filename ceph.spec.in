@@ -1764,7 +1764,7 @@ rm -f ${FILE_CONTEXT}.pre
 # The fixfiles command won't fix label for /var/run/ceph
 /usr/sbin/restorecon -R /var/run/ceph > /dev/null 2>&1
 
-# Start the daemons iff they were running before
+# Start the daemons if they were running before
 if test $STATUS -eq 0; then
     /usr/bin/systemctl start ceph.target > /dev/null 2>&1 || :
 fi
