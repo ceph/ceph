@@ -10209,26 +10209,27 @@ int BlueStore::_do_remove(
 	}
       }
 
-      uint32_t b_start = OBJECT_MAX_SIZE;
-      uint32_t b_end = 0;
-      for (auto& e : h->extent_map.extent_map) {
-	const bluestore_blob_t& b = e.blob->get_blob();
-	SharedBlob *sb = e.blob->shared_blob.get();
-	if (b.is_shared() &&
-	    std::find(unshared_blobs.begin(), unshared_blobs.end(),
-		      sb) != unshared_blobs.end()) {
-	  dout(20) << __func__ << "  unsharing " << *e.blob << dendl;
-	  bluestore_blob_t& blob = e.blob->dirty_blob();
-	  blob.clear_flag(bluestore_blob_t::FLAG_SHARED);
-	  if (e.logical_offset < b_start) {
-	    b_start = e.logical_offset;
-	  }
-	  if (e.logical_end() > b_end) {
-	    b_end = e.logical_end();
-	  }
-	}
-      }
       if (!unshared_blobs.empty()) {
+        uint32_t b_start = OBJECT_MAX_SIZE;
+        uint32_t b_end = 0;
+        for (auto& e : h->extent_map.extent_map) {
+          const bluestore_blob_t& b = e.blob->get_blob();
+          SharedBlob *sb = e.blob->shared_blob.get();
+          if (b.is_shared() &&
+              std::find(unshared_blobs.begin(), unshared_blobs.end(),
+                        sb) != unshared_blobs.end()) {
+            dout(20) << __func__ << "  unsharing " << *e.blob << dendl;
+            bluestore_blob_t& blob = e.blob->dirty_blob();
+            blob.clear_flag(bluestore_blob_t::FLAG_SHARED);
+            if (e.logical_offset < b_start) {
+              b_start = e.logical_offset;
+            }
+            if (e.logical_end() > b_end) {
+              b_end = e.logical_end();
+            }
+          }
+        }
+
 	h->extent_map.dirty_range(b_start, b_end);
 	txc->write_onode(h);
       }
