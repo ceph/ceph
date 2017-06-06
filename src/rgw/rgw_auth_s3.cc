@@ -676,11 +676,12 @@ get_v4_canon_req_hash(CephContext* cct,
  *
  * http://docs.aws.amazon.com/general/latest/gr/sigv4-create-string-to-sign.html
  */
-std::string get_v4_string_to_sign(CephContext* const cct,
-                                  const boost::string_view& algorithm,
-                                  const boost::string_view& request_date,
-                                  const boost::string_view& credential_scope,
-                                  const sha256_digest_t& canonreq_hash)
+AWSEngine::VersionAbstractor::string_to_sign_t
+get_v4_string_to_sign(CephContext* const cct,
+                      const boost::string_view& algorithm,
+                      const boost::string_view& request_date,
+                      const boost::string_view& credential_scope,
+                      const sha256_digest_t& canonreq_hash)
 {
   const auto hexed_cr_hash = buf_to_hex(canonreq_hash);
 
@@ -750,9 +751,10 @@ transform_secret_key(const boost::string_view& secret_access_key)
 /*
  * calculate the SigningKey of AWS auth version 4
  */
-sha256_digest_t get_v4_signing_key(CephContext* const cct,
-                                   const boost::string_view& credential_scope,
-                                   const boost::string_view& secret_access_key)
+static sha256_digest_t
+get_v4_signing_key(CephContext* const cct,
+                   const boost::string_view& credential_scope,
+                   const boost::string_view& secret_access_key)
 {
   boost::string_view date, region, service;
   std::tie(date, region, service) = parse_cred_scope(credential_scope);
@@ -776,14 +778,21 @@ sha256_digest_t get_v4_signing_key(CephContext* const cct,
 
 /*
  * calculate the AWS signature version 4
-
+ *
  * http://docs.aws.amazon.com/general/latest/gr/sigv4-calculate-signature.html
+ *
+ * srv_signature_t is an alias over Ceph's basic_sstring. We're using
+ * it to keep everything within the stack boundaries instead of doing
+ * dynamic allocations.
  */
 AWSEngine::VersionAbstractor::server_signature_t
-get_v4_signature(CephContext* const cct,
-                 const sha256_digest_t& signing_key,
-                 const boost::string_view& string_to_sign)
+get_v4_signature(const boost::string_view& credential_scope,
+                 CephContext* const cct,
+                 const boost::string_view& secret_key,
+                 const AWSEngine::VersionAbstractor::string_to_sign_t& string_to_sign)
 {
+  auto signing_key = get_v4_signing_key(cct, credential_scope, secret_key);
+
   /* The server-side generated digest for comparison. */
   const auto digest = calc_hmac_sha256(signing_key, string_to_sign);
 
@@ -802,7 +811,7 @@ get_v4_signature(CephContext* const cct,
 AWSEngine::VersionAbstractor::server_signature_t
 get_v2_signature(CephContext* const cct,
                  const std::string& secret_key,
-                 const std::string& string_to_sign)
+                 const AWSEngine::VersionAbstractor::string_to_sign_t& string_to_sign)
 {
   if (secret_key.empty()) {
     throw -EINVAL;

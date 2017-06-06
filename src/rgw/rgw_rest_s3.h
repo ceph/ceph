@@ -9,6 +9,7 @@
 #include <mutex>
 
 #include <boost/utility/string_view.hpp>
+#include <boost/container/static_vector.hpp>
 
 #include "common/backport14.h"
 #include "common/sstring.hh"
@@ -687,7 +688,7 @@ public:
     using signature_factory_t = \
       std::function<server_signature_t(CephContext* cct,
                                        const std::string& secret_key,
-                                       const std::string& string_to_sign)>;
+                                       const string_to_sign_t& string_to_sign)>;
 
     /* Return an instance of Completer for verifying the payload's fingerprint
      * if necessary. Otherwise caller gets nullptr. Caller may provide secret
@@ -714,6 +715,7 @@ protected:
   }
 
   using result_t = rgw::auth::Engine::result_t;
+  using string_to_sign_t = VersionAbstractor::string_to_sign_t;
   using signature_factory_t = VersionAbstractor::signature_factory_t;
   using completer_factory_t = VersionAbstractor::completer_factory_t;
 
@@ -722,35 +724,15 @@ protected:
    * Replace these thing with a simple, dedicated structure. */
   virtual result_t authenticate(const boost::string_view& access_key_id,
                                 const boost::string_view& signature,
-                                const std::string& string_to_sign,
+                                const string_to_sign_t& string_to_sign,
                                 const signature_factory_t& signature_factory,
                                 const completer_factory_t& completer_factory,
                                 const req_state* s) const = 0;
 
 public:
-  result_t authenticate(const req_state* const s) const final {
-    boost::string_view access_key_id;
-    boost::string_view signature;
-    std::string string_to_sign;
-
-    VersionAbstractor::signature_factory_t signature_factory;
-    VersionAbstractor::completer_factory_t completer_factory;
-
-    /* Small reminder: an ver_abstractor is allowed to throw! */
-    std::tie(access_key_id,
-             signature,
-             string_to_sign,
-             signature_factory,
-             completer_factory) = ver_abstractor.get_auth_data(s);
-
-    if (access_key_id.empty() || signature.empty()) {
-      return result_t::deny(-EINVAL);
-    } else {
-      return authenticate(access_key_id, signature, string_to_sign,
-                          signature_factory, completer_factory, s);
-    }
-  }
+  result_t authenticate(const req_state* const s) const final;
 };
+
 
 class AWSGeneralAbstractor : public AWSEngine::VersionAbstractor {
   CephContext* const cct;
@@ -833,7 +815,7 @@ protected:
 
   result_t authenticate(const boost::string_view& access_key_id,
                         const boost::string_view& signature,
-                        const std::string& string_to_sign,
+                        const string_to_sign_t& string_to_sign,
                         const signature_factory_t&,
                         const completer_factory_t& completer_factory,
                         const req_state* s) const override;
@@ -862,7 +844,7 @@ class LocalEngine : public AWSEngine {
 
   result_t authenticate(const boost::string_view& access_key_id,
                         const boost::string_view& signature,
-                        const std::string& string_to_sign,
+                        const string_to_sign_t& string_to_sign,
                         const signature_factory_t& signature_factory,
                         const completer_factory_t& completer_factory,
                         const req_state* s) const override;

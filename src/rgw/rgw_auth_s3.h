@@ -412,26 +412,23 @@ get_v4_canon_req_hash(CephContext* cct,
                       const boost::string_view& signed_hdrs,
                       const boost::string_view& request_payload_hash);
 
-std::string get_v4_string_to_sign(CephContext* cct,
-                                  const boost::string_view& algorithm,
-                                  const boost::string_view& request_date,
-                                  const boost::string_view& credential_scope,
-                                  const sha256_digest_t& canonreq_hash);
-
-extern sha256_digest_t
-get_v4_signing_key(CephContext* const cct,
-                   const boost::string_view& credential_scope,
-                   const boost::string_view& access_key_secret);
+AWSEngine::VersionAbstractor::string_to_sign_t
+get_v4_string_to_sign(CephContext* cct,
+                      const boost::string_view& algorithm,
+                      const boost::string_view& request_date,
+                      const boost::string_view& credential_scope,
+                      const sha256_digest_t& canonreq_hash);
 
 extern AWSEngine::VersionAbstractor::server_signature_t
-get_v4_signature(CephContext* cct,
-                 const sha256_digest_t& signing_key,
-                 const boost::string_view& string_to_sign);
+get_v4_signature(const boost::string_view& credential_scope,
+                 CephContext* const cct,
+                 const boost::string_view& secret_key,
+                 const AWSEngine::VersionAbstractor::string_to_sign_t& string_to_sign);
 
 extern AWSEngine::VersionAbstractor::server_signature_t
 get_v2_signature(CephContext*,
                  const std::string& secret_key,
-                 const std::string& string_to_sign);
+                 const AWSEngine::VersionAbstractor::string_to_sign_t& string_to_sign);
 
 } /* namespace s3 */
 } /* namespace auth */

@@ -3565,25 +3565,6 @@ AWSGeneralAbstractor::get_auth_data(const req_state* const s) const
   }
 }
 
-/* srv_signature_t is an alias over Ceph's basic_sstring. We're using
- * it to keep everything within the stack boundaries instead of doing
- * dynamic allocations. */
-static inline AWSVerAbstractor::server_signature_t
-v4_signature(const boost::string_view& credential_scope,
-
-             CephContext* const cct,
-             const boost::string_view& secret_key,
-             const boost::string_view& string_to_sign)
-{
-  auto signing_key = \
-    rgw::auth::s3::get_v4_signing_key(cct, credential_scope, secret_key);
-
-  auto server_signature = \
-    rgw::auth::s3::get_v4_signature(cct, std::move(signing_key),
-                                    string_to_sign);
-  return server_signature;
-}
-
 std::tuple<AWSVerAbstractor::access_key_id_t,
            AWSVerAbstractor::client_signature_t,
            AWSVerAbstractor::string_to_sign_t,
@@ -3648,7 +3629,7 @@ AWSGeneralAbstractor::get_auth_data_v4(const req_state* const s,
                                          credential_scope,
                                          std::move(canonical_req_hash));
 
-  const auto sig_factory = std::bind(v4_signature,
+  const auto sig_factory = std::bind(rgw::auth::s3::get_v4_signature,
                                      credential_scope,
                                      std::placeholders::_1,
                                      std::placeholders::_2,
@@ -3852,7 +3833,7 @@ AWSBrowserUploadAbstractor::get_auth_data_v4(const req_state* const s) const
   const boost::string_view credential_scope = credential.substr(pos + 1);
   dout(10) << "credential scope = " << credential_scope << dendl;
 
-  const auto sig_factory = std::bind(v4_signature,
+  const auto sig_factory = std::bind(rgw::auth::s3::get_v4_signature,
                                      credential_scope,
                                      std::placeholders::_1,
                                      std::placeholders::_2,
@@ -3879,6 +3860,32 @@ AWSBrowserUploadAbstractor::get_auth_data(const req_state* const s) const
   } else {
     ldout(s->cct, 0) << "Signature verification algorithm AWS v2" << dendl;
     return get_auth_data_v2(s);
+  }
+}
+
+
+AWSEngine::result_t
+AWSEngine::authenticate(const req_state* const s) const
+{
+  boost::string_view access_key_id;
+  boost::string_view signature;
+  VersionAbstractor::string_to_sign_t string_to_sign;
+
+  VersionAbstractor::signature_factory_t signature_factory;
+  VersionAbstractor::completer_factory_t completer_factory;
+
+  /* Small reminder: an ver_abstractor is allowed to throw! */
+  std::tie(access_key_id,
+           signature,
+           string_to_sign,
+           signature_factory,
+           completer_factory) = ver_abstractor.get_auth_data(s);
+
+  if (access_key_id.empty() || signature.empty()) {
+    return result_t::deny(-EINVAL);
+  } else {
+    return authenticate(access_key_id, signature, string_to_sign,
+                        signature_factory, completer_factory, s);
   }
 }
 
@@ -3939,7 +3946,7 @@ rgw::auth::Engine::result_t
 rgw::auth::s3::LDAPEngine::authenticate(
   const boost::string_view& access_key_id,
   const boost::string_view& signature,
-  const std::string& string_to_sign,
+  const string_to_sign_t& string_to_sign,
   const signature_factory_t&,
   const completer_factory_t& completer_factory,
   const req_state* const s) const
@@ -3983,7 +3990,7 @@ rgw::auth::Engine::result_t
 rgw::auth::s3::LocalEngine::authenticate(
   const boost::string_view& _access_key_id,
   const boost::string_view& signature,
-  const std::string& string_to_sign,
+  const string_to_sign_t& string_to_sign,
   const signature_factory_t& signature_factory,
   const completer_factory_t& completer_factory,
   const req_state* const s) const
