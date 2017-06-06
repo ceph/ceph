@@ -1509,12 +1509,10 @@ public:
         collect_children();
       } while ((int)entries.size() == max_entries && can_adjust_marker);
 
-ldout(cct, 0) << __FILE__ << ":" << __LINE__ << ":" << *this << ": num_spawned()=" << num_spawned() << dendl;
       while (num_spawned() > 1) {
         yield wait_for_child();
         collect_children();
       }
-ldout(cct, 0) << __FILE__ << ":" << __LINE__ << ":" << *this << ": num_spawned()=" << num_spawned() << dendl;
 
       if (!lost_lock) {
         /* update marker to reflect we're done with full sync */
