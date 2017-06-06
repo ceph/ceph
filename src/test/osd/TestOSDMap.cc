@@ -441,7 +441,7 @@ TEST_F(OSDMapTest, PrimaryAffinity) {
 	  ASSERT_EQ(0, primary[i]);
 	} else {
 	  ASSERT_LT(10000/6/4, primary[0]);
-	  ASSERT_GT(10000/6/4*3, primary[0]);
+	  ASSERT_GT(10000/6/4*3+3, primary[0]);
 	}
       }
     }
