@@ -154,9 +154,6 @@ def raw_write(buf):
 
 def osdids():
     ret, outbuf, outs = json_command(cluster_handle, prefix='osd ls')
-    if ret == -errno.EINVAL:
-        # try old mon
-        ret, outbuf, outs = send_command(cluster_handle, cmd=['osd', 'ls'])
     if ret:
         raise RuntimeError('Can\'t contact mon for osd list')
     return [line.decode('utf-8') for line in outbuf.split(b'\n') if line]
@@ -165,10 +162,6 @@ def osdids():
 def monids():
     ret, outbuf, outs = json_command(cluster_handle, prefix='mon dump',
                                      argdict={'format': 'json'})
-    if ret == -errno.EINVAL:
-        # try old mon
-        ret, outbuf, outs = send_command(cluster_handle,
-                                         cmd=['mon', 'dump', '--format=json'])
     if ret:
         raise RuntimeError('Can\'t contact mon for mon list')
     d = json.loads(outbuf.decode('utf-8'))
@@ -178,10 +171,6 @@ def monids():
 def mdsids():
     ret, outbuf, outs = json_command(cluster_handle, prefix='mds dump',
                                      argdict={'format': 'json'})
-    if ret == -errno.EINVAL:
-        # try old mon
-        ret, outbuf, outs = send_command(cluster_handle,
-                                         cmd=['mds', 'dump', '--format=json'])
     if ret:
         raise RuntimeError('Can\'t contact mon for mds list')
     d = json.loads(outbuf.decode('utf-8'))
@@ -946,12 +935,6 @@ def main():
 
         # first do a ceph status
         ret, outbuf, outs = json_command(cluster_handle, prefix='status')
-        if ret == -errno.EINVAL:
-            # try old mon
-            ret, outbuf, outs = send_command(cluster_handle, cmd=['status'])
-            # old mon returns status to outs...ick
-            if ret == 0:
-                outbuf += outs
         if ret:
             print("status query failed: ", outs, file=sys.stderr)
             return ret
@@ -1037,62 +1020,47 @@ def main():
 
         ret, outbuf, outs = json_command(cluster_handle, target=target,
                                          prefix='get_command_descriptions')
-        compat = False
-        if ret == -errno.EINVAL:
-            # send command to old monitor or OSD
-            if verbose:
-                print(prefix + '{0} to old {1}'.format(' '.join(childargs), target[0]))
-            compat = True
-            if parsed_args.output_format:
-                childargs.extend(['--format', parsed_args.output_format])
-            ret, outbuf, outs = send_command(cluster_handle, target, childargs,
-                                             inbuf)
+        if ret:
+            where = '{0}.{1}'.format(*target)
+            if ret > 0:
+                raise RuntimeError('Unexpeceted return code from {0}: {1}'.
+                                   format(where, ret))
+            outs = 'problem getting command descriptions from {0}'.format(where)
+        else:
+            sigdict = parse_json_funcsigs(outbuf.decode('utf-8'), 'cli')
 
-            if ret == -errno.EINVAL:
-                # did we race with a mon upgrade?  try again!
-                ret, outbuf, outs = json_command(cluster_handle, target=target,
-                                                 prefix='get_command_descriptions')
-                if ret == 0:
-                    compat = False  # yep, carry on
-        if not compat:
-            if ret:
+            if parsed_args.completion:
+                return complete(sigdict, childargs, target)
+
+            ret, outbuf, outs = new_style_command(parsed_args, childargs,
+                                                  target, sigdict, inbuf,
+                                                  verbose)
+
+            # debug tool: send any successful command *again* to
+            # verify that it is idempotent.
+            if not ret and 'CEPH_CLI_TEST_DUP_COMMAND' in os.environ:
+                ret, outbuf, outs = new_style_command(parsed_args, childargs,
+                                                      target, sigdict, inbuf,
+                                                      verbose)
                 if ret < 0:
-                    outs = 'problem getting command descriptions from {0}.{1}'.format(*target)
-            else:
-                sigdict = parse_json_funcsigs(outbuf.decode('utf-8'), 'cli')
-
-                if parsed_args.completion:
-                    return complete(sigdict, childargs, target)
-
-                ret, outbuf, outs = new_style_command(parsed_args, childargs, target,
-                                                      sigdict, inbuf, verbose)
-
-                # debug tool: send any successful command *again* to
-                # verify that it is idempotent.
-                if not ret and 'CEPH_CLI_TEST_DUP_COMMAND' in os.environ:
-                    ret, outbuf, outs = new_style_command(parsed_args, childargs, target,
-                                                          sigdict, inbuf, verbose)
-                    if ret < 0:
-                        ret = -ret
-                        print(prefix + 'Second attempt of previously successful command failed with {0}: {1}'.format(errno.errorcode.get(ret, 'Unknown'), outs),
-                              file=sys.stderr)
+                    ret = -ret
+                    print(prefix +
+                          'Second attempt of previously successful command '
+                          'failed with {0}: {1}'.format(
+                              errno.errorcode.get(ret, 'Unknown'), outs),
+                          file=sys.stderr)
 
         if ret < 0:
             ret = -ret
-            print(u'Error {0}: {1}'.format(errno.errorcode.get(ret, 'Unknown'), outs), file=sys.stderr)
+            errstr = errno.errorcode.get(ret, 'Unknown')
+            print(u'Error {0}: {1}'.format(errstr, outs), file=sys.stderr)
             if len(targets) > 1:
                 final_ret = ret
             else:
                 return ret
 
-        # this assumes outs never has useful command output, only status
-        if compat:
-            if ret == 0:
-                # old cli/mon would send status string to stdout on non-error
-                print(outs)
-        else:
-            if outs:
-                print(prefix + outs, file=sys.stderr)
+        if outs:
+            print(prefix + outs, file=sys.stderr)
 
         sys.stdout.flush()
 
@@ -1104,8 +1072,7 @@ def main():
             # to satisfy consumers that skip the first line, but not annoy
             # consumers that don't.
             if parsed_args.output_format and \
-               parsed_args.output_format.startswith('json') and \
-               not compat:
+               parsed_args.output_format.startswith('json'):
                 print()
 
             # if we are prettifying things, normalize newlines.  sigh.
