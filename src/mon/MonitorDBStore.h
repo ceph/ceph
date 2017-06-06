@@ -620,10 +620,10 @@ class MonitorDBStore
       }
       do_dump = true;
     }
+    string options;
     if (kv_type == "rocksdb")
-      db->init(g_conf->mon_rocksdb_options);
-    else
-      db->init();
+      options=g_conf->mon_rocksdb_options;
+    db->init(options);
   }
 
   int open(ostream &out) {
