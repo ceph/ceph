@@ -243,6 +243,7 @@ OPTION(ms_async_rdma_polling_us, OPT_U32, 1000)
 OPTION(ms_async_rdma_local_gid, OPT_STR, "")       // GID format: "fe80:0000:0000:0000:7efe:90ff:fe72:6efe", no zero folding
 OPTION(ms_async_rdma_roce_ver, OPT_INT, 1)         // 0=RoCEv1, 1=RoCEv2, 2=RoCEv1.5
 OPTION(ms_async_rdma_sl, OPT_INT, 3)               // in RoCE, this means PCP
+OPTION(ms_async_rdma_dscp, OPT_INT, 96)            // in RoCE, this means DSCP
 
 OPTION(ms_dpdk_port_id, OPT_INT, 0)
 SAFE_OPTION(ms_dpdk_coremask, OPT_STR, "1")        // it is modified in unittest so that use SAFE_OPTION to declare 
