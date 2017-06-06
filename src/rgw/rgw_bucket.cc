@@ -857,7 +857,7 @@ int RGWBucket::link(RGWBucketAdminOpState& op_state, std::string *err_msg)
     policy.create_default(user_info.user_id, display_name);
 
     owner = policy.get_owner();
-    r = store->set_bucket_owner(bucket, owner);
+    r = store->set_bucket_owner(bucket_info.bucket, owner);
     if (r < 0) {
       set_err_msg(err_msg, "failed to set bucket owner: " + cpp_strerror(-r));
       return r;

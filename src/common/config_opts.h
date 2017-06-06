@@ -1734,3 +1734,10 @@ OPTION(internal_safe_to_start_threads, OPT_BOOL, false)
 OPTION(debug_deliberately_leak_memory, OPT_BOOL, false)
 
 OPTION(rgw_swift_custom_header, OPT_STR, "") // option to enable swift custom headers
+
+/* resharding tunables */
+OPTION(rgw_reshard_num_logs, OPT_INT, 16)
+OPTION(rgw_reshard_bucket_lock_duration, OPT_INT, 120) // duration of lock on bucket obj during resharding
+OPTION(rgw_dynamic_resharding, OPT_BOOL, true)
+OPTION(rgw_max_objs_per_shard, OPT_INT, 100000)
+OPTION(rgw_reshard_thread_interval, OPT_U32, 60 * 10) // maximum time between rounds of reshard thread processing
