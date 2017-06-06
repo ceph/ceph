@@ -692,6 +692,19 @@ COMMAND("osd primary-affinity " \
 	"type=CephFloat,name=weight,range=0.0|1.0", \
 	"adjust osd primary-affinity from 0.0 <= <weight> <= 1.0", \
 	"osd", "rw", "cli,rest")
+COMMAND("osd destroy " \
+        "name=id,type=CephOsdName " \
+        "name=sure,type=CephChoices,strings=--yes-i-really-mean-it,req=false", \
+        "mark osd as being destroyed. Keeps the ID intact (allowing reuse), " \
+        "but removes cephx keys, config-key data and lockbox keys, "\
+        "rendering data permanently unreadable.", \
+        "osd", "rw", "cli,rest")
+COMMAND("osd purge " \
+        "name=id,type=CephOsdName " \
+        "name=sure,type=CephChoices,strings=--yes-i-really-mean-it,req=false", \
+        "purge all osd data from the monitors. Combines `osd destroy`, " \
+        "`osd rm`, and `osd crush rm`.", \
+        "osd", "rw", "cli,rest")
 COMMAND("osd lost " \
 	"name=id,type=CephOsdName " \
 	"name=sure,type=CephChoices,strings=--yes-i-really-mean-it,req=false", \
@@ -701,6 +714,13 @@ COMMAND("osd create " \
 	"name=uuid,type=CephUUID,req=false " \
 	"name=id,type=CephOsdName,req=false", \
 	"create new osd (with optional UUID and ID)", "osd", "rw", "cli,rest")
+COMMAND("osd new " \
+        "name=uuid,type=CephUUID,req=true " \
+        "name=id,type=CephOsdName,req=false", \
+        "Create a new OSD. If supplied, the `id` to be replaced needs to " \
+        "exist and have been previously destroyed. " \
+        "Reads secrets from JSON file via `-i <file>` (see man page).", \
+        "osd", "rw", "cli,rest")
 COMMAND("osd blacklist " \
 	"name=blacklistop,type=CephChoices,strings=add|rm " \
 	"name=addr,type=CephEntityAddr " \
