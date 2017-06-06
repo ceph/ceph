@@ -376,6 +376,16 @@ instances or all radosgw-admin commands can be put into the ``[global]`` or the
 :Type: Integer
 :Default: ``-1``
 
+``rgw bucket quota ttl``
+
+:Description: Time (seconds) for bucket stats to be cached within this
+              RGW instance. When multiple RGW instances are in a round-robin
+              rotation, quota enforcement is only guaranteed to be eventually
+              consistent. This option provides a trade-off between refreshing
+              quota stats (which takes time) and the possibility of a user
+              going over quota (because the stats are out-of-date).
+:Type: Integer
+:Default: ``600``
 
 ``rgw user default quota max objects``
 
