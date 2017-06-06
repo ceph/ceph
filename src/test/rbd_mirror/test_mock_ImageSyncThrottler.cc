@@ -78,7 +78,6 @@ public:
 
   void finish(int r) {
     on_finish->complete(r);
-    put();
   }
 
   void get() {

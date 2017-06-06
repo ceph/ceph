@@ -145,7 +145,7 @@ Context *ExclusiveLock<I>::start_op() {
 
 template <typename I>
 void ExclusiveLock<I>::handle_init_complete(uint64_t features) {
-  ldout(m_image_ctx.cct, 10) << "features=" << features << dendl;
+  ldout(m_image_ctx.cct, 10) << ": features=" << features << dendl;
 
   if ((features & RBD_FEATURE_JOURNALING) != 0) {
     m_image_ctx.io_work_queue->set_require_lock_on_read();

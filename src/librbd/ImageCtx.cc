@@ -629,18 +629,23 @@ struct C_InvalidateCache : public Context {
     return -ENOENT;
   }
 
-  bool ImageCtx::test_flags(uint64_t flags) const
+  int ImageCtx::test_flags(uint64_t flags, bool *flags_set) const
   {
     RWLock::RLocker l(snap_lock);
-    return test_flags(flags, snap_lock);
+    return test_flags(flags, snap_lock, flags_set);
   }
 
-  bool ImageCtx::test_flags(uint64_t flags, const RWLock &in_snap_lock) const
+  int ImageCtx::test_flags(uint64_t flags, const RWLock &in_snap_lock,
+                           bool *flags_set) const
   {
     assert(snap_lock.is_locked());
     uint64_t snap_flags;
-    get_flags(snap_id, &snap_flags);
-    return ((snap_flags & flags) == flags);
+    int r = get_flags(snap_id, &snap_flags);
+    if (r < 0) {
+      return r;
+    }
+    *flags_set = ((snap_flags & flags) == flags);
+    return 0;
   }
 
   int ImageCtx::update_flags(snap_t in_snap_id, uint64_t flag, bool enabled)

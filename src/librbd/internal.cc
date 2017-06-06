@@ -1382,12 +1382,14 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
                        ictx->exclusive_lock->is_lock_owner();
       if (is_locked) {
         C_SaferCond ctx;
-        ictx->exclusive_lock->shut_down(&ctx);
+        auto exclusive_lock = ictx->exclusive_lock;
+        exclusive_lock->shut_down(&ctx);
         ictx->owner_lock.put_read();
         int r = ctx.wait();
         if (r < 0) {
           lderr(cct) << "error shutting down exclusive lock" << dendl;
         }
+        delete exclusive_lock;
       } else {
         ictx->owner_lock.put_read();
       }

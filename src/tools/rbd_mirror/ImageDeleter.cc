@@ -479,11 +479,9 @@ int ImageDeleter::image_has_snapshots_and_children(IoCtx *ioctx,
 void ImageDeleter::complete_active_delete(int r) {
   dout(20) << dendl;
 
-  m_delete_lock.Lock();
-  DeleteInfo *del_info = m_active_delete.release();
-  assert(del_info != nullptr);
-  m_delete_lock.Unlock();
-  del_info->notify(r);
+  Mutex::Locker delete_locker(m_delete_lock);
+  m_active_delete->notify(r);
+  m_active_delete.reset();
 }
 
 void ImageDeleter::enqueue_failed_delete(int error_code) {

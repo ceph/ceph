@@ -484,7 +484,10 @@ TEST_F(TestImageReplayer, StartInterrupted)
 TEST_F(TestImageReplayer, JournalReset)
 {
   bootstrap();
+  delete m_replayer;
+
   ASSERT_EQ(0, librbd::Journal<>::reset(m_remote_ioctx, m_remote_image_id));
+
   // try to recover
   bootstrap();
 }
@@ -758,6 +761,7 @@ TEST_F(TestImageReplayer, Resync_StartInterrupted)
 
   ASSERT_TRUE(m_replayer->is_replaying());
 
+  generate_test_data();
   open_remote_image(&ictx);
   for (int i = 0; i < TEST_IO_COUNT; ++i) {
     write_test_data(ictx, m_test_data, TEST_IO_SIZE * i, TEST_IO_SIZE);
@@ -833,6 +837,7 @@ TEST_F(TestImageReplayer, MultipleReplayFailures_SingleEpoch) {
     wait_for_stopped();
     unwatch();
   }
+  close_image(ictx);
 }
 
 TEST_F(TestImageReplayer, MultipleReplayFailures_MultiEpoch) {
@@ -881,6 +886,7 @@ TEST_F(TestImageReplayer, MultipleReplayFailures_MultiEpoch) {
     ASSERT_EQ(0, release_ctx.wait());
   }
 
+  generate_test_data();
   write_test_data(ictx, m_test_data, 0, TEST_IO_SIZE);
 
   for (uint64_t i = 0; i < 5; ++i) {
@@ -1155,6 +1161,7 @@ TEST_F(TestImageReplayer, MirroringDelay)
   for (int i = 0; i < TEST_IO_COUNT; ++i) {
     write_test_data(ictx, m_test_data, TEST_IO_SIZE * i, TEST_IO_SIZE);
   }
+  close_image(ictx);
 
   sleep(DELAY / 2);
   stop();

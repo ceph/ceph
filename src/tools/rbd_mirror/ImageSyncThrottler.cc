@@ -42,7 +42,9 @@ struct ImageSyncThrottler<ImageCtxT>::C_SyncHolder : public Context {
   }
 
   void finish(int r) override {
+    m_sync->put();
     m_sync_throttler->handle_sync_finished(this);
+
     m_on_finish->complete(r);
   }
 };
