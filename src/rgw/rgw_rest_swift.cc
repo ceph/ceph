@@ -2662,23 +2662,18 @@ int RGWHandler_REST_SWIFT::init_from_header(struct req_state* const s,
   }
 
   std::string tenant_path;
-  if (! g_conf->rgw_swift_tenant_name.empty()) {
-    tenant_path = "/AUTH_";
-    tenant_path.append(g_conf->rgw_swift_tenant_name);
-  }
-
   /* verify that the request_uri conforms with what's expected */
-  char buf[g_conf->rgw_swift_url_prefix.length() + 16 + tenant_path.length()];
+  char buf[g_conf->rgw_swift_url_prefix.length() + 16];
   int blen;
   if (g_conf->rgw_swift_url_prefix == "/") {
-    blen = sprintf(buf, "/v1%s", tenant_path.c_str());
+    blen = sprintf(buf, "/v1/AUTH_");
   } else {
-    blen = sprintf(buf, "/%s/v1%s",
-                   g_conf->rgw_swift_url_prefix.c_str(), tenant_path.c_str());
+    blen = sprintf(buf, "/%s/v1/AUTH_",
+                   g_conf->rgw_swift_url_prefix.c_str());
   }
 
-  if (strncmp(reqbuf, buf, blen) != 0) {
-    return -ENOENT;
+  if (strncmp(reqbuf, buf, blen) == 0) {
+    tenant_path = "/AUTH_";
   }
 
   int ret = allocate_formatter(s, RGW_FORMAT_PLAIN, true);
@@ -2707,6 +2702,8 @@ int RGWHandler_REST_SWIFT::init_from_header(struct req_state* const s,
 
     if (account_name.empty()) {
       return -ERR_PRECONDITION_FAILED;
+    } else if ( ! g_conf->rgw_swift_tenant_name.empty() && account_name.compare(g_conf->rgw_swift_tenant_name) != 0) {
+      return -ENOENT;
     } else {
       s->account_name = account_name;
     }
