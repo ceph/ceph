@@ -3878,6 +3878,7 @@ void ObjectModDesc::decode(bufferlist::iterator &_bl)
   ::decode(bl, _bl);
   // ensure bl does not pin a larger buffer in memory
   bl.rebuild();
+  bl.reassign_to_mempool(mempool::mempool_osd_pglog);
   DECODE_FINISH(_bl);
 }
 

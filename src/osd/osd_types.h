@@ -3126,7 +3126,9 @@ public:
     TRY_DELETE = 6,
     ROLLBACK_EXTENTS = 7
   };
-  ObjectModDesc() : can_local_rollback(true), rollback_info_completed(false) {}
+  ObjectModDesc() : can_local_rollback(true), rollback_info_completed(false) {
+    bl.reassign_to_mempool(mempool::mempool_osd_pglog);
+  }
   void claim(ObjectModDesc &other) {
     bl.clear();
     bl.claim(other.bl);
