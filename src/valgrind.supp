@@ -223,3 +223,41 @@
    fun:pthread_create@*
    ...
 }
+
+# rados cython constants
+{
+   <insert_a_suppression_name_here>
+   Memcheck:Leak
+   match-leak-kinds: definite
+   fun:malloc
+   fun:PyObject_Malloc
+   fun:PyCode_New
+   fun:__Pyx_InitCachedConstants
+   fun:initrados
+   fun:_PyImport_LoadDynamicModule
+   ...
+   fun:PyImport_ImportModuleLevel
+   ...
+   fun:PyObject_Call
+   fun:PyEval_CallObjectWithKeywords
+   fun:PyEval_EvalFrameEx
+}
+
+# rbd cython constants
+{
+   <insert_a_suppression_name_here>
+   Memcheck:Leak
+   match-leak-kinds: definite
+   fun:malloc
+   fun:PyObject_Malloc
+   fun:PyCode_New
+   fun:__Pyx_InitCachedConstants
+   fun:initrbd
+   fun:_PyImport_LoadDynamicModule
+   ...
+   fun:PyImport_ImportModuleLevel
+   ...
+   fun:PyObject_Call
+   fun:PyEval_CallObjectWithKeywords
+   fun:PyEval_EvalFrameEx
+}
