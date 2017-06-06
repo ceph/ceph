@@ -573,6 +573,9 @@ protected:
 public:
   using RGWHandler_REST_S3::RGWHandler_REST_S3;
   ~RGWHandler_REST_Obj_S3() override = default;
+
+  int error_handler(const int err_no,
+                    std::string* const error_content) override;
 };
 
 class RGWRESTMgr_S3 : public RGWRESTMgr {

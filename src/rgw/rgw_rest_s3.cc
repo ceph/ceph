@@ -3059,6 +3059,18 @@ RGWOp *RGWHandler_REST_Obj_S3::op_options()
   return new RGWOptionsCORS_ObjStore_S3;
 }
 
+
+int RGWHandler_REST_Obj_S3::error_handler(const int err_no,
+                  std::string* const error_content)
+{
+  if (err_no == -ENOENT &&
+      !s->object.instance.empty()) {
+    return -ERR_NO_SUCH_VERSION;
+  }
+
+  return err_no;
+}
+
 int RGWHandler_REST_S3::init_from_header(struct req_state* s,
 					int default_formatter,
 					bool configurable_format)
