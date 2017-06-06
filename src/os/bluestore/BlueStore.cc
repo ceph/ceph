@@ -2200,7 +2200,7 @@ void BlueStore::ExtentMap::reshard(
     }
     if (spanning_scan_end > needs_reshard_end) {
       fault_range(db, needs_reshard_end,
-		  spanning_scan_end - needs_reshard_begin);
+		  spanning_scan_end - needs_reshard_end);
     }
     auto sp = sv.begin() + si_begin;
     auto esp = sv.end();
