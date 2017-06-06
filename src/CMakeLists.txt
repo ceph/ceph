@@ -898,9 +898,9 @@ if(WITH_TESTS)
     DESTINATION bin)
 endif(WITH_TESTS)
 
-if(HAVE_INTEL)
+if(HAVE_INTEL AND HAVE_BETTER_YASM_ELF64)
   add_subdirectory(crypto/isa-l)
-endif(HAVE_INTEL)
+endif(HAVE_INTEL AND HAVE_BETTER_YASM_ELF64)
 
 if(WITH_TESTS)
 
