@@ -73,7 +73,7 @@ static void usage()
   generic_server_usage();
 }
 
-static std::string devpath, poolname("rbd"), imgname, snapname;
+static std::string devpath, poolname, imgname, snapname;
 static bool readonly = false;
 static int nbds_max = 0;
 static int max_part = 255;
@@ -646,6 +646,14 @@ static int do_map(int argc, const char *argv[])
   if (r < 0)
     goto close_nbd;
 
+  if (poolname.empty()) {
+    r = rados.conf_get("rbd_default_pool", poolname);
+    if (r < 0) {
+      cerr << "rbd-nbd: failed to retrieve default pool" << std::endl;
+      goto close_nbd;
+    }
+  }
+
   r = rados.ioctx_create(poolname.c_str(), io_ctx);
   if (r < 0)
     goto close_nbd;
@@ -792,8 +800,11 @@ static int parse_imgpath(const std::string &imgpath)
     return -EINVAL;
   }
 
-  if (match[1].matched)
+  if (match[1].matched) {
     poolname = match[1];
+  } else {
+    poolname = "";
+  }
 
   imgname = match[2];
 
