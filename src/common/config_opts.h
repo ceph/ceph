@@ -243,6 +243,7 @@ OPTION(ms_async_rdma_polling_us, OPT_U32, 1000)
 OPTION(ms_async_rdma_local_gid, OPT_STR, "")       // GID format: "fe80:0000:0000:0000:7efe:90ff:fe72:6efe", no zero folding
 OPTION(ms_async_rdma_roce_ver, OPT_INT, 1)         // 0=RoCEv1, 1=RoCEv2, 2=RoCEv1.5
 OPTION(ms_async_rdma_sl, OPT_INT, 3)               // in RoCE, this means PCP
+OPTION(ms_async_rdma_dscp, OPT_INT, 96)            // in RoCE, this means DSCP
 
 OPTION(ms_dpdk_port_id, OPT_INT, 0)
 SAFE_OPTION(ms_dpdk_coremask, OPT_STR, "1")        // it is modified in unittest so that use SAFE_OPTION to declare 
@@ -271,6 +272,7 @@ OPTION(mon_osd_cache_size, OPT_INT, 10)  // the size of osdmaps cache, not to re
 
 OPTION(mon_cpu_threads, OPT_INT, 4)
 OPTION(mon_osd_mapping_pgs_per_chunk, OPT_INT, 4096)
+OPTION(mon_osd_max_creating_pgs, OPT_INT, 1024)
 OPTION(mon_tick_interval, OPT_INT, 5)
 OPTION(mon_session_timeout, OPT_INT, 300)    // must send keepalive or subscribe
 OPTION(mon_subscribe_interval, OPT_DOUBLE, 24*3600)  // for legacy clients only
@@ -307,6 +309,7 @@ OPTION(mon_clock_drift_warn_backoff, OPT_FLOAT, 5) // exponential backoff for cl
 OPTION(mon_timecheck_interval, OPT_FLOAT, 300.0) // on leader, timecheck (clock drift check) interval (seconds)
 OPTION(mon_timecheck_skew_interval, OPT_FLOAT, 30.0) // on leader, timecheck (clock drift check) interval when in presence of a skew (seconds)
 OPTION(mon_pg_stuck_threshold, OPT_INT, 300) // number of seconds after which pgs can be considered inactive, unclean, or stale (see doc/control.rst under dump_stuck for more info)
+OPTION(mon_health_max_detail, OPT_INT, 50) // max detailed pgs to report in health detail
 OPTION(mon_pg_min_inactive, OPT_U64, 1) // the number of PGs which have to be inactive longer than 'mon_pg_stuck_threshold' before health goes into ERR. 0 means disabled, never go into ERR.
 OPTION(mon_pg_warn_min_per_osd, OPT_INT, 30)  // min # pgs per (in) osd before we warn the admin
 OPTION(mon_pg_warn_max_per_osd, OPT_INT, 300)  // max # pgs per (in) osd before we warn the admin
@@ -378,6 +381,7 @@ OPTION(mon_debug_dump_json, OPT_BOOL, false)
 OPTION(mon_debug_dump_location, OPT_STR, "/var/log/ceph/$cluster-$name.tdump")
 OPTION(mon_debug_no_require_luminous, OPT_BOOL, false)
 OPTION(mon_debug_no_require_bluestore_for_ec_overwrites, OPT_BOOL, false)
+OPTION(mon_debug_no_initial_persistent_features, OPT_BOOL, false)
 OPTION(mon_inject_transaction_delay_max, OPT_DOUBLE, 10.0)      // seconds
 OPTION(mon_inject_transaction_delay_probability, OPT_DOUBLE, 0) // range [0, 1]
 
@@ -1143,7 +1147,7 @@ OPTION(bluestore_extent_map_shard_target_size, OPT_U32, 500)
 OPTION(bluestore_extent_map_shard_min_size, OPT_U32, 150)
 OPTION(bluestore_extent_map_shard_target_size_slop, OPT_DOUBLE, .2)
 OPTION(bluestore_extent_map_inline_shard_prealloc_size, OPT_U32, 256)
-OPTION(bluestore_cache_trim_interval, OPT_DOUBLE, .1)
+OPTION(bluestore_cache_trim_interval, OPT_DOUBLE, .2)
 OPTION(bluestore_cache_trim_max_skip_pinned, OPT_U32, 64) // skip this many onodes pinned in cache before we give up
 OPTION(bluestore_cache_type, OPT_STR, "2q")   // lru, 2q
 OPTION(bluestore_2q_cache_kin_ratio, OPT_DOUBLE, .5)    // kin page slot size / max page slot size
@@ -1709,8 +1713,8 @@ OPTION(rgw_swift_versioning_enabled, OPT_BOOL, false) // whether swift object ve
 OPTION(mgr_module_path, OPT_STR, CEPH_PKGLIBDIR "/mgr") // where to load python modules from
 OPTION(mgr_modules, OPT_STR, "restful")  // Which modules to load
 OPTION(mgr_data, OPT_STR, "/var/lib/ceph/mgr/$cluster-$id") // where to find keyring etc
-OPTION(mgr_beacon_period, OPT_INT, 5)  // How frequently to send beacon
-OPTION(mgr_stats_period, OPT_INT, 5) // How frequently to send stats
+OPTION(mgr_tick_period, OPT_INT, 2)  // How frequently to tick
+OPTION(mgr_stats_period, OPT_INT, 5) // How frequently clients send stats
 OPTION(mgr_client_bytes, OPT_U64, 128*1048576) // bytes from clients
 OPTION(mgr_client_messages, OPT_U64, 512)      // messages from clients
 OPTION(mgr_osd_bytes, OPT_U64, 512*1048576)   // bytes from osds
@@ -1755,3 +1759,10 @@ OPTION(internal_safe_to_start_threads, OPT_BOOL, false)
 OPTION(debug_deliberately_leak_memory, OPT_BOOL, false)
 
 OPTION(rgw_swift_custom_header, OPT_STR, "") // option to enable swift custom headers
+
+/* resharding tunables */
+OPTION(rgw_reshard_num_logs, OPT_INT, 16)
+OPTION(rgw_reshard_bucket_lock_duration, OPT_INT, 120) // duration of lock on bucket obj during resharding
+OPTION(rgw_dynamic_resharding, OPT_BOOL, true)
+OPTION(rgw_max_objs_per_shard, OPT_INT, 100000)
+OPTION(rgw_reshard_thread_interval, OPT_U32, 60 * 10) // maximum time between rounds of reshard thread processing

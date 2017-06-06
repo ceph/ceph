@@ -10,7 +10,6 @@
 #ifndef CLS_REPLICA_LOG_OPS_H_
 #define CLS_REPLICA_LOG_OPS_H_
 
-#include "include/types.h"
 #include "cls_replica_log_types.h"
 
 struct cls_replica_log_delete_marker_op {

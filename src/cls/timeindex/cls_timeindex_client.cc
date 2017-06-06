@@ -3,10 +3,8 @@
 
 #include <errno.h>
 
-#include "include/types.h"
 #include "cls/timeindex/cls_timeindex_ops.h"
 #include "cls/timeindex/cls_timeindex_client.h"
-#include "include/rados/librados.hpp"
 #include "include/compat.h"
 
 void cls_timeindex_add(

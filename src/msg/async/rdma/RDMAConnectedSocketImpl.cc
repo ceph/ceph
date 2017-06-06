@@ -104,6 +104,7 @@ int RDMAConnectedSocketImpl::activate()
 
   qpa.ah_attr.dlid = peer_msg.lid;
   qpa.ah_attr.sl = cct->_conf->ms_async_rdma_sl;
+  qpa.ah_attr.grh.traffic_class = cct->_conf->ms_async_rdma_dscp;
   qpa.ah_attr.src_path_bits = 0;
   qpa.ah_attr.port_num = (uint8_t)(infiniband->get_ib_physical_port());
 

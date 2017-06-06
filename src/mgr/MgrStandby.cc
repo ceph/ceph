@@ -134,7 +134,7 @@ int MgrStandby::init()
   client.init();
   timer.init();
 
-  send_beacon();
+  tick();
 
   dout(4) << "Complete." << dendl;
   return 0;
@@ -155,9 +155,20 @@ void MgrStandby::send_beacon()
                                  available);
                                  
   monc.send_mon_message(m);
-  timer.add_event_after(g_conf->mgr_beacon_period, new FunctionContext(
+}
+
+void MgrStandby::tick()
+{
+  dout(0) << __func__ << dendl;
+  send_beacon();
+
+  if (active_mgr) {
+    active_mgr->tick();
+  }
+
+  timer.add_event_after(g_conf->mgr_tick_period, new FunctionContext(
         [this](int r){
-          send_beacon();
+          tick();
         }
   )); 
 }
@@ -240,6 +251,11 @@ void MgrStandby::handle_mgr_map(MMgrMap* mmap)
       derr << "I was active but no longer am" << dendl;
       active_mgr->shutdown();
       active_mgr.reset();
+
+      // FIXME: reset monc connection so that our old subscriptions go away
+      // and we stop getting MLog and MMgrDigest messages.  (We do something
+      // similar in Mgr::init().)
+      monc.reopen_session();
     }
   }
 

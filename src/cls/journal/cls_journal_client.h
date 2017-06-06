@@ -4,15 +4,16 @@
 #ifndef CEPH_CLS_JOURNAL_CLIENT_H
 #define CEPH_CLS_JOURNAL_CLIENT_H
 
-#include "include/int_types.h"
-#include "include/rados/librados.hpp"
 #include "cls/journal/cls_journal_types.h"
-#include <map>
 #include <set>
-#include <string>
 #include <boost/optional.hpp>
 
 class Context;
+namespace librados {
+  class IoCtx;
+  class ObjectWriteOperation;
+  class ObjectReadOperation;
+}
 
 namespace cls {
 namespace journal {

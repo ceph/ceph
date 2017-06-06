@@ -1444,8 +1444,9 @@ bool OSDService::_get_map_bl(epoch_t e, bufferlist& bl)
   found = store->read(coll_t::meta(),
 		      OSD::get_osdmap_pobject_name(e), 0, 0, bl,
 		      CEPH_OSD_OP_FLAG_FADVISE_WILLNEED) >= 0;
-  if (found)
+  if (found) {
     _add_map_bl(e, bl);
+  }
   return found;
 }
 
@@ -1463,14 +1464,19 @@ bool OSDService::get_inc_map_bl(epoch_t e, bufferlist& bl)
   found = store->read(coll_t::meta(),
 		      OSD::get_inc_osdmap_pobject_name(e), 0, 0, bl,
 		      CEPH_OSD_OP_FLAG_FADVISE_WILLNEED) >= 0;
-  if (found)
+  if (found) {
     _add_map_inc_bl(e, bl);
+  }
   return found;
 }
 
 void OSDService::_add_map_bl(epoch_t e, bufferlist& bl)
 {
   dout(10) << "add_map_bl " << e << " " << bl.length() << " bytes" << dendl;
+  // cache a contiguous buffer
+  if (bl.get_num_buffers() > 1) {
+    bl.rebuild();
+  }
   bl.try_assign_to_mempool(mempool::mempool_osd_mapbl);
   map_bl_cache.add(e, bl);
 }
@@ -1478,6 +1484,10 @@ void OSDService::_add_map_bl(epoch_t e, bufferlist& bl)
 void OSDService::_add_map_inc_bl(epoch_t e, bufferlist& bl)
 {
   dout(10) << "add_map_inc_bl " << e << " " << bl.length() << " bytes" << dendl;
+  // cache a contiguous buffer
+  if (bl.get_num_buffers() > 1) {
+    bl.rebuild();
+  }
   bl.try_assign_to_mempool(mempool::mempool_osd_mapbl);
   map_bl_inc_cache.add(e, bl);
 }
@@ -1485,12 +1495,20 @@ void OSDService::_add_map_inc_bl(epoch_t e, bufferlist& bl)
 void OSDService::pin_map_inc_bl(epoch_t e, bufferlist &bl)
 {
   Mutex::Locker l(map_cache_lock);
+  // cache a contiguous buffer
+  if (bl.get_num_buffers() > 1) {
+    bl.rebuild();
+  }
   map_bl_inc_cache.pin(e, bl);
 }
 
 void OSDService::pin_map_bl(epoch_t e, bufferlist &bl)
 {
   Mutex::Locker l(map_cache_lock);
+  // cache a contiguous buffer
+  if (bl.get_num_buffers() > 1) {
+    bl.rebuild();
+  }
   map_bl_cache.pin(e, bl);
 }
 
@@ -5007,7 +5025,9 @@ void OSD::tick_without_osd_lock()
       // do any pending reports
       send_full_update();
       send_failures();
-      send_pg_stats(now);
+      if (osdmap->require_osd_release < CEPH_RELEASE_LUMINOUS) {
+	send_pg_stats(now);
+      }
     }
     map_lock.put_read();
   }
@@ -5397,7 +5417,9 @@ void OSD::ms_handle_connect(Connection *con)
       service.send_pg_temp();
       requeue_failures();
       send_failures();
-      send_pg_stats(now);
+      if (osdmap->require_osd_release < CEPH_RELEASE_LUMINOUS) {
+	send_pg_stats(now);
+      }
 
       map_lock.put_read();
       if (is_active()) {
@@ -5838,6 +5860,7 @@ void OSD::send_still_alive(epoch_t epoch, const entity_inst_t &i)
 void OSD::send_pg_stats(const utime_t &now)
 {
   assert(map_lock.is_locked());
+  assert(osdmap->require_osd_release < CEPH_RELEASE_LUMINOUS);
   dout(20) << "send_pg_stats" << dendl;
 
   osd_stat_t cur_stat = service.get_osd_stat();
@@ -6438,7 +6461,12 @@ void OSD::do_command(Connection *con, ceph_tid_t tid, vector<string>& cmd, buffe
   }
 
   else if (prefix == "flush_pg_stats") {
-    flush_pg_stats();
+    if (osdmap->require_osd_release >= CEPH_RELEASE_LUMINOUS) {
+      mgrc.send_pgstats();
+      ds << service.get_osd_stat_seq() << "\n";
+    } else {
+      flush_pg_stats();
+    }
   }
 
   else if (prefix == "heap") {
@@ -7552,6 +7580,13 @@ void OSD::_committed_osd_maps(epoch_t first, epoch_t last, MOSDMap *m)
 	do_restart = true;
       }
     }
+    if (osdmap->require_osd_release < CEPH_RELEASE_LUMINOUS &&
+	newmap->require_osd_release >= CEPH_RELEASE_LUMINOUS) {
+      dout(10) << __func__ << " require_osd_release reached luminous in "
+	       << newmap->get_epoch() << dendl;
+      clear_pg_stat_queue();
+      outstanding_pg_stats.clear();
+    }
 
     osdmap = newmap;
     epoch_t up_epoch;
@@ -7726,12 +7761,7 @@ void OSD::_committed_osd_maps(epoch_t first, epoch_t last, MOSDMap *m)
     activate_map();
   }
 
-  if (m->newest_map && m->newest_map > last) {
-    dout(10) << " msg say newest map is " << m->newest_map
-	     << ", requesting more" << dendl;
-    osdmap_subscribe(osdmap->get_epoch()+1, false);
-  }
-  else if (do_shutdown) {
+  if (do_shutdown) {
     if (network_error) {
       Mutex::Locker l(heartbeat_lock);
       map<int,pair<utime_t,entity_inst_t>>::iterator it =
@@ -7746,6 +7776,11 @@ void OSD::_committed_osd_maps(epoch_t first, epoch_t last, MOSDMap *m)
     // trigger shutdown in a different thread
     dout(0) << __func__ << " shutdown OSD via async signal" << dendl;
     queue_async_signal(SIGINT);
+  }
+  else if (m->newest_map && m->newest_map > last) {
+    dout(10) << " msg say newest map is " << m->newest_map
+	     << ", requesting more" << dendl;
+    osdmap_subscribe(osdmap->get_epoch()+1, false);
   }
   else if (is_preboot()) {
     if (m->get_source().is_mon())

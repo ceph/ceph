@@ -63,11 +63,10 @@ function TEST_crush_rule_dump() {
 
     local ruleset=ruleset1
     ceph osd crush rule create-erasure $ruleset || return 1
-    local expected
-    expected="<rule_name>$ruleset</rule_name>"
-    ceph --format xml osd crush rule dump $ruleset | grep $expected || return 1
-    expected='"rule_name": "'$ruleset'"'
-    ceph osd crush rule dump | grep "$expected" || return 1
+    test $(ceph --format json osd crush rule dump $ruleset | \
+           jq ".rule_name == \"$ruleset\"") == true || return 1
+    test $(ceph --format json osd crush rule dump | \
+           jq "map(select(.rule_name == \"$ruleset\")) | length == 1") == true || return 1
     ! ceph osd crush rule dump non_existent_ruleset || return 1
     ceph osd crush rule rm $ruleset || return 1
 }
@@ -275,15 +274,15 @@ function TEST_crush_repair_faulty_crushmap() {
     # should be an empty crush map without any buckets
     success=false
     for delay in 1 2 4 8 16 32 64 128 256 ; do
-        if ! test $(ceph osd crush dump --format=xml | \
-                           $XMLSTARLET sel -t -m "//buckets/bucket" -v .) ; then
+        if test $(ceph osd crush dump --format=json | \
+                  jq '.buckets | length == 0') == true ; then
             success=true
             break
         fi
         sleep $delay
     done
     if ! $success ; then
-        ceph osd crush dump --format=xml
+        ceph osd crush dump --format=json-pretty
         return 1
     fi
     # bring them down, the "ceph" commands will try to hunt for other monitor in
@@ -296,8 +295,8 @@ function TEST_crush_repair_faulty_crushmap() {
     run_mon $dir b --public-addr $MONB || return 1
     run_mon $dir c --public-addr $MONC || return 1
     # the buckets are back
-    test $(ceph osd crush dump --format=xml | \
-           $XMLSTARLET sel -t -m "//buckets/bucket" -v .) || return 1
+    test $(ceph osd crush dump --format=json | \
+           jq '.buckets | length > 0') == true || return 1
     CEPH_ARGS=$CEPH_ARGS_orig
 }
 

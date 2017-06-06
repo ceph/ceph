@@ -129,7 +129,7 @@ static const int SM_IOV_MAX = (IOV_MAX >= 1024 ? IOV_MAX / 4 : IOV_MAX);
     
     Mutex pipe_lock;
     int state;
-    atomic_t state_closed; // non-zero iff state = STATE_CLOSED
+    std::atomic<bool> state_closed = { false }; // true iff state = STATE_CLOSED
 
     // session_security handles any signatures or encryptions required for this pipe's msgs. PLR
 
