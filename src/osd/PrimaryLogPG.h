@@ -864,7 +864,7 @@ protected:
    * Also used to store error log entries for dup detection.
    */
   void submit_log_entries(
-    const mempool::osd::list<pg_log_entry_t> &entries,
+    const mempool::osd_pglog::list<pg_log_entry_t> &entries,
     ObcLockManager &&manager,
     boost::optional<std::function<void(void)> > &&on_complete,
     OpRequestRef op = OpRequestRef(),
