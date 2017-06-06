@@ -122,6 +122,9 @@ public:
       ASSERT_EQ(acting, acting2);
       ASSERT_EQ(acting_primary, acting_primary2);
     }
+    cout << "any: " << *any << std::endl;;
+    cout << "first: " << *first << std::endl;;
+    cout << "primary: " << *primary << std::endl;;
   }
 };
 
@@ -376,7 +379,9 @@ TEST_F(OSDMapTest, PrimaryAffinity) {
        p != osdmap.get_pools().end();
        ++p) {
     int pool = p->first;
-    cout << "pool " << pool << std::endl;
+    int expect_primary = 10000 / n;
+    cout << "pool " << pool << " size " << (int)p->second.size
+	 << " expect_primary " << expect_primary << std::endl;
     {
       vector<int> any(n, 0);
       vector<int> first(n, 0);
@@ -417,6 +422,8 @@ TEST_F(OSDMapTest, PrimaryAffinity) {
       vector<int> first(n, 0);
       vector<int> primary(n, 0);
       test_mappings(pool, 10000, &any, &first, &primary);
+      int expect = (10000 / (n-2)) / 2; // half weight
+      cout << "expect " << expect << std::endl;
       for (int i=0; i<n; ++i) {
 	ASSERT_LT(0, any[i]);
 	if (i >= 2) {
@@ -428,8 +435,8 @@ TEST_F(OSDMapTest, PrimaryAffinity) {
 	  }
 	  ASSERT_EQ(0, primary[i]);
 	} else {
-	  ASSERT_LT(10000/6/4, primary[0]);
-	  ASSERT_GT(10000/6/4*3, primary[0]);
+	  ASSERT_LT(expect *2/3, primary[0]);
+	  ASSERT_GT(expect *4/3, primary[0]);
 	}
       }
     }
