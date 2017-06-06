@@ -1866,7 +1866,7 @@ private:
   size_t block_size_order = 0; ///< bits to shift to get block size
 
   uint64_t min_alloc_size = 0; ///< minimum allocation unit (power of 2)
-  int deferred_batch_ops = 0; ///< deferred batch size
+  std::atomic<int> deferred_batch_ops = {0}; ///< deferred batch size
 
   ///< bits for min_alloc_size
   std::atomic<uint8_t> min_alloc_size_order = {0};
