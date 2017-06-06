@@ -2797,7 +2797,6 @@ public:
                      void *index_op);
       int write_meta(uint64_t size, uint64_t accounted_size,
                      map<std::string, bufferlist>& attrs);
-      int write_data(const char *data, uint64_t ofs, uint64_t len, bool exclusive);
     };
 
     struct Delete {
