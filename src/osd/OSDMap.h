@@ -383,7 +383,7 @@ public:
     mempool::osdmap::vector<string> old_erasure_code_profiles;
     mempool::osdmap::map<int32_t,entity_addr_t> new_up_client;
     mempool::osdmap::map<int32_t,entity_addr_t> new_up_cluster;
-    mempool::osdmap::map<int32_t,uint8_t> new_state;             // XORed onto previous state.
+    mempool::osdmap::map<int32_t,uint32_t> new_state;             // XORed onto previous state.
     mempool::osdmap::map<int32_t,uint32_t> new_weight;
     mempool::osdmap::map<pg_t,mempool::osdmap::vector<int32_t> > new_pg_temp;     // [] to remove
     mempool::osdmap::map<pg_t, int32_t> new_primary_temp;            // [-1] to remove
@@ -472,7 +472,7 @@ private:
   int num_in_osd;      // not saved; see calc_num_osds
 
   int32_t max_osd;
-  vector<uint8_t> osd_state;
+  vector<uint32_t> osd_state;
 
   struct addrs_s {
     mempool::osdmap::vector<ceph::shared_ptr<entity_addr_t> > client_addr;
