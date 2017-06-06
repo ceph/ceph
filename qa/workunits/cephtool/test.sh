@@ -1540,9 +1540,9 @@ function test_mon_pg()
   wait_for_health "HEALTH_ERR.*1 full osd(s)"
   $SUDO ceph --admin-daemon $(get_admin_socket osd.0) injectfull full
   wait_for_health "HEALTH_ERR.*2 full osd(s)"
-  ceph health detail | grep "osd.0 is full at.*%"
-  ceph health detail | grep "osd.2 is full at.*%"
-  ceph health detail | grep "osd.1 is backfill full at.*%"
+  ceph health detail | grep "osd.0 is full"
+  ceph health detail | grep "osd.2 is full"
+  ceph health detail | grep "osd.1 is backfill full"
   $SUDO ceph --admin-daemon $(get_admin_socket osd.0) injectfull none
   $SUDO ceph --admin-daemon $(get_admin_socket osd.1) injectfull none
   $SUDO ceph --admin-daemon $(get_admin_socket osd.2) injectfull none
