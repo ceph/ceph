@@ -220,7 +220,7 @@ int RGWMetadataLog::trim(int shard_id, const real_time& from_time, const real_ti
 
   ret = store->time_log_trim(oid, from_time, end_time, start_marker, end_marker);
 
-  if (ret == -ENOENT)
+  if (ret == -ENOENT || ret == -ENODATA)
     ret = 0;
 
   return ret;

@@ -6682,7 +6682,7 @@ next:
     map<int, string> markers;
     ret = store->get_bi_log_status(bucket_info, shard_id, markers);
     if (ret < 0) {
-      cerr << "ERROR: trim_bi_log_entries(): " << cpp_strerror(-ret) << std::endl;
+      cerr << "ERROR: get_bi_log_status(): " << cpp_strerror(-ret) << std::endl;
       return -ret;
     }
     formatter->open_object_section("entries");
