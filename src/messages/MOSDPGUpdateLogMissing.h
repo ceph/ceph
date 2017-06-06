@@ -29,7 +29,7 @@ public:
   spg_t pgid;
   shard_id_t from;
   ceph_tid_t rep_tid;
-  mempool::osd::list<pg_log_entry_t> entries;
+  mempool::osd_pglog::list<pg_log_entry_t> entries;
 
   epoch_t get_epoch() const { return map_epoch; }
   spg_t get_pgid() const { return pgid; }
@@ -50,7 +50,7 @@ public:
     : MOSDFastDispatchOp(MSG_OSD_PG_UPDATE_LOG_MISSING, HEAD_VERSION,
 			 COMPAT_VERSION) { }
   MOSDPGUpdateLogMissing(
-    const mempool::osd::list<pg_log_entry_t> &entries,
+    const mempool::osd_pglog::list<pg_log_entry_t> &entries,
     spg_t pgid,
     shard_id_t from,
     epoch_t epoch,
