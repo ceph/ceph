@@ -1,0 +1,5 @@
+#!/bin/sh
+
+set -e
+
+dpkg-maintscript-helper rm_conffile /etc/logrotate.d/ceph-common -- "$@"
