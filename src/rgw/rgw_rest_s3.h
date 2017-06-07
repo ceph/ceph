@@ -740,6 +740,11 @@ class AWSGeneralAbstractor : public AWSEngine::VersionAbstractor {
   bool is_time_skew_ok(const utime_t& header_time,
                        const bool qsr) const;
 
+  virtual boost::optional<std::string>
+  get_v4_canonical_headers(const req_info& info,
+                           const boost::string_view& signedheaders,
+                           const bool using_qs) const;
+
   std::tuple<access_key_id_t,
              client_signature_t,
              string_to_sign_t,
@@ -767,6 +772,15 @@ public:
   get_auth_data(const req_state* s) const override;
 };
 
+class AWSGeneralBoto2Abstractor : public AWSGeneralAbstractor {
+  boost::optional<std::string>
+  get_v4_canonical_headers(const req_info& info,
+                           const boost::string_view& signedheaders,
+                           const bool using_qs) const override;
+
+public:
+  using AWSGeneralAbstractor::AWSGeneralAbstractor;
+};
 
 class AWSBrowserUploadAbstractor : public AWSEngine::VersionAbstractor {
   static std::string to_string(ceph::bufferlist bl) {

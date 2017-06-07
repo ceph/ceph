@@ -3503,6 +3503,16 @@ AWSGeneralAbstractor::get_auth_data(const req_state* const s) const
   }
 }
 
+boost::optional<std::string>
+AWSGeneralAbstractor::get_v4_canonical_headers(
+  const req_info& info,
+  const boost::string_view& signedheaders,
+  const bool using_qs) const
+{
+  return rgw::auth::s3::get_v4_canonical_headers(info, signedheaders,
+                                                 using_qs, false);
+}
+
 std::tuple<AWSVerAbstractor::access_key_id_t,
            AWSVerAbstractor::client_signature_t,
            AWSVerAbstractor::string_to_sign_t,
@@ -3532,8 +3542,7 @@ AWSGeneralAbstractor::get_auth_data_v4(const req_state* const s,
 
   /* craft canonical headers */
   boost::optional<std::string> canonical_headers = \
-    rgw::auth::s3::get_v4_canonical_headers(s->info, signed_hdrs, using_qs,
-                                            true /* FIXME: force_boto2_compat*/);
+    get_v4_canonical_headers(s->info, signed_hdrs, using_qs);
   if (canonical_headers) {
     ldout(s->cct, 10) << "canonical headers format = " << *canonical_headers
                       << dendl;
@@ -3670,6 +3679,17 @@ AWSGeneralAbstractor::get_auth_data_v4(const req_state* const s,
                              cmpl_factory);
     }
   }
+}
+
+
+boost::optional<std::string>
+AWSGeneralBoto2Abstractor::get_v4_canonical_headers(
+  const req_info& info,
+  const boost::string_view& signedheaders,
+  const bool using_qs) const
+{
+  return rgw::auth::s3::get_v4_canonical_headers(info, signedheaders,
+                                                 using_qs, true);
 }
 
 
