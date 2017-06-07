@@ -306,8 +306,6 @@ EMetaBlob::EMetaBlob(MDLog *mdlog) : opened_ino(0), renamed_dirino(0),
 
 void EMetaBlob::add_dir_context(CDir *dir, int mode)
 {
-  MDSRank *mds = dir->cache->mds;
-
   list<CDentry*> parents;
 
   // it may be okay not to include the maybe items, if
