@@ -4450,6 +4450,14 @@ void RGWPutACLs::execute()
   if (op_ret < 0)
     return;
 
+  if (!store->is_meta_master() && (!store->get_zonegroup().equals(s->bucket_info.zonegroup))) {
+     op_ret = forward_request_to_master(s, NULL, store, in_data, NULL);
+     if (op_ret < 0) {
+       ldout(s->cct, 20) << __func__ << "forward_request_to_master returned ret=" << op_ret << dendl;
+     }
+    return;
+  }
+
   ldout(s->cct, 15) << "read len=" << len << " data=" << (data ? data : "") << dendl;
 
   if (!s->canned_acl.empty() && len) {

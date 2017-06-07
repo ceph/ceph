@@ -1308,6 +1308,7 @@ protected:
   int len;
   char *data;
   ACLOwner owner;
+  bufferlist in_data;
 
 public:
   RGWPutACLs() {
