@@ -207,12 +207,10 @@ private:
 
 PoolReplayer::PoolReplayer(Threads<librbd::ImageCtx> *threads,
 			   std::shared_ptr<ImageDeleter> image_deleter,
-			   ImageSyncThrottlerRef<> image_sync_throttler,
 			   int64_t local_pool_id, const peer_t &peer,
 			   const std::vector<const char*> &args) :
   m_threads(threads),
   m_image_deleter(image_deleter),
-  m_image_sync_throttler(image_sync_throttler),
   m_lock(stringify("rbd::mirror::PoolReplayer ") + stringify(peer)),
   m_peer(peer),
   m_args(args),
@@ -306,8 +304,7 @@ int PoolReplayer::init()
   dout(20) << "connected to " << m_peer << dendl;
 
   m_instance_replayer.reset(
-    InstanceReplayer<>::create(m_threads, m_image_deleter,
-                               m_image_sync_throttler, m_local_rados,
+    InstanceReplayer<>::create(m_threads, m_image_deleter, m_local_rados,
                                local_mirror_uuid, m_local_pool_id));
   m_instance_replayer->init();
   m_instance_replayer->add_peer(m_peer.uuid, m_remote_io_ctx);
@@ -323,6 +320,7 @@ int PoolReplayer::init()
 
   m_leader_watcher.reset(new LeaderWatcher<>(m_threads, m_local_io_ctx,
                                              &m_leader_listener));
+
   r = m_leader_watcher->init();
   if (r < 0) {
     derr << "error initializing leader watcher: " << cpp_strerror(r) << dendl;
@@ -476,6 +474,10 @@ void PoolReplayer::print_status(Formatter *f, stringstream *ss)
                  reinterpret_cast<CephContext *>(m_remote_io_ctx.cct())->_conf->
                      admin_socket);
 
+  f->open_object_section("sync_throttler");
+  m_instance_watcher->print_sync_status(f, ss);
+  f->close_section();
+
   m_instance_replayer->print_status(f, ss);
 
   f->close_section();
@@ -622,11 +624,15 @@ void PoolReplayer::handle_update(const std::string &mirror_uuid,
 
 void PoolReplayer::handle_post_acquire_leader(Context *on_finish) {
   dout(20) << dendl;
+
+  m_instance_watcher->handle_acquire_leader();
   init_local_pool_watcher(on_finish);
 }
 
 void PoolReplayer::handle_pre_release_leader(Context *on_finish) {
   dout(20) << dendl;
+
+  m_instance_watcher->handle_release_leader();
   shut_down_pool_watchers(on_finish);
 }
 
@@ -731,6 +737,12 @@ void PoolReplayer::handle_wait_for_update_ops(int r, Context *on_finish) {
 
   Mutex::Locker locker(m_lock);
   m_instance_replayer->release_all(on_finish);
+}
+
+void PoolReplayer::handle_update_leader(const std::string &leader_instance_id) {
+  dout(20) << "leader_instance_id=" << leader_instance_id << dendl;
+
+  m_instance_watcher->handle_update_leader(leader_instance_id);
 }
 
 } // namespace mirror

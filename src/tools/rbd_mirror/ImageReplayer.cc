@@ -21,7 +21,6 @@
 #include "librbd/Utils.h"
 #include "librbd/journal/Replay.h"
 #include "ImageReplayer.h"
-#include "ImageSync.h"
 #include "Threads.h"
 #include "tools/rbd_mirror/image_replayer/BootstrapRequest.h"
 #include "tools/rbd_mirror/image_replayer/CloseImageRequest.h"
@@ -273,14 +272,14 @@ void ImageReplayer<I>::RemoteJournalerListener::handle_update(
 template <typename I>
 ImageReplayer<I>::ImageReplayer(Threads<librbd::ImageCtx> *threads,
                                 shared_ptr<ImageDeleter> image_deleter,
-                                ImageSyncThrottlerRef<I> image_sync_throttler,
+                                InstanceWatcher<I> *instance_watcher,
                                 RadosRef local,
                                 const std::string &local_mirror_uuid,
                                 int64_t local_pool_id,
                                 const std::string &global_image_id) :
   m_threads(threads),
   m_image_deleter(image_deleter),
-  m_image_sync_throttler(image_sync_throttler),
+  m_instance_watcher(instance_watcher),
   m_local(local),
   m_local_mirror_uuid(local_mirror_uuid),
   m_local_pool_id(local_pool_id),
@@ -469,7 +468,7 @@ void ImageReplayer<I>::bootstrap() {
     ImageReplayer, &ImageReplayer<I>::handle_bootstrap>(this);
 
   BootstrapRequest<I> *request = BootstrapRequest<I>::create(
-    m_local_ioctx, m_remote_image.io_ctx, m_image_sync_throttler,
+    m_local_ioctx, m_remote_image.io_ctx, m_instance_watcher,
     &m_local_image_ctx, m_local_image_id, m_remote_image.image_id,
     m_global_image_id, m_threads->work_queue, m_threads->timer,
     &m_threads->timer_lock, m_local_mirror_uuid, m_remote_image.mirror_uuid,

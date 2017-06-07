@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "ImageSync.h"
+#include "InstanceWatcher.h"
 #include "ProgressContext.h"
 #include "common/errno.h"
 #include "journal/Journaler.h"
@@ -33,13 +34,15 @@ ImageSync<I>::ImageSync(I *local_image_ctx, I *remote_image_ctx,
                         SafeTimer *timer, Mutex *timer_lock,
                         const std::string &mirror_uuid, Journaler *journaler,
                         MirrorPeerClientMeta *client_meta,
-                        ContextWQ *work_queue, Context *on_finish,
-			ProgressContext *progress_ctx)
+                        ContextWQ *work_queue,
+                        InstanceWatcher<I> *instance_watcher,
+                        Context *on_finish, ProgressContext *progress_ctx)
   : BaseRequest("rbd::mirror::ImageSync", local_image_ctx->cct, on_finish),
     m_local_image_ctx(local_image_ctx), m_remote_image_ctx(remote_image_ctx),
     m_timer(timer), m_timer_lock(timer_lock), m_mirror_uuid(mirror_uuid),
     m_journaler(journaler), m_client_meta(client_meta),
-    m_work_queue(work_queue), m_progress_ctx(progress_ctx),
+    m_work_queue(work_queue), m_instance_watcher(instance_watcher),
+    m_progress_ctx(progress_ctx),
     m_lock(unique_lock_name("ImageSync::m_lock", this)) {
 }
 
@@ -51,7 +54,7 @@ ImageSync<I>::~ImageSync() {
 
 template <typename I>
 void ImageSync<I>::send() {
-  send_prune_catch_up_sync_point();
+  send_notify_sync_request();
 }
 
 template <typename I>
@@ -62,6 +65,10 @@ void ImageSync<I>::cancel() {
 
   m_canceled = true;
 
+  if (m_instance_watcher->cancel_sync_request(m_local_image_ctx->id)) {
+    return;
+  }
+
   if (m_snapshot_copy_request != nullptr) {
     m_snapshot_copy_request->cancel();
   }
@@ -69,6 +76,29 @@ void ImageSync<I>::cancel() {
   if (m_image_copy_request != nullptr) {
     m_image_copy_request->cancel();
   }
+}
+
+template <typename I>
+void ImageSync<I>::send_notify_sync_request() {
+  update_progress("NOTIFY_SYNC_REQUEST");
+
+  dout(20) << dendl;
+
+  Context *ctx = create_context_callback<
+    ImageSync<I>, &ImageSync<I>::handle_notify_sync_request>(this);
+  m_instance_watcher->notify_sync_request(m_local_image_ctx->id, ctx);
+}
+
+template <typename I>
+void ImageSync<I>::handle_notify_sync_request(int r) {
+  dout(20) << ": r=" << r << dendl;
+
+  if (r < 0) {
+    BaseRequest::finish(r);
+    return;
+  }
+
+  send_prune_catch_up_sync_point();
 }
 
 template <typename I>
@@ -364,6 +394,14 @@ void ImageSync<I>::update_progress(const std::string &description) {
   if (m_progress_ctx) {
     m_progress_ctx->update_progress("IMAGE_SYNC/" + description);
   }
+}
+
+template <typename I>
+void ImageSync<I>::finish(int r) {
+  dout(20) << ": r=" << r << dendl;
+
+  m_instance_watcher->notify_sync_complete(m_local_image_ctx->id);
+  BaseRequest::finish(r);
 }
 
 } // namespace mirror
