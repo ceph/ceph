@@ -150,7 +150,9 @@ struct Collection {
   static constexpr int64_t MIN_POOL_ID = 0x0000ffffffffffff;
 
   Collection(const spg_t& pg)
-    : pg(pg), cid(pg), sequencer(stringify(pg)) {}
+    : pg(pg), cid(pg), sequencer(stringify(pg)) {
+    sequencer.shard_hint = pg;
+  }
 };
 
 struct Object {
