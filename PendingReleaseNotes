@@ -147,3 +147,9 @@
   ``mon_osd_err_op_age_ratio`` that is a expressed as a multitple of
   ``mon_osd_warn_op_age`` (default: 128, for roughly 60 minutes) to
   control when an error is generated.
+
+* The default maximum size for a single RADOS object has been reduced from
+  100GB to 128MB.  The 100GB limit was completely impractical in practice
+  while the 128MB limit is a bit high but not unreasonable.  If you have an
+  application written directly to librados that is using objects larger than
+  128MB you may need to adjust ``osd_max_object_size``.

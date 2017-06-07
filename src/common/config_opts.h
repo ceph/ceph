@@ -993,7 +993,7 @@ OPTION(osd_recovery_op_warn_multiple, OPT_U32, 16)
 OPTION(osd_mon_shutdown_timeout, OPT_DOUBLE, 5)
 OPTION(osd_shutdown_pgref_assert, OPT_BOOL, false) // crash if the OSD has stray PG refs on shutdown
 
-OPTION(osd_max_object_size, OPT_U64, 100*1024L*1024L*1024L) // OSD's maximum object size
+OPTION(osd_max_object_size, OPT_U64, 128*1024L*1024L) // OSD's maximum object size
 OPTION(osd_max_object_name_len, OPT_U32, 2048) // max rados object name len
 OPTION(osd_max_object_namespace_len, OPT_U32, 256) // max rados object namespace len
 OPTION(osd_max_attr_name_len, OPT_U32, 100)    // max rados attr name len; cannot go higher than 100 chars for file system backends
