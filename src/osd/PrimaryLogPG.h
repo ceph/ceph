@@ -91,7 +91,7 @@ public:
     uint32_t flags;    // object_copy_data_t::FLAG_*
     uint32_t source_data_digest, source_omap_digest;
     uint32_t data_digest, omap_digest;
-    vector<pair<osd_reqid_t, version_t> > reqids; // [(reqid, user_version)]
+    mempool::osd_pglog::vector<pair<osd_reqid_t, version_t> > reqids; // [(reqid, user_version)]
     map<string, bufferlist> attrs; // xattrs
     uint64_t truncate_seq;
     uint64_t truncate_size;
@@ -530,7 +530,7 @@ public:
     int num_read;    ///< count read ops
     int num_write;   ///< count update ops
 
-    vector<pair<osd_reqid_t, version_t> > extra_reqids;
+    mempool::osd_pglog::vector<pair<osd_reqid_t, version_t> > extra_reqids;
 
     CopyFromCallback *copy_cb;
 
@@ -864,7 +864,7 @@ protected:
    * Also used to store error log entries for dup detection.
    */
   void submit_log_entries(
-    const mempool::osd::list<pg_log_entry_t> &entries,
+    const mempool::osd_pglog::list<pg_log_entry_t> &entries,
     ObcLockManager &&manager,
     boost::optional<std::function<void(void)> > &&on_complete,
     OpRequestRef op = OpRequestRef(),
