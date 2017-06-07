@@ -719,6 +719,8 @@ void Paxos::handle_begin(MonOpRequestRef op)
   // set state.
   state = STATE_UPDATING;
   lease_expire = utime_t();  // cancel lease
+  // leader won't renew lease until commit, we need some extra time
+  reset_lease_timeout();
 
   // yes.
   version_t v = last_committed+1;
