@@ -10105,7 +10105,7 @@ bool OSDMonitor::preprocess_pool_op(MonOpRequestRef op)
     }
     return false;
   case POOL_OP_DELETE:
-    if (osdmap.lookup_pg_pool_name(m->name.c_str()) >= 0) {
+    if (!osdmap.have_pg_pool(m->pool)) {
       _pool_op_reply(op, 0, osdmap.get_epoch());
       return true;
     }
