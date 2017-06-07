@@ -727,7 +727,7 @@ struct ObjectOperation {
     uint32_t *out_flags;
     uint32_t *out_data_digest;
     uint32_t *out_omap_digest;
-    vector<pair<osd_reqid_t, version_t> > *out_reqids;
+    mempool::osd_pglog::vector<pair<osd_reqid_t, version_t> > *out_reqids;
     uint64_t *out_truncate_seq;
     uint64_t *out_truncate_size;
     int *prval;
@@ -742,7 +742,7 @@ struct ObjectOperation {
 			      uint32_t *flags,
 			      uint32_t *dd,
 			      uint32_t *od,
-			      vector<pair<osd_reqid_t, version_t> > *oreqids,
+			      mempool::osd_pglog::vector<pair<osd_reqid_t, version_t> > *oreqids,
 			      uint64_t *otseq,
 			      uint64_t *otsize,
 			      int *r)
@@ -817,7 +817,7 @@ struct ObjectOperation {
 		uint32_t *out_flags,
 		uint32_t *out_data_digest,
 		uint32_t *out_omap_digest,
-		vector<pair<osd_reqid_t, version_t> > *out_reqids,
+		mempool::osd_pglog::vector<pair<osd_reqid_t, version_t> > *out_reqids,
 		uint64_t *truncate_seq,
 		uint64_t *truncate_size,
 		int *prval) {
