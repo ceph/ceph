@@ -967,7 +967,7 @@ function get_not_primary() {
 
     local primary=$(get_primary $poolname $objectname)
     ceph --format json osd map $poolname $objectname 2>/dev/null | \
-        jq ".acting | map(select (. != $primary)) | first"
+        jq ".acting | map(select (. != $primary)) | .[0]"
 }
 
 function test_get_not_primary() {
