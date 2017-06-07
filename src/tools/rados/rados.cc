@@ -1990,6 +1990,9 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
 
   // list pools?
   if (strcmp(nargs[0], "lspools") == 0) {
+    if (nargs.size() >= 2)
+      usage_exit();
+
     list<string> vec;
     ret = rados.pool_list(vec);
     if (ret < 0) {
@@ -2000,6 +2003,9 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
       cout << *i << std::endl;
   }
   else if (strcmp(nargs[0], "df") == 0) {
+    if (nargs.size() >= 2)
+      usage_exit();    
+
     // pools
     list<string> vec;
 
