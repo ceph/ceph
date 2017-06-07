@@ -45,24 +45,6 @@ class PrioritizedQueue : public OpQueue <T, K> {
   int64_t min_cost;
 
   typedef std::list<std::pair<unsigned, T> > ListPairs;
-  static unsigned filter_list_pairs(
-    ListPairs *l,
-    std::function<bool (T)> f) {
-    unsigned ret = 0;
-    for (typename ListPairs::iterator i = l->end();
-	 i != l->begin();
-      ) {
-      auto next = i;
-      --next;
-      if (f(next->second)) {
-	++ret;
-	l->erase(next);
-      } else {
-	i = next;
-      }
-    }
-    return ret;
-  }
 
   struct SubQueue {
   private:
@@ -141,24 +123,6 @@ class PrioritizedQueue : public OpQueue <T, K> {
     }
     bool empty() const {
       return q.empty();
-    }
-    void remove_by_filter(
-      std::function<bool (T)> f) {
-      for (typename Classes::iterator i = q.begin();
-	   i != q.end();
-	   ) {
-	size -= filter_list_pairs(&(i->second), f);
-	if (i->second.empty()) {
-	  if (cur == i) {
-	    ++cur;
-	  }
-	  q.erase(i++);
-	} else {
-	  ++i;
-	}
-      }
-      if (cur == q.end())
-	cur = q.begin();
     }
     void remove_by_class(K k, std::list<T> *out) {
       typename Classes::iterator i = q.find(k);
@@ -249,33 +213,6 @@ public:
       total += i->second.length();
     }
     return total;
-  }
-
-  void remove_by_filter(
-      std::function<bool (T)> f) final {
-    for (typename SubQueues::iterator i = queue.begin();
-	 i != queue.end();
-	 ) {
-      unsigned priority = i->first;
-      
-      i->second.remove_by_filter(f);
-      if (i->second.empty()) {
-	++i;
-	remove_queue(priority);
-      } else {
-	++i;
-      }
-    }
-    for (typename SubQueues::iterator i = high_queue.begin();
-	 i != high_queue.end();
-	 ) {
-      i->second.remove_by_filter(f);
-      if (i->second.empty()) {
-	high_queue.erase(i++);
-      } else {
-	++i;
-      }
-    }
   }
 
   void remove_by_class(K k, std::list<T> *out = 0) final {

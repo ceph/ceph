@@ -106,3 +106,25 @@ add_executable(unittest_ec_transaction
 )
 add_ceph_unittest(unittest_ec_transaction ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_ec_transaction)
 target_link_libraries(unittest_ec_transaction osd global ${BLKID_LIBRARIES})
+
+# unittest_mclock_op_class_queue
+add_executable(unittest_mclock_op_class_queue
+  TestMClockOpClassQueue.cc
+)
+add_ceph_unittest(unittest_mclock_op_class_queue
+  ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_mclock_op_class_queue
+)
+target_link_libraries(unittest_mclock_op_class_queue
+  global osd dmclock
+)
+
+# unittest_mclock_client_queue
+add_executable(unittest_mclock_client_queue
+  TestMClockClientQueue.cc
+)
+add_ceph_unittest(unittest_mclock_client_queue
+  ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_mclock_client_queue
+)
+target_link_libraries(unittest_mclock_client_queue
+  global osd dmclock
+)
