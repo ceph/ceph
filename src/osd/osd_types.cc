@@ -822,6 +822,10 @@ std::string pg_state_string(int state)
     oss << "incomplete+";
   if (state & PG_STATE_PEERED)
     oss << "peered+";
+  if (state & PG_STATE_SNAPTRIM)
+    oss << "snaptrim+";
+  if (state & PG_STATE_SNAPTRIM_WAIT)
+    oss << "snaptrim_wait+";
   string ret(oss.str());
   if (ret.length() > 0)
     ret.resize(ret.length() - 1);
@@ -875,6 +879,10 @@ int pg_string_state(const std::string& state)
     type = PG_STATE_ACTIVATING;
   else if (state == "peered")
     type = PG_STATE_PEERED;
+  else if (state == "snaptrim")
+    type = PG_STATE_SNAPTRIM;
+  else if (state == "snaptrim_wait")
+    type = PG_STATE_SNAPTRIM_WAIT;
   else
     type = -1;
   return type;
