@@ -439,7 +439,7 @@ TEST(PGTempMap, basic)
 {
   PGTempMap m;
   pg_t a(1,1);
-  for (unsigned i=3; i<1000; ++i) {
+  for (int i=3; i<1000; ++i) {
     pg_t x(i, 1);
     m.set(x, {i});
   }
