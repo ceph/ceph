@@ -471,6 +471,8 @@ class RGWRealm:
         (period_json, retcode) = zone.cluster.rgw_admin('--rgw-realm=' + self.realm + ' period update --commit')
         self.parse_current_period(period_json)
 	self.master_zone = zone
+        # wait for reconfiguration, so that later metadata requests go to the new master
+        time.sleep(5)
 
 
 class RGWUser:
