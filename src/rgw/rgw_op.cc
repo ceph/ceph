@@ -1516,6 +1516,7 @@ void RGWGetObj::execute()
   op_ret = read_op.prepare();
   if (op_ret < 0)
     goto done_err;
+  version_id = read_op.state.obj.key.instance;
 
   /* STAT ops don't need data, and do no i/o */
   if (get_type() == RGW_OP_STAT_OBJ) {
