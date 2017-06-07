@@ -1941,7 +1941,9 @@ class Prepare(object):
             formatter_class=argparse.RawDescriptionHelpFormatter,
             description=textwrap.fill(textwrap.dedent("""\
             If the --bluestore argument is given, a bluestore objectstore
-            will be used instead of the legacy filestore objectstore.
+            will be created.  If --filestore is provided, a legacy FileStore
+            objectstore will be created.  If neither is specified, we default
+            to BlueStore.
 
             When an entire device is prepared for bluestore, two
             partitions are created. The first partition is for metadata,
@@ -2039,8 +2041,15 @@ class PrepareBluestore(Prepare):
         parser = argparse.ArgumentParser(add_help=False)
         parser.add_argument(
             '--bluestore',
-            action='store_true', default=None,
+            dest='bluestore',
+            action='store_true', default=True,
             help='bluestore objectstore',
+        )
+        parser.add_argument(
+            '--filestore',
+            dest='bluestore',
+            action='store_false',
+            help='filestore objectstore',
         )
         return parser
 
@@ -2949,6 +2958,11 @@ class PrepareFilestoreData(PrepareData):
         self.set_data_partition()
         self.populate_data_path_device(*to_prepare_list)
 
+    def populate_data_path(self, path, *to_prepare_list):
+        super(PrepareFilestoreData, self).populate_data_path(path,
+                                                             *to_prepare_list)
+        write_one_line(path, 'type', 'filestore')
+
 
 class PrepareBluestoreData(PrepareData):
 
@@ -3034,7 +3048,7 @@ def mkfs(
                 '--setgroup', get_ceph_group(),
             ],
         )
-    else:
+    elif osd_type == 'filestore':
         ceph_osd_mkfs(
             [
                 'ceph-osd',
@@ -3051,6 +3065,8 @@ def mkfs(
                 '--setgroup', get_ceph_group(),
             ],
         )
+    else:
+        raise Error('unrecognized objectstore type %s' % osd_type)
 
 
 def auth_key(
