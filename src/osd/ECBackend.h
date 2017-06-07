@@ -505,9 +505,12 @@ public:
     Context *on_all_applied = nullptr;
     Context *on_all_commit = nullptr;
     ~Op() {
-      delete on_local_applied_sync;
-      delete on_all_applied;
-      delete on_all_commit;
+      if (on_local_applied_sync)
+        delete on_local_applied_sync; on_local_applied_sync = nullptr;
+      if (on_all_applied)
+        delete on_all_applied; on_all_applied = nullptr;
+      if (on_all_commit)
+        delete on_all_commit; on_all_commit = nullptr;
     }
   };
   using op_list = boost::intrusive::list<Op>;
