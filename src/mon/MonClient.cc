@@ -234,19 +234,6 @@ bool MonClient::ms_dispatch(Message *m)
   if (my_addr == entity_addr_t())
     my_addr = messenger->get_myaddr();
 
-  // we only care about these message types
-  switch (m->get_type()) {
-  case CEPH_MSG_MON_MAP:
-  case CEPH_MSG_AUTH_REPLY:
-  case CEPH_MSG_MON_SUBSCRIBE_ACK:
-  case CEPH_MSG_MON_GET_VERSION_REPLY:
-  case MSG_MON_COMMAND_ACK:
-  case MSG_LOGACK:
-    break;
-  default:
-    return false;
-  }
-
   Mutex::Locker lock(monc_lock);
 
   if (_hunting()) {
@@ -291,12 +278,14 @@ bool MonClient::ms_dispatch(Message *m)
       log_client->handle_log_ack(static_cast<MLogAck*>(m));
       m->put();
       if (more_log_pending) {
-	send_log();
+        send_log();
       }
     } else {
       m->put();
     }
     break;
+  default:
+    return false;
   }
   return true;
 }
