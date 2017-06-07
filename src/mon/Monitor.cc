@@ -1074,6 +1074,7 @@ void Monitor::_reset()
   }
   quorum.clear();
   outside_quorum.clear();
+  quorum_feature_map.clear();
 
   scrub_reset();
 
@@ -2094,6 +2095,16 @@ void Monitor::calc_quorum_requirements()
   dout(10) << __func__ << " required_features " << required_features << dendl;
 }
 
+void Monitor::get_combined_feature_map(FeatureMap *fm)
+{
+  *fm += session_map.feature_map;
+  for (auto id : quorum) {
+    if (id != rank) {
+      *fm += quorum_feature_map[id];
+    }
+  }
+}
+
 void Monitor::sync_force(Formatter *f, ostream& ss)
 {
   bool free_formatter = false;
@@ -2225,6 +2236,7 @@ void Monitor::get_mon_status(Formatter *f, ostream& ss)
   monmap->dump(f);
   f->close_section();
 
+  f->dump_object("feature_map", session_map.feature_map);
   f->close_section(); // mon_status
 
   if (free_formatter) {
@@ -3156,6 +3168,24 @@ void Monitor::handle_command(MonOpRequestRef op)
     }
     f->flush(ds);
     rdata.append(ds);
+    rs = "";
+    r = 0;
+  } else if (prefix == "features") {
+    if (!is_leader() && !is_peon()) {
+      dout(10) << " waiting for quorum" << dendl;
+      waitfor_quorum.push_back(new C_RetryMessage(this, op));
+      return;
+    }
+    if (!is_leader()) {
+      forward_request_leader(op);
+      return;
+    }
+    if (!f)
+      f.reset(Formatter::create("json-pretty"));
+    FeatureMap fm;
+    get_combined_feature_map(&fm);
+    f->dump_object("features", fm);
+    f->flush(rdata);
     rs = "";
     r = 0;
   } else if (prefix == "mon metadata") {

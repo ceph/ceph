@@ -728,6 +728,13 @@ add_executable(unittest_mempool
 add_ceph_unittest(unittest_mempool ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_mempool)
 target_link_libraries(unittest_mempool global)
 
+# unittest_features
+add_executable(unittest_features
+  test_features.cc
+  )
+add_ceph_unittest(unittest_features ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_features)
+target_link_libraries(unittest_features global)
+
 # unittest_crypto
 add_executable(unittest_crypto
   crypto.cc

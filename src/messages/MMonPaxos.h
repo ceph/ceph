@@ -22,7 +22,7 @@
 
 class MMonPaxos : public Message {
 
-  static const int HEAD_VERSION = 3;
+  static const int HEAD_VERSION = 4;
   static const int COMPAT_VERSION = 3;
 
  public:
@@ -62,6 +62,8 @@ class MMonPaxos : public Message {
   bufferlist latest_value;
 
   map<version_t,bufferlist> values;
+
+  bufferlist feature_map;
 
   MMonPaxos() : Message(MSG_MON_PAXOS, HEAD_VERSION, COMPAT_VERSION) { }
   MMonPaxos(epoch_t e, int o, utime_t now) : 
@@ -103,6 +105,7 @@ public:
     ::encode(latest_version, payload);
     ::encode(latest_value, payload);
     ::encode(values, payload);
+    ::encode(feature_map, payload);
   }
   void decode_payload() override {
     bufferlist::iterator p = payload.begin();
@@ -118,6 +121,9 @@ public:
     ::decode(latest_version, p);
     ::decode(latest_value, p);
     ::decode(values, p);
+    if (header.version >= 4) {
+      ::decode(feature_map, p);
+    }
   }
 };
 
