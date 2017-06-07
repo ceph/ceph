@@ -1160,9 +1160,10 @@ void Server::journal_and_reply(MDRequestRef& mdr, CInode *in, CDentry *dn, LogEv
       dout(10) << " journaled last replay op, flushing" << dendl;
       mdlog->flush();
     }
-  } else if (mdr->did_early_reply)
+  } else if (mdr->did_early_reply) {
     mds->locker->drop_rdlocks(mdr.get());
-  else
+    mdlog->flush();
+  } else
     mdlog->flush();
 }
 
