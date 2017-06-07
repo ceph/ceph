@@ -1258,8 +1258,7 @@ TEST(pg_pool_t_test, get_pg_num_divisor) {
 
   p.set_pg_num(12);
   p.set_pgp_num(12);
-  //cout << "num " << p.get_pg_num()
-  //     << " mask " << p.get_pg_num_mask() << std::endl;
+
   ASSERT_EQ(16u, p.get_pg_num_divisor(pg_t(0, 1)));
   ASSERT_EQ(16u, p.get_pg_num_divisor(pg_t(1, 1)));
   ASSERT_EQ(16u, p.get_pg_num_divisor(pg_t(2, 1)));
