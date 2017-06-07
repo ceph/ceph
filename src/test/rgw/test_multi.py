@@ -200,8 +200,11 @@ class RGWRealm:
         log(20, 'current meta sync status=', meta_sync_status_json)
         sync_status = json.loads(meta_sync_status_json)
         
-        global_sync_status=sync_status['sync_status']['info']['status']
-        num_shards=sync_status['sync_status']['info']['num_shards']
+        sync_info = sync_status['sync_status']['info']
+        global_sync_status = sync_info['status']
+        num_shards = sync_info['num_shards']
+        period = sync_info['period']
+        realm_epoch = sync_info['realm_epoch']
 
         sync_markers=sync_status['sync_status']['markers']
         log(20, 'sync_markers=', sync_markers)
@@ -211,7 +214,7 @@ class RGWRealm:
         for i in xrange(num_shards):
             markers[i] = sync_markers[i]['val']['marker']
 
-        return (num_shards, markers)
+        return period, realm_epoch, num_shards, markers
 
     def meta_master_log_status(self, master_zone):
         (mdlog_status_json, retcode) = master_zone.cluster.rgw_admin_ro('--rgw-realm=' + self.realm + ' mdlog status')
@@ -253,13 +256,16 @@ class RGWRealm:
 
         while True:
             log_status = self.meta_master_log_status(self.master_zone)
-            (num_shards, sync_status) = self.meta_sync_status(zone)
+            (period, realm_epoch, num_shards, sync_status) = self.meta_sync_status(zone)
 
-            log(20, 'log_status=', log_status)
-            log(20, 'sync_status=', sync_status)
-
-            if self.compare_meta_status(zone, log_status, sync_status):
-                break
+            if realm_epoch < self.current_realm_epoch:
+                log(1, 'zone %s is syncing realm epoch=%d, behind current realm epoch=%d',
+                    zone.zone_name, realm_epoch, self.current_realm_epoch)
+            else:
+                log(20, 'log_status=', log_status)
+                log(20, 'sync_status=', sync_status)
+                if self.compare_meta_status(zone, log_status, sync_status):
+                    break
 
             time.sleep(5)
 
@@ -452,9 +458,18 @@ class RGWRealm:
         if wait_meta:
             self.meta_checkpoint()
 
+    def parse_current_period(self, period_json):
+        period = json.loads(period_json)
+        self.current_realm_epoch = period['realm_epoch']
+
+    def init_current_period(self):
+        (period_json, retcode) = self.master_zone.cluster.rgw_admin('--rgw-realm=' + self.realm + ' period get')
+        self.parse_current_period(period_json)
+
     def set_master_zone(self, zone):
         (zg_json, retcode) = zone.cluster.rgw_admin('--rgw-realm=' + self.realm + ' --rgw-zonegroup=' + zone.zg + ' --rgw-zone=' + zone.zone_name + ' zone modify --master=1')
         (period_json, retcode) = zone.cluster.rgw_admin('--rgw-realm=' + self.realm + ' period update --commit')
+        self.parse_current_period(period_json)
 	self.master_zone = zone
 
 
@@ -508,7 +523,7 @@ class RGWMulti:
             for i in xrange(0, self.num_clusters):
                 realm.add_zone(self.clusters[i], 'us', 'us-' + str(i + 1), (i == 0))
 
-        realm.meta_checkpoint()
+        realm.init_current_period()
 
         user = RGWUser('tester', '"Test User"', gen_access_key(), gen_secret(), tenant)
         realm.create_user(user)
