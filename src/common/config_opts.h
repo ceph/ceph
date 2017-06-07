@@ -753,7 +753,7 @@ OPTION(osd_inject_failure_on_pg_removal, OPT_BOOL, false)
 OPTION(osd_max_markdown_period , OPT_INT, 600)
 OPTION(osd_max_markdown_count, OPT_INT, 5)
 
-OPTION(osd_op_threads, OPT_INT, 2)    // 0 == no threading
+OPTION(osd_peering_wq_threads, OPT_INT, 2)
 OPTION(osd_peering_wq_batch_size, OPT_U64, 20)
 OPTION(osd_op_pq_max_tokens_per_priority, OPT_U64, 4194304)
 OPTION(osd_op_pq_min_cost, OPT_U64, 65536)
@@ -761,8 +761,12 @@ OPTION(osd_disk_threads, OPT_INT, 1)
 OPTION(osd_disk_thread_ioprio_class, OPT_STR, "") // rt realtime be best effort idle
 OPTION(osd_disk_thread_ioprio_priority, OPT_INT, -1) // 0-7
 OPTION(osd_recover_clone_overlap, OPT_BOOL, true)   // preserve clone_overlap during recovery/migration
-OPTION(osd_op_num_threads_per_shard, OPT_INT, 2)
-OPTION(osd_op_num_shards, OPT_INT, 5)
+OPTION(osd_op_num_threads_per_shard, OPT_INT, 0)
+OPTION(osd_op_num_threads_per_shard_hdd, OPT_INT, 1)
+OPTION(osd_op_num_threads_per_shard_ssd, OPT_INT, 2)
+OPTION(osd_op_num_shards, OPT_INT, 0)
+OPTION(osd_op_num_shards_hdd, OPT_INT, 5)
+OPTION(osd_op_num_shards_ssd, OPT_INT, 8)
 OPTION(osd_op_queue, OPT_STR, "wpq") // PrioritzedQueue (prio), Weighted Priority Queue (wpq), or debug_random
 OPTION(osd_op_queue_cut_off, OPT_STR, "low") // Min priority to go to strict queue. (low, high, debug_random)
 
