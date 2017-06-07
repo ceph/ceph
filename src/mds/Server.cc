@@ -5320,7 +5320,9 @@ void Server::_link_local_finish(MDRequestRef& mdr, CDentry *dn, CInode *targeti,
   dout(10) << "_link_local_finish " << *dn << " to " << *targeti << dendl;
 
   // link and unlock the NEW dentry
-  dn->pop_projected_linkage();
+  CDentry::linkage_t *dnl = dn->pop_projected_linkage();
+  if (!dnl->get_inode())
+    dn->link_remote(dnl, targeti);
   dn->mark_dirty(dnpv, mdr->ls);
 
   // target inode
@@ -5438,7 +5440,9 @@ void Server::_link_remote_finish(MDRequestRef& mdr, bool inc,
 
   if (inc) {
     // link the new dentry
-    dn->pop_projected_linkage();
+    CDentry::linkage_t *dnl = dn->pop_projected_linkage();
+    if (!dnl->get_inode())
+      dn->link_remote(dnl, targeti);
     dn->mark_dirty(dpv, mdr->ls);
   } else {
     // unlink main dentry
