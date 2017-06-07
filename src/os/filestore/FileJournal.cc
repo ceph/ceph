@@ -1228,7 +1228,7 @@ void FileJournal::write_thread_entry()
       // saturated.
       while (aio_num > 0) {
 	int exp = MIN(aio_num * 2, 24);
-	long unsigned min_new = 1ull << exp;
+	long unsigned min_new = 1ul << exp;
 	uint64_t cur = aio_write_queue_bytes;
 	dout(20) << "write_thread_entry aio throttle: aio num " << aio_num << " bytes " << aio_bytes
 		 << " ... exp " << exp << " min_new " << min_new
@@ -1476,7 +1476,6 @@ void FileJournal::write_finish_thread_entry()
     }
 
     {
-      Mutex::Locker locker(aio_lock);
       for (int i=0; i<r; i++) {
 	aio_info *ai = (aio_info *)event[i].obj;
 	if (event[i].res != ai->len) {
