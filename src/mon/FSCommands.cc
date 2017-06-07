@@ -298,9 +298,10 @@ public:
         });
       }
     } else if (var == "balancer") {
-      if (val.empty())
+      if (val.empty()) {
         ss << "unsetting the metadata load balancer";
-      else 
+      }
+      else { 
         ss << "setting the metadata load balancer to " << val;
         fsmap.modify_filesystem(
             fs->fscid,
@@ -308,6 +309,7 @@ public:
         {
           fs->mds_map.set_balancer(val);
         });
+      }
       return true;
     } else if (var == "max_file_size") {
       if (interr.length()) {
