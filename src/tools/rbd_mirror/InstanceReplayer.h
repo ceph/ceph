@@ -20,6 +20,7 @@ namespace mirror {
 class ImageDeleter;
 
 template <typename> class ImageReplayer;
+template <typename> class InstanceWatcher;
 template <typename> struct Threads;
 
 template <typename ImageCtxT = librbd::ImageCtx>
@@ -27,10 +28,10 @@ class InstanceReplayer {
 public:
   static InstanceReplayer* create(
       Threads<ImageCtxT> *threads, std::shared_ptr<ImageDeleter> image_deleter,
-      ImageSyncThrottlerRef<ImageCtxT> image_sync_throttler, RadosRef local_rados,
-      const std::string &local_mirror_uuid, int64_t local_pool_id) {
-      return new InstanceReplayer(threads, image_deleter, image_sync_throttler,
-                                 local_rados, local_mirror_uuid, local_pool_id);
+      RadosRef local_rados, const std::string &local_mirror_uuid,
+      int64_t local_pool_id) {
+    return new InstanceReplayer(threads, image_deleter, local_rados,
+                                local_mirror_uuid, local_pool_id);
   }
   void destroy() {
     delete this;
@@ -38,7 +39,6 @@ public:
 
   InstanceReplayer(Threads<ImageCtxT> *threads,
 		   std::shared_ptr<ImageDeleter> image_deleter,
-                   ImageSyncThrottlerRef<ImageCtxT> image_sync_throttler,
 		   RadosRef local_rados, const std::string &local_mirror_uuid,
 		   int64_t local_pool_id);
   ~InstanceReplayer();
@@ -52,7 +52,8 @@ public:
   void add_peer(std::string mirror_uuid, librados::IoCtx io_ctx);
   void remove_peer(std::string mirror_uuid);
 
-  void acquire_image(const std::string &global_image_id,
+  void acquire_image(InstanceWatcher<ImageCtxT> *instance_watcher,
+                     const std::string &global_image_id,
                      const std::string &peer_mirror_uuid,
                      const std::string &peer_image_id,
                      Context *on_finish);
@@ -109,7 +110,6 @@ private:
 
   Threads<ImageCtxT> *m_threads;
   std::shared_ptr<ImageDeleter> m_image_deleter;
-  ImageSyncThrottlerRef<ImageCtxT> m_image_sync_throttler;
   RadosRef m_local_rados;
   std::string m_local_mirror_uuid;
   int64_t m_local_pool_id;
