@@ -165,6 +165,7 @@ void LogMonitor::update_from_paxos(bool *need_bootstrap)
     }
 
     summary.version++;
+    summary.prune(g_conf->mon_log_max_summary);
   }
 
   dout(15) << __func__ << " logging for "
@@ -345,6 +346,7 @@ bool LogMonitor::prepare_log(MonOpRequestRef op)
       pending_log.insert(pair<utime_t,LogEntry>(p->stamp, *p));
     }
   }
+  pending_summary.prune(g_conf->mon_log_max_summary);
   wait_for_finished_proposal(op, new C_Log(this, op));
   return true;
 }
@@ -371,17 +373,64 @@ bool LogMonitor::should_propose(double& delay)
 bool LogMonitor::preprocess_command(MonOpRequestRef op)
 {
   op->mark_logmon_event("preprocess_command");
-  int r = -1;
+  MMonCommand *m = static_cast<MMonCommand*>(op->get_req());
+  int r = -EINVAL;
   bufferlist rdata;
   stringstream ss;
 
-  if (r != -1) {
-    string rs;
-    getline(ss, rs);
-    mon->reply_command(op, r, rs, rdata, get_last_committed());
+  map<string, cmd_vartype> cmdmap;
+  if (!cmdmap_from_json(m->cmd, &cmdmap, ss)) {
+    string rs = ss.str();
+    mon->reply_command(op, -EINVAL, rs, get_last_committed());
     return true;
-  } else
+  }
+  MonSession *session = m->get_session();
+  if (!session) {
+    mon->reply_command(op, -EACCES, "access denied", get_last_committed());
+    return true;
+  }
+
+  string prefix;
+  cmd_getval(g_ceph_context, cmdmap, "prefix", prefix);
+
+  string format;
+  cmd_getval(g_ceph_context, cmdmap, "format", format, string("plain"));
+  boost::scoped_ptr<Formatter> f(Formatter::create(format));
+
+  if (prefix == "log last") {
+    int64_t num = 20;
+    cmd_getval(g_ceph_context, cmdmap, "num", num);
+    if (f) {
+      f->open_array_section("tail");
+    }
+    auto p = summary.tail.end();
+    while (num > 0 && p != summary.tail.begin()) {
+      num--;
+      --p;
+    }
+    ostringstream ss;
+    for ( ; p != summary.tail.end(); ++p) {
+      if (f) {
+	f->dump_object("entry", *p);
+      } else {
+	ss << *p << "\n";
+      }
+    }
+    if (f) {
+      f->close_section();
+      f->flush(rdata);
+    } else {
+      rdata.append(ss.str());
+    }
+    r = 0;
+  } else {
     return false;
+  }
+
+  string rs;
+  getline(ss, rs);
+  mon->reply_command(op, r, rs, rdata, get_last_committed());
+  return true;
 }
 
 
@@ -421,6 +470,7 @@ bool LogMonitor::prepare_command(MonOpRequestRef op)
     le.prio = CLOG_INFO;
     le.msg = str_join(logtext, " ");
     pending_summary.add(le);
+    pending_summary.prune(g_conf->mon_log_max_summary);
     pending_log.insert(pair<utime_t,LogEntry>(le.stamp, le));
     wait_for_finished_proposal(op, new Monitor::C_Command(
           mon, op, 0, string(), get_last_committed() + 1));
