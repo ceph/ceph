@@ -1689,6 +1689,7 @@ int get_zones_pool_set(CephContext* cct,
       pool_names.insert(zone.user_uid_pool);
       pool_names.insert(zone.roles_pool);
       pool_names.insert(zone.reshard_pool);
+      pool_names.insert(zone.groups_pool);
       for(auto& iter : zone.placement_pools) {
 	pool_names.insert(iter.second.index_pool);
 	pool_names.insert(iter.second.data_pool);
@@ -1760,6 +1761,7 @@ int RGWZoneParams::fix_pool_names()
   user_uid_pool = fix_zone_pool_dup(pools, name, ".rgw.meta:users.uid", user_uid_pool);
   roles_pool = fix_zone_pool_dup(pools, name, ".rgw.meta:roles", roles_pool);
   reshard_pool = fix_zone_pool_dup(pools, name, ".rgw.log:reshard", reshard_pool);
+  groups_pool = fix_zone_pool_dup(pools, name, ".rgw.meta:groups", groups_pool);
 
   for(auto& iter : placement_pools) {
     iter.second.index_pool = fix_zone_pool_dup(pools, name, "." + default_bucket_index_pool_suffix,

@@ -1187,6 +1187,7 @@ struct RGWZoneParams : RGWSystemMetaObj {
   rgw_pool user_uid_pool;
   rgw_pool roles_pool;
   rgw_pool reshard_pool;
+  rgw_pool groups_pool;
 
   RGWAccessKey system_key;
 
@@ -1220,7 +1221,7 @@ struct RGWZoneParams : RGWSystemMetaObj {
   const string& get_compression_type(const string& placement_rule) const;
   
   void encode(bufferlist& bl) const override {
-    ENCODE_START(10, 1, bl);
+    ENCODE_START(11, 1, bl);
     encode(domain_root, bl);
     encode(control_pool, bl);
     encode(gc_pool, bl);
@@ -1240,11 +1241,12 @@ struct RGWZoneParams : RGWSystemMetaObj {
     encode(tier_config, bl);
     encode(roles_pool, bl);
     encode(reshard_pool, bl);
+    encode(groups_pool, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::iterator& bl) override {
-    DECODE_START(10, bl);
+    DECODE_START(11, bl);
     decode(domain_root, bl);
     decode(control_pool, bl);
     decode(gc_pool, bl);
@@ -1287,6 +1289,11 @@ struct RGWZoneParams : RGWSystemMetaObj {
       decode(reshard_pool, bl);
     } else {
       reshard_pool = log_pool.name + ":reshard";
+    }
+    if (struct_v >= 11) {
+      decode(groups_pool, bl);
+    } else {
+      groups_pool = name + ".rgw.groups";
     }
     DECODE_FINISH(bl);
   }
