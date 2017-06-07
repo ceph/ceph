@@ -936,7 +936,6 @@ int NVMEDevice::read(uint64_t off, uint64_t len, bufferlist *pbl,
     while (t->return_code > 0)
       ioc->cond.wait(l);
   }
-  pbl->clear();
   pbl->push_back(std::move(p));
   r = t->return_code;
   delete t;
@@ -947,6 +946,45 @@ int NVMEDevice::read(uint64_t off, uint64_t len, bufferlist *pbl,
   }
   return r;
 }
+
+int NVMEDevice::aio_read(
+    uint64_t off,
+    uint64_t len,
+    bufferlist *pbl,
+    IOContext *ioc)
+{
+  uint64_t len = bl.length();
+  dout(20) << __func__ << " " << off << "~" << len << " ioc " << ioc << dendl;
+  assert(off % block_size == 0);
+  assert(len % block_size == 0);
+  assert(len > 0);
+  assert(off < size);
+  assert(off + len <= size);
+
+  Task *t = new Task(this, IOCommand::READ_COMMAND, off, len);
+
+  bufferptr p = buffer::create_page_aligned(len);
+  pbl->append(p);
+  int r = 0;
+  t->ctx = ioc;
+  char *buf = p.c_str();
+  t->fill_cb = [buf, t]() {
+    t->copy_to_buf(buf, 0, t->len);
+  };
+
+  Task *first = static_cast<Task*>(ioc->nvme_task_first);
+  Task *last = static_cast<Task*>(ioc->nvme_task_last);
+  if (last)
+    last->next = t;
+  if (!first)
+    ioc->nvme_task_first = t;
+  ioc->nvme_task_last = t;
+  ++ioc->num_pending;
+
+  return 0;
+}
+
+
 
 int NVMEDevice::read_random(uint64_t off, uint64_t len, char *buf, bool buffered)
 {

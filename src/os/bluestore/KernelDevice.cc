@@ -271,10 +271,12 @@ void KernelDevice::_aio_thread()
 	// trust aio[] values; they my be freed (e.g., by BlueFS::_fsync)
 	if (left == 0) {
 	  // check waiting count before doing callback (which may
-	  // destroy this ioc).
+	  // destroy this ioc).  and avoid ref to ioc after aio_wake()
+	  // in case that triggers destruction.
+	  void *priv = ioc->priv;
 	  ioc->aio_wake();
-	  if (ioc->priv) {
-	    aio_callback(aio_callback_priv, ioc->priv);
+	  if (priv) {
+	    aio_callback(aio_callback_priv, priv);
 	  }
 	}
       }
@@ -539,7 +541,6 @@ int KernelDevice::read(uint64_t off, uint64_t len, bufferlist *pbl,
     goto out;
   }
   assert((uint64_t)r == len);
-  pbl->clear();
   pbl->push_back(std::move(p));
 
   dout(40) << "data: ";
@@ -551,6 +552,39 @@ int KernelDevice::read(uint64_t off, uint64_t len, bufferlist *pbl,
   --ioc->num_reading;
   ioc->aio_wake();
   return r < 0 ? r : 0;
+}
+
+int KernelDevice::aio_read(
+  uint64_t off,
+  uint64_t len,
+  bufferlist *pbl,
+  IOContext *ioc)
+{
+  dout(5) << __func__ << " 0x" << std::hex << off << "~" << len << std::dec
+	  << dendl;
+
+  int r = 0;
+#ifdef HAVE_LIBAIO
+  if (aio && dio) {
+    _aio_log_start(ioc, off, len);
+    ioc->pending_aios.push_back(FS::aio_t(ioc, fd_direct));
+    ++ioc->num_pending;
+    FS::aio_t& aio = ioc->pending_aios.back();
+    aio.pread(off, len);
+    for (unsigned i=0; i<aio.iov.size(); ++i) {
+      dout(30) << "aio " << i << " " << aio.iov[i].iov_base
+	       << " " << aio.iov[i].iov_len << dendl;
+    }
+    pbl->append(aio.bl);
+    dout(5) << __func__ << " 0x" << std::hex << off << "~" << len
+	    << std::dec << " aio " << &aio << dendl;
+  } else
+#endif
+  {
+    r = read(off, len, pbl, ioc, false);
+  }
+
+  return r;
 }
 
 int KernelDevice::direct_read_unaligned(uint64_t off, uint64_t len, char *buf)

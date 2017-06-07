@@ -4981,6 +4981,11 @@ struct region_t {
   uint64_t logical_offset;
   uint64_t blob_xoffset;   //region offset within the blob
   uint64_t length;
+  bufferlist bl;
+
+  // used later in read process
+  uint64_t front = 0;
+  uint64_t r_off = 0;
 
   region_t(uint64_t offset, uint64_t b_offs, uint64_t len)
     : logical_offset(offset),
@@ -5048,6 +5053,7 @@ int BlueStore::_do_read(
   blobs2read_t blobs2read;
   unsigned left = length;
   uint64_t pos = offset;
+  unsigned num_regions = 0;
   auto lp = o->extent_map.seek_lextent(offset);
   while (left > 0 && lp != o->extent_map.extent_map.end()) {
     if (pos < lp->logical_offset) {
@@ -5092,6 +5098,7 @@ int BlueStore::_do_read(
 	dout(30) << __func__ << "    will read 0x" << std::hex << pos << ": 0x"
 		 << b_off << "~" << l << std::dec << dendl;
 	blobs2read[bptr].emplace_back(region_t(pos, b_off, l));
+	++num_regions;
       }
       pos += l;
       b_off += l;
@@ -5101,31 +5108,98 @@ int BlueStore::_do_read(
     ++lp;
   }
 
-  // enumerate and read/decompress desired blobs
+  // read raw blob data.  use aio if we have >1 blobs to read.
+  vector<bufferlist> compressed_blob_bls;
+  IOContext ioc(cct);
+  for (auto& p : blobs2read) {
+    BlobRef bptr = p.first;
+    dout(20) << __func__ << "  blob " << *bptr << std::hex
+	     << " need 0x" << p.second << std::dec << dendl;
+    if (bptr->get_blob().is_compressed()) {
+      // read the whole thing
+      if (compressed_blob_bls.empty()) {
+	// ensure we avoid any reallocation on subsequent blobs
+	compressed_blob_bls.reserve(blobs2read.size());
+      }
+      compressed_blob_bls.push_back(bufferlist());
+      bufferlist& bl = compressed_blob_bls.back();
+      r = bptr->get_blob().map(
+	0, bptr->get_blob().get_ondisk_length(),
+	[&](uint64_t offset, uint64_t length) {
+	  int r;
+	  // use aio if there are more regions to read than those in this blob
+	  if (num_regions > p.second.size()) {
+	    r = bdev->aio_read(offset, length, &bl, &ioc);
+	  } else {
+	    r = bdev->read(offset, length, &bl, &ioc, false);
+	  }
+	  if (r < 0)
+            return r;
+          return 0;
+	});
+    } else {
+      // read the pieces
+      for (auto& reg : p.second) {
+	// determine how much of the blob to read
+	uint64_t chunk_size = bptr->get_blob().get_chunk_size(block_size);
+	reg.r_off = reg.blob_xoffset;
+	uint64_t r_len = reg.length;
+	reg.front = reg.r_off % chunk_size;
+	if (reg.front) {
+	  reg.r_off -= reg.front;
+	  r_len += reg.front;
+	}
+	unsigned tail = r_len % chunk_size;
+	if (tail) {
+	  r_len += chunk_size - tail;
+	}
+	dout(20) << __func__ << "    region 0x" << std::hex
+		 << reg.logical_offset
+		 << ": 0x" << reg.blob_xoffset << "~" << reg.length
+		 << " reading 0x" << reg.r_off << "~" << r_len << std::dec
+		 << dendl;
+
+	// read it
+	r = bptr->get_blob().map(
+	  reg.r_off, r_len,
+	  [&](uint64_t offset, uint64_t length) {
+	    int r;
+	    // use aio if there is more than one region to read
+	    if (num_regions > 1) {
+	      r = bdev->aio_read(offset, length, &reg.bl, &ioc);
+	    } else {
+	      r = bdev->read(offset, length, &reg.bl, &ioc, false);
+	    }
+	    if (r < 0)
+              return r;
+            return 0;
+	  });
+        if (r < 0)
+          return r;
+	assert(reg.bl.length() == r_len);
+      }
+    }
+  }
+  if (ioc.has_pending_aios()) {
+    bdev->aio_submit(&ioc);
+    dout(20) << __func__ << " waiting for aio" << dendl;
+    ioc.aio_wait();
+  }
+
+  // enumerate and decompress desired blobs
+  auto p = compressed_blob_bls.begin();
   blobs2read_t::iterator b2r_it = blobs2read.begin();
   while (b2r_it != blobs2read.end()) {
     BlobRef bptr = b2r_it->first;
     dout(20) << __func__ << "  blob " << *bptr << std::hex
 	     << " need 0x" << b2r_it->second << std::dec << dendl;
-    if (bptr->get_blob().has_flag(bluestore_blob_t::FLAG_COMPRESSED)) {
-      bufferlist compressed_bl, raw_bl;
-      IOContext ioc(NULL);   // FIXME?
-      r = bptr->get_blob().map(
-	0, bptr->get_blob().get_ondisk_length(),
-	[&](uint64_t offset, uint64_t length) {
-	  bufferlist t;
-	  int r = bdev->read(offset, length, &t, &ioc, false);
-	  if (r < 0)
-            return r;
-	  compressed_bl.claim_append(t);
-          return 0;
-	});
-      if (r < 0)
-        return r;
-
+    if (bptr->get_blob().is_compressed()) {
+      assert(p != compressed_blob_bls.end());
+      bufferlist& compressed_bl = *p++;
       if (_verify_csum(o, &bptr->get_blob(), 0, compressed_bl) < 0) {
 	return -EIO;
       }
+      bufferlist raw_bl;
       r = _decompress(compressed_bl, &raw_bl);
       if (r < 0)
 	return r;
@@ -5137,51 +5211,18 @@ int BlueStore::_do_read(
 	  raw_bl, i.blob_xoffset, i.length);
       }
     } else {
-      for (auto reg : b2r_it->second) {
-	// determine how much of the blob to read
-	uint64_t chunk_size = bptr->get_blob().get_chunk_size(block_size);
-	uint64_t r_off = reg.blob_xoffset;
-	uint64_t r_len = reg.length;
-	unsigned front = r_off % chunk_size;
-	if (front) {
-	  r_off -= front;
-	  r_len += front;
-	}
-	unsigned tail = r_len % chunk_size;
-	if (tail) {
-	  r_len += chunk_size - tail;
-	}
-	dout(20) << __func__ << "    region 0x" << std::hex
-		 << reg.logical_offset
-		 << ": 0x" << reg.blob_xoffset << "~" << reg.length
-		 << " reading 0x" << r_off << "~" << r_len << std::dec
-		 << dendl;
-
-	// read it
-	IOContext ioc(NULL);  // FIXME?
-	bufferlist bl;
-	r = bptr->get_blob().map(r_off, r_len,
-			     [&](uint64_t offset, uint64_t length) {
-	    bufferlist t;
-	    int r = bdev->read(offset, length, &t, &ioc, false);
-	    if (r < 0)
-              return r;
-	    bl.claim_append(t);
-            return 0;
-	  });
-        if (r < 0)
-          return r;
-
-	r = _verify_csum(o, &bptr->get_blob(), r_off, bl);
+      for (auto& reg : b2r_it->second) {
+	r = _verify_csum(o, &bptr->get_blob(), reg.r_off, reg.bl);
 	if (r < 0) {
 	  return -EIO;
 	}
 	if (buffered) {
-	  bptr->shared_blob->bc.did_read(r_off, bl);
+	  bptr->shared_blob->bc.did_read(reg.r_off, reg.bl);
 	}
 
 	// prune and keep result
-	ready_regions[reg.logical_offset].substr_of(bl, front, reg.length);
+	ready_regions[reg.logical_offset].substr_of(
+	  reg.bl, reg.front, reg.length);
       }
     }
     ++b2r_it;
