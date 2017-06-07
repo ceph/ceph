@@ -35,7 +35,6 @@ std::ostream &operator<<(std::ostream &out, const ContDesc &rhs)
   return out << "(ObjNum " << rhs.objnum
 	     << " snap " << rhs.cursnap
 	     << " seq_num " << rhs.seqnum
-    //<< " prefix " << rhs.prefix
 	     << ")";
 }
 
