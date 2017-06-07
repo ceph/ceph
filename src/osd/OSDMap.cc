@@ -1792,6 +1792,13 @@ int OSDMap::apply_incremental(const Incremental &inc)
     auto blp = bl.begin();
     crush.reset(new CrushWrapper);
     crush->decode(blp);
+    if (require_osd_release >= CEPH_RELEASE_LUMINOUS) {
+      // only increment if this is a luminous-encoded osdmap, lest
+      // the mon's crush_version diverge from what the osds or others
+      // are decoding and applying on their end.  if we won't encode
+      // it in the canonical version, don't change it.
+      ++crush_version;
+    }
   }
 
   calc_num_osds();
@@ -2311,7 +2318,7 @@ void OSDMap::encode(bufferlist& bl, uint64_t features) const
   ENCODE_START(8, 7, bl);
 
   {
-    uint8_t v = 5;
+    uint8_t v = 6;
     if (!HAVE_FEATURE(features, SERVER_LUMINOUS)) {
       v = 3;
     }
@@ -2373,6 +2380,9 @@ void OSDMap::encode(bufferlist& bl, uint64_t features) const
     } else {
       assert(pg_upmap.empty());
       assert(pg_upmap_items.empty());
+    }
+    if (v >= 6) {
+      ::encode(crush_version, bl);
     }
     ENCODE_FINISH(bl); // client-usable data
   }
@@ -2584,7 +2594,7 @@ void OSDMap::decode(bufferlist::iterator& bl)
    * Since we made it past that hurdle, we can use our normal paths.
    */
   {
-    DECODE_START(5, bl); // client-usable data
+    DECODE_START(6, bl); // client-usable data
     // base
     ::decode(fsid, bl);
     ::decode(epoch, bl);
@@ -2638,6 +2648,9 @@ void OSDMap::decode(bufferlist::iterator& bl)
     } else {
       pg_upmap.clear();
       pg_upmap_items.clear();
+    }
+    if (struct_v >= 6) {
+      ::decode(crush_version, bl);
     }
     DECODE_FINISH(bl); // client-usable data
   }
@@ -2758,6 +2771,7 @@ void OSDMap::dump(Formatter *f) const
   f->dump_stream("created") << get_created();
   f->dump_stream("modified") << get_modified();
   f->dump_string("flags", get_flag_string());
+  f->dump_unsigned("crush_version", get_crush_version());
   f->dump_float("full_ratio", full_ratio);
   f->dump_float("backfillfull_ratio", backfillfull_ratio);
   f->dump_float("nearfull_ratio", nearfull_ratio);
@@ -2972,6 +2986,7 @@ void OSDMap::print(ostream& out) const
       << "modified " << get_modified() << "\n";
 
   out << "flags " << get_flag_string() << "\n";
+  out << "crush_version " << get_crush_version() << "\n";
   out << "full_ratio " << full_ratio << "\n";
   out << "backfillfull_ratio " << backfillfull_ratio << "\n";
   out << "nearfull_ratio " << nearfull_ratio << "\n";
