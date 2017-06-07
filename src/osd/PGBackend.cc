@@ -673,6 +673,28 @@ map<pg_shard_t, ScrubMap *>::const_iterator
       error_string += " oi_attr_corrupted";
       goto out;
     }
+    if (obj.has_snapset()) {
+      bufferlist b;
+      map<string, bufferptr>::iterator m;
+      SnapSet ss;
+      m = i->second.attrs.find(SS_ATTR);
+      if (m == i->second.attrs.end()) {
+        // no snapset on object, probably corrupt
+        shard_info.set_ss_attr_missing();
+        error_string += " ss_attr_missing";
+        goto out;
+      }
+      b.push_back(m->second);
+      try {
+        bufferlist::iterator miter = b.begin();
+        ::decode(ss, miter);
+      } catch (...) {
+        // invalid SnapSet, probably corrupt
+        shard_info.set_ss_attr_corrupted();
+        error_string += " ss_attr_corrupted";
+        goto out;
+      }
+    }
 
     if (auth_version != eversion_t()) {
       if (!object_error.has_object_info_inconsistency() && !(bl == auth_bl)) {
