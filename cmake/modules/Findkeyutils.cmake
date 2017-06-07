@@ -1,24 +1,19 @@
 # Try to find Keyutils
 # Once done, this will define
 #
-# KEYUTILS_FOUND - system has Profiler
-# KEYUTILS_INCLUDE_DIR - the Profiler include directories
-# KEYUTILS_LIBRARIES - link these to use Profiler
+# KEYUTILS_FOUND - system has keyutils
+# KEYUTILS_INCLUDE_DIR - the keyutils include directories
+# KEYUTILS_LIBRARIES - link these to use keyutils
 
 if(KEYUTILS_INCLUDE_DIR AND KEYUTILS_LIBRARIES)
 	set(KEYUTILS_FIND_QUIETLY TRUE)
 endif(KEYUTILS_INCLUDE_DIR AND KEYUTILS_LIBRARIES)
 
-INCLUDE(CheckCXXSymbolExists)
-
 # include dir
-
-find_path(KEYUTILS_INCLUDE_DIR keyutils.h NO_DEFAULT_PATH PATHS
-  /usr/include
+find_path(KEYUTILS_INCLUDE_DIR keyutils.h PATHS
   /opt/local/include
   /usr/local/include
 )
-
 
 # finally the library itself
 find_library(LIBKEYUTILS NAMES keyutils)

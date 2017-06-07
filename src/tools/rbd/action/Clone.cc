@@ -19,14 +19,6 @@ int do_clone(librbd::RBD &rbd, librados::IoCtx &p_ioctx,
              const char *p_name, const char *p_snapname,
              librados::IoCtx &c_ioctx, const char *c_name,
              librbd::ImageOptions& opts) {
-  uint64_t features;
-  int r = opts.get(RBD_IMAGE_OPTION_FEATURES, &features);
-  assert(r == 0);
-
-  if ((features & RBD_FEATURE_LAYERING) != RBD_FEATURE_LAYERING) {
-    return -EINVAL;
-  }
-
   return rbd.clone3(p_ioctx, p_name, p_snapname, c_ioctx, c_name, opts);
 }
 
@@ -44,7 +36,7 @@ int execute(const po::variables_map &vm) {
   std::string snap_name;
   int r = utils::get_pool_image_snapshot_names(
     vm, at::ARGUMENT_MODIFIER_SOURCE, &arg_index, &pool_name, &image_name,
-    &snap_name, utils::SNAPSHOT_PRESENCE_REQUIRED);
+    &snap_name, utils::SNAPSHOT_PRESENCE_REQUIRED, utils::SPEC_VALIDATION_NONE);
   if (r < 0) {
     return r;
   }
@@ -54,7 +46,7 @@ int execute(const po::variables_map &vm) {
   std::string dst_snap_name;
   r = utils::get_pool_image_snapshot_names(
     vm, at::ARGUMENT_MODIFIER_DEST, &arg_index, &dst_pool_name, &dst_image_name,
-    &dst_snap_name, utils::SNAPSHOT_PRESENCE_NONE);
+    &dst_snap_name, utils::SNAPSHOT_PRESENCE_NONE, utils::SPEC_VALIDATION_FULL);
   if (r < 0) {
     return r;
   }
@@ -64,6 +56,7 @@ int execute(const po::variables_map &vm) {
   if (r < 0) {
     return r;
   }
+  opts.set(RBD_IMAGE_OPTION_FORMAT, static_cast<uint64_t>(2));
 
   librados::Rados rados;
   librados::IoCtx io_ctx;

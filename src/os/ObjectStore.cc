@@ -20,7 +20,6 @@
 
 #include "filestore/FileStore.h"
 #include "memstore/MemStore.h"
-#include "keyvaluestore/KeyValueStore.h"
 #if defined(HAVE_LIBAIO)
 #include "bluestore/BlueStore.h"
 #endif
@@ -65,22 +64,28 @@ ObjectStore *ObjectStore::create(CephContext *cct,
 				 const string& type,
 				 const string& data,
 				 const string& journal,
-			         osflagbits_t flags)
+				 osflagbits_t flags)
 {
   if (type == "filestore") {
-    return new FileStore(data, journal, flags);
+    return new FileStore(cct, data, journal, flags);
   }
   if (type == "memstore") {
     return new MemStore(cct, data);
   }
-  if (type == "keyvaluestore" &&
-      cct->check_experimental_feature_enabled("keyvaluestore")) {
-    return new KeyValueStore(data);
-  }
 #if defined(HAVE_LIBAIO)
-  if (type == "bluestore" &&
-      cct->check_experimental_feature_enabled("bluestore")) {
+  if (type == "bluestore") {
     return new BlueStore(cct, data);
+  }
+  if (type == "random") {
+    if (rand() % 2) {
+      return new FileStore(cct, data, journal, flags);
+    } else {
+      return new BlueStore(cct, data);
+    }
+  }
+#else
+  if (type == "random") {
+    return new FileStore(cct, data, journal, flags);
   }
 #endif
   if (type == "kstore" &&
@@ -91,21 +96,30 @@ ObjectStore *ObjectStore::create(CephContext *cct,
 }
 
 int ObjectStore::probe_block_device_fsid(
+  CephContext *cct,
   const string& path,
   uuid_d *fsid)
 {
   int r;
 
+#if defined(HAVE_LIBAIO)
   // first try bluestore -- it has a crc on its header and will fail
   // reliably.
-  r = BlueStore::get_block_device_fsid(path, fsid);
-  if (r == 0)
+  r = BlueStore::get_block_device_fsid(cct, path, fsid);
+  if (r == 0) {
+    lgeneric_dout(cct, 0) << __func__ << " " << path << " is bluestore, "
+			  << *fsid << dendl;
     return r;
+  }
+#endif
 
   // okay, try FileStore (journal).
-  r = FileStore::get_block_device_fsid(path, fsid);
-  if (r == 0)
+  r = FileStore::get_block_device_fsid(cct, path, fsid);
+  if (r == 0) {
+    lgeneric_dout(cct, 0) << __func__ << " " << path << " is filestore, "
+			  << *fsid << dendl;
     return r;
+  }
 
   return -EINVAL;
 }
@@ -146,8 +160,13 @@ ostream& operator<<(ostream& out, const ObjectStore::Sequencer& s)
   return out << "osr(" << s.get_name() << " " << &s << ")";
 }
 
+ostream& operator<<(ostream& out, const ObjectStore::Transaction& tx) {
+
+  return out << "Transaction(" << &tx << ")"; 
+}
+
 unsigned ObjectStore::apply_transactions(Sequencer *osr,
-					 list<Transaction*> &tls,
+					 vector<Transaction>& tls,
 					 Context *ondisk)
 {
   // use op pool
@@ -168,14 +187,14 @@ unsigned ObjectStore::apply_transactions(Sequencer *osr,
 
 int ObjectStore::queue_transactions(
   Sequencer *osr,
-  list<Transaction*>& tls,
+  vector<Transaction>& tls,
   Context *onreadable,
   Context *oncommit,
   Context *onreadable_sync,
   Context *oncomplete,
   TrackedOpRef op = TrackedOpRef())
 {
-  RunOnDeleteRef _complete(new RunOnDelete(oncomplete));
+  RunOnDeleteRef _complete (std::make_shared<RunOnDelete>(oncomplete));
   Context *_onreadable = new Wrapper<RunOnDeleteRef>(
     onreadable, _complete);
   Context *_oncommit = new Wrapper<RunOnDeleteRef>(

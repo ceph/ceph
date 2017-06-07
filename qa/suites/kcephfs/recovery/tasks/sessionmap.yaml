@@ -1,0 +1,14 @@
+
+overrides:
+  ceph:
+    conf:
+      global:
+        ms type: simple
+    log-whitelist:
+      - client session with invalid root
+
+tasks:
+  - cephfs_test_runner:
+      fail_on_skip: false
+      modules:
+        - tasks.cephfs.test_sessionmap

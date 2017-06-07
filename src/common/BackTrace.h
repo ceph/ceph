@@ -18,7 +18,7 @@ struct BackTrace {
   size_t size;
   char **strings;
 
-  BackTrace(int s) : skip(s) {
+  explicit BackTrace(int s) : skip(s) {
 #ifdef HAVE_EXECINFO_H
     size = backtrace(array, max);
     strings = backtrace_symbols(array, size);
@@ -35,8 +35,13 @@ struct BackTrace {
   BackTrace(const BackTrace& other);
   const BackTrace& operator=(const BackTrace& other);
 
-  void print(std::ostream& out);
+  void print(std::ostream& out) const;
 };
+
+inline std::ostream& operator<<(std::ostream& out, const BackTrace& bt) {
+  bt.print(out);
+  return out;
+}
 
 }
 

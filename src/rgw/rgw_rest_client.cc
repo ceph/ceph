@@ -10,8 +10,36 @@
 #include "common/ceph_crypto_cms.h"
 #include "common/armor.h"
 #include "common/strtol.h"
+#include "include/str_list.h"
+#include "rgw_crypt_sanitize.h"
 
+#define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
+
+int RGWRESTSimpleRequest::get_status()
+{
+  int retcode = get_req_retcode();
+  if (retcode < 0) {
+    return retcode;
+  }
+  return status;
+}
+
+int RGWRESTSimpleRequest::handle_header(const string& name, const string& val) 
+{
+  if (name == "CONTENT_LENGTH") {
+    string err;
+    long len = strict_strtol(val.c_str(), 10, &err);
+    if (!err.empty()) {
+      ldout(cct, 0) << "ERROR: failed converting content length (" << val << ") to int " << dendl;
+      return -EINVAL;
+    }
+
+    max_response = len;
+  }
+
+  return 0;
+}
 
 int RGWRESTSimpleRequest::receive_header(void *ptr, size_t len)
 {
@@ -69,9 +97,9 @@ int RGWRESTSimpleRequest::receive_header(void *ptr, size_t len)
   return 0;
 }
 
-static void get_new_date_str(CephContext *cct, string& date_str)
+static void get_new_date_str(string& date_str)
 {
-  utime_t tm = ceph_clock_now(cct);
+  utime_t tm = ceph_clock_now();
   stringstream s;
   tm.asctime(s);
   date_str = s.str();
@@ -91,7 +119,7 @@ int RGWRESTSimpleRequest::execute(RGWAccessKey& key, const char *method, const c
   new_url.append(new_resource);
 
   string date_str;
-  get_new_date_str(cct, date_str);
+  get_new_date_str(date_str);
   headers.push_back(pair<string, string>("HTTP_DATE", date_str));
 
   string canonical_header;
@@ -134,10 +162,14 @@ int RGWRESTSimpleRequest::send_data(void *ptr, size_t len)
 
 int RGWRESTSimpleRequest::receive_data(void *ptr, size_t len)
 {
-  if (response.length() > max_response)
+  size_t cp_len, left_len;
+
+  left_len = max_response > response.length() ? (max_response - response.length()) : 0;
+  if (left_len == 0)
     return 0; /* don't read extra data */
 
-  bufferptr p((char *)ptr, len);
+  cp_len = (len > left_len) ? left_len : len;
+  bufferptr p((char *)ptr, cp_len);
 
   response.append(p);
 
@@ -152,11 +184,15 @@ void RGWRESTSimpleRequest::append_param(string& dest, const string& name, const 
   } else {
     dest.append("&");
   }
-  dest.append(name);
+  string url_name;
+  url_encode(name, url_name);
+  dest.append(url_name);
 
   if (!val.empty()) {
+    string url_val;
+    url_encode(val, url_val);
     dest.append("=");
-    dest.append(val);
+    dest.append(url_val);
   }
 }
 
@@ -166,7 +202,7 @@ void RGWRESTSimpleRequest::get_params_str(map<string, string>& extra_args, strin
   for (miter = extra_args.begin(); miter != extra_args.end(); ++miter) {
     append_param(dest, miter->first, miter->second);
   }
-  list<pair<string, string> >::iterator iter;
+  param_vec_t::iterator iter;
   for (iter = params.begin(); iter != params.end(); ++iter) {
     append_param(dest, iter->first, iter->second);
   }
@@ -174,11 +210,18 @@ void RGWRESTSimpleRequest::get_params_str(map<string, string>& extra_args, strin
 
 int RGWRESTSimpleRequest::sign_request(RGWAccessKey& key, RGWEnv& env, req_info& info)
 {
+  /* don't sign if no key is provided */
+  if (key.key.empty()) {
+    return 0;
+  }
+
   map<string, string, ltstr_nocase>& m = env.get_map();
 
-  map<string, string>::iterator i;
-  for (i = m.begin(); i != m.end(); ++i) {
-    ldout(cct, 0) << "> " << i->first << " -> " << i->second << dendl;
+  if (cct->_conf->subsys.should_gather(ceph_subsys_rgw, 20)) {
+    map<string, string>::iterator i;
+    for (i = m.begin(); i != m.end(); ++i) {
+      ldout(cct, 20) << "> " << i->first << " -> " << rgw::crypt_sanitize::x_meta_map{i->first, i->second} << dendl;
+    }
   }
 
   string canonical_header;
@@ -207,7 +250,7 @@ int RGWRESTSimpleRequest::forward_request(RGWAccessKey& key, req_info& info, siz
 {
 
   string date_str;
-  get_new_date_str(cct, date_str);
+  get_new_date_str(date_str);
 
   RGWEnv new_env;
   req_info new_info(cct, &new_env);
@@ -233,8 +276,7 @@ int RGWRESTSimpleRequest::forward_request(RGWAccessKey& key, req_info& info, siz
   }
 
   string params_str;
-  map<string, string>& args = new_info.args.get_params();
-  get_params_str(args, params_str);
+  get_params_str(info.args.get_params(), params_str);
 
   string new_url = url;
   string& resource = new_info.request_uri;
@@ -257,8 +299,13 @@ int RGWRESTSimpleRequest::forward_request(RGWAccessKey& key, req_info& info, siz
   }
 
   int r = process(new_info.method, new_url.c_str());
-  if (r < 0)
+  if (r < 0){
+    if (r == -EINVAL){
+      // curl_easy has errored, generally means the service is not available
+      r = -ERR_SERVICE_UNAVAILABLE;
+    }
     return r;
+  }
 
   response.append((char)0); /* NULL terminate response */
 
@@ -272,8 +319,8 @@ int RGWRESTSimpleRequest::forward_request(RGWAccessKey& key, req_info& info, siz
 class RGWRESTStreamOutCB : public RGWGetDataCB {
   RGWRESTStreamWriteRequest *req;
 public:
-  RGWRESTStreamOutCB(RGWRESTStreamWriteRequest *_req) : req(_req) {}
-  int handle_data(bufferlist& bl, off_t bl_ofs, off_t bl_len); /* callback for object iteration when sending data */
+  explicit RGWRESTStreamOutCB(RGWRESTStreamWriteRequest *_req) : req(_req) {}
+  int handle_data(bufferlist& bl, off_t bl_ofs, off_t bl_len) override; /* callback for object iteration when sending data */
 };
 
 int RGWRESTStreamOutCB::handle_data(bufferlist& bl, off_t bl_ofs, off_t bl_len)
@@ -307,7 +354,7 @@ int RGWRESTStreamWriteRequest::add_output_data(bufferlist& bl)
   lock.Unlock();
 
   bool done;
-  return process_request(handle, false, &done);
+  return http_manager.process_requests(false, &done);
 }
 
 static void grants_by_type_add_one_grant(map<int, string>& grants_by_type, int perm, ACLGrant& grant)
@@ -382,13 +429,13 @@ static void add_grants_headers(map<int, string>& grants, map<string, string, lts
 
 int RGWRESTStreamWriteRequest::put_obj_init(RGWAccessKey& key, rgw_obj& obj, uint64_t obj_size, map<string, bufferlist>& attrs)
 {
-  string resource = obj.bucket.name + "/" + obj.get_object();
+  string resource = obj.bucket.name + "/" + obj.get_oid();
   string new_url = url;
   if (new_url[new_url.size() - 1] != '/')
     new_url.append("/");
 
   string date_str;
-  get_new_date_str(cct, date_str);
+  get_new_date_str(date_str);
 
   RGWEnv new_env;
   req_info new_info(cct, &new_env);
@@ -455,7 +502,7 @@ int RGWRESTStreamWriteRequest::put_obj_init(RGWAccessKey& key, rgw_obj& obj, uin
 
   set_send_length(obj_size);
 
-  int r = init_async(new_info.method, new_url.c_str(), &handle);
+  int r = http_manager.add_request(this, new_info.method, new_url.c_str());
   if (r < 0)
     return r;
 
@@ -518,40 +565,76 @@ void set_str_from_headers(map<string, string>& out_headers, const string& header
   }
 }
 
-int RGWRESTStreamWriteRequest::complete(string& etag, time_t *mtime)
+static int parse_rgwx_mtime(CephContext *cct, const string& s, ceph::real_time *rt)
 {
-  int ret = complete_request(handle);
+  string err;
+  vector<string> vec;
+
+  get_str_vec(s, ".", vec);
+
+  if (vec.empty()) {
+    return -EINVAL;
+  }
+
+  long secs = strict_strtol(vec[0].c_str(), 10, &err);
+  long nsecs = 0;
+  if (!err.empty()) {
+    ldout(cct, 0) << "ERROR: failed converting mtime (" << s << ") to real_time " << dendl;
+    return -EINVAL;
+  }
+
+  if (vec.size() > 1) {
+    nsecs = strict_strtol(vec[1].c_str(), 10, &err);
+    if (!err.empty()) {
+      ldout(cct, 0) << "ERROR: failed converting mtime (" << s << ") to real_time " << dendl;
+      return -EINVAL;
+    }
+  }
+
+  *rt = utime_t(secs, nsecs).to_real_time();
+
+  return 0;
+}
+
+int RGWRESTStreamWriteRequest::complete(string& etag, real_time *mtime)
+{
+  int ret = http_manager.complete_requests();
   if (ret < 0)
     return ret;
 
   set_str_from_headers(out_headers, "ETAG", etag);
+
   if (mtime) {
     string mtime_str;
     set_str_from_headers(out_headers, "RGWX_MTIME", mtime_str);
-    string err;
-    long t = strict_strtol(mtime_str.c_str(), 10, &err);
-    if (!err.empty()) {
-      ldout(cct, 0) << "ERROR: failed converting mtime (" << mtime_str << ") to int " << dendl;
-      return -EINVAL;
-    }
-    *mtime = (time_t)t;
-  }
 
+    ret = parse_rgwx_mtime(cct, mtime_str, mtime);
+    if (ret < 0) {
+      return ret;
+    }
+  }
   return status;
 }
 
-int RGWRESTStreamReadRequest::get_obj(RGWAccessKey& key, map<string, string>& extra_headers, rgw_obj& obj)
+int RGWRESTStreamRWRequest::send_request(RGWAccessKey& key, map<string, string>& extra_headers, rgw_obj& obj, RGWHTTPManager *mgr)
 {
   string urlsafe_bucket, urlsafe_object;
-  url_encode(obj.bucket.name, urlsafe_bucket);
-  url_encode(obj.get_object(), urlsafe_object);
+  url_encode(obj.bucket.get_key(':', 0), urlsafe_bucket);
+  url_encode(obj.key.name, urlsafe_object);
   string resource = urlsafe_bucket + "/" + urlsafe_object;
+
+  return send_request(&key, extra_headers, resource, nullptr, mgr);
+}
+
+int RGWRESTStreamRWRequest::send_request(RGWAccessKey *key, map<string, string>& extra_headers, const string& resource,
+                                         bufferlist *send_data, RGWHTTPManager *mgr)
+{
   string new_url = url;
   if (new_url[new_url.size() - 1] != '/')
     new_url.append("/");
 
   string date_str;
-  get_new_date_str(cct, date_str);
+  get_new_date_str(date_str);
 
   RGWEnv new_env;
   req_info new_info(cct, &new_env);
@@ -560,7 +643,19 @@ int RGWRESTStreamReadRequest::get_obj(RGWAccessKey& key, map<string, string>& ex
   map<string, string>& args = new_info.args.get_params();
   get_params_str(args, params_str);
 
-  new_url.append(resource + params_str);
+  /* merge params with extra args so that we can sign correctly */
+  for (param_vec_t::iterator iter = params.begin(); iter != params.end(); ++iter) {
+    new_info.args.append(iter->first, iter->second);
+  }
+
+  string new_resource;
+  if (resource[0] == '/') {
+    new_resource = resource.substr(1);
+  } else {
+    new_resource = resource;
+  }
+
+  new_url.append(new_resource + params_str);
 
   new_env.set("HTTP_DATE", date_str.c_str());
 
@@ -569,18 +664,20 @@ int RGWRESTStreamReadRequest::get_obj(RGWAccessKey& key, map<string, string>& ex
     new_env.set(iter->first.c_str(), iter->second.c_str());
   }
 
-  new_info.method = "GET";
+  new_info.method = method;
 
   new_info.script_uri = "/";
-  new_info.script_uri.append(resource);
+  new_info.script_uri.append(new_resource);
   new_info.request_uri = new_info.script_uri;
 
   new_info.init_meta_info(NULL);
 
-  int ret = sign_request(key, new_env, new_info);
-  if (ret < 0) {
-    ldout(cct, 0) << "ERROR: failed to sign request" << dendl;
-    return ret;
+  if (key) {
+    int ret = sign_request(*key, new_env, new_info);
+    if (ret < 0) {
+      ldout(cct, 0) << "ERROR: failed to sign request" << dendl;
+      return ret;
+    }
   }
 
   map<string, string, ltstr_nocase>& m = new_env.get_map();
@@ -589,27 +686,55 @@ int RGWRESTStreamReadRequest::get_obj(RGWAccessKey& key, map<string, string>& ex
     headers.push_back(pair<string, string>(iter->first, iter->second));
   }
 
-  int r = process(new_info.method, new_url.c_str());
+  bool send_data_hint = false;
+  if (send_data) {
+    outbl.claim(*send_data);
+    send_data_hint = true;
+  }
+
+  RGWHTTPManager *pmanager = &http_manager;
+  if (mgr) {
+    pmanager = mgr;
+  }
+
+  int r = pmanager->add_request(this, new_info.method, new_url.c_str(), send_data_hint);
   if (r < 0)
     return r;
+
+  if (!mgr) {
+    r = pmanager->complete_requests();
+    if (r < 0)
+      return r;
+  }
 
   return 0;
 }
 
-int RGWRESTStreamReadRequest::complete(string& etag, time_t *mtime, map<string, string>& attrs)
+int RGWRESTStreamRWRequest::complete_request(string& etag, real_time *mtime, uint64_t *psize, map<string, string>& attrs)
 {
   set_str_from_headers(out_headers, "ETAG", etag);
-  if (mtime) {
-    string mtime_str;
-    set_str_from_headers(out_headers, "RGWX_MTIME", mtime_str);
-    if (!mtime_str.empty()) {
-      string err;
-      long t = strict_strtol(mtime_str.c_str(), 10, &err);
-      if (!err.empty()) {
-        ldout(cct, 0) << "ERROR: failed converting mtime (" << mtime_str << ") to int " << dendl;
-        return -EINVAL;
+  if (status >= 0) {
+    if (mtime) {
+      string mtime_str;
+      set_str_from_headers(out_headers, "RGWX_MTIME", mtime_str);
+      if (!mtime_str.empty()) {
+        int ret = parse_rgwx_mtime(cct, mtime_str, mtime);
+        if (ret < 0) {
+          return ret;
+        }
+      } else {
+        *mtime = real_time();
       }
-      *mtime = (time_t)t;
+    }
+    if (psize) {
+      string size_str;
+      set_str_from_headers(out_headers, "RGWX_OBJECT_SIZE", size_str);
+      string err;
+      *psize = strict_strtoll(size_str.c_str(), 10, &err);
+      if (!err.empty()) {
+        ldout(cct, 0) << "ERROR: failed parsing embedded metadata object size (" << size_str << ") to int " << dendl;
+        return -EIO;
+      }
     }
   }
 
@@ -637,7 +762,7 @@ int RGWRESTStreamReadRequest::complete(string& etag, time_t *mtime, map<string, 
   return status;
 }
 
-int RGWRESTStreamReadRequest::handle_header(const string& name, const string& val)
+int RGWRESTStreamRWRequest::handle_header(const string& name, const string& val)
 {
   if (name == "RGWX_EMBEDDED_METADATA_LEN") {
     string err;
@@ -652,7 +777,7 @@ int RGWRESTStreamReadRequest::handle_header(const string& name, const string& va
   return 0;
 }
 
-int RGWRESTStreamReadRequest::receive_data(void *ptr, size_t len)
+int RGWRESTStreamRWRequest::receive_data(void *ptr, size_t len)
 {
   bufferptr bp((const char *)ptr, len);
   bufferlist bl;
@@ -664,9 +789,27 @@ int RGWRESTStreamReadRequest::receive_data(void *ptr, size_t len)
   return len;
 }
 
-int RGWRESTStreamReadRequest::send_data(void *ptr, size_t len)
+int RGWRESTStreamRWRequest::send_data(void *ptr, size_t len)
 {
-  /* not sending any data */
-  return 0;
+  if (outbl.length() == 0) {
+    return 0;
+  }
+
+  uint64_t send_size = min(len, (size_t)(outbl.length() - write_ofs));
+  if (send_size > 0) {
+    memcpy(ptr, outbl.c_str() + write_ofs, send_size);
+    write_ofs += send_size;
+  }
+  return send_size;
 }
+
+class StreamIntoBufferlist : public RGWGetDataCB {
+  bufferlist& bl;
+public:
+  StreamIntoBufferlist(bufferlist& _bl) : bl(_bl) {}
+  int handle_data(bufferlist& inbl, off_t bl_ofs, off_t bl_len) override {
+    bl.claim_append(inbl);
+    return bl_len;
+  }
+};
 

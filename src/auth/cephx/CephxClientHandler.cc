@@ -18,9 +18,9 @@
 #include "CephxClientHandler.h"
 #include "CephxProtocol.h"
 
-#include "../KeyRing.h"
-
+#include "auth/KeyRing.h"
 #include "common/config.h"
+#include "common/dout.h"
 
 #define dout_subsys ceph_subsys_auth
 #undef dout_prefix
@@ -46,6 +46,12 @@ int CephxClientHandler::build_request(bufferlist& bl) const
       return -ENOENT;
     }
 
+    // is the key OK?
+    if (!secret.get_secret().length()) {
+      ldout(cct, 20) << "secret for entity " << cct->_conf->name << " is invalid" << dendl;
+      return -EINVAL;
+    }
+
     CephXAuthenticate req;
     get_random_bytes((char *)&req.client_challenge, sizeof(req.client_challenge));
     std::string error;
@@ -64,11 +70,12 @@ int CephxClientHandler::build_request(bufferlist& bl) const
 
     ::encode(req, bl);
 
-    ldout(cct, 10) << "get auth session key: client_challenge " << req.client_challenge << dendl;
+    ldout(cct, 10) << "get auth session key: client_challenge "
+		   << hex << req.client_challenge << dendl;
     return 0;
   }
 
-  if (need) {
+  if (_need_tickets()) {
     /* get service tickets */
     ldout(cct, 10) << "get service keys: want=" << want << " need=" << need << " have=" << have << dendl;
 
@@ -90,6 +97,15 @@ int CephxClientHandler::build_request(bufferlist& bl) const
   return 0;
 }
 
+bool CephxClientHandler::_need_tickets() const
+{
+  // do not bother (re)requesting tickets if we *only* need the MGR
+  // ticket; that can happen during an upgrade and we want to avoid a
+  // loop.  we'll end up re-requesting it later when the secrets
+  // rotating.
+  return need && need != CEPH_ENTITY_TYPE_MGR;
+}
+
 int CephxClientHandler::handle_response(int ret, bufferlist::iterator& indata)
 {
   ldout(cct, 10) << "handle_response ret = " << ret << dendl;
@@ -102,7 +118,8 @@ int CephxClientHandler::handle_response(int ret, bufferlist::iterator& indata)
     CephXServerChallenge ch;
     ::decode(ch, indata);
     server_challenge = ch.server_challenge;
-    ldout(cct, 10) << " got initial server challenge " << server_challenge << dendl;
+    ldout(cct, 10) << " got initial server challenge "
+		   << hex << server_challenge << dendl;
     starting = false;
 
     tickets.invalidate_ticket(CEPH_ENTITY_TYPE_AUTH);
@@ -129,7 +146,7 @@ int CephxClientHandler::handle_response(int ret, bufferlist::iterator& indata)
       }
       ldout(cct, 10) << " want=" << want << " need=" << need << " have=" << have << dendl;
       validate_tickets();
-      if (need)
+      if (_need_tickets())
 	ret = -EAGAIN;
       else
 	ret = 0;
@@ -146,7 +163,7 @@ int CephxClientHandler::handle_response(int ret, bufferlist::iterator& indata)
         return -EPERM;
       }
       validate_tickets();
-      if (!need) {
+      if (!_need_tickets()) {
 	ret = 0;
       }
     }
@@ -167,7 +184,7 @@ int CephxClientHandler::handle_response(int ret, bufferlist::iterator& indata)
 	if (decode_decrypt(cct, secrets, secret_key, indata, error)) {
 	  ldout(cct, 0) << "could not set rotating key: decode_decrypt failed. error:"
 	    << error << dendl;
-	  error.clear();
+	  return -EINVAL;
 	} else {
 	  rotating_secrets->set_secrets(secrets);
 	}
@@ -177,7 +194,7 @@ int CephxClientHandler::handle_response(int ret, bufferlist::iterator& indata)
 
   default:
    ldout(cct, 0) << " unknown request_type " << header.request_type << dendl;
-   assert(0);
+   ceph_abort();
   }
   return ret;
 }
@@ -224,8 +241,11 @@ bool CephxClientHandler::need_tickets()
   RWLock::WLocker l(lock);
   validate_tickets();
 
-  ldout(cct, 20) << "need_tickets: want=" << want << " need=" << need << " have=" << have << dendl;
+  ldout(cct, 20) << "need_tickets: want=" << want
+		 << " have=" << have
+		 << " need=" << need
+		 << dendl;
 
-  return (need != 0);
+  return _need_tickets();
 }
 

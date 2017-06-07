@@ -31,7 +31,7 @@ public:
 	  bufferlist *pbl, uint64_t delay_ns=0)
     : m_cct(cct), m_con(c), m_delay(delay_ns * std::chrono::nanoseconds(1)),
       m_lock(lock), m_bl(pbl), m_off(off) {}
-  void finish(int r) {
+  void finish(int r) override {
     std::this_thread::sleep_for(m_delay);
     if (m_bl) {
       buffer::ptr bp(r);
@@ -62,7 +62,9 @@ void FakeWriteback::read(const object_t& oid, uint64_t object_no,
 			 const object_locator_t& oloc,
 			 uint64_t off, uint64_t len, snapid_t snapid,
 			 bufferlist *pbl, uint64_t trunc_size,
-			 __u32 trunc_seq, int op_flags, Context *onfinish)
+			 __u32 trunc_seq, int op_flags,
+                         const ZTracer::Trace &parent_trace,
+                         Context *onfinish)
 {
   C_Delay *wrapper = new C_Delay(m_cct, onfinish, m_lock, off, pbl,
 				 m_delay_ns);
@@ -75,12 +77,14 @@ ceph_tid_t FakeWriteback::write(const object_t& oid,
 				const SnapContext& snapc,
 				const bufferlist &bl, ceph::real_time mtime,
 				uint64_t trunc_size, __u32 trunc_seq,
-				ceph_tid_t journal_tid, Context *oncommit)
+				ceph_tid_t journal_tid,
+                                const ZTracer::Trace &parent_trace,
+                                Context *oncommit)
 {
   C_Delay *wrapper = new C_Delay(m_cct, oncommit, m_lock, off, NULL,
 				 m_delay_ns);
   m_finisher->queue(wrapper, 0);
-  return m_tid.inc();
+  return ++m_tid;
 }
 
 bool FakeWriteback::may_copy_on_write(const object_t&, uint64_t, uint64_t,

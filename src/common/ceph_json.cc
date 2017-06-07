@@ -1,13 +1,9 @@
-#include <iostream>
-#include <include/types.h>
-#include <limits.h>
-#include <errno.h>
-
 #include "common/ceph_json.h"
 #include "include/utime.h"
 
 // for testing DELETE ME
 #include <fstream>
+#include <include/types.h>
 
 using namespace std;
 using namespace json_spirit;
@@ -40,7 +36,7 @@ JSONObj *JSONObjIter::operator*()
 }
 
 // does not work, FIXME
-ostream& operator<<(ostream& out, JSONObj& obj) {
+ostream& operator<<(ostream &out, const JSONObj &obj) {
    out << obj.name << ": " << obj.data_string;
    return out;
 }

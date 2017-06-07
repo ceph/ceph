@@ -23,6 +23,7 @@
 #include "common/Finisher.h"
 #include "common/TrackedOp.h"
 #include "os/ObjectStore.h"
+#include "common/zipkin_trace.h"
 
 class PerfCounters;
 
@@ -31,14 +32,15 @@ protected:
   uuid_d fsid;
   Finisher *finisher;
 public:
+  CephContext* cct;
   PerfCounters *logger;
 protected:
   Cond *do_sync_cond;
   bool wait_on_full;
 
 public:
-  Journal(uuid_d f, Finisher *fin, Cond *c=0) :
-    fsid(f), finisher(fin), logger(NULL),
+  Journal(CephContext* cct, uuid_d f, Finisher *fin, Cond *c=0) :
+    fsid(f), finisher(fin), cct(cct), logger(NULL),
     do_sync_cond(c),
     wait_on_full(false) { }
   virtual ~Journal() { }
@@ -49,7 +51,14 @@ public:
   virtual void close() = 0;  ///< close an open journal
 
   virtual void flush() = 0;
-  virtual void throttle() = 0;
+
+  /**
+   * reserve_throttle_and_backoff
+   *
+   * Implementation may throttle or backoff based on ops
+   * reserved here but not yet released using committed_thru.
+   */
+  virtual void reserve_throttle_and_backoff(uint64_t count) = 0;
 
   virtual int dump(ostream& out) { return -EOPNOTSUPP; }
 
@@ -72,7 +81,9 @@ public:
 
   virtual bool should_commit_now() = 0;
 
-  virtual int prepare_entry(list<ObjectStore::Transaction*>& tls, bufferlist* tbl) = 0;
+  virtual int prepare_entry(vector<ObjectStore::Transaction>& tls, bufferlist* tbl) = 0;
+
+  virtual off64_t get_journal_size_estimate() { return 0; }
 
   // reads/recovery
 

@@ -3,7 +3,6 @@
 #ifndef CEPH_LIBRBD_ASYNC_REQUEST_H
 #define CEPH_LIBRBD_ASYNC_REQUEST_H
 
-#include "include/int_types.h"
 #include "include/Context.h"
 #include "include/rados/librados.hpp"
 #include "include/xlist.h"
@@ -23,10 +22,7 @@ public:
   void complete(int r) {
     if (should_complete(r)) {
       r = filter_return_code(r);
-      finish(r);
-      finish_request();
-      m_on_finish->complete(r);
-      delete this;
+      finish_and_destroy(r);
     }
   }
 
@@ -41,7 +37,6 @@ public:
 
 protected:
   ImageCtxT &m_image_ctx;
-  Context *m_on_finish;
 
   librados::AioCompletion *create_callback_completion();
   Context *create_callback_context();
@@ -54,9 +49,19 @@ protected:
     return r;
   }
 
-  virtual void finish(int r) {
+  // NOTE: temporary until converted to new state machine format
+  virtual void finish_and_destroy(int r) {
+    finish(r);
+    delete this;
   }
+
+  virtual void finish(int r) {
+    finish_request();
+    m_on_finish->complete(r);
+  }
+
 private:
+  Context *m_on_finish;
   bool m_canceled;
   typename xlist<AsyncRequest<ImageCtxT> *>::item m_xlist_item;
 

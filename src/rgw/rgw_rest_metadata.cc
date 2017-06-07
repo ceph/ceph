@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 /*
  * Ceph - scalable distributed file system
@@ -20,7 +20,9 @@
 #include "rgw_client_io.h"
 #include "common/errno.h"
 #include "common/strtol.h"
+#include "include/assert.h"
 
+#define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
 
 const string RGWOp_Metadata_Get::name() {
@@ -32,8 +34,8 @@ static inline void frame_metadata_key(req_state *s, string& out) {
   string key = s->info.args.get("key", &exists);
 
   string section;
-  if (!s->bucket_name.empty()) {
-    section = s->bucket_name;
+  if (!s->init_state.url_bucket.empty()) {
+    section = s->init_state.url_bucket;
   } else {
     section = key;
     key.clear();
@@ -87,11 +89,13 @@ void RGWOp_Metadata_List::execute() {
     list<string> keys;
     http_ret = store->meta_mgr->list_keys_next(handle, max, keys, &truncated);
     if (http_ret < 0) {
-      dout(5) << "ERROR: lists_keys_next(): " << cpp_strerror(http_ret) << dendl;
+      dout(5) << "ERROR: lists_keys_next(): " << cpp_strerror(http_ret)
+	      << dendl;
       return;
     }
 
-    for (list<string>::iterator iter = keys.begin(); iter != keys.end(); ++iter) {
+    for (list<string>::iterator iter = keys.begin(); iter != keys.end();
+	 ++iter) {
       s->formatter->dump_string("key", *iter);
     }
 
@@ -116,17 +120,17 @@ int RGWOp_Metadata_Put::get_data(bufferlist& bl) {
     if (!data) {
        return -ENOMEM;
     }
-    int r = s->cio->read(data, cl, &read_len);
+    read_len = recv_body(s, data, cl);
     if (cl != (size_t)read_len) {
-      dout(10) << "cio->read incomplete" << dendl;
+      dout(10) << "recv_body incomplete" << dendl;
     }
-    if (r < 0) {
+    if (read_len < 0) {
       free(data);
-      return r;
+      return read_len;
     }
     bl.append(data, read_len);
   } else {
-    int chunk_size = CEPH_PAGE_SIZE; 
+    int chunk_size = CEPH_PAGE_SIZE;
     const char *enc = s->info.env->get("HTTP_TRANSFER_ENCODING");
     if (!enc || strcmp(enc, "chunked")) {
       return -ERR_LENGTH_REQUIRED;
@@ -136,10 +140,10 @@ int RGWOp_Metadata_Put::get_data(bufferlist& bl) {
       return -ENOMEM;
     }
     do {
-      int r = s->cio->read(data, chunk_size, &read_len);
-      if (r < 0) {
-        free(data);
-        return r;
+      read_len = recv_body(s, data, chunk_size);
+      if (read_len < 0) {
+	free(data);
+	return read_len;
       }
       bl.append(data, read_len);
     } while (read_len == chunk_size);
@@ -157,23 +161,31 @@ void RGWOp_Metadata_Put::execute() {
   if (http_ret < 0) {
     return;
   }
+
+  if (s->aws4_auth_needs_complete) {
+    http_ret = do_aws4_auth_completion();
+    if (http_ret < 0) {
+      return;
+    }
+  }
   
   frame_metadata_key(s, metadata_key);
-  
+
   RGWMetadataHandler::sync_type_t sync_type = RGWMetadataHandler::APPLY_ALWAYS;
 
   bool mode_exists = false;
   string mode_string = s->info.args.get("update-type", &mode_exists);
   if (mode_exists) {
     bool parsed = RGWMetadataHandler::string_to_sync_type(mode_string,
-                                                          sync_type);
+							  sync_type);
     if (!parsed) {
       http_ret = -EINVAL;
       return;
     }
   }
 
-  http_ret = store->meta_mgr->put(metadata_key, bl, sync_type, &ondisk_version);
+  http_ret = store->meta_mgr->put(metadata_key, bl, sync_type,
+				  &ondisk_version);
   if (http_ret < 0) {
     dout(5) << "ERROR: can't put key: " << cpp_strerror(http_ret) << dendl;
     return;
@@ -194,8 +206,8 @@ void RGWOp_Metadata_Put::send_response() {
   stringstream ver_stream;
   ver_stream << "ver:" << ondisk_version.ver
 	     <<",tag:" << ondisk_version.tag;
-  dump_pair(s, "RGWX_UPDATE_STATUS", update_status.c_str());
-  dump_pair(s, "RGWX_UPDATE_VERSION", ver_stream.str().c_str());
+  dump_header_if_nonempty(s, "RGWX_UPDATE_STATUS", update_status);
+  dump_header_if_nonempty(s, "RGWX_UPDATE_VERSION", ver_stream.str());
   end_header(s);
 }
 
@@ -222,7 +234,7 @@ void RGWOp_Metadata_Lock::execute() {
   duration_str = s->info.args.get("length");
   lock_id      = s->info.args.get("lock_id");
 
-  if ((!s->info.args.exists("key")) || 
+  if ((!s->info.args.exists("key")) ||
       (duration_str.empty()) ||
       lock_id.empty()) {
     dout(5) << "Error invalid parameter list" << dendl;
@@ -239,8 +251,7 @@ void RGWOp_Metadata_Lock::execute() {
     http_ret = -EINVAL;
     return;
   }
-  utime_t time(dur, 0);
-  http_ret = store->meta_mgr->lock_exclusive(metadata_key, time, lock_id);
+  http_ret = store->meta_mgr->lock_exclusive(metadata_key, make_timespan(dur), lock_id);
   if (http_ret == -EBUSY)
     http_ret = -ERR_LOCKED;
 }
@@ -255,7 +266,7 @@ void RGWOp_Metadata_Unlock::execute() {
 
   lock_id = s->info.args.get("lock_id");
 
-  if ((!s->info.args.exists("key")) || 
+  if ((!s->info.args.exists("key")) ||
       lock_id.empty()) {
     dout(5) << "Error invalid parameter list" << dendl;
     http_ret = -EINVAL;
@@ -288,4 +299,3 @@ RGWOp *RGWHandler_Metadata::op_post() {
 
   return NULL;
 }
-

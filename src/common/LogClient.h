@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 /*
  * Ceph - scalable distributed file system
@@ -7,9 +7,9 @@
  *
  * This is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
- * License version 2.1, as published by the Free Software 
+ * License version 2.1, as published by the Free Software
  * Foundation.  See file COPYING.
- * 
+ *
  */
 
 #ifndef CEPH_LOGCLIENT_H
@@ -18,24 +18,33 @@
 #include "common/LogEntry.h"
 #include "common/Mutex.h"
 
-#include <iosfwd>
-#include <sstream>
-
 class LogClient;
 class MLog;
 class MLogAck;
 class Messenger;
 class MonMap;
 class Message;
+struct uuid_d;
 struct Connection;
 
 class LogChannel;
+
+namespace ceph {
+namespace logging {
+  class Graylog;
+}
+}
 
 int parse_log_client_options(CephContext *cct,
 			     map<string,string> &log_to_monitors,
 			     map<string,string> &log_to_syslog,
 			     map<string,string> &log_channels,
-			     map<string,string> &log_prios);
+			     map<string,string> &log_prios,
+			     map<string,string> &log_to_graylog,
+			     map<string,string> &log_to_graylog_host,
+			     map<string,string> &log_to_graylog_port,
+			     uuid_d &fsid,
+			     string &host);
 
 class LogClientTemp
 {
@@ -137,6 +146,10 @@ public:
   }
   bool must_log_to_monitors() { return log_to_monitors; }
 
+  bool do_log_to_graylog() {
+    return (graylog != nullptr);
+  }
+
   typedef shared_ptr<LogChannel> Ref;
 
   /**
@@ -147,7 +160,12 @@ public:
   void update_config(map<string,string> &log_to_monitors,
 		     map<string,string> &log_to_syslog,
 		     map<string,string> &log_channels,
-		     map<string,string> &log_prios);
+		     map<string,string> &log_prios,
+		     map<string,string> &log_to_graylog,
+		     map<string,string> &log_to_graylog_host,
+		     map<string,string> &log_to_graylog_port,
+		     uuid_d &fsid,
+		     string &host);
 
   void do_log(clog_type prio, std::stringstream& ss);
   void do_log(clog_type prio, const std::string& s);
@@ -161,6 +179,7 @@ private:
   std::string syslog_facility;
   bool log_to_syslog;
   bool log_to_monitors;
+  shared_ptr<ceph::logging::Graylog> graylog;
 
 
   friend class LogClientTemp;
@@ -183,8 +202,7 @@ public:
   }
 
   bool handle_log_ack(MLogAck *m);
-  void reset_session();
-  Message *get_mon_log_message();
+  Message *get_mon_log_message(bool flush);
   bool are_pending();
 
   LogChannelRef create_channel() {
@@ -196,7 +214,7 @@ public:
     if (channels.count(name))
       c = channels[name];
     else {
-      c = LogChannelRef(new LogChannel(cct, this, name));
+      c = std::make_shared<LogChannel>(cct, this, name);
       channels[name] = c;
     }
     return c;
@@ -210,7 +228,10 @@ public:
   void shutdown() {
     channels.clear();
   }
-  
+
+  uint64_t get_next_seq();
+  const entity_inst_t& get_myinst();
+  const EntityName& get_myname();
   version_t queue(LogEntry &entry);
 
 private:
@@ -223,7 +244,7 @@ private:
   bool is_mon;
   Mutex log_lock;
   version_t last_log_sent;
-  version_t last_log;
+  std::atomic<uint64_t> last_log;
   std::deque<LogEntry> log_queue;
 
   std::map<std::string, LogChannelRef> channels;

@@ -1,67 +1,21 @@
 ## erasure code plugins
 
-set(erasure_codelibdir ${LIBRARY_OUTPUT_PATH}/erasure-code)
+set(erasure_plugin_dir ${CMAKE_INSTALL_PKGLIBDIR}/erasure-code)
 
-## detect sse support
+#jerasure subdir must be before shec so jerasure & neon obj libs are declared
+include_directories(jerasure/jerasure/include)
+include_directories(jerasure/gf-complete/include)
+include_directories(jerasure)
 
-# create a tmp file with an empty main()
-set(sse_srcs "${CMAKE_BINARY_DIR}/src/erasure-code/jerasure/tmp_sse.c")
-file(WRITE ${sse_srcs} "void main() {}")
-
-# try each -msse flag
-try_compile(INTEL_SSE ${CMAKE_BINARY_DIR} ${sse_srcs}
-  COMPILE_DEFINITIONS "-msse")
-try_compile(INTEL_SSE2 ${CMAKE_BINARY_DIR} ${sse_srcs}
-  COMPILE_DEFINITIONS "-msse2")
-try_compile(INTEL_SSE3 ${CMAKE_BINARY_DIR} ${sse_srcs}
-  COMPILE_DEFINITIONS "-msse3")
-try_compile(INTEL_SSSE3 ${CMAKE_BINARY_DIR} ${sse_srcs}
-  COMPILE_DEFINITIONS "-mssse3")
-try_compile(INTEL_SSE4_1 ${CMAKE_BINARY_DIR} ${sse_srcs}
-  COMPILE_DEFINITIONS "-msse4.1")
-try_compile(INTEL_SSE4_2 ${CMAKE_BINARY_DIR} ${sse_srcs}
-  COMPILE_DEFINITIONS "-msse4.2")
-try_compile(ARM_NEON ${CMAKE_BINARY_DIR} ${sse_srcs}
-  COMPILE_DEFINITIONS "-mfpu=neon")
-try_compile(ARM_NEON2 ${CMAKE_BINARY_DIR} ${sse_srcs}
-  COMPILE_DEFINITIONS "-march=armv8-a+simd")
-
-# clean up tmp file
-file(REMOVE ${sse_srcs})
-
-if(ARM_NEON OR ARM_NEON2)
-  if(ARM_NEON)
-    set(ARM_NEON_FLAGS "-mfpu=neon")
-  else(ARM_NEON)
-    set(ARM_NEON_FLAGS "-march=armv8-a+simd")
-  endif(ARM_NEON)
-else(ARM_NEON OR ARM_NEON2)
-  message(STATUS "Skipping target ec_jerasure_neon & ec_shec_neon: Architecture not ARM")
-endif(ARM_NEON OR ARM_NEON2)
-
-if(INTEL_SSE)
-  set(SSE3_FLAGS "-msse")
-  if (INTEL_SSE2)
-    set(SSE3_FLAGS "${SSE3_FLAGS} -msse2")
-  endif (INTEL_SSE2)
-  if (INTEL_SSE3)
-    set(SSE3_FLAGS "${SSE3_FLAGS} -msse3")
-  endif (INTEL_SSE3)
-  if (INTEL_SSSE3)
-    set(SSE3_FLAGS "${SSE3_FLAGS} -mssse3")
-  endif (INTEL_SSSE3)
-else(INTEL_SSE)
-  message(STATUS "Skipping target ec_jerasure_sse3 & ec_shec_sse3: -msse not supported")
-endif(INTEL_SSE)
-
-if(INTEL_SSE4_1)
-  set(SSE4_FLAGS "${SSE3_FLAGS} -msse4.1")
-  if (INTEL_SSE4_2)
-    set(SSE4_FLAGS "${SSE4_FLAGS} -msse4.2")
-  endif (INTEL_SSE4_2)
-else(INTEL_SSE4_1)
-  message(STATUS "Skipping target ec_jerasure_sse4 & ec_shec_sse4: -msse4.1 not supported")
-endif(INTEL_SSE4_1)
+# legacy jerasure flavors. these are left here for backward compatibility
+# and should be removed in future versions
+set(jerasure_legacy_flavors generic)
+if(HAVE_ARM)
+  list(APPEND jerasure_legacy_flavors neon)
+endif()
+if(HAVE_INTEL)
+ list(APPEND jerasure_legacy_flavors sse3 sse4)
+endif()
 
 add_subdirectory(jerasure)
 add_subdirectory(lrc)
@@ -70,10 +24,11 @@ add_subdirectory(shec)
 if (HAVE_BETTER_YASM_ELF64)
   add_subdirectory(isa)
   set(EC_ISA_LIB ec_isa)
+  set(EC_ISA_EMBEDDED_LIB cephd_ec_isa)
 endif (HAVE_BETTER_YASM_ELF64)
 
-add_library(erasure_code ErasureCodePlugin.cc)
-target_link_libraries(erasure_code dl)
+add_library(erasure_code STATIC ErasureCodePlugin.cc)
+target_link_libraries(erasure_code ${CMAKE_DL_LIBS})
 add_dependencies(erasure_code ${CMAKE_SOURCE_DIR}/src/ceph_ver.h)
 
 add_library(erasure_code_objs OBJECT ErasureCode.cc)
@@ -81,7 +36,12 @@ add_library(erasure_code_objs OBJECT ErasureCode.cc)
 add_custom_target(erasure_code_plugins DEPENDS
     ${EC_ISA_LIB}
     ec_lrc
-    ec_jerasure_sse3
-    ec_jerasure_sse4
-    ec_jerasure)
+    ec_jerasure
+    ec_shec)
 
+if(WITH_EMBEDDED)
+  include(MergeStaticLibraries)
+  add_library(cephd_ec_base STATIC $<TARGET_OBJECTS:erasure_code_objs>)
+  set_target_properties(cephd_ec_base PROPERTIES COMPILE_DEFINITIONS BUILDING_FOR_EMBEDDED)
+  merge_static_libraries(cephd_ec cephd_ec_base ${EC_ISA_EMBEDDED_LIB} cephd_ec_jerasure cephd_ec_lrc cephd_ec_shec)
+endif()

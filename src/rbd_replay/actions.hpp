@@ -124,22 +124,22 @@ public:
 template <typename ActionType>
 class TypedAction : public Action {
 public:
-  TypedAction(const ActionType &action) : m_action(action) {
+  explicit TypedAction(const ActionType &action) : m_action(action) {
   }
 
-  virtual action_id_t id() const {
+  action_id_t id() const override {
     return m_action.id;
   }
 
-  virtual thread_id_t thread_id() const {
+  thread_id_t thread_id() const override {
     return m_action.thread_id;
   }
 
-  virtual const action::Dependencies& predecessors() const {
+  const action::Dependencies& predecessors() const override {
     return m_action.dependencies;
   }
 
-  virtual std::ostream& dump(std::ostream& o) const {
+  std::ostream& dump(std::ostream& o) const override {
     o << get_action_name() << ": ";
     ceph::JSONFormatter formatter(false);
     formatter.open_object_section("");
@@ -165,13 +165,13 @@ public:
     : TypedAction<action::StartThreadAction>(action) {
   }
 
-  virtual bool is_start_thread() {
+  bool is_start_thread() override {
     return true;
   }
-  virtual void perform(ActionCtx &ctx);
+  void perform(ActionCtx &ctx) override;
 
 protected:
-  virtual const char *get_action_name() const {
+  const char *get_action_name() const override {
     return "StartThreadAction";
   }
 };
@@ -182,10 +182,10 @@ public:
     : TypedAction<action::StopThreadAction>(action) {
   }
 
-  virtual void perform(ActionCtx &ctx);
+  void perform(ActionCtx &ctx) override;
 
 protected:
-  virtual const char *get_action_name() const {
+  const char *get_action_name() const override {
     return "StartThreadAction";
   }
 };
@@ -193,14 +193,14 @@ protected:
 
 class AioReadAction : public TypedAction<action::AioReadAction> {
 public:
-  AioReadAction(const action::AioReadAction &action)
+  explicit AioReadAction(const action::AioReadAction &action)
     : TypedAction<action::AioReadAction>(action) {
   }
 
-  virtual void perform(ActionCtx &ctx);
+  void perform(ActionCtx &ctx) override;
 
 protected:
-  virtual const char *get_action_name() const {
+  const char *get_action_name() const override {
     return "AioReadAction";
   }
 };
@@ -208,14 +208,14 @@ protected:
 
 class ReadAction : public TypedAction<action::ReadAction> {
 public:
-  ReadAction(const action::ReadAction &action)
+  explicit ReadAction(const action::ReadAction &action)
     : TypedAction<action::ReadAction>(action) {
   }
 
-  virtual void perform(ActionCtx &ctx);
+  void perform(ActionCtx &ctx) override;
 
 protected:
-  virtual const char *get_action_name() const {
+  const char *get_action_name() const override {
     return "ReadAction";
   }
 };
@@ -223,14 +223,14 @@ protected:
 
 class AioWriteAction : public TypedAction<action::AioWriteAction> {
 public:
-  AioWriteAction(const action::AioWriteAction &action)
+  explicit AioWriteAction(const action::AioWriteAction &action)
     : TypedAction<action::AioWriteAction>(action) {
   }
 
-  virtual void perform(ActionCtx &ctx);
+  void perform(ActionCtx &ctx) override;
 
 protected:
-  virtual const char *get_action_name() const {
+  const char *get_action_name() const override {
     return "AioWriteAction";
   }
 };
@@ -238,29 +238,59 @@ protected:
 
 class WriteAction : public TypedAction<action::WriteAction> {
 public:
-  WriteAction(const action::WriteAction &action)
+  explicit WriteAction(const action::WriteAction &action)
     : TypedAction<action::WriteAction>(action) {
   }
 
-  virtual void perform(ActionCtx &ctx);
+  void perform(ActionCtx &ctx) override;
 
 protected:
-  virtual const char *get_action_name() const {
+  const char *get_action_name() const override {
     return "WriteAction";
+  }
+};
+
+
+class AioDiscardAction : public TypedAction<action::AioDiscardAction> {
+public:
+  explicit AioDiscardAction(const action::AioDiscardAction &action)
+    : TypedAction<action::AioDiscardAction>(action) {
+  }
+
+  void perform(ActionCtx &ctx) override;
+
+protected:
+  const char *get_action_name() const override {
+    return "AioDiscardAction";
+  }
+};
+
+
+class DiscardAction : public TypedAction<action::DiscardAction> {
+public:
+  explicit DiscardAction(const action::DiscardAction &action)
+    : TypedAction<action::DiscardAction>(action) {
+  }
+
+  void perform(ActionCtx &ctx) override;
+
+protected:
+  const char *get_action_name() const override {
+    return "DiscardAction";
   }
 };
 
 
 class OpenImageAction : public TypedAction<action::OpenImageAction> {
 public:
-  OpenImageAction(const action::OpenImageAction &action)
+  explicit OpenImageAction(const action::OpenImageAction &action)
     : TypedAction<action::OpenImageAction>(action) {
   }
 
-  virtual void perform(ActionCtx &ctx);
+  void perform(ActionCtx &ctx) override;
 
 protected:
-  virtual const char *get_action_name() const {
+  const char *get_action_name() const override {
     return "OpenImageAction";
   }
 };
@@ -268,15 +298,44 @@ protected:
 
 class CloseImageAction : public TypedAction<action::CloseImageAction> {
 public:
-  CloseImageAction(const action::CloseImageAction &action)
+  explicit CloseImageAction(const action::CloseImageAction &action)
     : TypedAction<action::CloseImageAction>(action) {
   }
 
-  virtual void perform(ActionCtx &ctx);
+  void perform(ActionCtx &ctx) override;
 
 protected:
-  virtual const char *get_action_name() const {
+  const char *get_action_name() const override {
     return "CloseImageAction";
+  }
+};
+
+class AioOpenImageAction : public TypedAction<action::AioOpenImageAction> {
+public:
+  explicit AioOpenImageAction(const action::AioOpenImageAction &action)
+    : TypedAction<action::AioOpenImageAction>(action) {
+  }
+
+  void perform(ActionCtx &ctx) override;
+
+protected:
+  const char *get_action_name() const override {
+    return "AioOpenImageAction";
+  }
+};
+
+
+class AioCloseImageAction : public TypedAction<action::AioCloseImageAction> {
+public:
+  explicit AioCloseImageAction(const action::AioCloseImageAction &action)
+    : TypedAction<action::AioCloseImageAction>(action) {
+  }
+
+  void perform(ActionCtx &ctx) override;
+
+protected:
+  const char *get_action_name() const override {
+    return "AioCloseImageAction";
   }
 };
 

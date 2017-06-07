@@ -13,28 +13,20 @@
  */
 
 #include "Cond.h"
-#include "Mutex.h"
-#include "Thread.h"
 #include "Timer.h"
 
-#include "common/config.h"
-#include "include/Context.h"
 
 #define dout_subsys ceph_subsys_timer
 #undef dout_prefix
 #define dout_prefix *_dout << "timer(" << this << ")."
 
-#include <sstream>
-#include <signal.h>
-#include <sys/time.h>
-#include <math.h>
 
 
 class SafeTimerThread : public Thread {
   SafeTimer *parent;
 public:
-  SafeTimerThread(SafeTimer *s) : parent(s) {}
-  void *entry() {
+  explicit SafeTimerThread(SafeTimer *s) : parent(s) {}
+  void *entry() override {
     parent->timer_thread();
     return NULL;
   }
@@ -86,8 +78,8 @@ void SafeTimer::timer_thread()
   lock.Lock();
   ldout(cct,10) << "timer_thread starting" << dendl;
   while (!stopping) {
-    utime_t now = ceph_clock_now(cct);
-    
+    utime_t now = ceph_clock_now();
+
     while (!schedule.empty()) {
       scheduled_map_t::iterator p = schedule.begin();
 
@@ -126,7 +118,7 @@ void SafeTimer::add_event_after(double seconds, Context *callback)
 {
   assert(lock.is_locked());
 
-  utime_t when = ceph_clock_now(cct);
+  utime_t when = ceph_clock_now();
   when += seconds;
   add_event_at(when, callback);
 }
@@ -156,7 +148,7 @@ bool SafeTimer::cancel_event(Context *callback)
 {
   assert(lock.is_locked());
   
-  std::map<Context*, std::multimap<utime_t, Context*>::iterator>::iterator p = events.find(callback);
+  auto p = events.find(callback);
   if (p == events.end()) {
     ldout(cct,10) << "cancel_event " << callback << " not found" << dendl;
     return false;
@@ -176,7 +168,7 @@ void SafeTimer::cancel_all_events()
   assert(lock.is_locked());
   
   while (!events.empty()) {
-    std::map<Context*, std::multimap<utime_t, Context*>::iterator>::iterator p = events.begin();
+    auto p = events.begin();
     ldout(cct,10) << " cancelled " << p->second->first << " -> " << p->first << dendl;
     delete p->first;
     schedule.erase(p->second);

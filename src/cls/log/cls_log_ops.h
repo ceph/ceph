@@ -4,23 +4,27 @@
 #ifndef CEPH_CLS_LOG_OPS_H
 #define CEPH_CLS_LOG_OPS_H
 
-#include "include/types.h"
 #include "cls_log_types.h"
 
 struct cls_log_add_op {
   list<cls_log_entry> entries;
+  bool monotonic_inc;
 
-  cls_log_add_op() {}
+  cls_log_add_op() : monotonic_inc(true) {}
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(1, 1, bl);
+    ENCODE_START(2, 1, bl);
     ::encode(entries, bl);
+    ::encode(monotonic_inc, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::iterator& bl) {
-    DECODE_START(1, bl);
+    DECODE_START(2, bl);
     ::decode(entries, bl);
+    if (struct_v >= 2) {
+      ::decode(monotonic_inc, bl);
+    }
     DECODE_FINISH(bl);
   }
 };

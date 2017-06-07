@@ -13,7 +13,6 @@
  */
 
 #include "include/Context.h"
-#include <set>
 
 /**
  * The Continuation interface is designed to help easily create multi-step
@@ -58,7 +57,7 @@ class Continuation {
     Callback(Continuation *c, int stage) :
       continuation(c),
       stage_to_activate(stage) {}
-    void finish(int r) {
+    void finish(int r) override {
       continuation->continue_function(r, stage_to_activate);
     }
   };
@@ -116,7 +115,6 @@ protected:
    virtual void _done() {
      on_finish->complete(rval);
      on_finish = NULL;
-     delete this;
      return;
    }
 
@@ -149,6 +147,7 @@ private:
     if (done ||
         (reported_done && stages_processing.empty())) {
       _done();
+      delete this;
     }
   }
 

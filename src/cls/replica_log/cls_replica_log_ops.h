@@ -10,13 +10,12 @@
 #ifndef CLS_REPLICA_LOG_OPS_H_
 #define CLS_REPLICA_LOG_OPS_H_
 
-#include "include/types.h"
 #include "cls_replica_log_types.h"
 
 struct cls_replica_log_delete_marker_op {
   string entity_id;
   cls_replica_log_delete_marker_op() {}
-  cls_replica_log_delete_marker_op(const string& id) : entity_id(id) {}
+  explicit cls_replica_log_delete_marker_op(const string& id) : entity_id(id) {}
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
@@ -39,7 +38,7 @@ WRITE_CLASS_ENCODER(cls_replica_log_delete_marker_op)
 struct cls_replica_log_set_marker_op {
   cls_replica_log_progress_marker marker;
   cls_replica_log_set_marker_op() {}
-  cls_replica_log_set_marker_op(const cls_replica_log_progress_marker& m) :
+  explicit cls_replica_log_set_marker_op(const cls_replica_log_progress_marker& m) :
     marker(m) {}
 
   void encode(bufferlist& bl) const {

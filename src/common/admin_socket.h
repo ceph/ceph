@@ -15,13 +15,7 @@
 #ifndef CEPH_COMMON_ADMIN_SOCKET_H
 #define CEPH_COMMON_ADMIN_SOCKET_H
 
-#include "common/Thread.h"
-#include "common/Mutex.h"
-
-#include <string>
-#include <map>
-#include "include/buffer_fwd.h"
-#include "common/cmdparse.h"
+#include "common/Cond.h"
 
 class AdminSocket;
 class CephContext;
@@ -39,7 +33,7 @@ class AdminSocket : public Thread
 {
 public:
   AdminSocket(CephContext *cct);
-  virtual ~AdminSocket();
+  ~AdminSocket() override;
 
   /**
    * register an admin socket command
@@ -63,7 +57,11 @@ public:
   int register_command(std::string command, std::string cmddesc, AdminSocketHook *hook, std::string help);
 
   /**
-   * unregister an admin socket command
+   * unregister an admin socket command.
+   *
+   * If a command is currently in progress, this will block until it
+   * is done.  For that reason, you must not hold any locks required
+   * by your hook while you call this.
    *
    * @param command command string
    * @return 0 on succest, -ENOENT if command dne.
@@ -71,7 +69,10 @@ public:
   int unregister_command(std::string command);
 
   bool init(const std::string &path);
-  
+
+  void chown(uid_t uid, gid_t gid);
+  void chmod(mode_t mode);
+
 private:
   AdminSocket(const AdminSocket& rhs);
   AdminSocket& operator=(const AdminSocket &rhs);
@@ -82,7 +83,7 @@ private:
   std::string destroy_shutdown_pipe();
   std::string bind_and_listen(const std::string &sock_path, int *fd);
 
-  void *entry();
+  void *entry() override;
   bool do_accept();
 
   CephContext *m_cct;
@@ -91,6 +92,8 @@ private:
   int m_shutdown_rd_fd;
   int m_shutdown_wr_fd;
 
+  bool in_hook;
+  Cond in_hook_cond;
   Mutex m_lock;    // protects m_hooks, m_descs, m_help
   AdminSocketHook *m_version_hook, *m_help_hook, *m_getdescs_hook;
 

@@ -63,6 +63,10 @@ for the journal too (which may be expensive) or place the journal on the
 same disk as the OSD (not recommended as it impairs performance). In the
 foregoing example we store the journal on a partitioned solid state drive.
 
+You can use the settings --fs-type or --bluestore to choose which file system
+you want to install in the OSD drive. (More information by running
+'ceph-deploy osd prepare --help').
+
 .. note:: When running multiple Ceph OSD daemons on a single node, and 
    sharing a partioned journal with each OSD daemon, you should consider
    the entire node the minimum failure domain for CRUSH purposes, because

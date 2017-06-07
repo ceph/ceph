@@ -14,14 +14,9 @@
 
 #include "PaxosService.h"
 #include "common/Clock.h"
-#include "Monitor.h"
-#include "MonitorDBStore.h"
-
-
 #include "common/config.h"
+#include "include/stringify.h"
 #include "include/assert.h"
-#include "common/Formatter.h"
-
 #include "mon/MonOpRequest.h"
 
 #define dout_subsys ceph_subsys_paxos
@@ -93,25 +88,51 @@ bool PaxosService::dispatch(MonOpRequestRef op)
   }
 
   // update
-  if (prepare_update(op)) {
-    double delay = 0.0;
-    if (should_propose(delay)) {
-      if (delay == 0.0) {
-	propose_pending();
-      } else {
-	// delay a bit
-	if (!proposal_timer) {
-	  proposal_timer = new C_Propose(this);
-	  dout(10) << " setting proposal_timer " << proposal_timer << " with delay of " << delay << dendl;
-	  mon->timer.add_event_after(delay, proposal_timer);
-	} else { 
-	  dout(10) << " proposal_timer already set" << dendl;
-	}
-      }
-    } else {
-      dout(10) << " not proposing" << dendl;
-    }
-  }     
+  if (!prepare_update(op)) {
+    // no changes made.
+    return true;
+  }
+
+  if (need_immediate_propose) {
+    dout(10) << __func__ << " forced immediate propose" << dendl;
+    need_immediate_propose = false;
+    propose_pending();
+    return true;
+  }
+
+  double delay = 0.0;
+  if (!should_propose(delay)) {
+    dout(10) << " not proposing" << dendl;
+    return true;
+  }
+
+  if (delay == 0.0) {
+    propose_pending();
+    return true;
+  }
+
+  // delay a bit
+  if (!proposal_timer) {
+    /**
+       * Callback class used to propose the pending value once the proposal_timer
+       * fires up.
+       */
+    proposal_timer = new C_MonContext(mon, [this](int r) {
+        proposal_timer = 0;
+        if (r >= 0) {
+          propose_pending();
+        } else if (r == -ECANCELED || r == -EAGAIN) {
+          return;
+        } else {
+          assert(0 == "bad return value for proposal_timer");
+        }
+    });
+    dout(10) << " setting proposal_timer " << proposal_timer
+             << " with delay of " << delay << dendl;
+    mon->timer.add_event_after(delay, proposal_timer);
+  } else {
+    dout(10) << " proposal_timer already set" << dendl;
+  }
   return true;
 }
 
@@ -144,33 +165,13 @@ void PaxosService::post_refresh()
   }
 }
 
-void PaxosService::remove_legacy_versions()
-{
-  dout(10) << __func__ << dendl;
-  if (!mon->store->exists(get_service_name(), "conversion_first"))
-    return;
-
-  version_t cf = mon->store->get(get_service_name(), "conversion_first");
-  version_t fc = get_first_committed();
-
-  dout(10) << __func__ << " conversion_first " << cf
-	   << " first committed " << fc << dendl;
-
-  MonitorDBStore::TransactionRef t(new MonitorDBStore::Transaction);
-  if (cf < fc) {
-    trim(t, cf, fc);
-  }
-  t->erase(get_service_name(), "conversion_first");
-  mon->store->apply_transaction(t);
-}
-
 bool PaxosService::should_propose(double& delay)
 {
   // simple default policy: quick startup, then some damping.
-  if (get_last_committed() <= 1)
+  if (get_last_committed() <= 1) {
     delay = 0.0;
-  else {
-    utime_t now = ceph_clock_now(g_ceph_context);
+  } else {
+    utime_t now = ceph_clock_now();
     if ((now - paxos->last_commit_time) > g_conf->paxos_propose_interval)
       delay = (double)g_conf->paxos_min_wait;
     else
@@ -218,6 +219,30 @@ void PaxosService::propose_pending()
 
   // apply to paxos
   proposing = true;
+  /**
+   * Callback class used to mark us as active once a proposal finishes going
+   * through Paxos.
+   *
+   * We should wake people up *only* *after* we inform the service we
+   * just went active. And we should wake people up only once we finish
+   * going active. This is why we first go active, avoiding to wake up the
+   * wrong people at the wrong time, such as waking up a C_RetryMessage
+   * before waking up a C_Active, thus ending up without a pending value.
+   */
+  class C_Committed : public Context {
+    PaxosService *ps;
+  public:
+    explicit C_Committed(PaxosService *p) : ps(p) { }
+    void finish(int r) override {
+      ps->proposing = false;
+      if (r >= 0)
+	ps->_active();
+      else if (r == -ECANCELED || r == -EAGAIN)
+	return;
+      else
+	assert(0 == "bad return value for C_Committed");
+    }
+  };
   paxos->queue_pending_finisher(new C_Committed(this));
   paxos->trigger_propose();
 }
@@ -232,7 +257,7 @@ bool PaxosService::should_stash_full()
    */
   return (!latest_full ||
 	  (latest_full <= get_trim_to()) ||
-	  (get_last_committed() - latest_full > (unsigned)g_conf->paxos_stash_full_interval));
+	  (get_last_committed() - latest_full > (version_t)g_conf->paxos_stash_full_interval));
 }
 
 void PaxosService::restart()
@@ -273,15 +298,30 @@ void PaxosService::_active()
   }
   if (!is_active()) {
     dout(10) << "_active - not active" << dendl;
+    /**
+     * Callback used to make sure we call the PaxosService::_active function
+     * whenever a condition is fulfilled.
+     *
+     * This is used in multiple situations, from waiting for the Paxos to commit
+     * our proposed value, to waiting for the Paxos to become active once an
+     * election is finished.
+     */
+    class C_Active : public Context {
+      PaxosService *svc;
+    public:
+      explicit C_Active(PaxosService *s) : svc(s) {}
+      void finish(int r) override {
+	if (r >= 0)
+	  svc->_active();
+      }
+    };
     wait_for_active_ctx(new C_Active(this));
     return;
   }
   dout(10) << "_active" << dendl;
 
-  remove_legacy_versions();
-
   // create pending state?
-  if (mon->is_leader() && is_active()) {
+  if (mon->is_leader()) {
     dout(7) << "_active creating new pending" << dendl;
     if (!have_pending) {
       create_pending();
@@ -297,8 +337,6 @@ void PaxosService::_active()
   } else {
     if (!mon->is_leader()) {
       dout(7) << __func__ << " we are not the leader, hence we propose nothing!" << dendl;
-    } else if (!is_active()) {
-      dout(7) << __func__ << " we are not active, hence we propose nothing!" << dendl;
     }
   }
 
@@ -307,13 +345,12 @@ void PaxosService::_active()
   // on this list; it is on Paxos's.
   finish_contexts(g_ceph_context, waiting_for_finished_proposal, 0);
 
-  if (is_active() && mon->is_leader())
+  if (mon->is_leader())
     upgrade_format();
 
   // NOTE: it's possible that this will get called twice if we commit
   // an old paxos value.  Implementations should be mindful of that.
-  if (is_active())
-    on_active();
+  on_active();
 }
 
 
@@ -355,7 +392,7 @@ void PaxosService::maybe_trim()
 	     << " > paxos_service_trim_max, limiting to " << g_conf->paxos_service_trim_max
 	     << dendl;
     trim_to = get_first_committed() + g_conf->paxos_service_trim_max;
-    to_remove = trim_to - get_first_committed();
+    to_remove = g_conf->paxos_service_trim_max;
   }
 
   dout(10) << __func__ << " trimming to " << trim_to << ", " << to_remove << " states" << dendl;
@@ -388,6 +425,9 @@ void PaxosService::trim(MonitorDBStore::TransactionRef t,
   if (g_conf->mon_compact_on_trim) {
     dout(20) << " compacting prefix " << get_service_name() << dendl;
     t->compact_range(get_service_name(), stringify(from - 1), stringify(to));
+    t->compact_range(get_service_name(),
+		     mon->store->combine_strings(full_prefix_name, from - 1),
+		     mon->store->combine_strings(full_prefix_name, to));
   }
 }
 

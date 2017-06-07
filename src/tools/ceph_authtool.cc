@@ -14,7 +14,7 @@
 
 #include "common/ConfUtils.h"
 #include "common/ceph_argparse.h"
-
+#include "common/config.h"
 #include "global/global_context.h"
 #include "global/global_init.h"
 
@@ -37,13 +37,14 @@ void usage()
        << "                                specified entityname\n"
        << "  --gen-print-key               will generate a new secret key without set it\n"
        << "                                to the keyringfile, prints the secret to stdout\n"
-       << "  --import-keyring              will import the content of a given keyring\n"
+       << "  --import-keyring FILE         will import the content of a given keyring\n"
        << "                                into the keyringfile\n"
-       << "  -u, --set-uid                 sets the auid (authenticated user id) for the\n"
+       << "  -n NAME, --name NAME          specify entityname to operate on\n"
+       << "  -u AUID, --set-uid AUID       sets the auid (authenticated user id) for the\n"
        << "                                specified entityname\n"
-       << "  -a, --add-key                 will add an encoded key to the keyring\n"
-       << "  --cap subsystem capability    will set the capability for given subsystem\n"
-       << "  --caps capsfile               will set all of capabilities associated with a\n"
+       << "  -a BASE64, --add-key BASE64   will add an encoded key to the keyring\n"
+       << "  --cap SUBSYSTEM CAPABILITY    will set the capability for given subsystem\n"
+       << "  --caps CAPSFILE               will set all of capabilities associated with a\n"
        << "                                given key, for all subsystems"
        << std::endl;
   exit(1);
@@ -62,8 +63,9 @@ int main(int argc, const char **argv)
   map<string,bufferlist> caps;
   std::string fn;
 
-  global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY,
-	      CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
+  auto cct = global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT,
+			 CODE_ENVIRONMENT_UTILITY,
+			 CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
 
   bool gen_key = false;
   bool gen_print_key = false;
@@ -73,6 +75,9 @@ int main(int argc, const char **argv)
   bool set_auid = false;
   std::vector<const char*>::iterator i;
 
+  /* Handle options unique to ceph-authtool
+   * -n NAME, --name NAME is handled by global_init
+   * */
   for (i = args.begin(); i != args.end(); ) {
     std::string val;
     if (ceph_argparse_double_dash(args, i)) {
@@ -82,6 +87,10 @@ int main(int argc, const char **argv)
     } else if (ceph_argparse_flag(args, i, "--gen-print-key", (char*)NULL)) {
       gen_print_key = true;
     } else if (ceph_argparse_witharg(args, i, &val, "-a", "--add-key", (char*)NULL)) {
+      if (val.empty()) {
+        cerr << "Option --add-key requires an argument" << std::endl;
+        exit(1);
+      }
       add_key = val;
     } else if (ceph_argparse_flag(args, i, "-l", "--list", (char*)NULL)) {
       list = true;
@@ -117,6 +126,7 @@ int main(int argc, const char **argv)
       usage();
     }
   }
+
   if (fn.empty() && !gen_print_key) {
     cerr << argv[0] << ": must specify filename" << std::endl;
     usage();
@@ -135,12 +145,19 @@ int main(int argc, const char **argv)
     usage();
   }
   if (gen_key && (!add_key.empty())) {
-    cerr << "can't both gen_key and add_key" << std::endl;
+    cerr << "can't both gen-key and add-key" << std::endl;
     usage();
   }
 
   common_init_finish(g_ceph_context);
   EntityName ename(g_conf->name);
+
+  // Enforce the use of gen-key or add-key when creating to avoid ending up
+  // with an "empty" key (key = AAAAAAAAAAAAAAAA)
+  if (create_keyring && !gen_key && add_key.empty() && !caps.empty()) {
+    cerr << "must specify either gen-key or add-key when creating" << std::endl;
+    usage();
+  }
 
   if (gen_print_key) {
     CryptoKey key;
@@ -171,6 +188,17 @@ int main(int argc, const char **argv)
       }
     } else {
       cerr << "can't open " << fn << ": " << err << std::endl;
+      exit(1);
+    }
+  }
+
+  // Validate that "name" actually has an existing key in this keyring if we
+  // have not given gen-key or add-key options
+  if (!gen_key && add_key.empty() && !caps.empty()) {
+    CryptoKey key;
+    if (!keyring.get_secret(ename, key)) {
+      cerr << "can't find existing key for " << ename 
+           << " and neither gen-key nor add-key specified" << std::endl;
       exit(1);
     }
   }
@@ -226,7 +254,7 @@ int main(int argc, const char **argv)
     }
     complain_about_parse_errors(g_ceph_context, &parse_errors);
     map<string, bufferlist> caps;
-    const char *key_names[] = { "mon", "osd", "mds", NULL };
+    const char *key_names[] = { "mon", "osd", "mds", "mgr", NULL };
     for (int i=0; key_names[i]; i++) {
       std::string val;
       if (cf.read("global", key_names[i], val) == 0) {

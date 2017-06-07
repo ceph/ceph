@@ -26,7 +26,7 @@ inline const char *get_mdstable_name(int t) {
   switch (t) {
   case TABLE_ANCHOR: return "anchortable";
   case TABLE_SNAP: return "snaptable";
-  default: assert(0);
+  default: ceph_abort();
   }
 }
 
@@ -53,7 +53,7 @@ inline const char *get_mdstableserver_opname(int op) {
   case TABLESERVER_OP_ROLLBACK: return "rollback";
   case TABLESERVER_OP_SERVER_UPDATE: return "server_update";
   case TABLESERVER_OP_SERVER_READY: return "server_ready";
-  default: assert(0); return 0;
+  default: ceph_abort(); return 0;
   }
 }
 
@@ -68,7 +68,7 @@ inline const char *get_mdstable_opname(int op) {
   case TABLE_OP_CREATE: return "create";
   case TABLE_OP_UPDATE: return "update";
   case TABLE_OP_DESTROY: return "destroy";
-  default: assert(0); return 0;
+  default: ceph_abort(); return 0;
   }
 }
 

@@ -1,0 +1,10 @@
+overrides:
+  ceph:
+    conf:
+      client:
+        fuse_default_permissions: 0
+tasks:
+- workunit:
+    clients:
+      all:
+        - kernel_untar_build.sh

@@ -1,7 +1,6 @@
 #include <errno.h>
 
-#include "include/types.h"
-#include "cls/version/cls_version_ops.h"
+#include "cls/version/cls_version_client.h"
 #include "include/rados/librados.hpp"
 
 
@@ -44,7 +43,7 @@ void cls_version_inc(librados::ObjectWriteOperation& op, obj_version& objv, Vers
 void cls_version_check(librados::ObjectOperation& op, obj_version& objv, VersionCond cond)
 {
   bufferlist in;
-  cls_version_inc_op call;
+  cls_version_check_op call;
   call.objv = objv;
 
   obj_version_cond c;
@@ -60,8 +59,8 @@ void cls_version_check(librados::ObjectOperation& op, obj_version& objv, Version
 class VersionReadCtx : public ObjectOperationCompletion {
   obj_version *objv;
 public:
-  VersionReadCtx(obj_version *_objv) : objv(_objv) {}
-  void handle_completion(int r, bufferlist& outbl) {
+  explicit VersionReadCtx(obj_version *_objv) : objv(_objv) {}
+  void handle_completion(int r, bufferlist& outbl) override {
     if (r >= 0) {
       cls_version_read_ret ret;
       try {

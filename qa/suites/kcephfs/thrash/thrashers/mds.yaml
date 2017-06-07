@@ -1,0 +1,4 @@
+tasks:
+- install:
+- ceph:
+- mds_thrash:

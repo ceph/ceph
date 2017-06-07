@@ -341,11 +341,12 @@ Add Instances to Ceph Config File
 On an admin node, add an entry for each instance in the Ceph configuration file
 for your Ceph Storage Cluster(s). For example:: 
 
-	...
+	[global]
+	rgw region root pool = .us.rgw.root     # Deprecated in Jewel
+	rgw zonegroup root pool = .us.rgw.root  # From Jewel
 	
 	[client.radosgw.us-east-1]
 	rgw region = us
-	rgw region root pool = .us.rgw.root
 	rgw zone = us-east
 	rgw zone root pool = .us-east.rgw.root
 	keyring = /etc/ceph/ceph.client.radosgw.keyring
@@ -355,7 +356,6 @@ for your Ceph Storage Cluster(s). For example::
 	
 	[client.radosgw.us-west-1]
 	rgw region = us
-	rgw region root pool = .us.rgw.root
 	rgw zone = us-west
 	rgw zone root pool = .us-west.rgw.root
 	keyring = /etc/ceph/ceph.client.radosgw.keyring
@@ -817,10 +817,9 @@ there is a unified namespace between the two regions.
 
 .. _CRUSH Map: ../../rados/operations/crush-map
 .. _Install Ceph Object Gateway: ../../install/install-ceph-gateway
-.. _Cephx Administration: ../../rados/operations/authentication/#cephx-administration
 .. _Ceph configuration file: ../../rados/configuration/ceph-conf
 .. _Configuration Reference - Pools: ../config-ref#pools
 .. _Configuration Reference - Regions: ../config-ref#regions
 .. _Configuration Reference - Zones: ../config-ref#zones
 .. _Pools: ../../rados/operations/pools
-.. _Simple Configuration: ../config
+.. _Simple Configuration: ../config-fcgi

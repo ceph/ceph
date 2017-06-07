@@ -5,8 +5,9 @@
 
 #include "include/types.h"
 #include "include/buffer_fwd.h"
+#include "include/rbd_types.h"
 #include "common/Formatter.h"
-#include "librbd/parent_types.h"
+#include "cls/rbd/cls_rbd_types.h"
 
 /// information about our parent image, if any
 struct cls_rbd_parent {
@@ -64,6 +65,9 @@ struct cls_rbd_snap {
   uint8_t protection_status;
   cls_rbd_parent parent;
   uint64_t flags;
+  utime_t timestamp;
+  cls::rbd::SnapshotNamespaceOnDisk snapshot_namespace = {
+    cls::rbd::UserSnapshotNamespace{}};
 
   /// true if we have a parent
   bool has_parent() const {
@@ -72,10 +76,10 @@ struct cls_rbd_snap {
 
   cls_rbd_snap() : id(CEPH_NOSNAP), image_size(0), features(0),
 		   protection_status(RBD_PROTECTION_STATUS_UNPROTECTED),
-                   flags(0)
+                   flags(0), timestamp(utime_t())
     {}
   void encode(bufferlist& bl) const {
-    ENCODE_START(4, 1, bl);
+    ENCODE_START(6, 1, bl);
     ::encode(id, bl);
     ::encode(name, bl);
     ::encode(image_size, bl);
@@ -83,10 +87,12 @@ struct cls_rbd_snap {
     ::encode(parent, bl);
     ::encode(protection_status, bl);
     ::encode(flags, bl);
+    ::encode(snapshot_namespace, bl);
+    ::encode(timestamp, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator& p) {
-    DECODE_START(4, p);
+    DECODE_START(6, p);
     ::decode(id, p);
     ::decode(name, p);
     ::decode(image_size, p);
@@ -99,6 +105,12 @@ struct cls_rbd_snap {
     }
     if (struct_v >= 4) {
       ::decode(flags, p);
+    }
+    if (struct_v >= 5) {
+      ::decode(snapshot_namespace, p);
+    }
+    if (struct_v >= 6) {
+      ::decode(timestamp, p);
     }
     DECODE_FINISH(p);
   }
@@ -123,7 +135,7 @@ struct cls_rbd_snap {
       f->dump_string("protection_status", "protected");
       break;
     default:
-      assert(0);
+      ceph_abort();
     }
   }
   static void generate_test_instances(list<cls_rbd_snap*>& o) {
@@ -146,6 +158,7 @@ struct cls_rbd_snap {
     t->parent.overlap = 12345;
     t->protection_status = RBD_PROTECTION_STATUS_PROTECTED;
     t->flags = 14;
+    t->timestamp = utime_t();
     o.push_back(t);
   }
 };

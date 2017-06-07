@@ -43,9 +43,12 @@ def get_features():
     if features is not None:
         features = int(features)
     else:
-        features = int(RBD_FEATURE_EXCLUSIVE_LOCK | RBD_FEATURE_LAYERING)
+        features = int(RBD_FEATURE_EXCLUSIVE_LOCK | RBD_FEATURE_LAYERING |
+                       RBD_FEATURE_OBJECT_MAP | RBD_FEATURE_FAST_DIFF)
     assert((features & RBD_FEATURE_EXCLUSIVE_LOCK) != 0)
     assert((features & RBD_FEATURE_LAYERING) != 0)
+    assert((features & RBD_FEATURE_OBJECT_MAP) != 0)
+    assert((features & RBD_FEATURE_FAST_DIFF) != 0)
     return features
 
 def master(ioctx):
@@ -61,6 +64,7 @@ def master(ioctx):
         image.create_snap('snap1')
         image.protect_snap('snap1')
 
+    features = features & ~(RBD_FEATURE_OBJECT_MAP | RBD_FEATURE_FAST_DIFF)
     RBD().clone(ioctx, PARENT_IMG_NAME, 'snap1', ioctx, CLONE_IMG_NAME,
                 features=features)
     with Image(ioctx, CLONE_IMG_NAME) as image:
@@ -70,7 +74,7 @@ def master(ioctx):
         while offset < IMG_SIZE:
             image.write(data, offset)
             offset += (1 << IMG_ORDER)
-        image.write('1', IMG_SIZE - 1)
+        image.write(b'1', IMG_SIZE - 1)
         assert(image.is_exclusive_lock_owner())
 
         print("waiting for slave to complete")
@@ -80,7 +84,7 @@ def master(ioctx):
     safe_delete_image(ioctx, CLONE_IMG_RENAME)
     safe_delete_image(ioctx, CLONE_IMG_NAME)
     delete_image(ioctx, PARENT_IMG_NAME)
-    print ("finished")
+    print("finished")
 
 def slave(ioctx):
     print("starting slave")
@@ -89,7 +93,7 @@ def slave(ioctx):
         try:
             with Image(ioctx, CLONE_IMG_NAME) as image:
                 if (image.list_lockers() != [] and
-                    image.read(IMG_SIZE - 1, 1) == '1'):
+                    image.read(IMG_SIZE - 1, 1) == b'1'):
                     break
         except Exception:
             pass
@@ -106,14 +110,15 @@ def slave(ioctx):
         assert(not image.is_exclusive_lock_owner())
 
         print("resize")
-        image.resize(IMG_SIZE / 2)
+        image.resize(IMG_SIZE // 2)
         assert(not image.is_exclusive_lock_owner())
-        assert(image.stat()['size'] == IMG_SIZE / 2)
+        assert(image.stat()['size'] == IMG_SIZE // 2)
 
         print("create_snap")
         image.create_snap('snap1')
         assert(not image.is_exclusive_lock_owner())
-        assert('snap1' in map(lambda snap: snap['name'], image.list_snaps()))
+        assert(any(snap['name'] == 'snap1'
+                   for snap in image.list_snaps()))
 
         print("protect_snap")
         image.protect_snap('snap1')
@@ -128,8 +133,8 @@ def slave(ioctx):
         print("rename_snap")
         image.rename_snap('snap1', 'snap1-new')
         assert(not image.is_exclusive_lock_owner())
-        assert('snap1-new' in map(lambda snap: snap['name'],
-                                  image.list_snaps()))
+        assert(any(snap['name'] == 'snap1-new'
+                   for snap in image.list_snaps()))
 
         print("remove_snap")
         image.remove_snap('snap1-new')
@@ -137,8 +142,7 @@ def slave(ioctx):
         assert(list(image.list_snaps()) == [])
 
         print("rebuild object map")
-        image.update_features(RBD_FEATURE_OBJECT_MAP | RBD_FEATURE_FAST_DIFF,
-                              False)
+        assert((image.features() & RBD_FEATURE_OBJECT_MAP) == 0)
         image.update_features(RBD_FEATURE_OBJECT_MAP, True)
         assert((image.flags() & RBD_FLAG_OBJECT_MAP_INVALID) != 0)
         image.rebuild_object_map()

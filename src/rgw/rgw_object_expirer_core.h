@@ -4,10 +4,11 @@
 #ifndef CEPH_OBJEXP_H
 #define CEPH_OBJEXP_H
 
-#include <errno.h>
-#include <iostream>
-#include <sstream>
+#include <atomic>
 #include <string>
+#include <cerrno>
+#include <sstream>
+#include <iostream>
 
 #include "auth/Crypto.h"
 
@@ -41,9 +42,9 @@ class RGWObjectExpirer {
 protected:
   RGWRados *store;
 
-  int init_bucket_info(const string& tenant_name,
-                       const string& bucket_name,
-                       const string& bucket_id,
+  int init_bucket_info(const std::string& tenant_name,
+                       const std::string& bucket_name,
+                       const std::string& bucket_id,
                        RGWBucketInfo& bucket_info);
 
   class OEWorker : public Thread {
@@ -53,33 +54,41 @@ protected:
     Cond cond;
 
   public:
-    OEWorker(CephContext *_cct, RGWObjectExpirer *_oe) : cct(_cct), oe(_oe), lock("OEWorker") {}
-    void *entry();
+    OEWorker(CephContext * const cct,
+             RGWObjectExpirer * const oe)
+      : cct(cct),
+        oe(oe),
+        lock("OEWorker") {
+    }
+
+    void *entry() override;
     void stop();
   };
 
   OEWorker *worker;
-  atomic_t down_flag;
+  std::atomic<bool> down_flag = { false };
 
 public:
-  RGWObjectExpirer(RGWRados *_store)
-    : store(_store)
-  {}
+  explicit RGWObjectExpirer(RGWRados *_store)
+    : store(_store) {
+  }
 
   int garbage_single_object(objexp_hint_entry& hint);
 
-  void garbage_chunk(list<cls_timeindex_entry>& entries,      /* in  */
+  void garbage_chunk(std::list<cls_timeindex_entry>& entries, /* in  */
                      bool& need_trim);                        /* out */
 
-  void trim_chunk(const string& shard,
+  void trim_chunk(const std::string& shard,
                   const utime_t& from,
-                  const utime_t& to);
+                  const utime_t& to,
+                  const string& from_marker,
+                  const string& to_marker);
 
-  void process_single_shard(const string& shard,
+  bool process_single_shard(const std::string& shard,
                             const utime_t& last_run,
                             const utime_t& round_start);
 
-  void inspect_all_shards(const utime_t& last_run,
+  bool inspect_all_shards(const utime_t& last_run,
                           const utime_t& round_start);
 
   bool going_down();

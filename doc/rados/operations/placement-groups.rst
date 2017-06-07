@@ -18,7 +18,7 @@ calculated automatically. Here are a few values commonly used:
 
 - Between 5 and 10 OSDs set ``pg_num`` to 512
 
-- Between 10 and 50 OSDs set ``pg_num`` to 4096
+- Between 10 and 50 OSDs set ``pg_num`` to 1024
 
 - If you have more than 50 OSDs, you need to understand the tradeoffs
   and how to calculate the ``pg_num`` value by yourself

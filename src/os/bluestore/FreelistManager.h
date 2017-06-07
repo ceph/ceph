@@ -6,46 +6,40 @@
 
 #include <string>
 #include <map>
+#include <mutex>
 #include <ostream>
-#include "common/Mutex.h"
 #include "kv/KeyValueDB.h"
 
 class FreelistManager {
-  std::string prefix;
-  Mutex lock;
-  uint64_t total_free;
-
-  std::map<uint64_t, uint64_t> kv_free;    ///< mirrors our kv values in the db
-
-  void _audit();
-  void _dump();
-
 public:
-  FreelistManager() :
-    lock("FreelistManager::lock"),
-    total_free(0) {
-  }
+  CephContext* cct;
+  FreelistManager(CephContext* cct) : cct(cct) {}
+  virtual ~FreelistManager() {}
 
-  int init(KeyValueDB *kvdb, std::string prefix);
-  void shutdown();
+  static FreelistManager *create(
+    CephContext* cct,
+    string type,
+    KeyValueDB *db,
+    string prefix);
 
-  void dump();
+  static void setup_merge_operators(KeyValueDB *db);
 
-  uint64_t get_total_free() {
-    Mutex::Locker l(lock);
-    return total_free;
-  }
+  virtual int create(uint64_t size, KeyValueDB::Transaction txn) = 0;
 
-  const std::map<uint64_t,uint64_t>& get_freelist() {
-    return kv_free;
-  }
+  virtual int init() = 0;
+  virtual void shutdown() = 0;
 
-  int allocate(
+  virtual void dump() = 0;
+
+  virtual void enumerate_reset() = 0;
+  virtual bool enumerate_next(uint64_t *offset, uint64_t *length) = 0;
+
+  virtual void allocate(
     uint64_t offset, uint64_t length,
-    KeyValueDB::Transaction txn);
-  int release(
+    KeyValueDB::Transaction txn) = 0;
+  virtual void release(
     uint64_t offset, uint64_t length,
-    KeyValueDB::Transaction txn);
+    KeyValueDB::Transaction txn) = 0;
 };
 
 

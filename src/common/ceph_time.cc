@@ -13,24 +13,37 @@
  */
 
 // For ceph_timespec
-#include "include/types.h"
-
-#include "ceph_context.h"
 #include "ceph_time.h"
 #include "config.h"
 
+#if defined(DARWIN)
+int clock_gettime(int clk_id, struct timespec *tp)
+{
+  if (clk_id == CALENDAR_CLOCK) {
+    // gettimeofday is much faster than clock_get_time
+    struct timeval now;
+    int ret = gettimeofday(&now, NULL);
+    if (ret)
+      return ret;
+    tp->tv_sec = now.tv_sec;
+    tp->tv_nsec = now.tv_usec * 1000L;
+  } else {
+    clock_serv_t cclock;
+    mach_timespec_t mts;
+
+    host_get_clock_service(mach_host_self(), clk_id, &cclock);
+    clock_get_time(cclock, &mts);
+    mach_port_deallocate(mach_task_self(), cclock);
+
+    tp->tv_sec = mts.tv_sec;
+    tp->tv_nsec = mts.tv_nsec;
+  }
+  return 0;
+}
+#endif
+
 namespace ceph {
   namespace time_detail {
-    real_clock::time_point real_clock::now(const CephContext* cct) noexcept {
-      struct timespec ts;
-      clock_gettime(CLOCK_REALTIME, &ts);
-      // TODO: After we get the time-literal configuration patch in,
-      // just add the configured duration.
-      if (cct)
-	ts.tv_sec += cct->_conf->clock_offset;
-      return from_timespec(ts);
-    }
-
     void real_clock::to_ceph_timespec(const time_point& t,
 				      struct ceph_timespec& ts) {
       ts.tv_sec = to_time_t(t);
@@ -46,17 +59,6 @@ namespace ceph {
       return time_point(seconds(ts.tv_sec) + nanoseconds(ts.tv_nsec));
     }
 
-    coarse_real_clock::time_point coarse_real_clock::now(
-      const CephContext* cct) noexcept {
-      struct timespec ts;
-      clock_gettime(CLOCK_REALTIME_COARSE, &ts);
-      // TODO: After we get the time-literal configuration patch in,
-      // just add the configured duration.
-      if (cct)
-	ts.tv_sec += cct->_conf->clock_offset;
-      return from_timespec(ts);
-    }
-
     void coarse_real_clock::to_ceph_timespec(const time_point& t,
 					     struct ceph_timespec& ts) {
       ts.tv_sec = to_time_t(t);
@@ -68,17 +70,20 @@ namespace ceph {
       to_ceph_timespec(t, ts);
       return ts;
     }
-    real_clock::time_point coarse_real_clock::from_ceph_timespec(
+    coarse_real_clock::time_point coarse_real_clock::from_ceph_timespec(
       const struct ceph_timespec& ts) {
       return time_point(seconds(ts.tv_sec) + nanoseconds(ts.tv_nsec));
     }
-  };
+  }
 
   using std::chrono::duration_cast;
   using std::chrono::seconds;
   using std::chrono::microseconds;
 
-  std::ostream& operator<<(std::ostream& m, const mono_time& t) {
+  template<typename Clock,
+	   typename std::enable_if<Clock::is_steady>::type*>
+  std::ostream& operator<<(std::ostream& m,
+			   const std::chrono::time_point<Clock>& t) {
     return m << std::chrono::duration<double>(t.time_since_epoch()).count()
 	     << "s";
   }
@@ -87,14 +92,17 @@ namespace ceph {
     return m << std::chrono::duration<double>(t).count() << "s";
   }
 
-  std::ostream& operator<<(std::ostream& m, const real_time& t) {
+  template<typename Clock,
+	   typename std::enable_if<!Clock::is_steady>::type*>
+  std::ostream& operator<<(std::ostream& m,
+			   const std::chrono::time_point<Clock>& t) {
     m.setf(std::ios::right);
     char oldfill = m.fill();
     m.fill('0');
     // localtime.  this looks like an absolute time.
     //  aim for http://en.wikipedia.org/wiki/ISO_8601
     struct tm bdt;
-    time_t tt = ceph::real_clock::to_time_t(t);
+    time_t tt = Clock::to_time_t(t);
     localtime_r(&tt, &bdt);
     m << std::setw(4) << (bdt.tm_year+1900)  // 2007 -> '07'
       << '-' << std::setw(2) << (bdt.tm_mon+1)
@@ -109,4 +117,13 @@ namespace ceph {
     m.unsetf(std::ios::right);
     return m;
   }
-};
+
+  template std::ostream&
+  operator<< <mono_clock>(std::ostream& m, const mono_time& t);
+  template std::ostream&
+  operator<< <real_clock>(std::ostream& m, const real_time& t);
+  template std::ostream&
+  operator<< <coarse_mono_clock>(std::ostream& m, const coarse_mono_time& t);
+  template std::ostream&
+  operator<< <coarse_real_clock>(std::ostream& m, const coarse_real_time& t);
+}

@@ -13,15 +13,15 @@
 #include <fstream>
 #include <sstream>
 #include <boost/program_options.hpp>
-
+#include "cls/rbd/cls_rbd_client.h"
 #include "cls/journal/cls_journal_types.h"
 #include "cls/journal/cls_journal_client.h"
 
 #include "journal/Journaler.h"
 #include "journal/ReplayEntry.h"
 #include "journal/ReplayHandler.h"
-//#include "librbd/Journal.h" // XXXMG: for librbd::Journal::reset()
-#include "librbd/JournalTypes.h"
+#include "journal/Settings.h"
+#include "librbd/journal/Types.h"
 
 namespace rbd {
 namespace action {
@@ -111,10 +111,12 @@ static int do_show_journal_status(librados::IoCtx& io_ctx,
     f->open_object_section("status");
     f->dump_unsigned("minimum_set", minimum_set);
     f->dump_unsigned("active_set", active_set);
-    f->open_object_section("registered_clients");
+    f->open_array_section("registered_clients");
     for (std::set<cls::journal::Client>::iterator c =
-          registered_clients.begin(); c != registered_clients.end(); c++) {
+          registered_clients.begin(); c != registered_clients.end(); ++c) {
+      f->open_object_section("client");
       c->dump(f);
+      f->close_section();
     }
     f->close_section();
     f->close_section();
@@ -124,7 +126,7 @@ static int do_show_journal_status(librados::IoCtx& io_ctx,
     std::cout << "active_set: " << active_set << std::endl;
     std::cout << "registered clients: " << std::endl;
     for (std::set<cls::journal::Client>::iterator c =
-          registered_clients.begin(); c != registered_clients.end(); c++) {
+          registered_clients.begin(); c != registered_clients.end(); ++c) {
       std::cout << "\t" << *c << std::endl;
     }
   }
@@ -134,44 +136,97 @@ static int do_show_journal_status(librados::IoCtx& io_ctx,
 static int do_reset_journal(librados::IoCtx& io_ctx,
 			    const std::string& journal_id)
 {
-  // XXXMG: does not work due to a linking issue
-  //return librbd::Journal::reset(io_ctx, journal_id);
+  // disable/re-enable journaling to delete/re-create the journal
+  // to properly handle mirroring constraints
+  std::string image_name;
+  int r = librbd::cls_client::dir_get_name(&io_ctx, RBD_DIRECTORY, journal_id,
+                                           &image_name);
+  if (r < 0) {
+    std::cerr << "failed to locate journal's image: " << cpp_strerror(r)
+              << std::endl;
+    return r;
+  }
 
-  ::journal::Journaler journaler(io_ctx, journal_id, "", 5);
+  librbd::Image image;
+  r = utils::open_image(io_ctx, image_name, false, &image);
+  if (r < 0) {
+    std::cerr << "failed to open image: " << cpp_strerror(r) << std::endl;
+    return r;
+  }
+
+  r = image.update_features(RBD_FEATURE_JOURNALING, false);
+  if (r < 0) {
+    std::cerr << "failed to disable image journaling: " << cpp_strerror(r)
+              << std::endl;
+    return r;
+  }
+
+  r = image.update_features(RBD_FEATURE_JOURNALING, true);
+  if (r < 0) {
+    std::cerr << "failed to re-enable image journaling: " << cpp_strerror(r)
+              << std::endl;
+    return r;
+  }
+  return 0;
+}
+
+static int do_disconnect_journal_client(librados::IoCtx& io_ctx,
+					const std::string& journal_id,
+					const std::string& client_id)
+{
+  int r;
 
   C_SaferCond cond;
-  journaler.init(&cond);
+  uint64_t minimum_set;
+  uint64_t active_set;
+  std::set<cls::journal::Client> registered_clients;
+  std::string oid = ::journal::Journaler::header_oid(journal_id);
 
-  int r = cond.wait();
+  cls::journal::client::get_mutable_metadata(io_ctx, oid, &minimum_set,
+                                            &active_set, &registered_clients,
+                                            &cond);
+  r = cond.wait();
   if (r < 0) {
-    std::cerr << "failed to initialize journal: " << cpp_strerror(r)
-	      << std::endl;
+    std::cerr << "warning: failed to get journal metadata" << std::endl;
     return r;
   }
 
-  uint8_t order, splay_width;
-  int64_t pool_id;
-  journaler.get_metadata(&order, &splay_width, &pool_id);
+  static const std::string IMAGE_CLIENT_ID("");
 
-  r = journaler.remove(true);
+  bool found = false;
+  for (auto &c : registered_clients) {
+    if (c.id == IMAGE_CLIENT_ID || (!client_id.empty() && client_id != c.id)) {
+      continue;
+    }
+    r = cls::journal::client::client_update_state(io_ctx, oid, c.id,
+				  cls::journal::CLIENT_STATE_DISCONNECTED);
+    if (r < 0) {
+      std::cerr << "warning: failed to disconnect client " << c.id << ": "
+		<< cpp_strerror(r) << std::endl;
+      return r;
+    }
+    std::cout << "client " << c.id << " disconnected" << std::endl;
+    found = true;
+  }
+
+  if (!found) {
+    if (!client_id.empty()) {
+      std::cerr << "warning: client " << client_id << " is not registered"
+		<< std::endl;
+    } else {
+      std::cerr << "no registered clients to disconnect" << std::endl;
+    }
+    return -ENOENT;
+  }
+
+  bufferlist bl;
+  r = io_ctx.notify2(oid, bl, 5000, NULL);
   if (r < 0) {
-    std::cerr << "failed to reset journal: " << cpp_strerror(r) << std::endl;
+    std::cerr << "warning: failed to notify state change:" << ": "
+	      << cpp_strerror(r) << std::endl;
     return r;
   }
-  r = journaler.create(order, splay_width, pool_id);
-  if (r < 0) {
-    std::cerr << "failed to create journal: " << cpp_strerror(r) << std::endl;
-    return r;
-  }
 
-  // XXXMG
-  const std::string CLIENT_DESCRIPTION = "master image";
-
-  r = journaler.register_client(CLIENT_DESCRIPTION);
-  if (r < 0) {
-    std::cerr << "failed to register client: " << cpp_strerror(r) << std::endl;
-    return r;
-  }
   return 0;
 }
 
@@ -179,13 +234,14 @@ class Journaler : public ::journal::Journaler {
 public:
   Journaler(librados::IoCtx& io_ctx, const std::string& journal_id,
 	    const std::string &client_id) :
-    ::journal::Journaler(io_ctx, journal_id, client_id, 5) {
+    ::journal::Journaler(io_ctx, journal_id, client_id, {}) {
   }
 
   int init() {
     int r;
 
-    r = register_client("rbd journal");
+    // TODO register with librbd payload
+    r = register_client(bufferlist());
     if (r < 0) {
       std::cerr << "failed to register client: " << cpp_strerror(r)
 		<< std::endl;
@@ -206,14 +262,14 @@ public:
     return 0;
   }
 
-  int shutdown() {
-    ::journal::Journaler::shutdown();
-
+  int shut_down() {
     int r = unregister_client();
     if (r < 0) {
       std::cerr << "rbd: failed to unregister journal client: "
 		<< cpp_strerror(r) << std::endl;
     }
+    ::journal::Journaler::shut_down();
+
     return r;
   }
 };
@@ -242,7 +298,6 @@ public:
     m_journaler.start_replay(&replay_handler);
 
     r = m_cond.wait();
-
     if (r < 0) {
       std::cerr << "rbd: failed to process journal: " << cpp_strerror(r)
 		<< std::endl;
@@ -250,27 +305,25 @@ public:
        m_r = r;
       }
     }
-
-    r = m_journaler.shutdown();
-    if (r < 0 && m_r == 0) {
-      m_r = r;
-    }
-
     return m_r;
+  }
+
+  int shut_down() {
+    return m_journaler.shut_down();
   }
 
 protected:
   struct ReplayHandler : public ::journal::ReplayHandler {
     JournalPlayer *journal;
-    ReplayHandler(JournalPlayer *_journal) : journal(_journal) {}
+    explicit ReplayHandler(JournalPlayer *_journal) : journal(_journal) {}
 
-    virtual void get() {}
-    virtual void put() {}
+    void get() override {}
+    void put() override {}
 
-    virtual void handle_entries_available() {
+    void handle_entries_available() override {
       journal->handle_replay_ready();
     }
-    virtual void handle_complete(int r) {
+    void handle_complete(int r) override {
       journal->handle_replay_complete(r);
     }
   };
@@ -279,12 +332,12 @@ protected:
     int r = 0;
     while (true) {
       ::journal::ReplayEntry replay_entry;
-      std::string tag;
-      if (!m_journaler.try_pop_front(&replay_entry, &tag)) {
+      uint64_t tag_id;
+      if (!m_journaler.try_pop_front(&replay_entry, &tag_id)) {
 	break;
       }
 
-      r = process_entry(replay_entry, tag);
+      r = process_entry(replay_entry, tag_id);
       if (r < 0) {
 	break;
       }
@@ -292,11 +345,13 @@ protected:
   }
 
   virtual int process_entry(::journal::ReplayEntry replay_entry,
-			    std::string& tag) = 0;
+			    uint64_t tag_id) = 0;
 
   void handle_replay_complete(int r) {
-    m_journaler.stop_replay();
-    m_cond.complete(r);
+    if (m_r == 0 && r < 0) {
+      m_r = r;
+    }
+    m_journaler.stop_replay(&m_cond);
   }
 
   Journaler m_journaler;
@@ -333,7 +388,7 @@ public:
     m_s() {
   }
 
-  int exec() {
+  int exec() override {
     int r = JournalPlayer::exec();
     m_s.print();
     return r;
@@ -354,10 +409,10 @@ private:
   };
 
   int process_entry(::journal::ReplayEntry replay_entry,
-		    std::string& tag) {
+		    uint64_t tag_id) override {
     m_s.total++;
     if (m_verbose) {
-      std::cout << "Entry: tag=" << tag << ", commit_tid="
+      std::cout << "Entry: tag_id=" << tag_id << ", commit_tid="
 		<< replay_entry.get_commit_tid() << std::endl;
     }
     bufferlist data = replay_entry.get_data();
@@ -377,31 +432,42 @@ private:
 static int do_inspect_journal(librados::IoCtx& io_ctx,
 			      const std::string& journal_id,
 			      bool verbose) {
-  return JournalInspector(io_ctx, journal_id, verbose).exec();
+  JournalInspector inspector(io_ctx, journal_id, verbose);
+  int r = inspector.exec();
+  if (r < 0) {
+    inspector.shut_down();
+    return r;
+  }
+
+  r = inspector.shut_down();
+  if (r < 0) {
+    return r;
+  }
+  return 0;
 }
 
 struct ExportEntry {
-  std::string tag;
+  uint64_t tag_id;
   uint64_t commit_tid;
   int type;
   bufferlist entry;
 
-  ExportEntry() : tag(), commit_tid(0), type(0), entry() {}
+  ExportEntry() : tag_id(0), commit_tid(0), type(0), entry() {}
 
-  ExportEntry(const std::string& tag, uint64_t commit_tid, int type,
+  ExportEntry(uint64_t tag_id, uint64_t commit_tid, int type,
 	      const bufferlist& entry)
-    : tag(tag), commit_tid(commit_tid), type(type), entry(entry) {
+    : tag_id(tag_id), commit_tid(commit_tid), type(type), entry(entry) {
   }
 
   void dump(Formatter *f) const {
-    ::encode_json("tag", tag, f);
+    ::encode_json("tag_id", tag_id, f);
     ::encode_json("commit_tid", commit_tid, f);
     ::encode_json("type", type, f);
     ::encode_json("entry", entry, f);
   }
 
   void decode_json(JSONObj *obj) {
-    JSONDecoder::decode_json("tag", tag, obj);
+    JSONDecoder::decode_json("tag_id", tag_id, obj);
     JSONDecoder::decode_json("commit_tid", commit_tid, obj);
     JSONDecoder::decode_json("type", type, obj);
     JSONDecoder::decode_json("entry", entry, obj);
@@ -420,7 +486,7 @@ public:
     m_s() {
   }
 
-  int exec() {
+  int exec() override {
     std::string header("# journal_id: " + m_journal_id + "\n");
     int r;
     r = safe_write(m_fd, header.c_str(), header.size());
@@ -448,7 +514,7 @@ private:
   };
 
   int process_entry(::journal::ReplayEntry replay_entry,
-		    std::string& tag) {
+		    uint64_t tag_id) override {
     m_s.total++;
     int type = -1;
     bufferlist entry = replay_entry.get_data();
@@ -461,7 +527,8 @@ private:
     } else {
       type = event_entry.get_event_type();
     }
-    ExportEntry export_entry(tag, replay_entry.get_commit_tid(), type, entry);
+    ExportEntry export_entry(tag_id, replay_entry.get_commit_tid(), type,
+                             entry);
     JSONFormatter f;
     ::encode_json("event_entry", export_entry, &f);
     std::ostringstream oss;
@@ -507,13 +574,21 @@ static int do_export_journal(librados::IoCtx& io_ctx,
       std::cerr << "rbd: error creating " << path << std::endl;
       return r;
     }
+#ifdef HAVE_POSIX_FADVISE
     posix_fadvise(fd, 0, 0, POSIX_FADV_SEQUENTIAL);
+#endif
   }
 
-  r = JournalExporter(io_ctx, journal_id, fd, no_error, verbose).exec();
+  JournalExporter exporter(io_ctx, journal_id, fd, no_error, verbose);
+  r = exporter.exec();
 
   if (!to_stdout) {
     close(fd);
+  }
+
+  int shut_down_r = exporter.shut_down();
+  if (r == 0 && shut_down_r < 0) {
+    r = shut_down_r;
   }
 
   return r;
@@ -651,7 +726,7 @@ public:
       librbd::journal::EventEntry event_entry;
       r = inspect_entry(e.entry, event_entry, m_verbose);
       if (r < 0) {
-	std::cerr << "rbd: corrupted entry " << n << ": tag=" << e.tag
+	std::cerr << "rbd: corrupted entry " << n << ": tag_tid=" << e.tag_id
 		  << ", commit_tid=" << e.commit_tid << std::endl;
 	if (m_no_error) {
 	  r1 = r;
@@ -660,7 +735,7 @@ public:
 	  break;
 	}
       }
-      m_journaler.append(e.tag, e.entry);
+      m_journaler.append(e.tag_id, e.entry);
       error_count--;
     }
 
@@ -679,11 +754,11 @@ public:
     if (r1 < 0 && r == 0) {
       r = r1;
     }
-    r1 = m_journaler.shutdown();
-    if (r1 < 0 && r == 0) {
-      r = r1;
-    }
     return r;
+  }
+
+  int shut_down() {
+    return m_journaler.shut_down();
   }
 
 private:
@@ -709,13 +784,21 @@ static int do_import_journal(librados::IoCtx& io_ctx,
       std::cerr << "rbd: error opening " << path << std::endl;
       return r;
     }
+#ifdef HAVE_POSIX_FADVISE
     posix_fadvise(fd, 0, 0, POSIX_FADV_SEQUENTIAL);
+#endif
   }
 
-  r = JournalImporter(io_ctx, journal_id, fd, no_error, verbose).exec();
+  JournalImporter importer(io_ctx, journal_id, fd, no_error, verbose);
+  r = importer.exec();
 
   if (!from_stdin) {
     close(fd);
+  }
+
+  int shut_down_r = importer.shut_down();
+  if (r == 0 && shut_down_r < 0) {
+    r = shut_down_r;
   }
 
   return r;
@@ -821,6 +904,45 @@ int execute_reset(const po::variables_map &vm) {
   r = do_reset_journal(io_ctx, journal_name);
   if (r < 0) {
     std::cerr << "rbd: journal reset: " << cpp_strerror(r) << std::endl;
+    return r;
+  }
+  return 0;
+}
+
+void get_client_disconnect_arguments(po::options_description *positional,
+				     po::options_description *options) {
+  at::add_journal_spec_options(positional, options, at::ARGUMENT_MODIFIER_NONE);
+  options->add_options()
+    ("client-id", po::value<std::string>(),
+     "client ID (or leave unspecified to disconnect all)");
+}
+
+int execute_client_disconnect(const po::variables_map &vm) {
+  size_t arg_index = 0;
+  std::string pool_name;
+  std::string journal_name;
+  int r = utils::get_pool_journal_names(vm, at::ARGUMENT_MODIFIER_NONE,
+					&arg_index, &pool_name, &journal_name);
+  if (r < 0) {
+    return r;
+  }
+
+  std::string client_id;
+  if (vm.count("client-id")) {
+    client_id = vm["client-id"].as<std::string>();
+  }
+
+  librados::Rados rados;
+  librados::IoCtx io_ctx;
+  r = utils::init(pool_name, &rados, &io_ctx);
+  if (r < 0) {
+    return r;
+  }
+
+  r = do_disconnect_journal_client(io_ctx, journal_name, client_id);
+  if (r < 0) {
+    std::cerr << "rbd: journal client disconnect: " << cpp_strerror(r)
+	      << std::endl;
     return r;
   }
   return 0;
@@ -963,6 +1085,11 @@ Shell::Action action_export(
 Shell::Action action_import(
   {"journal", "import"}, {}, "Import image journal.", "",
   &get_import_arguments, &execute_import);
+
+Shell::Action action_disconnect(
+  {"journal", "client", "disconnect"}, {},
+  "Flag image journal client as disconnected.", "",
+  &get_client_disconnect_arguments, &execute_client_disconnect);
 
 } // namespace journal
 } // namespace action

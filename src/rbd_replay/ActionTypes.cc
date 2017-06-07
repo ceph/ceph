@@ -26,7 +26,7 @@ void decode_big_endian_string(std::string &str, bufferlist::iterator &it) {
 #if defined(CEPH_LITTLE_ENDIAN)
   uint32_t length;
   ::decode(length, it);
-  length = swab32(length);
+  length = swab(length);
   str.clear();
   it.copy(length, str);
 #else
@@ -36,7 +36,7 @@ void decode_big_endian_string(std::string &str, bufferlist::iterator &it) {
 
 class EncodeVisitor : public boost::static_visitor<void> {
 public:
-  EncodeVisitor(bufferlist &bl) : m_bl(bl) {
+  explicit EncodeVisitor(bufferlist &bl) : m_bl(bl) {
   }
 
   template <typename Action>
@@ -65,7 +65,7 @@ private:
 
 class DumpVisitor : public boost::static_visitor<void> {
 public:
-  DumpVisitor(Formatter *formatter) : m_formatter(formatter) {}
+  explicit DumpVisitor(Formatter *formatter) : m_formatter(formatter) {}
 
   template <typename Action>
   inline void operator()(const Action &action) const {
@@ -92,8 +92,8 @@ void Dependency::decode(__u8 version, bufferlist::iterator &it) {
   ::decode(id, it);
   ::decode(time_delta, it);
   if (byte_swap_required(version)) {
-    id = swab32(id);
-    time_delta = swab64(time_delta);
+    id = swab(id);
+    time_delta = swab(time_delta);
   }
 }
 
@@ -125,12 +125,12 @@ void ActionBase::decode(__u8 version, bufferlist::iterator &it) {
   }
 
   if (byte_swap_required(version)) {
-    id = swab32(id);
-    thread_id = swab64(thread_id);
+    id = swab(id);
+    thread_id = swab(thread_id);
 
     uint32_t dep_count;
     ::decode(dep_count, it);
-    dep_count = swab32(dep_count);
+    dep_count = swab(dep_count);
     dependencies.resize(dep_count);
     for (uint32_t i = 0; i < dep_count; ++i) {
       dependencies[i].decode(0, it);
@@ -161,7 +161,7 @@ void ImageActionBase::decode(__u8 version, bufferlist::iterator &it) {
   ActionBase::decode(version, it);
   ::decode(imagectx_id, it);
   if (byte_swap_required(version)) {
-    imagectx_id = swab64(imagectx_id);
+    imagectx_id = swab(imagectx_id);
   }
 }
 
@@ -181,8 +181,8 @@ void IoActionBase::decode(__u8 version, bufferlist::iterator &it) {
   ::decode(offset, it);
   ::decode(length, it);
   if (byte_swap_required(version)) {
-    offset = swab64(offset);
-    length = swab64(length);
+    offset = swab(offset);
+    length = swab(length);
   }
 }
 
@@ -212,6 +212,32 @@ void OpenImageAction::decode(__u8 version, bufferlist::iterator &it) {
 }
 
 void OpenImageAction::dump(Formatter *f) const {
+  ImageActionBase::dump(f);
+  f->dump_string("name", name);
+  f->dump_string("snap_name", snap_name);
+  f->dump_bool("read_only", read_only);
+}
+
+void AioOpenImageAction::encode(bufferlist &bl) const {
+  ImageActionBase::encode(bl);
+  ::encode(name, bl);
+  ::encode(snap_name, bl);
+  ::encode(read_only, bl);
+}
+
+void AioOpenImageAction::decode(__u8 version, bufferlist::iterator &it) {
+  ImageActionBase::decode(version, it);
+  if (byte_swap_required(version)) {
+    decode_big_endian_string(name, it);
+    decode_big_endian_string(snap_name, it);
+  } else {
+    ::decode(name, it);
+    ::decode(snap_name, it);
+  }
+  ::decode(read_only, it);
+}
+
+void AioOpenImageAction::dump(Formatter *f) const {
   ImageActionBase::dump(f);
   f->dump_string("name", name);
   f->dump_string("snap_name", snap_name);
@@ -262,17 +288,29 @@ void ActionEntry::decode(__u8 version, bufferlist::iterator &it) {
   case ACTION_TYPE_WRITE:
     action = WriteAction();
     break;
+  case ACTION_TYPE_DISCARD:
+    action = DiscardAction();
+    break;
   case ACTION_TYPE_AIO_READ:
     action = AioReadAction();
     break;
   case ACTION_TYPE_AIO_WRITE:
     action = AioWriteAction();
     break;
+  case ACTION_TYPE_AIO_DISCARD:
+    action = AioDiscardAction();
+    break;
   case ACTION_TYPE_OPEN_IMAGE:
     action = OpenImageAction();
     break;
   case ACTION_TYPE_CLOSE_IMAGE:
     action = CloseImageAction();
+    break;
+  case ACTION_TYPE_AIO_OPEN_IMAGE:
+    action = AioOpenImageAction();
+    break;
+  case ACTION_TYPE_AIO_CLOSE_IMAGE:
+    action = AioCloseImageAction();
     break;
   }
 
@@ -298,12 +336,18 @@ void ActionEntry::generate_test_instances(std::list<ActionEntry *> &o) {
   o.push_back(new ActionEntry(WriteAction()));
   o.push_back(new ActionEntry(WriteAction(1, 123456789, dependencies, 3, 4,
                                           5)));
+  o.push_back(new ActionEntry(DiscardAction()));
+  o.push_back(new ActionEntry(DiscardAction(1, 123456789, dependencies, 3, 4,
+                                            5)));
   o.push_back(new ActionEntry(AioReadAction()));
   o.push_back(new ActionEntry(AioReadAction(1, 123456789, dependencies, 3, 4,
                                             5)));
   o.push_back(new ActionEntry(AioWriteAction()));
   o.push_back(new ActionEntry(AioWriteAction(1, 123456789, dependencies, 3, 4,
                                              5)));
+  o.push_back(new ActionEntry(AioDiscardAction()));
+  o.push_back(new ActionEntry(AioDiscardAction(1, 123456789, dependencies, 3, 4,
+                                               5)));
 
   o.push_back(new ActionEntry(OpenImageAction()));
   o.push_back(new ActionEntry(OpenImageAction(1, 123456789, dependencies, 3,
@@ -311,6 +355,13 @@ void ActionEntry::generate_test_instances(std::list<ActionEntry *> &o) {
                                               true)));
   o.push_back(new ActionEntry(CloseImageAction()));
   o.push_back(new ActionEntry(CloseImageAction(1, 123456789, dependencies, 3)));
+
+  o.push_back(new ActionEntry(AioOpenImageAction()));
+  o.push_back(new ActionEntry(AioOpenImageAction(1, 123456789, dependencies, 3,
+                                              "image_name", "snap_name",
+                                              true)));
+  o.push_back(new ActionEntry(AioCloseImageAction()));
+  o.push_back(new ActionEntry(AioCloseImageAction(1, 123456789, dependencies, 3)));
 }
 
 } // namespace action
@@ -333,17 +384,29 @@ std::ostream &operator<<(std::ostream &out,
   case ACTION_TYPE_WRITE:
     out << "Write";
     break;
+  case ACTION_TYPE_DISCARD:
+    out << "Discard";
+    break;
   case ACTION_TYPE_AIO_READ:
     out << "AioRead";
     break;
   case ACTION_TYPE_AIO_WRITE:
     out << "AioWrite";
     break;
+  case ACTION_TYPE_AIO_DISCARD:
+    out << "AioDiscard";
+    break;
   case ACTION_TYPE_OPEN_IMAGE:
     out << "OpenImage";
     break;
   case ACTION_TYPE_CLOSE_IMAGE:
     out << "CloseImage";
+    break;
+  case ACTION_TYPE_AIO_OPEN_IMAGE:
+    out << "AioOpenImage";
+    break;
+  case ACTION_TYPE_AIO_CLOSE_IMAGE:
+    out << "AioCloseImage";
     break;
   default:
     out << "Unknown (" << static_cast<uint32_t>(type) << ")";

@@ -28,9 +28,13 @@
 #include "common/Finisher.h"
 #include "common/errno.h"
 #include "common/debug.h"
+#include "common/safe_io.h"
+
+#define dout_context g_ceph_context
 
 class MonitorDBStore
 {
+  string path;
   boost::scoped_ptr<KeyValueDB> db;
   bool do_dump;
   int dump_fd_binary;
@@ -182,7 +186,7 @@ class MonitorDBStore
     }
 
     void append_from_encoded(bufferlist& bl) {
-      TransactionRef other(new Transaction);
+      auto other(std::make_shared<Transaction>());
       bufferlist::iterator it = bl.begin();
       other->decode(it);
       append(other);
@@ -288,7 +292,7 @@ class MonitorDBStore
 	break;
       default:
 	derr << __func__ << " unknown op type " << op.type << dendl;
-	ceph_assert(0);
+	ceph_abort();
 	break;
       }
     }
@@ -316,7 +320,7 @@ class MonitorDBStore
 		    Context *f)
       : store(s), t(t), oncommit(f)
     {}
-    void finish(int r) {
+    void finish(int r) override {
       /* The store serializes writes.  Each transaction is handled
        * sequentially by the io_work Finisher.  If a transaction takes longer
        * to apply its state to permanent storage, then no other transaction
@@ -372,7 +376,7 @@ class MonitorDBStore
 			 string &key,
 			 bufferlist &value,
 			 uint64_t max) {
-      TransactionRef tmp(new Transaction);
+      auto tmp(std::make_shared<Transaction>());
       bufferlist tmp_bl;
       tmp->put(prefix, key, value);
       tmp->encode(tmp_bl);
@@ -430,7 +434,7 @@ class MonitorDBStore
 	sync_prefixes(prefixes)
     { }
 
-    virtual ~WholeStoreIteratorImpl() { }
+    ~WholeStoreIteratorImpl() override { }
 
     /**
      * Obtain a chunk of the store
@@ -441,7 +445,7 @@ class MonitorDBStore
      *			    differ from the one passed on to the function)
      * @param last_key[out] Last key in the chunk
      */
-    virtual void get_chunk_tx(TransactionRef tx, uint64_t max) {
+    void get_chunk_tx(TransactionRef tx, uint64_t max) override {
       assert(done == false);
       assert(iter->valid() == true);
 
@@ -459,7 +463,7 @@ class MonitorDBStore
       done = true;
     }
 
-    virtual pair<string,string> get_next_key() {
+    pair<string,string> get_next_key() override {
       assert(iter->valid());
 
       for (; iter->valid(); iter->next()) {
@@ -472,7 +476,7 @@ class MonitorDBStore
       return pair<string,string>();
     }
 
-    virtual bool _is_valid() {
+    bool _is_valid() override {
       return iter->valid();
     }
   };
@@ -480,7 +484,7 @@ class MonitorDBStore
   Synchronizer get_synchronizer(pair<string,string> &key,
 				set<string> &prefixes) {
     KeyValueDB::WholeSpaceIterator iter;
-    iter = db->get_snapshot_iterator();
+    iter = db->get_iterator();
 
     if (!key.first.empty() && !key.second.empty())
       iter->upper_bound(key.first, key.second);
@@ -494,14 +498,14 @@ class MonitorDBStore
 
   KeyValueDB::Iterator get_iterator(const string &prefix) {
     assert(!prefix.empty());
-    KeyValueDB::Iterator iter = db->get_snapshot_iterator(prefix);
+    KeyValueDB::Iterator iter = db->get_iterator(prefix);
     iter->seek_to_first();
     return iter;
   }
 
   KeyValueDB::WholeSpaceIterator get_iterator() {
     KeyValueDB::WholeSpaceIterator iter;
-    iter = db->get_snapshot_iterator();
+    iter = db->get_iterator();
     iter->seek_to_first();
     return iter;
   }
@@ -577,12 +581,63 @@ class MonitorDBStore
     assert(r >= 0);
   }
 
-  int open(ostream &out) {
-    if (g_conf->mon_keyvaluedb == "rocksdb")
+  void _open(string kv_type) {
+    string::const_reverse_iterator rit;
+    int pos = 0;
+    for (rit = path.rbegin(); rit != path.rend(); ++rit, ++pos) {
+      if (*rit != '/')
+	break;
+    }
+    ostringstream os;
+    os << path.substr(0, path.size() - pos) << "/store.db";
+    string full_path = os.str();
+
+    KeyValueDB *db_ptr = KeyValueDB::create(g_ceph_context,
+					    kv_type,
+					    full_path);
+    if (!db_ptr) {
+      derr << __func__ << " error initializing "
+	   << kv_type << " db back storage in "
+	   << full_path << dendl;
+      assert(0 == "MonitorDBStore: error initializing keyvaluedb back storage");
+    }
+    db.reset(db_ptr);
+
+    if (g_conf->mon_debug_dump_transactions) {
+      if (!g_conf->mon_debug_dump_json) {
+        dump_fd_binary = ::open(
+          g_conf->mon_debug_dump_location.c_str(),
+          O_CREAT|O_APPEND|O_WRONLY, 0644);
+        if (dump_fd_binary < 0) {
+          dump_fd_binary = -errno;
+          derr << "Could not open log file, got "
+               << cpp_strerror(dump_fd_binary) << dendl;
+        }
+      } else {
+        dump_fmt.reset();
+        dump_fmt.open_array_section("dump");
+        dump_fd_json.open(g_conf->mon_debug_dump_location.c_str());
+      }
+      do_dump = true;
+    }
+    if (kv_type == "rocksdb")
       db->init(g_conf->mon_rocksdb_options);
     else
       db->init();
-    int r = db->open(out);
+  }
+
+  int open(ostream &out) {
+    string kv_type;
+    int r = read_meta("kv_backend", &kv_type);
+    if (r < 0 || kv_type.empty()) {
+      // assume old monitors that did not mark the type were leveldb.
+      kv_type = "leveldb";
+      r = write_meta("kv_backend", kv_type);
+      if (r < 0)
+	return r;
+    }
+    _open(kv_type);
+    r = db->open(out);
     if (r < 0)
       return r;
     io_work.start();
@@ -591,11 +646,17 @@ class MonitorDBStore
   }
 
   int create_and_open(ostream &out) {
-    if (g_conf->mon_keyvaluedb == "rocksdb")
-      db->init(g_conf->mon_rocksdb_options);
-    else
-      db->init();
-    int r = db->create_and_open(out);
+    // record the type before open
+    string kv_type;
+    int r = read_meta("kv_backend", &kv_type);
+    if (r < 0) {
+      kv_type = g_conf->mon_keyvaluedb;
+      r = write_meta("kv_backend", kv_type);
+      if (r < 0)
+	return r;
+    }
+    _open(kv_type);
+    r = db->create_and_open(out);
     if (r < 0)
       return r;
     io_work.start();
@@ -607,6 +668,7 @@ class MonitorDBStore
     // there should be no work queued!
     io_work.stop();
     is_open = false;
+    db.reset(NULL);
   }
 
   void compact() {
@@ -621,51 +683,65 @@ class MonitorDBStore
     return db->get_estimated_size(extras);
   }
 
-  MonitorDBStore(const string& path)
-    : db(0),
+  /**
+   * write_meta - write a simple configuration key out-of-band
+   *
+   * Write a simple key/value pair for basic store configuration
+   * (e.g., a uuid or magic number) to an unopened/unmounted store.
+   * The default implementation writes this to a plaintext file in the
+   * path.
+   *
+   * A newline is appended.
+   *
+   * @param key key name (e.g., "fsid")
+   * @param value value (e.g., a uuid rendered as a string)
+   * @returns 0 for success, or an error code
+   */
+  int write_meta(const std::string& key,
+		 const std::string& value) const {
+    string v = value;
+    v += "\n";
+    int r = safe_write_file(path.c_str(), key.c_str(),
+			    v.c_str(), v.length());
+    if (r < 0)
+      return r;
+    return 0;
+  }
+
+  /**
+   * read_meta - read a simple configuration key out-of-band
+   *
+   * Read a simple key value to an unopened/mounted store.
+   *
+   * Trailing whitespace is stripped off.
+   *
+   * @param key key name
+   * @param value pointer to value string
+   * @returns 0 for success, or an error code
+   */
+  int read_meta(const std::string& key,
+		std::string *value) const {
+    char buf[4096];
+    int r = safe_read_file(path.c_str(), key.c_str(),
+			   buf, sizeof(buf));
+    if (r <= 0)
+      return r;
+    // drop trailing newlines
+    while (r && isspace(buf[r-1])) {
+      --r;
+    }
+    *value = string(buf, r);
+    return 0;
+  }
+
+  explicit MonitorDBStore(const string& path)
+    : path(path),
+      db(0),
       do_dump(false),
       dump_fd_binary(-1),
       dump_fmt(true),
       io_work(g_ceph_context, "monstore", "fn_monstore"),
       is_open(false) {
-    string::const_reverse_iterator rit;
-    int pos = 0;
-    for (rit = path.rbegin(); rit != path.rend(); ++rit, ++pos) {
-      if (*rit != '/')
-	break;
-    }
-    ostringstream os;
-    os << path.substr(0, path.size() - pos) << "/store.db";
-    string full_path = os.str();
-
-    KeyValueDB *db_ptr = KeyValueDB::create(g_ceph_context,
-					    g_conf->mon_keyvaluedb,
-					    full_path);
-    if (!db_ptr) {
-      derr << __func__ << " error initializing "
-	   << g_conf->mon_keyvaluedb << " db back storage in "
-	   << full_path << dendl;
-      assert(0 != "MonitorDBStore: error initializing keyvaluedb back storage");
-    }
-    db.reset(db_ptr);
-
-    if (g_conf->mon_debug_dump_transactions) {
-      if (!g_conf->mon_debug_dump_json) {
-        dump_fd_binary = ::open(
-          g_conf->mon_debug_dump_location.c_str(),
-          O_CREAT|O_APPEND|O_WRONLY, 0644);
-        if (!dump_fd_binary) {
-          dump_fd_binary = -errno;
-          derr << "Could not open log file, got "
-               << cpp_strerror(dump_fd_binary) << dendl;
-        }
-      } else {
-        dump_fmt.reset();
-        dump_fmt.open_array_section("dump");
-        dump_fd_json.open(g_conf->mon_debug_dump_location.c_str());
-      }
-      do_dump = true;
-    }
   }
   ~MonitorDBStore() {
     assert(!is_open);

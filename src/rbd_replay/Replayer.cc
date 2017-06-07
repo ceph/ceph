@@ -23,6 +23,7 @@
 #include "global/global_context.h"
 #include "rbd_replay_debug.hpp"
 
+#define dout_context g_ceph_context
 
 using namespace std;
 using namespace rbd_replay;
@@ -224,6 +225,9 @@ void Replayer::run(const std::string& replay_file) {
                       << std::endl;
             exit(-r);
           }
+	  if (it->get_remaining() == 0) {
+	    break;
+	  }
 
           if (versioned) {
             action_entry.decode(*it);
@@ -231,7 +235,7 @@ void Replayer::run(const std::string& replay_file) {
             action_entry.decode_unversioned(*it);
           }
         } catch (const buffer::error &err) {
-          std::cerr << "Failed to decode trace action" << std::endl;
+          std::cerr << "Failed to decode trace action: " << err.what() << std::endl;
           exit(1);
         }
 

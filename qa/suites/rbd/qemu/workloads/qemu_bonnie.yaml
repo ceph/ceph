@@ -1,0 +1,6 @@
+tasks:
+- qemu:
+    all:
+      clone: true
+      test: http://git.ceph.com/?p={repo};a=blob_plain;hb={branch};f=qa/workunits/suites/bonnie.sh
+exclude_arch: armv7l

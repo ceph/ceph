@@ -1,0 +1,16 @@
+tasks:
+- install: null
+- ceph:
+    fs: ext4
+    log-whitelist:
+    - reached quota
+    - wrongly marked me down
+    - objects unfound and apparently lost
+- thrashosds:
+    chance_pgnum_grow: 2
+    chance_pgpnum_fix: 1
+    timeout: 1200
+- workunit:
+    clients:
+      client.0:
+      - rados/test.sh

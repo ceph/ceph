@@ -41,6 +41,7 @@ mkdir -p "$FAKE_HOME"
 # cram doesn't like seeing the same foo.t basename twice on the same
 # run, so run it once per directory
 FAILED=0
+FAILEDTOOLS=""
 for tool in "$SRCDIR"/cli/*; do
     toolname="$(basename "$tool")"
     install -d -m0755 -- "$BUILDDIR/cli/$toolname"
@@ -52,9 +53,15 @@ for tool in "$SRCDIR"/cli/*; do
 	CXX="$CXX" \
 	HOME="$FAKE_HOME" \
 	"$SRCDIR/run-cli-tests-maybe-unset-ccache" \
-	"$CRAM_BIN" -v "$@"  --error-dir="$BUILDDIR/cli/$toolname" -- "$tool"/*.t; then
+	"$CRAM_BIN" -v "$@"  --error-dir="$BUILDDIR/cli/$toolname" -- "$tool"/*.t
+    then
 	FAILED=1
+	FAILEDTOOLS="$FAILEDTOOLS $toolname"
     fi
 done
+
+if [ $FAILED -eq 1 ]; then
+    echo "Tests that failed: $FAILEDTOOLS"
+fi
 
 exit "$FAILED"

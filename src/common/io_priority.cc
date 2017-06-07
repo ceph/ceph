@@ -12,15 +12,15 @@
  *
  */
 
-#include <sys/types.h>
 #include <unistd.h>
+#if defined(__FreeBSD__)
+#include <errno.h>
+#endif
 #ifdef __linux__
 #include <sys/syscall.h>   /* For SYS_xxx definitions */
 #endif
 #include <algorithm>
-#include <errno.h>
 
-#include "common/errno.h"
 #include "io_priority.h"
 
 pid_t ceph_gettid(void)

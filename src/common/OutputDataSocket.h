@@ -15,14 +15,7 @@
 #ifndef CEPH_COMMON_OUTPUTDATASOCKET_H
 #define CEPH_COMMON_OUTPUTDATASOCKET_H
 
-#include "common/Thread.h"
-#include "common/Mutex.h"
 #include "common/Cond.h"
-
-#include <string>
-#include <map>
-#include <list>
-#include "include/buffer.h"
 
 class CephContext;
 
@@ -30,7 +23,7 @@ class OutputDataSocket : public Thread
 {
 public:
   OutputDataSocket(CephContext *cct, uint64_t _backlog);
-  virtual ~OutputDataSocket();
+  ~OutputDataSocket() override;
 
   bool init(const std::string &path);
   
@@ -43,7 +36,7 @@ protected:
   std::string create_shutdown_pipe(int *pipe_rd, int *pipe_wr);
   std::string bind_and_listen(const std::string &sock_path, int *fd);
 
-  void *entry();
+  void *entry() override;
   bool do_accept();
 
   void handle_connection(int fd);

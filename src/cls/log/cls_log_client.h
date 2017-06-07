@@ -1,9 +1,13 @@
 #ifndef CEPH_CLS_LOG_CLIENT_H
 #define CEPH_CLS_LOG_CLIENT_H
 
-#include "include/types.h"
-#include "include/rados/librados.hpp"
 #include "cls_log_types.h"
+
+namespace librados {
+  class ObjectWriteOperation;
+  class ObjectReadOperation;
+  class IoCtx;
+}
 
 /*
  * log objclass
@@ -12,7 +16,7 @@
 void cls_log_add_prepare_entry(cls_log_entry& entry, const utime_t& timestamp,
                  const string& section, const string& name, bufferlist& bl);
 
-void cls_log_add(librados::ObjectWriteOperation& op, list<cls_log_entry>& entry);
+void cls_log_add(librados::ObjectWriteOperation& op, list<cls_log_entry>& entries, bool monotonic_inc);
 void cls_log_add(librados::ObjectWriteOperation& op, cls_log_entry& entry);
 void cls_log_add(librados::ObjectWriteOperation& op, const utime_t& timestamp,
                  const string& section, const string& name, bufferlist& bl);

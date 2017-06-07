@@ -16,16 +16,17 @@
 #ifndef CEPH_MOSDSUBOP_H
 #define CEPH_MOSDSUBOP_H
 
-#include "msg/Message.h"
-#include "osd/osd_types.h"
+#include "MOSDFastDispatchOp.h"
+
+#include "include/ceph_features.h"
 
 /*
  * OSD sub op - for internal ops on pobjects between primary and replicas(/stripes/whatever)
  */
 
-class MOSDSubOp : public Message {
+class MOSDSubOp : public MOSDFastDispatchOp {
 
-  static const int HEAD_VERSION = 11;
+  static const int HEAD_VERSION = 12;
   static const int COMPAT_VERSION = 7;
 
 public:
@@ -51,7 +52,6 @@ public:
   eversion_t old_version;
 
   SnapSet snapset;
-  SnapContext snapc;
 
   // transaction to exec
   bufferlist logbl;
@@ -62,14 +62,14 @@ public:
 
   // piggybacked osd/og state
   eversion_t pg_trim_to;   // primary->replica: trim to here
-  eversion_t pg_trim_rollback_to;   // primary->replica: trim rollback
+  eversion_t pg_roll_forward_to;   // primary->replica: trim rollback
                                     // info to here
   osd_peer_stat_t peer_stat;
 
   map<string,bufferlist> attrset;
 
   interval_set<uint64_t> data_subset;
-  map<hobject_t, interval_set<uint64_t>, hobject_t::BitwiseComparator> clone_subsets;
+  map<hobject_t, interval_set<uint64_t>> clone_subsets;
 
   bool first, complete;
 
@@ -92,13 +92,20 @@ public:
   /// non-empty if this transaction involves a hit_set history update
   boost::optional<pg_hit_set_history_t> updated_hit_set_history;
 
-  int get_cost() const {
+  epoch_t get_map_epoch() const override {
+    return map_epoch;
+  }
+  spg_t get_spg() const override {
+    return pgid;
+  }
+
+  int get_cost() const override {
     if (ops.size() == 1 && ops[0].op.op == CEPH_OSD_OP_PULL)
       return ops[0].op.extent.length;
     return data.length();
   }
 
-  virtual void decode_payload() {
+  void decode_payload() override {
     //since we drop incorrect_pools flag, now we only support
     //version >=7
     assert (header.version >= 7);
@@ -128,7 +135,12 @@ public:
     ::decode(old_size, p);
     ::decode(old_version, p);
     ::decode(snapset, p);
-    ::decode(snapc, p);
+
+    if (header.version <= 11) {
+      SnapContext snapc_dont_need;
+      ::decode(snapc_dont_need, p);
+    }
+
     ::decode(logbl, p);
     ::decode(pg_stats, p);
     ::decode(pg_trim_to, p);
@@ -166,15 +178,16 @@ public:
       ::decode(updated_hit_set_history, p);
     }
     if (header.version >= 11) {
-      ::decode(pg_trim_rollback_to, p);
+      ::decode(pg_roll_forward_to, p);
     } else {
-      pg_trim_rollback_to = pg_trim_to;
+      pg_roll_forward_to = pg_trim_to;
     }
   }
 
   void finish_decode() { }
 
-  virtual void encode_payload(uint64_t features) {
+  void encode_payload(uint64_t features) override {
+    header.version = HEAD_VERSION;
     ::encode(map_epoch, payload);
     ::encode(reqid, payload);
     ::encode(pgid.pgid, payload);
@@ -196,7 +209,13 @@ public:
     ::encode(old_size, payload);
     ::encode(old_version, payload);
     ::encode(snapset, payload);
-    ::encode(snapc, payload);
+
+    if ((features & CEPH_FEATURE_OSDSUBOP_NO_SNAPCONTEXT) == 0) {
+      header.version = 11;
+      SnapContext dummy_snapc;
+      ::encode(dummy_snapc, payload);
+    }
+
     ::encode(logbl, payload);
     ::encode(pg_stats, payload);
     ::encode(pg_trim_to, payload);
@@ -212,7 +231,7 @@ public:
     ::encode(complete, payload);
     ::encode(oloc, payload);
     ::encode(data_included, payload);
-    ::encode(recovery_info, payload);
+    ::encode(recovery_info, payload, features);
     ::encode(recovery_progress, payload);
     ::encode(current_progress, payload);
     ::encode(omap_entries, payload);
@@ -222,15 +241,15 @@ public:
     ::encode(from, payload);
     ::encode(pgid.shard, payload);
     ::encode(updated_hit_set_history, payload);
-    ::encode(pg_trim_rollback_to, payload);
+    ::encode(pg_roll_forward_to, payload);
   }
 
   MOSDSubOp()
-    : Message(MSG_OSD_SUBOP, HEAD_VERSION, COMPAT_VERSION) { }
+    : MOSDFastDispatchOp(MSG_OSD_SUBOP, HEAD_VERSION, COMPAT_VERSION) { }
   MOSDSubOp(osd_reqid_t r, pg_shard_t from,
 	    spg_t p, const hobject_t& po,  int aw,
 	    epoch_t mape, ceph_tid_t rtid, eversion_t v)
-    : Message(MSG_OSD_SUBOP, HEAD_VERSION, COMPAT_VERSION),
+    : MOSDFastDispatchOp(MSG_OSD_SUBOP, HEAD_VERSION, COMPAT_VERSION),
       map_epoch(mape),
       reqid(r),
       from(from),
@@ -244,11 +263,11 @@ public:
     set_tid(rtid);
   }
 private:
-  ~MOSDSubOp() {}
+  ~MOSDSubOp() override {}
 
 public:
-  const char *get_type_name() const { return "osd_sub_op"; }
-  void print(ostream& out) const {
+  const char *get_type_name() const override { return "osd_sub_op"; }
+  void print(ostream& out) const override {
     out << "osd_sub_op(" << reqid
 	<< " " << pgid
 	<< " " << poid
@@ -258,7 +277,7 @@ public:
     if (complete)
       out << " complete";
     out << " v " << version
-	<< " snapset=" << snapset << " snapc=" << snapc;    
+	<< " snapset=" << snapset;
     if (!data_subset.empty()) out << " subset " << data_subset;
     if (updated_hit_set_history)
       out << ", has_updated_hit_set_history";

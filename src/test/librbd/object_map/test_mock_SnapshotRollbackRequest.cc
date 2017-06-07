@@ -1,4 +1,4 @@
-// -*- mode:C; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
 #include "test/librbd/test_mock_fixture.h"
@@ -17,45 +17,43 @@ namespace object_map {
 using ::testing::_;
 using ::testing::DoDefault;
 using ::testing::Return;
+using ::testing::StrEq;
 
 class TestMockObjectMapSnapshotRollbackRequest : public TestMockFixture {
 public:
   void expect_read_map(librbd::ImageCtx *ictx, uint64_t snap_id, int r) {
     if (r < 0) {
       EXPECT_CALL(get_mock_io_ctx(ictx->md_ctx),
-                  read(ObjectMap::object_map_name(ictx->id, snap_id),
+                  read(ObjectMap<>::object_map_name(ictx->id, snap_id),
                        0, 0, _)).WillOnce(Return(r));
     } else {
       EXPECT_CALL(get_mock_io_ctx(ictx->md_ctx),
-                  read(ObjectMap::object_map_name(ictx->id, snap_id),
+                  read(ObjectMap<>::object_map_name(ictx->id, snap_id),
                        0, 0, _)).WillOnce(DoDefault());
     }
   }
 
   void expect_write_map(librbd::ImageCtx *ictx, int r) {
     EXPECT_CALL(get_mock_io_ctx(ictx->md_ctx),
-                exec(ObjectMap::object_map_name(ictx->id, CEPH_NOSNAP), _,
-		     "lock", "assert_locked", _, _, _))
+                exec(ObjectMap<>::object_map_name(ictx->id, CEPH_NOSNAP), _,
+		     StrEq("lock"), StrEq("assert_locked"), _, _, _))
                   .WillOnce(DoDefault());
     if (r < 0) {
       EXPECT_CALL(get_mock_io_ctx(ictx->md_ctx),
                   write_full(
-                    ObjectMap::object_map_name(ictx->id, CEPH_NOSNAP), _, _))
+                    ObjectMap<>::object_map_name(ictx->id, CEPH_NOSNAP), _, _))
                   .WillOnce(Return(r));
     } else {
       EXPECT_CALL(get_mock_io_ctx(ictx->md_ctx),
                   write_full(
-                    ObjectMap::object_map_name(ictx->id, CEPH_NOSNAP), _, _))
+                    ObjectMap<>::object_map_name(ictx->id, CEPH_NOSNAP), _, _))
                   .WillOnce(DoDefault());
     }
   }
 
   void expect_invalidate(librbd::ImageCtx *ictx, uint32_t times) {
     EXPECT_CALL(get_mock_io_ctx(ictx->md_ctx),
-                exec(ictx->header_oid, _, "lock", "assert_locked", _, _, _))
-                  .Times(0);
-    EXPECT_CALL(get_mock_io_ctx(ictx->md_ctx),
-                exec(ictx->header_oid, _, "rbd", "set_flags", _, _, _))
+                exec(ictx->header_oid, _, StrEq("rbd"), StrEq("set_flags"), _, _, _))
                   .Times(times)
                   .WillRepeatedly(DoDefault());
   }
@@ -66,7 +64,7 @@ TEST_F(TestMockObjectMapSnapshotRollbackRequest, Success) {
 
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
-  ASSERT_EQ(0, librbd::snap_create(ictx, "snap1"));
+  ASSERT_EQ(0, snap_create(*ictx, "snap1"));
   ASSERT_EQ(0, ictx->state->refresh_if_required());
 
   uint64_t snap_id = ictx->snap_info.rbegin()->first;
@@ -87,7 +85,7 @@ TEST_F(TestMockObjectMapSnapshotRollbackRequest, ReadMapError) {
 
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
-  ASSERT_EQ(0, librbd::snap_create(ictx, "snap1"));
+  ASSERT_EQ(0, snap_create(*ictx, "snap1"));
   ASSERT_EQ(0, ictx->state->refresh_if_required());
 
   uint64_t snap_id = ictx->snap_info.rbegin()->first;
@@ -106,7 +104,9 @@ TEST_F(TestMockObjectMapSnapshotRollbackRequest, ReadMapError) {
     ASSERT_EQ(0, ictx->get_flags(snap_id, &flags));
     ASSERT_NE(0U, flags & RBD_FLAG_OBJECT_MAP_INVALID);
   }
-  ASSERT_TRUE(ictx->test_flags(RBD_FLAG_OBJECT_MAP_INVALID));
+  bool flags_set;
+  ASSERT_EQ(0, ictx->test_flags(RBD_FLAG_OBJECT_MAP_INVALID, &flags_set));
+  ASSERT_TRUE(flags_set);
   expect_unlock_exclusive_lock(*ictx);
 }
 
@@ -115,7 +115,7 @@ TEST_F(TestMockObjectMapSnapshotRollbackRequest, WriteMapError) {
 
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
-  ASSERT_EQ(0, librbd::snap_create(ictx, "snap1"));
+  ASSERT_EQ(0, snap_create(*ictx, "snap1"));
   ASSERT_EQ(0, ictx->state->refresh_if_required());
 
   uint64_t snap_id = ictx->snap_info.rbegin()->first;
@@ -135,7 +135,9 @@ TEST_F(TestMockObjectMapSnapshotRollbackRequest, WriteMapError) {
     ASSERT_EQ(0, ictx->get_flags(snap_id, &flags));
     ASSERT_EQ(0U, flags & RBD_FLAG_OBJECT_MAP_INVALID);
   }
-  ASSERT_TRUE(ictx->test_flags(RBD_FLAG_OBJECT_MAP_INVALID));
+  bool flags_set;
+  ASSERT_EQ(0, ictx->test_flags(RBD_FLAG_OBJECT_MAP_INVALID, &flags_set));
+  ASSERT_TRUE(flags_set);
   expect_unlock_exclusive_lock(*ictx);
 }
 

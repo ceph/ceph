@@ -24,13 +24,13 @@ private:
   bool m_has_extsize;
   int set_extsize(int fd, unsigned int val);
 public:
-  XfsFileStoreBackend(FileStore *fs);
-  ~XfsFileStoreBackend() {}
-  const char *get_name() {
+  explicit XfsFileStoreBackend(FileStore *fs);
+  ~XfsFileStoreBackend() override {}
+  const char *get_name() override {
     return "xfs";
   }
-  int detect_features();
-  int set_alloc_hint(int fd, uint64_t hint);
+  int detect_features() override;
+  int set_alloc_hint(int fd, uint64_t hint) override;
 };
 
 #endif /* CEPH_XFSFILESTOREBACKEND_H */

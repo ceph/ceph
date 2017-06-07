@@ -124,6 +124,15 @@ bool mem_is_zero(const char *data, size_t len)
 
 static inline bool mem_is_zero(const char *data, size_t len) {
   const char *end = data + len;
+  const char* end64 = data + (len / sizeof(uint64_t))*sizeof(uint64_t);
+
+  while (data < end64) {
+    if (*(uint64_t*)data != 0) {
+      return false;
+    }
+    data += sizeof(uint64_t);
+  }
+
   while (data < end) {
     if (*data != 0) {
       return false;

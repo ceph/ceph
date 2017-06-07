@@ -114,6 +114,10 @@ struct ceph_eversion {
 #define CEPH_OSD_UP      (1<<1)
 #define CEPH_OSD_AUTOOUT (1<<2)  /* osd was automatically marked out */
 #define CEPH_OSD_NEW     (1<<3)  /* osd is new, never marked in */
+#define CEPH_OSD_FULL    (1<<4)  /* osd is at or above full threshold */
+#define CEPH_OSD_NEARFULL (1<<5) /* osd is at or above nearfull threshold */
+#define CEPH_OSD_BACKFILLFULL (1<<6) /* osd is at or above backfillfull threshold */
+#define CEPH_OSD_DESTROYED (1<<7) /* osd has been destroyed */
 
 extern const char *ceph_osd_state_name(int s);
 
@@ -144,6 +148,38 @@ extern const char *ceph_osd_state_name(int s);
 #define CEPH_OSDMAP_NOTIERAGENT (1<<13) /* disable tiering agent */
 #define CEPH_OSDMAP_NOREBALANCE (1<<14) /* block osd backfill unless pg is degraded */
 #define CEPH_OSDMAP_SORTBITWISE (1<<15) /* use bitwise hobject_t sort */
+#define CEPH_OSDMAP_REQUIRE_JEWEL (1<<16) /* require jewel for booting osds */
+#define CEPH_OSDMAP_REQUIRE_KRAKEN (1<<17) /* require kraken for booting osds */
+#define CEPH_OSDMAP_REQUIRE_LUMINOUS (1<<18) /* require l for booting osds */
+
+/* these are hidden in 'ceph status' view */
+#define CEPH_OSDMAP_SEMIHIDDEN_FLAGS (CEPH_OSDMAP_REQUIRE_JEWEL|	\
+				      CEPH_OSDMAP_REQUIRE_KRAKEN |	\
+				      CEPH_OSDMAP_REQUIRE_LUMINOUS |	\
+				      CEPH_OSDMAP_SORTBITWISE)
+#define CEPH_OSDMAP_LEGACY_REQUIRE_FLAGS (CEPH_OSDMAP_REQUIRE_JEWEL |	\
+					  CEPH_OSDMAP_REQUIRE_KRAKEN |	\
+					  CEPH_OSDMAP_REQUIRE_LUMINOUS)
+
+/*
+ * major ceph release numbers
+ */
+#define CEPH_RELEASE_ARGONAUT    1
+#define CEPH_RELEASE_BOBTAIL     2
+#define CEPH_RELEASE_CUTTLEFISH  3
+#define CEPH_RELEASE_DUMPLING    4
+#define CEPH_RELEASE_EMPEROR     5
+#define CEPH_RELEASE_FIREFLY     6
+#define CEPH_RELEASE_GIANT       7
+#define CEPH_RELEASE_HAMMER      8
+#define CEPH_RELEASE_INFERNALIS  9
+#define CEPH_RELEASE_JEWEL      10
+#define CEPH_RELEASE_KRAKEN     11
+#define CEPH_RELEASE_LUMINOUS   12
+#define CEPH_RELEASE_MIMIC      13
+
+extern const char *ceph_release_name(int r);
+extern int ceph_release_from_name(const char *s);
 
 /*
  * The error code to return when an OSD can't handle a write
@@ -170,7 +206,7 @@ extern const char *ceph_osd_state_name(int s);
 #define CEPH_OSD_OP_TYPE_ATTR  0x0300
 #define CEPH_OSD_OP_TYPE_EXEC  0x0400
 #define CEPH_OSD_OP_TYPE_PG    0x0500
-#define CEPH_OSD_OP_TYPE_MULTI 0x0600 /* multiobject */
+//      LEAVE UNUSED           0x0600 used to be multiobject ops
 
 #define __CEPH_OSD_OP1(mode, nr) \
 	(CEPH_OSD_OP_MODE_##mode | (nr))
@@ -184,6 +220,7 @@ extern const char *ceph_osd_state_name(int s);
 	f(READ,		__CEPH_OSD_OP(RD, DATA, 1),	"read")		    \
 	f(STAT,		__CEPH_OSD_OP(RD, DATA, 2),	"stat")		    \
 	f(MAPEXT,	__CEPH_OSD_OP(RD, DATA, 3),	"mapext")	    \
+	f(CHECKSUM,	__CEPH_OSD_OP(RD, DATA, 31),	"checksum")	    \
 									    \
 	/* fancy read */						    \
 	f(MASKTRUNC,	__CEPH_OSD_OP(RD, DATA, 4),	"masktrunc")	    \
@@ -237,7 +274,7 @@ extern const char *ceph_osd_state_name(int s);
 									    \
 	/* tiering */							    \
 	f(COPY_FROM,	__CEPH_OSD_OP(WR, DATA, 26),	"copy-from")	    \
-	f(COPY_GET_CLASSIC, __CEPH_OSD_OP(RD, DATA, 27), "copy-get-classic") \
+	/* was copy-get-classic */					\
 	f(UNDIRTY,	__CEPH_OSD_OP(WR, DATA, 28),	"undirty")	    \
 	f(ISDIRTY,	__CEPH_OSD_OP(RD, DATA, 29),	"isdirty")	    \
 	f(COPY_GET,	__CEPH_OSD_OP(RD, DATA, 30),	"copy-get")	    \
@@ -255,10 +292,12 @@ extern const char *ceph_osd_state_name(int s);
 	f(CACHE_PIN,	__CEPH_OSD_OP(WR, DATA, 36),	"cache-pin")        \
 	f(CACHE_UNPIN,	__CEPH_OSD_OP(WR, DATA, 37),	"cache-unpin")      \
 									    \
-	/** multi **/							    \
-	f(CLONERANGE,	__CEPH_OSD_OP(WR, MULTI, 1),	"clonerange")	    \
-	f(ASSERT_SRC_VERSION, __CEPH_OSD_OP(RD, MULTI, 2), "assert-src-version") \
-	f(SRC_CMPXATTR,	__CEPH_OSD_OP(RD, MULTI, 3),	"src-cmpxattr")	    \
+	/* ESX/SCSI */							    \
+	f(WRITESAME,	__CEPH_OSD_OP(WR, DATA, 38),	"write-same")	    \
+	f(CMPEXT,	__CEPH_OSD_OP(RD, DATA, 32),	"cmpext")	    \
+									    \
+	/* Extensible */						    \
+	f(SET_REDIRECT,	__CEPH_OSD_OP(WR, DATA, 39),	"set-redirect")	    \
 									    \
 	/** attrs **/							    \
 	/* read */							    \
@@ -280,7 +319,7 @@ extern const char *ceph_osd_state_name(int s);
 	f(SCRUB,	__CEPH_OSD_OP1(SUB, 5),		"scrub")	    \
 	f(SCRUB_RESERVE, __CEPH_OSD_OP1(SUB, 6),	"scrub-reserve")    \
 	f(SCRUB_UNRESERVE, __CEPH_OSD_OP1(SUB, 7),	"scrub-unreserve")  \
-	f(SCRUB_STOP,	__CEPH_OSD_OP1(SUB, 8),		"scrub-stop")	    \
+	/* 8 used to be scrub-stop */					\
 	f(SCRUB_MAP,	__CEPH_OSD_OP1(SUB, 9),		"scrub-map")	    \
 									    \
 	/** exec **/							    \
@@ -293,7 +332,8 @@ extern const char *ceph_osd_state_name(int s);
 	f(PG_HITSET_LS,	__CEPH_OSD_OP(RD, PG, 3),	"pg-hitset-ls")	    \
 	f(PG_HITSET_GET, __CEPH_OSD_OP(RD, PG, 4),	"pg-hitset-get")    \
 	f(PGNLS,	__CEPH_OSD_OP(RD, PG, 5),	"pgnls")	    \
-	f(PGNLS_FILTER,	__CEPH_OSD_OP(RD, PG, 6),	"pgnls-filter")
+	f(PGNLS_FILTER,	__CEPH_OSD_OP(RD, PG, 6),	"pgnls-filter")     \
+	f(SCRUBLS, __CEPH_OSD_OP(RD, PG, 7), "scrubls")
 
 enum {
 #define GENERATE_ENUM_ENTRY(op, opcode, str)	CEPH_OSD_OP_##op = (opcode),
@@ -316,10 +356,6 @@ static inline int ceph_osd_op_type_exec(int op)
 static inline int ceph_osd_op_type_pg(int op)
 {
 	return (op & CEPH_OSD_OP_TYPE) == CEPH_OSD_OP_TYPE_PG;
-}
-static inline int ceph_osd_op_type_multi(int op)
-{
-	return (op & CEPH_OSD_OP_TYPE) == CEPH_OSD_OP_TYPE_MULTI;
 }
 
 static inline int ceph_osd_op_mode_subop(int op)
@@ -353,6 +389,7 @@ static inline int ceph_osd_op_uses_extent(int op)
 	case CEPH_OSD_OP_ZERO:
 	case CEPH_OSD_OP_APPEND:
 	case CEPH_OSD_OP_TRIMTRUNC:
+	case CEPH_OSD_OP_CMPEXT:
 		return true;
 	default:
 		return false;
@@ -404,6 +441,7 @@ enum {
 	CEPH_OSD_FLAG_KNOWN_REDIR = 0x400000,  /* redirect bit is authoritative */
 	CEPH_OSD_FLAG_FULL_TRY =    0x800000,  /* try op despite full flag */
 	CEPH_OSD_FLAG_FULL_FORCE = 0x1000000,  /* force op despite full flag */
+	CEPH_OSD_FLAG_IGNORE_REDIRECT = 0x2000000,  /* ignore redirection */
 };
 
 enum {
@@ -444,10 +482,6 @@ enum {
 };
 
 enum {
-	CEPH_OSD_COPY_GET_FLAG_NOTSUPP_OMAP = 1, /* mean dest pool don't support omap*/
-};
-
-enum {
 	CEPH_OSD_TMAP2OMAP_NULLOK = 1,
 };
 
@@ -461,7 +495,36 @@ enum {
 	CEPH_OSD_WATCH_OP_PING = 7,
 };
 
+enum {
+	CEPH_OSD_CHECKSUM_OP_TYPE_XXHASH32 = 0,
+	CEPH_OSD_CHECKSUM_OP_TYPE_XXHASH64 = 1,
+	CEPH_OSD_CHECKSUM_OP_TYPE_CRC32C   = 2
+};
+
 const char *ceph_osd_watch_op_name(int o);
+
+enum {
+	CEPH_OSD_ALLOC_HINT_FLAG_SEQUENTIAL_WRITE = 1,
+	CEPH_OSD_ALLOC_HINT_FLAG_RANDOM_WRITE = 2,
+	CEPH_OSD_ALLOC_HINT_FLAG_SEQUENTIAL_READ = 4,
+	CEPH_OSD_ALLOC_HINT_FLAG_RANDOM_READ = 8,
+	CEPH_OSD_ALLOC_HINT_FLAG_APPEND_ONLY = 16,
+	CEPH_OSD_ALLOC_HINT_FLAG_IMMUTABLE = 32,
+	CEPH_OSD_ALLOC_HINT_FLAG_SHORTLIVED = 64,
+	CEPH_OSD_ALLOC_HINT_FLAG_LONGLIVED = 128,
+	CEPH_OSD_ALLOC_HINT_FLAG_COMPRESSIBLE = 256,
+	CEPH_OSD_ALLOC_HINT_FLAG_INCOMPRESSIBLE = 512,
+};
+
+const char *ceph_osd_alloc_hint_flag_name(int f);
+
+enum {
+	CEPH_OSD_BACKOFF_OP_BLOCK = 1,
+	CEPH_OSD_BACKOFF_OP_ACK_BLOCK = 2,
+	CEPH_OSD_BACKOFF_OP_UNBLOCK = 3,
+};
+
+const char *ceph_osd_backoff_op_name(int op);
 
 /*
  * an individual object operation.  each may be accompanied by some data
@@ -500,6 +563,7 @@ struct ceph_osd_op {
 			__le64 ver;     /* no longer used */
 			__u8 op;	/* CEPH_OSD_WATCH_OP_* */
 			__u32 gen;      /* registration generation */
+			__u32 timeout; /* connection timeout */
 		} __attribute__ ((packed)) watch;
 		struct {
 			__le64 cookie;
@@ -514,7 +578,6 @@ struct ceph_osd_op {
 		} __attribute__ ((packed)) clonerange;
 		struct {
 			__le64 max;     /* max data in reply */
-			__le32 flags;
 		} __attribute__ ((packed)) copy_get;
 		struct {
 			__le64 snapid;
@@ -535,10 +598,34 @@ struct ceph_osd_op {
 		struct {
 			__le64 expected_object_size;
 			__le64 expected_write_size;
+			__le32 flags;  /* CEPH_OSD_OP_ALLOC_HINT_FLAG_* */
 		} __attribute__ ((packed)) alloc_hint;
+		struct {
+			__le64 offset;
+			__le64 length;
+			__le64 data_length;
+		} __attribute__ ((packed)) writesame;
+		struct {
+			__le64 offset;
+			__le64 length;
+			__le32 chunk_size;
+			__u8 type;              /* CEPH_OSD_CHECKSUM_OP_TYPE_* */
+		} __attribute__ ((packed)) checksum;
 	};
 	__le32 payload_len;
 } __attribute__ ((packed));
+
+/*
+ * Check the compatibility of struct ceph_osd_op
+ *  (2+4+(2*8+8+4)+4) = (sizeof(ceph_osd_op::op) +
+ *                     sizeof(ceph_osd_op::flags) +
+ *                     sizeof(ceph_osd_op::extent) +
+ *                     sizeof(ceph_osd_op::payload_len))
+ */
+#ifdef __cplusplus
+static_assert(sizeof(ceph_osd_op) == (2+4+(2*8+8+4)+4),
+              "sizeof(ceph_osd_op) breaks the compatibility");
+#endif
 
 struct ceph_osd_reply_head {
 	__le32 client_inc;                /* client incarnation */

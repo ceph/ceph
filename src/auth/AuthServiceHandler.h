@@ -15,12 +15,14 @@
 #ifndef CEPH_AUTHSERVICEHANDLER_H
 #define CEPH_AUTHSERVICEHANDLER_H
 
-#include "include/types.h"
-#include "common/config.h"
-#include "Auth.h"
+#include <stddef.h>              // for NULL
+#include <stdint.h>              // for uint64_t
+#include "common/entity_name.h"  // for EntityName
+#include "include/buffer_fwd.h"  // for bufferlist
 
 class CephContext;
 class KeyServer;
+struct AuthCapsInfo;
 
 struct AuthServiceHandler {
 protected:
@@ -29,7 +31,7 @@ public:
   EntityName entity_name;
   uint64_t global_id;
 
-  AuthServiceHandler(CephContext *cct_) : cct(cct_), global_id(0) {}
+  explicit AuthServiceHandler(CephContext *cct_) : cct(cct_), global_id(0) {}
 
   virtual ~AuthServiceHandler() { }
 

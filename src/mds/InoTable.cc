@@ -19,6 +19,7 @@
 
 #include "common/config.h"
 
+#define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_mds
 #undef dout_prefix
 #define dout_prefix *_dout << "mds." << rank << "." << table_name << ": "
@@ -107,7 +108,7 @@ void InoTable::replay_alloc_id(inodeno_t id)
     projected_free.erase(id);
   } else {
     mds->clog->error() << "journal replay alloc " << id
-      << " not in free " << free << "\n";
+      << " not in free " << free;
   }
   projected_version = ++version;
 }
@@ -123,7 +124,7 @@ void InoTable::replay_alloc_ids(interval_set<inodeno_t>& ids)
     projected_free.subtract(ids);
   } else {
     mds->clog->error() << "journal replay alloc " << ids << ", only "
-	<< is << " is in free " << free << "\n";
+	<< is << " is in free " << free;
     free.subtract(is);
     projected_free.subtract(is);
   }
@@ -189,4 +190,38 @@ void InoTable::dump(Formatter *f) const
 void InoTable::generate_test_instances(list<InoTable*>& ls)
 {
   ls.push_back(new InoTable());
+}
+
+
+bool InoTable::is_marked_free(inodeno_t id) const
+{
+  return free.contains(id) || projected_free.contains(id);
+}
+
+bool InoTable::intersects_free(
+    const interval_set<inodeno_t> &other,
+    interval_set<inodeno_t> *intersection)
+{
+  interval_set<inodeno_t> i;
+  i.intersection_of(free, other);
+  if (intersection != nullptr) {
+    *intersection = i;
+  }
+  return !(i.empty());
+}
+
+bool InoTable::repair(inodeno_t id)
+{
+  if (projected_version != version) {
+    // Can't do the repair while other things are in flight
+    return false;
+  }
+
+  assert(is_marked_free(id));
+  dout(10) << "repair: before status. ino = 0x" << std::hex << id << " pver =" << projected_version << " ver= " << version << dendl;
+  free.erase(id);
+  projected_free.erase(id);
+  projected_version = ++version;
+  dout(10) << "repair: after status. ino = 0x" << std::hex <<id << " pver =" << projected_version << " ver= " << version << dendl;
+  return true;
 }

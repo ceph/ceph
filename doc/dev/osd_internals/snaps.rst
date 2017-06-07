@@ -65,7 +65,7 @@ order to determine which clones might need to be removed upon snap
 removal, we maintain a mapping from snap to *hobject_t* using the
 *SnapMapper*.
 
-See ReplicatedPG::SnapTrimmer, SnapMapper
+See PrimaryLogPG::SnapTrimmer, SnapMapper
 
 This trimming is performed asynchronously by the snap_trim_wq while the
 pg is clean and not scrubbing.
@@ -74,6 +74,9 @@ pg is clean and not scrubbing.
   #. We determine the next object for trimming out of PG::snap_mapper.
      For each object, we create a log entry and repop updating the
      object info and the snap set (including adjusting the overlaps).
+     If the object is a clone which no longer belongs to any live snapshots,
+     it is removed here. (See PrimaryLogPG::trim_object() when new_snaps
+     is empty.)
   #. We also locally update our *SnapMapper* instance with the object's
      new snaps.
   #. The log entry containing the modification of the object also
@@ -81,6 +84,7 @@ pg is clean and not scrubbing.
      its own *SnapMapper* instance.
   #. The primary shares the info with the replica, which persists
      the new set of purged_snaps along with the rest of the info.
+
 
 
 Recovery

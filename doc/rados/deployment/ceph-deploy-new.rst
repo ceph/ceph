@@ -63,4 +63,4 @@ For example::
 
 
 .. _Monitor Configuration Reference: ../../configuration/mon-config-ref
-.. _Cephx Guide: ../../operations/authentication#monitor-keyrings
+.. _Cephx Guide: ../../../dev/mon-bootstrap#secret-keys

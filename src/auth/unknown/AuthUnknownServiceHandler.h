@@ -15,8 +15,8 @@
 #ifndef CEPH_AUTHUNKNOWNSERVICEHANDLER_H
 #define CEPH_AUTHUNKNOWNSERVICEHANDLER_H
 
-#include "../AuthServiceHandler.h"
-#include "../Auth.h"
+#include "auth/AuthServiceHandler.h"
+#include "auth/Auth.h"
 
 class CephContext;
 
@@ -30,7 +30,7 @@ public:
     return CEPH_AUTH_UNKNOWN;
   }
   int handle_request(bufferlist::iterator& indata, bufferlist& result_bl, uint64_t& global_id, AuthCapsInfo& caps, uint64_t *auid = NULL) {
-    assert(0);  // shouldn't get called
+    ceph_abort();  // shouldn't get called
     return 0;
   }
   void build_cephx_response_header(int request_type, int status, bufferlist& bl) { }

@@ -1,31 +1,16 @@
 // -*- mode:C; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
-#include <iostream>
-
-#include <string.h>
-#include <stdlib.h>
 #include <errno.h>
 
-#include "include/types.h"
-#include "include/utime.h"
 #include "objclass/objclass.h"
-#include "cls/version/cls_version_types.h"
-#include "cls/version/cls_version_ops.h"
-#include "common/Clock.h"
 
-#include "global/global_context.h"
+#include "cls/version/cls_version_ops.h"
+
 #include "include/compat.h"
 
 CLS_VER(1,0)
 CLS_NAME(version)
-
-cls_handle_t h_class;
-cls_method_handle_t h_version_set;
-cls_method_handle_t h_version_inc;
-cls_method_handle_t h_version_inc_conds;
-cls_method_handle_t h_version_read;
-cls_method_handle_t h_version_check_conds;
 
 
 #define VERSION_ATTR "ceph.objclass.version"
@@ -116,6 +101,7 @@ static bool check_conds(list<obj_version_cond>& conds, obj_version& objv)
   for (list<obj_version_cond>::iterator iter = conds.begin(); iter != conds.end(); ++iter) {
     obj_version_cond& cond = *iter;
     obj_version& v = cond.ver;
+    CLS_LOG(20, "cls_version: check_version %s:%d (cond=%d)", v.tag.c_str(), (int)v.ver, (int)cond.cond);
 
     switch (cond.cond) {
       case VER_COND_NONE:
@@ -223,9 +209,16 @@ static int cls_version_read(cls_method_context_t hctx, bufferlist *in, bufferlis
   return 0;
 }
 
-void __cls_init()
+CLS_INIT(version)
 {
   CLS_LOG(1, "Loaded version class!");
+
+  cls_handle_t h_class;
+  cls_method_handle_t h_version_set;
+  cls_method_handle_t h_version_inc;
+  cls_method_handle_t h_version_inc_conds;
+  cls_method_handle_t h_version_read;
+  cls_method_handle_t h_version_check_conds;
 
   cls_register("version", &h_class);
 

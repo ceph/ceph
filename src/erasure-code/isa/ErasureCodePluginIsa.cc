@@ -25,21 +25,16 @@
 
 // -----------------------------------------------------------------------------
 #include "ceph_ver.h"
-#include "common/debug.h"
-#include "erasure-code/ErasureCodePlugin.h"
-#include "ErasureCodeIsaTableCache.h"
+#include "include/buffer.h"
+#include "ErasureCodePluginIsa.h"
 #include "ErasureCodeIsa.h"
 // -----------------------------------------------------------------------------
 
-class ErasureCodePluginIsa : public ErasureCodePlugin {
-public:
-  ErasureCodeIsaTableCache tcache;
-
-  virtual int factory(const std::string &directory,
+int ErasureCodePluginIsa::factory(const std::string &directory,
 		      ErasureCodeProfile &profile,
                       ErasureCodeInterfaceRef *erasure_code,
-                      ostream *ss)
-  {
+                      std::ostream *ss)
+{
     ErasureCodeIsa *interface;
     std::string t;
     if (profile.find("technique") == profile.end())
@@ -68,8 +63,9 @@ public:
     }
     *erasure_code = ErasureCodeInterfaceRef(interface);
     return 0;
-  }
-};
+}
+
+#ifndef BUILDING_FOR_EMBEDDED
 
 // -----------------------------------------------------------------------------
 
@@ -86,3 +82,5 @@ int __erasure_code_init(char *plugin_name, char *directory)
 
   return instance.add(plugin_name, new ErasureCodePluginIsa());
 }
+
+#endif

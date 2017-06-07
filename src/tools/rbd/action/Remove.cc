@@ -41,7 +41,7 @@ int execute(const po::variables_map &vm) {
   std::string snap_name;
   int r = utils::get_pool_image_snapshot_names(
     vm, at::ARGUMENT_MODIFIER_NONE, &arg_index, &pool_name, &image_name,
-    &snap_name, utils::SNAPSHOT_PRESENCE_NONE);
+    &snap_name, utils::SNAPSHOT_PRESENCE_NONE, utils::SPEC_VALIDATION_NONE);
   if (r < 0) {
     return r;
   }
@@ -52,6 +52,8 @@ int execute(const po::variables_map &vm) {
   if (r < 0) {
     return r;
   }
+
+  io_ctx.set_osdmap_full_try();
 
   librbd::RBD rbd;
   r = do_delete(rbd, io_ctx, image_name.c_str(),
@@ -68,6 +70,23 @@ int execute(const po::variables_map &vm) {
                 << "it crashed. Try again after closing/unmapping it or "
                 << "waiting 30s for the crashed client to timeout."
                 << std::endl;
+    } else if (r == -EMLINK) {
+      librbd::Image image;
+      int image_r = utils::open_image(io_ctx, image_name, true, &image);
+      librbd::group_spec_t group_spec;
+      if (image_r == 0) {
+	image_r = image.get_group(&group_spec);
+      }
+      if (image_r == 0)
+	std::cerr << "rbd: error: image belongs to a consistency group "
+		  << group_spec.pool << "." << group_spec.name;
+      else
+	std::cerr << "rbd: error: image belongs to a consistency group";
+
+      std::cerr << std::endl
+		<< "Remove the image from the consistency group and try again."
+		<< std::endl;
+      image.close();
     } else {
       std::cerr << "rbd: delete error: " << cpp_strerror(r) << std::endl;
     }

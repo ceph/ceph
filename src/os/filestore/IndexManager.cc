@@ -36,8 +36,9 @@
 static int set_version(const char *path, uint32_t version) {
   bufferlist bl;
   ::encode(version, bl);
-  return chain_setxattr(path, "user.cephos.collection_version", bl.c_str(),
-		     bl.length(), true);
+  return chain_setxattr<true, true>(
+    path, "user.cephos.collection_version", bl.c_str(),
+    bl.length());
 }
 
 static int get_version(const char *path, uint32_t *version) {
@@ -73,14 +74,14 @@ IndexManager::~IndexManager() {
 
 
 int IndexManager::init_index(coll_t c, const char *path, uint32_t version) {
-  Mutex::Locker l(lock);
+  RWLock::WLocker l(lock);
   int r = set_version(path, version);
   if (r < 0)
     return r;
-  HashIndex index(c, path, g_conf->filestore_merge_threshold,
-		  g_conf->filestore_split_multiple,
+  HashIndex index(cct, c, path, cct->_conf->filestore_merge_threshold,
+		  cct->_conf->filestore_split_multiple,
 		  version,
-		  g_conf->filestore_index_retry_probability);
+		  cct->_conf->filestore_index_retry_probability);
   return index.init();
 }
 
@@ -99,26 +100,37 @@ int IndexManager::build_index(coll_t c, const char *path, CollectionIndex **inde
     case CollectionIndex::HASH_INDEX_TAG_2: // fall through
     case CollectionIndex::HOBJECT_WITH_POOL: {
       // Must be a HashIndex
-      *index = new HashIndex(c, path, g_conf->filestore_merge_threshold,
-				   g_conf->filestore_split_multiple, version);
+      *index = new HashIndex(cct, c, path,
+			     cct->_conf->filestore_merge_threshold,
+			     cct->_conf->filestore_split_multiple, version);
       return 0;
     }
-    default: assert(0);
+    default: ceph_abort();
     }
 
   } else {
     // No need to check
-    *index = new HashIndex(c, path, g_conf->filestore_merge_threshold,
-				 g_conf->filestore_split_multiple,
-				 CollectionIndex::HOBJECT_WITH_POOL,
-				 g_conf->filestore_index_retry_probability);
+    *index = new HashIndex(cct, c, path, cct->_conf->filestore_merge_threshold,
+			   cct->_conf->filestore_split_multiple,
+			   CollectionIndex::HOBJECT_WITH_POOL,
+			   cct->_conf->filestore_index_retry_probability);
     return 0;
   }
 }
 
-int IndexManager::get_index(coll_t c, const string& baseDir, Index *index) {
+bool IndexManager::get_index_optimistic(coll_t c, Index *index) {
+  RWLock::RLocker l(lock);
+  ceph::unordered_map<coll_t, CollectionIndex* > ::iterator it = col_indices.find(c);
+  if (it == col_indices.end()) 
+    return false;
+  index->index = it->second;
+  return true;
+}
 
-  Mutex::Locker l(lock);
+int IndexManager::get_index(coll_t c, const string& baseDir, Index *index) {
+  if (get_index_optimistic(c, index))
+    return 0;
+  RWLock::WLocker l(lock);
   ceph::unordered_map<coll_t, CollectionIndex* > ::iterator it = col_indices.find(c);
   if (it == col_indices.end()) {
     char path[PATH_MAX];

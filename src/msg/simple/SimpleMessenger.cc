@@ -39,17 +39,15 @@ static ostream& _prefix(std::ostream *_dout, SimpleMessenger *msgr) {
  */
 
 SimpleMessenger::SimpleMessenger(CephContext *cct, entity_name_t name,
-				 string mname, uint64_t _nonce, uint64_t features)
+				 string mname, uint64_t _nonce)
   : SimplePolicyMessenger(cct, name,mname, _nonce),
     accepter(this, _nonce),
-    dispatch_queue(cct, this),
+    dispatch_queue(cct, this, mname),
     reaper_thread(this),
     nonce(_nonce),
     lock("SimpleMessenger::lock"), need_addr(true), did_bind(false),
     global_seq(0),
     cluster_protocol(0),
-    dispatch_throttler(cct, string("msgr_dispatch_throttler-") + mname,
-		       cct->_conf->ms_dispatch_throttle_bytes),
     reaper_started(false), reaper_stop(false),
     timeout(0),
     local_connection(new PipeConnection(cct, this))
@@ -57,7 +55,6 @@ SimpleMessenger::SimpleMessenger(CephContext *cct, entity_name_t name,
   ANNOTATE_BENIGN_RACE_SIZED(&timeout, sizeof(timeout),
                              "SimpleMessenger read timeout");
   ceph_spin_init(&global_seq_lock);
-  local_features = features;
   init_local_connection();
 }
 
@@ -89,10 +86,15 @@ int SimpleMessenger::shutdown()
 {
   ldout(cct,10) << "shutdown " << get_myaddr() << dendl;
   mark_down_all();
-  dispatch_queue.shutdown();
 
   // break ref cycles on the loopback connection
   local_connection->set_priv(NULL);
+
+  lock.Lock();
+  stop_cond.Signal();
+  stopped = true;
+  lock.Unlock();
+
   return 0;
 }
 
@@ -147,11 +149,11 @@ int SimpleMessenger::_send_message(Message *m, Connection *con)
  * If my_inst.addr doesn't have an IP set, this function
  * will fill it in from the passed addr. Otherwise it does nothing and returns.
  */
-void SimpleMessenger::set_addr_unknowns(entity_addr_t &addr)
+void SimpleMessenger::set_addr_unknowns(const entity_addr_t &addr)
 {
   if (my_inst.addr.is_blank_ip()) {
     int port = my_inst.addr.get_port();
-    my_inst.addr.addr = addr.addr;
+    my_inst.addr.u = addr.u;
     my_inst.addr.set_port(port);
     init_local_connection();
   }
@@ -195,16 +197,6 @@ int SimpleMessenger::get_proto_version(int peer_type, bool connect)
  */
 #undef dout_prefix
 #define dout_prefix _prefix(_dout, this)
-
-void SimpleMessenger::dispatch_throttle_release(uint64_t msize)
-{
-  if (msize) {
-    ldout(cct,10) << "dispatch_throttle_release " << msize << " to dispatch throttler "
-	    << dispatch_throttler.get_current() << "/"
-	    << dispatch_throttler.get_max() << dendl;
-    dispatch_throttler.put(msize);
-  }
-}
 
 void SimpleMessenger::reaper_entry()
 {
@@ -314,6 +306,27 @@ int SimpleMessenger::rebind(const set<int>& avoid_ports)
   return accepter.rebind(avoid_ports);
 }
 
+
+int SimpleMessenger::client_bind(const entity_addr_t &bind_addr)
+{
+  if (!cct->_conf->ms_bind_before_connect)
+    return 0;
+  Mutex::Locker l(lock);
+  if (did_bind) {
+    assert(my_inst.addr == bind_addr);
+    return 0;
+  }
+  if (started) {
+    ldout(cct,10) << "rank.bind already started" << dendl;
+    return -1;
+  }
+  ldout(cct,10) << "rank.bind " << bind_addr << dendl;
+
+  set_myaddr(bind_addr);
+  return 0;
+}
+
+
 int SimpleMessenger::start()
 {
   lock.Lock();
@@ -324,6 +337,7 @@ int SimpleMessenger::start()
 
   assert(!started);
   started = true;
+  stopped = false;
 
   if (!did_bind) {
     my_inst.addr.nonce = nonce;
@@ -431,6 +445,7 @@ void SimpleMessenger::submit_message(Message *m, PipeConnection *con,
 				     const entity_addr_t& dest_addr, int dest_type,
 				     bool already_locked)
 {
+  m->trace.event("simple submitting message");
   if (cct->_conf->ms_dump_on_send) {
     m->encode(-1, true);
     ldout(cct, 0) << "submit_message " << *m << "\n";
@@ -484,6 +499,7 @@ void SimpleMessenger::submit_message(Message *m, PipeConnection *con,
   if (my_inst.addr == dest_addr) {
     // local
     ldout(cct,20) << "submit_message " << *m << " local" << dendl;
+    m->set_connection(local_connection.get());
     dispatch_queue.local_delivery(m, m->get_priority());
     return;
   }
@@ -536,14 +552,10 @@ void SimpleMessenger::wait()
     lock.Unlock();
     return;
   }
-  lock.Unlock();
+  if (!stopped)
+    stop_cond.Wait(lock);
 
-  if (dispatch_queue.is_started()) {
-    ldout(cct,10) << "wait: waiting for dispatch queue" << dendl;
-    dispatch_queue.wait();
-    dispatch_queue.discard_local();
-    ldout(cct,10) << "wait: dispatch queue is stopped" << dendl;
-  }
+  lock.Unlock();
 
   // done!  clean up.
   if (did_bind) {
@@ -551,6 +563,14 @@ void SimpleMessenger::wait()
     accepter.stop();
     did_bind = false;
     ldout(cct,20) << "wait: stopped accepter thread" << dendl;
+  }
+
+  dispatch_queue.shutdown();
+  if (dispatch_queue.is_started()) {
+    ldout(cct,10) << "wait: waiting for dispatch queue" << dendl;
+    dispatch_queue.wait();
+    dispatch_queue.discard_local();
+    ldout(cct,10) << "wait: dispatch queue is stopped" << dendl;
   }
 
   if (reaper_started) {
@@ -574,6 +594,10 @@ void SimpleMessenger::wait()
       p->unregister_pipe();
       p->pipe_lock.Lock();
       p->stop_and_wait();
+      // don't generate an event here; we're shutting down anyway.
+      PipeConnectionRef con = p->connection_state;
+      if (con)
+	con->clear_pipe(p);
       p->pipe_lock.Unlock();
     }
 
@@ -705,9 +729,10 @@ void SimpleMessenger::learned_addr(const entity_addr_t &peer_addr_for_me)
   if (need_addr) {
     entity_addr_t t = peer_addr_for_me;
     t.set_port(my_inst.addr.get_port());
-    ANNOTATE_BENIGN_RACE_SIZED(&my_inst.addr.addr, sizeof(my_inst.addr.addr),
+    t.set_nonce(my_inst.addr.get_nonce());
+    ANNOTATE_BENIGN_RACE_SIZED(&my_inst.addr, sizeof(my_inst.addr),
                                "SimpleMessenger learned addr");
-    my_inst.addr.addr = t.addr;
+    my_inst.addr = t;
     ldout(cct,1) << "learned my addr " << my_inst.addr << dendl;
     need_addr = false;
     init_local_connection();
@@ -719,6 +744,6 @@ void SimpleMessenger::init_local_connection()
 {
   local_connection->peer_addr = my_inst.addr;
   local_connection->peer_type = my_inst.name.type();
-  local_connection->set_features(local_features);
+  local_connection->set_features(CEPH_FEATURES_ALL);
   ms_deliver_handle_fast_connect(local_connection.get());
 }

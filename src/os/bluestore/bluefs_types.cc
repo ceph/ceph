@@ -7,25 +7,6 @@
 #include "include/stringify.h"
 
 // bluefs_extent_t
-
-void bluefs_extent_t::encode(bufferlist& bl) const
-{
-  ENCODE_START(1, 1, bl);
-  ::encode(offset, bl);
-  ::encode(length, bl);
-  ::encode(bdev, bl);
-  ENCODE_FINISH(bl);
-}
-
-void bluefs_extent_t::decode(bufferlist::iterator& p)
-{
-  DECODE_START(1, p);
-  ::decode(offset, p);
-  ::decode(length, p);
-  ::decode(bdev, p);
-  DECODE_FINISH(p);
-}
-
 void bluefs_extent_t::dump(Formatter *f) const
 {
   f->dump_unsigned("offset", offset);
@@ -39,12 +20,13 @@ void bluefs_extent_t::generate_test_instances(list<bluefs_extent_t*>& ls)
   ls.push_back(new bluefs_extent_t);
   ls.back()->offset = 1;
   ls.back()->length = 2;
-  ls.back()->bdev = 3;
+  ls.back()->bdev = 1;
 }
 
-ostream& operator<<(ostream& out, bluefs_extent_t e)
+ostream& operator<<(ostream& out, const bluefs_extent_t& e)
 {
-  return out << e.bdev << ":" << e.offset << "+" << e.length;
+  return out << (int)e.bdev << ":0x" << std::hex << e.offset << "+" << e.length
+	     << std::dec;
 }
 
 // bluefs_super_t
@@ -90,22 +72,22 @@ void bluefs_super_t::generate_test_instances(list<bluefs_super_t*>& ls)
 
 ostream& operator<<(ostream& out, const bluefs_super_t& s)
 {
-  return out << "super(" << s.uuid
+  return out << "super(uuid " << s.uuid
 	     << " osd " << s.osd_uuid
 	     << " v " << s.version
-	     << " block_size " << s.block_size
-	     << " log_fnode " << s.log_fnode
-	     << ")";
+	     << " block_size 0x" << std::hex << s.block_size
+	     << " log_fnode 0x" << s.log_fnode
+	     << std::dec << ")";
 }
 
 // bluefs_fnode_t
 
-vector<bluefs_extent_t>::iterator bluefs_fnode_t::seek(
+mempool::bluefs::vector<bluefs_extent_t>::iterator bluefs_fnode_t::seek(
   uint64_t offset, uint64_t *x_off)
 {
-  vector<bluefs_extent_t>::iterator p = extents.begin();
+  auto p = extents.begin();
   while (p != extents.end()) {
-    if (offset >= p->length) {
+    if ((int64_t) offset >= p->length) {
       offset -= p->length;
       ++p;
     } else {
@@ -114,28 +96,6 @@ vector<bluefs_extent_t>::iterator bluefs_fnode_t::seek(
   }
   *x_off = offset;
   return p;
-}
-
-void bluefs_fnode_t::encode(bufferlist& bl) const
-{
-  ENCODE_START(1, 1, bl);
-  ::encode(ino, bl);
-  ::encode(size, bl);
-  ::encode(mtime, bl);
-  ::encode(prefer_bdev, bl);
-  ::encode(extents, bl);
-  ENCODE_FINISH(bl);
-}
-
-void bluefs_fnode_t::decode(bufferlist::iterator& p)
-{
-  DECODE_START(1, p);
-  ::decode(ino, p);
-  ::decode(size, p);
-  ::decode(mtime, p);
-  ::decode(prefer_bdev, p);
-  ::decode(extents, p);
-  DECODE_FINISH(p);
 }
 
 void bluefs_fnode_t::dump(Formatter *f) const
@@ -163,8 +123,8 @@ void bluefs_fnode_t::generate_test_instances(list<bluefs_fnode_t*>& ls)
 
 ostream& operator<<(ostream& out, const bluefs_fnode_t& file)
 {
-  return out << "file(" << file.ino
-	     << " size " << file.size
+  return out << "file(ino " << file.ino
+	     << " size 0x" << std::hex << file.size << std::dec
 	     << " mtime " << file.mtime
 	     << " bdev " << (int)file.prefer_bdev
 	     << " extents " << file.extents
@@ -218,17 +178,19 @@ void bluefs_transaction_t::generate_test_instance(
   ls.back()->op_alloc_rm(1, 0, 123);
   ls.back()->op_dir_create("dir");
   ls.back()->op_dir_create("dir2");
-  ls.back()->op_dir_link("dir", "file1", 1);
-  ls.back()->op_dir_unlink("dir", "oldfile");
-  ls.back()->op_file_update(bluefs_fnode_t());
-  ls.back()->op_dir_remove("dir3");
+  bluefs_fnode_t fnode;
+  fnode.ino = 2;
+  ls.back()->op_file_update(fnode);
+  ls.back()->op_dir_link("dir", "file1", 2);
+  ls.back()->op_dir_unlink("dir", "file1");
   ls.back()->op_file_remove(2);
+  ls.back()->op_dir_remove("dir2");
 }
 
 ostream& operator<<(ostream& out, const bluefs_transaction_t& t)
 {
-  return out << "txn(" << t.seq
-	     << " len " << t.op_bl.length()
-	     << " crc " << t.op_bl.crc32c(-1)
-	     << ")";
+  return out << "txn(seq " << t.seq
+	     << " len 0x" << std::hex << t.op_bl.length()
+	     << " crc 0x" << t.op_bl.crc32c(-1)
+	     << std::dec << ")";
 }

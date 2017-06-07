@@ -37,17 +37,17 @@ int execute(const po::variables_map &vm) {
   std::string snap_name;
   int r = utils::get_pool_image_snapshot_names(
     vm, at::ARGUMENT_MODIFIER_SOURCE, &arg_index, &pool_name, &image_name,
-    &snap_name, utils::SNAPSHOT_PRESENCE_NONE);
+    &snap_name, utils::SNAPSHOT_PRESENCE_NONE, utils::SPEC_VALIDATION_NONE);
   if (r < 0) {
     return r;
   }
 
-  std::string dst_pool_name;
   std::string dst_image_name;
   std::string dst_snap_name;
+  std::string dst_pool_name = pool_name;
   r = utils::get_pool_image_snapshot_names(
     vm, at::ARGUMENT_MODIFIER_DEST, &arg_index, &dst_pool_name, &dst_image_name,
-    &dst_snap_name, utils::SNAPSHOT_PRESENCE_NONE);
+    &dst_snap_name, utils::SNAPSHOT_PRESENCE_NONE, utils::SPEC_VALIDATION_FULL);
   if (r < 0) {
     return r;
   }
@@ -79,6 +79,6 @@ Shell::Action action(
   {"rename"}, {"mv"}, "Rename image within pool.", "", &get_arguments,
   &execute);
 
-} // namespace list
+} // namespace rename
 } // namespace action
 } // namespace rbd

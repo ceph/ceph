@@ -19,8 +19,8 @@
 
 class MOSDMarkMeDown : public PaxosServiceMessage {
 
-  static const int COMPAT_VERSION = 1;
   static const int HEAD_VERSION = 2;
+  static const int COMPAT_VERSION = 2;
 
  public:
   uuid_d fsid;
@@ -37,32 +37,31 @@ class MOSDMarkMeDown : public PaxosServiceMessage {
 			  HEAD_VERSION, COMPAT_VERSION),
       fsid(fs), target_osd(f), epoch(e), request_ack(request_ack) {}
  private:
-  ~MOSDMarkMeDown() {}
+  ~MOSDMarkMeDown() override {}
 
 public: 
-  entity_inst_t get_target() { return target_osd; }
-  epoch_t get_epoch() { return epoch; }
+  entity_inst_t get_target() const { return target_osd; }
+  epoch_t get_epoch() const { return epoch; }
 
-  void decode_payload() {
+  void decode_payload() override {
     bufferlist::iterator p = payload.begin();
     paxos_decode(p);
     ::decode(fsid, p);
     ::decode(target_osd, p);
     ::decode(epoch, p);
     ::decode(request_ack, p);
-    if (header.version < 2)
-      request_ack = true;    // assume true for older clients
   }
-  void encode_payload(uint64_t features) {
+
+  void encode_payload(uint64_t features) override {
     paxos_encode();
     ::encode(fsid, payload);
-    ::encode(target_osd, payload);
+    ::encode(target_osd, payload, features);
     ::encode(epoch, payload);
     ::encode(request_ack, payload);
   }
 
-  const char *get_type_name() const { return "MOSDMarkMeDown"; }
-  void print(ostream& out) const {
+  const char *get_type_name() const override { return "MOSDMarkMeDown"; }
+  void print(ostream& out) const override {
     out << "MOSDMarkMeDown("
 	<< "request_ack=" << request_ack
 	<< ", target_osd=" << target_osd

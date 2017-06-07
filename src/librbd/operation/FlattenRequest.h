@@ -4,8 +4,8 @@
 #define CEPH_LIBRBD_OPERATION_FLATTEN_REQUEST_H
 
 #include "librbd/operation/Request.h"
-#include "librbd/parent_types.h"
 #include "common/snap_types.h"
+#include "librbd/Types.h"
 
 namespace librbd {
 
@@ -28,11 +28,11 @@ public:
   }
 
 protected:
-  virtual void send_op();
-  virtual bool should_complete(int r);
+  void send_op() override;
+  bool should_complete(int r) override;
 
-  virtual journal::Event create_event() const {
-    return journal::FlattenEvent(0);
+  journal::Event create_event(uint64_t op_tid) const override {
+    return journal::FlattenEvent(op_tid);
   }
 
 private:
@@ -75,7 +75,7 @@ private:
   ProgressContext &m_prog_ctx;
   State m_state;
 
-  parent_spec m_parent_spec;
+  ParentSpec m_parent_spec;
   bool m_ignore_enoent;
 
   bool send_update_header();

@@ -19,7 +19,9 @@
 #include "rgw_rest_opstate.h"
 #include "rgw_client_io.h"
 #include "common/errno.h"
+#include "include/assert.h"
 
+#define dout_context g_ceph_context
 #define OPSTATE_LIST_MAX_ENTRIES 1000
 #define dout_subsys ceph_subsys_rgw
 

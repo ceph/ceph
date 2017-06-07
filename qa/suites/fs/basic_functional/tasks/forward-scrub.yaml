@@ -1,0 +1,14 @@
+
+overrides:
+  ceph:
+    log-whitelist:
+      - inode wrongly marked free
+      - bad backtrace on inode
+      - inode table repaired for inode
+      - Scrub error on inode
+      - Metadata damage detected
+
+tasks:
+  - cephfs_test_runner:
+      modules:
+        - tasks.cephfs.test_forward_scrub

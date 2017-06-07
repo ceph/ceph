@@ -174,7 +174,7 @@ CEPH_MSGR_TAG_KEEPALIVE (0x09)
 		u8 data[0]; // No data.
 	}
 
-CEPH_MSGR_TAG_KEEPALIVE2 (0x04)
+CEPH_MSGR_TAG_KEEPALIVE2 (0x0E)
 -------------------------------
 
 ::
@@ -184,7 +184,7 @@ CEPH_MSGR_TAG_KEEPALIVE2 (0x04)
 		utime_t timestamp;
 	}
 
-CEPH_MSGR_TAG_KEEPALIVE2_ACK (0x05)
+CEPH_MSGR_TAG_KEEPALIVE2_ACK (0x0F)
 -----------------------------------
 
 ::

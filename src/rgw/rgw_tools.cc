@@ -16,21 +16,21 @@
 
 #define READ_CHUNK_LEN (512 * 1024)
 
-static map<string, string> ext_mime_map;
+static std::map<std::string, std::string>* ext_mime_map;
 
-int rgw_put_system_obj(RGWRados *rgwstore, rgw_bucket& bucket, string& oid, const char *data, size_t size, bool exclusive,
-                       RGWObjVersionTracker *objv_tracker, time_t set_mtime, map<string, bufferlist> *pattrs)
+int rgw_put_system_obj(RGWRados *rgwstore, const rgw_pool& pool, const string& oid, const char *data, size_t size, bool exclusive,
+                       RGWObjVersionTracker *objv_tracker, real_time set_mtime, map<string, bufferlist> *pattrs)
 {
   map<string,bufferlist> no_attrs;
   if (!pattrs)
     pattrs = &no_attrs;
 
-  rgw_obj obj(bucket, oid);
+  rgw_raw_obj obj(pool, oid);
 
   int ret = rgwstore->put_system_obj(NULL, obj, data, size, exclusive, NULL, *pattrs, objv_tracker, set_mtime);
 
   if (ret == -ENOENT) {
-    ret = rgwstore->create_pool(bucket);
+    ret = rgwstore->create_pool(pool);
     if (ret >= 0)
       ret = rgwstore->put_system_obj(NULL, obj, data, size, exclusive, NULL, *pattrs, objv_tracker, set_mtime);
   }
@@ -38,14 +38,18 @@ int rgw_put_system_obj(RGWRados *rgwstore, rgw_bucket& bucket, string& oid, cons
   return ret;
 }
 
-int rgw_get_system_obj(RGWRados *rgwstore, RGWObjectCtx& obj_ctx, rgw_bucket& bucket, const string& key, bufferlist& bl,
-                       RGWObjVersionTracker *objv_tracker, time_t *pmtime, map<string, bufferlist> *pattrs,
+int rgw_get_system_obj(RGWRados *rgwstore, RGWObjectCtx& obj_ctx, const rgw_pool& pool, const string& key, bufferlist& bl,
+                       RGWObjVersionTracker *objv_tracker, real_time *pmtime, map<string, bufferlist> *pattrs,
                        rgw_cache_entry_info *cache_info)
 {
-  struct rgw_err err;
   bufferlist::iterator iter;
   int request_len = READ_CHUNK_LEN;
-  rgw_obj obj(bucket, key);
+  rgw_raw_obj obj(pool, key);
+
+  obj_version original_readv;
+  if (objv_tracker && !objv_tracker->read_version.empty()) {
+    original_readv = objv_tracker->read_version;
+  }
 
   do {
     RGWRados::SystemObject source(rgwstore, obj_ctx, obj);
@@ -53,7 +57,6 @@ int rgw_get_system_obj(RGWRados *rgwstore, RGWObjectCtx& obj_ctx, rgw_bucket& bu
 
     rop.stat_params.attrs = pattrs;
     rop.stat_params.lastmod = pmtime;
-    rop.stat_params.perr = &err;
 
     int ret = rop.stat(objv_tracker);
     if (ret < 0)
@@ -64,6 +67,14 @@ int rgw_get_system_obj(RGWRados *rgwstore, RGWObjectCtx& obj_ctx, rgw_bucket& bu
     ret = rop.read(0, request_len - 1, bl, objv_tracker);
     if (ret == -ECANCELED) {
       /* raced, restart */
+      if (!original_readv.empty()) {
+        /* we were asked to read a specific obj_version, failed */
+        return ret;
+      }
+      if (objv_tracker) {
+        objv_tracker->read_version.clear();
+      }
+      source.invalidate_state();
       continue;
     }
     if (ret < 0)
@@ -76,6 +87,13 @@ int rgw_get_system_obj(RGWRados *rgwstore, RGWObjectCtx& obj_ctx, rgw_bucket& bu
   } while (true);
 
   return 0;
+}
+
+int rgw_delete_system_obj(RGWRados *rgwstore, const rgw_pool& pool, const string& oid,
+                          RGWObjVersionTracker *objv_tracker)
+{
+  rgw_raw_obj obj(pool, oid);
+  return rgwstore->delete_system_obj(obj, objv_tracker);
 }
 
 void parse_mime_map_line(const char *start, const char *end)
@@ -97,7 +115,7 @@ void parse_mime_map_line(const char *start, const char *end)
   do {
     ext = strsep(&l, DELIMS);
     if (ext && *ext) {
-      ext_mime_map[ext] = mime;
+      (*ext_mime_map)[ext] = mime;
     }
   } while (ext);
 }
@@ -123,7 +141,8 @@ static int ext_mime_map_init(CephContext *cct, const char *ext_map)
   int ret;
   if (fd < 0) {
     ret = -errno;
-    ldout(cct, 0) << "ext_mime_map_init(): failed to open file=" << ext_map << " ret=" << ret << dendl;
+    ldout(cct, 0) << __func__ << " failed to open file=" << ext_map
+                  << " : " << cpp_strerror(-ret) << dendl;
     return ret;
   }
 
@@ -131,21 +150,22 @@ static int ext_mime_map_init(CephContext *cct, const char *ext_map)
   ret = fstat(fd, &st);
   if (ret < 0) {
     ret = -errno;
-    ldout(cct, 0) << "ext_mime_map_init(): failed to stat file=" << ext_map << " ret=" << ret << dendl;
+    ldout(cct, 0) << __func__ << " failed to stat file=" << ext_map
+                  << " : " << cpp_strerror(-ret) << dendl;
     goto done;
   }
 
   buf = (char *)malloc(st.st_size + 1);
   if (!buf) {
     ret = -ENOMEM;
-    ldout(cct, 0) << "ext_mime_map_init(): failed to allocate buf" << dendl;
+    ldout(cct, 0) << __func__ << " failed to allocate buf" << dendl;
     goto done;
   }
 
   ret = safe_read(fd, buf, st.st_size + 1);
   if (ret != st.st_size) {
     // huh? file size has changed?
-    ldout(cct, 0) << "ext_mime_map_init(): raced! will retry.." << dendl;
+    ldout(cct, 0) << __func__ << " raced! will retry.." << dendl;
     free(buf);
     close(fd);
     return ext_mime_map_init(cct, ext_map);
@@ -162,8 +182,8 @@ done:
 
 const char *rgw_find_mime_by_ext(string& ext)
 {
-  map<string, string>::iterator iter = ext_mime_map.find(ext);
-  if (iter == ext_mime_map.end())
+  map<string, string>::iterator iter = ext_mime_map->find(ext);
+  if (iter == ext_mime_map->end())
     return NULL;
 
   return iter->second.c_str();
@@ -171,6 +191,7 @@ const char *rgw_find_mime_by_ext(string& ext)
 
 int rgw_tools_init(CephContext *cct)
 {
+  ext_mime_map = new std::map<std::string, std::string>;
   int ret = ext_mime_map_init(cct, cct->_conf->rgw_mime_types_file.c_str());
   if (ret < 0)
     return ret;
@@ -180,5 +201,6 @@ int rgw_tools_init(CephContext *cct)
 
 void rgw_tools_cleanup()
 {
-  ext_mime_map.clear();
+  delete ext_mime_map;
+  ext_mime_map = nullptr;
 }

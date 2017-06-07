@@ -1,0 +1,11 @@
+overrides:
+  ceph:
+    conf:
+      osd:
+        filestore flush min: 0
+tasks:
+- kclient:
+- workunit:
+    clients:
+      all:
+        - suites/ffsb.sh

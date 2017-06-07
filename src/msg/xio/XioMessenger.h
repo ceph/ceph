@@ -28,7 +28,17 @@ extern "C" {
 #include "common/Mutex.h"
 #include "include/Spinlock.h"
 
-class XioMessenger : public SimplePolicyMessenger
+class XioInit {
+  /* safe to be called multiple times */
+  void package_init(CephContext *cct);
+
+protected:
+  XioInit(CephContext *cct) {
+    this->package_init(cct);
+  }
+};
+
+class XioMessenger : public SimplePolicyMessenger, XioInit
 {
 private:
   static atomic_t nInstances;
@@ -53,12 +63,13 @@ private:
 
 public:
   XioMessenger(CephContext *cct, entity_name_t name,
-	       string mname, uint64_t nonce, uint64_t features,
+	       string mname, uint64_t nonce,
+	       uint64_t cflags = 0,
 	       DispatchStrategy* ds = new QueueStrategy(1));
 
   virtual ~XioMessenger();
 
-  XioPortal* default_portal() { return portals.get_portal0(); }
+  XioPortal* get_portal() { return portals.get_next_portal(); }
 
   virtual void set_myaddr(const entity_addr_t& a) {
     Messenger::set_myaddr(a);
@@ -69,8 +80,6 @@ public:
   int _send_message(Message *m, Connection *con);
   int _send_message_impl(Message *m, XioConnection *xcon);
 
-  uint32_t get_magic() { return magic; }
-  void set_magic(int _magic) { magic = _magic; }
   uint32_t get_special_handling() { return special_handling; }
   void set_special_handling(int n) { special_handling = n; }
   int pool_hint(uint32_t size);
@@ -86,7 +95,7 @@ public:
 		    void *cb_user_context);
 
   /* Messenger interface */
-  virtual void set_addr_unknowns(entity_addr_t &addr)
+  virtual void set_addr_unknowns(const entity_addr_t &addr) override
     { } /* XXX applicable? */
 
   virtual int get_dispatch_queue_len()
@@ -122,12 +131,7 @@ public:
 
   virtual ConnectionRef get_loopback_connection();
 
-  virtual int send_keepalive(const entity_inst_t& dest)
-    { return EINVAL; }
-
-  virtual int send_keepalive(Connection *con)
-    { return EINVAL; }
-
+  void unregister_xcon(XioConnection *xcon);
   virtual void mark_down(const entity_addr_t& a);
   virtual void mark_down(Connection *con);
   virtual void mark_down_all();
@@ -145,13 +149,16 @@ public:
    */
   void learned_addr(const entity_addr_t& peer_addr_for_me);
 
+private:
+  int get_nconns_per_portal(uint64_t cflags);
+  int get_nportals(uint64_t cflags);
 
 protected:
   virtual void ready()
     { }
-
-public:
-  uint64_t local_features;
 };
+
+XioCommand* pool_alloc_xio_command(XioConnection *xcon);
+
 
 #endif /* XIO_MESSENGER_H */

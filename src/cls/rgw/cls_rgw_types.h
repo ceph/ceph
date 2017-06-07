@@ -1,15 +1,16 @@
 #ifndef CEPH_CLS_RGW_TYPES_H
 #define CEPH_CLS_RGW_TYPES_H
 
-#include <map>
-
-#include "include/types.h"
-#include "include/utime.h"
+#include "common/ceph_time.h"
 #include "common/Formatter.h"
+
+#include "rgw/rgw_basic_types.h"
 
 #define CEPH_RGW_REMOVE 'r'
 #define CEPH_RGW_UPDATE 'u'
-#define CEPH_RGW_TAG_TIMEOUT 60*60*24
+#define CEPH_RGW_TAG_TIMEOUT 120
+#define CEPH_RGW_DIR_SUGGEST_LOG_OP  0x80
+#define CEPH_RGW_DIR_SUGGEST_OP_MASK 0x7f
 
 class JSONObj;
 
@@ -17,9 +18,12 @@ namespace ceph {
   class Formatter;
 }
 
+using rgw_zone_set = std::set<std::string>;
+
 enum RGWPendingState {
   CLS_RGW_STATE_PENDING_MODIFY = 0,
   CLS_RGW_STATE_COMPLETE       = 1,
+  CLS_RGW_STATE_UNKNOWN        = 2,
 };
 
 enum RGWModifyOp {
@@ -36,9 +40,24 @@ enum RGWBILogFlags {
   RGW_BILOG_FLAG_VERSIONED_OP = 0x1,
 };
 
+enum RGWCheckMTimeType {
+  CLS_RGW_CHECK_TIME_MTIME_EQ = 0,
+  CLS_RGW_CHECK_TIME_MTIME_LT = 1,
+  CLS_RGW_CHECK_TIME_MTIME_LE = 2,
+  CLS_RGW_CHECK_TIME_MTIME_GT = 3,
+  CLS_RGW_CHECK_TIME_MTIME_GE = 4,
+};
+
+#define ROUND_BLOCK_SIZE 4096
+
+static inline uint64_t cls_rgw_get_rounded_size(uint64_t size)
+{
+  return (size + ROUND_BLOCK_SIZE - 1) & ~(ROUND_BLOCK_SIZE - 1);
+}
+
 struct rgw_bucket_pending_info {
   RGWPendingState state;
-  utime_t timestamp;
+  ceph::real_time timestamp;
   uint8_t op;
 
   rgw_bucket_pending_info() : state(CLS_RGW_STATE_PENDING_MODIFY), op(0) {}
@@ -69,18 +88,19 @@ WRITE_CLASS_ENCODER(rgw_bucket_pending_info)
 struct rgw_bucket_dir_entry_meta {
   uint8_t category;
   uint64_t size;
-  utime_t mtime;
+  ceph::real_time mtime;
   string etag;
   string owner;
   string owner_display_name;
   string content_type;
   uint64_t accounted_size;
+  string user_data;
 
   rgw_bucket_dir_entry_meta() :
-  category(0), size(0), accounted_size(0) { mtime.set_from_double(0); }
+  category(0), size(0), accounted_size(0) { }
 
   void encode(bufferlist &bl) const {
-    ENCODE_START(4, 3, bl);
+    ENCODE_START(5, 3, bl);
     ::encode(category, bl);
     ::encode(size, bl);
     ::encode(mtime, bl);
@@ -89,10 +109,11 @@ struct rgw_bucket_dir_entry_meta {
     ::encode(owner_display_name, bl);
     ::encode(content_type, bl);
     ::encode(accounted_size, bl);
+    ::encode(user_data, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator &bl) {
-    DECODE_START_LEGACY_COMPAT_LEN(4, 3, 3, bl);
+    DECODE_START_LEGACY_COMPAT_LEN(5, 3, 3, bl);
     ::decode(category, bl);
     ::decode(size, bl);
     ::decode(mtime, bl);
@@ -105,6 +126,8 @@ struct rgw_bucket_dir_entry_meta {
       ::decode(accounted_size, bl);
     else
       accounted_size = size;
+    if (struct_v >= 5)
+      ::decode(user_data, bl);
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
@@ -219,6 +242,10 @@ struct cls_rgw_obj_key {
   cls_rgw_obj_key(const string &_name) : name(_name) {}
   cls_rgw_obj_key(const string& n, const string& i) : name(n), instance(i) {}
 
+  void set(const string& _name) {
+    name = _name;
+  }
+
   bool operator==(const cls_rgw_obj_key& k) const {
     return (name.compare(k.name) == 0) &&
            (instance.compare(k.instance) == 0);
@@ -229,6 +256,12 @@ struct cls_rgw_obj_key {
       r = instance.compare(k.instance);
     }
     return (r < 0);
+  }
+  bool operator<=(const cls_rgw_obj_key& k) const {
+    return !(k < *this);
+  }
+  bool empty() {
+    return name.empty();
   }
   void encode(bufferlist &bl) const {
     ENCODE_START(1, 1, bl);
@@ -294,7 +327,7 @@ struct rgw_bucket_dir_entry {
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator &bl) {
-    DECODE_START_LEGACY_COMPAT_LEN(6, 3, 3, bl);
+    DECODE_START_LEGACY_COMPAT_LEN(8, 3, 3, bl);
     ::decode(key.name, bl);
     ::decode(ver.epoch, bl);
     ::decode(exists, bl);
@@ -348,6 +381,8 @@ enum BIIndexType {
   OLHIdx        = 3,
 };
 
+struct rgw_bucket_category_stats;
+
 struct rgw_cls_bi_entry {
   BIIndexType type;
   string idx;
@@ -375,6 +410,8 @@ struct rgw_cls_bi_entry {
 
   void dump(Formatter *f) const;
   void decode_json(JSONObj *obj, cls_rgw_obj_key *effective_key = NULL);
+
+  bool get_info(cls_rgw_obj_key *key, uint8_t *category, rgw_bucket_category_stats *accounted_stats);
 };
 WRITE_CLASS_ENCODER(rgw_cls_bi_entry)
 
@@ -463,18 +500,21 @@ struct rgw_bi_log_entry {
   string id;
   string object;
   string instance;
-  utime_t timestamp;
+  ceph::real_time timestamp;
   rgw_bucket_entry_ver ver;
   RGWModifyOp op;
   RGWPendingState state;
   uint64_t index_ver;
   string tag;
   uint16_t bilog_flags;
+  string owner; /* only being set if it's a delete marker */
+  string owner_display_name; /* only being set if it's a delete marker */
+  rgw_zone_set zones_trace;
 
   rgw_bi_log_entry() : op(CLS_RGW_OP_UNKNOWN), state(CLS_RGW_STATE_PENDING_MODIFY), index_ver(0), bilog_flags(0) {}
 
   void encode(bufferlist &bl) const {
-    ENCODE_START(2, 1, bl);
+    ENCODE_START(4, 1, bl);
     ::encode(id, bl);
     ::encode(object, bl);
     ::encode(timestamp, bl);
@@ -487,10 +527,13 @@ struct rgw_bi_log_entry {
     encode_packed_val(index_ver, bl);
     ::encode(instance, bl);
     ::encode(bilog_flags, bl);
+    ::encode(owner, bl);
+    ::encode(owner_display_name, bl);
+    ::encode(zones_trace, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator &bl) {
-    DECODE_START(2, bl);
+    DECODE_START(4, bl);
     ::decode(id, bl);
     ::decode(object, bl);
     ::decode(timestamp, bl);
@@ -506,10 +549,22 @@ struct rgw_bi_log_entry {
       ::decode(instance, bl);
       ::decode(bilog_flags, bl);
     }
+    if (struct_v >= 3) {
+      ::decode(owner, bl);
+      ::decode(owner_display_name, bl);
+    }
+    if (struct_v >= 4) {
+      ::decode(zones_trace, bl);
+    }
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
+  void decode_json(JSONObj *obj);
   static void generate_test_instances(list<rgw_bi_log_entry*>& o);
+
+  bool is_versioned() {
+    return ((bilog_flags & RGW_BILOG_FLAG_VERSIONED_OP) != 0);
+  }
 };
 WRITE_CLASS_ENCODER(rgw_bi_log_entry)
 
@@ -517,21 +572,28 @@ struct rgw_bucket_category_stats {
   uint64_t total_size;
   uint64_t total_size_rounded;
   uint64_t num_entries;
+  uint64_t actual_size{0}; //< account for compression, encryption
 
   rgw_bucket_category_stats() : total_size(0), total_size_rounded(0), num_entries(0) {}
 
   void encode(bufferlist &bl) const {
-    ENCODE_START(2, 2, bl);
+    ENCODE_START(3, 2, bl);
     ::encode(total_size, bl);
     ::encode(total_size_rounded, bl);
     ::encode(num_entries, bl);
+    ::encode(actual_size, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator &bl) {
-    DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, bl);
+    DECODE_START_LEGACY_COMPAT_LEN(3, 2, 2, bl);
     ::decode(total_size, bl);
     ::decode(total_size_rounded, bl);
     ::decode(num_entries, bl);
+    if (struct_v >= 3) {
+      ::decode(actual_size, bl);
+    } else {
+      actual_size = total_size;
+    }
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
@@ -539,26 +601,80 @@ struct rgw_bucket_category_stats {
 };
 WRITE_CLASS_ENCODER(rgw_bucket_category_stats)
 
+enum cls_rgw_reshard_status {
+  CLS_RGW_RESHARD_NONE        = 0,
+  CLS_RGW_RESHARD_IN_PROGRESS = 1,
+  CLS_RGW_RESHARD_DONE        = 2,
+};
+
+struct cls_rgw_bucket_instance_entry {
+  cls_rgw_reshard_status reshard_status{CLS_RGW_RESHARD_NONE};
+  string new_bucket_instance_id;
+  int32_t num_shards{-1};
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    ::encode((uint8_t)reshard_status, bl);
+    ::encode(new_bucket_instance_id, bl);
+    ::encode(num_shards, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::iterator& bl) {
+    DECODE_START(1, bl);
+    uint8_t s;
+    ::decode(s, bl);
+    reshard_status = (cls_rgw_reshard_status)s;
+    ::decode(new_bucket_instance_id, bl);
+    ::decode(num_shards, bl);
+    DECODE_FINISH(bl);
+  }
+
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<cls_rgw_bucket_instance_entry*>& o);
+
+  void clear() {
+    reshard_status = CLS_RGW_RESHARD_NONE;
+    new_bucket_instance_id.clear();
+  }
+
+  void set_status(const string& new_instance_id, int32_t new_num_shards, cls_rgw_reshard_status s) {
+    reshard_status = s;
+    new_bucket_instance_id = new_instance_id;
+    num_shards = new_num_shards;
+  }
+
+  bool resharding() const {
+    return reshard_status != CLS_RGW_RESHARD_NONE;
+  }
+  bool resharding_in_progress() const {
+    return reshard_status == CLS_RGW_RESHARD_IN_PROGRESS;
+  }
+};
+WRITE_CLASS_ENCODER(cls_rgw_bucket_instance_entry)
+
 struct rgw_bucket_dir_header {
   map<uint8_t, rgw_bucket_category_stats> stats;
   uint64_t tag_timeout;
   uint64_t ver;
   uint64_t master_ver;
   string max_marker;
+  cls_rgw_bucket_instance_entry new_instance;
 
   rgw_bucket_dir_header() : tag_timeout(0), ver(0), master_ver(0) {}
 
   void encode(bufferlist &bl) const {
-    ENCODE_START(5, 2, bl);
+    ENCODE_START(6, 2, bl);
     ::encode(stats, bl);
     ::encode(tag_timeout, bl);
     ::encode(ver, bl);
     ::encode(master_ver, bl);
     ::encode(max_marker, bl);
+    ::encode(new_instance, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator &bl) {
-    DECODE_START_LEGACY_COMPAT_LEN(3, 2, 2, bl);
+    DECODE_START_LEGACY_COMPAT_LEN(6, 2, 2, bl);
     ::decode(stats, bl);
     if (struct_v > 2) {
       ::decode(tag_timeout, bl);
@@ -574,10 +690,22 @@ struct rgw_bucket_dir_header {
     if (struct_v >= 5) {
       ::decode(max_marker, bl);
     }
+    if (struct_v >= 6) {
+      ::decode(new_instance, bl);
+    } else {
+      new_instance = cls_rgw_bucket_instance_entry();
+    }
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
   static void generate_test_instances(list<rgw_bucket_dir_header*>& o);
+
+  bool resharding() const {
+    return new_instance.resharding();
+  }
+  bool resharding_in_progress() const {
+    return new_instance.resharding_in_progress();
+  }
 };
 WRITE_CLASS_ENCODER(rgw_bucket_dir_header)
 
@@ -640,7 +768,8 @@ WRITE_CLASS_ENCODER(rgw_usage_data)
 
 
 struct rgw_usage_log_entry {
-  string owner;
+  rgw_user owner;
+  rgw_user payer; /* if empty, same as owner */
   string bucket;
   uint64_t epoch;
   rgw_usage_data total_usage; /* this one is kept for backwards compatibility */
@@ -648,10 +777,11 @@ struct rgw_usage_log_entry {
 
   rgw_usage_log_entry() : epoch(0) {}
   rgw_usage_log_entry(string& o, string& b) : owner(o), bucket(b), epoch(0) {}
+  rgw_usage_log_entry(string& o, string& p, string& b) : owner(o), payer(p), bucket(b), epoch(0) {}
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(2, 1, bl);
-    ::encode(owner, bl);
+    ENCODE_START(3, 1, bl);
+    ::encode(owner.to_str(), bl);
     ::encode(bucket, bl);
     ::encode(epoch, bl);
     ::encode(total_usage.bytes_sent, bl);
@@ -659,13 +789,16 @@ struct rgw_usage_log_entry {
     ::encode(total_usage.ops, bl);
     ::encode(total_usage.successful_ops, bl);
     ::encode(usage_map, bl);
+    ::encode(payer.to_str(), bl);
     ENCODE_FINISH(bl);
   }
 
 
    void decode(bufferlist::iterator& bl) {
-    DECODE_START(2, bl);
-    ::decode(owner, bl);
+    DECODE_START(3, bl);
+    string s;
+    ::decode(s, bl);
+    owner.from_str(s);
     ::decode(bucket, bl);
     ::decode(epoch, bl);
     ::decode(total_usage.bytes_sent, bl);
@@ -677,6 +810,11 @@ struct rgw_usage_log_entry {
     } else {
       ::decode(usage_map, bl);
     }
+    if (struct_v >= 3) {
+      string p;
+      ::decode(p, bl);
+      payer.from_str(p);
+    }
     DECODE_FINISH(bl);
   }
 
@@ -685,7 +823,9 @@ struct rgw_usage_log_entry {
       owner = e.owner;
       bucket = e.bucket;
       epoch = e.epoch;
+      payer = e.payer;
     }
+
     map<string, rgw_usage_data>::const_iterator iter;
     for (iter = e.usage_map.begin(); iter != e.usage_map.end(); ++iter) {
       if (!categories || !categories->size() || categories->count(iter->first)) {
@@ -734,7 +874,7 @@ struct rgw_user_bucket {
   string bucket;
 
   rgw_user_bucket() {}
-  rgw_user_bucket(string &u, string& b) : user(u), bucket(b) {}
+  rgw_user_bucket(const string& u, const string& b) : user(u), bucket(b) {}
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
@@ -756,7 +896,7 @@ struct rgw_user_bucket {
       return true;
     else if (!comp)
       return bucket.compare(ub2.bucket) < 0;
-  
+
     return false;
   }
 };
@@ -816,7 +956,7 @@ struct cls_rgw_obj_chain {
 
   cls_rgw_obj_chain() {}
 
-  void push_obj(string& pool, cls_rgw_obj_key& key, string& loc) {
+  void push_obj(const string& pool, const cls_rgw_obj_key& key, const string& loc) {
     cls_rgw_obj obj;
     obj.pool = pool;
     obj.key = key;
@@ -848,6 +988,10 @@ struct cls_rgw_obj_chain {
   static void generate_test_instances(list<cls_rgw_obj_chain*>& ls) {
     ls.push_back(new cls_rgw_obj_chain);
   }
+
+  bool empty() {
+    return objs.empty();
+  }
 };
 WRITE_CLASS_ENCODER(cls_rgw_obj_chain)
 
@@ -855,7 +999,7 @@ struct cls_rgw_gc_obj_info
 {
   string tag;
   cls_rgw_obj_chain chain;
-  utime_t time;
+  ceph::real_time time;
 
   cls_rgw_gc_obj_info() {}
 
@@ -886,9 +1030,81 @@ struct cls_rgw_gc_obj_info
     ls.push_back(new cls_rgw_gc_obj_info);
     ls.push_back(new cls_rgw_gc_obj_info);
     ls.back()->tag = "footag";
-    ls.back()->time = utime_t(21, 32);
+    ceph_timespec ts{21, 32};
+    ls.back()->time = ceph::real_clock::from_ceph_timespec(ts);
   }
 };
 WRITE_CLASS_ENCODER(cls_rgw_gc_obj_info)
+
+struct cls_rgw_lc_obj_head
+{
+  time_t start_date;
+  string marker;
+
+  cls_rgw_lc_obj_head() {}
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    uint64_t t = start_date;
+    ::encode(t, bl);
+    ::encode(marker, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::iterator& bl) {
+    DECODE_START(1, bl);
+    uint64_t t;
+    ::decode(t, bl);
+    start_date = static_cast<time_t>(t);
+    ::decode(marker, bl);
+    DECODE_FINISH(bl);
+  }
+
+};
+WRITE_CLASS_ENCODER(cls_rgw_lc_obj_head)
+
+struct cls_rgw_reshard_entry
+{
+  ceph::real_time time;
+  string tenant;
+  string bucket_name;
+  string bucket_id;
+  string new_instance_id;
+  uint32_t old_num_shards{0};
+  uint32_t new_num_shards{0};
+
+  cls_rgw_reshard_entry() {}
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+     ::encode(time, bl);
+    ::encode(tenant, bl);
+    ::encode(bucket_name, bl);
+    ::encode(bucket_id, bl);
+    ::encode(new_instance_id, bl);
+    ::encode(old_num_shards, bl);
+    ::encode(new_num_shards, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::iterator& bl) {
+    DECODE_START(1, bl);
+    ::decode(time, bl);
+    ::decode(tenant, bl);
+    ::decode(bucket_name, bl);
+    ::decode(bucket_id, bl);
+    ::decode(new_instance_id, bl);
+    ::decode(old_num_shards, bl);
+    ::decode(new_num_shards, bl);
+    DECODE_FINISH(bl);
+  }
+
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<cls_rgw_reshard_entry*>& o);
+
+  static void generate_key(const string& tenant, const string& bucket_name, string *key);
+  void get_key(string *key) const;
+};
+WRITE_CLASS_ENCODER(cls_rgw_reshard_entry)
 
 #endif

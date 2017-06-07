@@ -2,14 +2,6 @@
  Journaler
 ===========
 
-``journaler allow split entries``
-
-:Description: Allow an entry to span a stripe boundary
-:Type: Boolean
-:Required: No
-:Default: ``true``
-
-
 ``journaler write head interval``
 
 :Description: How frequently to update the journal head object
@@ -28,7 +20,7 @@
 
 ``journal prezero periods``
 
-:Description: How mnay stripe periods to zero ahead of write position
+:Description: How many stripe periods to zero ahead of write position
 :Type: Integer
 :Required: No
 :Default: ``10``

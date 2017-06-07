@@ -12,9 +12,10 @@
  *
  */
 
+#include "include/compat.h"
+#include "pthread.h"
+
 #include "common/BackTrace.h"
-#include "common/perf_counters.h"
-#include "common/config.h"
 #include "common/debug.h"
 #include "global/pidfile.h"
 #include "global/signal_handler.h"
@@ -25,10 +26,12 @@
 #include <stdlib.h>
 #include <sys/stat.h>
 #include <sys/types.h>
-
+#include "common/errno.h"
 #if defined(_AIX)
 extern char *sys_siglist[]; 
 #endif 
+
+#define dout_context g_ceph_context
 
 void install_sighandler(int signum, signal_handler_t handler, int flags)
 {
@@ -91,29 +94,36 @@ static void handle_fatal_signal(int signum)
   // case, SA_RESETHAND specifies that the default signal handler--
   // presumably dump core-- will handle it.
   char buf[1024];
+  char pthread_name[16] = {0}; //limited by 16B include terminating null byte.
+  int r = ceph_pthread_getname(pthread_self(), pthread_name, sizeof(pthread_name));
+  (void)r;
 #if defined(__sun)
   char message[SIG2STR_MAX];
   sig2str(signum,message);
   snprintf(buf, sizeof(buf), "*** Caught signal (%s) **\n "
-	    "in thread %llx\n", message, (unsigned long long)pthread_self());
+	    "in thread %llx thread_name:%s\n", message, (unsigned long long)pthread_self(),
+	    pthread_name);
 #else
   snprintf(buf, sizeof(buf), "*** Caught signal (%s) **\n "
-	    "in thread %llx\n", sig_str(signum), (unsigned long long)pthread_self());
+	    "in thread %llx thread_name:%s\n", sig_str(signum), (unsigned long long)pthread_self(),
+	    pthread_name);
 #endif
   dout_emergency(buf);
   pidfile_remove();
 
+  // TODO: don't use an ostringstream here. It could call malloc(), which we
+  // don't want inside a signal handler.
+  // Also fix the backtrace code not to allocate memory.
+  BackTrace bt(0);
+  ostringstream oss;
+  bt.print(oss);
+  dout_emergency(oss.str());
+
   // avoid recursion back into logging code if that is where
   // we got the SEGV.
-  if (!g_ceph_context->_log->is_inside_log_lock()) {
-    // TODO: don't use an ostringstream here. It could call malloc(), which we
-    // don't want inside a signal handler.
-    // Also fix the backtrace code not to allocate memory.
-    BackTrace bt(0);
-    ostringstream oss;
-    bt.print(oss);
-    dout_emergency(oss.str());
-
+  if (g_ceph_context &&
+      g_ceph_context->_log &&
+      !g_ceph_context->_log->is_inside_log_lock()) {
     // dump to log.  this uses the heap extensively, but we're better
     // off trying than not.
     derr << buf << std::endl;
@@ -147,6 +157,36 @@ void install_standard_sighandlers(void)
 #include "common/Thread.h"
 #include <errno.h>
 
+string get_name_by_pid(pid_t pid)
+{
+  char proc_pid_path[PATH_MAX] = {0};
+  snprintf(proc_pid_path, PATH_MAX, PROCPREFIX "/proc/%d/cmdline", pid);
+  int fd = open(proc_pid_path, O_RDONLY);
+
+  if (fd < 0) {
+    fd = -errno;
+    derr << "Fail to open '" << proc_pid_path 
+         << "' error = " << cpp_strerror(fd) 
+         << dendl;
+    return "<unknown>";
+  }
+  // assuming the cmdline length does not exceed PATH_MAX. if it
+  // really does, it's fine to return a truncated version.
+  char buf[PATH_MAX] = {0};
+  int ret = read(fd, buf, sizeof(buf));
+  close(fd);
+  if (ret < 0) {
+    ret = -errno;
+    derr << "Fail to read '" << proc_pid_path
+         << "' error = " << cpp_strerror(ret)
+         << dendl;
+    return "<unknown>";
+  }
+  std::replace(buf, buf + ret, '\0', ' ');
+  return string(buf, ret);
+}
+
+ 
 /**
  * safe async signal handler / dispatcher
  *
@@ -169,12 +209,20 @@ struct SignalHandler : public Thread {
 
   /// for an individual signal
   struct safe_handler {
+
+    safe_handler() {
+      memset(pipefd, 0, sizeof(pipefd));
+      memset(&handler, 0, sizeof(handler));
+      memset(&info_t, 0, sizeof(info_t));    
+    }
+
+    siginfo_t info_t;
     int pipefd[2];  // write to [1], read from [0]
     signal_handler_t handler;
   };
 
   /// all handlers
-  safe_handler *handlers[32];
+  safe_handler *handlers[32] = {nullptr};
 
   /// to protect the handlers array
   Mutex lock;
@@ -182,9 +230,6 @@ struct SignalHandler : public Thread {
   SignalHandler()
     : stop(false), lock("SignalHandler::lock")
   {
-    for (unsigned i = 0; i < 32; i++)
-      handlers[i] = NULL;
-
     // create signal pipe
     int r = pipe(pipefd);
     assert(r == 0);
@@ -192,10 +237,10 @@ struct SignalHandler : public Thread {
     assert(r == 0);
 
     // create thread
-    create("sginal_handler");
+    create("signal_handler");
   }
 
-  ~SignalHandler() {
+  ~SignalHandler() override {
     shutdown();
   }
 
@@ -211,7 +256,7 @@ struct SignalHandler : public Thread {
   }
 
   // thread entry point
-  void *entry() {
+  void *entry() override {
     while (!stop) {
       // build fd list
       struct pollfd fds[33];
@@ -240,21 +285,26 @@ struct SignalHandler : public Thread {
 	char v;
 
 	// consume byte from signal socket, if any.
-	r = read(pipefd[0], &v, 1);
+	TEMP_FAILURE_RETRY(read(pipefd[0], &v, 1));
 
 	lock.Lock();
 	for (unsigned signum=0; signum<32; signum++) {
 	  if (handlers[signum]) {
 	    r = read(handlers[signum]->pipefd[0], &v, 1);
 	    if (r == 1) {
+	      siginfo_t * siginfo = &handlers[signum]->info_t;
+	      string task_name = get_name_by_pid(siginfo->si_pid);
+	      derr << "received  signal: " << sig_str(signum)
+		   << " from " << " PID: " << siginfo->si_pid
+		   << " task name: " << task_name
+		   << " UID: " << siginfo->si_uid
+		   << dendl;
 	      handlers[signum]->handler(signum);
 	    }
 	  }
 	}
 	lock.Unlock();
-      } else {
-	//cout << "no data, got r=" << r << " errno=" << errno << std::endl;
-      }
+      } 
     }
     return NULL;
   }
@@ -269,15 +319,25 @@ struct SignalHandler : public Thread {
     assert(r == 1);
   }
 
+  void queue_signal_info(int signum, siginfo_t *siginfo, void * content) {
+    // If this signal handler is registered, the callback must be
+    // defined.  We can do this without the lock because we will never
+    // have the signal handler defined without the handlers entry also
+    // being filled in.
+    assert(handlers[signum]);
+    memcpy(&handlers[signum]->info_t, siginfo, sizeof(siginfo_t));
+    int r = write(handlers[signum]->pipefd[1], " ", 1);
+    assert(r == 1);
+  }
+
   void register_handler(int signum, signal_handler_t handler, bool oneshot);
   void unregister_handler(int signum, signal_handler_t handler);
 };
 
 static SignalHandler *g_signal_handler = NULL;
 
-static void handler_hook(int signum)
-{
-  g_signal_handler->queue_signal(signum);
+static void handler_signal_hook(int signum, siginfo_t * siginfo, void * content) {
+  g_signal_handler->queue_signal_info(signum, siginfo, content);
 }
 
 void SignalHandler::register_handler(int signum, signal_handler_t handler, bool oneshot)
@@ -306,10 +366,9 @@ void SignalHandler::register_handler(int signum, signal_handler_t handler, bool 
   struct sigaction act;
   memset(&act, 0, sizeof(act));
 
-  act.sa_handler = handler_hook;
+  act.sa_handler = (signal_handler_t)handler_signal_hook;
   sigfillset(&act.sa_mask);  // mask all signals in the handler
-  act.sa_flags = oneshot ? SA_RESETHAND : 0;
-
+  act.sa_flags = SA_SIGINFO | (oneshot ? SA_RESETHAND : 0);
   int ret = sigaction(signum, &act, &oldact);
   assert(ret == 0);
 }

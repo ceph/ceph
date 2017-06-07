@@ -28,7 +28,7 @@ public:
   map<client_t,entity_inst_t> client_map;
   bool old_style_encode;
 
-  ESessions() : LogEvent(EVENT_SESSIONS), old_style_encode(false) { }
+  ESessions() : LogEvent(EVENT_SESSIONS), cmapv(0), old_style_encode(false) { }
   ESessions(version_t pv, map<client_t,entity_inst_t>& cm) :
     LogEvent(EVENT_SESSIONS),
     cmapv(pv),
@@ -38,22 +38,23 @@ public:
 
   void mark_old_encoding() { old_style_encode = true; }
 
-  void encode(bufferlist &bl) const;
+  void encode(bufferlist &bl, uint64_t features) const override;
   void decode_old(bufferlist::iterator &bl);
   void decode_new(bufferlist::iterator &bl);
-  void decode(bufferlist::iterator &bl) {
+  void decode(bufferlist::iterator &bl) override {
     if (old_style_encode) decode_old(bl);
     else decode_new(bl);
   }
-  void dump(Formatter *f) const;
+  void dump(Formatter *f) const override;
   static void generate_test_instances(list<ESessions*>& ls);
 
-  void print(ostream& out) const {
+  void print(ostream& out) const override {
     out << "ESessions " << client_map.size() << " opens cmapv " << cmapv;
   }
   
-  void update_segment();
-  void replay(MDSRank *mds);  
+  void update_segment() override;
+  void replay(MDSRank *mds) override;  
 };
+WRITE_CLASS_ENCODER_FEATURES(ESessions)
 
 #endif

@@ -15,10 +15,10 @@ namespace resize {
 namespace at = argument_types;
 namespace po = boost::program_options;
 
-static int do_resize(librbd::Image& image, uint64_t size, bool no_progress)
+static int do_resize(librbd::Image& image, uint64_t size, bool allow_shrink, bool no_progress)
 {
   utils::ProgressContext pc("Resizing image", no_progress);
-  int r = image.resize_with_progress(size, pc);
+  int r = image.resize2(size, allow_shrink, pc);
   if (r < 0) {
     pc.fail();
     return r;
@@ -43,7 +43,7 @@ int execute(const po::variables_map &vm) {
   std::string snap_name;
   int r = utils::get_pool_image_snapshot_names(
     vm, at::ARGUMENT_MODIFIER_NONE, &arg_index, &pool_name, &image_name,
-    &snap_name, utils::SNAPSHOT_PRESENCE_NONE);
+    &snap_name, utils::SNAPSHOT_PRESENCE_NONE, utils::SPEC_VALIDATION_NONE);
   if (r < 0) {
     return r;
   }
@@ -57,7 +57,7 @@ int execute(const po::variables_map &vm) {
   librados::Rados rados;
   librados::IoCtx io_ctx;
   librbd::Image image;
-  r = utils::init_and_open_image(pool_name, image_name, snap_name, false,
+  r = utils::init_and_open_image(pool_name, image_name, "", snap_name, false,
                                  &rados, &io_ctx, &image);
   if (r < 0) {
     return r;
@@ -70,14 +70,13 @@ int execute(const po::variables_map &vm) {
     return r;
   }
 
-  if (info.size > size && !vm["allow-shrink"].as<bool>()) {
-    std::cerr << "rbd: shrinking an image is only allowed with the "
-              << "--allow-shrink flag" << std::endl;
-    return -EINVAL;
-  }
-
-  r = do_resize(image, size, vm[at::NO_PROGRESS].as<bool>());
+  r = do_resize(image, size, vm["allow-shrink"].as<bool>(), vm[at::NO_PROGRESS].as<bool>());
   if (r < 0) {
+    if (r == -EINVAL && !vm["allow-shrink"].as<bool>()) {
+      std::cerr << "rbd: shrinking an image is only allowed with the "
+                << "--allow-shrink flag" << std::endl;
+      return r;
+    }
     std::cerr << "rbd: resize error: " << cpp_strerror(r) << std::endl;
     return r;
   }
@@ -89,6 +88,6 @@ Shell::Action action(
   {"resize"}, {}, "Resize (expand or shrink) image.", "", &get_arguments,
   &execute);
 
-} // namespace list
+} // namespace resize
 } // namespace action
 } // namespace rbd

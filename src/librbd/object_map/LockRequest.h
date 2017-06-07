@@ -4,11 +4,11 @@
 #ifndef CEPH_LIBRBD_OBJECT_MAP_LOCK_REQUEST_H
 #define CEPH_LIBRBD_OBJECT_MAP_LOCK_REQUEST_H
 
-#include "include/int_types.h"
 #include "include/buffer.h"
-#include "include/Context.h"
 #include "cls/lock/cls_lock_types.h"
 #include <map>
+
+class Context;
 
 namespace librbd {
 
@@ -19,6 +19,9 @@ namespace object_map {
 template <typename ImageCtxT = ImageCtx>
 class LockRequest {
 public:
+  static LockRequest* create(ImageCtxT &image_ctx, Context *on_finish) {
+    return new LockRequest(image_ctx, on_finish);
+  }
   LockRequest(ImageCtxT &image_ctx, Context *on_finish);
 
   void send();

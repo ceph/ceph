@@ -63,6 +63,9 @@ struct Page {
   }
 
   static Ref create(size_t page_size, uint64_t offset = 0) {
+    // ensure proper alignment of the Page
+    const auto align = alignof(Page);
+    page_size = (page_size + align - 1) & ~(align - 1);
     // allocate the Page and its data in a single buffer
     auto buffer = new char[page_size + sizeof(Page)];
     // place the Page structure at the end of the buffer
@@ -126,7 +129,7 @@ class PageSet {
   }
 
  public:
-  PageSet(size_t page_size) : page_size(page_size) {}
+  explicit PageSet(size_t page_size) : page_size(page_size) {}
   PageSet(PageSet &&rhs)
     : pages(std::move(rhs.pages)), page_size(rhs.page_size) {}
   ~PageSet() {

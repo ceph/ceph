@@ -18,6 +18,7 @@
 #include "PendingIO.hpp"
 #include "rbd_replay_debug.hpp"
 
+#define dout_context g_ceph_context
 
 using namespace rbd_replay;
 using namespace std;
@@ -57,12 +58,28 @@ struct ConstructVisitor : public boost::static_visitor<Action::ptr> {
     return Action::ptr(new AioWriteAction(action));
   }
 
+  inline Action::ptr operator()(const action::DiscardAction &action) const {
+    return Action::ptr(new DiscardAction(action));
+  }
+
+  inline Action::ptr operator()(const action::AioDiscardAction &action) const {
+    return Action::ptr(new AioDiscardAction(action));
+  }
+
   inline Action::ptr operator()(const action::OpenImageAction &action) const {
     return Action::ptr(new OpenImageAction(action));
   }
 
   inline Action::ptr operator()(const action::CloseImageAction &action) const {
     return Action::ptr(new CloseImageAction(action));
+  }
+
+  inline Action::ptr operator()(const action::AioOpenImageAction &action) const {
+    return Action::ptr(new AioOpenImageAction(action));
+  }
+
+  inline Action::ptr operator()(const action::AioCloseImageAction &action) const {
+    return Action::ptr(new AioCloseImageAction(action));
   }
 
   inline Action::ptr operator()(const action::UnknownAction &action) const {
@@ -110,7 +127,6 @@ void ReadAction::perform(ActionCtx &worker) {
   worker.remove_pending(io);
 }
 
-
 void AioWriteAction::perform(ActionCtx &worker) {
   static const std::string fake_data(create_fake_data());
   dout(ACTION_LEVEL) << "Performing " << *this << dendl;
@@ -139,6 +155,31 @@ void WriteAction::perform(ActionCtx &worker) {
   io->bufferlist().append_zero(m_action.length);
   if (!worker.readonly()) {
     ssize_t r = image->write(m_action.offset, m_action.length, io->bufferlist());
+    assertf(r >= 0, "id = %d, r = %d", id(), r);
+  }
+  worker.remove_pending(io);
+}
+
+void AioDiscardAction::perform(ActionCtx &worker) {
+  dout(ACTION_LEVEL) << "Performing " << *this << dendl;
+  librbd::Image *image = worker.get_image(m_action.imagectx_id);
+  PendingIO::ptr io(new PendingIO(pending_io_id(), worker));
+  worker.add_pending(io);
+  if (worker.readonly()) {
+    worker.remove_pending(io);
+  } else {
+    int r = image->aio_discard(m_action.offset, m_action.length, &io->completion());
+    assertf(r >= 0, "id = %d, r = %d", id(), r);
+  }
+}
+
+void DiscardAction::perform(ActionCtx &worker) {
+  dout(ACTION_LEVEL) << "Performing " << *this << dendl;
+  librbd::Image *image = worker.get_image(m_action.imagectx_id);
+  PendingIO::ptr io(new PendingIO(pending_io_id(), worker));
+  worker.add_pending(io);
+  if (!worker.readonly()) {
+    ssize_t r = image->discard(m_action.offset, m_action.length);
     assertf(r >= 0, "id = %d, r = %d", id(), r);
   }
   worker.remove_pending(io);
@@ -175,3 +216,35 @@ void CloseImageAction::perform(ActionCtx &worker) {
   worker.set_action_complete(pending_io_id());
 }
 
+void AioOpenImageAction::perform(ActionCtx &worker) {
+  dout(ACTION_LEVEL) << "Performing " << *this << dendl;
+  // TODO: Make it async
+  PendingIO::ptr io(new PendingIO(pending_io_id(), worker));
+  worker.add_pending(io);
+  librbd::Image *image = new librbd::Image();
+  librbd::RBD *rbd = worker.rbd();
+  rbd_loc name(worker.map_image_name(m_action.name, m_action.snap_name));
+  int r;
+  if (m_action.read_only || worker.readonly()) {
+    r = rbd->open_read_only(*worker.ioctx(), *image, name.image.c_str(), name.snap.c_str());
+  } else {
+    r = rbd->open(*worker.ioctx(), *image, name.image.c_str(), name.snap.c_str());
+  }
+  if (r) {
+    cerr << "Unable to open image '" << m_action.name
+	 << "' with snap '" << m_action.snap_name
+	 << "' (mapped to '" << name.str()
+	 << "') and readonly " << m_action.read_only
+	 << ": (" << -r << ") " << strerror(-r) << std::endl;
+    exit(1);
+  }
+  worker.put_image(m_action.imagectx_id, image);
+  worker.remove_pending(io);
+}
+
+void AioCloseImageAction::perform(ActionCtx &worker) {
+  dout(ACTION_LEVEL) << "Performing " << *this << dendl;
+  // TODO: Make it async
+  worker.erase_image(m_action.imagectx_id);
+  worker.set_action_complete(pending_io_id());
+}

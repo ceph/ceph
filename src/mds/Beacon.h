@@ -39,64 +39,21 @@ class MDSRank;
  */
 class Beacon : public Dispatcher
 {
-  //CephContext *cct;
-  mutable Mutex lock;
-  MonClient*    monc;
-  SafeTimer     timer;
-
-  // Items we duplicate from the MDS to have access under our own lock
-  std::string name;
-  version_t epoch;
-  CompatSet compat;
-  mds_rank_t standby_for_rank;
-  std::string standby_for_name;
-  MDSMap::DaemonState want_state;
-
-  // Internal beacon state
-  version_t last_seq;          // last seq sent to monitor
-  std::map<version_t,utime_t>  seq_stamp;    // seq # -> time sent
-  utime_t last_acked_stamp;  // last time we sent a beacon that got acked
-  utime_t last_mon_reconnect;
-  bool was_laggy;
-  utime_t laggy_until;
-
-  // Health status to be copied into each beacon message
-  MDSHealth health;
-
-  // Ticker
-  class C_MDS_BeaconSender : public Context {
-    Beacon *beacon;
-  public:
-    C_MDS_BeaconSender(Beacon *beacon_) : beacon(beacon_) {}
-    void finish(int r) {
-      assert(beacon->lock.is_locked_by_me());
-      beacon->sender = NULL;
-      beacon->_send();
-    }
-  } *sender;
-
-  void _notify_mdsmap(MDSMap const *mdsmap);
-  void _send();
-
-  version_t awaiting_seq;
-  Cond waiting_cond;
-
 public:
   Beacon(CephContext *cct_, MonClient *monc_, std::string name);
-  ~Beacon();
+  ~Beacon() override;
 
-  void init(MDSMap const *mdsmap, MDSMap::DaemonState want_state_, mds_rank_t standby_rank_, std::string const &standby_name_);
+  void init(MDSMap const *mdsmap);
   void shutdown();
 
-  bool ms_dispatch(Message *m); 
-  void ms_handle_connect(Connection *c) {}
-  bool ms_handle_reset(Connection *c) {return false;}
-  void ms_handle_remote_reset(Connection *c) {}
+  bool ms_dispatch(Message *m) override;
+  void ms_handle_connect(Connection *c) override {}
+  bool ms_handle_reset(Connection *c) override {return false;}
+  void ms_handle_remote_reset(Connection *c) override {}
+  bool ms_handle_refused(Connection *c) override {return false;}
 
   void notify_mdsmap(MDSMap const *mdsmap);
   void notify_health(MDSRank const *mds);
-
-  void set_standby_for(mds_rank_t rank_, std::string const &name_);
 
   void handle_mds_beacon(MMDSBeacon *m);
   void send();
@@ -113,6 +70,43 @@ public:
 
   bool is_laggy();
   utime_t get_laggy_until() const;
+
+private:
+  void _notify_mdsmap(MDSMap const *mdsmap);
+  void _send();
+
+  //CephContext *cct;
+  mutable Mutex lock;
+  MonClient*    monc;
+  SafeTimer     timer;
+
+  // Items we duplicate from the MDS to have access under our own lock
+  std::string name;
+  version_t epoch;
+  CompatSet compat;
+  mds_rank_t standby_for_rank;
+  std::string standby_for_name;
+  fs_cluster_id_t standby_for_fscid;
+  bool standby_replay;
+  MDSMap::DaemonState want_state;
+
+  // Internal beacon state
+  version_t last_seq;          // last seq sent to monitor
+  std::map<version_t,utime_t>  seq_stamp;    // seq # -> time sent
+  utime_t last_acked_stamp;  // last time we sent a beacon that got acked
+  utime_t last_mon_reconnect;
+  bool was_laggy;
+  utime_t laggy_until;
+
+  // Health status to be copied into each beacon message
+  MDSHealth health;
+
+  // Ticker
+  class C_MDS_BeaconSender;
+  C_MDS_BeaconSender *sender;
+
+  version_t awaiting_seq;
+  Cond waiting_cond;
 };
 
 #endif // BEACON_STATE_H

@@ -15,6 +15,7 @@
 #include "common/strtol.h"
 #include "common/ceph_argparse.h"
 
+#define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_filestore
 
 static void usage()
@@ -36,6 +37,7 @@ static void usage()
 // helper class for bytes with units
 struct byte_units {
   size_t v;
+  // cppcheck-suppress noExplicitConstructor
   byte_units(size_t v) : v(v) {}
 
   bool parse(const std::string &val, std::string *err);
@@ -85,7 +87,7 @@ class C_NotifyCond : public Context {
 public:
   C_NotifyCond(std::mutex *mutex, std::condition_variable *cond, bool *done)
     : mutex(mutex), cond(cond), done(done) {}
-  void finish(int r) {
+  void finish(int r) override {
     std::lock_guard<std::mutex> lock(*mutex);
     *done = true;
     cond->notify_one();
@@ -111,7 +113,7 @@ void osbench_worker(ObjectStore *os, const Config &cfg,
     uint64_t offset = starting_offset;
     size_t len = cfg.size;
 
-    list<ObjectStore::Transaction*> tls;
+    vector<ObjectStore::Transaction> tls;
 
     std::cout << "Write cycle " << i << std::endl;
     while (len) {
@@ -119,7 +121,8 @@ void osbench_worker(ObjectStore *os, const Config &cfg,
 
       auto t = new ObjectStore::Transaction;
       t->write(cid, oid, offset, count, data);
-      tls.push_back(t);
+      tls.push_back(std::move(*t));
+      delete t;
 
       offset += count;
       if (offset > cfg.size)
@@ -139,11 +142,7 @@ void osbench_worker(ObjectStore *os, const Config &cfg,
     cond.wait(lock, [&done](){ return done; });
     lock.unlock();
 
-    while (!tls.empty()) {
-      auto t = tls.front();
-      tls.pop_front();
-      delete t;
-    }
+
   }
   sequencer.flush();
 }
@@ -157,7 +156,8 @@ int main(int argc, const char *argv[])
   argv_to_vec(argc, argv, args);
   env_to_vec(args);
 
-  global_init(nullptr, args, CEPH_ENTITY_TYPE_OSD, CODE_ENVIRONMENT_UTILITY, 0);
+  auto cct = global_init(nullptr, args, CEPH_ENTITY_TYPE_OSD,
+			 CODE_ENVIRONMENT_UTILITY, 0);
 
   std::string val;
   vector<const char*>::iterator i = args.begin();
@@ -261,7 +261,7 @@ int main(int argc, const char *argv[])
     ObjectStore::Sequencer osr(__func__);
     ObjectStore::Transaction t;
     t.create_collection(cid, 0);
-    os->apply_transaction(&osr, t);
+    os->apply_transaction(&osr, std::move(t));
   }
 
   // create the objects
@@ -271,21 +271,21 @@ int main(int argc, const char *argv[])
     for (int i = 0; i < cfg.threads; i++) {
       std::stringstream oss;
       oss << "osbench-thread-" << i;
-      oids.emplace_back(pg.make_temp_object(oss.str()));
+      oids.emplace_back(hobject_t(sobject_t(oss.str(), CEPH_NOSNAP)));
 
       ObjectStore::Sequencer osr(__func__);
       ObjectStore::Transaction t;
       t.touch(cid, oids[i]);
-      int r = os->apply_transaction(&osr, t);
+      int r = os->apply_transaction(&osr, std::move(t));
       assert(r == 0);
     }
   } else {
-    oids.emplace_back(pg.make_temp_object("osbench"));
+    oids.emplace_back(hobject_t(sobject_t("osbench", CEPH_NOSNAP)));
 
     ObjectStore::Sequencer osr(__func__);
     ObjectStore::Transaction t;
     t.touch(cid, oids.back());
-    int r = os->apply_transaction(&osr, t);
+    int r = os->apply_transaction(&osr, std::move(t));
     assert(r == 0);
   }
 
@@ -318,7 +318,7 @@ int main(int argc, const char *argv[])
   ObjectStore::Transaction t;
   for (const auto &oid : oids)
     t.remove(cid, oid);
-  os->apply_transaction(&osr,t);
+  os->apply_transaction(&osr,std::move(t));
 
   os->umount();
   return 0;

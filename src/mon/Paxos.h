@@ -112,12 +112,8 @@ e 12v
 #include "include/types.h"
 #include "mon_types.h"
 #include "include/buffer.h"
-#include "messages/PaxosServiceMessage.h"
 #include "msg/msg_types.h"
-
 #include "include/Context.h"
-
-#include "common/Timer.h"
 #include "common/perf_counters.h"
 #include <errno.h>
 
@@ -126,7 +122,6 @@ e 12v
 
 class Monitor;
 class MMonPaxos;
-class Paxos;
 
 enum {
   l_paxos_first = 45800,
@@ -355,7 +350,7 @@ private:
    *
    * On the Leader, it will be the Proposal Number picked by the Leader 
    * itself. On the Peon, however, it will be the proposal sent by the Leader
-   * and it will only be updated iif its value is higher than the one
+   * and it will only be updated if its value is higher than the one
    * already known by the Peon.
    */
   version_t accepted_pn;
@@ -620,87 +615,38 @@ private:
   bool trimming;
 
   /**
+   * true if we want trigger_propose to *not* propose (yet)
+   */
+  bool plugged = false;
+
+  /**
    * @defgroup Paxos_h_callbacks Callback classes.
    * @{
    */
   /**
    * Callback class responsible for handling a Collect Timeout.
    */
-  class C_CollectTimeout : public Context {
-    Paxos *paxos;
-  public:
-    C_CollectTimeout(Paxos *p) : paxos(p) {}
-    void finish(int r) {
-      if (r == -ECANCELED)
-	return;
-      paxos->collect_timeout();
-    }
-  };
-
+  class C_CollectTimeout;
   /**
    * Callback class responsible for handling an Accept Timeout.
    */
-  class C_AcceptTimeout : public Context {
-    Paxos *paxos;
-  public:
-    C_AcceptTimeout(Paxos *p) : paxos(p) {}
-    void finish(int r) {
-      if (r == -ECANCELED)
-	return;
-      paxos->accept_timeout();
-    }
-  };
-
+  class C_AcceptTimeout;
   /**
    * Callback class responsible for handling a Lease Ack Timeout.
    */
-  class C_LeaseAckTimeout : public Context {
-    Paxos *paxos;
-  public:
-    C_LeaseAckTimeout(Paxos *p) : paxos(p) {}
-    void finish(int r) {
-      if (r == -ECANCELED)
-	return;
-      paxos->lease_ack_timeout();
-    }
-  };
+  class C_LeaseAckTimeout;
 
   /**
    * Callback class responsible for handling a Lease Timeout.
    */
-  class C_LeaseTimeout : public Context {
-    Paxos *paxos;
-  public:
-    C_LeaseTimeout(Paxos *p) : paxos(p) {}
-    void finish(int r) {
-      if (r == -ECANCELED)
-	return;
-      paxos->lease_timeout();
-    }
-  };
+  class C_LeaseTimeout;
 
   /**
    * Callback class responsible for handling a Lease Renew Timeout.
    */
-  class C_LeaseRenew : public Context {
-    Paxos *paxos;
-  public:
-    C_LeaseRenew(Paxos *p) : paxos(p) {}
-    void finish(int r) {
-      if (r == -ECANCELED)
-	return;
-      paxos->lease_renew_timeout();
-    }
-  };
+  class C_LeaseRenew;
 
-  class C_Trimmed : public Context {
-    Paxos *paxos;
-  public:
-    C_Trimmed(Paxos *p) : paxos(p) { }
-    void finish(int r) {
-      paxos->trimming = false;
-    }
-  };
+  class C_Trimmed;
   /**
    *
    */
@@ -716,11 +662,11 @@ public:
     C_Proposal(Context *c, bufferlist& proposal_bl) :
 	proposer_context(c),
 	bl(proposal_bl),
-        proposed(false),
-	proposal_time(ceph_clock_now(NULL))
+	proposed(false),
+	proposal_time(ceph_clock_now())
       { }
 
-    void finish(int r) {
+    void finish(int r) override {
       if (proposer_context) {
 	proposer_context->complete(r);
 	proposer_context = NULL;
@@ -766,7 +712,7 @@ private:
    * Once a Peon receives a collect message from the Leader it will reply
    * with its first and last committed versions, as well as information so
    * the Leader may know if its Proposal Number was, or was not, accepted by
-   * the Peon. The Peon will accept the Leader's Proposal Number iif it is
+   * the Peon. The Peon will accept the Leader's Proposal Number if it is
    * higher than the Peon's currently accepted Proposal Number. The Peon may
    * also inform the Leader of accepted but uncommitted values.
    *
@@ -789,7 +735,7 @@ private:
    * knows something we don't and the Leader will have to abort the current
    * proposal in order to retry with the Proposal Number specified by the Peon.
    * It may also occur that the Peon replied with a lower Proposal Number, in
-   * which case we assume it is a reply to an an older value and we'll simply
+   * which case we assume it is a reply to an older value and we'll simply
    * drop it.
    * This function will also check if the Peon replied with an accepted but
    * yet uncommitted value. In this case, if its version is higher than our
@@ -842,9 +788,9 @@ private:
    *
    * @pre We are the Leader
    * @pre We are on STATE_ACTIVE
-   * @post We commit, iif we are alone, or we send a message to each quorum 
+   * @post We commit, if we are alone, or we send a message to each quorum 
    *	   member
-   * @post We are on STATE_ACTIVE, iif we are alone, or on 
+   * @post We are on STATE_ACTIVE, if we are alone, or on 
    *	   STATE_UPDATING otherwise
    *
    * @param value The value being proposed to the quorum
@@ -859,8 +805,8 @@ private:
    *
    * @pre We are a Peon
    * @pre We are on STATE_ACTIVE
-   * @post We are on STATE_UPDATING iif we accept the Leader's proposal
-   * @post We send a reply message to the Leader iif we accept its proposal
+   * @post We are on STATE_UPDATING if we accept the Leader's proposal
+   * @post We send a reply message to the Leader if we accept its proposal
    *
    * @invariant The received message is an operation of type OP_BEGIN
    *
@@ -882,11 +828,11 @@ private:
    *
    * @pre We are the Leader
    * @pre We are on STATE_UPDATING
-   * @post We are on STATE_ACTIVE iif we received accepts from the full quorum
-   * @post We extended the lease iif we moved on to STATE_ACTIVE
-   * @post We are on STATE_UPDATING iif we didn't received accepts from the
+   * @post We are on STATE_ACTIVE if we received accepts from the full quorum
+   * @post We extended the lease if we moved on to STATE_ACTIVE
+   * @post We are on STATE_UPDATING if we didn't received accepts from the
    *	   full quorum
-   * @post We have committed iif we received accepts from a majority
+   * @post We have committed if we received accepts from a majority
    *
    * @invariant The received message is an operation of type OP_ACCEPT
    *
@@ -983,7 +929,7 @@ private:
    * @post A lease timeout callback is set
    * @post Move to STATE_ACTIVE
    * @post Fire up all the callbacks waiting for STATE_ACTIVE
-   * @post Fire up all the callbacks waiting for readable iif we are readable
+   * @post Fire up all the callbacks waiting for readable if we are readable
    * @post Ack the lease to the Leader
    *
    * @invariant The received message is an operation of type OP_LEASE
@@ -1000,7 +946,7 @@ private:
    * fresh elections.
    *
    * @pre We are the Leader
-   * @post Cancel the Lease Ack timeout callback iif we receive acks from all
+   * @post Cancel the Lease Ack timeout callback if we receive acks from all
    *	   the quorum members
    *
    * @invariant The received message is an operation of type OP_LEASE_ACK
@@ -1188,11 +1134,6 @@ public:
   void _sanity_check_store();
 
   /**
-   * remove legacy paxos versions from before conversion
-   */
-  void remove_legacy_versions();
-
-  /**
    * Helper function to decode a bufferlist into a transaction and append it
    * to another transaction.
    *
@@ -1205,7 +1146,7 @@ public:
    */
   static void decode_append_transaction(MonitorDBStore::TransactionRef t,
 					bufferlist& bl) {
-    MonitorDBStore::TransactionRef vt(new MonitorDBStore::Transaction);
+    auto vt(std::make_shared<MonitorDBStore::Transaction>());
     bufferlist::iterator it = bl.begin();
     vt->decode(it);
     t->append(vt);
@@ -1258,7 +1199,19 @@ public:
 
     return true;
   }
- 
+
+  bool is_plugged() const {
+    return plugged;
+  }
+  void plug() {
+    assert(plugged == false);
+    plugged = true;
+  }
+  void unplug() {
+    assert(plugged == true);
+    plugged = false;
+  }
+
   // read
   /**
    * @defgroup Paxos_h_read_funcs Read-related functions
@@ -1276,6 +1229,14 @@ public:
    * @return the first committed version
    */
   version_t get_first_committed() { return first_committed; }
+  /** 
+   * Get the last commit time
+   *
+   * @returns Our last commit time
+  */
+  utime_t get_last_commit_time() const{
+    return last_commit_time;
+  }
   /**
    * Check if a given version is readable.
    *
@@ -1421,9 +1382,9 @@ inline ostream& operator<<(ostream& out, Paxos::C_Proposal& p)
 {
   string proposed = (p.proposed ? "proposed" : "unproposed");
   out << " " << proposed
-      << " queued " << (ceph_clock_now(NULL) - p.proposal_time)
+      << " queued " << (ceph_clock_now() - p.proposal_time)
       << " tx dump:\n";
-  MonitorDBStore::TransactionRef t(new MonitorDBStore::Transaction);
+  auto t(std::make_shared<MonitorDBStore::Transaction>());
   bufferlist::iterator p_it = p.bl.begin();
   t->decode(p_it);
   JSONFormatter f(true);

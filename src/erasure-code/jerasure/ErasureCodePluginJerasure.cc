@@ -17,9 +17,11 @@
 
 #include "ceph_ver.h"
 #include "common/debug.h"
-#include "erasure-code/ErasureCodePlugin.h"
 #include "ErasureCodeJerasure.h"
+#include "ErasureCodePluginJerasure.h"
+#include "jerasure_init.h"
 
+#define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_osd
 #undef dout_prefix
 #define dout_prefix _prefix(_dout)
@@ -29,12 +31,10 @@ static ostream& _prefix(std::ostream* _dout)
   return *_dout << "ErasureCodePluginJerasure: ";
 }
 
-class ErasureCodePluginJerasure : public ErasureCodePlugin {
-public:
-  virtual int factory(const std::string& directory,
+int ErasureCodePluginJerasure::factory(const std::string& directory,
 		      ErasureCodeProfile &profile,
 		      ErasureCodeInterfaceRef *erasure_code,
-		      ostream *ss) {
+		      std::ostream *ss) {
     ErasureCodeJerasure *interface;
     std::string t;
     if (profile.find("technique") != profile.end())
@@ -69,15 +69,9 @@ public:
     }
     *erasure_code = ErasureCodeInterfaceRef(interface);
     return 0;
-  }
-};
-
-extern "C" {
-#include "galois.h"
-
-extern gf_t *gfp_array[];
-extern int  gfp_is_composite[];
 }
+
+#ifndef BUILDING_FOR_EMBEDDED
 
 const char *__erasure_code_version() { return CEPH_GIT_NICE_VER; }
 
@@ -85,12 +79,11 @@ int __erasure_code_init(char *plugin_name, char *directory)
 {
   ErasureCodePluginRegistry &instance = ErasureCodePluginRegistry::instance();
   int w[] = { 4, 8, 16, 32 };
-  for(int i = 0; i < 4; i++) {
-    int r = galois_init_default_field(w[i]);
-    if (r) {
-      derr << "failed to gf_init_easy(" << w[i] << ")" << dendl;
-      return -r;
-    }
+  int r = jerasure_init(4, w);
+  if (r) {
+    return -r;
   }
   return instance.add(plugin_name, new ErasureCodePluginJerasure());
 }
+
+#endif

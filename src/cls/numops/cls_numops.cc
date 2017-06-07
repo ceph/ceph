@@ -21,8 +21,6 @@
 
 #include "objclass/objclass.h"
 #include <errno.h>
-#include <iostream>
-#include <map>
 #include <string>
 #include <sstream>
 #include <cstdio>
@@ -32,10 +30,6 @@
 
 CLS_VER(1,0)
 CLS_NAME(numops)
-
-cls_handle_t h_class;
-cls_method_handle_t h_add;
-cls_method_handle_t h_mul;
 
 static int add(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
@@ -147,9 +141,13 @@ static int mul(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   return cls_cxx_map_set_val(hctx, key, &new_value);
 }
 
-void __cls_init()
+CLS_INIT(numops)
 {
   CLS_LOG(20, "loading cls_numops");
+
+  cls_handle_t h_class;
+  cls_method_handle_t h_add;
+  cls_method_handle_t h_mul;
 
   cls_register("numops", &h_class);
 

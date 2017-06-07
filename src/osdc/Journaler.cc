@@ -24,14 +24,23 @@
 #define dout_subsys ceph_subsys_journaler
 #undef dout_prefix
 #define dout_prefix *_dout << objecter->messenger->get_myname() \
-  << ".journaler" << (readonly ? "(ro) ":"(rw) ")
+  << ".journaler." << name << (readonly ? "(ro) ":"(rw) ")
 
 using std::chrono::seconds;
 
 
+class Journaler::C_DelayFlush : public Context {
+  Journaler *journaler;
+  public:
+  C_DelayFlush(Journaler *j) : journaler(j) {}
+  void finish(int r) override {
+    journaler->_do_delayed_flush();
+  }
+};
+
 void Journaler::set_readonly()
 {
-  Mutex::Locker l(lock);
+  lock_guard l(lock);
 
   ldout(cct, 1) << "set_readonly" << dendl;
   readonly = true;
@@ -39,15 +48,15 @@ void Journaler::set_readonly()
 
 void Journaler::set_writeable()
 {
-  Mutex::Locker l(lock);
+  lock_guard l(lock);
 
   ldout(cct, 1) << "set_writeable" << dendl;
   readonly = false;
 }
 
-void Journaler::create(ceph_file_layout *l, stream_format_t const sf)
+void Journaler::create(file_layout_t *l, stream_format_t const sf)
 {
-  Mutex::Locker lk(lock);
+  lock_guard lk(lock);
 
   assert(!readonly);
   state = STATE_ACTIVE;
@@ -56,26 +65,26 @@ void Journaler::create(ceph_file_layout *l, stream_format_t const sf)
   journal_stream.set_format(sf);
   _set_layout(l);
 
-  prezeroing_pos = prezero_pos = write_pos = flush_pos = safe_pos =
-    read_pos = requested_pos = received_pos =
+  prezeroing_pos = prezero_pos = write_pos = flush_pos =
+    safe_pos = read_pos = requested_pos = received_pos =
     expire_pos = trimming_pos = trimmed_pos =
-    (uint64_t)layout.fl_stripe_count * layout.fl_object_size;
+    next_safe_pos = layout.get_period();
 
   ldout(cct, 1) << "created blank journal at inode 0x" << std::hex << ino
 		<< std::dec << ", format=" << stream_format << dendl;
 }
 
-void Journaler::set_layout(ceph_file_layout const *l)
+void Journaler::set_layout(file_layout_t const *l)
 {
-    Mutex::Locker lk(lock);
+    lock_guard lk(lock);
     _set_layout(l);
 }
 
-void Journaler::_set_layout(ceph_file_layout const *l)
+void Journaler::_set_layout(file_layout_t const *l)
 {
   layout = *l;
 
-  assert(layout.fl_pg_pool == pg_pool);
+  assert(layout.pool_id == pg_pool);
   last_written.layout = layout;
   last_committed.layout = layout;
 
@@ -84,13 +93,13 @@ void Journaler::_set_layout(ceph_file_layout const *l)
   uint64_t periods = cct->_conf->journaler_prefetch_periods;
   if (periods < 2)
     periods = 2;  // we need at least 2 periods to make progress.
-  fetch_len = layout.fl_stripe_count * layout.fl_object_size * periods;
+  fetch_len = layout.get_period() * periods;
 }
 
 
 /***************** HEADER *******************/
 
-ostream& operator<<(ostream& out, Journaler::Header &h)
+ostream& operator<<(ostream &out, const Journaler::Header &h)
 {
   return out << "loghead(trim " << h.trimmed_pos
 	     << ", expire " << h.expire_pos
@@ -103,8 +112,8 @@ class Journaler::C_ReadHead : public Context {
   Journaler *ls;
 public:
   bufferlist bl;
-  C_ReadHead(Journaler *l) : ls(l) {}
-  void finish(int r) {
+  explicit C_ReadHead(Journaler *l) : ls(l) {}
+  void finish(int r) override {
     ls->_finish_read_head(r, bl);
   }
 };
@@ -116,7 +125,7 @@ public:
   bufferlist bl;
   C_RereadHead(Journaler *l, Context *onfinish_) : ls (l),
 						   onfinish(onfinish_) {}
-  void finish(int r) {
+  void finish(int r) override {
     ls->_finish_reread_head(r, bl, onfinish);
   }
 };
@@ -125,8 +134,8 @@ class Journaler::C_ProbeEnd : public Context {
   Journaler *ls;
 public:
   uint64_t end;
-  C_ProbeEnd(Journaler *l) : ls(l), end(-1) {}
-  void finish(int r) {
+  explicit C_ProbeEnd(Journaler *l) : ls(l), end(-1) {}
+  void finish(int r) override {
     ls->_finish_probe_end(r, end);
   }
 };
@@ -138,14 +147,14 @@ public:
   uint64_t end;
   C_ReProbe(Journaler *l, C_OnFinisher *onfinish_) :
     ls(l), onfinish(onfinish_), end(0) {}
-  void finish(int r) {
+  void finish(int r) override {
     ls->_finish_reprobe(r, end, onfinish);
   }
 };
 
 void Journaler::recover(Context *onread) 
 {
-  Mutex::Locker l(lock);
+  lock_guard l(lock);
   if (stopping) {
     onread->complete(-EAGAIN);
     return;
@@ -156,7 +165,7 @@ void Journaler::recover(Context *onread)
   assert(readonly);
 
   if (onread)
-    waitfor_recover.push_back(onread);
+    waitfor_recover.push_back(wrap_finisher(onread));
 
   if (state != STATE_UNDEF) {
     ldout(cct, 1) << "recover - already recovering" << dendl;
@@ -171,7 +180,7 @@ void Journaler::recover(Context *onread)
 
 void Journaler::_read_head(Context *on_finish, bufferlist *bl)
 {
-  assert(lock.is_locked_by_me());
+  // lock is locked
   assert(state == STATE_READHEAD || state == STATE_REREADHEAD);
 
   object_t oid = file_object_t(ino, 0);
@@ -181,7 +190,7 @@ void Journaler::_read_head(Context *on_finish, bufferlist *bl)
 
 void Journaler::reread_head(Context *onfinish)
 {
-  Mutex::Locker l(lock);
+  lock_guard l(lock);
   _reread_head(wrap_finisher(onfinish));
 }
 
@@ -205,7 +214,7 @@ void Journaler::_reread_head(Context *onfinish)
 
 void Journaler::_finish_reread_head(int r, bufferlist& bl, Context *finish)
 {
-  Mutex::Locker l(lock);
+  lock_guard l(lock);
 
   //read on-disk header into
   assert(bl.length() || r < 0 );
@@ -220,7 +229,7 @@ void Journaler::_finish_reread_head(int r, bufferlist& bl, Context *finish)
       finish->complete(-EINVAL);
       return;
     }
-    prezeroing_pos = prezero_pos = write_pos = flush_pos = safe_pos
+    prezeroing_pos = prezero_pos = write_pos = flush_pos = safe_pos = next_safe_pos
       = h.write_pos;
     expire_pos = h.expire_pos;
     trimmed_pos = trimming_pos = h.trimmed_pos;
@@ -233,7 +242,7 @@ void Journaler::_finish_reread_head(int r, bufferlist& bl, Context *finish)
 
 void Journaler::_finish_read_head(int r, bufferlist& bl)
 {
-  Mutex::Locker l(lock);
+  lock_guard l(lock);
 
   assert(state == STATE_READHEAD);
 
@@ -281,7 +290,7 @@ void Journaler::_finish_read_head(int r, bufferlist& bl)
     return;
   }
 
-  prezeroing_pos = prezero_pos = write_pos = flush_pos = safe_pos
+  prezeroing_pos = prezero_pos = write_pos = flush_pos = safe_pos = next_safe_pos
     = h.write_pos;
   read_pos = requested_pos = received_pos = expire_pos = h.expire_pos;
   trimmed_pos = trimming_pos = h.trimmed_pos;
@@ -301,7 +310,7 @@ void Journaler::_finish_read_head(int r, bufferlist& bl)
 
 void Journaler::_probe(Context *finish, uint64_t *end)
 {
-  assert(lock.is_locked_by_me());
+  // lock is locked
   ldout(cct, 1) << "probing for end of the log" << dendl;
   assert(state == STATE_PROBING || state == STATE_REPROBING);
   // probe the log
@@ -323,20 +332,20 @@ void Journaler::_reprobe(C_OnFinisher *finish)
 void Journaler::_finish_reprobe(int r, uint64_t new_end,
 				C_OnFinisher *onfinish)
 {
-  Mutex::Locker l(lock);
+  lock_guard l(lock);
 
   assert(new_end >= write_pos || r < 0);
   ldout(cct, 1) << "_finish_reprobe new_end = " << new_end
 	  << " (header had " << write_pos << ")."
 	  << dendl;
-  prezeroing_pos = prezero_pos = write_pos = flush_pos = safe_pos = new_end;
+  prezeroing_pos = prezero_pos = write_pos = flush_pos = safe_pos = next_safe_pos = new_end;
   state = STATE_ACTIVE;
   onfinish->complete(r);
 }
 
 void Journaler::_finish_probe_end(int r, uint64_t end)
 {
-  Mutex::Locker l(lock);
+  lock_guard l(lock);
 
   assert(state == STATE_PROBING);
   if (r < 0) { // error in probing
@@ -346,7 +355,7 @@ void Journaler::_finish_probe_end(int r, uint64_t end)
     end = write_pos;
     ldout(cct, 1) << "_finish_probe_end write_pos = " << end << " (header had "
 		  << write_pos << "). log was empty. recovered." << dendl;
-    assert(0); // hrm.
+    ceph_abort(); // hrm.
   } else {
     assert(end >= write_pos);
     ldout(cct, 1) << "_finish_probe_end write_pos = " << end
@@ -356,7 +365,7 @@ void Journaler::_finish_probe_end(int r, uint64_t end)
 
   state = STATE_ACTIVE;
 
-  prezeroing_pos = prezero_pos = write_pos = flush_pos = safe_pos = end;
+  prezeroing_pos = prezero_pos = write_pos = flush_pos = safe_pos = next_safe_pos = end;
 
 out:
   // done.
@@ -372,14 +381,14 @@ class Journaler::C_RereadHeadProbe : public Context
 public:
   C_RereadHeadProbe(Journaler *l, C_OnFinisher *finish) :
     ls(l), final_finish(finish) {}
-  void finish(int r) {
+  void finish(int r) override {
     ls->_finish_reread_head_and_probe(r, final_finish);
   }
 };
 
 void Journaler::reread_head_and_probe(Context *onfinish)
 {
-  Mutex::Locker l(lock);
+  lock_guard l(lock);
 
   assert(state == STATE_ACTIVE);
   _reread_head(new C_RereadHeadProbe(this, wrap_finisher(onfinish)));
@@ -388,7 +397,7 @@ void Journaler::reread_head_and_probe(Context *onfinish)
 void Journaler::_finish_reread_head_and_probe(int r, C_OnFinisher *onfinish)
 {
   // Expect to be called back from finish_reread_head, which already takes lock
-  assert(lock.is_locked_by_me());
+  // lock is locked
 
   assert(!r); //if we get an error, we're boned
   _reprobe(onfinish);
@@ -404,14 +413,14 @@ public:
   C_OnFinisher *oncommit;
   C_WriteHead(Journaler *l, Header& h_, C_OnFinisher *c) : ls(l), h(h_),
 							   oncommit(c) {}
-  void finish(int r) {
+  void finish(int r) override {
     ls->_finish_write_head(r, h, oncommit);
   }
 };
 
 void Journaler::write_head(Context *oncommit)
 {
-  Mutex::Locker l(lock);
+  lock_guard l(lock);
   _write_head(oncommit);
 }
 
@@ -431,7 +440,7 @@ void Journaler::_write_head(Context *oncommit)
   assert(last_written.write_pos >= last_written.expire_pos);
   assert(last_written.expire_pos >= last_written.trimmed_pos);
 
-  last_wrote_head = ceph::real_clock::now(cct);
+  last_wrote_head = ceph::real_clock::now();
 
   bufferlist bl;
   ::encode(last_written, bl);
@@ -439,8 +448,8 @@ void Journaler::_write_head(Context *oncommit)
 
   object_t oid = file_object_t(ino, 0);
   object_locator_t oloc(pg_pool);
-  objecter->write_full(oid, oloc, snapc, bl, ceph::real_clock::now(cct), 0,
-		       NULL, wrap_finisher(new C_WriteHead(
+  objecter->write_full(oid, oloc, snapc, bl, ceph::real_clock::now(), 0,
+		       wrap_finisher(new C_WriteHead(
 					     this, last_written,
 					     wrap_finisher(oncommit))),
 		       0, 0, write_iohint);
@@ -449,7 +458,7 @@ void Journaler::_write_head(Context *oncommit)
 void Journaler::_finish_write_head(int r, Header &wrote,
 				   C_OnFinisher *oncommit)
 {
-  Mutex::Locker l(lock);
+  lock_guard l(lock);
 
   if (r < 0) {
     lderr(cct) << "_finish_write_head got " << cpp_strerror(r) << dendl;
@@ -476,14 +485,14 @@ class Journaler::C_Flush : public Context {
 public:
   C_Flush(Journaler *l, int64_t s, ceph::real_time st)
     : ls(l), start(s), stamp(st) {}
-  void finish(int r) {
+  void finish(int r) override {
     ls->_finish_flush(r, start, stamp);
   }
 };
 
 void Journaler::_finish_flush(int r, uint64_t start, ceph::real_time stamp)
 {
-  Mutex::Locker l(lock);
+  lock_guard l(lock);
   assert(!readonly);
 
   if (r < 0) {
@@ -492,22 +501,22 @@ void Journaler::_finish_flush(int r, uint64_t start, ceph::real_time stamp)
     return;
   }
 
-  assert(start >= safe_pos);
   assert(start < flush_pos);
 
   // calc latency?
   if (logger) {
-    ceph::timespan lat = ceph::real_clock::now(cct) - stamp;
+    ceph::timespan lat = ceph::real_clock::now() - stamp;
     logger->tinc(logger_key_lat, lat);
   }
 
   // adjust safe_pos
-  assert(pending_safe.count(start));
-  pending_safe.erase(start);
+  auto it = pending_safe.find(start);
+  assert(it != pending_safe.end());
+  pending_safe.erase(it);
   if (pending_safe.empty())
-    safe_pos = flush_pos;
+    safe_pos = next_safe_pos;
   else
-    safe_pos = *pending_safe.begin();
+    safe_pos = pending_safe.begin()->second;
 
   ldout(cct, 10) << "_finish_flush safe from " << start
 		 << ", pending_safe " << pending_safe
@@ -529,39 +538,21 @@ void Journaler::_finish_flush(int r, uint64_t start, ceph::real_time stamp)
 
 uint64_t Journaler::append_entry(bufferlist& bl)
 {
-  Mutex::Locker l(lock);
+  unique_lock l(lock);
 
   assert(!readonly);
   uint32_t s = bl.length();
 
-  if (!cct->_conf->journaler_allow_split_entries) {
-    // will we span a stripe boundary?
-    int p = layout.fl_stripe_unit;
-    if (write_pos / p != (write_pos + (int64_t)(bl.length() +
-						sizeof(s))) / p) {
-      // yes.
-      // move write_pos forward.
-      int64_t owp = write_pos;
-      write_pos += p;
-      write_pos -= (write_pos % p);
-
-      // pad with zeros.
-      bufferptr bp(write_pos - owp);
-      bp.zero();
-      assert(bp.length() >= 4);
-      write_buf.push_back(bp);
-
-      // now flush.
-      flush();
-
-      ldout(cct, 12) << "append_entry skipped " << (write_pos-owp)
-		     << " bytes to " << write_pos
-		     << " to avoid spanning stripe boundary" << dendl;
-    }
-  }
-
-
   // append
+  size_t delta = bl.length() + journal_stream.get_envelope_size();
+  // write_buf space is nearly full
+  if (!write_buf_throttle.get_or_fail(delta)) {
+    l.unlock();
+    ldout(cct, 10) << "write_buf_throttle wait, delta " << delta << dendl;
+    write_buf_throttle.get(delta);
+    l.lock();
+  }
+  ldout(cct, 20) << "write_buf_throttle get, delta " << delta << dendl;
   size_t wrote = journal_stream.write(bl, &write_buf, write_pos);
   ldout(cct, 10) << "append_entry len " << s << " to " << write_pos << "~"
 		 << wrote << dendl;
@@ -577,6 +568,14 @@ uint64_t Journaler::append_entry(bufferlist& bl)
     ldout(cct, 10) << " flushing completed object(s) (su " << su << " wro "
 		   << write_obj << " flo " << flush_obj << ")" << dendl;
     _do_flush(write_buf.length() - write_off);
+
+    // if _do_flush() skips flushing some data, it does do a best effort to
+    // update next_safe_pos.
+    if (write_buf.length() > 0 &&
+	write_buf.length() <= wrote) { // the unflushed data are within this entry
+      // set next_safe_pos to end of previous entry
+      next_safe_pos = write_pos - wrote;
+    }
   }
 
   return write_pos;
@@ -591,7 +590,7 @@ void Journaler::_do_flush(unsigned amount)
   assert(!readonly);
 
   // flush
-  unsigned len = write_pos - flush_pos;
+  uint64_t len = write_pos - flush_pos;
   assert(len == write_buf.length());
   if (amount && amount < len)
     len = amount;
@@ -610,7 +609,7 @@ void Journaler::_do_flush(unsigned amount)
       waiting_for_zero = true;
       return;
     }
-    if (newlen < len) {
+    if (static_cast<uint64_t>(newlen) < len) {
       ldout(cct, 10) << "_do_flush wanted to do " << flush_pos << "~" << len
 		     << " but hit prezero_pos " << prezero_pos
 		     << ", will do " << flush_pos << "~" << newlen << dendl;
@@ -625,29 +624,43 @@ void Journaler::_do_flush(unsigned amount)
 
   // submit write for anything pending
   // flush _start_ pos to _finish_flush
-  ceph::real_time now = ceph::real_clock::now(cct);
+  ceph::real_time now = ceph::real_clock::now();
   SnapContext snapc;
 
   Context *onsafe = new C_Flush(this, flush_pos, now);  // on COMMIT
-  pending_safe.insert(flush_pos);
+  pending_safe[flush_pos] = next_safe_pos;
 
   bufferlist write_bl;
 
   // adjust pointers
   if (len == write_buf.length()) {
     write_bl.swap(write_buf);
+    next_safe_pos = write_pos;
   } else {
     write_buf.splice(0, len, &write_bl);
+    // Keys of waitfor_safe map are journal entry boundaries.
+    // Try finding a journal entry that we are actually flushing
+    // and set next_safe_pos to end of it. This is best effort.
+    // The one we found may not be the lastest flushing entry.
+    auto p = waitfor_safe.lower_bound(flush_pos + len);
+    if (p != waitfor_safe.end()) {
+      if (p->first > flush_pos + len && p != waitfor_safe.begin())
+       --p;
+      if (p->first <= flush_pos + len && p->first > next_safe_pos)
+       next_safe_pos = p->first;
+    }
   }
 
   filer.write(ino, &layout, snapc,
-	      flush_pos, len, write_bl, ceph::real_clock::now(cct),
+	      flush_pos, len, write_bl, ceph::real_clock::now(),
 	      0,
-	      NULL, wrap_finisher(onsafe), write_iohint);
+	      wrap_finisher(onsafe), write_iohint);
 
   flush_pos += len;
   assert(write_buf.length() == write_pos - flush_pos);
-
+  write_buf_throttle.put(len);
+  ldout(cct, 20) << "write_buf_throttle put, len " << len << dendl;
+ 
   ldout(cct, 10)
     << "_do_flush (prezeroing/prezero)/write/flush/safe pointers now at "
     << "(" << prezeroing_pos << "/" << prezero_pos << ")/" << write_pos
@@ -659,7 +672,7 @@ void Journaler::_do_flush(unsigned amount)
 
 void Journaler::wait_for_flush(Context *onsafe)
 {
-  Mutex::Locker l(lock);
+  lock_guard l(lock);
   if (stopping) {
     onsafe->complete(-EAGAIN);
     return;
@@ -692,7 +705,7 @@ void Journaler::_wait_for_flush(Context *onsafe)
 
 void Journaler::flush(Context *onsafe)
 {
-  Mutex::Locker l(lock);
+  lock_guard l(lock);
   _flush(wrap_finisher(onsafe));
 }
 
@@ -710,28 +723,20 @@ void Journaler::_flush(C_OnFinisher *onsafe)
       onsafe->complete(0);
     }
   } else {
-    // maybe buffer
-    if (write_buf.length() < cct->_conf->journaler_batch_max) {
-      // delay!  schedule an event.
-      ldout(cct, 20) << "flush delaying flush" << dendl;
-      if (delay_flush_event) {
-	timer->cancel_event(delay_flush_event);
-      }
-      delay_flush_event = new C_DelayFlush(this);
-      timer->add_event_after(cct->_conf->journaler_batch_interval,
-			     delay_flush_event);
-    } else {
-      ldout(cct, 20) << "flush not delaying flush" << dendl;
-      _do_flush();
-    }
+    _do_flush();
     _wait_for_flush(onsafe);
   }
 
   // write head?
-  if (last_wrote_head + seconds(cct->_conf->journaler_write_head_interval)
-      < ceph::real_clock::now(cct)) {
+  if (_write_head_needed()) {
     _write_head();
   }
+}
+
+bool Journaler::_write_head_needed()
+{
+  return last_wrote_head + seconds(cct->_conf->journaler_write_head_interval)
+      < ceph::real_clock::now();
 }
 
 
@@ -742,7 +747,7 @@ struct C_Journaler_Prezero : public Context {
   uint64_t from, len;
   C_Journaler_Prezero(Journaler *j, uint64_t f, uint64_t l)
     : journaler(j), from(f), len(l) {}
-  void finish(int r) {
+  void finish(int r) override {
     journaler->_finish_prezero(r, from, len);
   }
 };
@@ -784,7 +789,7 @@ void Journaler::_issue_prezero()
     Context *c = wrap_finisher(new C_Journaler_Prezero(this, prezeroing_pos,
 						       len));
     filer.zero(ino, &layout, snapc, prezeroing_pos, len,
-	       ceph::real_clock::now(cct), 0, NULL, c);
+	       ceph::real_clock::now(), 0, c);
     prezeroing_pos += len;
   }
 }
@@ -794,7 +799,7 @@ void Journaler::_issue_prezero()
 // lock before calling into objecter to do I/O.
 void Journaler::_finish_prezero(int r, uint64_t start, uint64_t len)
 {
-  Mutex::Locker l(lock);
+  lock_guard l(lock);
 
   ldout(cct, 10) << "_prezeroed to " << start << "~" << len
 		 << ", prezeroing/prezero was " << prezeroing_pos << "/"
@@ -841,7 +846,7 @@ class Journaler::C_Read : public Context {
 public:
   bufferlist bl;
   C_Read(Journaler *j, uint64_t o, uint64_t l) : ls(j), offset(o), length(l) {}
-  void finish(int r) {
+  void finish(int r) override {
     ls->_finish_read(r, offset, length, bl);
   }
 };
@@ -849,10 +854,11 @@ public:
 class Journaler::C_RetryRead : public Context {
   Journaler *ls;
 public:
-  C_RetryRead(Journaler *l) : ls(l) {}
-  void finish(int r) {
+  explicit C_RetryRead(Journaler *l) : ls(l) {}
+
+  void finish(int r) override {
     // Should only be called from waitfor_safe i.e. already inside lock
-    assert(ls->lock.is_locked_by_me());
+    // (ls->lock is locked
     ls->_prefetch();
   }
 };
@@ -860,7 +866,7 @@ public:
 void Journaler::_finish_read(int r, uint64_t offset, uint64_t length,
 			     bufferlist& bl)
 {
-  Mutex::Locker l(lock);
+  lock_guard l(lock);
 
   if (r < 0) {
     ldout(cct, 0) << "_finish_read got error " << r << dendl;
@@ -938,7 +944,9 @@ void Journaler::_assimilate_prefetch()
 
   if ((got_any && !was_readable && readable) || read_pos == write_pos) {
     // readable!
-    ldout(cct, 10) << "_finish_read now readable (or at journal end)" << dendl;
+    ldout(cct, 10) << "_finish_read now readable (or at journal end) readable="
+                   << readable << " read_pos=" << read_pos << " write_pos="
+                   << write_pos << dendl;
     if (on_readable) {
       C_OnFinisher *f = on_readable;
       on_readable = 0;
@@ -949,9 +957,6 @@ void Journaler::_assimilate_prefetch()
 
 void Journaler::_issue_read(uint64_t len)
 {
-  // make sure we're fully flushed
-  _do_flush();
-
   // stuck at safe_pos?  (this is needed if we are reading the tail of
   // a journal we are also writing to)
   assert(requested_pos <= safe_pos);
@@ -959,11 +964,19 @@ void Journaler::_issue_read(uint64_t len)
     ldout(cct, 10) << "_issue_read requested_pos = safe_pos = " << safe_pos
 		   << ", waiting" << dendl;
     assert(write_pos > requested_pos);
-    if (flush_pos == safe_pos) {
+    if (pending_safe.empty()) {
       _flush(NULL);
     }
-    assert(flush_pos > safe_pos);
-    waitfor_safe[flush_pos].push_back(new C_RetryRead(this));
+
+    // Make sure keys of waitfor_safe map are journal entry boundaries.
+    // The key we used here is either next_safe_pos or old value of
+    // next_safe_pos. next_safe_pos is always set to journal entry
+    // boundary.
+    auto p = pending_safe.rbegin();
+    if (p != pending_safe.rend())
+      waitfor_safe[p->second].push_back(new C_RetryRead(this));
+    else
+      waitfor_safe[next_safe_pos].push_back(new C_RetryRead(this));
     return;
   }
 
@@ -1028,6 +1041,19 @@ void Journaler::_prefetch()
     ldout(cct, 10) << "_prefetch " << pf << " requested_pos " << requested_pos
 		   << " < target " << target << " (" << raw_target
 		   << "), prefetching " << len << dendl;
+
+    if (pending_safe.empty() && write_pos > safe_pos) {
+      // If we are reading and writing the journal, then we may need
+      // to issue a flush if one isn't already in progress.
+      // Avoid doing a flush every time so that if we do write/read/write/read
+      // we don't end up flushing after every write.
+      ldout(cct, 10) << "_prefetch: requested_pos=" << requested_pos
+                     << ", read_pos=" << read_pos
+                     << ", write_pos=" << write_pos
+                     << ", safe_pos=" << safe_pos << dendl;
+      _do_flush();
+    }
+
     _issue_read(len);
   }
 }
@@ -1058,8 +1084,9 @@ bool Journaler::_is_readable()
       "adjusting write_pos to " << read_pos << dendl;
 
     // adjust write_pos
-    prezeroing_pos = prezero_pos = write_pos = flush_pos = safe_pos = read_pos;
+    prezeroing_pos = prezero_pos = write_pos = flush_pos = safe_pos = next_safe_pos = read_pos;
     assert(write_buf.length() == 0);
+    assert(waitfor_safe.empty());
 
     // reset read state
     requested_pos = received_pos = read_pos;
@@ -1085,7 +1112,7 @@ bool Journaler::_is_readable()
  */
 bool Journaler::is_readable()
 {
-  Mutex::Locker l(lock);
+  lock_guard l(lock);
 
   if (error != 0) {
     return false;
@@ -1101,7 +1128,7 @@ class Journaler::C_EraseFinish : public Context {
   C_OnFinisher *completion;
   public:
   C_EraseFinish(Journaler *j, C_OnFinisher *c) : journaler(j), completion(c) {}
-  void finish(int r) {
+  void finish(int r) override {
     journaler->_finish_erase(r, completion);
   }
 };
@@ -1112,13 +1139,13 @@ class Journaler::C_EraseFinish : public Context {
  */
 void Journaler::erase(Context *completion)
 {
-  Mutex::Locker l(lock);
+  lock_guard l(lock);
 
   // Async delete the journal data
   uint64_t first = trimmed_pos / get_layout_period();
   uint64_t num = (write_pos - trimmed_pos) / get_layout_period() + 2;
   filer.purge_range(ino, &layout, SnapContext(), first, num,
-		    ceph::real_clock::now(cct), 0,
+		    ceph::real_clock::now(), 0,
 		    wrap_finisher(new C_EraseFinish(
 				    this, wrap_finisher(completion))));
 
@@ -1130,11 +1157,12 @@ void Journaler::erase(Context *completion)
 
 void Journaler::_finish_erase(int data_result, C_OnFinisher *completion)
 {
-  Mutex::Locker l(lock);
+  lock_guard l(lock);
 
   if (data_result == 0) {
     // Async delete the journal header
-    filer.purge_range(ino, &layout, SnapContext(), 0, 1, ceph::real_clock::now(cct),
+    filer.purge_range(ino, &layout, SnapContext(), 0, 1,
+		      ceph::real_clock::now(),
 		      0, wrap_finisher(completion));
   } else {
     lderr(cct) << "Failed to delete journal " << ino << " data: "
@@ -1149,7 +1177,7 @@ void Journaler::_finish_erase(int data_result, C_OnFinisher *completion)
  */
 bool Journaler::try_read_entry(bufferlist& bl)
 {
-  Mutex::Locker l(lock);
+  lock_guard l(lock);
 
   if (!readable) {
     ldout(cct, 10) << "try_read_entry at " << read_pos << " not readable"
@@ -1191,7 +1219,7 @@ bool Journaler::try_read_entry(bufferlist& bl)
 
 void Journaler::wait_for_readable(Context *onreadable)
 {
-  Mutex::Locker l(lock);
+  lock_guard l(lock);
   if (stopping) {
     onreadable->complete(-EAGAIN);
     return;
@@ -1208,6 +1236,11 @@ void Journaler::wait_for_readable(Context *onreadable)
   }
 }
 
+bool Journaler::have_waiter() const
+{
+  return on_readable != nullptr;
+}
+
 
 
 
@@ -1219,14 +1252,14 @@ class Journaler::C_Trim : public Context {
   uint64_t to;
 public:
   C_Trim(Journaler *l, int64_t t) : ls(l), to(t) {}
-  void finish(int r) {
+  void finish(int r) override {
     ls->_finish_trim(r, to);
   }
 };
 
 void Journaler::trim()
 {
-  Mutex::Locker l(lock);
+  lock_guard l(lock);
   _trim();
 }
 
@@ -1265,14 +1298,14 @@ void Journaler::_trim()
   uint64_t num = (trim_to - trimming_pos) / period;
   SnapContext snapc;
   filer.purge_range(ino, &layout, snapc, first, num,
-		    ceph::real_clock::now(cct), 0,
+		    ceph::real_clock::now(), 0,
 		    wrap_finisher(new C_Trim(this, trim_to)));
   trimming_pos = trim_to;
 }
 
 void Journaler::_finish_trim(int r, uint64_t to)
 {
-  Mutex::Locker l(lock);
+  lock_guard l(lock);
 
   assert(!readonly);
   ldout(cct, 10) << "_finish_trim trimmed_pos was " << trimmed_pos
@@ -1294,7 +1327,7 @@ void Journaler::_finish_trim(int r, uint64_t to)
 
 void Journaler::handle_write_error(int r)
 {
-  assert(lock.is_locked_by_me());
+  // lock is locked
 
   lderr(cct) << "handle_write_error " << cpp_strerror(r) << dendl;
   if (on_write_error) {
@@ -1454,7 +1487,7 @@ size_t JournalStream::write(bufferlist &entry, bufferlist *to,
  * @param c callback/context to trigger on error
  */
 void Journaler::set_write_error_handler(Context *c) {
-  Mutex::Locker l(lock);
+  lock_guard l(lock);
   assert(!on_write_error);
   on_write_error = wrap_finisher(c);
   called_write_error = false;
@@ -1478,7 +1511,7 @@ C_OnFinisher *Journaler::wrap_finisher(Context *c)
 
 void Journaler::shutdown()
 {
-  Mutex::Locker l(lock);
+  lock_guard l(lock);
 
   ldout(cct, 1) << __func__ << dendl;
 
@@ -1493,7 +1526,7 @@ void Journaler::shutdown()
     f->complete(-EAGAIN);
   }
 
-  finish_contexts(cct, waitfor_recover, 0);
+  finish_contexts(cct, waitfor_recover, -ESHUTDOWN);
 
   std::map<uint64_t, std::list<Context*> >::iterator i;
   for (i = waitfor_safe.begin(); i != waitfor_safe.end(); ++i) {

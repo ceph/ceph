@@ -1,0 +1,19 @@
+overrides:
+  ceph:
+    conf:
+      mon:
+        mon warn on legacy crush tunables: false
+        mon debug unsafe allow tier with nonempty snaps: true
+    log-whitelist:
+      - wrongly marked me down
+      - reached quota
+roles:
+- - mon.a
+  - osd.0
+  - osd.1
+- - mon.b
+  - mon.c
+  - osd.2
+  - osd.3
+- - client.0
+  - client.1

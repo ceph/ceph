@@ -17,7 +17,7 @@
 #include "include/ceph_fs.h"
 #include "include/cephfs/libcephfs.h"
 #include <errno.h>
-#include <sys/fcntl.h>
+#include <fcntl.h>
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -60,8 +60,8 @@ TEST(Caps, ReadZero) {
 
     ASSERT_EQ(0, ceph_close(cmount, wfd));
 
-    struct stat st;
-    ASSERT_EQ(0, ceph_stat(cmount, c_path, &st));
+    struct ceph_statx stx;
+    ASSERT_EQ(0, ceph_statx(cmount, c_path, &stx, CEPH_STATX_MTIME, 0));
 
     caps = ceph_debug_get_file_caps(cmount, c_path);
     ASSERT_EQ(expect, caps & expect);

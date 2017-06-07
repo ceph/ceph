@@ -1,9 +1,139 @@
-v10.0.0
-======
+>= 12.0.0
+------
+* The "journaler allow split entries" config setting has been removed.
 
-* The rbd CLI no longer accepts the deprecated '--image-features' option
-  during create, import, and clone operations.  The '--image-feature'
-  option should be used instead.
+12.0.0
+------
 
-* The 'send_pg_creates' and 'map_pg_creates' mon CLI commands are
-  obsolete and no longer supported.
+ * When assigning a network to the public network and not to
+   the cluster network the network specification of the public
+   network will be used for the cluster network as well.
+   In older versions this would lead to cluster services
+   being bound to 0.0.0.0:<port>, thus making the
+   cluster service even more publicly available than the
+   public services. When only specifying a cluster network it
+   will still result in the public services binding to 0.0.0.0.
+
+*  Some variants of the omap_get_keys and omap_get_vals librados
+   functions have been deprecated in favor of omap_get_vals2 and
+   omap_get_keys2.  The new methods include an output argument
+   indicating whether there are additional keys left to fetch.
+   Previously this had to be inferred from the requested key count vs
+   the number of keys returned, but this breaks with new OSD-side
+   limits on the number of keys or bytes that can be returned by a
+   single omap request.  These limits were introduced by kraken but
+   are effectively disabled by default (by setting a very large limit
+   of 1 GB) because users of the newly deprecated interface cannot
+   tell whether they should fetch more keys or not.  In the case of
+   the standalone calls in the C++ interface
+   (IoCtx::get_omap_{keys,vals}), librados has been updated to loop on
+   the client side to provide a correct result via multiple calls to
+   the OSD.  In the case of the methods used for building
+   multi-operation transactions, however, client-side looping is not
+   practical, and the methods have been deprecated.  Note that use of
+   either the IoCtx methods on older librados versions or the
+   deprecated methods on any version of librados will lead to
+   incomplete results if/when the new OSD limits are enabled.
+
+* In previous versions, if a client sent an op to the wrong OSD, the OSD
+  would reply with ENXIO.  The rationale here is that the client or OSD is
+  clearly buggy and we want to surface the error as clearly as possible.
+  We now only send the ENXIO reply if the osd_enxio_on_misdirected_op option
+  is enabled (it's off by default).  This means that a VM using librbd that
+  previously would have gotten an EIO and gone read-only will now see a
+  blocked/hung IO instead.
+
+*  When configuring ceph-fuse mounts in /etc/fstab, a new syntax is
+   available that uses "ceph.<arg>=<val>" in the options column, instead
+   of putting configuration in the device column.  The old style syntax
+   still works.  See the documentation page "Mount CephFS in your
+   file systems table" for details.
+
+12.0.1
+------
+
+* The original librados rados_objects_list_open (C) and objects_begin
+  (C++) object listing API, deprecated in Hammer, has finally been
+  removed.  Users of this interface must update their software to use
+  either the rados_nobjects_list_open (C) and nobjects_begin (C++) API or
+  the new rados_object_list_begin (C) and object_list_begin (C++) API
+  before updating the client-side librados library to Luminous.
+
+  Object enumeration (via any API) with the latest librados version
+  and pre-Hammer OSDs is no longer supported.  Note that no in-tree
+  Ceph services rely on object enumeration via the deprecated APIs, so
+  only external librados users might be affected.
+
+  The newest (and recommended) rados_object_list_begin (C) and
+  object_list_begin (C++) API is only usable on clusters with the
+  SORTBITWISE flag enabled (Jewel and later).  (Note that this flag is
+  required to be set before upgrading beyond Jewel.)
+
+* The rados copy-get-classic operation has been removed since it has not been
+  used by the OSD since before hammer.  It is unlikely any librados user is
+  using this operation explicitly since there is also the more modern copy-get.
+
+* The RGW api for getting object torrent has changed its params from 'get_torrent'
+  to 'torrent' so that it can be compatible with Amazon S3. Now the request for 
+  object torrent is like 'GET /ObjectName?torrent'.
+
+* The configuration option "osd pool erasure code stripe width" has
+  been replaced by "osd pool erasure code stripe unit", and given the
+  ability to be overridden by the erasure code profile setting
+  "stripe_unit". For more details see "Erasure Code Profiles" in the
+  documentation.
+
+* rbd and cephfs can use erasure coding with bluestore. This may be
+  enabled by setting 'allow_ec_overwrites' to 'true' for a pool. Since
+  this relies on bluestore's checksumming to do deep scrubbing,
+  enabling this on a pool stored on filestore is not allowed.
+
+* The 'rados df' JSON output now prints numeric values as numbers instead of
+  strings.
+
+* There was a bug introduced in Jewel (#19119) that broke the mapping behavior
+  when an "out" OSD that still existed in the CRUSH map was removed with 'osd rm'.
+  This could result in 'misdirected op' and other errors.  The bug is now fixed,
+  but the fix itself introduces the same risk because the behavior may vary between
+  clients and OSDs.  To avoid problems, please ensure that all OSDs are removed
+  from the CRUSH map before deleting them.  That is, be sure to do::
+
+     ceph osd crush rm osd.123
+
+  before::
+
+     ceph osd rm osd.123
+
+12.0.2
+------
+
+* The original librados rados_objects_list_open (C) and objects_begin
+  (C++) object listing API, deprecated in Hammer, has finally been
+  removed.  Users of this interface must update their software to use
+  either the rados_nobjects_list_open (C) and nobjects_begin (C++) API or
+  the new rados_object_list_begin (C) and object_list_begin (C++) API
+  before updating the client-side librados library to Luminous.
+
+  Object enumeration (via any API) with the latest librados version
+  and pre-Hammer OSDs is no longer supported.  Note that no in-tree
+  Ceph services rely on object enumeration via the deprecated APIs, so
+  only external librados users might be affected.
+
+  The newest (and recommended) rados_object_list_begin (C) and
+  object_list_begin (C++) API is only usable on clusters with the
+  SORTBITWISE flag enabled (Jewel and later).  (Note that this flag is
+  required to be set before upgrading beyond Jewel.)
+* CephFS clients without the 'p' flag in their authentication capability
+  string will no longer be able to set quotas or any layout fields.  This
+  flag previously only restricted modification of the pool and namespace
+  fields in layouts.
+* CephFS directory fragmentation (large directory support) is enabled
+  by default on new filesystems.  To enable it on existing filesystems
+  use "ceph fs set <fs_name> allow_dirfrags".
+* CephFS will generate a health warning if you have fewer standby daemons
+  than it thinks you wanted.  By default this will be 1 if you ever had
+  a standby, and 0 if you did not.  You can customize this using
+  ``ceph fs set <fs> standby_count_wanted <number>``.  Setting it
+  to zero will effectively disable the health check.
+* The "ceph mds tell ..." command has been removed.  It is superceded
+  by "ceph tell mds.<id> ..."

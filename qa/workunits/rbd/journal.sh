@@ -21,6 +21,22 @@ function expect_false()
     if "$@"; then return 1; else return 0; fi
 }
 
+function save_commit_position()
+{
+    local journal=$1
+
+    rados -p rbd getomapval journal.${journal} client_ \
+	  $TMPDIR/${journal}.client_.omap
+}
+
+function restore_commit_position()
+{
+    local journal=$1
+
+    rados -p rbd setomapval journal.${journal} client_ \
+	  < $TMPDIR/${journal}.client_.omap
+}
+
 test_rbd_journal()
 {
     local image=testrbdjournal$$
@@ -52,8 +68,12 @@ test_rbd_journal()
     rbd journal status ${journal}
 
     local count=10
+    save_commit_position ${journal}
     rbd bench-write ${image} --io-size 4096 --io-threads 1 \
 	--io-total $((4096 * count)) --io-pattern seq
+    rbd journal status --image ${image} | fgrep "tid=$((count - 1))"
+    restore_commit_position ${journal}
+    rbd journal status --image ${image} | fgrep "positions=[]"
     local count1=$(rbd journal inspect --verbose ${journal} |
 			  grep -c 'event_type.*AioWrite')
     test "${count}" -eq "${count1}"
@@ -67,9 +87,13 @@ test_rbd_journal()
     local image1=${image}1
     rbd create --image-feature exclusive-lock --image-feature journaling \
 	--size 128 ${image1}
+    journal1=$(rbd info ${image1} --format=xml 2>/dev/null |
+		      $XMLSTARLET sel -t -v "//image/journal")
 
+    save_commit_position ${journal1}
     rbd journal import --dest ${image1} $TMPDIR/journal.export
     rbd snap create ${image1}@test
+    restore_commit_position ${journal1}
     # check that commit position is properly updated: the journal should contain
     # 12 entries (10 AioWrite + 1 SnapCreate + 1 OpFinish) and commit
     # position set to tid=11
@@ -83,12 +107,9 @@ test_rbd_journal()
         if (w != 10 || s != 1 || f != 1 || t != 12 || e != 0) exit(1)
       }
     '
-    rbd journal status --image ${image1} | grep 'tid=11'
 
     rbd export ${image1}@test $TMPDIR/${image1}.export
     cmp $TMPDIR/${image}.export $TMPDIR/${image1}.export
-
-    rbd journal inspect ${journal1}
 
     rbd journal reset ${journal}
 

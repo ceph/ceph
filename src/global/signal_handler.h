@@ -16,8 +16,6 @@
 #define CEPH_GLOBAL_SIGNAL_HANDLER_H
 
 #include <signal.h>
-#include <string>
-
 #include "acconfig.h"
 
 typedef void (*signal_handler_t)(int);

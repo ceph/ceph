@@ -1,8 +1,9 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
-#include "include/types.h"
 #include "common/bloom_filter.hpp"
+
+MEMPOOL_DEFINE_FACTORY(unsigned char, byte, bloom_filter);
 
 void bloom_filter::encode(bufferlist& bl) const
 {
@@ -64,7 +65,7 @@ void bloom_filter::dump(Formatter *f) const
   f->close_section();
 }
 
-void bloom_filter::generate_test_instances(list<bloom_filter*>& ls)
+void bloom_filter::generate_test_instances(std::list<bloom_filter*>& ls)
 {
   ls.push_back(new bloom_filter(10, .5, 1));
   ls.push_back(new bloom_filter(10, .5, 1));
@@ -86,7 +87,7 @@ void compressible_bloom_filter::encode(bufferlist& bl) const
 
   uint32_t s = size_list.size();
   ::encode(s, bl);
-  for (vector<size_t>::const_iterator p = size_list.begin();
+  for (std::vector<size_t>::const_iterator p = size_list.begin();
        p != size_list.end(); ++p)
     ::encode((uint64_t)*p, bl);
 
@@ -115,13 +116,13 @@ void compressible_bloom_filter::dump(Formatter *f) const
   bloom_filter::dump(f);
 
   f->open_array_section("table_sizes");
-  for (vector<size_t>::const_iterator p = size_list.begin();
+  for (std::vector<size_t>::const_iterator p = size_list.begin();
        p != size_list.end(); ++p)
     f->dump_unsigned("size", (uint64_t)*p);
   f->close_section();
 }
 
-void compressible_bloom_filter::generate_test_instances(list<compressible_bloom_filter*>& ls)
+void compressible_bloom_filter::generate_test_instances(std::list<compressible_bloom_filter*>& ls)
 {
   ls.push_back(new compressible_bloom_filter(10, .5, 1));
   ls.push_back(new compressible_bloom_filter(10, .5, 1));

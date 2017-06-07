@@ -177,7 +177,7 @@ TEST(MonCap, AllowAll) {
 
   ASSERT_TRUE(cap.parse("allow *", NULL));
   ASSERT_TRUE(cap.is_allow_all());
-  ASSERT_TRUE(cap.is_capable(NULL, EntityName(),
+  ASSERT_TRUE(cap.is_capable(NULL, CEPH_ENTITY_TYPE_MON, EntityName(),
 			     "foo", "asdf", map<string,string>(), true, true, true));
 
   MonCap cap2;
@@ -195,29 +195,46 @@ TEST(MonCap, ProfileOSD) {
   name.from_str("osd.123");
   map<string,string> ca;
 
-  ASSERT_TRUE(cap.is_capable(NULL, name, "osd", "", ca, true, false, false));
-  ASSERT_TRUE(cap.is_capable(NULL, name, "osd", "", ca, true, true, false));
-  ASSERT_TRUE(cap.is_capable(NULL, name, "osd", "", ca, true, true, true));
-  ASSERT_TRUE(cap.is_capable(NULL, name, "osd", "", ca, true, true, true));
-  ASSERT_TRUE(cap.is_capable(NULL, name, "mon", "", ca, true, false,false));
+  ASSERT_TRUE(cap.is_capable(NULL, CEPH_ENTITY_TYPE_MON,
+			     name, "osd", "", ca, true, false, false));
+  ASSERT_TRUE(cap.is_capable(NULL, CEPH_ENTITY_TYPE_MON,
+			     name, "osd", "", ca, true, true, false));
+  ASSERT_TRUE(cap.is_capable(NULL, CEPH_ENTITY_TYPE_MON,
+			     name, "osd", "", ca, true, true, true));
+  ASSERT_TRUE(cap.is_capable(NULL, CEPH_ENTITY_TYPE_MON,
+			     name, "osd", "", ca, true, true, true));
+  ASSERT_TRUE(cap.is_capable(NULL, CEPH_ENTITY_TYPE_MON,
+			     name, "mon", "", ca, true, false,false));
 
-  ASSERT_FALSE(cap.is_capable(NULL, name, "mds", "", ca, true, true, true));
-  ASSERT_FALSE(cap.is_capable(NULL, name, "mon", "", ca, true, true, true));
+  ASSERT_FALSE(cap.is_capable(NULL, CEPH_ENTITY_TYPE_MON,
+			     name, "mds", "", ca, true, true, true));
+  ASSERT_FALSE(cap.is_capable(NULL, CEPH_ENTITY_TYPE_MON,
+			     name, "mon", "", ca, true, true, true));
 
   ca.clear();
-  ASSERT_FALSE(cap.is_capable(NULL, name, "", "config-key get", ca, true, true, true));
+  ASSERT_FALSE(cap.is_capable(NULL, CEPH_ENTITY_TYPE_MON,
+			     name, "", "config-key get", ca, true, true, true));
   ca["key"] = "daemon-private/osd.123";
-  ASSERT_FALSE(cap.is_capable(NULL, name, "", "config-key get", ca, true, true, true));
+  ASSERT_FALSE(cap.is_capable(NULL, CEPH_ENTITY_TYPE_MON,
+			     name, "", "config-key get", ca, true, true, true));
   ca["key"] = "daemon-private/osd.12/asdf";
-  ASSERT_FALSE(cap.is_capable(NULL, name, "", "config-key get", ca, true, true, true));
+  ASSERT_FALSE(cap.is_capable(NULL, CEPH_ENTITY_TYPE_MON,
+			     name, "", "config-key get", ca, true, true, true));
   ca["key"] = "daemon-private/osd.123/";
-  ASSERT_TRUE(cap.is_capable(NULL, name, "", "config-key get", ca, true, true, true));
-  ASSERT_TRUE(cap.is_capable(NULL, name, "", "config-key get", ca, true, true, true));
-  ASSERT_TRUE(cap.is_capable(NULL, name, "", "config-key get", ca, true, true, true));
+  ASSERT_TRUE(cap.is_capable(NULL, CEPH_ENTITY_TYPE_MON,
+			     name, "", "config-key get", ca, true, true, true));
+  ASSERT_TRUE(cap.is_capable(NULL, CEPH_ENTITY_TYPE_MON,
+			     name, "", "config-key get", ca, true, true, true));
+  ASSERT_TRUE(cap.is_capable(NULL, CEPH_ENTITY_TYPE_MON,
+			     name, "", "config-key get", ca, true, true, true));
   ca["key"] = "daemon-private/osd.123/foo";
-  ASSERT_TRUE(cap.is_capable(NULL, name, "", "config-key get", ca, true, true, true));
-  ASSERT_TRUE(cap.is_capable(NULL, name, "", "config-key put", ca, true, true, true));
-  ASSERT_TRUE(cap.is_capable(NULL, name, "", "config-key exists", ca, true, true, true));
-  ASSERT_TRUE(cap.is_capable(NULL, name, "", "config-key delete", ca, true, true, true));
+  ASSERT_TRUE(cap.is_capable(NULL, CEPH_ENTITY_TYPE_MON,
+			     name, "", "config-key get", ca, true, true, true));
+  ASSERT_TRUE(cap.is_capable(NULL, CEPH_ENTITY_TYPE_MON,
+			     name, "", "config-key put", ca, true, true, true));
+  ASSERT_TRUE(cap.is_capable(NULL, CEPH_ENTITY_TYPE_MON,
+			     name, "", "config-key exists", ca, true, true, true));
+  ASSERT_TRUE(cap.is_capable(NULL, CEPH_ENTITY_TYPE_MON,
+			     name, "", "config-key delete", ca, true, true, true));
 }
 

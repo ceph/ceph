@@ -22,13 +22,14 @@ class ENoOp : public LogEvent {
 
 public:
   ENoOp() : LogEvent(EVENT_NOOP), pad_size(0) { }
-  ENoOp(uint32_t size_) : LogEvent(EVENT_NOOP), pad_size(size_){ }
+  explicit ENoOp(uint32_t size_) : LogEvent(EVENT_NOOP), pad_size(size_){ }
 
-  void encode(bufferlist& bl) const;
-  void decode(bufferlist::iterator& bl);
-  void dump(Formatter *f) const {}
+  void encode(bufferlist& bl, uint64_t features) const override;
+  void decode(bufferlist::iterator& bl) override;
+  void dump(Formatter *f) const override {}
 
-  void replay(MDSRank *mds);
+  void replay(MDSRank *mds) override;
 };
+WRITE_CLASS_ENCODER_FEATURES(ENoOp)
 
 #endif

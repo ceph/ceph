@@ -1,0 +1,70 @@
+#!/bin/sh -e
+
+if [ ! -d .git ]; then
+    echo "no .git present.  run this from the base dir of the git checkout."
+    exit 1
+fi
+
+version=$1
+[ -z "$version" ] && version=`git describe --match 'v*' | sed 's/^v//'`
+outfile="ceph-$version"
+
+echo "version $version"
+
+# update submodules
+echo "updating submodules..."
+force=$(if git submodule usage 2>&1 | grep --quiet 'update.*--force'; then echo --force ; fi)
+if ! git submodule sync || ! git submodule update $force --init --recursive; then
+    echo "Error: could not initialize submodule projects"
+    echo "  Network connectivity might be required."
+    exit 1
+fi
+
+# clean out old cruft...
+echo "cleanup..."
+rm -f $outfile*
+
+# build new tarball
+echo "building tarball..."
+bin/git-archive-all.sh --prefix ceph-$version/ \
+		       --verbose \
+		       --ignore corpus \
+		       $outfile.tar
+
+# populate files with version strings
+echo "including src/.git_version, ceph.spec"
+
+(git rev-parse HEAD ; git describe) 2> /dev/null > src/.git_version
+
+# if the version has '-' in it, it has a 'release' part,
+# like vX.Y.Z-N-g<shortsha1>.  If it doesn't, it's just
+# vX.Y.Z.  Handle both, and translate - to . for rpm
+# naming rules (the - separates version and release).
+
+if expr index $version '-' > /dev/null; then
+	rpm_version=`echo $version | cut -d - -f 1-1`
+	rpm_release=`echo $version | cut -d - -f 2- | sed 's/-/./'`
+else
+	rpm_version=$version
+	rpm_release=0
+fi
+
+
+for spec in ceph.spec.in alpine/APKBUILD.in; do
+    cat $spec |
+        sed "s/@VERSION@/$rpm_version/g" |
+        sed "s/@RPM_RELEASE@/$rpm_release/g" |
+        sed "s/@TARBALL_BASENAME@/ceph-$version/g" > `echo $spec | sed 's/.in$//'`
+done
+ln -s . $outfile
+tar cvf $outfile.version.tar $outfile/src/.git_version $outfile/ceph.spec $outfile/alpine/APKBUILD
+tar --concatenate -f $outfile.both.tar $outfile.version.tar
+tar --concatenate -f $outfile.both.tar $outfile.tar
+mv $outfile.both.tar $outfile.tar
+rm $outfile
+rm -f $outfile.version.tar
+
+echo "compressing..."
+bzip2 -9 $outfile.tar
+
+echo "done."

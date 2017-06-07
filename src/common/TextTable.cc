@@ -62,7 +62,7 @@ pad(string s, int width, TextTable::Align align)
   return string(lpad, ' ') + s + string(rpad, ' ');
 }
 
-std::ostream &operator<<(std::ostream& out, TextTable &t)
+std::ostream &operator<<(std::ostream &out, const TextTable &t)
 {
   for (unsigned int i = 0; i < t.col.size(); i++) {
     TextTable::TextTableColumn col = t.col[i];

@@ -1,0 +1,36 @@
+tasks:
+- qemu:
+    all:
+      type: filesystem
+      cpus: 4
+      memory: 12288
+      disks:
+      - image_size: 30720
+      - image_size: 30720
+      test: http://git.ceph.com/?p={repo};a=blob_plain;hb={branch};f=qa/workunits/rbd/run_devstack_tempest.sh
+      image_url: https://cloud-images.ubuntu.com/releases/16.04/release/ubuntu-16.04-server-cloudimg-amd64-disk1.img
+      cloud_config_archive:
+      - type: text/cloud-config
+        content: |
+          users:
+          - name: stack
+            lock_passwd: False
+            shell: /bin/bash
+            sudo: ["ALL=(root) NOPASSWD:ALL\nDefaults:stack,tempest !requiretty"]
+          - name: tempest
+            lock_passwd: False
+            shell: /bin/bash
+            sudo:
+            - "ALL=(root) NOPASSWD:/sbin/ip"
+            - "ALL=(root) NOPASSWD:/sbin/iptables"
+            - "ALL=(root) NOPASSWD:/usr/bin/ovsdb-client"
+      - |
+        #!/bin/bash -ex
+        mount --bind /mnt/test_b /opt
+        mkdir /opt/stack
+        chown -R stack:stack /home/stack
+        chown -R stack:stack /opt/stack
+
+        mkdir /mnt/log/stack
+        chmod a+rwx /mnt/log/stack
+        chown -R stack:stack /mnt/log/stack

@@ -26,8 +26,6 @@ pools for storing data. A pool provides you with:
 - **Snapshots**: When you create snapshots with ``ceph osd pool mksnap``, 
   you effectively take a snapshot of a particular pool.
   
-- **Set Ownership**: You can set a user ID as the owner of a pool. 
-
 To organize data into pools, you can list, create, and remove pools. 
 You can also view the utilization statistics for each pool.
 
@@ -78,7 +76,7 @@ Where:
               default value ``8`` is NOT suitable for most systems.
 
 :Type: Integer
-:Required: Yes
+:Required: Yes.
 :Default: 8
 
 ``{pgp-num}``
@@ -177,11 +175,31 @@ To delete a pool, execute::
 
 	ceph osd pool delete {pool-name} [{pool-name} --yes-i-really-really-mean-it]
 
+
+To remove a pool the mon_allow_pool_delete flag must be set to true in the Monitor's
+configuration. Otherwise they will refuse to remove a pool.
+
+See `Monitor Configuration`_ for more information.
+
+.. _Monitor Configuration: ../../configuration/mon-config-ref
 	
 If you created your own rulesets and rules for a pool you created,  you should
-consider removing them when you no longer need your pool.  If you created users
-with permissions strictly for a pool that no longer exists, you should consider
-deleting those users too.
+consider removing them when you no longer need your pool::
+
+	ceph osd pool get {pool-name} crush_ruleset
+
+If the ruleset was "123", for example, you can check the other pools like so::
+
+	ceph osd dump | grep "^pool" | grep "crush_ruleset 123"
+
+If no other pools use that custom ruleset, then it's safe to delete that
+ruleset from the cluster.
+
+If you created users with permissions strictly for a pool that no longer
+exists, you should consider deleting those users too::
+
+	ceph auth list | grep -C 5 {pool-name}
+	ceph auth del {user}
 
 
 Rename a Pool
@@ -257,21 +275,21 @@ You may set values for the following keys:
 :Type: Integer
 :Version: ``0.54`` and above
 
-.. _crash_replay_interval:
+.. _pg_num:
 
-``crash_replay_interval``
+``pg_num``
 
-:Description: The number of seconds to allow clients to replay acknowledged, 
-              but uncommitted requests.
-              
+:Description: The effective number of placement groups to use when calculating 
+              data placement.
 :Type: Integer
+:Valid Range: Superior to ``pg_num`` current value.
 
 .. _pgp_num:
 
 ``pgp_num``
 
-:Description: The effective number of placement groups to use when calculating 
-              data placement.
+:Description: The effective number of placement groups for placement to use 
+              when calculating data placement.
 
 :Type: Integer
 :Valid Range: Equal to or less than ``pg_num``.
@@ -282,6 +300,16 @@ You may set values for the following keys:
 
 :Description: The ruleset to use for mapping object placement in the cluster.
 :Type: Integer
+
+.. _allow_ec_overwrites:
+
+``allow_ec_overwrites``
+
+:Description: Whether writes to an erasure coded pool can update part
+              of an object, so cephfs and rbd can use it. See
+              `Erasure Coding with Overwrites`_ for more details.
+:Type: Boolean
+:Version: ``12.2.0`` and above
 
 .. _hashpspool:
 
@@ -448,7 +476,7 @@ You may set values for the following keys:
 :Default: ``20``
 
 
-``hit_set_grade_search_last_n``
+``hit_set_search_last_n``
 
 :Description: Count at most N appearance in hit_sets for temperature calculation
 :Type: Integer
@@ -481,11 +509,11 @@ You may set values for the following keys:
 ``fast_read``
 
 :Description: On Erasure Coding pool, if this flag is turned on, the read request
-              would issue sub reads to all shards, and wait until it receives enough
+              would issue sub reads to all shards, and waits until it receives enough
               shards to decode to serve the client. In the case of jerasure and isa
               erasure plugins, once the first K replies return, client's request is
-              serverd immediately using the data decoded from these replies. This
-              helps to tradeoff some resources for betterperformance. Currently this
+              served immediately using the data decoded from these replies. This
+              helps to tradeoff some resources for better performance. Currently this
               flag is only supported for Erasure Coding pool.
 
 :Type: Boolean
@@ -495,7 +523,7 @@ You may set values for the following keys:
 
 ``scrub_min_interval``
 
-:Description: The maximum interval in seconds for pool scrubbing when
+:Description: The minimum interval in seconds for pool scrubbing when
               load is low. If it is 0, the value osd_scrub_min_interval
               from config is used.
 
@@ -546,10 +574,10 @@ You may get values for the following keys:
 :Type: Integer
 :Version: ``0.54`` and above
 
-``crash_replay_interval``
+``pg_num``
 
-:Description: see crash_replay_interval_
-              
+:Description: see pg_num_
+
 :Type: Integer
 
 
@@ -705,7 +733,7 @@ To get the number of object replicas, execute the following::
 	ceph osd dump | grep 'replicated size'
 	
 Ceph will list the pools, with the ``replicated size`` attribute highlighted.
-By default, ceph Creates two replicas of an object (a total of three copies, or 
+By default, ceph creates two replicas of an object (a total of three copies, or 
 a size of 3).
 
 
@@ -713,3 +741,4 @@ a size of 3).
 .. _Pool, PG and CRUSH Config Reference: ../../configuration/pool-pg-config-ref
 .. _Bloom Filter: http://en.wikipedia.org/wiki/Bloom_filter
 .. _setting the number of placement groups: ../placement-groups#set-the-number-of-placement-groups
+.. _Erasure Coding with Overwrites: ../erasure-code#erasure-coding-with-overwrites

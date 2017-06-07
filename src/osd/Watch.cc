@@ -7,8 +7,9 @@
 #include <map>
 
 #include "OSD.h"
-#include "ReplicatedPG.h"
+#include "PrimaryLogPG.h"
 #include "Watch.h"
+#include "Session.h"
 
 #include "common/config.h"
 
@@ -16,6 +17,7 @@ struct CancelableContext : public Context {
   virtual void cancel() = 0;
 };
 
+#define dout_context osd->cct
 #define dout_subsys ceph_subsys_osd
 #undef dout_prefix
 #define dout_prefix _prefix(_dout, this)
@@ -71,8 +73,8 @@ class NotifyTimeoutCB : public CancelableContext {
   NotifyRef notif;
   bool canceled; // protected by notif lock
 public:
-  NotifyTimeoutCB(NotifyRef notif) : notif(notif), canceled(false) {}
-  void finish(int) {
+  explicit NotifyTimeoutCB(NotifyRef notif) : notif(notif), canceled(false) {}
+  void finish(int) override {
     notif->osd->watch_lock.Unlock();
     notif->lock.Lock();
     if (!canceled)
@@ -81,7 +83,7 @@ public:
       notif->lock.Unlock();
     notif->osd->watch_lock.Lock();
   }
-  void cancel() {
+  void cancel() override {
     assert(notif->lock.is_locked_by_me());
     canceled = true;
   }
@@ -107,7 +109,7 @@ void Notify::do_timeout()
   for (set<WatchRef>::iterator i = _watchers.begin();
        i != _watchers.end();
        ++i) {
-    boost::intrusive_ptr<ReplicatedPG> pg((*i)->get_pg());
+    boost::intrusive_ptr<PrimaryLogPG> pg((*i)->get_pg());
     pg->lock();
     if (!(*i)->is_discarded()) {
       (*i)->cancel_notify(self.lock());
@@ -234,15 +236,15 @@ class HandleWatchTimeout : public CancelableContext {
   WatchRef watch;
 public:
   bool canceled; // protected by watch->pg->lock
-  HandleWatchTimeout(WatchRef watch) : watch(watch), canceled(false) {}
-  void cancel() {
+  explicit HandleWatchTimeout(WatchRef watch) : watch(watch), canceled(false) {}
+  void cancel() override {
     canceled = true;
   }
-  void finish(int) { assert(0); /* not used */ }
-  void complete(int) {
-    dout(10) << "HandleWatchTimeout" << dendl;
-    boost::intrusive_ptr<ReplicatedPG> pg(watch->pg);
+  void finish(int) override { ceph_abort(); /* not used */ }
+  void complete(int) override {
     OSDService *osd(watch->osd);
+    ldout(osd->cct, 10) << "HandleWatchTimeout" << dendl;
+    boost::intrusive_ptr<PrimaryLogPG> pg(watch->pg);
     osd->watch_lock.Unlock();
     pg->lock();
     watch->cb = NULL;
@@ -258,11 +260,12 @@ class HandleDelayedWatchTimeout : public CancelableContext {
   WatchRef watch;
 public:
   bool canceled;
-  HandleDelayedWatchTimeout(WatchRef watch) : watch(watch), canceled(false) {}
-  void cancel() {
+  explicit HandleDelayedWatchTimeout(WatchRef watch) : watch(watch), canceled(false) {}
+  void cancel() override {
     canceled = true;
   }
-  void finish(int) {
+  void finish(int) override {
+    OSDService *osd(watch->osd);
     dout(10) << "HandleWatchTimeoutDelayed" << dendl;
     assert(watch->pg->is_locked());
     watch->cb = NULL;
@@ -283,7 +286,7 @@ string Watch::gen_dbg_prefix() {
 }
 
 Watch::Watch(
-  ReplicatedPG *pg,
+  PrimaryLogPG *pg,
   OSDService *osd,
   ObjectContextRef obc,
   uint32_t timeout,
@@ -360,13 +363,13 @@ void Watch::got_ping(utime_t t)
 void Watch::connect(ConnectionRef con, bool _will_ping)
 {
   if (conn == con) {
-    dout(10) << "connecting - already connected" << dendl;
+    dout(10) << __func__ << " con " << con << " - already connected" << dendl;
     return;
   }
-  dout(10) << "connecting" << dendl;
+  dout(10) << __func__ << " con " << con << dendl;
   conn = con;
   will_ping = _will_ping;
-  OSD::Session* sessionref(static_cast<OSD::Session*>(con->get_priv()));
+  Session* sessionref(static_cast<Session*>(con->get_priv()));
   if (sessionref) {
     sessionref->wstate.addWatch(self.lock());
     sessionref->put();
@@ -377,7 +380,7 @@ void Watch::connect(ConnectionRef con, bool _will_ping)
     }
   }
   if (will_ping) {
-    last_ping = ceph_clock_now(NULL);
+    last_ping = ceph_clock_now();
     register_cb();
   } else {
     unregister_cb();
@@ -386,7 +389,7 @@ void Watch::connect(ConnectionRef con, bool _will_ping)
 
 void Watch::disconnect()
 {
-  dout(10) << "disconnect" << dendl;
+  dout(10) << "disconnect (con was " << conn << ")" << dendl;
   conn = ConnectionRef();
   if (!will_ping)
     register_cb();
@@ -412,7 +415,7 @@ void Watch::discard_state()
   unregister_cb();
   discarded = true;
   if (conn) {
-    OSD::Session* sessionref(static_cast<OSD::Session*>(conn->get_priv()));
+    Session* sessionref(static_cast<Session*>(conn->get_priv()));
     if (sessionref) {
       sessionref->wstate.removeWatch(self.lock());
       sessionref->put();
@@ -422,7 +425,7 @@ void Watch::discard_state()
   obc = ObjectContextRef();
 }
 
-bool Watch::is_discarded()
+bool Watch::is_discarded() const
 {
   return discarded;
 }
@@ -449,7 +452,7 @@ void Watch::start_notify(NotifyRef notif)
   assert(in_progress_notifies.find(notif->notify_id) ==
 	 in_progress_notifies.end());
   if (will_ping) {
-    utime_t cutoff = ceph_clock_now(NULL);
+    utime_t cutoff = ceph_clock_now();
     cutoff.sec_ref() -= timeout;
     if (last_ping < cutoff) {
       dout(10) << __func__ << " " << notif->notify_id
@@ -493,7 +496,7 @@ void Watch::notify_ack(uint64_t notify_id, bufferlist& reply_bl)
 }
 
 WatchRef Watch::makeWatchRef(
-  ReplicatedPG *pg, OSDService *osd,
+  PrimaryLogPG *pg, OSDService *osd,
   ObjectContextRef obc, uint32_t timeout, uint64_t cookie, entity_name_t entity, const entity_addr_t& addr)
 {
   WatchRef ret(new Watch(pg, osd, obc, timeout, cookie, entity, addr));
@@ -513,7 +516,7 @@ void WatchConState::removeWatch(WatchRef watch)
   watches.erase(watch);
 }
 
-void WatchConState::reset()
+void WatchConState::reset(Connection *con)
 {
   set<WatchRef> _watches;
   {
@@ -523,10 +526,14 @@ void WatchConState::reset()
   for (set<WatchRef>::iterator i = _watches.begin();
        i != _watches.end();
        ++i) {
-    boost::intrusive_ptr<ReplicatedPG> pg((*i)->get_pg());
+    boost::intrusive_ptr<PrimaryLogPG> pg((*i)->get_pg());
     pg->lock();
     if (!(*i)->is_discarded()) {
-      (*i)->disconnect();
+      if ((*i)->is_connected(con)) {
+	(*i)->disconnect();
+      } else {
+	lgeneric_derr(cct) << __func__ << " not still connected to " << (*i) << dendl;
+      }
     }
     pg->unlock();
   }

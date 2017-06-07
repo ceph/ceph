@@ -23,18 +23,6 @@ static const std::string APP_NAME("rbd");
 static const std::string HELP_SPEC("help");
 static const std::string BASH_COMPLETION_SPEC("bash-completion");
 
-struct Secret {};
-
-void validate(boost::any& v, const std::vector<std::string>& values,
-              Secret *target_type, int) {
-  std::cerr << "rbd: --secret is deprecated, use --keyfile" << std::endl;
-
-  po::validators::check_first_occurrence(v);
-  const std::string &s = po::validators::get_single_string(values);
-  g_conf->set_val_or_die("keyfile", s.c_str());
-  v = boost::any(s);
-}
-
 std::string format_command_spec(const Shell::CommandSpec &spec) {
   return joinify<std::string>(spec.begin(), spec.end(), " ");
 }
@@ -78,13 +66,13 @@ std::set<std::string>& Shell::get_switch_arguments() {
   return switch_arguments;
 }
 
-int Shell::execute(int arg_count, const char **arg_values) {
+int Shell::execute(const Arguments& cmdline_arguments) {
 
-  std::vector<std::string> arguments;
-  prune_command_line_arguments(arg_count, arg_values, &arguments);
-
+  std::vector<std::string> arguments(cmdline_arguments.begin(),
+                                     cmdline_arguments.end());
   std::vector<std::string> command_spec;
   get_command_spec(arguments, &command_spec);
+  bool is_alias = true;
 
   if (command_spec.empty() || command_spec == CommandSpec({"help"})) {
     // list all available actions
@@ -93,12 +81,12 @@ int Shell::execute(int arg_count, const char **arg_values) {
   } else if (command_spec[0] == HELP_SPEC) {
     // list help for specific action
     command_spec.erase(command_spec.begin());
-    Action *action = find_action(command_spec, NULL);
+    Action *action = find_action(command_spec, NULL, &is_alias);
     if (action == NULL) {
       print_unknown_action(command_spec);
       return EXIT_FAILURE;
     } else {
-      print_action_help(action);
+      print_action_help(action, is_alias);
       return 0;
     }
   } else if (command_spec[0] == BASH_COMPLETION_SPEC) {
@@ -108,7 +96,7 @@ int Shell::execute(int arg_count, const char **arg_values) {
   }
 
   CommandSpec *matching_spec;
-  Action *action = find_action(command_spec, &matching_spec);
+  Action *action = find_action(command_spec, &matching_spec, &is_alias);
   if (action == NULL) {
     print_unknown_action(command_spec);
     return EXIT_FAILURE;
@@ -211,7 +199,7 @@ void Shell::get_command_spec(const std::vector<std::string> &arguments,
 }
 
 Shell::Action *Shell::find_action(const CommandSpec &command_spec,
-                                  CommandSpec **matching_spec) {
+                                  CommandSpec **matching_spec, bool *is_alias) {
   for (size_t i = 0; i < get_actions().size(); ++i) {
     Action *action = get_actions()[i];
     if (action->command_spec.size() <= command_spec.size()) {
@@ -222,6 +210,7 @@ Shell::Action *Shell::find_action(const CommandSpec &command_spec,
         if (matching_spec != NULL) {
           *matching_spec = &action->command_spec;
         }
+        *is_alias = false;
         return action;
       }
     }
@@ -235,6 +224,7 @@ Shell::Action *Shell::find_action(const CommandSpec &command_spec,
         if (matching_spec != NULL) {
           *matching_spec = &action->alias_command_spec;
         }
+        *is_alias = true;
         return action;
       }
     }
@@ -250,35 +240,9 @@ void Shell::get_global_options(po::options_description *opts) {
     ("user", po::value<std::string>(), "client id (without 'client.' prefix)")
     ("name,n", po::value<std::string>(), "client name")
     ("mon_host,m", po::value<std::string>(), "monitor host")
-    ("secret", po::value<Secret>(), "path to secret key (deprecated)")
+    ("secret", po::value<at::Secret>(), "path to secret key (deprecated)")
     ("keyfile,K", po::value<std::string>(), "path to secret key")
     ("keyring,k", po::value<std::string>(), "path to keyring");
-}
-
-void Shell::prune_command_line_arguments(int arg_count, const char **arg_values,
-                                         std::vector<std::string> *args) {
-
-  std::vector<std::string> config_keys;
-  g_conf->get_all_keys(&config_keys);
-  std::set<std::string> config_key_set(config_keys.begin(), config_keys.end());
-
-  args->reserve(arg_count);
-  for (int i = 1; i < arg_count; ++i) {
-    std::string arg(arg_values[i]);
-    if (arg.size() > 2 && arg.substr(0, 2) == "--") {
-      std::string option_name(arg.substr(2));
-      std::string alt_option_name(option_name);
-      std::replace(alt_option_name.begin(), alt_option_name.end(), '-', '_');
-      if (config_key_set.count(option_name) ||
-          config_key_set.count(alt_option_name)) {
-        // Ceph config override -- skip since it's handled by CephContext
-        ++i;
-        continue;
-      }
-    }
-
-    args->push_back(arg);
-  }
 }
 
 void Shell::print_help() {
@@ -309,6 +273,8 @@ void Shell::print_help() {
 
   for (size_t i = 0; i < actions.size(); ++i) {
     Action *action = actions[i];
+    if (!action->visible)
+      continue;
     std::stringstream ss;
     ss << indent
        << format_command_name(action->command_spec, action->alias_command_spec);
@@ -329,14 +295,13 @@ void Shell::print_help() {
   std::cout << std::endl << global_opts << std::endl
             << "See '" << APP_NAME << " help <command>' for help on a specific "
             << "command." << std::endl;
-}
+ }
 
-void Shell::print_action_help(Action *action) {
-
+void Shell::print_action_help(Action *action, bool is_alias) {
   std::stringstream ss;
-  ss << "usage: " << APP_NAME << " "
-     << format_command_spec(action->command_spec);
-  std::cout << ss.str();
+    ss << "usage: " << APP_NAME << " "
+       << format_command_spec(is_alias ? action->alias_command_spec : action->command_spec);
+    std::cout << ss.str();
 
   po::options_description positional;
   po::options_description options;
@@ -366,7 +331,10 @@ void Shell::print_unknown_action(const std::vector<std::string> &command_spec) {
 }
 
 void Shell::print_bash_completion(const CommandSpec &command_spec) {
-  Action *action = find_action(command_spec, NULL);
+  
+  bool is_alias = true;
+
+  Action *action = find_action(command_spec, NULL, &is_alias);
   po::options_description global_opts;
   get_global_options(&global_opts);
   print_bash_completion_options(global_opts);

@@ -27,7 +27,7 @@
 
 
 void Striper::file_to_extents(CephContext *cct, const char *object_format,
-			      const ceph_file_layout *layout,
+			      const file_layout_t *layout,
 			      uint64_t offset, uint64_t len,
 			      uint64_t trunc_size,
 			      vector<ObjectExtent>& extents,
@@ -41,7 +41,7 @@ void Striper::file_to_extents(CephContext *cct, const char *object_format,
 
 void Striper::file_to_extents(
   CephContext *cct, const char *object_format,
-  const ceph_file_layout *layout,
+  const file_layout_t *layout,
   uint64_t offset, uint64_t len,
   uint64_t trunc_size,
   map<object_t,vector<ObjectExtent> >& object_extents,
@@ -58,9 +58,9 @@ void Striper::file_to_extents(
    * buffer.. hence ObjectExtent.buffer_extents
    */
 
-  __u32 object_size = layout->fl_object_size;
-  __u32 su = layout->fl_stripe_unit;
-  __u32 stripe_count = layout->fl_stripe_count;
+  __u32 object_size = layout->object_size;
+  __u32 su = layout->stripe_unit;
+  __u32 stripe_count = layout->stripe_count;
   assert(object_size >= su);
   if (stripe_count == 1) {
     ldout(cct, 20) << " sc is one, reset su to os" << dendl;
@@ -161,16 +161,16 @@ void Striper::assimilate_extents(
   }
 }
 
-void Striper::extent_to_file(CephContext *cct, ceph_file_layout *layout,
+void Striper::extent_to_file(CephContext *cct, file_layout_t *layout,
 			   uint64_t objectno, uint64_t off, uint64_t len,
 			   vector<pair<uint64_t, uint64_t> >& extents)
 {
   ldout(cct, 10) << "extent_to_file " << objectno << " " << off << "~"
 		 << len << dendl;
 
-  __u32 object_size = layout->fl_object_size;
-  __u32 su = layout->fl_stripe_unit;
-  __u32 stripe_count = layout->fl_stripe_count;
+  __u32 object_size = layout->object_size;
+  __u32 su = layout->stripe_unit;
+  __u32 stripe_count = layout->stripe_count;
   assert(object_size >= su);
   uint64_t stripes_per_object = object_size / su;
   ldout(cct, 20) << " stripes_per_object " << stripes_per_object << dendl;
@@ -199,16 +199,16 @@ void Striper::extent_to_file(CephContext *cct, ceph_file_layout *layout,
 }
 
 uint64_t Striper::object_truncate_size(CephContext *cct,
-				       const ceph_file_layout *layout,
+				       const file_layout_t *layout,
 				       uint64_t objectno, uint64_t trunc_size)
 {
   uint64_t obj_trunc_size;
   if (trunc_size == 0 || trunc_size == (uint64_t)-1) {
     obj_trunc_size = trunc_size;
   } else {
-    __u32 object_size = layout->fl_object_size;
-    __u32 su = layout->fl_stripe_unit;
-    __u32 stripe_count = layout->fl_stripe_count;
+    __u32 object_size = layout->object_size;
+    __u32 su = layout->stripe_unit;
+    __u32 stripe_count = layout->stripe_count;
     assert(object_size >= su);
     uint64_t stripes_per_object = object_size / su;
 
@@ -237,13 +237,13 @@ uint64_t Striper::object_truncate_size(CephContext *cct,
 		 << trunc_size << "->" << obj_trunc_size << dendl;
   return obj_trunc_size;
 }
-uint64_t Striper::get_num_objects(const ceph_file_layout& layout,
+
+uint64_t Striper::get_num_objects(const file_layout_t& layout,
 				  uint64_t size)
 {
-  __u32 object_size = layout.fl_object_size;
-  __u32 stripe_unit = layout.fl_stripe_unit;
-  __u32 stripe_count = layout.fl_stripe_count;
-  uint64_t period = (uint64_t)stripe_count * object_size;
+  __u32 stripe_unit = layout.stripe_unit;
+  __u32 stripe_count = layout.stripe_count;
+  uint64_t period = layout.get_period();
   uint64_t num_periods = (size + period - 1) / period;
   uint64_t remainder_bytes = size % period;
   uint64_t remainder_objs = 0;
@@ -270,6 +270,7 @@ void Striper::StripedReadResult::add_partial_result(
     size_t actual = MIN(bl.length(), p->second);
     bl.splice(0, actual, &r.first);
     r.second = p->second;
+    total_intended_len += r.second;
   }
 }
 
@@ -297,6 +298,7 @@ void Striper::StripedReadResult::add_partial_sparse_result(
 	ldout(cct, 20) << "  s at end" << dendl;
 	pair<bufferlist, uint64_t>& r = partial[tofs];
 	r.second = tlen;
+	total_intended_len += r.second;
 	break;
       }
 
@@ -315,6 +317,7 @@ void Striper::StripedReadResult::add_partial_sparse_result(
 	size_t gap = MIN(s->first - bl_off, tlen);
 	ldout(cct, 20) << "  s gap " << gap << ", skipping" << dendl;
 	r.second = gap;
+	total_intended_len += r.second;
 	bl_off += gap;
 	tofs += gap;
 	tlen -= gap;
@@ -332,6 +335,7 @@ void Striper::StripedReadResult::add_partial_sparse_result(
 	pair<bufferlist, uint64_t>& r = partial[tofs];
 	bl.splice(0, actual, &r.first);
 	r.second = actual;
+	total_intended_len += r.second;
 	bl_off += actual;
 	tofs += actual;
 	tlen -= actual;
@@ -369,9 +373,9 @@ void Striper::StripedReadResult::assemble_result(CephContext *cct,
     size_t len = p->second.first.length();
     if (len < p->second.second) {
       if (zero_tail || bl.length()) {
-	bufferptr bp(p->second.second - len);
-	bp.zero();
-	bl.push_front(bp);
+        bufferptr bp(p->second.second - len);
+        bp.zero();
+        bl.push_front(std::move(bp));
 	bl.claim_prepend(p->second.first);
       } else {
 	bl.claim_prepend(p->second.first);
@@ -382,5 +386,40 @@ void Striper::StripedReadResult::assemble_result(CephContext *cct,
     ++p;
   }
   partial.clear();
+}
+
+void Striper::StripedReadResult::assemble_result(CephContext *cct, char *buffer, size_t length)
+{
+
+  assert(buffer && length == total_intended_len);
+
+  map<uint64_t,pair<bufferlist,uint64_t> >::reverse_iterator p = partial.rbegin();
+  if (p == partial.rend())
+    return;
+
+  uint64_t curr = length;
+  uint64_t end = p->first + p->second.second;
+  while (p != partial.rend()) {
+    // sanity check
+    ldout(cct, 20) << "assemble_result(" << this << ") " << p->first << "~" << p->second.second
+		   << " " << p->second.first.length() << " bytes"
+		   << dendl;
+    assert(p->first == end - p->second.second);
+    end = p->first;
+
+    size_t len = p->second.first.length();
+    assert(curr >= p->second.second);
+    curr -= p->second.second;
+    if (len < p->second.second) {
+      if (len)
+	p->second.first.copy(0, len, buffer + curr);
+      memset(buffer + curr + len, 0, p->second.second - len);
+    } else {
+      p->second.first.copy(0, len, buffer + curr);
+    }
+    ++p;
+  }
+  partial.clear();
+  assert(curr == 0);
 }
 

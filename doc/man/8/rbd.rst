@@ -9,15 +9,15 @@
 Synopsis
 ========
 
-| **rbd** [ -c *ceph.conf* ] [ -m *monaddr* ] [--cluster *cluster name*]
-  [ -p | --pool *pool* ] [--size *size* ] [ --object-size *B/K/M* ] [ *command* ... ] 
+| **rbd** [ -c *ceph.conf* ] [ -m *monaddr* ] [--cluster *cluster-name*]
+  [ -p | --pool *pool* ] [ *command* ... ]
 
 
 Description
 ===========
 
 **rbd** is a utility for manipulating rados block device (RBD) images,
-used by the Linux rbd driver and the rbd storage driver for Qemu/KVM.
+used by the Linux rbd driver and the rbd storage driver for QEMU/KVM.
 RBD images are simple block devices that are striped over objects and
 stored in a RADOS object store. The size of the objects the image is
 striped over must be a power of two.
@@ -35,7 +35,7 @@ Options
 
    Connect to specified monitor (instead of looking through ceph.conf).
 
-.. option:: --cluster cluster name
+.. option:: --cluster cluster-name
 
    Use different cluster name as compared to default cluster name *ceph*.
 
@@ -54,30 +54,32 @@ Parameters
 
 .. option:: --image-format format-id
 
-   Specifies which object layout to use. The default is 1.
+   Specifies which object layout to use. The default is 2.
 
-   * format 1 - Use the original format for a new rbd image. This format is
-     understood by all versions of librbd and the kernel rbd module, but
-     does not support newer features like cloning.
+   * format 1 - (deprecated) Use the original format for a new rbd image. This
+     format is understood by all versions of librbd and the kernel rbd module,
+     but does not support newer features like cloning.
 
    * format 2 - Use the second rbd format, which is supported by
      librbd and kernel since version 3.11 (except for striping). This adds
      support for cloning and is more easily extensible to allow more
      features in the future.
 
-.. option:: --size size-in-M/G/T
+.. option:: -s size-in-M/G/T, --size size-in-M/G/T
 
-   Specifies the size (in M/G/T) of the new rbd image.
+   Specifies the size of the new rbd image or the new size of the existing rbd
+   image in M/G/T.  If no suffix is given, unit M is assumed.
 
-.. option:: --object-size B/K/M
+.. option:: --object-size size-in-B/K/M
 
-   Specifies the object size in B/K/M, it will be rounded up the nearest power of two.
-   The default object size is 4 MB, smallest is 4K and maximum is 32M.
-
+   Specifies the object size in B/K/M.  Object size will be rounded up the
+   nearest power of two; if no suffix is given, unit B is assumed.  The default
+   object size is 4M, smallest is 4K and maximum is 32M.
 
 .. option:: --stripe-unit size-in-B/K/M
 
-   Specifies the stripe unit size in B/K/M.  See striping section (below) for more details.
+   Specifies the stripe unit size in B/K/M.  If no suffix is given, unit B is
+   assumed.  See striping section (below) for more details.
 
 .. option:: --stripe-count num
 
@@ -120,11 +122,12 @@ Parameters
 
    Make json or xml formatted output more human-readable.
 
-.. option:: -o map-options, --options map-options
+.. option:: -o krbd-options, --options krbd-options
 
-   Specifies which options to use when mapping an image.  map-options is
-   a comma-separated string of options (similar to mount(8) mount options).
-   See map options section below for more details.
+   Specifies which options to use when mapping or unmapping an image via the
+   rbd kernel driver.  krbd-options is a comma-separated list of options
+   (similar to mount(8) mount options).  See kernel rbd (krbd) options section
+   below for more details.
 
 .. option:: --read-only
 
@@ -159,6 +162,10 @@ Parameters
    by examining the in-memory object map instead of querying RADOS for each
    object within the image.
 
+.. option:: --limit
+
+   Specifies the limit for the number of snapshots permitted.
+
 Commands
 ========
 
@@ -182,11 +189,11 @@ Commands
   If image is a clone, information about its parent is also displayed.
   If a snapshot is specified, whether it is protected is shown as well.
 
-:command:`create` (-s | --size *size-in-M/G/T*) [--image-format *format-id*] [--object-size *B/K/M*] [--stripe-unit *size-in-B/K/M* --stripe-count *num*] [--image-feature *feature-name*]... [--image-shared] *image-spec*
+:command:`create` (-s | --size *size-in-M/G/T*) [--image-format *format-id*] [--object-size *size-in-B/K/M*] [--stripe-unit *size-in-B/K/M* --stripe-count *num*] [--image-feature *feature-name*]... [--image-shared] *image-spec*
   Will create a new rbd image. You must also specify the size via --size.  The
   --stripe-unit and --stripe-count arguments are optional, but must be used together.
 
-:command:`clone` [--object-size *B/K/M*] [--stripe-unit *size-in-B/K/M* --stripe-count *num*] [--image-feature *feature-name*] [--image-shared] *parent-snap-spec* *child-image-spec*
+:command:`clone` [--object-size *size-in-B/K/M*] [--stripe-unit *size-in-B/K/M* --stripe-count *num*] [--image-feature *feature-name*] [--image-shared] *parent-snap-spec* *child-image-spec*
   Will create a clone (copy-on-write child) of the parent snapshot.
   Object size will be identical to that of the parent image unless
   specified. Size will be the same as the parent snapshot. The --stripe-unit
@@ -217,10 +224,12 @@ Commands
   Deletes an rbd image (including all data blocks). If the image has
   snapshots, this fails and nothing is deleted.
 
-:command:`export` (*image-spec* | *snap-spec*) [*dest-path*]
+:command:`export` [--export-format *format (1 or 2)*] (*image-spec* | *snap-spec*) [*dest-path*]
   Exports image to dest path (use - for stdout).
+  The --export-format accepts '1' or '2' currently. Format 2 allow us to export not only the content
+  of image, but also the snapshots and other properties, such as image_order, features.
 
-:command:`import` [--image-format *format-id*] [--object-size *B/K/M*] [--stripe-unit *size-in-B/K/M* --stripe-count *num*] [--image-feature *feature-name*]... [--image-shared] *src-path* [*image-spec*]
+:command:`import` [--export-format *format (1 or 2)*] [--image-format *format-id*] [--object-size *size-in-B/K/M*] [--stripe-unit *size-in-B/K/M* --stripe-count *num*] [--image-feature *feature-name*]... [--image-shared] *src-path* [*image-spec*]
   Creates a new image and imports its data from path (use - for
   stdin).  The import operation will try to create sparse rbd images 
   if possible.  For import from stdin, the sparsification unit is
@@ -228,6 +237,9 @@ Commands
 
   The --stripe-unit and --stripe-count arguments are optional, but must be
   used together.
+
+  The --export-format accepts '1' or '2' currently. Format 2 allow us to import not only the content
+  of image, but also the snapshots and other properties, such as image_order, features.
 
 :command:`export-diff` [--from-snap *snap-name*] [--whole-object] (*image-spec* | *snap-spec*) *dest-path*
   Exports an incremental diff for an image to dest path (use - for stdout).  If
@@ -291,7 +303,7 @@ Commands
   Rollback image content to snapshot. This will iterate through the entire blocks
   array and update the data head content to the snapshotted version.
 
-:command:`snap rm` *snap-spec*
+:command:`snap rm` [--force] *snap-spec*
   Removes the specified snapshot.
 
 :command:`snap purge` *image-spec*
@@ -313,10 +325,17 @@ Commands
 
   This requires image format 2.
 
-:command:`map` [-o | --options *map-options* ] [--read-only] *image-spec* | *snap-spec*
+:command:`snap limit set` [--limit] *limit* *image-spec*
+  Set a limit for the number of snapshots allowed on an image.
+
+:command:`snap limit clear` *image-spec*
+  Remove any previously set limit on the number of snapshots allowed on
+  an image.
+
+:command:`map` [-o | --options *krbd-options* ] [--read-only] *image-spec* | *snap-spec*
   Maps the specified image to a block device via the rbd kernel module.
 
-:command:`unmap` *image-spec* | *snap-spec* | *device-path*
+:command:`unmap` [-o | --options *krbd-options* ] *image-spec* | *snap-spec* | *device-path*
   Unmaps the block device that was mapped via the rbd kernel module.
 
 :command:`showmapped`
@@ -358,9 +377,10 @@ Commands
   Release a lock on an image. The lock id and locker are
   as output by lock ls.
 
-:command:`bench-write` [--io-size *size-in-B/K/M/G/T*] [--io-threads *num-ios-in-flight*] [--io-total *total-size-to-write-in-B/K/M/G/T*] [--io-pattern seq | rand] *image-spec*
-  Generate a series of writes to the image and measure the write throughput and
-  latency.  Defaults are: --io-size 4096, --io-threads 16, --io-total 1G,
+:command:`bench` --io-type <read | write> [--io-size *size-in-B/K/M/G/T*] [--io-threads *num-ios-in-flight*] [--io-total *size-in-B/K/M/G/T*] [--io-pattern seq | rand] *image-spec*
+  Generate a series of IOs to the image and measure the IO throughput and
+  latency.  If no suffix is given, unit B is assumed for both --io-size and
+  --io-total.  Defaults are: --io-size 4096, --io-threads 16, --io-total 1G,
   --io-pattern seq.
 
 Image and snap specs
@@ -407,14 +427,14 @@ By default, [*stripe_unit*] is the same as the object size and [*stripe_count*] 
 used.
 
 
-Map options
-===========
+Kernel rbd (krbd) options
+=========================
 
 Most of these options are useful mainly for debugging and benchmarking.  The
 default values are set in the kernel and may therefore depend on the version of
 the running kernel.
 
-libceph (per client instance) options:
+Per client instance `rbd map` options:
 
 * fsid=aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee - FSID that should be assumed by
   the client.
@@ -453,13 +473,24 @@ libceph (per client instance) options:
 
 * osd_idle_ttl=x - OSD idle TTL (default is 60 seconds).
 
-Mapping (per block device) options:
+Per mapping (block device) `rbd map` options:
 
 * rw - Map the image read-write (default).
 
 * ro - Map the image read-only.  Equivalent to --read-only.
 
 * queue_depth=x - queue depth (since 4.2, default is 128 requests).
+
+* lock_on_read - Acquire exclusive lock on reads, in addition to writes and
+  discards (since 4.9).
+
+* exclusive - Disable automatic exclusive lock transitions (since 4.12).
+
+`rbd unmap` options:
+
+* force - Force the unmapping of a block device that is open (since 4.9).  The
+  driver will wait for running requests to complete and then unmap; requests
+  sent to the driver after initiating the unmap will be failed.
 
 
 Examples
@@ -497,9 +528,9 @@ To map an image via the kernel with cephx enabled::
 
        rbd map mypool/myimage --id admin --keyfile secretfile
 
-To map an image via the kernel with different cluster name other than default *ceph*.
+To map an image via the kernel with different cluster name other than default *ceph*::
 
-       rbd map mypool/myimage --cluster *cluster name*
+       rbd map mypool/myimage --cluster cluster-name
 
 To unmap an image::
 

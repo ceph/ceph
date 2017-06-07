@@ -25,17 +25,16 @@
 
 #include "messages/MLock.h"
 
+#define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_mds
 #undef dout_prefix
 #define dout_prefix *_dout << "mds." << dir->cache->mds->get_nodeid() << ".cache.den(" << dir->dirfrag() << " " << name << ") "
 
 
-ostream& CDentry::print_db_line_prefix(ostream& out) 
+ostream& CDentry::print_db_line_prefix(ostream& out)
 {
-  return out << ceph_clock_now(g_ceph_context) << " mds." << dir->cache->mds->get_nodeid() << ".cache.den(" << dir->ino() << " " << name << ") ";
+  return out << ceph_clock_now() << " mds." << dir->cache->mds->get_nodeid() << ".cache.den(" << dir->ino() << " " << name << ") ";
 }
-
-boost::pool<> CDentry::pool(sizeof(CDentry));
 
 LockType CDentry::lock_type(CEPH_LOCK_DN);
 LockType CDentry::versionlock_type(CEPH_LOCK_DVERSION);
@@ -89,7 +88,9 @@ ostream& operator<<(ostream& out, const CDentry& dn)
 
   out << " inode=" << dn.get_linkage()->get_inode();
 
-  if (dn.is_new()) out << " state=new";
+  out << " state=" << dn.get_state();
+  if (dn.is_new()) out << "|new";
+  if (dn.state_test(CDentry::STATE_BOTTOMLRU)) out << "|bottomlru";
 
   if (dn.get_num_ref()) {
     out << " |";
@@ -204,10 +205,10 @@ void CDentry::mark_new()
   state_set(STATE_NEW);
 }
 
-void CDentry::make_path_string(string& s) const
+void CDentry::make_path_string(string& s, bool projected) const
 {
   if (dir) {
-    dir->inode->make_path_string(s);
+    dir->inode->make_path_string(s, projected);
   } else {
     s = "???";
   }
@@ -215,34 +216,12 @@ void CDentry::make_path_string(string& s) const
   s.append(name.data(), name.length());
 }
 
-void CDentry::make_path(filepath& fp) const
+void CDentry::make_path(filepath& fp, bool projected) const
 {
   assert(dir);
-  if (dir->inode->is_base())
-    fp = filepath(dir->inode->ino());               // base case
-  else if (dir->inode->get_parent_dn())
-    dir->inode->get_parent_dn()->make_path(fp);  // recurse
-  else
-    fp = filepath(dir->inode->ino());               // relative but not base?  hrm!
+  dir->inode->make_path(fp, projected);
   fp.push_dentry(name);
 }
-
-/*
-void CDentry::make_path(string& s, inodeno_t tobase)
-{
-  assert(dir);
-  
-  if (dir->inode->is_root()) {
-    s += "/";  // make it an absolute path (no matter what) if we hit the root.
-  } 
-  else if (dir->inode->get_parent_dn() &&
-	   dir->inode->ino() != tobase) {
-    dir->inode->get_parent_dn()->make_path(s, tobase);
-    s += "/";
-  }
-  s += name;
-}
-*/
 
 /*
  * we only add ourselves to remote_parents when the linkage is
@@ -270,6 +249,18 @@ void CDentry::unlink_remote(CDentry::linkage_t *dnl)
   dnl->inode = 0;
 }
 
+void CDentry::push_projected_linkage()
+{
+  _project_linkage();
+
+  if (is_auth()) {
+    CInode *diri = dir->inode;
+    if (diri->is_stray())
+      diri->mdcache->notify_stray_removed();
+  }
+}
+
+
 void CDentry::push_projected_linkage(CInode *inode)
 {
   // dirty rstat tracking is in the projected plane
@@ -282,6 +273,12 @@ void CDentry::push_projected_linkage(CInode *inode)
 
   if (dirty_rstat)
     inode->mark_dirty_rstat();
+
+  if (is_auth()) {
+    CInode *diri = dir->inode;
+    if (diri->is_stray())
+      diri->mdcache->notify_stray_created();
+  }
 }
 
 CDentry::linkage_t *CDentry::pop_projected_linkage()
@@ -446,7 +443,7 @@ void CDentry::encode_lock_state(int type, bufferlist& bl)
   else if (linkage.is_null()) {
     // encode nothing.
   }
-  else assert(0);  
+  else ceph_abort();
 }
 
 void CDentry::decode_lock_state(int type, bufferlist& bl)
@@ -487,7 +484,7 @@ void CDentry::decode_lock_state(int type, bufferlist& bl)
     }
     break;
   default: 
-    assert(0);
+    ceph_abort();
   }
 }
 
@@ -559,16 +556,18 @@ void CDentry::dump(Formatter *f) const
   make_path(path);
 
   f->dump_string("path", path.get_path());
-  f->dump_int("snap_first", first);
-  f->dump_int("snap_last", last);
-
-  f->dump_bool("is_null", get_linkage()->is_null());
+  f->dump_unsigned("path_ino", path.get_ino().val);
+  f->dump_unsigned("snap_first", first);
+  f->dump_unsigned("snap_last", last);
+  
+  f->dump_bool("is_primary", get_linkage()->is_primary());
   f->dump_bool("is_remote", get_linkage()->is_remote());
+  f->dump_bool("is_null", get_linkage()->is_null());
   f->dump_bool("is_new", is_new());
   if (get_linkage()->get_inode()) {
-    f->dump_int("inode", get_linkage()->get_inode()->ino());
+    f->dump_unsigned("inode", get_linkage()->get_inode()->ino());
   } else {
-    f->dump_int("inode", 0);
+    f->dump_unsigned("inode", 0);
   }
 
   if (linkage.is_remote()) {
@@ -577,8 +576,8 @@ void CDentry::dump(Formatter *f) const
     f->dump_string("remote_type", "");
   }
 
-  f->dump_int("version", get_version());
-  f->dump_int("projected_version", get_projected_version());
+  f->dump_unsigned("version", get_version());
+  f->dump_unsigned("projected_version", get_projected_version());
 
   f->dump_int("auth_pins", auth_pins);
   f->dump_int("nested_auth_pins", nested_auth_pins);
@@ -618,60 +617,6 @@ std::string CDentry::linkage_t::get_remote_d_type_string() const
     case S_IFDIR: return "dir";
     case S_IFCHR: return "chr";
     case S_IFIFO: return "fifo";
-    default: assert(0); return "";
+    default: ceph_abort(); return "";
   }
-}
-
-void CDentry::scrub_initialize(CDir *parent, bool recurse, bool children,
-                        ScrubHeaderRefConst header,
-                               Context *f)
-{
-  if (!scrub_infop)
-    scrub_info_create();
-  else
-    assert(!scrub_infop->dentry_scrubbing);
-
-  scrub_infop->scrub_parent = parent;
-  scrub_infop->scrub_recursive = recurse;
-  scrub_infop->scrub_children = children;
-  scrub_infop->dentry_scrubbing = true;
-  scrub_infop->on_finish = f;
-  scrub_infop->header = header;
-
-  auth_pin(this);
-}
-
-void CDentry::scrub_finished(Context **c)
-{
-  dout(10) << __func__ << dendl;
-  assert(scrub_info()->dentry_scrubbing);
-
-  if (scrub_infop->scrub_parent) {
-    scrub_infop->scrub_parent->scrub_dentry_finished(this);
-  }
-
-  *c = scrub_infop->on_finish;
-
-  if (scrub_infop->header && scrub_infop->header->origin == this) {
-    // We are at the point that a tagging scrub was initiated
-    LogChannelRef clog = dir->cache->mds->clog;
-    clog->info() << "scrub complete with tag '"
-      << scrub_infop->header->tag << "'";
-  }
-
-  delete scrub_infop;
-  scrub_infop = NULL;
-
-  auth_unpin(this);
-}
-
-void CDentry::scrub_info_create() const
-{
-  assert(!scrub_infop);
-
-  // break out of const-land to set up implicit initial state
-  CDentry *me = const_cast<CDentry*>(this);
-
-  // we don't need to change or set up any default parameters; assign directly
-  me->scrub_infop = new scrub_info_t();
 }

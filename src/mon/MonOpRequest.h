@@ -42,7 +42,7 @@ struct MonOpRequest : public TrackedOp {
   void mark_svc_event(const string &service, const string &event) {
     string s = service;
     s.append(":").append(event);
-    mark_event(s);
+    mark_event_string(s);
   }
 
   void mark_logmon_event(const string &event) {
@@ -74,6 +74,9 @@ struct MonOpRequest : public TrackedOp {
     OP_TYPE_COMMAND,          ///< is a command
   };
 
+  MonOpRequest(const MonOpRequest &other) = delete;
+  MonOpRequest & operator = (const MonOpRequest &other) = delete;
+
 private:
   Message *request;
   utime_t dequeued_time;
@@ -83,17 +86,19 @@ private:
   op_type_t op_type;
 
   MonOpRequest(Message *req, OpTracker *tracker) :
-    TrackedOp(tracker, req->get_recv_stamp()),
+    TrackedOp(tracker,
+      req->get_recv_stamp().is_zero() ?
+      req->get_recv_stamp() : ceph_clock_now()),
     request(req),
     session(NULL),
     con(NULL),
     forwarded_to_leader(false),
     op_type(OP_TYPE_NONE)
   {
-    tracker->mark_event(this, "header_read", request->get_recv_stamp());
-    tracker->mark_event(this, "throttled", request->get_throttle_stamp());
-    tracker->mark_event(this, "all_read", request->get_recv_complete_stamp());
-    tracker->mark_event(this, "dispatched", request->get_dispatch_stamp());
+    mark_event("header_read", request->get_recv_stamp());
+    mark_event("throttled", request->get_throttle_stamp());
+    mark_event("all_read", request->get_recv_complete_stamp());
+    mark_event("dispatched", request->get_dispatch_stamp());
 
     if (req) {
       con = req->get_connection();
@@ -103,16 +108,12 @@ private:
     }
   }
 
-  void _dump(utime_t now, Formatter *f) const {
+  void _dump(Formatter *f) const override {
     {
       f->open_array_section("events");
       Mutex::Locker l(lock);
-      for (list<pair<utime_t,string> >::const_iterator i = events.begin();
-           i != events.end(); ++i) {
-        f->open_object_section("event");
-        f->dump_stream("time") << i->first;
-        f->dump_string("event", i->second);
-        f->close_section();
+      for (auto& i : events) {
+	f->dump_object("event", i);
       }
       f->close_section();
       f->open_object_section("info");
@@ -125,12 +126,12 @@ private:
   }
 
 protected:
-  void _dump_op_descriptor_unlocked(ostream& stream) const {
+  void _dump_op_descriptor_unlocked(ostream& stream) const override {
     get_req()->print(stream);
   }
 
 public:
-  ~MonOpRequest() {
+  ~MonOpRequest() override {
     request->put();
     // certain ops may not have a session (e.g., AUTH or PING)
     if (session)
@@ -173,7 +174,7 @@ public:
     return (con && con->get_peer_type() & CEPH_ENTITY_TYPE_MON);
   }
 
-  typedef ceph::shared_ptr<MonOpRequest> Ref;
+  typedef boost::intrusive_ptr<MonOpRequest> Ref;
 
   void set_op_type(op_type_t t) {
     op_type = t;

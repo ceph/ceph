@@ -1,6 +1,6 @@
 from sqlalchemy import create_engine
 from pecan import conf  # noqa
-from db import Session, Base
+from .db import Session, Base
 import sys
 
 def create_from_conf():
@@ -26,4 +26,3 @@ def rollback():
 
 def clear():
     Session.remove()
-

@@ -30,16 +30,18 @@
 #define TYPE_FEATUREFUL(t)
 #define TYPE_FEATUREFUL_STRAYDATA(t)
 #define TYPE_FEATUREFUL_NONDETERMINISTIC(t)
+#define TYPE_FEATUREFUL_NOCOPY(t)
 #define TYPE_NOCOPY(t)
 #define MESSAGE(t)
 #include "types.h"
 #undef TYPE
 #undef TYPE_STRAYDATA
 #undef TYPE_NONDETERMINISTIC
+#undef TYPE_NOCOPY
 #undef TYPE_FEATUREFUL
 #undef TYPE_FEATUREFUL_STRAYDATA
 #undef TYPE_FEATUREFUL_NONDETERMINISTIC
-#undef TYPE_NOCOPY
+#undef TYPE_FEATUREFUL_NOCOPY
 #undef MESSAGE
 
 #define MB(m) ((m) * 1024 * 1024)
@@ -48,9 +50,9 @@ void usage(ostream &out)
 {
   out << "usage: ceph-dencoder [commands ...]" << std::endl;
   out << "\n";
-  out << "  version            print version string (to stdout)\n";
+  out << "  version             print version string (to stdout)\n";
   out << "\n";
-  out << "  import <encfile>   read encoded data from encfile\n";
+  out << "  import <encfile>    read encoded data from encfile\n";
   out << "  export <outfile>    write encoded data to outfile\n";
   out << "\n";
   out << "  set_features <num>  set feature bits used for encoding\n";
@@ -62,6 +64,7 @@ void usage(ostream &out)
   out << "  decode              decode into in-memory object\n";
   out << "  encode              encode in-memory object\n";
   out << "  dump_json           dump in-memory object as json (to stdout)\n";
+  out << "  hexdump             print encoded data in hex\n";
   out << "\n";
   out << "  copy                copy object (via operator=)\n";
   out << "  copy_ctor           copy object (via copy ctor)\n";
@@ -101,15 +104,15 @@ public:
     : m_object(new T),
       stray_okay(stray_okay),
       nondeterministic(nondeterministic) {}
-  ~DencoderBase() {
+  ~DencoderBase() override {
     delete m_object;
   }
 
-  string decode(bufferlist bl, uint64_t seek) {
+  string decode(bufferlist bl, uint64_t seek) override {
     bufferlist::iterator p = bl.begin();
     p.seek(seek);
     try {
-      m_object->decode(p);
+      ::decode(*m_object, p);
     }
     catch (buffer::error& e) {
       return e.what();
@@ -122,18 +125,18 @@ public:
     return string();
   }
 
-  virtual void encode(bufferlist& out, uint64_t features) = 0;
+  void encode(bufferlist& out, uint64_t features) override = 0;
 
-  void dump(ceph::Formatter *f) {
+  void dump(ceph::Formatter *f) override {
     m_object->dump(f);
   }
-  void generate() {
+  void generate() override {
     T::generate_test_instances(m_list);
   }
-  int num_generated() {
+  int num_generated() override {
     return m_list.size();
   }
-  string select_generated(unsigned i) {
+  string select_generated(unsigned i) override {
     // allow 0- or 1-based (by wrapping)
     if (i == 0)
       i = m_list.size();
@@ -145,7 +148,7 @@ public:
     return string();
   }
 
-  bool is_deterministic() {
+  bool is_deterministic() override {
     return !nondeterministic;
   }
 };
@@ -155,9 +158,9 @@ class DencoderImplNoFeatureNoCopy : public DencoderBase<T> {
 public:
   DencoderImplNoFeatureNoCopy(bool stray_ok, bool nondeterministic)
     : DencoderBase<T>(stray_ok, nondeterministic) {}
-  virtual void encode(bufferlist& out, uint64_t features) {
+  void encode(bufferlist& out, uint64_t features) override {
     out.clear();
-    this->m_object->encode(out);
+    ::encode(*this->m_object, out);
   }
 };
 
@@ -166,13 +169,13 @@ class DencoderImplNoFeature : public DencoderImplNoFeatureNoCopy<T> {
 public:
   DencoderImplNoFeature(bool stray_ok, bool nondeterministic)
     : DencoderImplNoFeatureNoCopy<T>(stray_ok, nondeterministic) {}
-  void copy() {
+  void copy() override {
     T *n = new T;
     *n = *this->m_object;
     delete this->m_object;
     this->m_object = n;
   }
-  void copy_ctor() {
+  void copy_ctor() override {
     T *n = new T(*this->m_object);
     delete this->m_object;
     this->m_object = n;
@@ -180,16 +183,33 @@ public:
 };
 
 template<class T>
-class DencoderImplFeatureful : public DencoderBase<T> {
+class DencoderImplFeaturefulNoCopy : public DencoderBase<T> {
 public:
-  DencoderImplFeatureful(bool stray_ok, bool nondeterministic)
+  DencoderImplFeaturefulNoCopy(bool stray_ok, bool nondeterministic)
     : DencoderBase<T>(stray_ok, nondeterministic) {}
-  virtual void encode(bufferlist& out, uint64_t features) {
+  void encode(bufferlist& out, uint64_t features) override {
     out.clear();
     ::encode(*(this->m_object), out, features);
   }
 };
 
+template<class T>
+class DencoderImplFeatureful : public DencoderImplFeaturefulNoCopy<T> {
+public:
+  DencoderImplFeatureful(bool stray_ok, bool nondeterministic)
+    : DencoderImplFeaturefulNoCopy<T>(stray_ok, nondeterministic) {}
+  void copy() override {
+    T *n = new T;
+    *n = *this->m_object;
+    delete this->m_object;
+    this->m_object = n;
+  }
+  void copy_ctor() override {
+    T *n = new T(*this->m_object);
+    delete this->m_object;
+    this->m_object = n;
+  }
+};
 
 template<class T>
 class MessageDencoderImpl : public Dencoder {
@@ -200,11 +220,11 @@ public:
   MessageDencoderImpl() {
     m_object = new T;
   }
-  ~MessageDencoderImpl() {
+  ~MessageDencoderImpl() override {
     m_object->put();
   }
 
-  string decode(bufferlist bl, uint64_t seek) {
+  string decode(bufferlist bl, uint64_t seek) override {
     bufferlist::iterator p = bl.begin();
     p.seek(seek);
     try {
@@ -230,21 +250,21 @@ public:
     return string();
   }
 
-  void encode(bufferlist& out, uint64_t features) {
+  void encode(bufferlist& out, uint64_t features) override {
     out.clear();
     encode_message(m_object, features, out);
   }
 
-  void dump(ceph::Formatter *f) {
+  void dump(ceph::Formatter *f) override {
     m_object->dump(f);
   }
-  void generate() {
+  void generate() override {
     //T::generate_test_instances(m_list);
   }
-  int num_generated() {
+  int num_generated() override {
     return m_list.size();
   }
-  string select_generated(unsigned i) {
+  string select_generated(unsigned i) override {
     // allow 0- or 1-based (by wrapping)
     if (i == 0)
       i = m_list.size();
@@ -256,7 +276,7 @@ public:
     m_object = *p;
     return string();
   }
-  bool is_deterministic() {
+  bool is_deterministic() override {
     return true;
   }
 
@@ -280,15 +300,18 @@ int main(int argc, const char **argv)
 #define TYPE_FEATUREFUL(t) dencoders[T_STRINGIFY(t)] = new DencoderImplFeatureful<t>(false, false);
 #define TYPE_FEATUREFUL_STRAYDATA(t) dencoders[T_STRINGIFY(t)] = new DencoderImplFeatureful<t>(true, false);
 #define TYPE_FEATUREFUL_NONDETERMINISTIC(t) dencoders[T_STRINGIFY(t)] = new DencoderImplFeatureful<t>(false, true);
+#define TYPE_FEATUREFUL_NOCOPY(t) dencoders[T_STRINGIFY(t)] = new DencoderImplFeaturefulNoCopy<t>(false, false);
 #define TYPE_NOCOPY(t) dencoders[T_STRINGIFY(t)] = new DencoderImplNoFeatureNoCopy<t>(false, false);
 #define MESSAGE(t) dencoders[T_STRINGIFY(t)] = new MessageDencoderImpl<t>;
 #include "types.h"
 #undef TYPE
 #undef TYPE_STRAYDATA
 #undef TYPE_NONDETERMINISTIC
+#undef TYPE_NOCOPY
 #undef TYPE_FEATUREFUL
 #undef TYPE_FEATUREFUL_STRAYDATA
 #undef TYPE_FEATUREFUL_NONDETERMINISTIC
+#undef TYPE_FEATUREFUL_NOCOPY
 #undef T_STR
 #undef T_STRINGIFY
 
@@ -302,7 +325,7 @@ int main(int argc, const char **argv)
   uint64_t skip = 0;
 
   if (args.empty()) {
-    usage(cerr);
+    cerr << "-h for help" << std::endl;
     exit(1);
   }
   for (std::vector<const char*>::iterator i = args.begin(); i != args.end(); ++i) {
@@ -322,7 +345,7 @@ int main(int argc, const char **argv)
     } else if (*i == string("type")) {
       ++i;
       if (i == args.end()) {
-	usage(cerr);
+	cerr << "expecting type" << std::endl;
 	exit(1);
       }
       string cname = *i;
@@ -335,7 +358,7 @@ int main(int argc, const char **argv)
     } else if (*i == string("skip")) {
       ++i;
       if (i == args.end()) {
-	usage(cerr);
+	cerr << "expecting byte count" << std::endl;
 	exit(1);
       }
       skip = atoi(*i);
@@ -345,43 +368,37 @@ int main(int argc, const char **argv)
     } else if (*i == string("set_features")) {
       ++i;
       if (i == args.end()) {
-	usage(cerr);
+	cerr << "expecting features" << std::endl;
 	exit(1);
       }
-      features = atoi(*i);
-
+      features = atoll(*i);
     } else if (*i == string("encode")) {
       if (!den) {
 	cerr << "must first select type with 'type <name>'" << std::endl;
-	usage(cerr);
 	exit(1);
       }
       den->encode(encbl, features | CEPH_FEATURE_RESERVED); // hack for OSDMap
     } else if (*i == string("decode")) {
       if (!den) {
 	cerr << "must first select type with 'type <name>'" << std::endl;
-	usage(cerr);
 	exit(1);
       }
       err = den->decode(encbl, skip);
     } else if (*i == string("copy_ctor")) {
       if (!den) {
 	cerr << "must first select type with 'type <name>'" << std::endl;
-	usage(cerr);
 	exit(1);
       }
       den->copy_ctor();
     } else if (*i == string("copy")) {
       if (!den) {
 	cerr << "must first select type with 'type <name>'" << std::endl;
-	usage(cerr);
 	exit(1);
       }
       den->copy();
     } else if (*i == string("dump_json")) {
       if (!den) {
 	cerr << "must first select type with 'type <name>'" << std::endl;
-	usage(cerr);
 	exit(1);
       }
       JSONFormatter jf(true);
@@ -391,10 +408,12 @@ int main(int argc, const char **argv)
       jf.flush(cout);
       cout << std::endl;
 
+    } else if (*i == string("hexdump")) {
+      encbl.hexdump(cout);
     } else if (*i == string("import")) {
       ++i;
       if (i == args.end()) {
-	usage(cerr);
+	cerr << "expecting filename" << std::endl;
 	exit(1);
       }
       int r;
@@ -413,7 +432,7 @@ int main(int argc, const char **argv)
     } else if (*i == string("export")) {
       ++i;
       if (i == args.end()) {
-	usage(cerr);
+	cerr << "expecting filename" << std::endl;
 	exit(1);
       }
       int fd = ::open(*i, O_WRONLY|O_CREAT|O_TRUNC, 0644);
@@ -431,31 +450,32 @@ int main(int argc, const char **argv)
     } else if (*i == string("count_tests")) {
       if (!den) {
 	cerr << "must first select type with 'type <name>'" << std::endl;
-	usage(cerr);
 	exit(1);
       }
       cout << den->num_generated() << std::endl;
     } else if (*i == string("select_test")) {
       if (!den) {
 	cerr << "must first select type with 'type <name>'" << std::endl;
-	usage(cerr);
 	exit(1);
       }
       ++i;
       if (i == args.end()) {
-	usage(cerr);
+	cerr << "expecting instance number" << std::endl;
 	exit(1);
       }
       int n = atoi(*i);
       err = den->select_generated(n);
     } else if (*i == string("is_deterministic")) {
+      if (!den) {
+	cerr << "must first select type with 'type <name>'" << std::endl;
+	exit(1);
+      }
       if (den->is_deterministic())
 	exit(0);
       else
 	exit(1);
     } else {
       cerr << "unknown option '" << *i << "'" << std::endl;
-      usage(cerr);
       exit(1);
     }      
     if (err.length()) {

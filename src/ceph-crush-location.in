@@ -68,13 +68,6 @@ if [ -z "$id" ]; then
     usage_exit
 fi
 
-# try a type-specific config, e.g. 'osd crush location'
-location="$($BINDIR/ceph-conf --cluster=${cluster:-ceph} --name=$type.$id --lookup ${type}_crush_location || :)"
-if [ -n "$location" ]; then
-    echo $location
-    exit 0
-fi
-
 # try a generic location
 location="$($BINDIR/ceph-conf --cluster=${cluster:-ceph} --name=$type.$id --lookup crush_location || :)"
 if [ -n "$location" ]; then

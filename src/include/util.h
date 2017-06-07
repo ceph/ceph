@@ -14,12 +14,8 @@
 #ifndef CEPH_UTIL_H
 #define CEPH_UTIL_H
 
-// is buf~len completely zero (in 8-byte chunks)
-
 #include "common/Formatter.h"
 #include "include/types.h"
-
-bool buf_is_zero(const char *buf, size_t len);
 
 int64_t unit_to_bytesize(string val, ostream *pss);
 
@@ -73,6 +69,7 @@ struct ceph_data_stats
   }
 };
 typedef struct ceph_data_stats ceph_data_stats_t;
+WRITE_CLASS_ENCODER(ceph_data_stats)
 
 int get_fs_stats(ceph_data_stats_t &stats, const char *path);
 
@@ -85,4 +82,6 @@ void collect_sys_info(map<string, string> *m, CephContext *cct);
 /// @param type the service type of given @p services, for example @p osd or @p mon.
 void dump_services(Formatter* f, const map<string, list<int> >& services, const char* type);
 
+string cleanbin(bufferlist &bl, bool &b64);
+string cleanbin(string &str);
 #endif /* CEPH_UTIL_H */

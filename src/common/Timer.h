@@ -17,9 +17,6 @@
 
 #include "Cond.h"
 #include "Mutex.h"
-#include "RWLock.h"
-
-#include <map>
 
 class CephContext;
 class Context;
@@ -27,10 +24,6 @@ class SafeTimerThread;
 
 class SafeTimer
 {
-  // This class isn't supposed to be copied
-  SafeTimer(const SafeTimer &rhs);
-  SafeTimer& operator=(const SafeTimer &rhs);
-
   CephContext *cct;
   Mutex& lock;
   Cond cond;
@@ -49,6 +42,10 @@ class SafeTimer
   void dump(const char *caller = 0) const;
 
 public:
+  // This class isn't supposed to be copied
+  SafeTimer(const SafeTimer&) = delete;
+  SafeTimer& operator=(const SafeTimer&) = delete;
+
   /* Safe callbacks determines whether callbacks are called with the lock
    * held.
    *

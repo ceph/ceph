@@ -18,8 +18,8 @@
 #include "MDSContext.h"
 
 #include "common/dout.h"
+#define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_mds
-
 
 void MDSInternalContextBase::complete(int r) {
   MDSRank *mds = get_mds();
@@ -45,7 +45,6 @@ void MDSInternalContextWrapper::finish(int r)
   fin->complete(r);
 }
 
-
 void MDSIOContextBase::complete(int r) {
   MDSRank *mds = get_mds();
 
@@ -66,6 +65,15 @@ void MDSIOContextBase::complete(int r) {
   }
 }
 
+void MDSLogContextBase::complete(int r) {
+  MDLog *mdlog = get_mds()->mdlog;
+  uint64_t safe_pos = write_pos;
+  pre_finish(r);
+  // MDSContextBase::complete() free this
+  MDSIOContextBase::complete(r);
+  mdlog->set_safe_pos(safe_pos);
+}
+
 MDSRank *MDSIOContext::get_mds() {
   return mds;
 }
@@ -79,9 +87,19 @@ void MDSIOContextWrapper::finish(int r)
   fin->complete(r);
 }
 
+void C_IO_Wrapper::complete(int r)
+{
+  if (async) {
+    async = false;
+    get_mds()->finisher->queue(this, r);
+  } else {
+    MDSIOContext::complete(r);
+  }
+}
+
 MDSRank *MDSInternalContextGather::get_mds()
 {
   derr << "Forbidden call to MDSInternalContextGather::get_mds by " << typeid(*this).name() << dendl;
-  assert(0);
+  ceph_abort();
 }
 

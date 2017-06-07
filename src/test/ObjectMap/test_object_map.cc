@@ -73,6 +73,17 @@ public:
     db->set_keys(hoid, to_write);
   }
 
+  void set_keys(ghobject_t hoid, const map<string, string> &to_set) {
+    map<string, bufferlist> to_write;
+    for (auto &&i: to_set) {
+      bufferptr bp(i.second.data(), i.second.size());
+      bufferlist bl;
+      bl.append(bp);
+      to_write.insert(make_pair(i.first, bl));
+    }
+    db->set_keys(hoid, to_write);
+  }
+
   void set_xattr(ghobject_t hoid,
 		 string key, string value) {
     map<string, bufferlist> to_write;
@@ -145,8 +156,10 @@ public:
     map<string, bufferlist> got;
     db->get_values(hoid, to_get, &got);
     if (!got.empty()) {
-      *value = string(got.begin()->second.c_str(),
-		      got.begin()->second.length());
+      if (value) {
+	*value = string(got.begin()->second.c_str(),
+			got.begin()->second.length());
+      }
       return 1;
     } else {
       return 0;
@@ -158,10 +171,20 @@ public:
 	       key);
   }
 
+  void remove_keys(const string &objname, const set<string> &to_remove) {
+    remove_keys(ghobject_t(hobject_t(sobject_t(objname, CEPH_NOSNAP))),
+                to_remove);
+  }
+
   void remove_key(ghobject_t hoid,
 		  string key) {
     set<string> to_remove;
     to_remove.insert(key);
+    db->rm_keys(hoid, to_remove);
+  }
+
+  void remove_keys(ghobject_t hoid,
+                   const set<string> &to_remove) {
     db->rm_keys(hoid, to_remove);
   }
 
@@ -187,8 +210,28 @@ public:
     db->clone(hoid, hoid2);
   }
 
+  void rename(const string &objname, const string &target) {
+    rename(ghobject_t(hobject_t(sobject_t(objname, CEPH_NOSNAP))),
+	  ghobject_t(hobject_t(sobject_t(target, CEPH_NOSNAP))));
+  }
+
+  void rename(ghobject_t hoid,
+	     ghobject_t hoid2) {
+    db->rename(hoid, hoid2);
+  }
+
   void clear(const string &objname) {
     clear(ghobject_t(hobject_t(sobject_t(objname, CEPH_NOSNAP))));
+  }
+
+  void legacy_clone(const string &objname, const string &target) {
+    legacy_clone(ghobject_t(hobject_t(sobject_t(objname, CEPH_NOSNAP))),
+	  ghobject_t(hobject_t(sobject_t(target, CEPH_NOSNAP))));
+  }
+
+  void legacy_clone(ghobject_t hoid,
+	     ghobject_t hoid2) {
+    db->legacy_clone(hoid, hoid2);
   }
 
   void clear(ghobject_t hoid) {
@@ -204,10 +247,10 @@ public:
   }
 
   void def_init() {
-    for (unsigned i = 0; i < 1000; ++i) {
+    for (unsigned i = 0; i < 10000; ++i) {
       key_space.insert("key_" + num_str(i));
     }
-    for (unsigned i = 0; i < 1000; ++i) {
+    for (unsigned i = 0; i < 100; ++i) {
       object_name_space.insert("name_" + num_str(i));
     }
   }
@@ -233,17 +276,35 @@ public:
 	<< value << std::endl;
   }
 
-  void auto_set_key(ostream &out) {
-    set<string>::iterator key = rand_choose(key_space);
+  void test_set_key(const string &obj, const string &key, const string &val) {
+    omap[obj][key] = val;
+    set_key(obj, key, val);
+  }
+
+  void test_set_keys(const string &obj, const map<string, string> &to_set) {
+    for (auto &&i: to_set) {
+      omap[obj][i.first] = i.second;
+    }
+    set_keys(
+      ghobject_t(hobject_t(sobject_t(obj, CEPH_NOSNAP))),
+      to_set);
+  }
+
+  void auto_set_keys(ostream &out) {
     set<string>::iterator object = rand_choose(object_name_space);
 
-    string value = val_from_key(*object, *key);
+    map<string, string> to_set;
+    unsigned amount = (rand() % 10) + 1;
+    for (unsigned i = 0; i < amount; ++i) {
+      set<string>::iterator key = rand_choose(key_space);
+      string value = val_from_key(*object, *key);
+      out << "auto_set_key " << *object << ": " << *key << " -> "
+	  << value << std::endl;
+      to_set.insert(make_pair(*key, value));
+    }
 
-    omap[*object][*key] = value;
-    set_key(*object, *key, value);
 
-    out << "auto_set_key " << *object << ": " << *key << " -> "
-	<< value << std::endl;
+    test_set_keys(*object, to_set);
   }
 
   void xattrs_on_object(const string &object, set<string> *out) {
@@ -403,6 +464,31 @@ public:
     return 0;
   }
 
+  void test_clone(const string &object, const string &target, ostream &out) {
+    clone(object, target);
+    if (!omap.count(object)) {
+      out << " source missing.";
+      omap.erase(target);
+    } else {
+      out << " source present.";
+      omap[target] = omap[object];
+    }
+    if (!hmap.count(object)) {
+      out << " hmap source missing." << std::endl;
+      hmap.erase(target);
+    } else {
+      out << " hmap source present." << std::endl;
+      hmap[target] = hmap[object];
+    }
+    if (!xattrs.count(object)) {
+      out << " hmap source missing." << std::endl;
+      xattrs.erase(target);
+    } else {
+      out << " hmap source present." << std::endl;
+      xattrs[target] = xattrs[object];
+    }
+  }
+
   void auto_clone_key(ostream &out) {
     set<string>::iterator object = rand_choose(object_name_space);
     set<string>::iterator target = rand_choose(object_name_space);
@@ -410,41 +496,33 @@ public:
       target = rand_choose(object_name_space);
     }
     out << "clone " << *object << " to " << *target;
-    clone(*object, *target);
-    if (!omap.count(*object)) {
-      out << " source missing.";
-      omap.erase(*target);
-    } else {
-      out << " source present.";
-      omap[*target] = omap[*object];
-    }
-    if (!hmap.count(*object)) {
-      out << " hmap source missing." << std::endl;
-      hmap.erase(*target);
-    } else {
-      out << " hmap source present." << std::endl;
-      hmap[*target] = hmap[*object];
-    }
-    if (!xattrs.count(*object)) {
-      out << " hmap source missing." << std::endl;
-      xattrs.erase(*target);
-    } else {
-      out << " hmap source present." << std::endl;
-      xattrs[*target] = xattrs[*object];
-    }
+    test_clone(*object, *target, out);
   }
 
-  void auto_remove_key(ostream &out) {
+  void test_remove_keys(const string &obj, const set<string> &to_remove) {
+    for (auto &&k: to_remove)
+      omap[obj].erase(k);
+    remove_keys(obj, to_remove);
+  }
+
+  void test_remove_key(const string &obj, const string &key) {
+    omap[obj].erase(key);
+    remove_key(obj, key);
+  }
+
+  void auto_remove_keys(ostream &out) {
     set<string>::iterator object = rand_choose(object_name_space);
     set<string> kspace;
     keys_on_object(*object, &kspace);
-    set<string>::iterator key = rand_choose(kspace);
-    if (key == kspace.end()) {
-      return;
+    set<string> to_remove;
+    for (unsigned i = 0; i < 3; ++i) {
+      set<string>::iterator key = rand_choose(kspace);
+      if (key == kspace.end())
+	continue;
+      out << "removing " << *key << " from " << *object << std::endl;
+      to_remove.insert(*key);
     }
-    out << "removing " << *key << " from " << *object << std::endl;
-    omap[*object].erase(*key);
-    remove_key(*object, *key);
+    test_remove_keys(*object, to_remove);
   }
 
   void auto_remove_xattr(ostream &out) {
@@ -469,12 +547,16 @@ public:
     xattrs.erase(*object);
   }
 
+  void test_clear(const string &obj) {
+    clear_omap(obj);
+    omap.erase(obj);
+    hmap.erase(obj);
+  }
+
   void auto_clear_omap(ostream &out) {
     set<string>::iterator object = rand_choose(object_name_space);
     out << "auto_clear_object " << *object << std::endl;
-    clear_omap(*object);
-    omap.erase(*object);
-    hmap.erase(*object);
+    test_clear(*object);
   }
 
   void auto_write_header(ostream &out) {
@@ -491,7 +573,7 @@ public:
     string header;
     int r = get_header(*object, &header);
     if (r < 0) {
-      assert(0);
+      ceph_abort();
     }
     if (header.size() == 0) {
       if (hmap.count(*object)) {
@@ -516,16 +598,47 @@ public:
       return 0;
     }
   }
+
+  void verify_keys(const std::string &obj, ostream &out) {
+    set<string> in_db;
+    ObjectMap::ObjectMapIterator iter = db->get_iterator(
+      ghobject_t(hobject_t(sobject_t(obj, CEPH_NOSNAP))));
+    for (iter->seek_to_first(); iter->valid(); iter->next()) {
+      in_db.insert(iter->key());
+    }
+    bool err = false;
+    for (auto &&i: omap[obj]) {
+      if (!in_db.count(i.first)) {
+	out << __func__ << ": obj " << obj << " missing key "
+	    << i.first << std::endl;
+	err = true;
+      } else {
+	in_db.erase(i.first);
+      }
+    }
+    if (!in_db.empty()) {
+      out << __func__ << ": obj " << obj << " found extra keys "
+	  << in_db << std::endl;
+      err = true;
+    }
+    ASSERT_FALSE(err);
+  }
+
+  void auto_verify_objects(ostream &out) {
+    for (auto &&i: omap) {
+      verify_keys(i.first, out);
+    }
+  }
 };
 
 class ObjectMapTest : public ::testing::Test {
 public:
   boost::scoped_ptr< ObjectMap > db;
   ObjectMapTester tester;
-  virtual void SetUp() {
+  void SetUp() override {
     char *path = getenv("OBJECT_MAP_PATH");
     if (!path) {
-      db.reset(new DBObjectMap(new KeyValueDBMemory()));
+      db.reset(new DBObjectMap(g_ceph_context, new KeyValueDBMemory()));
       tester.db = db.get();
       return;
     }
@@ -536,13 +649,13 @@ public:
     KeyValueDB *store = KeyValueDB::create(g_ceph_context, "leveldb", strpath);
     assert(!store->create_and_open(cerr));
 
-    db.reset(new DBObjectMap(store));
+    db.reset(new DBObjectMap(g_ceph_context, store));
     tester.db = db.get();
   }
 
-  virtual void TearDown() {
+  void TearDown() override {
     std::cerr << "Checking..." << std::endl;
-    assert(db->check(std::cerr));
+    ASSERT_EQ(0, db->check(std::cerr));
   }
 };
 
@@ -551,7 +664,8 @@ int main(int argc, char **argv) {
   vector<const char*> args;
   argv_to_vec(argc, (const char **)argv, args);
 
-  global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
+  auto cct = global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT,
+			 CODE_ENVIRONMENT_UTILITY, 0);
   common_init_finish(g_ceph_context);
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();
@@ -744,6 +858,128 @@ TEST_F(ObjectMapTest, OddEvenClone) {
   db->clear(hoid2);
 }
 
+TEST_F(ObjectMapTest, Rename) {
+  ghobject_t hoid(hobject_t(sobject_t("foo", CEPH_NOSNAP)));
+  ghobject_t hoid2(hobject_t(sobject_t("foo2", CEPH_NOSNAP)));
+
+  for (unsigned i = 0; i < 1000; ++i) {
+    tester.set_key(hoid, "foo" + num_str(i), "bar" + num_str(i));
+  }
+
+  db->rename(hoid, hoid2);
+  // Verify rename where target exists
+  db->clone(hoid2, hoid);
+  db->rename(hoid, hoid2);
+
+  int r = 0;
+  for (unsigned i = 0; i < 1000; ++i) {
+    string result;
+    r = tester.get_key(hoid2, "foo" + num_str(i), &result);
+    ASSERT_EQ(1, r);
+    ASSERT_EQ("bar" + num_str(i), result);
+
+    if (i % 2) {
+      tester.remove_key(hoid2, "foo" + num_str(i));
+    }
+  }
+
+  for (unsigned i = 0; i < 1000; ++i) {
+    string result;
+    r = tester.get_key(hoid2, "foo" + num_str(i), &result);
+    if (i % 2) {
+      ASSERT_EQ(0, r);
+    } else {
+      ASSERT_EQ(1, r);
+      ASSERT_EQ("bar" + num_str(i), result);
+    }
+  }
+
+  {
+    ObjectMap::ObjectMapIterator iter = db->get_iterator(hoid2);
+    iter->seek_to_first();
+    for (unsigned i = 0; i < 1000; ++i) {
+      if (!(i % 2)) {
+	ASSERT_TRUE(iter->valid());
+	ASSERT_EQ("foo" + num_str(i), iter->key());
+	iter->next();
+      }
+    }
+  }
+
+  db->clear(hoid2);
+}
+
+TEST_F(ObjectMapTest, OddEvenOldClone) {
+  ghobject_t hoid(hobject_t(sobject_t("foo", CEPH_NOSNAP)));
+  ghobject_t hoid2(hobject_t(sobject_t("foo2", CEPH_NOSNAP)));
+
+  for (unsigned i = 0; i < 1000; ++i) {
+    tester.set_key(hoid, "foo" + num_str(i), "bar" + num_str(i));
+  }
+
+  db->legacy_clone(hoid, hoid2);
+
+  int r = 0;
+  for (unsigned i = 0; i < 1000; ++i) {
+    string result;
+    r = tester.get_key(hoid, "foo" + num_str(i), &result);
+    ASSERT_EQ(1, r);
+    ASSERT_EQ("bar" + num_str(i), result);
+    r = tester.get_key(hoid2, "foo" + num_str(i), &result);
+    ASSERT_EQ(1, r);
+    ASSERT_EQ("bar" + num_str(i), result);
+
+    if (i % 2) {
+      tester.remove_key(hoid, "foo" + num_str(i));
+    } else {
+      tester.remove_key(hoid2, "foo" + num_str(i));
+    }
+  }
+
+  for (unsigned i = 0; i < 1000; ++i) {
+    string result;
+    string result2;
+    r = tester.get_key(hoid, "foo" + num_str(i), &result);
+    int r2 = tester.get_key(hoid2, "foo" + num_str(i), &result2);
+    if (i % 2) {
+      ASSERT_EQ(0, r);
+      ASSERT_EQ(1, r2);
+      ASSERT_EQ("bar" + num_str(i), result2);
+    } else {
+      ASSERT_EQ(0, r2);
+      ASSERT_EQ(1, r);
+      ASSERT_EQ("bar" + num_str(i), result);
+    }
+  }
+
+  {
+    ObjectMap::ObjectMapIterator iter = db->get_iterator(hoid);
+    iter->seek_to_first();
+    for (unsigned i = 0; i < 1000; ++i) {
+      if (!(i % 2)) {
+	ASSERT_TRUE(iter->valid());
+	ASSERT_EQ("foo" + num_str(i), iter->key());
+	iter->next();
+      }
+    }
+  }
+
+  {
+    ObjectMap::ObjectMapIterator iter2 = db->get_iterator(hoid2);
+    iter2->seek_to_first();
+    for (unsigned i = 0; i < 1000; ++i) {
+      if (i % 2) {
+	ASSERT_TRUE(iter2->valid());
+	ASSERT_EQ("foo" + num_str(i), iter2->key());
+	iter2->next();
+      }
+    }
+  }
+
+  db->clear(hoid);
+  db->clear(hoid2);
+}
+
 TEST_F(ObjectMapTest, RandomTest) {
   tester.def_init();
   for (unsigned i = 0; i < 5000; ++i) {
@@ -759,7 +995,7 @@ TEST_F(ObjectMapTest, RandomTest) {
     } else if (val < 14) {
       ASSERT_TRUE(tester.auto_verify_header(std::cerr));
     } else if (val < 30) {
-      tester.auto_set_key(std::cerr);
+      tester.auto_set_keys(std::cerr);
     } else if (val < 42) {
       tester.auto_set_xattr(std::cerr);
     } else if (val < 55) {
@@ -779,7 +1015,117 @@ TEST_F(ObjectMapTest, RandomTest) {
     } else if (val < 92) {
       tester.auto_remove_xattr(std::cerr);
     } else {
-      tester.auto_remove_key(std::cerr);
+      tester.auto_remove_keys(std::cerr);
+    }
+
+    if (i % 500) {
+      tester.auto_verify_objects(std::cerr);
     }
   }
 }
+
+TEST_F(ObjectMapTest, RandomTestNoDeletesXattrs) {
+  tester.def_init();
+  for (unsigned i = 0; i < 5000; ++i) {
+    unsigned val = rand();
+    val <<= 8;
+    val %= 100;
+    if (!(i%100))
+      std::cout << "on op " << i
+		<< " val is " << val << std::endl;
+
+    if (val < 45) {
+      tester.auto_set_keys(std::cerr);
+    } else if (val < 90) {
+      tester.auto_remove_keys(std::cerr);
+    } else {
+      tester.auto_clone_key(std::cerr);
+    }
+
+    if (i % 500) {
+      tester.auto_verify_objects(std::cerr);
+    }
+  }
+}
+
+string num_to_key(unsigned i) {
+  char buf[100];
+  int ret = snprintf(buf, sizeof(buf), "%010u", i);
+  assert(ret > 0);
+  return string(buf, ret);
+}
+
+TEST_F(ObjectMapTest, TestMergeNewCompleteContainBug) {
+  /* This test exploits a bug in kraken and earlier where merge_new_complete
+   * could miss complete entries fully contained by a new entry.  To get this
+   * to actually result in an incorrect return value, you need to remove at
+   * least two values, one before a complete region, and one which occurs in
+   * the parent after the complete region (but within 20 not yet completed
+   * parent points of the first value).
+   */
+  for (unsigned i = 10; i < 160; i+=2) {
+    tester.test_set_key("foo", num_to_key(i), "asdf");
+  }
+  tester.test_clone("foo", "foo2", std::cout);
+  tester.test_clear("foo");
+
+  tester.test_set_key("foo2", num_to_key(15), "asdf");
+  tester.test_set_key("foo2", num_to_key(13), "asdf");
+  tester.test_set_key("foo2", num_to_key(57), "asdf");
+
+  tester.test_remove_key("foo2", num_to_key(15));
+
+  set<string> to_remove;
+  to_remove.insert(num_to_key(13));
+  to_remove.insert(num_to_key(58));
+  to_remove.insert(num_to_key(60));
+  to_remove.insert(num_to_key(62));
+  tester.test_remove_keys("foo2", to_remove);
+
+  tester.verify_keys("foo2", std::cout);
+  ASSERT_EQ(tester.get_key("foo2", num_to_key(10), nullptr), 1);
+  ASSERT_EQ(tester.get_key("foo2", num_to_key(1), nullptr), 0);
+  ASSERT_EQ(tester.get_key("foo2", num_to_key(56), nullptr), 1);
+  // this one triggers the bug
+  ASSERT_EQ(tester.get_key("foo2", num_to_key(58), nullptr), 0);
+}
+
+TEST_F(ObjectMapTest, TestIterateBug18533) {
+  /* This test starts with the one immediately above to create a pair of
+   * complete regions where one contains the other.  Then, it deletes the
+   * key at the start of the contained region.  The logic in next_parent()
+   * skips ahead to the end of the contained region, and we start copying
+   * values down again from the parent into the child -- including some
+   * that had actually been deleted.  I think this works for any removal
+   * within the outer complete region after the start of the contained
+   * region.
+   */
+  for (unsigned i = 10; i < 160; i+=2) {
+    tester.test_set_key("foo", num_to_key(i), "asdf");
+  }
+  tester.test_clone("foo", "foo2", std::cout);
+  tester.test_clear("foo");
+
+  tester.test_set_key("foo2", num_to_key(15), "asdf");
+  tester.test_set_key("foo2", num_to_key(13), "asdf");
+  tester.test_set_key("foo2", num_to_key(57), "asdf");
+  tester.test_set_key("foo2", num_to_key(91), "asdf");
+
+  tester.test_remove_key("foo2", num_to_key(15));
+
+  set<string> to_remove;
+  to_remove.insert(num_to_key(13));
+  to_remove.insert(num_to_key(58));
+  to_remove.insert(num_to_key(60));
+  to_remove.insert(num_to_key(62));
+  to_remove.insert(num_to_key(82));
+  to_remove.insert(num_to_key(84));
+  tester.test_remove_keys("foo2", to_remove);
+
+  //tester.test_remove_key("foo2", num_to_key(15)); also does the trick
+  tester.test_remove_key("foo2", num_to_key(80));
+
+  // the iterator in verify_keys will return an extra value
+  tester.verify_keys("foo2", std::cout);
+}
+

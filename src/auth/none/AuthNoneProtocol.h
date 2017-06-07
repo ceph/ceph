@@ -15,7 +15,7 @@
 #ifndef CEPH_AUTHNONEPROTOCOL_H
 #define CEPH_AUTHNONEPROTOCOL_H
 
-#include "../Auth.h"
+#include "auth/Auth.h"
 
 struct AuthNoneAuthorizer : public AuthAuthorizer {
   AuthNoneAuthorizer() : AuthAuthorizer(CEPH_AUTH_NONE) { }
@@ -26,7 +26,7 @@ struct AuthNoneAuthorizer : public AuthAuthorizer {
     ::encode(global_id, bl);
     return 0;
   }
-  bool verify_reply(bufferlist::iterator& reply) { return true; }
+  bool verify_reply(bufferlist::iterator& reply) override { return true; }
 };
 
 #endif

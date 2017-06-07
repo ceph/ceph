@@ -1,0 +1,12 @@
+overrides:
+  ceph:
+    log-whitelist:
+    - reached quota
+    - wrongly marked me down
+tasks:
+- workunit:
+    clients:
+      client.0:
+        - rados/test.sh
+        - rados/test_pool_quota.sh
+

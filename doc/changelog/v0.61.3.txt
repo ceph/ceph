@@ -685,7 +685,7 @@ Date:   Tue May 21 14:36:11 2013 -0700
     mon: implement --extract-monmap <filename>
 
     This will make for a simpler process for
-      http://ceph.com/docs/master/rados/operations/add-or-rm-mons/#removing-monitors-from-an-unhealthy-cluster
+      http://docs.ceph.com/docs/master/rados/operations/add-or-rm-mons/#removing-monitors-from-an-unhealthy-cluster
 
     Signed-off-by: Sage Weil <sage@inktank.com>
     (cherry picked from commit c0268e27497a4d8228ef54da9d4ca12f3ac1f1bf)

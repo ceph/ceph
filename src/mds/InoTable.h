@@ -26,7 +26,7 @@ class InoTable : public MDSTable {
   interval_set<inodeno_t> projected_free;
 
  public:
-  InoTable(MDSRank *m) : MDSTable(m, "inotable", true) { }
+  explicit InoTable(MDSRank *m) : MDSTable(m, "inotable", true) { }
 
   inodeno_t project_alloc_id(inodeno_t id=0);
   void apply_alloc_id(inodeno_t id);
@@ -41,14 +41,19 @@ class InoTable : public MDSTable {
   void replay_alloc_ids(interval_set<inodeno_t>& inos);
   void replay_release_ids(interval_set<inodeno_t>& inos);
   void replay_reset();
+  bool repair(inodeno_t id);
+  bool is_marked_free(inodeno_t id) const;
+  bool intersects_free(
+      const interval_set<inodeno_t> &other,
+      interval_set<inodeno_t> *intersection);
 
-  void reset_state();
-  void encode_state(bufferlist& bl) const {
+  void reset_state() override;
+  void encode_state(bufferlist& bl) const override {
     ENCODE_START(2, 2, bl);
     ::encode(free, bl);
     ENCODE_FINISH(bl);
   }
-  void decode_state(bufferlist::iterator& bl) {
+  void decode_state(bufferlist::iterator& bl) override {
     DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, bl);
     ::decode(free, bl);
     projected_free = free;
@@ -105,5 +110,6 @@ class InoTable : public MDSTable {
     }
   }
 };
+WRITE_CLASS_ENCODER(InoTable)
 
 #endif

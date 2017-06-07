@@ -15,11 +15,7 @@
 #ifndef CEPH_SIMPLECACHE_H
 #define CEPH_SIMPLECACHE_H
 
-#include <map>
-#include <list>
-#include <memory>
 #include "common/Mutex.h"
-#include "common/Cond.h"
 #include "include/unordered_map.h"
 
 template <class K, class V, class C = std::less<K>, class H = std::hash<K> >
@@ -37,8 +33,8 @@ class SimpleLRU {
     }
   }
 
-  void _add(K key, V value) {
-    lru.push_front(make_pair(key, value));
+  void _add(K key, V&& value) {
+    lru.emplace_front(key, std::move(value)); // can't move key because we access it below
     contents[key] = lru.begin();
     trim_cache();
   }
@@ -50,7 +46,7 @@ public:
 
   void pin(K key, V val) {
     Mutex::Locker l(lock);
-    pinned.insert(make_pair(key, val));
+    pinned.emplace(std::move(key), std::move(val));
   }
 
   void clear_pinned(K e) {
@@ -61,7 +57,7 @@ public:
       typename ceph::unordered_map<K, typename list<pair<K, V> >::iterator, H>::iterator iter =
         contents.find(i->first);
       if (iter == contents.end())
-	_add(i->first, i->second);
+	_add(i->first, std::move(i->second));
       else
 	lru.splice(lru.begin(), lru, iter->second);
     }
@@ -102,7 +98,7 @@ public:
 
   void add(K key, V value) {
     Mutex::Locker l(lock);
-    _add(key, value);
+    _add(std::move(key), std::move(value));
   }
 };
 

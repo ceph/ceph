@@ -13,19 +13,24 @@ Linux Kernel
 
 - **Ceph Kernel Client**
 
-  We currently recommend:
+  If you are using the kernel client, the general advice is to *track* "stable"
+  or "longterm maintenance" kernel series provided by either http://kernel.org
+  or your distribution on the kernel client machines.
 
-  - 4.1.4 or later
-  - 3.16.3 or later (rbd deadlock regression in 3.16.[0-2])
-  - *NOT* 3.15.* (rbd deadlock regression)
-  - 3.14.*
+  For RBD, if you choose to *track* long-term kernels, we currently recommend
+  4.x-based "longterm maintenance" kernel series:
+
+  - 4.9.z
+  - 4.4.z
 
   These are considered pretty old, but if you must:
 
-  - 3.10.*
+  - 3.16.z
+  - 3.10.z
 
-  Firefly (CRUSH_TUNABLES3) tunables are supported starting with 3.15.
-  See `CRUSH Tunables`_ for more details.
+  For CephFS, see `CephFS best practices`_ for kernel version guidance.
+
+  Older kernel client versions may not support your `CRUSH tunables`_ profile.
 
 - **B-tree File System (Btrfs)**
 
@@ -40,8 +45,8 @@ platforms.  Generally speaking, there is very little dependence on
 specific distributions aside from the kernel and system initialization
 package (i.e., sysvinit, upstart, systemd).
 
-Infernalis (9.1.0)
-------------------
+Infernalis (9.2.z) and Jewel (10.2.z)
+-------------------------------------
 
 +----------+----------+--------------------+--------------+---------+------------+
 | Distro   | Release  | Code Name          | Kernel       | Notes   | Testing    | 
@@ -84,8 +89,6 @@ Firefly (0.80)
 +----------+----------+--------------------+--------------+---------+------------+
 | CentOS   | 7        | N/A                | linux-3.10.0 |         | B          |
 +----------+----------+--------------------+--------------+---------+------------+
-| Debian   | 6.0      | Squeeze            | linux-2.6.32 | 1, 2, 3 | B          |
-+----------+----------+--------------------+--------------+---------+------------+
 | Debian   | 7.0      | Wheezy             | linux-3.2.0  | 1, 2    | B          |
 +----------+----------+--------------------+--------------+---------+------------+
 | Fedora   | 19       | Schrödinger's Cat  | linux-3.10.0 |         | B          |
@@ -106,16 +109,11 @@ Notes
 
 - **1**: The default kernel has an older version of ``btrfs`` that we do not
   recommend for ``ceph-osd`` storage nodes.  Upgrade to a recommended
-  kernel or use ``XFS`` or ``ext4``.
+  kernel or use ``XFS``.
 
 - **2**: The default kernel has an old Ceph client that we do not recommend
   for kernel client (kernel RBD or the Ceph file system).  Upgrade to a
   recommended kernel.
-
-- **3**: The default kernel or installed version of ``glibc`` does not
-  support the ``syncfs(2)`` system call.  Putting multiple
-  ``ceph-osd`` daemons using ``XFS`` or ``ext4`` on the same host will
-  not perform as well as they could.
 
 
 Testing
@@ -133,3 +131,5 @@ Testing
   pre-release, and released code.
 
 .. _CRUSH Tunables: ../../rados/operations/crush-map#tunables
+
+.. _CephFS best practices: ../../cephfs/best-practices

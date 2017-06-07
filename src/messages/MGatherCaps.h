@@ -11,18 +11,18 @@ class MGatherCaps : public Message {
   MGatherCaps() :
     Message(MSG_MDS_GATHERCAPS) {}
 private:
-  ~MGatherCaps() {}
+  ~MGatherCaps() override {}
 
 public:
-  const char *get_type_name() const { return "gather_caps"; }
-  void print(ostream& o) const {
+  const char *get_type_name() const override { return "gather_caps"; }
+  void print(ostream& o) const override {
     o << "gather_caps(" << ino << ")";
   }
 
-  void encode_payload(uint64_t features) {
+  void encode_payload(uint64_t features) override {
     ::encode(ino, payload);
   }
-  void decode_payload() {
+  void decode_payload() override {
     bufferlist::iterator p = payload.begin();
     ::decode(ino, p);
   }

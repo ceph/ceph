@@ -61,7 +61,7 @@ headers for C/C++ under ``/usr/include/rados``. ::
 Getting librados for Python
 ---------------------------
 
-The ``rados.py`` modules provides ``librados`` support to Python
+The ``rados`` module provides ``librados`` support to Python
 applications. The ``librados-dev`` package for Debian/Ubuntu
 and the ``librados2-devel`` package for RHEL/CentOS will install the
 ``python-rados`` package for you. You may install ``python-rados``
@@ -266,10 +266,11 @@ it and connecting to the cluster might look something like this:
 .. code-block:: c
 
 	#include <stdio.h>
+	#include <stdlib.h>
 	#include <string.h>
 	#include <rados/librados.h>
 
-	int main (int argc, char argv**) 
+	int main (int argc, const char **argv) 
 	{
 
 		/* Declare the cluster handle and required arguments. */
@@ -346,15 +347,14 @@ you to initialize a ``librados::Rados`` cluster handle object:
 		librados::Rados cluster;
 		char cluster_name[] = "ceph";
 		char user_name[] = "client.admin";
-		uint64_t flags; 
+		uint64_t flags = 0; 
 	
 		/* Initialize the cluster handle with the "ceph" cluster name and "client.admin" user */ 
 		{
 			ret = cluster.init2(user_name, cluster_name, flags);
 			if (ret < 0) {
 				std::cerr << "Couldn't initialize the cluster handle! error " << ret << std::endl;
-				ret = EXIT_FAILURE;
-				return 1;
+				return EXIT_FAILURE;
 			} else {
 				std::cout << "Created a cluster handle." << std::endl;
 			}
@@ -365,8 +365,7 @@ you to initialize a ``librados::Rados`` cluster handle object:
 			ret = cluster.conf_read_file("/etc/ceph/ceph.conf");	
 			if (ret < 0) {
 				std::cerr << "Couldn't read the Ceph configuration file! error " << ret << std::endl;
-				ret = EXIT_FAILURE;
-				return 1;
+				return EXIT_FAILURE;
 			} else {
 				std::cout << "Read the Ceph configuration file." << std::endl;
 			}
@@ -377,8 +376,7 @@ you to initialize a ``librados::Rados`` cluster handle object:
 			ret = cluster.conf_parse_argv(argc, argv);
 			if (ret < 0) {
 				std::cerr << "Couldn't parse command line options! error " << ret << std::endl;
-				ret = EXIT_FAILURE;
-				return 1;
+				return EXIT_FAILURE;
 			} else {
 				std::cout << "Parsed command line options." << std::endl;
 			}
@@ -389,8 +387,7 @@ you to initialize a ``librados::Rados`` cluster handle object:
 			ret = cluster.connect();
 			if (ret < 0) {
 				std::cerr << "Couldn't connect to cluster! error " << ret << std::endl;
-				ret = EXIT_FAILURE;
-				return 1;
+				return EXIT_FAILURE;
 			} else {
 				std::cout << "Connected to the cluster." << std::endl;
 			}
@@ -581,10 +578,11 @@ C Example
 .. code-block:: c
 
 	#include <stdio.h>
+	#include <stdlib.h>
 	#include <string.h>
 	#include <rados/librados.h>
 
-	int main (int argc, const char argv**) 
+	int main (int argc, const char **argv) 
 	{
 		/* 
 		 * Continued from previous C example, where cluster handle and
@@ -653,7 +651,7 @@ C Example
 		}
 		
 		/* Wait for the operation to complete */
-		rados_wait_for_complete(comp);
+		rados_aio_wait_for_complete(comp);
 		
 		/* Release the asynchronous I/O complete handle to avoid memory leaks. */
 		rados_aio_release(comp);		
@@ -967,6 +965,15 @@ C++ Example
 	cluster.shutdown();
 
 
+Java Example
+--------------
+
+.. code-block:: java
+
+	cluster.ioCtxDestroy(io);
+	cluster.shutDown();
+	
+	
 Python Example
 --------------
 
@@ -987,8 +994,8 @@ PHP Example
 
 
 
-.. _user ID: ../../operations/authentication#cephx-commandline-options
-.. _CAPS: ../../operations/auth-intro#ceph-authorization-caps
+.. _user ID: ../../operations/user-management#command-line-usage
+.. _CAPS: ../../operations/user-management#authorization-capabilities
 .. _Installation (Quick): ../../../start
 .. _Smart Daemons Enable Hyperscale: ../../../architecture#smart-daemons-enable-hyperscale
 .. _Calculating PG IDs: ../../../architecture#calculating-pg-ids

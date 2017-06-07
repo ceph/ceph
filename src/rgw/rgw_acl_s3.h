@@ -9,14 +9,9 @@
 #include <iosfwd>
 #include <include/types.h>
 
-#include <expat.h>
-
 #include "include/str_list.h"
 #include "rgw_xml.h"
 #include "rgw_acl.h"
-
-
-using namespace std;
 
 class RGWRados;
 
@@ -24,9 +19,9 @@ class ACLPermission_S3 : public ACLPermission, public XMLObj
 {
 public:
   ACLPermission_S3() {}
-  ~ACLPermission_S3() {}
+  ~ACLPermission_S3() override {}
 
-  bool xml_end(const char *el);
+  bool xml_end(const char *el) override;
   void to_xml(ostream& out);
 };
 
@@ -34,7 +29,7 @@ class ACLGrantee_S3 : public ACLGrantee, public XMLObj
 {
 public:
   ACLGrantee_S3() {}
-  ~ACLGrantee_S3() {}
+  ~ACLGrantee_S3() override {}
 
   bool xml_start(const char *el, const char **attr);
 };
@@ -44,10 +39,10 @@ class ACLGrant_S3 : public ACLGrant, public XMLObj
 {
 public:
   ACLGrant_S3() {}
-  ~ACLGrant_S3() {}
+  ~ACLGrant_S3() override {}
 
   void to_xml(CephContext *cct, ostream& out);
-  bool xml_end(const char *el);
+  bool xml_end(const char *el) override;
   bool xml_start(const char *el, const char **attr);
 
   static ACLGroupTypeEnum uri_to_group(string& uri);
@@ -57,10 +52,10 @@ public:
 class RGWAccessControlList_S3 : public RGWAccessControlList, public XMLObj
 {
 public:
-  RGWAccessControlList_S3(CephContext *_cct) : RGWAccessControlList(_cct) {}
-  ~RGWAccessControlList_S3() {}
+  explicit RGWAccessControlList_S3(CephContext *_cct) : RGWAccessControlList(_cct) {}
+  ~RGWAccessControlList_S3() override {}
 
-  bool xml_end(const char *el);
+  bool xml_end(const char *el) override;
   void to_xml(ostream& out);
 
   int create_canned(ACLOwner& owner, ACLOwner& bucket_owner, const string& canned_acl);
@@ -71,9 +66,9 @@ class ACLOwner_S3 : public ACLOwner, public XMLObj
 {
 public:
   ACLOwner_S3() {}
-  ~ACLOwner_S3() {}
+  ~ACLOwner_S3() override {}
 
-  bool xml_end(const char *el);
+  bool xml_end(const char *el) override;
   void to_xml(ostream& out);
 };
 
@@ -82,14 +77,14 @@ class RGWEnv;
 class RGWAccessControlPolicy_S3 : public RGWAccessControlPolicy, public XMLObj
 {
 public:
-  RGWAccessControlPolicy_S3(CephContext *_cct) : RGWAccessControlPolicy(_cct) {}
-  ~RGWAccessControlPolicy_S3() {}
+  explicit RGWAccessControlPolicy_S3(CephContext *_cct) : RGWAccessControlPolicy(_cct) {}
+  ~RGWAccessControlPolicy_S3() override {}
 
-  bool xml_end(const char *el);
+  bool xml_end(const char *el) override;
 
   void to_xml(ostream& out);
   int rebuild(RGWRados *store, ACLOwner *owner, RGWAccessControlPolicy& dest);
-  bool compare_group_name(string& id, ACLGroupTypeEnum group);
+  bool compare_group_name(string& id, ACLGroupTypeEnum group) override;
 
   virtual int create_canned(ACLOwner& _owner, ACLOwner& bucket_owner, string canned_acl) {
     RGWAccessControlList_S3& _acl = static_cast<RGWAccessControlList_S3 &>(acl);
@@ -108,9 +103,9 @@ class RGWACLXMLParser_S3 : public RGWXMLParser
 {
   CephContext *cct;
 
-  XMLObj *alloc_obj(const char *el);
+  XMLObj *alloc_obj(const char *el) override;
 public:
-  RGWACLXMLParser_S3(CephContext *_cct) : cct(_cct) {}
+  explicit RGWACLXMLParser_S3(CephContext *_cct) : cct(_cct) {}
 };
 
 #endif

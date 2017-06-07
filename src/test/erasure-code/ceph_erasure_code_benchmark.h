@@ -38,6 +38,7 @@ class ErasureCodeBench {
   ErasureCodeProfile profile;
 
   bool verbose;
+  boost::intrusive_ptr<CephContext> cct;
 public:
   int setup(int argc, char** argv);
   int run();

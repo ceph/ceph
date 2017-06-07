@@ -21,6 +21,7 @@
 #include "include/rados/librados.h"
 #include "include/rados/librados.hpp"
 #include "mon/MonClient.h"
+#include "mgr/MgrClient.h"
 #include "msg/Dispatcher.h"
 
 #include "IoCtxImpl.h"
@@ -32,9 +33,13 @@ struct md_config_t;
 class Message;
 class MLog;
 class Messenger;
+class AioCompletionImpl;
 
 class librados::RadosClient : public Dispatcher
 {
+  std::unique_ptr<CephContext,
+		  std::function<void(CephContext*)> > cct_deleter;
+
 public:
   using Dispatcher::cct;
   md_config_t *conf;
@@ -46,17 +51,19 @@ private:
   } state;
 
   MonClient monclient;
+  MgrClient mgrclient;
   Messenger *messenger;
 
   uint64_t instance_id;
 
   bool _dispatch(Message *m);
-  bool ms_dispatch(Message *m);
+  bool ms_dispatch(Message *m) override;
 
-  bool ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer, bool force_new);
-  void ms_handle_connect(Connection *con);
-  bool ms_handle_reset(Connection *con);
-  void ms_handle_remote_reset(Connection *con);
+  bool ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer, bool force_new) override;
+  void ms_handle_connect(Connection *con) override;
+  bool ms_handle_reset(Connection *con) override;
+  void ms_handle_remote_reset(Connection *con) override;
+  bool ms_handle_refused(Connection *con) override;
 
   Objecter *objecter;
 
@@ -67,6 +74,7 @@ private:
 
   version_t log_last_version;
   rados_log_callback_t log_cb;
+  rados_log_callback2_t log_cb2;
   void *log_cb_arg;
   string log_watch;
 
@@ -75,13 +83,14 @@ private:
 public:
   Finisher finisher;
 
-  RadosClient(CephContext *cct_);
-  ~RadosClient();
+  explicit RadosClient(CephContext *cct_);
+  ~RadosClient() override;
   int ping_monitor(string mon_id, string *result);
   int connect();
   void shutdown();
 
   int watch_flush();
+  int async_watch_flush(AioCompletionImpl *c);
 
   uint64_t get_instance_id();
 
@@ -102,6 +111,7 @@ public:
   int pool_list(std::list<std::pair<int64_t, string> >& ls);
   int get_pool_stats(std::list<string>& ls, map<string,::pool_stat_t>& result);
   int get_fs_stats(ceph_statfs& result);
+  bool get_pool_is_selfmanaged_snaps_mode(const std::string& pool);
 
   /*
   -1 was set as the default value and monitor will pickup the right crush rule with below order:
@@ -127,13 +137,16 @@ public:
   int mon_command(string name,
 		  const vector<string>& cmd, const bufferlist &inbl,
 	          bufferlist *outbl, string *outs);
+  int mgr_command(const vector<string>& cmd, const bufferlist &inbl,
+	          bufferlist *outbl, string *outs);
   int osd_command(int osd, vector<string>& cmd, const bufferlist& inbl,
                   bufferlist *poutbl, string *prs);
   int pg_command(pg_t pgid, vector<string>& cmd, const bufferlist& inbl,
 	         bufferlist *poutbl, string *prs);
 
   void handle_log(MLog *m);
-  int monitor_log(const string& level, rados_log_callback_t cb, void *arg);
+  int monitor_log(const string& level, rados_log_callback_t cb,
+		  rados_log_callback2_t cb2, void *arg);
 
   void get();
   bool put();

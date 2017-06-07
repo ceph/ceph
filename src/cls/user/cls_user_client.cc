@@ -3,8 +3,6 @@
 
 #include <errno.h>
 
-#include "include/types.h"
-#include "cls/user/cls_user_ops.h"
 #include "cls/user/cls_user_client.h"
 #include "include/rados/librados.hpp"
 
@@ -18,7 +16,7 @@ void cls_user_set_buckets(librados::ObjectWriteOperation& op, list<cls_user_buck
   cls_user_set_buckets_op call;
   call.entries = entries;
   call.add = add;
-  call.time = ceph_clock_now(NULL);
+  call.time = real_clock::now();
   ::encode(call, in);
   op.exec("user", "set_buckets_info", in);
 }
@@ -27,7 +25,7 @@ void cls_user_complete_stats_sync(librados::ObjectWriteOperation& op)
 {
   bufferlist in;
   cls_user_complete_stats_sync_op call;
-  call.time = ceph_clock_now(NULL);
+  call.time = real_clock::now();
   ::encode(call, in);
   op.exec("user", "complete_stats_sync", in);
 }
@@ -49,7 +47,7 @@ class ClsUserListCtx : public ObjectOperationCompletion {
 public:
   ClsUserListCtx(list<cls_user_bucket_entry> *_entries, string *_marker, bool *_truncated, int *_pret) :
                                       entries(_entries), marker(_marker), truncated(_truncated), pret(_pret) {}
-  void handle_completion(int r, bufferlist& outbl) {
+  void handle_completion(int r, bufferlist& outbl) override {
     if (r >= 0) {
       cls_user_list_buckets_ret ret;
       try {
@@ -97,12 +95,12 @@ class ClsUserGetHeaderCtx : public ObjectOperationCompletion {
   int *pret;
 public:
   ClsUserGetHeaderCtx(cls_user_header *_h, RGWGetUserHeader_CB *_ctx, int *_pret) : header(_h), ret_ctx(_ctx), pret(_pret) {}
-  ~ClsUserGetHeaderCtx() {
+  ~ClsUserGetHeaderCtx() override {
     if (ret_ctx) {
       ret_ctx->put();
     }
   }
-  void handle_completion(int r, bufferlist& outbl) {
+  void handle_completion(int r, bufferlist& outbl) override {
     if (r >= 0) {
       cls_user_get_header_ret ret;
       try {

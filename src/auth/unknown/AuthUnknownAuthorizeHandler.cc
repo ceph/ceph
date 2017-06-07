@@ -13,9 +13,6 @@
  */
 
 #include "AuthUnknownAuthorizeHandler.h"
-#include "common/debug.h"
-
-#define dout_subsys ceph_subsys_auth
 
 bool AuthUnknownAuthorizeHandler::verify_authorizer(CephContext *cct, KeyStore *keys,
 						 bufferlist& authorizer_data, bufferlist& authorizer_reply,

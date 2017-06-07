@@ -1,11 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
-#include <errno.h>
-
 #include "common/Throttle.h"
-#include "common/dout.h"
-#include "common/ceph_context.h"
 #include "common/perf_counters.h"
 
 #define dout_subsys ceph_subsys_throttle
@@ -17,6 +13,7 @@ enum {
   l_throttle_first = 532430,
   l_throttle_val,
   l_throttle_max,
+  l_throttle_get_started,
   l_throttle_get,
   l_throttle_get_sum,
   l_throttle_get_or_fail_fail,
@@ -44,6 +41,7 @@ Throttle::Throttle(CephContext *cct, const std::string& n, int64_t m, bool _use_
     PerfCountersBuilder b(cct, string("throttle-") + name, l_throttle_first, l_throttle_last);
     b.add_u64(l_throttle_val, "val", "Currently available throttle");
     b.add_u64(l_throttle_max, "max", "Max value for throttle");
+    b.add_u64_counter(l_throttle_get_started, "get_started", "Number of get calls, increased before wait");
     b.add_u64_counter(l_throttle_get, "get", "Gets");
     b.add_u64_counter(l_throttle_get_sum, "get_sum", "Got data");
     b.add_u64_counter(l_throttle_get_or_fail_fail, "get_or_fail_fail", "Get blocked during get_or_fail");
@@ -96,22 +94,19 @@ bool Throttle::_wait(int64_t c)
   if (_should_wait(c) || !cond.empty()) { // always wait behind other waiters.
     Cond *cv = new Cond;
     cond.push_back(cv);
+    waited = true;
+    ldout(cct, 2) << "_wait waiting..." << dendl;
+    if (logger)
+      start = ceph_clock_now();
+
     do {
-      if (!waited) {
-	ldout(cct, 2) << "_wait waiting..." << dendl;
-	if (logger)
-	  start = ceph_clock_now(cct);
-      }
-      waited = true;
       cv->Wait(lock);
     } while (_should_wait(c) || cv != cond.front());
 
-    if (waited) {
-      ldout(cct, 3) << "_wait finished waiting" << dendl;
-      if (logger) {
-	utime_t dur = ceph_clock_now(cct) - start;
-        logger->tinc(l_throttle_wait, dur);
-      }
+    ldout(cct, 2) << "_wait finished waiting" << dendl;
+    if (logger) {
+      utime_t dur = ceph_clock_now() - start;
+      logger->tinc(l_throttle_wait, dur);
     }
 
     delete cv;
@@ -166,6 +161,9 @@ bool Throttle::get(int64_t c, int64_t m)
 
   assert(c >= 0);
   ldout(cct, 10) << "get " << c << " (" << count.read() << " -> " << (count.read() + c) << ")" << dendl;
+  if (logger) {
+    logger->inc(l_throttle_get_started);
+  }
   bool waited = false;
   {
     Mutex::Locker l(lock);
@@ -235,6 +233,292 @@ int64_t Throttle::put(int64_t c)
     }
   }
   return count.read();
+}
+
+void Throttle::reset()
+{
+  Mutex::Locker l(lock);
+  if (!cond.empty())
+    cond.front()->SignalOne();
+  count.set(0);
+  if (logger) {
+    logger->set(l_throttle_val, 0);
+  }
+}
+
+enum {
+  l_backoff_throttle_first = l_throttle_last + 1,
+  l_backoff_throttle_val,
+  l_backoff_throttle_max,
+  l_backoff_throttle_get,
+  l_backoff_throttle_get_sum,
+  l_backoff_throttle_take,
+  l_backoff_throttle_take_sum,
+  l_backoff_throttle_put,
+  l_backoff_throttle_put_sum,
+  l_backoff_throttle_wait,
+  l_backoff_throttle_last,
+};
+
+BackoffThrottle::BackoffThrottle(CephContext *cct, const std::string& n, unsigned expected_concurrency, bool _use_perf)
+  : cct(cct), name(n), logger(NULL),
+    conds(expected_concurrency),///< [in] determines size of conds
+    use_perf(_use_perf)
+{
+  if (!use_perf)
+    return;
+
+  if (cct->_conf->throttler_perf_counter) {
+    PerfCountersBuilder b(cct, string("throttle-") + name, l_backoff_throttle_first, l_backoff_throttle_last);
+    b.add_u64(l_backoff_throttle_val, "val", "Currently available throttle");
+    b.add_u64(l_backoff_throttle_max, "max", "Max value for throttle");
+    b.add_u64_counter(l_backoff_throttle_get, "get", "Gets");
+    b.add_u64_counter(l_backoff_throttle_get_sum, "get_sum", "Got data");
+    b.add_u64_counter(l_backoff_throttle_take, "take", "Takes");
+    b.add_u64_counter(l_backoff_throttle_take_sum, "take_sum", "Taken data");
+    b.add_u64_counter(l_backoff_throttle_put, "put", "Puts");
+    b.add_u64_counter(l_backoff_throttle_put_sum, "put_sum", "Put data");
+    b.add_time_avg(l_backoff_throttle_wait, "wait", "Waiting latency");
+
+    logger = b.create_perf_counters();
+    cct->get_perfcounters_collection()->add(logger);
+    logger->set(l_backoff_throttle_max, max);
+  }
+}
+
+BackoffThrottle::~BackoffThrottle()
+{
+  if (!use_perf)
+    return;
+
+  if (logger) {
+    cct->get_perfcounters_collection()->remove(logger);
+    delete logger;
+  }
+}
+
+bool BackoffThrottle::set_params(
+  double _low_threshhold,
+  double _high_threshhold,
+  double _expected_throughput,
+  double _high_multiple,
+  double _max_multiple,
+  uint64_t _throttle_max,
+  ostream *errstream)
+{
+  bool valid = true;
+  if (_low_threshhold > _high_threshhold) {
+    valid = false;
+    if (errstream) {
+      *errstream << "low_threshhold (" << _low_threshhold
+		 << ") > high_threshhold (" << _high_threshhold
+		 << ")" << std::endl;
+    }
+  }
+
+  if (_high_multiple > _max_multiple) {
+    valid = false;
+    if (errstream) {
+      *errstream << "_high_multiple (" << _high_multiple
+		 << ") > _max_multiple (" << _max_multiple
+		 << ")" << std::endl;
+    }
+  }
+
+  if (_low_threshhold > 1 || _low_threshhold < 0) {
+    valid = false;
+    if (errstream) {
+      *errstream << "invalid low_threshhold (" << _low_threshhold << ")"
+		 << std::endl;
+    }
+  }
+
+  if (_high_threshhold > 1 || _high_threshhold < 0) {
+    valid = false;
+    if (errstream) {
+      *errstream << "invalid high_threshhold (" << _high_threshhold << ")"
+		 << std::endl;
+    }
+  }
+
+  if (_max_multiple < 0) {
+    valid = false;
+    if (errstream) {
+      *errstream << "invalid _max_multiple ("
+		 << _max_multiple << ")"
+		 << std::endl;
+    }
+  }
+
+  if (_high_multiple < 0) {
+    valid = false;
+    if (errstream) {
+      *errstream << "invalid _high_multiple ("
+		 << _high_multiple << ")"
+		 << std::endl;
+    }
+  }
+
+  if (_expected_throughput < 0) {
+    valid = false;
+    if (errstream) {
+      *errstream << "invalid _expected_throughput("
+		 << _expected_throughput << ")"
+		 << std::endl;
+    }
+  }
+
+  if (!valid)
+    return false;
+
+  locker l(lock);
+  low_threshhold = _low_threshhold;
+  high_threshhold = _high_threshhold;
+  high_delay_per_count = _high_multiple / _expected_throughput;
+  max_delay_per_count = _max_multiple / _expected_throughput;
+  max = _throttle_max;
+
+  if (logger)
+    logger->set(l_backoff_throttle_max, max);
+
+  if (high_threshhold - low_threshhold > 0) {
+    s0 = high_delay_per_count / (high_threshhold - low_threshhold);
+  } else {
+    low_threshhold = high_threshhold;
+    s0 = 0;
+  }
+
+  if (1 - high_threshhold > 0) {
+    s1 = (max_delay_per_count - high_delay_per_count)
+      / (1 - high_threshhold);
+  } else {
+    high_threshhold = 1;
+    s1 = 0;
+  }
+
+  _kick_waiters();
+  return true;
+}
+
+std::chrono::duration<double> BackoffThrottle::_get_delay(uint64_t c) const
+{
+  if (max == 0)
+    return std::chrono::duration<double>(0);
+
+  double r = ((double)current) / ((double)max);
+  if (r < low_threshhold) {
+    return std::chrono::duration<double>(0);
+  } else if (r < high_threshhold) {
+    return c * std::chrono::duration<double>(
+      (r - low_threshhold) * s0);
+  } else {
+    return c * std::chrono::duration<double>(
+      high_delay_per_count + ((r - high_threshhold) * s1));
+  }
+}
+
+std::chrono::duration<double> BackoffThrottle::get(uint64_t c)
+{
+  locker l(lock);
+  auto delay = _get_delay(c);
+
+  if (logger) {
+    logger->inc(l_backoff_throttle_get);
+    logger->inc(l_backoff_throttle_get_sum, c);
+  }
+
+  // fast path
+  if (delay == std::chrono::duration<double>(0) &&
+      waiters.empty() &&
+      ((max == 0) || (current == 0) || ((current + c) <= max))) {
+    current += c;
+
+    if (logger) {
+      logger->set(l_backoff_throttle_val, current);
+    }
+
+    return std::chrono::duration<double>(0);
+  }
+
+  auto ticket = _push_waiter();
+  utime_t wait_from = ceph_clock_now();
+  bool waited = false;
+
+  while (waiters.begin() != ticket) {
+    (*ticket)->wait(l);
+    waited = true;
+  }
+
+  auto start = std::chrono::system_clock::now();
+  delay = _get_delay(c);
+  while (true) {
+    if (!((max == 0) || (current == 0) || (current + c) <= max)) {
+      (*ticket)->wait(l);
+      waited = true;
+    } else if (delay > std::chrono::duration<double>(0)) {
+      (*ticket)->wait_for(l, delay);
+      waited = true;
+    } else {
+      break;
+    }
+    assert(ticket == waiters.begin());
+    delay = _get_delay(c) - (std::chrono::system_clock::now() - start);
+  }
+  waiters.pop_front();
+  _kick_waiters();
+
+  current += c;
+
+  if (logger) {
+    logger->set(l_backoff_throttle_val, current);
+    if (waited) {
+      logger->tinc(l_backoff_throttle_wait, ceph_clock_now() - wait_from);
+    }
+  }
+
+  return std::chrono::system_clock::now() - start;
+}
+
+uint64_t BackoffThrottle::put(uint64_t c)
+{
+  locker l(lock);
+  assert(current >= c);
+  current -= c;
+  _kick_waiters();
+
+  if (logger) {
+    logger->inc(l_backoff_throttle_put);
+    logger->inc(l_backoff_throttle_put_sum, c);
+    logger->set(l_backoff_throttle_val, current);
+  }
+
+  return current;
+}
+
+uint64_t BackoffThrottle::take(uint64_t c)
+{
+  locker l(lock);
+  current += c;
+
+  if (logger) {
+    logger->inc(l_backoff_throttle_take);
+    logger->inc(l_backoff_throttle_take_sum, c);
+    logger->set(l_backoff_throttle_val, current);
+  }
+
+  return current;
+}
+
+uint64_t BackoffThrottle::get_current()
+{
+  locker l(lock);
+  return current;
+}
+
+uint64_t BackoffThrottle::get_max()
+{
+  locker l(lock);
+  return max;
 }
 
 SimpleThrottle::SimpleThrottle(uint64_t max, bool ignore_enoent)

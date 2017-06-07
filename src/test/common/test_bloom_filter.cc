@@ -291,7 +291,7 @@ TEST(BloomFilter, SequenceDouble) {
 #endif
 
 TEST(BloomFilter, Assignement) {
-  bloom_filter bf1(10, .1, .1), bf2;
+  bloom_filter bf1(10, .1, 1), bf2;
 
   bf1.insert("foo");
   bf2 = bf1;

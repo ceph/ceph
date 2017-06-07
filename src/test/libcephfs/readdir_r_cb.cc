@@ -15,7 +15,7 @@
 #include "gtest/gtest.h"
 #include "include/cephfs/libcephfs.h"
 #include <errno.h>
-#include <sys/fcntl.h>
+#include <fcntl.h>
 
 TEST(LibCephFS, ReaddirRCB) {
   struct ceph_mount_info *cmount;

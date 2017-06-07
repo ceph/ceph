@@ -23,21 +23,14 @@ import sys
 from setuptools import setup
 from setuptools import find_packages
 
+assert sys.version_info >= (2, 7), \
+    "Python version lower than 2.7 is not supported"
+
 def read(fname):
     path = os.path.join(os.path.dirname(__file__), fname)
     f = open(path)
     return f.read()
 
-
-def filter_included_modules(*m):
-    modules = sum(m, [])
-    if sys.version_info[0] == 2 and sys.version_info[1] <= 6:
-        return modules
-    included_modules = set(['argparse', 'importlib', 'sysconfig'])
-    return list(set(modules) - included_modules)
-
-
-install_requires = read('requirements.txt').split()
 tests_require = read('test-requirements.txt').split()
 
 setup(
@@ -53,9 +46,8 @@ setup(
     keywords='ceph',
     url="https://git.ceph.com/?p=ceph.git;a=summary",
 
-    install_requires=filter_included_modules(['setuptools'],
-                                             install_requires),
-    tests_require=filter_included_modules(tests_require),
+    install_requires=['setuptools'],
+    tests_require=tests_require,
 
     classifiers=[
         'Environment :: Console',
@@ -64,7 +56,7 @@ setup(
         'Operating System :: POSIX :: Linux',
         'License :: OSI Approved :: GNU Lesser General Public License v2 or later (LGPLv2+)',
         'Programming Language :: Python',
-        'Programming Language :: Python :: 2',
+        'Programming Language :: Python :: 2.7',
         'Programming Language :: Python :: 3',
         'Topic :: Utilities',
     ],

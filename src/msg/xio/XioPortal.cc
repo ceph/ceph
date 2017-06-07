@@ -62,9 +62,6 @@ int XioPortals::bind(struct xio_session_ops *ops, const string& base_uri,
 
   /* bind the portals */
   for (size_t i = 0; i < portals.size(); i++) {
-    if (!portals[i])
-      portals[i] = new XioPortal(msgr);
-
     uint16_t result_port;
     if (port != 0) {
       // bind directly to the given port
@@ -76,8 +73,10 @@ int XioPortals::bind(struct xio_session_ops *ops, const string& base_uri,
       // try ports within the configured range
       for (; port_min <= port_max; port_min++) {
         r = portals[i]->bind(ops, base_uri, port_min, &result_port);
-        if (r == 0)
+        if (r == 0) {
+          port_min++;
           break;
+        }
       }
       if (r != 0) {
         lderr(msgr->cct) << "portal.bind unable to bind to " << base_uri

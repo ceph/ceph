@@ -5,6 +5,8 @@
 #define CEPH_RGW_USER_H
 
 #include <string>
+#include <boost/algorithm/string.hpp>
+#include "include/assert.h"
 
 #include "include/types.h"
 #include "rgw_common.h"
@@ -17,13 +19,13 @@
 #include "common/Formatter.h"
 #include "rgw_formats.h"
 
-using namespace std;
-
 #define RGW_USER_ANON_ID "anonymous"
 
 #define SECRET_KEY_LEN 40
 #define PUBLIC_ID_LEN 20
 #define RAND_SUBUSER_LEN 5
+
+#define XMLNS_AWS_S3 "http://s3.amazonaws.com/doc/2006-03-01/"
 
 /**
  * A string wrapper that includes encode/decode functions
@@ -52,10 +54,6 @@ extern int rgw_user_sync_all_stats(RGWRados *store, const rgw_user& user_id);
 extern void rgw_get_anon_user(RGWUserInfo& info);
 
 /**
- * verify that user is an actual user, and not the anonymous user
- */
-extern bool rgw_user_is_authenticated(RGWUserInfo& info);
-/**
  * Save the given user information to storage.
  * Returns: 0 on success, -ERR# on failure.
  */
@@ -63,29 +61,19 @@ extern int rgw_store_user_info(RGWRados *store,
                                RGWUserInfo& info,
                                RGWUserInfo *old_info,
                                RGWObjVersionTracker *objv_tracker,
-                               time_t mtime,
+                               real_time mtime,
                                bool exclusive,
                                map<string, bufferlist> *pattrs = NULL);
-/**
- * Save the custom user metadata given in @attrs and delete those in @rmattrs
- * for user specified in @user_id.
- * Returns: 0 on success, -ERR# on failure.
- */
-extern int rgw_store_user_attrs(RGWRados *store,
-                                string& user_id,
-                                map<string, bufferlist>& attrs,
-                                map<string, bufferlist>* rmattrs,
-                                RGWObjVersionTracker *objv_tracker);
 
 /**
  * Given an user_id, finds the user info associated with it.
  * returns: 0 on success, -ERR# on failure (including nonexistence)
  */
 extern int rgw_get_user_info_by_uid(RGWRados *store,
-                                    rgw_user& user_id,
+                                    const rgw_user& user_id,
                                     RGWUserInfo& info,
                                     RGWObjVersionTracker *objv_tracker = NULL,
-                                    time_t *pmtime                     = NULL,
+                                    real_time *pmtime                     = NULL,
                                     rgw_cache_entry_info *cache_info   = NULL,
                                     map<string, bufferlist> *pattrs    = NULL);
 /**
@@ -93,19 +81,25 @@ extern int rgw_get_user_info_by_uid(RGWRados *store,
  * returns: 0 on success, -ERR# on failure (including nonexistence)
  */
 extern int rgw_get_user_info_by_email(RGWRados *store, string& email, RGWUserInfo& info,
-                                      RGWObjVersionTracker *objv_tracker = NULL, time_t *pmtime = NULL);
+                                      RGWObjVersionTracker *objv_tracker = NULL, real_time *pmtime = NULL);
 /**
  * Given an swift username, finds the user info associated with it.
  * returns: 0 on success, -ERR# on failure (including nonexistence)
  */
-extern int rgw_get_user_info_by_swift(RGWRados *store, string& swift_name, RGWUserInfo& info,
-                                      RGWObjVersionTracker *objv_tracker = NULL, time_t *pmtime = NULL);
+extern int rgw_get_user_info_by_swift(RGWRados *store,
+                                      const string& swift_name,
+                                      RGWUserInfo& info,        /* out */
+                                      RGWObjVersionTracker *objv_tracker = nullptr,
+                                      real_time *pmtime = nullptr);
 /**
  * Given an access key, finds the user info associated with it.
  * returns: 0 on success, -ERR# on failure (including nonexistence)
  */
-extern int rgw_get_user_info_by_access_key(RGWRados *store, string& access_key, RGWUserInfo& info,
-                                           RGWObjVersionTracker *objv_tracker = NULL, time_t *pmtime = NULL);
+extern int rgw_get_user_info_by_access_key(RGWRados* store,
+                                           const std::string& access_key,
+                                           RGWUserInfo& info,
+                                           RGWObjVersionTracker* objv_tracker = nullptr,
+                                           real_time* pmtime = nullptr);
 /**
  * Get all the custom metadata stored for user specified in @user_id
  * and put it into @attrs.
@@ -163,8 +157,9 @@ struct RGWUserAdminOpState {
   rgw_user user_id;
   std::string user_email;
   std::string display_name;
-  uint32_t max_buckets;
+  int32_t max_buckets;
   __u8 suspended;
+  __u8 admin;
   __u8 system;
   __u8 exclusive;
   __u8 fetch_stats;
@@ -204,6 +199,7 @@ struct RGWUserAdminOpState {
   bool op_mask_specified;
   bool caps_specified;
   bool suspension_op;
+  bool admin_specified;
   bool system_specified;
   bool key_op;
   bool temp_url_key_specified;
@@ -233,6 +229,7 @@ struct RGWUserAdminOpState {
     gen_access = false;
     key_op = true;
   }
+
   void set_secret_key(std::string& secret_key) {
     if (secret_key.empty())
       return;
@@ -242,19 +239,24 @@ struct RGWUserAdminOpState {
     gen_secret = false;
     key_op = true;
   }
+
   void set_user_id(rgw_user& id) {
     if (id.empty())
       return;
 
     user_id = id;
   }
+
   void set_user_email(std::string& email) {
     if (email.empty())
       return;
 
+    /* always lowercase email address */
+    boost::algorithm::to_lower(email);
     user_email = email;
     user_email_specified = true;
   }
+
   void set_display_name(std::string& name) {
     if (name.empty())
       return;
@@ -262,14 +264,20 @@ struct RGWUserAdminOpState {
     display_name = name;
     display_name_specified = true;
   }
+
   void set_subuser(std::string& _subuser) {
     if (_subuser.empty())
       return;
 
     size_t pos = _subuser.find(":");
-
     if (pos != string::npos) {
-      user_id.id = _subuser.substr(0, pos);
+      rgw_user tmp_id;
+      tmp_id.from_str(_subuser.substr(0, pos));
+      if (tmp_id.tenant.empty()) {
+        user_id.id = tmp_id.id;
+      } else {
+        user_id = tmp_id;
+      }
       subuser = _subuser.substr(pos+1);
     } else {
       subuser = _subuser;
@@ -277,6 +285,7 @@ struct RGWUserAdminOpState {
 
     subuser_specified = true;
   }
+
   void set_caps(std::string& _caps) {
     if (_caps.empty())
       return;
@@ -284,52 +293,70 @@ struct RGWUserAdminOpState {
     caps = _caps;
     caps_specified = true;
   }
+
   void set_perm(uint32_t perm) {
     perm_mask = perm;
     perm_specified = true;
   }
+
   void set_op_mask(uint32_t mask) {
     op_mask = mask;
     op_mask_specified = true;
   }
+
   void set_temp_url_key(const string& key, int index) {
     temp_url_keys[index] = key;
     temp_url_key_specified = true;
   }
+
   void set_key_type(int32_t type) {
     key_type = type;
     type_specified = true;
   }
+
   void set_suspension(__u8 is_suspended) {
     suspended = is_suspended;
     suspension_op = true;
   }
+
+  void set_admin(__u8 is_admin) {
+    admin = is_admin;
+    admin_specified = true;
+  }
+
   void set_system(__u8 is_system) {
     system = is_system;
     system_specified = true;
   }
+
   void set_exclusive(__u8 is_exclusive) {
     exclusive = is_exclusive;
   }
+
   void set_fetch_stats(__u8 is_fetch_stats) {
     fetch_stats = is_fetch_stats;
   }
+
   void set_user_info(RGWUserInfo& user_info) {
     user_id = user_info.user_id;
     info = user_info;
   }
-  void set_max_buckets(uint32_t mb) {
+
+  void set_max_buckets(int32_t mb) {
     max_buckets = mb;
     max_buckets_specified = true;
   }
+
   void set_gen_access() {
     gen_access = true;
     key_op = true;
   }
+
   void set_gen_secret() {
     gen_secret = true;
     key_op = true;
   }
+
   void set_generate_key() {
     if (id.empty())
       gen_access = true;
@@ -337,10 +364,12 @@ struct RGWUserAdminOpState {
       gen_secret = true;
     key_op = true;
   }
+
   void clear_generate_key() {
     gen_access = false;
     gen_secret = false;
   }
+
   void set_purge_keys() {
     purge_keys = true;
     key_op = true;
@@ -388,7 +417,7 @@ struct RGWUserAdminOpState {
   __u8 get_suspension_status() { return suspended; }
   int32_t get_key_type() {return key_type; }
   uint32_t get_subuser_perm() { return perm_mask; }
-  uint32_t get_max_buckets() { return max_buckets; }
+  int32_t get_max_buckets() { return max_buckets; }
   uint32_t get_op_mask() { return op_mask; }
   RGWQuotaInfo& get_bucket_quota() { return bucket_quota; }
   RGWQuotaInfo& get_user_quota() { return user_quota; }
@@ -452,6 +481,7 @@ struct RGWUserAdminOpState {
     key_type = -1;
     perm_mask = RGW_PERM_NONE;
     suspended = 0;
+    admin = 0;
     system = 0;
     exclusive = 0;
     fetch_stats = 0;
@@ -527,7 +557,7 @@ private:
   int add(RGWUserAdminOpState& op_state, std::string *err_msg, bool defer_save);
   int remove(RGWUserAdminOpState& op_state, std::string *err_msg, bool defer_save);
 public:
-  RGWAccessKeyPool(RGWUser* usr);
+  explicit RGWAccessKeyPool(RGWUser* usr);
   ~RGWAccessKeyPool();
 
   int init(RGWUserAdminOpState& op_state);
@@ -562,7 +592,7 @@ private:
   int remove(RGWUserAdminOpState& op_state, std::string *err_msg, bool defer_save);
   int modify(RGWUserAdminOpState& op_state, std::string *err_msg, bool defer_save);
 public:
-  RGWSubUserPool(RGWUser *user);
+  explicit RGWSubUserPool(RGWUser *user);
   ~RGWSubUserPool();
 
   bool exists(std::string subuser);
@@ -587,7 +617,7 @@ private:
   int remove(RGWUserAdminOpState& op_state, std::string *err_msg, bool defer_save);
 
 public:
-  RGWUserCapPool(RGWUser *user);
+  explicit RGWUserCapPool(RGWUser *user);
   ~RGWUserCapPool();
 
   int init(RGWUserAdminOpState& op_state);

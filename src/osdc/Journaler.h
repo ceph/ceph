@@ -64,7 +64,7 @@
 #include "Filer.h"
 
 #include "common/Timer.h"
-
+#include "common/Throttle.h"
 
 class CephContext;
 class Context;
@@ -113,6 +113,13 @@ class JournalStream
   bool readable(bufferlist &bl, uint64_t *need) const;
   size_t read(bufferlist &from, bufferlist *to, uint64_t *start_ptr);
   size_t write(bufferlist &entry, bufferlist *to, uint64_t const &start_ptr);
+  size_t get_envelope_size() const {
+     if (format >= JOURNAL_FORMAT_RESILIENT) {
+       return JOURNAL_ENVELOPE_RESILIENT;
+     } else {
+       return JOURNAL_ENVELOPE_LEGACY;
+     }
+  }
 
   // A magic number for the start of journal entries, so that we can
   // identify them in damaged journals.
@@ -130,14 +137,14 @@ public:
     uint64_t unused_field;
     uint64_t write_pos;
     string magic;
-    ceph_file_layout layout; //< The mapping from byte stream offsets
+    file_layout_t layout; //< The mapping from byte stream offsets
 			     //  to RADOS objects
     stream_format_t stream_format; //< The encoding of LogEvents
 				   //  within the journal byte stream
 
     Header(const char *m="") :
       trimmed_pos(0), expire_pos(0), unused_field(0), write_pos(0), magic(m),
-      stream_format(-1) {memset(&layout, 0, sizeof(layout));
+      stream_format(-1) {
     }
 
     void encode(bufferlist &bl) const {
@@ -147,7 +154,7 @@ public:
       ::encode(expire_pos, bl);
       ::encode(unused_field, bl);
       ::encode(write_pos, bl);
-      ::encode(layout, bl);
+      ::encode(layout, bl, 0);  // encode in legacy format
       ::encode(stream_format, bl);
       ENCODE_FINISH(bl);
     }
@@ -175,16 +182,7 @@ public:
 	f->dump_unsigned("expire_pos", expire_pos);
 	f->dump_unsigned("trimmed_pos", trimmed_pos);
 	f->dump_unsigned("stream_format", stream_format);
-	f->open_object_section("layout");
-	{
-	  f->dump_unsigned("stripe_unit", layout.fl_stripe_unit);
-	  f->dump_unsigned("stripe_count", layout.fl_stripe_count);
-	  f->dump_unsigned("object_size", layout.fl_object_size);
-	  f->dump_unsigned("cas_hash", layout.fl_cas_hash);
-	  f->dump_unsigned("object_stripe_unit", layout.fl_object_stripe_unit);
-	  f->dump_unsigned("pg_pool", layout.fl_pg_pool);
-	}
-	f->close_section(); // layout
+	f->dump_object("layout", layout);
       }
       f->close_section(); // journal_header
     }
@@ -215,13 +213,16 @@ public:
 private:
   // me
   CephContext *cct;
-  Mutex lock;
+  std::mutex lock;
+  const std::string name;
+  typedef std::lock_guard<std::mutex> lock_guard;
+  typedef std::unique_lock<std::mutex> unique_lock;
   Finisher *finisher;
   Header last_written;
   inodeno_t ino;
   int64_t pg_pool;
   bool readonly;
-  ceph_file_layout layout;
+  file_layout_t layout;
   uint32_t stream_format;
   JournalStream journal_stream;
 
@@ -232,27 +233,15 @@ private:
   PerfCounters *logger;
   int logger_key_lat;
 
-  SafeTimer *timer;
-
   class C_DelayFlush;
-  friend class C_DelayFlush;
-
-  class C_DelayFlush : public Context {
-    Journaler *journaler;
-    public:
-    C_DelayFlush(Journaler *j) : journaler(j) {}
-    void finish(int r) {
-      journaler->_do_delayed_flush();
-    }
-  } *delay_flush_event;
-
+  C_DelayFlush *delay_flush_event;
   /*
    * Do a flush as a result of a C_DelayFlush context.
    */
   void _do_delayed_flush()
   {
     assert(delay_flush_event != NULL);
-    Mutex::Locker l(lock);
+    lock_guard l(lock);
     delay_flush_event = NULL;
     _do_flush();
   }
@@ -279,7 +268,7 @@ private:
   friend class C_WriteHead;
 
   void _reread_head(Context *onfinish);
-  void _set_layout(ceph_file_layout const *l);
+  void _set_layout(file_layout_t const *l);
   list<Context*> waitfor_recover;
   void _read_head(Context *on_finish, bufferlist *bl);
   void _finish_read_head(int r, bufferlist& bl);
@@ -309,12 +298,20 @@ private:
   uint64_t flush_pos; ///< where we will flush. if
 		      ///  write_pos>flush_pos, we're buffering writes.
   uint64_t safe_pos; ///< what has been committed safely to disk.
+
+  uint64_t next_safe_pos; /// start postion of the first entry that isn't
+			  /// being fully flushed. If we don't flush any
+			  // partial entry, it's equal to flush_pos.
+
   bufferlist write_buf; ///< write buffer.  flush_pos +
 			///  write_buf.length() == write_pos.
 
+  // protect write_buf from bufferlist _len overflow 
+  Throttle write_buf_throttle;
+
   bool waiting_for_zero;
   interval_set<uint64_t> pending_zero;  // non-contig bits we've zeroed
-  std::set<uint64_t> pending_safe;
+  std::map<uint64_t, uint64_t> pending_safe; // flush_pos -> safe_pos
   // when safe through given offset
   std::map<uint64_t, std::list<Context*> > waitfor_safe;
 
@@ -396,18 +393,19 @@ private:
 			 // CEPH_OSD_OP_FADIVSE_*
 
 public:
-  Journaler(inodeno_t ino_, int64_t pool, const char *mag, Objecter *obj,
-	    PerfCounters *l, int lkey, SafeTimer *tim, Finisher *f) :
+  Journaler(const std::string &name_, inodeno_t ino_, int64_t pool,
+      const char *mag, Objecter *obj, PerfCounters *l, int lkey, Finisher *f) :
     last_committed(mag),
-    cct(obj->cct), lock("Journaler"), finisher(f),
-    last_written(mag),
+    cct(obj->cct), name(name_), finisher(f), last_written(mag),
     ino(ino_), pg_pool(pool), readonly(true),
     stream_format(-1), journal_stream(-1),
     magic(mag),
     objecter(obj), filer(objecter, f), logger(l), logger_key_lat(lkey),
-    timer(tim), delay_flush_event(0),
+    delay_flush_event(0),
     state(STATE_UNDEF), error(0),
-    prezeroing_pos(0), prezero_pos(0), write_pos(0), flush_pos(0), safe_pos(0),
+    prezeroing_pos(0), prezero_pos(0), write_pos(0), flush_pos(0),
+    safe_pos(0), next_safe_pos(0),
+    write_buf_throttle(cct, "write_buf_throttle", UINT_MAX - (UINT_MAX >> 3)),
     waiting_for_zero(false),
     read_pos(0), requested_pos(0), received_pos(0),
     fetch_len(0), temp_fetch_len(0),
@@ -415,7 +413,6 @@ public:
     expire_pos(0), trimming_pos(0), trimmed_pos(0), readable(false),
     write_iohint(0), stopping(false)
   {
-    memset(&layout, 0, sizeof(layout));
   }
 
   /* reset
@@ -425,7 +422,7 @@ public:
    * "erase" method.
    */
   void reset() {
-    Mutex::Locker l(lock);
+    lock_guard l(lock);
     assert(state == STATE_ACTIVE);
 
     readonly = true;
@@ -437,6 +434,7 @@ public:
     write_pos = 0;
     flush_pos = 0;
     safe_pos = 0;
+    next_safe_pos = 0;
     read_pos = 0;
     requested_pos = 0;
     received_pos = 0;
@@ -451,7 +449,7 @@ public:
   // Asynchronous operations
   // =======================
   void erase(Context *completion);
-  void create(ceph_file_layout *layout, stream_format_t const sf);
+  void create(file_layout_t *layout, stream_format_t const sf);
   void recover(Context *onfinish);
   void reread_head(Context *onfinish);
   void reread_head_and_probe(Context *onfinish);
@@ -459,36 +457,44 @@ public:
   void wait_for_flush(Context *onsafe = 0);
   void flush(Context *onsafe = 0);
   void wait_for_readable(Context *onfinish);
+  bool have_waiter() const;
 
   // Synchronous setters
   // ===================
-  void set_layout(ceph_file_layout const *l);
+  void set_layout(file_layout_t const *l);
   void set_readonly();
   void set_writeable();
-  void set_write_pos(int64_t p) {
-    Mutex::Locker l(lock);
-    prezeroing_pos = prezero_pos = write_pos = flush_pos = safe_pos = p;
+  void set_write_pos(uint64_t p) {
+    lock_guard l(lock);
+    prezeroing_pos = prezero_pos = write_pos = flush_pos = safe_pos = next_safe_pos = p;
   }
-  void set_read_pos(int64_t p) {
-    Mutex::Locker l(lock);
+  void set_read_pos(uint64_t p) {
+    lock_guard l(lock);
     // we can't cope w/ in-progress read right now.
     assert(requested_pos == received_pos);
     read_pos = requested_pos = received_pos = p;
     read_buf.clear();
   }
   uint64_t append_entry(bufferlist& bl);
-  void set_expire_pos(int64_t ep) {
-      Mutex::Locker l(lock);
+  void set_expire_pos(uint64_t ep) {
+      lock_guard l(lock);
       expire_pos = ep;
   }
-  void set_trimmed_pos(int64_t p) {
-      Mutex::Locker l(lock);
+  void set_trimmed_pos(uint64_t p) {
+      lock_guard l(lock);
       trimming_pos = trimmed_pos = p;
   }
 
+  bool _write_head_needed();
+  bool write_head_needed() {
+    lock_guard l(lock);
+    return _write_head_needed();
+  }
+
+
   void trim();
   void trim_tail() {
-    Mutex::Locker l(lock);
+    lock_guard l(lock);
 
     assert(!readonly);
     _issue_prezero();
@@ -512,9 +518,9 @@ public:
   // ===================
   // TODO: need some locks on reads for true safety
   uint64_t get_layout_period() const {
-    return (uint64_t)layout.fl_stripe_count * (uint64_t)layout.fl_object_size;
+    return layout.get_period();
   }
-  ceph_file_layout& get_layout() { return layout; }
+  file_layout_t& get_layout() { return layout; }
   bool is_active() { return state == STATE_ACTIVE; }
   int get_error() { return error; }
   bool is_readonly() { return readonly; }

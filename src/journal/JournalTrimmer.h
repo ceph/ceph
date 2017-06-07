@@ -7,10 +7,13 @@
 #include "include/int_types.h"
 #include "include/rados/librados.hpp"
 #include "include/Context.h"
+#include "common/AsyncOpTracker.h"
 #include "common/Mutex.h"
-#include "journal/AsyncOpTracker.h"
 #include "journal/JournalMetadata.h"
 #include "cls/journal/cls_journal_types.h"
+#include <functional>
+
+struct Context;
 
 namespace journal {
 
@@ -22,45 +25,48 @@ public:
                  const JournalMetadataPtr &journal_metadata);
   ~JournalTrimmer();
 
-  int remove_objects(bool force);
+  void shut_down(Context *on_finish);
+
+  void remove_objects(bool force, Context *on_finish);
   void committed(uint64_t commit_tid);
 
 private:
+  typedef std::function<Context*()> CreateContext;
+
+  struct MetadataListener : public JournalMetadataListener {
+    JournalTrimmer *journal_trimmer;
+
+    MetadataListener(JournalTrimmer *journal_trimmer)
+      : journal_trimmer(journal_trimmer) {
+    }
+    void handle_update(JournalMetadata *) override {
+      journal_trimmer->handle_metadata_updated();
+    }
+  };
+
   struct C_CommitPositionSafe : public Context {
     JournalTrimmer *journal_trimmer;
-    ObjectSetPosition object_set_position;
 
-    C_CommitPositionSafe(JournalTrimmer *_journal_trimmer,
-                         const ObjectSetPosition &_object_set_position)
-      : journal_trimmer(_journal_trimmer),
-        object_set_position(_object_set_position) {}
-
-    virtual void finish(int r) {
-      journal_trimmer->handle_commit_position_safe(r, object_set_position);
+    C_CommitPositionSafe(JournalTrimmer *_journal_trimmer)
+      : journal_trimmer(_journal_trimmer) {
+      journal_trimmer->m_async_op_tracker.start_op();
+    }
+    ~C_CommitPositionSafe() override {
       journal_trimmer->m_async_op_tracker.finish_op();
     }
-  };
-  struct C_RemoveSet : public Context {
-    JournalTrimmer *journal_trimmer;
-    uint64_t object_set;
-    Mutex lock;
-    uint32_t refs;
-    int return_value;
 
-    C_RemoveSet(JournalTrimmer *_journal_trimmer, uint64_t _object_set,
-                uint8_t _splay_width);
-    virtual void complete(int r);
-    virtual void finish(int r) {
-      journal_trimmer->handle_set_removed(r, object_set);
-      journal_trimmer->m_async_op_tracker.finish_op();
+    void finish(int r) override {
     }
   };
+
+  struct C_RemoveSet;
 
   librados::IoCtx m_ioctx;
   CephContext *m_cct;
   std::string m_object_oid_prefix;
 
   JournalMetadataPtr m_journal_metadata;
+  MetadataListener m_metadata_listener;
 
   AsyncOpTracker m_async_op_tracker;
 
@@ -70,11 +76,16 @@ private:
   uint64_t m_remove_set;
   Context *m_remove_set_ctx;
 
+  bool m_shutdown = false;
+
+  CreateContext m_create_commit_position_safe_context = [this]() {
+      return new C_CommitPositionSafe(this);
+    };
+
   void trim_objects(uint64_t minimum_set);
   void remove_set(uint64_t object_set);
 
-  void handle_commit_position_safe(int r, const ObjectSetPosition &position);
-
+  void handle_metadata_updated();
   void handle_set_removed(int r, uint64_t object_set);
 };
 

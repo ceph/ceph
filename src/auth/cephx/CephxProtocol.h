@@ -83,10 +83,7 @@
 #define CEPHX_REQUEST_TYPE_MASK            0x0F00
 #define CEPHX_CRYPT_ERR			1
 
-#include "../Auth.h"
-#include "../RotatingKeyRing.h"
-#include "common/debug.h"
-
+#include "auth/Auth.h"
 #include <errno.h>
 #include <sstream>
 
@@ -277,11 +274,11 @@ private:
 public:
   uint64_t nonce;
 
-  CephXAuthorizer(CephContext *cct_)
+  explicit CephXAuthorizer(CephContext *cct_)
     : AuthAuthorizer(CEPH_AUTH_CEPHX), cct(cct_), nonce(0) {}
 
   bool build_authorizer();
-  bool verify_reply(bufferlist::iterator& reply);
+  bool verify_reply(bufferlist::iterator& reply) override;
 };
 
 
@@ -320,7 +317,7 @@ struct CephXTicketManager {
   tickets_map_t tickets_map;
   uint64_t global_id;
 
-  CephXTicketManager(CephContext *cct_) : global_id(0), cct(cct_) {}
+  explicit CephXTicketManager(CephContext *cct_) : global_id(0), cct(cct_) {}
 
   bool verify_service_ticket_reply(CryptoKey& principal_secret,
 				 bufferlist::iterator& indata);
@@ -424,7 +421,7 @@ extern bool cephx_verify_authorizer(CephContext *cct, KeyStore *keys,
 /*
  * encode+encrypt macros
  */
-#define AUTH_ENC_MAGIC 0xff009cad8826aa55ull
+static constexpr uint64_t AUTH_ENC_MAGIC = 0xff009cad8826aa55ull;
 
 template <typename T>
 void decode_decrypt_enc_bl(CephContext *cct, T& t, CryptoKey key, bufferlist& bl_enc, 

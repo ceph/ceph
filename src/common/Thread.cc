@@ -12,21 +12,13 @@
  *
  */
 
+#include "include/compat.h"
 #include "common/Thread.h"
 #include "common/code_environment.h"
 #include "common/debug.h"
 #include "common/signal.h"
 #include "common/io_priority.h"
 
-#include <dirent.h>
-#include <errno.h>
-#include <iostream>
-#include <pthread.h>
-#include <signal.h>
-#include <sstream>
-#include <stdlib.h>
-#include <string.h>
-#include <sys/types.h>
 #ifdef HAVE_SCHED
 #include <sched.h>
 #endif
@@ -54,7 +46,8 @@ Thread::Thread()
     pid(0),
     ioprio_class(-1),
     ioprio_priority(-1),
-    cpuid(-1)
+    cpuid(-1),
+    thread_name(NULL)
 {
 }
 
@@ -81,6 +74,8 @@ void *Thread::entry_wrapper()
   }
   if (pid && cpuid >= 0)
     _set_affinity(cpuid);
+
+  ceph_pthread_setname(pthread_self(), thread_name);
   return entry();
 }
 
@@ -145,6 +140,9 @@ int Thread::try_create(size_t stacksize)
 
 void Thread::create(const char *name, size_t stacksize)
 {
+  assert(strlen(name) < 16);
+  thread_name = name;
+
   int ret = try_create(stacksize);
   if (ret != 0) {
     char buf[256];
@@ -152,9 +150,6 @@ void Thread::create(const char *name, size_t stacksize)
 	     "failed with error %d", ret);
     dout_emergency(buf);
     assert(ret == 0);
-  } else if (thread_id > 0) {
-      assert(strlen(name) < 16);
-      pthread_setname_np(thread_id, name);
   }
 }
 
@@ -197,8 +192,9 @@ int Thread::set_ioprio(int cls, int prio)
 
 int Thread::set_affinity(int id)
 {
+  int r = 0;
   cpuid = id;
   if (pid && ceph_gettid() == pid)
-    _set_affinity(id);
-  return 0;
+    r = _set_affinity(id);
+  return r;
 }
