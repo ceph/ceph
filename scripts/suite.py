@@ -43,6 +43,7 @@ Standard arguments:
   -k <kernel>, --kernel <kernel>
                               The kernel branch to run against; if not
                               supplied, the installed kernel is unchanged
+                              [default: distro]
   -f <flavor>, --flavor <flavor>
                               The kernel flavor to run against: ('basic',
                               'gcov', 'notcmalloc')
