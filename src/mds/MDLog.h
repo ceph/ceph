@@ -164,6 +164,10 @@ public:
   {
     return expiring_segments;
   }
+
+  bool segment_is_expired(LogSegment* ls) {
+    return expired_segments.count(ls);
+  }
 protected:
 
   // -- subtreemaps --

@@ -3370,6 +3370,8 @@ public:
   void finish(int r) override {
     assert(r == 0);
 
+    if (!mdr->ls || get_mds()->mdlog->segment_is_expired(mdr->ls))
+      mdr->ls = get_mds()->mdlog->get_current_segment();
     dn->pop_projected_linkage();
 
     // dirty inode, dn, dir
@@ -3834,6 +3836,8 @@ public:
     assert(r == 0);
 
     // apply
+    if (!mdr->ls || get_mds()->mdlog->segment_is_expired(mdr->ls))
+      mdr->ls = get_mds()->mdlog->get_current_segment();
     in->pop_and_dirty_projected_inode(mdr->ls);
     mdr->apply();
 
@@ -4763,6 +4767,8 @@ public:
     assert(r == 0);
 
     // apply
+    if (!mdr->ls || get_mds()->mdlog->segment_is_expired(mdr->ls))
+      mdr->ls = get_mds()->mdlog->get_current_segment();
     in->pop_and_dirty_projected_inode(mdr->ls);
     
     mdr->apply();
@@ -4940,6 +4946,8 @@ public:
     ServerLogContext(s, r), dn(d), newi(ni) {}
   void finish(int r) override {
     assert(r == 0);
+    if (!mdr->ls || get_mds()->mdlog->segment_is_expired(mdr->ls))
+      mdr->ls = get_mds()->mdlog->get_current_segment();
 
     // link the inode
     dn->pop_projected_linkage();
@@ -5320,6 +5328,8 @@ void Server::_link_local_finish(MDRequestRef& mdr, CDentry *dn, CInode *targeti,
   dout(10) << "_link_local_finish " << *dn << " to " << *targeti << dendl;
 
   // link and unlock the NEW dentry
+  if (!mdr->ls || mds->mdlog->segment_is_expired(mdr->ls))
+    mdr->ls = mdlog->get_current_segment();
   dn->pop_projected_linkage();
   dn->mark_dirty(dnpv, mdr->ls);
 
@@ -5432,6 +5442,8 @@ void Server::_link_remote_finish(MDRequestRef& mdr, bool inc,
 	   << *dn << " to " << *targeti << dendl;
 
   assert(g_conf->mds_kill_link_at != 3);
+  if (!mdr->ls || mds->mdlog->segment_is_expired(mdr->ls))
+    mdr->ls = mdlog->get_current_segment();
 
   if (!mdr->more()->witnessed.empty())
     mdcache->logged_master_update(mdr->reqid);
@@ -5570,6 +5582,8 @@ void Server::_logged_slave_link(MDRequestRef& mdr, CInode *targeti)
   assert(g_conf->mds_kill_link_at != 6);
 
   // update the target
+  if (!mdr->ls || mds->mdlog->segment_is_expired(mdr->ls))
+    mdr->ls = mdlog->get_current_segment();
   targeti->pop_and_dirty_projected_inode(mdr->ls);
   mdr->apply();
 
@@ -5709,6 +5723,8 @@ void Server::_link_rollback_finish(MutationRef& mut, MDRequestRef& mdr)
 
   assert(g_conf->mds_kill_link_at != 10);
 
+  if (!mut->ls || mds->mdlog->segment_is_expired(mut->ls))
+    mut->ls = mds->mdlog->get_current_segment();
   mut->apply();
   if (mdr)
     mdcache->request_finish(mdr);
@@ -5999,6 +6015,8 @@ void Server::_unlink_local_finish(MDRequestRef& mdr,
 				  version_t dnpv) 
 {
   dout(10) << "_unlink_local_finish " << *dn << dendl;
+  if (!mdr->ls || mds->mdlog->segment_is_expired(mdr->ls))
+    mdr->ls = mdlog->get_current_segment();
 
   if (!mdr->more()->witnessed.empty())
     mdcache->logged_master_update(mdr->reqid);
@@ -7680,6 +7698,8 @@ void Server::_logged_slave_rename(MDRequestRef& mdr,
 				  CDentry *srcdn, CDentry *destdn, CDentry *straydn)
 {
   dout(10) << "_logged_slave_rename " << *mdr << dendl;
+  if (!mdr->ls || mds->mdlog->segment_is_expired(mdr->ls))
+    mdr->ls = mdlog->get_current_segment();
 
   // prepare ack
   MMDSSlaveRequest *reply = NULL;
@@ -8147,6 +8167,8 @@ void Server::_rename_rollback_finish(MutationRef& mut, MDRequestRef& mdr, CDentr
 				     CDentry *straydn, bool finish_mdr)
 {
   dout(10) << "_rename_rollback_finish " << mut->reqid << dendl;
+  if (!mut->ls || mds->mdlog->segment_is_expired(mut->ls))
+    mut->ls = mds->mdlog->get_current_segment();
 
   if (straydn) {
     straydn->get_dir()->unlink_inode(straydn);
@@ -8528,6 +8550,8 @@ void Server::_mksnap_finish(MDRequestRef& mdr, CInode *diri, SnapInfo &info)
 
   int op = (diri->snaprealm? CEPH_SNAP_OP_CREATE : CEPH_SNAP_OP_SPLIT);
 
+  if (!mdr->ls || mds->mdlog->segment_is_expired(mdr->ls))
+    mdr->ls = mdlog->get_current_segment();
   diri->pop_and_dirty_projected_inode(mdr->ls);
   mdr->apply();
 
@@ -8656,6 +8680,8 @@ void Server::_rmsnap_finish(MDRequestRef& mdr, CInode *diri, snapid_t snapid)
   snapid_t seq;
   ::decode(seq, p);  
 
+  if (!mdr->ls || mds->mdlog->segment_is_expired(mdr->ls))
+    mdr->ls = mdlog->get_current_segment();
   diri->pop_and_dirty_projected_inode(mdr->ls);
   mdr->apply();
 
@@ -8795,7 +8821,8 @@ void Server::handle_client_renamesnap(MDRequestRef& mdr)
 void Server::_renamesnap_finish(MDRequestRef& mdr, CInode *diri, snapid_t snapid)
 {
   dout(10) << "_renamesnap_finish " << *mdr << " " << snapid << dendl;
-
+  if (!mdr->ls || mds->mdlog->segment_is_expired(mdr->ls))
+    mdr->ls = mds->mdlog->get_current_segment();
   diri->pop_and_dirty_projected_inode(mdr->ls);
   mdr->apply();
 

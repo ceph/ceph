@@ -536,7 +536,8 @@ void MDCache::_create_system_file(CDir *dir, const char *name, CInode *in, MDSIn
 void MDCache::_create_system_file_finish(MutationRef& mut, CDentry *dn, version_t dpv, MDSInternalContextBase *fin)
 {
   dout(10) << "_create_system_file_finish " << *dn << dendl;
-  
+  if (!mut->ls || mds->mdlog->segment_is_expired(mut->ls))
+    mut->ls = mds->mdlog->get_current_segment();
   dn->pop_projected_linkage();
   dn->mark_dirty(dpv, mut->ls);
 
@@ -954,6 +955,8 @@ void MDCache::try_subtree_merge_at(CDir *dir, bool do_eval)
 void MDCache::subtree_merge_writebehind_finish(CInode *in, MutationRef& mut)
 {
   dout(10) << "subtree_merge_writebehind_finish on " << in << dendl;
+  if (!mut->ls || mds->mdlog->segment_is_expired(mut->ls))
+    mut->ls = mds->mdlog->get_current_segment();
   in->pop_and_dirty_projected_inode(mut->ls);
 
   mut->apply();
@@ -6329,6 +6332,8 @@ void MDCache::truncate_inode_finish(CInode *in, LogSegment *ls)
 void MDCache::truncate_inode_logged(CInode *in, MutationRef& mut)
 {
   dout(10) << "truncate_inode_logged " << *in << dendl;
+  if (!mut->ls || mds->mdlog->segment_is_expired(mut->ls))
+    mut->ls = mds->mdlog->get_current_segment();
   mut->apply();
   mds->locker->drop_locks(mut.get());
   mut->cleanup();
@@ -9390,6 +9395,8 @@ void MDCache::_snaprealm_create_finish(MDRequestRef& mdr, MutationRef& mut, CIno
   dout(10) << "_snaprealm_create_finish " << *in << dendl;
 
   // apply
+  if (!mut->ls || mds->mdlog->segment_is_expired(mut->ls))
+    mut->ls = mds->mdlog->get_current_segment();
   in->pop_and_dirty_projected_inode(mut->ls);
   mut->apply();
   mds->locker->drop_locks(mut.get());
@@ -11287,6 +11294,8 @@ void MDCache::_fragment_logged(MDRequestRef& mdr)
   assert(it != fragments.end());
   fragment_info_t &info = it->second;
   CInode *diri = info.resultfrags.front()->get_inode();
+  if (!mdr->ls || mds->mdlog->segment_is_expired(mdr->ls))
+    mdr->ls = mds->mdlog->get_current_segment();
 
   dout(10) << "fragment_logged " << basedirfrag << " bits " << info.bits
 	   << " on " << *diri << dendl;
