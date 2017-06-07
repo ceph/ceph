@@ -749,16 +749,17 @@ def test_multi_period_incremental_sync():
         from nose.plugins.skip import SkipTest
         raise SkipTest("test_multi_period_incremental_sync skipped. Requires 3 or more clusters.")
 
-    buckets, zone_bucket = create_bucket_per_zone()
+    all_zones = realm.get_zones()
 
-    all_zones = []
-    for z in zone_bucket:
-        all_zones.append(z)
+    # create a bucket in each zone
+    buckets = []
+    for zone in all_zones:
+        conn = zone.get_connection(user)
+        bucket_name = gen_bucket_name()
+        log(1, 'create bucket zone=', zone.zone_name, ' name=', bucket_name)
+        bucket = conn.create_bucket(bucket_name)
+        buckets.append(bucket_name)
 
-    for zone, bucket_name in zone_bucket.iteritems():
-        for objname in [ 'p1', '_p1' ]:
-            k = new_key(zone, bucket_name, objname)
-            k.set_contents_from_string('asdasd')
     realm.meta_checkpoint()
 
     # kill zone 3 gateway to freeze sync status to incremental in first period
@@ -768,12 +769,15 @@ def test_multi_period_incremental_sync():
     # change master to zone 2 -> period 2
     realm.set_master_zone(realm.get_zone('us-2'))
 
-    for zone, bucket_name in zone_bucket.iteritems():
+    # create another bucket in each zone, except for z3
+    for zone in all_zones:
         if zone == z3:
             continue
-        for objname in [ 'p2', '_p2' ]:
-            k = new_key(zone, bucket_name, objname)
-            k.set_contents_from_string('qweqwe')
+        conn = zone.get_connection(user)
+        bucket_name = gen_bucket_name()
+        log(1, 'create bucket zone=', zone.zone_name, ' name=', bucket_name)
+        bucket = conn.create_bucket(bucket_name)
+        buckets.append(bucket_name)
 
     # wait for zone 1 to sync
     realm.zone_meta_checkpoint(realm.get_zone('us-1'))
@@ -781,25 +785,22 @@ def test_multi_period_incremental_sync():
     # change master back to zone 1 -> period 3
     realm.set_master_zone(realm.get_zone('us-1'))
 
-    for zone, bucket_name in zone_bucket.iteritems():
+    for zone in all_zones:
         if zone == z3:
             continue
-        for objname in [ 'p3', '_p3' ]:
-            k = new_key(zone, bucket_name, objname)
-            k.set_contents_from_string('zxczxc')
+        conn = zone.get_connection(user)
+        bucket_name = gen_bucket_name()
+        log(1, 'create bucket zone=', zone.zone_name, ' name=', bucket_name)
+        bucket = conn.create_bucket(bucket_name)
+        buckets.append(bucket_name)
 
     # restart zone 3 gateway and wait for sync
     z3.cluster.start_rgw()
     realm.meta_checkpoint()
 
-    # verify that we end up with the same objects
-    for source_zone, bucket in zone_bucket.iteritems():
-        for target_zone in all_zones:
-            if source_zone.zone_name == target_zone.zone_name:
-                continue
-
-            realm.zone_bucket_checkpoint(target_zone, source_zone, bucket.name)
-
+    # verify that we end up with the same buckets
+    for bucket_name in buckets:
+        for source_zone, target_zone in itertools.combinations(all_zones, 2):
             check_bucket_eq(source_zone, target_zone, bucket)
 
 # TODO: test this in isolation, so it doesn't have side effects on other tests
