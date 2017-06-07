@@ -38,13 +38,13 @@ struct Option {
     LEVEL_DEV,
   } level_t;
 
-  typedef boost::variant<
+  using value_t = boost::variant<
     std::string,
     int64_t,
     double,
     bool//,
     //entity_addr_t,
-    /*uuid_d*/> value_t;
+    /*uuid_d*/>;
   std::string name;
   type_t type;
   level_t level;
@@ -66,20 +66,34 @@ struct Option {
     : name(name), type(t), level(l)
   {}
 
+  // bool is an integer, but we don't think so. teach it the hard way.
+  template<typename T>
+  using is_not_integer = std::enable_if<!std::is_integral<T>::value ||
+					std::is_same<T, bool>::value, int>;
+  template<typename T>
+  using is_integer = std::enable_if<std::is_integral<T>::value &&
+				    !std::is_same<T, bool>::value, int>;
+  template<typename T, typename is_not_integer<T>::type = 0>
+  Option& set_value(value_t& v, const T& new_value) {
+    v = new_value;
+    return *this;
+  }
+  template<typename T, typename is_integer<T>::type = 0>
+  Option& set_value(value_t& v, T new_value) {
+    v = int64_t(new_value);
+    return *this;
+  }
   template<typename T>
   Option& set_default(const T& v) {
-    value = v;
-    return *this;
+    return set_value(value, v);
   }
   template<typename T>
   Option& set_daemon_default(const T& v) {
-    daemon_value = v;
-    return *this;
+    return set_value(daemon_value, v);
   }
   template<typename T>
   Option& set_nondaemon_default(const T& v) {
-    daemon_value = v;
-    return *this;
+    return set_value(nondaemon_value, v);
   }
   Option& add_tag(const char* t) {
     tags.push_back(t);
