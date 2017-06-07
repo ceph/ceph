@@ -300,7 +300,7 @@ void add_create_journal_options(po::options_description *opt) {
 void add_size_option(boost::program_options::options_description *opt) {
   opt->add_options()
     ((IMAGE_SIZE + ",s").c_str(), po::value<ImageSize>()->required(),
-     "image size (in M/G/T)");
+     "image size (in M/G/T) [default: M]");
 }
 
 void add_sparse_size_option(boost::program_options::options_description *opt) {
