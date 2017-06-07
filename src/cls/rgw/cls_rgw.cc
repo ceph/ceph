@@ -2281,7 +2281,7 @@ static int list_plain_entries(cls_method_context_t hctx, const string& name, con
 
     map<string, bufferlist>::iterator iter;
     for (iter = keys.begin(); iter != keys.end(); ++iter) {
-      if (iter->first >= end_key) {
+      if ((iter->first >= end_key) || !bi_is_objs_index(iter->first)) {
         /* past the end of plain namespace */
         return count;
       }
