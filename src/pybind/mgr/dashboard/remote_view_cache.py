@@ -22,13 +22,12 @@ class GetterThread(Thread):
             self._view.value = None
             self._view.value_when = None
             self._view.getter_thread = None
-            self.event.set()
-
-        with self._view.lock:
-            self._view.latency = t1 - t0
-            self._view.value = val
-            self._view.value_when = datetime.datetime.now()
-            self._view.getter_thread = None
+        else:
+            with self._view.lock:
+                self._view.latency = t1 - t0
+                self._view.value = val
+                self._view.value_when = datetime.datetime.now()
+                self._view.getter_thread = None
 
         self.event.set()
 
