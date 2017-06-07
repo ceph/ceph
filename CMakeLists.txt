@@ -217,6 +217,12 @@ if(WITH_SPDK)
   set(HAVE_SPDK TRUE)
 endif(WITH_SPDK)
 
+option(WITH_PMEM "Enable PMEM" OFF)
+if(WITH_PMEM)
+  find_package(pmem REQUIRED)
+  set(HAVE_PMEM ${PMEM_FOUND})
+endif(WITH_PMEM)
+
 # needs mds and? XXX
 option(WITH_LIBCEPHFS "libcephfs client library" ON)
 
