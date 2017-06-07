@@ -177,9 +177,12 @@ extern const char *ceph_osd_state_name(int s);
 #define CEPH_RELEASE_KRAKEN     11
 #define CEPH_RELEASE_LUMINOUS   12
 #define CEPH_RELEASE_MIMIC      13
+#define CEPH_RELEASE_MAX        14  /* highest + 1 */
 
 extern const char *ceph_release_name(int r);
 extern int ceph_release_from_name(const char *s);
+extern uint64_t ceph_release_features(int r);
+extern int ceph_release_from_features(uint64_t features);
 
 /*
  * The error code to return when an OSD can't handle a write

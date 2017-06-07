@@ -233,6 +233,11 @@ private:
   set<int> quorum;       // current active set of monitors (if !starting)
   utime_t leader_since;  // when this monitor became the leader, if it is the leader
   utime_t exited_quorum; // time detected as not in quorum; 0 if in
+
+  // map of counts of connected clients, by type and features, for
+  // each quorum mon
+  map<int,FeatureMap> quorum_feature_map;
+
   /**
    * Intersection of quorum member's connection feature bits.
    */
@@ -573,6 +578,8 @@ public:
   void apply_quorum_to_compatset_features();
   void apply_monmap_to_compatset_features();
   void calc_quorum_requirements();
+
+  void get_combined_feature_map(FeatureMap *fm);
 
 private:
   void _reset();   ///< called from bootstrap, start_, or join_election
