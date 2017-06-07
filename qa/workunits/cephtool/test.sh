@@ -722,6 +722,8 @@ function test_mon_misc()
   ceph_watch_start
   mymsg="this is a test log message $$.$(date)"
   ceph log "$mymsg"
+  ceph log last | grep "$mymsg"
+  ceph log last 100 | grep "$mymsg"
   ceph_watch_wait "$mymsg"
 
   ceph mgr dump
