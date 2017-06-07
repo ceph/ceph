@@ -3741,6 +3741,25 @@ void RGWPutMetadataAccount::execute()
   /* Handle the quota extracted at the verify_permission step. */
   if (new_quota_extracted) {
     new_uinfo.user_quota = std::move(new_quota);
+    RGWStorageStats user_stats;
+    op_ret = store->get_user_stats(new_uinfo.user_id, user_stats);
+    if (op_ret < 0 && op_ret != -ENOENT) {
+      ldout(s->cct, 0) << "fail to get user stats" << dendl;
+      return;
+    } else if (op_ret >= 0) {
+      if (new_uinfo.user_quota.max_objects > 0 && 
+          static_cast<uint64_t>(new_uinfo.user_quota.max_objects) < user_stats.num_objects) {
+        ldout(s->cct, 0) << "quota's max objects is less than user's total entries" << dendl;
+        op_ret = -EINVAL;
+        return;
+      }
+      if (new_uinfo.user_quota.max_size > 0 && 
+          static_cast<uint64_t>(new_uinfo.user_quota.max_size) < user_stats.size) {
+        ldout(s->cct, 0) << "quota's max size is less than user's total bytes" << dendl;
+        op_ret = -EINVAL;
+        return;
+      }
+    }
   }
 
   /* We are passing here the current (old) user info to allow the function

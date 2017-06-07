@@ -1334,9 +1334,26 @@ int set_user_quota(int opt_cmd, RGWUser& user, RGWUserAdminOpState& op_state, in
   set_quota_info(user_info.user_quota, opt_cmd, max_size, max_objects, have_max_size, have_max_objects);
 
   op_state.set_user_quota(user_info.user_quota);
-
+  
+  RGWStorageStats user_stats;
+  int r = user.get_store()->get_user_stats(op_state.get_user_id(), user_stats);
+  if (r < 0 && r != -ENOENT) {
+    cerr << "ERROR: fail to get user's stats" << cpp_strerror(-r) <<std::endl;
+    return -r;
+  } else if (r >= 0) {
+    if (user_info.user_quota.max_objects > 0 && 
+        static_cast<uint64_t>(user_info.user_quota.max_objects) < user_stats.num_objects) {
+      cerr << "ERROR: quota's max objects is less than user's total entries" << std::endl;
+      return EINVAL;
+    }
+    if (user_info.user_quota.max_size > 0 && 
+        static_cast<uint64_t>(user_info.user_quota.max_size) < user_stats.size) {
+      cerr << "ERROR: quota's max size is less than user's total bytes" << std::endl;
+      return EINVAL;
+    }
+  }
   string err;
-  int r = user.modify(op_state, &err);
+  r = user.modify(op_state, &err);
   if (r < 0) {
     cerr << "ERROR: failed updating user info: " << cpp_strerror(-r) << ": " << err << std::endl;
     return -r;
