@@ -11,14 +11,14 @@
 //#include "msg/msg_types.h"
 
 struct Option {
-  typedef enum {
+  enum type_t {
     TYPE_INT,
     TYPE_STR,
     TYPE_FLOAT,
     TYPE_BOOL,
     TYPE_ADDR,
     TYPE_UUID,
-  } type_t;
+  };
 
   const char *type_to_str(type_t t) {
     switch (t) {
@@ -32,11 +32,11 @@ struct Option {
     }
   }      
 
-  typedef enum {
+  enum level_t {
     LEVEL_BASIC,
     LEVEL_ADVANCED,
     LEVEL_DEV,
-  } level_t;
+  };
 
   using value_t = boost::variant<
     std::string,
@@ -45,9 +45,9 @@ struct Option {
     bool//,
     //entity_addr_t,
     /*uuid_d*/>;
-  std::string name;
-  type_t type;
-  level_t level;
+  const std::string name;
+  const type_t type;
+  const level_t level;
 
   std::string desc;
   std::string long_desc;
