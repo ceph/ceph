@@ -255,7 +255,7 @@ void RGWBL::format_opslog_entry(struct rgw_log_entry& entry, bufferlist *buffer)
                  << time << row_separator                                      // Time
                  << entry.remote_addr << row_separator                         // Remote IP
                  << entry.user << row_separator                                // Requester
-                 << "-" << row_separator                                       // Request ID
+                 << entry.request_id << row_separator                          // Request ID
                  << entry.op << row_separator                                  // Operation
                  << oname << row_separator                                     // Key
                  << entry.uri << row_separator                                 // Request-URI

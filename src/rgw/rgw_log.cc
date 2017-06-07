@@ -414,6 +414,7 @@ int rgw_log_op(RGWRados *store, RGWREST* const rest, struct req_state *s,
 
   entry.error_code = s->err.err_code;
   entry.bucket_id = bucket_id;
+  entry.request_id = s->trans_id;
 
   bufferlist bl;
   ::encode(entry, bl);
