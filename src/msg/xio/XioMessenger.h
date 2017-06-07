@@ -17,13 +17,16 @@
 #define XIO_MESSENGER_H
 
 #include "msg/SimplePolicyMessenger.h"
+
+#include <atomic>
+
 extern "C" {
 #include "libxio.h"
 }
+
 #include "XioConnection.h"
 #include "XioPortal.h"
 #include "QueueStrategy.h"
-#include "include/atomic.h"
 #include "common/Thread.h"
 #include "common/Mutex.h"
 #include "include/Spinlock.h"
@@ -41,9 +44,9 @@ protected:
 class XioMessenger : public SimplePolicyMessenger, XioInit
 {
 private:
-  static atomic_t nInstances;
-  atomic_t nsessions;
-  atomic_t shutdown_called;
+  static std::atomic<uint64_t> nInstances = { 0 };
+  std::atomic<uint64_t> nsessions = { 0 };
+  std::atomic<bool> shutdown_called = { false };
   Spinlock conns_sp;
   XioConnection::ConnList conns_list;
   XioConnection::EntitySet conns_entity_map;
