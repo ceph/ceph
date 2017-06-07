@@ -245,7 +245,6 @@ class TestCephDisk(object):
         #
         # bluestore
         #
-        c.conf['global']['enable experimental unrecoverable data corrupting features'] = '*'
         c.conf['global']['bluestore fsck on mount'] = 'true'
         c.save_conf()
 
@@ -261,7 +260,7 @@ class TestCephDisk(object):
         disk = c.unused_disks()[0]
         osd_uuid = str(uuid.uuid1())
         c.sh("ceph-disk --verbose zap " + disk)
-        c.sh("ceph-disk --verbose prepare --osd-uuid " + osd_uuid +
+        c.sh("ceph-disk --verbose prepare --filestore --osd-uuid " + osd_uuid +
              " " + disk)
         c.wait_for_osd_up(osd_uuid)
         device = json.loads(c.sh("ceph-disk list --format json " + disk))[0]
@@ -283,7 +282,7 @@ class TestCephDisk(object):
         c = CephDisk()
         disk = c.unused_disks()[0]
         osd_uuid = str(uuid.uuid1())
-        c.sh("ceph-disk --verbose prepare --osd-uuid " + osd_uuid + " " + disk)
+        c.sh("ceph-disk --verbose prepare --filestore --osd-uuid " + osd_uuid + " " + disk)
         c.wait_for_osd_up(osd_uuid)
         c.check_osd_status(osd_uuid)
         c.destroy_osd(osd_uuid)
@@ -292,7 +291,7 @@ class TestCephDisk(object):
         c = CephDisk()
         disk = c.unused_disks()[0]
         osd_uuid = str(uuid.uuid1())
-        c.sh("ceph-disk --verbose prepare --osd-uuid " + osd_uuid + " " + disk)
+        c.sh("ceph-disk --verbose prepare --filestore --osd-uuid " + osd_uuid + " " + disk)
         c.wait_for_osd_up(osd_uuid)
         partition = c.get_osd_partition(osd_uuid)
         assert partition['type'] == 'data'
@@ -374,7 +373,7 @@ class TestCephDisk(object):
         osd_uuid = str(uuid.uuid1())
         journal_uuid = str(uuid.uuid1())
         c.sh("ceph-disk --verbose zap " + disk)
-        c.sh(ceph_disk + " --verbose prepare " +
+        c.sh(ceph_disk + " --verbose prepare --filestore " +
              " --osd-uuid " + osd_uuid +
              " --journal-uuid " + journal_uuid +
              " --dmcrypt " +
@@ -429,7 +428,7 @@ class TestCephDisk(object):
         c.sh("ceph-disk --verbose zap " + disk)
         c.conf['global']['osd objectstore'] = 'memstore'
         c.save_conf()
-        c.sh("ceph-disk --verbose prepare --osd-uuid " + osd_uuid +
+        c.sh("ceph-disk --verbose prepare --filestore --osd-uuid " + osd_uuid +
              " " + disk)
         c.wait_for_osd_up(osd_uuid)
         device = json.loads(c.sh("ceph-disk list --format json " + disk))[0]
@@ -447,7 +446,7 @@ class TestCephDisk(object):
         disk = c.unused_disks()[0]
         osd_uuid = str(uuid.uuid1())
         c.sh("ceph-disk --verbose zap " + disk)
-        c.sh("ceph-disk --verbose prepare --osd-uuid " + osd_uuid +
+        c.sh("ceph-disk --verbose prepare --filestore --osd-uuid " + osd_uuid +
              " " + disk)
         c.wait_for_osd_up(osd_uuid)
         device = json.loads(c.sh("ceph-disk list --format json " + disk))[0]
@@ -552,7 +551,7 @@ class TestCephDisk(object):
         symlink = os.path.join(tempdir, 'osd')
         os.symlink(disk, symlink)
         c.sh("ceph-disk --verbose zap " + symlink)
-        c.sh("ceph-disk --verbose prepare --osd-uuid " + osd_uuid +
+        c.sh("ceph-disk --verbose prepare --filestore --osd-uuid " + osd_uuid +
              " " + symlink)
         c.wait_for_osd_up(osd_uuid)
         device = json.loads(c.sh("ceph-disk list --format json " + symlink))[0]
@@ -581,7 +580,7 @@ class TestCephDisk(object):
         c.sh("chown ceph:ceph " + tempdir + " || true")
         journal_file = os.path.join(tempdir, 'journal')
         osd_uuid = str(uuid.uuid1())
-        c.sh("ceph-disk --verbose prepare --osd-uuid " + osd_uuid +
+        c.sh("ceph-disk --verbose prepare --filestore --osd-uuid " + osd_uuid +
              " " + data_disk + " " + journal_file)
         c.wait_for_osd_up(osd_uuid)
         device = json.loads(
@@ -629,7 +628,7 @@ class TestCephDisk(object):
     def activate_separated_journal(self, data_disk, journal_disk):
         c = CephDisk()
         osd_uuid = str(uuid.uuid1())
-        c.sh("ceph-disk --verbose prepare --osd-uuid " + osd_uuid +
+        c.sh("ceph-disk --verbose prepare --filestore --osd-uuid " + osd_uuid +
              " " + data_disk + " " + journal_disk)
         c.wait_for_osd_up(osd_uuid)
         device = json.loads(
@@ -684,7 +683,7 @@ class TestCephDisk(object):
         #
         # Create another OSD with the journal partition of the previous OSD
         #
-        c.sh("ceph-disk --verbose prepare --osd-uuid " + osd_uuid +
+        c.sh("ceph-disk --verbose prepare --filestore --osd-uuid " + osd_uuid +
              " " + data_disk + " " + journal_path)
         c.helper("pool_read_write 1")  # 1 == pool size
         c.wait_for_osd_up(osd_uuid)
@@ -722,7 +721,7 @@ class TestCephDisk(object):
         #
         osd_uuid = str(uuid.uuid1())
         c.sh("ceph-disk --verbose zap " + multipath)
-        c.sh("ceph-disk --verbose prepare --osd-uuid " + osd_uuid +
+        c.sh("ceph-disk --verbose prepare --filestore --osd-uuid " + osd_uuid +
              " " + multipath)
         c.wait_for_osd_up(osd_uuid)
         device = json.loads(
