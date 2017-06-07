@@ -59,7 +59,6 @@ RGWGetObj_Decompress::RGWGetObj_Decompress(CephContext* cct_,
                                                                 partial_content(partial_content_),
                                                                 q_ofs(0),
                                                                 q_len(0),
-                                                                first_data(true),
                                                                 cur_ofs(0)
 {
   compressor = Compressor::create(cct, cs_info->compression_type);
@@ -69,7 +68,8 @@ RGWGetObj_Decompress::RGWGetObj_Decompress(CephContext* cct_,
 
 int RGWGetObj_Decompress::handle_data(bufferlist& bl, off_t bl_ofs, off_t bl_len)
 {
-  ldout(cct, 10) << "Compression for rgw is enabled, decompress part " << bl_len << dendl;
+  ldout(cct, 10) << "Compression for rgw is enabled, decompress part "
+      << "bl_ofs="<< bl_ofs << bl_len << dendl;
 
   if (!compressor.get()) {
     // if compressor isn't available - error, because cannot return decompressed data?
@@ -79,6 +79,7 @@ int RGWGetObj_Decompress::handle_data(bufferlist& bl, off_t bl_ofs, off_t bl_len
   bufferlist out_bl, in_bl, temp_in_bl;
   bl.copy(bl_ofs, bl_len, temp_in_bl); 
   bl_ofs = 0;
+  int r;
   if (waiting.length() != 0) {
     in_bl.append(waiting);
     in_bl.append(temp_in_bl);        
@@ -87,9 +88,9 @@ int RGWGetObj_Decompress::handle_data(bufferlist& bl, off_t bl_ofs, off_t bl_len
     in_bl.claim(temp_in_bl);
   }
   bl_len = in_bl.length();
-
+  
   while (first_block <= last_block) {
-    bufferlist tmp, tmp_out;
+    bufferlist tmp;
     off_t ofs_in_bl = first_block->new_ofs - cur_ofs;
     if (ofs_in_bl + (off_t)first_block->len > bl_len) {
       // not complete block, put it to waiting
@@ -99,48 +100,37 @@ int RGWGetObj_Decompress::handle_data(bufferlist& bl, off_t bl_ofs, off_t bl_len
       break;
     }
     in_bl.copy(ofs_in_bl, first_block->len, tmp);
-    int r = compressor->decompress(tmp, tmp_out);
-    if (r < 0) {
-      lderr(cct) << "Compression failed with exit code " << r << dendl;
-      return r;
-    }
-    if (first_block == last_block && partial_content)
-      tmp_out.copy(0, q_len, out_bl);
-    else {
-      out_bl.append(tmp_out);    
-      if (cct->_conf->rgw_max_chunk_size && (out_bl.length() >= cct->_conf->rgw_max_chunk_size)) {
-        if (first_data && partial_content && out_bl.length() != 0)
-          bl_ofs =  q_ofs;
-        
-        if (first_data && out_bl.length() != 0)
-          first_data = false;
-        
-        r = next->handle_data(out_bl, bl_ofs, out_bl.length() - bl_ofs);
-        if (r < 0) {
-          lderr(cct) << "handle_data failed with exit code " << r << dendl;
-          return r;       
-        }  
-        bl_ofs = 0;
-        out_bl.clear();
-      }
+    int cr = compressor->decompress(tmp, out_bl);
+    if (cr < 0) {
+      lderr(cct) << "Compression failed with exit code " << cr << dendl;
+      return cr;
     }
     ++first_block;
- }
-
-  if (first_data && partial_content && out_bl.length() != 0)
-    bl_ofs =  q_ofs;
-
-  if (first_data && out_bl.length() != 0)
-    first_data = false;
+    while (out_bl.length() - q_ofs >= cct->_conf->rgw_max_chunk_size)
+    {
+      off_t ch_len = std::min<off_t>(cct->_conf->rgw_max_chunk_size, q_len);
+      q_len -= ch_len;
+      r = next->handle_data(out_bl, q_ofs, ch_len);
+      if (r < 0) {
+        lderr(cct) << "handle_data failed with exit code " << r << dendl;
+        return r;
+      }
+      out_bl.splice(0, q_ofs + ch_len);
+      q_ofs = 0;
+    }
+  }
 
   cur_ofs += bl_len;
 
-  if (out_bl.length()) {
-    assert(out_bl.length() >= bl_ofs); 
-    return next->handle_data(out_bl, bl_ofs, out_bl.length() - bl_ofs);
-  } 
-
-  return 0;
+  off_t ch_len = std::min<off_t>(out_bl.length() - q_ofs, q_len);
+  r = next->handle_data(out_bl, q_ofs, ch_len);
+  if (r < 0) {
+    lderr(cct) << "handle_data failed with exit code " << r << dendl;
+    return r;
+  }
+  q_len -= ch_len;
+  q_ofs = 0;
+  return r;
 }
 
 int RGWGetObj_Decompress::fixup_range(off_t& ofs, off_t& end)
@@ -169,12 +159,11 @@ int RGWGetObj_Decompress::fixup_range(off_t& ofs, off_t& end)
   }
 
   q_ofs = ofs - first_block->old_ofs;
-  q_len = end - last_block->old_ofs + 1;
+  q_len = end + 1 - ofs;
 
   ofs = first_block->new_ofs;
   end = last_block->new_ofs + last_block->len - 1;
 
-  first_data = true;
   cur_ofs = ofs;
   waiting.clear();
 
