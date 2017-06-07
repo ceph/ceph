@@ -27,6 +27,9 @@ const char * Compressor::get_comp_alg_name(int a) {
   case COMP_ALG_SNAPPY: return "snappy";
   case COMP_ALG_ZLIB: return "zlib";
   case COMP_ALG_ZSTD: return "zstd";
+#if defined(HAVE_QATZIP)
+  case COMP_ALG_QATZIP: return "qatzip";
+#endif
   default: return "???";
   }
 }
@@ -38,6 +41,11 @@ boost::optional<Compressor::CompressionAlgorithm> Compressor::get_comp_alg_type(
     return COMP_ALG_ZLIB;
   if (s == "zstd")
     return COMP_ALG_ZSTD;
+
+#if defined(HAVE_QATZIP)
+  if (s == "qatzip")
+    return COMP_ALG_QATZIP;
+#endif
   if (s == "")
     return COMP_ALG_NONE;
 

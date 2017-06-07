@@ -325,9 +325,13 @@ INSTANTIATE_TEST_CASE_P(
 #ifdef __x86_64__
     "zlib/isal",
 #endif
+#ifdef HAVE_QATZIP
+    "qatzip",
+#endif
     "zlib/noisal",
     "snappy",
-    "zstd"));
+    "zstd"
+    ));
 
 #ifdef __x86_64__
 

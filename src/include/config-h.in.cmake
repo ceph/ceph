@@ -321,4 +321,7 @@
 /* Define to 1 if you have the `getprogname' function. */
 #cmakedefine HAVE_GETPROGNAME 1
 
+/* support Intel QAT compress/decompress*/
+#cmakedefine HAVE_QATZIP 1
+
 #endif /* CONFIG_H */
