@@ -302,12 +302,12 @@ public:
         ss << "unsetting the metadata load balancer";
       else 
         ss << "setting the metadata load balancer to " << val;
-        fsmap.modify_filesystem(
-            fs->fscid,
-            [val](std::shared_ptr<Filesystem> fs)
-        {
-          fs->mds_map.set_balancer(val);
-        });
+      fsmap.modify_filesystem(
+          fs->fscid,
+          [val](std::shared_ptr<Filesystem> fs)
+      {
+        fs->mds_map.set_balancer(val);
+      });
       return true;
     } else if (var == "max_file_size") {
       if (interr.length()) {
