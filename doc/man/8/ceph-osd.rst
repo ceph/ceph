@@ -57,11 +57,11 @@ Options
 
    Journal updates to *journal*.
 
-.. option:: --check-allows-journal
+.. option:: --check-wants-journal
 
    Check whether a journal is desired.
 
-.. option:: --check-wants-journal
+.. option:: --check-allows-journal
 
    Check whether a journal is allowed.
 
