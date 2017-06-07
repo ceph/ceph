@@ -186,6 +186,7 @@ WRITE_CLASS_ENCODER(KeyServerData::Incremental)
 
 class KeyServer : public KeyStore {
   CephContext *cct;
+  KeyServerData temp_data;
   KeyServerData data;
   mutable Mutex lock;
 

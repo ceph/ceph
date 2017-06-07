@@ -133,6 +133,7 @@ bool KeyServerData::get_caps(CephContext *cct, const EntityName& name,
 
 KeyServer::KeyServer(CephContext *cct_, KeyRing *extra_secrets)
   : cct(cct_),
+    temp_data(extra_secrets),
     data(extra_secrets),
     lock("KeyServer::lock")
 {
@@ -160,7 +161,7 @@ bool KeyServer::_check_rotating_secrets()
 
   if (added) {
     ldout(cct, 10) << __func__ << " added " << added << dendl;
-    data.rotating_ver++;
+    temp_data.rotating_ver++;
     //data.next_rotating_time = ceph_clock_now(cct);
     //data.next_rotating_time += MIN(cct->_conf->auth_mon_ticket_ttl, cct->_conf->auth_service_ticket_ttl);
     _dump_rotating_secrets();
@@ -172,8 +173,8 @@ bool KeyServer::_check_rotating_secrets()
 void KeyServer::_dump_rotating_secrets()
 {
   ldout(cct, 30) << "_dump_rotating_secrets" << dendl;
-  for (map<uint32_t, RotatingSecrets>::iterator iter = data.rotating_secrets.begin();
-       iter != data.rotating_secrets.end();
+  for (map<uint32_t, RotatingSecrets>::iterator iter = temp_data.rotating_secrets.begin();
+       iter != temp_data.rotating_secrets.end();
        ++iter) {
     RotatingSecrets& key = iter->second;
     for (map<uint64_t, ExpiringCryptoKey>::iterator mapiter = key.secrets.begin();
@@ -187,7 +188,7 @@ void KeyServer::_dump_rotating_secrets()
 
 int KeyServer::_rotate_secret(uint32_t service_id)
 {
-  RotatingSecrets& r = data.rotating_secrets[service_id];
+  RotatingSecrets& r = temp_data.rotating_secrets[service_id];
   int added = 0;
   utime_t now = ceph_clock_now();
   double ttl = service_id == CEPH_ENTITY_TYPE_AUTH ? cct->_conf->auth_mon_ticket_ttl : cct->_conf->auth_service_ticket_ttl;
@@ -368,16 +369,25 @@ bool KeyServer::updated_rotating(bufferlist& rotating_bl, version_t& rotating_ve
 {
   Mutex::Locker l(lock);
 
-  _check_rotating_secrets(); 
-
-  if (data.rotating_ver <= rotating_ver)
-    return false;
+  if (data.rotating_ver < rotating_ver)
+  {
+	temp_data.encode_rotating(rotating_bl);
+        ldout(cct, 10) << "re-encode rotating" << dendl;
+        return true;
+  }
  
-  data.encode_rotating(rotating_bl);
-
-  rotating_ver = data.rotating_ver;
-
-  return true;
+  else if (data.rotating_ver == rotating_ver)
+  {
+	_check_rotating_secrets();
+	if (data.rotating_ver < temp_data.rotating_ver)
+	{
+	  temp_data.encode_rotating(rotating_bl);
+	  rotating_ver = temp_data.rotating_ver;
+          ldout(cct, 10) << "add new rotating secret" << dendl;
+	  return true;
+	}
+  }
+  return false;
 }
 
 bool KeyServer::get_rotating_encrypted(const EntityName& name,
