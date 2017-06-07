@@ -393,7 +393,7 @@ Description: common utilities to mount and interact with a ceph storage cluster
 
 Package: ceph-common-dbg
 Architecture: linux-any
-Depends: ceph-common (= ${binary:Version}), ${misc:Depends}
+Depends: ceph-fs-common (= ${binary:Version}), ${misc:Depends}
 Conflicts: ceph-client-tools-dbg
 Replaces: ceph-client-tools-dbg,
 	  ceph-test-dbg (<< 9.0.3-1646)
