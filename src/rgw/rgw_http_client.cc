@@ -113,6 +113,7 @@ static size_t simple_send_http_data(void *ptr, size_t size, size_t nmemb, void *
   return ret;
 }
 
+
 /*
  * the following set of callbacks will be called either on RGWHTTPManager::process(),
  * or via the RGWHTTPManager async processing.
@@ -173,11 +174,11 @@ static size_t send_http_data(void *ptr, size_t size, size_t nmemb, void *_info)
   return ret;
 }
 
-static curl_slist *headers_to_slist(list<pair<string, string> >& headers)
+static curl_slist *headers_to_slist(param_vec_t& headers)
 {
   curl_slist *h = NULL;
 
-  list<pair<string, string> >::iterator iter;
+  param_vec_t::iterator iter;
   for (iter = headers.begin(); iter != headers.end(); ++iter) {
     pair<string, string>& p = *iter;
     string val = p.first;
