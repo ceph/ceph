@@ -3307,7 +3307,7 @@ struct pg_log_entry_t {
   bufferlist snaps;   // only for clone entries
   hobject_t  soid;
   osd_reqid_t reqid;  // caller+tid to uniquely identify request
-  vector<pair<osd_reqid_t, version_t> > extra_reqids;
+  mempool::osd_pglog::vector<pair<osd_reqid_t, version_t> > extra_reqids;
   eversion_t version, prior_version, reverting_to;
   version_t user_version; // the user version for this entry
   utime_t     mtime;  // this is the _user_ mtime, mind you
@@ -4157,7 +4157,7 @@ struct object_copy_data_t {
   snapid_t snap_seq;
 
   ///< recent reqids on this object
-  vector<pair<osd_reqid_t, version_t> > reqids;
+  mempool::osd_pglog::vector<pair<osd_reqid_t, version_t> > reqids;
 
   uint64_t truncate_seq;
   uint64_t truncate_size;

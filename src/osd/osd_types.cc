@@ -4009,8 +4009,7 @@ void pg_log_entry_t::dump(Formatter *f) const
   f->dump_stream("prior_version") << prior_version;
   f->dump_stream("reqid") << reqid;
   f->open_array_section("extra_reqids");
-  for (vector<pair<osd_reqid_t, version_t> >::const_iterator p =
-	 extra_reqids.begin();
+  for (auto p = extra_reqids.begin();
        p != extra_reqids.end();
        ++p) {
     f->open_object_section("extra_reqid");
@@ -4444,7 +4443,7 @@ void object_copy_data_t::dump(Formatter *f) const
     f->dump_unsigned("snap", *p);
   f->close_section();
   f->open_array_section("reqids");
-  for (vector<pair<osd_reqid_t, version_t> >::const_iterator p = reqids.begin();
+  for (auto p = reqids.begin();
        p != reqids.end();
        ++p) {
     f->open_object_section("extra_reqid");

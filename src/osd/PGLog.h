@@ -284,8 +284,7 @@ public:
       }
       p = extra_caller_ops.find(r);
       if (p != extra_caller_ops.end()) {
-	for (vector<pair<osd_reqid_t, version_t> >::const_iterator i =
-	       p->second->extra_reqids.begin();
+	for (auto i = p->second->extra_reqids.begin();
 	     i != p->second->extra_reqids.end();
 	     ++i) {
 	  if (i->first == r) {
@@ -302,7 +301,7 @@ public:
 
     /// get a (bounded) list of recent reqids for the given object
     void get_object_reqids(const hobject_t& oid, unsigned max,
-			   vector<pair<osd_reqid_t, version_t> > *pls) const {
+			   mempool::osd_pglog::vector<pair<osd_reqid_t, version_t> > *pls) const {
        // make sure object is present at least once before we do an
        // O(n) search.
       if (!(indexed_data & PGLOG_INDEXED_OBJECTS)) {
@@ -351,8 +350,7 @@ public:
 	}
         
 	if (to_index & PGLOG_INDEXED_EXTRA_CALLER_OPS) {
-	  for (vector<pair<osd_reqid_t, version_t> >::const_iterator j =
-		 i->extra_reqids.begin();
+	  for (auto j = i->extra_reqids.begin();
 	       j != i->extra_reqids.end();
 	       ++j) {
             extra_caller_ops.insert(
@@ -389,8 +387,7 @@ public:
         }
       }
       if (indexed_data & PGLOG_INDEXED_EXTRA_CALLER_OPS) {
-        for (vector<pair<osd_reqid_t, version_t> >::const_iterator j =
-	       e.extra_reqids.begin();
+        for (auto j = e.extra_reqids.begin();
 	     j != e.extra_reqids.end();
 	     ++j) {
 	  extra_caller_ops.insert(make_pair(j->first, &e));
@@ -417,8 +414,7 @@ public:
         }
       }
       if (indexed_data & PGLOG_INDEXED_EXTRA_CALLER_OPS) {
-        for (vector<pair<osd_reqid_t, version_t> >::const_iterator j =
-	       e.extra_reqids.begin();
+        for (auto j = e.extra_reqids.begin();
              j != e.extra_reqids.end();
              ++j) {
           for (ceph::unordered_multimap<osd_reqid_t,pg_log_entry_t*>::iterator k =
@@ -465,8 +461,7 @@ public:
       }
       
       if (indexed_data & PGLOG_INDEXED_EXTRA_CALLER_OPS) {
-        for (vector<pair<osd_reqid_t, version_t> >::const_iterator j =
-	       e.extra_reqids.begin();
+        for (auto j = e.extra_reqids.begin();
 	     j != e.extra_reqids.end();
 	     ++j) {
 	  extra_caller_ops.insert(make_pair(j->first, &(log.back())));
