@@ -1123,6 +1123,30 @@ bool FileStore::test_mount_in_use()
   return inuse;
 }
 
+bool FileStore::is_rotational()
+{
+  bool rotational;
+  if (backend) {
+    rotational = backend->is_rotational();
+  } else {
+    int fd = ::open(basedir.c_str(), O_RDONLY);
+    if (fd < 0)
+      return true;
+    struct statfs st;
+    int r = ::fstatfs(fd, &st);
+    ::close(fd);
+    if (r < 0) {
+      return true;
+    }
+    create_backend(st.f_type);
+    rotational = backend->is_rotational();
+    delete backend;
+    backend = NULL;
+  }
+  dout(10) << __func__ << " " << (int)rotational << dendl;
+  return rotational;
+}
+
 int FileStore::_detect_fs()
 {
   struct statfs st;
