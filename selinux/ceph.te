@@ -108,7 +108,7 @@ allow ceph_t random_device_t:chr_file getattr;
 allow ceph_t urandom_device_t:chr_file getattr;
 allow ceph_t self:process setpgid;
 allow ceph_t var_run_t:dir { write create add_name };
-allow ceph_t var_run_t:file { write create open getattr };
+allow ceph_t var_run_t:file { read write create open getattr };
 
 fsadm_manage_pid(ceph_t)
 
