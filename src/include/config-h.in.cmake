@@ -87,6 +87,9 @@
 /* Defined if you don't have atomic_ops */
 #cmakedefine NO_ATOMIC_OPS
 
+/* Defined if you have LZ4 */
+#cmakedefine HAVE_LZ4
+
 /* Defined if you have libaio */
 #cmakedefine HAVE_LIBAIO
 
