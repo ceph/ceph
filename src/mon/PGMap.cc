@@ -2431,7 +2431,7 @@ static void note_stuck_detail(
   }
 }
 
-static int _warn_slow_request_histogram(
+static pair<int,int> _warn_slow_request_histogram(
   CephContext *cct,
   const pow2_hist_t& h,
   string suffix,
@@ -2439,23 +2439,31 @@ static int _warn_slow_request_histogram(
   list<pair<health_status_t,string> > *detail)
 {
   if (h.h.empty())
-    return 0;
+    return make_pair(0, 0);
 
-  unsigned sum = 0;
+  unsigned warn = 0, error = 0;
+  float err_age =
+    cct->_conf->mon_osd_warn_op_age * cct->_conf->mon_osd_err_op_age_ratio;
   for (unsigned i = h.h.size() - 1; i > 0; --i) {
     float ub = (float)(1 << i) / 1000.0;
-    if (ub < cct->_conf->mon_osd_max_op_age)
+    if (ub < cct->_conf->mon_osd_warn_op_age)
       break;
     if (h.h[i]) {
+      auto sev = HEALTH_WARN;
+      if (ub > err_age) {
+	sev = HEALTH_ERR;
+	error += h.h[i];
+      } else {
+	warn += h.h[i];
+      }
       if (detail) {
 	ostringstream ss;
 	ss << h.h[i] << " ops are blocked > " << ub << " sec" << suffix;
-	detail->push_back(make_pair(HEALTH_WARN, ss.str()));
+	detail->push_back(make_pair(sev, ss.str()));
       }
-      sum += h.h[i];
     }
   }
-  return sum;
+  return make_pair(warn, error);
 }
 
 namespace {
@@ -2708,33 +2716,55 @@ void PGMap::get_health(
   }
 
   // slow requests
-  if (cct->_conf->mon_osd_max_op_age > 0 &&
-      osd_sum.op_queue_age_hist.upper_bound() > cct->_conf->mon_osd_max_op_age) {
-    unsigned sum = _warn_slow_request_histogram(
+  if (cct->_conf->mon_osd_warn_op_age > 0 &&
+      osd_sum.op_queue_age_hist.upper_bound() > cct->_conf->mon_osd_warn_op_age) {
+    auto sum = _warn_slow_request_histogram(
       cct, osd_sum.op_queue_age_hist, "", summary, NULL);
-    if (sum > 0) {
-      ostringstream ss;
-      ss << sum << " requests are blocked > " << cct->_conf->mon_osd_max_op_age
-	 << " sec";
-      summary.push_back(make_pair(HEALTH_WARN, ss.str()));
+    if (sum.first > 0 || sum.second > 0) {
+      if (sum.first > 0) {
+	ostringstream ss;
+	ss << sum.first << " requests are blocked > "
+	   << cct->_conf->mon_osd_warn_op_age
+	   << " sec";
+	summary.push_back(make_pair(HEALTH_WARN, ss.str()));
+      }
+      if (sum.second > 0) {
+	ostringstream ss;
+	ss << sum.first << " requests are blocked > "
+	   << (cct->_conf->mon_osd_warn_op_age *
+	       cct->_conf->mon_osd_err_op_age_ratio)
+	   << " sec";
+	summary.push_back(make_pair(HEALTH_ERR, ss.str()));
+      }
 
       if (detail) {
-	unsigned num_slow_osds = 0;
+	unsigned num_warn = 0, num_err = 0;
 	// do per-osd warnings
 	for (auto p = osd_stat.begin();
 	     p != osd_stat.end();
 	     ++p) {
-	  if (_warn_slow_request_histogram(
+	  auto sum = _warn_slow_request_histogram(
 		cct,
 		p->second.op_queue_age_hist,
 		string(" on osd.") + stringify(p->first),
-		summary, detail))
-	    ++num_slow_osds;
+		summary, detail);
+	  if (sum.second)
+	    ++num_err;
+	  else if (sum.first)
+	    ++num_warn;
 	}
-	ostringstream ss2;
-	ss2 << num_slow_osds << " osds have slow requests";
-	summary.push_back(make_pair(HEALTH_WARN, ss2.str()));
-	detail->push_back(make_pair(HEALTH_WARN, ss2.str()));
+	if (num_err) {
+	  ostringstream ss2;
+	  ss2 << num_err << " osds have very slow requests";
+	  summary.push_back(make_pair(HEALTH_ERR, ss2.str()));
+	  detail->push_back(make_pair(HEALTH_ERR, ss2.str()));
+	}
+	if (num_warn) {
+	  ostringstream ss2;
+	  ss2 << num_err << " osds have slow requests";
+	  summary.push_back(make_pair(HEALTH_WARN, ss2.str()));
+	  detail->push_back(make_pair(HEALTH_WARN, ss2.str()));
+	}
       }
     }
   }
