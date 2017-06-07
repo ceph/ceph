@@ -44,7 +44,6 @@
 #include "rgw_coroutine.h"
 #include "rgw_compression.h"
 
-#include "rgw_boost_asio_yield.h"
 #undef fork // fails to compile RGWPeriod::fork() below
 
 #include "common/Clock.h"

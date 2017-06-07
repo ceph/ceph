@@ -205,9 +205,6 @@
 /* LTTng is disabled, so define this macro to be nothing. */
 #cmakedefine tracepoint
 
-/* have boost::asio::coroutine */
-#cmakedefine HAVE_BOOST_ASIO_COROUTINE
-
 /* Define to 1 if you have fdatasync. */
 #cmakedefine HAVE_FDATASYNC 1
 
