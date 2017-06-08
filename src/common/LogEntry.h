@@ -88,14 +88,6 @@ public:
 };
 WRITE_CLASS_ENCODER_FEATURES(LogEntryKey)
 
-namespace std {
-  template<> struct hash<LogEntryKey> {
-    size_t operator()(const LogEntryKey& r) const {
-      return r.get_hash();
-    }
-  };
-} // namespace std
-
 struct LogEntry {
   entity_inst_t who;
   EntityName name;
@@ -121,22 +113,22 @@ WRITE_CLASS_ENCODER_FEATURES(LogEntry)
 struct LogSummary {
   version_t version;
   list<LogEntry> tail;
-  ceph::unordered_set<LogEntryKey> keys;
+  ceph::unordered_set<size_t> keys;
 
   LogSummary() : version(0) {}
 
   void add(const LogEntry& e) {
+    keys.insert(e.key().get_hash());
     tail.push_back(e);
-    keys.insert(tail.back().key());
   }
   void prune(size_t max) {
     while (tail.size() > max) {
-      keys.erase(tail.front().key());
+      keys.erase(tail.front().key().get_hash());
       tail.pop_front();
     }
   }
   bool contains(const LogEntryKey& k) const {
-    return keys.count(k);
+    return keys.count(k.get_hash());
   }
 
   void encode(bufferlist& bl, uint64_t features) const;

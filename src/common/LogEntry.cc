@@ -253,7 +253,7 @@ void LogSummary::decode(bufferlist::iterator& bl)
   DECODE_FINISH(bl);
   keys.clear();
   for (auto& p : tail) {
-    keys.insert(p.key());
+    keys.insert(p.key().get_hash());
   }
 }
 
