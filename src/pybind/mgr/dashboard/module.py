@@ -129,26 +129,26 @@ class Module(MgrModule):
             data['crush'] = self.get("osd_map_crush")
             data['crush_map_text'] = self.get("osd_map_crush_map_text")
             data['osd_metadata'] = self.get("osd_metadata")
-            obj = OsdMap(data['epoch'], data)
+            obj = OsdMap(data)
         elif object_type == Config:
             data = self.get("config")
-            obj = Config(0, data)
+            obj = Config( data)
         elif object_type == MonMap:
             data = self.get("mon_map")
-            obj = MonMap(data['epoch'], data)
+            obj = MonMap(data)
         elif object_type == FsMap:
             data = self.get("fs_map")
-            obj = FsMap(data['epoch'], data)
+            obj = FsMap(data)
         elif object_type == PgSummary:
             data = self.get("pg_summary")
             self.log.debug("JSON: {0}".format(data))
-            obj = PgSummary(0, data)
+            obj = PgSummary(data)
         elif object_type == Health:
             data = self.get("health")
-            obj = Health(0, json.loads(data['json']))
+            obj = Health(json.loads(data['json']))
         elif object_type == MonStatus:
             data = self.get("mon_status")
-            obj = MonStatus(0, json.loads(data['json']))
+            obj = MonStatus(json.loads(data['json']))
         else:
             raise NotImplementedError(object_type)
 
@@ -577,6 +577,7 @@ class Module(MgrModule):
                 )
 
             def _servers(self):
+                servers = global_instance().list_servers()
                 return {
                     'servers': global_instance().list_servers()
                 }
