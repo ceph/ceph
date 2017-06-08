@@ -446,12 +446,15 @@ namespace rgw {
       return full_object_name(true /* omit_bucket */);
     }
 
-    inline std::string format_child_name(const std::string& cbasename) const {
+    inline std::string format_child_name(const std::string& cbasename,
+                                         bool is_dir) const {
       std::string child_name{relative_object_name()};
       if ((child_name.size() > 0) &&
 	  (child_name.back() != '/'))
 	child_name += "/";
       child_name += cbasename;
+      if (is_dir)
+	child_name += "/";
       return child_name;
     }
 
@@ -2326,12 +2329,12 @@ public:
 
     src_bucket_name = src_parent->bucket_name();
     // need s->src_bucket_name?
-    src_object.name = src_parent->format_child_name(src_name);
+    src_object.name = src_parent->format_child_name(src_name, false);
     // need s->src_object?
 
     dest_bucket_name = dst_parent->bucket_name();
     // need s->bucket.name?
-    dest_object = dst_parent->format_child_name(dst_name);
+    dest_object = dst_parent->format_child_name(dst_name, false);
     // need s->object_name?
 
     int rc = valid_s3_object_name(dest_object);
