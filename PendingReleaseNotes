@@ -153,3 +153,21 @@
   while the 128MB limit is a bit high but not unreasonable.  If you have an
   application written directly to librados that is using objects larger than
   128MB you may need to adjust ``osd_max_object_size``.
+
+* The semantics of the 'rados ls' and librados object listing
+  operations have always been a bit confusing in that "whiteout"
+  objects (which logically don't exist and will return ENOENT if you
+  try to access them) are included in the results.  Previously
+  whiteouts only occurred in cache tier pools.  In luminous, logically
+  deleted but snapshotted objects now result in a whiteout object, and
+  as a result they will appear in 'rados ls' results, even though
+  trying to read such an object will result in ENOENT.  The 'rados
+  listsnaps' operation can be used in such a case to enumerate which
+  snapshots are present.
+
+  This may seem a bit strange, but is less strange than having a
+  deleted-but-snapshotted object not appear at all and be completely
+  hidden from librados's ability to enumerate objects.  Future
+  versions of Ceph will likely include an alternative object
+  enumeration interface that makes it more natural and efficient to
+  enumerate all objects along with their snapshot and clone metadata.
