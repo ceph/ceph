@@ -43,6 +43,12 @@ log = logging.getLogger("dashboard")
 # python module for the convenience of the GUI?
 LOG_BUFFER_SIZE = 30
 
+# cherrypy likes to sys.exit on error.  don't let it take us down too!
+def os_exit_noop():
+    pass
+
+os._exit = os_exit_noop
+
 
 def recurse_refs(root, path):
     if isinstance(root, dict):
