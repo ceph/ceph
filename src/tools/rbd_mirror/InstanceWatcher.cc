@@ -2,7 +2,6 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "InstanceWatcher.h"
-#include "include/atomic.h"
 #include "include/stringify.h"
 #include "common/debug.h"
 #include "common/errno.h"
