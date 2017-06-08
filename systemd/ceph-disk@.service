@@ -6,6 +6,6 @@ Wants=local-fs.target
 [Service]
 Type=oneshot
 KillMode=none
-Environment=CEPH_DISK_TIMEOUT=300
+Environment=CEPH_DISK_TIMEOUT=10000
 ExecStart=/bin/sh -c 'timeout $CEPH_DISK_TIMEOUT flock /var/lock/ceph-disk-$(basename %f) /usr/sbin/ceph-disk --verbose --log-stdout trigger --sync %f'
 TimeoutSec=0
