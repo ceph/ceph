@@ -423,3 +423,37 @@ class TestPrepareData(Base):
                                  set_type=set_type):
             data = main.PrepareData(args)
         assert data.args.cluster_uuid == cluster_uuid
+
+
+class TestSecrets(Base):
+
+    @mock.patch('ceph_disk.main.command')
+    def test_secrets(self, m_command):
+        key = "KEY"
+        m_command.side_effect = lambda cmd: (key + "\n", '', 0)
+        s = main.Secrets()
+        assert {"cephx_secret": key} == s.keys
+        assert '{"cephx_secret": "' + key + '"}' == s.get_json()
+
+    @mock.patch('ceph_disk.main.open')
+    @mock.patch('ceph_disk.main.CryptHelpers.get_dmcrypt_keysize')
+    @mock.patch('ceph_disk.main.command')
+    def test_lockbox_secrets(self,
+                             m_command,
+                             m_get_dmcrypt_keysize,
+                             m_open):
+        key = "KEY"
+        m_command.side_effect = lambda cmd: (key + "\n", '', 0)
+        m_get_dmcrypt_keysize.side_effect = lambda args: 32
+
+        class File:
+            def read(self, size):
+                return b'O' * size
+
+        m_open.side_effect = lambda path, mode: File()
+        s = main.LockboxSecrets({})
+        assert {
+            "dmcrypt_key": 'T09PTw==',
+            "cephx_secret": key,
+            "cephx_lockbox_secret": key,
+        } == s.keys
