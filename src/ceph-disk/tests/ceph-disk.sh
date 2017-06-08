@@ -45,11 +45,16 @@ else
 fi
 
 cat=$(which cat)
-timeout=$(which timeout)
 diff=$(which diff)
 mkdir=$(which mkdir)
 rm=$(which rm)
 uuidgen=$(which uuidgen)
+if [ `uname` = FreeBSD ]; then
+    # for unknown reasons FreeBSD timeout does not return sometimes
+    timeout=""
+else
+    timeout="$(which timeout) $CEPH_DISK_TIMEOUT"
+fi
 
 function setup() {
     local dir=$1
@@ -189,7 +194,7 @@ function test_mark_init() {
     else
         expected=systemd
     fi
-    $timeout $TIMEOUT ${CEPH_DISK} $CEPH_DISK_ARGS \
+    $timeout ${CEPH_DISK} $CEPH_DISK_ARGS \
         --verbose \
         activate \
         --mark-init=$expected \
@@ -309,7 +314,7 @@ function test_activate_dir_bluestore() {
         prepare --bluestore --block-file --osd-uuid $osd_uuid $to_prepare || return 1
 
     CEPH_ARGS=" --osd-objectstore=bluestore --bluestore-fsck-on-mount=true --bluestore-block-db-size=67108864 --bluestore-block-wal-size=134217728 --bluestore-block-size=10737418240 $CEPH_ARGS" \
-      $timeout $TIMEOUT ${CEPH_DISK} $CEPH_DISK_ARGS \
+      $timeout ${CEPH_DISK} $CEPH_DISK_ARGS \
         activate \
         --mark-init=none \
         $to_activate || return 1
