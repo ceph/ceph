@@ -38,7 +38,6 @@ makedepends="
 	keyutils-dev
 	leveldb-dev
 	libaio-dev
-	libatomic_ops-dev
 	libedit-dev
 	libressl-dev
 	libtirpc-dev

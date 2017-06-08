@@ -84,9 +84,6 @@
 /* Define if you have res_nquery */
 #cmakedefine HAVE_RES_NQUERY
 
-/* Defined if you don't have atomic_ops */
-#cmakedefine NO_ATOMIC_OPS
-
 /* Defined if you have LZ4 */
 #cmakedefine HAVE_LZ4
 
