@@ -1137,7 +1137,8 @@ OPTION(bluestore_cache_type, OPT_STR, "2q")   // lru, 2q
 OPTION(bluestore_2q_cache_kin_ratio, OPT_DOUBLE, .5)    // kin page slot size / max page slot size
 OPTION(bluestore_2q_cache_kout_ratio, OPT_DOUBLE, .5)   // number of kout page slot / total number of page slot
 OPTION(bluestore_cache_size, OPT_U64, 1024*1024*1024)
-OPTION(bluestore_cache_meta_ratio, OPT_DOUBLE, .9)
+OPTION(bluestore_cache_meta_ratio, OPT_DOUBLE, .7)
+OPTION(bluestore_cache_kv_ratio, OPT_DOUBLE, .2)
 OPTION(bluestore_kvbackend, OPT_STR, "rocksdb")
 OPTION(bluestore_allocator, OPT_STR, "bitmap")     // stupid | bitmap
 OPTION(bluestore_freelist_blocks_per_key, OPT_INT, 128)

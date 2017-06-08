@@ -132,6 +132,7 @@ public:
   void _set_csum();
   void _set_compression();
   void _set_throttle_params();
+  int _set_cache_sizes();
 
   class TransContext;
 
@@ -1067,7 +1068,9 @@ public:
       --num_blobs;
     }
 
-    void trim(uint64_t target_bytes, float target_meta_ratio,
+    void trim(uint64_t target_bytes,
+	      float target_meta_ratio,
+	      float target_data_ratio,
 	      float bytes_per_onode);
 
     void trim_all();
@@ -1899,6 +1902,10 @@ private:
 
   uint64_t kv_ios = 0;
   uint64_t kv_throttle_costs = 0;
+
+  float cache_meta_ratio = 0;   ///< cache ratio dedicated to metadata
+  float cache_kv_ratio = 0;     ///< cache ratio dedicated to kv (e.g., rocksdb)
+  float cache_data_ratio = 0;   ///< cache ratio dedicated to object data
 
   // cache trim control
 
