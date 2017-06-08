@@ -19,6 +19,8 @@
 
 #include "PurgeQueue.h"
 
+// reinclude our assert to clobber the system one
+#include "include/assert.h"
 
 #define dout_context cct
 #define dout_subsys ceph_subsys_mds

@@ -15,6 +15,7 @@
 #ifndef CEPH_FINISHER_H
 #define CEPH_FINISHER_H
 
+#include "common/Mutex.h"
 #include "common/Cond.h"
 #include "common/perf_counters.h"
 

@@ -29,6 +29,9 @@
 
 #include "common/ceph_context.h"
 
+// reinclude our assert to clobber the system one
+# include "include/assert.h"
+
 class PerfCounters;
 
 enum {

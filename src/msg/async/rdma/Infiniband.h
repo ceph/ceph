@@ -17,10 +17,10 @@
 #ifndef CEPH_INFINIBAND_H
 #define CEPH_INFINIBAND_H
 
-#include <infiniband/verbs.h>
-
 #include <string>
 #include <vector>
+
+#include <infiniband/verbs.h>
 
 #include "include/int_types.h"
 #include "include/page.h"
@@ -29,6 +29,9 @@
 #include "msg/msg_types.h"
 #include "msg/async/net_handler.h"
 #include "common/Mutex.h"
+
+// re-include our assert to clobber the system one; fix dout:
+#include "include/assert.h"
 
 #define HUGE_PAGE_SIZE (2 * 1024 * 1024)
 #define ALIGN_TO_PAGE_SIZE(x) \

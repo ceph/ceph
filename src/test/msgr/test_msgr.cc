@@ -1370,7 +1370,7 @@ class MarkdownDispatcher : public Dispatcher {
   set<ConnectionRef> conns;
   bool last_mark;
  public:
-  std::atomic<int64_t> count = { 0 };
+  std::atomic<uint64_t> count = { 0 };
   explicit MarkdownDispatcher(bool s): Dispatcher(g_ceph_context), lock("MarkdownDispatcher::lock"),
                               last_mark(false) {}
   bool ms_can_fast_dispatch_any() const override { return false; }
