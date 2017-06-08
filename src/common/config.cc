@@ -803,10 +803,10 @@ int md_config_t::_get_val(const char *key, char **buf, int len) const
 	oss << *((std::string*)opt->conf_ptr(this));
 	break;
       case OPT_FLOAT:
-        oss << *(float*)opt->conf_ptr(this);
+        oss << std::fixed << *(float*)opt->conf_ptr(this);
         break;
       case OPT_DOUBLE:
-        oss << *(double*)opt->conf_ptr(this);
+        oss << std::fixed << *(double*)opt->conf_ptr(this);
         break;
       case OPT_BOOL: {
 	  bool b = *(bool*)opt->conf_ptr(this);
