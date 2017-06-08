@@ -347,12 +347,14 @@ class TestStrays(CephFSTestCase):
         """
         # Write some bytes to file_a
         size_mb = 8
-        self.mount_a.write_n_mb("file_a", size_mb)
-        ino = self.mount_a.path_to_ino("file_a")
+        self.mount_a.run_shell(["mkdir", "dir_1"])
+        self.mount_a.write_n_mb("dir_1/file_a", size_mb)
+        ino = self.mount_a.path_to_ino("dir_1/file_a")
 
         # Create a hardlink named file_b
-        self.mount_a.run_shell(["ln", "file_a", "file_b"])
-        self.assertEqual(self.mount_a.path_to_ino("file_b"), ino)
+        self.mount_a.run_shell(["mkdir", "dir_2"])
+        self.mount_a.run_shell(["ln", "dir_1/file_a", "dir_2/file_b"])
+        self.assertEqual(self.mount_a.path_to_ino("dir_2/file_b"), ino)
 
         # Flush journal
         self.fs.mds_asok(['flush', 'journal'])
@@ -361,8 +363,15 @@ class TestStrays(CephFSTestCase):
         pre_unlink_bt = self.fs.read_backtrace(ino)
         self.assertEqual(pre_unlink_bt['ancestors'][0]['dname'], "file_a")
 
+        # empty mds cache. otherwise mds reintegrates stray when unlink finishes
+        self.mount_a.umount_wait()
+        self.fs.mds_asok(['flush', 'journal'])
+        self.fs.mds_fail_restart()
+        self.fs.wait_for_daemons()
+        self.mount_a.mount()
+
         # Unlink file_a
-        self.mount_a.run_shell(["rm", "-f", "file_a"])
+        self.mount_a.run_shell(["rm", "-f", "dir_1/file_a"])
 
         # See that a stray was created
         self.assertEqual(self.get_mdc_stat("num_strays"), 1)
@@ -378,14 +387,24 @@ class TestStrays(CephFSTestCase):
         self.fs.mds_asok(['flush', 'journal'])
         self.assertTrue(self.get_backtrace_path(ino).startswith("stray"))
 
+        last_reintegrated = self.get_mdc_stat("strays_reintegrated")
+
         # Do a metadata operation on the remaining link (mv is heavy handed, but
         # others like touch may be satisfied from caps without poking MDS)
-        self.mount_a.run_shell(["mv", "file_b", "file_c"])
+        self.mount_a.run_shell(["mv", "dir_2/file_b", "dir_2/file_c"])
+
+        # Stray reintegration should happen as a result of the eval_remote call
+        # on responding to a client request.
+        self.wait_until_equal(
+            lambda: self.get_mdc_stat("num_strays"),
+            expect_val=0,
+            timeout=60
+        )
 
         # See the reintegration counter increment
-        # This should happen as a result of the eval_remote call on
-        # responding to a client request.
-        self._wait_for_counter("mds_cache", "strays_reintegrated", 1)
+        curr_reintegrated = self.get_mdc_stat("strays_reintegrated")
+        self.assertGreater(curr_reintegrated, last_reintegrated)
+        last_reintegrated = curr_reintegrated
 
         # Flush the journal
         self.fs.mds_asok(['flush', 'journal'])
@@ -394,22 +413,41 @@ class TestStrays(CephFSTestCase):
         post_reint_bt = self.fs.read_backtrace(ino)
         self.assertEqual(post_reint_bt['ancestors'][0]['dname'], "file_c")
 
-        # See that the number of strays in existence is zero
-        self.assertEqual(self.get_mdc_stat("num_strays"), 0)
+        # mds should reintegrates stray when unlink finishes
+        self.mount_a.run_shell(["ln", "dir_2/file_c", "dir_2/file_d"])
+        self.mount_a.run_shell(["rm", "-f", "dir_2/file_c"])
+
+        # Stray reintegration should happen as a result of the notify_stray call
+        # on completion of unlink
+        self.wait_until_equal(
+            lambda: self.get_mdc_stat("num_strays"),
+            expect_val=0,
+            timeout=60
+        )
+
+        # See the reintegration counter increment
+        curr_reintegrated = self.get_mdc_stat("strays_reintegrated")
+        self.assertGreater(curr_reintegrated, last_reintegrated)
+        last_reintegrated = curr_reintegrated
+
+        # Flush the journal
+        self.fs.mds_asok(['flush', 'journal'])
+
+        # See that the backtrace for the file points to the newest link's path
+        post_reint_bt = self.fs.read_backtrace(ino)
+        self.assertEqual(post_reint_bt['ancestors'][0]['dname'], "file_d")
 
         # Now really delete it
-        self.mount_a.run_shell(["rm", "-f", "file_c"])
+        self.mount_a.run_shell(["rm", "-f", "dir_2/file_d"])
         self._wait_for_counter("mds_cache", "strays_enqueued", 1)
         self._wait_for_counter("purge_queue", "pq_executed", 1)
 
         self.assert_purge_idle()
         self.assertTrue(self.fs.data_objects_absent(ino, size_mb * 1024 * 1024))
 
-        # We caused the inode to go stray twice
-        self.assertEqual(self.get_mdc_stat("strays_created"), 2)
-        # One time we reintegrated it
-        self.assertEqual(self.get_mdc_stat("strays_reintegrated"), 1)
-        # Then the second time we purged it
+        # We caused the inode to go stray 3 times
+        self.assertEqual(self.get_mdc_stat("strays_created"), 3)
+        # We purged it at the last
         self.assertEqual(self.get_mdc_stat("strays_enqueued"), 1)
 
     def test_mv_hardlink_cleanup(self):
@@ -432,27 +470,25 @@ class TestStrays(CephFSTestCase):
         # mv file_a file_b
         self.mount_a.run_shell(["mv", "file_a", "file_b"])
 
-        self.fs.mds_asok(['flush', 'journal'])
+        # Stray reintegration should happen as a result of the notify_stray call on
+        # completion of rename
+        self.wait_until_equal(
+            lambda: self.get_mdc_stat("num_strays"),
+            expect_val=0,
+            timeout=60
+        )
 
-        # Initially, linkto_b will still be a remote inode pointing to a newly created
-        # stray from when file_b was unlinked due to the 'mv'.  No data objects should
-        # have been deleted, as both files still have linkage.
-        self.assertEqual(self.get_mdc_stat("num_strays"), 1)
         self.assertEqual(self.get_mdc_stat("strays_created"), 1)
-        self.assertTrue(self.get_backtrace_path(file_b_ino).startswith("stray"))
+        self.assertGreaterEqual(self.get_mdc_stat("strays_reintegrated"), 1)
+
+        # No data objects should have been deleted, as both files still have linkage.
         self.assertTrue(self.fs.data_objects_present(file_a_ino, size_mb * 1024 * 1024))
         self.assertTrue(self.fs.data_objects_present(file_b_ino, size_mb * 1024 * 1024))
-
-        # Trigger reintegration and wait for it to happen
-        self.assertEqual(self.get_mdc_stat("strays_reintegrated"), 0)
-        self.mount_a.run_shell(["mv", "linkto_b", "file_c"])
-        self._wait_for_counter("mds_cache", "strays_reintegrated", 1)
 
         self.fs.mds_asok(['flush', 'journal'])
 
         post_reint_bt = self.fs.read_backtrace(file_b_ino)
-        self.assertEqual(post_reint_bt['ancestors'][0]['dname'], "file_c")
-        self.assertEqual(self.get_mdc_stat("num_strays"), 0)
+        self.assertEqual(post_reint_bt['ancestors'][0]['dname'], "linkto_b")
 
     def _setup_two_ranks(self):
         # Set up two MDSs
@@ -576,14 +612,27 @@ class TestStrays(CephFSTestCase):
 
         # Create a non-purgeable stray in a ~mds1 stray directory
         # by doing a hard link and deleting the original file
-        self.mount_a.run_shell(["mkdir", "mydir"])
-        self.mount_a.run_shell(["touch", "mydir/original"])
-        self.mount_a.run_shell(["ln", "mydir/original", "mydir/linkto"])
+        self.mount_a.run_shell(["mkdir", "dir_1", "dir_2"])
+        self.mount_a.run_shell(["touch", "dir_1/original"])
+        self.mount_a.run_shell(["ln", "dir_1/original", "dir_2/linkto"])
 
-        self._force_migrate(rank_0_id, rank_1_id, "/mydir",
-                            self.mount_a.path_to_ino("mydir/original"))
+        self._force_migrate(rank_0_id, rank_1_id, "/dir_1",
+                            self.mount_a.path_to_ino("dir_1/original"))
 
-        self.mount_a.run_shell(["rm", "-f", "mydir/original"])
+        # empty mds cache. otherwise mds reintegrates stray when unlink finishes
+        self.mount_a.umount_wait()
+        self.fs.mds_asok(['flush', 'journal'], rank_0_id)
+        self.fs.mds_asok(['flush', 'journal'], rank_1_id)
+        self.fs.mds_fail_restart()
+        self.fs.wait_for_daemons()
+
+        active_mds_names = self.fs.get_active_names()
+        rank_0_id = active_mds_names[0]
+        rank_1_id = active_mds_names[1]
+
+        self.mount_a.mount()
+
+        self.mount_a.run_shell(["rm", "-f", "dir_1/original"])
         self.mount_a.umount_wait()
 
         self._wait_for_counter("mds_cache", "strays_created", 1,
