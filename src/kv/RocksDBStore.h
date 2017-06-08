@@ -75,6 +75,8 @@ class RocksDBStore : public KeyValueDB {
   rocksdb::BlockBasedTableOptions bbt_opts;
   string options_str;
 
+  uint64_t cache_size = 0;
+
   int do_open(ostream &out, bool create_if_missing);
 
   // manage async compactions
@@ -435,6 +437,10 @@ err:
     return total_size;
   }
 
+  int set_cache_size(uint64_t s) override {
+    cache_size = s;
+    return 0;
+  }
 
 protected:
   WholeSpaceIterator _get_iterator() override;
