@@ -17,7 +17,6 @@ class RGWGroup
   string path;
   string arn;
   string creation_date;
-  string policy;
   vector<string> users;
   string tenant;
 
@@ -28,8 +27,10 @@ class RGWGroup
   int read_name();
   int read_info();
   void set_id(const string& id) { this->id = id; }
+  bool validate_name(const string& name);
+  bool validate_path(const string& path);
   bool validate_input();
-  void extract_name_tenant(const std::string& str);
+  void extract_name_tenant(const string& str, string& tenant, string& name);
 
 public:
   RGWGroup(CephContext *cct,
@@ -44,7 +45,7 @@ public:
     tenant(std::move(tenant)) {
     if (this->path.empty())
       this->path = "/";
-    extract_name_tenant(this->name);
+    extract_name_tenant(this->name, this->tenant, this->name);
   }
 
   RGWGroup(CephContext *cct,
@@ -55,7 +56,7 @@ public:
     store(store),
     name(std::move(name)),
     tenant(std::move(tenant)) {
-    extract_name_tenant(this->name);
+    extract_name_tenant(this->name, this->tenant, this->name);
   }
 
   RGWGroup(CephContext *cct,
@@ -81,7 +82,6 @@ public:
     ::encode(path, bl);
     ::encode(arn, bl);
     ::encode(creation_date, bl);
-    ::encode(policy, bl);
     ::encode(users, bl);
     ::encode(tenant, bl);
     ENCODE_FINISH(bl);
@@ -94,7 +94,6 @@ public:
     ::decode(path, bl);
     ::decode(arn, bl);
     ::decode(creation_date, bl);
-    ::decode(policy, bl);
     ::decode(users, bl);
     ::decode(tenant, bl);
     DECODE_FINISH(bl);
@@ -104,12 +103,18 @@ public:
   const string& get_name() const { return name; }
   const string& get_path() const { return path; }
   const string& get_create_date() const { return creation_date; }
+  const string& get_tenant() const { return tenant; }
 
   int create(bool exclusive);
   int delete_obj();
   int get();
   int get_by_id();
   int update();
+  int update_name(const string& name);
+  int update_path(const string& path);
+  bool add_user(string& user);
+  bool remove_user(string& user);
+  void get_users(vector<string>& users);
   void dump(Formatter *f) const;
   void decode_json(JSONObj *obj);
 

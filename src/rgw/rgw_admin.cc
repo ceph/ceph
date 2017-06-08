@@ -44,6 +44,7 @@
 #include "rgw_realm_watcher.h"
 #include "rgw_role.h"
 #include "rgw_reshard.h"
+#include "rgw_group.h"
 
 
 #define dout_context g_ceph_context
@@ -67,6 +68,7 @@ void usage()
   cout << "  user check                 check user info\n";
   cout << "  user stats                 show user stats as accounted by quota subsystem\n";
   cout << "  user list                  list users\n";
+  cout << "  user list-groups           list groups that a user belongs to\n";
   cout << "  caps add                   add user capabilities\n";
   cout << "  caps rm                    remove user capabilities\n";
   cout << "  subuser create             create a new subuser\n" ;
@@ -209,6 +211,13 @@ void usage()
   cout << "  reshard cancel             cancel resharding a bucket\n";
   cout << "  sync error list            list sync error\n";
   cout << "  sync error trim            trim sync error\n";
+  cout << "  group create               create a AWS group\n";
+  cout << "  group add                  add user to a group\n";
+  cout << "  group get                  get details of a group\n";
+  cout << "  group remove               remove user from a group\n";
+  cout << "  group delete               delete a group\n";
+  cout << "  group list                 list groups with a specified path prefix\n";
+  cout << "  group update               update the name and/or path of the group\n";
   cout << "options:\n";
   cout << "   --tenant=<tenant>         tenant name\n";
   cout << "   --uid=<id>                user id\n";
@@ -337,6 +346,12 @@ void usage()
   cout << "   --policy-name             name of the policy document\n";
   cout << "   --policy-doc              permission policy document\n";
   cout << "   --path-prefix             path prefix for filtering roles\n";
+  cout << "\nGroup options:\n";
+  cout << "   --group-name              name of the group to create\n";
+  cout << "   --path                    path to the group\n";
+  cout << "   --path-prefix             path prefix for filtering groups\n";
+  cout << "   --new-group-name          new name of an existing group\n";
+  cout << "   --new-path                new path of an existing group\n";
   cout << "\n";
   generic_client_usage();
 }
@@ -352,6 +367,7 @@ enum {
   OPT_USER_CHECK,
   OPT_USER_STATS,
   OPT_USER_LIST,
+  OPT_USER_LIST_GROUPS,
   OPT_SUBUSER_CREATE,
   OPT_SUBUSER_MODIFY,
   OPT_SUBUSER_RM,
@@ -498,6 +514,13 @@ enum {
   OPT_RESHARD_STATUS,
   OPT_RESHARD_PROCESS,
   OPT_RESHARD_CANCEL,
+  OPT_GROUP_CREATE,
+  OPT_GROUP_ADD,
+  OPT_GROUP_GET,
+  OPT_GROUP_REMOVE,
+  OPT_GROUP_DELETE,
+  OPT_GROUP_LIST,
+  OPT_GROUP_UPDATE,
 };
 
 static int get_cmd(const char *cmd, const char *prev_cmd, const char *prev_prev_cmd, bool *need_more)
@@ -513,6 +536,7 @@ static int get_cmd(const char *cmd, const char *prev_cmd, const char *prev_prev_
       strcmp(cmd, "error") == 0 ||
       strcmp(cmd, "gc") == 0 ||
       strcmp(cmd, "global") == 0 ||
+      strcmp(cmd, "group") == 0 ||
       strcmp(cmd, "key") == 0 ||
       strcmp(cmd, "log") == 0 ||
       strcmp(cmd, "lc") == 0 ||
@@ -582,6 +606,8 @@ static int get_cmd(const char *cmd, const char *prev_cmd, const char *prev_prev_
       return OPT_USER_STATS;
     if (strcmp(cmd, "list") == 0)
       return OPT_USER_LIST;
+    if (strcmp(cmd, "list-groups") == 0)
+      return OPT_USER_LIST_GROUPS;
   } else if (strcmp(prev_cmd, "subuser") == 0) {
     if (strcmp(cmd, "create") == 0)
       return OPT_SUBUSER_CREATE;
@@ -948,6 +974,21 @@ static int get_cmd(const char *cmd, const char *prev_cmd, const char *prev_prev_
       return OPT_RESHARD_PROCESS;
     if (strcmp(cmd, "cancel") == 0)
       return OPT_RESHARD_CANCEL;
+  } else if (strcmp(prev_cmd, "group") == 0) {
+    if (strcmp(cmd, "create") == 0)
+      return OPT_GROUP_CREATE;
+    if (strcmp(cmd, "add") == 0)
+      return OPT_GROUP_ADD;
+    if (strcmp(cmd, "get") == 0)
+      return OPT_GROUP_GET;
+    if (strcmp(cmd, "remove") == 0)
+      return OPT_GROUP_REMOVE;
+    if (strcmp(cmd, "delete") == 0)
+      return OPT_GROUP_DELETE;
+    if (strcmp(cmd, "list") == 0)
+      return OPT_GROUP_LIST;
+    if (strcmp(cmd, "update") == 0)
+      return OPT_GROUP_UPDATE;
   }
 
   return -EINVAL;
@@ -1047,6 +1088,24 @@ static void show_roles_info(vector<RGWRole>& roles, Formatter* formatter)
     formatter->open_object_section("role");
     it.dump(formatter);
     formatter->close_section();
+  }
+  formatter->close_section();
+  formatter->flush(cout);
+}
+
+static void show_group_info(const RGWGroup& group, Formatter* formatter)
+{
+  formatter->open_object_section("group");
+  group.dump(formatter);
+  formatter->close_section();
+  formatter->flush(cout);
+}
+
+static void show_groups_info(vector<RGWGroup>& groups, Formatter* formatter)
+{
+  formatter->open_array_section("Groups");
+  for (const auto& it : groups) {
+    show_group_info(it, formatter);
   }
   formatter->close_section();
   formatter->flush(cout);
@@ -2382,6 +2441,7 @@ int main(int argc, const char **argv)
   std::string role_name, path, assume_role_doc, policy_name, perm_policy_doc, path_prefix;
   std::string redirect_zone;
   bool redirect_zone_set = false;
+  std::string group_name, new_group_name, new_path;
   list<string> endpoints;
   int tmp_int;
   int sync_from_all_specified = false;
@@ -2832,6 +2892,12 @@ int main(int argc, const char **argv)
       perm_policy_doc = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--path-prefix", (char*)NULL)) {
       path_prefix = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--group-name", (char*)NULL)) {
+      group_name = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--new-group-name", (char*)NULL)) {
+      new_group_name = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--new-path", (char*)NULL)) {
+      new_path = val;
     } else if (strncmp(*i, "-", 1) == 0) {
       cerr << "ERROR: invalid flag " << *i << std::endl;
       return EINVAL;
@@ -2896,11 +2962,17 @@ int main(int argc, const char **argv)
                           && opt_cmd != OPT_ROLE_POLICY_DELETE
                           && opt_cmd != OPT_RESHARD_ADD
                           && opt_cmd != OPT_RESHARD_CANCEL
-                          && opt_cmd != OPT_RESHARD_STATUS) {
+                          && opt_cmd != OPT_RESHARD_STATUS
+                          && opt_cmd != OPT_GROUP_CREATE
+                          && opt_cmd != OPT_GROUP_GET
+                          && opt_cmd != OPT_GROUP_DELETE
+                          && opt_cmd != OPT_GROUP_LIST) {
         cerr << "ERROR: --tenant is set, but there's no user ID" << std::endl;
         return EINVAL;
       }
-      user_id.tenant = tenant;
+      if (opt_cmd != OPT_GROUP_ADD && opt_cmd != OPT_GROUP_REMOVE) {
+        user_id.tenant = tenant;
+      }
     }
     /* check key parameter conflict */
     if ((!access_key.empty()) && gen_access_key) {
@@ -4529,6 +4601,24 @@ int main(int argc, const char **argv)
     }
 
     break;
+  case OPT_USER_LIST_GROUPS:
+  {
+    RGWUserInfo info;
+    ret = rgw_get_user_info_by_uid(store, user_id, info);
+    if (ret < 0) {
+      return -ret;
+    }
+
+    for (const auto& group_name : info.groups) {
+      RGWGroup group(g_ceph_context, store, group_name, "");
+      ret = group.get();
+      if (ret < 0) {
+        return -ret;
+      }
+      show_group_info(group, formatter);
+    }
+    return 0;
+  }
   case OPT_SUBUSER_CREATE:
     ret = user.subusers.add(user_op, &err_msg);
     if (ret < 0) {
@@ -4881,6 +4971,257 @@ int main(int argc, const char **argv)
       cout << "Policy: " << policy_name << " successfully deleted for role: "
            << role_name << std::endl;
       return 0;
+  }
+  case OPT_GROUP_CREATE:
+  {
+    if (group_name.empty()) {
+      cerr << "ERROR: group name is empty" << std::endl;
+      return EINVAL;
+    }
+
+    RGWGroup group(g_ceph_context, store, group_name, path, tenant);
+    ret = group.create(true);
+    if (ret < 0) {
+      return -ret;
+    }
+    show_group_info(group, formatter);
+    return 0;
+  }
+  case OPT_GROUP_ADD:
+  {
+    if (group_name.empty()) {
+      cerr << "ERROR: group name is empty" << std::endl;
+      return EINVAL;
+    }
+
+    string user = user_id.to_str();
+    if (user.empty()) {
+      cerr << "ERROR: user id is empty" << std::endl;
+      return EINVAL;
+    }
+
+    RGWGroup group(g_ceph_context, store, group_name, "");
+    ret = group.get();
+    if (ret < 0) {
+      return -ret;
+    }
+
+    RGWUserInfo info, updated_info;
+    ret = rgw_get_user_info_by_uid(store, user_id, info);
+    //user is found
+    if (ret == 0) {
+      //add user to group
+      if (group.add_user(user)) {
+        ret = group.update();
+        if (ret < 0) {
+          return -ret;
+        }
+      } else {
+        cerr << "ERROR: User already in group" << std::endl;
+        return ERR_USER_ALREADY_IN_GROUP;
+      }
+      updated_info = info;
+      if (rgw_add_group_to_user(updated_info, group_name)) {
+        ret = rgw_store_user_info(store, updated_info, &info, NULL, real_time(), false);
+        if (ret < 0) {
+          //remove user from group
+          if (group.remove_user(user)) {
+            ret = group.update();
+            if (ret < 0) {
+              return -ret;
+            }
+          }
+          return -ret;
+        }
+      } else {
+        cerr << "ERROR: Group already in user" << std::endl;
+        return ERR_GROUP_ALREADY_IN_USER;
+      }
+    } else {
+      cerr << "ERROR: User not found: " << user << std::endl;
+      return -ret;
+    }
+
+    cout << "User successfully added to group: " << group_name << std::endl;
+    return 0;
+  }
+  case OPT_GROUP_GET:
+  {
+    if (group_name.empty()) {
+      cerr << "ERROR: group name is empty" << std::endl;
+      return EINVAL;
+    }
+
+    RGWGroup group(g_ceph_context, store, group_name, "");
+    ret = group.get();
+    if (ret < 0) {
+      return -ret;
+    }
+    show_group_info(group, formatter);
+    return 0;
+  }
+  case OPT_GROUP_REMOVE:
+  {
+    if (group_name.empty()) {
+      cerr << "ERROR: group name is empty" << std::endl;
+      return EINVAL;
+    }
+
+    string user = user_id.to_str();
+    if (user.empty()) {
+      cerr << "ERROR: user id is empty" << std::endl;
+      return EINVAL;
+    }
+
+    RGWGroup group(g_ceph_context, store, group_name, tenant);
+    ret = group.get();
+    if (ret < 0) {
+      return -ret;
+    }
+
+    RGWUserInfo info, updated_info;
+    ret = rgw_get_user_info_by_uid(store, user_id, info);
+    //user is found
+    if (ret == 0) {
+      //remove user from group
+      if (group.remove_user(user)) {
+        ret = group.update();
+        if (ret < 0) {
+          return -ret;
+        }
+      } else {
+        cerr << "ERROR: User not found in group" << std::endl;
+        return ERR_NO_USER_FOUND;
+      }
+
+      updated_info = info;
+      if (rgw_remove_group_from_user(updated_info, group_name)) {
+        ret = rgw_store_user_info(store, updated_info, &info, NULL, real_time(), false);
+        if (ret < 0) {
+          //add user back to group
+          if (group.add_user(user)) {
+            ret = group.update();
+            if (ret < 0) {
+              return -ret;
+            }
+          }
+          return -ret;
+        }
+      } else {
+        cerr << "ERROR: Group not found in user" << std::endl;
+        return ERR_NO_GROUP_FOUND;
+      }
+    } else {
+      cerr << "ERROR: User not found: " << user << std::endl;
+      return -ret;
+    }
+
+    cout << "User successfully removed from group: " << group_name << std::endl;
+    return 0;
+  }
+  case OPT_GROUP_DELETE:
+  {
+    if (group_name.empty()) {
+      cerr << "ERROR: group name is empty" << std::endl;
+      return EINVAL;
+    }
+
+    RGWGroup group(g_ceph_context, store, group_name, tenant);
+    ret = group.get();
+    if (ret < 0) {
+      return -ret;
+    }
+    vector<string> users;
+    group.get_users(users);
+
+    if (users.empty()) {
+      ret = group.delete_obj();
+      if (ret < 0) {
+        return -ret;
+      }
+    } else {
+      cerr << "ERROR: Group not empty: " << group_name << std::endl;
+      return ERR_GROUP_NOT_EMPTY;
+     }
+
+    cout << "Group successfully deleted: " << group_name << std::endl;
+    return 0;
+  }
+  case OPT_GROUP_LIST:
+  {
+    vector<RGWGroup> result;
+    ret = RGWGroup::get_groups_by_path_prefix(store, g_ceph_context, path_prefix, tenant, result);
+    if (ret < 0) {
+      return -ret;
+    }
+    show_groups_info(result, formatter);
+    return 0;
+  }
+  case OPT_GROUP_UPDATE:
+  {
+    if (group_name.empty()) {
+      cerr << "ERROR: group name is empty" << std::endl;
+      return EINVAL;
+    }
+
+    RGWGroup group(g_ceph_context, store, group_name, "");
+    ret = group.get();
+    if (ret < 0) {
+      return -ret;
+    }
+
+    if (! new_group_name.empty() && (group_name != new_group_name)) {
+      ret = group.update_name(new_group_name);
+      if (ret < 0) {
+        return -ret;
+      }
+      vector<string> users;
+      group.get_users(users);
+      for (auto& user : users) {
+        RGWUserInfo info, updated_info;
+        ret = rgw_get_user_info_by_uid(store, user, info);
+        if (ret == 0) {
+          updated_info = info;
+          string new_group = new_group_name;
+          if (rgw_update_group_in_user(updated_info, group_name, new_group)) {
+            ret = rgw_store_user_info(store, updated_info, &info, NULL,
+                                      real_time(), false);
+            if (ret < 0) {
+              cerr << "ERROR: unable to store updated user info: " << user << std::endl;
+            }
+          } else {
+            cerr << "ERROR: group not found for user: " << user << std::endl;
+            ret = -ERR_NO_GROUP_FOUND;
+          }
+        } else {
+          cerr << "ERROR: unable to fetch user info: " << user << std::endl;
+        }
+        if (ret < 0) {
+          //revert back to the old name
+          ret = group.update_name(group_name);
+          if (ret < 0) {
+            return -ret;
+          }
+          return -ret;
+        }
+      }
+    }
+
+    if (! new_path.empty() && (group.get_path() != new_path)) {
+      ret = group.update_path(new_path);
+      if (ret < 0) {
+        return -ret;
+      }
+    }
+
+    if (! (new_group_name.empty() && new_path.empty())) {
+      ret = group.update();
+      if (ret < 0) {
+        return -ret;
+      }
+    }
+    show_group_info(group, formatter);
+    return 0;
   }
   default:
     output_user_info = false;

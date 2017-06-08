@@ -1,6 +1,8 @@
 #include <errno.h>
 #include <ctime>
-#include <regex>
+#include <algorithm>
+
+#include <boost/regex.hpp>
 
 #include "common/errno.h"
 #include "common/Formatter.h"
@@ -111,7 +113,7 @@ int RGWGroup::create(bool exclusive)
     ldout(cct, 0) << "ERROR: storing group name in pool: " << pool.name << ": "
                   << name << ": " << cpp_strerror(-ret) << dendl;
 
-    //Delete the role info that was stored in the previous call
+    //Delete the group info that was stored in the previous call
     string oid = get_info_oid_prefix() + id;
     int info_ret = rgw_delete_system_obj(store, pool, oid, NULL);
     if (info_ret < 0) {
@@ -222,6 +224,109 @@ int RGWGroup::update()
   return 0;
 }
 
+int RGWGroup::update_name(const string& new_name)
+{
+  string tenant;
+  string name = new_name;
+  extract_name_tenant(name, tenant, name);
+
+  if (! validate_name(name)) {
+    return -EINVAL;
+  }
+
+  auto& pool = store->get_zone_params().groups_pool;
+
+  //Check if the new group name already exists
+  bufferlist bl;
+  RGWObjectCtx obj_ctx(store);
+  string oid = tenant + get_names_oid_prefix() + name;
+  int ret = rgw_get_system_obj(store, obj_ctx, pool, oid, bl, NULL, NULL);
+  if (ret == 0) {
+    ldout(cct, 0) << "ERROR: group name already exists in pool: " << pool.name << ": "
+                  << name << ": " << cpp_strerror(-ret) << dendl;
+    return -EEXIST;
+  }
+
+  // Delete old name secondary index
+  string old_name, old_tenant;
+  old_name = this->name;
+  old_tenant = this->tenant;
+  oid = this->tenant + get_names_oid_prefix() + this->name;
+  ret = rgw_delete_system_obj(store, pool, oid, NULL);
+  if (ret < 0) {
+    ldout(cct, 0) << "ERROR: deleting group name from pool: " << pool.name << ": "
+                  << this->name << ": " << cpp_strerror(-ret) << dendl;
+    return ret;
+  }
+
+  // Create new name secondary index
+  this->name = name;
+  this->tenant = tenant;
+  this->arn = group_arn_prefix + tenant + ":group" + path + name;
+  ret = store_name(true);
+  if (ret < 0) {
+    ldout(cct, 0) << "ERROR:  storing name in pool: " << pool.name << ": "
+                  << name << ": " << cpp_strerror(-ret) << dendl;
+    // Revert back
+    this->name = old_name;
+    this->tenant = old_tenant;
+    this->arn = group_arn_prefix + this->tenant + ":group" + path + this->name;
+    ret = store_name(true);
+    if (ret < 0) {
+      return ret;
+    }
+    return ret;
+  }
+
+  return 0;
+}
+
+int RGWGroup::update_path(const string& new_path)
+{
+  if (! validate_path(new_path)) {
+    return -EINVAL;
+  }
+
+  auto& pool = store->get_zone_params().groups_pool;
+
+  // Delete old path secondary index
+  string old_path = this->path;
+  string oid = this->tenant + get_path_oid_prefix() + this->path +
+                              get_info_oid_prefix() + this->id;
+  int ret = rgw_delete_system_obj(store, pool, oid, NULL);
+  if (ret < 0) {
+    ldout(cct, 0) << "ERROR: deleting group path from pool: " << pool.name << ": "
+                  << this->path << ": " << cpp_strerror(-ret) << dendl;
+    return ret;
+  }
+
+  // Create new path secondary index
+  this->path = new_path;
+  this->arn = group_arn_prefix + this->tenant + ":group" + new_path + this->name;
+  ret = store_path(true);
+  if (ret < 0) {
+    ldout(cct, 0) << "ERROR:  storing path in pool: " << pool.name << ": "
+                  << new_path << ": " << cpp_strerror(-ret) << dendl;
+    //Revert back
+    this->path = old_path;
+    this->arn = group_arn_prefix + this->tenant + ":group" + old_path + this->name;
+    ret = store_path(true);
+    if (ret < 0 ){
+      return ret;
+    }
+    return ret;
+  }
+
+  return 0;
+}
+
+void RGWGroup::get_users(vector<string>& users)
+{
+  for (const auto& user : this->users) {
+    users.push_back(std::move(user));
+  }
+}
+
 void RGWGroup::dump(Formatter *f) const
 {
   encode_json("id", id , f);
@@ -229,7 +334,7 @@ void RGWGroup::dump(Formatter *f) const
   encode_json("path", path, f);
   encode_json("arn", arn, f);
   encode_json("create_date", creation_date, f);
-  //encode_json("assume_role_policy_document", trust_policy, f);
+  encode_json("users", users, f);
 }
 
 void RGWGroup::decode_json(JSONObj *obj)
@@ -239,7 +344,7 @@ void RGWGroup::decode_json(JSONObj *obj)
   JSONDecoder::decode_json("path", path, obj);
   JSONDecoder::decode_json("arn", arn, obj);
   JSONDecoder::decode_json("create_date", creation_date, obj);
-  //JSONDecoder::decode_json("assume_role_policy_document", trust_policy, obj);
+  JSONDecoder::decode_json("users", users, obj);
 }
 
 int RGWGroup::read_id(const string& group_name, const string& tenant, string& group_id)
@@ -320,26 +425,31 @@ int RGWGroup::read_name()
   return 0;
 }
 
-bool RGWGroup::validate_input()
+bool RGWGroup::validate_name(const string& name)
 {
   if (name.length() > MAX_GROUP_NAME_LEN) {
     ldout(cct, 0) << "ERROR: Invalid name length " << dendl;
     return false;
   }
 
+  boost::regex regex_name("[A-Za-z0-9:=,.@-]+");
+  if (! boost::regex_match(name, regex_name)) {
+    ldout(cct, 0) << "ERROR: Invalid chars in name " << dendl;
+    return false;
+  }
+
+  return true;
+}
+
+bool RGWGroup::validate_path(const string& path)
+{
   if (path.length() > MAX_PATH_NAME_LEN) {
     ldout(cct, 0) << "ERROR: Invalid path length " << dendl;
     return false;
   }
 
-  std::regex regex_name("[A-Za-z0-9:=,.@-]+");
-  if (! std::regex_match(name, regex_name)) {
-    ldout(cct, 0) << "ERROR: Invalid chars in name " << dendl;
-    return false;
-  }
-
-  std::regex regex_path("(/[!-~]+/)|(/)");
-  if (! std::regex_match(path,regex_path)) {
+  boost::regex regex_path("(/[!-~]+/)|(/)");
+  if (! boost::regex_match(path,regex_path)) {
     ldout(cct, 0) << "ERROR: Invalid chars in path " << dendl;
     return false;
   }
@@ -347,13 +457,46 @@ bool RGWGroup::validate_input()
   return true;
 }
 
-void RGWGroup::extract_name_tenant(const std::string& str)
+bool RGWGroup::validate_input()
+{
+  if(! validate_name(name)) {
+    return false;
+  }
+
+  if (! validate_path(path)) {
+    return false;
+  }
+
+  return true;
+}
+
+void RGWGroup::extract_name_tenant(const string& str, string& tenant, string& name)
 {
   size_t pos = str.find('$');
   if (pos != std::string::npos) {
     tenant = str.substr(0, pos);
     name = str.substr(pos + 1);
   }
+}
+
+bool RGWGroup::add_user(string& user)
+{
+  const auto& it = std::find(this->users.begin(), this->users.end(), user);
+  if (it == this->users.end()) {
+    this->users.push_back(std::move(user));
+    return true;
+  }
+  return false;
+}
+
+bool RGWGroup::remove_user(string& user)
+{
+  const auto& it = std::find(this->users.begin(), this->users.end(), user);
+  if (it != this->users.end()) {
+    this->users.erase(it);
+    return true;
+  }
+  return false;
 }
 
 int RGWGroup::get_groups_by_path_prefix(RGWRados *store,
@@ -365,7 +508,7 @@ int RGWGroup::get_groups_by_path_prefix(RGWRados *store,
   auto pool = store->get_zone_params().groups_pool;
   string prefix;
 
-  // List all roles if path prefix is empty
+  // List all groups if path prefix is empty
   if (! path_prefix.empty()) {
     prefix = tenant + group_path_oid_prefix + path_prefix;
   } else {
@@ -399,7 +542,7 @@ int RGWGroup::get_groups_by_path_prefix(RGWRados *store,
     string path = it.substr(0, pos);
 
     /*Make sure that prefix is part of path (False results could've been returned)
-      because of the role info oid + id appended to the path)*/
+      because of the group info oid + id appended to the path)*/
     if(path_prefix.empty() || path.find(path_prefix) != string::npos) {
       //Get id from info oid prefix + id
       string id = it.substr(pos + group_oid_prefix.length());

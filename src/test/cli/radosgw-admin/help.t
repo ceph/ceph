@@ -10,6 +10,7 @@
     user check                 check user info
     user stats                 show user stats as accounted by quota subsystem
     user list                  list users
+    user list-groups           list groups that a user belongs to
     caps add                   add user capabilities
     caps rm                    remove user capabilities
     subuser create             create a new subuser
@@ -152,6 +153,13 @@
     reshard cancel             cancel resharding a bucket
     sync error list            list sync error
     sync error trim            trim sync error
+    group create               create a AWS group
+    group add                  add user to a group
+    group get                  get details of a group
+    group remove               remove user from a group
+    group delete               delete a group
+    group list                 list groups with a specified path prefix
+    group update               update the name and/or path of the group
   options:
      --tenant=<tenant>         tenant name
      --uid=<id>                user id
@@ -284,6 +292,13 @@
      --policy-name             name of the policy document
      --policy-doc              permission policy document
      --path-prefix             path prefix for filtering roles
+  
+  Group options:
+     --group-name              name of the group to create
+     --path                    path to the group
+     --path-prefix             path prefix for filtering groups
+     --new-group-name          new name of an existing group
+     --new-path                new path of an existing group
   
     --conf/-c FILE    read configuration from the given configuration file
     --id/-i ID        set ID portion of my name

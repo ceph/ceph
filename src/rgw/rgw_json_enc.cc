@@ -474,6 +474,7 @@ void RGWUserInfo::dump(Formatter *f) const
     break;
   }
   encode_json("type", user_source_type, f);
+  encode_json("groups", groups, f);
 }
 
 
@@ -543,6 +544,7 @@ void RGWUserInfo::decode_json(JSONObj *obj)
   } else if (user_source_type == "none") {
     type = TYPE_NONE;
   }
+  JSONDecoder::decode_json("groups", groups, obj);
 }
 
 void RGWQuotaInfo::dump(Formatter *f) const

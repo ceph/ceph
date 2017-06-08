@@ -28,6 +28,7 @@
 #include "rgw_quota.h"
 #include "rgw_string.h"
 #include "rgw_website.h"
+#include "rgw_group.h"
 #include "cls/version/cls_version_types.h"
 #include "cls/user/cls_user_types.h"
 #include "cls/rgw/cls_rgw_types.h"
@@ -218,6 +219,11 @@ using ceph::crypto::MD5;
 #define ERR_INVALID_ENCRYPTION_ALGORITHM                 2214
 
 #define ERR_BUSY_RESHARDING      2300
+#define ERR_NO_GROUP_FOUND       2301
+#define ERR_GROUP_NOT_EMPTY      2302
+#define ERR_NO_USER_FOUND        2303
+#define ERR_USER_ALREADY_IN_GROUP       2304
+#define ERR_GROUP_ALREADY_IN_USER       2305
 
 #ifndef UINT32_MAX
 #define UINT32_MAX (0xffffffffu)
@@ -634,6 +640,7 @@ struct RGWUserInfo
   map<int, string> temp_url_keys;
   RGWQuotaInfo user_quota;
   uint32_t type;
+  vector<string> groups;
 
   RGWUserInfo()
     : auid(0),
@@ -653,7 +660,7 @@ struct RGWUserInfo
   }
 
   void encode(bufferlist& bl) const {
-     ENCODE_START(19, 9, bl);
+     ENCODE_START(20, 9, bl);
      encode(auid, bl);
      string access_key;
      string secret_key;
@@ -694,10 +701,11 @@ struct RGWUserInfo
      encode(user_id.tenant, bl);
      encode(admin, bl);
      encode(type, bl);
+     encode(groups, bl);
      ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator& bl) {
-     DECODE_START_LEGACY_COMPAT_LEN_32(19, 9, 9, bl);
+     DECODE_START_LEGACY_COMPAT_LEN_32(20, 9, 9, bl);
      if (struct_v >= 2) decode(auid, bl);
      else auid = CEPH_AUTH_UID_DEFAULT;
      string access_key;
@@ -769,6 +777,9 @@ struct RGWUserInfo
     }
     if (struct_v >= 19) {
       decode(type, bl);
+    }
+    if (struct_v >= 20) {
+      decode(groups, bl);
     }
     DECODE_FINISH(bl);
   }
