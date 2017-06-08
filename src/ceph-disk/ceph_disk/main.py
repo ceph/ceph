@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 #
-# Copyright (C) 2015, 2016 Red Hat <contact@redhat.com>
+# Copyright (C) 2015, 2016, 2017 Red Hat <contact@redhat.com>
 # Copyright (C) 2014 Inktank <info@inktank.com>
 # Copyright (C) 2014 Cloudwatt <libre.licensing@cloudwatt.com>
 # Copyright (C) 2014 Catalyst.net Ltd

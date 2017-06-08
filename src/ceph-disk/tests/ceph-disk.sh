@@ -1,7 +1,7 @@
 #!/bin/bash
 #
 # Copyright (C) 2014 Cloudwatt <libre.licensing@cloudwatt.com>
-# Copyright (C) 2014, 2015, 2016 Red Hat <contact@redhat.com>
+# Copyright (C) 2014, 2015, 2016, 2017 Red Hat <contact@redhat.com>
 #
 # Author: Loic Dachary <loic@dachary.org>
 #
