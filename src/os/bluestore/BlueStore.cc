@@ -9062,8 +9062,12 @@ void BlueStore::_dump_extent_map(ExtentMap &em, int log_level)
   }
 }
 
-void BlueStore::_dump_transaction(Transaction *t, int log_level)
+void BlueStore::_dump_transaction(Transaction* const t, const int log_level)
 {
+  if (! cct->_conf->subsys.should_gather(ceph_subsys_bluestore, log_level)) {
+    return;
+  }
+
   dout(log_level) << " transaction dump:\n";
   JSONFormatter f(true);
   f.open_object_section("transaction");
