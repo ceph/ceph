@@ -654,7 +654,7 @@ COMMAND("osd in " \
 	"set osd(s) <id> [<id>...] in", "osd", "rw", "cli,rest")
 COMMAND("osd rm " \
 	"name=ids,type=CephString,n=N", \
-	"remove osd(s) <id> [<id>...] in", "osd", "rw", "cli,rest")
+	"remove osd(s) <id> [<id>...]", "osd", "rw", "cli,rest")
 COMMAND("osd add-noout " \
         "name=ids,type=CephString,n=N", \
         "mark osd(s) <id> [<id>...] as noout, " \
