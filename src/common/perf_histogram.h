@@ -18,10 +18,10 @@
 #include <array>
 #include <atomic>
 #include <memory>
-#include <cassert>
 
 #include "common/Formatter.h"
 #include "include/int_types.h"
+#include "include/assert.h"
 
 class PerfHistogramCommon {
 public:
