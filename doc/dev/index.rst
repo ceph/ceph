@@ -135,7 +135,7 @@ in the body of the message.
 
 There are also `other Ceph-related mailing lists`_.
 
-.. _`other Ceph-related mailing lists`: https://ceph.com/resources/mailing-list-irc/
+.. _`other Ceph-related mailing lists`: https://ceph.com/irc/
 
 IRC
 ---
@@ -145,7 +145,7 @@ time using `Internet Relay Chat`_.
 
 .. _`Internet Relay Chat`: http://www.irchelp.org/
 
-See https://ceph.com/resources/mailing-list-irc/ for how to set up your IRC
+See https://ceph.com/irc/ for how to set up your IRC
 client and a list of channels.
 
 Submitting patches
@@ -750,7 +750,7 @@ The results of the nightlies are published at http://pulpito.ceph.com/ and
 http://pulpito.ovh.sepia.ceph.com:8081/. The developer nick shows in the
 test results URL and in the first column of the Pulpito dashboard.  The
 results are also reported on the `ceph-qa mailing list
-<http://ceph.com/resources/mailing-list-irc/>`_ for analysis.
+<https://ceph.com/irc/>`_ for analysis.
 
 Suites inventory
 ----------------
@@ -1202,9 +1202,9 @@ Getting ceph-workbench
 Since testing in the cloud is done using the `ceph-workbench
 ceph-qa-suite`_ tool, you will need to install that first. It is designed
 to be installed via Docker, so if you don't have Docker running on your
-development machine, take care of that first. The Docker project has a good
-tutorial called `Get Started with Docker Engine for Linux
-<https://docs.docker.com/linux/>`_ if you unsure how to proceed.
+development machine, take care of that first. You can follow `the official
+tutorial<https://docs.docker.com/engine/installation/>`_ to install if
+you have not installed yet.
 
 Once Docker is up and running, install ``ceph-workbench`` by following the
 `Installation instructions in the ceph-workbench documentation
