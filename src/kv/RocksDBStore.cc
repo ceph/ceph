@@ -298,11 +298,14 @@ int RocksDBStore::do_open(ostream &out, bool create_if_missing)
   }
 
   std::shared_ptr<rocksdb::Cache> cache;
+  if (!cache_size) {
+    cache_size = g_conf->rocksdb_cache_size;
+  }
   if (g_conf->rocksdb_cache_type == "lru") {
-    cache = rocksdb::NewLRUCache(g_conf->rocksdb_cache_size,
+    cache = rocksdb::NewLRUCache(cache_size,
 				 g_conf->rocksdb_cache_shard_bits);
   } else if (g_conf->rocksdb_cache_type == "clock") {
-    cache = rocksdb::NewClockCache(g_conf->rocksdb_cache_size,
+    cache = rocksdb::NewClockCache(cache_size,
 				   g_conf->rocksdb_cache_shard_bits);
   } else {
     derr << "unrecognized rocksdb_cache_type '" << g_conf->rocksdb_cache_type
@@ -320,8 +323,8 @@ int RocksDBStore::do_open(ostream &out, bool create_if_missing)
   }
   opt.table_factory.reset(rocksdb::NewBlockBasedTableFactory(bbt_opts));
   dout(10) << __func__ << " set block size to " << g_conf->rocksdb_block_size
-           << " cache size to " << g_conf->rocksdb_cache_size
-           << " num of cache shards to "
+           << ", cache size to " << prettybyte_t(cache_size)
+           << ", cache shards to "
 	   << (1 << g_conf->rocksdb_cache_shard_bits) << dendl;
 
   opt.merge_operator.reset(new MergeOperatorRouter(*this));
