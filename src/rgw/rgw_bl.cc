@@ -328,42 +328,70 @@ int RGWBL::bucket_bl_deliver(string opslog_obj, const rgw_bucket target_bucket,
 			     const string target_prefix,
 			     map<string, bufferlist> tobject_attrs)
 {
-  bufferlist opslog_buffer;
   ldout(cct, 20) << __func__ << " fetch phrase:" << dendl;
-  int r = bucket_bl_fetch(opslog_obj, &opslog_buffer);
-  if (r < 0) {
-    return r;
+
+  RGWAccessHandle sh;
+  int ret = store->log_show_init(opslog_obj, &sh);
+  if (ret < 0) {
+    ldout(cct, 0) << "RGWBL::bucket_bl_deliver"
+                  << " log_show_init() failed, obj=" << opslog_obj
+                  << " ret=" << cpp_strerror(-ret) << dendl;
+    return ret;
   }
+  
+  bufferlist opslog_buffer;
+  struct rgw_log_entry entry;
+  int entry_nums = 0;
 
-  if (opslog_buffer.length() == 0) {
-    ldout(cct, 0) << __func__ << " bucket_bl_fetch has no entries" << dendl;
-    return 0;
-  }
-
-  ldout(cct, 20) << __func__ << " render key phrase:" << dendl;
-  string target_key = render_target_key(cct, target_prefix, opslog_obj);
-  if (target_key.empty()) {
-    ldout(cct, 0) << __func__ << " render target object failed ret=" << dendl;
-    return -1;
-  }
-
-  rgw_obj tobject(target_bucket, target_key);
-
-  ldout(cct, 20) << __func__ << " upload phrase:" << dendl;
-  r = bucket_bl_upload(&opslog_buffer, tobject, tobject_attrs);
-  opslog_buffer.clear();
-  if (r < 0) {
-    ldout(cct, 0) << __func__ << " bucket_bl_upload() failed ret="
-		  << cpp_strerror(-r) << dendl;
-    return r;
-  } else {
-    ldout(cct, 20) << __func__ << " cleanup phrase:" << dendl;
-    r = bucket_bl_remove(opslog_obj);
-    if (r < 0){
-      return r;
-    } else {
-      return 0;
+  do {
+    ret = store->log_show_next(sh, &entry);
+    if (ret < 0) {
+      ldout(cct, 20) << "RGWBL::bucket_bl_deliver log_show_next obj=" << opslog_obj
+                     << " failed ret=" << cpp_strerror(-ret) << dendl;
+      return ret;
     }
+    
+#define MAX_OPSLOG_UPLOAD_ENTRIES 10000
+    if (ret > 0) {
+      format_opslog_entry(entry, &opslog_buffer);
+      entry_nums += 1;
+    }
+
+    if (entry_nums == MAX_OPSLOG_UPLOAD_ENTRIES || ret == 0) { 
+      entry_nums = 0;
+
+      if (opslog_buffer.length() == 0) {
+        ldout(cct, 0) << __func__ << " opslog obj has no entries, obj = " 
+	              << opslog_obj << dendl;
+        break;
+      }
+
+      ldout(cct, 20) << __func__ << " render key phrase:" << dendl;
+      string target_key = render_target_key(cct, target_prefix);
+      if (target_key.empty()) {
+        ldout(cct, 0) << __func__ << " render target object failed" << dendl;
+        return -1;
+      }
+
+      rgw_obj tobject(target_bucket, target_key);
+      
+      ldout(cct, 20) << __func__ << " upload phrase:" << dendl;
+      int upload_ret = bucket_bl_upload(&opslog_buffer, tobject, tobject_attrs);
+      opslog_buffer.clear();
+      if (upload_ret < 0) {
+        ldout(cct, 0) << __func__ << " bucket_bl_upload() failed ret="
+		      << cpp_strerror(-upload_ret) << dendl;
+        return upload_ret;
+      }
+    }
+  } while (ret > 0);
+
+  ldout(cct, 20) << __func__ << " cleanup phrase:" << dendl;
+  int remove_ret = bucket_bl_remove(opslog_obj);
+  if (remove_ret < 0){
+    return remove_ret;
+  } else {
+    return 0;
   }
 }
 
