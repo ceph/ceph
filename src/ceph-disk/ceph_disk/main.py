@@ -2407,15 +2407,22 @@ class PrepareBluestoreBlockDB(PrepareSpace):
         super(PrepareBluestoreBlockDB, self).__init__(args)
 
     def get_space_size(self):
-        block_size = get_conf(
+        block_db_size = get_conf(
             cluster=self.args.cluster,
             variable='bluestore_block_db_size',
         )
 
-        if block_size is None:
-            return 20480  # MB, default value
+        if block_db_size is None or int(block_db_size) == 0:
+            block_size = get_conf(
+                cluster=self.args.cluster,
+                variable='bluestore_block_size',
+            )
+            if block_size is None:
+                return 1024  # MB
+            size = int(block_size) / 100 / 1048576
+            return max(size, 1024)  # MB
         else:
-            return int(block_size) / 1048576  # MB
+            return int(block_db_size) / 1048576  # MB
 
     def desired_partition_number(self):
         if getattr(self.args, 'block.db') == self.args.data:
