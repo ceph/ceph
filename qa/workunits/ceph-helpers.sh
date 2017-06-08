@@ -590,11 +590,9 @@ function destroy_osd() {
     local dir=$1
     local id=$2
 
-    kill_daemons $dir TERM osd.$id || return 1
     ceph osd out osd.$id || return 1
-    ceph auth del osd.$id || return 1
-    ceph osd crush remove osd.$id || return 1
-    ceph osd rm $id || return 1
+    kill_daemons $dir TERM osd.$id || return 1
+    ceph osd purge osd.$id --yes-i-really-mean-it || return 1
     teardown $dir/$id || return 1
     rm -fr $dir/$id
 }
