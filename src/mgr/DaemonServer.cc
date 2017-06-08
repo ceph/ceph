@@ -263,12 +263,11 @@ void DaemonServer::shutdown()
 
 bool DaemonServer::handle_open(MMgrOpen *m)
 {
-  DaemonKey key(
-      m->get_connection()->get_peer_type(),
-      m->daemon_name);
+  uint32_t type = m->get_connection()->get_peer_type();
+  DaemonKey key(type, m->daemon_name);
 
   dout(4) << "from " << m->get_connection() << " name "
-          << m->daemon_name << dendl;
+          << ceph_entity_type_name(type) << "." << m->daemon_name << dendl;
 
   auto configure = new MMgrConfigure();
   configure->stats_period = g_conf->mgr_stats_period;
@@ -285,12 +284,11 @@ bool DaemonServer::handle_open(MMgrOpen *m)
 
 bool DaemonServer::handle_report(MMgrReport *m)
 {
-  DaemonKey key(
-      m->get_connection()->get_peer_type(),
-      m->daemon_name);
+  uint32_t type = m->get_connection()->get_peer_type();
+  DaemonKey key(type, m->daemon_name);
 
   dout(4) << "from " << m->get_connection() << " name "
-          << m->daemon_name << dendl;
+          << ceph_entity_type_name(type) << "." << m->daemon_name << dendl;
 
   DaemonStatePtr daemon;
   if (daemon_state.exists(key)) {
