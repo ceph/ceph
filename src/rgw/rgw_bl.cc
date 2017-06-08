@@ -157,7 +157,7 @@ int RGWBL::bucket_bl_prepare(int index)
   return 0;
 }
 
-static string render_target_key(CephContext *cct, const string prefix, string obj_name)
+static string render_target_key(CephContext *cct, const string prefix)
 {
   string target_key;
 
@@ -168,16 +168,20 @@ static string render_target_key(CephContext *cct, const string prefix, string ob
       return target_key;
   } else {
     string unique_str = string(unique_string_buf);
-    string date = obj_name.substr(0, 13); // TODO(jiaying) need more accurate time interval to match
-                                          // timestamp in s3 BL log file name.
+    utime_t now = ceph_clock_now();
+    struct tm current_time;
+    time_t tt = now.sec();
+    localtime_r(&tt, &current_time);
+    char buffer[20];
+    strftime(buffer, 20, "%Y-%m-%d-%H-%M-%S", &current_time);
+    std::string time(buffer);
 
     target_key += prefix;
-    target_key += date;
+    target_key += time;
     target_key += "-";
     target_key += unique_str;
 
     ldout(cct, 20) << "RGWBL::render_target_key "<< "prefix=" << prefix
-                   << " obj_name=" << obj_name
                    << " unique_str=" << unique_str
                    << " target_key=" << target_key << dendl;
 
