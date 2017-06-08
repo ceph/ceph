@@ -120,8 +120,8 @@ private:
 
 public:
 
-  static const std::string DEFAULT_K;
-  static const std::string DEFAULT_M;
+  static constexpr int DEFAULT_K = 7;
+  static constexpr int DEFAULT_M = 3;
 
   unsigned char* encode_coeff; // encoding coefficient
   unsigned char* encode_tbls; // encoding table

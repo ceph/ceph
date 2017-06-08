@@ -210,12 +210,12 @@ int ErasureCode::to_mapping(const ErasureCodeProfile &profile,
 int ErasureCode::to_int(const std::string &name,
 			ErasureCodeProfile &profile,
 			int *value,
-			const std::string &default_value,
+			int default_value,
 			ostream *ss)
 {
   if (profile.find(name) == profile.end() ||
       profile.find(name)->second.size() == 0)
-    profile[name] = default_value;
+    profile[name] = std::to_string(default_value);
   std::string p = profile.find(name)->second;
   std::string err;
   int r = strict_strtol(p.c_str(), 10, &err);
@@ -223,7 +223,7 @@ int ErasureCode::to_int(const std::string &name,
     *ss << "could not convert " << name << "=" << p
 	<< " to int because " << err
 	<< ", set to default " << default_value << std::endl;
-    *value = strict_strtol(default_value.c_str(), 10, &err);
+    *value = default_value;
     return -EINVAL;
   }
   *value = r;

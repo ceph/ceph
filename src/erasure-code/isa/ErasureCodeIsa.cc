@@ -14,6 +14,7 @@
 
 // -----------------------------------------------------------------------------
 #include <algorithm>
+#include <boost/container/small_vector.hpp>
 #include <errno.h>
 // -----------------------------------------------------------------------------
 #include "common/debug.h"
@@ -22,6 +23,7 @@
 #include "crush/CrushWrapper.h"
 #include "osd/osd_types.h"
 using namespace std;
+using boost::container::small_vector;
 
 // -----------------------------------------------------------------------------
 extern "C" {
@@ -42,9 +44,6 @@ _prefix(std::ostream* _dout)
   return *_dout << "ErasureCodeIsa: ";
 }
 // -----------------------------------------------------------------------------
-
-const std::string ErasureCodeIsaDefault::DEFAULT_K("7");
-const std::string ErasureCodeIsaDefault::DEFAULT_M("3");
 
 int
 ErasureCodeIsa::create_ruleset(const string &name,
@@ -109,7 +108,9 @@ ErasureCodeIsa::get_chunk_size(unsigned int object_size) const
 int ErasureCodeIsa::encode_chunks(const set<int> &want_to_encode,
                                   map<int, bufferlist> *encoded)
 {
-  char *chunks[k + m];
+  small_vector<char*,
+               ErasureCodeIsaDefault::DEFAULT_K+
+               ErasureCodeIsaDefault::DEFAULT_M> chunks(k+m);
   for (int i = 0; i < k + m; i++)
     chunks[i] = (*encoded)[i].c_str();
   isa_encode(&chunks[0], &chunks[k], (*encoded)[0].length());
@@ -121,10 +122,14 @@ int ErasureCodeIsa::decode_chunks(const set<int> &want_to_read,
                                   map<int, bufferlist> *decoded)
 {
   unsigned blocksize = (*chunks.begin()).second.length();
-  int erasures[k + m + 1];
+  small_vector<int,
+               ErasureCodeIsaDefault::DEFAULT_K +
+               ErasureCodeIsaDefault::DEFAULT_M + 1> erasures(k + m + 1);
   int erasures_count = 0;
-  char *data[k];
-  char *coding[m];
+  small_vector<char *,
+               ErasureCodeIsaDefault::DEFAULT_K> data(k);
+  small_vector<char *,
+               ErasureCodeIsaDefault::DEFAULT_M> coding(m);
   for (int i = 0; i < k + m; i++) {
     if (chunks.find(i) == chunks.end()) {
       erasures[erasures_count] = i;
@@ -137,7 +142,7 @@ int ErasureCodeIsa::decode_chunks(const set<int> &want_to_read,
   }
   erasures[erasures_count] = -1;
   assert(erasures_count > 0);
-  return isa_decode(erasures, data, coding, blocksize);
+  return isa_decode(erasures.data(), data.data(), coding.data(), blocksize);
 }
 
 // -----------------------------------------------------------------------------

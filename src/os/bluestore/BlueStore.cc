@@ -5430,7 +5430,7 @@ int BlueStore::fsck(bool deep)
       ++num_objects;
       num_spanning_blobs += o->extent_map.spanning_blob_map.size();
       o->extent_map.fault_range(db, 0, OBJECT_MAX_SIZE);
-      _dump_onode(o, 30);
+      _dump_onode<30>(o);
       // shards
       if (!o->extent_map.shards.empty()) {
 	++num_sharded_objects;
@@ -9008,7 +9008,8 @@ int BlueStore::_touch(TransContext *txc,
   return r;
 }
 
-void BlueStore::_dump_onode(OnodeRef o, int log_level)
+template<int log_level>
+void BlueStore::_dump_onode(OnodeRef o)
 {
   if (!cct->_conf->subsys.should_gather(ceph_subsys_bluestore, log_level))
     return;
@@ -9030,6 +9031,9 @@ void BlueStore::_dump_onode(OnodeRef o, int log_level)
   }
   _dump_extent_map(o->extent_map, log_level);
 }
+
+template void BlueStore::_dump_onode<30>(OnodeRef o);
+template void BlueStore::_dump_onode<20>(OnodeRef o);
 
 void BlueStore::_dump_extent_map(ExtentMap &em, int log_level)
 {
@@ -10150,7 +10154,7 @@ void BlueStore::_do_truncate(
   dout(15) << __func__ << " " << c->cid << " " << o->oid
 	   << " 0x" << std::hex << offset << std::dec << dendl;
 
-  _dump_onode(o, 30);
+  _dump_onode(o);
 
   if (offset == o->onode.size)
     return;

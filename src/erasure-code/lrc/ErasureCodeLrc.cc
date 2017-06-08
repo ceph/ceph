@@ -278,8 +278,6 @@ int ErasureCodeLrc::parse(ErasureCodeProfile &profile,
   return parse_ruleset(profile, ss);
 }
 
-const string ErasureCodeLrc::DEFAULT_KML("-1");
-
 int ErasureCodeLrc::parse_kml(ErasureCodeProfile &profile,
 			      ostream *ss)
 {
@@ -529,7 +527,7 @@ int ErasureCodeLrc::init(ErasureCodeProfile &profile,
   // they would otherwise be exposed to the caller.
   //
   if (profile.find("l") != profile.end() &&
-      profile.find("l")->second != DEFAULT_KML) {
+      profile.find("l")->second != std::to_string(DEFAULT_KML)) {
     profile.erase("mapping");
     profile.erase("layers");
   }

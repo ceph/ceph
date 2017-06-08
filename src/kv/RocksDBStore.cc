@@ -107,6 +107,15 @@ int RocksDBStore::set_merge_operator(
 
 class CephRocksdbLogger : public rocksdb::Logger {
   CephContext *cct;
+
+  template<rocksdb::InfoLogLevel v>
+  void logv(const char* format, va_list ap) {
+    dout(v);
+    char buf[65536];
+    vsnprintf(buf, sizeof(buf), format, ap);
+    *_dout << buf << dendl;
+  }
+
 public:
   explicit CephRocksdbLogger(CephContext *c) : cct(c) {
     cct->get();
@@ -127,10 +136,28 @@ public:
   void Logv(const rocksdb::InfoLogLevel log_level, const char* format,
 	    va_list ap) override {
     int v = rocksdb::NUM_INFO_LOG_LEVELS - log_level - 1;
-    dout(v);
-    char buf[65536];
-    vsnprintf(buf, sizeof(buf), format, ap);
-    *_dout << buf << dendl;
+    switch (v) {
+    case rocksdb::InfoLogLevel::DEBUG_LEVEL:
+      logv<rocksdb::InfoLogLevel::DEBUG_LEVEL>(format, ap);
+      break;
+    case rocksdb::InfoLogLevel::INFO_LEVEL:
+      logv<rocksdb::InfoLogLevel::INFO_LEVEL>(format, ap);
+      break;
+    case rocksdb::InfoLogLevel::WARN_LEVEL:
+      logv<rocksdb::InfoLogLevel::WARN_LEVEL>(format, ap);
+      break;
+    case rocksdb::InfoLogLevel::ERROR_LEVEL:
+      logv<rocksdb::InfoLogLevel::ERROR_LEVEL>(format, ap);
+      break;
+    case rocksdb::InfoLogLevel::FATAL_LEVEL:
+      logv<rocksdb::InfoLogLevel::FATAL_LEVEL>(format, ap);
+      break;
+    case rocksdb::InfoLogLevel::HEADER_LEVEL:
+      logv<rocksdb::InfoLogLevel::HEADER_LEVEL>(format, ap);
+      break;
+    default:
+      return;
+    }
   }
 };
 
