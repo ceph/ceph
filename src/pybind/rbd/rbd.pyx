@@ -394,6 +394,8 @@ class OSError(Error):
     def __str__(self):
         return '[Errno {0}] {1}'.format(self.errno, self.strerror)
 
+    def __reduce__(self):
+        return (self.__class__, (self.errno, self.strerror))
 
 class PermissionError(OSError):
     pass
