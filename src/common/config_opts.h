@@ -491,6 +491,7 @@ OPTION(objecter_inflight_op_bytes, OPT_U64, 1024*1024*100) // max in-flight data
 OPTION(objecter_inflight_ops, OPT_U64, 1024)               // max in-flight ios
 OPTION(objecter_completion_locks_per_session, OPT_U64, 32) // num of completion locks per each session, for serializing same object responses
 OPTION(objecter_inject_no_watch_ping, OPT_BOOL, false)   // suppress watch pings
+OPTION(objecter_return_error_when_osd_full, OPT_BOOL, false) // return error when osd full, instead of pause
 OPTION(objecter_retry_writes_after_first_reply, OPT_BOOL, false)   // ignore the first reply for each write, and resend the osd op instead
 OPTION(objecter_debug_inject_relock_delay, OPT_BOOL, false)
 
