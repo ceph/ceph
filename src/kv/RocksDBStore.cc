@@ -297,24 +297,30 @@ int RocksDBStore::do_open(ostream &out, bool create_if_missing)
     opt.env = static_cast<rocksdb::Env*>(priv);
   }
 
-  std::shared_ptr<rocksdb::Cache> cache;
+  // caches
   if (!cache_size) {
     cache_size = g_conf->rocksdb_cache_size;
   }
+  uint64_t row_cache_size = cache_size * g_conf->rocksdb_cache_row_ratio;
+  uint64_t block_cache_size = cache_size - row_cache_size;
   if (g_conf->rocksdb_cache_type == "lru") {
-    cache = rocksdb::NewLRUCache(cache_size,
-				 g_conf->rocksdb_cache_shard_bits);
+    bbt_opts.block_cache = rocksdb::NewLRUCache(
+      block_cache_size,
+      g_conf->rocksdb_cache_shard_bits);
   } else if (g_conf->rocksdb_cache_type == "clock") {
-    cache = rocksdb::NewClockCache(cache_size,
-				   g_conf->rocksdb_cache_shard_bits);
+    bbt_opts.block_cache = rocksdb::NewClockCache(
+      block_cache_size,
+      g_conf->rocksdb_cache_shard_bits);
   } else {
     derr << "unrecognized rocksdb_cache_type '" << g_conf->rocksdb_cache_type
 	 << "'" << dendl;
     return -EINVAL;
   }
-
   bbt_opts.block_size = g_conf->rocksdb_block_size;
-  bbt_opts.block_cache = cache;
+
+  opt.row_cache = rocksdb::NewLRUCache(row_cache_size,
+				       g_conf->rocksdb_cache_shard_bits);
+
   if (g_conf->kstore_rocksdb_bloom_bits_per_key > 0) {
     dout(10) << __func__ << " set bloom filter bits per key to "
 	     << g_conf->kstore_rocksdb_bloom_bits_per_key << dendl;
@@ -322,10 +328,13 @@ int RocksDBStore::do_open(ostream &out, bool create_if_missing)
 				   g_conf->kstore_rocksdb_bloom_bits_per_key));
   }
   opt.table_factory.reset(rocksdb::NewBlockBasedTableFactory(bbt_opts));
-  dout(10) << __func__ << " set block size to " << g_conf->rocksdb_block_size
-           << ", cache size to " << prettybyte_t(cache_size)
-           << ", cache shards to "
-	   << (1 << g_conf->rocksdb_cache_shard_bits) << dendl;
+  dout(10) << __func__ << " block size " << g_conf->rocksdb_block_size
+           << ", block_cache size " << prettybyte_t(block_cache_size)
+	   << ", row_cache size " << prettybyte_t(row_cache_size)
+	   << "; shards "
+	   << (1 << g_conf->rocksdb_cache_shard_bits)
+	   << ", type " << g_conf->rocksdb_cache_type
+	   << dendl;
 
   opt.merge_operator.reset(new MergeOperatorRouter(*this));
   status = rocksdb::DB::Open(opt, path, &db);
