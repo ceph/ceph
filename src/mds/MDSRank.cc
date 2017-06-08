@@ -351,7 +351,7 @@ void MDSRankDispatcher::shutdown()
   finisher->stop(); // no flushing
   mds_lock.Lock();
 
-  if (objecter->initialized.read())
+  if (objecter->initialized)
     objecter->shutdown();
 
   monc->shutdown();
