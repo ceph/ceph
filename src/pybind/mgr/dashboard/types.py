@@ -33,47 +33,19 @@ def memoize(function):
     return wrapper
 
 
-class SyncObject(object):
-    """
-    An object from a Ceph cluster that we are maintaining
-    a copy of on the Calamari server.
+OSD_FLAGS = ('pause', 'noup', 'nodown', 'noout', 'noin', 'nobackfill',
+             'norecover', 'noscrub', 'nodeep-scrub')
 
-    We wrap these JSON-serializable objects in a python object to:
-
-    - Decorate them with things like id-to-entry dicts
-    - Have a generic way of seeing the version of an object
-
-    """
-    def __init__(self, version, data):
-        self.version = version
+class DataWrapper(object):
+    def __init__(self, data):
         self.data = data
 
-    @classmethod
-    def cmp(cls, a, b):
-        """
-        Slight bastardization of cmp.  Takes two versions,
-        and returns a cmp-like value, except that if versions
-        are not sortable we only return 0 or 1.
-        """
-        # Version is something unique per version (like a hash)
-        return 1 if a != b else 0
 
-
-class VersionedSyncObject(SyncObject):
-    @classmethod
-    def cmp(cls, a, b):
-        # Version is something numeric like an epoch
-        return cmp(a, b)
-
-
-OSD_FLAGS = ('pause', 'noup', 'nodown', 'noout', 'noin', 'nobackfill', 'norecover', 'noscrub', 'nodeep-scrub')
-
-
-class OsdMap(VersionedSyncObject):
+class OsdMap(DataWrapper):
     str = OSD_MAP
 
-    def __init__(self, version, data):
-        super(OsdMap, self).__init__(version, data)
+    def __init__(self, data):
+        super(OsdMap, self).__init__(data)
         if data is not None:
             self.osds_by_id = dict([(o['osd'], o) for o in data['osds']])
             self.pools_by_id = dict([(p['pool'], p) for p in data['pools']])
@@ -204,37 +176,37 @@ class OsdMap(VersionedSyncObject):
         return osds
 
 
-class FsMap(VersionedSyncObject):
+class FsMap(DataWrapper):
     str = 'fs_map'
 
 
-class MonMap(VersionedSyncObject):
+class MonMap(DataWrapper):
     str = 'mon_map'
 
 
-class MonStatus(VersionedSyncObject):
+class MonStatus(DataWrapper):
     str = 'mon_status'
 
-    def __init__(self, version, data):
-        super(MonStatus, self).__init__(version, data)
+    def __init__(self, data):
+        super(MonStatus, self).__init__(data)
         if data is not None:
             self.mons_by_rank = dict([(m['rank'], m) for m in data['monmap']['mons']])
         else:
             self.mons_by_rank = {}
 
 
-class PgSummary(SyncObject):
+class PgSummary(DataWrapper):
     """
     A summary of the state of PGs in the cluster, reported by pool and by OSD.
     """
     str = 'pg_summary'
 
 
-class Health(SyncObject):
+class Health(DataWrapper):
     str = 'health'
 
 
-class Config(SyncObject):
+class Config(DataWrapper):
     str = 'config'
 
 
