@@ -196,6 +196,11 @@ public:
     stray_manager.notify_stray_created();
   }
 
+  void eval_remote(CDentry *dn)
+  {
+    stray_manager.eval_remote(dn);
+  }
+
   // -- client caps --
   uint64_t              last_cap_id;
   
@@ -970,7 +975,6 @@ public:
 
   // -- stray --
 public:
-  void eval_remote(CDentry *dn);
   void fetch_backtrace(inodeno_t ino, int64_t pool, bufferlist& bl, Context *fin);
   uint64_t get_num_strays() const { return stray_manager.get_num_strays(); }
 

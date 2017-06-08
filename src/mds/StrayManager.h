@@ -119,6 +119,8 @@ class StrayManager
    */
   bool _eval_stray(CDentry *dn, bool delay=false);
 
+  void _eval_stray_remote(CDentry *stray_dn, CDentry *remote_dn);
+
   // My public interface is for consumption by MDCache
   public:
   explicit StrayManager(MDSRank *mds, PurgeQueue &purge_queue_);
@@ -144,11 +146,10 @@ class StrayManager
   void advance_delayed();
 
   /**
-   * When a metadata op touches a remote dentry that points to
-   * a stray, call in here to evaluate it for migration (move
-   * a stray residing on another MDS to this MDS) or reintegration
-   * (move a stray dentry's inode into a non-stray hardlink dentry and
-   * clean up the stray).
+   * Remote dentry potentially points to a stray. When it is touched,
+   * call in here to evaluate it for migration (move a stray residing
+   * on another MDS to this MDS) or reintegration (move a stray dentry's
+   * inode into a non-stray hardlink dentry and clean up the stray).
    *
    * @param stray_dn a stray dentry whose inode has been referenced
    *                 by a remote dentry
@@ -157,7 +158,7 @@ class StrayManager
    *                  as a hint for which remote to reintegrate into
    *                  if there are multiple remotes.
    */
-  void eval_remote_stray(CDentry *stray_dn, CDentry *remote_dn=NULL);
+  void eval_remote(CDentry *remote_dn);
 
   /**
    * Given a dentry within one of my stray directories,
