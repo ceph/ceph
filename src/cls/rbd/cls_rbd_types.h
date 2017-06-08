@@ -133,6 +133,7 @@ inline void decode(MirrorImageStatusState &state, bufferlist::iterator& it)
 
 struct MirrorImageStatus {
   MirrorImageStatus() {}
+  ~MirrorImageStatus() {}
   MirrorImageStatus(MirrorImageStatusState state,
 		    const std::string &description = "")
     : state(state), description(description) {}
