@@ -17,6 +17,9 @@
 #include "msg/async/net_handler.h"
 #include "RDMAStack.h"
 
+// reinclude our assert to clobber the system one
+#include "include/assert.h"
+
 #define dout_subsys ceph_subsys_ms
 #undef dout_prefix
 #define dout_prefix *_dout << " RDMAServerSocketImpl "
