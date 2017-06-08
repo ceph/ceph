@@ -131,14 +131,18 @@ template <typename I>
 void ExclusiveLock<I>::shut_down(Context *on_shut_down) {
   ldout(m_image_ctx.cct, 10) << this << " " << __func__ << dendl;
 
+  C_Gather *gather_ctx = new C_Gather(m_image_ctx.cct, on_shut_down);
   {
     Mutex::Locker locker(m_lock);
     assert(!is_shutdown());
-    execute_action(ACTION_SHUT_DOWN, on_shut_down);
+    execute_action(ACTION_SHUT_DOWN, gather_ctx->new_sub());
   }
 
   // if stalled in request state machine -- abort
   handle_peer_notification(0);
+
+  //allow to delete ExclusiveLock
+  gather_ctx->activate();
 }
 
 template <typename I>
