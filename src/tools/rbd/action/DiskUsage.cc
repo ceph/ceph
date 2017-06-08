@@ -35,7 +35,7 @@ static int compute_image_disk_usage(const std::string& name,
                                     const std::string& from_snap_name,
                                     librbd::Image &image, uint64_t size,
                                     TextTable& tbl, Formatter *f,
-                                    uint64_t *used_size) {
+                                    bool whole_object, uint64_t *used_size) {
   const char* from = NULL;
   if (!from_snap_name.empty()) {
     from = from_snap_name.c_str();
@@ -55,7 +55,7 @@ static int compute_image_disk_usage(const std::string& name,
   }
 
   *used_size = 0;
-  r = image.diff_iterate2(from, 0, size, false, true,
+  r = image.diff_iterate2(from, 0, size, false, whole_object,
                           &disk_usage_callback, used_size);
   if (r < 0) {
     std::cerr << "rbd: failed to iterate diffs: " << cpp_strerror(r)
@@ -87,7 +87,8 @@ static int compute_image_disk_usage(const std::string& name,
 
 static int do_disk_usage(librbd::RBD &rbd, librados::IoCtx &io_ctx,
                          const char *imgname, const char *snapname,
-                         const char *from_snapname, Formatter *f) {
+                         const char *from_snapname, bool whole_object,
+                         Formatter *f) {
   std::vector<std::string> names;
   int r = rbd.list(io_ctx, names);
   if (r == -ENOENT) {
@@ -174,7 +175,7 @@ static int do_disk_usage(librbd::RBD &rbd, librados::IoCtx &io_ctx,
       if (imgname == nullptr || found_from_snap ||
          (found_from_snap && snapname != nullptr && snap->name == snapname)) {
         r = compute_image_disk_usage(*name, snap->name, last_snap_name,
-                                     snap_image, snap->size, tbl, f,
+                                     snap_image, snap->size, tbl, f, whole_object,
                                      &used_size);
         if (r < 0) {
           goto out;
@@ -199,7 +200,7 @@ static int do_disk_usage(librbd::RBD &rbd, librados::IoCtx &io_ctx,
 
     if (snapname == NULL) {
       r = compute_image_disk_usage(*name, "", last_snap_name, image, info.size,
-                                   tbl, f, &used_size);
+                                   tbl, f, whole_object, &used_size);
       if (r < 0) {
         goto out;
       }
@@ -242,7 +243,9 @@ void get_arguments(po::options_description *positional,
   at::add_format_options(options);
   options->add_options()
     (at::FROM_SNAPSHOT_NAME.c_str(), po::value<std::string>(),
-     "snapshot starting point");
+     "snapshot starting point")
+    (at::WHOLE_OBJECT.c_str(), po::bool_switch(),
+     "stat whole object");
 }
 
 int execute(const po::variables_map &vm) {
@@ -263,6 +266,8 @@ int execute(const po::variables_map &vm) {
     from_snap_name = vm[at::FROM_SNAPSHOT_NAME].as<std::string>();
   }
 
+  bool whole_object = vm[at::WHOLE_OBJECT].as<bool>();
+
   at::Format::Formatter formatter;
   r = utils::get_formatter(vm, &formatter);
   if (r < 0) {
@@ -281,7 +286,7 @@ int execute(const po::variables_map &vm) {
                     image_name.empty() ? nullptr: image_name.c_str() ,
                     snap_name.empty() ? nullptr : snap_name.c_str(),
                     from_snap_name.empty() ? nullptr : from_snap_name.c_str(),
-                    formatter.get());
+                    whole_object, formatter.get());
   if (r < 0) {
     std::cerr << "du failed: " << cpp_strerror(r) << std::endl;
     return r;
@@ -289,6 +294,7 @@ int execute(const po::variables_map &vm) {
   return 0;
 }
 
+Shell::SwitchArguments switched_arguments({at::WHOLE_OBJECT});
 Shell::Action action(
   {"disk-usage"}, {"du"}, "Show disk usage stats for pool, image or snapshot",
   "", &get_arguments, &execute);
