@@ -318,7 +318,6 @@ of cluster membership, configuration, and state.
 
 %package mgr
 Summary:        Ceph Manager Daemon
-License:        LGPL-2.1 and CC-BY-SA-1.0 and GPL-2.0 and BSL-1.0 and BSD-3-Clause and MIT
 %if 0%{?suse_version}
 Group:          System/Filesystems
 %endif
@@ -404,7 +403,6 @@ Summary:	OCF-compliant resource agents for Ceph daemons
 %if 0%{?suse_version}
 Group:		System/Filesystems
 %endif
-License:	LGPL-2.0
 Requires:	ceph-base = %{_epoch_prefix}%{version}
 Requires:	resource-agents
 %description resource-agents
@@ -437,7 +435,6 @@ Summary:	RADOS distributed object store client library
 %if 0%{?suse_version}
 Group:		System/Libraries
 %endif
-License:	LGPL-2.0
 %if 0%{?rhel} || 0%{?fedora}
 Obsoletes:	ceph-libs < %{_epoch_prefix}%{version}-%{release}
 %endif
@@ -452,7 +449,6 @@ Summary:	RADOS headers
 %if 0%{?suse_version}
 Group:		Development/Libraries/C and C++
 %endif
-License:	LGPL-2.0
 Requires:	librados2 = %{_epoch_prefix}%{version}-%{release}
 Obsoletes:	ceph-devel < %{_epoch_prefix}%{version}-%{release}
 Provides:	librados2-devel = %{_epoch_prefix}%{version}-%{release}
@@ -466,7 +462,6 @@ Summary:	RADOS gateway client library
 %if 0%{?suse_version}
 Group:		System/Libraries
 %endif
-License:	LGPL-2.0
 Requires:	librados2 = %{_epoch_prefix}%{version}-%{release}
 %description -n librgw2
 This package provides a library implementation of the RADOS gateway
@@ -477,7 +472,6 @@ Summary:	RADOS gateway client library
 %if 0%{?suse_version}
 Group:		Development/Libraries/C and C++
 %endif
-License:	LGPL-2.0
 Requires:	librados-devel = %{_epoch_prefix}%{version}-%{release}
 Requires:	librgw2 = %{_epoch_prefix}%{version}-%{release}
 Provides:	librgw2-devel = %{_epoch_prefix}%{version}-%{release}
@@ -491,7 +485,6 @@ Summary:	Python 2 libraries for the RADOS gateway
 %if 0%{?suse_version}
 Group:		Development/Languages/Python
 %endif
-License:	LGPL-2.0
 Requires:	librgw2 = %{_epoch_prefix}%{version}-%{release}
 Requires:	python-rados = %{_epoch_prefix}%{version}-%{release}
 Obsoletes:	python-ceph < %{_epoch_prefix}%{version}-%{release}
@@ -504,7 +497,6 @@ Summary:	Python 3 libraries for the RADOS gateway
 %if 0%{?suse_version}
 Group:		Development/Languages/Python
 %endif
-License:	LGPL-2.0
 Requires:	librgw2 = %{_epoch_prefix}%{version}-%{release}
 Requires:	python%{python3_pkgversion}-rados = %{_epoch_prefix}%{version}-%{release}
 %description -n python%{python3_pkgversion}-rgw
@@ -516,7 +508,6 @@ Summary:	Python 2 libraries for the RADOS object store
 %if 0%{?suse_version}
 Group:		Development/Languages/Python
 %endif
-License:	LGPL-2.0
 Requires:	librados2 = %{_epoch_prefix}%{version}-%{release}
 Obsoletes:	python-ceph < %{_epoch_prefix}%{version}-%{release}
 %description -n python-rados
@@ -528,7 +519,6 @@ Summary:	Python 3 libraries for the RADOS object store
 %if 0%{?suse_version}
 Group:		Development/Languages/Python
 %endif
-License:	LGPL-2.0
 Requires:	python%{python3_pkgversion}
 Requires:	librados2 = %{_epoch_prefix}%{version}-%{release}
 %description -n python%{python3_pkgversion}-rados
@@ -540,7 +530,6 @@ Summary:	RADOS striping interface
 %if 0%{?suse_version}
 Group:		System/Libraries
 %endif
-License:	LGPL-2.0
 Requires:	librados2 = %{_epoch_prefix}%{version}-%{release}
 %description -n libradosstriper1
 Striping interface built on top of the rados library, allowing
@@ -552,7 +541,6 @@ Summary:	RADOS striping interface headers
 %if 0%{?suse_version}
 Group:		Development/Libraries/C and C++
 %endif
-License:	LGPL-2.0
 Requires:	libradosstriper1 = %{_epoch_prefix}%{version}-%{release}
 Requires:	librados-devel = %{_epoch_prefix}%{version}-%{release}
 Obsoletes:	ceph-devel < %{_epoch_prefix}%{version}-%{release}
@@ -567,7 +555,6 @@ Summary:	RADOS block device client library
 %if 0%{?suse_version}
 Group:		System/Libraries
 %endif
-License:	LGPL-2.0
 Requires:	librados2 = %{_epoch_prefix}%{version}-%{release}
 %if 0%{?suse_version}
 Requires(post): coreutils
@@ -586,7 +573,6 @@ Summary:	RADOS block device headers
 %if 0%{?suse_version}
 Group:		Development/Libraries/C and C++
 %endif
-License:	LGPL-2.0
 Requires:	librbd1 = %{_epoch_prefix}%{version}-%{release}
 Requires:	librados-devel = %{_epoch_prefix}%{version}-%{release}
 Obsoletes:	ceph-devel < %{_epoch_prefix}%{version}-%{release}
@@ -601,7 +587,6 @@ Summary:	Python 2 libraries for the RADOS block device
 %if 0%{?suse_version}
 Group:		Development/Languages/Python
 %endif
-License:	LGPL-2.0
 Requires:	librbd1 = %{_epoch_prefix}%{version}-%{release}
 Requires:	python-rados = %{_epoch_prefix}%{version}-%{release}
 Obsoletes:	python-ceph < %{_epoch_prefix}%{version}-%{release}
@@ -614,7 +599,6 @@ Summary:	Python 3 libraries for the RADOS block device
 %if 0%{?suse_version}
 Group:		Development/Languages/Python
 %endif
-License:	LGPL-2.0
 Requires:	librbd1 = %{_epoch_prefix}%{version}-%{release}
 Requires:	python%{python3_pkgversion}-rados = %{_epoch_prefix}%{version}-%{release}
 %description -n python%{python3_pkgversion}-rbd
@@ -626,7 +610,6 @@ Summary:	Ceph distributed file system client library
 %if 0%{?suse_version}
 Group:		System/Libraries
 %endif
-License:	LGPL-2.0
 %if 0%{?rhel} || 0%{?fedora}
 Obsoletes:	ceph-libs < %{_epoch_prefix}%{version}-%{release}
 Obsoletes:	ceph-libcephfs
@@ -642,7 +625,6 @@ Summary:	Ceph distributed file system headers
 %if 0%{?suse_version}
 Group:		Development/Libraries/C and C++
 %endif
-License:	LGPL-2.0
 Requires:	libcephfs2 = %{_epoch_prefix}%{version}-%{release}
 Requires:	librados-devel = %{_epoch_prefix}%{version}-%{release}
 Obsoletes:	ceph-devel < %{_epoch_prefix}%{version}-%{release}
@@ -657,7 +639,6 @@ Summary:	Python 2 libraries for Ceph distributed file system
 %if 0%{?suse_version}
 Group:		Development/Languages/Python
 %endif
-License:	LGPL-2.0
 Requires:	libcephfs2 = %{_epoch_prefix}%{version}-%{release}
 %if 0%{?suse_version}
 Recommends: python-rados = %{_epoch_prefix}%{version}-%{release}
@@ -672,7 +653,6 @@ Summary:	Python 3 libraries for Ceph distributed file system
 %if 0%{?suse_version}
 Group:		Development/Languages/Python
 %endif
-License:	LGPL-2.0
 Requires:	libcephfs2 = %{_epoch_prefix}%{version}-%{release}
 Requires:	python%{python3_pkgversion}-rados = %{_epoch_prefix}%{version}-%{release}
 %description -n python%{python3_pkgversion}-cephfs
@@ -684,7 +664,6 @@ Summary:	Python 3 utility libraries for Ceph CLI
 %if 0%{?suse_version}
 Group:		Development/Languages/Python
 %endif
-License:	LGPL-2.0
 %description -n python%{python3_pkgversion}-ceph-argparse
 This package contains types and routines for Python 3 used by the Ceph CLI as
 well as the RESTful interface. These have to do with querying the daemons for
@@ -697,7 +676,6 @@ Summary:	Ceph benchmarks and test tools
 %if 0%{?suse_version}
 Group:		System/Benchmark
 %endif
-License:	LGPL-2.0
 Requires:	ceph-common
 Requires:	xmlstarlet
 Requires:	jq
@@ -712,7 +690,6 @@ Summary:	Java Native Interface library for CephFS Java bindings
 %if 0%{?suse_version}
 Group:		System/Libraries
 %endif
-License:	LGPL-2.0
 Requires:	java
 Requires:	libcephfs2 = %{_epoch_prefix}%{version}-%{release}
 %description -n libcephfs_jni1
@@ -724,7 +701,6 @@ Summary:	Development files for CephFS Java Native Interface library
 %if 0%{?suse_version}
 Group:		Development/Libraries/Java
 %endif
-License:	LGPL-2.0
 Requires:	java
 Requires:	libcephfs_jni1 = %{_epoch_prefix}%{version}-%{release}
 Obsoletes:	ceph-devel < %{_epoch_prefix}%{version}-%{release}
@@ -739,7 +715,6 @@ Summary:	Java libraries for the Ceph File System
 %if 0%{?suse_version}
 Group:		System/Libraries
 %endif
-License:	LGPL-2.0
 Requires:	java
 Requires:	libcephfs_jni1 = %{_epoch_prefix}%{version}-%{release}
 Requires:       junit
@@ -752,7 +727,6 @@ This package contains the Java libraries for the Ceph File System.
 %package -n rados-objclass-devel
 Summary:        RADOS object class development kit
 Group:          Development/Libraries
-License:        LGPL-2.0
 Requires:       librados2-devel = %{_epoch_prefix}%{version}-%{release}
 %description -n rados-objclass-devel
 This package contains libraries and headers needed to develop RADOS object
@@ -782,7 +756,6 @@ Summary:	Compatibility package for Cephs python libraries
 %if 0%{?suse_version}
 Group:		Development/Languages/Python
 %endif
-License:	LGPL-2.0
 Obsoletes:	python-ceph
 Requires:	python-rados = %{_epoch_prefix}%{version}-%{release}
 Requires:	python-rbd = %{_epoch_prefix}%{version}-%{release}
