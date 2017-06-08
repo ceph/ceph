@@ -9496,25 +9496,7 @@ void MDCache::eval_remote(CDentry *remote_dn)
   CDentry *primary_dn = in->get_projected_parent_dn();
   assert(primary_dn != NULL);
   if (primary_dn->get_dir()->get_inode()->is_stray()) {
-    if (in->is_auth()) {
-      dout(20) << __func__ << ": have auth for inode, evaluating" << dendl;
-
-      stray_manager.eval_remote_stray(primary_dn, remote_dn);
-    } else {
-      dout(20) << __func__ << ": do not have auth for inode, migrating " << dendl;
-      /*
-       * Inodes get filed into a stray dentry when a client unlinks
-       * the primary DN for them.  However, that doesn't mean there
-       * isn't a remote DN still in the world.  The remote DN just
-       * ends up pointing at a stray.  Strays can pretty much live
-       * forever in this scenario.
-       *
-       * Therefore, we have a special behaviour here: migrate a stray
-       * to <me> when <I> handle a client request with a trace referring
-       * to a stray inode on another MDS.
-       */
-      stray_manager.migrate_stray(primary_dn, mds->get_nodeid());
-    }
+    stray_manager.eval_remote_stray(primary_dn, remote_dn);
   } else {
     dout(20) << __func__ << ": inode's primary dn not stray" << dendl;
   }
