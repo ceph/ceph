@@ -1,3 +1,5 @@
+# centos btrfs hits ENOSPC all the time :(
+os_type: ubuntu
 overrides:
   ceph:
     fs: btrfs
