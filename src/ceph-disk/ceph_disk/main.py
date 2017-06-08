@@ -1307,27 +1307,15 @@ def _dmcrypt_map(
         rawdev,
     ] + cryptsetup_parameters
 
-    def run(args, stdin):
-        LOG.info(" ".join(args))
-        process = subprocess.Popen(
-            args,
-            stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE)
-        out, err = process.communicate(stdin)
-        LOG.debug(out)
-        LOG.error(err)
-        assert process.returncode == 0
-
     try:
         if luks:
             if format_dev:
-                run(luksFormat_args, key)
-            run(luksOpen_args, key)
+                command_with_stdin(luksFormat_args, key)
+            command_with_stdin(luksOpen_args, key)
         else:
             # Plain mode has no format function, nor any validation
             # that the key is correct.
-            run(create_args, key)
+            command_with_stdin(create_args, key)
         # set proper ownership of mapped device
         command_check_call(['chown', 'ceph:ceph', dev])
         return dev
