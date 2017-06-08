@@ -234,10 +234,17 @@ void RGWBL::format_opslog_entry(struct rgw_log_entry& entry, bufferlist *buffer)
   oname = entry.obj.name.empty() ? "-" : entry.obj.name;
   oversion_id = entry.obj.instance.empty() ? "-" : entry.obj.instance;
 
+  struct tm entry_time;
+  time_t tt = entry.time.sec();
+  localtime_r(&tt, &entry_time);
+  char time_buffer[29];
+  strftime(time_buffer, 29, "[%d/%b/%Y:%H:%M:%S %z]", &entry_time);
+  std::string time(time_buffer);
+
                                                                                // S3 BL field
   pending_column << entry.bucket_owner.id << row_separator                     // Bucket Owner
                  << entry.bucket << row_separator                              // Bucket
-                 << "[" << entry.time << "]" << row_separator                  // Time
+                 << time << row_separator                                      // Time
                  << entry.remote_addr << row_separator                         // Remote IP
                  << entry.user << row_separator                                // Requester
                  << "-" << row_separator                                       // Request ID
