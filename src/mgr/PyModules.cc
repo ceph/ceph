@@ -433,7 +433,9 @@ void PyModules::shutdown()
     auto module = i.second.get();
     const auto& name = i.first;
     dout(10) << "waiting for module " << name << " to shutdown" << dendl;
+    lock.Unlock();
     module->shutdown();
+    lock.Lock();
     dout(10) << "module " << name << " shutdown" << dendl;
   }
 
