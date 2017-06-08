@@ -1925,6 +1925,87 @@ int RGWHandler_REST::validate_bucket_name(const string& bucket)
     return -ERR_INVALID_BUCKET_NAME;
   }
 
+  if (bucket[0] == '.' || bucket[bucket.size()-1] == '.') {
+    // Name cannot start/end with a period
+    return -ERR_INVALID_BUCKET_NAME;
+  }
+
+  for (size_t i=0; i<bucket.size(); ++i)
+  {
+    // Bucket names can contain lowercase letters, numbers, and hyphens.
+    if (!(islower(bucket[i]) ||
+        isdigit(bucket[i]) ||
+        bucket[i] == '-' ||
+        bucket[i] == '.' )) {
+      return -ERR_INVALID_BUCKET_NAME;
+    }
+  }
+
+  // Bucket names must be a series of one or more labels.
+  // Adjacent labels are separated by a single period (.).
+  // Bucket names can contain lowercase letters, numbers, and hyphens.
+  // Each label must start and end with a lowercase letter or a number.
+  vector<string> labels;
+
+  size_t pre_pos = 0;
+  size_t period_pos = 0;
+  do {
+    period_pos = bucket.find('.', pre_pos);
+    if (period_pos == string::npos) {
+      labels.push_back(bucket.substr(pre_pos));
+      break;
+    }
+    else {
+      labels.push_back(bucket.substr(pre_pos, period_pos - pre_pos));
+      pre_pos = period_pos + 1;
+    }
+  }
+  while (true);
+
+  for (auto& i: labels) {
+    if (i.empty()) {
+      return -ERR_INVALID_BUCKET_NAME;
+    }
+
+    if (!((islower(i.front()) || isdigit(i.front())) &&
+        (islower(i.back()) || isdigit(i.back())))) {
+      return -ERR_INVALID_OBJECT_NAME;
+    }
+  }
+
+  // Bucket names must not be formatted as an IP address (e.g., 192.168.5.4).
+  // FIXME: supports ipv6 ?
+
+  bool is_ip_address = true;
+
+  if (labels.size() != 4) {
+    is_ip_address = false;
+  }
+  else {
+    for (auto& i: labels) {
+      if (i.size() > 3) {
+        is_ip_address = false;
+        break;
+      }
+      for (auto& c:i) {
+        if (!isdigit(c)) {
+          is_ip_address = false;
+          break;
+        }
+      }
+      int tmp = atoi(i.c_str());
+      if (tmp > 255 || tmp < 0) {
+        is_ip_address = false;
+        break;
+      }
+    }
+  }
+
+  if (is_ip_address) {
+    return -ERR_INVALID_OBJECT_NAME;
+  }
+
+
   return 0;
 }
 
