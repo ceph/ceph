@@ -31,6 +31,7 @@ from mgr_module import MgrModule, CommandResult
 from types import OsdMap, NotFound, Config, FsMap, MonMap, \
     PgSummary, Health, MonStatus
 
+import rados
 from rbd_ls import RbdLs
 from cephfs_clients import CephFSClients
 
@@ -63,6 +64,9 @@ class Module(MgrModule):
 
         self.log_buffer = collections.deque(maxlen=LOG_BUFFER_SIZE)
 
+        # Keep a librados instance for those that need it.
+        self._rados = None
+
         # Stateful instances of RbdLs, hold cached results.  Key to dict
         # is pool name.
         self.rbd_ls = {}
@@ -74,6 +78,28 @@ class Module(MgrModule):
         # A short history of pool df stats
         self.pool_stats = defaultdict(lambda: defaultdict(
             lambda: collections.deque(maxlen=10)))
+
+    @property
+    def rados(self):
+        """
+        A librados instance to be shared by any classes within
+        this mgr module that want one.
+        """
+        if self._rados:
+            return self._rados
+
+        from mgr_module import ceph_state
+        ctx_capsule = ceph_state.get_context()
+        self._rados = rados.Rados(context=ctx_capsule)
+        self._rados.connect()
+
+        return self._rados
+
+    def get_localized_config(self, key):
+        r = self.get_config(self.get_mgr_id() + '/' + key)
+        if r is None:
+            r = self.get_config(key)
+        return r
 
     def update_pool_stats(self):
         df = global_instance().get("df")
@@ -103,26 +129,26 @@ class Module(MgrModule):
             data['crush'] = self.get("osd_map_crush")
             data['crush_map_text'] = self.get("osd_map_crush_map_text")
             data['osd_metadata'] = self.get("osd_metadata")
-            obj = OsdMap(data['epoch'], data)
+            obj = OsdMap(data)
         elif object_type == Config:
             data = self.get("config")
-            obj = Config(0, data)
+            obj = Config( data)
         elif object_type == MonMap:
             data = self.get("mon_map")
-            obj = MonMap(data['epoch'], data)
+            obj = MonMap(data)
         elif object_type == FsMap:
             data = self.get("fs_map")
-            obj = FsMap(data['epoch'], data)
+            obj = FsMap(data)
         elif object_type == PgSummary:
             data = self.get("pg_summary")
             self.log.debug("JSON: {0}".format(data))
-            obj = PgSummary(0, data)
+            obj = PgSummary(data)
         elif object_type == Health:
             data = self.get("health")
-            obj = Health(0, json.loads(data['json']))
+            obj = Health(json.loads(data['json']))
         elif object_type == MonStatus:
             data = self.get("mon_status")
-            obj = MonStatus(0, json.loads(data['json']))
+            obj = MonStatus(json.loads(data['json']))
         else:
             raise NotImplementedError(object_type)
 
@@ -144,6 +170,11 @@ class Module(MgrModule):
         log.info("Stopping server...")
         cherrypy.engine.exit()
         log.info("Stopped server")
+
+        log.info("Stopping librados...")
+        if self._rados:
+            self._rados.shutdown()
+        log.info("Stopped librados.")
 
     def get_latest(self, daemon_type, daemon_name, stat):
         data = self.get_counter(daemon_type, daemon_name, stat)[stat]
@@ -546,6 +577,7 @@ class Module(MgrModule):
                 )
 
             def _servers(self):
+                servers = global_instance().list_servers()
                 return {
                     'servers': global_instance().list_servers()
                 }
