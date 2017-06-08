@@ -427,6 +427,26 @@ def command(arguments, **kwargs):
     return _bytes2str(out), _bytes2str(err), process.returncode
 
 
+def command_with_stdin(arguments, stdin):
+    LOG.info("Running command with stdin: " + " ".join(arguments))
+    process = subprocess.Popen(
+        arguments,
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE)
+    out, err = process.communicate(stdin)
+    LOG.debug(out)
+    if process.returncode != 0:
+        LOG.error(err)
+        raise SystemExit(
+            "'{cmd}' failed with status code {returncode}".format(
+                cmd=arguments,
+                returncode=process.returncode,
+            )
+        )
+    return out
+
+
 def _bytes2str(string):
     return string.decode('utf-8') if isinstance(string, bytes) else string
 
