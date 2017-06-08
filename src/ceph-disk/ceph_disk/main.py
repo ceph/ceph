@@ -36,6 +36,7 @@ import tempfile
 import uuid
 import time
 import shlex
+import shutil
 import pwd
 import grp
 import textwrap
@@ -1030,30 +1031,50 @@ def allocate_osd_id(
     cluster,
     fsid,
     keyring,
+    path,
 ):
     """
-    Accocates an OSD id on the given cluster.
+    Allocates an OSD id on the given cluster.
 
     :raises: Error if the call to allocate the OSD id fails.
     :return: The allocated OSD id.
     """
+    lockbox_path = os.path.join(STATEDIR, 'osd-lockbox', fsid)
+    lockbox_osd_id = read_one_line(lockbox_path, 'whoami')
+    osd_keyring = os.path.join(path, 'keyring')
+    if lockbox_osd_id:
+        LOG.debug('Getting OSD id from Lockbox...')
+        osd_id = lockbox_osd_id
+        shutil.move(os.path.join(lockbox_path, 'osd_keyring'),
+                    osd_keyring)
+        path_set_context(osd_keyring)
+        os.unlink(os.path.join(lockbox_path, 'whoami'))
+        return osd_id
 
     LOG.debug('Allocating OSD id...')
+    secrets = Secrets()
     try:
-        osd_id = _check_output(
-            args=[
+        wanttobe = read_one_line(path, 'wanttobe')
+        if os.path.exists(os.path.join(path, 'wanttobe')):
+            os.unlink(os.path.join(path, 'wanttobe'))
+        id_arg = wanttobe and [wanttobe] or []
+        osd_id = command_with_stdin(
+            [
                 'ceph',
                 '--cluster', cluster,
                 '--name', 'client.bootstrap-osd',
                 '--keyring', keyring,
-                'osd', 'create', '--concise',
+                '-i', '/dev/fd/0',
+                'osd', 'new',
                 fsid,
-            ],
+            ] + id_arg,
+            secrets.get_json()
         )
     except subprocess.CalledProcessError as e:
         raise Error('ceph osd create failed', e, e.output)
     osd_id = must_be_one_line(osd_id)
     check_osd_id(osd_id)
+    secrets.write_osd_keyring(osd_keyring, osd_id)
     return osd_id
 
 
@@ -1928,6 +1949,11 @@ class Prepare(object):
             help='unique OSD uuid to assign this disk to',
         )
         parser.add_argument(
+            '--osd-id',
+            metavar='ID',
+            help='unique OSD id to assign this disk to',
+        )
+        parser.add_argument(
             '--crush-device-class',
             help='crush device class to assign this disk to',
         )
@@ -2613,7 +2639,7 @@ class LockboxSecrets(Secrets):
         assert ret == 0
 
         self.keys.update({
-            'dmcrypt_key': base64.b64encode(key),
+            'dmcrypt_key': base64_key,
             'cephx_lockbox_secret': secret.strip(),
         })
 
@@ -2682,42 +2708,28 @@ class Lockbox(object):
             self.partition = self.create_partition()
 
     def create_key(self):
-        key_size = CryptHelpers.get_dmcrypt_keysize(self.args)
-        key = open('/dev/urandom', 'rb').read(key_size / 8)
-        base64_key = base64.b64encode(key)
         cluster = self.args.cluster
         bootstrap = self.args.prepare_key_template.format(cluster=cluster,
                                                           statedir=STATEDIR)
-        command_check_call(
-            [
-                'ceph',
-                '--cluster', cluster,
-                '--name', 'client.bootstrap-osd',
-                '--keyring', bootstrap,
-                'config-key',
-                'put',
-                'dm-crypt/osd/' + self.args.osd_uuid + '/luks',
-                base64_key,
-            ],
-        )
-        keyring, stderr, ret = command(
-            [
-                'ceph',
-                '--cluster', cluster,
-                '--name', 'client.bootstrap-osd',
-                '--keyring', bootstrap,
-                'auth',
-                'get-or-create',
-                'client.osd-lockbox.' + self.args.osd_uuid,
-                'mon',
-                ('allow command "config-key get" with key="dm-crypt/osd/' +
-                 self.args.osd_uuid + '/luks"'),
-            ],
-        )
-        LOG.debug("stderr " + stderr)
-        assert ret == 0
         path = self.get_mount_point()
-        open(os.path.join(path, 'keyring'), 'w').write(keyring)
+        secrets = LockboxSecrets(self.args)
+        id_arg = self.args.osd_id and [self.args.osd_id] or []
+        osd_id = command_with_stdin(
+            [
+                'ceph',
+                '--cluster', cluster,
+                '--name', 'client.bootstrap-osd',
+                '--keyring', bootstrap,
+                '-i', '/dev/fd/0',
+                'osd', 'new', self.args.osd_uuid,
+            ] + id_arg,
+            secrets.get_json()
+        )
+        secrets.write_lockbox_keyring(path, self.args.osd_uuid)
+        osd_id = must_be_one_line(osd_id)
+        check_osd_id(osd_id)
+        write_one_line(path, 'whoami', osd_id)
+        secrets.write_osd_keyring(os.path.join(path, 'osd_keyring'), osd_id)
         write_one_line(path, 'key-management-mode', KEY_MANAGEMENT_MODE_V1)
 
     def symlink_spaces(self, path):
@@ -2878,6 +2890,8 @@ class PrepareData(object):
 
         write_one_line(path, 'ceph_fsid', self.args.cluster_uuid)
         write_one_line(path, 'fsid', self.args.osd_uuid)
+        if self.args.osd_id:
+            write_one_line(path, 'wanttobe', self.args.osd_id)
         if self.args.crush_device_class:
             write_one_line(path, 'crush_device_class',
                            self.args.crush_device_class)
@@ -3129,12 +3143,10 @@ def mkfs(
                 'ceph-osd',
                 '--cluster', cluster,
                 '--mkfs',
-                '--mkkey',
                 '-i', osd_id,
                 '--monmap', monmap,
                 '--osd-data', path,
                 '--osd-uuid', fsid,
-                '--keyring', os.path.join(path, 'keyring'),
                 '--setuser', get_ceph_user(),
                 '--setgroup', get_ceph_group(),
             ],
@@ -3145,58 +3157,17 @@ def mkfs(
                 'ceph-osd',
                 '--cluster', cluster,
                 '--mkfs',
-                '--mkkey',
                 '-i', osd_id,
                 '--monmap', monmap,
                 '--osd-data', path,
                 '--osd-journal', os.path.join(path, 'journal'),
                 '--osd-uuid', fsid,
-                '--keyring', os.path.join(path, 'keyring'),
                 '--setuser', get_ceph_user(),
                 '--setgroup', get_ceph_group(),
             ],
         )
     else:
         raise Error('unrecognized objectstore type %s' % osd_type)
-
-
-def auth_key(
-    path,
-    cluster,
-    osd_id,
-    keyring,
-):
-    try:
-        # try dumpling+ cap scheme
-        command_check_call(
-            [
-                'ceph',
-                '--cluster', cluster,
-                '--name', 'client.bootstrap-osd',
-                '--keyring', keyring,
-                'auth', 'add', 'osd.{osd_id}'.format(osd_id=osd_id),
-                '-i', os.path.join(path, 'keyring'),
-                'osd', 'allow *',
-                'mon', 'allow profile osd',
-            ],
-        )
-    except subprocess.CalledProcessError as err:
-        if err.returncode == errno.EINVAL:
-            # try old cap scheme
-            command_check_call(
-                [
-                    'ceph',
-                    '--cluster', cluster,
-                    '--name', 'client.bootstrap-osd',
-                    '--keyring', keyring,
-                    'auth', 'add', 'osd.{osd_id}'.format(osd_id=osd_id),
-                    '-i', os.path.join(path, 'keyring'),
-                    'osd', 'allow *',
-                    'mon', 'allow rwx',
-                ],
-            )
-        else:
-            raise
 
 
 def get_mount_point(cluster, osd_id):
@@ -3712,6 +3683,7 @@ def activate(
             cluster=cluster,
             fsid=fsid,
             keyring=keyring,
+            path=path,
         )
         write_one_line(path, 'whoami', osd_id)
     LOG.debug('OSD id is %s', osd_id)
@@ -3752,13 +3724,6 @@ def activate(
                 pass
 
     if not os.path.exists(os.path.join(path, 'active')):
-        LOG.debug('Authorizing OSD key...')
-        auth_key(
-            path=path,
-            cluster=cluster,
-            osd_id=osd_id,
-            keyring=keyring,
-        )
         write_one_line(path, 'active', 'ok')
     LOG.debug('%s osd.%s data dir is ready at %s', cluster, osd_id, path)
     return (osd_id, cluster)
