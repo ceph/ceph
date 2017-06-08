@@ -420,7 +420,7 @@ recovery operations to ensure optimal performance during recovery.
               ``osd client op priority``.
 
 :Type: 32-bit Integer
-:Default: ``10`` 
+:Default: ``3`` 
 :Valid Range: 1-63
 
 
@@ -654,7 +654,7 @@ perform well in a degraded state.
               increased load on the cluster.
 
 :Type: 32-bit Integer
-:Default: ``15``
+:Default: ``3``
 
 
 ``osd recovery max chunk`` 
