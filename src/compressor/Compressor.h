@@ -16,10 +16,10 @@
 #define CEPH_COMPRESSOR_H
 
 
-#include <boost/optional.hpp>
 #include <memory>
 #include <string>
-
+#include <boost/optional.hpp>
+#include "include/assert.h"	// boost clobbers this
 #include "include/buffer.h"
 #include "include/int_types.h"
 
