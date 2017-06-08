@@ -1173,6 +1173,8 @@ OPTION(bluestore_debug_inject_read_err, OPT_BOOL, false)
 OPTION(bluestore_debug_randomize_serial_transaction, OPT_INT, 0)
 OPTION(bluestore_debug_omit_block_device_write, OPT_BOOL, false)
 OPTION(bluestore_debug_fsck_abort, OPT_BOOL, false)
+OPTION(bluestore_debug_omit_kv_commit, OPT_BOOL, false)
+OPTION(bluestore_debug_permit_any_bdev_label, OPT_BOOL, false)
 OPTION(bluestore_shard_finishers, OPT_BOOL, false)
 
 OPTION(kstore_max_ops, OPT_U64, 512)
