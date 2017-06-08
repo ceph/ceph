@@ -768,7 +768,7 @@ namespace rgw {
     fh_cache.drain(ObjUnref(this),
 		  RGWFileHandle::FHCache::FLAG_LOCK);
     rgwlib.get_fe()->get_process()->unregister_fs(this);
-    rele();
+    intrusive_ptr_release();
   } /* RGWLibFS::close */
 
   inline std::ostream& operator<<(std::ostream &os, struct timespec const &ts) {
