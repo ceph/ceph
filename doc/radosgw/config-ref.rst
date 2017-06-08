@@ -394,6 +394,13 @@ instances or all radosgw-admin commands can be put into the ``[global]`` or the
 :Default: ``-1``
 
 
+``rgw verify ssl``
+
+:Description: Verify SSL certificates while making requests.
+:Type: Boolean
+:Default: ``true``
+
+
 Regions
 =======
 
