@@ -1130,6 +1130,7 @@ void PGMap::apply_incremental(CephContext *cct, const Incremental& inc)
     if (t != osd_stat.end()) {
       stat_osd_sub(t->first, t->second);
       osd_stat.erase(t);
+      osd_epochs.erase(*p);
     }
 
     // remove these old osds from full/nearfull set(s), too
