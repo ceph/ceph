@@ -3895,3 +3895,8 @@ int OSDMap::calc_pg_upmaps(
   ldout(cct, 10) << " end deviation " << end_deviation << dendl;
   return num_changed;
 }
+
+int OSDMap::get_osds_by_bucket_name(const string &name, set<int> *osds) const
+{
+  return crush->get_leaves(name, osds);
+}

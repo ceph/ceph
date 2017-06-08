@@ -1221,6 +1221,8 @@ public:
     Incremental *pending_inc
     );
 
+  int get_osds_by_bucket_name(const string &name, set<int> *osds) const;
+
   /*
    * handy helpers to build simple maps...
    */
