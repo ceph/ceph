@@ -834,6 +834,8 @@ std::string pg_state_string(int state)
     oss << "snaptrim+";
   if (state & PG_STATE_SNAPTRIM_WAIT)
     oss << "snaptrim_wait+";
+  if (state & PG_STATE_SNAPTRIM_ERROR)
+    oss << "snaptrim_error+";
   string ret(oss.str());
   if (ret.length() > 0)
     ret.resize(ret.length() - 1);
@@ -891,6 +893,8 @@ int pg_string_state(const std::string& state)
     type = PG_STATE_SNAPTRIM;
   else if (state == "snaptrim_wait")
     type = PG_STATE_SNAPTRIM_WAIT;
+  else if (state == "snaptrim_error")
+    type = PG_STATE_SNAPTRIM_ERROR;
   else
     type = -1;
   return type;
