@@ -157,7 +157,11 @@ CHECK_STRUCT_HAS_MEMBER("struct stat" st_mtim.tv_nsec sys/stat.h
 CHECK_STRUCT_HAS_MEMBER("struct stat" st_mtimespec.tv_nsec sys/stat.h
   HAVE_STAT_ST_MTIMESPEC_TV_NSEC LANGUAGE C)
 
-set(CEPH_MAN_DIR "share/man" CACHE STRING "Install location for man pages (relative to prefix).")
+if(FREEBSD)
+  set(CEPH_MAN_DIR "man" CACHE STRING "Install location for man pages (relative to prefix).")
+else()
+  set(CEPH_MAN_DIR "share/man" CACHE STRING "Install location for man pages (relative to prefix).")
+endif()
 
 option(ENABLE_SHARED "build shared libraries" ON)
 if(ENABLE_SHARED)
