@@ -1783,6 +1783,14 @@ bool RGWFormPost::is_integral()
 {
   const std::string form_signature = get_part_str(ctrl_parts, "signature");
 
+  try {
+    get_owner_info(s, *s->user);
+    s->auth.identity = rgw::auth::transform_old_authinfo(s);
+  } catch (...) {
+    ldout(s->cct, 5) << "cannot get user_info of account's owner" << dendl;
+    return false;
+  }
+
   for (const auto& kv : s->user->temp_url_keys) {
     const int temp_url_key_num = kv.first;
     const string& temp_url_key = kv.second;
@@ -1813,6 +1821,58 @@ bool RGWFormPost::is_integral()
   }
 
   return false;
+}
+
+void RGWFormPost::get_owner_info(const req_state* const s,
+                                   RGWUserInfo& owner_info) const
+{
+  /* We cannot use req_state::bucket_name because it isn't available
+   * now. It will be initialized in RGWHandler_REST_SWIFT::postauth_init(). */
+  const string& bucket_name = s->init_state.url_bucket;
+
+  /* TempURL in Formpost only requires that bucket name is specified. */
+  if (bucket_name.empty()) {
+    throw -EPERM;
+  }
+
+  string bucket_tenant;
+  if (!s->account_name.empty()) {
+    RGWUserInfo uinfo;
+    bool found = false;
+
+    const rgw_user uid(s->account_name);
+    if (uid.tenant.empty()) {
+      const rgw_user tenanted_uid(uid.id, uid.id);
+
+      if (rgw_get_user_info_by_uid(store, tenanted_uid, uinfo) >= 0) {
+        /* Succeeded. */
+        bucket_tenant = uinfo.user_id.tenant;
+        found = true;
+      }
+    }
+
+    if (!found && rgw_get_user_info_by_uid(store, uid, uinfo) < 0) {
+      throw -EPERM;
+    } else {
+      bucket_tenant = uinfo.user_id.tenant;
+    }
+  }
+
+  /* Need to get user info of bucket owner. */
+  RGWBucketInfo bucket_info;
+  int ret = store->get_bucket_info(*static_cast<RGWObjectCtx *>(s->obj_ctx),
+                                   bucket_tenant, bucket_name,
+                                   bucket_info, nullptr);
+  if (ret < 0) {
+    throw ret;
+  }
+
+  ldout(s->cct, 20) << "temp url user (bucket owner): " << bucket_info.owner
+                 << dendl;
+
+  if (rgw_get_user_info_by_uid(store, bucket_info.owner, owner_info) < 0) {
+    throw -EPERM;
+  }
 }
 
 int RGWFormPost::get_params()
@@ -1944,8 +2004,9 @@ bool RGWFormPost::is_next_file_to_upload()
     const auto field_iter = part.fields.find("Content-Disposition");
     if (std::end(part.fields) != field_iter) {
       const auto& params = field_iter->second.params;
+      const auto& filename_iter = params.find("filename");
 
-      if (std::end(params) != params.find("filename")) {
+      if (std::end(params) != filename_iter && ! filename_iter->second.empty()) {
         current_data_part = std::move(part);
         return true;
       }
