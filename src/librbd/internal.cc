@@ -667,11 +667,26 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
       for (auto &id_it : info.second) {
 	string name;
 	r = cls_client::dir_get_name(&ioctx, RBD_DIRECTORY, id_it, &name);
-	if (r < 0) {
-	  lderr(cct) << "Error looking up name for image id " << id_it
-		     << " in pool " << info.first.second << dendl;
-	  return r;
+	if (r < 0 && r != -ENOENT) {
+          lderr(cct) << "Error looking up name for image id " << id_it
+                     << " in pool " << info.first.second << dendl;
+          return r;
+        } else if (r == -ENOENT) {
+          cls::rbd::TrashImageSpec trash_spec;
+          r = cls_client::trash_get(&ioctx, id_it, &trash_spec);
+          if (r < 0) {
+            if (r != -EOPNOTSUPP && r != -ENOENT) {
+              lderr(cct) << "Error looking up name for image id " << id_it
+                         << " in rbd trash" << dendl;
+              return r;
+            }
+            return -ENOENT;
+          }
+
+          // the child image is in trash bin
+          continue;
 	}
+
 	names.insert(make_pair(info.first.second, name));
       }
     }
