@@ -123,7 +123,7 @@ uint32_t RGWAccessControlPolicy::get_perm(const rgw::auth::Identity& auth_identi
 
   /* Should we continue looking up even deeper? */
   if (nullptr != http_referer && (perm & perm_mask) != perm_mask) {
-    perm |= acl.get_referer_perm(http_referer, perm_mask);
+    perm = acl.get_referer_perm(http_referer, perm_mask);
   }
 
   ldout(cct, 5) << "-- Getting permissions done for identity=" << auth_identity

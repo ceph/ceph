@@ -216,6 +216,10 @@ struct ACLReferer {
   }
 
   bool is_match(boost::string_ref http_referer) const {
+    if ("*" == url_spec){
+      return true;
+    }
+
     const auto http_host = get_http_host(http_referer);
     if (!http_host || http_host->length() < url_spec.length()) {
       return false;
