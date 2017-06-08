@@ -7,6 +7,7 @@ import json
 import time
 import errno
 import inspect
+import tempfile
 import threading
 import traceback
 
@@ -197,17 +198,17 @@ class CommandsRequest(object):
 class Module(MgrModule):
     COMMANDS = [
         {
-            "cmd": "create_key name=key_name,type=CephString",
+            "cmd": "restful create-key name=key_name,type=CephString",
             "desc": "Create an API key with this name",
             "perm": "rw"
         },
         {
-            "cmd": "delete_key name=key_name,type=CephString",
+            "cmd": "restful delete-key name=key_name,type=CephString",
             "desc": "Delete an API key with this name",
             "perm": "rw"
         },
         {
-            "cmd": "list_keys",
+            "cmd": "restful list-keys",
             "desc": "List all API keys",
             "perm": "rw"
         },
@@ -233,10 +234,21 @@ class Module(MgrModule):
         except:
             self.log.error(str(traceback.format_exc()))
 
+    def get_localized_config(self, key):
+        r = self.get_config(self.get_mgr_id() + '/' + key)
+        if r is None:
+            r = self.get_config(key)
+        return r
+
+    def refresh_keys(self):
+        self.keys = {}
+        rawkeys = self.get_config_prefix('keys/') or {}
+        for k, v in rawkeys.iteritems():
+            self.keys[k[5:]] = v  # strip of keys/ prefix
 
     def _serve(self):
         # Load stored authentication keys
-        self.keys = self.get_config_json("keys") or {}
+        self.refresh_keys()
 
         jsonify._instance = jsonify.GenericJSON(
             sort_keys=True,
@@ -244,18 +256,38 @@ class Module(MgrModule):
             separators=(',', ': '),
         )
 
-        cert = self.get_config_json("cert") or '/etc/ceph/ceph-mgr-restful.crt'
-        pkey = self.get_config_json("pkey") or '/etc/ceph/ceph-mgr-restful.key'
+        server_addr = self.get_localized_config('server_addr') or '127.0.0.1'
+        server_port = int(self.get_localized_config('server_port') or '8003')
+        self.log.info('server_addr: %s server_port: %d',
+                      server_addr, server_port)
+
+        cert = self.get_localized_config("crt")
+        if cert is not None:
+            cert_tmp = tempfile.NamedTemporaryFile()
+            cert_tmp.write(cert)
+            cert_tmp.flush()
+            cert_fname = cert_tmp.name
+        else:
+            cert_fname = self.get_localized_config('crt_file') or '/etc/ceph/ceph-mgr-restful.crt'
+
+        pkey = self.get_localized_config("key")
+        if pkey is not None:
+            pkey_tmp = tempfile.NamedTemporaryFile()
+            pkey_tmp.write(pkey)
+            pkey_tmp.flush()
+            pkey_fname = pkey_tmp.name
+        else:
+            pkey_fname = self.get_localized_config('key_file') or '/etc/ceph/ceph-mgr-restful.key'
 
         # Create the HTTPS werkzeug server serving pecan app
         self.server = make_server(
-            host='0.0.0.0',
-            port=8003,
+            host=server_addr,
+            port=server_port,
             app=make_app(
                 root='restful.api.Root',
                 hooks = lambda: [ErrorHook()],
             ),
-            ssl_context=(cert, pkey),
+            ssl_context=(cert_fname, pkey_fname),
         )
 
         self.server.serve_forever()
@@ -300,13 +332,14 @@ class Module(MgrModule):
 
     def handle_command(self, command):
         self.log.warn("Handling command: '%s'" % str(command))
-        if command['prefix'] == "create_key":
+        if command['prefix'] == "restful create-key":
             if command['key_name'] in self.keys:
                 return 0, self.keys[command['key_name']], ""
 
             else:
-                self.keys[command['key_name']] = str(uuid4())
-                self.set_config_json('keys', self.keys)
+                key = str(uuid4())
+                self.keys[command['key_name']] = key
+                self.set_config('keys/' + command['key_name'], key)
 
             return (
                 0,
@@ -314,10 +347,10 @@ class Module(MgrModule):
                 "",
             )
 
-        elif command['prefix'] == "delete_key":
+        elif command['prefix'] == "restful delete-key":
             if command['key_name'] in self.keys:
                 del self.keys[command['key_name']]
-                self.set_config_json('keys', self.keys)
+                self.set_config('keys/' + command['key_name'], None)
 
             return (
                 0,
@@ -325,10 +358,11 @@ class Module(MgrModule):
                 "",
             )
 
-        elif command['prefix'] == "list_keys":
+        elif command['prefix'] == "restful list-keys":
+            self.refresh_keys()
             return (
                 0,
-                json.dumps(self.get_config_json('keys'), indent=2),
+                json.dumps(self.keys, indent=2),
                 "",
             )
 
