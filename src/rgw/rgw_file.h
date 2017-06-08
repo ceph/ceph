@@ -1536,11 +1536,11 @@ class RGWCreateBucketRequest : public RGWLibRequest,
 			       public RGWCreateBucket /* RGWOp */
 {
 public:
-  std::string& uri;
+  const std::string& bucket_name;
 
   RGWCreateBucketRequest(CephContext* _cct, RGWUserInfo *_user,
-			std::string& _uri)
-    : RGWLibRequest(_cct, _user), uri(_uri) {
+			std::string& _bname)
+    : RGWLibRequest(_cct, _user), bucket_name(_bname) {
     op = this;
   }
 
@@ -1568,6 +1568,7 @@ public:
     s->info.method = "PUT";
     s->op = OP_PUT;
 
+    string uri = "/" + bucket_name;
     /* XXX derp derp derp */
     s->relative_uri = uri;
     s->info.request_uri = uri; // XXX
@@ -1603,11 +1604,11 @@ class RGWDeleteBucketRequest : public RGWLibRequest,
 			       public RGWDeleteBucket /* RGWOp */
 {
 public:
-  std::string& uri;
+  const std::string& bucket_name;
 
   RGWDeleteBucketRequest(CephContext* _cct, RGWUserInfo *_user,
-			std::string& _uri)
-    : RGWLibRequest(_cct, _user), uri(_uri) {
+			std::string& _bname)
+    : RGWLibRequest(_cct, _user), bucket_name(_bname) {
     op = this;
   }
 
@@ -1630,6 +1631,7 @@ public:
     s->info.method = "DELETE";
     s->op = OP_DELETE;
 
+    string uri = "/" + bucket_name;
     /* XXX derp derp derp */
     s->relative_uri = uri;
     s->info.request_uri = uri; // XXX
