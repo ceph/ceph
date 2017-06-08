@@ -292,17 +292,18 @@ function test_activate_dir() {
     local dir=$1
     shift
 
-    run_mon $dir a
+    run_mon $dir a || return 1
+    run_mgr $dir x || return 1
     $@
 
-    local osd_data=$dir/dir
-    $mkdir -p $osd_data
-    test_activate $osd_data $osd_data || return 1
+    test_activate $dir $dir/dir || return 1
 }
 
 function test_activate_dir_bluestore() {
     local dir=$1
-    run_mon $dir a
+
+    run_mon $dir a || return 1
+    run_mgr $dir x || return 1
 
     local osd_data=$dir/dir
     $mkdir -p $osd_data
