@@ -1440,6 +1440,19 @@ function test_mon_osd()
   ceph osd rm-nodown all
   ! ceph health detail | grep 'nodown osd(s).*0.*1'
 
+  ids=`ceph osd ls-tree default`
+  for osd in $ids
+  do
+    ceph osd add-noout $osd
+    ceph osd add-nodown $osd
+  done
+  ceph -s | grep 'noout osd(s)'
+  ceph -s | grep 'nodown osd(s)'
+  ceph osd rm-noout any
+  ceph osd rm-nodown any
+  ! ceph -s | grep 'noout osd(s)'
+  ! ceph -s | grep 'nodown osd(s)'
+
   # make sure mark out preserves weight
   ceph osd reweight osd.0 .5
   ceph osd dump | grep ^osd.0 | grep 'weight 0.5'

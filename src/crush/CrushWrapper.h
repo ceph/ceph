@@ -637,6 +637,15 @@ public:
   int get_children(int id, list<int> *children);
 
   /**
+    * enumerate leaves(devices) of given node
+    *
+    * @param name parent bucket name
+    * @return 0 on success or a negative errno on error.
+    */
+  int get_leaves(const string &name, set<int> *leaves);
+  int _get_leaves(int id, list<int> *leaves); // worker
+
+  /**
    * insert an item into the map at a specific position
    *
    * Add an item as a specific location of the hierarchy.

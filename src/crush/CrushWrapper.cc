@@ -677,6 +677,64 @@ int CrushWrapper::get_children(int id, list<int> *children)
   return b->size;
 }
 
+int CrushWrapper::_get_leaves(int id, list<int> *leaves)
+{
+  assert(leaves);
+
+  // Already leaf?
+  if (id >= 0) {
+    leaves->push_back(id);
+    return 0;
+  }
+
+  crush_bucket *b = get_bucket(id);
+  if (IS_ERR(b)) {
+    return -ENOENT;
+  }
+
+  for (unsigned n = 0; n < b->size; n++) {
+    if (b->items[n] >= 0) {
+      leaves->push_back(b->items[n]);
+    } else {
+      // is a bucket, do recursive call
+      int r = _get_leaves(b->items[n], leaves);
+      if (r < 0) {
+        return r;
+      }
+    }
+  }
+
+  return 0; // all is well
+}
+
+int CrushWrapper::get_leaves(const string &name, set<int> *leaves)
+{
+  assert(leaves);
+  leaves->clear();
+
+  if (!name_exists(name)) {
+    return -ENOENT;
+  }
+
+  int id = get_item_id(name);
+  if (id >= 0) {
+    // already leaf
+    leaves->insert(id);
+    return 0;
+  }
+
+  list<int> unordered;
+  int r = _get_leaves(id, &unordered);
+  if (r < 0) {
+    return r;
+  }
+
+  for (auto &p : unordered) {
+    leaves->insert(p);
+  }
+
+  return 0;
+}
 
 int CrushWrapper::insert_item(CephContext *cct, int item, float weight, string name,
 			      const map<string,string>& loc)  // typename -> bucketname

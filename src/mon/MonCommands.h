@@ -437,6 +437,11 @@ COMMAND("osd getcrushmap " \
 	"name=epoch,type=CephInt,range=0,req=false", \
 	"get CRUSH map", "osd", "r", "cli,rest")
 COMMAND("osd getmaxosd", "show largest OSD id", "osd", "r", "cli,rest")
+COMMAND("osd ls-tree " \
+        "name=epoch,type=CephInt,range=0,req=false "
+        "name=name,type=CephString,req=true", \
+        "show OSD ids under bucket <name> in the CRUSH map", \
+        "osd", "r", "cli,rest")
 COMMAND("osd find " \
 	"name=id,type=CephOsdName", \
 	"find osd <id> in the CRUSH map and show its location", \

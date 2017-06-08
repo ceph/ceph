@@ -4076,7 +4076,8 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
 	   prefix == "osd tree" ||
 	   prefix == "osd ls" ||
 	   prefix == "osd getmap" ||
-	   prefix == "osd getcrushmap") {
+	   prefix == "osd getcrushmap" ||
+	   prefix == "osd ls-tree") {
     string val;
 
     epoch_t epoch = 0;
@@ -4179,6 +4180,41 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
     } else if (prefix == "osd getcrushmap") {
       p->crush->encode(rdata, mon->get_quorum_con_features());
       ss << "got crush map from osdmap epoch " << p->get_epoch();
+    } else if (prefix == "osd ls-tree") {
+      string bucket_name;
+      cmd_getval(g_ceph_context, cmdmap, "name", bucket_name);
+      set<int> osds;
+      r = p->get_osds_by_bucket_name(bucket_name, &osds);
+      if (r == -ENOENT) {
+        ss << "\"" << bucket_name << "\" does not exist";
+        goto reply;
+      } else if (r < 0) {
+        ss << "can not parse bucket name:\"" << bucket_name << "\"";
+        goto reply;
+      }
+
+      if (f) {
+        f->open_array_section("osds");
+        for (auto &i : osds) {
+          if (osdmap.exists(i)) {
+            f->dump_int("osd", i);
+          }
+        }
+        f->close_section();
+        f->flush(ds);
+      } else {
+        bool first = true;
+        for (auto &i : osds) {
+          if (osdmap.exists(i)) {
+            if (!first)
+              ds << "\n";
+            first = false;
+            ds << i;
+          }
+        }
+      }
+
+      rdata.append(ds);
     }
     if (p != &osdmap)
       delete p;
