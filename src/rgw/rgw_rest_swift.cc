@@ -2235,11 +2235,10 @@ bool RGWSwiftWebsiteHandler::is_web_dir() const
   std::string subdir_name;
   url_decode(s->object.name, subdir_name);
 
-  /* Remove character from the subdir name if it is "/". */
   if (subdir_name.empty()) {
     return false;
   } else if (subdir_name.back() == '/') {
-    subdir_name.pop_back();
+    return true;
   }
 
   rgw_obj obj(s->bucket, subdir_name);
