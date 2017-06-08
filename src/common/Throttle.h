@@ -25,6 +25,7 @@ class Throttle {
   ceph::atomic_t count, max;
   Mutex lock;
   list<Cond*> cond;
+  list<Context*> callbacks;
   const bool use_perf;
 
 public:
@@ -95,9 +96,17 @@ public:
   /**
    * the unblocked version of @p get()
    * @returns true if it successfully got the requested amount,
-   * or false if it would block.
+   * or false if it will return right now.
    */
   bool get_or_fail(int64_t c = 1);
+
+  /**
+   * the unblocked version of @p get()
+   * @returns true if it successfully got the requested amount(caller need to
+   * handle passing ctxt itself),
+   * or false if it would call later(throttle will take over the life of ctxt).
+   */
+  bool get_or_reserve(int64_t c = 1, Context *ctxt);
 
   /**
    * put slots back to the stock
