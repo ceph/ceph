@@ -672,6 +672,10 @@ static int do_map(int argc, const char *argv[])
   r = image.stat(info, sizeof(info));
   if (r < 0)
     goto close_nbd;
+  if (info.size == 0) {
+    cerr << "rbd-nbd: cannot map an image with size 0" << std::endl;
+    goto close_nbd;
+  }
 
   r = ioctl(nbd, NBD_SET_BLKSIZE, RBD_NBD_BLKSIZE);
   if (r < 0) {
