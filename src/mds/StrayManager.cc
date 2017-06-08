@@ -535,7 +535,7 @@ bool StrayManager::_eval_stray(CDentry *dn, bool delay)
      * if we can do anything with them if we happen to have them in
      * cache.
      */
-    eval_remote_stray(dn, NULL);
+    _eval_stray_remote(dn, NULL);
     return false;
   }
 }
@@ -558,8 +558,37 @@ bool StrayManager::eval_stray(CDentry *dn, bool delay)
   return ret;
 }
 
-void StrayManager::eval_remote_stray(CDentry *stray_dn, CDentry *remote_dn)
+void StrayManager::eval_remote(CDentry *remote_dn)
 {
+  dout(10) << __func__ << " " << *remote_dn << dendl;
+
+  CDentry::linkage_t *dnl = remote_dn->get_projected_linkage();
+  assert(dnl->is_remote());
+  CInode *in = dnl->get_inode();
+
+  if (!in) {
+    dout(20) << __func__ << ": no inode, cannot evaluate" << dendl;
+    return;
+  }
+
+  if (remote_dn->last != CEPH_NOSNAP) {
+    dout(20) << __func__ << ": snap dentry, cannot evaluate" << dendl;
+    return;
+  }
+
+  // refers to stray?
+  CDentry *primary_dn = in->get_projected_parent_dn();
+  assert(primary_dn != NULL);
+  if (primary_dn->get_dir()->get_inode()->is_stray()) {
+    _eval_stray_remote(primary_dn, remote_dn);
+  } else {
+    dout(20) << __func__ << ": inode's primary dn not stray" << dendl;
+  }
+}
+
+void StrayManager::_eval_stray_remote(CDentry *stray_dn, CDentry *remote_dn)
+{
+  dout(20) << __func__ << " " << *stray_dn << dendl;
   assert(stray_dn != NULL);
   assert(stray_dn->get_dir()->get_inode()->is_stray());
   CDentry::linkage_t *stray_dnl = stray_dn->get_projected_linkage();
