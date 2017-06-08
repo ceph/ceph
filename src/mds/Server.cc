@@ -455,6 +455,10 @@ void Server::handle_client_session(MClientSession *m)
     finish_flush_session(session, m->get_seq());
     break;
 
+  case CEPH_SESSION_REQUEST_FLUSH_MDLOG:
+    mdlog->flush();
+    break;
+
   default:
     ceph_abort();
   }
