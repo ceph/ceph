@@ -778,7 +778,9 @@ int Operations<I>::snap_rollback(const cls::rbd::SnapshotNamespace& snap_namespa
   }
 
   r = prepare_image_update();
-  if (r < 0) {
+  if (r == -EAGAIN) {
+    return r;
+  } else if (r < 0) {
     return -EROFS;
   }
   if (m_image_ctx.exclusive_lock != nullptr &&
