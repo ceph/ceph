@@ -11,6 +11,10 @@
  * Global config value validators for the Ceph project
  */
 
+int validate(md_config_t::option_rbd_default_pool_t *type,
+             std::string *value, std::string *error_message);
+int validate(md_config_t::option_rbd_default_data_pool_t *type,
+             std::string *value, std::string *error_message);
 int validate(md_config_t::option_rbd_default_features_t *type,
              std::string *value, std::string *error_message);
 

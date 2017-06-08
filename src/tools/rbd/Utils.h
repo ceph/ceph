@@ -102,6 +102,7 @@ int extract_image_id_spec(const std::string &spec, std::string *pool_name,
 std::string get_positional_argument(
     const boost::program_options::variables_map &vm, size_t index);
 
+std::string get_default_pool_name();
 std::string get_pool_name(const boost::program_options::variables_map &vm,
                           size_t *arg_index);
 
