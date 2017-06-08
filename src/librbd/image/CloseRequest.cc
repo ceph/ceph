@@ -279,7 +279,6 @@ void CloseRequest<I>::handle_close_parent(int r) {
   CephContext *cct = m_image_ctx->cct;
   ldout(cct, 10) << this << " " << __func__ << ": r=" << r << dendl;
 
-  delete m_image_ctx->parent;
   save_result(r);
   if (r < 0) {
     lderr(cct) << "error closing parent image: " << cpp_strerror(r) << dendl;

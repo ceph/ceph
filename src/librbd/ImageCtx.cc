@@ -229,6 +229,11 @@ struct C_InvalidateCache : public Context {
     assert(journal == NULL);
     assert(asok_hook == NULL);
 
+    if (parent != NULL) {
+      delete parent;
+      parent = NULL;
+    }
+
     if (perfcounter) {
       perf_stop();
     }
