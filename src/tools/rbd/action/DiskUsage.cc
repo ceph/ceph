@@ -180,9 +180,7 @@ static int do_disk_usage(librbd::RBD &rbd, librados::IoCtx &io_ctx,
           goto out;
         }
 
-        if (snapname != NULL) {
-          total_prov += snap->size;
-        }
+        total_prov += snap->size;
         total_used += used_size;
         ++count;
       }
