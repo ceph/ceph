@@ -72,8 +72,6 @@ using namespace librados;
 
 #include "compressor/Compressor.h"
 
-#include <atomic>
-
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
 
@@ -3488,7 +3486,7 @@ class RGWIndexCompletionManager {
 
   int num_shards;
 
-  atomic_t cur_shard;
+  std::atomic<int> cur_shard;
 
 
 public:
@@ -3512,8 +3510,8 @@ public:
   }
 
   int next_shard() {
-    int result = cur_shard.read() % num_shards;
-    cur_shard.inc();
+    int result = cur_shard % num_shards;
+    cur_shard++;
     return result;
   }
 
