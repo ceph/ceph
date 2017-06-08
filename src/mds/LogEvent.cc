@@ -38,8 +38,6 @@
 
 #include "events/ENoOp.h"
 
-#define dout_context g_ceph_context
-
 
 LogEvent *LogEvent::decode(bufferlist& bl)
 {

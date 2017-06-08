@@ -24,7 +24,7 @@ public:
 
 private:
   static const int HEAD_VERSION = 1;
-  ~MMonMetadata() override {}
+  ~MMonMetadata() {}
 
 public:
   MMonMetadata() :
@@ -35,15 +35,15 @@ public:
     data(metadata)
   {}
 
-  const char *get_type_name() const override {
+  virtual const char *get_type_name() const {
     return "mon_metadata";
   }
 
-  void encode_payload(uint64_t features) override {
+  virtual void encode_payload(uint64_t features) {
     ::encode(data, payload);
   }
 
-  void decode_payload() override {
+  virtual void decode_payload() {
     bufferlist::iterator p = payload.begin();
     ::decode(data, p);
   }

@@ -16,8 +16,13 @@
 #define COMMON_CEPH_TIMER_H
 
 #include <condition_variable>
+#include <functional>
+#include <mutex>
 #include <thread>
+
 #include <boost/intrusive/set.hpp>
+
+#include "ceph_time.h"
 
 namespace ceph {
 
@@ -53,7 +58,7 @@ namespace ceph {
 
     template <class TC>
     class timer {
-      using sh = set_member_hook<link_mode<normal_link> >;
+      typedef set_member_hook<link_mode<normal_link> > sh;
 
       struct event {
 	typename TC::time_point t;
@@ -84,19 +89,15 @@ namespace ceph {
 	}
       };
 
-      using schedule_type = set<event,
-				member_hook<event, sh, &event::schedule_link>,
-				constant_time_size<false>,
-				compare<SchedCompare> >;
+      set<event,
+	  member_hook<event, sh, &event::schedule_link>,
+	  constant_time_size<false>,
+	  compare<SchedCompare> > schedule;
 
-      schedule_type schedule;
-
-      using event_set_type = set<event,
-				 member_hook<event, sh, &event::event_link>,
-				 constant_time_size<false>,
-				 compare<EventCompare> >;
-
-      event_set_type events;
+      set<event,
+	  member_hook<event, sh, &event::event_link>,
+	  constant_time_size<false>,
+	  compare<EventCompare> > events;
 
       std::mutex lock;
       using lock_guard = std::lock_guard<std::mutex>;
@@ -228,30 +229,6 @@ namespace ceph {
 	// function for the purposes of cancellation is no longer
 	// suitable. Thus:
 	return e.id;
-      }
-
-      // Adjust the timeout of a currently-scheduled event (relative)
-      bool adjust_event(uint64_t id, typename TC::duration duration) {
-	return adjust_event(id, TC::now() + duration);
-      }
-
-      // Adjust the timeout of a currently-scheduled event (absolute)
-      bool adjust_event(uint64_t id, typename TC::time_point when) {
-	std::lock_guard<std::mutex> l(lock);
-
-	event key(id);
-	typename event_set_type::iterator it = events.find(key);
-
-	if (it == events.end())
-	  return false;
-
-	event& e = *it;
-
-	schedule.erase(e);
-	e.t = when;
-	schedule.insert(e);
-
-	return true;
       }
 
       // Cancel an event. If the event has already come and gone (or you

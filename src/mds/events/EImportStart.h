@@ -28,34 +28,33 @@ class EImportStart : public LogEvent {
 protected:
   dirfrag_t base;
   vector<dirfrag_t> bounds;
-  mds_rank_t from;
 
-public:
+ public:
   EMetaBlob metablob;
   bufferlist client_map;  // encoded map<__u32,entity_inst_t>
   version_t cmapv;
 
-  EImportStart(MDLog *log, dirfrag_t di, vector<dirfrag_t>& b, mds_rank_t f) :
-    LogEvent(EVENT_IMPORTSTART),
-    base(di), bounds(b), from(f), metablob(log) { }
-  EImportStart() :
-    LogEvent(EVENT_IMPORTSTART), from(MDS_RANK_NONE) { }
+  EImportStart(MDLog *log,
+	       dirfrag_t di,
+	       vector<dirfrag_t>& b) : LogEvent(EVENT_IMPORTSTART), 
+				       base(di), bounds(b),
+				       metablob(log) { }
+  EImportStart() : LogEvent(EVENT_IMPORTSTART) { }
   
-  void print(ostream& out) const override {
-    out << "EImportStart " << base << " from mds." << from << " " << metablob;
+  void print(ostream& out) const {
+    out << "EImportStart " << base << " " << metablob;
   }
 
-  EMetaBlob *get_metablob() override { return &metablob; }
+  EMetaBlob *get_metablob() { return &metablob; }
   
-  void encode(bufferlist &bl, uint64_t features) const override;
-  void decode(bufferlist::iterator &bl) override;
-  void dump(Formatter *f) const override;
+  void encode(bufferlist &bl) const;
+  void decode(bufferlist::iterator &bl);
+  void dump(Formatter *f) const;
   static void generate_test_instances(list<EImportStart*>& ls);
   
-  void update_segment() override;
-  void replay(MDSRank *mds) override;
+  void update_segment();
+  void replay(MDSRank *mds);
 
 };
-WRITE_CLASS_ENCODER_FEATURES(EImportStart)
 
 #endif

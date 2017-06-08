@@ -19,4 +19,3 @@ Ceph, your own interface to Ceph, etc.).
    librados (C) <librados>
    librados (C++) <libradospp>
    librados (Python) <python>
-   object class <objclass-sdk>

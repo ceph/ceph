@@ -1,4 +1,4 @@
-#!/usr/bin/env nosetests
+#!/usr/bin/nosetests --nocapture
 # -*- mode:python; tab-width:4; indent-tabs-mode:t -*-
 # vim: ts=4 sw=4 smarttab expandtab
 #
@@ -11,14 +11,11 @@ License version 2, as published by the Free Software
 Foundation.  See file COPYING.
 """
 
+from StringIO import StringIO
+
 from unittest import TestCase
 
 from ceph_daemon import DaemonWatcher
-
-try:
-    from StringIO import StringIO
-except ImportError:
-    from io import StringIO
 
 
 class TestDaemonWatcher(TestCase):

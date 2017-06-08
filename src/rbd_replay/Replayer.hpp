@@ -36,31 +36,31 @@ public:
   void start();
 
   /// Should only be called by StopThreadAction
-  void stop() override;
+  void stop();
 
   void join();
 
   void send(Action::ptr action);
 
-  void add_pending(PendingIO::ptr io) override;
+  void add_pending(PendingIO::ptr io);
 
-  void remove_pending(PendingIO::ptr io) override;
+  void remove_pending(PendingIO::ptr io);
 
-  librbd::Image* get_image(imagectx_id_t imagectx_id) override;
+  librbd::Image* get_image(imagectx_id_t imagectx_id);
 
-  void put_image(imagectx_id_t imagectx_id, librbd::Image* image) override;
+  void put_image(imagectx_id_t imagectx_id, librbd::Image* image);
 
-  void erase_image(imagectx_id_t imagectx_id) override;
+  void erase_image(imagectx_id_t imagectx_id);
 
-  librbd::RBD* rbd() override;
+  librbd::RBD* rbd();
 
-  librados::IoCtx* ioctx() override;
+  librados::IoCtx* ioctx();
 
-  void set_action_complete(action_id_t id) override;
+  void set_action_complete(action_id_t id);
 
-  bool readonly() const override;
+  bool readonly() const;
 
-  rbd_loc map_image_name(std::string image_name, std::string snap_name) const override;
+  rbd_loc map_image_name(std::string image_name, std::string snap_name) const;
 
 private:
   void run();
@@ -77,7 +77,7 @@ private:
 
 class Replayer {
 public:
-  explicit Replayer(int num_action_trackers);
+  Replayer(int num_action_trackers);
 
   ~Replayer();
 

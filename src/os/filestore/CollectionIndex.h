@@ -24,11 +24,9 @@
 #include "common/RWLock.h"
 
 /**
-  CollectionIndex provides an interface for manipulating indexed collections
+ * CollectionIndex provides an interface for manipulating indexed collections
  */
 class CollectionIndex {
-public:
-  CephContext* cct;
 protected:
   /**
    * Object encapsulating a returned path.
@@ -59,14 +57,14 @@ protected:
     /// Debugging Constructor
     Path(
       string path,                              ///< [in] Path to return.
-      const coll_t& coll)                              ///< [in] collection
+      coll_t coll)                              ///< [in] collection
       : full_path(path), parent_coll(coll) {}
 
     /// Getter for the stored path.
     const char *path() const { return full_path.c_str(); }
 
     /// Getter for collection
-    const coll_t& coll() const { return parent_coll; }
+    coll_t coll() const { return parent_coll; }
 
     /// Getter for parent
     CollectionIndex* get_index() const {
@@ -75,12 +73,13 @@ protected:
   };
  public:
 
+  string access_lock_name;
   RWLock access_lock;
   /// Type of returned paths
   typedef ceph::shared_ptr<Path> IndexedPath;
 
   static IndexedPath get_testing_path(string path, coll_t collection) {
-    return std::make_shared<Path>(path, collection);
+    return IndexedPath(new Path(path, collection));
   }
 
   static const uint32_t FLAT_INDEX_TAG = 0;
@@ -161,13 +160,14 @@ protected:
     uint32_t match,                             //< [in] value to match
     uint32_t bits,                              //< [in] bits to check
     CollectionIndex* dest  //< [in] destination index
-    ) { ceph_abort(); return 0; }
+    ) { assert(0); return 0; }
 
 
   /// List contents of collection by hash
   virtual int collection_list_partial(
     const ghobject_t &start, ///< [in] object at which to start
     const ghobject_t &end,    ///< [in] list only objects < end
+    bool sort_bitwise,      ///< [in] use bitwise sort
     int max_count,          ///< [in] return at most max_count objects
     vector<ghobject_t> *ls,  ///< [out] Listed objects
     ghobject_t *next         ///< [out] Next object to list
@@ -176,8 +176,9 @@ protected:
   /// Call prior to removing directory
   virtual int prep_delete() { return 0; }
 
-  CollectionIndex(CephContext* cct, const coll_t& collection)
-    : cct(cct), access_lock("CollectionIndex::access_lock", true, false) {}
+  CollectionIndex(coll_t collection):
+    access_lock_name ("CollectionIndex::access_lock::" + collection.to_str()),
+    access_lock(access_lock_name.c_str()) {}
 
   /*
    * Pre-hash the collection, this collection should map to a PG folder.
@@ -189,9 +190,7 @@ protected:
   virtual int pre_hash_collection(
       uint32_t pg_num,            ///< [in] pg number of the pool this collection belongs to
       uint64_t expected_num_objs  ///< [in] expected number of objects this collection has
-      ) { ceph_abort(); return 0; }
-
-  virtual int apply_layout_settings() { ceph_abort(); return 0; }
+      ) { assert(0); return 0; }
 
   /// Virtual destructor
   virtual ~CollectionIndex() {}

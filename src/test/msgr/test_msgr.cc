@@ -14,7 +14,6 @@
  *
  */
 
-#include <atomic>
 #include <iostream>
 #include <unistd.h>
 #include <stdlib.h>
@@ -38,14 +37,6 @@
 
 typedef boost::mt11213b gen_type;
 
-#include "common/dout.h"
-#include "include/assert.h"
-
-#define dout_subsys ceph_subsys_ms
-#undef dout_prefix
-#define dout_prefix *_dout << " ceph_test_msgr "
-
-
 #if GTEST_HAS_PARAM_TEST
 
 #define CHECK_AND_WAIT_TRUE(expr) do {  \
@@ -63,16 +54,14 @@ class MessengerTest : public ::testing::TestWithParam<const char*> {
   Messenger *client_msgr;
 
   MessengerTest(): server_msgr(NULL), client_msgr(NULL) {}
-  void SetUp() override {
-    lderr(g_ceph_context) << __func__ << " start set up " << GetParam() << dendl;
-    server_msgr = Messenger::create(g_ceph_context, string(GetParam()), entity_name_t::OSD(0), "server", getpid(), 0);
-    client_msgr = Messenger::create(g_ceph_context, string(GetParam()), entity_name_t::CLIENT(-1), "client", getpid(), 0);
-    server_msgr->set_default_policy(Messenger::Policy::stateless_server(0));
-    client_msgr->set_default_policy(Messenger::Policy::lossy_client(0));
+  virtual void SetUp() {
+    cerr << __func__ << " start set up " << GetParam() << std::endl;
+    server_msgr = Messenger::create(g_ceph_context, string(GetParam()), entity_name_t::OSD(0), "server", getpid());
+    client_msgr = Messenger::create(g_ceph_context, string(GetParam()), entity_name_t::CLIENT(-1), "client", getpid());
+    server_msgr->set_default_policy(Messenger::Policy::stateless_server(0, 0));
+    client_msgr->set_default_policy(Messenger::Policy::lossy_client(0, 0));
   }
-  void TearDown() override {
-    ASSERT_EQ(server_msgr->get_dispatch_queue_len(), 0);
-    ASSERT_EQ(client_msgr->get_dispatch_queue_len(), 0);
+  virtual void TearDown() {
     delete server_msgr;
     delete client_msgr;
   }
@@ -83,10 +72,11 @@ class MessengerTest : public ::testing::TestWithParam<const char*> {
 class FakeDispatcher : public Dispatcher {
  public:
   struct Session : public RefCountedObject {
-    atomic<uint64_t> count;
+    Mutex lock;
+    uint64_t count;
     ConnectionRef con;
 
-    explicit Session(ConnectionRef c): RefCountedObject(g_ceph_context), count(0), con(c) {
+    Session(ConnectionRef c): RefCountedObject(g_ceph_context), lock("FakeDispatcher::Session::lock"), count(0), con(c) {
     }
     uint64_t get_count() { return count; }
   };
@@ -99,11 +89,11 @@ class FakeDispatcher : public Dispatcher {
   bool got_connect;
   bool loopback;
 
-  explicit FakeDispatcher(bool s): Dispatcher(g_ceph_context), lock("FakeDispatcher::lock"),
+  FakeDispatcher(bool s): Dispatcher(g_ceph_context), lock("FakeDispatcher::lock"),
                           is_server(s), got_new(false), got_remote_reset(false),
                           got_connect(false), loopback(false) {}
-  bool ms_can_fast_dispatch_any() const override { return true; }
-  bool ms_can_fast_dispatch(const Message *m) const override {
+  bool ms_can_fast_dispatch_any() const { return true; }
+  bool ms_can_fast_dispatch(Message *m) const {
     switch (m->get_type()) {
     case CEPH_MSG_PING:
       return true;
@@ -112,21 +102,22 @@ class FakeDispatcher : public Dispatcher {
     }
   }
 
-  void ms_handle_fast_connect(Connection *con) override {
+  void ms_handle_fast_connect(Connection *con) {
     lock.Lock();
-    lderr(g_ceph_context) << __func__ << " " << con << dendl;
+    cerr << __func__ << con << std::endl;
     Session *s = static_cast<Session*>(con->get_priv());
     if (!s) {
       s = new Session(con);
       con->set_priv(s->get());
-      lderr(g_ceph_context) << __func__ << " con: " << con << " count: " << s->count << dendl;
+      cerr << __func__ << " con: " << con << " count: " << s->count << std::endl;
     }
     s->put();
     got_connect = true;
     cond.Signal();
     lock.Unlock();
   }
-  void ms_handle_fast_accept(Connection *con) override {
+  void ms_handle_fast_accept(Connection *con) {
+    Mutex::Locker l(lock);
     Session *s = static_cast<Session*>(con->get_priv());
     if (!s) {
       s = new Session(con);
@@ -134,27 +125,28 @@ class FakeDispatcher : public Dispatcher {
     }
     s->put();
   }
-  bool ms_dispatch(Message *m) override {
+  bool ms_dispatch(Message *m) {
+    Mutex::Locker l(lock);
     Session *s = static_cast<Session*>(m->get_connection()->get_priv());
     if (!s) {
       s = new Session(m->get_connection());
       m->get_connection()->set_priv(s->get());
     }
     s->put();
+    Mutex::Locker l1(s->lock);
     s->count++;
-    lderr(g_ceph_context) << __func__ << " conn: " << m->get_connection() << " session " << s << " count: " << s->count << dendl;
+    cerr << __func__ << " conn: " << m->get_connection() << " session " << s << " count: " << s->count << std::endl;
     if (is_server) {
       reply_message(m);
     }
-    Mutex::Locker l(lock);
     got_new = true;
     cond.Signal();
     m->put();
     return true;
   }
-  bool ms_handle_reset(Connection *con) override {
+  bool ms_handle_reset(Connection *con) {
     Mutex::Locker l(lock);
-    lderr(g_ceph_context) << __func__ << " " << con << dendl;
+    cerr << __func__ << con << std::endl;
     Session *s = static_cast<Session*>(con->get_priv());
     if (s) {
       s->con.reset(NULL);  // break con <-> session ref cycle
@@ -163,9 +155,9 @@ class FakeDispatcher : public Dispatcher {
     }
     return true;
   }
-  void ms_handle_remote_reset(Connection *con) override {
+  void ms_handle_remote_reset(Connection *con) {
     Mutex::Locker l(lock);
-    lderr(g_ceph_context) << __func__ << " " << con << dendl;
+    cerr << __func__ << con << std::endl;
     Session *s = static_cast<Session*>(con->get_priv());
     if (s) {
       s->con.reset(NULL);  // break con <-> session ref cycle
@@ -173,20 +165,18 @@ class FakeDispatcher : public Dispatcher {
       s->put();
     }
     got_remote_reset = true;
-    cond.Signal();
   }
-  bool ms_handle_refused(Connection *con) override {
-    return false;
-  }
-  void ms_fast_dispatch(Message *m) override {
+  void ms_fast_dispatch(Message *m) {
+    Mutex::Locker l(lock);
     Session *s = static_cast<Session*>(m->get_connection()->get_priv());
     if (!s) {
       s = new Session(m->get_connection());
       m->get_connection()->set_priv(s->get());
     }
     s->put();
+    Mutex::Locker l1(s->lock);
     s->count++;
-    lderr(g_ceph_context) << __func__ << " conn: " << m->get_connection() << " session " << s << " count: " << s->count << dendl;
+    cerr << __func__ << " conn: " << m->get_connection() << " session " << s << " count: " << s->count << std::endl;
     if (is_server) {
       if (loopback)
         assert(m->get_source().is_osd());
@@ -195,15 +185,14 @@ class FakeDispatcher : public Dispatcher {
     } else if (loopback) {
       assert(m->get_source().is_client());
     }
-    m->put();
-    Mutex::Locker l(lock);
     got_new = true;
     cond.Signal();
+    m->put();
   }
 
   bool ms_verify_authorizer(Connection *con, int peer_type, int protocol,
                             bufferlist& authorizer, bufferlist& authorizer_reply,
-                            bool& isvalid, CryptoKey& session_key) override {
+                            bool& isvalid, CryptoKey& session_key) {
     isvalid = true;
     return true;
   }
@@ -287,8 +276,6 @@ TEST_P(MessengerTest, SimpleTest) {
   ASSERT_TRUE(static_cast<Session*>(conn->get_priv())->get_count() == 1);
   client_msgr->shutdown();
   client_msgr->wait();
-  server_msgr->shutdown();
-  server_msgr->wait();
 }
 
 TEST_P(MessengerTest, NameAddrTest) {
@@ -380,52 +367,14 @@ TEST_P(MessengerTest, FeatureTest) {
   client_msgr->wait();
 }
 
-TEST_P(MessengerTest, TimeoutTest) {
-  g_ceph_context->_conf->set_val("ms_tcp_read_timeout", "1");
-  FakeDispatcher cli_dispatcher(false), srv_dispatcher(true);
-  entity_addr_t bind_addr;
-  bind_addr.parse("127.0.0.1");
-  server_msgr->bind(bind_addr);
-  server_msgr->add_dispatcher_head(&srv_dispatcher);
-  server_msgr->start();
-
-  client_msgr->add_dispatcher_head(&cli_dispatcher);
-  client_msgr->start();
-
-  // 1. build the connection
-  MPing *m = new MPing();
-  ConnectionRef conn = client_msgr->get_connection(server_msgr->get_myinst());
-  {
-    ASSERT_EQ(conn->send_message(m), 0);
-    Mutex::Locker l(cli_dispatcher.lock);
-    while (!cli_dispatcher.got_new)
-      cli_dispatcher.cond.Wait(cli_dispatcher.lock);
-    cli_dispatcher.got_new = false;
-  }
-  ASSERT_TRUE(conn->is_connected());
-  ASSERT_TRUE((static_cast<Session*>(conn->get_priv()))->get_count() == 1);
-  ASSERT_TRUE(conn->peer_is_osd());
-
-  // 2. wait for idle
-  usleep(2500*1000);
-  ASSERT_FALSE(conn->is_connected());
-
-  server_msgr->shutdown();
-  server_msgr->wait();
-
-  client_msgr->shutdown();
-  client_msgr->wait();
-  g_ceph_context->_conf->set_val("ms_tcp_read_timeout", "900");
-}
-
 TEST_P(MessengerTest, StatefulTest) {
   Message *m;
   FakeDispatcher cli_dispatcher(false), srv_dispatcher(true);
   entity_addr_t bind_addr;
   bind_addr.parse("127.0.0.1");
-  Messenger::Policy p = Messenger::Policy::stateful_server(0);
+  Messenger::Policy p = Messenger::Policy::stateful_server(0, 0);
   server_msgr->set_policy(entity_name_t::TYPE_CLIENT, p);
-  p = Messenger::Policy::lossless_client(0);
+  p = Messenger::Policy::lossless_client(0, 0);
   client_msgr->set_policy(entity_name_t::TYPE_OSD, p);
 
   server_msgr->bind(bind_addr);
@@ -451,7 +400,6 @@ TEST_P(MessengerTest, StatefulTest) {
   // don't lose state
   ASSERT_TRUE(static_cast<Session*>(server_conn->get_priv())->get_count() == 1);
 
-  srv_dispatcher.got_new = false;
   conn = client_msgr->get_connection(server_msgr->get_myinst());
   {
     m = new MPing();
@@ -463,26 +411,14 @@ TEST_P(MessengerTest, StatefulTest) {
   }
   ASSERT_TRUE(static_cast<Session*>(conn->get_priv())->get_count() == 1);
   server_conn = server_msgr->get_connection(client_msgr->get_myinst());
-  {
-    Mutex::Locker l(srv_dispatcher.lock);
-    while (!srv_dispatcher.got_remote_reset)
-      srv_dispatcher.cond.Wait(srv_dispatcher.lock);
-  }
+  ASSERT_TRUE(static_cast<Session*>(server_conn->get_priv())->get_count() == 1);
 
   // 2. test for client reconnect
   ASSERT_FALSE(cli_dispatcher.got_remote_reset);
   cli_dispatcher.got_connect = false;
-  cli_dispatcher.got_new = false;
-  cli_dispatcher.got_remote_reset = false;
   server_conn->mark_down();
   ASSERT_FALSE(server_conn->is_connected());
   // ensure client detect server socket closed
-  {
-    Mutex::Locker l(cli_dispatcher.lock);
-    while (!cli_dispatcher.got_remote_reset)
-      cli_dispatcher.cond.Wait(cli_dispatcher.lock);
-    cli_dispatcher.got_remote_reset = false;
-  }
   {
     Mutex::Locker l(cli_dispatcher.lock);
     while (!cli_dispatcher.got_connect)
@@ -491,7 +427,6 @@ TEST_P(MessengerTest, StatefulTest) {
   }
   CHECK_AND_WAIT_TRUE(conn->is_connected());
   ASSERT_TRUE(conn->is_connected());
-
   {
     m = new MPing();
     ASSERT_EQ(conn->send_message(m), 0);
@@ -502,9 +437,10 @@ TEST_P(MessengerTest, StatefulTest) {
     cli_dispatcher.got_new = false;
   }
   // resetcheck happen
-  ASSERT_EQ(1U, static_cast<Session*>(conn->get_priv())->get_count());
+  ASSERT_TRUE(static_cast<Session*>(conn->get_priv())->get_count() == 1);
   server_conn = server_msgr->get_connection(client_msgr->get_myinst());
-  ASSERT_EQ(1U, static_cast<Session*>(server_conn->get_priv())->get_count());
+  ASSERT_TRUE(static_cast<Session*>(server_conn->get_priv())->get_count() == 1);
+  ASSERT_TRUE(cli_dispatcher.got_remote_reset);
   cli_dispatcher.got_remote_reset = false;
 
   server_msgr->shutdown();
@@ -518,9 +454,9 @@ TEST_P(MessengerTest, StatelessTest) {
   FakeDispatcher cli_dispatcher(false), srv_dispatcher(true);
   entity_addr_t bind_addr;
   bind_addr.parse("127.0.0.1");
-  Messenger::Policy p = Messenger::Policy::stateless_server(0);
+  Messenger::Policy p = Messenger::Policy::stateless_server(0, 0);
   server_msgr->set_policy(entity_name_t::TYPE_CLIENT, p);
-  p = Messenger::Policy::lossy_client(0);
+  p = Messenger::Policy::lossy_client(0, 0);
   client_msgr->set_policy(entity_name_t::TYPE_OSD, p);
 
   server_msgr->bind(bind_addr);
@@ -543,7 +479,6 @@ TEST_P(MessengerTest, StatelessTest) {
   conn->mark_down();
   ASSERT_FALSE(conn->is_connected());
 
-  srv_dispatcher.got_new = false;
   conn = client_msgr->get_connection(server_msgr->get_myinst());
   {
     m = new MPing();
@@ -556,12 +491,7 @@ TEST_P(MessengerTest, StatelessTest) {
   ASSERT_TRUE(static_cast<Session*>(conn->get_priv())->get_count() == 1);
   ConnectionRef server_conn = server_msgr->get_connection(client_msgr->get_myinst());
   // server lose state
-  {
-    Mutex::Locker l(srv_dispatcher.lock);
-    while (!srv_dispatcher.got_new)
-      srv_dispatcher.cond.Wait(srv_dispatcher.lock);
-  }
-  ASSERT_EQ(1U, static_cast<Session*>(server_conn->get_priv())->get_count());
+  ASSERT_TRUE(static_cast<Session*>(server_conn->get_priv())->get_count() == 1);
 
   // 2. test for client lossy
   server_conn->mark_down();
@@ -591,9 +521,9 @@ TEST_P(MessengerTest, ClientStandbyTest) {
   FakeDispatcher cli_dispatcher(false), srv_dispatcher(true);
   entity_addr_t bind_addr;
   bind_addr.parse("127.0.0.1");
-  Messenger::Policy p = Messenger::Policy::stateful_server(0);
+  Messenger::Policy p = Messenger::Policy::stateful_server(0, 0);
   server_msgr->set_policy(entity_name_t::TYPE_CLIENT, p);
-  p = Messenger::Policy::lossless_peer(0);
+  p = Messenger::Policy::lossless_peer(0, 0);
   client_msgr->set_policy(entity_name_t::TYPE_OSD, p);
 
   server_msgr->bind(bind_addr);
@@ -708,9 +638,9 @@ TEST_P(MessengerTest, MessageTest) {
   FakeDispatcher cli_dispatcher(false), srv_dispatcher(true);
   entity_addr_t bind_addr;
   bind_addr.parse("127.0.0.1");
-  Messenger::Policy p = Messenger::Policy::stateful_server(0);
+  Messenger::Policy p = Messenger::Policy::stateful_server(0, 0);
   server_msgr->set_policy(entity_name_t::TYPE_CLIENT, p);
-  p = Messenger::Policy::lossless_peer(0);
+  p = Messenger::Policy::lossless_peer(0, 0);
   client_msgr->set_policy(entity_name_t::TYPE_OSD, p);
 
   server_msgr->bind(bind_addr);
@@ -738,7 +668,7 @@ TEST_P(MessengerTest, MessageTest) {
     t += 1000*1000*500;
     Mutex::Locker l(cli_dispatcher.lock);
     while (!cli_dispatcher.got_new)
-      cli_dispatcher.cond.WaitInterval(cli_dispatcher.lock, t);
+      cli_dispatcher.cond.WaitInterval(g_ceph_context, cli_dispatcher.lock, t);
     ASSERT_TRUE(cli_dispatcher.got_new);
     cli_dispatcher.got_new = false;
   }
@@ -756,7 +686,7 @@ TEST_P(MessengerTest, MessageTest) {
     t += 1000*1000*500;
     Mutex::Locker l(cli_dispatcher.lock);
     while (!cli_dispatcher.got_new)
-      cli_dispatcher.cond.WaitInterval(cli_dispatcher.lock, t);
+      cli_dispatcher.cond.WaitInterval(g_ceph_context, cli_dispatcher.lock, t);
     ASSERT_TRUE(cli_dispatcher.got_new);
     cli_dispatcher.got_new = false;
   }
@@ -769,34 +699,6 @@ TEST_P(MessengerTest, MessageTest) {
 
 class SyntheticWorkload;
 
-struct Payload {
-  enum Who : uint8_t {
-    PING = 0,
-    PONG = 1,
-  };
-  uint8_t who;
-  uint64_t seq;
-  bufferlist data;
-
-  Payload(Who who, uint64_t seq, const bufferlist& data)
-    : who(who), seq(seq), data(data)
-  {}
-  Payload() = default;
-  DENC(Payload, v, p) {
-    DENC_START(1, 1, p);
-    denc(v.who, p);
-    denc(v.seq, p);
-    denc(v.data, p);
-    DENC_FINISH(p);
-  }
-};
-WRITE_CLASS_DENC(Payload)
-
-ostream& operator<<(ostream& out, const Payload &pl)
-{
-  return out << "reply=" << pl.who << " i = " << pl.seq;
-}
-
 class SyntheticDispatcher : public Dispatcher {
  public:
   Mutex lock;
@@ -807,14 +709,14 @@ class SyntheticDispatcher : public Dispatcher {
   bool got_connect;
   map<ConnectionRef, list<uint64_t> > conn_sent;
   map<uint64_t, bufferlist> sent;
-  atomic<uint64_t> index;
+  atomic_t index;
   SyntheticWorkload *workload;
 
   SyntheticDispatcher(bool s, SyntheticWorkload *wl):
       Dispatcher(g_ceph_context), lock("SyntheticDispatcher::lock"), is_server(s), got_new(false),
       got_remote_reset(false), got_connect(false), index(0), workload(wl) {}
-  bool ms_can_fast_dispatch_any() const override { return true; }
-  bool ms_can_fast_dispatch(const Message *m) const override {
+  bool ms_can_fast_dispatch_any() const { return true; }
+  bool ms_can_fast_dispatch(Message *m) const {
     switch (m->get_type()) {
     case CEPH_MSG_PING:
     case MSG_COMMAND:
@@ -824,30 +726,18 @@ class SyntheticDispatcher : public Dispatcher {
     }
   }
 
-  void ms_handle_fast_connect(Connection *con) override {
-    Mutex::Locker l(lock);
-    list<uint64_t> c = conn_sent[con];
-    for (list<uint64_t>::iterator it = c.begin();
-         it != c.end(); ++it)
-      sent.erase(*it);
-    conn_sent.erase(con);
+  void ms_handle_fast_connect(Connection *con) {
+    lock.Lock();
     got_connect = true;
     cond.Signal();
+    lock.Unlock();
   }
-  void ms_handle_fast_accept(Connection *con) override {
-    Mutex::Locker l(lock);
-    list<uint64_t> c = conn_sent[con];
-    for (list<uint64_t>::iterator it = c.begin();
-         it != c.end(); ++it)
-      sent.erase(*it);
-    conn_sent.erase(con);
-    cond.Signal();
+  void ms_handle_fast_accept(Connection *con) { }
+  bool ms_dispatch(Message *m) {
+    assert(0);
   }
-  bool ms_dispatch(Message *m) override {
-    ceph_abort();
-  }
-  bool ms_handle_reset(Connection *con) override;
-  void ms_handle_remote_reset(Connection *con) override {
+  bool ms_handle_reset(Connection *con);
+  void ms_handle_remote_reset(Connection *con) {
     Mutex::Locker l(lock);
     list<uint64_t> c = conn_sent[con];
     for (list<uint64_t>::iterator it = c.begin();
@@ -856,71 +746,71 @@ class SyntheticDispatcher : public Dispatcher {
     conn_sent.erase(con);
     got_remote_reset = true;
   }
-  bool ms_handle_refused(Connection *con) override {
-    return false;
-  }
-  void ms_fast_dispatch(Message *m) override {
+  void ms_fast_dispatch(Message *m) {
     // MSG_COMMAND is used to disorganize regular message flow
     if (m->get_type() == MSG_COMMAND) {
       m->put();
       return ;
     }
 
-    Payload pl;
-    auto p = m->get_data().begin();
-    ::decode(pl, p);
-    if (pl.who == Payload::PING) {
-      lderr(g_ceph_context) << __func__ << " conn=" << m->get_connection() << pl << dendl;
-      reply_message(m, pl);
-      m->put();
-      Mutex::Locker l(lock);
-      got_new = true;
-      cond.Signal();
-    } else {
-      Mutex::Locker l(lock);
-      if (sent.count(pl.seq)) {
-	lderr(g_ceph_context) << __func__ << " conn=" << m->get_connection() << pl << dendl;
-	ASSERT_EQ(conn_sent[m->get_connection()].front(), pl.seq);
-	ASSERT_TRUE(pl.data.contents_equal(sent[pl.seq]));
-	conn_sent[m->get_connection()].pop_front();
-	sent.erase(pl.seq);
-      }
-      m->put();
-      got_new = true;
-      cond.Signal();
+    Mutex::Locker l(lock);
+    uint64_t i;
+    bool reply;
+    assert(m->get_middle().length());
+    bufferlist::iterator blp = m->get_middle().begin();
+    ::decode(i, blp);
+    ::decode(reply, blp);
+    if (reply) {
+      //cerr << __func__ << " reply=" << reply << " i=" << i << std::endl;
+      reply_message(m, i);
+    } else if (sent.count(i)) {
+      //cerr << __func__ << " reply=" << reply << " i=" << i << std::endl;
+      ASSERT_EQ(conn_sent[m->get_connection()].front(), i);
+      ASSERT_TRUE(m->get_data().contents_equal(sent[i]));
+      conn_sent[m->get_connection()].pop_front();
+      sent.erase(i);
     }
+    got_new = true;
+    cond.Signal();
+    m->put();
   }
 
   bool ms_verify_authorizer(Connection *con, int peer_type, int protocol,
                             bufferlist& authorizer, bufferlist& authorizer_reply,
-                            bool& isvalid, CryptoKey& session_key) override {
+                            bool& isvalid, CryptoKey& session_key) {
     isvalid = true;
     return true;
   }
 
-  void reply_message(const Message *m, Payload& pl) {
-    pl.who = Payload::PONG;
+  void reply_message(Message *m, uint64_t i) {
     bufferlist bl;
-    ::encode(pl, bl);
+    ::encode(i, bl);
+    ::encode(false, bl);
     MPing *rm = new MPing();
-    rm->set_data(bl);
+    if (m->get_data_len())
+      rm->set_data(m->get_data());
+    if (m->get_middle().length())
+      rm->set_middle(bl);
     m->get_connection()->send_message(rm);
-    lderr(g_ceph_context) << __func__ << " conn=" << m->get_connection() << " reply m=" << m << " i=" << pl.seq << dendl;
+    //cerr << __func__ << " conn=" << m->get_connection() << " reply m=" << m << " i=" << i << std::endl;
   }
 
-  void send_message_wrap(ConnectionRef con, const bufferlist& data) {
-    Message *m = new MPing();
-    Payload pl{Payload::PING, index++, data};
-    bufferlist bl;
-    ::encode(pl, bl);
-    m->set_data(bl);
-    if (!con->get_messenger()->get_default_policy().lossy) {
+  void send_message_wrap(ConnectionRef con, Message *m) {
+    {
       Mutex::Locker l(lock);
-      sent[pl.seq] = pl.data;
-      conn_sent[con].push_back(pl.seq);
+      bufferlist bl;
+      uint64_t i = index.read();
+      index.inc();
+      ::encode(i, bl);
+      ::encode(true, bl);
+      m->set_middle(bl);
+      if (!con->get_messenger()->get_default_policy().lossy) {
+        sent[i] = m->get_data();
+        conn_sent[con].push_back(i);
+      }
+      //cerr << __func__ << " conn=" << con.get() << " send m=" << m << " i=" << i << std::endl;
     }
-    lderr(g_ceph_context) << __func__ << " conn=" << con.get() << " send m=" << m << " i=" << pl.seq << dendl;
-    ASSERT_EQ(0, con->send_message(m));
+    ASSERT_EQ(con->send_message(m), 0);
   }
 
   uint64_t get_pending() {
@@ -935,14 +825,6 @@ class SyntheticDispatcher : public Dispatcher {
          it != conn_sent[con].end(); ++it)
       sent.erase(*it);
     conn_sent.erase(con);
-  }
-
-  void print() {
-    for (auto && p : conn_sent) {
-      if (!p.second.empty()) {
-        lderr(g_ceph_context) << __func__ << " " << p.first << " wait " << p.second.size() << dendl;
-      }
-    }
   }
 };
 
@@ -971,7 +853,7 @@ class SyntheticWorkload {
     char addr[64];
     for (int i = 0; i < servers; ++i) {
       msgr = Messenger::create(g_ceph_context, type, entity_name_t::OSD(0),
-                               "server", getpid()+i, 0);
+                               "server", getpid()+i);
       snprintf(addr, sizeof(addr), "127.0.0.1:%d", base_port+i);
       bind_addr.parse(addr);
       msgr->bind(bind_addr);
@@ -985,7 +867,7 @@ class SyntheticWorkload {
 
     for (int i = 0; i < clients; ++i) {
       msgr = Messenger::create(g_ceph_context, type, entity_name_t::CLIENT(-1),
-                               "client", getpid()+i+servers, 0);
+                               "client", getpid()+i+servers);
       if (cli_policy.standby) {
         snprintf(addr, sizeof(addr), "127.0.0.1:%d", base_port+i+servers);
         bind_addr.parse(addr);
@@ -1086,8 +968,13 @@ class SyntheticWorkload {
       m->set_priority(200);
       conn->send_message(m);
     } else {
+      Message *m = new MPing();
+      bufferlist bl;
       boost::uniform_int<> u(0, rand_data.size()-1);
-      dispatcher.send_message_wrap(conn, rand_data[u(rng)]);
+      uint64_t index = u(rng);
+      bl = rand_data[index];
+      m->set_data(bl);
+      dispatcher.send_message_wrap(conn, m);
     }
   }
 
@@ -1110,32 +997,23 @@ class SyntheticWorkload {
     ASSERT_EQ(available_connections.erase(conn), 1U);
   }
 
-  void print_internal_state(bool detail=false) {
+  void print_internal_state() {
     Mutex::Locker l(lock);
-    lderr(g_ceph_context) << "available_connections: " << available_connections.size()
-         << " inflight messages: " << dispatcher.get_pending() << dendl;
-    if (detail && !available_connections.empty()) {
-      dispatcher.print();
-    }
+    cerr << "available_connections: " << available_connections.size()
+         << " inflight messages: " << dispatcher.get_pending() << std::endl;
   }
 
   void wait_for_done() {
-    int64_t tick_us = 1000 * 100; // 100ms
-    int64_t timeout_us = 5 * 60 * 1000 * 1000; // 5 mins
-    int i = 0;
+    uint64_t i = 0;
     while (dispatcher.get_pending()) {
-      usleep(tick_us);
-      timeout_us -= tick_us;
+      usleep(1000*100);
       if (i++ % 50 == 0)
-        print_internal_state(true);
-      if (timeout_us < 0)
-        assert(0 == " loop time exceed 5 mins, it looks we stuck into some problems!");
+        print_internal_state();
     }
     for (set<Messenger*>::iterator it = available_servers.begin();
          it != available_servers.end(); ++it) {
       (*it)->shutdown();
       (*it)->wait();
-      ASSERT_EQ((*it)->get_dispatch_queue_len(), 0);
       delete (*it);
     }
     available_servers.clear();
@@ -1144,7 +1022,6 @@ class SyntheticWorkload {
          it != available_clients.end(); ++it) {
       (*it)->shutdown();
       (*it)->wait();
-      ASSERT_EQ((*it)->get_dispatch_queue_len(), 0);
       delete (*it);
     }
     available_clients.clear();
@@ -1164,16 +1041,16 @@ bool SyntheticDispatcher::ms_handle_reset(Connection *con) {
 
 TEST_P(MessengerTest, SyntheticStressTest) {
   SyntheticWorkload test_msg(8, 32, GetParam(), 100,
-                             Messenger::Policy::stateful_server(0),
-                             Messenger::Policy::lossless_client(0));
+                             Messenger::Policy::stateful_server(0, 0),
+                             Messenger::Policy::lossless_client(0, 0));
   for (int i = 0; i < 100; ++i) {
-    if (!(i % 10)) lderr(g_ceph_context) << "seeding connection " << i << dendl;
+    if (!(i % 10)) cerr << "seeding connection " << i << std::endl;
     test_msg.generate_connection();
   }
   gen_type rng(time(NULL));
-  for (int i = 0; i < 5000; ++i) {
+  for (int i = 0; i < 10000; ++i) {
     if (!(i % 10)) {
-      lderr(g_ceph_context) << "Op " << i << ": " << dendl;
+      cerr << "Op " << i << ": ";
       test_msg.print_internal_state();
     }
     boost::uniform_int<> true_false(0, 99);
@@ -1193,16 +1070,16 @@ TEST_P(MessengerTest, SyntheticStressTest) {
 
 TEST_P(MessengerTest, SyntheticStressTest1) {
   SyntheticWorkload test_msg(16, 32, GetParam(), 100,
-                             Messenger::Policy::lossless_peer_reuse(0),
-                             Messenger::Policy::lossless_peer_reuse(0));
+                             Messenger::Policy::lossless_peer_reuse(0, 0),
+                             Messenger::Policy::lossless_peer_reuse(0, 0));
   for (int i = 0; i < 10; ++i) {
-    if (!(i % 10)) lderr(g_ceph_context) << "seeding connection " << i << dendl;
+    if (!(i % 10)) cerr << "seeding connection " << i << std::endl;
     test_msg.generate_connection();
   }
   gen_type rng(time(NULL));
   for (int i = 0; i < 10000; ++i) {
     if (!(i % 10)) {
-      lderr(g_ceph_context) << "Op " << i << ": " << dendl;
+      cerr << "Op " << i << ": ";
       test_msg.print_internal_state();
     }
     boost::uniform_int<> true_false(0, 99);
@@ -1222,21 +1099,19 @@ TEST_P(MessengerTest, SyntheticStressTest1) {
 
 
 TEST_P(MessengerTest, SyntheticInjectTest) {
-  uint64_t dispatch_throttle_bytes = g_ceph_context->_conf->ms_dispatch_throttle_bytes;
   g_ceph_context->_conf->set_val("ms_inject_socket_failures", "30");
   g_ceph_context->_conf->set_val("ms_inject_internal_delays", "0.1");
-  g_ceph_context->_conf->set_val("ms_dispatch_throttle_bytes", "16777216");
   SyntheticWorkload test_msg(8, 32, GetParam(), 100,
-                             Messenger::Policy::stateful_server(0),
-                             Messenger::Policy::lossless_client(0));
+                             Messenger::Policy::stateful_server(0, 0),
+                             Messenger::Policy::lossless_client(0, 0));
   for (int i = 0; i < 100; ++i) {
-    if (!(i % 10)) lderr(g_ceph_context) << "seeding connection " << i << dendl;
+    if (!(i % 10)) cerr << "seeding connection " << i << std::endl;
     test_msg.generate_connection();
   }
   gen_type rng(time(NULL));
   for (int i = 0; i < 1000; ++i) {
     if (!(i % 10)) {
-      lderr(g_ceph_context) << "Op " << i << ": " << dendl;
+      cerr << "Op " << i << ": ";
       test_msg.print_internal_state();
     }
     boost::uniform_int<> true_false(0, 99);
@@ -1254,24 +1129,22 @@ TEST_P(MessengerTest, SyntheticInjectTest) {
   test_msg.wait_for_done();
   g_ceph_context->_conf->set_val("ms_inject_socket_failures", "0");
   g_ceph_context->_conf->set_val("ms_inject_internal_delays", "0");
-  g_ceph_context->_conf->set_val(
-      "ms_dispatch_throttle_bytes", std::to_string(dispatch_throttle_bytes));
 }
 
 TEST_P(MessengerTest, SyntheticInjectTest2) {
   g_ceph_context->_conf->set_val("ms_inject_socket_failures", "30");
   g_ceph_context->_conf->set_val("ms_inject_internal_delays", "0.1");
   SyntheticWorkload test_msg(8, 16, GetParam(), 100,
-                             Messenger::Policy::lossless_peer_reuse(0),
-                             Messenger::Policy::lossless_peer_reuse(0));
+                             Messenger::Policy::lossless_peer_reuse(0, 0),
+                             Messenger::Policy::lossless_peer_reuse(0, 0));
   for (int i = 0; i < 100; ++i) {
-    if (!(i % 10)) lderr(g_ceph_context) << "seeding connection " << i << dendl;
+    if (!(i % 10)) cerr << "seeding connection " << i << std::endl;
     test_msg.generate_connection();
   }
   gen_type rng(time(NULL));
   for (int i = 0; i < 1000; ++i) {
     if (!(i % 10)) {
-      lderr(g_ceph_context) << "Op " << i << ": " << dendl;
+      cerr << "Op " << i << ": ";
       test_msg.print_internal_state();
     }
     boost::uniform_int<> true_false(0, 99);
@@ -1295,16 +1168,16 @@ TEST_P(MessengerTest, SyntheticInjectTest3) {
   g_ceph_context->_conf->set_val("ms_inject_socket_failures", "600");
   g_ceph_context->_conf->set_val("ms_inject_internal_delays", "0.1");
   SyntheticWorkload test_msg(8, 16, GetParam(), 100,
-                             Messenger::Policy::stateless_server(0),
-                             Messenger::Policy::lossy_client(0));
+                             Messenger::Policy::stateless_server(0, 0),
+                             Messenger::Policy::lossy_client(0, 0));
   for (int i = 0; i < 100; ++i) {
-    if (!(i % 10)) lderr(g_ceph_context) << "seeding connection " << i << dendl;
+    if (!(i % 10)) cerr << "seeding connection " << i << std::endl;
     test_msg.generate_connection();
   }
   gen_type rng(time(NULL));
   for (int i = 0; i < 1000; ++i) {
     if (!(i % 10)) {
-      lderr(g_ceph_context) << "Op " << i << ": " << dendl;
+      cerr << "Op " << i << ": ";
       test_msg.print_internal_state();
     }
     boost::uniform_int<> true_false(0, 99);
@@ -1328,20 +1201,17 @@ TEST_P(MessengerTest, SyntheticInjectTest3) {
 TEST_P(MessengerTest, SyntheticInjectTest4) {
   g_ceph_context->_conf->set_val("ms_inject_socket_failures", "30");
   g_ceph_context->_conf->set_val("ms_inject_internal_delays", "0.1");
-  g_ceph_context->_conf->set_val("ms_inject_delay_probability", "1");
-  g_ceph_context->_conf->set_val("ms_inject_delay_type", "client osd", false);
-  g_ceph_context->_conf->set_val("ms_inject_delay_max", "5");
   SyntheticWorkload test_msg(16, 32, GetParam(), 100,
-                             Messenger::Policy::lossless_peer(0),
-                             Messenger::Policy::lossless_peer(0));
+                             Messenger::Policy::lossless_peer(0, 0),
+                             Messenger::Policy::lossless_peer(0, 0));
   for (int i = 0; i < 100; ++i) {
-    if (!(i % 10)) lderr(g_ceph_context) << "seeding connection " << i << dendl;
+    if (!(i % 10)) cerr << "seeding connection " << i << std::endl;
     test_msg.generate_connection();
   }
   gen_type rng(time(NULL));
   for (int i = 0; i < 1000; ++i) {
     if (!(i % 10)) {
-      lderr(g_ceph_context) << "Op " << i << ": " << dendl;
+      cerr << "Op " << i << ": ";
       test_msg.print_internal_state();
     }
     boost::uniform_int<> true_false(0, 99);
@@ -1359,9 +1229,6 @@ TEST_P(MessengerTest, SyntheticInjectTest4) {
   test_msg.wait_for_done();
   g_ceph_context->_conf->set_val("ms_inject_socket_failures", "0");
   g_ceph_context->_conf->set_val("ms_inject_internal_delays", "0");
-  g_ceph_context->_conf->set_val("ms_inject_delay_probability", "0");
-  g_ceph_context->_conf->set_val("ms_inject_delay_type", "", false);
-  g_ceph_context->_conf->set_val("ms_inject_delay_max", "0");
 }
 
 
@@ -1370,11 +1237,11 @@ class MarkdownDispatcher : public Dispatcher {
   set<ConnectionRef> conns;
   bool last_mark;
  public:
-  std::atomic<int64_t> count = { 0 };
-  explicit MarkdownDispatcher(bool s): Dispatcher(g_ceph_context), lock("MarkdownDispatcher::lock"),
-                              last_mark(false) {}
-  bool ms_can_fast_dispatch_any() const override { return false; }
-  bool ms_can_fast_dispatch(const Message *m) const override {
+  atomic_t count;
+  MarkdownDispatcher(bool s): Dispatcher(g_ceph_context), lock("MarkdownDispatcher::lock"),
+                              last_mark(false), count(0) {}
+  bool ms_can_fast_dispatch_any() const { return false; }
+  bool ms_can_fast_dispatch(Message *m) const {
     switch (m->get_type()) {
     case CEPH_MSG_PING:
       return true;
@@ -1383,24 +1250,22 @@ class MarkdownDispatcher : public Dispatcher {
     }
   }
 
-  void ms_handle_fast_connect(Connection *con) override {
-    lderr(g_ceph_context) << __func__ << " " << con << dendl;
+  void ms_handle_fast_connect(Connection *con) {
+    cerr << __func__ << con << std::endl;
     Mutex::Locker l(lock);
     conns.insert(con);
   }
-  void ms_handle_fast_accept(Connection *con) override {
+  void ms_handle_fast_accept(Connection *con) {
     Mutex::Locker l(lock);
     conns.insert(con);
   }
-  bool ms_dispatch(Message *m) override {
-    lderr(g_ceph_context) << __func__ << " conn: " << m->get_connection() << dendl;
+  bool ms_dispatch(Message *m) {
+    cerr << __func__ << " conn: " << m->get_connection() << std::endl;
     Mutex::Locker l(lock);
-    count++;
+    count.inc();
     conns.insert(m->get_connection());
-    if (conns.size() < 2 && !last_mark) {
-      m->put();
+    if (conns.size() < 2 && !last_mark)
       return true;
-    }
 
     last_mark = true;
     usleep(rand() % 500);
@@ -1416,27 +1281,24 @@ class MarkdownDispatcher : public Dispatcher {
     m->put();
     return true;
   }
-  bool ms_handle_reset(Connection *con) override {
-    lderr(g_ceph_context) << __func__ << " " << con << dendl;
+  bool ms_handle_reset(Connection *con) {
+    cerr << __func__ << con << std::endl;
     Mutex::Locker l(lock);
     conns.erase(con);
     usleep(rand() % 500);
     return true;
   }
-  void ms_handle_remote_reset(Connection *con) override {
+  void ms_handle_remote_reset(Connection *con) {
     Mutex::Locker l(lock);
     conns.erase(con);
-    lderr(g_ceph_context) << __func__ << " " << con << dendl;
+    cerr << __func__ << con << std::endl;
   }
-  bool ms_handle_refused(Connection *con) override {
-    return false;
-  }
-  void ms_fast_dispatch(Message *m) override {
-    ceph_abort();
+  void ms_fast_dispatch(Message *m) {
+    assert(0);
   }
   bool ms_verify_authorizer(Connection *con, int peer_type, int protocol,
                             bufferlist& authorizer, bufferlist& authorizer_reply,
-                            bool& isvalid, CryptoKey& session_key) override {
+                            bool& isvalid, CryptoKey& session_key) {
     isvalid = true;
     return true;
   }
@@ -1445,7 +1307,7 @@ class MarkdownDispatcher : public Dispatcher {
 
 // Markdown with external lock
 TEST_P(MessengerTest, MarkdownTest) {
-  Messenger *server_msgr2 = Messenger::create(g_ceph_context, string(GetParam()), entity_name_t::OSD(0), "server", getpid(), 0);
+  Messenger *server_msgr2 = Messenger::create(g_ceph_context, string(GetParam()), entity_name_t::OSD(0), "server", getpid());
   MarkdownDispatcher cli_dispatcher(false), srv_dispatcher(true);
   entity_addr_t bind_addr;
   bind_addr.parse("127.0.0.1:16800");
@@ -1461,7 +1323,7 @@ TEST_P(MessengerTest, MarkdownTest) {
   client_msgr->start();
 
   int i = 1000;
-  int64_t last = 0;
+  uint64_t last = 0;
   bool equal = false;
   uint64_t equal_count = 0;
   while (i--) {
@@ -1471,16 +1333,16 @@ TEST_P(MessengerTest, MarkdownTest) {
     ASSERT_EQ(conn1->send_message(m), 0);
     m = new MPing();
     ASSERT_EQ(conn2->send_message(m), 0);
-    CHECK_AND_WAIT_TRUE(srv_dispatcher.count > last + 1);
-    if (srv_dispatcher.count == last) {
-      lderr(g_ceph_context) << __func__ << " last is " << last << dendl;
+    CHECK_AND_WAIT_TRUE(srv_dispatcher.count.read() > last + 1);
+    if (srv_dispatcher.count.read() == last) {
+      cerr << __func__ << " last is " << last << std::endl;
       equal = true;
       equal_count++;
     } else {
       equal = false;
       equal_count = 0;
     }
-    last = srv_dispatcher.count;
+    last = srv_dispatcher.count.read();
     if (equal_count)
       usleep(1000*500);
     ASSERT_FALSE(equal && equal_count > 3);
@@ -1498,7 +1360,7 @@ INSTANTIATE_TEST_CASE_P(
   Messenger,
   MessengerTest,
   ::testing::Values(
-    "async+posix",
+    "async",
     "simple"
   )
 );
@@ -1521,7 +1383,7 @@ int main(int argc, char **argv) {
   argv_to_vec(argc, (const char **)argv, args);
   env_to_vec(args);
 
-  auto cct = global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
+  global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
   g_ceph_context->_conf->set_val("auth_cluster_required", "none");
   g_ceph_context->_conf->set_val("auth_service_required", "none");
   g_ceph_context->_conf->set_val("auth_client_required", "none");
@@ -1537,6 +1399,6 @@ int main(int argc, char **argv) {
 
 /*
  * Local Variables:
- * compile-command: "cd ../.. ; make -j4 ceph_test_msgr && valgrind --tool=memcheck ./ceph_test_msgr"
+ * compile-command: "cd ../.. ; make -j4 unittest_msgr && valgrind --tool=memcheck ./unittest_msgr"
  * End:
  */

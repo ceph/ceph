@@ -15,8 +15,13 @@
 #ifndef PRIORITY_QUEUE_H
 #define PRIORITY_QUEUE_H
 
+#include "common/Mutex.h"
 #include "common/Formatter.h"
-#include "common/OpQueue.h"
+
+#include <map>
+#include <utility>
+#include <list>
+#include <algorithm>
 
 /**
  * Manages queue for normal and strict priority items
@@ -39,26 +44,34 @@
  * to provide fairness for different clients.
  */
 template <typename T, typename K>
-class PrioritizedQueue : public OpQueue <T, K> {
+class PrioritizedQueue {
   int64_t total_priority;
   int64_t max_tokens_per_subqueue;
   int64_t min_cost;
 
   typedef std::list<std::pair<unsigned, T> > ListPairs;
+  template <class F>
   static unsigned filter_list_pairs(
-    ListPairs *l,
-    std::function<bool (T)> f) {
+    ListPairs *l, F f,
+    std::list<T> *out) {
     unsigned ret = 0;
-    for (typename ListPairs::iterator i = l->end();
-	 i != l->begin();
+    if (out) {
+      for (typename ListPairs::reverse_iterator i = l->rbegin();
+	   i != l->rend();
+	   ++i) {
+	if (f(i->second)) {
+	  out->push_front(i->second);
+	}
+      }
+    }
+    for (typename ListPairs::iterator i = l->begin();
+	 i != l->end();
       ) {
-      auto next = i;
-      --next;
-      if (f(next->second)) {
+      if (f(i->second)) {
+	l->erase(i++);
 	++ret;
-	l->erase(next);
       } else {
-	i = next;
+	++i;
       }
     }
     return ret;
@@ -93,16 +106,14 @@ class PrioritizedQueue : public OpQueue <T, K> {
     }
     void put_tokens(unsigned t) {
       tokens += t;
-      if (tokens > max_tokens) {
+      if (tokens > max_tokens)
 	tokens = max_tokens;
-      }
     }
     void take_tokens(unsigned t) {
-      if (tokens > t) {
+      if (tokens > t)
 	tokens -= t;
-      } else {
+      else
 	tokens = 0;
-      }
     }
     void enqueue(K cl, unsigned cost, T item) {
       q[cl].push_back(std::make_pair(cost, item));
@@ -125,14 +136,12 @@ class PrioritizedQueue : public OpQueue <T, K> {
       assert(!(q.empty()));
       assert(cur != q.end());
       cur->second.pop_front();
-      if (cur->second.empty()) {
+      if (cur->second.empty())
 	q.erase(cur++);
-      } else {
+      else
 	++cur;
-      }
-      if (cur == q.end()) {
+      if (cur == q.end())
 	cur = q.begin();
-      }
       size--;
     }
     unsigned length() const {
@@ -142,16 +151,15 @@ class PrioritizedQueue : public OpQueue <T, K> {
     bool empty() const {
       return q.empty();
     }
-    void remove_by_filter(
-      std::function<bool (T)> f) {
+    template <class F>
+    void remove_by_filter(F f, std::list<T> *out) {
       for (typename Classes::iterator i = q.begin();
 	   i != q.end();
 	   ) {
-	size -= filter_list_pairs(&(i->second), f);
+	size -= filter_list_pairs(&(i->second), f, out);
 	if (i->second.empty()) {
-	  if (cur == i) {
+	  if (cur == i)
 	    ++cur;
-	  }
 	  q.erase(i++);
 	} else {
 	  ++i;
@@ -162,13 +170,11 @@ class PrioritizedQueue : public OpQueue <T, K> {
     }
     void remove_by_class(K k, std::list<T> *out) {
       typename Classes::iterator i = q.find(k);
-      if (i == q.end()) {
+      if (i == q.end())
 	return;
-      }
       size -= i->second.size();
-      if (i == cur) {
+      if (i == cur)
 	++cur;
-      }
       if (out) {
 	for (typename ListPairs::reverse_iterator j =
 	       i->second.rbegin();
@@ -178,19 +184,17 @@ class PrioritizedQueue : public OpQueue <T, K> {
 	}
       }
       q.erase(i);
-      if (cur == q.end()) {
+      if (cur == q.end())
 	cur = q.begin();
-      }
     }
 
-    void dump(ceph::Formatter *f) const {
+    void dump(Formatter *f) const {
       f->dump_int("tokens", tokens);
       f->dump_int("max_tokens", max_tokens);
       f->dump_int("size", size);
       f->dump_int("num_keys", q.size());
-      if (!empty()) {
+      if (!empty())
 	f->dump_int("first_item_cost", front().first);
-      }
     }
   };
 
@@ -200,9 +204,8 @@ class PrioritizedQueue : public OpQueue <T, K> {
 
   SubQueue *create_queue(unsigned priority) {
     typename SubQueues::iterator p = queue.find(priority);
-    if (p != queue.end()) {
+    if (p != queue.end())
       return &p->second;
-    }
     total_priority += priority;
     SubQueue *sq = &queue[priority];
     sq->set_max_tokens(max_tokens_per_subqueue);
@@ -217,9 +220,8 @@ class PrioritizedQueue : public OpQueue <T, K> {
   }
 
   void distribute_tokens(unsigned cost) {
-    if (total_priority == 0) {
+    if (total_priority == 0)
       return;
-    }
     for (typename SubQueues::iterator i = queue.begin();
 	 i != queue.end();
 	 ++i) {
@@ -234,7 +236,7 @@ public:
       min_cost(min_c)
   {}
 
-  unsigned length() const final {
+  unsigned length() const {
     unsigned total = 0;
     for (typename SubQueues::const_iterator i = queue.begin();
 	 i != queue.end();
@@ -251,14 +253,14 @@ public:
     return total;
   }
 
-  void remove_by_filter(
-      std::function<bool (T)> f) final {
+  template <class F>
+  void remove_by_filter(F f, std::list<T> *removed = 0) {
     for (typename SubQueues::iterator i = queue.begin();
 	 i != queue.end();
 	 ) {
       unsigned priority = i->first;
       
-      i->second.remove_by_filter(f);
+      i->second.remove_by_filter(f, removed);
       if (i->second.empty()) {
 	++i;
 	remove_queue(priority);
@@ -269,7 +271,7 @@ public:
     for (typename SubQueues::iterator i = high_queue.begin();
 	 i != high_queue.end();
 	 ) {
-      i->second.remove_by_filter(f);
+      i->second.remove_by_filter(f, removed);
       if (i->second.empty()) {
 	high_queue.erase(i++);
       } else {
@@ -278,7 +280,7 @@ public:
     }
   }
 
-  void remove_by_class(K k, std::list<T> *out = 0) final {
+  void remove_by_class(K k, std::list<T> *out = 0) {
     for (typename SubQueues::iterator i = queue.begin();
 	 i != queue.end();
 	 ) {
@@ -303,15 +305,15 @@ public:
     }
   }
 
-  void enqueue_strict(K cl, unsigned priority, T item) final {
+  void enqueue_strict(K cl, unsigned priority, T item) {
     high_queue[priority].enqueue(cl, 0, item);
   }
 
-  void enqueue_strict_front(K cl, unsigned priority, T item) final {
+  void enqueue_strict_front(K cl, unsigned priority, T item) {
     high_queue[priority].enqueue_front(cl, 0, item);
   }
 
-  void enqueue(K cl, unsigned priority, unsigned cost, T item) final {
+  void enqueue(K cl, unsigned priority, unsigned cost, T item) {
     if (cost < min_cost)
       cost = min_cost;
     if (cost > max_tokens_per_subqueue)
@@ -319,7 +321,7 @@ public:
     create_queue(priority)->enqueue(cl, cost, item);
   }
 
-  void enqueue_front(K cl, unsigned priority, unsigned cost, T item) final {
+  void enqueue_front(K cl, unsigned priority, unsigned cost, T item) {
     if (cost < min_cost)
       cost = min_cost;
     if (cost > max_tokens_per_subqueue)
@@ -327,21 +329,20 @@ public:
     create_queue(priority)->enqueue_front(cl, cost, item);
   }
 
-  bool empty() const final {
+  bool empty() const {
     assert(total_priority >= 0);
     assert((total_priority == 0) || !(queue.empty()));
     return queue.empty() && high_queue.empty();
   }
 
-  T dequeue() final {
+  T dequeue() {
     assert(!empty());
 
     if (!(high_queue.empty())) {
       T ret = high_queue.rbegin()->second.front().second;
       high_queue.rbegin()->second.pop_front();
-      if (high_queue.rbegin()->second.empty()) {
+      if (high_queue.rbegin()->second.empty())
 	high_queue.erase(high_queue.rbegin()->first);
-      }
       return ret;
     }
 
@@ -357,9 +358,8 @@ public:
 	unsigned cost = i->second.front().first;
 	i->second.take_tokens(cost);
 	i->second.pop_front();
-	if (i->second.empty()) {
+	if (i->second.empty())
 	  remove_queue(i->first);
-	}
 	distribute_tokens(cost);
 	return ret;
       }
@@ -370,14 +370,13 @@ public:
     T ret = queue.rbegin()->second.front().second;
     unsigned cost = queue.rbegin()->second.front().first;
     queue.rbegin()->second.pop_front();
-    if (queue.rbegin()->second.empty()) {
+    if (queue.rbegin()->second.empty())
       remove_queue(queue.rbegin()->first);
-    }
     distribute_tokens(cost);
     return ret;
   }
 
-  void dump(ceph::Formatter *f) const final {
+  void dump(Formatter *f) const {
     f->dump_int("total_priority", total_priority);
     f->dump_int("max_tokens_per_subqueue", max_tokens_per_subqueue);
     f->dump_int("min_cost", min_cost);

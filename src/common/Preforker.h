@@ -3,10 +3,15 @@
 #ifndef CEPH_COMMON_PREFORKER_H
 #define CEPH_COMMON_PREFORKER_H
 
+#include "acconfig.h"
+#include <sys/types.h>
 #include <sys/socket.h>
 #include <sys/wait.h>
+#include <errno.h>
+#include <stdlib.h>
 #include <unistd.h>
 #include <sstream>
+#include <string>
 
 #include "include/assert.h"
 #include "common/safe_io.h"
@@ -34,7 +39,7 @@ public:
 
   int prefork(std::string &err) {
     assert(!forked);
-    int r = ::socketpair(AF_UNIX, SOCK_STREAM, 0, fd);
+    int r = socketpair(AF_UNIX, SOCK_STREAM, 0, fd);
     std::ostringstream oss;
     if (r < 0) {
       oss << "[" << getpid() << "]: unable to create socketpair: " << cpp_strerror(errno);
@@ -51,16 +56,12 @@ public:
       err = oss.str();
       return r;
     }
-    if (is_child()) {
+    if (childpid == 0) {
       ::close(fd[0]);
     } else {
       ::close(fd[1]);
     }
     return 0;
-  }
-
-  int get_signal_fd() const {
-    return forked ? fd[1] : 0;
   }
 
   bool is_child() {
@@ -116,8 +117,7 @@ public:
     return r;
   }
   void exit(int r) {
-    if (is_child())
-        signal_exit(r);
+    signal_exit(r);
     ::exit(r);
   }
 

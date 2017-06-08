@@ -1,10 +1,12 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 #include "librbd/AsyncObjectThrottle.h"
+#include "include/rbd/librbd.hpp"
 #include "common/RWLock.h"
 #include "common/WorkQueue.h"
 #include "librbd/AsyncRequest.h"
 #include "librbd/ImageCtx.h"
+#include "librbd/internal.h"
 #include "librbd/Utils.h"
 
 namespace librbd
@@ -100,6 +102,4 @@ void AsyncObjectThrottle<T>::start_next_op() {
 
 } // namespace librbd
 
-#ifndef TEST_F
 template class librbd::AsyncObjectThrottle<librbd::ImageCtx>;
-#endif

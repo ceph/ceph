@@ -58,7 +58,7 @@ class MDataPing : public Message {
     }
 
 private:
-  ~MDataPing() override
+  ~MDataPing()
     {
       if (mdata_hook)
 	mdata_hook(&mp);
@@ -73,19 +73,19 @@ private:
     }
 
 public:
-  void decode_payload() override {
+  void decode_payload() {
     bufferlist::iterator p = payload.begin();
     ::decode(tag, p);
     ::decode(counter, p);
   }
-  void encode_payload(uint64_t features) override {
+  void encode_payload(uint64_t features) {
     ::encode(tag, payload);
     ::encode(counter, payload);
   }
 
-  const char *get_type_name() const override { return "data_ping"; }
+  const char *get_type_name() const { return "data_ping"; }
 
-  void print(ostream& out) const override {
+  void print(ostream& out) const {
     out << get_type_name() << " " << tag << " " << counter;
   }
 };

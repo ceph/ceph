@@ -63,7 +63,6 @@
 
 using namespace std;
 
-#define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_
 #undef dout_prefix
 #define dout_prefix _prefix(_dout, get_name())
@@ -91,8 +90,8 @@ class TestStub : public Dispatcher
 
   struct C_Tick : public Context {
     TestStub *s;
-    explicit C_Tick(TestStub *stub) : s(stub) {}
-    void finish(int r) override {
+    C_Tick(TestStub *stub) : s(stub) {}
+    void finish(int r) {
       generic_dout(20) << "C_Tick::" << __func__ << dendl;
       if (r == -ECANCELED) {
 	generic_dout(20) << "C_Tick::" << __func__
@@ -103,9 +102,9 @@ class TestStub : public Dispatcher
     }
   };
 
-  bool ms_dispatch(Message *m) override = 0;
-  void ms_handle_connect(Connection *con) override = 0;
-  void ms_handle_remote_reset(Connection *con) override = 0;
+  virtual bool ms_dispatch(Message *m) = 0;
+  virtual void ms_handle_connect(Connection *con) = 0;
+  virtual void ms_handle_remote_reset(Connection *con) = 0;
   virtual int _shutdown() = 0;
   // courtesy method to be implemented by the stubs at their
   // own discretion
@@ -188,7 +187,7 @@ class ClientStub : public TestStub
   rngen_t gen;
 
  protected:
-  bool ms_dispatch(Message *m) override {
+  bool ms_dispatch(Message *m) {
     Mutex::Locker l(lock);
     dout(1) << "client::" << __func__ << " " << *m << dendl;
     switch (m->get_type()) {
@@ -200,34 +199,30 @@ class ClientStub : public TestStub
     return true;
   }
 
-  void ms_handle_connect(Connection *con) override {
+  void ms_handle_connect(Connection *con) {
     dout(1) << "client::" << __func__ << " " << con << dendl;
     Mutex::Locker l(lock);
     objecter->ms_handle_connect(con);
   }
 
-  void ms_handle_remote_reset(Connection *con) override {
+  void ms_handle_remote_reset(Connection *con) {
     dout(1) << "client::" << __func__ << " " << con << dendl;
     Mutex::Locker l(lock);
     objecter->ms_handle_remote_reset(con);
   }
 
-  bool ms_handle_reset(Connection *con) override {
+  bool ms_handle_reset(Connection *con) {
     dout(1) << "client::" << __func__ << dendl;
     Mutex::Locker l(lock);
     objecter->ms_handle_reset(con);
     return false;
   }
 
-  bool ms_handle_refused(Connection *con) override {
-    return false;
-  }
-
-  const string get_name() override {
+  const string get_name() {
     return "client";
   }
 
-  int _shutdown() override {
+  virtual int _shutdown() {
     if (objecter) {
       objecter->shutdown();
     }
@@ -235,12 +230,12 @@ class ClientStub : public TestStub
   }
 
  public:
-  explicit ClientStub(CephContext *cct)
+  ClientStub(CephContext *cct)
     : TestStub(cct, "client"),
       gen((int) time(NULL))
   { }
 
-  int init() override {
+  int init() {
     int err;
     err = monc.build_initial_monmap();
     if (err < 0) {
@@ -253,7 +248,7 @@ class ClientStub : public TestStub
     assert(messenger.get() != NULL);
 
     messenger->set_default_policy(
-	Messenger::Policy::lossy_client(CEPH_FEATURE_OSDREPLYMUX));
+	Messenger::Policy::lossy_client(0, CEPH_FEATURE_OSDREPLYMUX));
     dout(10) << "ClientStub::" << __func__ << " starting messenger at "
 	    << messenger->get_myaddr() << dendl;
 
@@ -333,8 +328,8 @@ class OSDStub : public TestStub
 
   struct C_CreatePGs : public Context {
     OSDStub *s;
-    explicit C_CreatePGs(OSDStub *stub) : s(stub) {}
-    void finish(int r) override {
+    C_CreatePGs(OSDStub *stub) : s(stub) {}
+    void finish(int r) {
       if (r == -ECANCELED) {
 	generic_dout(20) << "C_CreatePGs::" << __func__
 			<< " shutdown" << dendl;
@@ -361,24 +356,26 @@ class OSDStub : public TestStub
 	     << cct->_conf->auth_supported << dendl;
     stringstream ss;
     ss << "client-osd" << whoami;
-    std::string public_msgr_type = cct->_conf->ms_public_type.empty() ? cct->_conf->get_val<std::string>("ms_type") : cct->_conf->ms_public_type;
-    messenger.reset(Messenger::create(cct, public_msgr_type, entity_name_t::OSD(whoami),
-				      ss.str().c_str(), getpid(), 0));
+    messenger.reset(Messenger::create(cct, cct->_conf->ms_type, entity_name_t::OSD(whoami),
+				      ss.str().c_str(), getpid()));
 
     Throttle throttler(g_ceph_context, "osd_client_bytes",
 	g_conf->osd_client_message_size_cap);
+    uint64_t supported =
+      CEPH_FEATURE_UID |
+      CEPH_FEATURE_NOSRCADDR |
+      CEPH_FEATURE_PGID64;
 
     messenger->set_default_policy(
-	Messenger::Policy::stateless_server(0));
+	Messenger::Policy::stateless_server(supported, 0));
     messenger->set_policy_throttlers(entity_name_t::TYPE_CLIENT,
 				    &throttler, NULL);
     messenger->set_policy(entity_name_t::TYPE_MON,
-	Messenger::Policy::lossy_client(
-	  CEPH_FEATURE_UID |
+	Messenger::Policy::lossy_client(supported, CEPH_FEATURE_UID |
 	  CEPH_FEATURE_PGID64 |
 	  CEPH_FEATURE_OSDENC));
     messenger->set_policy(entity_name_t::TYPE_OSD,
-	Messenger::Policy::stateless_server(0));
+	Messenger::Policy::stateless_server(0,0));
 
     dout(10) << __func__ << " public addr " << g_conf->public_addr << dendl;
     int err = messenger->bind(g_conf->public_addr);
@@ -392,7 +389,7 @@ class OSDStub : public TestStub
     monc.set_messenger(messenger.get());
   }
 
-  int init() override {
+  int init() {
     dout(10) << __func__ << dendl;
     Mutex::Locker l(lock);
 
@@ -440,7 +437,7 @@ class OSDStub : public TestStub
     return 0;
   }
 
-  int _shutdown() override {
+  int _shutdown() {
 
     return 0;
   }
@@ -448,7 +445,7 @@ class OSDStub : public TestStub
   void boot() {
     dout(1) << __func__ << " boot?" << dendl;
 
-    utime_t now = ceph_clock_now();
+    utime_t now = ceph_clock_now(messenger->cct);
     if ((last_boot_attempt > 0.0)
 	&& ((now - last_boot_attempt)) <= STUB_BOOT_INTERVAL) {
       dout(1) << __func__ << " backoff and try again later." << dendl;
@@ -464,7 +461,7 @@ class OSDStub : public TestStub
 
   void add_pg(pg_t pgid, epoch_t epoch, pg_t parent) {
 
-    utime_t now = ceph_clock_now();
+    utime_t now = ceph_clock_now(messenger->cct);
 
     pg_stat_t s;
     s.created = epoch;
@@ -495,8 +492,9 @@ class OSDStub : public TestStub
       return;
     }
 
-    auto& osdmap_pools = osdmap.get_pools();
-    for (auto pit = osdmap_pools.begin(); pit != osdmap_pools.end(); ++pit) {
+    const map<int64_t,pg_pool_t> &osdmap_pools = osdmap.get_pools();
+    map<int64_t,pg_pool_t>::const_iterator pit;
+    for (pit = osdmap_pools.begin(); pit != osdmap_pools.end(); ++pit) {
       const int64_t pool_id = pit->first;
       const pg_pool_t &pool = pit->second;
       int ruleno = pool.get_crush_ruleset();
@@ -541,7 +539,7 @@ class OSDStub : public TestStub
   void send_pg_stats() {
     dout(10) << __func__
 	     << " pgs " << pgs.size() << " osdmap " << osdmap << dendl;
-    utime_t now = ceph_clock_now();
+    utime_t now = ceph_clock_now(messenger->cct);
     MPGStats *mstats = new MPGStats(monc.get_fsid(), osdmap.get_epoch(), now);
 
     mstats->set_tid(1);
@@ -575,7 +573,7 @@ class OSDStub : public TestStub
     assert(pgs.count(pgid) > 0);
 
     pg_stat_t &s = pgs[pgid];
-    utime_t now = ceph_clock_now();
+    utime_t now = ceph_clock_now(messenger->cct);
 
     if (now - s.last_change < 10.0) {
       dout(10) << __func__
@@ -673,8 +671,9 @@ class OSDStub : public TestStub
 
     JSONFormatter f(true);
     f.open_array_section("pools");
-    auto& osdmap_pools = osdmap.get_pools();
-    for (auto pit = osdmap_pools.begin(); pit != osdmap_pools.end(); ++pit) {
+    const map<int64_t,pg_pool_t> &osdmap_pools = osdmap.get_pools();
+    map<int64_t,pg_pool_t>::const_iterator pit;
+    for (pit = osdmap_pools.begin(); pit != osdmap_pools.end(); ++pit) {
       const int64_t pool_id = pit->first;
       const pg_pool_t &pool = pit->second;
       f.open_object_section("pool");
@@ -699,7 +698,7 @@ class OSDStub : public TestStub
     dout(10) << __func__
 	     << " send " << num_entries << " log messages" << dendl;
 
-    utime_t now = ceph_clock_now();
+    utime_t now = ceph_clock_now(messenger->cct);
     int seq = 0;
     for (; num_entries > 0; --num_entries) {
       LogEntry e;
@@ -714,7 +713,7 @@ class OSDStub : public TestStub
     monc.send_mon_message(m);
   }
 
-  void _tick() override {
+  void _tick() {
     if (!osdmap.exists(whoami)) {
       std::cout << __func__ << " not in the cluster; boot!" << std::endl;
       boot();
@@ -869,7 +868,7 @@ class OSDStub : public TestStub
     m->put();
   }
 
-  bool ms_dispatch(Message *m) override {
+  bool ms_dispatch(Message *m) {
     dout(1) << __func__ << " " << *m << dendl;
 
     switch (m->get_type()) {
@@ -886,29 +885,25 @@ class OSDStub : public TestStub
     return true;
   }
 
-  void ms_handle_connect(Connection *con) override {
+  void ms_handle_connect(Connection *con) {
     dout(1) << __func__ << " " << con << dendl;
     if (con->get_peer_type() == CEPH_ENTITY_TYPE_MON) {
       dout(10) << __func__ << " on mon" << dendl;
     }
   }
 
-  void ms_handle_remote_reset(Connection *con) override {}
+  void ms_handle_remote_reset(Connection *con) {}
 
-  bool ms_handle_reset(Connection *con) override {
+  bool ms_handle_reset(Connection *con) {
     dout(1) << __func__ << dendl;
-    Session *session = (Session *)con->get_priv();
+    OSD::Session *session = (OSD::Session *)con->get_priv();
     if (!session)
       return false;
     session->put();
     return true;
   }
 
-  bool ms_handle_refused(Connection *con) override {
-    return false;
-  }
-
-  const string get_name() override {
+  const string get_name() {
     stringstream ss;
     ss << "osd." << whoami;
     return ss.str();
@@ -929,7 +924,7 @@ SafeTimer *shutdown_timer = NULL;
 
 struct C_Shutdown : public Context
 {
-  void finish(int r) override {
+  void finish(int r) {
     generic_dout(10) << "main::shutdown time has ran out" << dendl;
     shutdown_cond.Signal();
   }
@@ -1000,9 +995,9 @@ int main(int argc, const char *argv[])
   our_name = argv[0];
   argv_to_vec(argc, argv, args);
 
-  auto cct = global_init(&def_args, args,
-			 CEPH_ENTITY_TYPE_OSD, CODE_ENVIRONMENT_UTILITY,
-			 0);
+  global_init(&def_args, args,
+	      CEPH_ENTITY_TYPE_OSD, CODE_ENVIRONMENT_UTILITY,
+	      0);
 
   common_init_finish(g_ceph_context);
   g_ceph_context->_conf->apply_changes(NULL);

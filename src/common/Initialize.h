@@ -69,7 +69,7 @@ class Initialize {
    *      function should normally contain an internal guard so that it
    *      only performs its initialization the first time it is invoked.
    */
-  explicit Initialize(void (*func)()) {
+  Initialize(void (*func)()) {
     (*func)();
   }
 

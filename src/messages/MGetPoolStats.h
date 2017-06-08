@@ -31,20 +31,20 @@ public:
   }
 
 private:
-  ~MGetPoolStats() override {}
+  ~MGetPoolStats() {}
 
 public:
-  const char *get_type_name() const override { return "getpoolstats"; }
-  void print(ostream& out) const override {
+  const char *get_type_name() const { return "getpoolstats"; }
+  void print(ostream& out) const {
     out << "getpoolstats(" << get_tid() << " " << pools << " v" << version << ")";
   }
 
-  void encode_payload(uint64_t features) override {
+  void encode_payload(uint64_t features) {
     paxos_encode();
     ::encode(fsid, payload);
     ::encode(pools, payload);
   }
-  void decode_payload() override {
+  void decode_payload() {
     bufferlist::iterator p = payload.begin();
     paxos_decode(p);
     ::decode(fsid, p);

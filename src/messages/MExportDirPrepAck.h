@@ -31,21 +31,21 @@ class MExportDirPrepAck : public Message {
     set_tid(tid);
   }
 private:
-  ~MExportDirPrepAck() override {}
+  ~MExportDirPrepAck() {}
 
 public:  
   bool is_success() { return success; }
-  const char *get_type_name() const override { return "ExPAck"; }
-  void print(ostream& o) const override {
+  const char *get_type_name() const { return "ExPAck"; }
+  void print(ostream& o) const {
     o << "export_prep_ack(" << dirfrag << (success ? " success)" : " fail)");
   }
 
-  void decode_payload() override {
+  void decode_payload() {
     bufferlist::iterator p = payload.begin();
     ::decode(dirfrag, p);
     ::decode(success, p);
   }
-  void encode_payload(uint64_t features) override {
+  void encode_payload(uint64_t features) {
     ::encode(dirfrag, payload);
     ::encode(success, payload);
   }

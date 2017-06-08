@@ -25,8 +25,18 @@
 
 class QuorumService
 {
-  Context *tick_event = nullptr;
+  Context *tick_event;
   double tick_period;
+
+  struct C_Tick : public Context {
+    QuorumService *s;
+    C_Tick(QuorumService *qs) : s(qs) { }
+    void finish(int r) {
+      if (r < 0)
+        return;
+      s->tick();
+    }
+  };
 
 public:
   enum {
@@ -40,6 +50,7 @@ protected:
   epoch_t epoch;
 
   QuorumService(Monitor *m) :
+    tick_event(NULL),
     tick_period(g_conf->mon_tick_interval),
     mon(m),
     epoch(0)
@@ -59,11 +70,7 @@ protected:
     if (tick_period <= 0)
       return;
 
-    tick_event = new C_MonContext(mon, [this](int r) {
-	if (r < 0)
-	  return;
-	tick();
-      });
+    tick_event = new C_Tick(this);
     mon->timer.add_event_after(tick_period, tick_event);
   }
 

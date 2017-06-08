@@ -15,8 +15,11 @@
 #ifndef CEPH_WORKQUEUE_H
 #define CEPH_WORKQUEUE_H
 
+#include "Mutex.h"
 #include "Cond.h"
+#include "Thread.h"
 #include "include/unordered_map.h"
+#include "common/config_obs.h"
 #include "common/HeartbeatMap.h"
 
 class CephContext;
@@ -59,7 +62,7 @@ private:
     string name;
     time_t timeout_interval, suicide_interval;
     WorkQueue_(string n, time_t ti, time_t sti)
-      : name(std::move(n)), timeout_interval(ti), suicide_interval(sti)
+      : name(n), timeout_interval(ti), suicide_interval(sti)
     { }
     virtual ~WorkQueue_() {}
     /// Remove all work items from the queue.
@@ -84,11 +87,11 @@ private:
   string _thread_num_option;
   const char **_conf_keys;
 
-  const char **get_tracked_conf_keys() const override {
+  const char **get_tracked_conf_keys() const {
     return _conf_keys;
   }
   void handle_conf_change(const struct md_config_t *conf,
-			  const std::set <std::string> &changed) override;
+			  const std::set <std::string> &changed);
 
 public:
   /** @brief Work queue that processes several submitted items at once.
@@ -104,7 +107,7 @@ public:
     virtual void _process_finish(const list<T*> &) {}
 
     // virtual methods from WorkQueue_ below
-    void *_void_dequeue() override {
+    void *_void_dequeue() {
       list<T*> *out(new list<T*>);
       _dequeue(out);
       if (!out->empty()) {
@@ -114,23 +117,26 @@ public:
 	return 0;
       }
     }
-    void _void_process(void *p, TPHandle &handle) override {
+    void _void_process(void *p, TPHandle &handle) {
       _process(*((list<T*>*)p), handle);
     }
-    void _void_process_finish(void *p) override {
+    void _void_process_finish(void *p) {
       _process_finish(*(list<T*>*)p);
       delete (list<T*> *)p;
     }
 
   protected:
-    virtual void _process(const list<T*> &items, TPHandle &handle) = 0;
+    virtual void _process(const list<T*> &) { assert(0); }
+    virtual void _process(const list<T*> &items, TPHandle &handle) {
+      _process(items);
+    }
 
   public:
     BatchWorkQueue(string n, time_t ti, time_t sti, ThreadPool* p)
-      : WorkQueue_(std::move(n), ti, sti), pool(p) {
+      : WorkQueue_(n, ti, sti), pool(p) {
       pool->add_work_queue(this);
     }
-    ~BatchWorkQueue() override {
+    ~BatchWorkQueue() {
       pool->remove_work_queue(this);
     }
 
@@ -183,11 +189,11 @@ public:
     list<U> to_finish;
     virtual void _enqueue(T) = 0;
     virtual void _enqueue_front(T) = 0;
-    bool _empty() override = 0;
+    virtual bool _empty() = 0;
     virtual U _dequeue() = 0;
     virtual void _process_finish(U) {}
 
-    void *_void_dequeue() override {
+    void *_void_dequeue() {
       {
 	Mutex::Locker l(_lock);
 	if (_empty())
@@ -197,7 +203,7 @@ public:
       }
       return ((void*)1); // Not used
     }
-    void _void_process(void *, TPHandle &handle) override {
+    void _void_process(void *, TPHandle &handle) {
       _lock.Lock();
       assert(!to_process.empty());
       U u = to_process.front();
@@ -211,7 +217,7 @@ public:
       _lock.Unlock();
     }
 
-    void _void_process_finish(void *) override {
+    void _void_process_finish(void *) {
       _lock.Lock();
       assert(!to_finish.empty());
       U u = to_finish.front();
@@ -221,14 +227,14 @@ public:
       _process_finish(u);
     }
 
-    void _clear() override {}
+    void _clear() {}
 
   public:
     WorkQueueVal(string n, time_t ti, time_t sti, ThreadPool *p)
-      : WorkQueue_(std::move(n), ti, sti), _lock("WorkQueueVal::lock"), pool(p) {
+      : WorkQueue_(n, ti, sti), _lock("WorkQueueVal::lock"), pool(p) {
       pool->add_work_queue(this);
     }
-    ~WorkQueueVal() override {
+    ~WorkQueueVal() {
       pool->remove_work_queue(this);
     }
     void queue(T item) {
@@ -251,7 +257,10 @@ public:
     void unlock() {
       pool->unlock();
     }
-    virtual void _process(U u, TPHandle &) = 0;
+    virtual void _process(U) { assert(0); }
+    virtual void _process(U u, TPHandle &) {
+      _process(u);
+    }
   };
 
   /** @brief Template by-pointer work queue.
@@ -272,26 +281,28 @@ public:
     virtual void _process_finish(T *) {}
 
     // implementation of virtual methods from WorkQueue_
-    void *_void_dequeue() override {
+    void *_void_dequeue() {
       return (void *)_dequeue();
     }
-    void _void_process(void *p, TPHandle &handle) override {
+    void _void_process(void *p, TPHandle &handle) {
       _process(static_cast<T *>(p), handle);
     }
-    void _void_process_finish(void *p) override {
+    void _void_process_finish(void *p) {
       _process_finish(static_cast<T *>(p));
     }
 
   protected:
     /// Process a work item. Called from the worker threads.
-    virtual void _process(T *t, TPHandle &) = 0;
+    virtual void _process(T *t) { assert(0); }
+    virtual void _process(T *t, TPHandle &) {
+      _process(t);
+    }
 
   public:
-    WorkQueue(string n, time_t ti, time_t sti, ThreadPool* p)
-      : WorkQueue_(std::move(n), ti, sti), pool(p) {
+    WorkQueue(string n, time_t ti, time_t sti, ThreadPool* p) : WorkQueue_(n, ti, sti), pool(p) {
       pool->add_work_queue(this);
     }
-    ~WorkQueue() override {
+    ~WorkQueue() {
       pool->remove_work_queue(this);
     }
     
@@ -343,7 +354,7 @@ public:
   template<typename T>
   class PointerWQ : public WorkQueue_ {
   public:
-    ~PointerWQ() override {
+    ~PointerWQ() {
       m_pool->remove_work_queue(this);
       assert(m_processing == 0);
     }
@@ -369,17 +380,17 @@ public:
     }
   protected:
     PointerWQ(string n, time_t ti, time_t sti, ThreadPool* p)
-      : WorkQueue_(std::move(n), ti, sti), m_pool(p), m_processing(0) {
+      : WorkQueue_(n, ti, sti), m_pool(p), m_processing(0) {
     }
-    void _clear() override {
+    virtual void _clear() {
       assert(m_pool->_lock.is_locked());
       m_items.clear();
     }
-    bool _empty() override {
+    virtual bool _empty() {
       assert(m_pool->_lock.is_locked());
       return m_items.empty();
     }
-    void *_void_dequeue() override {
+    virtual void *_void_dequeue() {
       assert(m_pool->_lock.is_locked());
       if (m_items.empty()) {
         return NULL;
@@ -390,10 +401,10 @@ public:
       m_items.pop_front();
       return item;
     }
-    void _void_process(void *item, ThreadPool::TPHandle &handle) override {
+    virtual void _void_process(void *item, ThreadPool::TPHandle &handle) {
       process(reinterpret_cast<T *>(item));
     }
-    void _void_process_finish(void *item) override {
+    virtual void _void_process_finish(void *item) {
       assert(m_pool->_lock.is_locked());
       assert(m_processing > 0);
       --m_processing;
@@ -412,11 +423,6 @@ public:
       }
       return m_items.front();
     }
-    void requeue(T *item) {
-      Mutex::Locker pool_locker(m_pool->_lock);
-      _void_process_finish(nullptr);
-      m_items.push_front(item);
-    }
     void signal() {
       Mutex::Locker pool_locker(m_pool->_lock);
       m_pool->_cond.SignalOne();
@@ -431,15 +437,14 @@ public:
   };
 private:
   vector<WorkQueue_*> work_queues;
-  int next_work_queue = 0;
+  int last_work_queue;
  
 
   // threads
   struct WorkThread : public Thread {
     ThreadPool *pool;
-    // cppcheck-suppress noExplicitConstructor
     WorkThread(ThreadPool *p) : pool(p) {}
-    void *entry() override {
+    void *entry() {
       pool->worker(this);
       return 0;
     }
@@ -455,7 +460,7 @@ private:
 
 public:
   ThreadPool(CephContext *cct_, string nm, string tn, int n, const char *option = NULL);
-  ~ThreadPool() override;
+  virtual ~ThreadPool();
 
   /// return number of threads currently running
   int get_num_threads() {
@@ -535,23 +540,23 @@ public:
     : ThreadPool::WorkQueueVal<
       GenContext<ThreadPool::TPHandle&>*>(name, ti, ti*10, tp) {}
   
-  void _enqueue(GenContext<ThreadPool::TPHandle&> *c) override {
+  void _enqueue(GenContext<ThreadPool::TPHandle&> *c) {
     _queue.push_back(c);
   }
-  void _enqueue_front(GenContext<ThreadPool::TPHandle&> *c) override {
+  void _enqueue_front(GenContext<ThreadPool::TPHandle&> *c) {
     _queue.push_front(c);
   }
-  bool _empty() override {
+  bool _empty() {
     return _queue.empty();
   }
-  GenContext<ThreadPool::TPHandle&> *_dequeue() override {
+  GenContext<ThreadPool::TPHandle&> *_dequeue() {
     assert(!_queue.empty());
     GenContext<ThreadPool::TPHandle&> *c = _queue.front();
     _queue.pop_front();
     return c;
   }
-  void _process(GenContext<ThreadPool::TPHandle&> *c,
-		ThreadPool::TPHandle &tp) override {
+  using ThreadPool::WorkQueueVal<GenContext<ThreadPool::TPHandle&>*>::_process;
+  void _process(GenContext<ThreadPool::TPHandle&> *c, ThreadPool::TPHandle &tp) {
     c->complete(tp);
   }
 };
@@ -562,7 +567,7 @@ class C_QueueInWQ : public Context {
 public:
   C_QueueInWQ(GenContextWQ *wq, GenContext<ThreadPool::TPHandle &> *c)
     : wq(wq), c(c) {}
-  void finish(int) override {
+  void finish(int) {
     wq->queue(c);
   }
 };
@@ -585,14 +590,14 @@ public:
     ThreadPool::PointerWQ<Context>::queue(ctx);
   }
 protected:
-  void _clear() override {
+  virtual void _clear() {
     ThreadPool::PointerWQ<Context>::_clear();
 
     Mutex::Locker locker(m_lock);
     m_context_results.clear();
   }
 
-  void process(Context *ctx) override {
+  virtual void process(Context *ctx) {
     int result = 0;
     {
       Mutex::Locker locker(m_lock);
@@ -655,7 +660,7 @@ public:
                                                                  sharded_pool(tp) {
       tp->set_wq(this);
     }
-    ~ShardedWQ() override {}
+    virtual ~ShardedWQ() {}
 
     void queue(T item) {
       _enqueue(item);
@@ -678,7 +683,7 @@ private:
     uint32_t thread_index;
     WorkThreadSharded(ShardedThreadPool *p, uint32_t pthread_index): pool(p),
       thread_index(pthread_index) {}
-    void *entry() override {
+    void *entry() {
       pool->shardedthreadpool_worker(thread_index);
       return 0;
     }

@@ -1,7 +1,0 @@
-tasks:
-- ceph-fuse:
-- workunit:
-    timeout: 6h
-    clients:
-      all:
-        - suites/fsx.sh

@@ -30,8 +30,6 @@ TEST(CephContext, do_command)
 {
   CephContext *cct = (new CephContext(CEPH_ENTITY_TYPE_CLIENT))->get();
 
-  cct->_conf->cluster = "ceph";
-
   string key("key");
   string value("value");
   cct->_conf->set_val(key.c_str(), value.c_str(), false);
@@ -52,21 +50,12 @@ TEST(CephContext, do_command)
     EXPECT_EQ("{\n    \"key\": \"value\"\n}\n", s);
   }
 
-  {
-    bufferlist out;
-    cct->do_command("config diff get", cmdmap, "xml", &out);
-    string s(out.c_str(), out.length());
-    EXPECT_EQ("<config_diff_get><diff><current><key>" + value + 
-      "</key></current><defaults><key></key></defaults></diff></config_diff_get>", s);
-  }
   cct->put();
 }
 
 TEST(CephContext, experimental_features)
 {
   CephContext *cct = (new CephContext(CEPH_ENTITY_TYPE_CLIENT))->get();
-
-  cct->_conf->cluster = "ceph";
 
   ASSERT_FALSE(cct->check_experimental_feature_enabled("foo"));
   ASSERT_FALSE(cct->check_experimental_feature_enabled("bar"));

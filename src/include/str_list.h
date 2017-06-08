@@ -3,6 +3,7 @@
 
 #include <list>
 #include <set>
+#include <sstream>
 #include <string>
 #include <vector>
 
@@ -88,14 +89,6 @@ inline std::string str_join(const std::vector<std::string>& v, std::string sep)
     r += *i;
   }
   return r;
-}
-
-static inline std::vector<std::string> get_str_vec(const std::string& str)
-{
-  std::vector<std::string> str_vec;
-  const char *delims = ";,= \t";
-  get_str_vec(str, delims, str_vec);
-  return str_vec;
 }
 
 #endif

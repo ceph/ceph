@@ -1,0 +1,93 @@
+if WITH_RADOS
+
+ceph_scratchtool_SOURCES = tools/scratchtool.c
+ceph_scratchtool_LDADD = $(LIBRADOS) $(CEPH_GLOBAL)
+bin_DEBUGPROGRAMS += ceph_scratchtool
+
+ceph_scratchtoolpp_SOURCES = tools/scratchtoolpp.cc
+ceph_scratchtoolpp_LDADD = $(LIBRADOS) $(CEPH_GLOBAL)
+bin_DEBUGPROGRAMS += ceph_scratchtoolpp
+
+ceph_radosacl_SOURCES = tools/radosacl.cc
+ceph_radosacl_LDADD = $(LIBRADOS) $(CEPH_GLOBAL)
+bin_DEBUGPROGRAMS += ceph_radosacl
+
+rados_SOURCES = \
+	tools/rados/rados.cc \
+	tools/RadosDump.cc \
+	tools/rados/RadosImport.cc \
+	tools/rados/PoolDump.cc
+rados_SOURCES += common/obj_bencher.cc # needs cleanup so it can go in libcommon.la
+rados_LDADD = libcls_lock_client.la $(LIBRADOS) $(LIBRADOSSTRIPER) $(CEPH_GLOBAL)
+bin_PROGRAMS += rados
+
+if WITH_RBD
+
+rbd_SOURCES = \
+	tools/rbd/rbd.cc \
+	tools/rbd/ArgumentTypes.cc \
+	tools/rbd/IndentStream.cc \
+	tools/rbd/OptionPrinter.cc \
+	tools/rbd/Shell.cc \
+	tools/rbd/Utils.cc \
+	tools/rbd/action/BenchWrite.cc \
+	tools/rbd/action/Children.cc \
+	tools/rbd/action/Clone.cc \
+	tools/rbd/action/Copy.cc \
+	tools/rbd/action/Create.cc \
+	tools/rbd/action/Diff.cc \
+	tools/rbd/action/DiskUsage.cc \
+	tools/rbd/action/Export.cc \
+	tools/rbd/action/ExportDiff.cc \
+	tools/rbd/action/Feature.cc \
+	tools/rbd/action/Flatten.cc \
+	tools/rbd/action/ImageMeta.cc \
+	tools/rbd/action/Import.cc \
+	tools/rbd/action/ImportDiff.cc \
+	tools/rbd/action/Info.cc \
+	tools/rbd/action/Journal.cc \
+	tools/rbd/action/Kernel.cc \
+	tools/rbd/action/Nbd.cc \
+	tools/rbd/action/List.cc \
+	tools/rbd/action/Lock.cc \
+	tools/rbd/action/MergeDiff.cc \
+	tools/rbd/action/MirrorPool.cc \
+	tools/rbd/action/ObjectMap.cc \
+	tools/rbd/action/Remove.cc \
+	tools/rbd/action/Rename.cc \
+	tools/rbd/action/Resize.cc \
+	tools/rbd/action/Snap.cc \
+	tools/rbd/action/Status.cc \
+	tools/rbd/action/Watch.cc
+noinst_HEADERS += \
+	tools/rbd/ArgumentTypes.h \
+	tools/rbd/IndentStream.h \
+	tools/rbd/OptionPrinter.h \
+	tools/rbd/Shell.h \
+	tools/rbd/Utils.h
+rbd_LDADD = \
+	libjournal.la libcls_journal_client.la \
+	$(LIBKRBD) $(LIBRBD) $(LIBRBD_TYPES) $(LIBRADOS) $(CEPH_GLOBAL) \
+	$(BOOST_REGEX_LIBS) $(BOOST_PROGRAM_OPTIONS_LIBS)
+if LINUX
+bin_PROGRAMS += rbd
+
+rbd_nbd_SOURCES = tools/rbd_nbd/rbd-nbd.cc
+rbd_nbd_CXXFLAGS = $(AM_CXXFLAGS)
+rbd_nbd_LDADD = $(LIBRBD) $(LIBRADOS) $(CEPH_GLOBAL) $(BOOST_REGEX_LIBS)
+bin_PROGRAMS += rbd-nbd
+
+endif # LINUX
+
+endif # WITH_RBD
+
+if WITH_CEPHFS
+
+ceph_client_debug_SOURCES = tools/ceph-client-debug.cc
+ceph_client_debug_LDADD = $(LIBCEPHFS) $(LIBCLIENT) $(CEPH_GLOBAL) $(LIBCOMMON)
+bin_DEBUGPROGRAMS += ceph-client-debug
+
+endif # WITH_CEPHFS
+
+
+endif # WITH_RADOS

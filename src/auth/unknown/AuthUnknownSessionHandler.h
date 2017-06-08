@@ -12,8 +12,8 @@
  * 
  */
 
-#include "auth/AuthSessionHandler.h"
-#include "msg/Message.h"
+#include "../AuthSessionHandler.h"
+#include "../Auth.h"
 
 #define dout_subsys ceph_subsys_auth
 
@@ -23,28 +23,28 @@ class AuthUnknownSessionHandler  : public AuthSessionHandler {
 public:
   AuthUnknownSessionHandler(CephContext *cct_, CryptoKey session_key)
     : AuthSessionHandler(cct_, CEPH_AUTH_UNKNOWN, session_key) {}
-  ~AuthUnknownSessionHandler() override {}
+  ~AuthUnknownSessionHandler() {}
   
-  bool no_security() override {
+  bool no_security() {
     return true;
   }
 
   // The Unknown suite neither signs nor encrypts messages, so these functions just return success.
   // Since nothing was signed or encrypted, don't increment the stats.  PLR
 
-  int sign_message(Message *m) override {
+  int sign_message(Message *m) {
     return 0;
   }
 
-  int check_message_signature(Message *m) override {
+  int check_message_signature(Message *m) {
     return 0;
   }
 
-  int encrypt_message(Message *m) override {
+  int encrypt_message(Message *m) {
     return 0;
   }
 
-  int decrypt_message(Message *m) override {
+  int decrypt_message(Message *m) {
     return 0;
   }
 

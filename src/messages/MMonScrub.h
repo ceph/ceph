@@ -19,7 +19,7 @@
 class MMonScrub : public Message
 {
   static const int HEAD_VERSION = 2;
-  static const int COMPAT_VERSION = 2;
+  static const int COMPAT_VERSION = 1;
 
 public:
   typedef enum {
@@ -51,9 +51,9 @@ public:
       op(op), version(v), num_keys(num_keys)
   { }
 
-  const char *get_type_name() const override { return "mon_scrub"; }
+  const char *get_type_name() const { return "mon_scrub"; }
 
-  void print(ostream& out) const override {
+  void print(ostream& out) const {
     out << "mon_scrub(" << get_opname((op_type_t)op);
     out << " v " << version;
     if (op == OP_RESULT)
@@ -63,7 +63,7 @@ public:
     out << ")";
   }
 
-  void encode_payload(uint64_t features) override {
+  void encode_payload(uint64_t features) {
     uint8_t o = op;
     ::encode(o, payload);
     ::encode(version, payload);
@@ -72,15 +72,17 @@ public:
     ::encode(key, payload);
   }
 
-  void decode_payload() override {
+  void decode_payload() {
     bufferlist::iterator p = payload.begin();
     uint8_t o;
     ::decode(o, p);
     op = (op_type_t)o;
     ::decode(version, p);
     ::decode(result, p);
-    ::decode(num_keys, p);
-    ::decode(key, p);
+    if (header.version >= 2) {
+      ::decode(num_keys, p);
+      ::decode(key, p);
+    }
   }
 };
 

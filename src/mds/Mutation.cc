@@ -71,7 +71,7 @@ void MutationImpl::finish_locking(SimpleLock *lock)
 
 
 // auth pins
-bool MutationImpl::is_auth_pinned(MDSCacheObject *object) const
+bool MutationImpl::is_auth_pinned(MDSCacheObject *object)
 { 
   return auth_pins.count(object) || remote_auth_pins.count(object); 
 }
@@ -173,10 +173,6 @@ void MutationImpl::cleanup()
   drop_pins();
 }
 
-void MutationImpl::_dump_op_descriptor_unlocked(ostream& stream) const
-{
-  stream << "Mutation";
-}
 
 // MDRequestImpl
 
@@ -196,27 +192,22 @@ MDRequestImpl::More* MDRequestImpl::more()
   return _more;
 }
 
-bool MDRequestImpl::has_more() const
+bool MDRequestImpl::has_more()
 {
-  return _more != nullptr;
+  return _more;
 }
 
 bool MDRequestImpl::has_witnesses()
 {
-  return (_more != nullptr) && (!_more->witnessed.empty());
+  return _more && !_more->witnessed.empty();
 }
 
 bool MDRequestImpl::slave_did_prepare()
 {
-  return has_more() && more()->slave_commit;
+  return more()->slave_commit;
 }
 
-bool MDRequestImpl::slave_rolling_back()
-{
-  return has_more() && more()->slave_rolling_back;
-}
-
-bool MDRequestImpl::did_ino_allocation() const
+bool MDRequestImpl::did_ino_allocation()
 {
   return alloc_ino || used_prealloc_ino || prealloc_inos.size();
 }      
@@ -306,19 +297,13 @@ void MDRequestImpl::set_filepath(const filepath& fp)
   assert(!client_request);
   more()->filepath1 = fp;
 }
-
 void MDRequestImpl::set_filepath2(const filepath& fp)
 {
   assert(!client_request);
   more()->filepath2 = fp;
 }
 
-bool MDRequestImpl::is_replay() const
-{
-  return client_request ? client_request->is_replay() : false;
-}
-
-void MDRequestImpl::print(ostream &out) const
+void MDRequestImpl::print(ostream &out)
 {
   out << "request(" << reqid;
   //if (request) out << " " << *request;
@@ -330,10 +315,10 @@ void MDRequestImpl::print(ostream &out) const
 
 void MDRequestImpl::dump(Formatter *f) const
 {
-  _dump(f);
+  _dump(ceph_clock_now(g_ceph_context), f);
 }
 
-void MDRequestImpl::_dump(Formatter *f) const
+void MDRequestImpl::_dump(utime_t now, Formatter *f) const
 {
   f->dump_string("flag_point", state_string());
   f->dump_stream("reqid") << reqid;
@@ -379,8 +364,13 @@ void MDRequestImpl::_dump(Formatter *f) const
   {
     f->open_array_section("events");
     Mutex::Locker l(lock);
-    for (auto& i : events) {
-      f->dump_object("event", i);
+    for (list<pair<utime_t, string> >::const_iterator i = events.begin();
+         i != events.end();
+         ++i) {
+      f->open_object_section("event");
+      f->dump_stream("time") << i->first;
+      f->dump_string("event", i->second);
+      f->close_section();
     }
     f->close_section(); // events
   }

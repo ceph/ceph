@@ -170,7 +170,9 @@ int FS::zero(int fd, uint64_t offset, uint64_t length)
   {
     // fall back to writing zeros
     bufferlist bl;
-    bl.append_zero(length);
+    bufferptr bp(length);
+    bp.zero();
+    bl.append(bp);
     r = ::lseek64(fd, offset, SEEK_SET);
     if (r < 0) {
       r = -errno;
@@ -182,6 +184,3 @@ int FS::zero(int fd, uint64_t offset, uint64_t length)
  out:
   return r;
 }
-
-// ---------------
-

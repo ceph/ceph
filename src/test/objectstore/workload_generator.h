@@ -17,12 +17,10 @@
 #include <boost/scoped_ptr.hpp>
 #include <boost/random/mersenne_twister.hpp>
 #include <boost/random/uniform_int.hpp>
+#include <map>
 #include <sys/time.h>
 
 #include "TestObjectStoreState.h"
-
-#include <map>
-#include <atomic>
 
 typedef boost::mt11213b rngen_t;
 
@@ -59,7 +57,7 @@ class WorkloadGenerator : public TestObjectStoreState {
   int m_max_in_flight;
   int m_num_ops;
   int m_destroy_coll_every_nr_runs;
-  std::atomic<int> m_nr_runs = { 0 };
+  atomic_t m_nr_runs;
 
   int m_num_colls;
 
@@ -112,7 +110,7 @@ class WorkloadGenerator : public TestObjectStoreState {
 
   bool should_destroy_collection() {
     return ((m_destroy_coll_every_nr_runs > 0) &&
-        (m_nr_runs >= m_destroy_coll_every_nr_runs));
+        ((int)m_nr_runs.read() >= m_destroy_coll_every_nr_runs));
   }
   void do_destroy_collection(ObjectStore::Transaction *t, coll_entry_t *entry,
       C_StatState *stat);
@@ -122,7 +120,7 @@ class WorkloadGenerator : public TestObjectStoreState {
   void do_stats();
 
 public:
-  explicit WorkloadGenerator(vector<const char*> args);
+  WorkloadGenerator(vector<const char*> args);
   ~WorkloadGenerator() {
     m_store->umount();
   }
@@ -131,13 +129,14 @@ public:
     WorkloadGenerator *wrkldgen_state;
 
   public:
-    explicit C_OnReadable(WorkloadGenerator *state)
-     :TestObjectStoreState::C_OnFinished(state), wrkldgen_state(state) { }
+    C_OnReadable(WorkloadGenerator *state,
+                                  ObjectStore::Transaction *t)
+     :TestObjectStoreState::C_OnFinished(state, t), wrkldgen_state(state) { }
 
-    void finish(int r) override
+    void finish(int r)
     {
       TestObjectStoreState::C_OnFinished::finish(r);
-      wrkldgen_state->m_nr_runs++;
+      wrkldgen_state->m_nr_runs.inc();
     }
   };
 
@@ -145,10 +144,11 @@ public:
     coll_entry_t *m_entry;
 
   public:
-    C_OnDestroyed(WorkloadGenerator *state, coll_entry_t *entry) :
-          C_OnReadable(state), m_entry(entry) {}
+    C_OnDestroyed(WorkloadGenerator *state,
+        ObjectStore::Transaction *t, coll_entry_t *entry) :
+          C_OnReadable(state, t), m_entry(entry) {}
 
-    void finish(int r) override {
+    void finish(int r) {
       C_OnReadable::finish(r);
       delete m_entry;
     }
@@ -162,7 +162,7 @@ public:
     C_StatWrapper(C_StatState *state, Context *context)
       : stat_state(state), ctx(context) { }
 
-    void finish(int r) override {
+    void finish(int r) {
       ctx->complete(r);
 
       stat_state->wrkldgen->m_stats_lock.Lock();

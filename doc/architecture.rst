@@ -150,7 +150,7 @@ cluster topology, which is inclusive of 5 maps collectively referred to as the
 #. **The MDS Map:** Contains the current MDS map epoch, when the map was 
    created, and the last time it changed. It also contains the pool for 
    storing metadata, a list of metadata servers, and which metadata servers
-   are ``up`` and ``in``. To view an MDS map, execute ``ceph fs dump``.
+   are ``up`` and ``in``. To view an MDS map, execute ``ceph mds dump``.
 
 Each map maintains an iterative history of its operating state changes. Ceph
 Monitors maintain a master copy of the cluster map including the cluster
@@ -207,10 +207,10 @@ of failure or bottleneck when using ``cephx``. The monitor returns an
 authentication data structure similar to a Kerberos ticket that contains a
 session key for use in obtaining Ceph services.  This session key is itself
 encrypted with the user's permanent  secret key, so that only the user can
-request services from the Ceph Monitor(s). The client then uses the session key
+request services from the Ceph monitor(s). The client then uses the session key
 to request its desired services from the monitor, and the monitor provides the
 client with a ticket that will authenticate the client to the OSDs that actually
-handle data. Ceph Monitors and OSDs share a secret, so the client can use the
+handle data. Ceph monitors and OSDs share a secret, so the client can use the
 ticket provided by the monitor with any OSD or metadata server in the cluster.
 Like Kerberos, ``cephx`` tickets expire, so an attacker cannot use an expired
 ticket or session key obtained surreptitiously. This form of authentication will
@@ -338,7 +338,7 @@ dispatch--which is a **huge** bottleneck at the petabyte-to-exabyte scale.
 Ceph eliminates the bottleneck: Ceph's OSD Daemons AND Ceph Clients are cluster
 aware. Like Ceph clients, each Ceph OSD Daemon knows about other Ceph OSD
 Daemons in the cluster.  This enables Ceph OSD Daemons to interact directly with
-other Ceph OSD Daemons and Ceph Monitors. Additionally, it enables Ceph Clients
+other Ceph OSD Daemons and Ceph monitors. Additionally, it enables Ceph Clients
 to interact directly with Ceph OSD Daemons.
 
 The ability of Ceph Clients, Ceph Monitors and Ceph OSD Daemons to interact with
@@ -360,15 +360,13 @@ ability to leverage this computing power leads to several major benefits:
    Ceph Client requests. If a Ceph OSD Daemon is ``down`` and ``in`` the Ceph 
    Storage Cluster, this status may indicate the failure of the Ceph OSD 
    Daemon. If a Ceph OSD Daemon is not running (e.g., it crashes), the Ceph OSD 
-   Daemon cannot notify the Ceph Monitor that it is ``down``. The OSDs
-   periodically send messages to the Ceph Monitor (``MPGStats`` pre-luminous,
-   and a new ``MOSDBeacon`` in luminous).  If the Ceph Monitor doesn't see that
-   message after a configurable period of time then it marks the OSD down.
-   This mechanism is a failsafe, however. Normally, Ceph OSD Daemons will
-   determine if a neighboring OSD is down and report it to the Ceph Monitor(s).
-   This assures that Ceph Monitors are lightweight processes.  See `Monitoring
-   OSDs`_ and `Heartbeats`_ for additional details.
-
+   Daemon cannot notify the Ceph Monitor that it is ``down``. The Ceph Monitor 
+   can ping a Ceph OSD Daemon periodically to ensure that it is running. 
+   However, Ceph also empowers Ceph OSD Daemons to determine if a neighboring 
+   OSD is ``down``, to update the cluster map and to report it to the Ceph 
+   monitor(s). This means that Ceph monitors can remain light weight processes. 
+   See `Monitoring OSDs`_ and `Heartbeats`_ for additional details.
+   
 #. **Data Scrubbing:** As part of maintaining data consistency and cleanliness, 
    Ceph OSD Daemons can scrub objects within placement groups. That is, Ceph 
    OSD Daemons can compare object metadata in one placement group with its 
@@ -937,11 +935,11 @@ on **OSD 3**.
      Primary OSD
     
    +-------------+
-   |    OSD 1    |
-   |         log |
-   |  +----+     |
-   |  |D1v2| 1,2 |
-   |  +----+     |
+   |    OSD 1    |             +-------------+
+   |         log |  Write Full |             |
+   |  +----+     |<------------+ Ceph Client |
+   |  |D1v2| 1,1 |      v2     |             |
+   |  +----+     |             +-------------+
    +------+------+
           |
           |
@@ -949,7 +947,7 @@ on **OSD 3**.
           |          |    OSD 2    |
           |          |         log |
           +--------->+  +----+     |
-          |          |  |D2v2| 1,2 |
+          |          |  |D2v2| 1,1 |
           |          |  +----+     |
           |          +-------------+
           |
@@ -957,7 +955,7 @@ on **OSD 3**.
           |          |    OSD 3    |
           |          |         log |
           +--------->|  +----+     |
-                     |  |C1v2| 1,2 |
+                     |  |C1v2| 1,1 |
                      |  +----+     |
                      +-------------+
 
@@ -1243,11 +1241,11 @@ Data Striping
 
 Storage devices have throughput limitations, which impact performance and
 scalability. So storage systems often support `striping`_--storing sequential
-pieces of information across multiple storage devices--to increase throughput
-and performance. The most common form of data striping comes from `RAID`_.
-The RAID type most similar to Ceph's striping is `RAID 0`_, or a 'striped
-volume'. Ceph's striping offers the throughput of RAID 0 striping, the
-reliability of n-way RAID mirroring and faster recovery.
+pieces of information across across multiple storage devices--to increase
+throughput and performance. The most common form of data striping comes from
+`RAID`_. The RAID type most similar to Ceph's striping is `RAID 0`_, or a
+'striped volume.' Ceph's striping offers the throughput of RAID 0 striping,
+the reliability of n-way RAID mirroring and faster recovery.
 
 Ceph provides three types of clients: Ceph Block Device, Ceph Filesystem, and
 Ceph Object Storage. A Ceph Client converts its data from the representation 
@@ -1502,9 +1500,9 @@ daemons throughout the cluster.
 Thin-provisioned snapshottable Ceph Block Devices are an attractive option for
 virtualization and cloud computing. In virtual machine scenarios, people
 typically deploy a Ceph Block Device with the ``rbd`` network storage driver in
-QEMU/KVM, where the host machine uses ``librbd`` to provide a block device
+Qemu/KVM, where the host machine uses ``librbd`` to provide a block device
 service to the guest. Many cloud computing stacks use ``libvirt`` to integrate
-with hypervisors. You can use thin-provisioned Ceph Block Devices with QEMU and
+with hypervisors. You can use thin-provisioned Ceph Block Devices with Qemu and
 ``libvirt`` to support OpenStack and CloudStack among other solutions.
 
 While we do not provide ``librbd`` support with other hypervisors at this time,
@@ -1575,7 +1573,7 @@ instance for high availability.
 
 
 
-.. _RADOS - A Scalable, Reliable Storage Service for Petabyte-scale Storage Clusters: https://ceph.com/wp-content/uploads/2016/08/weil-rados-pdsw07.pdf
+.. _RADOS - A Scalable, Reliable Storage Service for Petabyte-scale Storage Clusters: http://ceph.com/papers/weil-rados-pdsw07.pdf
 .. _Paxos: http://en.wikipedia.org/wiki/Paxos_(computer_science)
 .. _Monitor Config Reference: ../rados/configuration/mon-config-ref
 .. _Monitoring OSDs and PGs: ../rados/operations/monitoring-osd-pg
@@ -1586,7 +1584,7 @@ instance for high availability.
 .. _Report Peering Failure: ../rados/configuration/mon-osd-interaction#osds-report-peering-failure
 .. _Troubleshooting Peering Failure: ../rados/troubleshooting/troubleshooting-pg#placement-group-down-peering-failure
 .. _Ceph Authentication and Authorization: ../rados/operations/auth-intro/
-.. _Hardware Recommendations: ../start/hardware-recommendations
+.. _Hardware Recommendations: ../install/hardware-recommendations
 .. _Network Config Reference: ../rados/configuration/network-config-ref
 .. _Data Scrubbing: ../rados/configuration/osd-config-ref#scrubbing
 .. _striping: http://en.wikipedia.org/wiki/Data_striping

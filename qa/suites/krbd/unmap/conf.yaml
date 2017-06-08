@@ -1,5 +1,0 @@
-overrides:
-  ceph:
-    conf:
-      client:
-        rbd default features: 1 # pre-single-major is v3.13, so layering only

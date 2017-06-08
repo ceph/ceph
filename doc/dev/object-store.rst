@@ -49,18 +49,18 @@
 
     "OSDMapTool" -> "OSDMap"
 
-    "PG" -> "PrimaryLogPG"
+    "PG" -> "ReplicatedPG"
     "PG" -> "ObjectStore"
     "PG" -> "OSDMap"
 
-    "PrimaryLogPG" -> "ObjectStore"
-    "PrimaryLogPG" -> "OSDMap"
+    "ReplicatedPG" -> "ObjectStore"
+    "ReplicatedPG" -> "OSDMap"
 
     "ObjectStore" -> "FileStore"
 
-    "FileStore" -> "xfs"
-    "FileStore" -> "btrfs"
+    "FileStore" -> "ext3"
     "FileStore" -> "ext4"
+    "FileStore" -> "btrfs"
   }
 
 

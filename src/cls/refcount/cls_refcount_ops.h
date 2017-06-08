@@ -4,6 +4,8 @@
 #ifndef CEPH_CLS_REFCOUNT_OPS_H
 #define CEPH_CLS_REFCOUNT_OPS_H
 
+#include <map>
+
 #include "include/types.h"
 
 class Formatter;

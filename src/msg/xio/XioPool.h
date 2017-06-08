@@ -48,7 +48,7 @@ public:
     char payload[MB];
   } *first;
 
-  explicit XioPool(struct xio_mempool *_handle) :
+  XioPool(struct xio_mempool *_handle) :
     handle(_handle), first(0)
     {
     }

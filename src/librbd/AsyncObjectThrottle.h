@@ -5,8 +5,10 @@
 
 #include "include/int_types.h"
 #include "include/Context.h"
+#include "common/RWLock.h"
 
 #include <boost/function.hpp>
+#include "include/assert.h"
 
 namespace librbd
 {
@@ -33,7 +35,7 @@ public:
 protected:
   ImageCtxT &m_image_ctx;
 
-  void finish(int r) override {
+  virtual void finish(int r) {
     m_finisher.finish_op(r);
   }
 
@@ -55,7 +57,7 @@ public:
 		      uint64_t end_object_no);
 
   void start_ops(uint64_t max_concurrent);
-  void finish_op(int r) override;
+  virtual void finish_op(int r);
 
 private:
   Mutex m_lock;

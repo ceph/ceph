@@ -31,7 +31,7 @@ public:
     : Connection(cct, m),
       pipe(NULL) { }
 
-  ~PipeConnection() override;
+  ~PipeConnection();
 
   Pipe* get_pipe();
 

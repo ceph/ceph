@@ -14,75 +14,62 @@
 #ifndef CEPH_MON_CONFIG_KEY_SERVICE_H
 #define CEPH_MON_CONFIG_KEY_SERVICE_H
 
+#include "mon/Monitor.h"
 #include "mon/QuorumService.h"
-#include "mon/MonitorDBStore.h"
+
+#include "messages/MMonHealth.h"
+
+#include "common/config.h"
+#include "common/Formatter.h"
 
 class Paxos;
-class Monitor;
-namespace ceph {
-class Formatter;
-}
 
 class ConfigKeyService : public QuorumService
 {
   Paxos *paxos;
 
-  int store_get(const string &key, bufferlist &bl);
-  void store_put(const string &key, bufferlist &bl, Context *cb = NULL);
-  void store_delete(MonitorDBStore::TransactionRef t, const string &key);
-  void store_delete(const string &key, Context *cb = NULL);
-  void store_delete_prefix(
-      MonitorDBStore::TransactionRef t,
-      const string &prefix);
+  int store_get(string key, bufferlist &bl);
+  void store_put(string key, bufferlist &bl, Context *cb = NULL);
+  void store_delete(string key, Context *cb = NULL);
   void store_list(stringstream &ss);
-  void store_dump(stringstream &ss);
-  bool store_exists(const string &key);
-  bool store_has_prefix(const string &prefix);
+  bool store_exists(string key);
 
   static const string STORE_PREFIX;
 
 protected:
-  void service_shutdown() override { }
+  virtual void service_shutdown() { }
 
 public:
   ConfigKeyService(Monitor *m, Paxos *p) :
     QuorumService(m),
     paxos(p)
   { }
-  ~ConfigKeyService() override { }
+  virtual ~ConfigKeyService() { }
 
 
   /**
    * @defgroup ConfigKeyService_Inherited_h Inherited abstract methods
    * @{
    */
-  void init() override { }
-  void get_health(Formatter *f,
-                  list<pair<health_status_t,string> >& summary,
-                  list<pair<health_status_t,string> > *detail) override { }
-  bool service_dispatch(MonOpRequestRef op) override;
+  virtual void init() { }
+  virtual void get_health(Formatter *f,
+			  list<pair<health_status_t,string> >& summary,
+                          list<pair<health_status_t,string> > *detail) { }
+  virtual bool service_dispatch(MonOpRequestRef op);
 
-  void start_epoch() override { }
-  void finish_epoch() override { }
-  void cleanup() override { }
-  void service_tick() override { }
+  virtual void start_epoch() { }
+  virtual void finish_epoch() { }
+  virtual void cleanup() { }
+  virtual void service_tick() { }
 
-  int validate_osd_destroy(const int32_t id, const uuid_d& uuid);
-  void do_osd_destroy(int32_t id, uuid_d& uuid);
-  int validate_osd_new(
-      const uuid_d& uuid,
-      const string& dmcrypt_key,
-      stringstream& ss);
-  void do_osd_new(const uuid_d& uuid, const string& dmcrypt_key);
-
-  int get_type() override {
+  virtual int get_type() {
     return QuorumService::SERVICE_CONFIG_KEY;
   }
 
-  string get_name() const override {
+  virtual string get_name() const {
     return "config_key";
   }
-  virtual void get_store_prefixes(set<string>& s);
+
   /**
    * @} // ConfigKeyService_Inherited_h
    */

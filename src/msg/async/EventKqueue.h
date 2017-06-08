@@ -25,43 +25,25 @@
 
 class KqueueDriver : public EventDriver {
   int kqfd;
-  pthread_t mythread;
-  struct kevent *res_events;
+  struct kevent *events;
   CephContext *cct;
   int size;
 
-  // Keep what we set on the kqfd
-  struct SaveEvent{
-    int fd;
-    int mask;
-  };
-  struct SaveEvent *sav_events;
-  int sav_max;
-  int restore_events();
-  int test_kqfd();
-  int test_thread_change(const char* funcname);
-
  public:
-  explicit KqueueDriver(CephContext *c): kqfd(-1), res_events(NULL), cct(c), 
-		size(0), sav_max(0) {}
+  KqueueDriver(CephContext *c): kqfd(-1), events(NULL), cct(c), size(0) {}
   virtual ~KqueueDriver() {
     if (kqfd != -1)
       close(kqfd);
 
-    if (res_events)
-      free(res_events);
-    size = 0;
-    if (sav_events)
-      free(sav_events);
-    sav_max = 0;
+    if (events)
+      free(events);
   }
 
-  int init(EventCenter *c, int nevent) override;
-  int add_event(int fd, int cur_mask, int add_mask) override;
-  int del_event(int fd, int cur_mask, int del_mask) override;
-  int resize_events(int newsize) override;
-  int event_wait(vector<FiredFileEvent> &fired_events,
-		 struct timeval *tp) override;
+  int init(int nevent);
+  int add_event(int fd, int cur_mask, int add_mask);
+  int del_event(int fd, int cur_mask, int del_mask);
+  int resize_events(int newsize);
+  int event_wait(vector<FiredFileEvent> &fired_events, struct timeval *tp);
 };
 
 #endif

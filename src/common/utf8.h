@@ -15,9 +15,6 @@
 #ifndef CEPH_COMMON_UTF8_H
 #define CEPH_COMMON_UTF8_H
 
-#define MAX_UTF8_SZ 6
-#define INVALID_UTF8_CHAR 0xfffffffful
-
 #ifdef __cplusplus
 extern "C" {
 #endif

@@ -13,7 +13,6 @@
 #ifndef CEPH_RBD_TYPES_H
 #define CEPH_RBD_TYPES_H
 
-#include "include/types.h"
 #include "rbd/features.h"
 
 /* New-style rbd image 'foo' consists of objects
@@ -60,39 +59,14 @@
 #define RBD_LOCK_NAME		"rbd_lock"
 
 /**
- * rbd_mirroring object in each pool contains pool-specific settings
- * for configuring mirroring.
+ * rbd_pool_settings object in each pool contains pool-specific settings
+ * for configuring features such as async image mirroring to other Ceph
+ * clusters.
  */
-#define RBD_MIRRORING       "rbd_mirroring"
-
-/**
- * rbd_mirror_leader and rbd_mirror_instance.<instance id> objects are used
- * for pool-level coordination between rbd-mirror daemons.
- */
-#define RBD_MIRROR_LEADER               "rbd_mirror_leader"
-#define RBD_MIRROR_INSTANCE_PREFIX      "rbd_mirror_instance."
+#define RBD_POOL_SETTINGS       "rbd_pool_settings"
 
 #define RBD_MAX_OBJ_NAME_SIZE	96
 #define RBD_MAX_BLOCK_NAME_SIZE 24
-
-/**
- * Maximum string length of the RBD v2 image id (not including
- * null termination). This limit was derived from the existing
- * RBD_MAX_BLOCK_NAME_SIZE limit which needs to hold the "rbd_data."
- * prefix and null termination.
- */
-#define RBD_MAX_IMAGE_ID_LENGTH 14
-
-/**
- * Maximum string length of the RBD block object name prefix (not including
- * null termination).
- *
- * v1 format: rb.<max 8-byte high id>.<max 8-byte low id>.<max 8-byte extra>
- * v2 format: rbd_data.[<max 19-byte pool id>.]<max 14-byte image id>
- *
- * Note: new features might require increasing this maximum prefix length.
- */
-#define RBD_MAX_BLOCK_NAME_PREFIX_LENGTH 43
 
 #define RBD_COMP_NONE		0
 #define RBD_CRYPT_NONE		0
@@ -100,12 +74,6 @@
 #define RBD_HEADER_TEXT		"<<< Rados Block Device Image >>>\n"
 #define RBD_HEADER_SIGNATURE	"RBD"
 #define RBD_HEADER_VERSION	"001.005"
-
-#define RBD_GROUP_HEADER_PREFIX "rbd_group_header."
-
-#define RBD_GROUP_DIRECTORY "rbd_group_directory"
-
-#define RBD_TRASH "rbd_trash"
 
 struct rbd_info {
 	__le64 max_id;
@@ -135,11 +103,5 @@ struct rbd_obj_header_ondisk {
 	struct rbd_obj_snap_ondisk snaps[0];
 } __attribute__((packed));
 
-enum {
-  RBD_PROTECTION_STATUS_UNPROTECTED  = 0,
-  RBD_PROTECTION_STATUS_UNPROTECTING = 1,
-  RBD_PROTECTION_STATUS_PROTECTED    = 2,
-  RBD_PROTECTION_STATUS_LAST         = 3
-};
 
 #endif

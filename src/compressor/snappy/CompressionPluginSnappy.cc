@@ -14,11 +14,29 @@
 
 
 // -----------------------------------------------------------------------------
-#include "acconfig.h"
 #include "ceph_ver.h"
-#include "CompressionPluginSnappy.h"
+#include "compressor/CompressionPlugin.h"
+#include "SnappyCompressor.h"
+// -----------------------------------------------------------------------------
 
-#ifndef BUILDING_FOR_EMBEDDED
+class CompressionPluginSnappy : public CompressionPlugin {
+
+public:
+
+  CompressionPluginSnappy(CephContext* cct) : CompressionPlugin(cct)
+  {}
+
+  virtual int factory(CompressorRef *cs,
+                      ostream *ss)
+  {
+    if (compressor == 0) {
+      SnappyCompressor *interface = new SnappyCompressor();
+      compressor = CompressorRef(interface);
+    }
+    *cs = compressor;
+    return 0;
+  }
+};
 
 // -----------------------------------------------------------------------------
 
@@ -37,5 +55,3 @@ int __ceph_plugin_init(CephContext *cct,
 
   return instance->add(type, name, new CompressionPluginSnappy(cct));
 }
-
-#endif // !BUILDING_FOR_EMBEDDED

@@ -86,8 +86,8 @@ static int compute_image_disk_usage(const std::string& name,
 }
 
 static int do_disk_usage(librbd::RBD &rbd, librados::IoCtx &io_ctx,
-                         const char *imgname, const char *snapname,
-                         const char *from_snapname, Formatter *f) {
+                        const char *imgname, const char *snapname,
+                        Formatter *f) {
   std::vector<std::string> names;
   int r = rbd.list(io_ctx, names);
   if (r == -ENOENT) {
@@ -106,18 +106,15 @@ static int do_disk_usage(librbd::RBD &rbd, librados::IoCtx &io_ctx,
     tbl.define_column("USED", TextTable::RIGHT, TextTable::RIGHT);
   }
 
-  uint32_t count = 0;
   uint64_t used_size = 0;
   uint64_t total_prov = 0;
   uint64_t total_used = 0;
-  bool found = false;
   std::sort(names.begin(), names.end());
   for (std::vector<string>::const_iterator name = names.begin();
        name != names.end(); ++name) {
     if (imgname != NULL && *name != imgname) {
       continue;
     }
-    found = true;
 
     librbd::Image image;
     r = rbd.open_read_only(io_ctx, image, name->c_str(), NULL);
@@ -155,7 +152,6 @@ static int do_disk_usage(librbd::RBD &rbd, librados::IoCtx &io_ctx,
       continue;
     }
 
-    bool found_from_snap = (from_snapname == nullptr);
     std::string last_snap_name;
     std::sort(snap_list.begin(), snap_list.end(),
               boost::bind(&librbd::snap_info_t::id, _1) <
@@ -171,8 +167,7 @@ static int do_disk_usage(librbd::RBD &rbd, librados::IoCtx &io_ctx,
         goto out;
       }
 
-      if (imgname == nullptr || found_from_snap ||
-         (found_from_snap && snapname != nullptr && snap->name == snapname)) {
+      if (imgname == NULL || (snapname != NULL && snap->name == snapname)) {
         r = compute_image_disk_usage(*name, snap->name, last_snap_name,
                                      snap_image, snap->size, tbl, f,
                                      &used_size);
@@ -184,15 +179,6 @@ static int do_disk_usage(librbd::RBD &rbd, librados::IoCtx &io_ctx,
           total_prov += snap->size;
         }
         total_used += used_size;
-        ++count;
-      }
-
-      if (!found_from_snap && from_snapname != nullptr &&
-          snap->name == from_snapname) {
-        found_from_snap = true;
-      }
-      if (snapname != nullptr && snap->name == snapname) {
-        break;
       }
       last_snap_name = snap->name;
     }
@@ -205,12 +191,7 @@ static int do_disk_usage(librbd::RBD &rbd, librados::IoCtx &io_ctx,
       }
       total_prov += info.size;
       total_used += used_size;
-      ++count;
     }
-  }
-  if (!found) {
-    std::cerr << "specified image " << imgname << " is not found." << std::endl;
-    return -ENOENT;
   }
 
 out:
@@ -223,7 +204,7 @@ out:
     f->close_section();
     f->flush(std::cout);
   } else {
-    if (count > 1) {
+    if (imgname == NULL) {
       tbl << "<TOTAL>"
           << stringify(si_t(total_prov))
           << stringify(si_t(total_used))
@@ -240,9 +221,6 @@ void get_arguments(po::options_description *positional,
   at::add_image_or_snap_spec_options(positional, options,
                                      at::ARGUMENT_MODIFIER_NONE);
   at::add_format_options(options);
-  options->add_options()
-    (at::FROM_SNAPSHOT_NAME.c_str(), po::value<std::string>(),
-     "snapshot starting point");
 }
 
 int execute(const po::variables_map &vm) {
@@ -253,14 +231,9 @@ int execute(const po::variables_map &vm) {
   int r = utils::get_pool_image_snapshot_names(
     vm, at::ARGUMENT_MODIFIER_NONE, &arg_index, &pool_name, &image_name,
     &snap_name, utils::SNAPSHOT_PRESENCE_PERMITTED,
-    utils::SPEC_VALIDATION_NONE, vm.count(at::FROM_SNAPSHOT_NAME));
+    false);
   if (r < 0) {
     return r;
-  }
-
-  std::string from_snap_name;
-  if (vm.count(at::FROM_SNAPSHOT_NAME)) {
-    from_snap_name = vm[at::FROM_SNAPSHOT_NAME].as<std::string>();
   }
 
   at::Format::Formatter formatter;
@@ -280,7 +253,6 @@ int execute(const po::variables_map &vm) {
   r = do_disk_usage(rbd, io_ctx,
                     image_name.empty() ? nullptr: image_name.c_str() ,
                     snap_name.empty() ? nullptr : snap_name.c_str(),
-                    from_snap_name.empty() ? nullptr : from_snap_name.c_str(),
                     formatter.get());
   if (r < 0) {
     std::cerr << "du failed: " << cpp_strerror(r) << std::endl;

@@ -32,7 +32,7 @@ protected:
   Finisher *finisher;
 
   /// The stack of dentries we want to scrub
-  elist<CInode*> inode_stack;
+  elist<CDentry*> dentry_stack;
   /// current number of dentries we're actually scrubbing
   int scrubs_in_progress;
   ScrubStack *scrubstack; // hack for dout
@@ -42,8 +42,8 @@ protected:
     ScrubStack *stack;
   public:
     C_KickOffScrubs(MDCache *mdcache, ScrubStack *s);
-    void finish(int r) override { }
-    void complete(int r) override {
+    void finish(int r) { }
+    void complete(int r) {
       stack->scrubs_in_progress--;
       stack->kick_off_scrubs();
       // don't delete self
@@ -55,77 +55,88 @@ public:
   MDCache *mdcache;
   ScrubStack(MDCache *mdc, Finisher *finisher_) :
     finisher(finisher_),
-    inode_stack(member_offset(CInode, item_scrub)),
+    dentry_stack(member_offset(CDentry, item_scrub)),
     scrubs_in_progress(0),
     scrubstack(this),
     stack_size(0),
     scrub_kick(mdc, this),
     mdcache(mdc) {}
   ~ScrubStack() {
-    assert(inode_stack.empty());
+    assert(dentry_stack.empty());
     assert(!scrubs_in_progress);
   }
   /**
-   * Put a inode on the top of the scrub stack, so it is the highest priority.
+   * Put a dentry on the top of the scrub stack, so it is the highest priority.
    * If there are other scrubs in progress, they will not continue scrubbing new
    * entries until this one is completed.
-   * @param in The inodey to scrub
+   * @param dn The dentry to scrub
+   * @param recursive True if we want to recursively scrub the
+   * entire hierarchy under dn.
+   * @param children True if we want to scrub the direct children of
+   * dn but aren't doing a recursive scrub. (Otherwise, all checks are
+   * local to dn's disk state.)
    * @param header The ScrubHeader propagated from whereever this scrub
    *               was initiated
    */
-  void enqueue_inode_top(CInode *in, const ScrubHeaderRefConst& header,
-			 MDSInternalContextBase *on_finish) {
-    enqueue_inode(in, header, on_finish, true);
+  void enqueue_dentry_top(CDentry *dn, bool recursive, bool children,
+                          ScrubHeaderRefConst header,
+                          MDSInternalContextBase *on_finish) {
+    enqueue_dentry(dn, recursive, children, header, on_finish, true);
   }
-  /** Like enqueue_inode_top, but we wait for all pending scrubs before
+  /** Like enqueue_dentry_top, but we wait for all pending scrubs before
    * starting this one.
    */
-  void enqueue_inode_bottom(CInode *in, const ScrubHeaderRefConst& header,
-			    MDSInternalContextBase *on_finish) {
-    enqueue_inode(in, header, on_finish, false);
+  void enqueue_dentry_bottom(CDentry *dn, bool recursive, bool children,
+                             ScrubHeaderRefConst header,
+                             MDSInternalContextBase *on_finish) {
+    enqueue_dentry(dn, recursive, children, header, on_finish, false);
   }
 
 private:
   /**
-   * Put the inode at either the top or bottom of the stack, with
+   * Put the dentry at either the top or bottom of the stack, with
    * the given scrub params, and then try and kick off more scrubbing.
    */
-  void enqueue_inode(CInode *in, const ScrubHeaderRefConst& header,
+  void enqueue_dentry(CDentry *dn, bool recursive, bool children,
+                      ScrubHeaderRefConst header,
                       MDSInternalContextBase *on_finish, bool top);
-  void _enqueue_inode(CInode *in, CDentry *parent, const ScrubHeaderRefConst& header,
-                      MDSInternalContextBase *on_finish, bool top);
+  void _enqueue_dentry(CDentry *dn, CDir *parent, bool recursive, bool children,
+                      ScrubHeaderRefConst header,
+                       MDSInternalContextBase *on_finish, bool top);
   /**
    * Kick off as many scrubs as are appropriate, based on the current
    * state of the stack.
    */
   void kick_off_scrubs();
   /**
-   * Push a indoe on top of the stack.
+   * Push a dentry on top of the stack.
    */
-  inline void push_inode(CInode *in);
+  inline void push_dentry(CDentry *dentry);
   /**
-   * Push a inode to the bottom of the stack.
+   * Push a dentry to the bottom of the stack.
    */
-  inline void push_inode_bottom(CInode *in);
+  inline void push_dentry_bottom(CDentry *dentry);
   /**
-   * Pop the given inode off the stack.
+   * Pop the given dentry off the stack.
    */
-  inline void pop_inode(CInode *in);
+  inline void pop_dentry(CDentry *dn);
 
   /**
-   * Scrub a file inode.
-   * @param in The indoe to scrub
+   * Scrub a file-representing dentry.
+   * @param dn The dentry to scrub
+   * @param progress Out pointer to a bool, which will be set to true.
+   * @pre dn->get_projected_inode()->is_file()==true;
    */
-  void scrub_file_inode(CInode *in);
+  void scrub_file_dentry(CDentry *dn);
 
   /**
    * Callback from completion of CInode::validate_disk_state
-   * @param in The inode we were validating
+   * @param dn The dentry owning the inode we were validating
    * @param r The return status from validate_disk_state
    * @param result Populated results from validate_disk_state
    */
-  void _validate_inode_done(CInode *in, int r,
-			    const CInode::validated_data &result);
+  void _validate_inode_done(CDentry *dn, int r,
+    const CInode::validated_data &result);
   friend class C_InodeValidated;
 
   /**
@@ -141,15 +152,15 @@ private:
    *
    * 4) If all dirfrags have been scrubbed, scrub my inode.
    *
-   * @param in The CInode to scrub as a directory
+   * @param dn The CDentry to scrub as a directory
    * @param added_dentries set to true if we pushed some of our children
    * onto the ScrubStack
    * @param is_terminal set to true if there are no descendant dentries
    * remaining to start scrubbing.
    * @param done set to true if we and all our children have finished scrubbing
    */
-  void scrub_dir_inode(CInode *in, bool *added_children, bool *is_terminal,
-                       bool *done);
+  void scrub_dir_dentry(CDentry *dn, bool *added_children, bool *is_terminal,
+                        bool *done);
   /**
    * Make progress on scrubbing a dirfrag. It may return after each of the
    * following steps, but will report making progress on each one.
@@ -164,14 +175,14 @@ private:
    * progress. Try again later.
    *
    */
-  void scrub_dirfrag(CDir *dir, const ScrubHeaderRefConst& header,
-		     bool *added_children, bool *is_terminal, bool *done);
+  void scrub_dirfrag(CDir *dir, bool *added_children, bool *is_terminal,
+		     bool *done);
   /**
    * Scrub a directory-representing dentry.
    *
-   * @param in The directory inode we're doing final scrub on.
+   * @param dn The CDentry of the directory we're doing final scrub on.
    */
-  void scrub_dir_inode_final(CInode *in);
+  void scrub_dir_dentry_final(CDentry *dn);
 
   /**
    * Get a CDir into memory, and return it if it's already complete.

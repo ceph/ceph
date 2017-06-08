@@ -38,7 +38,7 @@ public:
   class FD {
   public:
     const int fd;
-    explicit FD(int _fd) : fd(_fd) {
+    FD(int _fd) : fd(_fd) {
       assert(_fd >= 0);
     }
     int operator*() const {
@@ -52,21 +52,21 @@ public:
 private:
   CephContext *cct;
   const int registry_shards;
-  SharedLRU<ghobject_t, FD> *registry;
+  SharedLRU<ghobject_t, FD, ghobject_t::BitwiseComparator> *registry;
 
 public:
-  explicit FDCache(CephContext *cct) : cct(cct),
-  registry_shards(MAX(cct->_conf->filestore_fd_cache_shards, 1)) {
+  FDCache(CephContext *cct) : cct(cct),
+  registry_shards(cct->_conf->filestore_fd_cache_shards) {
     assert(cct);
     cct->_conf->add_observer(this);
-    registry = new SharedLRU<ghobject_t, FD>[registry_shards];
+    registry = new SharedLRU<ghobject_t, FD, ghobject_t::BitwiseComparator>[registry_shards];
     for (int i = 0; i < registry_shards; ++i) {
       registry[i].set_cct(cct);
       registry[i].set_size(
           MAX((cct->_conf->filestore_fd_cache_size / registry_shards), 1));
     }
   }
-  ~FDCache() override {
+  ~FDCache() {
     cct->_conf->remove_observer(this);
     delete[] registry;
   }
@@ -89,7 +89,7 @@ public:
   }
 
   /// md_config_obs_t
-  const char** get_tracked_conf_keys() const override {
+  const char** get_tracked_conf_keys() const {
     static const char* KEYS[] = {
       "filestore_fd_cache_size",
       NULL
@@ -97,7 +97,7 @@ public:
     return KEYS;
   }
   void handle_conf_change(const md_config_t *conf,
-			  const std::set<std::string> &changed) override {
+			  const std::set<std::string> &changed) {
     if (changed.count("filestore_fd_cache_size")) {
       for (int i = 0; i < registry_shards; ++i)
         registry[i].set_size(

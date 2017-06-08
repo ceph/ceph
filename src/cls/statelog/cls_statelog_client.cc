@@ -1,6 +1,7 @@
 #include <errno.h>
 
-#include "cls/statelog/cls_statelog_client.h"
+#include "include/types.h"
+#include "cls/statelog/cls_statelog_ops.h"
 #include "include/rados/librados.hpp"
 
 
@@ -73,7 +74,7 @@ class StateLogListCtx : public ObjectOperationCompletion {
 public:
   StateLogListCtx(list<cls_statelog_entry> *_entries, string *_marker, bool *_truncated) :
                                       entries(_entries), marker(_marker), truncated(_truncated) {}
-  void handle_completion(int r, bufferlist& outbl) override {
+  void handle_completion(int r, bufferlist& outbl) {
     if (r >= 0) {
       cls_statelog_list_ret ret;
       try {
@@ -113,6 +114,7 @@ void cls_statelog_list(librados::ObjectReadOperation& op,
 void cls_statelog_check_state(librados::ObjectOperation& op, const string& client_id, const string& op_id, const string& object, uint32_t state)
 {
   bufferlist inbl;
+  bufferlist outbl;
   cls_statelog_check_state_op call;
   call.client_id = client_id;
   call.op_id = op_id;

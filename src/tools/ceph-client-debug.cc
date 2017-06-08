@@ -23,7 +23,6 @@
 #include "client/Dir.h"
 #include "include/cephfs/libcephfs.h"
 
-#define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_client
 
 void usage()
@@ -86,9 +85,8 @@ int main(int argc, const char **argv)
   argv_to_vec(argc, argv, args);
   env_to_vec(args);
 
-  auto cct = global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT,
-			 CODE_ENVIRONMENT_UTILITY,
-			 CINIT_FLAG_UNPRIVILEGED_DAEMON_DEFAULTS);
+  global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY,
+	      CINIT_FLAG_UNPRIVILEGED_DAEMON_DEFAULTS);
   
   common_init_finish(g_ceph_context);
 

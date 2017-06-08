@@ -10,7 +10,7 @@
 #include "include/assert.h"
 
 namespace ceph {
-namespace logging {
+namespace log {
 
 struct Subsystem {
   int log_level, gather_level;

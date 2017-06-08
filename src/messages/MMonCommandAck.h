@@ -28,21 +28,21 @@ class MMonCommandAck : public PaxosServiceMessage {
     PaxosServiceMessage(MSG_MON_COMMAND_ACK, v),
     cmd(c), r(_r), rs(s) { }
 private:
-  ~MMonCommandAck() override {}
+  ~MMonCommandAck() {}
 
 public:
-  const char *get_type_name() const override { return "mon_command"; }
-  void print(ostream& o) const override {
+  const char *get_type_name() const { return "mon_command"; }
+  void print(ostream& o) const {
     o << "mon_command_ack(" << cmd << "=" << r << " " << rs << " v" << version << ")";
   }
   
-  void encode_payload(uint64_t features) override {
+  void encode_payload(uint64_t features) {
     paxos_encode();
     ::encode(r, payload);
     ::encode(rs, payload);
     ::encode(cmd, payload);
   }
-  void decode_payload() override {
+  void decode_payload() {
     bufferlist::iterator p = payload.begin();
     paxos_decode(p);
     ::decode(r, p);

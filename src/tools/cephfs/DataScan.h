@@ -28,11 +28,7 @@ class RecoveryDriver {
     bool force_init;
 
   public:
-    virtual int init(
-        librados::Rados &rados,
-	std::string &metadata_pool_name,
-        const FSMap *fsmap,
-        fs_cluster_id_t fscid) = 0;
+    virtual int init(librados::Rados &rados, const MDSMap *mdsmap) = 0;
 
     void set_force_corrupt(const bool val)
     {
@@ -92,8 +88,7 @@ class RecoveryDriver {
     }
 
     RecoveryDriver()
-      : force_corrupt(false),
-	force_init(false)
+      : force_corrupt(false)
     {}
 
     virtual ~RecoveryDriver() {}
@@ -117,23 +112,19 @@ class LocalFileDriver : public RecoveryDriver
     {}
 
     // Implement RecoveryDriver interface
-    int init(
-        librados::Rados &rados,
-	std::string &metadata_pool_name,
-        const FSMap *fsmap,
-        fs_cluster_id_t fscid) override;
+    int init(librados::Rados &rados, const MDSMap *mdsmap);
 
     int inject_with_backtrace(
         const inode_backtrace_t &bt,
-        const InodeStore &dentry) override;
+        const InodeStore &dentry);
 
     int inject_lost_and_found(
         inodeno_t ino,
-        const InodeStore &dentry) override;
+        const InodeStore &dentry);
 
-    int init_roots(int64_t data_pool_id) override;
+    int init_roots(int64_t data_pool_id);
 
-    int check_roots(bool *result) override;
+    int check_roots(bool *result);
 };
 
 /**
@@ -151,16 +142,16 @@ class MetadataTool
    */
   void build_file_dentry(
     inodeno_t ino, uint64_t file_size, time_t file_mtime,
-    const file_layout_t &layout,
+    const ceph_file_layout &layout,
     InodeStore *out);
 
   /**
    * Construct a synthetic InodeStore for a directory
    */
   void build_dir_dentry(
-    inodeno_t ino,
-    const frag_info_t &fragstat,
-    const file_layout_t &layout,
+    inodeno_t ino, uint64_t nfiles,
+    time_t mtime,
+    const ceph_file_layout &layout,
     InodeStore *out);
 
   /**
@@ -197,6 +188,9 @@ class MetadataDriver : public RecoveryDriver, public MetadataTool
         frag_t fragment,
         bool *created);
 
+    int inject_linkage(
+        inodeno_t dir_ino, const std::string &dname,
+        const frag_t fragment, const InodeStore &inode);
 
     /**
      * Work out which fragment of a directory should contain a named
@@ -211,40 +205,30 @@ class MetadataDriver : public RecoveryDriver, public MetadataTool
   public:
 
     // Implement RecoveryDriver interface
-    int init(
-        librados::Rados &rados,
-	std::string &metadata_pool_name,
-        const FSMap *fsmap,
-        fs_cluster_id_t fscid) override;
-
-    int inject_linkage(
-        inodeno_t dir_ino, const std::string &dname,
-        const frag_t fragment, const InodeStore &inode);
+    int init(librados::Rados &rados, const MDSMap *mdsmap);
 
     int inject_with_backtrace(
         const inode_backtrace_t &bt,
-        const InodeStore &dentry) override;
+        const InodeStore &dentry);
 
     int inject_lost_and_found(
         inodeno_t ino,
-        const InodeStore &dentry) override;
+        const InodeStore &dentry);
 
-    int init_roots(int64_t data_pool_id) override;
+    int init_roots(int64_t data_pool_id);
 
-    int check_roots(bool *result) override;
+    int check_roots(bool *result);
 };
 
 class DataScan : public MDSUtility, public MetadataTool
 {
   protected:
     RecoveryDriver *driver;
-    fs_cluster_id_t fscid;
 
     // IoCtx for data pool (where we scrape file backtraces from)
     librados::IoCtx data_io;
     // Remember the data pool ID for use in layouts
     int64_t data_pool_id;
-    string metadata_pool_name;
 
     uint32_t n;
     uint32_t m;
@@ -265,20 +249,7 @@ class DataScan : public MDSUtility, public MetadataTool
      */
     int scan_frags();
 
-    /**
-     * Cleanup xattrs from data pool
-     */
-    int cleanup();
-
-    /**
-     * Check if an inode number is in the permitted ranges
-     */
-    bool valid_ino(inodeno_t ino) const;
-
-
-    int scan_links();
-
-    // Accept pools which are not in the FSMap
+    // Accept pools which are not in the MDSMap
     bool force_pool;
     // Respond to decode errors by overwriting
     bool force_corrupt;
@@ -303,31 +274,20 @@ class DataScan : public MDSUtility, public MetadataTool
       const std::vector<const char*> &arg,
       std::vector<const char *>::const_iterator &i);
 
-    int probe_filter(librados::IoCtx &ioctx);
 
-    /**
-     * Apply a function to all objects in an ioctx's pool, optionally
-     * restricted to only those objects with a 00000000 offset and
-     * no tag matching DataScan::scrub_tag.
-     */
-    int forall_objects(
-        librados::IoCtx &ioctx,
-        bool untagged_only,
-        std::function<int(std::string, uint64_t, uint64_t)> handler);
 
   public:
     void usage();
     int main(const std::vector<const char *> &args);
 
     DataScan()
-      : driver(NULL), fscid(FS_CLUSTER_ID_NONE),
-	data_pool_id(-1), metadata_pool_name(""), n(0), m(1),
+      : driver(NULL), data_pool_id(-1), n(0), m(1),
         force_pool(false), force_corrupt(false),
         force_init(false)
     {
     }
 
-    ~DataScan() override
+    ~DataScan()
     {
       delete driver;
     }

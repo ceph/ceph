@@ -1,6 +1,8 @@
 #ifndef CEPH_COMMON_PREBUFFEREDSTREAMBUF_H
 #define CEPH_COMMON_PREBUFFEREDSTREAMBUF_H
 
+#include <iosfwd>
+#include <string>
 #include <streambuf>
 
 /**
@@ -28,10 +30,10 @@ public:
   PrebufferedStreambuf(char *buf, size_t len);
 
   // called when the buffer fills up
-  int_type overflow(int_type c) override;
+  int_type overflow(int_type c);
 
   // called when we read and need more data
-  int_type underflow() override;
+  int_type underflow();
 
   /// return a string copy (inefficiently)
   std::string get_str() const;

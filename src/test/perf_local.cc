@@ -41,6 +41,7 @@
 #include <xmmintrin.h>
 #endif
 
+#include "include/atomic.h"
 #include "include/buffer.h"
 #include "include/encoding.h"
 #include "include/ceph_hash.h"
@@ -55,8 +56,6 @@
 #include "global/global_init.h"
 
 #include "test/perf_helper.h"
-
-#include <atomic>
 
 using namespace ceph;
 
@@ -96,15 +95,15 @@ void discard(void* value) {
 // Test functions start here
 //----------------------------------------------------------------------
 
-// Measure the cost of atomic compare-and-swap
+// Measure the cost of atomic_t::compare_and_swap
 double atomic_int_cmp()
 {
   int count = 1000000;
-  std::atomic<unsigned> value = { 11 };
-  unsigned int test = 11;
+  atomic_t value(11);
+  int test = 11;
   uint64_t start = Cycles::rdtsc();
   for (int i = 0; i < count; i++) {
-    value.compare_exchange_strong(test, test+2);
+    value.compare_and_swap(test, test+2);
     test += 2;
   }
   uint64_t stop = Cycles::rdtsc();
@@ -112,43 +111,43 @@ double atomic_int_cmp()
   return Cycles::to_seconds(stop - start)/count;
 }
 
-// Measure the cost of incrementing an atomic
+// Measure the cost of atomic_t::inc
 double atomic_int_inc()
 {
   int count = 1000000;
-  std::atomic<int64_t> value = { 11 };
+  atomic_t value(11);
   uint64_t start = Cycles::rdtsc();
   for (int i = 0; i < count; i++) {
-    value++;
+    value.inc();
   }
   uint64_t stop = Cycles::rdtsc();
   // printf("Final value: %d\n", value.load());
   return Cycles::to_seconds(stop - start)/count;
 }
 
-// Measure the cost of reading an atomic
+// Measure the cost of reading an atomic_t
 double atomic_int_read()
 {
   int count = 1000000;
-  std::atomic<int64_t> value = { 11 };
+  atomic_t value(11);
   int total = 0;
   uint64_t start = Cycles::rdtsc();
   for (int i = 0; i < count; i++) {
-    total += value;
+    total += value.read();
   }
   uint64_t stop = Cycles::rdtsc();
   // printf("Total: %d\n", total);
   return Cycles::to_seconds(stop - start)/count;
 }
 
-// Measure the cost of storing a new value in an atomic
+// Measure the cost of storing a new value in a atomic_t
 double atomic_int_set()
 {
   int count = 1000000;
-  std::atomic<int64_t> value = { 11 };
+  atomic_t value(11);
   uint64_t start = Cycles::rdtsc();
   for (int i = 0; i < count; i++) {
-    value = 88;
+    value.set(88);
   }
   uint64_t stop = Cycles::rdtsc();
   return Cycles::to_seconds(stop - start)/count;
@@ -185,7 +184,7 @@ double buffer_basic()
 }
 
 struct DummyBlock {
-  int a = 1, b = 2, c = 3, d = 4;
+  int a, b, c, d;
   void encode(bufferlist &bl) const {
     ENCODE_START(1, 1, bl);
     ::encode(a, bl);
@@ -330,8 +329,8 @@ class CondPingPong {
   class Consumer : public Thread {
     CondPingPong *p;
    public:
-    explicit Consumer(CondPingPong *p): p(p) {}
-    void* entry() override {
+    Consumer(CondPingPong *p): p(p) {}
+    void* entry() {
       p->consume();
       return 0;
     }
@@ -451,8 +450,8 @@ double eventcenter_poll()
 {
   int count = 1000000;
   EventCenter center(g_ceph_context);
-  center.init(1000, 0, "posix");
-  center.set_owner();
+  center.init(1000);
+  center.set_owner(pthread_self());
   uint64_t start = Cycles::rdtsc();
   for (int i = 0; i < count; i++) {
     center.process_events(0);
@@ -467,15 +466,15 @@ class CenterWorker : public Thread {
 
  public:
   EventCenter center;
-  explicit CenterWorker(CephContext *c): cct(c), done(false), center(c) {
-    center.init(100, 0, "posix");
+  CenterWorker(CephContext *c): cct(c), done(false), center(c) {
+    center.init(100);
   }
   void stop() {
     done = true;
     center.wakeup();
   }
-  void* entry() override {
-    center.set_owner();
+  void* entry() {
+    center.set_owner(pthread_self());
     bind_thread_to_cpu(2);
     while (!done)
       center.process_events(1000);
@@ -484,12 +483,12 @@ class CenterWorker : public Thread {
 };
 
 class CountEvent: public EventCallback {
-  std::atomic<int64_t> *count;
+  atomic_t *count;
 
  public:
-  explicit CountEvent(std::atomic<int64_t> *atomic): count(atomic) {}
-  void do_request(int id) override {
-    (*count)--;
+  CountEvent(atomic_t *atomic): count(atomic) {}
+  void do_request(int id) {
+    count->dec();
   }
 };
 
@@ -498,20 +497,20 @@ double eventcenter_dispatch()
   int count = 100000;
 
   CenterWorker worker(g_ceph_context);
-  std::atomic<int64_t> flag = { 1 };
+  atomic_t flag(1);
   worker.create("evt_center_disp");
   EventCallbackRef count_event(new CountEvent(&flag));
 
   worker.center.dispatch_event_external(count_event);
   // Start a new thread and wait for it to ready.
-  while (flag)
+  while (flag.read())
     usleep(100);
 
   uint64_t start = Cycles::rdtsc();
   for (int i = 0; i < count; i++) {
-    flag = 1;
+    flag.set(1);
     worker.center.dispatch_event_external(count_event);
-    while (flag)
+    while (flag.read())
       ;
   }
   uint64_t stop = Cycles::rdtsc();
@@ -750,7 +749,7 @@ double test_spinlock()
 // Helper for spawn_thread. This is the main function that the thread executes
 // (intentionally empty).
 class ThreadHelper : public Thread {
-  void *entry() override { return 0; }
+  void *entry() { return 0; }
 };
 
 // Measure the cost of start and joining with a thread.
@@ -769,7 +768,7 @@ double spawn_thread()
 
 class FakeContext : public Context {
  public:
-  void finish(int r) override {}
+  virtual void finish(int r) {}
 };
 
 // Measure the cost of starting and stopping a Dispatch::Timer.
@@ -890,7 +889,7 @@ double perf_ceph_clock_now()
   int count = 100000;
   uint64_t start = Cycles::rdtsc();
   for (int i = 0; i < count; i++) {
-    ceph_clock_now();
+    ceph_clock_now(g_ceph_context);
   }
   uint64_t stop = Cycles::rdtsc();
   return Cycles::to_seconds(stop - start)/count;
@@ -1019,10 +1018,8 @@ int main(int argc, char *argv[])
   vector<const char*> args;
   argv_to_vec(argc, (const char **)argv, args);
 
-  auto cct = global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT,
-			 CODE_ENVIRONMENT_UTILITY, 0);
+  global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
   common_init_finish(g_ceph_context);
-  Cycles::init();
 
   bind_thread_to_cpu(3);
   if (argc == 1) {

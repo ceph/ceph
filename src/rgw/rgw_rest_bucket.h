@@ -10,28 +10,26 @@
 
 class RGWHandler_Bucket : public RGWHandler_Auth_S3 {
 protected:
-  RGWOp *op_get() override;
-  RGWOp *op_put() override;
-  RGWOp *op_post() override;
-  RGWOp *op_delete() override;
+  RGWOp *op_get();
+  RGWOp *op_put();
+  RGWOp *op_post();
+  RGWOp *op_delete();
 public:
-  using RGWHandler_Auth_S3::RGWHandler_Auth_S3;
-  ~RGWHandler_Bucket() override = default;
+  RGWHandler_Bucket() {}
+  virtual ~RGWHandler_Bucket() {}
 
-  int read_permissions(RGWOp*) override {
+  int read_permissions(RGWOp*) {
     return 0;
   }
 };
 
 class RGWRESTMgr_Bucket : public RGWRESTMgr {
 public:
-  RGWRESTMgr_Bucket() = default;
-  ~RGWRESTMgr_Bucket() override = default;
+  RGWRESTMgr_Bucket() {}
+  virtual ~RGWRESTMgr_Bucket() {}
 
-  RGWHandler_REST* get_handler(struct req_state*,
-                               const rgw::auth::StrategyRegistry& auth_registry,
-                               const std::string&) override {
-    return new RGWHandler_Bucket(auth_registry);
+  RGWHandler *get_handler(struct req_state *s) {
+    return new RGWHandler_Bucket;
   }
 };
 

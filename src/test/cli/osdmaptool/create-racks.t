@@ -10,10 +10,7 @@
   tunable choose_local_fallback_tries 0
   tunable choose_total_tries 50
   tunable chooseleaf_descend_once 1
-  tunable chooseleaf_vary_r 1
-  tunable chooseleaf_stable 1
   tunable straw_calc_version 1
-  tunable allowed_bucket_algs 54
   
   # devices
   device 0 device0
@@ -273,7 +270,7 @@
   host cephstore5522 {
   \tid -2\t\t# do not change unnecessarily (esc)
   \t# weight 7.000 (esc)
-  \talg straw2 (esc)
+  \talg straw (esc)
   \thash 0\t# rjenkins1 (esc)
   \titem osd.1 weight 1.000 (esc)
   \titem osd.2 weight 1.000 (esc)
@@ -286,7 +283,7 @@
   host cephstore5523 {
   \tid -4\t\t# do not change unnecessarily (esc)
   \t# weight 7.000 (esc)
-  \talg straw2 (esc)
+  \talg straw (esc)
   \thash 0\t# rjenkins1 (esc)
   \titem osd.10 weight 1.000 (esc)
   \titem osd.11 weight 1.000 (esc)
@@ -299,7 +296,7 @@
   host cephstore6238 {
   \tid -8\t\t# do not change unnecessarily (esc)
   \t# weight 7.000 (esc)
-  \talg straw2 (esc)
+  \talg straw (esc)
   \thash 0\t# rjenkins1 (esc)
   \titem osd.113 weight 1.000 (esc)
   \titem osd.114 weight 1.000 (esc)
@@ -312,7 +309,7 @@
   host cephstore6240 {
   \tid -10\t\t# do not change unnecessarily (esc)
   \t# weight 7.000 (esc)
-  \talg straw2 (esc)
+  \talg straw (esc)
   \thash 0\t# rjenkins1 (esc)
   \titem osd.127 weight 1.000 (esc)
   \titem osd.128 weight 1.000 (esc)
@@ -325,7 +322,7 @@
   host cephstore6242 {
   \tid -12\t\t# do not change unnecessarily (esc)
   \t# weight 7.000 (esc)
-  \talg straw2 (esc)
+  \talg straw (esc)
   \thash 0\t# rjenkins1 (esc)
   \titem osd.141 weight 1.000 (esc)
   \titem osd.142 weight 1.000 (esc)
@@ -338,7 +335,7 @@
   host cephstore5524 {
   \tid -14\t\t# do not change unnecessarily (esc)
   \t# weight 7.000 (esc)
-  \talg straw2 (esc)
+  \talg straw (esc)
   \thash 0\t# rjenkins1 (esc)
   \titem osd.15 weight 1.000 (esc)
   \titem osd.16 weight 1.000 (esc)
@@ -351,7 +348,7 @@
   host cephstore6244 {
   \tid -15\t\t# do not change unnecessarily (esc)
   \t# weight 7.000 (esc)
-  \talg straw2 (esc)
+  \talg straw (esc)
   \thash 0\t# rjenkins1 (esc)
   \titem osd.155 weight 1.000 (esc)
   \titem osd.156 weight 1.000 (esc)
@@ -364,7 +361,7 @@
   host cephstore6246 {
   \tid -17\t\t# do not change unnecessarily (esc)
   \t# weight 7.000 (esc)
-  \talg straw2 (esc)
+  \talg straw (esc)
   \thash 0\t# rjenkins1 (esc)
   \titem osd.169 weight 1.000 (esc)
   \titem osd.170 weight 1.000 (esc)
@@ -377,7 +374,7 @@
   host cephstore6337 {
   \tid -19\t\t# do not change unnecessarily (esc)
   \t# weight 7.000 (esc)
-  \talg straw2 (esc)
+  \talg straw (esc)
   \thash 0\t# rjenkins1 (esc)
   \titem osd.183 weight 1.000 (esc)
   \titem osd.184 weight 1.000 (esc)
@@ -390,7 +387,7 @@
   host cephstore6341 {
   \tid -23\t\t# do not change unnecessarily (esc)
   \t# weight 7.000 (esc)
-  \talg straw2 (esc)
+  \talg straw (esc)
   \thash 0\t# rjenkins1 (esc)
   \titem osd.211 weight 1.000 (esc)
   \titem osd.212 weight 1.000 (esc)
@@ -403,7 +400,7 @@
   host cephstore6342 {
   \tid -24\t\t# do not change unnecessarily (esc)
   \t# weight 7.000 (esc)
-  \talg straw2 (esc)
+  \talg straw (esc)
   \thash 0\t# rjenkins1 (esc)
   \titem osd.218 weight 1.000 (esc)
   \titem osd.219 weight 1.000 (esc)
@@ -416,7 +413,7 @@
   host cephstore5525 {
   \tid -25\t\t# do not change unnecessarily (esc)
   \t# weight 7.000 (esc)
-  \talg straw2 (esc)
+  \talg straw (esc)
   \thash 0\t# rjenkins1 (esc)
   \titem osd.22 weight 1.000 (esc)
   \titem osd.23 weight 1.000 (esc)
@@ -429,7 +426,7 @@
   host cephstore6345 {
   \tid -27\t\t# do not change unnecessarily (esc)
   \t# weight 7.000 (esc)
-  \talg straw2 (esc)
+  \talg straw (esc)
   \thash 0\t# rjenkins1 (esc)
   \titem osd.232 weight 1.000 (esc)
   \titem osd.233 weight 1.000 (esc)
@@ -442,7 +439,7 @@
   host cephstore5526 {
   \tid -28\t\t# do not change unnecessarily (esc)
   \t# weight 7.000 (esc)
-  \talg straw2 (esc)
+  \talg straw (esc)
   \thash 0\t# rjenkins1 (esc)
   \titem osd.29 weight 1.000 (esc)
   \titem osd.30 weight 1.000 (esc)
@@ -455,7 +452,7 @@
   host cephstore5527 {
   \tid -29\t\t# do not change unnecessarily (esc)
   \t# weight 7.000 (esc)
-  \talg straw2 (esc)
+  \talg straw (esc)
   \thash 0\t# rjenkins1 (esc)
   \titem osd.36 weight 1.000 (esc)
   \titem osd.37 weight 1.000 (esc)
@@ -468,7 +465,7 @@
   host cephstore5529 {
   \tid -30\t\t# do not change unnecessarily (esc)
   \t# weight 7.000 (esc)
-  \talg straw2 (esc)
+  \talg straw (esc)
   \thash 0\t# rjenkins1 (esc)
   \titem osd.43 weight 1.000 (esc)
   \titem osd.44 weight 1.000 (esc)
@@ -481,7 +478,7 @@
   host cephstore5530 {
   \tid -31\t\t# do not change unnecessarily (esc)
   \t# weight 7.000 (esc)
-  \talg straw2 (esc)
+  \talg straw (esc)
   \thash 0\t# rjenkins1 (esc)
   \titem osd.50 weight 1.000 (esc)
   \titem osd.51 weight 1.000 (esc)
@@ -494,7 +491,7 @@
   rack irv-n2 {
   \tid -3\t\t# do not change unnecessarily (esc)
   \t# weight 119.000 (esc)
-  \talg straw2 (esc)
+  \talg straw (esc)
   \thash 0\t# rjenkins1 (esc)
   \titem cephstore5522 weight 7.000 (esc)
   \titem cephstore5523 weight 7.000 (esc)
@@ -517,7 +514,7 @@
   host cephstore6236 {
   \tid -5\t\t# do not change unnecessarily (esc)
   \t# weight 7.000 (esc)
-  \talg straw2 (esc)
+  \talg straw (esc)
   \thash 0\t# rjenkins1 (esc)
   \titem osd.100 weight 1.000 (esc)
   \titem osd.101 weight 1.000 (esc)
@@ -530,7 +527,7 @@
   host cephstore6237 {
   \tid -7\t\t# do not change unnecessarily (esc)
   \t# weight 7.000 (esc)
-  \talg straw2 (esc)
+  \talg straw (esc)
   \thash 0\t# rjenkins1 (esc)
   \titem osd.106 weight 1.000 (esc)
   \titem osd.107 weight 1.000 (esc)
@@ -543,7 +540,7 @@
   host cephstore6239 {
   \tid -9\t\t# do not change unnecessarily (esc)
   \t# weight 7.000 (esc)
-  \talg straw2 (esc)
+  \talg straw (esc)
   \thash 0\t# rjenkins1 (esc)
   \titem osd.120 weight 1.000 (esc)
   \titem osd.121 weight 1.000 (esc)
@@ -556,7 +553,7 @@
   host cephstore6241 {
   \tid -11\t\t# do not change unnecessarily (esc)
   \t# weight 7.000 (esc)
-  \talg straw2 (esc)
+  \talg straw (esc)
   \thash 0\t# rjenkins1 (esc)
   \titem osd.134 weight 1.000 (esc)
   \titem osd.135 weight 1.000 (esc)
@@ -569,7 +566,7 @@
   host cephstore6243 {
   \tid -13\t\t# do not change unnecessarily (esc)
   \t# weight 7.000 (esc)
-  \talg straw2 (esc)
+  \talg straw (esc)
   \thash 0\t# rjenkins1 (esc)
   \titem osd.148 weight 1.000 (esc)
   \titem osd.149 weight 1.000 (esc)
@@ -582,7 +579,7 @@
   host cephstore6245 {
   \tid -16\t\t# do not change unnecessarily (esc)
   \t# weight 7.000 (esc)
-  \talg straw2 (esc)
+  \talg straw (esc)
   \thash 0\t# rjenkins1 (esc)
   \titem osd.162 weight 1.000 (esc)
   \titem osd.163 weight 1.000 (esc)
@@ -595,7 +592,7 @@
   host cephstore6336 {
   \tid -18\t\t# do not change unnecessarily (esc)
   \t# weight 7.000 (esc)
-  \talg straw2 (esc)
+  \talg straw (esc)
   \thash 0\t# rjenkins1 (esc)
   \titem osd.176 weight 1.000 (esc)
   \titem osd.177 weight 1.000 (esc)
@@ -608,7 +605,7 @@
   host cephstore6338 {
   \tid -20\t\t# do not change unnecessarily (esc)
   \t# weight 7.000 (esc)
-  \talg straw2 (esc)
+  \talg straw (esc)
   \thash 0\t# rjenkins1 (esc)
   \titem osd.190 weight 1.000 (esc)
   \titem osd.191 weight 1.000 (esc)
@@ -621,7 +618,7 @@
   host cephstore6339 {
   \tid -21\t\t# do not change unnecessarily (esc)
   \t# weight 7.000 (esc)
-  \talg straw2 (esc)
+  \talg straw (esc)
   \thash 0\t# rjenkins1 (esc)
   \titem osd.197 weight 1.000 (esc)
   \titem osd.198 weight 1.000 (esc)
@@ -634,7 +631,7 @@
   host cephstore6340 {
   \tid -22\t\t# do not change unnecessarily (esc)
   \t# weight 7.000 (esc)
-  \talg straw2 (esc)
+  \talg straw (esc)
   \thash 0\t# rjenkins1 (esc)
   \titem osd.204 weight 1.000 (esc)
   \titem osd.205 weight 1.000 (esc)
@@ -647,7 +644,7 @@
   host cephstore6343 {
   \tid -26\t\t# do not change unnecessarily (esc)
   \t# weight 7.000 (esc)
-  \talg straw2 (esc)
+  \talg straw (esc)
   \thash 0\t# rjenkins1 (esc)
   \titem osd.225 weight 1.000 (esc)
   \titem osd.226 weight 1.000 (esc)
@@ -660,7 +657,7 @@
   host cephstore6230 {
   \tid -32\t\t# do not change unnecessarily (esc)
   \t# weight 7.000 (esc)
-  \talg straw2 (esc)
+  \talg straw (esc)
   \thash 0\t# rjenkins1 (esc)
   \titem osd.57 weight 1.000 (esc)
   \titem osd.58 weight 1.000 (esc)
@@ -673,7 +670,7 @@
   host cephstore6231 {
   \tid -33\t\t# do not change unnecessarily (esc)
   \t# weight 7.000 (esc)
-  \talg straw2 (esc)
+  \talg straw (esc)
   \thash 0\t# rjenkins1 (esc)
   \titem osd.64 weight 1.000 (esc)
   \titem osd.65 weight 1.000 (esc)
@@ -686,7 +683,7 @@
   host cephstore6232 {
   \tid -34\t\t# do not change unnecessarily (esc)
   \t# weight 7.000 (esc)
-  \talg straw2 (esc)
+  \talg straw (esc)
   \thash 0\t# rjenkins1 (esc)
   \titem osd.71 weight 1.000 (esc)
   \titem osd.72 weight 1.000 (esc)
@@ -699,7 +696,7 @@
   host cephstore6233 {
   \tid -35\t\t# do not change unnecessarily (esc)
   \t# weight 7.000 (esc)
-  \talg straw2 (esc)
+  \talg straw (esc)
   \thash 0\t# rjenkins1 (esc)
   \titem osd.78 weight 1.000 (esc)
   \titem osd.79 weight 1.000 (esc)
@@ -712,7 +709,7 @@
   host cephstore6234 {
   \tid -36\t\t# do not change unnecessarily (esc)
   \t# weight 7.000 (esc)
-  \talg straw2 (esc)
+  \talg straw (esc)
   \thash 0\t# rjenkins1 (esc)
   \titem osd.85 weight 1.000 (esc)
   \titem osd.86 weight 1.000 (esc)
@@ -725,7 +722,7 @@
   host cephstore6235 {
   \tid -37\t\t# do not change unnecessarily (esc)
   \t# weight 7.000 (esc)
-  \talg straw2 (esc)
+  \talg straw (esc)
   \thash 0\t# rjenkins1 (esc)
   \titem osd.92 weight 1.000 (esc)
   \titem osd.93 weight 1.000 (esc)
@@ -738,7 +735,7 @@
   rack irv-n1 {
   \tid -6\t\t# do not change unnecessarily (esc)
   \t# weight 119.000 (esc)
-  \talg straw2 (esc)
+  \talg straw (esc)
   \thash 0\t# rjenkins1 (esc)
   \titem cephstore6236 weight 7.000 (esc)
   \titem cephstore6237 weight 7.000 (esc)
@@ -761,7 +758,7 @@
   root default {
   \tid -1\t\t# do not change unnecessarily (esc)
   \t# weight 238.000 (esc)
-  \talg straw2 (esc)
+  \talg straw (esc)
   \thash 0\t# rjenkins1 (esc)
   \titem irv-n2 weight 119.000 (esc)
   \titem irv-n1 weight 119.000 (esc)
@@ -791,10 +788,6 @@
   created \d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d+ (re)
   modified \d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d+ (re)
   flags 
-  full_ratio 0
-  backfillfull_ratio 0
-  nearfull_ratio 0
-  min_compat_client jewel
   
   pool 0 'rbd' replicated size 3 min_size 2 crush_ruleset 0 object_hash rjenkins pg_num 15296 pgp_num 15296 last_change 0 flags hashpspool stripe_width 0
   

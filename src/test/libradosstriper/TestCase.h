@@ -23,15 +23,15 @@
 class StriperTest : public ::testing::Test {
 public:
   StriperTest() {}
-  ~StriperTest() override {}
+  virtual ~StriperTest() {}
 protected:
   static void SetUpTestCase();
   static void TearDownTestCase();
   static rados_t s_cluster;
   static std::string pool_name;
 
-  void SetUp() override;
-  void TearDown() override;
+  virtual void SetUp();
+  virtual void TearDown();
   rados_t cluster;
   rados_ioctx_t ioctx;
   rados_striper_t striper;
@@ -40,14 +40,14 @@ protected:
 class StriperTestPP : public ::testing::Test {
 public:
   StriperTestPP() : cluster(s_cluster) {}
-  ~StriperTestPP() override {}
+  virtual ~StriperTestPP() {}
   static void SetUpTestCase();
   static void TearDownTestCase();
 protected:
   static librados::Rados s_cluster;
   static std::string pool_name;
 
-  void SetUp() override;
+  virtual void SetUp();
   librados::Rados &cluster;
   librados::IoCtx ioctx;
   libradosstriper::RadosStriper striper;
@@ -66,14 +66,14 @@ struct TestData {
 class StriperTestParam : public ::testing::TestWithParam<TestData> {
 public:
   StriperTestParam() : cluster(s_cluster) {}
-  ~StriperTestParam() override {}
+  virtual ~StriperTestParam() {}
   static void SetUpTestCase();
   static void TearDownTestCase();
 protected:
   static librados::Rados s_cluster;
   static std::string pool_name;
 
-  void SetUp() override;
+  virtual void SetUp();
   librados::Rados &cluster;
   librados::IoCtx ioctx;
   libradosstriper::RadosStriper striper;

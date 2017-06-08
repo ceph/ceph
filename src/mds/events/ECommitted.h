@@ -23,21 +23,20 @@ public:
   metareqid_t reqid;
 
   ECommitted() : LogEvent(EVENT_COMMITTED) { }
-  explicit ECommitted(metareqid_t r) :
+  ECommitted(metareqid_t r) : 
     LogEvent(EVENT_COMMITTED), reqid(r) { }
 
-  void print(ostream& out) const override {
+  void print(ostream& out) const {
     out << "ECommitted " << reqid;
   }
 
-  void encode(bufferlist &bl, uint64_t features) const override;
-  void decode(bufferlist::iterator &bl) override;
-  void dump(Formatter *f) const override;
+  void encode(bufferlist &bl) const;
+  void decode(bufferlist::iterator &bl);
+  void dump(Formatter *f) const;
   static void generate_test_instances(list<ECommitted*>& ls);
 
-  void update_segment() override {}
-  void replay(MDSRank *mds) override;
+  void update_segment() {}
+  void replay(MDSRank *mds);
 };
-WRITE_CLASS_ENCODER_FEATURES(ECommitted)
 
 #endif

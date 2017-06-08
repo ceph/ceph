@@ -12,8 +12,8 @@
  *
  */
 
-#include "include/compat.h"
 #include "common/errno.h"
+#include "include/atomic.h"
 #include "systest_runnable.h"
 #include "systest_settings.h"
 
@@ -30,7 +30,10 @@
 #include <sys/wait.h>
 #include <unistd.h>
 #include <vector>
-#include <atomic>
+
+#if defined(__FreeBSD__)
+#include <pthread_np.h>
+#endif
 
 using std::ostringstream;
 using std::string;
@@ -44,7 +47,7 @@ static pid_t do_gettid(void)
 #endif
 }
 
-std::atomic<unsigned> m_highest_id = { 0 };
+ceph::atomic_t m_highest_id(0);
 
 SysTestRunnable::
 SysTestRunnable(int argc, const char **argv)
@@ -53,7 +56,7 @@ SysTestRunnable(int argc, const char **argv)
     m_argv_orig(NULL)
 {
   m_started = false;
-  m_id = ++m_highest_id;
+  m_id = m_highest_id.inc();
   memset(&m_pthread, 0, sizeof(m_pthread));
   update_id_str(false);
   set_argv(argc, argv);

@@ -4,21 +4,13 @@
 #include "include/stringify.h"
 #include "CrushTester.h"
 #include "CrushTreeDumper.h"
-#include "include/ceph_features.h"
 
 #include <algorithm>
 #include <stdlib.h>
 #include <boost/lexical_cast.hpp>
-// to workaround https://svn.boost.org/trac/boost/ticket/9501
-#ifdef _LIBCPP_VERSION
-#include <boost/version.hpp>
-#if BOOST_VERSION < 105600
-#define ICL_USE_BOOST_MOVE_IMPLEMENTATION
-#endif
-#endif
 #include <boost/icl/interval_map.hpp>
 #include <boost/algorithm/string/join.hpp>
-#include "common/SubProcess.h"
+#include <common/SubProcess.h>
 
 void CrushTester::set_device_weight(int dev, float f)
 {
@@ -262,6 +254,12 @@ int CrushTester::random_placement(int ruleno, vector<int>& out, int maxout, vect
       crush.get_max_devices() == 0)
     return -EINVAL;
 
+  // compute each device's proportional weight
+  vector<float> proportional_weights( weight.size() );
+  for (unsigned i = 0; i < weight.size(); i++) {
+    proportional_weights[i] = (float) weight[i] / (float) total_weight;
+  }
+
   // determine the real maximum number of devices to return
   int devices_requested = min(maxout, get_maximum_affected_by_rule(ruleno));
   bool accept_placement = false;
@@ -384,7 +382,7 @@ int CrushTester::test_with_crushtool(const char *crushtool_cmd,
   }
 
   bufferlist bl;
-  ::encode(crush, bl, CEPH_FEATURES_SUPPORTED_DEFAULT);
+  ::encode(crush, bl);
   bl.write_fd(crushtool.get_stdin());
   crushtool.close_stdin();
   bl.clear();
@@ -417,7 +415,7 @@ namespace {
   public:
     CrushWalker(const CrushWrapper *crush, unsigned max_id)
       : Parent(crush), max_id(max_id) {}
-    void dump_item(const CrushTreeDumper::Item &qi, DumbFormatter *) override {
+    void dump_item(const CrushTreeDumper::Item &qi, DumbFormatter *) {
       int type = -1;
       if (qi.is_bucket()) {
 	if (!crush->get_item_name(qi.id)) {
@@ -573,6 +571,7 @@ int CrushTester::test()
 
       // create a structure to hold data for post-processing
       tester_data_set tester_data;
+      vector<int> vector_data_buffer;
       vector<float> vector_data_buffer_f;
 
       // create a map to hold batch-level placement information
@@ -641,11 +640,7 @@ int CrushTester::test()
           if (use_crush) {
             if (output_mappings)
 	      err << "CRUSH"; // prepend CRUSH to placement output
-            uint32_t real_x = x;
-            if (pool_id != -1) {
-              real_x = crush_hash32_2(CRUSH_HASH_RJENKINS1, x, (uint32_t)pool_id);
-            }
-            crush.do_rule(r, real_x, out, nr, weight, 0);
+            crush.do_rule(r, x, out, nr, weight);
           } else {
             if (output_mappings)
 	      err << "RNG"; // prepend RNG to placement output to denote simulation

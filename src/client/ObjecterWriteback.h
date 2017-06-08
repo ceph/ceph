@@ -12,53 +12,49 @@ class ObjecterWriteback : public WritebackHandler {
     : m_objecter(o),
       m_finisher(fin),
       m_lock(lock) { }
-  ~ObjecterWriteback() override {}
+  virtual ~ObjecterWriteback() {}
 
-  void read(const object_t& oid, uint64_t object_no,
+  virtual void read(const object_t& oid, uint64_t object_no,
 		    const object_locator_t& oloc, uint64_t off, uint64_t len,
 		    snapid_t snapid, bufferlist *pbl, uint64_t trunc_size,
-		    __u32 trunc_seq, int op_flags,
-                    const ZTracer::Trace &parent_trace,
-                    Context *onfinish) override {
+		    __u32 trunc_seq, int op_flags, Context *onfinish) {
     m_objecter->read_trunc(oid, oloc, off, len, snapid, pbl, 0,
 			   trunc_size, trunc_seq,
 			   new C_OnFinisher(new C_Lock(m_lock, onfinish),
 					    m_finisher));
   }
 
-  bool may_copy_on_write(const object_t& oid, uint64_t read_off,
-				 uint64_t read_len, snapid_t snapid) override {
+  virtual bool may_copy_on_write(const object_t& oid, uint64_t read_off,
+				 uint64_t read_len, snapid_t snapid) {
     return false;
   }
 
-  ceph_tid_t write(const object_t& oid, const object_locator_t& oloc,
+  virtual ceph_tid_t write(const object_t& oid, const object_locator_t& oloc,
 			   uint64_t off, uint64_t len,
 			   const SnapContext& snapc, const bufferlist &bl,
 			   ceph::real_time mtime, uint64_t trunc_size,
 			   __u32 trunc_seq, ceph_tid_t journal_tid,
-                           const ZTracer::Trace &parent_trace,
-			   Context *oncommit) override {
+			   Context *oncommit) {
     return m_objecter->write_trunc(oid, oloc, off, len, snapc, bl, mtime, 0,
-				   trunc_size, trunc_seq,
+				   trunc_size, trunc_seq, NULL,
 				   new C_OnFinisher(new C_Lock(m_lock,
 							       oncommit),
 						    m_finisher));
   }
 
-  bool can_scattered_write() override { return true; }
-  using WritebackHandler::write;
-  ceph_tid_t write(const object_t& oid, const object_locator_t& oloc,
+  virtual bool can_scattered_write() { return true; }
+  virtual ceph_tid_t write(const object_t& oid, const object_locator_t& oloc,
                            vector<pair<uint64_t, bufferlist> >& io_vec,
 			   const SnapContext& snapc, ceph::real_time mtime,
 			   uint64_t trunc_size, __u32 trunc_seq,
-			   Context *oncommit) override {
+			   Context *oncommit) {
     ObjectOperation op;
     for (vector<pair<uint64_t, bufferlist> >::iterator p = io_vec.begin();
 	 p != io_vec.end();
 	 ++p)
       op.write(p->first, p->second, trunc_size, trunc_seq);
 
-    return m_objecter->mutate(oid, oloc, op, snapc, mtime, 0,
+    return m_objecter->mutate(oid, oloc, op, snapc, mtime, 0, NULL,
 			      new C_OnFinisher(new C_Lock(m_lock, oncommit),
 					       m_finisher));
   }

@@ -50,10 +50,14 @@ public:
       m_object_map(*object_map), m_ret_val(0) {
   }
 
-  void send() override;
+  virtual void send();
 
 protected:
-  bool should_complete(int r) override;
+  virtual bool should_complete(int r);
+
+  virtual void finish() {
+  }
+  using AsyncRequest<>::finish;
 
 private:
   State m_state;

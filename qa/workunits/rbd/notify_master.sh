@@ -1,5 +1,7 @@
 #!/bin/sh -ex
 
-relpath=$(dirname $0)/../../../src/test/librbd
-python $relpath/test_notify.py master
+CEPH_REF=${CEPH_REF:-master}
+wget -O test_notify.py "https://git.ceph.com/?p=ceph.git;a=blob_plain;hb=$CEPH_REF;f=src/test/librbd/test_notify.py"
+
+python test_notify.py master
 exit 0

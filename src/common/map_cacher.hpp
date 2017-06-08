@@ -15,6 +15,16 @@
 #ifndef MAPCACHER_H
 #define MAPCACHER_H
 
+#include <boost/scoped_ptr.hpp>
+#include <boost/optional/optional_io.hpp>
+#include "include/memory.h"
+#include <set>
+#include <map>
+#include <utility>
+#include <string>
+#include <errno.h>
+
+#include "include/Context.h"
 #include "common/sharedptr_registry.hpp"
 
 namespace MapCacher {
@@ -116,7 +126,7 @@ public:
 	return 0;
       }
     }
-    ceph_abort(); // not reachable
+    assert(0); // not reachable
     return -EINVAL;
   } ///< @return error value, 0 on success, -ENOENT if no more entries
 

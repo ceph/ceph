@@ -22,6 +22,8 @@
 
  */ 
 
+#include <vector>
+
 #include "ErasureCodeInterface.h"
 
 namespace ceph {
@@ -30,81 +32,81 @@ namespace ceph {
   public:
     static const unsigned SIMD_ALIGN;
 
-    std::vector<int> chunk_mapping;
+    vector<int> chunk_mapping;
     ErasureCodeProfile _profile;
 
-    ~ErasureCode() override {}
+    virtual ~ErasureCode() {}
 
-    int init(ErasureCodeProfile &profile, std::ostream *ss) override {
+    virtual int init(ErasureCodeProfile &profile, ostream *ss) {
       _profile = profile;
       return 0;
     }
 
-    const ErasureCodeProfile &get_profile() const override {
+    virtual const ErasureCodeProfile &get_profile() const {
       return _profile;
     }
 
-    int sanity_check_k(int k, std::ostream *ss);
+    int sanity_check_k(int k, ostream *ss);
 
-    unsigned int get_coding_chunk_count() const override {
+    virtual unsigned int get_coding_chunk_count() const {
       return get_chunk_count() - get_data_chunk_count();
     }
 
-    int minimum_to_decode(const std::set<int> &want_to_read,
-                                  const std::set<int> &available_chunks,
-                                  std::set<int> *minimum) override;
+    virtual int minimum_to_decode(const set<int> &want_to_read,
+                                  const set<int> &available_chunks,
+                                  set<int> *minimum);
 
-    int minimum_to_decode_with_cost(const std::set<int> &want_to_read,
-                                            const std::map<int, int> &available,
-                                            std::set<int> *minimum) override;
+    virtual int minimum_to_decode_with_cost(const set<int> &want_to_read,
+                                            const map<int, int> &available,
+                                            set<int> *minimum);
 
     int encode_prepare(const bufferlist &raw,
-                       std::map<int, bufferlist> &encoded) const;
+                       map<int, bufferlist> &encoded) const;
 
-    int encode(const std::set<int> &want_to_encode,
+    virtual int encode(const set<int> &want_to_encode,
                        const bufferlist &in,
-                       std::map<int, bufferlist> *encoded) override;
+                       map<int, bufferlist> *encoded);
 
-    int encode_chunks(const std::set<int> &want_to_encode,
-                              std::map<int, bufferlist> *encoded) override;
+    virtual int encode_chunks(const set<int> &want_to_encode,
+                              map<int, bufferlist> *encoded);
 
-    int decode(const std::set<int> &want_to_read,
-                       const std::map<int, bufferlist> &chunks,
-                       std::map<int, bufferlist> *decoded) override;
+    virtual int decode(const set<int> &want_to_read,
+                       const map<int, bufferlist> &chunks,
+                       map<int, bufferlist> *decoded);
 
-    int decode_chunks(const std::set<int> &want_to_read,
-                              const std::map<int, bufferlist> &chunks,
-                              std::map<int, bufferlist> *decoded) override;
+    virtual int decode_chunks(const set<int> &want_to_read,
+                              const map<int, bufferlist> &chunks,
+                              map<int, bufferlist> *decoded);
 
-    const std::vector<int> &get_chunk_mapping() const override;
+    virtual const vector<int> &get_chunk_mapping() const;
 
     int to_mapping(const ErasureCodeProfile &profile,
-		   std::ostream *ss);
+		   ostream *ss);
 
     static int to_int(const std::string &name,
 		      ErasureCodeProfile &profile,
 		      int *value,
 		      const std::string &default_value,
-		      std::ostream *ss);
+		      ostream *ss);
 
     static int to_bool(const std::string &name,
 		       ErasureCodeProfile &profile,
 		       bool *value,
 		       const std::string &default_value,
-		       std::ostream *ss);
+		       ostream *ss);
 
     static int to_string(const std::string &name,
 			 ErasureCodeProfile &profile,
 			 std::string *value,
 			 const std::string &default_value,
-			 std::ostream *ss);
+			 ostream *ss);
 
-    int decode_concat(const std::map<int, bufferlist> &chunks,
-			      bufferlist *decoded) override;
+    virtual int decode_concat(const map<int, bufferlist> &chunks,
+			      bufferlist *decoded);
 
   protected:
     int parse(const ErasureCodeProfile &profile,
-	      std::ostream *ss);
+	      ostream *ss);
 
   private:
     int chunk_index(unsigned int i) const;

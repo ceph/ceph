@@ -1,14 +1,14 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
-// vim: ts=8 sw=2 smarttab
 #ifndef CEPH_CLASSHANDLER_H
 #define CEPH_CLASSHANDLER_H
 
 #include "include/types.h"
-#include "objclass/objclass.h"
-#include "common/Mutex.h"
 
-//forward declaration
-class CephContext;
+#include "objclass/objclass.h"
+
+#include "common/Cond.h"
+#include "common/Mutex.h"
+#include "common/ceph_context.h"
+
 
 class ClassHandler
 {
@@ -59,8 +59,6 @@ public:
     ClassHandler *handler;
     void *handle;
 
-    bool whitelisted;
-
     map<string, ClassMethod> methods_map;
     map<string, ClassFilter> filters_map;
 
@@ -102,22 +100,17 @@ public:
   };
 
 private:
+  Mutex mutex;
   map<string, ClassData> classes;
 
-  ClassData *_get_class(const string& cname, bool check_allowed);
+  ClassData *_get_class(const string& cname);
   int _load_class(ClassData *cls);
 
-  static bool in_class_list(const std::string& cname,
-      const std::string& list);
-
 public:
-  Mutex mutex;
-
-  explicit ClassHandler(CephContext *cct_) : cct(cct_), mutex("ClassHandler") {}
-
+  ClassHandler(CephContext *cct_) : cct(cct_), mutex("ClassHandler") {}
+  
   int open_all_classes();
 
-  void add_embedded_class(const string& cname);
   int open_class(const string& cname, ClassData **pcls);
   
   ClassData *register_class(const char *cname);

@@ -26,10 +26,10 @@ protected:
   map<pair<string,string>, bufferlist>::iterator it;
 
 public:
-  explicit WholeSpaceMemIterator(KeyValueDBMemory *db) : db(db), ready(false) { }
-  ~WholeSpaceMemIterator() override { }
+  WholeSpaceMemIterator(KeyValueDBMemory *db) : db(db), ready(false) { }
+  virtual ~WholeSpaceMemIterator() { }
 
-  int seek_to_first() override {
+  int seek_to_first() {
     if (db->db.empty()) {
       it = db->db.end();
       ready = false;
@@ -40,7 +40,7 @@ public:
     return 0;
   }
 
-  int seek_to_first(const string &prefix) override {
+  int seek_to_first(const string &prefix) {
     it = db->db.lower_bound(make_pair(prefix, ""));
     if (db->db.empty() || (it == db->db.end())) {
       it = db->db.end();
@@ -51,7 +51,7 @@ public:
     return 0;
   }
 
-  int seek_to_last() override {
+  int seek_to_last() {
     it = db->db.end();
     if (db->db.empty()) {
       ready = false;
@@ -63,7 +63,7 @@ public:
     return 0;
   }
 
-  int seek_to_last(const string &prefix) override {
+  int seek_to_last(const string &prefix) {
     string tmp(prefix);
     tmp.append(1, (char) 0);
     it = db->db.upper_bound(make_pair(tmp,""));
@@ -78,7 +78,7 @@ public:
     return 0;
   }
 
-  int lower_bound(const string &prefix, const string &to) override {
+  int lower_bound(const string &prefix, const string &to) {
     it = db->db.lower_bound(make_pair(prefix,to));
     if ((db->db.empty()) || (it == db->db.end())) {
       it = db->db.end();
@@ -92,7 +92,7 @@ public:
     return 0;
   }
 
-  int upper_bound(const string &prefix, const string &after) override {
+  int upper_bound(const string &prefix, const string &after) {
     it = db->db.upper_bound(make_pair(prefix,after));
     if ((db->db.empty()) || (it == db->db.end())) {
       it = db->db.end();
@@ -104,7 +104,7 @@ public:
     return 0;
   }
 
-  bool valid() override {
+  bool valid() {
     return ready && (it != db->db.end());
   }
 
@@ -112,7 +112,7 @@ public:
     return ready && (it == db->db.begin());
   }
 
-  int prev() override {
+  int prev() {
     if (!begin() && ready)
       --it;
     else
@@ -120,38 +120,38 @@ public:
     return 0;
   }
 
-  int next() override {
+  int next() {
     if (valid())
       ++it;
     return 0;
   }
 
-  string key() override {
+  string key() {
     if (valid())
       return (*it).first.second;
     else
       return "";
   }
 
-  pair<string,string> raw_key() override {
+  pair<string,string> raw_key() {
     if (valid())
       return (*it).first;
     else
       return make_pair("", "");
   }
   
-  bool raw_key_is_prefixed(const string &prefix) override {
+  bool raw_key_is_prefixed(const string &prefix) {
     return prefix == (*it).first.first;
   }
 
-  bufferlist value() override {
+  bufferlist value() {
     if (valid())
       return (*it).second;
     else
       return bufferlist();
   }
 
-  int status() override {
+  int status() {
     return 0;
   }
 };
@@ -217,24 +217,6 @@ int KeyValueDBMemory::rmkeys_by_prefix(const string &prefix) {
   return 0;
 }
 
-int KeyValueDBMemory::rm_range_keys(const string &prefix, const string &start, const string &end) {
-  map<std::pair<string,string>,bufferlist>::iterator i;
-  i = db.lower_bound(make_pair(prefix, start));
-  if (i == db.end())
-    return 0;
-
-  while (i != db.end()) {
-    std::pair<string,string> key = (*i).first;
-    if (key.first != prefix)
-      break;
-    if (key.second >= end)
-      break;
-    ++i;
-    rmkey(key.first, key.second);
-  }
-  return 0;
-}
-
 KeyValueDB::WholeSpaceIterator KeyValueDBMemory::_get_iterator() {
   return ceph::shared_ptr<KeyValueDB::WholeSpaceIteratorImpl>(
     new WholeSpaceMemIterator(this)
@@ -256,10 +238,16 @@ public:
    * keep it in mind.
    */
 
-  explicit WholeSpaceSnapshotMemIterator(KeyValueDBMemory *db) :
+  WholeSpaceSnapshotMemIterator(KeyValueDBMemory *db) :
     WholeSpaceMemIterator(db) { }
-  ~WholeSpaceSnapshotMemIterator() override {
+  ~WholeSpaceSnapshotMemIterator() {
     delete db;
   }
 };
 
+KeyValueDB::WholeSpaceIterator KeyValueDBMemory::_get_snapshot_iterator() {
+  KeyValueDBMemory *snap_db = new KeyValueDBMemory(this);
+  return ceph::shared_ptr<KeyValueDB::WholeSpaceIteratorImpl>(
+    new WholeSpaceSnapshotMemIterator(snap_db)
+  );
+}

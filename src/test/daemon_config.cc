@@ -12,12 +12,11 @@
  *
  */
 
-#include "gtest/gtest.h"
 #include "common/ceph_argparse.h"
 #include "common/config.h"
-#include "global/global_context.h"
 #include "include/cephfs/libcephfs.h"
 #include "include/rados/librados.h"
+#include "test/unit.h"
 
 #include <errno.h>
 #include <sstream>
@@ -339,6 +338,14 @@ TEST(DaemonConfig, ThreadSafety1) {
 }
 
 TEST(DaemonConfig, InvalidIntegers) {
+  {
+    int ret = g_ceph_context->_conf->set_val("num_client", "-1");
+    ASSERT_EQ(ret, -EINVAL);
+  }
+  {
+    int ret = g_ceph_context->_conf->set_val("num_client", "-1K");
+    ASSERT_EQ(ret, -EINVAL);
+  }
   {
     long long bad_value = (long long)std::numeric_limits<int>::max() + 1;
     string str = boost::lexical_cast<string>(bad_value);

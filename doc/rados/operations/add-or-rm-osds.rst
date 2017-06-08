@@ -174,13 +174,13 @@ your new OSD before it can begin receiving data. You may use
 ``service ceph`` from your admin host or start the OSD from its host
 machine.
 
-For Ubuntu Trusty use Upstart. ::
+For Debian/Ubuntu use Upstart. ::
 
 	sudo start ceph-osd id={osd-num}
 
-For all other distros use systemd. ::
+For CentOS/RHEL, use sysvinit. ::
 
-	sudo systemctl start ceph-osd@{osd-num}
+	sudo /etc/init.d/ceph start osd.{osd-num}
 
 
 Once you start your OSD, it is ``up`` and ``in``.
@@ -221,7 +221,7 @@ that your cluster is not at its ``near full`` ratio.
    or exceed its ``full ratio``.
    
 
-Take the OSD out of the Cluster
+Take the OSD ``out`` of the Cluster
 -----------------------------------
 
 Before you remove an OSD, it is usually ``up`` and ``in``.  You need to take it
@@ -274,7 +274,7 @@ That is, the OSD may be ``up`` and ``out``. You must stop
 your OSD before you remove it from the configuration. :: 
 
 	ssh {osd-host}
-	sudo systemctl stop ceph-osd@{osd-num}
+	sudo /etc/init.d/ceph stop osd.{osd-num}
 
 Once you stop your OSD, it is ``down``. 
 

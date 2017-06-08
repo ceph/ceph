@@ -15,11 +15,7 @@
 #ifndef CEPH_LIBRBD_CLS_NUMOPS_CLIENT_H
 #define CEPH_LIBRBD_CLS_NUMOPS_CLIENT_H
 
-#include <string>
-
-namespace librados {
-  class IoCtx;
-}
+#include "include/rados/librados.hpp"
 
 namespace rados {
   namespace cls {

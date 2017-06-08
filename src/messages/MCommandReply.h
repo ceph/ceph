@@ -33,19 +33,19 @@ class MCommandReply : public Message {
     : Message(MSG_COMMAND_REPLY),
       r(_r), rs(s) { }
 private:
-  ~MCommandReply() override {}
+  ~MCommandReply() {}
 
 public:
-  const char *get_type_name() const override { return "command_reply"; }
-  void print(ostream& o) const override {
+  const char *get_type_name() const { return "command_reply"; }
+  void print(ostream& o) const {
     o << "command_reply(tid " << get_tid() << ": " << r << " " << rs << ")";
   }
   
-  void encode_payload(uint64_t features) override {
+  void encode_payload(uint64_t features) {
     ::encode(r, payload);
     ::encode(rs, payload);
   }
-  void decode_payload() override {
+  void decode_payload() {
     bufferlist::iterator p = payload.begin();
     ::decode(r, p);
     ::decode(rs, p);

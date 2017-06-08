@@ -27,7 +27,6 @@
 #include "common/config.h"
 #include "include/assert.h"
 
-#define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_mds
 #undef dout_prefix
 #define dout_prefix *_dout << "mds." << rank << ".snap "
@@ -42,19 +41,21 @@ void SnapServer::reset_state()
   // find any removed snapshot in data pools
   if (mds) {  // only if I'm running in a live MDS
     snapid_t first_free = 0;
-    mds->objecter->with_osdmap([&](const OSDMap& o) {
-	for (const auto p : mds->mdsmap->get_data_pools()) {
-	  const pg_pool_t *pi = o.get_pg_pool(p);
-	  if (!pi) {
-	    // If pool isn't in OSDMap yet then can't have any snaps
-	    // needing removal, skip.
-	    continue;
-	  }
-	  if (!pi->removed_snaps.empty() &&
-	      pi->removed_snaps.range_end() > first_free)
-	    first_free = pi->removed_snaps.range_end();
-	}
-      });
+    const OSDMap *osdmap = mds->objecter->get_osdmap_read();
+    for (set<int64_t>::const_iterator p = mds->mdsmap->get_data_pools().begin();
+         p != mds->mdsmap->get_data_pools().end();
+         ++p) {
+      const pg_pool_t *pi = osdmap->get_pg_pool(*p);
+      if (!pi) {
+        // If pool isn't in OSDMap yet then can't have any snaps needing
+        // removal, skip.
+        continue;
+      }
+      if (!pi->removed_snaps.empty() &&
+          pi->removed_snaps.range_end() > first_free)
+        first_free = pi->removed_snaps.range_end();
+    }
+    mds->objecter->put_osdmap_read();
     if (first_free > last_snap)
       last_snap = first_free;
   }
@@ -132,12 +133,12 @@ void SnapServer::_prepare(bufferlist &bl, uint64_t reqid, mds_rank_t bymds)
     break;
 
   default:
-    ceph_abort();
+    assert(0);
   }
   //dump();
 }
 
-bool SnapServer::_is_prepared(version_t tid) const
+bool SnapServer::_is_prepared(version_t tid)
 {
   return 
     pending_update.count(tid) ||
@@ -166,9 +167,11 @@ bool SnapServer::_commit(version_t tid, MMDSTableRequest *req)
     dout(7) << "commit " << tid << " destroy " << sn << " seq " << seq << dendl;
     snaps.erase(sn);
 
-    for (const auto p : mds->mdsmap->get_data_pools()) {
-      need_to_purge[p].insert(sn);
-      need_to_purge[p].insert(seq);
+    for (set<int64_t>::const_iterator p = mds->mdsmap->get_data_pools().begin();
+	 p != mds->mdsmap->get_data_pools().end();
+	 ++p) {
+      need_to_purge[*p].insert(sn);
+      need_to_purge[*p].insert(seq);
     }
 
     pending_destroy.erase(tid);
@@ -178,7 +181,7 @@ bool SnapServer::_commit(version_t tid, MMDSTableRequest *req)
     pending_noop.erase(tid);
   }
   else
-    ceph_abort();
+    assert(0);
 
   // bump version.
   version++;
@@ -210,7 +213,7 @@ void SnapServer::_rollback(version_t tid)
   }    
 
   else
-    ceph_abort();
+    assert(0);
 
   // bump version.
   version++;
@@ -256,28 +259,30 @@ void SnapServer::check_osd_map(bool force)
   map<int, vector<snapid_t> > all_purge;
   map<int, vector<snapid_t> > all_purged;
 
-  mds->objecter->with_osdmap(
-    [this, &all_purged, &all_purge](const OSDMap& osdmap) {
-      for (const auto& p : need_to_purge) {
-	int id = p.first;
-	const pg_pool_t *pi = osdmap.get_pg_pool(id);
-	if (pi == NULL) {
-	  // The pool is gone.  So are the snapshots.
-	  all_purged[id] = std::vector<snapid_t>(p.second.begin(),
-						 p.second.end());
-	  continue;
-	}
+  const OSDMap *osdmap = mds->objecter->get_osdmap_read();
+  for (map<int, set<snapid_t> >::iterator p = need_to_purge.begin();
+       p != need_to_purge.end();
+       ++p) {
+    int id = p->first;
+    const pg_pool_t *pi = osdmap->get_pg_pool(id);
+    if (pi == NULL) {
+      // The pool is gone.  So are the snapshots.
+      all_purged[id] = std::vector<snapid_t>(p->second.begin(), p->second.end());
+      continue;
+    }
 
-	for (const auto& q : p.second) {
-	  if (pi->is_removed_snap(q)) {
-	    dout(10) << " osdmap marks " << q << " as removed" << dendl;
-	    all_purged[id].push_back(q);
-	  } else {
-	    all_purge[id].push_back(q);
-	  }
-	}
+    for (set<snapid_t>::iterator q = p->second.begin();
+	 q != p->second.end();
+	 ++q) {
+      if (pi->is_removed_snap(*q)) {
+	dout(10) << " osdmap marks " << *q << " as removed" << dendl;
+	all_purged[id].push_back(*q);
+      } else {
+	all_purge[id].push_back(*q);
       }
-  });
+    }
+  }
+  mds->objecter->put_osdmap_read();
 
   if (!all_purged.empty()) {
     // prepare to remove from need_to_purge list

@@ -7,8 +7,11 @@ a Ceph Storage Cluster to store its data. The Ceph filesystem uses the same Ceph
 Storage Cluster system as Ceph Block Devices, Ceph Object Storage with its S3
 and Swift APIs, or native bindings (librados).
 
-.. note:: If you are evaluating CephFS for the first time, please review
-          the best practices for deployment: :doc:`/cephfs/best-practices`
+.. important:: CephFS currently lacks a robust 'fsck' check and
+               repair function.  Please use caution when storing
+               important data as the disaster recovery tools are
+               still under development.  For more information about
+               using CephFS today, see :doc:`/cephfs/early-adopters`
 
 .. ditaa::
             +-----------------------+  +------------------------+
@@ -28,9 +31,6 @@ and Swift APIs, or native bindings (librados).
             +---------------+ +---------------+ +---------------+
 
 
-Using CephFS
-============
-
 Using the Ceph Filesystem requires at least one :term:`Ceph Metadata Server` in
 your Ceph Storage Cluster.
 
@@ -48,10 +48,8 @@ least one :term:`Ceph Metadata Server` running.
 .. toctree:: 
 	:maxdepth: 1
 
-	Add/Remove MDS(s) <../../rados/deployment/ceph-deploy-mds>
-	MDS failover and standby configuration <standby>
-	MDS Configuration Settings <mds-config-ref>
-	Client Configuration Settings <client-config-ref>
+	Add/Remove MDS <../../rados/deployment/ceph-deploy-mds>
+	MDS Configuration <mds-config-ref>
 	Journaler Configuration <journaler>
 	Manpage ceph-mds <../../man/8/ceph-mds>
 
@@ -71,6 +69,7 @@ authentication keyring.
 	Mount CephFS <kernel>
 	Mount CephFS as FUSE <fuse>
 	Mount CephFS in fstab <fstab>
+	Manpage cephfs <../../man/8/cephfs>
 	Manpage ceph-fuse <../../man/8/ceph-fuse>
 	Manpage mount.ceph <../../man/8/mount.ceph>
 
@@ -80,37 +79,20 @@ authentication keyring.
 	</td><td><h3>Additional Details</h3>
 
 .. toctree:: 
-    :maxdepth: 1
+	:maxdepth: 1
 
-    Deployment best practices <best-practices>
-    Administrative commands <administration>
-    POSIX compatibility <posix>
-    Experimental Features <experimental-features>
-    CephFS Quotas <quota>
-    Using Ceph with Hadoop <hadoop>
-    cephfs-journal-tool <cephfs-journal-tool>
-    File layouts <file-layouts>
-    Client eviction <eviction>
-    Handling full filesystems <full>
-    Health messages <health-messages>
-    Troubleshooting <troubleshooting>
-    Disaster recovery <disaster-recovery>
-    Client authentication <client-auth>
-    Upgrading old filesystems <upgrading>
-    Configuring directory fragmentation <dirfrags>
-    Configuring multiple active MDS daemons <multimds>
+	POSIX compatibility <posix>
+        CephFS Quotas <quota>
+	Using Ceph with Hadoop <hadoop>
+	libcephfs <../../api/libcephfs-java/>
+	cephfs-journal-tool <cephfs-journal-tool>
+	File layouts <file-layouts>
+	Client eviction <eviction>
+	Handling full filesystems <full>
+	Troubleshooting <troubleshooting>
+	Disaster recovery <disaster-recovery>
+	Client authentication <client-auth>
 
 .. raw:: html
 
 	</td></tr></tbody></table>
-
-For developers
-==============
-
-.. toctree:: 
-    :maxdepth: 1
-
-    Client's Capabilities <capabilities>
-    libcephfs <../../api/libcephfs-java/>
-    Mantle <mantle>
-

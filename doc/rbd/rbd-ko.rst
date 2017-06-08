@@ -56,4 +56,4 @@ For example::
 	sudo rbd unmap /dev/rbd/rbd/foo
 
 
-.. _cephx: ../../rados/operations/user-management/
+.. _cephx: ../../rados/operations/authentication/

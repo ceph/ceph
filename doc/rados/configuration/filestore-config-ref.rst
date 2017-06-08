@@ -24,45 +24,22 @@ by using a method of storing XATTRs that is extrinsic to the underlying filesyst
 
 Ceph XATTRs are stored as ``inline xattr``, using the XATTRs provided
 by the underlying file system, if it does not impose a size limit. If
-there is a size limit (4KB total on ext4, for instance), some Ceph
-XATTRs will be stored in an key/value database when either the
-``filestore max inline xattr size`` or ``filestore max inline
-xattrs`` threshold is reached.
+there is a size limit ( 4KB total on ext4, for instance ), some Ceph
+XATTRs will be stored in an key/value database ( aka ``omap`` ) when
+the ``filestore max inline xattr size`` or ``filestore max inline
+xattrs`` threshold are reached.
+
+``filestore xattr use omap``
+
+:Description: Use object map for XATTRS. Set to ``true`` for ``ext4`` file systems. 
+:Type: Boolean
+:Required: No
+:Default: ``false``
 
 
 ``filestore max inline xattr size``
 
-:Description: The maximimum size of an XATTR stored in the filesystem (i.e., XFS,
-              btrfs, ext4, etc.) per object. Should not be larger than the
-              filesytem can handle. Default value of 0 means to use the value
-              specific to the underlying filesystem.
-:Type: Unsigned 32-bit Integer
-:Required: No
-:Default: ``0``
-
-
-``filestore max inline xattr size xfs``
-
-:Description: The maximimum size of an XATTR stored in the XFS filesystem.
-              Only used if ``filestore max inline xattr size`` == 0.
-:Type: Unsigned 32-bit Integer
-:Required: No
-:Default: ``65536``
-
-
-``filestore max inline xattr size btrfs``
-
-:Description: The maximimum size of an XATTR stored in the btrfs filesystem.
-              Only used if ``filestore max inline xattr size`` == 0.
-:Type: Unsigned 32-bit Integer
-:Required: No
-:Default: ``2048``
-
-
-``filestore max inline xattr size other``
-
-:Description: The maximimum size of an XATTR stored in other filesystems.
-              Only used if ``filestore max inline xattr size`` == 0.
+:Description: The maximimum size of an XATTR stored in the filesystem (i.e., XFS, btrfs, ext4, etc.) per object. Should not be larger than the filesytem can handle.
 :Type: Unsigned 32-bit Integer
 :Required: No
 :Default: ``512``
@@ -70,36 +47,7 @@ xattrs`` threshold is reached.
 
 ``filestore max inline xattrs``
 
-:Description: The maximum number of XATTRs stored in the filesystem per object.
-              Default value of 0 means to use the value specific to the
-              underlying filesystem.
-:Type: 32-bit Integer
-:Required: No
-:Default: ``0``
-
-
-``filestore max inline xattrs xfs``
-
-:Description: The maximum number of XATTRs stored in the XFS filesystem per object.
-              Only used if ``filestore max inline xattrs`` == 0.
-:Type: 32-bit Integer
-:Required: No
-:Default: ``10``
-
-
-``filestore max inline xattrs btrfs``
-
-:Description: The maximum number of XATTRs stored in the btrfs filesystem per object.
-              Only used if ``filestore max inline xattrs`` == 0.
-:Type: 32-bit Integer
-:Required: No
-:Default: ``10``
-
-
-``filestore max inline xattrs other``
-
-:Description: The maximum number of XATTRs stored in other filesystems per object.
-              Only used if ``filestore max inline xattrs`` == 0.
+:Description: The maximum number of XATTRs stored in the fileystem per object.
 :Type: 32-bit Integer
 :Required: No
 :Default: ``2``

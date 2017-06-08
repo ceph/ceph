@@ -40,8 +40,10 @@ class SimpleLock;
 class ScatterLock;
 class LocalLock;
 
+class MDCache;
+typedef ceph::shared_ptr<MDRequestImpl> MDRequestRef;
+
 #include "SimpleLock.h"
-#include "Mutation.h"
 
 class Locker {
 private:
@@ -70,7 +72,7 @@ protected:
 public:
   void include_snap_rdlocks(set<SimpleLock*>& rdlocks, CInode *in);
   void include_snap_rdlocks_wlayout(set<SimpleLock*>& rdlocks, CInode *in,
-                                    file_layout_t **layout);
+                                    ceph_file_layout **layout);
 
   bool acquire_locks(MDRequestRef& mdr,
 		     set<SimpleLock*> &rdlocks,
@@ -187,14 +189,13 @@ public:
   bool any_late_revoking_caps(xlist<Capability*> const &revoking) const;
 
  protected:
-  bool _need_flush_mdlog(CInode *in, int wanted_caps);
   void adjust_cap_wanted(Capability *cap, int wanted, int issue_seq);
   void handle_client_caps(class MClientCaps *m);
   void _update_cap_fields(CInode *in, int dirty, MClientCaps *m, inode_t *pi);
   void _do_snap_update(CInode *in, snapid_t snap, int dirty, snapid_t follows, client_t client, MClientCaps *m, MClientCaps *ack);
   void _do_null_snapflush(CInode *head_in, client_t client);
   bool _do_cap_update(CInode *in, Capability *cap, int dirty, snapid_t follows, MClientCaps *m,
-		      MClientCaps *ack=0, bool *need_flush=NULL);
+		      MClientCaps *ack=0);
   void handle_client_cap_release(class MClientCapRelease *m);
   void _do_cap_release(client_t client, inodeno_t ino, uint64_t cap_id, ceph_seq_t mseq, ceph_seq_t seq);
   void caps_tick();
@@ -232,14 +233,13 @@ public:
   void mark_updated_Filelock(ScatterLock *lock);
 
   // -- file i/o --
-public:
+ public:
   version_t issue_file_data_version(CInode *in);
   Capability* issue_new_caps(CInode *in, int mode, Session *session, SnapRealm *conrealm, bool is_replay);
   bool issue_caps(CInode *in, Capability *only_cap=0);
   void issue_caps_set(set<CInode*>& inset);
   void issue_truncate(CInode *in);
   void revoke_stale_caps(Session *session);
-  void revoke_stale_caps(Capability *cap);
   void resume_stale_caps(Session *session);
   void remove_stale_leases(Session *session);
 
@@ -248,16 +248,13 @@ public:
 protected:
   void handle_inode_file_caps(class MInodeFileCaps *m);
 
-  void file_update_finish(CInode *in, MutationRef& mut, bool share_max, bool issue_client_cap,
-			  client_t client, MClientCaps *ack);
-private:
-  uint64_t calc_new_max_size(inode_t *pi, uint64_t size);
+  void file_update_finish(CInode *in, MutationRef& mut, bool share, client_t client, Capability *cap,
+			  MClientCaps *ack);
 public:
-  void calc_new_client_ranges(CInode *in, uint64_t size,
-			      map<client_t, client_writeable_range_t>* new_ranges,
-			      bool *max_increased);
+  void calc_new_client_ranges(CInode *in, uint64_t size, map<client_t, client_writeable_range_t>& new_ranges);
   bool check_inode_max_size(CInode *in, bool force_wrlock=false,
-                            uint64_t newmax=0, uint64_t newsize=0,
+                            bool update_size=false, uint64_t newsize=0,
+                            bool update_max=false, uint64_t newmax=0,
 			    utime_t mtime=utime_t());
   void share_inode_max_size(CInode *in, Capability *only_cap=0);
 
@@ -267,9 +264,8 @@ private:
   friend class C_Locker_FileUpdate_finish;
   friend class C_Locker_RetryCapRelease;
   friend class C_Locker_Eval;
-  friend class C_Locker_ScatterWB;
   friend class LockerContext;
-  friend class LockerLogContext;
+  friend class C_Locker_ScatterWB;
 
   
   // -- client leases --

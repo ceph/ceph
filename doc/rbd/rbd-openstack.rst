@@ -115,7 +115,7 @@ On the ``nova-compute``, ``cinder-backup`` and on the ``cinder-volume`` node,
 use both the Python bindings and the client command line tools::
 
   sudo apt-get install ceph-common
-  sudo yum install ceph-common
+  sudo yum install ceph
 
 
 Setup Ceph Client Authentication
@@ -124,17 +124,9 @@ Setup Ceph Client Authentication
 If you have `cephx authentication`_ enabled, create a new user for Nova/Cinder
 and Glance. Execute the following::
 
+    ceph auth get-or-create client.cinder mon 'allow r' osd 'allow class-read object_prefix rbd_children, allow rwx pool=volumes, allow rwx pool=vms, allow rx pool=images'
     ceph auth get-or-create client.glance mon 'allow r' osd 'allow class-read object_prefix rbd_children, allow rwx pool=images'
     ceph auth get-or-create client.cinder-backup mon 'allow r' osd 'allow class-read object_prefix rbd_children, allow rwx pool=backups'
-
-If you run an OpenStack version before Mitaka, create the following ``client.cinder`` key::
-
-    ceph auth get-or-create client.cinder mon 'allow r' osd 'allow class-read object_prefix rbd_children, allow rwx pool=volumes, allow rwx pool=vms, allow rx pool=images'
-
-Since Mitaka introduced the support of RBD snapshots while doing a snapshot of a Nova instance,
-we need to allow the ``client.cinder`` key write access to the ``images`` pool; therefore, create the following key::
-
-    ceph auth get-or-create client.cinder mon 'allow r' osd 'allow class-read object_prefix rbd_children, allow rwx pool=volumes, allow rwx pool=vms, allow rwx pool=images'
 
 Add the keyrings for ``client.cinder``, ``client.glance``, and
 ``client.cinder-backup`` to the appropriate nodes and change their ownership::
@@ -184,7 +176,7 @@ Save the uuid of the secret for configuring ``nova-compute`` later.
    However from a platform consistency perspective, it's better to keep the
    same UUID.
 
-.. _cephx authentication: ../../rados/configuration/auth-config-ref/#enabling-disabling-cephx
+.. _cephx authentication: ../../rados/operations/authentication
 
 
 Configure OpenStack to use Ceph
@@ -223,47 +215,21 @@ Edit ``/etc/glance/glance-api.conf`` and add under the ``[glance_store]`` sectio
     rbd_store_ceph_conf = /etc/ceph/ceph.conf
     rbd_store_chunk_size = 8
 
+
+For more information about the configuration options available in Glance please see: http://docs.openstack.org/trunk/config-reference/content/section_glance-api.conf.html.
+
 .. important:: Glance has not completely moved to 'store' yet.
-    So we still need to configure the store in the DEFAULT section until Kilo.
+    So we still need to configure the store in the DEFAULT section.
 
-Kilo and after
-~~~~~~~~~~~~~~
-
-Edit ``/etc/glance/glance-api.conf`` and add under the ``[glance_store]`` section::
-
-    [glance_store]
-    stores = rbd
-    default_store = rbd
-    rbd_store_pool = images
-    rbd_store_user = glance
-    rbd_store_ceph_conf = /etc/ceph/ceph.conf
-    rbd_store_chunk_size = 8
-
-For more information about the configuration options available in Glance please refer to the OpenStack Configuration Reference: http://docs.openstack.org/.
-
-Enable copy-on-write cloning of images
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-Note that this exposes the back end location via Glance's API, so the endpoint
-with this option enabled should not be publicly accessible.
-
-Any OpenStack version except Mitaka
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Any OpenStack version
+~~~~~~~~~~~~~~~~~~~~~
 
 If you want to enable copy-on-write cloning of images, also add under the ``[DEFAULT]`` section::
 
     show_image_direct_url = True
 
-For Mitaka only
-^^^^^^^^^^^^^^^
-
-To enable image locations and take advantage of copy-on-write cloning for images, add under the ``[DEFAULT]`` section::
-
-    show_multiple_locations = True
-    show_image_direct_url = True
-
-Disable cache management (any OpenStack version)
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Note that this exposes the back end location via Glance's API, so the endpoint
+with this option enabled should not be publicly accessible.
 
 Disable the Glance cache management to avoid images getting cached under ``/var/lib/glance/image-cache/``,
 assuming your configuration file has ``flavor = keystone+cachemanagement``::
@@ -289,13 +255,7 @@ OpenStack requires a driver to interact with Ceph block devices. You must also
 specify the pool name for the block device. On your OpenStack node, edit
 ``/etc/cinder/cinder.conf`` by adding::
 
-    [DEFAULT]
-    ...
-    enabled_backends = ceph
-    ...
-    [ceph]
     volume_driver = cinder.volume.drivers.rbd.RBDDriver
-    volume_backend_name = ceph
     rbd_pool = volumes
     rbd_ceph_conf = /etc/ceph/ceph.conf
     rbd_flatten_volume_from_snapshot = false
@@ -307,8 +267,6 @@ specify the pool name for the block device. On your OpenStack node, edit
 If you're using `cephx authentication`_, also configure the user and uuid of
 the secret you added to ``libvirt`` as documented earlier::
 
-    [ceph]
-    ...
     rbd_user = cinder
     rbd_secret_uuid = 457eb676-33da-42ec-9a8c-9293d545c337
 
@@ -340,8 +298,6 @@ from volume), you must tell Nova (and libvirt) which user and UUID to refer to
 when attaching the device. libvirt will refer to this user when connecting and
 authenticating with the Ceph cluster. ::
 
-    [libvirt]
-    ...
     rbd_user = cinder
     rbd_secret_uuid = 457eb676-33da-42ec-9a8c-9293d545c337
 
@@ -397,7 +353,7 @@ On every Compute node, edit ``/etc/nova/nova.conf`` and add::
     libvirt_images_type = rbd
     libvirt_images_rbd_pool = vms
     libvirt_images_rbd_ceph_conf = /etc/ceph/ceph.conf
-    disk_cachemodes="network=writeback"
+    libvirt_disk_cachemodes="network=writeback"
     rbd_user = cinder
     rbd_secret_uuid = 457eb676-33da-42ec-9a8c-9293d545c337
 
@@ -507,6 +463,6 @@ dashboard, you can boot from that volume by performing the following steps:
 #. Select the volume you created.
 
 .. _qemu-img: ../qemu-rbd/#running-qemu-with-rbd
-.. _Block Devices and OpenStack (Dumpling): http://docs.ceph.com/docs/dumpling/rbd/rbd-openstack
+.. _Block Devices and OpenStack (Dumpling): http://ceph.com/docs/dumpling/rbd/rbd-openstack
 .. _stable/havana: https://github.com/jdurgin/nova/tree/havana-ephemeral-rbd
 .. _stable/icehouse: https://github.com/angdraug/nova/tree/rbd-ephemeral-clone-stable-icehouse

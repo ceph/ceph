@@ -15,12 +15,13 @@
 #ifndef CEPH_MOSDPGSCAN_H
 #define CEPH_MOSDPGSCAN_H
 
-#include "MOSDFastDispatchOp.h"
+#include "msg/Message.h"
+#include "osd/osd_types.h"
 
-class MOSDPGScan : public MOSDFastDispatchOp {
+class MOSDPGScan : public Message {
 
   static const int HEAD_VERSION = 2;
-  static const int COMPAT_VERSION = 2;
+  static const int COMPAT_VERSION = 1;
 
 public:
   enum {
@@ -41,17 +42,7 @@ public:
   spg_t pgid;
   hobject_t begin, end;
 
-  epoch_t get_map_epoch() const override {
-    return map_epoch;
-  }
-  epoch_t get_min_epoch() const override {
-    return query_epoch;
-  }
-  spg_t get_spg() const override {
-    return pgid;
-  }
-
-  void decode_payload() override {
+  virtual void decode_payload() {
     bufferlist::iterator p = payload.begin();
     ::decode(op, p);
     ::decode(map_epoch, p);
@@ -66,11 +57,18 @@ public:
     if (!end.is_max() && end.pool == -1)
       end.pool = pgid.pool();
 
-    ::decode(from, p);
-    ::decode(pgid.shard, p);
+    if (header.version >= 2) {
+      ::decode(from, p);
+      ::decode(pgid.shard, p);
+    } else {
+      from = pg_shard_t(
+	get_source().num(),
+	shard_id_t::NO_SHARD);
+      pgid.shard = shard_id_t::NO_SHARD;
+    }
   }
 
-  void encode_payload(uint64_t features) override {
+  virtual void encode_payload(uint64_t features) {
     ::encode(op, payload);
     ::encode(map_epoch, payload);
     ::encode(query_epoch, payload);
@@ -81,11 +79,10 @@ public:
     ::encode(pgid.shard, payload);
   }
 
-  MOSDPGScan()
-    : MOSDFastDispatchOp(MSG_OSD_PG_SCAN, HEAD_VERSION, COMPAT_VERSION) {}
+  MOSDPGScan() : Message(MSG_OSD_PG_SCAN, HEAD_VERSION, COMPAT_VERSION) {}
   MOSDPGScan(__u32 o, pg_shard_t from,
 	     epoch_t e, epoch_t qe, spg_t p, hobject_t be, hobject_t en)
-    : MOSDFastDispatchOp(MSG_OSD_PG_SCAN, HEAD_VERSION, COMPAT_VERSION),
+    : Message(MSG_OSD_PG_SCAN, HEAD_VERSION, COMPAT_VERSION),
       op(o),
       map_epoch(e), query_epoch(e),
       from(from),
@@ -93,11 +90,11 @@ public:
       begin(be), end(en) {
   }
 private:
-  ~MOSDPGScan() override {}
+  ~MOSDPGScan() {}
 
 public:
-  const char *get_type_name() const override { return "pg_scan"; }
-  void print(ostream& out) const override {
+  const char *get_type_name() const { return "pg_scan"; }
+  void print(ostream& out) const {
     out << "pg_scan(" << get_op_name(op)
 	<< " " << pgid
 	<< " " << begin << "-" << end

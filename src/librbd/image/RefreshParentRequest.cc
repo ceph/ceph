@@ -24,7 +24,7 @@ using util::create_context_callback;
 
 template <typename I>
 RefreshParentRequest<I>::RefreshParentRequest(I &child_image_ctx,
-                                              const ParentInfo &parent_md,
+                                              const parent_info &parent_md,
                                               Context *on_finish)
   : m_child_image_ctx(child_image_ctx), m_parent_md(parent_md),
     m_on_finish(on_finish), m_parent_image_ctx(nullptr),
@@ -33,7 +33,7 @@ RefreshParentRequest<I>::RefreshParentRequest(I &child_image_ctx,
 
 template <typename I>
 bool RefreshParentRequest<I>::is_refresh_required(I &child_image_ctx,
-                                                  const ParentInfo &parent_md) {
+                                                  const parent_info &parent_md) {
   assert(child_image_ctx.snap_lock.is_locked());
   assert(child_image_ctx.parent_lock.is_locked());
   return (is_open_required(child_image_ctx, parent_md) ||
@@ -42,14 +42,14 @@ bool RefreshParentRequest<I>::is_refresh_required(I &child_image_ctx,
 
 template <typename I>
 bool RefreshParentRequest<I>::is_close_required(I &child_image_ctx,
-                                                const ParentInfo &parent_md) {
+                                                const parent_info &parent_md) {
   return (child_image_ctx.parent != nullptr &&
           (parent_md.spec.pool_id == -1 || parent_md.overlap == 0));
 }
 
 template <typename I>
 bool RefreshParentRequest<I>::is_open_required(I &child_image_ctx,
-                                               const ParentInfo &parent_md) {
+                                               const parent_info &parent_md) {
   return (parent_md.spec.pool_id > -1 && parent_md.overlap > 0 &&
           (child_image_ctx.parent == nullptr ||
            child_image_ctx.parent->md_ctx.get_id() != parent_md.spec.pool_id ||
@@ -117,10 +117,9 @@ void RefreshParentRequest<I>::send_open_parent() {
   }
 
   using klass = RefreshParentRequest<I>;
-  Context *ctx = create_async_context_callback(
-    m_child_image_ctx, create_context_callback<
-      klass, &klass::handle_open_parent, false>(this));
-  OpenRequest<I> *req = OpenRequest<I>::create(m_parent_image_ctx, false, ctx);
+  Context *ctx = create_context_callback<
+    klass, &klass::handle_open_parent, false>(this);
+  OpenRequest<I> *req = OpenRequest<I>::create(m_parent_image_ctx, ctx);
   req->send();
 }
 
@@ -133,12 +132,8 @@ Context *RefreshParentRequest<I>::handle_open_parent(int *result) {
   if (*result < 0) {
     lderr(cct) << "failed to open parent image: " << cpp_strerror(*result)
                << dendl;
-
-    // image already closed by open state machine
-    delete m_parent_image_ctx;
-    m_parent_image_ctx = nullptr;
-
-    return m_on_finish;
+    send_close_parent();
+    return nullptr;
   }
 
   send_set_parent_snap();
@@ -152,25 +147,24 @@ void RefreshParentRequest<I>::send_set_parent_snap() {
   CephContext *cct = m_child_image_ctx.cct;
   ldout(cct, 10) << this << " " << __func__ << dendl;
 
-  cls::rbd::SnapshotNamespace snap_namespace;
+  int r;
   std::string snap_name;
   {
     RWLock::RLocker snap_locker(m_parent_image_ctx->snap_lock);
-    const SnapInfo *info = m_parent_image_ctx->get_snap_info(m_parent_md.spec.snap_id);
-    if (!info) {
-      lderr(cct) << "failed to locate snapshot: Snapshot with this id not found" << dendl;
-      send_complete(-ENOENT);
-      return;
-    }
-    snap_namespace = info->snap_namespace;
-    snap_name = info->name;
+    r = m_parent_image_ctx->get_snap_name(m_parent_md.spec.snap_id, &snap_name);
+  }
+
+  if (r < 0) {
+    lderr(cct) << "failed to located snapshot: " << cpp_strerror(r) << dendl;
+    send_complete(r);
+    return;
   }
 
   using klass = RefreshParentRequest<I>;
   Context *ctx = create_context_callback<
     klass, &klass::handle_set_parent_snap, false>(this);
   SetSnapRequest<I> *req = SetSnapRequest<I>::create(
-    *m_parent_image_ctx, snap_namespace, snap_name, ctx);
+    *m_parent_image_ctx, snap_name, ctx);
   req->send();
 }
 

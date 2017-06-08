@@ -12,8 +12,6 @@
  *
  */
 
-#include "include/compat.h"
-
 #include "simple_dispatcher.h"
 #include "messages/MPing.h"
 #include "messages/MDataPing.h"
@@ -33,6 +31,7 @@ SimpleDispatcher::~SimpleDispatcher() {
 
 bool SimpleDispatcher::ms_dispatch(Message *m)
 {
+  ConnectionRef conn;
   uint64_t dc = 0;
 
   dc = dcount++;

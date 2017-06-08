@@ -1,16 +1,21 @@
+
 #include <syslog.h>
-#include <boost/algorithm/string/predicate.hpp>
+
+#include <boost/algorithm/string.hpp>
 
 #include "LogEntry.h"
 #include "Formatter.h"
+
 #include "include/stringify.h"
+
+
 
 // ----
 // LogEntryKey
 
-void LogEntryKey::encode(bufferlist& bl, uint64_t features) const
+void LogEntryKey::encode(bufferlist& bl) const
 {
-  ::encode(who, bl, features);
+  ::encode(who, bl);
   ::encode(stamp, bl);
   ::encode(seq, bl);
 }
@@ -20,7 +25,6 @@ void LogEntryKey::decode(bufferlist::iterator& bl)
   ::decode(who, bl);
   ::decode(stamp, bl);
   ::decode(seq, bl);
-  _calc_hash();
 }
 
 void LogEntryKey::dump(Formatter *f) const
@@ -52,7 +56,7 @@ int clog_type_to_syslog_level(clog_type t)
     case CLOG_SEC:
       return LOG_CRIT;
     default:
-      ceph_abort();
+      assert(0);
       return 0;
   }
 }
@@ -162,7 +166,7 @@ string clog_type_to_string(clog_type t)
     case CLOG_SEC:
       return "crit";
     default:
-      ceph_abort();
+      assert(0);
       return 0;
   }
 }
@@ -180,23 +184,22 @@ void LogEntry::log_to_syslog(string level, string facility)
   }
 }
 
-void LogEntry::encode(bufferlist& bl, uint64_t features) const
+void LogEntry::encode(bufferlist& bl) const
 {
-  ENCODE_START(4, 2, bl);
+  ENCODE_START(3, 2, bl);
   __u16 t = prio;
-  ::encode(who, bl, features);
+  ::encode(who, bl);
   ::encode(stamp, bl);
   ::encode(seq, bl);
   ::encode(t, bl);
   ::encode(msg, bl);
   ::encode(channel, bl);
-  ::encode(name, bl);
   ENCODE_FINISH(bl);
 }
 
 void LogEntry::decode(bufferlist::iterator& bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(4, 2, 2, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(3, 2, 2, bl);
   __u16 t;
   ::decode(who, bl);
   ::decode(stamp, bl);
@@ -212,16 +215,12 @@ void LogEntry::decode(bufferlist::iterator& bl)
     // clue of what a 'channel' is.
     channel = CLOG_CHANNEL_CLUSTER;
   }
-  if (struct_v >= 4) {
-    ::decode(name, bl);
-  }
   DECODE_FINISH(bl);
 }
 
 void LogEntry::dump(Formatter *f) const
 {
   f->dump_stream("who") << who;
-  f->dump_stream("name") << name;
   f->dump_stream("stamp") << stamp;
   f->dump_unsigned("seq", seq);
   f->dump_string("channel", channel);
@@ -237,11 +236,11 @@ void LogEntry::generate_test_instances(list<LogEntry*>& o)
 
 // -----
 
-void LogSummary::encode(bufferlist& bl, uint64_t features) const
+void LogSummary::encode(bufferlist& bl) const
 {
   ENCODE_START(2, 2, bl);
   ::encode(version, bl);
-  ::encode(tail, bl, features);
+  ::encode(tail, bl);
   ENCODE_FINISH(bl);
 }
 
@@ -251,10 +250,6 @@ void LogSummary::decode(bufferlist::iterator& bl)
   ::decode(version, bl);
   ::decode(tail, bl);
   DECODE_FINISH(bl);
-  keys.clear();
-  for (auto& p : tail) {
-    keys.insert(p.key());
-  }
 }
 
 void LogSummary::dump(Formatter *f) const

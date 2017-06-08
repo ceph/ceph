@@ -34,11 +34,11 @@ class MExportDirDiscoverAck : public Message {
     set_tid(tid);
   }
 private:
-  ~MExportDirDiscoverAck() override {}
+  ~MExportDirDiscoverAck() {}
 
 public:
-  const char *get_type_name() const override { return "ExDisA"; }
-  void print(ostream& o) const override {
+  const char *get_type_name() const { return "ExDisA"; }
+  void print(ostream& o) const {
     o << "export_discover_ack(" << dirfrag;
     if (success) 
       o << " success)";
@@ -46,12 +46,12 @@ public:
       o << " failure)";
   }
 
-  void decode_payload() override {
+  void decode_payload() {
     bufferlist::iterator p = payload.begin();
     ::decode(dirfrag, p);
     ::decode(success, p);
   }
-  void encode_payload(uint64_t features) override {
+  void encode_payload(uint64_t features) {
     ::encode(dirfrag, payload);
     ::encode(success, payload);
   }

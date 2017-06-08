@@ -15,8 +15,7 @@
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU Library Public License for more details.
 #
-source $(dirname $0)/../detect-build-env-vars.sh
-source $CEPH_ROOT/qa/workunits/ceph-helpers.sh
+source ../qa/workunits/ceph-helpers.sh
 
 function run() {
     local dir=$1
@@ -40,7 +39,7 @@ function TEST_mon_scrub() {
 
     run_mon $dir a || return 1
 
-    ceph mon scrub || return 1
+    ./ceph mon scrub || return 1
 }
 
 main mon-scrub "$@"

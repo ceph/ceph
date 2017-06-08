@@ -161,7 +161,7 @@ struct object_begin {
   // of object processing.
   object_info_t oi;
 
-  explicit object_begin(const ghobject_t &hoid): hoid(hoid) { }
+  object_begin(const ghobject_t &hoid): hoid(hoid) { }
   object_begin() { }
 
   // If superblock doesn't include CEPH_FS_FEATURE_INCOMPAT_SHARDS then
@@ -172,7 +172,7 @@ struct object_begin {
     ::encode(hoid.hobj, bl);
     ::encode(hoid.generation, bl);
     ::encode(hoid.shard_id, bl);
-    ::encode(oi, bl, -1);  /* FIXME: we always encode with full features */
+    ::encode(oi, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator& bl) {
@@ -218,8 +218,8 @@ struct data_section {
 
 struct attr_section {
   map<string,bufferlist> data;
-  explicit attr_section(const map<string,bufferlist> &data) : data(data) { }
-  explicit attr_section(map<string, bufferptr> &data_)
+  attr_section(const map<string,bufferlist> &data) : data(data) { }
+  attr_section(map<string, bufferptr> &data_)
   {
     for (std::map<std::string, bufferptr>::iterator i = data_.begin();
          i != data_.end(); ++i) {
@@ -245,7 +245,7 @@ struct attr_section {
 
 struct omap_hdr_section {
   bufferlist hdr;
-  explicit omap_hdr_section(bufferlist hdr) : hdr(hdr) { }
+  omap_hdr_section(bufferlist hdr) : hdr(hdr) { }
   omap_hdr_section() { }
 
   void encode(bufferlist& bl) const {
@@ -262,7 +262,7 @@ struct omap_hdr_section {
 
 struct omap_section {
   map<string, bufferlist> omap;
-  explicit omap_section(const map<string, bufferlist> &omap) :
+  omap_section(const map<string, bufferlist> &omap) :
     omap(omap) { }
   omap_section() { }
 
@@ -284,31 +284,26 @@ struct metadata_section {
   epoch_t map_epoch;
   pg_info_t info;
   pg_log_t log;
-  PastIntervals past_intervals;
+  map<epoch_t,pg_interval_t> past_intervals;
   OSDMap osdmap;
   bufferlist osdmap_bl;  // Used in lieu of encoding osdmap due to crc checking
   map<eversion_t, hobject_t> divergent_priors;
-  pg_missing_t missing;
 
-  metadata_section(
-    __u8 struct_ver,
-    epoch_t map_epoch,
-    const pg_info_t &info,
-    const pg_log_t &log,
-    const PastIntervals &past_intervals,
-    const pg_missing_t &missing)
+  metadata_section(__u8 struct_ver, epoch_t map_epoch, const pg_info_t &info,
+		   const pg_log_t &log, map<epoch_t,pg_interval_t> &past_intervals,
+		   map<eversion_t, hobject_t> &divergent_priors)
     : struct_ver(struct_ver),
       map_epoch(map_epoch),
       info(info),
       log(log),
       past_intervals(past_intervals),
-      missing(missing) {}
+      divergent_priors(divergent_priors) { }
   metadata_section()
     : struct_ver(0),
       map_epoch(0) { }
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(6, 6, bl);
+    ENCODE_START(4, 1, bl);
     ::encode(struct_ver, bl);
     ::encode(map_epoch, bl);
     ::encode(info, bl);
@@ -318,19 +313,16 @@ struct metadata_section {
     // preserving exact layout for CRC checking.
     bl.append(osdmap_bl);
     ::encode(divergent_priors, bl);
-    ::encode(missing, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator& bl) {
-    DECODE_START(6, bl);
+    DECODE_START(4, bl);
     ::decode(struct_ver, bl);
     ::decode(map_epoch, bl);
     ::decode(info, bl);
     ::decode(log, bl);
-    if (struct_v >= 6) {
+    if (struct_v > 1) {
       ::decode(past_intervals, bl);
-    } else if (struct_v > 1) {
-      past_intervals.decode_classic(bl);
     } else {
       cout << "NOTICE: Older export without past_intervals" << std::endl;
     }
@@ -341,9 +333,6 @@ struct metadata_section {
     }
     if (struct_v > 3) {
       ::decode(divergent_priors, bl);
-    }
-    if (struct_v > 4) {
-      ::decode(missing, bl);
     }
     DECODE_FINISH(bl);
   }

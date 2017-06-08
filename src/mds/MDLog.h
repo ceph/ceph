@@ -34,7 +34,6 @@ enum {
   l_mdl_wrpos,
   l_mdl_rdpos,
   l_mdl_jlat,
-  l_mdl_replayed,
   l_mdl_last,
 };
 
@@ -88,8 +87,8 @@ protected:
   class ReplayThread : public Thread {
     MDLog *log;
   public:
-    explicit ReplayThread(MDLog *l) : log(l) {}
-    void* entry() override {
+    ReplayThread(MDLog *l) : log(l) {}
+    void* entry() {
       log->_replay_thread();
       return 0;
     }
@@ -110,8 +109,8 @@ protected:
     MDSInternalContextBase *completion;
   public:
     void set_completion(MDSInternalContextBase *c) {completion = c;}
-    explicit RecoveryThread(MDLog *l) : log(l), completion(NULL) {}
-    void* entry() override {
+    RecoveryThread(MDLog *l) : log(l), completion(NULL) {}
+    void* entry() {
       log->_recovery_thread(completion);
       return 0;
     }
@@ -129,30 +128,21 @@ protected:
 
   struct PendingEvent {
     LogEvent *le;
-    MDSContext *fin;
+    MDSInternalContextBase *fin;
     bool flush;
-    PendingEvent(LogEvent *e, MDSContext *c, bool f=false) : le(e), fin(c), flush(f) {}
+    PendingEvent(LogEvent *e, MDSInternalContextBase *c, bool f=false) : le(e), fin(c), flush(f) {}
   };
 
-  int64_t mdsmap_up_features;
   map<uint64_t,list<PendingEvent> > pending_events; // log segment -> event list
   Mutex submit_mutex;
   Cond submit_cond;
-
-  void set_safe_pos(uint64_t pos)
-  {
-    Mutex::Locker l(submit_mutex);
-    assert(pos >= safe_pos);
-    safe_pos = pos;
-  }
-  friend class MDSLogContextBase;
 
   void _submit_thread();
   class SubmitThread : public Thread {
     MDLog *log;
   public:
-    explicit SubmitThread(MDLog *l) : log(l) {}
-    void* entry() override {
+    SubmitThread(MDLog *l) : log(l) {}
+    void* entry() {
       log->_submit_thread();
       return 0;
     }
@@ -170,7 +160,7 @@ protected:
   friend class ESubtreeMap;
   friend class MDCache;
 
-  uint64_t get_last_segment_seq() const {
+  uint64_t get_last_segment_seq() {
     assert(!segments.empty());
     return segments.rbegin()->first;
   }
@@ -192,7 +182,7 @@ public:
   void set_write_iohint(unsigned iohint_flags);
 
 public:
-  explicit MDLog(MDSRank *m) : mds(m),
+  MDLog(MDSRank *m) : mds(m),
                       num_events(0), 
                       unflushed(0),
                       capped(false),
@@ -203,7 +193,6 @@ public:
                       already_replayed(false),
                       recovery_thread(this),
                       event_seq(0), expiring_events(0), expired_events(0),
-		      mdsmap_up_features(0),
                       submit_mutex("MDLog::submit_mutex"),
                       submit_thread(this),
                       cur_event(NULL) { }		  
@@ -247,7 +236,7 @@ public:
     return NULL;
   }
 
-  bool have_any_segments() const {
+  bool have_any_segments() {
     return !segments.empty();
   }
 
@@ -256,16 +245,15 @@ public:
   size_t get_num_events() const { return num_events; }
   size_t get_num_segments() const { return segments.size(); }
 
-  uint64_t get_read_pos() const;
-  uint64_t get_write_pos() const;
-  uint64_t get_safe_pos() const;
+  uint64_t get_read_pos();
+  uint64_t get_write_pos();
+  uint64_t get_safe_pos();
   Journaler *get_journaler() { return journaler; }
-  bool empty() const { return segments.empty(); }
+  bool empty() { return segments.empty(); }
 
-  bool is_capped() const { return capped; }
+  bool is_capped() { return capped; }
   void cap();
 
-  void kick_submitter();
   void shutdown();
 
   // -- events --
@@ -278,23 +266,23 @@ public:
     _start_entry(e);
   }
   void cancel_entry(LogEvent *e);
-  void _submit_entry(LogEvent *e, MDSLogContextBase *c);
-  void submit_entry(LogEvent *e, MDSLogContextBase *c = 0) {
+  void _submit_entry(LogEvent *e, MDSInternalContextBase *c);
+  void submit_entry(LogEvent *e, MDSInternalContextBase *c = 0) {
     Mutex::Locker l(submit_mutex);
     _submit_entry(e, c);
     submit_cond.Signal();
   }
-  void start_submit_entry(LogEvent *e, MDSLogContextBase *c = 0) {
+  void start_submit_entry(LogEvent *e, MDSInternalContextBase *c = 0) {
     Mutex::Locker l(submit_mutex);
     _start_entry(e);
     _submit_entry(e, c);
     submit_cond.Signal();
   }
-  bool entry_is_open() const { return cur_event != NULL; }
+  bool entry_is_open() { return cur_event != NULL; }
 
   void wait_for_safe( MDSInternalContextBase *c );
   void flush();
-  bool is_flushed() const {
+  bool is_flushed() {
     return unflushed == 0;
   }
 

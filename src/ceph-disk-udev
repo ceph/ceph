@@ -1,0 +1,85 @@
+#! /bin/sh
+
+# Wrapper for the ceph udev rules.  Since older versions of udev+blkid
+# do not support gpt label fields, this shell script is invoked from
+# the udev rule to read the needed gpt label fields and call the
+# appropriate ceph OSD functions.
+
+PARTNO=$1
+NAME=$2
+PARENT_NAME=$3
+
+# Get GPT partition type guid
+ID_PART_ENTRY_TYPE=$(/usr/sbin/sgdisk --info=${PARTNO} /dev/${PARENT_NAME} | grep "Partition GUID code" | awk '{print $4}' | tr '[:upper:]' '[:lower:]')
+
+if [ -z "$ID_PART_ENTRY_TYPE" ]; then
+    exit
+fi
+
+ID_PART_ENTRY_UUID=$(/usr/sbin/sgdisk --info=${PARTNO} /dev/${PARENT_NAME} | grep "Partition unique GUID" | awk '{print $4}' | tr '[:upper:]' '[:lower:]')
+
+# set up the symlinks
+mkdir -p /dev/disk/by-partuuid
+ln -sf ../../${NAME} /dev/disk/by-partuuid/$ID_PART_ENTRY_UUID
+mkdir -p /dev/disk/by-parttypeuuid
+ln -sf ../../${NAME} /dev/disk/by-parttypeuuid/${ID_PART_ENTRY_TYPE}.${ID_PART_ENTRY_UUID}
+
+case $ID_PART_ENTRY_TYPE in
+
+45b0969e-9b03-4f30-b4c6-b4b80ceff106)
+    # JOURNAL_UUID
+    # activate ceph-tagged journal partitions.
+    /usr/sbin/ceph-disk -v activate-journal /dev/${NAME}
+    ;;
+
+45b0969e-9b03-4f30-b4c6-5ec00ceff106)
+    # DMCRYPT_JOURNAL_UUID
+    # Map journal if using dm-crypt
+    /sbin/cryptsetup --key-file /etc/ceph/dmcrypt-keys/${ID_PART_ENTRY_UUID} --key-size 256 create ${ID_PART_ENTRY_UUID} /dev/${NAME}
+    ;;
+
+45b0969e-9b03-4f30-b4c6-35865ceff106)
+    # DMCRYPT_LUKS_JOURNAL_UUID
+    # Map journal if using dm-crypt
+    /sbin/cryptsetup --key-file /etc/ceph/dmcrypt-keys/${ID_PART_ENTRY_UUID} luksOpen /dev/${NAME} ${ID_PART_ENTRY_UUID}
+    ;;
+
+4fbd7e29-9d25-41b8-afd0-062c0ceff05d)
+    # OSD_UUID
+    # activate ceph-tagged partitions.
+    /usr/sbin/ceph-disk -v activate /dev/${NAME}
+    ;;
+
+4fbd7e29-9d25-41b8-afd0-5ec00ceff05d)
+    # DMCRYPT_OSD_UUID
+    # Map data device and activate ceph-tagged partitions
+    # for dm-crypted data devices
+    /sbin/cryptsetup --key-file /etc/ceph/dmcrypt-keys/${ID_PART_ENTRY_UUID} --key-size 256 create ${ID_PART_ENTRY_UUID} /dev/${NAME}
+    bash -c 'while [ ! -e /dev/mapper/${ID_PART_ENTRY_UUID} ];do sleep 1; done'
+    /usr/sbin/ceph-disk activate /dev/mapper/${ID_PART_ENTRY_UUID}
+    ;;
+
+4fbd7e29-9d25-41b8-afd0-35865ceff05d)
+    # DMCRYPT_LUKS_OSD_UUID
+    # Map data device and activate ceph-tagged partitions
+    # for dm-crypted data devices
+    /sbin/cryptsetup --key-file /etc/ceph/dmcrypt-keys/${ID_PART_ENTRY_UUID} luksOpen /dev/${NAME} ${ID_PART_ENTRY_UUID}
+    bash -c 'while [ ! -e /dev/mapper/${ID_PART_ENTRY_UUID} ];do sleep 1; done'
+    /usr/sbin/ceph-disk activate /dev/mapper/${ID_PART_ENTRY_UUID}
+    ;;
+
+89c57f98-2fe5-4dc0-89c1-f3ad0ceff2be)
+    # TOBE_UUID
+    ;;
+
+89c57f98-2fe5-4dc0-89c1-5ec00ceff2be)
+    # DMCRYPT_TOBE_UUID
+    ;;
+
+*)
+    # Not a Ceph device
+    ;;
+
+esac
+
+exit

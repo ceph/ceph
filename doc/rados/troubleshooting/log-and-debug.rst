@@ -88,6 +88,8 @@ particular daemons are set under the daemon section in your configuration file
 	[mds]
 		debug mds = 1
 		debug mds balancer = 1
+		debug mds log = 1
+		debug mds migrator = 1
 
 
 See `Subsystem, Log and Debug Settings`_ for details.
@@ -148,7 +150,7 @@ Each subsystem has a logging level for its output logs, and for its logs
 in-memory. You may set different values for each of these subsystems by setting
 a log file level and a memory level for debug logging. Ceph's logging levels
 operate on a scale of ``1`` to ``20``, where ``1`` is terse and ``20`` is
-verbose [#]_ . In general, the logs in-memory are not sent to the output log unless:
+verbose. In general, the logs in-memory are not sent to the output log unless:
 
 - a fatal signal is raised or
 - an ``assert`` in source code is triggered or
@@ -169,7 +171,7 @@ as ``debug ms = 1/5``. For example:
 
 	debug {subsystem} = {log-level}/{memory-level}
 	#for example
-	debug mds balancer = 1/20
+	debug mds log = 1/20
 
 
 The following table provides a list of Ceph subsystems and their default log and
@@ -553,5 +555,3 @@ RADOS Gateway
 :Type: Boolean
 :Required: No
 :Default: ``false``
-
-.. [#] there are levels >20 in some rare cases and that they are extremely verbose.

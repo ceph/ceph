@@ -7,20 +7,19 @@ TOPDIR=`pwd`
 install -d -m0755 build-doc
 
 if command -v dpkg >/dev/null; then
-    packages=`cat ${TOPDIR}/doc_deps.deb.txt`
-    for package in $packages; do
-    if [ "$(dpkg --status -- $package 2>&1 | sed -n 's/^Status: //p')" != "install ok installed" ]; then
-        # add a space after old values
-        missing="${missing:+$missing }$package"
-    fi
+    for package in python-dev python-pip python-virtualenv doxygen ditaa ant libxml2-dev libxslt1-dev cython; do
+	if [ "$(dpkg --status -- $package|sed -n 's/^Status: //p')" != "install ok installed" ]; then
+            # add a space after old values
+	    missing="${missing:+$missing }$package"
+	fi
     done
     if [ -n "$missing" ]; then
-        echo "$0: missing required packages, please install them:" 1>&2
-        echo "sudo apt-get install -o APT::Install-Recommends=true $missing" 1>&2
-        exit 1
+	echo "$0: missing required packages, please install them:" 1>&2
+	echo "sudo apt-get install $missing"
+	exit 1
     fi
 elif command -v yum >/dev/null; then
-    for package in python-devel python-pip python-virtualenv doxygen ditaa ant libxml2-devel libxslt-devel Cython graphviz; do
+    for package in python-devel python-pip python-virtualenv doxygen ditaa ant libxml-devel libxslt-devel Cython; do
 	if ! rpm -q $package >/dev/null ; then
 		missing="${missing:+$missing }$package"
 	fi
@@ -57,7 +56,7 @@ cd build-doc
 [ -z "$vdir" ] && vdir="$TOPDIR/build-doc/virtualenv"
 
 if [ ! -e $vdir ]; then
-    virtualenv --system-site-packages $vdir -p python2
+    virtualenv --system-site-packages $vdir
 fi
 $vdir/bin/pip install --quiet -r $TOPDIR/admin/doc-requirements.txt
 
@@ -67,53 +66,21 @@ install -d -m0755 \
 
 # To avoid having to build librbd to build the Python bindings to build the docs,
 # create a dummy librbd.so that allows the module to be imported by sphinx.
-# the module are imported by the "automodule::" directive.
 mkdir -p $vdir/lib
 export LD_LIBRARY_PATH="$vdir/lib"
 export PYTHONPATH=$TOPDIR/src/pybind
+ln -sf librbd.so.1 $vdir/lib/librbd.so
+gcc -shared -o $vdir/lib/librbd.so.1 -xc /dev/null
+CFLAGS="-iquote $TOPDIR/src/include" \
+    CPPFLAGS="-iquote $TOPDIR/src/include" \
+    LDFLAGS="-L$vdir/lib -Wl,--no-as-needed" \
+    $vdir/bin/pip install $TOPDIR/src/pybind
+nm $vdir/lib/python*/*-packages/rbd.so | grep 'U rbd_' | \
+    awk '{ print "void "$2"(void) {}" }' | \
+    gcc -shared -o $vdir/lib/librbd.so.1 -xc -
 
-# FIXME(sileht): I dunno how to pass the include-dirs correctly with pip
-# for build_ext step, it should be:
-# --global-option=build_ext --global-option="--cython-include-dirs $TOPDIR/src/pybind/rados/"
-# but that doesn't work, so copying the file in the rbd module directly, that's ok for docs
-for bind in rados rbd cephfs rgw; do
-    if [ ${bind} != rados ]; then
-        cp -f $TOPDIR/src/pybind/rados/rados.pxd $TOPDIR/src/pybind/${bind}/
-    fi
-    ln -sf lib${bind}.so.1 $vdir/lib/lib${bind}.so
-    gcc -shared -o $vdir/lib/lib${bind}.so.1 -xc /dev/null
-    BUILD_DOC=1 \
-        CFLAGS="-iquote$TOPDIR/src/include" \
-        CPPFLAGS="-iquote$TOPDIR/src/include" \
-        LDFLAGS="-L$vdir/lib -Wl,--no-as-needed" \
-        $vdir/bin/pip install $TOPDIR/src/pybind/${bind}
-    # rgwfile_version(), librgw_create(), rgw_mount()
-    nm $vdir/lib/python*/*-packages/${bind}.so | grep -E "U (lib)?${bind}" | \
-        awk '{ print "void "$2"(void) {}" }' | \
-        gcc -shared -o $vdir/lib/lib${bind}.so.1 -xc -
-    if [ ${bind} != rados ]; then
-        rm -f $TOPDIR/src/pybind/${bind}/rados.pxd
-    fi
-done
-
-if [ -z "$@" ]; then
-    sphinx_targets="html man"
-else
-    sphinx_targets=$@
-fi
-for target in $sphinx_targets; do
-    builder=$target
-    case $target in
-        html)
-            builder=dirhtml
-            ;;
-        man)
-            extra_opt="-t man"
-            ;;
-    esac
-    $vdir/bin/sphinx-build -a -b $builder $extra_opt -d doctrees \
-                           $TOPDIR/doc $TOPDIR/build-doc/output/$target
-done
+$vdir/bin/sphinx-build -a -n -b dirhtml -d doctrees $TOPDIR/doc $TOPDIR/build-doc/output/html
+$vdir/bin/sphinx-build -a -b man -d doctrees $TOPDIR/doc $TOPDIR/build-doc/output/man
 
 #
 # Build and install JavaDocs

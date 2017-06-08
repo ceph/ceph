@@ -29,73 +29,70 @@
 
 class TestWrapLFNIndex : public LFNIndex {
 public:
-  TestWrapLFNIndex(CephContext* cct,
-		   coll_t collection,
+  TestWrapLFNIndex(coll_t collection,
 		   const char *base_path,
-		   uint32_t index_version)
-    : LFNIndex(cct, collection, base_path, index_version) {}
+		   uint32_t index_version) : LFNIndex(collection, base_path, index_version) {}
 
-  uint32_t collection_version() override {
+  virtual uint32_t collection_version() {
     return index_version;
   }
 
-  int cleanup() override { return 0; }
+  int cleanup() { return 0; }
 
-  int _split(
+  virtual int _split(
 		     uint32_t match,                           
 		     uint32_t bits,                            
 		     CollectionIndex* dest
-		     ) override { return 0; }
+		     ) { return 0; }
 
   void test_generate_and_parse(const ghobject_t &hoid, const std::string &mangled_expected) {
     const std::string mangled_name = lfn_generate_object_name(hoid);
     EXPECT_EQ(mangled_expected, mangled_name);
     ghobject_t hoid_parsed;
-    EXPECT_EQ(0, lfn_parse_object_name(mangled_name, &hoid_parsed));
+    EXPECT_TRUE(lfn_parse_object_name(mangled_name, &hoid_parsed));
     EXPECT_EQ(hoid, hoid_parsed);
   }
 
 protected:
-  int _init() override { return 0; }
+  virtual int _init() { return 0; }
 
-  int _created(
+  virtual int _created(
 		       const vector<string> &path,
 		       const ghobject_t &hoid,
 		       const string &mangled_name 
-		       ) override { return 0; }
+		       ) { return 0; }
 
-  int _remove(
+  virtual int _remove(
 		      const vector<string> &path,
 		      const ghobject_t &hoid,
 		      const string &mangled_name
-		      ) override { return 0; }
+		      ) { return 0; }
 
-  int _lookup(
+  virtual int _lookup(
 		      const ghobject_t &hoid,
 		      vector<string> *path,
 		      string *mangled_name,
 		      int *exists		 
-		      ) override { return 0; }
+		      ) { return 0; }
 
-  int _collection_list_partial(
+  virtual int _collection_list_partial(
 				       const ghobject_t &start,
 				       const ghobject_t &end,
+				       bool sort_bitwise,
 				       int max_count,
 				       vector<ghobject_t> *ls,
 				       ghobject_t *next
-				       ) override { return 0; }
-  int _pre_hash_collection(
+				       ) { return 0; }
+  virtual int _pre_hash_collection(
                                    uint32_t pg_num,
                                    uint64_t expected_num_objs
-                                  ) override { return 0; }
+                                  ) { return 0; }
 
 };
 
 class TestHASH_INDEX_TAG : public TestWrapLFNIndex, public ::testing::Test {
 public:
-  TestHASH_INDEX_TAG()
-    : TestWrapLFNIndex(g_ceph_context, coll_t(), "PATH_1",
-		       CollectionIndex::HASH_INDEX_TAG) {
+  TestHASH_INDEX_TAG() : TestWrapLFNIndex(coll_t(), "PATH_1", CollectionIndex::HASH_INDEX_TAG) {
   }
 };
 
@@ -113,9 +110,7 @@ TEST_F(TestHASH_INDEX_TAG, generate_and_parse_name) {
 
 class TestHASH_INDEX_TAG_2 : public TestWrapLFNIndex, public ::testing::Test {
 public:
-  TestHASH_INDEX_TAG_2()
-    : TestWrapLFNIndex(g_ceph_context,
-		       coll_t(), "PATH_1", CollectionIndex::HASH_INDEX_TAG_2) {
+  TestHASH_INDEX_TAG_2() : TestWrapLFNIndex(coll_t(), "PATH_1", CollectionIndex::HASH_INDEX_TAG_2) {
   }
 };
 
@@ -138,9 +133,7 @@ TEST_F(TestHASH_INDEX_TAG_2, generate_and_parse_name) {
 
 class TestHOBJECT_WITH_POOL : public TestWrapLFNIndex, public ::testing::Test {
 public:
-  TestHOBJECT_WITH_POOL()
-    : TestWrapLFNIndex(g_ceph_context, coll_t(),
-		       "PATH_1", CollectionIndex::HOBJECT_WITH_POOL) {
+  TestHOBJECT_WITH_POOL() : TestWrapLFNIndex(coll_t(), "PATH_1", CollectionIndex::HOBJECT_WITH_POOL) {
   }
 };
 
@@ -184,18 +177,16 @@ TEST_F(TestHOBJECT_WITH_POOL, generate_and_parse_name) {
 
 class TestLFNIndex : public TestWrapLFNIndex, public ::testing::Test {
 public:
-  TestLFNIndex()
-    : TestWrapLFNIndex(g_ceph_context, coll_t(), "PATH_1",
-		       CollectionIndex::HOBJECT_WITH_POOL) {
+  TestLFNIndex() : TestWrapLFNIndex(coll_t(), "PATH_1", CollectionIndex::HOBJECT_WITH_POOL) {
   }
 
-  void SetUp() override {
+  virtual void SetUp() {
     ::chmod("PATH_1", 0700);
     ASSERT_EQ(0, ::system("rm -fr PATH_1"));
     ASSERT_EQ(0, ::mkdir("PATH_1", 0700));
   }
 
-  void TearDown() override {
+  virtual void TearDown() {
     ASSERT_EQ(0, ::system("rm -fr PATH_1"));
   }
 };
@@ -212,9 +203,8 @@ TEST_F(TestLFNIndex, remove_object) {
     ghobject_t hoid(hobject_t(sobject_t("ABC", CEPH_NOSNAP)));
 
     EXPECT_EQ(0, ::chmod("PATH_1", 0000));
-    if (getuid() != 0) {
+    if (getuid() != 0)
       EXPECT_EQ(-EACCES, remove_object(path, hoid));
-    }
     EXPECT_EQ(0, ::chmod("PATH_1", 0700));
     EXPECT_EQ(-ENOENT, remove_object(path, hoid));
     EXPECT_EQ(0, get_mangled_name(path, hoid, &mangled_name, &exists));
@@ -405,9 +395,8 @@ TEST_F(TestLFNIndex, get_mangled_name) {
     exists = 666;
     EXPECT_EQ(0, ::close(::creat(pathname.c_str(), 0600)));
     EXPECT_EQ(0, ::chmod("PATH_1", 0500));
-    if (getuid() != 0) {
+    if (getuid() != 0)
       EXPECT_EQ(-EACCES, get_mangled_name(path, hoid, &mangled_name, &exists));
-    }
     EXPECT_EQ("", mangled_name);
     EXPECT_EQ(666, exists);
     EXPECT_EQ(0, ::chmod("PATH_1", 0700));
@@ -461,8 +450,7 @@ int main(int argc, char **argv) {
     vector<const char*> args;
     argv_to_vec(argc, (const char **)argv, args);
 
-    auto cct = global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT,
-			   CODE_ENVIRONMENT_UTILITY, 0);
+    global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
     common_init_finish(g_ceph_context);
 
     ::testing::InitGoogleTest(&argc, argv);

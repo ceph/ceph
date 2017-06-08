@@ -36,6 +36,8 @@
 
 #include "include/int_types.h"
 
+#include <stdlib.h>
+
 #define MAX_ITER	8
 
 unsigned long crc32_table_iscsi_base[256] = {

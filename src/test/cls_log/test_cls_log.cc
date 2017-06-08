@@ -122,7 +122,7 @@ TEST(cls_rgw, test_log_add_same_time)
   ASSERT_EQ(0, ioctx.create(oid, true));
 
   /* generate log */
-  utime_t start_time = ceph_clock_now();
+  utime_t start_time = ceph_clock_now(g_ceph_context);
   generate_log(ioctx, oid, 10, start_time, false);
 
   librados::ObjectReadOperation *rop = new_rop();
@@ -187,9 +187,6 @@ TEST(cls_rgw, test_log_add_same_time)
   ASSERT_EQ(1, (int)truncated);
 
   delete rop;
-
-  /* destroy pool */
-  ASSERT_EQ(0, destroy_one_pool_pp(pool_name, rados));
 }
 
 TEST(cls_rgw, test_log_add_different_time)
@@ -209,7 +206,7 @@ TEST(cls_rgw, test_log_add_different_time)
   ASSERT_EQ(0, ioctx.create(oid, true));
 
   /* generate log */
-  utime_t start_time = ceph_clock_now();
+  utime_t start_time = ceph_clock_now(g_ceph_context);
   generate_log(ioctx, oid, 10, start_time, true);
 
   librados::ObjectReadOperation *rop = new_rop();
@@ -283,9 +280,6 @@ TEST(cls_rgw, test_log_add_different_time)
 
   ASSERT_EQ(10, i);
   delete rop;
-
-  /* destroy pool */
-  ASSERT_EQ(0, destroy_one_pool_pp(pool_name, rados));
 }
 
 TEST(cls_rgw, test_log_trim)
@@ -305,7 +299,7 @@ TEST(cls_rgw, test_log_trim)
   ASSERT_EQ(0, ioctx.create(oid, true));
 
   /* generate log */
-  utime_t start_time = ceph_clock_now();
+  utime_t start_time = ceph_clock_now(g_ceph_context);
   generate_log(ioctx, oid, 10, start_time, true);
 
   librados::ObjectReadOperation *rop = new_rop();
@@ -337,7 +331,4 @@ TEST(cls_rgw, test_log_trim)
     ASSERT_EQ(0, (int)truncated);
   }
   delete rop;
-
-  /* destroy pool */
-  ASSERT_EQ(0, destroy_one_pool_pp(pool_name, rados));
 }

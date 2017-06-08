@@ -146,8 +146,8 @@ private:
   }
 
 public:
-  explicit WBThrottle(CephContext *cct);
-  ~WBThrottle() override;
+  WBThrottle(CephContext *cct);
+  ~WBThrottle();
 
   void start();
   void stop();
@@ -177,12 +177,12 @@ public:
   void throttle();
 
   /// md_config_obs_t
-  const char** get_tracked_conf_keys() const override;
+  const char** get_tracked_conf_keys() const;
   void handle_conf_change(const md_config_t *conf,
-			  const std::set<std::string> &changed) override;
+			  const std::set<std::string> &changed);
 
   /// Thread
-  void *entry() override;
+  void *entry();
 };
 
 #endif

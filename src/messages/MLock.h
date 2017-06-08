@@ -18,6 +18,7 @@
 
 #include "msg/Message.h"
 #include "mds/locks.h"
+#include "mds/SimpleLock.h"
 
 class MLock : public Message {
   int32_t     action;  // action type
@@ -56,11 +57,11 @@ public:
     lockdata.claim(bl);
   }
 private:
-  ~MLock() override {}
+  ~MLock() {}
   
 public:
-  const char *get_type_name() const override { return "ILock"; }
-  void print(ostream& out) const override {
+  const char *get_type_name() const { return "ILock"; }
+  void print(ostream& out) const {
     out << "lock(a=" << get_lock_action_name(action)
 	<< " " << get_lock_type_name(lock_type)
 	<< " " << object_info
@@ -72,7 +73,7 @@ public:
     this->lockdata = lockdata;
   }
   
-  void decode_payload() override {
+  void decode_payload() {
     bufferlist::iterator p = payload.begin();
     ::decode(asker, p);
     ::decode(action, p);
@@ -81,7 +82,7 @@ public:
     ::decode(object_info, p);
     ::decode(lockdata, p);
   }
-  void encode_payload(uint64_t features) override {
+  virtual void encode_payload(uint64_t features) {
     ::encode(asker, payload);
     ::encode(action, payload);
     ::encode(reqid, payload);

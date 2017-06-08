@@ -111,18 +111,9 @@ def api_setup(app, conf, cluster, clientname, clientid, args):
         app.ceph_baseurl = app.ceph_baseurl[:-1]
     addr = app.ceph_cluster.conf_get('public_addr') or DEFAULT_ADDR
 
-    if addr == '-':
-        addr = None
-        port = None
-    else:
-        # remove the type prefix from the conf value if any
-        for t in ('legacy:', 'msgr2:'):
-            if addr.startswith(t):
-                addr = addr[len(t):]
-                break
-        # remove any nonce from the conf value
-        addr = addr.split('/')[0]
-        addr, port = addr.rsplit(':', 1)
+    # remove any nonce from the conf value
+    addr = addr.split('/')[0]
+    addr, port = addr.rsplit(':', 1)
     addr = addr or DEFAULT_ADDR
     port = port or DEFAULT_PORT
     port = int(port)
@@ -233,6 +224,15 @@ def generate_url_and_params(app, sig, flavor):
         # prefixes go in the URL path
         if desc.t == CephPrefix:
             url += '/' + desc.instance.prefix
+        # CephChoices with 1 required string (not --) do too, unless
+        # we've already started collecting params, in which case they
+        # too are params
+        elif (desc.t == CephChoices and
+              len(desc.instance.strings) == 1 and
+              desc.req and
+              not str(desc.instance).startswith('--') and
+              not params):
+            url += '/' + str(desc.instance)
         else:
             # tell/<target> is a weird case; the URL includes what
             # would everywhere else be a parameter

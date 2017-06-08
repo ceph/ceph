@@ -19,34 +19,30 @@
 
 class MExportDirNotifyAck : public Message {
   dirfrag_t dirfrag;
-  pair<__s32,__s32> new_auth;
 
  public:
   dirfrag_t get_dirfrag() { return dirfrag; }
-  pair<__s32,__s32> get_new_auth() { return new_auth; }
   
   MExportDirNotifyAck() {}
-  MExportDirNotifyAck(dirfrag_t df, uint64_t tid, pair<__s32,__s32> na) :
-    Message(MSG_MDS_EXPORTDIRNOTIFYACK), dirfrag(df), new_auth(na) {
+  MExportDirNotifyAck(dirfrag_t df, uint64_t tid) :
+    Message(MSG_MDS_EXPORTDIRNOTIFYACK), dirfrag(df) {
     set_tid(tid);
   }
 private:
-  ~MExportDirNotifyAck() override {}
+  ~MExportDirNotifyAck() {}
 
 public:
-  const char *get_type_name() const override { return "ExNotA"; }
-  void print(ostream& o) const override {
+  const char *get_type_name() const { return "ExNotA"; }
+  void print(ostream& o) const {
     o << "export_notify_ack(" << dirfrag << ")";
   }
 
-  void encode_payload(uint64_t features) override {
+  void encode_payload(uint64_t features) {
     ::encode(dirfrag, payload);
-    ::encode(new_auth, payload);
   }
-  void decode_payload() override {
+  void decode_payload() {
     bufferlist::iterator p = payload.begin();
     ::decode(dirfrag, p);
-    ::decode(new_auth, p);
   }
   
 };

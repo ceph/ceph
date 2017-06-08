@@ -27,10 +27,10 @@ class MMDSResolveAck : public Message {
 
   MMDSResolveAck() : Message(MSG_MDS_RESOLVEACK) {}
 private:
-  ~MMDSResolveAck() override {}
+  ~MMDSResolveAck() {}
 
 public:
-  const char *get_type_name() const override { return "resolve_ack"; }
+  const char *get_type_name() const { return "resolve_ack"; }
   /*void print(ostream& out) const {
     out << "resolve_ack.size()
 	<< "+" << ambiguous_imap.size()
@@ -45,11 +45,11 @@ public:
     abort.push_back(r);
   }
 
-  void encode_payload(uint64_t features) override {
+  void encode_payload(uint64_t features) {
     ::encode(commit, payload);
     ::encode(abort, payload);
   }
-  void decode_payload() override {
+  void decode_payload() {
     bufferlist::iterator p = payload.begin();
     ::decode(commit, p);
     ::decode(abort, p);

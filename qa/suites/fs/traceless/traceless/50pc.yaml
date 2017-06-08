@@ -1,5 +1,0 @@
-overrides:
-  ceph:
-    conf:
-      mds:
-        mds inject traceless reply probability: .5

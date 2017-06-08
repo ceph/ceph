@@ -14,7 +14,6 @@ namespace rbd {
 
 class Shell {
 public:
-  typedef std::vector<const char *> Arguments;
   typedef std::vector<std::string> CommandSpec;
 
   struct Action {
@@ -28,16 +27,15 @@ public:
     const std::string help;
     GetArguments get_arguments;
     Execute execute;
-    bool visible;
 
     template <typename Args, typename Execute>
     Action(const std::initializer_list<std::string> &command_spec,
            const std::initializer_list<std::string> &alias_command_spec,
            const std::string &description, const std::string &help,
-           Args args, Execute execute, bool visible = true)
+           Args args, Execute execute)
         : command_spec(command_spec), alias_command_spec(alias_command_spec),
           description(description), help(help), get_arguments(args),
-          execute(execute), visible(visible) {
+          execute(execute) {
       Shell::get_actions().push_back(this);
     }
 
@@ -49,7 +47,7 @@ public:
     }
   };
 
-  int execute(const Arguments &argument);
+  int execute(int arg_count, const char **arg_values);
 
 private:
   static std::vector<Action *>& get_actions();
@@ -58,12 +56,14 @@ private:
   void get_command_spec(const std::vector<std::string> &arguments,
                         std::vector<std::string> *command_spec);
   Action *find_action(const CommandSpec &command_spec,
-                      CommandSpec **matching_spec, bool *is_alias);
+                      CommandSpec **matching_spec);
 
   void get_global_options(boost::program_options::options_description *opts);
+  void prune_command_line_arguments(int arg_count, const char **arg_values,
+                                    std::vector<std::string> *args);
 
   void print_help();
-  void print_action_help(Action *action, bool is_alias);
+  void print_action_help(Action *action);
   void print_unknown_action(const CommandSpec &command_spec);
 
   void print_bash_completion(const CommandSpec &command_spec);

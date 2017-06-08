@@ -58,7 +58,7 @@ namespace Hypertable {
   class OpenFileDataCephPtr : public OpenFileDataPtr {
   public:
     OpenFileDataCephPtr() : OpenFileDataPtr() { }
-    explicit OpenFileDataCephPtr(OpenFileDataCeph *ofdl) : OpenFileDataPtr(ofdl, true) { }
+    OpenFileDataCephPtr(OpenFileDataCeph *ofdl) : OpenFileDataPtr(ofdl, true) { }
     OpenFileDataCeph *operator->() const { return static_cast<OpenFileDataCeph *>(get()); }
   };
 
@@ -67,7 +67,7 @@ namespace Hypertable {
    */
   class CephBroker : public DfsBroker::Broker {
   public:
-    explicit CephBroker(PropertiesPtr& cfg);
+    CephBroker(PropertiesPtr& cfg);
     virtual ~CephBroker();
 
     virtual void open(ResponseCallbackOpen *cb, const char *fname,

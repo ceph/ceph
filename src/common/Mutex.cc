@@ -11,10 +11,14 @@
  * Foundation.  See file COPYING.
  *
  */
+#include <string>
 
 #include "common/Mutex.h"
 #include "common/perf_counters.h"
+#include "common/ceph_context.h"
 #include "common/config.h"
+#include "include/stringify.h"
+#include "include/utime.h"
 #include "common/Clock.h"
 #include "common/valgrind.h"
 
@@ -88,12 +92,12 @@ Mutex::~Mutex() {
 void Mutex::Lock(bool no_lockdep) {
   int r;
 
-  if (lockdep && g_lockdep && !no_lockdep && !recursive) _will_lock();
+  if (lockdep && g_lockdep && !no_lockdep) _will_lock();
 
   if (logger && cct && cct->_conf->mutex_perf_counter) {
     utime_t start;
     // instrumented mutex enabled
-    start = ceph_clock_now();
+    start = ceph_clock_now(cct);
     if (TryLock()) {
       goto out;
     }
@@ -101,7 +105,7 @@ void Mutex::Lock(bool no_lockdep) {
     r = pthread_mutex_lock(&_m);
 
     logger->tinc(l_mutex_wait,
-		 ceph_clock_now() - start);
+		 ceph_clock_now(cct) - start);
   } else {
     r = pthread_mutex_lock(&_m);
   }

@@ -21,7 +21,6 @@
 
 #include "mds/CInode.h"
 #include "mds/CDir.h"
-#include "mds/mdstypes.h"
 
 // sent from replica to auth
 
@@ -39,7 +38,7 @@ class MMDSCacheRejoin : public Message {
     case OP_WEAK: return "weak";
     case OP_STRONG: return "strong";
     case OP_ACK: return "ack";
-    default: ceph_abort(); return 0;
+    default: assert(0); return 0;
     }
   }
 
@@ -164,7 +163,7 @@ class MMDSCacheRejoin : public Message {
   map<vinodeno_t, inode_strong> strong_inodes;
 
   // open
-  map<inodeno_t,map<client_t, cap_reconnect_t> > cap_exports;
+  map<inodeno_t,map<client_t, ceph_mds_cap_reconnect> > cap_exports;
   map<client_t, entity_inst_t> client_map;
   bufferlist imported_caps;
 
@@ -203,11 +202,11 @@ class MMDSCacheRejoin : public Message {
     Message(MSG_MDS_CACHEREJOIN, HEAD_VERSION, COMPAT_VERSION),
     op(o) {}
 private:
-  ~MMDSCacheRejoin() override {}
+  ~MMDSCacheRejoin() {}
 
 public:
-  const char *get_type_name() const override { return "cache_rejoin"; }
-  void print(ostream& out) const override {
+  const char *get_type_name() const { return "cache_rejoin"; }
+  void print(ostream& out) const {
     out << "cache_rejoin " << get_opname(op);
   }
 
@@ -225,11 +224,11 @@ public:
     ::encode(nonce, inode_locks);
     ::encode(bl, inode_locks);
   }
-  void add_inode_base(CInode *in, uint64_t features) {
+  void add_inode_base(CInode *in) {
     ::encode(in->inode.ino, inode_base);
     ::encode(in->last, inode_base);
     bufferlist bl;
-    in->_encode_base(bl, features);
+    in->_encode_base(bl);
     ::encode(bl, inode_base);
   }
   void add_inode_authpin(vinodeno_t ino, const metareqid_t& ri, __u32 attempt) {
@@ -285,7 +284,7 @@ public:
   }
 
   // -- encoding --
-  void encode_payload(uint64_t features) override {
+  void encode_payload(uint64_t features) {
     ::encode(op, payload);
     ::encode(strong_inodes, payload);
     ::encode(inode_base, payload);
@@ -296,7 +295,7 @@ public:
     ::encode(xlocked_inodes, payload);
     ::encode(wrlocked_inodes, payload);
     ::encode(cap_exports, payload);
-    ::encode(client_map, payload, features);
+    ::encode(client_map, payload);
     ::encode(imported_caps, payload);
     ::encode(strong_dirfrags, payload);
     ::encode(dirfrag_bases, payload);
@@ -307,7 +306,7 @@ public:
     ::encode(authpinned_dentries, payload);
     ::encode(xlocked_dentries, payload);
   }
-  void decode_payload() override {
+  void decode_payload() {
     bufferlist::iterator p = payload.begin();
     ::decode(op, p);
     ::decode(strong_inodes, p);

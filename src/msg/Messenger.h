@@ -41,10 +41,6 @@ class Messenger {
 private:
   list<Dispatcher*> dispatchers;
   list <Dispatcher*> fast_dispatchers;
-  ZTracer::Endpoint trace_endpoint;
-
-  void set_endpoint_addr(const entity_addr_t& a,
-                         const entity_name_t &name);
 
 protected:
   /// the "name" of the local daemon. eg client.99
@@ -56,14 +52,6 @@ protected:
   int socket_priority;
 
 public:
-  /**
-   * Various Messenger conditional config/type flags to allow
-   * different "transport" Messengers to tune themselves
-   */
-  static const int HAS_HEAVY_TRAFFIC    = 0x0001;
-  static const int HAS_MANY_CONNECTIONS = 0x0002;
-  static const int HEARTBEAT            = 0x0004;
-
   /**
    *  The CephContext this Messenger uses. Many other components initialize themselves
    *  from this value.
@@ -106,31 +94,31 @@ public:
 	features_supported(CEPH_FEATURES_SUPPORTED_DEFAULT),
 	features_required(0) {}
   private:
-    Policy(bool l, bool s, bool st, bool r, uint64_t req)
+    Policy(bool l, bool s, bool st, bool r, uint64_t sup, uint64_t req)
       : lossy(l), server(s), standby(st), resetcheck(r),
 	throttler_bytes(NULL),
 	throttler_messages(NULL),
-	features_supported(CEPH_FEATURES_SUPPORTED_DEFAULT),
+	features_supported(sup | CEPH_FEATURES_SUPPORTED_DEFAULT),
 	features_required(req) {}
 
   public:
-    static Policy stateful_server(uint64_t req) {
-      return Policy(false, true, true, true, req);
+    static Policy stateful_server(uint64_t sup, uint64_t req) {
+      return Policy(false, true, true, true, sup, req);
     }
-    static Policy stateless_server(uint64_t req) {
-      return Policy(true, true, false, false, req);
+    static Policy stateless_server(uint64_t sup, uint64_t req) {
+      return Policy(true, true, false, false, sup, req);
     }
-    static Policy lossless_peer(uint64_t req) {
-      return Policy(false, false, true, false, req);
+    static Policy lossless_peer(uint64_t sup, uint64_t req) {
+      return Policy(false, false, true, false, sup, req);
     }
-    static Policy lossless_peer_reuse(uint64_t req) {
-      return Policy(false, false, true, true, req);
+    static Policy lossless_peer_reuse(uint64_t sup, uint64_t req) {
+      return Policy(false, false, true, true, sup, req);
     }
-    static Policy lossy_client(uint64_t req) {
-      return Policy(true, false, false, false, req);
+    static Policy lossy_client(uint64_t sup, uint64_t req) {
+      return Policy(true, false, false, false, sup, req);
     }
-    static Policy lossless_client(uint64_t req) {
-      return Policy(false, false, false, true, req);
+    static Policy lossless_client(uint64_t sup, uint64_t req) {
+      return Policy(false, false, false, true, sup, req);
     }
   };
 
@@ -140,8 +128,7 @@ public:
    * or use the create() function.
    */
   Messenger(CephContext *cct_, entity_name_t w)
-    : trace_endpoint("0.0.0.0", 0, "Messenger"),
-      my_inst(),
+    : my_inst(),
       default_send_priority(CEPH_MSG_PRIO_DEFAULT), started(false),
       magic(0),
       socket_priority(-1),
@@ -164,14 +151,13 @@ public:
    * @param lname logical name of the messenger in this process (e.g., "client")
    * @param nonce nonce value to uniquely identify this instance on the current host
    * @param features bits for the local connection
-   * @param cflags general set of flags to configure transport resources
    */
   static Messenger *create(CephContext *cct,
                            const string &type,
                            entity_name_t name,
 			   string lname,
                            uint64_t nonce,
-			   uint64_t cflags);
+			   uint64_t features = 0);
 
   /**
    * create a new messenger
@@ -218,18 +204,8 @@ protected:
   /**
    * set messenger's address
    */
-  virtual void set_myaddr(const entity_addr_t& a) {
-    my_inst.addr = a;
-    set_endpoint_addr(a, my_inst.name);
-  }
+  virtual void set_myaddr(const entity_addr_t& a) { my_inst.addr = a; }
 public:
-  /**
-   * @return the zipkin trace endpoint
-   */
-  const ZTracer::Endpoint* get_trace_endpoint() const {
-    return &trace_endpoint;
-  }
-
   /**
    * Retrieve the Messenger's name.
    *
@@ -254,7 +230,7 @@ public:
    *
    * @param addr The address to use as a template.
    */
-  virtual void set_addr_unknowns(const entity_addr_t &addr) = 0;
+  virtual void set_addr_unknowns(entity_addr_t &addr) = 0;
   /// Get the default send priority.
   int get_default_send_priority() { return default_send_priority; }
   /**
@@ -424,14 +400,6 @@ public:
    */
   virtual int rebind(const set<int>& avoid_ports) { return -EOPNOTSUPP; }
   /**
-   * Bind the 'client' Messenger to a specific address.Messenger will bind
-   * the address before connect to others when option ms_bind_before_connect
-   * is true.
-   * @param bind_addr The address to bind to.
-   * @return 0 on success, or -1 on error, or -errno if
-   */
-  virtual int client_bind(const entity_addr_t& bind_addr) = 0;
-  /**
    * @} // Configuration
    */
 
@@ -562,7 +530,7 @@ public:
    *
    * @param m The Message we are testing.
    */
-  bool ms_can_fast_dispatch(const Message *m) {
+  bool ms_can_fast_dispatch(Message *m) {
     for (list<Dispatcher*>::iterator p = fast_dispatchers.begin();
 	 p != fast_dispatchers.end();
 	 ++p) {
@@ -577,10 +545,9 @@ public:
    *
    * @param m The Message we are fast dispatching. We take ownership
    * of one reference to it.
-   * If none of our Dispatchers can handle it, ceph_abort().
    */
   void ms_fast_dispatch(Message *m) {
-    m->set_dispatch_stamp(ceph_clock_now());
+    m->set_dispatch_stamp(ceph_clock_now(cct));
     for (list<Dispatcher*>::iterator p = fast_dispatchers.begin();
 	 p != fast_dispatchers.end();
 	 ++p) {
@@ -589,7 +556,7 @@ public:
 	return;
       }
     }
-    ceph_abort();
+    assert(0);
   }
   /**
    *
@@ -610,7 +577,7 @@ public:
    *  one reference to it.
    */
   void ms_deliver_dispatch(Message *m) {
-    m->set_dispatch_stamp(ceph_clock_now());
+    m->set_dispatch_stamp(ceph_clock_now(cct));
     for (list<Dispatcher*>::iterator p = dispatchers.begin();
 	 p != dispatchers.end();
 	 ++p) {
@@ -704,24 +671,6 @@ public:
 	 ++p)
       (*p)->ms_handle_remote_reset(con);
   }
-
-  /**
-   * Notify each Dispatcher of a Connection for which reconnection
-   * attempts are being refused. Call this function whenever you
-   * detect that a lossy Connection has been disconnected and it's
-   * impossible to reconnect.
-   *
-   * @param con Pointer to the broken Connection.
-   */
-  void ms_deliver_handle_refused(Connection *con) {
-    for (list<Dispatcher*>::iterator p = dispatchers.begin();
-         p != dispatchers.end();
-         ++p) {
-      if ((*p)->ms_handle_refused(con))
-        return;
-    }
-  }
-
   /**
    * Get the AuthAuthorizer for a new outgoing Connection.
    *

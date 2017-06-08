@@ -2,9 +2,10 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "include/types.h"
+#include "msg/Message.h"
+#include "osd/OSD.h"
 #include "ClassHandler.h"
 #include "common/errno.h"
-#include "common/ceph_context.h"
 
 #include <dlfcn.h>
 
@@ -15,7 +16,6 @@
 #endif
 
 #include "common/config.h"
-#include "common/debug.h"
 
 #define dout_subsys ceph_subsys_osd
 #undef dout_prefix
@@ -26,20 +26,10 @@
 #define CLS_SUFFIX ".so"
 
 
-void ClassHandler::add_embedded_class(const string& cname)
-{
-  assert(mutex.is_locked());
-  ClassData *cls = _get_class(cname, false);
-  assert(cls->status == ClassData::CLASS_UNKNOWN);
-  cls->status = ClassData::CLASS_INITIALIZING;
-}
-
 int ClassHandler::open_class(const string& cname, ClassData **pcls)
 {
   Mutex::Locker lock(mutex);
-  ClassData *cls = _get_class(cname, true);
-  if (!cls)
-    return -EPERM;
+  ClassData *cls = _get_class(cname);
   if (cls->status != ClassData::CLASS_OPEN) {
     int r = _load_class(cls);
     if (r)
@@ -51,14 +41,15 @@ int ClassHandler::open_class(const string& cname, ClassData **pcls)
 
 int ClassHandler::open_all_classes()
 {
-  ldout(cct, 10) << __func__ << dendl;
+  dout(10) << __func__ << dendl;
   DIR *dir = ::opendir(cct->_conf->osd_class_dir.c_str());
   if (!dir)
     return -errno;
 
-  struct dirent *pde = nullptr;
+  char buf[offsetof(struct dirent, d_name) + PATH_MAX + 1];
+  struct dirent *pde;
   int r = 0;
-  while ((pde = ::readdir(dir))) {
+  while ((r = ::readdir_r(dir, (dirent *)&buf, &pde)) == 0 && pde) {
     if (pde->d_name[0] == '.')
       continue;
     if (strlen(pde->d_name) > sizeof(CLS_PREFIX) - 1 + sizeof(CLS_SUFFIX) - 1 &&
@@ -67,11 +58,10 @@ int ClassHandler::open_all_classes()
       char cname[PATH_MAX + 1];
       strncpy(cname, pde->d_name + sizeof(CLS_PREFIX) - 1, sizeof(cname) -1);
       cname[strlen(cname) - (sizeof(CLS_SUFFIX) - 1)] = '\0';
-      ldout(cct, 10) << __func__ << " found " << cname << dendl;
+      dout(10) << __func__ << " found " << cname << dendl;
       ClassData *cls;
-      // skip classes that aren't in 'osd class load list'
       r = open_class(cname, &cls);
-      if (r < 0 && r != -EPERM)
+      if (r < 0)
 	goto out;
     }
   }
@@ -82,38 +72,13 @@ int ClassHandler::open_all_classes()
 
 void ClassHandler::shutdown()
 {
-  for (auto& cls : classes) {
-    if (cls.second.handle) {
-      dlclose(cls.second.handle);
-    }
+  for (map<string, ClassData>::iterator p = classes.begin(); p != classes.end(); ++p) {
+    dlclose(p->second.handle);
   }
   classes.clear();
 }
 
-/*
- * Check if @cname is in the whitespace delimited list @list, or the @list
- * contains the wildcard "*".
- *
- * This is expensive but doesn't consume memory for an index, and is performed
- * only once when a class is loaded.
- */
-bool ClassHandler::in_class_list(const std::string& cname,
-    const std::string& list)
-{
-  std::istringstream ss(list);
-  std::istream_iterator<std::string> begin{ss};
-  std::istream_iterator<std::string> end{};
-
-  const std::vector<std::string> targets{cname, "*"};
-
-  auto it = std::find_first_of(begin, end,
-      targets.begin(), targets.end());
-
-  return it != end;
-}
-
-ClassHandler::ClassData *ClassHandler::_get_class(const string& cname,
-    bool check_allowed)
+ClassHandler::ClassData *ClassHandler::_get_class(const string& cname)
 {
   ClassData *cls;
   map<string, ClassData>::iterator iter = classes.find(cname);
@@ -121,15 +86,10 @@ ClassHandler::ClassData *ClassHandler::_get_class(const string& cname,
   if (iter != classes.end()) {
     cls = &iter->second;
   } else {
-    if (check_allowed && !in_class_list(cname, cct->_conf->osd_class_load_list)) {
-      ldout(cct, 0) << "_get_class not permitted to load " << cname << dendl;
-      return NULL;
-    }
     cls = &classes[cname];
-    ldout(cct, 10) << "_get_class adding new class name " << cname << " " << cls << dendl;
+    dout(10) << "_get_class adding new class name " << cname << " " << cls << dendl;
     cls->name = cname;
     cls->handler = this;
-    cls->whitelisted = in_class_list(cname, cct->_conf->osd_class_default_list);
   }
   return cls;
 }
@@ -146,7 +106,7 @@ int ClassHandler::_load_class(ClassData *cls)
     snprintf(fname, sizeof(fname), "%s/" CLS_PREFIX "%s" CLS_SUFFIX,
 	     cct->_conf->osd_class_dir.c_str(),
 	     cls->name.c_str());
-    ldout(cct, 10) << "_load_class " << cls->name << " from " << fname << dendl;
+    dout(10) << "_load_class " << cls->name << " from " << fname << dendl;
 
     cls->handle = dlopen(fname, RTLD_NOW);
     if (!cls->handle) {
@@ -154,12 +114,12 @@ int ClassHandler::_load_class(ClassData *cls)
       int r = ::stat(fname, &st);
       if (r < 0) {
         r = -errno;
-	ldout(cct, 0) << __func__ << " could not stat class " << fname
-		      << ": " << cpp_strerror(r) << dendl;
+        dout(0) << __func__ << " could not stat class " << fname
+                << ": " << cpp_strerror(r) << dendl;
       } else {
-	ldout(cct, 0) << "_load_class could not open class " << fname
-		      << " (dlopen failed): " << dlerror() << dendl;
-	r = -EIO;
+	dout(0) << "_load_class could not open class " << fname
+      	        << " (dlopen failed): " << dlerror() << dendl;
+      	r = -EIO;
       }
       cls->status = ClassData::CLASS_MISSING;
       return r;
@@ -172,7 +132,7 @@ int ClassHandler::_load_class(ClassData *cls)
       while (deps) {
 	if (!deps->name)
 	  break;
-	ClassData *cls_dep = _get_class(deps->name, false);
+	ClassData *cls_dep = _get_class(deps->name);
 	cls->dependencies.insert(cls_dep);
 	if (cls_dep->status != ClassData::CLASS_OPEN)
 	  cls->missing_dependencies.insert(cls_dep);
@@ -190,19 +150,19 @@ int ClassHandler::_load_class(ClassData *cls)
       cls->status = ClassData::CLASS_MISSING_DEPS;
       return r;
     }
-
-    ldout(cct, 10) << "_load_class " << cls->name << " satisfied dependency " << dc->name << dendl;
+    
+    dout(10) << "_load_class " << cls->name << " satisfied dependency " << dc->name << dendl;
     cls->missing_dependencies.erase(p++);
   }
-
+  
   // initialize
   void (*cls_init)() = (void (*)())dlsym(cls->handle, "__cls_init");
   if (cls_init) {
     cls->status = ClassData::CLASS_INITIALIZING;
     cls_init();
   }
-
-  ldout(cct, 10) << "_load_class " << cls->name << " success" << dendl;
+  
+  dout(10) << "_load_class " << cls->name << " success" << dendl;
   cls->status = ClassData::CLASS_OPEN;
   return 0;
 }
@@ -213,11 +173,11 @@ ClassHandler::ClassData *ClassHandler::register_class(const char *cname)
 {
   assert(mutex.is_locked());
 
-  ClassData *cls = _get_class(cname, false);
-  ldout(cct, 10) << "register_class " << cname << " status " << cls->status << dendl;
+  ClassData *cls = _get_class(cname);
+  dout(10) << "register_class " << cname << " status " << cls->status << dendl;
 
   if (cls->status != ClassData::CLASS_INITIALIZING) {
-    ldout(cct, 0) << "class " << cname << " isn't loaded; is the class registering under the wrong name?" << dendl;
+    dout(0) << "class " << cname << " isn't loaded; is the class registering under the wrong name?" << dendl;
     return NULL;
   }
   return cls;
@@ -234,12 +194,11 @@ ClassHandler::ClassMethod *ClassHandler::ClassData::register_method(const char *
 {
   /* no need for locking, called under the class_init mutex */
   if (!flags) {
-    lderr(handler->cct) << "register_method " << name << "." << mname
-			<< " flags " << flags << " " << (void*)func
-			<< " FAILED -- flags must be non-zero" << dendl;
+    derr << "register_method " << name << "." << mname << " flags " << flags << " " << (void*)func
+	 << " FAILED -- flags must be non-zero" << dendl;
     return NULL;
   }
-  ldout(handler->cct, 10) << "register_method " << name << "." << mname << " flags " << flags << " " << (void*)func << dendl;
+  dout(10) << "register_method " << name << "." << mname << " flags " << flags << " " << (void*)func << dendl;
   ClassMethod& method = methods_map[mname];
   method.func = func;
   method.name = mname;
@@ -253,7 +212,7 @@ ClassHandler::ClassMethod *ClassHandler::ClassData::register_cxx_method(const ch
 									cls_method_cxx_call_t func)
 {
   /* no need for locking, called under the class_init mutex */
-  ldout(handler->cct, 10) << "register_cxx_method " << name << "." << mname << " flags " << flags << " " << (void*)func << dendl;
+  dout(10) << "register_cxx_method " << name << "." << mname << " flags " << flags << " " << (void*)func << dendl;
   ClassMethod& method = methods_map[mname];
   method.cxx_func = func;
   method.name = mname;

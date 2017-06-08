@@ -2,15 +2,16 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "journal/FutureImpl.h"
+#include "common/Finisher.h"
 #include "journal/Utils.h"
 
 namespace journal {
 
-FutureImpl::FutureImpl(uint64_t tag_tid, uint64_t entry_tid,
+FutureImpl::FutureImpl(Finisher &finisher, const std::string &tag, uint64_t tid,
                        uint64_t commit_tid)
-  : RefCountedObject(NULL, 0), m_tag_tid(tag_tid), m_entry_tid(entry_tid),
+  : RefCountedObject(NULL, 0), m_finisher(finisher), m_tag(tag), m_tid(tid),
     m_commit_tid(commit_tid),
-    m_lock("FutureImpl::m_lock", false, false), m_safe(false),
+    m_lock(utils::unique_lock_name("FutureImpl::m_lock", this)), m_safe(false),
     m_consistent(false), m_return_value(0), m_flush_state(FLUSH_STATE_NONE),
     m_consistent_ack(this) {
 }
@@ -27,56 +28,36 @@ void FutureImpl::init(const FutureImplPtr &prev_future) {
 }
 
 void FutureImpl::flush(Context *on_safe) {
-
   bool complete;
-  FlushHandlers flush_handlers;
-  FutureImplPtr prev_future;
+  FlushHandlerPtr flush_handler;
   {
     Mutex::Locker locker(m_lock);
     complete = (m_safe && m_consistent);
     if (!complete) {
-      if (on_safe != nullptr) {
+      if (on_safe != NULL) {
         m_contexts.push_back(on_safe);
       }
 
-      prev_future = prepare_flush(&flush_handlers, m_lock);
-    }
-  }
+      if (m_flush_state == FLUSH_STATE_NONE) {
+        m_flush_state = FLUSH_STATE_REQUESTED;
+        flush_handler = m_flush_handler;
 
-  // instruct prior futures to flush as well
-  while (prev_future) {
-    prev_future = prev_future->prepare_flush(&flush_handlers);
+        // walk the chain backwards up to <splay width> futures
+        if (m_prev_future) {
+          m_prev_future->flush();
+        }
+      }
+    }
   }
 
   if (complete && on_safe != NULL) {
-    on_safe->complete(m_return_value);
-  } else if (!flush_handlers.empty()) {
+    m_finisher.queue(on_safe, m_return_value);
+  } else if (flush_handler) {
     // attached to journal object -- instruct it to flush all entries through
     // this one.  possible to become detached while lock is released, so flush
     // will be re-requested by the object if it doesn't own the future
-    for (auto &pair : flush_handlers) {
-      pair.first->flush(pair.second);
-    }
+    flush_handler->flush(this);
   }
-}
-
-FutureImplPtr FutureImpl::prepare_flush(FlushHandlers *flush_handlers) {
-  Mutex::Locker locker(m_lock);
-  return prepare_flush(flush_handlers, m_lock);
-}
-
-FutureImplPtr FutureImpl::prepare_flush(FlushHandlers *flush_handlers,
-                                        Mutex &lock) {
-  assert(m_lock.is_locked());
-
-  if (m_flush_state == FLUSH_STATE_NONE) {
-    m_flush_state = FLUSH_STATE_REQUESTED;
-
-    if (m_flush_handler && flush_handlers->count(m_flush_handler) == 0) {
-      flush_handlers->insert({m_flush_handler, this});
-    }
-  }
-  return m_prev_future;
 }
 
 void FutureImpl::wait(Context *on_safe) {
@@ -88,8 +69,7 @@ void FutureImpl::wait(Context *on_safe) {
       return;
     }
   }
-
-  on_safe->complete(m_return_value);
+  m_finisher.queue(on_safe, m_return_value);
 }
 
 bool FutureImpl::is_complete() const {
@@ -157,9 +137,7 @@ void FutureImpl::finish_unlock() {
 }
 
 std::ostream &operator<<(std::ostream &os, const FutureImpl &future) {
-  os << "Future[tag_tid=" << future.m_tag_tid << ", "
-     << "entry_tid=" << future.m_entry_tid << ", "
-     << "commit_tid=" << future.m_commit_tid << "]";
+  os << "Future[tag=" << future.m_tag << ", tid=" << future.m_tid << "]";
   return os;
 }
 

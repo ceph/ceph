@@ -16,10 +16,10 @@
 # GNU Library Public License for more details.
 #
 
-source $CEPH_ROOT/qa/workunits/ceph-helpers.sh
+source ../qa/workunits/ceph-helpers.sh
 
 export CEPH_VSTART_WRAPPER=1
-export CEPH_DIR="${TMPDIR:-$PWD}/td/t-$CEPH_PORT"
+export CEPH_DIR="$PWD/testdir/test-$CEPH_PORT"
 export CEPH_DEV_DIR="$CEPH_DIR/dev"
 export CEPH_OUT_DIR="$CEPH_DIR/out"
 
@@ -30,15 +30,9 @@ function vstart_setup()
     trap "teardown $CEPH_DIR" EXIT
     export LC_ALL=C # some tests are vulnerable to i18n
     export PATH="$(pwd):${PATH}"
-    OBJSTORE_ARGS=""
-    if [ "bluestore" = "${CEPH_OBJECTSTORE}" ]; then
-        OBJSTORE_ARGS="-b"
-    fi
-    $CEPH_ROOT/src/vstart.sh \
-        --short \
-        $OBJSTORE_ARGS \
+    ./vstart.sh \
         -o 'paxos propose interval = 0.01' \
-        -d -n -l || return 1
+        -n -l $CEPH_START || return 1
     export CEPH_CONF=$CEPH_DIR/ceph.conf
 
     crit=$(expr 100 - $(ceph-conf --show-config-value mon_data_avail_crit))

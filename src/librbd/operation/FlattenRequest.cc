@@ -2,10 +2,12 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "librbd/operation/FlattenRequest.h"
+#include "librbd/AioObjectRequest.h"
 #include "librbd/AsyncObjectThrottle.h"
 #include "librbd/ExclusiveLock.h"
 #include "librbd/ImageCtx.h"
-#include "librbd/io/ObjectRequest.h"
+#include "librbd/ImageWatcher.h"
+#include "librbd/ObjectMap.h"
 #include "common/dout.h"
 #include "common/errno.h"
 #include <boost/lambda/bind.hpp>
@@ -28,7 +30,7 @@ public:
   {
   }
 
-  int send() override {
+  virtual int send() {
     I &image_ctx = this->m_image_ctx;
     assert(image_ctx.owner_lock.is_locked());
     CephContext *cct = image_ctx.cct;
@@ -41,8 +43,8 @@ public:
 
     bufferlist bl;
     string oid = image_ctx.get_object_name(m_object_no);
-    auto req = new io::ObjectWriteRequest(&image_ctx, oid, m_object_no, 0,
-                                          bl, m_snapc, 0, {}, this);
+    AioObjectWrite *req = new AioObjectWrite(&image_ctx, oid, m_object_no, 0,
+                                             bl, m_snapc, this);
     if (!req->has_parent()) {
       // stop early if the parent went away - it just means
       // another flatten finished first or the image was resized
@@ -65,10 +67,7 @@ bool FlattenRequest<I>::should_complete(int r) {
   I &image_ctx = this->m_image_ctx;
   CephContext *cct = image_ctx.cct;
   ldout(cct, 5) << this << " should_complete: " << " r=" << r << dendl;
-  if (r == -ERESTART) {
-    ldout(cct, 5) << "flatten operation interrupted" << dendl;
-    return true;
-  } else if (r < 0 && !(r == -ENOENT && m_ignore_enoent) ) {
+  if (r < 0 && !(r == -ENOENT && m_ignore_enoent) ) {
     lderr(cct) << "flatten encountered an error: " << cpp_strerror(r) << dendl;
     return true;
   }
@@ -140,6 +139,9 @@ bool FlattenRequest<I>::send_update_header() {
 
   // remove parent from this (base) image
   librados::ObjectWriteOperation op;
+  if (image_ctx.exclusive_lock != nullptr) {
+    image_ctx.exclusive_lock->assert_header_locked(&op);
+  }
   cls_client::remove_parent(&op);
 
   librados::AioCompletion *rados_completion = this->create_callback_completion();

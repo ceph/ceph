@@ -51,12 +51,12 @@ class ESession : public LogEvent {
     cmapv(v),
     inos(i), inotablev(iv) { }
 
-  void encode(bufferlist& bl, uint64_t features) const override;
-  void decode(bufferlist::iterator& bl) override;
-  void dump(Formatter *f) const override;
+  void encode(bufferlist& bl) const;
+  void decode(bufferlist::iterator& bl);
+  void dump(Formatter *f) const;
   static void generate_test_instances(list<ESession*>& ls);
 
-  void print(ostream& out) const override {
+  void print(ostream& out) const {
     if (open)
       out << "ESession " << client_inst << " open cmapv " << cmapv;
     else
@@ -65,10 +65,9 @@ class ESession : public LogEvent {
       out << " (" << inos.size() << " inos, v" << inotablev << ")";
   }
   
-  void update_segment() override;
-  void replay(MDSRank *mds) override;
+  void update_segment();
+  void replay(MDSRank *mds);
   entity_inst_t get_client_inst() const {return client_inst;}
 };
-WRITE_CLASS_ENCODER_FEATURES(ESession)
 
 #endif

@@ -16,10 +16,9 @@
 #ifndef CEPH_MOSDOP_H
 #define CEPH_MOSDOP_H
 
-#include "MOSDFastDispatchOp.h"
+#include "msg/Message.h"
+#include "osd/osd_types.h"
 #include "include/ceph_features.h"
-#include "common/hobject.h"
-#include <atomic>
 
 /*
  * OSD op
@@ -31,9 +30,9 @@
 
 class OSD;
 
-class MOSDOp : public MOSDFastDispatchOp {
+class MOSDOp : public Message {
 
-  static const int HEAD_VERSION = 8;
+  static const int HEAD_VERSION = 7;
   static const int COMPAT_VERSION = 3;
 
 private:
@@ -41,20 +40,22 @@ private:
   __u32 osdmap_epoch;
   __u32 flags;
   utime_t mtime;
+  eversion_t reassert_version;
   int32_t retry_attempt;   // 0 is first attempt.  -1 if we don't know.
 
-  hobject_t hobj;
-  spg_t pgid;
+  object_t oid;
+  object_locator_t oloc;
+  pg_t pgid;
   bufferlist::iterator p;
   // Decoding flags. Decoding is only needed for messages catched by pipe reader.
-  // Transition from true -> false without locks being held
-  // Can never see final_decode_needed == false and partial_decode_needed == true
-  atomic<bool> partial_decode_needed;
-  atomic<bool> final_decode_needed;
+  bool partial_decode_needed;
+  bool final_decode_needed;
   //
 public:
   vector<OSDOp> ops;
 private:
+
+  snapid_t snapid;
   snapid_t snap_seq;
   vector<snapid_t> snaps;
 
@@ -66,9 +67,7 @@ public:
   friend class MOSDOpReply;
 
   ceph_tid_t get_client_tid() { return header.tid; }
-  void set_snapid(const snapid_t& s) {
-    hobj.snap = s;
-  }
+  void set_snapid(const snapid_t& s) { snapid = s; }
   void set_snaps(const vector<snapid_t>& i) {
     snaps = i;
   }
@@ -76,30 +75,23 @@ public:
   void set_reqid(const osd_reqid_t rid) {
     reqid = rid;
   }
-  void set_spg(spg_t p) {
-    pgid = p;
-  }
 
   // Fields decoded in partial decoding
-  pg_t get_pg() const {
-    assert(!partial_decode_needed);
-    return pgid.pgid;
-  }
-  spg_t get_spg() const override {
+  const pg_t& get_pg() const {
     assert(!partial_decode_needed);
     return pgid;
   }
-  pg_t get_raw_pg() const {
-    assert(!partial_decode_needed);
-    return pg_t(hobj.get_hash(), pgid.pgid.pool());
-  }
-  epoch_t get_map_epoch() const override {
+  epoch_t get_map_epoch() const {
     assert(!partial_decode_needed);
     return osdmap_epoch;
   }
   int get_flags() const {
     assert(!partial_decode_needed);
     return flags;
+  }
+  const eversion_t& get_version() const {
+    assert(!partial_decode_needed);
+    return reassert_version;
   }
   osd_reqid_t get_reqid() const {
     assert(!partial_decode_needed);
@@ -123,23 +115,17 @@ public:
     assert(!final_decode_needed);
     return mtime;
   }
-  object_locator_t get_object_locator() const {
+  const object_locator_t& get_object_locator() const {
     assert(!final_decode_needed);
-    if (hobj.oid.name.empty())
-      return object_locator_t(hobj.pool, hobj.nspace, hobj.get_hash());
-    else
-      return object_locator_t(hobj);
+    return oloc;
   }
-  const object_t& get_oid() const {
+  object_t& get_oid() {
     assert(!final_decode_needed);
-    return hobj.oid;
+    return oid;
   }
-  const hobject_t &get_hobj() const {
-    return hobj;
-  }
-  snapid_t get_snapid() const {
+  const snapid_t& get_snapid() {
     assert(!final_decode_needed);
-    return hobj.snap;
+    return snapid;
   }
   const snapid_t& get_snap_seq() const {
     assert(!final_decode_needed);
@@ -167,17 +153,17 @@ public:
   }
 
   MOSDOp()
-    : MOSDFastDispatchOp(CEPH_MSG_OSD_OP, HEAD_VERSION, COMPAT_VERSION),
+    : Message(CEPH_MSG_OSD_OP, HEAD_VERSION, COMPAT_VERSION),
       partial_decode_needed(true),
       final_decode_needed(true) { }
-  MOSDOp(int inc, long tid, const hobject_t& ho, spg_t& _pgid,
+  MOSDOp(int inc, long tid,
+         object_t& _oid, object_locator_t& _oloc, pg_t& _pgid,
 	 epoch_t _osdmap_epoch,
 	 int _flags, uint64_t feat)
-    : MOSDFastDispatchOp(CEPH_MSG_OSD_OP, HEAD_VERSION, COMPAT_VERSION),
+    : Message(CEPH_MSG_OSD_OP, HEAD_VERSION, COMPAT_VERSION),
       client_inc(inc),
       osdmap_epoch(_osdmap_epoch), flags(_flags), retry_attempt(-1),
-      hobj(ho),
-      pgid(_pgid),
+      oid(_oid), oloc(_oloc), pgid(_pgid),
       partial_decode_needed(false),
       final_decode_needed(false),
       features(feat) {
@@ -188,9 +174,10 @@ public:
     reqid.inc = inc;
   }
 private:
-  ~MOSDOp() override {}
+  ~MOSDOp() {}
 
 public:
+  void set_version(eversion_t v) { reassert_version = v; }
   void set_mtime(utime_t mt) { mtime = mt; }
   void set_mtime(ceph::real_time mt) {
     mtime = ceph::real_clock::to_timespec(mt);
@@ -231,7 +218,14 @@ public:
     add_simple_op(CEPH_OSD_OP_STAT, 0, 0);
   }
 
-  bool has_flag(__u32 flag) const { return flags & flag; };
+  bool has_flag(__u32 flag) { return flags & flag; };
+  bool wants_ack() const { return flags & CEPH_OSD_FLAG_ACK; }
+  bool wants_ondisk() const { return flags & CEPH_OSD_FLAG_ONDISK; }
+  bool wants_onnvram() const { return flags & CEPH_OSD_FLAG_ONNVRAM; }
+
+  void set_want_ack(bool b) { flags |= CEPH_OSD_FLAG_ACK; }
+  void set_want_onnvram(bool b) { flags |= CEPH_OSD_FLAG_ONNVRAM; }
+  void set_want_ondisk(bool b) { flags |= CEPH_OSD_FLAG_ONDISK; }
 
   bool is_retry_attempt() const { return flags & CEPH_OSD_FLAG_RETRY; }
   void set_retry_attempt(unsigned a) { 
@@ -243,7 +237,7 @@ public:
   }
 
   // marshalling
-  void encode_payload(uint64_t features) override {
+  virtual void encode_payload(uint64_t features) {
 
     OSDOp::merge_osd_op_vector_in_data(ops, data);
 
@@ -275,17 +269,17 @@ struct ceph_osd_request_head {
       ::encode(client_inc, payload);
 
       __u32 su = 0;
-      ::encode(get_raw_pg(), payload);
+      ::encode(pgid, payload);
       ::encode(su, payload);
 
       ::encode(osdmap_epoch, payload);
       ::encode(flags, payload);
       ::encode(mtime, payload);
-      ::encode(eversion_t(), payload);  // reassert_version
+      ::encode(reassert_version, payload);
 
-      __u32 oid_len = hobj.oid.name.length();
+      __u32 oid_len = oid.name.length();
       ::encode(oid_len, payload);
-      ::encode(hobj.snap, payload);
+      ::encode(snapid, payload);
       ::encode(snap_seq, payload);
       __u32 num_snaps = snaps.size();
       ::encode(num_snaps, payload);
@@ -296,7 +290,7 @@ struct ceph_osd_request_head {
       for (unsigned i = 0; i < ops.size(); i++)
 	::encode(ops[i].op, payload);
 
-      ::encode_nohead(hobj.oid.name, payload);
+      ::encode_nohead(oid.name, payload);
       ::encode_nohead(snaps, payload);
     } else if ((features & CEPH_FEATURE_NEW_OSDOP_ENCODING) == 0) {
       header.version = 6;
@@ -304,78 +298,43 @@ struct ceph_osd_request_head {
       ::encode(osdmap_epoch, payload);
       ::encode(flags, payload);
       ::encode(mtime, payload);
-      ::encode(eversion_t(), payload); // reassert_version
-      ::encode(get_object_locator(), payload);
-      ::encode(get_raw_pg(), payload);
+      ::encode(reassert_version, payload);
+      ::encode(oloc, payload);
+      ::encode(pgid, payload);
 
-      ::encode(hobj.oid, payload);
+      ::encode(oid, payload);
 
       __u16 num_ops = ops.size();
       ::encode(num_ops, payload);
       for (unsigned i = 0; i < ops.size(); i++)
         ::encode(ops[i].op, payload);
 
-      ::encode(hobj.snap, payload);
+      ::encode(snapid, payload);
       ::encode(snap_seq, payload);
       ::encode(snaps, payload);
 
       ::encode(retry_attempt, payload);
       ::encode(features, payload);
-      if (reqid.name != entity_name_t() || reqid.tid != 0) {
-	::encode(reqid, payload);
-      } else {
-	// don't include client_inc in the reqid for the legacy v6
-	// encoding or else we'll confuse older peers.
-	::encode(osd_reqid_t(), payload);
-      }
-    } else if (!HAVE_FEATURE(features, RESEND_ON_SPLIT)) {
-      // reordered, v7 message encoding
-      header.version = 7;
-      ::encode(get_raw_pg(), payload);
-      ::encode(osdmap_epoch, payload);
-      ::encode(flags, payload);
-      ::encode(eversion_t(), payload); // reassert_version
       ::encode(reqid, payload);
-      ::encode(client_inc, payload);
-      ::encode(mtime, payload);
-      ::encode(get_object_locator(), payload);
-      ::encode(hobj.oid, payload);
-
-      __u16 num_ops = ops.size();
-      ::encode(num_ops, payload);
-      for (unsigned i = 0; i < ops.size(); i++)
-	::encode(ops[i].op, payload);
-
-      ::encode(hobj.snap, payload);
-      ::encode(snap_seq, payload);
-      ::encode(snaps, payload);
-
-      ::encode(retry_attempt, payload);
-      ::encode(features, payload);
     } else {
-      // latest v8 encoding with hobject_t hash separate from pgid, no
-      // reassert version
+      // new, reordered, v7 message encoding
       header.version = HEAD_VERSION;
       ::encode(pgid, payload);
-      ::encode(hobj.get_hash(), payload);
       ::encode(osdmap_epoch, payload);
       ::encode(flags, payload);
+      ::encode(reassert_version, payload);
       ::encode(reqid, payload);
-      encode_trace(payload, features);
-
-      // -- above decoded up front; below decoded post-dispatch thread --
-
       ::encode(client_inc, payload);
       ::encode(mtime, payload);
-      ::encode(get_object_locator(), payload);
-      ::encode(hobj.oid, payload);
+      ::encode(oloc, payload);
+      ::encode(oid, payload);
 
       __u16 num_ops = ops.size();
       ::encode(num_ops, payload);
       for (unsigned i = 0; i < ops.size(); i++)
 	::encode(ops[i].op, payload);
 
-      ::encode(hobj.snap, payload);
+      ::encode(snapid, payload);
       ::encode(snap_seq, payload);
       ::encode(snaps, payload);
 
@@ -384,48 +343,37 @@ struct ceph_osd_request_head {
     }
   }
 
-  void decode_payload() override {
+  virtual void decode_payload() {
     assert(partial_decode_needed && final_decode_needed);
     p = payload.begin();
 
     // Always keep here the newest version of decoding order/rule
     if (header.version == HEAD_VERSION) {
-      ::decode(pgid, p);      // actual pgid
-      uint32_t hash;
-      ::decode(hash, p); // raw hash value
-      hobj.set_hash(hash);
-      ::decode(osdmap_epoch, p);
-      ::decode(flags, p);
-      ::decode(reqid, p);
-      decode_trace(p);
-    } else if (header.version == 7) {
-      ::decode(pgid.pgid, p);      // raw pgid
-      hobj.set_hash(pgid.pgid.ps());
-      ::decode(osdmap_epoch, p);
-      ::decode(flags, p);
-      eversion_t reassert_version;
-      ::decode(reassert_version, p);
-      ::decode(reqid, p);
+	  ::decode(pgid, p);
+	  ::decode(osdmap_epoch, p);
+	  ::decode(flags, p);
+	  ::decode(reassert_version, p);
+	  ::decode(reqid, p);
     } else if (header.version < 2) {
       // old decode
       ::decode(client_inc, p);
 
       old_pg_t opgid;
       ::decode_raw(opgid, p);
-      pgid.pgid = opgid;
+      pgid = opgid;
 
       __u32 su;
       ::decode(su, p);
+      oloc.pool = pgid.pool();
 
       ::decode(osdmap_epoch, p);
       ::decode(flags, p);
       ::decode(mtime, p);
-      eversion_t reassert_version;
       ::decode(reassert_version, p);
 
       __u32 oid_len;
       ::decode(oid_len, p);
-      ::decode(hobj.snap, p);
+      ::decode(snapid, p);
       ::decode(snap_seq, p);
       __u32 num_snaps;
       ::decode(num_snaps, p);
@@ -437,15 +385,13 @@ struct ceph_osd_request_head {
       for (unsigned i = 0; i < num_ops; i++)
 	::decode(ops[i].op, p);
 
-      decode_nohead(oid_len, hobj.oid.name, p);
+      decode_nohead(oid_len, oid.name, p);
       decode_nohead(num_snaps, snaps, p);
 
       // recalculate pgid hash value
-      pgid.pgid.set_ps(ceph_str_hash(CEPH_STR_HASH_RJENKINS,
-				     hobj.oid.name.c_str(),
-				     hobj.oid.name.length()));
-      hobj.pool = pgid.pgid.pool();
-      hobj.set_hash(pgid.pgid.ps());
+      pgid.set_ps(ceph_str_hash(CEPH_STR_HASH_RJENKINS,
+				oid.name.c_str(),
+				oid.name.length()));
 
       retry_attempt = -1;
       features = 0;
@@ -462,21 +408,19 @@ struct ceph_osd_request_head {
       ::decode(osdmap_epoch, p);
       ::decode(flags, p);
       ::decode(mtime, p);
-      eversion_t reassert_version;
       ::decode(reassert_version, p);
 
-      object_locator_t oloc;
       ::decode(oloc, p);
 
       if (header.version < 3) {
 	old_pg_t opgid;
 	::decode_raw(opgid, p);
-	pgid.pgid = opgid;
+	pgid = opgid;
       } else {
-	::decode(pgid.pgid, p);
+	::decode(pgid, p);
       }
 
-      ::decode(hobj.oid, p);
+      ::decode(oid, p);
 
       //::decode(ops, p);
       __u16 num_ops;
@@ -485,7 +429,7 @@ struct ceph_osd_request_head {
       for (unsigned i = 0; i < num_ops; i++)
         ::decode(ops[i].op, p);
 
-      ::decode(hobj.snap, p);
+      ::decode(snapid, p);
       ::decode(snap_seq, p);
       ::decode(snaps, p);
 
@@ -504,11 +448,6 @@ struct ceph_osd_request_head {
       else
 	reqid = osd_reqid_t();
 
-      hobj.pool = pgid.pgid.pool();
-      hobj.set_key(oloc.key);
-      hobj.nspace = oloc.nspace;
-      hobj.set_hash(pgid.pgid.ps());
-
       OSDOp::split_osd_op_vector_in_data(ops, data);
 
       // we did the full decode
@@ -522,17 +461,16 @@ struct ceph_osd_request_head {
     partial_decode_needed = false;
   }
 
-  bool finish_decode() {
+  void finish_decode() {
     assert(!partial_decode_needed); // partial decoding required
     if (!final_decode_needed)
-      return false; // Message is already final decoded
+      return; // Message is already final decoded
     assert(header.version >= 7);
 
     ::decode(client_inc, p);
     ::decode(mtime, p);
-    object_locator_t oloc;
     ::decode(oloc, p);
-    ::decode(hobj.oid, p);
+    ::decode(oid, p);
 
     __u16 num_ops;
     ::decode(num_ops, p);
@@ -540,7 +478,7 @@ struct ceph_osd_request_head {
     for (unsigned i = 0; i < num_ops; i++)
       ::decode(ops[i].op, p);
 
-    ::decode(hobj.snap, p);
+    ::decode(snapid, p);
     ::decode(snap_seq, p);
     ::decode(snaps, p);
 
@@ -548,37 +486,38 @@ struct ceph_osd_request_head {
 
     ::decode(features, p);
 
-    hobj.pool = pgid.pgid.pool();
-    hobj.set_key(oloc.key);
-    hobj.nspace = oloc.nspace;
-
     OSDOp::split_osd_op_vector_in_data(ops, data);
 
     final_decode_needed = false;
-    return true;
   }
 
-  void clear_buffers() override {
+  void clear_buffers() {
     ops.clear();
   }
 
-  const char *get_type_name() const override { return "osd_op"; }
-  void print(ostream& out) const override {
+  const char *get_type_name() const { return "osd_op"; }
+  void print(ostream& out) const {
     out << "osd_op(";
     if (!partial_decode_needed) {
       out << get_reqid() << ' ';
       out << pgid;
       if (!final_decode_needed) {
 	out << ' ';
-	out << hobj
+	if (!oloc.nspace.empty())
+	  out << oloc.nspace << "/";
+	out << oid
 	    << " " << ops
 	    << " snapc " << get_snap_seq() << "=" << snaps;
+	if (oloc.key.size())
+	  out << " " << oloc;
 	if (is_retry_attempt())
 	  out << " RETRY=" << get_retry_attempt();
       } else {
-	out << " " << get_raw_pg() << " (undecoded)";
+	out << " (undecoded)";
       }
       out << " " << ceph_osd_flag_string(get_flags());
+      if (reassert_version != eversion_t())
+	out << " reassert_version=" << reassert_version;
       out << " e" << osdmap_epoch;
     }
     out << ")";

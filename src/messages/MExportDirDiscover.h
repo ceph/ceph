@@ -40,22 +40,22 @@ class MExportDirDiscover : public Message {
     set_tid(tid);
   }
 private:
-  ~MExportDirDiscover() override {}
+  ~MExportDirDiscover() {}
 
 public:
-  const char *get_type_name() const override { return "ExDis"; }
-  void print(ostream& o) const override {
+  const char *get_type_name() const { return "ExDis"; }
+  void print(ostream& o) const {
     o << "export_discover(" << dirfrag << " " << path << ")";
   }
 
-  void decode_payload() override {
+  virtual void decode_payload() {
     bufferlist::iterator p = payload.begin();
     ::decode(from, p);
     ::decode(dirfrag, p);
     ::decode(path, p);
   }
 
-  void encode_payload(uint64_t features) override {
+  virtual void encode_payload(uint64_t features) {
     ::encode(from, payload);
     ::encode(dirfrag, payload);
     ::encode(path, payload);

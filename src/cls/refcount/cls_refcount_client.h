@@ -2,11 +2,7 @@
 #define CEPH_CLS_REFCOUNT_CLIENT_H
 
 #include "include/types.h"
-
-namespace librados {
-  class ObjectWriteOperation;
-  class IoCtx;
-}
+#include "include/rados/librados.hpp"
 
 /*
  * refcount objclass

@@ -17,7 +17,6 @@
 #endif
 
 #include "include/compat.h"
-#include "include/fs_types.h"
 #include "common/entity_name.h"
 #include "common/errno.h"
 #include "common/safe_io.h"
@@ -28,24 +27,20 @@
 
 #include "Dumper.h"
 
-#define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_mds
 
 #define HEADER_LEN 4096
 
-int Dumper::init(mds_role_t role_)
+int Dumper::init(int rank_)
 {
-  role = role_;
+  rank = rank_;
 
   int r = MDSUtility::init();
   if (r < 0) {
     return r;
   }
 
-  auto fs =  fsmap->get_filesystem(role.fscid);
-  assert(fs != nullptr);
-
-  JournalPointer jp(role.rank, fs->mds_map.get_metadata_pool());
+  JournalPointer jp(rank, mdsmap->get_metadata_pool());
   int jp_load_result = jp.load(objecter);
   if (jp_load_result != 0) {
     std::cerr << "Error loading journal: " << cpp_strerror(jp_load_result) << std::endl;
@@ -79,12 +74,8 @@ int Dumper::dump(const char *dump_file)
 {
   int r = 0;
 
-  auto fs =  fsmap->get_filesystem(role.fscid);
-  assert(fs != nullptr);
-
-  Journaler journaler("dumper", ino, fs->mds_map.get_metadata_pool(),
-                      CEPH_FS_ONDISK_MAGIC, objecter, 0, 0,
-                      &finisher);
+  Journaler journaler(ino, mdsmap->get_metadata_pool(), CEPH_FS_ONDISK_MAGIC,
+                                       objecter, 0, 0, &timer, &finisher);
   r = recover_journal(&journaler);
   if (r) {
     return r;
@@ -103,7 +94,7 @@ int Dumper::dump(const char *dump_file)
     char buf[HEADER_LEN];
     memset(buf, 0, sizeof(buf));
     snprintf(buf, HEADER_LEN, "Ceph mds%d journal dump\n start offset %llu (0x%llx)\n       length %llu (0x%llx)\n    write_pos %llu (0x%llx)\n    format %llu\n    trimmed_pos %llu (0x%llx)\n%c",
-	    role.rank, 
+	    rank, 
 	    (unsigned long long)start, (unsigned long long)start,
 	    (unsigned long long)len, (unsigned long long)len,
 	    (unsigned long long)journaler.last_committed.write_pos, (unsigned long long)journaler.last_committed.write_pos,
@@ -183,9 +174,6 @@ int Dumper::undump(const char *dump_file)
 {
   cout << "undump " << dump_file << std::endl;
   
-  auto fs =  fsmap->get_filesystem(role.fscid);
-  assert(fs != nullptr);
-
   int r = 0;
   int fd = ::open(dump_file, O_RDONLY);
   if (fd < 0) {
@@ -215,7 +203,7 @@ int Dumper::undump(const char *dump_file)
   } else {
     // Old format dump, any untrimmed objects before expire_pos will
     // be discarded as trash.
-    trimmed_pos = start - (start % file_layout_t::get_default().object_size);
+    trimmed_pos = start - (start % g_default_file_layout.fl_object_size);
   }
 
   if (trimmed_pos > start) {
@@ -245,22 +233,22 @@ int Dumper::undump(const char *dump_file)
   h.stream_format = format;
   h.magic = CEPH_FS_ONDISK_MAGIC;
 
-  h.layout = file_layout_t::get_default();
-  h.layout.pool_id = fs->mds_map.get_metadata_pool();
+  h.layout = g_default_file_layout;
+  h.layout.fl_pg_pool = mdsmap->get_metadata_pool();
   
   bufferlist hbl;
   ::encode(h, hbl);
 
   object_t oid = file_object_t(ino, 0);
-  object_locator_t oloc(fs->mds_map.get_metadata_pool());
+  object_locator_t oloc(mdsmap->get_metadata_pool());
   SnapContext snapc;
 
   cout << "writing header " << oid << std::endl;
   C_SaferCond header_cond;
   lock.Lock();
   objecter->write_full(oid, oloc, snapc, hbl,
-		       ceph::real_clock::now(), 0,
-		       &header_cond);
+		       ceph::real_clock::now(g_ceph_context), 0,
+		       NULL, &header_cond);
   lock.Unlock();
 
   r = header_cond.wait();
@@ -278,7 +266,7 @@ int Dumper::undump(const char *dump_file)
    * will be taken care of during normal operation by Journaler's
    * prezeroing behaviour */
   {
-    uint32_t const object_size = h.layout.object_size;
+    uint32_t const object_size = h.layout.fl_object_size;
     assert(object_size > 0);
     uint64_t const last_obj = h.write_pos / object_size;
     uint64_t const purge_count = 2;
@@ -286,7 +274,7 @@ int Dumper::undump(const char *dump_file)
     cout << "Purging " << purge_count << " objects from " << last_obj << std::endl;
     lock.Lock();
     filer.purge_range(ino, &h.layout, snapc, last_obj, purge_count,
-		      ceph::real_clock::now(), 0, &purge_cond);
+		      ceph::real_clock::now(g_ceph_context), 0, &purge_cond);
     lock.Unlock();
     purge_cond.wait();
   }
@@ -306,7 +294,7 @@ int Dumper::undump(const char *dump_file)
     C_SaferCond write_cond;
     lock.Lock();
     filer.write(ino, &h.layout, snapc, pos, l, j,
-		ceph::real_clock::now(), 0, &write_cond);
+		ceph::real_clock::now(g_ceph_context), 0, NULL, &write_cond);
     lock.Unlock();
 
     r = write_cond.wait();

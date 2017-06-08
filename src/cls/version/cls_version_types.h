@@ -31,11 +31,6 @@ struct obj_version {
     ver++;
   }
 
-  void clear() {
-    ver = 0;
-    tag.clear();
-  }
-
   bool empty() {
     return tag.empty();
   }

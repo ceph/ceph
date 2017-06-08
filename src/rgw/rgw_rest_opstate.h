@@ -11,27 +11,26 @@
  * Foundation. See file COPYING.
  *
  */
-
-#ifndef RGW_REST_OPSTATE_H
-#define RGW_REST_OPSTATE_H
+#ifndef CEPH_RGW_REST_OPSTATE_H
+#define CEPH_RGW_REST_OPSTATE_H
 
 class RGWOp_Opstate_List : public RGWRESTOp {
   bool sent_header;
 public:
   RGWOp_Opstate_List() : sent_header(false) {}
-  ~RGWOp_Opstate_List() override {}
+  ~RGWOp_Opstate_List() {}
 
-  int check_caps(RGWUserCaps& caps) override {
+  int check_caps(RGWUserCaps& caps) {
     return caps.check_cap("opstate", RGW_CAP_READ);
   }
-  int verify_permission() override {
-    return check_caps(s->user->caps);
+  int verify_permission() {
+    return check_caps(s->user.caps);
   }
-  void execute() override;
-  void send_response() override;
+  void execute();
+  virtual void send_response();
   virtual void send_response(list<cls_statelog_entry> entries);
   virtual void send_response_end();
-  const string name() override {
+  virtual const string name() {
     return "opstate_list";
   }
 };
@@ -39,13 +38,13 @@ public:
 class RGWOp_Opstate_Set : public RGWRESTOp {
 public:
   RGWOp_Opstate_Set() {}
-  ~RGWOp_Opstate_Set() override {}
+  ~RGWOp_Opstate_Set() {}
 
-  int check_caps(RGWUserCaps& caps) override {
+  int check_caps(RGWUserCaps& caps) {
     return caps.check_cap("opstate", RGW_CAP_WRITE);
   }
-  void execute() override;
-  const string name() override {
+  void execute();
+  virtual const string name() {
     return "set_opstate";
   }
 };
@@ -53,13 +52,13 @@ public:
 class RGWOp_Opstate_Renew : public RGWRESTOp {
 public:
   RGWOp_Opstate_Renew() {}
-  ~RGWOp_Opstate_Renew() override {}
+  ~RGWOp_Opstate_Renew() {}
 
-  int check_caps(RGWUserCaps& caps) override {
+  int check_caps(RGWUserCaps& caps) {
     return caps.check_cap("opstate", RGW_CAP_WRITE);
   }
-  void execute() override;
-  const string name() override {
+  void execute();
+  virtual const string name() {
     return "renew_opstate";
   }
 };
@@ -67,45 +66,44 @@ public:
 class RGWOp_Opstate_Delete : public RGWRESTOp {
 public:
   RGWOp_Opstate_Delete() {}
-  ~RGWOp_Opstate_Delete() override {}
+  ~RGWOp_Opstate_Delete() {}
 
-  int check_caps(RGWUserCaps& caps) override {
+  int check_caps(RGWUserCaps& caps) {
     return caps.check_cap("opstate", RGW_CAP_WRITE);
   }
-  void execute() override;
-  const string name() override {
+  void execute();
+  virtual const string name() {
     return "delete_opstate";
   }
 };
 
 class RGWHandler_Opstate : public RGWHandler_Auth_S3 {
 protected:
-  RGWOp *op_get() override {
+  RGWOp *op_get() {
     return new RGWOp_Opstate_List;
   }
-  RGWOp *op_delete() override {
+  RGWOp *op_delete() {
     return new RGWOp_Opstate_Delete;
   }
-  RGWOp *op_post() override;
+  RGWOp *op_post();
 
-  int read_permissions(RGWOp*) override {
+  int read_permissions(RGWOp*) {
     return 0;
   }
 public:
-  using RGWHandler_Auth_S3::RGWHandler_Auth_S3;
-  ~RGWHandler_Opstate() override = default;
+  RGWHandler_Opstate() : RGWHandler_Auth_S3() {}
+  virtual ~RGWHandler_Opstate() {}
 };
 
 class RGWRESTMgr_Opstate : public RGWRESTMgr {
 public:
-  RGWRESTMgr_Opstate() = default;
-  ~RGWRESTMgr_Opstate() override = default;
+  RGWRESTMgr_Opstate() {}
+  virtual ~RGWRESTMgr_Opstate() {}
 
-  RGWHandler_REST* get_handler(struct req_state*,
-                               const rgw::auth::StrategyRegistry& auth_registry,
-                               const std::string&) override {
-    return new RGWHandler_Opstate(auth_registry);
+  virtual RGWHandler *get_handler(struct req_state *s){
+    return new RGWHandler_Opstate;
   }
 };
 
-#endif /*!RGW_REST_OPSTATE_H*/
+#endif /*!CEPH_RGW_REST_OPSTATE_H*/
+

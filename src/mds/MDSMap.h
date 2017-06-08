@@ -25,7 +25,6 @@
 #include <set>
 #include <map>
 #include <string>
-#include <algorithm>
 
 #include "common/config.h"
 
@@ -71,7 +70,6 @@ extern CompatSet get_mdsmap_compat_set_base(); // pre v0.20
 #define MDS_FEATURE_INCOMPAT_OMAPDIRFRAG CompatSet::Feature(6, "dirfrag is stored in omap")
 #define MDS_FEATURE_INCOMPAT_INLINE CompatSet::Feature(7, "mds uses inline data")
 #define MDS_FEATURE_INCOMPAT_NOANCHOR CompatSet::Feature(8, "no anchor table")
-#define MDS_FEATURE_INCOMPAT_FILE_LAYOUT_V2 CompatSet::Feature(8, "file layout v2")
 
 #define MDS_FS_NAME_DEFAULT "cephfs"
 
@@ -90,6 +88,7 @@ public:
     // States of an MDS rank, and of any MDS daemon holding that rank
     // ==============================================================
     STATE_STOPPED  =   CEPH_MDS_STATE_STOPPED,        // down, once existed, but no subtrees. empty log.  may not be held by a daemon.
+    STATE_ONESHOT_REPLAY = CEPH_MDS_STATE_REPLAYONCE, // up, replaying active node journal to verify it, then shutting down
 
     STATE_CREATING  =  CEPH_MDS_STATE_CREATING,       // up, creating MDS instance (new journal, idalloc..).
     STATE_STARTING  =  CEPH_MDS_STATE_STARTING,       // up, starting prior stopped MDS instance.
@@ -119,6 +118,16 @@ public:
      */
   } DaemonState;
 
+  // indicate startup standby preferences for MDS
+  // of course, if they have a specific rank to follow, they just set that!
+  static const mds_rank_t MDS_NO_STANDBY_PREF; // doesn't have instructions to do anything
+  static const mds_rank_t MDS_STANDBY_ANY;     // is instructed to be standby-replay, may
+                                               // or may not have specific name to follow
+  static const mds_rank_t MDS_STANDBY_NAME;    // standby for a named MDS
+  static const mds_rank_t MDS_MATCHED_ACTIVE;  // has a matched standby, which if up
+                                               // it should follow, but otherwise should
+                                               // be assigned a rank
+
   struct mds_info_t {
     mds_gid_t global_id;
     std::string name;
@@ -130,17 +139,10 @@ public:
     utime_t laggy_since;
     mds_rank_t standby_for_rank;
     std::string standby_for_name;
-    fs_cluster_id_t standby_for_fscid;
-    bool standby_replay;
     std::set<mds_rank_t> export_targets;
-    uint64_t mds_features;
 
-    mds_info_t() : global_id(MDS_GID_NONE), rank(MDS_RANK_NONE), inc(0),
-                   state(STATE_STANDBY), state_seq(0),
-                   standby_for_rank(MDS_RANK_NONE),
-                   standby_for_fscid(FS_CLUSTER_ID_NONE),
-                   standby_replay(false)
-    { }
+    mds_info_t() : global_id(MDS_GID_NONE), rank(MDS_RANK_NONE), inc(0), state(STATE_STANDBY), state_seq(0),
+		   standby_for_rank(MDS_NO_STANDBY_PREF) { }
 
     bool laggy() const { return !(laggy_since == utime_t()); }
     void clear_laggy() { laggy_since = utime_t(); }
@@ -153,7 +155,6 @@ public:
     }
     void decode(bufferlist::iterator& p);
     void dump(Formatter *f) const;
-    void print_summary(ostream &out) const;
     static void generate_test_instances(list<mds_info_t*>& ls);
   private:
     void encode_versioned(bufferlist& bl, uint64_t features) const;
@@ -179,7 +180,7 @@ protected:
   __u32 session_autoclose;
   uint64_t max_file_size;
 
-  std::vector<int64_t> data_pools;  // file data pools available to clients (via an ioctl).  first is the default.
+  std::set<int64_t> data_pools;  // file data pools available to clients (via an ioctl).  first is the default.
   int64_t cas_pool;            // where CAS objects go
   int64_t metadata_pool;       // where fs metadata objects go
   
@@ -194,88 +195,61 @@ protected:
    */
 
   mds_rank_t max_mds; /* The maximum number of active MDSes. Also, the maximum rank. */
-  mds_rank_t standby_count_wanted;
-  string balancer;    /* The name/version of the mantle balancer (i.e. the rados obj name) */
 
   std::set<mds_rank_t> in;              // currently defined cluster
-
+  std::map<mds_rank_t,int32_t> inc;     // most recent incarnation.
   // which ranks are failed, stopped, damaged (i.e. not held by a daemon)
   std::set<mds_rank_t> failed, stopped, damaged;
   std::map<mds_rank_t, mds_gid_t> up;        // who is in those roles
   std::map<mds_gid_t, mds_info_t> mds_info;
 
-  uint8_t ever_allowed_features; //< bitmap of features the cluster has allowed
-  uint8_t explicitly_allowed_features; //< bitmap of features explicitly enabled 
+  bool ever_allowed_snaps; //< the cluster has ever allowed snap creation
+  bool explicitly_allowed_snaps; //< the user has explicitly enabled snap creation
 
   bool inline_data_enabled;
-
-  uint64_t cached_up_features;
 
 public:
   CompatSet compat;
 
   friend class MDSMonitor;
-  friend class Filesystem;
-  friend class FSMap;
 
 public:
   MDSMap() 
     : epoch(0), enabled(false), fs_name(MDS_FS_NAME_DEFAULT),
-      flags(CEPH_MDSMAP_DEFAULTS), last_failure(0),
+      flags(0), last_failure(0),
       last_failure_osd_epoch(0),
       tableserver(0), root(0),
       session_timeout(0),
       session_autoclose(0),
       max_file_size(0),
       cas_pool(-1),
-      metadata_pool(-1),
+      metadata_pool(0),
       max_mds(0),
-      standby_count_wanted(-1),
-      ever_allowed_features(0),
-      explicitly_allowed_features(0),
-      inline_data_enabled(false),
-      cached_up_features(0)
+      ever_allowed_snaps(false),
+      explicitly_allowed_snaps(false),
+      inline_data_enabled(false)
   { }
 
-  bool get_inline_data_enabled() const { return inline_data_enabled; }
+  bool get_inline_data_enabled() { return inline_data_enabled; }
   void set_inline_data_enabled(bool enabled) { inline_data_enabled = enabled; }
 
-  utime_t get_session_timeout() const {
+  utime_t get_session_timeout() {
     return utime_t(session_timeout,0);
   }
-  uint64_t get_max_filesize() const { return max_file_size; }
-  void set_max_filesize(uint64_t m) { max_file_size = m; }
+  uint64_t get_max_filesize() { return max_file_size; }
   
   int get_flags() const { return flags; }
-  bool test_flag(int f) const { return flags & f; }
+  int test_flag(int f) const { return flags & f; }
   void set_flag(int f) { flags |= f; }
   void clear_flag(int f) { flags &= ~f; }
 
-  const std::string &get_fs_name() const {return fs_name;}
-
   void set_snaps_allowed() {
     set_flag(CEPH_MDSMAP_ALLOW_SNAPS);
-    ever_allowed_features |= CEPH_MDSMAP_ALLOW_SNAPS;
-    explicitly_allowed_features |= CEPH_MDSMAP_ALLOW_SNAPS;
+    ever_allowed_snaps = true;
+    explicitly_allowed_snaps = true;
   }
+  bool allows_snaps() { return test_flag(CEPH_MDSMAP_ALLOW_SNAPS); }
   void clear_snaps_allowed() { clear_flag(CEPH_MDSMAP_ALLOW_SNAPS); }
-  bool allows_snaps() const { return test_flag(CEPH_MDSMAP_ALLOW_SNAPS); }
-
-  void set_multimds_allowed() {
-    set_flag(CEPH_MDSMAP_ALLOW_MULTIMDS);
-    ever_allowed_features |= CEPH_MDSMAP_ALLOW_MULTIMDS;
-    explicitly_allowed_features |= CEPH_MDSMAP_ALLOW_MULTIMDS;
-  }
-  void clear_multimds_allowed() { clear_flag(CEPH_MDSMAP_ALLOW_MULTIMDS); }
-  bool allows_multimds() const { return test_flag(CEPH_MDSMAP_ALLOW_MULTIMDS); }
-
-  void set_dirfrags_allowed() {
-    set_flag(CEPH_MDSMAP_ALLOW_DIRFRAGS);
-    ever_allowed_features |= CEPH_MDSMAP_ALLOW_DIRFRAGS;
-    explicitly_allowed_features |= CEPH_MDSMAP_ALLOW_DIRFRAGS;
-  }
-  void clear_dirfrags_allowed() { clear_flag(CEPH_MDSMAP_ALLOW_DIRFRAGS); }
-  bool allows_dirfrags() const { return test_flag(CEPH_MDSMAP_ALLOW_DIRFRAGS); }
 
   epoch_t get_epoch() const { return epoch; }
   void inc_epoch() { epoch++; }
@@ -293,43 +267,31 @@ public:
   mds_rank_t get_max_mds() const { return max_mds; }
   void set_max_mds(mds_rank_t m) { max_mds = m; }
 
-  mds_rank_t get_standby_count_wanted(mds_rank_t standby_daemon_count) const {
-    assert(standby_daemon_count >= 0);
-    std::set<mds_rank_t> s;
-    get_standby_replay_mds_set(s);
-    mds_rank_t standbys_avail = (mds_rank_t)s.size()+standby_daemon_count;
-    mds_rank_t wanted = std::max(0, standby_count_wanted);
-    return wanted > standbys_avail ? wanted - standbys_avail : 0;
-  }
-  void set_standby_count_wanted(mds_rank_t n) { standby_count_wanted = n; }
-  bool check_health(mds_rank_t standby_daemon_count);
-
-  const std::string get_balancer() const { return balancer; }
-  void set_balancer(std::string val) { balancer.assign(val); }
-
   mds_rank_t get_tableserver() const { return tableserver; }
   mds_rank_t get_root() const { return root; }
 
-  const std::vector<int64_t> &get_data_pools() const { return data_pools; }
+  const std::set<int64_t> &get_data_pools() const { return data_pools; }
   int64_t get_first_data_pool() const { return *data_pools.begin(); }
+  int64_t get_cas_pool() const { return cas_pool; }
   int64_t get_metadata_pool() const { return metadata_pool; }
   bool is_data_pool(int64_t poolid) const {
-    return std::binary_search(data_pools.begin(), data_pools.end(), poolid);
+    return data_pools.count(poolid);
   }
 
   bool pool_in_use(int64_t poolid) const {
     return get_enabled() && (is_data_pool(poolid) || metadata_pool == poolid);
   }
 
-  const std::map<mds_gid_t,mds_info_t>& get_mds_info() const { return mds_info; }
-  const mds_info_t& get_mds_info_gid(mds_gid_t gid) const {
-    return mds_info.at(gid);
+  const std::map<mds_gid_t,mds_info_t>& get_mds_info() { return mds_info; }
+  const mds_info_t& get_mds_info_gid(mds_gid_t gid) {
+    assert(mds_info.count(gid));
+    return mds_info[gid];
   }
-  const mds_info_t& get_mds_info(mds_rank_t m) const {
-    assert(up.count(m) && mds_info.count(up.at(m)));
-    return mds_info.at(up.at(m));
+  const mds_info_t& get_mds_info(mds_rank_t m) {
+    assert(up.count(m) && mds_info.count(up[m]));
+    return mds_info[up[m]];
   }
-  mds_gid_t find_mds_gid_by_name(const std::string& s) const {
+  mds_gid_t find_mds_gid_by_name(const std::string& s) {
     for (std::map<mds_gid_t,mds_info_t>::const_iterator p = mds_info.begin();
 	 p != mds_info.end();
 	 ++p) {
@@ -341,17 +303,13 @@ public:
   }
 
   // counts
-  unsigned get_num_in_mds() const {
+  unsigned get_num_in_mds() {
     return in.size();
   }
-  unsigned get_num_up_mds() const {
+  unsigned get_num_up_mds() {
     return up.size();
   }
-  mds_rank_t get_last_in_mds() const {
-    auto p = in.rbegin();
-    return p == in.rend() ? MDS_RANK_NONE : *p;
-  }
-  int get_num_failed_mds() const {
+  int get_num_failed_mds() {
     return failed.size();
   }
   unsigned get_num_mds(int state) const {
@@ -365,10 +323,10 @@ public:
 
   // data pools
   void add_data_pool(int64_t poolid) {
-    data_pools.push_back(poolid);
+    data_pools.insert(poolid);
   }
   int remove_data_pool(int64_t poolid) {
-    std::vector<int64_t>::iterator p = std::find(data_pools.begin(), data_pools.end(), poolid);
+    std::set<int64_t>::iterator p = data_pools.find(poolid);
     if (p == data_pools.end())
       return -ENOENT;
     data_pools.erase(p);
@@ -376,87 +334,127 @@ public:
   }
 
   // sets
-  void get_mds_set(std::set<mds_rank_t>& s) const {
+  void get_mds_set(std::set<mds_rank_t>& s) {
     s = in;
   }
-  void get_up_mds_set(std::set<mds_rank_t>& s) const {
+  void get_up_mds_set(std::set<mds_rank_t>& s) {
     for (std::map<mds_rank_t, mds_gid_t>::const_iterator p = up.begin();
 	 p != up.end();
 	 ++p)
       s.insert(p->first);
   }
-  void get_active_mds_set(std::set<mds_rank_t>& s) const {
+  void get_active_mds_set(std::set<mds_rank_t>& s) {
     get_mds_set(s, MDSMap::STATE_ACTIVE);
   }
-  void get_standby_replay_mds_set(std::set<mds_rank_t>& s) const {
-    get_mds_set(s, MDSMap::STATE_STANDBY_REPLAY);
-  }
-  void get_failed_mds_set(std::set<mds_rank_t>& s) const {
+  void get_failed_mds_set(std::set<mds_rank_t>& s) {
     s = failed;
-  }
-
-  // features
-  uint64_t get_up_features() {
-    if (!cached_up_features) {
-      bool first = true;
-      for (std::map<mds_rank_t, mds_gid_t>::const_iterator p = up.begin();
-	   p != up.end();
-	   ++p) {
-	std::map<mds_gid_t, mds_info_t>::const_iterator q =
-	  mds_info.find(p->second);
-	assert(q != mds_info.end());
-	if (first) {
-	  cached_up_features = q->second.mds_features;
-	  first = false;
-	} else {
-	  cached_up_features &= q->second.mds_features;
-	}
-      }
-    }
-    return cached_up_features;
   }
 
   /**
    * Get MDS ranks which are in but not up.
    */
-  void get_down_mds_set(std::set<mds_rank_t> *s) const
+  void get_down_mds_set(std::set<mds_rank_t> *s)
   {
     assert(s != NULL);
     s->insert(failed.begin(), failed.end());
     s->insert(damaged.begin(), damaged.end());
   }
 
-  int get_failed() const {
+  int get_failed() {
     if (!failed.empty()) return *failed.begin();
     return -1;
   }
-  void get_stopped_mds_set(std::set<mds_rank_t>& s) const {
+  void get_stopped_mds_set(std::set<mds_rank_t>& s) {
     s = stopped;
   }
-  void get_recovery_mds_set(std::set<mds_rank_t>& s) const {
+  void get_recovery_mds_set(std::set<mds_rank_t>& s) {
     s = failed;
-    for (const auto& p : damaged)
-      s.insert(p);
-    for (const auto& p : mds_info)
-      if (p.second.state >= STATE_REPLAY && p.second.state <= STATE_STOPPING)
-	s.insert(p.second.rank);
+    for (std::map<mds_gid_t, mds_info_t>::const_iterator p = mds_info.begin();
+	 p != mds_info.end();
+	 ++p)
+      if (p->second.state >= STATE_REPLAY && p->second.state <= STATE_STOPPING)
+	s.insert(p->second.rank);
   }
-
-  void
-  get_clientreplay_or_active_or_stopping_mds_set(std::set<mds_rank_t>& s) const {
+  void get_clientreplay_or_active_or_stopping_mds_set(std::set<mds_rank_t>& s) {
     for (std::map<mds_gid_t, mds_info_t>::const_iterator p = mds_info.begin();
 	 p != mds_info.end();
 	 ++p)
       if (p->second.state >= STATE_CLIENTREPLAY && p->second.state <= STATE_STOPPING)
 	s.insert(p->second.rank);
   }
-  void get_mds_set(std::set<mds_rank_t>& s, DaemonState state) const {
+  void get_mds_set(std::set<mds_rank_t>& s, DaemonState state) {
     for (std::map<mds_gid_t, mds_info_t>::const_iterator p = mds_info.begin();
 	 p != mds_info.end();
 	 ++p)
       if (p->second.state == state)
 	s.insert(p->second.rank);
   } 
+
+  int get_random_up_mds() {
+    if (up.empty())
+      return -1;
+    std::map<mds_rank_t, mds_gid_t>::iterator p = up.begin();
+    for (int n = rand() % up.size(); n; n--)
+      ++p;
+    return p->first;
+  }
+
+  const mds_info_t* find_by_name(const std::string& name) const {
+    for (std::map<mds_gid_t, mds_info_t>::const_iterator p = mds_info.begin();
+	 p != mds_info.end();
+	 ++p) {
+      if (p->second.name == name)
+	return &p->second;
+    }
+    return NULL;
+  }
+
+  mds_gid_t find_standby_for(mds_rank_t mds, std::string& name) const {
+    std::map<mds_gid_t, mds_info_t>::const_iterator generic_standby
+      = mds_info.end();
+    for (std::map<mds_gid_t, mds_info_t>::const_iterator p = mds_info.begin();
+	 p != mds_info.end();
+	 ++p) {
+      if ((p->second.state != MDSMap::STATE_STANDBY && p->second.state != MDSMap::STATE_STANDBY_REPLAY) ||
+	  p->second.laggy() ||
+	  p->second.rank >= 0)
+	continue;
+      if (p->second.standby_for_rank == mds || (name.length() && p->second.standby_for_name == name))
+	return p->first;
+      if (p->second.standby_for_rank < 0 && p->second.standby_for_name.length() == 0)
+	generic_standby = p;
+    }
+    if (generic_standby != mds_info.end())
+      return generic_standby->first;
+    return MDS_GID_NONE;
+  }
+
+  mds_gid_t find_unused_for(mds_rank_t mds, std::string& name,
+                            bool force_standby_active) const {
+    for (std::map<mds_gid_t,mds_info_t>::const_iterator p = mds_info.begin();
+         p != mds_info.end();
+         ++p) {
+      if (p->second.state != MDSMap::STATE_STANDBY ||
+          p->second.laggy() ||
+          p->second.rank >= 0)
+        continue;
+      if ((p->second.standby_for_rank == MDS_NO_STANDBY_PREF ||
+           p->second.standby_for_rank == MDS_MATCHED_ACTIVE ||
+           (p->second.standby_for_rank == MDS_STANDBY_ANY && force_standby_active))) {
+        return p->first;
+      }
+    }
+    return MDS_GID_NONE;
+  }
+
+  mds_gid_t find_replacement_for(mds_rank_t mds, std::string& name,
+                                 bool force_standby_active) const {
+    const mds_gid_t standby = find_standby_for(mds, name);
+    if (standby)
+      return standby;
+    else
+      return find_unused_for(mds, name, force_standby_active);
+  }
 
   void get_health(list<pair<health_status_t,std::string> >& summary,
 		  list<pair<health_status_t,std::string> > *detail) const;
@@ -518,12 +516,8 @@ public:
     return i->second.state;
   }
 
-  const mds_info_t& get_info(const mds_rank_t m) const {
-    return mds_info.at(up.at(m));
-  }
-  const mds_info_t& get_info_gid(const mds_gid_t gid) const {
-    return mds_info.at(gid);
-  }
+  mds_info_t& get_info(mds_rank_t m) { assert(up.count(m)); return mds_info[up[m]]; }
+  mds_info_t& get_info_gid(mds_gid_t gid) { assert(mds_info.count(gid)); return mds_info[gid]; }
 
   bool is_boot(mds_rank_t m) const { return get_state(m) == STATE_BOOT; }
   bool is_creating(mds_rank_t m) const { return get_state(m) == STATE_CREATING; }
@@ -558,9 +552,12 @@ public:
     return p->second.laggy();
   }
 
-  // degraded = some recovery in process.  fixes active membership and
-  // recovery_set.
-  bool is_degraded() const {
+
+  // cluster states
+  bool is_full() const {
+    return mds_rank_t(in.size()) >= max_mds;
+  }
+  bool is_degraded() const {   // degraded = some recovery in process.  fixes active membership and recovery_set.
     if (!failed.empty() || !damaged.empty())
       return true;
     for (std::map<mds_gid_t,mds_info_t>::const_iterator p = mds_info.begin();
@@ -570,25 +567,25 @@ public:
 	return true;
     return false;
   }
-  bool is_any_failed() const {
+  bool is_any_failed() {
     return failed.size();
   }
-  bool is_resolving() const {
+  bool is_resolving() {
     return
       get_num_mds(STATE_RESOLVE) > 0 &&
       get_num_mds(STATE_REPLAY) == 0 &&
-      failed.empty() && damaged.empty();
+      failed.empty();
   }
-  bool is_rejoining() const {
+  bool is_rejoining() {  
     // nodes are rejoining cache state
     return 
       get_num_mds(STATE_REJOIN) > 0 &&
       get_num_mds(STATE_REPLAY) == 0 &&
       get_num_mds(STATE_RECONNECT) == 0 &&
       get_num_mds(STATE_RESOLVE) == 0 &&
-      failed.empty() && damaged.empty();
+      failed.empty();
   }
-  bool is_stopped() const {
+  bool is_stopped() {
     return up.empty();
   }
 
@@ -597,7 +594,7 @@ public:
    * an MDS daemon's entity_inst_t associated
    * with it.
    */
-  bool have_inst(mds_rank_t m) const {
+  bool have_inst(mds_rank_t m) {
     return up.count(m);
   }
 
@@ -629,18 +626,20 @@ public:
     return false;
   }
   
-  mds_rank_t get_rank_gid(mds_gid_t gid) const {
-    if (mds_info.count(gid)) {
-      return mds_info.at(gid).rank;
-    } else {
-      return MDS_RANK_NONE;
-    }
+  mds_rank_t get_rank_gid(mds_gid_t gid) {
+    if (mds_info.count(gid))
+      return mds_info[gid].rank;
+    return MDS_RANK_NONE;
   }
 
-  int get_inc_gid(mds_gid_t gid) const {
-    auto mds_info_entry = mds_info.find(gid);
-    if (mds_info_entry != mds_info.end())
-      return mds_info_entry->second.inc;
+  int get_inc(mds_rank_t m) {
+    if (up.count(m)) 
+      return mds_info[up[m]].inc;
+    return 0;
+  }
+  int get_inc_gid(mds_gid_t gid) {
+    if (mds_info.count(gid))
+      return mds_info[gid].inc;
     return -1;
   }
   void encode(bufferlist& bl, uint64_t features) const;
@@ -651,18 +650,16 @@ public:
   }
 
 
-  void print(ostream& out) const;
-  void print_summary(Formatter *f, ostream *out) const;
+  void print(ostream& out);
+  void print_summary(Formatter *f, ostream *out);
 
   void dump(Formatter *f) const;
   static void generate_test_instances(list<MDSMap*>& ls);
-
-  static bool state_transition_valid(DaemonState prev, DaemonState next);
 };
 WRITE_CLASS_ENCODER_FEATURES(MDSMap::mds_info_t)
 WRITE_CLASS_ENCODER_FEATURES(MDSMap)
 
-inline ostream& operator<<(ostream &out, const MDSMap &m) {
+inline ostream& operator<<(ostream& out, MDSMap& m) {
   m.print_summary(NULL, &out);
   return out;
 }

@@ -30,7 +30,6 @@ class SequencerPosition;
  */
 class ObjectMap {
 public:
-  CephContext* cct;
   /// Set keys and values from specified map
   virtual int set_keys(
     const ghobject_t &oid,              ///< [in] object containing map
@@ -125,22 +124,8 @@ public:
     ) = 0;
 
 
-  /// Clone keys from oid map to target map
+  /// Clone keys efficiently from oid map to target map
   virtual int clone(
-    const ghobject_t &oid,             ///< [in] object containing map
-    const ghobject_t &target,           ///< [in] target of clone
-    const SequencerPosition *spos=0     ///< [in] sequencer position
-    ) { return 0; }
-
-  /// Rename map because of name change
-  virtual int rename(
-    const ghobject_t &from,             ///< [in] object containing map
-    const ghobject_t &to,               ///< [in] new name
-    const SequencerPosition *spos=0     ///< [in] sequencer position
-    ) { return 0; }
-
-  /// For testing clone keys from oid map to target map using faster but more complex method
-  virtual int legacy_clone(
     const ghobject_t &oid,             ///< [in] object containing map
     const ghobject_t &target,           ///< [in] target of clone
     const SequencerPosition *spos=0     ///< [in] sequencer position
@@ -152,7 +137,7 @@ public:
     const SequencerPosition *spos=0   ///< [in] Sequencer
     ) { return 0; }
 
-  virtual int check(std::ostream &out, bool repair = false) { return 0; }
+  virtual bool check(std::ostream &out) { return true; }
 
   typedef KeyValueDB::GenericIteratorImpl ObjectMapIteratorImpl;
   typedef ceph::shared_ptr<ObjectMapIteratorImpl> ObjectMapIterator;
@@ -161,7 +146,6 @@ public:
   }
 
 
-  ObjectMap(CephContext* cct) : cct(cct) {}
   virtual ~ObjectMap() {}
 };
 

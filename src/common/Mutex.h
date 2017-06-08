@@ -111,7 +111,7 @@ public:
     Mutex &mutex;
 
   public:
-    explicit Locker(Mutex& m) : mutex(m) {
+    Locker(Mutex& m) : mutex(m) {
       mutex.Lock();
     }
     ~Locker() {

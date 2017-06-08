@@ -46,92 +46,92 @@
 
 class ErasureCodeLrc : public ErasureCode {
 public:
-  static const std::string DEFAULT_KML;
+  static const string DEFAULT_KML;
 
   struct Layer {
-    explicit Layer(std::string _chunks_map) : chunks_map(_chunks_map) { }
+    Layer(string _chunks_map) : chunks_map(_chunks_map) { }
     ErasureCodeInterfaceRef erasure_code;
-    std::vector<int> data;
-    std::vector<int> coding;
-    std::vector<int> chunks;
-    std::set<int> chunks_as_set;
-    std::string chunks_map;
+    vector<int> data;
+    vector<int> coding;
+    vector<int> chunks;
+    set<int> chunks_as_set;
+    string chunks_map;
     ErasureCodeProfile profile;
   };
-  std::vector<Layer> layers;
-  std::string directory;
+  vector<Layer> layers;
+  string directory;
   unsigned int chunk_count;
   unsigned int data_chunk_count;
-  std::string ruleset_root;
+  string ruleset_root;
   struct Step {
-    Step(std::string _op, std::string _type, int _n) :
+    Step(string _op, string _type, int _n) :
       op(_op),
       type(_type),
       n(_n) {}
-    std::string op;
-    std::string type;
+    string op;
+    string type;
     int n;
   };
-  std::vector<Step> ruleset_steps;
+  vector<Step> ruleset_steps;
 
-  explicit ErasureCodeLrc(const std::string &dir)
+  ErasureCodeLrc(const std::string &dir)
     : directory(dir),
       chunk_count(0), data_chunk_count(0), ruleset_root("default")
   {
     ruleset_steps.push_back(Step("chooseleaf", "host", 0));
   }
 
-  ~ErasureCodeLrc() override {}
+  virtual ~ErasureCodeLrc() {}
 
-  std::set<int> get_erasures(const std::set<int> &need,
-			const std::set<int> &available) const;
+  set<int> get_erasures(const set<int> &need,
+			const set<int> &available) const;
 
-  int minimum_to_decode(const std::set<int> &want_to_read,
-				const std::set<int> &available,
-				std::set<int> *minimum) override;
+  virtual int minimum_to_decode(const set<int> &want_to_read,
+				const set<int> &available,
+				set<int> *minimum);
 
-  int create_ruleset(const std::string &name,
+  virtual int create_ruleset(const string &name,
 			     CrushWrapper &crush,
-			     std::ostream *ss) const override;
+			     ostream *ss) const;
 
-  unsigned int get_chunk_count() const override {
+  virtual unsigned int get_chunk_count() const {
     return chunk_count;
   }
 
-  unsigned int get_data_chunk_count() const override {
+  virtual unsigned int get_data_chunk_count() const {
     return data_chunk_count;
   }
 
-  unsigned int get_chunk_size(unsigned int object_size) const override;
+  virtual unsigned int get_chunk_size(unsigned int object_size) const;
 
-  int encode_chunks(const std::set<int> &want_to_encode,
-			    std::map<int, bufferlist> *encoded) override;
+  virtual int encode_chunks(const set<int> &want_to_encode,
+			    map<int, bufferlist> *encoded);
 
-  int decode_chunks(const std::set<int> &want_to_read,
-			    const std::map<int, bufferlist> &chunks,
-			    std::map<int, bufferlist> *decoded) override;
+  virtual int decode_chunks(const set<int> &want_to_read,
+			    const map<int, bufferlist> &chunks,
+			    map<int, bufferlist> *decoded);
 
-  int init(ErasureCodeProfile &profile, std::ostream *ss) override;
+  virtual int init(ErasureCodeProfile &profile, ostream *ss);
 
-  virtual int parse(ErasureCodeProfile &profile, std::ostream *ss);
+  virtual int parse(ErasureCodeProfile &profile, ostream *ss);
 
-  int parse_kml(ErasureCodeProfile &profile, std::ostream *ss);
+  int parse_kml(ErasureCodeProfile &profile, ostream *ss);
 
-  int parse_ruleset(ErasureCodeProfile &profile, std::ostream *ss);
+  int parse_ruleset(ErasureCodeProfile &profile, ostream *ss);
 
-  int parse_ruleset_step(std::string description_string,
+  int parse_ruleset_step(string description_string,
 			 json_spirit::mArray description,
-			 std::ostream *ss);
+			 ostream *ss);
 
   int layers_description(const ErasureCodeProfile &profile,
 			 json_spirit::mArray *description,
-			 std::ostream *ss) const;
-  int layers_parse(std::string description_string,
+			 ostream *ss) const;
+  int layers_parse(string description_string,
 		   json_spirit::mArray description,
-		   std::ostream *ss);
-  int layers_init(std::ostream *ss);
-  int layers_sanity_checks(std::string description_string,
-			   std::ostream *ss) const;
+		   ostream *ss);
+  int layers_init(ostream *ss);
+  int layers_sanity_checks(string description_string,
+			   ostream *ss) const;
 };
 
 #endif

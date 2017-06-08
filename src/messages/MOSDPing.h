@@ -24,7 +24,7 @@
 class MOSDPing : public Message {
 
   static const int HEAD_VERSION = 2;
-  static const int COMPAT_VERSION = 2;
+  static const int COMPAT_VERSION = 1;
 
  public:
   enum {
@@ -61,19 +61,20 @@ class MOSDPing : public Message {
     : Message(MSG_OSD_PING, HEAD_VERSION, COMPAT_VERSION)
   {}
 private:
-  ~MOSDPing() override {}
+  ~MOSDPing() {}
 
 public:
-  void decode_payload() override {
+  void decode_payload() {
     bufferlist::iterator p = payload.begin();
     ::decode(fsid, p);
     ::decode(map_epoch, p);
     ::decode(peer_as_of_epoch, p);
     ::decode(op, p);
     ::decode(peer_stat, p);
-    ::decode(stamp, p);
+    if (header.version >= 2)
+      ::decode(stamp, p);
   }
-  void encode_payload(uint64_t features) override {
+  void encode_payload(uint64_t features) {
     ::encode(fsid, payload);
     ::encode(map_epoch, payload);
     ::encode(peer_as_of_epoch, payload);
@@ -82,8 +83,8 @@ public:
     ::encode(stamp, payload);
   }
 
-  const char *get_type_name() const override { return "osd_ping"; }
-  void print(ostream& out) const override {
+  const char *get_type_name() const { return "osd_ping"; }
+  void print(ostream& out) const {
     out << "osd_ping(" << get_op_name(op)
 	<< " e" << map_epoch
       //<< " as_of " << peer_as_of_epoch

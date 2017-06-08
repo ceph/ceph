@@ -1,5 +1,4 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+
 
 #include <string>
 
@@ -25,11 +24,13 @@ static string obj_fingerprint(const string& oid, const char *force_ns = NULL)
 
   string obj_marker = oid.substr(0, pos);
 
-  rgw_obj_key key;
+  string obj_name;
+  string obj_instance;
+  string obj_ns;
 
-  rgw_obj_key::parse_raw_oid(oid.substr(pos + 1), &key);
+  rgw_obj::parse_raw_oid(oid.substr(pos + 1), &obj_name, &obj_instance, &obj_ns);
 
-  if (key.ns.empty()) {
+  if (obj_ns.empty()) {
     return oid;
   }
 
@@ -37,8 +38,10 @@ static string obj_fingerprint(const string& oid, const char *force_ns = NULL)
 
   if (force_ns) {
     rgw_bucket b;
-    rgw_obj new_obj(b, key);
-    s = obj_marker + "_" + new_obj.get_oid();
+    rgw_obj new_obj(b, obj_name);
+    new_obj.set_ns(force_ns);
+    new_obj.set_instance(obj_instance);
+    s = obj_marker + "_" + new_obj.get_object();
   }
 
   /* cut out suffix */
@@ -106,46 +109,13 @@ int RGWOrphanStore::remove_job(const string& job_name)
   return 0;
 }
 
-int RGWOrphanStore::list_jobs(map <string,RGWOrphanSearchState>& job_list)
-{
-  map <string,bufferlist> vals;
-  int MAX_READ=1024;
-  string marker="";
-  int r = 0;
-
-  // loop through all the omap vals from index object, storing them to job_list,
-  // read in batches of 1024, we update the marker every iteration and exit the
-  // loop when we find that total size read out is less than batch size
-  do {
-    r = ioctx.omap_get_vals(oid, marker, MAX_READ, &vals);
-    if (r < 0) {
-      return r;
-    }
-    r = vals.size();
-
-    for (const auto &it : vals) {
-      marker=it.first;
-      RGWOrphanSearchState state;
-      try {
-        bufferlist bl = it.second;
-        ::decode(state, bl);
-      } catch (buffer::error& err) {
-        lderr(store->ctx()) << "ERROR: could not decode buffer" << dendl;
-        return -EIO;
-      }
-      job_list[it.first] = state;
-    }
-  } while (r == MAX_READ);
-
-  return 0;
-}
-
 int RGWOrphanStore::init()
 {
-  rgw_pool& log_pool = store->get_zone_params().log_pool;
-  int r = rgw_init_ioctx(store->get_rados_handle(), log_pool, ioctx);
+  const char *log_pool = store->get_zone_params().log_pool.name.c_str();
+  librados::Rados *rados = store->get_rados_handle();
+  int r = rados->ioctx_create(log_pool, ioctx);
   if (r < 0) {
-    cerr << "ERROR: failed to open log pool (" << log_pool << " ret=" << r << std::endl;
+    cerr << "ERROR: failed to open log pool (" << store->get_zone_params().log_pool.name << " ret=" << r << std::endl;
     return r;
   }
 
@@ -173,8 +143,8 @@ int RGWOrphanStore::read_entries(const string& oid, const string& marker, map<st
 {
 #define MAX_OMAP_GET 100
   int ret = ioctx.omap_get_vals(oid, marker, MAX_OMAP_GET, entries);
-  if (ret < 0 && ret != -ENOENT) {
-    cerr << "ERROR: " << __func__ << "(" << oid << ") returned ret=" << cpp_strerror(-ret) << std::endl;
+  if (ret < 0) {
+    cerr << "ERROR: " << __func__ << "(" << oid << ") returned ret=" << ret << std::endl;
   }
 
   *truncated = (entries->size() == MAX_OMAP_GET);
@@ -202,7 +172,7 @@ int RGWOrphanSearch::init(const string& job_name, RGWOrphanSearchInfo *info) {
     search_info = *info;
     search_info.job_name = job_name;
     search_info.num_shards = (info->num_shards ? info->num_shards : DEFAULT_NUM_SHARDS);
-    search_info.start_time = ceph_clock_now();
+    search_info.start_time = ceph_clock_now(store->ctx());
     search_stage = RGWOrphanSearchStage(ORPHAN_SEARCH_STAGE_INIT);
 
     r = save_state();
@@ -280,11 +250,13 @@ int RGWOrphanSearch::log_oids(map<int, string>& log_shards, map<int, list<string
 
 int RGWOrphanSearch::build_all_oids_index()
 {
+  librados::Rados *rados = store->get_rados_handle();
+
   librados::IoCtx ioctx;
 
-  int ret = rgw_init_ioctx(store->get_rados_handle(), search_info.pool, ioctx);
+  int ret = rados->ioctx_create(search_info.pool.c_str(), ioctx);
   if (ret < 0) {
-    lderr(store->ctx()) << __func__ << ": rgw_init_ioctx() returned ret=" << ret << dendl;
+    lderr(store->ctx()) << __func__ << ": ioctx_create() returned ret=" << ret << dendl;
     return ret;
   }
 
@@ -313,13 +285,13 @@ int RGWOrphanSearch::build_all_oids_index()
       continue;
     }
     string stripped_oid = oid.substr(pos + 1);
-    rgw_obj_key key;
-    if (!rgw_obj_key::parse_raw_oid(stripped_oid, &key)) {
+    string name, instance, ns;
+    if (!rgw_obj::parse_raw_oid(stripped_oid, &name, &instance, &ns)) {
       cout << "cannot parse oid: " << oid << ", skipping" << std::endl;
       continue;
     }
 
-    if (key.ns.empty()) {
+    if (ns.empty()) {
       /* skipping head objects, we don't want to remove these as they are mutable and
        * cleaning them up is racy (can race with object removal and a later recreation)
        */
@@ -418,7 +390,7 @@ int RGWOrphanSearch::handle_stat_result(map<int, list<string> >& oids, RGWRados:
   set<string> obj_oids;
   rgw_bucket& bucket = result.obj.bucket;
   if (!result.has_manifest) { /* a very very old object, or part of a multipart upload during upload */
-    const string loc = bucket.bucket_id + "_" + result.obj.get_oid();
+    const string loc = bucket.bucket_id + "_" + result.obj.get_object();
     obj_oids.insert(obj_fingerprint(loc));
 
     /*
@@ -431,8 +403,8 @@ int RGWOrphanSearch::handle_stat_result(map<int, list<string> >& oids, RGWRados:
 
     RGWObjManifest::obj_iterator miter;
     for (miter = manifest.obj_begin(); miter != manifest.obj_end(); ++miter) {
-      const rgw_raw_obj& loc = miter.get_location().get_raw_obj(store);
-      string s = loc.oid;
+      const rgw_obj& loc = miter.get_location();
+      string s = bucket.bucket_id + "_" + loc.get_object();
       obj_oids.insert(obj_fingerprint(s));
     }
   }
@@ -482,7 +454,7 @@ int RGWOrphanSearch::build_linked_oids_for_bucket(const string& bucket_instance_
     return ret;
   }
 
-  RGWRados::Bucket target(store, bucket_info);
+  RGWRados::Bucket target(store, bucket_info.bucket);
   RGWRados::Bucket::List list_op(&target);
 
   string marker;
@@ -497,7 +469,7 @@ int RGWOrphanSearch::build_linked_oids_for_bucket(const string& bucket_instance_
   int count = 0;
 
   do {
-    vector<rgw_bucket_dir_entry> result;
+    vector<RGWObjEnt> result;
 
 #define MAX_LIST_OBJS_ENTRIES 100
     ret = list_op.list_objects(MAX_LIST_OBJS_ENTRIES, &result, NULL, &truncated);
@@ -506,16 +478,17 @@ int RGWOrphanSearch::build_linked_oids_for_bucket(const string& bucket_instance_
       return -ret;
     }
 
-    for (vector<rgw_bucket_dir_entry>::iterator iter = result.begin(); iter != result.end(); ++iter) {
-      rgw_bucket_dir_entry& entry = *iter;
+    for (vector<RGWObjEnt>::iterator iter = result.begin(); iter != result.end(); ++iter) {
+      RGWObjEnt& entry = *iter;
       if (entry.key.instance.empty()) {
         ldout(store->ctx(), 20) << "obj entry: " << entry.key.name << dendl;
       } else {
         ldout(store->ctx(), 20) << "obj entry: " << entry.key.name << " [" << entry.key.instance << "]" << dendl;
       }
 
-      ldout(store->ctx(), 20) << __func__ << ": entry.key.name=" << entry.key.name << " entry.key.instance=" << entry.key.instance << dendl;
+      ldout(store->ctx(), 20) << __func__ << ": entry.key.name=" << entry.key.name << " entry.key.instance=" << entry.key.instance << " entry.ns=" << entry.ns << dendl;
       rgw_obj obj(bucket_info.bucket, entry.key);
+      obj.set_ns(entry.ns);
 
       RGWRados::Object op_target(store, bucket_info, obj_ctx, obj);
 
@@ -590,11 +563,6 @@ int RGWOrphanSearch::build_linked_oids_index()
       for (map<string, bufferlist>::iterator eiter = entries.begin(); eiter != entries.end(); ++eiter) {
         ldout(store->ctx(), 20) << " indexed entry: " << eiter->first << dendl;
         ret = build_linked_oids_for_bucket(eiter->first, oids);
-        if (ret < 0) {
-          lderr(store->ctx()) << __func__ << ": ERROR: build_linked_oids_for_bucket() indexed entry=" << eiter->first
-                              << " returned ret=" << ret << dendl;
-          return ret;
-        }
       }
 
       search_stage.shard = iter->first;
@@ -610,11 +578,7 @@ int RGWOrphanSearch::build_linked_oids_index()
     return ret;
   }
 
-  ret = save_state();
-  if (ret < 0) {
-    cerr << __func__ << ": ERROR: failed to write state ret=" << ret << std::endl;
-    return ret;
-  }
+  save_state();
 
   return 0;
 }
@@ -677,9 +641,11 @@ int RGWOrphanSearch::compare_oid_indexes()
 
   librados::IoCtx data_ioctx;
 
-  int ret = rgw_init_ioctx(store->get_rados_handle(), search_info.pool, data_ioctx);
+  librados::Rados *rados = store->get_rados_handle();
+
+  int ret = rados->ioctx_create(search_info.pool.c_str(), data_ioctx);
   if (ret < 0) {
-    lderr(store->ctx()) << __func__ << ": rgw_init_ioctx() returned ret=" << ret << dendl;
+    lderr(store->ctx()) << __func__ << ": ioctx_create() returned ret=" << ret << dendl;
     return ret;
   }
 
@@ -761,7 +727,7 @@ int RGWOrphanSearch::run()
       ldout(store->ctx(), 0) << __func__ << "(): building index of all objects in pool" << dendl;
       r = build_all_oids_index();
       if (r < 0) {
-        lderr(store->ctx()) << __func__ << ": ERROR: build_all_objs_index returned ret=" << r << dendl;
+        lderr(store->ctx()) << __func__ << ": ERROR: build_all_objs_index returnr ret=" << r << dendl;
         return r;
       }
 
@@ -777,7 +743,7 @@ int RGWOrphanSearch::run()
       ldout(store->ctx(), 0) << __func__ << "(): building index of all bucket indexes" << dendl;
       r = build_buckets_instance_index();
       if (r < 0) {
-        lderr(store->ctx()) << __func__ << ": ERROR: build_all_objs_index returned ret=" << r << dendl;
+        lderr(store->ctx()) << __func__ << ": ERROR: build_all_objs_index returnr ret=" << r << dendl;
         return r;
       }
 
@@ -794,7 +760,7 @@ int RGWOrphanSearch::run()
       ldout(store->ctx(), 0) << __func__ << "(): building index of all linked objects" << dendl;
       r = build_linked_oids_index();
       if (r < 0) {
-        lderr(store->ctx()) << __func__ << ": ERROR: build_all_objs_index returned ret=" << r << dendl;
+        lderr(store->ctx()) << __func__ << ": ERROR: build_all_objs_index returnr ret=" << r << dendl;
         return r;
       }
 
@@ -809,14 +775,14 @@ int RGWOrphanSearch::run()
     case ORPHAN_SEARCH_STAGE_COMPARE:
       r = compare_oid_indexes();
       if (r < 0) {
-        lderr(store->ctx()) << __func__ << ": ERROR: build_all_objs_index returned ret=" << r << dendl;
+        lderr(store->ctx()) << __func__ << ": ERROR: build_all_objs_index returnr ret=" << r << dendl;
         return r;
       }
 
       break;
 
     default:
-      ceph_abort();
+      assert(0);
   };
 
   return 0;

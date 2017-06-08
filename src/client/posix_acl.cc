@@ -1,32 +1,25 @@
 #include "include/types.h"
 #include <sys/stat.h>
 #include "posix_acl.h"
-#include "UserPerm.h"
-
-#ifndef ACCESSPERMS
-#define ACCESSPERMS (S_IRWXU|S_IRWXG|S_IRWXO)
-#endif
+#include "UserGroups.h"
 
 int posix_acl_check(const void *xattr, size_t size)
 {
   const acl_ea_header *header;
   if (size < sizeof(*header))
-    return -1;
+    return 0;
   header = reinterpret_cast<const acl_ea_header*>(xattr);
   ceph_le32 expected_version;
   expected_version = ACL_EA_VERSION;
   if (header->a_version != expected_version)
-    return -1;
+    return 0;
 
   const acl_ea_entry *entry = header->a_entries;
   size -= sizeof(*header);
   if (size % sizeof(*entry))
-    return -1;
-
-  int count = size / sizeof(*entry);
-  if (count == 0)
     return 0;
 
+  int count = size / sizeof(*entry);
   int state = ACL_USER_OBJ;
   int needs_mask = 0;
   for (int i = 0; i < count; ++i) {
@@ -37,10 +30,10 @@ int posix_acl_check(const void *xattr, size_t size)
         state = ACL_USER;
         break;
       }
-      return -1;
+      return 0;
     case ACL_USER:
       if (state != ACL_USER)
-        return -1;
+        return 0;
       needs_mask = 1;
       break;
     case ACL_GROUP_OBJ:
@@ -48,15 +41,15 @@ int posix_acl_check(const void *xattr, size_t size)
         state = ACL_GROUP;
         break;
       }
-      return -1;
+      return 0;
     case ACL_GROUP:
       if (state != ACL_GROUP)
-        return -1;
+        return 0;
       needs_mask = 1;
       break;
     case ACL_MASK:
       if (state != ACL_GROUP)
-        return -1;
+        return 0;
       state = ACL_OTHER;
       break;
     case ACL_OTHER:
@@ -67,17 +60,17 @@ int posix_acl_check(const void *xattr, size_t size)
       }
       // fall-thru
     default:
-      return -1;
+      return 0;
     }
     ++entry;
   }
 
-  return state == 0 ? count : -1;
+  return state == 0;
 }
 
 int posix_acl_equiv_mode(const void *xattr, size_t size, mode_t *mode_p)
 {
-  if (posix_acl_check(xattr, size) < 0)
+  if (!posix_acl_check(xattr, size))
     return -EINVAL;
 
   int not_equiv = 0;
@@ -118,7 +111,7 @@ int posix_acl_equiv_mode(const void *xattr, size_t size, mode_t *mode_p)
 
 int posix_acl_inherit_mode(bufferptr& acl, mode_t *mode_p)
 {
-  if (posix_acl_check(acl.c_str(), acl.length()) <= 0)
+  if (!posix_acl_check(acl.c_str(), acl.length()))
     return -EIO;
 
   acl_ea_entry *group_entry = NULL, *mask_entry = NULL;
@@ -180,7 +173,7 @@ int posix_acl_inherit_mode(bufferptr& acl, mode_t *mode_p)
 
 int posix_acl_access_chmod(bufferptr& acl, mode_t mode)
 {
-  if (posix_acl_check(acl.c_str(), acl.length()) <= 0)
+  if (!posix_acl_check(acl.c_str(), acl.length()))
     return -EIO;
 
   acl_ea_entry *group_entry = NULL, *mask_entry = NULL;
@@ -220,9 +213,9 @@ int posix_acl_access_chmod(bufferptr& acl, mode_t mode)
 }
 
 int posix_acl_permits(const bufferptr& acl, uid_t i_uid, gid_t i_gid,
-			 const UserPerm& perms, unsigned want)
+			 uid_t uid, UserGroups& groups, unsigned want)
 {
-  if (posix_acl_check(acl.c_str(), acl.length()) < 0)
+  if (!posix_acl_check(acl.c_str(), acl.length()))
     return -EIO;
 
   const acl_ea_header *header = reinterpret_cast<const acl_ea_header*>(acl.c_str());
@@ -238,19 +231,19 @@ int posix_acl_permits(const bufferptr& acl, uid_t i_uid, gid_t i_gid,
     perm = entry->e_perm;
     switch(tag) {
       case ACL_USER_OBJ:
-	if (i_uid == perms.uid())
+	if (i_uid == uid)
 	  goto check_perm;
 	break;
       case ACL_USER:
 	id = entry->e_id;
-	if (id == perms.uid())
+	if (id == uid)
 	  goto check_mask;
 	break;
       case ACL_GROUP_OBJ:
 	/* fall through */
       case ACL_GROUP:
 	id = (tag == ACL_GROUP_OBJ) ? i_gid : entry->e_id;
-	if (perms.gid_in_groups(id)) {
+	if (groups.is_in(id)) {
 	  group_found = 1;
 	  if ((perm & want) == want)
 	    goto check_mask;

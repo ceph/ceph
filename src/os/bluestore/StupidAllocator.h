@@ -4,20 +4,21 @@
 #ifndef CEPH_OS_BLUESTORE_STUPIDALLOCATOR_H
 #define CEPH_OS_BLUESTORE_STUPIDALLOCATOR_H
 
-#include <mutex>
-
 #include "Allocator.h"
-#include "include/btree_interval_set.h"
-#include "os/bluestore/bluestore_types.h"
+#include "include/interval_set.h"
+#include "common/Mutex.h"
 
 class StupidAllocator : public Allocator {
-  CephContext* cct;
-  std::mutex lock;
+  Mutex lock;
 
   int64_t num_free;     ///< total bytes in freelist
+  int64_t num_uncommitted;
+  int64_t num_committing;
   int64_t num_reserved; ///< reserved bytes
 
-  std::vector<btree_interval_set<uint64_t> > free;        ///< leading-edge copy
+  vector<interval_set<uint64_t> > free;        ///< leading-edge copy
+  interval_set<uint64_t> uncommitted; ///< released but not yet usable
+  interval_set<uint64_t> committing;  ///< released but not yet usable
 
   uint64_t last_alloc;
 
@@ -25,31 +26,30 @@ class StupidAllocator : public Allocator {
   void _insert_free(uint64_t offset, uint64_t len);
 
 public:
-  StupidAllocator(CephContext* cct);
-  ~StupidAllocator() override;
+  StupidAllocator();
+  ~StupidAllocator();
 
-  int reserve(uint64_t need) override;
-  void unreserve(uint64_t unused) override;
+  int reserve(uint64_t need);
+  void unreserve(uint64_t unused);
 
-  int64_t allocate(
-    uint64_t want_size, uint64_t alloc_unit, uint64_t max_alloc_size,
-    int64_t hint, mempool::bluestore_alloc::vector<AllocExtent> *extents) override;
-
-  int64_t allocate_int(
-    uint64_t want_size, uint64_t alloc_unit, int64_t hint,
+  int allocate(
+    uint64_t need_size, uint64_t alloc_unit, int64_t hint,
     uint64_t *offset, uint32_t *length);
 
-  void release(
-    uint64_t offset, uint64_t length) override;
+  int release(
+    uint64_t offset, uint64_t length);
 
-  uint64_t get_free() override;
+  void commit_start();
+  void commit_finish();
 
-  void dump() override;
+  uint64_t get_free();
 
-  void init_add_free(uint64_t offset, uint64_t length) override;
-  void init_rm_free(uint64_t offset, uint64_t length) override;
+  void dump(ostream& out);
 
-  void shutdown() override;
+  void init_add_free(uint64_t offset, uint64_t length);
+  void init_rm_free(uint64_t offset, uint64_t length);
+
+  void shutdown();
 };
 
 #endif

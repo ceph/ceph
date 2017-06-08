@@ -15,12 +15,10 @@
 #ifndef CEPH_CEPHXCLIENTHANDLER_H
 #define CEPH_CEPHXCLIENTHANDLER_H
 
-#include "auth/AuthClientHandler.h"
+#include "../AuthClientHandler.h"
 #include "CephxProtocol.h"
-#include "auth/RotatingKeyRing.h"
 
 class CephContext;
-class KeyRing;
 
 class CephxClientHandler : public AuthClientHandler {
   bool starting;
@@ -47,30 +45,29 @@ public:
     reset();
   }
 
-  void reset() override {
+  void reset() {
     RWLock::WLocker l(lock);
     starting = true;
     server_challenge = 0;
   }
-  void prepare_build_request() override;
-  int build_request(bufferlist& bl) const override;
-  int handle_response(int ret, bufferlist::iterator& iter) override;
-  bool build_rotating_request(bufferlist& bl) const override;
+  void prepare_build_request();
+  int build_request(bufferlist& bl) const;
+  int handle_response(int ret, bufferlist::iterator& iter);
+  bool build_rotating_request(bufferlist& bl) const;
 
-  int get_protocol() const override { return CEPH_AUTH_CEPHX; }
+  int get_protocol() const { return CEPH_AUTH_CEPHX; }
 
-  AuthAuthorizer *build_authorizer(uint32_t service_id) const override;
+  AuthAuthorizer *build_authorizer(uint32_t service_id) const;
 
-  bool need_tickets() override;
+  bool need_tickets();
 
-  void set_global_id(uint64_t id) override {
+  void set_global_id(uint64_t id) {
     RWLock::WLocker l(lock);
     global_id = id;
     tickets.global_id = id;
   }
 private:
-  void validate_tickets() override;
-  bool _need_tickets() const;
+  void validate_tickets();
 };
 
 #endif

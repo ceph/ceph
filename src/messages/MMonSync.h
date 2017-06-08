@@ -71,9 +71,9 @@ public:
       last_committed(0)
   { }
 
-  const char *get_type_name() const override { return "mon_sync"; }
+  const char *get_type_name() const { return "mon_sync"; }
 
-  void print(ostream& out) const override {
+  void print(ostream& out) const {
     out << "mon_sync(" << get_opname(op);
     if (cookie)
       out << " cookie " << cookie;
@@ -86,17 +86,17 @@ public:
     out << ")";
   }
 
-  void encode_payload(uint64_t features) override {
+  void encode_payload(uint64_t features) {
     ::encode(op, payload);
     ::encode(cookie, payload);
     ::encode(last_committed, payload);
     ::encode(last_key.first, payload);
     ::encode(last_key.second, payload);
     ::encode(chunk_bl, payload);
-    ::encode(reply_to, payload, features);
+    ::encode(reply_to, payload);
   }
 
-  void decode_payload() override {
+  void decode_payload() {
     bufferlist::iterator p = payload.begin();
     ::decode(op, p);
     ::decode(cookie, p);

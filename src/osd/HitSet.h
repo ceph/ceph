@@ -21,6 +21,7 @@
 #include "include/unordered_set.h"
 #include "common/bloom_filter.hpp"
 #include "common/hobject.h"
+#include "common/Formatter.h"
 
 /**
  * generic container for a HitSet
@@ -91,7 +92,7 @@ public:
     };
 
     Params()  {}
-    explicit Params(Impl *i) : impl(i) {}
+    Params(Impl *i) : impl(i) {}
     virtual ~Params() {}
 
     boost::scoped_ptr<Params::Impl> impl;
@@ -114,8 +115,8 @@ public:
   };
 
   HitSet() : impl(NULL), sealed(false) {}
-  explicit HitSet(Impl *i) : impl(i), sealed(false) {}
-  explicit HitSet(const HitSet::Params& params);
+  HitSet(Impl *i) : impl(i), sealed(false) {}
+  HitSet(const HitSet::Params& params);
 
   HitSet(const HitSet& o) {
     sealed = o.sealed;
@@ -182,10 +183,10 @@ class ExplicitHashHitSet : public HitSet::Impl {
 public:
   class Params : public HitSet::Params::Impl {
   public:
-    HitSet::impl_type_t get_type() const override {
+    virtual HitSet::impl_type_t get_type() const {
       return HitSet::TYPE_EXPLICIT_HASH;
     }
-    HitSet::Impl *get_new_impl() const override {
+    virtual HitSet::Impl *get_new_impl() const {
       return new ExplicitHashHitSet;
     }
     static void generate_test_instances(list<Params*>& o) {
@@ -194,46 +195,52 @@ public:
   };
 
   ExplicitHashHitSet() : count(0) {}
-  explicit ExplicitHashHitSet(const ExplicitHashHitSet::Params *p) : count(0) {}
+  ExplicitHashHitSet(const ExplicitHashHitSet::Params *p) : count(0) {}
   ExplicitHashHitSet(const ExplicitHashHitSet &o) : count(o.count),
       hits(o.hits) {}
 
-  HitSet::Impl *clone() const override {
+  HitSet::Impl *clone() const {
     return new ExplicitHashHitSet(*this);
   }
 
-  HitSet::impl_type_t get_type() const override {
+  HitSet::impl_type_t get_type() const {
     return HitSet::TYPE_EXPLICIT_HASH;
   }
-  bool is_full() const override {
+  bool is_full() const {
     return false;
   }
-  void insert(const hobject_t& o) override {
+  void insert(const hobject_t& o) {
     hits.insert(o.get_hash());
     ++count;
   }
-  bool contains(const hobject_t& o) const override {
+  bool contains(const hobject_t& o) const {
     return hits.count(o.get_hash());
   }
-  unsigned insert_count() const override {
+  unsigned insert_count() const {
     return count;
   }
-  unsigned approx_unique_insert_count() const override {
+  unsigned approx_unique_insert_count() const {
     return hits.size();
   }
-  void encode(bufferlist &bl) const override {
+  void encode(bufferlist &bl) const {
     ENCODE_START(1, 1, bl);
     ::encode(count, bl);
     ::encode(hits, bl);
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::iterator &bl) override {
+  void decode(bufferlist::iterator &bl) {
     DECODE_START(1, bl);
     ::decode(count, bl);
     ::decode(hits, bl);
     DECODE_FINISH(bl);
   }
-  void dump(Formatter *f) const override;
+  void dump(Formatter *f) const {
+    f->dump_unsigned("insert_count", count);
+    f->open_array_section("hash_set");
+    for (ceph::unordered_set<uint32_t>::const_iterator p = hits.begin(); p != hits.end(); ++p)
+      f->dump_unsigned("hash", *p);
+    f->close_section();
+  }
   static void generate_test_instances(list<ExplicitHashHitSet*>& o) {
     o.push_back(new ExplicitHashHitSet);
     o.push_back(new ExplicitHashHitSet);
@@ -253,10 +260,10 @@ class ExplicitObjectHitSet : public HitSet::Impl {
 public:
   class Params : public HitSet::Params::Impl {
   public:
-    HitSet::impl_type_t get_type() const override {
+    virtual HitSet::impl_type_t get_type() const {
       return HitSet::TYPE_EXPLICIT_OBJECT;
     }
-    HitSet::Impl *get_new_impl() const override {
+    virtual HitSet::Impl *get_new_impl() const {
       return new ExplicitObjectHitSet;
     }
     static void generate_test_instances(list<Params*>& o) {
@@ -265,46 +272,55 @@ public:
   };
 
   ExplicitObjectHitSet() : count(0) {}
-  explicit ExplicitObjectHitSet(const ExplicitObjectHitSet::Params *p) : count(0) {}
+  ExplicitObjectHitSet(const ExplicitObjectHitSet::Params *p) : count(0) {}
   ExplicitObjectHitSet(const ExplicitObjectHitSet &o) : count(o.count),
       hits(o.hits) {}
 
-  HitSet::Impl *clone() const override {
+  HitSet::Impl *clone() const {
     return new ExplicitObjectHitSet(*this);
   }
 
-  HitSet::impl_type_t get_type() const override {
+  HitSet::impl_type_t get_type() const {
     return HitSet::TYPE_EXPLICIT_OBJECT;
   }
-  bool is_full() const override {
+  bool is_full() const {
     return false;
   }
-  void insert(const hobject_t& o) override {
+  void insert(const hobject_t& o) {
     hits.insert(o);
     ++count;
   }
-  bool contains(const hobject_t& o) const override {
+  bool contains(const hobject_t& o) const {
     return hits.count(o);
   }
-  unsigned insert_count() const override {
+  unsigned insert_count() const {
     return count;
   }
-  unsigned approx_unique_insert_count() const override {
+  unsigned approx_unique_insert_count() const {
     return hits.size();
   }
-  void encode(bufferlist &bl) const override {
+  void encode(bufferlist &bl) const {
     ENCODE_START(1, 1, bl);
     ::encode(count, bl);
     ::encode(hits, bl);
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::iterator &bl) override {
+  void decode(bufferlist::iterator &bl) {
     DECODE_START(1, bl);
     ::decode(count, bl);
     ::decode(hits, bl);
     DECODE_FINISH(bl);
   }
-  void dump(Formatter *f) const override;
+  void dump(Formatter *f) const {
+    f->dump_unsigned("insert_count", count);
+    f->open_array_section("set");
+    for (ceph::unordered_set<hobject_t>::const_iterator p = hits.begin(); p != hits.end(); ++p) {
+      f->open_object_section("object");
+      p->dump(f);
+      f->close_section();
+    }
+    f->close_section();
+  }
   static void generate_test_instances(list<ExplicitObjectHitSet*>& o) {
     o.push_back(new ExplicitObjectHitSet);
     o.push_back(new ExplicitObjectHitSet);
@@ -322,16 +338,16 @@ class BloomHitSet : public HitSet::Impl {
   compressible_bloom_filter bloom;
 
 public:
-  HitSet::impl_type_t get_type() const override {
+  HitSet::impl_type_t get_type() const {
     return HitSet::TYPE_BLOOM;
   }
 
   class Params : public HitSet::Params::Impl {
   public:
-    HitSet::impl_type_t get_type() const override {
+    virtual HitSet::impl_type_t get_type() const {
       return HitSet::TYPE_BLOOM;
     }
-    HitSet::Impl *get_new_impl() const override {
+    virtual HitSet::Impl *get_new_impl() const {
       return new BloomHitSet;
     }
 
@@ -347,7 +363,7 @@ public:
       : fpp_micro(o.fpp_micro),
 	target_size(o.target_size),
 	seed(o.seed) {}
-    ~Params() override {}
+    ~Params() {}
 
     double get_fpp() const {
       return (double)fpp_micro / 1000000.0;
@@ -356,22 +372,26 @@ public:
       fpp_micro = (unsigned)(llrintl(f * (double)1000000.0));
     }
 
-    void encode(bufferlist& bl) const override {
+    void encode(bufferlist& bl) const {
       ENCODE_START(1, 1, bl);
       ::encode(fpp_micro, bl);
       ::encode(target_size, bl);
       ::encode(seed, bl);
       ENCODE_FINISH(bl);
     }
-    void decode(bufferlist::iterator& bl) override {
+    void decode(bufferlist::iterator& bl) {
       DECODE_START(1, bl);
       ::decode(fpp_micro, bl);
       ::decode(target_size, bl);
       ::decode(seed, bl);
       DECODE_FINISH(bl);
     }
-    void dump(Formatter *f) const override;
-    void dump_stream(ostream& o) const override {
+    void dump(Formatter *f) const {
+      f->dump_float("false_positive_probability", get_fpp());
+      f->dump_int("target_size", target_size);
+      f->dump_int("seed", seed);
+    }
+    void dump_stream(ostream& o) const {
       o << "false_positive_probability: "
 	<< get_fpp() << ", target_size: " << target_size
 	<< ", seed: " << seed;
@@ -389,7 +409,7 @@ public:
   BloomHitSet(unsigned inserts, double fpp, int seed)
     : bloom(inserts, fpp, seed)
   {}
-  explicit BloomHitSet(const BloomHitSet::Params *p) : bloom(p->target_size,
+  BloomHitSet(const BloomHitSet::Params *p) : bloom(p->target_size,
                                                     p->get_fpp(),
                                                     p->seed)
   {}
@@ -402,44 +422,48 @@ public:
     this->decode(bli);
   }
 
-  HitSet::Impl *clone() const override {
+  HitSet::Impl *clone() const {
     return new BloomHitSet(*this);
   }
 
-  bool is_full() const override {
+  bool is_full() const {
     return bloom.is_full();
   }
 
-  void insert(const hobject_t& o) override {
+  void insert(const hobject_t& o) {
     bloom.insert(o.get_hash());
   }
-  bool contains(const hobject_t& o) const override {
+  bool contains(const hobject_t& o) const {
     return bloom.contains(o.get_hash());
   }
-  unsigned insert_count() const override {
+  unsigned insert_count() const {
     return bloom.element_count();
   }
-  unsigned approx_unique_insert_count() const override {
+  unsigned approx_unique_insert_count() const {
     return bloom.approx_unique_element_count();
   }
-  void seal() override {
+  void seal() {
     // aim for a density of .5 (50% of bit set)
     double pc = (double)bloom.density() * 2.0;
     if (pc < 1.0)
       bloom.compress(pc);
   }
 
-  void encode(bufferlist &bl) const override {
+  void encode(bufferlist &bl) const {
     ENCODE_START(1, 1, bl);
     ::encode(bloom, bl);
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::iterator &bl) override {
+  void decode(bufferlist::iterator &bl) {
     DECODE_START(1, bl);
     ::decode(bloom, bl);
     DECODE_FINISH(bl);
   }
-  void dump(Formatter *f) const override;
+  void dump(Formatter *f) const {
+    f->open_object_section("bloom_filter");
+    bloom.dump(f);
+    f->close_section();
+  }
   static void generate_test_instances(list<BloomHitSet*>& o) {
     o.push_back(new BloomHitSet);
     o.push_back(new BloomHitSet(10, .1, 1));

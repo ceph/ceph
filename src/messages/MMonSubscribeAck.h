@@ -28,20 +28,20 @@ struct MMonSubscribeAck : public Message {
   MMonSubscribeAck(uuid_d& f, int i) : Message(CEPH_MSG_MON_SUBSCRIBE_ACK),
 				       interval(i), fsid(f) { }
 private:
-  ~MMonSubscribeAck() override {}
+  ~MMonSubscribeAck() {}
 
 public:
-  const char *get_type_name() const override { return "mon_subscribe_ack"; }
-  void print(ostream& o) const override {
+  const char *get_type_name() const { return "mon_subscribe_ack"; }
+  void print(ostream& o) const {
     o << "mon_subscribe_ack(" << interval << "s)";
   }
 
-  void decode_payload() override {
+  void decode_payload() {
     bufferlist::iterator p = payload.begin();
     ::decode(interval, p);
     ::decode(fsid, p);
   }
-  void encode_payload(uint64_t features) override {
+  void encode_payload(uint64_t features) {
     ::encode(interval, payload);
     ::encode(fsid, payload);
   }

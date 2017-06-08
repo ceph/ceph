@@ -12,15 +12,22 @@
  *
  */
 
+#include "include/int_types.h"
 #include "common/config.h"
+#include "common/ceph_context.h"
 #include "ceph_crypto.h"
+#include "auth/Crypto.h"
+
+#include <pthread.h>
+#include <stdlib.h>
+
 
 #ifdef USE_CRYPTOPP
 void ceph::crypto::init(CephContext *cct)
 {
 }
 
-void ceph::crypto::shutdown(bool)
+void ceph::crypto::shutdown()
 {
 }
 
@@ -29,15 +36,10 @@ ceph::crypto::HMACSHA1::~HMACSHA1()
 {
 }
 
-ceph::crypto::HMACSHA256::~HMACSHA256()
-{
-}
-
 #elif defined(USE_NSS)
 
 // for SECMOD_RestartModules()
 #include <secmod.h>
-#include <nspr.h>
 
 static pthread_mutex_t crypto_init_mutex = PTHREAD_MUTEX_INITIALIZER;
 static uint32_t crypto_refs = 0;
@@ -71,22 +73,19 @@ void ceph::crypto::init(CephContext *cct)
   assert(crypto_context != NULL);
 }
 
-void ceph::crypto::shutdown(bool shared)
+void ceph::crypto::shutdown()
 {
   pthread_mutex_lock(&crypto_init_mutex);
   assert(crypto_refs > 0);
   if (--crypto_refs == 0) {
     NSS_ShutdownContext(crypto_context);
-    if (!shared) {
-      PR_Cleanup();
-    }
     crypto_context = NULL;
     crypto_init_pid = 0;
   }
   pthread_mutex_unlock(&crypto_init_mutex);
 }
 
-ceph::crypto::HMAC::~HMAC()
+ceph::crypto::HMACSHA1::~HMACSHA1()
 {
   PK11_DestroyContext(ctx, PR_TRUE);
   PK11_FreeSymKey(symkey);

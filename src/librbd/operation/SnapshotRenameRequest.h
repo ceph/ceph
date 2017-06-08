@@ -5,6 +5,7 @@
 #define CEPH_LIBRBD_OPERATION_SNAPSHOT_RENAME_REQUEST_H
 
 #include "librbd/operation/Request.h"
+#include <iosfwd>
 #include <string>
 
 class Context;
@@ -41,11 +42,13 @@ public:
   SnapshotRenameRequest(ImageCtxT &image_ctx, Context *on_finish,
                         uint64_t snap_id, const std::string &snap_name);
 
-  journal::Event create_event(uint64_t op_tid) const override;
+  virtual journal::Event create_event() const {
+    return journal::SnapRenameEvent(0, m_snap_id, m_snap_name);
+  }
 
 protected:
-  void send_op() override;
-  bool should_complete(int r) override;
+  virtual void send_op();
+  virtual bool should_complete(int r);
 
 private:
   uint64_t m_snap_id;

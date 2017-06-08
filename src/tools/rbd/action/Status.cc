@@ -20,6 +20,7 @@ namespace po = boost::program_options;
 static int do_show_status(librados::IoCtx &io_ctx, librbd::Image &image,
                           const char *imgname, Formatter *f)
 {
+  librbd::image_info_t info;
   uint8_t old_format;
   int r;
   std::string header_oid;
@@ -33,13 +34,16 @@ static int do_show_status(librados::IoCtx &io_ctx, librbd::Image &image,
     header_oid = imgname;
     header_oid += RBD_SUFFIX;
   } else {
-    std::string id;
-    r = image.get_id(&id);
-    if (r < 0) {
+    r = image.stat(info, sizeof(info));
+    if (r < 0)
       return r;
-    }
 
-    header_oid = RBD_HEADER_PREFIX + id;
+    char prefix[RBD_MAX_BLOCK_NAME_SIZE + 1];
+    strncpy(prefix, info.block_name_prefix, RBD_MAX_BLOCK_NAME_SIZE);
+    prefix[RBD_MAX_BLOCK_NAME_SIZE] = '\0';
+
+    header_oid = RBD_HEADER_PREFIX;
+    header_oid.append(prefix + strlen(RBD_DATA_PREFIX));
   }
 
   r = io_ctx.list_watchers(header_oid, &watchers);
@@ -50,7 +54,7 @@ static int do_show_status(librados::IoCtx &io_ctx, librbd::Image &image,
     f->open_object_section("status");
 
   if (f) {
-    f->open_array_section("watchers");
+    f->open_object_section("watchers");
     for (std::list<obj_watch_t>::iterator i = watchers.begin(); i != watchers.end(); ++i) {
       f->open_object_section("watcher");
       f->dump_string("address", i->addr);
@@ -92,7 +96,7 @@ int execute(const po::variables_map &vm) {
   std::string snap_name;
   int r = utils::get_pool_image_snapshot_names(
     vm, at::ARGUMENT_MODIFIER_NONE, &arg_index, &pool_name, &image_name,
-    &snap_name, utils::SNAPSHOT_PRESENCE_NONE, utils::SPEC_VALIDATION_NONE);
+    &snap_name, utils::SNAPSHOT_PRESENCE_NONE);
   if (r < 0) {
     return r;
   }
@@ -106,7 +110,7 @@ int execute(const po::variables_map &vm) {
   librados::Rados rados;
   librados::IoCtx io_ctx;
   librbd::Image image;
-  r = utils::init_and_open_image(pool_name, image_name, "", "", true, &rados,
+  r = utils::init_and_open_image(pool_name, image_name, "", true, &rados,
                                  &io_ctx, &image);
   if (r < 0) {
     return r;

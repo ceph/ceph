@@ -75,9 +75,8 @@ int main(int argc, const char **argv)
 	argv_to_vec(argc, argv, args);
 	env_to_vec(args);
 
-	auto cct = global_init(NULL, args,
-			       CEPH_ENTITY_TYPE_ANY,
-			       CODE_ENVIRONMENT_UTILITY, 0);
+	global_init(NULL, args,
+		    CEPH_ENTITY_TYPE_ANY, CODE_ENVIRONMENT_UTILITY, 0);
 
 	for (arg_iter = args.begin(); arg_iter != args.end();) {
 	  if (ceph_argparse_witharg(args, arg_iter, &val, "--addr",
@@ -118,8 +117,7 @@ int main(int argc, const char **argv)
 	messenger = new XioMessenger(g_ceph_context,
 				     entity_name_t::MON(-1),
 				     "xio_client",
-				     0 /* nonce */,
-				     0 /* cflags */,
+				     0 /* nonce */, XIO_ALL_FEATURES,
 				     dstrategy);
 
 	// enable timing prints
@@ -131,7 +129,7 @@ int main(int argc, const char **argv)
 	if (n_dsize)
 	  (void) static_cast<XioMessenger*>(messenger)->pool_hint(n_dsize);
 
-	messenger->set_default_policy(Messenger::Policy::lossy_client(0));
+	messenger->set_default_policy(Messenger::Policy::lossy_client(0, 0));
 
 	string dest_str = "tcp://";
 	dest_str += addr;

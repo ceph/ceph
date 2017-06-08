@@ -9,7 +9,6 @@ const char *ceph_entity_type_name(int type)
 	case CEPH_ENTITY_TYPE_MDS: return "mds";
 	case CEPH_ENTITY_TYPE_OSD: return "osd";
 	case CEPH_ENTITY_TYPE_MON: return "mon";
-	case CEPH_ENTITY_TYPE_MGR: return "mgr";
 	case CEPH_ENTITY_TYPE_CLIENT: return "client";
 	case CEPH_ENTITY_TYPE_AUTH: return "auth";
 	default: return "unknown";
@@ -38,95 +37,9 @@ const char *ceph_osd_state_name(int s)
 		return "autoout";
 	case CEPH_OSD_NEW:
 		return "new";
-	case CEPH_OSD_FULL:
-		return "full";
-	case CEPH_OSD_NEARFULL:
-		return "nearfull";
-	case CEPH_OSD_BACKFILLFULL:
-		return "backfillfull";
-        case CEPH_OSD_DESTROYED:
-                return "destroyed";
 	default:
 		return "???";
-	}
-}
-
-const char *ceph_release_name(int r)
-{
-	switch (r) {
-	case CEPH_RELEASE_ARGONAUT:
-		return "argonaut";
-	case CEPH_RELEASE_BOBTAIL:
-		return "bobtail";
-	case CEPH_RELEASE_CUTTLEFISH:
-		return "cuttlefish";
-	case CEPH_RELEASE_DUMPLING:
-		return "dumpling";
-	case CEPH_RELEASE_EMPEROR:
-		return "emperor";
-	case CEPH_RELEASE_FIREFLY:
-		return "firefly";
-	case CEPH_RELEASE_GIANT:
-		return "giant";
-	case CEPH_RELEASE_HAMMER:
-		return "hammer";
-	case CEPH_RELEASE_INFERNALIS:
-		return "infernalis";
-	case CEPH_RELEASE_JEWEL:
-		return "jewel";
-	case CEPH_RELEASE_KRAKEN:
-		return "kraken";
-	case CEPH_RELEASE_LUMINOUS:
-		return "luminous";
-	case CEPH_RELEASE_MIMIC:
-		return "mimic";
-	default:
-		return "unknown";
-	}
-}
-
-int ceph_release_from_name(const char *s)
-{
-	if (!s) {
-		return -1;
-	}
-	if (strcmp(s, "luminous") == 0) {
-		return CEPH_RELEASE_LUMINOUS;
-	}
-	if (strcmp(s, "kraken") == 0) {
-		return CEPH_RELEASE_KRAKEN;
-	}
-	if (strcmp(s, "jewel") == 0) {
-		return CEPH_RELEASE_JEWEL;
-	}
-	if (strcmp(s, "infernalis") == 0) {
-		return CEPH_RELEASE_INFERNALIS;
-	}
-	if (strcmp(s, "hammer") == 0) {
-		return CEPH_RELEASE_HAMMER;
-	}
-	if (strcmp(s, "giant") == 0) {
-		return CEPH_RELEASE_GIANT;
-	}
-	if (strcmp(s, "firefly") == 0) {
-		return CEPH_RELEASE_FIREFLY;
-	}
-	if (strcmp(s, "emperor") == 0) {
-		return CEPH_RELEASE_EMPEROR;
-	}
-	if (strcmp(s, "dumpling") == 0) {
-		return CEPH_RELEASE_DUMPLING;
-	}
-	if (strcmp(s, "cuttlefish") == 0) {
-		return CEPH_RELEASE_CUTTLEFISH;
-	}
-	if (strcmp(s, "bobtail") == 0) {
-		return CEPH_RELEASE_BOBTAIL;
-	}
-	if (strcmp(s, "argonaut") == 0) {
-		return CEPH_RELEASE_ARGONAUT;
-	}
-	return -1;
+	}	
 }
 
 const char *ceph_osd_watch_op_name(int o)
@@ -140,34 +53,6 @@ const char *ceph_osd_watch_op_name(int o)
 		return "reconnect";
 	case CEPH_OSD_WATCH_OP_PING:
 		return "ping";
-	default:
-		return "???";
-	}
-}
-
-const char *ceph_osd_alloc_hint_flag_name(int f)
-{
-	switch (f) {
-	case CEPH_OSD_ALLOC_HINT_FLAG_SEQUENTIAL_WRITE:
-		return "sequential_write";
-	case CEPH_OSD_ALLOC_HINT_FLAG_RANDOM_WRITE:
-		return "random_write";
-	case CEPH_OSD_ALLOC_HINT_FLAG_SEQUENTIAL_READ:
-		return "sequential_read";
-	case CEPH_OSD_ALLOC_HINT_FLAG_RANDOM_READ:
-		return "random_read";
-	case CEPH_OSD_ALLOC_HINT_FLAG_APPEND_ONLY:
-		return "append_only";
-	case CEPH_OSD_ALLOC_HINT_FLAG_IMMUTABLE:
-		return "immutable";
-	case CEPH_OSD_ALLOC_HINT_FLAG_SHORTLIVED:
-		return "shortlived";
-	case CEPH_OSD_ALLOC_HINT_FLAG_LONGLIVED:
-		return "longlived";
-	case CEPH_OSD_ALLOC_HINT_FLAG_COMPRESSIBLE:
-		return "compressible";
-	case CEPH_OSD_ALLOC_HINT_FLAG_INCOMPRESSIBLE:
-		return "incompressible";
 	default:
 		return "???";
 	}
@@ -212,7 +97,6 @@ const char *ceph_session_op_name(int op)
 	case CEPH_SESSION_RECALL_STATE: return "recall_state";
 	case CEPH_SESSION_FLUSHMSG: return "flushmsg";
 	case CEPH_SESSION_FLUSHMSG_ACK: return "flushmsg_ack";
-	case CEPH_SESSION_FORCE_RO: return "force_ro";
 	case CEPH_SESSION_REJECT: return "reject";
 	}
 	return "???";
@@ -251,10 +135,8 @@ const char *ceph_mds_op_name(int op)
 	case CEPH_MDS_OP_GETFILELOCK: return "getfilelock";
 	case CEPH_MDS_OP_FRAGMENTDIR: return "fragmentdir";
 	case CEPH_MDS_OP_EXPORTDIR: return "exportdir";
+	case CEPH_MDS_OP_VALIDATE: return "validate_path";
 	case CEPH_MDS_OP_FLUSH: return "flush_path";
-	case CEPH_MDS_OP_ENQUEUE_SCRUB: return "enqueue_scrub";
-	case CEPH_MDS_OP_REPAIR_FRAGSTATS: return "repair_fragstats";
-	case CEPH_MDS_OP_REPAIR_INODESTATS: return "repair_inodestats";
 	}
 	return "???";
 }
@@ -321,16 +203,6 @@ const char *ceph_pool_op_name(int op)
 	case POOL_OP_DELETE_SNAP: return "delete snap";
 	case POOL_OP_CREATE_UNMANAGED_SNAP: return "create unmanaged snap";
 	case POOL_OP_DELETE_UNMANAGED_SNAP: return "delete unmanaged snap";
-	}
-	return "???";
-}
-
-const char *ceph_osd_backoff_op_name(int op)
-{
-	switch (op) {
-	case CEPH_OSD_BACKOFF_OP_BLOCK: return "block";
-	case CEPH_OSD_BACKOFF_OP_ACK_BLOCK: return "ack-block";
-	case CEPH_OSD_BACKOFF_OP_UNBLOCK: return "unblock";
 	}
 	return "???";
 }

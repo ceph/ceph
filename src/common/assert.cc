@@ -12,7 +12,18 @@
  *
  */
 
+#include "BackTrace.h"
+#include "common/ceph_context.h"
+#include "common/config.h"
 #include "common/debug.h"
+#include "common/Clock.h"
+#include "include/assert.h"
+
+#include <errno.h>
+#include <iostream>
+#include <pthread.h>
+#include <sstream>
+#include <time.h>
 
 namespace ceph {
   static CephContext *g_assert_context = NULL;
@@ -36,9 +47,10 @@ namespace ceph {
 			  const char *func)
   {
     ostringstream tss;
-    tss << ceph_clock_now();
+    tss << ceph_clock_now(g_assert_context);
 
     char buf[8096];
+    BackTrace *bt = new BackTrace(1);
     snprintf(buf, sizeof(buf),
 	     "%s: In function '%s' thread %llx time %s\n"
 	     "%s: %d: FAILED assert(%s)\n",
@@ -48,7 +60,7 @@ namespace ceph {
 
     // TODO: get rid of this memory allocation.
     ostringstream oss;
-    oss << BackTrace(1);
+    bt->print(oss);
     dout_emergency(oss.str());
 
     dout_emergency(" NOTE: a copy of the executable, or `objdump -rdS <executable>` "
@@ -56,7 +68,7 @@ namespace ceph {
 
     if (g_assert_context) {
       lderr(g_assert_context) << buf << std::endl;
-      *_dout << oss.str();
+      bt->print(*_dout);
       *_dout << " NOTE: a copy of the executable, or `objdump -rdS <executable>` "
 	     << "is needed to interpret this.\n" << dendl;
 
@@ -70,7 +82,7 @@ namespace ceph {
 			   const char *func, const char* msg, ...)
   {
     ostringstream tss;
-    tss << ceph_clock_now();
+    tss << ceph_clock_now(g_assert_context);
 
     class BufAppender {
     public:
@@ -118,7 +130,7 @@ namespace ceph {
 
     // TODO: get rid of this memory allocation.
     ostringstream oss;
-    oss << *bt;
+    bt->print(oss);
     dout_emergency(oss.str());
 
     dout_emergency(" NOTE: a copy of the executable, or `objdump -rdS <executable>` "
@@ -126,7 +138,7 @@ namespace ceph {
 
     if (g_assert_context) {
       lderr(g_assert_context) << buf << std::endl;
-      *_dout << oss.str();
+      bt->print(*_dout);
       *_dout << " NOTE: a copy of the executable, or `objdump -rdS <executable>` "
 	     << "is needed to interpret this.\n" << dendl;
 

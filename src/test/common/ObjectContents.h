@@ -16,20 +16,20 @@ bool test_object_contents();
 
 class ObjectContents {
   uint64_t _size;
-  std::map<uint64_t, unsigned int> seeds;
+  map<uint64_t, unsigned int> seeds;
   interval_set<uint64_t> written;
   bool _exists;
 public:
   class Iterator {
     ObjectContents *parent;
-    std::map<uint64_t, unsigned int>::iterator iter;
+    map<uint64_t, unsigned int>::iterator iter;
     unsigned int current_state;
     int current_val;
     uint64_t pos;
   private:
     unsigned int get_state(uint64_t pos);
   public:
-    explicit Iterator(ObjectContents *parent) :
+    Iterator(ObjectContents *parent) :
       parent(parent), iter(parent->seeds.end()),
       current_state(0), current_val(0), pos(-1) {
       seek_to_first();
@@ -77,7 +77,7 @@ public:
     seeds[0] = 0;
   }
 
-  explicit ObjectContents(bufferlist::iterator &bp) {
+  ObjectContents(bufferlist::iterator &bp) {
     ::decode(_size, bp);
     ::decode(seeds, bp);
     ::decode(written, bp);
@@ -100,7 +100,7 @@ public:
   void debug(std::ostream &out) {
     out << "_size is " << _size << std::endl;
     out << "seeds is: (";
-    for (std::map<uint64_t, unsigned int>::iterator i = seeds.begin();
+    for (map<uint64_t, unsigned int>::iterator i = seeds.begin();
 	 i != seeds.end();
 	 ++i) {
       out << "[" << i->first << "," << i->second << "], ";

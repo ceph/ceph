@@ -23,18 +23,18 @@ public:
   {
   }
 
-  void send() override = 0;
+  virtual void send() = 0;
 
 protected:
   const uint64_t m_snap_id;
 
-  bool should_complete(int r) override;
-  int filter_return_code(int r) const override {
+  virtual bool should_complete(int r);
+  virtual int filter_return_code(int r) const {
     // never propagate an error back to the caller
     return 0;
   }
-  virtual void finish_request() {
-  }
+  virtual void finish() = 0;
+  using AsyncRequest<>::finish;
 
 private:
   /**

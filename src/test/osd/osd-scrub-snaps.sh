@@ -14,8 +14,7 @@
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU Library Public License for more details.
 #
-source $(dirname $0)/../detect-build-env-vars.sh
-source $CEPH_ROOT/qa/workunits/ceph-helpers.sh
+source ../qa/workunits/ceph-helpers.sh
 
 function run() {
     local dir=$1
@@ -40,7 +39,6 @@ function TEST_scrub_snaps() {
 
     setup $dir || return 1
     run_mon $dir a --osd_pool_default_size=1 || return 1
-    run_mgr $dir x || return 1
     run_osd $dir 0 || return 1
 
     wait_for_clean || return 1
@@ -50,7 +48,7 @@ function TEST_scrub_snaps() {
     poolid=$(ceph osd dump | grep "^pool.*[']test[']" | awk '{ print $2 }')
 
     dd if=/dev/urandom of=$TESTDATA bs=1032 count=1
-    for i in `seq 1 15`
+    for i in `seq 1 14`
     do
         rados -p $poolname put obj${i} $TESTDATA
     done
@@ -98,8 +96,8 @@ function TEST_scrub_snaps() {
 
     # Don't need to ceph_objectstore_tool function because osd stopped
 
-    JSON="$(ceph-objectstore-tool --data-path $dir/0 --journal-path $dir/0/journal --head --op list obj1)"
-    ceph-objectstore-tool --data-path $dir/0 --journal-path $dir/0/journal "$JSON" --force remove
+    JSON="$(ceph-objectstore-tool --data-path $dir/0 --journal-path $dir/0/journal --op list obj1 | grep \"snapid\":-2)"
+    ceph-objectstore-tool --data-path $dir/0 --journal-path $dir/0/journal "$JSON" remove
 
     JSON="$(ceph-objectstore-tool --data-path $dir/0 --journal-path $dir/0/journal --op list obj5 | grep \"snapid\":2)"
     ceph-objectstore-tool --data-path $dir/0 --journal-path $dir/0/journal "$JSON" remove
@@ -112,14 +110,14 @@ function TEST_scrub_snaps() {
     dd if=/dev/urandom of=$TESTDATA bs=256 count=18
     ceph-objectstore-tool --data-path $dir/0 --journal-path $dir/0/journal "$JSON" set-bytes $TESTDATA
 
-    JSON="$(ceph-objectstore-tool --data-path $dir/0 --journal-path $dir/0/journal --head --op list obj3)"
+    JSON="$(ceph-objectstore-tool --data-path $dir/0 --journal-path $dir/0/journal --op list obj3 | grep \"snapid\":-2)"
     dd if=/dev/urandom of=$TESTDATA bs=256 count=15
     ceph-objectstore-tool --data-path $dir/0 --journal-path $dir/0/journal "$JSON" set-bytes $TESTDATA
 
     JSON="$(ceph-objectstore-tool --data-path $dir/0 --journal-path $dir/0/journal --op list obj4 | grep \"snapid\":7)"
     ceph-objectstore-tool --data-path $dir/0 --journal-path $dir/0/journal "$JSON" remove
 
-    JSON="$(ceph-objectstore-tool --data-path $dir/0 --journal-path $dir/0/journal --head --op list obj2)"
+    JSON="$(ceph-objectstore-tool --data-path $dir/0 --journal-path $dir/0/journal --op list obj2 | grep \"snapid\":-1)"
     ceph-objectstore-tool --data-path $dir/0 --journal-path $dir/0/journal "$JSON" rm-attr snapset
 
     # Create a clone which isn't in snapset and doesn't have object info
@@ -129,29 +127,24 @@ function TEST_scrub_snaps() {
 
     rm -f $TESTDATA
 
-    JSON="$(ceph-objectstore-tool --data-path $dir/0 --journal-path $dir/0/journal --head --op list obj6)"
+    JSON="$(ceph-objectstore-tool --data-path $dir/0 --journal-path $dir/0/journal --op list obj6 | grep \"snapid\":-2)"
     ceph-objectstore-tool --data-path $dir/0 --journal-path $dir/0/journal "$JSON" clear-snapset
-    JSON="$(ceph-objectstore-tool --data-path $dir/0 --journal-path $dir/0/journal --head --op list obj7)"
+    JSON="$(ceph-objectstore-tool --data-path $dir/0 --journal-path $dir/0/journal --op list obj7 | grep \"snapid\":-2)"
     ceph-objectstore-tool --data-path $dir/0 --journal-path $dir/0/journal "$JSON" clear-snapset corrupt
-    JSON="$(ceph-objectstore-tool --data-path $dir/0 --journal-path $dir/0/journal --head --op list obj8)"
+    JSON="$(ceph-objectstore-tool --data-path $dir/0 --journal-path $dir/0/journal --op list obj8 | grep \"snapid\":-2)"
     ceph-objectstore-tool --data-path $dir/0 --journal-path $dir/0/journal "$JSON" clear-snapset seq
-    JSON="$(ceph-objectstore-tool --data-path $dir/0 --journal-path $dir/0/journal --head --op list obj9)"
+    JSON="$(ceph-objectstore-tool --data-path $dir/0 --journal-path $dir/0/journal --op list obj9 | grep \"snapid\":-2)"
     ceph-objectstore-tool --data-path $dir/0 --journal-path $dir/0/journal "$JSON" clear-snapset clone_size
-    JSON="$(ceph-objectstore-tool --data-path $dir/0 --journal-path $dir/0/journal --head --op list obj10)"
+    JSON="$(ceph-objectstore-tool --data-path $dir/0 --journal-path $dir/0/journal --op list obj10 | grep \"snapid\":-2)"
     ceph-objectstore-tool --data-path $dir/0 --journal-path $dir/0/journal "$JSON" clear-snapset clone_overlap
-    JSON="$(ceph-objectstore-tool --data-path $dir/0 --journal-path $dir/0/journal --head --op list obj11)"
+    JSON="$(ceph-objectstore-tool --data-path $dir/0 --journal-path $dir/0/journal --op list obj11 | grep \"snapid\":-2)"
     ceph-objectstore-tool --data-path $dir/0 --journal-path $dir/0/journal "$JSON" clear-snapset clones
-    JSON="$(ceph-objectstore-tool --data-path $dir/0 --journal-path $dir/0/journal --head --op list obj12)"
+    JSON="$(ceph-objectstore-tool --data-path $dir/0 --journal-path $dir/0/journal --op list obj12 | grep \"snapid\":-2)"
     ceph-objectstore-tool --data-path $dir/0 --journal-path $dir/0/journal "$JSON" clear-snapset head
-    JSON="$(ceph-objectstore-tool --data-path $dir/0 --journal-path $dir/0/journal --head --op list obj13)"
+    JSON="$(ceph-objectstore-tool --data-path $dir/0 --journal-path $dir/0/journal --op list obj13 | grep \"snapid\":-2)"
     ceph-objectstore-tool --data-path $dir/0 --journal-path $dir/0/journal "$JSON" clear-snapset snaps
-    JSON="$(ceph-objectstore-tool --data-path $dir/0 --journal-path $dir/0/journal --head --op list obj14)"
+    JSON="$(ceph-objectstore-tool --data-path $dir/0 --journal-path $dir/0/journal --op list obj14 | grep \"snapid\":-2)"
     ceph-objectstore-tool --data-path $dir/0 --journal-path $dir/0/journal "$JSON" clear-snapset size
-
-    echo "garbage" > $dir/bad
-    JSON="$(ceph-objectstore-tool --data-path $dir/0 --journal-path $dir/0/journal --head --op list obj15)"
-    ceph-objectstore-tool --data-path $dir/0 --journal-path $dir/0/journal "$JSON" set-attr snapset $dir/bad
-    rm -f $dir/bad
 
     run_osd $dir 0 || return 1
     wait_for_clean || return 1
@@ -162,250 +155,6 @@ function TEST_scrub_snaps() {
         return 1
     fi
     grep 'log_channel' $dir/osd.0.log
-
-    rados list-inconsistent-pg $poolname > $dir/json || return 1
-    # Check pg count
-    test $(jq '. | length' $dir/json) = "1" || return 1
-    # Check pgid
-    test $(jq -r '.[0]' $dir/json) = $pgid || return 1
-
-    rados list-inconsistent-snapset $pgid > $dir/json || return 1
-    test $(jq '.inconsistents | length' $dir/json) = "21" || return 1
-
-    local jqfilter='.inconsistents'
-    local sortkeys='import json; import sys ; JSON=sys.stdin.read() ; ud = json.loads(JSON) ; print json.dumps(ud, sort_keys=True, indent=2)'
-
-    jq "$jqfilter" << EOF | python -c "$sortkeys" > $dir/checkcsjson
-{
-  "inconsistents": [
-    {
-      "errors": [
-        "headless"
-      ],
-      "snap": 1,
-      "locator": "",
-      "nspace": "",
-      "name": "obj1"
-    },
-    {
-      "errors": [
-        "size_mismatch"
-      ],
-      "snap": 1,
-      "locator": "",
-      "nspace": "",
-      "name": "obj10"
-    },
-    {
-      "errors": [
-        "headless"
-      ],
-      "snap": 1,
-      "locator": "",
-      "nspace": "",
-      "name": "obj11"
-    },
-    {
-      "errors": [
-        "size_mismatch"
-      ],
-      "snap": 1,
-      "locator": "",
-      "nspace": "",
-      "name": "obj14"
-    },
-    {
-      "errors": [
-        "headless"
-      ],
-      "snap": 1,
-      "locator": "",
-      "nspace": "",
-      "name": "obj6"
-    },
-    {
-      "errors": [
-        "headless"
-      ],
-      "snap": 1,
-      "locator": "",
-      "nspace": "",
-      "name": "obj7"
-    },
-    {
-      "errors": [
-        "size_mismatch"
-      ],
-      "snap": 1,
-      "locator": "",
-      "nspace": "",
-      "name": "obj9"
-    },
-    {
-      "errors": [
-        "headless"
-      ],
-      "snap": 4,
-      "locator": "",
-      "nspace": "",
-      "name": "obj2"
-    },
-    {
-      "errors": [
-        "size_mismatch"
-      ],
-      "snap": 4,
-      "locator": "",
-      "nspace": "",
-      "name": "obj5"
-    },
-    {
-      "errors": [
-        "headless"
-      ],
-      "snap": 7,
-      "locator": "",
-      "nspace": "",
-      "name": "obj2"
-    },
-    {
-      "errors": [
-        "oi_attr_missing",
-        "headless"
-      ],
-      "snap": 7,
-      "locator": "",
-      "nspace": "",
-      "name": "obj5"
-    },
-    {
-      "extra clones": [
-        1
-      ],
-      "errors": [
-        "extra_clones"
-      ],
-      "snap": "head",
-      "locator": "",
-      "nspace": "",
-      "name": "obj11"
-    },
-    {
-      "errors": [
-        "head_mismatch"
-      ],
-      "snap": "head",
-      "locator": "",
-      "nspace": "",
-      "name": "obj12"
-    },
-    {
-      "errors": [
-        "ss_attr_corrupted"
-      ],
-      "snap": "head",
-      "locator": "",
-      "nspace": "",
-      "name": "obj15"
-    },
-    {
-      "extra clones": [
-        7,
-        4
-      ],
-      "errors": [
-        "ss_attr_missing",
-        "extra_clones"
-      ],
-      "snap": "head",
-      "locator": "",
-      "nspace": "",
-      "name": "obj2"
-    },
-    {
-      "errors": [
-        "size_mismatch"
-      ],
-      "snap": "head",
-      "locator": "",
-      "nspace": "",
-      "name": "obj3"
-    },
-    {
-      "missing": [
-        7
-      ],
-      "errors": [
-        "clone_missing"
-      ],
-      "snap": "head",
-      "locator": "",
-      "nspace": "",
-      "name": "obj4"
-    },
-    {
-      "missing": [
-        2,
-        1
-      ],
-      "extra clones": [
-        7
-      ],
-      "errors": [
-        "extra_clones",
-        "clone_missing"
-      ],
-      "snap": "head",
-      "locator": "",
-      "nspace": "",
-      "name": "obj5"
-    },
-    {
-      "extra clones": [
-        1
-      ],
-      "errors": [
-        "extra_clones"
-      ],
-      "snap": "head",
-      "locator": "",
-      "nspace": "",
-      "name": "obj6"
-    },
-    {
-      "extra clones": [
-        1
-      ],
-      "errors": [
-        "head_mismatch",
-        "extra_clones"
-      ],
-      "snap": "head",
-      "locator": "",
-      "nspace": "",
-      "name": "obj7"
-    },
-    {
-      "errors": [
-        "snapset_mismatch"
-      ],
-      "snap": "head",
-      "locator": "",
-      "nspace": "",
-      "name": "obj8"
-    }
-  ],
-  "epoch": 20
-}
-EOF
-
-    jq "$jqfilter" $dir/json | python -c "$sortkeys" > $dir/csjson
-    diff -y $dir/checkcsjson $dir/csjson || return 1
-
-    if which jsonschema > /dev/null;
-    then
-      jsonschema -i $dir/json $CEPH_ROOT/doc/rados/command/list-inconsistent-snap.json || return 1
-    fi
 
     for i in `seq 1 7`
     do
@@ -426,31 +175,29 @@ EOF
     kill_daemons $dir || return 1
 
     declare -a err_strings
-    err_strings[0]="log_channel[(]cluster[)] log [[]ERR[]] : scrub [0-9]*[.]0 .*::obj10:.* is missing in clone_overlap"
-    err_strings[1]="log_channel[(]cluster[)] log [[]ERR[]] : scrub [0-9]*[.]0 .*::obj5:7 no '_' attr"
-    err_strings[2]="log_channel[(]cluster[)] log [[]ERR[]] : scrub [0-9]*[.]0 .*::obj5:7 is an unexpected clone"
-    err_strings[3]="log_channel[(]cluster[)] log [[]ERR[]] : scrub [0-9]*[.]0 .*::obj5:4 on disk size [(]4608[)] does not match object info size [(]512[)] adjusted for ondisk to [(]512[)]"
-    err_strings[4]="log_channel[(]cluster[)] log [[]ERR[]] : scrub [0-9]*[.]0 .*:::obj5:head expected clone .*:::obj5:2"
-    err_strings[5]="log_channel[(]cluster[)] log [[]ERR[]] : scrub [0-9]*[.]0 .*:::obj5:head expected clone .*:::obj5:1"
-    err_strings[6]="log_channel[(]cluster[)] log [[]INF[]] : scrub [0-9]*[.]0 .*:::obj5:head 2 missing clone[(]s[)]"
-    err_strings[7]="log_channel[(]cluster[)] log [[]ERR[]] : scrub [0-9]*[.]0 .*:::obj12:head snapset.head_exists=false, but head exists"
-    err_strings[8]="log_channel[(]cluster[)] log [[]ERR[]] : scrub [0-9]*[.]0 .*:::obj8:head snaps.seq not set"
-    err_strings[9]="log_channel[(]cluster[)] log [[]ERR[]] : scrub [0-9]*[.]0 .*:::obj7:head snapset.head_exists=false, but head exists"
-    err_strings[10]="log_channel[(]cluster[)] log [[]ERR[]] : scrub [0-9]*[.]0 .*:::obj7:1 is an unexpected clone"
-    err_strings[11]="log_channel[(]cluster[)] log [[]ERR[]] : scrub [0-9]*[.]0 .*:::obj3:head on disk size [(]3840[)] does not match object info size [(]768[)] adjusted for ondisk to [(]768[)]"
-    err_strings[12]="log_channel[(]cluster[)] log [[]ERR[]] : scrub [0-9]*[.]0 .*:::obj6:1 is an unexpected clone"
-    err_strings[13]="log_channel[(]cluster[)] log [[]ERR[]] : scrub [0-9]*[.]0 .*:::obj2:head no 'snapset' attr"
-    err_strings[14]="log_channel[(]cluster[)] log [[]ERR[]] : scrub [0-9]*[.]0 .*:::obj2:7 clone ignored due to missing snapset"
-    err_strings[15]="log_channel[(]cluster[)] log [[]ERR[]] : scrub [0-9]*[.]0 .*:::obj2:4 clone ignored due to missing snapset"
-    err_strings[16]="log_channel[(]cluster[)] log [[]ERR[]] : scrub [0-9]*[.]0 .*:::obj4:head expected clone .*:::obj4:7"
-    err_strings[17]="log_channel[(]cluster[)] log [[]INF[]] : scrub [0-9]*[.]0 .*:::obj4:head 1 missing clone[(]s[)]"
-    err_strings[18]="log_channel[(]cluster[)] log [[]ERR[]] : scrub [0-9]*[.]0 .*:::obj1:1 is an unexpected clone"
-    err_strings[19]="log_channel[(]cluster[)] log [[]ERR[]] : scrub [0-9]*[.]0 .*:::obj9:1 is missing in clone_size"
-    err_strings[20]="log_channel[(]cluster[)] log [[]ERR[]] : scrub [0-9]*[.]0 .*:::obj11:1 is an unexpected clone"
-    err_strings[21]="log_channel[(]cluster[)] log [[]ERR[]] : scrub [0-9]*[.]0 .*:::obj14:1 size 1032 != clone_size 1033"
-    err_strings[22]="log_channel[(]cluster[)] log [[]ERR[]] : [0-9]*[.]0 scrub 23 errors"
-    err_strings[23]="log_channel[(]cluster[)] log [[]ERR[]] : scrub [0-9]*[.]0 .*:::obj15:head can't decode 'snapset' attr buffer"
-    err_strings[24]="log_channel[(]cluster[)] log [[]ERR[]] : scrub [0-9]*[.]0 .*:::obj12:1 has no oi or legacy_snaps; cannot convert 1=[[]1[]]:[[]1[]].stray_clone_snaps=[{]1=[[]1[]][}]"
+    err_strings[0]="log_channel[(]cluster[)] log [[]ERR[]] : scrub [0-9]*[.]0 [0-9]*/2acecc8b/obj10/1 is missing in clone_overlap"
+    err_strings[1]="log_channel[(]cluster[)] log [[]ERR[]] : scrub [0-9]*[.]0 [0-9]*/666934a3/obj5/7 no '_' attr"
+    err_strings[2]="log_channel[(]cluster[)] log [[]ERR[]] : scrub [0-9]*[.]0 [0-9]*/666934a3/obj5/7 is an unexpected clone"
+    err_strings[3]="log_channel[(]cluster[)] log [[]ERR[]] : scrub [0-9]*[.]0 [0-9]*/666934a3/obj5/4 on disk size [(]4608[)] does not match object info size [(]512[)] adjusted for ondisk to [(]512[)]"
+    err_strings[4]="log_channel[(]cluster[)] log [[]ERR[]] : scrub [0-9]*[.]0 [0-9]*/666934a3/obj5/head expected clone [0-9]*/666934a3/obj5/2"
+    err_strings[5]="log_channel[(]cluster[)] log [[]ERR[]] : scrub [0-9]*[.]0 [0-9]*/666934a3/obj5/head expected clone [0-9]*/666934a3/obj5/1"
+    err_strings[6]="log_channel[(]cluster[)] log [[]INF[]] : scrub [0-9]*[.]0 [0-9]*/666934a3/obj5/head 2 missing clone[(]s[)]"
+    err_strings[7]="log_channel[(]cluster[)] log [[]ERR[]] : scrub [0-9]*[.]0 [0-9]*/d3a9faf5/obj12/head snapset.head_exists=false, but head exists"
+    err_strings[8]="log_channel[(]cluster[)] log [[]ERR[]] : scrub [0-9]*[.]0 [0-9]*/8df7eaa5/obj8/head snaps.seq not set"
+    err_strings[9]="log_channel[(]cluster[)] log [[]ERR[]] : scrub [0-9]*[.]0 [0-9]*/5c889059/obj7/head snapset.head_exists=false, but head exists"
+    err_strings[10]="log_channel[(]cluster[)] log [[]ERR[]] : scrub [0-9]*[.]0 [0-9]*/5c889059/obj7/1 is an unexpected clone"
+    err_strings[11]="log_channel[(]cluster[)] log [[]ERR[]] : scrub [0-9]*[.]0 [0-9]*/61f68bb1/obj3/head on disk size [(]3840[)] does not match object info size [(]768[)] adjusted for ondisk to [(]768[)]"
+    err_strings[12]="log_channel[(]cluster[)] log [[]ERR[]] : scrub [0-9]*[.]0 [0-9]*/83425cc4/obj6/1 is an unexpected clone"
+    err_strings[13]="log_channel[(]cluster[)] log [[]ERR[]] : scrub [0-9]*[.]0 [0-9]*/3f1ee208/obj2/snapdir no 'snapset' attr"
+    err_strings[14]="log_channel[(]cluster[)] log [[]INF[]] : scrub [0-9]*[.]0 [0-9]*/3f1ee208/obj2/7 clone ignored due to missing snapset"
+    err_strings[15]="log_channel[(]cluster[)] log [[]INF[]] : scrub [0-9]*[.]0 [0-9]*/3f1ee208/obj2/4 clone ignored due to missing snapset"
+    err_strings[16]="log_channel[(]cluster[)] log [[]ERR[]] : scrub [0-9]*[.]0 [0-9]*/a8759770/obj4/snapdir expected clone [0-9]*/a8759770/obj4/7"
+    err_strings[17]="log_channel[(]cluster[)] log [[]INF[]] : scrub [0-9]*[.]0 [0-9]*/a8759770/obj4/snapdir 1 missing clone[(]s[)]"
+    err_strings[18]="log_channel[(]cluster[)] log [[]ERR[]] : scrub [0-9]*[.]0 [0-9]*/6cf8deff/obj1/1 is an unexpected clone"
+    err_strings[19]="log_channel[(]cluster[)] log [[]ERR[]] : scrub [0-9]*[.]0 [0-9]*/e478ac7f/obj9/1 is missing in clone_size"
+    err_strings[20]="log_channel[(]cluster[)] log [[]ERR[]] : scrub [0-9]*[.]0 [0-9]*/29547577/obj11/1 is an unexpected clone"
+    err_strings[21]="log_channel[(]cluster[)] log [[]ERR[]] : scrub [0-9]*[.]0 [0-9]*/94122507/obj14/1 size 1032 != clone_size 1033"
+    err_strings[22]="log_channel[(]cluster[)] log [[]ERR[]] : [0-9]*[.]0 scrub 19 errors"
 
     for i in `seq 0 ${#err_strings[@]}`
     do

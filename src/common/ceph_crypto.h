@@ -6,7 +6,6 @@
 #define CEPH_CRYPTO_MD5_DIGESTSIZE 16
 #define CEPH_CRYPTO_HMACSHA1_DIGESTSIZE 20
 #define CEPH_CRYPTO_SHA1_DIGESTSIZE 20
-#define CEPH_CRYPTO_HMACSHA256_DIGESTSIZE 32
 #define CEPH_CRYPTO_SHA256_DIGESTSIZE 32
 
 #ifdef USE_CRYPTOPP
@@ -23,11 +22,7 @@ namespace ceph {
   namespace crypto {
     void assert_init();
     void init(CephContext *cct);
-    // @param shared true if the the underlying crypto library could be shared
-    //               with the application linked against the Ceph library.
-    // @note we do extra global cleanup specific to the underlying crypto
-    //       library, if @c shared is @c false.
-    void shutdown(bool shared=true);
+    void shutdown();
 
     using CryptoPP::Weak::MD5;
     using CryptoPP::SHA1;
@@ -41,19 +36,10 @@ namespace ceph {
 	}
       ~HMACSHA1();
     };
-
-    class HMACSHA256: public CryptoPP::HMAC<CryptoPP::SHA256> {
-    public:
-      HMACSHA256 (const byte *key, size_t length)
-        : CryptoPP::HMAC<CryptoPP::SHA256>(key, length)
-        {
-        }
-      ~HMACSHA256();
-    };
   }
 }
 #elif defined(USE_NSS)
-// you *must* use CRYPTO_CXXFLAGS in CMakeLists.txt for including this include
+// you *must* use CRYPTO_CXXFLAGS in Makefile.am for including this include
 # include <nss.h>
 # include <pk11pub.h>
 
@@ -71,13 +57,14 @@ namespace ceph {
   namespace crypto {
     void assert_init();
     void init(CephContext *cct);
-    void shutdown(bool shared=true);
+    void shutdown();
     class Digest {
     private:
       PK11Context *ctx;
+      SECOidTag sec_type;
       size_t digest_size;
     public:
-      Digest (SECOidTag _type, size_t _digest_size) : digest_size(_digest_size) {
+      Digest (SECOidTag _type, size_t _digest_size) : sec_type(_type), digest_size(_digest_size) {
 	ctx = PK11_CreateDigestContext(_type);
 	assert(ctx);
 	Restart();
@@ -121,33 +108,31 @@ namespace ceph {
       SHA256 () : Digest(SEC_OID_SHA256, CEPH_CRYPTO_SHA256_DIGESTSIZE) { }
     };
 
-    class HMAC {
+    class HMACSHA1 {
     private:
       PK11SlotInfo *slot;
       PK11SymKey *symkey;
       PK11Context *ctx;
-      unsigned int digest_size;
     public:
-      HMAC (CK_MECHANISM_TYPE cktype, unsigned int digestsize, const byte *key, size_t length) {
-        digest_size = digestsize;
-	slot = PK11_GetBestSlot(cktype, NULL);
+      HMACSHA1 (const byte *key, size_t length) {
+	slot = PK11_GetBestSlot(CKM_SHA_1_HMAC, NULL);
 	assert(slot);
 	SECItem keyItem;
 	keyItem.type = siBuffer;
 	keyItem.data = (unsigned char*)key;
 	keyItem.len = length;
-	symkey = PK11_ImportSymKey(slot, cktype, PK11_OriginUnwrap,
+	symkey = PK11_ImportSymKey(slot, CKM_SHA_1_HMAC, PK11_OriginUnwrap,
 				   CKA_SIGN,  &keyItem, NULL);
 	assert(symkey);
 	SECItem param;
 	param.type = siBuffer;
 	param.data = NULL;
 	param.len = 0;
-	ctx = PK11_CreateContextBySymKey(cktype, CKA_SIGN, symkey, &param);
+	ctx = PK11_CreateContextBySymKey(CKM_SHA_1_HMAC, CKA_SIGN, symkey, &param);
 	assert(ctx);
 	Restart();
       }
-      ~HMAC ();
+      ~HMACSHA1 ();
       void Restart() {
 	SECStatus s;
 	s = PK11_DigestBegin(ctx);
@@ -161,27 +146,16 @@ namespace ceph {
       void Final (byte *digest) {
 	SECStatus s;
 	unsigned int dummy;
-	s = PK11_DigestFinal(ctx, digest, &dummy, digest_size);
+	s = PK11_DigestFinal(ctx, digest, &dummy, CEPH_CRYPTO_HMACSHA1_DIGESTSIZE);
 	assert(s == SECSuccess);
-	assert(dummy == digest_size);
+	assert(dummy == CEPH_CRYPTO_HMACSHA1_DIGESTSIZE);
 	Restart();
       }
-    };
-
-    class HMACSHA1 : public HMAC {
-    public:
-      HMACSHA1 (const byte *key, size_t length) : HMAC(CKM_SHA_1_HMAC, CEPH_CRYPTO_HMACSHA1_DIGESTSIZE, key, length) { }
-    };
-
-    class HMACSHA256 : public HMAC {
-    public:
-      HMACSHA256 (const byte *key, size_t length) : HMAC(CKM_SHA256_HMAC, CEPH_CRYPTO_HMACSHA256_DIGESTSIZE, key, length) { }
     };
   }
 }
 
 #else
-// cppcheck-suppress preprocessorErrorDirective
 # error "No supported crypto implementation found."
 #endif
 

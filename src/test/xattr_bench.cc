@@ -66,7 +66,7 @@ public:
     (*in_progress)++;
   }
 
-  void finish(int r) override {
+  void finish(int r) {
     Mutex::Locker l(*lock);
     (*in_progress)--;
     cond->Signal();
@@ -106,7 +106,7 @@ uint64_t do_run(ObjectStore *store, int attrsize, int numattrs,
     }
     collections[coll] = make_pair(objects, new ObjectStore::Sequencer(coll.to_str()));
   }
-  store->apply_transaction(&osr, std::move(t));
+  store->apply_transaction(&osr, t);
 
   bufferlist bl;
   for (int i = 0; i < attrsize; ++i) {
@@ -135,10 +135,9 @@ uint64_t do_run(ObjectStore *store, int attrsize, int numattrs,
 		   bl);
       }
     }
-    store->queue_transaction(iter->second.second, std::move(*t),
+    store->queue_transaction(iter->second.second, t,
 			     new OnApplied(&lock, &cond, &in_flight,
 					   t));
-    delete t;
   }
   {
     Mutex::Locker l(lock);
@@ -152,9 +151,16 @@ int main(int argc, char **argv) {
   vector<const char*> args;
   argv_to_vec(argc, (const char **)argv, args);
 
-  auto cct = global_init(0, args, CEPH_ENTITY_TYPE_CLIENT,
-			 CODE_ENVIRONMENT_UTILITY, 0);
+  global_init(0, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
   common_init_finish(g_ceph_context);
+  if (args[0] == string("omap")) {
+    std::cerr << "using omap xattrs" << std::endl;
+    g_ceph_context->_conf->set_val("filestore_xattr_use_omap", "true");
+  } else {
+    std::cerr << "not using omap xattrs" << std::endl;
+    g_ceph_context->_conf->set_val("filestore_xattr_use_omap", "false");
+  }
+  g_ceph_context->_conf->apply_changes(NULL);
 
   std::cerr << "args: " << args << std::endl;
   if (args.size() < 3) {
@@ -165,8 +171,7 @@ int main(int argc, char **argv) {
   string store_path(args[1]);
   string store_dev(args[2]);
 
-  boost::scoped_ptr<ObjectStore> store(new FileStore(cct.get(), store_path,
-						     store_dev));
+  boost::scoped_ptr<ObjectStore> store(new FileStore(store_path, store_dev));
 
   std::cerr << "mkfs starting" << std::endl;
   assert(!store->mkfs());

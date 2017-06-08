@@ -19,7 +19,7 @@
 
 class MRecoveryReserve : public Message {
   static const int HEAD_VERSION = 2;
-  static const int COMPAT_VERSION = 2;
+  static const int COMPAT_VERSION = 1;
 public:
   spg_t pgid;
   epoch_t query_epoch;
@@ -40,36 +40,39 @@ public:
       pgid(pgid), query_epoch(query_epoch),
       type(type) {}
 
-  const char *get_type_name() const override {
+  const char *get_type_name() const {
     return "MRecoveryReserve";
   }
 
-  void print(ostream& out) const override {
-    out << "MRecoveryReserve(" << pgid;
+  void print(ostream& out) const {
+    out << "MRecoveryReserve ";
     switch (type) {
     case REQUEST:
-      out << " REQUEST";
+      out << "REQUEST ";
       break;
     case GRANT:
-      out << " GRANT";
+      out << "GRANT ";
       break;
     case RELEASE:
-      out << " RELEASE";
+      out << "RELEASE ";
       break;
     }
-    out << " e" << query_epoch << ")";
+    out << " pgid: " << pgid << ", query_epoch: " << query_epoch;
     return;
   }
 
-  void decode_payload() override {
+  void decode_payload() {
     bufferlist::iterator p = payload.begin();
     ::decode(pgid.pgid, p);
     ::decode(query_epoch, p);
     ::decode(type, p);
-    ::decode(pgid.shard, p);
+    if (header.version >= 2)
+      ::decode(pgid.shard, p);
+    else
+      pgid.shard = shard_id_t::NO_SHARD;
   }
 
-  void encode_payload(uint64_t features) override {
+  void encode_payload(uint64_t features) {
     ::encode(pgid.pgid, payload);
     ::encode(query_epoch, payload);
     ::encode(type, payload);

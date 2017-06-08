@@ -23,11 +23,11 @@
 class CompressorPluginExample : public CompressionPlugin {
 public:
 
-  explicit CompressorPluginExample(CephContext* cct) : CompressionPlugin(cct)
+  CompressorPluginExample(CephContext* cct) : CompressionPlugin(cct)
   {}
 
-  int factory(CompressorRef *cs,
-		      ostream *ss) override
+  virtual int factory(CompressorRef *cs,
+		      ostream *ss)
   {
     if (compressor == 0) {
       CompressorExample *interface = new CompressorExample();

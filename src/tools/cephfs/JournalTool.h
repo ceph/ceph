@@ -12,7 +12,6 @@
  */
 
 #include "MDSUtility.h"
-#include "RoleSelector.h"
 #include <vector>
 
 #include "mds/mdstypes.h"
@@ -33,10 +32,7 @@ class JournalScanner;
 class JournalTool : public MDSUtility
 {
   private:
-    MDSRoleSelector role_selector;
-    // Bit hacky, use this `rank` member to control behaviour of the
-    // various main_ functions.
-    mds_rank_t rank;
+    int rank;
 
     // Entry points
     int main_journal(std::vector<const char*> &argv);
@@ -56,13 +52,9 @@ class JournalTool : public MDSUtility
 
     // I/O handles
     librados::Rados rados;
-    librados::IoCtx input;
-    librados::IoCtx output;
-
-    bool other_pool;
+    librados::IoCtx io;
 
     // Metadata backing store manipulation
-    int read_lost_found(std::set<std::string> &lost);
     int scavenge_dentries(
         EMetaBlob const &metablob,
         bool const dry_run,
@@ -82,7 +74,7 @@ class JournalTool : public MDSUtility
   public:
     void usage();
     JournalTool() :
-      rank(0), other_pool(false) {}
+      rank(0) {}
     int main(std::vector<const char*> &argv);
 };
 

@@ -49,23 +49,17 @@ run() {
     do_run "$@"
 }
 
-if [ -n "$CEPH_BIN" ] ; then
-   # CMake env
-   RADOS_TOOL="$CEPH_BIN/rados"
-   CEPH_TOOL="$CEPH_BIN/ceph"
-else
-   # executables should be installed by the QA env 
-   RADOS_TOOL=$(which rados)
-   CEPH_TOOL=$(which ceph)
+DNAME="`dirname $0`"
+DNAME="`readlink -f $DNAME`"
+RADOS_TOOL="`readlink -f \"$DNAME/../rados\"`"
+if ! test -f $RADOS_TOOL ; then
+    RADOS_TOOL=$(which rados)
 fi
-
 KEEP_TEMP_FILES=0
 POOL=trs_pool
 POOL_CP_TARGET=trs_pool.2
-POOL_EC=trs_pool_ec
 
 [ -x "$RADOS_TOOL" ] || die "couldn't find $RADOS_TOOL binary to test"
-[ -x "$CEPH_TOOL" ] || die "couldn't find $CEPH_TOOL binary to test"
 
 while getopts  "c:hkp:" flag; do
     case $flag in
@@ -80,16 +74,7 @@ done
 TDIR=`mktemp -d -t test_rados_tool.XXXXXXXXXX` || die "mktemp failed"
 [ $KEEP_TEMP_FILES -eq 0 ] && trap "rm -rf ${TDIR}; exit" INT TERM EXIT
 
-# ensure rados doesn't segfault without --pool
-run_expect_nosignal "$RADOS_TOOL" --snap "asdf" ls
-run_expect_nosignal "$RADOS_TOOL" --snapid "0" ls
-run_expect_nosignal "$RADOS_TOOL" --object_locator "asdf" ls
-run_expect_nosignal "$RADOS_TOOL" --namespace "asdf" ls
-
 run_expect_succ "$RADOS_TOOL" mkpool "$POOL"
-run_expect_succ "$CEPH_TOOL" osd erasure-code-profile set myprofile k=2 m=1 stripe_unit=2K ruleset-failure-domain=osd --force
-run_expect_succ "$CEPH_TOOL" osd pool create "$POOL_EC" 100 100 erasure myprofile
-
 
 # expb happens to be the empty export for legacy reasons
 run_expect_succ "$RADOS_TOOL" -p "$POOL" export "$TDIR/expb"
@@ -174,7 +159,6 @@ for i in `seq 1 5`; do
   rand_str=`dd if=/dev/urandom bs=4 count=1 | hexdump -x`
   run_expect_succ "$RADOS_TOOL" -p "$POOL" setomapheader $objname "$rand_str"
   run_expect_succ --tee "$fname.omap.header" "$RADOS_TOOL" -p "$POOL" getomapheader $objname
-
 # a few random omap keys
   for j in `seq 1 4`; do
     rand_str=`dd if=/dev/urandom bs=4 count=1 | hexdump -x`
@@ -281,13 +265,12 @@ expect_false()
 }
 
 cleanup() {
-    $RADOS_TOOL -p $POOL rm $OBJ > /dev/null 2>&1 || true
-    $RADOS_TOOL -p $POOL_EC rm $OBJ > /dev/null 2>&1 || true
+    $RADOS_TOOL -p $POOL rm $OBJ || true
 }
 
 test_omap() {
     cleanup
-    for i in $(seq 1 1 10)
+    for i in $(seq 1 1 600)
     do
 	if [ $(($i % 2)) -eq 0 ]; then
             $RADOS_TOOL -p $POOL setomapval $OBJ $i $i
@@ -296,26 +279,7 @@ test_omap() {
 	fi
         $RADOS_TOOL -p $POOL getomapval $OBJ $i | grep -q "|$i|\$"
     done
-    $RADOS_TOOL -p $POOL listomapvals $OBJ | grep -c value | grep 10
-    for i in $(seq 1 1 5)
-    do
-        $RADOS_TOOL -p $POOL rmomapkey $OBJ $i
-    done
-    $RADOS_TOOL -p $POOL listomapvals $OBJ | grep -c value | grep 5
-    cleanup
-
-    for i in $(seq 1 1 10)
-    do
-        dd if=/dev/urandom bs=128 count=1 > $TDIR/omap_key
-        if [ $(($i % 2)) -eq 0 ]; then
-            $RADOS_TOOL -p $POOL --omap-key-file $TDIR/omap_key setomapval $OBJ $i
-        else
-            echo -n "$i" | $RADOS_TOOL -p $POOL --omap-key-file $TDIR/omap_key setomapval $OBJ
-        fi
-        $RADOS_TOOL -p $POOL --omap-key-file $TDIR/omap_key getomapval $OBJ | grep -q "|$i|\$"
-        $RADOS_TOOL -p $POOL --omap-key-file $TDIR/omap_key rmomapkey $OBJ
-        $RADOS_TOOL -p $POOL listomapvals $OBJ | grep -c value | grep 0
-    done
+    $RADOS_TOOL -p $POOL listomapvals $OBJ | grep -c value | grep 600
     cleanup
 }
 
@@ -336,240 +300,28 @@ test_xattr() {
     $RADOS_TOOL -p $POOL listxattr $OBJ > $V1
     grep -q foo $V1
     grep -q bar $V1
-    [ `cat $V1 | wc -l` -eq 2 ]
+    wc -l $V1 | grep -q "^2 "
     rm $V1 $V2
     cleanup
 }
 test_rmobj() {
     p=`uuidgen`
-    $CEPH_TOOL osd pool create $p 1
-    $CEPH_TOOL osd pool set-quota $p max_objects 1
+    ceph osd pool create $p 1
+    ceph osd pool set-quota $p max_objects 1
     V1=`mktemp fooattrXXXXXXX`
-    $RADOS_TOOL put $OBJ $V1 -p $p
-    while ! $CEPH_TOOL osd dump | grep 'full max_objects'
+    rados put $OBJ $V1 -p $p
+    while ! ceph osd dump | grep 'full max_objects'
     do
 	sleep 2
     done
-    $RADOS_TOOL -p $p rm $OBJ --force-full
-    $RADOS_TOOL rmpool $p $p --yes-i-really-really-mean-it
+    rados -p $p rm $OBJ --force-full
+    rados rmpool $p $p --yes-i-really-really-mean-it
     rm $V1
-}
-
-test_ls() {
-    echo "Testing rados ls command"
-    p=`uuidgen`
-    $CEPH_TOOL osd pool create $p 1
-    NS=10
-    OBJS=20
-    # Include default namespace (0) in the total
-    TOTAL=$(expr $OBJS \* $(expr $NS + 1))
-
-    for nsnum in `seq 0 $NS`
-    do
-        for onum in `seq 1 $OBJS`
-        do
-	    if [ "$nsnum" = "0" ];
-	    then
-                "$RADOS_TOOL" -p $p put obj${onum} /etc/fstab 2> /dev/null
-            else
-                "$RADOS_TOOL" -p $p -N "NS${nsnum}" put obj${onum} /etc/fstab 2> /dev/null
-	    fi
-	done
-    done
-    CHECK=$("$RADOS_TOOL" -p $p ls 2> /dev/null | wc -l)
-    if [ "$OBJS" -ne "$CHECK" ];
-    then
-        die "Created $OBJS objects in default namespace but saw $CHECK"
-    fi
-    TESTNS=NS${NS}
-    CHECK=$("$RADOS_TOOL" -p $p -N $TESTNS ls 2> /dev/null | wc -l)
-    if [ "$OBJS" -ne "$CHECK" ];
-    then
-        die "Created $OBJS objects in $TESTNS namespace but saw $CHECK"
-    fi
-    CHECK=$("$RADOS_TOOL" -p $p --all ls 2> /dev/null | wc -l)
-    if [ "$TOTAL" -ne "$CHECK" ];
-    then
-        die "Created $TOTAL objects but saw $CHECK"
-    fi
-
-    $RADOS_TOOL rmpool $p $p --yes-i-really-really-mean-it
-}
-
-test_cleanup() {
-    echo "Testing rados cleanup command"
-    p=`uuidgen`
-    $CEPH_TOOL osd pool create $p 1
-    NS=5
-    OBJS=4
-    # Include default namespace (0) in the total
-    TOTAL=$(expr $OBJS \* $(expr $NS + 1))
-
-    for nsnum in `seq 0 $NS`
-    do
-        for onum in `seq 1 $OBJS`
-        do
-	    if [ "$nsnum" = "0" ];
-	    then
-                "$RADOS_TOOL" -p $p put obj${onum} /etc/fstab 2> /dev/null
-            else
-                "$RADOS_TOOL" -p $p -N "NS${nsnum}" put obj${onum} /etc/fstab 2> /dev/null
-	    fi
-	done
-    done
-
-    $RADOS_TOOL -p $p --all ls > $TDIR/before.ls.out 2> /dev/null
-
-    $RADOS_TOOL -p $p bench 3 write --no-cleanup 2> /dev/null
-    $RADOS_TOOL -p $p -N NS1 bench 3 write --no-cleanup 2> /dev/null
-    $RADOS_TOOL -p $p -N NS2 bench 3 write --no-cleanup 2> /dev/null
-    $RADOS_TOOL -p $p -N NS3 bench 3 write --no-cleanup 2> /dev/null
-    # Leave dangling objects without a benchmark_last_metadata in NS4
-    expect_false timeout 3 $RADOS_TOOL -p $p -N NS4 bench 30 write --no-cleanup 2> /dev/null
-    $RADOS_TOOL -p $p -N NS5 bench 3 write --no-cleanup 2> /dev/null
-
-    $RADOS_TOOL -p $p -N NS3 cleanup 2> /dev/null
-    #echo "Check NS3 after specific cleanup"
-    CHECK=$($RADOS_TOOL -p $p -N NS3 ls | wc -l)
-    if [ "$OBJS" -ne "$CHECK" ] ;
-    then
-        die "Expected $OBJS objects in NS3 but saw $CHECK"
-    fi
-
-    #echo "Try to cleanup all"
-    $RADOS_TOOL -p $p --all cleanup
-    #echo "Check all namespaces"
-    $RADOS_TOOL -p $p --all ls > $TDIR/after.ls.out 2> /dev/null
-    CHECK=$(cat $TDIR/after.ls.out | wc -l)
-    if [ "$TOTAL" -ne "$CHECK" ];
-    then
-        die "Expected $TOTAL objects but saw $CHECK"
-    fi
-    if ! diff $TDIR/before.ls.out $TDIR/after.ls.out
-    then
-        die "Different objects found after cleanup"
-    fi
-
-    set +e
-    run_expect_fail $RADOS_TOOL -p $p cleanup --prefix illegal_prefix
-    run_expect_succ $RADOS_TOOL -p $p cleanup --prefix benchmark_data_otherhost
-    set -e
-
-    $RADOS_TOOL rmpool $p $p --yes-i-really-really-mean-it
-}
-
-function test_append()
-{
-  cleanup
-
-  # create object
-  touch ./rados_append_null
-  $RADOS_TOOL -p $POOL append $OBJ ./rados_append_null
-  $RADOS_TOOL -p $POOL get $OBJ ./rados_append_0_out
-  cmp ./rados_append_null ./rados_append_0_out
-
-  # append 4k, total size 4k
-  dd if=/dev/zero of=./rados_append_4k bs=4k count=1
-  $RADOS_TOOL -p $POOL append $OBJ ./rados_append_4k
-  $RADOS_TOOL -p $POOL get $OBJ ./rados_append_4k_out
-  cmp ./rados_append_4k ./rados_append_4k_out
-
-  # append 4k, total size 8k
-  $RADOS_TOOL -p $POOL append $OBJ ./rados_append_4k
-  $RADOS_TOOL -p $POOL get $OBJ ./rados_append_4k_out
-  read_size=`ls -l ./rados_append_4k_out | awk -F ' '  '{print $5}'`
-  if [ 8192 -ne $read_size ];
-  then
-    die "Append failed expecting 8192 read $read_size"
-  fi
-
-  # append 10M, total size 10493952
-  dd if=/dev/zero of=./rados_append_10m bs=10M count=1
-  $RADOS_TOOL -p $POOL append $OBJ ./rados_append_10m
-  $RADOS_TOOL -p $POOL get $OBJ ./rados_append_10m_out
-  read_size=`ls -l ./rados_append_10m_out | awk -F ' '  '{print $5}'`
-  if [ 10493952 -ne $read_size ];
-  then
-    die "Append failed expecting 10493952 read $read_size"
-  fi
-
-  # cleanup
-  cleanup
-
-  # create object
-  $RADOS_TOOL -p $POOL_EC append $OBJ ./rados_append_null
-  $RADOS_TOOL -p $POOL_EC get $OBJ ./rados_append_0_out
-  cmp rados_append_null rados_append_0_out
-
-  # append 4k, total size 4k
-  $RADOS_TOOL -p $POOL_EC append $OBJ ./rados_append_4k
-  $RADOS_TOOL -p $POOL_EC get $OBJ ./rados_append_4k_out
-  cmp rados_append_4k rados_append_4k_out
-
-  # append 4k, total size 8k
-  $RADOS_TOOL -p $POOL_EC append $OBJ ./rados_append_4k
-  $RADOS_TOOL -p $POOL_EC get $OBJ ./rados_append_4k_out
-  read_size=`ls -l ./rados_append_4k_out | awk -F ' '  '{print $5}'`
-  if [ 8192 -ne $read_size ];
-  then
-    die "Append failed expecting 8192 read $read_size"
-  fi
-
-  # append 10M, total size 10493952
-  $RADOS_TOOL -p $POOL_EC append $OBJ ./rados_append_10m
-  $RADOS_TOOL -p $POOL_EC get $OBJ ./rados_append_10m_out
-  read_size=`ls -l ./rados_append_10m_out | awk -F ' '  '{print $5}'`
-  if [ 10493952 -ne $read_size ];
-  then
-    die "Append failed expecting 10493952 read $read_size"
-  fi
-
-  cleanup
-  rm -rf ./rados_append_null ./rados_append_0_out
-  rm -rf ./rados_append_4k ./rados_append_4k_out ./rados_append_10m ./rados_append_10m_out
-}
-
-function test_put()
-{
-  # rados put test:
-  cleanup
-
-  # create file in local fs
-  dd if=/dev/urandom of=rados_object_10k bs=1K count=10
-
-  # test put command
-  $RADOS_TOOL -p $POOL put $OBJ ./rados_object_10k
-  $RADOS_TOOL -p $POOL get $OBJ ./rados_object_10k_out
-  cmp ./rados_object_10k ./rados_object_10k_out
-  cleanup
-
-  # test put command with offset 0
-  $RADOS_TOOL -p $POOL put $OBJ ./rados_object_10k --offset 0
-  $RADOS_TOOL -p $POOL get $OBJ ./rados_object_offset_0_out
-  cmp ./rados_object_10k ./rados_object_offset_0_out
-  cleanup
-
-  # test put command with offset 1000
-  $RADOS_TOOL -p $POOL put $OBJ ./rados_object_10k --offset 1000
-  $RADOS_TOOL -p $POOL get $OBJ ./rados_object_offset_1000_out
-  cmp ./rados_object_10k ./rados_object_offset_1000_out 0 1000
-  cleanup
-
-  rm -rf ./rados_object_10k ./rados_object_10k_out ./rados_object_offset_0_out ./rados_object_offset_1000_out
 }
 
 test_xattr
 test_omap
 test_rmobj
-test_ls
-test_cleanup
-test_append
-test_put
-
-# clean up environment, delete pool
-$CEPH_TOOL osd pool delete $POOL $POOL --yes-i-really-really-mean-it
-$CEPH_TOOL osd pool delete $POOL_EC $POOL_EC --yes-i-really-really-mean-it
-$CEPH_TOOL osd pool delete $POOL_CP_TARGET $POOL_CP_TARGET --yes-i-really-really-mean-it
 
 echo "SUCCESS!"
 exit 0

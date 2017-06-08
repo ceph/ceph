@@ -3,7 +3,7 @@
 
 /*
  * This is a simple example RADOS class, designed to be usable as a
- * template for implementing new methods.
+ * template from implementing new methods.
  *
  * Our goal here is to illustrate the interface between the OSD and
  * the class and demonstrate what kinds of things a class can do.
@@ -38,6 +38,15 @@
 
 CLS_VER(1,0)
 CLS_NAME(hello)
+
+cls_handle_t h_class;
+cls_method_handle_t h_say_hello;
+cls_method_handle_t h_record_hello;
+cls_method_handle_t h_replay;
+cls_method_handle_t h_writes_dont_return_data;
+cls_method_handle_t h_turn_it_to_11;
+cls_method_handle_t h_bad_reader;
+cls_method_handle_t h_bad_writer;
 
 /**
  * say hello - a "read" method that does not depend on the object
@@ -252,7 +261,7 @@ static int bad_writer(cls_method_context_t hctx, bufferlist *in, bufferlist *out
 class PGLSHelloFilter : public PGLSFilter {
   string val;
 public:
-  int init(bufferlist::iterator& params) override {
+  int init(bufferlist::iterator& params) {
     try {
       ::decode(xattr, params);
       ::decode(val, params);
@@ -262,9 +271,9 @@ public:
     return 0;
   }
 
-  ~PGLSHelloFilter() override {}
-  bool filter(const hobject_t &obj, bufferlist& xattr_data,
-                      bufferlist& outdata) override
+  virtual ~PGLSHelloFilter() {}
+  virtual bool filter(const hobject_t &obj, bufferlist& xattr_data,
+                      bufferlist& outdata)
   {
     if (val.size() != xattr_data.length())
       return false;
@@ -289,20 +298,11 @@ PGLSFilter *hello_filter()
  * We do two things here: we register the new class, and then register
  * all of the class's methods.
  */
-CLS_INIT(hello)
+void __cls_init()
 {
   // this log message, at level 0, will always appear in the ceph-osd
   // log file.
   CLS_LOG(0, "loading cls_hello");
-
-  cls_handle_t h_class;
-  cls_method_handle_t h_say_hello;
-  cls_method_handle_t h_record_hello;
-  cls_method_handle_t h_replay;
-  cls_method_handle_t h_writes_dont_return_data;
-  cls_method_handle_t h_turn_it_to_11;
-  cls_method_handle_t h_bad_reader;
-  cls_method_handle_t h_bad_writer;
 
   cls_register("hello", &h_class);
 

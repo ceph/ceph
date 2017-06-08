@@ -35,15 +35,15 @@ public:
   {}
 
 private:
-  ~MPGStats() override {}
+  ~MPGStats() {}
 
 public:
-  const char *get_type_name() const override { return "pg_stats"; }
-  void print(ostream& out) const override {
+  const char *get_type_name() const { return "pg_stats"; }
+  void print(ostream& out) const {
     out << "pg_stats(" << pg_stat.size() << " pgs tid " << get_tid() << " v " << version << ")";
   }
 
-  void encode_payload(uint64_t features) override {
+  void encode_payload(uint64_t features) {
     paxos_encode();
     ::encode(fsid, payload);
     ::encode(osd_stat, payload);
@@ -51,7 +51,7 @@ public:
     ::encode(epoch, payload);
     ::encode(had_map_for, payload);
   }
-  void decode_payload() override {
+  void decode_payload() {
     bufferlist::iterator p = payload.begin();
     paxos_decode(p);
     ::decode(fsid, p);

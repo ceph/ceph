@@ -284,12 +284,6 @@ public:
     else
       ::encode((uint32_t)0, bl);
   }
-  void encode(bufferlist &bl, uint64_t features) const {
-    if (map)
-      ::encode(*map, bl, features);
-    else
-      ::encode((uint32_t)0, bl);
-  }
   void decode(bufferlist::iterator& p) {
     uint32_t n;
     ::decode(n, p);
@@ -304,11 +298,6 @@ public:
 template<class Key, class T, class Map>
 inline void encode(const compact_map_base<Key, T, Map>& m, bufferlist& bl) {
   m.encode(bl);
-}
-template<class Key, class T, class Map>
-inline void encode(const compact_map_base<Key, T, Map>& m, bufferlist& bl,
-		   uint64_t features) {
-  m.encode(bl, features);
 }
 template<class Key, class T, class Map>
 inline void decode(compact_map_base<Key, T, Map>& m, bufferlist::iterator& p) {

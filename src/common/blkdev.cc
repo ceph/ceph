@@ -9,11 +9,16 @@
  * Foundation.  See file COPYING.
  * 
  */
-
 #include <errno.h>
+#include <sys/types.h>
 #include <sys/ioctl.h>
 #include <sys/stat.h>
+#include <stdio.h>
+#include <string.h>
+#include <ctype.h>
 #include <dirent.h>
+#include <stdlib.h>
+#include "include/int_types.h"
 #include "include/uuid.h"
 
 #ifdef __linux__
@@ -41,7 +46,6 @@ int get_block_device_size(int fd, int64_t *psize)
   int ret = ::ioctl(fd, BLKGETSIZE, &sectors);
   *psize = sectors * 512ULL;
 #else
-// cppcheck-suppress preprocessorErrorDirective
 # error "Linux configuration error (get_block_device_size)"
 #endif
   if (ret < 0)
@@ -54,30 +58,22 @@ int get_block_device_size(int fd, int64_t *psize)
  *  e.g.,
  *   /dev/sda3 -> sda
  *   /dev/cciss/c0d1p2 -> cciss/c0d1
- *  dev can a symbolic link.
  */
 int get_block_device_base(const char *dev, char *out, size_t out_len)
 {
   struct stat st;
   int r = 0;
+  char buf[PATH_MAX*2];
+  struct dirent *de;
   DIR *dir;
-  char devname[PATH_MAX] = {0}, fn[PATH_MAX] = {0};
+  char devname[PATH_MAX], fn[PATH_MAX];
   char *p;
-  char realname[PATH_MAX] = {0};
 
-  if (strncmp(dev, "/dev/", 5) != 0) {
-    if (realpath(dev, realname) == NULL || (strncmp(realname, "/dev/", 5) != 0)) {
-      return -EINVAL;
-    }
-  }
+  if (strncmp(dev, "/dev/", 5) != 0)
+    return -EINVAL;
 
-  if (strlen(realname))
-    strncpy(devname, realname + 5, PATH_MAX - 5);
-  else
-    strncpy(devname, dev + 5, strlen(dev) - 5);
-
-  devname[PATH_MAX - 1] = '\0';
-
+  strncpy(devname, dev + 5, PATH_MAX-1);
+  devname[PATH_MAX-1] = '\0';
   for (p = devname; *p; ++p)
     if (*p == '/')
       *p = '!';
@@ -96,8 +92,14 @@ int get_block_device_base(const char *dev, char *out, size_t out_len)
   if (!dir)
     return -errno;
 
-  struct dirent *de = nullptr;
-  while ((de = ::readdir(dir))) {
+  while (!::readdir_r(dir, reinterpret_cast<struct dirent*>(buf), &de)) {
+    if (!de) {
+      if (errno) {
+	r = -errno;
+	goto out;
+      }
+      break;
+    }
     if (de->d_name[0] == '.')
       continue;
     snprintf(fn, sizeof(fn), "%s/sys/block/%s/%s", sandbox_dir, de->d_name,
@@ -122,40 +124,6 @@ int get_block_device_base(const char *dev, char *out, size_t out_len)
 }
 
 /**
- * get a block device property as a string
- *
- * store property in *val, up to maxlen chars
- * return 0 on success
- * return negative error on error
- */
-int64_t get_block_device_string_property(const char *devname,
-					 const char *property,
-					 char *val, size_t maxlen)
-{
-  char filename[PATH_MAX];
-  snprintf(filename, sizeof(filename),
-	   "%s/sys/block/%s/%s", sandbox_dir, devname, property);
-
-  FILE *fp = fopen(filename, "r");
-  if (fp == NULL) {
-    return -errno;
-  }
-
-  int r = 0;
-  if (fgets(val, maxlen - 1, fp)) {
-    // truncate at newline
-    char *p = val;
-    while (*p && *p != '\n')
-      ++p;
-    *p = 0;
-  } else {
-    r = -EINVAL;
-  }
-  fclose(fp);
-  return r;
-}
-
-/**
  * get a block device property
  *
  * return the value (we assume it is positive)
@@ -163,43 +131,50 @@ int64_t get_block_device_string_property(const char *devname,
  */
 int64_t get_block_device_int_property(const char *devname, const char *property)
 {
-  char buff[256] = {0};
-  int r = get_block_device_string_property(devname, property, buff, sizeof(buff));
+  char basename[PATH_MAX], filename[PATH_MAX];
+  int64_t r;
+
+  r = get_block_device_base(devname, basename, sizeof(basename));
   if (r < 0)
     return r;
-  // take only digits
-  for (char *p = buff; *p; ++p) {
-    if (!isdigit(*p)) {
-      *p = 0;
-      break;
-    }
+
+  snprintf(filename, sizeof(filename),
+	   "%s/sys/block/%s/queue/discard_granularity", sandbox_dir, basename);
+
+  FILE *fp = fopen(filename, "r");
+  if (fp == NULL) {
+    return -errno;
   }
-  char *endptr = 0;
-  r = strtoll(buff, &endptr, 10);
-  if (endptr != buff + strlen(buff))
-    r = -EINVAL;
+
+  char buff[256] = {0};
+  if (fgets(buff, sizeof(buff) - 1, fp)) {
+    // strip newline etc
+    for (char *p = buff; *p; ++p) {
+      if (!isdigit(*p)) {
+	*p = 0;
+	break;
+      }
+    }
+    char *endptr = 0;
+    r = strtoll(buff, &endptr, 10);
+    if (endptr != buff + strlen(buff))
+      r = -EINVAL;
+  } else {
+    r = 0;
+  }
+  fclose(fp);
   return r;
 }
 
 bool block_device_support_discard(const char *devname)
 {
-  return get_block_device_int_property(devname, "queue/discard_granularity") > 0;
+  return get_block_device_int_property(devname, "discard_granularity") > 0;
 }
 
 int block_device_discard(int fd, int64_t offset, int64_t len)
 {
   uint64_t range[2] = {(uint64_t)offset, (uint64_t)len};
   return ioctl(fd, BLKDISCARD, range);
-}
-
-bool block_device_is_rotational(const char *devname)
-{
-  return get_block_device_int_property(devname, "queue/rotational") > 0;
-}
-
-int block_device_model(const char *devname, char *model, size_t max)
-{
-  return get_block_device_string_property(devname, "device/model", model, max);
 }
 
 int get_device_by_uuid(uuid_d dev_uuid, const char* label, char* partition,
@@ -217,7 +192,7 @@ int get_device_by_uuid(uuid_d dev_uuid, const char* label, char* partition,
   if (blkid_get_cache(&cache, NULL) >= 0)
     dev = blkid_find_dev_with_tag(cache, label, (const char*)uuid_str);
   else
-    return -EINVAL;
+    rc = -EINVAL;
 
   if (dev) {
     temp_partition_ptr = blkid_dev_devname(dev);
@@ -240,29 +215,6 @@ int get_device_by_uuid(uuid_d dev_uuid, const char* label, char* partition,
     blkid_put_cache(cache);
   return rc;
 }
-
-int get_device_by_fd(int fd, char *partition, char *device, size_t max)
-{
-  struct stat st;
-  int r = fstat(fd, &st);
-  if (r < 0) {
-    return -EINVAL;  // hrm.
-  }
-  dev_t devid = S_ISBLK(st.st_mode) ? st.st_rdev : st.st_dev;
-  char *t = blkid_devno_to_devname(devid);
-  if (!t) {
-    return -EINVAL;
-  }
-  strncpy(partition, t, max);
-  free(t);
-  dev_t diskdev;
-  r = blkid_devno_to_wholedisk(devid, device, max, &diskdev);
-  if (r < 0) {
-    return -EINVAL;
-  }
-  return 0;
-}
-
 #elif defined(__APPLE__)
 #include <sys/disk.h>
 
@@ -291,11 +243,6 @@ int block_device_discard(int fd, int64_t offset, int64_t len)
   return -EOPNOTSUPP;
 }
 
-bool block_device_is_rotational(const char *devname)
-{
-  return false;
-}
-
 int get_device_by_uuid(uuid_d dev_uuid, const char* label, char* partition,
 	char* device)
 {
@@ -322,49 +269,11 @@ int block_device_discard(int fd, int64_t offset, int64_t len)
   return -EOPNOTSUPP;
 }
 
-bool block_device_is_rotational(const char *devname)
-{
-  return false;
-}
-
 int get_device_by_uuid(uuid_d dev_uuid, const char* label, char* partition,
 	char* device)
-{
-  return -EOPNOTSUPP;
-}
-int get_device_by_fd(int fd, char* partition, char* device)
 {
   return -EOPNOTSUPP;
 }
 #else
-int get_block_device_size(int fd, int64_t *psize)
-{
-  return -EOPNOTSUPP;
-}
-
-bool block_device_support_discard(const char *devname)
-{
-  return false;
-}
-
-int block_device_discard(int fd, int64_t offset, int64_t len)
-{
-  return -EOPNOTSUPP;
-}
-
-bool block_device_is_rotational(const char *devname)
-{
-  return false;
-}
-
-int get_device_by_uuid(uuid_d dev_uuid, const char* label, char* partition,
-	char* device)
-{
-  return -EOPNOTSUPP;
-}
-
-int get_device_by_fd(int fd, char* partition, char* device)
-{
-  return -EOPNOTSUPP;
-}
+# error "Unable to query block device size: unsupported platform, please report."
 #endif

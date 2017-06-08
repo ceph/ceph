@@ -42,8 +42,7 @@ int main(int argc, const char **argv, char *envp[])
   vector<const char*> args;
   argv_to_vec(argc, argv, args);
 
-  auto cct = global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT,
-			 CODE_ENVIRONMENT_UTILITY, 0);
+  global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
   common_init_finish(g_ceph_context);
 
   parse_syn_options(args);   // for SyntheticClient
@@ -67,7 +66,7 @@ int main(int argc, const char **argv, char *envp[])
     messengers[i]->bind(g_conf->public_addr);
     mclients[i] = new MonClient(g_ceph_context);
     mclients[i]->build_initial_monmap();
-    auto client = new StandaloneClient(messengers[i], mclients[i]);
+    Client *client = new Client(messengers[i], mclients[i]);
     client->set_filer_flags(syn_filer_flags);
     SyntheticClient *syn = new SyntheticClient(client);
     clients.push_back(client);

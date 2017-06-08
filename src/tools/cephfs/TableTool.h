@@ -13,9 +13,9 @@
 
 
 #include "MDSUtility.h"
-#include "RoleSelector.h"
 
 #include "include/rados/librados.hpp"
+
 
 /**
  * Command line tool for debugging the backing store of
@@ -24,17 +24,18 @@
 class TableTool : public MDSUtility
 {
   private:
-    MDSRoleSelector role_selector;
+    mds_rank_t rank;
 
     // I/O handles
     librados::Rados rados;
     librados::IoCtx io;
 
-    int apply_role_fn(std::function<int(mds_role_t, Formatter *)> fptr, Formatter *f);
+    int apply_rank_fn(std::function<int(mds_rank_t, Formatter *)> fptr, Formatter *f);
 
   public:
     void usage();
+    TableTool() :
+      rank(MDS_RANK_NONE) {}
     int main(std::vector<const char*> &argv);
 
 };
-

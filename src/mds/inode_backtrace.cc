@@ -122,7 +122,6 @@ int inode_backtrace_t::compare(const inode_backtrace_t& other,
                                bool *equivalent, bool *divergent) const
 {
   int min_size = MIN(ancestors.size(),other.ancestors.size());
-  *equivalent = true;
   *divergent = false;
   if (min_size == 0)
     return 0;
@@ -131,9 +130,6 @@ int inode_backtrace_t::compare(const inode_backtrace_t& other,
     comparator = 1;
   else if (ancestors[0].version < other.ancestors[0].version)
     comparator = -1;
-  if (ancestors[0].dirino != other.ancestors[0].dirino ||
-      ancestors[0].dname != other.ancestors[0].dname)
-    *divergent = true;
   for (int i = 1; i < min_size; ++i) {
     if (*divergent) {
       /**
@@ -142,10 +138,20 @@ int inode_backtrace_t::compare(const inode_backtrace_t& other,
        */
       break;
     }
-    if (ancestors[i].dirino != other.ancestors[i].dirino ||
-        ancestors[i].dname != other.ancestors[i].dname) {
+    if (ancestors[i].dirino != other.ancestors[i].dirino) {
       *equivalent = false;
-      return comparator;
+      if (ancestors[i-1].version < other.ancestors[i-1].version) {
+        if (comparator > 0)
+          *divergent = true;
+        return -1;
+      } else if (ancestors[i-1].version > other.ancestors[i-1].version) {
+        if (comparator < 0)
+          *divergent = true;
+        return 1;
+      } else {
+        assert(ancestors[i-1].version == other.ancestors[i-1].version);
+        return 0;
+      }
     } else if (ancestors[i].version > other.ancestors[i].version) {
       if (comparator < 0)
         *divergent = true;
@@ -156,7 +162,7 @@ int inode_backtrace_t::compare(const inode_backtrace_t& other,
       comparator = -1;
     }
   }
-  if (*divergent)
-    *equivalent = false;
+  if (!*divergent)
+    *equivalent = true;
   return comparator;
 }

@@ -2,57 +2,82 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "test/librados_test_stub/TestMemRadosClient.h"
-#include "test/librados_test_stub/TestMemCluster.h"
 #include "test/librados_test_stub/TestMemIoCtxImpl.h"
 #include <errno.h>
-#include <sstream>
 
 namespace librados {
 
-TestMemRadosClient::TestMemRadosClient(CephContext *cct,
-                                       TestMemCluster *test_mem_cluster)
-  : TestRadosClient(cct, test_mem_cluster->get_watch_notify()),
-    m_mem_cluster(test_mem_cluster) {
-  m_mem_cluster->allocate_client(&m_nonce, &m_global_id);
+TestMemRadosClient::TestMemRadosClient(CephContext *cct)
+  : TestRadosClient(cct), m_pool_id() {
 }
 
 TestMemRadosClient::~TestMemRadosClient() {
-  m_mem_cluster->deallocate_client(m_nonce);
+  for (Pools::iterator iter = m_pools.begin(); iter != m_pools.end(); ++iter) {
+    delete iter->second;
+  }
+}
+
+TestMemRadosClient::File::File()
+  : snap_id(), exists(true), lock("TestMemRadosClient::File::lock")
+{
+}
+
+TestMemRadosClient::File::File(const File &rhs)
+  : data(rhs.data),
+    mtime(rhs.mtime),
+    snap_id(rhs.snap_id),
+    exists(rhs.exists),
+    lock("TestMemRadosClient::File::lock")
+{
+}
+
+TestMemRadosClient::Pool::Pool()
+  : pool_id(), snap_id(1), file_lock("TestMemRadosClient::Pool::file_lock")
+{
 }
 
 TestIoCtxImpl *TestMemRadosClient::create_ioctx(int64_t pool_id,
 						const std::string &pool_name) {
-  return new TestMemIoCtxImpl(this, pool_id, pool_name,
-                              m_mem_cluster->get_pool(pool_name));
+  return new TestMemIoCtxImpl(this, pool_id, pool_name, get_pool(pool_name));
 }
 
 void TestMemRadosClient::object_list(int64_t pool_id,
  				     std::list<librados::TestRadosClient::Object> *list) {
   list->clear();
 
-  auto pool = m_mem_cluster->get_pool(pool_id);
-  if (pool != nullptr) {
-    RWLock::RLocker file_locker(pool->file_lock);
-    for (auto &file_pair : pool->files) {
-      Object obj;
-      obj.oid = file_pair.first;
-      list->push_back(obj);
+  for (Pools::iterator p_it = m_pools.begin(); p_it != m_pools.end(); ++p_it) {
+    Pool *pool = p_it->second;
+    if (pool->pool_id == pool_id) {
+      RWLock::RLocker l(pool->file_lock);
+      for (Files::iterator it = pool->files.begin();
+	   it != pool->files.end(); ++it) {
+	Object obj;
+	obj.oid = it->first;
+	list->push_back(obj);
+      } 
+      break;
     }
   }
-}
+} 
 
 int TestMemRadosClient::pool_create(const std::string &pool_name) {
-  if (is_blacklisted()) {
-    return -EBLACKLISTED;
+  if (m_pools.find(pool_name) != m_pools.end()) {
+    return -EEXIST;
   }
-  return m_mem_cluster->pool_create(pool_name);
+  Pool *pool = new Pool();
+  pool->pool_id = ++m_pool_id;
+  m_pools[pool_name] = pool;
+  return 0;
 }
 
 int TestMemRadosClient::pool_delete(const std::string &pool_name) {
-  if (is_blacklisted()) {
-    return -EBLACKLISTED;
+  Pools::iterator iter = m_pools.find(pool_name);
+  if (iter == m_pools.end()) {
+    return -ENOENT;
   }
-  return m_mem_cluster->pool_delete(pool_name);
+  iter->second->put();
+  m_pools.erase(iter);
+  return 0;
 }
 
 int TestMemRadosClient::pool_get_base_tier(int64_t pool_id, int64_t* base_tier) {
@@ -62,55 +87,46 @@ int TestMemRadosClient::pool_get_base_tier(int64_t pool_id, int64_t* base_tier) 
 }
 
 int TestMemRadosClient::pool_list(std::list<std::pair<int64_t, std::string> >& v) {
-  return m_mem_cluster->pool_list(v);
-}
-
-int64_t TestMemRadosClient::pool_lookup(const std::string &pool_name) {
-  return m_mem_cluster->pool_lookup(pool_name);
-}
-
-int TestMemRadosClient::pool_reverse_lookup(int64_t id, std::string *name) {
-  return m_mem_cluster->pool_reverse_lookup(id, name);
-}
-
-int TestMemRadosClient::watch_flush() {
-  get_watch_notify()->flush(this);
+  v.clear();
+  for (Pools::iterator iter = m_pools.begin(); iter != m_pools.end(); ++iter) {
+    v.push_back(std::make_pair(iter->second->pool_id, iter->first));
+  }
   return 0;
 }
 
-bool TestMemRadosClient::is_blacklisted() const {
-  return m_mem_cluster->is_blacklisted(m_nonce);
+int64_t TestMemRadosClient::pool_lookup(const std::string &pool_name) {
+  Pools::iterator iter = m_pools.find(pool_name);
+  if (iter == m_pools.end()) {
+    return -ENOENT;
+  }
+  return iter->second->pool_id;
+}
+
+int TestMemRadosClient::pool_reverse_lookup(int64_t id, std::string *name) {
+  for (Pools::iterator iter = m_pools.begin(); iter != m_pools.end(); ++iter) {
+    if (iter->second->pool_id == id) {
+      *name = iter->first;
+      return 0;
+    }
+  }
+  return -ENOENT;
+}
+
+int TestMemRadosClient::watch_flush() {
+  get_watch_notify().flush();
+  return 0;
 }
 
 int TestMemRadosClient::blacklist_add(const std::string& client_address,
 				      uint32_t expire_seconds) {
-  if (is_blacklisted()) {
-    return -EBLACKLISTED;
-  }
-
-  // extract the nonce to use as a unique key to the client
-  auto idx = client_address.find("/");
-  if (idx == std::string::npos || idx + 1 >= client_address.size()) {
-    return -EINVAL;
-  }
-
-  std::stringstream nonce_ss(client_address.substr(idx + 1));
-  uint32_t nonce;
-  nonce_ss >> nonce;
-  if (!nonce_ss) {
-    return -EINVAL;
-  }
-
-  m_mem_cluster->blacklist(nonce);
   return 0;
 }
 
-void TestMemRadosClient::transaction_start(const std::string &oid) {
-  m_mem_cluster->transaction_start(oid);
-}
-
-void TestMemRadosClient::transaction_finish(const std::string &oid) {
-  m_mem_cluster->transaction_finish(oid);
+TestMemRadosClient::Pool *TestMemRadosClient::get_pool(
+    const std::string &pool_name) {
+  Pools::iterator iter = m_pools.find(pool_name);
+  assert(iter != m_pools.end());
+  return iter->second;
 }
 
 } // namespace librados

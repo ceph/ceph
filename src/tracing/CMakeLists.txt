@@ -1,59 +1,38 @@
-# we are in "src/tracing", so create the output dir manually.
-# the source files include the tracing headers like
-# #include "tracing/oprequest.h". so better put them into
-# ${PROJECT_BINARY_DIR}/include, where acconfig.h is also located
-set(working_dir ${CMAKE_BINARY_DIR}/include)
-set(header_dir ${working_dir}/tracing)
-file(MAKE_DIRECTORY ${header_dir})
+add_custom_target(lttng_gen_tp
+  ALL
+  COMMAND 
+  lttng-gen-tp tracing/librados.tp -o tracing/librados.h && 
+  lttng-gen-tp tracing/librbd.tp -o tracing/librbd.h && 
+  lttng-gen-tp tracing/objectstore.tp -o tracing/objectstore.h && 
+  lttng-gen-tp tracing/oprequest.tp -o tracing/oprequest.h &&
+  lttng-gen-tp tracing/osd.tp -o tracing/osd.h &&
+  lttng-gen-tp tracing/pg.tp -o tracing/pg.h
+  WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/src
+  COMMENT "lttng-gen-tp generated .h files")
 
-add_custom_target(tracepoint_libraries)
+add_library(libosd_tp STATIC
+  oprequest.c
+  osd.c
+  pg.c)
+target_link_libraries(libosd_tp lttng-ust dl)
+target_include_directories(libosd_tp PUBLIC ${CMAKE_SOURCE_DIR}/src/tracing)
+add_dependencies(libosd_tp lttng_gen_tp)
+set_target_properties(libosd_tp PROPERTIES OUTPUT_NAME osd_tp VERSION 1.0.0 SOVERSION 1)
 
-file(GLOB tps "*.tp")
-foreach(tp ${tps})
-  get_filename_component(name ${tp} NAME_WE)
-  set(header ${header_dir}/${name}.h)
-  add_custom_command(
-    OUTPUT ${header}
-    COMMAND ${LTTNG_GEN_TP} ${tp} -o tracing/${name}.h
-    DEPENDS ${tp}
-    WORKING_DIRECTORY ${working_dir}
-    COMMENT "generating ${header}")
-  add_custom_target(
-    ${name}-tp
-    DEPENDS ${header})
-endforeach()
+add_library(librados_tp STATIC librados.c)
+target_link_libraries(librados_tp lttng-ust dl)
+target_include_directories(librados_tp PUBLIC ${CMAKE_SOURCE_DIR}/src/tracing)
+add_dependencies(librados_tp lttng_gen_tp)
+set_target_properties(librados_tp PROPERTIES OUTPUT_NAME rados_tp VERSION 2.0.0 SOVERSION 2)
 
-function(add_tracing_library name tracings version)
-  foreach(tp_file ${tracings})
-    get_filename_component(tp ${tp_file} NAME_WE)
-    list(APPEND hdrs
-      ${header_dir}/${tp}.h)
-    list(APPEND tpfiles ${tp}.c)
-  endforeach()
-  add_library(${name} SHARED ${hdrs} ${tpfiles})
-  target_link_libraries(${name} ${LTTNGUST_LIBRARIES} ${CMAKE_DL_LIBS})
-  string(REGEX MATCH "^[0-9]+" soversion ${version})
-  set_target_properties(${name} PROPERTIES
-    OUTPUT_NAME ${name}
-    VERSION ${version}
-    SOVERSION ${soversion}
-    INSTALL_RPATH "")
-  add_dependencies(tracepoint_libraries ${name})
-endfunction()
+add_library(librbd_tp STATIC librbd.c)
+target_link_libraries(librbd_tp lttng-ust dl)
+target_include_directories(librbd_tp PUBLIC ${CMAKE_SOURCE_DIR}/src/tracing)
+add_dependencies(librbd_tp lttng_gen_tp)
+set_target_properties(librbd_tp PROPERTIES OUTPUT_NAME rbd_tp VERSION 1.0.0 SOVERSION 1)
 
-set(osd_traces oprequest.tp osd.tp pg.tp)
-add_tracing_library(osd_tp "${osd_traces}" 1.0.0)
-add_tracing_library(rados_tp librados.tp 2.0.0)
-add_tracing_library(rbd_tp librbd.tp 1.0.0)
-add_tracing_library(os_tp objectstore.tp 1.0.0)
-
-install(TARGETS rados_tp osd_tp rbd_tp os_tp DESTINATION ${CMAKE_INSTALL_LIBDIR})
-if(WITH_OSD_INSTRUMENT_FUNCTIONS)
-  add_tracing_library(cyg_profile_tp cyg_profile.tp 1.0.0)
-  install(TARGETS cyg_profile_tp DESTINATION ${CMAKE_INSTALL_LIBDIR})
-endif()
-if(WITH_LTTNG AND WITH_EVENTTRACE)
-  add_tracing_library(eventtrace_tp eventtrace.tp 1.0.0)
-  install(TARGETS eventtrace_tp DESTINATION ${CMAKE_INSTALL_LIBDIR})
-endif()
-
+add_library(libos_tp STATIC objectstore.c)
+target_link_libraries(libos_tp lttng-ust dl)
+target_include_directories(libos_tp PUBLIC ${CMAKE_SOURCE_DIR}/src/tracing)
+add_dependencies(libos_tp lttng_gen_tp)
+set_target_properties(libos_tp PROPERTIES OUTPUT_NAME os_tp VERSION 1.0.0 SOVERSION 1)

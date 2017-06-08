@@ -22,7 +22,7 @@ void DumbBackend::_write(
     full_path.c_str(), O_CREAT|O_WRONLY, 0777);
   if (fd < 0) {
     std::cout << full_path << ": errno is " << errno << std::endl;
-    ceph_abort();
+    assert(0);
   }
 
   int r =  ::lseek(fd, offset, SEEK_SET);

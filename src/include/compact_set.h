@@ -12,11 +12,7 @@
 #ifndef CEPH_COMPACT_SET_H
 #define CEPH_COMPACT_SET_H
 
-#include <stdlib.h>
-
-#include "include/buffer.h"
-#include "include/encoding.h"
-
+#include <set>
 
 template <class T, class Set>
 class compact_set_base {

@@ -4,9 +4,8 @@
 #ifndef CEPH_LIBRBD_IMAGE_OPEN_REQUEST_H
 #define CEPH_LIBRBD_IMAGE_OPEN_REQUEST_H
 
+#include "include/int_types.h"
 #include "include/buffer.h"
-#include <map>
-#include <string>
 
 class Context;
 
@@ -19,9 +18,8 @@ namespace image {
 template <typename ImageCtxT = ImageCtx>
 class OpenRequest {
 public:
-  static OpenRequest *create(ImageCtxT *image_ctx, bool skip_open_parent,
-                             Context *on_finish) {
-    return new OpenRequest(image_ctx, skip_open_parent, on_finish);
+  static OpenRequest *create(ImageCtxT *image_ctx, Context *on_finish) {
+    return new OpenRequest(image_ctx, on_finish);
   }
 
   void send();
@@ -32,57 +30,44 @@ private:
    *
    * <start>
    *    |
-   *    | (v1)
-   *    |-----> V1_DETECT_HEADER
-   *    |           |
-   *    |           \-------------------------------\
-   *    | (v2)                                      |
-   *    \-----> V2_DETECT_HEADER                    |
-   *                |                               |
-   *                v                               |
-   *            V2_GET_ID|NAME                      |
-   *                |                               |
-   *                v                               |
-   *            V2_GET_NAME_FROM_TRASH              |
-   *                |                               |
-   *                v                               |
-   *            V2_GET_IMMUTABLE_METADATA           |
-   *                |                               |
-   *                v                               |
-   *            V2_GET_STRIPE_UNIT_COUNT            |
-   *                |                               |
-   *                v                               |
-   *            V2_GET_DATA_POOL                    |
-   *                |                               |
-   *                v                               |
-   *      /---> V2_APPLY_METADATA -------------> REGISTER_WATCH (skip if
-   *      |         |                               |            read-only)
-   *      \---------/                               v
-   *                                             REFRESH
-   *                                                |
-   *                                                v
-   *                                             SET_SNAP (skip if no snap)
-   *                                                |
-   *                                                v
-   *                                             <finish>
-   *                                                ^
-   *     (on error)                                 |
-   *    * * * * * * > CLOSE ------------------------/
+   *    | (v1)                          (read only)
+   *    |-----> V1_DETECT_HEADER  . . . . . . . . . . . . . . . . .
+   *    |           |                                             .
+   *    |           \-------------------------------\             .
+   *    | (v2)                                      |             .
+   *    \-----> V2_DETECT_HEADER                    |             .
+   *                |                               |             .
+   *                v                               |             .
+   *            V2_GET_ID                           |             .
+   *                |                               |             .
+   *                v                               |             .
+   *            V2_GET_IMMUTABLE_METADATA           |             .
+   *                |                               |             .
+   *                v                               v             .
+   *            V2_GET_STRIPE_UNIT_COUNT  ----> REGISTER_WATCH    .
+   *                .                               |             .
+   *                .  (read only)                  v             .
+   *                . . . . . . . . . . . . . > REFRESH < . . . . .
+   *                                             .   |
+   *                                             .   |
+   *                                             .   \--> SET_SNAP
+   *                                   (no snap) .          |
+   *                                             .          v
+   *                                             . . . > <finish>
+   *                                                        ^
+   *     (on error)                                         |
+   *    * * * * * * > CLOSE --------------------------------/
    *
    * @endverbatim
    */
 
-  OpenRequest(ImageCtxT *image_ctx, bool skip_open_parent, Context *on_finish);
+  OpenRequest(ImageCtxT *image_ctx, Context *on_finish);
 
   ImageCtxT *m_image_ctx;
-  bool m_skip_open_parent_image;
   Context *m_on_finish;
 
   bufferlist m_out_bl;
   int m_error_result;
-
-  std::string m_last_metadata_key;
-  std::map<std::string, bufferlist> m_metadata;
 
   void send_v1_detect_header();
   Context *handle_v1_detect_header(int *result);
@@ -93,23 +78,11 @@ private:
   void send_v2_get_id();
   Context *handle_v2_get_id(int *result);
 
-  void send_v2_get_name();
-  Context *handle_v2_get_name(int *result);
-
-  void send_v2_get_name_from_trash();
-  Context *handle_v2_get_name_from_trash(int *result);
-
   void send_v2_get_immutable_metadata();
   Context *handle_v2_get_immutable_metadata(int *result);
 
   void send_v2_get_stripe_unit_count();
   Context *handle_v2_get_stripe_unit_count(int *result);
-
-  void send_v2_get_data_pool();
-  Context *handle_v2_get_data_pool(int *result);
-
-  void send_v2_apply_metadata();
-  Context *handle_v2_apply_metadata(int *result);
 
   void send_register_watch();
   Context *handle_register_watch(int *result);

@@ -70,8 +70,7 @@ int main(int argc, char **argv) {
   vector<const char*> args;
   argv_to_vec(argc, (const char **)argv, args);
 
-  auto cct = global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT,
-			 CODE_ENVIRONMENT_UTILITY, 0);
+  global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
   common_init_finish(g_ceph_context);
 
   char mb[10];
@@ -120,9 +119,9 @@ TEST(TestFileJournal, Create) {
   for (unsigned i = 0 ; i < 3; ++i) {
     SCOPED_TRACE(subtests[i].description);
     fsid.generate_random();
-    FileJournal fj(g_ceph_context, fsid, finisher, &sync_cond, path,
-		  subtests[i].directio, subtests[i].aio, subtests[i].faio);
-    ASSERT_EQ(0, fj.create());
+    FileJournal j(fsid, finisher, &sync_cond, path, subtests[i].directio,
+		  subtests[i].aio, subtests[i].faio);
+    ASSERT_EQ(0, j.create());
   }
 }
 
@@ -134,20 +133,19 @@ TEST(TestFileJournal, WriteSmall) {
   for (unsigned i = 0 ; i < 3; ++i) {
     SCOPED_TRACE(subtests[i].description);
     fsid.generate_random();
-    FileJournal fj(g_ceph_context, fsid, finisher, &sync_cond, path,
-		  subtests[i].directio, subtests[i].aio, subtests[i].faio);
-    ASSERT_EQ(0, fj.create());
-    ASSERT_EQ(0, fj.make_writeable());
+    FileJournal j(fsid, finisher, &sync_cond, path, subtests[i].directio,
+		  subtests[i].aio, subtests[i].faio);
+    ASSERT_EQ(0, j.create());
+    j.make_writeable();
 
-    vector<ObjectStore::Transaction> tls;
+    list<ObjectStore::Transaction*> tls;
     bufferlist bl;
     bl.append("small");
-    int orig_len = fj.prepare_entry(tls, &bl);
-    fj.reserve_throttle_and_backoff(bl.length());
-    fj.submit_entry(1, bl, orig_len, new C_SafeCond(&wait_lock, &cond, &done));
+    int orig_len = j.prepare_entry(tls, &bl);
+    j.submit_entry(1, bl, orig_len, new C_SafeCond(&wait_lock, &cond, &done));
     wait();
 
-    fj.close();
+    j.close();
   }
 }
 
@@ -159,10 +157,10 @@ TEST(TestFileJournal, WriteBig) {
   for (unsigned i = 0 ; i < 3; ++i) {
     SCOPED_TRACE(subtests[i].description);
     fsid.generate_random();
-    FileJournal fj(g_ceph_context, fsid, finisher, &sync_cond, path,
-		  subtests[i].directio, subtests[i].aio, subtests[i].faio);
-    ASSERT_EQ(0, fj.create());
-    ASSERT_EQ(0, fj.make_writeable());
+    FileJournal j(fsid, finisher, &sync_cond, path, subtests[i].directio,
+		  subtests[i].aio, subtests[i].faio);
+    ASSERT_EQ(0, j.create());
+    j.make_writeable();
 
     bufferlist bl;
     while (bl.length() < size_mb*1000/2) {
@@ -170,12 +168,11 @@ TEST(TestFileJournal, WriteBig) {
       memset(foo, 1, sizeof(foo));
       bl.append(foo, sizeof(foo));
     }
-    vector<ObjectStore::Transaction> tls;
-    int orig_len = fj.prepare_entry(tls, &bl);
-    fj.reserve_throttle_and_backoff(bl.length());
-    fj.submit_entry(1, bl, orig_len, new C_SafeCond(&wait_lock, &cond, &done));
+    list<ObjectStore::Transaction*> tls;
+    int orig_len = j.prepare_entry(tls, &bl);
+    j.submit_entry(1, bl, orig_len, new C_SafeCond(&wait_lock, &cond, &done));
     wait();
-    fj.close();
+    j.close();
   }
 }
 
@@ -187,28 +184,27 @@ TEST(TestFileJournal, WriteMany) {
   for (unsigned i = 0 ; i < 3; ++i) {
     SCOPED_TRACE(subtests[i].description);
     fsid.generate_random();
-    FileJournal fj(g_ceph_context, fsid, finisher, &sync_cond, path,
-		  subtests[i].directio, subtests[i].aio, subtests[i].faio);
-    ASSERT_EQ(0, fj.create());
-    ASSERT_EQ(0, fj.make_writeable());
+    FileJournal j(fsid, finisher, &sync_cond, path, subtests[i].directio,
+		  subtests[i].aio, subtests[i].faio);
+    ASSERT_EQ(0, j.create());
+    j.make_writeable();
 
     C_GatherBuilder gb(g_ceph_context, new C_SafeCond(&wait_lock, &cond, &done));
 
-    vector<ObjectStore::Transaction> tls;
+    list<ObjectStore::Transaction*> tls;
     bufferlist bl;
     bl.append("small");
     uint64_t seq = 1;
     for (int i=0; i<100; i++) {
       bl.append("small");
-      int orig_len = fj.prepare_entry(tls, &bl);
-      fj.reserve_throttle_and_backoff(bl.length());
-      fj.submit_entry(seq++, bl, orig_len, gb.new_sub());
+      int orig_len = j.prepare_entry(tls, &bl);
+      j.submit_entry(seq++, bl, orig_len, gb.new_sub());
     }
     gb.activate();
 
     wait();
 
-    fj.close();
+    j.close();
   }
 }
 
@@ -220,19 +216,18 @@ TEST(TestFileJournal, WriteManyVecs) {
   for (unsigned i = 0 ; i < 3; ++i) {
     SCOPED_TRACE(subtests[i].description);
     fsid.generate_random();
-    FileJournal fj(g_ceph_context, fsid, finisher, &sync_cond, path,
-		  subtests[i].directio, subtests[i].aio, subtests[i].faio);
-    ASSERT_EQ(0, fj.create());
-    ASSERT_EQ(0, fj.make_writeable());
+    FileJournal j(fsid, finisher, &sync_cond, path, subtests[i].directio,
+		  subtests[i].aio, subtests[i].faio);
+    ASSERT_EQ(0, j.create());
+    j.make_writeable();
 
     C_GatherBuilder gb(g_ceph_context, new C_SafeCond(&wait_lock, &cond, &done));
 
     bufferlist first;
     first.append("small");
-    vector<ObjectStore::Transaction> tls;
-    int orig_len = fj.prepare_entry(tls, &first);
-    fj.reserve_throttle_and_backoff(first.length());
-    fj.submit_entry(1, first, orig_len, gb.new_sub());
+    list<ObjectStore::Transaction*> tls;
+    int orig_len = j.prepare_entry(tls, &first);
+    j.submit_entry(1, first, orig_len, gb.new_sub());
 
     bufferlist bl;
     for (int i=0; i<IOV_MAX * 2; i++) {
@@ -241,23 +236,22 @@ TEST(TestFileJournal, WriteManyVecs) {
       bl.append(bp);
     }
     bufferlist origbl = bl;
-    orig_len = fj.prepare_entry(tls, &bl);
-    fj.reserve_throttle_and_backoff(bl.length());
-    fj.submit_entry(2, bl, orig_len, gb.new_sub());
+    orig_len = j.prepare_entry(tls, &bl);
+    j.submit_entry(2, bl, orig_len, gb.new_sub());
     gb.activate();
     wait();
 
-    fj.close();
+    j.close();
 
-    fj.open(1);
+    j.open(1);
     bufferlist inbl;
     string v;
     uint64_t seq = 0;
-    ASSERT_EQ(true, fj.read_entry(inbl, seq));
+    ASSERT_EQ(true, j.read_entry(inbl, seq));
     ASSERT_EQ(seq, 2ull);
     ASSERT_TRUE(inbl.contents_equal(origbl));
-    ASSERT_EQ(0, fj.make_writeable());
-    fj.close();
+    j.make_writeable();
+    j.close();
 
   }
 }
@@ -267,59 +261,56 @@ TEST(TestFileJournal, ReplaySmall) {
   g_ceph_context->_conf->set_val("journal_write_header_frequency", "0");
   g_ceph_context->_conf->apply_changes(NULL);
 
-  vector<ObjectStore::Transaction> tls;
+  list<ObjectStore::Transaction*> tls;
 
   for (unsigned i = 0 ; i < 3; ++i) {
     SCOPED_TRACE(subtests[i].description);
     fsid.generate_random();
-    FileJournal fj(g_ceph_context, fsid, finisher, &sync_cond, path,
-		  subtests[i].directio, subtests[i].aio, subtests[i].faio);
-    ASSERT_EQ(0, fj.create());
-    ASSERT_EQ(0, fj.make_writeable());
+    FileJournal j(fsid, finisher, &sync_cond, path, subtests[i].directio,
+		  subtests[i].aio, subtests[i].faio);
+    ASSERT_EQ(0, j.create());
+    j.make_writeable();
 
     C_GatherBuilder gb(g_ceph_context, new C_SafeCond(&wait_lock, &cond, &done));
 
     bufferlist bl;
     bl.append("small");
-    int orig_len = fj.prepare_entry(tls, &bl);
-    fj.reserve_throttle_and_backoff(bl.length());
-    fj.submit_entry(1, bl, orig_len, gb.new_sub());
+    int orig_len = j.prepare_entry(tls, &bl);
+    j.submit_entry(1, bl, orig_len, gb.new_sub());
     bl.append("small");
-    orig_len = fj.prepare_entry(tls, &bl);
-    fj.reserve_throttle_and_backoff(bl.length());
-    fj.submit_entry(2, bl, orig_len, gb.new_sub());
+    orig_len = j.prepare_entry(tls, &bl);
+    j.submit_entry(2, bl, orig_len, gb.new_sub());
     bl.append("small");
-    orig_len = fj.prepare_entry(tls, &bl);
-    fj.reserve_throttle_and_backoff(bl.length());
-    fj.submit_entry(3, bl, orig_len, gb.new_sub());
+    orig_len = j.prepare_entry(tls, &bl);
+    j.submit_entry(3, bl, orig_len, gb.new_sub());
     gb.activate();
     wait();
 
-    fj.close();
+    j.close();
 
-    fj.open(1);
+    j.open(1);
 
     bufferlist inbl;
     string v;
     uint64_t seq = 0;
-    ASSERT_EQ(true, fj.read_entry(inbl, seq));
+    ASSERT_EQ(true, j.read_entry(inbl, seq));
     ASSERT_EQ(seq, 2ull);
     inbl.copy(0, inbl.length(), v);
     ASSERT_EQ("small", v);
     inbl.clear();
     v.clear();
 
-    ASSERT_EQ(true, fj.read_entry(inbl, seq));
+    ASSERT_EQ(true, j.read_entry(inbl, seq));
     ASSERT_EQ(seq, 3ull);
     inbl.copy(0, inbl.length(), v);
     ASSERT_EQ("small", v);
     inbl.clear();
     v.clear();
 
-    ASSERT_TRUE(!fj.read_entry(inbl, seq));
+    ASSERT_TRUE(!j.read_entry(inbl, seq));
 
-    ASSERT_EQ(0, fj.make_writeable());
-    fj.close();
+    j.make_writeable();
+    j.close();
   }
 }
 
@@ -328,14 +319,14 @@ TEST(TestFileJournal, ReplayCorrupt) {
   g_ceph_context->_conf->set_val("journal_write_header_frequency", "0");
   g_ceph_context->_conf->apply_changes(NULL);
 
-  vector<ObjectStore::Transaction> tls;
+  list<ObjectStore::Transaction*> tls;
   for (unsigned i = 0 ; i < 3; ++i) {
     SCOPED_TRACE(subtests[i].description);
     fsid.generate_random();
-    FileJournal fj(g_ceph_context, fsid, finisher, &sync_cond, path,
-		  subtests[i].directio, subtests[i].aio, subtests[i].faio);
-    ASSERT_EQ(0, fj.create());
-    ASSERT_EQ(0, fj.make_writeable());
+    FileJournal j(fsid, finisher, &sync_cond, path, subtests[i].directio,
+		  subtests[i].aio, subtests[i].faio);
+    ASSERT_EQ(0, j.create());
+    j.make_writeable();
 
     C_GatherBuilder gb(g_ceph_context, new C_SafeCond(&wait_lock, &cond, &done));
 
@@ -343,25 +334,21 @@ TEST(TestFileJournal, ReplayCorrupt) {
     const char *newneedle = "in a haystack";
     bufferlist bl;
     bl.append(needle);
-    int orig_len = fj.prepare_entry(tls, &bl);
-    fj.reserve_throttle_and_backoff(bl.length());
-    fj.submit_entry(1, bl, orig_len, gb.new_sub());
+    int orig_len = j.prepare_entry(tls, &bl);
+    j.submit_entry(1, bl, orig_len, gb.new_sub());
     bl.append(needle);
-    orig_len = fj.prepare_entry(tls, &bl);
-    fj.reserve_throttle_and_backoff(bl.length());
-    fj.submit_entry(2, bl, orig_len, gb.new_sub());
+    orig_len = j.prepare_entry(tls, &bl);
+    j.submit_entry(2, bl, orig_len, gb.new_sub());
     bl.append(needle);
-    orig_len = fj.prepare_entry(tls, &bl);
-    fj.reserve_throttle_and_backoff(bl.length());
-    fj.submit_entry(3, bl, orig_len, gb.new_sub());
+    orig_len = j.prepare_entry(tls, &bl);
+    j.submit_entry(3, bl, orig_len, gb.new_sub());
     bl.append(needle);
-    orig_len = fj.prepare_entry(tls, &bl);
-    fj.reserve_throttle_and_backoff(bl.length());
-    fj.submit_entry(4, bl, orig_len, gb.new_sub());
+    orig_len = j.prepare_entry(tls, &bl);
+    j.submit_entry(4, bl, orig_len, gb.new_sub());
     gb.activate();
     wait();
 
-    fj.close();
+    j.close();
 
     cout << "corrupting journal" << std::endl;
     char buf[1024*128];
@@ -389,23 +376,23 @@ TEST(TestFileJournal, ReplayCorrupt) {
     ASSERT_EQ(r, 0);
     close(fd);
 
-    fj.open(1);
+    j.open(1);
 
     bufferlist inbl;
     string v;
     uint64_t seq = 0;
-    ASSERT_EQ(true, fj.read_entry(inbl, seq));
+    ASSERT_EQ(true, j.read_entry(inbl, seq));
     ASSERT_EQ(seq, 2ull);
     inbl.copy(0, inbl.length(), v);
     ASSERT_EQ(needle, v);
     inbl.clear();
     v.clear();
     bool corrupt;
-    ASSERT_FALSE(fj.read_entry(inbl, seq, &corrupt));
+    ASSERT_FALSE(j.read_entry(inbl, seq, &corrupt));
     ASSERT_TRUE(corrupt);
 
-    ASSERT_EQ(0, fj.make_writeable());
-    fj.close();
+    j.make_writeable();
+    j.close();
   }
 }
 
@@ -417,10 +404,10 @@ TEST(TestFileJournal, WriteTrim) {
   for (unsigned i = 0 ; i < 3; ++i) {
     SCOPED_TRACE(subtests[i].description);
     fsid.generate_random();
-    FileJournal fj(g_ceph_context, fsid, finisher, &sync_cond, path,
-		  subtests[i].directio, subtests[i].aio, subtests[i].faio);
-    ASSERT_EQ(0, fj.create());
-    ASSERT_EQ(0, fj.make_writeable());
+    FileJournal j(fsid, finisher, &sync_cond, path, subtests[i].directio,
+		  subtests[i].aio, subtests[i].faio);
+    ASSERT_EQ(0, j.create());
+    j.make_writeable();
 
     list<C_Sync*> ls;
 
@@ -429,34 +416,33 @@ TEST(TestFileJournal, WriteTrim) {
     memset(foo, 1, sizeof(foo));
 
     uint64_t seq = 1, committed = 0;
-    vector<ObjectStore::Transaction> tls;
+    list<ObjectStore::Transaction*> tls;
 
     for (unsigned i=0; i<size_mb*2; i++) {
       bl.clear();
       bl.push_back(buffer::copy(foo, sizeof(foo)));
       bl.zero();
       ls.push_back(new C_Sync);
-      int orig_len = fj.prepare_entry(tls, &bl);
-      fj.reserve_throttle_and_backoff(bl.length());
-      fj.submit_entry(seq++, bl, orig_len, ls.back()->c);
+      int orig_len = j.prepare_entry(tls, &bl);
+      j.submit_entry(seq++, bl, orig_len, ls.back()->c);
 
       while (ls.size() > size_mb/2) {
         delete ls.front();
         ls.pop_front();
         committed++;
-        fj.committed_thru(committed);
+        j.committed_thru(committed);
       }
     }
 
     while (ls.size()) {
       delete ls.front();
       ls.pop_front();
-      fj.committed_thru(++committed);
+      j.committed_thru(++committed);
     }
 
-    ASSERT_TRUE(fj.journalq_empty());
+    ASSERT_TRUE(j.journalq_empty());
 
-    fj.close();
+    j.close();
   }
 }
 
@@ -464,15 +450,15 @@ TEST(TestFileJournal, WriteTrimSmall) {
   g_ceph_context->_conf->set_val("journal_ignore_corruption", "false");
   g_ceph_context->_conf->set_val("journal_write_header_frequency", "0");
   g_ceph_context->_conf->apply_changes(NULL);
-  vector<ObjectStore::Transaction> tls;
+  list<ObjectStore::Transaction*> tls;
 
   for (unsigned i = 0 ; i < 3; ++i) {
     SCOPED_TRACE(subtests[i].description);
     fsid.generate_random();
-    FileJournal fj(g_ceph_context, fsid, finisher, &sync_cond, path,
-		  subtests[i].directio, subtests[i].aio, subtests[i].faio);
-    ASSERT_EQ(0, fj.create());
-    ASSERT_EQ(0, fj.make_writeable());
+    FileJournal j(fsid, finisher, &sync_cond, path, subtests[i].directio,
+		  subtests[i].aio, subtests[i].faio);
+    ASSERT_EQ(0, j.create());
+    j.make_writeable();
 
     list<C_Sync*> ls;
 
@@ -488,25 +474,24 @@ TEST(TestFileJournal, WriteTrimSmall) {
         bl.push_back(buffer::copy(foo, sizeof(foo) / 128));
       bl.zero();
       ls.push_back(new C_Sync);
-      int orig_len = fj.prepare_entry(tls, &bl);
-      fj.reserve_throttle_and_backoff(bl.length());
-      fj.submit_entry(seq++, bl, orig_len, ls.back()->c);
+      int orig_len = j.prepare_entry(tls, &bl);
+      j.submit_entry(seq++, bl, orig_len, ls.back()->c);
 
       while (ls.size() > size_mb/2) {
         delete ls.front();
         ls.pop_front();
         committed++;
-        fj.committed_thru(committed);
+        j.committed_thru(committed);
       }
     }
 
     while (ls.size()) {
       delete ls.front();
       ls.pop_front();
-      fj.committed_thru(committed);
+      j.committed_thru(committed);
     }
 
-    fj.close();
+    j.close();
   }
 }
 
@@ -515,14 +500,14 @@ TEST(TestFileJournal, ReplayDetectCorruptFooterMagic) {
   g_ceph_context->_conf->set_val("journal_write_header_frequency", "1");
   g_ceph_context->_conf->apply_changes(NULL);
 
-  vector<ObjectStore::Transaction> tls;
+  list<ObjectStore::Transaction*> tls;
   for (unsigned i = 0 ; i < 3; ++i) {
     SCOPED_TRACE(subtests[i].description);
     fsid.generate_random();
-    FileJournal fj(g_ceph_context, fsid, finisher, &sync_cond, path,
-		  subtests[i].directio, subtests[i].aio, subtests[i].faio);
-    ASSERT_EQ(0, fj.create());
-    ASSERT_EQ(0, fj.make_writeable());
+    FileJournal j(fsid, finisher, &sync_cond, path, subtests[i].directio,
+		  subtests[i].aio, subtests[i].faio);
+    ASSERT_EQ(0, j.create());
+    j.make_writeable();
 
     C_GatherBuilder gb(g_ceph_context, new C_SafeCond(&wait_lock, &cond, &done));
 
@@ -530,41 +515,39 @@ TEST(TestFileJournal, ReplayDetectCorruptFooterMagic) {
     for (unsigned i = 1; i <= 4; ++i) {
       bufferlist bl;
       bl.append(needle);
-      int orig_len = fj.prepare_entry(tls, &bl);
-      fj.reserve_throttle_and_backoff(bl.length());
-      fj.submit_entry(i, bl, orig_len, gb.new_sub());
+      int orig_len = j.prepare_entry(tls, &bl);
+      j.submit_entry(i, bl, orig_len, gb.new_sub());
     }
     gb.activate();
     wait();
 
     bufferlist bl;
     bl.append("needle");
-    int orig_len = fj.prepare_entry(tls, &bl);
-    fj.reserve_throttle_and_backoff(bl.length());
-    fj.submit_entry(5, bl, orig_len, new C_SafeCond(&wait_lock, &cond, &done));
+    int orig_len = j.prepare_entry(tls, &bl);
+    j.submit_entry(5, bl, orig_len, new C_SafeCond(&wait_lock, &cond, &done));
     wait();
 
-    fj.close();
+    j.close();
     int fd = open(path, O_WRONLY);
 
     cout << "corrupting journal" << std::endl;
-    fj.open(0);
-    fj.corrupt_footer_magic(fd, 2);
+    j.open(0);
+    j.corrupt_footer_magic(fd, 2);
 
     uint64_t seq = 0;
     bl.clear();
     bool corrupt = false;
-    bool result = fj.read_entry(bl, seq, &corrupt);
+    bool result = j.read_entry(bl, seq, &corrupt);
     ASSERT_TRUE(result);
     ASSERT_EQ(seq, 1UL);
     ASSERT_FALSE(corrupt);
 
-    result = fj.read_entry(bl, seq, &corrupt);
+    result = j.read_entry(bl, seq, &corrupt);
     ASSERT_FALSE(result);
     ASSERT_TRUE(corrupt);
 
-    ASSERT_EQ(0, fj.make_writeable());
-    fj.close();
+    j.make_writeable();
+    j.close();
     ::close(fd);
   }
 }
@@ -574,14 +557,14 @@ TEST(TestFileJournal, ReplayDetectCorruptPayload) {
   g_ceph_context->_conf->set_val("journal_write_header_frequency", "1");
   g_ceph_context->_conf->apply_changes(NULL);
 
-  vector<ObjectStore::Transaction> tls;
+  list<ObjectStore::Transaction*> tls;
   for (unsigned i = 0 ; i < 3; ++i) {
     SCOPED_TRACE(subtests[i].description);
     fsid.generate_random();
-    FileJournal fj(g_ceph_context, fsid, finisher, &sync_cond, path,
-		  subtests[i].directio, subtests[i].aio, subtests[i].faio);
-    ASSERT_EQ(0, fj.create());
-    ASSERT_EQ(0, fj.make_writeable());
+    FileJournal j(fsid, finisher, &sync_cond, path, subtests[i].directio,
+		  subtests[i].aio, subtests[i].faio);
+    ASSERT_EQ(0, j.create());
+    j.make_writeable();
 
     C_GatherBuilder gb(g_ceph_context, new C_SafeCond(&wait_lock, &cond, &done));
 
@@ -589,41 +572,39 @@ TEST(TestFileJournal, ReplayDetectCorruptPayload) {
     for (unsigned i = 1; i <= 4; ++i) {
       bufferlist bl;
       bl.append(needle);
-      int orig_len = fj.prepare_entry(tls, &bl);
-      fj.reserve_throttle_and_backoff(bl.length());
-      fj.submit_entry(i, bl, orig_len, gb.new_sub());
+      int orig_len = j.prepare_entry(tls, &bl);
+      j.submit_entry(i, bl, orig_len, gb.new_sub());
     }
     gb.activate();
     wait();
 
     bufferlist bl;
     bl.append("needle");
-    int orig_len = fj.prepare_entry(tls, &bl);
-    fj.reserve_throttle_and_backoff(bl.length());
-    fj.submit_entry(5, bl, orig_len, new C_SafeCond(&wait_lock, &cond, &done));
+    int orig_len = j.prepare_entry(tls, &bl);
+    j.submit_entry(5, bl, orig_len, new C_SafeCond(&wait_lock, &cond, &done));
     wait();
 
-    fj.close();
+    j.close();
     int fd = open(path, O_WRONLY);
 
     cout << "corrupting journal" << std::endl;
-    fj.open(0);
-    fj.corrupt_payload(fd, 2);
+    j.open(0);
+    j.corrupt_payload(fd, 2);
 
     uint64_t seq = 0;
     bl.clear();
     bool corrupt = false;
-    bool result = fj.read_entry(bl, seq, &corrupt);
+    bool result = j.read_entry(bl, seq, &corrupt);
     ASSERT_TRUE(result);
     ASSERT_EQ(seq, 1UL);
     ASSERT_FALSE(corrupt);
 
-    result = fj.read_entry(bl, seq, &corrupt);
+    result = j.read_entry(bl, seq, &corrupt);
     ASSERT_FALSE(result);
     ASSERT_TRUE(corrupt);
 
-    ASSERT_EQ(0, fj.make_writeable());
-    fj.close();
+    j.make_writeable();
+    j.close();
     ::close(fd);
   }
 }
@@ -633,14 +614,14 @@ TEST(TestFileJournal, ReplayDetectCorruptHeader) {
   g_ceph_context->_conf->set_val("journal_write_header_frequency", "1");
   g_ceph_context->_conf->apply_changes(NULL);
 
-  vector<ObjectStore::Transaction> tls;
+  list<ObjectStore::Transaction*> tls;
   for (unsigned i = 0 ; i < 3; ++i) {
     SCOPED_TRACE(subtests[i].description);
     fsid.generate_random();
-    FileJournal fj(g_ceph_context, fsid, finisher, &sync_cond, path,
-		  subtests[i].directio, subtests[i].aio, subtests[i].faio);
-    ASSERT_EQ(0, fj.create());
-    ASSERT_EQ(0, fj.make_writeable());
+    FileJournal j(fsid, finisher, &sync_cond, path, subtests[i].directio,
+		  subtests[i].aio, subtests[i].faio);
+    ASSERT_EQ(0, j.create());
+    j.make_writeable();
 
     C_GatherBuilder gb(g_ceph_context, new C_SafeCond(&wait_lock, &cond, &done));
 
@@ -648,41 +629,39 @@ TEST(TestFileJournal, ReplayDetectCorruptHeader) {
     for (unsigned i = 1; i <= 4; ++i) {
       bufferlist bl;
       bl.append(needle);
-      int orig_len = fj.prepare_entry(tls, &bl);
-      fj.reserve_throttle_and_backoff(bl.length());
-      fj.submit_entry(i, bl, orig_len, gb.new_sub());
+      int orig_len = j.prepare_entry(tls, &bl);
+      j.submit_entry(i, bl, orig_len, gb.new_sub());
     }
     gb.activate();
     wait();
 
     bufferlist bl;
     bl.append("needle");
-    int orig_len = fj.prepare_entry(tls, &bl);
-    fj.reserve_throttle_and_backoff(bl.length());
-    fj.submit_entry(5, bl, orig_len, new C_SafeCond(&wait_lock, &cond, &done));
+    int orig_len = j.prepare_entry(tls, &bl);
+    j.submit_entry(5, bl, orig_len, new C_SafeCond(&wait_lock, &cond, &done));
     wait();
 
-    fj.close();
+    j.close();
     int fd = open(path, O_WRONLY);
 
     cout << "corrupting journal" << std::endl;
-    fj.open(0);
-    fj.corrupt_header_magic(fd, 2);
+    j.open(0);
+    j.corrupt_header_magic(fd, 2);
 
     uint64_t seq = 0;
     bl.clear();
     bool corrupt = false;
-    bool result = fj.read_entry(bl, seq, &corrupt);
+    bool result = j.read_entry(bl, seq, &corrupt);
     ASSERT_TRUE(result);
     ASSERT_EQ(seq, 1UL);
     ASSERT_FALSE(corrupt);
 
-    result = fj.read_entry(bl, seq, &corrupt);
+    result = j.read_entry(bl, seq, &corrupt);
     ASSERT_FALSE(result);
     ASSERT_TRUE(corrupt);
 
-    ASSERT_EQ(0, fj.make_writeable());
-    fj.close();
+    j.make_writeable();
+    j.close();
     ::close(fd);
   }
 }

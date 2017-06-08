@@ -31,7 +31,7 @@ struct librados::AioCompletionImpl {
   Cond cond;
   int ref, rval;
   bool released;
-  bool complete;
+  bool ack, safe;
   version_t objver;
   ceph_tid_t tid;
 
@@ -42,22 +42,20 @@ struct librados::AioCompletionImpl {
   bool is_read;
   bufferlist bl;
   bufferlist *blp;
-  char *out_buf;
 
   IoCtxImpl *io;
   ceph_tid_t aio_write_seq;
   xlist<AioCompletionImpl*>::item aio_write_list_item;
 
   AioCompletionImpl() : lock("AioCompletionImpl lock", false, false),
-			ref(1), rval(0), released(false),
-			complete(false),
+			ref(1), rval(0), released(false), ack(false), safe(false),
 			objver(0),
                         tid(0),
 			callback_complete(0),
 			callback_safe(0),
 			callback_complete_arg(0),
 			callback_safe_arg(0),
-			is_read(false), blp(nullptr), out_buf(nullptr),
+			is_read(false), blp(NULL),
 			io(NULL), aio_write_seq(0), aio_write_list_item(this) { }
 
   int set_complete_callback(void *cb_arg, rados_callback_t cb) {
@@ -76,41 +74,55 @@ struct librados::AioCompletionImpl {
   }
   int wait_for_complete() {
     lock.Lock();
-    while (!complete)
+    while (!ack)
       cond.Wait(lock);
     lock.Unlock();
     return 0;
   }
   int wait_for_safe() {
-    return wait_for_complete();
+    lock.Lock();
+    while (!safe)
+      cond.Wait(lock);
+    lock.Unlock();
+    return 0;
   }
   int is_complete() {
     lock.Lock();
-    int r = complete;
+    int r = ack;
     lock.Unlock();
     return r;
   }
   int is_safe() {
-    return is_complete();
+    lock.Lock();
+    int r = safe;
+    lock.Unlock();
+    return r;
   }
   int wait_for_complete_and_cb() {
     lock.Lock();
-    while (!complete || callback_complete || callback_safe)
+    while (!ack || callback_complete)
       cond.Wait(lock);
     lock.Unlock();
     return 0;
   }
   int wait_for_safe_and_cb() {
-    return wait_for_complete_and_cb();
+    lock.Lock();
+    while (!safe || callback_safe)
+      cond.Wait(lock);
+    lock.Unlock();
+    return 0;
   }
   int is_complete_and_cb() {
     lock.Lock();
-    int r = complete && !callback_complete && !callback_safe;
+    int r = ack && !callback_complete;
     lock.Unlock();
     return r;
   }
   int is_safe_and_cb() {
-    return is_complete_and_cb();
+    lock.Lock();
+    int r = safe && !callback_safe;
+    lock.Unlock();
+    return r;
   }
   int get_return_value() {
     lock.Lock();
@@ -158,23 +170,35 @@ namespace librados {
 struct C_AioComplete : public Context {
   AioCompletionImpl *c;
 
-  explicit C_AioComplete(AioCompletionImpl *cc) : c(cc) {
+  C_AioComplete(AioCompletionImpl *cc) : c(cc) {
     c->_get();
   }
 
-  void finish(int r) override {
-    rados_callback_t cb_complete = c->callback_complete;
-    void *cb_complete_arg = c->callback_complete_arg;
-    if (cb_complete)
-      cb_complete(c, cb_complete_arg);
-
-    rados_callback_t cb_safe = c->callback_safe;
-    void *cb_safe_arg = c->callback_safe_arg;
-    if (cb_safe)
-      cb_safe(c, cb_safe_arg);
+  void finish(int r) {
+    rados_callback_t cb = c->callback_complete;
+    void *cb_arg = c->callback_complete_arg;
+    cb(c, cb_arg);
 
     c->lock.Lock();
     c->callback_complete = NULL;
+    c->cond.Signal();
+    c->put_unlock();
+  }
+};
+
+struct C_AioSafe : public Context {
+  AioCompletionImpl *c;
+
+  C_AioSafe(AioCompletionImpl *cc) : c(cc) {
+    c->_get();
+  }
+
+  void finish(int r) {
+    rados_callback_t cb = c->callback_safe;
+    void *cb_arg = c->callback_safe_arg;
+    cb(c, cb_arg);
+
+    c->lock.Lock();
     c->callback_safe = NULL;
     c->cond.Signal();
     c->put_unlock();
@@ -192,16 +216,16 @@ struct C_AioComplete : public Context {
 struct C_AioCompleteAndSafe : public Context {
   AioCompletionImpl *c;
 
-  explicit C_AioCompleteAndSafe(AioCompletionImpl *cc) : c(cc) {
+  C_AioCompleteAndSafe(AioCompletionImpl *cc) : c(cc) {
     c->get();
   }
 
-  void finish(int r) override {
+  void finish(int r) {
     c->lock.Lock();
     c->rval = r;
-    c->complete = true;
+    c->ack = true;
+    c->safe = true;
     c->lock.Unlock();
-
     rados_callback_t cb_complete = c->callback_complete;
     void *cb_complete_arg = c->callback_complete_arg;
     if (cb_complete)

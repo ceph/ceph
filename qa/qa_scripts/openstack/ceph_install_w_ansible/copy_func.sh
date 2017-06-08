@@ -1,1 +1,0 @@
-../copy_func.sh

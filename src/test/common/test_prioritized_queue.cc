@@ -6,7 +6,7 @@
 
 #include <numeric>
 #include <vector>
-#include <algorithm>
+
 
 using std::vector;
 
@@ -19,13 +19,13 @@ protected:
   enum { item_size  = 100, };
   vector<Item> items;
 
-  void SetUp() override {
+  virtual void SetUp() {
     for (int i = 0; i < item_size; i++) {
       items.push_back(Item(i));
     }
-    std::random_shuffle(items.begin(), items.end());
+    random_shuffle(items.begin(), items.end());
   }
-  void TearDown() override {
+  virtual void TearDown() {
     items.clear();
   }
 };
@@ -164,17 +164,10 @@ TEST_F(PrioritizedQueueTest, fairness_by_class) {
 template <typename T>
 struct Greater {
   const T rhs;
-  std::list<T> *removed;
-  explicit Greater(const T& v, std::list<T> *removed) : rhs(v), removed(removed)
+  Greater(const T& v) : rhs(v)
   {}
-  bool operator()(const T& lhs) {
-    if (lhs > rhs) {
-      if (removed)
-	removed->push_back(lhs);
-      return true;
-    } else {
-      return false;
-    }
+  bool operator()(const T& lhs) const {
+    return lhs > rhs;
   }
 };
 
@@ -183,7 +176,7 @@ TEST_F(PrioritizedQueueTest, remove_by_filter) {
   const unsigned max_tokens_per_subqueue = 50;
   PQ pq(max_tokens_per_subqueue, min_cost);
 
-  Greater<Item> pred(item_size/2, nullptr);
+  const Greater<Item> pred(item_size/2);
   unsigned num_to_remove = 0;
   for (unsigned i = 0; i < item_size; i++) {
     const Item& item = items[i];
@@ -193,8 +186,7 @@ TEST_F(PrioritizedQueueTest, remove_by_filter) {
     }
   }
   std::list<Item> removed;
-  Greater<Item> pred2(item_size/2, &removed);
-  pq.remove_by_filter(pred2);
+  pq.remove_by_filter(pred, &removed);
 
   // see if the removed items are expected ones.
   for (std::list<Item>::iterator it = removed.begin();

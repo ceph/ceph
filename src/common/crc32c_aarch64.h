@@ -1,7 +1,6 @@
 #ifndef CEPH_COMMON_CRC32C_AARCH64_H
 #define CEPH_COMMON_CRC32C_AARCH64_H
 
-#include "acconfig.h"
 #include "arch/arm.h"
 
 #ifdef __cplusplus

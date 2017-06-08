@@ -15,7 +15,7 @@
 #ifndef CEPH_AUTHUNKNOWNPROTOCOL_H
 #define CEPH_AUTHUNKNOWNPROTOCOL_H
 
-#include "auth/Auth.h"
+#include "../Auth.h"
 
 struct AuthUnknownAuthorizer : public AuthAuthorizer {
   AuthUnknownAuthorizer() : AuthAuthorizer(CEPH_AUTH_UNKNOWN) { }

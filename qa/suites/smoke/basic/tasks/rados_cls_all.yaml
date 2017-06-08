@@ -1,8 +1,0 @@
-tasks:
-- install:
-- ceph:
-    fs: xfs
-- workunit:
-    clients:
-      client.0:
-        - cls

@@ -34,18 +34,18 @@ struct MAuthReply : public Message {
       result_bl = *bl;
   }
 private:
-  ~MAuthReply() override {}
+  ~MAuthReply() {}
 
 public:
-  const char *get_type_name() const override { return "auth_reply"; }
-  void print(ostream& o) const override {
+  const char *get_type_name() const { return "auth_reply"; }
+  void print(ostream& o) const {
     o << "auth_reply(proto " << protocol << " " << result << " " << cpp_strerror(result);
     if (result_msg.length())
       o << ": " << result_msg;
     o << ")";
   }
 
-  void decode_payload() override {
+  void decode_payload() {
     bufferlist::iterator p = payload.begin();
     ::decode(protocol, p);
     ::decode(result, p);
@@ -53,7 +53,7 @@ public:
     ::decode(result_bl, p);
     ::decode(result_msg, p);
   }
-  void encode_payload(uint64_t features) override {
+  void encode_payload(uint64_t features) {
     ::encode(protocol, payload);
     ::encode(result, payload);
     ::encode(global_id, payload);

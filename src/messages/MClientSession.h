@@ -47,11 +47,11 @@ public:
     st.encode_timeval(&head.stamp);
   }
 private:
-  ~MClientSession() override {}
+  ~MClientSession() {}
 
 public:
-  const char *get_type_name() const override { return "client_session"; }
-  void print(ostream& out) const override {
+  const char *get_type_name() const { return "client_session"; }
+  void print(ostream& out) const {
     out << "client_session(" << ceph_session_op_name(get_op());
     if (get_seq())
       out << " seq " << get_seq();
@@ -60,14 +60,14 @@ public:
     out << ")";
   }
 
-  void decode_payload() override { 
+  void decode_payload() { 
     bufferlist::iterator p = payload.begin();
     ::decode(head, p);
     if (header.version >= 2) {
       ::decode(client_meta, p);
     }
   }
-  void encode_payload(uint64_t features) override { 
+  void encode_payload(uint64_t features) { 
     ::encode(head, payload);
     if (client_meta.empty()) {
       // If we're not trying to send any metadata (always the case if

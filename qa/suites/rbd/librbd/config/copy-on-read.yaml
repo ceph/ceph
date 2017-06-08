@@ -1,5 +1,0 @@
-overrides:
-  ceph:
-    conf:
-      client:
-        rbd clone copy on read: true

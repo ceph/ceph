@@ -15,7 +15,6 @@
 #include "common/TextTable.h"
 #include <iostream>
 #include "gtest/gtest.h"
-#include "include/coredumpctl.h"
 
 TEST(TextTable, Alignment) {
   TextTable t;
@@ -73,6 +72,5 @@ TEST(TextTable, TooManyItems) {
   t.define_column("3", TextTable::LEFT, TextTable::LEFT);
 
   // expect assertion failure on this, which throws FailedAssertion
-  PrCtl unset_dumpable;
   ASSERT_DEATH((t << "1" << "2" << "3" << "4" << TextTable::endrow), "");
 }

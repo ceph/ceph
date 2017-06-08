@@ -23,7 +23,6 @@
 #include <signal.h>
 #include "os/filestore/chain_xattr.h"
 #include "include/Context.h"
-#include "include/coredumpctl.h"
 #include "common/errno.h"
 #include "common/ceph_argparse.h"
 #include "global/global_init.h"
@@ -121,7 +120,6 @@ TEST(chain_xattr, get_and_set) {
   {
     int x;
     const string name = user + string(CHAIN_XATTR_MAX_NAME_LEN * 2, '@');
-    PrCtl unset_dumpable;
     ASSERT_DEATH(chain_setxattr(file, name.c_str(), &x, sizeof(x)), "");
     ASSERT_DEATH(chain_fsetxattr(fd, name.c_str(), &x, sizeof(x)), "");
   }
@@ -222,35 +220,6 @@ TEST(chain_xattr, chunk_aligned) {
   ::unlink(file);
 }
 
-void get_vector_from_xattr(vector<string> &xattrs, char* xattr, int size) {
-  char *end = xattr + size;
-  while (xattr < end) {
-    if (*xattr == '\0' )
-      break;
-    xattrs.push_back(xattr);
-    xattr += strlen(xattr) + 1;
-  }
-}
-
-bool listxattr_cmp(char* xattr1, char* xattr2, int size) {
-  vector<string> xattrs1;
-  vector<string> xattrs2;
-  get_vector_from_xattr(xattrs1, xattr1, size);
-  get_vector_from_xattr(xattrs2, xattr2, size);
-
-  if (xattrs1.size() != xattrs2.size())
-    return false;
-
-  std::sort(xattrs1.begin(), xattrs1.end());
-  std::sort(xattrs2.begin(), xattrs2.end());
-  std::vector<string> diff;
-  std::set_difference(xattrs1.begin(), xattrs1.end(),
-			  xattrs2.begin(), xattrs2.end(),
-			  diff.begin());
-
-  return diff.empty();
-}
-
 TEST(chain_xattr, listxattr) {
   const char* file = FILENAME;
   ::unlink(file);
@@ -261,41 +230,19 @@ TEST(chain_xattr, listxattr) {
   const string x(LARGE_BLOCK_LEN, 'X');
   const int y = 1234;
 
-  int orig_size = chain_listxattr(file, NULL, 0);
-  char *orig_buffer = NULL;
-  string orig_str;
-  if (orig_size) {
-    orig_buffer = (char*)malloc(orig_size);
-    chain_flistxattr(fd, orig_buffer, orig_size);
-    orig_str = string(orig_buffer);
-    orig_size = orig_str.size();
-  }
-
   ASSERT_EQ(LARGE_BLOCK_LEN, chain_setxattr(file, name1.c_str(), x.c_str(), LARGE_BLOCK_LEN));
   ASSERT_EQ((int)sizeof(y), chain_setxattr(file, name2.c_str(), &y, sizeof(y)));
 
-  int buffer_size = 0;
-  if (orig_size)
-    buffer_size += orig_size + sizeof(char);
-  buffer_size += name1.size() + sizeof(char) + name2.size() + sizeof(char);
-
-  int index = 0;
+  int buffer_size = name1.size() + sizeof(char) + name2.size() + sizeof(char);
   char* expected = (char*)malloc(buffer_size);
-  ::memset(expected, '\0', buffer_size);
-  if (orig_size) {
-    ::strcpy(expected, orig_str.c_str());
-    index = orig_size + 1;
-  }
-  ::strcpy(expected + index, name1.c_str());
-  ::strcpy(expected + index + name1.size() + 1, name2.c_str());
-  char* actual = (char*)malloc(buffer_size);
-  ::memset(actual, '\0', buffer_size);
+  ::strcpy(expected, name1.c_str());
+  ::strcpy(expected + name1.size() + 1, name2.c_str());
+  char* actual = (char*)calloc(1, buffer_size);
   ASSERT_LT(buffer_size, chain_listxattr(file, NULL, 0)); // size evaluation is conservative
   chain_listxattr(file, actual, buffer_size);
-  ASSERT_TRUE(listxattr_cmp(expected, actual, buffer_size));
   ::memset(actual, '\0', buffer_size);
   chain_flistxattr(fd, actual, buffer_size);
-  ASSERT_TRUE(listxattr_cmp(expected, actual, buffer_size));
+  ASSERT_EQ(0, ::memcmp(expected, actual, buffer_size));
 
   int unlikely_to_be_a_valid_fd = 400;
   ASSERT_GT(0, chain_listxattr("UNLIKELY_TO_EXIST", actual, 0));
@@ -308,125 +255,7 @@ TEST(chain_xattr, listxattr) {
   ASSERT_EQ(0, chain_removexattr(file, name1.c_str()));
   ASSERT_EQ(0, chain_removexattr(file, name2.c_str()));
 
-  free(orig_buffer);
-  free(actual);
   free(expected);
-  ::unlink(file);
-}
-
-list<string> get_xattrs(int fd)
-{
-  char _buf[1024];
-  char *buf = _buf;
-  int len = sys_flistxattr(fd, _buf, sizeof(_buf));
-  if (len < 0)
-    return list<string>();
-  list<string> ret;
-  while (len > 0) {
-    size_t next_len = strlen(buf);
-    ret.push_back(string(buf, buf + next_len));
-    assert(len >= (int)(next_len + 1));
-    buf += (next_len + 1);
-    len -= (next_len + 1);
-  }
-  return ret;
-}
-
-list<string> get_xattrs(string fn)
-{
-  int fd = ::open(fn.c_str(), O_RDONLY);
-  if (fd < 0)
-    return list<string>();
-  auto ret = get_xattrs(fd);
-  ::close(fd);
-  return ret;
-}
-
-TEST(chain_xattr, fskip_chain_cleanup_and_ensure_single_attr)
-{
-  const char *name = "user.foo";
-  const char *file = FILENAME;
-  ::unlink(file);
-  int fd = ::open(file, O_CREAT|O_RDWR|O_TRUNC, 0700);
-
-  std::size_t existing_xattrs = get_xattrs(fd).size();
-  char buf[800];
-  memset(buf, 0x1F, sizeof(buf));
-  // set chunked without either
-  {
-    std::size_t r = chain_fsetxattr(fd, name, buf, sizeof(buf));
-    ASSERT_EQ(sizeof(buf), r);
-    ASSERT_GT(get_xattrs(fd).size(), existing_xattrs + 1UL);
-  }
-
-  // verify
-  {
-    char buf2[sizeof(buf)*2];
-    std::size_t r = chain_fgetxattr(fd, name, buf2, sizeof(buf2));
-    ASSERT_EQ(sizeof(buf), r);
-    ASSERT_EQ(0, memcmp(buf, buf2, sizeof(buf)));
-  }
-
-  // overwrite
-  {
-    std::size_t r = chain_fsetxattr<false, true>(fd, name, buf, sizeof(buf));
-    ASSERT_EQ(sizeof(buf), r);
-    ASSERT_EQ(existing_xattrs + 1UL, get_xattrs(fd).size());
-  }
-
-  // verify
-  {
-    char buf2[sizeof(buf)*2];
-    std::size_t r = chain_fgetxattr(fd, name, buf2, sizeof(buf2));
-    ASSERT_EQ(sizeof(buf), r);
-    ASSERT_EQ(0, memcmp(buf, buf2, sizeof(buf)));
-  }
-
-  ::close(fd);
-  ::unlink(file);
-}
-
-TEST(chain_xattr, skip_chain_cleanup_and_ensure_single_attr)
-{
-  const char *name = "user.foo";
-  const char *file = FILENAME;
-  ::unlink(file);
-  int fd = ::open(file, O_CREAT|O_RDWR|O_TRUNC, 0700);
-  std::size_t existing_xattrs = get_xattrs(fd).size();
-  ::close(fd);
-
-  char buf[3000];
-  memset(buf, 0x1F, sizeof(buf));
-  // set chunked without either
-  {
-    std::size_t r = chain_setxattr(file, name, buf, sizeof(buf));
-    ASSERT_EQ(sizeof(buf), r);
-    ASSERT_GT(get_xattrs(file).size(), existing_xattrs + 1UL);
-  }
-
-  // verify
-  {
-    char buf2[sizeof(buf)*2];
-    std::size_t r = chain_getxattr(file, name, buf2, sizeof(buf2));
-    ASSERT_EQ(sizeof(buf), r);
-    ASSERT_EQ(0, memcmp(buf, buf2, sizeof(buf)));
-  }
-
-  // overwrite
-  {
-    std::size_t r = chain_setxattr<false, true>(file, name, buf, sizeof(buf));
-    ASSERT_EQ(sizeof(buf), r);
-    ASSERT_EQ(existing_xattrs + 1UL, get_xattrs(file).size());
-  }
-
-  // verify
-  {
-    char buf2[sizeof(buf)*2];
-    std::size_t r = chain_getxattr(file, name, buf2, sizeof(buf2));
-    ASSERT_EQ(sizeof(buf), r);
-    ASSERT_EQ(0, memcmp(buf, buf2, sizeof(buf)));
-  }
-
   ::unlink(file);
 }
 
@@ -434,8 +263,7 @@ int main(int argc, char **argv) {
   vector<const char*> args;
   argv_to_vec(argc, (const char **)argv, args);
 
-  auto cct = global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT,
-			 CODE_ENVIRONMENT_UTILITY, 0);
+  global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
   common_init_finish(g_ceph_context);
   g_ceph_context->_conf->set_val("err_to_stderr", "false");
   g_ceph_context->_conf->set_val("log_to_stderr", "false");

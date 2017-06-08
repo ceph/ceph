@@ -6,7 +6,6 @@
 *.egg-info
 *.egg
 dist
-virtualenv
 build
 wheelhouse*
 *.log

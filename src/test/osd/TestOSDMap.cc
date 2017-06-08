@@ -1,23 +1,20 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 #include "gtest/gtest.h"
 #include "osd/OSDMap.h"
-#include "osd/OSDMapMapping.h"
 
 #include "global/global_context.h"
 #include "global/global_init.h"
 #include "common/common_init.h"
-#include "common/ceph_argparse.h"
 
 #include <iostream>
 
 using namespace std;
 
 int main(int argc, char **argv) {
+  std::vector<const char *> preargs;
   std::vector<const char*> args(argv, argv+argc);
-  env_to_vec(args);
-  auto cct = global_init(nullptr, args, CEPH_ENTITY_TYPE_CLIENT,
-			 CODE_ENVIRONMENT_UTILITY,
-			 CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
+  global_init(&preargs, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY,
+              CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
   common_init_finish(g_ceph_context);
   // make sure we have 3 copies, or some tests won't work
   g_ceph_context->_conf->set_val("osd_pool_default_size", "3", false);
@@ -31,8 +28,6 @@ class OSDMapTest : public testing::Test {
   const static int num_osds = 6;
 public:
   OSDMap osdmap;
-  OSDMapMapping mapping;
-
   OSDMapTest() {}
 
   void set_up_map() {
@@ -81,29 +76,17 @@ public:
 		     vector<int> *any,
 		     vector<int> *first,
 		     vector<int> *primary) {
-    mapping.update(osdmap);
     for (int i=0; i<num; ++i) {
-      vector<int> up, acting;
-      int up_primary, acting_primary;
+      vector<int> o;
+      int p;
       pg_t pgid(i, pool);
-      osdmap.pg_to_up_acting_osds(pgid,
-				  &up, &up_primary, &acting, &acting_primary);
-      for (unsigned j=0; j<acting.size(); ++j)
-	(*any)[acting[j]]++;
-      if (!acting.empty())
-	(*first)[acting[0]]++;
-      if (acting_primary >= 0)
-	(*primary)[acting_primary]++;
-
-      // compare to precalc mapping
-      vector<int> up2, acting2;
-      int up_primary2, acting_primary2;
-      pgid = osdmap.raw_pg_to_pg(pgid);
-      mapping.get(pgid, &up2, &up_primary2, &acting2, &acting_primary2);
-      ASSERT_EQ(up, up2);
-      ASSERT_EQ(up_primary, up_primary2);
-      ASSERT_EQ(acting, acting2);
-      ASSERT_EQ(acting_primary, acting_primary2);
+      osdmap.pg_to_acting_osds(pgid, &o, &p);
+      for (unsigned j=0; j<o.size(); ++j)
+	(*any)[o[j]]++;
+      if (!o.empty())
+	(*first)[o[0]]++;
+      if (p >= 0)
+	(*primary)[p]++;
     }
   }
 };
@@ -120,21 +103,21 @@ TEST_F(OSDMapTest, Features) {
   uint64_t features = osdmap.get_features(CEPH_ENTITY_TYPE_OSD, NULL);
   ASSERT_TRUE(features & CEPH_FEATURE_CRUSH_TUNABLES);
   ASSERT_TRUE(features & CEPH_FEATURE_CRUSH_TUNABLES2);
-  ASSERT_TRUE(features & CEPH_FEATURE_CRUSH_TUNABLES3);
+  ASSERT_FALSE(features & CEPH_FEATURE_CRUSH_TUNABLES3);
   ASSERT_TRUE(features & CEPH_FEATURE_CRUSH_V2);
   ASSERT_TRUE(features & CEPH_FEATURE_OSD_ERASURE_CODES);
   ASSERT_TRUE(features & CEPH_FEATURE_OSDHASHPSPOOL);
-  ASSERT_TRUE(features & CEPH_FEATURE_OSD_PRIMARY_AFFINITY);
+  ASSERT_FALSE(features & CEPH_FEATURE_OSD_PRIMARY_AFFINITY);
 
   // clients have a slightly different view
   features = osdmap.get_features(CEPH_ENTITY_TYPE_CLIENT, NULL);
   ASSERT_TRUE(features & CEPH_FEATURE_CRUSH_TUNABLES);
   ASSERT_TRUE(features & CEPH_FEATURE_CRUSH_TUNABLES2);
-  ASSERT_TRUE(features & CEPH_FEATURE_CRUSH_TUNABLES3);
+  ASSERT_FALSE(features & CEPH_FEATURE_CRUSH_TUNABLES3);
   ASSERT_TRUE(features & CEPH_FEATURE_CRUSH_V2);
   ASSERT_FALSE(features & CEPH_FEATURE_OSD_ERASURE_CODES);  // dont' need this
   ASSERT_TRUE(features & CEPH_FEATURE_OSDHASHPSPOOL);
-  ASSERT_TRUE(features & CEPH_FEATURE_OSD_PRIMARY_AFFINITY);
+  ASSERT_FALSE(features & CEPH_FEATURE_OSD_PRIMARY_AFFINITY);
 
   // remove teh EC pool, but leave the rule.  add primary affinity.
   {
@@ -237,8 +220,7 @@ TEST_F(OSDMapTest, PGTempRespected) {
 
   // apply pg_temp to osdmap
   OSDMap::Incremental pgtemp_map(osdmap.get_epoch() + 1);
-  pgtemp_map.new_pg_temp[pgid] = mempool::osdmap::vector<int>(
-    new_acting_osds.begin(), new_acting_osds.end());
+  pgtemp_map.new_pg_temp[pgid] = new_acting_osds;
   osdmap.apply_incremental(pgtemp_map);
 
   osdmap.pg_to_up_acting_osds(pgid, &up_osds, &up_primary,
@@ -268,42 +250,29 @@ TEST_F(OSDMapTest, PrimaryTempRespected) {
   EXPECT_EQ(acting_primary, acting_osds[1]);
 }
 
-TEST_F(OSDMapTest, CleanTemps) {
+TEST_F(OSDMapTest, RemovesRedundantTemps) {
   set_up_map();
 
-  OSDMap::Incremental pgtemp_map(osdmap.get_epoch() + 1);
-  OSDMap::Incremental pending_inc(osdmap.get_epoch() + 2);
-  pg_t pga = osdmap.raw_pg_to_pg(pg_t(0, 0));
-  {
-    vector<int> up_osds, acting_osds;
-    int up_primary, acting_primary;
-    osdmap.pg_to_up_acting_osds(pga, &up_osds, &up_primary,
-				&acting_osds, &acting_primary);
-    pgtemp_map.new_pg_temp[pga] = mempool::osdmap::vector<int>(
-      up_osds.begin(), up_osds.end());
-    pgtemp_map.new_primary_temp[pga] = up_primary;
-  }
-  pg_t pgb = osdmap.raw_pg_to_pg(pg_t(1, 0));
-  {
-    vector<int> up_osds, acting_osds;
-    int up_primary, acting_primary;
-    osdmap.pg_to_up_acting_osds(pgb, &up_osds, &up_primary,
-				&acting_osds, &acting_primary);
-    pending_inc.new_pg_temp[pgb] = mempool::osdmap::vector<int>(
-      up_osds.begin(), up_osds.end());
-    pending_inc.new_primary_temp[pgb] = up_primary;
-  }
+  pg_t rawpg(0, 0, -1);
+  pg_t pgid = osdmap.raw_pg_to_pg(rawpg);
+  vector<int> up_osds, acting_osds;
+  int up_primary, acting_primary;
 
+  osdmap.pg_to_up_acting_osds(pgid, &up_osds, &up_primary,
+                              &acting_osds, &acting_primary);
+
+  // stick calculated values in to temps
+  OSDMap::Incremental pgtemp_map(osdmap.get_epoch() + 1);
+  pgtemp_map.new_pg_temp[pgid] = up_osds;
+  pgtemp_map.new_primary_temp[pgid] = up_primary;
   osdmap.apply_incremental(pgtemp_map);
 
-  OSDMap::clean_temps(g_ceph_context, osdmap, &pending_inc);
+  OSDMap::Incremental pending_inc(osdmap.get_epoch() + 1);
+  OSDMap::remove_redundant_temporaries(g_ceph_context, osdmap, &pending_inc);
 
-  EXPECT_TRUE(pending_inc.new_pg_temp.count(pga) &&
-	      pending_inc.new_pg_temp[pga].size() == 0);
-  EXPECT_EQ(-1, pending_inc.new_primary_temp[pga]);
-
-  EXPECT_TRUE(!pending_inc.new_pg_temp.count(pgb) &&
-	      !pending_inc.new_primary_temp.count(pgb));
+  EXPECT_TRUE(pending_inc.new_pg_temp.count(pgid) &&
+	      pending_inc.new_pg_temp[pgid].size() == 0);
+  EXPECT_EQ(-1, pending_inc.new_primary_temp[pgid]);
 }
 
 TEST_F(OSDMapTest, KeepsNecessaryTemps) {
@@ -339,14 +308,13 @@ TEST_F(OSDMapTest, KeepsNecessaryTemps) {
   if (i == (int)get_num_osds())
     FAIL() << "did not find unused OSD for temp mapping";
 
-  pgtemp_map.new_pg_temp[pgid] = mempool::osdmap::vector<int>(
-    up_osds.begin(), up_osds.end());
+  pgtemp_map.new_pg_temp[pgid] = up_osds;
   pgtemp_map.new_primary_temp[pgid] = up_osds[1];
   osdmap.apply_incremental(pgtemp_map);
 
   OSDMap::Incremental pending_inc(osdmap.get_epoch() + 1);
 
-  OSDMap::clean_temps(g_ceph_context, osdmap, &pending_inc);
+  OSDMap::remove_redundant_temporaries(g_ceph_context, osdmap, &pending_inc);
   EXPECT_FALSE(pending_inc.new_pg_temp.count(pgid));
   EXPECT_FALSE(pending_inc.new_primary_temp.count(pgid));
 }
@@ -397,9 +365,8 @@ TEST_F(OSDMapTest, PrimaryAffinity) {
 	  ASSERT_LT(0, first[i]);
 	  ASSERT_LT(0, primary[i]);
 	} else {
-	  if (p->second.is_replicated()) {
+	  if (p->second.is_replicated())
 	    ASSERT_EQ(0, first[i]);
-	  }
 	  ASSERT_EQ(0, primary[i]);
 	}
       }
@@ -419,9 +386,8 @@ TEST_F(OSDMapTest, PrimaryAffinity) {
 	  ASSERT_LT(0, first[i]);
 	  ASSERT_LT(0, primary[i]);
 	} else if (i == 1) {
-	  if (p->second.is_replicated()) {
+	  if (p->second.is_replicated())
 	    ASSERT_EQ(0, first[i]);
-	  }
 	  ASSERT_EQ(0, primary[i]);
 	} else {
 	  ASSERT_LT(10000/6/4, primary[0]);
@@ -433,20 +399,4 @@ TEST_F(OSDMapTest, PrimaryAffinity) {
     osdmap.set_primary_affinity(0, 0x10000);
     osdmap.set_primary_affinity(1, 0x10000);
   }
-}
-
-TEST(PGTempMap, basic)
-{
-  PGTempMap m;
-  pg_t a(1,1);
-  for (unsigned i=3; i<1000; ++i) {
-    pg_t x(i, 1);
-    m.set(x, {i});
-  }
-  pg_t b(2,1);
-  m.set(a, {1, 2});
-  ASSERT_NE(m.find(a), m.end());
-  ASSERT_EQ(m.find(a), m.begin());
-  ASSERT_EQ(m.find(b), m.end());
-  ASSERT_EQ(998u, m.size());
 }

@@ -15,10 +15,16 @@
 #include "include/types.h"
 #include "msg/msg_types.h"
 #include "include/rados/librados.hpp"
-#include "include/utime.h"
- 
+
 using namespace librados;
 
+#include <iostream>
+
+#include <errno.h>
+#include <stdlib.h>
+#include <time.h>
+
+#include "cls/lock/cls_lock_types.h"
 #include "cls/lock/cls_lock_ops.h"
 #include "cls/lock/cls_lock_client.h"
 
@@ -75,15 +81,6 @@ namespace rados {
         ObjectWriteOperation op;
         unlock(&op, name, cookie);
         return ioctx->operate(oid, &op);
-      }
-
-      int aio_unlock(IoCtx *ioctx, const string& oid,
-		     const string& name, const string& cookie,
-		     librados::AioCompletion *completion)
-      {
-        ObjectWriteOperation op;
-        unlock(&op, name, cookie);
-        return ioctx->aio_operate(oid, completion, &op);
       }
 
       void break_lock(ObjectWriteOperation *rados_op,
@@ -190,22 +187,6 @@ namespace rados {
         bufferlist in;
         ::encode(op, in);
         rados_op->exec("lock", "assert_locked", in);
-      }
-
-      void set_cookie(librados::ObjectWriteOperation *rados_op,
-                      const std::string& name, ClsLockType type,
-                      const std::string& cookie, const std::string& tag,
-                      const std::string& new_cookie)
-      {
-        cls_lock_set_cookie_op op;
-        op.name = name;
-        op.type = type;
-        op.cookie = cookie;
-        op.tag = tag;
-        op.new_cookie = new_cookie;
-        bufferlist in;
-        ::encode(op, in);
-        rados_op->exec("lock", "set_cookie", in);
       }
 
       void Lock::assert_locked_exclusive(ObjectOperation *op)

@@ -10,7 +10,7 @@ class TestOp;
 
 class TestOpStat {
 public:
-  mutable Mutex stat_lock;
+  Mutex stat_lock;
 
   TestOpStat() : stat_lock("TestOpStat lock") {}
     
@@ -45,9 +45,9 @@ public:
 
   void begin(TestOp *in);
   void end(TestOp *in);
-  friend std::ostream & operator<<(std::ostream &, const TestOpStat &);
+  friend std::ostream & operator<<(std::ostream &, TestOpStat&);
 };
 
-std::ostream & operator<<(std::ostream &out, const TestOpStat &rhs);
+std::ostream & operator<<(std::ostream &out, TestOpStat &rhs);
 
 #endif

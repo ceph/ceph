@@ -12,12 +12,8 @@
 #ifndef CLS_REPLICA_LOG_CLIENT_H_
 #define CLS_REPLICA_LOG_CLIENT_H_
 
-#include "cls_replica_log_ops.h"
-
-namespace librados {
-  class ObjectWriteOperation;
-  class IoCtx;
-}
+#include "include/rados/librados.hpp"
+#include "cls_replica_log_types.h"
 
 /**
  * Prepare a progress marker object to send out.

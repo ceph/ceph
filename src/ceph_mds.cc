@@ -15,14 +15,12 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
-#include <pthread.h>
 
 #include <iostream>
 #include <string>
 using namespace std;
 
 #include "include/ceph_features.h"
-#include "include/compat.h"
 
 #include "common/config.h"
 #include "common/strtol.h"
@@ -48,19 +46,20 @@ using namespace std;
 
 #include "include/assert.h"
 
-#define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_mds
 
-static void usage()
+void usage()
 {
-  cout << "usage: ceph-mds -i <ID> [flags] [[--hot-standby][rank]]\n"
+  derr << "usage: ceph-mds -i name [flags] [[--journal_check rank]|[--hot-standby][rank]]\n"
        << "  -m monitorip:port\n"
        << "        connect to monitor at given address\n"
        << "  --debug_mds n\n"
        << "        debug MDS level (e.g. 10)\n"
+       << "  --journal-check rank\n"
+       << "        replay the journal for rank, then exit\n"
        << "  --hot-standby rank\n"
        << "        start up as a hot standby for rank\n"
-       << std::endl;
+       << dendl;
   generic_server_usage();
 }
 
@@ -88,22 +87,18 @@ static void handle_mds_signal(int signum)
     mds->handle_signal(signum);
 }
 
-#ifdef BUILDING_FOR_EMBEDDED
-extern "C" int cephd_mds(int argc, const char **argv)
-#else
-int main(int argc, const char **argv)
-#endif
+int main(int argc, const char **argv) 
 {
-  ceph_pthread_setname(pthread_self(), "ceph-mds");
-
   vector<const char*> args;
   argv_to_vec(argc, argv, args);
   env_to_vec(args);
 
-  auto cct = global_init(NULL, args,
-			 CEPH_ENTITY_TYPE_MDS, CODE_ENVIRONMENT_DAEMON,
-			 0, "mds_data");
+  global_init(NULL, args, CEPH_ENTITY_TYPE_MDS, CODE_ENVIRONMENT_DAEMON, 0);
   ceph_heap_profiler_init();
+
+  // mds specific args
+  MDSMap::DaemonState shadow = MDSMap::STATE_NULL;
+  std::string dump_file;
 
   std::string val, action;
   for (std::vector<const char*>::iterator i = args.begin(); i != args.end(); ) {
@@ -111,16 +106,33 @@ int main(int argc, const char **argv)
       break;
     }
     else if (ceph_argparse_flag(args, i, "--help", "-h", (char*)NULL)) {
-      // exit(1) will be called in the usage()
       usage();
+      break;
     }
-    else if (ceph_argparse_witharg(args, i, &val, "--hot-standby", (char*)NULL)) {
-      int r = parse_rank("hot-standby", val);
-      dout(0) << "requesting standby_replay for mds." << r << dendl;
+    else if (ceph_argparse_witharg(args, i, &val, "--journal-check", (char*)NULL)) {
+      int r = parse_rank("journal-check", val);
+      if (shadow != MDSMap::STATE_NULL) {
+        dout(0) << "Error: can only select one standby state" << dendl;
+        return -1;
+      }
+      dout(0) << "requesting oneshot_replay for mds." << r << dendl;
+      shadow = MDSMap::STATE_ONESHOT_REPLAY;
       char rb[32];
       snprintf(rb, sizeof(rb), "%d", r);
       g_conf->set_val("mds_standby_for_rank", rb);
-      g_conf->set_val("mds_standby_replay", "true");
+      g_conf->apply_changes(NULL);
+    }
+    else if (ceph_argparse_witharg(args, i, &val, "--hot-standby", (char*)NULL)) {
+      int r = parse_rank("hot-standby", val);
+      if (shadow != MDSMap::STATE_NULL) {
+        dout(0) << "Error: can only select one standby state" << dendl;
+        return -1;
+      }
+      dout(0) << "requesting standby_replay for mds." << r << dendl;
+      shadow = MDSMap::STATE_STANDBY_REPLAY;
+      char rb[32];
+      snprintf(rb, sizeof(rb), "%d", r);
+      g_conf->set_val("mds_standby_for_rank", rb);
       g_conf->apply_changes(NULL);
     }
     else {
@@ -144,36 +156,42 @@ int main(int argc, const char **argv)
       "MDS names may not start with a numeric digit." << dendl;
   }
 
-  uint64_t nonce = 0;
-  get_random_bytes((char*)&nonce, sizeof(nonce));
-
-  std::string public_msgr_type = g_conf->ms_public_type.empty() ? g_conf->get_val<std::string>("ms_type") : g_conf->ms_public_type;
-  Messenger *msgr = Messenger::create(g_ceph_context, public_msgr_type,
+  Messenger *msgr = Messenger::create(g_ceph_context, g_conf->ms_type,
 				      entity_name_t::MDS(-1), "mds",
-				      nonce, Messenger::HAS_MANY_CONNECTIONS);
-  if (!msgr)
-    exit(1);
+				      getpid());
   msgr->set_cluster_protocol(CEPH_MDS_PROTOCOL);
 
   cout << "starting " << g_conf->name << " at " << msgr->get_myaddr()
        << std::endl;
+  uint64_t supported =
+    CEPH_FEATURE_UID |
+    CEPH_FEATURE_NOSRCADDR |
+    CEPH_FEATURE_DIRLAYOUTHASH |
+    CEPH_FEATURE_MDS_INLINE_DATA |
+    CEPH_FEATURE_PGID64 |
+    CEPH_FEATURE_MSG_AUTH |
+    CEPH_FEATURE_EXPORT_PEER |
+    CEPH_FEATURE_MDS_QUOTA;
   uint64_t required =
     CEPH_FEATURE_OSDREPLYMUX;
 
-  msgr->set_default_policy(Messenger::Policy::lossy_client(required));
+  msgr->set_default_policy(Messenger::Policy::lossy_client(supported, required));
   msgr->set_policy(entity_name_t::TYPE_MON,
-                   Messenger::Policy::lossy_client(CEPH_FEATURE_UID |
+                   Messenger::Policy::lossy_client(supported,
+                                                   CEPH_FEATURE_UID |
                                                    CEPH_FEATURE_PGID64));
   msgr->set_policy(entity_name_t::TYPE_MDS,
-                   Messenger::Policy::lossless_peer(CEPH_FEATURE_UID));
+                   Messenger::Policy::lossless_peer(supported,
+                                                    CEPH_FEATURE_UID));
   msgr->set_policy(entity_name_t::TYPE_CLIENT,
-                   Messenger::Policy::stateful_server(0));
+                   Messenger::Policy::stateful_server(supported, 0));
 
   int r = msgr->bind(g_conf->public_addr);
   if (r < 0)
     exit(1);
 
-  global_init_daemonize(g_ceph_context);
+  if (shadow != MDSMap::STATE_ONESHOT_REPLAY)
+    global_init_daemonize(g_ceph_context);
   common_init_finish(g_ceph_context);
 
   // get monmap
@@ -191,7 +209,10 @@ int main(int argc, const char **argv)
   mds->orig_argc = argc;
   mds->orig_argv = argv;
 
-  r = mds->init();
+  if (shadow != MDSMap::STATE_NULL)
+    r = mds->init(shadow);
+  else
+    r = mds->init();
   if (r < 0) {
     msgr->wait();
     goto shutdown;
@@ -227,6 +248,8 @@ int main(int argc, const char **argv)
     delete mds;
     delete msgr;
   }
+
+  g_ceph_context->put();
 
   // cd on exit, so that gmon.out (if any) goes into a separate directory for each node.
   char s[20];

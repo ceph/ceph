@@ -11,32 +11,31 @@
  * Foundation. See file COPYING.
  *
  */
-
-#ifndef RGW_REST_METADATA_H
-#define RGW_REST_METADATA_H
+#ifndef CEPH_RGW_REST_METADATA_H
+#define CEPH_RGW_REST_METADATA_H
 
 class RGWOp_Metadata_List : public RGWRESTOp {
 public:
   RGWOp_Metadata_List() {}
-  ~RGWOp_Metadata_List() override {}
+  ~RGWOp_Metadata_List() {}
 
-  int check_caps(RGWUserCaps& caps) override {
+  int check_caps(RGWUserCaps& caps) {
     return caps.check_cap("metadata", RGW_CAP_READ);
   }
-  void execute() override;
-  const string name() override;
+  void execute();
+  virtual const string name();
 };
 
 class RGWOp_Metadata_Get : public RGWRESTOp {
 public:
   RGWOp_Metadata_Get() {}
-  ~RGWOp_Metadata_Get() override {}
+  ~RGWOp_Metadata_Get() {}
 
-  int check_caps(RGWUserCaps& caps) override {
+  int check_caps(RGWUserCaps& caps) {
     return caps.check_cap("metadata", RGW_CAP_READ);
   }
-  void execute() override;
-  const string name() override;
+  void execute();
+  virtual const string name();
 };
 
 class RGWOp_Metadata_Put : public RGWRESTOp {
@@ -45,39 +44,38 @@ class RGWOp_Metadata_Put : public RGWRESTOp {
   obj_version ondisk_version;
 public:
   RGWOp_Metadata_Put() {}
-  ~RGWOp_Metadata_Put() override {}
+  ~RGWOp_Metadata_Put() {}
 
-  int check_caps(RGWUserCaps& caps) override {
+  int check_caps(RGWUserCaps& caps) {
     return caps.check_cap("metadata", RGW_CAP_WRITE);
   }
-  void execute() override;
-  void send_response() override;
-  const string name() override { return "set_metadata"; }
-  RGWOpType get_type() override { return RGW_OP_ADMIN_SET_METADATA; }
+  void execute();
+  void send_response();
+  virtual const string name() { return "set_metadata"; }
 };
 
 class RGWOp_Metadata_Delete : public RGWRESTOp {
 public:
   RGWOp_Metadata_Delete() {}
-  ~RGWOp_Metadata_Delete() override {}
+  ~RGWOp_Metadata_Delete() {}
 
-  int check_caps(RGWUserCaps& caps) override {
+  int check_caps(RGWUserCaps& caps) {
     return caps.check_cap("metadata", RGW_CAP_WRITE);
   }
-  void execute() override;
-  const string name() override { return "remove_metadata"; }
+  void execute();
+  virtual const string name() { return "remove_metadata"; }
 };
 
 class RGWOp_Metadata_Lock : public RGWRESTOp {
 public:
   RGWOp_Metadata_Lock() {}
-  ~RGWOp_Metadata_Lock() override {}
+  ~RGWOp_Metadata_Lock() {}
 
-  int check_caps(RGWUserCaps& caps) override {
+  int check_caps(RGWUserCaps& caps) {
     return caps.check_cap("metadata", RGW_CAP_WRITE);
   }
-  void execute() override;
-  const string name() override {
+  void execute();
+  virtual const string name() {
     return "lock_metadata_object";
   }
 };
@@ -85,42 +83,41 @@ public:
 class RGWOp_Metadata_Unlock : public RGWRESTOp {
 public:
   RGWOp_Metadata_Unlock() {}
-  ~RGWOp_Metadata_Unlock() override {}
+  ~RGWOp_Metadata_Unlock() {}
 
-  int check_caps(RGWUserCaps& caps) override {
+  int check_caps(RGWUserCaps& caps) {
     return caps.check_cap("metadata", RGW_CAP_WRITE);
   }
-  void execute() override;
-  const string name() override {
+  void execute();
+  virtual const string name() {
     return "unlock_metadata_object";
   }
 };
 
 class RGWHandler_Metadata : public RGWHandler_Auth_S3 {
 protected:
-  RGWOp *op_get() override;
-  RGWOp *op_put() override;
-  RGWOp *op_delete() override;
-  RGWOp *op_post() override;
+  RGWOp *op_get();
+  RGWOp *op_put();
+  RGWOp *op_delete();
+  RGWOp *op_post();
 
-  int read_permissions(RGWOp*) override {
+  int read_permissions(RGWOp*) {
     return 0;
   }
 public:
-  using RGWHandler_Auth_S3::RGWHandler_Auth_S3;
-  ~RGWHandler_Metadata() override = default;
+  RGWHandler_Metadata() : RGWHandler_Auth_S3() {}
+  virtual ~RGWHandler_Metadata() {}
 };
 
 class RGWRESTMgr_Metadata : public RGWRESTMgr {
 public:
-  RGWRESTMgr_Metadata() = default;
-  ~RGWRESTMgr_Metadata() override = default;
+  RGWRESTMgr_Metadata() {}
+  virtual ~RGWRESTMgr_Metadata() {}
 
-  RGWHandler_REST* get_handler(struct req_state* const s,
-                               const rgw::auth::StrategyRegistry& auth_registry,
-                               const std::string& frontend_prefix) override {
-    return new RGWHandler_Metadata(auth_registry);
+  virtual RGWHandler *get_handler(struct req_state *s){
+    return new RGWHandler_Metadata;
   }
 };
 
-#endif /* RGW_REST_METADATA_H */
+
+#endif

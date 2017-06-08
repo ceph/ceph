@@ -16,7 +16,7 @@ class TestFileStoreBackend : public Backend {
 
 public:
   TestFileStoreBackend(ObjectStore *os, bool write_infos);
-  ~TestFileStoreBackend() override {
+  ~TestFileStoreBackend() {
     finisher.stop();
   }
   void write(
@@ -24,14 +24,14 @@ public:
     uint64_t offset,
     const bufferlist &bl,
     Context *on_applied,
-    Context *on_commit) override;
+    Context *on_commit);
 
   void read(
     const string &oid,
     uint64_t offset,
     uint64_t length,
     bufferlist *bl,
-    Context *on_complete) override;
+    Context *on_complete);
 };
 
 #endif

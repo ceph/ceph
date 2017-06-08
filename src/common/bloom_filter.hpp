@@ -22,10 +22,16 @@
 #ifndef COMMON_BLOOM_FILTER_HPP
 #define COMMON_BLOOM_FILTER_HPP
 
+#include <cstddef>
+#include <algorithm>
 #include <cmath>
+#include <limits>
+#include <list>
+#include <string>
+#include <vector>
 
-#include "include/mempool.h"
 #include "include/encoding.h"
+#include "common/Formatter.h"
 
 static const std::size_t bits_per_char = 0x08;    // 8 bits in 1 char(unsigned)
 static const unsigned char bit_mask[bits_per_char] = {
@@ -39,7 +45,6 @@ static const unsigned char bit_mask[bits_per_char] = {
   0x80   //10000000
 };
 
-MEMPOOL_DECLARE_FACTORY(unsigned char, byte, bloom_filter);
 
 class bloom_filter
 {
@@ -98,7 +103,7 @@ public:
   void init() {
     generate_unique_salt();
     if (table_size_) {
-      bit_table_ = mempool::bloom_filter::alloc_byte.allocate(table_size_);
+      bit_table_ = new cell_type[table_size_];
       std::fill_n(bit_table_, table_size_, 0x00);
     } else {
       bit_table_ = NULL;
@@ -114,15 +119,13 @@ public:
   bloom_filter& operator = (const bloom_filter& filter)
   {
     if (this != &filter) {
-      if (bit_table_) {
-	mempool::bloom_filter::alloc_byte.deallocate(bit_table_, table_size_);
-      }
       salt_count_ = filter.salt_count_;
       table_size_ = filter.table_size_;
       insert_count_ = filter.insert_count_;
       target_element_count_ = filter.target_element_count_;
       random_seed_ = filter.random_seed_;
-      bit_table_ = mempool::bloom_filter::alloc_byte.allocate(table_size_);
+      delete[] bit_table_;
+      bit_table_ = new cell_type[table_size_];
       std::copy(filter.bit_table_, filter.bit_table_ + table_size_, bit_table_);
       salt_ = filter.salt_;
     }
@@ -131,7 +134,7 @@ public:
 
   virtual ~bloom_filter()
   {
-    mempool::bloom_filter::alloc_byte.deallocate(bit_table_, table_size_);
+    delete[] bit_table_;
   }
 
   inline bool operator!() const
@@ -550,7 +553,7 @@ public:
     size_list.push_back(table_size_);
   }
 
-  inline std::size_t size() const override
+  inline virtual std::size_t size() const
   {
     return size_list.back() * bits_per_char;
   }
@@ -573,7 +576,7 @@ public:
       return false;
     }
 
-    cell_type* tmp = mempool::bloom_filter::alloc_byte.allocate(new_table_size);
+    cell_type* tmp = new cell_type[new_table_size];
     std::copy(bit_table_, bit_table_ + (new_table_size), tmp);
     cell_type* itr = bit_table_ + (new_table_size);
     cell_type* end = bit_table_ + (original_table_size);
@@ -586,7 +589,7 @@ public:
 	itr_tmp = tmp;
     }
 
-    mempool::bloom_filter::alloc_byte.deallocate(bit_table_, table_size_);
+    delete[] bit_table_;
     bit_table_ = tmp;
     size_list.push_back(new_table_size);
     table_size_ = new_table_size;
@@ -594,7 +597,7 @@ public:
     return true;
   }
 
-  inline double approx_unique_element_count() const override {
+  virtual inline double approx_unique_element_count() const {
     // this is not a very good estimate; a better solution should have
     // some asymptotic behavior as density() approaches 1.0.
     //
@@ -604,7 +607,7 @@ public:
 
 private:
 
-  inline void compute_indices(const bloom_type& hash, std::size_t& bit_index, std::size_t& bit) const override
+  inline virtual void compute_indices(const bloom_type& hash, std::size_t& bit_index, std::size_t& bit) const
   {
     bit_index = hash;
     for (std::size_t i = 0; i < size_list.size(); ++i)

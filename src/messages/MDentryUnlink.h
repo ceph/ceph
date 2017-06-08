@@ -33,21 +33,21 @@ class MDentryUnlink : public Message {
     dirfrag(df),
     dn(n) {}
 private:
-  ~MDentryUnlink() override {}
+  ~MDentryUnlink() {}
 
 public:
-  const char *get_type_name() const override { return "dentry_unlink";}
-  void print(ostream& o) const override {
+  const char *get_type_name() const { return "dentry_unlink";}
+  void print(ostream& o) const {
     o << "dentry_unlink(" << dirfrag << " " << dn << ")";
   }
   
-  void decode_payload() override {
+  void decode_payload() {
     bufferlist::iterator p = payload.begin();
     ::decode(dirfrag, p);
     ::decode(dn, p);
     ::decode(straybl, p);
   }
-  void encode_payload(uint64_t features) override {
+  void encode_payload(uint64_t features) {
     ::encode(dirfrag, payload);
     ::encode(dn, payload);
     ::encode(straybl, payload);

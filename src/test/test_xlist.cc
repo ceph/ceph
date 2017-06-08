@@ -10,7 +10,7 @@ struct Item {
   xlist<Item*>::item xitem;
   int val;
 
-  explicit Item(int v) :
+  Item(int v) :
     xitem(this),
     val(v)
   {}
@@ -26,13 +26,13 @@ protected:
   // for filling up an ItemList
   Refs refs;
 
-  void SetUp() override {
+  virtual void SetUp() {
     for (int i = 0; i < 13; i++) {
       items.push_back(new Item(i));
       refs.push_back(&items.back()->xitem);
     }
   }
-  void TearDown() override {
+  virtual void TearDown() {
     for (Items::iterator i = items.begin(); i != items.end(); ++i) {
       delete *i;
     }

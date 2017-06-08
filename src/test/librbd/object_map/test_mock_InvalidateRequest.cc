@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// -*- mode:C; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
 #include "test/librbd/test_mock_fixture.h"
@@ -15,7 +15,6 @@ namespace object_map {
 using ::testing::_;
 using ::testing::DoDefault;
 using ::testing::Return;
-using ::testing::StrEq;
 
 class TestMockObjectMapInvalidateRequest : public TestMockFixture {
 public:
@@ -26,15 +25,13 @@ TEST_F(TestMockObjectMapInvalidateRequest, UpdatesInMemoryFlag) {
 
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
-  bool flags_set;
-  ASSERT_EQ(0, ictx->test_flags(RBD_FLAG_OBJECT_MAP_INVALID, &flags_set));
-  ASSERT_FALSE(flags_set);
+  ASSERT_FALSE(ictx->test_flags(RBD_FLAG_OBJECT_MAP_INVALID));
 
   C_SaferCond cond_ctx;
   AsyncRequest<> *request = new InvalidateRequest<>(*ictx, CEPH_NOSNAP, false, &cond_ctx);
 
   EXPECT_CALL(get_mock_io_ctx(ictx->md_ctx),
-              exec(ictx->header_oid, _, StrEq("rbd"), StrEq("set_flags"), _, _, _))
+              exec(ictx->header_oid, _, "rbd", "set_flags", _, _, _))
                 .Times(0);
 
   {
@@ -44,8 +41,7 @@ TEST_F(TestMockObjectMapInvalidateRequest, UpdatesInMemoryFlag) {
   }
   ASSERT_EQ(0, cond_ctx.wait());
 
-  ASSERT_EQ(0, ictx->test_flags(RBD_FLAG_OBJECT_MAP_INVALID, &flags_set));
-  ASSERT_TRUE(flags_set);
+  ASSERT_TRUE(ictx->test_flags(RBD_FLAG_OBJECT_MAP_INVALID));
 }
 
 TEST_F(TestMockObjectMapInvalidateRequest, UpdatesHeadOnDiskFlag) {
@@ -59,7 +55,10 @@ TEST_F(TestMockObjectMapInvalidateRequest, UpdatesHeadOnDiskFlag) {
   AsyncRequest<> *request = new InvalidateRequest<>(*ictx, CEPH_NOSNAP, false, &cond_ctx);
 
   EXPECT_CALL(get_mock_io_ctx(ictx->md_ctx),
-              exec(ictx->header_oid, _, StrEq("rbd"), StrEq("set_flags"), _, _, _))
+              exec(ictx->header_oid, _, "lock", "assert_locked", _, _, _))
+                .WillOnce(DoDefault());
+  EXPECT_CALL(get_mock_io_ctx(ictx->md_ctx),
+              exec(ictx->header_oid, _, "rbd", "set_flags", _, _, _))
                 .WillOnce(DoDefault());
 
   {
@@ -78,17 +77,18 @@ TEST_F(TestMockObjectMapInvalidateRequest, UpdatesSnapOnDiskFlag) {
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
-  ASSERT_EQ(0, snap_create(*ictx, "snap1"));
-  ASSERT_EQ(0, librbd::snap_set(ictx,
-				cls::rbd::UserSnapshotNamespace(),
-				"snap1"));
+  ASSERT_EQ(0, librbd::snap_create(ictx, "snap1"));
+  ASSERT_EQ(0, librbd::snap_set(ictx, "snap1"));
 
   C_SaferCond cond_ctx;
   AsyncRequest<> *request = new InvalidateRequest<>(*ictx, ictx->snap_id, false,
                                                 &cond_ctx);
 
   EXPECT_CALL(get_mock_io_ctx(ictx->md_ctx),
-              exec(ictx->header_oid, _, StrEq("rbd"), StrEq("set_flags"), _, _, _))
+              exec(ictx->header_oid, _, "lock", "assert_locked", _, _, _))
+                .Times(0);
+  EXPECT_CALL(get_mock_io_ctx(ictx->md_ctx),
+              exec(ictx->header_oid, _, "rbd", "set_flags", _, _, _))
                 .WillOnce(DoDefault());
 
   {
@@ -109,7 +109,7 @@ TEST_F(TestMockObjectMapInvalidateRequest, SkipOnDiskUpdateWithoutLock) {
   AsyncRequest<> *request = new InvalidateRequest<>(*ictx, CEPH_NOSNAP, false, &cond_ctx);
 
   EXPECT_CALL(get_mock_io_ctx(ictx->md_ctx),
-              exec(ictx->header_oid, _, StrEq("rbd"), StrEq("set_flags"), _, _, _))
+              exec(ictx->header_oid, _, "rbd", "set_flags", _, _, _))
                 .Times(0);
 
   {
@@ -133,7 +133,10 @@ TEST_F(TestMockObjectMapInvalidateRequest, IgnoresOnDiskUpdateFailure) {
   AsyncRequest<> *request = new InvalidateRequest<>(*ictx, CEPH_NOSNAP, false, &cond_ctx);
 
   EXPECT_CALL(get_mock_io_ctx(ictx->md_ctx),
-              exec(ictx->header_oid, _, StrEq("rbd"), StrEq("set_flags"), _, _, _))
+              exec(ictx->header_oid, _, "lock", "assert_locked", _, _, _))
+                .WillOnce(DoDefault());
+  EXPECT_CALL(get_mock_io_ctx(ictx->md_ctx),
+              exec(ictx->header_oid, _, "rbd", "set_flags", _, _, _))
                 .WillOnce(Return(-EINVAL));
 
   {

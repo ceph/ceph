@@ -20,25 +20,78 @@
 #include "include/types.h"
 #include "include/xlist.h"
 
+#include <list>
 #include <map>
 using namespace std;
 #include "include/unordered_map.h"
 #include "include/unordered_set.h"
 
 #include "common/Mutex.h"
+#include "include/atomic.h"
 #include "common/Cond.h"
 #include "common/Thread.h"
-
-#include "include/Spinlock.h"
+#include "common/Throttle.h"
 
 #include "msg/SimplePolicyMessenger.h"
-#include "msg/DispatchQueue.h"
 #include "include/assert.h"
 #include "AsyncConnection.h"
 #include "Event.h"
 
 
 class AsyncMessenger;
+class WorkerPool;
+
+enum {
+  l_msgr_first = 94000,
+  l_msgr_recv_messages,
+  l_msgr_send_messages,
+  l_msgr_recv_bytes,
+  l_msgr_send_bytes,
+  l_msgr_created_connections,
+  l_msgr_active_connections,
+  l_msgr_last,
+};
+
+
+class Worker : public Thread {
+  static const uint64_t InitEventNumber = 5000;
+  static const uint64_t EventMaxWaitUs = 30000000;
+  CephContext *cct;
+  WorkerPool *pool;
+  bool done;
+  int id;
+  PerfCounters *perf_logger;
+
+ public:
+  EventCenter center;
+  Worker(CephContext *c, WorkerPool *p, int i)
+    : cct(c), pool(p), done(false), id(i), perf_logger(NULL), center(c) {
+    center.init(InitEventNumber);
+    char name[128];
+    sprintf(name, "AsyncMessenger::Worker-%d", id);
+    // initialize perf_logger
+    PerfCountersBuilder plb(cct, name, l_msgr_first, l_msgr_last);
+
+    plb.add_u64_counter(l_msgr_recv_messages, "msgr_recv_messages", "Network received messages");
+    plb.add_u64_counter(l_msgr_send_messages, "msgr_send_messages", "Network sent messages");
+    plb.add_u64_counter(l_msgr_recv_bytes, "msgr_recv_bytes", "Network received bytes");
+    plb.add_u64_counter(l_msgr_send_bytes, "msgr_send_bytes", "Network received bytes");
+    plb.add_u64_counter(l_msgr_created_connections, "msgr_active_connections", "Active connection number");
+    plb.add_u64_counter(l_msgr_active_connections, "msgr_created_connections", "Created connection number");
+
+    perf_logger = plb.create_perf_counters();
+    cct->get_perfcounters_collection()->add(perf_logger);
+  }
+  ~Worker() {
+    if (perf_logger) {
+      cct->get_perfcounters_collection()->remove(perf_logger);
+      delete perf_logger;
+    }
+  }
+  void *entry();
+  void stop();
+  PerfCounters *get_perf_counter() { return perf_logger; }
+};
 
 /**
  * If the Messenger binds to a specific address, the Processor runs
@@ -48,21 +101,72 @@ class Processor {
   AsyncMessenger *msgr;
   NetHandler net;
   Worker *worker;
-  ServerSocket listen_socket;
+  int listen_sd;
+  uint64_t nonce;
   EventCallbackRef listen_handler;
 
-  class C_processor_accept;
+  class C_processor_accept : public EventCallback {
+    Processor *pro;
+
+   public:
+    C_processor_accept(Processor *p): pro(p) {}
+    void do_request(int id) {
+      pro->accept();
+    }
+  };
 
  public:
-  Processor(AsyncMessenger *r, Worker *w, CephContext *c);
+  Processor(AsyncMessenger *r, CephContext *c, uint64_t n)
+          : msgr(r), net(c), worker(NULL), listen_sd(-1), nonce(n), listen_handler(new C_processor_accept(this)) {}
   ~Processor() { delete listen_handler; };
 
   void stop();
-  int bind(const entity_addr_t &bind_addr,
-	   const set<int>& avoid_ports,
-	   entity_addr_t* bound_addr);
-  void start();
+  int bind(const entity_addr_t &bind_addr, const set<int>& avoid_ports);
+  int rebind(const set<int>& avoid_port);
+  int start(Worker *w);
   void accept();
+};
+
+class WorkerPool {
+  WorkerPool(const WorkerPool &);
+  WorkerPool& operator=(const WorkerPool &);
+  CephContext *cct;
+  uint64_t seq;
+  vector<Worker*> workers;
+  vector<int> coreids;
+  // Used to indicate whether thread started
+  bool started;
+  Mutex barrier_lock;
+  Cond barrier_cond;
+  atomic_t barrier_count;
+
+  class C_barrier : public EventCallback {
+    WorkerPool *pool;
+   public:
+    C_barrier(WorkerPool *p): pool(p) {}
+    void do_request(int id) {
+      Mutex::Locker l(pool->barrier_lock);
+      pool->barrier_count.dec();
+      pool->barrier_cond.Signal();
+      delete this;
+    }
+  };
+  friend class C_barrier;
+ public:
+  WorkerPool(CephContext *c);
+  virtual ~WorkerPool();
+  void start();
+  Worker *get_worker() {
+    return workers[(seq++)%workers.size()];
+  }
+  int get_cpuid(int id) {
+    if (coreids.empty())
+      return -1;
+    return coreids[id % coreids.size()];
+  }
+  void barrier();
+  // uniq name for CephContext to distinguish differnt object
+  static const string name;
 };
 
 /*
@@ -83,26 +187,26 @@ public:
    * _nonce A unique ID to use for this AsyncMessenger. It should not
    * be a value that will be repeated if the daemon restarts.
    */
-  AsyncMessenger(CephContext *cct, entity_name_t name, const std::string &type,
-                 string mname, uint64_t _nonce);
+  AsyncMessenger(CephContext *cct, entity_name_t name,
+                 string mname, uint64_t _nonce, uint64_t features);
 
   /**
    * Destroy the AsyncMessenger. Pretty simple since all the work is done
    * elsewhere.
    */
-  ~AsyncMessenger() override;
+  virtual ~AsyncMessenger();
 
   /** @defgroup Accessors
    * @{
    */
-  void set_addr_unknowns(const entity_addr_t &addr) override;
+  void set_addr_unknowns(entity_addr_t& addr);
 
-  int get_dispatch_queue_len() override {
-    return dispatch_queue.get_queue_len();
+  int get_dispatch_queue_len() {
+    return 0;
   }
 
-  double get_dispatch_queue_max_age(utime_t now) override {
-    return dispatch_queue.get_max_age(now);
+  double get_dispatch_queue_max_age(utime_t now) {
+    return 0;
   }
   /** @} Accessors */
 
@@ -110,14 +214,13 @@ public:
    * @defgroup Configuration functions
    * @{
    */
-  void set_cluster_protocol(int p) override {
+  void set_cluster_protocol(int p) {
     assert(!started && !did_bind);
     cluster_protocol = p;
   }
 
-  int bind(const entity_addr_t& bind_addr) override;
-  int rebind(const set<int>& avoid_ports) override;
-  int client_bind(const entity_addr_t& bind_addr) override;
+  int bind(const entity_addr_t& bind_addr);
+  int rebind(const set<int>& avoid_ports);
 
   /** @} Configuration functions */
 
@@ -125,9 +228,9 @@ public:
    * @defgroup Startup/Shutdown
    * @{
    */
-  int start() override;
-  void wait() override;
-  int shutdown() override;
+  virtual int start();
+  virtual void wait();
+  virtual int shutdown();
 
   /** @} // Startup/Shutdown */
 
@@ -135,8 +238,8 @@ public:
    * @defgroup Messaging
    * @{
    */
-  int send_message(Message *m, const entity_inst_t& dest) override {
-    Mutex::Locker l(lock);
+  virtual int send_message(Message *m, const entity_inst_t& dest) {
+          Mutex::Locker l(lock);
 
     return _send_message(m, dest);
   }
@@ -147,18 +250,23 @@ public:
    * @defgroup Connection Management
    * @{
    */
-  ConnectionRef get_connection(const entity_inst_t& dest) override;
-  ConnectionRef get_loopback_connection() override;
-  void mark_down(const entity_addr_t& addr) override;
-  void mark_down_all() override {
-    shutdown_connections(true);
-  }
+  virtual ConnectionRef get_connection(const entity_inst_t& dest);
+  virtual ConnectionRef get_loopback_connection();
+  int send_keepalive(Connection *con);
+  virtual void mark_down(const entity_addr_t& addr);
+  virtual void mark_down_all();
   /** @} // Connection Management */
 
   /**
    * @defgroup Inner classes
    * @{
    */
+
+  Connection *create_anon_connection() {
+    Mutex::Locker l(lock);
+    Worker *w = pool->get_worker();
+    return new AsyncConnection(cct, this, &w->center, w->get_perf_counter());
+  }
 
   /**
    * @} // Inner classes
@@ -172,7 +280,7 @@ protected:
   /**
    * Start up the DispatchQueue thread once we have somebody to dispatch to.
    */
-  void ready() override;
+  virtual void ready();
   /** @} // Messenger Interfaces */
 
 private:
@@ -211,21 +319,12 @@ private:
                       const entity_addr_t& dest_addr, int dest_type);
 
   int _send_message(Message *m, const entity_inst_t& dest);
-  void _finish_bind(const entity_addr_t& bind_addr,
-		    const entity_addr_t& listen_addr);
 
  private:
-  static const uint64_t ReapDeadConnectionThreshold = 5;
+  WorkerPool *pool;
 
-  NetworkStack *stack;
-  std::vector<Processor*> processors;
+  Processor processor;
   friend class Processor;
-  DispatchQueue dispatch_queue;
-
-  // the worker run messenger's cron jobs
-  Worker *local_worker;
-
-  std::string ms_type;
 
   /// overall lock used for AsyncMessenger data structures
   Mutex lock;
@@ -238,21 +337,11 @@ private:
   bool need_addr;
 
   /**
-   * set to bind address if bind was called before NetworkStack was ready to
-   * bind
-   */
-  entity_addr_t pending_bind_addr;
-
-  /**
-   * false; set to true if a pending bind exists
-   */
-  bool pending_bind = false;
-
-  /**
    *  The following aren't lock-protected since you shouldn't be able to race
    *  the only writers.
    */
 
+  int listen_sd;
   /**
    *  false; set to true if the AsyncMessenger bound to a specific address;
    *  and set false again by Accepter::stop().
@@ -276,6 +365,7 @@ private:
    *
    * These are not yet in the conns map.
    */
+  // FIXME clear up
   set<AsyncConnectionRef> accepting_conns;
 
   /**
@@ -292,8 +382,6 @@ private:
   Mutex deleted_lock;
   set<AsyncConnectionRef> deleted_conns;
 
-  EventCallbackRef reap_handler;
-
   /// internal cluster protocol version, if any, for talking to entities of the same type.
   int cluster_protocol;
 
@@ -308,7 +396,8 @@ private:
 
     // lazy delete, see "deleted_conns"
     Mutex::Locker l(deleted_lock);
-    if (deleted_conns.erase(p->second)) {
+    if (deleted_conns.count(p->second)) {
+      deleted_conns.erase(p->second);
       p->second->get_perf_counter()->dec(l_msgr_active_connections);
       conns.erase(p);
       return NULL;
@@ -321,16 +410,15 @@ private:
     assert(lock.is_locked());
     local_connection->peer_addr = my_inst.addr;
     local_connection->peer_type = my_inst.name.type();
-    local_connection->set_features(CEPH_FEATURES_ALL);
+    local_connection->set_features(local_features);
     ms_deliver_handle_fast_connect(local_connection.get());
   }
-
-  void shutdown_connections(bool queue_reset);
 
 public:
 
   /// con used for sending messages to ourselves
   ConnectionRef local_connection;
+  uint64_t local_features;
 
   /**
    * @defgroup AsyncMessenger internals
@@ -346,14 +434,14 @@ public:
 
   int accept_conn(AsyncConnectionRef conn) {
     Mutex::Locker l(lock);
-    auto it = conns.find(conn->peer_addr);
-    if (it != conns.end()) {
-      AsyncConnectionRef existing = it->second;
+    if (conns.count(conn->peer_addr)) {
+      AsyncConnectionRef existing = conns[conn->peer_addr];
 
       // lazy delete, see "deleted_conns"
       // If conn already in, we will return 0
       Mutex::Locker l(deleted_lock);
-      if (deleted_conns.erase(existing)) {
+      if (deleted_conns.count(existing)) {
+        deleted_conns.erase(existing);
       } else if (conn != existing) {
         return -1;
       }
@@ -365,10 +453,7 @@ public:
   }
 
   void learned_addr(const entity_addr_t &peer_addr_for_me);
-  void add_accept(Worker *w, ConnectedSocket cli_socket, entity_addr_t &addr);
-  NetworkStack *get_stack() {
-    return stack;
-  }
+  AsyncConnectionRef add_accept(int sd);
 
   /**
    * This wraps ms_deliver_get_authorizer. We use it for AsyncConnection.
@@ -405,7 +490,7 @@ public:
    * a peer protocol (if it matches our own), the protocol version for the
    * peer (if we're connecting), or our protocol version (if we're accepting).
    */
-  int get_proto_version(int peer_type, bool connect) const;
+  int get_proto_version(int peer_type, bool connect);
 
   /**
    * Fill in the address and peer type for the local connection, which
@@ -424,21 +509,7 @@ public:
   void unregister_conn(AsyncConnectionRef conn) {
     Mutex::Locker l(deleted_lock);
     deleted_conns.insert(conn);
-
-    if (deleted_conns.size() >= ReapDeadConnectionThreshold) {
-      local_worker->center.dispatch_event_external(reap_handler);
-    }
   }
-
-  /**
-   * Reap dead connection from `deleted_conns`
-   *
-   * @return the number of dead connections
-   *
-   * See "deleted_conns"
-   */
-  int reap_dead();
-
   /**
    * @} // AsyncMessenger Internals
    */

@@ -28,7 +28,6 @@
 #include "include/assert.h"
 #include "include/compat.h"
 
-#define dout_context cct()
 #define dout_subsys ceph_subsys_filestore
 #undef dout_prefix
 #define dout_prefix *_dout << "xfsfilestorebackend(" << get_basedir_path() << ") "
@@ -106,7 +105,7 @@ int XfsFileStoreBackend::detect_features()
     goto out_close;
   }
 
-  if (cct()->_conf->filestore_xfs_extsize) {
+  if (g_conf->filestore_xfs_extsize) {
     ret = set_extsize(fd, 1U << 15); // a few pages
     if (ret) {
       ret = 0;

@@ -42,7 +42,7 @@ public:
 	    const string &oid)
 	: coll(coll), oid(oid) {}
       void operator()(FileStoreTracker *harness,
-		      OutTransaction *out) override {
+		      OutTransaction *out) {
 	harness->write(make_pair(coll, oid), out);
       }
     };
@@ -56,7 +56,7 @@ public:
 		 const string &to)
 	: coll(coll), from(from), to(to) {}
       void operator()(FileStoreTracker *harness,
-		      OutTransaction *out) override {
+		      OutTransaction *out) {
 	harness->clone_range(make_pair(coll, from), make_pair(coll, to),
 			     out);
       }
@@ -71,7 +71,7 @@ public:
 		 const string &to)
 	: coll(coll), from(from), to(to) {}
       void operator()(FileStoreTracker *harness,
-		      OutTransaction *out) override {
+		      OutTransaction *out) {
 	harness->clone(make_pair(coll, from), make_pair(coll, to),
 			     out);
       }
@@ -84,7 +84,7 @@ public:
 	     const string &obj)
 	: coll(coll), obj(obj) {}
       void operator()(FileStoreTracker *harness,
-		      OutTransaction *out) override {
+		      OutTransaction *out) {
 	harness->remove(make_pair(coll, obj),
 			out);
       }

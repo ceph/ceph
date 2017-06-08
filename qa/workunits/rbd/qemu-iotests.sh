@@ -5,18 +5,15 @@
 # require the admin ceph user, as there's no way to pass the ceph user
 # to qemu-iotests currently.
 
-testlist='001 002 003 004 005 008 009 010 011 021 025 032 033 055'
+# This will only work with particular qemu versions, like 1.0. Later
+# versions of qemu include qemu-iotests directly in the qemu
+# repository.
+testlist='001 002 003 004 005 008 009 010 011 021 025 032 033 055 077'
 
 git clone https://github.com/qemu/qemu.git
+# use v2.2.0-rc3 (last released version that handles all the tests
 cd qemu
-if lsb_release -da | grep -iq xenial; then
-    # Xenial requires a recent test harness
-    git checkout v2.3.0
-else
-    # use v2.2.0-rc3 (last released version that handles all the tests
-    git checkout 2528043f1f299e0e88cb026f1ca7c40bbb4e1f80
-
-fi
+git checkout 2528043f1f299e0e88cb026f1ca7c40bbb4e1f80
 
 cd tests/qemu-iotests
 mkdir bin
@@ -26,10 +23,6 @@ then
     QEMU='/usr/bin/qemu-system-x86_64'
 else
     QEMU='/usr/libexec/qemu-kvm'
-
-    # disable test 055 since qemu-kvm (RHEL/CentOS) doesn't support the
-    # required QMP commands
-    testlist=$(echo ${testlist} | sed "s/ 055//g")
 fi
 ln -s $QEMU bin/qemu
 

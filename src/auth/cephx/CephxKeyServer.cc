@@ -13,8 +13,10 @@
  */
 
 #include "common/config.h"
+
 #include "CephxKeyServer.h"
-#include "common/dout.h"
+#include "common/Timer.h"
+
 #include <sstream>
 
 #define dout_subsys ceph_subsys_auth
@@ -34,12 +36,12 @@ bool KeyServerData::get_service_secret(CephContext *cct, uint32_t service_id,
   const RotatingSecrets& secrets = iter->second;
 
   // second to oldest, unless it's expired
-  map<uint64_t, ExpiringCryptoKey>::const_iterator riter =
+  map<uint64_t, ExpiringCryptoKey>::const_iterator riter = 
 	secrets.secrets.begin();
   if (secrets.secrets.size() > 1)
     ++riter;
 
-  if (riter->second.expiration < ceph_clock_now())
+  if (riter->second.expiration < ceph_clock_now(cct))
     ++riter;   // "current" key has expired, use "next" key instead
 
   secret_id = riter->first;
@@ -156,7 +158,6 @@ bool KeyServer::_check_rotating_secrets()
   added += _rotate_secret(CEPH_ENTITY_TYPE_MON);
   added += _rotate_secret(CEPH_ENTITY_TYPE_OSD);
   added += _rotate_secret(CEPH_ENTITY_TYPE_MDS);
-  added += _rotate_secret(CEPH_ENTITY_TYPE_MGR);
 
   if (added) {
     ldout(cct, 10) << __func__ << " added " << added << dendl;
@@ -189,7 +190,7 @@ int KeyServer::_rotate_secret(uint32_t service_id)
 {
   RotatingSecrets& r = data.rotating_secrets[service_id];
   int added = 0;
-  utime_t now = ceph_clock_now();
+  utime_t now = ceph_clock_now(cct);
   double ttl = service_id == CEPH_ENTITY_TYPE_AUTH ? cct->_conf->auth_mon_ticket_ttl : cct->_conf->auth_service_ticket_ttl;
 
   while (r.need_new_secrets(now)) {
@@ -267,7 +268,7 @@ bool KeyServer::generate_secret(CryptoKey& secret)
   if (crypto->create(bp) < 0)
     return false;
 
-  secret.set_secret(CEPH_CRYPTO_AES, bp, ceph_clock_now());
+  secret.set_secret(CEPH_CRYPTO_AES, bp, ceph_clock_now(NULL));
 
   return true;
 }
@@ -297,13 +298,14 @@ bool KeyServer::contains(const EntityName& name) const
 int KeyServer::encode_secrets(Formatter *f, stringstream *ds) const
 {
   Mutex::Locker l(lock);
+
+  if (f)
+    f->open_array_section("auth_dump");
+
   map<EntityName, EntityAuth>::const_iterator mapiter = data.secrets_begin();
 
   if (mapiter == data.secrets_end())
     return -ENOENT;
-
-  if (f)
-    f->open_array_section("auth_dump");
 
   while (mapiter != data.secrets_end()) {
     const EntityName& name = mapiter->first;
@@ -426,7 +428,7 @@ int KeyServer::_build_session_auth_info(uint32_t service_id, CephXServiceTicketI
 {
   info.service_id = service_id;
   info.ticket = auth_ticket_info.ticket;
-  info.ticket.init_timestamps(ceph_clock_now(), cct->_conf->auth_service_ticket_ttl);
+  info.ticket.init_timestamps(ceph_clock_now(cct), cct->_conf->auth_service_ticket_ttl);
 
   generate_secret(info.session_key);
 
@@ -458,7 +460,6 @@ int KeyServer::build_session_auth_info(uint32_t service_id, CephXServiceTicketIn
   info.service_secret = service_secret;
   info.secret_id = secret_id;
 
-  Mutex::Locker l(lock);
   return _build_session_auth_info(service_id, auth_ticket_info, info);
 }
 

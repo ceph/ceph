@@ -25,7 +25,6 @@ class Thread {
   pid_t pid;
   int ioprio_class, ioprio_priority;
   int cpuid;
-  const char *thread_name;
 
   void *entry_wrapper();
 

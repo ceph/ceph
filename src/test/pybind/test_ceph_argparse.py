@@ -1,4 +1,4 @@
-#!/usr/bin/env nosetests 
+#!/usr/bin/nosetests --nocapture
 # -*- mode:python; tab-width:4; indent-tabs-mode:t; coding:utf-8 -*-
 # vim: ts=4 sw=4 smarttab expandtab fileencoding=utf-8
 #
@@ -25,10 +25,7 @@ import re
 import json
 
 def get_command_descriptions(what):
-    CEPH_BIN = os.environ['CEPH_BIN']
-    if CEPH_BIN == "":
-        CEPH_BIN = "."
-    return os.popen(CEPH_BIN + "/get_command_descriptions " + "--" + what).read()
+    return os.popen("./get_command_descriptions " + "--" + what).read()
 
 def test_parse_json_funcsigs():
     commands = get_command_descriptions("all")
@@ -91,17 +88,11 @@ class TestArgparse:
 
 class TestBasic:
 
-    def test_non_ascii_in_non_options(self):
-        # ArgumentPrefix("no match for {0}".format(s)) is not able to convert
-        # unicode str parameter into str. and validate_command() should not
-        # choke on it.
-        assert_is_none(validate_command(sigdict, [u'章鱼和鱿鱼']))
-        assert_is_none(validate_command(sigdict, [u'–w']))
-        # actually we always pass unicode strings to validate_command() in "ceph"
-        # CLI, but we also use bytestrings in our tests, so make sure it does not
-        # break.
-        assert_is_none(validate_command(sigdict, ['章鱼和鱿鱼']))
-        assert_is_none(validate_command(sigdict, ['–w']))
+	def test_non_ascii_in_non_options(self):
+		# unicode() is not able to convert this str parameter into unicode
+		# using the default encoding 'ascii'. and validate_command() should
+		# not choke on it.
+		assert_is_none(validate_command(sigdict, ['章鱼和鱿鱼']))
 
 
 class TestPG(TestArgparse):
@@ -182,6 +173,21 @@ class TestPG(TestArgparse):
 
     def test_force_create_pg(self):
         self.one_pgid('force_create_pg')
+
+    def set_ratio(self, command):
+        self.assert_valid_command(['pg',
+                                   command,
+                                   '0.0'])
+        assert_equal({}, validate_command(sigdict, ['pg', command]))
+        assert_equal({}, validate_command(sigdict, ['pg',
+                                                    command,
+                                                    '2.0']))
+
+    def test_set_full_ratio(self):
+        self.set_ratio('set_full_ratio')
+
+    def test_set_nearfull_ratio(self):
+        self.set_ratio('set_nearfull_ratio')
 
 
 class TestAuth(TestArgparse):
@@ -374,6 +380,9 @@ class TestMDS(TestArgparse):
     def test_set_max_mds(self):
         self.check_1_natural_arg('mds', 'set_max_mds')
 
+    def test_setmap(self):
+        self.check_1_natural_arg('mds', 'setmap')
+
     def test_set_state(self):
         self.assert_valid_command(['mds', 'set_state', '1', '2'])
         assert_equal({}, validate_command(sigdict, ['mds', 'set_state']))
@@ -396,11 +405,7 @@ class TestMDS(TestArgparse):
         assert_equal({}, validate_command(sigdict, ['mds', 'rm', '1', 'mds.42']))
 
     def test_rmfailed(self):
-        self.assert_valid_command(['mds', 'rmfailed', '0'])
-        self.assert_valid_command(['mds', 'rmfailed', '0', '--yes-i-really-mean-it'])
-        assert_equal({}, validate_command(sigdict, ['mds', 'rmfailed', '0',
-                                                    '--yes-i-really-mean-it',
-                                                    'toomany']))
+        self.check_1_natural_arg('mds', 'rmfailed')
 
     def test_cluster_down(self):
         self.check_no_arg('mds', 'cluster_down')
@@ -473,10 +478,6 @@ class TestMDS(TestArgparse):
 
 
 class TestFS(TestArgparse):
-    
-    def test_dump(self):
-        self.check_0_or_1_natural_arg('fs', 'dump')
-    
     def test_fs_new(self):
         self.assert_valid_command(['fs', 'new', 'default', 'metadata', 'data'])
 
@@ -488,11 +489,6 @@ class TestFS(TestArgparse):
     def test_fs_ls(self):
         self.assert_valid_command(['fs', 'ls'])
         assert_equal({}, validate_command(sigdict, ['fs', 'ls', 'toomany']))
-
-    def test_fs_set_default(self):
-        self.assert_valid_command(['fs', 'set-default', 'cephfs'])
-        assert_equal({}, validate_command(sigdict, ['fs', 'set-default']))
-        assert_equal({}, validate_command(sigdict, ['fs', 'set-default', 'cephfs', 'toomany']))
 
 class TestMon(TestArgparse):
 
@@ -635,7 +631,7 @@ class TestOSD(TestArgparse):
                                                     'rename-bucket']))
         assert_equal({}, validate_command(sigdict, ['osd', 'crush',
                                                     'rename-bucket',
-                                                    'srcname']))
+													'srcname']))
         assert_equal({}, validate_command(sigdict, ['osd', 'crush',
                                                     'rename-bucket', 'srcname',
                                                     'dstname',
@@ -741,7 +737,7 @@ class TestOSD(TestArgparse):
 
     def test_crush_tunables(self):
         for tunable in ('legacy', 'argonaut', 'bobtail', 'firefly',
-                        'optimal', 'default'):
+						'optimal', 'default'):
             self.assert_valid_command(['osd', 'crush', 'tunables',
                                        tunable])
         assert_equal({}, validate_command(sigdict, ['osd', 'crush',
@@ -993,13 +989,13 @@ class TestOSD(TestArgparse):
                                                     'poolname',
                                                     '128', '128',
                                                     'erasure', '^^^',
-                                                    'ruleset']))
+													'ruleset']))
         assert_equal({}, validate_command(sigdict, ['osd', 'pool', 'create',
                                                     'poolname',
                                                     '128', '128',
                                                     'erasure', 'profile',
                                                     'ruleset',
-                                                    'toomany']))
+												    'toomany']))
         assert_equal({}, validate_command(sigdict, ['osd', 'pool', 'create',
                                                     'poolname',
                                                     '128', '128',
@@ -1099,12 +1095,16 @@ class TestOSD(TestArgparse):
     def test_reweight_by_utilization(self):
         self.assert_valid_command(['osd', 'reweight-by-utilization'])
         self.assert_valid_command(['osd', 'reweight-by-utilization', '100'])
-        self.assert_valid_command(['osd', 'reweight-by-utilization', '100', '.1'])
-        self.assert_valid_command(['osd', 'reweight-by-utilization', '--no-increasing'])
+        assert_equal({}, validate_command(sigdict, ['osd',
+                                                    'reweight-by-utilization',
+                                                    '50']))
         assert_equal({}, validate_command(sigdict, ['osd',
                                                     'reweight-by-utilization',
                                                     '100',
                                                     'toomany']))
+
+    def test_thrash(self):
+        self.check_1_natural_arg('osd', 'thrash')
 
     def test_tier_op(self):
         for op in ('add', 'remove', 'set-overlay'):
@@ -1138,24 +1138,6 @@ class TestOSD(TestArgparse):
                                                     'poolname',
                                                     'toomany']))
 
-    def set_ratio(self, command):
-        self.assert_valid_command(['osd',
-                                   command,
-                                   '0.0'])
-        assert_equal({}, validate_command(sigdict, ['osd', command]))
-        assert_equal({}, validate_command(sigdict, ['osd',
-                                                    command,
-                                                    '2.0']))
-
-    def test_set_full_ratio(self):
-        self.set_ratio('set-full-ratio')
-
-    def test_set_backfillfull_ratio(self):
-        self.set_ratio('set-backfillfull-ratio')
-
-    def test_set_nearfull_ratio(self):
-        self.set_ratio('set-nearfull-ratio')
-
 
 class TestConfigKey(TestArgparse):
 
@@ -1177,9 +1159,6 @@ class TestConfigKey(TestArgparse):
 
     def test_exists(self):
         self.check_1_string_arg('config-key', 'exists')
-
-    def test_dump(self):
-        self.check_no_arg('config-key', 'dump')
 
     def test_list(self):
         self.check_no_arg('config-key', 'list')

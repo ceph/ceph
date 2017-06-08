@@ -23,8 +23,6 @@
 #include "include/types.h"
 #include "include/timegm.h"
 #include "common/strtol.h"
-#include "common/ceph_time.h"
-#include "include/denc.h"
 
 
 // --------
@@ -63,10 +61,6 @@ public:
     tv.tv_sec = v.tv_sec;
     tv.tv_nsec = v.tv_nsec;
   }
-  explicit utime_t(const ceph::real_time& rt) {
-    ceph_timespec ts = real_clock::to_ceph_timespec(rt);
-    decode_timeval(&ts);
-  }
   utime_t(const struct timeval &v) {
     set_from_timeval(&v);
   }
@@ -80,12 +74,6 @@ public:
   void set_from_double(double d) { 
     tv.tv_sec = (__u32)trunc(d);
     tv.tv_nsec = (__u32)((d - (double)tv.tv_sec) * (double)1000000000.0);
-  }
-
-  real_time to_real_time() const {
-    ceph_timespec ts;
-    encode_timeval(&ts);
-    return ceph::real_clock::from_ceph_timespec(ts);
   }
 
   // accessors
@@ -137,12 +125,6 @@ public:
 #endif
   }
 
-  DENC(utime_t, v, p) {
-    denc(v.tv.tv_sec, p);
-    denc(v.tv.tv_nsec, p);
-  }
-
-
   void encode_timeval(struct ceph_timespec *t) const {
     t->tv_sec = tv.tv_sec;
     t->tv_nsec = tv.tv_nsec;
@@ -155,7 +137,7 @@ public:
   utime_t round_to_minute() {
     struct tm bdt;
     time_t tt = sec();
-    localtime_r(&tt, &bdt);
+    gmtime_r(&tt, &bdt);
     bdt.tm_sec = 0;
     tt = mktime(&bdt);
     return utime_t(tt, 0);
@@ -164,7 +146,7 @@ public:
   utime_t round_to_hour() {
     struct tm bdt;
     time_t tt = sec();
-    localtime_r(&tt, &bdt);
+    gmtime_r(&tt, &bdt);
     bdt.tm_sec = 0;
     bdt.tm_min = 0;
     tt = mktime(&bdt);
@@ -210,35 +192,6 @@ public:
 	  << ':' << std::setw(2) << bdt.tm_min
 	  << ':' << std::setw(2) << bdt.tm_sec;
       out << "." << std::setw(6) << usec();
-      out << "Z";
-    }
-    out.fill(oldfill);
-    out.unsetf(std::ios::right);
-    return out;
-  }
-
-  // output
-  ostream& gmtime_nsec(ostream& out) const {
-    out.setf(std::ios::right);
-    char oldfill = out.fill();
-    out.fill('0');
-    if (sec() < ((time_t)(60*60*24*365*10))) {
-      // raw seconds.  this looks like a relative time.
-      out << (long)sec() << "." << std::setw(6) << usec();
-    } else {
-      // localtime.  this looks like an absolute time.
-      //  aim for http://en.wikipedia.org/wiki/ISO_8601
-      struct tm bdt;
-      time_t tt = sec();
-      gmtime_r(&tt, &bdt);
-      out << std::setw(4) << (bdt.tm_year+1900)  // 2007 -> '07'
-	  << '-' << std::setw(2) << (bdt.tm_mon+1)
-	  << '-' << std::setw(2) << bdt.tm_mday
-	  << ' '
-	  << std::setw(2) << bdt.tm_hour
-	  << ':' << std::setw(2) << bdt.tm_min
-	  << ':' << std::setw(2) << bdt.tm_sec;
-      out << "." << std::setw(9) << nsec();
       out << "Z";
     }
     out.fill(oldfill);
@@ -388,7 +341,6 @@ public:
   }
 };
 WRITE_CLASS_ENCODER(utime_t)
-WRITE_CLASS_DENC(utime_t)
 
 
 // arithmetic operators

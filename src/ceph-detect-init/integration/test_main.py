@@ -49,12 +49,9 @@ docker run -v $toplevel:$toplevel -w $(pwd) --user $(id -u) {name} bash -x {name
     init = open(name + '/init').read().strip()
     shutil.rmtree(name)
     return init
-
+    
 
 class TestCephDetectInit(testtools.TestCase):
-
-    def test_alpine_3_4(self):
-        self.assertEqual('openrc', run('alpine-3.4'))
 
     def test_centos_6(self):
         self.assertEqual('sysvinit', run('centos-6'))

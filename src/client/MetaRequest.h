@@ -6,18 +6,19 @@
 
 
 #include "include/types.h"
+#include "msg/msg_types.h"
 #include "include/xlist.h"
 #include "include/filepath.h"
 #include "include/atomic.h"
 #include "mds/mdstypes.h"
 #include "InodeRef.h"
-#include "UserPerm.h"
+
+#include "common/Mutex.h"
 
 #include "messages/MClientRequest.h"
 
 class MClientReply;
 class Dentry;
-class dir_result_t;
 
 struct MetaRequest {
 private:
@@ -48,14 +49,22 @@ public:
   __u32    sent_on_mseq;       // mseq at last submission of this request
   int      num_fwd;            // # of times i've been forwarded
   int      retry_attempt;
-  std::atomic<uint64_t> ref = { 1 };
+  atomic_t ref;
   
   MClientReply *reply;         // the reply
   bool kick;
   bool success;
   
   // readdir result
-  dir_result_t *dirp;
+  frag_t readdir_frag;
+  string readdir_start;  // starting _after_ this name
+  uint64_t readdir_offset;
+
+  frag_t readdir_reply_frag;
+  vector<pair<string,InodeRef> > readdir_result;
+  bool readdir_end;
+  int readdir_num;
+  string readdir_last_name;
 
   //possible responses
   bool got_unsafe;
@@ -64,15 +73,15 @@ public:
   xlist<MetaRequest*>::item unsafe_item;
   xlist<MetaRequest*>::item unsafe_dir_item;
   xlist<MetaRequest*>::item unsafe_target_item;
+  Mutex lock; //for get/set sync
 
   Cond  *caller_cond;          // who to take up
   Cond  *dispatch_cond;        // who to kick back
   list<Cond*> waitfor_safe;
 
   InodeRef target;
-  UserPerm perms;
 
-  explicit MetaRequest(int op) :
+  MetaRequest(int op) :
     _dentry(NULL), _old_dentry(NULL), abort_rc(0),
     tid(0),
     inode_drop(0), inode_unless(0),
@@ -83,12 +92,14 @@ public:
     regetattr_mask(0),
     mds(-1), resend_mds(-1), send_to_auth(false), sent_on_mseq(0),
     num_fwd(0), retry_attempt(0),
-    reply(0), 
+    ref(1), reply(0), 
     kick(false), success(false),
+    readdir_offset(0), readdir_end(false), readdir_num(0),
     got_unsafe(false), item(this), unsafe_item(this),
     unsafe_dir_item(this), unsafe_target_item(this),
+    lock("MetaRequest lock"),
     caller_cond(0), dispatch_cond(0) {
-    memset(&head, 0, sizeof(head));
+    memset(&head, 0, sizeof(ceph_mds_request_head));
     head.op = op;
   }
   ~MetaRequest();
@@ -139,7 +150,7 @@ public:
     out->swap(_old_inode);
   }
   void set_other_inode(Inode *in) {
-    _other_inode = in;
+    _old_inode = in;
   }
   Inode *other_inode() {
     return _other_inode.get();
@@ -153,13 +164,13 @@ public:
   Dentry *old_dentry();
 
   MetaRequest* get() {
-    ref++;
+    ref.inc();
     return this;
   }
 
   /// psuedo-private put method; use Client::put_request()
   bool _put() {
-    int v = --ref;
+    int v = ref.dec();
     return v == 0;
   }
 
@@ -171,13 +182,8 @@ public:
   void set_filepath(const filepath& fp) { path = fp; }
   void set_filepath2(const filepath& fp) { path2 = fp; }
   void set_string2(const char *s) { path2.set_path(s, 0); }
-  void set_caller_perms(const UserPerm& _perms) {
-    perms.shallow_copy(_perms);
-    head.caller_uid = perms.uid();
-    head.caller_gid = perms.gid();
-  }
-  uid_t get_uid() { return perms.uid(); }
-  uid_t get_gid() { return perms.gid(); }
+  void set_caller_uid(unsigned u) { head.caller_uid = u; }
+  void set_caller_gid(unsigned g) { head.caller_gid = g; }
   void set_data(const bufferlist &d) { data = d; }
   void set_dentry_wanted() {
     head.flags = head.flags | CEPH_MDS_FLAG_WANT_DENTRY;

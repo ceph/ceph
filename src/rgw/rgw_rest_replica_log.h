@@ -11,9 +11,8 @@
  * Foundation. See file COPYING.
  *
  */
-
-#ifndef RGW_REST_REPLICA_LOG_H
-#define RGW_REST_REPLICA_LOG_H
+#ifndef CEPH_RGW_REST_REPLICA_LOG_H
+#define CEPH_RGW_REST_REPLICA_LOG_H
 
 class RGWOp_OBJLog_GetBounds : public RGWRESTOp {
   string prefix;
@@ -23,17 +22,17 @@ class RGWOp_OBJLog_GetBounds : public RGWRESTOp {
 public:
   RGWOp_OBJLog_GetBounds(const char *_prefix, const char *type) 
     : prefix(_prefix), obj_type(type){}
-  ~RGWOp_OBJLog_GetBounds() override {}
+  ~RGWOp_OBJLog_GetBounds() {}
 
-  int check_caps(RGWUserCaps& caps) override {
+  int check_caps(RGWUserCaps& caps) {
     return caps.check_cap(obj_type.c_str(), RGW_CAP_READ);
   }
-  int verify_permission() override {
-    return check_caps(s->user->caps);
+  int verify_permission() {
+    return check_caps(s->user.caps);
   }
-  void execute() override;
-  void send_response() override;
-  const string name() override {
+  void execute();
+  virtual void send_response();
+  virtual const string name() {
     string s = "replica";
     s.append(obj_type);
     s.append("_getbounds");
@@ -47,13 +46,13 @@ class RGWOp_OBJLog_SetBounds : public RGWRESTOp {
 public:
   RGWOp_OBJLog_SetBounds(const char *_prefix, const char *type) 
     : prefix(_prefix), obj_type(type){}
-  ~RGWOp_OBJLog_SetBounds() override {}
+  ~RGWOp_OBJLog_SetBounds() {}
 
-  int check_caps(RGWUserCaps& caps) override {
+  int check_caps(RGWUserCaps& caps) {
     return caps.check_cap(obj_type.c_str(), RGW_CAP_WRITE);
   }
-  void execute() override;
-  const string name() override {
+  void execute();
+  virtual const string name() {
     string s = "replica";
     s.append(obj_type);
     s.append("_updatebounds");
@@ -67,13 +66,13 @@ class RGWOp_OBJLog_DeleteBounds : public RGWRESTOp {
 public:
   RGWOp_OBJLog_DeleteBounds(const char *_prefix, const char *type) 
     : prefix(_prefix), obj_type(type){}
-  ~RGWOp_OBJLog_DeleteBounds() override {}
+  ~RGWOp_OBJLog_DeleteBounds() {}
 
-  int check_caps(RGWUserCaps& caps) override {
+  int check_caps(RGWUserCaps& caps) {
     return caps.check_cap(obj_type.c_str(), RGW_CAP_WRITE);
   }
-  void execute() override;
-  const string name() override {
+  void execute();
+  virtual const string name() {
     string s = "replica";
     s.append(obj_type);
     s.append("_deletebound");
@@ -85,17 +84,17 @@ class RGWOp_BILog_GetBounds : public RGWRESTOp {
   RGWReplicaBounds bounds;
 public:
   RGWOp_BILog_GetBounds() {}
-  ~RGWOp_BILog_GetBounds() override {}
+  ~RGWOp_BILog_GetBounds() {}
 
-  int check_caps(RGWUserCaps& caps) override {
+  int check_caps(RGWUserCaps& caps) {
     return caps.check_cap("bilog", RGW_CAP_READ);
   }
-  int verify_permission() override {
-    return check_caps(s->user->caps);
+  int verify_permission() {
+    return check_caps(s->user.caps);
   }
-  void execute() override;
-  void send_response() override;
-  const string name() override {
+  void execute();
+  virtual void send_response();
+  virtual const string name() {
     return "replicabilog_getbounds";
   }
 };
@@ -103,13 +102,13 @@ public:
 class RGWOp_BILog_SetBounds : public RGWRESTOp {
 public:
   RGWOp_BILog_SetBounds() {}
-  ~RGWOp_BILog_SetBounds() override {}
+  ~RGWOp_BILog_SetBounds() {}
 
-  int check_caps(RGWUserCaps& caps) override {
+  int check_caps(RGWUserCaps& caps) {
     return caps.check_cap("bilog", RGW_CAP_WRITE);
   }
-  void execute() override;
-  const string name() override {
+  void execute();
+  virtual const string name() {
     return "replicabilog_updatebounds";
   }
 };
@@ -117,41 +116,39 @@ public:
 class RGWOp_BILog_DeleteBounds : public RGWRESTOp {
 public:
   RGWOp_BILog_DeleteBounds() {}
-  ~RGWOp_BILog_DeleteBounds() override {}
+  ~RGWOp_BILog_DeleteBounds() {}
 
-  int check_caps(RGWUserCaps& caps) override {
+  int check_caps(RGWUserCaps& caps) {
     return caps.check_cap("bilog", RGW_CAP_WRITE);
   }
-  void execute() override;
-  const string name() override {
+  void execute();
+  virtual const string name() {
     return "replicabilog_deletebound";
   }
 };
 
 class RGWHandler_ReplicaLog : public RGWHandler_Auth_S3 {
 protected:
-  RGWOp *op_get() override;
-  RGWOp *op_delete() override;
-  RGWOp *op_post() override;
+  RGWOp *op_get();
+  RGWOp *op_delete();
+  RGWOp *op_post();
 
-  int read_permissions(RGWOp*) override {
+  int read_permissions(RGWOp*) {
     return 0;
   }
 public:
-  using RGWHandler_Auth_S3::RGWHandler_Auth_S3;
-  ~RGWHandler_ReplicaLog() override = default;
+  RGWHandler_ReplicaLog() : RGWHandler_Auth_S3() {}
+  virtual ~RGWHandler_ReplicaLog() {}
 };
 
 class RGWRESTMgr_ReplicaLog : public RGWRESTMgr {
 public:
-  RGWRESTMgr_ReplicaLog() = default;
-  ~RGWRESTMgr_ReplicaLog() override = default;
+  RGWRESTMgr_ReplicaLog() {}
+  virtual ~RGWRESTMgr_ReplicaLog() {}
 
-  RGWHandler_REST* get_handler(struct req_state*,
-                               const rgw::auth::StrategyRegistry& auth_registry,
-                               const std::string&) override {
-    return new RGWHandler_ReplicaLog(auth_registry);
+  virtual RGWHandler *get_handler(struct req_state *s){
+    return new RGWHandler_ReplicaLog;
   }
 };
 
-#endif /*!RGW_REST_REPLICA_LOG_H*/
+#endif /*!CEPH_RGW_REST_REPLICA_LOG_H*/

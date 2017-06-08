@@ -1,3 +1,5 @@
+
+
 #include "../crush/crush.h"
 using namespace crush;
 
@@ -6,6 +8,19 @@ using namespace crush;
 #include <iostream>
 #include <vector>
 using namespace std;
+
+/*
+ostream& operator<<(ostream& out, vector<int>& v)
+{
+  out << "[";
+  for (int i=0; i<v.size(); i++) {
+    if (i) out << " ";
+    out << v[i];
+  }
+  out << "]";
+  return out;
+}
+*/
 
 void make_disks(int n, int& no, vector<int>& d) 
 {
@@ -16,6 +31,7 @@ void make_disks(int n, int& no, vector<int>& d)
     n--;
   }
 }
+
 
 Bucket *make_bucket(Crush& c, vector<int>& wid, int h, int& ndisks, int& nbuckets)
 {
@@ -28,6 +44,7 @@ Bucket *make_bucket(Crush& c, vector<int>& wid, int h, int& ndisks, int& nbucket
     UniformBucket *b = new UniformBucket(nbuckets--, 1, 0, 10, disks);
     b->make_primes(hash);  
     c.add_bucket(b);
+    //cout << h << " uniformbucket with " << wid[h] << " disks" << endl;
     return b;
   } else {
     // mixed
@@ -37,6 +54,7 @@ Bucket *make_bucket(Crush& c, vector<int>& wid, int h, int& ndisks, int& nbucket
       b->add_item(n->get_id(), n->get_weight());
     }
     c.add_bucket(b);
+    //cout << h << " mixedbucket with " << wid[h] << endl;
     return b;
   }
 }
@@ -55,6 +73,7 @@ int main()
 
   // crush
   Crush c;
+
 
   // buckets
   vector<int> disks;
@@ -88,7 +107,10 @@ int main()
     c.add_bucket(&umb1);
     
     MixedBucket b(-100, 1);
+    //b.add_item(-2, ub1.get_weight());
     b.add_item(-4, umb1.get_weight());
+    //b.add_item(-2, ub2.get_weight());
+    //b.add_item(-3, ub3.get_weight());
   }
 
   if (0) {
@@ -110,6 +132,7 @@ int main()
           for (int k=0; k<n; k++)
             d->add_item(disks[k], 10);
           
+          //b->add_item(disks[j], 10);
           c.add_bucket(d);
           b->add_item(d->get_id(), d->get_weight());
         }
@@ -138,6 +161,8 @@ int main()
     root = make_hierarchy(c, wid, ndisks, nbuckets);
   }
   
+
+
   // rule
   int numrep = 1;
 
@@ -147,10 +172,18 @@ int main()
     rule.steps.push_back(RuleStep(CRUSH_RULE_CHOOSE, numrep, 0));
   }
   if (1) {
+    /*
+    rule.steps.push_back(RuleStep(CRUSH_RULE_TAKE, -4));
+    rule.steps.push_back(RuleStep(CRUSH_RULE_CHOOSE, 2, 0));
+    rule.steps.push_back(RuleStep(CRUSH_RULE_EMIT));
+    */
     rule.steps.push_back(RuleStep(CRUSH_RULE_TAKE, root));
     rule.steps.push_back(RuleStep(CRUSH_RULE_CHOOSE, 1, 0));
     rule.steps.push_back(RuleStep(CRUSH_RULE_EMIT));
   }
+
+  //c.overload[10] = .1;
+
 
   int pg_per = 100;
   int numpg = pg_per*ndisks/numrep;
@@ -180,10 +213,14 @@ int main()
     for (int xx=1; xx<numpg; xx++) {
       x++;
 
+      //cout << H(x) << "\t" << h(x) << endl;
       c.do_rule(rule, x, v);
+      //cout << "v = " << v << endl;// " " << v[0] << " " << v[1] << "  " << v[2] << endl;
       
       bool bad = false;
       for (int i=0; i<numrep; i++) {
+        //int d = b.choose_r(x, i, h);
+        //v[i] = d;
         ocount[v[i]]++;
         for (int j=i+1; j<numrep; j++) {
           if (v[i] == v[j]) 
@@ -192,7 +229,15 @@ int main()
       }
       if (bad)
         cout << "bad set " << x << ": " << v << endl;
+      
+      //cout << v << "\t" << ocount << endl;
     }
+    
+    /*
+      for (int i=0; i<ocount.size(); i++) {
+      cout << "disk " << i << " has " << ocount[i] << endl;
+      }
+    */
     
     cout << "collisions: " << c.collisions << endl;
     cout << "r bumps: " << c.bumps << endl;
@@ -216,4 +261,6 @@ int main()
   tvar /= tvarnum;
 
   cout << "total variance " << tvar << endl;
+
+
 }

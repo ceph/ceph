@@ -56,7 +56,7 @@ class Distribution {
       if (s < p[i]) return v[i];
       s -= p[i];
     }
-    ceph_abort();
+    assert(0);
     return v[p.size() - 1];  // hmm.  :/
   }
 

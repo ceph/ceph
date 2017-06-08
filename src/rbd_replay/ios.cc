@@ -62,7 +62,7 @@ void IO::write_debug_base(ostream& out, string type) const {
 }
 
 
-ostream& operator<<(ostream &out, const IO::ptr &io) {
+ostream& operator<<(ostream& out, IO::ptr io) {
   io->write_debug(out);
   return out;
 }
@@ -111,18 +111,6 @@ void WriteIO::write_debug(std::ostream& out) const {
   out << ", imagectx=" << m_imagectx << ", offset=" << m_offset << ", length=" << m_length << "]";
 }
 
-void DiscardIO::encode(bufferlist &bl) const {
-  action::Action action((action::DiscardAction(
-    ionum(), thread_id(), convert_dependencies(start_time(), dependencies()),
-    m_imagectx, m_offset, m_length)));
-  ::encode(action, bl);
-}
-
-void DiscardIO::write_debug(std::ostream& out) const {
-  write_debug_base(out, "discard");
-  out << ", imagectx=" << m_imagectx << ", offset=" << m_offset << ", length=" << m_length << "]";
-}
-
 void AioReadIO::encode(bufferlist &bl) const {
   action::Action action((action::AioReadAction(
     ionum(), thread_id(), convert_dependencies(start_time(), dependencies()),
@@ -147,18 +135,6 @@ void AioWriteIO::write_debug(std::ostream& out) const {
   out << ", imagectx=" << m_imagectx << ", offset=" << m_offset << ", length=" << m_length << "]";
 }
 
-void AioDiscardIO::encode(bufferlist &bl) const {
-  action::Action action((action::AioDiscardAction(
-    ionum(), thread_id(), convert_dependencies(start_time(), dependencies()),
-    m_imagectx, m_offset, m_length)));
-  ::encode(action, bl);
-}
-
-void AioDiscardIO::write_debug(std::ostream& out) const {
-  write_debug_base(out, "aio discard");
-  out << ", imagectx=" << m_imagectx << ", offset=" << m_offset << ", length=" << m_length << "]";
-}
-
 void OpenImageIO::encode(bufferlist &bl) const {
   action::Action action((action::OpenImageAction(
     ionum(), thread_id(), convert_dependencies(start_time(), dependencies()),
@@ -180,29 +156,5 @@ void CloseImageIO::encode(bufferlist &bl) const {
 
 void CloseImageIO::write_debug(std::ostream& out) const {
   write_debug_base(out, "close image");
-  out << ", imagectx=" << m_imagectx;
-}
-
-void AioOpenImageIO::encode(bufferlist &bl) const {
-  action::Action action((action::AioOpenImageAction(
-    ionum(), thread_id(), convert_dependencies(start_time(), dependencies()),
-    m_imagectx, m_name, m_snap_name, m_readonly)));
-  ::encode(action, bl);
-}
-
-void AioOpenImageIO::write_debug(std::ostream& out) const {
-  write_debug_base(out, "aio open image");
-  out << ", imagectx=" << m_imagectx << ", name='" << m_name << "', snap_name='" << m_snap_name << "', readonly=" << m_readonly;
-}
-
-void AioCloseImageIO::encode(bufferlist &bl) const {
-  action::Action action((action::AioCloseImageAction(
-    ionum(), thread_id(), convert_dependencies(start_time(), dependencies()),
-    m_imagectx)));
-  ::encode(action, bl);
-}
-
-void AioCloseImageIO::write_debug(std::ostream& out) const {
-  write_debug_base(out, "aio close image");
   out << ", imagectx=" << m_imagectx;
 }

@@ -23,21 +23,16 @@
 
 #include "Resetter.h"
 
-#define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_mds
 
-int Resetter::reset(mds_role_t role)
+int Resetter::reset(int rank)
 {
   Mutex mylock("Resetter::reset::lock");
   Cond cond;
   bool done;
   int r;
 
-  auto fs =  fsmap->get_filesystem(role.fscid);
-  assert(fs != nullptr);
-  int64_t const pool_id = fs->mds_map.get_metadata_pool();
-
-  JournalPointer jp(role.rank, pool_id);
+  JournalPointer jp(rank, mdsmap->get_metadata_pool());
   int jp_load_result = jp.load(objecter);
   if (jp_load_result != 0) {
     std::cerr << "Error loading journal: " << cpp_strerror(jp_load_result) <<
@@ -45,10 +40,10 @@ int Resetter::reset(mds_role_t role)
     return jp_load_result;
   }
 
-  Journaler journaler("resetter", jp.front,
-      pool_id,
+  Journaler journaler(jp.front,
+      mdsmap->get_metadata_pool(),
       CEPH_FS_ONDISK_MAGIC,
-      objecter, 0, 0, &finisher);
+      objecter, 0, 0, &timer, &finisher);
 
   lock.Lock();
   journaler.recover(new C_SafeCond(&mylock, &cond, &done, &r));
@@ -96,8 +91,8 @@ int Resetter::reset(mds_role_t role)
   while (!done)
     cond.Wait(mylock);
   mylock.Unlock();
-
-  Mutex::Locker l(lock);
+    
+  lock.Lock();
   if (r != 0) {
     return r;
   }
@@ -107,19 +102,17 @@ int Resetter::reset(mds_role_t role)
     return r;
   }
 
+  lock.Unlock();
+
   cout << "done" << std::endl;
 
   return 0;
 }
 
-int Resetter::reset_hard(mds_role_t role)
+int Resetter::reset_hard(int rank)
 {
-  auto fs =  fsmap->get_filesystem(role.fscid);
-  assert(fs != nullptr);
-  int64_t const pool_id = fs->mds_map.get_metadata_pool();
-
-  JournalPointer jp(role.rank, pool_id);
-  jp.front = role.rank + MDS_INO_LOG_OFFSET;
+  JournalPointer jp(rank, mdsmap->get_metadata_pool());
+  jp.front = rank + MDS_INO_LOG_OFFSET;
   jp.back = 0;
   int r = jp.save(objecter);
   if (r != 0) {
@@ -127,14 +120,13 @@ int Resetter::reset_hard(mds_role_t role)
     return r;
   }
 
-  Journaler journaler("resetter", jp.front,
-    pool_id,
+  Journaler journaler(jp.front,
+    mdsmap->get_metadata_pool(),
     CEPH_FS_ONDISK_MAGIC,
-    objecter, 0, 0, &finisher);
+    objecter, 0, 0, &timer, &finisher);
   journaler.set_writeable();
 
-  file_layout_t default_log_layout = MDCache::gen_default_log_layout(
-      fsmap->get_filesystem(role.fscid)->mds_map);
+  ceph_file_layout default_log_layout = MDCache::gen_default_log_layout(*mdsmap);
   journaler.create(&default_log_layout, g_conf->mds_journal_format);
 
   C_SaferCond cond;
@@ -158,7 +150,7 @@ int Resetter::reset_hard(mds_role_t role)
   }
 
   dout(4) << "Successfully wrote new journal pointer and header for rank "
-    << role << dendl;
+    << rank << dendl;
   return 0;
 }
 
@@ -169,7 +161,7 @@ int Resetter::_write_reset_event(Journaler *journaler)
   LogEvent *le = new EResetJournal;
 
   bufferlist bl;
-  le->encode_with_header(bl, CEPH_FEATURES_SUPPORTED_DEFAULT);
+  le->encode_with_header(bl);
   
   cout << "writing EResetJournal entry" << std::endl;
   C_SaferCond cond;

@@ -9,7 +9,7 @@ exclude_patterns = ['**/.#*', '**/*~']
 
 
 def _get_description(fname, base):
-    with open(fname) as f:
+    with file(fname) as f:
         one = None
         while True:
             line = f.readline().rstrip('\n')

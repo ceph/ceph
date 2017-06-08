@@ -29,14 +29,16 @@ class Journaler;
 
 class Dumper : public MDSUtility {
 private:
-  mds_role_t role;
+  int rank;
   inodeno_t ino;
 
 public:
-  Dumper() : ino(-1)
+  Dumper() : rank(-1), ino(-1)
   {}
 
-  int init(mds_role_t role_);
+  void handle_mds_map(MMDSMap* m);
+
+  int init(int rank);
   int recover_journal(Journaler *journaler);
   int dump(const char *dumpfile);
   int undump(const char *dumpfile);

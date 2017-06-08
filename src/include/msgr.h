@@ -5,8 +5,6 @@
 #include <sys/socket.h> // for struct sockaddr_storage
 #endif
 
-#include "include/int_types.h"
-
 /*
  * Data types for message passing layer used by Ceph.
  */
@@ -26,6 +24,8 @@
  * constant.
  */
 #define CEPH_BANNER "ceph v027"
+#define CEPH_BANNER_MAX_LEN 30
+
 
 /*
  * Rollover-safe type and comparator for 32-bit sequence numbers.
@@ -52,7 +52,6 @@ struct ceph_entity_name {
 #define CEPH_ENTITY_TYPE_MDS    0x02
 #define CEPH_ENTITY_TYPE_OSD    0x04
 #define CEPH_ENTITY_TYPE_CLIENT 0x08
-#define CEPH_ENTITY_TYPE_MGR    0x10
 #define CEPH_ENTITY_TYPE_AUTH   0x20
 
 #define CEPH_ENTITY_TYPE_ANY    0xFF

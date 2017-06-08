@@ -15,9 +15,6 @@ TEST(LibRadosPools, PoolList) {
   ASSERT_EQ("", create_one_pool(pool_name, &cluster));
   ASSERT_LT(rados_pool_list(cluster, buf, POOL_LIST_BUF_SZ), POOL_LIST_BUF_SZ);
 
-  // we can pass a null buffer too.
-  ASSERT_LT(rados_pool_list(cluster, NULL, POOL_LIST_BUF_SZ), POOL_LIST_BUF_SZ);
-
   bool found_pool = false;
   while (buf[0] != '\0') {
     if ((found_pool == false) && (strcmp(buf, pool_name.c_str()) == 0)) {
@@ -133,8 +130,7 @@ TEST(LibRadosPools, PoolGetBaseTier) {
   ASSERT_EQ(0, rados_mon_command(cluster, (const char **)cmd, 1, "", 0, NULL, 0, NULL, 0));
 
   cmdstr = "{\"prefix\": \"osd tier cache-mode\", \"pool\": \"" +
-     tier_pool_name + "\", \"mode\":\"readonly\", \"sure\": " +
-    "\"--yes-i-really-mean-it\"}";
+     tier_pool_name + "\", \"mode\":\"readonly\"}";
   cmd[0] = (char *)cmdstr.c_str();
   ASSERT_EQ(0, rados_mon_command(cluster, (const char **)cmd, 1, "", 0, NULL, 0, NULL, 0));
 

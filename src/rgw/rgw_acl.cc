@@ -13,6 +13,8 @@
 #include "rgw_acl.h"
 #include "rgw_user.h"
 
+#include "rgw_acl_s3.h" // required for backward compatibility
+
 #define dout_subsys ceph_subsys_rgw
 
 using namespace std;
@@ -22,9 +24,6 @@ void RGWAccessControlList::_add_grant(ACLGrant *grant)
   ACLPermission& perm = grant->get_permission();
   ACLGranteeType& type = grant->get_type();
   switch (type.get_type()) {
-  case ACL_TYPE_REFERER:
-    referer_list.emplace_back(grant->get_referer(), perm.get_permissions());
-    break;
   case ACL_TYPE_GROUP:
     acl_group_map[grant->get_group()] |= perm.get_permissions();
     break;
@@ -47,22 +46,20 @@ void RGWAccessControlList::add_grant(ACLGrant *grant)
   _add_grant(grant);
 }
 
-uint32_t RGWAccessControlList::get_perm(const rgw::auth::Identity& auth_identity,
-                                        const uint32_t perm_mask)
-{
-  ldout(cct, 5) << "Searching permissions for identity=" << auth_identity
-                << " mask=" << perm_mask << dendl;
-
-  return perm_mask & auth_identity.get_perms_from_aclspec(acl_user_map);
+int RGWAccessControlList::get_perm(rgw_user& id, int perm_mask) {
+  ldout(cct, 5) << "Searching permissions for uid=" << id << " mask=" << perm_mask << dendl;
+  map<string, int>::iterator iter = acl_user_map.find(id.to_str());
+  if (iter != acl_user_map.end()) {
+    ldout(cct, 5) << "Found permission: " << iter->second << dendl;
+    return iter->second & perm_mask;
+  }
+  ldout(cct, 5) << "Permissions for user not found" << dendl;
+  return 0;
 }
 
-uint32_t RGWAccessControlList::get_group_perm(ACLGroupTypeEnum group,
-                                              const uint32_t perm_mask)
-{
-  ldout(cct, 5) << "Searching permissions for group=" << (int)group
-                << " mask=" << perm_mask << dendl;
-
-  const auto iter = acl_group_map.find((uint32_t)group);
+int RGWAccessControlList::get_group_perm(ACLGroupTypeEnum group, int perm_mask) {
+  ldout(cct, 5) << "Searching permissions for group=" << (int)group << " mask=" << perm_mask << dendl;
+  map<uint32_t, int>::iterator iter = acl_group_map.find((uint32_t)group);
   if (iter != acl_group_map.end()) {
     ldout(cct, 5) << "Found permission: " << iter->second << dendl;
     return iter->second & perm_mask;
@@ -71,76 +68,36 @@ uint32_t RGWAccessControlList::get_group_perm(ACLGroupTypeEnum group,
   return 0;
 }
 
-uint32_t RGWAccessControlList::get_referer_perm(const std::string http_referer,
-                                                const uint32_t perm_mask)
-{
-  ldout(cct, 5) << "Searching permissions for referer=" << http_referer
-                << " mask=" << perm_mask << dendl;
+int RGWAccessControlPolicy::get_perm(rgw_user& id, int perm_mask) {
+  int perm = acl.get_perm(id, perm_mask);
 
-  /* FIXME: C++11 doesn't have std::rbegin nor std::rend. We would like to
-   * switch when C++14 becomes available. */
-  const auto iter = std::find_if(referer_list.crbegin(), referer_list.crend(),
-    [&http_referer](const ACLReferer& r) -> bool {
-      return r.is_match(http_referer);
-    }
-  );
-
-  if (referer_list.crend() == iter) {
-    ldout(cct, 5) << "Permissions for referer not found" << dendl;
-    return 0;
-  } else {
-    ldout(cct, 5) << "Found referer permission=" << iter->perm << dendl;
-    return iter->perm & perm_mask;
-  }
-}
-
-uint32_t RGWAccessControlPolicy::get_perm(const rgw::auth::Identity& auth_identity,
-                                          const uint32_t perm_mask,
-                                          const char * const http_referer)
-{
-  ldout(cct, 20) << "-- Getting permissions begin with perm_mask=" << perm_mask
-                 << dendl;
-
-  uint32_t perm = acl.get_perm(auth_identity, perm_mask);
-
-  if (auth_identity.is_owner_of(owner.get_id())) {
+  if (id.compare(owner.get_id()) == 0) {
     perm |= perm_mask & (RGW_PERM_READ_ACP | RGW_PERM_WRITE_ACP);
   }
 
-  if (perm == perm_mask) {
+  if (perm == perm_mask)
     return perm;
-  }
 
   /* should we continue looking up? */
   if ((perm & perm_mask) != perm_mask) {
     perm |= acl.get_group_perm(ACL_GROUP_ALL_USERS, perm_mask);
 
-    if (false == auth_identity.is_owner_of(rgw_user(RGW_USER_ANON_ID))) {
+    if (!compare_group_name(id.id, ACL_GROUP_ALL_USERS)) {
       /* this is not the anonymous user */
       perm |= acl.get_group_perm(ACL_GROUP_AUTHENTICATED_USERS, perm_mask);
     }
   }
 
-  /* Should we continue looking up even deeper? */
-  if (nullptr != http_referer && (perm & perm_mask) != perm_mask) {
-    perm |= acl.get_referer_perm(http_referer, perm_mask);
-  }
-
-  ldout(cct, 5) << "-- Getting permissions done for identity=" << auth_identity
-                << ", owner=" << owner.get_id()
-                << ", perm=" << perm << dendl;
+  ldout(cct, 5) << "Getting permissions id=" << id << " owner=" << owner.get_id() << " perm=" << perm << dendl;
 
   return perm;
 }
 
-bool RGWAccessControlPolicy::verify_permission(const rgw::auth::Identity& auth_identity,
-                                               const uint32_t user_perm_mask,
-                                               const uint32_t perm,
-                                               const char * const http_referer)
+bool RGWAccessControlPolicy::verify_permission(rgw_user& uid, int user_perm_mask, int perm)
 {
-  uint32_t test_perm = perm | RGW_PERM_READ_OBJS | RGW_PERM_WRITE_OBJS;
+  int test_perm = perm | RGW_PERM_READ_OBJS | RGW_PERM_WRITE_OBJS;
 
-  uint32_t policy_perm = get_perm(auth_identity, test_perm, http_referer);
+  int policy_perm = get_perm(uid, test_perm);
 
   /* the swift WRITE_OBJS perm is equivalent to the WRITE obj, just
      convert those bits. Note that these bits will only be set on
@@ -153,13 +110,9 @@ bool RGWAccessControlPolicy::verify_permission(const rgw::auth::Identity& auth_i
     policy_perm |= (RGW_PERM_READ | RGW_PERM_READ_ACP);
   }
    
-  uint32_t acl_perm = policy_perm & perm & user_perm_mask;
+  int acl_perm = policy_perm & perm & user_perm_mask;
 
-  ldout(cct, 10) << " identity=" << auth_identity
-                 << " requested perm (type)=" << perm
-                 << ", policy perm=" << policy_perm
-                 << ", user_perm_mask=" << user_perm_mask
-                 << ", acl perm=" << acl_perm << dendl;
+  ldout(cct, 10) << " uid=" << uid << " requested perm (type)=" << perm << ", policy perm=" << policy_perm << ", user_perm_mask=" << user_perm_mask << ", acl perm=" << acl_perm << dendl;
 
   return (perm == acl_perm);
 }

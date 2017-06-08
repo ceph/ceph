@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// -*- mode:C; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 #include "include/int_types.h"
 #include "include/rados/librados.h"
@@ -20,16 +20,11 @@ public:
 
   static std::string get_temp_image_name();
 
-  void SetUp() override;
-  void TearDown() override;
+  virtual void SetUp();
+  virtual void TearDown();
 
   int open_image(const std::string &image_name, librbd::ImageCtx **ictx);
   void close_image(librbd::ImageCtx *ictx);
-
-  int snap_create(librbd::ImageCtx &ictx, const std::string &snap_name);
-  int snap_protect(librbd::ImageCtx &ictx, const std::string &snap_name);
-
-  int flatten(librbd::ImageCtx &ictx, librbd::ProgressContext &prog_ctx);
 
   int lock_image(librbd::ImageCtx &ictx, ClsLockType lock_type,
                  const std::string &cookie);
@@ -39,9 +34,7 @@ public:
 
   static std::string _pool_name;
   static librados::Rados _rados;
-  static rados_t _cluster;
   static uint64_t _image_number;
-  static std::string _data_pool;
 
   librados::IoCtx m_ioctx;
   librbd::RBD m_rbd;

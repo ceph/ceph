@@ -59,10 +59,10 @@ Add Keys
 ========
 
 Add a key to your system's list of trusted keys to avoid a security warning. For
-major releases (e.g., ``hammer``, ``jewel``) and development releases
-(``release-name-rc1``, ``release-name-rc2``), use the ``release.asc`` key. For
-development testing packages, use the ``autobuild.asc`` key (developers and
-QA).
+major releases (e.g., ``dumpling``, ``emperor``, ``firefly``) and development
+releases (``release-name-rc1``, ``release-name-rc2``), use the ``release.asc``
+key. For development testing packages, use the ``autobuild.asc`` key (developers
+and QA).
 
 
 APT
@@ -92,6 +92,28 @@ To install the ``autobuild.asc`` key, execute the following
 	sudo rpm --import 'https://download.ceph.com/keys/autobuild.asc'
 
 
+.. _mirrors:
+
+Mirrors
+=======
+
+For improved user experience multiple mirrors for Ceph are available around the
+world.
+
+These mirrors are available on the following locations:
+
+- **EU**: http://eu.ceph.com/
+- **AU**: http://au.ceph.com/
+
+You can replace all ceph.com URLs with any of the mirrors, for example:
+
+  http://download.ceph.com/debian-hammer
+
+Change this to:
+
+  http://eu.ceph.com/debian-hammer
+
+
 Add Ceph
 ========
 
@@ -101,22 +123,38 @@ Yellowdog Updater, Modified (YUM), you must add Ceph repositories.
 
 You may find releases for Debian/Ubuntu (installed with APT) at::
 
-	https://download.ceph.com/debian-{release-name}
+	http://download.ceph.com/debian-{release-name}
 
 You may find releases for CentOS/RHEL and others (installed with YUM) at::
 
-	https://download.ceph.com/rpm-{release-name}
+	http://download.ceph.com/rpm-{release-name}
 
-The major releases of Ceph are summarized at: :doc:`/releases`.
+The major releases of Ceph include:
 
-Every second major release is considered Long Term Stable (LTS). Critical
-bugfixes are backported to LTS releases until their retirement. Since retired
-releases are no longer maintained, we recommend that users upgrade their
-clusters regularly - preferably to the latest LTS release.
+- **Hammer:** Hammer is the most recent, and is also the eighth major release
+  of Ceph.  These packages are recommended for anyone deploying Ceph in a
+  production environment. Critical bug fixes are backported and point releases
+  are made as necessary.
 
-The most recent LTS release is Jewel (10.2.x).
+- **Giant:** Giant is the seventh major release of Ceph. These packages are
+  recommended for anyone deploying Ceph in a production environment.  Critical
+  bug fixes are backported and point releases are made as necessary.
 
-.. tip:: For international users: There might be a mirror close to you where download Ceph from. For more information see: `Ceph Mirrors`_.
+- **Firefly:** Firefly is the sixth major release of Ceph. These packages
+  are recommended for anyone deploying Ceph in a production environment.
+  Firefly is a long-term stable release, so critical bug fixes are backported
+  and point releases are made as necessary.
+
+- **Emperor:** Emperor is the fifth major release of Ceph. These packages
+  are are old and no longer maintained, so we recommend that users upgrade to
+  Firefly immediately.
+
+- **Argonaut, Bobtail, Cuttlefish, Dumpling:** These are the first four
+  releases of Ceph. These packages are old and no longer maintained (Dumpling
+  was retired in May 2015), so we recommend that users upgrade to a more
+  recent version.
+
+.. tip:: For international users, there are various mirrors globally. See :ref:`mirrors`.
 
 Debian Packages
 ---------------
@@ -125,73 +163,77 @@ Add a Ceph package repository to your system's list of APT sources. For newer
 versions of Debian/Ubuntu, call ``lsb_release -sc`` on the command line to
 get the short codename, and replace ``{codename}`` in the following command. ::
 
-	sudo apt-add-repository 'deb https://download.ceph.com/debian-jewel/ {codename} main'
+	sudo apt-add-repository 'deb http://download.ceph.com/debian-firefly/ {codename} main'
 
 For early Linux distributions, you may execute the following command::
 
-	echo deb https://download.ceph.com/debian-jewel/ $(lsb_release -sc) main | sudo tee /etc/apt/sources.list.d/ceph.list
+	echo deb http://download.ceph.com/debian-firefly/ $(lsb_release -sc) main | sudo tee /etc/apt/sources.list.d/ceph.list
 
 For earlier Ceph releases, replace ``{release-name}`` with the name  with the
 name of the Ceph release. You may call ``lsb_release -sc`` on the command  line
 to get the short codename, and replace ``{codename}`` in the following command.
 ::
 
-	sudo apt-add-repository 'deb https://download.ceph.com/debian-{release-name}/ {codename} main'
+	sudo apt-add-repository 'deb http://download.ceph.com/debian-{release-name}/ {codename} main'
 
 For older Linux distributions, replace ``{release-name}`` with the name of the
 release::
 
-	echo deb https://download.ceph.com/debian-{release-name}/ $(lsb_release -sc) main | sudo tee /etc/apt/sources.list.d/ceph.list
+	echo deb http://download.ceph.com/debian-{release-name}/ $(lsb_release -sc) main | sudo tee /etc/apt/sources.list.d/ceph.list
 
 Ceph on ARM processors requires Google's memory profiling tools (``google-perftools``).
 The Ceph repository should have a copy at
-https://download.ceph.com/packages/google-perftools/debian. ::
+http://download.ceph.com/packages/google-perftools/debian. ::
 
-	echo deb https://download.ceph.com/packages/google-perftools/debian  $(lsb_release -sc) main | sudo tee /etc/apt/sources.list.d/google-perftools.list
+	echo deb http://download.ceph.com/packages/google-perftools/debian  $(lsb_release -sc) main | sudo tee /etc/apt/sources.list.d/google-perftools.list
 
 
 For development release packages, add our package repository to your system's
 list of APT sources.  See `the testing Debian repository`_ for a complete list
 of Debian and Ubuntu releases supported. ::
 
-	echo deb https://download.ceph.com/debian-testing/ $(lsb_release -sc) main | sudo tee /etc/apt/sources.list.d/ceph.list
+	echo deb http://download.ceph.com/debian-testing/ $(lsb_release -sc) main | sudo tee /etc/apt/sources.list.d/ceph.list
 
-.. tip:: For international users: There might be a mirror close to you where download Ceph from. For more information see: `Ceph Mirrors`_.
+.. tip:: For international users, there are various mirrors globally. See the
+   information at the start of this page.
 
 RPM Packages
 ------------
 
 For major releases, you may add a Ceph entry to the ``/etc/yum.repos.d``
 directory. Create a ``ceph.repo`` file. In the example below, replace
-``{ceph-release}`` with  a major release of Ceph (e.g., ``hammer``, ``jewel``,
-etc.) and ``{distro}`` with your Linux distribution (e.g., ``el7``, etc.).  You
-may view https://download.ceph.com/rpm-{ceph-release}/ directory to see which
-distributions Ceph supports. Some Ceph packages (e.g., EPEL) must take priority
-over standard packages, so you must ensure that you set
+``{ceph-release}`` with  a major release of Ceph (e.g., ``dumpling``,
+``emperor``, etc.) and ``{distro}`` with your Linux distribution (e.g., ``el6``,
+``rhel6``, etc.).  You may view http://download.ceph.com/rpm-{ceph-release}/ directory to
+see which  distributions Ceph supports. Some Ceph packages (e.g., EPEL) must
+take priority over standard packages, so you must ensure that you set
 ``priority=2``. ::
 
 	[ceph]
 	name=Ceph packages for $basearch
-	baseurl=https://download.ceph.com/rpm-{ceph-release}/{distro}/$basearch
+	baseurl=http://download.ceph.com/rpm-{ceph-release}/{distro}/$basearch
 	enabled=1
 	priority=2
 	gpgcheck=1
+	type=rpm-md
 	gpgkey=https://download.ceph.com/keys/release.asc
 
 	[ceph-noarch]
 	name=Ceph noarch packages
-	baseurl=https://download.ceph.com/rpm-{ceph-release}/{distro}/noarch
+	baseurl=http://download.ceph.com/rpm-{ceph-release}/{distro}/noarch
 	enabled=1
 	priority=2
 	gpgcheck=1
+	type=rpm-md
 	gpgkey=https://download.ceph.com/keys/release.asc
 
 	[ceph-source]
 	name=Ceph source packages
-	baseurl=https://download.ceph.com/rpm-{ceph-release}/{distro}/SRPMS
+	baseurl=http://download.ceph.com/rpm-{ceph-release}/{distro}/SRPMS
 	enabled=0
 	priority=2
 	gpgcheck=1
+	type=rpm-md
 	gpgkey=https://download.ceph.com/keys/release.asc
 
 
@@ -200,26 +242,29 @@ for development releases instead. ::
 
 	[ceph]
 	name=Ceph packages for $basearch/$releasever
-	baseurl=https://download.ceph.com/rpm-testing/{distro}/$basearch
+	baseurl=http://download.ceph.com/rpm-testing/{distro}/$basearch
 	enabled=1
 	priority=2
 	gpgcheck=1
+	type=rpm-md
 	gpgkey=https://download.ceph.com/keys/release.asc
 
 	[ceph-noarch]
 	name=Ceph noarch packages
-	baseurl=https://download.ceph.com/rpm-testing/{distro}/noarch
+	baseurl=http://download.ceph.com/rpm-testing/{distro}/noarch
 	enabled=1
 	priority=2
 	gpgcheck=1
+	type=rpm-md
 	gpgkey=https://download.ceph.com/keys/release.asc
 
 	[ceph-source]
 	name=Ceph source packages
-	baseurl=https://download.ceph.com/rpm-testing/{distro}/SRPMS
+	baseurl=http://download.ceph.com/rpm-testing/{distro}/SRPMS
 	enabled=0
 	priority=2
 	gpgcheck=1
+	type=rpm-md
 	gpgkey=https://download.ceph.com/keys/release.asc
 
 
@@ -230,18 +275,16 @@ Development packages have new features integrated quickly, while still
 undergoing several weeks of QA prior to release.
 
 The repository package installs the repository details on your local system for
-use with ``yum``. Replace ``{distro}`` with your Linux distribution, and
-``{release}`` with the specific release of Ceph::
+use with ``yum`` or ``up2date``. Replace ``{distro}`` with your Linux distribution,
+and ``{release}`` with the specific release of Ceph::
 
-    su -c 'rpm -Uvh https://download.ceph.com/rpms/{distro}/x86_64/ceph-{release}.el7.noarch.rpm'
+    su -c 'rpm -Uvh http://download.ceph.com/rpms/{distro}/x86_64/ceph-{release}.el6.noarch.rpm'
 
 You can download the RPMs directly from::
 
-     https://download.ceph.com/rpm-testing
+     http://download.ceph.com/rpm-testing
 
-.. tip:: For international users: There might be a mirror close to you where download Ceph from. For more information see: `Ceph Mirrors`_.
-
-
+.. tip:: For international users, there are various mirrors globally. See :ref:`mirrors`.
 Add Ceph Development
 ====================
 
@@ -270,8 +313,9 @@ RPM Packages
 
 For current development branches, you may add a Ceph entry to the
 ``/etc/yum.repos.d`` directory. Create a ``ceph.repo`` file. In the example
-below, replace ``{distro}`` with your Linux distribution (e.g., ``el7``), and
-``{branch}`` with the name of the branch you want to install. ::
+below, replace ``{distro}`` with your Linux distribution (e.g., ``centos6``,
+``rhel6``, etc.), and ``{branch}`` with the name of the branch you want to
+install. ::
 
 
 	[ceph-source]
@@ -279,6 +323,7 @@ below, replace ``{distro}`` with your Linux distribution (e.g., ``el7``), and
 	baseurl=http://gitbuilder.ceph.com/ceph-rpm-{distro}-x86_64-basic/ref/{branch}/SRPMS
 	enabled=0
 	gpgcheck=1
+	type=rpm-md
 	gpgkey=https://download.ceph.com/keys/autobuild.asc
 
 
@@ -309,8 +354,8 @@ RPM Packages
 
 You may add a Ceph entry to the ``/etc/yum.repos.d`` directory. Create a
 ``ceph-apache.repo`` file. In the example below, replace ``{distro}`` with your
-Linux distribution (e.g., ``el7``).  You may view http://gitbuilder.ceph.com
-directory to see which distributions Ceph supports.
+Linux distribution (e.g., ``el6``, ``rhel6``, etc.).  You may view
+http://gitbuilder.ceph.com directory to see which distributions Ceph supports.
 ::
 
 
@@ -320,6 +365,7 @@ directory to see which distributions Ceph supports.
 	enabled=1
 	priority=2
 	gpgcheck=1
+	type=rpm-md
 	gpgkey=https://download.ceph.com/keys/autobuild.asc
 
 	[apache2-ceph-source]
@@ -328,6 +374,7 @@ directory to see which distributions Ceph supports.
 	enabled=0
 	priority=2
 	gpgcheck=1
+	type=rpm-md
 	gpgkey=https://download.ceph.com/keys/autobuild.asc
 
 
@@ -339,6 +386,7 @@ Repeat the forgoing process by creating a ``ceph-fastcgi.repo`` file. ::
 	enabled=1
 	priority=2
 	gpgcheck=1
+	type=rpm-md
 	gpgkey=https://download.ceph.com/keys/autobuild.asc
 
 	[fastcgi-ceph-noarch]
@@ -347,6 +395,7 @@ Repeat the forgoing process by creating a ``ceph-fastcgi.repo`` file. ::
 	enabled=1
 	priority=2
 	gpgcheck=1
+	type=rpm-md
 	gpgkey=https://download.ceph.com/keys/autobuild.asc
 
 	[fastcgi-ceph-source]
@@ -355,6 +404,7 @@ Repeat the forgoing process by creating a ``ceph-fastcgi.repo`` file. ::
 	enabled=0
 	priority=2
 	gpgcheck=1
+	type=rpm-md
 	gpgkey=https://download.ceph.com/keys/autobuild.asc
 
 
@@ -386,7 +436,7 @@ your Linux distribution codename. Replace ``{arch}`` with the CPU architecture.
 
 ::
 
-	wget -q https://download.ceph.com/debian-{release}/pool/main/c/ceph/ceph_{version}{distro}_{arch}.deb
+	wget -q http://download.ceph.com/debian-{release}/pool/main/c/ceph/ceph_{version}{distro}_{arch}.deb
 
 
 RPM Packages
@@ -395,7 +445,7 @@ RPM Packages
 Ceph requires additional additional third party libraries.
 To add the EPEL repository, execute the following::
 
-   sudo yum install -y https://dl.fedoraproject.org/pub/epel/epel-release-latest-7.noarch.rpm
+   su -c 'rpm -Uvh http://dl.fedoraproject.org/pub/epel/6/x86_64/epel-release-6-8.noarch.rpm'
 
 Ceph requires the following packages:
 
@@ -406,31 +456,32 @@ Ceph requires the following packages:
 - gperftools-libs
 
 
-Packages are currently built for the RHEL/CentOS7 (``el7``) platforms.  The
-repository package installs the repository details on your local system for use
-with ``yum``. Replace ``{distro}`` with your distribution. ::
+Packages are currently built for the RHEL/CentOS6 (``el6``), Fedora 18 and 19
+(``f18`` and ``f19``), OpenSUSE 12.2 (``opensuse12.2``), and SLES (``sles11``)
+platforms. The repository package installs the repository details on your local
+system for use with ``yum`` or ``up2date``. Replace ``{distro}`` with your
+distribution. ::
 
-    su -c 'rpm -Uvh https://download.ceph.com/rpm-jewel/{distro}/noarch/ceph-{version}.{distro}.noarch.rpm'
+    su -c 'rpm -Uvh http://download.ceph.com/rpm-firefly/{distro}/noarch/ceph-{version}.{distro}.noarch.rpm'
 
-For example, for CentOS 7  (``el7``)::
+For example, for CentOS 6  (``el6``)::
 
-    su -c 'rpm -Uvh https://download.ceph.com/rpm-jewel/el7/noarch/ceph-release-1-0.el7.noarch.rpm'
+    su -c 'rpm -Uvh http://download.ceph.com/rpm-firefly/el6/noarch/ceph-release-1-0.el6.noarch.rpm'
 
 You can download the RPMs directly from::
 
-	https://download.ceph.com/rpm-jewel
+	http://download.ceph.com/rpm-firefly
 
 
 For earlier Ceph releases, replace ``{release-name}`` with the name
 with the name of the Ceph release. You may call ``lsb_release -sc`` on the command
 line to get the short codename. ::
 
-	su -c 'rpm -Uvh https://download.ceph.com/rpm-{release-name}/{distro}/noarch/ceph-{version}.{distro}.noarch.rpm'
+	su -c 'rpm -Uvh http://download.ceph.com/rpm-{release-name}/{distro}/noarch/ceph-{version}.{distro}.noarch.rpm'
 
 
 
 
 .. _Install Ceph Object Storage: ../install-storage-cluster
-.. _the testing Debian repository: https://download.ceph.com/debian-testing/dists
+.. _the testing Debian repository: http://download.ceph.com/debian-testing/dists
 .. _the gitbuilder page: http://gitbuilder.ceph.com
-.. _Ceph Mirrors: ../mirrors

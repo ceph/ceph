@@ -26,8 +26,11 @@
 #define CEPH_ERASURE_CODE_ISA_L_H
 
 // -----------------------------------------------------------------------------
+#include "common/Mutex.h"
 #include "erasure-code/ErasureCode.h"
 #include "ErasureCodeIsaTableCache.h"
+// -----------------------------------------------------------------------------
+#include <list>
 // -----------------------------------------------------------------------------
 
 #define DEFAULT_RULESET_ROOT "default"
@@ -46,8 +49,8 @@ public:
 
   ErasureCodeIsaTableCache &tcache;
   const char *technique;
-  std::string ruleset_root;
-  std::string ruleset_failure_domain;
+  string ruleset_root;
+  string ruleset_failure_domain;
 
   ErasureCodeIsa(const char *_technique,
                  ErasureCodeIsaTableCache &_tcache) :
@@ -61,37 +64,37 @@ public:
   {
   }
 
-  
-  ~ErasureCodeIsa() override
+  virtual
+  ~ErasureCodeIsa()
   {
   }
 
-  int create_ruleset(const std::string &name,
+  virtual int create_ruleset(const string &name,
                              CrushWrapper &crush,
-                             std::ostream *ss) const override;
+                             ostream *ss) const;
 
-  unsigned int
-  get_chunk_count() const override
+  virtual unsigned int
+  get_chunk_count() const
   {
     return k + m;
   }
 
-  unsigned int
-  get_data_chunk_count() const override
+  virtual unsigned int
+  get_data_chunk_count() const
   {
     return k;
   }
 
-  unsigned int get_chunk_size(unsigned int object_size) const override;
+  virtual unsigned int get_chunk_size(unsigned int object_size) const;
 
-  int encode_chunks(const std::set<int> &want_to_encode,
-                            std::map<int, bufferlist> *encoded) override;
+  virtual int encode_chunks(const set<int> &want_to_encode,
+                            map<int, bufferlist> *encoded);
 
-  int decode_chunks(const std::set<int> &want_to_read,
-                            const std::map<int, bufferlist> &chunks,
-                            std::map<int, bufferlist> *decoded) override;
+  virtual int decode_chunks(const set<int> &want_to_read,
+                            const map<int, bufferlist> &chunks,
+                            map<int, bufferlist> *decoded);
 
-  int init(ErasureCodeProfile &profile, std::ostream *ss) override;
+  virtual int init(ErasureCodeProfile &profile, ostream *ss);
 
   virtual void isa_encode(char **data,
                           char **coding,
@@ -109,7 +112,7 @@ public:
 
  private:
   virtual int parse(ErasureCodeProfile &profile,
-                    std::ostream *ss) = 0;
+                    ostream *ss) = 0;
 };
 
 // -----------------------------------------------------------------------------
@@ -135,30 +138,30 @@ public:
     matrixtype = matrix;
   }
 
-  
-  ~ErasureCodeIsaDefault() override
+  virtual
+  ~ErasureCodeIsaDefault()
   {
 
   }
 
-  void isa_encode(char **data,
+  virtual void isa_encode(char **data,
                           char **coding,
-                          int blocksize) override;
+                          int blocksize);
 
   virtual bool erasure_contains(int *erasures, int i);
 
-  int isa_decode(int *erasures,
+  virtual int isa_decode(int *erasures,
                          char **data,
                          char **coding,
-                         int blocksize) override;
+                         int blocksize);
 
-  unsigned get_alignment() const override;
+  virtual unsigned get_alignment() const;
 
-  void prepare() override;
+  virtual void prepare();
 
  private:
-  int parse(ErasureCodeProfile &profile,
-                    std::ostream *ss) override;
+  virtual int parse(ErasureCodeProfile &profile,
+                    ostream *ss);
 };
 
 #endif

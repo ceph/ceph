@@ -3,10 +3,12 @@
 #ifndef CEPH_COMMON_CMDPARSE_H
 #define CEPH_COMMON_CMDPARSE_H
 
+#include <string>
+#include <sstream>
+#include <map>
 #include <boost/variant.hpp>
 #include <vector>
 #include <stdexcept>
-#include <ostream>
 #include "common/Formatter.h"
 #include "common/BackTrace.h"
 
@@ -15,15 +17,9 @@ class CephContext;
 /* this is handy; can't believe it's not standard */
 #define ARRAY_SIZE(a)	(sizeof(a) / sizeof(*a))
 
-typedef boost::variant<std::string,
-		       bool,
-		       int64_t,
-		       double,
-		       std::vector<std::string>,
-		       std::vector<int64_t>>  cmd_vartype;
+typedef boost::variant<std::string, bool, int64_t, double, std::vector<std::string> > cmd_vartype;
 typedef std::map<std::string, cmd_vartype> cmdmap_t;
 
-std::string cmddesc_get_prefix(const std::string &cmddesc);
 void dump_cmd_to_json(ceph::Formatter *f, const std::string& cmd);
 void dump_cmd_and_help_to_json(ceph::Formatter *f,
 			       const std::string& secname,
@@ -35,18 +31,16 @@ void dump_cmddesc_to_json(ceph::Formatter *jf,
 		          const std::string& helptext,
 		          const std::string& module,
 		          const std::string& perm,
-		          const std::string& avail,
-		          uint64_t flags);
+		          const std::string& avail);
 bool cmdmap_from_json(std::vector<std::string> cmd, cmdmap_t *mapp,
 		      std::stringstream &ss);
-void cmdmap_dump(const cmdmap_t &cmdmap, ceph::Formatter *f);
-void handle_bad_get(CephContext *cct, const std::string& k, const char *name);
+void handle_bad_get(CephContext *cct, std::string k, const char *name);
 
 std::string cmd_vartype_stringify(const cmd_vartype& v);
 
 template <typename T>
 bool
-cmd_getval(CephContext *cct, const cmdmap_t& cmdmap, const std::string& k, T& val)
+cmd_getval(CephContext *cct, const cmdmap_t& cmdmap, std::string k, T& val)
 {
   if (cmdmap.count(k)) {
     try {
@@ -63,7 +57,7 @@ cmd_getval(CephContext *cct, const cmdmap_t& cmdmap, const std::string& k, T& va
 
 template <typename T>
 void
-cmd_getval(CephContext *cct, const cmdmap_t& cmdmap, const std::string& k, T& val, const T& defval)
+cmd_getval(CephContext *cct, cmdmap_t& cmdmap, std::string k, T& val, T defval)
 {
   if (!cmd_getval(cct, cmdmap, k, val))
     val = defval;
@@ -71,12 +65,8 @@ cmd_getval(CephContext *cct, const cmdmap_t& cmdmap, const std::string& k, T& va
 
 template <typename T>
 void
-cmd_putval(CephContext *cct, cmdmap_t& cmdmap, const std::string& k, const T& val)
+cmd_putval(CephContext *cct, cmdmap_t& cmdmap, std::string k, T val)
 {
   cmdmap[k] = val;
 }
-
-extern int parse_osd_id(const char *s, std::ostream *pss);
-extern long parse_pos_long(const char *s, std::ostream *pss = NULL);
-
 #endif

@@ -7,23 +7,17 @@
 #include <boost/shared_ptr.hpp>
 
 namespace librados {
-
-class IoCtx;
-class MockTestMemIoCtxImpl;
-class TestCluster;
-
-MockTestMemIoCtxImpl &get_mock_io_ctx(IoCtx &ioctx);
-
-} // namespace librados
+class TestRadosClient;
+}
 
 namespace librados_test_stub {
 
-typedef boost::shared_ptr<librados::TestCluster> TestClusterRef;
+typedef boost::shared_ptr<librados::TestRadosClient> TestRadosClientPtr;
 
-void set_cluster(TestClusterRef cluster);
-TestClusterRef get_cluster();
+void set_rados_client(const TestRadosClientPtr &rados_client);
+
+TestRadosClientPtr get_rados_client();
 
 } // namespace librados_test_stub
-
 
 #endif // LIBRADOS_TEST_STUB_H

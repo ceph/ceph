@@ -3,175 +3,183 @@
 export DH_VERBOSE=1
 export DESTDIR=$(CURDIR)/debian/tmp
 
-export DEB_HOST_ARCH      ?= $(shell dpkg-architecture -qDEB_HOST_ARCH)
-
-extraopts += -DUSE_CRYPTOPP=OFF -DWITH_OCF=ON -DWITH_LTTNG=ON -DWITH_PYTHON3=ON -DWITH_EMBEDDED=OFF
-extraopts += -DWITH_CEPHFS_JAVA=ON
-# assumes that ceph is exmpt from multiarch support, so we override the libdir.
-extraopts += -DCMAKE_INSTALL_LIBDIR=/usr/lib
-extraopts += -DCMAKE_INSTALL_LIBEXECDIR=/usr/lib
-extraopts += -DCMAKE_INSTALL_SYSCONFDIR=/etc
 ifneq (,$(filter parallel=%,$(DEB_BUILD_OPTIONS)))
   NUMJOBS = $(patsubst parallel=%,%,$(filter parallel=%,$(DEB_BUILD_OPTIONS)))
-  extraopts += -DBOOST_J=$(NUMJOBS)
+  MAKEFLAGS += -j$(NUMJOBS)
 endif
+
+export DEB_HOST_GNU_TYPE  ?= $(shell dpkg-architecture -qDEB_HOST_GNU_TYPE)
+export DEB_BUILD_GNU_TYPE ?= $(shell dpkg-architecture -qDEB_BUILD_GNU_TYPE)
+
+# Recommended snippet for Autoconf 2.52 or later
+ifeq ($(DEB_BUILD_GNU_TYPE), $(DEB_HOST_GNU_TYPE))
+  confflags += --build $(DEB_HOST_GNU_TYPE)
+else
+  confflags += --build $(DEB_BUILD_GNU_TYPE) --host $(DEB_HOST_GNU_TYPE)
+endif
+
+export DEB_HOST_ARCH      ?= $(shell dpkg-architecture -qDEB_HOST_ARCH)
+
+extraopts += --with-ocf --with-nss
+extraopts += --with-debug
+extraopts += --enable-cephfs-java
+
+# rocksdb is not packaged by anyone.  build it if we can.
+extraopts += --with-librocksdb-static=check
 
 ifeq ($(DEB_HOST_ARCH), armel)
   # armel supports ARMv4t or above instructions sets.
   # libatomic-ops is only usable with Ceph for ARMv6 or above.
-  extraopts += -DWITH_ATOMIC_OPS=OFF
+  extraopts += --without-libatomic-ops
 endif
 
-ifneq (,$(filter $(DEB_HOST_ARCH), arm armel armhf arm64 i386 amd64 mips mipsel powerpc ppc64))
-  # beast depends on libboost_context which only support the archs above
-  extraopts += -DWITH_RADOSGW_BEAST_FRONTEND=ON
-else
-  extraopts += -DWITH_RADOSGW_BEAST_FRONTEND=OFF
-endif
+configure: configure-stamp
+configure-stamp:
+	dh_testdir
+	./autogen.sh
+	./configure --prefix=/usr --localstatedir=/var \
+	  --sysconfdir=/etc $(extraopts) $(confflags) \
+	  $(CEPH_EXTRA_CONFIGURE_ARGS)
+	touch $@
 
-%:
-	dh $@ --buildsystem=cmake --with javahelper,python2,python3,systemd --parallel
+build-arch: build
+build-indep: build
 
-override_dh_auto_configure:
-	env | sort
-	dh_auto_configure --buildsystem=cmake -- $(extraopts) $(CEPH_EXTRA_CMAKE_ARGS)
+build: build-stamp
+build-stamp: configure-stamp  
+	dh_testdir
 
-override_dh_auto_build:
-	dh_auto_build --buildsystem=cmake
+	$(MAKE)
+
+	cp src/init-ceph debian/ceph.init
 	cp src/init-radosgw debian/radosgw.init
+	cp src/logrotate.conf debian/ceph.logrotate
 
-override_dh_auto_clean:
-	dh_auto_clean --buildsystem=cmake
-	rm -f debian/radosgw.init debian/ceph.logrotate
+	touch $@
 
-override_dh_auto_install:
-	dh_auto_install --buildsystem=cmake --destdir=$(DESTDIR)
+clean:
+	dh_testdir
+	dh_testroot
+	rm -f build-stamp configure-stamp
+
+	[ ! -f Makefile ] || $(MAKE) distclean
+	rm -f aclocal.m4 compile config.sub config.guess depcomp install-sh \
+	  ltmain.sh missing
+	rm -f configure Makefile.in man/Makefile.in src/Makefile.in
+	rm -f src/acconfig.h.in
+	rm -f debian/ceph.init debian/radosgw.init debian/ceph.logrotate debian/radosgw.logrotate
+
+	dh_clean
+
+install: build
+	dh_testdir
+	dh_testroot
+	dh_clean -k 
+	dh_installdirs
+
+	$(MAKE) DESTDIR=$(DESTDIR) install
+	sed -i "/dependency_libs/ s/'.*'/''/" `find . -name '*.la'`
 	install -D -m 644 udev/50-rbd.rules $(DESTDIR)/lib/udev/rules.d/50-rbd.rules
+	install -D -m 644 udev/60-ceph-partuuid-workaround.rules $(DESTDIR)/lib/udev/rules.d/60-ceph-partuuid-workaround.rules
 	install -D -m 644 udev/95-ceph-osd.rules $(DESTDIR)/lib/udev/rules.d/95-ceph-osd.rules
-	install -D -m 644 udev/60-ceph-by-parttypeuuid.rules $(DESTDIR)/lib/udev/rules.d/60-ceph-by-parttypeuuid.rules
 	install -D -m 644 src/etc-rbdmap $(DESTDIR)/etc/ceph/rbdmap
+	install -D -m 755 src/init-rbdmap $(DESTDIR)/etc/init.d/rbdmap
 
-# doc/changelog is a directory, which confuses dh_installchangelogs
-override_dh_installchangelogs:
-	dh_installchangelogs --exclude doc/changelog
+# Add here commands to install the package into debian/testpack.
+# Build architecture-independent files here.
+binary-indep: build install
+	dh_testdir
+	dh_testroot
+	jh_installlibs -v -i
+	dh_installchangelogs -i
+	dh_installdocs -i --all ChangeLog
+	dh_installexamples -i
+	dh_install -i --sourcedir=$(DESTDIR) --list-missing
+	dh_installman -i
+	dh_lintian -i
+	dh_link -i
+	dh_compress -i
+	dh_fixperms -i
+	dh_python2 -i
+	dh_installdeb -i
+	dh_gencontrol -i
+	dh_md5sums -i
+	dh_builddeb -i
 
-override_dh_installdocs:
+# We have nothing to do by default.
+# Build architecture-dependent files here.
+binary-arch: build install
+	dh_testdir
+	dh_testroot
+	dh_installchangelogs -a
 	dh_installdocs -a --all ChangeLog
-
-override_dh_installlogrotate:
-	cp src/logrotate.conf debian/ceph-base.ceph.logrotate
-	dh_installlogrotate -pceph-base --name=ceph
-
-override_dh_installinit:
+	dh_installexamples -a
+	dh_install -a --sourcedir=$(DESTDIR) --list-missing
+	dh_installlogrotate -a
+	dh_installinit -a --no-start
 	# dh_installinit is only set up to handle one upstart script
 	# per package, so do this ourselves
-	install -d -m0755 debian/ceph-base/etc/init
-	install -m0644 src/upstart/ceph-all.conf debian/ceph-base/etc/init
-	install -d -m0755 debian/ceph-osd/etc/init
-	install -m0644 src/upstart/ceph-osd*.conf debian/ceph-osd/etc/init
-	install -m0644 src/upstart/ceph-disk.conf debian/ceph-osd/etc/init
-	install -d -m0755 debian/ceph-mon/etc/init
-	install -m0644 src/upstart/ceph-mon*.conf debian/ceph-mon/etc/init
+	install -d -m0755 debian/ceph/etc/init
+	install -m0644 src/upstart/ceph*.conf debian/ceph/etc/init
 	install -d -m0755 debian/ceph-common/etc/init
 	install -m0644 src/upstart/rbdmap.conf debian/ceph-common/etc/init
 	install -d -m0755 debian/ceph-mds/etc/init
-	install -m0644 src/upstart/ceph-mds*.conf debian/ceph-mds/etc/init
-	install -d -m0755 debian/ceph-mgr/etc/init
-	install -m0644 src/upstart/ceph-mgr*.conf debian/ceph-mgr/etc/init
+	mv debian/ceph/etc/init/ceph-mds* debian/ceph-mds/etc/init
 	install -d -m0755 debian/radosgw/etc/init
 	install -m0644 src/upstart/radosgw*.conf debian/radosgw/etc/init
-	install -d -m0755 debian/rbd-mirror/etc/init
-	install -m0644 src/upstart/ceph-rbd-mirror*.conf debian/rbd-mirror/etc/init
 	# install the systemd stuff manually since we have funny service names
 	install -d -m0755 debian/ceph-common/lib/systemd/system
 	install -m0644 systemd/ceph.target debian/ceph-common/lib/systemd/system
-	install -d -m0755 debian/ceph-common/etc/default
-	install -m0644 etc/default/ceph debian/ceph-common/etc/default/
+	install -d -m0755 debian/ceph-common/etc/default/ceph
+	install -m0644 etc/default/ceph debian/ceph-common/etc/default/ceph
 	install -d -m0755 debian/ceph-common/usr/lib/tmpfiles.d
 	install -m 0644 -D systemd/ceph.tmpfiles.d debian/ceph-common/usr/lib/tmpfiles.d/ceph.conf
 
-	install -d -m0755 debian/ceph-base/lib/systemd/system
-	install -d -m0755 debian/ceph-mon/lib/systemd/system
-	install -d -m0755 debian/ceph-osd/lib/systemd/system
-	install -m0644 systemd/ceph-mon@.service debian/ceph-mon/lib/systemd/system
-	install -m0644 systemd/ceph-osd@.service debian/ceph-osd/lib/systemd/system
-	install -m0644 systemd/ceph-disk@.service debian/ceph-osd/lib/systemd/system
-	install -m0644 systemd/rbdmap.service debian/ceph-common/lib/systemd/system
-	sed -i s./etc/sysconfig/./etc/default/.g debian/ceph-mon/lib/systemd/system/ceph-mon@.service
-	sed -i s./etc/sysconfig/./etc/default/.g debian/ceph-osd/lib/systemd/system/ceph-osd@.service
-	sed -i s./etc/sysconfig/./etc/default/.g debian/ceph-osd/lib/systemd/system/ceph-disk@.service
-	install -m0644 systemd/ceph-mon.target debian/ceph-mon/lib/systemd/system
-	install -m0644 systemd/ceph-osd.target debian/ceph-osd/lib/systemd/system
+	install -d -m0755 debian/ceph/lib/systemd/system
+	install -m0644 systemd/ceph-mon@.service debian/ceph/lib/systemd/system
+	install -m0644 systemd/ceph-create-keys@.service debian/ceph/lib/systemd/system
+	install -m0644 systemd/ceph-osd@.service debian/ceph/lib/systemd/system
+	install -m0644 systemd/ceph-disk@.service debian/ceph/lib/systemd/system
+	sed -i s./etc/sysconfig/./etc/default/.g debian/ceph/lib/systemd/system/ceph-mon@.service
+	sed -i s./etc/sysconfig/./etc/default/.g debian/ceph/lib/systemd/system/ceph-create-keys@.service
+	sed -i s./etc/sysconfig/./etc/default/.g debian/ceph/lib/systemd/system/ceph-osd@.service
+	sed -i s./etc/sysconfig/./etc/default/.g debian/ceph/lib/systemd/system/ceph-disk@.service
 
 	install -d -m0755 debian/ceph-mds/lib/systemd/system
 	install -m0644 systemd/ceph-mds@.service debian/ceph-mds/lib/systemd/system
 	sed -i s./etc/sysconfig/./etc/default/.g debian/ceph-mds/lib/systemd/system/ceph-mds@.service
-	install -m0644 systemd/ceph-mds.target debian/ceph-mds/lib/systemd/system
-
-	install -d -m0755 debian/ceph-fuse/lib/systemd/system
-	install -m0644 systemd/ceph-fuse@.service debian/ceph-fuse/lib/systemd/system
-	sed -i s./etc/sysconfig/./etc/default/.g debian/ceph-fuse/lib/systemd/system/ceph-fuse@.service
-	install -m0644 systemd/ceph-fuse.target debian/ceph-fuse/lib/systemd/system
-
-	install -d -m0755 debian/ceph-mgr/lib/systemd/system
-	install -m0644 systemd/ceph-mgr@.service debian/ceph-mgr/lib/systemd/system
-	sed -i s./etc/sysconfig/./etc/default/.g debian/ceph-mgr/lib/systemd/system/ceph-mgr@.service
-	install -m0644 systemd/ceph-mgr.target debian/ceph-mgr/lib/systemd/system
 
 	install -d -m0755 debian/radosgw/lib/systemd/system
 	install -m0644 systemd/ceph-radosgw@.service debian/radosgw/lib/systemd/system
 	sed -i s./etc/sysconfig/./etc/default/.g debian/radosgw/lib/systemd/system/ceph-radosgw@.service
-	install -m0644 systemd/ceph-radosgw.target debian/radosgw/lib/systemd/system
 
-	install -d -m0755 debian/rbd-mirror/lib/systemd/system
-	install -m0644 systemd/ceph-rbd-mirror@.service debian/rbd-mirror/lib/systemd/system
-	sed -i s./etc/sysconfig/./etc/default/.g debian/rbd-mirror/lib/systemd/system/ceph-rbd-mirror@.service
-	install -m0644 systemd/ceph-rbd-mirror.target debian/rbd-mirror/lib/systemd/system
+	dh_installman -a
+	dh_lintian -a
+	dh_link -a
 
-	dh_installinit -p ceph-base --name ceph --no-start
-	dh_installinit -p radosgw --no-start
-
-override_dh_systemd_start:
-	dh_systemd_start --no-restart-on-upgrade
-
-override_dh_strip:
+	dh_strip -pceph --dbg-package=ceph-dbg
 	dh_strip -pceph-mds --dbg-package=ceph-mds-dbg
 	dh_strip -pceph-fuse --dbg-package=ceph-fuse-dbg
-	dh_strip -pceph-mgr --dbg-package=ceph-mgr-dbg
-	dh_strip -pceph-mon --dbg-package=ceph-mon-dbg
-	dh_strip -pceph-osd --dbg-package=ceph-osd-dbg
-	dh_strip -pceph-fuse --dbg-package=ceph-fuse-dbg
 	dh_strip -prbd-fuse --dbg-package=rbd-fuse-dbg
-	dh_strip -prbd-mirror --dbg-package=rbd-mirror-dbg
 	dh_strip -prbd-nbd --dbg-package=rbd-nbd-dbg
 	dh_strip -pceph-common --dbg-package=ceph-common-dbg
+	dh_strip -pceph-fs-common --dbg-package=ceph-fs-common-dbg
 	dh_strip -plibrados2 --dbg-package=librados2-dbg
 	dh_strip -plibradosstriper1 --dbg-package=libradosstriper1-dbg
 	dh_strip -plibrbd1 --dbg-package=librbd1-dbg
-	dh_strip -plibcephfs2 --dbg-package=libcephfs2-dbg
-	dh_strip -plibrgw2 --dbg-package=librgw2-dbg
+	dh_strip -plibcephfs1 --dbg-package=libcephfs1-dbg
 	dh_strip -pradosgw --dbg-package=radosgw-dbg
 	dh_strip -pceph-test --dbg-package=ceph-test-dbg
 
-override_dh_shlibdeps:
-	dh_shlibdeps -a --exclude=erasure-code --exclude=rados-classes --exclude=compressor
+	dh_compress -a
+	dh_fixperms -a
+	dh_makeshlibs -a
+	dh_python2 -a
+	dh_installdeb -a
+	dh_shlibdeps -a
+	dh_gencontrol -a
+	dh_md5sums -a
+	dh_builddeb -a
 
-override_dh_python2:
-	for binding in rados cephfs rbd rgw; do \
-	  dh_python2 -p python-$$binding;       \
-	done
-	dh_python2 -p ceph-common
-	dh_python2 -p ceph-base
-	dh_python2 -p ceph-osd
-	dh_python2 -p ceph-mgr
-
-override_dh_python3:
-	for binding in rados cephfs rbd rgw; do \
-	  dh_python3 -p python3-$$binding;      \
-	done
-	dh_python3 -p python3-ceph-argparse
-
-# do not run tests
-override_dh_auto_test:
-
-.PHONY: override_dh_autoreconf override_dh_auto_configure override_dh_auto_build override_dh_auto_clean override_dh_auto_install override_dh_installdocs override_dh_installlogrotate override_dh_installinit override_dh_systemd_start override_dh_strip override_dh_auto_test
+binary: binary-indep binary-arch
+.PHONY: build clean binary-indep binary-arch binary install configure

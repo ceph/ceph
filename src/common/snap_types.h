@@ -2,7 +2,6 @@
 #define __CEPH_SNAP_TYPES_H
 
 #include "include/types.h"
-#include "include/fs_types.h"
 
 namespace ceph {
 

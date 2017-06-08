@@ -14,6 +14,7 @@
 
 #include <algorithm>
 #include <errno.h>
+#include <list>
 #include <map>
 #include <sstream>
 #include <stdio.h>
@@ -21,6 +22,8 @@
 #include <string.h>
 #include <string>
 #include <sys/stat.h>
+#include <sys/types.h>
+#include <unistd.h>
 #include <iostream>
 
 #include "include/buffer.h"
@@ -37,8 +40,8 @@ using std::string;
 
 ////////////////////////////// ConfLine //////////////////////////////
 ConfLine::
-ConfLine(const std::string &key_, const std::string &val_,
-      const std::string &newsection_, const std::string &comment_, int line_no_)
+ConfLine(const std::string &key_, const std::string val_,
+      const std::string newsection_, const std::string comment_, int line_no_)
   : key(key_), val(val_), newsection(newsection_)
 {
   // If you want to implement writable ConfFile support, you'll need to save
@@ -98,9 +101,6 @@ parse_file(const std::string &fname, std::deque<std::string> *errors,
   char *buf = NULL;
   FILE *fp = fopen(fname.c_str(), "r");
   if (!fp) {
-    ostringstream oss;
-    oss << __func__ << ": cannot open " << fname << ": " << cpp_strerror(errno);
-    errors->push_back(oss.str());
     ret = -errno;
     return ret;
   }
@@ -109,14 +109,14 @@ parse_file(const std::string &fname, std::deque<std::string> *errors,
   if (fstat(fileno(fp), &st_buf)) {
     ret = -errno;
     ostringstream oss;
-    oss << __func__ << ": failed to fstat '" << fname << "': " << cpp_strerror(ret);
+    oss << "read_conf: failed to fstat '" << fname << "': " << cpp_strerror(ret);
     errors->push_back(oss.str());
     goto done;
   }
 
   if (st_buf.st_size > MAX_CONFIG_FILE_SZ) {
     ostringstream oss;
-    oss << __func__ << ": config file '" << fname << "' is " << st_buf.st_size
+    oss << "read_conf: config file '" << fname << "' is " << st_buf.st_size
 	<< " bytes, but the maximum is " << MAX_CONFIG_FILE_SZ;
     errors->push_back(oss.str());
     ret = -EINVAL;
@@ -134,14 +134,14 @@ parse_file(const std::string &fname, std::deque<std::string> *errors,
     if (ferror(fp)) {
       ret = -errno;
       ostringstream oss;
-      oss << __func__ << ": fread error while reading '" << fname << "': "
+      oss << "read_conf: fread error while reading '" << fname << "': "
 	  << cpp_strerror(ret);
       errors->push_back(oss.str());
       goto done;
     }
     else {
       ostringstream oss;
-      oss << __func__ << ": unexpected EOF while reading '" << fname << "': "
+      oss << "read_conf: unexpected EOF while reading '" << fname << "': "
 	  << "possible concurrent modification?";
       errors->push_back(oss.str());
       ret = -EIO;
@@ -297,8 +297,6 @@ load_from_buffer(const char *buf, size_t sz, std::deque<std::string> *errors,
   size_t rem = sz;
   while (1) {
     b += line_len + 1;
-    if ((line_len + 1) > rem)
-      break;
     rem -= line_len + 1;
     if (rem == 0)
       break;
@@ -588,7 +586,7 @@ process_line(int line_no, const char *line, std::deque<std::string> *errors)
 	  comment += c;
 	break;
       default:
-	ceph_abort();
+	assert(0);
 	break;
     }
     assert(c != '\0'); // We better not go past the end of the input string.

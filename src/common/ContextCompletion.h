@@ -34,7 +34,7 @@ public:
     m_context_completion.start_op();
   }
 
-  void finish(int r) override {
+  virtual void finish(int r) {
     m_context_completion.finish_op(r);
   }
 

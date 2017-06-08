@@ -558,6 +558,12 @@ int parse_json_resp(JSONParser &parser) {
   return 0;
 }
 
+struct RGWMetadataLogData {
+  obj_version read_version;
+  obj_version write_version;
+  string status;
+};
+
 struct cls_log_entry_json {
   string section;
   string name;
@@ -577,7 +583,7 @@ static int decode_json(JSONObj *obj, RGWMetadataLogData &data) {
   jo = obj->find_obj("status");
   if (!jo)
     return -1;
-  JSONDecoder::decode_json("status", data, jo);
+  JSONDecoder::decode_json("status", data.status, jo);
   return 0;
 }
 
@@ -1072,19 +1078,19 @@ TEST(TestRGWAdmin, mdlog_list) {
     list<cls_log_entry_json>::iterator it = entries.begin();
     EXPECT_TRUE(it->section.compare("user") == 0);
     EXPECT_TRUE(it->name.compare(uid) == 0);
-    EXPECT_TRUE(it->log_data.status == MDLOG_STATUS_WRITE);
+    EXPECT_TRUE(it->log_data.status.compare("write") == 0);
     ++it;
     EXPECT_TRUE(it->section.compare("user") == 0);
     EXPECT_TRUE(it->name.compare(uid) == 0);
-    EXPECT_TRUE(it->log_data.status == MDLOG_STATUS_COMPLETE);
+    EXPECT_TRUE(it->log_data.status.compare("complete") == 0);
     ++it;
     EXPECT_TRUE(it->section.compare("user") == 0);
     EXPECT_TRUE(it->name.compare(uid) == 0);
-    EXPECT_TRUE(it->log_data.status == MDLOG_STATUS_WRITE);
+    EXPECT_TRUE(it->log_data.status.compare("write") == 0);
     ++it;
     EXPECT_TRUE(it->section.compare("user") == 0);
     EXPECT_TRUE(it->name.compare(uid) == 0);
-    EXPECT_TRUE(it->log_data.status == MDLOG_STATUS_COMPLETE);
+    EXPECT_TRUE(it->log_data.status.compare("complete") == 0);
   }
 
   sleep(1); /*To get a modified time*/
@@ -1106,19 +1112,19 @@ TEST(TestRGWAdmin, mdlog_list) {
     list<cls_log_entry_json>::iterator it = entries.begin();
     EXPECT_TRUE(it->section.compare("user") == 0);
     EXPECT_TRUE(it->name.compare(uid) == 0);
-    EXPECT_TRUE(it->log_data.status == MDLOG_STATUS_WRITE);
+    EXPECT_TRUE(it->log_data.status.compare("write") == 0);
     ++it;
     EXPECT_TRUE(it->section.compare("user") == 0);
     EXPECT_TRUE(it->name.compare(uid) == 0);
-    EXPECT_TRUE(it->log_data.status == MDLOG_STATUS_COMPLETE);
+    EXPECT_TRUE(it->log_data.status.compare("complete") == 0);
     ++it;
     EXPECT_TRUE(it->section.compare("user") == 0);
     EXPECT_TRUE(it->name.compare(uid) == 0);
-    EXPECT_TRUE(it->log_data.status == MDLOG_STATUS_WRITE);
+    EXPECT_TRUE(it->log_data.status.compare("write") == 0);
     ++it;
     EXPECT_TRUE(it->section.compare("user") == 0);
     EXPECT_TRUE(it->name.compare(uid) == 0);
-    EXPECT_TRUE(it->log_data.status == MDLOG_STATUS_COMPLETE);
+    EXPECT_TRUE(it->log_data.status.compare("complete") == 0);
   }
 
   sleep(1);
@@ -1142,18 +1148,18 @@ TEST(TestRGWAdmin, mdlog_list) {
     list<cls_log_entry_json>::iterator it = entries.begin();
     EXPECT_TRUE(it->section.compare("user") == 0);
     EXPECT_TRUE(it->name.compare(uid) == 0);
-    EXPECT_TRUE(it->log_data.status == MDLOG_STATUS_REMOVE);
+    EXPECT_TRUE(it->log_data.status.compare("remove") == 0);
     ++it;
     EXPECT_TRUE(it->section.compare("user") == 0);
     EXPECT_TRUE(it->name.compare(uid) == 0);
     ++it;
     EXPECT_TRUE(it->section.compare("user") == 0);
     EXPECT_TRUE(it->name.compare(uid) == 0);
-    EXPECT_TRUE(it->log_data.status == MDLOG_STATUS_WRITE);
+    EXPECT_TRUE(it->log_data.status.compare("write") == 0);
     ++it;
     EXPECT_TRUE(it->section.compare("user") == 0);
     EXPECT_TRUE(it->name.compare(uid) == 0);
-    EXPECT_TRUE(it->log_data.status == MDLOG_STATUS_COMPLETE);
+    EXPECT_TRUE(it->log_data.status.compare("complete") == 0);
   }
 
   sleep(1);
@@ -1572,8 +1578,7 @@ int main(int argc, char *argv[]){
   vector<const char*> args;
   argv_to_vec(argc, (const char **)argv, args);
 
-  auto cct = global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT,
-			 CODE_ENVIRONMENT_UTILITY, 0);
+  global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
   common_init_finish(g_ceph_context);
   g_test = new admin_log::test_helper();
   finisher = new Finisher(g_ceph_context);

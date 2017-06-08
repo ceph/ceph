@@ -3,8 +3,10 @@
 
 #include "librbd/object_map/InvalidateRequest.h"
 #include "common/dout.h"
+#include "common/errno.h"
 #include "librbd/ExclusiveLock.h"
 #include "librbd/ImageCtx.h"
+#include "librbd/ImageWatcher.h"
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
@@ -45,7 +47,6 @@ void InvalidateRequest<I>::send() {
   r = image_ctx.update_flags(m_snap_id, flags, true);
   if (r < 0) {
     this->async_complete(r);
-    return;
   }
 
   // do not update on-disk flags if not image owner
@@ -59,6 +60,10 @@ void InvalidateRequest<I>::send() {
 
   lderr(cct) << this << " invalidating object map on-disk" << dendl;
   librados::ObjectWriteOperation op;
+  if (image_ctx.exclusive_lock != nullptr &&
+      m_snap_id == CEPH_NOSNAP && !m_force) {
+    image_ctx.exclusive_lock->assert_header_locked(&op);
+  }
   cls_client::set_flags(&op, m_snap_id, flags, flags);
 
   librados::AioCompletion *rados_completion =

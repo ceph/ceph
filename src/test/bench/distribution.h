@@ -35,7 +35,7 @@ public:
     Distribution<V> *v,
     Distribution<W> *w)
     : t(t), u(u), v(v), w(w) {}
-  boost::tuple<T, U, V, W> operator()() override {
+  boost::tuple<T, U, V, W> operator()() {
     return boost::make_tuple((*t)(), (*u)(), (*v)(), (*w)());
   }
 };
@@ -53,7 +53,7 @@ public:
       contents.insert(std::make_pair(count, *i));
     }
   }
-  T operator()() override {
+  virtual T operator()() {
     assert(contents.size());
     boost::uniform_int<> value(0, contents.size() - 1);
     return contents.find(value(rng))->second;
@@ -76,7 +76,7 @@ public:
       contents.insert(std::make_pair(total, i->second));
     }
   }
-  T operator()() override {
+  virtual T operator()() {
     return contents.lower_bound(
       boost::uniform_real<>(0, total)(rng))->second;
   }
@@ -107,7 +107,7 @@ class UniformRandom : public Distribution<uint64_t> {
 public:
   UniformRandom(const rngen_t &rng, uint64_t min, uint64_t max) :
     rng(rng), min(min), max(max) {}
-  uint64_t operator()() override {
+  virtual uint64_t operator()() {
     return boost::uniform_int<uint64_t>(min, max)(rng);
   }
 };
@@ -118,7 +118,7 @@ class Align : public Distribution<uint64_t> {
 public:
   Align(Distribution<uint64_t> *dist, uint64_t align) :
     dist(dist), align(align) {}
-  uint64_t operator()() override {
+  virtual uint64_t operator()() {
     uint64_t ret = (*dist)();
     return ret - (ret % align);
   }
@@ -127,8 +127,8 @@ public:
 class Uniform : public Distribution<uint64_t> {
   uint64_t val;
 public:
-  explicit Uniform(uint64_t val) : val(val) {}
-  uint64_t operator()() override {
+  Uniform(uint64_t val) : val(val) {}
+  virtual uint64_t operator()() {
     return val;
   }
 };

@@ -52,9 +52,8 @@ int main(int argc, const char **argv)
 	argv_to_vec(argc, argv, args);
 	env_to_vec(args);
 
-	auto cct = global_init(NULL, args, CEPH_ENTITY_TYPE_ANY,
-			       CODE_ENVIRONMENT_DAEMON,
-			       0);
+	global_init(NULL, args, CEPH_ENTITY_TYPE_ANY, CODE_ENVIRONMENT_DAEMON,
+		    0);
 
 	for (arg_iter = args.begin(); arg_iter != args.end();) {
 	  if (ceph_argparse_witharg(args, arg_iter, &val, "--addr",
@@ -74,15 +73,14 @@ int main(int argc, const char **argv)
 	dest_str += port;
 	entity_addr_from_url(&bind_addr, dest_str.c_str());
 
-	messenger = Messenger::create(g_ceph_context, g_conf->get_val<std::string>("ms_type"),
+	messenger = Messenger::create(g_ceph_context, g_conf->ms_type,
 				      entity_name_t::MON(-1),
 				      "simple_server",
-				      0 /* nonce */,
-				      0 /* flags */);
+				      0 /* nonce */);
 	// enable timing prints
 	messenger->set_magic(MSG_MAGIC_TRACE_CTR);
 	messenger->set_default_policy(
-	  Messenger::Policy::stateless_server(0));
+	  Messenger::Policy::stateless_server(CEPH_FEATURES_ALL, 0));
 
 	r = messenger->bind(bind_addr);
 	if (r < 0)

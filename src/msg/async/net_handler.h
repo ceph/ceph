@@ -20,16 +20,16 @@
 
 namespace ceph {
   class NetHandler {
-    int generic_connect(const entity_addr_t& addr, const entity_addr_t& bind_addr, bool nonblock);
+   private:
+    int create_socket(int domain, bool reuse_addr=false);
+    int generic_connect(const entity_addr_t& addr, bool nonblock);
 
     CephContext *cct;
    public:
-    int create_socket(int domain, bool reuse_addr=false);
-    explicit NetHandler(CephContext *c): cct(c) {}
+    NetHandler(CephContext *c): cct(c) {}
     int set_nonblock(int sd);
-    void set_close_on_exec(int sd);
-    int set_socket_options(int sd, bool nodelay, int size);
-    int connect(const entity_addr_t &addr, const entity_addr_t& bind_addr);
+    void set_socket_options(int sd);
+    int connect(const entity_addr_t &addr);
     
     /**
      * Try to reconnect the socket.
@@ -39,8 +39,7 @@ namespace ceph {
      *            < 0       need to goto fail
      */
     int reconnect(const entity_addr_t &addr, int sd);
-    int nonblock_connect(const entity_addr_t &addr, const entity_addr_t& bind_addr);
-    void set_priority(int sd, int priority, int domain);
+    int nonblock_connect(const entity_addr_t &addr);
   };
 }
 

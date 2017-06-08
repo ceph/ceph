@@ -66,7 +66,7 @@ static int call_nbd_cmd(const po::variables_map &vm,
   }
 
   for (std::vector<const char*>::const_iterator p = args.begin();
-       p != args.end(); ++p)
+       p != args.end(); p++)
     process.add_cmd_arg(*p);
 
   if (process.spawn()) {
@@ -99,11 +99,8 @@ void get_map_arguments(po::options_description *positional,
   at::add_image_or_snap_spec_options(positional, options,
                                      at::ARGUMENT_MODIFIER_NONE);
   options->add_options()
-    ("read-only", po::bool_switch(), "map read-only")
-    ("exclusive", po::bool_switch(), "forbid writes by other clients")
-    ("device", po::value<std::string>(), "specify nbd device")
-    ("nbds_max", po::value<std::string>(), "override module param nbds_max")
-    ("max_part", po::value<std::string>(), "override module param max_part");
+    ("read-only", po::bool_switch(), "mount read-only")
+    ("device", po::value<std::string>(), "specify nbd device");
 }
 
 int execute_map(const po::variables_map &vm)
@@ -114,8 +111,7 @@ int execute_map(const po::variables_map &vm)
   std::string snap_name;
   int r = utils::get_pool_image_snapshot_names(
     vm, at::ARGUMENT_MODIFIER_NONE, &arg_index, &pool_name, &image_name,
-    &snap_name, utils::SNAPSHOT_PRESENCE_PERMITTED,
-    utils::SPEC_VALIDATION_NONE);
+    &snap_name, utils::SNAPSHOT_PRESENCE_PERMITTED);
   if (r < 0) {
     return r;
   }
@@ -136,20 +132,9 @@ int execute_map(const po::variables_map &vm)
   if (vm["read-only"].as<bool>())
     args.push_back("--read-only");
 
-  if (vm["exclusive"].as<bool>())
-    args.push_back("--exclusive");
-
   if (vm.count("device")) {
     args.push_back("--device");
     args.push_back(vm["device"].as<std::string>().c_str());
-  }
-  if (vm.count("nbds_max")) {
-    args.push_back("--nbds_max");
-    args.push_back(vm["nbds_max"].as<std::string>().c_str());
-  }
-  if (vm.count("max_part")) {
-    args.push_back("--max_part");
-    args.push_back(vm["max_part"].as<std::string>().c_str());
   }
 
   return call_nbd_cmd(vm, args);

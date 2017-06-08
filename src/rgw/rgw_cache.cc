@@ -27,8 +27,7 @@ int ObjectCache::get(string& name, ObjectCacheInfo& info, uint32_t mask, rgw_cac
   ObjectCacheEntry *entry = &iter->second;
 
   if (lru_counter - entry->lru_promotion_ts > lru_window) {
-    ldout(cct, 20) << "cache get: touching lru, lru_counter=" << lru_counter
-                   << " promotion_ts=" << entry->lru_promotion_ts << dendl;
+    ldout(cct, 20) << "cache get: touching lru, lru_counter=" << lru_counter << " promotion_ts=" << entry->lru_promotion_ts << dendl;
     lock.unlock();
     lock.get_write(); /* promote lock to writer */
 
@@ -49,15 +48,11 @@ int ObjectCache::get(string& name, ObjectCacheInfo& info, uint32_t mask, rgw_cac
 
   ObjectCacheInfo& src = iter->second.info;
   if ((src.flags & mask) != mask) {
-    ldout(cct, 10) << "cache get: name=" << name << " : type miss (requested=0x"
-                   << std::hex << mask << ", cached=0x" << src.flags
-                   << std::dec << ")" << dendl;
+    ldout(cct, 10) << "cache get: name=" << name << " : type miss (requested=" << mask << ", cached=" << src.flags << ")" << dendl;
     if(perfcounter) perfcounter->inc(l_rgw_cache_miss);
     return -ENOENT;
   }
-  ldout(cct, 10) << "cache get: name=" << name << " : hit (requested=0x"
-                 << std::hex << mask << ", cached=0x" << src.flags
-                 << std::dec << ")" << dendl;
+  ldout(cct, 10) << "cache get: name=" << name << " : hit" << dendl;
 
   info = src;
   if (cache_info) {
@@ -88,7 +83,7 @@ bool ObjectCache::chain_cache_entry(list<rgw_cache_entry_info *>& cache_info_ent
     ldout(cct, 10) << "chain_cache_entry: cache_locator=" << cache_info->cache_locator << dendl;
     map<string, ObjectCacheEntry>::iterator iter = cache_map.find(cache_info->cache_locator);
     if (iter == cache_map.end()) {
-      ldout(cct, 20) << "chain_cache_entry: couldn't find cache locator" << dendl;
+      ldout(cct, 20) << "chain_cache_entry: couldn't find cachce locator" << dendl;
       return false;
     }
 
@@ -124,8 +119,7 @@ void ObjectCache::put(string& name, ObjectCacheInfo& info, rgw_cache_entry_info 
     return;
   }
 
-  ldout(cct, 10) << "cache put: name=" << name << " info.flags=0x"
-                 << std::hex << info.flags << std::dec << dendl;
+  ldout(cct, 10) << "cache put: name=" << name << dendl;
   map<string, ObjectCacheEntry>::iterator iter = cache_map.find(name);
   if (iter == cache_map.end()) {
     ObjectCacheEntry entry;

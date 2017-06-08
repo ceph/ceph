@@ -25,7 +25,6 @@
 #include "TestObjectStoreState.h"
 #include "include/assert.h"
 
-#define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_filestore
 #undef dout_prefix
 #define dout_prefix *_dout << "ceph_test_objectstore_state "
@@ -35,10 +34,11 @@ void TestObjectStoreState::init(int colls, int objs)
   dout(5) << "init " << colls << " colls " << objs << " objs" << dendl;
 
   ObjectStore::Sequencer osr(__func__);
-  ObjectStore::Transaction t;
+  ObjectStore::Transaction *t;
+  t = new ObjectStore::Transaction;
 
-  t.create_collection(coll_t::meta(), 0);
-  m_store->apply_transaction(&osr, std::move(t));
+  t->create_collection(coll_t::meta(), 0);
+  m_store->apply_transaction(&osr, *t);
 
   wait_for_ready();
 
@@ -49,7 +49,7 @@ void TestObjectStoreState::init(int colls, int objs)
     dout(5) << "init create collection " << entry->m_coll.to_str()
         << " meta " << entry->m_meta_obj << dendl;
 
-    ObjectStore::Transaction *t = new ObjectStore::Transaction;
+    t = new ObjectStore::Transaction;
     t->create_collection(entry->m_coll, 32);
     bufferlist hint;
     uint32_t pg_num = colls;
@@ -68,16 +68,15 @@ void TestObjectStoreState::init(int colls, int objs)
     }
     baseid += objs;
 
-    m_store->queue_transaction(&(entry->m_osr), std::move(*t),
-        new C_OnFinished(this));
-    delete t;
+    m_store->queue_transaction(&(entry->m_osr), t,
+        new C_OnFinished(this, t));
     inc_in_flight();
 
     m_collections.insert(make_pair(coll_id, entry));
     m_collections_ids.push_back(coll_id);
     m_next_coll_nr++;
   }
-  dout(5) << "init has " << m_in_flight.load() << "in-flight transactions" << dendl;
+  dout(5) << "init has " << m_in_flight.read() << "in-flight transactions" << dendl;
   wait_for_done();
   dout(5) << "init finished" << dendl;
 }

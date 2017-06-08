@@ -43,7 +43,7 @@ struct RGWOrphanSearchStage {
   string marker;
 
   RGWOrphanSearchStage() : stage(ORPHAN_SEARCH_STAGE_UNKNOWN), shard(0) {}
-  explicit RGWOrphanSearchStage(RGWOrphanSearchStageId _stage) : stage(_stage), shard(0) {}
+  RGWOrphanSearchStage(RGWOrphanSearchStageId _stage) : stage(_stage), shard(0) {}
   RGWOrphanSearchStage(RGWOrphanSearchStageId _stage, int _shard, const string& _marker) : stage(_stage), shard(_shard), marker(_marker) {}
 
   void encode(bufferlist& bl) const {
@@ -70,25 +70,23 @@ WRITE_CLASS_ENCODER(RGWOrphanSearchStage)
   
 struct RGWOrphanSearchInfo {
   string job_name;
-  rgw_pool pool;
+  string pool;
   uint16_t num_shards;
   utime_t start_time;
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(2, 1, bl);
+    ENCODE_START(1, 1, bl);
     ::encode(job_name, bl);
-    ::encode(pool.to_str(), bl);
+    ::encode(pool, bl);
     ::encode(num_shards, bl);
     ::encode(start_time, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::iterator& bl) {
-    DECODE_START(2, bl);
+    DECODE_START(1, bl);
     ::decode(job_name, bl);
-    string s;
-    ::decode(s, bl);
-    pool.from_str(s);
+    ::decode(pool, bl);
     ::decode(num_shards, bl);
     ::decode(start_time, bl);
     DECODE_FINISH(bl);
@@ -129,7 +127,9 @@ class RGWOrphanStore {
   string oid;
 
 public:
-  explicit RGWOrphanStore(RGWRados *_store) : store(_store), oid(RGW_ORPHAN_INDEX_OID) {}
+  RGWOrphanStore(RGWRados *_store) : store(_store) {
+    oid = RGW_ORPHAN_INDEX_OID;
+  }
 
   librados::IoCtx& get_ioctx() { return ioctx; }
 
@@ -138,7 +138,6 @@ public:
   int read_job(const string& job_name, RGWOrphanSearchState& state);
   int write_job(const string& job_name, const RGWOrphanSearchState& state);
   int remove_job(const string& job_name);
-  int list_jobs(map<string,RGWOrphanSearchState> &job_list);
 
 
   int store_entries(const string& oid, const map<string, bufferlist>& entries);

@@ -13,7 +13,7 @@ Synopsis
 
 | **ceph** **compact**
 
-| **ceph** **config-key** [ *del* | *exists* | *get* | *list* | *dump* | *put* ] ...
+| **ceph** **config-key** [ *del* | *exists* | *get* | *list* | *put* ] ...
 
 | **ceph** **daemon** *<name>* \| *<path>* *<command>* ...
 
@@ -33,13 +33,13 @@ Synopsis
 
 | **ceph** **log** *<logtext>* [ *<logtext>*... ]
 
-| **ceph** **mds** [ *compat* \| *deactivate* \| *fail* \| *rm* \| *rmfailed* \| *set_state* \| *stat* \| *tell* ] ...
+| **ceph** **mds** [ *add_data_pool* \| *cluster_down* \| *cluster_up* \| *compat* \| *deactivate* \| *dump* \| *fail* \| *getmap* \| *newfs* \| *remove_data_pool* \| *rm* \| *rmfailed* \| *set* \| *set_max_mds* \| *set_state* \| *setmap* \| *stat* \| *stop* \| *tell* ] ...
 
 | **ceph** **mon** [ *add* \| *dump* \| *getmap* \| *remove* \| *stat* ] ...
 
 | **ceph** **mon_status**
 
-| **ceph** **osd** [ *blacklist* \| *blocked-by* \| *create* \| *new* \| *deep-scrub* \| *df* \| *down* \| *dump* \| *erasure-code-profile* \| *find* \| *getcrushmap* \| *getmap* \| *getmaxosd* \| *in* \| *lspools* \| *map* \| *metadata* \| *out* \| *pause* \| *perf* \| *pg-temp* \| *primary-affinity* \| *primary-temp* \| *repair* \| *reweight* \| *reweight-by-pg* \| *rm* \| *destroy* \| *purge* \| *scrub* \| *set* \| *setcrushmap* \| *setmaxosd*  \| *stat* \| *tree* \| *unpause* \| *unset* ] ...
+| **ceph** **osd** [ *blacklist* \| *blocked-by* \| *create* \| *deep-scrub* \| *df* \| *down* \| *dump* \| *erasure-code-profile* \| *find* \| *getcrushmap* \| *getmap* \| *getmaxosd* \| *in* \| *lspools* \| *map* \| *metadata* \| *out* \| *pause* \| *perf* \| *pg-temp* \| *primary-affinity* \| *primary-temp* \| *repair* \| *reweight* \| *reweight-by-pg* \| *rm* \| *scrub* \| *set* \| *setcrushmap* \| *setmaxosd*  \| *stat* \| *thrash* \| *tree* \| *unpause* \| *unset* ] ...
 
 | **ceph** **osd** **crush** [ *add* \| *add-bucket* \| *create-or-move* \| *dump* \| *get-tunable* \| *link* \| *move* \| *remove* \| *rename-bucket* \| *reweight* \| *reweight-all* \| *reweight-subtree* \| *rm* \| *rule* \| *set* \| *set-tunable* \| *show-tunables* \| *tunables* \| *unlink* ] ...
 
@@ -201,13 +201,7 @@ Usage::
 
 	ceph config-key list
 
-Subcommand ``dump`` dumps configuration keys and values.
-
-Usage::
-
-	ceph config-key dump
-
-Subcommand ``put`` puts configuration key and value.
+Subcommand ``put`` puts configuration key and values.
 
 Usage::
 
@@ -334,6 +328,24 @@ mds
 Manage metadata server configuration and administration. It uses some
 additional subcommands.
 
+Subcommand ``add_data_pool`` adds data pool.
+
+Usage::
+
+	ceph mds add_data_pool <pool>
+
+Subcommand ``cluster_down`` takes mds cluster down.
+
+Usage::
+
+	ceph mds cluster_down
+
+Subcommand ``cluster_up`` brings mds cluster up.
+
+Usage::
+
+	ceph mds cluster_up
+
 Subcommand ``compat`` manages compatible features. It uses some additional
 subcommands.
 
@@ -361,11 +373,35 @@ Usage::
 
 	ceph mds deactivate <who>
 
+Subcommand ``dump`` dumps information, optionally from epoch.
+
+Usage::
+
+	ceph mds dump {<int[0-]>}
+
 Subcommand ``fail`` forces mds to status fail.
 
 Usage::
 
 	ceph mds fail <who>
+
+Subcommand ``getmap`` gets MDS map, optionally from epoch.
+
+Usage::
+
+	ceph mds getmap {<int[0-]>}
+
+Subcommand ``newfs`` makes new filesystem using pools <metadata> and <data>.
+
+Usage::
+
+	ceph mds newfs <int[0-]> <int[0-]> {--yes-i-really-mean-it}
+
+Subcommand ``remove_data_pool`` removes data pool.
+
+Usage::
+
+	ceph mds remove_data_pool <pool>
 
 Subcommand ``rm`` removes inactive mds.
 
@@ -379,17 +415,41 @@ Usage::
 
 	ceph mds rmfailed <int[0-]>
 
+Subcommand ``set`` set mds parameter <var> to <val>
+
+Usage::
+
+	ceph mds set max_mds|max_file_size|allow_new_snaps|inline_data <va> {<confirm>}
+
+Subcommand ``set_max_mds`` sets max MDS index.
+
+Usage::
+
+	ceph mds set_max_mds <int[0-]>
+
 Subcommand ``set_state`` sets mds state of <gid> to <numeric-state>.
 
 Usage::
 
 	ceph mds set_state <int[0-]> <int[0-20]>
 
+Subcommand ``setmap`` sets mds map; must supply correct epoch number.
+
+Usage::
+
+	ceph mds setmap <int[0-]>
+
 Subcommand ``stat`` shows MDS status.
 
 Usage::
 
 	ceph mds stat
+
+Subcommand ``stop`` stops mds.
+
+Usage::
+
+	ceph mds stop <who>
 
 Subcommand ``tell`` sends command to particular mds.
 
@@ -481,31 +541,6 @@ Subcommand ``create`` creates new osd (with optional UUID and ID).
 Usage::
 
 	ceph osd create {<uuid>} {<id>}
-
-Subcommand ``new`` reuses a previously destroyed OSD *id*. The new OSD will
-have the specified *uuid*, and the command expects a JSON file containing
-the base64 cephx key for auth entity *client.osd.<id>*, as well as optional
-base64 cepx key for dm-crypt lockbox access and a dm-crypt key. Specifying
-a dm-crypt requires specifying the accompanying lockbox cephx key.
-
-Usage::
-
-    ceph osd new {<id>} {<uuid>} -i {<secrets.json>}
-
-The secrets JSON file is expected to maintain a form of the following format::
-
-    {
-        "cephx_secret": "AQBWtwhZdBO5ExAAIDyjK2Bh16ZXylmzgYYEjg=="
-    }
-
-Or::
-
-    {
-        "cephx_secret": "AQBWtwhZdBO5ExAAIDyjK2Bh16ZXylmzgYYEjg==",
-        "cephx_lockbox_secret": "AQDNCglZuaeVCRAAYr76PzR1Anh7A0jswkODIQ==",
-        "dmcrypt_key": "<dm-crypt key>"
-    }
-        
 
 Subcommand ``crush`` is used for CRUSH management. It uses some additional
 subcommands.
@@ -947,7 +982,6 @@ Subcommand ``reweight-by-pg`` reweight OSDs by PG distribution
 Usage::
 
 	ceph osd reweight-by-pg {<int[100-]>} {<poolname> [<poolname...]}
-	{--no-increasing}
 
 Subcommand ``reweight-by-utilization`` reweight OSDs by utilization
 [overload-percentage-for-consideration, default 120].
@@ -955,36 +989,12 @@ Subcommand ``reweight-by-utilization`` reweight OSDs by utilization
 Usage::
 
 	ceph osd reweight-by-utilization {<int[100-]>}
-	{--no-increasing}
 
 Subcommand ``rm`` removes osd(s) <id> [<id>...] in the cluster.
 
 Usage::
 
 	ceph osd rm <ids> [<ids>...]
-
-Subcommand ``destroy`` marks OSD *id* as *destroyed*, removing its cephx
-entity's keys and all of its dm-crypt and daemon-private config key
-entries.
-
-This command will not remove the OSD from crush, nor will it remove the
-OSD from the OSD map. Instead, once the command successfully completes,
-the OSD will show marked as *destroyed*.
-
-In order to mark an OSD as destroyed, the OSD must first be marked as
-**lost**.
-
-Usage::
-
-    ceph osd destroy <id> {--yes-i-really-mean-it}
-
-
-Subcommand ``purge`` performs a combination of ``osd destroy``,
-``osd rm`` and ``osd crush remove``.
-
-Usage::
-
-    ceph osd purge <id> {--yes-i-really-mean-it}
 
 Subcommand ``scrub`` initiates scrub on specified osd.
 
@@ -1016,6 +1026,12 @@ Subcommand ``stat`` prints summary of OSD map.
 Usage::
 
 	ceph osd stat
+
+Subcommand ``thrash`` thrashes OSDs for <num_epochs>.
+
+Usage::
+
+	ceph osd thrash <int[0-]>
 
 Subcommand ``tier`` is used for managing tiers. It uses some additional
 subcommands.
@@ -1166,7 +1182,7 @@ Usage::
 	deep_scrub|backfill|backfill_toofull|recovery_wait|
 	undersized...]}
 
-Subcommand ``ls-by-pool`` lists pg with pool = [poolname]
+Subcommand ``ls-by-pool`` lists pg with pool = [poolname | poolid]
 
 Usage::
 
@@ -1220,12 +1236,6 @@ Usage::
 
 	ceph pg set_full_ratio <float[0.0-1.0]>
 
-Subcommand ``set_backfillfull_ratio`` sets ratio at which pgs are considered too full to backfill.
-
-Usage::
-
-	ceph pg set_backfillfull_ratio <float[0.0-1.0]>
-
 Subcommand ``set_nearfull_ratio`` sets ratio at which pgs are considered nearly
 full.
 
@@ -1243,16 +1253,12 @@ Usage::
 quorum
 ------
 
-Cause MON to enter or exit quorum.
+Enter or exit quorum.
 
 Usage::
 
 	ceph quorum enter|exit
 
-Note: this only works on the MON to which the ``ceph`` command is connected.
-If you want a specific MON to enter or exit quorum, use this syntax::
-
-	ceph tell mon.<id> quorum enter|exit
 
 quorum_status
 -------------
@@ -1313,13 +1319,6 @@ Usage::
 
 	ceph tell <name (type.id)> <args> [<args>...]
 
-
-List all available commands.
-
-Usage::
-
- 	ceph tell <name (type.id)> help
-
 version
 -------
 
@@ -1361,7 +1360,7 @@ Options
 
 	Name of the Ceph cluster.
 
-.. option:: --admin-daemon ADMIN_SOCKET, daemon DAEMON_NAME
+.. option:: daemon ADMIN_SOCKET, daemon DAEMON_NAME, --admin-socket ADMIN_SOCKET, --admin-socket DAEMON_NAME
 
 	Submit admin-socket commands via admin sockets in /var/run/ceph.
 
@@ -1416,13 +1415,6 @@ Options
 .. option:: --connect-timeout CLUSTER_TIMEOUT
 
 	Set a timeout for connecting to the cluster.
-
-.. option:: --no-increasing
-
-	 ``--no-increasing`` is off by default. So increasing the osd weight is allowed
-         using the ``reweight-by-utilization`` or ``test-reweight-by-utilization`` commands.
-         If this option is used with these commands, it will help not to increase osd weight
-         even the osd is under utilized.
 
 
 Availability

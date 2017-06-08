@@ -1,24 +1,39 @@
 # - Find libxio
 # Find libxio transport library
 #
-# XIO_INCLUDE_DIR -  libxio include dir
-# XIO_LIBRARIES - List of libraries
-# XIO_FOUND - True if libxio found.
+# Xio_INCLUDE_DIR -  libxio include dir
+# Xio_LIBRARIES - List of libraries
+# Xio_FOUND - True if libxio found.
 
-if(WITH_XIO AND EXISTS ${WITH_XIO})
-  find_path(XIO_INCLUDE_DIR libxio.h HINTS "${WITH_XIO}/include")
-  find_library(XIO_LIBRARY xio HINTS "${WITH_XIO}/lib")
+set(_xio_include_path ${HT_DEPENDENCY_INCLUDE_DIR})
+set(_xio_lib_path ${HT_DEPENDENCY_LIB_DIR})
+if (EXISTS ${WITH_XIO})
+  list(APPEND _xio_include_path "${WITH_XIO}/include")
+  list(APPEND _xio_lib_path "${WITH_XIO}/lib")
 else()
-  find_path(XIO_INCLUDE_DIR libxio.h)
-  find_library(XIO_LIBRARY xio)
+  list(APPEND _xio_include_path /usr/include /usr/local/include /opt/accelio/include)
+  list(APPEND _xio_lib_path /lib /usr/lib /usr/local/lib /opt/accelio/lib)
 endif()
 
-set(XIO_LIBRARIES ${XIO_LIBRARY})
+find_path(Xio_INCLUDE_DIR libxio.h NO_DEFAULT_PATH PATHS ${_xio_include_path})
 
-include(FindPackageHandleStandardArgs)
-find_package_handle_standard_args(xio DEFAULT_MSG XIO_LIBRARY XIO_INCLUDE_DIR)
+find_library(Xio_LIBRARY NO_DEFAULT_PATH NAMES xio PATHS ${_xio_lib_path})
+set(Xio_LIBRARIES ${Xio_LIBRARY})
+
+INCLUDE(FindPackageHandleStandardArgs)
+FIND_PACKAGE_HANDLE_STANDARD_ARGS(xio DEFAULT_MSG Xio_LIBRARY Xio_INCLUDE_DIR)
+
+if (Xio_FOUND)
+  message(STATUS "Found Xio: ${Xio_INCLUDE_DIR} ${Xio_LIBRARY}")
+else ()
+  message(STATUS "Not Found Xio: ${Xio_INCLUDE_DIR} ${Xio_LIBRARY}")
+  if (Xio_FIND_REQUIRED)
+    message(STATUS "Looked for Xio libraries named ${Xio_NAMES}.")
+    message(FATAL_ERROR "Could NOT find Xio library")
+  endif ()
+endif ()
 
 mark_as_advanced(
-  XIO_LIBRARY
-  XIO_INCLUDE_DIR
+  Xio_LIBRARY
+  Xio_INCLUDE_DIR
   )

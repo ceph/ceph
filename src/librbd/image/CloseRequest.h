@@ -4,6 +4,7 @@
 #ifndef CEPH_LIBRBD_IMAGE_CLOSE_REQUEST_H
 #define CEPH_LIBRBD_IMAGE_CLOSE_REQUEST_H
 
+#include "include/int_types.h"
 #include "librbd/ImageCtx.h"
 
 class Context;
@@ -30,21 +31,16 @@ private:
    * <start>
    *    |
    *    v
-   * BLOCK_IMAGE_WATCHER (skip if R/O)
-   *    |
-   *    v
-   * SHUT_DOWN_UPDATE_WATCHERS
+   * UNREGISTER_IMAGE_WATCHER
    *    |
    *    v
    * SHUT_DOWN_AIO_WORK_QUEUE . . .
-   *    |                         . (exclusive lock disabled)
-   *    v                         v
-   * SHUT_DOWN_EXCLUSIVE_LOCK   FLUSH
    *    |                         .
-   *    |     . . . . . . . . . . .
-   *    |     .
-   *    v     v
-   * UNREGISTER_IMAGE_WATCHER (skip if R/O)
+   *    v                         .
+   * SHUT_DOWN_EXCLUSIVE_LOCK     . (exclusive lock
+   *    |                         .  disabled)
+   *    v                         v
+   * FLUSH  < . . . . . . . . . . .
    *    |
    *    v
    * FLUSH_READAHEAD
@@ -53,16 +49,13 @@ private:
    * SHUTDOWN_CACHE
    *    |
    *    v
-   * FLUSH_OP_WORK_QUEUE . . . . .
-   *    |                        .
-   *    v                        .
-   * CLOSE_PARENT                . (no parent)
-   *    |                        .
-   *    v                        .
-   * FLUSH_IMAGE_WATCHER < . . . .
-   *    |
-   *    v
-   * <finish>
+   * FLUSH_OP_WORK_QUEUE  . . . . .
+   *    |                         .
+   *    v                         .
+   * CLOSE_PARENT                 . (no parent)
+   *    |                         .
+   *    v                         .
+   * <finish> < . . . . . . . . . .
    *
    * @endverbatim
    */
@@ -76,23 +69,17 @@ private:
 
   decltype(m_image_ctx->exclusive_lock) m_exclusive_lock;
 
-  void send_block_image_watcher();
-  void handle_block_image_watcher(int r);
+  void send_unregister_image_watcher();
+  void handle_unregister_image_watcher(int r);
 
-  void send_shut_down_update_watchers();
-  void handle_shut_down_update_watchers(int r);
-
-  void send_shut_down_io_queue();
-  void handle_shut_down_io_queue(int r);
+  void send_shut_down_aio_queue();
+  void handle_shut_down_aio_queue(int r);
 
   void send_shut_down_exclusive_lock();
   void handle_shut_down_exclusive_lock(int r);
 
   void send_flush();
   void handle_flush(int r);
-
-  void send_unregister_image_watcher();
-  void handle_unregister_image_watcher(int r);
 
   void send_flush_readahead();
   void handle_flush_readahead(int r);
@@ -105,9 +92,6 @@ private:
 
   void send_close_parent();
   void handle_close_parent(int r);
-
-  void send_flush_image_watcher();
-  void handle_flush_image_watcher(int r);
 
   void finish();
 

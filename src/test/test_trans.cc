@@ -19,17 +19,16 @@
 #include "global/global_init.h"
 #include "include/assert.h"
 
-#define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_filestore
 #undef dout_prefix
 #define dout_prefix *_dout
 
 struct Foo : public Thread {
-  void *entry() override {
+  void *entry() {
     dout(0) << "foo started" << dendl;
     sleep(1);
     dout(0) << "foo asserting 0" << dendl;
-    ceph_abort();
+    assert(0);
   }
 } foo;
 
@@ -39,8 +38,7 @@ int main(int argc, const char **argv)
   argv_to_vec(argc, argv, args);
   env_to_vec(args);
 
-  auto cct = global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT,
-			 CODE_ENVIRONMENT_UTILITY, 0);
+  global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
   common_init_finish(g_ceph_context);
 
   // args
@@ -51,7 +49,7 @@ int main(int argc, const char **argv)
   cout << "#dev " << filename << std::endl;
   cout << "#mb " << mb << std::endl;
 
-  ObjectStore *fs = new FileStore(cct.get(), filename, NULL);
+  ObjectStore *fs = new FileStore(filename, NULL);
   if (fs->mount() < 0) {
     cout << "mount failed" << std::endl;
     return -1;
@@ -74,7 +72,7 @@ int main(int argc, const char **argv)
   dout(0) << "starting thread" << dendl;
   foo.create("foo");
   dout(0) << "starting op" << dendl;
-  fs->apply_transaction(&osr, std::move(t));
+  fs->apply_transaction(&osr, t);
 
 }
 

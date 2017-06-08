@@ -24,12 +24,12 @@ public:
   {
   }
 
-  ~RbdWatchCtx() override {}
+  virtual ~RbdWatchCtx() {}
 
-  void handle_notify(uint64_t notify_id,
+  virtual void handle_notify(uint64_t notify_id,
                              uint64_t cookie,
                              uint64_t notifier_id,
-                             bufferlist& bl) override {
+                             bufferlist& bl) {
     std::cout << m_image_name << " received notification: notify_id="
               << notify_id << ", cookie=" << cookie << ", notifier_id="
               << notifier_id << ", bl.length=" << bl.length() << std::endl;
@@ -37,7 +37,7 @@ public:
     m_io_ctx.notify_ack(m_header_oid, notify_id, cookie, reply);
   }
 
-  void handle_error(uint64_t cookie, int err) override {
+  virtual void handle_error(uint64_t cookie, int err) {
     std::cerr << m_image_name << " received error: cookie=" << cookie << ", "
               << "err=" << cpp_strerror(err) << std::endl;
   }
@@ -61,13 +61,19 @@ static int do_watch(librados::IoCtx& pp, librbd::Image &image,
   if (old_format != 0) {
     header_oid = std::string(imgname) + RBD_SUFFIX;
   } else {
-    std::string id;
-    r = image.get_id(&id);
+    librbd::image_info_t info;
+    r = image.stat(info, sizeof(info));
     if (r < 0) {
+      std::cerr << "failed to stat image" << std::endl;
       return r;
     }
 
-    header_oid = RBD_HEADER_PREFIX + id;
+    char prefix[RBD_MAX_BLOCK_NAME_SIZE + 1];
+    strncpy(prefix, info.block_name_prefix, RBD_MAX_BLOCK_NAME_SIZE);
+    prefix[RBD_MAX_BLOCK_NAME_SIZE] = '\0';
+
+    std::string image_id(prefix + strlen(RBD_DATA_PREFIX));
+    header_oid = RBD_HEADER_PREFIX + image_id;
   }
 
   uint64_t cookie;
@@ -101,7 +107,7 @@ int execute(const po::variables_map &vm) {
   std::string snap_name;
   int r = utils::get_pool_image_snapshot_names(
     vm, at::ARGUMENT_MODIFIER_NONE, &arg_index, &pool_name, &image_name,
-    &snap_name, utils::SNAPSHOT_PRESENCE_NONE, utils::SPEC_VALIDATION_NONE);
+    &snap_name, utils::SNAPSHOT_PRESENCE_NONE);
   if (r < 0) {
     return r;
   }
@@ -109,7 +115,7 @@ int execute(const po::variables_map &vm) {
   librados::Rados rados;
   librados::IoCtx io_ctx;
   librbd::Image image;
-  r = utils::init_and_open_image(pool_name, image_name, "", "", true, &rados,
+  r = utils::init_and_open_image(pool_name, image_name, "", true, &rados,
                                  &io_ctx, &image);
   if (r < 0) {
     return r;

@@ -68,7 +68,7 @@ protected:
 public:
   LogSegment *_segment;
 
-  explicit LogEvent(int t)
+  LogEvent(int t)
     : _type(t), _start_off(0), _segment(0) { }
   virtual ~LogEvent() { }
 
@@ -84,16 +84,16 @@ public:
   void set_stamp(utime_t t) { stamp = t; }
 
   // encoding
-  virtual void encode(bufferlist& bl, uint64_t features) const = 0;
+  virtual void encode(bufferlist& bl) const = 0;
   virtual void decode(bufferlist::iterator &bl) = 0;
   static LogEvent *decode(bufferlist &bl);
   virtual void dump(Formatter *f) const = 0;
 
-  void encode_with_header(bufferlist& bl, uint64_t features) {
+  void encode_with_header(bufferlist& bl) {
     ::encode(EVENT_NEW_ENCODING, bl);
     ENCODE_START(1, 1, bl)
     ::encode(_type, bl);
-    encode(bl, features);
+    encode(bl);
     ENCODE_FINISH(bl);
   }
 
@@ -109,7 +109,7 @@ public:
   /*** recovery ***/
   /* replay() - replay given event.  this is idempotent.
    */
-  virtual void replay(MDSRank *m) { ceph_abort(); }
+  virtual void replay(MDSRank *m) { assert(0); }
 
   /**
    * If the subclass embeds a MetaBlob, return it here so that
@@ -118,7 +118,7 @@ public:
   virtual EMetaBlob *get_metablob() { return NULL; }
 };
 
-inline ostream& operator<<(ostream& out, const LogEvent &le) {
+inline ostream& operator<<(ostream& out, LogEvent& le) {
   le.print(out);
   return out;
 }

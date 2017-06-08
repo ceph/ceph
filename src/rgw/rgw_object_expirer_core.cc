@@ -35,7 +35,6 @@ using namespace std;
 
 #include "cls/lock/cls_lock_client.h"
 
-#define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
 
 static string objexp_lock_name = "gc_process";
@@ -125,19 +124,12 @@ void RGWObjectExpirer::garbage_chunk(list<cls_timeindex_entry>& entries,      /*
 }
 
 void RGWObjectExpirer::trim_chunk(const string& shard,
-                                  const utime_t& from,
-                                  const utime_t& to,
-                                  const string& from_marker,
-                                  const string& to_marker)
+                               const utime_t& from,
+                               const utime_t& to)
 {
-  ldout(store->ctx(), 20) << "trying to trim removal hints to=" << to
-                          << ", to_marker=" << to_marker << dendl;
+  ldout(store->ctx(), 20) << "trying to trim removal hints to  " << to << dendl;
 
-  real_time rt_from = from.to_real_time();
-  real_time rt_to = to.to_real_time();
-
-  int ret = store->objexp_hint_trim(shard, rt_from, rt_to,
-                                    from_marker, to_marker);
+  int ret = store->objexp_hint_trim(shard, from, to);
   if (ret < 0) {
     ldout(store->ctx(), 0) << "ERROR during trim: " << ret << dendl;
   }
@@ -145,20 +137,19 @@ void RGWObjectExpirer::trim_chunk(const string& shard,
   return;
 }
 
-bool RGWObjectExpirer::process_single_shard(const string& shard,
-                                            const utime_t& last_run,
-                                            const utime_t& round_start)
+void RGWObjectExpirer::process_single_shard(const string& shard,
+                                         const utime_t& last_run,
+                                         const utime_t& round_start)
 {
   string marker;
   string out_marker;
   bool truncated = false;
-  bool done = true;
 
   CephContext *cct = store->ctx();
   int num_entries = cct->_conf->rgw_objexp_chunk_size;
 
   int max_secs = cct->_conf->rgw_objexp_gc_interval;
-  utime_t end = ceph_clock_now();
+  utime_t end = ceph_clock_now(cct);
   end += max_secs;
 
   rados::cls::lock::Lock l(objexp_lock_name);
@@ -169,20 +160,15 @@ bool RGWObjectExpirer::process_single_shard(const string& shard,
   int ret = l.lock_exclusive(&store->objexp_pool_ctx, shard);
   if (ret == -EBUSY) { /* already locked by another processor */
     dout(5) << __func__ << "(): failed to acquire lock on " << shard << dendl;
-    return false;
+    return;
   }
-
   do {
-    real_time rt_last = last_run.to_real_time();
-    real_time rt_start = round_start.to_real_time();
-
     list<cls_timeindex_entry> entries;
-    ret = store->objexp_hint_list(shard, rt_last, rt_start,
-                                  num_entries, marker, entries,
-                                  &out_marker, &truncated);
+    ret = store->objexp_hint_list(shard, last_run, round_start,
+                                      num_entries, marker, entries,
+                                      &out_marker, &truncated);
     if (ret < 0) {
-      ldout(cct, 10) << "cannot get removal hints from shard: " << shard
-                     << dendl;
+      ldout(cct, 10) << "cannot get removal hints from shard: " << shard << dendl;
       continue;
     }
 
@@ -190,12 +176,11 @@ bool RGWObjectExpirer::process_single_shard(const string& shard,
     garbage_chunk(entries, need_trim);
 
     if (need_trim) {
-      trim_chunk(shard, last_run, round_start, marker, out_marker);
+      trim_chunk(shard, last_run, round_start);
     }
 
-    utime_t now = ceph_clock_now();
+    utime_t now = ceph_clock_now(g_ceph_context);
     if (now >= end) {
-      done = false;
       break;
     }
 
@@ -203,16 +188,15 @@ bool RGWObjectExpirer::process_single_shard(const string& shard,
   } while (truncated);
 
   l.unlock(&store->objexp_pool_ctx, shard);
-  return done;
+  return;
 }
 
-/* Returns true if all shards have been processed successfully. */
-bool RGWObjectExpirer::inspect_all_shards(const utime_t& last_run,
-                                          const utime_t& round_start)
+void RGWObjectExpirer::inspect_all_shards(const utime_t& last_run, const utime_t& round_start)
 {
-  CephContext * const cct = store->ctx();
+  utime_t shard_marker;
+
+  CephContext *cct = store->ctx();
   int num_shards = cct->_conf->rgw_objexp_hints_num_shards;
-  bool all_done = true;
 
   for (int i = 0; i < num_shards; i++) {
     string shard;
@@ -220,17 +204,15 @@ bool RGWObjectExpirer::inspect_all_shards(const utime_t& last_run,
 
     ldout(store->ctx(), 20) << "proceeding shard = " << shard << dendl;
 
-    if (! process_single_shard(shard, last_run, round_start)) {
-      all_done = false;
-    }
+    process_single_shard(shard, last_run, round_start);
   }
 
-  return all_done;
+  return;
 }
 
 bool RGWObjectExpirer::going_down()
 {
-  return down_flag;
+  return (down_flag.read() != 0);
 }
 
 void RGWObjectExpirer::start_processor()
@@ -241,7 +223,7 @@ void RGWObjectExpirer::start_processor()
 
 void RGWObjectExpirer::stop_processor()
 {
-  down_flag = true;
+  down_flag.set(1);
   if (worker) {
     worker->stop();
     worker->join();
@@ -253,20 +235,17 @@ void RGWObjectExpirer::stop_processor()
 void *RGWObjectExpirer::OEWorker::entry() {
   utime_t last_run;
   do {
-    utime_t start = ceph_clock_now();
+    utime_t start = ceph_clock_now(cct);
     ldout(cct, 2) << "object expiration: start" << dendl;
-    if (oe->inspect_all_shards(last_run, start)) {
-      /* All shards have been processed properly. Next time we can start
-       * from this moment. */
-      last_run = start;
-    }
+    oe->inspect_all_shards(last_run, start);
     ldout(cct, 2) << "object expiration: stop" << dendl;
 
+    last_run = start;
 
     if (oe->going_down())
       break;
 
-    utime_t end = ceph_clock_now();
+    utime_t end = ceph_clock_now(cct);
     end -= start;
     int secs = cct->_conf->rgw_objexp_gc_interval;
 
@@ -276,7 +255,7 @@ void *RGWObjectExpirer::OEWorker::entry() {
     secs -= end.sec();
 
     lock.Lock();
-    cond.WaitInterval(lock, utime_t(secs, 0));
+    cond.WaitInterval(cct, lock, utime_t(secs, 0));
     lock.Unlock();
   } while (!oe->going_down());
 

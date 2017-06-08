@@ -30,10 +30,11 @@ public:
   static void resize(ceph::BitVector<2> *object_map, uint64_t num_objs,
                      uint8_t default_state);
 
-  void send() override;
+  virtual void send();
 
 protected:
-  void finish_request() override;
+  virtual void finish();
+  using AsyncRequest<>::finish;
 
 private:
   ceph::BitVector<2> *m_object_map;

@@ -13,10 +13,6 @@ Get Usage
 
 Request bandwidth usage information.
 
-Note: this feature is disabled by default, can be enabled by setting ``rgw
-enable usage log = true`` in the appropriate section of ceph.conf. For changes
-in ceph.conf to take effect, radosgw process restart is needed.
-
 :caps: usage=read
 
 Syntax
@@ -58,7 +54,7 @@ Request Parameters
 
 :Description: Specifies whether data entries should be returned.
 :Type: Boolean
-:Example: True [True]
+:Example: True [False]
 :Required: No
 
 
@@ -66,7 +62,7 @@ Request Parameters
 
 :Description: Specifies whether data summary should be returned.
 :Type: Boolean
-:Example: True [True]
+:Example: True [False]
 :Required: No
 
 
@@ -167,10 +163,6 @@ Trim Usage
 Remove usage information. With no dates specified, removes all usage
 information.
 
-Note: this feature is disabled by default, can be enabled by setting ``rgw
-enable usage log = true`` in the appropriate section of ceph.conf. For changes
-in ceph.conf to take effect, radosgw process restart is needed.
-
 :caps: usage=write
 
 Syntax
@@ -223,7 +215,8 @@ TBD.
 Get User Info
 =============
 
-Get user information.
+Get user information. If no user is specified returns the list of all users along with suspension
+information.
 
 :caps: users=read
 
@@ -245,7 +238,7 @@ Request Parameters
 :Description: The user for which the information is requested.
 :Type: String
 :Example: ``foo_user``
-:Required: Yes
+:Required: No
 
 
 Response Entities
@@ -314,7 +307,7 @@ None.
 Create User
 ===========
 
-Create a new user. By default, a S3 key pair will be created automatically
+Create a new user. By Default, a S3 key pair will be created automatically
 and returned in the response. If only one of ``access-key`` or ``secret-key``
 is provided, the omitted key will be automatically generated. By default, a
 generated key is added to the keyring without replacing an existing key pair.
@@ -745,8 +738,9 @@ Create Subuser
 ==============
 
 Create a new subuser (primarily useful for clients using the Swift API).
-Note that in general for a subuser to be useful, it must be granted 
-permissions by specifying ``access``. As with user creation if
+Note that either ``gen-subuser`` or ``subuser`` is required for a valid
+request. Note that in general for a subuser to be useful, it must be
+granted permissions by specifying ``access``. As with user creation if
 ``subuser`` is specified without ``secret``, then a secret key will
 be automatically generated.
 
@@ -777,7 +771,7 @@ Request Parameters
 :Description: Specify the subuser ID to be created.
 :Type: String
 :Example: ``sub_foo``
-:Required: Yes
+:Required: No
 
 ``secret-key``
 
@@ -1487,16 +1481,9 @@ Request Parameters
 
 ``bucket``
 
-:Description: The bucket name to unlink.
+:Description: The bucket to unlink.
 :Type: String
 :Example: ``foo_bucket``
-:Required: Yes
-
-``bucket-id``
-
-:Description: The bucket id to unlink.
-:Type: String
-:Example: ``dev.6607669.420``
 :Required: Yes
 
 ``uid``
@@ -1702,7 +1689,7 @@ Request Parameters
 
 :Description: The administrative capability to add to the user.
 :Type: String
-:Example: ``usage=read,write;user=write``
+:Example: ``usage=read, write``
 :Required: Yes
 
 Response Entities
@@ -1742,11 +1729,12 @@ Example Request
 
 ::
 
-	PUT /{admin}/user?caps&user-caps=usage=read,write;user=write&format=json HTTP/1.1
+	PUT /{admin}/user?caps&format=json HTTP/1.1
 	Host: {fqdn}
 	Content-Type: text/plain
 	Authorization: {your-authorization-token}
 
+	usage=read
 
 
 Remove A User Capability
@@ -1818,6 +1806,11 @@ Special Error Responses
 :Description: User does not possess specified capability.
 :Code: 404 Not Found
 
+Special Error Responses
+~~~~~~~~~~~~~~~~~~~~~~~
+
+None.
+
 
 Quotas
 ======
@@ -1841,11 +1834,10 @@ Valid parameters for quotas include:
 - **Maximum Size:** The ``max-size`` option allows you to specify a quota
   for the maximum number of bytes. A negative value disables this setting.
   
-- **Quota Type:** The ``quota-type`` option sets the scope for the quota.
+- **Quota Scope:** The ``quota-scope`` option sets the scope for the quota.
   The options are ``bucket`` and ``user``.
 
-- **Enable/Disable Quota:** The ``enabled`` option specifies whether the
-  quota should be enabled. The value should be either 'True' or 'False'.
+
 
 Get User Quota
 ~~~~~~~~~~~~~~

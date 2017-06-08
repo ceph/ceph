@@ -11,6 +11,9 @@
  * Foundation.  See file COPYING.
  *
  */
+#include "acconfig.h"
+
+#include "common/pipe.h"
 #include "include/compat.h"
 
 #include <errno.h>

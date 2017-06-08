@@ -9,18 +9,21 @@
 class OnApplied : public Context {
   FileStoreTracker *tracker;
   list<pair<pair<coll_t, string>, uint64_t> > in_flight;
+  ObjectStore::Transaction *t;
 public:
   OnApplied(FileStoreTracker *tracker,
-	    list<pair<pair<coll_t, string>, uint64_t> > in_flight)
-    : tracker(tracker), in_flight(in_flight) {}
+	    list<pair<pair<coll_t, string>, uint64_t> > in_flight,
+	    ObjectStore::Transaction *t)
+    : tracker(tracker), in_flight(in_flight), t(t) {}
 
-  void finish(int r) override {
+  void finish(int r) {
     for (list<pair<pair<coll_t, string>, uint64_t> >::iterator i =
 	   in_flight.begin();
 	 i != in_flight.end();
 	 ++i) {
       tracker->applied(i->first, i->second);
     }
+    delete t;
   }
 };
 
@@ -32,7 +35,7 @@ public:
 	      list<pair<pair<coll_t, string>, uint64_t> > in_flight)
     : tracker(tracker), in_flight(in_flight) {}
 
-  void finish(int r) override {
+  void finish(int r) {
     for (list<pair<pair<coll_t, string>, uint64_t> >::iterator i =
 	   in_flight.begin();
 	 i != in_flight.end();
@@ -74,10 +77,9 @@ void FileStoreTracker::submit_transaction(Transaction &t)
     (**i)(this, &out);
   }
   store->queue_transaction(
-    0, std::move(*out.t),
-    new OnApplied(this, in_flight),
+    0, out.t,
+    new OnApplied(this, in_flight, out.t),
     new OnCommitted(this, in_flight));
-  delete out.t;
 }
 
 void FileStoreTracker::write(const pair<coll_t, string> &obj,
@@ -327,7 +329,7 @@ void FileStoreTracker::verify(const coll_t &coll, const string &obj,
     }
   }
   std::cerr << "Verifying " << make_pair(coll, obj) << " failed " << std::endl;
-  ceph_abort();
+  assert(0);
 }
 
 ObjectContents FileStoreTracker::get_current_content(

@@ -31,21 +31,21 @@ class MMonGetVersionReply : public Message {
 public:
   MMonGetVersionReply() : Message(CEPH_MSG_MON_GET_VERSION_REPLY, HEAD_VERSION) { }
 
-  const char *get_type_name() const override {
-    return "mon_get_version_reply";
+  const char *get_type_name() const {
+    return "mon_check_map_ack";
   }
 
-  void print(ostream& o) const override {
-    o << "mon_get_version_reply(handle=" << handle << " version=" << version << ")";
+  void print(ostream& o) const {
+    o << "mon_check_map_ack(handle=" << handle << " version=" << version << ")";
   }
 
-  void encode_payload(uint64_t features) override {
+  void encode_payload(uint64_t features) {
     ::encode(handle, payload);
     ::encode(version, payload);
     ::encode(oldest_version, payload);
   }
 
-  void decode_payload() override {
+  void decode_payload() {
     bufferlist::iterator p = payload.begin();
     ::decode(handle, p);
     ::decode(version, p);
@@ -58,7 +58,7 @@ public:
   version_t oldest_version;
 
 private:
-  ~MMonGetVersionReply() override {}
+  ~MMonGetVersionReply() {}
 };
 
 #endif

@@ -20,7 +20,7 @@
 
 #include "include/cephfs/libcephfs.h"
 #include <errno.h>
-#include <fcntl.h>
+#include <sys/fcntl.h>
 #include <unistd.h>
 #include <sys/file.h>
 #include <sys/types.h>
@@ -70,6 +70,7 @@ static const struct timespec* abstime(struct timespec &ts, long ms) {
 }
 
 /* Basic locking */
+
 TEST(LibCephFS, BasicLocking) {
   struct ceph_mount_info *cmount = NULL;
   STARTUP_CEPH();
@@ -426,8 +427,7 @@ static void process_ConcurrentLocking(str_ConcurrentLocking& s) {
   exit(EXIT_SUCCESS);
 }
 
-// Disabled because of fork() issues (http://tracker.ceph.com/issues/16556)
-TEST(LibCephFS, DISABLED_InterProcessLocking) {
+TEST(LibCephFS, InterProcessLocking) {
   PROCESS_SLOW_MS();
   // Process synchronization
   char c_file[1024];
@@ -526,8 +526,7 @@ TEST(LibCephFS, DISABLED_InterProcessLocking) {
   CLEANUP_CEPH();
 }
 
-// Disabled because of fork() issues (http://tracker.ceph.com/issues/16556)
-TEST(LibCephFS, DISABLED_ThreesomeInterProcessLocking) {
+TEST(LibCephFS, ThreesomeInterProcessLocking) {
   PROCESS_SLOW_MS();
   // Process synchronization
   char c_file[1024];

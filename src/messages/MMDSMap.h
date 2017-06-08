@@ -21,10 +21,31 @@
 #include "include/ceph_features.h"
 
 class MMDSMap : public Message {
-  static const int HEAD_VERSION = 1;
-  static const int COMPAT_VERSION = 1;
-public:
+ public:
+  /*
+  map<epoch_t, bufferlist> maps;
+  map<epoch_t, bufferlist> incremental_maps;
 
+  epoch_t get_first() {
+    epoch_t e = 0;
+    map<epoch_t, bufferlist>::iterator i = maps.begin();
+    if (i != maps.end())  e = i->first;
+    i = incremental_maps.begin();    
+    if (i != incremental_maps.end() &&
+        (e == 0 || i->first < e)) e = i->first;
+    return e;
+  }
+  epoch_t get_last() {
+    epoch_t e = 0;
+    map<epoch_t, bufferlist>::reverse_iterator i = maps.rbegin();
+    if (i != maps.rend())  e = i->first;
+    i = incremental_maps.rbegin();    
+    if (i != incremental_maps.rend() &&
+        (e == 0 || i->first > e)) e = i->first;
+    return e;
+  }
+  */
+  
   uuid_d fsid;
   epoch_t epoch;
   bufferlist encoded;
@@ -33,35 +54,34 @@ public:
   bufferlist& get_encoded() { return encoded; }
 
   MMDSMap() : 
-    Message(CEPH_MSG_MDS_MAP, HEAD_VERSION, COMPAT_VERSION) {}
+    Message(CEPH_MSG_MDS_MAP) {}
   MMDSMap(const uuid_d &f, MDSMap *mm) :
-    Message(CEPH_MSG_MDS_MAP, HEAD_VERSION, COMPAT_VERSION),
+    Message(CEPH_MSG_MDS_MAP),
     fsid(f) {
     epoch = mm->get_epoch();
     mm->encode(encoded, -1);  // we will reencode with fewer features as necessary
   }
 private:
-  ~MMDSMap() override {}
+  ~MMDSMap() {}
 
 public:
-  const char *get_type_name() const override { return "mdsmap"; }
-  void print(ostream& out) const override {
+  const char *get_type_name() const { return "mdsmap"; }
+  void print(ostream& out) const {
     out << "mdsmap(e " << epoch << ")";
   }
 
   // marshalling
-  void decode_payload() override {
+  void decode_payload() {
     bufferlist::iterator p = payload.begin();
     ::decode(fsid, p);
     ::decode(epoch, p);
     ::decode(encoded, p);
   }
-  void encode_payload(uint64_t features) override {
+  void encode_payload(uint64_t features) {
     ::encode(fsid, payload);
     ::encode(epoch, payload);
     if ((features & CEPH_FEATURE_PGID64) == 0 ||
-	(features & CEPH_FEATURE_MDSENC) == 0 ||
-	(features & CEPH_FEATURE_MSG_ADDR2) == 0) {
+	(features & CEPH_FEATURE_MDSENC) == 0) {
       // reencode for old clients.
       MDSMap m;
       m.decode(encoded);

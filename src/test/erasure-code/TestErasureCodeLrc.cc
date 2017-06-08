@@ -16,19 +16,20 @@
  */
 
 #include <errno.h>
-#include <stdlib.h>
 
 #include "crush/CrushWrapper.h"
+#include "common/config.h"
 #include "include/stringify.h"
+#include "global/global_init.h"
 #include "erasure-code/lrc/ErasureCodeLrc.h"
+#include "common/ceph_argparse.h"
 #include "global/global_context.h"
 #include "common/config.h"
 #include "gtest/gtest.h"
 
-
 TEST(ErasureCodeLrc, parse_ruleset)
 {
-  ErasureCodeLrc lrc(g_conf->get_val<std::string>("erasure_code_dir"));
+  ErasureCodeLrc lrc(g_conf->erasure_code_dir);
   EXPECT_EQ("default", lrc.ruleset_root);
   EXPECT_EQ("host", lrc.ruleset_steps.front().type);
 
@@ -128,9 +129,7 @@ TEST(ErasureCodeTest, create_ruleset)
     }
   }
 
-  c->finalize();
-
-  ErasureCodeLrc lrc(g_conf->get_val<std::string>("erasure_code_dir"));
+  ErasureCodeLrc lrc(g_conf->erasure_code_dir);
   EXPECT_EQ(0, lrc.create_ruleset("rule1", *c, &cerr));
 
   ErasureCodeProfile profile;
@@ -151,7 +150,7 @@ TEST(ErasureCodeTest, create_ruleset)
   int rule = c->get_rule_id(rule_name);
   vector<int> out;
   unsigned int n = racks * hosts;
-  c->do_rule(rule, 1, out, n, weight, 0);
+  c->do_rule(rule, 1, out, n, weight);
   EXPECT_EQ(n, out.size());
   //
   // check that the first five are in the same rack and the next five
@@ -171,7 +170,7 @@ TEST(ErasureCodeTest, create_ruleset)
 
 TEST(ErasureCodeLrc, parse_kml)
 {
-  ErasureCodeLrc lrc(g_conf->get_val<std::string>("erasure_code_dir"));
+  ErasureCodeLrc lrc(g_conf->erasure_code_dir);
   ErasureCodeProfile profile;
   EXPECT_EQ(0, lrc.parse_kml(profile, &cerr));
   profile["k"] = "4";
@@ -246,7 +245,7 @@ TEST(ErasureCodeLrc, parse_kml)
 
 TEST(ErasureCodeLrc, layers_description)
 {
-  ErasureCodeLrc lrc(g_conf->get_val<std::string>("erasure_code_dir"));
+  ErasureCodeLrc lrc(g_conf->erasure_code_dir);
   ErasureCodeProfile profile;
 
   json_spirit::mArray description;
@@ -275,7 +274,7 @@ TEST(ErasureCodeLrc, layers_description)
 TEST(ErasureCodeLrc, layers_parse)
 {
   {
-    ErasureCodeLrc lrc(g_conf->get_val<std::string>("erasure_code_dir"));
+    ErasureCodeLrc lrc(g_conf->erasure_code_dir);
     ErasureCodeProfile profile;
 
     const char *description_string ="[ 0 ]";
@@ -287,7 +286,7 @@ TEST(ErasureCodeLrc, layers_parse)
   }
 
   {
-    ErasureCodeLrc lrc(g_conf->get_val<std::string>("erasure_code_dir"));
+    ErasureCodeLrc lrc(g_conf->erasure_code_dir);
     ErasureCodeProfile profile;
 
     const char *description_string ="[ [ 0 ] ]";
@@ -299,7 +298,7 @@ TEST(ErasureCodeLrc, layers_parse)
   }
 
   {
-    ErasureCodeLrc lrc(g_conf->get_val<std::string>("erasure_code_dir"));
+    ErasureCodeLrc lrc(g_conf->erasure_code_dir);
     ErasureCodeProfile profile;
 
     const char *description_string ="[ [ \"\", 0 ] ]";
@@ -315,7 +314,7 @@ TEST(ErasureCodeLrc, layers_parse)
   // profile.
   //
   {
-    ErasureCodeLrc lrc(g_conf->get_val<std::string>("erasure_code_dir"));
+    ErasureCodeLrc lrc(g_conf->erasure_code_dir);
     ErasureCodeProfile profile;
 
     const char *description_string ="[ [ \"\", { \"a\": \"b\" }, \"ignored\" ] ]";
@@ -331,7 +330,7 @@ TEST(ErasureCodeLrc, layers_parse)
   // profile.
   //
   {
-    ErasureCodeLrc lrc(g_conf->get_val<std::string>("erasure_code_dir"));
+    ErasureCodeLrc lrc(g_conf->erasure_code_dir);
     ErasureCodeProfile profile;
 
     const char *description_string ="[ [ \"\", \"a=b c=d\" ] ]";
@@ -348,7 +347,7 @@ TEST(ErasureCodeLrc, layers_parse)
 TEST(ErasureCodeLrc, layers_sanity_checks)
 {
   {
-    ErasureCodeLrc lrc(g_conf->get_val<std::string>("erasure_code_dir"));
+    ErasureCodeLrc lrc(g_conf->erasure_code_dir);
     ErasureCodeProfile profile;
     profile["mapping"] =
 	    "__DDD__DD";
@@ -362,7 +361,7 @@ TEST(ErasureCodeLrc, layers_sanity_checks)
     EXPECT_EQ(0, lrc.init(profile, &cerr));
   }
   {
-    ErasureCodeLrc lrc(g_conf->get_val<std::string>("erasure_code_dir"));
+    ErasureCodeLrc lrc(g_conf->erasure_code_dir);
     ErasureCodeProfile profile;
     const char *description_string =
       "[ "
@@ -371,7 +370,7 @@ TEST(ErasureCodeLrc, layers_sanity_checks)
     EXPECT_EQ(ERROR_LRC_MAPPING, lrc.init(profile, &cerr));
   }
   {
-    ErasureCodeLrc lrc(g_conf->get_val<std::string>("erasure_code_dir"));
+    ErasureCodeLrc lrc(g_conf->erasure_code_dir);
     ErasureCodeProfile profile;
     profile["mapping"] = "";
     const char *description_string =
@@ -381,7 +380,7 @@ TEST(ErasureCodeLrc, layers_sanity_checks)
     EXPECT_EQ(ERROR_LRC_LAYERS_COUNT, lrc.init(profile, &cerr));
   }
   {
-    ErasureCodeLrc lrc(g_conf->get_val<std::string>("erasure_code_dir"));
+    ErasureCodeLrc lrc(g_conf->erasure_code_dir);
     ErasureCodeProfile profile;
     profile["mapping"] =
 	    "DD";
@@ -399,14 +398,12 @@ TEST(ErasureCodeLrc, layers_sanity_checks)
 TEST(ErasureCodeLrc, layers_init)
 {
   {
-    ErasureCodeLrc lrc(g_conf->get_val<std::string>("erasure_code_dir"));
+    ErasureCodeLrc lrc(g_conf->erasure_code_dir);
     ErasureCodeProfile profile;
 
-    const char* env = getenv("CEPH_LIB");
-    string directory(env ? env : ".libs");
-    string description_string = 
-      "[ " 
-      "  [ \"_cDDD_cDD_\", \"directory=" + directory + "\" ]," 
+    const char *description_string =
+      "[ "
+      "  [ \"_cDDD_cDD_\", \"directory=.libs\" ],"
       "]";
     profile["layers"] = description_string;
     json_spirit::mArray description;
@@ -422,7 +419,7 @@ TEST(ErasureCodeLrc, layers_init)
 
 TEST(ErasureCodeLrc, init)
 {
-  ErasureCodeLrc lrc(g_conf->get_val<std::string>("erasure_code_dir"));
+  ErasureCodeLrc lrc(g_conf->erasure_code_dir);
   ErasureCodeProfile profile;
   profile["mapping"] =
     "__DDD__DD";
@@ -438,7 +435,7 @@ TEST(ErasureCodeLrc, init)
 
 TEST(ErasureCodeLrc, init_kml)
 {
-  ErasureCodeLrc lrc(g_conf->get_val<std::string>("erasure_code_dir"));
+  ErasureCodeLrc lrc(g_conf->erasure_code_dir);
   ErasureCodeProfile profile;
   profile["k"] = "4";
   profile["m"] = "2";
@@ -451,7 +448,7 @@ TEST(ErasureCodeLrc, minimum_to_decode)
 {
   // trivial : no erasures, the minimum is want_to_read
   {
-    ErasureCodeLrc lrc(g_conf->get_val<std::string>("erasure_code_dir"));
+    ErasureCodeLrc lrc(g_conf->erasure_code_dir);
     ErasureCodeProfile profile;
     profile["mapping"] =
       "__DDD__DD";
@@ -474,7 +471,7 @@ TEST(ErasureCodeLrc, minimum_to_decode)
   }
   // locally repairable erasure
   {
-    ErasureCodeLrc lrc(g_conf->get_val<std::string>("erasure_code_dir"));
+    ErasureCodeLrc lrc(g_conf->erasure_code_dir);
     ErasureCodeProfile profile;
     profile["mapping"] =
 	    "__DDD__DD_";
@@ -524,7 +521,7 @@ TEST(ErasureCodeLrc, minimum_to_decode)
   }
   // implicit parity required
   {
-    ErasureCodeLrc lrc(g_conf->get_val<std::string>("erasure_code_dir"));
+    ErasureCodeLrc lrc(g_conf->erasure_code_dir);
     ErasureCodeProfile profile;
     profile["mapping"] =
 	    "__DDD__DD";
@@ -602,7 +599,7 @@ TEST(ErasureCodeLrc, minimum_to_decode)
 
 TEST(ErasureCodeLrc, encode_decode)
 {
-  ErasureCodeLrc lrc(g_conf->get_val<std::string>("erasure_code_dir"));
+  ErasureCodeLrc lrc(g_conf->erasure_code_dir);
   ErasureCodeProfile profile;
   profile["mapping"] =
     "__DD__DD";
@@ -615,8 +612,8 @@ TEST(ErasureCodeLrc, encode_decode)
   profile["layers"] = description_string;
   EXPECT_EQ(0, lrc.init(profile, &cerr));
   EXPECT_EQ(4U, lrc.get_data_chunk_count());
-  unsigned int chunk_size = g_conf->osd_pool_erasure_code_stripe_unit;
-  unsigned int stripe_width = lrc.get_data_chunk_count() * chunk_size;
+  unsigned int stripe_width = g_conf->osd_pool_erasure_code_stripe_width;
+  unsigned int chunk_size = stripe_width / lrc.get_data_chunk_count();
   EXPECT_EQ(chunk_size, lrc.get_chunk_size(stripe_width));
   set<int> want_to_encode;
   map<int, bufferlist> encoded;
@@ -732,7 +729,7 @@ TEST(ErasureCodeLrc, encode_decode)
 
 TEST(ErasureCodeLrc, encode_decode_2)
 {
-  ErasureCodeLrc lrc(g_conf->get_val<std::string>("erasure_code_dir"));
+  ErasureCodeLrc lrc(g_conf->erasure_code_dir);
   ErasureCodeProfile profile;
   profile["mapping"] =
     "DD__DD__";
@@ -745,8 +742,8 @@ TEST(ErasureCodeLrc, encode_decode_2)
   profile["layers"] = description_string;
   EXPECT_EQ(0, lrc.init(profile, &cerr));
   EXPECT_EQ(4U, lrc.get_data_chunk_count());
-  unsigned int chunk_size = g_conf->osd_pool_erasure_code_stripe_unit;
-  unsigned int stripe_width = lrc.get_data_chunk_count() * chunk_size;
+  unsigned int stripe_width = g_conf->osd_pool_erasure_code_stripe_width;
+  unsigned int chunk_size = stripe_width / lrc.get_data_chunk_count();
   EXPECT_EQ(chunk_size, lrc.get_chunk_size(stripe_width));
   set<int> want_to_encode;
   map<int, bufferlist> encoded;
@@ -906,6 +903,20 @@ TEST(ErasureCodeLrc, encode_decode_2)
     map<int, bufferlist> decoded;
     EXPECT_EQ(0, lrc.decode(want_to_read, chunks, &decoded));
   }
+}
+
+int main(int argc, char **argv)
+{
+  vector<const char*> args;
+  argv_to_vec(argc, (const char **)argv, args);
+
+  global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
+  common_init_finish(g_ceph_context);
+
+  g_conf->set_val("erasure_code_dir", ".libs", false, false);
+
+  ::testing::InitGoogleTest(&argc, argv);
+  return RUN_ALL_TESTS();
 }
 
 /*

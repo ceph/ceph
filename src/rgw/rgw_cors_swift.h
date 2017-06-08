@@ -23,6 +23,8 @@
 
 #include "rgw_cors.h"
 
+using namespace std;
+
 class RGWCORSConfiguration_SWIFT : public RGWCORSConfiguration
 {
   public:

@@ -11,18 +11,13 @@
 class TestJournalTrimmer : public RadosTestFixture {
 public:
 
-  void TearDown() override {
+  virtual void TearDown() {
     for (MetadataList::iterator it = m_metadata_list.begin();
          it != m_metadata_list.end(); ++it) {
       (*it)->remove_listener(&m_listener);
     }
-    m_metadata_list.clear();
-
     for (std::list<journal::JournalTrimmer*>::iterator it = m_trimmers.begin();
          it != m_trimmers.end(); ++it) {
-      C_SaferCond ctx;
-      (*it)->shut_down(&ctx);
-      ASSERT_EQ(0, ctx.wait());
       delete *it;
     }
     RadosTestFixture::TearDown();
@@ -32,16 +27,21 @@ public:
                      const std::string &oid, uint64_t object_num,
                      const std::string &payload, uint64_t *commit_tid) {
     int r = append(oid + "." + stringify(object_num), create_payload(payload));
-    uint64_t tid = metadata->allocate_commit_tid(object_num, 234, 123);
+    uint64_t tid = metadata->allocate_commit_tid(object_num, "tag", 123);
     if (commit_tid != NULL) {
       *commit_tid = tid;
     }
     return r;
   }
 
+  using RadosTestFixture::client_register;
+  int client_register(const std::string &oid) {
+    return RadosTestFixture::client_register(oid, "client", "");
+  }
+
   journal::JournalMetadataPtr create_metadata(const std::string &oid) {
-    journal::JournalMetadataPtr metadata = RadosTestFixture::create_metadata(
-      oid);
+    journal::JournalMetadataPtr metadata(new journal::JournalMetadata(
+      m_ioctx, oid, "client", 0.1));
     m_metadata_list.push_back(metadata);
     metadata->add_listener(&m_listener);
     return metadata;
@@ -75,7 +75,7 @@ TEST_F(TestJournalTrimmer, Committed) {
   ASSERT_EQ(0, init_metadata(metadata));
   ASSERT_TRUE(wait_for_update(metadata));
 
-  ASSERT_EQ(0, metadata->set_active_set(10));
+  metadata->set_active_set(10);
   ASSERT_TRUE(wait_for_update(metadata));
 
   uint64_t commit_tid1;
@@ -85,10 +85,10 @@ TEST_F(TestJournalTrimmer, Committed) {
   uint64_t commit_tid5;
   uint64_t commit_tid6;
   ASSERT_EQ(0, append_payload(metadata, oid, 0, "payload", &commit_tid1));
-  ASSERT_EQ(0, append_payload(metadata, oid, 4, "payload", &commit_tid2));
+  ASSERT_EQ(0, append_payload(metadata, oid, 2, "payload", &commit_tid2));
   ASSERT_EQ(0, append_payload(metadata, oid, 5, "payload", &commit_tid3));
   ASSERT_EQ(0, append_payload(metadata, oid, 0, "payload", &commit_tid4));
-  ASSERT_EQ(0, append_payload(metadata, oid, 4, "payload", &commit_tid5));
+  ASSERT_EQ(0, append_payload(metadata, oid, 2, "payload", &commit_tid5));
   ASSERT_EQ(0, append_payload(metadata, oid, 5, "payload", &commit_tid6));
 
   journal::JournalTrimmer *trimmer = create_trimmer(oid, metadata);
@@ -118,7 +118,7 @@ TEST_F(TestJournalTrimmer, CommittedWithOtherClient) {
   ASSERT_EQ(0, init_metadata(metadata));
   ASSERT_TRUE(wait_for_update(metadata));
 
-  ASSERT_EQ(0, metadata->set_active_set(10));
+  metadata->set_active_set(10);
   ASSERT_TRUE(wait_for_update(metadata));
 
   uint64_t commit_tid1;
@@ -153,7 +153,7 @@ TEST_F(TestJournalTrimmer, RemoveObjects) {
   ASSERT_EQ(0, init_metadata(metadata));
   ASSERT_TRUE(wait_for_update(metadata));
 
-  ASSERT_EQ(0, metadata->set_active_set(10));
+  metadata->set_active_set(10);
   ASSERT_TRUE(wait_for_update(metadata));
 
   ASSERT_EQ(0, append(oid + ".0", create_payload("payload")));
@@ -163,10 +163,7 @@ TEST_F(TestJournalTrimmer, RemoveObjects) {
 
   journal::JournalTrimmer *trimmer = create_trimmer(oid, metadata);
 
-  C_SaferCond cond;
-  trimmer->remove_objects(false, &cond);
-  ASSERT_EQ(0, cond.wait());
-
+  ASSERT_EQ(0, trimmer->remove_objects(false));
   ASSERT_TRUE(wait_for_update(metadata));
 
   ASSERT_EQ(-ENOENT, assert_exists(oid + ".0"));
@@ -186,13 +183,7 @@ TEST_F(TestJournalTrimmer, RemoveObjectsWithOtherClient) {
   ASSERT_TRUE(wait_for_update(metadata));
 
   journal::JournalTrimmer *trimmer = create_trimmer(oid, metadata);
-
-  C_SaferCond ctx1;
-  trimmer->remove_objects(false, &ctx1);
-  ASSERT_EQ(-EBUSY, ctx1.wait());
-
-  C_SaferCond ctx2;
-  trimmer->remove_objects(true, &ctx2);
-  ASSERT_EQ(0, ctx2.wait());
+  ASSERT_EQ(-EBUSY, trimmer->remove_objects(false));
+  ASSERT_EQ(0, trimmer->remove_objects(true));
 }
 

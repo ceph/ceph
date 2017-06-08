@@ -21,8 +21,10 @@
 #ifndef CEPH_ERASURE_CODE_SHEC_H
 #define CEPH_ERASURE_CODE_SHEC_H
 
+#include "common/Mutex.h"
 #include "erasure-code/ErasureCode.h"
 #include "ErasureCodeShecTableCache.h"
+#include <list>
 
 #define DEFAULT_RULESET_ROOT "default"
 #define DEFAULT_RULESET_FAILURE_DOMAIN "host"
@@ -66,44 +68,44 @@ public:
     matrix(0)
   {}
 
-  ~ErasureCodeShec() override {}
+  virtual ~ErasureCodeShec() {}
 
-  int create_ruleset(const string &name,
+  virtual int create_ruleset(const string &name,
 			     CrushWrapper &crush,
-			     ostream *ss) const override;
+			     ostream *ss) const;
 
-  unsigned int get_chunk_count() const override {
+  virtual unsigned int get_chunk_count() const {
     return k + m;
   }
 
-  unsigned int get_data_chunk_count() const override {
+  virtual unsigned int get_data_chunk_count() const {
     return k;
   }
 
-  unsigned int get_chunk_size(unsigned int object_size) const override;
+  virtual unsigned int get_chunk_size(unsigned int object_size) const;
 
-  int minimum_to_decode(const set<int> &want_to_read,
+  virtual int minimum_to_decode(const set<int> &want_to_read,
 				const set<int> &available_chunks,
-				set<int> *minimum) override;
+				set<int> *minimum);
 
-  int minimum_to_decode_with_cost(const set<int> &want_to_read,
+  virtual int minimum_to_decode_with_cost(const set<int> &want_to_read,
 					  const map<int, int> &available,
-					  set<int> *minimum) override;
+					  set<int> *minimum);
 
-  int encode(const set<int> &want_to_encode,
+  virtual int encode(const set<int> &want_to_encode,
 		     const bufferlist &in,
-		     map<int, bufferlist> *encoded) override;
-  int encode_chunks(const set<int> &want_to_encode,
-			    map<int, bufferlist> *encoded) override;
+		     map<int, bufferlist> *encoded);
+  virtual int encode_chunks(const set<int> &want_to_encode,
+			    map<int, bufferlist> *encoded);
 
-  int decode(const set<int> &want_to_read,
+  virtual int decode(const set<int> &want_to_read,
 		     const map<int, bufferlist> &chunks,
-		     map<int, bufferlist> *decoded) override;
-  int decode_chunks(const set<int> &want_to_read,
+		     map<int, bufferlist> *decoded);
+  virtual int decode_chunks(const set<int> &want_to_read,
 			    const map<int, bufferlist> &chunks,
-			    map<int, bufferlist> *decoded) override;
+			    map<int, bufferlist> *decoded);
 
-  int init(ErasureCodeProfile &profile, ostream *ss) override;
+  virtual int init(ErasureCodeProfile &profile, ostream *ss);
   virtual void shec_encode(char **data,
 			   char **coding,
 			   int blocksize) = 0;
@@ -138,21 +140,21 @@ public:
     ErasureCodeShec(technique, _tcache)
   {}
 
-  ~ErasureCodeShecReedSolomonVandermonde() override {
+  virtual ~ErasureCodeShecReedSolomonVandermonde() {
   }
 
-  void shec_encode(char **data,
+  virtual void shec_encode(char **data,
 			   char **coding,
-			   int blocksize) override;
-  int shec_decode(int *erasures,
+			   int blocksize);
+  virtual int shec_decode(int *erasures,
 			  int *avails,
 			  char **data,
 			  char **coding,
-			  int blocksize) override;
-  unsigned get_alignment() const override;
-  void prepare() override;
+			  int blocksize);
+  virtual unsigned get_alignment() const;
+  virtual void prepare();
 private:
-  int parse(const ErasureCodeProfile &profile) override;
+  virtual int parse(const ErasureCodeProfile &profile);
 };
 
 #endif

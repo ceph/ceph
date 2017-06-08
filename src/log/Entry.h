@@ -11,7 +11,7 @@
 
 
 namespace ceph {
-namespace logging {
+namespace log {
 
 struct Entry {
   utime_t m_stamp;

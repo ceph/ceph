@@ -21,22 +21,10 @@
 #include "include/elist.h"
 #include "common/snap_types.h"
 
-class MDSInternalContextBase;
 
 struct SnapRealm {
-protected:
-  // cache
-  mutable snapid_t cached_seq;           // max seq over self and all past+present parents.
-  mutable snapid_t cached_last_created;  // max last_created over all past+present parents
-  mutable snapid_t cached_last_destroyed;
-  mutable set<snapid_t> cached_snaps;
-  mutable SnapContext cached_snap_context;
-  mutable bufferlist cached_snap_trace;
-
-  void check_cache() const;
-
-public:
   // realm state
+
   sr_t srnode;
 
   // in-memory state
@@ -46,11 +34,17 @@ public:
   bool open;                        // set to true once all past_parents are opened
   SnapRealm *parent;
   set<SnapRealm*> open_children;    // active children that are currently open
+  map<inodeno_t,SnapRealm*> open_past_parents;  // these are explicitly pinned.
   set<SnapRealm*> open_past_children;  // past children who has pinned me
-  map<inodeno_t, pair<SnapRealm*, set<snapid_t> > > open_past_parents;  // these are explicitly pinned.
-  unsigned num_open_past_parents;
 
+  // cache
+  snapid_t cached_seq;           // max seq over self and all past+present parents.
+  snapid_t cached_last_created;  // max last_created over all past+present parents
+  snapid_t cached_last_destroyed;
+  set<snapid_t> cached_snaps;
+  SnapContext cached_snap_context;
 
+  bufferlist cached_snap_trace;
 
   elist<CInode*> inodes_with_caps;             // for efficient realm splits
   map<client_t, xlist<Capability*>* > client_caps;   // to identify clients who need snap notifications
@@ -59,12 +53,11 @@ public:
     srnode(),
     mdcache(c), inode(in),
     open(false), parent(0),
-    num_open_past_parents(0),
     inodes_with_caps(0) 
   { }
 
-  bool exists(const string &name) const {
-    for (map<snapid_t,SnapInfo>::const_iterator p = srnode.snaps.begin();
+  bool exists(const string &name) {
+    for (map<snapid_t,SnapInfo>::iterator p = srnode.snaps.begin();
 	 p != srnode.snaps.end();
 	 ++p) {
       if (p->second.name == name)
@@ -73,32 +66,38 @@ public:
     return false;
   }
 
-  bool is_open() const { return open; }
+  bool is_open() { return open; }
   void _close_parents() { open = false; }
   bool _open_parents(MDSInternalContextBase *retryorfinish, snapid_t first=1, snapid_t last=CEPH_NOSNAP);
-  bool open_parents(MDSInternalContextBase *retryorfinish);
   void _remove_missing_parent(snapid_t snapid, inodeno_t parent, int err);
+  bool open_parents(MDSInternalContextBase *retryorfinish) {
+    if (!_open_parents(retryorfinish))
+      return false;
+    delete retryorfinish;
+    return true;
+  }
   bool have_past_parents_open(snapid_t first=1, snapid_t last=CEPH_NOSNAP);
-  void add_open_past_parent(SnapRealm *parent, snapid_t last);
-  void remove_open_past_parent(inodeno_t ino, snapid_t last);
+  void add_open_past_parent(SnapRealm *parent);
+  void remove_open_past_parent(inodeno_t ino);
   void close_parents();
 
   void prune_past_parents();
-  bool has_past_parents() const { return !srnode.past_parents.empty(); }
+  bool has_past_parents() { return !srnode.past_parents.empty(); }
 
   void build_snap_set(set<snapid_t>& s, 
 		      snapid_t& max_seq, snapid_t& max_last_created, snapid_t& max_last_destroyed,
-		      snapid_t first, snapid_t last) const;
+		      snapid_t first, snapid_t last);
   void get_snap_info(map<snapid_t,SnapInfo*>& infomap, snapid_t first=0, snapid_t last=CEPH_NOSNAP);
 
   const bufferlist& get_snap_trace();
-  void build_snap_trace(bufferlist& snapbl) const;
+  void build_snap_trace(bufferlist& snapbl);
 
   const string& get_snapname(snapid_t snapid, inodeno_t atino);
   snapid_t resolve_snapname(const string &name, inodeno_t atino, snapid_t first=0, snapid_t last=CEPH_NOSNAP);
 
-  const set<snapid_t>& get_snaps() const;
-  const SnapContext& get_snap_context() const;
+  void check_cache();
+  const set<snapid_t>& get_snaps();
+  const SnapContext& get_snap_context();
   void invalidate_cached_snaps() {
     cached_seq = 0;
   }
@@ -144,11 +143,9 @@ public:
   void join(SnapRealm *child);
 
   void add_cap(client_t client, Capability *cap) {
-    auto client_caps_entry = client_caps.find(client);
-    if (client_caps_entry == client_caps.end())
-      client_caps_entry = client_caps.emplace(client,
-					      new xlist<Capability*>).first;
-    client_caps_entry->second->push_back(&cap->item_snaprealm_caps);
+    if (client_caps.count(client) == 0)
+      client_caps[client] = new xlist<Capability*>;
+    client_caps[client]->push_back(&cap->item_snaprealm_caps);
   }
   void remove_cap(client_t client, Capability *cap) {
     cap->item_snaprealm_caps.remove_myself();

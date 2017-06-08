@@ -24,20 +24,20 @@ public:
   MLogAck() : Message(MSG_LOGACK) {}
   MLogAck(uuid_d& f, version_t l) : Message(MSG_LOGACK), fsid(f), last(l) {}
 private:
-  ~MLogAck() override {}
+  ~MLogAck() {}
 
 public:
-  const char *get_type_name() const override { return "log_ack"; }
-  void print(ostream& out) const override {
+  const char *get_type_name() const { return "log_ack"; }
+  void print(ostream& out) const {
     out << "log(last " << last << ")";
   }
 
-  void encode_payload(uint64_t features) override {
+  void encode_payload(uint64_t features) {
     ::encode(fsid, payload);
     ::encode(last, payload);
     ::encode(channel, payload);
   }
-  void decode_payload() override {
+  void decode_payload() {
     bufferlist::iterator p = payload.begin();
     ::decode(fsid, p);
     ::decode(last, p);

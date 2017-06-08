@@ -16,19 +16,20 @@
 #ifndef CEPH_MOSDREPOP_H
 #define CEPH_MOSDREPOP_H
 
-#include "MOSDFastDispatchOp.h"
+#include "msg/Message.h"
+#include "osd/osd_types.h"
 
 /*
  * OSD sub op - for internal ops on pobjects between primary and replicas(/stripes/whatever)
  */
 
-class MOSDRepOp : public MOSDFastDispatchOp {
+class MOSDRepOp : public Message {
 
-  static const int HEAD_VERSION = 2;
+  static const int HEAD_VERSION = 1;
   static const int COMPAT_VERSION = 1;
 
 public:
-  epoch_t map_epoch, min_epoch;
+  epoch_t map_epoch;
 
   // metadata from original request
   osd_reqid_t reqid;
@@ -54,7 +55,7 @@ public:
 
   // piggybacked osd/og state
   eversion_t pg_trim_to;   // primary->replica: trim to here
-  eversion_t pg_roll_forward_to;   // primary->replica: trim rollback
+  eversion_t pg_trim_rollback_to;   // primary->replica: trim rollback
                                     // info to here
 
   hobject_t new_temp_oid;      ///< new temp object that we must now start tracking
@@ -63,30 +64,14 @@ public:
   /// non-empty if this transaction involves a hit_set history update
   boost::optional<pg_hit_set_history_t> updated_hit_set_history;
 
-  epoch_t get_map_epoch() const override {
-    return map_epoch;
-  }
-  epoch_t get_min_epoch() const override {
-    return min_epoch;
-  }
-  spg_t get_spg() const override {
-    return pgid;
-  }
-
-  int get_cost() const override {
+  int get_cost() const {
     return data.length();
   }
 
-  void decode_payload() override {
+  virtual void decode_payload() {
     p = payload.begin();
     // splitted to partial and final
     ::decode(map_epoch, p);
-    if (header.version >= 2) {
-      ::decode(min_epoch, p);
-      decode_trace(p);
-    } else {
-      min_epoch = map_epoch;
-    }
     ::decode(reqid, p);
     ::decode(pgid, p);
   }
@@ -108,18 +93,12 @@ public:
 
     ::decode(from, p);
     ::decode(updated_hit_set_history, p);
-    ::decode(pg_roll_forward_to, p);
+    ::decode(pg_trim_rollback_to, p);
     final_decode_needed = false;
   }
 
-  void encode_payload(uint64_t features) override {
+  virtual void encode_payload(uint64_t features) {
     ::encode(map_epoch, payload);
-    if (HAVE_FEATURE(features, SERVER_LUMINOUS)) {
-      ::encode(min_epoch, payload);
-      encode_trace(payload, features);
-    } else {
-      header.version = 1;
-    }
     ::encode(reqid, payload);
     ::encode(pgid, payload);
     ::encode(poid, payload);
@@ -133,19 +112,18 @@ public:
     ::encode(discard_temp_oid, payload);
     ::encode(from, payload);
     ::encode(updated_hit_set_history, payload);
-    ::encode(pg_roll_forward_to, payload);
+    ::encode(pg_trim_rollback_to, payload);
   }
 
   MOSDRepOp()
-    : MOSDFastDispatchOp(MSG_OSD_REPOP, HEAD_VERSION, COMPAT_VERSION),
+    : Message(MSG_OSD_REPOP, HEAD_VERSION, COMPAT_VERSION),
       map_epoch(0),
       final_decode_needed(true), acks_wanted (0) {}
   MOSDRepOp(osd_reqid_t r, pg_shard_t from,
 	    spg_t p, const hobject_t& po, int aw,
-	    epoch_t mape, epoch_t min_epoch, ceph_tid_t rtid, eversion_t v)
-    : MOSDFastDispatchOp(MSG_OSD_REPOP, HEAD_VERSION, COMPAT_VERSION),
+	    epoch_t mape, ceph_tid_t rtid, eversion_t v)
+    : Message(MSG_OSD_REPOP, HEAD_VERSION, COMPAT_VERSION),
       map_epoch(mape),
-      min_epoch(min_epoch),
       reqid(r),
       pgid(p),
       final_decode_needed(false),
@@ -156,15 +134,15 @@ public:
     set_tid(rtid);
   }
 private:
-  ~MOSDRepOp() override {}
+  ~MOSDRepOp() {}
 
 public:
-  const char *get_type_name() const override { return "osd_repop"; }
-  void print(ostream& out) const override {
+  const char *get_type_name() const { return "osd_repop"; }
+  void print(ostream& out) const {
     out << "osd_repop(" << reqid
-	<< " " << pgid << " e" << map_epoch << "/" << min_epoch;
+          << " " << pgid;
     if (!final_decode_needed) {
-      out << " " << poid << " v " << version;
+        out << " " << poid << " v " << version;
       if (updated_hit_set_history)
         out << ", has_updated_hit_set_history";
     }

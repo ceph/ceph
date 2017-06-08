@@ -31,19 +31,19 @@ class MExportDirFinish : public Message {
     set_tid(tid);
   }
 private:
-  ~MExportDirFinish() override {}
+  ~MExportDirFinish() {}
 
 public:
-  const char *get_type_name() const override { return "ExFin"; }
-  void print(ostream& o) const override {
+  const char *get_type_name() const { return "ExFin"; }
+  void print(ostream& o) const {
     o << "export_finish(" << dirfrag << (last ? " last" : "") << ")";
   }
   
-  void encode_payload(uint64_t features) override {
+  void encode_payload(uint64_t features) {
     ::encode(dirfrag, payload);
     ::encode(last, payload);
   }
-  void decode_payload() override {
+  void decode_payload() {
     bufferlist::iterator p = payload.begin();
     ::decode(dirfrag, p);
     ::decode(last, p);

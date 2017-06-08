@@ -31,7 +31,7 @@
 
 /**
  * LFNIndex also encapsulates logic for manipulating
- * subdirectories of a collection as well as the long filename
+ * subdirectories of of a collection as well as the long filename
  * logic.
  *
  * The protected methods provide machinery for derived classes to
@@ -66,7 +66,7 @@
     } catch (RetryException) {			\
       failed = true;				\
     } catch (...) {				\
-      ceph_abort();				\
+      assert(0);				\
     }						\
   }						\
   return -1;					\
@@ -127,12 +127,11 @@ private:
 public:
   /// Constructor
   LFNIndex(
-    CephContext* cct,
     coll_t collection,
     const char *base_path, ///< [in] path to Index root
     uint32_t index_version,
     double _error_injection_probability=0)
-    : CollectionIndex(cct, collection),
+    : CollectionIndex(collection),
       base_path(base_path),
       index_version(index_version),
       error_injection_enabled(false),
@@ -150,49 +149,50 @@ public:
    }
   }
 
-  coll_t coll() const override { return collection; }
+  coll_t coll() const { return collection; }
 
   /// Virtual destructor
-  ~LFNIndex() override {}
+  virtual ~LFNIndex() {}
 
   /// @see CollectionIndex
-  int init() override;
+  int init();
 
   /// @see CollectionIndex
-  int cleanup() override = 0;
+  int cleanup() = 0;
 
   /// @see CollectionIndex
   int created(
     const ghobject_t &oid,
     const char *path
-    ) override;
+    );
 
   /// @see CollectionIndex
   int unlink(
     const ghobject_t &oid
-    ) override;
+    );
 
   /// @see CollectionIndex
   int lookup(
     const ghobject_t &oid,
     IndexedPath *path,
     int *hardlink
-    ) override;
+    );
 
   /// @see CollectionIndex;
   int pre_hash_collection(
       uint32_t pg_num,
       uint64_t expected_num_objs
-      ) override;
+      );
 
   /// @see CollectionIndex
   int collection_list_partial(
     const ghobject_t &start,
     const ghobject_t &end,
+    bool sort_bitwise,
     int max_count,
     vector<ghobject_t> *ls,
     ghobject_t *next
-    ) override;
+    );
 
   virtual int _split(
     uint32_t match,                             //< [in] value to match
@@ -205,18 +205,13 @@ public:
     uint32_t match,
     uint32_t bits,
     CollectionIndex* dest
-    ) override {
+    ) {
     WRAP_RETRY(
       r = _split(match, bits, dest);
       goto out;
       );
   }
 
-  /**
-   * Returns the length of the longest escaped name which could result
-   * from any clone, shard, or rollback object of this object
-   */
-  static uint64_t get_max_escaped_name_len(const hobject_t &obj);
 
 protected:
   virtual int _init() = 0;
@@ -254,6 +249,7 @@ protected:
   virtual int _collection_list_partial(
     const ghobject_t &start,
     const ghobject_t &end,
+    bool sort_bitwise,
     int max_count,
     vector<ghobject_t> *ls,
     ghobject_t *next
@@ -484,36 +480,24 @@ private:
     ); ///< @return Generated object name.
 
   /// Generate object name
-  static string lfn_generate_object_name_current(
+  string lfn_generate_object_name(
     const ghobject_t &oid ///< [in] Object for which to generate.
     ); ///< @return Generated object name.
 
-  /// Generate object name
-  string lfn_generate_object_name(
-    const ghobject_t &oid ///< [in] Object for which to generate.
-    ) {
-    if (index_version == HASH_INDEX_TAG)
-      return lfn_generate_object_name_keyless(oid);
-    if (index_version == HASH_INDEX_TAG_2)
-      return lfn_generate_object_name_poolless(oid);
-    else
-      return lfn_generate_object_name_current(oid);
-  } ///< @return Generated object name.
-
   /// Parse object name
-  int lfn_parse_object_name_keyless(
+  bool lfn_parse_object_name_keyless(
     const string &long_name, ///< [in] Name to parse
     ghobject_t *out	     ///< [out] Resulting Object
     ); ///< @return True if successfull, False otherwise.
 
   /// Parse object name
-  int lfn_parse_object_name_poolless(
+  bool lfn_parse_object_name_poolless(
     const string &long_name, ///< [in] Name to parse
     ghobject_t *out	     ///< [out] Resulting Object
     ); ///< @return True if successfull, False otherwise.
 
   /// Parse object name
-  int lfn_parse_object_name(
+  bool lfn_parse_object_name(
     const string &long_name, ///< [in] Name to parse
     ghobject_t *out	     ///< [out] Resulting Object
     ); ///< @return True if successfull, False otherwise.
@@ -571,12 +555,6 @@ private:
   string mangle_attr_name(
     const string &attr ///< [in] Attribute to mangle.
     ); ///< @return Mangled attribute name.
-
-  /// checks whether long_name could hash to short_name
-  bool short_name_matches(
-    const char *short_name,    ///< [in] name to check against
-    const char *cand_long_name ///< [in] candidate long name
-    );
 
   /// Builds hashed filename
   void build_filename(

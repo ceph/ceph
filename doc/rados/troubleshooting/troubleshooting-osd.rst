@@ -6,7 +6,7 @@ Before troubleshooting your OSDs, check your monitors and network first. If
 you execute ``ceph health`` or ``ceph -s`` on the command line and Ceph returns
 a health status, it means that the monitors have a quorum.
 If you don't have a monitor quorum or if there are errors with the monitor
-status, `address the monitor issues first <../troubleshooting-mon>`_.
+status, `address the monitor issues first <../troubleshooting-mon>`_. 
 Check your networks to ensure they
 are running properly, because networks may have a significant impact on OSD
 operation and performance.
@@ -140,18 +140,18 @@ If you start your cluster and an OSD won't start, check the following:
   actual mounts, you may have trouble starting OSDs. If you want to store the
   journal on a block device, you should partition your journal disk and assign
   one partition per OSD.
-
+  
 - **Check Max Threadcount:** If you have a node with a lot of OSDs, you may be
   hitting the default maximum number of threads (e.g., usually 32k), especially
-  during recovery. You can increase the number of threads using ``sysctl`` to
-  see if increasing the maximum number of threads to the maximum possible
-  number of threads allowed (i.e.,  4194303) will help. For example::
+  during recovery. You can increase the number of threads using ``sysctl`` to 
+  see if increasing the maximum number of threads to the maximum possible 
+  number of threads allowed (i.e.,  4194303) will help. For example:: 
 
 	sysctl -w kernel.pid_max=4194303
 
   If increasing the maximum thread count resolves the issue, you can make it
-  permanent by including a ``kernel.pid_max`` setting in the
-  ``/etc/sysctl.conf`` file. For example::
+  permanent by including a ``kernel.pid_max`` setting in the 
+  ``/etc/sysctl.conf`` file. For example:: 
 
 	kernel.pid_max = 4194303
 
@@ -165,7 +165,11 @@ If you start your cluster and an OSD won't start, check the following:
   (if it isn't already), and try again. If it segment faults again,
   contact the ceph-devel email list and provide your Ceph configuration
   file, your monitor output and the contents of your log file(s).
+  
 
+
+If you cannot resolve the issue and the email list isn't helpful, you may
+contact `Inktank`_ for support.
 
 
 An OSD Failed
@@ -206,9 +210,7 @@ Ceph prevents you from writing to a full OSD so that you don't lose data.
 In an operational cluster, you should receive a warning when your cluster
 is getting near its full ratio. The ``mon osd full ratio`` defaults to
 ``0.95``, or 95% of capacity before it stops clients from writing data.
-The ``mon osd backfillfull ratio`` defaults to ``0.90``, or 90 % of
-capacity when it blocks backfills from starting. The
-``mon osd nearfull ratio`` defaults to ``0.85``, or 85% of capacity
+The ``mon osd nearfull ratio`` defaults to ``0.85``, or 85% of capacity
 when it generates a health warning.
 
 Full cluster issues usually arise when testing how Ceph handles an OSD
@@ -216,21 +218,20 @@ failure on a small cluster. When one node has a high percentage of the
 cluster's data, the cluster can easily eclipse its nearfull and full ratio
 immediately. If you are testing how Ceph reacts to OSD failures on a small
 cluster, you should leave ample free disk space and consider temporarily
-lowering the ``mon osd full ratio``, ``mon osd backfillfull ratio``  and
-``mon osd nearfull ratio``.
+lowering the ``mon osd full ratio`` and ``mon osd nearfull ratio``.
 
 Full ``ceph-osds`` will be reported by ``ceph health``::
 
 	ceph health
-	HEALTH_WARN 1 nearfull osd(s)
+	HEALTH_WARN 1 nearfull osds
+	osd.2 is near full at 85%
 
 Or::
 
-	ceph health detail
-	HEALTH_ERR 1 full osd(s); 1 backfillfull osd(s); 1 nearfull osd(s)
+	ceph health
+	HEALTH_ERR 1 nearfull osds, 1 full osds
+	osd.2 is near full at 85%
 	osd.3 is full at 97%
-	osd.4 is backfill full at 91%
-	osd.2 is near full at 87%
 
 The best way to deal with a full cluster is to add new ``ceph-osds``, allowing
 the cluster to redistribute data to the newly available storage.
@@ -287,8 +288,8 @@ write throughput can bottleneck if other processes share the drive, including
 journals, operating systems, monitors, other OSDs and non-Ceph processes.
 
 Ceph acknowledges writes *after* journaling, so fast SSDs are an attractive
-option to accelerate the response time--particularly when using the ``XFS`` or
-``ext4`` filesystems. By contrast, the ``btrfs`` filesystem can write and journal
+option to accelerate the response time--particularly when using the ``ext4`` or
+XFS filesystems. By contrast, the ``btrfs`` filesystem can write and journal
 simultaneously.
 
 .. note:: Partitioning a drive does not change its total throughput or
@@ -364,14 +365,9 @@ might not have a recent enough version of ``glibc`` to support ``syncfs(2)``.
 Filesystem Issues
 -----------------
 
-Currently, we recommend deploying clusters with XFS. The btrfs
+Currently, we recommend deploying clusters with XFS or ext4. The btrfs
 filesystem has many attractive features, but bugs in the filesystem may
-lead to performance issues.  We do not recommend ext4 because xattr size
-limitations break our support for long object names (needed for RGW).
-
-For more information, see `Filesystem Recommendations`_.
-
-.. _Filesystem Recommendations: ../configuration/filesystem-recommendations
+lead to performance issues.
 
 
 Insufficient RAM
@@ -453,7 +449,7 @@ You can clear the flags with::
 
 Two other flags are supported, ``noin`` and ``noout``, which prevent
 booting OSDs from being marked ``in`` (allocated data) or protect OSDs
-from eventually being marked ``out`` (regardless of what the current value for
+from eventually being marked ``out`` (regardless of what the current value for 
 ``mon osd down out interval`` is).
 
 .. note:: ``noup``, ``noout``, and ``nodown`` are temporary in the
@@ -478,5 +474,6 @@ from eventually being marked ``out`` (regardless of what the current value for
 .. _unsubscribe from the ceph-devel email list: mailto:majordomo@vger.kernel.org?body=unsubscribe+ceph-devel
 .. _subscribe to the ceph-users email list: mailto:ceph-users-join@lists.ceph.com
 .. _unsubscribe from the ceph-users email list: mailto:ceph-users-leave@lists.ceph.com
-.. _OS recommendations: ../../../start/os-recommendations
+.. _Inktank: http://inktank.com
+.. _OS recommendations: ../../../install/os-recommendations
 .. _ceph-devel: ceph-devel@vger.kernel.org

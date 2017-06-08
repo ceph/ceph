@@ -6,9 +6,8 @@
 #include "common/ceph_json.h"
 #include "rgw_policy_s3.h"
 #include "rgw_common.h"
-#include "rgw_crypt_sanitize.h"
 
-#define dout_context g_ceph_context
+
 #define dout_subsys ceph_subsys_rgw
 
 class RGWPolicyCondition {
@@ -30,11 +29,8 @@ public:
      string first, second;
      env->get_value(v1, first, checked_vars);
      env->get_value(v2, second, checked_vars);
-     dout(1) << "policy condition check " << v1 << " ["
-         << rgw::crypt_sanitize::s3_policy{v1, first}
-         << "] " << v2 << " ["
-         << rgw::crypt_sanitize::s3_policy{v2, second}
-         << "]" << dendl;
+
+     dout(1) << "policy condition check " << v1 << " [" << first << "] " << v2 << " [" << second << "]" << dendl;
      bool ret = check(first, second, err_msg);
      if (!ret) {
        err_msg.append(": ");
@@ -50,7 +46,7 @@ public:
 
 class RGWPolicyCondition_StrEqual : public RGWPolicyCondition {
 protected:
-  bool check(const string& first, const string& second, string& msg) override {
+  bool check(const string& first, const string& second, string& msg) {
     bool ret = first.compare(second) == 0;
     if (!ret) {
       msg = "Policy condition failed: eq";
@@ -61,7 +57,7 @@ protected:
 
 class RGWPolicyCondition_StrStartsWith : public RGWPolicyCondition {
 protected:
-  bool check(const string& first, const string& second, string& msg) override {
+  bool check(const string& first, const string& second, string& msg) {
     bool ret = first.compare(0, second.size(), second) == 0;
     if (!ret) {
       msg = "Policy condition failed: starts-with";
@@ -133,7 +129,7 @@ int RGWPolicy::set_expires(const string& e)
   if (!parse_iso8601(e.c_str(), &t))
       return -EINVAL;
 
-  expires = internal_timegm(&t);
+  expires = timegm(&t);
 
   return 0;
 }
@@ -186,7 +182,7 @@ int RGWPolicy::add_condition(const string& op, const string& first, const string
 
 int RGWPolicy::check(RGWPolicyEnv *env, string& err_msg)
 {
-  uint64_t now = ceph_clock_now().sec();
+  uint64_t now = ceph_clock_now(NULL).sec();
   if (expires <= now) {
     dout(0) << "NOTICE: policy calculated as expired: " << expiration_str << dendl;
     err_msg = "Policy expired";
@@ -290,13 +286,11 @@ int RGWPolicy::from_json(bufferlist& bl, string& err_msg)
       int r = add_condition(v[0], v[1], v[2], err_msg);
       if (r < 0)
         return r;
-    } else if (!citer.end()) {
+    } else {
       JSONObj *c = *citer;
       dout(0) << "adding simple_check: " << c->get_name() << " : " << c->get_data() << dendl;
 
       add_simple_check(c->get_name(), c->get_data());
-    } else {
-      return -EINVAL;
     }
   }
   return 0;

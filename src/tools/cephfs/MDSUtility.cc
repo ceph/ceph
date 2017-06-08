@@ -14,7 +14,6 @@
 #include "MDSUtility.h"
 #include "mon/MonClient.h"
 
-#define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_mds
 
 
@@ -22,12 +21,13 @@ MDSUtility::MDSUtility() :
   Dispatcher(g_ceph_context),
   objecter(NULL),
   lock("MDSUtility::lock"),
+  timer(g_ceph_context, lock),
   finisher(g_ceph_context, "MDSUtility", "fn_mds_utility"),
   waiting_for_mds_map(NULL)
 {
   monc = new MonClient(g_ceph_context);
   messenger = Messenger::create_client_messenger(g_ceph_context, "mds");
-  fsmap = new FSMap();
+  mdsmap = new MDSMap();
   objecter = new Objecter(g_ceph_context, messenger, monc, NULL, 0, 0);
 }
 
@@ -37,7 +37,7 @@ MDSUtility::~MDSUtility()
   delete objecter;
   delete monc;
   delete messenger;
-  delete fsmap;
+  delete mdsmap;
   assert(waiting_for_mds_map == NULL);
 }
 
@@ -85,16 +85,17 @@ int MDSUtility::init()
   // Start Objecter and wait for OSD map
   objecter->start();
   objecter->wait_for_osd_map();
+  timer.init();
 
   // Prepare to receive MDS map and request it
   Mutex init_lock("MDSUtility:init");
   Cond cond;
   bool done = false;
-  assert(!fsmap->get_epoch());
+  assert(!mdsmap->get_epoch());
   lock.Lock();
   waiting_for_mds_map = new C_SafeCond(&init_lock, &cond, &done, NULL);
   lock.Unlock();
-  monc->sub_want("fsmap", 0, CEPH_SUBSCRIBE_ONETIME);
+  monc->sub_want("mdsmap", 0, CEPH_SUBSCRIBE_ONETIME);
   monc->renew_subs();
 
   // Wait for MDS map
@@ -103,7 +104,7 @@ int MDSUtility::init()
   while (!done)
     cond.Wait(init_lock);
   init_lock.Unlock();
-  dout(4) << "Got MDS map " << fsmap->get_epoch() << dendl;
+  dout(4) << "Got MDS map " << mdsmap->get_epoch() << dendl;
 
   finisher.start();
 
@@ -116,6 +117,7 @@ void MDSUtility::shutdown()
   finisher.stop();
 
   lock.Lock();
+  timer.shutdown();
   objecter->shutdown();
   lock.Unlock();
   monc->shutdown();
@@ -128,22 +130,21 @@ bool MDSUtility::ms_dispatch(Message *m)
 {
    Mutex::Locker locker(lock);
    switch (m->get_type()) {
-   case CEPH_MSG_FS_MAP:
-     handle_fs_map((MFSMap*)m);
+   case CEPH_MSG_MDS_MAP:
+     handle_mds_map((MMDSMap*)m);
      break;
    case CEPH_MSG_OSD_MAP:
      break;
    default:
      return false;
    }
-   m->put();
    return true;
 }
 
 
-void MDSUtility::handle_fs_map(MFSMap* m)
+void MDSUtility::handle_mds_map(MMDSMap* m)
 {
-  *fsmap = m->get_fsmap();
+  mdsmap->decode(m->get_encoded());
   if (waiting_for_mds_map) {
     waiting_for_mds_map->complete(0);
     waiting_for_mds_map = NULL;
@@ -162,6 +163,6 @@ bool MDSUtility::ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer,
       return false;
   }
 
-  *authorizer = monc->build_authorizer(dest_type);
+  *authorizer = monc->auth->build_authorizer(dest_type);
   return *authorizer != NULL;
 }

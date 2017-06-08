@@ -8,10 +8,18 @@ $(function() {
 	    lines: { show: true },
 	});
     }
-    if (typeof encode_vandermonde_jerasure != 'undefined') {
+    if (typeof encode_vandermonde_jerasure_generic != 'undefined') {
         encode.push({
-	    data: encode_vandermonde_jerasure,
+	    data: encode_vandermonde_jerasure_generic,
             label: "Jerasure Generic, Vandermonde",
+	    points: { show: true },
+	    lines: { show: true },
+	});
+    }
+    if (typeof encode_vandermonde_jerasure_sse4 != 'undefined') {
+        encode.push({
+	    data: encode_vandermonde_jerasure_sse4,
+            label: "Jerasure SIMD, Vandermonde",
 	    points: { show: true },
 	    lines: { show: true },
 	});
@@ -24,9 +32,9 @@ $(function() {
 	    lines: { show: true },
 	});
     }
-    if (typeof encode_cauchy_jerasure != 'undefined') {
+    if (typeof encode_cauchy_jerasure_generic != 'undefined') {
         encode.push({
-	    data: encode_cauchy_jerasure,
+	    data: encode_cauchy_jerasure_generic,
             label: "Jerasure, Cauchy",
 	    points: { show: true },
 	    lines: { show: true },
@@ -48,10 +56,18 @@ $(function() {
 	    lines: { show: true },
 	});
     }
-    if (typeof decode_vandermonde_jerasure != 'undefined') {
+    if (typeof decode_vandermonde_jerasure_generic != 'undefined') {
         decode.push({
-	    data: decode_vandermonde_jerasure,
+	    data: decode_vandermonde_jerasure_generic,
             label: "Jerasure Generic, Vandermonde",
+	    points: { show: true },
+	    lines: { show: true },
+	});
+    }
+    if (typeof decode_vandermonde_jerasure_sse4 != 'undefined') {
+        decode.push({
+	    data: decode_vandermonde_jerasure_sse4,
+            label: "Jerasure SIMD, Vandermonde",
 	    points: { show: true },
 	    lines: { show: true },
 	});
@@ -64,9 +80,9 @@ $(function() {
 	    lines: { show: true },
 	});
     }
-    if (typeof decode_cauchy_jerasure != 'undefined') {
+    if (typeof decode_cauchy_jerasure_generic != 'undefined') {
         decode.push({
-	    data: decode_cauchy_jerasure,
+	    data: decode_cauchy_jerasure_generic,
             label: "Jerasure, Cauchy",
 	    points: { show: true },
 	    lines: { show: true },

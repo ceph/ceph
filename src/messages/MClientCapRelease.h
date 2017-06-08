@@ -36,15 +36,15 @@ class MClientCapRelease : public Message {
     memset(&head, 0, sizeof(head));
   }
 private:
-  ~MClientCapRelease() override {}
+  ~MClientCapRelease() {}
 
 public:
-  const char *get_type_name() const override { return "client_cap_release";}
-  void print(ostream& out) const override {
+  const char *get_type_name() const { return "client_cap_release";}
+  void print(ostream& out) const {
     out << "client_cap_release(" << caps.size() << ")";
   }
   
-  void decode_payload() override {
+  void decode_payload() {
     bufferlist::iterator p = payload.begin();
     ::decode(head, p);
     ::decode_nohead(head.num, caps, p);
@@ -52,7 +52,7 @@ public:
       ::decode(osd_epoch_barrier, p);
     }
   }
-  void encode_payload(uint64_t features) override {
+  void encode_payload(uint64_t features) {
     head.num = caps.size();
     ::encode(head, payload);
     ::encode_nohead(caps, payload);

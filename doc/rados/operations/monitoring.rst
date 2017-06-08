@@ -122,8 +122,6 @@ on the number of replicas, clones and snapshots.
 - **USED:** The notional amount of data stored in kilobytes, unless the number 
   appends **M** for megabytes or **G** for gigabytes.
 - **%USED:** The notional percentage of storage used per pool.
-- **MAX AVAIL:** An estimate of the notional amount of data that can be written
-  to this pool.
 - **Objects:** The notional number of objects stored per pool.
 
 .. note:: The numbers in the **POOLS** section are notional. They are not 
@@ -131,11 +129,6 @@ on the number of replicas, clones and snapshots.
    the sum of the **USED** and **%USED** amounts will not add up to the 
    **RAW USED** and **%RAW USED** amounts in the **GLOBAL** section of the 
    output.
-
-.. note:: The **MAX AVAIL** value is a complicated function of the
-   replication or erasure code used, the CRUSH rule that maps storage
-   to devices, the utilization of those devices, and the configured
-   mon_osd_full_ratio.
 
 
 Checking a Cluster's Status
@@ -253,7 +246,7 @@ metadata servers are ``up`` and ``active``,  execute the following::
 	
 To display details of the metadata cluster, execute the following:: 
 
-	ceph fs dump
+	ceph mds dump
 
 
 Checking Placement Group States

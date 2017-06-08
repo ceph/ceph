@@ -2,7 +2,7 @@ For the general process of submitting patches to ceph, read the below
 
 `Submitting Patches`_
 
-For documentation patches the following guide will help you get started
+For documentation patches the the following guide will help you get started
 
 `Documenting Ceph`_
 
@@ -14,5 +14,5 @@ implements a feature. Except on rare occasions, code cleanup that only
 involve coding style or whitespace modifications are discouraged,
 primarily because they cause problems when rebasing and backporting.
 
-.. _Submitting Patches: SubmittingPatches.rst
+.. _Submitting Patches: SubmittingPatches
 .. _Documenting Ceph:  doc/start/documenting-ceph.rst

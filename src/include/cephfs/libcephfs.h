@@ -15,9 +15,7 @@
 #ifndef CEPH_LIB_H
 #define CEPH_LIB_H
 
-#if defined(__linux__)
 #include <features.h>
-#endif
 #include <utime.h>
 #include <sys/stat.h>
 #include <sys/types.h>
@@ -25,17 +23,14 @@
 #include <sys/socket.h>
 #include <stdint.h>
 #include <stdbool.h>
-#include <fcntl.h>
-
-#include "ceph_statx.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-#define LIBCEPHFS_VER_MAJOR 10
-#define LIBCEPHFS_VER_MINOR 0
-#define LIBCEPHFS_VER_EXTRA 2
+#define LIBCEPHFS_VER_MAJOR 0
+#define LIBCEPHFS_VER_MINOR 94
+#define LIBCEPHFS_VER_EXTRA 0
 
 #define LIBCEPHFS_VERSION(maj, min, extra) ((maj << 16) + (min << 8) + extra)
 #define LIBCEPHFS_VERSION_CODE LIBCEPHFS_VERSION(LIBCEPHFS_VER_MAJOR, LIBCEPHFS_VER_MINOR, LIBCEPHFS_VER_EXTRA)
@@ -97,9 +92,6 @@ typedef struct vinodeno_t vinodeno;
 
 #endif /* ! __cplusplus */
 
-struct UserPerm;
-typedef struct UserPerm UserPerm;
-
 struct Inode;
 typedef struct Inode Inode;
 
@@ -109,60 +101,19 @@ struct CephContext;
 
 /* setattr mask bits */
 #ifndef CEPH_SETATTR_MODE
-# define CEPH_SETATTR_MODE	1
-# define CEPH_SETATTR_UID	2
-# define CEPH_SETATTR_GID	4
-# define CEPH_SETATTR_MTIME	8
-# define CEPH_SETATTR_ATIME	16
-# define CEPH_SETATTR_SIZE	32
-# define CEPH_SETATTR_CTIME	64
-# define CEPH_SETATTR_BTIME	512
+# define CEPH_SETATTR_MODE   1
+# define CEPH_SETATTR_UID    2
+# define CEPH_SETATTR_GID    4
+# define CEPH_SETATTR_MTIME  8
+# define CEPH_SETATTR_ATIME 16
+# define CEPH_SETATTR_SIZE  32
+# define CEPH_SETATTR_CTIME 64
 #endif
 
 /* define error codes for the mount function*/
 # define CEPHFS_ERROR_MON_MAP_BUILD 1000
 # define CEPHFS_ERROR_NEW_CLIENT 1002
 # define CEPHFS_ERROR_MESSENGER_START 1003
-
-/**
- * Create a UserPerm credential object.
- *
- * Some calls (most notably, the ceph_ll_* ones), take a credential object
- * that represents the credentials that the calling program is using. This
- * function creates a new credential object for this purpose. Returns a
- * pointer to the object, or NULL if it can't be allocated.
- *
- * Note that the gidlist array is used directly and is not copied. It must
- * remain valid over the lifetime of the created UserPerm object.
- *
- * @param uid uid to be used
- * @param gid gid to be used
- * @param ngids number of gids in supplemental grouplist
- * @param gidlist array of gid_t's in the list of groups
- */
-UserPerm *ceph_userperm_new(uid_t uid, gid_t gid, int ngids, gid_t *gidlist);
-
-/**
- * Destroy a UserPerm credential object.
- *
- * @param perm pointer to object to be destroyed
- *
- * Currently this just frees the object. Note that the gidlist array is not
- * freed. The caller must do so if it's necessary.
- */
-void ceph_userperm_destroy(UserPerm *perm);
-
-/**
- * Get a pointer to the default UserPerm object for the mount.
- *
- * @param cmount the mount info handle
- *
- * Every cmount has a default set of credentials. This returns a pointer to
- * that object.
- *
- * Unlike with ceph_userperm_new, this object should not be freed.
- */
-struct UserPerm *ceph_mount_perms(struct ceph_mount_info *cmount);
 
 /**
  * @defgroup libcephfs_h_init Setup and Teardown
@@ -207,22 +158,6 @@ int ceph_create(struct ceph_mount_info **cmount, const char * const id);
  */
 int ceph_create_with_context(struct ceph_mount_info **cmount, struct CephContext *conf);
 
-
-#ifndef VOIDPTR_RADOS_T
-#define VOIDPTR_RADOS_T
-typedef void *rados_t;
-#endif // VOIDPTR_RADOS_T
-
-/**
- * Create a mount handle from a rados_t, for using libcephfs in the
- * same process as librados.
- *
- * @param cmount the mount info handle to initialize
- * @param cluster reference to already-initialized librados handle
- * @returns 0 on success, negative error code on failure
- */
-int ceph_create_from_rados(struct ceph_mount_info **cmount, rados_t cluster);
-
 /**
  * Initialize the filesystem client (but do not mount the filesystem yet)
  *
@@ -244,6 +179,7 @@ int ceph_init(struct ceph_mount_info *cmount);
  * @returns 0 on success, negative error code on failure
  */
 int ceph_mount(struct ceph_mount_info *cmount, const char *root);
+
 
 /**
  * Execute a management command remotely on an MDS.
@@ -492,16 +428,13 @@ int ceph_readdir_r(struct ceph_mount_info *cmount, struct ceph_dir_result *dirp,
  * @param dirp the directory stream pointer from an opendir holding the state of the
  *        next entry to return.
  * @param de the directory entry pointer filled in with the next directory entry of the dirp state.
- * @param stx the stats of the file/directory of the entry returned
- * @param want mask showing desired inode attrs for returned entry
- * @param flags bitmask of flags to use when filling out attributes
- * @param out optional returned Inode argument. If non-NULL, then a reference will be taken on
- *            the inode and the pointer set on success.
+ * @param st the stats of the file/directory of the entry returned
+ * @param stmask a mask that gets filled in with the stats fields that are being set in the st parameter.
  * @returns 1 if the next entry was filled in, 0 if the end of the directory stream was reached,
  *          and a negative error code on failure.
  */
 int ceph_readdirplus_r(struct ceph_mount_info *cmount, struct ceph_dir_result *dirp, struct dirent *de,
-		       struct ceph_statx *stx, unsigned want, unsigned flags, struct Inode **out);
+		       struct stat *st, int *stmask);
 
 /**
  * Gets multiple directory entries.
@@ -614,7 +547,7 @@ int ceph_link(struct ceph_mount_info *cmount, const char *existing, const char *
  *
  * @param cmount the ceph mount handle to use for creating the link.
  * @param path the path to the symlink to read
- * @param buf the buffer to hold the path of the file that the symlink points to.
+ * @param buf the buffer to hold the the path of the file that the symlink points to.
  * @param size the length of the buffer
  * @returns number of bytes copied on success or negative error code on failure
  */
@@ -660,53 +593,35 @@ int ceph_unlink(struct ceph_mount_info *cmount, const char *path);
 int ceph_rename(struct ceph_mount_info *cmount, const char *from, const char *to);
 
 /**
- * Get an open file's extended statistics and attributes.
- *
- * @param cmount the ceph mount handle to use for performing the stat.
- * @param fd the file descriptor of the file to get statistics of.
- * @param stx the ceph_statx struct that will be filled in with the file's statistics.
- * @param want bitfield of CEPH_STATX_* flags showing designed attributes
- * @param flags bitfield that can be used to set AT_* modifier flags (only AT_NO_ATTR_SYNC and AT_SYMLINK_NOFOLLOW)
- * @returns 0 on success or negative error code on failure.
- */
-int ceph_fstatx(struct ceph_mount_info *cmount, int fd, struct ceph_statx *stx,
-		unsigned int want, unsigned int flags);
-
-/**
- * Get a file's extended statistics and attributes.
+ * Get a file's statistics and attributes.
  *
  * @param cmount the ceph mount handle to use for performing the stat.
  * @param path the file or directory to get the statistics of.
- * @param stx the ceph_statx struct that will be filled in with the file's statistics.
- * @param want bitfield of CEPH_STATX_* flags showing designed attributes
- * @param flags bitfield that can be used to set AT_* modifier flags (only AT_NO_ATTR_SYNC and AT_SYMLINK_NOFOLLOW)
+ * @param stbuf the stat struct that will be filled in with the file's statistics.
  * @returns 0 on success or negative error code on failure.
  */
-int ceph_statx(struct ceph_mount_info *cmount, const char *path, struct ceph_statx *stx,
-	       unsigned int want, unsigned int flags);
+int ceph_stat(struct ceph_mount_info *cmount, const char *path, struct stat *stbuf);
+
+/**
+ * Get a file's statistics and attributes, without following symlinks.
+ *
+ * @param cmount the ceph mount handle to use for performing the stat.
+ * @param path the file or directory to get the statistics of.
+ * @param stbuf the stat struct that will be filled in with the file's statistics.
+ * @returns 0 on success or negative error code on failure.
+ */
+int ceph_lstat(struct ceph_mount_info *cmount, const char *path, struct stat *stbuf);
 
 /**
  * Set a file's attributes.
- *
- * @param cmount the ceph mount handle to use for performing the setattr.
- * @param relpath the path to the file/directory to set the attributes of.
- * @param stx the statx struct that must include attribute values to set on the file.
- * @param mask a mask of all the CEPH_SETATTR_* values that have been set in the statx struct.
- * @param flags mask of AT_* flags (only AT_ATTR_NOFOLLOW is respected for now)
- * @returns 0 on success or negative error code on failure.
- */
-int ceph_setattrx(struct ceph_mount_info *cmount, const char *relpath, struct ceph_statx *stx, int mask, int flags);
-
-/**
- * Set a file's attributes (extended version).
  * 
  * @param cmount the ceph mount handle to use for performing the setattr.
- * @param fd the fd of the open file/directory to set the attributes of.
- * @param stx the statx struct that must include attribute values to set on the file.
+ * @param relpath the path to the file/directory to set the attributes of.
+ * @param attr the stat struct that must include attribute values to set on the file.
  * @param mask a mask of all the stat values that have been set on the stat struct.
  * @returns 0 on success or negative error code on failure.
  */
-int ceph_fsetattrx(struct ceph_mount_info *cmount, int fd, struct ceph_statx *stx, int mask);
+int ceph_setattr(struct ceph_mount_info *cmount, const char *relpath, struct stat *attr, int mask);
 
 /**
  * Change the mode bits (permissions) of a file/directory.
@@ -958,6 +873,17 @@ int ceph_fsync(struct ceph_mount_info *cmount, int fd, int syncdataonly);
 int ceph_fallocate(struct ceph_mount_info *cmount, int fd, int mode,
 	                      int64_t offset, int64_t length);
 
+/**
+ * Get the open file's statistics.
+ *
+ * @param cmount the ceph mount handle to use for performing the fstat.
+ * @param fd the file descriptor of the file to get statistics of.
+ * @param stbuf the stat struct of the file's statistics, filled in by the
+ *    function.
+ * @returns 0 on success or a negative error code on failure
+ */
+int ceph_fstat(struct ceph_mount_info *cmount, int fd, struct stat *stbuf);
+
 /** @} file */
 
 /**
@@ -994,7 +920,7 @@ int ceph_fgetxattr(struct ceph_mount_info *cmount, int fd, const char *name,
 	void *value, size_t size);
 
 /**
- * Get an extended attribute without following symbolic links.  This function is
+ * Get an extended attribute wihtout following symbolic links.  This function is
  * identical to ceph_getxattr, but if the path refers to a symbolic link,
  * we get the extended attributes of the symlink rather than the attributes
  * of the link itself.
@@ -1440,22 +1366,21 @@ int ceph_ll_lookup_inode(
  */
 int ceph_ll_lookup_root(struct ceph_mount_info *cmount,
                   Inode **parent);
-int ceph_ll_lookup(struct ceph_mount_info *cmount, Inode *parent,
-		   const char *name, Inode **out, struct ceph_statx *stx,
-		   unsigned want, unsigned flags, const UserPerm *perms);
+int ceph_ll_lookup(struct ceph_mount_info *cmount, struct Inode *parent,
+		   const char *name, struct stat *attr,
+		   Inode **out, int uid, int gid);
 int ceph_ll_put(struct ceph_mount_info *cmount, struct Inode *in);
 int ceph_ll_forget(struct ceph_mount_info *cmount, struct Inode *in,
 		   int count);
-int ceph_ll_walk(struct ceph_mount_info *cmount, const char* name, Inode **i,
-		 struct ceph_statx *stx, unsigned int want, unsigned int flags,
-		 const UserPerm *perms);
+int ceph_ll_walk(struct ceph_mount_info *cmount, const char *name,
+		 struct Inode **i,
+		 struct stat *attr);
 int ceph_ll_getattr(struct ceph_mount_info *cmount, struct Inode *in,
-		    struct ceph_statx *stx, unsigned int want, unsigned int flags,
-		    const UserPerm *perms);
+		    struct stat *attr, int uid, int gid);
 int ceph_ll_setattr(struct ceph_mount_info *cmount, struct Inode *in,
-		    struct ceph_statx *stx, int mask, const UserPerm *perms);
+		    struct stat *st, int mask, int uid, int gid);
 int ceph_ll_open(struct ceph_mount_info *cmount, struct Inode *in, int flags,
-		 struct Fh **fh, const UserPerm *perms);
+		 struct Fh **fh, int uid, int gid);
 off_t ceph_ll_lseek(struct ceph_mount_info *cmount, struct Fh* filehandle,
 		     off_t offset, int whence);
 int ceph_ll_read(struct ceph_mount_info *cmount, struct Fh* filehandle,
@@ -1478,55 +1403,50 @@ int ceph_ll_iclose(struct ceph_mount_info *cmount, struct Inode *in, int mode);
  * @param name name of attribute
  * @param value pointer to begin buffer
  * @param size buffer size
- * @param perms pointer to UserPerms object
+ * @param uid user ID
+ * @param gid group ID
  * @returns size of returned buffer. Negative number in error case
  */
 int ceph_ll_getxattr(struct ceph_mount_info *cmount, struct Inode *in,
-		     const char *name, void *value, size_t size,
-		     const UserPerm *perms);
+		     const char *name, void *value, size_t size, int uid,
+		     int gid);
 int ceph_ll_setxattr(struct ceph_mount_info *cmount, struct Inode *in,
 		     const char *name, const void *value, size_t size,
-		     int flags, const UserPerm *perms);
+		     int flags, int uid, int gid);
 int ceph_ll_listxattr(struct ceph_mount_info *cmount, struct Inode *in,
-                      char *list, size_t buf_size, size_t *list_size,
-		      const UserPerm *perms);
+                      char *list, size_t buf_size, size_t *list_size, int uid, int gid);
 int ceph_ll_removexattr(struct ceph_mount_info *cmount, struct Inode *in,
-			const char *name, const UserPerm *perms);
-int ceph_ll_create(struct ceph_mount_info *cmount, Inode *parent,
-		   const char *name, mode_t mode, int oflags, Inode **outp,
-		   Fh **fhp, struct ceph_statx *stx, unsigned want,
-		   unsigned lflags, const UserPerm *perms);
-int ceph_ll_mknod(struct ceph_mount_info *cmount, Inode *parent,
-		  const char *name, mode_t mode, dev_t rdev, Inode **out,
-		  struct ceph_statx *stx, unsigned want, unsigned flags,
-		  const UserPerm *perms);
-int ceph_ll_mkdir(struct ceph_mount_info *cmount, Inode *parent,
-		  const char *name, mode_t mode, Inode **out,
-		  struct ceph_statx *stx, unsigned want,
-		  unsigned flags, const UserPerm *perms);
+			const char *name, int uid, int gid);
+int ceph_ll_create(struct ceph_mount_info *cmount, struct Inode *parent,
+		   const char *name, mode_t mode, int flags,
+		   struct stat *attr, struct Inode **out, Fh **fhp,
+		   int uid, int gid);
+int ceph_ll_mkdir(struct ceph_mount_info *cmount, struct Inode *parent,
+		  const char *name, mode_t mode, struct stat *attr,
+		  Inode **out, int uid, int gid);
 int ceph_ll_link(struct ceph_mount_info *cmount, struct Inode *in,
-		 struct Inode *newparent, const char *name,
-		 const UserPerm *perms);
+		 struct Inode *newparrent, const char *name,
+		 struct stat *attr, int uid, int gid);
+int ceph_ll_truncate(struct ceph_mount_info *cmount, struct Inode *in,
+		     uint64_t length, int uid, int gid);
 int ceph_ll_opendir(struct ceph_mount_info *cmount, struct Inode *in,
-		    struct ceph_dir_result **dirpp, const UserPerm *perms);
+		    struct ceph_dir_result **dirpp, int uid, int gid);
 int ceph_ll_releasedir(struct ceph_mount_info *cmount,
 		       struct ceph_dir_result* dir);
 int ceph_ll_rename(struct ceph_mount_info *cmount, struct Inode *parent,
 		   const char *name, struct Inode *newparent,
-		   const char *newname, const UserPerm *perms);
+		   const char *newname, int uid, int gid);
 int ceph_ll_unlink(struct ceph_mount_info *cmount, struct Inode *in,
-		   const char *name, const UserPerm *perms);
+		   const char *name, int uid, int gid);
 int ceph_ll_statfs(struct ceph_mount_info *cmount, struct Inode *in,
 		   struct statvfs *stbuf);
 int ceph_ll_readlink(struct ceph_mount_info *cmount, struct Inode *in,
-		     char *buf, size_t bufsize, const UserPerm *perms);
-int ceph_ll_symlink(struct ceph_mount_info *cmount,
-		    Inode *in, const char *name, const char *value,
-		    Inode **out, struct ceph_statx *stx,
-		    unsigned want, unsigned flags,
-		    const UserPerm *perms);
+		     char *buf, size_t bufsize, int uid, int gid);
+int ceph_ll_symlink(struct ceph_mount_info *cmount, struct Inode *parent,
+		    const char *name, const char *value, struct stat *attr,
+		    struct Inode **in, int uid, int gid);
 int ceph_ll_rmdir(struct ceph_mount_info *cmount, struct Inode *in,
-		  const char *name, const UserPerm *perms);
+		  const char *name, int uid, int gid);
 uint32_t ceph_ll_stripe_unit(struct ceph_mount_info *cmount,
 			     struct Inode *in);
 uint32_t ceph_ll_file_layout(struct ceph_mount_info *cmount,
@@ -1555,11 +1475,6 @@ int ceph_ll_write_block(struct ceph_mount_info *cmount,
 int ceph_ll_commit_blocks(struct ceph_mount_info *cmount,
 			  struct Inode *in, uint64_t offset, uint64_t range);
 
-
-int ceph_ll_getlk(struct ceph_mount_info *cmount,
-		  Fh *fh, struct flock *fl, uint64_t owner);
-int ceph_ll_setlk(struct ceph_mount_info *cmount,
-		  Fh *fh, struct flock *fl, uint64_t owner, int sleep);
 
 #ifdef __cplusplus
 }

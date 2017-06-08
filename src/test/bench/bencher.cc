@@ -10,24 +10,24 @@
 template<typename T>
 struct C_Holder : public Context {
   T obj;
-  explicit C_Holder(
+  C_Holder(
     T obj)
     : obj(obj) {}
-  void finish(int r) override {
+  void finish(int r) {
     return;
   }
 };
 
 struct OnDelete {
   Context *c;
-  explicit OnDelete(Context *c) : c(c) {}
+  OnDelete(Context *c) : c(c) {}
   ~OnDelete() { c->complete(0); }
 };
 
 struct Cleanup : public Context {
   Bencher *bench;
-  explicit Cleanup(Bencher *bench) : bench(bench) {}
-  void finish(int r) override {
+  Cleanup(Bencher *bench) : bench(bench) {}
+  void finish(int r) {
     bench->complete_op();
   }
 };
@@ -40,7 +40,7 @@ struct OnWriteApplied : public Context {
     Bencher *bench, uint64_t seq,
     ceph::shared_ptr<OnDelete> on_delete
     ) : bench(bench), seq(seq), on_delete(on_delete) {}
-  void finish(int r) override {
+  void finish(int r) {
     bench->stat_collector->write_applied(seq);
   }
 };
@@ -53,7 +53,7 @@ struct OnWriteCommit : public Context {
     Bencher *bench, uint64_t seq,
     ceph::shared_ptr<OnDelete> on_delete
     ) : bench(bench), seq(seq), on_delete(on_delete) {}
-  void finish(int r) override {
+  void finish(int r) {
     bench->stat_collector->write_committed(seq);
   }
 };
@@ -64,7 +64,7 @@ struct OnReadComplete : public Context {
   boost::scoped_ptr<bufferlist> bl;
   OnReadComplete(Bencher *bench, uint64_t seq, bufferlist *bl) :
     bench(bench), seq(seq), bl(bl) {}
-  void finish(int r) override {
+  void finish(int r) {
     bench->stat_collector->read_complete(seq);
     bench->complete_op();
   }
@@ -193,7 +193,7 @@ void Bencher::run_bench()
 	break;
       }
       default: {
-	ceph_abort();
+	assert(0);
       }
     } 
     ops++;

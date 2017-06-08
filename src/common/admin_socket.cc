@@ -12,16 +12,36 @@
  * 
  */
 
+#include "include/int_types.h"
+
+#include "common/Thread.h"
 #include "common/admin_socket.h"
 #include "common/admin_socket_client.h"
+#include "common/config.h"
+#include "common/cmdparse.h"
+#include "common/dout.h"
 #include "common/errno.h"
+#include "common/perf_counters.h"
 #include "common/pipe.h"
 #include "common/safe_io.h"
 #include "common/version.h"
-#include "include/compat.h"
+#include "common/Formatter.h"
 
+#include <errno.h>
+#include <fcntl.h>
+#include <map>
 #include <poll.h>
+#include <set>
+#include <sstream>
+#include <stdint.h>
+#include <string.h>
+#include <string>
+#include <sys/socket.h>
+#include <sys/types.h>
 #include <sys/un.h>
+#include <unistd.h>
+
+#include "include/compat.h"
 
 #define dout_subsys ceph_subsys_asok
 #undef dout_prefix
@@ -89,7 +109,6 @@ AdminSocket::AdminSocket(CephContext *cct)
     m_sock_fd(-1),
     m_shutdown_rd_fd(-1),
     m_shutdown_wr_fd(-1),
-    in_hook(false),
     m_lock("AdminSocket::m_lock"),
     m_version_hook(NULL),
     m_help_hook(NULL),
@@ -267,29 +286,6 @@ void* AdminSocket::entry()
   ldout(m_cct, 5) << "entry exit" << dendl;
 }
 
-void AdminSocket::chown(uid_t uid, gid_t gid)
-{
-  if (m_sock_fd >= 0) {
-    int r = ::chown(m_path.c_str(), uid, gid);
-    if (r < 0) {
-      r = -errno;
-      lderr(m_cct) << "AdminSocket: failed to chown socket: "
-		   << cpp_strerror(r) << dendl;
-    }
-  }
-}
-
-void AdminSocket::chmod(mode_t mode)
-{
-  if (m_sock_fd >= 0) {
-    int r = ::chmod(m_path.c_str(), mode);
-    if (r < 0) {
-      r = -errno;
-      lderr(m_cct) << "AdminSocket: failed to chmod socket: "
-                   << cpp_strerror(r) << dendl;
-    }
-  }
-}
 
 bool AdminSocket::do_accept()
 {
@@ -307,16 +303,14 @@ bool AdminSocket::do_accept()
   }
 
   char cmd[1024];
-  unsigned pos = 0;
+  int pos = 0;
   string c;
   while (1) {
     int ret = safe_read(connection_fd, &cmd[pos], 1);
     if (ret <= 0) {
-      if (ret < 0) {
-        lderr(m_cct) << "AdminSocket: error reading request code: "
-		     << cpp_strerror(ret) << dendl;
-      }
-      VOID_TEMP_FAILURE_RETRY(close(connection_fd));
+      lderr(m_cct) << "AdminSocket: error reading request code: "
+		   << cpp_strerror(ret) << dendl;
+      close(connection_fd);
       return false;
     }
     //ldout(m_cct, 0) << "AdminSocket read byte " << (int)cmd[pos] << " pos " << pos << dendl;
@@ -347,11 +341,7 @@ bool AdminSocket::do_accept()
 	break;
       }
     }
-    if (++pos >= sizeof(cmd)) {
-      lderr(m_cct) << "AdminSocket: error reading request too long" << dendl;
-      VOID_TEMP_FAILURE_RETRY(close(connection_fd));
-      return false;
-    }
+    pos++;
   }
 
   bool rval = false;
@@ -363,7 +353,6 @@ bool AdminSocket::do_accept()
   cmdvec.push_back(cmd);
   if (!cmdmap_from_json(cmdvec, &cmdmap, errss)) {
     ldout(m_cct, 0) << "AdminSocket: " << errss.rdbuf() << dendl;
-    VOID_TEMP_FAILURE_RETRY(close(connection_fd));
     return false;
   }
   cmd_getval(m_cct, cmdmap, "format", format);
@@ -395,22 +384,9 @@ bool AdminSocket::do_accept()
     lderr(m_cct) << "AdminSocket: request '" << c << "' not defined" << dendl;
   } else {
     string args;
-    if (match != c) {
+    if (match != c)
       args = c.substr(match.length() + 1);
-    }
-
-    // Drop lock to avoid cycles in cases where the hook takes
-    // the same lock that was held during calls to register/unregister,
-    // and set in_hook to allow unregister to wait for us before
-    // removing this hook.
-    in_hook = true;
-    auto match_hook = p->second;
-    m_lock.Unlock();
-    bool success = match_hook->call(match, cmdmap, format, out);
-    m_lock.Lock();
-    in_hook = false;
-    in_hook_cond.Signal();
-
+    bool success = p->second->call(match, cmdmap, format, out);
     if (!success) {
       ldout(m_cct, 0) << "AdminSocket: request '" << match << "' args '" << args
 		      << "' to " << p->second << " failed" << dendl;
@@ -463,14 +439,6 @@ int AdminSocket::unregister_command(std::string command)
     m_hooks.erase(command);
     m_descs.erase(command);
     m_help.erase(command);
-
-    // If we are currently processing a command, wait for it to
-    // complete in case it referenced the hook that we are
-    // unregistering.
-    if (in_hook) {
-      in_hook_cond.Wait(m_lock);
-    }
-
     ret = 0;
   } else {
     ldout(m_cct, 5) << "unregister_command " << command << " ENOENT" << dendl;
@@ -482,20 +450,17 @@ int AdminSocket::unregister_command(std::string command)
 
 class VersionHook : public AdminSocketHook {
 public:
-  bool call(std::string command, cmdmap_t &cmdmap, std::string format,
-		    bufferlist& out) override {
+  virtual bool call(std::string command, cmdmap_t &cmdmap, std::string format,
+		    bufferlist& out) {
     if (command == "0") {
       out.append(CEPH_ADMIN_SOCK_VERSION);
     } else {
       JSONFormatter jf;
       jf.open_object_section("version");
-      if (command == "version") {
+      if (command == "version")
 	jf.dump_string("version", ceph_version_to_str());
-	jf.dump_string("release", ceph_release_name(ceph_release()));
-	jf.dump_string("release_type", ceph_release_type());
-      } else if (command == "git_version") {
+      else if (command == "git_version")
 	jf.dump_string("git_version", git_version_to_str());
-      }
       ostringstream ss;
       jf.close_section();
       jf.flush(ss);
@@ -508,8 +473,8 @@ public:
 class HelpHook : public AdminSocketHook {
   AdminSocket *m_as;
 public:
-  explicit HelpHook(AdminSocket *as) : m_as(as) {}
-  bool call(string command, cmdmap_t &cmdmap, string format, bufferlist& out) override {
+  HelpHook(AdminSocket *as) : m_as(as) {}
+  bool call(string command, cmdmap_t &cmdmap, string format, bufferlist& out) {
     Formatter *f = Formatter::create(format, "json-pretty", "json-pretty");
     f->open_object_section("help");
     for (map<string,string>::iterator p = m_as->m_help.begin();
@@ -530,8 +495,8 @@ public:
 class GetdescsHook : public AdminSocketHook {
   AdminSocket *m_as;
 public:
-  explicit GetdescsHook(AdminSocket *as) : m_as(as) {}
-  bool call(string command, cmdmap_t &cmdmap, string format, bufferlist& out) override {
+  GetdescsHook(AdminSocket *as) : m_as(as) {}
+  bool call(string command, cmdmap_t &cmdmap, string format, bufferlist& out) {
     int cmdnum = 0;
     JSONFormatter jf(false);
     jf.open_object_section("command_descriptions");

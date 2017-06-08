@@ -15,11 +15,12 @@
 #ifndef CEPH_MOSDPGBACKFILL_H
 #define CEPH_MOSDPGBACKFILL_H
 
-#include "MOSDFastDispatchOp.h"
+#include "msg/Message.h"
+#include "osd/osd_types.h"
 
-class MOSDPGBackfill : public MOSDFastDispatchOp {
+class MOSDPGBackfill : public Message {
   static const int HEAD_VERSION = 3;
-  static const int COMPAT_VERSION = 3;
+  static const int COMPAT_VERSION = 1;
 public:
   enum {
     OP_BACKFILL_PROGRESS = 2,
@@ -39,19 +40,10 @@ public:
   epoch_t map_epoch, query_epoch;
   spg_t pgid;
   hobject_t last_backfill;
+  bool compat_stat_sum;
   pg_stat_t stats;
 
-  epoch_t get_map_epoch() const override {
-    return map_epoch;
-  }
-  epoch_t get_min_epoch() const override {
-    return query_epoch;
-  }
-  spg_t get_spg() const override {
-    return pgid;
-  }
-
-  void decode_payload() override {
+  virtual void decode_payload() {
     bufferlist::iterator p = payload.begin();
     ::decode(op, p);
     ::decode(map_epoch, p);
@@ -62,16 +54,23 @@ public:
     // For compatibility with version 1
     ::decode(stats.stats, p);
 
-    ::decode(stats, p);
+    if (header.version >= 2) {
+      ::decode(stats, p);
+    } else {
+      compat_stat_sum = true;
+    }
 
     // Handle hobject_t format change
     if (!last_backfill.is_max() &&
 	last_backfill.pool == -1)
       last_backfill.pool = pgid.pool();
-    ::decode(pgid.shard, p);
+    if (header.version >= 3)
+      ::decode(pgid.shard, p);
+    else
+      pgid.shard = shard_id_t::NO_SHARD;
   }
 
-  void encode_payload(uint64_t features) override {
+  virtual void encode_payload(uint64_t features) {
     ::encode(op, payload);
     ::encode(map_epoch, payload);
     ::encode(query_epoch, payload);
@@ -86,19 +85,21 @@ public:
     ::encode(pgid.shard, payload);
   }
 
-  MOSDPGBackfill()
-    : MOSDFastDispatchOp(MSG_OSD_PG_BACKFILL, HEAD_VERSION, COMPAT_VERSION) {}
+  MOSDPGBackfill() :
+    Message(MSG_OSD_PG_BACKFILL, HEAD_VERSION, COMPAT_VERSION),
+    compat_stat_sum(false) {}
   MOSDPGBackfill(__u32 o, epoch_t e, epoch_t qe, spg_t p)
-    : MOSDFastDispatchOp(MSG_OSD_PG_BACKFILL, HEAD_VERSION, COMPAT_VERSION),
+    : Message(MSG_OSD_PG_BACKFILL, HEAD_VERSION, COMPAT_VERSION),
       op(o),
       map_epoch(e), query_epoch(e),
-      pgid(p) {}
+      pgid(p),
+      compat_stat_sum(false) {}
 private:
-  ~MOSDPGBackfill() override {}
+  ~MOSDPGBackfill() {}
 
 public:
-  const char *get_type_name() const override { return "pg_backfill"; }
-  void print(ostream& out) const override {
+  const char *get_type_name() const { return "pg_backfill"; }
+  void print(ostream& out) const {
     out << "pg_backfill(" << get_op_name(op)
 	<< " " << pgid
 	<< " e " << map_epoch << "/" << query_epoch

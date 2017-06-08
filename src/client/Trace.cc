@@ -41,7 +41,7 @@ void Trace::start()
   fs->open(filename);
   if (!fs->is_open()) {
     //generic_dout(0) << "** unable to open trace file " << filename << dendl;
-    ceph_abort();
+    assert(0);
   }
   //generic_dout(2) << "opened traced file '" << filename << "'" << dendl;
   
@@ -52,22 +52,22 @@ void Trace::start()
   _line = 1;
 }
 
-const char *Trace::peek_string(string &buf, const char *prefix)
+const char *Trace::peek_string(char *buf, const char *prefix)
 {
   //if (prefix) cout << "prefix '" << prefix << "' line '" << line << "'" << std::endl;
   if (prefix &&
       strstr(line.c_str(), "/prefix") == line.c_str()) {
-    buf.clear();
-    buf.append(prefix);
-    buf.append(line.c_str() + strlen("/prefix"));
+    strcpy(buf, prefix);
+    strcpy(buf + strlen(prefix),
+	   line.c_str() + strlen("/prefix"));
   } else {
-    buf = line;
+    strcpy(buf, line.c_str());
   }
-  return buf.c_str();
+  return buf;
 }
 
 
-const char *Trace::get_string(string &buf, const char *prefix)
+const char *Trace::get_string(char *buf, const char *prefix)
 {
   peek_string(buf, prefix);
 
@@ -77,5 +77,5 @@ const char *Trace::get_string(string &buf, const char *prefix)
   getline(*fs, line);
   //cout << "next line is " << line << std::endl;
 
-  return buf.c_str();
+  return buf;
 }

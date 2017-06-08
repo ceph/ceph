@@ -4,12 +4,13 @@
 #ifndef CEPH_CLS_USER_OPS_H
 #define CEPH_CLS_USER_OPS_H
 
+#include "include/types.h"
 #include "cls_user_types.h"
 
 struct cls_user_set_buckets_op {
   list<cls_user_bucket_entry> entries;
   bool add;
-  real_time time; /* op time */
+  utime_t time; /* op time */
 
   cls_user_set_buckets_op() : add(false) {}
 
@@ -158,7 +159,7 @@ struct cls_user_get_header_ret {
 WRITE_CLASS_ENCODER(cls_user_get_header_ret)
 
 struct cls_user_complete_stats_sync_op {
-  real_time time;
+  utime_t time;
 
   cls_user_complete_stats_sync_op() {}
 

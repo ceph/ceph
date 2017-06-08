@@ -26,16 +26,16 @@ struct MAuth : public PaxosServiceMessage {
 
   MAuth() : PaxosServiceMessage(CEPH_MSG_AUTH, 0), protocol(0), monmap_epoch(0) { }
 private:
-  ~MAuth() override {}
+  ~MAuth() {}
 
 public:
-  const char *get_type_name() const override { return "auth"; }
-  void print(ostream& out) const override {
+  const char *get_type_name() const { return "auth"; }
+  void print(ostream& out) const {
     out << "auth(proto " << protocol << " " << auth_payload.length() << " bytes"
 	<< " epoch " << monmap_epoch << ")";
   }
 
-  void decode_payload() override {
+  void decode_payload() {
     bufferlist::iterator p = payload.begin();
     paxos_decode(p);
     ::decode(protocol, p);
@@ -45,7 +45,7 @@ public:
     else
       monmap_epoch = 0;
   }
-  void encode_payload(uint64_t features) override {
+  void encode_payload(uint64_t features) {
     paxos_encode();
     ::encode(protocol, payload);
     ::encode(auth_payload, payload);

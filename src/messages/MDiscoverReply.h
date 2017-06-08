@@ -141,11 +141,11 @@ class MDiscoverReply : public Message {
     header.tid = 0;
   }
 private:
-  ~MDiscoverReply() override {}
+  ~MDiscoverReply() {}
 
 public:
-  const char *get_type_name() const override { return "discover_reply"; }
-  void print(ostream& out) const override {
+  const char *get_type_name() const { return "discover_reply"; }
+  void print(ostream& out) const {
     out << "discover_reply(" << header.tid << " " << base_ino << ")";
   }
   
@@ -174,7 +174,7 @@ public:
 
 
   // ...
-  void decode_payload() override {
+  virtual void decode_payload() {
     bufferlist::iterator p = payload.begin();
     ::decode(base_ino, p);
     ::decode(base_dir_frag, p);
@@ -190,7 +190,7 @@ public:
     ::decode(starts_with, p);
     ::decode(trace, p);
   }
-  void encode_payload(uint64_t features) override {
+  void encode_payload(uint64_t features) {
     ::encode(base_ino, payload);
     ::encode(base_dir_frag, payload);
     ::encode(wanted_base_dir, payload);

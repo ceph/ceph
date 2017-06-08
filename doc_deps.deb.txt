@@ -1,13 +1,8 @@
-git
-gcc
 python-dev
 python-pip
 python-virtualenv
 doxygen
 ditaa
 libxml2-dev
-libxslt1-dev
+libxslt-dev
 graphviz
-ant
-zlib1g-dev
-cython

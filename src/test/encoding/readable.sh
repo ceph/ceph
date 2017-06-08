@@ -1,39 +1,27 @@
-#!/bin/bash -e
+#!/bin/sh -e
 
-source $(dirname $0)/../detect-build-env-vars.sh
-
-[ -z "$CEPH_ROOT" ] && CEPH_ROOT=..
-
-dir=$CEPH_ROOT/ceph-object-corpus
+dir=../ceph-object-corpus
 
 set -e
 
+tmp1=`mktemp /tmp/typ-XXXXXXXXX`
+tmp2=`mktemp /tmp/typ-XXXXXXXXX`
+
 failed=0
 numtests=0
-pids=""
 
-if [ -x ./ceph-dencoder ]; then
-  CEPH_DENCODER=./ceph-dencoder
-else
-  CEPH_DENCODER=ceph-dencoder
-fi
+myversion=`./ceph-dencoder version`
 
-myversion=`$CEPH_DENCODER version`
-DEBUG=0
-WAITALL_DELAY=.1
-debug() { if [ "$DEBUG" -gt 0 ]; then echo "DEBUG: $*" >&2; fi }
+for arversion in `ls -v $dir/archive`; do
+  vdir="$dir/archive/$arversion"
+  #echo $vdir
 
-test_object() {
-    local type=$1
-    local output_file=$2
-    local failed=0
-    local numtests=0
+  if [ ! -d "$vdir/objects" ]; then
+    continue;
+  fi
 
-    tmp1=`mktemp /tmp/typ-XXXXXXXXX`
-    tmp2=`mktemp /tmp/typ-XXXXXXXXX`
-
-    rm -f $output_file
-    if $CEPH_DENCODER type $type 2>/dev/null; then
+  for type in `ls $vdir/objects`; do
+    if ./ceph-dencoder type $type 2>/dev/null; then
       #echo "type $type";
       echo "        $vdir/objects/$type"
 
@@ -41,7 +29,7 @@ test_object() {
       incompat=""
       incompat_paths=""
       sawarversion=0
-      for iv in `ls $dir/archive | sort -n`; do
+      for iv in `ls -v $dir/archive`; do
         if [ "$iv" = "$arversion" ]; then
           sawarversion=1
         fi
@@ -53,7 +41,7 @@ test_object() {
           # all paths for this type into variable. Assuming that this path won't contain any
           # whitechars (implication of above for loop).
           if [ -d "$dir/archive/$iv/forward_incompat/$type" ]; then
-            if [ -n "`ls $dir/archive/$iv/forward_incompat/$type/ | sort -n`" ]; then
+            if [ -n "`ls -v $dir/archive/$iv/forward_incompat/$type/`" ]; then
               incompat_paths="$incompat_paths $dir/archive/$iv/forward_incompat/$type"
             else
               echo "type $type directory empty, ignoring whole type instead of single objects"
@@ -69,7 +57,7 @@ test_object() {
       if [ -n "$incompat" ]; then
         if [ -z "$incompat_paths" ]; then
           echo "skipping incompat $type version $arversion, changed at $incompat < code $myversion"
-	  return
+          continue
         else
           # If we are ignoring not whole type, but objects that are in $incompat_path,
           # we don't skip here, just give info.
@@ -96,21 +84,15 @@ test_object() {
           continue
         fi;
 
-        $CEPH_DENCODER type $type import $vdir/objects/$type/$f decode dump_json > $tmp1 &
-        pid1="$!"
-        $CEPH_DENCODER type $type import $vdir/objects/$type/$f decode encode decode dump_json > $tmp2 &
-        pid2="$!"
         #echo "\t$vdir/$type/$f"
-        if ! wait $pid1; then
+        if ! ./ceph-dencoder type $type import $vdir/objects/$type/$f decode dump_json > $tmp1; then
           echo "**** failed to decode $vdir/objects/$type/$f ****"
           failed=$(($failed + 1))
-          rm -f $tmp1 $tmp2
           continue      
         fi
-        if ! wait $pid2; then
+        if ! ./ceph-dencoder type $type import $vdir/objects/$type/$f decode encode decode dump_json > $tmp2; then
           echo "**** failed to decode+encode+decode $vdir/objects/$type/$f ****"
           failed=$(($failed + 1))
-          rm -f $tmp1 $tmp2
           continue
         fi
 
@@ -118,7 +100,7 @@ test_object() {
         # nondeterministically.  compare the sorted json
         # output.  this is a weaker test, but is better than
         # nothing.
-        if ! $CEPH_DENCODER type $type is_deterministic; then
+        if ! ./ceph-dencoder type $type is_deterministic; then
           echo "  sorting json output for nondeterministic object"
           for f in $tmp1 $tmp2; do
             sort $f | sed 's/,$//' > $f.new
@@ -136,93 +118,10 @@ test_object() {
     else
       echo "skipping unrecognized type $type"
     fi
-
-    echo "failed=$failed" > $output_file
-    echo "numtests=$numtests" >> $output_file
-    rm -f $tmp1 $tmp2
-}
-
-waitall() { # PID...
-   ## Wait for children to exit and indicate whether all exited with 0 status.
-   local errors=0
-   while :; do
-     debug "Processes remaining: $*"
-     for pid in "$@"; do
-       shift
-       if kill -0 "$pid" 2>/dev/null; then
-         debug "$pid is still alive."
-         set -- "$@" "$pid"
-       elif wait "$pid"; then
-         debug "$pid exited with zero exit status."
-       else
-         debug "$pid exited with non-zero exit status."
-         errors=$(($errors + 1))
-       fi
-     done
-     [ $# -eq 0 ] && break
-     sleep ${WAITALL_DELAY:-1}
-    done
-   [ $errors -eq 0 ]
-}
-
-######
-# MAIN
-######
-
-do_join() {
-        waitall $pids
-        pids=""
-        # Reading the output of jobs to compute failed & numtests
-        # Tests are run in parallel but sum should be done sequentialy to avoid
-        # races between threads
-        while [ "$running_jobs" -ge 0 ]; do
-            if [ -f $output_file.$running_jobs ]; then
-                read_failed=$(grep "^failed=" $output_file.$running_jobs | cut -d "=" -f 2)
-                read_numtests=$(grep "^numtests=" $output_file.$running_jobs | cut -d "=" -f 2)
-                rm -f $output_file.$running_jobs
-                failed=$(($failed + $read_failed))
-                numtests=$(($numtests + $read_numtests))
-            fi
-            running_jobs=$(($running_jobs - 1))
-        done
-        running_jobs=0
-}
-
-# Using $MAX_PARALLEL_JOBS jobs if defined, unless the number of logical
-# processors
-if [ `uname` == FreeBSD ]; then
-  NPROC=`sysctl -n hw.ncpu`
-  max_parallel_jobs=${MAX_PARALLEL_JOBS:-${NPROC}}
-else
-  max_parallel_jobs=${MAX_PARALLEL_JOBS:-$(nproc)}
-fi
-
-output_file=`mktemp /tmp/typ-XXXXXXXXX`
-running_jobs=0
-
-for arversion in `ls $dir/archive | sort -n`; do
-  vdir="$dir/archive/$arversion"
-  #echo $vdir
-
-  if [ ! -d "$vdir/objects" ]; then
-    continue;
-  fi
-
-  for type in `ls $vdir/objects`; do
-    test_object $type $output_file.$running_jobs &
-    pids="$pids $!"
-    running_jobs=$(($running_jobs + 1))
-
-    # Once we spawned enough jobs, let's wait them to complete
-    # Every spawned job have almost the same execution time so
-    # it's not a big deal having them not ending at the same time
-    if [ "$running_jobs" -eq "$max_parallel_jobs" ]; then
-	do_join
-    fi
   done
 done
 
-do_join
+rm -f $tmp1 $tmp2
 
 if [ $failed -gt 0 ]; then
   echo "FAILED $failed / $numtests tests."

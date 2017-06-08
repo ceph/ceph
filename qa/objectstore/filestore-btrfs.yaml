@@ -1,7 +1,0 @@
-overrides:
-  ceph:
-    fs: btrfs
-    conf:
-      osd:
-        osd objectstore: filestore
-        osd op thread timeout: 60

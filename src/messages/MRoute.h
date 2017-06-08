@@ -23,7 +23,7 @@
 struct MRoute : public Message {
 
   static const int HEAD_VERSION = 3;
-  static const int COMPAT_VERSION = 3;
+  static const int COMPAT_VERSION = 2;
 
   uint64_t session_mon_tid;
   Message *msg;
@@ -48,25 +48,38 @@ struct MRoute : public Message {
     msg = decode_message(NULL, 0, p);
   }
 private:
-  ~MRoute() override {
+  ~MRoute() {
     if (msg)
       msg->put();
   }
 
 public:
-  void decode_payload() override {
+  void decode_payload() {
     bufferlist::iterator p = payload.begin();
     ::decode(session_mon_tid, p);
     ::decode(dest, p);
-    bool m;
-    ::decode(m, p);
-    if (m)
+    if (header.version >= 2) {
+      bool m;
+      ::decode(m, p);
+      if (m)
+	msg = decode_message(NULL, 0, p);
+    } else {
       msg = decode_message(NULL, 0, p);
-    ::decode(send_osdmap_first, p);
+    }
+    if (header.version >= 3) {
+      ::decode(send_osdmap_first, p);
+    }
   }
-  void encode_payload(uint64_t features) override {
+  void encode_payload(uint64_t features) {
     ::encode(session_mon_tid, payload);
-    ::encode(dest, payload, features);
+    ::encode(dest, payload);
+    if ((features & CEPH_FEATURE_MON_NULLROUTE) == 0) {
+      header.version = 1;
+      header.compat_version = 1;
+      assert(msg);
+      encode_message(msg, features, payload);
+      return;
+    }
     bool m = msg ? true : false;
     ::encode(m, payload);
     if (msg)
@@ -74,8 +87,8 @@ public:
     ::encode(send_osdmap_first, payload);
   }
 
-  const char *get_type_name() const override { return "route"; }
-  void print(ostream& o) const override {
+  const char *get_type_name() const { return "route"; }
+  void print(ostream& o) const {
     if (msg)
       o << "route(" << *msg;
     else

@@ -6,13 +6,13 @@ while (<>) {
     #    next unless / \d\d bdev /;
     my $rest = $_;
     my @hit;
-    while ($rest =~ /([\da-f]+)[~\+]([\da-f]+)/) {
-	my ($o, $l) = $rest =~ /([\da-f]+)[~\+]([\da-f]+)/;
+    while ($rest =~ /(\d+)~(\d+)/) {
+	my ($o, $l) = $rest =~ /(\d+)~(\d+)/;
 	$rest = $';
-	if (hex($offset) >= hex($o) &&
-	    hex($offset) < hex($o) + hex($l)) {
-	    my $rel = hex($offset) - hex($o);
-	    push(@hit, sprintf("%x",$rel));
+	if ($offset >= $o &&
+	    $offset < $o + $l) {
+	    my $rel = $offset - $o;
+	    push(@hit, $rel);
 	}
     }
     print join(',',@hit) . "\t$_" if @hit;

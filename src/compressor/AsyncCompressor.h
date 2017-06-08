@@ -16,36 +16,34 @@
 #define CEPH_ASYNCCOMPRESSOR_H
 
 #include <deque>
-#include <vector>
-#include <atomic>
 
+#include "include/atomic.h"
 #include "include/str_list.h"
-
 #include "Compressor.h"
 #include "common/WorkQueue.h"
+
 
 class AsyncCompressor {
  private:
   CompressorRef compressor;
   CephContext *cct;
-  std::atomic<uint64_t> job_id { 0 };
+  atomic_t job_id;
   vector<int> coreids;
   ThreadPool compress_tp;
 
-  enum class status_t {
+  enum {
     WAIT,
     WORKING,
     DONE,
     ERROR
-  };
-
+  } status;
   struct Job {
     uint64_t id;
-    std::atomic<status_t> status { status_t::WAIT };
+    atomic_t status;
     bool is_compress;
     bufferlist data;
-    Job(uint64_t i, bool compress): id(i), is_compress(compress) {}
-    Job(const Job &j): id(j.id), status(j.status.load()), is_compress(j.is_compress), data(j.data) {}
+    Job(uint64_t i, bool compress): id(i), status(WAIT), is_compress(compress) {}
+    Job(const Job &j): id(j.id), status(j.status.read()), is_compress(j.is_compress), data(j.data) {}
   };
   Mutex job_lock;
   // only when job.status == DONE && with job_lock holding, we can insert/erase element in jobs
@@ -60,37 +58,35 @@ class AsyncCompressor {
     CompressWQ(AsyncCompressor *ac, time_t timeout, time_t suicide_timeout, ThreadPool *tp)
       : ThreadPool::WorkQueue<Job>("AsyncCompressor::CompressWQ", timeout, suicide_timeout, tp), async_compressor(ac) {}
 
-    bool _enqueue(Job *item) override {
+    bool _enqueue(Job *item) {
       job_queue.push_back(item);
       return true;
     }
-    void _dequeue(Job *item) override {
-      ceph_abort();
+    void _dequeue(Job *item) {
+      assert(0);
     }
-    bool _empty() override {
+    bool _empty() {
       return job_queue.empty();
     }
-    Job* _dequeue() override {
+    Job* _dequeue() {
       if (job_queue.empty())
         return NULL;
       Job *item = NULL;
       while (!job_queue.empty()) {
         item = job_queue.front();
         job_queue.pop_front();
-
-        auto expected = status_t::WAIT;
-        if (item->status.compare_exchange_strong(expected, status_t::WORKING)) {
+        if (item->status.compare_and_swap(WAIT, WORKING)) {
           break;
         } else {
-          Mutex::Locker l(async_compressor->job_lock);
+          Mutex::Locker (async_compressor->job_lock);
           async_compressor->jobs.erase(item->id);
           item = NULL;
         }
       }
       return item;
     }
-    void _process(Job *item, ThreadPool::TPHandle &) override {
-      assert(item->status == status_t::WORKING);
+    void _process(Job *item, ThreadPool::TPHandle &handle) {
+      assert(item->status.read() == WORKING);
       bufferlist out;
       int r;
       if (item->is_compress)
@@ -99,21 +95,20 @@ class AsyncCompressor {
         r = async_compressor->compressor->decompress(item->data, out);
       if (!r) {
         item->data.swap(out);
-        auto expected = status_t::WORKING;
-        assert(item->status.compare_exchange_strong(expected, status_t::DONE));
+        assert(item->status.compare_and_swap(WORKING, DONE));
       } else {
-        item->status = status_t::ERROR;
+        item->status.set(ERROR);
       }
     }
-    void _process_finish(Job *item) override {}
-    void _clear() override {}
+    void _process_finish(Job *item) {}
+    void _clear() {}
   } compress_wq;
   friend class CompressWQ;
   void _compress(bufferlist &in, bufferlist &out);
   void _decompress(bufferlist &in, bufferlist &out);
 
  public:
-  explicit AsyncCompressor(CephContext *c);
+  AsyncCompressor(CephContext *c);
   virtual ~AsyncCompressor() {}
 
   int get_cpuid(int id) {

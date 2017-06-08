@@ -32,7 +32,7 @@
 
 class MOSDOpReply : public Message {
 
-  static const int HEAD_VERSION = 8;
+  static const int HEAD_VERSION = 6;
   static const int COMPAT_VERSION = 2;
 
   object_t oid;
@@ -45,7 +45,6 @@ class MOSDOpReply : public Message {
   version_t user_version;
   epoch_t osdmap_epoch;
   int32_t retry_attempt;
-  bool do_redirect;
   request_redirect_t redirect;
 
 public:
@@ -92,7 +91,7 @@ public:
 
   void set_redirect(const request_redirect_t& redir) { redirect = redir; }
   const request_redirect_t& get_redirect() const { return redirect; }
-  bool is_redirect_reply() const { return do_redirect; }
+  bool is_redirect_reply() const { return !redirect.empty(); }
 
   void add_flags(int f) { flags |= f; }
 
@@ -125,13 +124,10 @@ public:
 
 public:
   MOSDOpReply()
-    : Message(CEPH_MSG_OSD_OPREPLY, HEAD_VERSION, COMPAT_VERSION) {
-    do_redirect = false;
-  }
-  MOSDOpReply(const MOSDOp *req, int r, epoch_t e, int acktype,
-	      bool ignore_out_data)
+    : Message(CEPH_MSG_OSD_OPREPLY, HEAD_VERSION, COMPAT_VERSION) { }
+  MOSDOpReply(MOSDOp *req, int r, epoch_t e, int acktype, bool ignore_out_data)
     : Message(CEPH_MSG_OSD_OPREPLY, HEAD_VERSION, COMPAT_VERSION),
-      oid(req->hobj.oid), pgid(req->pgid.pgid), ops(req->ops) {
+      oid(req->oid), pgid(req->pgid), ops(req->ops) {
 
     set_tid(req->get_tid());
     result = r;
@@ -140,7 +136,6 @@ public:
     osdmap_epoch = e;
     user_version = 0;
     retry_attempt = req->get_retry_attempt();
-    do_redirect = false;
 
     // zero out ops payload_len and possibly out data
     for (unsigned i = 0; i < ops.size(); i++) {
@@ -150,10 +145,10 @@ public:
     }
   }
 private:
-  ~MOSDOpReply() override {}
+  ~MOSDOpReply() {}
 
 public:
-  void encode_payload(uint64_t features) override {
+  virtual void encode_payload(uint64_t features) {
 
     OSDOp::merge_osd_op_vector_out_data(ops, data);
 
@@ -194,47 +189,35 @@ public:
 
       ::encode(replay_version, payload);
       ::encode(user_version, payload);
-      if ((features & CEPH_FEATURE_NEW_OSDOPREPLY_ENCODING) == 0) {
-        header.version = 6;
-        ::encode(redirect, payload);
-      } else {
-        do_redirect = !redirect.empty();
-        ::encode(do_redirect, payload);
-        if (do_redirect) {
-          ::encode(redirect, payload);
-        }
-      }
-      encode_trace(payload, features);
+      ::encode(redirect, payload);
     }
   }
-  void decode_payload() override {
+  virtual void decode_payload() {
     bufferlist::iterator p = payload.begin();
 
     // Always keep here the newest version of decoding order/rule
     if (header.version == HEAD_VERSION) {
-      ::decode(oid, p);
-      ::decode(pgid, p);
-      ::decode(flags, p);
-      ::decode(result, p);
-      ::decode(bad_replay_version, p);
-      ::decode(osdmap_epoch, p);
+	::decode(oid, p);
+	::decode(pgid, p);
+	::decode(flags, p);
+	::decode(result, p);
+	::decode(bad_replay_version, p);
+	::decode(osdmap_epoch, p);
 
-      __u32 num_ops = ops.size();
-      ::decode(num_ops, p);
-      ops.resize(num_ops);
-      for (unsigned i = 0; i < num_ops; i++)
+	__u32 num_ops = ops.size();
+	::decode(num_ops, p);
+	ops.resize(num_ops);
+	for (unsigned i = 0; i < num_ops; i++)
 	::decode(ops[i].op, p);
-      ::decode(retry_attempt, p);
+	::decode(retry_attempt, p);
 
-      for (unsigned i = 0; i < num_ops; ++i)
+	for (unsigned i = 0; i < num_ops; ++i)
 	::decode(ops[i].rval, p);
 
-      OSDOp::split_osd_op_vector_out_data(ops, data);
+	OSDOp::split_osd_op_vector_out_data(ops, data);
 
-      ::decode(replay_version, p);
-      ::decode(user_version, p);
-      ::decode(do_redirect, p);
-      if (do_redirect)
+	::decode(replay_version, p);
+	::decode(user_version, p);
 	::decode(redirect, p);
     } else if (header.version < 2) {
       ceph_osd_reply_head head;
@@ -285,25 +268,14 @@ public:
 	user_version = replay_version.version;
       }
 
-      if (header.version == 6) {
+      if (header.version >= 6)
 	::decode(redirect, p);
-        do_redirect = !redirect.empty();
-      }
-      if (header.version >= 7) {
-        ::decode(do_redirect, p);
-        if (do_redirect) {
-	  ::decode(redirect, p);
-        }
-      }
-      if (header.version >= 8) {
-        decode_trace(p);
-      }
     }
   }
 
-  const char *get_type_name() const override { return "osd_op_reply"; }
+  const char *get_type_name() const { return "osd_op_reply"; }
   
-  void print(ostream& out) const override {
+  void print(ostream& out) const {
     out << "osd_op_reply(" << get_tid()
 	<< " " << oid << " " << ops
 	<< " v" << get_replay_version()

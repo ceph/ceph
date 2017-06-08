@@ -6,9 +6,8 @@
 
 #include "include/int_types.h"
 #include "include/buffer.h"
+#include "include/Context.h"
 #include "common/bit_vector.hpp"
-
-class Context;
 
 namespace librbd {
 
@@ -19,12 +18,6 @@ namespace object_map {
 template <typename ImageCtxT = ImageCtx>
 class RefreshRequest {
 public:
-  static RefreshRequest *create(ImageCtxT &image_ctx,
-                                ceph::BitVector<2> *object_map,
-                                uint64_t snap_id, Context *on_finish) {
-    return new RefreshRequest(image_ctx, object_map, snap_id, on_finish);
-  }
-
   RefreshRequest(ImageCtxT &image_ctx, ceph::BitVector<2> *object_map,
                  uint64_t snap_id, Context *on_finish);
 
@@ -33,27 +26,20 @@ public:
 private:
   /**
    * @verbatim
-   *
-   * <start> -----> LOCK (skip if snapshot)
-   *    *             |
-   *    *             v  (other errors)
-   *    *           LOAD * * * * * * * > INVALIDATE ------------\
-   *    *             |    *                                    |
-   *    *             |    * (-EINVAL or too small)             |
-   *    *             |    * * * * * * > INVALIDATE_AND_RESIZE  |
-   *    *             |                      |              *   |
-   *    *             |                      |              *   |
-   *    *             |                      v              *   |
-   *    *             |                    RESIZE           *   |
-   *    *             |                      |              *   |
-   *    *             |                      |  * * * * * * *   |
-   *    *             |                      |  *               |
-   *    *             |                      v  v               |
-   *    *             \--------------------> LOCK <-------------/
-   *    *                                     |
-   *    v                                     v
-   * INVALIDATE_AND_CLOSE ---------------> <finish>
-   *
+   *                         (other errors)
+   * <start> -----> LOAD * * * * * * * > INVALIDATE ------------\
+   *                  |    *                                    |
+   *                  |    * (-EINVAL or too small)             |
+   *                  |    * * * * * * > INVALIDATE_AND_RESIZE  |
+   *                  |                      |              *   |
+   *                  |                      |              *   |
+   *                  |                      v              *   |
+   *                  |                    RESIZE           *   |
+   *                  |                      |              *   |
+   *                  |                      |  * * * * * * *   |
+   *                  |                      |  *               |
+   *                  |                      v  v               |
+   *                  \-----------------> <finish> <------------/
    * @endverbatim
    */
 
@@ -67,9 +53,6 @@ private:
   bool m_truncate_on_disk_object_map;
   bufferlist m_out_bl;
 
-  void send_lock();
-  Context *handle_lock(int *ret_val);
-
   void send_load();
   Context *handle_load(int *ret_val);
 
@@ -81,9 +64,6 @@ private:
 
   void send_resize();
   Context *handle_resize(int *ret_val);
-
-  void send_invalidate_and_close();
-  Context *handle_invalidate_and_close(int *ret_val);
 
   void apply();
 };

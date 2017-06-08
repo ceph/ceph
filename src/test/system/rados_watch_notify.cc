@@ -163,7 +163,8 @@ int main(int argc, const char **argv)
 
   // create a pool and an object, watch the object, notify,
   // then delete the object, notify
-  // this test is enabled for the resolution of bug #2339.
+  if (false) {
+    // this test is currently broken, pending the resolution of bug #2339
   pool += ".";
   {
     StRadosCreatePool r1(argc, argv, NULL, setup_sem, NULL, pool, 1, ".obj");
@@ -188,6 +189,7 @@ int main(int argc, const char **argv)
       printf("test4: got error: %s\n", error.c_str());
       return EXIT_FAILURE;
     }
+  }
   }
 
   printf("******* SUCCESS **********\n");

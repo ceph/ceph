@@ -29,25 +29,25 @@
 
 class CompressorExample : public Compressor {
 public:
-  CompressorExample() : Compressor(COMP_ALG_NONE, "example") {}
-  ~CompressorExample() override {}
+  virtual ~CompressorExample() {}
 
-  int compress(const bufferlist &in, bufferlist &out) override
+  virtual int compress(bufferlist &in, bufferlist &out)
   {
     out = in;
     return 0;
   }
 
-  int decompress(const bufferlist &in, bufferlist &out) override
+  virtual int decompress(bufferlist &in, bufferlist &out)
   {
     out = in;
     return 0;
   }
-  int decompress(bufferlist::iterator &p, size_t compressed_len, bufferlist &out) override
+
+  virtual const char* get_method_name()
   {
-    p.copy(MIN(p.get_remaining(), compressed_len), out);
-    return 0;
+    return "example";
   }
+
 };
 
 #endif

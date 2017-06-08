@@ -17,17 +17,23 @@
 #ifndef SUB_PROCESS_H
 #define SUB_PROCESS_H
 
+#include <sys/types.h>
 #include <sys/wait.h>
+
+#include <signal.h>
+#include <errno.h>
 #include <stdarg.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <signal.h>
+
 #include <sstream>
 #include <vector>
 #include <iostream>
+
 #include <include/assert.h>
 #include <common/errno.h>
-#if defined(__FreeBSD__)
-#include <sys/types.h>
-#include <signal.h>
-#endif
 
 /**
  * SubProcess:
@@ -81,7 +87,7 @@ public:
 
   void kill(int signo = SIGTERM) const;
 
-  const std::string err() const;
+  const char* err() const;
 
 protected:
   bool is_child() const { return pid == 0; }
@@ -110,7 +116,7 @@ public:
 		  int timeout = 0, int sigkill = SIGKILL);
 
 protected:
-  void exec() override;
+  virtual void exec();
 
 private:
   int timeout;
@@ -213,8 +219,8 @@ inline void SubProcess::kill(int signo) const {
   assert(ret == 0);
 }
 
-inline const std::string SubProcess::err() const {
-  return errstr.str();
+inline const char* SubProcess::err() const {
+  return errstr.str().c_str();
 }
 
 class fd_buf : public std::streambuf {
@@ -303,7 +309,7 @@ inline int SubProcess::spawn() {
     }
 
     exec();
-    ceph_abort(); // Never reached
+    assert(0); // Never reached
   }
 
   ret = -errno;
@@ -385,7 +391,7 @@ inline void SubProcessTimed::exec() {
 
   if (timeout <= 0) {
     SubProcess::exec();
-    ceph_abort(); // Never reached
+    assert(0); // Never reached
   }
 
   sigset_t mask, oldmask;
@@ -434,7 +440,7 @@ inline void SubProcessTimed::exec() {
     }
     (void)setpgid(0, 0); // Become process group leader.
     SubProcess::exec();
-    ceph_abort(); // Never reached
+    assert(0); // Never reached
   }
 
   // Parent

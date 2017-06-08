@@ -24,8 +24,12 @@
 #include "messages/MMonCommand.h"
 #include "messages/MLog.h"
 #include "messages/MLogAck.h"
-#include "common/Graylog.h"
+
+#include "common/Timer.h"
+
+#include "osd/osd_types.h"
 #include "common/errno.h"
+#include "common/config.h"
 #include "common/strtol.h"
 #include "include/assert.h"
 #include "include/str_list.h"
@@ -41,8 +45,26 @@ static ostream& _prefix(std::ostream *_dout, Monitor *mon, version_t v) {
 		<< ").log v" << v << " ";
 }
 
-ostream& operator<<(ostream &out, const LogMonitor &pm)
+ostream& operator<<(ostream& out, LogMonitor& pm)
 {
+  /*
+  std::stringstream ss;
+  for (ceph::unordered_map<int,int>::iterator p = pm.pg_map.num_pg_by_state.begin();
+       p != pm.pg_map.num_pg_by_state.end();
+       ++p) {
+    if (p != pm.pg_map.num_pg_by_state.begin())
+      ss << ", ";
+    ss << p->second << " " << pg_state_string(p->first);
+  }
+  string states = ss.str();
+  return out << "v" << pm.pg_map.version << ": "
+	     << pm.pg_map.pg_stat.size() << " pgs: "
+	     << states << "; "
+	     << kb_t(pm.pg_map.total_pg_kb()) << " data, " 
+	     << kb_t(pm.pg_map.total_used_kb()) << " used, "
+	     << kb_t(pm.pg_map.total_avail_kb()) << " / "
+	     << kb_t(pm.pg_map.total_kb()) << " free";
+  */
   return out << "log";
 }
 
@@ -56,6 +78,8 @@ void LogMonitor::tick()
 
   dout(10) << *this << dendl;
 
+  if (!mon->is_leader()) return; 
+
 }
 
 void LogMonitor::create_initial()
@@ -63,8 +87,7 @@ void LogMonitor::create_initial()
   dout(10) << "create_initial -- creating initial map" << dendl;
   LogEntry e;
   memset(&e.who, 0, sizeof(e.who));
-  e.name = g_conf->name;
-  e.stamp = ceph_clock_now();
+  e.stamp = ceph_clock_now(g_ceph_context);
   e.prio = CLOG_INFO;
   std::stringstream ss;
   ss << "mkfs " << mon->monmap->get_fsid();
@@ -129,15 +152,6 @@ void LogMonitor::update_from_paxos(bool *need_bootstrap)
                          channels.get_facility(channel));
       }
 
-      if (channels.do_log_to_graylog(channel)) {
-	ceph::logging::Graylog::Ref graylog = channels.get_graylog(channel);
-	if (graylog) {
-	  graylog->log_log_entry(&le);
-	}
-	dout(7) << "graylog: " << channel << " " << graylog
-		<< " host:" << channels.log_to_graylog_host << dendl;
-      }
-
       string log_file = channels.get_log_file(channel);
       dout(20) << __func__ << " logging for channel '" << channel
                << "' to file '" << log_file << "'" << dendl;
@@ -165,7 +179,6 @@ void LogMonitor::update_from_paxos(bool *need_bootstrap)
     }
 
     summary.version++;
-    summary.prune(g_conf->mon_log_max_summary);
   }
 
   dout(15) << __func__ << " logging for "
@@ -200,6 +213,17 @@ void LogMonitor::update_from_paxos(bool *need_bootstrap)
   check_subs();
 }
 
+void LogMonitor::store_do_append(MonitorDBStore::TransactionRef t,
+    const string& key, bufferlist& bl)
+{
+  bufferlist existing_bl;
+  int err = get_value(key, existing_bl);
+  assert(err == 0);
+
+  existing_bl.append(bl);
+  put_value(t, key, existing_bl);
+}
+
 void LogMonitor::create_pending()
 {
   pending_log.clear();
@@ -216,7 +240,7 @@ void LogMonitor::encode_pending(MonitorDBStore::TransactionRef t)
   ::encode(v, bl);
   multimap<utime_t,LogEntry>::iterator p;
   for (p = pending_log.begin(); p != pending_log.end(); ++p)
-    p->second.encode(bl, mon->get_quorum_con_features());
+    p->second.encode(bl);
 
   put_version(t, version, bl);
   put_last_committed(t, version);
@@ -228,7 +252,7 @@ void LogMonitor::encode_full(MonitorDBStore::TransactionRef t)
   assert(get_last_committed() == summary.version);
 
   bufferlist summary_bl;
-  ::encode(summary, summary_bl, mon->get_quorum_con_features());
+  ::encode(summary, summary_bl);
 
   put_version_full(t, summary.version, summary_bl);
   put_version_latest_full(t, summary.version);
@@ -236,12 +260,9 @@ void LogMonitor::encode_full(MonitorDBStore::TransactionRef t)
 
 version_t LogMonitor::get_trim_to()
 {
-  if (!mon->is_leader())
-    return 0;
-
   unsigned max = g_conf->mon_max_log_epochs;
   version_t version = get_last_committed();
-  if (version > max)
+  if (mon->is_leader() && version > max)
     return version - max;
   return 0;
 }
@@ -259,7 +280,7 @@ bool LogMonitor::preprocess_query(MonOpRequestRef op)
     return preprocess_log(op);
 
   default:
-    ceph_abort();
+    assert(0);
     return true;
   }
 }
@@ -275,7 +296,7 @@ bool LogMonitor::prepare_update(MonOpRequestRef op)
   case MSG_LOG:
     return prepare_log(op);
   default:
-    ceph_abort();
+    assert(0);
     return false;
   }
 }
@@ -313,18 +334,6 @@ bool LogMonitor::preprocess_log(MonOpRequestRef op)
   return true;
 }
 
-struct LogMonitor::C_Log : public C_MonOp {
-  LogMonitor *logmon;
-  C_Log(LogMonitor *p, MonOpRequestRef o) :
-    C_MonOp(o), logmon(p) {}
-  void _finish(int r) override {
-    if (r == -ECANCELED) {
-      return;
-    }
-    logmon->_updated_log(op);
-  }
-};
-
 bool LogMonitor::prepare_log(MonOpRequestRef op) 
 {
   op->mark_logmon_event("prepare_log");
@@ -346,7 +355,6 @@ bool LogMonitor::prepare_log(MonOpRequestRef op)
       pending_log.insert(pair<utime_t,LogEntry>(p->stamp, *p));
     }
   }
-  pending_summary.prune(g_conf->mon_log_max_summary);
   wait_for_finished_proposal(op, new C_Log(this, op));
   return true;
 }
@@ -373,64 +381,17 @@ bool LogMonitor::should_propose(double& delay)
 bool LogMonitor::preprocess_command(MonOpRequestRef op)
 {
   op->mark_logmon_event("preprocess_command");
-  MMonCommand *m = static_cast<MMonCommand*>(op->get_req());
-  int r = -EINVAL;
+  int r = -1;
   bufferlist rdata;
   stringstream ss;
 
-  map<string, cmd_vartype> cmdmap;
-  if (!cmdmap_from_json(m->cmd, &cmdmap, ss)) {
-    string rs = ss.str();
-    mon->reply_command(op, -EINVAL, rs, get_last_committed());
+  if (r != -1) {
+    string rs;
+    getline(ss, rs);
+    mon->reply_command(op, r, rs, rdata, get_last_committed());
     return true;
-  }
-  MonSession *session = m->get_session();
-  if (!session) {
-    mon->reply_command(op, -EACCES, "access denied", get_last_committed());
-    return true;
-  }
-
-  string prefix;
-  cmd_getval(g_ceph_context, cmdmap, "prefix", prefix);
-
-  string format;
-  cmd_getval(g_ceph_context, cmdmap, "format", format, string("plain"));
-  boost::scoped_ptr<Formatter> f(Formatter::create(format));
-
-  if (prefix == "log last") {
-    int64_t num = 20;
-    cmd_getval(g_ceph_context, cmdmap, "num", num);
-    if (f) {
-      f->open_array_section("tail");
-    }
-    auto p = summary.tail.end();
-    while (num > 0 && p != summary.tail.begin()) {
-      num--;
-      --p;
-    }
-    ostringstream ss;
-    for ( ; p != summary.tail.end(); ++p) {
-      if (f) {
-	f->dump_object("entry", *p);
-      } else {
-	ss << *p << "\n";
-      }
-    }
-    if (f) {
-      f->close_section();
-      f->flush(rdata);
-    } else {
-      rdata.append(ss.str());
-    }
-    r = 0;
-  } else {
+  } else
     return false;
-  }
-
-  string rs;
-  getline(ss, rs);
-  mon->reply_command(op, r, rs, rdata, get_last_committed());
-  return true;
 }
 
 
@@ -464,13 +425,11 @@ bool LogMonitor::prepare_command(MonOpRequestRef op)
     cmd_getval(g_ceph_context, cmdmap, "logtext", logtext);
     LogEntry le;
     le.who = m->get_orig_source_inst();
-    le.name = session->entity_name;
     le.stamp = m->get_recv_stamp();
     le.seq = 0;
     le.prio = CLOG_INFO;
     le.msg = str_join(logtext, " ");
     pending_summary.add(le);
-    pending_summary.prune(g_conf->mon_log_max_summary);
     pending_log.insert(pair<utime_t,LogEntry>(le.stamp, le));
     wait_for_finished_proposal(op, new Monitor::C_Command(
           mon, op, 0, string(), get_last_committed() + 1));
@@ -495,7 +454,7 @@ int LogMonitor::sub_name_to_id(const string& n)
     return CLOG_WARN;
   if (n == "log-error")
     return CLOG_ERROR;
-  return CLOG_UNKNOWN;
+  return -1;
 }
 
 void LogMonitor::check_subs()
@@ -605,7 +564,7 @@ void LogMonitor::_create_sub_incremental(MLog *mlog, int level, version_t sv)
     dout(10) << __func__ << " skipped from " << sv
 	     << " to first_committed " << get_first_committed() << dendl;
     LogEntry le;
-    le.stamp = ceph_clock_now();
+    le.stamp = ceph_clock_now(NULL);
     le.prio = CLOG_WARN;
     ostringstream ss;
     ss << "skipped log messages from " << sv << " to " << get_first_committed();
@@ -691,33 +650,6 @@ void LogMonitor::update_log_channels()
     return;
   }
 
-  r = get_conf_str_map_helper(g_conf->mon_cluster_log_to_graylog, oss,
-                              &channels.log_to_graylog,
-                              CLOG_CONFIG_DEFAULT_KEY);
-  if (r < 0) {
-    derr << __func__ << " error parsing 'mon_cluster_log_to_graylog'"
-         << dendl;
-    return;
-  }
-
-  r = get_conf_str_map_helper(g_conf->mon_cluster_log_to_graylog_host, oss,
-                              &channels.log_to_graylog_host,
-                              CLOG_CONFIG_DEFAULT_KEY);
-  if (r < 0) {
-    derr << __func__ << " error parsing 'mon_cluster_log_to_graylog_host'"
-         << dendl;
-    return;
-  }
-
-  r = get_conf_str_map_helper(g_conf->mon_cluster_log_to_graylog_port, oss,
-                              &channels.log_to_graylog_port,
-                              CLOG_CONFIG_DEFAULT_KEY);
-  if (r < 0) {
-    derr << __func__ << " error parsing 'mon_cluster_log_to_graylog_port'"
-         << dendl;
-    return;
-  }
-
   channels.expand_channel_meta();
 }
 
@@ -775,32 +707,6 @@ bool LogMonitor::log_channel_info::do_log_to_syslog(const string &channel) {
   return ret;
 }
 
-ceph::logging::Graylog::Ref LogMonitor::log_channel_info::get_graylog(
-    const string &channel)
-{
-  generic_dout(25) << __func__ << " for channel '"
-		   << channel << "'" << dendl;
-
-  if (graylogs.count(channel) == 0) {
-    auto graylog(std::make_shared<ceph::logging::Graylog>("mon"));
-
-    graylog->set_fsid(g_conf->fsid);
-    graylog->set_hostname(g_conf->host);
-    graylog->set_destination(get_str_map_key(log_to_graylog_host, channel,
-					     &CLOG_CONFIG_DEFAULT_KEY),
-			     atoi(get_str_map_key(log_to_graylog_port, channel,
-						  &CLOG_CONFIG_DEFAULT_KEY).c_str()));
-
-    graylogs[channel] = graylog;
-    generic_dout(20) << __func__ << " for channel '"
-		     << channel << "' to graylog host '"
-		     << log_to_graylog_host[channel] << ":"
-		     << log_to_graylog_port[channel]
-		     << "'" << dendl;
-  }
-  return graylogs[channel];
-}
-
 void LogMonitor::handle_conf_change(const struct md_config_t *conf,
                                     const std::set<std::string> &changed)
 {
@@ -808,10 +714,7 @@ void LogMonitor::handle_conf_change(const struct md_config_t *conf,
       changed.count("mon_cluster_log_to_syslog_level") ||
       changed.count("mon_cluster_log_to_syslog_facility") ||
       changed.count("mon_cluster_log_file") ||
-      changed.count("mon_cluster_log_file_level") ||
-      changed.count("mon_cluster_log_to_graylog") ||
-      changed.count("mon_cluster_log_to_graylog_host") ||
-      changed.count("mon_cluster_log_to_graylog_port")) {
+      changed.count("mon_cluster_log_file_level")) {
     update_log_channels();
   }
 }

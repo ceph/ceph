@@ -19,7 +19,6 @@
 // SUMMARY: TestErasureCodeShec combination of k,m,c by 301 patterns
 
 #include <errno.h>
-#include <stdlib.h>
 
 #include "crush/CrushWrapper.h"
 #include "osd/osd_types.h"
@@ -294,13 +293,10 @@ int main(int argc, char **argv)
   vector<const char*> args;
   argv_to_vec(argc, (const char **) argv, args);
 
-  auto cct = global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT,
-			 CODE_ENVIRONMENT_UTILITY, 0);
+  global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
   common_init_finish(g_ceph_context);
 
-  const char* env = getenv("CEPH_LIB");
-  string directory(env ? env : ".libs");
-  g_conf->set_val("erasure_code_dir", directory, false);
+  g_conf->set_val("erasure_code_dir", ".libs", false, false);
 
   ::testing::InitGoogleTest(&argc, argv);
 

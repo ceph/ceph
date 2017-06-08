@@ -12,8 +12,8 @@ class RGWMultiDelDelete : public XMLObj
 {
 public:
   RGWMultiDelDelete() :quiet(false) {}
-  ~RGWMultiDelDelete() override {}
-  bool xml_end(const char *el) override;
+  ~RGWMultiDelDelete() {}
+  bool xml_end(const char *el);
 
   std::vector<rgw_obj_key> objects;
   bool quiet;
@@ -24,7 +24,7 @@ class RGWMultiDelQuiet : public XMLObj
 {
 public:
   RGWMultiDelQuiet() {}
-  ~RGWMultiDelQuiet() override {}
+  ~RGWMultiDelQuiet() {}
 };
 
 class RGWMultiDelObject : public XMLObj
@@ -33,8 +33,8 @@ class RGWMultiDelObject : public XMLObj
   string version_id;
 public:
   RGWMultiDelObject() {}
-  ~RGWMultiDelObject() override {}
-  bool xml_end(const char *el) override;
+  ~RGWMultiDelObject() {}
+  bool xml_end(const char *el);
 
   const string& get_key() { return key; }
   const string& get_version_id() { return version_id; }
@@ -44,22 +44,22 @@ class RGWMultiDelKey : public XMLObj
 {
 public:
   RGWMultiDelKey() {}
-  ~RGWMultiDelKey() override {}
+  ~RGWMultiDelKey() {}
 };
 
 class RGWMultiDelVersionId : public XMLObj
 {
 public:
   RGWMultiDelVersionId() {}
-  ~RGWMultiDelVersionId() override {}
+  ~RGWMultiDelVersionId() {}
 };
 
 class RGWMultiDelXMLParser : public RGWXMLParser
 {
-  XMLObj *alloc_obj(const char *el) override;
+  XMLObj *alloc_obj(const char *el);
 public:
   RGWMultiDelXMLParser() {}
-  ~RGWMultiDelXMLParser() override {}
+  ~RGWMultiDelXMLParser() {}
 };
 
 

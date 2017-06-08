@@ -21,10 +21,11 @@
 
 #include <stdio.h>
 #include <signal.h>
-#include "gtest/gtest.h"
 #include "common/Thread.h"
 #include "common/sharedptr_registry.hpp"
 #include "common/ceph_argparse.h"
+#include "global/global_init.h"
+#include <gtest/gtest.h>
 
 class SharedPtrRegistryTest : public SharedPtrRegistry<unsigned int, int> {
 public:
@@ -53,7 +54,7 @@ public:
     {
     }
     
-    void *entry() override {
+    virtual void *entry() {
       switch(in_method) {
       case LOOKUP_OR_CREATE:
 	if (value) 
@@ -303,7 +304,7 @@ public:
     int value;
   };
 
-  void SetUp() override {
+  virtual void SetUp() {
     died = UNDEFINED;
   }
 };
@@ -321,6 +322,17 @@ TEST_F(SharedPtrRegistry_destructor, destructor) {
   }
   EXPECT_EQ(YES, died);
   EXPECT_FALSE(registry.lookup(key));
+}
+
+int main(int argc, char **argv) {
+  vector<const char*> args;
+  argv_to_vec(argc, (const char **)argv, args);
+
+  global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
+  common_init_finish(g_ceph_context);
+
+  ::testing::InitGoogleTest(&argc, argv);
+  return RUN_ALL_TESTS();
 }
 
 // Local Variables:

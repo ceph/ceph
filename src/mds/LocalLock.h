@@ -27,7 +27,7 @@ public:
     set_state(LOCK_LOCK); // always.
   }
 
-  bool is_locallock() const override {
+  bool is_locallock() const {
     return true;
   }
 
@@ -52,7 +52,7 @@ public:
     return last_wrlock_client;
   }
   
-  void print(ostream& out) const override {
+  virtual void print(ostream& out) const {
     out << "(";
     _print(out);
     if (last_wrlock_client >= 0)

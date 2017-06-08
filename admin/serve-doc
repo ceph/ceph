@@ -1,6 +1,4 @@
 #!/usr/bin/python
-from __future__ import print_function
-
 import SimpleHTTPServer
 import SocketServer
 import os
@@ -26,7 +24,6 @@ httpd = SocketServer.TCPServer(
     ReusingTCPServer,
     )
 try:
-    print("Serving doc at port: http://localhost:8080")
     httpd.serve_forever()
 except KeyboardInterrupt:
     pass

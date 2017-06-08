@@ -29,49 +29,34 @@ Filesystems
 Ceph OSD Daemons rely heavily upon the stability and performance of the
 underlying filesystem.
 
-Recommended
------------
+.. note:: We currently recommend ``XFS`` for production deployments.
+   We recommend ``btrfs`` for testing, development, and any
+   non-critical deployments.  We believe that ``btrfs`` has the correct
+   feature set and roadmap to serve Ceph in the long-term, but ``XFS``
+   and ``ext4`` provide the necessary stability for today's deployments.
+   ``btrfs`` development is proceeding rapidly: users should be
+   comfortable installing the latest released upstream kernels and be
+   able to track development activity for critical bug fixes.
 
-We currently recommend ``XFS`` for production deployments.
+Ceph OSD Daemons depend on the Extended Attributes (XATTRs) of the underlying
+file system for various forms of internal object state and metadata. The
+underlying filesystem must provide sufficient capacity for XATTRs.  ``btrfs``
+does not bound the total xattr metadata stored with a file.  ``XFS`` has a
+relatively large limit (64 KB) that most deployments won't encounter, but the
+``ext4`` is too small to be usable.
 
-We used to recommend ``btrfs`` for testing, development, and any non-critical
-deployments becuase it has the most promising set of features.  However, we
-now plan to avoid using a kernel file system entirely with the new BlueStore
-backend.  ``btrfs`` is still supported and has a comparatively compelling
-set of features, but be mindful of its stability and support status in your
-Linux distribution.
+You should always add the following line to the ``[osd]`` section of your
+``ceph.conf`` file for ``ext4`` filesystems; you can optionally use
+it for ``btrfs`` and ``XFS``.::
 
-Not recommended
----------------
-
-We recommend *against* using ``ext4`` due to limitations in the size
-of xattrs it can store, and the problems this causes with the way Ceph
-handles long RADOS object names.  Although these issues will generally
-not surface with Ceph clusters using only short object names (e.g., an
-RBD workload that does not include long RBD image names), other users
-like RGW make extensive use of long object names and can break.
-
-Starting with the Jewel release, the ``ceph-osd`` daemon will refuse
-to start if the configured max object name cannot be safely stored on
-``ext4``.  If the cluster is only being used with short object names
-(e.g., RBD only), you can continue using ``ext4`` by setting the
-following configuration option::
-
-  osd max object name len = 256
-  osd max object namespace len = 64
-
-.. note:: This may result in difficult-to-diagnose errors if you try
-          to use RGW or other librados clients that do not properly
-          handle or politely surface any resulting ENAMETOOLONG
-          errors.
+	filestore xattr use omap = true
 
 
 Filesystem Background Info
 ==========================
 
-The ``XFS``, ``btrfs`` and ``ext4`` file systems provide numerous
-advantages in highly scaled data storage environments when `compared`_
-to ``ext3``.
+The ``XFS``, ``btrfs`` and ``ext4`` file systems provide numerous advantages in highly 
+scaled data storage environments when `compared`_ to ``ext3``.
 
 ``XFS``, ``btrfs`` and ``ext4`` are `journaling file systems`_, which means that
 they are more robust when recovering from crashes, power outages, etc. These
@@ -92,7 +77,8 @@ capability means that ``btrfs`` can support snapshots that are writable.
 ``btrfs`` also incorporates multi-device management into the file system,
 which enables you to support heterogeneous disk storage infrastructure,
 data allocation policies. The community also aims to provide ``fsck``, 
-deduplication, and data encryption support in the future.
+deduplication, and data encryption support in the future. This compelling 
+list of features makes ``btrfs`` the ideal choice for Ceph clusters.
 
 .. _copy-on-write: http://en.wikipedia.org/wiki/Copy-on-write
 .. _compared: http://en.wikipedia.org/wiki/Comparison_of_file_systems

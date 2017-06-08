@@ -10,12 +10,18 @@
  */
 
 #include "objclass/objclass.h"
+#include "global/global_context.h"
 
 #include "cls_replica_log_types.h"
 #include "cls_replica_log_ops.h"
 
 CLS_VER(1, 0)
 CLS_NAME(replica_log)
+
+cls_handle_t h_class;
+cls_method_handle_t h_replica_log_set;
+cls_method_handle_t h_replica_log_delete;
+cls_method_handle_t h_replica_log_get;
 
 static const string replica_log_prefix = "rl_";
 static const string replica_log_bounds = replica_log_prefix + "bounds";
@@ -130,14 +136,9 @@ static int cls_replica_log_get(cls_method_context_t hctx,
   return 0;
 }
 
-CLS_INIT(replica_log)
+void __cls_init()
 {
   CLS_LOG(1, "Loaded replica log class!");
-
-  cls_handle_t h_class;
-  cls_method_handle_t h_replica_log_set;
-  cls_method_handle_t h_replica_log_delete;
-  cls_method_handle_t h_replica_log_get;
 
   cls_register("replica_log", &h_class);
 

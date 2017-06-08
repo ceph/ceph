@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// -*- mode:C; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
 #include "test/librbd/test_mock_fixture.h"
@@ -23,7 +23,6 @@ using ::testing::DoAll;
 using ::testing::DoDefault;
 using ::testing::Return;
 using ::testing::SetArgPointee;
-using ::testing::StrEq;
 using ::testing::WithArg;
 
 class TestMockOperationSnapshotRemoveRequest : public TestMockFixture {
@@ -37,13 +36,13 @@ public:
       return r;
     }
 
-    r = snap_create(*ictx, snap_name);
+    r = librbd::snap_create(ictx, snap_name);
     if (r < 0) {
       return r;
     }
 
-    r = snap_protect(*ictx, snap_name);
-    if (r < 0) {
+    r = librbd::snap_protect(ictx, snap_name);
+     if (r < 0) {
       return r;
     }
     close_image(ictx);
@@ -63,7 +62,7 @@ public:
     if (r < 0) {
       expect.WillOnce(Return(r));
     } else {
-      ParentSpec &parent_spec = mock_image_ctx.snap_info.rbegin()->second.parent.spec;
+      parent_spec &parent_spec = mock_image_ctx.snap_info.rbegin()->second.parent.spec;
       expect.WillOnce(DoAll(SetArgPointee<1>(parent_spec),
                             Return(0)));
     }
@@ -72,7 +71,7 @@ public:
   void expect_remove_child(MockImageCtx &mock_image_ctx, int r) {
     bool deep_flatten = mock_image_ctx.image_ctx->test_features(RBD_FEATURE_DEEP_FLATTEN);
     auto &expect = EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.md_ctx),
-                               exec(RBD_CHILDREN, _, StrEq("rbd"), StrEq("remove_child"), _,
+                               exec(RBD_CHILDREN, _, "rbd", "remove_child",_,
                                     _, _));
     if (deep_flatten) {
       expect.Times(0);
@@ -94,9 +93,9 @@ public:
 
   void expect_snap_remove(MockImageCtx &mock_image_ctx, int r) {
     auto &expect = EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.md_ctx),
-                               exec(mock_image_ctx.header_oid, _, StrEq("rbd"),
-                               StrEq(mock_image_ctx.old_format ? "snap_remove" :
-                                                                  "snapshot_remove"),
+                               exec(mock_image_ctx.header_oid, _, "rbd",
+                               mock_image_ctx.old_format ? "snap_remove" :
+                                                           "snapshot_remove",
                                 _, _, _));
     if (r < 0) {
       expect.WillOnce(Return(r));
@@ -106,7 +105,7 @@ public:
   }
 
   void expect_rm_snap(MockImageCtx &mock_image_ctx) {
-    EXPECT_CALL(mock_image_ctx, rm_snap(_, _, _)).Times(1);
+    EXPECT_CALL(mock_image_ctx, rm_snap(_, _)).Times(1);
   }
 
   void expect_release_snap_id(MockImageCtx &mock_image_ctx) {
@@ -120,7 +119,7 @@ public:
 TEST_F(TestMockOperationSnapshotRemoveRequest, Success) {
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
-  ASSERT_EQ(0, snap_create(*ictx, "snap1"));
+  ASSERT_EQ(0, librbd::snap_create(ictx, "snap1"));
   ASSERT_EQ(0, ictx->state->refresh_if_required());
 
   MockImageCtx mock_image_ctx(*ictx);
@@ -148,8 +147,7 @@ TEST_F(TestMockOperationSnapshotRemoveRequest, Success) {
 
   C_SaferCond cond_ctx;
   MockSnapshotRemoveRequest *req = new MockSnapshotRemoveRequest(
-    mock_image_ctx, &cond_ctx, cls::rbd::UserSnapshotNamespace(), "snap1",
-    snap_id);
+    mock_image_ctx, &cond_ctx, "snap1", snap_id);
   {
     RWLock::RLocker owner_locker(mock_image_ctx.owner_lock);
     req->send();
@@ -171,10 +169,10 @@ TEST_F(TestMockOperationSnapshotRemoveRequest, FlattenedCloneRemovesChild) {
 
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(clone_name, &ictx));
-  ASSERT_EQ(0, snap_create(*ictx, "snap1"));
+  ASSERT_EQ(0, librbd::snap_create(ictx, "snap1"));
 
   librbd::NoOpProgressContext prog_ctx;
-  ASSERT_EQ(0, flatten(*ictx, prog_ctx));
+  ASSERT_EQ(0, librbd::flatten(ictx, prog_ctx));
   ASSERT_EQ(0, ictx->state->refresh_if_required());
 
   MockImageCtx mock_image_ctx(*ictx);
@@ -202,8 +200,7 @@ TEST_F(TestMockOperationSnapshotRemoveRequest, FlattenedCloneRemovesChild) {
 
   C_SaferCond cond_ctx;
   MockSnapshotRemoveRequest *req = new MockSnapshotRemoveRequest(
-    mock_image_ctx, &cond_ctx, cls::rbd::UserSnapshotNamespace(), "snap1",
-    snap_id);
+    mock_image_ctx, &cond_ctx, "snap1", snap_id);
   {
     RWLock::RLocker owner_locker(mock_image_ctx.owner_lock);
     req->send();
@@ -216,7 +213,7 @@ TEST_F(TestMockOperationSnapshotRemoveRequest, ObjectMapSnapRemoveError) {
 
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
-  ASSERT_EQ(0, snap_create(*ictx, "snap1"));
+  ASSERT_EQ(0, librbd::snap_create(ictx, "snap1"));
   ASSERT_EQ(0, ictx->state->refresh_if_required());
 
   MockImageCtx mock_image_ctx(*ictx);
@@ -234,8 +231,7 @@ TEST_F(TestMockOperationSnapshotRemoveRequest, ObjectMapSnapRemoveError) {
 
   C_SaferCond cond_ctx;
   MockSnapshotRemoveRequest *req = new MockSnapshotRemoveRequest(
-    mock_image_ctx, &cond_ctx, cls::rbd::UserSnapshotNamespace(), "snap1",
-    snap_id);
+    mock_image_ctx, &cond_ctx, "snap1", snap_id);
   {
     RWLock::RLocker owner_locker(mock_image_ctx.owner_lock);
     req->send();
@@ -246,7 +242,7 @@ TEST_F(TestMockOperationSnapshotRemoveRequest, ObjectMapSnapRemoveError) {
 TEST_F(TestMockOperationSnapshotRemoveRequest, RemoveChildParentError) {
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
-  ASSERT_EQ(0, snap_create(*ictx, "snap1"));
+  ASSERT_EQ(0, librbd::snap_create(ictx, "snap1"));
   ASSERT_EQ(0, ictx->state->refresh_if_required());
 
   MockImageCtx mock_image_ctx(*ictx);
@@ -265,8 +261,7 @@ TEST_F(TestMockOperationSnapshotRemoveRequest, RemoveChildParentError) {
 
   C_SaferCond cond_ctx;
   MockSnapshotRemoveRequest *req = new MockSnapshotRemoveRequest(
-    mock_image_ctx, &cond_ctx, cls::rbd::UserSnapshotNamespace(), "snap1",
-    snap_id);
+    mock_image_ctx, &cond_ctx, "snap1", snap_id);
   {
     RWLock::RLocker owner_locker(mock_image_ctx.owner_lock);
     req->send();
@@ -293,10 +288,10 @@ TEST_F(TestMockOperationSnapshotRemoveRequest, RemoveChildError) {
     return SUCCEED();
   }
 
-  ASSERT_EQ(0, snap_create(*ictx, "snap1"));
+  ASSERT_EQ(0, librbd::snap_create(ictx, "snap1"));
 
   librbd::NoOpProgressContext prog_ctx;
-  ASSERT_EQ(0, flatten(*ictx, prog_ctx));
+  ASSERT_EQ(0, librbd::flatten(ictx, prog_ctx));
   ASSERT_EQ(0, ictx->state->refresh_if_required());
 
   MockImageCtx mock_image_ctx(*ictx);
@@ -315,8 +310,7 @@ TEST_F(TestMockOperationSnapshotRemoveRequest, RemoveChildError) {
 
   C_SaferCond cond_ctx;
   MockSnapshotRemoveRequest *req = new MockSnapshotRemoveRequest(
-    mock_image_ctx, &cond_ctx, cls::rbd::UserSnapshotNamespace(), "snap1",
-    snap_id);
+    mock_image_ctx, &cond_ctx, "snap1", snap_id);
   {
     RWLock::RLocker owner_locker(mock_image_ctx.owner_lock);
     req->send();
@@ -327,7 +321,7 @@ TEST_F(TestMockOperationSnapshotRemoveRequest, RemoveChildError) {
 TEST_F(TestMockOperationSnapshotRemoveRequest, RemoveSnapError) {
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
-  ASSERT_EQ(0, snap_create(*ictx, "snap1"));
+  ASSERT_EQ(0, librbd::snap_create(ictx, "snap1"));
   ASSERT_EQ(0, ictx->state->refresh_if_required());
 
   MockImageCtx mock_image_ctx(*ictx);
@@ -353,40 +347,7 @@ TEST_F(TestMockOperationSnapshotRemoveRequest, RemoveSnapError) {
 
   C_SaferCond cond_ctx;
   MockSnapshotRemoveRequest *req = new MockSnapshotRemoveRequest(
-    mock_image_ctx, &cond_ctx, cls::rbd::UserSnapshotNamespace(), "snap1",
-    snap_id);
-  {
-    RWLock::RLocker owner_locker(mock_image_ctx.owner_lock);
-    req->send();
-  }
-  ASSERT_EQ(-ENOENT, cond_ctx.wait());
-}
-
-TEST_F(TestMockOperationSnapshotRemoveRequest, MissingSnap) {
-  librbd::ImageCtx *ictx;
-  ASSERT_EQ(0, open_image(m_image_name, &ictx));
-
-  MockImageCtx mock_image_ctx(*ictx);
-
-  MockExclusiveLock mock_exclusive_lock;
-  if (ictx->test_features(RBD_FEATURE_EXCLUSIVE_LOCK)) {
-    mock_image_ctx.exclusive_lock = &mock_exclusive_lock;
-  }
-
-  MockObjectMap mock_object_map;
-  if (ictx->test_features(RBD_FEATURE_OBJECT_MAP)) {
-    mock_image_ctx.object_map = &mock_object_map;
-  }
-
-  expect_op_work_queue(mock_image_ctx);
-
-  ::testing::InSequence seq;
-  uint64_t snap_id = 456;
-
-  C_SaferCond cond_ctx;
-  MockSnapshotRemoveRequest *req = new MockSnapshotRemoveRequest(
-    mock_image_ctx, &cond_ctx, cls::rbd::UserSnapshotNamespace(), "snap1",
-    snap_id);
+    mock_image_ctx, &cond_ctx, "snap1", snap_id);
   {
     RWLock::RLocker owner_locker(mock_image_ctx.owner_lock);
     req->send();

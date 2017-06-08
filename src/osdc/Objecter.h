@@ -15,30 +15,23 @@
 #ifndef CEPH_OBJECTER_H
 #define CEPH_OBJECTER_H
 
-#include <condition_variable>
 #include <list>
 #include <map>
-#include <mutex>
 #include <memory>
 #include <sstream>
-#include <type_traits>
 
-#include <boost/thread/shared_mutex.hpp>
-
-#include "include/assert.h"
-#include "include/buffer.h"
 #include "include/types.h"
+#include "include/buffer.h"
 #include "include/rados/rados_types.hpp"
 
 #include "common/admin_socket.h"
 #include "common/ceph_time.h"
 #include "common/ceph_timer.h"
-#include "common/Finisher.h"
-#include "common/shunique_lock.h"
-#include "common/zipkin_trace.h"
+#include "common/RWLock.h"
 
 #include "messages/MOSDOp.h"
 #include "osd/OSDMap.h"
+
 
 using namespace std;
 
@@ -86,12 +79,43 @@ struct ObjectOperation {
     ops.rbegin()->op.flags = flags;
   }
 
-  class C_TwoContexts;
+  /**
+   * This is a more limited form of C_Contexts, but that requires
+   * a ceph_context which we don't have here.
+   */
+  class C_TwoContexts : public Context {
+    Context *first;
+    Context *second;
+  public:
+    C_TwoContexts(Context *first, Context *second) : first(first),
+						     second(second) {}
+    void finish(int r) {
+      first->complete(r);
+      second->complete(r);
+      first = NULL;
+      second = NULL;
+    }
+
+    virtual ~C_TwoContexts() {
+      delete first;
+      delete second;
+    }
+  };
+
   /**
    * Add a callback to run when this operation completes,
    * after any other callbacks for it.
    */
-  void add_handler(Context *extra);
+  void add_handler(Context *extra) {
+    size_t last = out_handler.size() - 1;
+    Context *orig = out_handler[last];
+    if (orig) {
+      Context *wrapper = new C_TwoContexts(orig, extra);
+      out_handler[last] = wrapper;
+    } else {
+      out_handler[last] = extra;
+    }
+  }
 
   OSDOp& add_op(int op) {
     int s = ops.size();
@@ -111,13 +135,14 @@ struct ObjectOperation {
     osd_op.op.extent.length = len;
     osd_op.indata.claim_append(bl);
   }
-  void add_writesame(int op, uint64_t off, uint64_t write_len,
-		     bufferlist& bl) {
+  void add_clone_range(int op, uint64_t off, uint64_t len,
+		       const object_t& srcoid, uint64_t srcoff,
+		       snapid_t srcsnapid) {
     OSDOp& osd_op = add_op(op);
-    osd_op.op.writesame.offset = off;
-    osd_op.op.writesame.length = write_len;
-    osd_op.op.writesame.data_length = bl.length();
-    osd_op.indata.claim_append(bl);
+    osd_op.op.clonerange.offset = off;
+    osd_op.op.clonerange.length = len;
+    osd_op.op.clonerange.src_offset = srcoff;
+    osd_op.soid = sobject_t(srcoid, srcsnapid);
   }
   void add_xattr(int op, const char *name, const bufferlist& data) {
     OSDOp& osd_op = add_op(op);
@@ -162,7 +187,7 @@ struct ObjectOperation {
     osd_op.op.pgls.start_epoch = start_epoch;
     ::encode(cookie, osd_op.indata);
   }
-  void add_pgls_filter(int op, uint64_t count, const bufferlist& filter,
+  void add_pgls_filter(int op, uint64_t count, bufferlist& filter,
 		       collection_list_handle_t cookie, epoch_t start_epoch) {
     OSDOp& osd_op = add_op(op);
     osd_op.op.pgls.count = count;
@@ -175,12 +200,10 @@ struct ObjectOperation {
     ::encode(cookie, osd_op.indata);
   }
   void add_alloc_hint(int op, uint64_t expected_object_size,
-                      uint64_t expected_write_size,
-		      uint32_t flags) {
+		      uint64_t expected_write_size) {
     OSDOp& osd_op = add_op(op);
     osd_op.op.alloc_hint.expected_object_size = expected_object_size;
     osd_op.op.alloc_hint.expected_write_size = expected_write_size;
-    osd_op.op.alloc_hint.flags = flags;
   }
 
   // ------
@@ -196,7 +219,7 @@ struct ObjectOperation {
     flags |= CEPH_OSD_FLAG_PGOP;
   }
 
-  void pg_nls(uint64_t count, const bufferlist& filter,
+  void pg_nls(uint64_t count, bufferlist& filter,
 	      collection_list_handle_t cookie, epoch_t start_epoch) {
     if (filter.length() == 0)
       add_pgls(CEPH_OSD_OP_PGNLS, count, cookie, start_epoch);
@@ -205,17 +228,6 @@ struct ObjectOperation {
 		      start_epoch);
     flags |= CEPH_OSD_FLAG_PGOP;
   }
-
-  void scrub_ls(const librados::object_id_t& start_after,
-		uint64_t max_to_get,
-		std::vector<librados::inconsistent_obj_t> *objects,
-		uint32_t *interval,
-		int *rval);
-  void scrub_ls(const librados::object_id_t& start_after,
-		uint64_t max_to_get,
-		std::vector<librados::inconsistent_snapset_t> *objects,
-		uint32_t *interval,
-		int *rval);
 
   void create(bool excl) {
     OSDOp& o = add_op(CEPH_OSD_OP_CREATE);
@@ -227,12 +239,11 @@ struct ObjectOperation {
     uint64_t *psize;
     ceph::real_time *pmtime;
     time_t *ptime;
-    struct timespec *pts;
     int *prval;
-    C_ObjectOperation_stat(uint64_t *ps, ceph::real_time *pm, time_t *pt, struct timespec *_pts,
+    C_ObjectOperation_stat(uint64_t *ps, ceph::real_time *pm, time_t *pt,
 			   int *prval)
-      : psize(ps), pmtime(pm), ptime(pt), pts(_pts), prval(prval) {}
-    void finish(int r) override {
+      : psize(ps), pmtime(pm), ptime(pt), prval(prval) {}
+    void finish(int r) {
       if (r >= 0) {
 	bufferlist::iterator p = bl.begin();
 	try {
@@ -246,8 +257,6 @@ struct ObjectOperation {
 	    *pmtime = mtime;
 	  if (ptime)
 	    *ptime = ceph::real_clock::to_time_t(mtime);
-	  if (pts)
-	    *pts = ceph::real_clock::to_timespec(mtime);
 	} catch (buffer::error& e) {
 	  if (prval)
 	    *prval = -EIO;
@@ -258,7 +267,7 @@ struct ObjectOperation {
   void stat(uint64_t *psize, ceph::real_time *pmtime, int *prval) {
     add_op(CEPH_OSD_OP_STAT);
     unsigned p = ops.size() - 1;
-    C_ObjectOperation_stat *h = new C_ObjectOperation_stat(psize, pmtime, NULL, NULL,
+    C_ObjectOperation_stat *h = new C_ObjectOperation_stat(psize, pmtime, NULL,
 							   prval);
     out_bl[p] = &h->bl;
     out_handler[p] = h;
@@ -267,52 +276,14 @@ struct ObjectOperation {
   void stat(uint64_t *psize, time_t *ptime, int *prval) {
     add_op(CEPH_OSD_OP_STAT);
     unsigned p = ops.size() - 1;
-    C_ObjectOperation_stat *h = new C_ObjectOperation_stat(psize, NULL, ptime, NULL,
+    C_ObjectOperation_stat *h = new C_ObjectOperation_stat(psize, NULL, ptime,
 							   prval);
     out_bl[p] = &h->bl;
     out_handler[p] = h;
     out_rval[p] = prval;
   }
-  void stat(uint64_t *psize, struct timespec *pts, int *prval) {
-    add_op(CEPH_OSD_OP_STAT);
-    unsigned p = ops.size() - 1;
-    C_ObjectOperation_stat *h = new C_ObjectOperation_stat(psize, NULL, NULL, pts,
-							   prval);
-    out_bl[p] = &h->bl;
-    out_handler[p] = h;
-    out_rval[p] = prval;
-  }
-  // object cmpext
-  struct C_ObjectOperation_cmpext : public Context {
-    int *prval;
-    C_ObjectOperation_cmpext(int *prval)
-      : prval(prval) {}
 
-    void finish(int r) {
-      if (prval)
-        *prval = r;
-    }
-  };
-
-  void cmpext(uint64_t off, bufferlist& cmp_bl, int *prval) {
-    add_data(CEPH_OSD_OP_CMPEXT, off, cmp_bl.length(), cmp_bl);
-    unsigned p = ops.size() - 1;
-    C_ObjectOperation_cmpext *h = new C_ObjectOperation_cmpext(prval);
-    out_handler[p] = h;
-    out_rval[p] = prval;
-  }
-
-  // Used by C API
-  void cmpext(uint64_t off, uint64_t cmp_len, const char *cmp_buf, int *prval) {
-    bufferlist cmp_bl;
-    cmp_bl.append(cmp_buf, cmp_len);
-    add_data(CEPH_OSD_OP_CMPEXT, off, cmp_len, cmp_bl);
-    unsigned p = ops.size() - 1;
-    C_ObjectOperation_cmpext *h = new C_ObjectOperation_cmpext(prval);
-    out_handler[p] = h;
-    out_rval[p] = prval;
-  }
-
+  // object data
   void read(uint64_t off, uint64_t len, bufferlist *pbl, int *prval,
 	    Context* ctx) {
     bufferlist bl;
@@ -332,7 +303,7 @@ struct ObjectOperation {
 				  std::map<uint64_t, uint64_t> *extents,
 				  int *prval)
       : data_bl(data_bl), extents(extents), prval(prval) {}
-    void finish(int r) override {
+    void finish(int r) {
       bufferlist::iterator iter = bl.begin();
       if (r >= 0) {
 	try {
@@ -370,9 +341,6 @@ struct ObjectOperation {
   void write_full(bufferlist& bl) {
     add_data(CEPH_OSD_OP_WRITEFULL, 0, bl.length(), bl);
   }
-  void writesame(uint64_t off, uint64_t write_len, bufferlist& bl) {
-    add_writesame(CEPH_OSD_OP_WRITESAME, off, write_len, bl);
-  }
   void append(bufferlist& bl) {
     add_data(CEPH_OSD_OP_APPEND, 0, bl.length(), bl);
   }
@@ -397,20 +365,10 @@ struct ObjectOperation {
     add_data(CEPH_OSD_OP_SPARSE_READ, off, len, bl);
   }
 
-  void checksum(uint8_t type, const bufferlist &init_value_bl,
-		uint64_t off, uint64_t len, size_t chunk_size,
-		bufferlist *pbl, int *prval, Context *ctx) {
-    OSDOp& osd_op = add_op(CEPH_OSD_OP_CHECKSUM);
-    osd_op.op.checksum.offset = off;
-    osd_op.op.checksum.length = len;
-    osd_op.op.checksum.type = type;
-    osd_op.op.checksum.chunk_size = chunk_size;
-    osd_op.indata.append(init_value_bl);
-
-    unsigned p = ops.size() - 1;
-    out_bl[p] = pbl;
-    out_rval[p] = prval;
-    out_handler[p] = ctx;
+  void clone_range(const object_t& src_oid, uint64_t src_offset, uint64_t len,
+		   uint64_t dst_offset) {
+    add_clone_range(CEPH_OSD_OP_CLONERANGE, dst_offset, len, src_oid,
+		    src_offset, CEPH_NOSNAP);
   }
 
   // object attrs
@@ -422,39 +380,17 @@ struct ObjectOperation {
     out_rval[p] = prval;
   }
   struct C_ObjectOperation_decodevals : public Context {
-    uint64_t max_entries;
     bufferlist bl;
     std::map<std::string,bufferlist> *pattrs;
-    bool *ptruncated;
     int *prval;
-    C_ObjectOperation_decodevals(uint64_t m, std::map<std::string,bufferlist> *pa,
-				 bool *pt, int *pr)
-      : max_entries(m), pattrs(pa), ptruncated(pt), prval(pr) {
-      if (ptruncated) {
-	*ptruncated = false;
-      }
-    }
-    void finish(int r) override {
+    C_ObjectOperation_decodevals(std::map<std::string,bufferlist> *pa, int *pr)
+      : pattrs(pa), prval(pr) {}
+    void finish(int r) {
       if (r >= 0) {
 	bufferlist::iterator p = bl.begin();
 	try {
 	  if (pattrs)
 	    ::decode(*pattrs, p);
-	  if (ptruncated) {
-	    std::map<std::string,bufferlist> ignore;
-	    if (!pattrs) {
-	      ::decode(ignore, p);
-	      pattrs = &ignore;
-	    }
-	    if (!p.end()) {
-	      ::decode(*ptruncated, p);
-	    } else {
-	      // the OSD did not provide this.  since old OSDs do not
-	      // enfoce omap result limits either, we can infer it from
-	      // the size of the result
-	      *ptruncated = (pattrs->size() == max_entries);
-	    }
-	  }
 	}
 	catch (buffer::error& e) {
 	  if (prval)
@@ -464,39 +400,17 @@ struct ObjectOperation {
     }
   };
   struct C_ObjectOperation_decodekeys : public Context {
-    uint64_t max_entries;
     bufferlist bl;
     std::set<std::string> *pattrs;
-    bool *ptruncated;
     int *prval;
-    C_ObjectOperation_decodekeys(uint64_t m, std::set<std::string> *pa, bool *pt,
-				 int *pr)
-      : max_entries(m), pattrs(pa), ptruncated(pt), prval(pr) {
-      if (ptruncated) {
-	*ptruncated = false;
-      }
-    }
-    void finish(int r) override {
+    C_ObjectOperation_decodekeys(std::set<std::string> *pa, int *pr)
+      : pattrs(pa), prval(pr) {}
+    void finish(int r) {
       if (r >= 0) {
 	bufferlist::iterator p = bl.begin();
 	try {
 	  if (pattrs)
 	    ::decode(*pattrs, p);
-	  if (ptruncated) {
-	    std::set<std::string> ignore;
-	    if (!pattrs) {
-	      ::decode(ignore, p);
-	      pattrs = &ignore;
-	    }
-	    if (!p.end()) {
-	      ::decode(*ptruncated, p);
-	    } else {
-	      // the OSD did not provide this.  since old OSDs do not
-	      // enfoce omap result limits either, we can infer it from
-	      // the size of the result
-	      *ptruncated = (pattrs->size() == max_entries);
-	    }
-	  }
 	}
 	catch (buffer::error& e) {
 	  if (prval)
@@ -511,7 +425,7 @@ struct ObjectOperation {
     int *prval;
     C_ObjectOperation_decodewatchers(list<obj_watch_t> *pw, int *pr)
       : pwatchers(pw), prval(pr) {}
-    void finish(int r) override {
+    void finish(int r) {
       if (r >= 0) {
 	bufferlist::iterator p = bl.begin();
 	try {
@@ -544,7 +458,7 @@ struct ObjectOperation {
     int *prval;
     C_ObjectOperation_decodesnaps(librados::snap_set_t *ps, int *pr)
       : psnaps(ps), prval(pr) {}
-    void finish(int r) override {
+    void finish(int r) {
       if (r >= 0) {
 	bufferlist::iterator p = bl.begin();
 	try {
@@ -580,7 +494,7 @@ struct ObjectOperation {
     if (pattrs || prval) {
       unsigned p = ops.size() - 1;
       C_ObjectOperation_decodevals *h
-	= new C_ObjectOperation_decodevals(0, pattrs, nullptr, prval);
+	= new C_ObjectOperation_decodevals(pattrs, prval);
       out_handler[p] = h;
       out_bl[p] = &h->bl;
       out_rval[p] = prval;
@@ -639,7 +553,6 @@ struct ObjectOperation {
   void omap_get_keys(const string &start_after,
 		     uint64_t max_to_get,
 		     std::set<std::string> *out_set,
-		     bool *ptruncated,
 		     int *prval) {
     OSDOp &op = add_op(CEPH_OSD_OP_OMAPGETKEYS);
     bufferlist bl;
@@ -648,10 +561,10 @@ struct ObjectOperation {
     op.op.extent.offset = 0;
     op.op.extent.length = bl.length();
     op.indata.claim_append(bl);
-    if (prval || ptruncated || out_set) {
+    if (prval || out_set) {
       unsigned p = ops.size() - 1;
       C_ObjectOperation_decodekeys *h =
-	new C_ObjectOperation_decodekeys(max_to_get, out_set, ptruncated, prval);
+	new C_ObjectOperation_decodekeys(out_set, prval);
       out_handler[p] = h;
       out_bl[p] = &h->bl;
       out_rval[p] = prval;
@@ -662,7 +575,6 @@ struct ObjectOperation {
 		     const string &filter_prefix,
 		     uint64_t max_to_get,
 		     std::map<std::string, bufferlist> *out_set,
-		     bool *ptruncated,
 		     int *prval) {
     OSDOp &op = add_op(CEPH_OSD_OP_OMAPGETVALS);
     bufferlist bl;
@@ -672,10 +584,10 @@ struct ObjectOperation {
     op.op.extent.offset = 0;
     op.op.extent.length = bl.length();
     op.indata.claim_append(bl);
-    if (prval || out_set || ptruncated) {
+    if (prval || out_set) {
       unsigned p = ops.size() - 1;
       C_ObjectOperation_decodevals *h =
-	new C_ObjectOperation_decodevals(max_to_get, out_set, ptruncated, prval);
+	new C_ObjectOperation_decodevals(out_set, prval);
       out_handler[p] = h;
       out_bl[p] = &h->bl;
       out_rval[p] = prval;
@@ -694,7 +606,7 @@ struct ObjectOperation {
     if (prval || out_set) {
       unsigned p = ops.size() - 1;
       C_ObjectOperation_decodevals *h =
-	new C_ObjectOperation_decodevals(0, out_set, nullptr, prval);
+	new C_ObjectOperation_decodevals(out_set, prval);
       out_handler[p] = h;
       out_bl[p] = &h->bl;
       out_rval[p] = prval;
@@ -755,7 +667,7 @@ struct ObjectOperation {
 	out_truncate_seq(otseq),
 	out_truncate_size(otsize),
 	prval(r) {}
-    void finish(int r) override {
+    void finish(int r) {
       // reqids are copied on ENOENT
       if (r < 0 && r != -ENOENT)
 	return;
@@ -806,6 +718,7 @@ struct ObjectOperation {
 
   void copy_get(object_copy_cursor_t *cursor,
 		uint64_t max,
+		uint32_t copyget_flags,
 		uint64_t *out_size,
 		ceph::real_time *out_mtime,
 		std::map<std::string,bufferlist> *out_attrs,
@@ -823,6 +736,7 @@ struct ObjectOperation {
 		int *prval) {
     OSDOp& osd_op = add_op(CEPH_OSD_OP_COPY_GET);
     osd_op.op.copy_get.max = max;
+    osd_op.op.copy_get.flags = copyget_flags;
     ::encode(*cursor, osd_op.indata);
     ::encode(max, osd_op.indata);
     unsigned p = ops.size() - 1;
@@ -848,7 +762,7 @@ struct ObjectOperation {
     int *prval;
     C_ObjectOperation_isdirty(bool *p, int *r)
       : pisdirty(p), prval(r) {}
-    void finish(int r) override {
+    void finish(int r) {
       if (r < 0)
 	return;
       try {
@@ -884,7 +798,7 @@ struct ObjectOperation {
 						      ceph::real_time> > *ut,
 				 int *r)
       : ptls(t), putls(ut), prval(r) {}
-    void finish(int r) override {
+    void finish(int r) {
       if (r < 0)
 	return;
       try {
@@ -999,11 +913,10 @@ struct ObjectOperation {
   }
 
   // watch/notify
-  void watch(uint64_t cookie, __u8 op, uint32_t timeout = 0) {
+  void watch(uint64_t cookie, __u8 op) {
     OSDOp& osd_op = add_op(CEPH_OSD_OP_WATCH);
     osd_op.op.watch.cookie = cookie;
     osd_op.op.watch.op = op;
-    osd_op.op.watch.timeout = timeout;
   }
 
   void notify(uint64_t cookie, uint32_t prot_ver, uint32_t timeout,
@@ -1055,11 +968,26 @@ struct ObjectOperation {
     OSDOp& osd_op = add_op(CEPH_OSD_OP_ASSERT_VER);
     osd_op.op.assert_ver.ver = ver;
   }
+  void assert_src_version(const object_t& srcoid, snapid_t srcsnapid,
+			  uint64_t ver) {
+    OSDOp& osd_op = add_op(CEPH_OSD_OP_ASSERT_SRC_VERSION);
+    osd_op.op.assert_ver.ver = ver;
+    ops.rbegin()->soid = sobject_t(srcoid, srcsnapid);
+  }
 
   void cmpxattr(const char *name, const bufferlist& val,
 		int op, int mode) {
     add_xattr(CEPH_OSD_OP_CMPXATTR, name, val);
     OSDOp& o = *ops.rbegin();
+    o.op.xattr.cmp_op = op;
+    o.op.xattr.cmp_mode = mode;
+  }
+  void src_cmpxattr(const object_t& srcoid, snapid_t srcsnapid,
+		    const char *name, const bufferlist& val,
+		    int op, int mode) {
+    add_xattr(CEPH_OSD_OP_SRC_CMPXATTR, name, val);
+    OSDOp& o = *ops.rbegin();
+    o.soid = sobject_t(srcoid, srcsnapid);
     o.op.xattr.cmp_op = op;
     o.op.xattr.cmp_mode = mode;
   }
@@ -1122,23 +1050,10 @@ struct ObjectOperation {
     add_op(CEPH_OSD_OP_CACHE_EVICT);
   }
 
-  /*
-   * Extensible tier
-   */
-  void set_redirect(object_t tgt, snapid_t snapid, object_locator_t tgt_oloc, 
-		    version_t tgt_version) {
-    OSDOp& osd_op = add_op(CEPH_OSD_OP_SET_REDIRECT);
-    osd_op.op.copy_from.snapid = snapid;
-    osd_op.op.copy_from.src_version = tgt_version;
-    ::encode(tgt, osd_op.indata);
-    ::encode(tgt_oloc, osd_op.indata);
-  }
-
   void set_alloc_hint(uint64_t expected_object_size,
-                      uint64_t expected_write_size,
-		      uint32_t flags) {
+		      uint64_t expected_write_size ) {
     add_alloc_hint(CEPH_OSD_OP_SETALLOCHINT, expected_object_size,
-		   expected_write_size, flags);
+		   expected_write_size);
 
     // CEPH_OSD_OP_SETALLOCHINT op is advisory and therefore deemed
     // not worth a feature bit.  Set FAILOK per-op flag to make
@@ -1177,15 +1092,14 @@ struct ObjectOperation {
 class Objecter : public md_config_obs_t, public Dispatcher {
 public:
   // config observer bits
-  const char** get_tracked_conf_keys() const override;
-  void handle_conf_change(const struct md_config_t *conf,
-                          const std::set <std::string> &changed) override;
+  virtual const char** get_tracked_conf_keys() const;
+  virtual void handle_conf_change(const struct md_config_t *conf,
+				  const std::set <std::string> &changed);
 
 public:
   Messenger *messenger;
   MonClient *monc;
   Finisher *finisher;
-  ZTracer::Endpoint trace_endpoint;
 private:
   OSDMap    *osdmap;
 public:
@@ -1199,21 +1113,14 @@ private:
   atomic_t inflight_ops;
   atomic_t client_inc;
   uint64_t max_linger_id;
-  atomic_t num_in_flight;
+  atomic_t num_unacked;
+  atomic_t num_uncommitted;
   atomic_t global_op_flags; // flags which are applied to each IO op
   bool keep_balanced_budget;
   bool honor_osdmap_full;
-  bool osdmap_full_try;
-
-  // If this is true, accumulate a set of blacklisted entities
-  // to be drained by consume_blacklist_events.
-  bool blacklist_events_enabled;
-  std::set<entity_addr_t> blacklist_events;
 
 public:
   void maybe_request_map();
-
-  void enable_blacklist_events();
 private:
 
   void _maybe_request_map();
@@ -1221,11 +1128,7 @@ private:
   version_t last_seen_osdmap_version;
   version_t last_seen_pgmap_version;
 
-  mutable boost::shared_mutex rwlock;
-  using lock_guard = std::unique_lock<decltype(rwlock)>;
-  using unique_lock = std::unique_lock<decltype(rwlock)>;
-  using shared_lock = boost::shared_lock<decltype(rwlock)>;
-  using shunique_lock = ceph::shunique_lock<decltype(rwlock)>;
+  RWLock rwlock;
   ceph::timer<ceph::mono_clock> timer;
 
   PerfCounters *logger;
@@ -1236,7 +1139,13 @@ private:
   void tick();
   void update_crush_location();
 
-  class RequestStateHook;
+  class RequestStateHook : public AdminSocketHook {
+    Objecter *m_objecter;
+  public:
+    RequestStateHook(Objecter *objecter);
+    bool call(std::string command, cmdmap_t& cmdmap, std::string format,
+	      bufferlist& out);
+  };
 
   RequestStateHook *m_request_state_hook;
 
@@ -1248,71 +1157,48 @@ public:
   struct OSDSession;
 
   struct op_target_t {
-    int flags = 0;
-
-    epoch_t epoch = 0;  ///< latest epoch we calculated the mapping
-
+    int flags;
     object_t base_oid;
     object_locator_t base_oloc;
     object_t target_oid;
     object_locator_t target_oloc;
 
-    ///< true if we are directed at base_pgid, not base_oid
-    bool precalc_pgid = false;
+    bool precalc_pgid; ///< true if we are directed at base_pgid, not base_oid
+    pg_t base_pgid; ///< explciti pg target, if any
 
-    ///< true if we have ever mapped to a valid pool
-    bool pool_ever_existed = false;
-
-    ///< explcit pg target, if any
-    pg_t base_pgid;
-
-    pg_t pgid; ///< last (raw) pg we mapped to
-    spg_t actual_pgid; ///< last (actual) spg_t we mapped to
-    unsigned pg_num = 0; ///< last pg_num we mapped to
-    unsigned pg_num_mask = 0; ///< last pg_num_mask we mapped to
+    pg_t pgid; ///< last pg we mapped to
+    unsigned pg_num; ///< last pg_num we mapped to
+    unsigned pg_num_mask; ///< last pg_num_mask we mapped to
     vector<int> up; ///< set of up osds for last pg we mapped to
     vector<int> acting; ///< set of acting osds for last pg we mapped to
-    int up_primary = -1; ///< last up_primary we mapped to
-    int acting_primary = -1;  ///< last acting_primary we mapped to
-    int size = -1; ///< the size of the pool when were were last mapped
-    int min_size = -1; ///< the min size of the pool when were were last mapped
-    bool sort_bitwise = false; ///< whether the hobject_t sort order is bitwise
+    int up_primary; ///< primary for last pg we mapped to based on the up set
+    int acting_primary;  ///< primary for last pg we mapped to based on the
+			 ///  acting set
+    int size; ///< the size of the pool when were were last mapped
+    int min_size; ///< the min size of the pool when were were last mapped
+    bool sort_bitwise; ///< whether the hobject_t sort order is bitwise
 
-    bool used_replica = false;
-    bool paused = false;
+    bool used_replica;
+    bool paused;
 
-    int osd = -1;      ///< the final target osd, or -1
-
-    epoch_t last_force_resend = 0;
+    int osd;      ///< the final target osd, or -1
 
     op_target_t(object_t oid, object_locator_t oloc, int flags)
       : flags(flags),
 	base_oid(oid),
-	base_oloc(oloc)
-      {}
-
-    op_target_t(pg_t pgid)
-      : base_oloc(pgid.pool(), pgid.ps()),
-	precalc_pgid(true),
-	base_pgid(pgid)
-      {}
-
-    op_target_t() = default;
-
-    hobject_t get_hobj() {
-      return hobject_t(target_oid,
-		       target_oloc.key,
-		       CEPH_NOSNAP,
-		       target_oloc.hash >= 0 ? target_oloc.hash : pgid.ps(),
-		       target_oloc.pool,
-		       target_oloc.nspace);
-    }
-
-    bool contained_by(const hobject_t& begin, const hobject_t& end) {
-      hobject_t h = get_hobj();
-      int r = cmp(h, begin);
-      return r == 0 || (r > 0 && h < end);
-    }
+	base_oloc(oloc),
+	precalc_pgid(false),
+	pg_num(0),
+	pg_num_mask(0),
+	up_primary(-1),
+	acting_primary(-1),
+	size(-1),
+	min_size(-1),
+	sort_bitwise(false),
+	used_replica(false),
+	paused(false),
+	osd(-1)
+    {}
 
     void dump(Formatter *f) const;
   };
@@ -1338,10 +1224,12 @@ public:
     vector<int*> out_rval;
 
     int priority;
-    Context *onfinish;
+    Context *onack, *oncommit;
     uint64_t ontimeout;
+    Context *oncommit_sync; // used internally by watch/notify
 
     ceph_tid_t tid;
+    eversion_t replay_version; // for op replay
     int attempts;
 
     version_t *objver;
@@ -1364,12 +1252,12 @@ public:
 
     int *data_offset;
 
+    epoch_t last_force_resend;
+
     osd_reqid_t reqid; // explicitly setting reqid
-    ZTracer::Trace trace;
 
     Op(const object_t& o, const object_locator_t& ol, vector<OSDOp>& op,
-       int f, Context *fin, version_t *ov, int *offset = NULL,
-       ZTracer::Trace *parent_trace = nullptr) :
+       int f, Context *ac, Context *co, version_t *ov, int *offset = NULL) :
       session(NULL), incarnation(0),
       target(o, ol, f),
       con(NULL),
@@ -1377,8 +1265,10 @@ public:
       snapid(CEPH_NOSNAP),
       outbl(NULL),
       priority(0),
-      onfinish(fin),
+      onack(ac),
+      oncommit(co),
       ontimeout(0),
+      oncommit_sync(NULL),
       tid(0),
       attempts(0),
       objver(ov),
@@ -1387,7 +1277,8 @@ public:
       budgeted(false),
       should_resend(true),
       ctx_budgeted(false),
-      data_offset(offset) {
+      data_offset(offset),
+      last_force_resend(0) {
       ops.swap(op);
 
       /* initialize out_* to match op vector */
@@ -1402,30 +1293,18 @@ public:
 
       if (target.base_oloc.key == o)
 	target.base_oloc.key.clear();
-
-      if (parent_trace && parent_trace->valid()) {
-        trace.init("op", nullptr, parent_trace);
-        trace.event("start");
-      }
     }
 
     bool operator<(const Op& other) const {
       return tid < other.tid;
     }
 
-    bool respects_full() const {
-      return
-	(target.flags & (CEPH_OSD_FLAG_WRITE | CEPH_OSD_FLAG_RWORDERED)) &&
-	!(target.flags & (CEPH_OSD_FLAG_FULL_TRY | CEPH_OSD_FLAG_FULL_FORCE));
-    }
-
   private:
-    ~Op() override {
+    ~Op() {
       while (!out_handler.empty()) {
 	delete out_handler.back();
 	out_handler.pop_back();
       }
-      trace.event("finish");
     }
   };
 
@@ -1435,7 +1314,7 @@ public:
     version_t latest;
     C_Op_Map_Latest(Objecter *o, ceph_tid_t t) : objecter(o), tid(t),
 						 latest(0) {}
-    void finish(int r) override;
+    void finish(int r);
   };
 
   struct C_Command_Map_Latest : public Context {
@@ -1444,7 +1323,7 @@ public:
     version_t latest;
     C_Command_Map_Latest(Objecter *o, ceph_tid_t t) :  objecter(o), tid(t),
 						       latest(0) {}
-    void finish(int r) override;
+    void finish(int r);
   };
 
   struct C_Stat : public Context {
@@ -1454,7 +1333,7 @@ public:
     Context *fin;
     C_Stat(uint64_t *ps, ceph::real_time *pm, Context *c) :
       psize(ps), pmtime(pm), fin(c) {}
-    void finish(int r) override {
+    void finish(int r) {
       if (r >= 0) {
 	bufferlist::iterator p = bl.begin();
 	uint64_t s;
@@ -1476,7 +1355,7 @@ public:
     Context *fin;
     C_GetAttrs(map<string, bufferlist>& set, Context *c) : attrset(set),
 							   fin(c) {}
-    void finish(int r) override {
+    void finish(int r) {
       if (r >= 0) {
 	bufferlist::iterator p = bl.begin();
 	::decode(attrset, p);
@@ -1488,18 +1367,17 @@ public:
 
   // Pools and statistics
   struct NListContext {
-    collection_list_handle_t pos;
+    int current_pg;
+    collection_list_handle_t cookie;
+    epoch_t current_pg_epoch;
+    int starting_pg_num;
+    bool at_end_of_pool;
+    bool at_end_of_pg;
+    bool sort_bitwise;
 
-    // these are for !sortbitwise compat only
-    int current_pg = 0;
-    int starting_pg_num = 0;
-    bool sort_bitwise = false;
-
-    bool at_end_of_pool = false; ///< publicly visible end flag
-
-    int64_t pool_id = -1;
-    int pool_snap_seq = 0;
-    uint64_t max_entries = 0;
+    int64_t pool_id;
+    int pool_snap_seq;
+    int max_entries;
     string nspace;
 
     bufferlist bl;   // raw data read to here
@@ -1513,14 +1391,30 @@ public:
     // the budget is not get/released on OP basis, instead the budget
     // is acquired before sending the first OP and released upon receiving
     // the last op reply.
-    int ctx_budget = -1;
+    int ctx_budget;
+
+    NListContext() : current_pg(0),
+		     current_pg_epoch(0),
+		     starting_pg_num(0),
+		     at_end_of_pool(false),
+		     at_end_of_pg(false),
+		     sort_bitwise(false),
+		     pool_id(0),
+		     pool_snap_seq(0),
+		     max_entries(0),
+		     nspace(),
+		     bl(),
+		     list(),
+		     filter(),
+		     extra_info(),
+		     ctx_budget(-1) {}
 
     bool at_end() const {
       return at_end_of_pool;
     }
 
     uint32_t get_pg_hash_position() const {
-      return pos.get_hash();
+      return current_pg;
     }
   };
 
@@ -1531,9 +1425,76 @@ public:
     epoch_t epoch;
     C_NList(NListContext *lc, Context * finish, Objecter *ob) :
       list_context(lc), final_finish(finish), objecter(ob), epoch(0) {}
-    void finish(int r) override {
+    void finish(int r) {
       if (r >= 0) {
 	objecter->_nlist_reply(list_context, r, final_finish, epoch);
+      } else {
+	final_finish->complete(r);
+      }
+    }
+  };
+
+  // Old pgls context we still use for talking to older OSDs
+  struct ListContext {
+    int current_pg;
+    collection_list_handle_t cookie;
+    epoch_t current_pg_epoch;
+    int starting_pg_num;
+    bool at_end_of_pool;
+    bool at_end_of_pg;
+    bool sort_bitwise;
+
+    int64_t pool_id;
+    int pool_snap_seq;
+    int max_entries;
+    string nspace;
+
+    bufferlist bl;   // raw data read to here
+    std::list<pair<object_t, string> > list;
+
+    bufferlist filter;
+
+    bufferlist extra_info;
+
+    // The budget associated with this context, once it is set (>= 0),
+    // the budget is not get/released on OP basis, instead the budget
+    // is acquired before sending the first OP and released upon receiving
+    // the last op reply.
+    int ctx_budget;
+
+    ListContext() : current_pg(0), current_pg_epoch(0), starting_pg_num(0),
+		    at_end_of_pool(false),
+		    at_end_of_pg(false),
+		    sort_bitwise(false),
+		    pool_id(0),
+		    pool_snap_seq(0),
+		    max_entries(0),
+		    nspace(),
+		    bl(),
+		    list(),
+		    filter(),
+		    extra_info(),
+		    ctx_budget(-1) {}
+
+    bool at_end() const {
+      return at_end_of_pool;
+    }
+
+    uint32_t get_pg_hash_position() const {
+      return current_pg;
+    }
+  };
+
+  struct C_List : public Context {
+    ListContext *list_context;
+    Context *final_finish;
+    Objecter *objecter;
+    epoch_t epoch;
+    C_List(ListContext *lc, Context * finish, Objecter *ob) :
+      list_context(lc), final_finish(finish), objecter(ob), epoch(0) {}
+    void finish(int r) {
+      if (r >= 0) {
+	objecter->_list_reply(list_context, r, final_finish, epoch);
       } else {
 	final_finish->complete(r);
       }
@@ -1579,61 +1540,34 @@ public:
 
   // -- osd commands --
   struct CommandOp : public RefCountedObject {
-    OSDSession *session = nullptr;
-    ceph_tid_t tid = 0;
+    OSDSession *session;
+    ceph_tid_t tid;
     vector<string> cmd;
     bufferlist inbl;
-    bufferlist *poutbl = nullptr;
-    string *prs = nullptr;
-
-    // target_osd == -1 means target_pg is valid
-    const int target_osd = -1;
-    const pg_t target_pg;
-
-    op_target_t target;
-
-    epoch_t map_dne_bound = 0;
-    int map_check_error = 0; // error to return if map check fails
-    const char *map_check_error_str = nullptr;
-
-    Context *onfinish = nullptr;
-    uint64_t ontimeout = 0;
+    bufferlist *poutbl;
+    string *prs;
+    int target_osd;
+    pg_t target_pg;
+    int osd; /* calculated osd for sending request */
+    epoch_t map_dne_bound;
+    int map_check_error; // error to return if map check fails
+    const char *map_check_error_str;
+    Context *onfinish;
+    uint64_t ontimeout;
     ceph::mono_time last_submit;
 
-    CommandOp(
-      int target_osd,
-      const vector<string> &cmd,
-      bufferlist inbl,
-      bufferlist *poutbl,
-      string *prs,
-      Context *onfinish)
-      : cmd(cmd),
-	inbl(inbl),
-	poutbl(poutbl),
-	prs(prs),
-	target_osd(target_osd),
-	onfinish(onfinish) {}
-
-    CommandOp(
-      pg_t pgid,
-      const vector<string> &cmd,
-      bufferlist inbl,
-      bufferlist *poutbl,
-      string *prs,
-      Context *onfinish)
-      : cmd(cmd),
-	inbl(inbl),
-	poutbl(poutbl),
-	prs(prs),
-	target_pg(pgid),
-	target(pgid),
-	onfinish(onfinish) {}
-
+    CommandOp()
+      : session(NULL),
+	tid(0), poutbl(NULL), prs(NULL), target_osd(-1), osd(-1),
+	map_dne_bound(0),
+	map_check_error(0),
+	map_check_error_str(NULL),
+	onfinish(NULL), ontimeout(0) {}
   };
 
-  void submit_command(CommandOp *c, ceph_tid_t *ptid);
-  int _calc_command_target(CommandOp *c, shunique_lock &sul);
-  void _assign_command_session(CommandOp *c, shunique_lock &sul);
+  int submit_command(CommandOp *c, ceph_tid_t *ptid);
+  int _calc_command_target(CommandOp *c);
+  void _assign_command_session(CommandOp *c);
   void _send_command(CommandOp *c);
   int command_op_cancel(OSDSession *s, ceph_tid_t tid, int r);
   void _finish_command(CommandOp *c, int r, string rs);
@@ -1669,11 +1603,7 @@ public:
     bool is_watch;
     ceph::mono_time watch_valid_thru; ///< send time for last acked ping
     int last_error;  ///< error from last failed ping|reconnect, if any
-    boost::shared_mutex watch_lock;
-    using lock_guard = std::unique_lock<decltype(watch_lock)>;
-    using unique_lock = std::unique_lock<decltype(watch_lock)>;
-    using shared_lock = boost::shared_lock<decltype(watch_lock)>;
-    using shunique_lock = ceph::shunique_lock<decltype(watch_lock)>;
+    RWLock watch_lock;
 
     // queue of pending async operations, with the timestamp of
     // when they were queued.
@@ -1697,12 +1627,14 @@ public:
     ceph_tid_t ping_tid;
     epoch_t map_dne_bound;
 
+    epoch_t last_force_resend;
+
     void _queued_async() {
-      // watch_lock ust be locked unique
+      assert(watch_lock.is_locked());
       watch_pending_async.push_back(ceph::mono_clock::now());
     }
     void finished_async() {
-      unique_lock l(watch_lock);
+      RWLock::WLocker l(watch_lock);
       assert(!watch_pending_async.empty());
       watch_pending_async.pop_front();
     }
@@ -1711,6 +1643,7 @@ public:
 		 target(object_t(), object_locator_t(), 0),
 		 snap(CEPH_NOSNAP), poutbl(NULL), pobjver(NULL),
 		 is_watch(false), last_error(0),
+		 watch_lock("Objecter::LingerOp::watch_lock"),
 		 register_gen(0),
 		 registered(false),
 		 canceled(false),
@@ -1722,7 +1655,8 @@ public:
 		 session(NULL),
 		 register_tid(0),
 		 ping_tid(0),
-		 map_dne_bound(0) {}
+		 map_dne_bound(0),
+		 last_force_resend(0) {}
 
     // no copy!
     const LingerOp &operator=(const LingerOp& r);
@@ -1733,7 +1667,7 @@ public:
     }
 
   private:
-    ~LingerOp() override {
+    ~LingerOp() {
       delete watch_context;
     }
   };
@@ -1745,10 +1679,10 @@ public:
     C_Linger_Commit(Objecter *o, LingerOp *l) : objecter(o), info(l) {
       info->get();
     }
-    ~C_Linger_Commit() override {
+    ~C_Linger_Commit() {
       info->put();
     }
-    void finish(int r) override {
+    void finish(int r) {
       objecter->_linger_commit(info, r, outbl);
     }
   };
@@ -1759,10 +1693,10 @@ public:
     C_Linger_Reconnect(Objecter *o, LingerOp *l) : objecter(o), info(l) {
       info->get();
     }
-    ~C_Linger_Reconnect() override {
+    ~C_Linger_Reconnect() {
       info->put();
     }
-    void finish(int r) override {
+    void finish(int r) {
       objecter->_linger_reconnect(info, r);
     }
   };
@@ -1776,10 +1710,10 @@ public:
       : objecter(o), info(l), register_gen(info->register_gen) {
       info->get();
     }
-    ~C_Linger_Ping() override {
+    ~C_Linger_Ping() {
       info->put();
     }
-    void finish(int r) override {
+    void finish(int r) {
       objecter->_linger_ping(info, r, sent, register_gen);
     }
   };
@@ -1790,51 +1724,41 @@ public:
     version_t latest;
     C_Linger_Map_Latest(Objecter *o, uint64_t id) :
       objecter(o), linger_id(id), latest(0) {}
-    void finish(int r) override;
+    void finish(int r);
   };
 
   // -- osd sessions --
-  struct OSDBackoff {
-    spg_t pgid;
-    uint64_t id;
-    hobject_t begin, end;
-  };
-
   struct OSDSession : public RefCountedObject {
-    boost::shared_mutex lock;
-    using lock_guard = std::lock_guard<decltype(lock)>;
-    using unique_lock = std::unique_lock<decltype(lock)>;
-    using shared_lock = boost::shared_lock<decltype(lock)>;
-    using shunique_lock = ceph::shunique_lock<decltype(lock)>;
+    RWLock lock;
+    Mutex **completion_locks;
 
     // pending ops
     map<ceph_tid_t,Op*> ops;
     map<uint64_t, LingerOp*> linger_ops;
     map<ceph_tid_t,CommandOp*> command_ops;
 
-    // backoffs
-    map<spg_t,map<hobject_t,OSDBackoff>> backoffs;
-    map<uint64_t,OSDBackoff*> backoffs_by_id;
-
     int osd;
     int incarnation;
-    ConnectionRef con;
     int num_locks;
-    std::unique_ptr<std::mutex[]> completion_locks;
-    using unique_completion_lock = std::unique_lock<
-      decltype(completion_locks)::element_type>;
-
+    ConnectionRef con;
 
     OSDSession(CephContext *cct, int o) :
-      osd(o), incarnation(0), con(NULL),
-      num_locks(cct->_conf->objecter_completion_locks_per_session),
-      completion_locks(new std::mutex[num_locks]) {}
+      lock("OSDSession"),
+      osd(o),
+      incarnation(0),
+      con(NULL) {
+      num_locks = cct->_conf->objecter_completion_locks_per_session;
+      completion_locks = new Mutex *[num_locks];
+      for (int i = 0; i < num_locks; i++) {
+	completion_locks[i] = new Mutex("OSDSession::completion_lock");
+      }
+    }
 
-    ~OSDSession() override;
+    ~OSDSession();
 
     bool is_homeless() { return (osd == -1); }
 
-    unique_completion_lock get_lock(object_t& oid);
+    Mutex *get_lock(object_t& oid);
   };
   map<int,OSDSession*> osd_sessions;
 
@@ -1856,6 +1780,9 @@ public:
   map<uint64_t, LingerOp*> linger_ops;
   // we use this just to confirm a cookie is valid before dereferencing the ptr
   set<LingerOp*> linger_ops_set;
+  int num_linger_callbacks;
+  Mutex linger_callback_lock;
+  Cond linger_callback_cond;
 
   map<ceph_tid_t,PoolStatOp*> poolstat_ops;
   map<ceph_tid_t,StatfsOp*> statfs_ops;
@@ -1898,10 +1825,10 @@ public:
   bool _osdmap_has_pool_full() const;
 
   bool target_should_be_paused(op_target_t *op);
-  int _calc_target(op_target_t *t, Connection *con,
+  int _calc_target(op_target_t *t, epoch_t *last_force_resend = 0,
 		   bool any_change = false);
   int _map_session(op_target_t *op, OSDSession **s,
-		   shunique_lock& lc);
+		   RWLock::Context& lc);
 
   void _session_op_assign(OSDSession *s, Op *op);
   void _session_op_remove(OSDSession *s, Op *op);
@@ -1910,13 +1837,13 @@ public:
   void _session_command_op_assign(OSDSession *to, CommandOp *op);
   void _session_command_op_remove(OSDSession *from, CommandOp *op);
 
-  int _assign_op_target_session(Op *op, shunique_lock& lc,
+  int _assign_op_target_session(Op *op, RWLock::Context& lc,
 				bool src_session_locked,
 				bool dst_session_locked);
-  int _recalc_linger_op_target(LingerOp *op, shunique_lock& lc);
+  int _recalc_linger_op_target(LingerOp *op, RWLock::Context& lc);
 
-  void _linger_submit(LingerOp *info, shunique_lock& sul);
-  void _send_linger(LingerOp *info, shunique_lock& sul);
+  void _linger_submit(LingerOp *info);
+  void _send_linger(LingerOp *info);
   void _linger_commit(LingerOp *info, int r, bufferlist& outbl);
   void _linger_reconnect(LingerOp *info, int r);
   void _send_linger_ping(LingerOp *info);
@@ -1924,14 +1851,26 @@ public:
 		    uint32_t register_gen);
   int _normalize_watch_error(int r);
 
+  void _linger_callback_queue() {
+    Mutex::Locker l(linger_callback_lock);
+    ++num_linger_callbacks;
+  }
+  void _linger_callback_finish() {
+    Mutex::Locker l(linger_callback_lock);
+    if (--num_linger_callbacks == 0)
+      linger_callback_cond.SignalAll();
+    assert(num_linger_callbacks >= 0);
+  }
   friend class C_DoWatchError;
 public:
-  void linger_callback_flush(Context *ctx) {
-    finisher->queue(ctx);
+  void linger_callback_flush() {
+    Mutex::Locker l(linger_callback_lock);
+    while (num_linger_callbacks > 0)
+      linger_callback_cond.Wait(linger_callback_lock);
   }
 
 private:
-  void _check_op_pool_dne(Op *op, unique_lock *sl);
+  void _check_op_pool_dne(Op *op, bool session_locked);
   void _send_op_map_check(Op *op);
   void _op_cancel_map_check(Op *op);
   void _check_linger_pool_dne(LingerOp *op, bool *need_unregister);
@@ -1943,15 +1882,17 @@ private:
 
   void kick_requests(OSDSession *session);
   void _kick_requests(OSDSession *session, map<uint64_t, LingerOp *>& lresend);
-  void _linger_ops_resend(map<uint64_t, LingerOp *>& lresend, unique_lock& ul);
+  void _linger_ops_resend(map<uint64_t, LingerOp *>& lresend);
 
-  int _get_session(int osd, OSDSession **session, shunique_lock& sul);
+  int _get_session(int osd, OSDSession **session, RWLock::Context& lc);
   void put_session(OSDSession *s);
   void get_session(OSDSession *s);
   void _reopen_session(OSDSession *session);
   void close_session(OSDSession *session);
 
   void _nlist_reply(NListContext *list_context, int r, Context *final_finish,
+		   epoch_t reply_epoch);
+  void _list_reply(ListContext *list_context, int r, Context *final_finish,
 		   epoch_t reply_epoch);
 
   void resend_mon_ops();
@@ -1963,12 +1904,12 @@ private:
    * If throttle_op needs to throttle it will unlock client_lock.
    */
   int calc_op_budget(Op *op);
-  void _throttle_op(Op *op, shunique_lock& sul, int op_size = 0);
-  int _take_op_budget(Op *op, shunique_lock& sul) {
-    assert(sul && sul.mutex() == &rwlock);
+  void _throttle_op(Op *op, int op_size=0);
+  int _take_op_budget(Op *op) {
+    assert(rwlock.is_locked());
     int op_budget = calc_op_budget(op);
     if (keep_balanced_budget) {
-      _throttle_op(op, sul, op_budget);
+      _throttle_op(op, op_budget);
     } else {
       op_throttle_bytes.take(op_budget);
       op_throttle_ops.take(1);
@@ -1986,6 +1927,7 @@ private:
     int op_budget = calc_op_budget(op);
     put_op_budget_bytes(op_budget);
   }
+  void put_list_context_budget(ListContext *list_context);
   void put_nlist_context_budget(NListContext *list_context);
   Throttle op_throttle_bytes, op_throttle_ops;
 
@@ -1995,48 +1937,34 @@ private:
 	   double mon_timeout,
 	   double osd_timeout) :
     Dispatcher(cct_), messenger(m), monc(mc), finisher(fin),
-    trace_endpoint("0.0.0.0", 0, "Objecter"),
     osdmap(new OSDMap), initialized(0), last_tid(0), client_inc(-1),
-    max_linger_id(0), num_in_flight(0), global_op_flags(0),
-    keep_balanced_budget(false), honor_osdmap_full(true), osdmap_full_try(false),
-    blacklist_events_enabled(false),
+    max_linger_id(0), num_unacked(0), num_uncommitted(0), global_op_flags(0),
+    keep_balanced_budget(false), honor_osdmap_full(true),
     last_seen_osdmap_version(0), last_seen_pgmap_version(0),
-    logger(NULL), tick_event(0), m_request_state_hook(NULL),
-    num_homeless_ops(0),
-    homeless_session(new OSDSession(cct, -1)),
+    rwlock("Objecter::rwlock"), logger(NULL), tick_event(0),
+    m_request_state_hook(NULL), num_linger_callbacks(0),
+    linger_callback_lock("Objecter::linger_callback_lock"),
+    num_homeless_ops(0), homeless_session(new OSDSession(cct, -1)),
     mon_timeout(ceph::make_timespan(mon_timeout)),
     osd_timeout(ceph::make_timespan(osd_timeout)),
     op_throttle_bytes(cct, "objecter_bytes",
 		      cct->_conf->objecter_inflight_op_bytes),
     op_throttle_ops(cct, "objecter_ops", cct->_conf->objecter_inflight_ops),
-    epoch_barrier(0),
-    retry_writes_after_first_reply(cct->_conf->objecter_retry_writes_after_first_reply)
+    epoch_barrier(0)
   { }
-  ~Objecter() override;
+  ~Objecter();
 
   void init();
-  void start(const OSDMap *o = nullptr);
+  void start();
   void shutdown();
 
-  // These two templates replace osdmap_(get)|(put)_read. Simply wrap
-  // whatever functionality you want to use the OSDMap in a lambda like:
-  //
-  // with_osdmap([](const OSDMap& o) { o.do_stuff(); });
-  //
-  // or
-  //
-  // auto t = with_osdmap([&](const OSDMap& o) { return o.lookup_stuff(x); });
-  //
-  // Do not call into something that will try to lock the OSDMap from
-  // here or you will have great woe and misery.
-
-  template<typename Callback, typename...Args>
-  auto with_osdmap(Callback&& cb, Args&&... args) const ->
-    decltype(cb(*osdmap, std::forward<Args>(args)...)) {
-    shared_lock l(rwlock);
-    return std::forward<Callback>(cb)(*osdmap, std::forward<Args>(args)...);
+  const OSDMap *get_osdmap_read() {
+    rwlock.get_read();
+    return osdmap;
   }
-
+  void put_osdmap_read() {
+    rwlock.put_read();
+  }
 
   /**
    * Tell the objecter to throttle outgoing ops according to its
@@ -2051,17 +1979,13 @@ private:
   void set_honor_osdmap_full() { honor_osdmap_full = true; }
   void unset_honor_osdmap_full() { honor_osdmap_full = false; }
 
-  void set_osdmap_full_try() { osdmap_full_try = true; }
-  void unset_osdmap_full_try() { osdmap_full_try = false; }
-
   void _scan_requests(OSDSession *s,
 		      bool force_resend,
 		      bool cluster_full,
 		      map<int64_t, bool> *pool_full_map,
 		      map<ceph_tid_t, Op*>& need_resend,
 		      list<LingerOp*>& need_resend_linger,
-		      map<ceph_tid_t, CommandOp*>& need_resend_command,
-		      shunique_lock& sul);
+		      map<ceph_tid_t, CommandOp*>& need_resend_command);
 
   int64_t get_object_hash_position(int64_t pool, const string& key,
 				   const string& ns);
@@ -2070,11 +1994,11 @@ private:
 
   // messages
  public:
-  bool ms_dispatch(Message *m) override;
-  bool ms_can_fast_dispatch_any() const override {
+  bool ms_dispatch(Message *m);
+  bool ms_can_fast_dispatch_any() const {
     return true;
   }
-  bool ms_can_fast_dispatch(const Message *m) const override {
+  bool ms_can_fast_dispatch(Message *m) const {
     switch (m->get_type()) {
     case CEPH_MSG_OSD_OPREPLY:
     case CEPH_MSG_WATCH_NOTIFY:
@@ -2083,51 +2007,32 @@ private:
       return false;
     }
   }
-  void ms_fast_dispatch(Message *m) override {
+  void ms_fast_dispatch(Message *m) {
     ms_dispatch(m);
   }
 
   void handle_osd_op_reply(class MOSDOpReply *m);
-  void handle_osd_backoff(class MOSDBackoff *m);
   void handle_watch_notify(class MWatchNotify *m);
   void handle_osd_map(class MOSDMap *m);
   void wait_for_osd_map();
 
-  /**
-   * Get list of entities blacklisted since this was last called,
-   * and reset the list.
-   *
-   * Uses a std::set because typical use case is to compare some
-   * other list of clients to see which overlap with the blacklisted
-   * addrs.
-   *
-   */
-  void consume_blacklist_events(std::set<entity_addr_t> *events);
-
-  int pool_snap_by_name(int64_t poolid,
-			const char *snap_name,
-			snapid_t *snap) const;
+  int pool_snap_by_name(int64_t poolid, const char *snap_name, snapid_t *snap);
   int pool_snap_get_info(int64_t poolid, snapid_t snap,
-			 pool_snap_info_t *info) const;
+			 pool_snap_info_t *info);
   int pool_snap_list(int64_t poolid, vector<uint64_t> *snaps);
 private:
 
-  void emit_blacklist_events(const OSDMap::Incremental &inc);
-  void emit_blacklist_events(const OSDMap &old_osd_map,
-                             const OSDMap &new_osd_map);
-
   // low-level
-  void _op_submit(Op *op, shunique_lock& lc, ceph_tid_t *ptid);
-  void _op_submit_with_budget(Op *op, shunique_lock& lc,
-			      ceph_tid_t *ptid,
-			      int *ctx_budget = NULL);
+  ceph_tid_t _op_submit(Op *op, RWLock::Context& lc);
+  ceph_tid_t _op_submit_with_budget(Op *op, RWLock::Context& lc,
+				    int *ctx_budget = NULL);
   inline void unregister_op(Op *op);
 
   // public interface
 public:
-  void op_submit(Op *op, ceph_tid_t *ptid = NULL, int *ctx_budget = NULL);
+  ceph_tid_t op_submit(Op *op, int *ctx_budget = NULL);
   bool is_active() {
-    shared_lock l(rwlock);
+    RWLock::RLocker l(rwlock);
     return !((!inflight_ops.read()) && linger_ops.empty() &&
 	     poolstat_ops.empty() && statfs_ops.empty());
   }
@@ -2190,42 +2095,40 @@ public:
   epoch_t op_cancel_writes(int r, int64_t pool=-1);
 
   // commands
-  void osd_command(int osd, const std::vector<string>& cmd,
+  int osd_command(int osd, vector<string>& cmd,
 		  const bufferlist& inbl, ceph_tid_t *ptid,
 		  bufferlist *poutbl, string *prs, Context *onfinish) {
     assert(osd >= 0);
-    CommandOp *c = new CommandOp(
-      osd,
-      cmd,
-      inbl,
-      poutbl,
-      prs,
-      onfinish);
-    submit_command(c, ptid);
+    CommandOp *c = new CommandOp;
+    c->cmd = cmd;
+    c->inbl = inbl;
+    c->poutbl = poutbl;
+    c->prs = prs;
+    c->onfinish = onfinish;
+    c->target_osd = osd;
+    return submit_command(c, ptid);
   }
-  void pg_command(pg_t pgid, vector<string>& cmd,
+  int pg_command(pg_t pgid, vector<string>& cmd,
 		 const bufferlist& inbl, ceph_tid_t *ptid,
 		 bufferlist *poutbl, string *prs, Context *onfinish) {
-    CommandOp *c = new CommandOp(
-      pgid,
-      cmd,
-      inbl,
-      poutbl,
-      prs,
-      onfinish);
-    submit_command(c, ptid);
+    CommandOp *c = new CommandOp;
+    c->cmd = cmd;
+    c->inbl = inbl;
+    c->poutbl = poutbl;
+    c->prs = prs;
+    c->onfinish = onfinish;
+    c->target_pg = pgid;
+    return submit_command(c, ptid);
   }
 
   // mid-level helpers
-  Op *prepare_mutate_op(
-    const object_t& oid, const object_locator_t& oloc,
-    ObjectOperation& op, const SnapContext& snapc,
-    ceph::real_time mtime, int flags,
-    Context *oncommit, version_t *objver = NULL,
-    osd_reqid_t reqid = osd_reqid_t(),
-    ZTracer::Trace *parent_trace = nullptr) {
+  Op *prepare_mutate_op(const object_t& oid, const object_locator_t& oloc,
+			ObjectOperation& op, const SnapContext& snapc,
+			ceph::real_time mtime, int flags, Context *onack,
+			Context *oncommit, version_t *objver = NULL,
+			osd_reqid_t reqid = osd_reqid_t()) {
     Op *o = new Op(oid, oloc, op.ops, flags | global_op_flags.read() |
-		   CEPH_OSD_FLAG_WRITE, oncommit, objver, nullptr, parent_trace);
+		   CEPH_OSD_FLAG_WRITE, onack, oncommit, objver);
     o->priority = op.priority;
     o->mtime = mtime;
     o->snapc = snapc;
@@ -2233,28 +2136,22 @@ public:
     o->reqid = reqid;
     return o;
   }
-  ceph_tid_t mutate(
-    const object_t& oid, const object_locator_t& oloc,
-    ObjectOperation& op, const SnapContext& snapc,
-    ceph::real_time mtime, int flags,
-    Context *oncommit, version_t *objver = NULL,
-    osd_reqid_t reqid = osd_reqid_t()) {
-    Op *o = prepare_mutate_op(oid, oloc, op, snapc, mtime, flags,
+  ceph_tid_t mutate(const object_t& oid, const object_locator_t& oloc,
+		    ObjectOperation& op, const SnapContext& snapc,
+		    ceph::real_time mtime, int flags, Context *onack,
+		    Context *oncommit, version_t *objver = NULL,
+		    osd_reqid_t reqid = osd_reqid_t()) {
+    Op *o = prepare_mutate_op(oid, oloc, op, snapc, mtime, flags, onack,
 			      oncommit, objver, reqid);
-    ceph_tid_t tid;
-    op_submit(o, &tid);
-    return tid;
+    return op_submit(o);
   }
-  Op *prepare_read_op(
-    const object_t& oid, const object_locator_t& oloc,
-    ObjectOperation& op,
-    snapid_t snapid, bufferlist *pbl, int flags,
-    Context *onack, version_t *objver = NULL,
-    int *data_offset = NULL,
-    uint64_t features = 0,
-    ZTracer::Trace *parent_trace = nullptr) {
+  Op *prepare_read_op(const object_t& oid, const object_locator_t& oloc,
+	     ObjectOperation& op,
+	     snapid_t snapid, bufferlist *pbl, int flags,
+	     Context *onack, version_t *objver = NULL,
+		      int *data_offset = NULL) {
     Op *o = new Op(oid, oloc, op.ops, flags | global_op_flags.read() |
-		   CEPH_OSD_FLAG_READ, onack, objver, data_offset, parent_trace);
+		   CEPH_OSD_FLAG_READ, onack, NULL, objver, data_offset);
     o->priority = op.priority;
     o->snapid = snapid;
     o->outbl = pbl;
@@ -2265,31 +2162,25 @@ public:
     o->out_rval.swap(op.out_rval);
     return o;
   }
-  ceph_tid_t read(
-    const object_t& oid, const object_locator_t& oloc,
-    ObjectOperation& op,
-    snapid_t snapid, bufferlist *pbl, int flags,
-    Context *onack, version_t *objver = NULL,
-    int *data_offset = NULL,
-    uint64_t features = 0) {
+  ceph_tid_t read(const object_t& oid, const object_locator_t& oloc,
+		  ObjectOperation& op,
+		  snapid_t snapid, bufferlist *pbl, int flags,
+		  Context *onack, version_t *objver = NULL,
+		  int *data_offset = NULL,
+		  uint64_t features = 0) {
     Op *o = prepare_read_op(oid, oloc, op, snapid, pbl, flags, onack, objver,
 			    data_offset);
     if (features)
       o->features = features;
-    ceph_tid_t tid;
-    op_submit(o, &tid);
-    return tid;
+    return op_submit(o);
   }
-  Op *prepare_pg_read_op(
-    uint32_t hash, object_locator_t oloc,
-    ObjectOperation& op, bufferlist *pbl, int flags,
-    Context *onack, epoch_t *reply_epoch,
-    int *ctx_budget) {
+  ceph_tid_t pg_read(uint32_t hash, object_locator_t oloc,
+		     ObjectOperation& op, bufferlist *pbl, int flags,
+		     Context *onack, epoch_t *reply_epoch,
+		     int *ctx_budget) {
     Op *o = new Op(object_t(), oloc,
-		   op.ops,
-		   flags | global_op_flags.read() | CEPH_OSD_FLAG_READ |
-		   CEPH_OSD_FLAG_IGNORE_OVERLAY,
-		   onack, NULL);
+		   op.ops, flags | global_op_flags.read() | CEPH_OSD_FLAG_READ,
+		   onack, NULL, NULL);
     o->target.precalc_pgid = true;
     o->target.base_pgid = pg_t(hash, oloc.pool);
     o->priority = op.priority;
@@ -2303,18 +2194,7 @@ public:
       // budget is tracked by listing context
       o->ctx_budgeted = true;
     }
-    return o;
-  }
-  ceph_tid_t pg_read(
-    uint32_t hash, object_locator_t oloc,
-    ObjectOperation& op, bufferlist *pbl, int flags,
-    Context *onack, epoch_t *reply_epoch,
-    int *ctx_budget) {
-    Op *o = prepare_pg_read_op(hash, oloc, op, pbl, flags,
-			       onack, reply_epoch, ctx_budget);
-    ceph_tid_t tid;
-    op_submit(o, &tid, ctx_budget);
-    return tid;
+    return op_submit(o, ctx_budget);
   }
 
   // caller owns a ref
@@ -2366,39 +2246,25 @@ public:
 
 
   // high-level helpers
-  Op *prepare_stat_op(
-    const object_t& oid, const object_locator_t& oloc,
-    snapid_t snap, uint64_t *psize, ceph::real_time *pmtime,
-    int flags, Context *onfinish, version_t *objver = NULL,
-    ObjectOperation *extra_ops = NULL) {
+  ceph_tid_t stat(const object_t& oid, const object_locator_t& oloc,
+		  snapid_t snap, uint64_t *psize, ceph::real_time *pmtime,
+		  int flags, Context *onfinish, version_t *objver = NULL,
+		  ObjectOperation *extra_ops = NULL) {
     vector<OSDOp> ops;
     int i = init_ops(ops, 1, extra_ops);
     ops[i].op.op = CEPH_OSD_OP_STAT;
     C_Stat *fin = new C_Stat(psize, pmtime, onfinish);
     Op *o = new Op(oid, oloc, ops, flags | global_op_flags.read() |
-		   CEPH_OSD_FLAG_READ, fin, objver);
+		   CEPH_OSD_FLAG_READ, fin, 0, objver);
     o->snapid = snap;
     o->outbl = &fin->bl;
-    return o;
-  }
-  ceph_tid_t stat(
-    const object_t& oid, const object_locator_t& oloc,
-    snapid_t snap, uint64_t *psize, ceph::real_time *pmtime,
-    int flags, Context *onfinish, version_t *objver = NULL,
-    ObjectOperation *extra_ops = NULL) {
-    Op *o = prepare_stat_op(oid, oloc, snap, psize, pmtime, flags,
-			    onfinish, objver, extra_ops);
-    ceph_tid_t tid;
-    op_submit(o, &tid);
-    return tid;
+    return op_submit(o);
   }
 
-  Op *prepare_read_op(
-    const object_t& oid, const object_locator_t& oloc,
-    uint64_t off, uint64_t len, snapid_t snap, bufferlist *pbl,
-    int flags, Context *onfinish, version_t *objver = NULL,
-    ObjectOperation *extra_ops = NULL, int op_flags = 0,
-    ZTracer::Trace *parent_trace = nullptr) {
+  ceph_tid_t read(const object_t& oid, const object_locator_t& oloc,
+		  uint64_t off, uint64_t len, snapid_t snap, bufferlist *pbl,
+		  int flags, Context *onfinish, version_t *objver = NULL,
+		  ObjectOperation *extra_ops = NULL, int op_flags = 0) {
     vector<OSDOp> ops;
     int i = init_ops(ops, 1, extra_ops);
     ops[i].op.op = CEPH_OSD_OP_READ;
@@ -2408,53 +2274,10 @@ public:
     ops[i].op.extent.truncate_seq = 0;
     ops[i].op.flags = op_flags;
     Op *o = new Op(oid, oloc, ops, flags | global_op_flags.read() |
-		   CEPH_OSD_FLAG_READ, onfinish, objver, nullptr, parent_trace);
+		   CEPH_OSD_FLAG_READ, onfinish, 0, objver);
     o->snapid = snap;
     o->outbl = pbl;
-    return o;
-  }
-  ceph_tid_t read(
-    const object_t& oid, const object_locator_t& oloc,
-    uint64_t off, uint64_t len, snapid_t snap, bufferlist *pbl,
-    int flags, Context *onfinish, version_t *objver = NULL,
-    ObjectOperation *extra_ops = NULL, int op_flags = 0) {
-    Op *o = prepare_read_op(oid, oloc, off, len, snap, pbl, flags,
-			    onfinish, objver, extra_ops, op_flags);
-    ceph_tid_t tid;
-    op_submit(o, &tid);
-    return tid;
-  }
-
-  Op *prepare_cmpext_op(
-    const object_t& oid, const object_locator_t& oloc,
-    uint64_t off, bufferlist &cmp_bl,
-    snapid_t snap, int flags, Context *onfinish, version_t *objver = NULL,
-    ObjectOperation *extra_ops = NULL, int op_flags = 0) {
-    vector<OSDOp> ops;
-    int i = init_ops(ops, 1, extra_ops);
-    ops[i].op.op = CEPH_OSD_OP_CMPEXT;
-    ops[i].op.extent.offset = off;
-    ops[i].op.extent.length = cmp_bl.length();
-    ops[i].op.extent.truncate_size = 0;
-    ops[i].op.extent.truncate_seq = 0;
-    ops[i].indata = cmp_bl;
-    ops[i].op.flags = op_flags;
-    Op *o = new Op(oid, oloc, ops, flags | global_op_flags.read() |
-		   CEPH_OSD_FLAG_READ, onfinish, objver);
-    o->snapid = snap;
-    return o;
-  }
-
-  ceph_tid_t cmpext(
-    const object_t& oid, const object_locator_t& oloc,
-    uint64_t off, bufferlist &cmp_bl,
-    snapid_t snap, int flags, Context *onfinish, version_t *objver = NULL,
-    ObjectOperation *extra_ops = NULL, int op_flags = 0) {
-    Op *o = prepare_cmpext_op(oid, oloc, off, cmp_bl, snap,
-			      flags, onfinish, objver, extra_ops, op_flags);
-    ceph_tid_t tid;
-    op_submit(o, &tid);
-    return tid;
+    return op_submit(o);
   }
 
   ceph_tid_t read_trunc(const object_t& oid, const object_locator_t& oloc,
@@ -2472,12 +2295,10 @@ public:
     ops[i].op.extent.truncate_seq = trunc_seq;
     ops[i].op.flags = op_flags;
     Op *o = new Op(oid, oloc, ops, flags | global_op_flags.read() |
-		   CEPH_OSD_FLAG_READ, onfinish, objver);
+		   CEPH_OSD_FLAG_READ, onfinish, 0, objver);
     o->snapid = snap;
     o->outbl = pbl;
-    ceph_tid_t tid;
-    op_submit(o, &tid);
-    return tid;
+    return op_submit(o);
   }
   ceph_tid_t mapext(const object_t& oid, const object_locator_t& oloc,
 		    uint64_t off, uint64_t len, snapid_t snap, bufferlist *pbl,
@@ -2491,12 +2312,10 @@ public:
     ops[i].op.extent.truncate_size = 0;
     ops[i].op.extent.truncate_seq = 0;
     Op *o = new Op(oid, oloc, ops, flags | global_op_flags.read() |
-		   CEPH_OSD_FLAG_READ, onfinish, objver);
+		   CEPH_OSD_FLAG_READ, onfinish, 0, objver);
     o->snapid = snap;
     o->outbl = pbl;
-    ceph_tid_t tid;
-    op_submit(o, &tid);
-    return tid;
+    return op_submit(o);
   }
   ceph_tid_t getxattr(const object_t& oid, const object_locator_t& oloc,
 	     const char *name, snapid_t snap, bufferlist *pbl, int flags,
@@ -2510,12 +2329,10 @@ public:
     if (name)
       ops[i].indata.append(name);
     Op *o = new Op(oid, oloc, ops, flags | global_op_flags.read() |
-		   CEPH_OSD_FLAG_READ, onfinish, objver);
+		   CEPH_OSD_FLAG_READ, onfinish, 0, objver);
     o->snapid = snap;
     o->outbl = pbl;
-    ceph_tid_t tid;
-    op_submit(o, &tid);
-    return tid;
+    return op_submit(o);
   }
 
   ceph_tid_t getxattrs(const object_t& oid, const object_locator_t& oloc,
@@ -2527,12 +2344,10 @@ public:
     ops[i].op.op = CEPH_OSD_OP_GETXATTRS;
     C_GetAttrs *fin = new C_GetAttrs(attrset, onfinish);
     Op *o = new Op(oid, oloc, ops, flags | global_op_flags.read() |
-		   CEPH_OSD_FLAG_READ, fin, objver);
+		   CEPH_OSD_FLAG_READ, fin, 0, objver);
     o->snapid = snap;
     o->outbl = &fin->bl;
-    ceph_tid_t tid;
-    op_submit(o, &tid);
-    return tid;
+    return op_submit(o);
   }
 
   ceph_tid_t read_full(const object_t& oid, const object_locator_t& oloc,
@@ -2548,23 +2363,19 @@ public:
   ceph_tid_t _modify(const object_t& oid, const object_locator_t& oloc,
 		     vector<OSDOp>& ops, ceph::real_time mtime,
 		     const SnapContext& snapc, int flags,
-		     Context *oncommit,
+		     Context *onack, Context *oncommit,
 		     version_t *objver = NULL) {
     Op *o = new Op(oid, oloc, ops, flags | global_op_flags.read() |
-		   CEPH_OSD_FLAG_WRITE, oncommit, objver);
+		   CEPH_OSD_FLAG_WRITE, onack, oncommit, objver);
     o->mtime = mtime;
     o->snapc = snapc;
-    ceph_tid_t tid;
-    op_submit(o, &tid);
-    return tid;
+    return op_submit(o);
   }
-  Op *prepare_write_op(
-    const object_t& oid, const object_locator_t& oloc,
-    uint64_t off, uint64_t len, const SnapContext& snapc,
-    const bufferlist &bl, ceph::real_time mtime, int flags,
-    Context *oncommit, version_t *objver = NULL,
-    ObjectOperation *extra_ops = NULL, int op_flags = 0,
-    ZTracer::Trace *parent_trace = nullptr) {
+  ceph_tid_t write(const object_t& oid, const object_locator_t& oloc,
+		   uint64_t off, uint64_t len, const SnapContext& snapc,
+		   const bufferlist &bl, ceph::real_time mtime, int flags,
+		   Context *onack, Context *oncommit, version_t *objver = NULL,
+		   ObjectOperation *extra_ops = NULL, int op_flags = 0) {
     vector<OSDOp> ops;
     int i = init_ops(ops, 1, extra_ops);
     ops[i].op.op = CEPH_OSD_OP_WRITE;
@@ -2575,31 +2386,17 @@ public:
     ops[i].indata = bl;
     ops[i].op.flags = op_flags;
     Op *o = new Op(oid, oloc, ops, flags | global_op_flags.read() |
-		   CEPH_OSD_FLAG_WRITE, oncommit, objver,
-                   nullptr, parent_trace);
+		   CEPH_OSD_FLAG_WRITE, onack, oncommit, objver);
     o->mtime = mtime;
     o->snapc = snapc;
-    return o;
+    return op_submit(o);
   }
-  ceph_tid_t write(
-    const object_t& oid, const object_locator_t& oloc,
-    uint64_t off, uint64_t len, const SnapContext& snapc,
-    const bufferlist &bl, ceph::real_time mtime, int flags,
-    Context *oncommit, version_t *objver = NULL,
-    ObjectOperation *extra_ops = NULL, int op_flags = 0) {
-    Op *o = prepare_write_op(oid, oloc, off, len, snapc, bl, mtime, flags,
-			     oncommit, objver, extra_ops, op_flags);
-    ceph_tid_t tid;
-    op_submit(o, &tid);
-    return tid;
-  }
-  Op *prepare_append_op(
-    const object_t& oid, const object_locator_t& oloc,
-    uint64_t len, const SnapContext& snapc,
-    const bufferlist &bl, ceph::real_time mtime, int flags,
-    Context *oncommit,
-    version_t *objver = NULL,
-    ObjectOperation *extra_ops = NULL) {
+  ceph_tid_t append(const object_t& oid, const object_locator_t& oloc,
+		    uint64_t len, const SnapContext& snapc,
+		    const bufferlist &bl, ceph::real_time mtime, int flags,
+		    Context *onack, Context *oncommit,
+		    version_t *objver = NULL,
+		    ObjectOperation *extra_ops = NULL) {
     vector<OSDOp> ops;
     int i = init_ops(ops, 1, extra_ops);
     ops[i].op.op = CEPH_OSD_OP_APPEND;
@@ -2609,29 +2406,16 @@ public:
     ops[i].op.extent.truncate_seq = 0;
     ops[i].indata = bl;
     Op *o = new Op(oid, oloc, ops, flags | global_op_flags.read() |
-		   CEPH_OSD_FLAG_WRITE, oncommit, objver);
+		   CEPH_OSD_FLAG_WRITE, onack, oncommit, objver);
     o->mtime = mtime;
     o->snapc = snapc;
-    return o;
-  }
-  ceph_tid_t append(
-    const object_t& oid, const object_locator_t& oloc,
-    uint64_t len, const SnapContext& snapc,
-    const bufferlist &bl, ceph::real_time mtime, int flags,
-    Context *oncommit,
-    version_t *objver = NULL,
-    ObjectOperation *extra_ops = NULL) {
-    Op *o = prepare_append_op(oid, oloc, len, snapc, bl, mtime, flags,
-			      oncommit, objver, extra_ops);
-    ceph_tid_t tid;
-    op_submit(o, &tid);
-    return tid;
+    return op_submit(o);
   }
   ceph_tid_t write_trunc(const object_t& oid, const object_locator_t& oloc,
 			 uint64_t off, uint64_t len, const SnapContext& snapc,
 			 const bufferlist &bl, ceph::real_time mtime, int flags,
 			 uint64_t trunc_size, __u32 trunc_seq,
-			 Context *oncommit,
+			 Context *onack, Context *oncommit,
 			 version_t *objver = NULL,
 			 ObjectOperation *extra_ops = NULL, int op_flags = 0) {
     vector<OSDOp> ops;
@@ -2644,19 +2428,16 @@ public:
     ops[i].indata = bl;
     ops[i].op.flags = op_flags;
     Op *o = new Op(oid, oloc, ops, flags | global_op_flags.read() |
-		   CEPH_OSD_FLAG_WRITE, oncommit, objver);
+		   CEPH_OSD_FLAG_WRITE, onack, oncommit, objver);
     o->mtime = mtime;
     o->snapc = snapc;
-    ceph_tid_t tid;
-    op_submit(o, &tid);
-    return tid;
+    return op_submit(o);
   }
-  Op *prepare_write_full_op(
-    const object_t& oid, const object_locator_t& oloc,
-    const SnapContext& snapc, const bufferlist &bl,
-    ceph::real_time mtime, int flags,
-    Context *oncommit, version_t *objver = NULL,
-    ObjectOperation *extra_ops = NULL, int op_flags = 0) {
+  ceph_tid_t write_full(const object_t& oid, const object_locator_t& oloc,
+			const SnapContext& snapc, const bufferlist &bl,
+			ceph::real_time mtime, int flags, Context *onack,
+			Context *oncommit, version_t *objver = NULL,
+			ObjectOperation *extra_ops = NULL, int op_flags = 0) {
     vector<OSDOp> ops;
     int i = init_ops(ops, 1, extra_ops);
     ops[i].op.op = CEPH_OSD_OP_WRITEFULL;
@@ -2665,64 +2446,14 @@ public:
     ops[i].indata = bl;
     ops[i].op.flags = op_flags;
     Op *o = new Op(oid, oloc, ops, flags | global_op_flags.read() |
-		   CEPH_OSD_FLAG_WRITE, oncommit, objver);
+		   CEPH_OSD_FLAG_WRITE, onack, oncommit, objver);
     o->mtime = mtime;
     o->snapc = snapc;
-    return o;
-  }
-  ceph_tid_t write_full(
-    const object_t& oid, const object_locator_t& oloc,
-    const SnapContext& snapc, const bufferlist &bl,
-    ceph::real_time mtime, int flags,
-    Context *oncommit, version_t *objver = NULL,
-    ObjectOperation *extra_ops = NULL, int op_flags = 0) {
-    Op *o = prepare_write_full_op(oid, oloc, snapc, bl, mtime, flags,
-				  oncommit, objver, extra_ops, op_flags);
-    ceph_tid_t tid;
-    op_submit(o, &tid);
-    return tid;
-  }
-  Op *prepare_writesame_op(
-    const object_t& oid, const object_locator_t& oloc,
-    uint64_t write_len, uint64_t off,
-    const SnapContext& snapc, const bufferlist &bl,
-    ceph::real_time mtime, int flags,
-    Context *oncommit, version_t *objver = NULL,
-    ObjectOperation *extra_ops = NULL, int op_flags = 0) {
-
-    vector<OSDOp> ops;
-    int i = init_ops(ops, 1, extra_ops);
-    ops[i].op.op = CEPH_OSD_OP_WRITESAME;
-    ops[i].op.writesame.offset = off;
-    ops[i].op.writesame.length = write_len;
-    ops[i].op.writesame.data_length = bl.length();
-    ops[i].indata = bl;
-    ops[i].op.flags = op_flags;
-    Op *o = new Op(oid, oloc, ops, flags | global_op_flags.read() |
-		   CEPH_OSD_FLAG_WRITE, oncommit, objver);
-    o->mtime = mtime;
-    o->snapc = snapc;
-    return o;
-  }
-  ceph_tid_t writesame(
-    const object_t& oid, const object_locator_t& oloc,
-    uint64_t write_len, uint64_t off,
-    const SnapContext& snapc, const bufferlist &bl,
-    ceph::real_time mtime, int flags,
-    Context *oncommit, version_t *objver = NULL,
-    ObjectOperation *extra_ops = NULL, int op_flags = 0) {
-
-    Op *o = prepare_writesame_op(oid, oloc, write_len, off, snapc, bl,
-				 mtime, flags, oncommit, objver,
-				 extra_ops, op_flags);
-
-    ceph_tid_t tid;
-    op_submit(o, &tid);
-    return tid;
+    return op_submit(o);
   }
   ceph_tid_t trunc(const object_t& oid, const object_locator_t& oloc,
 		   const SnapContext& snapc, ceph::real_time mtime, int flags,
-		   uint64_t trunc_size, __u32 trunc_seq,
+		   uint64_t trunc_size, __u32 trunc_seq, Context *onack,
 		   Context *oncommit, version_t *objver = NULL,
 		   ObjectOperation *extra_ops = NULL) {
     vector<OSDOp> ops;
@@ -2732,16 +2463,14 @@ public:
     ops[i].op.extent.truncate_size = trunc_size;
     ops[i].op.extent.truncate_seq = trunc_seq;
     Op *o = new Op(oid, oloc, ops, flags | global_op_flags.read() |
-		   CEPH_OSD_FLAG_WRITE, oncommit, objver);
+		   CEPH_OSD_FLAG_WRITE, onack, oncommit, objver);
     o->mtime = mtime;
     o->snapc = snapc;
-    ceph_tid_t tid;
-    op_submit(o, &tid);
-    return tid;
+    return op_submit(o);
   }
   ceph_tid_t zero(const object_t& oid, const object_locator_t& oloc,
 		  uint64_t off, uint64_t len, const SnapContext& snapc,
-		  ceph::real_time mtime, int flags, Context *oncommit,
+		  ceph::real_time mtime, int flags, Context *onack, Context *oncommit,
 	     version_t *objver = NULL, ObjectOperation *extra_ops = NULL) {
     vector<OSDOp> ops;
     int i = init_ops(ops, 1, extra_ops);
@@ -2749,32 +2478,29 @@ public:
     ops[i].op.extent.offset = off;
     ops[i].op.extent.length = len;
     Op *o = new Op(oid, oloc, ops, flags | global_op_flags.read() |
-		   CEPH_OSD_FLAG_WRITE, oncommit, objver);
+		   CEPH_OSD_FLAG_WRITE, onack, oncommit, objver);
     o->mtime = mtime;
     o->snapc = snapc;
-    ceph_tid_t tid;
-    op_submit(o, &tid);
-    return tid;
+    return op_submit(o);
   }
   ceph_tid_t rollback_object(const object_t& oid, const object_locator_t& oloc,
 			     const SnapContext& snapc, snapid_t snapid,
-			     ceph::real_time mtime, Context *oncommit,
+			     ceph::real_time mtime, Context *onack, Context *oncommit,
 			     version_t *objver = NULL,
 			     ObjectOperation *extra_ops = NULL) {
     vector<OSDOp> ops;
     int i = init_ops(ops, 1, extra_ops);
     ops[i].op.op = CEPH_OSD_OP_ROLLBACK;
     ops[i].op.snap.snapid = snapid;
-    Op *o = new Op(oid, oloc, ops, CEPH_OSD_FLAG_WRITE, oncommit, objver);
+    Op *o = new Op(oid, oloc, ops, CEPH_OSD_FLAG_WRITE, onack, oncommit,
+		   objver);
     o->mtime = mtime;
     o->snapc = snapc;
-    ceph_tid_t tid;
-    op_submit(o, &tid);
-    return tid;
+    return op_submit(o);
   }
   ceph_tid_t create(const object_t& oid, const object_locator_t& oloc,
 		    const SnapContext& snapc, ceph::real_time mtime, int global_flags,
-		    int create_flags, Context *oncommit,
+		    int create_flags, Context *onack, Context *oncommit,
 		    version_t *objver = NULL,
 		    ObjectOperation *extra_ops = NULL) {
     vector<OSDOp> ops;
@@ -2782,43 +2508,29 @@ public:
     ops[i].op.op = CEPH_OSD_OP_CREATE;
     ops[i].op.flags = create_flags;
     Op *o = new Op(oid, oloc, ops, global_flags | global_op_flags.read() |
-		   CEPH_OSD_FLAG_WRITE, oncommit, objver);
+		   CEPH_OSD_FLAG_WRITE, onack, oncommit, objver);
     o->mtime = mtime;
     o->snapc = snapc;
-    ceph_tid_t tid;
-    op_submit(o, &tid);
-    return tid;
+    return op_submit(o);
   }
-  Op *prepare_remove_op(
-    const object_t& oid, const object_locator_t& oloc,
-    const SnapContext& snapc, ceph::real_time mtime, int flags,
-    Context *oncommit,
-    version_t *objver = NULL, ObjectOperation *extra_ops = NULL) {
+  ceph_tid_t remove(const object_t& oid, const object_locator_t& oloc,
+	       const SnapContext& snapc, ceph::real_time mtime, int flags,
+	       Context *onack, Context *oncommit,
+	       version_t *objver = NULL, ObjectOperation *extra_ops = NULL) {
     vector<OSDOp> ops;
     int i = init_ops(ops, 1, extra_ops);
     ops[i].op.op = CEPH_OSD_OP_DELETE;
     Op *o = new Op(oid, oloc, ops, flags | global_op_flags.read() |
-		   CEPH_OSD_FLAG_WRITE, oncommit, objver);
+		   CEPH_OSD_FLAG_WRITE, onack, oncommit, objver);
     o->mtime = mtime;
     o->snapc = snapc;
-    return o;
-  }
-  ceph_tid_t remove(
-    const object_t& oid, const object_locator_t& oloc,
-    const SnapContext& snapc, ceph::real_time mtime, int flags,
-    Context *oncommit,
-    version_t *objver = NULL, ObjectOperation *extra_ops = NULL) {
-    Op *o = prepare_remove_op(oid, oloc, snapc, mtime, flags,
-			      oncommit, objver, extra_ops);
-    ceph_tid_t tid;
-    op_submit(o, &tid);
-    return tid;
+    return op_submit(o);
   }
 
   ceph_tid_t setxattr(const object_t& oid, const object_locator_t& oloc,
 	      const char *name, const SnapContext& snapc, const bufferlist &bl,
 	      ceph::real_time mtime, int flags,
-	      Context *oncommit,
+	      Context *onack, Context *oncommit,
 	      version_t *objver = NULL, ObjectOperation *extra_ops = NULL) {
     vector<OSDOp> ops;
     int i = init_ops(ops, 1, extra_ops);
@@ -2829,17 +2541,15 @@ public:
       ops[i].indata.append(name);
     ops[i].indata.append(bl);
     Op *o = new Op(oid, oloc, ops, flags | global_op_flags.read() |
-		   CEPH_OSD_FLAG_WRITE, oncommit, objver);
+		   CEPH_OSD_FLAG_WRITE, onack, oncommit, objver);
     o->mtime = mtime;
     o->snapc = snapc;
-    ceph_tid_t tid;
-    op_submit(o, &tid);
-    return tid;
+    return op_submit(o);
   }
   ceph_tid_t removexattr(const object_t& oid, const object_locator_t& oloc,
 	      const char *name, const SnapContext& snapc,
 	      ceph::real_time mtime, int flags,
-	      Context *oncommit,
+	      Context *onack, Context *oncommit,
 	      version_t *objver = NULL, ObjectOperation *extra_ops = NULL) {
     vector<OSDOp> ops;
     int i = init_ops(ops, 1, extra_ops);
@@ -2849,18 +2559,16 @@ public:
     if (name)
       ops[i].indata.append(name);
     Op *o = new Op(oid, oloc, ops, flags | global_op_flags.read() |
-		   CEPH_OSD_FLAG_WRITE, oncommit, objver);
+		   CEPH_OSD_FLAG_WRITE, onack, oncommit, objver);
     o->mtime = mtime;
     o->snapc = snapc;
-    ceph_tid_t tid;
-    op_submit(o, &tid);
-    return tid;
+    return op_submit(o);
   }
 
   void list_nobjects(NListContext *p, Context *onfinish);
   uint32_t list_nobjects_seek(NListContext *p, uint32_t pos);
-  uint32_t list_nobjects_seek(NListContext *list_context, const hobject_t& c);
-  void list_nobjects_get_cursor(NListContext *list_context, hobject_t *c);
+  void list_objects(ListContext *p, Context *onfinish);
+  uint32_t list_objects_seek(ListContext *p, uint32_t pos);
 
   hobject_t enumerate_objects_begin();
   hobject_t enumerate_objects_end();
@@ -2871,7 +2579,6 @@ public:
     const hobject_t &start,
     const hobject_t &end,
     const uint32_t max,
-    const bufferlist &filter_bl,
     std::list<librados::ListObjectImpl> *result, 
     hobject_t *next,
     Context *on_finish);
@@ -2952,7 +2659,7 @@ public:
       extents.swap(e);
       resultbl.swap(r);
     }
-    void finish(int r) override {
+    void finish(int r) {
       objecter->_sg_read_finish(extents, resultbl, bl, onfinish);
     }
   };
@@ -2987,14 +2694,15 @@ public:
 
   void sg_write_trunc(vector<ObjectExtent>& extents, const SnapContext& snapc,
 		      const bufferlist& bl, ceph::real_time mtime, int flags,
-		      uint64_t trunc_size, __u32 trunc_seq,
+		      uint64_t trunc_size, __u32 trunc_seq, Context *onack,
 		      Context *oncommit, int op_flags = 0) {
     if (extents.size() == 1) {
       write_trunc(extents[0].oid, extents[0].oloc, extents[0].offset,
 		  extents[0].length, snapc, bl, mtime, flags,
-		  extents[0].truncate_size, trunc_seq, oncommit,
+		  extents[0].truncate_size, trunc_seq, onack, oncommit,
 		  0, 0, op_flags);
     } else {
+      C_GatherBuilder gack(cct, onack);
       C_GatherBuilder gcom(cct, oncommit);
       for (vector<ObjectExtent>::iterator p = extents.begin();
 	   p != extents.end();
@@ -3008,39 +2716,35 @@ public:
 	assert(cur.length() == p->length);
 	write_trunc(p->oid, p->oloc, p->offset, p->length,
 	      snapc, cur, mtime, flags, p->truncate_size, trunc_seq,
+	      onack ? gack.new_sub():0,
 	      oncommit ? gcom.new_sub():0,
 	      0, 0, op_flags);
       }
+      gack.activate();
       gcom.activate();
     }
   }
 
   void sg_write(vector<ObjectExtent>& extents, const SnapContext& snapc,
 		const bufferlist& bl, ceph::real_time mtime, int flags,
-		Context *oncommit, int op_flags = 0) {
-    sg_write_trunc(extents, snapc, bl, mtime, flags, 0, 0, oncommit,
+		Context *onack, Context *oncommit, int op_flags = 0) {
+    sg_write_trunc(extents, snapc, bl, mtime, flags, 0, 0, onack, oncommit,
 		   op_flags);
   }
 
-  void ms_handle_connect(Connection *con) override;
-  bool ms_handle_reset(Connection *con) override;
-  void ms_handle_remote_reset(Connection *con) override;
-  bool ms_handle_refused(Connection *con) override;
+  void ms_handle_connect(Connection *con);
+  bool ms_handle_reset(Connection *con);
+  void ms_handle_remote_reset(Connection *con);
   bool ms_get_authorizer(int dest_type,
 			 AuthAuthorizer **authorizer,
-			 bool force_new) override;
+			 bool force_new);
 
   void blacklist_self(bool set);
 
 private:
   epoch_t epoch_barrier;
-  bool retry_writes_after_first_reply;
 public:
   void set_epoch_barrier(epoch_t epoch);
-
-  PerfCounters *get_logger() {
-    return logger;
-  }
 };
 
 #endif

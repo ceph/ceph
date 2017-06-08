@@ -56,10 +56,12 @@ Release Cycle
 
 Four times a year, the development roadmap is discussed online during
 the `Ceph Developer Summit <http://wiki.ceph.com/Planning/CDS/>`_. A
-new stable release (hammer, infernalis, jewel ...) is published at the same
-frequency.  Every other release (firefly, hammer, jewel...) is a `Long Term
-Stable (LTS) <../../releases>`_.  See `Understanding the release cycle
-<../../releases#understanding-the-release-cycle>`_ for more information.
+new stable release (argonaut, cuttlefish, dumpling, emperor, firefly,
+giant, hammer, infernalis ...) is published at the same frequency. 
+Every other release (dumpling, firefly, hammer, ...) is a `Long Term Stable (LTS) <../../releases>`_.
+See `Understanding the release cycle
+<../../releases#understanding-the-release-cycle>`_ for more
+information.
 
 Merging bug fixes or features
 =============================
@@ -100,9 +102,9 @@ follows:
 Each ``team`` is responsible for a project:
 
 * rgw lead is Yehuda Sadeh
-* CephFS lead is John Spray
+* CephFS lead is Gregory Farnum
 * rados lead is Samuel Just
-* rbd lead is Jason Dillaman
+* rbd lead is Josh Durgin
 
 The ``developer`` assigned to an issue is responsible for it. The
 status of an open issue can be:
@@ -139,15 +141,15 @@ results are posted on `pulpito <http://pulpito.ceph.com/>`_ and the
 The ``quality engineer`` is either a developer or a member of the QE
 team. There is at least one integration test suite per project:
 
-* `rgw <https://github.com/ceph/ceph/tree/master/qa/suites/rgw>`_ suite
-* `CephFS <https://github.com/ceph/ceph/tree/master/qa/suites/fs>`_ suite
-* `rados <https://github.com/ceph/ceph/tree/master/qa/suites/rados>`_ suite
-* `rbd <https://github.com/ceph/ceph/tree/master/qa/suites/rbd>`_ suite
+* `rgw <https://github.com/ceph/ceph-qa-suite/tree/master/suites/rgw>`_ suite
+* `CephFS <https://github.com/ceph/ceph-qa-suite/tree/master/suites/fs>`_ suite
+* `rados <https://github.com/ceph/ceph-qa-suite/tree/master/suites/rados>`_ suite
+* `rbd <https://github.com/ceph/ceph-qa-suite/tree/master/suites/rbd>`_ suite
 
-and many others such as
+and a many others such as
 
-* `upgrade <https://github.com/ceph/ceph/tree/master/qa/suites/upgrade>`_ suites
-* `power-cyle <https://github.com/ceph/ceph/tree/master/qa/suites/powercycle>`_ suite
+* `upgrade <https://github.com/ceph/ceph-qa-suite/tree/master/suites/upgrade>`_ suites
+* `power-cyle <https://github.com/ceph/ceph-qa-suite/tree/master/suites/powercycle>`_ suite
 * ...
 
 Preparing a new release

@@ -57,7 +57,7 @@ const char *get_id_str()
 int main(int argc, const char **argv)
 {
   const char *num_objects = getenv("NUM_OBJECTS");
-  const std::string pool = get_temp_pool_name(argv[0]);
+  std::string pool = "foo";
   if (num_objects) {
     g_num_objects = atoi(num_objects); 
     if (g_num_objects == 0)

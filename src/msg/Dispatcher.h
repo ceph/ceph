@@ -16,7 +16,6 @@
 #ifndef CEPH_DISPATCHER_H
 #define CEPH_DISPATCHER_H
 
-#include "include/assert.h"
 #include "include/buffer_fwd.h"
 #include "include/assert.h"
 
@@ -29,7 +28,7 @@ class CephContext;
 
 class Dispatcher {
 public:
-  explicit Dispatcher(CephContext *cct_)
+  Dispatcher(CephContext *cct_)
     : cct(cct_)
   {
   }
@@ -59,7 +58,7 @@ public:
    * @param m The message we want to fast dispatch.
    * @returns True if the message can be fast dispatched; false otherwise.
    */
-  virtual bool ms_can_fast_dispatch(const Message *m) const { return false;}
+  virtual bool ms_can_fast_dispatch(Message *m) const { return false;}
   /**
    * This function determines if a dispatcher is included in the
    * list of fast-dispatch capable Dispatchers.
@@ -73,7 +72,7 @@ public:
    *
    * @param m The Message to fast dispatch.
    */
-  virtual void ms_fast_dispatch(Message *m) { ceph_abort(); }
+  virtual void ms_fast_dispatch(Message *m) { assert(0); }
   /**
    * Let the Dispatcher preview a Message before it is dispatched. This
    * function is called on *every* Message, prior to the fast/regular dispatch
@@ -156,16 +155,6 @@ public:
    */
   virtual void ms_handle_remote_reset(Connection *con) = 0;
   
-  /**
-   * This indicates that the connection is both broken and further
-   * connection attempts are failing because other side refuses
-   * it.
-   *
-   * @param con The Connection which broke. You are not granted
-   * a reference to it.
-   */
-  virtual bool ms_handle_refused(Connection *con) = 0;
-
   /**
    * @defgroup Authentication
    * @{

@@ -42,8 +42,6 @@
 
 using namespace std;
 
-const static int POLL_TIMEOUT=120000;
-
 struct krbd_ctx {
   CephContext *cct;
   struct udev *udev;
@@ -120,14 +118,12 @@ static int build_map_buf(CephContext *cct, const char *pool, const char *image,
   if (r < 0)
     return r;
 
-  list<entity_addr_t> mon_addr;
-  monmap.list_addrs(mon_addr);
-
-  for (const auto &p : mon_addr) {
-    if (oss.tellp() > 0) {
+  for (map<string, entity_addr_t>::const_iterator it = monmap.mon_addr.begin();
+       it != monmap.mon_addr.end();
+       ++it) {
+    if (it != monmap.mon_addr.begin())
       oss << ",";
-    }
-    oss << p.get_sockaddr();
+    oss << it->second.addr;
   }
 
   oss << " name=" << cct->_conf->name.get_id();
@@ -191,7 +187,7 @@ static int wait_for_udev_add(struct udev_monitor *mon, const char *pool,
 
     fds[0].fd = udev_monitor_get_fd(mon);
     fds[0].events = POLLIN;
-    if (poll(fds, 1, POLL_TIMEOUT) < 0)
+    if (poll(fds, 1, -1) < 0)
       return -errno;
 
     dev = udev_monitor_receive_device(mon);
@@ -208,9 +204,9 @@ static int wait_for_udev_add(struct udev_monitor *mon, const char *pool,
         const char *this_snap = udev_device_get_sysattr_value(dev,
                                                               "current_snap");
 
-        if (this_pool && strcmp(this_pool, pool) == 0 &&
-            this_image && strcmp(this_image, image) == 0 &&
-            this_snap && strcmp(this_snap, snap) == 0) {
+        if (strcmp(this_pool, pool) == 0 &&
+            strcmp(this_image, image) == 0 &&
+            strcmp(this_snap, snap) == 0) {
           bus_dev = dev;
           continue;
         }
@@ -457,16 +453,6 @@ out_enm:
   return r;
 }
 
-static string build_unmap_buf(const string& id, const char *options)
-{
-  string buf(id);
-  if (strcmp(options, "") != 0) {
-    buf += " ";
-    buf += options;
-  }
-  return buf;
-}
-
 static int wait_for_udev_remove(struct udev_monitor *mon, dev_t devno)
 {
   for (;;) {
@@ -475,7 +461,7 @@ static int wait_for_udev_remove(struct udev_monitor *mon, dev_t devno)
 
     fds[0].fd = udev_monitor_get_fd(mon);
     fds[0].events = POLLIN;
-    if (poll(fds, 1, POLL_TIMEOUT) < 0)
+    if (poll(fds, 1, -1) < 0)
       return -errno;
 
     dev = udev_monitor_receive_device(mon);
@@ -494,7 +480,7 @@ static int wait_for_udev_remove(struct udev_monitor *mon, dev_t devno)
   return 0;
 }
 
-static int do_unmap(struct udev *udev, dev_t devno, const string& buf)
+static int do_unmap(struct udev *udev, dev_t devno, const string& id)
 {
   struct udev_monitor *mon;
   int r;
@@ -518,7 +504,7 @@ static int do_unmap(struct udev *udev, dev_t devno, const string& buf)
    * Try to circumvent this with a retry before turning to udev.
    */
   for (int tries = 0; ; tries++) {
-    r = sysfs_write_rbd_remove(buf);
+    r = sysfs_write_rbd_remove(id);
     if (r >= 0) {
       break;
     } else if (r == -EBUSY && tries < 2) {
@@ -550,11 +536,10 @@ out_mon:
   return r;
 }
 
-static int unmap_image(struct krbd_ctx *ctx, const char *devnode,
-                       const char *options)
+static int unmap_image(struct krbd_ctx *ctx, const char *devnode)
 {
   struct stat sb;
-  dev_t wholedevno = 0;
+  dev_t wholedevno;
   string id;
   int r;
 
@@ -583,14 +568,14 @@ static int unmap_image(struct krbd_ctx *ctx, const char *devnode,
     return r;
   }
 
-  return do_unmap(ctx->udev, wholedevno, build_unmap_buf(id, options));
+  return do_unmap(ctx->udev, wholedevno, id);
 }
 
 static int unmap_image(struct krbd_ctx *ctx, const char *pool,
-                       const char *image, const char *snap,
-                       const char *options)
+                       const char *image, const char *snap)
+
 {
-  dev_t devno = 0;
+  dev_t devno;
   string id;
   int r;
 
@@ -607,20 +592,16 @@ static int unmap_image(struct krbd_ctx *ctx, const char *pool,
     return r;
   }
 
-  return do_unmap(ctx->udev, devno, build_unmap_buf(id, options));
+  return do_unmap(ctx->udev, devno, id);
 }
 
-static bool dump_one_image(Formatter *f, TextTable *tbl,
-                           struct udev_device *dev)
+static void dump_one_image(Formatter *f, TextTable *tbl,
+                           const char *id, const char *pool,
+                           const char *image, const char *snap)
 {
-  const char *id = udev_device_get_sysname(dev);
-  const char *pool = udev_device_get_sysattr_value(dev, "pool");
-  const char *image = udev_device_get_sysattr_value(dev, "name");
-  const char *snap = udev_device_get_sysattr_value(dev, "current_snap");
-  string kname = get_kernel_rbd_name(id);
+  assert(id && pool && image && snap);
 
-  if (!pool || !image || !snap)
-    return false;
+  string kname = get_kernel_rbd_name(id);
 
   if (f) {
     f->open_object_section(id);
@@ -632,8 +613,6 @@ static bool dump_one_image(Formatter *f, TextTable *tbl,
   } else {
     *tbl << id << pool << image << snap << kname << TextTable::endrow;
   }
-
-  return true;
 }
 
 static int do_dump(struct udev *udev, Formatter *f, TextTable *tbl)
@@ -659,10 +638,18 @@ static int do_dump(struct udev *udev, Formatter *f, TextTable *tbl)
     struct udev_device *dev;
 
     dev = udev_device_new_from_syspath(udev, udev_list_entry_get_name(l));
-    if (dev) {
-      have_output |= dump_one_image(f, tbl, dev);
-      udev_device_unref(dev);
+    if (!dev) {
+      r = -ENOMEM;
+      goto out_enm;
     }
+
+    dump_one_image(f, tbl, udev_device_get_sysname(dev),
+                   udev_device_get_sysattr_value(dev, "pool"),
+                   udev_device_get_sysattr_value(dev, "name"),
+                   udev_device_get_sysattr_value(dev, "current_snap"));
+
+    have_output = true;
+    udev_device_unref(dev);
   }
 
   r = have_output;
@@ -745,17 +732,15 @@ extern "C" int krbd_map(struct krbd_ctx *ctx, const char *pool,
   return r;
 }
 
-extern "C" int krbd_unmap(struct krbd_ctx *ctx, const char *devnode,
-                          const char *options)
+extern "C" int krbd_unmap(struct krbd_ctx *ctx, const char *devnode)
 {
-  return unmap_image(ctx, devnode, options);
+  return unmap_image(ctx, devnode);
 }
 
 extern "C" int krbd_unmap_by_spec(struct krbd_ctx *ctx, const char *pool,
-                                  const char *image, const char *snap,
-                                  const char *options)
+                                  const char *image, const char *snap)
 {
-  return unmap_image(ctx, pool, image, snap, options);
+  return unmap_image(ctx, pool, image, snap);
 }
 
 int krbd_showmapped(struct krbd_ctx *ctx, Formatter *f)

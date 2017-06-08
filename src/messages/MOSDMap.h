@@ -62,11 +62,11 @@ class MOSDMap : public Message {
       fsid(f),
       oldest_map(0), newest_map(0) { }
 private:
-  ~MOSDMap() override {}
+  ~MOSDMap() {}
 
 public:
   // marshalling
-  void decode_payload() override {
+  void decode_payload() {
     bufferlist::iterator p = payload.begin();
     ::decode(fsid, p);
     ::decode(incremental_maps, p);
@@ -79,14 +79,13 @@ public:
       newest_map = 0;
     }
   }
-  void encode_payload(uint64_t features) override {
+  void encode_payload(uint64_t features) {
     header.version = HEAD_VERSION;
     ::encode(fsid, payload);
     if ((features & CEPH_FEATURE_PGID64) == 0 ||
 	(features & CEPH_FEATURE_PGPOOL3) == 0 ||
 	(features & CEPH_FEATURE_OSDENC) == 0 ||
-        (features & CEPH_FEATURE_OSDMAP_ENC) == 0 ||
-	(features & CEPH_FEATURE_MSG_ADDR2) == 0) {
+        (features & CEPH_FEATURE_OSDMAP_ENC) == 0) {
       if ((features & CEPH_FEATURE_PGID64) == 0 ||
 	  (features & CEPH_FEATURE_PGPOOL3) == 0)
 	header.version = 1;  // old old_client version
@@ -110,9 +109,9 @@ public:
 	  OSDMap m;
 	  m.decode(inc.fullmap);
 	  inc.fullmap.clear();
-	  m.encode(inc.fullmap, features | CEPH_FEATURE_RESERVED);
+	  m.encode(inc.fullmap, features);
 	}
-	inc.encode(p->second, features | CEPH_FEATURE_RESERVED);
+	inc.encode(p->second, features);
       }
       for (map<epoch_t,bufferlist>::iterator p = maps.begin();
 	   p != maps.end();
@@ -120,7 +119,7 @@ public:
 	OSDMap m;
 	m.decode(p->second);
 	p->second.clear();
-	m.encode(p->second, features | CEPH_FEATURE_RESERVED);
+	m.encode(p->second, features);
       }
     }
     ::encode(incremental_maps, payload);
@@ -131,8 +130,8 @@ public:
     }
   }
 
-  const char *get_type_name() const override { return "osdmap"; }
-  void print(ostream& out) const override {
+  const char *get_type_name() const { return "omap"; }
+  void print(ostream& out) const {
     out << "osd_map(" << get_first() << ".." << get_last();
     if (oldest_map || newest_map)
       out << " src has " << oldest_map << ".." << newest_map;

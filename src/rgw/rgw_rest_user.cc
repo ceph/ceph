@@ -8,7 +8,6 @@
 #include "rgw_rest_user.h"
 
 #include "include/str_list.h"
-#include "include/assert.h"
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -17,13 +16,13 @@ class RGWOp_User_Info : public RGWRESTOp {
 public:
   RGWOp_User_Info() {}
 
-  int check_caps(RGWUserCaps& caps) override {
+  int check_caps(RGWUserCaps& caps) {
     return caps.check_cap("users", RGW_CAP_READ);
   }
 
-  void execute() override;
+  void execute();
 
-  const string name() override { return "get_user_info"; }
+  virtual const string name() { return "get_user_info"; }
 };
 
 void RGWOp_User_Info::execute()
@@ -34,15 +33,6 @@ void RGWOp_User_Info::execute()
   bool fetch_stats;
 
   RESTArgs::get_string(s, "uid", uid_str, &uid_str);
-
-  // if uid was not supplied in rest argument, error out now, otherwise we'll
-  // end up initializing anonymous user, for which keys.init will eventually
-  // return -EACESS
-  if (uid_str.empty()){
-    http_ret=-EINVAL;
-    return;
-  }
-
   rgw_user uid(uid_str);
 
   RESTArgs::get_bool(s, "stats", false, &fetch_stats);
@@ -58,13 +48,13 @@ class RGWOp_User_Create : public RGWRESTOp {
 public:
   RGWOp_User_Create() {}
 
-  int check_caps(RGWUserCaps& caps) override {
+  int check_caps(RGWUserCaps& caps) {
     return caps.check_cap("users", RGW_CAP_WRITE);
   }
 
-  void execute() override;
+  void execute();
 
-  const string name() override { return "create_user"; }
+  virtual const string name() { return "create_user"; }
 };
 
 void RGWOp_User_Create::execute()
@@ -82,8 +72,8 @@ void RGWOp_User_Create::execute()
   bool system;
   bool exclusive;
 
-  int32_t max_buckets;
-  int32_t default_max_buckets = s->cct->_conf->rgw_user_max_buckets;
+  uint32_t max_buckets;
+  uint32_t default_max_buckets = s->cct->_conf->rgw_user_max_buckets;
 
   RGWUserAdminOpState op_state;
 
@@ -98,23 +88,34 @@ void RGWOp_User_Create::execute()
   RESTArgs::get_string(s, "user-caps", caps, &caps);
   RESTArgs::get_bool(s, "generate-key", true, &gen_key);
   RESTArgs::get_bool(s, "suspended", false, &suspended);
-  RESTArgs::get_int32(s, "max-buckets", default_max_buckets, &max_buckets);
+  RESTArgs::get_uint32(s, "max-buckets", default_max_buckets, &max_buckets);
   RESTArgs::get_bool(s, "system", false, &system);
   RESTArgs::get_bool(s, "exclusive", false, &exclusive);
 
-  if (!s->user->system && system) {
+  if (!s->user.system && system) {
     ldout(s->cct, 0) << "cannot set system flag by non-system user" << dendl;
     http_ret = -EINVAL;
     return;
   }
 
-  // TODO: validate required args are passed in. (for eg. uid and display_name here)
-  op_state.set_user_id(uid);
-  op_state.set_display_name(display_name);
-  op_state.set_user_email(email);
-  op_state.set_caps(caps);
-  op_state.set_access_key(access_key);
-  op_state.set_secret_key(secret_key);
+  // FIXME: don't do double argument checking
+  if (!uid.empty())
+    op_state.set_user_id(uid);
+
+  if (!display_name.empty())
+    op_state.set_display_name(display_name);
+
+  if (!email.empty())
+    op_state.set_user_email(email);
+
+  if (!caps.empty())
+    op_state.set_caps(caps);
+
+  if (!access_key.empty())
+    op_state.set_access_key(access_key);
+
+  if (!secret_key.empty())
+    op_state.set_secret_key(secret_key);
 
   if (!key_type_str.empty()) {
     int32_t key_type = KEY_TYPE_UNDEFINED;
@@ -141,37 +142,6 @@ void RGWOp_User_Create::execute()
   if (gen_key)
     op_state.set_generate_key();
 
-  RGWQuotaInfo bucket_quota;
-  RGWQuotaInfo user_quota;
-
-  if (s->cct->_conf->rgw_bucket_default_quota_max_objects >= 0) {
-    bucket_quota.max_objects = s->cct->_conf->rgw_bucket_default_quota_max_objects;
-    bucket_quota.enabled = true;
-  }
-
-  if (s->cct->_conf->rgw_bucket_default_quota_max_size >= 0) {
-    bucket_quota.max_size = s->cct->_conf->rgw_bucket_default_quota_max_size;
-    bucket_quota.enabled = true;
-  }
-
-  if (s->cct->_conf->rgw_user_default_quota_max_objects >= 0) {
-    user_quota.max_objects = s->cct->_conf->rgw_user_default_quota_max_objects;
-    user_quota.enabled = true;
-  }
-
-  if (s->cct->_conf->rgw_user_default_quota_max_size >= 0) {
-    user_quota.max_size = s->cct->_conf->rgw_user_default_quota_max_size;
-    user_quota.enabled = true;
-  }
-
-  if (bucket_quota.enabled) {
-    op_state.set_bucket_quota(bucket_quota);
-  }
-
-  if (user_quota.enabled) {
-    op_state.set_user_quota(user_quota);
-  }
-
   http_ret = RGWUserAdminOp_User::create(store, op_state, flusher);
 }
 
@@ -180,13 +150,13 @@ class RGWOp_User_Modify : public RGWRESTOp {
 public:
   RGWOp_User_Modify() {}
 
-  int check_caps(RGWUserCaps& caps) override {
+  int check_caps(RGWUserCaps& caps) {
     return caps.check_cap("users", RGW_CAP_WRITE);
   }
 
-  void execute() override;
+  void execute();
 
-  const string name() override { return "modify_user"; }
+  virtual const string name() { return "modify_user"; }
 };
 
 void RGWOp_User_Modify::execute()
@@ -203,7 +173,7 @@ void RGWOp_User_Modify::execute()
   bool suspended;
   bool system;
 
-  int32_t max_buckets;
+  uint32_t max_buckets;
 
   RGWUserAdminOpState op_state;
 
@@ -217,23 +187,34 @@ void RGWOp_User_Modify::execute()
   RESTArgs::get_string(s, "user-caps", caps, &caps);
   RESTArgs::get_bool(s, "generate-key", false, &gen_key);
   RESTArgs::get_bool(s, "suspended", false, &suspended);
-  RESTArgs::get_int32(s, "max-buckets", RGW_DEFAULT_MAX_BUCKETS, &max_buckets);
+  RESTArgs::get_uint32(s, "max-buckets", RGW_DEFAULT_MAX_BUCKETS, &max_buckets);
   RESTArgs::get_string(s, "key-type", key_type_str, &key_type_str);
 
   RESTArgs::get_bool(s, "system", false, &system);
 
-  if (!s->user->system && system) {
+  if (!s->user.system && system) {
     ldout(s->cct, 0) << "cannot set system flag by non-system user" << dendl;
     http_ret = -EINVAL;
     return;
   }
 
-  op_state.set_user_id(uid);
-  op_state.set_display_name(display_name);
-  op_state.set_user_email(email);
-  op_state.set_caps(caps);
-  op_state.set_access_key(access_key);
-  op_state.set_secret_key(secret_key);
+  if (!uid.empty())
+    op_state.set_user_id(uid);
+
+  if (!display_name.empty())
+    op_state.set_display_name(display_name);
+
+  if (!email.empty())
+    op_state.set_user_email(email);
+
+  if (!caps.empty())
+    op_state.set_caps(caps);
+
+  if (!access_key.empty())
+    op_state.set_access_key(access_key);
+
+  if (!secret_key.empty())
+    op_state.set_secret_key(secret_key);
 
   if (max_buckets != RGW_DEFAULT_MAX_BUCKETS)
     op_state.set_max_buckets(max_buckets);
@@ -265,13 +246,13 @@ class RGWOp_User_Remove : public RGWRESTOp {
 public:
   RGWOp_User_Remove() {}
 
-  int check_caps(RGWUserCaps& caps) override {
+  int check_caps(RGWUserCaps& caps) {
     return caps.check_cap("users", RGW_CAP_WRITE);
   }
 
-  void execute() override;
+  void execute();
 
-  const string name() override { return "remove_user"; }
+  virtual const string name() { return "remove_user"; }
 };
 
 void RGWOp_User_Remove::execute()
@@ -300,13 +281,13 @@ class RGWOp_Subuser_Create : public RGWRESTOp {
 public:
   RGWOp_Subuser_Create() {}
 
-  int check_caps(RGWUserCaps& caps) override {
+  int check_caps(RGWUserCaps& caps) {
     return caps.check_cap("users", RGW_CAP_WRITE);
   }
 
-  void execute() override;
+  void execute();
 
-  const string name() override { return "create_subuser"; }
+  virtual const string name() { return "create_subuser"; }
 };
 
 void RGWOp_Subuser_Create::execute()
@@ -314,13 +295,11 @@ void RGWOp_Subuser_Create::execute()
   std::string uid_str;
   std::string subuser;
   std::string secret_key;
-  std::string access_key;
   std::string perm_str;
   std::string key_type_str;
 
   bool gen_subuser = false; // FIXME placeholder
   bool gen_secret;
-  bool gen_access;
 
   uint32_t perm_mask = 0;
   int32_t key_type = KEY_TYPE_SWIFT;
@@ -331,25 +310,26 @@ void RGWOp_Subuser_Create::execute()
   rgw_user uid(uid_str);
 
   RESTArgs::get_string(s, "subuser", subuser, &subuser);
-  RESTArgs::get_string(s, "access-key", access_key, &access_key);
   RESTArgs::get_string(s, "secret-key", secret_key, &secret_key);
   RESTArgs::get_string(s, "access", perm_str, &perm_str);
   RESTArgs::get_string(s, "key-type", key_type_str, &key_type_str);
   //RESTArgs::get_bool(s, "generate-subuser", false, &gen_subuser);
   RESTArgs::get_bool(s, "generate-secret", false, &gen_secret);
-  RESTArgs::get_bool(s, "gen-access-key", false, &gen_access);
-  
+
   perm_mask = rgw_str_to_perm(perm_str.c_str());
   op_state.set_perm(perm_mask);
 
-  op_state.set_user_id(uid);
-  op_state.set_subuser(subuser);
-  op_state.set_access_key(access_key);
-  op_state.set_secret_key(secret_key);
-  op_state.set_generate_subuser(gen_subuser);
+  // FIXME: no double checking
+  if (!uid.empty())
+    op_state.set_user_id(uid);
 
-  if (gen_access)
-    op_state.set_gen_access();
+  if (!subuser.empty())
+    op_state.set_subuser(subuser);
+
+  if (!secret_key.empty())
+    op_state.set_secret_key(secret_key);
+
+  op_state.set_generate_subuser(gen_subuser);
 
   if (gen_secret)
     op_state.set_gen_secret();
@@ -370,13 +350,13 @@ class RGWOp_Subuser_Modify : public RGWRESTOp {
 public:
   RGWOp_Subuser_Modify() {}
 
-  int check_caps(RGWUserCaps& caps) override {
+  int check_caps(RGWUserCaps& caps) {
     return caps.check_cap("users", RGW_CAP_WRITE);
   }
 
-  void execute() override;
+  void execute();
 
-  const string name() override { return "modify_subuser"; }
+  virtual const string name() { return "modify_subuser"; }
 };
 
 void RGWOp_Subuser_Modify::execute()
@@ -406,10 +386,18 @@ void RGWOp_Subuser_Modify::execute()
   perm_mask = rgw_str_to_perm(perm_str.c_str());
   op_state.set_perm(perm_mask);
 
-  op_state.set_user_id(uid);
-  op_state.set_subuser(subuser);
-  op_state.set_secret_key(secret_key);
-  op_state.set_gen_secret();
+  // FIXME: no double checking
+  if (!uid.empty())
+    op_state.set_user_id(uid);
+
+  if (!subuser.empty())
+    op_state.set_subuser(subuser);
+
+  if (!secret_key.empty())
+    op_state.set_secret_key(secret_key);
+
+  if (gen_secret)
+    op_state.set_gen_secret();
 
   if (!key_type_str.empty()) {
     if (key_type_str.compare("swift") == 0)
@@ -427,13 +415,13 @@ class RGWOp_Subuser_Remove : public RGWRESTOp {
 public:
   RGWOp_Subuser_Remove() {}
 
-  int check_caps(RGWUserCaps& caps) override {
+  int check_caps(RGWUserCaps& caps) {
     return caps.check_cap("users", RGW_CAP_WRITE);
   }
 
-  void execute() override;
+  void execute();
 
-  const string name() override { return "remove_subuser"; }
+  virtual const string name() { return "remove_subuser"; }
 };
 
 void RGWOp_Subuser_Remove::execute()
@@ -450,8 +438,12 @@ void RGWOp_Subuser_Remove::execute()
   RESTArgs::get_string(s, "subuser", subuser, &subuser);
   RESTArgs::get_bool(s, "purge-keys", true, &purge_keys);
 
-  op_state.set_user_id(uid);
-  op_state.set_subuser(subuser);
+  // FIXME: no double checking
+  if (!uid.empty())
+    op_state.set_user_id(uid);
+
+  if (!subuser.empty())
+    op_state.set_subuser(subuser);
 
   if (purge_keys)
     op_state.set_purge_keys();
@@ -464,13 +456,13 @@ class RGWOp_Key_Create : public RGWRESTOp {
 public:
   RGWOp_Key_Create() {}
 
-  int check_caps(RGWUserCaps& caps) override {
+  int check_caps(RGWUserCaps& caps) {
     return caps.check_cap("users", RGW_CAP_WRITE);
   }
 
-  void execute() override;
+  void execute();
 
-  const string name() override { return "create_access_key"; }
+  virtual const string name() { return "create_access_key"; }
 };
 
 void RGWOp_Key_Create::execute()
@@ -494,10 +486,18 @@ void RGWOp_Key_Create::execute()
   RESTArgs::get_string(s, "key-type", key_type_str, &key_type_str);
   RESTArgs::get_bool(s, "generate-key", true, &gen_key);
 
-  op_state.set_user_id(uid);
-  op_state.set_subuser(subuser);
-  op_state.set_access_key(access_key);
-  op_state.set_secret_key(secret_key);
+  // FIXME: no double checking
+  if (!uid.empty())
+    op_state.set_user_id(uid);
+
+  if (!subuser.empty())
+    op_state.set_subuser(subuser);
+
+  if (!access_key.empty())
+    op_state.set_access_key(access_key);
+
+  if (!secret_key.empty())
+    op_state.set_secret_key(secret_key);
 
   if (gen_key)
     op_state.set_generate_key();
@@ -520,13 +520,13 @@ class RGWOp_Key_Remove : public RGWRESTOp {
 public:
   RGWOp_Key_Remove() {}
 
-  int check_caps(RGWUserCaps& caps) override {
+  int check_caps(RGWUserCaps& caps) {
     return caps.check_cap("users", RGW_CAP_WRITE);
   }
 
-  void execute() override;
+  void execute();
 
-  const string name() override { return "remove_access_key"; }
+  virtual const string name() { return "remove_access_key"; }
 };
 
 void RGWOp_Key_Remove::execute()
@@ -545,9 +545,15 @@ void RGWOp_Key_Remove::execute()
   RESTArgs::get_string(s, "access-key", access_key, &access_key);
   RESTArgs::get_string(s, "key-type", key_type_str, &key_type_str);
 
-  op_state.set_user_id(uid);
-  op_state.set_subuser(subuser);
-  op_state.set_access_key(access_key);
+  // FIXME: no double checking
+  if (!uid.empty())
+    op_state.set_user_id(uid);
+
+  if (!subuser.empty())
+    op_state.set_subuser(subuser);
+
+  if (!access_key.empty())
+    op_state.set_access_key(access_key);
 
   if (!key_type_str.empty()) {
     int32_t key_type = KEY_TYPE_UNDEFINED;
@@ -567,13 +573,13 @@ class RGWOp_Caps_Add : public RGWRESTOp {
 public:
   RGWOp_Caps_Add() {}
 
-  int check_caps(RGWUserCaps& caps) override {
+  int check_caps(RGWUserCaps& caps) {
     return caps.check_cap("users", RGW_CAP_WRITE);
   }
 
-  void execute() override;
+  void execute();
 
-  const string name() override { return "add_user_caps"; }
+  virtual const string name() { return "add_user_caps"; }
 };
 
 void RGWOp_Caps_Add::execute()
@@ -588,8 +594,12 @@ void RGWOp_Caps_Add::execute()
 
   RESTArgs::get_string(s, "user-caps", caps, &caps);
 
-  op_state.set_user_id(uid);
-  op_state.set_caps(caps);
+  // FIXME: no double checking
+  if (!uid.empty())
+    op_state.set_user_id(uid);
+
+  if (!caps.empty())
+    op_state.set_caps(caps);
 
   http_ret = RGWUserAdminOp_Caps::add(store, op_state, flusher);
 }
@@ -599,13 +609,13 @@ class RGWOp_Caps_Remove : public RGWRESTOp {
 public:
   RGWOp_Caps_Remove() {}
 
-  int check_caps(RGWUserCaps& caps) override {
+  int check_caps(RGWUserCaps& caps) {
     return caps.check_cap("users", RGW_CAP_WRITE);
   }
 
-  void execute() override;
+  void execute();
 
-  const string name() override { return "remove_user_caps"; }
+  virtual const string name() { return "remove_user_caps"; }
 };
 
 void RGWOp_Caps_Remove::execute()
@@ -620,8 +630,12 @@ void RGWOp_Caps_Remove::execute()
 
   RESTArgs::get_string(s, "user-caps", caps, &caps);
 
-  op_state.set_user_id(uid);
-  op_state.set_caps(caps);
+  // FIXME: no double checking
+  if (!uid.empty())
+    op_state.set_user_id(uid);
+
+  if (!caps.empty())
+    op_state.set_caps(caps);
 
   http_ret = RGWUserAdminOp_Caps::remove(store, op_state, flusher);
 }
@@ -632,7 +646,7 @@ struct UserQuotas {
 
   UserQuotas() {}
 
-  explicit UserQuotas(RGWUserInfo& info) : bucket_quota(info.bucket_quota), 
+  UserQuotas(RGWUserInfo& info) : bucket_quota(info.bucket_quota), 
 				  user_quota(info.user_quota) {}
 
   void dump(Formatter *f) const {
@@ -650,13 +664,13 @@ class RGWOp_Quota_Info : public RGWRESTOp {
 public:
   RGWOp_Quota_Info() {}
 
-  int check_caps(RGWUserCaps& caps) override {
+  int check_caps(RGWUserCaps& caps) {
     return caps.check_cap("users", RGW_CAP_READ);
   }
 
-  void execute() override;
+  void execute();
 
-  const string name() override { return "get_quota_info"; }
+  virtual const string name() { return "get_quota_info"; }
 };
 
 
@@ -717,13 +731,13 @@ class RGWOp_Quota_Set : public RGWRESTOp {
 public:
   RGWOp_Quota_Set() {}
 
-  int check_caps(RGWUserCaps& caps) override {
+  int check_caps(RGWUserCaps& caps) {
     return caps.check_cap("users", RGW_CAP_WRITE);
   }
 
-  void execute() override;
+  void execute();
 
-  const string name() override { return "set_quota_info"; }
+  virtual const string name() { return "set_quota_info"; }
 };
 
 /**
@@ -867,11 +881,8 @@ void RGWOp_Quota_Set::execute()
         old_quota = &info.bucket_quota;
       }
 
-      int64_t old_max_size_kb = rgw_rounded_kb(old_quota->max_size);
-      int64_t max_size_kb;
       RESTArgs::get_int64(s, "max-objects", old_quota->max_objects, &quota.max_objects);
-      RESTArgs::get_int64(s, "max-size-kb", old_max_size_kb, &max_size_kb);
-      quota.max_size = max_size_kb * 1024;
+      RESTArgs::get_int64(s, "max-size-kb", old_quota->max_size_kb, &quota.max_size_kb);
       RESTArgs::get_bool(s, "enabled", old_quota->enabled, &quota.enabled);
     }
 

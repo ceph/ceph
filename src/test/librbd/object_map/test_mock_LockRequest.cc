@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// -*- mode:C; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
 #include "test/librbd/test_mock_fixture.h"
@@ -19,7 +19,6 @@ using ::testing::_;
 using ::testing::DoAll;
 using ::testing::InSequence;
 using ::testing::Return;
-using ::testing::StrEq;
 using ::testing::WithArg;
 
 class TestMockObjectMapLockRequest : public TestMockFixture {
@@ -27,18 +26,16 @@ public:
   typedef LockRequest<MockImageCtx> MockLockRequest;
 
   void expect_lock(MockImageCtx &mock_image_ctx, int r) {
-    std::string oid(ObjectMap<>::object_map_name(mock_image_ctx.id,
-                                                 CEPH_NOSNAP));
+    std::string oid(ObjectMap::object_map_name(mock_image_ctx.id, CEPH_NOSNAP));
     EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.md_ctx),
-                exec(oid, _, StrEq("lock"), StrEq("lock"), _, _, _))
+                exec(oid, _, "lock", "lock", _, _, _))
                   .WillOnce(Return(r));
   }
 
   void expect_get_lock_info(MockImageCtx &mock_image_ctx, int r) {
-    std::string oid(ObjectMap<>::object_map_name(mock_image_ctx.id,
-                                                 CEPH_NOSNAP));
+    std::string oid(ObjectMap::object_map_name(mock_image_ctx.id, CEPH_NOSNAP));
     auto &expect = EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.md_ctx),
-                               exec(oid, _, StrEq("lock"), StrEq("get_info"), _, _, _));
+                               exec(oid, _, "lock", "get_info", _, _, _));
     if (r < 0) {
       expect.WillOnce(Return(r));
     } else {
@@ -53,7 +50,7 @@ public:
          rados::cls::lock::locker_info_t()}};
 
       bufferlist bl;
-      ::encode(reply, bl, CEPH_FEATURES_SUPPORTED_DEFAULT);
+      ::encode(reply, bl);
 
       std::string str(bl.c_str(), bl.length());
       expect.WillOnce(DoAll(WithArg<5>(CopyInBufferlist(str)), Return(r)));
@@ -61,10 +58,9 @@ public:
   }
 
   void expect_break_lock(MockImageCtx &mock_image_ctx, int r) {
-    std::string oid(ObjectMap<>::object_map_name(mock_image_ctx.id,
-                                                 CEPH_NOSNAP));
+    std::string oid(ObjectMap::object_map_name(mock_image_ctx.id, CEPH_NOSNAP));
     auto &expect = EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.md_ctx),
-                               exec(oid, _, StrEq("lock"), StrEq("break_lock"), _, _, _));
+                               exec(oid, _, "lock", "break_lock", _, _, _));
     if (r < 0) {
       expect.WillOnce(Return(r));
     } else {

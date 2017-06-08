@@ -15,40 +15,24 @@
 #ifndef MOSDPGPULL_H
 #define MOSDPGPULL_H
 
-#include "MOSDFastDispatchOp.h"
+#include "msg/Message.h"
+#include "osd/osd_types.h"
 
-class MOSDPGPull : public MOSDFastDispatchOp {
-  static const int HEAD_VERSION = 3;
-  static const int COMPAT_VERSION = 2;
+class MOSDPGPull : public Message {
+  static const int HEAD_VERSION = 2;
+  static const int COMPAT_VERSION = 1;
 
-  vector<PullOp> pulls;
 
 public:
   pg_shard_t from;
   spg_t pgid;
-  epoch_t map_epoch, min_epoch;
+  epoch_t map_epoch;
+  vector<PullOp> pulls;
   uint64_t cost;
 
-  epoch_t get_map_epoch() const override {
-    return map_epoch;
-  }
-  epoch_t get_min_epoch() const override {
-    return min_epoch;
-  }
-  spg_t get_spg() const override {
-    return pgid;
-  }
-
-  void take_pulls(vector<PullOp> *outpulls) {
-    outpulls->swap(pulls);
-  }
-  void set_pulls(vector<PullOp> *inpulls) {
-    inpulls->swap(pulls);
-  }
-
-  MOSDPGPull()
-    : MOSDFastDispatchOp(MSG_OSD_PG_PULL, HEAD_VERSION, COMPAT_VERSION),
-      cost(0)
+  MOSDPGPull() :
+    Message(MSG_OSD_PG_PULL, HEAD_VERSION, COMPAT_VERSION),
+    cost(0)
     {}
 
   void compute_cost(CephContext *cct) {
@@ -60,42 +44,41 @@ public:
     }
   }
 
-  int get_cost() const override {
+  int get_cost() const {
     return cost;
   }
 
-  void decode_payload() override {
+  virtual void decode_payload() {
     bufferlist::iterator p = payload.begin();
     ::decode(pgid.pgid, p);
     ::decode(map_epoch, p);
     ::decode(pulls, p);
     ::decode(cost, p);
-    ::decode(pgid.shard, p);
-    ::decode(from, p);
-    if (header.version >= 3) {
-      ::decode(min_epoch, p);
+    if (header.version >= 2) {
+      ::decode(pgid.shard, p);
+      ::decode(from, p);
     } else {
-      min_epoch = map_epoch;
+      pgid.shard = shard_id_t::NO_SHARD;
+      from = pg_shard_t(get_source().num(), shard_id_t::NO_SHARD);
     }
   }
 
-  void encode_payload(uint64_t features) override {
+  virtual void encode_payload(uint64_t features) {
     ::encode(pgid.pgid, payload);
     ::encode(map_epoch, payload);
-    ::encode(pulls, payload, features);
+    ::encode(pulls, payload);
     ::encode(cost, payload);
     ::encode(pgid.shard, payload);
     ::encode(from, payload);
-    ::encode(min_epoch, payload);
   }
 
-  const char *get_type_name() const override { return "MOSDPGPull"; }
+  const char *get_type_name() const { return "MOSDPGPull"; }
 
-  void print(ostream& out) const override {
+  void print(ostream& out) const {
     out << "MOSDPGPull(" << pgid
-	<< " e" << map_epoch << "/" << min_epoch
-	<< " cost " << cost
-	<< ")";
+	<< " " << map_epoch
+	<< " " << pulls;
+    out << ")";
   }
 };
 

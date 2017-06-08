@@ -84,9 +84,9 @@ int OmapBench::setup(int argc, const char** argv) {
       	   << "rand for random sizes between\n"
       	   << "                        0 and max size, uniform for all sizes"
       	   << " to be specified size.\n"
-           << "                        (default uniform)\n";
-      cout << "	--name          the rados id to use (default "<< rados_id
-           << ")\n";
+      	   << "                        (default "<<value_size;
+      cout <<"\n  --name          the rados id to use (default "<<rados_id;
+      cout<<")\n";
       exit(1);
     }
   }
@@ -133,10 +133,10 @@ Writer::Writer(OmapBench *omap_bench) : ob(omap_bench) {
   oid = name.str();
 }
 void Writer::start_time() {
-  begin_time = ceph_clock_now();
+  begin_time = ceph_clock_now(g_ceph_context);
 }
 void Writer::stop_time() {
-  end_time = ceph_clock_now();
+  end_time = ceph_clock_now(g_ceph_context);
 }
 double Writer::get_time() {
   return (end_time - begin_time) * 1000;
@@ -232,9 +232,7 @@ int OmapBench::print_written_omap() {
     objstrm << prefix;
     objstrm << i;
     cout << "\nPrinting omap for "<<objstrm.str() << std::endl;
-    // FIXME: we ignore pmore here.  this shouldn't happen for benchmark
-    // keys, though, unless the OSD limit is *really* low.
-    key_read.omap_get_keys2("", LONG_MAX, &out_keys, nullptr, &err);
+    key_read.omap_get_keys("", LONG_MAX, &out_keys, &err);
     io_ctx.operate(objstrm.str(), &key_read, NULL);
     if (err < 0) {
       cout << "error " << err;

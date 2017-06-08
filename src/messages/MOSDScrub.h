@@ -25,7 +25,7 @@
 struct MOSDScrub : public Message {
 
   static const int HEAD_VERSION = 2;
-  static const int COMPAT_VERSION = 2;
+  static const int COMPAT_VERSION = 1;
 
   uuid_d fsid;
   vector<pg_t> scrub_pgs;
@@ -40,11 +40,11 @@ struct MOSDScrub : public Message {
     Message(MSG_OSD_SCRUB, HEAD_VERSION, COMPAT_VERSION),
     fsid(f), scrub_pgs(pgs), repair(r), deep(d) {}
 private:
-  ~MOSDScrub() override {}
+  ~MOSDScrub() {}
 
 public:
-  const char *get_type_name() const override { return "scrub"; }
-  void print(ostream& out) const override {
+  const char *get_type_name() const { return "scrub"; }
+  void print(ostream& out) const {
     out << "scrub(";
     if (scrub_pgs.empty())
       out << "osd";
@@ -57,18 +57,22 @@ public:
     out << ")";
   }
 
-  void encode_payload(uint64_t features) override {
+  void encode_payload(uint64_t features) {
     ::encode(fsid, payload);
     ::encode(scrub_pgs, payload);
     ::encode(repair, payload);
     ::encode(deep, payload);
   }
-  void decode_payload() override {
+  void decode_payload() {
     bufferlist::iterator p = payload.begin();
     ::decode(fsid, p);
     ::decode(scrub_pgs, p);
     ::decode(repair, p);
-    ::decode(deep, p);
+    if (header.version >= 2) {
+      ::decode(deep, p);
+    } else {
+      deep = false;
+    }
   }
 };
 

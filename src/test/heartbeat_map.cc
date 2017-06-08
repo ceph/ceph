@@ -15,15 +15,14 @@
 #include "common/Mutex.h"
 #include "common/HeartbeatMap.h"
 #include "common/ceph_context.h"
+#include "test/unit.h"
 #include "common/config.h"
-#include "global/global_context.h"
-#include "gtest/gtest.h"
 
 using namespace ceph;
 
 TEST(HeartbeatMap, Healthy) {
   HeartbeatMap hm(g_ceph_context);
-  heartbeat_handle_d *h = hm.add_worker("one", pthread_self());
+  heartbeat_handle_d *h = hm.add_worker("one");
 
   hm.reset_timeout(h, 9, 18);
   bool healthy = hm.is_healthy();
@@ -34,7 +33,7 @@ TEST(HeartbeatMap, Healthy) {
 
 TEST(HeartbeatMap, Unhealth) {
   HeartbeatMap hm(g_ceph_context);
-  heartbeat_handle_d *h = hm.add_worker("one", pthread_self());
+  heartbeat_handle_d *h = hm.add_worker("one");
 
   hm.reset_timeout(h, 1, 3);
   sleep(2);

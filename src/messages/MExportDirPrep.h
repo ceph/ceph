@@ -46,11 +46,11 @@ public:
     set_tid(tid);
   }
 private:
-  ~MExportDirPrep() override {}
+  ~MExportDirPrep() {}
 
 public:
-  const char *get_type_name() const override { return "ExP"; }
-  void print(ostream& o) const override {
+  const char *get_type_name() const { return "ExP"; }
+  void print(ostream& o) const {
     o << "export_prep(" << dirfrag << ")";
   }
 
@@ -64,7 +64,7 @@ public:
     bystanders.insert(who);
   }
 
-  void decode_payload() override {
+  void decode_payload() {
     bufferlist::iterator p = payload.begin();
     ::decode(dirfrag, p);
     ::decode(basedir, p);
@@ -73,7 +73,7 @@ public:
     ::decode(bystanders, p);
   }
 
-  void encode_payload(uint64_t features) override {
+  void encode_payload(uint64_t features) {
     ::encode(dirfrag, payload);
     ::encode(basedir, payload);
     ::encode(bounds, payload);

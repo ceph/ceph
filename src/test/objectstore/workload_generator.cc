@@ -31,8 +31,6 @@
 
 #include "TestObjectStoreState.h"
 
-#define dout_context g_ceph_context
-
 static const char *our_name = NULL;
 void usage();
 
@@ -60,7 +58,7 @@ WorkloadGenerator::WorkloadGenerator(vector<const char*> args)
 {
   int err = 0;
 
-  m_nr_runs = 0;
+  m_nr_runs.set(0);
 
   init_args(args);
   dout(0) << "data            = " << g_conf->osd_data << dendl;
@@ -352,11 +350,11 @@ void WorkloadGenerator::do_destroy_collection(ObjectStore::Transaction *t,
 					      coll_entry_t *entry,
 					      C_StatState *stat)
 {  
-  m_nr_runs = 0;
+  m_nr_runs.set(0);
   entry->m_osr.flush();
   vector<ghobject_t> ls;
   m_store->collection_list(entry->m_coll, ghobject_t(), ghobject_t::get_max(),
-			   INT_MAX, &ls, NULL);
+			   true, INT_MAX, &ls, NULL);
   dout(2) << __func__ << " coll " << entry->m_coll
       << " (" << ls.size() << " objects)" << dendl;
 
@@ -389,7 +387,7 @@ TestObjectStoreState::coll_entry_t
 
 void WorkloadGenerator::do_stats()
 {
-  utime_t now = ceph_clock_now();
+  utime_t now = ceph_clock_now(NULL);
   m_stats_lock.Lock();
 
   utime_t duration = (now - m_stats_begin);
@@ -414,7 +412,7 @@ void WorkloadGenerator::run()
   int ops_run = 0;
 
   utime_t stats_interval(m_stats_show_secs, 0);
-  utime_t now = ceph_clock_now();
+  utime_t now = ceph_clock_now(NULL);
   utime_t stats_time = now;
   m_stats_begin = now;
 
@@ -431,7 +429,7 @@ void WorkloadGenerator::run()
 
     dout(5) << __func__
         << " m_finished_lock is-locked: " << m_finished_lock.is_locked()
-        << " in-flight: " << m_in_flight.load()
+        << " in-flight: " << m_in_flight.read()
         << dendl;
 
     wait_for_ready();
@@ -443,7 +441,7 @@ void WorkloadGenerator::run()
 
 
     if (m_do_stats) {
-      utime_t now = ceph_clock_now();
+      utime_t now = ceph_clock_now(NULL);
       utime_t elapsed = now - stats_time;
       if (elapsed >= stats_interval) {
 	do_stats();
@@ -461,7 +459,7 @@ void WorkloadGenerator::run()
         break;
       }
 
-      c = new C_OnReadable(this);
+      c = new C_OnReadable(this, t);
       goto queue_tx;
     }
 
@@ -471,7 +469,7 @@ void WorkloadGenerator::run()
 
     if (destroy_collection) {
       do_destroy_collection(t, entry, stat_state);
-      c = new C_OnDestroyed(this, entry);
+      c = new C_OnDestroyed(this, t, entry);
       if (!m_num_ops)
         create_coll = true;
     } else {
@@ -482,7 +480,7 @@ void WorkloadGenerator::run()
       do_pgmeta_omap_set(t, entry->m_pgid, entry->m_coll, stat_state);
       do_append_log(t, entry, stat_state);
 
-      c = new C_OnReadable(this);
+      c = new C_OnReadable(this, t);
     }
 
 queue_tx:
@@ -492,8 +490,7 @@ queue_tx:
       c = new C_StatWrapper(stat_state, tmp);
     }
 
-    m_store->queue_transaction(&(entry->m_osr), std::move(*t), c);
-    delete t;
+    m_store->queue_transaction(&(entry->m_osr), t, c);
 
     inc_in_flight();
 
@@ -502,7 +499,7 @@ queue_tx:
   } while (true);
 
   dout(2) << __func__ << " waiting for "
-	  << m_in_flight.load() << " in-flight transactions" << dendl;
+	  << m_in_flight.read() << " in-flight transactions" << dendl;
 
   wait_for_done();
 
@@ -570,9 +567,9 @@ int main(int argc, const char *argv[])
 //  def_args.push_back("workload_gen_dir/journal");
   argv_to_vec(argc, argv, args);
 
-  auto cct = global_init(&def_args, args,
-			 CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY,
-			 CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
+  global_init(&def_args, args,
+      CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY,
+      CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
   common_init_finish(g_ceph_context);
   g_ceph_context->_conf->apply_changes(NULL);
 

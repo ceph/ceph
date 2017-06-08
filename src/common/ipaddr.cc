@@ -1,15 +1,10 @@
+#include "include/ipaddr.h"
 
+#include <sys/socket.h>
 #include <arpa/inet.h>
-#include <ifaddrs.h>
 #include <stdlib.h>
 #include <string.h>
-#if defined(__FreeBSD__)
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <netinet/in.h>
-#endif
 
-#include "include/ipaddr.h"
 
 static void netmask_ipv4(const struct in_addr *addr,
 			 unsigned int prefix_len,
@@ -115,7 +110,7 @@ const struct sockaddr *find_ip_in_subnet(const struct ifaddrs *addrs,
 }
 
 
-bool parse_network(const char *s, struct sockaddr_storage *network, unsigned int *prefix_len) {
+bool parse_network(const char *s, struct sockaddr *network, unsigned int *prefix_len) {
   char *slash = strchr((char*)s, '/');
   if (!slash) {
     // no slash
@@ -149,14 +144,14 @@ bool parse_network(const char *s, struct sockaddr_storage *network, unsigned int
   int ok;
   ok = inet_pton(AF_INET, addr, &((struct sockaddr_in*)network)->sin_addr);
   if (ok) {
-    network->ss_family = AF_INET;
+    network->sa_family = AF_INET;
     return true;
   }
 
   // try parsing as ipv6
   ok = inet_pton(AF_INET6, addr, &((struct sockaddr_in6*)network)->sin6_addr);
   if (ok) {
-    network->ss_family = AF_INET6;
+    network->sa_family = AF_INET6;
     return true;
   }
 

@@ -36,12 +36,12 @@ struct ETableServer : public LogEvent {
     LogEvent(EVENT_TABLESERVER),
     table(t), op(o), reqid(ri), bymds(m), tid(ti), version(v) { }
 
-  void encode(bufferlist& bl, uint64_t features) const override;
-  void decode(bufferlist::iterator& bl) override;
-  void dump(Formatter *f) const override;
+  void encode(bufferlist& bl) const;
+  void decode(bufferlist::iterator& bl);
+  void dump(Formatter *f) const;
   static void generate_test_instances(list<ETableServer*>& ls);
 
-  void print(ostream& out) const override {
+  void print(ostream& out) const {
     out << "ETableServer " << get_mdstable_name(table) 
 	<< " " << get_mdstableserver_opname(op);
     if (reqid) out << " reqid " << reqid;
@@ -51,9 +51,8 @@ struct ETableServer : public LogEvent {
     if (mutation.length()) out << " mutation=" << mutation.length() << " bytes";
   }  
 
-  void update_segment() override;
-  void replay(MDSRank *mds) override;  
+  void update_segment();
+  void replay(MDSRank *mds);  
 };
-WRITE_CLASS_ENCODER_FEATURES(ETableServer)
 
 #endif

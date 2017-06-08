@@ -15,11 +15,27 @@
 #define BARRIER_H
 
 #include "include/types.h"
+
+#include <string>
+#include <list>
+#include <set>
+#include <map>
 #include <boost/intrusive/list.hpp>
 #define BOOST_ICL_USE_STATIC_BOUNDED_INTERVALS
 #include <boost/icl/interval_set.hpp>
+#include <fstream>
+#include <exception>
+
+using std::list;
+using std::set;
+using std::map;
+using std::fstream;
+
+#include <ext/hash_map>
+
 #include "common/Mutex.h"
 #include "common/Cond.h"
+#include "common/config.h"
 
 class Client;
 
@@ -42,9 +58,26 @@ enum CBlockSync_State
   CBlockSync_State_Completed,
 };
 
+class Barrier;
 class BarrierContext;
 
-class C_Block_Sync;
+class C_Block_Sync : public Context {
+private:
+  Client *cl;
+  uint64_t ino;
+  barrier_interval iv;
+  enum CBlockSync_State state;
+  Barrier *barrier;
+  int *rval; /* see Cond.h */
+
+public:
+  boost::intrusive::list_member_hook<> intervals_hook;
+  C_Block_Sync(Client *c, uint64_t i, barrier_interval iv, int *r);
+  void finish(int rval);
+
+  friend class Barrier;
+  friend class BarrierContext;
+};
 
 typedef boost::intrusive::list< C_Block_Sync,
 				boost::intrusive::member_hook<

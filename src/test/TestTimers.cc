@@ -26,12 +26,12 @@ namespace
 class TestContext : public Context
 {
 public:
-  explicit TestContext(int num_)
+  TestContext(int num_)
     : num(num_)
   {
   }
 
-  void finish(int r) override
+  virtual void finish(int r)
   {
     array_lock.Lock();
     cout << "TestContext " << num << std::endl;
@@ -39,7 +39,7 @@ public:
     array_lock.Unlock();
   }
 
-  ~TestContext() override
+  virtual ~TestContext()
   {
   }
 
@@ -50,12 +50,12 @@ protected:
 class StrictOrderTestContext : public TestContext
 {
 public:
-  explicit StrictOrderTestContext (int num_)
+  StrictOrderTestContext (int num_)
     : TestContext(num_)
   {
   }
 
-  void finish(int r) override
+  virtual void finish(int r)
   {
     array_lock.Lock();
     cout << "StrictOrderTestContext " << num << std::endl;
@@ -63,7 +63,7 @@ public:
     array_lock.Unlock();
   }
 
-  ~StrictOrderTestContext() override
+  virtual ~StrictOrderTestContext()
   {
   }
 };
@@ -94,7 +94,7 @@ static int basic_timer_test(T &timer, Mutex *lock)
     if (lock)
       lock->Lock();
     utime_t inc(2 * i, 0);
-    utime_t t = ceph_clock_now() + inc;
+    utime_t t = ceph_clock_now(g_ceph_context) + inc;
     timer.add_event_at(t, test_contexts[i]);
     if (lock)
       lock->Unlock();
@@ -133,7 +133,7 @@ static int test_out_of_order_insertion(SafeTimer &timer, Mutex *lock)
 
   {
     utime_t inc(100, 0);
-    utime_t t = ceph_clock_now() + inc;
+    utime_t t = ceph_clock_now(g_ceph_context) + inc;
     lock->Lock();
     timer.add_event_at(t, test_contexts[0]);
     lock->Unlock();
@@ -141,7 +141,7 @@ static int test_out_of_order_insertion(SafeTimer &timer, Mutex *lock)
 
   {
     utime_t inc(2, 0);
-    utime_t t = ceph_clock_now() + inc;
+    utime_t t = ceph_clock_now(g_ceph_context) + inc;
     lock->Lock();
     timer.add_event_at(t, test_contexts[1]);
     lock->Unlock();
@@ -182,7 +182,7 @@ static int safe_timer_cancel_all_test(SafeTimer &safe_timer, Mutex& safe_timer_l
   safe_timer_lock.Lock();
   for (int i = 0; i < MAX_TEST_CONTEXTS; ++i) {
     utime_t inc(4 * i, 0);
-    utime_t t = ceph_clock_now() + inc;
+    utime_t t = ceph_clock_now(g_ceph_context) + inc;
     safe_timer.add_event_at(t, test_contexts[i]);
   }
   safe_timer_lock.Unlock();
@@ -220,7 +220,7 @@ static int safe_timer_cancellation_test(SafeTimer &safe_timer, Mutex& safe_timer
   safe_timer_lock.Lock();
   for (int i = 0; i < MAX_TEST_CONTEXTS; ++i) {
     utime_t inc(4 * i, 0);
-    utime_t t = ceph_clock_now() + inc;
+    utime_t t = ceph_clock_now(g_ceph_context) + inc;
     safe_timer.add_event_at(t, test_contexts[i]);
   }
   safe_timer_lock.Unlock();
@@ -255,8 +255,7 @@ int main(int argc, const char **argv)
   argv_to_vec(argc, argv, args);
   env_to_vec(args);
 
-  auto cct = global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT,
-                         CODE_ENVIRONMENT_UTILITY, 0);
+  global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
   common_init_finish(g_ceph_context);
 
   int ret;

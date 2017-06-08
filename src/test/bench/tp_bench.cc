@@ -39,13 +39,13 @@ class Base : public Queueable {
 public:
   Base(DetailedStatCollector *col,
        Semaphore *sem) : col(col), sem(sem) {}
-  void queue(unsigned *item) override {
+  void queue(unsigned *item) {
     col->read_complete(*item);
     sem->Put();
     delete item;
   }
-  void start() override {}
-  void stop() override {}
+  void start() {}
+  void stop() {}
 };
 class WQWrapper : public Queueable {
   boost::scoped_ptr<ThreadPool::WorkQueue<unsigned> > wq;
@@ -53,9 +53,9 @@ class WQWrapper : public Queueable {
 public:
   WQWrapper(ThreadPool::WorkQueue<unsigned> *wq, ThreadPool *tp):
     wq(wq), tp(tp) {}
-  void queue(unsigned *item) override { wq->queue(item); }
-  void start() override { tp->start(); }
-  void stop() override { tp->stop(); }
+  void queue(unsigned *item) { wq->queue(item); }
+  void start() { tp->start(); }
+  void stop() { tp->stop(); }
 };
 class FinisherWrapper : public Queueable {
   class CB : public Context {
@@ -63,7 +63,7 @@ class FinisherWrapper : public Queueable {
     unsigned *item;
   public:
     CB(Queueable *next, unsigned *item) : next(next), item(item) {}
-    void finish(int) override {
+    void finish(int) {
       next->queue(item);
     }
   };
@@ -72,32 +72,33 @@ class FinisherWrapper : public Queueable {
 public:
   FinisherWrapper(CephContext *cct, Queueable *next) :
     f(cct), next(next) {}
-  void queue(unsigned *item) override {
+  void queue(unsigned *item) {
     f.queue(new CB(next, item));
   }
-  void start() override { f.start(); }
-  void stop() override { f.stop(); }
+  void start() { f.start(); }
+  void stop() { f.stop(); }
 };
 class PassAlong : public ThreadPool::WorkQueue<unsigned> {
   Queueable *next;
   list<unsigned*> q;
-  bool _enqueue(unsigned *item) override {
+  bool _enqueue(unsigned *item) {
     q.push_back(item);
     return true;
   }
-  void _dequeue(unsigned *item) override { ceph_abort(); }
-  unsigned *_dequeue() override {
+  void _dequeue(unsigned *item) { assert(0); }
+  unsigned *_dequeue() {
     if (q.empty())
       return 0;
     unsigned *val = q.front();
     q.pop_front();
     return val;
   }
-  void _process(unsigned *item, ThreadPool::TPHandle &) override {
+  using ThreadPool::WorkQueue<unsigned>::_process;
+  void _process(unsigned *item) {
     next->queue(item);
   }
-  void _clear() override { q.clear(); }
-  bool _empty() override { return q.empty(); }
+  void _clear() { q.clear(); }
+  bool _empty() { return q.empty(); }
 public:
   PassAlong(ThreadPool *tp, Queueable *_next) :
     ThreadPool::WorkQueue<unsigned>("TestQueue", 100, 100, tp), next(_next) {}
@@ -142,7 +143,7 @@ int main(int argc, char **argv)
     ceph_options.push_back(i->c_str());
   }
 
-  auto cct = global_init(
+  global_init(
     &def_args, ceph_options, CEPH_ENTITY_TYPE_CLIENT,
     CODE_ENVIRONMENT_UTILITY,
     CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);

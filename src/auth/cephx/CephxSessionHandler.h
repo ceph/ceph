@@ -13,11 +13,10 @@
  */
 
 
-#include "auth/AuthSessionHandler.h"
-#include "auth/Auth.h"
+#include "../AuthSessionHandler.h"
+#include "../Auth.h"
 
 class CephContext;
-class Message;
 
 class CephxSessionHandler  : public AuthSessionHandler {
   uint64_t features;
@@ -26,24 +25,24 @@ public:
   CephxSessionHandler(CephContext *cct_, CryptoKey session_key, uint64_t features)
     : AuthSessionHandler(cct_, CEPH_AUTH_CEPHX, session_key),
       features(features) {}
-  ~CephxSessionHandler() override {}
+  ~CephxSessionHandler() {}
   
-  bool no_security() override {
+  bool no_security() {
     return false;
   }
 
   int _calc_signature(Message *m, uint64_t *psig);
 
-  int sign_message(Message *m) override;
-  int check_message_signature(Message *m) override ;
+  int sign_message(Message *m);
+  int check_message_signature(Message *m) ;
 
   // Cephx does not currently encrypt messages, so just return 0 if called.  PLR
 
-  int encrypt_message(Message *m) override {
+  int encrypt_message(Message *m) {
     return 0;
   }
 
-  int decrypt_message(Message *m) override {
+  int decrypt_message(Message *m) {
     return 0;
   }
 

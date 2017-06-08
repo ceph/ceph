@@ -24,10 +24,10 @@ public:
   {
   }
 
-  void send() override;
+  virtual void send();
 
 protected:
-  bool should_complete(int r) override;
+  virtual bool should_complete(int r);
 
 private:
   /**

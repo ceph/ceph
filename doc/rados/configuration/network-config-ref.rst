@@ -347,8 +347,7 @@ Bind settings set the default port ranges Ceph OSD and MDS daemons use. The
 default range is ``6800:7300``. Ensure that your `IP Tables`_ configuration
 allows you to use the configured port range.
 
-You may also enable Ceph daemons to bind to IPv6 addresses instead of IPv4
-addresses.
+You may also enable Ceph daemons to bind to IPv6 addresses.
 
 
 ``ms bind port min``
@@ -369,8 +368,7 @@ addresses.
 
 ``ms bind ipv6``
 
-:Description: Enables Ceph daemons to bind to IPv6 addresses. Currently the
-              messenger *either* uses IPv4 or IPv6, but it can't do both.
+:Description: Enables Ceph daemons to bind to IPv6 addresses.
 :Type: Boolean
 :Default: ``false``
 :Required: No

@@ -36,7 +36,6 @@
 #include "msg/Message.h"
 #include "include/filepath.h"
 #include "mds/mdstypes.h"
-#include "include/ceph_features.h"
 
 #include <sys/types.h>
 #include <utime.h>
@@ -47,7 +46,7 @@
 // metadata ops.
 
 class MClientRequest : public Message {
-  static const int HEAD_VERSION = 4;
+  static const int HEAD_VERSION = 3;
   static const int COMPAT_VERSION = 1;
 
 public:
@@ -76,9 +75,8 @@ public:
 
   // path arguments
   filepath path, path2;
-  vector<uint64_t> gid_list;
 
-  bool queued_for_replay = false;
+
 
  public:
   // cons
@@ -90,7 +88,7 @@ public:
     head.op = op;
   }
 private:
-  ~MClientRequest() override {}
+  ~MClientRequest() {}
 
 public:
   void set_mdsmap_epoch(epoch_t e) { head.mdsmap_epoch = e; }
@@ -138,12 +136,6 @@ public:
   void set_string2(const char *s) { path2.set_path(s, 0); }
   void set_caller_uid(unsigned u) { head.caller_uid = u; }
   void set_caller_gid(unsigned g) { head.caller_gid = g; }
-  void set_gid_list(int count, const gid_t *gids) {
-    gid_list.reserve(count);
-    for (int i = 0; i < count; ++i) {
-      gid_list.push_back(gids[i]);
-    }
-  }
   void set_dentry_wanted() {
     head.flags = head.flags | CEPH_MDS_FLAG_WANT_DENTRY;
   }
@@ -158,7 +150,6 @@ public:
   int get_op() const { return head.op; }
   unsigned get_caller_uid() const { return head.caller_uid; }
   unsigned get_caller_gid() const { return head.caller_gid; }
-  const vector<uint64_t>& get_caller_gid_list() const { return gid_list; }
 
   const string& get_path() const { return path.get_path(); }
   const filepath& get_filepath() const { return path; }
@@ -167,63 +158,27 @@ public:
 
   int get_dentry_wanted() { return get_flags() & CEPH_MDS_FLAG_WANT_DENTRY; }
 
-  void mark_queued_for_replay() { queued_for_replay = true; }
-  bool is_queued_for_replay() { return queued_for_replay; }
-
-  void decode_payload() override {
+  void decode_payload() {
     bufferlist::iterator p = payload.begin();
-
-    if (header.version >= 4) {
-      ::decode(head, p);
-    } else {
-      struct ceph_mds_request_head_legacy old_mds_head;
-
-      ::decode(old_mds_head, p);
-      copy_from_legacy_head(&head, &old_mds_head);
-      head.version = 0;
-
-      /* Can't set the btime from legacy struct */
-      if (head.op == CEPH_MDS_OP_SETATTR) {
-	int localmask = head.args.setattr.mask;
-
-	localmask &= ~CEPH_SETATTR_BTIME;
-
-	head.args.setattr.btime = { 0 };
-	head.args.setattr.mask = localmask;
-      }
-    }
-
+    ::decode(head, p);
     ::decode(path, p);
     ::decode(path2, p);
     ::decode_nohead(head.num_releases, releases, p);
     if (header.version >= 2)
       ::decode(stamp, p);
-    if (header.version >= 4) // epoch 3 was for a ceph_mds_request_args change
-      ::decode(gid_list, p);
   }
 
-  void encode_payload(uint64_t features) override {
+  void encode_payload(uint64_t features) {
     head.num_releases = releases.size();
-    head.version = CEPH_MDS_REQUEST_HEAD_VERSION;
-
-    if (features & CEPH_FEATURE_FS_BTIME) {
-      ::encode(head, payload);
-    } else {
-      struct ceph_mds_request_head_legacy old_mds_head;
-
-      copy_to_legacy_head(&old_mds_head, &head);
-      ::encode(old_mds_head, payload);
-    }
-
+    ::encode(head, payload);
     ::encode(path, payload);
     ::encode(path2, payload);
     ::encode_nohead(releases, payload);
     ::encode(stamp, payload);
-    ::encode(gid_list, payload);
   }
 
-  const char *get_type_name() const override { return "creq"; }
-  void print(ostream& out) const override {
+  const char *get_type_name() const { return "creq"; }
+  void print(ostream& out) const {
     out << "client_request(" << get_orig_source() 
 	<< ":" << get_tid() 
 	<< " " << ceph_mds_op_name(get_op());
@@ -263,15 +218,7 @@ public:
       out << " RETRY=" << (int)head.num_retry;
     if (get_flags() & CEPH_MDS_FLAG_REPLAY)
       out << " REPLAY";
-    if (queued_for_replay)
-      out << " QUEUED_FOR_REPLAY";
-    out << " caller_uid=" << head.caller_uid
-	<< ", caller_gid=" << head.caller_gid
-	<< '{';
-    for (auto i = gid_list.begin(); i != gid_list.end(); ++i)
-      out << *i << ',';
-    out << '}'
-	<< ")";
+    out << ")";
   }
 
 };

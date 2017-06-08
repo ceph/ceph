@@ -58,70 +58,6 @@ ostream& operator<<(ostream &out, const Pipe &pipe) {
   return pipe._pipe_prefix(out);
 }
 
-/**
- * The DelayedDelivery is for injecting delays into Message delivery off
- * the socket. It is only enabled if delays are requested, and if they
- * are then it pulls Messages off the DelayQueue and puts them into the
- * in_q (SimpleMessenger::dispatch_queue).
- * Please note that this probably has issues with Pipe shutdown and
- * replacement semantics. I've tried, but no guarantees.
- */
-class Pipe::DelayedDelivery: public Thread {
-  Pipe *pipe;
-  std::deque< pair<utime_t,Message*> > delay_queue;
-  Mutex delay_lock;
-  Cond delay_cond;
-  int flush_count;
-  bool active_flush;
-  bool stop_delayed_delivery;
-  bool delay_dispatching; // we are in fast dispatch now
-  bool stop_fast_dispatching_flag; // we need to stop fast dispatching
-
-public:
-  explicit DelayedDelivery(Pipe *p)
-    : pipe(p),
-      delay_lock("Pipe::DelayedDelivery::delay_lock"), flush_count(0),
-      active_flush(false),
-      stop_delayed_delivery(false),
-      delay_dispatching(false),
-      stop_fast_dispatching_flag(false) { }
-  ~DelayedDelivery() override {
-    discard();
-  }
-  void *entry() override;
-  void queue(utime_t release, Message *m) {
-    Mutex::Locker l(delay_lock);
-    delay_queue.push_back(make_pair(release, m));
-    delay_cond.Signal();
-  }
-  void discard();
-  void flush();
-  bool is_flushing() {
-    Mutex::Locker l(delay_lock);
-    return flush_count > 0 || active_flush;
-  }
-  void wait_for_flush() {
-    Mutex::Locker l(delay_lock);
-    while (flush_count > 0 || active_flush)
-      delay_cond.Wait(delay_lock);
-  }
-  void stop() {
-    delay_lock.Lock();
-    stop_delayed_delivery = true;
-    delay_cond.Signal();
-    delay_lock.Unlock();
-  }
-  void steal_for_pipe(Pipe *new_owner) {
-    Mutex::Locker l(delay_lock);
-    pipe = new_owner;
-  }
-  /**
-   * We need to stop fast dispatching before we need to stop putting
-   * normal messages into the DispatchQueue.
-   */
-  void stop_fast_dispatching();
-};
-
 /**************************************
  * Pipe
  */
@@ -148,7 +84,6 @@ Pipe::Pipe(SimpleMessenger *r, int st, PipeConnection *con)
     send_keepalive_ack(false),
     connect_seq(0), peer_global_seq(0),
     out_seq(0), in_seq(0), in_seq_acked(0) {
-  ANNOTATE_BENIGN_RACE_SIZED(&sd, sizeof(sd), "Pipe socket");
   ANNOTATE_BENIGN_RACE_SIZED(&state, sizeof(state), "Pipe state");
   ANNOTATE_BENIGN_RACE_SIZED(&recv_len, sizeof(recv_len), "Pipe recv_len");
   ANNOTATE_BENIGN_RACE_SIZED(&recv_ofs, sizeof(recv_ofs), "Pipe recv_ofs");
@@ -209,13 +144,11 @@ void Pipe::start_reader()
 
 void Pipe::maybe_start_delay_thread()
 {
-  if (!delay_thread) {
-    auto pos = msgr->cct->_conf->get_val<std::string>("ms_inject_delay_type").find(ceph_entity_type_name(connection_state->peer_type));
-    if (pos != string::npos) {
-      lsubdout(msgr->cct, ms, 1) << "setting up a delay queue on Pipe " << this << dendl;
-      delay_thread = new DelayedDelivery(this);
-      delay_thread->create("ms_pipe_delay");
-    }
+  if (!delay_thread &&
+      msgr->cct->_conf->ms_inject_delay_type.find(ceph_entity_type_name(connection_state->peer_type)) != string::npos) {
+    lsubdout(msgr->cct, ms, 1) << "setting up a delay queue on Pipe " << this << dendl;
+    delay_thread = new DelayedDelivery(this);
+    delay_thread->create("ms_pipe_delay");
   }
 }
 
@@ -244,7 +177,7 @@ void Pipe::DelayedDelivery::discard()
   Mutex::Locker l(delay_lock);
   while (!delay_queue.empty()) {
     Message *m = delay_queue.front().second;
-    pipe->in_q->dispatch_throttle_release(m->get_dispatch_throttle_size());
+    pipe->msgr->dispatch_throttle_release(m->get_dispatch_throttle_size());
     m->put();
     delay_queue.pop_front();
   }
@@ -273,7 +206,7 @@ void *Pipe::DelayedDelivery::entry()
     Message *m = delay_queue.front().second;
     string delay_msg_type = pipe->msgr->cct->_conf->ms_inject_delay_msg_type;
     if (!flush_count &&
-        (release > ceph_clock_now() &&
+        (release > ceph_clock_now(pipe->msgr->cct) &&
          (delay_msg_type.empty() || m->get_type_name() == delay_msg_type))) {
       lgeneric_subdout(pipe->msgr->cct, ms, 10) << *pipe << "DelayedDelivery::entry sleeping on delay_cond until " << release << dendl;
       delay_cond.WaitUntil(delay_lock, release);
@@ -366,20 +299,18 @@ int Pipe::accept()
   }
 
   // and my addr
-  ::encode(msgr->my_inst.addr, addrs, 0);  // legacy
+  ::encode(msgr->my_inst.addr, addrs);
 
   port = msgr->my_inst.addr.get_port();
 
   // and peer's socket addr (they might not know their ip)
-  sockaddr_storage ss;
-  len = sizeof(ss);
-  r = ::getpeername(sd, (sockaddr*)&ss, &len);
+  len = sizeof(socket_addr.ss_addr());
+  r = ::getpeername(sd, (sockaddr*)&socket_addr.ss_addr(), &len);
   if (r < 0) {
     ldout(msgr->cct,0) << "accept failed to getpeername " << cpp_strerror(errno) << dendl;
     goto fail_unlocked;
   }
-  socket_addr.set_sockaddr((sockaddr*)&ss);
-  ::encode(socket_addr, addrs, 0);  // legacy
+  ::encode(socket_addr, addrs);
 
   r = tcp_write(addrs.c_str(), addrs.length());
   if (r < 0) {
@@ -400,8 +331,8 @@ int Pipe::accept()
     goto fail_unlocked;
   }
   {
-    bufferptr tp(sizeof(ceph_entity_addr));
-    addrbl.push_back(std::move(tp));
+    bufferptr tp(sizeof(peer_addr));
+    addrbl.push_back(tp);
   }
   if (tcp_read(addrbl.c_str(), addrbl.length()) < 0) {
     ldout(msgr->cct,10) << "accept couldn't read peer_addr" << dendl;
@@ -416,7 +347,7 @@ int Pipe::accept()
   if (peer_addr.is_blank_ip()) {
     // peer apparently doesn't know what ip they have; figure it out for them.
     int port = peer_addr.get_port();
-    peer_addr.u = socket_addr.u;
+    peer_addr.addr = socket_addr.addr;
     peer_addr.set_port(port);
     ldout(msgr->cct,0) << "accept peer addr is really " << peer_addr
 	    << " (socket is " << socket_addr << ")" << dendl;
@@ -429,6 +360,9 @@ int Pipe::accept()
       goto fail_unlocked;
     }
 
+    // sanitize features
+    connect.features = ceph_sanitize_features(connect.features);
+
     authorizer.clear();
     if (connect.authorizer_len) {
       bp = buffer::create(connect.authorizer_len);
@@ -436,7 +370,7 @@ int Pipe::accept()
         ldout(msgr->cct,10) << "accept couldn't read connect authorizer" << dendl;
         goto fail_unlocked;
       }
-      authorizer.push_back(std::move(bp));
+      authorizer.push_back(bp);
       authorizer_reply.clear();
     }
 
@@ -537,21 +471,13 @@ int Pipe::accept()
 	 *  held by somebody trying to make use of the SimpleMessenger lock.
 	 *  So drop locks, wait, and retry. It just looks like a slow network
 	 *  to everybody else.
-	 *
-	 *  We take a ref to existing here since it might get reaped before we
-	 *  wake up (see bug #15870).  We can be confident that it lived until
-	 *  locked it since we held the msgr lock from _lookup_pipe through to
-	 *  locking existing->lock and checking reader_dispatching.
 	 */
-	existing->get();
 	pipe_lock.Unlock();
 	msgr->lock.Unlock();
 	existing->notify_on_dispatch_done = true;
 	while (existing->reader_dispatching)
 	  existing->cond.Wait(existing->pipe_lock);
 	existing->pipe_lock.Unlock();
-	existing->put();
-	existing = nullptr;
 	goto retry_existing_lookup;
       }
 
@@ -676,7 +602,7 @@ int Pipe::accept()
       existing = NULL;
       goto open;
     }
-    ceph_abort();
+    assert(0);
 
   retry_session:
     assert(existing->pipe_lock.is_locked());
@@ -858,7 +784,7 @@ int Pipe::accept()
       state = STATE_STANDBY;
     } else {
       state = STATE_CLOSED;
-      state_closed = true;
+      state_closed.set(1);
     }
     fault();
     if (queued || replaced)
@@ -879,7 +805,7 @@ int Pipe::accept()
   }
 
   state = STATE_CLOSED;
-  state_closed = true;
+  state_closed.set(1);
   fault();
   return -1;
 }
@@ -892,8 +818,7 @@ void Pipe::set_socket_options()
     int r = ::setsockopt(sd, IPPROTO_TCP, TCP_NODELAY, (char*)&flag, sizeof(flag));
     if (r < 0) {
       r = -errno;
-      ldout(msgr->cct,0) << "couldn't set TCP_NODELAY: "
-                         << cpp_strerror(r) << dendl;
+      ldout(msgr->cct,0) << "couldn't set TCP_NODELAY: " << cpp_strerror(r) << dendl;
     }
   }
   if (msgr->cct->_conf->ms_tcp_rcvbuf) {
@@ -901,8 +826,7 @@ void Pipe::set_socket_options()
     int r = ::setsockopt(sd, SOL_SOCKET, SO_RCVBUF, (void*)&size, sizeof(size));
     if (r < 0)  {
       r = -errno;
-      ldout(msgr->cct,0) << "couldn't set SO_RCVBUF to " << size
-                         << ": " << cpp_strerror(r) << dendl;
+      ldout(msgr->cct,0) << "couldn't set SO_RCVBUF to " << size << ": " << cpp_strerror(r) << dendl;
     }
   }
 
@@ -912,53 +836,34 @@ void Pipe::set_socket_options()
   int r = ::setsockopt(sd, SOL_SOCKET, SO_NOSIGPIPE, (void*)&val, sizeof(val));
   if (r) {
     r = -errno;
-    ldout(msgr->cct,0) << "couldn't set SO_NOSIGPIPE: "
-                       << cpp_strerror(r) << dendl;
+    ldout(msgr->cct,0) << "couldn't set SO_NOSIGPIPE: " << cpp_strerror(r) << dendl;
   }
 #endif
 
-#ifdef SO_PRIORITY
   int prio = msgr->get_socket_priority();
   if (prio >= 0) {
     int r = -1;
 #ifdef IPTOS_CLASS_CS6
     int iptos = IPTOS_CLASS_CS6;
-    int addr_family = 0;
-    if (!peer_addr.is_blank_ip()) {
-      addr_family = peer_addr.get_family();
-    } else {
-      addr_family = msgr->get_myaddr().get_family();
-    }
-    switch (addr_family) {
-    case AF_INET:
-      r = ::setsockopt(sd, IPPROTO_IP, IP_TOS, &iptos, sizeof(iptos));
-      break;
-    case AF_INET6:
-      r = ::setsockopt(sd, IPPROTO_IPV6, IPV6_TCLASS, &iptos, sizeof(iptos));
-      break;
-    default:
-      lderr(msgr->cct) << "couldn't set ToS of unknown family ("
-		       << addr_family << ")"
-		       << " to " << iptos << dendl;
-      return;
-    }
+    r = ::setsockopt(sd, IPPROTO_IP, IP_TOS, &iptos, sizeof(iptos));
     if (r < 0) {
-      r = -errno;
-      ldout(msgr->cct,0) << "couldn't set TOS to " << iptos
-			 << ": " << cpp_strerror(r) << dendl;
+      ldout(msgr->cct,0) << "couldn't set IP_TOS to " << iptos
+                         << ": " << cpp_strerror(errno) << dendl;
     }
 #endif
+#if defined(SO_PRIORITY) 
     // setsockopt(IPTOS_CLASS_CS6) sets the priority of the socket as 0.
     // See http://goo.gl/QWhvsD and http://goo.gl/laTbjT
     // We need to call setsockopt(SO_PRIORITY) after it.
+#if defined(__linux__)
     r = ::setsockopt(sd, SOL_SOCKET, SO_PRIORITY, &prio, sizeof(prio));
-    if (r < 0) {
-      r = -errno;
-      ldout(msgr->cct,0) << "couldn't set SO_PRIORITY to " << prio
-                         << ": " << cpp_strerror(r) << dendl;
-    }
-  }
 #endif
+    if (r < 0) {
+      ldout(msgr->cct,0) << "couldn't set SO_PRIORITY to " << prio
+                         << ": " << cpp_strerror(errno) << dendl;
+    }
+#endif
+  }
 }
 
 int Pipe::connect()
@@ -971,13 +876,13 @@ int Pipe::connect()
   __u32 cseq = connect_seq;
   __u32 gseq = msgr->get_global_seq();
 
-  // stop reader thread
+  // stop reader thrad
   join_reader();
 
   pipe_lock.Unlock();
   
   char tag = -1;
-  int rc = -1;
+  int rc;
   struct msghdr msg;
   struct iovec msgvec[2];
   int msglen;
@@ -995,8 +900,7 @@ int Pipe::connect()
   // create socket?
   sd = ::socket(peer_addr.get_family(), SOCK_STREAM, 0);
   if (sd < 0) {
-    rc = -errno;
-    lderr(msgr->cct) << "connect couldn't create socket " << cpp_strerror(rc) << dendl;
+    lderr(msgr->cct) << "connect couldn't created socket " << cpp_strerror(errno) << dendl;
     goto fail;
   }
 
@@ -1004,37 +908,19 @@ int Pipe::connect()
 
   set_socket_options();
 
-  {
-    entity_addr_t addr2bind = msgr->get_myaddr();
-    if (msgr->cct->_conf->ms_bind_before_connect && (!addr2bind.is_blank_ip())) {
-      addr2bind.set_port(0);
-      int r = ::bind(sd , addr2bind.get_sockaddr(), addr2bind.get_sockaddr_len());
-      if (r < 0) {
-        ldout(msgr->cct,2) << "client bind error " << ", " << cpp_strerror(errno) << dendl;
-        goto fail;
-      }
-    }
-  }
-
   // connect!
   ldout(msgr->cct,10) << "connecting to " << peer_addr << dendl;
-  rc = ::connect(sd, peer_addr.get_sockaddr(), peer_addr.get_sockaddr_len());
+  rc = ::connect(sd, (sockaddr*)&peer_addr.addr, peer_addr.addr_size());
   if (rc < 0) {
-    int stored_errno = errno;
     ldout(msgr->cct,2) << "connect error " << peer_addr
-	     << ", " << cpp_strerror(stored_errno) << dendl;
-    if (stored_errno == ECONNREFUSED) {
-      ldout(msgr->cct, 2) << "connection refused!" << dendl;
-      msgr->dispatch_queue.queue_refused(connection_state.get());
-    }
+	     << ", " << cpp_strerror(errno) << dendl;
     goto fail;
   }
 
   // verify banner
   // FIXME: this should be non-blocking, or in some other way verify the banner as we get it.
-  rc = tcp_read((char*)&banner, strlen(CEPH_BANNER));
-  if (rc < 0) {
-    ldout(msgr->cct,2) << "connect couldn't read banner, " << cpp_strerror(rc) << dendl;
+  if (tcp_read((char*)&banner, strlen(CEPH_BANNER)) < 0) {
+    ldout(msgr->cct,2) << "connect couldn't read banner, " << cpp_strerror(errno) << dendl;
     goto fail;
   }
   if (memcmp(banner, CEPH_BANNER, strlen(CEPH_BANNER))) {
@@ -1048,38 +934,31 @@ int Pipe::connect()
   msg.msg_iov = msgvec;
   msg.msg_iovlen = 1;
   msglen = msgvec[0].iov_len;
-  rc = do_sendmsg(&msg, msglen);
-  if (rc < 0) {
-    ldout(msgr->cct,2) << "connect couldn't write my banner, " << cpp_strerror(rc) << dendl;
+  if (do_sendmsg(&msg, msglen)) {
+    ldout(msgr->cct,2) << "connect couldn't write my banner, " << cpp_strerror(errno) << dendl;
     goto fail;
   }
 
   // identify peer
   {
 #if defined(__linux__) || defined(DARWIN) || defined(__FreeBSD__)
-    bufferptr p(sizeof(ceph_entity_addr) * 2);
+    bufferptr p(sizeof(paddr) * 2);
 #else
     int wirelen = sizeof(__u32) * 2 + sizeof(ceph_sockaddr_storage);
     bufferptr p(wirelen * 2);
 #endif
-    addrbl.push_back(std::move(p));
+    addrbl.push_back(p);
   }
-  rc = tcp_read(addrbl.c_str(), addrbl.length());
-  if (rc < 0) {
-    ldout(msgr->cct,2) << "connect couldn't read peer addrs, " << cpp_strerror(rc) << dendl;
+  if (tcp_read(addrbl.c_str(), addrbl.length()) < 0) {
+    ldout(msgr->cct,2) << "connect couldn't read peer addrs, " << cpp_strerror(errno) << dendl;
     goto fail;
   }
-  try {
+  {
     bufferlist::iterator p = addrbl.begin();
     ::decode(paddr, p);
     ::decode(peer_addr_for_me, p);
+    port = peer_addr_for_me.get_port();
   }
-  catch (buffer::error& e) {
-    ldout(msgr->cct,2) << "connect couldn't decode peer addrs: " << e.what()
-		       << dendl;
-    goto fail;
-  }
-  port = peer_addr_for_me.get_port();
 
   ldout(msgr->cct,20) << "connect read peer addr " << paddr << " on socket " << sd << dendl;
   if (peer_addr != paddr) {
@@ -1099,7 +978,7 @@ int Pipe::connect()
 
   msgr->learned_addr(peer_addr_for_me);
 
-  ::encode(msgr->my_inst.addr, myaddrbl, 0);  // legacy
+  ::encode(msgr->my_inst.addr, myaddrbl);
 
   memset(&msg, 0, sizeof(msg));
   msgvec[0].iov_base = myaddrbl.c_str();
@@ -1107,9 +986,8 @@ int Pipe::connect()
   msg.msg_iov = msgvec;
   msg.msg_iovlen = 1;
   msglen = msgvec[0].iov_len;
-  rc = do_sendmsg(&msg, msglen);
-  if (rc < 0) {
-    ldout(msgr->cct,2) << "connect couldn't write my addr, " << cpp_strerror(rc) << dendl;
+  if (do_sendmsg(&msg, msglen)) {
+    ldout(msgr->cct,2) << "connect couldn't write my addr, " << cpp_strerror(errno) << dendl;
     goto fail;
   }
   ldout(msgr->cct,10) << "connect sent my addr " << msgr->my_inst.addr << dendl;
@@ -1149,19 +1027,20 @@ int Pipe::connect()
 
     ldout(msgr->cct,10) << "connect sending gseq=" << gseq << " cseq=" << cseq
 	     << " proto=" << connect.protocol_version << dendl;
-    rc = do_sendmsg(&msg, msglen);
-    if (rc < 0) {
-      ldout(msgr->cct,2) << "connect couldn't write gseq, cseq, " << cpp_strerror(rc) << dendl;
+    if (do_sendmsg(&msg, msglen)) {
+      ldout(msgr->cct,2) << "connect couldn't write gseq, cseq, " << cpp_strerror(errno) << dendl;
       goto fail;
     }
 
     ldout(msgr->cct,20) << "connect wrote (self +) cseq, waiting for reply" << dendl;
     ceph_msg_connect_reply reply;
-    rc = tcp_read((char*)&reply, sizeof(reply));
-    if (rc < 0) {
-      ldout(msgr->cct,2) << "connect read reply " << cpp_strerror(rc) << dendl;
+    if (tcp_read((char*)&reply, sizeof(reply)) < 0) {
+      ldout(msgr->cct,2) << "connect read reply " << cpp_strerror(errno) << dendl;
       goto fail;
     }
+
+    // sanitize features
+    reply.features = ceph_sanitize_features(reply.features);
 
     ldout(msgr->cct,20) << "connect got reply tag " << (int)reply.tag
 			<< " connect_seq " << reply.connect_seq
@@ -1176,9 +1055,8 @@ int Pipe::connect()
     if (reply.authorizer_len) {
       ldout(msgr->cct,10) << "reply.authorizer_len=" << reply.authorizer_len << dendl;
       bufferptr bp = buffer::create(reply.authorizer_len);
-      rc = tcp_read(bp.c_str(), reply.authorizer_len);
-      if (rc < 0) {
-        ldout(msgr->cct,10) << "connect couldn't read connect authorizer_reply" << cpp_strerror(rc) << dendl;
+      if (tcp_read(bp.c_str(), reply.authorizer_len) < 0) {
+        ldout(msgr->cct,10) << "connect couldn't read connect authorizer_reply" << dendl;
 	goto fail;
       }
       authorizer_reply.push_back(bp);
@@ -1269,9 +1147,8 @@ int Pipe::connect()
       if (reply.tag == CEPH_MSGR_TAG_SEQ) {
         ldout(msgr->cct,10) << "got CEPH_MSGR_TAG_SEQ, reading acked_seq and writing in_seq" << dendl;
         uint64_t newly_acked_seq = 0;
-        rc = tcp_read((char*)&newly_acked_seq, sizeof(newly_acked_seq));
-        if (rc < 0) {
-          ldout(msgr->cct,2) << "connect read error on newly_acked_seq" << cpp_strerror(rc) << dendl;
+        if (tcp_read((char*)&newly_acked_seq, sizeof(newly_acked_seq)) < 0) {
+          ldout(msgr->cct,2) << "connect read error on newly_acked_seq" << dendl;
           goto fail_locked;
         }
 	ldout(msgr->cct,2) << " got newly_acked_seq " << newly_acked_seq
@@ -1352,7 +1229,7 @@ int Pipe::connect()
 
  stop_locked:
   delete authorizer;
-  return rc;
+  return -1;
 }
 
 void Pipe::register_pipe()
@@ -1534,7 +1411,7 @@ void Pipe::fault(bool onread)
     backoff.set_from_double(conf->ms_initial_backoff);
   } else {
     ldout(msgr->cct,10) << "fault waiting " << backoff << dendl;
-    cond.WaitInterval(pipe_lock, backoff);
+    cond.WaitInterval(msgr->cct, pipe_lock, backoff);
     backoff += backoff;
     if (backoff > conf->ms_max_backoff)
       backoff.set_from_double(conf->ms_max_backoff);
@@ -1583,14 +1460,13 @@ void Pipe::stop()
   ldout(msgr->cct,10) << "stop" << dendl;
   assert(pipe_lock.is_locked());
   state = STATE_CLOSED;
-  state_closed = true;
+  state_closed.set(1);
   cond.Signal();
   shutdown_socket();
 }
 
 void Pipe::stop_and_wait()
 {
-  assert(pipe_lock.is_locked_by_me());
   if (state != STATE_CLOSED)
     stop();
 
@@ -1604,9 +1480,7 @@ void Pipe::stop_and_wait()
   }
   
   if (delay_thread) {
-    pipe_lock.Unlock();
     delay_thread->stop_fast_dispatching();
-    pipe_lock.Lock();
   }
   while (reader_running &&
 	 reader_dispatching)
@@ -1654,7 +1528,7 @@ void Pipe::reader()
     if (tag == CEPH_MSGR_TAG_KEEPALIVE) {
       ldout(msgr->cct,2) << "reader got KEEPALIVE" << dendl;
       pipe_lock.Lock();
-      connection_state->set_last_keepalive(ceph_clock_now());
+      connection_state->set_last_keepalive(ceph_clock_now(NULL));
       continue;
     }
     if (tag == CEPH_MSGR_TAG_KEEPALIVE2) {
@@ -1671,7 +1545,7 @@ void Pipe::reader()
 	keepalive_ack_stamp = utime_t(t);
 	ldout(msgr->cct,2) << "reader got KEEPALIVE2 " << keepalive_ack_stamp
 			   << dendl;
-	connection_state->set_last_keepalive(ceph_clock_now());
+	connection_state->set_last_keepalive(ceph_clock_now(NULL));
 	cond.Signal();
       }
       continue;
@@ -1718,11 +1592,9 @@ void Pipe::reader()
 	continue;
       }
 
-      m->trace.event("pipe read message");
-
       if (state == STATE_CLOSED ||
 	  state == STATE_CONNECTING) {
-	in_q->dispatch_throttle_release(m->get_dispatch_throttle_size());
+	msgr->dispatch_throttle_release(m->get_dispatch_throttle_size());
 	m->put();
 	continue;
       }
@@ -1736,7 +1608,7 @@ void Pipe::reader()
 	ldout(msgr->cct,0) << "reader got old message "
 		<< m->get_seq() << " <= " << in_seq << " " << m << " " << *m
 		<< ", discarding" << dendl;
-	in_q->dispatch_throttle_release(m->get_dispatch_throttle_size());
+	msgr->dispatch_throttle_release(m->get_dispatch_throttle_size());
 	m->put();
 	if (connection_state->has_feature(CEPH_FEATURE_RECONNECT_SEQ) &&
 	    msgr->cct->_conf->ms_die_on_old_message)
@@ -1793,7 +1665,7 @@ void Pipe::reader()
       pipe_lock.Lock();
       if (state == STATE_CLOSING) {
 	state = STATE_CLOSED;
-	state_closed = true;
+	state_closed.set(1);
       } else {
 	state = STATE_CLOSING;
       }
@@ -1841,12 +1713,12 @@ void Pipe::writer()
       ldout(msgr->cct,20) << "writer writing CLOSE tag" << dendl;
       char tag = CEPH_MSGR_TAG_CLOSE;
       state = STATE_CLOSED;
-      state_closed = true;
+      state_closed.set(1);
       pipe_lock.Unlock();
-      if (sd >= 0) {
-	// we can ignore return value, actually; we don't care if this succeeds.
+      if (sd) {
 	int r = ::write(sd, &tag, 1);
-	(void)r;
+	// we can ignore r, actually; we don't care if this succeeds.
+	r++; r = 0; // placate gcc
       }
       pipe_lock.Lock();
       continue;
@@ -1861,7 +1733,7 @@ void Pipe::writer()
 	if (connection_state->has_feature(CEPH_FEATURE_MSGR_KEEPALIVE2)) {
 	  pipe_lock.Unlock();
 	  rc = write_keepalive2(CEPH_MSGR_TAG_KEEPALIVE2,
-				ceph_clock_now());
+				ceph_clock_now(msgr->cct));
 	} else {
 	  pipe_lock.Unlock();
 	  rc = write_keepalive();
@@ -1954,8 +1826,6 @@ void Pipe::writer()
 
         pipe_lock.Unlock();
 
-        m->trace.event("pipe writing message");
-
         ldout(msgr->cct,20) << "writer sending " << m->get_seq() << " " << m << dendl;
 	int rc = write_message(header, footer, blist);
 
@@ -2005,16 +1875,19 @@ static void alloc_aligned_buffer(bufferlist& data, unsigned len, unsigned off)
     // head
     unsigned head = 0;
     head = MIN(CEPH_PAGE_SIZE - (off & ~CEPH_PAGE_MASK), left);
-    data.push_back(buffer::create(head));
+    bufferptr bp = buffer::create(head);
+    data.push_back(bp);
     left -= head;
   }
   unsigned middle = left & CEPH_PAGE_MASK;
   if (middle > 0) {
-    data.push_back(buffer::create_page_aligned(middle));
+    bufferptr bp = buffer::create_page_aligned(middle);
+    data.push_back(bp);
     left -= middle;
   }
   if (left) {
-    data.push_back(buffer::create(left));
+    bufferptr bp = buffer::create(left);
+    data.push_back(bp);
   }
 }
 
@@ -2066,7 +1939,7 @@ int Pipe::read_message(Message **pm, AuthSessionHandler* auth_handler)
   unsigned data_len, data_off;
   int aborted;
   Message *message;
-  utime_t recv_stamp = ceph_clock_now();
+  utime_t recv_stamp = ceph_clock_now(msgr->cct);
 
   if (policy.throttler_messages) {
     ldout(msgr->cct,10) << "reader wants " << 1 << " message from policy throttler "
@@ -2089,12 +1962,12 @@ int Pipe::read_message(Message **pm, AuthSessionHandler* auth_handler)
     // blocks indefinitely, which it shouldn't).  in contrast, the
     // policy throttle carries for the lifetime of the message.
     ldout(msgr->cct,10) << "reader wants " << message_size << " from dispatch throttler "
-	     << in_q->dispatch_throttler.get_current() << "/"
-	     << in_q->dispatch_throttler.get_max() << dendl;
-    in_q->dispatch_throttler.get(message_size);
+	     << msgr->dispatch_throttler.get_current() << "/"
+	     << msgr->dispatch_throttler.get_max() << dendl;
+    msgr->dispatch_throttler.get(message_size);
   }
 
-  utime_t throttle_stamp = ceph_clock_now();
+  utime_t throttle_stamp = ceph_clock_now(msgr->cct);
 
   // read front
   front_len = header.front_len;
@@ -2102,7 +1975,7 @@ int Pipe::read_message(Message **pm, AuthSessionHandler* auth_handler)
     bufferptr bp = buffer::create(front_len);
     if (tcp_read(bp.c_str(), front_len) < 0)
       goto out_dethrottle;
-    front.push_back(std::move(bp));
+    front.push_back(bp);
     ldout(msgr->cct,20) << "reader got front " << front.length() << dendl;
   }
 
@@ -2112,7 +1985,7 @@ int Pipe::read_message(Message **pm, AuthSessionHandler* auth_handler)
     bufferptr bp = buffer::create(middle_len);
     if (tcp_read(bp.c_str(), middle_len) < 0)
       goto out_dethrottle;
-    middle.push_back(std::move(bp));
+    middle.push_back(bp);
     ldout(msgr->cct,20) << "reader got middle " << middle.length() << dendl;
   }
 
@@ -2160,7 +2033,7 @@ int Pipe::read_message(Message **pm, AuthSessionHandler* auth_handler)
       bufferptr bp = blp.get_current_ptr();
       int read = MIN(bp.length(), left);
       ldout(msgr->cct,20) << "reader reading nonblocking into " << (void*)bp.c_str() << " len " << bp.length() << dendl;
-      ssize_t got = tcp_read_nonblocking(bp.c_str(), read);
+      int got = tcp_read_nonblocking(bp.c_str(), read);
       ldout(msgr->cct,30) << "reader read " << got << " of " << read << dendl;
       connection_state->lock.Unlock();
       if (got < 0)
@@ -2200,8 +2073,7 @@ int Pipe::read_message(Message **pm, AuthSessionHandler* auth_handler)
 
   ldout(msgr->cct,20) << "reader got " << front.length() << " + " << middle.length() << " + " << data.length()
 	   << " byte message" << dendl;
-  message = decode_message(msgr->cct, msgr->crcflags, header, footer,
-                           front, middle, data, connection_state.get());
+  message = decode_message(msgr->cct, msgr->crcflags, header, footer, front, middle, data);
   if (!message) {
     ret = -EINVAL;
     goto out_dethrottle;
@@ -2231,7 +2103,7 @@ int Pipe::read_message(Message **pm, AuthSessionHandler* auth_handler)
 
   message->set_recv_stamp(recv_stamp);
   message->set_throttle_stamp(throttle_stamp);
-  message->set_recv_complete_stamp(ceph_clock_now());
+  message->set_recv_complete_stamp(ceph_clock_now(msgr->cct));
 
   *pm = message;
   return 0;
@@ -2252,7 +2124,7 @@ int Pipe::read_message(Message **pm, AuthSessionHandler* auth_handler)
       policy.throttler_bytes->put(message_size);
     }
 
-    in_q->dispatch_throttle_release(message_size);
+    msgr->dispatch_throttle_release(message_size);
   }
   return ret;
 }
@@ -2321,10 +2193,17 @@ void Pipe::restore_sigpipe()
 }
 
 
-int Pipe::do_sendmsg(struct msghdr *msg, unsigned len, bool more)
+int Pipe::do_sendmsg(struct msghdr *msg, int len, bool more)
 {
   suppress_sigpipe();
   while (len > 0) {
+    if (0) { // sanity
+      int l = 0;
+      for (unsigned i=0; i<msg->msg_iovlen; i++)
+	l += msg->msg_iov[i].iov_len;
+      assert(l == len);
+    }
+
     int r;
 #if defined(MSG_NOSIGNAL)
     r = ::sendmsg(sd, msg, MSG_NOSIGNAL | (more ? MSG_MORE : 0));
@@ -2333,16 +2212,16 @@ int Pipe::do_sendmsg(struct msghdr *msg, unsigned len, bool more)
 #endif
     if (r == 0) 
       ldout(msgr->cct,10) << "do_sendmsg hmm do_sendmsg got r==0!" << dendl;
-    if (r < 0) {
-      r = -errno; 
-      ldout(msgr->cct,1) << "do_sendmsg error " << cpp_strerror(r) << dendl;
+    if (r < 0) { 
+      ldout(msgr->cct,1) << "do_sendmsg error " << cpp_strerror(errno) << dendl;
       restore_sigpipe();
-      return r;
+      return -1;
     }
     if (state == STATE_CLOSED) {
       ldout(msgr->cct,10) << "do_sendmsg oh look, state == CLOSED, giving up" << dendl;
+      errno = EINTR;
       restore_sigpipe();
-      return -EINTR; // close enough
+      return -1; // close enough
     }
 
     len -= r;
@@ -2478,15 +2357,15 @@ int Pipe::write_message(const ceph_msg_header& header, const ceph_msg_footer& fo
 
   // payload (front+data)
   list<bufferptr>::const_iterator pb = blist.buffers().begin();
-  unsigned b_off = 0;  // carry-over buffer offset, if any
-  unsigned bl_pos = 0; // blist pos
-  unsigned left = blist.length();
+  int b_off = 0;  // carry-over buffer offset, if any
+  int bl_pos = 0; // blist pos
+  int left = blist.length();
 
   while (left > 0) {
-    unsigned donow = MIN(left, pb->length()-b_off);
+    int donow = MIN(left, (int)pb->length()-b_off);
     if (donow == 0) {
       ldout(msgr->cct,0) << "donow = " << donow << " left " << left << " pb->length " << pb->length()
-                         << " b_off " << b_off << dendl;
+	      << " b_off " << b_off << dendl;
     }
     assert(donow > 0);
     ldout(msgr->cct,30) << " bl_pos " << bl_pos << " b_off " << b_off
@@ -2495,7 +2374,7 @@ int Pipe::write_message(const ceph_msg_header& header, const ceph_msg_footer& fo
 	     << " writing " << donow 
 	     << dendl;
     
-    if (msg.msg_iovlen >= SM_IOV_MAX-2) {
+    if (msg.msg_iovlen >= IOV_MAX-2) {
       if (do_sendmsg(&msg, msglen, true))
 	goto fail;
       
@@ -2510,13 +2389,13 @@ int Pipe::write_message(const ceph_msg_header& header, const ceph_msg_footer& fo
     msglen += donow;
     msg.msg_iovlen++;
     
-    assert(left >= donow);
     left -= donow;
+    assert(left >= 0);
     b_off += donow;
     bl_pos += donow;
     if (left == 0)
       break;
-    while (b_off == pb->length()) {
+    while (b_off == (int)pb->length()) {
       ++pb;
       b_off = 0;
     }
@@ -2561,10 +2440,10 @@ int Pipe::write_message(const ceph_msg_header& header, const ceph_msg_footer& fo
 }
 
 
-int Pipe::tcp_read(char *buf, unsigned len)
+int Pipe::tcp_read(char *buf, int len)
 {
   if (sd < 0)
-    return -EINVAL;
+    return -1;
 
   while (len > 0) {
 
@@ -2578,7 +2457,7 @@ int Pipe::tcp_read(char *buf, unsigned len)
     if (tcp_read_wait() < 0)
       return -1;
 
-    ssize_t got = tcp_read_nonblocking(buf, len);
+    int got = tcp_read_nonblocking(buf, len);
 
     if (got < 0)
       return -1;
@@ -2587,13 +2466,13 @@ int Pipe::tcp_read(char *buf, unsigned len)
     buf += got;
     //lgeneric_dout(cct, DBL) << "tcp_read got " << got << ", " << len << " left" << dendl;
   }
-  return 0;
+  return len;
 }
 
 int Pipe::tcp_read_wait()
 {
   if (sd < 0)
-    return -EINVAL;
+    return -1;
   struct pollfd pfd;
   short evmask;
   pfd.fd = sd;
@@ -2605,11 +2484,8 @@ int Pipe::tcp_read_wait()
   if (has_pending_data())
     return 0;
 
-  int r = poll(&pfd, 1, msgr->timeout);
-  if (r < 0)
-    return -errno;
-  if (r == 0)
-    return -EAGAIN;
+  if (poll(&pfd, 1, msgr->timeout) <= 0)
+    return -1;
 
   evmask = POLLERR | POLLHUP | POLLNVAL;
 #if defined(__linux__)
@@ -2624,12 +2500,12 @@ int Pipe::tcp_read_wait()
   return 0;
 }
 
-ssize_t Pipe::do_recv(char *buf, size_t len, int flags)
+int Pipe::do_recv(char *buf, size_t len, int flags)
 {
 again:
-  ssize_t got = ::recv( sd, buf, len, flags );
+  int got = ::recv( sd, buf, len, flags );
   if (got < 0) {
-    if (errno == EINTR) {
+    if (errno == EAGAIN || errno == EINTR) {
       goto again;
     }
     ldout(msgr->cct, 10) << __func__ << " socket " << sd << " returned "
@@ -2642,10 +2518,10 @@ again:
   return got;
 }
 
-ssize_t Pipe::buffered_recv(char *buf, size_t len, int flags)
+int Pipe::buffered_recv(char *buf, size_t len, int flags)
 {
-  size_t left = len;
-  ssize_t total_recv = 0;
+  int left = len;
+  int total_recv = 0;
   if (recv_len > recv_ofs) {
     int to_read = MIN(recv_len - recv_ofs, left);
     memcpy(buf, &recv_buf[recv_ofs], to_read);
@@ -2660,9 +2536,9 @@ ssize_t Pipe::buffered_recv(char *buf, size_t len, int flags)
 
   /* nothing left in the prefetch buffer */
 
-  if (left > recv_max_prefetch) {
+  if (len > (size_t)recv_max_prefetch) {
     /* this was a large read, we don't prefetch for these */
-    ssize_t ret = do_recv(buf, left, flags );
+    int ret = do_recv(buf, left, flags );
     if (ret < 0) {
       if (total_recv > 0)
         return total_recv;
@@ -2673,25 +2549,25 @@ ssize_t Pipe::buffered_recv(char *buf, size_t len, int flags)
   }
 
 
-  ssize_t got = do_recv(recv_buf, recv_max_prefetch, flags);
-  if (got < 0) {
+  int got = do_recv(recv_buf, recv_max_prefetch, flags);
+  if (got <= 0) {
     if (total_recv > 0)
       return total_recv;
 
     return got;
   }
 
-  recv_len = (size_t)got;
-  got = MIN(left, (size_t)got);
+  recv_len = got;
+  got = MIN(left, got);
   memcpy(buf, recv_buf, got);
   recv_ofs = got;
   total_recv += got;
   return total_recv;
 }
 
-ssize_t Pipe::tcp_read_nonblocking(char *buf, unsigned len)
+int Pipe::tcp_read_nonblocking(char *buf, int len)
 {
-  ssize_t got = buffered_recv(buf, len, MSG_DONTWAIT );
+  int got = buffered_recv(buf, len, MSG_DONTWAIT );
   if (got < 0) {
     ldout(msgr->cct, 10) << __func__ << " socket " << sd << " returned "
 		         << got << " " << cpp_strerror(errno) << dendl;
@@ -2707,7 +2583,7 @@ ssize_t Pipe::tcp_read_nonblocking(char *buf, unsigned len)
   return got;
 }
 
-int Pipe::tcp_write(const char *buf, unsigned len)
+int Pipe::tcp_write(const char *buf, int len)
 {
   if (sd < 0)
     return -1;

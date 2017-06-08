@@ -2,7 +2,7 @@
 #include "SubsystemMap.h"
 
 namespace ceph {
-namespace logging {
+namespace log {
 
 void SubsystemMap::add(unsigned subsys, std::string name, int log, int gather)
 {

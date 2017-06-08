@@ -18,6 +18,9 @@
 #ifndef CEPH_COMMON_PLUGINREGISTRY_H
 #define CEPH_COMMON_PLUGINREGISTRY_H
 
+#include <string>
+#include <map>
+
 #include "common/Mutex.h"
 
 class CephContext;
@@ -36,7 +39,7 @@ namespace ceph {
     void *library;
     CephContext *cct;
 
-    explicit Plugin(CephContext *cct) : library(NULL), cct(cct) {}
+    Plugin(CephContext *cct) : cct(cct) {}
     virtual ~Plugin() {}
   };
 
@@ -48,7 +51,7 @@ namespace ceph {
     bool disable_dlclose;
     std::map<std::string,std::map<std::string,Plugin*> > plugins;
 
-    explicit PluginRegistry(CephContext *cct);
+    PluginRegistry(CephContext *cct);
     ~PluginRegistry();
 
     int add(const std::string& type, const std::string& name,

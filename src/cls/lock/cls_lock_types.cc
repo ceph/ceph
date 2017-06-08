@@ -12,6 +12,8 @@
  * 
  */
 
+#include "include/types.h"
+#include "msg/msg_types.h"
 #include "common/Formatter.h"
 
 #include "cls/lock/cls_lock_types.h"
@@ -47,7 +49,6 @@ void locker_info_t::dump(Formatter *f) const
 
 static void generate_test_addr(entity_addr_t& a, int nonce, int port)
 {
-  a.set_type(entity_addr_t::TYPE_LEGACY);
   a.set_nonce(nonce);
   a.set_family(AF_INET);
   a.set_in4_quad(0, 127);

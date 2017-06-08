@@ -11,15 +11,15 @@
 #include "include/rados/librados.hpp"
 #include "include/rbd/librbd.hpp"
 
+#include "librbd/AioObjectRequest.h"
 #include "librbd/ExclusiveLock.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/internal.h"
 #include "librbd/LibrbdWriteback.h"
+#include "librbd/AioCompletion.h"
 #include "librbd/ObjectMap.h"
 #include "librbd/Journal.h"
 #include "librbd/Utils.h"
-#include "librbd/io/AioCompletion.h"
-#include "librbd/io/ObjectRequest.h"
 
 #include "include/assert.h"
 
@@ -50,12 +50,15 @@ namespace librbd {
    */
   class C_ReadRequest : public Context {
   public:
-    C_ReadRequest(CephContext *cct, Context *c, Mutex *cache_lock)
-      : m_cct(cct), m_ctx(c), m_cache_lock(cache_lock) {
+    C_ReadRequest(CephContext *cct, Context *c, RWLock *owner_lock,
+                  Mutex *cache_lock)
+      : m_cct(cct), m_ctx(c), m_owner_lock(owner_lock),
+        m_cache_lock(cache_lock) {
     }
-    void finish(int r) override {
+    virtual void finish(int r) {
       ldout(m_cct, 20) << "aio_cb completing " << dendl;
       {
+        RWLock::RLocker owner_locker(*m_owner_lock);
         Mutex::Locker cache_locker(*m_cache_lock);
 	m_ctx->complete(r);
       }
@@ -64,16 +67,17 @@ namespace librbd {
   private:
     CephContext *m_cct;
     Context *m_ctx;
+    RWLock *m_owner_lock;
     Mutex *m_cache_lock;
   };
 
   class C_OrderedWrite : public Context {
   public:
     C_OrderedWrite(CephContext *cct, LibrbdWriteback::write_result_d *result,
-		   const ZTracer::Trace &trace, LibrbdWriteback *wb)
-      : m_cct(cct), m_result(result), m_trace(trace), m_wb_handler(wb) {}
-    ~C_OrderedWrite() override {}
-    void finish(int r) override {
+		   LibrbdWriteback *wb)
+      : m_cct(cct), m_result(result), m_wb_handler(wb) {}
+    virtual ~C_OrderedWrite() {}
+    virtual void finish(int r) {
       ldout(m_cct, 20) << "C_OrderedWrite completing " << m_result << dendl;
       {
 	Mutex::Locker l(m_wb_handler->m_lock);
@@ -83,12 +87,10 @@ namespace librbd {
 	m_wb_handler->complete_writes(m_result->oid);
       }
       ldout(m_cct, 20) << "C_OrderedWrite finished " << m_result << dendl;
-      m_trace.event("finish");
     }
   private:
     CephContext *m_cct;
     LibrbdWriteback::write_result_d *m_result;
-    ZTracer::Trace m_trace;
     LibrbdWriteback *m_wb_handler;
   };
 
@@ -101,33 +103,26 @@ namespace librbd {
     uint64_t off;
     bufferlist bl;
     SnapContext snapc;
-    uint64_t journal_tid;
-    ZTracer::Trace trace;
     Context *req_comp;
-    bool request_sent = false;
+    uint64_t journal_tid;
+    bool request_sent;
 
     C_WriteJournalCommit(ImageCtx *_image_ctx, const std::string &_oid,
                          uint64_t _object_no, uint64_t _off,
                          const bufferlist &_bl, const SnapContext& _snapc,
-                         uint64_t _journal_tid,
-			 const ZTracer::Trace &trace, Context *_req_comp)
+                         Context *_req_comp, uint64_t _journal_tid)
       : image_ctx(_image_ctx), oid(_oid), object_no(_object_no), off(_off),
-        bl(_bl), snapc(_snapc), journal_tid(_journal_tid),
-        trace(trace), req_comp(_req_comp) {
+        bl(_bl), snapc(_snapc), req_comp(_req_comp), journal_tid(_journal_tid),
+        request_sent(false) {
       CephContext *cct = image_ctx->cct;
       ldout(cct, 20) << this << " C_WriteJournalCommit: "
                      << "delaying write until journal tid "
                      << journal_tid << " safe" << dendl;
     }
 
-    void complete(int r) override {
+    virtual void complete(int r) {
       if (request_sent || r < 0) {
-        if (request_sent && r == 0) {
-          // only commit IO events that are safely recorded to the backing image
-          // since the cache will retry all IOs that fail
-          commit_io_event_extent(0);
-        }
-
+        commit_io_event_extent(r);
         req_comp->complete(r);
         delete this;
       } else {
@@ -135,7 +130,7 @@ namespace librbd {
       }
     }
 
-    void finish(int r) override {
+    virtual void finish(int r) {
     }
 
     void commit_io_event_extent(int r) {
@@ -162,33 +157,13 @@ namespace librbd {
       ldout(cct, 20) << this << " C_WriteJournalCommit: "
                      << "journal committed: sending write request" << dendl;
 
+      RWLock::RLocker owner_locker(image_ctx->owner_lock);
       assert(image_ctx->exclusive_lock->is_lock_owner());
 
       request_sent = true;
-      auto req = new io::ObjectWriteRequest(image_ctx, oid, object_no, off,
-                                            bl, snapc, 0, trace, this);
+      AioObjectWrite *req = new AioObjectWrite(image_ctx, oid, object_no, off,
+                                               bl, snapc, this);
       req->send();
-    }
-  };
-
-  struct C_CommitIOEventExtent : public Context {
-    ImageCtx *image_ctx;
-    uint64_t journal_tid;
-    uint64_t offset;
-    uint64_t length;
-
-    C_CommitIOEventExtent(ImageCtx *image_ctx, uint64_t journal_tid,
-                          uint64_t offset, uint64_t length)
-      : image_ctx(image_ctx), journal_tid(journal_tid), offset(offset),
-        length(length) {
-    }
-
-    void finish(int r) override {
-      // all IO operations are flushed prior to closing the journal
-      assert(image_ctx->journal != nullptr);
-
-      image_ctx->journal->commit_io_event_extent(journal_tid, offset, length,
-                                                 r);
     }
   };
 
@@ -200,12 +175,11 @@ namespace librbd {
 			     const object_locator_t& oloc,
 			     uint64_t off, uint64_t len, snapid_t snapid,
 			     bufferlist *pbl, uint64_t trunc_size,
-			     __u32 trunc_seq, int op_flags,
-                             const ZTracer::Trace &parent_trace,
-                             Context *onfinish)
+			     __u32 trunc_seq, int op_flags, Context *onfinish)
   {
     // on completion, take the mutex and then call onfinish.
-    Context *req = new C_ReadRequest(m_ictx->cct, onfinish, &m_lock);
+    Context *req = new C_ReadRequest(m_ictx->cct, onfinish, &m_ictx->owner_lock,
+                                     &m_lock);
 
     {
       RWLock::RLocker snap_locker(m_ictx->snap_lock);
@@ -222,10 +196,9 @@ namespace librbd {
     int flags = m_ictx->get_read_flags(snapid);
 
     librados::AioCompletion *rados_completion =
-      util::create_rados_callback(req);
-    int r = m_ictx->data_ctx.aio_operate(
-      oid.name, rados_completion, &op, flags, nullptr,
-      (parent_trace.valid() ? parent_trace.get_info() : nullptr));
+      util::create_rados_ack_callback(req);
+    int r = m_ictx->data_ctx.aio_operate(oid.name, rados_completion, &op,
+					 flags, NULL);
     rados_completion->release();
     assert(r >= 0);
   }
@@ -245,7 +218,7 @@ namespace librbd {
     // reverse map this object extent onto the parent
     vector<pair<uint64_t,uint64_t> > objectx;
     Striper::extent_to_file(m_ictx->cct, &m_ictx->layout,
-			  object_no, 0, m_ictx->layout.object_size,
+			  object_no, 0, m_ictx->layout.fl_object_size,
 			  objectx);
     uint64_t object_overlap = m_ictx->prune_parent_extents(objectx, overlap);
     bool may = object_overlap > 0;
@@ -261,34 +234,26 @@ namespace librbd {
 				    const bufferlist &bl,
 				    ceph::real_time mtime, uint64_t trunc_size,
 				    __u32 trunc_seq, ceph_tid_t journal_tid,
-                                    const ZTracer::Trace &parent_trace,
 				    Context *oncommit)
   {
-    ZTracer::Trace trace;
-    if (parent_trace.valid()) {
-      trace.init("", &m_ictx->trace_endpoint, &parent_trace);
-      trace.copy_name("writeback " + oid.name);
-      trace.event("start");
-    }
-
+    assert(m_ictx->owner_lock.is_locked());
     uint64_t object_no = oid_to_object_no(oid.name, m_ictx->object_prefix);
 
     write_result_d *result = new write_result_d(oid.name, oncommit);
     m_writes[oid.name].push(result);
     ldout(m_ictx->cct, 20) << "write will wait for result " << result << dendl;
-    C_OrderedWrite *req_comp = new C_OrderedWrite(m_ictx->cct, result, trace,
-                                                  this);
+    C_OrderedWrite *req_comp = new C_OrderedWrite(m_ictx->cct, result, this);
 
     // all IO operations are flushed prior to closing the journal
     assert(journal_tid == 0 || m_ictx->journal != NULL);
     if (journal_tid != 0) {
       m_ictx->journal->flush_event(
-        journal_tid, new C_WriteJournalCommit(
-	  m_ictx, oid.name, object_no, off, bl, snapc, journal_tid, trace,
-          req_comp));
+	journal_tid, new C_WriteJournalCommit(m_ictx, oid.name, object_no, off,
+					      bl, snapc, req_comp,
+					      journal_tid));
     } else {
-      auto req = new io::ObjectWriteRequest(
-	m_ictx, oid.name, object_no, off, bl, snapc, 0, trace, req_comp);
+      AioObjectWrite *req = new AioObjectWrite(m_ictx, oid.name, object_no,
+					       off, bl, snapc, req_comp);
       req->send();
     }
     return ++m_tid;
@@ -297,37 +262,31 @@ namespace librbd {
 
   void LibrbdWriteback::overwrite_extent(const object_t& oid, uint64_t off,
 					 uint64_t len,
-					 ceph_tid_t original_journal_tid,
-                                         ceph_tid_t new_journal_tid) {
+					 ceph_tid_t journal_tid) {
     typedef std::vector<std::pair<uint64_t,uint64_t> > Extents;
 
-    ldout(m_ictx->cct, 20) << __func__ << ": " << oid << " "
-                           << off << "~" << len << " "
-                           << "journal_tid=" << original_journal_tid << ", "
-                           << "new_journal_tid=" << new_journal_tid << dendl;
-
+    assert(m_ictx->owner_lock.is_locked());
     uint64_t object_no = oid_to_object_no(oid.name, m_ictx->object_prefix);
 
     // all IO operations are flushed prior to closing the journal
-    assert(original_journal_tid != 0 && m_ictx->journal != NULL);
+    assert(journal_tid != 0 && m_ictx->journal != NULL);
 
     Extents file_extents;
     Striper::extent_to_file(m_ictx->cct, &m_ictx->layout, object_no, off,
 			    len, file_extents);
     for (Extents::iterator it = file_extents.begin();
 	 it != file_extents.end(); ++it) {
-      if (new_journal_tid != 0) {
-        // ensure new journal event is safely committed to disk before
-        // committing old event
-        m_ictx->journal->flush_event(
-          new_journal_tid, new C_CommitIOEventExtent(m_ictx,
-                                                     original_journal_tid,
-                                                     it->first, it->second));
-      } else {
-        m_ictx->journal->commit_io_event_extent(original_journal_tid, it->first,
-					        it->second, 0);
-      }
+      m_ictx->journal->commit_io_event_extent(journal_tid, it->first,
+					      it->second, 0);
     }
+  }
+
+  void LibrbdWriteback::get_client_lock() {
+    m_ictx->owner_lock.get_read();
+  }
+
+  void LibrbdWriteback::put_client_lock() {
+    m_ictx->owner_lock.put_read();
   }
 
   void LibrbdWriteback::complete_writes(const std::string& oid)

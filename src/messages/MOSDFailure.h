@@ -22,70 +22,54 @@
 class MOSDFailure : public PaxosServiceMessage {
 
   static const int HEAD_VERSION = 3;
-  static const int COMPAT_VERSION = 3;
 
  public:
-  enum {
-    FLAG_ALIVE = 0,      // use this on its own to mark as "I'm still alive"
-    FLAG_FAILED = 1,     // if set, failure; if not, recovery
-    FLAG_IMMEDIATE = 2,  // known failure, not a timeout
-  };
-  
   uuid_d fsid;
   entity_inst_t target_osd;
-  __u8 flags;
+  __u8 is_failed;
   epoch_t       epoch;
   int32_t failed_for;  // known to be failed since at least this long
 
   MOSDFailure() : PaxosServiceMessage(MSG_OSD_FAILURE, 0, HEAD_VERSION) { }
   MOSDFailure(const uuid_d &fs, const entity_inst_t& f, int duration, epoch_t e)
-    : PaxosServiceMessage(MSG_OSD_FAILURE, e, HEAD_VERSION, COMPAT_VERSION),
-      fsid(fs), target_osd(f),
-      flags(FLAG_FAILED),
-      epoch(e), failed_for(duration) { }
-  MOSDFailure(const uuid_d &fs, const entity_inst_t& f, int duration, 
-              epoch_t e, __u8 extra_flags)
-    : PaxosServiceMessage(MSG_OSD_FAILURE, e, HEAD_VERSION, COMPAT_VERSION),
-      fsid(fs), target_osd(f),
-      flags(extra_flags),
-      epoch(e), failed_for(duration) { }
+    : PaxosServiceMessage(MSG_OSD_FAILURE, e, HEAD_VERSION),
+      fsid(fs), target_osd(f), is_failed(true), epoch(e), failed_for(duration) { }
 private:
-  ~MOSDFailure() override {}
+  ~MOSDFailure() {}
 
 public: 
   entity_inst_t get_target() { return target_osd; }
-  bool if_osd_failed() const { 
-    return flags & FLAG_FAILED; 
-  }
-  bool is_immediate() const { 
-    return flags & FLAG_IMMEDIATE; 
-  }
-  epoch_t get_epoch() const { return epoch; }
+  bool if_osd_failed() { return is_failed; }
+  epoch_t get_epoch() { return epoch; }
 
-  void decode_payload() override {
+  void decode_payload() {
     bufferlist::iterator p = payload.begin();
     paxos_decode(p);
     ::decode(fsid, p);
     ::decode(target_osd, p);
     ::decode(epoch, p);
-    ::decode(flags, p);
-    ::decode(failed_for, p);
+    if (header.version >= 2)
+      ::decode(is_failed, p);
+    else
+      is_failed = true;
+    if (header.version >= 3)
+      ::decode(failed_for, p);
+    else
+      failed_for = 0;
   }
-
-  void encode_payload(uint64_t features) override {
+  void encode_payload(uint64_t features) {
     paxos_encode();
     ::encode(fsid, payload);
-    ::encode(target_osd, payload, features);
+    ::encode(target_osd, payload);
     ::encode(epoch, payload);
-    ::encode(flags, payload);
+    ::encode(is_failed, payload);
     ::encode(failed_for, payload);
   }
 
-  const char *get_type_name() const override { return "osd_failure"; }
-  void print(ostream& out) const override {
+  const char *get_type_name() const { return "osd_failure"; }
+  void print(ostream& out) const {
     out << "osd_failure("
-	<< (if_osd_failed() ? "failed " : "recovered ")
-	<< (is_immediate() ? "immediate " : "timeout ")
+	<< (is_failed ? "failed " : "recovered ")
 	<< target_osd << " for " << failed_for << "sec e" << epoch
 	<< " v" << version << ")";
   }

@@ -15,10 +15,12 @@
 #ifndef CEPH_KEYSSERVER_H
 #define CEPH_KEYSSERVER_H
 
+#include "common/config.h"
+
 #include "auth/KeyRing.h"
 #include "CephxProtocol.h"
-#include "CephxKeyServer.h"
-#include "common/Mutex.h"
+
+#include "common/Timer.h"
 
 class CephContext;
 
@@ -33,7 +35,7 @@ struct KeyServerData {
   version_t rotating_ver;
   map<uint32_t, RotatingSecrets> rotating_secrets;
 
-  explicit KeyServerData(KeyRing *extra)
+  KeyServerData(KeyRing *extra)
     : version(0),
       extra_secrets(extra),
       rotating_ver(0) {}
@@ -173,7 +175,7 @@ struct KeyServerData {
       break;
 
     default:
-      ceph_abort();
+      assert(0);
     }
   }
 
@@ -200,7 +202,7 @@ public:
   KeyServer(CephContext *cct_, KeyRing *extra_secrets);
   bool generate_secret(CryptoKey& secret);
 
-  bool get_secret(const EntityName& name, CryptoKey& secret) const override;
+  bool get_secret(const EntityName& name, CryptoKey& secret) const;
   bool get_auth(const EntityName& name, EntityAuth& auth) const;
   bool get_caps(const EntityName& name, const string& type, AuthCapsInfo& caps) const;
   bool get_active_rotating_secret(const EntityName& name, CryptoKey& secret) const;
@@ -217,7 +219,7 @@ public:
   bool get_service_secret(uint32_t service_id, CryptoKey& service_key, 
 			  uint64_t& secret_id) const;
   bool get_service_secret(uint32_t service_id, uint64_t secret_id,
-			  CryptoKey& secret) const override;
+			  CryptoKey& secret) const;
 
   bool generate_secret(EntityName& name, CryptoKey& secret);
 
@@ -241,12 +243,10 @@ public:
   }
 
   void clear_secrets() {
-    Mutex::Locker l(lock);
     data.clear_secrets();
   }
 
   void apply_data_incremental(KeyServerData::Incremental& inc) {
-    Mutex::Locker l(lock);
     data.apply_incremental(inc);
   }
   void set_ver(version_t ver) {
@@ -269,16 +269,19 @@ public:
     return (b != data.secrets_end());
   }
   int get_num_secrets() {
-    Mutex::Locker l(lock);
     return data.secrets.size();
   }
 
+  /*void add_rotating_secret(uint32_t service_id, ExpiringCryptoKey& key) {
+    Mutex::Locker l(lock);
+    data.add_rotating_secret(service_id, key);
+  }
+  */
   void clone_to(KeyServerData& dst) const {
     Mutex::Locker l(lock);
     dst = data;
   }
   void export_keyring(KeyRing& keyring) {
-    Mutex::Locker l(lock);
     for (map<EntityName, EntityAuth>::iterator p = data.secrets.begin();
 	 p != data.secrets.end();
 	 ++p) {

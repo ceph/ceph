@@ -23,7 +23,7 @@
 class Item : public LRUObject {
 public:
   int id;
-  explicit Item(int v) : id(v) {}
+  Item(int v) : id(v) {}
 };
 
 

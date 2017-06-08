@@ -38,8 +38,8 @@ public:
 		int notify_retcode,
 		const std::string &pool_name,
 		const std::string &obj_name);
-  ~StRadosNotify() override;
-  int run() override;
+  ~StRadosNotify();
+  virtual int run();
 private:
   CrossProcessSem *m_setup_sem;
   CrossProcessSem *m_notify_sem;

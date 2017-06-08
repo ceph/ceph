@@ -107,7 +107,7 @@ which are as follows:
 :command:`region get`
   Show region info.
 
-:command:`region list`
+:command:`regions list`
   List all regions set on this cluster.
 
 :command:`region set`
@@ -158,6 +158,10 @@ which are as follows:
 
 :command:`usage trim`
   Trim usage information (with optional user and date range).
+
+:command:`temp remove`
+  Remove temporary objects that were created up to specified date
+  (and optional time).
 
 :command:`gc list`
   Dump expired garbage collection objects (specify --include-all to list all
@@ -214,12 +218,6 @@ which are as follows:
 :command:`replicalog delete`
   Delete replica metadata log entry.
 
-:command:`orphans find`
-  Init and run search for leaked rados objects
-
-:command:`orphans finish`
-  Clean up search for leaked rados objects
-
 
 Options
 =======
@@ -268,7 +266,7 @@ Options
 
 .. option:: --key-type=<type>
 
-	key type, options are: swift, s3.
+	key type, options are: swift, S3.
 
 .. option:: --temp-url-key[-2]=<key>
 
@@ -403,32 +401,6 @@ Quota Options
 	Scope of quota (bucket, user).
 
 
-Orphans Search Options
-======================
-
-.. option:: --pool
-
-	Data pool to scan for leaked rados objects
-
-.. option:: --num-shards
-
-	Number of shards to use for keeping the temporary scan info
-
-.. option:: --orphan-stale-secs
-
-        Number of seconds to wait before declaring an object to be an orphan.
-        Default is 86400 (24 hours).
-
-.. option:: --job-id
-
-        Set the job id (for orphans find)
-
-.. option:: --max-concurrent-ios
-
-        Maximum concurrent ios for orphans find.
-        Default is 32.
-
-
 Examples
 ========
 
@@ -457,15 +429,7 @@ Remove a user and all associated buckets with their contents::
 
 Remove a bucket::
 
-	$ radosgw-admin bucket rm --bucket=foo
-
-Link bucket to specified user::
-	
-	$ radosgw-admin bucket link --bucket=foo --bucket_id=<bucket id> --uid=johnny
-
-Unlink bucket from specified user::
-
-        $ radosgw-admin bucket unlink --bucket=foo --uid=johnny
+        $ radosgw-admin bucket unlink --bucket=foo
 
 Show the logs of a bucket from April 1st, 2012::
 

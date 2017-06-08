@@ -48,7 +48,8 @@ IFS='
  	'
 
 function cleanup () {
-    rm -rf $TMPDIR
+    rm -f $TMPFILE
+    rm -f $TOARCHIVE
     IFS="$OLD_IFS"
 }
 
@@ -104,7 +105,7 @@ readonly PROGRAM=`basename "$0"`
 readonly VERSION=0.2
 
 OLD_PWD="`pwd`"
-TMPDIR=`mktemp -d "${TMPDIR:-/tmp}/$PROGRAM.XXXXXX"`
+TMPDIR=${TMPDIR:-/tmp}
 TMPFILE=`mktemp "$TMPDIR/$PROGRAM.XXXXXX"` # Create a place to store our work's progress
 TOARCHIVE=`mktemp "$TMPDIR/$PROGRAM.toarchive.XXXXXX"`
 OUT_FILE=$OLD_PWD # assume "this directory" without a name change by default

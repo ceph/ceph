@@ -31,7 +31,6 @@ using namespace std;
 #include "buffer.h"
 #include "encoding.h"
 #include "include/types.h"
-#include "include/fs_types.h"
 
 #include "common/Formatter.h"
 
@@ -130,7 +129,6 @@ class filepath {
 
   const string& last_dentry() const {
     if (bits.empty() && path.length() > 0) parse_bits();
-    assert(!bits.empty());
     return bits[ bits.size()-1 ];
   }
 

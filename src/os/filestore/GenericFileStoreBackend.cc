@@ -39,7 +39,6 @@
 #include "common/errno.h"
 #include "common/config.h"
 #include "common/sync_filesystem.h"
-#include "common/blkdev.h"
 
 #include "common/SloppyCRCMap.h"
 #include "os/filestore/chain_xattr.h"
@@ -47,7 +46,6 @@
 #define SLOPPY_CRC_XATTR "user.cephos.scrc"
 
 
-#define dout_context cct()
 #define dout_subsys ceph_subsys_filestore
 #undef dout_prefix
 #define dout_prefix *_dout << "genericfilestorebackend(" << get_basedir_path() << ") "
@@ -60,34 +58,10 @@ GenericFileStoreBackend::GenericFileStoreBackend(FileStore *fs):
   FileStoreBackend(fs),
   ioctl_fiemap(false),
   seek_data_hole(false),
-  use_splice(false),
-  m_filestore_fiemap(cct()->_conf->filestore_fiemap),
-  m_filestore_seek_data_hole(cct()->_conf->filestore_seek_data_hole),
-  m_filestore_fsync_flushes_journal_data(cct()->_conf->filestore_fsync_flushes_journal_data),
-  m_filestore_splice(cct()->_conf->filestore_splice)
-{
-  // rotational?
-  {
-    // NOTE: the below won't work on btrfs; we'll assume rotational.
-    string fn = get_basedir_path();
-    int fd = ::open(fn.c_str(), O_RDONLY);
-    if (fd < 0) {
-      return;
-    }
-    char partition[PATH_MAX], devname[PATH_MAX];
-    int r = get_device_by_fd(fd, partition, devname, sizeof(devname));
-    if (r < 0) {
-      dout(1) << "unable to get device name for " << get_basedir_path() << ": "
-	      << cpp_strerror(r) << dendl;
-      m_rotational = true;
-    } else {
-      m_rotational = block_device_is_rotational(devname);
-      dout(20) << __func__ << " devname " << devname
-	       << " rotational " << (int)m_rotational << dendl;
-    }
-    ::close(fd);
-  }
-}
+  m_filestore_fiemap(g_conf->filestore_fiemap),
+  m_filestore_seek_data_hole(g_conf->filestore_seek_data_hole),
+  m_filestore_fsync_flushes_journal_data(g_conf->filestore_fsync_flushes_journal_data),
+  m_filestore_splice(false) {}
 
 int GenericFileStoreBackend::detect_features()
 {
@@ -191,9 +165,6 @@ int GenericFileStoreBackend::detect_features()
   //splice detection
 #ifdef CEPH_HAVE_SPLICE
   if (!m_filestore_splice) {
-    dout(0) << __func__ << ": splice() is disabled via 'filestore splice' config option" << dendl;
-    use_splice = false;
-  } else {
     int pipefd[2];
     loff_t off_in = 0;
     int r;
@@ -203,7 +174,7 @@ int GenericFileStoreBackend::detect_features()
       lseek(fd, 0, SEEK_SET);
       r = splice(fd, &off_in, pipefd[1], NULL, 10, 0);
       if (!(r < 0 && errno == EINVAL)) {
-	use_splice = true;
+	m_filestore_splice = true;
 	dout(0) << "detect_features: splice is supported" << dendl;
       } else
 	dout(0) << "detect_features: splice is NOT supported" << dendl;
@@ -373,7 +344,7 @@ int GenericFileStoreBackend::_crc_load_or_init(int fd, SloppyCRCMap *cm)
     }
   }
   bufferlist bl;
-  bl.append(std::move(bp));
+  bl.append(bp);
   bufferlist::iterator p = bl.begin();
   try {
     ::decode(*cm, p);

@@ -17,6 +17,8 @@
 
 #include <map>
 #include <list>
+#include <memory>
+#include <utility>
 #include "common/Mutex.h"
 #include "common/Cond.h"
 #include "include/unordered_map.h"

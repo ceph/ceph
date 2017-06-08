@@ -11,7 +11,6 @@
 #include "include/memory.h"
 #include <boost/scoped_ptr.hpp>
 #include "include/encoding.h"
-#include "common/Formatter.h"
 
 using std::string;
 /**
@@ -56,13 +55,7 @@ public:
       const std::string &k,	      ///< [in] Key to set
       const bufferlist &bl    ///< [in] Value to set
       ) = 0;
-    virtual void set(
-      const std::string &prefix,
-      const char *k,
-      size_t keylen,
-      const bufferlist& bl) {
-      set(prefix, string(k, keylen), bl);
-    }
+
 
     /// Removes Keys (via encoded bufferlist)
     void rmkeys(
@@ -94,41 +87,11 @@ public:
       const std::string &prefix,   ///< [in] Prefix to search for
       const std::string &k	      ///< [in] Key to remove
       ) = 0;
-    virtual void rmkey(
-      const std::string &prefix,   ///< [in] Prefix to search for
-      const char *k,	      ///< [in] Key to remove
-      size_t keylen
-      ) {
-      rmkey(prefix, string(k, keylen));
-    }
-
-    /// Remove Single Key which exists and was not overwritten.
-    /// This API is only related to performance optimization, and should only be 
-    /// re-implemented by log-insert-merge tree based keyvalue stores(such as RocksDB). 
-    /// If a key is overwritten (by calling set multiple times), then the result
-    /// of calling rm_single_key on this key is undefined.
-    virtual void rm_single_key(
-      const std::string &prefix,   ///< [in] Prefix to search for
-      const std::string &k	      ///< [in] Key to remove
-      ) { return rmkey(prefix, k);}
 
     /// Removes keys beginning with prefix
     virtual void rmkeys_by_prefix(
       const std::string &prefix ///< [in] Prefix by which to remove keys
       ) = 0;
-
-    virtual void rm_range_keys(
-      const string &prefix,    ///< [in] Prefix by which to remove keys
-      const string &start,     ///< [in] The start bound of remove keys
-      const string &end        ///< [in] The start bound of remove keys
-      ) = 0;
-
-    /// Merge value into key
-    virtual void merge(
-      const std::string &prefix,   ///< [in] Prefix ==> MUST match some established merge operator
-      const std::string &key,      ///< [in] Key to be merged
-      const bufferlist  &value     ///< [in] value to be merged into key
-    ) { assert(0 == "Not implemented"); }
 
     virtual ~TransactionImpl() {}
   };
@@ -144,7 +107,6 @@ public:
   virtual int init(string option_str="") = 0;
   virtual int open(std::ostream &out) = 0;
   virtual int create_and_open(std::ostream &out) = 0;
-  virtual void close() { }
 
   virtual Transaction get_transaction() = 0;
   virtual int submit_transaction(Transaction) = 0;
@@ -172,11 +134,6 @@ public:
       r = -ENOENT;
     }
     return r;
-  }
-  virtual int get(const string &prefix,
-		  const char *key, size_t keylen,
-		  bufferlist *value) {
-    return get(prefix, string(key, keylen), value);
   }
 
   class GenericIteratorImpl {
@@ -216,12 +173,6 @@ public:
       }
     }
     virtual int status() = 0;
-    virtual size_t key_size() {
-      return 0;
-    }
-    virtual size_t value_size() {
-      return 0;
-    }
     virtual ~WholeSpaceIteratorImpl() { }
   };
   typedef ceph::shared_ptr< WholeSpaceIteratorImpl > WholeSpaceIterator;
@@ -232,28 +183,28 @@ public:
   public:
     IteratorImpl(const std::string &prefix, WholeSpaceIterator iter) :
       prefix(prefix), generic_iter(iter) { }
-    ~IteratorImpl() override { }
+    virtual ~IteratorImpl() { }
 
-    int seek_to_first() override {
+    int seek_to_first() {
       return generic_iter->seek_to_first(prefix);
     }
     int seek_to_last() {
       return generic_iter->seek_to_last(prefix);
     }
-    int upper_bound(const std::string &after) override {
+    int upper_bound(const std::string &after) {
       return generic_iter->upper_bound(prefix, after);
     }
-    int lower_bound(const std::string &to) override {
+    int lower_bound(const std::string &to) {
       return generic_iter->lower_bound(prefix, to);
     }
-    bool valid() override {
+    bool valid() {
       if (!generic_iter->valid())
 	return false;
       return generic_iter->raw_key_is_prefixed(prefix);
     }
     // Note that next() and prev() shouldn't validate iters,
     // it's responsibility of caller to ensure they're valid.
-    int next(bool validate=true) override {
+    int next(bool validate=true) {
       if (validate) {
         if (valid())
           return generic_iter->next();
@@ -272,19 +223,19 @@ public:
         return generic_iter->prev();  
       }      
     }
-    std::string key() override {
+    std::string key() {
       return generic_iter->key();
     }
     std::pair<std::string, std::string> raw_key() {
       return generic_iter->raw_key();
     }
-    bufferlist value() override {
+    bufferlist value() {
       return generic_iter->value();
     }
     bufferptr value_as_ptr() {
       return generic_iter->value_as_ptr();
     }
-    int status() override {
+    int status() {
       return generic_iter->status();
     }
   };
@@ -296,11 +247,23 @@ public:
   }
 
   Iterator get_iterator(const std::string &prefix) {
-    return std::make_shared<IteratorImpl>(prefix, get_iterator());
+    return ceph::shared_ptr<IteratorImpl>(
+      new IteratorImpl(prefix, get_iterator())
+    );
+  }
+
+  WholeSpaceIterator get_snapshot_iterator() {
+    return _get_snapshot_iterator();
+  }
+
+  Iterator get_snapshot_iterator(const std::string &prefix) {
+    return ceph::shared_ptr<IteratorImpl>(
+      new IteratorImpl(prefix, get_snapshot_iterator())
+    );
   }
 
   virtual uint64_t get_estimated_size(std::map<std::string,uint64_t> &extra) = 0;
-  virtual int get_statfs(struct store_statfs_t *buf) {
+  virtual int get_statfs(struct statfs *buf) {
     return -EOPNOTSUPP;
   }
 
@@ -318,40 +281,9 @@ public:
   virtual void compact_range_async(const std::string& prefix,
 				   const std::string& start, const std::string& end) {}
 
-  // See RocksDB merge operator definition, we support the basic
-  // associative merge only right now.
-  class MergeOperator {
-    public:
-    /// Merge into a key that doesn't exist
-    virtual void merge_nonexistent(
-      const char *rdata, size_t rlen,
-      std::string *new_value) = 0;
-    /// Merge into a key that does exist
-    virtual void merge(
-      const char *ldata, size_t llen,
-      const char *rdata, size_t rlen,
-      std::string *new_value) = 0;
-    /// We use each operator name and each prefix to construct the overall RocksDB operator name for consistency check at open time.
-    virtual string name() const = 0;
-
-    virtual ~MergeOperator() {}
-  };
-
-  /// Setup one or more operators, this needs to be done BEFORE the DB is opened.
-  virtual int set_merge_operator(const std::string& prefix,
-				 std::shared_ptr<MergeOperator> mop) {
-    return -EOPNOTSUPP;
-  }
-
-  virtual void get_statistics(Formatter *f) {
-    return;
-  }
 protected:
-  /// List of matching prefixes and merge operators
-  std::vector<std::pair<std::string,
-			std::shared_ptr<MergeOperator> > > merge_ops;
-
   virtual WholeSpaceIterator _get_iterator() = 0;
+  virtual WholeSpaceIterator _get_snapshot_iterator() = 0;
 };
 
 #endif

@@ -8,7 +8,7 @@
 
 ### Functions
 usage() {
-        cat <<EOF
+        echo <<EOF
 multi-dump.sh: dumps out ceph maps
 
 -D                         Enable diff-mode

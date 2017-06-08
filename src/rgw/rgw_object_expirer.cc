@@ -41,7 +41,7 @@ class StoreDestructor {
   RGWRados *store;
 
 public:
-  explicit StoreDestructor(RGWRados *_s) : store(_s) {}
+  StoreDestructor(RGWRados *_s) : store(_s) {}
   ~StoreDestructor() {
     if (store) {
       RGWStoreManager::close_storage(store);
@@ -60,9 +60,8 @@ int main(const int argc, const char **argv)
   argv_to_vec(argc, argv, args);
   env_to_vec(args);
 
-  auto cct = global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT,
-			 CODE_ENVIRONMENT_DAEMON,
-			 CINIT_FLAG_UNPRIVILEGED_DAEMON_DEFAULTS, "rgw_data");
+  global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_DAEMON,
+	      CINIT_FLAG_UNPRIVILEGED_DAEMON_DEFAULTS);
 
   for (std::vector<const char *>::iterator i = args.begin(); i != args.end(); ) {
     if (ceph_argparse_double_dash(args, i)) {
@@ -79,7 +78,7 @@ int main(const int argc, const char **argv)
 
   common_init_finish(g_ceph_context);
 
-  store = RGWStoreManager::get_storage(g_ceph_context, false, false, false, false, false);
+  store = RGWStoreManager::get_storage(g_ceph_context, false, false);
   if (!store) {
     std::cerr << "couldn't init storage provider" << std::endl;
     return EIO;

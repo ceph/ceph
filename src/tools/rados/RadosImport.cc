@@ -18,7 +18,6 @@
 #include "osd/PGLog.h"
 #include "RadosImport.h"
 
-#define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rados
 
 int RadosImport::import(std::string pool, bool no_overwrite)
@@ -43,11 +42,7 @@ int RadosImport::import(std::string pool, bool no_overwrite)
     cerr << "Error " << ret << " in cluster.conf_read_env" << std::endl;
     return ret;
   }
-  ret = cluster.connect();
-  if (ret) {
-    cerr << "Error " << ret << " in cluster.connect" << std::endl;
-    return ret;
-  }
+  cluster.connect();
 
   ret = cluster.ioctx_create(pool.c_str(), ioctx);
   if (ret < 0) {
@@ -248,22 +243,8 @@ int RadosImport::get_object_rados(librados::IoCtx &ioctx, bufferlist &bl, bool n
     need_align = true;
     alignment = align;
   } else {
-    int ret = ioctx.pool_requires_alignment2(&need_align);
-    if (ret < 0) {
-      cerr << "pool_requires_alignment2 failed: " << cpp_strerror(ret)
-        << std::endl;
-      return ret;
-    }
-
-    if (need_align) {
-      ret = ioctx.pool_required_alignment2(&alignment);
-      if (ret < 0) {
-        cerr << "pool_required_alignment2 failed: " << cpp_strerror(ret)
-	  << std::endl;
-	return ret;
-      }
-      assert(alignment != 0);
-    }
+    if ((need_align = ioctx.pool_requires_alignment()))
+      alignment = ioctx.pool_required_alignment();
   }
 
   if (need_align) {

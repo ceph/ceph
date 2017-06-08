@@ -15,7 +15,10 @@
 #ifndef CEPH_ROTATINGKEYRING_H
 #define CEPH_ROTATINGKEYRING_H
 
+#include "common/config.h"
 #include "common/Mutex.h"
+
+#include "auth/Crypto.h"
 #include "auth/Auth.h"
 
 /*
@@ -23,7 +26,6 @@
  */
 
 class KeyRing;
-class CephContext;
 
 class RotatingKeyRing : public KeyStore {
   CephContext *cct;
@@ -43,9 +45,9 @@ public:
   bool need_new_secrets(utime_t now) const;
   void set_secrets(RotatingSecrets& s);
   void dump_rotating() const;
-  bool get_secret(const EntityName& name, CryptoKey& secret) const override;
+  bool get_secret(const EntityName& name, CryptoKey& secret) const;
   bool get_service_secret(uint32_t service_id, uint64_t secret_id,
-			  CryptoKey& secret) const override;
+			  CryptoKey& secret) const;
   KeyRing *get_keyring();
 };
 

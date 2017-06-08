@@ -33,7 +33,7 @@ public:
   boost::scoped_ptr<KeyValueDB> db;
   boost::scoped_ptr<KeyValueDBMemory> mock;
 
-  void SetUp() override {
+  virtual void SetUp() {
     assert(!store_path.empty());
 
     KeyValueDB *db_ptr = KeyValueDB::create(g_ceph_context, "leveldb", store_path);
@@ -42,7 +42,7 @@ public:
     mock.reset(new KeyValueDBMemory());
   }
 
-  void TearDown() override { }
+  virtual void TearDown() { }
 
   ::testing::AssertionResult validate_db_clear(KeyValueDB *store) {
     KeyValueDB::WholeSpaceIterator it = store->get_iterator();
@@ -198,7 +198,7 @@ public:
   }
 
   void clear(KeyValueDB *store) {
-    KeyValueDB::WholeSpaceIterator it = store->get_iterator();
+    KeyValueDB::WholeSpaceIterator it = store->get_snapshot_iterator();
     it->seek_to_first();
     KeyValueDB::Transaction t = store->get_transaction();
     while (it->valid()) {
@@ -274,7 +274,7 @@ public:
     db->submit_transaction_sync(tx);
   }
 
-  void SetUp() override {
+  virtual void SetUp() {
     IteratorTest::SetUp();
 
     prefix1 = "_PREFIX_1_";
@@ -292,7 +292,7 @@ public:
     ASSERT_TRUE(validate_db_match());
   }
 
-  void TearDown() override {
+  virtual void TearDown() {
     IteratorTest::TearDown();
   }
 
@@ -523,6 +523,20 @@ TEST_F(RmKeysTest, RmKeysWhileIteratingMockDB)
 	    << "over the mock store without using snapshots" << std::endl;
 }
 
+TEST_F(RmKeysTest, RmKeysWhileIteratingSnapshotLevelDB)
+{
+  SCOPED_TRACE("LevelDB -- WholeSpaceSnapshotIterator");
+  RmKeysWhileIteratingSnapshot(db.get(), db->get_snapshot_iterator());
+  ASSERT_FALSE(HasFatalFailure());
+}
+
+TEST_F(RmKeysTest, RmKeysWhileIteratingSnapshotMockDB)
+{
+  SCOPED_TRACE("Mock DB -- WholeSpaceSnapshotIterator");
+  RmKeysWhileIteratingSnapshot(mock.get(), mock->get_snapshot_iterator());
+  ASSERT_FALSE(HasFatalFailure());
+}
+
 // ------- Set Keys / Update Values -------
 class SetKeysTest : public IteratorTest
 {
@@ -543,7 +557,7 @@ public:
     db->submit_transaction_sync(tx);
   }
 
-  void SetUp() override {
+  virtual void SetUp() {
     IteratorTest::SetUp();
 
     prefix1 = "_PREFIX_1_";
@@ -560,7 +574,7 @@ public:
     ASSERT_TRUE(validate_db_match());
   }
 
-  void TearDown() override {
+  virtual void TearDown() {
     IteratorTest::TearDown();
   }
 
@@ -749,6 +763,20 @@ TEST_F(SetKeysTest, SetKeysWhileIteratingMockDB)
   ASSERT_FALSE(HasFatalFailure());
 }
 
+TEST_F(SetKeysTest, SetKeysWhileIteratingSnapshotLevelDB)
+{
+  SCOPED_TRACE("LevelDB: SetKeysWhileIteratingSnapshotLevelDB");
+  SetKeysWhileIteratingSnapshot(db.get(), db->get_snapshot_iterator());
+  ASSERT_FALSE(HasFatalFailure());
+}
+
+TEST_F(SetKeysTest, SetKeysWhileIteratingSnapshotMockDB)
+{
+  SCOPED_TRACE("MockDB: SetKeysWhileIteratingSnapshotMockDB");
+  SetKeysWhileIteratingSnapshot(mock.get(), mock->get_snapshot_iterator());
+  ASSERT_FALSE(HasFatalFailure());
+}
+
 TEST_F(SetKeysTest, DISABLED_UpdateValuesWhileIteratingLevelDB)
 {
   SCOPED_TRACE("LevelDB: UpdateValuesWhileIteratingLevelDB");
@@ -762,6 +790,21 @@ TEST_F(SetKeysTest, UpdateValuesWhileIteratingMockDB)
   UpdateValuesWhileIterating(mock.get(), mock->get_iterator());
   ASSERT_FALSE(HasFatalFailure());
 }
+
+TEST_F(SetKeysTest, UpdateValuesWhileIteratingSnapshotLevelDB)
+{
+  SCOPED_TRACE("LevelDB: UpdateValuesWhileIteratingSnapshotLevelDB");
+  UpdateValuesWhileIteratingSnapshot(db.get(), db->get_snapshot_iterator());
+  ASSERT_FALSE(HasFatalFailure());
+}
+
+TEST_F(SetKeysTest, UpdateValuesWhileIteratingSnapshotMockDB)
+{
+  SCOPED_TRACE("MockDB: UpdateValuesWhileIteratingSnapshotMockDB");
+  UpdateValuesWhileIteratingSnapshot(mock.get(), mock->get_snapshot_iterator());
+  ASSERT_FALSE(HasFatalFailure());
+}
+
 
 class BoundsTest : public IteratorTest
 {
@@ -786,7 +829,7 @@ public:
     store->submit_transaction_sync(tx);
   }
 
-  void SetUp() override {
+  virtual void SetUp() {
     IteratorTest::SetUp();
 
     prefix1 = "_PREFIX_1_";
@@ -804,7 +847,7 @@ public:
     ASSERT_TRUE(validate_db_match());
   }
 
-  void TearDown() override {
+  virtual void TearDown() {
     IteratorTest::TearDown();
   }
 
@@ -1257,7 +1300,7 @@ public:
     store->submit_transaction_sync(tx);
   }
 
-  void SetUp() override {
+  virtual void SetUp() {
     IteratorTest::SetUp();
 
     prefix0 = "_PREFIX_0_";
@@ -1278,7 +1321,7 @@ public:
     ASSERT_TRUE(validate_db_match());
   }
 
-  void TearDown() override {
+  virtual void TearDown() {
     IteratorTest::TearDown();
   }
 
@@ -1519,7 +1562,7 @@ public:
     store->submit_transaction_sync(tx);
   }
 
-  void SetUp() override {
+  virtual void SetUp() {
     IteratorTest::SetUp();
 
     prefix1 = "_PREFIX_1_";
@@ -1535,7 +1578,7 @@ public:
     ASSERT_TRUE(validate_db_match());
   }
 
-  void TearDown() override {
+  virtual void TearDown() {
     IteratorTest::TearDown();
   }
 
@@ -1591,7 +1634,7 @@ TEST_F(KeySpaceIteration, BackwardIterationMockDB) {
 class EmptyStore : public IteratorTest
 {
 public:
-  void SetUp() override {
+  virtual void SetUp() {
     IteratorTest::SetUp();
 
     clear(db.get());
@@ -1743,7 +1786,7 @@ int main(int argc, char *argv[])
   vector<const char*> args;
   argv_to_vec(argc, (const char **) argv, args);
 
-  auto cct = global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
+  global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
   common_init_finish(g_ceph_context);
   ::testing::InitGoogleTest(&argc, argv);
 

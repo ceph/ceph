@@ -13,6 +13,7 @@
 #ifndef CEPH_HISTOGRAM_H
 #define CEPH_HISTOGRAM_H
 
+#include <vector>
 #include <list>
 
 #include "include/encoding.h"
@@ -51,9 +52,6 @@ public:
   void clear() {
     h.clear();
   }
-  bool empty() const {
-    return h.empty();
-  }
   void set_bin(int bin, int32_t count) {
     _expand_to(bin + 1);
     h[bin] = count;
@@ -61,10 +59,19 @@ public:
   }
 
   void add(int32_t v) {
-    int bin = cbits(v);
+    int bin = calc_bits_of(v);
     _expand_to(bin + 1);
     h[bin]++;
     _contract();
+  }
+
+  static int calc_bits_of(int t) {
+    int b = 0;
+    while (t > 0) {
+      t = t >> 1;
+      b++;
+    }
+    return b;
   }
 
   bool operator==(const pow2_hist_t &r) const {
@@ -82,7 +89,7 @@ public:
   int get_position_micro(int32_t v, uint64_t *lower, uint64_t *upper) {
     if (v < 0)
       return -1;
-    unsigned bin = cbits(v);
+    unsigned bin = calc_bits_of(v);
     uint64_t lower_sum = 0, upper_sum = 0, total = 0;
     for (unsigned i=0; i<h.size(); ++i) {
       if (i <= bin)

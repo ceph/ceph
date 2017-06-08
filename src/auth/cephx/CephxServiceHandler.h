@@ -15,8 +15,8 @@
 #ifndef CEPH_CEPHXSERVICEHANDLER_H
 #define CEPH_CEPHXSERVICEHANDLER_H
 
-#include "auth/AuthServiceHandler.h"
-#include "auth/Auth.h"
+#include "../AuthServiceHandler.h"
+#include "../Auth.h"
 
 class KeyServer;
 
@@ -27,10 +27,10 @@ class CephxServiceHandler  : public AuthServiceHandler {
 public:
   CephxServiceHandler(CephContext *cct_, KeyServer *ks) 
     : AuthServiceHandler(cct_), key_server(ks), server_challenge(0) {}
-  ~CephxServiceHandler() override {}
+  ~CephxServiceHandler() {}
   
-  int start_session(EntityName& name, bufferlist::iterator& indata, bufferlist& result_bl, AuthCapsInfo& caps) override;
-  int handle_request(bufferlist::iterator& indata, bufferlist& result_bl, uint64_t& global_id, AuthCapsInfo& caps, uint64_t *auid = NULL) override;
+  int start_session(EntityName& name, bufferlist::iterator& indata, bufferlist& result_bl, AuthCapsInfo& caps);
+  int handle_request(bufferlist::iterator& indata, bufferlist& result_bl, uint64_t& global_id, AuthCapsInfo& caps, uint64_t *auid = NULL);
   void build_cephx_response_header(int request_type, int status, bufferlist& bl);
 };
 

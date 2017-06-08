@@ -26,7 +26,6 @@ using std::set;
 #include "include/interval_set.h"
 #include "mdstypes.h"
 #include "mds/MDSAuthCaps.h"
-#include "common/perf_counters.h"
 
 class CInode;
 struct MDRequestImpl;
@@ -35,13 +34,6 @@ struct MDRequestImpl;
 #include "Capability.h"
 #include "msg/Message.h"
 
-enum {
-  l_mdssm_first = 5500,
-  l_mdssm_session_count,
-  l_mdssm_session_add,
-  l_mdssm_session_remove,
-  l_mdssm_last,
-};
 
 /* 
  * session
@@ -94,7 +86,7 @@ private:
   void _update_human_name();
   std::string human_name;
 
-  // Versions in this session was projected: used to verify
+  // Versions in this this session was projected: used to verify
   // that appropriate mark_dirty calls follow.
   std::deque<version_t> projected;
 
@@ -104,7 +96,9 @@ public:
 
   void push_pv(version_t pv)
   {
-    assert(projected.empty() || projected.back() != pv);
+    if (!projected.empty()) {
+      assert(projected.back() != pv);
+    }
     projected.push_back(pv);
   }
 
@@ -115,7 +109,7 @@ public:
     projected.pop_front();
   }
 
-  int get_state() const { return state; }
+  inline int get_state() const {return state;}
   void set_state(int new_state)
   {
     if (state != new_state) {
@@ -129,7 +123,6 @@ public:
 
   // Ephemeral state for tracking progress of capability recalls
   utime_t recalled_at;  // When was I asked to SESSION_RECALL?
-  utime_t last_recall_sent;
   uint32_t recall_count;  // How many caps was I asked to SESSION_RECALL?
   uint32_t recall_release_count;  // How many caps have I actually revoked?
 
@@ -149,9 +142,8 @@ public:
 
   void notify_cap_release(size_t n_caps);
   void notify_recall_sent(int const new_limit);
-  void clear_recalled_at();
 
-  inodeno_t next_ino() const {
+  inodeno_t next_ino() {
     if (info.prealloc_inos.empty())
       return 0;
     return info.prealloc_inos.range_start();
@@ -172,16 +164,17 @@ public:
     info.used_inos.insert(ino, 1);
     return ino;
   }
-  int get_num_projected_prealloc_inos() const {
+  int get_num_projected_prealloc_inos() {
     return info.prealloc_inos.size() + pending_prealloc_inos.size();
   }
 
-  client_t get_client() const {
+  client_t get_client() {
     return info.get_client();
   }
 
+  int get_state() { return state; }
   const char *get_state_name() const { return get_state_name(state); }
-  uint64_t get_state_seq() const { return state_seq; }
+  uint64_t get_state_seq() { return state_seq; }
   bool is_closed() const { return state == STATE_CLOSED; }
   bool is_opening() const { return state == STATE_OPENING; }
   bool is_open() const { return state == STATE_OPEN; }
@@ -193,10 +186,10 @@ public:
     ++importing_count;
   }
   void dec_importing() {
-    assert(importing_count > 0);
+    assert(importing_count);
     --importing_count;
   }
-  bool is_importing() const { return importing_count > 0; }
+  bool is_importing() { return importing_count > 0; }
 
   // -- caps --
 private:
@@ -291,16 +284,12 @@ public:
   }
 
   unsigned get_num_completed_flushes() const { return info.completed_flushes.size(); }
-  unsigned get_num_trim_flushes_warnings() const {
-    return num_trim_flushes_warnings;
-  }
+  unsigned get_num_trim_flushes_warnings() { return num_trim_flushes_warnings; }
   void inc_num_trim_flushes_warnings() { ++num_trim_flushes_warnings; }
   void reset_num_trim_flushes_warnings() { num_trim_flushes_warnings = 0; }
 
   unsigned get_num_completed_requests() const { return info.completed_requests.size(); }
-  unsigned get_num_trim_requests_warnings() const {
-    return num_trim_requests_warnings;
-  }
+  unsigned get_num_trim_requests_warnings() { return num_trim_requests_warnings; }
   void inc_num_trim_requests_warnings() { ++num_trim_requests_warnings; }
   void reset_num_trim_requests_warnings() { num_trim_requests_warnings = 0; }
 
@@ -314,13 +303,13 @@ public:
     completed_requests_dirty = false;
   }
 
-  int check_access(CInode *in, unsigned mask, int caller_uid, int caller_gid,
-		   const vector<uint64_t> *gid_list, int new_uid, int new_gid);
+  bool check_access(CInode *in, unsigned mask, int caller_uid, int caller_gid,
+		    int new_uid, int new_gid);
 
 
   Session() : 
     state(STATE_CLOSED), state_seq(0), importing_count(0),
-    recall_count(0), recall_release_count(0),
+    recalled_at(), recall_count(0), recall_release_count(0),
     auth_caps(g_ceph_context),
     connection(NULL), item_session_list(this),
     requests(0),  // member_offset passed to front() manually
@@ -329,7 +318,7 @@ public:
     completed_requests_dirty(false),
     num_trim_flushes_warnings(0),
     num_trim_requests_warnings(0) { }
-  ~Session() override {
+  ~Session() {
     assert(!item_session_list.is_on_list());
     while (!preopen_out_queue.empty()) {
       preopen_out_queue.front()->put();
@@ -387,9 +376,8 @@ class MDSRank;
 class SessionMapStore {
 protected:
   version_t version;
-  ceph::unordered_map<entity_name_t, Session*> session_map;
-  PerfCounters *logger;
 public:
+  ceph::unordered_map<entity_name_t, Session*> session_map;
   mds_rank_t rank;
 
   version_t get_version() const {return version;}
@@ -407,17 +395,12 @@ public:
 
   Session* get_or_add_session(const entity_inst_t& i) {
     Session *s;
-    auto session_map_entry = session_map.find(i.name);
-    if (session_map_entry != session_map.end()) {
-      s = session_map_entry->second;
+    if (session_map.count(i.name)) {
+      s = session_map[i.name];
     } else {
       s = session_map[i.name] = new Session;
       s->info.inst = i;
-      s->last_cap_renew = ceph_clock_now();
-      if (logger) {
-        logger->set(l_mdssm_session_count, session_map.size());
-        logger->inc(l_mdssm_session_add);
-      }
+      s->last_cap_renew = ceph_clock_now(g_ceph_context);
     }
 
     return s;
@@ -430,7 +413,7 @@ public:
     session_map.clear();
   }
 
-  SessionMapStore() : version(0), logger(nullptr), rank(MDS_RANK_NONE) {}
+  SessionMapStore() : version(0), rank(MDS_RANK_NONE) {}
   virtual ~SessionMapStore() {};
 };
 
@@ -445,24 +428,10 @@ public:
   uint64_t set_state(Session *session, int state);
   map<version_t, list<MDSInternalContextBase*> > commit_waiters;
 
-  explicit SessionMap(MDSRank *m) : mds(m),
+  SessionMap(MDSRank *m) : mds(m),
 		       projected(0), committing(0), committed(0),
                        loaded_legacy(false)
   { }
-
-  ~SessionMap() override
-  {
-    for (auto p : by_state)
-      delete p.second;
-
-    if (logger) {
-      g_ceph_context->get_perfcounters_collection()->remove(logger);
-    }
-
-    delete logger;
-  }
-
-  void register_perfcounters();
 
   void set_version(const version_t v)
   {
@@ -486,39 +455,40 @@ public:
 
   version_t get_committing() const
   {
-    return committing;
+    return committed;
   }
 
   // sessions
-  void decode_legacy(bufferlist::iterator& blp) override;
-  bool empty() const { return session_map.empty(); }
+  void decode_legacy(bufferlist::iterator& blp);
+  bool empty() { return session_map.empty(); }
   const ceph::unordered_map<entity_name_t, Session*> &get_sessions() const
   {
     return session_map;
   }
 
-  bool is_any_state(int state) const {
-    map<int,xlist<Session*>* >::const_iterator p = by_state.find(state);
+  bool is_any_state(int state) {
+    map<int,xlist<Session*>* >::iterator p = by_state.find(state);
     if (p == by_state.end() || p->second->empty())
       return false;
     return true;
   }
 
-  bool have_unclosed_sessions() const {
+  bool have_unclosed_sessions() {
     return
+      is_any_state(Session::STATE_OPENING) ||
       is_any_state(Session::STATE_OPENING) ||
       is_any_state(Session::STATE_OPEN) ||
       is_any_state(Session::STATE_CLOSING) ||
       is_any_state(Session::STATE_STALE) ||
       is_any_state(Session::STATE_KILLING);
   }
-  bool have_session(entity_name_t w) const {
+  bool have_session(entity_name_t w) {
     return session_map.count(w);
   }
   Session* get_session(entity_name_t w) {
-    auto session_map_entry = session_map.find(w);
-    return (session_map_entry != session_map.end() ?
-	    session_map_entry-> second : nullptr);
+    if (session_map.count(w))
+      return session_map[w];
+    return 0;
   }
   const Session* get_session(entity_name_t w) const {
     ceph::unordered_map<entity_name_t, Session*>::const_iterator p = session_map.find(w);
@@ -534,10 +504,9 @@ public:
   void touch_session(Session *session);
 
   Session *get_oldest_session(int state) {
-    auto by_state_entry = by_state.find(state);
-    if (by_state_entry == by_state.end() || by_state_entry->second->empty())
+    if (by_state.count(state) == 0 || by_state[state]->empty())
       return 0;
-    return by_state_entry->second->front();
+    return by_state[state]->front();
   }
 
   void dump();
@@ -563,8 +532,8 @@ public:
 	 ++p) {
       Session *s = get_or_add_session(p->second);
       set_state(s, Session::STATE_OPEN);
-      version++;
     }
+    version++;
   }
 
   // helpers
@@ -595,7 +564,7 @@ public:
   inodeno_t ino;
   list<MDSInternalContextBase*> waiting_for_load;
 
-  object_t get_object_name() const;
+  object_t get_object_name();
 
   void load(MDSInternalContextBase *onload);
   void _load_finish(
@@ -604,8 +573,7 @@ public:
       int values_r,
       bool first,
       bufferlist &header_bl,
-      std::map<std::string, bufferlist> &session_vals,
-      bool more_session_vals);
+      std::map<std::string, bufferlist> &session_vals);
 
   void load_legacy();
   void _load_legacy_finish(int r, bufferlist &bl);
@@ -665,8 +633,6 @@ public:
   void save_if_dirty(const std::set<entity_name_t> &tgt_sessions,
                      MDSGatherBuilder *gather_bld);
 };
-
-std::ostream& operator<<(std::ostream &out, const Session &s);
 
 
 #endif

@@ -3,11 +3,11 @@
 POOL_NAME=rbd_test_validate_pool
 PG_NUM=100
 
-tear_down () {
+function tear_down() {
   ceph osd pool delete $POOL_NAME $POOL_NAME --yes-i-really-really-mean-it || true
 }
 
-set_up () {
+function set_up() {
   tear_down
   ceph osd pool create $POOL_NAME $PG_NUM
   ceph osd pool mksnap $POOL_NAME snap

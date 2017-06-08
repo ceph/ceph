@@ -15,16 +15,21 @@
 
 #include <string>
 #include <errno.h>
+#include <sstream>
 
 #include "objclass/objclass.h"
 
 #include "cls_cephfs.h"
 
 CLS_VER(1,0)
-CLS_NAME(cephfs)
+CLS_NAME(cephfs_size_scan)
+
+cls_handle_t h_class;
+cls_method_handle_t h_accumulate_inode_metadata;
 
 
-std::ostream &operator<<(std::ostream &out, const ObjCeiling &in)
+
+std::ostream &operator<<(std::ostream &out, ObjCeiling &in)
 {
   out << "id: " << in.id << " size: " << in.size;
   return out;
@@ -126,7 +131,7 @@ class PGLSCephFSFilter : public PGLSFilter {
 protected:
   std::string scrub_tag;
 public:
-  int init(bufferlist::iterator& params) override {
+  int init(bufferlist::iterator& params) {
     try {
       InodeTagFilterArgs args;
       args.decode(params);
@@ -144,10 +149,10 @@ public:
     return 0;
   }
 
-  ~PGLSCephFSFilter() override {}
-  bool reject_empty_xattr() override { return false; }
-  bool filter(const hobject_t &obj, bufferlist& xattr_data,
-                      bufferlist& outdata) override;
+  virtual ~PGLSCephFSFilter() {}
+  virtual bool reject_empty_xattr() { return false; }
+  virtual bool filter(const hobject_t &obj, bufferlist& xattr_data,
+                      bufferlist& outdata);
 };
 
 bool PGLSCephFSFilter::filter(const hobject_t &obj,
@@ -190,14 +195,11 @@ PGLSFilter *inode_tag_filter()
  * We do two things here: we register the new class, and then register
  * all of the class's methods.
  */
-CLS_INIT(cephfs)
+void __cls_init()
 {
   // this log message, at level 0, will always appear in the ceph-osd
   // log file.
-  CLS_LOG(0, "loading cephfs");
-
-  cls_handle_t h_class;
-  cls_method_handle_t h_accumulate_inode_metadata;
+  CLS_LOG(0, "loading cephfs_size_scan");
 
   cls_register("cephfs", &h_class);
   cls_register_cxx_method(h_class, "accumulate_inode_metadata",

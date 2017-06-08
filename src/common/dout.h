@@ -39,14 +39,6 @@ inline std::ostream& operator<<(std::ostream& out, _bad_endl_use_dendl_t) {
   return out;
 }
 
-class DoutPrefixProvider {
-public:
-  virtual string gen_prefix() const = 0;
-  virtual CephContext *get_cct() const = 0;
-  virtual unsigned get_subsys() const = 0;
-  virtual ~DoutPrefixProvider() {}
-};
-
 // generic macros
 #define dout_prefix *_dout
 
@@ -57,7 +49,7 @@ public:
       char __array[((v >= -1) && (v <= 200)) ? 0 : -1] __attribute__((unused)); \
     }									\
     static size_t _log_exp_length=80; \
-    ceph::logging::Entry *_dout_e = cct->_log->create_entry(v, sub, &_log_exp_length);	\
+    ceph::log::Entry *_dout_e = cct->_log->create_entry(v, sub, &_log_exp_length);	\
     ostream _dout_os(&_dout_e->m_streambuf);				\
     CephContext *_dout_cct = cct;					\
     std::ostream* _dout = &_dout_os;
@@ -65,8 +57,6 @@ public:
 #define lsubdout(cct, sub, v)  dout_impl(cct, ceph_subsys_##sub, v) dout_prefix
 #define ldout(cct, v)  dout_impl(cct, dout_subsys, v) dout_prefix
 #define lderr(cct) dout_impl(cct, ceph_subsys_, -1) dout_prefix
-
-#define ldpp_dout(dpp, v) if (dpp) dout_impl(dpp->get_cct(), dpp->get_subsys(), v) (*_dout << dpp->gen_prefix())
 
 #define lgeneric_subdout(cct, sub, v) dout_impl(cct, ceph_subsys_##sub, v) *_dout
 #define lgeneric_dout(cct, v) dout_impl(cct, ceph_subsys_, v) *_dout
@@ -77,11 +67,9 @@ public:
 
 // NOTE: depend on magic value in _ASSERT_H so that we detect when
 // /usr/include/assert.h clobbers our fancier version.
-#define dendl_impl std::flush;				\
+#define dendl std::flush;				\
   _ASSERT_H->_log->submit_entry(_dout_e);		\
     }						\
   } while (0)
-
-#define dendl dendl_impl
 
 #endif

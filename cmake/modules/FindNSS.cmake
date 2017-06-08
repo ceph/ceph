@@ -32,7 +32,6 @@ else (NSS_LIBRARIES AND NSS_INCLUDE_DIRS)
       /usr/local/include
       /opt/local/include
       /sw/include
-      /usr/local/include/nss
     PATH_SUFFIXES
       nss3
       nss

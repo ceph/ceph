@@ -4,13 +4,15 @@
 #include <set>
 #include <boost/scoped_ptr.hpp>
 #include <sys/types.h>
-#include <cstdlib>
 
 #include "include/buffer.h"
 #include "common/map_cacher.hpp"
 #include "osd/SnapMapper.h"
+#include "global/global_init.h"
+#include "common/ceph_argparse.h"
 
 #include "gtest/gtest.h"
+#include "stdlib.h"
 
 using namespace std;
 
@@ -43,8 +45,8 @@ class PausyAsyncMap : public MapCacher::StoreDriver<string, bufferlist> {
   typedef ceph::shared_ptr<_Op> Op;
   struct Remove : public _Op {
     set<string> to_remove;
-    explicit Remove(const set<string> &to_remove) : to_remove(to_remove) {}
-    void operate(map<string, bufferlist> *store) override {
+    Remove(const set<string> &to_remove) : to_remove(to_remove) {}
+    void operate(map<string, bufferlist> *store) {
       for (set<string>::iterator i = to_remove.begin();
 	   i != to_remove.end();
 	   ++i) {
@@ -54,8 +56,8 @@ class PausyAsyncMap : public MapCacher::StoreDriver<string, bufferlist> {
   };
   struct Insert : public _Op {
     map<string, bufferlist> to_insert;
-    explicit Insert(const map<string, bufferlist> &to_insert) : to_insert(to_insert) {}
-    void operate(map<string, bufferlist> *store) override {
+    Insert(const map<string, bufferlist> &to_insert) : to_insert(to_insert) {}
+    void operate(map<string, bufferlist> *store) {
       for (map<string, bufferlist>::iterator i = to_insert.begin();
 	   i != to_insert.end();
 	   ++i) {
@@ -66,8 +68,8 @@ class PausyAsyncMap : public MapCacher::StoreDriver<string, bufferlist> {
   };
   struct Callback : public _Op {
     Context *context;
-    explicit Callback(Context *c) : context(c) {}
-    void operate(map<string, bufferlist> *store) override {
+    Callback(Context *c) : context(c) {}
+    void operate(map<string, bufferlist> *store) {
       context->complete(0);
     }
   };
@@ -77,13 +79,13 @@ public:
     list<Op> ops;
     list<Op> callbacks;
   public:
-    void set_keys(const map<string, bufferlist> &i) override {
+    void set_keys(const map<string, bufferlist> &i) {
       ops.push_back(Op(new Insert(i)));
     }
-    void remove_keys(const set<string> &r) override {
+    void remove_keys(const set<string> &r) {
       ops.push_back(Op(new Remove(r)));
     }
-    void add_callback(Context *c) override {
+    void add_callback(Context *c) {
       callbacks.push_back(Op(new Callback(c)));
     }
   };
@@ -101,9 +103,9 @@ private:
     bool paused;
     list<Op> queue;
   public:
-    explicit Doer(PausyAsyncMap *parent) :
+    Doer(PausyAsyncMap *parent) :
       parent(parent), lock("Doer lock"), stopping(0), paused(false) {}
-    void *entry() override {
+    virtual void *entry() {
       while (1) {
 	list<Op> ops;
 	{
@@ -167,12 +169,12 @@ public:
   PausyAsyncMap() : lock("PausyAsyncMap"), doer(this) {
     doer.create("doer");
   }
-  ~PausyAsyncMap() override {
+  ~PausyAsyncMap() {
     doer.join();
   }
   int get_keys(
     const set<string> &keys,
-    map<string, bufferlist> *out) override {
+    map<string, bufferlist> *out) {
     Mutex::Locker l(lock);
     for (set<string>::const_iterator i = keys.begin();
 	 i != keys.end();
@@ -185,7 +187,7 @@ public:
   }
   int get_next(
     const string &key,
-    pair<string, bufferlist> *next) override {
+    pair<string, bufferlist> *next) {
     Mutex::Locker l(lock);
     map<string, bufferlist>::iterator j = store.upper_bound(key);
     if (j != store.end()) {
@@ -213,7 +215,7 @@ public:
     public:
       OnFinish(Mutex *lock, Cond *cond, bool *done)
 	: lock(lock), cond(cond), done(done) {}
-      void finish(int) override {
+      void finish(int) {
 	Mutex::Locker l(*lock);
 	*done = true;
 	cond->Signal();
@@ -364,7 +366,7 @@ public:
       cur = next.first;
     }
   }
-  void SetUp() override {
+  virtual void SetUp() {
     driver.reset(new PausyAsyncMap());
     cache.reset(new MapCacher::MapCacher<string, bufferlist>(driver.get()));
     names.clear();
@@ -374,7 +376,7 @@ public:
       names.insert(random_string(1 + (random_size() % 10)));
     }
   }
-  void TearDown() override {
+  virtual void TearDown() {
     driver->stop();
     cache.reset();
     driver.reset();
@@ -438,8 +440,8 @@ TEST_F(MapCacherTest, Random)
 class MapperVerifier {
   PausyAsyncMap *driver;
   boost::scoped_ptr< SnapMapper > mapper;
-  map<snapid_t, set<hobject_t> > snap_to_hobject;
-  map<hobject_t, set<snapid_t>> hobject_to_snap;
+  map<snapid_t, set<hobject_t, hobject_t::BitwiseComparator> > snap_to_hobject;
+  map<hobject_t, set<snapid_t>, hobject_t::BitwiseComparator> hobject_to_snap;
   snapid_t next;
   uint32_t mask;
   uint32_t bits;
@@ -451,7 +453,7 @@ public:
     uint32_t mask,
     uint32_t bits)
     : driver(driver),
-      mapper(new SnapMapper(g_ceph_context, driver, mask, bits, 0, shard_id_t(1))),
+      mapper(new SnapMapper(driver, mask, bits, 0, shard_id_t(1))),
              mask(mask), bits(bits),
       lock("lock") {}
 
@@ -491,7 +493,7 @@ public:
     for (set<snapid_t>::iterator i = snaps.begin();
 	 i != snaps.end();
 	 ++i) {
-      map<snapid_t, set<hobject_t> >::iterator j = snap_to_hobject.find(*i);
+      map<snapid_t, set<hobject_t, hobject_t::BitwiseComparator> >::iterator j = snap_to_hobject.find(*i);
       assert(j != snap_to_hobject.end());
       j->second.insert(obj);
     }
@@ -506,41 +508,38 @@ public:
     Mutex::Locker l(lock);
     if (snap_to_hobject.empty())
       return;
-    map<snapid_t, set<hobject_t> >::iterator snap =
+    map<snapid_t, set<hobject_t, hobject_t::BitwiseComparator> >::iterator snap =
       rand_choose(snap_to_hobject);
-    set<hobject_t> hobjects = snap->second;
+    set<hobject_t, hobject_t::BitwiseComparator> hobjects = snap->second;
 
-    vector<hobject_t> hoids;
-    while (mapper->get_next_objects_to_trim(
-	     snap->first, rand() % 5 + 1, &hoids) == 0) {
-      for (auto &&hoid: hoids) {
-	assert(!hoid.is_max());
-	assert(hobjects.count(hoid));
-	hobjects.erase(hoid);
+    hobject_t hoid;
+    while (mapper->get_next_object_to_trim(snap->first, &hoid) == 0) {
+      assert(!hoid.is_max());
+      assert(hobjects.count(hoid));
+      hobjects.erase(hoid);
 
-	map<hobject_t, set<snapid_t>>::iterator j =
-	  hobject_to_snap.find(hoid);
-	assert(j->second.count(snap->first));
-	set<snapid_t> old_snaps(j->second);
-	j->second.erase(snap->first);
+      map<hobject_t, set<snapid_t>, hobject_t::BitwiseComparator>::iterator j =
+	hobject_to_snap.find(hoid);
+      assert(j->second.count(snap->first));
+      set<snapid_t> old_snaps(j->second);
+      j->second.erase(snap->first);
 
-	{
-	  PausyAsyncMap::Transaction t;
-	  mapper->update_snaps(
-	    hoid,
-	    j->second,
-	    &old_snaps,
-	    &t);
-	  driver->submit(&t);
-	}
-	if (j->second.empty()) {
-	  hobject_to_snap.erase(j);
-	}
-	hoid = hobject_t::get_max();
+      {
+	PausyAsyncMap::Transaction t;
+	mapper->update_snaps(
+	  hoid,
+	  j->second,
+	  &old_snaps,
+	  &t);
+	driver->submit(&t);
       }
-      hoids.clear();
+      if (j->second.empty()) {
+	hobject_to_snap.erase(j);
+      }
+      hoid = hobject_t::get_max();
     }
     assert(hobjects.empty());
+
     snap_to_hobject.erase(snap);
   }
 
@@ -548,12 +547,12 @@ public:
     Mutex::Locker l(lock);
     if (hobject_to_snap.empty())
       return;
-    map<hobject_t, set<snapid_t>>::iterator obj =
+    map<hobject_t, set<snapid_t>, hobject_t::BitwiseComparator>::iterator obj =
       rand_choose(hobject_to_snap);
     for (set<snapid_t>::iterator i = obj->second.begin();
 	 i != obj->second.end();
 	 ++i) {
-      map<snapid_t, set<hobject_t> >::iterator j =
+      map<snapid_t, set<hobject_t, hobject_t::BitwiseComparator> >::iterator j =
 	snap_to_hobject.find(*i);
       assert(j->second.count(obj->first));
       j->second.erase(obj->first);
@@ -572,7 +571,7 @@ public:
     Mutex::Locker l(lock);
     if (hobject_to_snap.empty())
       return;
-    map<hobject_t, set<snapid_t>>::iterator obj =
+    map<hobject_t, set<snapid_t>, hobject_t::BitwiseComparator>::iterator obj =
       rand_choose(hobject_to_snap);
     set<snapid_t> snaps;
     int r = mapper->get_snaps(obj->first, &snaps);
@@ -587,12 +586,12 @@ protected:
   map<pg_t, ceph::shared_ptr<MapperVerifier> > mappers;
   uint32_t pgnum;
 
-  void SetUp() override {
+  virtual void SetUp() {
     driver.reset(new PausyAsyncMap());
     pgnum = 0;
   }
 
-  void TearDown() override {
+  virtual void TearDown() {
     driver->stop();
     mappers.clear();
     driver.reset();
@@ -657,4 +656,15 @@ TEST_F(SnapMapperTest, More) {
 TEST_F(SnapMapperTest, MultiPG) {
   init(50);
   run();
+}
+
+int main(int argc, char **argv)
+{
+  vector<const char*> args;
+  argv_to_vec(argc, (const char **)argv, args);
+
+  global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
+  common_init_finish(g_ceph_context);
+  ::testing::InitGoogleTest(&argc, argv);
+  return RUN_ALL_TESTS();
 }

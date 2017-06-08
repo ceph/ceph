@@ -19,7 +19,6 @@
 #include "Journal.h"
 #include "FileJournal.h"
 #include "common/RWLock.h"
-#include "osd/OpRequest.h"
 
 class JournalingObjectStore : public ObjectStore {
 protected:
@@ -28,13 +27,12 @@ protected:
 
 
   class SubmitManager {
-    CephContext* cct;
     Mutex lock;
     uint64_t op_seq;
     uint64_t op_submitted;
   public:
-    SubmitManager(CephContext* cct) :
-      cct(cct), lock("JOS::SubmitManager::lock", false, true, false, cct),
+    SubmitManager() :
+      lock("JOS::SubmitManager::lock", false, true, false, g_ceph_context),
       op_seq(0), op_submitted(0)
     {}
     uint64_t op_submit_start();
@@ -49,7 +47,6 @@ protected:
   } submit_manager;
 
   class ApplyManager {
-    CephContext* cct;
     Journal *&journal;
     Finisher &finisher;
 
@@ -64,13 +61,13 @@ protected:
     uint64_t committing_seq, committed_seq;
 
   public:
-    ApplyManager(CephContext* cct, Journal *&j, Finisher &f) :
-      cct(cct), journal(j), finisher(f),
-      apply_lock("JOS::ApplyManager::apply_lock", false, true, false, cct),
+    ApplyManager(Journal *&j, Finisher &f) :
+      journal(j), finisher(f),
+      apply_lock("JOS::ApplyManager::apply_lock", false, true, false, g_ceph_context),
       blocked(false),
       open_ops(0),
       max_applied_seq(0),
-      com_lock("JOS::ApplyManager::com_lock", false, true, false, cct),
+      com_lock("JOS::ApplyManager::com_lock", false, true, false, g_ceph_context),
       committing_seq(0), committed_seq(0) {}
     void reset() {
       assert(open_ops == 0);
@@ -121,7 +118,7 @@ protected:
   void _op_journal_transactions(bufferlist& tls, uint32_t orig_len, uint64_t op,
 				Context *onjournal, TrackedOpRef osd_op);
 
-  virtual int do_transactions(vector<ObjectStore::Transaction>& tls, uint64_t op_seq) = 0;
+  virtual int do_transactions(list<ObjectStore::Transaction*>& tls, uint64_t op_seq) = 0;
 
 public:
   bool is_committing() {
@@ -132,15 +129,14 @@ public:
   }
 
 public:
-  JournalingObjectStore(CephContext* cct, const std::string& path)
-    : ObjectStore(cct, path),
+  JournalingObjectStore(const std::string& path)
+    : ObjectStore(path),
       journal(NULL),
-      finisher(cct, "JournalObjectStore", "fn_jrn_objstore"),
-      submit_manager(cct),
-      apply_manager(cct, journal, finisher),
+      finisher(g_ceph_context, "JournalObjectStore", "fn_jrn_objstore"),
+      apply_manager(journal, finisher),
       replaying(false) {}
 
-  ~JournalingObjectStore() override {
+  ~JournalingObjectStore() {
   }
 };
 

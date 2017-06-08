@@ -35,7 +35,7 @@ using namespace std;
 #include "msg/Message.h"
 #include "include/assert.h"
 
-#include "msg/DispatchQueue.h"
+#include "DispatchQueue.h"
 #include "Pipe.h"
 #include "Accepter.h"
 
@@ -82,24 +82,24 @@ public:
    * features The local features bits for the local_connection
    */
   SimpleMessenger(CephContext *cct, entity_name_t name,
-		  string mname, uint64_t _nonce);
+		  string mname, uint64_t _nonce, uint64_t features);
 
   /**
    * Destroy the SimpleMessenger. Pretty simple since all the work is done
    * elsewhere.
    */
-  ~SimpleMessenger() override;
+  virtual ~SimpleMessenger();
 
   /** @defgroup Accessors
    * @{
    */
-  void set_addr_unknowns(const entity_addr_t& addr) override;
+  void set_addr_unknowns(entity_addr_t& addr);
 
-  int get_dispatch_queue_len() override {
+  int get_dispatch_queue_len() {
     return dispatch_queue.get_queue_len();
   }
 
-  double get_dispatch_queue_max_age(utime_t now) override {
+  double get_dispatch_queue_max_age(utime_t now) {
     return dispatch_queue.get_max_age(now);
   }
   /** @} Accessors */
@@ -108,14 +108,13 @@ public:
    * @defgroup Configuration functions
    * @{
    */
-  void set_cluster_protocol(int p) override {
+  void set_cluster_protocol(int p) {
     assert(!started && !did_bind);
     cluster_protocol = p;
   }
 
-  int bind(const entity_addr_t& bind_addr) override;
-  int rebind(const set<int>& avoid_ports) override;
-  int client_bind(const entity_addr_t& bind_addr) override;
+  int bind(const entity_addr_t& bind_addr);
+  int rebind(const set<int>& avoid_ports);
 
   /** @} Configuration functions */
 
@@ -123,9 +122,9 @@ public:
    * @defgroup Startup/Shutdown
    * @{
    */
-  int start() override;
-  void wait() override;
-  int shutdown() override;
+  virtual int start();
+  virtual void wait();
+  virtual int shutdown();
 
   /** @} // Startup/Shutdown */
 
@@ -133,7 +132,7 @@ public:
    * @defgroup Messaging
    * @{
    */
-  int send_message(Message *m, const entity_inst_t& dest) override {
+  virtual int send_message(Message *m, const entity_inst_t& dest) {
     return _send_message(m, dest);
   }
 
@@ -147,13 +146,13 @@ public:
    * @defgroup Connection Management
    * @{
    */
-  ConnectionRef get_connection(const entity_inst_t& dest) override;
-  ConnectionRef get_loopback_connection() override;
+  virtual ConnectionRef get_connection(const entity_inst_t& dest);
+  virtual ConnectionRef get_loopback_connection();
   int send_keepalive(Connection *con);
-  void mark_down(const entity_addr_t& addr) override;
+  virtual void mark_down(const entity_addr_t& addr);
   void mark_down(Connection *con);
   void mark_disposable(Connection *con);
-  void mark_down_all() override;
+  virtual void mark_down_all();
   /** @} // Connection Management */
 protected:
   /**
@@ -163,7 +162,7 @@ protected:
   /**
    * Start up the DispatchQueue thread once we have somebody to dispatch to.
    */
-  void ready() override;
+  virtual void ready();
   /** @} // Messenger Interfaces */
 private:
   /**
@@ -192,8 +191,8 @@ private:
   class ReaperThread : public Thread {
     SimpleMessenger *msgr;
   public:
-    explicit ReaperThread(SimpleMessenger *m) : msgr(m) {}
-    void *entry() override {
+    ReaperThread(SimpleMessenger *m) : msgr(m) {}
+    void *entry() {
       msgr->reaper_entry();
       return 0;
     }
@@ -306,8 +305,8 @@ private:
   /// internal cluster protocol version, if any, for talking to entities of the same type.
   int cluster_protocol;
 
-  Cond  stop_cond;
-  bool stopped = true;
+  /// Throttle preventing us from building up a big backlog waiting for dispatch
+  Throttle dispatch_throttler;
 
   bool reaper_started, reaper_stop;
   Cond reaper_cond;
@@ -322,7 +321,7 @@ private:
     if (p == rank_pipe.end())
       return NULL;
     // see lock cribbing in Pipe::fault()
-    if (p->second->state_closed)
+    if (p->second->state_closed.read())
       return NULL;
     return p->second;
   }
@@ -333,6 +332,7 @@ public:
 
   /// con used for sending messages to ourselves
   ConnectionRef local_connection;
+  uint64_t local_features;
 
   /**
    * @defgroup SimpleMessenger internals
@@ -382,6 +382,13 @@ public:
    * probably shouldn't be called by anybody else.
    */
   void learned_addr(const entity_addr_t& peer_addr_for_me);
+
+  /**
+   * Release memory accounting back to the dispatch throttler.
+   *
+   * @param msize The amount of memory to release.
+   */
+  void dispatch_throttle_release(uint64_t msize);
 
   /**
    * This function is used by the reaper thread. As long as nobody

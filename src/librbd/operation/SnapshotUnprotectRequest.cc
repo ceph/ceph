@@ -9,7 +9,7 @@
 #include "librbd/AsyncObjectThrottle.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/internal.h"
-#include "librbd/Types.h"
+#include "librbd/parent_types.h"
 #include "librbd/Utils.h"
 #include <list>
 #include <set>
@@ -56,13 +56,13 @@ template <typename I>
 class C_ScanPoolChildren : public C_AsyncObjectThrottle<I> {
 public:
   C_ScanPoolChildren(AsyncObjectThrottle<I> &throttle, I *image_ctx,
-                     const ParentSpec &pspec, const Pools &pools,
+                     const parent_spec &pspec, const Pools &pools,
                      size_t pool_idx)
     : C_AsyncObjectThrottle<I>(throttle, *image_ctx), m_pspec(pspec),
       m_pool(pools[pool_idx]) {
   }
 
-  int send() override {
+  virtual int send() {
     I &image_ctx = this->m_image_ctx;
     assert(image_ctx.owner_lock.is_locked());
 
@@ -102,7 +102,7 @@ public:
     cls_client::get_children_start(&op, m_pspec);
 
     librados::AioCompletion *rados_completion =
-      util::create_rados_callback(this);
+      util::create_rados_ack_callback(this);
     r = m_pool_ioctx.aio_operate(RBD_CHILDREN, rados_completion, &op,
                                  &m_children_bl);
     assert(r == 0);
@@ -111,7 +111,7 @@ public:
   }
 
 protected:
-  void finish(int r) override {
+  virtual void finish(int r) {
     I &image_ctx = this->m_image_ctx;
     CephContext *cct = image_ctx.cct;
 
@@ -139,7 +139,7 @@ protected:
   }
 
 private:
-  ParentSpec m_pspec;
+  parent_spec m_pspec;
   Pool m_pool;
 
   IoCtx m_pool_ioctx;
@@ -152,10 +152,9 @@ private:
 template <typename I>
 SnapshotUnprotectRequest<I>::SnapshotUnprotectRequest(I &image_ctx,
                                                       Context *on_finish,
-                                                      const cls::rbd::SnapshotNamespace &snap_namespace,
-						      const std::string &snap_name)
-  : Request<I>(image_ctx, on_finish), m_snap_namespace(snap_namespace),
-    m_snap_name(snap_name), m_ret_val(0), m_snap_id(CEPH_NOSNAP) {
+                                                      const std::string &snap_name)
+  : Request<I>(image_ctx, on_finish), m_snap_name(snap_name), m_ret_val(0),
+    m_snap_id(CEPH_NOSNAP) {
 }
 
 template <typename I>
@@ -170,11 +169,7 @@ bool SnapshotUnprotectRequest<I>::should_complete(int r) {
   ldout(cct, 5) << this << " " << __func__ << ": state=" << m_state << ", "
                 << "r=" << r << dendl;
   if (r < 0) {
-    if (r == -EINVAL) {
-      ldout(cct, 1) << "snapshot is already unprotected" << dendl;
-    } else {
-      lderr(cct) << "encountered error: " << cpp_strerror(r) << dendl;
-    }
+    lderr(cct) << "encountered error: " << cpp_strerror(r) << dendl;
     if (m_ret_val == 0) {
       m_ret_val = r;
     }
@@ -256,7 +251,7 @@ void SnapshotUnprotectRequest<I>::send_scan_pool_children() {
   std::list<Pool> pool_list;
   rados.pool_list2(pool_list);
 
-  ParentSpec pspec(image_ctx.md_ctx.get_id(), image_ctx.id, m_snap_id);
+  parent_spec pspec(image_ctx.md_ctx.get_id(), image_ctx.id, m_snap_id);
   Pools pools(pool_list.begin(), pool_list.end());
 
   Context *ctx = this->create_callback_context();
@@ -264,7 +259,7 @@ void SnapshotUnprotectRequest<I>::send_scan_pool_children() {
     boost::lambda::bind(boost::lambda::new_ptr<C_ScanPoolChildren<I> >(),
       boost::lambda::_1, &image_ctx, pspec, pools, boost::lambda::_2));
   AsyncObjectThrottle<I> *throttle = new AsyncObjectThrottle<I>(
-    nullptr, image_ctx, context_factory, ctx, NULL, 0, pools.size());
+    this, image_ctx, context_factory, ctx, NULL, 0, pools.size());
   throttle->start_ops(image_ctx.concurrent_management_ops);
 }
 
@@ -320,7 +315,7 @@ int SnapshotUnprotectRequest<I>::verify_and_send_unprotect_snap_start() {
     return -ENOSYS;
   }
 
-  m_snap_id = image_ctx.get_snap_id(m_snap_namespace, m_snap_name);
+  m_snap_id = image_ctx.get_snap_id(m_snap_name);
   if (m_snap_id == CEPH_NOSNAP) {
     return -ENOENT;
   }

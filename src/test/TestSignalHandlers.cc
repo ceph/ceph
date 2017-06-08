@@ -28,7 +28,6 @@
 #include <sstream>
 #include <string>
 
-#define dout_context g_ceph_context
 using std::string;
 
 // avoid compiler warning about dereferencing NULL pointer
@@ -45,18 +44,10 @@ static void simple_segv_test()
   std::cout << "i = " << i << std::endl;
 }
 
-// Given the name of the function, we can be pretty sure this is intentional.
-
-#pragma clang diagnostic push
-
-#pragma clang diagnostic ignored "-Winfinite-recursion"
-
 static void infinite_recursion_test_impl()
 {
   infinite_recursion_test_impl();
 }
-
-#pragma clang diagnostic pop
 
 static void infinite_recursion_test()
 {
@@ -80,8 +71,7 @@ int main(int argc, const char **argv)
   argv_to_vec(argc, argv, args);
   env_to_vec(args);
 
-  auto cct = global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT,
-			 CODE_ENVIRONMENT_UTILITY, 0);
+  global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
   common_init_finish(g_ceph_context);
 
   test_fn_t fn = NULL;

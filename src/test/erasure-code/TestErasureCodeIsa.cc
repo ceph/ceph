@@ -16,12 +16,13 @@
  */
 
 #include <errno.h>
-#include <stdlib.h>
 
 #include "crush/CrushWrapper.h"
 #include "include/stringify.h"
+#include "global/global_init.h"
 #include "erasure-code/isa/ErasureCodeIsa.h"
 #include "erasure-code/isa/xor_op.h"
+#include "common/ceph_argparse.h"
 #include "global/global_context.h"
 #include "common/config.h"
 #include "gtest/gtest.h"
@@ -291,7 +292,7 @@ TEST_F(IsaErasureCodeTest, chunk_size)
     profile["k"] = "2";
     profile["m"] = "1";
     Isa.init(profile, &cerr);
-    const int k = 2;
+    int k = 2;
 
     ASSERT_EQ(EC_ISA_ADDRESS_ALIGNMENT, Isa.get_chunk_size(1));
     ASSERT_EQ(EC_ISA_ADDRESS_ALIGNMENT, Isa.get_chunk_size(EC_ISA_ADDRESS_ALIGNMENT * k - 1));
@@ -303,7 +304,7 @@ TEST_F(IsaErasureCodeTest, chunk_size)
     profile["k"] = "3";
     profile["m"] = "1";
     Isa.init(profile, &cerr);
-    const int k = 3;
+    int k = 3;
 
     ASSERT_EQ(EC_ISA_ADDRESS_ALIGNMENT, Isa.get_chunk_size(1));
     ASSERT_EQ(EC_ISA_ADDRESS_ALIGNMENT, Isa.get_chunk_size(EC_ISA_ADDRESS_ALIGNMENT * k - 1));
@@ -534,8 +535,8 @@ TEST_F(IsaErasureCodeTest, isa_cauchy_exhaustive)
 
   Isa.init(profile, &cerr);
 
-  const int k = 12;
-  const int m = 4;
+  int k = 12;
+  int m = 4;
 
 #define LARGE_ENOUGH 2048
   bufferptr in_ptr(buffer::create_page_aligned(LARGE_ENOUGH));
@@ -661,8 +662,8 @@ TEST_F(IsaErasureCodeTest, isa_cauchy_cache_trash)
 
   Isa.init(profile, &cerr);
 
-  const int k = 16;
-  const int m = 4;
+  int k = 16;
+  int m = 4;
 
 #define LARGE_ENOUGH 2048
   bufferptr in_ptr(buffer::create_page_aligned(LARGE_ENOUGH));
@@ -787,8 +788,8 @@ TEST_F(IsaErasureCodeTest, isa_xor_codec)
   profile["m"] = "1";
   Isa.init(profile, &cerr);
 
-  const int k = 4;
-  const int m = 1;
+  int k = 4;
+  int m = 1;
 
 #define LARGE_ENOUGH 2048
   bufferptr in_ptr(buffer::create_page_aligned(LARGE_ENOUGH));
@@ -903,8 +904,6 @@ TEST_F(IsaErasureCodeTest, create_ruleset)
     }
   }
 
-  c->finalize();
-
   {
     stringstream ss;
     ErasureCodeIsaDefault isa(tcache);
@@ -924,7 +923,7 @@ TEST_F(IsaErasureCodeTest, create_ruleset)
     vector<__u32> weight(c->get_max_devices(), 0x10000);
     vector<int> out;
     int x = 0;
-    c->do_rule(ruleset, x, out, isa.get_chunk_count(), weight, 0);
+    c->do_rule(ruleset, x, out, isa.get_chunk_count(), weight);
     ASSERT_EQ(out.size(), isa.get_chunk_count());
     for (unsigned i=0; i<out.size(); ++i)
       ASSERT_NE(CRUSH_ITEM_NONE, out[i]);
@@ -953,6 +952,20 @@ TEST_F(IsaErasureCodeTest, create_ruleset)
     EXPECT_EQ(-EINVAL, isa.create_ruleset("otherrule", *c, &ss));
     EXPECT_EQ("unknown type WORSE", ss.str());
   }
+}
+
+int main(int argc, char **argv)
+{
+  vector<const char*> args;
+  argv_to_vec(argc, (const char **) argv, args);
+
+  global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
+  common_init_finish(g_ceph_context);
+
+  g_conf->set_val("erasure_code_dir", ".libs", false, false);
+
+  ::testing::InitGoogleTest(&argc, argv);
+  return RUN_ALL_TESTS();
 }
 
 /*

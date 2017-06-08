@@ -50,10 +50,14 @@ public:
     assert(snap_id != CEPH_NOSNAP);
   }
 
-  void send() override;
+  virtual void send();
 
 protected:
-  bool should_complete(int r) override;
+  virtual bool should_complete(int r);
+
+  virtual void finish() {
+  }
+  using AsyncRequest<>::finish;
 
 private:
   State m_state;

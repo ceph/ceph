@@ -135,11 +135,14 @@ it runs ``gatherkeys`` to get the keyring. It then creates a mds on the desired
 host under the path ``/var/lib/ceph/mds/`` in ``/var/lib/ceph/mds/{cluster}-{name}``
 format and a bootstrap keyring under ``/var/lib/ceph/bootstrap-mds/`` in
 ``/var/lib/ceph/bootstrap-mds/{cluster}.keyring`` format. It then runs appropriate
-commands based on ``distro.init`` to start the ``mds``.
+commands based on ``distro.init`` to start the ``mds``. To remove the mds,
+subcommand ``destroy`` is used.
 
 Usage::
 
 	ceph-deploy mds create [HOST[:DAEMON-NAME]] [HOST[:DAEMON-NAME]...]
+
+	ceph-deploy mds destroy [HOST[:DAEMON-NAME]] [HOST[:DAEMON-NAME]...]
 
 The [DAEMON-NAME] is optional.
 
@@ -364,9 +367,9 @@ the configuration file under ``/etc/ceph`` directory of remote host to admin nod
 
 Usage::
 
-	ceph-deploy config push [HOST] [HOST...]
+	ceph-deploy push [HOST] [HOST...]
 
-	ceph-deploy config pull [HOST] [HOST...]
+	ceph-deploy pull [HOST] [HOST...]
 
 Here, [HOST] is the hostname of the node where config file will be pushed to or
 pulled from.
@@ -484,29 +487,89 @@ Another option :option:`--master` can also be used with this command.
 Options
 =======
 
-.. option:: --address
+.. option:: --version
 
-	IP address of the host node to be added to the cluster.
+	The current installed version of :program:`ceph-deploy`.
 
-.. option:: --adjust-repos
+.. option:: --username
 
-	Install packages modifying source repos.
+	The username to connect to the remote host.
 
-.. option:: --ceph-conf
+.. option:: --overwrite-conf
 
-	Use (or reuse) a given ``ceph.conf`` file.
+	Overwrite an existing conf file on remote host (if present).
 
 .. option:: --cluster
 
 	Name of the cluster.
 
-.. option:: --dev
+.. option:: --ceph-conf
 
-	Install a bleeding edge built from Git branch or tag (default: master).
+	Use (or reuse) a given ``ceph.conf`` file.
+
+.. option:: --no-ssh-copykey
+
+	Do not attempt to copy ssh keys.
+
+.. option:: --fsid
+
+	Provide an alternate FSID for ``ceph.conf`` generation.
 
 .. option:: --cluster-network
 
 	Specify the (internal) cluster network.
+
+.. option:: --public-network
+
+	Specify the public network for a cluster.
+
+.. option:: --testing
+
+	Install the latest development release.
+
+.. option:: --dev
+
+	Install a bleeding edge built from Git branch or tag (default: master).
+
+.. option:: --adjust-repos
+
+	Install packages modifying source repos.
+
+.. option:: --no-adjust-repos
+
+	Install packages without modifying source repos.
+
+.. option:: --repo
+
+	Install repo files only (skips package installation).
+
+.. option:: --local-mirror
+
+	Fetch packages and push them to hosts for a local repo mirror.
+
+.. option:: --repo-url
+
+	Specify a repo url that mirrors/contains Ceph packages.
+
+.. option:: --gpg-url
+
+	Specify a GPG key url to be used with custom repos (defaults to ceph.com).
+
+.. option:: --address
+
+	IP address of the host node to be added to the cluster.
+
+.. option:: --keyrings
+
+	Concatenate multiple keyrings to be seeded on new monitors.
+
+.. option:: --zap-disk
+
+	Destroy the partition table and content of a disk.
+
+.. option:: --fs-type
+
+	Filesystem to use to format disk ``(xfs, btrfs or ext4)``.
 
 .. option:: --dmcrypt
 
@@ -520,77 +583,13 @@ Options
 
 	Comma-separated package(s) to install on remote hosts.
 
-.. option:: --fs-type
-
-	Filesystem to use to format disk ``(xfs, btrfs or ext4)``.
-
-.. option:: --fsid
-
-	Provide an alternate FSID for ``ceph.conf`` generation.
-
-.. option:: --gpg-url
-
-	Specify a GPG key url to be used with custom repos (defaults to ceph.com).
-
-.. option:: --keyrings
-
-	Concatenate multiple keyrings to be seeded on new monitors.
-
-.. option:: --local-mirror
-
-	Fetch packages and push them to hosts for a local repo mirror.
-
-.. option:: --master
-
-	The domain for the Calamari master server.
-
-.. option:: --mkfs
-
-	Inject keys to MONs on remote nodes.
-
-.. option:: --no-adjust-repos
-
-	Install packages without modifying source repos.
-
-.. option:: --no-ssh-copykey
-
-	Do not attempt to copy ssh keys.
-
-.. option:: --overwrite-conf
-
-	Overwrite an existing conf file on remote host (if present).
-
-.. option:: --public-network
-
-	Specify the public network for a cluster.
-
 .. option:: --remove
 
 	Comma-separated package(s) to remove from remote hosts.
 
-.. option:: --repo
+.. option:: --master
 
-	Install repo files only (skips package installation).
-
-.. option:: --repo-url
-
-	Specify a repo url that mirrors/contains Ceph packages.
-
-.. option:: --testing
-
-	Install the latest development release.
-
-.. option:: --username
-
-	The username to connect to the remote host.
-
-.. option:: --version
-
-	The current installed version of :program:`ceph-deploy`.
-
-.. option:: --zap-disk
-
-	Destroy the partition table and content of a disk.
+	The domain for the Calamari master server.
 
 
 Availability

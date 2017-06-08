@@ -22,7 +22,6 @@
 #include "rgw_cors_s3.h"
 #include "rgw_user.h"
 
-#define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
 
 using namespace std;
@@ -159,7 +158,7 @@ bool RGWCORSRule_S3::xml_end(const char *el) {
 
 void RGWCORSConfiguration_S3::to_xml(ostream& out) {
   XMLFormatter f;
-  f.open_object_section_in_ns("CORSConfiguration", XMLNS_AWS_S3);
+  f.open_object_section("CORSConfiguration");
   for(list<RGWCORSRule>::iterator it = rules.begin();
       it != rules.end(); ++it) {
     (static_cast<RGWCORSRule_S3 &>(*it)).to_xml(f);
@@ -184,37 +183,37 @@ bool RGWCORSConfiguration_S3::xml_end(const char *el) {
 class CORSRuleID_S3 : public XMLObj {
   public:
     CORSRuleID_S3() {}
-    ~CORSRuleID_S3() override {}
+    ~CORSRuleID_S3() {}
 };
 
 class CORSRuleAllowedOrigin_S3 : public XMLObj {
   public:
     CORSRuleAllowedOrigin_S3() {}
-    ~CORSRuleAllowedOrigin_S3() override {}
+    ~CORSRuleAllowedOrigin_S3() {}
 };
 
 class CORSRuleAllowedMethod_S3 : public XMLObj {
   public:
     CORSRuleAllowedMethod_S3() {}
-    ~CORSRuleAllowedMethod_S3() override {}
+    ~CORSRuleAllowedMethod_S3() {}
 };
 
 class CORSRuleAllowedHeader_S3 : public XMLObj {
   public:
     CORSRuleAllowedHeader_S3() {}
-    ~CORSRuleAllowedHeader_S3() override {}
+    ~CORSRuleAllowedHeader_S3() {}
 };
 
 class CORSRuleMaxAgeSeconds_S3 : public XMLObj {
   public:
     CORSRuleMaxAgeSeconds_S3() {}
-    ~CORSRuleMaxAgeSeconds_S3() override {}
+    ~CORSRuleMaxAgeSeconds_S3() {}
 };
 
 class CORSRuleExposeHeader_S3 : public XMLObj {
   public:
     CORSRuleExposeHeader_S3() {}
-    ~CORSRuleExposeHeader_S3() override {}
+    ~CORSRuleExposeHeader_S3() {}
 };
 
 XMLObj *RGWCORSXMLParser_S3::alloc_obj(const char *el) {

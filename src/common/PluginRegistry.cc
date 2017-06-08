@@ -15,12 +15,16 @@
  * 
  */
 
+#include <errno.h>
+#include <dlfcn.h>
+
 #include "PluginRegistry.h"
 #include "ceph_ver.h"
+#include "common/ceph_context.h"
 #include "common/errno.h"
-#include "common/debug.h"
+#include "include/str_list.h"
 
-#include <dlfcn.h>
+#include "common/debug.h"
 
 #define PLUGIN_PREFIX "libceph_"
 #define PLUGIN_SUFFIX ".so"
@@ -134,24 +138,13 @@ int PluginRegistry::load(const std::string &type,
   assert(lock.is_locked());
   ldout(cct, 1) << __func__ << " " << type << " " << name << dendl;
 
-  // std::string fname = cct->_conf->plugin_dir + "/" + type + "/" PLUGIN_PREFIX
-  //  + name + PLUGIN_SUFFIX;
-  std::string fname = cct->_conf->get_val<std::string>("plugin_dir") + "/" + type + "/" + PLUGIN_PREFIX
-      + name + PLUGIN_SUFFIX;
+  std::string fname = cct->_conf->plugin_dir + "/" + type + "/" PLUGIN_PREFIX
+    + name + PLUGIN_SUFFIX;
   void *library = dlopen(fname.c_str(), RTLD_NOW);
   if (!library) {
-    string err1(dlerror());
-    // fall back to plugin_dir
-    std::string fname2 = cct->_conf->get_val<std::string>("plugin_dir") + "/" + PLUGIN_PREFIX +
-      name + PLUGIN_SUFFIX;
-    library = dlopen(fname2.c_str(), RTLD_NOW);
-    if (!library) {
-      lderr(cct) << __func__
-		 << " failed dlopen(): \""	<< err1.c_str() 
-		 << "\" or \"" << dlerror() << "\""
-		 << dendl;
-      return -EIO;
-    }
+    lderr(cct) << __func__ << " failed dlopen(" << fname << "): "
+	       << dlerror() << dendl;
+    return -EIO;
   }
 
   const char * (*code_version)() =

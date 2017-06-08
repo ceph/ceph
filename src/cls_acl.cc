@@ -16,6 +16,10 @@
 CLS_VER(1,0)
 CLS_NAME(acl)
 
+cls_handle_t h_class;
+cls_method_handle_t h_get;
+cls_method_handle_t h_set;
+
 int get_method(cls_method_context_t ctx, char *indata, int datalen,
 				 char **outdata, int *outdatalen)
 {
@@ -42,13 +46,9 @@ int set_method(cls_method_context_t ctx, char *indata, int datalen,
    return 0;
 }
 
-CLS_INIT(acl)
+void __cls_init()
 {
    cls_log("Loaded acl class!");
-
-   cls_handle_t h_class;
-   cls_method_handle_t h_get;
-   cls_method_handle_t h_set;
 
    cls_register("acl", &h_class);
    cls_register_method(h_class, "get", CLS_METHOD_RD, get_method, &h_get);

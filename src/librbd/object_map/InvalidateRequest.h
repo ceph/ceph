@@ -27,11 +27,11 @@ public:
       m_snap_id(snap_id), m_force(force) {
   }
 
-  void send() override;
+  virtual void send();
 
 protected:
-  bool should_complete(int r) override;
-  int filter_return_code(int r) const override{
+  virtual bool should_complete(int r) override;
+  virtual int filter_return_code(int r) const override{
     // never propagate an error back to the caller
     return 0;
   }

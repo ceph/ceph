@@ -2,18 +2,10 @@
 
 # this should be run from the src directory in the ceph.git
 
-source $(dirname $0)/detect-build-env-vars.sh
-CEPH_SRC=$CEPH_ROOT/src
-if [ -e CMakeCache.txt ]; then
-    CYTHON_MODULES_DIR=$CEPH_LIB/cython_modules
-else
-    CYTHON_MODULES_DIR=$CEPH_SRC/build
-fi
-
+CEPH_SRC=$(pwd)
+export LD_LIBRARY_PATH="$LD_LIBRARY_PATH:$CEPH_SRC/.libs"
 export PYTHONPATH="$CEPH_SRC/pybind:$CEPH_SRC/test/pybind"
-for x in $CYTHON_MODULES_DIR/lib* ; do
-    PYTHONPATH="${PYTHONPATH}:${x}"
-done
+PATH="$CEPH_SRC:$PATH"
 
 recreate_pool() {
     POOL_NAME=$1
@@ -26,7 +18,7 @@ run_cli_tests() {
     recreate_pool rbd
     $CEPH_SRC/../qa/workunits/rbd/import_export.sh
     recreate_pool rbd
-    $CEPH_SRC/../qa/workunits/rbd/cli_generic.sh
+    $CEPH_SRC/../qa/workunits/rbd/copy.sh
     recreate_pool rbd
     $CEPH_SRC/../qa/workunits/rbd/journal.sh
 }
@@ -56,7 +48,7 @@ run_cli_tests
 export RBD_CREATE_ARGS="--image-format 2"
 run_cli_tests
 
-for i in 0 1 61 109
+for i in 0 1 5 13 29 109
 do
     export RBD_FEATURES=$i
     run_api_tests

@@ -75,15 +75,15 @@ class Cond {
     return r;
   }
 
-  int WaitInterval(Mutex &mutex, utime_t interval) {
-    utime_t when = ceph_clock_now();
+  int WaitInterval(CephContext *cct, Mutex &mutex, utime_t interval) {
+    utime_t when = ceph_clock_now(cct);
     when += interval;
     return WaitUntil(mutex, when);
   }
 
   template<typename Duration>
-  int WaitInterval(Mutex &mutex, Duration interval) {
-    ceph::real_time when(ceph::real_clock::now());
+  int WaitInterval(CephContext *cct, Mutex &mutex, Duration interval) {
+    ceph::real_time when(ceph::real_clock::now(cct));
     when += interval;
 
     struct timespec ts = ceph::real_clock::to_timespec(when);
@@ -139,7 +139,7 @@ public:
   C_Cond(Cond *c, bool *d, int *r) : cond(c), done(d), rval(r) {
     *done = false;
   }
-  void finish(int r) override {
+  void finish(int r) {
     *done = true;
     *rval = r;
     cond->Signal();
@@ -162,7 +162,7 @@ public:
   C_SafeCond(Mutex *l, Cond *c, bool *d, int *r=0) : lock(l), cond(c), done(d), rval(r) {
     *done = false;
   }
-  void finish(int r) override {
+  void finish(int r) {
     lock->Lock();
     if (rval)
       *rval = r;
@@ -185,10 +185,10 @@ class C_SaferCond : public Context {
   int rval;      ///< return value
 public:
   C_SaferCond() : lock("C_SaferCond"), done(false), rval(0) {}
-  void finish(int r) override { complete(r); }
+  void finish(int r) { complete(r); }
 
   /// We overload complete in order to not delete the context
-  void complete(int r) override {
+  void complete(int r) {
     Mutex::Locker l(lock);
     done = true;
     rval = r;

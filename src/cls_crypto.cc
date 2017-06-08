@@ -13,6 +13,11 @@
 CLS_VER(1,0)
 CLS_NAME(crypto)
 
+cls_handle_t h_class;
+
+cls_method_handle_t h_md5;
+cls_method_handle_t h_sha1;
+
 int md5_method(cls_method_context_t ctx, char *indata, int datalen,
 				 char **outdata, int *outdatalen)
 {
@@ -59,13 +64,9 @@ int sha1_method(cls_method_context_t ctx, char *indata, int datalen,
    return 0;
 }
 
-CLS_INIT(crypto)
+void __cls_init()
 {
    cls_log("Loaded crypto class!");
-
-   cls_handle_t h_class;
-   cls_method_handle_t h_md5;
-   cls_method_handle_t h_sha1;
 
    cls_register("crypto", &h_class);
    cls_register_method(h_class, "md5", CLS_METHOD_RD, md5_method, &h_md5);

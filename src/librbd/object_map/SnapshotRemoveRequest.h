@@ -52,18 +52,21 @@ public:
       m_snap_id(snap_id), m_next_snap_id(CEPH_NOSNAP) {
   }
 
-  void send() override;
+  virtual void send();
 
 protected:
-  bool should_complete(int r) override;
+  virtual bool should_complete(int r);
 
-  int filter_return_code(int r) const override {
-    if ((m_state == STATE_LOAD_MAP || m_state == STATE_REMOVE_MAP) &&
-        r == -ENOENT) {
+  virtual int filter_return_code(int r) const {
+    if (m_state == STATE_REMOVE_MAP && r == -ENOENT) {
       return 0;
     }
     return r;
   }
+
+  virtual void finish() {
+  }
+  using AsyncRequest<>::finish;
 
 private:
   State m_state;

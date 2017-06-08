@@ -7,7 +7,7 @@
 #include "Entry.h"
 
 namespace ceph {
-namespace logging {
+namespace log {
 
 struct EntryQueue {
   int m_len;

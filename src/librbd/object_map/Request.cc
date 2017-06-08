@@ -2,10 +2,13 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "librbd/object_map/Request.h"
+#include "include/rados/librados.hpp"
+#include "include/rbd/librbd.hpp"
 #include "common/dout.h"
 #include "common/errno.h"
 #include "common/RWLock.h"
 #include "librbd/ImageCtx.h"
+#include "librbd/ImageWatcher.h"
 #include "librbd/object_map/InvalidateRequest.h"
 
 #define dout_subsys ceph_subsys_rbd
@@ -17,7 +20,7 @@ namespace object_map {
 
 bool Request::should_complete(int r) {
   CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 20) << this << " should_complete: r=" << r << dendl;
+  ldout(cct, 20) << &m_image_ctx << " should_complete: r=" << r << dendl;
 
   switch (m_state)
   {
@@ -28,7 +31,10 @@ bool Request::should_complete(int r) {
       return invalidate();
     }
 
-    finish_request();
+    {
+      RWLock::WLocker l2(m_image_ctx.object_map_lock);
+      finish();
+    }
     return true;
 
   case STATE_INVALIDATE:
@@ -48,9 +54,7 @@ bool Request::should_complete(int r) {
 }
 
 bool Request::invalidate() {
-  bool flags_set;
-  int r = m_image_ctx.test_flags(RBD_FLAG_OBJECT_MAP_INVALID, &flags_set);
-  if (r == 0 && flags_set) {
+  if (m_image_ctx.test_flags(RBD_FLAG_OBJECT_MAP_INVALID)) {
     return true;
   }
 

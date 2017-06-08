@@ -4,13 +4,11 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include "include/on_exit.h"
-#include "include/assert.h"
 
 #ifndef MAP_ANONYMOUS
 # ifdef MAP_ANON
 #  define MAP_ANONYMOUS MAP_ANON
 # else
-// cppcheck-suppress preprocessorErrorDirective
 #  error "Don't know how to create anonymous mmap"
 # endif
 #endif
@@ -66,7 +64,7 @@ int main(int argc, char **argv)
 
   // shared mem for exit tests
   shared_val = (int*)mmap(NULL, sizeof(int),
-      PROT_READ|PROT_WRITE, MAP_SHARED|MAP_ANONYMOUS, -1, 0);
+      PROT_READ|PROT_WRITE, MAP_SHARED|MAP_ANONYMOUS, 0, 0);
   assert(shared_val != MAP_FAILED);
 
   // test normal exit returning from main
@@ -108,7 +106,7 @@ int main(int argc, char **argv)
     *new_val = EXIT_FUNC_VAL;
     exit_func_mgr.add_callback(exit_func_cb, new_val);
     call_exit();
-    ceph_abort();
+    assert(0);
   }
 
   return 0;

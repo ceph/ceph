@@ -7,11 +7,6 @@ The following settings may added to the Ceph configuration file (i.e., usually
 settings may contain default values. If you do not specify each setting in the
 Ceph configuration file, the default value will be set automatically.
 
-Configuration variables set under the ``[client.radosgw.{instance-name}]``
-section will not apply to rgw or radosgw-admin commands without an instance-name
-specified in the command. Thus variables meant to be applied to all RGW
-instances or all radosgw-admin commands can be put into the ``[global]`` or the
-``[client]`` section to avoid specifying instance-name.
 
 ``rgw data``
 
@@ -52,11 +47,6 @@ instances or all radosgw-admin commands can be put into the ``[global]`` or the
 :Type: String
 :Default: N/A
 
-``rgw fcgi socket backlog``
-
-:Description: The socket backlog for fcgi.
-:Type: Integer
-:Default: ``1024``
 
 ``rgw host``
 
@@ -143,7 +133,7 @@ instances or all radosgw-admin commands can be put into the ``[global]`` or the
 
 ``rgw num rados handles``
 
-:Description: The number of `RADOS cluster handles`_ for Ceph Object Gateway.
+:Description: The numer of the `RADOS cluster handles`_ for Ceph Object Gateway.
               Having a configurable number of RADOS handles is resulting in
               significant performance boost for all types of workloads. Each RGW
               worker thread would now get to pick a RADOS handle for its lifetime,
@@ -299,8 +289,6 @@ instances or all radosgw-admin commands can be put into the ``[global]`` or the
               a value of zero indicates there is no sharding. It is not
               recommended to set a value too large (e.g. thousand) as it
               increases the cost for bucket listing.
-              This variable should be set in the client or global sections
-              so that it is automatically applied to radosgw-admin commands.
 
 :Type: Integer
 :Default: ``0``
@@ -358,42 +346,6 @@ instances or all radosgw-admin commands can be put into the ``[global]`` or the
 :Type: Boolean
 :Default: ``false``
 
-
-``rgw bucket default quota max objects``
-
-:Description: Default max number of objects per bucket. Set on new users,
-              if no other quota is specified. Has no effect on existing users.
-              This variable should be set in the client or global sections
-              so that it is automatically applied to radosgw-admin commands.
-:Type: Integer
-:Default: ``-1``
-
-
-``rgw bucket default quota max size``
-
-:Description: Default max capacity per bucket, in bytes. Set on new users,
-              if no other quota is specified. Has no effect on existing users.
-:Type: Integer
-:Default: ``-1``
-
-
-``rgw user default quota max objects``
-
-:Description: Default max number of objects for a user. This includes all
-              objects in all buckets owned by the user. Set on new users,
-              if no other quota is specified. Has no effect on existing users.
-:Type: Integer
-:Default: ``-1``
-
-
-``rgw user default quota max size``
-
-:Description: The value for user max size quota in bytes set on new users,
-              if no other quota is specified.  Has no effect on existing users.
-:Type: Integer
-:Default: ``-1``
-
-
 Regions
 =======
 
@@ -413,7 +365,7 @@ List Regions
 
 A Ceph cluster contains a list of regions. To list the regions, execute:: 
 
-	sudo radosgw-admin region list
+	sudo radosgw-admin regions list
 
 The ``radosgw-admin`` returns a JSON formatted list of regions. 
 
@@ -757,17 +709,9 @@ configuration.
 ``rgw region root pool``
 
 :Description: The pool for storing all region-specific information.
-              Not used in Ceph version ``Jewel``.
 :Type: String
 :Default: ``.rgw.root``
 
-.. versionadded:: Jewel
-
-``rgw zonegroup root pool``
-
-:Description: The pool for storing all zonegroup-specific information.
-:Type: String
-:Default: ``.rgw.root``
 
 
 .. versionadded:: v.67
@@ -805,17 +749,10 @@ Swift Settings
 
 ``rgw swift url prefix``
 
-:Description: The URL prefix for the Swift StorageURL that goes in front of
-              the "/v1" part. This allows to run several Gateway instances
-              on the same host. For compatibility, setting this configuration
-              variable to empty causes the default "/swift" to be used.
-              Use explicit prefix "/" to start StorageURL at the root.
-              WARNING: setting this option to "/" will NOT work if S3 API is
-              enabled. From the other side disabling S3 will make impossible
-              to deploy RadosGW in the multi-site configuration!
+:Description: The URL prefix for the Swift API. 
 :Default: ``swift``
-:Example: "/swift-testing"
-
+:Example: http://fqdn.com/swift
+	
 
 ``rgw swift auth url``
 
@@ -831,20 +768,6 @@ Swift Settings
 :Description: The entry point for a Swift auth URL.
 :Type: String
 :Default: ``auth``
-
-
-``rgw swift versioning enabled``
-
-:Description: Enables the Object Versioning of OpenStack Object Storage API.
-              This allows clients to put the ``X-Versions-Location`` attribute
-              on containers that should be versioned. The attribute specifies
-              the name of container storing archived versions. It must be owned
-              by the same user that the versioned container due to access
-              control verification - ACLs are NOT taken into consideration.
-              Those containers cannot be versioned by the S3 object versioning
-              mechanism.
-:Type: Boolean
-:Default: ``false``
 
 
 
@@ -950,17 +873,6 @@ Logging Settings
 :Default: ``30``
 
 
-``rgw log http headers``
-
-:Description: Comma-delimited list of HTTP headers to include with ops
-	      log entries.  Header names are case insensitive, and use
-	      the full header name with words separated by underscores.
-
-:Type: String
-:Default: None
-:Example: "http_x_forwarded_for, http_x_special_k"
-
-
 ``rgw intent log object name``
 
 :Description: The logging format for the intent log object name. See manpage 
@@ -1035,64 +947,9 @@ Keystone Settings
 :Default: None
 
 
-``rgw keystone api version``
-
-:Description: The version (2 or 3) of OpenStack Identity API that should be
-              used for communication with the Keystone server.
-:Type: Integer
-:Default: ``2``
-
-
-``rgw keystone admin domain``
-
-:Description: The name of OpenStack domain with admin privilege when using
-              OpenStack Identity API v3.
-:Type: String
-:Default: None
-
-
-``rgw keystone admin project``
-
-:Description: The name of OpenStack project with admin privilege when using
-              OpenStack Identity API v3. If left unspecified, value of
-              ``rgw keystone admin tenant`` will be used instead.
-:Type: String
-:Default: None
-
-
 ``rgw keystone admin token``
 
-:Description: The Keystone admin token (shared secret). In Ceph RadosGW
-              authentication with the admin token has priority over
-              authentication with the admin credentials
-              (``rgw keystone admin user``, ``rgw keystone admin password``,
-              ``rgw keystone admin tenant``, ``rgw keystone admin project``,
-              ``rgw keystone admin domain``). Admin token feature is considered
-              as deprecated.
-:Type: String
-:Default: None
-
-
-``rgw keystone admin tenant``
-
-:Description: The name of OpenStack tenant with admin privilege (Service Tenant) when
-              using OpenStack Identity API v2
-:Type: String
-:Default: None
-
-
-``rgw keystone admin user``
-
-:Description: The name of OpenStack user with admin privilege for Keystone
-              authentication (Service User) when OpenStack Identity API v2
-:Type: String
-:Default: None
-
-
-``rgw keystone admin password``
-
-:Description: The password for OpenStack admin user when using OpenStack
-              Identity API v2
+:Description: The Keystone admin token (shared secret).
 :Type: String
 :Default: None
 
@@ -1118,59 +975,8 @@ Keystone Settings
 :Default: ``15 * 60``
 
 
-``rgw keystone verify ssl``
-
-:Description: Verify SSL certificates while making token requests to keystone.
-:Type: Boolean
-:Default: ``true``
-
-Barbican Settings
-=================
-
-``rgw barbican url``
-
-:Description: The URL for the Barbican server.
-:Type: String
-:Default: None
-
-``rgw keystone barbican user``
-
-:Description: The name of the OpenStack user with access to the `Barbican`_
-              secrets used for `Encryption`_.
-:Type: String
-:Default: None
-
-``rgw keystone barbican password``
-
-:Description: The password associated with the `Barbican`_ user.
-:Type: String
-:Default: None
-
-``rgw keystone barbican tenant``
-
-:Description: The name of the OpenStack tenant associated with the `Barbican`_
-              user when using OpenStack Identity API v2.
-:Type: String
-:Default: None
-
-``rgw keystone barbican project``
-
-:Description: The name of the OpenStack project associated with the `Barbican`_
-              user when using OpenStack Identity API v3.
-:Type: String
-:Default: None
-
-``rgw keystone barbican domain``
-
-:Description: The name of the OpenStack domain associated with the `Barbican`_
-              user when using OpenStack Identity API v3.
-:Type: String
-:Default: None
-
 
 .. _Architecture: ../../architecture#data-striping
 .. _Pool Configuration: ../../rados/configuration/pool-pg-config-ref/
 .. _Cluster Pools: ../../rados/operations/pools
 .. _Rados cluster handles: ../../rados/api/librados-intro/#step-2-configuring-a-cluster-handle
-.. _Barbican: ../barbican
-.. _Encryption: ../encryption

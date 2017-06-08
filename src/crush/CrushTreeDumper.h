@@ -63,7 +63,7 @@ namespace CrushTreeDumper {
   template <typename F>
   class Dumper : public list<Item> {
   public:
-    explicit Dumper(const CrushWrapper *crush_) : crush(crush_) {
+    Dumper(const CrushWrapper *crush_) : crush(crush_) {
       crush->find_roots(roots);
       root = roots.begin();
     }
@@ -76,31 +76,8 @@ namespace CrushTreeDumper {
       clear();
     }
 
-    virtual bool should_dump_leaf(int i) const {
-      return true;
-    }
-    virtual bool should_dump_empty_bucket() const {
-      return true;
-    }
-
-    bool should_dump(int id) {
-      if (id >= 0)
-	return should_dump_leaf(id);
-      if (should_dump_empty_bucket())
-	return true;
-      int s = crush->get_bucket_size(id);
-      for (int k = s - 1; k >= 0; k--) {
-	int c = crush->get_bucket_item(id, k);
-	if (should_dump(c))
-	  return true;
-      }
-      return false;
-    }
-
     bool next(Item &qi) {
       if (empty()) {
-	while (root != roots.end() && !should_dump(*root))
-	  ++root;
 	if (root == roots.end())
 	  return false;
 	push_back(Item(*root, 0, crush->get_bucket_weightf(*root)));
@@ -116,11 +93,9 @@ namespace CrushTreeDumper {
 	int s = crush->get_bucket_size(qi.id);
 	for (int k = s - 1; k >= 0; k--) {
 	  int id = crush->get_bucket_item(qi.id, k);
-	  if (should_dump(id)) {
-	    qi.children.push_back(id);
-	    push_front(Item(id, qi.depth + 1,
-			    crush->get_bucket_item_weightf(qi.id, k)));
-	  }
+	  qi.children.push_back(id);
+	  push_front(Item(id, qi.depth + 1,
+			  crush->get_bucket_item_weightf(qi.id, k)));
 	}
       }
       return true;
@@ -180,10 +155,10 @@ namespace CrushTreeDumper {
 
   class FormattingDumper : public Dumper<Formatter> {
   public:
-    explicit FormattingDumper(const CrushWrapper *crush) : Dumper<Formatter>(crush) {}
+    FormattingDumper(const CrushWrapper *crush) : Dumper<Formatter>(crush) {}
 
   protected:
-    void dump_item(const Item &qi, Formatter *f) override {
+    virtual void dump_item(const Item &qi, Formatter *f) {
       f->open_object_section("item");
       dump_item_fields(qi, f);
       dump_bucket_children(qi, f);

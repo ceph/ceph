@@ -9,20 +9,22 @@
  */
 
 #include <iostream>
-#include <memory>
 #include <gtest/gtest.h>
 
 #include "include/stringify.h"
+#include "common/ceph_argparse.h"
+#include "global/global_init.h"
+#include "global/global_context.h"
 
 #include "crush/CrushWrapper.h"
 #include "osd/osd_types.h"
 
 #include <set>
 
-std::unique_ptr<CrushWrapper> build_indep_map(CephContext *cct, int num_rack,
-                              int num_host, int num_osd)
+CrushWrapper *build_indep_map(CephContext *cct, int num_rack, int num_host,
+			      int num_osd)
 {
-  std::unique_ptr<CrushWrapper> c(new CrushWrapper);
+  CrushWrapper *c = new CrushWrapper;
   c->create();
 
   c->set_type_name(5, "root");
@@ -66,8 +68,6 @@ std::unique_ptr<CrushWrapper> build_indep_map(CephContext *cct, int num_rack,
   assert(ret == 0);
   c->set_rule_name(ruleno, "data");
 
-  c->finalize();
-
   if (false) {
     Formatter *f = Formatter::create("json-pretty");
     f->open_object_section("crush_map");
@@ -94,13 +94,13 @@ int get_num_dups(const vector<int>& v)
 }
 
 TEST(CRUSH, indep_toosmall) {
-  std::unique_ptr<CrushWrapper> c(build_indep_map(g_ceph_context, 1, 3, 1));
+  CrushWrapper *c = build_indep_map(g_ceph_context, 1, 3, 1);
   vector<__u32> weight(c->get_max_devices(), 0x10000);
   c->dump_tree(&cout, NULL);
 
   for (int x = 0; x < 100; ++x) {
     vector<int> out;
-    c->do_rule(0, x, out, 5, weight, 0);
+    c->do_rule(0, x, out, 5, weight);
     cout << x << " -> " << out << std::endl;
     int num_none = 0;
     for (unsigned i=0; i<out.size(); ++i) {
@@ -110,16 +110,17 @@ TEST(CRUSH, indep_toosmall) {
     ASSERT_EQ(2, num_none);
     ASSERT_EQ(0, get_num_dups(out));
   }
+  delete c;
 }
 
 TEST(CRUSH, indep_basic) {
-  std::unique_ptr<CrushWrapper> c(build_indep_map(g_ceph_context, 3, 3, 3));
+  CrushWrapper *c = build_indep_map(g_ceph_context, 3, 3, 3);
   vector<__u32> weight(c->get_max_devices(), 0x10000);
   c->dump_tree(&cout, NULL);
 
   for (int x = 0; x < 100; ++x) {
     vector<int> out;
-    c->do_rule(0, x, out, 5, weight, 0);
+    c->do_rule(0, x, out, 5, weight);
     cout << x << " -> " << out << std::endl;
     int num_none = 0;
     for (unsigned i=0; i<out.size(); ++i) {
@@ -129,10 +130,11 @@ TEST(CRUSH, indep_basic) {
     ASSERT_EQ(0, num_none);
     ASSERT_EQ(0, get_num_dups(out));
   }
+  delete c;
 }
 
 TEST(CRUSH, indep_out_alt) {
-  std::unique_ptr<CrushWrapper> c(build_indep_map(g_ceph_context, 3, 3, 3));
+  CrushWrapper *c = build_indep_map(g_ceph_context, 3, 3, 3);
   vector<__u32> weight(c->get_max_devices(), 0x10000);
 
   // mark a bunch of osds out
@@ -145,7 +147,7 @@ TEST(CRUSH, indep_out_alt) {
   c->set_choose_total_tries(100);
   for (int x = 0; x < 100; ++x) {
     vector<int> out;
-    c->do_rule(0, x, out, 9, weight, 0);
+    c->do_rule(0, x, out, 9, weight);
     cout << x << " -> " << out << std::endl;
     int num_none = 0;
     for (unsigned i=0; i<out.size(); ++i) {
@@ -155,10 +157,11 @@ TEST(CRUSH, indep_out_alt) {
     ASSERT_EQ(0, num_none);
     ASSERT_EQ(0, get_num_dups(out));
   }
+  delete c;
 }
 
 TEST(CRUSH, indep_out_contig) {
-  std::unique_ptr<CrushWrapper> c(build_indep_map(g_ceph_context, 3, 3, 3));
+  CrushWrapper *c = build_indep_map(g_ceph_context, 3, 3, 3);
   vector<__u32> weight(c->get_max_devices(), 0x10000);
 
   // mark a bunch of osds out
@@ -170,7 +173,7 @@ TEST(CRUSH, indep_out_contig) {
   c->set_choose_total_tries(100);
   for (int x = 0; x < 100; ++x) {
     vector<int> out;
-    c->do_rule(0, x, out, 7, weight, 0);
+    c->do_rule(0, x, out, 7, weight);
     cout << x << " -> " << out << std::endl;
     int num_none = 0;
     for (unsigned i=0; i<out.size(); ++i) {
@@ -180,11 +183,12 @@ TEST(CRUSH, indep_out_contig) {
     ASSERT_EQ(1, num_none);
     ASSERT_EQ(0, get_num_dups(out));
   }
+  delete c;
 }
 
 
 TEST(CRUSH, indep_out_progressive) {
-  std::unique_ptr<CrushWrapper> c(build_indep_map(g_ceph_context, 3, 3, 3));
+  CrushWrapper *c = build_indep_map(g_ceph_context, 3, 3, 3);
   c->set_choose_total_tries(100);
   vector<__u32> tweight(c->get_max_devices(), 0x10000);
   c->dump_tree(&cout, NULL);
@@ -197,7 +201,7 @@ TEST(CRUSH, indep_out_progressive) {
     vector<int> prev;
     for (unsigned i=0; i<weight.size(); ++i) {
       vector<int> out;
-      c->do_rule(0, x, out, 7, weight, 0);
+      c->do_rule(0, x, out, 7, weight);
       cout << "(" << i << "/" << weight.size() << " out) "
 	   << x << " -> " << out << std::endl;
       int num_none = 0;
@@ -244,12 +248,13 @@ TEST(CRUSH, indep_out_progressive) {
   }
   cout << tchanged << " total changed" << std::endl;
 
+  delete c;
 }
 
 TEST(CRUSH, straw_zero) {
   // zero weight items should have no effect on placement.
 
-  std::unique_ptr<CrushWrapper> c(new CrushWrapper);
+  CrushWrapper *c = new CrushWrapper;
   const int ROOT_TYPE = 1;
   c->set_type_name(ROOT_TYPE, "root");
   const int OSD_TYPE = 0;
@@ -286,14 +291,12 @@ TEST(CRUSH, straw_zero) {
 				       "firstn", pg_pool_t::TYPE_REPLICATED);
   EXPECT_EQ(1, ruleset1);
 
-  c->finalize();
-
   vector<unsigned> reweight(n, 0x10000);
   for (int i=0; i<10000; ++i) {
     vector<int> out0, out1;
-    c->do_rule(ruleset0, i, out0, 1, reweight, 0);
+    c->do_rule(ruleset0, i, out0, 1, reweight);
     ASSERT_EQ(1u, out0.size());
-    c->do_rule(ruleset1, i, out1, 1, reweight, 0);
+    c->do_rule(ruleset1, i, out1, 1, reweight);
     ASSERT_EQ(1u, out1.size());
     ASSERT_EQ(out0[0], out1[0]);
     //cout << i << "\t" << out0 << "\t" << out1 << std::endl;
@@ -314,7 +317,7 @@ TEST(CRUSH, straw_same) {
   // compare the result and verify that the resulting mapping is
   // almost identical.
 
-  std::unique_ptr<CrushWrapper> c(new CrushWrapper);
+  CrushWrapper *c = new CrushWrapper;
   const int ROOT_TYPE = 1;
   c->set_type_name(ROOT_TYPE, "root");
   const int OSD_TYPE = 0;
@@ -379,17 +382,15 @@ TEST(CRUSH, straw_same) {
     jf.flush(cout);
   }
 
-  c->finalize();
-
   vector<int> sum0(n, 0), sum1(n, 0);
   vector<unsigned> reweight(n, 0x10000);
   int different = 0;
   int max = 100000;
   for (int i=0; i<max; ++i) {
     vector<int> out0, out1;
-    c->do_rule(ruleset0, i, out0, 1, reweight, 0);
+    c->do_rule(ruleset0, i, out0, 1, reweight);
     ASSERT_EQ(1u, out0.size());
-    c->do_rule(ruleset1, i, out1, 1, reweight, 0);
+    c->do_rule(ruleset1, i, out1, 1, reweight);
     ASSERT_EQ(1u, out1.size());
     sum0[out0[0]]++;
     sum1[out1[0]]++;
@@ -412,7 +413,7 @@ TEST(CRUSH, straw_same) {
 
 double calc_straw2_stddev(int *weights, int n, bool verbose)
 {
-  std::unique_ptr<CrushWrapper> c(new CrushWrapper);
+  CrushWrapper *c = new CrushWrapper;
   const int ROOT_TYPE = 2;
   c->set_type_name(ROOT_TYPE, "root");
   const int HOST_TYPE = 1;
@@ -450,12 +451,10 @@ double calc_straw2_stddev(int *weights, int n, bool verbose)
   totalweight /= (double)0x10000;
   double avgweight = totalweight / n;
 
-  c->finalize();
-
   int total = 1000000;
   for (int i=0; i<total; ++i) {
     vector<int> out;
-    c->do_rule(ruleset0, i, out, 1, reweight, 0);
+    c->do_rule(ruleset0, i, out, 1, reweight);
     sum[out[0]]++;
   }
 
@@ -536,7 +535,7 @@ TEST(CRUSH, straw2_reweight) {
   };
   int n = 15;
 
-  std::unique_ptr<CrushWrapper> c(new CrushWrapper);
+  CrushWrapper *c = new CrushWrapper;
   const int ROOT_TYPE = 2;
   c->set_type_name(ROOT_TYPE, "root");
   const int HOST_TYPE = 1;
@@ -592,25 +591,22 @@ TEST(CRUSH, straw2_reweight) {
   totalweight /= (double)0x10000;
   double avgweight = totalweight / n;
 
-  c->finalize();
-
   int total = 1000000;
   for (int i=0; i<total; ++i) {
     vector<int> out0, out1;
-    c->do_rule(ruleset0, i, out0, 1, reweight, 0);
+    c->do_rule(ruleset0, i, out0, 1, reweight);
     ASSERT_EQ(1u, out0.size());
 
-    c->do_rule(ruleset1, i, out1, 1, reweight, 0);
+    c->do_rule(ruleset1, i, out1, 1, reweight);
     ASSERT_EQ(1u, out1.size());
 
     sum[out1[0]]++;
     //sum[rand()%n]++;
 
-    if (out1[0] == changed) {
+    if (out1[0] == changed)
       ASSERT_EQ(changed, out0[0]);
-    } else if (out0[0] != changed) {
+    else if (out0[0] != changed)
       ASSERT_EQ(out0[0], out1[0]);
-    }
   }
 
   double expected = (double)total / (double)n;
@@ -638,4 +634,17 @@ TEST(CRUSH, straw2_reweight) {
     double estddev = sqrt((double)total * p * (1.0 - p));
     cout << "     vs " << estddev << std::endl;
   }
+}
+
+
+
+int main(int argc, char **argv) {
+  vector<const char*> args;
+  argv_to_vec(argc, (const char **)argv, args);
+
+  global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
+  common_init_finish(g_ceph_context);
+
+  ::testing::InitGoogleTest(&argc, argv);
+  return RUN_ALL_TESTS();
 }

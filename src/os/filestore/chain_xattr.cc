@@ -2,16 +2,28 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "chain_xattr.h"
-#include <errno.h>           // for ERANGE, ENODATA, ENOMEM
-#include <stdio.h>           // for size_t, snprintf
-#include <stdlib.h>          // for free, malloc
-#include <string.h>          // for strcpy, strlen
-#include "include/assert.h"  // for assert
-#include "include/buffer.h"
+
+#include "include/int_types.h"
+
+#include <unistd.h>
+#include <stdlib.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+#include <sys/file.h>
+#include <errno.h>
+#include <dirent.h>
+#include <sys/ioctl.h>
+#include <string.h>
+#include <stdio.h>
+#include "include/assert.h"
 
 #if defined(__linux__)
 #include <linux/fs.h>
 #endif
+
+#include "common/xattr.h"
+#include "include/compat.h"
 
 /*
  * chaining xattrs
@@ -25,7 +37,7 @@
  * where <id> marks the num of xattr in the chain.
  */
 
-void get_raw_xattr_name(const char *name, int i, char *raw_name, int raw_len)
+static void get_raw_xattr_name(const char *name, int i, char *raw_name, int raw_len)
 {
   int pos = 0;
 
@@ -123,7 +135,7 @@ int chain_getxattr(const char *fn, const char *name, void *val, size_t size)
     return getxattr_len(fn, name);
 
   do {
-    chunk_size = size;
+    chunk_size = (size < CHAIN_XATTR_MAX_BLOCK_LEN ? size : CHAIN_XATTR_MAX_BLOCK_LEN);
     get_raw_xattr_name(name, i, raw_name, sizeof(raw_name));
 
     r = sys_getxattr(fn, raw_name, (char *)val + pos, chunk_size);
@@ -161,35 +173,6 @@ int chain_getxattr(const char *fn, const char *name, void *val, size_t size)
   return ret;
 }
 
-int chain_getxattr_buf(const char *fn, const char *name, bufferptr *bp)
-{
-  size_t size = 1024; // Initial
-  while (1) {
-    bufferptr buf(size);
-    int r = chain_getxattr(
-      fn,
-      name,
-      buf.c_str(),
-      size);
-    if (r > 0) {
-      buf.set_length(r);
-      if (bp)
-	bp->swap(buf);
-      return r;
-    } else if (r == 0) {
-      return 0;
-    } else {
-      if (r == -ERANGE) {
-	size *= 2;
-      } else {
-	return r;
-      }
-    }
-  }
-  assert(0 == "unreachable");
-  return 0;
-}
-
 static int chain_fgetxattr_len(int fd, const char *name)
 {
   int i = 0, total = 0;
@@ -223,7 +206,7 @@ int chain_fgetxattr(int fd, const char *name, void *val, size_t size)
     return chain_fgetxattr_len(fd, name);
 
   do {
-    chunk_size = size;
+    chunk_size = (size < CHAIN_XATTR_MAX_BLOCK_LEN ? size : CHAIN_XATTR_MAX_BLOCK_LEN);
     get_raw_xattr_name(name, i, raw_name, sizeof(raw_name));
 
     r = sys_fgetxattr(fd, raw_name, (char *)val + pos, chunk_size);
@@ -264,7 +247,7 @@ int chain_fgetxattr(int fd, const char *name, void *val, size_t size)
 
 // setxattr
 
-int get_xattr_block_size(size_t size)
+static int get_xattr_block_size(size_t size)
 {
   if (size <= CHAIN_XATTR_SHORT_LEN_THRESHOLD)
     // this may fit in the inode; stripe over short attrs so that XFS
@@ -272,6 +255,79 @@ int get_xattr_block_size(size_t size)
     return CHAIN_XATTR_SHORT_BLOCK_LEN;
   return CHAIN_XATTR_MAX_BLOCK_LEN;
 }
+
+int chain_setxattr(const char *fn, const char *name, const void *val, size_t size, bool onechunk)
+{
+  int i = 0, pos = 0;
+  char raw_name[CHAIN_XATTR_MAX_NAME_LEN * 2 + 16];
+  int ret = 0;
+  size_t max_chunk_size = get_xattr_block_size(size);
+
+  do {
+    size_t chunk_size = (size < max_chunk_size ? size : max_chunk_size);
+    get_raw_xattr_name(name, i, raw_name, sizeof(raw_name));
+    size -= chunk_size;
+
+    int r = sys_setxattr(fn, raw_name, (char *)val + pos, chunk_size);
+    if (r < 0) {
+      ret = r;
+      break;
+    }
+    pos  += chunk_size;
+    ret = pos;
+    i++;
+  } while (size);
+
+  if (ret >= 0 && !onechunk) {
+    int r;
+    do {
+      get_raw_xattr_name(name, i, raw_name, sizeof(raw_name));
+      r = sys_removexattr(fn, raw_name);
+      if (r < 0 && r != -ENODATA)
+	ret = r;
+      i++;
+    } while (r != -ENODATA);
+  }
+
+  return ret;
+}
+
+int chain_fsetxattr(int fd, const char *name, const void *val, size_t size, bool onechunk)
+{
+  int i = 0, pos = 0;
+  char raw_name[CHAIN_XATTR_MAX_NAME_LEN * 2 + 16];
+  int ret = 0;
+  size_t max_chunk_size = get_xattr_block_size(size);
+
+  do {
+    size_t chunk_size = (size < max_chunk_size ? size : max_chunk_size);
+    get_raw_xattr_name(name, i, raw_name, sizeof(raw_name));
+    size -= chunk_size;
+
+    int r = sys_fsetxattr(fd, raw_name, (char *)val + pos, chunk_size);
+    if (r < 0) {
+      ret = r;
+      break;
+    }
+    pos  += chunk_size;
+    ret = pos;
+    i++;
+  } while (size);
+
+  if (ret >= 0 && !onechunk) {
+    int r;
+    do {
+      get_raw_xattr_name(name, i, raw_name, sizeof(raw_name));
+      r = sys_fremovexattr(fd, raw_name);
+      if (r < 0 && r != -ENODATA)
+	ret = r;
+      i++;
+    } while (r != -ENODATA);
+  }
+
+  return ret;
+}
+
 
 // removexattr
 

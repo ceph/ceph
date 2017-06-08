@@ -15,6 +15,7 @@
 
 #include <errno.h>
 #include <stdio.h>
+#include <string.h>
 
 int mime_encode_as_qp(const char *input, char *output, int outlen)
 {

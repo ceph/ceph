@@ -17,10 +17,6 @@
 #ifndef CEPH_COMMON_EVENT_SOCKET_H
 #define CEPH_COMMON_EVENT_SOCKET_H
 
-#include <unistd.h>
-#if defined(__FreeBSD__)
-#include <errno.h>
-#endif
 #include "include/event_type.h"
 
 class EventSocket {
@@ -56,9 +52,7 @@ class EventSocket {
           ret = -errno;
         else
           ret = 0;
-        break;
       }
-#ifdef HAVE_EVENTFD
       case EVENT_SOCKET_TYPE_EVENTFD:
       {
         uint64_t value = 1;
@@ -67,13 +61,10 @@ class EventSocket {
           ret = -errno;
         else
           ret = 0;
-        break;
       }
-#endif
       default:
       {
         ret = -1;
-        break;
       }
     }
     return ret;

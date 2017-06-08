@@ -45,15 +45,15 @@ public:
       : cid(cid), hoid(hoid), t(t) {}
   public:
     void set_keys(
-      const std::map<std::string, bufferlist> &to_set) override {
+      const std::map<std::string, bufferlist> &to_set) {
       t->omap_setkeys(cid, hoid, to_set);
     }
     void remove_keys(
-      const std::set<std::string> &to_remove) override {
+      const std::set<std::string> &to_remove) {
       t->omap_rmkeys(cid, hoid, to_remove);
     }
     void add_callback(
-      Context *c) override {
+      Context *c) {
       t->register_on_applied(c);
     }
   };
@@ -67,10 +67,10 @@ public:
     os(os), cid(cid), hoid(hoid) {}
   int get_keys(
     const std::set<std::string> &keys,
-    std::map<std::string, bufferlist> *out) override;
+    std::map<std::string, bufferlist> *out);
   int get_next(
     const std::string &key,
-    pair<std::string, bufferlist> *next) override;
+    pair<std::string, bufferlist> *next);
 };
 
 /**
@@ -97,7 +97,6 @@ public:
  */
 class SnapMapper {
 public:
-  CephContext* cct;
   struct object_snaps {
     hobject_t oid;
     std::set<snapid_t> snaps;
@@ -166,14 +165,13 @@ public:
   const shard_id_t shard;
   const string shard_prefix;
   SnapMapper(
-    CephContext* cct,
     MapCacher::StoreDriver<std::string, bufferlist> *driver,
     uint32_t match,  ///< [in] pgid
     uint32_t bits,   ///< [in] current split bits
     int64_t pool,    ///< [in] pool
     shard_id_t shard ///< [in] shard
     )
-    : cct(cct), backend(driver), mask_bits(bits), match(match), pool(pool),
+    : backend(driver), mask_bits(bits), match(match), pool(pool),
       shard(shard), shard_prefix(make_shard_prefix(shard)) {
     update_bits(mask_bits);
   }
@@ -213,10 +211,9 @@ public:
     );
 
   /// Returns first object with snap as a snap
-  int get_next_objects_to_trim(
+  int get_next_object_to_trim(
     snapid_t snap,              ///< [in] snap to check
-    unsigned max,               ///< [in] max to get
-    vector<hobject_t> *out      ///< [out] next objects to trim (must be empty)
+    hobject_t *hoid             ///< [out] next hoid to trim
     );  ///< @return error, -ENOENT if no more objects
 
   /// Remove mapping for oid
