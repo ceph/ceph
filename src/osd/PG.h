@@ -1190,7 +1190,6 @@ public:
 
     // common to both scrubs
     bool active;
-    bool queue_snap_trim;
     int waiting_on;
     set<pg_shard_t> waiting_on_whom;
     int shallow_errors;
@@ -1292,7 +1291,6 @@ public:
     // clear all state
     void reset() {
       active = false;
-      queue_snap_trim = false;
       waiting_on = 0;
       waiting_on_whom.clear();
       if (active_rep_scrub) {

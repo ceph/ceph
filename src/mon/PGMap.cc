@@ -2589,6 +2589,8 @@ void PGMap::get_health(
       note["backfill_toofull"] += p->second;
     if (p->first & PG_STATE_RECOVERY_TOOFULL)
       note["recovery_toofull"] += p->second;
+    if (p->first & PG_STATE_SNAPTRIM_ERROR)
+      note["snaptrim_error"] += p->second;
   }
 
   mempool::pgmap::unordered_map<pg_t, pg_stat_t> stuck_pgs;
