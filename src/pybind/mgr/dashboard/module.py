@@ -695,8 +695,8 @@ class Module(MgrModule):
 
                 return dict(result)
 
-        server_addr = self.get_config('server_addr') or '127.0.0.1'
-        server_port = self.get_config('server_port') or '7000'
+        server_addr = self.get_localized_config('server_addr') or '127.0.0.1'
+        server_port = self.get_localized_config('server_port') or '7000'
         log.info("server_addr: %s server_port: %s" % (server_addr, server_port))
         cherrypy.config.update({
             'server.socket_host': server_addr,

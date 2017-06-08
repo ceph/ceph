@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 
 # abort on failure
 set -e
@@ -115,6 +115,8 @@ filestore_path=
 VSTART_SEC="client.vstart.sh"
 
 MON_ADDR=""
+DASH_URLS=""
+RESTFUL_URLS=""
 
 conf_fn="$CEPH_CONF_PATH/ceph.conf"
 keyring_fn="$CEPH_CONF_PATH/keyring"
@@ -452,7 +454,7 @@ $CMDSDEBUG
         mds root ino gid = `id -g`
 $extra_conf
 [mgr]
-        mgr modules = rest fsstatus dashboard
+        mgr modules = restful fsstatus dashboard
         mgr data = $CEPH_DEV_DIR/mgr.\$id
         mgr module path = $MGR_PYTHON_PATH
         mon reweight min pgs per osd = 4
@@ -609,6 +611,8 @@ EOF
 
 start_mgr() {
     local mgr=0
+    # avoid monitors on nearby ports (which test/*.sh use extensively)
+    MGR_PORT=$(($CEPH_PORT + 1000))
     for name in x y z a b c d e f g h i j k l m n o p
     do
         [ $mgr -eq $CEPH_NUM_MGR ] && break
@@ -625,9 +629,33 @@ start_mgr() {
         host = $HOSTNAME
 EOF
 
+	ceph_adm config-key put mgr/dashboard/$name/server_addr $IP
+	ceph_adm config-key put mgr/dashboard/$name/server_port $MGR_PORT
+	DASH_URLS+="http://$IP:$MGR_PORT/"
+	MGR_PORT=$(($MGR_PORT + 1000))
+
+	CERT=`mktemp`
+	PKEY=`mktemp`
+	openssl req -new -nodes -x509 \
+		-subj "/O=IT/CN=ceph-mgr-restful" \
+		-days 3650 -keyout "$PKEY" -out "$CERT" -extensions v3_ca
+	ceph_adm config-key put mgr/restful/$name/server_addr $IP
+	ceph_adm config-key put mgr/restful/$name/server_port $MGR_PORT
+	ceph_adm config-key put mgr/restful/$name/crt -i $CERT
+	ceph_adm config-key put mgr/restful/$name/key -i $PKEY
+	rm $CERT $PKEY
+
+	RESTFUL_URLS+="https://$IP:$MGR_PORT"
+	MGR_PORT=$(($MGR_PORT + 1000))
+
         echo "Starting mgr.${name}"
         run 'mgr' $CEPH_BIN/ceph-mgr -i $name $ARGS
     done
+
+    SF=`mktemp`
+    ceph_adm tell mgr.x restful create-key admin -o $SF
+    RESTFUL_SECRET=`cat $SF`
+    rm $SF
 }
 
 start_mds() {
@@ -957,6 +985,10 @@ fi
 
 echo "started.  stop.sh to stop.  see out/* (e.g. 'tail -f out/????') for debug output."
 
+echo ""
+echo "dashboard urls: $DASH_URLS"
+echo "  restful urls: $RESTFUL_URLS"
+echo "  w/ user/pass: admin / $RESTFUL_SECRET"
 echo ""
 echo "export PYTHONPATH=./pybind:$PYTHONPATH"
 echo "export LD_LIBRARY_PATH=$CEPH_LIB"

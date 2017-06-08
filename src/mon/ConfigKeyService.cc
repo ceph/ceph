@@ -208,8 +208,9 @@ bool ConfigKeyService::service_dispatch(MonOpRequestRef op)
       goto out;
     }
     // we'll reply to the message once the proposal has been handled
+    ss << "set " << key;
     store_put(key, data,
-        new Monitor::C_Command(mon, op, 0, "value stored", 0));
+	      new Monitor::C_Command(mon, op, 0, ss.str(), 0));
     // return for now; we'll put the message once it's done.
     return true;
 
