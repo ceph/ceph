@@ -37,7 +37,7 @@ export LD_LIBRARY_PATH=$CEPH_LIB
 CEPH_DISK_ARGS=
 CEPH_DISK_ARGS+=" --verbose"
 CEPH_DISK_ARGS+=" --prepend-to-path="
-TIMEOUT=360
+: ${CEPH_DISK_TIMEOUT:=360}
 if [ `uname` != FreeBSD ]; then
     PROCDIR=""
 else
