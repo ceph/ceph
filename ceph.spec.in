@@ -549,6 +549,20 @@ Summary:	RADOS striping interface headers
 %if 0%{?suse_version}
 Group:		Development/Libraries/C and C++
 %endif
+Requires:	libradosstriper1 = %{_epoch_prefix}%{version}-%{release}
+Requires:	librados-devel = %{_epoch_prefix}%{version}-%{release}
+Obsoletes:	ceph-devel < %{_epoch_prefix}%{version}-%{release}
+Provides:	libradosstriper1-devel = %{_epoch_prefix}%{version}-%{release}
+Obsoletes:	libradosstriper1-devel < %{_epoch_prefix}%{version}-%{release}
+%description -n libradosstriper-devel
+This package contains libraries and headers needed to develop programs
+that use RADOS striping interface.
+
+%package -n librbd1
+Summary:	RADOS block device client library
+%if 0%{?suse_version}
+Group:		System/Libraries
+%endif
 Requires:	librados2 = %{_epoch_prefix}%{version}-%{release}
 %if 0%{?suse_version}
 Requires(post): coreutils
