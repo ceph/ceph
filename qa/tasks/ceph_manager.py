@@ -114,6 +114,10 @@ class Thrasher:
         self.minin = self.config.get("min_in", 3)
         self.chance_move_pg = self.config.get('chance_move_pg', 1.0)
         self.sighup_delay = self.config.get('sighup_delay')
+        self.optrack_toggle_delay = self.config.get('optrack_toggle_delay')
+        self.dump_ops_enable = self.config.get('dump_ops_enable')
+        self.noscrub_toggle_delay = self.config.get('noscrub_toggle_delay')
+        self.chance_thrash_cluster_full = self.config.get('chance_thrash_cluster_full', .05)
 
         num_osds = self.in_osds + self.out_osds
         self.max_pgs = self.config.get("max_pgs_per_pool_osd", 1200) * num_osds
@@ -456,6 +460,16 @@ class Thrasher:
         self.ceph_manager.raw_cluster_cmd('osd', 'primary-affinity',
                                           str(osd), str(pa))
 
+    def thrash_cluster_full(self):
+        """
+        Set and unset cluster full condition
+        """
+        self.log('Setting full ratio to .001')
+        self.ceph_manager.raw_cluster_cmd('osd', 'set-full-ratio', '.001')
+        time.sleep(1)
+        self.log('Setting full ratio back to .95')
+        self.ceph_manager.raw_cluster_cmd('osd', 'set-full-ratio', '.95')
+
     def all_up(self):
         """
         Make sure all osds are up and not out.
@@ -659,6 +673,8 @@ class Thrasher:
                         chance_test_min_size,))
         actions.append((self.test_backfill_full,
                         chance_test_backfill_full,))
+        if self.chance_thrash_cluster_full > 0:
+            actions.append((self.thrash_cluster_full, self.chance_thrash_cluster_full,))
         for key in ['heartbeat_inject_failure', 'filestore_inject_stall']:
             for scenario in [
                 (lambda:

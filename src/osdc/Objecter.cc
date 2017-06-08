@@ -1036,8 +1036,7 @@ void Objecter::_scan_requests(OSDSession *s,
     int r = _calc_target(&op->target, &op->last_force_resend);
     switch (r) {
     case RECALC_OP_TARGET_NO_ACTION:
-      if (!force_resend &&
-	  (!force_resend_writes || !(op->target.flags & CEPH_OSD_FLAG_WRITE)))
+      if (!force_resend && !(force_resend_writes && op->respects_full()))
 	break;
       // -- fall-thru --
     case RECALC_OP_TARGET_NEED_RESEND:
