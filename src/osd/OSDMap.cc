@@ -2880,10 +2880,10 @@ void OSDMap::generate_test_instances(list<OSDMap*>& o)
   cct->put();
 }
 
-string OSDMap::get_flag_string(unsigned f)
+string OSDMap::get_flag_string(unsigned f) const
 {
   string s;
-  if ( f& CEPH_OSDMAP_NEARFULL)
+  if (f & CEPH_OSDMAP_NEARFULL)
     s += ",nearfull";
   if (f & CEPH_OSDMAP_FULL)
     s += ",full";
