@@ -247,44 +247,45 @@ function test_activate_dir_magic() {
     grep --quiet $uuid $osd_data/ceph_fsid || return 1
 }
 
+function read_write() {
+    local dir=$1
+    local file=${2:-$(uuidgen)}
+    local pool=rbd
+
+    echo FOO > $dir/$file
+    $timeout rados --pool $pool put $file $dir/$file || return 1
+    $timeout rados --pool $pool get $file $dir/$file.copy || return 1
+    $diff $dir/$file $dir/$file.copy || return 1
+}
+
 function test_pool_read_write() {
-    local osd_uuid=$1
-    local TEST_POOL=rbd
+    local dir=$1
+    local pool=rbd
 
-    $timeout $TIMEOUT ceph osd pool set $TEST_POOL size 1 || return 1
-
-    local id=$(ceph osd create $osd_uuid)
-    local weight=1
-    ceph osd crush add osd.$id $weight root=default host=localhost || return 1
-    echo FOO > $dir/BAR
-    $timeout $TIMEOUT rados --pool $TEST_POOL put BAR $dir/BAR || return 1
-    $timeout $TIMEOUT rados --pool $TEST_POOL get BAR $dir/BAR.copy || return 1
-    $diff $dir/BAR $dir/BAR.copy || return 1
+    $timeout ceph osd pool set $pool size 1 || return 1
+    read_write $dir || return 1
 }
 
 function test_activate() {
-    local to_prepare=$1
-    local to_activate=$2
-    local osd_uuid=$($uuidgen)
-    local timeoutcmd
+    local dir=$1
+    shift
+    local osd_data=$1
+    shift
 
-    if [ `uname` = FreeBSD ]; then
-        # for unknown reasons FreeBSD timeout does not return here
-        # So we run without timeout
-        timeoutcmd=""
-    else 
-	timeoutcmd="${timeout} $TIMEOUT"
-    fi
+    mkdir -p $osd_data
 
     ${CEPH_DISK} $CEPH_DISK_ARGS \
-        prepare --filestore --osd-uuid $osd_uuid $to_prepare || return 1
+        prepare --filestore "$@" $osd_data || return 1
 
-    $timeoutcmd ${CEPH_DISK} $CEPH_DISK_ARGS \
+    $timeout ${CEPH_DISK} $CEPH_DISK_ARGS \
         activate \
         --mark-init=none \
-        $to_activate || return 1
+        $osd_data || return 1
 
-    test_pool_read_write $osd_uuid || return 1
+    test_pool_read_write $dir || return 1
+}
+
+
 }
 
 function test_activate_dir() {
@@ -318,7 +319,8 @@ function test_activate_dir_bluestore() {
         activate \
         --mark-init=none \
         $to_activate || return 1
-    test_pool_read_write $osd_uuid || return 1
+
+    test_pool_read_write $dir || return 1
 }
 
 function test_find_cluster_by_uuid() {
