@@ -250,12 +250,6 @@ if(WITH_LEVELDB)
   find_file(HAVE_LEVELDB_FILTER_POLICY leveldb/filter_policy.h PATHS ${LEVELDB_INCLUDE_DIR})
 endif(WITH_LEVELDB)
 
-find_package(atomic_ops REQUIRED)
-message(STATUS "${ATOMIC_OPS_LIBRARIES}")
-if(NOT ${ATOMIC_OPS_FOUND})
-  set(NO_ATOMIC_OPS 1)
-endif(NOT ${ATOMIC_OPS_FOUND})
-
 find_package(snappy REQUIRED)
 
 option(WITH_LZ4 "LZ4 compression support" OFF)
