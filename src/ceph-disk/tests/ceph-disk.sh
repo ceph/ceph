@@ -285,7 +285,46 @@ function test_activate() {
     test_pool_read_write $dir || return 1
 }
 
+function test_reuse_osd_id() {
+    local dir=$1
 
+    run_mon $dir a || return 1
+    run_mgr $dir x || return 1
+
+    test_activate $dir $dir/dir1 --osd-uuid $(uuidgen) || return 1
+
+    #
+    # add a new OSD with a given OSD id (13)
+    #
+    local osd_uuid=$($uuidgen)
+    local osd_id=13
+    test_activate $dir $dir/dir2 --osd-id $osd_id --osd-uuid $osd_uuid || return 1
+    test $osd_id = $(ceph osd new $osd_uuid) || return 1
+
+    #
+    # make sure the OSD is in use by the PGs
+    #
+    wait_osd_id_used_by_pgs $osd_id 6 || return 1
+    read_write $dir SOMETHING || return 1
+
+    #
+    # set the OSD out and verify it is no longer used by the PGs
+    #
+    ceph osd out osd.$osd_id || return 1
+    wait_osd_id_used_by_pgs $osd_id 0 || return 1
+
+    #
+    # kill the OSD and destroy it (do not purge, retain its place in the crushmap)
+    #
+    kill_daemons $dir TERM osd.$osd_id || return 1
+    ceph osd destroy osd.$osd_id --yes-i-really-mean-it || return 1
+
+    #
+    # add a new OSD with the same id as the destroyed OSD
+    #
+    osd_uuid=$($uuidgen)
+    test_activate $dir $dir/dir3 --osd-id $osd_id --osd-uuid $osd_uuid || return 1
+    test $osd_id = $(ceph osd new $osd_uuid) || return 1
 }
 
 function test_activate_dir() {
@@ -452,6 +491,7 @@ function run() {
       default_actions+="test_activate_dir_bluestore "
     default_actions+="test_ceph_osd_mkfs "
     default_actions+="test_crush_device_class "
+    default_actions+="test_reuse_osd_id "
     local actions=${@:-$default_actions}
     for action in $actions  ; do
         setup $dir || return 1
