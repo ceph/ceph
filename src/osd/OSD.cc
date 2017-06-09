@@ -9060,12 +9060,13 @@ void OSD::do_recovery(
    * queue_recovery_after_sleep.
    */
   if (cct->_conf->osd_recovery_sleep > 0 && service.recovery_needs_sleep) {
-    auto recovery_requeue_callback = new FunctionContext([this, pg, queued, reserved_pushes](int r) {
+    PGRef pgref(pg);
+    auto recovery_requeue_callback = new FunctionContext([this, pgref, queued, reserved_pushes](int r) {
       dout(20) << "do_recovery wake up at "
                << ceph_clock_now()
 	       << ", re-queuing recovery" << dendl;
       service.recovery_needs_sleep = false;
-      service.queue_recovery_after_sleep(pg, queued, reserved_pushes);
+      service.queue_recovery_after_sleep(pgref.get(), queued, reserved_pushes);
     });
     Mutex::Locker l(service.recovery_sleep_lock);
 
