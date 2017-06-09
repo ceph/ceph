@@ -781,9 +781,18 @@ void PGMapDigest::dump_object_stat_sum(
   if (sum.num_object_copies > 0)
     curr_object_copies_rate = (float)(sum.num_object_copies - sum.num_objects_degraded) / sum.num_object_copies;
 
+  float used = 0.0;
+  if (avail) {
+    used = sum.num_bytes * curr_object_copies_rate;
+    used /= used + avail;
+  } else if (sum.num_bytes) {
+    used = 1.0;
+  }
+
   if (f) {
     f->dump_int("kb_used", SHIFT_ROUND_UP(sum.num_bytes, 10));
     f->dump_int("bytes_used", sum.num_bytes);
+    f->dump_format_unquoted("percent_used", "%.2f", (used*100));
     f->dump_unsigned("max_avail", avail);
     f->dump_int("objects", sum.num_objects);
     if (verbose) {
@@ -798,13 +807,6 @@ void PGMapDigest::dump_object_stat_sum(
     }
   } else {
     tbl << stringify(si_t(sum.num_bytes));
-    float used = 0.0;
-    if (avail) {
-      used = sum.num_bytes * curr_object_copies_rate;
-      used /= used + avail;
-    } else if (sum.num_bytes) {
-      used = 1.0;
-    }
     tbl << percentify(used*100);
     tbl << si_t(avail);
     tbl << sum.num_objects;
