@@ -25,7 +25,6 @@ using namespace std;
 #include "include/unordered_set.h"
 
 #include "common/Mutex.h"
-#include "include/atomic.h"
 #include "include/Spinlock.h"
 #include "common/Cond.h"
 #include "common/Thread.h"

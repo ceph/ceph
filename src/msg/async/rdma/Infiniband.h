@@ -26,12 +26,9 @@
 #include "include/page.h"
 #include "common/debug.h"
 #include "common/errno.h"
+#include "common/Mutex.h"
 #include "msg/msg_types.h"
 #include "msg/async/net_handler.h"
-#include "common/Mutex.h"
-
-// re-include our assert to clobber the system one; fix dout:
-#include "include/assert.h"
 
 #define HUGE_PAGE_SIZE (2 * 1024 * 1024)
 #define ALIGN_TO_PAGE_SIZE(x) \
