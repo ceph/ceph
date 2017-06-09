@@ -1449,11 +1449,6 @@ function test_mon_osd()
   ceph osd in 0
   ceph osd dump | grep ^osd.0 | grep 'weight 0.5'
 
-  f=$TEMP_DIR/map.$$
-  ceph osd getcrushmap -o $f
-  [ -s $f ]
-  ceph osd setcrushmap -i $f
-  rm $f
   ceph osd getmap -o $f
   [ -s $f ]
   rm $f
@@ -1580,6 +1575,31 @@ function test_mon_osd()
   ceph osd blocked-by
 
   ceph osd stat | grep up,
+}
+
+function test_mon_crush()
+{
+  f=$TEMP_DIR/map.$$
+  ceph osd getcrushmap -o $f 2> $f.epoch
+  [ -s $f ]
+  epoch=`cat $f.epoch`
+  [ "$epoch" -gt 1 ]
+  nextepoch=$(( $epoch + 1 ))
+  echo epoch $epoch nextepoch $nextepoch
+  rm -f $f.epoch
+  expect_false ceph osd setcrushmap $nextepoch -i $f
+  ceph osd setcrushmap $epoch -i $f 2> $f.epoch
+  gotepoch=`cat $f.epoch`
+  echo gotepoch $gotepoch
+  rm -f $f.epoch
+  [ "$gotepoch" -eq "$nextepoch" ]
+  # should be idempotent
+  ceph osd setcrushmap $epoch -i $f 2> $f.epoch
+  gotepoch=`cat $f.epoch`
+  echo epoch $gotepoch
+  rm -f $f.epoch
+  [ "$gotepoch" -eq "$nextepoch" ]
+  rm $f
 }
 
 function test_mon_osd_pool()
@@ -2349,6 +2369,7 @@ MON_TESTS+=" auth_profiles"
 MON_TESTS+=" mon_misc"
 MON_TESTS+=" mon_mon"
 MON_TESTS+=" mon_osd"
+MON_TESTS+=" mon_crush"
 MON_TESTS+=" mon_osd_create_destroy"
 MON_TESTS+=" mon_osd_pool"
 MON_TESTS+=" mon_osd_pool_quota"
