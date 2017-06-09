@@ -170,7 +170,7 @@ public:
   MgrClient mgr_client;
   uint64_t mgr_proxy_bytes = 0;  // in-flight proxied mgr command message bytes
 
-  const PGStatService *pgservice;
+  const MonPGStatService *pgservice;
 
 private:
   void new_tick();
