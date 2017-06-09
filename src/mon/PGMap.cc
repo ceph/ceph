@@ -2548,7 +2548,6 @@ namespace {
       ss << pgs_count << " unscrubbed pgs";
       summary.push_back(make_pair(HEALTH_WARN, ss.str()));
     }
-
   }
 }
 
@@ -2934,6 +2933,70 @@ void PGMap::get_health(
 	    detail->push_back(make_pair(HEALTH_WARN, ss.str()));
 	  }
 	}
+      }
+    }
+  }
+
+  for (auto it : pools) {
+    auto it2 = pg_pool_sum.find(it.first);
+    if (it2 == pg_pool_sum.end()) {
+      continue;
+    }
+    const pool_stat_t *pstat = &it2->second;
+    const object_stat_sum_t& sum = pstat->stats.sum;
+    const string& pool_name = osdmap.get_pool_name(it.first);
+    const pg_pool_t &pool = it.second;
+
+    float warn_threshold = (float)g_conf->mon_pool_quota_warn_threshold/100;
+    float crit_threshold = (float)g_conf->mon_pool_quota_crit_threshold/100;
+
+    if (pool.quota_max_objects > 0) {
+      stringstream ss;
+      health_status_t status = HEALTH_OK;
+      if ((uint64_t)sum.num_objects >= pool.quota_max_objects) {
+      } else if (crit_threshold > 0 &&
+		 sum.num_objects >= pool.quota_max_objects*crit_threshold) {
+        ss << "pool '" << pool_name
+           << "' has " << sum.num_objects << " objects"
+           << " (max " << pool.quota_max_objects << ")";
+        status = HEALTH_ERR;
+      } else if (warn_threshold > 0 &&
+		 sum.num_objects >= pool.quota_max_objects*warn_threshold) {
+        ss << "pool '" << pool_name
+           << "' has " << sum.num_objects << " objects"
+           << " (max " << pool.quota_max_objects << ")";
+        status = HEALTH_WARN;
+      }
+      if (status != HEALTH_OK) {
+        pair<health_status_t,string> s(status, ss.str());
+        summary.push_back(s);
+        if (detail)
+          detail->push_back(s);
+      }
+    }
+
+    if (pool.quota_max_bytes > 0) {
+      health_status_t status = HEALTH_OK;
+      stringstream ss;
+      if ((uint64_t)sum.num_bytes >= pool.quota_max_bytes) {
+      } else if (crit_threshold > 0 &&
+		 sum.num_bytes >= pool.quota_max_bytes*crit_threshold) {
+        ss << "pool '" << pool_name
+           << "' has " << si_t(sum.num_bytes) << " bytes"
+           << " (max " << si_t(pool.quota_max_bytes) << ")";
+        status = HEALTH_ERR;
+      } else if (warn_threshold > 0 &&
+		 sum.num_bytes >= pool.quota_max_bytes*warn_threshold) {
+        ss << "pool '" << pool_name
+           << "' has " << si_t(sum.num_bytes) << " bytes"
+           << " (max " << si_t(pool.quota_max_bytes) << ")";
+        status = HEALTH_WARN;
+      }
+      if (status != HEALTH_OK) {
+        pair<health_status_t,string> s(status, ss.str());
+        summary.push_back(s);
+        if (detail)
+          detail->push_back(s);
       }
     }
   }
