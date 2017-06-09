@@ -5,11 +5,13 @@ require {
 	type var_run_t;
 	type random_device_t;
 	type urandom_device_t;
-        type setfiles_t;
+	type setfiles_t;
+	type nvme_device_t;
 	class sock_file unlink;
 	class lnk_file read;
 	class dir read;
 	class file { getattr read open };
+	class blk_file { getattr ioctl open read write };
 }
 
 ########################################
@@ -85,6 +87,8 @@ auth_use_nsswitch(ceph_t)
 logging_send_syslog_msg(ceph_t)
 
 sysnet_dns_name_resolve(ceph_t)
+
+allow ceph_t nvme_device_t:blk_file { getattr ioctl open read write };
 
 # basis for future security review
 allow ceph_t ceph_var_run_t:sock_file { create unlink write setattr };
