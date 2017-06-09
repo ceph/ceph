@@ -11844,26 +11844,26 @@ void MDCache::show_cache()
   }
 }
 
-void MDCache::dump_cache(std::string const &file_name)
+int MDCache::dump_cache(std::string const &file_name)
 {
-  dump_cache(file_name.c_str(), NULL);
+  return dump_cache(file_name.c_str(), NULL);
 }
 
-void MDCache::dump_cache(Formatter *f)
+int MDCache::dump_cache(Formatter *f)
 {
-  dump_cache(NULL, f);
+  return dump_cache(NULL, f);
 }
 
-void MDCache::dump_cache(const string& dump_root, int depth, Formatter *f)
+int MDCache::dump_cache(const string& dump_root, int depth, Formatter *f)
 {
-  dump_cache(NULL, f, dump_root, depth);
+  return dump_cache(NULL, f, dump_root, depth);
 }
 
 /**
  * Dump the metadata cache, either to a Formatter, if
  * provided, else to a plain text file.
  */
-void MDCache::dump_cache(const char *fn, Formatter *f,
+int MDCache::dump_cache(const char *fn, Formatter *f,
 			 const string& dump_root, int depth)
 {
   int r = 0;
@@ -11883,7 +11883,7 @@ void MDCache::dump_cache(const char *fn, Formatter *f,
     fd = ::open(fn, O_WRONLY|O_CREAT|O_EXCL, 0600);
     if (fd < 0) {
       derr << "failed to open " << fn << ": " << cpp_strerror(errno) << dendl;
-      return;
+      return errno;
     }
   }
 
@@ -11985,6 +11985,7 @@ void MDCache::dump_cache(const char *fn, Formatter *f,
   } else {
     ::close(fd);
   }
+  return r;
 }
 
 
