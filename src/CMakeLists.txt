@@ -483,6 +483,7 @@ set(libcommon_files
   ${async_rdma_common_srcs}
   ${dpdk_common_srcs}
   msg/msg_types.cc
+  common/reverse.c
   common/hobject.cc
   osd/OSDMap.cc
   osd/OSDMapMapping.cc
@@ -556,7 +557,8 @@ if(HAVE_INTEL)
 elseif(HAVE_POWER8)
   list(APPEND libcommon_files
     common/crc32c_ppc.c
-    common/crc32c_ppc_asm.S)
+    common/crc32c_ppc_asm.S
+    common/crc32c_ppc_fast_zero_asm.S)
 endif(HAVE_INTEL)
 
 if(LINUX)
