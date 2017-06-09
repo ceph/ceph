@@ -36,7 +36,7 @@ int RGWPutObj_Compress::handle_data(bufferlist& bl, off_t ofs, void **phandle, r
         compression_block newbl;
         int bs = blocks.size();
         newbl.old_ofs = ofs;
-        newbl.new_ofs = bs > 0 ? blocks[bs-1].len + blocks[bs-1].new_ofs : 0;
+        newbl.new_ofs = bs > 0 ? (uint64_t)(blocks[bs-1].len + blocks[bs-1].new_ofs) : 0;
         newbl.len = in_bl.length();
         blocks.push_back(newbl);
       }
