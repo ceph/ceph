@@ -713,61 +713,23 @@ int RGWGetObj_BlockDecrypt::handle_data(bufferlist& bl, off_t bl_ofs, off_t bl_l
     part_ofs -= parts_len[i];
     i++;
   }
-  if (cache.length() > 0) {
-    //append before operation.
-    off_t append_size = block_size - cache.length();
-    if (append_size > bl_len)
-      append_size = bl_len;
-    char *src = bl.get_contiguous(bl_ofs, append_size);
-    cache.append(src,append_size);
-    bl_ofs += append_size;
-    bl_len -= append_size;
-
-    if (cache.length() == block_size) {
-      bufferlist data;
-      if (! crypt->decrypt(cache, 0, block_size, data, part_ofs) ) {
-        return -ERR_INTERNAL_ERROR;
-      }
-      part_ofs += block_size;
-
-      off_t send_size = block_size - enc_begin_skip;
-      if (ofs + enc_begin_skip + send_size > end + 1) {
-        send_size = end + 1 - ofs - enc_begin_skip;
-      }
-      res = next->handle_data(data, enc_begin_skip, send_size);
-
-      enc_begin_skip = 0;
-      cache.clear();
-      ofs += block_size;
-      if (res != 0)
-        return res;
+  bl.copy(bl_ofs, bl_len, cache);
+  off_t aligned_size = cache.length() & ~(block_size - 1);
+  if (aligned_size > 0) {
+    bufferlist data;
+    if (! crypt->decrypt(cache, 0, aligned_size, data, part_ofs) ) {
+      return -ERR_INTERNAL_ERROR;
     }
+    off_t send_size = aligned_size - enc_begin_skip;
+    if (ofs + enc_begin_skip + send_size > end + 1) {
+      send_size = end + 1 - ofs - enc_begin_skip;
+    }
+    res = next->handle_data(data, enc_begin_skip, send_size);
+    enc_begin_skip = 0;
+    ofs += aligned_size;
+    cache.splice(0, aligned_size);
   }
-  if (bl_len > 0) {
-    off_t aligned_size = bl_len & ~(block_size - 1);
-    //save remainder
-    off_t remainder = bl_len - aligned_size;
-    if(remainder > 0) {
-      bl.copy(bl_ofs + aligned_size, remainder, cache);
-    }
-    if (aligned_size > 0) {
-      bufferlist data;
-      if (! crypt->decrypt(bl, bl_ofs, aligned_size, data, part_ofs) ) {
-        return -ERR_INTERNAL_ERROR;
-      }
-      part_ofs += aligned_size;
-      off_t send_size = aligned_size - enc_begin_skip;
-      if (ofs + enc_begin_skip + send_size > end + 1) {
-        send_size = end + 1 - ofs - enc_begin_skip;
-      }
-      res = next->handle_data(data, enc_begin_skip, send_size);
-      enc_begin_skip = 0;
-      ofs += aligned_size;
-      if (res != 0)
-        return res;
-    }
-  }
-  return 0;
+  return res;
 }
 
 /**
@@ -830,62 +792,27 @@ int RGWPutObj_BlockEncrypt::handle_data(bufferlist& bl,
     }
     return res;
   }
-  off_t bl_ofs = 0;
-  if (cache.length() > 0) {
-    //append before operation.
-    off_t size = block_size - cache.length();
-    if (size > bl.length())
-      size = bl.length();
-    if (size > 0) {
-      char *src = bl.get_contiguous(0, size);
-      cache.append(src,size);
-      bl_ofs += size;
-    }
-    if (cache.length() == block_size) {
-      bufferlist data;
-      if (! crypt->encrypt(cache, 0, block_size, data, ofs)) {
-        return -ERR_INTERNAL_ERROR;
-      }
-      res = next->handle_data(data, ofs, phandle, pobj, again);
-      cache.clear();
-      ofs += block_size;
-      if (res != 0)
-        return res;
-    }
-  }
-  if (bl_ofs < bl.length()) {
-    off_t aligned_size = (bl.length() - bl_ofs) & ~(block_size - 1);
-    //save remainder
-    off_t remainder = (bl.length() - bl_ofs) - aligned_size;
-    if(remainder > 0) {
-      bl.copy(bl_ofs + aligned_size, remainder, cache);
-    }
-    if (aligned_size > 0) {
-      bufferlist data;
-      if (! crypt->encrypt(bl, bl_ofs, aligned_size, data, ofs) ) {
-        return -ERR_INTERNAL_ERROR;
-      }
-      res=next->handle_data(data, ofs, phandle, pobj, again);
-      ofs += aligned_size;
-      if (res != 0)
-        return res;
-    }
-  }
+
+  cache.append(bl);
+  off_t proc_size = cache.length() & ~(block_size - 1);
   if (bl.length() == 0) {
-    if (cache.length() > 0) {
-      /*flush cached data*/
-      bufferlist data;
-      if (! crypt->encrypt(cache, 0, cache.length(), data, ofs) ) {
-        return -ERR_INTERNAL_ERROR;
-      }
-      res = next->handle_data(data, ofs, phandle, pobj, again);
-      ofs += cache.length();
-      cache.clear();
-      if (res != 0)
-        return res;
+    proc_size = cache.length();
+  }
+  if (proc_size > 0) {
+    bufferlist data;
+    if (! crypt->encrypt(cache, 0, proc_size, data, ofs) ) {
+      return -ERR_INTERNAL_ERROR;
     }
+    res = next->handle_data(data, ofs, phandle, pobj, again);
+    ofs += proc_size;
+    cache.splice(0, proc_size);
+    if (res < 0)
+      return res;
+  }
+
+  if (bl.length() == 0) {
     /*replicate 0-sized handle_data*/
-    res = next->handle_data(cache, ofs, phandle, pobj, again);
+    res = next->handle_data(bl, ofs, phandle, pobj, again);
   }
   return res;
 }
