@@ -1169,11 +1169,11 @@ bool PGMonitor::check_sub(Subscription *sub)
   return true;
 }
 
-class PGMapStatService : public MonPGStatService {
+class PGMonStatService : public MonPGStatService {
   const PGMap& pgmap;
   PGMonitor *pgmon;
 public:
-  PGMapStatService(const PGMap& o, PGMonitor *pgm)
+  PGMonStatService(const PGMap& o, PGMonitor *pgm)
     : pgmap(o),
       pgmon(pgm) {}
 
@@ -1311,7 +1311,7 @@ public:
 MonPGStatService *PGMonitor::get_pg_stat_service()
 {
   if (!pgservice) {
-    pgservice.reset(new PGMapStatService(pg_map, this));
+    pgservice.reset(new PGMonStatService(pg_map, this));
   }
   return pgservice.get();
 }
