@@ -331,7 +331,6 @@ Requires: 	python-CherryPy
 Requires:       python-Werkzeug
 %endif
 Requires:       python-pecan
-Requires(post):	openssl
 %description mgr
 ceph-mgr enables python modules that provide services (such as the REST
 module derived from Calamari) and expose CLI hooks.  ceph-mgr gathers
@@ -1182,13 +1181,6 @@ fi
 %attr(750,ceph,ceph) %dir %{_localstatedir}/lib/ceph/mgr
 
 %post mgr
-CERT="%{_sysconfdir}/ceph/ceph-mgr-restful.crt"
-PKEY="%{_sysconfdir}/ceph/ceph-mgr-restful.key"
-if [ ! -e "$CERT" -o ! -e "$PKEY" ]; then
-  openssl req -new -nodes -x509 \
-    -subj "/O=IT/CN=ceph-mgr-restful" \
-    -days 3650 -keyout "$PKEY" -out "$CERT" -extensions v3_ca
-fi
 %if 0%{?suse_version}
 if [ $1 -eq 1 ] ; then
   /usr/bin/systemctl preset ceph-mgr@\*.service ceph-mgr.target >/dev/null 2>&1 || :
