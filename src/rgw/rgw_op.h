@@ -1748,7 +1748,7 @@ extern rgw::IAM::Environment rgw_build_iam_environment(RGWRados* store,
 
 static inline int put_data_and_throttle(RGWPutObjDataProcessor *processor,
 					bufferlist& data, off_t ofs,
-					bool need_to_wait)
+					bool& need_to_wait)
 {
   bool again = false;
   do {
