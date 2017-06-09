@@ -7527,12 +7527,6 @@ void OSD::handle_osd_map(MOSDMap *m)
     rerequest_full_maps();
   }
 
-  if (last <= superblock.newest_map) {
-    dout(10) << " no new maps here, dropping" << dendl;
-    m->put();
-    return;
-  }
-
   if (superblock.oldest_map) {
     // make sure we at least keep pace with incoming maps
     trim_maps(m->oldest_map, last - first + 1, skip_maps);
