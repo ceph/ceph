@@ -8,7 +8,6 @@
 #include "include/types.h"
 #include "include/xlist.h"
 #include "include/filepath.h"
-#include "include/atomic.h"
 #include "mds/mdstypes.h"
 #include "InodeRef.h"
 #include "UserPerm.h"
