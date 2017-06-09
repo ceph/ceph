@@ -199,8 +199,14 @@ function test_mon_injectargs()
   ceph tell osd.0 injectargs -- '--osd_op_history_duration' >& $TMPFILE || return 1
   check_response "Option --osd_op_history_duration requires an argument"
 
+  ceph tell osd.0 injectargs -- '--osd_deep_scrub_interval 2419200' >& $TMPFILE || return 1
+  check_response "osd_deep_scrub_interval = '2419200.000000' (unchangeable)"
+
+  ceph tell osd.0 injectargs -- '--mon_probe_timeout 2' >& $TMPFILE || return 1
+  check_response "mon_probe_timeout = '2.000000' (unchangeable)"
+
   ceph tell osd.0 injectargs -- '--mon-lease 6' >& $TMPFILE || return 1
-  check_response "mon_lease = '6' (unchangeable)"
+  check_response "mon_lease = '6.000000' (unchangeable)"
 }
 
 function test_mon_injectargs_SI()
@@ -1757,6 +1763,7 @@ function test_mon_crushmap_validation()
   check_response "Error EINVAL: Failed crushmap test: TEST FAIL"
 
   local mon_lease=`ceph-conf --show-config-value mon_lease`
+  mon_lease=`echo ${mon_lease} | awk '{ printf $1 + 0 }'`
 
   test "${mon_lease}" -gt 0
 
