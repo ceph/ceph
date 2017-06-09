@@ -271,7 +271,12 @@ bool DaemonServer::handle_open(MMgrOpen *m)
           << m->daemon_name << dendl;
 
   auto configure = new MMgrConfigure();
-  configure->stats_period = g_conf->mgr_stats_period;
+  if (m->get_connection()->get_peer_type() == entity_name_t::TYPE_CLIENT) {
+    // We don't want clients to send us stats
+    configure->stats_period = 0;
+  } else {
+    configure->stats_period = g_conf->mgr_stats_period;
+  }
   m->get_connection()->send_message(configure);
 
   if (daemon_state.exists(key)) {
@@ -291,6 +296,13 @@ bool DaemonServer::handle_report(MMgrReport *m)
 
   dout(4) << "from " << m->get_connection() << " name "
           << m->daemon_name << dendl;
+
+  if (m->get_connection()->get_peer_type() == entity_name_t::TYPE_CLIENT) {
+    // Clients should not be sending us stats
+    dout(4) << "rejecting report from client " << m->daemon_name << dendl;
+    m->put();
+    return true;
+  }
 
   DaemonStatePtr daemon;
   if (daemon_state.exists(key)) {
