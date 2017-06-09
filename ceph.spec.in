@@ -883,6 +883,7 @@ install -m 0644 -D systemd/50-ceph.preset %{buildroot}%{_libexecdir}/systemd/sys
 mkdir -p %{buildroot}%{_sbindir}
 install -m 0644 -D src/logrotate.conf %{buildroot}%{_sysconfdir}/logrotate.d/ceph
 chmod 0644 %{buildroot}%{_docdir}/ceph/sample.ceph.conf
+install -m 0644 -D COPYING %{buildroot}%{_docdir}/ceph/COPYING
 
 # firewall templates and /sbin/mount.ceph symlink
 %if 0%{?suse_version}
@@ -926,9 +927,6 @@ rm -rf %{buildroot}
 %files
 
 %files base
-%docdir %{_docdir}
-%dir %{_docdir}/ceph
-%{_docdir}/ceph/sample.ceph.conf
 %{_bindir}/crushtool
 %{_bindir}/monmaptool
 %{_bindir}/osdmaptool
@@ -1028,6 +1026,10 @@ if [ $FIRST_ARG -ge 1 ] ; then
 fi
 
 %files common
+%docdir %{_docdir}
+%docdir %{_docdir}/ceph
+%doc %{_docdir}/ceph/sample.ceph.conf
+%doc %{_docdir}/ceph/COPYING
 %{_bindir}/ceph
 %{_bindir}/ceph-authtool
 %{_bindir}/ceph-conf
