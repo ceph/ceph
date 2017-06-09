@@ -504,6 +504,21 @@ if(HAVE_BLKID)
     )
 endif(HAVE_BLKID)
 
+# ceph_test_admin_socket_output
+
+add_executable(ceph_test_admin_socket_output
+  test_admin_socket_output.cc
+  admin_socket_output.cc
+  admin_socket_output_tests.cc
+  )
+target_link_libraries(ceph_test_admin_socket_output
+  ceph-common
+  ${Boost_FILESYSTEM_LIBRARY}
+  )
+install(TARGETS
+  ceph_test_admin_socket_output
+  DESTINATION ${CMAKE_INSTALL_BINDIR})
+
 #make check starts here
 
 #following dependencies are run inside make check unit tests
