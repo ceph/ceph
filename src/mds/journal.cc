@@ -1488,7 +1488,7 @@ void EMetaBlob::replay(MDSRank *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
 	dir = renamed_diri->get_or_open_dirfrag(mds->mdcache, *p);
 	dout(10) << " creating new rename import bound " << *dir << dendl;
 	dir->state_clear(CDir::STATE_AUTH);
-	mds->mdcache->adjust_subtree_auth(dir, CDIR_AUTH_UNDEF, false);
+	mds->mdcache->adjust_subtree_auth(dir, CDIR_AUTH_UNDEF);
       }
     }
 

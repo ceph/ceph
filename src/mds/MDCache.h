@@ -269,9 +269,9 @@ protected:
 public:
   bool is_subtrees() { return !subtrees.empty(); }
   void list_subtrees(list<CDir*>& ls);
-  void adjust_subtree_auth(CDir *root, mds_authority_t auth, bool do_eval=true);
-  void adjust_subtree_auth(CDir *root, mds_rank_t a, mds_rank_t b=CDIR_AUTH_UNKNOWN, bool do_eval=true) {
-    adjust_subtree_auth(root, mds_authority_t(a,b), do_eval); 
+  void adjust_subtree_auth(CDir *root, mds_authority_t auth);
+  void adjust_subtree_auth(CDir *root, mds_rank_t a, mds_rank_t b=CDIR_AUTH_UNKNOWN) {
+    adjust_subtree_auth(root, mds_authority_t(a,b));
   }
   void adjust_bounded_subtree_auth(CDir *dir, set<CDir*>& bounds, mds_authority_t auth);
   void adjust_bounded_subtree_auth(CDir *dir, set<CDir*>& bounds, mds_rank_t a) {
@@ -283,7 +283,7 @@ public:
   }
   void map_dirfrag_set(list<dirfrag_t>& dfs, set<CDir*>& result);
   void try_subtree_merge(CDir *root);
-  void try_subtree_merge_at(CDir *root, bool do_eval=true);
+  void try_subtree_merge_at(CDir *root, set<CInode*> *to_eval);
   void subtree_merge_writebehind_finish(CInode *in, MutationRef& mut);
   void eval_subtree_root(CInode *diri);
   CDir *get_subtree_root(CDir *dir);
@@ -302,8 +302,7 @@ public:
   void verify_subtree_bounds(CDir *root, const list<dirfrag_t>& bounds);
 
   void project_subtree_rename(CInode *diri, CDir *olddir, CDir *newdir);
-  void adjust_subtree_after_rename(CInode *diri, CDir *olddir,
-                                   bool pop, bool imported = false);
+  void adjust_subtree_after_rename(CInode *diri, CDir *olddir, bool pop);
 
   void get_auth_subtrees(set<CDir*>& s);
   void get_fullauth_subtrees(set<CDir*>& s);

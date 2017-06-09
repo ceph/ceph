@@ -7301,8 +7301,6 @@ void Server::_rename_apply(MDRequestRef& mdr, CDentry *srcdn, CDentry *destdn, C
   CDentry::linkage_t *destdnl = destdn->get_linkage();
 
   CInode *oldin = destdnl->get_inode();
-  
-  bool imported_inode = false;
 
   // primary+remote link merge?
   bool linkmerge = (srcdnl->get_inode() == destdnl->get_inode() &&
@@ -7402,7 +7400,6 @@ void Server::_rename_apply(MDRequestRef& mdr, CDentry *srcdn, CDentry *destdn, C
       
       // hack: fix auth bit
       in->state_set(CInode::STATE_AUTH);
-      imported_inode = true;
 
       mdr->clear_ambiguous_auth();
     }
@@ -7427,7 +7424,7 @@ void Server::_rename_apply(MDRequestRef& mdr, CDentry *srcdn, CDentry *destdn, C
 
   // update subtree map?
   if (destdnl->is_primary() && in->is_dir()) 
-    mdcache->adjust_subtree_after_rename(in, srcdn->get_dir(), true, imported_inode);
+    mdcache->adjust_subtree_after_rename(in, srcdn->get_dir(), true);
 
   if (straydn && oldin->is_dir())
     mdcache->adjust_subtree_after_rename(oldin, destdn->get_dir(), true);
