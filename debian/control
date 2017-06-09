@@ -163,7 +163,6 @@ Architecture: linux-any
 Depends: ceph-base (= ${binary:Version}),
          python-pecan,
          python-werkzeug,
-         openssl,
          ${misc:Depends},
          ${python:Depends},
 	 python-cherrypy3,
