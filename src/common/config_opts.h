@@ -1449,6 +1449,10 @@ OPTION(rgw_realm_reconfigure_delay, OPT_DOUBLE, 2) // seconds to wait before rel
 OPTION(rgw_period_push_interval, OPT_DOUBLE, 2) // seconds to wait before retrying "period push"
 OPTION(rgw_period_push_interval_max, OPT_DOUBLE, 30) // maximum interval after exponential backoff
 
+OPTION(rgw_safe_max_objects_per_shard, OPT_INT, 100*1024) // safe max loading
+OPTION(rgw_shard_warning_threshold, OPT_DOUBLE, 90) // pct of safe max
+						    // at which to warn
+
 OPTION(rgw_swift_versioning_enabled, OPT_BOOL, false) // whether swift object versioning feature is enabled
 
 OPTION(mutex_perf_counter, OPT_BOOL, false) // enable/disable mutex perf counter

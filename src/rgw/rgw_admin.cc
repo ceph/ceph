@@ -1,3 +1,4 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
 #include <errno.h>
@@ -66,6 +67,7 @@ void _usage()
   cout << "  key create                 create access key\n";
   cout << "  key rm                     remove access key\n";
   cout << "  bucket list                list buckets\n";
+  cout << "  bucket limit check         show bucket sharding stats\n";
   cout << "  bucket link                link bucket to specified user\n";
   cout << "  bucket unlink              unlink bucket from specified user\n";
   cout << "  bucket stats               returns bucket statistics\n";
@@ -248,6 +250,9 @@ void _usage()
   cout << "   --categories=<list>       comma separated list of categories, used in usage show\n";
   cout << "   --caps=<caps>             list of caps (e.g., \"usage=read, write; user=read\"\n";
   cout << "   --yes-i-really-mean-it    required for certain operations\n";
+  cout << "   --warnings-only           when specified with bucket limit check, list\n";
+  cout << "                             only buckets nearing or over the current max\n";
+  cout << "                             objects per shard value\n";
   cout << "   --bypass-gc               when specified with bucket deletion, triggers\n";
   cout << "                             object deletions by not involving GC\n";
   cout << "   --inconsistent-index      when specified with bucket deletion and bypass-gc set to true,\n";
@@ -291,6 +296,7 @@ enum {
   OPT_KEY_CREATE,
   OPT_KEY_RM,
   OPT_BUCKETS_LIST,
+  OPT_BUCKETS_LIMIT_CHECK,
   OPT_BUCKET_LINK,
   OPT_BUCKET_UNLINK,
   OPT_BUCKET_STATS,
@@ -486,6 +492,10 @@ static int get_cmd(const char *cmd, const char *prev_cmd, const char *prev_prev_
   } else if (strcmp(prev_cmd, "buckets") == 0) {
     if (strcmp(cmd, "list") == 0)
       return OPT_BUCKETS_LIST;
+    if (strcmp(cmd, "limit") == 0) {
+      *need_more = true;
+      return 0;
+    }
   } else if (strcmp(prev_cmd, "bucket") == 0) {
     if (strcmp(cmd, "list") == 0)
       return OPT_BUCKETS_LIST;
@@ -507,14 +517,18 @@ static int get_cmd(const char *cmd, const char *prev_cmd, const char *prev_prev_
       *need_more = true;
       return 0;
     }
-  } else if ((prev_prev_cmd && strcmp(prev_prev_cmd, "bucket") == 0) &&
-	     (strcmp(prev_cmd, "sync") == 0)) {
-    if (strcmp(cmd, "status") == 0)
-      return OPT_BUCKET_SYNC_STATUS;
-    if (strcmp(cmd, "init") == 0)
-      return OPT_BUCKET_SYNC_INIT;
-    if (strcmp(cmd, "run") == 0)
-      return OPT_BUCKET_SYNC_RUN;
+  } else if (prev_prev_cmd && strcmp(prev_prev_cmd, "bucket") == 0) {
+    if (strcmp(prev_cmd, "sync") == 0) {
+      if (strcmp(cmd, "status") == 0)
+	return OPT_BUCKET_SYNC_STATUS;
+      if (strcmp(cmd, "init") == 0)
+	return OPT_BUCKET_SYNC_INIT;
+      if (strcmp(cmd, "run") == 0)
+	return OPT_BUCKET_SYNC_RUN;
+    } else if ((strcmp(prev_cmd, "limit") == 0) &&
+	       (strcmp(cmd, "check") == 0)) {
+      return OPT_BUCKETS_LIMIT_CHECK;
+    }
   } else if (strcmp(prev_cmd, "log") == 0) {
     if (strcmp(cmd, "list") == 0)
       return OPT_LOG_LIST;
@@ -2263,6 +2277,7 @@ int main(int argc, char **argv)
 
   int sync_stats = false;
   int bypass_gc = false;
+  int warnings_only = false;
   int inconsistent_index = false;
 
   int verbose = false;
@@ -2488,6 +2503,8 @@ int main(int argc, char **argv)
     } else if (ceph_argparse_binary_flag(args, i, &extra_info, NULL, "--extra-info", (char*)NULL)) {
      // do nothing
     } else if (ceph_argparse_binary_flag(args, i, &bypass_gc, NULL, "--bypass-gc", (char*)NULL)) {
+     // do nothing
+    } else if (ceph_argparse_binary_flag(args, i, &warnings_only, NULL, "--warnings-only", (char*)NULL)) {
      // do nothing
     } else if (ceph_argparse_binary_flag(args, i, &inconsistent_index, NULL, "--inconsistent-index", (char*)NULL)) {
      // do nothing
@@ -4306,6 +4323,51 @@ int main(int argc, char **argv)
     }
   }
 
+  if (opt_cmd == OPT_BUCKETS_LIMIT_CHECK) {
+    void *handle;
+    std::list<std::string> user_ids;
+    metadata_key = "user";
+    int max = 1000;
+
+    bool truncated;
+
+    if (! user_id.empty()) {
+      user_ids.push_back(user_id.id);
+      ret =
+	RGWBucketAdminOp::limit_check(store, bucket_op, user_ids, f,
+	  warnings_only);
+    } else {
+      /* list users in groups of max-keys, then perform user-bucket
+       * limit-check on each group */
+     ret = store->meta_mgr->list_keys_init(metadata_key, &handle);
+      if (ret < 0) {
+	cerr << "ERROR: buckets limit check can't get user metadata_key: "
+	     << cpp_strerror(-ret) << std::endl;
+	return -ret;
+      }
+
+      do {
+	ret = store->meta_mgr->list_keys_next(handle, max, user_ids,
+					      &truncated);
+	if (ret < 0 && ret != -ENOENT) {
+	  cerr << "ERROR: buckets limit check lists_keys_next(): "
+	       << cpp_strerror(-ret) << std::endl;
+	  break;
+	} else {
+	  /* ok, do the limit checks for this group */
+	  ret =
+	    RGWBucketAdminOp::limit_check(store, bucket_op, user_ids, f,
+	      warnings_only);
+	  if (ret < 0)
+	    break;
+	}
+	user_ids.clear();
+      } while (truncated);
+      store->meta_mgr->list_keys_complete(handle);
+    }
+    return -ret;
+  } /* OPT_BUCKETS_LIMIT_CHECK */
+
   if (opt_cmd == OPT_BUCKETS_LIST) {
     if (bucket_name.empty()) {
       RGWBucketAdminOp::info(store, bucket_op, f);
@@ -4356,8 +4418,8 @@ int main(int argc, char **argv)
 
       formatter->close_section();
       formatter->flush(cout);
-    }
-  }
+    } /* have bucket_name */
+  } /* OPT_BUCKETS_LIST */
 
   if (opt_cmd == OPT_BUCKET_STATS) {
     bucket_op.set_fetch_stats(true);
