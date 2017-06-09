@@ -359,8 +359,6 @@ private:
 
   void update_pool_flags(int64_t pool_id, uint64_t flags);
   bool update_pools_status();
-  void get_pools_health(list<pair<health_status_t,string> >& summary,
-                        list<pair<health_status_t,string> > *detail) const;
 
   bool prepare_set_flag(MonOpRequestRef op, int flag);
   bool prepare_unset_flag(MonOpRequestRef op, int flag);
