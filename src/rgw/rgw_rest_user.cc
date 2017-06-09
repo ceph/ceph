@@ -327,11 +327,13 @@ void RGWOp_Subuser_Create::execute()
   std::string uid_str;
   std::string subuser;
   std::string secret_key;
+  std::string access_key;
   std::string perm_str;
   std::string key_type_str;
 
   bool gen_subuser = false; // FIXME placeholder
   bool gen_secret;
+  bool gen_access;
 
   uint32_t perm_mask = 0;
   int32_t key_type = KEY_TYPE_SWIFT;
@@ -342,12 +344,14 @@ void RGWOp_Subuser_Create::execute()
   rgw_user uid(uid_str);
 
   RESTArgs::get_string(s, "subuser", subuser, &subuser);
+  RESTArgs::get_string(s, "access-key", access_key, &access_key);
   RESTArgs::get_string(s, "secret-key", secret_key, &secret_key);
   RESTArgs::get_string(s, "access", perm_str, &perm_str);
   RESTArgs::get_string(s, "key-type", key_type_str, &key_type_str);
   //RESTArgs::get_bool(s, "generate-subuser", false, &gen_subuser);
   RESTArgs::get_bool(s, "generate-secret", false, &gen_secret);
-
+  RESTArgs::get_bool(s, "gen-access-key", false, &gen_access);
+  
   perm_mask = rgw_str_to_perm(perm_str.c_str());
   op_state.set_perm(perm_mask);
 
@@ -358,10 +362,16 @@ void RGWOp_Subuser_Create::execute()
   if (!subuser.empty())
     op_state.set_subuser(subuser);
 
+  if (!access_key.empty())
+    op_state.set_access_key(access_key);
+  
   if (!secret_key.empty())
     op_state.set_secret_key(secret_key);
 
   op_state.set_generate_subuser(gen_subuser);
+
+  if (gen_access)
+    op_state.set_gen_access();
 
   if (gen_secret)
     op_state.set_gen_secret();
