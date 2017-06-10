@@ -182,3 +182,11 @@
   replicated rule in the CRUSH map for replicated pools.  Erasure
   coded pools have rules that are automatically created for them if they are
   not specified at pool creation time.
+
+12.1.1
+------
+
+* The 'ceph health' structured output (JSON or XML) no longer contains
+  a 'timechecks' section describing the time sync status.  This
+  information is now available via the 'ceph time-sync-status'
+  command.
