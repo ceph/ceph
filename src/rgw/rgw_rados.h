@@ -3175,7 +3175,7 @@ public:
   }
 
   bool need_to_log_metadata() {
-    return get_zone().log_meta;
+    return is_meta_master() && get_zone().log_meta;
   }
 
   librados::Rados* get_rados_handle();
