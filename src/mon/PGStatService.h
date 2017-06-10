@@ -91,7 +91,7 @@ public:
 
 };
 
-class MonPGStatService : public PGStatService {
+class MonPGStatService : virtual public PGStatService {
 public:
   MonPGStatService() : PGStatService() {}
   virtual ~MonPGStatService() {}

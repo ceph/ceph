@@ -581,7 +581,8 @@ namespace reweight {
 }
 
 
-class PGMapStatService : public PGStatService {
+class PGMapStatService : virtual public PGStatService {
+protected:
   const PGMap& pgmap;
 public:
   PGMapStatService(const PGMap& o)
