@@ -2464,49 +2464,26 @@ health_status_t Monitor::get_health(list<string>& status,
 
   health_monitor->get_health(f, summary, (detailbl ? &detail : NULL));
 
-  if (f) {
-    f->open_object_section("timechecks");
-    f->dump_unsigned("epoch", get_epoch());
-    f->dump_int("round", timecheck_round);
-    f->dump_stream("round_status")
-      << ((timecheck_round%2) ? "on-going" : "finished");
-  }
-
   health_status_t overall = HEALTH_OK;
   if (!timecheck_skews.empty()) {
     list<string> warns;
-    if (f)
-      f->open_array_section("mons");
     for (map<entity_inst_t,double>::iterator i = timecheck_skews.begin();
          i != timecheck_skews.end(); ++i) {
       entity_inst_t inst = i->first;
       double skew = i->second;
       double latency = timecheck_latencies[inst];
       string name = monmap->get_name(inst.addr);
-
       ostringstream tcss;
       health_status_t tcstatus = timecheck_status(tcss, skew, latency);
       if (tcstatus != HEALTH_OK) {
         if (overall > tcstatus)
           overall = tcstatus;
         warns.push_back(name);
-
         ostringstream tmp_ss;
         tmp_ss << "mon." << name
                << " addr " << inst.addr << " " << tcss.str()
 	       << " (latency " << latency << "s)";
         detail.push_back(make_pair(tcstatus, tmp_ss.str()));
-      }
-
-      if (f) {
-        f->open_object_section("mon");
-        f->dump_string("name", name.c_str());
-        f->dump_float("skew", skew);
-        f->dump_float("latency", latency);
-        f->dump_stream("health") << tcstatus;
-        if (tcstatus != HEALTH_OK)
-          f->dump_stream("details") << tcss.str();
-        f->close_section();
       }
     }
     if (!warns.empty()) {
@@ -2521,11 +2498,7 @@ health_status_t Monitor::get_health(list<string>& status,
       status.push_back(ss.str());
       summary.push_back(make_pair(HEALTH_WARN, "Monitor clock skew detected "));
     }
-    if (f)
-      f->close_section();
   }
-  if (f)
-    f->close_section();
 
   if (f)
     f->open_array_section("summary");
@@ -3089,6 +3062,40 @@ void Monitor::handle_command(MonOpRequestRef op)
       rs = "must supply options to be parsed in a single string";
       r = -EINVAL;
     }
+  } else if (prefix == "time-sync-status") {
+    if (!f)
+      f.reset(Formatter::create("json-pretty"));
+    f->open_object_section("time_sync");
+    if (!timecheck_skews.empty()) {
+      f->open_object_section("time_skew_status");
+      for (auto& i : timecheck_skews) {
+	entity_inst_t inst = i.first;
+	double skew = i.second;
+	double latency = timecheck_latencies[inst];
+	string name = monmap->get_name(inst.addr);
+	ostringstream tcss;
+	health_status_t tcstatus = timecheck_status(tcss, skew, latency);
+	f->open_object_section(name.c_str());
+	f->dump_float("skew", skew);
+	f->dump_float("latency", latency);
+	f->dump_stream("health") << tcstatus;
+	if (tcstatus != HEALTH_OK) {
+	  f->dump_stream("details") << tcss.str();
+	}
+	f->close_section();
+      }
+      f->close_section();
+    }
+    f->open_object_section("timechecks");
+    f->dump_unsigned("epoch", get_epoch());
+    f->dump_int("round", timecheck_round);
+    f->dump_stream("round_status") << ((timecheck_round%2) ?
+				       "on-going" : "finished");
+    f->close_section();
+    f->close_section();
+    f->flush(rdata);
+    r = 0;
+    rs = "";
   } else if (prefix == "status" ||
 	     prefix == "health" ||
 	     prefix == "df") {

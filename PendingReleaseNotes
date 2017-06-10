@@ -194,3 +194,8 @@
   If you deployed Luminous dev releases or 12.1.0 rc release and made use of
   the CRUSH choose_args feature, you need to remove all choose_args mappings
   from your CRUSH map before starting the upgrade.
+
+* The 'ceph health' structured output (JSON or XML) no longer contains
+  a 'timechecks' section describing the time sync status.  This
+  information is now available via the 'ceph time-sync-status'
+  command.
