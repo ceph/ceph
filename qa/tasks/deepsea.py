@@ -170,7 +170,7 @@ class DeepSea(Task):
                 .format(_remote.hostname))
             _remote.run(args=[
                 'sudo', 'sh', '-c',
-                'umount /dev/vdb2 ; umount /dev/vdc2'
+                'for f in vdb2 vdc2 ; do test -b /dev/$f && umount /dev/$f || true ; done'
                 ])
         super(DeepSea, self).end()
 
