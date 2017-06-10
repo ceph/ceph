@@ -706,6 +706,8 @@ function test_mon_misc()
   ceph health --format json-pretty
   ceph health detail --format xml-pretty
 
+  ceph time-sync-status
+
   ceph node ls
   for t in mon osd mds ; do
       ceph node ls $t
