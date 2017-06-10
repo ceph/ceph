@@ -14,6 +14,7 @@
 #ifndef CEPH_DNS_RESOLVE_H
 #define CEPH_DNS_RESOLVE_H
 
+#include <netinet/in.h>
 #include <resolv.h>
 
 #include "common/Mutex.h"
