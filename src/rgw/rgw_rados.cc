@@ -13101,7 +13101,7 @@ int RGWRados::cls_user_remove_bucket(rgw_raw_obj& obj, const cls_user_bucket& bu
   return 0;
 }
 
-int RGWRados::check_bucket_shards(const RGWBucketInfo& bucket_info, rgw_bucket& bucket,
+int RGWRados::check_bucket_shards(const RGWBucketInfo& bucket_info, const rgw_bucket& bucket,
 				  RGWQuotaInfo& bucket_quota)
 {
   if (!cct->_conf->rgw_dynamic_resharding) {
