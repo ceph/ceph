@@ -13120,6 +13120,9 @@ int RGWRados::check_bucket_shards(const RGWBucketInfo& bucket_info, const rgw_bu
   }
 
   if (need_resharding) {
+    ldout(cct, 20) << __func__ << " bucket " << bucket.name << " need resharding " <<
+      " old num shards " << bucket_info.num_shards << " new num shards " << suggested_num_shards <<
+      dendl;
     return add_bucket_to_reshard(bucket_info, suggested_num_shards);
   }
 
