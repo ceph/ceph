@@ -21,6 +21,7 @@
 #include "include/types.h"
 #include "common/Clock.h"
 #include "msg/Message.h"
+#include "include/health.h"
 
 #include <set>
 #include <map>

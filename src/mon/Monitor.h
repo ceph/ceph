@@ -27,6 +27,7 @@
 #include <cmath>
 
 #include "include/types.h"
+#include "include/health.h"
 #include "msg/Messenger.h"
 
 #include "common/Timer.h"

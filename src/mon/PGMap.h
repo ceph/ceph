@@ -21,6 +21,7 @@
 #ifndef CEPH_PGMAP_H
 #define CEPH_PGMAP_H
 
+#include "include/health.h"
 #include "common/debug.h"
 #include "common/TextTable.h"
 #include "osd/osd_types.h"
