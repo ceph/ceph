@@ -17,17 +17,7 @@
 
 #include "messages/PaxosServiceMessage.h"
 #include "include/types.h"
-
-// health_status_t
-static inline void encode(health_status_t hs, bufferlist& bl) {
-  uint8_t v = hs;
-  ::encode(v, bl);
-}
-static inline void decode(health_status_t& hs, bufferlist::iterator& p) {
-  uint8_t v;
-  ::decode(v, p);
-  hs = health_status_t(v);
-}
+#include "include/health.h"
 
 class MMonMgrReport : public PaxosServiceMessage {
 
