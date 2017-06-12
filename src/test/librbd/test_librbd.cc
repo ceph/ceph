@@ -18,8 +18,6 @@
 #include "include/rbd/librbd.h"
 #include "include/rbd/librbd.hpp"
 
-#include "common/Thread.h"
-
 #include "gtest/gtest.h"
 
 #include <errno.h>
@@ -34,16 +32,57 @@
 #include <sstream>
 #include <set>
 #include <vector>
+#include <pthread.h>
 
 #include "test/librados/test.h"
 #include "test/librbd/test_support.h"
-#include "common/errno.h"
 #include "include/interval_set.h"
 #include "include/stringify.h"
 
 #include <boost/scope_exit.hpp>
 
 using namespace std;
+
+namespace {
+
+class Thread {
+public:
+  Thread() : thread_id(0) {
+  }
+  virtual ~Thread() {
+  }
+
+  void create() {
+    int r = pthread_create(&thread_id, NULL, _entry_func, (void*)this);
+    assert(r == 0);
+  }
+
+  int join() {
+    if (thread_id == 0) {
+      assert("join on thread that was never started" == 0);
+      return -EINVAL;
+    }
+
+    int r = pthread_join(thread_id, NULL);
+    assert(r == 0);
+    thread_id = 0;
+    return r;
+  }
+
+protected:
+  virtual void *entry() = 0;
+
+private:
+  pthread_t thread_id;
+
+  static void *_entry_func(void *arg) {
+    void *r = ((Thread*)arg)->entry();
+    return r;
+  }
+
+};
+
+} // anonymous namespace
 
 #define ASSERT_PASSED(x, args...) \
   do {                            \
@@ -1161,8 +1200,6 @@ TEST_F(TestLibRBD, TestIOPPWithIOHint)
   ioctx.close();
 }
 
-
-
 TEST_F(TestLibRBD, TestIOToSnapshot)
 {
   rados_ioctx_t ioctx;
@@ -1212,7 +1249,7 @@ TEST_F(TestLibRBD, TestIOToSnapshot)
   r = rbd_write(image, 0, TEST_IO_TO_SNAP_SIZE, test_data);
   printf("write to snapshot returned %d\n", r);
   ASSERT_LT(r, 0);
-  cout << cpp_strerror(-r) << std::endl;
+  cout << strerror(-r) << std::endl;
 
   ASSERT_PASSED(read_test_data, image, orig_data, 0, TEST_IO_TO_SNAP_SIZE, 0);
   rbd_snap_set(image, "written");
@@ -1236,7 +1273,7 @@ TEST_F(TestLibRBD, TestIOToSnapshot)
   r = rbd_write(image_at_snap, 0, TEST_IO_TO_SNAP_SIZE, test_data);
   printf("write to snapshot returned %d\n", r);
   ASSERT_LT(r, 0);
-  cout << cpp_strerror(-r) << std::endl;
+  cout << strerror(-r) << std::endl;
   ASSERT_EQ(0, rbd_close(image_at_snap));
 
   ASSERT_EQ(2, test_ls_snaps(image, 2, "orig", isize, "written", isize));
@@ -2955,4 +2992,12 @@ TEST_F(TestLibRBD, FlushCacheWithCopyupOnExternalSnapshot) {
   image.aio_read(0, 1024, read_bl, read_comp);
   ASSERT_EQ(0, read_comp->wait_for_complete());
   read_comp->release();
+}
+
+// poorman's assert()
+namespace ceph {
+  void __ceph_assert_fail(const char *assertion, const char *file, int line,
+			  const char *func) {
+    assert(false);
+  }
 }
