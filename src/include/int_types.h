@@ -50,4 +50,16 @@ typedef __u32 __bitwise__ __be32;
 typedef __u64 __bitwise__ __le64;
 typedef __u64 __bitwise__ __be64;
 
+#ifndef BOOST_MPL_CFG_NO_PREPROCESSED_HEADERS
+#define BOOST_MPL_CFG_NO_PREPROCESSED_HEADERS
+#endif
+
+#ifndef BOOST_MPL_LIMIT_VECTOR_SIZE
+#define BOOST_MPL_LIMIT_VECTOR_SIZE 30 // or whatever you need
+#endif
+
+#ifndef BOOST_MPL_LIMIT_MAP_SIZE
+#define BOOST_MPL_LIMIT_MAP_SIZE 30 // or whatever you need
+#endif
+
 #endif
