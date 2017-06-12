@@ -60,6 +60,8 @@ void MgrMonitor::update_from_paxos(bool *need_bootstrap)
     dout(4) << "active server: " << map.active_addr
 	    << "(" << map.active_gid << ")" << dendl;
 
+    load_health();
+
     if (map.available) {
       first_seen_inactive = utime_t();
     } else {
@@ -86,6 +88,18 @@ void MgrMonitor::encode_pending(MonitorDBStore::TransactionRef t)
   pending_map.encode(bl, mon->get_quorum_con_features());
   put_version(t, pending_map.epoch, bl);
   put_last_committed(t, pending_map.epoch);
+
+  health_check_map_t next;
+  if (!pending_map.available) {
+    health_status_t level = HEALTH_WARN;
+    utime_t now = ceph_clock_now();
+    if (first_seen_inactive != utime_t() &&
+	now - first_seen_inactive > g_conf->mon_mgr_inactive_grace) {
+      level = HEALTH_ERR;
+    }
+    next.add("MGR_DOWN", level, "no active mgr");
+  }
+  encode_health(next, t);
 }
 
 bool MgrMonitor::check_caps(MonOpRequestRef op, const uuid_d& fsid)

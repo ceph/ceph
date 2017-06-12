@@ -78,6 +78,7 @@
 #include "MgrStatMonitor.h"
 #include "mon/QuorumService.h"
 #include "mon/OldHealthMonitor.h"
+#include "mon/HealthMonitor.h"
 #include "mon/ConfigKeyService.h"
 #include "common/config.h"
 #include "common/cmdparse.h"
@@ -204,6 +205,7 @@ Monitor::Monitor(CephContext* cct_, string nm, MonitorDBStore *s,
   paxos_service[PAXOS_AUTH] = new AuthMonitor(this, paxos, "auth");
   paxos_service[PAXOS_MGR] = new MgrMonitor(this, paxos, "mgr");
   paxos_service[PAXOS_MGRSTAT] = new MgrStatMonitor(this, paxos, "mgrstat");
+  paxos_service[PAXOS_HEALTH] = new HealthMonitor(this, paxos, "health");
 
   health_monitor = new OldHealthMonitor(this);
   config_key_service = new ConfigKeyService(this, paxos);
@@ -2445,6 +2447,115 @@ void Monitor::do_health_to_clog(bool force)
   health_status_cache.summary = summary;
 }
 
+health_status_t Monitor::get_health_status(
+  bool want_detail,
+  Formatter *f,
+  std::string *plain,
+  const char *sep1,
+  const char *sep2)
+{
+  health_status_t r = HEALTH_OK;
+  bool compat = g_conf->mon_health_preluminous_compat;
+  if (f) {
+    f->open_object_section("health");
+    f->open_object_section("checks");
+  }
+
+  string summary;
+  string *psummary = f ? nullptr : &summary;
+  for (auto& svc : paxos_service) {
+    r = std::min(r, svc->get_health_checks().dump_summary(
+		   f, psummary, sep2, want_detail));
+  }
+
+  if (f) {
+    f->close_section();
+    f->dump_stream("status") << r;
+  } else {
+    // one-liner: HEALTH_FOO[ thing1[; thing2 ...]]
+    *plain = stringify(r);
+    if (summary.size()) {
+      *plain += sep1;
+      *plain += summary;
+    }
+    *plain += "\n";
+  }
+
+  if (f && compat) {
+    f->open_array_section("summary");
+    for (auto& svc : paxos_service) {
+      svc->get_health_checks().dump_summary_compat(f);
+    }
+    f->close_section();
+    f->dump_stream("overall_status") << r;
+  }
+
+  if (want_detail) {
+    if (f && compat) {
+      f->open_array_section("detail");
+    }
+
+    for (auto& svc : paxos_service) {
+      svc->get_health_checks().dump_detail(f, plain, compat);
+    }
+
+    if (f && compat) {
+      f->close_section();
+    }
+  }
+  if (f) {
+    f->close_section();
+  }
+  return r;
+}
+
+void Monitor::log_health(
+  const health_check_map_t& updated,
+  const health_check_map_t& previous,
+  MonitorDBStore::TransactionRef t)
+{
+  if (!g_conf->mon_health_to_clog) {
+    return;
+  }
+  // FIXME: log atomically as part of @t instead of using clog.
+  dout(10) << __func__ << " updated " << updated.checks.size()
+	   << " previous " << previous.checks.size()
+	   << dendl;
+  for (auto& p : updated.checks) {
+    auto q = previous.checks.find(p.first);
+    if (q == previous.checks.end()) {
+      // new
+      ostringstream ss;
+      ss << p.second.severity << " " << p.first << ": "
+	 << p.second.summary;
+      if (p.second.severity == HEALTH_WARN)
+	clog->warn() << ss.str();
+      else
+	clog->error() << ss.str();
+    } else {
+      if (p.second.summary != q->second.summary ||
+	  p.second.severity != q->second.severity) {
+	// summary or severity changed (ignore detail changes at this level)
+	ostringstream ss;
+	ss << p.second.severity << " " << p.first << " (update): "
+	   << p.second.summary;
+	if (p.second.severity == HEALTH_WARN)
+	  clog->warn() << ss.str();
+	else
+	  clog->error() << ss.str();
+      }
+    }
+  }
+  for (auto& p : previous.checks) {
+    if (!updated.checks.count(p.first)) {
+      // cleared
+      ostringstream ss;
+      ss << HEALTH_OK << " " << p.first << ": " << p.second.summary;
+      clog->info() << ss.str();
+    }
+  }
+}
+
 health_status_t Monitor::get_health(list<string>& status,
                                     bufferlist *detailbl,
                                     Formatter *f)
@@ -2550,12 +2661,9 @@ void Monitor::get_cluster_status(stringstream &ss, Formatter *f)
   if (f)
     f->open_object_section("status");
 
-  // reply with the status for all the components
-  list<string> health;
-  get_health(health, NULL, f);
-
   if (f) {
     f->dump_stream("fsid") << monmap->get_fsid();
+    get_health_status(false, f, nullptr);
     f->dump_unsigned("election_epoch", get_epoch());
     {
       f->open_array_section("quorum");
@@ -2579,7 +2687,6 @@ void Monitor::get_cluster_status(stringstream &ss, Formatter *f)
     f->open_object_section("fsmap");
     mdsmon()->get_fsmap().print_summary(f, NULL);
     f->close_section();
-
     f->open_object_section("mgrmap");
     mgrmon()->get_map().print_summary(f, nullptr);
     f->close_section();
@@ -2587,11 +2694,21 @@ void Monitor::get_cluster_status(stringstream &ss, Formatter *f)
     f->dump_object("servicemap", mgrstatmon()->get_service_map());
     f->close_section();
   } else {
-
     ss << "  cluster:\n";
     ss << "    id:     " << monmap->get_fsid() << "\n";
-    ss << "    health: " << joinify(health.begin(), health.end(), 
-				  string("\n            ")) << "\n";
+
+    string health;
+    if (osdmon()->osdmap.require_osd_release >= CEPH_RELEASE_LUMINOUS) {
+      get_health_status(false, nullptr, &health,
+			"\n            ", "\n            ");
+    } else {
+      list<string> ls;
+      get_health(ls, NULL, f);
+      health = joinify(ls.begin(), ls.end(),
+		       string("\n            "));
+    }
+    ss << "    health: " << health << "\n";
+
     ss << "\n \n  services:\n";
     {
       size_t maxlen = 3;
@@ -3112,25 +3229,35 @@ void Monitor::handle_command(MonOpRequestRef op)
       }
       rdata.append(ds);
     } else if (prefix == "health") {
-      list<string> health_str;
-      get_health(health_str, detail == "detail" ? &rdata : NULL, f.get());
-      if (f) {
-        f->flush(ds);
-        ds << '\n';
-      } else {
-	assert(!health_str.empty());
-	ds << health_str.front();
-	health_str.pop_front();
-	if (!health_str.empty()) {
-	  ds << ' ';
-	  ds << joinify(health_str.begin(), health_str.end(), string("; "));
+      if (osdmon()->osdmap.require_osd_release >= CEPH_RELEASE_LUMINOUS) {
+	string plain;
+	get_health_status(detail == "detail", f.get(), f ? nullptr : &plain);
+	if (f) {
+	  f->flush(rdata);
+	} else {
+	  rdata.append(plain);
 	}
+      } else {
+	list<string> health_str;
+	get_health(health_str, detail == "detail" ? &rdata : NULL, f.get());
+	if (f) {
+	  f->flush(ds);
+	  ds << '\n';
+	} else {
+	  assert(!health_str.empty());
+	  ds << health_str.front();
+	  health_str.pop_front();
+	  if (!health_str.empty()) {
+	    ds << ' ';
+	    ds << joinify(health_str.begin(), health_str.end(), string("; "));
+	  }
+	}
+	bufferlist comb;
+	comb.append(ds);
+	if (detail == "detail")
+	  comb.append(rdata);
+	rdata = comb;
       }
-      bufferlist comb;
-      comb.append(ds);
-      if (detail == "detail")
-	comb.append(rdata);
-      rdata = comb;
     } else if (prefix == "df") {
       bool verbose = (detail == "detail");
       if (f)
@@ -4117,6 +4244,11 @@ void Monitor::dispatch_op(MonOpRequestRef op)
 
     case MSG_MON_HEALTH:
       health_monitor->dispatch(op);
+      break;
+
+    case MSG_MON_HEALTH_CHECKS:
+      op->set_type_service();
+      paxos_service[PAXOS_HEALTH]->dispatch(op);
       break;
 
     default:
