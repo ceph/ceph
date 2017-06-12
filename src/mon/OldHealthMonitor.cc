@@ -22,7 +22,7 @@
 
 #include "mon/Monitor.h"
 #include "mon/HealthService.h"
-#include "mon/HealthMonitor.h"
+#include "mon/OldHealthMonitor.h"
 #include "mon/DataHealthService.h"
 
 #include "messages/MMonHealth.h"
@@ -33,13 +33,13 @@
 #undef dout_prefix
 #define dout_prefix _prefix(_dout, mon, this)
 static ostream& _prefix(std::ostream *_dout, const Monitor *mon,
-                        const HealthMonitor *hmon) {
+                        const OldHealthMonitor *hmon) {
   return *_dout << "mon." << mon->name << "@" << mon->rank
 		<< "(" << mon->get_state_name() << ")." << hmon->get_name()
                 << "(" << hmon->get_epoch() << ") ";
 }
 
-void HealthMonitor::init()
+void OldHealthMonitor::init()
 {
   dout(10) << __func__ << dendl;
   assert(services.empty());
@@ -52,7 +52,7 @@ void HealthMonitor::init()
   }
 }
 
-bool HealthMonitor::service_dispatch(MonOpRequestRef op)
+bool OldHealthMonitor::service_dispatch(MonOpRequestRef op)
 {
   assert(op->get_req()->get_type() == MSG_MON_HEALTH);
   MMonHealth *hm = static_cast<MMonHealth*>(op->get_req());
@@ -65,7 +65,7 @@ bool HealthMonitor::service_dispatch(MonOpRequestRef op)
   return services[service_type]->service_dispatch(op);
 }
 
-void HealthMonitor::start_epoch() {
+void OldHealthMonitor::start_epoch() {
   epoch_t epoch = get_epoch();
   for (map<int,HealthService*>::iterator it = services.begin();
        it != services.end(); ++it) {
@@ -73,8 +73,8 @@ void HealthMonitor::start_epoch() {
   }
 }
 
-void HealthMonitor::finish_epoch() {
-  generic_dout(20) << "HealthMonitor::finish_epoch()" << dendl;
+void OldHealthMonitor::finish_epoch() {
+  generic_dout(20) << "OldHealthMonitor::finish_epoch()" << dendl;
   for (map<int,HealthService*>::iterator it = services.begin();
        it != services.end(); ++it) {
     assert(it->second != NULL);
@@ -82,9 +82,9 @@ void HealthMonitor::finish_epoch() {
   }
 }
 
-void HealthMonitor::service_shutdown()
+void OldHealthMonitor::service_shutdown()
 {
-  dout(0) << "HealthMonitor::service_shutdown "
+  dout(0) << "OldHealthMonitor::service_shutdown "
           << services.size() << " services" << dendl;
   for (map<int,HealthService*>::iterator it = services.begin();
       it != services.end();
@@ -95,7 +95,7 @@ void HealthMonitor::service_shutdown()
   services.clear();
 }
 
-void HealthMonitor::get_health(
+void OldHealthMonitor::get_health(
   list<pair<health_status_t,string> >& summary,
   list<pair<health_status_t,string> > *detail)
 {
@@ -105,4 +105,3 @@ void HealthMonitor::get_health(
     it->second->get_health(summary, detail);
   }
 }
-
