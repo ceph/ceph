@@ -100,6 +100,11 @@ void MgrStatMonitor::create_pending()
 void MgrStatMonitor::encode_pending(MonitorDBStore::TransactionRef t)
 {
   ++version;
+  if (version < mon->pgmon()->get_last_committed()) {
+    // fast-forward to pgmon version to ensure clients don't see a
+    // jump back in time for MGetPoolStats and MStatFs.
+    version = mon->pgmon()->get_last_committed() + 1;
+  }
   dout(10) << " " << version << dendl;
   bufferlist bl;
   ::encode(pending_digest, bl, mon->get_quorum_con_features());
