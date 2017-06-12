@@ -36,6 +36,18 @@ struct MockImageCache {
                      int fadvise_flags, Context *on_finish) {
     aio_writesame_mock(off, len, bl, fadvise_flags, on_finish);
   }
+
+  MOCK_METHOD6(aio_compare_and_write_mock, void(const Extents &,
+                                                const ceph::bufferlist &,
+                                                const ceph::bufferlist &,
+                                                uint64_t *, int, Context *));
+
+  void aio_compare_and_write(Extents&& image_extents, ceph::bufferlist&& cmp_bl,
+                             ceph::bufferlist&& bl, uint64_t *mismatch_offset,
+                             int fadvise_flags, Context *on_finish) {
+    aio_compare_and_write_mock(image_extents, cmp_bl, bl, mismatch_offset,
+                               fadvise_flags, on_finish);
+  }
 };
 
 } // namespace cache
