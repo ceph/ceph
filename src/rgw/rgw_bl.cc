@@ -349,7 +349,8 @@ int RGWBL::bucket_bl_deliver(string opslog_obj, const rgw_bucket target_bucket,
   bufferlist opslog_buffer;
   struct rgw_log_entry entry;
   int entry_nums = 0;
-
+  std::vector<std::string> uploaded_obj_keys;
+ 
   do {
     ret = store->log_show_next(sh, &entry);
     if (ret < 0) {
@@ -383,13 +384,44 @@ int RGWBL::bucket_bl_deliver(string opslog_obj, const rgw_bucket target_bucket,
       rgw_obj tobject(target_bucket, target_key);
       
       ldout(cct, 20) << __func__ << " upload phrase:" << dendl;
-      int upload_ret = bucket_bl_upload(&opslog_buffer, tobject, tobject_attrs);
+      int upload_ret = -1;
+#define BL_UPLOAD_RETRY_NUMS 2
+      int retry_nums = BL_UPLOAD_RETRY_NUMS;
+      do {
+        upload_ret = bucket_bl_upload(&opslog_buffer, tobject, tobject_attrs);
+      } while (upload_ret < 0 && upload_ret != -EPERM && (retry_nums--) != 0);
+ 
       opslog_buffer.clear();
       if (upload_ret < 0) {
         ldout(cct, 0) << __func__ << " bucket_bl_upload() failed ret="
 		      << cpp_strerror(-upload_ret) << dendl;
+
+        RGWObjectCtx obj_ctx(store);
+        obj_ctx.obj.set_atomic(tobject);
+        RGWBucketInfo bucket_info;
+        int bucket_ret = store->get_bucket_info(obj_ctx, target_bucket.tenant, target_bucket.name, 
+                                                bucket_info, NULL, NULL); 
+        if (bucket_ret < 0) {
+          if (bucket_ret == -ENOENT) {
+            bucket_ret = -ERR_NO_SUCH_BUCKET;
+          } 
+          ldout(cct, 0) << __func__ << " get bucket_info failed! ret = " 
+                        << bucket_ret << dendl;
+          return bucket_ret;
+        } 
+        
+        for (auto key_iter = uploaded_obj_keys.begin(); key_iter != uploaded_obj_keys.end(); key_iter++) {
+          rgw_obj del_obj(target_bucket, *key_iter);
+          int del_ret = store->delete_obj(obj_ctx, bucket_info, del_obj, bucket_info.versioning_status());
+          if (del_ret < 0 && del_ret != -ENOENT) {
+            ldout(cct, 0) << __func__ << " ERROR: delete log obj failed ret = "
+                          << del_ret << " obj_key = " << target_key << dendl;
+          }
+        }
+        
         return upload_ret;
       }
+      uploaded_obj_keys.push_back(target_key);  
     }
   } while (ret > 0);
 
