@@ -11,8 +11,8 @@
  * Foundation.  See file COPYING.
  *
  */
-#ifndef CEPH_HEALTH_MONITOR_H
-#define CEPH_HEALTH_MONITOR_H
+#ifndef CEPH_MON_OLDHEALTHMONITOR_H
+#define CEPH_MON_OLDHEALTHMONITOR_H
 
 #include "mon/QuorumService.h"
 
@@ -20,7 +20,7 @@
 namespace ceph { class Formatter; }
 class HealthService;
 
-class HealthMonitor : public QuorumService
+class OldHealthMonitor : public QuorumService
 {
   map<int,HealthService*> services;
 
@@ -28,14 +28,14 @@ protected:
   void service_shutdown() override;
 
 public:
-  HealthMonitor(Monitor *m) : QuorumService(m) { }
-  ~HealthMonitor() override {
+  OldHealthMonitor(Monitor *m) : QuorumService(m) { }
+  ~OldHealthMonitor() override {
     assert(services.empty());
   }
 
 
   /**
-   * @defgroup HealthMonitor_Inherited_h Inherited abstract methods
+   * @defgroup OldHealthMonitor_Inherited_h Inherited abstract methods
    * @{
    */
   void init() override;
@@ -59,8 +59,8 @@ public:
   }
 
   /**
-   * @} // HealthMonitor_Inherited_h
+   * @} // OldHealthMonitor_Inherited_h
    */
 };
 
-#endif // CEPH_HEALTH_MONITOR_H
+#endif
