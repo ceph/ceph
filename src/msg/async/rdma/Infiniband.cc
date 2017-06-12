@@ -18,6 +18,8 @@
 #include "common/errno.h"
 #include "common/debug.h"
 #include "RDMAStack.h"
+#include <sys/time.h>
+#include <sys/resource.h>
 
 #define dout_subsys ceph_subsys_ms
 #undef dout_prefix
@@ -776,9 +778,45 @@ int Infiniband::MemoryManager::get_send_buffers(std::vector<Chunk*> &c, size_t b
   return send->get_buffers(c, bytes);
 }
 
-Infiniband::Infiniband(CephContext *cct, const std::string &device_name, uint8_t port_num)
-  : cct(cct), lock("IB lock"), device_name(device_name), port_num(port_num)
+bool Infiniband::init_prereq = false;
+
+void Infiniband::verify_prereq(CephContext *cct) {
+
+  //On RDMA MUST be called before fork
+   int rc = ibv_fork_init();
+   if (rc) {
+      lderr(cct) << __func__ << " failed to call ibv_for_init(). On RDMA must be called before fork. Application aborts." << dendl;
+      ceph_abort();
+   }
+
+   ldout(cct, 20) << __func__ << " ms_async_rdma_enable_hugepage value is: " << cct->_conf->ms_async_rdma_enable_hugepage <<  dendl;
+   if (cct->_conf->ms_async_rdma_enable_hugepage){
+     rc =  setenv("RDMAV_HUGEPAGES_SAFE","1",1);
+     ldout(cct, 20) << __func__ << " RDMAV_HUGEPAGES_SAFE is set as: " << getenv("RDMAV_HUGEPAGES_SAFE") <<  dendl;
+     if (rc) {
+       lderr(cct) << __func__ << " failed to export RDMA_HUGEPAGES_SAFE. On RDMA must be exported before using huge pages. Application aborts." << dendl;
+       ceph_abort();
+     }
+   }
+
+   //Check ulimit
+   struct rlimit limit;
+   getrlimit(RLIMIT_MEMLOCK, &limit);
+   if (limit.rlim_cur != RLIM_INFINITY || limit.rlim_max != RLIM_INFINITY) {
+      lderr(cct) << __func__ << "!!! WARNING !!! For RDMA to work properly user memlock (ulimit -l) must be big enough to allow large amount of registered memory."
+				  " We recommend setting this parameter to infinity" << dendl;
+   }
+   init_prereq = true;
+}
+
+Infiniband::Infiniband(CephContext *cct)
+  : cct(cct), lock("IB lock"),
+    device_name(cct->_conf->ms_async_rdma_device_name),
+    port_num( cct->_conf->ms_async_rdma_port_num)
 {
+  if (!init_prereq)
+    verify_prereq(cct);
+  ldout(cct, 20) << __func__ << " constructing Infiniband..." << dendl;
 }
 
 void Infiniband::init()
@@ -836,7 +874,6 @@ void Infiniband::init()
   srq = create_shared_receive_queue(rx_queue_len, MAX_SHARED_RX_SGE_COUNT);
 
   post_chunks_to_srq(rx_queue_len); //add to srq
-  dispatcher->polling_start();
 }
 
 Infiniband::~Infiniband()
@@ -844,21 +881,9 @@ Infiniband::~Infiniband()
   if (!initialized)
     return;
 
-  if (dispatcher)
-    dispatcher->polling_stop();
-
   ibv_destroy_srq(srq);
   delete memory_manager;
   delete pd;
-}
-
-void Infiniband::set_dispatcher(RDMADispatcher *d)
-{
-  assert(!d ^ !dispatcher);
-
-  dispatcher = d;
-  if (dispatcher != nullptr)
-    MemoryManager::RxAllocator::set_perf_logger(dispatcher->perf_logger);
 }
 
 /**
