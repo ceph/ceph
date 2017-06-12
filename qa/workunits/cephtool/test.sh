@@ -294,24 +294,6 @@ function test_tiering_agent()
   ceph osd pool delete $slow $slow --yes-i-really-really-mean-it
 }
 
-function flush_pg_stats()
-{
-    ids=`ceph osd ls`
-    seqs=''
-    for osd in $ids
-    do
-	seq=`ceph tell osd.$osd flush_pg_stats`
-	seqs="$seqs $osd-$seq"
-    done
-    for s in $seqs
-    do
-	osd=`echo $s | cut -d - -f 1`
-	seq=`echo $s | cut -d - -f 2`
-	echo "waiting osd.$osd seq $seq"
-	while test $(ceph osd last-stat-seq $osd) -lt $seq; do sleep 1 ; done
-    done
-}
-
 function test_tiering_1()
 {
   # tiering
