@@ -44,6 +44,14 @@ set(isa_srcs
   ${isal_src_dir}/erasure_code/gf_6vect_dot_prod_avx.asm
   ${isal_src_dir}/erasure_code/gf_vect_dot_prod_avx.asm
   ${isal_src_dir}/erasure_code/gf_vect_mul_sse.asm
+  ${isal_src_dir}/erasure_code/gf_2vect_dot_prod_avx512.asm
+  ${isal_src_dir}/erasure_code/gf_2vect_mad_avx512.asm
+  ${isal_src_dir}/erasure_code/gf_3vect_dot_prod_avx512.asm
+  ${isal_src_dir}/erasure_code/gf_3vect_mad_avx512.asm
+  ${isal_src_dir}/erasure_code/gf_4vect_dot_prod_avx512.asm
+  ${isal_src_dir}/erasure_code/gf_4vect_mad_avx512.asm
+  ${isal_src_dir}/erasure_code/gf_vect_dot_prod_avx512.asm
+  ${isal_src_dir}/erasure_code/gf_vect_mad_avx512.asm
   ErasureCodeIsa.cc
   ErasureCodeIsaTableCache.cc
   ErasureCodePluginIsa.cc
