@@ -55,7 +55,7 @@ string clog_type_to_string(clog_type t);
 
 struct LogEntryKey {
 private:
-  uint64_t _hash;
+  uint64_t _hash = 0;
 
   void _calc_hash() {
     hash<entity_inst_t> h;
