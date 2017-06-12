@@ -603,6 +603,12 @@ map<pg_shard_t, ScrubMap *>::const_iterator
       goto out;
     }
 
+    if (oi.soid != obj) {
+      shard_info.set_oi_attr_corrupted();
+      error_string += " oi_attr_corrupted";
+      goto out;
+    }
+
     if (auth_version != eversion_t()) {
       if (!object_error.has_object_info_inconsistency() && !(bl == auth_bl)) {
 	object_error.set_object_info_inconsistency();
