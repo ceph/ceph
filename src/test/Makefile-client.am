@@ -40,6 +40,7 @@ if WITH_RADOS
 
 libradostest_la_SOURCES = \
 	test/librados/test.cc \
+	test/librados/test_common.cc \
 	test/librados/TestCase.cc
 noinst_LTLIBRARIES += libradostest.la
 libradostest_la_CXXFLAGS = $(UNITTEST_CXXFLAGS)
