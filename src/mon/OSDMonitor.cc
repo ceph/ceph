@@ -5780,7 +5780,7 @@ int OSDMonitor::prepare_new_pool(string& name, uint64_t auid,
         << ", which in this case is " << pg_num;
     return -ERANGE;
   }
-  if (pool_type == pg_pool_t::TYPE_REPLICATED && fast_read == FAST_READ_ON) {
+  if (pool_type == pg_pool_t::TYPE_ERASURE && fast_read == FAST_READ_ON) {
     *ss << "'fast_read' can only apply to erasure coding pool";
     return -EINVAL;
   }
