@@ -57,8 +57,7 @@ public:
    * @{
    */
   void init() override { }
-  void get_health(Formatter *f,
-                  list<pair<health_status_t,string> >& summary,
+  void get_health(list<pair<health_status_t,string> >& summary,
                   list<pair<health_status_t,string> > *detail) override { }
   bool service_dispatch(MonOpRequestRef op) override;
 
