@@ -693,7 +693,10 @@ int RGWOp::verify_op_mask()
 
 int RGWGetObjTags::verify_permission()
 {
-  if (!verify_object_permission(s, RGW_PERM_READ))
+  if (!verify_object_permission(s,
+				s->object.instance.empty() ?
+				rgw::IAM::s3GetObjectTagging:
+				rgw::IAM::s3GetObjectVersionTagging))
     return -EACCES;
 
   return 0;
@@ -723,9 +726,11 @@ void RGWGetObjTags::execute()
 
 int RGWPutObjTags::verify_permission()
 {
-  if (!verify_object_permission(s, RGW_PERM_WRITE)) {
+  if (!verify_object_permission(s,
+				s->object.instance.empty() ?
+				rgw::IAM::s3PutObjectTagging:
+				rgw::IAM::s3PutObjectVersionTagging))
     return -EACCES;
-  }
   return 0;
 }
 
@@ -759,9 +764,11 @@ void RGWDeleteObjTags::pre_exec(){
 int RGWDeleteObjTags::verify_permission(){
 
   if (!s->object.empty()){
-    if(!verify_object_permission(s, RGW_PERM_WRITE)) {
+    if (!verify_object_permission(s,
+				  s->object.instance.empty() ?
+				  rgw::IAM::s3DeleteObjectTagging:
+				  rgw::IAM::s3DeleteObjectVersionTagging))
       return -EACCES;
-    }
   }
   return 0;
 }
