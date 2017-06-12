@@ -57,6 +57,7 @@ public:
                  const SnapContext &snapc) override;
   int writesame(const std::string& oid, bufferlist& bl, size_t len,
                 uint64_t off, const SnapContext &snapc) override;
+  int cmpext(const std::string& oid, uint64_t off, bufferlist& cmp_bl) override;
   int xattr_get(const std::string& oid,
                 std::map<std::string, bufferlist>* attrset) override;
   int xattr_set(const std::string& oid, const std::string &name,
