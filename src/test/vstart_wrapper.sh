@@ -62,7 +62,13 @@ function main()
 {
     teardown $CEPH_DIR
     vstart_setup || return 1
-    CEPH_CONF=$CEPH_DIR/ceph.conf "$@" || return 1
+    if CEPH_CONF=$CEPH_DIR/ceph.conf "$@"; then
+        code=0
+    else
+        code=1
+        display_logs $CEPH_OUT_DIR
+    fi
+    return $code
 }
 
 main "$@"

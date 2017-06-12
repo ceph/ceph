@@ -1638,18 +1638,24 @@ function test_wait_background() {
 
 function flush_pg_stats()
 {
+    local timeout=${1:-$TIMEOUT}
+
     ids=`ceph osd ls`
     seqs=''
     for osd in $ids; do
 	    seq=`ceph tell osd.$osd flush_pg_stats`
 	    seqs="$seqs $osd-$seq"
     done
+
     for s in $seqs; do
 	    osd=`echo $s | cut -d - -f 1`
 	    seq=`echo $s | cut -d - -f 2`
 	    echo "waiting osd.$osd seq $seq"
 	    while test $(ceph osd last-stat-seq $osd) -lt $seq; do
             sleep 1
+            if [ $((timeout--)) -eq 0 ]; then
+                return 1
+            fi
         done
     done
 }
