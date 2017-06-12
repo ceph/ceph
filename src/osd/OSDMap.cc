@@ -1219,6 +1219,14 @@ void OSDMap::get_up_osds(set<int32_t>& ls) const
   }
 }
 
+void OSDMap::get_out_osds(set<int32_t>& ls) const
+{
+  for (int i = 0; i < max_osd; i++) {
+    if (is_out(i))
+      ls.insert(i);
+  }
+}
+
 void OSDMap::calc_state_set(int state, set<string>& st)
 {
   unsigned t = state;
