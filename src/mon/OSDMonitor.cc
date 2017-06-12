@@ -8419,73 +8419,98 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 	     prefix == "osd rm") {
 
     bool any = false;
+    bool stop = false;
+    bool verbose = true;
 
     vector<string> idvec;
     cmd_getval(g_ceph_context, cmdmap, "ids", idvec);
-    for (unsigned j = 0; j < idvec.size(); j++) {
-      long osd = parse_osd_id(idvec[j].c_str(), &ss);
-      if (osd < 0) {
-	ss << "invalid osd id" << osd;
-	err = -EINVAL;
-	continue;
-      } else if (!osdmap.exists(osd)) {
-	ss << "osd." << osd << " does not exist. ";
-	continue;
-      }
-      if (prefix == "osd down") {
-	if (osdmap.is_down(osd)) {
-	  ss << "osd." << osd << " is already down. ";
-	} else {
-	  pending_inc.new_state[osd] = CEPH_OSD_UP;
-	  ss << "marked down osd." << osd << ". ";
-	  any = true;
-	}
-      } else if (prefix == "osd out") {
-	if (osdmap.is_out(osd)) {
-	  ss << "osd." << osd << " is already out. ";
-	} else {
-	  pending_inc.new_weight[osd] = CEPH_OSD_OUT;
-	  if (osdmap.osd_weight[osd]) {
-	    if (pending_inc.new_xinfo.count(osd) == 0) {
-	      pending_inc.new_xinfo[osd] = osdmap.osd_xinfo[osd];
-	    }
-	    pending_inc.new_xinfo[osd].old_weight = osdmap.osd_weight[osd];
-	  }
-	  ss << "marked out osd." << osd << ". ";
-	  any = true;
-	}
-      } else if (prefix == "osd in") {
-	if (osdmap.is_in(osd)) {
-	  ss << "osd." << osd << " is already in. ";
-	} else {
-	  if (osdmap.osd_xinfo[osd].old_weight > 0) {
-	    pending_inc.new_weight[osd] = osdmap.osd_xinfo[osd].old_weight;
-	    if (pending_inc.new_xinfo.count(osd) == 0) {
-	      pending_inc.new_xinfo[osd] = osdmap.osd_xinfo[osd];
-	    }
-	    pending_inc.new_xinfo[osd].old_weight = 0;
-	  } else {
-	    pending_inc.new_weight[osd] = CEPH_OSD_IN;
-	  }
-	  ss << "marked in osd." << osd << ". ";
-	  any = true;
-	}
-      } else if (prefix == "osd rm") {
-        err = prepare_command_osd_remove(osd);
+    for (unsigned j = 0; j < idvec.size() && !stop; j++) {
+      set<int> osds;
 
-        if (err == -EBUSY) {
-	  if (any)
-	    ss << ", ";
-          ss << "osd." << osd << " is still up; must be down before removal. ";
-	} else {
-          assert(err == 0);
-	  if (any) {
-	    ss << ", osd." << osd;
-          } else {
-	    ss << "removed osd." << osd;
-          }
-	  any = true;
-	}
+      // wildcard?
+      if (j == 0 &&
+          (idvec[0] == "any" || idvec[0] == "all" || idvec[0] == "*")) {
+        if (prefix == "osd in") {
+          // touch out osds only
+          osdmap.get_out_osds(osds);
+        } else {
+          osdmap.get_all_osds(osds);
+        }
+        stop = true;
+        verbose = false; // so the output is less noisy.
+      } else {
+        long osd = parse_osd_id(idvec[j].c_str(), &ss);
+        if (osd < 0) {
+          ss << "invalid osd id" << osd;
+          err = -EINVAL;
+          continue;
+        } else if (!osdmap.exists(osd)) {
+          ss << "osd." << osd << " does not exist. ";
+          continue;
+        }
+
+        osds.insert(osd);
+      }
+
+      for (auto &osd : osds) {
+        if (prefix == "osd down") {
+	  if (osdmap.is_down(osd)) {
+            if (verbose)
+	      ss << "osd." << osd << " is already down. ";
+	  } else {
+            pending_inc.pending_osd_state_set(osd, CEPH_OSD_UP);
+	    ss << "marked down osd." << osd << ". ";
+	    any = true;
+	  }
+        } else if (prefix == "osd out") {
+	  if (osdmap.is_out(osd)) {
+            if (verbose)
+	      ss << "osd." << osd << " is already out. ";
+	  } else {
+	    pending_inc.new_weight[osd] = CEPH_OSD_OUT;
+	    if (osdmap.osd_weight[osd]) {
+	      if (pending_inc.new_xinfo.count(osd) == 0) {
+	        pending_inc.new_xinfo[osd] = osdmap.osd_xinfo[osd];
+	      }
+	      pending_inc.new_xinfo[osd].old_weight = osdmap.osd_weight[osd];
+	    }
+	    ss << "marked out osd." << osd << ". ";
+	    any = true;
+	  }
+        } else if (prefix == "osd in") {
+	  if (osdmap.is_in(osd)) {
+            if (verbose)
+	      ss << "osd." << osd << " is already in. ";
+	  } else {
+	    if (osdmap.osd_xinfo[osd].old_weight > 0) {
+	      pending_inc.new_weight[osd] = osdmap.osd_xinfo[osd].old_weight;
+	      if (pending_inc.new_xinfo.count(osd) == 0) {
+	        pending_inc.new_xinfo[osd] = osdmap.osd_xinfo[osd];
+	      }
+	      pending_inc.new_xinfo[osd].old_weight = 0;
+	    } else {
+	      pending_inc.new_weight[osd] = CEPH_OSD_IN;
+	    }
+	    ss << "marked in osd." << osd << ". ";
+	    any = true;
+	  }
+        } else if (prefix == "osd rm") {
+          err = prepare_command_osd_remove(osd);
+
+          if (err == -EBUSY) {
+	    if (any)
+	      ss << ", ";
+            ss << "osd." << osd << " is still up; must be down before removal. ";
+	  } else {
+            assert(err == 0);
+	    if (any) {
+	      ss << ", osd." << osd;
+            } else {
+	      ss << "removed osd." << osd;
+            }
+	    any = true;
+	  }
+        }
       }
     }
     if (any) {

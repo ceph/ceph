@@ -645,16 +645,24 @@ COMMAND("osd cluster_snap", "take cluster snapshot (disabled)", \
 	"osd", "r", "")
 COMMAND("osd down " \
 	"type=CephString,name=ids,n=N", \
-	"set osd(s) <id> [<id>...] down", "osd", "rw", "cli,rest")
+	"set osd(s) <id> [<id>...] down, " \
+        "or use <any|all|*> to set all osds down", \
+        "osd", "rw", "cli,rest")
 COMMAND("osd out " \
 	"name=ids,type=CephString,n=N", \
-	"set osd(s) <id> [<id>...] out", "osd", "rw", "cli,rest")
+	"set osd(s) <id> [<id>...] out, " \
+        "or use <any|all|*> to set all osds out", \
+        "osd", "rw", "cli,rest")
 COMMAND("osd in " \
 	"name=ids,type=CephString,n=N", \
-	"set osd(s) <id> [<id>...] in", "osd", "rw", "cli,rest")
+	"set osd(s) <id> [<id>...] in, "
+        "can use <any|all|*> to automatically set all previously out osds in", \
+        "osd", "rw", "cli,rest")
 COMMAND("osd rm " \
 	"name=ids,type=CephString,n=N", \
-	"remove osd(s) <id> [<id>...]", "osd", "rw", "cli,rest")
+	"remove osd(s) <id> [<id>...], "
+        "or use <any|all|*> to remove all osds", \
+        "osd", "rw", "cli,rest")
 COMMAND("osd add-noout " \
         "name=ids,type=CephString,n=N", \
         "mark osd(s) <id> [<id>...] as noout, " \
