@@ -91,9 +91,26 @@ Major Changes from Kraken
   * The "ceph mds tell ..." command has been removed.  It is superceded
     by "ceph tell mds.<id> ..."
 
+- *MON*
+
+  * Ability to replace osds via `osd destroy` & `osd new` commands
+  * `osd purge` command added which combines the functionality of
+    `osd destroy`, `osd rm` and `osd crush rm`
+
 - *MGR*
+
   * ceph-mgr supports a default dashboard
   * ceph-mgr introduces a new pecan based rest API
+
+- *RBD*
+
+  * The default 'rbd' pool is no longer created automatically during cluster creation. Additionally, the name of the default pool used by the rbd CLI when no pool is specified can be overridden via a new ```rbd default pool = <pool name>``` configuration option.
+  * Initial support for deferred image deletion via new ```rbd trash``` CLI commands. Images, even ones actively in-use by clones, can be moved to the trash and deleted at a later time.
+  * New pool-level ```rbd mirror pool promote``` and ```rbd mirror pool demote``` commands to batch promote/demote all mirrored images within a pool.
+  * Mirroring now optionally supports a configurable replication delay via the ```rbd mirroring replay delay = <seconds>``` configuration option.  
+  * Improved discard handling when the object map feature is enabled.
+  * rbd CLI ```import``` and ```copy``` commands now detect sparse and preserve sparse regions.
+  * Snapshots will now include a creation timestamp
 
 - *RGW*:
 
@@ -107,6 +124,10 @@ Major Changes from Kraken
   * RGW has consolidated the several metadata index pools via the use of rados
     namespaces
   * RGW now supports dynamic bucket index sharding
+  * RGW now has preliminary AWS-like bucket policy api support, for now, policy
+    is a means to express a range of new authorization concepts, in future, it
+    is a building block for additional auth capabilities such as STS and group
+    policy.
 
 Notable Changes
 ---------------
