@@ -15,7 +15,7 @@ set(lib_mon_srcs
   LogMonitor.cc
   AuthMonitor.cc
   Elector.cc
-  HealthMonitor.cc
+  OldHealthMonitor.cc
   DataHealthService.cc
   PGMonitor.cc
   PGMap.cc
