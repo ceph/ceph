@@ -95,24 +95,14 @@ void HealthMonitor::service_shutdown()
   services.clear();
 }
 
-void HealthMonitor::get_health(Formatter *f,
-			       list<pair<health_status_t,string> >& summary,
-			       list<pair<health_status_t,string> > *detail)
+void HealthMonitor::get_health(
+  list<pair<health_status_t,string> >& summary,
+  list<pair<health_status_t,string> > *detail)
 {
-  if (f) {
-    f->open_object_section("health");
-    f->open_array_section("health_services");
-  }
-
   for (map<int,HealthService*>::iterator it = services.begin();
        it != services.end();
        ++it) {
-    it->second->get_health(f, summary, detail);
-  }
-
-  if (f) {
-    f->close_section(); // health_services
-    f->close_section(); // health
+    it->second->get_health(summary, detail);
   }
 }
 
