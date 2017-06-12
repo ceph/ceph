@@ -5281,7 +5281,7 @@ int BlueStore::fsck(bool deep)
 
   mempool_thread.init();
 
-  // we need finishrs and kv_{sync,fainlize}_thread *just* for replay
+  // we need finishers and kv_{sync,finalize}_thread *just* for replay
   _kv_start();
   r = _deferred_replay();
   _kv_stop();
