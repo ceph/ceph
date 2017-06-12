@@ -46,6 +46,9 @@ class DeepSea(Task):
         - deepsea:
             exec:
             - suites/basic/health-ok.sh
+
+    :param ctx: the argparse.Namespace object
+    :param config: the config dict
     """
     def __init__(self, ctx, config):
         super(DeepSea, self).__init__(ctx, config)
