@@ -411,6 +411,8 @@ static const actpair actpairs[] =
  { "s3:DeleteBucketWebsite", s3DeleteBucketWebsite },
  { "s3:DeleteObject", s3DeleteObject },
  { "s3:DeleteObjectVersion", s3DeleteObjectVersion },
+ { "s3:DeleteObjectTagging", s3DeleteObjectTagging },
+ { "s3:DeleteObjectVersionTagging", s3DeleteObjectVersionTagging },
  { "s3:DeleteReplicationConfiguration", s3DeleteReplicationConfiguration },
  { "s3:GetAccelerateConfiguration", s3GetAccelerateConfiguration },
  { "s3:GetBucketAcl", s3GetBucketAcl },
@@ -430,6 +432,8 @@ static const actpair actpairs[] =
  { "s3:GetObjectVersionAcl", s3GetObjectVersionAcl },
  { "s3:GetObjectVersion", s3GetObjectVersion },
  { "s3:GetObjectVersionTorrent", s3GetObjectVersionTorrent },
+ { "s3:GetObjectTagging", s3GetObjectTagging },
+ { "s3:GetObjectVersionTagging", s3GetObjectVersionTagging},
  { "s3:GetReplicationConfiguration", s3GetReplicationConfiguration },
  { "s3:ListAllMyBuckets", s3ListAllMyBuckets },
  { "s3:ListBucketMultiPartUploads", s3ListBucketMultiPartUploads },
@@ -450,6 +454,8 @@ static const actpair actpairs[] =
  { "s3:PutObjectAcl",  s3PutObjectAcl },
  { "s3:PutObject", s3PutObject },
  { "s3:PutObjectVersionAcl", s3PutObjectVersionAcl },
+ { "s3:PutObjectTagging", s3PutObjectTagging },
+ { "s3:PutObjectVersionTagging", s3PutObjectVersionTagging },
  { "s3:PutReplicationConfiguration", s3PutReplicationConfiguration },
  { "s3:RestoreObject", s3RestoreObject }};
 
@@ -1356,6 +1362,24 @@ const char* action_bit_string(uint64_t action) {
 
   case s3DeleteReplicationConfiguration:
     return "s3:DeleteReplicationConfiguration";
+
+  case s3PutObjectTagging:
+    return "s3:PutObjectTagging";
+
+  case s3PutObjectVersionTagging:
+    return "s3:PutObjectVersionTagging";
+
+  case s3GetObjectTagging:
+    return "s3:GetObjectTagging";
+
+  case s3GetObjectVersionTagging:
+    return "s3:GetObjectVersionTagging";
+
+  case s3DeleteObjectTagging:
+    return "s3:DeleteObjectTagging";
+
+  case s3DeleteObjectVersionTagging:
+    return "s3:DeleteObjectVersionTagging";
   }
   return "s3Invalid";
 }

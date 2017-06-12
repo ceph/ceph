@@ -91,7 +91,13 @@ static constexpr std::uint64_t s3PutLifecycleConfiguration = 1ULL << 44;
 static constexpr std::uint64_t s3PutReplicationConfiguration = 1ULL << 45;
 static constexpr std::uint64_t s3GetReplicationConfiguration = 1ULL << 46;
 static constexpr std::uint64_t s3DeleteReplicationConfiguration = 1ULL << 47;
-static constexpr std::uint64_t s3Count = 48;
+static constexpr std::uint64_t s3GetObjectTagging = 1ULL << 48;
+static constexpr std::uint64_t s3PutObjectTagging = 1ULL << 49;
+static constexpr std::uint64_t s3DeleteObjectTagging = 1ULL << 50;
+static constexpr std::uint64_t s3GetObjectVersionTagging = 1ULL << 51;
+static constexpr std::uint64_t s3PutObjectVersionTagging = 1ULL << 52;
+static constexpr std::uint64_t s3DeleteObjectVersionTagging = 1ULL << 53;
+static constexpr std::uint64_t s3Count = 54;
 static constexpr std::uint64_t s3All = (1ULL << s3Count) - 1;
 
 namespace {
@@ -101,6 +107,8 @@ inline int op_to_perm(std::uint64_t op) {
   case s3GetObjectTorrent:
   case s3GetObjectVersion:
   case s3GetObjectVersionTorrent:
+  case s3GetObjectTagging:
+  case s3GetObjectVersionTagging:
   case s3ListAllMyBuckets:
   case s3ListBucket:
   case s3ListBucketMultiPartUploads:
@@ -114,6 +122,10 @@ inline int op_to_perm(std::uint64_t op) {
   case s3DeleteObject:
   case s3DeleteObjectVersion:
   case s3PutObject:
+  case s3PutObjectTagging:
+  case s3PutObjectVersionTagging:
+  case s3DeleteObjectTagging:
+  case s3DeleteObjectVersionTagging:
   case s3RestoreObject:
     return RGW_PERM_WRITE;
 
