@@ -424,6 +424,7 @@ noinst_HEADERS += \
 	test/objectstore/workload_generator.h \
 	test/kv_store_bench.h \
 	test/librados/test.h \
+	test/librados/test_common.h \
 	test/librados/TestCase.h \
 	test/libradosstriper/TestCase.h \
 	test/librbd/test_fixture.h \
