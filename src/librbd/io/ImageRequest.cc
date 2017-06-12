@@ -151,6 +151,18 @@ ImageRequest<I>* ImageRequest<I>::create_writesame_request(
 }
 
 template <typename I>
+ImageRequest<I>* ImageRequest<I>::create_compare_and_write_request(
+    I &image_ctx, AioCompletion *c, Extents &&image_extents,
+    bufferlist &&cmp_bl, bufferlist &&bl, uint64_t *mismatch_offset,
+    int op_flags, const ZTracer::Trace &parent_trace) {
+  return new ImageCompareAndWriteRequest<I>(image_ctx, c,
+                                            std::move(image_extents),
+                                            std::move(cmp_bl),
+                                            std::move(bl), mismatch_offset,
+                                            op_flags, parent_trace);
+}
+
+template <typename I>
 void ImageRequest<I>::aio_read(I *ictx, AioCompletion *c,
                                Extents &&image_extents,
                                ReadResult &&read_result, int op_flags,
