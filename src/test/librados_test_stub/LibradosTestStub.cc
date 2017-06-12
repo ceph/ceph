@@ -689,6 +689,12 @@ int IoCtx::writesame(const std::string& oid, bufferlist& bl, size_t len,
                      ctx->get_snap_context()));
 }
 
+int IoCtx::cmpext(const std::string& oid, uint64_t off, bufferlist& cmp_bl) {
+  TestIoCtxImpl *ctx = reinterpret_cast<TestIoCtxImpl*>(io_ctx_impl);
+  return ctx->execute_operation(
+    oid, boost::bind(&TestIoCtxImpl::cmpext, _1, _2, off, cmp_bl));
+}
+
 int IoCtx::application_enable(const std::string& app_name, bool force) {
   return 0;
 }
@@ -763,6 +769,16 @@ void ObjectOperation::set_op_flags2(int flags) {
 size_t ObjectOperation::size() {
   TestObjectOperationImpl *o = reinterpret_cast<TestObjectOperationImpl*>(impl);
   return o->ops.size();
+}
+
+void ObjectOperation::cmpext(uint64_t off, bufferlist& cmp_bl, int *prval) {
+  TestObjectOperationImpl *o = reinterpret_cast<TestObjectOperationImpl*>(impl);
+  ObjectOperationTestImpl op = boost::bind(&TestIoCtxImpl::cmpext, _1, _2, off, cmp_bl);
+  if (prval != NULL) {
+    op = boost::bind(save_operation_result,
+                     boost::bind(op, _1, _2, _3, _4), prval);
+  }
+  o->ops.push_back(op);
 }
 
 void ObjectReadOperation::list_snaps(snap_set_t *out_snaps, int *prval) {
