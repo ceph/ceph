@@ -2462,7 +2462,7 @@ health_status_t Monitor::get_health(list<string>& status,
     s->get_health(summary, detailbl ? &detail : NULL, cct);
   }
 
-  health_monitor->get_health(f, summary, (detailbl ? &detail : NULL));
+  health_monitor->get_health(summary, (detailbl ? &detail : NULL));
 
   health_status_t overall = HEALTH_OK;
   if (!timecheck_skews.empty()) {
