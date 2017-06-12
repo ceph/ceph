@@ -20,16 +20,6 @@
 #include "common/Cond.h"
 #include "obj_bencher.h"
 
-#include <iostream>
-#include <fstream>
-
-#include <cerrno>
-
-#include <stdlib.h>
-#include <time.h>
-#include <sstream>
-#include <vector>
-
 const std::string BENCH_LASTRUN_METADATA = "benchmark_last_metadata";
 const std::string BENCH_PREFIX = "benchmark_data";
 static char cached_hostname[30] = {0};

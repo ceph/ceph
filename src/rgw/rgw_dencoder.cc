@@ -118,6 +118,7 @@ void RGWObjManifest::obj_iterator::update_location()
 
   if (ofs < manifest->get_head_size()) {
     location = manifest->get_obj();
+    location.set_placement_rule(manifest->get_head_placement_rule());
     return;
   }
 

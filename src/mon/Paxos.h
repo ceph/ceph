@@ -350,7 +350,7 @@ private:
    *
    * On the Leader, it will be the Proposal Number picked by the Leader 
    * itself. On the Peon, however, it will be the proposal sent by the Leader
-   * and it will only be updated iif its value is higher than the one
+   * and it will only be updated if its value is higher than the one
    * already known by the Peon.
    */
   version_t accepted_pn;
@@ -615,6 +615,11 @@ private:
   bool trimming;
 
   /**
+   * true if we want trigger_propose to *not* propose (yet)
+   */
+  bool plugged = false;
+
+  /**
    * @defgroup Paxos_h_callbacks Callback classes.
    * @{
    */
@@ -707,7 +712,7 @@ private:
    * Once a Peon receives a collect message from the Leader it will reply
    * with its first and last committed versions, as well as information so
    * the Leader may know if its Proposal Number was, or was not, accepted by
-   * the Peon. The Peon will accept the Leader's Proposal Number iif it is
+   * the Peon. The Peon will accept the Leader's Proposal Number if it is
    * higher than the Peon's currently accepted Proposal Number. The Peon may
    * also inform the Leader of accepted but uncommitted values.
    *
@@ -783,9 +788,9 @@ private:
    *
    * @pre We are the Leader
    * @pre We are on STATE_ACTIVE
-   * @post We commit, iif we are alone, or we send a message to each quorum 
+   * @post We commit, if we are alone, or we send a message to each quorum 
    *	   member
-   * @post We are on STATE_ACTIVE, iif we are alone, or on 
+   * @post We are on STATE_ACTIVE, if we are alone, or on 
    *	   STATE_UPDATING otherwise
    *
    * @param value The value being proposed to the quorum
@@ -800,8 +805,8 @@ private:
    *
    * @pre We are a Peon
    * @pre We are on STATE_ACTIVE
-   * @post We are on STATE_UPDATING iif we accept the Leader's proposal
-   * @post We send a reply message to the Leader iif we accept its proposal
+   * @post We are on STATE_UPDATING if we accept the Leader's proposal
+   * @post We send a reply message to the Leader if we accept its proposal
    *
    * @invariant The received message is an operation of type OP_BEGIN
    *
@@ -823,11 +828,11 @@ private:
    *
    * @pre We are the Leader
    * @pre We are on STATE_UPDATING
-   * @post We are on STATE_ACTIVE iif we received accepts from the full quorum
-   * @post We extended the lease iif we moved on to STATE_ACTIVE
-   * @post We are on STATE_UPDATING iif we didn't received accepts from the
+   * @post We are on STATE_ACTIVE if we received accepts from the full quorum
+   * @post We extended the lease if we moved on to STATE_ACTIVE
+   * @post We are on STATE_UPDATING if we didn't received accepts from the
    *	   full quorum
-   * @post We have committed iif we received accepts from a majority
+   * @post We have committed if we received accepts from a majority
    *
    * @invariant The received message is an operation of type OP_ACCEPT
    *
@@ -924,7 +929,7 @@ private:
    * @post A lease timeout callback is set
    * @post Move to STATE_ACTIVE
    * @post Fire up all the callbacks waiting for STATE_ACTIVE
-   * @post Fire up all the callbacks waiting for readable iif we are readable
+   * @post Fire up all the callbacks waiting for readable if we are readable
    * @post Ack the lease to the Leader
    *
    * @invariant The received message is an operation of type OP_LEASE
@@ -941,7 +946,7 @@ private:
    * fresh elections.
    *
    * @pre We are the Leader
-   * @post Cancel the Lease Ack timeout callback iif we receive acks from all
+   * @post Cancel the Lease Ack timeout callback if we receive acks from all
    *	   the quorum members
    *
    * @invariant The received message is an operation of type OP_LEASE_ACK
@@ -1194,7 +1199,19 @@ public:
 
     return true;
   }
- 
+
+  bool is_plugged() const {
+    return plugged;
+  }
+  void plug() {
+    assert(plugged == false);
+    plugged = true;
+  }
+  void unplug() {
+    assert(plugged == true);
+    plugged = false;
+  }
+
   // read
   /**
    * @defgroup Paxos_h_read_funcs Read-related functions

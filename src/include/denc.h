@@ -37,6 +37,7 @@
 #include <boost/intrusive/set.hpp>
 #include <boost/optional.hpp>
 
+#include "include/assert.h"	// boost clobbers this
 #include "include/intarith.h"
 #include "include/int_types.h"
 #include "include/memory.h"
@@ -44,11 +45,12 @@
 #include "buffer.h"
 #include "byteorder.h"
 
-template<typename T, typename VVV=void>
+template<typename T, typename=void>
 struct denc_traits {
   static constexpr bool supported = false;
   static constexpr bool featured = false;
   static constexpr bool bounded = false;
+  static constexpr bool need_contiguous = true;
 };
 
 
@@ -138,6 +140,7 @@ struct denc_traits {
       static constexpr bool supported = true;
       static constexpr bool bounded = false;
       static constexpr bool featured = false;
+      static constexpr bool need_contiguous = true;
       static void bound_encode(const T &o, size_t& p, uint64_t f=0);
       static void encode(const T &o, buffer::list::contiguous_appender& p,
 		         uint64_t f=0);
@@ -151,6 +154,7 @@ struct denc_traits {
       static constexpr bool supported = true;
       static constexpr bool bounded = false;
       static constexpr bool featured = true;
+      static constexpr bool need_contiguous = true;
       static void bound_encode(const T &o, size_t& p, uint64_t f);
       static void encode(const T &o, buffer::list::contiguous_appender& p,
 		         uint64_t f);
@@ -190,6 +194,12 @@ struct denc_traits {
   declared via WRITE_CLASS_DENC, although you can also invoke them explicitly
   in your code.
 
+  - These methods are optimised for contiguous buffer, but denc() will try
+    rebuild a contigous one if the decoded bufferlist is segmented. If you are
+    concerned about the cost, you might want to define yet another method:
+
+    void decode(buffer::list::iterator &p);
+
   - These can be defined either explicitly (as above), or can be "magically"
   defined all in one go using the DENC macro and DENC_{START,FINISH} helpers
   (which work like the legacy {ENCODE,DECODE}_{START,FINISH} macros):
@@ -212,35 +222,47 @@ struct denc_traits {
 
 // ---------------------------------------------------------------------
 // raw types
+namespace _denc {
+  template<class T, class...> struct is_any_of : std::false_type
+  {};
+  template<class T, class Head, class... Tail>
+  struct is_any_of<T, Head, Tail...> : std::conditional<
+    std::is_same<T, Head>::value,
+    std::true_type,
+    is_any_of<T, Tail...>>::type
+  {};
+}
 
-#define WRITE_RAW_DENC(type)						\
-  template<>								\
-  struct denc_traits<type> {						\
-    static constexpr bool supported = true;				\
-    static constexpr bool featured = false;				\
-    static constexpr bool bounded = true;				\
-    static void bound_encode(const type &o, size_t& p, uint64_t f=0) {	\
-      p += sizeof(type);						\
-    }									\
-    static void encode(const type &o,					\
-		       buffer::list::contiguous_appender& p,		\
-		       uint64_t f=0) {					\
-      p.append((const char*)&o, sizeof(o));				\
-    }									\
-    static void decode(type& o, buffer::ptr::iterator &p,		\
-		       uint64_t f=0) {					\
-      o = *(type *)p.get_pos_add(sizeof(o));				\
-    }									\
-  };
 
-WRITE_RAW_DENC(ceph_le64)
-WRITE_RAW_DENC(ceph_le32)
-WRITE_RAW_DENC(ceph_le16)
-WRITE_RAW_DENC(uint8_t);
+template<typename T>
+struct denc_traits<
+  T,
+  typename std::enable_if<
+    _denc::is_any_of<T, ceph_le64, ceph_le32, ceph_le16, uint8_t
 #ifndef _CHAR_IS_SIGNED
-WRITE_RAW_DENC(int8_t);
+		     , int8_t
 #endif
-
+		     >::value>::type> {
+  static constexpr bool supported = true;
+  static constexpr bool featured = false;
+  static constexpr bool bounded = true;
+  static constexpr bool need_contiguous = false;
+  static void bound_encode(const T &o, size_t& p, uint64_t f=0) {
+    p += sizeof(T);
+  }
+  static void encode(const T &o,
+		     buffer::list::contiguous_appender& p,
+		     uint64_t f=0) {
+    p.append((const char*)&o, sizeof(o));
+  }
+  static void decode(T& o, buffer::ptr::iterator &p,
+		     uint64_t f=0) {
+    o = *(T *)p.get_pos_add(sizeof(o));
+  }
+  static void decode(T& o, buffer::list::iterator &p) {
+    p.copy(sizeof(T), reinterpret_cast<char*>(&o));
+  }
+};
 
 
 // -----------------------------------------------------------------------
@@ -254,34 +276,65 @@ WRITE_RAW_DENC(int8_t);
 // template, and hence get selected. This machinary prevents these these from
 // getting glued into the legacy encode/decode methods; the overhead of setting
 // up a contiguous_appender etc is likely to be slower.
+namespace _denc {
 
-#define WRITE_INT_DENC(itype, etype)					\
-  template<>								\
-  struct denc_traits<itype> {						\
-    static constexpr bool supported = true;				\
-    static constexpr bool featured = false;				\
-    static constexpr bool bounded = true;				\
-    static void bound_encode(const itype &o, size_t& p, uint64_t f=0) {	\
-      p += sizeof(etype);						\
-    }									\
-    static void encode(const itype &o, buffer::list::contiguous_appender& p, \
-		       uint64_t f=0) {					\
-      *(etype *)p.get_pos_add(sizeof(etype)) = o;			\
-    }									\
-    static void decode(itype& o, buffer::ptr::iterator &p,		\
-		       uint64_t f=0) {					\
-      o = *(etype*)p.get_pos_add(sizeof(etype));			\
-    }									\
-  };
+template<typename T, typename=void> struct ExtType {
+  using type = void;
+};
 
-WRITE_INT_DENC(uint16_t, __le16);
-WRITE_INT_DENC(int16_t, __le16);
-WRITE_INT_DENC(uint32_t, __le32);
-WRITE_INT_DENC(int32_t, __le32);
-WRITE_INT_DENC(uint64_t, __le64);
-WRITE_INT_DENC(int64_t, __le64);
-WRITE_INT_DENC(bool, uint8_t);
+template<typename T> struct ExtType<
+  T,
+  typename std::enable_if<std::is_same<T, int16_t>::value ||
+			  std::is_same<T, uint16_t>::value>::type> {
+  using type = __le16;
+};
 
+template<typename T> struct ExtType<
+  T,
+  typename std::enable_if<std::is_same<T, int32_t>::value ||
+			  std::is_same<T, uint32_t>::value>::type> {
+  using type = __le32;
+};
+
+template<typename T> struct ExtType<
+  T,
+  typename std::enable_if<std::is_same<T, int64_t>::value ||
+			  std::is_same<T, uint64_t>::value>::type> {
+  using type = __le64;
+};
+
+template<> struct ExtType<bool> {
+  using type = uint8_t;
+};
+} // namespace _denc
+
+template<typename T>
+struct denc_traits<
+  T,
+  typename std::enable_if<!std::is_void<typename _denc::ExtType<T>::type>::value>::type>
+{
+  static constexpr bool supported = true;
+  static constexpr bool featured = false;
+  static constexpr bool bounded = true;
+  static constexpr bool need_contiguous = false;
+  using etype = typename _denc::ExtType<T>::type;
+  static void bound_encode(const T &o, size_t& p, uint64_t f=0) {
+    p += sizeof(etype);
+  }
+  static void encode(const T &o, buffer::list::contiguous_appender& p,
+		     uint64_t f=0) {
+    *(etype *)p.get_pos_add(sizeof(etype)) = o;
+  }
+  static void decode(T& o, buffer::ptr::iterator &p,
+		     uint64_t f=0) {
+    o = *(etype*)p.get_pos_add(sizeof(etype));
+  }
+  static void decode(T& o, buffer::list::iterator &p) {
+    etype e;
+    p.copy(sizeof(etype), reinterpret_cast<char*>(&e));
+    o = e;
+  }
+};
 
 // varint
 //
@@ -561,6 +614,40 @@ inline typename std::enable_if<traits::supported &&
   traits::decode(o, p, features);
 }
 
+namespace _denc {
+  template<typename T, typename=void>
+  struct has_legacy_denc : std::false_type
+  {};
+  template<typename T>
+  struct has_legacy_denc<T,
+    decltype(std::declval<T&>()
+	     .decode(std::declval<bufferlist::iterator&>()))> : std::true_type
+  {
+    static void decode(T& v, bufferlist::iterator& p) {
+      v.decode(p);
+    }
+  };
+  template<typename T>
+  struct has_legacy_denc<T,
+    typename std::enable_if<
+      !denc_traits<T>::need_contiguous>::type> : std::true_type
+  {
+    static void decode(T& v, bufferlist::iterator& p) {
+      denc_traits<T>::decode(v, p);
+    }
+  };
+}
+
+template<typename T,
+	 typename traits=denc_traits<T>,
+	 typename has_legacy_denc=_denc::has_legacy_denc<T>>
+inline typename std::enable_if<traits::supported &&
+			       has_legacy_denc::value>::type denc(
+  T& o,
+  buffer::list::iterator& p)
+{
+  has_legacy_denc::decode(o, p);
+}
 
 // ---------------------------------------------------------------------
 // base types and containers
@@ -577,6 +664,7 @@ public:
   static constexpr bool supported = true;
   static constexpr bool featured = false;
   static constexpr bool bounded = false;
+  static constexpr bool need_contiguous = false;
 
   static void bound_encode(const value_type& s, size_t& p, uint64_t f=0) {
     p += sizeof(uint32_t) + s.size();
@@ -593,6 +681,13 @@ public:
     uint32_t len;
     ::denc(len, p);
     decode_nohead(len, s, p);
+  }
+  static void decode(value_type& s, buffer::list::iterator& p)
+  {
+    uint32_t len;
+    ::denc(len, p);
+    s.clear();
+    p.copy(len, s);
   }
   static void decode_nohead(size_t len, value_type& s,
 			    buffer::ptr::iterator& p) {
@@ -615,6 +710,7 @@ struct denc_traits<bufferptr> {
   static constexpr bool supported = true;
   static constexpr bool featured = false;
   static constexpr bool bounded = false;
+  static constexpr bool need_contiguous = false;
   static void bound_encode(const bufferptr& v, size_t& p, uint64_t f=0) {
     p += sizeof(uint32_t) + v.length();
   }
@@ -628,6 +724,18 @@ struct denc_traits<bufferptr> {
     ::denc(len, p);
     v = p.get_ptr(len);
   }
+  static void decode(bufferptr& v, buffer::list::iterator& p) {
+    uint32_t len;
+    ::denc(len, p);
+    bufferlist s;
+    p.copy(len, s);
+    if (len) {
+      if (s.get_num_buffers() == 1)
+	v = s.front();
+      else
+	v = buffer::copy(s.c_str(), s.length());
+    }
+  }
 };
 
 //
@@ -638,6 +746,7 @@ struct denc_traits<bufferlist> {
   static constexpr bool supported = true;
   static constexpr bool featured = false;
   static constexpr bool bounded = false;
+  static constexpr bool need_contiguous = false;
   static void bound_encode(const bufferlist& v, size_t& p, uint64_t f=0) {
     p += sizeof(uint32_t) + v.length();
   }
@@ -651,6 +760,12 @@ struct denc_traits<bufferlist> {
     ::denc(len, p);
     v.clear();
     v.push_back(p.get_ptr(len));
+  }
+  static void decode(bufferlist& v, buffer::list::iterator& p) {
+    uint32_t len;
+    ::denc(len, p);
+    v.clear();
+    p.copy(len, v);
   }
   static void encode_nohead(const bufferlist& v,
 			    buffer::list::contiguous_appender& p) {
@@ -679,6 +794,8 @@ struct denc_traits<
   static constexpr bool supported = true;
   static constexpr bool featured = a_traits::featured || b_traits::featured ;
   static constexpr bool bounded = a_traits::bounded && b_traits::bounded;
+  static constexpr bool need_contiguous = (a_traits::need_contiguous ||
+					   b_traits::need_contiguous);
 
   template<typename AA=A>
   static typename std::enable_if<sizeof(AA) &&
@@ -715,6 +832,13 @@ struct denc_traits<
     denc(v.first, p, f);
     denc(v.second, p, f);
   }
+  template<typename AA=A>
+  static typename std::enable_if<sizeof(AA) && !need_contiguous>::type
+    decode(std::pair<A,B>& v, buffer::list::iterator& p,
+	    uint64_t f = 0) {
+    denc(v.first, p);
+    denc(v.second, p);
+  }
 };
 
 namespace _denc {
@@ -730,6 +854,7 @@ namespace _denc {
     static constexpr bool supported = true;
     static constexpr bool featured = traits::featured;
     static constexpr bool bounded = false;
+    static constexpr bool need_contiguous = traits::need_contiguous;
 
     template<typename U=T>
     static typename std::enable_if<sizeof(U) &&
@@ -800,6 +925,13 @@ namespace _denc {
       denc(num, p);
       decode_nohead(num, s, p, f);
     }
+    template<typename U=T>
+    static typename std::enable_if<sizeof(U) && !need_contiguous>::type
+    decode(container& s, buffer::list::iterator& p) {
+      uint32_t num;
+      denc(num, p);
+      decode_nohead(num, s, p);
+    }
 
     // nohead
     template<typename U=T>
@@ -826,6 +958,18 @@ namespace _denc {
       while (num--) {
 	T t;
 	denc(t, p, f);
+	Details::insert(s, std::move(t));
+      }
+    }
+    template<typename U=T>
+    static typename std::enable_if<sizeof(U) && !need_contiguous>::type
+    decode_nohead(size_t num, container& s,
+		  buffer::list::iterator& p) {
+      s.clear();
+      Details::reserve(s, num);
+      while (num--) {
+	T t;
+	denc(t, p);
 	Details::insert(s, std::move(t));
       }
     }
@@ -965,6 +1109,7 @@ public:
   static constexpr bool supported = true;
   static constexpr bool featured = traits::featured;
   static constexpr bool bounded = traits::bounded;
+  static constexpr bool need_contiguous = traits::need_contiguous;
 
   template<typename U=T>
   static typename std::enable_if<sizeof(U) &&
@@ -1023,6 +1168,14 @@ public:
     for (auto& e : s)
       denc(e, p, f);
   }
+  template<typename U=T>
+  static typename std::enable_if<sizeof(U) &&
+                                 !need_contiguous>::type
+  decode(container& s, buffer::list::iterator& p) {
+    for (auto& e : s) {
+      denc(e, p);
+    }
+  }
 };
 
 namespace _denc {
@@ -1066,12 +1219,16 @@ namespace _denc {
 				     tuple_traits<Ts...>::bounded);
     static constexpr bool featured = (denc_traits<T>::featured ||
 				    tuple_traits<Ts...>::featured);
+    static constexpr bool need_contiguous =
+      (denc_traits<T>::need_contiguous ||
+       tuple_traits<Ts...>::need_contiguous);
   };
   template<>
   struct tuple_traits<> {
     static constexpr bool supported = true;
     static constexpr bool bounded = true;
     static constexpr bool featured = false;
+    static constexpr bool need_contiguous = false;
   };
 }
 
@@ -1167,6 +1324,17 @@ private:
 		     _denc::indices<I>) {
     denc(std::get<I>(s), p);
   }
+  template<typename T, size_t I, size_t J, size_t ...Is>
+  static void decode_helper(T& s, buffer::list::iterator& p,
+			    _denc::indices<I, J, Is...>) {
+    denc(std::get<I>(s), p);
+    decode_helper(s, p, _denc::indices<J, Is...>{});
+  }
+  template<typename T, size_t I>
+  static void decode_helper(T& s, buffer::list::iterator& p,
+			    _denc::indices<I>) {
+    denc(std::get<I>(s), p);
+  }
 
 public:
   using traits = _denc::tuple_traits<Ts...>;
@@ -1174,6 +1342,7 @@ public:
   static constexpr bool supported = true;
   static constexpr bool featured = traits::featured;
   static constexpr bool bounded = traits::bounded;
+  static constexpr bool need_contiguous = traits::need_contiguous;
 
 
   template<typename U = traits>
@@ -1222,6 +1391,12 @@ public:
   static void decode(container& s, buffer::ptr::iterator& p, uint64_t f = 0) {
     decode_helper(s, p, _denc::build_indices_t<sizeof...(Ts)>{});
   }
+  template<typename U = traits>
+  static typename std::enable_if<U::supported &&
+                                 !need_contiguous>::type
+  decode(container& s, buffer::list::iterator& p, uint64_t f = 0) {
+    decode_helper(s, p, _denc::build_indices_t<sizeof...(Ts)>{});
+  }
 };
 
 //
@@ -1236,6 +1411,7 @@ struct denc_traits<
   static constexpr bool supported = true;
   static constexpr bool featured = traits::featured;
   static constexpr bool bounded = false;
+  static constexpr bool need_contiguous = traits::need_contiguous;
 
   template<typename U = T>
   static typename std::enable_if<sizeof(U) && !featured>::type
@@ -1281,6 +1457,19 @@ struct denc_traits<
   }
 
   template<typename U = T>
+  static typename std::enable_if<sizeof(U) && !need_contiguous>::type
+  decode(boost::optional<T>& v, buffer::list::iterator& p) {
+    bool x;
+    denc(x, p);
+    if (x) {
+      v = T{};
+      denc(*v, p);
+    } else {
+      v = boost::none;
+    }
+  }
+
+  template<typename U = T>
   static typename std::enable_if<sizeof(U) && !featured>::type
   encode_nohead(const boost::optional<T>& v,
 		bufferlist::contiguous_appender& p) {
@@ -1312,6 +1501,7 @@ struct denc_traits<boost::none_t> {
   static constexpr bool supported = true;
   static constexpr bool featured = false;
   static constexpr bool bounded = true;
+  static constexpr bool need_contiguous = false;
 
   static void bound_encode(const boost::none_t& v, size_t& p) {
     p += sizeof(bool);
@@ -1336,6 +1526,7 @@ struct denc_traits<boost::none_t> {
     static constexpr bool supported = true;				\
     static constexpr bool featured = false;				\
     static constexpr bool bounded = b;					\
+    static constexpr bool need_contiguous = !_denc::has_legacy_denc<T>::value;\
     static void bound_encode(const T& v, size_t& p, uint64_t f=0) {	\
       v.bound_encode(p);						\
     }									\
@@ -1355,6 +1546,7 @@ struct denc_traits<boost::none_t> {
     static constexpr bool supported = true;				\
     static constexpr bool featured = true;				\
     static constexpr bool bounded = b;					\
+    static constexpr bool need_contiguous = !_denc::has_legacy_denc<T>::value;\
     static void bound_encode(const T& v, size_t& p, uint64_t f) {	\
       v.bound_encode(p, f);						\
     }									\
@@ -1399,9 +1591,39 @@ inline typename std::enable_if<traits::supported &&
   traits::encode(o, a, features);
 }
 
-template<typename T, typename traits=denc_traits<T>>
+template<typename T,
+	 typename traits=denc_traits<T>>
 inline typename std::enable_if<traits::supported &&
-			       !traits::featured>::type decode(
+			       !traits::need_contiguous>::type decode(
+  T& o,
+  bufferlist::iterator& p)
+{
+  if (p.end())
+    throw buffer::end_of_buffer();
+  const auto& bl = p.get_bl();
+  const auto remaining = bl.length() - p.get_off();
+  // it is expensive to rebuild a contigous buffer and drop it, so avoid this.
+  if (p.get_current_ptr().get_raw() != bl.back().get_raw() &&
+      remaining > CEPH_PAGE_SIZE) {
+    traits::decode(o, p);
+  } else {
+    // ensure we get a contigous buffer... until the end of the
+    // bufferlist.  we don't really know how much we'll need here,
+    // unfortunately.  hopefully it is already contiguous and we're just
+    // bumping the raw ref and initializing the ptr tmp fields.
+    bufferptr tmp;
+    bufferlist::iterator t = p;
+    t.copy_shallow(remaining, tmp);
+    auto cp = tmp.begin();
+    traits::decode(o, cp);
+    p.advance((ssize_t)cp.get_offset());
+  }
+}
+
+template<typename T,
+	 typename traits=denc_traits<T>>
+inline typename std::enable_if<traits::supported &&
+			       traits::need_contiguous>::type decode(
   T& o,
   bufferlist::iterator& p)
 {
@@ -1411,22 +1633,6 @@ inline typename std::enable_if<traits::supported &&
   // bufferlist.  we don't really know how much we'll need here,
   // unfortunately.  hopefully it is already contiguous and we're just
   // bumping the raw ref and initializing the ptr tmp fields.
-  bufferptr tmp;
-  bufferlist::iterator t = p;
-  t.copy_shallow(p.get_bl().length() - p.get_off(), tmp);
-  auto cp = tmp.begin();
-  traits::decode(o, cp);
-  p.advance((ssize_t)cp.get_offset());
-}
-
-template<typename T, typename traits=denc_traits<T>>
-inline typename std::enable_if<traits::supported &&
-			       traits::featured>::type decode(
-  T& o,
-  bufferlist::iterator& p)
-{
-  if (p.end())
-    throw buffer::end_of_buffer();
   bufferptr tmp;
   bufferlist::iterator t = p;
   t.copy_shallow(p.get_bl().length() - p.get_off(), tmp);

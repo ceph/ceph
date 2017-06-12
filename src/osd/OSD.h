@@ -131,6 +131,8 @@ enum {
   l_osd_map_cache_miss,
   l_osd_map_cache_miss_low,
   l_osd_map_cache_miss_low_avg,
+  l_osd_map_bl_cache_hit,
+  l_osd_map_bl_cache_miss,
 
   l_osd_stat_bytes,
   l_osd_stat_bytes_used,
@@ -923,6 +925,13 @@ public:
   Mutex recovery_request_lock;
   SafeTimer recovery_request_timer;
 
+  // For async recovery sleep
+  bool recovery_needs_sleep = true;
+  utime_t recovery_schedule_time = utime_t();
+
+  Mutex recovery_sleep_lock;
+  SafeTimer recovery_sleep_timer;
+
   // -- tids --
   // for ops i issue
   std::atomic_uint last_tid{0};
@@ -953,6 +962,9 @@ public:
 
   Mutex snap_sleep_lock;
   SafeTimer snap_sleep_timer;
+
+  Mutex scrub_sleep_lock;
+  SafeTimer scrub_sleep_timer;
 
   AsyncReserver<spg_t> snap_reserver;
   void queue_for_snap_trim(PG *pg);
@@ -1050,6 +1062,10 @@ public:
     }
     _maybe_queue_recovery();
   }
+  void queue_recovery_after_sleep(PG *pg, epoch_t queued, uint64_t reserved_pushes) {
+    Mutex::Locker l(recovery_lock);
+    _queue_for_recovery(make_pair(queued, pg), reserved_pushes);
+  }
 
 
   // osd map cache (past osd maps)
@@ -1100,6 +1116,7 @@ public:
   void init();
   void final_init();  
   void start_shutdown();
+  void shutdown_reserver();
   void shutdown();
 
 private:
@@ -1130,11 +1147,19 @@ public:
   // -- stats --
   Mutex stat_lock;
   osd_stat_t osd_stat;
+  uint32_t seq = 0;
 
   void update_osd_stat(vector<int>& hb_peers);
   osd_stat_t get_osd_stat() {
     Mutex::Locker l(stat_lock);
+    ++seq;
+    osd_stat.up_from = up_epoch;
+    osd_stat.seq = ((uint64_t)osd_stat.up_from << 32) + seq;
     return osd_stat;
+  }
+  uint64_t get_osd_stat_seq() {
+    Mutex::Locker l(stat_lock);
+    return osd_stat.seq;
   }
 
   // -- OSD Full Status --
@@ -1248,33 +1273,9 @@ public:
   Mutex pgid_lock;
   map<spg_t, int> pgid_tracker;
   map<spg_t, PG*> live_pgs;
-  void add_pgid(spg_t pgid, PG *pg) {
-    Mutex::Locker l(pgid_lock);
-    if (!pgid_tracker.count(pgid)) {
-      live_pgs[pgid] = pg;
-    }
-    pgid_tracker[pgid]++;
-  }
-  void remove_pgid(spg_t pgid, PG *pg) {
-    Mutex::Locker l(pgid_lock);
-    assert(pgid_tracker.count(pgid));
-    assert(pgid_tracker[pgid] > 0);
-    pgid_tracker[pgid]--;
-    if (pgid_tracker[pgid] == 0) {
-      pgid_tracker.erase(pgid);
-      live_pgs.erase(pgid);
-    }
-  }
-  void dump_live_pgids() {
-    Mutex::Locker l(pgid_lock);
-    derr << "live pgids:" << dendl;
-    for (map<spg_t, int>::const_iterator i = pgid_tracker.cbegin();
-	 i != pgid_tracker.cend();
-	 ++i) {
-      derr << "\t" << *i << dendl;
-      live_pgs[i->first]->dump_live_ids();
-    }
-  }
+  void add_pgid(spg_t pgid, PG *pg);
+  void remove_pgid(spg_t pgid, PG *pg);
+  void dump_live_pgids();
 #endif
 
   explicit OSDService(OSD *osd);
@@ -1321,6 +1322,8 @@ protected:
 
   int whoami;
   std::string dev_path, journal_path;
+
+  bool store_is_rotational = true;
 
   ZTracer::Endpoint trace_endpoint;
   void create_logger();
@@ -1472,7 +1475,7 @@ public:
 
 private:
 
-  ThreadPool osd_tp;
+  ThreadPool peering_tp;
   ShardedThreadPool osd_op_tp;
   ThreadPool disk_tp;
   ThreadPool command_tp;
@@ -1993,7 +1996,7 @@ private:
     epoch_t advance_to, PG *pg,
     ThreadPool::TPHandle &handle,
     PG::RecoveryCtx *rctx,
-    set<boost::intrusive_ptr<PG> > *split_pgs
+    set<PGRef> *split_pgs
   );
   void consume_map();
   void activate_map();
@@ -2033,6 +2036,11 @@ protected:
 
   PG   *_lookup_lock_pg_with_map_lock_held(spg_t pgid);
   PG   *_lookup_lock_pg(spg_t pgid);
+
+public:
+  PG   *lookup_lock_pg(spg_t pgid);
+
+protected:
   PG   *_open_lock_pg(OSDMapRef createmap,
 		      spg_t pg, bool no_lockdep_check=false);
   enum res_result {
@@ -2097,7 +2105,7 @@ protected:
 
   void split_pgs(
     PG *parent,
-    const set<spg_t> &childpgids, set<boost::intrusive_ptr<PG> > *out_pgs,
+    const set<spg_t> &childpgids, set<PGRef> *out_pgs,
     OSDMapRef curmap,
     OSDMapRef nextmap,
     PG::RecoveryCtx *rctx);
@@ -2466,6 +2474,9 @@ private:
   void handle_osd_ping(class MOSDPing *m);
 
   int init_op_flags(OpRequestRef& op);
+
+  int get_num_op_shards();
+  int get_num_op_threads();
 
 public:
   static int peek_meta(ObjectStore *store, string& magic,

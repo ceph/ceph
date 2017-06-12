@@ -167,7 +167,6 @@ int extract_image_id_spec(const std::string &spec, std::string *pool_name,
   }
 
   return 0;
- 
 }
 
 std::string get_positional_argument(const po::variables_map &vm, size_t index) {
@@ -184,8 +183,11 @@ std::string get_positional_argument(const po::variables_map &vm, size_t index) {
   return "";
 }
 
-std::string get_pool_name(const po::variables_map &vm,
-                          size_t *arg_index) {
+std::string get_default_pool_name() {
+  return g_ceph_context->_conf->rbd_default_pool;
+}
+
+std::string get_pool_name(const po::variables_map &vm, size_t *arg_index) {
   std::string pool_name;
   if (vm.count(at::POOL_NAME)) {
     pool_name = vm[at::POOL_NAME].as<std::string>();
@@ -197,7 +199,7 @@ std::string get_pool_name(const po::variables_map &vm,
   }
 
   if (pool_name.empty()) {
-    pool_name = at::DEFAULT_POOL_NAME;
+    pool_name = get_default_pool_name();
   }
   return pool_name;
 }
@@ -237,7 +239,7 @@ int get_special_pool_group_names(const po::variables_map &vm,
   }
 
   if (group_pool_name->empty()) {
-    *group_pool_name = at::DEFAULT_POOL_NAME;
+    *group_pool_name = get_default_pool_name();
   }
 
   if (group_name->empty()) {
@@ -286,7 +288,7 @@ int get_special_pool_image_names(const po::variables_map &vm,
   }
 
   if (image_pool_name->empty()) {
-    *image_pool_name = at::DEFAULT_POOL_NAME;
+    *image_pool_name = get_default_pool_name();
   }
 
   if (image_name->empty()) {
@@ -320,8 +322,8 @@ int get_pool_image_id(const po::variables_map &vm,
     }
   }
 
-  if (pool_name->empty()) {
-    *pool_name = at::DEFAULT_POOL_NAME;
+  if (pool_name != nullptr && pool_name->empty()) {
+    *pool_name = get_default_pool_name();
   }
 
   if (image_id != nullptr && image_id->empty()) {
@@ -361,8 +363,8 @@ int get_pool_group_names(const po::variables_map &vm,
     }
   }
 
-  if (pool_name->empty()) {
-    *pool_name = at::DEFAULT_POOL_NAME;
+  if (pool_name != nullptr && pool_name->empty()) {
+    *pool_name = get_default_pool_name();
   }
 
   if (group_name != nullptr && group_name->empty()) {
@@ -426,7 +428,7 @@ int get_pool_image_snapshot_names(const po::variables_map &vm,
   }
 
   if (pool_name != nullptr && pool_name->empty()) {
-    *pool_name = at::DEFAULT_POOL_NAME;
+    *pool_name = get_default_pool_name();
   }
 
   if (image_name != nullptr && image_required && image_name->empty()) {
@@ -437,11 +439,11 @@ int get_pool_image_snapshot_names(const po::variables_map &vm,
     return -EINVAL;
   }
 
-  //Validate pool name while creating/renaming/copying/cloning/importing/etc image
+  //Validate pool name while creating/renaming/copying/cloning/importing/etc
   if (spec_validation == SPEC_VALIDATION_FULL) {
-    boost::regex pattern("^[^@/]*?$");
+    boost::regex pattern("^[^@/]+?$");
     if (!boost::regex_match (*pool_name, pattern)) {
-      std::cerr << "rbd: invalid spec '" << *pool_name << "'" << std::endl;
+      std::cerr << "rbd: invalid pool name '" << *pool_name << "'" << std::endl;
       return -EINVAL;
     }
   }
@@ -476,7 +478,7 @@ int get_pool_snapshot_names(const po::variables_map &vm,
   }
 
   if (pool_name != nullptr && pool_name->empty()) {
-    *pool_name = at::DEFAULT_POOL_NAME;
+    *pool_name = get_default_pool_name();
   }
 
   if (snap_name != nullptr) {
@@ -549,7 +551,7 @@ int get_pool_journal_names(const po::variables_map &vm,
   }
 
   if (pool_name != nullptr && pool_name->empty()) {
-    *pool_name = at::DEFAULT_POOL_NAME;
+    *pool_name = get_default_pool_name();
   }
 
   if (pool_name != nullptr && journal_name != nullptr &&
@@ -621,7 +623,7 @@ int validate_snapshot_name(at::ArgumentModifier mod,
     // disallow "/" and "@" in snap name
     boost::regex pattern("^[^@/]*?$");
     if (!boost::regex_match (snap_name, pattern)) {
-      std::cerr << "rbd: invalid spec '" << snap_name << "'" << std::endl;
+      std::cerr << "rbd: invalid snap name '" << snap_name << "'" << std::endl;
       return -EINVAL;
     }
   }
@@ -867,8 +869,15 @@ int init_io_ctx(librados::Rados &rados, const std::string &pool_name,
                 librados::IoCtx *io_ctx) {
   int r = rados.ioctx_create(pool_name.c_str(), *io_ctx);
   if (r < 0) {
-    std::cerr << "rbd: error opening pool " << pool_name << ": "
-              << cpp_strerror(r) << std::endl;
+    if (r == -ENOENT && pool_name == get_default_pool_name()) {
+      std::cerr << "rbd: error opening default pool "
+                << "'" << pool_name << "'" << std::endl
+                << "Ensure that the default pool has been created or specify "
+                << "an alternate pool name." << std::endl;
+    } else {
+      std::cerr << "rbd: error opening pool '" << pool_name << "': "
+                << cpp_strerror(r) << std::endl;
+    }
     return r;
   }
   return 0;

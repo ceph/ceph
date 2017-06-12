@@ -5,6 +5,7 @@
 #include "common/errno.h"
 #include "cls/rbd/cls_rbd_client.h"
 #include "cls/rbd/cls_rbd_types.h"
+#include "librbd/ExclusiveLock.h"
 #include "librbd/ObjectMap.h"
 #include "librbd/Operations.h"
 #include "librbd/Utils.h"
@@ -62,8 +63,18 @@ void SnapshotCreateRequest<I>::send_set_size() {
   librados::ObjectWriteOperation op;
   librbd::cls_client::set_size(&op, m_size);
 
-  librados::AioCompletion *comp = create_rados_callback<
-    SnapshotCreateRequest<I>, &SnapshotCreateRequest<I>::handle_set_size>(this);
+  auto finish_op_ctx = start_local_op();
+  if (finish_op_ctx == nullptr) {
+    derr << ": lost exclusive lock" << dendl;
+    finish(-EROFS);
+    return;
+  }
+
+  auto ctx = new FunctionContext([this, finish_op_ctx](int r) {
+      handle_set_size(r);
+      finish_op_ctx->complete(0);
+    });
+  librados::AioCompletion *comp = create_rados_callback(ctx);
   int r = m_local_image_ctx->md_ctx.aio_operate(m_local_image_ctx->header_oid,
                                                 comp, &op);
   assert(r == 0);
@@ -106,9 +117,18 @@ void SnapshotCreateRequest<I>::send_remove_parent() {
   librados::ObjectWriteOperation op;
   librbd::cls_client::remove_parent(&op);
 
-  librados::AioCompletion *comp = create_rados_callback<
-    SnapshotCreateRequest<I>,
-    &SnapshotCreateRequest<I>::handle_remove_parent>(this);
+  auto finish_op_ctx = start_local_op();
+  if (finish_op_ctx == nullptr) {
+    derr << ": lost exclusive lock" << dendl;
+    finish(-EROFS);
+    return;
+  }
+
+  auto ctx = new FunctionContext([this, finish_op_ctx](int r) {
+      handle_remove_parent(r);
+      finish_op_ctx->complete(0);
+    });
+  librados::AioCompletion *comp = create_rados_callback(ctx);
   int r = m_local_image_ctx->md_ctx.aio_operate(m_local_image_ctx->header_oid,
                                                 comp, &op);
   assert(r == 0);
@@ -152,9 +172,18 @@ void SnapshotCreateRequest<I>::send_set_parent() {
   librados::ObjectWriteOperation op;
   librbd::cls_client::set_parent(&op, m_parent_spec, m_parent_overlap);
 
-  librados::AioCompletion *comp = create_rados_callback<
-    SnapshotCreateRequest<I>,
-    &SnapshotCreateRequest<I>::handle_set_parent>(this);
+  auto finish_op_ctx = start_local_op();
+  if (finish_op_ctx == nullptr) {
+    derr << ": lost exclusive lock" << dendl;
+    finish(-EROFS);
+    return;
+  }
+
+  auto ctx = new FunctionContext([this, finish_op_ctx](int r) {
+      handle_set_parent(r);
+      finish_op_ctx->complete(0);
+    });
+  librados::AioCompletion *comp = create_rados_callback(ctx);
   int r = m_local_image_ctx->md_ctx.aio_operate(m_local_image_ctx->header_oid,
                                                 comp, &op);
   assert(r == 0);
@@ -186,9 +215,17 @@ template <typename I>
 void SnapshotCreateRequest<I>::send_snap_create() {
   dout(20) << ": snap_name=" << m_snap_name << dendl;
 
-  Context *ctx = create_context_callback<
-    SnapshotCreateRequest<I>, &SnapshotCreateRequest<I>::handle_snap_create>(
-      this);
+  auto finish_op_ctx = start_local_op();
+  if (finish_op_ctx == nullptr) {
+    derr << ": lost exclusive lock" << dendl;
+    finish(-EROFS);
+    return;
+  }
+
+  auto ctx = new FunctionContext([this, finish_op_ctx](int r) {
+      handle_snap_create(r);
+      finish_op_ctx->complete(0);
+    });
   RWLock::RLocker owner_locker(m_local_image_ctx->owner_lock);
   m_local_image_ctx->operations->execute_snap_create(m_snap_namespace,
 						     m_snap_name.c_str(),
@@ -218,8 +255,8 @@ void SnapshotCreateRequest<I>::send_create_object_map() {
   }
 
   m_local_image_ctx->snap_lock.get_read();
-  auto snap_it = m_local_image_ctx->snap_ids.find({cls::rbd::UserSnapshotNamespace(),
-						   m_snap_name});
+  auto snap_it = m_local_image_ctx->snap_ids.find(
+    {cls::rbd::UserSnapshotNamespace(), m_snap_name});
   if (snap_it == m_local_image_ctx->snap_ids.end()) {
     derr << ": failed to locate snap: " << m_snap_name << dendl;
     m_local_image_ctx->snap_lock.put_read();
@@ -242,9 +279,18 @@ void SnapshotCreateRequest<I>::send_create_object_map() {
   librados::ObjectWriteOperation op;
   librbd::cls_client::object_map_resize(&op, object_count, OBJECT_NONEXISTENT);
 
-  librados::AioCompletion *comp = create_rados_callback<
-    SnapshotCreateRequest<I>,
-    &SnapshotCreateRequest<I>::handle_create_object_map>(this);
+  auto finish_op_ctx = start_local_op();
+  if (finish_op_ctx == nullptr) {
+    derr << ": lost exclusive lock" << dendl;
+    finish(-EROFS);
+    return;
+  }
+
+  auto ctx = new FunctionContext([this, finish_op_ctx](int r) {
+      handle_create_object_map(r);
+      finish_op_ctx->complete(0);
+    });
+  librados::AioCompletion *comp = create_rados_callback(ctx);
   int r = m_local_image_ctx->md_ctx.aio_operate(object_map_oid, comp, &op);
   assert(r == 0);
   comp->release();
@@ -262,6 +308,15 @@ void SnapshotCreateRequest<I>::handle_create_object_map(int r) {
   }
 
   finish(0);
+}
+
+template <typename I>
+Context *SnapshotCreateRequest<I>::start_local_op() {
+  RWLock::RLocker owner_locker(m_local_image_ctx->owner_lock);
+  if (m_local_image_ctx->exclusive_lock == nullptr) {
+    return nullptr;
+  }
+  return m_local_image_ctx->exclusive_lock->start_op();
 }
 
 template <typename I>

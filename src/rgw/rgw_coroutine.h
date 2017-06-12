@@ -20,7 +20,7 @@
 #include "common/admin_socket.h"
 
 #include "rgw_common.h"
-#include "rgw_boost_asio_coroutine.h"
+#include <boost/asio/coroutine.hpp>
 
 #include <atomic>
 

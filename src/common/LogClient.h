@@ -18,10 +18,6 @@
 #include "common/LogEntry.h"
 #include "common/Mutex.h"
 
-#include <iosfwd>
-#include <sstream>
-#include <atomic>
-
 class LogClient;
 class MLog;
 class MLogAck;
@@ -235,6 +231,7 @@ public:
 
   uint64_t get_next_seq();
   const entity_inst_t& get_myinst();
+  const EntityName& get_myname();
   version_t queue(LogEntry &entry);
 
 private:

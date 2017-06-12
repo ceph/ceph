@@ -36,7 +36,8 @@ public:
   ImageWatcher(ImageCtxT& image_ctx);
   ~ImageWatcher() override;
 
-  void unregister_watch(Context *on_finish);
+  void unregister_watch(Context *on_finish) override;
+  void block_notifies(Context *on_finish) override;
 
   void notify_flatten(uint64_t request_id, ProgressContext &prog_ctx,
                       Context *on_finish);
@@ -145,23 +146,7 @@ private:
     ProgressContext *m_prog_ctx;
   };
 
-  struct C_ProcessPayload : public Context {
-    ImageWatcher *image_watcher;
-    uint64_t notify_id;
-    uint64_t handle;
-    watch_notify::Payload payload;
-
-    C_ProcessPayload(ImageWatcher *image_watcher_, uint64_t notify_id_,
-                     uint64_t handle_, const watch_notify::Payload &payload)
-      : image_watcher(image_watcher_), notify_id(notify_id_), handle(handle_),
-        payload(payload) {
-    }
-
-    void finish(int r) override {
-      image_watcher->process_payload(notify_id, handle, payload, r);
-    }
-  };
-
+  struct C_ProcessPayload;
   struct C_ResponseMessage : public Context {
     C_NotifyAck *notify_ack;
 
@@ -251,7 +236,7 @@ private:
   bool handle_payload(const watch_notify::UnknownPayload& payload,
                       C_NotifyAck *ctx);
   void process_payload(uint64_t notify_id, uint64_t handle,
-                       const watch_notify::Payload &payload, int r);
+                       const watch_notify::Payload &payload);
 
   void handle_notify(uint64_t notify_id, uint64_t handle,
                      uint64_t notifier_id, bufferlist &bl) override;

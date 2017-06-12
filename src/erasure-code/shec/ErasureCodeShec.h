@@ -21,10 +21,8 @@
 #ifndef CEPH_ERASURE_CODE_SHEC_H
 #define CEPH_ERASURE_CODE_SHEC_H
 
-#include "common/Mutex.h"
 #include "erasure-code/ErasureCode.h"
 #include "ErasureCodeShecTableCache.h"
-#include <list>
 
 #define DEFAULT_RULESET_ROOT "default"
 #define DEFAULT_RULESET_FAILURE_DOMAIN "host"

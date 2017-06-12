@@ -77,7 +77,7 @@ librados::RadosClient::RadosClient(CephContext *cct_)
     lock("librados::RadosClient::lock"),
     timer(cct, lock),
     refcnt(1),
-    log_last_version(0), log_cb(NULL), log_cb_arg(NULL),
+    log_last_version(0), log_cb(NULL), log_cb2(NULL), log_cb_arg(NULL),
     finisher(cct, "radosclient", "fn-radosclient")
 {
 }
@@ -351,7 +351,7 @@ void librados::RadosClient::shutdown()
   }
 
   bool need_objecter = false;
-  if (objecter && objecter->initialized.read()) {
+  if (objecter && objecter->initialized) {
     need_objecter = true;
   }
 
@@ -920,7 +920,10 @@ int librados::RadosClient::pg_command(pg_t pgid, vector<string>& cmd,
   return ret;
 }
 
-int librados::RadosClient::monitor_log(const string& level, rados_log_callback_t cb, void *arg)
+int librados::RadosClient::monitor_log(const string& level,
+				       rados_log_callback_t cb,
+				       rados_log_callback2_t cb2,
+				       void *arg)
 {
   Mutex::Locker l(lock);
 
@@ -928,12 +931,14 @@ int librados::RadosClient::monitor_log(const string& level, rados_log_callback_t
     return -ENOTCONN;
   }
 
-  if (cb == NULL) {
+  if (cb == NULL && cb2 == NULL) {
     // stop watch
-    ldout(cct, 10) << __func__ << " removing cb " << (void*)log_cb << dendl;
+    ldout(cct, 10) << __func__ << " removing cb " << (void*)log_cb
+		   << " " << (void*)log_cb2 << dendl;
     monclient.sub_unwant(log_watch);
     log_watch.clear();
     log_cb = NULL;
+    log_cb2 = NULL;
     log_cb_arg = NULL;
     return 0;
   }
@@ -954,15 +959,17 @@ int librados::RadosClient::monitor_log(const string& level, rados_log_callback_t
     return -EINVAL;
   }
 
-  if (log_cb)
+  if (log_cb || log_cb2)
     monclient.sub_unwant(log_watch);
 
   // (re)start watch
-  ldout(cct, 10) << __func__ << " add cb " << (void*)cb << " level " << level << dendl;
+  ldout(cct, 10) << __func__ << " add cb " << (void*)cb << " " << (void*)cb2
+		 << " level " << level << dendl;
   monclient.sub_want(watch_level, 0, 0);
 
   monclient.renew_subs();
   log_cb = cb;
+  log_cb2 = cb2;
   log_cb_arg = arg;
   log_watch = watch_level;
   return 0;
@@ -976,21 +983,27 @@ void librados::RadosClient::handle_log(MLog *m)
   if (log_last_version < m->version) {
     log_last_version = m->version;
 
-    if (log_cb) {
+    if (log_cb || log_cb2) {
       for (std::deque<LogEntry>::iterator it = m->entries.begin(); it != m->entries.end(); ++it) {
         LogEntry e = *it;
         ostringstream ss;
-        ss << e.stamp << " " << e.who.name << " " << e.prio << " " << e.msg;
+        ss << e.stamp << " " << e.name << " " << e.prio << " " << e.msg;
         string line = ss.str();
         string who = stringify(e.who);
+	string name = stringify(e.name);
         string level = stringify(e.prio);
         struct timespec stamp;
         e.stamp.to_timespec(&stamp);
 
         ldout(cct, 20) << __func__ << " delivering " << ss.str() << dendl;
-        log_cb(log_cb_arg, line.c_str(), who.c_str(),
-               stamp.tv_sec, stamp.tv_nsec,
-               e.seq, level.c_str(), e.msg.c_str());
+	if (log_cb)
+	  log_cb(log_cb_arg, line.c_str(), who.c_str(),
+		 stamp.tv_sec, stamp.tv_nsec,
+		 e.seq, level.c_str(), e.msg.c_str());
+	if (log_cb2)
+	  log_cb2(log_cb_arg, line.c_str(), who.c_str(), name.c_str(),
+		  stamp.tv_sec, stamp.tv_nsec,
+		  e.seq, level.c_str(), e.msg.c_str());
       }
     }
 

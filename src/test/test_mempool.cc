@@ -86,32 +86,32 @@ void do_insert_key(A& a, B& b, int count, int base)
   for (int i = 0; i < count; ++i) {
     a.insert(make_pair(base+i,base+i));
     b.insert(make_pair(base+i,base+i));
-    check_usage(mempool::unittest_1::id);
+    check_usage(mempool::osd::id);
   }
 }
 
 TEST(mempool, vector_context)
 {
-  check_usage(mempool::unittest_1::id);
-  EXPECT_EQ(mempool::unittest_1::allocated_bytes(), 0u);
-  EXPECT_EQ(mempool::unittest_1::allocated_items(), 0u);
+  check_usage(mempool::osd::id);
+  EXPECT_EQ(mempool::osd::allocated_bytes(), 0u);
+  EXPECT_EQ(mempool::osd::allocated_items(), 0u);
   for (unsigned i = 0; i < 10; ++i) {
     vector<int> a;
-    mempool::unittest_1::vector<int> b,c;
+    mempool::osd::vector<int> b,c;
     eq_elements(a,b);
     do_push_back(a,b,i,i);
     eq_elements(a,b);
-    check_usage(mempool::unittest_1::id);
+    check_usage(mempool::osd::id);
 
     mempool::stats_t total;
     map<std::string,mempool::stats_t> by_type;
-    mempool::get_pool(mempool::unittest_1::id).get_stats(&total, &by_type);
-    EXPECT_GE(mempool::unittest_1::allocated_bytes(), i * 4u);
-    EXPECT_GE(mempool::unittest_1::allocated_items(), i);
+    mempool::get_pool(mempool::osd::id).get_stats(&total, &by_type);
+    EXPECT_GE(mempool::osd::allocated_bytes(), i * 4u);
+    EXPECT_GE(mempool::osd::allocated_items(), i);
 
     c.swap(b);
     eq_elements(a,c);
-    check_usage(mempool::unittest_1::id);
+    check_usage(mempool::osd::id);
     a.clear();
     b.clear();
     c.clear();
@@ -122,7 +122,7 @@ TEST(mempool, list_context)
 {
   for (unsigned i = 1; i < 10; ++i) {
     list<int> a;
-    mempool::unittest_1::list<int> b,c;
+    mempool::osd::list<int> b,c;
     eq_elements(a,b);
     do_push_back(a,b,i,i);
     eq_elements(a,b);
@@ -139,12 +139,12 @@ TEST(mempool, list_context)
 
     mempool::stats_t total;
     map<std::string,mempool::stats_t> by_type;
-    mempool::get_pool(mempool::unittest_1::id).get_stats(&total, &by_type);
-    EXPECT_GE(mempool::unittest_1::allocated_bytes(), i * 4u);
-    EXPECT_EQ(mempool::unittest_1::allocated_items(), i);
+    mempool::get_pool(mempool::osd::id).get_stats(&total, &by_type);
+    EXPECT_GE(mempool::osd::allocated_bytes(), i * 4u);
+    EXPECT_EQ(mempool::osd::allocated_items(), i);
 
     eq_elements(a,c);
-    check_usage(mempool::unittest_1::id);
+    check_usage(mempool::osd::id);
   }
 }
 
@@ -152,22 +152,22 @@ TEST(mempool, set_context)
 {
   for (int i = 0; i < 10; ++i) {
     set<int> a;
-    mempool::unittest_1::set<int> b;
+    mempool::osd::set<int> b;
     do_insert(a,b,i,i);
     eq_elements(a,b);
-    check_usage(mempool::unittest_1::id);
+    check_usage(mempool::osd::id);
   }
 
   for (int i = 1; i < 10; ++i) {
     set<int> a;
-    mempool::unittest_1::set<int> b;
+    mempool::osd::set<int> b;
     do_insert(a,b,i,0);
     EXPECT_NE(a.find(i/2),a.end());
     EXPECT_NE(b.find(i/2),b.end());
     a.erase(a.find(i/2));
     b.erase(b.find(i/2));
     eq_elements(a,b);
-    check_usage(mempool::unittest_1::id);
+    check_usage(mempool::osd::id);
   }
 }
 
@@ -182,14 +182,14 @@ struct obj {
     return l.a < r.a;
   }
 };
-MEMPOOL_DEFINE_OBJECT_FACTORY(obj, obj, unittest_2);
+MEMPOOL_DEFINE_OBJECT_FACTORY(obj, obj, osdmap);
 
 TEST(mempool, test_factory)
 {
    obj *o1 = new obj();
    obj *o2 = new obj(10);
    obj *o3 = new obj(20,30);
-   check_usage(mempool::unittest_2::id);
+   check_usage(mempool::osdmap::id);
    EXPECT_NE(o1,nullptr);
    EXPECT_EQ(o1->a,1);
    EXPECT_EQ(o1->b,1);
@@ -201,18 +201,18 @@ TEST(mempool, test_factory)
    delete o1;
    delete o2;
    delete o3;
-   check_usage(mempool::unittest_2::id);
+   check_usage(mempool::osdmap::id);
 }
 
 TEST(mempool, vector)
 {
   {
-    mempool::unittest_1::vector<int> v;
+    mempool::osd::vector<int> v;
     v.push_back(1);
     v.push_back(2);
   }
   {
-    mempool::unittest_2::vector<obj> v;
+    mempool::osdmap::vector<obj> v;
     v.push_back(obj());
     v.push_back(obj(1));
   }
@@ -220,10 +220,10 @@ TEST(mempool, vector)
 
 TEST(mempool, set)
 {
-  mempool::unittest_1::set<int> set_int;
+  mempool::osd::set<int> set_int;
   set_int.insert(1);
   set_int.insert(2);
-  mempool::unittest_2::set<obj> set_obj;
+  mempool::osdmap::set<obj> set_obj;
   set_obj.insert(obj());
   set_obj.insert(obj(1));
   set_obj.insert(obj(1, 2));
@@ -232,12 +232,12 @@ TEST(mempool, set)
 TEST(mempool, map)
 {
   {
-    mempool::unittest_1::map<int,int> v;
+    mempool::osd::map<int,int> v;
     v[1] = 2;
     v[3] = 4;
   }
   {
-    mempool::unittest_2::map<int,obj> v;
+    mempool::osdmap::map<int,obj> v;
     v[1] = obj();
     v[2] = obj(2);
     v[3] = obj(2, 3);
@@ -247,12 +247,12 @@ TEST(mempool, map)
 TEST(mempool, list)
 {
   {
-    mempool::unittest_1::list<int> v;
+    mempool::osd::list<int> v;
     v.push_back(1);
     v.push_back(2);
   }
   {
-    mempool::unittest_2::list<obj> v;
+    mempool::osdmap::list<obj> v;
     v.push_back(obj());
     v.push_back(obj(1));
   }
@@ -260,33 +260,66 @@ TEST(mempool, list)
 
 TEST(mempool, unordered_map)
 {
-  mempool::unittest_2::unordered_map<int,obj> h;
+  mempool::osdmap::unordered_map<int,obj> h;
   h[1] = obj();
   h[2] = obj(1);
+}
+
+TEST(mempool, string_test)
+{
+  mempool::osdmap::string s;
+  s.reserve(100);
+  EXPECT_GE(mempool::osdmap::allocated_items(), s.capacity() + 1u); // +1 for zero-byte termination :
+  for (size_t i = 0; i < 10; ++i) {
+    s += '1';
+    s.append(s);
+    EXPECT_GE(mempool::osdmap::allocated_items(), s.capacity() + 1u);
+  }
 }
 
 TEST(mempool, bufferlist)
 {
   bufferlist bl;
   int len = 1048576;
-  size_t before = mempool::buffer_data::allocated_bytes();
+  size_t before = mempool::buffer_anon::allocated_bytes();
   cout << "before " << before << std::endl;
   bl.append(buffer::create_aligned(len, 4096));
-  size_t after = mempool::buffer_data::allocated_bytes();
+  size_t after = mempool::buffer_anon::allocated_bytes();
   cout << "after " << after << std::endl;
   ASSERT_GE(after, before + len);
 }
 
-TEST(mempool, string_test)
+TEST(mempool, bufferlist_reassign)
 {
-  mempool::unittest_2::string s;
-  s.reserve(100);
-  EXPECT_GE(mempool::unittest_2::allocated_items(), s.capacity() + 1u); // +1 for zero-byte termination :
-  for (size_t i = 0; i < 10; ++i) {
-    s += '1';
-    s.append(s);
-    EXPECT_GE(mempool::unittest_2::allocated_items(), s.capacity() + 1u);
+  bufferlist bl;
+  size_t items_before = mempool::buffer_anon::allocated_items();
+  size_t bytes_before = mempool::buffer_anon::allocated_bytes();
+  bl.append("fooo");
+  ASSERT_EQ(items_before + 1, mempool::buffer_anon::allocated_items());
+  ASSERT_LT(bytes_before, mempool::buffer_anon::allocated_bytes());
+
+  // move existing bl
+  bl.reassign_to_mempool(mempool::mempool_osd);
+  ASSERT_EQ(items_before, mempool::buffer_anon::allocated_items());
+  ASSERT_EQ(bytes_before, mempool::buffer_anon::allocated_bytes());
+
+  // additional appends should go to the same pool
+  items_before = mempool::osd::allocated_items();
+  bytes_before = mempool::osd::allocated_bytes();
+  cout << "anon b " << mempool::buffer_anon::allocated_bytes() << std::endl;
+  for (unsigned i = 0; i < 1000; ++i) {
+    bl.append("asdfddddddddddddddddddddddasfdasdfasdfasdfasdfasdf");
   }
+  cout << "anon a " << mempool::buffer_anon::allocated_bytes() << std::endl;
+  ASSERT_LT(items_before, mempool::osd::allocated_items());
+  ASSERT_LT(bytes_before, mempool::osd::allocated_bytes());
+
+  // try_.. won't
+  items_before = mempool::osd::allocated_items();
+  bytes_before = mempool::osd::allocated_bytes();
+  bl.try_assign_to_mempool(mempool::mempool_bloom_filter);
+  ASSERT_EQ(items_before, mempool::osd::allocated_items());
+  ASSERT_EQ(bytes_before, mempool::osd::allocated_bytes());
 }
 
 int main(int argc, char **argv)

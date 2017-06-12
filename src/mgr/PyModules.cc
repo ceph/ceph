@@ -13,6 +13,7 @@
 
 // Include this first to get python headers earlier
 #include "PyState.h"
+#include "Gil.h"
 
 #include <boost/tokenizer.hpp>
 #include "common/errno.h"
@@ -29,39 +30,11 @@
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_mgr
-
 #undef dout_prefix
-#define dout_prefix *_dout << "mgr[py] "
+#define dout_prefix *_dout << "mgr " << __func__ << " "
 
 // definition for non-const static member
 std::string PyModules::config_prefix;
-
-namespace {
-  PyObject* log_write(PyObject*, PyObject* args) {
-    char* m = nullptr;
-    if (PyArg_ParseTuple(args, "s", &m)) {
-      auto len = strlen(m);
-      if (len && m[len-1] == '\n') {
-	m[len-1] = '\0';
-      }
-      dout(4) << m << dendl;
-    }
-    Py_RETURN_NONE;
-  }
-
-  PyObject* log_flush(PyObject*, PyObject*){
-    Py_RETURN_NONE;
-  }
-
-  static PyMethodDef log_methods[] = {
-    {"write", log_write, METH_VARARGS, "write stdout and stderr"},
-    {"flush", log_flush, METH_VARARGS, "flush"},
-    {nullptr, nullptr, 0, nullptr}
-  };
-}
-
-#undef dout_prefix
-#define dout_prefix *_dout << "mgr " << __func__ << " "
 
 // constructor/destructor implementations cannot be in .h,
 // because ServeThread is still an "incomplete" type there
@@ -264,7 +237,7 @@ PyObject *PyModules::get_python(const std::string &what)
       cluster_state.with_pgmap(
           [&osd_map, &f](const PGMap &pg_map) {
         pg_map.dump_fs_stats(nullptr, &f, true);
-        pg_map.dump_pool_stats(osd_map, nullptr, &f, true);
+        pg_map.dump_pool_stats_full(osd_map, nullptr, &f, true);
       });
     });
     return f.get();
@@ -365,37 +338,12 @@ int PyModules::init()
   Mutex::Locker locker(lock);
 
   global_handle = this;
-  // namespace in config-key prefixed by "mgr/<id>/"
-  config_prefix = std::string(g_conf->name.get_type_str()) + "/" +
-	          g_conf->name.get_id() + "/";
+  // namespace in config-key prefixed by "mgr/"
+  config_prefix = std::string(g_conf->name.get_type_str()) + "/";
 
   // Set up global python interpreter
   Py_SetProgramName(const_cast<char*>(PYTHON_EXECUTABLE));
   Py_InitializeEx(0);
-
-  // Some python modules do not cope with an unpopulated argv, so lets
-  // fake one.  This step also picks up site-packages into sys.path.
-  const char *argv[] = {"ceph-mgr"};
-  PySys_SetArgv(1, (char**)argv);
-
-  if (g_conf->daemonize) {
-    auto py_logger = Py_InitModule("ceph_logger", log_methods);
-#if PY_MAJOR_VERSION >= 3
-    PySys_SetObject("stderr", py_logger);
-    PySys_SetObject("stdout", py_logger);
-#else
-    PySys_SetObject(const_cast<char*>("stderr"), py_logger);
-    PySys_SetObject(const_cast<char*>("stdout"), py_logger);
-#endif
-  }
-  // Populate python namespace with callable hooks
-  Py_InitModule("ceph_state", CephStateMethods);
-
-  // Configure sys.path to include mgr_module_path
-  std::string sys_path = std::string(Py_GetPath()) + ":" + get_site_packages()
-                         + ":" + g_conf->mgr_module_path;
-  dout(10) << "Computed sys.path '" << sys_path << "'" << dendl;
-  PySys_SetPath((char*)(sys_path.c_str()));
 
   // Let CPython know that we will be calling it back from other
   // threads in future.
@@ -403,26 +351,33 @@ int PyModules::init()
     PyEval_InitThreads();
   }
 
+  // Configure sys.path to include mgr_module_path
+  std::string sys_path = std::string(Py_GetPath()) + ":" + get_site_packages()
+                         + ":" + g_conf->mgr_module_path;
+  dout(10) << "Computed sys.path '" << sys_path << "'" << dendl;
+
+  // Drop the GIL and remember the main thread state (current
+  // thread state becomes NULL)
+  pMainThreadState = PyEval_SaveThread();
+
   // Load python code
   boost::tokenizer<> tok(g_conf->mgr_modules);
   for(const auto& module_name : tok) {
     dout(1) << "Loading python module '" << module_name << "'" << dendl;
-    auto mod = std::unique_ptr<MgrPyModule>(new MgrPyModule(module_name));
+    auto mod = std::unique_ptr<MgrPyModule>(new MgrPyModule(module_name, sys_path, pMainThreadState));
     int r = mod->load();
     if (r != 0) {
+      // Don't use handle_pyerror() here; we don't have the GIL
+      // or the right thread state (this is deliberate).
       derr << "Error loading module '" << module_name << "': "
         << cpp_strerror(r) << dendl;
-      derr << handle_pyerror() << dendl;
       // Don't drop out here, load the other modules
     } else {
       // Success!
       modules[module_name] = std::move(mod);
     }
-  } 
+  }
 
-  // Drop the GIL
-  PyEval_SaveThread();
-  
   return 0;
 }
 
@@ -438,14 +393,11 @@ public:
 
   void *entry() override
   {
-    PyGILState_STATE gstate;
-    gstate = PyGILState_Ensure();
     running = true;
 
+    // No need to acquire the GIL here; the module does it.
     dout(4) << "Entering thread for " << mod->get_name() << dendl;
     mod->serve();
-
-    PyGILState_Release(gstate);
 
     running = false;
     return nullptr;
@@ -480,7 +432,9 @@ void PyModules::shutdown()
     auto module = i.second.get();
     const auto& name = i.first;
     dout(10) << "waiting for module " << name << " to shutdown" << dendl;
+    lock.Unlock();
     module->shutdown();
+    lock.Lock();
     dout(10) << "module " << name << " shutdown" << dendl;
   }
 
@@ -495,7 +449,7 @@ void PyModules::shutdown()
 
   modules.clear();
 
-  PyGILState_Ensure();
+  PyEval_RestoreThread(pMainThreadState);
   Py_Finalize();
 
   // nobody needs me anymore.
@@ -558,6 +512,26 @@ bool PyModules::get_config(const std::string &handle,
   } else {
     return false;
   }
+}
+
+PyObject *PyModules::get_config_prefix(const std::string &handle,
+    const std::string &prefix) const
+{
+  PyThreadState *tstate = PyEval_SaveThread();
+  Mutex::Locker l(lock);
+  PyEval_RestoreThread(tstate);
+
+  const std::string base_prefix = config_prefix + handle + "/";
+  const std::string global_prefix = base_prefix + prefix;
+  dout(4) << __func__ << "prefix: " << global_prefix << dendl;
+
+  PyFormatter f;
+  for (auto p = config_cache.lower_bound(global_prefix);
+       p != config_cache.end() && p->first.find(global_prefix) == 0;
+       ++p) {
+    f.dump_string(p->first.c_str() + base_prefix.size(), p->second);
+  }
+  return f.get();
 }
 
 void PyModules::set_config(const std::string &handle,

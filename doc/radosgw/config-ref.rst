@@ -7,6 +7,11 @@ The following settings may added to the Ceph configuration file (i.e., usually
 settings may contain default values. If you do not specify each setting in the
 Ceph configuration file, the default value will be set automatically.
 
+Configuration variables set under the ``[client.radosgw.{instance-name}]``
+section will not apply to rgw or radosgw-admin commands without an instance-name
+specified in the command. Thus variables meant to be applied to all RGW
+instances or all radosgw-admin commands can be put into the ``[global]`` or the
+``[client]`` section to avoid specifying instance-name.
 
 ``rgw data``
 
@@ -294,6 +299,8 @@ Ceph configuration file, the default value will be set automatically.
               a value of zero indicates there is no sharding. It is not
               recommended to set a value too large (e.g. thousand) as it
               increases the cost for bucket listing.
+              This variable should be set in the client or global sections
+              so that it is automatically applied to radosgw-admin commands.
 
 :Type: Integer
 :Default: ``0``
@@ -352,10 +359,41 @@ Ceph configuration file, the default value will be set automatically.
 :Default: ``false``
 
 
+``rgw bucket quota ttl``
+
+:Description: The amount of time in seconds cached quota information is
+              trusted.  After this timeout, the quota information will be
+              re-fetched from the cluster.
+:Type: Integer
+:Default: ``600``
+
+
+``rgw user quota bucket sync interval``
+
+:Description: The amount of time in seconds bucket quota information is
+              accumulated before syncing to the cluster.  During this time,
+              other RGW instances will not see the changes in bucket quota
+              stats from operations on this instance.
+:Type: Integer
+:Default: ``180``
+
+
+``rgw user quota sync interval``
+
+:Description: The amount of time in seconds user quota information is
+              accumulated before syncing to the cluster.  During this time,
+              other RGW instances will not see the changes in user quota stats
+              from operations on this instance.
+:Type: Integer
+:Default: ``180``
+
+
 ``rgw bucket default quota max objects``
 
 :Description: Default max number of objects per bucket. Set on new users,
               if no other quota is specified. Has no effect on existing users.
+              This variable should be set in the client or global sections
+              so that it is automatically applied to radosgw-admin commands.
 :Type: Integer
 :Default: ``-1``
 
@@ -383,6 +421,13 @@ Ceph configuration file, the default value will be set automatically.
               if no other quota is specified.  Has no effect on existing users.
 :Type: Integer
 :Default: ``-1``
+
+
+``rgw verify ssl``
+
+:Description: Verify SSL certificates while making requests.
+:Type: Boolean
+:Default: ``true``
 
 
 Regions

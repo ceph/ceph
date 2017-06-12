@@ -13,37 +13,21 @@
  *
  */
 
-#include <time.h>
-
 #include <boost/algorithm/string.hpp>
 
 #include "include/mempool.h"
 #include "common/admin_socket.h"
 #include "common/perf_counters.h"
-#include "common/Thread.h"
 #include "common/code_environment.h"
-#include "common/ceph_context.h"
 #include "common/ceph_crypto.h"
-#include "common/config.h"
-#include "common/debug.h"
 #include "common/HeartbeatMap.h"
 #include "common/errno.h"
-#include "common/lockdep.h"
-#include "common/Formatter.h"
 #include "common/Graylog.h"
-#include "log/Log.h"
 #include "auth/Crypto.h"
 #include "include/str_list.h"
-#include "common/Mutex.h"
-#include "common/Cond.h"
 #include "common/PluginRegistry.h"
-#include "common/valgrind.h"
 
-#include <iostream>
-#include <pthread.h>
-
-#include "include/Spinlock.h"
-
+using ceph::bufferlist;
 using ceph::HeartbeatMap;
 
 namespace {
@@ -642,11 +626,13 @@ CephContext::~CephContext()
   delete _plugin_registry;
 
   _admin_socket->unregister_command("perfcounters_dump");
-  _admin_socket->unregister_command("perf dump");
   _admin_socket->unregister_command("1");
+  _admin_socket->unregister_command("perf dump");
   _admin_socket->unregister_command("perfcounters_schema");
-  _admin_socket->unregister_command("perf schema");
+  _admin_socket->unregister_command("perf histogram dump");
   _admin_socket->unregister_command("2");
+  _admin_socket->unregister_command("perf schema");
+  _admin_socket->unregister_command("perf histogram schema");
   _admin_socket->unregister_command("perf reset");
   _admin_socket->unregister_command("config show");
   _admin_socket->unregister_command("config set");
@@ -697,7 +683,7 @@ CephContext::~CephContext()
 }
 
 void CephContext::put() {
-  if (nref.dec() == 0) {
+  if (--nref == 0) {
     ANNOTATE_HAPPENS_AFTER(&nref);
     ANNOTATE_HAPPENS_BEFORE_FORGET_ALL(&nref);
     delete this;

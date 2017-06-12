@@ -90,6 +90,29 @@ typedef off_t loff_t;
 
 // -- io helpers --
 
+// Forward declare all the I/O helpers so strict ADL can find them in
+// the case of containers of containers. I'm tempted to abstract this
+// stuff using template templates like I did for denc.
+
+template<class A, class B>
+inline ostream& operator<<(ostream&out, const pair<A,B>& v);
+template<class A, class Alloc>
+inline ostream& operator<<(ostream& out, const vector<A,Alloc>& v);
+template<class A, class Comp, class Alloc>
+inline ostream& operator<<(ostream& out, const deque<A,Alloc>& v);
+template<class A, class B, class C>
+inline ostream& operator<<(ostream&out, const boost::tuple<A, B, C> &t);
+template<class A, class Alloc>
+inline ostream& operator<<(ostream& out, const list<A,Alloc>& ilist);
+template<class A, class Comp, class Alloc>
+inline ostream& operator<<(ostream& out, const set<A, Comp, Alloc>& iset);
+template<class A, class Comp, class Alloc>
+inline ostream& operator<<(ostream& out, const multiset<A,Comp,Alloc>& iset);
+template<class A, class B, class Comp, class Alloc>
+inline ostream& operator<<(ostream& out, const map<A,B,Comp,Alloc>& m);
+template<class A, class B, class Comp, class Alloc>
+inline ostream& operator<<(ostream& out, const multimap<A,B,Comp,Alloc>& m);
+
 template<class A, class B>
 inline ostream& operator<<(ostream& out, const pair<A,B>& v) {
   return out << v.first << "," << v.second;
@@ -395,7 +418,7 @@ enum health_status_t {
 };
 
 #ifdef __cplusplus
-inline ostream& operator<<(ostream &oss, health_status_t status) {
+inline ostream& operator<<(ostream &oss, const health_status_t status) {
   switch (status) {
     case HEALTH_ERR:
       oss << "HEALTH_ERR";
@@ -453,8 +476,10 @@ ostream &operator<<(ostream &lhs, const shard_id_t &rhs);
 
 #if defined(__sun) || defined(_AIX) || defined(DARWIN)
 __s32  ceph_to_host_errno(__s32 e);
+__s32  host_to_ceph_errno(__s32 e);
 #else
 #define  ceph_to_host_errno(e) (e)
+#define  host_to_ceph_errno(e) (e)
 #endif
 
 struct errorcode32_t {
@@ -470,7 +495,8 @@ struct errorcode32_t {
   }
 
   void encode(bufferlist &bl) const {
-    ::encode(code, bl);
+    __s32 newcode = host_to_ceph_errno(code);
+    ::encode(newcode, bl);
   }
   void decode(bufferlist::iterator &bl) {
     ::decode(code, bl);

@@ -50,6 +50,11 @@ if(WITH_FUSE)
     FuseStore.cc)
 endif(WITH_FUSE)
 
+if(WITH_PMEM)
+  list(APPEND libos_srcs
+    bluestore/PMEMDevice.cc)
+endif(WITH_PMEM)
+
 if(WITH_SPDK)
   list(APPEND libos_srcs
     bluestore/NVMEDevice.cc)
@@ -65,6 +70,10 @@ endif(HAVE_LIBAIO)
 
 if(WITH_FUSE)
   target_link_libraries(os ${FUSE_LIBRARIES})
+endif()
+
+if(WITH_PMEM)
+  target_link_libraries(os ${PMEM_LIBRARY})
 endif()
 
 if(WITH_SPDK)

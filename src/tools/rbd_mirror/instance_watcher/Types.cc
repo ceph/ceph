@@ -58,22 +58,34 @@ private:
 
 } // anonymous namespace
 
-void ImagePayloadBase::encode(bufferlist &bl) const {
+void PayloadBase::encode(bufferlist &bl) const {
   ::encode(request_id, bl);
+}
+
+void PayloadBase::decode(__u8 version, bufferlist::iterator &iter) {
+  ::decode(request_id, iter);
+}
+
+void PayloadBase::dump(Formatter *f) const {
+  f->dump_unsigned("request_id", request_id);
+}
+
+void ImagePayloadBase::encode(bufferlist &bl) const {
+  PayloadBase::encode(bl);
   ::encode(global_image_id, bl);
   ::encode(peer_mirror_uuid, bl);
   ::encode(peer_image_id, bl);
 }
 
 void ImagePayloadBase::decode(__u8 version, bufferlist::iterator &iter) {
-  ::decode(request_id, iter);
+  PayloadBase::decode(version, iter);
   ::decode(global_image_id, iter);
   ::decode(peer_mirror_uuid, iter);
   ::decode(peer_image_id, iter);
 }
 
 void ImagePayloadBase::dump(Formatter *f) const {
-  f->dump_unsigned("request_id", request_id);
+  PayloadBase::dump(f);
   f->dump_string("global_image_id", global_image_id);
   f->dump_string("peer_mirror_uuid", peer_mirror_uuid);
   f->dump_string("peer_image_id", peer_image_id);
@@ -92,6 +104,21 @@ void ImageReleasePayload::decode(__u8 version, bufferlist::iterator &iter) {
 void ImageReleasePayload::dump(Formatter *f) const {
   ImagePayloadBase::dump(f);
   f->dump_bool("schedule_delete", schedule_delete);
+}
+
+void SyncPayloadBase::encode(bufferlist &bl) const {
+  PayloadBase::encode(bl);
+  ::encode(sync_id, bl);
+}
+
+void SyncPayloadBase::decode(__u8 version, bufferlist::iterator &iter) {
+  PayloadBase::decode(version, iter);
+  ::decode(sync_id, iter);
+}
+
+void SyncPayloadBase::dump(Formatter *f) const {
+  PayloadBase::dump(f);
+  f->dump_string("sync_id", sync_id);
 }
 
 void UnknownPayload::encode(bufferlist &bl) const {
@@ -124,6 +151,12 @@ void NotifyMessage::decode(bufferlist::iterator& iter) {
   case NOTIFY_OP_IMAGE_RELEASE:
     payload = ImageReleasePayload();
     break;
+  case NOTIFY_OP_SYNC_REQUEST:
+    payload = SyncRequestPayload();
+    break;
+  case NOTIFY_OP_SYNC_START:
+    payload = SyncStartPayload();
+    break;
   default:
     payload = UnknownPayload();
     break;
@@ -144,6 +177,12 @@ void NotifyMessage::generate_test_instances(std::list<NotifyMessage *> &o) {
   o.push_back(new NotifyMessage(ImageReleasePayload()));
   o.push_back(new NotifyMessage(ImageReleasePayload(1, "gid", "uuid", "id",
                                                     true)));
+
+  o.push_back(new NotifyMessage(SyncRequestPayload()));
+  o.push_back(new NotifyMessage(SyncRequestPayload(1, "sync_id")));
+
+  o.push_back(new NotifyMessage(SyncStartPayload()));
+  o.push_back(new NotifyMessage(SyncStartPayload(1, "sync_id")));
 }
 
 std::ostream &operator<<(std::ostream &out, const NotifyOp &op) {
@@ -153,6 +192,12 @@ std::ostream &operator<<(std::ostream &out, const NotifyOp &op) {
     break;
   case NOTIFY_OP_IMAGE_RELEASE:
     out << "ImageRelease";
+    break;
+  case NOTIFY_OP_SYNC_REQUEST:
+    out << "SyncRequest";
+    break;
+  case NOTIFY_OP_SYNC_START:
+    out << "SyncStart";
     break;
   default:
     out << "Unknown (" << static_cast<uint32_t>(op) << ")";

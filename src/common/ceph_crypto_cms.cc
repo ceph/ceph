@@ -36,38 +36,24 @@
 
 
 #include "common/config.h"
+#include "common/debug.h"
 
 #ifdef USE_NSS
-
 #include <nspr.h>
 #include <cert.h>
 #include <nss.h>
 #include <smime.h>
-
 #endif
-
-#include <string.h>
-#include <errno.h>
-
-
-#include "include/buffer.h"
-
-#include "common/debug.h"
-
-#include "ceph_crypto_cms.h"
 
 #define dout_subsys ceph_subsys_crypto
 
-
 #ifndef USE_NSS
-
 int ceph_decode_cms(CephContext *cct, bufferlist& cms_bl, bufferlist& decoded_bl)
 {
   return -ENOTSUP;
 }
 
 #else
-
 
 static int cms_verbose = 0;
 
@@ -356,5 +342,4 @@ int ceph_decode_cms(CephContext *cct, bufferlist& cms_bl, bufferlist& decoded_bl
 
     return ret;
 }
-
 #endif

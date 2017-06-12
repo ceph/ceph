@@ -16,13 +16,8 @@
 #define COMMON_CEPH_TIMER_H
 
 #include <condition_variable>
-#include <functional>
-#include <mutex>
 #include <thread>
-
 #include <boost/intrusive/set.hpp>
-
-#include "ceph_time.h"
 
 namespace ceph {
 

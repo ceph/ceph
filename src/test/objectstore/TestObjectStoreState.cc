@@ -77,7 +77,7 @@ void TestObjectStoreState::init(int colls, int objs)
     m_collections_ids.push_back(coll_id);
     m_next_coll_nr++;
   }
-  dout(5) << "init has " << m_in_flight.read() << "in-flight transactions" << dendl;
+  dout(5) << "init has " << m_in_flight.load() << "in-flight transactions" << dendl;
   wait_for_done();
   dout(5) << "init finished" << dendl;
 }

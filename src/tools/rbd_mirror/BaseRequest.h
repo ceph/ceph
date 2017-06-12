@@ -20,7 +20,7 @@ public:
   virtual void cancel() {}
 
 protected:
-  void finish(int r) {
+  virtual void finish(int r) {
     if (m_cct) {
       lsubdout(m_cct, rbd_mirror, 20) << m_name << "::finish: r=" << r << dendl;
     }

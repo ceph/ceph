@@ -1,4 +1,5 @@
 usr/bin/radosgw
 usr/bin/radosgw-token
+usr/bin/radosgw-es
 usr/bin/radosgw-object-expirer
 usr/share/man/man8/radosgw.8

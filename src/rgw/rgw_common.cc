@@ -208,8 +208,8 @@ req_info::req_info(CephContext *cct, class RGWEnv *e) : env(e) {
   if (request_uri[0] != '/') {
     request_uri = get_abs_path(request_uri);
   }
-  int pos = request_uri.find('?');
-  if (pos >= 0) {
+  auto pos = request_uri.find('?');
+  if (pos != string::npos) {
     request_params = request_uri.substr(pos + 1);
     request_uri = request_uri.substr(0, pos);
   } else {
@@ -458,11 +458,11 @@ string rgw_string_unquote(const string& s)
 static void trim_whitespace(const string& src, string& dst)
 {
   const char *spacestr = " \t\n\r\f\v";
-  int start = src.find_first_not_of(spacestr);
-  if (start < 0)
+  auto start = src.find_first_not_of(spacestr);
+  if (start == string::npos)
     return;
 
-  int end = src.find_last_not_of(spacestr);
+  auto end = src.find_last_not_of(spacestr);
   dst = src.substr(start, end - start + 1);
 }
 
@@ -550,7 +550,7 @@ bool parse_iso8601(const char *s, struct tm *t, uint32_t *pns, bool extended_for
   trim_whitespace(p, str);
   int len = str.size();
 
-  if (len == 1 && str[0] == 'Z')
+  if (len == 0 || (len == 1 && str[0] == 'Z'))
     return true;
 
   if (str[0] != '.' ||
@@ -593,8 +593,8 @@ int parse_key_value(string& in_str, const char *delim, string& key, string& val)
   if (delim == NULL)
     return -EINVAL;
 
-  int pos = in_str.find(delim);
-  if (pos < 0)
+  auto pos = in_str.find(delim);
+  if (pos == string::npos)
     return -EINVAL;
 
   trim_whitespace(in_str.substr(0, pos), key);
@@ -865,10 +865,10 @@ int gen_rand_alphanumeric_plain(CephContext *cct, char *dest, int size) /* size 
 
 int NameVal::parse()
 {
-  int delim_pos = str.find('=');
+  auto delim_pos = str.find('=');
   int ret = 0;
 
-  if (delim_pos < 0) {
+  if (delim_pos == string::npos) {
     name = str;
     val = "";
     ret = 1;
@@ -1584,8 +1584,8 @@ int RGWUserCaps::add_from_string(const string& str)
 {
   int start = 0;
   do {
-    int end = str.find(';', start);
-    if (end < 0)
+    auto end = str.find(';', start);
+    if (end == string::npos)
       end = str.size();
 
     int r = add_cap(str.substr(start, end - start));
@@ -1602,8 +1602,8 @@ int RGWUserCaps::remove_from_string(const string& str)
 {
   int start = 0;
   do {
-    int end = str.find(';', start);
-    if (end < 0)
+    auto end = str.find(';', start);
+    if (end == string::npos)
       end = str.size();
 
     int r = remove_cap(str.substr(start, end - start));

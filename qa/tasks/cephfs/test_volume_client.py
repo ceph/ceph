@@ -11,10 +11,6 @@ log = logging.getLogger(__name__)
 
 
 class TestVolumeClient(CephFSTestCase):
-    #
-    # TODO: Test that VolumeClient can recover from partial auth updates.
-    #
-
     # One for looking at the global filesystem, one for being
     # the VolumeClient, two for mounting the created shares
     CLIENTS_REQUIRED = 4
@@ -494,12 +490,17 @@ vc.disconnect()
         )))
 
         # Evicted guest client, guest_mounts[0], should not be able to do
-        # anymore metadata ops. It behaves as if it has lost network
-        # connection.
-        background = guest_mounts[0].write_n_mb("rogue.bin", 1, wait=False)
-        # Approximate check for 'stuck' as 'still running after 10s'.
-        time.sleep(10)
-        self.assertFalse(background.finished)
+        # anymore metadata ops.  It should start failing all operations
+        # when it sees that its own address is in the blacklist.
+        try:
+            guest_mounts[0].write_n_mb("rogue.bin", 1)
+        except CommandFailedError:
+            pass
+        else:
+            raise RuntimeError("post-eviction write should have failed!")
+
+        # The blacklisted guest client should now be unmountable
+        guest_mounts[0].umount_wait()
 
         # Guest client, guest_mounts[1], using the same auth ID 'guest', but
         # has mounted the other volume, should be able to use its volume
@@ -519,8 +520,6 @@ vc.disconnect()
                 guest_entity=guest_entity
             )))
 
-        # We must hard-umount the one that we evicted
-        guest_mounts[0].umount_wait(force=True)
 
     def test_purge(self):
         """

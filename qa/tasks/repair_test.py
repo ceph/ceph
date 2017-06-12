@@ -303,3 +303,6 @@ def task(ctx, config):
     repair_test_2(ctx, manager, config, choose_replica)
 
     repair_test_erasure_code(manager, hinfoerr, 'primary', "deep-scrub")
+
+    manager.raw_cluster_cmd('osd', 'unset', 'noscrub')
+    manager.raw_cluster_cmd('osd', 'unset', 'nodeep-scrub')

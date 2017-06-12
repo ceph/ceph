@@ -44,7 +44,7 @@ using std::vector;
 
 #define dout_subsys ceph_subsys_mon
 
-ostream& operator<<(ostream& out, mon_rwxa_t p)
+ostream& operator<<(ostream& out, const mon_rwxa_t& p)
 { 
   if (p == MON_CAP_ANY)
     return out << "*";
@@ -165,6 +165,7 @@ void MonCapGrant::expand_profile_mon(const EntityName& name) const
     profile_grants.push_back(MonCapGrant("osd", MON_CAP_R));
     // This command grant is checked explicitly in MRemoveSnaps handling
     profile_grants.push_back(MonCapGrant("osd pool rmsnap"));
+    profile_grants.push_back(MonCapGrant("osd blacklist"));
     profile_grants.push_back(MonCapGrant("log", MON_CAP_W));
   }
   if (profile == "mgr") {
@@ -173,7 +174,8 @@ void MonCapGrant::expand_profile_mon(const EntityName& name) const
     profile_grants.push_back(MonCapGrant("mon", MON_CAP_R));
     profile_grants.push_back(MonCapGrant("mds", MON_CAP_R));
     profile_grants.push_back(MonCapGrant("osd", MON_CAP_R | MON_CAP_W));
-    profile_grants.push_back(MonCapGrant("config-key", MON_CAP_R));
+    profile_grants.push_back(MonCapGrant("auth", MON_CAP_R | MON_CAP_X));
+    profile_grants.push_back(MonCapGrant("config-key", MON_CAP_R | MON_CAP_W));
     string prefix = string("daemon-private/mgr/");
     profile_grants.push_back(MonCapGrant("config-key get", "key",
 					 StringConstraint("", prefix)));

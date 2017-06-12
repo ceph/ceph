@@ -185,6 +185,7 @@ Server::Server(MDSRank *m) :
   is_full(false),
   reconnect_done(NULL),
   failed_reconnects(0),
+  reconnect_evicting(false),
   terminating_sessions(false)
 {
 }
@@ -318,6 +319,7 @@ Session *Server::get_session(Message *m)
 void Server::handle_client_session(MClientSession *m)
 {
   version_t pv;
+  bool blacklisted = false;
   Session *session = get_session(m);
 
   dout(3) << "handle_client_session " << *m << " from " << m->get_source() << dendl;
@@ -345,6 +347,17 @@ void Server::handle_client_session(MClientSession *m)
     }
     assert(session->is_closed() ||
 	   session->is_closing());
+
+    blacklisted = mds->objecter->with_osdmap(
+        [session](const OSDMap &osd_map) -> bool {
+          return osd_map.is_blacklisted(session->info.inst.addr);
+        });
+
+    if (blacklisted) {
+      dout(10) << "ignoring blacklisted client " << session->info.inst.addr << dendl;
+      m->put();
+      return;
+    }
 
     session->set_client_metadata(m->client_meta);
     dout(20) << __func__ << " CEPH_SESSION_REQUEST_OPEN "
@@ -713,10 +726,16 @@ void Server::find_idle_sessions()
     return;
   }
 
-  while (1) {
-    Session *session = mds->sessionmap.get_oldest_session(Session::STATE_STALE);
-    if (!session)
-      break;
+  // Collect a list of sessions exceeding the autoclose threshold
+  std::vector<Session *> to_evict;
+  const auto sessions_p = mds->sessionmap.by_state.find(Session::STATE_STALE);
+  if (sessions_p == mds->sessionmap.by_state.end() || sessions_p->second->empty()) {
+    return;
+  }
+  const auto &stale_sessions = sessions_p->second;
+  assert(stale_sessions != nullptr);
+
+  for (const auto &session: *stale_sessions) {
     if (session->is_importing()) {
       dout(10) << "stopping at importing session " << session->info.inst << dendl;
       break;
@@ -727,13 +746,25 @@ void Server::find_idle_sessions()
 	       << session->last_cap_renew << ")" << dendl;
       break;
     }
-    
+
+    to_evict.push_back(session);
+  }
+
+  for (const auto &session: to_evict) {
     utime_t age = now;
     age -= session->last_cap_renew;
-    mds->clog->info() << "closing stale session " << session->info.inst
-	<< " after " << age;
-    dout(10) << "autoclosing stale session " << session->info.inst << " last " << session->last_cap_renew << dendl;
-    kill_session(session, NULL);
+    mds->clog->warn() << "evicting unresponsive client " << *session
+                      << ", after " << age << " seconds";
+    dout(10) << "autoclosing stale session " << session->info.inst << " last "
+             << session->last_cap_renew << dendl;
+
+    if (g_conf->mds_session_blacklist_on_timeout) {
+      std::stringstream ss;
+      mds->evict_client(session->info.inst.name.num(), false, true,
+                        ss, nullptr);
+    } else {
+      kill_session(session, NULL);
+    }
   }
 }
 
@@ -743,6 +774,8 @@ void Server::find_idle_sessions()
  */
 void Server::kill_session(Session *session, Context *on_safe)
 {
+  assert(mds->mds_lock.is_locked_by_me());
+
   if ((session->is_opening() ||
        session->is_open() ||
        session->is_stale()) &&
@@ -759,6 +792,32 @@ void Server::kill_session(Session *session, Context *on_safe)
       on_safe->complete(0);
     }
   }
+}
+
+size_t Server::apply_blacklist(const std::set<entity_addr_t> &blacklist)
+{
+  std::list<Session*> victims;
+  const auto sessions = mds->sessionmap.get_sessions();
+  for (const auto p : sessions)  {
+    if (!p.first.is_client()) {
+      // Do not apply OSDMap blacklist to MDS daemons, we find out
+      // about their death via MDSMap.
+      continue;
+    }
+
+    Session *s = p.second;
+    if (blacklist.count(s->info.inst.addr)) {
+      victims.push_back(s);
+    }
+  }
+
+  for (const auto s : victims) {
+    kill_session(s, nullptr);
+  }
+
+  dout(10) << "apply_blacklist: killed " << victims.size() << dendl;
+
+  return victims.size();
 }
 
 void Server::journal_close_session(Session *session, int state, Context *on_safe)
@@ -942,22 +1001,53 @@ void Server::reconnect_gather_finish()
 
 void Server::reconnect_tick()
 {
+  if (reconnect_evicting) {
+    dout(4) << "reconnect_tick: waiting for evictions" << dendl;
+    return;
+  }
+
   utime_t reconnect_end = reconnect_start;
   reconnect_end += g_conf->mds_reconnect_timeout;
   if (ceph_clock_now() >= reconnect_end &&
       !client_reconnect_gather.empty()) {
     dout(10) << "reconnect timed out" << dendl;
+
+    // If we're doing blacklist evictions, use this to wait for them before
+    // proceeding to reconnect_gather_finish
+    MDSGatherBuilder gather(g_ceph_context);
+
     for (set<client_t>::iterator p = client_reconnect_gather.begin();
 	 p != client_reconnect_gather.end();
 	 ++p) {
       Session *session = mds->sessionmap.get_session(entity_name_t::CLIENT(p->v));
       assert(session);
       dout(1) << "reconnect gave up on " << session->info.inst << dendl;
-      kill_session(session, NULL);
+
+      mds->clog->warn() << "evicting unresponsive client " << *session
+                        << ", after waiting " << g_conf->mds_reconnect_timeout
+                        << " seconds during MDS startup";
+
+      if (g_conf->mds_session_blacklist_on_timeout) {
+        std::stringstream ss;
+        mds->evict_client(session->info.inst.name.num(), false, true, ss,
+                          gather.new_sub());
+      } else {
+        kill_session(session, NULL);
+      }
+
       failed_reconnects++;
     }
     client_reconnect_gather.clear();
-    reconnect_gather_finish();
+
+    if (gather.has_subs()) {
+      dout(1) << "reconnect will complete once clients are evicted" << dendl;
+      gather.set_finisher(new MDSInternalContextWrapper(mds, new FunctionContext(
+            [this](int r){reconnect_gather_finish();})));
+      gather.activate();
+      reconnect_evicting = true;
+    } else {
+      reconnect_gather_finish();
+    }
   }
 }
 
@@ -5327,6 +5417,7 @@ void Server::_link_remote(MDRequestRef& mdr, bool inc, CDentry *dn, CInode *targ
     mdcache->predirty_journal_parents(mdr, &le->metablob, targeti, dn->get_dir(), PREDIRTY_DIR, -1);
     mdcache->journal_cow_dentry(mdr.get(), &le->metablob, dn);
     le->metablob.add_null_dentry(dn, true);
+    dn->push_projected_linkage();
   }
 
   journal_and_reply(mdr, targeti, dn, le, new C_MDS_link_remote_finish(this, mdr, inc, dn, targeti));
@@ -5352,6 +5443,7 @@ void Server::_link_remote_finish(MDRequestRef& mdr, bool inc,
   } else {
     // unlink main dentry
     dn->get_dir()->unlink_inode(dn);
+    dn->pop_projected_linkage();
     dn->mark_dirty(dn->get_projected_version(), mdr->ls);  // dirty old dentry
   }
 
@@ -5994,10 +6086,11 @@ struct C_MDS_SlaveRmdirPrep : public ServerLogContext {
 
 struct C_MDS_SlaveRmdirCommit : public ServerContext {
   MDRequestRef mdr;
-  C_MDS_SlaveRmdirCommit(Server *s, MDRequestRef& r)
-    : ServerContext(s), mdr(r) { }
+  CDentry *straydn;
+  C_MDS_SlaveRmdirCommit(Server *s, MDRequestRef& r, CDentry *sd)
+    : ServerContext(s), mdr(r), straydn(sd) { }
   void finish(int r) override {
-    server->_commit_slave_rmdir(mdr, r);
+    server->_commit_slave_rmdir(mdr, r, straydn);
   }
 };
 
@@ -6040,7 +6133,7 @@ void Server::handle_slave_rmdir_prep(MDRequestRef& mdr)
   dout(20) << " rollback is " << mdr->more()->rollback_bl.length() << " bytes" << dendl;
 
   // set up commit waiter
-  mdr->more()->slave_commit = new C_MDS_SlaveRmdirCommit(this, mdr);
+  mdr->more()->slave_commit = new C_MDS_SlaveRmdirCommit(this, mdr, straydn);
 
   if (!in->has_subtree_root_dirfrag(mds->get_nodeid())) {
     dout(10) << " no auth subtree in " << *in << ", skipping journal" << dendl;
@@ -6141,11 +6234,17 @@ void Server::handle_slave_rmdir_prep_ack(MDRequestRef& mdr, MMDSSlaveRequest *ac
     dout(10) << "still waiting on slaves " << mdr->more()->waiting_on_slave << dendl;
 }
 
-void Server::_commit_slave_rmdir(MDRequestRef& mdr, int r)
+void Server::_commit_slave_rmdir(MDRequestRef& mdr, int r, CDentry *straydn)
 {
   dout(10) << "_commit_slave_rmdir " << *mdr << " r=" << r << dendl;
   
   if (r == 0) {
+    if (mdr->more()->slave_update_journaled) {
+      CInode *strayin = straydn->get_projected_linkage()->get_inode();
+      if (strayin && !strayin->snaprealm)
+	mdcache->clear_dirty_bits_for_stray(strayin);
+    }
+
     mdr->cleanup();
 
     if (mdr->more()->slave_update_journaled) {
@@ -7204,7 +7303,7 @@ void Server::_rename_apply(MDRequestRef& mdr, CDentry *srcdn, CDentry *destdn, C
     if (destdnl->is_primary()) {
       assert(straydn);
       dout(10) << "straydn is " << *straydn << dendl;
-      destdn->get_dir()->unlink_inode(destdn);
+      destdn->get_dir()->unlink_inode(destdn, false);
 
       straydn->pop_projected_linkage();
       if (mdr->is_slave() && !mdr->more()->slave_update_journaled)
@@ -7223,7 +7322,7 @@ void Server::_rename_apply(MDRequestRef& mdr, CDentry *srcdn, CDentry *destdn, C
 	//oldin->open_snaprealm();  might be sufficient..	
       }
     } else if (destdnl->is_remote()) {
-      destdn->get_dir()->unlink_inode(destdn);
+      destdn->get_dir()->unlink_inode(destdn, false);
       if (oldin->is_auth())
   	oldin->pop_and_dirty_projected_inode(mdr->ls);
     }
@@ -7257,7 +7356,7 @@ void Server::_rename_apply(MDRequestRef& mdr, CDentry *srcdn, CDentry *destdn, C
   } else { // primary
     if (linkmerge) {
       dout(10) << "merging primary onto remote link" << dendl;
-      destdn->get_dir()->unlink_inode(destdn);
+      destdn->get_dir()->unlink_inode(destdn, false);
     }
     destdnl = destdn->pop_projected_linkage();
     if (mdr->is_slave() && !mdr->more()->slave_update_journaled)
@@ -7701,6 +7800,11 @@ void Server::_commit_slave_rename(MDRequestRef& mdr, int r,
       mdr->more()->is_ambiguous_auth = false;
     }
 
+    if (straydn && mdr->more()->slave_update_journaled) {
+      CInode *strayin = straydn->get_projected_linkage()->get_inode();
+      if (strayin && !strayin->snaprealm)
+	mdcache->clear_dirty_bits_for_stray(strayin);
+    }
 
     mds->queue_waiters(finished);
     mdr->cleanup();

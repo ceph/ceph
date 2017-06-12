@@ -4,19 +4,14 @@
 #define CEPH_FORMATTER_H
 
 #include "include/int_types.h"
+#include "include/buffer_fwd.h"
 
 #include <deque>
-#include <iosfwd>
 #include <list>
 #include <vector>
 #include <stdarg.h>
-#include <stddef.h>
-#include <utility>
 #include <sstream>
-#include <string>
 #include <map>
-
-#include "include/buffer_fwd.h"
 
 namespace ceph {
 

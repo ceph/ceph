@@ -13,8 +13,12 @@
  */
 
 #include <random>
-#include "Compressor.h"
+#include <sstream>
+
 #include "CompressionPlugin.h"
+#include "Compressor.h"
+#include "common/ceph_context.h"
+#include "common/debug.h"
 #include "common/dout.h"
 
 const char * Compressor::get_comp_alg_name(int a) {
@@ -23,6 +27,7 @@ const char * Compressor::get_comp_alg_name(int a) {
   case COMP_ALG_SNAPPY: return "snappy";
   case COMP_ALG_ZLIB: return "zlib";
   case COMP_ALG_ZSTD: return "zstd";
+  case COMP_ALG_LZ4: return "lz4";
   default: return "???";
   }
 }
@@ -34,6 +39,8 @@ boost::optional<Compressor::CompressionAlgorithm> Compressor::get_comp_alg_type(
     return COMP_ALG_ZLIB;
   if (s == "zstd")
     return COMP_ALG_ZSTD;
+  if (s == "lz4")
+    return COMP_ALG_LZ4;
   if (s == "")
     return COMP_ALG_NONE;
 

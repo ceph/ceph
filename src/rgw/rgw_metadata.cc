@@ -12,9 +12,9 @@
 #include "rgw_tools.h"
 
 #include "rgw_cr_rados.h"
-#include "rgw_boost_asio_yield.h"
 
 #include "include/assert.h"
+#include <boost/asio/yield.hpp>
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -220,7 +220,7 @@ int RGWMetadataLog::trim(int shard_id, const real_time& from_time, const real_ti
 
   ret = store->time_log_trim(oid, from_time, end_time, start_marker, end_marker);
 
-  if (ret == -ENOENT)
+  if (ret == -ENOENT || ret == -ENODATA)
     ret = 0;
 
   return ret;

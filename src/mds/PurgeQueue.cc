@@ -515,7 +515,7 @@ void PurgeQueue::update_op_limit(const MDSMap &mds_map)
   uint64_t pg_count = 0;
   objecter->with_osdmap([&](const OSDMap& o) {
     // Number of PGs across all data pools
-    const std::set<int64_t> &data_pools = mds_map.get_data_pools();
+    const std::vector<int64_t> &data_pools = mds_map.get_data_pools();
     for (const auto dp : data_pools) {
       if (o.get_pg_pool(dp) == NULL) {
         // It is possible that we have an older OSDMap than MDSMap,

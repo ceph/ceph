@@ -4,10 +4,14 @@
 #ifndef CEPH_CLS_USER_CLIENT_H
 #define CEPH_CLS_USER_CLIENT_H
 
-#include "include/types.h"
-#include "include/rados/librados.hpp"
-#include "cls_user_types.h"
+#include "cls_user_ops.h"
 #include "common/RefCountedObj.h"
+
+namespace librados {
+  class ObjectWriteOperation;
+  class ObjectReadOperation;
+  class IoCtx;
+}
 
 class RGWGetUserHeader_CB : public RefCountedObject {
 public:

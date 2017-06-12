@@ -15,13 +15,17 @@
 #ifndef CEPH_COMPRESSOR_H
 #define CEPH_COMPRESSOR_H
 
+
+#include <memory>
 #include <string>
 #include <boost/optional.hpp>
-#include "include/memory.h"
+#include "include/assert.h"	// boost clobbers this
 #include "include/buffer.h"
+#include "include/int_types.h"
 
 class Compressor;
-typedef shared_ptr<Compressor> CompressorRef;
+typedef std::shared_ptr<Compressor> CompressorRef;
+class CephContext;
 
 class Compressor {
 public:
@@ -30,6 +34,7 @@ public:
     COMP_ALG_SNAPPY = 1,
     COMP_ALG_ZLIB = 2,
     COMP_ALG_ZSTD = 3,
+    COMP_ALG_LZ4 = 4,
     COMP_ALG_LAST	//the last value for range checks
   };
   // compression options
@@ -55,11 +60,11 @@ public:
   CompressionAlgorithm get_type() const {
     return alg;
   }
-  virtual int compress(const bufferlist &in, bufferlist &out) = 0;
-  virtual int decompress(const bufferlist &in, bufferlist &out) = 0;
+  virtual int compress(const ceph::bufferlist &in, ceph::bufferlist &out) = 0;
+  virtual int decompress(const ceph::bufferlist &in, ceph::bufferlist &out) = 0;
   // this is a bit weird but we need non-const iterator to be in
   // alignment with decode methods
-  virtual int decompress(bufferlist::iterator &p, size_t compressed_len, bufferlist &out) = 0;
+  virtual int decompress(ceph::bufferlist::iterator &p, size_t compressed_len, ceph::bufferlist &out) = 0;
 
   static CompressorRef create(CephContext *cct, const std::string &type);
   static CompressorRef create(CephContext *cct, int alg);

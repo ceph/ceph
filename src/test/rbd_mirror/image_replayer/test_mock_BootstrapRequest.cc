@@ -3,7 +3,7 @@
 
 #include "test/rbd_mirror/test_mock_fixture.h"
 #include "librbd/journal/TypeTraits.h"
-#include "tools/rbd_mirror/ImageSyncThrottler.h"
+#include "tools/rbd_mirror/InstanceWatcher.h"
 #include "tools/rbd_mirror/Threads.h"
 #include "tools/rbd_mirror/image_replayer/BootstrapRequest.h"
 #include "tools/rbd_mirror/image_replayer/CloseImageRequest.h"
@@ -44,17 +44,42 @@ namespace mirror {
 class ProgressContext;
 
 template<>
-struct ImageSyncThrottler<librbd::MockTestImageCtx> {
-  MOCK_METHOD10(start_sync, void(librbd::MockTestImageCtx *local_image_ctx,
-                                 librbd::MockTestImageCtx *remote_image_ctx,
-                                 SafeTimer *timer, Mutex *timer_lock,
-                                 const std::string &mirror_uuid,
-                                 ::journal::MockJournaler *journaler,
-                                 librbd::journal::MirrorPeerClientMeta *client_meta,
-                                 ContextWQ *work_queue, Context *on_finish,
-                                 ProgressContext *progress_ctx));
-  MOCK_METHOD2(cancel_sync, void(librados::IoCtx &local_io_ctx,
-                                 const std::string& mirror_uuid));
+struct ImageSync<librbd::MockTestImageCtx> {
+  static ImageSync* s_instance;
+  Context *on_finish = nullptr;
+
+  static ImageSync* create(
+      librbd::MockTestImageCtx *local_image_ctx,
+      librbd::MockTestImageCtx *remote_image_ctx,
+      SafeTimer *timer, Mutex *timer_lock, const std::string &mirror_uuid,
+      ::journal::MockJournaler *journaler,
+      librbd::journal::MirrorPeerClientMeta *client_meta, ContextWQ *work_queue,
+      InstanceWatcher<librbd::MockTestImageCtx> *instance_watcher,
+      Context *on_finish, ProgressContext *progress_ctx) {
+    assert(s_instance != nullptr);
+    s_instance->on_finish = on_finish;
+    return s_instance;
+  }
+
+  ImageSync() {
+    assert(s_instance == nullptr);
+    s_instance = this;
+  }
+  ~ImageSync() {
+    s_instance = nullptr;
+  }
+
+  MOCK_METHOD0(get, void());
+  MOCK_METHOD0(put, void());
+  MOCK_METHOD0(send, void());
+  MOCK_METHOD0(cancel, void());
+};
+
+ImageSync<librbd::MockTestImageCtx>*
+  ImageSync<librbd::MockTestImageCtx>::s_instance = nullptr;
+
+template<>
+struct InstanceWatcher<librbd::MockTestImageCtx> {
 };
 
 namespace image_replayer {
@@ -241,10 +266,11 @@ MATCHER_P(IsSameIoCtx, io_ctx, "") {
 
 class TestMockImageReplayerBootstrapRequest : public TestMockFixture {
 public:
-  typedef ImageSyncThrottlerRef<librbd::MockTestImageCtx> MockImageSyncThrottler;
   typedef BootstrapRequest<librbd::MockTestImageCtx> MockBootstrapRequest;
   typedef CloseImageRequest<librbd::MockTestImageCtx> MockCloseImageRequest;
   typedef CreateImageRequest<librbd::MockTestImageCtx> MockCreateImageRequest;
+  typedef ImageSync<librbd::MockTestImageCtx> MockImageSync;
+  typedef InstanceWatcher<librbd::MockTestImageCtx> MockInstanceWatcher;
   typedef IsPrimaryRequest<librbd::MockTestImageCtx> MockIsPrimaryRequest;
   typedef OpenImageRequest<librbd::MockTestImageCtx> MockOpenImageRequest;
   typedef OpenLocalImageRequest<librbd::MockTestImageCtx> MockOpenLocalImageRequest;
@@ -381,14 +407,13 @@ public:
         }));
   }
 
-  void expect_image_sync(MockImageSyncThrottler image_sync_throttler,
-                         int r) {
-    EXPECT_CALL(*image_sync_throttler, start_sync(_, _, _, _,
-                                                  StrEq("local mirror uuid"),
-                                                  _, _, _, _, _))
-      .WillOnce(WithArg<8>(Invoke([this, r](Context *on_finish) {
-                             m_threads->work_queue->queue(on_finish, r);
-                           })));
+  void expect_image_sync(MockImageSync &mock_image_sync, int r) {
+    EXPECT_CALL(mock_image_sync, get());
+    EXPECT_CALL(mock_image_sync, send())
+      .WillOnce(Invoke([this, &mock_image_sync, r]() {
+            m_threads->work_queue->queue(mock_image_sync.on_finish, r);
+          }));
+    EXPECT_CALL(mock_image_sync, put());
   }
 
   bufferlist encode_tag_data(const librbd::journal::TagData &tag_data) {
@@ -397,7 +422,7 @@ public:
     return bl;
   }
 
-  MockBootstrapRequest *create_request(MockImageSyncThrottler mock_image_sync_throttler,
+  MockBootstrapRequest *create_request(MockInstanceWatcher *mock_instance_watcher,
                                        ::journal::MockJournaler &mock_journaler,
                                        const std::string &local_image_id,
                                        const std::string &remote_image_id,
@@ -407,7 +432,7 @@ public:
                                        Context *on_finish) {
     return new MockBootstrapRequest(m_local_io_ctx,
                                     m_remote_io_ctx,
-                                    mock_image_sync_throttler,
+                                    mock_instance_watcher,
                                     &m_local_test_image_ctx,
                                     local_image_id,
                                     remote_image_id,
@@ -473,10 +498,9 @@ TEST_F(TestMockImageReplayerBootstrapRequest, NonPrimaryRemoteSyncingState) {
   expect_close_image(mock_close_image_request, mock_remote_image_ctx, 0);
 
   C_SaferCond ctx;
-  MockImageSyncThrottler mock_image_sync_throttler(
-    new ImageSyncThrottler<librbd::MockTestImageCtx>());
+  MockInstanceWatcher mock_instance_watcher;
   MockBootstrapRequest *request = create_request(
-    mock_image_sync_throttler, mock_journaler, mock_local_image_ctx.id,
+    &mock_instance_watcher, mock_journaler, mock_local_image_ctx.id,
     mock_remote_image_ctx.id, "global image id", "local mirror uuid",
     "remote mirror uuid", &ctx);
   request->send();
@@ -548,10 +572,9 @@ TEST_F(TestMockImageReplayerBootstrapRequest, RemoteDemotePromote) {
   expect_close_image(mock_close_image_request, mock_remote_image_ctx, 0);
 
   C_SaferCond ctx;
-  MockImageSyncThrottler mock_image_sync_throttler(
-    new ImageSyncThrottler<librbd::MockTestImageCtx>());
+  MockInstanceWatcher mock_instance_watcher;
   MockBootstrapRequest *request = create_request(
-    mock_image_sync_throttler, mock_journaler, mock_local_image_ctx.id,
+    &mock_instance_watcher, mock_journaler, mock_local_image_ctx.id,
     mock_remote_image_ctx.id, "global image id", "local mirror uuid",
     "remote mirror uuid", &ctx);
   request->send();
@@ -633,10 +656,9 @@ TEST_F(TestMockImageReplayerBootstrapRequest, MultipleRemoteDemotePromotes) {
   expect_close_image(mock_close_image_request, mock_remote_image_ctx, 0);
 
   C_SaferCond ctx;
-  MockImageSyncThrottler mock_image_sync_throttler(
-    new ImageSyncThrottler<librbd::MockTestImageCtx>());
+  MockInstanceWatcher mock_instance_watcher;
   MockBootstrapRequest *request = create_request(
-    mock_image_sync_throttler, mock_journaler, mock_local_image_ctx.id,
+    &mock_instance_watcher, mock_journaler, mock_local_image_ctx.id,
     mock_remote_image_ctx.id, "global image id", "local mirror uuid",
     "remote mirror uuid", &ctx);
   request->send();
@@ -706,10 +728,9 @@ TEST_F(TestMockImageReplayerBootstrapRequest, LocalDemoteRemotePromote) {
   expect_close_image(mock_close_image_request, mock_remote_image_ctx, 0);
 
   C_SaferCond ctx;
-  MockImageSyncThrottler mock_image_sync_throttler(
-    new ImageSyncThrottler<librbd::MockTestImageCtx>());
+  MockInstanceWatcher mock_instance_watcher;
   MockBootstrapRequest *request = create_request(
-    mock_image_sync_throttler, mock_journaler, mock_local_image_ctx.id,
+    &mock_instance_watcher, mock_journaler, mock_local_image_ctx.id,
     mock_remote_image_ctx.id, "global image id", "local mirror uuid",
     "remote mirror uuid", &ctx);
   request->send();
@@ -778,10 +799,9 @@ TEST_F(TestMockImageReplayerBootstrapRequest, SplitBrainForcePromote) {
   expect_close_image(mock_close_image_request, mock_remote_image_ctx, 0);
 
   C_SaferCond ctx;
-  MockImageSyncThrottler mock_image_sync_throttler(
-    new ImageSyncThrottler<librbd::MockTestImageCtx>());
+  MockInstanceWatcher mock_instance_watcher;
   MockBootstrapRequest *request = create_request(
-    mock_image_sync_throttler, mock_journaler, mock_local_image_ctx.id,
+    &mock_instance_watcher, mock_journaler, mock_local_image_ctx.id,
     mock_remote_image_ctx.id, "global image id", "local mirror uuid",
     "remote mirror uuid", &ctx);
   request->send();
@@ -838,10 +858,9 @@ TEST_F(TestMockImageReplayerBootstrapRequest, ResyncRequested) {
   expect_close_image(mock_close_image_request, mock_remote_image_ctx, 0);
 
   C_SaferCond ctx;
-  MockImageSyncThrottler mock_image_sync_throttler(
-    new ImageSyncThrottler<librbd::MockTestImageCtx>());
+  MockInstanceWatcher mock_instance_watcher;
   MockBootstrapRequest *request = create_request(
-    mock_image_sync_throttler, mock_journaler, mock_local_image_ctx.id,
+    &mock_instance_watcher, mock_journaler, mock_local_image_ctx.id,
     mock_remote_image_ctx.id, "global image id", "local mirror uuid",
     "remote mirror uuid", &ctx);
   m_do_resync = false;
@@ -906,16 +925,16 @@ TEST_F(TestMockImageReplayerBootstrapRequest, PrimaryRemote) {
   expect_journaler_update_client(mock_journaler, client_data, 0);
 
   // sync the remote image to the local image
-  MockImageSyncThrottler mock_image_sync_throttler(
-    new ImageSyncThrottler<librbd::MockTestImageCtx>());
-  expect_image_sync(mock_image_sync_throttler, 0);
+  MockImageSync mock_image_sync;
+  expect_image_sync(mock_image_sync, 0);
 
   MockCloseImageRequest mock_close_image_request;
   expect_close_image(mock_close_image_request, mock_remote_image_ctx, 0);
 
   C_SaferCond ctx;
+  MockInstanceWatcher mock_instance_watcher;
   MockBootstrapRequest *request = create_request(
-    mock_image_sync_throttler, mock_journaler, "",
+    &mock_instance_watcher, mock_journaler, "",
     mock_remote_image_ctx.id, "global image id", "local mirror uuid",
     "remote mirror uuid", &ctx);
   request->send();
@@ -982,16 +1001,16 @@ TEST_F(TestMockImageReplayerBootstrapRequest, PrimaryRemoteLocalDeleted) {
   expect_journaler_update_client(mock_journaler, client_data, 0);
 
   // sync the remote image to the local image
-  MockImageSyncThrottler mock_image_sync_throttler(
-    new ImageSyncThrottler<librbd::MockTestImageCtx>());
-  expect_image_sync(mock_image_sync_throttler, 0);
+  MockImageSync mock_image_sync;
+  expect_image_sync(mock_image_sync, 0);
 
   MockCloseImageRequest mock_close_image_request;
   expect_close_image(mock_close_image_request, mock_remote_image_ctx, 0);
 
   C_SaferCond ctx;
+  MockInstanceWatcher mock_instance_watcher;
   MockBootstrapRequest *request = create_request(
-    mock_image_sync_throttler, mock_journaler, "",
+    &mock_instance_watcher, mock_journaler, "",
     mock_remote_image_ctx.id, "global image id", "local mirror uuid",
     "remote mirror uuid", &ctx);
   request->send();

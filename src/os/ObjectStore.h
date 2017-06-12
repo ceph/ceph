@@ -1561,6 +1561,20 @@ public:
   virtual bool wants_journal() = 0;  //< prefers a journal
   virtual bool allows_journal() = 0; //< allows a journal
 
+  /**
+   * is_rotational
+   *
+   * Check whether store is backed by a rotational (HDD) or non-rotational
+   * (SSD) device.
+   *
+   * This must be usable *before* the store is mounted.
+   *
+   * @return true for HDD, false for SSD
+   */
+  virtual bool is_rotational() {
+    return true;
+  }
+
   virtual bool can_sort_nibblewise() {
     return false;   // assume a backend cannot, unless it says otherwise
   }

@@ -106,12 +106,13 @@ you might do something like this:
 
 Running a RadosGW development environment
 -----------------------------------------
-Add the ``-r`` to vstart.sh to enable the RadosGW
+
+Set the ``RGW`` environment variable when running vstart.sh to enable the RadosGW.
 
 .. code::
 
 	$ cd build
-	$ ../src/vstart.sh -d -n -x -r
+	$ RGW=1 ../src/vstart.sh -d -n -x
 
 You can now use the swift python client to communicate with the RadosGW.
 

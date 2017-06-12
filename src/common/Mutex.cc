@@ -11,14 +11,10 @@
  * Foundation.  See file COPYING.
  *
  */
-#include <string>
 
 #include "common/Mutex.h"
 #include "common/perf_counters.h"
-#include "common/ceph_context.h"
 #include "common/config.h"
-#include "include/stringify.h"
-#include "include/utime.h"
 #include "common/Clock.h"
 #include "common/valgrind.h"
 

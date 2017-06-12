@@ -651,6 +651,28 @@ TRACEPOINT_EVENT(librados, rados_monitor_log_exit,
     )
 )
 
+TRACEPOINT_EVENT(librados, rados_monitor_log2_enter,
+    TP_ARGS(
+        rados_t, cluster,
+        const char*, level,
+        rados_log_callback2_t, callback,
+        void*, arg),
+    TP_FIELDS(
+        ctf_integer_hex(rados_t, cluster, cluster)
+        ceph_ctf_string(level, level)
+        ctf_integer_hex(rados_log_callback2_t, callback, callback)
+        ctf_integer_hex(void*, arg, arg)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_monitor_log2_exit,
+    TP_ARGS(
+        int, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)
+
 TRACEPOINT_EVENT(librados, rados_ioctx_create_enter,
     TP_ARGS(
         rados_t, cluster,

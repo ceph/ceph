@@ -23,13 +23,10 @@
  * stuff to live.
  */
 
-#include <deque>
-#include <stdint.h>
 #include <string>
 #include <vector>
 
 #include "common/entity_name.h"
-#include "msg/msg_types.h"
 
 /////////////////////// Types ///////////////////////
 class CephInitParameters

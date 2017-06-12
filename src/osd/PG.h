@@ -942,7 +942,6 @@ protected:
 public:
   void clear_primary_state();
 
- public:
   bool is_actingbackfill(pg_shard_t osd) const {
     return actingbackfill.count(osd);
   }
@@ -2197,9 +2196,6 @@ public:
 
   epoch_t last_epoch;
 
-  Mutex scrub_sleep_lock;
-  SafeTimer scrub_sleep_timer;
-
  public:
   const spg_t&      get_pgid() const { return pg_id; }
 
@@ -2386,7 +2382,7 @@ public:
 
 
   bool append_log_entries_update_missing(
-    const mempool::osd::list<pg_log_entry_t> &entries,
+    const mempool::osd_pglog::list<pg_log_entry_t> &entries,
     ObjectStore::Transaction &t);
 
   /**
@@ -2394,7 +2390,7 @@ public:
    * actingbackfill logs and missings (also missing_loc)
    */
   void merge_new_log_entries(
-    const mempool::osd::list<pg_log_entry_t> &entries,
+    const mempool::osd_pglog::list<pg_log_entry_t> &entries,
     ObjectStore::Transaction &t);
 
   void reset_interval_flush();

@@ -86,7 +86,7 @@ public:
   }
 };
 
-inline ostream& operator<<(ostream& out, const MMDSResolve::slave_request) {
+inline ostream& operator<<(ostream& out, const MMDSResolve::slave_request&) {
     return out;
 }
 

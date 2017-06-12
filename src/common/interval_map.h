@@ -15,11 +15,6 @@
 #ifndef INTERVAL_MAP_H
 #define INTERVAL_MAP_H
 
-#include <map>
-#include <vector>
-#include <utility>
-#include <boost/optional.hpp>
-#include <iostream>
 #include "include/interval_set.h"
 
 template <typename K, typename V, typename S>

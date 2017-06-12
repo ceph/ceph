@@ -4,9 +4,16 @@ if test -e build; then
     echo 'build dir already exists; rm -rf build and re-run'
     exit 1
 fi
+
+ARGS=""
+if which ccache ; then
+    echo "enabling ccache"
+    ARGS+="-DWITH_CCACHE=ON"
+fi
+
 mkdir build
 cd build
-cmake -DBOOST_J=$(nproc) "$@" ..
+cmake -DBOOST_J=$(nproc) $ARGS "$@" ..
 
 # minimal config to find plugins
 cat <<EOF > ceph.conf

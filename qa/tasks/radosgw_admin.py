@@ -68,12 +68,6 @@ def task(ctx, config):
     """
     global log
 
-    # regions and config found from rgw task
-    assert ctx.rgw.regions is not None, \
-        "radosgw_admin task needs region(s) declared from the rgw task"
-    regions = ctx.rgw.regions
-    log.debug('regions are: %r', regions)
-
     assert ctx.rgw.config, \
         "radosgw_admin task needs a config passed from the rgw task"
     config = ctx.rgw.config
@@ -84,20 +78,10 @@ def task(ctx, config):
     # choose first client as default
     client = clients_from_config[0]
 
-    multi_region_run = rgw_utils.multi_region_enabled(ctx)
-    if multi_region_run:
-        client = rgw_utils.get_config_master_client(ctx, config, regions)
-
-    log.debug('multi_region_run is: %r', multi_region_run)
-    log.debug('master_client is: %r', client)
-
     # once the client is chosen, pull the host name and  assigned port out of
     # the role_endpoints that were assigned by the rgw task
     (remote_host, remote_port) = ctx.rgw.role_endpoints[client]
 
-    realm = ctx.rgw.realm
-    log.debug('radosgw-admin: realm %r', realm)
-    
     ##
     user1='foo'
     user2='fud'
@@ -171,374 +155,6 @@ def task(ctx, config):
     assert out['keys'][0]['access_key'] == access_key
     assert out['keys'][0]['secret_key'] == secret_key
     assert not out['suspended']
-
-    # this whole block should only be run if regions have been configured
-    if multi_region_run:
-        rgw_utils.radosgw_agent_sync_all(ctx)
-        # post-sync, validate that user1 exists on the sync destination host
-        for agent_client, c_config in ctx.radosgw_agent.config.iteritems():
-            dest_client = c_config['dest']
-            (err, out) = rgwadmin(ctx, dest_client, ['metadata', 'list', 'user'])
-            (err, out) = rgwadmin(ctx, dest_client, ['user', 'info', '--uid', user1], check_status=True)
-            assert out['user_id'] == user1
-            assert out['email'] == email
-            assert out['display_name'] == display_name1
-            assert len(out['keys']) == 1
-            assert out['keys'][0]['access_key'] == access_key
-            assert out['keys'][0]['secret_key'] == secret_key
-            assert not out['suspended']
-
-        # compare the metadata between different regions, make sure it matches
-        log.debug('compare the metadata between different regions, make sure it matches')
-        for agent_client, c_config in ctx.radosgw_agent.config.iteritems():
-            source_client = c_config['src']
-            dest_client = c_config['dest']
-            (err1, out1) = rgwadmin(ctx, source_client,
-                ['metadata', 'get', 'user:{uid}'.format(uid=user1)], check_status=True)
-            (err2, out2) = rgwadmin(ctx, dest_client,
-                ['metadata', 'get', 'user:{uid}'.format(uid=user1)], check_status=True)
-            assert out1 == out2
-
-        # suspend a user on the master, then check the status on the destination
-        log.debug('suspend a user on the master, then check the status on the destination')
-        for agent_client, c_config in ctx.radosgw_agent.config.iteritems():
-            source_client = c_config['src']
-            dest_client = c_config['dest']
-            (err, out) = rgwadmin(ctx, source_client, ['user', 'suspend', '--uid', user1])
-            rgw_utils.radosgw_agent_sync_all(ctx)
-            (err, out) = rgwadmin(ctx, dest_client, ['user', 'info', '--uid', user1], check_status=True)
-            assert out['suspended']
-
-        # delete a user on the master, then check that it's gone on the destination
-        log.debug('delete a user on the master, then check that it\'s gone on the destination')
-        for agent_client, c_config in ctx.radosgw_agent.config.iteritems():
-            source_client = c_config['src']
-            dest_client = c_config['dest']
-            (err, out) = rgwadmin(ctx, source_client, ['user', 'rm', '--uid', user1], check_status=True)
-            rgw_utils.radosgw_agent_sync_all(ctx)
-            (err, out) = rgwadmin(ctx, source_client, ['user', 'info', '--uid', user1])
-            assert out is None
-            (err, out) = rgwadmin(ctx, dest_client, ['user', 'info', '--uid', user1])
-            assert out is None
-
-            # then recreate it so later tests pass
-            (err, out) = rgwadmin(ctx, client, [
-                'user', 'create',
-                '--uid', user1,
-                '--display-name', display_name1,
-                '--email', email,
-                '--access-key', access_key,
-                '--secret', secret_key,
-                '--max-buckets', '4'
-                ],
-                check_status=True)
-
-        # now do the multi-region bucket tests
-        log.debug('now do the multi-region bucket tests')
-
-        # Create a second user for the following tests
-        log.debug('Create a second user for the following tests')
-        (err, out) = rgwadmin(ctx, client, [
-            'user', 'create',
-            '--uid', user2,
-            '--display-name', display_name2,
-            '--email', email2,
-            '--access-key', access_key2,
-            '--secret', secret_key2,
-            '--max-buckets', '4'
-            ],
-            check_status=True)
-        (err, out) = rgwadmin(ctx, client, ['user', 'info', '--uid', user2], check_status=True)
-        assert out is not None
-
-        # create a bucket and do a sync
-        log.debug('create a bucket and do a sync')
-        bucket = connection.create_bucket(bucket_name2)
-        rgw_utils.radosgw_agent_sync_all(ctx)
-
-        # compare the metadata for the bucket between different regions, make sure it matches
-        log.debug('compare the metadata for the bucket between different regions, make sure it matches')
-        for agent_client, c_config in ctx.radosgw_agent.config.iteritems():
-            source_client = c_config['src']
-            dest_client = c_config['dest']
-            (err1, out1) = rgwadmin(ctx, source_client,
-                ['metadata', 'get', 'bucket:{bucket_name}'.format(bucket_name=bucket_name2)],
-                check_status=True)
-            (err2, out2) = rgwadmin(ctx, dest_client,
-                ['metadata', 'get', 'bucket:{bucket_name}'.format(bucket_name=bucket_name2)],
-                check_status=True)
-            log.debug('metadata 1 %r', out1)
-            log.debug('metadata 2 %r', out2)
-            assert out1 == out2
-
-            # get the bucket.instance info and compare that
-            src_bucket_id = out1['data']['bucket']['bucket_id']
-            dest_bucket_id = out2['data']['bucket']['bucket_id']
-            (err1, out1) = rgwadmin(ctx, source_client, ['metadata', 'get',
-                'bucket.instance:{bucket_name}:{bucket_instance}'.format(
-                bucket_name=bucket_name2,bucket_instance=src_bucket_id)],
-                check_status=True)
-            (err2, out2) = rgwadmin(ctx, dest_client, ['metadata', 'get',
-                'bucket.instance:{bucket_name}:{bucket_instance}'.format(
-                bucket_name=bucket_name2,bucket_instance=dest_bucket_id)],
-                check_status=True)
-            assert out1 == out2
-
-        same_region = 0
-        for agent_client, c_config in ctx.radosgw_agent.config.iteritems():
-            source_client = c_config['src']
-            dest_client = c_config['dest']
-
-            source_region = rgw_utils.region_for_client(ctx, source_client)
-            dest_region = rgw_utils.region_for_client(ctx, dest_client)
-
-            # 301 is only returned for requests to something in a different region
-            if source_region == dest_region:
-                log.debug('301 is only returned for requests to something in a different region')
-                same_region += 1
-                continue
-
-            # Attempt to create a new connection with user1 to the destination RGW
-            log.debug('Attempt to create a new connection with user1 to the destination RGW')
-            # and use that to attempt a delete (that should fail)
-
-            (dest_remote_host, dest_remote_port) = ctx.rgw.role_endpoints[dest_client]
-            connection_dest = boto.s3.connection.S3Connection(
-                aws_access_key_id=access_key,
-                aws_secret_access_key=secret_key,
-                is_secure=False,
-                port=dest_remote_port,
-                host=dest_remote_host,
-                calling_format=boto.s3.connection.OrdinaryCallingFormat(),
-                )
-
-            # this should fail
-            r, content = send_raw_http_request(connection_dest, 'DELETE', bucket_name2, '', follow_redirects = False)
-            assert r.status == 301
-
-            # now delete the bucket on the source RGW and do another sync
-            log.debug('now delete the bucket on the source RGW and do another sync')
-            bucket.delete()
-            rgw_utils.radosgw_agent_sync_all(ctx)
-
-        if same_region == len(ctx.radosgw_agent.config):
-            bucket.delete()
-            rgw_utils.radosgw_agent_sync_all(ctx)
-
-        # make sure that the bucket no longer exists in either region
-        log.debug('make sure that the bucket no longer exists in either region')
-        for agent_client, c_config in ctx.radosgw_agent.config.iteritems():
-            source_client = c_config['src']
-            dest_client = c_config['dest']
-            (err1, out1) = rgwadmin(ctx, source_client, ['metadata', 'get',
-                'bucket:{bucket_name}'.format(bucket_name=bucket_name2)])
-            (err2, out2) = rgwadmin(ctx, dest_client, ['metadata', 'get',
-                'bucket:{bucket_name}'.format(bucket_name=bucket_name2)])
-            # Both of the previous calls should have errors due to requesting
-            # metadata for non-existent buckets
-            assert err1
-            assert err2
-
-        # create a bucket and then sync it
-        log.debug('create a bucket and then sync it')
-        bucket = connection.create_bucket(bucket_name2)
-        rgw_utils.radosgw_agent_sync_all(ctx)
-
-        # compare the metadata for the bucket between different regions, make sure it matches
-        log.debug('compare the metadata for the bucket between different regions, make sure it matches')
-        for agent_client, c_config in ctx.radosgw_agent.config.iteritems():
-            source_client = c_config['src']
-            dest_client = c_config['dest']
-            (err1, out1) = rgwadmin(ctx, source_client,
-                ['metadata', 'get', 'bucket:{bucket_name}'.format(bucket_name=bucket_name2)],
-                check_status=True)
-            (err2, out2) = rgwadmin(ctx, dest_client,
-                ['metadata', 'get', 'bucket:{bucket_name}'.format(bucket_name=bucket_name2)],
-                check_status=True)
-            assert out1 == out2
-
-        # Now delete the bucket and recreate it with a different user
-        log.debug('Now delete the bucket and recreate it with a different user')
-        # within the same window of time and then sync.
-        bucket.delete()
-        bucket = connection2.create_bucket(bucket_name2)
-        rgw_utils.radosgw_agent_sync_all(ctx)
-
-        # compare the metadata for the bucket between different regions, make sure it matches
-        log.debug('compare the metadata for the bucket between different regions, make sure it matches')
-        # user2 should own the bucket in both regions
-        for agent_client, c_config in ctx.radosgw_agent.config.iteritems():
-            source_client = c_config['src']
-            dest_client = c_config['dest']
-            (err1, out1) = rgwadmin(ctx, source_client,
-                ['metadata', 'get', 'bucket:{bucket_name}'.format(bucket_name=bucket_name2)],
-                check_status=True)
-            (err2, out2) = rgwadmin(ctx, dest_client,
-                ['metadata', 'get', 'bucket:{bucket_name}'.format(bucket_name=bucket_name2)],
-                check_status=True)
-            assert out1 == out2
-            assert out1['data']['owner'] == user2
-            assert out1['data']['owner'] != user1
-
-        # now we're going to use this bucket to test meta-data update propagation
-        log.debug('now we\'re going to use this bucket to test meta-data update propagation')
-        for agent_client, c_config in ctx.radosgw_agent.config.iteritems():
-            source_client = c_config['src']
-            dest_client = c_config['dest']
-
-            # get the metadata so we can tweak it
-            log.debug('get the metadata so we can tweak it')
-            (err, orig_data) = rgwadmin(ctx, source_client,
-                ['metadata', 'get', 'bucket:{bucket_name}'.format(bucket_name=bucket_name2)],
-                check_status=True)
-
-            # manually edit mtime for this bucket to be 300 seconds in the past
-            log.debug('manually edit mtime for this bucket to be 300 seconds in the past')
-            new_data = copy.deepcopy(orig_data)
-            mtime = datetime.datetime.strptime(orig_data['mtime'], "%Y-%m-%d %H:%M:%S.%fZ") - datetime.timedelta(300)
-            new_data['mtime'] =  unicode(mtime.strftime("%Y-%m-%d %H:%M:%S.%fZ"))
-            log.debug("new mtime ", mtime)
-            assert new_data != orig_data
-            (err, out) = rgwadmin(ctx, source_client,
-                ['metadata', 'put', 'bucket:{bucket_name}'.format(bucket_name=bucket_name2)],
-                stdin=StringIO(json.dumps(new_data)),
-                check_status=True)
-
-            # get the metadata and make sure that the 'put' worked
-            log.debug('get the metadata and make sure that the \'put\' worked')
-            (err, out) = rgwadmin(ctx, source_client,
-                ['metadata', 'get', 'bucket:{bucket_name}'.format(bucket_name=bucket_name2)],
-                check_status=True)
-            assert out == new_data
-
-            # sync to propagate the new metadata
-            log.debug('sync to propagate the new metadata')
-            rgw_utils.radosgw_agent_sync_all(ctx)
-
-            # get the metadata from the dest and compare it to what we just set
-            log.debug('get the metadata from the dest and compare it to what we just set')
-            # and what the source region has.
-            (err1, out1) = rgwadmin(ctx, source_client,
-                ['metadata', 'get', 'bucket:{bucket_name}'.format(bucket_name=bucket_name2)],
-                check_status=True)
-            (err2, out2) = rgwadmin(ctx, dest_client,
-                ['metadata', 'get', 'bucket:{bucket_name}'.format(bucket_name=bucket_name2)],
-                check_status=True)
-            # yeah for the transitive property
-            assert out1 == out2
-            assert out1 == new_data
-
-        # now we delete the bucket
-        log.debug('now we delete the bucket')
-        bucket.delete()
-
-        log.debug('sync to propagate the deleted bucket')
-        rgw_utils.radosgw_agent_sync_all(ctx)
-
-        # Delete user2 as later tests do not expect it to exist.
-        # Verify that it is gone on both regions
-        for agent_client, c_config in ctx.radosgw_agent.config.iteritems():
-            source_client = c_config['src']
-            dest_client = c_config['dest']
-            (err, out) = rgwadmin(ctx, source_client,
-                ['user', 'rm', '--uid', user2], check_status=True)
-            rgw_utils.radosgw_agent_sync_all(ctx)
-            # The two 'user info' calls should fail and not return any data
-            # since we just deleted this user.
-            (err, out) = rgwadmin(ctx, source_client, ['user', 'info', '--uid', user2])
-            assert out is None
-            (err, out) = rgwadmin(ctx, dest_client, ['user', 'info', '--uid', user2])
-            assert out is None
-
-        # Test data sync
-
-        # First create a bucket for data sync test purpose
-        bucket = connection.create_bucket(bucket_name + 'data')
-
-        # Create a tiny file and check if in sync
-        for agent_client, c_config in ctx.radosgw_agent.config.iteritems():
-            if c_config.get('metadata-only'):
-                continue
-
-            for full in (True, False):
-                source_client = c_config['src']
-                dest_client = c_config['dest']
-                k = boto.s3.key.Key(bucket)
-                k.key = 'tiny_file'
-                k.set_contents_from_string("123456789")
-                safety_window = rgw_utils.radosgw_data_log_window(ctx, source_client)
-                time.sleep(safety_window)
-                rgw_utils.radosgw_agent_sync_all(ctx, data=True, full=full)
-                (dest_host, dest_port) = ctx.rgw.role_endpoints[dest_client]
-                dest_connection = boto.s3.connection.S3Connection(
-                    aws_access_key_id=access_key,
-                    aws_secret_access_key=secret_key,
-                    is_secure=False,
-                    port=dest_port,
-                    host=dest_host,
-                    calling_format=boto.s3.connection.OrdinaryCallingFormat(),
-                )
-                dest_k = dest_connection.get_bucket(bucket_name + 'data').get_key('tiny_file')
-                assert k.get_contents_as_string() == dest_k.get_contents_as_string()
-
-                # check that deleting it removes it from the dest zone
-                k.delete()
-                time.sleep(safety_window)
-                # full sync doesn't handle deleted objects yet
-                rgw_utils.radosgw_agent_sync_all(ctx, data=True, full=False)
-
-                dest_bucket = dest_connection.get_bucket(bucket_name + 'data')
-                dest_k = dest_bucket.get_key('tiny_file')
-                assert dest_k == None, 'object not deleted from destination zone'
-
-        # finally we delete the bucket
-        bucket.delete()
-
-        bucket = connection.create_bucket(bucket_name + 'data2')
-        for agent_client, c_config in ctx.radosgw_agent.config.iteritems():
-            if c_config.get('metadata-only'):
-                continue
-
-            for full in (True, False):
-                source_client = c_config['src']
-                dest_client = c_config['dest']
-                (dest_host, dest_port) = ctx.rgw.role_endpoints[dest_client]
-                dest_connection = boto.s3.connection.S3Connection(
-                    aws_access_key_id=access_key,
-                    aws_secret_access_key=secret_key,
-                    is_secure=False,
-                    port=dest_port,
-                    host=dest_host,
-                    calling_format=boto.s3.connection.OrdinaryCallingFormat(),
-                )
-                for i in range(20):
-                    k = boto.s3.key.Key(bucket)
-                    k.key = 'tiny_file_' + str(i)
-                    k.set_contents_from_string(str(i) * 100)
-
-                safety_window = rgw_utils.radosgw_data_log_window(ctx, source_client)
-                time.sleep(safety_window)
-                rgw_utils.radosgw_agent_sync_all(ctx, data=True, full=full)
-
-                for i in range(20):
-                    dest_k = dest_connection.get_bucket(bucket_name + 'data2').get_key('tiny_file_' + str(i))
-                    assert (str(i) * 100) == dest_k.get_contents_as_string()
-                    k = boto.s3.key.Key(bucket)
-                    k.key = 'tiny_file_' + str(i)
-                    k.delete()
-
-                # check that deleting removes the objects from the dest zone
-                time.sleep(safety_window)
-                # full sync doesn't delete deleted objects yet
-                rgw_utils.radosgw_agent_sync_all(ctx, data=True, full=False)
-
-                for i in range(20):
-                    dest_bucket = dest_connection.get_bucket(bucket_name + 'data2')
-                    dest_k = dest_bucket.get_key('tiny_file_' + str(i))
-                    assert dest_k == None, 'object %d not deleted from destination zone' % i
-        bucket.delete()
-
-    # end of 'if multi_region_run:'
 
     # TESTCASE 'suspend-ok','user','suspend','active user','succeeds'
     (err, out) = rgwadmin(ctx, client, ['user', 'suspend', '--uid', user1],
@@ -642,9 +258,6 @@ def task(ctx, config):
     (err, out) = rgwadmin(ctx, client, ['bucket', 'stats', '--uid', user1],
         check_status=True)
     assert len(out) == 0
-
-    if multi_region_run:
-        rgw_utils.radosgw_agent_sync_all(ctx)
 
     # TESTCASE 'bucket-stats2','bucket','stats','no buckets','succeeds, empty list'
     (err, out) = rgwadmin(ctx, client, ['bucket', 'list', '--uid', user1], check_status=True)
@@ -1002,10 +615,7 @@ def task(ctx, config):
     # TESTCASE 'zone-info', 'zone', 'get', 'get zone info', 'succeeds, has default placement rule'
     #
 
-    if realm is None:
-        (err, out) = rgwadmin(ctx, client, ['zone', 'get','--rgw-zone','default'])
-    else:
-        (err, out) = rgwadmin(ctx, client, ['zone', 'get'])
+    (err, out) = rgwadmin(ctx, client, ['zone', 'get','--rgw-zone','default'])
     orig_placement_pools = len(out['placement_pools'])
 
     # removed this test, it is not correct to assume that zone has default placement, it really
@@ -1025,9 +635,6 @@ def task(ctx, config):
         stdin=StringIO(json.dumps(out)),
         check_status=True)
 
-    if realm is None:
-        (err, out) = rgwadmin(ctx, client, ['zone', 'get','--rgw-zone','default'])
-    else:
-        (err, out) = rgwadmin(ctx, client, ['zone', 'get'])
+    (err, out) = rgwadmin(ctx, client, ['zone', 'get','--rgw-zone','default'])
     assert len(out) > 0
     assert len(out['placement_pools']) == orig_placement_pools + 1

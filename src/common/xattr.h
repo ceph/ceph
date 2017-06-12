@@ -12,8 +12,6 @@
 #ifndef CEPH_EXTATTR_H
 #define CEPH_EXTATTR_H
 
-#include <sys/types.h>
-#include <errno.h>
 
 #ifdef __cplusplus
 extern "C" {

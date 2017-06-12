@@ -40,6 +40,14 @@ void MonmapMonitor::create_initial()
   dout(10) << "create_initial using current monmap" << dendl;
   pending_map = *mon->monmap;
   pending_map.epoch = 1;
+
+  if (g_conf->mon_debug_no_initial_persistent_features) {
+    derr << __func__ << " mon_debug_no_initial_persistent_features=true"
+	 << dendl;
+  } else {
+    // initialize with default persistent features for new clusters
+    pending_map.persistent_features = ceph::features::mon::get_persistent();
+  }
 }
 
 void MonmapMonitor::update_from_paxos(bool *need_bootstrap)
@@ -716,10 +724,6 @@ bool MonmapMonitor::should_propose(double& delay)
 {
   delay = 0.0;
   return true;
-}
-
-void MonmapMonitor::tick()
-{
 }
 
 void MonmapMonitor::get_health(list<pair<health_status_t, string> >& summary,

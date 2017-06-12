@@ -6,6 +6,7 @@ from teuthology.orchestra.run import CommandFailedError
 import errno
 import time
 
+
 class TestMisc(CephFSTestCase):
     CLIENTS_REQUIRED = 2
 
@@ -101,12 +102,12 @@ class TestMisc(CephFSTestCase):
         only session
         """
 
-        self.mount_b.umount_wait();
+        self.mount_b.umount_wait()
         ls_data = self.fs.mds_asok(['session', 'ls'])
         self.assert_session_count(1, ls_data)
 
-        self.mount_a.kill();
-        self.mount_a.kill_cleanup();
+        self.mount_a.kill()
+        self.mount_a.kill_cleanup()
 
         time.sleep(self.mds_session_autoclose * 1.5)
         ls_data = self.fs.mds_asok(['session', 'ls'])

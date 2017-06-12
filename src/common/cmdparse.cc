@@ -12,10 +12,6 @@
  *
  */
 
-#include <cxxabi.h>
-#include "common/cmdparse.h"
-#include "common/Formatter.h"
-#include "include/str_list.h"
 #include "json_spirit/json_spirit.h"
 #include "common/debug.h"
 
@@ -334,4 +330,48 @@ handle_bad_get(CephContext *cct, const string& k, const char *tname)
   lderr(cct) << oss.rdbuf() << dendl;
   if (status == 0)
     free((char *)typestr);
+}
+
+long parse_pos_long(const char *s, std::ostream *pss)
+{
+  if (*s == '-' || *s == '+') {
+    if (pss)
+      *pss << "expected numerical value, got: " << s;
+    return -EINVAL;
+  }
+
+  string err;
+  long r = strict_strtol(s, 10, &err);
+  if ((r == 0) && !err.empty()) {
+    if (pss)
+      *pss << err;
+    return -1;
+  }
+  if (r < 0) {
+    if (pss)
+      *pss << "unable to parse positive integer '" << s << "'";
+    return -1;
+  }
+  return r;
+}
+
+int parse_osd_id(const char *s, std::ostream *pss)
+{
+  // osd.NNN?
+  if (strncmp(s, "osd.", 4) == 0) {
+    s += 4;
+  }
+
+  // NNN?
+  ostringstream ss;
+  long id = parse_pos_long(s, &ss);
+  if (id < 0) {
+    *pss << ss.str();
+    return id;
+  }
+  if (id > 0xffff) {
+    *pss << "osd id " << id << " is too large";
+    return -ERANGE;
+  }
+  return id;
 }

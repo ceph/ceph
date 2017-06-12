@@ -41,7 +41,7 @@ extern "C" const char *code_environment_to_str(enum code_environment_t e)
   }
 }
 
-std::ostream &operator<<(std::ostream &oss, enum code_environment_t e)
+std::ostream &operator<<(std::ostream &oss, const enum code_environment_t e)
 {
   oss << code_environment_to_str(e);
   return oss;
@@ -59,6 +59,24 @@ int get_process_name(char *buf, int len)
   }
   memset(buf, 0, len);
   return prctl(PR_GET_NAME, buf);
+}
+
+#elif defined(HAVE_GETPROGNAME)
+
+int get_process_name(char *buf, int len)
+{
+  if (len <= 0) {
+    return -EINVAL;
+  }
+
+  const char *progname = getprogname();
+  if (progname == nullptr || *progname == '\0') {
+    return -ENOSYS;
+  }
+
+  strncpy(buf, progname, len - 1);
+  buf[len - 1] = '\0';
+  return 0;
 }
 
 #else

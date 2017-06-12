@@ -9,7 +9,7 @@ tasks:
     wait-for-healthy: false
 - exec:
     osd.0:
-      - ceph osd set require_luminous_osds
+      - ceph osd require-osd-release luminous
       - ceph osd set-require-min-compat-client luminous
 - ceph.healthy:
 overrides:

@@ -13,8 +13,12 @@ except ImportError:
 import nose.core
 
 from rgw_multi import multisite
+from rgw_multi.zone_rados import RadosZone as RadosZone
+from rgw_multi.zone_es  import ESZone as ESZone
+
 # make tests from rgw_multi.tests available to nose
 from rgw_multi.tests import *
+from rgw_multi.tests_es import *
 
 mstart_path = os.getenv('MSTART_PATH')
 if mstart_path is None:
@@ -146,6 +150,7 @@ def init(parse_args):
     cfg = configparser.RawConfigParser({
                                          'num_zonegroups': 1,
                                          'num_zones': 3,
+                                         'num_es_zones': 0,
                                          'gateways_per_zone': 2,
                                          'no_bootstrap': 'false',
                                          'log_level': 20,
@@ -155,11 +160,12 @@ def init(parse_args):
                                          'checkpoint_retries': 60,
                                          'checkpoint_delay': 5,
                                          'reconfigure_delay': 5,
+                                         'es_endpoint': None,
                                          })
     try:
         path = os.environ['RGW_MULTI_TEST_CONF']
     except KeyError:
-        path = tpath('test_multi.conf')
+        path = test_path + 'test_multi.conf'
 
     try:
         with open(path) as f:
@@ -175,6 +181,7 @@ def init(parse_args):
     section = 'DEFAULT'
     parser.add_argument('--num-zonegroups', type=int, default=cfg.getint(section, 'num_zonegroups'))
     parser.add_argument('--num-zones', type=int, default=cfg.getint(section, 'num_zones'))
+    parser.add_argument('--num-es-zones', type=int, default=cfg.getint(section, 'num_es_zones'))
     parser.add_argument('--gateways-per-zone', type=int, default=cfg.getint(section, 'gateways_per_zone'))
     parser.add_argument('--no-bootstrap', action='store_true', default=cfg.getboolean(section, 'no_bootstrap'))
     parser.add_argument('--log-level', type=int, default=cfg.getint(section, 'log_level'))
@@ -184,6 +191,7 @@ def init(parse_args):
     parser.add_argument('--checkpoint-retries', type=int, default=cfg.getint(section, 'checkpoint_retries'))
     parser.add_argument('--checkpoint-delay', type=int, default=cfg.getint(section, 'checkpoint_delay'))
     parser.add_argument('--reconfigure-delay', type=int, default=cfg.getint(section, 'reconfigure_delay'))
+    parser.add_argument('--es-endpoint', type=str, default=cfg.get(section, 'es_endpoint'))
 
     argv = []
 
@@ -192,6 +200,9 @@ def init(parse_args):
 
     args = parser.parse_args(argv)
     bootstrap = not args.no_bootstrap
+
+    # if num_es_zones is defined, need to have es_endpoint defined too
+    assert(args.num_es_zones == 0 or args.es_endpoint)
 
     setup_logging(args.log_level, args.log_file, args.file_log_level)
 
@@ -217,6 +228,8 @@ def init(parse_args):
     period = multisite.Period(realm=realm)
     realm.current_period = period
 
+    num_zones = args.num_zones + args.num_es_zones
+
     for zg in range(0, args.num_zonegroups):
         zonegroup = multisite.ZoneGroup(zonegroup_name(zg), period)
         period.zonegroups.append(zonegroup)
@@ -225,7 +238,7 @@ def init(parse_args):
         if is_master_zg:
             period.master_zonegroup = zonegroup
 
-        for z in range(0, args.num_zones):
+        for z in range(0, num_zones):
             is_master = z == 0
             # start a cluster, or use c1 for first zone
             cluster = None
@@ -253,8 +266,15 @@ def init(parse_args):
                 else:
                     zonegroup.get(cluster)
 
+            es_zone = (z >= args.num_zones)
+
             # create the zone in its zonegroup
             zone = multisite.Zone(zone_name(zg, z), zonegroup, cluster)
+            if es_zone:
+                zone = ESZone(zone_name(zg, z), args.es_endpoint, zonegroup, cluster)
+            else:
+                zone = RadosZone(zone_name(zg, z), zonegroup, cluster)
+
             if bootstrap:
                 arg = admin_creds.credential_args()
                 if is_master:
@@ -267,6 +287,13 @@ def init(parse_args):
             zonegroup.zones.append(zone)
             if is_master:
                 zonegroup.master_zone = zone
+
+            zonegroup.zones_by_type.setdefault(zone.tier_type(), []).append(zone)
+
+            if zone.is_read_only():
+                zonegroup.ro_zones.append(zone)
+            else:
+                zonegroup.rw_zones.append(zone)
 
             # update/commit the period
             if bootstrap:

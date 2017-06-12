@@ -2,14 +2,10 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "Graylog.h"
-
-#include <iostream>
-
 #include "common/Formatter.h"
 #include "common/LogEntry.h"
 #include "log/Entry.h"
 #include "log/SubsystemMap.h"
-#include "include/uuid.h"
 
 namespace ceph {
 namespace logging {

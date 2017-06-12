@@ -59,7 +59,10 @@ void MgrClient::shutdown()
   command_table.clear();
 
   timer.shutdown();
-  session.reset();
+  if (session) {
+    session->con->mark_down();
+    session.reset();
+  }
 }
 
 bool MgrClient::ms_dispatch(Message *m)
@@ -233,10 +236,10 @@ void MgrClient::send_report()
 	session->declared.insert(path);
       }
 
-      ::encode(static_cast<uint64_t>(data.u64.read()), report->packed);
+      ::encode(static_cast<uint64_t>(data.u64), report->packed);
       if (data.type & PERFCOUNTER_LONGRUNAVG) {
-        ::encode(static_cast<uint64_t>(data.avgcount.read()), report->packed);
-        ::encode(static_cast<uint64_t>(data.avgcount2.read()), report->packed);
+        ::encode(static_cast<uint64_t>(data.avgcount), report->packed);
+        ::encode(static_cast<uint64_t>(data.avgcount2), report->packed);
       }
     }
     ENCODE_FINISH(report->packed);
@@ -256,9 +259,13 @@ void MgrClient::send_report()
     timer.add_event_after(stats_period, report_callback);
   }
 
+  send_pgstats();
+}
+
+void MgrClient::send_pgstats()
+{
   if (pgstats_cb) {
-    MPGStats *m_stats = pgstats_cb();
-    session->con->send_message(m_stats);
+    session->con->send_message(pgstats_cb());
   }
 }
 

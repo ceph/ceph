@@ -87,36 +87,37 @@ def admin_socket(asok_path, cmd, format=''):
     return ret
 
 
-def _gettermsize():
-    try:
-        rows, cols = struct.unpack('hhhh', ioctl(0, TIOCGWINSZ, 8*'\x00'))[0:2]
-    except IOError:
-        return 25, 80
-
-    return rows,cols
-
-
 class Termsize(object):
-
+    DEFAULT_SIZE = (25, 80)
     def __init__(self):
-        self.rows, self.cols = _gettermsize()
+        self.rows, self.cols = self._gettermsize()
         self.changed = False
 
+    def _gettermsize(self):
+        try:
+            fd = sys.stdin.fileno()
+            sz = struct.pack('hhhh', 0, 0, 0, 0)
+            rows, cols = struct.unpack('hhhh', ioctl(fd, TIOCGWINSZ, sz))[:2]
+            return rows, cols
+        except IOError:
+            return self.DEFAULT_SIZE
+
     def update(self):
-        rows, cols = _gettermsize()
-        self.changed = self.changed or (
-            (self.rows != rows) or (self.cols != cols)
-        )
+        rows, cols = self._gettermsize()
+        if not self.changed:
+            self.changed = (self.rows, self.cols) != (rows, cols)
         self.rows, self.cols = rows, cols
 
     def reset_changed(self):
         self.changed = False
 
     def __str__(self):
-        return '%s(%dx%d, changed %s)' % (self.__class__, self.rows, self.cols, self.changed)
+        return '%s(%dx%d, changed %s)' % (self.__class__,
+                                          self.rows, self.cols, self.changed)
 
     def __repr__(self):
-        return 'Termsize(%d,%d,%s)' % (self.__class__, self.rows, self.cols, self.changed)
+        return 'Termsize(%d,%d,%s)' % (self.__class__,
+                                       self.rows, self.cols, self.changed)
 
 
 class DaemonWatcher(object):

@@ -122,6 +122,7 @@ extended attribute of directories. The name of this extended attribute is
 ``ceph.dir.pin``.  Users can set this attribute using standard commands:
 
 ::
+
     setfattr -n ceph.dir.pin -v 2 path/to/dir
 
 The value of the extended attribute is the rank to assign the directory subtree
@@ -133,9 +134,11 @@ children. However, the parents pin can be overriden by setting the child
 directory's export pin. For example:
 
 ::
+
     mkdir -p a/b
     # "a" and "a/b" both start without an export pin set
     setfattr -n ceph.dir.pin -v 1 a/
     # a and b are now pinned to rank 1
     setfattr -n ceph.dir.pin -v 0 a/b
     # a/b is now pinned to rank 0 and a/ and the rest of its children are still pinned to rank 1
+

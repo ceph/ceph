@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 2.8.11)
 
 project(ceph)
-set(VERSION 12.0.2)
+set(VERSION 12.0.3)
 
 if(POLICY CMP0046)
   # Tweak policies (this one disables "missing" dependency warning)
@@ -105,6 +105,7 @@ CHECK_FUNCTION_EXISTS(pthread_set_name_np HAVE_PTHREAD_SET_NAME_NP)
 CHECK_FUNCTION_EXISTS(pthread_setname_np HAVE_PTHREAD_SETNAME_NP)
 CHECK_FUNCTION_EXISTS(pthread_getname_np HAVE_PTHREAD_GETNAME_NP)
 CHECK_FUNCTION_EXISTS(eventfd HAVE_EVENTFD)
+CHECK_FUNCTION_EXISTS(getprogname HAVE_GETPROGNAME)
 
 CHECK_INCLUDE_FILES("linux/types.h" HAVE_LINUX_TYPES_H)
 CHECK_INCLUDE_FILES("linux/version.h" HAVE_LINUX_VERSION_H)
@@ -216,6 +217,12 @@ if(WITH_SPDK)
   set(HAVE_SPDK TRUE)
 endif(WITH_SPDK)
 
+option(WITH_PMEM "Enable PMEM" OFF)
+if(WITH_PMEM)
+  find_package(pmem REQUIRED)
+  set(HAVE_PMEM ${PMEM_FOUND})
+endif(WITH_PMEM)
+
 # needs mds and? XXX
 option(WITH_LIBCEPHFS "libcephfs client library" ON)
 
@@ -249,13 +256,13 @@ if(WITH_LEVELDB)
   find_file(HAVE_LEVELDB_FILTER_POLICY leveldb/filter_policy.h PATHS ${LEVELDB_INCLUDE_DIR})
 endif(WITH_LEVELDB)
 
-find_package(atomic_ops REQUIRED)
-message(STATUS "${ATOMIC_OPS_LIBRARIES}")
-if(NOT ${ATOMIC_OPS_FOUND})
-  set(NO_ATOMIC_OPS 1)
-endif(NOT ${ATOMIC_OPS_FOUND})
-
 find_package(snappy REQUIRED)
+
+option(WITH_LZ4 "LZ4 compression support" OFF)
+if(WITH_LZ4)
+  find_package(LZ4 REQUIRED)
+  set(HAVE_LZ4 ${LZ4_FOUND})
+endif(WITH_LZ4)
 
 #if allocator is set on command line make sure it matches below strings
 if(ALLOCATOR)
@@ -343,7 +350,7 @@ endif(WITH_BLKIN)
 
 #option for RGW
 option(WITH_RADOSGW "Rados Gateway is enabled" ON)
-option(WITH_RADOSGW_FCGI_FRONTEND "Rados Gateway's FCGI frontend is enabled" ON)
+option(WITH_RADOSGW_FCGI_FRONTEND "Rados Gateway's FCGI frontend is enabled" OFF)
 option(WITH_RADOSGW_BEAST_FRONTEND "Rados Gateway's Beast frontend is enabled" ON)
 if(WITH_RADOSGW)
   find_package(EXPAT REQUIRED)
@@ -435,6 +442,8 @@ if(${WITH_LTTNG})
   endif()
 endif(${WITH_LTTNG})
 
+option(WITH_OSD_INSTRUMENT_FUNCTIONS OFF)
+
 #option for Babeltrace
 option(HAVE_BABELTRACE "Babeltrace libraries are enabled" ON)
 if(${HAVE_BABELTRACE})
@@ -511,12 +520,18 @@ endif()
 # Boost
 option(WITH_SYSTEM_BOOST "require and build with system Boost" OFF)
 
+# Boost::thread depends on Boost::atomic, so list it explicitly.
 set(BOOST_COMPONENTS
-	thread system regex random program_options date_time iostreams coroutine context)
+  atomic thread system regex random program_options date_time iostreams
+  filesystem)
 set(BOOST_HEADER_COMPONENTS container)
 
 if(WITH_MGR)
 	list(APPEND BOOST_COMPONENTS python)
+endif()
+
+if(WITH_RADOSGW_BEAST_FRONTEND)
+	list(APPEND BOOST_COMPONENTS coroutine context)
 endif()
 
 if (WITH_SYSTEM_BOOST)
@@ -582,9 +597,6 @@ else()
   set(Boost_USE_STATIC_LIBS ON)
   set(Boost_NO_SYSTEM_PATHS ON)
   include_directories(BEFORE ${BOOST_PREFIX}/include)
-  # fixup for CheckIncludeFileCXX
-  set(HAVE_BOOST_ASIO_COROUTINE ON)
-
   set(BOOST_ROOT ${BOOST_PREFIX})
   set(Boost_NO_SYSTEM_PATHS ON)
 endif()
@@ -595,8 +607,6 @@ set(Boost_USE_MULTITHREADED ON)
 find_package(Boost 1.61 COMPONENTS ${BOOST_COMPONENTS} REQUIRED)
 include_directories(SYSTEM ${Boost_INCLUDE_DIRS})
 include_directories(SYSTEM ${PROJECT_BINARY_DIR}/include)
-
-CHECK_INCLUDE_FILE_CXX("boost/asio/coroutine.hpp" HAVE_BOOST_ASIO_COROUTINE)
 
 find_package(Threads REQUIRED)
 

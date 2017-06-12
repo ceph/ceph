@@ -33,6 +33,9 @@ public:
 
     virtual void post_acquire_handler(Context *on_finish) = 0;
     virtual void pre_release_handler(Context *on_finish) = 0;
+
+    virtual void update_leader_handler(
+      const std::string &leader_instance_id) = 0;
   };
 
   LeaderWatcher(Threads<ImageCtxT> *threads, librados::IoCtx &io_ctx,
@@ -50,6 +53,8 @@ public:
   bool get_leader_instance_id(std::string *instance_id) const;
   void release_leader();
   void list_instances(std::vector<std::string> *instance_ids);
+
+  std::string get_instance_id();
 
 private:
   /**

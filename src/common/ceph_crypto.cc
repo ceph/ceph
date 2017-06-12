@@ -12,15 +12,8 @@
  *
  */
 
-#include "include/int_types.h"
 #include "common/config.h"
-#include "common/ceph_context.h"
 #include "ceph_crypto.h"
-#include "auth/Crypto.h"
-
-#include <pthread.h>
-#include <stdlib.h>
-
 
 #ifdef USE_CRYPTOPP
 void ceph::crypto::init(CephContext *cct)

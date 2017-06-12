@@ -84,8 +84,8 @@
 /* Define if you have res_nquery */
 #cmakedefine HAVE_RES_NQUERY
 
-/* Defined if you don't have atomic_ops */
-#cmakedefine NO_ATOMIC_OPS
+/* Defined if you have LZ4 */
+#cmakedefine HAVE_LZ4
 
 /* Defined if you have libaio */
 #cmakedefine HAVE_LIBAIO
@@ -104,6 +104,9 @@
 
 /* DPDK conditional compilation */
 #cmakedefine HAVE_DPDK
+
+/* PMEM conditional compilation */
+#cmakedefine HAVE_PMEM
 
 /* Defined if LevelDB supports bloom filters */
 #cmakedefine HAVE_LEVELDB_FILTER_POLICY
@@ -169,6 +172,9 @@
 /* Define if you want to use LTTng */
 #cmakedefine WITH_LTTNG
 
+/* Define if you want to OSD function instrumentation */
+#cmakedefine WITH_OSD_INSTRUMENT_FUNCTIONS
+
 /* Define if you want to use Babeltrace */
 #cmakedefine WITH_BABELTRACE
 
@@ -198,9 +204,6 @@
 
 /* LTTng is disabled, so define this macro to be nothing. */
 #cmakedefine tracepoint
-
-/* have boost::asio::coroutine */
-#cmakedefine HAVE_BOOST_ASIO_COROUTINE
 
 /* Define to 1 if you have fdatasync. */
 #cmakedefine HAVE_FDATASYNC 1
@@ -314,5 +317,8 @@
 #cmakedefine CEPH_LITTLE_ENDIAN
 
 #cmakedefine PYTHON_EXECUTABLE "@PYTHON_EXECUTABLE@"
+
+/* Define to 1 if you have the `getprogname' function. */
+#cmakedefine HAVE_GETPROGNAME 1
 
 #endif /* CONFIG_H */

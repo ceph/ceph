@@ -249,15 +249,21 @@ class interval_set {
     denc_traits<std::map<T,T>>::bound_encode(m, p);
   }
   void encode(bufferlist::contiguous_appender& p) const {
-    denc_traits<std::map<T,T>>::encode(m, p);
+    denc(m, p);
   }
   void decode(bufferptr::iterator& p) {
-    denc_traits<std::map<T,T>>::decode(m, p);
+    denc(m, p);
     _size = 0;
-    for (typename std::map<T,T>::const_iterator i = m.begin();
-         i != m.end();
-         i++)
-      _size += i->second;
+    for (const auto& i : m) {
+      _size += i.second;
+    }
+  }
+  void decode(bufferlist::iterator& p) {
+    denc(m, p);
+    _size = 0;
+    for (const auto& i : m) {
+      _size += i.second;
+    }
   }
 
   void encode_nohead(bufferlist::contiguous_appender& p) const {
@@ -266,10 +272,9 @@ class interval_set {
   void decode_nohead(int n, bufferptr::iterator& p) {
     denc_traits<std::map<T,T>>::decode_nohead(n, m, p);
     _size = 0;
-    for (typename std::map<T,T>::const_iterator i = m.begin();
-         i != m.end();
-         i++)
-      _size += i->second;
+    for (const auto& i : m) {
+      _size += i.second;
+    }
   }
 
   void clear() {
@@ -576,6 +581,7 @@ struct denc_traits<interval_set<T>> {
   static constexpr bool supported = true;
   static constexpr bool bounded = false;
   static constexpr bool featured = false;
+  static constexpr bool need_contiguous = denc_traits<T>::need_contiguous;
   static void bound_encode(const interval_set<T>& v, size_t& p) {
     v.bound_encode(p);
   }
@@ -584,6 +590,11 @@ struct denc_traits<interval_set<T>> {
     v.encode(p);
   }
   static void decode(interval_set<T>& v, bufferptr::iterator& p) {
+    v.decode(p);
+  }
+  template<typename U=T>
+    static typename std::enable_if<sizeof(U) && !need_contiguous>::type
+    decode(interval_set<T>& v, bufferlist::iterator& p) {
     v.decode(p);
   }
   static void encode_nohead(const interval_set<T>& v,

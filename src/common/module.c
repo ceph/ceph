@@ -15,6 +15,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#if defined(__FreeBSD__)
+#include <sys/wait.h>
+#endif 
 
 /*
  * TODO: Switch to libkmod when we abandon older platforms.  The APIs

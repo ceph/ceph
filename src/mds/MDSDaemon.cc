@@ -661,7 +661,13 @@ COMMAND("cpu_profiler " \
 COMMAND("session ls " \
 	"name=filters,type=CephString,n=N,req=false",
 	"List client sessions", "mds", "r", "cli,rest")
+COMMAND("client ls " \
+	"name=filters,type=CephString,n=N,req=false",
+	"List client sessions", "mds", "r", "cli,rest")
 COMMAND("session evict " \
+	"name=filters,type=CephString,n=N,req=false",
+	"Evict client session(s)", "mds", "rw", "cli,rest")
+COMMAND("client evict " \
 	"name=filters,type=CephString,n=N,req=false",
 	"Evict client session(s)", "mds", "rw", "cli,rest")
 COMMAND("damage ls",
@@ -774,7 +780,9 @@ int MDSDaemon::_handle_command(
     int64_t session_id = 0;
     bool got = cmd_getval(cct, cmdmap, "session_id", session_id);
     assert(got);
-    bool killed = mds_rank->kill_session(session_id, false, ss);
+    bool killed = mds_rank->evict_client(session_id, false,
+                                         g_conf->mds_session_blacklist_on_evict,
+                                         ss);
     if (!killed)
       r = -ENOENT;
   } else if (prefix == "heap") {

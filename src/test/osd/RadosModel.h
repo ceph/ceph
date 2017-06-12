@@ -64,7 +64,9 @@ enum TestOpType {
   TEST_OP_CACHE_TRY_FLUSH,
   TEST_OP_CACHE_EVICT,
   TEST_OP_APPEND,
-  TEST_OP_APPEND_EXCL
+  TEST_OP_APPEND_EXCL,
+  TEST_OP_SET_REDIRECT,
+  TEST_OP_UNSET_REDIRECT
 };
 
 class TestWatchContext : public librados::WatchCtx2 {
@@ -166,6 +168,8 @@ public:
   set<string> oid_not_in_use;
   set<string> oid_flushing;
   set<string> oid_not_flushing;
+  set<string> oid_redirect_not_in_use;
+  set<string> oid_redirect_in_use;
   SharedPtrRegistry<int, int> snaps_in_use;
   int current_snap;
   string pool_name;
@@ -190,6 +194,7 @@ public:
   bool pool_snaps;
   bool write_fadvise_dontneed;
   int snapname_num;
+  map<string,string > redirect_objs;
 
   RadosTestContext(const string &pool_name, 
 		   int max_in_flight,
@@ -475,6 +480,11 @@ public:
       }
     }
     return false;
+  }
+
+  void update_object_redirect_target(const string &oid, const string &target)
+  {
+    redirect_objs[oid] = target;
   }
 
   bool object_existed_at(const string &oid, int snap = -1) const
@@ -1945,6 +1955,224 @@ public:
   string getType() override
   {
     return "CopyFromOp";
+  }
+};
+
+class SetRedirectOp : public TestOp {
+public:
+  string oid, oid_tgt, tgt_pool_name;
+  ObjectDesc src_value, tgt_value;
+  librados::ObjectWriteOperation op;
+  librados::ObjectReadOperation rd_op;
+  librados::AioCompletion *comp;
+  ceph::shared_ptr<int> in_use;
+  int done;
+  int r;
+  SetRedirectOp(int n,
+	     RadosTestContext *context,
+	     const string &oid,
+	     const string &oid_tgt,
+	     const string &tgt_pool_name,
+	     TestOpStat *stat = 0)
+    : TestOp(n, context, stat),
+      oid(oid), oid_tgt(oid_tgt), tgt_pool_name(tgt_pool_name),
+      comp(NULL), done(0), 
+      r(0)
+  {}
+
+  void _begin() override
+  {
+    Mutex::Locker l(context->state_lock);
+    context->oid_in_use.insert(oid);
+    context->oid_not_in_use.erase(oid);
+    context->oid_redirect_in_use.insert(oid_tgt);
+    context->oid_redirect_not_in_use.erase(oid_tgt);
+
+    context->find_object(oid, &src_value); 
+    if(!context->redirect_objs[oid].empty()) {
+      /* update target's user_version */
+      rd_op.stat(NULL, NULL, NULL);
+      comp = context->rados.aio_create_completion();
+      context->io_ctx.aio_operate(context->prefix+oid_tgt, comp, &rd_op,
+			    librados::OPERATION_ORDER_READS_WRITES,
+			    NULL);
+      comp->wait_for_safe();
+      context->update_object_version(oid_tgt, comp->get_version64());
+      comp->release();
+
+      /* unset redirect target */
+      comp = context->rados.aio_create_completion();
+      bool present = !src_value.deleted();
+      context->remove_object(oid);
+      op.remove();
+      context->io_ctx.aio_operate(context->prefix+oid, comp, &op,
+				  librados::OPERATION_ORDER_READS_WRITES |
+				  librados::OPERATION_IGNORE_REDIRECT);
+      comp->wait_for_safe();
+      if ((r = comp->get_return_value())) {
+	if (!(r == -ENOENT && !present)) {
+	  cerr << "r is " << r << " while deleting " << oid << " and present is " << present << std::endl;
+	  ceph_abort();
+	}
+      }
+      comp->release();
+
+      context->oid_redirect_not_in_use.insert(context->redirect_objs[oid]);
+      context->oid_redirect_in_use.erase(context->redirect_objs[oid]);
+
+      /* copy_from oid_tgt --> oid */
+      comp = context->rados.aio_create_completion();
+      context->find_object(oid_tgt, &tgt_value);
+      string src = context->prefix+oid_tgt;
+      op.copy_from(src.c_str(), context->io_ctx, tgt_value.version);
+      context->io_ctx.aio_operate(context->prefix+oid, comp, &op,
+				  librados::OPERATION_ORDER_READS_WRITES);
+      comp->wait_for_safe();
+      if ((r = comp->get_return_value())) {
+	cerr << "Error: oid " << oid << " copy_from " << oid_tgt << " returned error code "
+	     << r << std::endl;
+	ceph_abort();
+      }
+      context->update_object_full(oid, tgt_value);
+      context->update_object_version(oid, comp->get_version64());
+      comp->release();
+    }
+
+    comp = context->rados.aio_create_completion();
+    rd_op.stat(NULL, NULL, NULL);
+    context->io_ctx.aio_operate(context->prefix+oid, comp, &rd_op,
+     			  librados::OPERATION_ORDER_READS_WRITES |
+     			  librados::OPERATION_IGNORE_REDIRECT,
+     			  NULL);
+    comp->wait_for_safe();
+    if ((r = comp->get_return_value()) && !src_value.deleted()) {
+      cerr << "Error: oid " << oid << " stat returned error code "
+	   << r << std::endl;
+      ceph_abort();
+    }
+    context->update_object_version(oid, comp->get_version64());
+    comp->release();
+
+    context->find_object(oid, &src_value); 
+    context->find_object(oid_tgt, &tgt_value);
+
+    if (!src_value.deleted() && !tgt_value.deleted())
+      context->update_object_full(oid, tgt_value);
+
+    if (src_value.version != 0 && !src_value.deleted())
+      op.assert_version(src_value.version);
+    op.set_redirect(context->prefix+oid_tgt, context->io_ctx, tgt_value.version);
+
+    pair<TestOp*, TestOp::CallbackInfo*> *cb_arg =
+      new pair<TestOp*, TestOp::CallbackInfo*>(this,
+					       new TestOp::CallbackInfo(0));
+    comp = context->rados.aio_create_completion((void*) cb_arg, NULL,
+						&write_callback);
+    context->io_ctx.aio_operate(context->prefix+oid, comp, &op,
+				librados::OPERATION_ORDER_READS_WRITES);
+  }
+
+  void _finish(CallbackInfo *info) override
+  {
+    Mutex::Locker l(context->state_lock);
+
+    if (info->id == 0) {
+      assert(comp->is_complete());
+      cout << num << ":  finishing set_redirect to oid " << oid << std::endl;
+      if ((r = comp->get_return_value())) {
+	if (r == -ENOENT && src_value.deleted()) {
+	  cout << num << ":  got expected ENOENT (src dne)" << std::endl;
+	} else {
+	  cerr << "Error: oid " << oid << " set_redirect " << oid_tgt << " returned error code "
+	       << r << std::endl;
+	  ceph_abort();
+	}
+      } else {
+	context->update_object_redirect_target(oid, oid_tgt);
+	context->update_object_version(oid, comp->get_version64());
+      }
+    }
+
+    if (++done == 1) {
+      context->oid_in_use.erase(oid);
+      context->oid_not_in_use.insert(oid);
+      context->kick();
+    }
+  }
+
+  bool finished() override
+  {
+    return done == 1;
+  }
+
+  string getType() override
+  {
+    return "SetRedirectOp";
+  }
+};
+
+class UnsetRedirectOp : public TestOp {
+public:
+  string oid;
+  librados::ObjectWriteOperation op;
+  librados::AioCompletion *completion;
+  librados::AioCompletion *comp;
+
+  UnsetRedirectOp(int n,
+	   RadosTestContext *context,
+	   const string &oid,
+	   TestOpStat *stat = 0)
+    : TestOp(n, context, stat), oid(oid)
+  {}
+
+  void _begin() override
+  {
+    context->state_lock.Lock();
+    if (context->get_watch_context(oid)) {
+      context->kick();
+      context->state_lock.Unlock();
+      return;
+    }
+
+    ObjectDesc contents;
+    context->find_object(oid, &contents);
+    bool present = !contents.deleted();
+
+    context->oid_in_use.insert(oid);
+    context->oid_not_in_use.erase(oid);
+    context->seq_num++;
+
+    context->remove_object(oid);
+
+    context->state_lock.Unlock();
+
+    comp = context->rados.aio_create_completion();
+    op.remove();
+    context->io_ctx.aio_operate(context->prefix+oid, comp, &op,
+				librados::OPERATION_ORDER_READS_WRITES |
+				librados::OPERATION_IGNORE_REDIRECT);
+    comp->wait_for_safe();
+    int r = comp->get_return_value();
+    if (r && !(r == -ENOENT && !present)) {
+      cerr << "r is " << r << " while deleting " << oid << " and present is " << present << std::endl;
+      ceph_abort();
+    }
+
+    context->state_lock.Lock();
+    context->oid_in_use.erase(oid);
+    context->oid_not_in_use.insert(oid);
+    if(!context->redirect_objs[oid].empty()) {
+      context->oid_redirect_not_in_use.insert(context->redirect_objs[oid]);
+      context->oid_redirect_in_use.erase(context->redirect_objs[oid]);
+      context->update_object_redirect_target(oid, string());
+    }
+    context->kick();
+    context->state_lock.Unlock();
+  }
+
+  string getType() override
+  {
+    return "UnsetRedirectOp";
   }
 };
 

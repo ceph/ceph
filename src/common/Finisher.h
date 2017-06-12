@@ -15,10 +15,8 @@
 #ifndef CEPH_FINISHER_H
 #define CEPH_FINISHER_H
 
-#include "include/atomic.h"
 #include "common/Mutex.h"
 #include "common/Cond.h"
-#include "common/Thread.h"
 #include "common/perf_counters.h"
 
 class CephContext;

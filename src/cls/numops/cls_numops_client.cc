@@ -12,11 +12,10 @@
  *
  */
 
-#include "objclass/objclass.h"
 #include "cls/numops/cls_numops_client.h"
 #include "include/encoding.h"
+#include "include/rados/librados.hpp"
 
-#include <cstdlib>
 #include <errno.h>
 #include <sstream>
 

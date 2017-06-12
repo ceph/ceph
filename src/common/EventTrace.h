@@ -18,9 +18,7 @@
 #ifndef _EventTrace_h_
 #define _EventTrace_h_
 
-#include <string>
 #include "msg/Message.h"
-#include "common/ceph_context.h"
 
 #if defined(WITH_LTTNG) && defined(WITH_EVENTTRACE)
 

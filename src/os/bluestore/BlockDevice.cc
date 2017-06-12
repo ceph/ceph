@@ -22,8 +22,15 @@
 #include "NVMEDevice.h"
 #endif
 
+#if defined(HAVE_PMEM)
+#include "PMEMDevice.h"
+#include <libpmem.h>
+#endif
+
 #include "common/debug.h"
 #include "common/EventTrace.h"
+#include "common/errno.h"
+#include "include/compat.h"
 
 #define dout_context cct
 #define dout_subsys ceph_subsys_bdev
@@ -55,7 +62,26 @@ BlockDevice *BlockDevice::create(CephContext* cct, const string& path,
     if (strncmp(bname, SPDK_PREFIX, sizeof(SPDK_PREFIX)-1) == 0)
       type = "ust-nvme";
   }
+
+#if defined(HAVE_PMEM)
+  if (type == "kernel") {
+    int is_pmem = 0;
+    void *addr = pmem_map_file(path.c_str(), 1024*1024, PMEM_FILE_EXCL, O_RDONLY, NULL, &is_pmem);
+    if (addr != NULL) {
+      if (is_pmem)
+	type = "pmem";
+      pmem_unmap(addr, 1024*1024);
+    }
+  }
+#endif
+
   dout(1) << __func__ << " path " << path << " type " << type << dendl;
+
+#if defined(HAVE_PMEM)
+  if (type == "pmem") {
+    return new PMEMDevice(cct, cb, cbpriv);
+  }
+#endif
 
   if (type == "kernel") {
     return new KernelDevice(cct, cb, cbpriv);
@@ -65,6 +91,7 @@ BlockDevice *BlockDevice::create(CephContext* cct, const string& path,
     return new NVMEDevice(cct, cb, cbpriv);
   }
 #endif
+
 
   derr << __func__ << " unknown backend " << type << dendl;
   ceph_abort();

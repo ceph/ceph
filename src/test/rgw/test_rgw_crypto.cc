@@ -616,7 +616,7 @@ TEST(TestRGWCrypto, verify_Encrypt_Decrypt)
 
     ut_put_sink put_sink;
     RGWPutObj_BlockEncrypt encrypt(g_ceph_context, &put_sink,
-                                     std::move(AES_256_CBC_create(g_ceph_context, &key[0], 32)) );
+				   AES_256_CBC_create(g_ceph_context, &key[0], 32) );
     bufferlist bl;
     bl.append((char*)test_in, test_size);
     void* handle;
@@ -633,7 +633,7 @@ TEST(TestRGWCrypto, verify_Encrypt_Decrypt)
 
     ut_get_sink get_sink;
     RGWGetObj_BlockDecrypt decrypt(g_ceph_context, &get_sink,
-                                   std::move(AES_256_CBC_create(g_ceph_context, &key[0], 32)) );
+                                   AES_256_CBC_create(g_ceph_context, &key[0], 32) );
 
     off_t bl_ofs = 0;
     off_t bl_end = test_size - 1;

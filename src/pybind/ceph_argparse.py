@@ -395,6 +395,10 @@ class CephName(CephArgtype):
             self.nametype = "mgr"
             self.val = s
             return
+        elif s == "mon":
+            self.nametype = "mon"
+            self.val = s
+            return
         if s.find('.') == -1:
             raise ArgumentFormat('CephName: no . in {0}'.format(s))
         else:
@@ -920,12 +924,12 @@ def validate(args, signature, flags=0, partial=False):
 
             # no arg, but not required?  Continue consuming mysig
             # in case there are later required args
-            if not myarg and not desc.req:
+            if myarg in (None, []) and not desc.req:
                 break
 
             # out of arguments for a required param?
             # Either return (if partial validation) or raise
-            if not myarg and desc.req:
+            if myarg in (None, []) and desc.req:
                 if desc.N and desc.numseen < 1:
                     # wanted N, didn't even get 1
                     if partial:
@@ -1262,7 +1266,7 @@ def send_command(cluster, target=('mon', ''), cmd=None, inbuf=b'', timeout=0,
             if verbose:
                 print('{0} to {1}'.format(cmd, target[0]),
                       file=sys.stderr)
-            if target[1] == '':
+            if len(target) < 2 or target[1] == '':
                 ret, outbuf, outs = run_in_thread(
                     cluster.mon_command, cmd, inbuf, timeout)
             else:

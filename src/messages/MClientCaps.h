@@ -288,6 +288,7 @@ public:
     ::encode(head, payload);
     ceph_mds_caps_body_legacy body;
     if (head.op == CEPH_CAP_OP_EXPORT) {
+      memset(&body, 0, sizeof(body));
       body.peer = peer;
     } else {
       body.size = size;

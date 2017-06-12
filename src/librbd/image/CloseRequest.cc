@@ -31,6 +31,29 @@ CloseRequest<I>::CloseRequest(I *image_ctx, Context *on_finish)
 
 template <typename I>
 void CloseRequest<I>::send() {
+  send_block_image_watcher();
+}
+
+template <typename I>
+void CloseRequest<I>::send_block_image_watcher() {
+  if (m_image_ctx->image_watcher == nullptr) {
+    send_shut_down_update_watchers();
+    return;
+  }
+
+  CephContext *cct = m_image_ctx->cct;
+  ldout(cct, 10) << this << " " << __func__ << dendl;
+
+  // prevent incoming requests from our peers
+  m_image_ctx->image_watcher->block_notifies(create_context_callback<
+    CloseRequest<I>, &CloseRequest<I>::handle_block_image_watcher>(this));
+}
+
+template <typename I>
+void CloseRequest<I>::handle_block_image_watcher(int r) {
+  CephContext *cct = m_image_ctx->cct;
+  ldout(cct, 10) << this << " " << __func__ << ": r=" << r << dendl;
+
   send_shut_down_update_watchers();
 }
 
@@ -52,35 +75,6 @@ void CloseRequest<I>::handle_shut_down_update_watchers(int r) {
   save_result(r);
   if (r < 0) {
     lderr(cct) << "failed to shut down update watchers: " << cpp_strerror(r)
-               << dendl;
-  }
-
-  send_unregister_image_watcher();
-}
-
-template <typename I>
-void CloseRequest<I>::send_unregister_image_watcher() {
-  if (m_image_ctx->image_watcher == nullptr) {
-    send_shut_down_io_queue();
-    return;
-  }
-
-  CephContext *cct = m_image_ctx->cct;
-  ldout(cct, 10) << this << " " << __func__ << dendl;
-
-  // prevent incoming requests from our peers
-  m_image_ctx->image_watcher->unregister_watch(create_context_callback<
-    CloseRequest<I>, &CloseRequest<I>::handle_unregister_image_watcher>(this));
-}
-
-template <typename I>
-void CloseRequest<I>::handle_unregister_image_watcher(int r) {
-  CephContext *cct = m_image_ctx->cct;
-  ldout(cct, 10) << this << " " << __func__ << ": r=" << r << dendl;
-
-  save_result(r);
-  if (r < 0) {
-    lderr(cct) << "failed to unregister image watcher: " << cpp_strerror(r)
                << dendl;
   }
 
@@ -156,7 +150,8 @@ void CloseRequest<I>::handle_shut_down_exclusive_lock(int r) {
     lderr(cct) << "failed to shut down exclusive lock: " << cpp_strerror(r)
                << dendl;
   }
-  send_flush_readahead();
+
+  send_unregister_image_watcher();
 }
 
 template <typename I>
@@ -178,6 +173,34 @@ void CloseRequest<I>::handle_flush(int r) {
   if (r < 0) {
     lderr(cct) << "failed to flush IO: " << cpp_strerror(r) << dendl;
   }
+  send_unregister_image_watcher();
+}
+
+template <typename I>
+void CloseRequest<I>::send_unregister_image_watcher() {
+  if (m_image_ctx->image_watcher == nullptr) {
+    send_flush_readahead();
+    return;
+  }
+
+  CephContext *cct = m_image_ctx->cct;
+  ldout(cct, 10) << this << " " << __func__ << dendl;
+
+  m_image_ctx->image_watcher->unregister_watch(create_context_callback<
+    CloseRequest<I>, &CloseRequest<I>::handle_unregister_image_watcher>(this));
+}
+
+template <typename I>
+void CloseRequest<I>::handle_unregister_image_watcher(int r) {
+  CephContext *cct = m_image_ctx->cct;
+  ldout(cct, 10) << this << " " << __func__ << ": r=" << r << dendl;
+
+  save_result(r);
+  if (r < 0) {
+    lderr(cct) << "failed to unregister image watcher: " << cpp_strerror(r)
+               << dendl;
+  }
+
   send_flush_readahead();
 }
 

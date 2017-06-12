@@ -631,7 +631,7 @@ rgw::IAM::Environment rgw_build_iam_environment(RGWRados* store,
   return e;
 }
 
-static void rgw_bucket_object_pre_exec(struct req_state *s)
+void rgw_bucket_object_pre_exec(struct req_state *s)
 {
   if (s->expect_cont)
     dump_continue(s);
@@ -1516,6 +1516,7 @@ void RGWGetObj::execute()
   op_ret = read_op.prepare();
   if (op_ret < 0)
     goto done_err;
+  version_id = read_op.state.obj.key.instance;
 
   /* STAT ops don't need data, and do no i/o */
   if (get_type() == RGW_OP_STAT_OBJ) {
@@ -2832,7 +2833,7 @@ int RGWPutObjProcessor_Multipart::do_complete(size_t accounted_size,
                                               map<string, bufferlist>& attrs,
                                               real_time delete_at,
                                               const char *if_match,
-                                              const char *if_nomatch, const string *user_data)
+                                              const char *if_nomatch, const string *user_data, rgw_zone_set *zones_trace)
 {
   complete_writing_data();
 
@@ -2843,6 +2844,7 @@ int RGWPutObjProcessor_Multipart::do_complete(size_t accounted_size,
   head_obj_op.meta.mtime = mtime;
   head_obj_op.meta.owner = s->owner.get_id();
   head_obj_op.meta.delete_at = delete_at;
+  head_obj_op.meta.zones_trace = zones_trace;
 
   int r = head_obj_op.write_meta(obj_len, accounted_size, attrs);
   if (r < 0)
@@ -3117,6 +3119,11 @@ void RGWPutObj::execute()
       ldout(s->cct, 20) << "check_quota() returned ret=" << op_ret << dendl;
       goto done;
     }
+    op_ret = store->check_bucket_shards(s->bucket_info, s->bucket, bucket_quota);
+    if (op_ret < 0) {
+      ldout(s->cct, 20) << "check_bucket_shards() returned ret=" << op_ret << dendl;
+      goto done;
+    }
   }
 
   if (supplied_etag) {
@@ -3317,6 +3324,12 @@ void RGWPutObj::execute()
     goto done;
   }
 
+  op_ret = store->check_bucket_shards(s->bucket_info, s->bucket, bucket_quota);
+  if (op_ret < 0) {
+    ldout(s->cct, 20) << "check_bucket_shards() returned ret=" << op_ret << dendl;
+    goto done;
+  }
+
   hash.Final(m);
 
   if (compressor && compressor->is_compressed()) {
@@ -3486,6 +3499,11 @@ void RGWPostObj::execute()
       return;
     }
 
+    op_ret = store->check_bucket_shards(s->bucket_info, s->bucket, bucket_quota);
+    if (op_ret < 0) {
+      return;
+    }
+
     RGWPutObjProcessor_Atomic processor(*static_cast<RGWObjectCtx *>(s->obj_ctx),
                                         s->bucket_info,
                                         s->bucket,
@@ -3562,6 +3580,11 @@ void RGWPostObj::execute()
 
     op_ret = store->check_quota(s->bucket_owner.get_id(), s->bucket,
                                 user_quota, bucket_quota, s->obj_size);
+    if (op_ret < 0) {
+      return;
+    }
+
+    op_ret = store->check_bucket_shards(s->bucket_info, s->bucket, bucket_quota);
     if (op_ret < 0) {
       return;
     }
@@ -6004,6 +6027,11 @@ int RGWBulkUploadOp::handle_file(const boost::string_ref path,
     return op_ret;
   }
 
+  op_ret = store->check_bucket_shards(s->bucket_info, s->bucket, bucket_quota);
+  if (op_ret < 0) {
+    return op_ret;
+  }
+
   RGWPutObjProcessor_Atomic processor(obj_ctx,
                                       binfo,
                                       binfo.bucket,
@@ -6074,6 +6102,11 @@ int RGWBulkUploadOp::handle_file(const boost::string_ref path,
   if (op_ret < 0) {
     ldout(s->cct, 20) << "bulk upload: quota exceeded for path=" << path
                       << dendl;
+    return op_ret;
+  }
+
+  op_ret = store->check_bucket_shards(s->bucket_info, s->bucket, bucket_quota);
+  if (op_ret < 0) {
     return op_ret;
   }
 
@@ -6304,6 +6337,77 @@ void RGWGetObjLayout::execute()
   head_obj = stat_op.state.head_obj;
 
   op_ret = target.get_manifest(&manifest);
+}
+
+
+int RGWConfigBucketMetaSearch::verify_permission()
+{
+  if (!s->auth.identity->is_owner_of(s->bucket_owner.get_id())) {
+    return -EACCES;
+  }
+
+  return 0;
+}
+
+void RGWConfigBucketMetaSearch::pre_exec()
+{
+  rgw_bucket_object_pre_exec(s);
+}
+
+void RGWConfigBucketMetaSearch::execute()
+{
+  op_ret = get_params();
+  if (op_ret < 0) {
+    ldout(s->cct, 20) << "NOTICE: get_params() returned ret=" << op_ret << dendl;
+    return;
+  }
+
+  s->bucket_info.mdsearch_config = mdsearch_config;
+
+  op_ret = store->put_bucket_instance_info(s->bucket_info, false, real_time(), &s->bucket_attrs);
+  if (op_ret < 0) {
+    ldout(s->cct, 0) << "NOTICE: put_bucket_info on bucket=" << s->bucket.name << " returned err=" << op_ret << dendl;
+    return;
+  }
+}
+
+int RGWGetBucketMetaSearch::verify_permission()
+{
+  if (!s->auth.identity->is_owner_of(s->bucket_owner.get_id())) {
+    return -EACCES;
+  }
+
+  return 0;
+}
+
+void RGWGetBucketMetaSearch::pre_exec()
+{
+  rgw_bucket_object_pre_exec(s);
+}
+
+int RGWDelBucketMetaSearch::verify_permission()
+{
+  if (!s->auth.identity->is_owner_of(s->bucket_owner.get_id())) {
+    return -EACCES;
+  }
+
+  return 0;
+}
+
+void RGWDelBucketMetaSearch::pre_exec()
+{
+  rgw_bucket_object_pre_exec(s);
+}
+
+void RGWDelBucketMetaSearch::execute()
+{
+  s->bucket_info.mdsearch_config.clear();
+
+  op_ret = store->put_bucket_instance_info(s->bucket_info, false, real_time(), &s->bucket_attrs);
+  if (op_ret < 0) {
+    ldout(s->cct, 0) << "NOTICE: put_bucket_info on bucket=" << s->bucket.name << " returned err=" << op_ret << dendl;
+    return;
+  }
 }
 
 

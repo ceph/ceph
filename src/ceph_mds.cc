@@ -53,7 +53,7 @@ using namespace std;
 
 static void usage()
 {
-  cout << "usage: ceph-mds -i name [flags] [[--hot-standby][rank]]\n"
+  cout << "usage: ceph-mds -i <ID> [flags] [[--hot-standby][rank]]\n"
        << "  -m monitorip:port\n"
        << "        connect to monitor at given address\n"
        << "  --debug_mds n\n"

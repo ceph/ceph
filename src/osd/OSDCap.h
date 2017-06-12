@@ -54,7 +54,7 @@ struct osd_rwxa_t {
   }
 };
 
-ostream& operator<<(ostream& out, osd_rwxa_t p);
+ostream& operator<<(ostream& out, const osd_rwxa_t& p);
 
 struct OSDCapSpec {
   osd_rwxa_t allow;

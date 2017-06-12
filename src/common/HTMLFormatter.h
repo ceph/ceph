@@ -3,10 +3,6 @@
 #ifndef CEPH_HTML_FORMATTER_H
 #define CEPH_HTML_FORMATTER_H
 
-#include <iosfwd>
-#include <stdarg.h>
-#include <string>
-
 #include "Formatter.h"
 
 namespace ceph {

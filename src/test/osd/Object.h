@@ -506,6 +506,7 @@ public:
   bool dirty;
 
   uint64_t version;
+  std::string redirect_target;
 private:
   std::list<std::pair<ceph::shared_ptr<ContentsGenerator>, ContDesc> > layers;
 };

@@ -48,7 +48,7 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "dpdk "
 
-std::ostream& operator<<(std::ostream& os, ipv4_address a) {
+std::ostream& operator<<(std::ostream& os, const ipv4_address& a) {
   auto ip = a.ip;
   return os << ((ip >> 24) & 0xff) << "." << ((ip >> 16) & 0xff)
             << "." << ((ip >> 8) & 0xff) << "." << ((ip >> 0) & 0xff);

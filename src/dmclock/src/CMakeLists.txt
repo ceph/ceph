@@ -1,7 +1,12 @@
+include_directories(${GTEST_INCLUDE_DIRS})
+include_directories(${Boost_INCLUDE_DIRS})
 include_directories(../support/src)
-include_directories(${BOOST_INCLUDE_DIR})
 
-set(local_flags "-Wall -pthread")
+set(local_flags "-std=c++11 -Wno-write-strings -Wall -pthread")
+
+if(DO_NOT_DELAY_TAG_CALC)
+  set(local_flags "${local_flags} -DDO_NOT_DELAY_TAG_CALC")
+endif()
 
 set(dmc_srcs dmclock_util.cc ../support/src/run_every.cc)
 

@@ -3,11 +3,12 @@
 #ifndef CEPH_TEST_OSDC_FAKEWRITEBACK_H
 #define CEPH_TEST_OSDC_FAKEWRITEBACK_H
 
-#include "include/atomic.h"
 #include "include/Context.h"
 #include "include/types.h"
 #include "osd/osd_types.h"
 #include "osdc/WritebackHandler.h"
+
+#include <atomic>
 
 class Finisher;
 class Mutex;
@@ -40,7 +41,7 @@ private:
   CephContext *m_cct;
   Mutex *m_lock;
   uint64_t m_delay_ns;
-  atomic_t m_tid;
+  std::atomic<unsigned> m_tid = { 0 };
   Finisher *m_finisher;
 };
 

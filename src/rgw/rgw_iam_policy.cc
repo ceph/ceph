@@ -3,10 +3,11 @@
 
 
 #include <cstring>
-#include <regex>
 #include <sstream>
 #include <stack>
 #include <utility>
+
+#include <boost/regex.hpp>
 
 #include "rapidjson/reader.h"
 
@@ -22,10 +23,7 @@ using std::find;
 using std::int64_t;
 using std::move;
 using std::pair;
-using std::regex;
-using std::regex_match;
 using std::size_t;
-using std::smatch;
 using std::string;
 using std::stringstream;
 using std::ostream;
@@ -36,6 +34,11 @@ using std::unordered_map;
 using boost::container::flat_set;
 using boost::none;
 using boost::optional;
+using boost::regex;
+using boost::regex_constants::ECMAScript;
+using boost::regex_constants::optimize;
+using boost::regex_match;
+using boost::smatch;
 
 using rapidjson::BaseReaderHandler;
 using rapidjson::UTF8;
@@ -201,13 +204,15 @@ ARN::ARN(const rgw_bucket& b, const string& o)
 }
 
 optional<ARN> ARN::parse(const string& s, bool wildcards) {
-  static const regex rx_wild("arn:([^:]*):([^:]*):([^:]*):([^:]*):([^:]*)",
-			     std::regex_constants::ECMAScript |
-			     std::regex_constants::optimize);
-  static const regex rx_no_wild(
-    "arn:([^:*]*):([^:*]*):([^:*]*):([^:*]*):([^:*]*)",
-    std::regex_constants::ECMAScript |
-    std::regex_constants::optimize);
+  static const char str_wild[] = "arn:([^:]*):([^:]*):([^:]*):([^:]*):([^:]*)";
+  static const regex rx_wild(str_wild,
+				    sizeof(str_wild) - 1,
+				    ECMAScript | optimize);
+  static const char str_no_wild[]
+    = "arn:([^:*]*):([^:*]*):([^:*]*):([^:*]*):([^:*]*)";
+  static const regex rx_no_wild(str_no_wild,
+				sizeof(str_no_wild) - 1,
+				ECMAScript | optimize);
 
   smatch match;
 
@@ -703,9 +708,9 @@ static optional<Principal> parse_principal(CephContext* cct, TokenID t,
       return Principal::tenant(std::move(a->account));
     }
 
-    static const regex rx("([^/]*)/(.*)",
-			  std::regex_constants::ECMAScript |
-			  std::regex_constants::optimize);
+    static const char rx_str[] = "([^/]*)/(.*)";
+    static const regex rx(rx_str, sizeof(rx_str) - 1,
+			  ECMAScript | optimize);
     smatch match;
     if (regex_match(a->resource, match, rx)) {
       ceph_assert(match.size() == 2);

@@ -36,7 +36,7 @@
 #include "librbd/io/ReadResult.h"
 #include "tools/rbd_mirror/types.h"
 #include "tools/rbd_mirror/ImageReplayer.h"
-#include "tools/rbd_mirror/ImageSyncThrottler.h"
+#include "tools/rbd_mirror/InstanceWatcher.h"
 #include "tools/rbd_mirror/Threads.h"
 #include "tools/rbd_mirror/ImageDeleter.h"
 
@@ -118,14 +118,19 @@ public:
     m_image_deleter.reset(new rbd::mirror::ImageDeleter(m_threads->work_queue,
                                                         m_threads->timer,
                                                         &m_threads->timer_lock));
-    m_image_sync_throttler.reset(new rbd::mirror::ImageSyncThrottler<>());
+    m_instance_watcher = rbd::mirror::InstanceWatcher<>::create(
+        m_local_ioctx, m_threads->work_queue, nullptr);
+    m_instance_watcher->handle_acquire_leader();
   }
 
-  ~TestImageReplayer() override 
+  ~TestImageReplayer() override
   {
     unwatch();
 
+    m_instance_watcher->handle_release_leader();
+
     delete m_replayer;
+    delete m_instance_watcher;
     delete m_threads;
 
     EXPECT_EQ(0, m_remote_cluster.pool_delete(m_remote_pool_name.c_str()));
@@ -134,9 +139,10 @@ public:
 
   template <typename ImageReplayerT = rbd::mirror::ImageReplayer<> >
   void create_replayer() {
-    m_replayer = new ImageReplayerT(m_threads, m_image_deleter, m_image_sync_throttler,
-      rbd::mirror::RadosRef(new librados::Rados(m_local_ioctx)),
-      m_local_mirror_uuid, m_local_ioctx.get_id(), "global image id");
+    m_replayer = new ImageReplayerT(
+        m_threads, m_image_deleter, m_instance_watcher,
+        rbd::mirror::RadosRef(new librados::Rados(m_local_ioctx)),
+        m_local_mirror_uuid, m_local_ioctx.get_id(), "global image id");
     m_replayer->add_remote_image(m_remote_mirror_uuid, m_remote_image_id,
                                  m_remote_ioctx);
   }
@@ -364,7 +370,7 @@ public:
   std::shared_ptr<rbd::mirror::ImageDeleter> m_image_deleter;
   std::shared_ptr<librados::Rados> m_local_cluster;
   librados::Rados m_remote_cluster;
-  std::shared_ptr<rbd::mirror::ImageSyncThrottler<>> m_image_sync_throttler;
+  rbd::mirror::InstanceWatcher<> *m_instance_watcher;
   std::string m_local_mirror_uuid = "local mirror uuid";
   std::string m_remote_mirror_uuid = "remote mirror uuid";
   std::string m_local_pool_name, m_remote_pool_name;
@@ -484,7 +490,10 @@ TEST_F(TestImageReplayer, StartInterrupted)
 TEST_F(TestImageReplayer, JournalReset)
 {
   bootstrap();
+  delete m_replayer;
+
   ASSERT_EQ(0, librbd::Journal<>::reset(m_remote_ioctx, m_remote_image_id));
+
   // try to recover
   bootstrap();
 }
@@ -758,6 +767,7 @@ TEST_F(TestImageReplayer, Resync_StartInterrupted)
 
   ASSERT_TRUE(m_replayer->is_replaying());
 
+  generate_test_data();
   open_remote_image(&ictx);
   for (int i = 0; i < TEST_IO_COUNT; ++i) {
     write_test_data(ictx, m_test_data, TEST_IO_SIZE * i, TEST_IO_SIZE);
@@ -833,6 +843,7 @@ TEST_F(TestImageReplayer, MultipleReplayFailures_SingleEpoch) {
     wait_for_stopped();
     unwatch();
   }
+  close_image(ictx);
 }
 
 TEST_F(TestImageReplayer, MultipleReplayFailures_MultiEpoch) {
@@ -881,6 +892,7 @@ TEST_F(TestImageReplayer, MultipleReplayFailures_MultiEpoch) {
     ASSERT_EQ(0, release_ctx.wait());
   }
 
+  generate_test_data();
   write_test_data(ictx, m_test_data, 0, TEST_IO_SIZE);
 
   for (uint64_t i = 0; i < 5; ++i) {
@@ -1155,6 +1167,7 @@ TEST_F(TestImageReplayer, MirroringDelay)
   for (int i = 0; i < TEST_IO_COUNT; ++i) {
     write_test_data(ictx, m_test_data, TEST_IO_SIZE * i, TEST_IO_SIZE);
   }
+  close_image(ictx);
 
   sleep(DELAY / 2);
   stop();

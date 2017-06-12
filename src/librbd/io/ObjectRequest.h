@@ -478,6 +478,8 @@ public:
     return true;
   }
 
+  void send_write() override;
+
 protected:
   void add_write_ops(librados::ObjectWriteOperation *wr,
                      bool set_hints) override {

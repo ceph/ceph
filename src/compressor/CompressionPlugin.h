@@ -18,8 +18,9 @@
 #ifndef COMPRESSION_PLUGIN_H
 #define COMPRESSION_PLUGIN_H
 
+#include <iosfwd>
 #include <iostream>
-#include "common/Mutex.h"
+
 #include "common/PluginRegistry.h"
 #include "Compressor.h"
 

@@ -19,9 +19,9 @@
 
 // -----------------------------------------------------------------------------
 #include "ErasureCodeShecTableCache.h"
-#include "ErasureCodeShec.h"
 #include "common/debug.h"
 // -----------------------------------------------------------------------------
+using namespace std;
 
 // -----------------------------------------------------------------------------
 #define dout_context g_ceph_context

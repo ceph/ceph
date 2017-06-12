@@ -27,7 +27,12 @@ typedef boost::intrusive_ptr<Session> SessionRef;
 struct Backoff;
 typedef boost::intrusive_ptr<Backoff> BackoffRef;
 class PG;
+#ifdef PG_DEBUG_REFS
+#include "common/tracked_int_ptr.hpp"
+typedef TrackedIntPtr<PG> PGRef;
+#else
 typedef boost::intrusive_ptr<PG> PGRef;
+#endif
 
 /*
  * A Backoff represents one instance of either a PG or an OID

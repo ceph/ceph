@@ -892,6 +892,9 @@ struct osd_stat_t {
 
   objectstore_perf_stat_t os_perf_stat;
 
+  epoch_t up_from = 0;
+  uint64_t seq = 0;
+
   osd_stat_t() : kb(0), kb_used(0), kb_avail(0),
 		 snap_trim_queue_len(0), num_snap_trimming(0) {}
 
@@ -3123,7 +3126,9 @@ public:
     TRY_DELETE = 6,
     ROLLBACK_EXTENTS = 7
   };
-  ObjectModDesc() : can_local_rollback(true), rollback_info_completed(false) {}
+  ObjectModDesc() : can_local_rollback(true), rollback_info_completed(false) {
+    bl.reassign_to_mempool(mempool::mempool_osd_pglog);
+  }
   void claim(ObjectModDesc &other) {
     bl.clear();
     bl.claim(other.bl);
@@ -3302,7 +3307,7 @@ struct pg_log_entry_t {
   bufferlist snaps;   // only for clone entries
   hobject_t  soid;
   osd_reqid_t reqid;  // caller+tid to uniquely identify request
-  vector<pair<osd_reqid_t, version_t> > extra_reqids;
+  mempool::osd_pglog::vector<pair<osd_reqid_t, version_t> > extra_reqids;
   eversion_t version, prior_version, reverting_to;
   version_t user_version; // the user version for this entry
   utime_t     mtime;  // this is the _user_ mtime, mind you
@@ -3314,7 +3319,9 @@ struct pg_log_entry_t {
 
   pg_log_entry_t()
    : user_version(0), return_code(0), op(0),
-     invalid_hash(false), invalid_pool(false) {}
+     invalid_hash(false), invalid_pool(false) {
+    snaps.reassign_to_mempool(mempool::mempool_osd_pglog);
+  }
   pg_log_entry_t(int _op, const hobject_t& _soid,
                 const eversion_t& v, const eversion_t& pv,
                 version_t uv,
@@ -3322,8 +3329,9 @@ struct pg_log_entry_t {
                 int return_code)
    : soid(_soid), reqid(rid), version(v), prior_version(pv), user_version(uv),
      mtime(mt), return_code(return_code), op(_op),
-     invalid_hash(false), invalid_pool(false)
-     {}
+     invalid_hash(false), invalid_pool(false) {
+    snaps.reassign_to_mempool(mempool::mempool_osd_pglog);
+  }
       
   bool is_clone() const { return op == CLONE; }
   bool is_modify() const { return op == MODIFY; }
@@ -3409,14 +3417,14 @@ protected:
   eversion_t rollback_info_trimmed_to;
 
 public:
-  mempool::osd::list<pg_log_entry_t> log;  // the actual log.
+  mempool::osd_pglog::list<pg_log_entry_t> log;  // the actual log.
   
   pg_log_t() = default;
   pg_log_t(const eversion_t &last_update,
 	   const eversion_t &log_tail,
 	   const eversion_t &can_rollback_to,
 	   const eversion_t &rollback_info_trimmed_to,
-	   mempool::osd::list<pg_log_entry_t> &&entries)
+	   mempool::osd_pglog::list<pg_log_entry_t> &&entries)
     : head(last_update), tail(log_tail), can_rollback_to(can_rollback_to),
       rollback_info_trimmed_to(rollback_info_trimmed_to),
       log(std::move(entries)) {}
@@ -3447,7 +3455,7 @@ public:
 
 
   pg_log_t split_out_child(pg_t child_pgid, unsigned split_bits) {
-    mempool::osd::list<pg_log_entry_t> oldlog, childlog;
+    mempool::osd_pglog::list<pg_log_entry_t> oldlog, childlog;
     oldlog.swap(log);
 
     eversion_t old_tail;
@@ -3471,11 +3479,11 @@ public:
       std::move(childlog));
   }
 
-  mempool::osd::list<pg_log_entry_t> rewind_from_head(eversion_t newhead) {
+  mempool::osd_pglog::list<pg_log_entry_t> rewind_from_head(eversion_t newhead) {
     assert(newhead >= tail);
 
-    mempool::osd::list<pg_log_entry_t>::iterator p = log.end();
-    mempool::osd::list<pg_log_entry_t> divergent;
+    mempool::osd_pglog::list<pg_log_entry_t>::iterator p = log.end();
+    mempool::osd_pglog::list<pg_log_entry_t> divergent;
     while (true) {
       if (p == log.begin()) {
 	// yikes, the whole thing is divergent!
@@ -4149,7 +4157,7 @@ struct object_copy_data_t {
   snapid_t snap_seq;
 
   ///< recent reqids on this object
-  vector<pair<osd_reqid_t, version_t> > reqids;
+  mempool::osd_pglog::vector<pair<osd_reqid_t, version_t> > reqids;
 
   uint64_t truncate_seq;
   uint64_t truncate_size;
@@ -4412,6 +4420,48 @@ static inline ostream& operator<<(ostream& out, const notify_info_t& n) {
 	     << " " << n.timeout << "s)";
 }
 
+struct object_info_t;
+struct object_manifest_t {
+  enum {
+    TYPE_NONE = 0,
+    TYPE_REDIRECT = 1,  // start with this
+    TYPE_CHUNKED = 2,   // do this later
+  };
+  uint8_t type;  // redirect, chunked, ...
+  hobject_t redirect_target;
+
+  object_manifest_t() : type(0) { }
+  object_manifest_t(uint8_t type, const hobject_t& redirect_target) 
+    : type(type), redirect_target(redirect_target) { }
+
+  bool is_empty() const {
+    return type == TYPE_NONE;
+  }
+  bool is_redirect() const {
+    return type == TYPE_REDIRECT;
+  }
+  bool is_chunked() const {
+    return type == TYPE_CHUNKED;
+  }
+  static const char *get_type_name(uint8_t m) {
+    switch (m) {
+    case TYPE_NONE: return "none";
+    case TYPE_REDIRECT: return "redirect";
+    case TYPE_CHUNKED: return "chunked";
+    default: return "unknown";
+    }
+  }
+  const char *get_type_name() const {
+    return get_type_name(type);
+  }
+  static void generate_test_instances(list<object_manifest_t*>& o);
+  void encode(bufferlist &bl) const;
+  void decode(bufferlist::iterator &bl);
+  void dump(Formatter *f) const;
+  friend ostream& operator<<(ostream& out, const object_info_t& oi);
+};
+WRITE_CLASS_ENCODER(object_manifest_t)
+ostream& operator<<(ostream& out, const object_manifest_t& oi);
 
 struct object_info_t {
   hobject_t soid;
@@ -4433,6 +4483,7 @@ struct object_info_t {
     FLAG_DATA_DIGEST = 1 << 4,  // has data crc
     FLAG_OMAP_DIGEST = 1 << 5,  // has omap crc
     FLAG_CACHE_PIN = 1 << 6,    // pin the object in cache tier
+    FLAG_MANIFEST = 1 << 7,	// has manifest
     // ...
     FLAG_USES_TMAP = 1<<8,  // deprecated; no longer used.
   } flag_t;
@@ -4480,6 +4531,8 @@ struct object_info_t {
   uint64_t expected_object_size, expected_write_size;
   uint32_t alloc_hint_flags;
 
+  struct object_manifest_t manifest;
+
   void copy_user_bits(const object_info_t& other);
 
   static ps_t legacy_object_locator_to_ps(const object_t &oid, 
@@ -4514,6 +4567,9 @@ struct object_info_t {
   }
   bool is_cache_pinned() const {
     return test_flag(FLAG_CACHE_PIN);
+  }
+  bool has_manifest() const {
+    return !manifest.is_empty();
   }
 
   void set_data_digest(__u32 d) {

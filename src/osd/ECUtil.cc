@@ -3,6 +3,7 @@
 #include <errno.h>
 #include "include/encoding.h"
 #include "ECUtil.h"
+using namespace std;
 
 int ECUtil::decode(
   const stripe_info_t &sinfo,

@@ -22,13 +22,7 @@
 #ifndef COMMON_BLOOM_FILTER_HPP
 #define COMMON_BLOOM_FILTER_HPP
 
-#include <cstddef>
-#include <algorithm>
 #include <cmath>
-#include <limits>
-#include <list>
-#include <string>
-#include <vector>
 
 #include "include/mempool.h"
 #include "include/encoding.h"

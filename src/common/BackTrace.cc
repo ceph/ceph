@@ -1,11 +1,8 @@
-
 #include <ostream>
 #include <cxxabi.h>
-#include <stdlib.h>
 #include <string.h>
 
 #include "BackTrace.h"
-
 #include "common/version.h"
 
 #define _STR(x) #x

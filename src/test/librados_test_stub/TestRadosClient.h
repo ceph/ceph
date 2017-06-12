@@ -4,17 +4,19 @@
 #ifndef CEPH_TEST_RADOS_CLIENT_H
 #define CEPH_TEST_RADOS_CLIENT_H
 
-#include "include/rados/librados.hpp"
-#include "common/config.h"
-#include "include/atomic.h"
-#include "include/buffer_fwd.h"
-#include "test/librados_test_stub/TestWatchNotify.h"
-#include <boost/function.hpp>
-#include <boost/functional/hash.hpp>
-#include <list>
 #include <map>
+#include <list>
 #include <string>
 #include <vector>
+#include <atomic>
+
+#include <boost/function.hpp>
+#include <boost/functional/hash.hpp>
+
+#include "include/rados/librados.hpp"
+#include "common/config.h"
+#include "include/buffer_fwd.h"
+#include "test/librados_test_stub/TestWatchNotify.h"
 
 class Finisher;
 
@@ -113,7 +115,7 @@ protected:
 private:
 
   CephContext *m_cct;
-  atomic_t m_refcount;
+  std::atomic<uint64_t> m_refcount = { 0 };
 
   TestWatchNotify *m_watch_notify;
 

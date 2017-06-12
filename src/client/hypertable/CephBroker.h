@@ -27,9 +27,8 @@
 extern "C" {
 #include <unistd.h>
 }
-
+#include <atomic>
 #include "Common/String.h"
-#include "Common/atomic.h"
 #include "Common/Properties.h"
 
 #include "DfsBroker/Lib/Broker.h"
@@ -97,7 +96,7 @@ namespace Hypertable {
 
   private:
     struct ceph_mount_info *cmount;
-    static atomic_t ms_next_fd;
+    static std::atomic<int> ms_next_fd;
 
     virtual void report_error(ResponseCallback *cb, int error);
 

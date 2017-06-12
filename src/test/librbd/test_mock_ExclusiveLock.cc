@@ -126,7 +126,7 @@ template <>
 struct PreReleaseRequest<MockExclusiveLockImageCtx> : public BaseRequest<PreReleaseRequest<MockExclusiveLockImageCtx> > {
   static PreReleaseRequest<MockExclusiveLockImageCtx> *create(
       MockExclusiveLockImageCtx &image_ctx, bool shutting_down,
-      Context *on_finish) {
+      AsyncOpTracker &async_op_tracker, Context *on_finish) {
     return BaseRequest::create(image_ctx, nullptr, on_finish);
   }
   MOCK_METHOD0(send, void());

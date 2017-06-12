@@ -26,11 +26,8 @@
 #define CEPH_ERASURE_CODE_ISA_L_H
 
 // -----------------------------------------------------------------------------
-#include "common/Mutex.h"
 #include "erasure-code/ErasureCode.h"
 #include "ErasureCodeIsaTableCache.h"
-// -----------------------------------------------------------------------------
-#include <list>
 // -----------------------------------------------------------------------------
 
 #define DEFAULT_RULESET_ROOT "default"
@@ -49,8 +46,8 @@ public:
 
   ErasureCodeIsaTableCache &tcache;
   const char *technique;
-  string ruleset_root;
-  string ruleset_failure_domain;
+  std::string ruleset_root;
+  std::string ruleset_failure_domain;
 
   ErasureCodeIsa(const char *_technique,
                  ErasureCodeIsaTableCache &_tcache) :
@@ -69,9 +66,9 @@ public:
   {
   }
 
-  int create_ruleset(const string &name,
+  int create_ruleset(const std::string &name,
                              CrushWrapper &crush,
-                             ostream *ss) const override;
+                             std::ostream *ss) const override;
 
   unsigned int
   get_chunk_count() const override
@@ -87,14 +84,14 @@ public:
 
   unsigned int get_chunk_size(unsigned int object_size) const override;
 
-  int encode_chunks(const set<int> &want_to_encode,
-                            map<int, bufferlist> *encoded) override;
+  int encode_chunks(const std::set<int> &want_to_encode,
+                            std::map<int, bufferlist> *encoded) override;
 
-  int decode_chunks(const set<int> &want_to_read,
-                            const map<int, bufferlist> &chunks,
-                            map<int, bufferlist> *decoded) override;
+  int decode_chunks(const std::set<int> &want_to_read,
+                            const std::map<int, bufferlist> &chunks,
+                            std::map<int, bufferlist> *decoded) override;
 
-  int init(ErasureCodeProfile &profile, ostream *ss) override;
+  int init(ErasureCodeProfile &profile, std::ostream *ss) override;
 
   virtual void isa_encode(char **data,
                           char **coding,
@@ -112,7 +109,7 @@ public:
 
  private:
   virtual int parse(ErasureCodeProfile &profile,
-                    ostream *ss) = 0;
+                    std::ostream *ss) = 0;
 };
 
 // -----------------------------------------------------------------------------
@@ -161,7 +158,7 @@ public:
 
  private:
   int parse(ErasureCodeProfile &profile,
-                    ostream *ss) override;
+                    std::ostream *ss) override;
 };
 
 #endif

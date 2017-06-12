@@ -616,17 +616,18 @@ int RGWRESTStreamWriteRequest::complete(string& etag, real_time *mtime)
   return status;
 }
 
-int RGWRESTStreamRWRequest::get_obj(RGWAccessKey& key, map<string, string>& extra_headers, rgw_obj& obj)
+int RGWRESTStreamRWRequest::send_request(RGWAccessKey& key, map<string, string>& extra_headers, rgw_obj& obj, RGWHTTPManager *mgr)
 {
   string urlsafe_bucket, urlsafe_object;
   url_encode(obj.bucket.get_key(':', 0), urlsafe_bucket);
   url_encode(obj.key.name, urlsafe_object);
   string resource = urlsafe_bucket + "/" + urlsafe_object;
 
-  return get_resource(key, extra_headers, resource);
+  return send_request(&key, extra_headers, resource, nullptr, mgr);
 }
 
-int RGWRESTStreamRWRequest::get_resource(RGWAccessKey& key, map<string, string>& extra_headers, const string& resource, RGWHTTPManager *mgr)
+int RGWRESTStreamRWRequest::send_request(RGWAccessKey *key, map<string, string>& extra_headers, const string& resource,
+                                         bufferlist *send_data, RGWHTTPManager *mgr)
 {
   string new_url = url;
   if (new_url[new_url.size() - 1] != '/')
@@ -671,10 +672,12 @@ int RGWRESTStreamRWRequest::get_resource(RGWAccessKey& key, map<string, string>&
 
   new_info.init_meta_info(NULL);
 
-  int ret = sign_request(key, new_env, new_info);
-  if (ret < 0) {
-    ldout(cct, 0) << "ERROR: failed to sign request" << dendl;
-    return ret;
+  if (key) {
+    int ret = sign_request(*key, new_env, new_info);
+    if (ret < 0) {
+      ldout(cct, 0) << "ERROR: failed to sign request" << dendl;
+      return ret;
+    }
   }
 
   map<string, string, ltstr_nocase>& m = new_env.get_map();
@@ -683,12 +686,18 @@ int RGWRESTStreamRWRequest::get_resource(RGWAccessKey& key, map<string, string>&
     headers.push_back(pair<string, string>(iter->first, iter->second));
   }
 
+  bool send_data_hint = false;
+  if (send_data) {
+    outbl.claim(*send_data);
+    send_data_hint = true;
+  }
+
   RGWHTTPManager *pmanager = &http_manager;
   if (mgr) {
     pmanager = mgr;
   }
 
-  int r = pmanager->add_request(this, new_info.method, new_url.c_str());
+  int r = pmanager->add_request(this, new_info.method, new_url.c_str(), send_data_hint);
   if (r < 0)
     return r;
 
@@ -701,7 +710,7 @@ int RGWRESTStreamRWRequest::get_resource(RGWAccessKey& key, map<string, string>&
   return 0;
 }
 
-int RGWRESTStreamRWRequest::complete(string& etag, real_time *mtime, uint64_t *psize, map<string, string>& attrs)
+int RGWRESTStreamRWRequest::complete_request(string& etag, real_time *mtime, uint64_t *psize, map<string, string>& attrs)
 {
   set_str_from_headers(out_headers, "ETAG", etag);
   if (status >= 0) {

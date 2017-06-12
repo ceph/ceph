@@ -306,6 +306,8 @@ void objectstore_perf_stat_t::generate_test_instances(std::list<objectstore_perf
 // -- osd_stat_t --
 void osd_stat_t::dump(Formatter *f) const
 {
+  f->dump_unsigned("up_from", up_from);
+  f->dump_unsigned("seq", seq);
   f->dump_unsigned("kb", kb);
   f->dump_unsigned("kb_used", kb_used);
   f->dump_unsigned("kb_avail", kb_avail);
@@ -325,7 +327,7 @@ void osd_stat_t::dump(Formatter *f) const
 
 void osd_stat_t::encode(bufferlist &bl) const
 {
-  ENCODE_START(5, 2, bl);
+  ENCODE_START(6, 2, bl);
   ::encode(kb, bl);
   ::encode(kb_used, bl);
   ::encode(kb_avail, bl);
@@ -335,12 +337,14 @@ void osd_stat_t::encode(bufferlist &bl) const
   ::encode((uint32_t)0, bl);
   ::encode(op_queue_age_hist, bl);
   ::encode(os_perf_stat, bl);
+  ::encode(up_from, bl);
+  ::encode(seq, bl);
   ENCODE_FINISH(bl);
 }
 
 void osd_stat_t::decode(bufferlist::iterator &bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(5, 2, 2, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(6, 2, 2, bl);
   ::decode(kb, bl);
   ::decode(kb_used, bl);
   ::decode(kb_avail, bl);
@@ -353,6 +357,10 @@ void osd_stat_t::decode(bufferlist::iterator &bl)
     ::decode(op_queue_age_hist, bl);
   if (struct_v >= 4)
     ::decode(os_perf_stat, bl);
+  if (struct_v >= 6) {
+    ::decode(up_from, bl);
+    ::decode(seq, bl);
+  }
   DECODE_FINISH(bl);
 }
 
@@ -830,7 +838,7 @@ std::string pg_state_string(int state)
   if (ret.length() > 0)
     ret.resize(ret.length() - 1);
   else
-    ret = "inactive";
+    ret = "unknown";
   return ret;
 }
 
@@ -3363,7 +3371,7 @@ void PastIntervals::update_type(bool ec_pool, bool compact)
 
 void PastIntervals::update_type_from_map(bool ec_pool, const OSDMap &osdmap)
 {
-  update_type(ec_pool, osdmap.test_flag(CEPH_OSDMAP_REQUIRE_LUMINOUS));
+  update_type(ec_pool, osdmap.require_osd_release >= CEPH_RELEASE_LUMINOUS);
 }
 
 bool PastIntervals::is_new_interval(
@@ -3870,6 +3878,7 @@ void ObjectModDesc::decode(bufferlist::iterator &_bl)
   ::decode(bl, _bl);
   // ensure bl does not pin a larger buffer in memory
   bl.rebuild();
+  bl.reassign_to_mempool(mempool::mempool_osd_pglog);
   DECODE_FINISH(_bl);
 }
 
@@ -3973,6 +3982,7 @@ void pg_log_entry_t::decode(bufferlist::iterator &bl)
     ::decode(snaps, bl);
     // ensure snaps does not pin a larger buffer in memory
     snaps.rebuild();
+    snaps.reassign_to_mempool(mempool::mempool_osd_pglog);
   }
 
   if (struct_v >= 8)
@@ -3999,8 +4009,7 @@ void pg_log_entry_t::dump(Formatter *f) const
   f->dump_stream("prior_version") << prior_version;
   f->dump_stream("reqid") << reqid;
   f->open_array_section("extra_reqids");
-  for (vector<pair<osd_reqid_t, version_t> >::const_iterator p =
-	 extra_reqids.begin();
+  for (auto p = extra_reqids.begin();
        p != extra_reqids.end();
        ++p) {
     f->open_object_section("extra_reqid");
@@ -4434,7 +4443,7 @@ void object_copy_data_t::dump(Formatter *f) const
     f->dump_unsigned("snap", *p);
   f->close_section();
   f->open_array_section("reqids");
-  for (vector<pair<osd_reqid_t, version_t> >::const_iterator p = reqids.begin();
+  for (auto p = reqids.begin();
        p != reqids.end();
        ++p) {
     f->open_object_section("extra_reqid");
@@ -4926,6 +4935,56 @@ void watch_info_t::generate_test_instances(list<watch_info_t*>& o)
   o.back()->addr = ea;
 }
 
+// -- object_manifest_t --
+
+void object_manifest_t::encode(bufferlist& bl) const
+{
+  ENCODE_START(1, 1, bl);
+  ::encode(type, bl);
+  switch (type) {
+    case TYPE_NONE: break;
+    case TYPE_REDIRECT: 
+      ::encode(redirect_target, bl);
+      break;
+    default:
+      ceph_abort();
+  }
+  ENCODE_FINISH(bl);
+}
+
+void object_manifest_t::decode(bufferlist::iterator& bl)
+{
+  DECODE_START(1, bl);
+  ::decode(type, bl);
+  switch (type) {
+    case TYPE_NONE: break;
+    case TYPE_REDIRECT: 
+      ::decode(redirect_target, bl);
+      break;
+    default:
+      ceph_abort();
+  }
+  DECODE_FINISH(bl);
+}
+
+void object_manifest_t::dump(Formatter *f) const
+{
+  f->dump_unsigned("type", type);
+  f->open_object_section("redirect_target");
+  redirect_target.dump(f);
+  f->close_section();
+}
+
+void object_manifest_t::generate_test_instances(list<object_manifest_t*>& o)
+{
+  o.push_back(new object_manifest_t());
+  o.back()->type = TYPE_REDIRECT;
+}
+
+ostream& operator<<(ostream& out, const object_manifest_t& om)
+{
+  return out << "type:" << om.type << " redirect_target:" << om.redirect_target;
+}
 
 // -- object_info_t --
 
@@ -4967,7 +5026,7 @@ void object_info_t::encode(bufferlist& bl, uint64_t features) const
        ++i) {
     old_watchers.insert(make_pair(i->first.second, i->second));
   }
-  ENCODE_START(16, 8, bl);
+  ENCODE_START(17, 8, bl);
   ::encode(soid, bl);
   ::encode(myoloc, bl);	//Retained for compatibility
   ::encode((__u32)0, bl); // was category, no longer used
@@ -4998,6 +5057,7 @@ void object_info_t::encode(bufferlist& bl, uint64_t features) const
   ::encode(expected_object_size, bl);
   ::encode(expected_write_size, bl);
   ::encode(alloc_hint_flags, bl);
+  ::encode(manifest, bl);
   ENCODE_FINISH(bl);
 }
 
@@ -5086,6 +5146,9 @@ void object_info_t::decode(bufferlist::iterator& bl)
     expected_write_size = 0;
     alloc_hint_flags = 0;
   }
+  if (struct_v >= 17) {
+    ::decode(manifest, bl);
+  }
   DECODE_FINISH(bl);
 }
 
@@ -5115,6 +5178,7 @@ void object_info_t::dump(Formatter *f) const
   f->dump_unsigned("expected_object_size", expected_object_size);
   f->dump_unsigned("expected_write_size", expected_write_size);
   f->dump_unsigned("alloc_hint_flags", alloc_hint_flags);
+  f->dump_object("manifest", manifest);
   f->open_object_section("watchers");
   for (map<pair<uint64_t, entity_name_t>,watch_info_t>::const_iterator p =
          watchers.begin(); p != watchers.end(); ++p) {
@@ -5152,6 +5216,8 @@ ostream& operator<<(ostream& out, const object_info_t& oi)
   out << " alloc_hint [" << oi.expected_object_size
       << " " << oi.expected_write_size
       << " " << oi.alloc_hint_flags << "]";
+  if (oi.has_manifest())
+    out << " " << oi.manifest;
 
   out << ")";
   return out;

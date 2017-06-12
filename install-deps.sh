@@ -30,7 +30,6 @@ if [ x`uname`x = xFreeBSDx ]; then
         devel/boost-python-libs \
         devel/valgrind \
         devel/pkgconf \
-        devel/libatomic_ops \
         devel/libedit \
         devel/libtool \
         devel/google-perftools \
@@ -53,12 +52,16 @@ if [ x`uname`x = xFreeBSDx ]; then
         emulators/fuse \
         java/junit \
         lang/python27 \
+	devel/py-pip \
         devel/py-argparse \
         devel/py-nose \
         www/py-flask \
         www/fcgi \
         sysutils/flock \
         sysutils/fusefs-libs \
+
+	# Now use pip to install some extra python modules
+	pip install pecan
 
     exit
 else
@@ -160,7 +163,8 @@ function populate_wheelhouse() {
 
     # although pip comes with virtualenv, having a recent version
     # of pip matters when it comes to using wheel packages
-    pip --timeout 300 $install 'setuptools >= 0.8' 'pip >= 7.0' 'wheel >= 0.24' || return 1
+    # workaround of https://github.com/pypa/setuptools/issues/1042
+    pip --timeout 300 $install 'setuptools >= 0.8,< 36' 'pip >= 7.0' 'wheel >= 0.24' || return 1
     if test $# != 0 ; then
         pip --timeout 300 $install $@ || return 1
     fi

@@ -73,12 +73,10 @@ ObjectStore *ObjectStore::create(CephContext *cct,
     return new MemStore(cct, data);
   }
 #if defined(HAVE_LIBAIO)
-  if (type == "bluestore" &&
-      cct->check_experimental_feature_enabled("bluestore")) {
+  if (type == "bluestore") {
     return new BlueStore(cct, data);
   }
-  if (type == "random" &&
-      cct->check_experimental_feature_enabled("bluestore")) {
+  if (type == "random") {
     if (rand() % 2) {
       return new FileStore(cct, data, journal, flags);
     } else {

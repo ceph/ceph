@@ -3422,6 +3422,42 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
 	   << cpp_strerror(ret) << std::endl;
       goto out;
     }
+  } else if (strcmp(nargs[0], "set-redirect") == 0) {
+    if (!pool_name)
+      usage_exit();
+
+    const char *target = target_pool_name;
+    if (!target)
+      target = pool_name;
+
+    const char *target_obj;
+    if (nargs.size() < 3) {
+      if (strcmp(target, pool_name) == 0) {
+        cerr << "cannot copy object into itself" << std::endl;
+	ret = -1;
+	goto out;
+      }
+      target_obj = nargs[1];
+    } else {
+      target_obj = nargs[2];
+    }
+
+    IoCtx target_ctx;
+    ret = rados.ioctx_create(target, target_ctx);
+    if (target_oloc.size()) {
+      target_ctx.locator_set_key(target_oloc);
+    }
+    if (target_nspace.size()) {
+      target_ctx.set_namespace(target_nspace);
+    }
+
+    ObjectWriteOperation op;
+    op.set_redirect(target_obj, target_ctx, 0);
+    ret = io_ctx.operate(nargs[1], &op);
+    if (ret < 0) {
+      cerr << "error set-redirect " << pool_name << "/" << nargs[1] << " => " << target << "/" << target_obj << ": " << cpp_strerror(ret) << std::endl;
+      goto out;
+    }
   } else if (strcmp(nargs[0], "export") == 0) {
     // export [filename]
     if (!pool_name || nargs.size() > 2) {

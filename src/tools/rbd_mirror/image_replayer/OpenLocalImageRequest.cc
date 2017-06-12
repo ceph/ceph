@@ -30,17 +30,33 @@ using librbd::util::create_context_callback;
 
 namespace {
 
+template <typename I>
 struct MirrorExclusiveLockPolicy : public librbd::exclusive_lock::Policy {
+  I *image_ctx;
+
+  MirrorExclusiveLockPolicy(I *image_ctx) : image_ctx(image_ctx) {
+  }
 
   bool may_auto_request_lock() override {
     return false;
   }
 
   int lock_requested(bool force) override {
-    // TODO: interlock is being requested (e.g. local promotion)
-    // Wait for demote event from peer or abort replay on forced
-    // promotion.
-    return -EROFS;
+    int r = -EROFS;
+    {
+      RWLock::RLocker owner_locker(image_ctx->owner_lock);
+      RWLock::RLocker snap_locker(image_ctx->snap_lock);
+      if (image_ctx->journal == nullptr || image_ctx->journal->is_tag_owner()) {
+        r = 0;
+      }
+    }
+
+    if (r == 0) {
+      // if the local image journal has been closed or if it was (force)
+      // promoted allow the lock to be released to another client
+      image_ctx->exclusive_lock->release_lock(nullptr);
+    }
+    return r;
   }
 
 };
@@ -93,7 +109,7 @@ void OpenLocalImageRequest<I>::send_open_image() {
     RWLock::WLocker owner_locker((*m_local_image_ctx)->owner_lock);
     RWLock::WLocker snap_locker((*m_local_image_ctx)->snap_lock);
     (*m_local_image_ctx)->set_exclusive_lock_policy(
-      new MirrorExclusiveLockPolicy());
+      new MirrorExclusiveLockPolicy<I>(*m_local_image_ctx));
     (*m_local_image_ctx)->set_journal_policy(
       new MirrorJournalPolicy(m_work_queue));
   }
