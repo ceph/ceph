@@ -1976,20 +1976,13 @@ void BlueStore::ExtentMap::update(KeyValueDB::Transaction t,
 	  // avoid resharding the trailing shard, even if it is small
 	  else if (n != shards.end() &&
 		   len < g_conf->bluestore_extent_map_shard_min_size) {
-	    // we are small; combine with a neighbor
-	    if (p == shards.begin() && endoff == OBJECT_MAX_SIZE) {
-	      // we are an only shard
-	      request_reshard(0, OBJECT_MAX_SIZE);
-	      return;
-	    } else if (p == shards.begin()) {
-	      // combine with next shard
+            assert(endoff != OBJECT_MAX_SIZE);
+	    if (p == shards.begin()) {
+	      // we are the first shard, combine with next shard
 	      request_reshard(p->shard_info->offset, endoff + 1);
-	    } else if (endoff == OBJECT_MAX_SIZE) {
-	      // combine with previous shard
-	      request_reshard(prev_p->shard_info->offset, endoff);
-	      return;
 	    } else {
-	      // combine with the smaller of the two
+	      // combine either with the previous shard or the next,
+	      // whichever is smaller
 	      if (prev_p->shard_info->bytes > n->shard_info->bytes) {
 		request_reshard(p->shard_info->offset, endoff + 1);
 	      } else {
