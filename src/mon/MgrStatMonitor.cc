@@ -70,7 +70,7 @@ MonPGStatService *MgrStatMonitor::get_pg_stat_service()
 
 void MgrStatMonitor::create_initial()
 {
-  dout(10) << dendl;
+  dout(10) << __func__ << dendl;
   version = 0;
 }
 
