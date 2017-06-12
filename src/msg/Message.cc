@@ -96,6 +96,7 @@ using namespace std;
 #include "messages/MMonGetVersion.h"
 #include "messages/MMonGetVersionReply.h"
 #include "messages/MMonHealth.h"
+#include "messages/MMonHealthChecks.h"
 #include "messages/MMonMetadata.h"
 #include "messages/MDataPing.h"
 #include "messages/MAuth.h"
@@ -783,6 +784,11 @@ Message *decode_message(CephContext *cct, int crcflags,
   case MSG_MON_HEALTH:
     m = new MMonHealth();
     break;
+
+  case MSG_MON_HEALTH_CHECKS:
+    m = new MMonHealthChecks();
+    break;
+
 #if defined(HAVE_XIO)
   case MSG_DATA_PING:
     m = new MDataPing();

@@ -275,6 +275,8 @@ void OSDMonitor::update_from_paxos(bool *need_bootstrap)
     mapping_job.reset();
   }
 
+  load_health();
+
   /*
    * We will possibly have a stashed latest that *we* wrote, and we will
    * always be sure to have the oldest full map in the first..last range
@@ -1101,6 +1103,19 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
     ::encode(pending_creatings, creatings_bl);
     t->put(OSD_PG_CREATING_PREFIX, "creating", creatings_bl);
   }
+
+  // health
+  _check_health(tmp, t);
+}
+
+void OSDMonitor::_check_health(
+  const OSDMap& nextmap,
+  MonitorDBStore::TransactionRef t)
+{
+  dout(20) << __func__ << dendl;
+  health_check_map_t next;
+#warning write me
+  encode_health(next, t);
 }
 
 void OSDMonitor::trim_creating_pgs(creating_pgs_t* creating_pgs,

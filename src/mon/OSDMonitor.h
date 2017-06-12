@@ -162,6 +162,8 @@ public:
     FAST_READ_DEFAULT
   };
 
+  void _check_health(const OSDMap& next, MonitorDBStore::TransactionRef t);
+
   // svc
 public:  
   void create_initial() override;
