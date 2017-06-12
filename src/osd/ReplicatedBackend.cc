@@ -361,6 +361,7 @@ void generate_transaction(
       bufferlist bl(oiter->second.updated_snaps->second.size() * 8 + 8);
       ::encode(oiter->second.updated_snaps->second, bl);
       le.snaps.swap(bl);
+      le.snaps.reassign_to_mempool(mempool::mempool_osd_pglog);
     }
   }
 
@@ -513,7 +514,7 @@ void ReplicatedBackend::submit_transaction(
   generate_transaction(
     t,
     coll,
-    !get_osdmap()->test_flag(CEPH_OSDMAP_REQUIRE_KRAKEN),
+    (get_osdmap()->require_osd_release < CEPH_RELEASE_KRAKEN),
     log_entries,
     &op_t,
     &added,

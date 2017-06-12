@@ -394,6 +394,8 @@ class OSError(Error):
     def __str__(self):
         return '[Errno {0}] {1}'.format(self.errno, self.strerror)
 
+    def __reduce__(self):
+        return (self.__class__, (self.errno, self.strerror))
 
 class PermissionError(OSError):
     pass
@@ -2797,6 +2799,10 @@ cdef class MetadataIterator(object):
             if len(self.next_chunk) < self.max_read:
                 break
             self.get_next_chunk()
+
+    def __dealloc__(self):
+        if self.last_read:
+            free(self.last_read)
 
     def get_next_chunk(self):
         cdef:

@@ -90,7 +90,7 @@ class FsNewHandler : public FileSystemCommandHandler
       FSMap &fsmap,
       MonOpRequestRef op,
       map<string, cmd_vartype> &cmdmap,
-      std::stringstream &ss)
+      std::stringstream &ss) override
   {
     string metadata_name;
     cmd_getval(g_ceph_context, cmdmap, "metadata", metadata_name);
@@ -102,11 +102,14 @@ class FsNewHandler : public FileSystemCommandHandler
 
     string force;
     cmd_getval(g_ceph_context,cmdmap, "force", force);
-    int64_t metadata_num_objects = mon->pgmon()->pg_map.pg_pool_sum[metadata].stats.sum.num_objects;
-    if (force != "--force" && metadata_num_objects > 0) {
-      ss << "pool '" << metadata_name
-	 << "' already contains some objects. Use an empty pool instead.";
-      return -EINVAL;
+    const pool_stat_t *stat = mon->pgservice->get_pool_stat(metadata);
+    if (stat) {
+      int64_t metadata_num_objects = stat->stats.sum.num_objects;
+      if (force != "--force" && metadata_num_objects > 0) {
+	ss << "pool '" << metadata_name
+	   << "' already contains some objects. Use an empty pool instead.";
+	return -EINVAL;
+      }
     }
 
     string data_name;
@@ -152,9 +155,9 @@ class FsNewHandler : public FileSystemCommandHandler
     }
 
     for (auto fs : fsmap.get_filesystems()) {
-      const set<int64_t>& data_pools = fs->mds_map.get_data_pools();
+      const std::vector<int64_t> &data_pools = fs->mds_map.get_data_pools();
       string sure;
-      if ((data_pools.find(data) != data_pools.end()
+      if ((std::find(data_pools.begin(), data_pools.end(), data) != data_pools.end()
 	   || fs->mds_map.get_metadata_pool() == metadata)
 	  && ((!cmd_getval(g_ceph_context, cmdmap, "sure", sure)
 	       || sure != "--allow-dangerous-metadata-overlay"))) {
@@ -295,10 +298,14 @@ public:
         });
       }
     } else if (var == "balancer") {
-      ss << "setting the metadata load balancer to " << val;
-        fsmap.modify_filesystem(
-            fs->fscid,
-            [val](std::shared_ptr<Filesystem> fs)
+      if (val.empty()) {
+        ss << "unsetting the metadata load balancer";
+      } else {
+        ss << "setting the metadata load balancer to " << val;
+      }
+      fsmap.modify_filesystem(
+	fs->fscid,
+	[val](std::shared_ptr<Filesystem> fs)
         {
           fs->mds_map.set_balancer(val);
         });
@@ -486,6 +493,12 @@ class AddDataPoolHandler : public FileSystemCommandHandler
     int r = _check_pool(mon->osdmon()->osdmap, poolid, false, &ss);
     if (r != 0) {
       return r;
+    }
+
+    // no-op when the data_pool already on fs
+    if (fs->mds_map.is_data_pool(poolid)) {
+      ss << "data pool " << poolid << " is already on fs " << fs_name;
+      return 0;
     }
 
     fsmap.modify_filesystem(

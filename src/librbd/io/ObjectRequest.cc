@@ -217,8 +217,6 @@ bool ObjectReadRequest<I>::should_complete(int r)
         RWLock::RLocker parent_locker(image_ctx->parent_lock);
         if (image_ctx->parent == NULL) {
           ldout(image_ctx->cct, 20) << "parent is gone; do nothing" << dendl;
-          m_state = LIBRBD_AIO_READ_FLAT;
-          finished = false;
           break;
         }
 
@@ -635,14 +633,34 @@ void ObjectRemoveRequest::guard_write() {
   }
 }
 void ObjectRemoveRequest::send_write() {
-  ldout(m_ictx->cct, 20) << m_oid << " " << m_object_off
-                         << "~" << m_object_len << dendl;
-  send_pre_object_map_update();
+  ldout(m_ictx->cct, 20) << m_oid << " remove " << " object exist "
+                         << m_object_exist << dendl;
+  if (!m_object_exist && !has_parent()) {
+    m_state = LIBRBD_AIO_WRITE_FLAT;
+    Context *ctx = util::create_context_callback<ObjectRequest>(this);
+    m_ictx->op_work_queue->queue(ctx, 0);
+  } else {
+    send_pre_object_map_update();
+  }
 }
 
 void ObjectTruncateRequest::send_write() {
-  ldout(m_ictx->cct, 20) << m_oid << " truncate " << m_object_off << dendl;
-  if (!m_object_exist && ! has_parent()) {
+  ldout(m_ictx->cct, 20) << m_oid << " truncate " << m_object_off
+                         << " object exist " << m_object_exist << dendl;
+  if (!m_object_exist && !has_parent()) {
+    m_state = LIBRBD_AIO_WRITE_FLAT;
+    Context *ctx = util::create_context_callback<ObjectRequest>(this);
+    m_ictx->op_work_queue->queue(ctx, 0);
+  } else {
+    AbstractObjectWriteRequest::send_write();
+  }
+}
+
+void ObjectZeroRequest::send_write() {
+  ldout(m_ictx->cct, 20) << m_oid << " zero " << m_object_off << "~"
+                         << m_object_len << " object exist " << m_object_exist
+                         << dendl;
+  if (!m_object_exist && !has_parent()) {
     m_state = LIBRBD_AIO_WRITE_FLAT;
     Context *ctx = util::create_context_callback<ObjectRequest>(this);
     m_ictx->op_work_queue->queue(ctx, 0);

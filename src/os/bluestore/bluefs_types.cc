@@ -23,7 +23,7 @@ void bluefs_extent_t::generate_test_instances(list<bluefs_extent_t*>& ls)
   ls.back()->bdev = 1;
 }
 
-ostream& operator<<(ostream& out, bluefs_extent_t e)
+ostream& operator<<(ostream& out, const bluefs_extent_t& e)
 {
   return out << (int)e.bdev << ":0x" << std::hex << e.offset << "+" << e.length
 	     << std::dec;

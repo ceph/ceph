@@ -116,7 +116,7 @@ ceph_tid_t MemWriteback::write(const object_t& oid,
   C_DelayWrite *wrapper = new C_DelayWrite(this, m_cct, oncommit, m_lock, oid,
 					   off, len, bl, m_delay_ns);
   m_finisher->queue(wrapper, 0);
-  return m_tid.inc();
+  return ++m_tid;
 }
 
 void MemWriteback::write_object_data(const object_t& oid, uint64_t off, uint64_t len,

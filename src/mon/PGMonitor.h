@@ -32,16 +32,15 @@ using namespace std;
 #include "msg/Messenger.h"
 #include "mon/MonitorDBStore.h"
 
-class MStatfs;
-class MMonCommand;
-class MGetPoolStats;
-
-class TextTable;
 class MPGStats;
+class PGStatService;
 
 class PGMonitor : public PaxosService {
-public:
   PGMap pg_map;
+  std::unique_ptr<PGStatService> pgservice;
+
+  bool do_delete = false;   ///< propose deleting pgmap data
+  bool did_delete = false;  ///< we already deleted pgmap data
 
 private:
   PGMap::Incremental pending_inc;
@@ -78,9 +77,6 @@ private:
 
   struct C_Stats;
 
-  void handle_statfs(MonOpRequestRef op);
-  bool preprocess_getpoolstats(MonOpRequestRef op);
-
   bool preprocess_command(MonOpRequestRef op);
   bool prepare_command(MonOpRequestRef op);
 
@@ -90,13 +86,8 @@ private:
   epoch_t send_pg_creates(int osd, Connection *con, epoch_t next);
 
 public:
-  PGMonitor(Monitor *mn, Paxos *p, const string& service_name)
-    : PaxosService(mn, p, service_name),
-      pgmap_meta_prefix("pgmap_meta"),
-      pgmap_pg_prefix("pgmap_pg"),
-      pgmap_osd_prefix("pgmap_osd")
-  { }
-  ~PGMonitor() override { }
+  PGMonitor(Monitor *mn, Paxos *p, const string& service_name);
+  ~PGMonitor() override;
 
   void get_store_prefixes(set<string>& s) override {
     s.insert(get_service_name());
@@ -124,8 +115,6 @@ public:
 
   void check_osd_map(epoch_t epoch);
 
-  void dump_info(Formatter *f) const;
-
   int _warn_slow_request_histogram(const pow2_hist_t& h, string suffix,
 				   list<pair<health_status_t,string> >& summary,
 				   list<pair<health_status_t,string> > *detail) const;
@@ -133,12 +122,16 @@ public:
   void get_health(list<pair<health_status_t,string> >& summary,
 		  list<pair<health_status_t,string> > *detail,
 		  CephContext *cct) const override;
-  void check_full_osd_health(list<pair<health_status_t,string> >& summary,
-			     list<pair<health_status_t,string> > *detail,
-			     const set<int>& s, const char *desc, health_status_t sev) const;
+  void check_full_osd_health(
+    list<pair<health_status_t,string> >& summary,
+    list<pair<health_status_t,string> > *detail,
+    const mempool::pgmap::set<int>& s,
+    const char *desc, health_status_t sev) const;
 
   void check_subs();
   bool check_sub(Subscription *sub);
+
+  PGStatService *get_pg_stat_service();
 
 private:
   // no copying allowed

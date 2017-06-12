@@ -26,6 +26,11 @@ struct MockExclusiveLock {
 
   MOCK_METHOD1(acquire_lock, void(Context *));
   MOCK_METHOD1(release_lock, void(Context *));
+
+  MOCK_METHOD0(accept_requests, bool());
+  MOCK_METHOD0(accept_ops, bool());
+
+  MOCK_METHOD0(start_op, Context*());
 };
 
 } // namespace librbd

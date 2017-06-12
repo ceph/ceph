@@ -1,4 +1,6 @@
 #!/bin/bash -x
+# -*- mode:shell-script; tab-width:8; sh-basic-offset:2; indent-tabs-mode:t -*-
+# vim: ts=8 sw=8 ft=bash smarttab
 
 source $(dirname $0)/../ceph-helpers.sh
 
@@ -292,7 +294,25 @@ function test_tiering_agent()
   ceph osd pool delete $slow $slow --yes-i-really-really-mean-it
 }
 
-function test_tiering()
+function flush_pg_stats()
+{
+    ids=`ceph osd ls`
+    seqs=''
+    for osd in $ids
+    do
+	seq=`ceph tell osd.$osd flush_pg_stats`
+	seqs="$seqs $osd-$seq"
+    done
+    for s in $seqs
+    do
+	osd=`echo $s | cut -d - -f 1`
+	seq=`echo $s | cut -d - -f 2`
+	echo "waiting osd.$osd seq $seq"
+	while test $(ceph osd last-stat-seq $osd) -lt $seq; do sleep 1 ; done
+    done
+}
+
+function test_tiering_1()
 {
   # tiering
   ceph osd pool create slow 2
@@ -319,7 +339,7 @@ function test_tiering()
   # test with dirty objects in the tier pool
   # tier pool currently set to 'writeback'
   rados -p cache put /etc/passwd /etc/passwd
-  ceph tell osd.\* flush_pg_stats || true
+  flush_pg_stats
   # 1 dirty object in pool 'cache'
   ceph osd tier cache-mode cache proxy
   expect_false ceph osd tier cache-mode cache none
@@ -328,7 +348,7 @@ function test_tiering()
   # remove object from tier pool
   rados -p cache rm /etc/passwd
   rados -p cache cache-flush-evict-all
-  ceph tell osd.\* flush_pg_stats || true
+  flush_pg_stats
   # no dirty objects in pool 'cache'
   ceph osd tier cache-mode cache proxy
   ceph osd tier cache-mode cache none
@@ -372,9 +392,14 @@ function test_tiering()
   ceph osd pool ls detail | grep cache2
   ceph osd pool ls detail -f json-pretty | grep cache2
 
+  ceph osd pool delete slow slow --yes-i-really-really-mean-it
+  ceph osd pool delete slow2 slow2 --yes-i-really-really-mean-it
   ceph osd pool delete cache cache --yes-i-really-really-mean-it
   ceph osd pool delete cache2 cache2 --yes-i-really-really-mean-it
+}
 
+function test_tiering_2()
+{
   # make sure we can't clobber snapshot state
   ceph osd pool create snap_base 2
   ceph osd pool create snap_cache 2
@@ -382,7 +407,10 @@ function test_tiering()
   expect_false ceph osd tier add snap_base snap_cache
   ceph osd pool delete snap_base snap_base --yes-i-really-really-mean-it
   ceph osd pool delete snap_cache snap_cache --yes-i-really-really-mean-it
+}
 
+function test_tiering_3()
+{
   # make sure we can't create snapshot on tier
   ceph osd pool create basex 2
   ceph osd pool create cachex 2
@@ -391,7 +419,10 @@ function test_tiering()
   ceph osd tier remove basex cachex
   ceph osd pool delete basex basex --yes-i-really-really-mean-it
   ceph osd pool delete cachex cachex --yes-i-really-really-mean-it
+}
 
+function test_tiering_4()
+{
   # make sure we can't create an ec pool tier
   ceph osd pool create eccache 2 2 erasure
   expect_false ceph osd set-require-min-compat-client bobtail
@@ -399,8 +430,12 @@ function test_tiering()
   expect_false ceph osd tier add repbase eccache
   ceph osd pool delete repbase repbase --yes-i-really-really-mean-it
   ceph osd pool delete eccache eccache --yes-i-really-really-mean-it
+}
 
+function test_tiering_5()
+{
   # convenient add-cache command
+  ceph osd pool create slow 2
   ceph osd pool create cache3 2
   ceph osd tier add-cache slow cache3 1024000
   ceph osd dump | grep cache3 | grep bloom | grep 'false_positive_probability: 0.05' | grep 'target_bytes 1024000' | grep '1200s x4'
@@ -411,10 +446,11 @@ function test_tiering()
   ceph osd pool ls | grep cache3
   ceph osd pool delete cache3 cache3 --yes-i-really-really-mean-it
   ! ceph osd pool ls | grep cache3 || exit 1
-
-  ceph osd pool delete slow2 slow2 --yes-i-really-really-mean-it
   ceph osd pool delete slow slow --yes-i-really-really-mean-it
+}
 
+function test_tiering_6()
+{
   # check add-cache whether work
   ceph osd pool create datapool 2
   ceph osd pool create cachepool 2
@@ -428,7 +464,10 @@ function test_tiering()
   ceph osd tier remove datapool cachepool
   ceph osd pool delete cachepool cachepool --yes-i-really-really-mean-it
   ceph osd pool delete datapool datapool --yes-i-really-really-mean-it
+}
 
+function test_tiering_7()
+{
   # protection against pool removal when used as tiers
   ceph osd pool create datapool 2
   ceph osd pool create cachepool 2
@@ -441,7 +480,10 @@ function test_tiering()
   ceph osd tier remove datapool cachepool
   ceph osd pool delete cachepool cachepool --yes-i-really-really-mean-it
   ceph osd pool delete datapool datapool --yes-i-really-really-mean-it
+}
 
+function test_tiering_8()
+{
   ## check health check
   ceph osd set notieragent
   ceph osd pool create datapool 2
@@ -455,15 +497,17 @@ function test_tiering()
   rados -p cache4 put foo1 $tmpfile
   rados -p cache4 put foo2 $tmpfile
   rm -f $tmpfile
-  ceph tell osd.\* flush_pg_stats || true
+  flush_pg_stats
   ceph df | grep datapool | grep ' 2 '
   ceph osd tier remove-overlay datapool
   ceph osd tier remove datapool cache4
   ceph osd pool delete cache4 cache4 --yes-i-really-really-mean-it
   ceph osd pool delete datapool datapool --yes-i-really-really-mean-it
   ceph osd unset notieragent
+}
 
-
+function test_tiering_9()
+{
   # make sure 'tier remove' behaves as we expect
   # i.e., removing a tier from a pool that's not its base pool only
   # results in a 'pool foo is now (or already was) not a tier of bar'
@@ -678,12 +722,17 @@ function test_mon_misc()
   ceph_watch_start
   mymsg="this is a test log message $$.$(date)"
   ceph log "$mymsg"
+  ceph log last | grep "$mymsg"
+  ceph log last 100 | grep "$mymsg"
   ceph_watch_wait "$mymsg"
 
   ceph mgr dump
 
   ceph mon metadata a
   ceph mon metadata
+  ceph mon count-metadata ceph_version
+  ceph mon versions
+
   ceph node ls
 }
 
@@ -764,7 +813,7 @@ function without_test_dup_command()
 
 function test_mds_tell()
 {
-  FS_NAME=cephfs
+  local FS_NAME=cephfs
   if ! mds_exists ; then
       echo "Skipping test, no MDS found"
       return
@@ -810,7 +859,7 @@ function test_mds_tell()
 
 function test_mon_mds()
 {
-  FS_NAME=cephfs
+  local FS_NAME=cephfs
   remove_all_fs
 
   ceph osd pool create fs_data 10
@@ -840,6 +889,8 @@ function test_mon_mds()
       ceph mds metadata $mds_id
   done
   ceph mds metadata
+  ceph mds versions
+  ceph mds count-metadata os
 
   # XXX mds fail, but how do you undo it?
   mdsmapfile=$TEMP_DIR/mdsmap.$$
@@ -1087,6 +1138,194 @@ function test_mon_mon()
   expect_false ceph mon feature set abcd --yes-i-really-mean-it
 }
 
+function gen_secrets_file()
+{
+  # lets assume we can have the following types
+  #  all - generates both cephx and lockbox, with mock dm-crypt key
+  #  cephx - only cephx
+  #  no_cephx - lockbox and dm-crypt, no cephx
+  #  no_lockbox - dm-crypt and cephx, no lockbox
+  #  empty - empty file
+  #  empty_json - correct json, empty map
+  #  bad_json - bad json :)
+  #
+  local t=$1
+  if [[ -z "$t" ]]; then
+    t="all"
+  fi
+
+  fn=$(mktemp $TEMP_DIR/secret.XXXXXX)
+  echo $fn
+  if [[ "$t" == "empty" ]]; then
+    return 0
+  fi
+
+  echo "{" > $fn
+  if [[ "$t" == "bad_json" ]]; then
+    echo "asd: ; }" >> $fn
+    return 0
+  elif [[ "$t" == "empty_json" ]]; then
+    echo "}" >> $fn
+    return 0
+  fi
+
+  cephx_secret="\"cephx_secret\": \"$(ceph-authtool --gen-print-key)\""
+  lb_secret="\"cephx_lockbox_secret\": \"$(ceph-authtool --gen-print-key)\""
+  dmcrypt_key="\"dmcrypt_key\": \"$(ceph-authtool --gen-print-key)\""
+
+  if [[ "$t" == "all" ]]; then
+    echo "$cephx_secret,$lb_secret,$dmcrypt_key" >> $fn
+  elif [[ "$t" == "cephx" ]]; then
+    echo "$cephx_secret" >> $fn
+  elif [[ "$t" == "no_cephx" ]]; then
+    echo "$lb_secret,$dmcrypt_key" >> $fn
+  elif [[ "$t" == "no_lockbox" ]]; then
+    echo "$cephx_secret,$dmcrypt_key" >> $fn
+  else
+    echo "unknown gen_secrets_file() type \'$fn\'"
+    return 1
+  fi
+  echo "}" >> $fn
+  return 0
+}
+
+function test_mon_osd_create_destroy()
+{
+  ceph osd new 2>&1 | grep 'EINVAL'
+  ceph osd new '' -1 2>&1 | grep 'EINVAL'
+  ceph osd new '' 10 2>&1 | grep 'EINVAL'
+
+  old_maxosd=$(ceph osd getmaxosd | sed -e 's/max_osd = //' -e 's/ in epoch.*//')
+
+  old_osds=$(ceph osd ls)
+  num_osds=$(ceph osd ls | wc -l)
+
+  uuid=$(uuidgen)
+  id=$(ceph osd new $uuid 2>/dev/null)
+
+  for i in $old_osds; do
+    [[ "$i" != "$id" ]]
+  done
+
+  ceph osd find $id
+
+  id2=`ceph osd new $uuid 2>/dev/null`
+
+  [[ $id2 == $id ]]
+
+  ceph osd new $uuid $id
+
+  id3=$(ceph osd getmaxosd | sed -e 's/max_osd = //' -e 's/ in epoch.*//')
+  ceph osd new $uuid $((id3+1)) 2>&1 | grep EEXIST
+
+  uuid2=$(uuidgen)
+  id2=$(ceph osd new $uuid2)
+  ceph osd find $id2
+  [[ "$id2" != "$id" ]]
+
+  ceph osd new $uuid $id2 2>&1 | grep EEXIST
+  ceph osd new $uuid2 $id2
+
+  # test with secrets
+  empty_secrets=$(gen_secrets_file "empty")
+  empty_json=$(gen_secrets_file "empty_json")
+  all_secrets=$(gen_secrets_file "all")
+  cephx_only=$(gen_secrets_file "cephx")
+  no_cephx=$(gen_secrets_file "no_cephx")
+  no_lockbox=$(gen_secrets_file "no_lockbox")
+  bad_json=$(gen_secrets_file "bad_json")
+
+  # empty secrets should be idempotent
+  new_id=$(ceph osd new $uuid $id -i $empty_secrets)
+  [[ "$new_id" == "$id" ]]
+
+  # empty json, thus empty secrets
+  new_id=$(ceph osd new $uuid $id -i $empty_json)
+  [[ "$new_id" == "$id" ]]
+
+  ceph osd new $uuid $id -i $all_secrets 2>&1 | grep 'EEXIST'
+
+  ceph osd rm $id
+  ceph osd rm $id2
+  ceph osd setmaxosd $old_maxosd
+
+  ceph osd new $uuid -i $bad_json 2>&1 | grep 'EINVAL'
+  ceph osd new $uuid -i $no_cephx 2>&1 | grep 'EINVAL'
+  ceph osd new $uuid -i $no_lockbox 2>&1 | grep 'EINVAL'
+
+  osds=$(ceph osd ls)
+  id=$(ceph osd new $uuid -i $all_secrets)
+  for i in $osds; do
+    [[ "$i" != "$id" ]]
+  done
+
+  ceph osd find $id
+
+  # validate secrets and dm-crypt are set
+  k=$(ceph auth get-key osd.$id --format=json-pretty 2>/dev/null | jq '.key')
+  s=$(cat $all_secrets | jq '.cephx_secret')
+  [[ $k == $s ]]
+  k=$(ceph auth get-key client.osd-lockbox.$uuid --format=json-pretty 2>/dev/null | \
+      jq '.key')
+  s=$(cat $all_secrets | jq '.cephx_lockbox_secret')
+  [[ $k == $s ]]
+  ceph config-key exists dm-crypt/osd/$uuid/luks
+
+  osds=$(ceph osd ls)
+  id2=$(ceph osd new $uuid2 -i $cephx_only)
+  for i in $osds; do
+    [[ "$i" != "$id2" ]]
+  done
+
+  ceph osd find $id2
+  k=$(ceph auth get-key osd.$id --format=json-pretty 2>/dev/null | jq '.key')
+  s=$(cat $all_secrets | jq '.cephx_secret')
+  [[ $k == $s ]]
+  expect_false ceph auth get-key client.osd-lockbox.$uuid2
+  expect_false ceph config-key exists dm-crypt/osd/$uuid2/luks
+
+  ceph osd destroy osd.$id2 --yes-i-really-mean-it
+  ceph osd destroy $id2 --yes-i-really-mean-it
+  ceph osd find $id2
+  expect_false ceph auth get-key osd.$id2
+  ceph osd dump | grep osd.$id2 | grep destroyed
+
+  id3=$id2
+  uuid3=$(uuidgen)
+  ceph osd new $uuid3 $id3 -i $all_secrets
+  ceph osd dump | grep osd.$id3 | expect_false grep destroyed
+  ceph auth get-key client.osd-lockbox.$uuid3
+  ceph auth get-key osd.$id3
+  ceph config-key exists dm-crypt/osd/$uuid3/luks
+
+  ceph osd purge osd.$id3 --yes-i-really-mean-it
+  expect_false ceph osd find $id2
+  expect_false ceph auth get-key osd.$id2
+  expect_false ceph auth get-key client.osd-lockbox.$uuid3
+  expect_false ceph config-key exists dm-crypt/osd/$uuid3/luks
+  ceph osd purge osd.$id3 --yes-i-really-mean-it
+  ceph osd purge osd.$id3 --yes-i-really-mean-it
+
+  ceph osd purge osd.$id --yes-i-really-mean-it
+  expect_false ceph osd find $id
+  expect_false ceph auth get-key osd.$id
+  expect_false ceph auth get-key client.osd-lockbox.$uuid
+  expect_false ceph config-key exists dm-crypt/osd/$uuid/luks
+
+  rm $empty_secrets $empty_json $all_secrets $cephx_only \
+     $no_cephx $no_lockbox $bad_json
+
+  for i in $(ceph osd ls); do
+    [[ "$i" != "$id" ]]
+    [[ "$i" != "$id2" ]]
+    [[ "$i" != "$id3" ]]
+  done
+
+  [[ "$(ceph osd ls | wc -l)" == "$num_osds" ]]
+  ceph osd setmaxosd $old_maxosd
+
+}
+
 function test_mon_osd()
 {
   #
@@ -1157,10 +1396,13 @@ function test_mon_osd()
   expect_false ceph osd unset sortbitwise  # cannot be unset
   expect_false ceph osd set bogus
   expect_false ceph osd unset bogus
+  ceph osd require-osd-release luminous
+  # can't lower (or use new command for anything but jewel)
+  expect_false ceph osd require-osd-release jewel
+  # these are no-ops but should succeed.
   ceph osd set require_jewel_osds
-  expect_false ceph osd unset require_jewel_osds
   ceph osd set require_kraken_osds
-  expect_false ceph osd unset require_kraken_osds
+  expect_false ceph osd unset require_jewel_osds
 
   ceph osd set noup
   ceph osd down 0
@@ -1256,8 +1498,8 @@ function test_mon_osd()
   max_osd=$((max_osd + 1))
   ceph osd getmaxosd | grep "max_osd = $max_osd"
 
-  ceph osd create $uuid $((id - 1)) 2>&1 | grep 'EINVAL'
-  ceph osd create $uuid $((id + 1)) 2>&1 | grep 'EINVAL'
+  ceph osd create $uuid $((id - 1)) 2>&1 | grep 'EEXIST'
+  ceph osd create $uuid $((id + 1)) 2>&1 | grep 'EEXIST'
   id2=`ceph osd create $uuid`
   [ "$id" = "$id2" ]
   id2=`ceph osd create $uuid $id`
@@ -1270,7 +1512,7 @@ function test_mon_osd()
   max_osd=$((id + 1))
   ceph osd getmaxosd | grep "max_osd = $max_osd"
 
-  ceph osd create $uuid $gap_start 2>&1 | grep 'EINVAL'
+  ceph osd create $uuid $gap_start 2>&1 | grep 'EEXIST'
 
   #
   # When CEPH_CLI_TEST_DUP_COMMAND is set, osd create
@@ -1312,6 +1554,23 @@ function test_mon_osd()
   ceph osd unpause
 
   ceph osd tree
+  ceph osd tree up
+  ceph osd tree down
+  ceph osd tree in
+  ceph osd tree out
+  ceph osd tree up in
+  ceph osd tree up out
+  ceph osd tree down in
+  ceph osd tree down out
+  ceph osd tree out down
+  expect_false ceph osd tree up down
+  expect_false ceph osd tree in out
+  expect_false ceph osd tree up foo
+
+  ceph osd metadata
+  ceph osd count-metadata os
+  ceph osd versions
+
   ceph osd perf
   ceph osd blocked-by
 
@@ -1480,9 +1739,9 @@ function test_mon_pg()
   wait_for_health "HEALTH_ERR.*1 full osd(s)"
   $SUDO ceph --admin-daemon $(get_admin_socket osd.0) injectfull full
   wait_for_health "HEALTH_ERR.*2 full osd(s)"
-  ceph health detail | grep "osd.0 is full at.*%"
-  ceph health detail | grep "osd.2 is full at.*%"
-  ceph health detail | grep "osd.1 is backfill full at.*%"
+  ceph health detail | grep "osd.0 is full"
+  ceph health detail | grep "osd.2 is full"
+  ceph health detail | grep "osd.1 is backfill full"
   $SUDO ceph --admin-daemon $(get_admin_socket osd.0) injectfull none
   $SUDO ceph --admin-daemon $(get_admin_socket osd.1) injectfull none
   $SUDO ceph --admin-daemon $(get_admin_socket osd.2) injectfull none
@@ -1888,11 +2147,11 @@ function test_mon_tell()
 
   ceph_watch_start debug
   ceph tell mon.a version
-  ceph_watch_wait 'mon.0 \[DBG\] from.*cmd=\[{"prefix": "version"}\]: dispatch'
+  ceph_watch_wait 'mon.a \[DBG\] from.*cmd=\[{"prefix": "version"}\]: dispatch'
 
   ceph_watch_start debug
   ceph tell mon.b version
-  ceph_watch_wait 'mon.1 \[DBG\] from.*cmd=\[{"prefix": "version"}\]: dispatch'
+  ceph_watch_wait 'mon.b \[DBG\] from.*cmd=\[{"prefix": "version"}\]: dispatch'
 }
 
 function test_mon_crushmap_validation()
@@ -2003,14 +2262,59 @@ function test_mon_cephdf_commands()
     rados -p cephdf_for_test ls - | grep -q cephdf_for_test && break
     sleep 1
   done
-
-  cal_raw_used_size=`ceph df detail | grep cephdf_for_test | awk -F ' ' '{printf "%d\n", 2 * $3}'`
-  raw_used_size=`ceph df detail | grep cephdf_for_test | awk -F ' '  '{print $10}'`
+  # "rados ls" goes straight to osd, but "ceph df" is served by mon. so we need
+  # to sync mon with osd
+  flush_pg_stats
+  local jq_filter='.pools | .[] | select(.name == "cephdf_for_test") | .stats'
+  cal_raw_used_size=`ceph df detail --format=json | jq "$jq_filter.raw_bytes_used"`
+  raw_used_size=`ceph df detail --format=json | jq "$jq_filter.bytes_used * 2"`
 
   ceph osd pool delete cephdf_for_test cephdf_for_test --yes-i-really-really-mean-it
   rm ./cephdf_for_test
 
   expect_false test $cal_raw_used_size != $raw_used_size
+}
+
+function test_mon_tell_help_command()
+{
+  ceph tell mon.a help
+
+  # wrong target
+  expect_false ceph tell mon.zzz help
+}
+
+function test_osd_tell_help_command()
+{
+  ceph tell osd.1 help
+  expect_false ceph tell osd.100 help
+}
+
+function test_mds_tell_help_command()
+{
+  local FS_NAME=cephfs
+  if ! mds_exists ; then
+      echo "Skipping test, no MDS found"
+      return
+  fi
+
+  remove_all_fs
+  ceph osd pool create fs_data 10
+  ceph osd pool create fs_metadata 10
+  ceph fs new $FS_NAME fs_metadata fs_data
+  wait_mds_active $FS_NAME
+
+
+  ceph tell mds.a help
+  expect_false ceph tell mds.z help
+
+  remove_all_fs
+  ceph osd pool delete fs_data fs_data --yes-i-really-really-mean-it
+  ceph osd pool delete fs_metadata fs_metadata --yes-i-really-really-mean-it
+}
+
+function test_mgr_tell_help_command()
+{
+  ceph tell mgr help
 }
 
 #
@@ -2032,12 +2336,15 @@ function test_mon_cephdf_commands()
 set +x
 MON_TESTS+=" mon_injectargs"
 MON_TESTS+=" mon_injectargs_SI"
-MON_TESTS+=" tiering"
+for i in `seq 9`; do
+    MON_TESTS+=" tiering_$i";
+done
 MON_TESTS+=" auth"
 MON_TESTS+=" auth_profiles"
 MON_TESTS+=" mon_misc"
 MON_TESTS+=" mon_mon"
 MON_TESTS+=" mon_osd"
+MON_TESTS+=" mon_osd_create_destroy"
 MON_TESTS+=" mon_osd_pool"
 MON_TESTS+=" mon_osd_pool_quota"
 MON_TESTS+=" mon_pg"
@@ -2052,18 +2359,25 @@ MON_TESTS+=" mon_ping"
 MON_TESTS+=" mon_deprecated_commands"
 MON_TESTS+=" mon_caps"
 MON_TESTS+=" mon_cephdf_commands"
+MON_TESTS+=" mon_tell_help_command"
+
 OSD_TESTS+=" osd_bench"
 OSD_TESTS+=" osd_negative_filestore_merge_threshold"
 OSD_TESTS+=" tiering_agent"
 OSD_TESTS+=" admin_heap_profiler"
+OSD_TESTS+=" osd_tell_help_command"
 
 MDS_TESTS+=" mds_tell"
 MDS_TESTS+=" mon_mds"
 MDS_TESTS+=" mon_mds_metadata"
+MDS_TESTS+=" mds_tell_help_command"
+
+MGR_TESTS+=" mgr_tell_help_command"
 
 TESTS+=$MON_TESTS
 TESTS+=$OSD_TESTS
 TESTS+=$MDS_TESTS
+TESTS+=$MGR_TESTS
 
 #
 # "main" follows
@@ -2107,6 +2421,9 @@ while [[ $# -gt 0 ]]; do
       ;;
     "--test-mds" )
       tests_to_run+="$MDS_TESTS"
+      ;;
+    "--test-mgr" )
+      tests_to_run+="$MGR_TESTS"
       ;;
     "-t" )
       shift

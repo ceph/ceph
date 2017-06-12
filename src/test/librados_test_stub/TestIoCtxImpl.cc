@@ -39,15 +39,15 @@ TestIoCtxImpl::TestIoCtxImpl(const TestIoCtxImpl& rhs)
 }
 
 TestIoCtxImpl::~TestIoCtxImpl() {
-  assert(m_pending_ops.read() == 0);
+  assert(m_pending_ops == 0);
 }
 
 void TestObjectOperationImpl::get() {
-  m_refcount.inc();
+  m_refcount++;
 }
 
 void TestObjectOperationImpl::put() {
-  if (m_refcount.dec() == 0) {
+  if (--m_refcount == 0) {
     ANNOTATE_HAPPENS_AFTER(&m_refcount);
     ANNOTATE_HAPPENS_BEFORE_FORGET_ALL(&m_refcount);
     delete this;
@@ -57,11 +57,11 @@ void TestObjectOperationImpl::put() {
 }
 
 void TestIoCtxImpl::get() {
-  m_refcount.inc();
+  m_refcount++;
 }
 
 void TestIoCtxImpl::put() {
-  if (m_refcount.dec() == 0) {
+  if (--m_refcount == 0) {
     m_client->put();
     delete this;
   }
@@ -95,7 +95,7 @@ void TestIoCtxImpl::aio_flush_async(AioCompletionImpl *c) {
 void TestIoCtxImpl::aio_notify(const std::string& oid, AioCompletionImpl *c,
                                bufferlist& bl, uint64_t timeout_ms,
                                bufferlist *pbl) {
-  m_pending_ops.inc();
+  m_pending_ops++;
   c->get();
   C_AioNotify *ctx = new C_AioNotify(this, c);
   m_client->get_watch_notify()->aio_notify(m_client, oid, bl, timeout_ms, pbl,
@@ -107,7 +107,7 @@ int TestIoCtxImpl::aio_operate(const std::string& oid, TestObjectOperationImpl &
                                int flags) {
   // TODO flags for now
   ops.get();
-  m_pending_ops.inc();
+  m_pending_ops++;
   m_client->add_aio_operation(oid, true, boost::bind(
     &TestIoCtxImpl::execute_aio_operations, this, oid, &ops,
     reinterpret_cast<bufferlist*>(0),
@@ -121,7 +121,7 @@ int TestIoCtxImpl::aio_operate_read(const std::string& oid,
                                     bufferlist *pbl) {
   // TODO ignoring flags for now
   ops.get();
-  m_pending_ops.inc();
+  m_pending_ops++;
   m_client->add_aio_operation(oid, true, boost::bind(
     &TestIoCtxImpl::execute_aio_operations, this, oid, &ops, pbl, m_snapc), c);
   return 0;
@@ -129,7 +129,7 @@ int TestIoCtxImpl::aio_operate_read(const std::string& oid,
 
 int TestIoCtxImpl::aio_watch(const std::string& o, AioCompletionImpl *c,
                              uint64_t *handle, librados::WatchCtx2 *watch_ctx) {
-  m_pending_ops.inc();
+  m_pending_ops++;
   c->get();
   C_AioNotify *ctx = new C_AioNotify(this, c);
   if (m_client->is_blacklisted()) {
@@ -142,7 +142,7 @@ int TestIoCtxImpl::aio_watch(const std::string& o, AioCompletionImpl *c,
 }
 
 int TestIoCtxImpl::aio_unwatch(uint64_t handle, AioCompletionImpl *c) {
-  m_pending_ops.inc();
+  m_pending_ops++;
   c->get();
   C_AioNotify *ctx = new C_AioNotify(this, c);
   if (m_client->is_blacklisted()) {
@@ -198,7 +198,7 @@ int TestIoCtxImpl::operate(const std::string& oid, TestObjectOperationImpl &ops)
   AioCompletionImpl *comp = new AioCompletionImpl();
 
   ops.get();
-  m_pending_ops.inc();
+  m_pending_ops++;
   m_client->add_aio_operation(oid, false, boost::bind(
     &TestIoCtxImpl::execute_aio_operations, this, oid, &ops,
     reinterpret_cast<bufferlist*>(0), m_snapc), comp);
@@ -214,7 +214,7 @@ int TestIoCtxImpl::operate_read(const std::string& oid, TestObjectOperationImpl 
   AioCompletionImpl *comp = new AioCompletionImpl();
 
   ops.get();
-  m_pending_ops.inc();
+  m_pending_ops++;
   m_client->add_aio_operation(oid, false, boost::bind(
     &TestIoCtxImpl::execute_aio_operations, this, oid, &ops, pbl,
     m_snapc), comp);
@@ -361,13 +361,13 @@ int TestIoCtxImpl::execute_aio_operations(const std::string& oid,
       }
     }
   }
-  m_pending_ops.dec();
+  m_pending_ops--;
   ops->put();
   return ret;
 }
 
 void TestIoCtxImpl::handle_aio_notify_complete(AioCompletionImpl *c, int r) {
-  m_pending_ops.dec();
+  m_pending_ops--;
 
   m_client->finish_aio_completion(c, r);
 }

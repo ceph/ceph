@@ -33,14 +33,6 @@ See `librgw-py`_.
 
 .. _librgw-py: ../radosgw/api
 
-Calamari APIs
-=============
-
-See `Calamari API`_.
-
-.. _Calamari API: http://ceph.com/calamari/docs/calamari_rest/index.html
-
-
 Ceph Object Store APIs
 ======================
 

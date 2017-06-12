@@ -4,10 +4,15 @@
 #ifndef CEPH_CLS_TIMEINDEX_CLIENT_H
 #define CEPH_CLS_TIMEINDEX_CLIENT_H
 
-#include "include/types.h"
-#include "cls/timeindex/cls_timeindex_ops.h"
 #include "include/rados/librados.hpp"
-#include "cls_timeindex_types.h"
+
+#include "cls_timeindex_ops.h"
+
+namespace librados {
+  class ObjectWriteOperation;
+  class ObjectReadOperation;
+  class IoCtx;
+}
 
 /**
  * timeindex objclass

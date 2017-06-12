@@ -32,6 +32,7 @@
 
 class MMgrReport;
 class MMgrOpen;
+class MMonMgrReport;
 class MCommand;
 struct MgrCommand;
 
@@ -61,6 +62,9 @@ protected:
   LogChannelRef clog, audit_clog;
 
   AuthAuthorizeHandlerRegistry auth_registry;
+
+  /// connections for osds
+  ceph::unordered_map<int,set<ConnectionRef>> osd_cons;
 
   Mutex lock;
 
@@ -95,7 +99,7 @@ public:
   ~DaemonServer() override;
 
   bool ms_dispatch(Message *m) override;
-  bool ms_handle_reset(Connection *con) override { return false; }
+  bool ms_handle_reset(Connection *con) override;
   void ms_handle_remote_reset(Connection *con) override {}
   bool ms_handle_refused(Connection *con) override;
   bool ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer,
@@ -111,6 +115,7 @@ public:
   bool handle_open(MMgrOpen *m);
   bool handle_report(MMgrReport *m);
   bool handle_command(MCommand *m);
+  void send_report();
 };
 
 #endif

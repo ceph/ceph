@@ -1,0 +1,29 @@
+The dmclock is an EXTERNAL library is not wholly owned by the ceph
+repo.  Instead, it is brought into ceph repo via a "git subtree".
+
+If you are unfamiliar with this technique, PLEASE READ
+../../README.git-subtree.
+
+IT'S VERY LIKELY YOU DO *NOT* WANT TO DIRECTLY MODIFY FILES IN OR
+BELOW src/dmclock, AND THAT IF YOU DO MODIFY SUCH FILES YOUR
+MODIFICATIONS WILL LIKELY BE REJECTED.
+
+You should only modify files below src/dmclock if:
+
+    1) you intend to diverge the ceph version of the dmclock library
+       from the external library, and
+
+    2) you intend for ceph developers to maintain those divergences
+       for the foreseeable future, even as the dmclock library evolves
+       and those changes are pulled into ceph.
+
+[Note: this file is an example of such a modification; this file is
+such a divergence.]
+
+If you would like to submit a PR to the dmclock library itself, then
+you'll want to submit a PR to:
+
+    https://github.com/ceph/dmclock
+
+After that PR is merged, you would then submit a PR to ceph that does
+a "git subtree pull" (see ../../README.git-subtree for details).

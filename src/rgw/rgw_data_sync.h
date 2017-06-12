@@ -29,17 +29,23 @@ struct rgw_data_sync_info {
   uint16_t state;
   uint32_t num_shards;
 
+  uint64_t instance_id{0};
+
   void encode(bufferlist& bl) const {
-    ENCODE_START(1, 1, bl);
+    ENCODE_START(2, 1, bl);
     ::encode(state, bl);
     ::encode(num_shards, bl);
+    ::encode(instance_id, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::iterator& bl) {
-     DECODE_START(1, bl);
+     DECODE_START(2, bl);
      ::decode(state, bl);
      ::decode(num_shards, bl);
+     if (struct_v >= 2) {
+       ::decode(instance_id, bl);
+     }
      DECODE_FINISH(bl);
   }
 
@@ -61,6 +67,7 @@ struct rgw_data_sync_info {
     }
     encode_json("status", s, f);
     encode_json("num_shards", num_shards, f);
+    encode_json("instance_id", instance_id, f);
   }
   void decode_json(JSONObj *obj) {
     std::string s;
@@ -73,6 +80,7 @@ struct rgw_data_sync_info {
       state = StateInit;
     }
     JSONDecoder::decode_json("num_shards", num_shards, obj);
+    JSONDecoder::decode_json("instance_id", num_shards, obj);
   }
 
   rgw_data_sync_info() : state((int)StateInit), num_shards(0) {}
@@ -520,7 +528,7 @@ class RGWDefaultSyncModule : public RGWSyncModule {
 public:
   RGWDefaultSyncModule() {}
   bool supports_data_export() override { return true; }
-  int create_instance(CephContext *cct, map<string, string>& config, RGWSyncModuleInstanceRef *instance) override;
+  int create_instance(CephContext *cct, map<string, string, ltstr_nocase>& config, RGWSyncModuleInstanceRef *instance) override;
 };
 
 // DataLogTrimCR factory function

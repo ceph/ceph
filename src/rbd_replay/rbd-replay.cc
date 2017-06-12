@@ -64,7 +64,7 @@ int main(int argc, const char **argv) {
 			 CODE_ENVIRONMENT_UTILITY, 0);
 
   std::vector<const char*>::iterator i;
-  string pool_name = "rbd";
+  string pool_name;
   float latency_multiplier = 1;
   bool readonly = false;
   ImageNameMap image_name_map;

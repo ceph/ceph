@@ -88,7 +88,9 @@ ostream& operator<<(ostream& out, const CDentry& dn)
 
   out << " inode=" << dn.get_linkage()->get_inode();
 
-  if (dn.is_new()) out << " state=new";
+  out << " state=" << dn.get_state();
+  if (dn.is_new()) out << "|new";
+  if (dn.state_test(CDentry::STATE_BOTTOMLRU)) out << "|bottomlru";
 
   if (dn.get_num_ref()) {
     out << " |";

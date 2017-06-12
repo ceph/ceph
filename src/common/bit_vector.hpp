@@ -13,13 +13,7 @@
 
 #include "common/Formatter.h"
 #include "include/assert.h"
-#include "include/buffer.h"
 #include "include/encoding.h"
-#include <stdint.h>
-#include <cmath>
-#include <list>
-#include <vector>
-#include <boost/static_assert.hpp>
 
 namespace ceph {
 

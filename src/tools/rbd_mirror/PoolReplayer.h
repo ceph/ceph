@@ -40,7 +40,6 @@ class PoolReplayer {
 public:
   PoolReplayer(Threads<librbd::ImageCtx> *threads,
 	       std::shared_ptr<ImageDeleter> image_deleter,
-	       ImageSyncThrottlerRef<> image_sync_throttler,
 	       int64_t local_pool_id, const peer_t &peer,
 	       const std::vector<const char*> &args);
   ~PoolReplayer();
@@ -100,9 +99,10 @@ private:
   void wait_for_update_ops(Context *on_finish);
   void handle_wait_for_update_ops(int r, Context *on_finish);
 
+  void handle_update_leader(const std::string &leader_instance_id);
+
   Threads<librbd::ImageCtx> *m_threads;
   std::shared_ptr<ImageDeleter> m_image_deleter;
-  ImageSyncThrottlerRef<> m_image_sync_throttler;
   mutable Mutex m_lock;
   Cond m_cond;
   std::atomic<bool> m_stopping = { false };
@@ -157,6 +157,11 @@ private:
 
     void pre_release_handler(Context *on_finish) override {
       m_pool_replayer->handle_pre_release_leader(on_finish);
+    }
+
+    void update_leader_handler(
+      const std::string &leader_instance_id) override {
+      m_pool_replayer->handle_update_leader(leader_instance_id);
     }
 
   private:

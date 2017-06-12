@@ -91,7 +91,7 @@ public:
     uint32_t flags;    // object_copy_data_t::FLAG_*
     uint32_t source_data_digest, source_omap_digest;
     uint32_t data_digest, omap_digest;
-    vector<pair<osd_reqid_t, version_t> > reqids; // [(reqid, user_version)]
+    mempool::osd_pglog::vector<pair<osd_reqid_t, version_t> > reqids; // [(reqid, user_version)]
     map<string, bufferlist> attrs; // xattrs
     uint64_t truncate_seq;
     uint64_t truncate_size;
@@ -530,7 +530,7 @@ public:
     int num_read;    ///< count read ops
     int num_write;   ///< count update ops
 
-    vector<pair<osd_reqid_t, version_t> > extra_reqids;
+    mempool::osd_pglog::vector<pair<osd_reqid_t, version_t> > extra_reqids;
 
     CopyFromCallback *copy_cb;
 
@@ -864,7 +864,7 @@ protected:
    * Also used to store error log entries for dup detection.
    */
   void submit_log_entries(
-    const mempool::osd::list<pg_log_entry_t> &entries,
+    const mempool::osd_pglog::list<pg_log_entry_t> &entries,
     ObcLockManager &&manager,
     boost::optional<std::function<void(void)> > &&on_complete,
     OpRequestRef op = OpRequestRef(),
@@ -1117,6 +1117,18 @@ protected:
 					   bool must_promote,
 					   bool in_hit_set,
 					   ObjectContextRef *promote_obc);
+  cache_result_t maybe_handle_manifest_detail(OpRequestRef op,
+						     bool write_ordered,
+						     ObjectContextRef obc);
+  bool maybe_handle_manifest(OpRequestRef op,
+			      bool write_ordered,
+			      ObjectContextRef obc) {
+    return cache_result_t::NOOP != maybe_handle_manifest_detail(
+      op,
+      write_ordered,
+      obc);
+  }
+
   /**
    * This helper function is called from do_op if the ObjectContext lookup fails.
    * @returns true if the caching code is handling the Op, false otherwise.
@@ -1329,7 +1341,7 @@ protected:
   // -- proxyread --
   map<ceph_tid_t, ProxyReadOpRef> proxyread_ops;
 
-  void do_proxy_read(OpRequestRef op);
+  void do_proxy_read(OpRequestRef op, ObjectContextRef obc = NULL);
   void finish_proxy_read(hobject_t oid, ceph_tid_t tid, int r);
   void cancel_proxy_read(ProxyReadOpRef prdop);
 
@@ -1338,7 +1350,7 @@ protected:
   // -- proxywrite --
   map<ceph_tid_t, ProxyWriteOpRef> proxywrite_ops;
 
-  void do_proxy_write(OpRequestRef op, const hobject_t& missing_oid);
+  void do_proxy_write(OpRequestRef op, const hobject_t& missing_oid, ObjectContextRef obc = NULL);
   void finish_proxy_write(hobject_t oid, ceph_tid_t tid, int r);
   void cancel_proxy_write(ProxyWriteOpRef pwop);
 

@@ -11,15 +11,10 @@
  * Foundation.  See file COPYING.
  *
  */
-#include "acconfig.h"
-
-#include "common/pipe.h"
 #include "include/compat.h"
 
 #include <errno.h>
 #include <fcntl.h>
-#include <limits.h>
-#include <stdint.h>
 #include <unistd.h>
 
 int pipe_cloexec(int pipefd[2])

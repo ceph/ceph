@@ -62,15 +62,15 @@ automatically created (name is same as in DEFINE_MEMORY_POOLS_HELPER).
 That namespace contains a set of common STL containers that are predefined
 with the appropriate allocators.
 
-Thus for mempool "unittest_1" we have automatically available to us:
+Thus for mempool "osd" we have automatically available to us:
 
-   mempool::unittest_1::map
-   mempool::unittest_1::multimap
-   mempool::unittest_1::set
-   mempool::unittest_1::multiset
-   mempool::unittest_1::list
-   mempool::unittest_1::vector
-   mempool::unittest_1::unordered_map
+   mempool::osd::map
+   mempool::osd::multimap
+   mempool::osd::set
+   mempool::osd::multiset
+   mempool::osd::list
+   mempool::osd::vector
+   mempool::osd::unordered_map
 
 
 Putting objects in a mempool
@@ -88,7 +88,7 @@ For a class:
 
 Then, in an appropriate .cc file,
 
-  MEMPOOL_DEFINE_OBJECT_FACTORY(Foo, foo, unittest_1);
+  MEMPOOL_DEFINE_OBJECT_FACTORY(Foo, foo, osd);
 
 The second argument can generally be identical to the first, except
 when the type contains a nested scope.  For example, for
@@ -103,7 +103,7 @@ can't use :: in a variable name.)
 In order to use the STL containers, simply use the namespaced variant
 of the container type.  For example,
 
-  mempool::unittest_1::map<int> myvec;
+  mempool::osd::map<int> myvec;
 
 Introspection
 -------------
@@ -137,16 +137,23 @@ namespace mempool {
 
 #define DEFINE_MEMORY_POOLS_HELPER(f) \
   f(bloom_filter)		      \
-  f(bluestore_meta_onode)	      \
-  f(bluestore_meta_other)	      \
   f(bluestore_alloc)		      \
+  f(bluestore_cache_data)	      \
+  f(bluestore_cache_onode)	      \
+  f(bluestore_cache_other)	      \
   f(bluestore_fsck)		      \
+  f(bluestore_txc)		      \
+  f(bluestore_writing_deferred)	      \
+  f(bluestore_writing)		      \
   f(bluefs)			      \
+  f(buffer_anon)		      \
   f(buffer_meta)		      \
-  f(buffer_data)		      \
   f(osd)			      \
+  f(osd_mapbl)			      \
+  f(osd_pglog)			      \
   f(osdmap)			      \
   f(osdmap_mapping)		      \
+  f(pgmap)			      \
   f(unittest_1)			      \
   f(unittest_2)
 
@@ -190,6 +197,12 @@ struct stats_t {
     f->dump_int("items", items);
     f->dump_int("bytes", bytes);
   }
+
+  stats_t& operator+=(const stats_t& o) {
+    items += o.items;
+    bytes += o.bytes;
+    return *this;
+  }
 };
 
 pool_t& get_pool(pool_index_t ix);
@@ -220,6 +233,8 @@ public:
   size_t allocated_bytes() const;
   size_t allocated_items() const;
 
+  void adjust_count(ssize_t items, ssize_t bytes);
+
   shard_t* pick_a_shard() {
     // Dirt cheap, see:
     //   http://fossies.org/dox/glibc-2.24/pthread__self_8c_source.html
@@ -244,7 +259,7 @@ public:
   void get_stats(stats_t *total,
 		 std::map<std::string, stats_t> *by_type) const;
 
-  void dump(ceph::Formatter *f) const;
+  void dump(ceph::Formatter *f, stats_t *ptotal=0) const;
 };
 
 void dump(ceph::Formatter *f);

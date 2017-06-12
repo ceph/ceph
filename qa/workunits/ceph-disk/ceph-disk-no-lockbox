@@ -1761,6 +1761,11 @@ class PrepareBluestore(Prepare):
             action='store_true', default=None,
             help='bluestore objectstore',
         )
+        parser.add_argument(
+            '--filestore',
+            action='store_true', default=True,
+            help='IGNORED FORWARD COMPATIBIILTY HACK',
+        )
         return parser
 
     @staticmethod
@@ -2408,6 +2413,11 @@ class PrepareFilestoreData(PrepareData):
             to_prepare.prepare()
         self.set_data_partition()
         self.populate_data_path_device(*to_prepare_list)
+
+    def populate_data_path(self, path, *to_prepare_list):
+        super(PrepareFilestoreData, self).populate_data_path(path,
+                                                             *to_prepare_list)
+        write_one_line(path, 'type', 'filestore')
 
 
 class PrepareBluestoreData(PrepareData):

@@ -446,12 +446,15 @@ namespace rgw {
       return full_object_name(true /* omit_bucket */);
     }
 
-    inline std::string format_child_name(const std::string& cbasename) const {
+    inline std::string format_child_name(const std::string& cbasename,
+                                         bool is_dir) const {
       std::string child_name{relative_object_name()};
       if ((child_name.size() > 0) &&
 	  (child_name.back() != '/'))
 	child_name += "/";
       child_name += cbasename;
+      if (is_dir)
+	child_name += "/";
       return child_name;
     }
 
@@ -809,6 +812,13 @@ namespace rgw {
     static constexpr uint32_t FLAG_NONE =      0x0000;
     static constexpr uint32_t FLAG_CLOSED =    0x0001;
 
+    struct BucketStats {
+      size_t size;
+      size_t size_rounded;
+      real_time creation_time;
+      uint64_t num_entries;
+    };
+
     RGWLibFS(CephContext* _cct, const char *_uid, const char *_user_id,
 	    const char* _key)
       : cct(_cct), root_fh(this, new_inst()), invalidate_cb(nullptr),
@@ -914,6 +924,7 @@ namespace rgw {
       LookupFHResult fhr { nullptr, uint32_t(RGWFileHandle::FLAG_NONE) };
 
       RGWFileHandle::FHCache::Latch lat;
+      bool fh_locked = flags & RGWFileHandle::FLAG_LOCKED;
 
     retry:
       RGWFileHandle* fh =
@@ -922,11 +933,13 @@ namespace rgw {
 			    RGWFileHandle::FHCache::FLAG_LOCK);
       /* LATCHED */
       if (fh) {
-	fh->mtx.lock(); // XXX !RAII because may-return-LOCKED
+	if (likely(! fh_locked))
+	    fh->mtx.lock(); // XXX !RAII because may-return-LOCKED
 	/* need initial ref from LRU (fast path) */
 	if (! fh_lru.ref(fh, cohort::lru::FLAG_INITIAL)) {
 	  lat.lock->unlock();
-	  fh->mtx.unlock();
+	  if (likely(! fh_locked))
+	    fh->mtx.unlock();
 	  goto retry; /* !LATCHED */
 	}
 	/* LATCHED, LOCKED */
@@ -958,6 +971,7 @@ namespace rgw {
 	return fhr;
 
       RGWFileHandle::FHCache::Latch lat;
+      bool fh_locked = flags & RGWFileHandle::FLAG_LOCKED;
 
       std::string obj_name{name};
       std::string key_name{parent->make_key_name(name)};
@@ -977,23 +991,27 @@ namespace rgw {
 			    RGWFileHandle::FHCache::FLAG_LOCK);
       /* LATCHED */
       if (fh) {
-	fh->mtx.lock(); // XXX !RAII because may-return-LOCKED
+	if (likely(! fh_locked))
+	  fh->mtx.lock(); // XXX !RAII because may-return-LOCKED
 	if (fh->flags & RGWFileHandle::FLAG_DELETED) {
 	  /* for now, delay briefly and retry */
 	  lat.lock->unlock();
-	  fh->mtx.unlock();
+	  if (likely(! fh_locked))
+	    fh->mtx.unlock();
 	  std::this_thread::sleep_for(std::chrono::milliseconds(20));
 	  goto retry; /* !LATCHED */
 	}
 	/* need initial ref from LRU (fast path) */
 	if (! fh_lru.ref(fh, cohort::lru::FLAG_INITIAL)) {
 	  lat.lock->unlock();
-	  fh->mtx.unlock();
+	  if (likely(! fh_locked))
+	    fh->mtx.unlock();
 	  goto retry; /* !LATCHED */
 	}
 	/* LATCHED, LOCKED */
 	if (! (flags & RGWFileHandle::FLAG_LOCK))
-	  fh->mtx.unlock(); /* ! LOCKED */
+	  if (likely(! fh_locked))
+	    fh->mtx.unlock(); /* ! LOCKED */
       } else {
 	/* make or re-use handle */
 	RGWFileHandle::Factory prototype(this, get_inst(), parent, fhk,
@@ -1048,8 +1066,9 @@ namespace rgw {
     int setattr(RGWFileHandle* rgw_fh, struct stat* st, uint32_t mask,
 		uint32_t flags);
 
-    LookupFHResult stat_bucket(RGWFileHandle* parent,
-			       const char *path, uint32_t flags);
+    LookupFHResult stat_bucket(RGWFileHandle* parent, const char *path,
+			       RGWLibFS::BucketStats& bs,
+			       uint32_t flags);
 
     LookupFHResult stat_leaf(RGWFileHandle* parent, const char *path,
 			     enum rgw_fh_type type = RGW_FS_TYPE_NIL,
@@ -1117,7 +1136,6 @@ namespace rgw {
       if (! fh) {
 	if (unlikely(fh_hk == root_fh.fh.fh_hk)) {
 	  fh = &root_fh;
-	  ref(fh);
 	}
       }
 
@@ -1520,11 +1538,11 @@ class RGWCreateBucketRequest : public RGWLibRequest,
 			       public RGWCreateBucket /* RGWOp */
 {
 public:
-  std::string& uri;
+  const std::string& bucket_name;
 
   RGWCreateBucketRequest(CephContext* _cct, RGWUserInfo *_user,
-			std::string& _uri)
-    : RGWLibRequest(_cct, _user), uri(_uri) {
+			std::string& _bname)
+    : RGWLibRequest(_cct, _user), bucket_name(_bname) {
     op = this;
   }
 
@@ -1552,6 +1570,7 @@ public:
     s->info.method = "PUT";
     s->op = OP_PUT;
 
+    string uri = "/" + bucket_name;
     /* XXX derp derp derp */
     s->relative_uri = uri;
     s->info.request_uri = uri; // XXX
@@ -1587,11 +1606,11 @@ class RGWDeleteBucketRequest : public RGWLibRequest,
 			       public RGWDeleteBucket /* RGWOp */
 {
 public:
-  std::string& uri;
+  const std::string& bucket_name;
 
   RGWDeleteBucketRequest(CephContext* _cct, RGWUserInfo *_user,
-			std::string& _uri)
-    : RGWLibRequest(_cct, _user), uri(_uri) {
+			std::string& _bname)
+    : RGWLibRequest(_cct, _user), bucket_name(_bname) {
     op = this;
   }
 
@@ -1614,6 +1633,7 @@ public:
     s->info.method = "DELETE";
     s->op = OP_DELETE;
 
+    string uri = "/" + bucket_name;
     /* XXX derp derp derp */
     s->relative_uri = uri;
     s->info.request_uri = uri; // XXX
@@ -1975,10 +1995,12 @@ class RGWStatBucketRequest : public RGWLibRequest,
 public:
   std::string uri;
   std::map<std::string, buffer::list> attrs;
+  RGWLibFS::BucketStats& bs;
 
   RGWStatBucketRequest(CephContext* _cct, RGWUserInfo *_user,
-		       const std::string& _path)
-    : RGWLibRequest(_cct, _user) {
+		       const std::string& _path,
+		       RGWLibFS::BucketStats& _stats)
+    : RGWLibRequest(_cct, _user), bs(_stats) {
     uri = "/" + _path;
     op = this;
   }
@@ -2030,6 +2052,10 @@ public:
 
   void send_response() override {
     bucket.creation_time = get_state()->bucket_info.creation_time;
+    bs.size = bucket.size;
+    bs.size_rounded = bucket.size_rounded;
+    bs.creation_time = bucket.creation_time;
+    bs.num_entries = bucket.count;
     std::swap(attrs, get_state()->bucket_attrs);
   }
 
@@ -2302,12 +2328,12 @@ public:
 
     src_bucket_name = src_parent->bucket_name();
     // need s->src_bucket_name?
-    src_object.name = src_parent->format_child_name(src_name);
+    src_object.name = src_parent->format_child_name(src_name, false);
     // need s->src_object?
 
     dest_bucket_name = dst_parent->bucket_name();
     // need s->bucket.name?
-    dest_object = dst_parent->format_child_name(dst_name);
+    dest_object = dst_parent->format_child_name(dst_name, false);
     // need s->object_name?
 
     int rc = valid_s3_object_name(dest_object);

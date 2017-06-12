@@ -14,7 +14,6 @@
 #include "common/Mutex.h"
 #include "common/snap_types.h"
 #include "global/global_init.h"
-#include "include/atomic.h"
 #include "include/buffer.h"
 #include "include/Context.h"
 #include "include/stringify.h"
@@ -22,6 +21,8 @@
 
 #include "FakeWriteback.h"
 #include "MemWriteback.h"
+
+#include <atomic>
 
 // XXX: Only tests default namespace
 struct op_data {
@@ -35,19 +36,19 @@ struct op_data {
   ObjectExtent extent;
   bool is_read;
   ceph::bufferlist result;
-  atomic_t done;
+  std::atomic<unsigned> done = { 0 };
 };
 
 class C_Count : public Context {
   op_data *m_op;
-  atomic_t *m_outstanding;
+  std::atomic<unsigned> *m_outstanding = nullptr;
 public:
-  C_Count(op_data *op, atomic_t *outstanding)
+  C_Count(op_data *op, std::atomic<unsigned> *outstanding)
     : m_op(op), m_outstanding(outstanding) {}
   void finish(int r) override {
-    m_op->done.inc();
-    assert(m_outstanding->read() > 0);
-    m_outstanding->dec();
+    m_op->done++;
+    assert(*m_outstanding > 0);
+    (*m_outstanding)--;
   }
 };
 
@@ -67,7 +68,7 @@ int stress_test(uint64_t num_ops, uint64_t num_objs,
 		   true);
   obc.start();
 
-  atomic_t outstanding_reads;
+  std::atomic<unsigned> outstanding_reads = { 0 };
   vector<ceph::shared_ptr<op_data> > ops;
   ObjectCacher::ObjectSet object_set(NULL, 0, 0);
   SnapContext snapc;
@@ -100,7 +101,7 @@ int stress_test(uint64_t num_ops, uint64_t num_objs,
     if (op->is_read) {
       ObjectCacher::OSDRead *rd = obc.prepare_read(CEPH_NOSNAP, &op->result, 0);
       rd->extents.push_back(op->extent);
-      outstanding_reads.inc();
+      outstanding_reads++;
       Context *completion = new C_Count(op.get(), &outstanding_reads);
       lock.Lock();
       int r = obc.readx(rd, &object_set, completion);
@@ -128,7 +129,7 @@ int stress_test(uint64_t num_ops, uint64_t num_objs,
     std::cout << "waiting for read " << i << ops[i]->extent << std::endl;
     uint64_t done = 0;
     while (done == 0) {
-      done = ops[i]->done.read();
+      done = ops[i]->done;
       if (!done) {
 	usleep(500);
       }

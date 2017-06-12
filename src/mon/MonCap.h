@@ -32,7 +32,7 @@ struct mon_rwxa_t {
   }
 };
 
-ostream& operator<<(ostream& out, mon_rwxa_t p);
+ostream& operator<<(ostream& out, const mon_rwxa_t& p);
 
 struct StringConstraint {
   string value;

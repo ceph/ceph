@@ -24,6 +24,10 @@
 #include <iostream>
 #include <include/assert.h>
 #include <common/errno.h>
+#if defined(__FreeBSD__)
+#include <sys/types.h>
+#include <signal.h>
+#endif
 
 /**
  * SubProcess:

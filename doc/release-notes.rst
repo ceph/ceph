@@ -58,7 +58,7 @@ Notable Changes
 * build/ops: rpm: fix python-Sphinx package name for SUSE (`pr#15015 <https://github.com/ceph/ceph/pull/15015>`_, Nathan Cutler, Jan Matejek)
 * build/ops: rpm: gperftools-devel >= 2.4 (`issue#13522 <http://tracker.ceph.com/issues/13522>`_, `pr#14870 <https://github.com/ceph/ceph/pull/14870>`_, Nathan Cutler)
 * build/ops: rpm: package crypto on x86_64 only (`pr#14779 <https://github.com/ceph/ceph/pull/14779>`_, Nathan Cutler)
-* build/ops: Signed-off-by: Nathan Cutler <ncutler@suse.com> (`pr#14820 <https://github.com/ceph/ceph/pull/14820>`_, Kefu Chai)
+* build/ops: debian: package crypto plugin only on amd64 (`pr#14820 <https://github.com/ceph/ceph/pull/14820>`_, Kefu Chai)
 * build/ops: src/init-ceph.in:  allow one((re)?start|stop) as commands (`pr#14560 <https://github.com/ceph/ceph/pull/14560>`_, Willem Jan Withagen)
 * build/ops: yasm-wrapper: strip -E (stops ccache trashing source files) (`pr#14633 <https://github.com/ceph/ceph/pull/14633>`_, Tim Serong)
 * cephfs: ceph-fuse: use user space permission check by default (`issue#19820 <http://tracker.ceph.com/issues/19820>`_, `pr#14907 <https://github.com/ceph/ceph/pull/14907>`_, "Yan, Zheng")
@@ -1819,7 +1819,7 @@ Upgrading from Jewel
   to Kraken 11.2.z (or, eventually, Luminous 12.2.z).
 
 * The ``sortbitwise`` flag must be set on the Jewel cluster before upgrading
-  to Kraken.  The latest Jewel (10.2.4+) releases issue a health warning if
+  to Kraken.  The latest Jewel (10.2.8+) releases issue a health warning if
   the flag is not set, so this is probably already set.  If it is not, Kraken
   OSDs will refuse to start and will print and error message in their log.
 

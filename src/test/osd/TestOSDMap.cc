@@ -6,6 +6,7 @@
 #include "global/global_context.h"
 #include "global/global_init.h"
 #include "common/common_init.h"
+#include "common/ceph_argparse.h"
 
 #include <iostream>
 
@@ -13,6 +14,7 @@ using namespace std;
 
 int main(int argc, char **argv) {
   std::vector<const char*> args(argv, argv+argc);
+  env_to_vec(args);
   auto cct = global_init(nullptr, args, CEPH_ENTITY_TYPE_CLIENT,
 			 CODE_ENVIRONMENT_UTILITY,
 			 CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
@@ -431,4 +433,20 @@ TEST_F(OSDMapTest, PrimaryAffinity) {
     osdmap.set_primary_affinity(0, 0x10000);
     osdmap.set_primary_affinity(1, 0x10000);
   }
+}
+
+TEST(PGTempMap, basic)
+{
+  PGTempMap m;
+  pg_t a(1,1);
+  for (auto i=3; i<1000; ++i) {
+    pg_t x(i, 1);
+    m.set(x, {static_cast<int>(i)});
+  }
+  pg_t b(2,1);
+  m.set(a, {1, 2});
+  ASSERT_NE(m.find(a), m.end());
+  ASSERT_EQ(m.find(a), m.begin());
+  ASSERT_EQ(m.find(b), m.end());
+  ASSERT_EQ(998u, m.size());
 }

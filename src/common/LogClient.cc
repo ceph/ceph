@@ -12,35 +12,17 @@
  * 
  */
 
-
-
-#include "include/types.h"
+#include "common/LogClient.h"
 #include "include/str_map.h"
-#include "include/uuid.h"
-
-#include "msg/Messenger.h"
-#include "msg/Message.h"
-
 #include "messages/MLog.h"
 #include "messages/MLogAck.h"
 #include "mon/MonMap.h"
-
-#include <iostream>
-#include <errno.h>
-#include <sys/stat.h>
-#include <syslog.h>
+#include "common/Graylog.h"
 
 #ifdef DARWIN
 #include <sys/param.h>
 #include <sys/mount.h>
 #endif // DARWIN
-
-#include "common/Graylog.h"
-// wipe the assert() introduced by boost headers included by Graylog.h
-#include "include/assert.h"
-#include "common/LogClient.h"
-
-#include "common/config.h"
 
 #define dout_subsys ceph_subsys_monc
 
@@ -241,6 +223,7 @@ void LogChannel::do_log(clog_type prio, const std::string& s)
   e.stamp = ceph_clock_now();
   // seq and who should be set for syslog/graylog/log_to_mon
   e.who = parent->get_myinst();
+  e.name = parent->get_myname();
   e.seq = parent->get_next_seq();
   e.prio = prio;
   e.msg = s;
@@ -358,6 +341,11 @@ uint64_t LogClient::get_next_seq()
 const entity_inst_t& LogClient::get_myinst()
 {
   return messenger->get_myinst();
+}
+
+const EntityName& LogClient::get_myname()
+{
+  return cct->_conf->name;
 }
 
 bool LogClient::handle_log_ack(MLogAck *m)

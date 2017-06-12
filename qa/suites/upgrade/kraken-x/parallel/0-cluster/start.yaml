@@ -25,4 +25,6 @@ overrides:
     - ScrubResult
     - wrongly marked
     conf:
+      global:
+        enable experimental unrecoverable data corrupting features: "*"
     fs: xfs

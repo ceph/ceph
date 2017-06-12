@@ -14,6 +14,7 @@
 #include <vector>
 
 class Context;
+class RWLock;
 
 namespace rbd {
 namespace mirror {
@@ -135,6 +136,8 @@ private:
 
   void send_update_object_map();
   void handle_update_object_map(int r);
+
+  Context *start_local_op(RWLock &owner_lock);
 
   void compute_diffs();
   void finish(int r);

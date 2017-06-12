@@ -1941,7 +1941,9 @@ class Prepare(object):
             formatter_class=argparse.RawDescriptionHelpFormatter,
             description=textwrap.fill(textwrap.dedent("""\
             If the --bluestore argument is given, a bluestore objectstore
-            will be used instead of the legacy filestore objectstore.
+            will be created.  If --filestore is provided, a legacy FileStore
+            objectstore will be created.  If neither is specified, we default
+            to BlueStore.
 
             When an entire device is prepared for bluestore, two
             partitions are created. The first partition is for metadata,
@@ -2039,8 +2041,15 @@ class PrepareBluestore(Prepare):
         parser = argparse.ArgumentParser(add_help=False)
         parser.add_argument(
             '--bluestore',
-            action='store_true', default=None,
+            dest='bluestore',
+            action='store_true', default=True,
             help='bluestore objectstore',
+        )
+        parser.add_argument(
+            '--filestore',
+            dest='bluestore',
+            action='store_false',
+            help='filestore objectstore',
         )
         return parser
 
@@ -2398,15 +2407,22 @@ class PrepareBluestoreBlockDB(PrepareSpace):
         super(PrepareBluestoreBlockDB, self).__init__(args)
 
     def get_space_size(self):
-        block_size = get_conf(
+        block_db_size = get_conf(
             cluster=self.args.cluster,
             variable='bluestore_block_db_size',
         )
 
-        if block_size is None:
-            return 20480  # MB, default value
+        if block_db_size is None or int(block_db_size) == 0:
+            block_size = get_conf(
+                cluster=self.args.cluster,
+                variable='bluestore_block_size',
+            )
+            if block_size is None:
+                return 1024  # MB
+            size = int(block_size) / 100 / 1048576
+            return max(size, 1024)  # MB
         else:
-            return int(block_size) / 1048576  # MB
+            return int(block_db_size) / 1048576  # MB
 
     def desired_partition_number(self):
         if getattr(self.args, 'block.db') == self.args.data:
@@ -2949,6 +2965,11 @@ class PrepareFilestoreData(PrepareData):
         self.set_data_partition()
         self.populate_data_path_device(*to_prepare_list)
 
+    def populate_data_path(self, path, *to_prepare_list):
+        super(PrepareFilestoreData, self).populate_data_path(path,
+                                                             *to_prepare_list)
+        write_one_line(path, 'type', 'filestore')
+
 
 class PrepareBluestoreData(PrepareData):
 
@@ -3034,7 +3055,7 @@ def mkfs(
                 '--setgroup', get_ceph_group(),
             ],
         )
-    else:
+    elif osd_type == 'filestore':
         ceph_osd_mkfs(
             [
                 'ceph-osd',
@@ -3051,6 +3072,8 @@ def mkfs(
                 '--setgroup', get_ceph_group(),
             ],
         )
+    else:
+        raise Error('unrecognized objectstore type %s' % osd_type)
 
 
 def auth_key(
@@ -4830,9 +4853,14 @@ def main_trigger(args):
 def main_fix(args):
     # A hash table containing 'path': ('uid', 'gid', blocking, recursive)
     fix_table = [
-        ('/etc/ceph', 'ceph', 'ceph', True, True),
+        ('/usr/bin/ceph-mon', 'root', 'root', True, False),
+        ('/usr/bin/ceph-mds', 'root', 'root', True, False),
+        ('/usr/bin/ceph-osd', 'root', 'root', True, False),
+        ('/usr/bin/radosgw', 'root', 'root', True, False),
+        ('/etc/ceph', 'root', 'root', True, True),
         ('/var/run/ceph', 'ceph', 'ceph', True, True),
         ('/var/log/ceph', 'ceph', 'ceph', True, True),
+        ('/var/log/radosgw', 'ceph', 'ceph', True, True),
         ('/var/lib/ceph', 'ceph', 'ceph', True, False),
     ]
 
@@ -4887,6 +4915,10 @@ def main_fix(args):
     # Use find to relabel + chown ~simultaenously
     if args.all:
         for directory, uid, gid, blocking, recursive in fix_table:
+            # Skip directories/files that are not installed
+            if not os.access(directory, os.F_OK):
+                continue
+
             c = [
                 'find',
                 directory,
@@ -4926,6 +4958,10 @@ def main_fix(args):
     # Fix permissions
     if args.permissions:
         for directory, uid, gid, blocking, recursive in fix_table:
+            # Skip directories/files that are not installed
+            if not os.access(directory, os.F_OK):
+                continue
+
             if recursive:
                 c = [
                     'chown',
@@ -4961,6 +4997,10 @@ def main_fix(args):
     # Fix SELinux labels
     if args.selinux:
         for directory, uid, gid, blocking, recursive in fix_table:
+            # Skip directories/files that are not installed
+            if not os.access(directory, os.F_OK):
+                continue
+
             if recursive:
                 c = [
                     'restorecon',
@@ -5584,7 +5624,9 @@ def main(argv):
         path = os.environ.get('PATH', os.defpath)
         os.environ['PATH'] = args.prepend_to_path + ":" + path
 
-    setup_statedir(args.statedir)
+    if args.func.__name__ != 'main_trigger':
+        # trigger may run when statedir is unavailable and does not use it
+        setup_statedir(args.statedir)
     setup_sysconfdir(args.sysconfdir)
 
     global CEPH_PREF_USER

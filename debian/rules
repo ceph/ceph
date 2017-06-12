@@ -22,6 +22,13 @@ ifeq ($(DEB_HOST_ARCH), armel)
   extraopts += -DWITH_ATOMIC_OPS=OFF
 endif
 
+ifneq (,$(filter $(DEB_HOST_ARCH), arm armel armhf arm64 i386 amd64 mips mipsel powerpc ppc64))
+  # beast depends on libboost_context which only support the archs above
+  extraopts += -DWITH_RADOSGW_BEAST_FRONTEND=ON
+else
+  extraopts += -DWITH_RADOSGW_BEAST_FRONTEND=OFF
+endif
+
 %:
 	dh $@ --buildsystem=cmake --with javahelper,python2,python3,systemd --parallel
 
@@ -52,8 +59,8 @@ override_dh_installdocs:
 	dh_installdocs -a --all ChangeLog
 
 override_dh_installlogrotate:
-	cp src/logrotate.conf debian/ceph-base.ceph.logrotate
-	dh_installlogrotate -pceph-base --name=ceph
+	cp src/logrotate.conf debian/ceph-common.logrotate
+	dh_installlogrotate -pceph-common
 
 override_dh_installinit:
 	# dh_installinit is only set up to handle one upstart script

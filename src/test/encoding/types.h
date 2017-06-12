@@ -17,6 +17,9 @@ TYPE(compressible_bloom_filter)
 #include "test_ceph_time.h"
 TYPE(real_time_wrapper)
 
+#include "test_sstring.h"
+TYPE(sstring_wrapper)
+
 #include "common/snap_types.h"
 TYPE(SnapContext)
 TYPE(SnapRealmInfo)
@@ -142,6 +145,7 @@ TYPE_FEATUREFUL(AuthMonitor::Incremental)
 #include "mon/PGMap.h"
 TYPE_FEATUREFUL(PGMap::Incremental)
 TYPE_FEATUREFUL_NONDETERMINISTIC(PGMap)
+TYPE_FEATUREFUL_NONDETERMINISTIC(PGMapDigest)
 
 #include "mon/MonitorDBStore.h"
 TYPE(MonitorDBStore::Transaction)
@@ -333,9 +337,19 @@ TYPE(rgw_cls_read_olh_log_ret)
 TYPE(rgw_cls_trim_olh_log_op)
 TYPE(rgw_cls_bucket_clear_olh_op)
 TYPE(rgw_cls_check_index_ret)
+TYPE(cls_rgw_reshard_add_op)
+TYPE(cls_rgw_reshard_list_op)
+TYPE(cls_rgw_reshard_list_ret)
+TYPE(cls_rgw_reshard_get_op)
+TYPE(cls_rgw_reshard_get_ret)
+TYPE(cls_rgw_reshard_remove_op)
+TYPE(cls_rgw_set_bucket_resharding_op)
+TYPE(cls_rgw_clear_bucket_resharding_op)
 
 #include "cls/rgw/cls_rgw_client.h"
 TYPE(rgw_bi_log_entry)
+TYPE(cls_rgw_reshard_entry)
+TYPE(cls_rgw_bucket_instance_entry)
 
 #include "cls/user/cls_user_types.h"
 TYPE(cls_user_bucket)

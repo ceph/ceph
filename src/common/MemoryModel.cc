@@ -1,9 +1,5 @@
-
-#include "acconfig.h"
-#include "include/compat.h"
-#include "include/types.h"
 #include "MemoryModel.h"
-#include "common/config.h"
+#include "include/compat.h"
 #include "debug.h"
 #if defined(__linux__)
 #include <malloc.h>

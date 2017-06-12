@@ -16,16 +16,19 @@
 #ifndef XIO_CONNECTION_H
 #define XIO_CONNECTION_H
 
+#include <atomic>
+
 #include <boost/intrusive/avl_set.hpp>
 #include <boost/intrusive/list.hpp>
+
 extern "C" {
 #include "libxio.h"
 }
+
 #include "XioInSeq.h"
 #include "XioSubmit.h"
 #include "msg/Connection.h"
 #include "msg/Messenger.h"
-#include "include/atomic.h"
 #include "auth/AuthSessionHandler.h"
 
 #define XIO_ALL_FEATURES (CEPH_FEATURES_ALL)
@@ -44,7 +47,7 @@ class XioConnection : public Connection
 public:
   enum type { ACTIVE, PASSIVE };
 
-  enum session_states {
+  enum class session_states : unsigned {
     INIT = 0,
     START,
     UP,
@@ -54,7 +57,7 @@ public:
     BARRIER
   };
 
-  enum session_startup_states {
+  enum class session_startup_states : unsigned {
     IDLE = 0,
     CONNECTING,
     ACCEPTING,
@@ -65,13 +68,13 @@ public:
 private:
   XioConnection::type xio_conn_type;
   XioPortal *portal;
-  atomic_t connected;
+  std::atomic<bool> connected = { false };
   entity_inst_t peer;
   struct xio_session *session;
   struct xio_connection	*conn;
   pthread_spinlock_t sp;
-  atomic_t send;
-  atomic_t recv;
+  std::atomic<int64_t> send = { 0 };
+  std::atomic<int64_t> recv = { 0 };
   uint32_t n_reqs; // Accelio-initiated reqs in progress (!counting partials)
   uint32_t magic;
   uint32_t special_handling;
@@ -94,18 +97,18 @@ private:
     uint32_t reconnects;
     uint32_t connect_seq, peer_global_seq;
     uint64_t in_seq, out_seq_acked; // atomic<uint64_t>, got receipt
-    atomic64_t out_seq; // atomic<uint32_t>
+    std::atomic<int64_t> out_seq = { 0 }; 
 
     lifecycle() : state(lifecycle::INIT), reconnects(0), connect_seq(0),
-		  peer_global_seq(0), in_seq(0), out_seq_acked(0), 
-		  out_seq(0) {}
+		  peer_global_seq(0), in_seq(0), out_seq_acked(0)
+		  {}
 
     void set_in_seq(uint64_t seq) {
       in_seq = seq;
     }
 
     uint64_t next_out_seq() {
-      return out_seq.inc();
+      return ++out_seq;
     }
 
   } state;
@@ -134,13 +137,13 @@ private:
     XioConnection *xcon;
     uint32_t protocol_version;
 
-    atomic_t session_state;
-    atomic_t startup_state;
+    std::atomic<session_states> session_state = { 0 };
+    std::atomic<session_startup_state> startup_state = { 0 };
 
     uint32_t reconnects;
     uint32_t connect_seq, global_seq, peer_global_seq;
     uint64_t in_seq, out_seq_acked; // atomic<uint64_t>, got receipt
-    atomic64_t out_seq; // atomic<uint64_t>
+    std::atomic<uint64_t> out_seq = { 0 }; 
 
     uint32_t flags;
 
@@ -157,15 +160,14 @@ private:
 	peer_global_seq(0),
 	in_seq(0),
 	out_seq_acked(0),
-	out_seq(0),
 	flags(FLAG_NONE) {}
 
     uint64_t get_session_state() {
-      return session_state.read();
+      return session_state;
     }
 
     uint64_t get_startup_state() {
-      return startup_state.read();
+      return startup_state;
     }
 
     void set_in_seq(uint64_t seq) {
@@ -173,7 +175,7 @@ private:
     }
 
     uint64_t next_out_seq() {
-      return out_seq.inc();
+      return ++out_seq;
     };
 
     // state machine
@@ -239,7 +241,7 @@ private:
   friend class XioSend;
 
   int on_disconnect_event() {
-    connected.set(false);
+    connected = false;
     pthread_spin_lock(&sp);
     discard_out_queues(CState::OP_FLAG_LOCKED);
     pthread_spin_unlock(&sp);
@@ -274,7 +276,7 @@ public:
   }
   ostream& conn_prefix(std::ostream *_dout);
 
-  bool is_connected() override { return connected.read(); }
+  bool is_connected() override { return connected; }
 
   int send_message(Message *m) override;
   void send_keepalive() override {send_keepalive_or_ack();}
@@ -288,8 +290,7 @@ public:
 
   XioConnection* get() {
 #if 0
-    int refs = nref.read();
-    cout << "XioConnection::get " << this << " " << refs << std::endl;
+    cout << "XioConnection::get " << this << " " << nref.load() << std::endl;
 #endif
     RefCountedObject::get();
     return this;
@@ -298,14 +299,13 @@ public:
   void put() {
     RefCountedObject::put();
 #if 0
-    int refs = nref.read();
-    cout << "XioConnection::put " << this << " " << refs << std::endl;
+    cout << "XioConnection::put " << this << " " << nref.load() << std::endl;
 #endif
   }
 
   void disconnect() {
     if (is_connected()) {
-      connected.set(false);
+      connected = false;
       xio_disconnect(conn); // normal teardown will clean up conn
     }
   }
@@ -340,9 +340,9 @@ typedef boost::intrusive_ptr<XioConnection> XioConnectionRef;
 class XioLoopbackConnection : public Connection
 {
 private:
-  atomic64_t seq;
+  std::atomic<uint64_t> seq = { 0 };
 public:
-  explicit XioLoopbackConnection(Messenger *m) : Connection(m->cct, m), seq(0)
+  explicit XioLoopbackConnection(Messenger *m) : Connection(m->cct, m)
     {
       const entity_inst_t& m_inst = m->get_myinst();
       peer_addr = m_inst.addr;
@@ -362,11 +362,11 @@ public:
   void mark_disposable() override {}
 
   uint64_t get_seq() {
-    return seq.read();
+    return seq;
   }
 
   uint64_t next_seq() {
-    return seq.inc();
+    return ++seq;
   }
 };
 

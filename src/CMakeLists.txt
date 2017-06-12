@@ -39,7 +39,9 @@ set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wno-unknown-pragmas")
 if(CMAKE_CXX_COMPILER_ID STREQUAL GNU)
   set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -rdynamic")
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wstrict-null-sentinel -Woverloaded-virtual")
-  set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -pie")
+  if(NOT WITH_OSD_INSTRUMENT_FUNCTIONS)
+    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -pie")
+  endif()
 elseif(CMAKE_CXX_COMPILER_ID STREQUAL Clang)
   set(CMAKE_EXE_LINKER_FLAGS "-Wl,-export-dynamic")
   set(CMAKE_LINKER_FLAGS "${CMAKE_LINKER_FLAGS} -rdynamic -Wl,-export-dynamic -export-dynamic")
@@ -113,8 +115,8 @@ else(no_yasm)
       message(STATUS " we are not x32")
       set(HAVE_GOOD_YASM_ELF64 1)
       execute_process(COMMAND yasm -f elf64 -i
-        ${CMAKE_SOURCE_DIR}/src/erasure-code/isa/isa-l/include/
-        ${CMAKE_SOURCE_DIR}/src/erasure-code/isa/isa-l/erasure_code/gf_vect_dot_prod_avx2.asm.s
+        ${CMAKE_SOURCE_DIR}/src/isa-l/include/
+        ${CMAKE_SOURCE_DIR}/src/isa-l/erasure_code/gf_vect_dot_prod_avx2.asm
         -o /dev/null
         RESULT_VARIABLE rc
         OUTPUT_QUIET)
@@ -200,6 +202,8 @@ endif(USE_NSS)
 
 set(GCOV_PREFIX_STRIP 4)
 
+# the src/.git_version file may be written out by make-dist; otherwise
+# we pull the git version from .git
 option(ENABLE_GIT_VERSION "build Ceph with git version string" ON)
 if(${ENABLE_GIT_VERSION})
   get_git_head_revision(GIT_REFSPEC CEPH_GIT_VER)
@@ -217,6 +221,17 @@ else(${ENABLE_GIT_VERSION})
   set(CEPH_GIT_VER "no_version")
   set(CEPH_GIT_NICE_VER "Development")
 endif(${ENABLE_GIT_VERSION})
+
+# the src/ceph_release file is 3 lines,
+#   <release number, e.g. '12' for luminous>
+#   <release name, e.g. 'luminous'>
+#   <release type: 'dev' for x.0.z, 'rc' or x.1.z, or 'stable' or x.2.z>
+# note that the release name is semi-redundant and must match CEPH_RELEASE_*
+# definitions in include/rados.h and common/ceph_strings.c.
+file(STRINGS ${CMAKE_CURRENT_SOURCE_DIR}/ceph_release CEPH_RELEASE_FILE)
+list(GET CEPH_RELEASE_FILE 0 CEPH_RELEASE)
+list(GET CEPH_RELEASE_FILE 1 CEPH_RELEASE_NAME)
+list(GET CEPH_RELEASE_FILE 2 CEPH_RELEASE_TYPE)
 
 option(WITH_OCF "build OCF-compliant cluster resource agent" OFF)
 if(WITH_OCF)
@@ -362,9 +377,7 @@ set(async_rdma_common_srcs)
 if(HAVE_RDMA)
   list(APPEND async_rdma_common_srcs
     msg/async/rdma/Infiniband.cc
-    msg/async/rdma/Device.cc
     msg/async/rdma/RDMAConnectedSocketImpl.cc
-    msg/async/rdma/RDMAConnTCP.cc
     msg/async/rdma/RDMAServerSocketImpl.cc
     msg/async/rdma/RDMAStack.cc)
 endif(HAVE_RDMA)
@@ -450,6 +463,7 @@ set(libcommon_files
   msg/simple/Accepter.cc
   msg/DispatchQueue.cc
   msg/Message.cc
+  mon/PGMap.cc
   osd/ECMsgTypes.cc
   osd/HitSet.cc
   common/RefCountedObj.cc
@@ -469,6 +483,7 @@ set(libcommon_files
   ${async_rdma_common_srcs}
   ${dpdk_common_srcs}
   msg/msg_types.cc
+  common/reverse.c
   common/hobject.cc
   osd/OSDMap.cc
   osd/OSDMapMapping.cc
@@ -542,7 +557,8 @@ if(HAVE_INTEL)
 elseif(HAVE_POWER8)
   list(APPEND libcommon_files
     common/crc32c_ppc.c
-    common/crc32c_ppc_asm.s)
+    common/crc32c_ppc_asm.S
+    common/crc32c_ppc_fast_zero_asm.S)
 endif(HAVE_INTEL)
 
 if(LINUX)
@@ -635,7 +651,6 @@ install(TARGETS ceph-common DESTINATION ${CMAKE_INSTALL_PKGLIBDIR})
 
 add_library(common_utf8 STATIC common/utf8.c)
 
-target_link_libraries(common json_spirit common_utf8 erasure_code rt uuid resolv ${CRYPTO_LIBS} ${Boost_LIBRARIES} ${BLKID_LIBRARIES} ${EXECINFO_LIBRARIES} ${BLKIN_LIBRARIES})
 if(${WITH_LTTNG})
   add_subdirectory(tracing)
   add_dependencies(common-objs oprequest-tp)
@@ -873,21 +888,23 @@ add_subdirectory(compressor)
 
 add_subdirectory(tools)
 
-# dmClock
+# dmClock (after gmock)
 
-add_subdirectory(dmclock) # after gmock
-add_dependencies(tests dmclock-tests dmclock-data-struct-tests)
+add_subdirectory(dmclock/src)
 
-if(WITH_TESTS)
-  install(PROGRAMS
-    ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/dmclock-tests
-    ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/dmclock-data-struct-tests
-    DESTINATION bin)
-endif(WITH_TESTS)
+option(WITH_DMCLOCK_TESTS
+  "enable the build of dmclock-tests and dmclock-data-struct tests binaries"
+  OFF)
+if(WITH_TESTS AND WITH_DMCLOCK_TESTS)
+  # note: add_test is not being called, so dmclock tests aren't part
+  # of ceph tests
+  add_subdirectory(dmclock/test)
+  add_subdirectory(dmclock/support/test)
+endif(WITH_TESTS AND WITH_DMCLOCK_TESTS)
 
-if(HAVE_INTEL)
+if(HAVE_INTEL AND HAVE_BETTER_YASM_ELF64)
   add_subdirectory(crypto/isa-l)
-endif(HAVE_INTEL)
+endif(HAVE_INTEL AND HAVE_BETTER_YASM_ELF64)
 
 if(WITH_TESTS)
 
@@ -944,7 +961,6 @@ install(PROGRAMS
 install(PROGRAMS
   ${CMAKE_SOURCE_DIR}/src/ceph-create-keys
 #  ${CMAKE_SOURCE_DIR}/src/ceph-disk
-  ${CMAKE_SOURCE_DIR}/src/ceph-disk-udev
   DESTINATION sbin)
 
 add_subdirectory(bash_completion)

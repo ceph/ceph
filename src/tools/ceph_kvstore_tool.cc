@@ -167,6 +167,27 @@ class StoreTool
     return (ret == 0);
   }
 
+  bool rm(const string& prefix, const string& key) {
+    assert(!prefix.empty());
+    assert(!key.empty());
+
+    KeyValueDB::Transaction tx = db->get_transaction();
+    tx->rmkey(prefix, key);
+    int ret = db->submit_transaction_sync(tx);
+
+    return (ret == 0);
+  }
+
+  bool rm_prefix(const string& prefix) {
+    assert(!prefix.empty());
+
+    KeyValueDB::Transaction tx = db->get_transaction();
+    tx->rmkeys_by_prefix(prefix);
+    int ret = db->submit_transaction_sync(tx);
+
+    return (ret == 0);
+  }
+
   int copy_store_to(string type, const string &other_path,
 		    const int num_keys_per_tx) {
 
@@ -245,7 +266,7 @@ class StoreTool
 
 void usage(const char *pname)
 {
-  std::cerr << "Usage: " << pname << " <leveldb|rocksdb|...> <store path> command [args...]\n"
+  std::cerr << "Usage: " << pname << " <leveldb|rocksdb|bluestore-kv> <store path> command [args...]\n"
     << "\n"
     << "Commands:\n"
     << "  list [prefix]\n"
@@ -255,6 +276,8 @@ void usage(const char *pname)
     << "  crc <prefix> <key>\n"
     << "  get-size [<prefix> <key>]\n"
     << "  set <prefix> <key> [ver <N>|in <file>]\n"
+    << "  rm <prefix> <key>\n"
+    << "  rm-prefix <prefix>\n"
     << "  store-copy <path> [num-keys-per-tx]\n"
     << "  store-crc <path>\n"
     << "  compact\n"
@@ -432,6 +455,35 @@ int main(int argc, const char *argv[])
     if (!ret) {
       std::cerr << "error setting ("
                 << url_escape(prefix) << "," << url_escape(key) << ")" << std::endl;
+      return 1;
+    }
+  } else if (cmd == "rm") {
+    if (argc < 6) {
+      usage(argv[0]);
+      return 1;
+    }
+    string prefix(url_unescape(argv[4]));
+    string key(url_unescape(argv[5]));
+
+    bool ret = st.rm(prefix, key);
+    if (!ret) {
+      std::cerr << "error removing ("
+                << url_escape(prefix) << "," << url_escape(key) << ")"
+		<< std::endl;
+      return 1;
+    }
+  } else if (cmd == "rm-prefix") {
+    if (argc < 5) {
+      usage(argv[0]);
+      return 1;
+    }
+    string prefix(url_unescape(argv[4]));
+
+    bool ret = st.rm_prefix(prefix);
+    if (!ret) {
+      std::cerr << "error removing prefix ("
+                << url_escape(prefix) << ")"
+		<< std::endl;
       return 1;
     }
   } else if (cmd == "store-copy") {

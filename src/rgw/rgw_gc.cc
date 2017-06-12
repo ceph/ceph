@@ -20,15 +20,11 @@ static string gc_oid_prefix = "gc";
 static string gc_index_lock_name = "gc_process";
 
 
-#define HASH_PRIME 7877
-
 void RGWGC::initialize(CephContext *_cct, RGWRados *_store) {
   cct = _cct;
   store = _store;
 
-  max_objs = cct->_conf->rgw_gc_max_objs;
-  if (max_objs > HASH_PRIME)
-    max_objs = HASH_PRIME;
+  max_objs = min(cct->_conf->rgw_gc_max_objs, rgw_shards_max());
 
   obj_names = new string[max_objs];
 
@@ -47,7 +43,7 @@ void RGWGC::finalize()
 
 int RGWGC::tag_index(const string& tag)
 {
-  return ceph_str_hash_linux(tag.c_str(), tag.size()) % HASH_PRIME % max_objs;
+  return rgw_shards_hash(tag, max_objs);
 }
 
 void RGWGC::add_chain(ObjectWriteOperation& op, cls_rgw_obj_chain& chain, const string& tag)
@@ -95,10 +91,11 @@ int RGWGC::remove(int index, const std::list<string>& tags)
 int RGWGC::list(int *index, string& marker, uint32_t max, bool expired_only, std::list<cls_rgw_gc_obj_info>& result, bool *truncated)
 {
   result.clear();
+  string next_marker;
 
   for (; *index < max_objs && result.size() < max; (*index)++, marker.clear()) {
     std::list<cls_rgw_gc_obj_info> entries;
-    int ret = cls_rgw_gc_list(store->gc_pool_ctx, obj_names[*index], marker, max - result.size(), expired_only, entries, truncated);
+    int ret = cls_rgw_gc_list(store->gc_pool_ctx, obj_names[*index], marker, max - result.size(), expired_only, entries, truncated, next_marker);
     if (ret == -ENOENT)
       continue;
     if (ret < 0)
@@ -108,6 +105,8 @@ int RGWGC::list(int *index, string& marker, uint32_t max, bool expired_only, std
     for (iter = entries.begin(); iter != entries.end(); ++iter) {
       result.push_back(*iter);
     }
+
+    marker = next_marker;
 
     if (*index == max_objs - 1) {
       /* we cut short here, truncated will hold the correct value */
@@ -155,12 +154,13 @@ int RGWGC::process(int index, int max_secs)
     return ret;
 
   string marker;
+  string next_marker;
   bool truncated;
   IoCtx *ctx = new IoCtx;
   do {
     int max = 100;
     std::list<cls_rgw_gc_obj_info> entries;
-    ret = cls_rgw_gc_list(store->gc_pool_ctx, obj_names[index], marker, max, true, entries, &truncated);
+    ret = cls_rgw_gc_list(store->gc_pool_ctx, obj_names[index], marker, max, true, entries, &truncated, next_marker);
     if (ret == -ENOENT) {
       ret = 0;
       goto done;

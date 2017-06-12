@@ -41,12 +41,14 @@ const char *mempool::get_pool_name(mempool::pool_index_t ix) {
 
 void mempool::dump(ceph::Formatter *f)
 {
+  stats_t total;
   for (size_t i = 0; i < num_pools; ++i) {
     const pool_t &pool = mempool::get_pool((pool_index_t)i);
     f->open_object_section(get_pool_name((pool_index_t)i));
-    pool.dump(f);
+    pool.dump(f, &total);
     f->close_section();
   }
+  f->dump_object("total", total);
 }
 
 void mempool::set_debug_mode(bool d)
@@ -77,6 +79,13 @@ size_t mempool::pool_t::allocated_items() const
   return (size_t) result;
 }
 
+void mempool::pool_t::adjust_count(ssize_t items, ssize_t bytes)
+{
+  shard_t *shard = pick_a_shard();
+  shard->items += items;
+  shard->bytes += bytes;
+}
+
 void mempool::pool_t::get_stats(
   stats_t *total,
   std::map<std::string, stats_t> *by_type) const
@@ -96,17 +105,22 @@ void mempool::pool_t::get_stats(
   }
 }
 
-void mempool::pool_t::dump(ceph::Formatter *f) const
+void mempool::pool_t::dump(ceph::Formatter *f, stats_t *ptotal) const
 {
   stats_t total;
   std::map<std::string, stats_t> by_type;
   get_stats(&total, &by_type);
-  f->dump_object("total", total);
+  if (ptotal) {
+    *ptotal += total;
+  }
+  total.dump(f);
   if (!by_type.empty()) {
+    f->open_object_section("by_type");
     for (auto &i : by_type) {
       f->open_object_section(i.first.c_str());
       i.second.dump(f);
       f->close_section();
     }
+    f->close_section();
   }
 }

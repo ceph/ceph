@@ -11,13 +11,16 @@
  * Foundation.  See file COPYING.
  */
 
+#ifndef CEPH_MGRMONITOR_H
+#define CEPH_MGRMONITOR_H
 
 #include "include/Context.h"
 #include "MgrMap.h"
 #include "PaxosService.h"
 
+class PGStatService;
 
-class MgrMonitor : public PaxosService
+class MgrMonitor: public PaxosService
 {
   MgrMap map;
   MgrMap pending_map;
@@ -45,6 +48,7 @@ public:
   MgrMonitor(Monitor *mn, Paxos *p, const string& service_name)
     : PaxosService(mn, p, service_name)
   {}
+  ~MgrMonitor() override {}
 
   void init() override;
   void on_shutdown() override;
@@ -84,3 +88,4 @@ public:
   friend class C_Updated;
 };
 
+#endif

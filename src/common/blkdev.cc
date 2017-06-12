@@ -9,15 +9,11 @@
  * Foundation.  See file COPYING.
  * 
  */
+
 #include <errno.h>
-#include <sys/types.h>
 #include <sys/ioctl.h>
 #include <sys/stat.h>
-#include <stdio.h>
-#include <string.h>
-#include <ctype.h>
 #include <dirent.h>
-#include <stdlib.h>
 #include "include/uuid.h"
 
 #ifdef __linux__
@@ -336,7 +332,7 @@ int get_device_by_uuid(uuid_d dev_uuid, const char* label, char* partition,
 {
   return -EOPNOTSUPP;
 }
-int get_device_by_fd(int fd, char* partition, char* device)
+int get_device_by_fd(int fd, char *partition, char *device, size_t max)
 {
   return -EOPNOTSUPP;
 }
@@ -367,7 +363,7 @@ int get_device_by_uuid(uuid_d dev_uuid, const char* label, char* partition,
   return -EOPNOTSUPP;
 }
 
-int get_device_by_fd(int fd, char* partition, char* device)
+int get_device_by_fd(int fd, char *partition, char *device, size_t max)
 {
   return -EOPNOTSUPP;
 }

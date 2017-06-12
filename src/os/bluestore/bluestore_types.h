@@ -161,13 +161,14 @@ WRITE_CLASS_DENC(bluestore_pextent_t)
 
 ostream& operator<<(ostream& out, const bluestore_pextent_t& o);
 
-typedef mempool::bluestore_meta_other::vector<bluestore_pextent_t> PExtentVector;
+typedef mempool::bluestore_cache_other::vector<bluestore_pextent_t> PExtentVector;
 
 template<>
 struct denc_traits<PExtentVector> {
   static constexpr bool supported = true;
   static constexpr bool bounded = false;
   static constexpr bool featured = false;
+  static constexpr bool need_contiguous = true;
   static void bound_encode(const PExtentVector& v, size_t& p) {
     p += sizeof(uint32_t);
     const auto size = v.size();
@@ -208,7 +209,7 @@ struct bluestore_extent_ref_map_t {
     }
   };
 
-  typedef mempool::bluestore_meta_other::map<uint64_t,record_t> map_t;
+  typedef mempool::bluestore_cache_other::map<uint64_t,record_t> map_t;
   map_t ref_map;
 
   void _check() const;
@@ -222,7 +223,8 @@ struct bluestore_extent_ref_map_t {
   }
 
   void get(uint64_t offset, uint32_t len);
-  void put(uint64_t offset, uint32_t len, PExtentVector *release);
+  void put(uint64_t offset, uint32_t len, PExtentVector *release,
+	   bool *maybe_unshared);
 
   bool contains(uint64_t offset, uint32_t len) const;
   bool intersects(uint64_t offset, uint32_t len) const;
@@ -483,7 +485,7 @@ private:
 
 public:
   enum {
-    FLAG_MUTABLE = 1,         ///< blob can be overwritten or split
+    LEGACY_FLAG_MUTABLE = 1,  ///< [legacy] blob can be overwritten or split
     FLAG_COMPRESSED = 2,      ///< blob is compressed
     FLAG_CSUM = 4,            ///< blob has checksums
     FLAG_HAS_UNUSED = 8,      ///< blob has unused map
@@ -595,7 +597,7 @@ public:
     compressed_length = clen;
   }
   bool is_mutable() const {
-    return has_flag(FLAG_MUTABLE);
+    return !is_compressed() && !is_shared();
   }
   bool is_compressed() const {
     return has_flag(FLAG_COMPRESSED);
@@ -939,7 +941,7 @@ ostream& operator<<(ostream& out, const bluestore_shared_blob_t& o);
 struct bluestore_onode_t {
   uint64_t nid = 0;                    ///< numeric id (locally unique)
   uint64_t size = 0;                   ///< object size
-  map<mempool::bluestore_meta_other::string, bufferptr> attrs;        ///< attrs
+  map<mempool::bluestore_cache_other::string, bufferptr> attrs;        ///< attrs
 
   struct shard_info {
     uint32_t offset = 0;  ///< logical offset for start of shard

@@ -94,6 +94,8 @@ private:
   void send_create_object_map();
   void handle_create_object_map(int r);
 
+  Context *start_local_op();
+
   void finish(int r);
 };
 

@@ -939,6 +939,32 @@ public:
     bucket_stats_cache.adjust_stats(user, bucket, obj_delta, added_bytes, removed_bytes);
     user_stats_cache.adjust_stats(user, bucket, obj_delta, added_bytes, removed_bytes);
   }
+
+  int check_bucket_shards(uint64_t max_objs_per_shard, uint64_t num_shards,
+			  const rgw_user& user, rgw_bucket& bucket, RGWQuotaInfo& bucket_quota,
+			  uint64_t num_objs, bool& need_resharding, uint32_t *suggested_num_shards)
+  {
+    RGWStorageStats bucket_stats;
+    int ret = bucket_stats_cache.get_stats(user, bucket, bucket_stats,
+                                           bucket_quota);
+    if (ret < 0) {
+      return ret;
+    }
+
+    if (bucket_stats.num_objects  + num_objs > num_shards * max_objs_per_shard) {
+      ldout(store->ctx(), 0) << __func__ << ": resharding needed: stats.num_objects=" << bucket_stats.num_objects
+             << " shard max_objects=" <<  max_objs_per_shard * num_shards << dendl;
+      need_resharding = true;
+      if (suggested_num_shards) {
+        *suggested_num_shards = (bucket_stats.num_objects  + num_objs) * 2 / max_objs_per_shard;
+      }
+    } else {
+      need_resharding = false;
+    }
+
+    return 0;
+  }
+
 };
 
 
@@ -951,3 +977,5 @@ void RGWQuotaHandler::free_handler(RGWQuotaHandler *handler)
 {
   delete handler;
 }
+
+

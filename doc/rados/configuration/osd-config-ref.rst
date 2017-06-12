@@ -420,7 +420,7 @@ recovery operations to ensure optimal performance during recovery.
               ``osd client op priority``.
 
 :Type: 32-bit Integer
-:Default: ``10`` 
+:Default: ``3`` 
 :Valid Range: 1-63
 
 
@@ -654,7 +654,7 @@ perform well in a degraded state.
               increased load on the cluster.
 
 :Type: 32-bit Integer
-:Default: ``15``
+:Default: ``3``
 
 
 ``osd recovery max chunk`` 
@@ -662,6 +662,14 @@ perform well in a degraded state.
 :Description: The maximum size of a recovered chunk of data to push. 
 :Type: 64-bit Integer Unsigned
 :Default: ``8 << 20`` 
+
+
+``osd recovery max single start``
+
+:Description: The maximum number of recovery operations per OSD that will be
+              newly started when an OSD is recovering.
+:Type: 64-bit Integer Unsigned
+:Default: ``1``
 
 
 ``osd recovery thread timeout`` 
@@ -678,6 +686,16 @@ perform well in a degraded state.
 
 :Type: Boolean
 :Default: ``true``
+
+
+``osd recovery sleep``
+
+:Description: Time to sleep before next recovery. Increasing this value will
+              slow down recovery operation while client operations will be
+              less impacted.
+
+:Type: Float
+:Default: ``0.01``
 
 Tiering
 =======

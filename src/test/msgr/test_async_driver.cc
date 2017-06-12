@@ -24,12 +24,13 @@
 #include <stdint.h>
 #include <arpa/inet.h>
 #include "include/Context.h"
-#include "include/atomic.h"
 #include "common/Mutex.h"
 #include "common/Cond.h"
 #include "global/global_init.h"
 #include "common/ceph_argparse.h"
 #include "msg/async/Event.h"
+
+#include <atomic>
 
 // We use epoll, kqueue, evport, select in descending order by performance.
 #if defined(__linux__)
@@ -293,15 +294,15 @@ class Worker : public Thread {
 };
 
 class CountEvent: public EventCallback {
-  atomic_t *count;
+  std::atomic<unsigned> *count;
   Mutex *lock;
   Cond *cond;
 
  public:
-  CountEvent(atomic_t *atomic, Mutex *l, Cond *c): count(atomic), lock(l), cond(c) {}
+  CountEvent(std::atomic<unsigned> *atomic, Mutex *l, Cond *c): count(atomic), lock(l), cond(c) {}
   void do_request(int id) override {
     lock->Lock();
-    count->dec();
+    (*count)--;
     cond->Signal();
     lock->Unlock();
   }
@@ -309,18 +310,18 @@ class CountEvent: public EventCallback {
 
 TEST(EventCenterTest, DispatchTest) {
   Worker worker1(g_ceph_context, 1), worker2(g_ceph_context, 2);
-  atomic_t count(0);
+  std::atomic<unsigned> count = { 0 };
   Mutex lock("DispatchTest::lock");
   Cond cond;
   worker1.create("worker_1");
   worker2.create("worker_2");
   for (int i = 0; i < 10000; ++i) {
-    count.inc();
+    count++;
     worker1.center.dispatch_event_external(EventCallbackRef(new CountEvent(&count, &lock, &cond)));
-    count.inc();
+    count++;
     worker2.center.dispatch_event_external(EventCallbackRef(new CountEvent(&count, &lock, &cond)));
     Mutex::Locker l(lock);
-    while (count.read())
+    while (count)
       cond.Wait(lock);
   }
   worker1.stop();

@@ -15,8 +15,7 @@
 #include "messages/MMgrMap.h"
 #include "messages/MMgrDigest.h"
 
-#include "PGMap.h"
-#include "PGMonitor.h"
+#include "PGStatService.h"
 #include "include/stringify.h"
 #include "mgr/MgrContext.h"
 #include "OSDMonitor.h"
@@ -32,6 +31,7 @@ static ostream& _prefix(std::ostream *_dout, Monitor *mon,
 		<< "(" << mon->get_state_name()
 		<< ").mgr e" << mgrmap.get_epoch() << " ";
 }
+
 
 void MgrMonitor::create_initial()
 {
@@ -341,7 +341,7 @@ void MgrMonitor::get_health(
   if (!map.available) {
     auto level = HEALTH_WARN;
     // do not escalate to ERR if they are still upgrading to jewel.
-    if (mon->osdmon()->osdmap.test_flag(CEPH_OSDMAP_REQUIRE_LUMINOUS)) {
+    if (mon->osdmon()->osdmap.require_osd_release >= CEPH_RELEASE_LUMINOUS) {
       utime_t now = ceph_clock_now();
       if (first_seen_inactive != utime_t() &&
 	  now - first_seen_inactive > g_conf->mon_mgr_inactive_grace) {
@@ -610,3 +610,5 @@ void MgrMonitor::on_shutdown()
 {
   cancel_timer();
 }
+
+

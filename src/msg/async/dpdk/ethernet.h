@@ -53,7 +53,7 @@ struct ethernet_address {
 inline bool operator==(const ethernet_address& a, const ethernet_address& b) {
   return a.mac == b.mac;
 }
-std::ostream& operator<<(std::ostream& os, ethernet_address ea);
+std::ostream& operator<<(std::ostream& os, const ethernet_address& ea);
 
 struct ethernet {
   using address = ethernet_address;

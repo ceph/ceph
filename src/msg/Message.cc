@@ -168,6 +168,7 @@ using namespace std;
 #include "messages/MMgrReport.h"
 #include "messages/MMgrOpen.h"
 #include "messages/MMgrConfigure.h"
+#include "messages/MMonMgrReport.h"
 
 #include "messages/MLock.h"
 
@@ -744,6 +745,10 @@ Message *decode_message(CephContext *cct, int crcflags,
 
   case MSG_MGR_BEACON:
     m = new MMgrBeacon();
+    break;
+
+  case MSG_MON_MGR_REPORT:
+    m = new MMonMgrReport();
     break;
 
   case MSG_MGR_MAP:

@@ -200,6 +200,7 @@ using ceph::crypto::MD5;
 #define ERR_MALFORMED_DOC        2204
 #define ERR_NO_ROLE_FOUND        2205
 #define ERR_DELETE_CONFLICT      2206
+#define ERR_BUSY_RESHARDING      2300
 
 #ifndef UINT32_MAX
 #define UINT32_MAX (0xffffffffu)
@@ -357,6 +358,10 @@ class RGWHTTPArgs
   }
 };
 
+const char *rgw_conf_get(const map<string, string, ltstr_nocase>& conf_map, const char *name, const char *def_val);
+int rgw_conf_get_int(const map<string, string, ltstr_nocase>& conf_map, const char *name, int def_val);
+bool rgw_conf_get_bool(const map<string, string, ltstr_nocase>& conf_map, const char *name, bool def_val);
+
 class RGWEnv;
 
 class RGWConf {
@@ -464,8 +469,11 @@ enum RGWOpType {
   /* rgw specific */
   RGW_OP_ADMIN_SET_METADATA,
   RGW_OP_GET_OBJ_LAYOUT,
-
-  RGW_OP_BULK_UPLOAD
+  RGW_OP_BULK_UPLOAD,
+  RGW_OP_METADATA_SEARCH,
+  RGW_OP_CONFIG_BUCKET_META_SEARCH,
+  RGW_OP_GET_BUCKET_META_SEARCH,
+  RGW_OP_DEL_BUCKET_META_SEARCH,
 };
 
 class RGWAccessControlPolicy;
@@ -1020,6 +1028,11 @@ struct rgw_bucket {
     DECODE_FINISH(bl);
   }
 
+  void update_bucket_id(const string& new_bucket_id) {
+    bucket_id = new_bucket_id;
+    oid.clear();
+  }
+
   // format a key for the bucket/instance. pass delim=0 to skip a field
   std::string get_key(char tenant_delim = '/',
                       char id_delim = ':') const;
@@ -1168,9 +1181,14 @@ struct RGWBucketInfo
   bool swift_versioning;
   string swift_ver_location;
 
+  map<string, uint32_t> mdsearch_config;
+
+  /* resharding */
+  uint8_t reshard_status;
+  string new_bucket_instance_id;
 
   void encode(bufferlist& bl) const {
-     ENCODE_START(17, 4, bl);
+     ENCODE_START(19, 4, bl);
      ::encode(bucket, bl);
      ::encode(owner.id, bl);
      ::encode(flags, bl);
@@ -1194,10 +1212,13 @@ struct RGWBucketInfo
        ::encode(swift_ver_location, bl);
      }
      ::encode(creation_time, bl);
+     ::encode(mdsearch_config, bl);
+     ::encode(reshard_status, bl);
+     ::encode(new_bucket_instance_id, bl);
      ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator& bl) {
-    DECODE_START_LEGACY_COMPAT_LEN_32(17, 4, 4, bl);
+    DECODE_START_LEGACY_COMPAT_LEN_32(19, 4, 4, bl);
      ::decode(bucket, bl);
      if (struct_v >= 2) {
        string s;
@@ -1254,6 +1275,13 @@ struct RGWBucketInfo
      if (struct_v >= 17) {
        ::decode(creation_time, bl);
      }
+     if (struct_v >= 18) {
+       ::decode(mdsearch_config, bl);
+     }
+     if (struct_v >= 19) {
+       ::decode(reshard_status, bl);
+       ::decode(new_bucket_instance_id, bl);
+     }
      DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
@@ -1271,7 +1299,7 @@ struct RGWBucketInfo
   }
 
   RGWBucketInfo() : flags(0), has_instance_obj(false), num_shards(0), bucket_index_shard_hash_type(MOD), requester_pays(false),
-                    has_website(false), swift_versioning(false) {}
+                    has_website(false), swift_versioning(false), reshard_status(0) {}
 };
 WRITE_CLASS_ENCODER(RGWBucketInfo)
 

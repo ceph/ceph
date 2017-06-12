@@ -39,7 +39,6 @@
 #include "auth/AuthMethodList.h"
 #include "auth/RotatingKeyRing.h"
 
-
 #define dout_subsys ceph_subsys_monc
 #undef dout_prefix
 #define dout_prefix *_dout << "monclient" << (_hunting() ? "(hunting)":"") << ": "
@@ -48,7 +47,8 @@ MonClient::MonClient(CephContext *cct_) :
   Dispatcher(cct_),
   messenger(NULL),
   monc_lock("MonClient::monc_lock"),
-  timer(cct_, monc_lock), finisher(cct_),
+  timer(cct_, monc_lock),
+  finisher(cct_),
   initialized(false),
   no_keyring_disabled_cephx(false),
   log_client(NULL),
@@ -267,6 +267,11 @@ bool MonClient::ms_dispatch(Message *m)
   switch (m->get_type()) {
   case CEPH_MSG_MON_MAP:
     handle_monmap(static_cast<MMonMap*>(m));
+    if (passthrough_monmap) {
+      return false;
+    } else {
+      m->put();
+    }
     break;
   case CEPH_MSG_AUTH_REPLY:
     handle_auth(static_cast<MAuthReply*>(m));
@@ -311,6 +316,8 @@ void MonClient::flush_log()
   send_log();
 }
 
+/* Unlike all the other message-handling functions, we don't put away a reference
+* because we want to support MMonMap passthrough to other Dispatchers. */
 void MonClient::handle_monmap(MMonMap *m)
 {
   ldout(cct, 10) << __func__ << " " << *m << dendl;
@@ -337,8 +344,6 @@ void MonClient::handle_monmap(MMonMap *m)
 
   map_cond.Signal();
   want_monmap = false;
-
-  m->put();
 }
 
 // ----------------------
@@ -408,7 +413,10 @@ void MonClient::shutdown()
     delete version_requests.begin()->second;
     version_requests.erase(version_requests.begin());
   }
-
+  while (!mon_commands.empty()) {
+    auto tid = mon_commands.begin()->first;
+    _cancel_mon_command(tid);
+  }
   while (!waiting_for_session.empty()) {
     ldout(cct, 20) << __func__ << " discarding pending message " << *waiting_for_session.front() << dendl;
     waiting_for_session.front()->put();
@@ -1003,7 +1011,7 @@ void MonClient::handle_mon_command_ack(MMonCommandAck *ack)
   ack->put();
 }
 
-int MonClient::_cancel_mon_command(uint64_t tid, int r)
+int MonClient::_cancel_mon_command(uint64_t tid)
 {
   assert(monc_lock.is_locked());
 
@@ -1053,7 +1061,7 @@ void MonClient::start_mon_command(const vector<string>& cmd,
       public:
       C_CancelMonCommand(uint64_t tid, MonClient *monc) : tid(tid), monc(monc) {}
       void finish(int r) override {
-	monc->_cancel_mon_command(tid, -ETIMEDOUT);
+	monc->_cancel_mon_command(tid);
       }
     };
     r->ontimeout = new C_CancelMonCommand(r->tid, this);

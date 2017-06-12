@@ -74,6 +74,7 @@ private:
 
   version_t log_last_version;
   rados_log_callback_t log_cb;
+  rados_log_callback2_t log_cb2;
   void *log_cb_arg;
   string log_watch;
 
@@ -144,7 +145,8 @@ public:
 	         bufferlist *poutbl, string *prs);
 
   void handle_log(MLog *m);
-  int monitor_log(const string& level, rados_log_callback_t cb, void *arg);
+  int monitor_log(const string& level, rados_log_callback_t cb,
+		  rados_log_callback2_t cb2, void *arg);
 
   void get();
   bool put();

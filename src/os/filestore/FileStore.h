@@ -20,9 +20,12 @@
 
 #include <map>
 #include <deque>
-#include <boost/scoped_ptr.hpp>
+#include <atomic>
 #include <fstream>
+
 using namespace std;
+
+#include <boost/scoped_ptr.hpp>
 
 #include "include/unordered_map.h"
 
@@ -364,7 +367,7 @@ private:
   FDCache fdcache;
   WBThrottle wbthrottle;
 
-  atomic_t next_osr_id;
+  std::atomic<int64_t> next_osr_id = { 0 };
   bool m_disable_wbthrottle;
   deque<OpSequencer*> op_queue;
   BackoffThrottle throttle_ops, throttle_bytes;
@@ -478,6 +481,9 @@ public:
   bool needs_journal() override {
     return false;
   }
+
+  bool is_rotational() override;
+
   void dump_perf_counters(Formatter *f) override {
     f->open_object_section("perf_counters");
     logger->dump_formatted(f, false);
@@ -766,7 +772,7 @@ private:
   bool m_filestore_do_dump;
   std::ofstream m_filestore_dump;
   JSONFormatter m_filestore_dump_fmt;
-  atomic_t m_filestore_kill_at;
+  std::atomic<int64_t> m_filestore_kill_at = { 0 };
   bool m_filestore_sloppy_crc;
   int m_filestore_sloppy_crc_block_size;
   uint64_t m_filestore_max_alloc_hint_size;
@@ -861,6 +867,7 @@ public:
   virtual int syncfs() = 0;
   virtual bool has_fiemap() = 0;
   virtual bool has_seek_data_hole() = 0;
+  virtual bool is_rotational() = 0;
   virtual int do_fiemap(int fd, off_t start, size_t len, struct fiemap **pfiemap) = 0;
   virtual int clone_range(int from, int to, uint64_t srcoff, uint64_t len, uint64_t dstoff) = 0;
   virtual int set_alloc_hint(int fd, uint64_t hint) = 0;

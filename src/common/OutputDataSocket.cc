@@ -12,34 +12,17 @@
  * 
  */
 
-#include "include/int_types.h"
-
-#include "common/Thread.h"
 #include "common/OutputDataSocket.h"
-#include "common/config.h"
-#include "common/dout.h"
 #include "common/errno.h"
-#include "common/perf_counters.h"
 #include "common/pipe.h"
 #include "common/safe_io.h"
-#include "common/version.h"
-#include "common/Formatter.h"
-
-#include <errno.h>
-#include <fcntl.h>
-#include <map>
-#include <poll.h>
-#include <set>
-#include <sstream>
-#include <stdint.h>
-#include <string.h>
-#include <string>
-#include <sys/socket.h>
-#include <sys/types.h>
-#include <sys/un.h>
-#include <unistd.h>
-
 #include "include/compat.h"
+
+#include <poll.h>
+#include <sys/un.h>
+
+// re-include our assert to clobber the system one; fix dout:
+#include "include/assert.h"
 
 #define dout_subsys ceph_subsys_asok
 #undef dout_prefix
