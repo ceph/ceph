@@ -378,6 +378,9 @@ struct C_InvalidateCache : public Context {
     plb.add_u64_counter(l_librbd_ws, "ws", "WriteSames");
     plb.add_u64_counter(l_librbd_ws_bytes, "ws_bytes", "WriteSame data");
     plb.add_time_avg(l_librbd_ws_latency, "ws_latency", "WriteSame latency");
+    plb.add_u64_counter(l_librbd_cmp, "cmp", "CompareAndWrites");
+    plb.add_u64_counter(l_librbd_cmp_bytes, "cmp_bytes", "Data size in cmps");
+    plb.add_time_avg(l_librbd_cmp_latency, "cmp_latency", "Latency of cmps");
     plb.add_u64_counter(l_librbd_snap_create, "snap_create", "Snap creations");
     plb.add_u64_counter(l_librbd_snap_remove, "snap_remove", "Snap removals");
     plb.add_u64_counter(l_librbd_snap_rollback, "snap_rollback", "Snap rollbacks");
