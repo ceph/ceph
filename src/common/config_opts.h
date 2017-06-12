@@ -999,8 +999,6 @@ OPTION(kstore_default_stripe_size, OPT_INT, 65536)
 
 OPTION(filestore_omap_backend, OPT_STR, "leveldb")
 
-OPTION(filestore_debug_disable_sharded_check, OPT_BOOL, false)
-
 /// filestore wb throttle limits
 OPTION(filestore_wbthrottle_enable, OPT_BOOL, true)
 OPTION(filestore_wbthrottle_btrfs_bytes_start_flusher, OPT_U64, 41943040)
