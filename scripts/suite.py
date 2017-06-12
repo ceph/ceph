@@ -41,8 +41,7 @@ Standard arguments:
                               either --ceph or --sha1, backtracking
                               up to <newest> commits [default: 0]
   -k <kernel>, --kernel <kernel>
-                              The kernel branch to run against; if not
-                              supplied, the installed kernel is unchanged
+                              The kernel branch to run against
                               [default: distro]
   -f <flavor>, --flavor <flavor>
                               The kernel flavor to run against: ('basic',
