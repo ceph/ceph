@@ -1532,14 +1532,7 @@ def update_partition(dev, description):
     command_check_call(['udevadm', 'settle', '--timeout=600'])
 
 
-def zap(dev):
-    """
-    Destroy the partition table and content of a given disk.
-    """
-    dev = os.path.realpath(dev)
-    dmode = os.stat(dev).st_mode
-    if not stat.S_ISBLK(dmode) or is_partition(dev):
-        raise Error('not full block device; cannot zap', dev)
+def zap_linux(dev):
     try:
         # Thoroughly wipe all partitions of any traces of
         # Filesystems or OSD Journals
@@ -1598,11 +1591,40 @@ def zap(dev):
                 dev,
             ],
         )
-
         update_partition(dev, 'zapped')
 
     except subprocess.CalledProcessError as e:
         raise Error(e)
+
+
+def zap_freebsd(dev):
+    try:
+        # For FreeBSD we just need to zap the partition.
+        command_check_call(
+            [
+                'gpart',
+                'destroy',
+                '-F',
+                dev,
+            ],
+        )
+
+    except subprocess.CalledProcessError as e:
+        raise Error(e)
+
+
+def zap(dev):
+    """
+    Destroy the partition table and content of a given disk.
+    """
+    dev = os.path.realpath(dev)
+    dmode = os.stat(dev).st_mode
+    if not stat.S_ISBLK(dmode) or is_partition(dev):
+        raise Error('not full block device; cannot zap', dev)
+    if FREEBSD:
+        zap_freebsd(dev)
+    else:
+        zap_linux(dev)
 
 
 def adjust_symlink(target, path):
