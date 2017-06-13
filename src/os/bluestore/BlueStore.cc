@@ -3565,6 +3565,10 @@ int BlueStore::_set_cache_sizes()
 	 << dendl;
     return -EINVAL;
   }
+  if (cache_data_ratio < 0) {
+    // deal with floating point imprecision
+    cache_data_ratio = 0;
+  }
   dout(1) << __func__ << " meta " << cache_meta_ratio
 	  << " kv " << cache_kv_ratio
 	  << " data " << cache_data_ratio
