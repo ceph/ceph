@@ -26,6 +26,7 @@
 #include "common/TextTable.h"
 #include "osd/osd_types.h"
 #include "include/mempool.h"
+#include "mon/health_check.h"
 #include <sstream>
 #include "mon/PGStatService.h"
 
@@ -495,6 +496,11 @@ public:
 		  const OSDMap& osdmap,
 		  list<pair<health_status_t,string> >& summary,
 		  list<pair<health_status_t,string> > *detail) const;
+
+  void get_health_checks(
+    CephContext *cct,
+    const OSDMap& osdmap,
+    health_check_map_t *checks) const;
 
   static void generate_test_instances(list<PGMap*>& o);
 };
