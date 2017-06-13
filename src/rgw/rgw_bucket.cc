@@ -868,8 +868,9 @@ int RGWBucket::link(RGWBucketAdminOpState& op_state, std::string *err_msg)
     policy.encode(aclbl);
 
     r = store->system_obj_set_attr(NULL, obj, RGW_ATTR_ACL, aclbl, &objv_tracker);
-    if (r < 0)
+    if (r < 0) {
       return r;
+    }
 
     RGWAccessControlPolicy policy_instance;
     policy_instance.create_default(user_info.user_id, display_name);
@@ -879,10 +880,14 @@ int RGWBucket::link(RGWBucketAdminOpState& op_state, std::string *err_msg)
     string oid_bucket_instance = RGW_BUCKET_INSTANCE_MD_PREFIX + key;
     rgw_raw_obj obj_bucket_instance(root_pool, oid_bucket_instance);
     r = store->system_obj_set_attr(NULL, obj_bucket_instance, RGW_ATTR_ACL, aclbl, &objv_tracker);
+    if (r < 0) {
+      return r;
+    }
 
     r = rgw_link_bucket(store, user_info.user_id, bucket_info.bucket, real_time());
-    if (r < 0)
+    if (r < 0) {
       return r;
+    }
   }
 
   return 0;
