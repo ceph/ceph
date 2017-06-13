@@ -3767,6 +3767,9 @@ PrimaryLogPG::OpContextUPtr PrimaryLogPG::trim_object(
       coid,
       old_snaps,
       new_snaps);
+
+    obc->obs.oi = object_info_t(coid);
+
     ctx->at_version.version++;
   } else {
     // save adjusted snaps for this object
@@ -3848,7 +3851,7 @@ PrimaryLogPG::OpContextUPtr PrimaryLogPG::trim_object(
 	ctx->delta_stats.num_objects_pinned--;
     }
     ctx->snapset_obc->obs.exists = false;
-    
+    obc->obs.oi = object_info_t(coid);
     t->remove(snapoid);
   } else {
     dout(10) << coid << " filtering snapset on " << snapoid << dendl;
