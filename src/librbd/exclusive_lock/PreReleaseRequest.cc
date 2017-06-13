@@ -46,6 +46,7 @@ PreReleaseRequest<I>::~PreReleaseRequest() {
   if (!m_shutting_down) {
     m_image_ctx.state->handle_prepare_lock_complete();
   }
+  delete m_on_finish;
 }
 
 template <typename I>
