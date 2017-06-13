@@ -6542,7 +6542,23 @@ int RGWGetBucketPolicy::verify_permission()
 void RGWGetBucketPolicy::execute()
 {
   auto attrs = s->bucket_attrs;
-  policy = attrs[RGW_ATTR_IAM_POLICY];
+  map<string, bufferlist>::iterator aiter = attrs.find(RGW_ATTR_IAM_POLICY);
+  if (aiter == attrs.end()) {
+    ldout(s->cct, 0) << __func__ << " can't find bucket IAM POLICY attr" 
+                     << " bucket_name = " << s->bucket_name << dendl;
+    op_ret = -ERR_NO_SUCH_BUCKET_POLICY;
+    s->err.message = "The bucket policy does not exist";
+    return;
+  } else {
+    policy = attrs[RGW_ATTR_IAM_POLICY];
+
+    if (policy.length() == 0) {
+      ldout(s->cct, 10) << "The bucket policy does not exist, bucket: " << s->bucket_name << dendl;
+      op_ret = -ERR_NO_SUCH_BUCKET_POLICY;
+      s->err.message = "The bucket policy does not exist";
+      return;
+    }
+  } 
 }
 
 void RGWDeleteBucketPolicy::send_response()
