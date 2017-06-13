@@ -1538,8 +1538,15 @@ ssize_t AsyncConnection::handle_connect_msg(ceph_msg_connect &connect, bufferlis
     // connection's lock
     existing->lock.lock();  // skip lockdep check (we are locking a second AsyncConnection here)
 
-    if (existing->replacing || existing->state == STATE_CLOSED) {
-      ldout(async_msgr->cct, 1) << __func__ << " existing racing replace or mark_down happened while replacing."
+    if (existing->state == STATE_CLOSED) {
+      ldout(async_msgr->cct, 1) << __func__ << " existing already closed." << dendl;
+      existing->lock.unlock();
+      existing = NULL;
+      goto open;
+    }
+
+    if (existing->replacing) {
+      ldout(async_msgr->cct, 1) << __func__ << " existing racing replace happened while replacing."
                                 << " existing_state=" << get_state_name(existing->state) << dendl;
       reply.global_seq = existing->peer_global_seq;
       r = _reply_accept(CEPH_MSGR_TAG_RETRY_GLOBAL, connect, reply, authorizer_reply);
