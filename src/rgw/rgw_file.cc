@@ -486,9 +486,18 @@ namespace rgw {
   MkObjResult RGWLibFS::mkdir(RGWFileHandle* parent, const char *name,
 			      struct stat *st, uint32_t mask, uint32_t flags)
   {
-    MkObjResult mkr{nullptr, -EINVAL};
     int rc, rc2;
+    rgw_file_handle *lfh;
 
+    rc = rgw_lookup(get_fs(), parent->get_fh(), name, &lfh,
+		    RGW_LOOKUP_FLAG_NONE);
+    if (! rc) {
+      /* conflict! */
+      rc = rgw_fh_rele(get_fs(), lfh, RGW_FH_RELE_FLAG_NONE);
+      return MkObjResult{nullptr, -EEXIST};
+    }
+
+    MkObjResult mkr{nullptr, -EINVAL};
     LookupFHResult fhr;
     RGWFileHandle* rgw_fh = nullptr;
     buffer::list ux_key, ux_attrs;
