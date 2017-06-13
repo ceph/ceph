@@ -21,15 +21,32 @@ namespace auth {
 /* A class aggregating the knowledge about all Strategies in RadosGW. It is
  * responsible for handling the dynamic reconfiguration on e.g. realm update. */
 class StrategyRegistry {
-  template <class ExtractorT>
-  using s3_strategy_t = rgw::auth::s3::AWSv2AuthStrategy<ExtractorT>;
+  template <class AbstractorT>
+  using s3_strategy_t = rgw::auth::s3::AWSAuthStrategy<AbstractorT>;
 
-  using s3_main_strategy_t = \
-    s3_strategy_t<rgw::auth::s3::RGWS3V2Extractor>;
+  struct s3_main_strategy_t : public Strategy {
+    using s3_main_strategy_plain_t = \
+      s3_strategy_t<rgw::auth::s3::AWSGeneralAbstractor>;
+    using s3_main_strategy_boto2_t = \
+      s3_strategy_t<rgw::auth::s3::AWSGeneralBoto2Abstractor>;
+
+    s3_main_strategy_plain_t s3_main_strategy_plain;
+    s3_main_strategy_boto2_t s3_main_strategy_boto2;
+
+    s3_main_strategy_t(CephContext* const cct, RGWRados* const store)
+      : s3_main_strategy_plain(cct, store),
+        s3_main_strategy_boto2(cct, store) {
+      add_engine(Strategy::Control::SUFFICIENT, s3_main_strategy_plain);
+      add_engine(Strategy::Control::FALLBACK, s3_main_strategy_boto2);
+    }
+
+    const char* get_name() const noexcept override {
+      return "rgw::auth::StrategyRegistry::s3_main_strategy_t";
+    }
+  } s3_main_strategy;
+
   using s3_post_strategy_t = \
-    s3_strategy_t<rgw::auth::s3::RGWGetPolicyV2Extractor>;
-
-  s3_main_strategy_t s3_main_strategy;
+    s3_strategy_t<rgw::auth::s3::AWSBrowserUploadAbstractor>;
   s3_post_strategy_t s3_post_strategy;
 
   rgw::auth::swift::DefaultStrategy swift_strategy;
@@ -42,7 +59,6 @@ public:
       swift_strategy(cct, store) {
   }
 
-public:
   const s3_main_strategy_t& get_s3_main() const {
     return s3_main_strategy;
   }

@@ -27,7 +27,7 @@
 #define SSTRING_HH_
 
 #include <type_traits>
-#include <boost/utility/string_ref.hpp>
+#include <boost/utility/string_view.hpp>
 
 #include "include/buffer.h"
 #include "include/denc.h"
@@ -527,8 +527,8 @@ public:
     const char_type& operator[](size_type pos) const {
         return str()[pos];
     }
-    operator boost::basic_string_ref<char_type, traits_type>() const {
-		return boost::basic_string_ref<char_type, traits_type>(str(), size());
+    operator boost::basic_string_view<char_type, traits_type>() const {
+		return boost::basic_string_view<char_type, traits_type>(str(), size());
     }
     template <typename string_type, typename T>
     friend inline string_type to_sstring(T value);
@@ -611,7 +611,7 @@ template <typename char_type, typename size_type, size_type max_size>
 struct hash<basic_sstring<char_type, size_type, max_size>> {
     size_t operator()(const basic_sstring<char_type, size_type, max_size>& s) const {
 		using traits_type = std::char_traits<char_type>;
-		return std::hash<boost::basic_string_ref<char_type,traits_type>>()(s);
+		return std::hash<boost::basic_string_view<char_type,traits_type>>()(s);
     }
 };
 

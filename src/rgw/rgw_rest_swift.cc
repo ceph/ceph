@@ -1399,18 +1399,13 @@ int RGWBulkDelete_ObjStore_SWIFT::get_data(
       const size_t sep_pos = path_str.find('/', start_pos);
 
       if (string::npos != sep_pos) {
-        string bucket_name;
-        url_decode(path_str.substr(start_pos, sep_pos - start_pos), bucket_name);
-
-        string obj_name;
-        url_decode(path_str.substr(sep_pos + 1), obj_name);
-
-        path.bucket_name = bucket_name;
-        path.obj_key = obj_name;
+        path.bucket_name = url_decode(path_str.substr(start_pos,
+                                                      sep_pos - start_pos));
+        path.obj_key = url_decode(path_str.substr(sep_pos + 1));
       } else {
         /* It's guaranteed here that bucket name is at least one character
          * long and is different than slash. */
-        url_decode(path_str.substr(start_pos), path.bucket_name);
+        path.bucket_name = url_decode(path_str.substr(start_pos));
       }
 
       items.push_back(path);
@@ -2293,8 +2288,7 @@ RGWOp* RGWSwiftWebsiteHandler::get_ws_listing_op()
 
 bool RGWSwiftWebsiteHandler::is_web_dir() const
 {
-  std::string subdir_name;
-  url_decode(s->object.name, subdir_name);
+  std::string subdir_name = url_decode(s->object.name);
 
   /* Remove character from the subdir name if it is "/". */
   if (subdir_name.empty()) {
@@ -2303,7 +2297,7 @@ bool RGWSwiftWebsiteHandler::is_web_dir() const
     subdir_name.pop_back();
   }
 
-  rgw_obj obj(s->bucket, subdir_name);
+  rgw_obj obj(s->bucket, std::move(subdir_name));
 
   /* First, get attrset of the object we'll try to retrieve. */
   RGWObjectCtx& obj_ctx = *static_cast<RGWObjectCtx *>(s->obj_ctx);
@@ -2538,45 +2532,7 @@ RGWOp *RGWHandler_REST_Obj_SWIFT::op_options()
 
 int RGWHandler_REST_SWIFT::authorize()
 {
-  try {
-    auto result = auth_strategy.authenticate(s);
-
-    if (result.get_status() != decltype(result)::Status::GRANTED) {
-      /* Access denied is acknowledged by returning a std::unique_ptr with
-       * nullptr inside. */
-      ldout(s->cct, 5) << "auth engine refused to authenicate" << dendl;
-      return -EPERM;
-    }
-
-    try {
-      rgw::auth::IdentityApplier::aplptr_t applier = result.get_applier();
-
-      /* Account used by a given RGWOp is decoupled from identity employed
-       * in the authorization phase (RGWOp::verify_permissions). */
-      applier->load_acct_info(*s->user);
-      s->perm_mask = applier->get_perm_mask();
-
-      /* This is the signle place where we pass req_state as a pointer
-       * to non-const and thus its modification is allowed. In the time
-       * of writing only RGWTempURLEngine needed that feature. */
-      applier->modify_request_state(s);
-
-      s->auth.identity = std::move(applier);
-      s->auth.completer = std::move(result.get_completer());
-
-      return 0;
-    } catch (int err) {
-      ldout(s->cct, 5) << "applier throwed err=" << err << dendl;
-      return err;
-    }
-  } catch (int err) {
-    ldout(s->cct, 5) << "auth engine throwed err=" << err << dendl;
-    return err;
-  }
-
-  /* All engines refused to handle this authentication request by
-   * returning RGWAuthEngine::Status::UNKKOWN. Rather rare case. */
-  return -EPERM;
+  return rgw::auth::Strategy::apply(auth_strategy, s);
 }
 
 int RGWHandler_REST_SWIFT::postauth_init()

@@ -16,6 +16,9 @@
 #include "include/types.h"
 #include "rgw_common.h"
 
+
+class RGWRestfulIO;
+
 namespace rgw {
 namespace io {
 
@@ -155,6 +158,7 @@ public:
 template <typename DecorateeT>
 class DecoratedRestfulClient : public RestfulClient {
   template<typename T> friend class DecoratedRestfulClient;
+  friend RGWRestfulIO;
 
   typedef typename std::remove_pointer<DecorateeT>::type DerefedDecorateeT;
 
@@ -169,19 +173,30 @@ class DecoratedRestfulClient : public RestfulClient {
    * object itself. */
   template <typename T = void,
             typename std::enable_if<
-    std::is_pointer<DecorateeT>::value, T>::type* = nullptr>
-  DerefedDecorateeT& get_decoratee() {
-    return *decoratee;
-  }
-
-  template <typename T = void,
-            typename std::enable_if<
     ! std::is_pointer<DecorateeT>::value, T>::type* = nullptr>
   DerefedDecorateeT& get_decoratee() {
     return decoratee;
   }
 
 protected:
+  template <typename T = void,
+            typename std::enable_if<
+    std::is_pointer<DecorateeT>::value, T>::type* = nullptr>
+  DerefedDecorateeT& get_decoratee() {
+    return *decoratee;
+  }
+
+  /* Dynamic decorators (those storing a pointer instead of the decorated
+   * object itself) can be reconfigured on-the-fly. HOWEVER: there are no
+   * facilities for orchestrating such changes. Callers must take care of
+   * atomicity and thread-safety. */
+  template <typename T = void,
+            typename std::enable_if<
+    std::is_pointer<DecorateeT>::value, T>::type* = nullptr>
+  void set_decoratee(DerefedDecorateeT& new_dec) {
+    decoratee = &new_dec;
+  }
+
   void init_env(CephContext *cct) override {
     return get_decoratee().init_env(cct);
   }
@@ -274,7 +289,7 @@ class StaticOutputBufferer : public std::streambuf {
     if (! sync()) {
       /* No error, the buffer has been successfully synchronized. */
       return c;
-     } else {
+    } else {
       return std::streambuf::traits_type::eof();
     }
   }
@@ -319,19 +334,20 @@ public:
  *
  * rgw::io::Accounter came in as a part of rgw::io::AccountingFilter. */
 class RGWRestfulIO : public rgw::io::AccountingFilter<rgw::io::RestfulClient*> {
-  SHA256 *sha256_hash;
+  std::vector<std::shared_ptr<DecoratedRestfulClient>> filters;
 
 public:
-  ~RGWRestfulIO() override {}
+  ~RGWRestfulIO() override = default;
 
   RGWRestfulIO(rgw::io::RestfulClient* engine)
-    : AccountingFilter<rgw::io::RestfulClient*>(std::move(engine)),
-      sha256_hash(nullptr) {
+    : AccountingFilter<rgw::io::RestfulClient*>(std::move(engine)) {
   }
 
-  using DecoratedRestfulClient<RestfulClient*>::recv_body;
-  virtual int recv_body(char* buf, size_t max, bool calculate_hash);
-  std::string grab_aws4_sha256_hash();
+  void add_filter(std::shared_ptr<DecoratedRestfulClient> new_filter) {
+    new_filter->set_decoratee(this->get_decoratee());
+    this->set_decoratee(*new_filter);
+    filters.emplace_back(std::move(new_filter));
+  }
 }; /* RGWRestfulIO */
 
 
@@ -350,7 +366,7 @@ static inline rgw::io::Accounter* ACCOUNTING_IO(struct req_state* s) {
   return ptr;
 }
 
-static inline RGWRestfulIO* AWS_AUTHv4_IO(struct req_state* s) {
+static inline RGWRestfulIO* AWS_AUTHv4_IO(const req_state* const s) {
   assert(dynamic_cast<RGWRestfulIO*>(s->cio) != nullptr);
 
   return static_cast<RGWRestfulIO*>(s->cio);
@@ -392,8 +408,13 @@ public:
       start = base;
     }
 
-    const int read_len = rio.recv_body(base, window_size, false);
-    if (read_len < 0 || 0 == read_len) {
+    size_t read_len = 0;
+    try {
+      read_len = rio.recv_body(base, window_size);
+    } catch (rgw::io::Exception&) {
+      return traits_type::eof();
+    }
+    if (0 == read_len) {
       return traits_type::eof();
     }
 

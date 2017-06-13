@@ -4,6 +4,8 @@
 #ifndef RGW_RGW_CRYPT_SANITIZE_H_
 #define RGW_RGW_CRYPT_SANITIZE_H_
 
+#include <boost/utility/string_view.hpp>
+
 #include "rgw_common.h"
 
 namespace rgw {
@@ -54,8 +56,8 @@ struct auth {
  * Temporary container for suppressing printing if log made from civetweb may contain secret key.
  */
 struct log_content {
-  const char* buf;
-  log_content(const char* buf)
+  const boost::string_view buf;
+  log_content(const boost::string_view buf)
   : buf(buf) {}
 };
 
