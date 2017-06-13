@@ -34,7 +34,7 @@ int RGWPutObj_Compress::handle_data(bufferlist& bl, off_t ofs, void **phandle, r
         compressed = true;
     
         compression_block newbl;
-        int bs = blocks.size();
+        size_t bs = blocks.size();
         newbl.old_ofs = ofs;
         newbl.new_ofs = bs > 0 ? blocks[bs-1].len + blocks[bs-1].new_ofs : 0;
         newbl.len = in_bl.length();
@@ -90,10 +90,10 @@ int RGWGetObj_Decompress::handle_data(bufferlist& bl, off_t bl_ofs, off_t bl_len
 
   while (first_block <= last_block) {
     bufferlist tmp, tmp_out;
-    int ofs_in_bl = first_block->new_ofs - cur_ofs;
-    if (ofs_in_bl + (unsigned)first_block->len > bl_len) {
+    off_t ofs_in_bl = first_block->new_ofs - cur_ofs;
+    if (ofs_in_bl + (off_t)first_block->len > bl_len) {
       // not complete block, put it to waiting
-      int tail = bl_len - ofs_in_bl;
+      unsigned tail = bl_len - ofs_in_bl;
       in_bl.copy(ofs_in_bl, tail, waiting);
       cur_ofs -= tail;
       break;
@@ -130,8 +130,8 @@ int RGWGetObj_Decompress::fixup_range(off_t& ofs, off_t& end)
     if (cs_info->blocks.size() > 1) {
       vector<compression_block>::iterator fb, lb;
       // not bad to use auto for lambda, I think
-      auto cmp_u = [] (off_t ofs, const compression_block& e) { return (unsigned)ofs < e.old_ofs; };
-      auto cmp_l = [] (const compression_block& e, off_t ofs) { return e.old_ofs <= (unsigned)ofs; };
+      auto cmp_u = [] (off_t ofs, const compression_block& e) { return (uint64_t)ofs < e.old_ofs; };
+      auto cmp_l = [] (const compression_block& e, off_t ofs) { return e.old_ofs <= (uint64_t)ofs; };
       fb = upper_bound(cs_info->blocks.begin()+1,
                        cs_info->blocks.end(),
                        ofs,
