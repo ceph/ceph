@@ -926,6 +926,10 @@ int md_config_t::_get_val(const char *key, std::string *value) const {
     ostringstream oss;
     if (bool *flag = boost::get<bool>(&config_value)) {
       oss << (*flag ? "true" : "false");
+    } else if (float *fp = boost::get<float>(&config_value)) {
+      oss << std::fixed << *fp ;
+    } else if (double *dp = boost::get<double>(&config_value)) {
+      oss << std::fixed << *dp ;
     } else {
       oss << config_value;
     }
