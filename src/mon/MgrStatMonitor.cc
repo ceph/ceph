@@ -78,14 +78,13 @@ void MgrStatMonitor::update_from_paxos(bool *need_bootstrap)
 {
   version = get_last_committed();
   dout(10) << " " << version << dendl;
+  load_health();
   bufferlist bl;
   get_version(version, bl);
   if (version) {
     assert(bl.length());
     auto p = bl.begin();
     ::decode(digest, p);
-    ::decode(health_summary, p);
-    ::decode(health_detail, p);
   }
 }
 
@@ -93,8 +92,7 @@ void MgrStatMonitor::create_pending()
 {
   dout(10) << " " << version << dendl;
   pending_digest = digest;
-  pending_health_summary = health_summary;
-  pending_health_detail = health_detail;
+  pending_health_checks = get_health_checks();
 }
 
 void MgrStatMonitor::encode_pending(MonitorDBStore::TransactionRef t)
@@ -108,10 +106,10 @@ void MgrStatMonitor::encode_pending(MonitorDBStore::TransactionRef t)
   dout(10) << " " << version << dendl;
   bufferlist bl;
   ::encode(pending_digest, bl, mon->get_quorum_con_features());
-  ::encode(pending_health_summary, bl);
-  ::encode(pending_health_detail, bl);
   put_version(t, version, bl);
   put_last_committed(t, version);
+
+  encode_health(pending_health_checks, t);
 }
 
 version_t MgrStatMonitor::get_trim_to()
@@ -131,10 +129,6 @@ void MgrStatMonitor::get_health(list<pair<health_status_t,string> >& summary,
 				list<pair<health_status_t,string> > *detail,
 				CephContext *cct) const
 {
-  summary.insert(summary.end(), health_summary.begin(), health_summary.end());
-  if (detail) {
-    detail->insert(detail->end(), health_detail.begin(), health_detail.end());
-  }
 }
 
 void MgrStatMonitor::tick()
@@ -188,8 +182,7 @@ bool MgrStatMonitor::prepare_report(MonOpRequestRef op)
   auto p = bl.begin();
   ::decode(pending_digest, p);
   dout(10) << __func__ << " " << pending_digest << dendl;
-  pending_health_summary.swap(m->health_summary);
-  pending_health_detail.swap(m->health_detail);
+  pending_health_checks.swap(m->health_checks);
   return true;
 }
 

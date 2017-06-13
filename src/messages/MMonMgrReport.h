@@ -18,6 +18,7 @@
 #include "messages/PaxosServiceMessage.h"
 #include "include/types.h"
 #include "include/health.h"
+#include "mon/health_check.h"
 
 class MMonMgrReport : public PaxosServiceMessage {
 
@@ -26,7 +27,7 @@ class MMonMgrReport : public PaxosServiceMessage {
 
 public:
   // PGMapDigest is in data payload
-  list<pair<health_status_t,std::string>> health_summary, health_detail;
+  health_check_map_t health_checks;
 
   MMonMgrReport()
     : PaxosServiceMessage(MSG_MON_MGR_REPORT, 0, HEAD_VERSION, COMPAT_VERSION)
@@ -43,14 +44,12 @@ public:
 
   void encode_payload(uint64_t features) override {
     paxos_encode();
-    ::encode(health_summary, payload);
-    ::encode(health_detail, payload);
+    ::encode(health_checks, payload);
   }
   void decode_payload() override {
     bufferlist::iterator p = payload.begin();
     paxos_decode(p);
-    ::decode(health_summary, p);
-    ::decode(health_detail, p);
+    ::decode(health_checks, p);
   }
 };
 
