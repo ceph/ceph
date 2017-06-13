@@ -2764,7 +2764,7 @@ void PGMap::get_health(
 	}
 	if (num_warn) {
 	  ostringstream ss2;
-	  ss2 << num_err << " osds have slow requests";
+	  ss2 << num_warn << " osds have slow requests";
 	  summary.push_back(make_pair(HEALTH_WARN, ss2.str()));
 	  detail->push_back(make_pair(HEALTH_WARN, ss2.str()));
 	}
