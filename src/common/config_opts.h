@@ -1223,7 +1223,7 @@ OPTION(filestore_index_retry_probability, OPT_DOUBLE, 0)
 // Allow object read error injection
 OPTION(filestore_debug_inject_read_err, OPT_BOOL, false)
 
-OPTION(filestore_debug_omap_check, OPT_BOOL, 0) // Expensive debugging check on sync
+OPTION(filestore_debug_omap_check, OPT_BOOL, false) // Expensive debugging check on sync
 OPTION(filestore_omap_header_cache_size, OPT_INT, 1024)
 
 // Use omap for xattrs for attrs over
