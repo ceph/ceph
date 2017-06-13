@@ -1970,7 +1970,7 @@ int BlueFS::open_for_write(
     // match up with bluestore.  the slow device is always the second
     // one (when a dedicated block.db device is present and used at
     // bdev 0).  the wal device is always last.
-    if (boost::algorithm::ends_with(filename, ".slow")) {
+    if (boost::algorithm::ends_with(dirname, ".slow")) {
       file->fnode.prefer_bdev = BlueFS::BDEV_SLOW;
     } else if (boost::algorithm::ends_with(dirname, ".wal")) {
       file->fnode.prefer_bdev = BlueFS::BDEV_WAL;
