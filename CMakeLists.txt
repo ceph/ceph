@@ -647,5 +647,5 @@ add_tags(ctags
   SRC_DIR src
   TAG_FILE tags
   EXCLUDE_OPTS ${CTAG_EXCLUDES}
-  EXCLUDES "*.js")
+  EXCLUDES "*.js" "*.css")
 add_custom_target(tags DEPENDS ctags)
