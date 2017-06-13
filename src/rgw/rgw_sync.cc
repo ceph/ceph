@@ -592,8 +592,8 @@ class RGWInitSyncStatusCoroutine : public RGWCoroutine {
 
   rgw_meta_sync_info status;
   vector<RGWMetadataLogInfo> shards_info;
-  RGWContinuousLeaseCR *lease_cr;
-  RGWCoroutinesStack *lease_stack;
+  boost::intrusive_ptr<RGWContinuousLeaseCR> lease_cr;
+  boost::intrusive_ptr<RGWCoroutinesStack> lease_stack;
 public:
   RGWInitSyncStatusCoroutine(RGWMetaSyncEnv *_sync_env,
                              const rgw_meta_sync_info &status)
@@ -604,7 +604,6 @@ public:
   ~RGWInitSyncStatusCoroutine() {
     if (lease_cr) {
       lease_cr->abort();
-      lease_cr->put();
     }
   }
 
@@ -616,10 +615,9 @@ public:
 	uint32_t lock_duration = cct->_conf->rgw_sync_lease_period;
         string lock_name = "sync_lock";
         RGWRados *store = sync_env->store;
-	lease_cr = new RGWContinuousLeaseCR(sync_env->async_rados, store, store->get_zone_params().log_pool, sync_env->status_oid(),
-                                            lock_name, lock_duration, this);
-        lease_cr->get();
-        lease_stack = spawn(lease_cr, false);
+	lease_cr.reset(new RGWContinuousLeaseCR(sync_env->async_rados, store, store->get_zone_params().log_pool, sync_env->status_oid(),
+                                                lock_name, lock_duration, this));
+        lease_stack.reset(spawn(lease_cr.get(), false));
       }
       while (!lease_cr->is_locked()) {
         if (lease_cr->is_done()) {
@@ -652,7 +650,7 @@ public:
 	}
       }
 
-      drain_all_but_stack(lease_stack); /* the lease cr still needs to run */
+      drain_all_but_stack(lease_stack.get()); /* the lease cr still needs to run */
 
       yield {
         set_status("updating sync status");
@@ -737,8 +735,8 @@ class RGWFetchAllMetaCR : public RGWCoroutine {
 
   std::unique_ptr<RGWShardedOmapCRManager> entries_index;
 
-  RGWContinuousLeaseCR *lease_cr;
-  RGWCoroutinesStack *lease_stack;
+  boost::intrusive_ptr<RGWContinuousLeaseCR> lease_cr;
+  boost::intrusive_ptr<RGWCoroutinesStack> lease_stack;
   bool lost_lock;
   bool failed;
 
@@ -753,9 +751,6 @@ public:
   }
 
   ~RGWFetchAllMetaCR() {
-    if (lease_cr) {
-      lease_cr->put();
-    }
   }
 
   void append_section_from_set(set<string>& all_sections, const string& name) {
@@ -791,10 +786,9 @@ public:
         set_status(string("acquiring lock (") + sync_env->status_oid() + ")");
 	uint32_t lock_duration = cct->_conf->rgw_sync_lease_period;
         string lock_name = "sync_lock";
-	lease_cr = new RGWContinuousLeaseCR(sync_env->async_rados, sync_env->store, sync_env->store->get_zone_params().log_pool, sync_env->status_oid(),
-                                            lock_name, lock_duration, this);
-        lease_cr->get();
-        lease_stack = spawn(lease_cr, false);
+	lease_cr.reset(new RGWContinuousLeaseCR(sync_env->async_rados, sync_env->store, sync_env->store->get_zone_params().log_pool, sync_env->status_oid(),
+                                                lock_name, lock_duration, this));
+        lease_stack = spawn(lease_cr.get(), false);
       }
       while (!lease_cr->is_locked()) {
         if (lease_cr->is_done()) {
@@ -873,7 +867,7 @@ public:
         }
       }
 
-      drain_all_but_stack(lease_stack); /* the lease cr still needs to run */
+      drain_all_but_stack(lease_stack.get()); /* the lease cr still needs to run */
 
       yield lease_cr->go_down();
 
@@ -1259,8 +1253,9 @@ class RGWMetaSyncShardCR : public RGWCoroutine {
   boost::asio::coroutine incremental_cr;
   boost::asio::coroutine full_cr;
 
-  RGWContinuousLeaseCR *lease_cr = nullptr;
-  RGWCoroutinesStack *lease_stack = nullptr;
+  boost::intrusive_ptr<RGWContinuousLeaseCR> lease_cr;
+  boost::intrusive_ptr<RGWCoroutinesStack> lease_stack;
+
   bool lost_lock = false;
 
   bool *reset_backoff;
@@ -1291,7 +1286,6 @@ public:
     delete marker_tracker;
     if (lease_cr) {
       lease_cr->abort();
-      lease_cr->put();
     }
   }
 
@@ -1383,15 +1377,11 @@ public:
       yield {
 	uint32_t lock_duration = cct->_conf->rgw_sync_lease_period;
         string lock_name = "sync_lock";
-        if (lease_cr) {
-          lease_cr->put();
-        }
         RGWRados *store = sync_env->store;
-	lease_cr = new RGWContinuousLeaseCR(sync_env->async_rados, store, pool,
-                                            sync_env->shard_obj_name(shard_id),
-                                            lock_name, lock_duration, this);
-        lease_cr->get();
-        lease_stack = spawn(lease_cr, false);
+	lease_cr.reset(new RGWContinuousLeaseCR(sync_env->async_rados, store, pool,
+                                                sync_env->shard_obj_name(shard_id),
+                                                lock_name, lock_duration, this));
+        lease_stack.reset(spawn(lease_cr.get(), false));
         lost_lock = false;
       }
       while (!lease_cr->is_locked()) {
@@ -1484,8 +1474,7 @@ public:
 
       yield lease_cr->go_down();
 
-      lease_cr->put();
-      lease_cr = NULL;
+      lease_cr.reset();
 
       drain_all();
 
@@ -1517,11 +1506,10 @@ public:
           uint32_t lock_duration = cct->_conf->rgw_sync_lease_period;
           string lock_name = "sync_lock";
           RGWRados *store = sync_env->store;
-          lease_cr = new RGWContinuousLeaseCR(sync_env->async_rados, store, pool,
-                                              sync_env->shard_obj_name(shard_id),
-                                              lock_name, lock_duration, this);
-          lease_cr->get();
-          lease_stack = spawn(lease_cr, false);
+          lease_cr.reset(new RGWContinuousLeaseCR(sync_env->async_rados, store, pool,
+                                                  sync_env->shard_obj_name(shard_id),
+                                                  lock_name, lock_duration, this));
+          lease_stack.reset(spawn(lease_cr.get(), false));
           lost_lock = false;
         }
         while (!lease_cr->is_locked()) {
