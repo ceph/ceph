@@ -42,7 +42,7 @@ bool RGWObjTagSet_S3::xml_end(const char*){
 
 int RGWObjTagSet_S3::rebuild(RGWObjTags& dest){
   int ret;
-  for (const auto &it: tags){
+  for (const auto &it: tag_map){
     ret = dest.check_and_add_tag(it.first, it.second);
     if (ret < 0)
       return ret;
@@ -57,7 +57,7 @@ bool RGWObjTagging_S3::xml_end(const char*){
 }
 
 void RGWObjTagSet_S3::dump_xml(Formatter *f){
-  for (const auto& tag: tags){
+  for (const auto& tag: tag_map){
     f->open_object_section("Tag");
     f->dump_string("Key", tag.first);
     f->dump_string("Value", tag.second);
