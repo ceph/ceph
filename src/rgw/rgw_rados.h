@@ -2525,6 +2525,9 @@ public:
   int list_periods(const string& current_period, list<string>& periods);
   void tick();
 
+  void update_stats(const rgw_user& bucket_owner, rgw_bucket& bucket, int obj_delta,
+                    uint64_t added_bytes, uint64_t removed_bytes);
+
   CephContext *ctx() { return cct; }
   /** do all necessary setup of the storage device */
   int initialize(CephContext *_cct, bool _use_gc_thread, bool _use_lc_thread, bool _quota_threads, bool _run_sync_thread, bool _run_reshard_thread) {

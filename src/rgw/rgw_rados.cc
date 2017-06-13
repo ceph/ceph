@@ -4669,6 +4669,12 @@ int RGWRados::list_periods(list<string>& periods)
   return 0;
 }
 
+void RGWRados::update_stats(const rgw_user& bucket_owner, rgw_bucket& bucket,
+                            int obj_delta, uint64_t added_bytes, uint64_t removed_bytes)
+{
+  dout(20) << __func__ << ": obj_delta=" << obj_delta << ", added_bytes=" << added_bytes << ", removed_bytes=" << removed_bytes << dendl;
+  quota_handler->update_stats(bucket_owner, bucket, obj_delta, added_bytes, removed_bytes);
+}
 
 int RGWRados::list_periods(const string& current_period, list<string>& periods)
 {
