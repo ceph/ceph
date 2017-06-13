@@ -1585,13 +1585,19 @@ static boost::optional<RGWRESTConn> get_remote_conn(RGWRados *store,
   return conn;
 }
 
-#define MAX_REST_RESPONSE (128 * 1024) // we expect a very small response
+// we expect a very small response
+static constexpr size_t MAX_REST_RESPONSE = 128 * 1024;
+
 static int send_to_remote_gateway(RGWRESTConn* conn, req_info& info,
                                   bufferlist& in_data, JSONParser& parser)
 {
-  bufferlist response;
+  if (!conn) {
+    return -EINVAL;
+  }
+
+  ceph::bufferlist response;
   rgw_user user;
-  int ret = conn->forward(user, info, NULL, MAX_REST_RESPONSE, &in_data, &response);
+  int ret = conn->forward(user, info, nullptr, MAX_REST_RESPONSE, &in_data, &response);
 
   int parse_ret = parser.parse(response.c_str(), response.length());
   if (parse_ret < 0) {
