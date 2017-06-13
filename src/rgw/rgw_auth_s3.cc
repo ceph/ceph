@@ -356,18 +356,22 @@ void rgw_create_s3_v4_string_to_sign(CephContext *cct, const string& algorithm, 
  * calculate the AWS signature version 4
  */
 int rgw_calculate_s3_v4_aws_signature(struct req_state *s,
-    const string& access_key_id, const string &date, const string& region,
-    const string& service, const string& string_to_sign, string& signature) {
+    const string& access_key_id, const string &date, const string& region, const string& service,
+    const string& string_to_sign, string& signature, const string &access_key_secret) {
 
-  map<string, RGWAccessKey>::iterator iter = s->user->access_keys.find(access_key_id);
-  if (iter == s->user->access_keys.end()) {
-    ldout(s->cct, 10) << "ERROR: access key not encoded in user info" << dendl;
-    return -EPERM;
+  string secret_key = "AWS4";
+
+  if (access_key_secret.empty()) {
+    map<string, RGWAccessKey>::iterator iter = s->user->access_keys.find(access_key_id);
+    if (iter == s->user->access_keys.end()) {
+      ldout(s->cct, 10) << "ERROR: access key not encoded in user info" << dendl;
+      return -EPERM;
+    }
+    RGWAccessKey& k = iter->second;
+    secret_key.append(k.key);
+  } else {
+    secret_key.append(access_key_secret);
   }
-
-  RGWAccessKey& k = iter->second;
-
-  string secret_key = "AWS4" + k.key;
 
   char secret_k[secret_key.size() * MAX_UTF8_SZ];
 
