@@ -42,6 +42,8 @@ protected:
   PGMap pg_map;
   PGMap::Incremental pending_inc;
 
+  PGMapStatService pgservice;
+
   bufferlist health_json;
   bufferlist mon_status_json;
 
@@ -77,6 +79,14 @@ public:
   template<typename Callback, typename...Args>
   auto with_pgmap(Callback&& cb, Args&&...args) const ->
     decltype(cb(pg_map, std::forward<Args>(args)...))
+  {
+    Mutex::Locker l(lock);
+    return std::forward<Callback>(cb)(pg_map, std::forward<Args>(args)...);
+  }
+
+  template<typename Callback, typename...Args>
+  auto with_pgservice(Callback&& cb, Args&&...args) const ->
+    decltype(cb(pgservice, std::forward<Args>(args)...))
   {
     Mutex::Locker l(lock);
     return std::forward<Callback>(cb)(pg_map, std::forward<Args>(args)...);
