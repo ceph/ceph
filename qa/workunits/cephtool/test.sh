@@ -215,11 +215,18 @@ function test_mon_injectargs()
   expect_failure $TEMP_DIR "Option --osd_op_history_duration requires an argument" \
                  ceph tell osd.0 injectargs -- '--osd_op_history_duration'
 
+  ceph tell osd.0 injectargs -- '--osd_deep_scrub_interval 2419200' >& $TMPFILE || return 1
+  check_response "osd_deep_scrub_interval = '2419200.000000' (not observed, change may require restart)"
+
+  ceph tell osd.0 injectargs -- '--mon_probe_timeout 2' >& $TMPFILE || return 1
+  check_response "mon_probe_timeout = '2.000000' (not observed, change may require restart)"
+
   ceph tell osd.0 injectargs -- '--mon-lease 6' >& $TMPFILE || return 1
-  check_response "mon_lease = '6' (not observed, change may require restart)"
+  check_response "mon_lease = '6.000000' (not observed, change may require restart)"
 
   # osd-scrub-auto-repair-num-errors is an OPT_U32, so -1 is not a valid setting
-  expect_false ceph tell osd.0 injectargs --osd-scrub-auto-repair-num-errors -1
+  expect_false ceph tell osd.0 injectargs --osd-scrub-auto-repair-num-errors -1 >& $TMPFILE || return 1
+  check_response "Error EINVAL: Parse error setting osd_scrub_auto_repair_num_errors to '-1' using injectargs"
 }
 
 function test_mon_injectargs_SI()
@@ -2180,6 +2187,7 @@ function test_mon_crushmap_validation()
   check_response "Error EINVAL: Failed crushmap test: TEST FAIL"
 
   local mon_lease=`ceph-conf --show-config-value mon_lease`
+  mon_lease=`echo ${mon_lease} | awk '{ printf $1 + 0 }'`
 
   test "${mon_lease}" -gt 0
 
