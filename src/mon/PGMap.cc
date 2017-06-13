@@ -1,6 +1,8 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
+#include <boost/algorithm/string.hpp>
+
 #include "PGMap.h"
 
 #define dout_subsys ceph_subsys_mon
@@ -2547,6 +2549,629 @@ namespace {
       std::stringstream ss;
       ss << pgs_count << " unscrubbed pgs";
       summary.push_back(make_pair(HEALTH_WARN, ss.str()));
+    }
+  }
+}
+
+static void note_stuck_detail(
+  pg_t pgid,
+  const pg_stat_t& stat,
+  const char *what,
+  utime_t since,
+  utime_t now,
+  unsigned max,
+  list<string> *detail)
+{
+  if (detail->size() >= max) {
+    return;
+  }
+  ostringstream ss;
+  ss << "pg " << pgid << " is stuck " << what;
+  if (since == utime_t()) {
+    ss << " since forever";
+  } else {
+    utime_t dur = now - since;
+    ss << " for " << dur;
+  }
+  ss << ", current state " << pg_state_string(stat.state)
+     << ", last acting " << stat.acting;
+  detail->push_back(ss.str());
+}
+
+static void note_stuck_summary(
+  const char *what,
+  unsigned num,
+  unsigned max,
+  health_check_t *check)
+{
+  ostringstream ss;
+  ss << num << " pgs stuck " << what;
+  check->summary = ss.str();
+  if (num > max) {
+    ostringstream ss;
+    ss << "+ " << (max - num) << " more pgs";
+    check->detail.push_back(ss.str());
+  }
+}
+
+void PGMap::get_health_checks(
+  CephContext *cct,
+  const OSDMap& osdmap,
+  health_check_map_t *checks) const
+{
+  unsigned max = cct->_conf->mon_health_max_detail;
+  auto& pools = osdmap.get_pools();
+  utime_t now = ceph_clock_now();
+
+  checks->clear();
+
+  // PG_{STALE,DOWN,UNDERSIZED,DEGRADED,INCONSISTENT,PEERING,REPAIR,...}
+  {
+    struct info_t {
+      unsigned state;
+      health_status_t severity;
+      unsigned num = 0;
+      health_check_t *check = nullptr;
+      info_t(unsigned s, health_status_t v = HEALTH_WARN)
+	: state(s), severity(v) {}
+    };
+    vector<info_t> state_checks = {
+      { PG_STATE_STALE },
+      { PG_STATE_DOWN },
+      { PG_STATE_UNDERSIZED },
+      { PG_STATE_DEGRADED },
+      { PG_STATE_INCONSISTENT, HEALTH_ERR },
+      { PG_STATE_PEERING },
+      { PG_STATE_REPAIR },
+      { PG_STATE_RECOVERING },
+      { PG_STATE_RECOVERY_WAIT },
+      { PG_STATE_INCOMPLETE, HEALTH_ERR },
+      { PG_STATE_BACKFILL_WAIT },
+      { PG_STATE_BACKFILL },
+      { PG_STATE_BACKFILL_TOOFULL },
+      { PG_STATE_RECOVERY_TOOFULL }
+    };
+    vector<info_t> active_checks;
+    for (auto& i : num_pg_by_state) {
+      for (auto& j : state_checks) {
+	if ((i.first & j.state) && !j.check) {
+	  string err = string("PG_") + pg_state_string(j.state);
+	  boost::to_upper(err);
+	  j.check = &checks->add(err, j.severity, "");
+	  active_checks.push_back(j);
+	}
+      }
+    }
+    if (!active_checks.empty()) {
+      // scan pgs
+      for (auto& i : pg_stat) {
+	for (auto& j : active_checks) {
+	  if (i.second.state & j.state) {
+	    if (++j.num <= max) {
+	      ostringstream ss;
+	      ss << "pg " << i.first << " is "
+		 << pg_state_string(i.second.state);
+	      ss << ", acting " << i.second.acting;
+	      if (i.second.stats.sum.num_objects_unfound)
+		ss << ", " << i.second.stats.sum.num_objects_unfound
+		   << " unfound";
+	      if (j.state & PG_STATE_INCOMPLETE) {
+		const pg_pool_t *pi = osdmap.get_pg_pool(i.first.pool());
+		if (pi && pi->min_size > 1) {
+		  ss << " (reducing pool "
+		     << osdmap.get_pool_name(i.first.pool())
+		     << " min_size from " << (int)pi->min_size
+		     << " may help; search ceph.com/docs for 'incomplete')";
+		}
+	      }
+	      j.check->detail.push_back(ss.str());
+	    }
+	  }
+	}
+      }
+      for (auto& j : active_checks) {
+	ostringstream ss;
+	ss << j.num << " pgs " << pg_state_string(j.state);
+        j.check->summary = ss.str();
+        if (j.num > max) {
+	  ostringstream ss;
+	  ss << "+ " << (max - j.num) << " more pgs";
+	  j.check->detail.push_back(ss.str());
+	}
+      }
+    }
+  }
+
+  // PG_STUCK_{INACTIVE,UNCLEAN,UNDERSIZED,DEGRADED,STALE}
+  {
+    utime_t cutoff = now - utime_t(cct->_conf->mon_pg_stuck_threshold, 0);
+    health_check_t *inactive = 0;
+    health_check_t *unclean = 0;
+    health_check_t *degraded = 0;
+    health_check_t *undersized = 0;
+    health_check_t *stale = 0;
+    unsigned num_inactive = 0;
+    unsigned num_unclean = 0;
+    unsigned num_degraded = 0;
+    unsigned num_undersized = 0;
+    unsigned num_stale = 0;
+    for (auto& i : pg_stat) {
+      if (!(i.second.state & PG_STATE_ACTIVE) &&
+	  i.second.last_active < cutoff) {
+	if (!inactive) {
+	  inactive = &checks->add("PG_STUCK_INACTIVE", HEALTH_ERR, "");
+	}
+	note_stuck_detail(i.first, i.second, "inactive", i.second.last_active,
+			  now, max, &inactive->detail);
+	++num_inactive;
+      }
+      if (!(i.second.state & PG_STATE_CLEAN) &&
+	  i.second.last_clean < cutoff) {
+	if (!unclean) {
+	  unclean = &checks->add("PG_STUCK_UNCLEAN", HEALTH_ERR, "");
+	}
+	note_stuck_detail(i.first, i.second, "unclean", i.second.last_clean,
+			  now, max, &unclean->detail);
+	++num_unclean;
+      }
+      if ((i.second.state & PG_STATE_DEGRADED) &&
+	  i.second.last_undegraded < cutoff) {
+	if (!degraded) {
+	  degraded = &checks->add("PG_STUCK_DEGRADED", HEALTH_ERR, "");
+	}
+	note_stuck_detail(i.first, i.second, "degraded",
+			  i.second.last_undegraded, now, max, &degraded->detail);
+	++num_degraded;
+      }
+      if ((i.second.state & PG_STATE_UNDERSIZED) &&
+	  i.second.last_fullsized < cutoff) {
+	if (!undersized) {
+	  undersized = &checks->add("PG_STUCK_UNDERSIZED", HEALTH_ERR, "");
+	}
+	note_stuck_detail(i.first, i.second, "undersized",
+			  i.second.last_fullsized, now, max,
+			  &undersized->detail);
+	++num_undersized;
+      }
+      if ((i.second.state & PG_STATE_STALE) &&
+	  i.second.last_unstale < cutoff) {
+	if (!stale) {
+	  stale = &checks->add("PG_STUCK_STALE", HEALTH_ERR, "");
+	}
+	note_stuck_detail(i.first, i.second, "stale", i.second.last_unstale,
+			  now, max, &stale->detail);
+	++num_stale;
+      }
+    }
+    if (inactive) {
+      note_stuck_summary("inactive", num_inactive, max, inactive);
+    }
+    if (unclean) {
+      note_stuck_summary("unclean", num_unclean, max, unclean);
+    }
+    if (degraded) {
+      note_stuck_summary("degraded", num_degraded, max, degraded);
+    }
+    if (undersized) {
+      note_stuck_summary("undersized", num_undersized, max, undersized);
+    }
+    if (stale) {
+      note_stuck_summary("stale", num_stale, max, stale);
+    }
+  }
+
+  // OSD_SKEWED_USAGE
+  if (cct->_conf->mon_warn_osd_usage_min_max_delta) {
+    int max_osd = -1, min_osd = -1;
+    float max_osd_usage = 0.0, min_osd_usage = 1.0;
+    for (auto p = osd_stat.begin(); p != osd_stat.end(); ++p) {
+      // kb should never be 0, but avoid divide by zero in case of corruption
+      if (p->second.kb <= 0)
+        continue;
+      float usage = ((float)p->second.kb_used) / ((float)p->second.kb);
+      if (usage > max_osd_usage) {
+        max_osd_usage = usage;
+	max_osd = p->first;
+      }
+      if (usage < min_osd_usage) {
+        min_osd_usage = usage;
+	min_osd = p->first;
+      }
+    }
+    float diff = max_osd_usage - min_osd_usage;
+    if (diff > cct->_conf->mon_warn_osd_usage_min_max_delta) {
+      auto& d = checks->add("OSD_SKEWED_USAGE", HEALTH_WARN,
+			    "skewed osd utilization");
+      ostringstream ss;
+      ss << "difference between min (osd." << min_osd << " at "
+	 << roundf(min_osd_usage*1000.0)/100.0
+	 << "%) and max (osd." << max_osd << " at "
+	 << roundf(max_osd_usage*1000.0)/100.0
+	 << "%) osd usage " << roundf(diff*1000.0)/100.0 << "% > "
+	 << roundf(cct->_conf->mon_warn_osd_usage_min_max_delta*1000.0)/100.0
+	 << " (mon_warn_osd_usage_min_max_delta)";
+      d.detail.push_back(ss.str());
+    }
+  }
+
+  // OSD_SCRUB_ERRORS
+  if (pg_sum.stats.sum.num_scrub_errors) {
+    ostringstream ss;
+    ss << pg_sum.stats.sum.num_scrub_errors << " scrub errors";
+    checks->add("OSD_SCRUB_ERRORS", HEALTH_ERR, ss.str());
+  }
+
+  // CACHE_POOL_NEAR_FULL
+  {
+    list<string> detail;
+    unsigned num_pools = 0;
+    for (auto& p : pools) {
+      if ((!p.second.target_max_objects && !p.second.target_max_bytes) ||
+	  !pg_pool_sum.count(p.first)) {
+	continue;
+      }
+      bool nearfull = false;
+      const string& name = osdmap.get_pool_name(p.first);
+      const pool_stat_t& st = get_pg_pool_sum_stat(p.first);
+      uint64_t ratio = p.second.cache_target_full_ratio_micro +
+	((1000000 - p.second.cache_target_full_ratio_micro) *
+	 cct->_conf->mon_cache_target_full_warn_ratio);
+      if (p.second.target_max_objects &&
+	  (uint64_t)(st.stats.sum.num_objects -
+		     st.stats.sum.num_objects_hit_set_archive) >
+	  p.second.target_max_objects * (ratio / 1000000.0)) {
+	ostringstream ss;
+	ss << "cache pool '" << name << "' with "
+	   << si_t(st.stats.sum.num_objects)
+	   << " objects at/near target max "
+	   << si_t(p.second.target_max_objects) << " objects";
+	detail.push_back(ss.str());
+	nearfull = true;
+      }
+      if (p.second.target_max_bytes &&
+	  (uint64_t)(st.stats.sum.num_bytes -
+		     st.stats.sum.num_bytes_hit_set_archive) >
+	  p.second.target_max_bytes * (ratio / 1000000.0)) {
+	ostringstream ss;
+	ss << "cache pool '" << name
+	   << "' with " << si_t(st.stats.sum.num_bytes)
+	   << "B at/near target max "
+	   << si_t(p.second.target_max_bytes) << "B";
+	detail.push_back(ss.str());
+	nearfull = true;
+      }
+      if (nearfull) {
+	++num_pools;
+      }
+    }
+    if (!detail.empty()) {
+      ostringstream ss;
+      ss << num_pools << " cache pools at or near target size";
+      auto& d = checks->add("CACHE_POOL_NEAR_FULL", HEALTH_WARN, ss.str());
+      d.detail.swap(detail);
+    }
+  }
+
+  // TOO_FEW_PGS
+  int num_in = osdmap.get_num_in_osds();
+  int sum_pg_up = MAX(pg_sum.up, static_cast<int32_t>(pg_stat.size()));
+  if (num_in && cct->_conf->mon_pg_warn_min_per_osd > 0) {
+    int per = sum_pg_up / num_in;
+    if (per < cct->_conf->mon_pg_warn_min_per_osd && per) {
+      ostringstream ss;
+      ss << "too few PGs per OSD (" << per
+	 << " < min " << cct->_conf->mon_pg_warn_min_per_osd << ")";
+      checks->add("TOO_FEW_PGS", HEALTH_WARN, ss.str());
+    }
+  }
+
+  // TOO_MANY_PGS
+  if (num_in && cct->_conf->mon_pg_warn_max_per_osd > 0) {
+    int per = sum_pg_up / num_in;
+    if (per > cct->_conf->mon_pg_warn_max_per_osd) {
+      ostringstream ss;
+      ss << "too many PGs per OSD (" << per
+	 << " > max " << cct->_conf->mon_pg_warn_max_per_osd << ")";
+      checks->add("TOO_MANY_PGS", HEALTH_WARN, ss.str());
+    }
+  }
+
+  // SMALLER_PGP_NUM
+  // MANY_OBJECTS_PER_PG
+  if (!pg_stat.empty()) {
+    list<string> pgp_detail, many_detail;
+    for (auto p = pg_pool_sum.begin();
+         p != pg_pool_sum.end();
+         ++p) {
+      const pg_pool_t *pi = osdmap.get_pg_pool(p->first);
+      if (!pi)
+	continue;   // in case osdmap changes haven't propagated to PGMap yet
+      const string& name = osdmap.get_pool_name(p->first);
+      if (pi->get_pg_num() > pi->get_pgp_num() &&
+	  !(name.find(".DELETED") != string::npos &&
+	    cct->_conf->mon_fake_pool_delete)) {
+	ostringstream ss;
+	ss << "pool " << name << " pg_num "
+	   << pi->get_pg_num() << " > pgp_num " << pi->get_pgp_num();
+	pgp_detail.push_back(ss.str());
+      }
+      int average_objects_per_pg = pg_sum.stats.sum.num_objects / pg_stat.size();
+      if (average_objects_per_pg > 0 &&
+          pg_sum.stats.sum.num_objects >= cct->_conf->mon_pg_warn_min_objects &&
+          p->second.stats.sum.num_objects >=
+	  cct->_conf->mon_pg_warn_min_pool_objects) {
+	int objects_per_pg = p->second.stats.sum.num_objects / pi->get_pg_num();
+	float ratio = (float)objects_per_pg / (float)average_objects_per_pg;
+	if (cct->_conf->mon_pg_warn_max_object_skew > 0 &&
+	    ratio > cct->_conf->mon_pg_warn_max_object_skew) {
+	  ostringstream ss;
+	  ss << "pool " << name << " objects per pg ("
+	     << objects_per_pg << ") is more than " << ratio
+	     << " times cluster average ("
+	     << average_objects_per_pg << ")";
+	  many_detail.push_back(ss.str());
+	}
+      }
+    }
+    if (!pgp_detail.empty()) {
+      ostringstream ss;
+      ss << pgp_detail.size() << " pools have pg_num > pgp_num";
+      auto& d = checks->add("SMALLER_PGP_NUM", HEALTH_WARN, ss.str());
+      d.detail.swap(pgp_detail);
+    }
+    if (!many_detail.empty()) {
+      ostringstream ss;
+      ss << many_detail.size() << " pools have many more objects per pg than"
+	 << " average";
+      auto& d = checks->add("MANY_OBJECTS_PER_PG", HEALTH_WARN, ss.str());
+      d.detail.swap(many_detail);
+    }
+  }
+
+  // POOL_FULL
+  // POOL_NEAR_FULL
+  {
+    float warn_threshold = (float)g_conf->mon_pool_quota_warn_threshold/100;
+    float crit_threshold = (float)g_conf->mon_pool_quota_crit_threshold/100;
+    list<string> full_detail, nearfull_detail;
+    unsigned full_pools = 0, nearfull_pools = 0;
+    for (auto it : pools) {
+      auto it2 = pg_pool_sum.find(it.first);
+      if (it2 == pg_pool_sum.end()) {
+	continue;
+      }
+      const pool_stat_t *pstat = &it2->second;
+      const object_stat_sum_t& sum = pstat->stats.sum;
+      const string& pool_name = osdmap.get_pool_name(it.first);
+      const pg_pool_t &pool = it.second;
+      bool full = false, nearfull = false;
+      if (pool.quota_max_objects > 0) {
+	stringstream ss;
+	if ((uint64_t)sum.num_objects >= pool.quota_max_objects) {
+	} else if (crit_threshold > 0 &&
+		   sum.num_objects >= pool.quota_max_objects*crit_threshold) {
+	  ss << "pool '" << pool_name
+	     << "' has " << sum.num_objects << " objects"
+	     << " (max " << pool.quota_max_objects << ")";
+	  full_detail.push_back(ss.str());
+	  full = true;
+	} else if (warn_threshold > 0 &&
+		   sum.num_objects >= pool.quota_max_objects*warn_threshold) {
+	  ss << "pool '" << pool_name
+	     << "' has " << sum.num_objects << " objects"
+	     << " (max " << pool.quota_max_objects << ")";
+	  nearfull_detail.push_back(ss.str());
+	  nearfull = true;
+	}
+      }
+      if (pool.quota_max_bytes > 0) {
+	stringstream ss;
+	if ((uint64_t)sum.num_bytes >= pool.quota_max_bytes) {
+	} else if (crit_threshold > 0 &&
+		   sum.num_bytes >= pool.quota_max_bytes*crit_threshold) {
+	  ss << "pool '" << pool_name
+	     << "' has " << si_t(sum.num_bytes) << " bytes"
+	     << " (max " << si_t(pool.quota_max_bytes) << ")";
+	  full_detail.push_back(ss.str());
+	  full = true;
+	} else if (warn_threshold > 0 &&
+		   sum.num_bytes >= pool.quota_max_bytes*warn_threshold) {
+	  ss << "pool '" << pool_name
+	     << "' has " << si_t(sum.num_bytes) << " bytes"
+	     << " (max " << si_t(pool.quota_max_bytes) << ")";
+	  nearfull_detail.push_back(ss.str());
+	  nearfull = true;
+	}
+      }
+      if (full) {
+	++full_pools;
+      }
+      if (nearfull) {
+	++nearfull_pools;
+      }
+    }
+    if (full_pools) {
+      ostringstream ss;
+      ss << full_pools << " pools full";
+      auto& d = checks->add("POOL_FULL", HEALTH_ERR, ss.str());
+      d.detail.swap(full_detail);
+    }
+    if (nearfull_pools) {
+      ostringstream ss;
+      ss << nearfull_pools << " pools full";
+      auto& d = checks->add("POOL_NEAR_FULL", HEALTH_WARN, ss.str());
+      d.detail.swap(nearfull_detail);
+    }
+  }
+
+  // DEGRADED_OBJECTS
+  if (pg_sum.stats.sum.num_objects_degraded &&
+      pg_sum.stats.sum.num_object_copies > 0) {
+    double pc = (double)pg_sum.stats.sum.num_objects_degraded /
+      (double)pg_sum.stats.sum.num_object_copies * (double)100.0;
+    char b[20];
+    snprintf(b, sizeof(b), "%.3lf", pc);
+    ostringstream ss;
+    ss << pg_sum.stats.sum.num_objects_degraded
+       << "/" << pg_sum.stats.sum.num_object_copies << " objects degraded ("
+       << b << "%)";
+    checks->add("DEGRADED_OBJECTS", HEALTH_WARN, ss.str());
+  }
+
+  // MISPLACED_OBJECTS
+  if (pg_sum.stats.sum.num_objects_misplaced &&
+      pg_sum.stats.sum.num_object_copies > 0) {
+    double pc = (double)pg_sum.stats.sum.num_objects_misplaced /
+      (double)pg_sum.stats.sum.num_object_copies * (double)100.0;
+    char b[20];
+    snprintf(b, sizeof(b), "%.3lf", pc);
+    ostringstream ss;
+    ss << pg_sum.stats.sum.num_objects_misplaced
+       << "/" << pg_sum.stats.sum.num_object_copies << " objects misplaced ("
+       << b << "%)";
+    checks->add("MISPLACED_OBJECTS", HEALTH_WARN, ss.str());
+  }
+
+  // UNFOUND_OBJECTS
+  if (pg_sum.stats.sum.num_objects_unfound &&
+      pg_sum.stats.sum.num_objects) {
+    double pc = (double)pg_sum.stats.sum.num_objects_unfound /
+      (double)pg_sum.stats.sum.num_objects * (double)100.0;
+    char b[20];
+    snprintf(b, sizeof(b), "%.3lf", pc);
+    ostringstream ss;
+    ss << pg_sum.stats.sum.num_objects_unfound
+       << "/" << pg_sum.stats.sum.num_objects << " unfound (" << b << "%)";
+    checks->add("UNFOUND_OBJECTS", HEALTH_WARN, ss.str());
+  }
+
+  // SLOW_REQUESTS
+  // STUCK_REQUESTS
+  if (cct->_conf->mon_osd_warn_op_age > 0 &&
+      osd_sum.op_queue_age_hist.upper_bound() >
+      cct->_conf->mon_osd_warn_op_age) {
+    list<string> warn_detail, error_detail;
+    unsigned warn = 0, error = 0;
+    float err_age =
+      cct->_conf->mon_osd_warn_op_age * cct->_conf->mon_osd_err_op_age_ratio;
+    const pow2_hist_t& h = osd_sum.op_queue_age_hist;
+    for (unsigned i = h.h.size() - 1; i > 0; --i) {
+      float ub = (float)(1 << i) / 1000.0;
+      if (ub < cct->_conf->mon_osd_warn_op_age)
+	break;
+      if (h.h[i]) {
+	ostringstream ss;
+	ss << h.h[i] << " ops are blocked > " << ub << " sec";
+	if (ub > err_age) {
+	  error += h.h[i];
+	  error_detail.push_back(ss.str());
+	} else {
+	  warn += h.h[i];
+	  warn_detail.push_back(ss.str());
+	}
+      }
+    }
+
+    map<float,set<int>> warn_osd_by_max; // max -> osds
+    map<float,set<int>> error_osd_by_max; // max -> osds
+    if (!warn_detail.empty() || !error_detail.empty()) {
+      for (auto& p : osd_stat) {
+	const pow2_hist_t& h = p.second.op_queue_age_hist;
+	for (unsigned i = h.h.size() - 1; i > 0; --i) {
+	  float ub = (float)(1 << i) / 1000.0;
+	  if (ub < cct->_conf->mon_osd_warn_op_age)
+	    break;
+	  if (h.h[i]) {
+	    if (ub > err_age) {
+	      error_osd_by_max[ub].insert(p.first);
+	    } else {
+	      warn_osd_by_max[ub].insert(p.first);
+	    }
+	    break;
+	  }
+	}
+      }
+    }
+
+    if (!warn_detail.empty()) {
+      ostringstream ss;
+      ss << warn << " slow requests are blocked > "
+	 << cct->_conf->mon_osd_warn_op_age << " sec";
+      auto& d = checks->add("SLOW_REQUESTS", HEALTH_WARN, ss.str());
+      d.detail.swap(warn_detail);
+      int left = max;
+      for (auto& p : warn_osd_by_max) {
+	ostringstream ss;
+	if (p.second.size() > 1) {
+	  ss << "osds " << p.second;
+	} else {
+	  ss << "osd." << *p.second.begin();
+	}
+	ss << " have blocked requests > " << p.first << " sec";
+	d.detail.push_back(ss.str());
+	if (--left == 0) {
+	  break;
+	}
+      }
+    }
+    if (!error_detail.empty()) {
+      ostringstream ss;
+      ss << warn << " stuck requests are blocked > "
+	 << err_age << " sec";
+      auto& d = checks->add("STUCK_REQUESTS", HEALTH_ERR, ss.str());
+      d.detail.swap(error_detail);
+      int left = max;
+      for (auto& p : error_osd_by_max) {
+	ostringstream ss;
+	if (p.second.size() > 1) {
+	  ss << "osds " << p.second;
+	} else {
+	  ss << "osd." << *p.second.begin();
+	}
+	ss << " have stuck requests > " << p.first << " sec";
+	d.detail.push_back(ss.str());
+	if (--left == 0) {
+	  break;
+	}
+      }
+    }
+  }
+
+  // PG_NOT_SCRUBBED
+  // PG_NOT_DEEP_SCRUBBED
+  {
+    list<string> detail, deep_detail;
+    const int age = cct->_conf->mon_warn_not_scrubbed +
+      cct->_conf->mon_scrub_interval;
+    const int deep_age = cct->_conf->mon_warn_not_deep_scrubbed +
+      cct->_conf->osd_deep_scrub_interval;
+    for (auto& p : pg_stat) {
+      const utime_t time_since_ls = now - p.second.last_scrub_stamp;
+      if (time_since_ls > age) {
+	ostringstream ss;
+	ss << "pg " << p.first << " not scrubbed since "
+	   << p.second.last_scrub_stamp;
+        detail.push_back(ss.str());
+      }
+      const utime_t time_since_lds = now - p.second.last_deep_scrub_stamp;
+      if (time_since_lds > deep_age) {
+	ostringstream ss;
+	ss << "pg " << p.first << " not deep-scrubbed since "
+	   << p.second.last_deep_scrub_stamp;
+        deep_detail.push_back(ss.str());
+      }
+    }
+    if (!detail.empty()) {
+      ostringstream ss;
+      ss << detail.size() << " pgs not scrubbed for " << age;
+      auto& d = checks->add("PG_NOT_SCRUBBED", HEALTH_WARN, ss.str());
+      d.detail.swap(detail);
+    }
+    if (!deep_detail.empty()) {
+      ostringstream ss;
+      ss << deep_detail.size() << " pgs not deep-scrubbed for " << age;
+      auto& d = checks->add("PG_NOT_DEEP_SCRUBBED", HEALTH_WARN, ss.str());
+      d.detail.swap(deep_detail);
     }
   }
 }
