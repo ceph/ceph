@@ -2166,6 +2166,8 @@ void BlueStore::ExtentMap::reshard(
     shards.insert(shards.begin() + si_begin, new_shard_info.size(), Shard());
     si_end = si_begin + new_shard_info.size();
 
+    assert(sv.size() == shards.size());
+
     // note that we need to update every shard_info of shards here,
     // as sv might have been totally re-allocated above
     for (unsigned i = 0; i < shards.size(); i++) {
