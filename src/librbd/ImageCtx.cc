@@ -11,7 +11,6 @@
 #include "common/WorkQueue.h"
 #include "common/Timer.h"
 
-#include "librbd/AsyncOperation.h"
 #include "librbd/AsyncRequest.h"
 #include "librbd/ExclusiveLock.h"
 #include "librbd/internal.h"
@@ -28,6 +27,7 @@
 #include "librbd/exclusive_lock/AutomaticPolicy.h"
 #include "librbd/exclusive_lock/StandardPolicy.h"
 #include "librbd/io/AioCompletion.h"
+#include "librbd/io/AsyncOperation.h"
 #include "librbd/io/ImageRequestWQ.h"
 #include "librbd/journal/StandardPolicy.h"
 
@@ -629,18 +629,23 @@ struct C_InvalidateCache : public Context {
     return -ENOENT;
   }
 
-  bool ImageCtx::test_flags(uint64_t flags) const
+  int ImageCtx::test_flags(uint64_t flags, bool *flags_set) const
   {
     RWLock::RLocker l(snap_lock);
-    return test_flags(flags, snap_lock);
+    return test_flags(flags, snap_lock, flags_set);
   }
 
-  bool ImageCtx::test_flags(uint64_t flags, const RWLock &in_snap_lock) const
+  int ImageCtx::test_flags(uint64_t flags, const RWLock &in_snap_lock,
+                           bool *flags_set) const
   {
     assert(snap_lock.is_locked());
     uint64_t snap_flags;
-    get_flags(snap_id, &snap_flags);
-    return ((snap_flags & flags) == flags);
+    int r = get_flags(snap_id, &snap_flags);
+    if (r < 0) {
+      return r;
+    }
+    *flags_set = ((snap_flags & flags) == flags);
+    return 0;
   }
 
   int ImageCtx::update_flags(snap_t in_snap_id, uint64_t flag, bool enabled)

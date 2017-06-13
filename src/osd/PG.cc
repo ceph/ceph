@@ -2714,7 +2714,10 @@ void PG::publish_stats_to_osd()
     if ((info.stats.state & PG_STATE_UNDERSIZED) == 0)
       info.stats.last_fullsized = now;
 
-    publish = true;
+    // do not send pgstat to mon anymore once we are luminous, since mgr takes
+    // care of this by sending MMonMgrReport to mon.
+    publish =
+      osd->osd->get_osdmap()->require_osd_release < CEPH_RELEASE_LUMINOUS;
     pg_stats_publish_valid = true;
     pg_stats_publish = pre_publish;
 
@@ -4925,7 +4928,7 @@ void PG::share_pg_info()
 }
 
 bool PG::append_log_entries_update_missing(
-  const mempool::osd::list<pg_log_entry_t> &entries,
+  const mempool::osd_pglog::list<pg_log_entry_t> &entries,
   ObjectStore::Transaction &t)
 {
   assert(!entries.empty());
@@ -4952,7 +4955,7 @@ bool PG::append_log_entries_update_missing(
 
 
 void PG::merge_new_log_entries(
-  const mempool::osd::list<pg_log_entry_t> &entries,
+  const mempool::osd_pglog::list<pg_log_entry_t> &entries,
   ObjectStore::Transaction &t)
 {
   dout(10) << __func__ << " " << entries << dendl;

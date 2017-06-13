@@ -107,7 +107,8 @@ void RemoveRequest<I>::acquire_exclusive_lock() {
   if (m_force) {
     Context *ctx = create_context_callback<
       klass, &klass::handle_exclusive_lock_force>(this);
-    m_image_ctx->exclusive_lock->shut_down(ctx);
+    m_exclusive_lock = m_image_ctx->exclusive_lock;
+    m_exclusive_lock->shut_down(ctx);
   } else {
     Context *ctx = create_context_callback<
       klass, &klass::handle_exclusive_lock>(this);
@@ -119,6 +120,9 @@ void RemoveRequest<I>::acquire_exclusive_lock() {
 template<typename I>
 Context *RemoveRequest<I>::handle_exclusive_lock_force(int *result) {
   ldout(m_cct, 20) << ": r=" << *result << dendl;
+
+  delete m_exclusive_lock;
+  m_exclusive_lock = nullptr;
 
   if (*result < 0) {
     lderr(m_cct) << "error shutting down exclusive lock: "

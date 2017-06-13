@@ -8,7 +8,6 @@
 #include "include/types.h"
 #include "include/xlist.h"
 #include "include/filepath.h"
-#include "include/atomic.h"
 #include "mds/mdstypes.h"
 #include "InodeRef.h"
 #include "UserPerm.h"
@@ -48,7 +47,7 @@ public:
   __u32    sent_on_mseq;       // mseq at last submission of this request
   int      num_fwd;            // # of times i've been forwarded
   int      retry_attempt;
-  atomic_t ref;
+  std::atomic<uint64_t> ref = { 1 };
   
   MClientReply *reply;         // the reply
   bool kick;
@@ -83,7 +82,7 @@ public:
     regetattr_mask(0),
     mds(-1), resend_mds(-1), send_to_auth(false), sent_on_mseq(0),
     num_fwd(0), retry_attempt(0),
-    ref(1), reply(0), 
+    reply(0), 
     kick(false), success(false),
     got_unsafe(false), item(this), unsafe_item(this),
     unsafe_dir_item(this), unsafe_target_item(this),
@@ -153,13 +152,13 @@ public:
   Dentry *old_dentry();
 
   MetaRequest* get() {
-    ref.inc();
+    ref++;
     return this;
   }
 
   /// psuedo-private put method; use Client::put_request()
   bool _put() {
-    int v = ref.dec();
+    int v = --ref;
     return v == 0;
   }
 

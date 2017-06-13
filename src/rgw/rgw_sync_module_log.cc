@@ -3,7 +3,6 @@
 #include "rgw_cr_rados.h"
 #include "rgw_sync_module.h"
 #include "rgw_data_sync.h"
-#include "rgw_boost_asio_yield.h"
 #include "rgw_sync_module_log.h"
 
 #define dout_subsys ceph_subsys_rgw

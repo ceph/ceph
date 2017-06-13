@@ -17,6 +17,8 @@
 
 #include "PyFormatter.h"
 
+#define LARGE_SIZE 1024
+
 
 void PyFormatter::open_array_section(const char *name)
 {
@@ -85,8 +87,10 @@ std::ostream& PyFormatter::dump_stream(const char *name)
 
 void PyFormatter::dump_format_va(const char *name, const char *ns, bool quoted, const char *fmt, va_list ap)
 {
-  // TODO
-  ceph_abort();
+  char buf[LARGE_SIZE];
+  vsnprintf(buf, LARGE_SIZE, fmt, ap);
+
+  dump_pyobject(name, PyString_FromString(buf));
 }
 
 /**

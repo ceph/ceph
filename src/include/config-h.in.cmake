@@ -84,8 +84,8 @@
 /* Define if you have res_nquery */
 #cmakedefine HAVE_RES_NQUERY
 
-/* Defined if you don't have atomic_ops */
-#cmakedefine NO_ATOMIC_OPS
+/* Defined if you have LZ4 */
+#cmakedefine HAVE_LZ4
 
 /* Defined if you have libaio */
 #cmakedefine HAVE_LIBAIO
@@ -104,6 +104,9 @@
 
 /* DPDK conditional compilation */
 #cmakedefine HAVE_DPDK
+
+/* PMEM conditional compilation */
+#cmakedefine HAVE_PMEM
 
 /* Defined if LevelDB supports bloom filters */
 #cmakedefine HAVE_LEVELDB_FILTER_POLICY
@@ -201,9 +204,6 @@
 
 /* LTTng is disabled, so define this macro to be nothing. */
 #cmakedefine tracepoint
-
-/* have boost::asio::coroutine */
-#cmakedefine HAVE_BOOST_ASIO_COROUTINE
 
 /* Define to 1 if you have fdatasync. */
 #cmakedefine HAVE_FDATASYNC 1

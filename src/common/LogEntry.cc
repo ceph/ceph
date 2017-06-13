@@ -20,6 +20,7 @@ void LogEntryKey::decode(bufferlist::iterator& bl)
   ::decode(who, bl);
   ::decode(stamp, bl);
   ::decode(seq, bl);
+  _calc_hash();
 }
 
 void LogEntryKey::dump(Formatter *f) const
@@ -250,6 +251,10 @@ void LogSummary::decode(bufferlist::iterator& bl)
   ::decode(version, bl);
   ::decode(tail, bl);
   DECODE_FINISH(bl);
+  keys.clear();
+  for (auto& p : tail) {
+    keys.insert(p.key());
+  }
 }
 
 void LogSummary::dump(Formatter *f) const

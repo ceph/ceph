@@ -383,7 +383,7 @@ public:
     mempool::osdmap::vector<string> old_erasure_code_profiles;
     mempool::osdmap::map<int32_t,entity_addr_t> new_up_client;
     mempool::osdmap::map<int32_t,entity_addr_t> new_up_cluster;
-    mempool::osdmap::map<int32_t,uint8_t> new_state;             // XORed onto previous state.
+    mempool::osdmap::map<int32_t,uint32_t> new_state;             // XORed onto previous state.
     mempool::osdmap::map<int32_t,uint32_t> new_weight;
     mempool::osdmap::map<pg_t,mempool::osdmap::vector<int32_t> > new_pg_temp;     // [] to remove
     mempool::osdmap::map<pg_t, int32_t> new_primary_temp;            // [-1] to remove
@@ -472,7 +472,7 @@ private:
   int num_in_osd;      // not saved; see calc_num_osds
 
   int32_t max_osd;
-  vector<uint8_t> osd_state;
+  vector<uint32_t> osd_state;
 
   struct addrs_s {
     mempool::osdmap::vector<ceph::shared_ptr<entity_addr_t> > client_addr;
@@ -606,10 +606,14 @@ public:
   }
   void count_full_nearfull_osds(int *full, int *backfill, int *nearfull) const;
   void get_full_osd_util(
-    const ceph::unordered_map<int32_t,osd_stat_t> &osd_stat,
+    const mempool::pgmap::unordered_map<int32_t,osd_stat_t> &osd_stat,
     map<int, float> *full,
     map<int, float> *backfill,
     map<int, float> *nearfull) const;
+
+  void get_full_osd_counts(set<int> *full, set<int> *backfill,
+			   set<int> *nearfull) const;
+
 
   /***** cluster state *****/
   /* osds */
@@ -715,6 +719,10 @@ public:
   bool exists(int osd) const {
     //assert(osd >= 0);
     return osd >= 0 && osd < max_osd && (osd_state[osd] & CEPH_OSD_EXISTS);
+  }
+
+  bool is_destroyed(int osd) const {
+    return exists(osd) && (osd_state[osd] & CEPH_OSD_DESTROYED);
   }
 
   bool is_up(int osd) const {

@@ -4,9 +4,6 @@
 #ifndef CEPH_CLS_VERSION_OPS_H
 #define CEPH_CLS_VERSION_OPS_H
 
-#include <map>
-
-#include "include/types.h"
 #include "cls_version_types.h"
 
 struct cls_version_set_op {

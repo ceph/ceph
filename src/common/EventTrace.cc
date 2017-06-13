@@ -16,12 +16,8 @@
  */
 
 #include "common/EventTrace.h"
-#include "common/dout.h"
 #include "common/TracepointProvider.h"
-#include "messages/MOSDOp.h"
 #include "messages/MOSDOpReply.h"
-#include <iostream>
-#include <string>
 
 #ifdef WITH_LTTNG
 #define TRACEPOINT_DEFINE

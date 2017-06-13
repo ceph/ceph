@@ -16,9 +16,9 @@ namespace mirror {
 namespace leader_watcher {
 
 enum NotifyOp {
-  NOTIFY_OP_HEARTBEAT     = 0,
-  NOTIFY_OP_LOCK_ACQUIRED = 1,
-  NOTIFY_OP_LOCK_RELEASED = 2,
+  NOTIFY_OP_HEARTBEAT        = 0,
+  NOTIFY_OP_LOCK_ACQUIRED    = 1,
+  NOTIFY_OP_LOCK_RELEASED    = 2,
 };
 
 struct HeartbeatPayload {

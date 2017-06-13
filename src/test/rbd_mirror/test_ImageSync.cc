@@ -15,6 +15,7 @@
 #include "librbd/io/ReadResult.h"
 #include "librbd/journal/Types.h"
 #include "tools/rbd_mirror/ImageSync.h"
+#include "tools/rbd_mirror/InstanceWatcher.h"
 #include "tools/rbd_mirror/Threads.h"
 
 void register_test_image_sync() {
@@ -55,6 +56,10 @@ public:
     create_and_open(m_local_io_ctx, &m_local_image_ctx);
     create_and_open(m_remote_io_ctx, &m_remote_image_ctx);
 
+    m_instance_watcher = rbd::mirror::InstanceWatcher<>::create(
+        m_local_io_ctx, m_threads->work_queue, nullptr);
+    m_instance_watcher->handle_acquire_leader();
+
     m_remote_journaler = new ::journal::Journaler(
       m_threads->work_queue, m_threads->timer, &m_threads->timer_lock,
       m_remote_io_ctx, m_remote_image_ctx->id, "mirror-uuid", {});
@@ -70,7 +75,11 @@ public:
 
   void TearDown() override {
     TestFixture::TearDown();
+
+    m_instance_watcher->handle_release_leader();
+
     delete m_remote_journaler;
+    delete m_instance_watcher;
   }
 
   void create_and_open(librados::IoCtx &io_ctx, librbd::ImageCtx **image_ctx) {
@@ -91,11 +100,12 @@ public:
     return new ImageSync<>(m_local_image_ctx, m_remote_image_ctx,
                            m_threads->timer, &m_threads->timer_lock,
                            "mirror-uuid", m_remote_journaler, &m_client_meta,
-                           m_threads->work_queue, ctx);
+                           m_threads->work_queue, m_instance_watcher, ctx);
   }
 
   librbd::ImageCtx *m_remote_image_ctx;
   librbd::ImageCtx *m_local_image_ctx;
+  rbd::mirror::InstanceWatcher<> *m_instance_watcher;
   ::journal::Journaler *m_remote_journaler;
   librbd::journal::MirrorPeerClientMeta m_client_meta;
 };
@@ -285,8 +295,11 @@ TEST_F(TestImageSync, SnapshotStress) {
       RWLock::RLocker snap_locker(m_local_image_ctx->snap_lock);
       local_size = m_local_image_ctx->get_image_size(
         m_local_image_ctx->snap_id);
-      ASSERT_FALSE(m_local_image_ctx->test_flags(RBD_FLAG_OBJECT_MAP_INVALID,
-                                                 m_local_image_ctx->snap_lock));
+      bool flags_set;
+      ASSERT_EQ(0, m_local_image_ctx->test_flags(RBD_FLAG_OBJECT_MAP_INVALID,
+                                                 m_local_image_ctx->snap_lock,
+                                                 &flags_set));
+      ASSERT_FALSE(flags_set);
     }
 
     ASSERT_EQ(remote_size, local_size);

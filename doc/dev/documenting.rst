@@ -30,7 +30,7 @@ API`_ provides a complete example. It is pulled into Sphinx by
 `librados.rst`_, which is rendered at :doc:`/rados/api/librados`.
 
 .. _`librados C API`: https://github.com/ceph/ceph/blob/master/src/include/rados/librados.h
-.. _`librados.rst`: https://raw.github.com/ceph/ceph/master/doc/api/librados.rst
+.. _`librados.rst`: https://github.com/ceph/ceph/raw/master/doc/rados/api/librados.rst
 
 Drawing diagrams
 ================

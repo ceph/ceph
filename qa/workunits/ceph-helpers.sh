@@ -514,7 +514,7 @@ function run_osd() {
 
     mkdir -p $osd_data
     ceph-disk $ceph_disk_args \
-        prepare $osd_data || return 1
+        prepare --filestore $osd_data || return 1
 
     activate_osd $dir $id "$@"
 }
@@ -535,9 +535,7 @@ function run_osd_bluestore() {
     ceph-disk $ceph_disk_args \
         prepare --bluestore $osd_data || return 1
 
-    local ceph_osd_args
-    ceph_osd_args+=" --enable-experimental-unrecoverable-data-corrupting-features=bluestore"
-    activate_osd $dir $id $ceph_osd_args "$@"
+    activate_osd $dir $id "$@"
 }
 
 function test_run_osd() {
@@ -655,7 +653,6 @@ function activate_osd() {
     ceph_disk_args+=" --prepend-to-path="
 
     local ceph_args="$CEPH_ARGS"
-    ceph_args+=" --enable-experimental-unrecoverable-data-corrupting-features=bluestore"
     ceph_args+=" --osd-failsafe-full-ratio=.99"
     ceph_args+=" --osd-journal-size=100"
     ceph_args+=" --osd-scrub-load-threshold=2000"
@@ -761,8 +758,8 @@ function get_osds() {
     local poolname=$1
     local objectname=$2
 
-    local osds=$(ceph --format xml osd map $poolname $objectname 2>/dev/null | \
-        $XMLSTARLET sel -t -m "//acting/osd" -v . -o ' ')
+    local osds=$(ceph --format json osd map $poolname $objectname 2>/dev/null | \
+        jq '.acting | .[]')
     # get rid of the trailing space
     echo $osds
 }
@@ -831,8 +828,7 @@ function get_pg() {
     local poolname=$1
     local objectname=$2
 
-    ceph --format xml osd map $poolname $objectname 2>/dev/null | \
-        $XMLSTARLET sel -t -m "//pgid" -v . -n
+    ceph --format json osd map $poolname $objectname 2>/dev/null | jq -r '.pgid'
 }
 
 function test_get_pg() {
@@ -865,9 +861,9 @@ function get_config() {
     local config=$3
 
     CEPH_ARGS='' \
-        ceph --format xml daemon $dir/ceph-$daemon.$id.asok \
+        ceph --format json daemon $dir/ceph-$daemon.$id.asok \
         config get $config 2> /dev/null | \
-        $XMLSTARLET sel -t -m "//$config" -v . -n
+        jq -r ".$config"
 }
 
 function test_get_config() {
@@ -901,10 +897,9 @@ function set_config() {
     local config=$3
     local value=$4
 
-    CEPH_ARGS='' \
-        ceph --format xml daemon $dir/ceph-$daemon.$id.asok \
-        config set $config $value 2> /dev/null | \
-        $XMLSTARLET sel -Q -t -m "//success" -v .
+    test $(env CEPH_ARGS='' ceph --format json daemon $dir/ceph-$daemon.$id.asok \
+               config set $config $value 2> /dev/null | \
+           jq 'has("success")') == true
 }
 
 function test_set_config() {
@@ -935,8 +930,8 @@ function get_primary() {
     local poolname=$1
     local objectname=$2
 
-    ceph --format xml osd map $poolname $objectname 2>/dev/null | \
-        $XMLSTARLET sel -t -m "//acting_primary" -v . -n
+    ceph --format json osd map $poolname $objectname 2>/dev/null | \
+        jq '.acting_primary'
 }
 
 function test_get_primary() {
@@ -968,9 +963,8 @@ function get_not_primary() {
     local objectname=$2
 
     local primary=$(get_primary $poolname $objectname)
-    ceph --format xml osd map $poolname $objectname 2>/dev/null | \
-        $XMLSTARLET sel -t -m "//acting/osd[not(.='$primary')]" -v . -n | \
-        head -1
+    ceph --format json osd map $poolname $objectname 2>/dev/null | \
+        jq ".acting | map(select (. != $primary)) | .[0]"
 }
 
 function test_get_not_primary() {
@@ -1023,7 +1017,6 @@ function objectstore_tool() {
 	journal_args=" --journal-path $osd_data/journal"
     fi
     ceph-objectstore-tool \
-	--enable-experimental-unrecoverable-data-corrupting-features=bluestore \
         --data-path $osd_data \
         $journal_args \
         "$@" || return 1
@@ -1058,12 +1051,13 @@ function test_objectstore_tool() {
 # @return 0 if recovery in progress, 1 otherwise
 #
 function get_is_making_recovery_progress() {
-    local progress=$(ceph --format xml status 2>/dev/null | \
-        $XMLSTARLET sel \
-        -t -m "//pgmap/recovering_keys_per_sec" -v . -o ' ' \
-        -t -m "//pgmap/recovering_bytes_per_sec" -v . -o ' ' \
-        -t -m "//pgmap/recovering_objects_per_sec" -v .)
-    test -n "$progress"
+    local recovery_progress
+    recovery_progress+=".recovering_keys_per_sec + "
+    recovery_progress+=".recovering_bytes_per_sec + "
+    recovery_progress+=".recovering_objects_per_sec"
+    local progress=$(ceph --format json status 2>/dev/null | \
+                     jq -r ".pgmap | $recovery_progress")
+    test "$progress" != null
 }
 
 function test_get_is_making_recovery_progress() {
@@ -1087,17 +1081,11 @@ function test_get_is_making_recovery_progress() {
 # @return 0 on success, 1 on error
 #
 function get_num_active_clean() {
-    local expression="("
-    expression+="contains(.,'active') and "
-    expression+="contains(.,'clean') and "
-    expression+="not(contains(.,'stale'))"
-    expression+=")"
-    # xmlstarlet 1.3.0 (which is on Ubuntu precise)
-    # add extra new lines that must be ignored with
-    # grep -v '^$' 
-    ceph --format xml pg dump pgs 2>/dev/null | \
-        $XMLSTARLET sel -t -m "//pg_stat/state[$expression]" -v . -n | \
-        grep -cv '^$'
+    local expression
+    expression+="select(contains(\"active\") and contains(\"clean\")) | "
+    expression+="select(contains(\"stale\") | not)"
+    ceph --format json pg dump pgs 2>/dev/null | \
+        jq "[.[] | .state | $expression] | length"
 }
 
 function test_get_num_active_clean() {
@@ -1123,8 +1111,7 @@ function test_get_num_active_clean() {
 # @return 0 on success, 1 on error
 #
 function get_num_pgs() {
-    ceph --format xml status 2>/dev/null | \
-        $XMLSTARLET sel -t -m "//pgmap/num_pgs" -v .
+    ceph --format json status 2>/dev/null | jq '.pgmap.num_pgs'
 }
 
 function test_get_num_pgs() {
@@ -1154,8 +1141,8 @@ function test_get_num_pgs() {
 function get_last_scrub_stamp() {
     local pgid=$1
     local sname=${2:-last_scrub_stamp}
-    ceph --format xml pg dump pgs 2>/dev/null | \
-        $XMLSTARLET sel -t -m "//pg_stat[pgid='$pgid']/$sname" -v .
+    ceph --format json pg dump pgs 2>/dev/null | \
+        jq -r ".[] | select(.pgid==\"$pgid\") | .$sname"
 }
 
 function test_get_last_scrub_stamp() {
@@ -1258,7 +1245,10 @@ function wait_for_clean() {
     local cur_active_clean
     local -a delays=($(get_timeout_delays $TIMEOUT .1))
     local -i loop=0
-    test $(get_num_pgs) != 0 || return 1
+
+    while test $(get_num_pgs) == 0 ; do
+	sleep 1
+    done
 
     while true ; do
         # Comparing get_num_active_clean & get_num_pgs is used to determine
@@ -1325,7 +1315,7 @@ function test_wait_for_health_ok() {
 
     setup $dir || return 1
     run_mon $dir a --osd_pool_default_size=1 --osd_failsafe_full_ratio=.99 --mon_pg_warn_min_per_osd=0 || return 1
-    run_mgr $dir x || return 1
+    run_mgr $dir x --mon_pg_warn_min_per_osd=0 || return 1
     ! TIMEOUT=1 wait_for_health_ok || return 1
     run_osd $dir 0 || return 1
     wait_for_health_ok || return 1
@@ -1644,6 +1634,47 @@ function test_wait_background() {
     if [ $? -ne 0 ]; then return 1; fi
 
     if [ ! -z "$pids" ]; then return 1; fi
+}
+
+function flush_pg_stats()
+{
+    local timeout=${1:-$TIMEOUT}
+
+    ids=`ceph osd ls`
+    seqs=''
+    for osd in $ids; do
+	    seq=`ceph tell osd.$osd flush_pg_stats`
+	    seqs="$seqs $osd-$seq"
+    done
+
+    for s in $seqs; do
+	    osd=`echo $s | cut -d - -f 1`
+	    seq=`echo $s | cut -d - -f 2`
+	    echo "waiting osd.$osd seq $seq"
+	    while test $(ceph osd last-stat-seq $osd) -lt $seq; do
+            sleep 1
+            if [ $((timeout--)) -eq 0 ]; then
+                return 1
+            fi
+        done
+    done
+}
+
+function test_flush_pg_stats()
+{
+    local dir=$1
+
+    setup $dir || return 1
+    run_mon $dir a --osd_pool_default_size=1 || return 1
+    run_mgr $dir x || return 1
+    run_osd $dir 0 || return 1
+    rados -p rbd put obj /etc/group
+    flush_pg_stats
+    local jq_filter='.pools | .[] | select(.name == "rbd") | .stats'
+    raw_bytes_used=`ceph df detail --format=json | jq "$jq_filter.raw_bytes_used"`
+    bytes_used=`ceph df detail --format=json | jq "$jq_filter.bytes_used"`
+    test $raw_bytes_used > 0 || return 1
+    test $raw_bytes_used == $bytes_used || return 1
 }
 
 #######################################################################

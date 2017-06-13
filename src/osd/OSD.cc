@@ -1460,8 +1460,9 @@ bool OSDService::_get_map_bl(epoch_t e, bufferlist& bl)
   found = store->read(coll_t::meta(),
 		      OSD::get_osdmap_pobject_name(e), 0, 0, bl,
 		      CEPH_OSD_OP_FLAG_FADVISE_WILLNEED) >= 0;
-  if (found)
+  if (found) {
     _add_map_bl(e, bl);
+  }
   return found;
 }
 
@@ -1479,14 +1480,19 @@ bool OSDService::get_inc_map_bl(epoch_t e, bufferlist& bl)
   found = store->read(coll_t::meta(),
 		      OSD::get_inc_osdmap_pobject_name(e), 0, 0, bl,
 		      CEPH_OSD_OP_FLAG_FADVISE_WILLNEED) >= 0;
-  if (found)
+  if (found) {
     _add_map_inc_bl(e, bl);
+  }
   return found;
 }
 
 void OSDService::_add_map_bl(epoch_t e, bufferlist& bl)
 {
   dout(10) << "add_map_bl " << e << " " << bl.length() << " bytes" << dendl;
+  // cache a contiguous buffer
+  if (bl.get_num_buffers() > 1) {
+    bl.rebuild();
+  }
   bl.try_assign_to_mempool(mempool::mempool_osd_mapbl);
   map_bl_cache.add(e, bl);
 }
@@ -1494,6 +1500,10 @@ void OSDService::_add_map_bl(epoch_t e, bufferlist& bl)
 void OSDService::_add_map_inc_bl(epoch_t e, bufferlist& bl)
 {
   dout(10) << "add_map_inc_bl " << e << " " << bl.length() << " bytes" << dendl;
+  // cache a contiguous buffer
+  if (bl.get_num_buffers() > 1) {
+    bl.rebuild();
+  }
   bl.try_assign_to_mempool(mempool::mempool_osd_mapbl);
   map_bl_inc_cache.add(e, bl);
 }
@@ -1501,12 +1511,20 @@ void OSDService::_add_map_inc_bl(epoch_t e, bufferlist& bl)
 void OSDService::pin_map_inc_bl(epoch_t e, bufferlist &bl)
 {
   Mutex::Locker l(map_cache_lock);
+  // cache a contiguous buffer
+  if (bl.get_num_buffers() > 1) {
+    bl.rebuild();
+  }
   map_bl_inc_cache.pin(e, bl);
 }
 
 void OSDService::pin_map_bl(epoch_t e, bufferlist &bl)
 {
   Mutex::Locker l(map_cache_lock);
+  // cache a contiguous buffer
+  if (bl.get_num_buffers() > 1) {
+    bl.rebuild();
+  }
   map_bl_cache.pin(e, bl);
 }
 
@@ -1715,7 +1733,7 @@ int OSD::mkfs(CephContext *cct, ObjectStore *store, const string &dev,
     goto free_store;
   }
 
-  store->set_cache_shards(cct->_conf->osd_op_num_shards);
+  store->set_cache_shards(1);  // doesn't matter for mkfs!
 
   ret = store->mount();
   if (ret) {
@@ -1883,12 +1901,15 @@ OSD::OSD(CephContext *cct_, ObjectStore *store_,
   clog(log_client.create_channel()),
   whoami(id),
   dev_path(dev), journal_path(jdev),
+  store_is_rotational(store->is_rotational()),
   trace_endpoint("0.0.0.0", 0, "osd"),
   asok_hook(NULL),
   osd_compat(get_osd_compat_set()),
-  osd_tp(cct, "OSD::osd_tp", "tp_osd", cct->_conf->osd_op_threads, "osd_op_threads"),
+  peering_tp(cct, "OSD::peering_tp", "tp_peering",
+	     cct->_conf->osd_peering_wq_threads,
+	     "osd_peering_tp_threads"),
   osd_op_tp(cct, "OSD::osd_op_tp", "tp_osd_tp",
-    cct->_conf->osd_op_num_threads_per_shard * cct->_conf->osd_op_num_shards),
+	    get_num_op_threads()),
   disk_tp(cct, "OSD::disk_tp", "tp_osd_disk", cct->_conf->osd_disk_threads, "osd_disk_threads"),
   command_tp(cct, "OSD::command_tp", "tp_osd_cmd",  1),
   session_waiting_lock("OSD::session_waiting_lock"),
@@ -1908,7 +1929,7 @@ OSD::OSD(CephContext *cct_, ObjectStore *store_,
   op_queue(get_io_queue()),
   op_prio_cutoff(get_io_prio_cut()),
   op_shardedwq(
-    cct->_conf->osd_op_num_shards,
+    get_num_op_shards(),
     this,
     cct->_conf->osd_op_thread_timeout,
     cct->_conf->osd_op_thread_suicide_timeout,
@@ -1917,7 +1938,7 @@ OSD::OSD(CephContext *cct_, ObjectStore *store_,
     this,
     cct->_conf->osd_op_thread_timeout,
     cct->_conf->osd_op_thread_suicide_timeout,
-    &osd_tp),
+    &peering_tp),
   map_lock("OSD::map_lock"),
   pg_map_lock("OSD::pg_map_lock"),
   last_pg_create_epoch(0),
@@ -2285,6 +2306,26 @@ int OSD::enable_disable_fuse(bool stop)
   return 0;
 }
 
+int OSD::get_num_op_shards()
+{
+  if (cct->_conf->osd_op_num_shards)
+    return cct->_conf->osd_op_num_shards;
+  if (store_is_rotational)
+    return cct->_conf->osd_op_num_shards_hdd;
+  else
+    return cct->_conf->osd_op_num_shards_ssd;
+}
+
+int OSD::get_num_op_threads()
+{
+  if (cct->_conf->osd_op_num_threads_per_shard)
+    return get_num_op_shards() * cct->_conf->osd_op_num_threads_per_shard;
+  if (store_is_rotational)
+    return get_num_op_shards() * cct->_conf->osd_op_num_threads_per_shard_hdd;
+  else
+    return get_num_op_shards() * cct->_conf->osd_op_num_threads_per_shard_ssd;
+}
+
 int OSD::init()
 {
   CompatSet initial, diff;
@@ -2298,11 +2339,12 @@ int OSD::init()
   service.recovery_sleep_timer.init();
 
   // mount.
-  dout(2) << "mounting " << dev_path << " "
-	  << (journal_path.empty() ? "(no journal)" : journal_path) << dendl;
+  dout(2) << "init " << dev_path
+	  << " (looks like " << (store_is_rotational ? "hdd" : "ssd") << ")"
+	  << dendl;
   assert(store);  // call pre_init() first!
 
-  store->set_cache_shards(cct->_conf->osd_op_num_shards);
+  store->set_cache_shards(get_num_op_shards());
 
   int r = store->mount();
   if (r < 0) {
@@ -2509,7 +2551,7 @@ int OSD::init()
   monc->set_log_client(&log_client);
   update_log_config();
 
-  osd_tp.start();
+  peering_tp.start();
   osd_op_tp.start();
   disk_tp.start();
   command_tp.start();
@@ -3204,9 +3246,9 @@ int OSD::shutdown()
   heartbeat_lock.Unlock();
   heartbeat_thread.join();
 
-  osd_tp.drain();
+  peering_tp.drain();
   peering_wq.clear();
-  osd_tp.stop();
+  peering_tp.stop();
   dout(10) << "osd tp stopped" << dendl;
 
   osd_op_tp.drain();
@@ -5023,7 +5065,9 @@ void OSD::tick_without_osd_lock()
       // do any pending reports
       send_full_update();
       send_failures();
-      send_pg_stats(now);
+      if (osdmap->require_osd_release < CEPH_RELEASE_LUMINOUS) {
+	send_pg_stats(now);
+      }
     }
     map_lock.put_read();
   }
@@ -5413,7 +5457,9 @@ void OSD::ms_handle_connect(Connection *con)
       service.send_pg_temp();
       requeue_failures();
       send_failures();
-      send_pg_stats(now);
+      if (osdmap->require_osd_release < CEPH_RELEASE_LUMINOUS) {
+	send_pg_stats(now);
+      }
 
       map_lock.put_read();
       if (is_active()) {
@@ -5718,6 +5764,7 @@ void OSD::_collect_metadata(map<string,string> *pm)
 
   // backend
   (*pm)["osd_objectstore"] = store->get_type();
+  (*pm)["rotational"] = store_is_rotational ? "1" : "0";
   store->collect_metadata(pm);
 
   collect_sys_info(pm, cct);
@@ -5834,8 +5881,8 @@ void OSD::send_failures()
   utime_t now = ceph_clock_now();
   while (!failure_queue.empty()) {
     int osd = failure_queue.begin()->first;
-    entity_inst_t i = osdmap->get_inst(osd);
     if (!failure_pending.count(osd)) {
+      entity_inst_t i = osdmap->get_inst(osd);
       int failed_for = (int)(double)(now - failure_queue.begin()->second);
       monc->send_mon_message(new MOSDFailure(monc->get_fsid(), i, failed_for,
 					     osdmap->get_epoch()));
@@ -5854,6 +5901,7 @@ void OSD::send_still_alive(epoch_t epoch, const entity_inst_t &i)
 void OSD::send_pg_stats(const utime_t &now)
 {
   assert(map_lock.is_locked());
+  assert(osdmap->require_osd_release < CEPH_RELEASE_LUMINOUS);
   dout(20) << "send_pg_stats" << dendl;
 
   osd_stat_t cur_stat = service.get_osd_stat();
@@ -6454,7 +6502,12 @@ void OSD::do_command(Connection *con, ceph_tid_t tid, vector<string>& cmd, buffe
   }
 
   else if (prefix == "flush_pg_stats") {
-    flush_pg_stats();
+    if (osdmap->require_osd_release >= CEPH_RELEASE_LUMINOUS) {
+      mgrc.send_pgstats();
+      ds << service.get_osd_stat_seq() << "\n";
+    } else {
+      flush_pg_stats();
+    }
   }
 
   else if (prefix == "heap") {
@@ -7568,6 +7621,13 @@ void OSD::_committed_osd_maps(epoch_t first, epoch_t last, MOSDMap *m)
 	do_restart = true;
       }
     }
+    if (osdmap->require_osd_release < CEPH_RELEASE_LUMINOUS &&
+	newmap->require_osd_release >= CEPH_RELEASE_LUMINOUS) {
+      dout(10) << __func__ << " require_osd_release reached luminous in "
+	       << newmap->get_epoch() << dendl;
+      clear_pg_stat_queue();
+      outstanding_pg_stats.clear();
+    }
 
     osdmap = newmap;
     epoch_t up_epoch;
@@ -7742,12 +7802,7 @@ void OSD::_committed_osd_maps(epoch_t first, epoch_t last, MOSDMap *m)
     activate_map();
   }
 
-  if (m->newest_map && m->newest_map > last) {
-    dout(10) << " msg say newest map is " << m->newest_map
-	     << ", requesting more" << dendl;
-    osdmap_subscribe(osdmap->get_epoch()+1, false);
-  }
-  else if (do_shutdown) {
+  if (do_shutdown) {
     if (network_error) {
       Mutex::Locker l(heartbeat_lock);
       map<int,pair<utime_t,entity_inst_t>>::iterator it =
@@ -7762,6 +7817,11 @@ void OSD::_committed_osd_maps(epoch_t first, epoch_t last, MOSDMap *m)
     // trigger shutdown in a different thread
     dout(0) << __func__ << " shutdown OSD via async signal" << dendl;
     queue_async_signal(SIGINT);
+  }
+  else if (m->newest_map && m->newest_map > last) {
+    dout(10) << " msg say newest map is " << m->newest_map
+	     << ", requesting more" << dendl;
+    osdmap_subscribe(osdmap->get_epoch()+1, false);
   }
   else if (is_preboot()) {
     if (m->get_source().is_mon())
@@ -9000,12 +9060,13 @@ void OSD::do_recovery(
    * queue_recovery_after_sleep.
    */
   if (cct->_conf->osd_recovery_sleep > 0 && service.recovery_needs_sleep) {
-    auto recovery_requeue_callback = new FunctionContext([this, pg, queued, reserved_pushes](int r) {
+    PGRef pgref(pg);
+    auto recovery_requeue_callback = new FunctionContext([this, pgref, queued, reserved_pushes](int r) {
       dout(20) << "do_recovery wake up at "
                << ceph_clock_now()
 	       << ", re-queuing recovery" << dendl;
       service.recovery_needs_sleep = false;
-      service.queue_recovery_after_sleep(pg, queued, reserved_pushes);
+      service.queue_recovery_after_sleep(pgref.get(), queued, reserved_pushes);
     });
     Mutex::Locker l(service.recovery_sleep_lock);
 

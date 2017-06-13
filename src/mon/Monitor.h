@@ -35,6 +35,7 @@
 #include "Elector.h"
 #include "Paxos.h"
 #include "Session.h"
+#include "PGStatService.h"
 
 #include "common/LogClient.h"
 #include "auth/cephx/CephxKeyServer.h"
@@ -169,6 +170,8 @@ public:
   MgrClient mgr_client;
   uint64_t mgr_proxy_bytes = 0;  // in-flight proxied mgr command message bytes
 
+  const PGStatService *pgservice;
+
 private:
   void new_tick();
 
@@ -230,6 +233,11 @@ private:
   set<int> quorum;       // current active set of monitors (if !starting)
   utime_t leader_since;  // when this monitor became the leader, if it is the leader
   utime_t exited_quorum; // time detected as not in quorum; 0 if in
+
+  // map of counts of connected clients, by type and features, for
+  // each quorum mon
+  map<int,FeatureMap> quorum_feature_map;
+
   /**
    * Intersection of quorum member's connection feature bits.
    */
@@ -571,6 +579,8 @@ public:
   void apply_monmap_to_compatset_features();
   void calc_quorum_requirements();
 
+  void get_combined_feature_map(FeatureMap *fm);
+
 private:
   void _reset();   ///< called from bootstrap, start_, or join_election
   void wait_for_paxos_write();
@@ -630,6 +640,10 @@ public:
 
   class MgrMonitor *mgrmon() {
     return (class MgrMonitor*) paxos_service[PAXOS_MGR];
+  }
+
+  class MgrStatMonitor *mgrstatmon() {
+    return (class MgrStatMonitor*) paxos_service[PAXOS_MGRSTAT];
   }
 
   friend class Paxos;
@@ -861,6 +875,7 @@ public:
 
   void update_mon_metadata(int from, Metadata&& m);
   int load_metadata(map<int, Metadata>& m);
+  void count_metadata(const string& field, Formatter *f);
 
   // features
   static CompatSet get_initial_supported_features();
@@ -942,8 +957,6 @@ public:
 #define CEPH_MON_FEATURE_INCOMPAT_ERASURE_CODE_PLUGINS_V3 CompatSet::Feature(7, "support shec erasure code")
 #define CEPH_MON_FEATURE_INCOMPAT_KRAKEN CompatSet::Feature(8, "support monmap features")
 // make sure you add your feature to Monitor::get_supported_features
-
-long parse_pos_long(const char *s, ostream *pss = NULL);
 
 struct MonCommand {
   string cmdstring;

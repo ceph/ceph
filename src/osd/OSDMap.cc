@@ -366,7 +366,15 @@ void OSDMap::Incremental::encode_client_old(bufferlist& bl) const
     ::encode(n, bl);
   }
   ::encode(new_up_client, bl, 0);
-  ::encode(new_state, bl);
+  {
+    // legacy is map<int32_t,uint8_t>
+    uint32_t n = new_state.size();
+    ::encode(n, bl);
+    for (auto p : new_state) {
+      ::encode(p.first, bl);
+      ::encode((uint8_t)p.second, bl);
+    }
+  }
   ::encode(new_weight, bl);
   // for ::encode(new_pg_temp, bl);
   n = new_pg_temp.size();
@@ -402,7 +410,14 @@ void OSDMap::Incremental::encode_classic(bufferlist& bl, uint64_t features) cons
   ::encode(new_pool_names, bl);
   ::encode(old_pools, bl);
   ::encode(new_up_client, bl, features);
-  ::encode(new_state, bl);
+  {
+    uint32_t n = new_state.size();
+    ::encode(n, bl);
+    for (auto p : new_state) {
+      ::encode(p.first, bl);
+      ::encode((uint8_t)p.second, bl);
+    }
+  }
   ::encode(new_weight, bl);
   ::encode(new_pg_temp, bl);
 
@@ -444,7 +459,7 @@ void OSDMap::Incremental::encode(bufferlist& bl, uint64_t features) const
   ENCODE_START(8, 7, bl);
 
   {
-    uint8_t v = 4;
+    uint8_t v = 5;
     if (!HAVE_FEATURE(features, SERVER_LUMINOUS)) {
       v = 3;
     }
@@ -462,7 +477,16 @@ void OSDMap::Incremental::encode(bufferlist& bl, uint64_t features) const
     ::encode(new_pool_names, bl);
     ::encode(old_pools, bl);
     ::encode(new_up_client, bl, features);
-    ::encode(new_state, bl);
+    if (v >= 5) {
+      ::encode(new_state, bl);
+    } else {
+      uint32_t n = new_state.size();
+      ::encode(n, bl);
+      for (auto p : new_state) {
+	::encode(p.first, bl);
+	::encode((uint8_t)p.second, bl);
+      }
+    }
     ::encode(new_weight, bl);
     ::encode(new_pg_temp, bl);
     ::encode(new_primary_temp, bl);
@@ -581,7 +605,13 @@ void OSDMap::Incremental::decode_classic(bufferlist::iterator &p)
     ::decode(old_pools, p);
   }
   ::decode(new_up_client, p);
-  ::decode(new_state, p);
+  {
+    map<int32_t,uint8_t> ns;
+    ::decode(ns, p);
+    for (auto q : ns) {
+      new_state[q.first] = q.second;
+    }
+  }
   ::decode(new_weight, p);
 
   if (v < 6) {
@@ -650,7 +680,7 @@ void OSDMap::Incremental::decode(bufferlist::iterator& bl)
     return;
   }
   {
-    DECODE_START(4, bl); // client-usable data
+    DECODE_START(5, bl); // client-usable data
     ::decode(fsid, bl);
     ::decode(epoch, bl);
     ::decode(modified, bl);
@@ -664,7 +694,15 @@ void OSDMap::Incremental::decode(bufferlist::iterator& bl)
     ::decode(new_pool_names, bl);
     ::decode(old_pools, bl);
     ::decode(new_up_client, bl);
-    ::decode(new_state, bl);
+    if (struct_v >= 5) {
+      ::decode(new_state, bl);
+    } else {
+      map<int32_t,uint8_t> ns;
+      ::decode(ns, bl);
+      for (auto q : ns) {
+	new_state[q.first] = q.second;
+      }
+    }
     ::decode(new_weight, bl);
     ::decode(new_pg_temp, bl);
     ::decode(new_primary_temp, bl);
@@ -1111,19 +1149,22 @@ void OSDMap::count_full_nearfull_osds(int *full, int *backfill, int *nearfull) c
   }
 }
 
-static bool get_osd_utilization(const ceph::unordered_map<int32_t,osd_stat_t> &osd_stat,
-   int id, int64_t* kb, int64_t* kb_used, int64_t* kb_avail) {
-    auto p = osd_stat.find(id);
-    if (p == osd_stat.end())
-      return false;
-    *kb = p->second.kb;
-    *kb_used = p->second.kb_used;
-    *kb_avail = p->second.kb_avail;
-    return *kb > 0;
+static bool get_osd_utilization(
+  const mempool::pgmap::unordered_map<int32_t,osd_stat_t> &osd_stat,
+  int id, int64_t* kb, int64_t* kb_used, int64_t* kb_avail)
+{
+  auto p = osd_stat.find(id);
+  if (p == osd_stat.end())
+    return false;
+  *kb = p->second.kb;
+  *kb_used = p->second.kb_used;
+  *kb_avail = p->second.kb_avail;
+  return *kb > 0;
 }
 
-void OSDMap::get_full_osd_util(const ceph::unordered_map<int32_t,osd_stat_t> &osd_stat,
-     map<int, float> *full, map<int, float> *backfill, map<int, float> *nearfull) const
+void OSDMap::get_full_osd_util(
+  const mempool::pgmap::unordered_map<int32_t,osd_stat_t> &osd_stat,
+  map<int, float> *full, map<int, float> *backfill, map<int, float> *nearfull) const
 {
   full->clear();
   backfill->clear();
@@ -1141,6 +1182,24 @@ void OSDMap::get_full_osd_util(const ceph::unordered_map<int32_t,osd_stat_t> &os
         if (get_osd_utilization(osd_stat, i, &kb, &kb_used, &kb_avail))
 	  nearfull->emplace(i, (float)kb_used / (float)kb);
       }
+    }
+  }
+}
+
+void OSDMap::get_full_osd_counts(set<int> *full, set<int> *backfill,
+				 set<int> *nearfull) const
+{
+  full->clear();
+  backfill->clear();
+  nearfull->clear();
+  for (int i = 0; i < max_osd; ++i) {
+    if (exists(i) && is_up(i) && is_in(i)) {
+      if (osd_state[i] & CEPH_OSD_FULL)
+	full->emplace(i);
+      else if (osd_state[i] & CEPH_OSD_BACKFILLFULL)
+	backfill->emplace(i);
+      else if (osd_state[i] & CEPH_OSD_NEARFULL)
+	nearfull->emplace(i);
     }
   }
 }
@@ -2146,7 +2205,13 @@ void OSDMap::encode_client_old(bufferlist& bl) const
   ::encode(flags, bl);
 
   ::encode(max_osd, bl);
-  ::encode(osd_state, bl);
+  {
+    uint32_t n = osd_state.size();
+    ::encode(n, bl);
+    for (auto s : osd_state) {
+      ::encode((uint8_t)s, bl);
+    }
+  }
   ::encode(osd_weight, bl);
   ::encode(osd_addrs->client_addr, bl, 0);
 
@@ -2188,7 +2253,13 @@ void OSDMap::encode_classic(bufferlist& bl, uint64_t features) const
   ::encode(flags, bl);
 
   ::encode(max_osd, bl);
-  ::encode(osd_state, bl);
+  {
+    uint32_t n = osd_state.size();
+    ::encode(n, bl);
+    for (auto s : osd_state) {
+      ::encode((uint8_t)s, bl);
+    }
+  }
   ::encode(osd_weight, bl);
   ::encode(osd_addrs->client_addr, bl, features);
 
@@ -2235,7 +2306,7 @@ void OSDMap::encode(bufferlist& bl, uint64_t features) const
   ENCODE_START(8, 7, bl);
 
   {
-    uint8_t v = 4;
+    uint8_t v = 5;
     if (!HAVE_FEATURE(features, SERVER_LUMINOUS)) {
       v = 3;
     }
@@ -2264,7 +2335,15 @@ void OSDMap::encode(bufferlist& bl, uint64_t features) const
     }
 
     ::encode(max_osd, bl);
-    ::encode(osd_state, bl);
+    if (v >= 5) {
+      ::encode(osd_state, bl);
+    } else {
+      uint32_t n = osd_state.size();
+      ::encode(n, bl);
+      for (auto s : osd_state) {
+	::encode((uint8_t)s, bl);
+      }
+    }
     ::encode(osd_weight, bl);
     ::encode(osd_addrs->client_addr, bl, features);
 
@@ -2406,7 +2485,14 @@ void OSDMap::decode_classic(bufferlist::iterator& p)
   ::decode(flags, p);
 
   ::decode(max_osd, p);
-  ::decode(osd_state, p);
+  {
+    vector<uint8_t> os;
+    ::decode(os, p);
+    osd_state.resize(os.size());
+    for (unsigned i = 0; i < os.size(); ++i) {
+      osd_state[i] = os[i];
+    }
+  }
   ::decode(osd_weight, p);
   ::decode(osd_addrs->client_addr, p);
   if (v <= 5) {
@@ -2493,7 +2579,7 @@ void OSDMap::decode(bufferlist::iterator& bl)
    * Since we made it past that hurdle, we can use our normal paths.
    */
   {
-    DECODE_START(4, bl); // client-usable data
+    DECODE_START(5, bl); // client-usable data
     // base
     ::decode(fsid, bl);
     ::decode(epoch, bl);
@@ -2507,7 +2593,16 @@ void OSDMap::decode(bufferlist::iterator& bl)
     ::decode(flags, bl);
 
     ::decode(max_osd, bl);
-    ::decode(osd_state, bl);
+    if (struct_v >= 5) {
+      ::decode(osd_state, bl);
+    } else {
+      vector<uint8_t> os;
+      ::decode(os, bl);
+      osd_state.resize(os.size());
+      for (unsigned i = 0; i < os.size(); ++i) {
+	osd_state[i] = os[i];
+      }
+    }
     ::decode(osd_weight, bl);
     ::decode(osd_addrs->client_addr, bl);
 

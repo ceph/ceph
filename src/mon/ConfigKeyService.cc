@@ -19,7 +19,9 @@
 #include "mon/Monitor.h"
 #include "mon/ConfigKeyService.h"
 #include "mon/MonitorDBStore.h"
+#include "mon/OSDMonitor.h"
 #include "common/errno.h"
+#include "include/stringify.h"
 
 #define dout_subsys ceph_subsys_mon
 #undef dout_prefix
@@ -55,10 +57,17 @@ void ConfigKeyService::store_put(const string &key, bufferlist &bl, Context *cb)
 void ConfigKeyService::store_delete(const string &key, Context *cb)
 {
   MonitorDBStore::TransactionRef t = paxos->get_pending_transaction();
-  t->erase(STORE_PREFIX, key);
+  store_delete(t, key);
   if (cb)
     paxos->queue_pending_finisher(cb);
   paxos->trigger_propose();
+}
+
+void ConfigKeyService::store_delete(
+    MonitorDBStore::TransactionRef t,
+    const string &key)
+{
+  t->erase(STORE_PREFIX, key);
 }
 
 bool ConfigKeyService::store_exists(const string &key)
@@ -83,6 +92,22 @@ void ConfigKeyService::store_list(stringstream &ss)
   f.flush(ss);
 }
 
+bool ConfigKeyService::store_has_prefix(const string &prefix)
+{
+  KeyValueDB::Iterator iter =
+    mon->store->get_iterator(STORE_PREFIX);
+
+  while (iter->valid()) {
+    string key(iter->key());
+    size_t p = key.find(prefix);
+    if (p != string::npos && p == 0) {
+      return true;
+    }
+    iter->next();
+  }
+  return false;
+}
+
 void ConfigKeyService::store_dump(stringstream &ss)
 {
   KeyValueDB::Iterator iter =
@@ -97,6 +122,24 @@ void ConfigKeyService::store_dump(stringstream &ss)
   }
   f.close_section();
   f.flush(ss);
+}
+
+void ConfigKeyService::store_delete_prefix(
+    MonitorDBStore::TransactionRef t,
+    const string &prefix)
+{
+  KeyValueDB::Iterator iter =
+    mon->store->get_iterator(STORE_PREFIX);
+
+  while (iter->valid()) {
+    string key(iter->key());
+
+    size_t p = key.find(prefix);
+    if (p != string::npos && p == 0) {
+      store_delete(t, key);
+    }
+    iter->next();
+  }
 }
 
 bool ConfigKeyService::service_dispatch(MonOpRequestRef op)
@@ -165,8 +208,9 @@ bool ConfigKeyService::service_dispatch(MonOpRequestRef op)
       goto out;
     }
     // we'll reply to the message once the proposal has been handled
+    ss << "set " << key;
     store_put(key, data,
-        new Monitor::C_Command(mon, op, 0, "value stored", 0));
+	      new Monitor::C_Command(mon, op, 0, ss.str(), 0));
     // return for now; we'll put the message once it's done.
     return true;
 
@@ -208,6 +252,7 @@ bool ConfigKeyService::service_dispatch(MonOpRequestRef op)
     store_dump(tmp_ss);
     rdata.append(tmp_ss);
     ret = 0;
+
   }
 
 out:
@@ -219,3 +264,76 @@ out:
   return (ret == 0);
 }
 
+string _get_dmcrypt_prefix(const uuid_d& uuid, const string k)
+{
+  return "dm-crypt/osd/" + stringify(uuid) + "/" + k;
+}
+
+int ConfigKeyService::validate_osd_destroy(
+    const int32_t id,
+    const uuid_d& uuid)
+{
+  string dmcrypt_prefix = _get_dmcrypt_prefix(uuid, "");
+  string daemon_prefix =
+    "daemon-private/osd." + stringify(id) + "/";
+
+  if (!store_has_prefix(dmcrypt_prefix) &&
+      !store_has_prefix(daemon_prefix)) {
+    return -ENOENT;
+  }
+  return 0;
+}
+
+void ConfigKeyService::do_osd_destroy(int32_t id, uuid_d& uuid)
+{
+  string dmcrypt_prefix = _get_dmcrypt_prefix(uuid, "");
+  string daemon_prefix =
+    "daemon-private/osd." + stringify(id) + "/";
+
+  MonitorDBStore::TransactionRef t = paxos->get_pending_transaction();
+  for (auto p : { dmcrypt_prefix, daemon_prefix }) {
+    store_delete_prefix(t, p);
+  }
+
+  paxos->trigger_propose();
+}
+
+int ConfigKeyService::validate_osd_new(
+    const uuid_d& uuid,
+    const string& dmcrypt_key,
+    stringstream& ss)
+{
+  string dmcrypt_prefix = _get_dmcrypt_prefix(uuid, "luks");
+  bufferlist value;
+  value.append(dmcrypt_key);
+
+  if (store_exists(dmcrypt_prefix)) {
+    bufferlist existing_value;
+    int err = store_get(dmcrypt_prefix, existing_value);
+    if (err < 0) {
+      dout(10) << __func__ << " unable to get dm-crypt key from store (r = "
+               << err << ")" << dendl;
+      return err;
+    }
+    if (existing_value.contents_equal(value)) {
+      // both values match; this will be an idempotent op.
+      return EEXIST;
+    }
+    ss << "dm-crypt key already exists and does not match";
+    return -EEXIST;
+  }
+  return 0;
+}
+
+void ConfigKeyService::do_osd_new(
+    const uuid_d& uuid,
+    const string& dmcrypt_key)
+{
+  assert(paxos->is_plugged());
+
+  string dmcrypt_key_prefix = _get_dmcrypt_prefix(uuid, "luks");
+  bufferlist dmcrypt_key_value;
+  dmcrypt_key_value.append(dmcrypt_key);
+  // store_put() will call trigger_propose
+  store_put(dmcrypt_key_prefix, dmcrypt_key_value, nullptr);
+}

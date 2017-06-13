@@ -45,10 +45,6 @@ Options
 
     Add *config* to all sections in the ceph configuration.
 
-.. option:: -r
-
-    Start radosgw on port starting from 8000.
-
 .. option:: --nodaemon
 
     Use ceph-run as wrapper for mon/osd/mds.
@@ -72,10 +68,6 @@ Options
 .. option:: --valgrind[_{osd,mds,mon}] 'valgrind_toolname [args...]'
 
     Launch the osd/mds/mon/all the ceph binaries using valgrind with the specified tool and arguments.
-
-.. option:: --{mon,osd,mds}_num
-
-    Set the count of mon/osd/mds daemons
 
 .. option:: --bluestore
 

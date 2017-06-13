@@ -150,8 +150,12 @@ namespace mempool {
   f(buffer_meta)		      \
   f(osd)			      \
   f(osd_mapbl)			      \
+  f(osd_pglog)			      \
   f(osdmap)			      \
-  f(osdmap_mapping)
+  f(osdmap_mapping)		      \
+  f(pgmap)			      \
+  f(unittest_1)			      \
+  f(unittest_2)
 
 
 // give them integer ids

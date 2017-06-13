@@ -133,12 +133,11 @@ public:
         } else {
           *ss << "(active)";
         }
-        *ss << " ";
       } else {
-	*ss << "no daemons active ";
+	*ss << "no daemons active";
       }
       if (standbys.size()) {
-	*ss << "standbys: ";
+	*ss << ", standbys: ";
 	bool first = true;
 	for (const auto &i : standbys) {
 	  if (!first) {

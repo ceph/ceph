@@ -30,7 +30,6 @@ if [ x`uname`x = xFreeBSDx ]; then
         devel/boost-python-libs \
         devel/valgrind \
         devel/pkgconf \
-        devel/libatomic_ops \
         devel/libedit \
         devel/libtool \
         devel/google-perftools \
@@ -53,12 +52,16 @@ if [ x`uname`x = xFreeBSDx ]; then
         emulators/fuse \
         java/junit \
         lang/python27 \
+	devel/py-pip \
         devel/py-argparse \
         devel/py-nose \
         www/py-flask \
         www/fcgi \
         sysutils/flock \
         sysutils/fusefs-libs \
+
+	# Now use pip to install some extra python modules
+	pip install pecan
 
     exit
 else

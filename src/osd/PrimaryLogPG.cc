@@ -2358,7 +2358,7 @@ void PrimaryLogPG::record_write_error(OpRequestRef op, const hobject_t &soid,
   assert(op->may_write());
   const osd_reqid_t &reqid = static_cast<const MOSDOp*>(op->get_req())->get_reqid();
   ObjectContextRef obc;
-  mempool::osd::list<pg_log_entry_t> entries;
+  mempool::osd_pglog::list<pg_log_entry_t> entries;
   entries.push_back(pg_log_entry_t(pg_log_entry_t::ERROR, soid,
 				   get_next_version(), eversion_t(), 0,
 				   reqid, utime_t(), r));
@@ -3767,6 +3767,9 @@ PrimaryLogPG::OpContextUPtr PrimaryLogPG::trim_object(
       coid,
       old_snaps,
       new_snaps);
+
+    obc->obs.oi = object_info_t(coid);
+
     ctx->at_version.version++;
   } else {
     // save adjusted snaps for this object
@@ -3848,7 +3851,7 @@ PrimaryLogPG::OpContextUPtr PrimaryLogPG::trim_object(
 	ctx->delta_stats.num_objects_pinned--;
     }
     ctx->snapset_obc->obs.exists = false;
-    
+    obc->obs.oi = object_info_t(coid);
     t->remove(snapoid);
   } else {
     dout(10) << coid << " filtering snapset on " << snapoid << dendl;
@@ -9212,7 +9215,7 @@ void PrimaryLogPG::simple_opc_submit(OpContextUPtr ctx)
 
 
 void PrimaryLogPG::submit_log_entries(
-  const mempool::osd::list<pg_log_entry_t> &entries,
+  const mempool::osd_pglog::list<pg_log_entry_t> &entries,
   ObcLockManager &&manager,
   boost::optional<std::function<void(void)> > &&_on_complete,
   OpRequestRef op,
@@ -10382,7 +10385,7 @@ void PrimaryLogPG::mark_all_unfound_lost(
   pg_log.get_log().print(*_dout);
   *_dout << dendl;
 
-  mempool::osd::list<pg_log_entry_t> log_entries;
+  mempool::osd_pglog::list<pg_log_entry_t> log_entries;
 
   utime_t mtime = ceph_clock_now();
   map<hobject_t, pg_missing_item>::const_iterator m =
