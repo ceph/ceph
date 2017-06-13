@@ -103,8 +103,8 @@ public:
   virtual void load_acct_info(RGWUserInfo& user_info) const = 0; /* out */
 
   /* Apply any changes to request state. This method will be most useful for
-   * TempURL of Swift API or AWSv4. */
-  virtual void modify_request_state(req_state * s) const {}      /* in/out */
+   * TempURL of Swift API. */
+  virtual void modify_request_state(req_state* s) const {}      /* in/out */
 };
 
 
@@ -126,7 +126,10 @@ public:
  *  E. execute-commit - commit the modifications from point C. */
 class Completer {
 public:
-  typedef std::unique_ptr<Completer> cmplptr_t;
+  /* It's expected that Completers would tend to implement many interfaces
+   * and be used not only in req_state::auth::completer. Ref counting their
+   * instances woild be helpful. */
+  typedef std::shared_ptr<Completer> cmplptr_t;
 
   virtual ~Completer() = default;
 
@@ -134,6 +137,10 @@ public:
    * the completion succeeded. On error throws rgw::auth::Exception storing
    * the reason. */
   virtual bool complete() = 0;
+
+  /* Apply any changes to request state. The initial use case was injecting
+   * the AWSv4 filter over rgw::io::RestfulClient in req_state. */
+  virtual void modify_request_state(req_state* s) = 0;     /* in/out */
 };
 
 
@@ -315,6 +322,8 @@ public:
   bool is_empty() const {
     return auth_stack.empty();
   }
+
+  static int apply(const Strategy& auth_strategy, req_state* s) noexcept;
 
 private:
   /* Using the reference wrapper here to explicitly point out we are not
