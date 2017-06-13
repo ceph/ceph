@@ -12,6 +12,8 @@
  *
  */
 
+#include <boost/algorithm/string/replace.hpp>
+
 #include "libradosstriper/RadosStriperImpl.h"
 
 #include <errno.h>
@@ -466,7 +468,9 @@ int libradosstriper::RadosStriperImpl::aio_read(const std::string& soid,
   // get list of extents to be read from
   vector<ObjectExtent> *extents = new vector<ObjectExtent>();
   if (read_len > 0) {
-    std::string format = soid + RADOS_OBJECT_EXTENSION_FORMAT;
+    std::string format = soid;
+    boost::replace_all(format, "%", "%%");
+    format += RADOS_OBJECT_EXTENSION_FORMAT;
     file_layout_t l;
     l.from_legacy(layout);
     Striper::file_to_extents(cct(), format.c_str(), &l, off, read_len,
@@ -781,7 +785,9 @@ libradosstriper::RadosStriperImpl::internal_aio_write(const std::string& soid,
   if (len > 0) {
     // get list of extents to be written to
     vector<ObjectExtent> extents;
-    std::string format = soid + RADOS_OBJECT_EXTENSION_FORMAT;
+    std::string format = soid;
+    boost::replace_all(format, "%", "%%");
+    format += RADOS_OBJECT_EXTENSION_FORMAT;
     file_layout_t l;
     l.from_legacy(layout);
     Striper::file_to_extents(cct(), format.c_str(), &l, off, len, 0, extents);
