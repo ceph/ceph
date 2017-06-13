@@ -3545,7 +3545,8 @@ int BlueStore::_set_cache_sizes()
 {
   cache_meta_ratio = cct->_conf->bluestore_cache_meta_ratio;
   cache_kv_ratio = cct->_conf->bluestore_cache_kv_ratio;
-  cache_data_ratio = 1.0 - cache_meta_ratio - cache_kv_ratio;
+  cache_data_ratio =
+    (double)1.0 - (double)cache_meta_ratio - (double)cache_kv_ratio;
 
   if (cache_meta_ratio <= 0 || cache_meta_ratio > 1.0) {
     derr << __func__ << "bluestore_cache_meta_ratio (" << cache_meta_ratio
