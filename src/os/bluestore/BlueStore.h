@@ -132,6 +132,7 @@ public:
   void _set_csum();
   void _set_compression();
   void _set_throttle_params();
+  int _set_cache_sizes();
 
   class TransContext;
 
@@ -388,7 +389,7 @@ public:
 
     /// put logical references, and get back any released extents
     void put_ref(uint64_t offset, uint32_t length,
-      PExtentVector *r);
+		 PExtentVector *r, set<SharedBlob*> *maybe_unshared_blobs);
 
     friend bool operator==(const SharedBlob &l, const SharedBlob &r) {
       return l.get_sbid() == r.get_sbid();
@@ -827,8 +828,7 @@ public:
 		     uint32_t offset, uint32_t length);
 
     /// ensure a range of the map is marked dirty
-    void dirty_range(KeyValueDB::Transaction t,
-		     uint32_t offset, uint32_t length);
+    void dirty_range(uint32_t offset, uint32_t length);
 
     extent_map_t::iterator find(uint64_t offset);
 
@@ -1036,8 +1036,6 @@ public:
     std::atomic<uint64_t> num_extents = {0};
     std::atomic<uint64_t> num_blobs = {0};
 
-    size_t last_trim_seq = 0;
-
     static Cache *create(CephContext* cct, string type, PerfCounters *logger);
 
     Cache(CephContext* cct) : cct(cct), logger(nullptr) {}
@@ -1070,7 +1068,9 @@ public:
       --num_blobs;
     }
 
-    void trim(uint64_t target_bytes, float target_meta_ratio,
+    void trim(uint64_t target_bytes,
+	      float target_meta_ratio,
+	      float target_data_ratio,
 	      float bytes_per_onode);
 
     void trim_all();
@@ -1081,6 +1081,11 @@ public:
 			   uint64_t *blobs,
 			   uint64_t *buffers,
 			   uint64_t *bytes) = 0;
+
+    bool empty() {
+      std::lock_guard<std::recursive_mutex> l(lock);
+      return _get_num_onodes() == 0 && _get_buffer_bytes() == 0;
+    }
 
 #ifdef DEBUG_CACHE
     virtual void _audit(const char *s) = 0;
@@ -1340,6 +1345,7 @@ public:
     void open_shared_blob(uint64_t sbid, BlobRef b);
     void load_shared_blob(SharedBlobRef sb);
     void make_blob_shared(uint64_t sbid, BlobRef b);
+    uint64_t make_blob_unshared(SharedBlob *sb);
 
     BlobRef new_blob() {
       BlobRef b = new Blob();
@@ -1363,7 +1369,6 @@ public:
     }
 
     void split_cache(Collection *dest);
-    void trim_cache();
 
     Collection(BlueStore *ns, Cache *ca, coll_t c);
   };
@@ -1389,6 +1394,63 @@ public:
 
   class OpSequencer;
   typedef boost::intrusive_ptr<OpSequencer> OpSequencerRef;
+
+  struct volatile_statfs{
+    enum {
+      STATFS_ALLOCATED = 0,
+      STATFS_STORED,
+      STATFS_COMPRESSED_ORIGINAL,
+      STATFS_COMPRESSED,
+      STATFS_COMPRESSED_ALLOCATED,
+      STATFS_LAST
+    };
+    int64_t values[STATFS_LAST];
+    volatile_statfs() {
+      memset(this, 0, sizeof(volatile_statfs));
+    }
+    void reset() {
+      *this = volatile_statfs();
+    }
+    volatile_statfs& operator+=(const volatile_statfs& other) {
+      for (size_t i = 0; i < STATFS_LAST; ++i) {
+	values[i] += other.values[i];
+      }
+      return *this;
+    }
+    int64_t& allocated() {
+      return values[STATFS_ALLOCATED];
+    }
+    int64_t& stored() {
+      return values[STATFS_STORED];
+    }
+    int64_t& compressed_original() {
+      return values[STATFS_COMPRESSED_ORIGINAL];
+    }
+    int64_t& compressed() {
+      return values[STATFS_COMPRESSED];
+    }
+    int64_t& compressed_allocated() {
+      return values[STATFS_COMPRESSED_ALLOCATED];
+    }
+    bool is_empty() {
+      return values[STATFS_ALLOCATED] == 0 &&
+	values[STATFS_STORED] == 0 &&
+	values[STATFS_COMPRESSED] == 0 &&
+	values[STATFS_COMPRESSED_ORIGINAL] == 0 &&
+	values[STATFS_COMPRESSED_ALLOCATED] == 0;
+    }
+    void decode(bufferlist::iterator& it) {
+      for (size_t i = 0; i < STATFS_LAST; i++) {
+	::decode(values[i], it);
+      }
+    }
+
+    void encode(bufferlist& bl) {
+      for (size_t i = 0; i < STATFS_LAST; i++) {
+	::encode(values[i], bl);
+      }
+    }
+  };
 
   struct TransContext : public AioContext {
     MEMPOOL_CLASS_HELPERS();
@@ -1478,57 +1540,7 @@ public:
     bluestore_deferred_transaction_t *deferred_txn = nullptr; ///< if any
 
     interval_set<uint64_t> allocated, released;
-    struct volatile_statfs{
-      enum {
-        STATFS_ALLOCATED = 0,
-        STATFS_STORED,
-        STATFS_COMPRESSED_ORIGINAL,
-        STATFS_COMPRESSED,
-        STATFS_COMPRESSED_ALLOCATED,
-        STATFS_LAST
-      };
-      int64_t values[STATFS_LAST];
-      volatile_statfs() {
-        memset(this, 0, sizeof(volatile_statfs));
-      }
-      void reset() {
-        *this = volatile_statfs();
-      }
-      int64_t& allocated() {
-        return values[STATFS_ALLOCATED];
-      }
-      int64_t& stored() {
-        return values[STATFS_STORED];
-      }
-      int64_t& compressed_original() {
-        return values[STATFS_COMPRESSED_ORIGINAL];
-      }
-      int64_t& compressed() {
-        return values[STATFS_COMPRESSED];
-      }
-      int64_t& compressed_allocated() {
-        return values[STATFS_COMPRESSED_ALLOCATED];
-      }
-      bool is_empty() {
-        return values[STATFS_ALLOCATED] == 0 &&
-          values[STATFS_STORED] == 0 &&
-          values[STATFS_COMPRESSED] == 0 &&
-          values[STATFS_COMPRESSED_ORIGINAL] == 0 &&
-          values[STATFS_COMPRESSED_ALLOCATED] == 0;
-      }
-      void decode(bufferlist::iterator& it) {
-        for (size_t i = 0; i < STATFS_LAST; i++) {
-          ::decode(values[i], it);
-        }
-      }
-
-      void encode(bufferlist& bl) {
-        for (size_t i = 0; i < STATFS_LAST; i++) {
-          ::encode(values[i], bl);
-        }
-      }
-    } statfs_delta;
-
+    volatile_statfs statfs_delta;
 
     IOContext ioc;
     bool had_ios = false;  ///< true if we submitted IOs before our kv txn
@@ -1558,6 +1570,10 @@ public:
     void write_shared_blob(SharedBlobRef &sb) {
       shared_blobs.insert(sb);
     }
+    void unshare_blob(SharedBlob *sb) {
+      shared_blobs.erase(sb);
+    }
+
     /// note we logically modified object (when onode itself is unmodified)
     void note_modified_object(OnodeRef &o) {
       // onode itself isn't written, though
@@ -1860,7 +1876,7 @@ private:
   size_t block_size_order = 0; ///< bits to shift to get block size
 
   uint64_t min_alloc_size = 0; ///< minimum allocation unit (power of 2)
-  int deferred_batch_ops = 0; ///< deferred batch size
+  std::atomic<int> deferred_batch_ops = {0}; ///< deferred batch size
 
   ///< bits for min_alloc_size
   std::atomic<uint8_t> min_alloc_size_order = {0};
@@ -1887,20 +1903,14 @@ private:
   uint64_t kv_ios = 0;
   uint64_t kv_throttle_costs = 0;
 
+  float cache_meta_ratio = 0;   ///< cache ratio dedicated to metadata
+  float cache_kv_ratio = 0;     ///< cache ratio dedicated to kv (e.g., rocksdb)
+  float cache_data_ratio = 0;   ///< cache ratio dedicated to object data
+
   // cache trim control
 
-  // note that these update in a racy way, but we don't *really* care if
-  // they're perfectly accurate.  they are all word sized so they will
-  // individually update atomically, but may not be coherent with each other.
-  size_t mempool_seq = 0;
-  size_t mempool_bytes = 0;
-  size_t mempool_onodes = 0;
-
-  void get_mempool_stats(size_t *seq, uint64_t *bytes, uint64_t *onodes) {
-    *seq = mempool_seq;
-    *bytes = mempool_bytes;
-    *onodes = mempool_onodes;
-  }
+  std::mutex vstatfs_lock;
+  volatile_statfs vstatfs;
 
   struct MempoolThread : public Thread {
     BlueStore *store;
@@ -1965,6 +1975,8 @@ private:
 			       bool create);
 
   int _open_super_meta();
+
+  void open_statfs();
 
   int _reconcile_bluefs_freespace();
   int _balance_bluefs_freespace(PExtentVector *extents);
@@ -2090,6 +2102,8 @@ public:
   bool wants_journal() override { return false; };
   bool allows_journal() override { return false; };
 
+  bool is_rotational() override;
+
   static int get_block_device_fsid(CephContext* cct, const string& path,
 				   uuid_d *fsid);
 
@@ -2129,6 +2143,7 @@ public:
 
   void get_db_statistics(Formatter *f) override;
   void generate_db_histogram(Formatter *f) override;
+  void _flush_cache();
   void flush_cache() override;
   void dump_perf_counters(Formatter *f) override {
     f->open_object_section("perf_counters");
@@ -2496,7 +2511,8 @@ private:
     TransContext *txc,
     CollectionRef& c,
     OnodeRef o,
-    WriteContext *wctx);
+    WriteContext *wctx,
+    set<SharedBlob*> *maybe_unshared_blobs=0);
 
   int _do_transaction(Transaction *t,
 		      TransContext *txc,
@@ -2539,7 +2555,8 @@ private:
   void _do_truncate(TransContext *txc,
 		   CollectionRef& c,
 		   OnodeRef o,
-		   uint64_t offset);
+		   uint64_t offset,
+		   set<SharedBlob*> *maybe_unshared_blobs=0);
   void _truncate(TransContext *txc,
 		CollectionRef& c,
 		OnodeRef& o,

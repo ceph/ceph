@@ -4,12 +4,15 @@
 #ifndef CEPH_CLS_LOCK_CLIENT_H
 #define CEPH_CLS_LOCK_CLIENT_H
 
-
-#include "include/types.h"
-#include "include/rados/librados.hpp"
-
 #include "cls/lock/cls_lock_types.h"
 
+namespace librados {
+  class AioCompletion;
+  class ObjectWriteOperation;
+  class IoCtx;
+  class ObjectReadOperation;
+  class ObjectOperation;
+}
 
 namespace rados {
   namespace cls {

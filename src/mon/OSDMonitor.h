@@ -429,6 +429,7 @@ private:
   OpTracker op_tracker;
 
   int load_metadata(int osd, map<string, string>& m, ostream *err);
+  void count_metadata(const string& field, Formatter *f);
   int get_osd_objectstore_type(int osd, std::string *type);
   bool is_pool_currently_all_bluestore(int64_t pool_id, const pg_pool_t &pool,
 				       ostream *err);
@@ -452,7 +453,8 @@ private:
   std::mutex creating_pgs_lock;
 
   creating_pgs_t update_pending_pgs(const OSDMap::Incremental& inc);
-  void trim_creating_pgs(creating_pgs_t *creating_pgs, const PGMap& pgm);
+  void trim_creating_pgs(creating_pgs_t *creating_pgs,
+			 const ceph::unordered_map<pg_t,pg_stat_t>& pgm);
   unsigned scan_for_creating_pgs(
     const mempool::osdmap::map<int64_t,pg_pool_t>& pools,
     const mempool::osdmap::set<int64_t>& removed_pools,
@@ -463,12 +465,12 @@ private:
   void check_pg_creates_subs();
   epoch_t send_pg_creates(int osd, Connection *con, epoch_t next);
 
+  int32_t _allocate_osd_id(int32_t* existing_id);
+
 public:
   OSDMonitor(CephContext *cct, Monitor *mn, Paxos *p, const string& service_name);
 
   void tick() override;  // check state, take actions
-
-  int parse_osd_id(const char *s, stringstream *pss);
 
   void get_health(list<pair<health_status_t,string> >& summary,
 		  list<pair<health_status_t,string> > *detail,
@@ -476,6 +478,41 @@ public:
   bool preprocess_command(MonOpRequestRef op);
   bool prepare_command(MonOpRequestRef op);
   bool prepare_command_impl(MonOpRequestRef op, map<string,cmd_vartype>& cmdmap);
+
+  int validate_osd_create(
+      const int32_t id,
+      const uuid_d& uuid,
+      const bool check_osd_exists,
+      int32_t* existing_id,
+      stringstream& ss);
+  int prepare_command_osd_create(
+      const int32_t id,
+      const uuid_d& uuid,
+      int32_t* existing_id,
+      stringstream& ss);
+  void do_osd_create(const int32_t id, const uuid_d& uuid, int32_t* new_id);
+  int prepare_command_osd_purge(int32_t id, stringstream& ss);
+  int prepare_command_osd_destroy(int32_t id, stringstream& ss);
+  int _prepare_command_osd_crush_remove(
+      CrushWrapper &newcrush,
+      int32_t id,
+      int32_t ancestor,
+      bool has_ancestor,
+      bool unlink_only);
+  void do_osd_crush_remove(CrushWrapper& newcrush);
+  int prepare_command_osd_crush_remove(
+      CrushWrapper &newcrush,
+      int32_t id,
+      int32_t ancestor,
+      bool has_ancestor,
+      bool unlink_only);
+  int prepare_command_osd_remove(int32_t id);
+  int prepare_command_osd_new(
+      MonOpRequestRef op,
+      const map<string,cmd_vartype>& cmdmap,
+      const map<string,string>& secrets,
+      stringstream &ss,
+      Formatter *f);
 
   int prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
                                stringstream& ss);

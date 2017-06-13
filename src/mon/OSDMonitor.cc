@@ -19,13 +19,16 @@
 #include <algorithm>
 #include <sstream>
 
-#include "OSDMonitor.h"
-#include "Monitor.h"
-#include "MDSMonitor.h"
-#include "PGMonitor.h"
+#include "mon/OSDMonitor.h"
+#include "mon/Monitor.h"
+#include "mon/MDSMonitor.h"
+#include "mon/PGMonitor.h"
+#include "mon/MgrStatMonitor.h"
+#include "mon/AuthMonitor.h"
+#include "mon/ConfigKeyService.h"
 
-#include "MonitorDBStore.h"
-#include "Session.h"
+#include "mon/MonitorDBStore.h"
+#include "mon/Session.h"
 
 #include "crush/CrushWrapper.h"
 #include "crush/CrushTester.h"
@@ -222,6 +225,7 @@ void OSDMonitor::create_initial()
   // new cluster should require latest by default
   if (g_conf->mon_debug_no_require_luminous) {
     newmap.require_osd_release = CEPH_RELEASE_KRAKEN;
+    derr << __func__ << " mon_debug_no_require_luminous=true" << dendl;
   } else {
     newmap.require_osd_release = CEPH_RELEASE_LUMINOUS;
     newmap.full_ratio = g_conf->mon_osd_full_ratio;
@@ -339,6 +343,15 @@ void OSDMonitor::update_from_paxos(bool *need_bootstrap)
     }
   }
 
+  // make sure we're using the right pg service.. remove me post-luminous!
+  if (osdmap.require_osd_release >= CEPH_RELEASE_LUMINOUS) {
+    dout(10) << __func__ << " pgservice is mgrstat" << dendl;
+    mon->pgservice = mon->mgrstatmon()->get_pg_stat_service();
+  } else {
+    dout(10) << __func__ << " pgservice is pg" << dendl;
+    mon->pgservice = mon->pgmon()->get_pg_stat_service();
+  }
+
   // walk through incrementals
   MonitorDBStore::TransactionRef t;
   size_t tx_size = 0;
@@ -400,6 +413,15 @@ void OSDMonitor::update_from_paxos(bool *need_bootstrap)
       t->erase("mkfs", "osdmap");
     }
 
+    // make sure we're using the right pg service.. remove me post-luminous!
+    if (osdmap.require_osd_release >= CEPH_RELEASE_LUMINOUS) {
+      dout(10) << __func__ << " pgservice is mgrstat" << dendl;
+      mon->pgservice = mon->mgrstatmon()->get_pg_stat_service();
+    } else {
+      dout(10) << __func__ << " pgservice is pg" << dendl;
+      mon->pgservice = mon->pgmon()->get_pg_stat_service();
+    }
+
     if (tx_size > g_conf->mon_sync_max_payload_size*2) {
       mon->store->apply_transaction(t);
       t = MonitorDBStore::TransactionRef();
@@ -407,7 +429,6 @@ void OSDMonitor::update_from_paxos(bool *need_bootstrap)
     }
     if (mon->monmap->get_required_features().contains_all(
           ceph::features::mon::FEATURE_LUMINOUS)) {
-      creating_pgs = update_pending_pgs(inc);
       for (const auto &osd_state : inc.new_state) {
 	if (osd_state.second & CEPH_OSD_UP) {
 	  // could be marked up *or* down, but we're too lazy to check which
@@ -556,10 +577,10 @@ public:
   typedef CrushTreeDumper::Dumper<F> Parent;
 
   OSDUtilizationDumper(const CrushWrapper *crush, const OSDMap *osdmap_,
-		       const PGMap *pgm_, bool tree_) :
+		       const PGStatService *pgs_, bool tree_) :
     Parent(crush),
     osdmap(osdmap_),
-    pgm(pgm_),
+    pgs(pgs_),
     tree(tree_),
     average_util(average_utilization()),
     min_var(-1),
@@ -591,7 +612,7 @@ protected:
     if (average_util)
       var = util / average_util;
 
-    size_t num_pgs = qi.is_bucket() ? 0 : pgm->get_num_pg_by_osd(qi.id);
+    size_t num_pgs = qi.is_bucket() ? 0 : pgs->get_num_pg_by_osd(qi.id);
 
     dump_item(qi, reweight, kb, kb_used, kb_avail, util, var, num_pgs, f);
 
@@ -638,13 +659,11 @@ protected:
 
   bool get_osd_utilization(int id, int64_t* kb, int64_t* kb_used,
 			   int64_t* kb_avail) const {
-    typedef ceph::unordered_map<int32_t,osd_stat_t> OsdStat;
-    OsdStat::const_iterator p = pgm->osd_stat.find(id);
-    if (p == pgm->osd_stat.end())
-      return false;
-    *kb = p->second.kb;
-    *kb_used = p->second.kb_used;
-    *kb_avail = p->second.kb_avail;
+    const osd_stat_t *p = pgs->get_osd_stat(id);
+    if (!p) return false;
+    *kb = p->kb;
+    *kb_used = p->kb_used;
+    *kb_avail = p->kb_avail;
     return *kb > 0;
   }
 
@@ -678,7 +697,7 @@ protected:
 
 protected:
   const OSDMap *osdmap;
-  const PGMap *pgm;
+  const PGStatService *pgs;
   bool tree;
   double average_util;
   double min_var;
@@ -692,8 +711,8 @@ public:
   typedef OSDUtilizationDumper<TextTable> Parent;
 
   OSDUtilizationPlainDumper(const CrushWrapper *crush, const OSDMap *osdmap,
-		     const PGMap *pgm, bool tree) :
-    Parent(crush, osdmap, pgm, tree) {}
+		     const PGStatService *pgs, bool tree) :
+    Parent(crush, osdmap, pgs, tree) {}
 
   void dump(TextTable *tbl) {
     tbl->define_column("ID", TextTable::LEFT, TextTable::RIGHT);
@@ -713,9 +732,9 @@ public:
     dump_stray(tbl);
 
     *tbl << "" << "" << "TOTAL"
-	 << si_t(pgm->osd_sum.kb << 10)
-	 << si_t(pgm->osd_sum.kb_used << 10)
-	 << si_t(pgm->osd_sum.kb_avail << 10)
+	 << si_t(pgs->get_osd_sum().kb << 10)
+	 << si_t(pgs->get_osd_sum().kb_used << 10)
+	 << si_t(pgs->get_osd_sum().kb_avail << 10)
 	 << lowprecision_t(average_util)
 	 << ""
 	 << TextTable::endrow;
@@ -798,8 +817,8 @@ public:
   typedef OSDUtilizationDumper<Formatter> Parent;
 
   OSDUtilizationFormatDumper(const CrushWrapper *crush, const OSDMap *osdmap,
-			     const PGMap *pgm, bool tree) :
-    Parent(crush, osdmap, pgm, tree) {}
+			     const PGStatService *pgs, bool tree) :
+    Parent(crush, osdmap, pgs, tree) {}
 
   void dump(Formatter *f) {
     f->open_array_section("nodes");
@@ -838,9 +857,9 @@ protected:
 public:
   void summary(Formatter *f) {
     f->open_object_section("summary");
-    f->dump_int("total_kb", pgm->osd_sum.kb);
-    f->dump_int("total_kb_used", pgm->osd_sum.kb_used);
-    f->dump_int("total_kb_avail", pgm->osd_sum.kb_avail);
+    f->dump_int("total_kb", pgs->get_osd_sum().kb);
+    f->dump_int("total_kb_used", pgs->get_osd_sum().kb_used);
+    f->dump_int("total_kb_avail", pgs->get_osd_sum().kb_avail);
     f->dump_float("average_utilization", average_util);
     f->dump_float("min_var", min_var);
     f->dump_float("max_var", max_var);
@@ -851,18 +870,17 @@ public:
 
 void OSDMonitor::print_utilization(ostream &out, Formatter *f, bool tree) const
 {
-  const PGMap *pgm = &mon->pgmon()->pg_map;
   const CrushWrapper *crush = osdmap.crush.get();
 
   if (f) {
     f->open_object_section("df");
-    OSDUtilizationFormatDumper d(crush, &osdmap, pgm, tree);
+    OSDUtilizationFormatDumper d(crush, &osdmap, mon->pgservice, tree);
     d.dump(f);
     d.summary(f);
     f->close_section();
     f->flush(out);
   } else {
-    OSDUtilizationPlainDumper d(crush, &osdmap, pgm, tree);
+    OSDUtilizationPlainDumper d(crush, &osdmap, mon->pgservice, tree);
     TextTable tbl;
     d.dump(&tbl);
     out << tbl
@@ -890,18 +908,20 @@ void OSDMonitor::create_pending()
     dout(1) << __func__ << " setting backfillfull_ratio = "
 	    << pending_inc.new_backfillfull_ratio << dendl;
   }
-  if (osdmap.require_osd_release < CEPH_RELEASE_LUMINOUS) {
+  if (osdmap.get_epoch() > 0 &&
+      osdmap.require_osd_release < CEPH_RELEASE_LUMINOUS) {
     // transition full ratios from PGMap to OSDMap (on upgrade)
-    PGMap *pg_map = &mon->pgmon()->pg_map;
-    if (osdmap.full_ratio != pg_map->full_ratio) {
+    float full_ratio = mon->pgservice->get_full_ratio();
+    float nearfull_ratio = mon->pgservice->get_nearfull_ratio();
+    if (osdmap.full_ratio != full_ratio) {
       dout(10) << __func__ << " full_ratio " << osdmap.full_ratio
-	       << " -> " << pg_map->full_ratio << " (from pgmap)" << dendl;
-      pending_inc.new_full_ratio = pg_map->full_ratio;
+	       << " -> " << full_ratio << " (from pgmap)" << dendl;
+      pending_inc.new_full_ratio = full_ratio;
     }
-    if (osdmap.nearfull_ratio != pg_map->nearfull_ratio) {
+    if (osdmap.nearfull_ratio != nearfull_ratio) {
       dout(10) << __func__ << " nearfull_ratio " << osdmap.nearfull_ratio
-	       << " -> " << pg_map->nearfull_ratio << " (from pgmap)" << dendl;
-      pending_inc.new_nearfull_ratio = pg_map->nearfull_ratio;
+	       << " -> " << nearfull_ratio << " (from pgmap)" << dendl;
+      pending_inc.new_nearfull_ratio = nearfull_ratio;
     }
   } else {
     // safety check (this shouldn't really happen)
@@ -925,57 +945,93 @@ void OSDMonitor::create_pending()
 creating_pgs_t
 OSDMonitor::update_pending_pgs(const OSDMap::Incremental& inc)
 {
+  dout(10) << __func__ << dendl;
   creating_pgs_t pending_creatings;
   {
     std::lock_guard<std::mutex> l(creating_pgs_lock);
     pending_creatings = creating_pgs;
   }
-  if (pending_creatings.last_scan_epoch > inc.epoch) {
-    return pending_creatings;
-  }
-  const auto& pgm = mon->pgmon()->pg_map;
-  if (pgm.last_pg_scan >= creating_pgs.last_scan_epoch) {
-    // TODO: please stop updating pgmap with pgstats once the upgrade is completed
-    const unsigned total = pending_creatings.pgs.size();
-    for (auto& pgid : pgm.creating_pgs) {
-      auto st = pgm.pg_stat.find(pgid);
-      assert(st != pgm.pg_stat.end());
-      auto created = make_pair(st->second.created, st->second.last_scrub_stamp);
-      // no need to add the pg, if it already exists in creating_pgs
-      pending_creatings.pgs.emplace(pgid, created);
+  // check for new or old pools
+  if (pending_creatings.last_scan_epoch < inc.epoch) {
+    if (osdmap.get_epoch() &&
+	osdmap.require_osd_release < CEPH_RELEASE_LUMINOUS) {
+      auto added =
+	mon->pgservice->maybe_add_creating_pgs(creating_pgs.last_scan_epoch,
+					       osdmap.get_pools(),
+					       &pending_creatings);
+      dout(7) << __func__ << " " << added << " pgs added from pgmap" << dendl;
     }
-    dout(7) << __func__ << total - pending_creatings.pgs.size()
-	    << " pgs added from pgmap" << dendl;
+    unsigned queued = 0;
+    queued += scan_for_creating_pgs(osdmap.get_pools(),
+				    inc.old_pools,
+				    inc.modified,
+				    &pending_creatings);
+    queued += scan_for_creating_pgs(inc.new_pools,
+				    inc.old_pools,
+				    inc.modified,
+				    &pending_creatings);
+    dout(10) << __func__ << " " << queued << " pools queued" << dendl;
+    for (auto deleted_pool : inc.old_pools) {
+      auto removed = pending_creatings.remove_pool(deleted_pool);
+      dout(10) << __func__ << " " << removed
+               << " pg removed because containing pool deleted: "
+               << deleted_pool << dendl;
+      last_epoch_clean.remove_pool(deleted_pool);
+    }
+    // pgmon updates its creating_pgs in check_osd_map() which is called by
+    // on_active() and check_osd_map() could be delayed if lease expires, so its
+    // creating_pgs could be stale in comparison with the one of osdmon. let's
+    // trim them here. otherwise, they will be added back after being erased.
+    unsigned removed = 0;
+    for (auto& pg : pending_created_pgs) {
+      dout(20) << __func__ << " noting created pg " << pg << dendl;
+      pending_creatings.created_pools.insert(pg.pool());
+      removed += pending_creatings.pgs.erase(pg);
+    }
+    pending_created_pgs.clear();
+    dout(10) << __func__ << " " << removed
+	     << " pgs removed because they're created" << dendl;
+    pending_creatings.last_scan_epoch = osdmap.get_epoch();
   }
-  unsigned added = 0;
-  added += scan_for_creating_pgs(osdmap.get_pools(),
-				 inc.old_pools,
-				 inc.modified,
-				 &pending_creatings);
-  added += scan_for_creating_pgs(inc.new_pools,
-				 inc.old_pools,
-				 inc.modified,
-				 &pending_creatings);
-  dout(10) << __func__ << added << " pg added for new pools" << dendl;
-  for (auto deleted_pool : inc.old_pools) {
-    auto removed = pending_creatings.remove_pool(deleted_pool);
-    dout(10) << __func__ << removed
-	     << " pg removed because containing pool deleted: "
-	     << deleted_pool << dendl;
+
+  // process queue
+  unsigned max = MAX(1, g_conf->mon_osd_max_creating_pgs);
+  const auto total = pending_creatings.pgs.size();
+  while (pending_creatings.pgs.size() < max &&
+	 !pending_creatings.queue.empty()) {
+    auto p = pending_creatings.queue.begin();
+    int64_t poolid = p->first;
+    dout(10) << __func__ << " pool " << poolid
+	     << " created " << p->second.created
+	     << " modified " << p->second.modified
+	     << " [" << p->second.start << "-" << p->second.end << ")"
+	     << dendl;
+    int n = MIN(max - pending_creatings.pgs.size(),
+		p->second.end - p->second.start);
+    ps_t first = p->second.start;
+    ps_t end = first + n;
+    for (ps_t ps = first; ps < end; ++ps) {
+      const pg_t pgid{ps, static_cast<uint64_t>(poolid)};
+      // NOTE: use the *current* epoch as the PG creation epoch so that the
+      // OSD does not have to generate a long set of PastIntervals.
+      pending_creatings.pgs.emplace(pgid, make_pair(inc.epoch,
+						    p->second.modified));
+      dout(10) << __func__ << " adding " << pgid << dendl;
+    }
+    p->second.start = end;
+    if (p->second.done()) {
+      dout(10) << __func__ << " done with queue for " << poolid << dendl;
+      pending_creatings.queue.erase(p);
+    } else {
+      dout(10) << __func__ << " pool " << poolid
+	       << " now [" << p->second.start << "-" << p->second.end << ")"
+	       << dendl;
+    }
   }
-  // pgmon updates its creating_pgs in check_osd_map() which is called by
-  // on_active() and check_osd_map() could be delayed if lease expires, so its
-  // creating_pgs could be stale in comparison with the one of osdmon. let's
-  // trim them here. otherwise, they will be added back after being erased.
-  unsigned removed = 0;
-  for (auto& pg : pending_created_pgs) {
-    pending_creatings.created_pools.insert(pg.pool());
-    removed += pending_creatings.pgs.erase(pg);
-  }
-  pending_created_pgs.clear();
-  dout(10) << __func__ << removed << " pgs removed because they're created"
-	   << dendl;
-  pending_creatings.last_scan_epoch = osdmap.get_epoch();
+  dout(10) << __func__ << " queue remaining: " << pending_creatings.queue.size()
+	   << " pools" << dendl;
+  dout(10) << __func__ << " " << pending_creatings.pgs.size() - total
+	   << " pgs added from queued pools" << dendl;
   return pending_creatings;
 }
 
@@ -994,7 +1050,7 @@ void OSDMonitor::maybe_prime_pg_temp()
 
   // check for interesting OSDs
   set<int> osds;
-  for (map<int32_t,uint8_t>::iterator p = pending_inc.new_state.begin();
+  for (auto p = pending_inc.new_state.begin();
        !all && p != pending_inc.new_state.end();
        ++p) {
     if ((p->second & CEPH_OSD_UP) &&
@@ -1086,12 +1142,12 @@ void OSDMonitor::prime_pg_temp(
 {
   if (mon->monmap->get_required_features().contains_all(
         ceph::features::mon::FEATURE_LUMINOUS)) {
+    // TODO: remove this creating_pgs direct access?
     if (creating_pgs.pgs.count(pgid)) {
       return;
     }
   } else {
-    const auto& pg_map = mon->pgmon()->pg_map;
-    if (pg_map.creating_pgs.count(pgid)) {
+    if (mon->pgservice->is_creating_pg(pgid)) {
       return;
     }
   }
@@ -1212,7 +1268,7 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
   }
 
   // tell me about it
-  for (map<int32_t,uint8_t>::iterator i = pending_inc.new_state.begin();
+  for (auto i = pending_inc.new_state.begin();
        i != pending_inc.new_state.end();
        ++i) {
     int s = i->second ? i->second : CEPH_OSD_UP;
@@ -1303,10 +1359,11 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
   if (mon->monmap->get_required_features().contains_all(
 	ceph::features::mon::FEATURE_LUMINOUS)) {
     auto pending_creatings = update_pending_pgs(pending_inc);
-    if (osdmap.require_osd_release < CEPH_RELEASE_LUMINOUS) {
+    if (osdmap.get_epoch() &&
+	osdmap.require_osd_release < CEPH_RELEASE_LUMINOUS) {
       dout(7) << __func__ << " in the middle of upgrading, "
 	      << " trimming pending creating_pgs using pgmap" << dendl;
-      trim_creating_pgs(&pending_creatings, mon->pgmon()->pg_map);
+      mon->pgservice->maybe_trim_creating_pgs(&pending_creatings);
     }
     bufferlist creatings_bl;
     ::encode(pending_creatings, creatings_bl);
@@ -1315,17 +1372,16 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
 }
 
 void OSDMonitor::trim_creating_pgs(creating_pgs_t* creating_pgs,
-				   const PGMap& pgm)
+				   const ceph::unordered_map<pg_t,pg_stat_t>& pg_stat)
 {
   auto p = creating_pgs->pgs.begin();
   while (p != creating_pgs->pgs.end()) {
-    auto q = pgm.pg_stat.find(p->first);
-    if (q != pgm.pg_stat.end() &&
+    auto q = pg_stat.find(p->first);
+    if (q != pg_stat.end() &&
 	!(q->second.state & PG_STATE_CREATING)) {
       dout(20) << __func__ << " pgmap shows " << p->first << " is created"
 	       << dendl;
       p = creating_pgs->pgs.erase(p);
-      creating_pgs->created_pools.insert(q->first.pool());
     } else {
       ++p;
     }
@@ -1348,6 +1404,28 @@ int OSDMonitor::load_metadata(int osd, map<string, string>& m, ostream *err)
     return -EIO;
   }
   return 0;
+}
+
+void OSDMonitor::count_metadata(const string& field, Formatter *f)
+{
+  map<string,int> by_val;
+  for (int osd = 0; osd < osdmap.get_max_osd(); ++osd) {
+    if (osdmap.is_up(osd)) {
+      map<string,string> meta;
+      load_metadata(osd, meta, nullptr);
+      auto p = meta.find(field);
+      if (p == meta.end()) {
+	by_val["unknown"]++;
+      } else {
+	by_val[p->second]++;
+      }
+    }
+  }
+  f->open_object_section(field.c_str());
+  for (auto& p : by_val) {
+    f->dump_int(p.first.c_str(), p.second);
+  }
+  f->close_section();
 }
 
 int OSDMonitor::get_osd_objectstore_type(int osd, string *type)
@@ -1445,11 +1523,16 @@ void OSDMonitor::share_map_with_random_osd()
 
 version_t OSDMonitor::get_trim_to()
 {
-  epoch_t floor;
+  if (mon->get_quorum().empty()) {
+    dout(10) << __func__ << ": quorum not formed" << dendl;
+    return 0;
+  }
 
+  epoch_t floor;
   if (mon->monmap->get_required_features().contains_all(
         ceph::features::mon::FEATURE_LUMINOUS)) {
     {
+      // TODO: Get this hidden in PGStatService
       std::lock_guard<std::mutex> l(creating_pgs_lock);
       if (!creating_pgs.pgs.empty()) {
 	return 0;
@@ -1457,12 +1540,12 @@ version_t OSDMonitor::get_trim_to()
     }
     floor = get_min_last_epoch_clean();
   } else {
-    if (!mon->pgmon()->is_readable())
+    if (!mon->pgservice->is_readable())
       return 0;
-    if (mon->pgmon()->pg_map.creating_pgs.empty()) {
+    if (mon->pgservice->have_creating_pgs()) {
       return 0;
     }
-    floor = mon->pgmon()->pg_map.get_min_last_epoch_clean();
+    floor = mon->pgservice->get_min_last_epoch_clean();
   }
   {
     dout(10) << " min_last_epoch_clean " << floor << dendl;
@@ -3034,7 +3117,7 @@ void OSDMonitor::send_incremental(epoch_t first,
 	  << " to " << session->inst << dendl;
 
   if (first <= session->osd_epoch) {
-    dout(10) << __func__ << session->inst << " should already have epoch "
+    dout(10) << __func__ << " " << session->inst << " should already have epoch "
 	     << session->osd_epoch << dendl;
     first = session->osd_epoch + 1;
   }
@@ -3192,7 +3275,7 @@ unsigned OSDMonitor::scan_for_creating_pgs(
   utime_t modified,
   creating_pgs_t* creating_pgs) const
 {
-  unsigned total = 0;
+  unsigned queued = 0;
   for (auto& p : pools) {
     int64_t poolid = p.first;
     const pg_pool_t& pool = p.second;
@@ -3213,23 +3296,27 @@ unsigned OSDMonitor::scan_for_creating_pgs(
 	       << " " << pool << dendl;
       continue;
     }
-    unsigned added = creating_pgs->create_pool(poolid, pool.get_pg_num(),
-					       created, modified);
-    dout(10) << __func__ << added << " pgs added for pool "<< poolid
+    dout(10) << __func__ << " queueing pool create for " << poolid
 	     << " " << pool << dendl;
-    total += added;
+    if (creating_pgs->create_pool(poolid, pool.get_pg_num(),
+				  created, modified)) {
+      queued++;
+    }
   }
-  return total;
+  return queued;
 }
 
 void OSDMonitor::update_creating_pgs()
 {
+  dout(10) << __func__ << " " << creating_pgs.pgs.size() << " pgs creating, "
+	   << creating_pgs.queue.size() << " pools in queue" << dendl;
   decltype(creating_pgs_by_osd_epoch) new_pgs_by_osd_epoch;
   std::lock_guard<std::mutex> l(creating_pgs_lock);
   for (auto& pg : creating_pgs.pgs) {
     int acting_primary = -1;
     auto pgid = pg.first;
     auto mapped = pg.second.first;
+    dout(20) << __func__ << " looking up " << pgid << dendl;
     mapping.get(pgid, nullptr, nullptr, nullptr, &acting_primary);
     // check the previous creating_pgs, look for the target to whom the pg was
     // previously mapped
@@ -3247,7 +3334,10 @@ void OSDMonitor::update_creating_pgs()
 	    mapped = mapping.get_epoch();
           }
           break;
-        }
+        } else {
+	  // newly creating
+	  mapped = mapping.get_epoch();
+	}
       }
     }
     dout(10) << __func__ << " will instruct osd." << acting_primary
@@ -3417,9 +3507,9 @@ void OSDMonitor::tick()
 
   // if map full setting has changed, get that info out there!
   if (osdmap.require_osd_release < CEPH_RELEASE_LUMINOUS &&
-      mon->pgmon()->is_readable()) {
+      mon->pgservice->is_readable()) {
     // for pre-luminous compat only!
-    if (!mon->pgmon()->pg_map.full_osds.empty()) {
+    if (mon->pgservice->have_full_osds()) {
       dout(5) << "There are full osds, setting full flag" << dendl;
       add_flag(CEPH_OSDMAP_FULL);
     } else if (osdmap.test_flag(CEPH_OSDMAP_FULL)){
@@ -3427,7 +3517,7 @@ void OSDMonitor::tick()
       remove_flag(CEPH_OSDMAP_FULL);
     }
 
-    if (!mon->pgmon()->pg_map.nearfull_osds.empty()) {
+    if (mon->pgservice->have_nearfull_osds()) {
       dout(5) << "There are near full osds, setting nearfull flag" << dendl;
       add_flag(CEPH_OSDMAP_NEARFULL);
     } else if (osdmap.test_flag(CEPH_OSDMAP_NEARFULL)){
@@ -3475,11 +3565,10 @@ bool OSDMonitor::handle_osd_timeouts(const utime_t &now,
     } else if (can_mark_down(i)) {
       utime_t diff = now - t->second;
       if (diff > timeo) {
-	mon->clog->info() << "osd." << i << " failed ("
-			  << osdmap.crush->get_full_location_ordered_string(i)
-			  << ") (pg stats for " << diff << "seconds)";
-	derr << "no osd or pg stats from osd." << i << " since " << t->second << ", " << diff
-	     << " seconds ago.  marking down" << dendl;
+	mon->clog->info() << "osd." << i << " marked down after no beacon for "
+			  << diff << " seconds";
+	derr << "no beacon from osd." << i << " since " << t->second
+	     << ", " << diff << " seconds ago.  marking down" << dendl;
 	pending_inc.new_state[i] = CEPH_OSD_UP;
 	new_down = true;
       }
@@ -3686,8 +3775,8 @@ void OSDMonitor::get_health(list<pair<health_status_t,string> >& summary,
 	summary.push_back(make_pair(HEALTH_ERR, ss.str()));
       }
 
-      map<int, float> full, backfillfull, nearfull;
-      osdmap.get_full_osd_util(mon->pgmon()->pg_map.osd_stat, &full, &backfillfull, &nearfull);
+      set<int> full, backfillfull, nearfull;
+      osdmap.get_full_osd_counts(&full, &backfillfull, &nearfull);
       if (full.size()) {
 	ostringstream ss;
 	ss << full.size() << " full osd(s)";
@@ -3706,17 +3795,17 @@ void OSDMonitor::get_health(list<pair<health_status_t,string> >& summary,
       if (detail) {
         for (auto& i: full) {
           ostringstream ss;
-          ss << "osd." << i.first << " is full at " << roundf(i.second * 100) << "%";
+          ss << "osd." << i << " is full";
 	  detail->push_back(make_pair(HEALTH_ERR, ss.str()));
         }
         for (auto& i: backfillfull) {
           ostringstream ss;
-          ss << "osd." << i.first << " is backfill full at " << roundf(i.second * 100) << "%";
+          ss << "osd." << i << " is backfill full";
 	  detail->push_back(make_pair(HEALTH_WARN, ss.str()));
         }
         for (auto& i: nearfull) {
           ostringstream ss;
-          ss << "osd." << i.first << " is near full at " << roundf(i.second * 100) << "%";
+          ss << "osd." << i << " is near full";
 	  detail->push_back(make_pair(HEALTH_WARN, ss.str()));
         }
       }
@@ -3961,9 +4050,8 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
   }
   else if (prefix == "osd perf" ||
 	   prefix == "osd blocked-by") {
-    const PGMap &pgm = mon->pgmon()->pg_map;
-    r = process_pg_map_command(prefix, cmdmap, pgm, osdmap,
-			       f.get(), &ss, &rdata);
+    r = mon->pgservice->process_pg_command(prefix, cmdmap,
+					   osdmap, f.get(), &ss, &rdata);
   }
   else if (prefix == "osd dump" ||
 	   prefix == "osd tree" ||
@@ -4172,6 +4260,20 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
       f->close_section();
     }
     f->flush(rdata);
+  } else if (prefix == "osd versions") {
+    if (!f)
+      f.reset(Formatter::create("json-pretty"));
+    count_metadata("ceph_version", f.get());
+    f->flush(rdata);
+    r = 0;
+  } else if (prefix == "osd count-metadata") {
+    if (!f)
+      f.reset(Formatter::create("json-pretty"));
+    string field;
+    cmd_getval(g_ceph_context, cmdmap, "property", field);
+    count_metadata(field, f.get());
+    f->flush(rdata);
+    r = 0;
   } else if (prefix == "osd map") {
     string poolstr, objstr, namespacestr;
     cmd_getval(g_ceph_context, cmdmap, "pool", poolstr);
@@ -4853,9 +4955,8 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
     }
     r = 0;
   } else if (prefix == "osd pool stats") {
-    const auto &pgm = mon->pgmon()->pg_map;
-    r = process_pg_map_command(prefix, cmdmap, pgm, osdmap,
-			       f.get(), &ss, &rdata);
+    r = mon->pgservice->process_pg_command(prefix, cmdmap,
+					   osdmap, f.get(), &ss, &rdata);
   } else if (prefix == "osd pool get-quota") {
     string pool_name;
     cmd_getval(g_ceph_context, cmdmap, "pool", pool_name);
@@ -5028,17 +5129,17 @@ void OSDMonitor::update_pool_flags(int64_t pool_id, uint64_t flags)
 
 bool OSDMonitor::update_pools_status()
 {
-  if (!mon->pgmon()->is_readable())
+  if (!mon->pgservice->is_readable())
     return false;
 
   bool ret = false;
 
   auto& pools = osdmap.get_pools();
   for (auto it = pools.begin(); it != pools.end(); ++it) {
-    if (!mon->pgmon()->pg_map.pg_pool_sum.count(it->first))
+    const pool_stat_t *pstat = mon->pgservice->get_pool_stat(it->first);
+    if (!pstat)
       continue;
-    pool_stat_t& stats = mon->pgmon()->pg_map.pg_pool_sum[it->first];
-    object_stat_sum_t& sum = stats.stats.sum;
+    const object_stat_sum_t& sum = pstat->stats.sum;
     const pg_pool_t &pool = it->second;
     const string& pool_name = osdmap.get_pool_name(it->first);
 
@@ -5084,10 +5185,10 @@ void OSDMonitor::get_pools_health(
 {
   auto& pools = osdmap.get_pools();
   for (auto it = pools.begin(); it != pools.end(); ++it) {
-    if (!mon->pgmon()->pg_map.pg_pool_sum.count(it->first))
+    const pool_stat_t *pstat = mon->pgservice->get_pool_stat(it->first);
+    if (!pstat)
       continue;
-    pool_stat_t& stats = mon->pgmon()->pg_map.pg_pool_sum[it->first];
-    object_stat_sum_t& sum = stats.stats.sum;
+    const object_stat_sum_t& sum = pstat->stats.sum;
     const pg_pool_t &pool = it->second;
     const string& pool_name = osdmap.get_pool_name(it->first);
 
@@ -5823,28 +5924,6 @@ bool OSDMonitor::prepare_unset_flag(MonOpRequestRef op, int flag)
   return true;
 }
 
-int OSDMonitor::parse_osd_id(const char *s, stringstream *pss)
-{
-  // osd.NNN?
-  if (strncmp(s, "osd.", 4) == 0) {
-    s += 4;
-  }
-
-  // NNN?
-  ostringstream ss;
-  long id = parse_pos_long(s, &ss);
-  if (id < 0) {
-    *pss << ss.str();
-    return id;
-  }
-  if (id > 0xffff) {
-    *pss << "osd id " << id << " is too large";
-    return -ERANGE;
-  }
-  return id;
-}
-
-
 int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
                                          stringstream& ss)
 {
@@ -6332,6 +6411,482 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
   return 0;
 }
 
+int OSDMonitor::_prepare_command_osd_crush_remove(
+    CrushWrapper &newcrush,
+    int32_t id,
+    int32_t ancestor,
+    bool has_ancestor,
+    bool unlink_only)
+{
+  int err = 0;
+
+  if (has_ancestor) {
+    err = newcrush.remove_item_under(g_ceph_context, id, ancestor,
+        unlink_only);
+  } else {
+    err = newcrush.remove_item(g_ceph_context, id, unlink_only);
+  }
+  return err;
+}
+
+void OSDMonitor::do_osd_crush_remove(CrushWrapper& newcrush)
+{
+  pending_inc.crush.clear();
+  newcrush.encode(pending_inc.crush, mon->get_quorum_con_features());
+}
+
+int OSDMonitor::prepare_command_osd_crush_remove(
+    CrushWrapper &newcrush,
+    int32_t id,
+    int32_t ancestor,
+    bool has_ancestor,
+    bool unlink_only)
+{
+  int err = _prepare_command_osd_crush_remove(
+      newcrush, id, ancestor,
+      has_ancestor, unlink_only);
+
+  if (err < 0)
+    return err;
+
+  assert(err == 0);
+  do_osd_crush_remove(newcrush);
+
+  return 0;
+}
+
+int OSDMonitor::prepare_command_osd_remove(int32_t id)
+{
+  if (osdmap.is_up(id)) {
+    return -EBUSY;
+  }
+
+  pending_inc.new_state[id] = osdmap.get_state(id);
+  pending_inc.new_uuid[id] = uuid_d();
+  pending_metadata_rm.insert(id);
+  pending_metadata.erase(id);
+
+  return 0;
+}
+
+int32_t OSDMonitor::_allocate_osd_id(int32_t* existing_id)
+{
+  assert(existing_id);
+  *existing_id = -1;
+
+  for (int32_t i = 0; i < osdmap.get_max_osd(); ++i) {
+    if (!osdmap.exists(i) &&
+        pending_inc.new_up_client.count(i) == 0 &&
+        (pending_inc.new_state.count(i) == 0 ||
+         (pending_inc.new_state[i] & CEPH_OSD_EXISTS) == 0)) {
+      *existing_id = i;
+      return -1;
+    }
+  }
+
+  if (pending_inc.new_max_osd < 0) {
+    return osdmap.get_max_osd();
+  }
+  return pending_inc.new_max_osd;
+}
+
+void OSDMonitor::do_osd_create(
+    const int32_t id,
+    const uuid_d& uuid,
+    int32_t* new_id)
+{
+  dout(10) << __func__ << " uuid " << uuid << dendl;
+  assert(new_id);
+
+  // We presume validation has been performed prior to calling this
+  // function. We assert with prejudice.
+
+  int32_t allocated_id = -1; // declare here so we can jump
+  int32_t existing_id = -1;
+  if (!uuid.is_zero()) {
+    existing_id = osdmap.identify_osd(uuid);
+    if (existing_id >= 0) {
+      assert(id < 0 || id == existing_id);
+      *new_id = existing_id;
+      goto out;
+    } else if (id >= 0) {
+      // uuid does not exist, and id has been provided, so just create
+      // the new osd.id
+      *new_id = id;
+      goto out;
+    }
+  }
+
+  // allocate a new id
+  allocated_id = _allocate_osd_id(&existing_id);
+  dout(10) << __func__ << " allocated id " << allocated_id
+           << " existing id " << existing_id << dendl;
+  if (existing_id >= 0) {
+    assert(existing_id < osdmap.get_max_osd());
+    assert(allocated_id < 0);
+    pending_inc.new_weight[existing_id] = CEPH_OSD_OUT;
+    *new_id = existing_id;
+
+  } else if (allocated_id >= 0) {
+    assert(existing_id < 0);
+    // raise max_osd
+    if (pending_inc.new_max_osd < 0) {
+      pending_inc.new_max_osd = osdmap.get_max_osd() + 1;
+    } else {
+      ++pending_inc.new_max_osd;
+    }
+    *new_id = pending_inc.new_max_osd - 1;
+    assert(*new_id == allocated_id);
+  } else {
+    assert(0 == "unexpected condition");
+  }
+
+out:
+  dout(10) << __func__ << " using id " << *new_id << dendl;
+  if (osdmap.get_max_osd() <= *new_id && pending_inc.new_max_osd <= *new_id) {
+    pending_inc.new_max_osd = *new_id + 1;
+  }
+
+  pending_inc.new_state[*new_id] |= CEPH_OSD_EXISTS | CEPH_OSD_NEW;
+  if (!uuid.is_zero())
+    pending_inc.new_uuid[*new_id] = uuid;
+}
+
+int OSDMonitor::validate_osd_create(
+    const int32_t id,
+    const uuid_d& uuid,
+    const bool check_osd_exists,
+    int32_t* existing_id,
+    stringstream& ss)
+{
+
+  dout(10) << __func__ << " id " << id << " uuid " << uuid
+           << " check_osd_exists " << check_osd_exists << dendl;
+
+  assert(existing_id);
+
+  if (id < 0 && uuid.is_zero()) {
+    // we have nothing to validate
+    *existing_id = -1;
+    return 0;
+  } else if (uuid.is_zero()) {
+    // we have an id but we will ignore it - because that's what
+    // `osd create` does.
+    return 0;
+  }
+
+  /*
+   * This function will be used to validate whether we are able to
+   * create a new osd when the `uuid` is specified.
+   *
+   * It will be used by both `osd create` and `osd new`, as the checks
+   * are basically the same when it pertains to osd id and uuid validation.
+   * However, `osd create` presumes an `uuid` is optional, for legacy
+   * reasons, while `osd new` requires the `uuid` to be provided. This
+   * means that `osd create` will not be idempotent if an `uuid` is not
+   * provided, but we will always guarantee the idempotency of `osd new`.
+   */
+
+  assert(!uuid.is_zero());
+  if (pending_inc.identify_osd(uuid) >= 0) {
+    // osd is about to exist
+    return -EAGAIN;
+  }
+
+  int32_t i = osdmap.identify_osd(uuid);
+  if (i >= 0) {
+    // osd already exists
+    if (id >= 0 && i != id) {
+      ss << "uuid " << uuid << " already in use for different id " << i;
+      return -EEXIST;
+    }
+    // return a positive errno to distinguish between a blocking error
+    // and an error we consider to not be a problem (i.e., this would be
+    // an idempotent operation).
+    *existing_id = i;
+    return EEXIST;
+  }
+  // i < 0
+  if (id >= 0) {
+    if (pending_inc.new_state.count(id)) {
+      // osd is about to exist
+      return -EAGAIN;
+    }
+    // we may not care if an osd exists if we are recreating a previously
+    // destroyed osd.
+    if (check_osd_exists && osdmap.exists(id)) {
+      ss << "id " << id << " already in use and does not match uuid "
+         << uuid;
+      return -EINVAL;
+    }
+  }
+  return 0;
+}
+
+int OSDMonitor::prepare_command_osd_create(
+    const int32_t id,
+    const uuid_d& uuid,
+    int32_t* existing_id,
+    stringstream& ss)
+{
+  dout(10) << __func__ << " id " << id << " uuid " << uuid << dendl;
+  assert(existing_id);
+
+  if (uuid.is_zero()) {
+    dout(10) << __func__ << " no uuid; assuming legacy `osd create`" << dendl;
+  }
+
+  return validate_osd_create(id, uuid, true, existing_id, ss);
+}
+
+int OSDMonitor::prepare_command_osd_new(
+    MonOpRequestRef op,
+    const map<string,cmd_vartype>& cmdmap,
+    const map<string,string>& secrets,
+    stringstream &ss,
+    Formatter *f)
+{
+  uuid_d uuid;
+  string uuidstr;
+  int64_t id = -1;
+
+  assert(paxos->is_plugged());
+
+  dout(10) << __func__ << " " << op << dendl;
+
+  /* validate command. abort now if something's wrong. */
+
+  /* `osd new` will expect a `uuid` to be supplied; `id` is optional.
+   *
+   * If `id` is not specified, we will identify any existing osd based
+   * on `uuid`. Operation will be idempotent iff secrets match.
+   *
+   * If `id` is specified, we will identify any existing osd based on
+   * `uuid` and match against `id`. If they match, operation will be
+   * idempotent iff secrets match.
+   *
+   * `-i secrets.json` will be optional. If supplied, will be used
+   * to check for idempotency when `id` and `uuid` match.
+   *
+   * If `id` is not specified, and `uuid` does not exist, an id will
+   * be found or allocated for the osd.
+   *
+   * If `id` is specified, and the osd has been previously marked
+   * as destroyed, then the `id` will be reused.
+   */
+  if (!cmd_getval(g_ceph_context, cmdmap, "uuid", uuidstr)) {
+    ss << "requires the OSD's UUID to be specified.";
+    return -EINVAL;
+  } else if (!uuid.parse(uuidstr.c_str())) {
+    ss << "invalid UUID value '" << uuidstr << "'.";
+    return -EINVAL;
+  }
+
+  if (cmd_getval(g_ceph_context, cmdmap, "id", id) &&
+      (id < 0)) {
+    ss << "invalid OSD id; must be greater or equal than zero.";
+    return -EINVAL;
+  }
+
+  // are we running an `osd create`-like command, or recreating
+  // a previously destroyed osd?
+
+  bool is_recreate_destroyed = (id >= 0 && osdmap.is_destroyed(id));
+
+  // we will care about `id` to assess whether osd is `destroyed`, or
+  // to create a new osd.
+  // we will need an `id` by the time we reach auth.
+
+  int32_t existing_id = -1;
+  int err = validate_osd_create(id, uuid, !is_recreate_destroyed,
+                                &existing_id, ss);
+
+  bool may_be_idempotent = false;
+  if (err == EEXIST) {
+    // this is idempotent from the osdmon's point-of-view
+    may_be_idempotent = true;
+    assert(existing_id >= 0);
+    id = existing_id;
+  } else if (err < 0) {
+    return err;
+  }
+
+  if (!may_be_idempotent) {
+    // idempotency is out of the window. We are either creating a new
+    // osd or recreating a destroyed osd.
+    //
+    // We now need to figure out if we have an `id` (and if it's valid),
+    // of find an `id` if we don't have one.
+
+    // NOTE: we need to consider the case where the `id` is specified for
+    // `osd create`, and we must honor it. So this means checking if
+    // the `id` is destroyed, and if so assume the destroy; otherwise,
+    // check if it `exists` - in which case we complain about not being
+    // `destroyed`. In the end, if nothing fails, we must allow the
+    // creation, so that we are compatible with `create`.
+    if (id >= 0 && osdmap.exists(id) && !osdmap.is_destroyed(id)) {
+      dout(10) << __func__ << " osd." << id << " isn't destroyed" << dendl;
+      ss << "OSD " << id << " has not yet been destroyed";
+      return -EINVAL;
+    } else if (id < 0) {
+      // find an `id`
+      id = _allocate_osd_id(&existing_id);
+      if (id < 0) {
+        assert(existing_id >= 0);
+        id = existing_id;
+      }
+      dout(10) << __func__ << " found id " << id << " to use" << dendl;
+    } else if (id >= 0 && osdmap.is_destroyed(id)) {
+      dout(10) << __func__ << " recreating osd." << id << dendl;
+    } else {
+      dout(10) << __func__ << " creating new osd." << id << dendl;
+    }
+  } else {
+    assert(id >= 0);
+    assert(osdmap.exists(id));
+  }
+
+  // we are now able to either create a brand new osd or reuse an existing
+  // osd that has been previously destroyed.
+
+  dout(10) << __func__ << " id " << id << " uuid " << uuid << dendl;
+
+  if (may_be_idempotent && secrets.empty()) {
+    // nothing to do, really.
+    dout(10) << __func__ << " idempotent and no secrets -- no op." << dendl;
+    assert(id >= 0);
+    if (f) {
+      f->open_object_section("created_osd");
+      f->dump_int("osdid", id);
+      f->close_section();
+    } else {
+      ss << id;
+    }
+    return EEXIST;
+  }
+
+  string cephx_secret, lockbox_secret, dmcrypt_key;
+  bool has_lockbox = false;
+  bool has_secrets = (!secrets.empty());
+
+  ConfigKeyService *svc = nullptr;
+  AuthMonitor::auth_entity_t cephx_entity, lockbox_entity;
+
+  if (has_secrets) {
+    if (secrets.count("cephx_secret") == 0) {
+      ss << "requires a cephx secret.";
+      return -EINVAL;
+    }
+    cephx_secret = secrets.at("cephx_secret");
+
+    bool has_lockbox_secret = (secrets.count("cephx_lockbox_secret") > 0);
+    bool has_dmcrypt_key = (secrets.count("dmcrypt_key") > 0);
+
+    dout(10) << __func__ << " has lockbox " << has_lockbox_secret
+             << " dmcrypt " << has_dmcrypt_key << dendl;
+
+    if (has_lockbox_secret && has_dmcrypt_key) {
+      has_lockbox = true;
+      lockbox_secret = secrets.at("cephx_lockbox_secret");
+      dmcrypt_key = secrets.at("dmcrypt_key");
+    } else if (!has_lockbox_secret != !has_dmcrypt_key) {
+      ss << "requires both a cephx lockbox secret and a dm-crypt key.";
+      return -EINVAL;
+    }
+
+    dout(10) << __func__ << " validate secrets using osd id " << id << dendl;
+
+    err = mon->authmon()->validate_osd_new(id, uuid,
+        cephx_secret,
+        lockbox_secret,
+        cephx_entity,
+        lockbox_entity,
+        ss);
+    if (err < 0) {
+      return err;
+    } else if (may_be_idempotent && err != EEXIST) {
+      // for this to be idempotent, `id` should already be >= 0; no need
+      // to use validate_id.
+      assert(id >= 0);
+      ss << "osd." << id << " exists but secrets do not match";
+      return -EEXIST;
+    }
+
+    if (has_lockbox) {
+      svc = (ConfigKeyService*)mon->config_key_service;
+      err = svc->validate_osd_new(uuid, dmcrypt_key, ss);
+      if (err < 0) {
+        return err;
+      } else if (may_be_idempotent && err != EEXIST) {
+        assert(id >= 0);
+        ss << "osd." << id << " exists but dm-crypt key does not match.";
+        return -EEXIST;
+      }
+    }
+  }
+  assert(!has_secrets || !cephx_secret.empty());
+  assert(!has_lockbox || !lockbox_secret.empty());
+
+  if (may_be_idempotent) {
+    // we have nothing to do for either the osdmon or the authmon,
+    // and we have no lockbox - so the config key service will not be
+    // touched. This is therefore an idempotent operation, and we can
+    // just return right away.
+    dout(10) << __func__ << " idempotent -- no op." << dendl;
+    assert(id >= 0);
+    if (f) {
+      f->open_object_section("created_osd");
+      f->dump_int("osdid", id);
+      f->close_section();
+    } else {
+      ss << id;
+    }
+    return EEXIST;
+  }
+  assert(!may_be_idempotent);
+
+  // perform updates.
+  if (has_secrets) {
+    assert(!cephx_secret.empty());
+    assert((lockbox_secret.empty() && dmcrypt_key.empty()) ||
+           (!lockbox_secret.empty() && !dmcrypt_key.empty()));
+
+    err = mon->authmon()->do_osd_new(cephx_entity,
+        lockbox_entity,
+        has_lockbox);
+    assert(0 == err);
+
+    if (has_lockbox) {
+      assert(nullptr != svc);
+      svc->do_osd_new(uuid, dmcrypt_key);
+    }
+  }
+
+  if (is_recreate_destroyed) {
+    assert(id >= 0);
+    assert(osdmap.is_destroyed(id));
+    pending_inc.new_weight[id] = CEPH_OSD_OUT;
+    pending_inc.new_state[id] |= CEPH_OSD_DESTROYED | CEPH_OSD_NEW;
+    pending_inc.new_uuid[id] = uuid;
+  } else {
+    assert(id >= 0);
+    int32_t new_id = -1;
+    do_osd_create(id, uuid, &new_id);
+    assert(new_id >= 0);
+    assert(id == new_id);
+  }
+
+  if (f) {
+    f->open_object_section("created_osd");
+    f->dump_int("osdid", id);
+    f->close_section();
+  } else {
+    ss << id;
+  }
+
+  return 0;
+}
+
 bool OSDMonitor::prepare_command(MonOpRequestRef op)
 {
   op->mark_osdmon_event(__func__);
@@ -6386,6 +6941,148 @@ static int parse_reweights(CephContext *cct,
   } catch (const std::logic_error& e) {
     return -EINVAL;
   }
+  return 0;
+}
+
+int OSDMonitor::prepare_command_osd_destroy(
+    int32_t id,
+    stringstream& ss)
+{
+  assert(paxos->is_plugged());
+
+  // we check if the osd exists for the benefit of `osd purge`, which may
+  // have previously removed the osd. If the osd does not exist, return
+  // -ENOENT to convey this, and let the caller deal with it.
+  //
+  // we presume that all auth secrets and config keys were removed prior
+  // to this command being called. if they exist by now, we also assume
+  // they must have been created by some other command and do not pertain
+  // to this non-existent osd.
+  if (!osdmap.exists(id)) {
+    dout(10) << __func__ << " osd." << id << " does not exist." << dendl;
+    return -ENOENT;
+  }
+
+  uuid_d uuid = osdmap.get_uuid(id);
+  dout(10) << __func__ << " destroying osd." << id
+           << " uuid " << uuid << dendl;
+
+  // if it has been destroyed, we assume our work here is done.
+  if (osdmap.is_destroyed(id)) {
+    ss << "destroyed osd." << id;
+    return 0;
+  }
+
+  EntityName cephx_entity, lockbox_entity;
+  bool idempotent_auth = false, idempotent_cks = false;
+
+  int err = mon->authmon()->validate_osd_destroy(id, uuid,
+                                                 cephx_entity,
+                                                 lockbox_entity,
+                                                 ss);
+  if (err < 0) {
+    if (err == -ENOENT) {
+      idempotent_auth = true;
+      err = 0;
+    } else {
+      return err;
+    }
+  }
+
+  ConfigKeyService *svc = (ConfigKeyService*)mon->config_key_service;
+  err = svc->validate_osd_destroy(id, uuid);
+  if (err < 0) {
+    assert(err == -ENOENT);
+    err = 0;
+    idempotent_cks = true;
+  }
+
+  if (!idempotent_auth) {
+    err = mon->authmon()->do_osd_destroy(cephx_entity, lockbox_entity);
+    assert(0 == err);
+  }
+
+  if (!idempotent_cks) {
+    svc->do_osd_destroy(id, uuid);
+  }
+
+  pending_inc.new_state[id] = CEPH_OSD_DESTROYED;
+  pending_inc.new_uuid[id] = uuid_d();
+
+  // we can only propose_pending() once per service, otherwise we'll be
+  // defying PaxosService and all laws of nature. Therefore, as we may
+  // be used during 'osd purge', let's keep the caller responsible for
+  // proposing.
+
+  return 0;
+}
+
+int OSDMonitor::prepare_command_osd_purge(
+    int32_t id,
+    stringstream& ss)
+{
+  assert(paxos->is_plugged());
+  dout(10) << __func__ << " purging osd." << id << dendl;
+
+  assert(!osdmap.is_up(id));
+
+  /*
+   * This may look a bit weird, but this is what's going to happen:
+   *
+   *  1. we make sure that removing from crush works
+   *  2. we call `prepare_command_osd_destroy()`. If it returns an
+   *     error, then we abort the whole operation, as no updates
+   *     have been made. However, we this function will have
+   *     side-effects, thus we need to make sure that all operations
+   *     performed henceforth will *always* succeed.
+   *  3. we call `prepare_command_osd_remove()`. Although this
+   *     function can return an error, it currently only checks if the
+   *     osd is up - and we have made sure that it is not so, so there
+   *     is no conflict, and it is effectively an update.
+   *  4. finally, we call `do_osd_crush_remove()`, which will perform
+   *     the crush update we delayed from before.
+   */
+
+  CrushWrapper newcrush;
+  _get_pending_crush(newcrush);
+
+  bool may_be_idempotent = false;
+
+  int err = _prepare_command_osd_crush_remove(newcrush, id, 0, false, false);
+  if (err == -ENOENT) {
+    err = 0;
+    may_be_idempotent = true;
+  } else if (err < 0) {
+    ss << "error removing osd." << id << " from crush";
+    return err;
+  }
+
+  // no point destroying the osd again if it has already been marked destroyed
+  if (!osdmap.is_destroyed(id)) {
+    err = prepare_command_osd_destroy(id, ss);
+    if (err < 0) {
+      if (err == -ENOENT) {
+        err = 0;
+      } else {
+        return err;
+      }
+    } else {
+      may_be_idempotent = false;
+    }
+    assert(0 == err);
+  }
+
+  if (may_be_idempotent && !osdmap.exists(id)) {
+    dout(10) << __func__ << " osd." << id << " does not exist and "
+             << "we are idempotent." << dendl;
+    return -ENOENT;
+  }
+
+  err = prepare_command_osd_remove(id);
+  // we should not be busy, as we should have made sure this id is not up.
+  assert(0 == err);
+
+  do_osd_crush_remove(newcrush);
   return 0;
 }
 
@@ -6963,6 +7660,8 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 	return true;
       }
       int id = newcrush.get_item_id(name);
+      int ancestor = 0;
+
       bool unlink_only = prefix == "osd crush unlink";
       string ancestor_str;
       if (cmd_getval(g_ceph_context, cmdmap, "ancestor", ancestor_str)) {
@@ -6972,20 +7671,20 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 	     << "' does not appear in the crush map";
 	  break;
 	}
-	int ancestor = newcrush.get_item_id(ancestor_str);
-	err = newcrush.remove_item_under(g_ceph_context, id, ancestor,
-					 unlink_only);
-      } else {
-	err = newcrush.remove_item(g_ceph_context, id, unlink_only);
+        ancestor = newcrush.get_item_id(ancestor_str);
       }
+
+      err = prepare_command_osd_crush_remove(
+          newcrush,
+          id, ancestor,
+          (ancestor < 0), unlink_only);
+
       if (err == -ENOENT) {
 	ss << "item " << id << " does not appear in that position";
 	err = 0;
 	break;
       }
       if (err == 0) {
-	pending_inc.crush.clear();
-	newcrush.encode(pending_inc.crush, mon->get_quorum_con_features());
 	ss << "removed item id " << id << " name '" << name << "' from crush map";
 	getline(ss, rs);
 	wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, 0, rs,
@@ -7511,6 +8210,45 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       err = -EPERM;
       goto reply;
     }
+    string sure;
+    cmd_getval(g_ceph_context, cmdmap, "sure", sure);
+    if (sure != "--yes-i-really-mean-it") {
+      FeatureMap m;
+      mon->get_combined_feature_map(&m);
+      uint64_t features = ceph_release_features(vno);
+      bool first = true;
+      bool ok = true;
+      for (int type : {
+	    CEPH_ENTITY_TYPE_CLIENT,
+	    CEPH_ENTITY_TYPE_MDS,
+	    CEPH_ENTITY_TYPE_MGR }) {
+	auto p = m.m.find(type);
+	if (p == m.m.end()) {
+	  continue;
+	}
+	for (auto& q : p->second) {
+	  uint64_t missing = ~q.first & features;
+	  if (missing) {
+	    if (first) {
+	      ss << "cannot set require_min_compat_client to " << v << ": ";
+	    } else {
+	      ss << "; ";
+	    }
+	    first = false;
+	    ss << q.second << " connected " << ceph_entity_type_name(type)
+	       << "(s) look like " << ceph_release_name(
+		 ceph_release_from_features(q.first))
+	       << " (missing 0x" << std::hex << missing << std::dec << ")";
+	    ok = false;
+	  }
+	}
+      }
+      if (!ok) {
+	ss << "; add --yes-i-really-mean-it to do it anyway";
+	err = -EPERM;
+	goto reply;
+      }
+    }
     ss << "set require_min_compat_client to " << ceph_release_name(vno);
     pending_inc.new_require_min_compat_client = vno;
     getline(ss, rs);
@@ -7731,16 +8469,14 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 	  any = true;
 	}
       } else if (prefix == "osd rm") {
-	if (osdmap.is_up(osd)) {
+        err = prepare_command_osd_remove(osd);
+
+        if (err == -EBUSY) {
 	  if (any)
 	    ss << ", ";
           ss << "osd." << osd << " is still up; must be down before removal. ";
-	  err = -EBUSY;
 	} else {
-	  pending_inc.new_state[osd] = osdmap.get_state(osd);
-          pending_inc.new_uuid[osd] = uuid_d();
-	  pending_metadata_rm.insert(osd);
-	  pending_metadata.erase(osd);
+          assert(err == 0);
 	  if (any) {
 	    ss << ", osd." << osd;
           } else {
@@ -8204,112 +8940,208 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       return true;
     }
 
+  } else if (prefix == "osd destroy" || prefix == "osd purge") {
+    /* Destroying an OSD means that we don't expect to further make use of
+     * the OSDs data (which may even become unreadable after this operation),
+     * and that we are okay with scrubbing all its cephx keys and config-key
+     * data (which may include lockbox keys, thus rendering the osd's data
+     * unreadable).
+     *
+     * The OSD will not be removed. Instead, we will mark it as destroyed,
+     * such that a subsequent call to `create` will not reuse the osd id.
+     * This will play into being able to recreate the OSD, at the same
+     * crush location, with minimal data movement.
+     */
+
+    // make sure authmon is writeable.
+    if (!mon->authmon()->is_writeable()) {
+      dout(10) << __func__ << " waiting for auth mon to be writeable for "
+               << "osd destroy" << dendl;
+      mon->authmon()->wait_for_writeable(op, new C_RetryMessage(this, op));
+      return false;
+    }
+
+    int64_t id;
+    if (!cmd_getval(g_ceph_context, cmdmap, "id", id)) {
+      ss << "unable to parse osd id value '"
+         << cmd_vartype_stringify(cmdmap["id"]) << "";
+      err = -EINVAL;
+      goto reply;
+    }
+
+    bool is_destroy = (prefix == "osd destroy");
+    if (!is_destroy) {
+      assert("osd purge" == prefix);
+    }
+
+    string sure;
+    if (!cmd_getval(g_ceph_context, cmdmap, "sure", sure) ||
+        sure != "--yes-i-really-mean-it") {
+      ss << "Are you SURE? This will mean real, permanent data loss, as well "
+         << "as cephx and lockbox keys. Pass --yes-i-really-mean-it if you "
+         << "really do.";
+      err = -EPERM;
+      goto reply;
+    } else if (is_destroy && !osdmap.exists(id)) {
+      ss << "osd." << id << " does not exist";
+      err = -ENOENT;
+      goto reply;
+    } else if (osdmap.is_up(id)) {
+      ss << "osd." << id << " is not `down`.";
+      err = -EBUSY;
+      goto reply;
+    } else if (is_destroy && osdmap.is_destroyed(id)) {
+      ss << "destroyed osd." << id;
+      err = 0;
+      goto reply;
+    }
+
+    bool goto_reply = false;
+
+    paxos->plug();
+    if (is_destroy) {
+      err = prepare_command_osd_destroy(id, ss);
+      // we checked above that it should exist.
+      assert(err != -ENOENT);
+    } else {
+      err = prepare_command_osd_purge(id, ss);
+      if (err == -ENOENT) {
+        err = 0;
+        ss << "osd." << id << " does not exist.";
+        goto_reply = true;
+      }
+    }
+    paxos->unplug();
+
+    if (err < 0 || goto_reply) {
+      goto reply;
+    }
+
+    if (is_destroy) {
+      ss << "destroyed osd." << id;
+    } else {
+      ss << "purged osd." << id;
+    }
+
+    getline(ss, rs);
+    wait_for_finished_proposal(op,
+        new Monitor::C_Command(mon, op, 0, rs, get_last_committed() + 1));
+    force_immediate_propose();
+    return true;
+
+  } else if (prefix == "osd new") {
+
+    // make sure authmon is writeable.
+    if (!mon->authmon()->is_writeable()) {
+      dout(10) << __func__ << " waiting for auth mon to be writeable for "
+               << "osd destroy" << dendl;
+      mon->authmon()->wait_for_writeable(op, new C_RetryMessage(this, op));
+      return false;
+    }
+
+    map<string,string> secrets_map;
+
+    bufferlist bl = m->get_data();
+    string secrets_json = bl.to_str();
+    dout(20) << __func__ << " osd new json = " << secrets_json << dendl;
+
+    err = get_json_str_map(secrets_json, ss, &secrets_map);
+    if (err < 0)
+      goto reply;
+
+    dout(20) << __func__ << " osd new secrets " << secrets_map << dendl;
+
+    paxos->plug();
+    err = prepare_command_osd_new(op, cmdmap, secrets_map, ss, f.get());
+    paxos->unplug();
+
+    if (err < 0) {
+      goto reply;
+    }
+
+    if (f) {
+      f->flush(rdata);
+    } else {
+      rdata.append(ss);
+    }
+
+    if (err == EEXIST) {
+      // idempotent operation
+      err = 0;
+      goto reply;
+    }
+
+    wait_for_finished_proposal(op,
+        new Monitor::C_Command(mon, op, 0, rs, rdata,
+                               get_last_committed() + 1));
+    force_immediate_propose();
+    return true;
+
   } else if (prefix == "osd create") {
-    int i = -1;
 
     // optional id provided?
-    int64_t id = -1;
-    if (cmd_getval(g_ceph_context, cmdmap, "id", id)) {
-      if (id < 0) {
-	ss << "invalid osd id value '" << id << "'";
+    int64_t id = -1, cmd_id = -1;
+    if (cmd_getval(g_ceph_context, cmdmap, "id", cmd_id)) {
+      if (cmd_id < 0) {
+	ss << "invalid osd id value '" << cmd_id << "'";
 	err = -EINVAL;
 	goto reply;
       }
-      dout(10) << " osd create got id " << id << dendl;
+      dout(10) << " osd create got id " << cmd_id << dendl;
     }
 
-    // optional uuid provided?
     uuid_d uuid;
     string uuidstr;
     if (cmd_getval(g_ceph_context, cmdmap, "uuid", uuidstr)) {
       if (!uuid.parse(uuidstr.c_str())) {
-	ss << "invalid uuid value '" << uuidstr << "'";
-	err = -EINVAL;
-	goto reply;
+        ss << "invalid uuid value '" << uuidstr << "'";
+        err = -EINVAL;
+        goto reply;
       }
-      dout(10) << " osd create got uuid " << uuid << dendl;
-      i = osdmap.identify_osd(uuid);
-      if (i >= 0) {
-	// osd already exists
-	if (id >= 0 && i != id) {
-	  ss << "uuid " << uuidstr << " already in use for different id " << i;
-	  err = -EINVAL;
-	  goto reply;
-	}
-	err = 0;
-	if (f) {
-	  f->open_object_section("created_osd");
-	  f->dump_int("osdid", i);
-	  f->close_section();
-	  f->flush(rdata);
-	} else {
-	  ss << i;
-	  rdata.append(ss);
-	}
-	goto reply;
-      }
-      // i < 0
-      if (id >= 0) {
-	if (osdmap.exists(id)) {
-	  ss << "id " << id << " already in use and does not match uuid "
-	     << uuid;
-	  err = -EINVAL;
-	  goto reply;
-	}
-	if (pending_inc.new_state.count(id)) {
-	  // osd is about to exist
-	  wait_for_finished_proposal(op, new C_RetryMessage(this, op));
-	  return true;
-	}
-	i = id;
-      }
-      if (pending_inc.identify_osd(uuid) >= 0) {
-	// osd is about to exist
-	wait_for_finished_proposal(op, new C_RetryMessage(this, op));
-	return true;
-      }
-      if (i >= 0) {
-	// raise max_osd
-	if (osdmap.get_max_osd() <= i && pending_inc.new_max_osd <= i)
-	  pending_inc.new_max_osd = i + 1;
-	goto done;
-      }
+      // we only care about the id if we also have the uuid, to
+      // ensure the operation's idempotency.
+      id = cmd_id;
     }
 
-    // allocate a new id
-    for (i=0; i < osdmap.get_max_osd(); i++) {
-      if (!osdmap.exists(i) &&
-	  pending_inc.new_up_client.count(i) == 0 &&
-	  (pending_inc.new_state.count(i) == 0 ||
-	   (pending_inc.new_state[i] & CEPH_OSD_EXISTS) == 0)) {
-        pending_inc.new_weight[i] = CEPH_OSD_OUT;
-	goto done;
+    int32_t new_id = -1;
+    err = prepare_command_osd_create(id, uuid, &new_id, ss);
+    if (err < 0) {
+      if (err == -EAGAIN) {
+        wait_for_finished_proposal(op, new C_RetryMessage(this, op));
+        return true;
       }
+      // a check has failed; reply to the user.
+      goto reply;
+
+    } else if (err == EEXIST) {
+      // this is an idempotent operation; we can go ahead and reply.
+      if (f) {
+        f->open_object_section("created_osd");
+        f->dump_int("osdid", new_id);
+        f->close_section();
+        f->flush(rdata);
+      } else {
+        ss << new_id;
+        rdata.append(ss);
+      }
+      err = 0;
+      goto reply;
     }
 
-    // raise max_osd
-    if (pending_inc.new_max_osd < 0)
-      pending_inc.new_max_osd = osdmap.get_max_osd() + 1;
-    else
-      pending_inc.new_max_osd++;
-    i = pending_inc.new_max_osd - 1;
+    do_osd_create(id, uuid, &new_id);
 
-done:
-    dout(10) << " creating osd." << i << dendl;
-    pending_inc.new_state[i] |= CEPH_OSD_EXISTS | CEPH_OSD_NEW;
-    if (!uuid.is_zero())
-      pending_inc.new_uuid[i] = uuid;
     if (f) {
       f->open_object_section("created_osd");
-      f->dump_int("osdid", i);
+      f->dump_int("osdid", new_id);
       f->close_section();
       f->flush(rdata);
     } else {
-      ss << i;
+      ss << new_id;
       rdata.append(ss);
     }
-    wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, 0, rs, rdata,
-					      get_last_committed() + 1));
+    wait_for_finished_proposal(op,
+        new Monitor::C_Command(mon, op, 0, rs, rdata,
+                               get_last_committed() + 1));
     return true;
 
   } else if (prefix == "osd blacklist clear") {
@@ -8712,9 +9544,8 @@ done:
     // make sure new tier is empty
     string force_nonempty;
     cmd_getval(g_ceph_context, cmdmap, "force_nonempty", force_nonempty);
-    const pool_stat_t& tier_stats =
-      mon->pgmon()->pg_map.get_pg_pool_sum_stat(tierpool_id);
-    if (tier_stats.stats.sum.num_objects != 0 &&
+    const pool_stat_t *pstats = mon->pgservice->get_pool_stat(tierpool_id);
+    if (pstats && pstats->stats.sum.num_objects != 0 &&
 	force_nonempty != "--force-nonempty") {
       ss << "tier pool '" << tierpoolstr << "' is not empty; --force-nonempty to force";
       err = -ENOTEMPTY;
@@ -9026,10 +9857,10 @@ done:
 	  mode != pg_pool_t::CACHEMODE_PROXY &&
 	  mode != pg_pool_t::CACHEMODE_READPROXY))) {
 
-      const pool_stat_t& tier_stats =
-        mon->pgmon()->pg_map.get_pg_pool_sum_stat(pool_id);
+      const pool_stat_t* pstats =
+        mon->pgservice->get_pool_stat(pool_id);
 
-      if (tier_stats.stats.sum.num_objects_dirty > 0) {
+      if (pstats && pstats->stats.sum.num_objects_dirty > 0) {
         ss << "unable to set cache-mode '"
            << pg_pool_t::get_cache_mode_name(mode) << "' on pool '" << poolstr
            << "': dirty objects found";
@@ -9094,9 +9925,9 @@ done:
       goto reply;
     }
     // make sure new tier is empty
-    const pool_stat_t& tier_stats =
-      mon->pgmon()->pg_map.get_pg_pool_sum_stat(tierpool_id);
-    if (tier_stats.stats.sum.num_objects != 0) {
+    const pool_stat_t *pstats =
+      mon->pgservice->get_pool_stat(tierpool_id);
+    if (pstats && pstats->stats.sum.num_objects != 0) {
       ss << "tier pool '" << tierpoolstr << "' is not empty";
       err = -ENOTEMPTY;
       goto reply;
@@ -9234,16 +10065,15 @@ done:
     cmd_getval(g_ceph_context, cmdmap, "no_increasing", no_increasing);
     string out_str;
     mempool::osdmap::map<int32_t, uint32_t> new_weights;
-    err = reweight::by_utilization(osdmap,
-				   mon->pgmon()->pg_map,
-				   oload,
-				   max_change,
-				   max_osds,
-				   by_pg,
-				   pools.empty() ? NULL : &pools,
-				   no_increasing == "--no-increasing",
-				   &new_weights,
-				   &ss, &out_str, f.get());
+    err = mon->pgservice->reweight_by_utilization(osdmap,
+					     oload,
+					     max_change,
+					     max_osds,
+					     by_pg,
+					     pools.empty() ? NULL : &pools,
+					     no_increasing == "--no-increasing",
+					     &new_weights,
+					     &ss, &out_str, f.get());
     if (err >= 0) {
       dout(10) << "reweight::by_utilization: finished with " << out_str << dendl;
     }

@@ -118,12 +118,7 @@ namespace rgw {
      * mechanism to avoid this is to store leaf object names with an
      * object locator w/o trailing slash */
 
-    /* mutating path */
-    std::string obj_path{parent->relative_object_name()};
-    if ((obj_path.length() > 0) &&
-	(obj_path.back() != '/'))
-      obj_path += "/";
-    obj_path += path;
+    std::string obj_path = parent->format_child_name(path, false);
 
     for (auto ix : { 0, 1, 2 }) {
       switch (ix) {
@@ -306,10 +301,8 @@ namespace rgw {
 	unref(bkt_fh);
       }
 
-      /* XXXX remove uri and deal with bucket and object names */
-      string uri = "/";
-      uri += name;
-      RGWDeleteBucketRequest req(cct, get_user(), uri);
+      string bname{name};
+      RGWDeleteBucketRequest req(cct, get_user(), bname);
       rc = rgwlib.get_fe()->execute_req(&req);
       if (! rc) {
 	rc = req.get_ret();
@@ -534,8 +527,7 @@ namespace rgw {
 	return mkr;
       }
 
-      string uri = "/" + bname; /* XXX get rid of URI some day soon */
-      RGWCreateBucketRequest req(get_context(), get_user(), uri);
+      RGWCreateBucketRequest req(get_context(), get_user(), bname);
 
       /* save attrs */
       req.emplace_attr(RGW_ATTR_UNIX_KEY1, std::move(ux_key));
@@ -546,15 +538,7 @@ namespace rgw {
     } else {
       /* create an object representing the directory */
       buffer::list bl;
-      string dir_name = /* XXX get rid of this some day soon, too */
-	parent->relative_object_name();
-
-      /* creating objects w/leading '/' makes a mess */
-      if ((dir_name.size() > 0) &&
-	  (dir_name.back() != '/'))
-	dir_name += "/";
-      dir_name += name;
-      dir_name += "/";
+      string dir_name = parent->format_child_name(name, true);
 
       /* need valid S3 name (characters, length <= 1024, etc) */
       rc = valid_fs_object_name(dir_name);
@@ -619,11 +603,7 @@ namespace rgw {
     }
 
     /* expand and check name */
-    std::string obj_name{parent->relative_object_name()};
-    if ((obj_name.size() > 0) &&
-	(obj_name.back() != '/'))
-      obj_name += "/";
-    obj_name += name;
+    std::string obj_name = parent->format_child_name(name, false);
     rc = valid_fs_object_name(obj_name);
     if (rc != 0) {
       return MkObjResult{nullptr, rc};
@@ -760,7 +740,7 @@ namespace rgw {
 	  << fh->name
 	  << " before ObjUnref refs=" << fh->get_refcnt()
 	  << dendl;
-	fs->fh_lru.unref(fh, cohort::lru::FLAG_NONE);
+	fs->unref(fh);
       }
     };
 
@@ -932,7 +912,7 @@ namespace rgw {
        * no unsafe iterators reaching it either--n.b., this constraint
        * is binding oncode which may in future attempt to e.g.,
        * cause the eviction of objects in LRU order */
-      (void) get_fs()->fh_lru.unref(parent, cohort::lru::FLAG_NONE);
+      (void) get_fs()->unref(parent);
     }
   }
 
@@ -1333,6 +1313,11 @@ namespace rgw {
 
     op_ret = get_store()->check_quota(s->bucket_owner.get_id(), s->bucket,
 				      user_quota, bucket_quota, s->obj_size);
+    if (op_ret < 0) {
+      goto done;
+    }
+
+    op_ret = get_store()->check_bucket_shards(s->bucket_info, s->bucket, bucket_quota);
     if (op_ret < 0) {
       goto done;
     }

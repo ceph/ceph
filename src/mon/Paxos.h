@@ -615,6 +615,11 @@ private:
   bool trimming;
 
   /**
+   * true if we want trigger_propose to *not* propose (yet)
+   */
+  bool plugged = false;
+
+  /**
    * @defgroup Paxos_h_callbacks Callback classes.
    * @{
    */
@@ -1194,7 +1199,19 @@ public:
 
     return true;
   }
- 
+
+  bool is_plugged() const {
+    return plugged;
+  }
+  void plug() {
+    assert(plugged == false);
+    plugged = true;
+  }
+  void unplug() {
+    assert(plugged == true);
+    plugged = false;
+  }
+
   // read
   /**
    * @defgroup Paxos_h_read_funcs Read-related functions

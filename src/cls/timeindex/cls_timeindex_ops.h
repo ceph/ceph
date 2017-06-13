@@ -4,7 +4,6 @@
 #ifndef CEPH_CLS_TIMEINDEX_OPS_H
 #define CEPH_CLS_TIMEINDEX_OPS_H
 
-#include "include/types.h"
 #include "cls_timeindex_types.h"
 
 struct cls_timeindex_add_op {

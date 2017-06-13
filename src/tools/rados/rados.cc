@@ -2030,7 +2030,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
       tab.define_column("COPIES", TextTable::LEFT, TextTable::RIGHT);
       tab.define_column("MISSING_ON_PRIMARY", TextTable::LEFT, TextTable::RIGHT);
       tab.define_column("UNFOUND", TextTable::LEFT, TextTable::RIGHT);
-      tab.define_column("DEGRAED", TextTable::LEFT, TextTable::RIGHT);
+      tab.define_column("DEGRADED", TextTable::LEFT, TextTable::RIGHT);
       tab.define_column("RD_OPS", TextTable::LEFT, TextTable::RIGHT);
       tab.define_column("RD", TextTable::LEFT, TextTable::RIGHT);
       tab.define_column("WR_OPS", TextTable::LEFT, TextTable::RIGHT);

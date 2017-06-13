@@ -47,8 +47,8 @@ public:
     : m_op(op), m_outstanding(outstanding) {}
   void finish(int r) override {
     m_op->done++;
-    assert(m_outstanding > 0);
-    *m_outstanding--;
+    assert(*m_outstanding > 0);
+    (*m_outstanding)--;
   }
 };
 

@@ -55,7 +55,7 @@ Release Cycle
 
 
 Four times a year, the development roadmap is discussed online during
-the `Ceph Developer Summit <http://wiki.ceph.com/Planning/CDS/>`_. A
+the `Ceph Developer Summit <http://tracker.ceph.com/projects/ceph/wiki/Planning#Ceph-Developer-Summit>`_. A
 new stable release (hammer, infernalis, jewel ...) is published at the same
 frequency.  Every other release (firefly, hammer, jewel...) is a `Long Term
 Stable (LTS) <../../releases>`_.  See `Understanding the release cycle
@@ -126,7 +126,7 @@ Running and interpreting teuthology integration tests
 The :doc:`/dev/sepia` runs `teuthology
 <https://github.com/ceph/teuthology/>`_ integration tests `on a regular basis <http://tracker.ceph.com/projects/ceph-releases/wiki/HOWTO_monitor_the_automated_tests_AKA_nightlies#Automated-tests-AKA-nightlies>`_ and the
 results are posted on `pulpito <http://pulpito.ceph.com/>`_ and the
-`ceph-qa mailing list <http://ceph.com/resources/mailing-list-irc/>`_.
+`ceph-qa mailing list <https://ceph.com/irc/>`_.
 
 * The job failures are `analyzed by quality engineers and developers
   <http://tracker.ceph.com/projects/ceph-releases/wiki/HOWTO_monitor_the_automated_tests_AKA_nightlies#List-of-suites-and-watchers>`_

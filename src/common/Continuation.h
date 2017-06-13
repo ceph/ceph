@@ -13,7 +13,6 @@
  */
 
 #include "include/Context.h"
-#include <set>
 
 /**
  * The Continuation interface is designed to help easily create multi-step

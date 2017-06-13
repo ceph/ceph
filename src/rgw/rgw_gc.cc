@@ -20,15 +20,11 @@ static string gc_oid_prefix = "gc";
 static string gc_index_lock_name = "gc_process";
 
 
-#define HASH_PRIME 7877
-
 void RGWGC::initialize(CephContext *_cct, RGWRados *_store) {
   cct = _cct;
   store = _store;
 
-  max_objs = cct->_conf->rgw_gc_max_objs;
-  if (max_objs > HASH_PRIME)
-    max_objs = HASH_PRIME;
+  max_objs = min(cct->_conf->rgw_gc_max_objs, rgw_shards_max());
 
   obj_names = new string[max_objs];
 
@@ -47,7 +43,7 @@ void RGWGC::finalize()
 
 int RGWGC::tag_index(const string& tag)
 {
-  return ceph_str_hash_linux(tag.c_str(), tag.size()) % HASH_PRIME % max_objs;
+  return rgw_shards_hash(tag, max_objs);
 }
 
 void RGWGC::add_chain(ObjectWriteOperation& op, cls_rgw_obj_chain& chain, const string& tag)
@@ -151,7 +147,7 @@ int RGWGC::process(int index, int max_secs)
 
   int ret = l.lock_exclusive(&store->gc_pool_ctx, obj_names[index]);
   if (ret == -EBUSY) { /* already locked by another gc processor */
-    dout(0) << "RGWGC::process() failed to acquire lock on " << obj_names[index] << dendl;
+    dout(10) << "RGWGC::process() failed to acquire lock on " << obj_names[index] << dendl;
     return 0;
   }
   if (ret < 0)
@@ -203,7 +199,7 @@ int RGWGC::process(int index, int max_secs)
 
         const string& oid = obj.key.name; /* just stored raw oid there */
 
-	dout(0) << "gc::process: removing " << obj.pool << ":" << obj.key.name << dendl;
+	dout(5) << "gc::process: removing " << obj.pool << ":" << obj.key.name << dendl;
 	ObjectWriteOperation op;
 	cls_refcount_put(op, info.tag, true);
         ret = ctx->operate(oid, &op);

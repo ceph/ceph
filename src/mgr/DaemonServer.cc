@@ -13,12 +13,13 @@
 
 #include "DaemonServer.h"
 
+#include "include/str_list.h"
 #include "auth/RotatingKeyRing.h"
-
 #include "json_spirit/json_spirit_writer.h"
 
 #include "messages/MMgrOpen.h"
 #include "messages/MMgrConfigure.h"
+#include "messages/MMonMgrReport.h"
 #include "messages/MCommand.h"
 #include "messages/MCommandReply.h"
 #include "messages/MPGStats.h"
@@ -171,6 +172,14 @@ bool DaemonServer::ms_verify_authorizer(Connection *con,
       }
     }
     con->set_priv(s->get());
+
+    if (peer_type == CEPH_ENTITY_TYPE_OSD) {
+      Mutex::Locker l(lock);
+      s->osd_id = atoi(s->entity_name.get_id().c_str());
+      dout(10) << __func__ << " registering osd." << s->osd_id << " session "
+	       << s << " con " << con << dendl;
+      osd_cons[s->osd_id].insert(con);
+    }
   }
 
   return true;
@@ -194,6 +203,22 @@ bool DaemonServer::ms_get_authorizer(int dest_type,
   *authorizer = monc->build_authorizer(dest_type);
   dout(20) << "got authorizer " << *authorizer << dendl;
   return *authorizer != NULL;
+}
+
+bool DaemonServer::ms_handle_reset(Connection *con)
+{
+  if (con->get_peer_type() == CEPH_ENTITY_TYPE_OSD) {
+    MgrSessionRef session(static_cast<MgrSession*>(con->get_priv()));
+    if (!session) {
+      return false;
+    }
+    session->put(); // SessionRef takes a ref
+    Mutex::Locker l(lock);
+    dout(10) << __func__ << " unregistering osd." << session->osd_id
+	     << "  session " << session << " con " << con << dendl;
+    osd_cons[session->osd_id].erase(con);
+  }
+  return false;
 }
 
 bool DaemonServer::ms_handle_refused(Connection *con)
@@ -235,15 +260,19 @@ void DaemonServer::shutdown()
 
 bool DaemonServer::handle_open(MMgrOpen *m)
 {
-  DaemonKey key(
-      m->get_connection()->get_peer_type(),
-      m->daemon_name);
+  uint32_t type = m->get_connection()->get_peer_type();
+  DaemonKey key(type, m->daemon_name);
 
   dout(4) << "from " << m->get_connection() << " name "
-          << m->daemon_name << dendl;
+          << ceph_entity_type_name(type) << "." << m->daemon_name << dendl;
 
   auto configure = new MMgrConfigure();
-  configure->stats_period = g_conf->mgr_stats_period;
+  if (m->get_connection()->get_peer_type() == entity_name_t::TYPE_CLIENT) {
+    // We don't want clients to send us stats
+    configure->stats_period = 0;
+  } else {
+    configure->stats_period = g_conf->mgr_stats_period;
+  }
   m->get_connection()->send_message(configure);
 
   if (daemon_state.exists(key)) {
@@ -257,12 +286,18 @@ bool DaemonServer::handle_open(MMgrOpen *m)
 
 bool DaemonServer::handle_report(MMgrReport *m)
 {
-  DaemonKey key(
-      m->get_connection()->get_peer_type(),
-      m->daemon_name);
+  uint32_t type = m->get_connection()->get_peer_type();
+  DaemonKey key(type, m->daemon_name);
 
   dout(4) << "from " << m->get_connection() << " name "
-          << m->daemon_name << dendl;
+          << ceph_entity_type_name(type) << "." << m->daemon_name << dendl;
+
+  if (m->get_connection()->get_peer_type() == entity_name_t::TYPE_CLIENT) {
+    // Clients should not be sending us stats
+    dout(4) << "rejecting report from client " << m->daemon_name << dendl;
+    m->put();
+    return true;
+  }
 
   DaemonStatePtr daemon;
   if (daemon_state.exists(key)) {
@@ -563,26 +598,90 @@ bool DaemonServer::handle_command(MCommand *m)
       return true;
     }
     int acting_primary = -1;
-    entity_inst_t inst;
     cluster_state.with_osdmap([&](const OSDMap& osdmap) {
 	acting_primary = osdmap.get_pg_acting_primary(pgid);
-	if (acting_primary >= 0) {
-	  inst = osdmap.get_inst(acting_primary);
-	}
       });
     if (acting_primary == -1) {
       ss << "pg " << pgid << " has no primary osd";
       cmdctx->reply(-EAGAIN, ss);
       return true;
     }
+    auto p = osd_cons.find(acting_primary);
+    if (p == osd_cons.end()) {
+      ss << "pg " << pgid << " primary osd." << acting_primary
+	 << " is not currently connected";
+      cmdctx->reply(-EAGAIN, ss);
+    }
     vector<pg_t> pgs = { pgid };
-    msgr->send_message(new MOSDScrub(monc->get_fsid(),
-				     pgs,
-				     scrubop == "repair",
-				     scrubop == "deep-scrub"),
-		       inst);
+    for (auto& con : p->second) {
+      con->send_message(new MOSDScrub(monc->get_fsid(),
+				      pgs,
+				      scrubop == "repair",
+				      scrubop == "deep-scrub"));
+    }
     ss << "instructing pg " << pgid << " on osd." << acting_primary
-       << " (" << inst << ") to " << scrubop;
+       << " to " << scrubop;
+    cmdctx->reply(0, ss);
+    return true;
+  } else if (prefix == "osd scrub" ||
+	      prefix == "osd deep-scrub" ||
+	      prefix == "osd repair") {
+    string whostr;
+    cmd_getval(g_ceph_context, cmdctx->cmdmap, "who", whostr);
+    vector<string> pvec;
+    get_str_vec(prefix, pvec);
+
+    set<int> osds;
+    if (whostr == "*") {
+      cluster_state.with_osdmap([&](const OSDMap& osdmap) {
+	  for (int i = 0; i < osdmap.get_max_osd(); i++)
+	    if (osdmap.is_up(i)) {
+	      osds.insert(i);
+	    }
+	});
+    } else {
+      long osd = parse_osd_id(whostr.c_str(), &ss);
+      if (osd < 0) {
+	ss << "invalid osd '" << whostr << "'";
+	cmdctx->reply(-EINVAL, ss);
+	return true;
+      }
+      cluster_state.with_osdmap([&](const OSDMap& osdmap) {
+	  if (osdmap.is_up(osd)) {
+	    osds.insert(osd);
+	  }
+	});
+      if (osds.empty()) {
+	ss << "osd." << osd << " is not up";
+	cmdctx->reply(-EAGAIN, ss);
+	return true;
+      }
+    }
+    set<int> sent_osds, failed_osds;
+    for (auto osd : osds) {
+      auto p = osd_cons.find(osd);
+      if (p == osd_cons.end()) {
+	failed_osds.insert(osd);
+      } else {
+	sent_osds.insert(osd);
+	for (auto& con : p->second) {
+	  con->send_message(new MOSDScrub(monc->get_fsid(),
+					  pvec.back() == "repair",
+					  pvec.back() == "deep-scrub"));
+	}
+      }
+    }
+    if (failed_osds.size() == osds.size()) {
+      ss << "failed to instruct osd(s) " << osds << " to " << pvec.back()
+	 << " (not connected)";
+      r = -EAGAIN;
+    } else {
+      ss << "instructed osd(s) " << sent_osds << " to " << pvec.back();
+      if (!failed_osds.empty()) {
+	ss << "; osd(s) " << failed_osds << " were not connected";
+      }
+      r = 0;
+    }
     cmdctx->reply(0, ss);
     return true;
   } else if (prefix == "osd reweight-by-pg" ||
@@ -724,4 +823,27 @@ bool DaemonServer::handle_command(MCommand *m)
     }));
     return true;
   }
+}
+
+void DaemonServer::send_report()
+{
+  auto m = new MMonMgrReport();
+  cluster_state.with_pgmap([&](const PGMap& pg_map) {
+      cluster_state.update_delta_stats();
+
+      // FIXME: reporting health detail here might be a bad idea?
+      cluster_state.with_osdmap([&](const OSDMap& osdmap) {
+	  // FIXME: no easy way to get mon features here.  this will do for
+	  // now, though, as long as we don't make a backward-incompat change.
+	  pg_map.encode_digest(osdmap, m->get_data(), CEPH_FEATURES_ALL);
+
+	  pg_map.get_health(g_ceph_context, osdmap,
+			    m->health_summary,
+			    &m->health_detail);
+	});
+    });
+  // TODO? We currently do not notify the PyModules
+  // TODO: respect needs_send, so we send the report only if we are asked to do
+  //       so, or the state is updated.
+  monc->send_mon_message(m);
 }

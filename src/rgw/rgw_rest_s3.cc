@@ -236,6 +236,10 @@ int RGWGetObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t bl_ofs,
 
   dump_content_length(s, total_len);
   dump_last_modified(s, lastmod);
+  if (!version_id.empty()) {
+    dump_header(s, "x-amz-version-id", version_id);
+  }
+  
 
   if (! op_ret) {
     if (! lo_etag.empty()) {

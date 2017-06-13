@@ -118,6 +118,8 @@ private:
   bool m_unknown_format = true;
   ImageCtxT *m_image_ctx;
 
+  decltype(m_image_ctx->exclusive_lock) m_exclusive_lock = nullptr;
+
   int m_ret_val = 0;
   bufferlist m_out_bl;
   std::list<obj_watch_t> m_watchers;

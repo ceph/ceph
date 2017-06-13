@@ -92,6 +92,7 @@ public:
   bool handle_command_reply(MCommandReply *m);
 
   void send_report();
+  void send_pgstats();
 
   void set_pgstats_cb(std::function<MPGStats*()> cb_)
   {

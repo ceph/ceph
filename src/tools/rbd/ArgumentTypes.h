@@ -29,8 +29,6 @@ enum SpecFormat {
   SPEC_FORMAT_IMAGE_OR_SNAPSHOT
 };
 
-static const std::string DEFAULT_POOL_NAME("rbd");
-
 static const std::string SOURCE_PREFIX("source-");
 static const std::string DEST_PREFIX("dest-");
 

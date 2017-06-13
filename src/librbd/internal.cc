@@ -327,22 +327,6 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
     }
   }
 
-  std::ostream &operator<<(std::ostream &os, const rbd_image_options_t &opts) {
-    image_options_ref* opts_ = static_cast<image_options_ref*>(opts);
-
-    os << "[";
-
-    for (image_options_t::const_iterator i = (*opts_)->begin();
-	 i != (*opts_)->end(); ++i) {
-      os << (i == (*opts_)->begin() ? "" : ", ") << image_option_name(i->first)
-	 << "=" << i->second;
-    }
-
-    os << "]";
-
-    return os;
-  }
-
   std::ostream &operator<<(std::ostream &os, const ImageOptions &opts) {
     os << "[";
 
@@ -1148,7 +1132,9 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
     // might have been blacklisted by peer -- ensure we still own
     // the lock by pinging the OSD
     int r = ictx->exclusive_lock->assert_header_locked();
-    if (r < 0) {
+    if (r == -EBUSY || r == -ENOENT) {
+      return 0;
+    } else if (r < 0) {
       return r;
     }
 
@@ -1398,12 +1384,14 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
                        ictx->exclusive_lock->is_lock_owner();
       if (is_locked) {
         C_SaferCond ctx;
-        ictx->exclusive_lock->shut_down(&ctx);
+        auto exclusive_lock = ictx->exclusive_lock;
+        exclusive_lock->shut_down(&ctx);
         ictx->owner_lock.put_read();
         int r = ctx.wait();
         if (r < 0) {
           lderr(cct) << "error shutting down exclusive lock" << dendl;
         }
+        delete exclusive_lock;
       } else {
         ictx->owner_lock.put_read();
       }

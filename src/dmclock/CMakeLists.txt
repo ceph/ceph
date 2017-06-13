@@ -1,32 +1,25 @@
 cmake_minimum_required(VERSION 2.8.11)
 
-set(CMAKE_CXX_FLAGS "-std=c++11 -Wno-write-strings ${CMAKE_CXX_FLAGS}")
+list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_LIST_DIR}/cmake/modules")
 
-set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake/modules/")
-
-if(DO_NOT_DELAY_TAG_CALC)
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DDO_NOT_DELAY_TAG_CALC")
-endif()
-
-if(K_WAY_HEAP)
-  if(K_WAY_HEAP LESS 2)
-    message(FATAL_ERROR "K_WAY_HEAP value should be at least 2")
-  else()
-    set(CMAKE_CXX_SIM_FLAGS "-DK_WAY_HEAP=${K_WAY_HEAP}")
+if (NOT(TARGET gtest AND TARGET gtest_main))
+  if(NOT(GTEST_FOUND))
+    find_package(GTest REQUIRED)
   endif()
 endif()
 
-if (NOT(TARGET gtest AND TARGET gtest_main))
-  find_package(gtest REQUIRED)
-  include_directories(${GTEST_INCLUDE_DIRS})
+if (NOT(BOOST_FOUND))
+  find_package(Boost REQUIRED)
 endif()
 
-find_package(Boost REQUIRED)
-include_directories(${Boost_INCLUDE_DIRS})
-
+# add_subdirectory(support/src)
 add_subdirectory(src)
 add_subdirectory(sim)
-add_subdirectory(support)
 
 enable_testing()
 add_subdirectory(test)
+add_subdirectory(support/test)
+add_test(NAME dmclock-tests
+  COMMAND $<TARGET_FILE:dmclock-tests>)
+add_test(NAME dmclock-data-struct-tests
+  COMMAND $<TARGET_FILE:dmclock-data-struct-tests>)

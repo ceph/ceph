@@ -38,7 +38,6 @@ class SafeTimer;
 
 namespace librbd {
 
-  class AsyncOperation;
   template <typename> class ExclusiveLock;
   template <typename> class ImageState;
   template <typename> class ImageWatcher;
@@ -52,6 +51,7 @@ namespace librbd {
   namespace exclusive_lock { struct Policy; }
   namespace io {
   class AioCompletion;
+  class AsyncOperation;
   class ImageRequestWQ;
   class CopyupRequest;
   }
@@ -141,7 +141,7 @@ namespace librbd {
 
     std::map<uint64_t, io::CopyupRequest*> copyup_list;
 
-    xlist<AsyncOperation*> async_ops;
+    xlist<io::AsyncOperation*> async_ops;
     xlist<AsyncRequest<>*> async_requests;
     std::list<Context*> async_requests_waiters;
 
@@ -269,8 +269,9 @@ namespace librbd {
     bool test_features(uint64_t test_features,
                        const RWLock &in_snap_lock) const;
     int get_flags(librados::snap_t in_snap_id, uint64_t *flags) const;
-    bool test_flags(uint64_t test_flags) const;
-    bool test_flags(uint64_t test_flags, const RWLock &in_snap_lock) const;
+    int test_flags(uint64_t test_flags, bool *flags_set) const;
+    int test_flags(uint64_t test_flags, const RWLock &in_snap_lock,
+                   bool *flags_set) const;
     int update_flags(librados::snap_t in_snap_id, uint64_t flag, bool enabled);
 
     const ParentInfo* get_parent_info(librados::snap_t in_snap_id) const;

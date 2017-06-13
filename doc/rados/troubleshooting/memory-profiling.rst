@@ -139,4 +139,4 @@ For example::
 	ceph tell osd.0 heap stop_profiler
 
 .. _Logging and Debugging: ../log-and-debug
-.. _Google Heap Profiler: http://google-perftools.googlecode.com/svn/trunk/doc/heapprofile.html
+.. _Google Heap Profiler: http://goog-perftools.sourceforge.net/doc/heap_profiler.html

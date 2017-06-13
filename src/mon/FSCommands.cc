@@ -102,11 +102,14 @@ class FsNewHandler : public FileSystemCommandHandler
 
     string force;
     cmd_getval(g_ceph_context,cmdmap, "force", force);
-    int64_t metadata_num_objects = mon->pgmon()->pg_map.pg_pool_sum[metadata].stats.sum.num_objects;
-    if (force != "--force" && metadata_num_objects > 0) {
-      ss << "pool '" << metadata_name
-	 << "' already contains some objects. Use an empty pool instead.";
-      return -EINVAL;
+    const pool_stat_t *stat = mon->pgservice->get_pool_stat(metadata);
+    if (stat) {
+      int64_t metadata_num_objects = stat->stats.sum.num_objects;
+      if (force != "--force" && metadata_num_objects > 0) {
+	ss << "pool '" << metadata_name
+	   << "' already contains some objects. Use an empty pool instead.";
+	return -EINVAL;
+      }
     }
 
     string data_name;
@@ -295,13 +298,14 @@ public:
         });
       }
     } else if (var == "balancer") {
-      if (val.empty())
+      if (val.empty()) {
         ss << "unsetting the metadata load balancer";
-      else 
+      } else {
         ss << "setting the metadata load balancer to " << val;
-        fsmap.modify_filesystem(
-            fs->fscid,
-            [val](std::shared_ptr<Filesystem> fs)
+      }
+      fsmap.modify_filesystem(
+	fs->fscid,
+	[val](std::shared_ptr<Filesystem> fs)
         {
           fs->mds_map.set_balancer(val);
         });

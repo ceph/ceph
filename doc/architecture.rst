@@ -1581,7 +1581,7 @@ instance for high availability.
 .. _Monitoring OSDs and PGs: ../rados/operations/monitoring-osd-pg
 .. _Heartbeats: ../rados/configuration/mon-osd-interaction
 .. _Monitoring OSDs: ../rados/operations/monitoring-osd-pg/#monitoring-osds
-.. _CRUSH - Controlled, Scalable, Decentralized Placement of Replicated Data: http://ceph.com/papers/weil-crush-sc06.pdf
+.. _CRUSH - Controlled, Scalable, Decentralized Placement of Replicated Data: https://ceph.com/wp-content/uploads/2016/08/weil-crush-sc06.pdf
 .. _Data Scrubbing: ../rados/configuration/osd-config-ref#scrubbing
 .. _Report Peering Failure: ../rados/configuration/mon-osd-interaction#osds-report-peering-failure
 .. _Troubleshooting Peering Failure: ../rados/troubleshooting/troubleshooting-pg#placement-group-down-peering-failure

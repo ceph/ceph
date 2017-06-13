@@ -362,11 +362,16 @@ void RDMADispatcher::handle_tx_event(ibv_wc *cqe, int n)
       }
     }
 
-    // FIXME: why not tx?
-    if (global_infiniband->get_memory_manager()->is_tx_buffer(chunk->buffer))
+    //TX completion may come either from regular send message or from 'fin' message.
+    //In the case of 'fin' wr_id points to the QueuePair.
+    if (global_infiniband->get_memory_manager()->is_tx_buffer(chunk->buffer)) {
       tx_chunks.push_back(chunk);
-    else
+    } else if (reinterpret_cast<QueuePair*>(response->wr_id)->get_local_qp_number() == response->qp_num ) {
+      ldout(cct, 1) << __func__ << " sending of the disconnect msg completed" << dendl;
+    } else {
       ldout(cct, 1) << __func__ << " not tx buffer, chunk " << chunk << dendl;
+      ceph_abort();
+    }
   }
 
   perf_logger->inc(l_msgr_rdma_tx_total_wc, n);

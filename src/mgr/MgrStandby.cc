@@ -14,6 +14,8 @@
 #include <Python.h>
 
 #include "common/errno.h"
+#include "common/signal.h"
+#include "include/compat.h"
 
 #include "include/stringify.h"
 #include "global/global_context.h"
@@ -33,7 +35,7 @@
 #define dout_prefix *_dout << "mgr " << __func__ << " "
 
 
-MgrStandby::MgrStandby() :
+MgrStandby::MgrStandby(int argc, const char **argv) :
   Dispatcher(g_ceph_context),
   monc{g_ceph_context},
   client_messenger(Messenger::create_client_messenger(g_ceph_context, "mgr")),
@@ -44,7 +46,9 @@ MgrStandby::MgrStandby() :
   audit_clog(log_client.create_channel(CLOG_CHANNEL_AUDIT)),
   lock("MgrStandby::lock"),
   timer(g_ceph_context, lock),
-  active_mgr(nullptr)
+  active_mgr(nullptr),
+  orig_argc(argc),
+  orig_argv(argv)
 {
 }
 
@@ -134,7 +138,7 @@ int MgrStandby::init()
   client.init();
   timer.init();
 
-  send_beacon();
+  tick();
 
   dout(4) << "Complete." << dendl;
   return 0;
@@ -155,9 +159,20 @@ void MgrStandby::send_beacon()
                                  available);
                                  
   monc.send_mon_message(m);
-  timer.add_event_after(g_conf->mgr_beacon_period, new FunctionContext(
+}
+
+void MgrStandby::tick()
+{
+  dout(0) << __func__ << dendl;
+  send_beacon();
+
+  if (active_mgr) {
+    active_mgr->tick();
+  }
+
+  timer.add_event_after(g_conf->mgr_tick_period, new FunctionContext(
         [this](int r){
-          send_beacon();
+          tick();
         }
   )); 
 }
@@ -189,6 +204,45 @@ void MgrStandby::shutdown()
   objecter.shutdown();
   // client_messenger is used by all of them, so stop it in the end
   client_messenger->shutdown();
+}
+
+void MgrStandby::respawn()
+{
+  char *new_argv[orig_argc+1];
+  dout(1) << " e: '" << orig_argv[0] << "'" << dendl;
+  for (int i=0; i<orig_argc; i++) {
+    new_argv[i] = (char *)orig_argv[i];
+    dout(1) << " " << i << ": '" << orig_argv[i] << "'" << dendl;
+  }
+  new_argv[orig_argc] = NULL;
+
+  /* Determine the path to our executable, test if Linux /proc/self/exe exists.
+   * This allows us to exec the same executable even if it has since been
+   * unlinked.
+   */
+  char exe_path[PATH_MAX] = "";
+  if (readlink(PROCPREFIX "/proc/self/exe", exe_path, PATH_MAX-1) == -1) {
+    /* Print CWD for the user's interest */
+    char buf[PATH_MAX];
+    char *cwd = getcwd(buf, sizeof(buf));
+    assert(cwd);
+    dout(1) << " cwd " << cwd << dendl;
+
+    /* Fall back to a best-effort: just running in our CWD */
+    strncpy(exe_path, orig_argv[0], PATH_MAX-1);
+  } else {
+    dout(1) << "respawning with exe " << exe_path << dendl;
+    strcpy(exe_path, PROCPREFIX "/proc/self/exe");
+  }
+
+  dout(1) << " exe_path " << exe_path << dendl;
+
+  unblock_all_signals(NULL);
+  execv(exe_path, new_argv);
+
+  derr << "respawn execv " << orig_argv[0]
+       << " failed with " << cpp_strerror(errno) << dendl;
+  ceph_abort();
 }
 
 void MgrStandby::_update_log_config()
@@ -238,8 +292,7 @@ void MgrStandby::handle_mgr_map(MMgrMap* mmap)
   } else {
     if (active_mgr != nullptr) {
       derr << "I was active but no longer am" << dendl;
-      active_mgr->shutdown();
-      active_mgr.reset();
+      respawn();
     }
   }
 

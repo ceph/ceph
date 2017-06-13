@@ -361,6 +361,7 @@ void generate_transaction(
       bufferlist bl(oiter->second.updated_snaps->second.size() * 8 + 8);
       ::encode(oiter->second.updated_snaps->second, bl);
       le.snaps.swap(bl);
+      le.snaps.reassign_to_mempool(mempool::mempool_osd_pglog);
     }
   }
 

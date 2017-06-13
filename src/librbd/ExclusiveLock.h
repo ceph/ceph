@@ -5,7 +5,7 @@
 #define CEPH_LIBRBD_EXCLUSIVE_LOCK_H
 
 #include "librbd/ManagedLock.h"
-#include "librbd/ImageCtx.h"
+#include "common/AsyncOpTracker.h"
 
 namespace librbd {
 
@@ -18,7 +18,8 @@ public:
 
   ExclusiveLock(ImageCtxT &image_ctx);
 
-  bool accept_requests(int *ret_val) const;
+  bool accept_requests(int *ret_val = nullptr) const;
+  bool accept_ops() const;
 
   void block_requests(int r);
   void unblock_requests();
@@ -27,6 +28,8 @@ public:
   void shut_down(Context *on_shutdown);
 
   void handle_peer_notification(int r);
+
+  Context *start_op();
 
 protected:
   void shutdown_handler(int r, Context *on_finish) override;
@@ -83,10 +86,14 @@ private:
   ImageCtxT& m_image_ctx;
   Context *m_pre_post_callback = nullptr;
 
+  AsyncOpTracker m_async_op_tracker;
+
   uint32_t m_request_blocked_count = 0;
   int m_request_blocked_ret_val = 0;
 
   int m_acquire_lock_peer_ret_val = 0;
+
+  bool accept_ops(const Mutex &lock) const;
 
   void handle_init_complete(uint64_t features);
   void handle_post_acquiring_lock(int r);

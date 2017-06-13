@@ -9,7 +9,7 @@
 
 #include <errno.h>
 
-#include "cls/replica_log/cls_replica_log_ops.h"
+#include "cls/replica_log/cls_replica_log_client.h"
 #include "include/rados/librados.hpp"
 
 using namespace librados;

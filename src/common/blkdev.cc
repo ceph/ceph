@@ -332,7 +332,7 @@ int get_device_by_uuid(uuid_d dev_uuid, const char* label, char* partition,
 {
   return -EOPNOTSUPP;
 }
-int get_device_by_fd(int fd, char* partition, char* device)
+int get_device_by_fd(int fd, char *partition, char *device, size_t max)
 {
   return -EOPNOTSUPP;
 }
@@ -363,7 +363,7 @@ int get_device_by_uuid(uuid_d dev_uuid, const char* label, char* partition,
   return -EOPNOTSUPP;
 }
 
-int get_device_by_fd(int fd, char* partition, char* device)
+int get_device_by_fd(int fd, char *partition, char *device, size_t max)
 {
   return -EOPNOTSUPP;
 }

@@ -34,7 +34,6 @@ set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wpointer-arith -Werror=format-security -fno
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -ftemplate-depth-1024 -Wno-invalid-offsetof")
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wnon-virtual-dtor")
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wvla")
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-unknown-pragmas")
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wno-unknown-pragmas")
 if(CMAKE_CXX_COMPILER_ID STREQUAL GNU)
@@ -464,6 +463,7 @@ set(libcommon_files
   msg/simple/Accepter.cc
   msg/DispatchQueue.cc
   msg/Message.cc
+  mon/PGMap.cc
   osd/ECMsgTypes.cc
   osd/HitSet.cc
   common/RefCountedObj.cc
@@ -483,6 +483,7 @@ set(libcommon_files
   ${async_rdma_common_srcs}
   ${dpdk_common_srcs}
   msg/msg_types.cc
+  common/reverse.c
   common/hobject.cc
   osd/OSDMap.cc
   osd/OSDMapMapping.cc
@@ -556,7 +557,8 @@ if(HAVE_INTEL)
 elseif(HAVE_POWER8)
   list(APPEND libcommon_files
     common/crc32c_ppc.c
-    common/crc32c_ppc_asm.S)
+    common/crc32c_ppc_asm.S
+    common/crc32c_ppc_fast_zero_asm.S)
 endif(HAVE_INTEL)
 
 if(LINUX)
@@ -886,21 +888,23 @@ add_subdirectory(compressor)
 
 add_subdirectory(tools)
 
-# dmClock
+# dmClock (after gmock)
 
-add_subdirectory(dmclock) # after gmock
-add_dependencies(tests dmclock-tests dmclock-data-struct-tests)
+add_subdirectory(dmclock/src)
 
-if(WITH_TESTS)
-  install(PROGRAMS
-    ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/dmclock-tests
-    ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/dmclock-data-struct-tests
-    DESTINATION bin)
-endif(WITH_TESTS)
+option(WITH_DMCLOCK_TESTS
+  "enable the build of dmclock-tests and dmclock-data-struct tests binaries"
+  OFF)
+if(WITH_TESTS AND WITH_DMCLOCK_TESTS)
+  # note: add_test is not being called, so dmclock tests aren't part
+  # of ceph tests
+  add_subdirectory(dmclock/test)
+  add_subdirectory(dmclock/support/test)
+endif(WITH_TESTS AND WITH_DMCLOCK_TESTS)
 
-if(HAVE_INTEL)
+if(HAVE_INTEL AND HAVE_BETTER_YASM_ELF64)
   add_subdirectory(crypto/isa-l)
-endif(HAVE_INTEL)
+endif(HAVE_INTEL AND HAVE_BETTER_YASM_ELF64)
 
 if(WITH_TESTS)
 

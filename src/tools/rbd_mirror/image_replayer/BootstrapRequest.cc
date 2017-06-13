@@ -21,7 +21,7 @@
 #include "librbd/Utils.h"
 #include "librbd/journal/Types.h"
 #include "tools/rbd_mirror/ProgressContext.h"
-#include "tools/rbd_mirror/ImageSyncThrottler.h"
+#include "tools/rbd_mirror/ImageSync.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rbd_mirror
@@ -41,7 +41,7 @@ template <typename I>
 BootstrapRequest<I>::BootstrapRequest(
         librados::IoCtx &local_io_ctx,
         librados::IoCtx &remote_io_ctx,
-        std::shared_ptr<ImageSyncThrottler<I>> image_sync_throttler,
+        InstanceWatcher<I> *instance_watcher,
         I **local_image_ctx,
         const std::string &local_image_id,
         const std::string &remote_image_id,
@@ -58,10 +58,10 @@ BootstrapRequest<I>::BootstrapRequest(
   : BaseRequest("rbd::mirror::image_replayer::BootstrapRequest",
 		reinterpret_cast<CephContext*>(local_io_ctx.cct()), on_finish),
     m_local_io_ctx(local_io_ctx), m_remote_io_ctx(remote_io_ctx),
-    m_image_sync_throttler(image_sync_throttler),
-    m_local_image_ctx(local_image_ctx), m_local_image_id(local_image_id),
-    m_remote_image_id(remote_image_id), m_global_image_id(global_image_id),
-    m_work_queue(work_queue), m_timer(timer), m_timer_lock(timer_lock),
+    m_instance_watcher(instance_watcher), m_local_image_ctx(local_image_ctx),
+    m_local_image_id(local_image_id), m_remote_image_id(remote_image_id),
+    m_global_image_id(global_image_id), m_work_queue(work_queue),
+    m_timer(timer), m_timer_lock(timer_lock),
     m_local_mirror_uuid(local_mirror_uuid),
     m_remote_mirror_uuid(remote_mirror_uuid), m_journaler(journaler),
     m_client_meta(client_meta), m_progress_ctx(progress_ctx),
@@ -88,7 +88,9 @@ void BootstrapRequest<I>::cancel() {
   Mutex::Locker locker(m_lock);
   m_canceled = true;
 
-  m_image_sync_throttler->cancel_sync(m_local_io_ctx, m_local_image_id);
+  if (m_image_sync != nullptr) {
+    m_image_sync->cancel();
+  }
 }
 
 template <typename I>
@@ -643,19 +645,22 @@ void BootstrapRequest<I>::image_sync() {
 
   {
     Mutex::Locker locker(m_lock);
-    if (!m_canceled) {
-      m_image_sync_throttler->start_sync(*m_local_image_ctx,
-                                         m_remote_image_ctx, m_timer,
-                                         m_timer_lock,
-                                         m_local_mirror_uuid, m_journaler,
-                                         m_client_meta, m_work_queue, ctx,
-                                         m_progress_ctx);
+    if (m_canceled) {
+      m_ret_val = -ECANCELED;
+    } else {
+      assert(m_image_sync == nullptr);
+      m_image_sync = ImageSync<I>::create(
+          *m_local_image_ctx, m_remote_image_ctx, m_timer, m_timer_lock,
+          m_local_mirror_uuid, m_journaler, m_client_meta, m_work_queue,
+          m_instance_watcher, ctx, m_progress_ctx);
+
+      m_image_sync->get();
+      m_image_sync->send();
       return;
     }
   }
 
   dout(10) << ": request canceled" << dendl;
-  m_ret_val = -ECANCELED;
   close_remote_image();
 }
 
@@ -663,14 +668,21 @@ template <typename I>
 void BootstrapRequest<I>::handle_image_sync(int r) {
   dout(20) << ": r=" << r << dendl;
 
-  if (m_canceled) {
-    dout(10) << ": request canceled" << dendl;
-    m_ret_val = -ECANCELED;
-  }
+  {
+    Mutex::Locker locker(m_lock);
 
-  if (r < 0) {
-    derr << ": failed to sync remote image: " << cpp_strerror(r) << dendl;
-    m_ret_val = r;
+    m_image_sync->put();
+    m_image_sync = nullptr;
+
+    if (m_canceled) {
+      dout(10) << ": request canceled" << dendl;
+      m_ret_val = -ECANCELED;
+    }
+
+    if (r < 0) {
+      derr << ": failed to sync remote image: " << cpp_strerror(r) << dendl;
+      m_ret_val = r;
+    }
   }
 
   close_remote_image();

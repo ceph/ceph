@@ -56,8 +56,7 @@ def task(ctx, config):
         logger=log.getChild('ceph_manager'),
         )
 
-    manager.raw_cluster_cmd('tell', 'osd.0', 'flush_pg_stats')
-    manager.raw_cluster_cmd('tell', 'osd.1', 'flush_pg_stats')
+    manager.flush_pg_stats([0, 1])
     manager.wait_for_clean(timeout)
 
     manager.raw_cluster_cmd('tell', 'mon.0', 'injectargs', '--',
@@ -74,7 +73,7 @@ def task(ctx, config):
 
     manager.mark_out_osd(0)
     time.sleep(timeout)
-    manager.raw_cluster_cmd('tell', 'osd.1', 'flush_pg_stats')
+    manager.flush_pg_stats([1])
     manager.wait_for_recovery(timeout)
 
     check_stuck(
@@ -85,8 +84,7 @@ def task(ctx, config):
         )
 
     manager.mark_in_osd(0)
-    manager.raw_cluster_cmd('tell', 'osd.0', 'flush_pg_stats')
-    manager.raw_cluster_cmd('tell', 'osd.1', 'flush_pg_stats')
+    manager.flush_pg_stats([0, 1])
     manager.wait_for_clean(timeout)
 
     check_stuck(
@@ -145,8 +143,7 @@ def task(ctx, config):
         manager.mark_in_osd(id_)
     while True:
         try:
-            manager.raw_cluster_cmd('tell', 'osd.0', 'flush_pg_stats')
-            manager.raw_cluster_cmd('tell', 'osd.1', 'flush_pg_stats')
+            manager.flush_pg_stats([0, 1])
             break
         except Exception:
             log.exception('osds must not be started yet, waiting...')

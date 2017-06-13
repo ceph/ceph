@@ -304,6 +304,10 @@ public:
     return -EOPNOTSUPP;
   }
 
+  virtual int set_cache_size(uint64_t) {
+    return -EOPNOTSUPP;
+  }
+
   virtual ~KeyValueDB() {}
 
   /// compact the underlying store

@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "librbd/exclusive_lock/PreReleaseRequest.h"
+#include "common/AsyncOpTracker.h"
 #include "common/dout.h"
 #include "common/errno.h"
 #include "librbd/ExclusiveLock.h"
@@ -24,19 +25,20 @@ using util::create_async_context_callback;
 using util::create_context_callback;
 
 template <typename I>
-PreReleaseRequest<I>* PreReleaseRequest<I>::create(I &image_ctx,
-                                                   bool shutting_down,
-                                                   Context *on_finish) {
-  return new PreReleaseRequest(image_ctx, shutting_down, on_finish);
+PreReleaseRequest<I>* PreReleaseRequest<I>::create(
+    I &image_ctx, bool shutting_down, AsyncOpTracker &async_op_tracker,
+    Context *on_finish) {
+  return new PreReleaseRequest(image_ctx, shutting_down, async_op_tracker,
+                               on_finish);
 }
 
 template <typename I>
 PreReleaseRequest<I>::PreReleaseRequest(I &image_ctx, bool shutting_down,
+                                        AsyncOpTracker &async_op_tracker,
                                         Context *on_finish)
-  : m_image_ctx(image_ctx),
-    m_on_finish(create_async_context_callback(image_ctx, on_finish)),
-    m_shutting_down(shutting_down), m_error_result(0), m_object_map(nullptr),
-    m_journal(nullptr) {
+  : m_image_ctx(image_ctx), m_shutting_down(shutting_down),
+    m_async_op_tracker(async_op_tracker),
+    m_on_finish(create_async_context_callback(image_ctx, on_finish)) {
 }
 
 template <typename I>
@@ -130,6 +132,24 @@ void PreReleaseRequest<I>::handle_block_writes(int r) {
     finish();
     return;
   }
+
+  send_wait_for_ops();
+}
+
+template <typename I>
+void PreReleaseRequest<I>::send_wait_for_ops() {
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 10) << dendl;
+
+  Context *ctx = create_context_callback<
+    PreReleaseRequest<I>, &PreReleaseRequest<I>::handle_wait_for_ops>(this);
+  m_async_op_tracker.wait_for_ops(ctx);
+}
+
+template <typename I>
+void PreReleaseRequest<I>::handle_wait_for_ops(int r) {
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 10) << dendl;
 
   send_invalidate_cache(false);
 }

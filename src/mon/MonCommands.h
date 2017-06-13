@@ -133,6 +133,9 @@ COMMAND("pg set_nearfull_ratio name=ratio,type=CephFloat,range=0.0|1.0", \
 
 COMMAND("pg map name=pgid,type=CephPgid", "show mapping of pg to osds", \
 	"pg", "r", "cli,rest")
+COMMAND("osd last-stat-seq name=id,type=CephOsdName", \
+	"get the last pg stats sequence number reported for this osd", \
+	"osd", "r", "cli,rest")
 
 /*
  * auth commands AuthMonitor.cc
@@ -194,6 +197,9 @@ COMMAND_WITH_FLAG("scrub", "scrub the monitor stores", \
 COMMAND("fsid", "show cluster FSID/UUID", "mon", "r", "cli,rest")
 COMMAND("log name=logtext,type=CephString,n=N", \
 	"log supplied text to the monitor log", "mon", "rw", "cli,rest")
+COMMAND("log last name=num,type=CephInt,range=1,req=false", \
+	"print last few lines of the cluster log", \
+	"mon", "rw", "cli,rest")
 COMMAND_WITH_FLAG("injectargs " \
 	     "name=injected_args,type=CephString,n=N",			\
 	     "inject config arguments into monitor", "mon", "rw", "cli,rest",
@@ -206,6 +212,8 @@ COMMAND("df name=detail,type=CephChoices,strings=detail,req=false", \
 COMMAND("report name=tags,type=CephString,n=N,req=false", \
 	"report full status of cluster, optional title tag strings", \
 	"mon", "r", "cli,rest")
+COMMAND("features", "report of connected features", \
+        "mon", "r", "cli,rest")
 COMMAND("quorum_status", "report status of monitor quorum", \
 	"mon", "r", "cli,rest")
 
@@ -253,6 +261,12 @@ COMMAND_WITH_FLAG("mon sync force " \
 COMMAND("mon metadata name=id,type=CephString,req=false",
 	"fetch metadata for mon <id>",
 	"mon", "r", "cli,rest")
+COMMAND("mon count-metadata name=property,type=CephString",
+	"count mons by metadata field property",
+	"mon", "r", "cli,rest")
+COMMAND("mon versions",
+	"check running versions of monitors",
+	"mon", "r", "cli,rest")
 
 
 /*
@@ -272,6 +286,12 @@ COMMAND_WITH_FLAG("mds getmap " \
 	"get MDS map, optionally from epoch", "mds", "r", "cli,rest", FLAG(DEPRECATED))
 COMMAND("mds metadata name=who,type=CephString,req=false",
 	"fetch metadata for mds <who>",
+	"mds", "r", "cli,rest")
+COMMAND("mds count-metadata name=property,type=CephString",
+	"count MDSs by metadata field property",
+	"mds", "r", "cli,rest")
+COMMAND("mds versions",
+	"check running versions of MDSs",
 	"mds", "r", "cli,rest")
 COMMAND_WITH_FLAG("mds tell " \
 	"name=who,type=CephString " \
@@ -442,20 +462,17 @@ COMMAND("osd metadata " \
 	"name=id,type=CephOsdName,req=false", \
 	"fetch metadata for osd {id} (default all)", \
 	"osd", "r", "cli,rest")
+COMMAND("osd count-metadata name=property,type=CephString",
+	"count OSDs by metadata field property",
+	"osd", "r", "cli,rest")
+COMMAND("osd versions", \
+	"check running versions of OSDs",
+	"osd", "r", "cli,rest")
 COMMAND("osd map " \
 	"name=pool,type=CephPoolname " \
 	"name=object,type=CephObjectname " \
 	"name=nspace,type=CephString,req=false", \
 	"find pg for <object> in <pool> with [namespace]", "osd", "r", "cli,rest")
-COMMAND("osd scrub " \
-	"name=who,type=CephString", \
-	"initiate scrub on osd <who>", "osd", "rw", "cli,rest")
-COMMAND("osd deep-scrub " \
-	"name=who,type=CephString", \
-	"initiate deep scrub on osd <who>", "osd", "rw", "cli,rest")
-COMMAND("osd repair " \
-	"name=who,type=CephString", \
-	"initiate repair on osd <who>", "osd", "rw", "cli,rest")
 COMMAND("osd lspools " \
 	"name=auid,type=CephInt,req=false", \
 	"list pools", "osd", "r", "cli,rest")
@@ -611,7 +628,8 @@ COMMAND("osd set-nearfull-ratio " \
 	"set usage ratio at which OSDs are marked near-full",
 	"osd", "rw", "cli,rest")
 COMMAND("osd set-require-min-compat-client " \
-	"name=version,type=CephString",
+	"name=version,type=CephString " \
+	"name=sure,type=CephChoices,strings=--yes-i-really-mean-it,req=false", \
 	"set the minimum client version we will maintain compatibility with",
 	"osd", "rw", "cli,rest")
 COMMAND("osd pause", "pause osd", "osd", "rw", "cli,rest")
@@ -698,6 +716,19 @@ COMMAND("osd primary-affinity " \
 	"type=CephFloat,name=weight,range=0.0|1.0", \
 	"adjust osd primary-affinity from 0.0 <= <weight> <= 1.0", \
 	"osd", "rw", "cli,rest")
+COMMAND("osd destroy " \
+        "name=id,type=CephOsdName " \
+        "name=sure,type=CephChoices,strings=--yes-i-really-mean-it,req=false", \
+        "mark osd as being destroyed. Keeps the ID intact (allowing reuse), " \
+        "but removes cephx keys, config-key data and lockbox keys, "\
+        "rendering data permanently unreadable.", \
+        "osd", "rw", "cli,rest")
+COMMAND("osd purge " \
+        "name=id,type=CephOsdName " \
+        "name=sure,type=CephChoices,strings=--yes-i-really-mean-it,req=false", \
+        "purge all osd data from the monitors. Combines `osd destroy`, " \
+        "`osd rm`, and `osd crush rm`.", \
+        "osd", "rw", "cli,rest")
 COMMAND("osd lost " \
 	"name=id,type=CephOsdName " \
 	"name=sure,type=CephChoices,strings=--yes-i-really-mean-it,req=false", \
@@ -707,6 +738,13 @@ COMMAND("osd create " \
 	"name=uuid,type=CephUUID,req=false " \
 	"name=id,type=CephOsdName,req=false", \
 	"create new osd (with optional UUID and ID)", "osd", "rw", "cli,rest")
+COMMAND("osd new " \
+        "name=uuid,type=CephUUID,req=true " \
+        "name=id,type=CephOsdName,req=false", \
+        "Create a new OSD. If supplied, the `id` to be replaced needs to " \
+        "exist and have been previously destroyed. " \
+        "Reads secrets from JSON file via `-i <file>` (see man page).", \
+        "osd", "rw", "cli,rest")
 COMMAND("osd blacklist " \
 	"name=blacklistop,type=CephChoices,strings=add|rm " \
 	"name=addr,type=CephEntityAddr " \

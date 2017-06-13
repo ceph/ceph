@@ -135,7 +135,7 @@ in the body of the message.
 
 There are also `other Ceph-related mailing lists`_.
 
-.. _`other Ceph-related mailing lists`: https://ceph.com/resources/mailing-list-irc/
+.. _`other Ceph-related mailing lists`: https://ceph.com/irc/
 
 IRC
 ---
@@ -145,7 +145,7 @@ time using `Internet Relay Chat`_.
 
 .. _`Internet Relay Chat`: http://www.irchelp.org/
 
-See https://ceph.com/resources/mailing-list-irc/ for how to set up your IRC
+See https://ceph.com/irc/ for how to set up your IRC
 client and a list of channels.
 
 Submitting patches
@@ -750,7 +750,7 @@ The results of the nightlies are published at http://pulpito.ceph.com/ and
 http://pulpito.ovh.sepia.ceph.com:8081/. The developer nick shows in the
 test results URL and in the first column of the Pulpito dashboard.  The
 results are also reported on the `ceph-qa mailing list
-<http://ceph.com/resources/mailing-list-irc/>`_ for analysis.
+<https://ceph.com/irc/>`_ for analysis.
 
 Suites inventory
 ----------------
@@ -1132,11 +1132,14 @@ Reducing the number of tests
 ----------------------------
 
 The ``rados`` suite generates thousands of tests out of a few hundred
-files. For instance, all tests in the `rados/thrash suite
-<https://github.com/ceph/ceph/tree/master/qa/suites/rados/thrash>`_
-run for ``xfs``, ``btrfs`` and ``ext4`` because they are combined (via
-special file ``%``) with the `fs directory
-<https://github.com/ceph/ceph/tree/master/qa/suites/rados/thrash/fs>`_
+files. This happens because teuthology constructs test matrices from
+subdirectories wherever it encounters a file named ``%``. For instance,
+all tests in the `rados/basic suite
+<https://github.com/ceph/ceph/tree/master/qa/suites/rados/basic>`_
+run with different messenger types: ``simple``, ``async`` and
+``random``, because they are combined (via the special file ``%``) with
+the `msgr directory
+<https://github.com/ceph/ceph/tree/master/qa/suites/rados/basic/msgr>`_
 
 All integration tests are required to be run before a Ceph release is published. 
 When merely verifying whether a contribution can be merged without
@@ -1199,9 +1202,9 @@ Getting ceph-workbench
 Since testing in the cloud is done using the `ceph-workbench
 ceph-qa-suite`_ tool, you will need to install that first. It is designed
 to be installed via Docker, so if you don't have Docker running on your
-development machine, take care of that first. The Docker project has a good
-tutorial called `Get Started with Docker Engine for Linux
-<https://docs.docker.com/linux/>`_ if you unsure how to proceed.
+development machine, take care of that first. You can follow `the official
+tutorial<https://docs.docker.com/engine/installation/>`_ to install if
+you have not installed yet.
 
 Once Docker is up and running, install ``ceph-workbench`` by following the
 `Installation instructions in the ceph-workbench documentation
@@ -1434,28 +1437,14 @@ Refer to :doc:`install/build-ceph`.
 
 You can do step 2 separately while it is building.
 
-Step 2 - s3-tests
------------------
-
-The test suite is in a separate git repo, and is written in python. Perform the
-following steps for jewel::
-
-    git clone git://github.com/ceph/s3-tests
-    cd s3-tests
-    git checkout ceph-jewel
-    ./bootstrap
-
-For kraken, checkout the ``ceph-kraken`` branch instead of ``ceph-jewel``. For
-master, use ``ceph-master``.
-
-Step 3 - vstart
+Step 2 - vstart
 ---------------
 
 When the build completes, and still in the top-level directory of the git
-clone where you built Ceph, do the following::
+clone where you built Ceph, do the following, for cmake builds::
 
-    cd src/
-    ./vstart.sh -n -r --mds_num 0
+    cd build/
+    RGW=1 ../vstart.sh -n
 
 This will produce a lot of output as the vstart cluster is started up. At the
 end you should see a message like::
@@ -1464,51 +1453,13 @@ end you should see a message like::
 
 This means the cluster is running.
 
-Step 4 - prepare S3 environment
--------------------------------
 
-The s3-tests suite expects to run in a particular environment (S3 users, keys,
-configuration file).
-
-Before you try to prepare the environment, make sure you don't have any
-existing keyring or ``ceph.conf`` files in ``/etc/ceph``.
-
-For jewel, Abhishek Lekshmanan wrote a script that can be used for this
-purpose. Assuming you are testing jewel, run the following commands from the
-``src/`` directory of your ceph clone (where you just started the vstart
-cluster)::
-
-    pushd ~
-    wget https://gist.githubusercontent.com/theanalyst/2fee6bc2780f67c79cad7802040fcddc/raw/b497ddba053d9a6fb5d91b73924cbafcfc32f137/s3tests-bootstrap.sh
-    popd
-    sh ~/s3tests-bootstrap.sh
-
-If the script is successful, it will display a blob of JSON and create a file
-called ``s3.conf`` in the current directory.
-
-Step 5 - run s3-tests
+Step 3 - run s3-tests
 ---------------------
 
-To actually run the tests, take note of the full path to the ``s3.conf`` file
-created in the previous step and then move to the directory where you cloned
-``s3-tests`` in Step 2.
+To run the s3tests suite do the following::
 
-First, verify that the test suite is there and can be run::
-
-    S3TEST_CONF=/path/to/s3.conf ./virtualenv/bin/nosetests -a '!fails_on_rgw' -v --collect-only
-
-This should complete quickly - it is like a "dry run" of all the tests in the
-suite.
-
-Finally, run the test suite itself::
-
-    S3TEST_CONF=/path/to/s3.conf ./virtualenv/bin/nosetests -a '!fails_on_rgw' -v
-
-Note: the following test is expected to error - this is a problem in the test
-setup (WIP), not an actual test failure::
-
-    ERROR: s3tests.functional.test_s3.test_bucket_acl_grant_email
-
+   $ ../qa/workunits/rgw/run-s3tests.sh
 
 .. WIP
 .. ===

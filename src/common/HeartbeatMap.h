@@ -16,8 +16,11 @@
 #define CEPH_HEARTBEATMAP_H
 
 #include <list>
+#include <atomic>
+#include <string>
 
-#include "include/atomic.h"
+#include <pthread.h>
+
 #include "RWLock.h"
 
 class CephContext;
@@ -38,7 +41,7 @@ namespace ceph {
 struct heartbeat_handle_d {
   const std::string name;
   pthread_t thread_id;
-  atomic_t timeout, suicide_timeout;
+  std::atomic<unsigned> timeout = { 0 }, suicide_timeout = { 0 };
   time_t grace, suicide_grace;
   std::list<heartbeat_handle_d*>::iterator list_item;
 
@@ -78,8 +81,8 @@ class HeartbeatMap {
   RWLock m_rwlock;
   time_t m_inject_unhealthy_until;
   std::list<heartbeat_handle_d*> m_workers;
-  atomic_t m_unhealthy_workers;
-  atomic_t m_total_workers;
+  std::atomic<unsigned> m_unhealthy_workers = { 0 };
+  std::atomic<unsigned> m_total_workers = { 0 };
 
   bool _check(const heartbeat_handle_d *h, const char *who, time_t now);
 };

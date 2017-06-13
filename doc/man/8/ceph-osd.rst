@@ -10,7 +10,7 @@ Synopsis
 ========
 
 | **ceph-osd** -i *osdnum* [ --osd-data *datapath* ] [ --osd-journal
-  *journal* ] [ --mkfs ] [ --mkjournal ] [ --mkkey ]
+  *journal* ] [ --mkfs ] [ --mkjournal ] [--flush-journal] [--check-allows-journal] [--check-wants-journal] [--check-needs-journal] [ --mkkey ]
 
 
 Description
@@ -56,6 +56,18 @@ Options
 .. option:: --osd-journal journal
 
    Journal updates to *journal*.
+
+.. option:: --check-wants-journal
+
+   Check whether a journal is desired.
+
+.. option:: --check-allows-journal
+
+   Check whether a journal is allowed.
+
+.. option:: --check-needs-journal
+
+   Check whether a journal is required.
 
 .. option:: --mkfs
 

@@ -78,6 +78,7 @@ static void usage()
        << "  --osd-journal PATH\n"
        << "                    journal file or block device\n"
        << "  --mkfs            create a [new] data directory\n"
+       << "  --mkkey           generate a new secret key. This is normally used in combination with --mkfs\n"
        << "  --convert-filestore\n"
        << "                    run any pending upgrade operations\n"
        << "  --flush-journal   flush all data out of journal\n"

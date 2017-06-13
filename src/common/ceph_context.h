@@ -15,12 +15,13 @@
 #ifndef CEPH_CEPHCONTEXT_H
 #define CEPH_CEPHCONTEXT_H
 
+#include <atomic>
 #include <set>
+#include <boost/noncopyable.hpp>
 
-#include "include/atomic.h"
 #include "common/cmdparse.h"
 #include "crush/CrushLocation.h"
-#include <boost/noncopyable.hpp>
+#include "include/Spinlock.h"
 
 class AdminSocket;
 class CephContextServiceThread;
@@ -40,8 +41,6 @@ namespace ceph {
   }
 }
 
-using ceph::bufferlist;
-
 /* A CephContext represents the context held by a single library user.
  * There can be multiple CephContexts in the same process.
  *
@@ -56,10 +55,10 @@ public:
   // ref count!
 private:
   ~CephContext();
-  atomic_t nref;
+  std::atomic<unsigned> nref;
 public:
   CephContext *get() {
-    nref.inc();
+    ++nref;
     return this;
   }
   void put();
@@ -119,7 +118,7 @@ public:
    * process an admin socket command
    */
   void do_command(std::string command, cmdmap_t& cmdmap, std::string format,
-		  bufferlist *out);
+		  ceph::bufferlist *out);
 
   template<typename T>
   void lookup_or_create_singleton_object(T*& p, const std::string &name) {
