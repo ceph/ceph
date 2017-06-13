@@ -12,11 +12,11 @@ static constexpr uint32_t MAX_TAG_KEY_SIZE=128;
 static constexpr uint32_t MAX_TAG_VAL_SIZE=256;
 
 bool RGWObjTags::add_tag(const string&key, const string& val){
-  return tags.emplace(std::make_pair(key,val)).second;
+  return tag_map.emplace(std::make_pair(key,val)).second;
 }
 
 int RGWObjTags::check_and_add_tag(const string&key, const string& val){
-  if (tags.size() == MAX_OBJ_TAGS ||
+  if (tag_map.size() == MAX_OBJ_TAGS ||
       key.size() > MAX_TAG_KEY_SIZE ||
       val.size() > MAX_TAG_VAL_SIZE ||
       key.size() == 0){
