@@ -15,14 +15,11 @@ class MgrStatMonitor : public PaxosService {
   // live version
   version_t version = 0;
   PGMapDigest digest;
-  list<pair<health_status_t,string>> health_summary;
-  list<pair<health_status_t,string>> health_detail;
   ServiceMap service_map;
 
   // pending commit
   PGMapDigest pending_digest;
-  list<pair<health_status_t,string>> pending_health_summary;
-  list<pair<health_status_t,string>> pending_health_detail;
+  health_check_map_t pending_health_checks;
   bufferlist pending_service_map_bl;
 
   std::unique_ptr<MgrPGStatService> pgservice;
