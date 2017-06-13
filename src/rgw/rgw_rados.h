@@ -2842,6 +2842,8 @@ public:
       
       explicit Delete(RGWRados::Object *_target) : target(_target) {}
 
+      int delete_obj_with_gc();
+      int delete_obj_bypass_gc();
       int delete_obj();
     };
 

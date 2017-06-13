@@ -214,6 +214,20 @@ instances or all radosgw-admin commands can be put into the ``[global]`` or the
 :Default: ``3600``
 
 
+``rgw remove object always bypass gc``
+
+:Description: Delete objects bypass gc (like radosgw-admin --bypass-gc option).
+:Type: Boolean
+:Default: ``false``
+
+
+``rgw remove object max concurrent ios``
+
+:Description: Maximum number of concurrent io operations per single rgw object remove request.
+:Type: Integer
+:Default: ``32``
+
+
 ``rgw s3 success create obj status``
 
 :Description: The alternate success status response for ``create-obj``.
