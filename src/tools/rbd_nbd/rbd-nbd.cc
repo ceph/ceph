@@ -776,19 +776,22 @@ close_ret:
 
 static int do_unmap()
 {
+  int r = 0;
+
   int nbd = open_device(devpath.c_str());
   if (nbd < 0) {
     cerr << "rbd-nbd: failed to open device: " << devpath << std::endl;
     return nbd;
   }
 
-  if (ioctl(nbd, NBD_DISCONNECT) < 0) {
-    cerr << "rbd-nbd: the device is not used" << std::endl;
+  r = ioctl(nbd, NBD_DISCONNECT);
+  if (r < 0) {
+      cerr << "rbd-nbd: the device is not used" << std::endl; 
   }
 
   close(nbd);
 
-  return 0;
+  return r;
 }
 
 static int parse_imgpath(const std::string &imgpath)
