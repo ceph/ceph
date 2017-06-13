@@ -610,7 +610,7 @@ class Module(MgrModule):
 
                     def get_rate(series):
                         if len(series) >= 2:
-                            return (series[0][1] - series[1][1]) / float(series[0][0] - series[1][0])
+                            return (float(series[0][1]) - float(series[1][1])) / (float(series[0][0]) - float(series[1][0]))
                         else:
                             return 0
 
