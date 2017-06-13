@@ -3619,9 +3619,8 @@ PrimaryLogPG::OpContextUPtr PrimaryLogPG::trim_object(
   bufferlist bl;
   ObjectContextRef obc = get_object_context(coid, false, NULL);
   if (!obc) {
-    dout(10) << __func__ << " could not find coid " << coid
-	     << "; cache tier?" << dendl;
-    return nullptr;
+    derr << __func__ << " could not find coid " << coid << dendl;
+    ceph_abort();
   }
   assert(obc->ssc);
 
