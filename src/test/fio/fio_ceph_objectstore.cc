@@ -124,7 +124,14 @@ Engine::Engine(const thread_data* td) : ref_count(0)
   if (!os)
     throw std::runtime_error("bad objectstore type " + g_conf->osd_objectstore);
 
-  os->set_cache_shards(g_conf->osd_op_num_shards);
+  unsigned num_shards;
+  if(g_conf->osd_op_num_shards)
+    num_shards = g_conf->osd_op_num_shards;
+  else if(os->is_rotational())
+    num_shards = g_conf->osd_op_num_shards_hdd;
+  else
+    num_shards = g_conf->osd_op_num_shards_ssd;
+  os->set_cache_shards(num_shards);
 
   int r = os->mkfs();
   if (r < 0)
