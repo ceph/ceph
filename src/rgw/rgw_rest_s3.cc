@@ -1104,15 +1104,15 @@ void RGWDeleteBucket_ObjStore_S3::send_response()
 
 int RGWPutObj_ObjStore_S3::get_params()
 {
+  if (!s->length)
+    return -ERR_LENGTH_REQUIRED;
+
   RGWObjectCtx& obj_ctx = *static_cast<RGWObjectCtx *>(s->obj_ctx);
   map<string, bufferlist> src_attrs;
   size_t pos;
   int ret;
 
   RGWAccessControlPolicy_S3 s3policy(s->cct);
-  if (!s->length)
-    return -ERR_LENGTH_REQUIRED;
-
   ret = create_s3_policy(s, store, s3policy, s->owner);
   if (ret < 0)
     return ret;
