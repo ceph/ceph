@@ -799,7 +799,7 @@ int main(int argc, const char **argv)
 		<< dendl;
     }
     
-    if (OSDMap::build_simple_crush_rulesets(g_ceph_context, crush, root, &cerr))
+    if (OSDMap::build_simple_crush_rules(g_ceph_context, crush, root, &cerr))
       return EXIT_FAILURE;
 
     modified = true;
