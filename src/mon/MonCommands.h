@@ -454,6 +454,11 @@ COMMAND("osd getcrushmap " \
 	"name=epoch,type=CephInt,range=0,req=false", \
 	"get CRUSH map", "osd", "r", "cli,rest")
 COMMAND("osd getmaxosd", "show largest OSD id", "osd", "r", "cli,rest")
+COMMAND("osd ls-tree " \
+        "name=epoch,type=CephInt,range=0,req=false "
+        "name=name,type=CephString,req=true", \
+        "show OSD ids under bucket <name> in the CRUSH map", \
+        "osd", "r", "cli,rest")
 COMMAND("osd find " \
 	"name=id,type=CephOsdName", \
 	"find osd <id> in the CRUSH map and show its location", \
@@ -664,16 +669,46 @@ COMMAND("osd cluster_snap", "take cluster snapshot (disabled)", \
 	"osd", "r", "")
 COMMAND("osd down " \
 	"type=CephString,name=ids,n=N", \
-	"set osd(s) <id> [<id>...] down", "osd", "rw", "cli,rest")
+	"set osd(s) <id> [<id>...] down, " \
+        "or use <any|all|*> to set all osds down", \
+        "osd", "rw", "cli,rest")
 COMMAND("osd out " \
 	"name=ids,type=CephString,n=N", \
-	"set osd(s) <id> [<id>...] out", "osd", "rw", "cli,rest")
+	"set osd(s) <id> [<id>...] out, " \
+        "or use <any|all|*> to set all osds out", \
+        "osd", "rw", "cli,rest")
 COMMAND("osd in " \
 	"name=ids,type=CephString,n=N", \
-	"set osd(s) <id> [<id>...] in", "osd", "rw", "cli,rest")
+	"set osd(s) <id> [<id>...] in, "
+        "can use <any|all|*> to automatically set all previously out osds in", \
+        "osd", "rw", "cli,rest")
 COMMAND("osd rm " \
 	"name=ids,type=CephString,n=N", \
-	"remove osd(s) <id> [<id>...] in", "osd", "rw", "cli,rest")
+	"remove osd(s) <id> [<id>...], "
+        "or use <any|all|*> to remove all osds", \
+        "osd", "rw", "cli,rest")
+COMMAND("osd add-noout " \
+        "name=ids,type=CephString,n=N", \
+        "mark osd(s) <id> [<id>...] as noout, " \
+        "or use <all|any|*> to mark all osds as noout", \
+        "osd", "rw", "cli,rest")
+COMMAND("osd add-nodown " \
+        "name=ids,type=CephString,n=N", \
+        "mark osd(s) <id> [<id>...] as nodown, " \
+        "or use <all|any|*> to mark all osds as nodown", \
+        "osd", "rw", "cli,rest")
+COMMAND("osd rm-noout " \
+        "name=ids,type=CephString,n=N", \
+        "allow osd(s) <id> [<id>...] to be marked out " \
+        "(if they are currently marked as noout), " \
+        "can use <all|any|*> to automatically filter out all noout osds", \
+        "osd", "rw", "cli,rest")
+COMMAND("osd rm-nodown " \
+        "name=ids,type=CephString,n=N", \
+        "allow osd(s) <id> [<id>...] to be marked down " \
+        "(if they are currently marked as nodown), " \
+        "can use <all|any|*> to automatically filter out all nodown osds", \
+        "osd", "rw", "cli,rest")
 COMMAND("osd reweight " \
 	"name=id,type=CephOsdName " \
 	"type=CephFloat,name=weight,range=0.0|1.0", \
