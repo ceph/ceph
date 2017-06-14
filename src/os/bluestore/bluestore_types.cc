@@ -781,6 +781,7 @@ void bluestore_blob_t::allocated(uint32_t b_off, uint32_t length, const AllocExt
     auto start_it = extents.begin();
     size_t pos = 0;
     while(true) {
+      assert(start_it != extents.end());
       if (cur_offs + start_it->length > b_off) {
 	break;
       }
@@ -793,6 +794,7 @@ void bluestore_blob_t::allocated(uint32_t b_off, uint32_t length, const AllocExt
     auto end_it = start_it;
 
     while (true) {
+      assert(end_it != extents.end());
       assert(!end_it->is_valid());
       if (cur_offs + end_it->length >= end_off) {
 	break;
