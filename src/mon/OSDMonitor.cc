@@ -674,7 +674,7 @@ protected:
         *kb = 0;
         *kb_used = 0;
         *kb_avail = 0;
-        return true;
+        return false;
       }
       return get_osd_utilization(id, kb, kb_used, kb_avail);
     }
