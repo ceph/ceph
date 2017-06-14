@@ -92,7 +92,7 @@ public:
     owner = _owner;
     return ret;
   }
-  int create_from_headers(RGWRados *store, RGWEnv *env, ACLOwner& _owner);
+  int create_from_headers(RGWRados *store, const RGWEnv *env, ACLOwner& _owner);
 };
 
 /**
