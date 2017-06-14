@@ -135,4 +135,98 @@ static inline constexpr size_t sarrlen(const char (&arr)[N]) {
   return N - 1;
 }
 
+namespace detail {
+
+// variadic sum() to add up string lengths for reserve()
+static inline constexpr size_t sum() { return 0; }
+template <typename... Args>
+constexpr size_t sum(size_t v, Args... args) { return v + sum(args...); }
+
+// traits for string_size()
+template <typename T>
+struct string_traits {
+  static constexpr size_t size(const T& s) { return s.size(); }
+};
+// specializations for char*/const char* use strlen()
+template <>
+struct string_traits<const char*> {
+  static constexpr size_t size(const char* s) { return std::strlen(s); }
+};
+template <>
+struct string_traits<char*> : string_traits<const char*> {};
+// specializations for char[]/const char[] also use strlen()
+template <std::size_t N>
+struct string_traits<const char[N]> : string_traits<const char*> {};
+template <std::size_t N>
+struct string_traits<char[N]> : string_traits<const char*> {};
+
+// helpers for string_cat_reserve()
+static inline void append_to(std::string& s) {}
+template <typename... Args>
+void append_to(std::string& s, const boost::string_view& v, const Args&... args)
+{
+  s.append(v.begin(), v.end());
+  append_to(s, args...);
+}
+
+// helpers for string_join_reserve()
+static inline void join_next(std::string& s, const boost::string_view& d) {}
+template <typename... Args>
+void join_next(std::string& s, const boost::string_view& d,
+               const boost::string_view& v, const Args&... args)
+{
+  s.append(d.begin(), d.end());
+  s.append(v.begin(), v.end());
+  join_next(s, d, args...);
+}
+
+static inline void join(std::string& s, const boost::string_view& d) {}
+template <typename... Args>
+void join(std::string& s, const boost::string_view& d,
+          const boost::string_view& v, const Args&... args)
+{
+  s.append(v.begin(), v.end());
+  join_next(s, d, args...);
+}
+
+} // namespace detail
+
+/// return the length of a c string, string literal, or string type
+template <typename T>
+constexpr size_t string_size(const T& s)
+{
+  return detail::string_traits<T>::size(s);
+}
+
+/// concatenates the given string arguments, returning as a std::string that
+/// gets preallocated with reserve()
+template <typename... Args>
+std::string string_cat_reserve(const Args&... args)
+{
+  size_t total_size = detail::sum(string_size(args)...);
+  std::string result;
+  result.reserve(total_size);
+  detail::append_to(result, args...);
+  return result;
+}
+
+/// joins the given string arguments with a delimiter, returning as a
+/// std::string that gets preallocated with reserve()
+template <typename... Args>
+std::string string_join_reserve(const boost::string_view& delim,
+                                const Args&... args)
+{
+  size_t delim_size = delim.size() * std::max<ssize_t>(0, sizeof...(args) - 1);
+  size_t total_size = detail::sum(string_size(args)...) + delim_size;
+  std::string result;
+  result.reserve(total_size);
+  detail::join(result, delim, args...);
+  return result;
+}
+template <typename... Args>
+std::string string_join_reserve(char delim, const Args&... args)
+{
+  return string_join_reserve(boost::string_view{&delim, 1}, args...);
+}
+
 #endif
