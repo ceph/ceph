@@ -308,11 +308,6 @@ void ExclusiveLock<I>::post_release_lock_handler(bool shutting_down, int r,
 
     if (r >= 0) {
       m_image_ctx.image_watcher->notify_released_lock();
-      if (m_image_ctx.io_work_queue->is_lock_request_needed()) {
-        // if we have blocked IO -- re-request the lock
-        RWLock::RLocker owner_locker(m_image_ctx.owner_lock);
-        ML<I>::acquire_lock(nullptr);
-      }
     }
   } else {
     {

@@ -17,8 +17,6 @@ struct MockImageRequestWQ {
   MOCK_METHOD0(unblock_writes, void());
 
   MOCK_METHOD2(set_require_lock, void(Direction, bool));
-
-  MOCK_CONST_METHOD0(is_lock_request_needed, bool());
 };
 
 } // namespace io
