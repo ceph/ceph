@@ -125,7 +125,7 @@ add_executable(ceph_test_rados_api_tier
 set_target_properties(ceph_test_rados_api_tier PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS})
 target_link_libraries(ceph_test_rados_api_tier
-  global rados_a ${UNITTEST_LIBS} ${Boost_SYSTEM_LIBRARY} radostest)
+  global rados_a ${UNITTEST_LIBS} Boost::system radostest)
 
 # ceph_test_rados_api_snapshots
 add_executable(ceph_test_rados_api_snapshots

@@ -36,7 +36,6 @@ set(rbd_srcs
   action/Trash.cc
   action/Watch.cc)
 add_executable(rbd ${rbd_srcs}
-  $<TARGET_OBJECTS:common_util_obj>
   $<TARGET_OBJECTS:common_texttable_obj>)
 set_target_properties(rbd PROPERTIES OUTPUT_NAME rbd)
 target_link_libraries(rbd librbd librados

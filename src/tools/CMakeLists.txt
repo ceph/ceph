@@ -23,11 +23,11 @@ target_link_libraries(ceph_radosacl librados global)
 install(TARGETS ceph_radosacl DESTINATION bin)
 
 add_executable(ceph-osdomap-tool ceph_osdomap_tool.cc)
-target_link_libraries(ceph-osdomap-tool os global ${Boost_PROGRAM_OPTIONS_LIBRARY})
+target_link_libraries(ceph-osdomap-tool os global Boost::program_options)
 install(TARGETS ceph-osdomap-tool DESTINATION bin)
 
 add_executable(ceph-monstore-tool ceph_monstore_tool.cc)
-target_link_libraries(ceph-monstore-tool os global ${Boost_PROGRAM_OPTIONS_LIBRARY})
+target_link_libraries(ceph-monstore-tool os global Boost::program_options)
 install(TARGETS ceph-monstore-tool DESTINATION bin)
 install(PROGRAMS
   ceph-monstore-update-crush.sh
@@ -38,7 +38,7 @@ add_executable(ceph-objectstore-tool
   ceph_objectstore_tool.cc
   rebuild_mondb.cc
   RadosDump.cc)
-target_link_libraries(ceph-objectstore-tool osd os global ${Boost_PROGRAM_OPTIONS_LIBRARY} ${CMAKE_DL_LIBS})
+target_link_libraries(ceph-objectstore-tool osd os global Boost::program_options ${CMAKE_DL_LIBS})
 if(WITH_FUSE)
   target_link_libraries(ceph-objectstore-tool fuse)
 endif(WITH_FUSE)
