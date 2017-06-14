@@ -40,7 +40,7 @@ jsonpatch==1.15           # via warlock
 jsonpointer==1.10         # via jsonpatch
 jsonschema==2.6.0         # via warlock
 keystoneauth1==2.19.0     # via openstacksdk, os-client-config, osc-lib, python-cinderclient, python-glanceclient, python-keystoneclient, python-neutronclient, python-novaclient, python-openstackclient
-libvirt-python==3.2.0
+libvirt-python==3.4.0
 manhole==1.3.0
 markupsafe==1.0           # via jinja2
 monotonic==1.3            # via oslo.utils
