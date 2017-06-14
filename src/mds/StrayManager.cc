@@ -290,11 +290,6 @@ void StrayManager::_purge_stray_logged(CDentry *dn, version_t pdv, LogSegment *l
   dn->state_clear(CDentry::STATE_PURGING);
   dn->put(CDentry::PIN_PURGING);
 
-  // drop inode
-  if (in->is_dirty())
-    in->mark_clean();
-  in->mdcache->remove_inode(in);
-
   // drop dentry?
   if (dn->is_new()) {
     dout(20) << " dn is new, removing" << dendl;
@@ -303,6 +298,11 @@ void StrayManager::_purge_stray_logged(CDentry *dn, version_t pdv, LogSegment *l
   } else {
     in->mdcache->touch_dentry_bottom(dn);  // drop dn as quickly as possible.
   }
+
+  // drop inode
+  if (in->is_dirty())
+    in->mark_clean();
+  in->mdcache->remove_inode(in);
 }
 
 void StrayManager::enqueue(CDentry *dn, bool trunc)
