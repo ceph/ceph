@@ -693,6 +693,8 @@ function test_mon_misc()
   ceph osd dump | grep '^epoch'
   ceph --concise osd dump | grep '^epoch'
 
+  ceph osd df | grep 'MIN/MAX VAR'
+
   # df
   ceph df > $TMPFILE
   grep GLOBAL $TMPFILE

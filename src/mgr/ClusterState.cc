@@ -23,7 +23,7 @@
 #define dout_prefix *_dout << "mgr " << __func__ << " "
 
 ClusterState::ClusterState(MonClient *monc_, Objecter *objecter_)
-  : monc(monc_), objecter(objecter_), lock("ClusterState")
+  : monc(monc_), objecter(objecter_), lock("ClusterState"), pgservice(pg_map)
 {}
 
 void ClusterState::set_objecter(Objecter *objecter_)

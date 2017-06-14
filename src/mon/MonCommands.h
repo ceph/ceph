@@ -768,9 +768,6 @@ COMMAND("osd pool get-quota " \
 COMMAND("osd utilization",
 	"get basic pg distribution stats",
 	"osd", "r", "cli,rest")
-COMMAND("osd df " \
-	"name=output_method,type=CephChoices,strings=plain|tree,req=false", \
-	"show OSD utilization", "osd", "r", "cli,rest")
 
 // tiering
 COMMAND("osd tier add " \
