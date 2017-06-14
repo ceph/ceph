@@ -1238,8 +1238,19 @@ public:
    * @param num_osd [in] number of OSDs if >= 0 or read from conf if < 0
    * @return **0** on success, negative errno on error.
    */
+private:
+  int build_simple_optioned(CephContext *cct, epoch_t e, uuid_d &fsid,
+			    int num_osd, int pg_bits, int pgp_bits,
+			    bool default_pool);
+public:
   int build_simple(CephContext *cct, epoch_t e, uuid_d &fsid,
-		   int num_osd, int pg_bits, int pgp_bits);
+		   int num_osd) {
+    build_simple_optioned(cct, e, fsid, num_osd, 0, 0, false);
+  }
+  int build_simple_with_pool(CephContext *cct, epoch_t e, uuid_d &fsid,
+			     int num_osd, int pg_bits, int pgp_bits) {
+    build_simple_optioned(cct, e, fsid, num_osd, pg_bits, pgp_bits, true);
+  }
   static int _build_crush_types(CrushWrapper& crush);
   static int build_simple_crush_map(CephContext *cct, CrushWrapper& crush,
 				    int num_osd, ostream *ss);
