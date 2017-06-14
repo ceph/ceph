@@ -1164,10 +1164,11 @@ ostream& print_array(ostream& m, Iterator begin, Iterator end) {
 }
 
 ostream& operator <<(ostream& m, const Condition& c) {
-  m << "{ " << condop_string(c.op) << ": { " << c.key;
+  m << "{ " << condop_string(c.op);
   if (c.ifexists) {
     m << "IfExists";
   }
+  m << ": { " << c.key;
   print_array(m, c.vals.cbegin(), c.vals.cend());
   return m << "}";
 }
