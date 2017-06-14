@@ -550,7 +550,8 @@ bool DaemonServer::handle_command(MCommand *m)
     if (!_allowed_command(session.get(), py_command.module, prefix, cmdctx->cmdmap,
                           param_str_map, &py_command)) {
       dout(1) << " access denied" << dendl;
-      ss << "access denied";
+      ss << "access denied; does your client key have mgr caps?"
+	" See http://docs.ceph.com/docs/master/mgr/administrator/#client-authentication";
       cmdctx->reply(-EACCES, ss);
       return true;
     }
@@ -562,7 +563,8 @@ bool DaemonServer::handle_command(MCommand *m)
       audit_clog->info() << "from='" << session->inst << "' "
                          << "entity='" << session->entity_name << "' "
                          << "cmd=" << m->cmd << ":  access denied";
-      ss << "access denied";
+      ss << "access denied' does your client key have mgr caps?"
+	" See http://docs.ceph.com/docs/master/mgr/administrator/#client-authentication";
       cmdctx->reply(-EACCES, ss);
       return true;
     }
