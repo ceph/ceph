@@ -3286,8 +3286,9 @@ int OSDMap::build_simple(CephContext *cct, epoch_t e, uuid_d &fsid,
 
   int poolbase = get_max_osd() ? get_max_osd() : 1;
 
-  int const default_replicated_ruleset = crush->get_osd_pool_default_crush_replicated_ruleset(cct);
-  assert(default_replicated_ruleset >= 0);
+  int const default_replicated_rule =
+    crush->get_osd_pool_default_crush_replicated_ruleset(cct);
+  assert(default_replicated_rule >= 0);
 
   for (auto &plname : pool_names) {
     int64_t pool = ++pool_max;
@@ -3303,7 +3304,7 @@ int OSDMap::build_simple(CephContext *cct, epoch_t e, uuid_d &fsid,
       pools[pool].set_flag(pg_pool_t::FLAG_NOSIZECHANGE);
     pools[pool].size = cct->_conf->osd_pool_default_size;
     pools[pool].min_size = cct->_conf->get_osd_pool_default_min_size();
-    pools[pool].crush_rule = default_replicated_ruleset;
+    pools[pool].crush_rule = default_replicated_rule;
     pools[pool].object_hash = CEPH_STR_HASH_RJENKINS;
     pools[pool].set_pg_num(poolbase << pg_bits);
     pools[pool].set_pgp_num(poolbase << pgp_bits);
@@ -3377,7 +3378,7 @@ int OSDMap::build_simple_crush_map(CephContext *cct, CrushWrapper& crush,
     crush.insert_item(cct, o, 1.0, name, loc);
   }
 
-  build_simple_crush_rulesets(cct, crush, "default", ss);
+  build_simple_crush_rules(cct, crush, "default", ss);
 
   crush.finalize();
 
@@ -3446,7 +3447,7 @@ int OSDMap::build_simple_crush_map_from_conf(CephContext *cct,
     crush.insert_item(cct, o, 1.0, section, loc);
   }
 
-  build_simple_crush_rulesets(cct, crush, "default", ss);
+  build_simple_crush_rules(cct, crush, "default", ss);
 
   crush.finalize();
 
@@ -3454,19 +3455,20 @@ int OSDMap::build_simple_crush_map_from_conf(CephContext *cct,
 }
 
 
-int OSDMap::build_simple_crush_rulesets(CephContext *cct,
-					CrushWrapper& crush,
-					const string& root,
-					ostream *ss)
+int OSDMap::build_simple_crush_rules(
+  CephContext *cct,
+  CrushWrapper& crush,
+  const string& root,
+  ostream *ss)
 {
-  int crush_ruleset = crush.get_osd_pool_default_crush_replicated_ruleset(cct);
+  int crush_rule = crush.get_osd_pool_default_crush_replicated_ruleset(cct);
   string failure_domain =
     crush.get_type_name(cct->_conf->osd_crush_chooseleaf_type);
 
   int r;
   r = crush.add_simple_ruleset_at("replicated_ruleset", root, failure_domain,
                                   "firstn", pg_pool_t::TYPE_REPLICATED,
-                                  crush_ruleset, ss);
+                                  crush_rule, ss);
   if (r < 0)
     return r;
   // do not add an erasure rule by default or else we will implicitly
