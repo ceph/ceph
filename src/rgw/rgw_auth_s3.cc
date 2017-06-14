@@ -919,8 +919,8 @@ AWSv4ComplMulti::ChunkMeta::create_next(CephContext* const cct,
 std::string
 AWSv4ComplMulti::calc_chunk_signature(const std::string& payload_hash) const
 {
-  constexpr size_t algorithm_len = std::strlen(AWS4_HMAC_SHA256_STR);
-  constexpr size_t empty_hash_len = std::strlen(AWS4_EMPTY_PAYLOAD_HASH);
+  const size_t algorithm_len = std::strlen(AWS4_HMAC_SHA256_STR);
+  const size_t empty_hash_len = std::strlen(AWS4_EMPTY_PAYLOAD_HASH);
 
   /* We want to avoid reallocations when concatenating the string_to_sign. */
   const size_t total_len = algorithm_len + date.length() + \
