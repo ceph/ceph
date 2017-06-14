@@ -290,7 +290,7 @@ int main(int argc, const char **argv)
     }
     uuid_d fsid;
     memset(&fsid, 0, sizeof(uuid_d));
-    osdmap.build_simple(g_ceph_context, 0, fsid, num_osd, pg_bits, pgp_bits);
+    osdmap.build_simple_with_pool(g_ceph_context, 0, fsid, num_osd, pg_bits, pgp_bits);
     modified = true;
   }
 
