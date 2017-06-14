@@ -3216,7 +3216,7 @@ bool OSDMap::crush_ruleset_in_use(int ruleset) const
 int OSDMap::build_simple(CephContext *cct, epoch_t e, uuid_d &fsid,
 			  int nosd, int pg_bits, int pgp_bits)
 {
-  ldout(cct, 10) << "build_simple on " << num_osd
+  ldout(cct, 10) << "build_simple on " << nosd
 		 << " osds" << dendl;
   epoch = e;
   set_fsid(fsid);
