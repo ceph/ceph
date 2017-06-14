@@ -430,6 +430,8 @@ bool MDSRank::_dispatch(Message *m, bool new_msg)
       m->put();
       return false;
     }
+
+    heartbeat_reset();
   }
 
   if (dispatch_depth > 1)

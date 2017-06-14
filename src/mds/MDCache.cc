@@ -5600,6 +5600,8 @@ void MDCache::export_remaining_imported_caps()
 	mds->send_message_client_counted(stale, q->first);
       }
     }
+
+    mds->heartbeat_reset();
   }
 
   for (map<inodeno_t, list<MDSInternalContextBase*> >::iterator p = cap_reconnect_waiters.begin();
