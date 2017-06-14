@@ -1581,7 +1581,7 @@ void pg_pool_t::encode(bufferlist& bl, uint64_t features) const
 
 void pg_pool_t::decode(bufferlist::iterator& bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(24, 5, 5, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(25, 5, 5, bl);
   ::decode(type, bl);
   ::decode(size, bl);
   ::decode(crush_ruleset, bl);
@@ -5057,14 +5057,16 @@ void object_info_t::encode(bufferlist& bl, uint64_t features) const
   ::encode(expected_object_size, bl);
   ::encode(expected_write_size, bl);
   ::encode(alloc_hint_flags, bl);
-  ::encode(manifest, bl);
+  if (has_manifest()) {
+    ::encode(manifest, bl);
+  }
   ENCODE_FINISH(bl);
 }
 
 void object_info_t::decode(bufferlist::iterator& bl)
 {
   object_locator_t myoloc;
-  DECODE_START_LEGACY_COMPAT_LEN(16, 8, 8, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(17, 8, 8, bl);
   map<entity_name_t, watch_info_t> old_watchers;
   ::decode(soid, bl);
   ::decode(myoloc, bl);
@@ -5147,7 +5149,9 @@ void object_info_t::decode(bufferlist::iterator& bl)
     alloc_hint_flags = 0;
   }
   if (struct_v >= 17) {
-    ::decode(manifest, bl);
+    if (has_manifest()) {
+      ::decode(manifest, bl);
+    }
   }
   DECODE_FINISH(bl);
 }

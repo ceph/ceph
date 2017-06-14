@@ -4508,6 +4508,8 @@ struct object_info_t {
       s += "|omap_digest";
     if (flags & FLAG_CACHE_PIN)
       s += "|cache_pin";
+    if (flags & FLAG_MANIFEST)
+      s += "|manifest";
     if (s.length())
       return s.substr(1);
     return s;
@@ -4569,7 +4571,7 @@ struct object_info_t {
     return test_flag(FLAG_CACHE_PIN);
   }
   bool has_manifest() const {
-    return !manifest.is_empty();
+    return test_flag(FLAG_MANIFEST);
   }
 
   void set_data_digest(__u32 d) {
