@@ -273,11 +273,6 @@ public:
       .Times(1);
   }
 
-  void expect_is_lock_request_needed(MockExclusiveLockImageCtx &mock_image_ctx, bool ret) {
-    EXPECT_CALL(*mock_image_ctx.io_work_queue, is_lock_request_needed())
-                  .WillRepeatedly(Return(ret));
-  }
-
   void expect_flush_notifies(MockExclusiveLockImageCtx &mock_image_ctx) {
     EXPECT_CALL(*mock_image_ctx.image_watcher, flush(_))
                   .WillOnce(CompleteContext(0, mock_image_ctx.image_ctx->op_work_queue));
@@ -383,7 +378,6 @@ TEST_F(TestMockExclusiveLock, StateTransitions) {
   expect_is_state_pre_releasing(exclusive_lock, false);
   expect_is_state_releasing(exclusive_lock, true);
   expect_notify_released_lock(mock_image_ctx);
-  expect_is_lock_request_needed(mock_image_ctx, false);
   ASSERT_EQ(0, when_post_release_lock_handler(exclusive_lock, false, 0));
 
   // (try) acquire lock
