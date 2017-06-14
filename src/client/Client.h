@@ -777,6 +777,8 @@ private:
   int _do_setxattr(Inode *in, const char *name, const void *value, size_t len, int flags, int uid, int gid);
   int _setxattr(Inode *in, const char *name, const void *value, size_t len, int flags, int uid=-1, int gid=-1);
   int _setxattr(InodeRef &in, const char *name, const void *value, size_t len, int flags);
+  int _setxattr_check_data_pool(string& name, string& value, const OSDMap *osdmap);
+  void _setxattr_maybe_wait_for_osdmap(const char *name, const void *value, size_t len);
   int _removexattr(Inode *in, const char *nm, int uid=-1, int gid=-1);
   int _removexattr(InodeRef &in, const char *nm);
   int _open(Inode *in, int flags, mode_t mode, Fh **fhp, int uid, int gid);
@@ -842,8 +844,6 @@ private:
   int may_hardlink(Inode *in, int uid=-1, int gid=-1);
   int _getattr_for_perm(Inode *in, int uid, int gid);
   int _getgrouplist(gid_t **sgids, int uid, int gid);
-
-  int check_data_pool_exist(string name, string value, const OSDMap *osdmap);
 
   vinodeno_t _get_vino(Inode *in);
   inodeno_t _get_inodeno(Inode *in);
