@@ -283,7 +283,7 @@ struct s3_acl_header {
   const char *http_header;
 };
 
-static const char *get_acl_header(RGWEnv *env,
+static const char *get_acl_header(const RGWEnv *env,
         const struct s3_acl_header *perm)
 {
   const char *header = perm->http_header;
@@ -332,7 +332,7 @@ static int parse_grantee_str(RGWRados *store, string& grantee_str,
   return 0;
 }
 
-static int parse_acl_header(RGWRados *store, RGWEnv *env,
+static int parse_acl_header(RGWRados *store, const RGWEnv *env,
          const struct s3_acl_header *perm, std::list<ACLGrant>& _grants)
 {
   std::list<string> grantees;
@@ -452,7 +452,7 @@ static const s3_acl_header acl_header_perms[] = {
   {0, NULL}
 };
 
-int RGWAccessControlPolicy_S3::create_from_headers(RGWRados *store, RGWEnv *env, ACLOwner& _owner)
+int RGWAccessControlPolicy_S3::create_from_headers(RGWRados *store, const RGWEnv *env, ACLOwner& _owner)
 {
   std::list<ACLGrant> grants;
 
