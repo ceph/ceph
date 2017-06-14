@@ -290,6 +290,12 @@ The procedure is as follows:
    **Note:** Once you add OSDs and start them, the placement group health errors
    should disappear. See the next section for details.
 
+Manager daemon configuration
+============================
+
+On each node where you run a ceph-mon daemon, you should also set up a ceph-mgr daemon.
+
+See `../mgr/administrator`_
 
 Adding OSDs
 ===========
