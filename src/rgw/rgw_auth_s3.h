@@ -169,11 +169,11 @@ class AWSv4ComplMulti : public rgw::auth::Completer,
 
     /* Let's suppose the data length fields can't exceed uint64_t. */
     static constexpr size_t META_MAX_SIZE = \
-      strlen("\r\nffffffffffffffff;chunk-signature=") + SIG_SIZE + strlen("\r\n");
+      sarrlen("\r\nffffffffffffffff;chunk-signature=") + SIG_SIZE + sarrlen("\r\n");
 
     /* The metadata size of for the last, empty chunk. */
     static constexpr size_t META_MIN_SIZE = \
-      strlen("0;chunk-signature=") + SIG_SIZE + strlen("\r\n");
+      sarrlen("0;chunk-signature=") + SIG_SIZE + sarrlen("\r\n");
 
     /* Detect whether a given stream_pos fits in boundaries of a chunk. */
     bool is_new_chunk_in_stream(size_t stream_pos) const;
