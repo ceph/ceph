@@ -1863,7 +1863,7 @@ TEST_F(PGLogTest, filter_log_1) {
 
     int osd_id = 1;
     epoch_t epoch = 40;
-    int64_t pool_id = 0;
+    int64_t pool_id = 1;
     int bits = 2;
     int max_osd = 4;
     int pg_num = max_osd << bits;
