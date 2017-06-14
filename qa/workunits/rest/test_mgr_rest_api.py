@@ -3,7 +3,6 @@
 import requests
 import time
 import sys
-import json
 
 # Do not show the stupid message about verify=False.  ignore exceptions bc
 # this doesn't work on some distros.
@@ -23,11 +22,7 @@ auth = ('admin', sys.argv[2])
 request = None
 
 # Create a pool and get its id
-request = requests.post(
-    addr + '/pool?wait=yes',
-    data=json.dumps({'name': 'supertestfriends', 'pg_num': 128}),
-    verify=False,
-    auth=auth)
+request = requests.post(addr + '/pool?wait=yes', json={'name': 'supertestfriends', 'pg_num': 128}, verify=False, auth=auth)
 print(request.text)
 request = requests.get(addr + '/pool', verify=False, auth=auth)
 assert(request.json()[-1]['pool_name'] == 'supertestfriends')
@@ -79,11 +74,7 @@ for method, endpoint, args in screenplay:
         continue
     url = addr + endpoint
     print("URL = " + url)
-    request = getattr(requests, method)(
-        url,
-        data=json.dumps(args),
-        verify=False,
-        auth=auth)
+    request = getattr(requests, method)(url, json=args, verify=False, auth=auth)
     print(request.text)
     if request.status_code != 200 or 'error' in request.json():
         print('ERROR: %s request for URL "%s" failed' % (method, url))
