@@ -203,7 +203,7 @@ static string get_abs_path(const string& request_uri) {
   return request_uri.substr(beg_pos, len - beg_pos);
 }
 
-req_info::req_info(CephContext *cct, class RGWEnv *e) : env(e) {
+req_info::req_info(CephContext *cct, const class RGWEnv *env) : env(env) {
   method = env->get("REQUEST_METHOD", "");
   script_uri = env->get("SCRIPT_URI", cct->_conf->rgw_script_uri.c_str());
   request_uri = env->get("REQUEST_URI", cct->_conf->rgw_request_uri.c_str());
@@ -383,12 +383,10 @@ void req_info::init_meta_info(bool *found_bad_meta)
 {
   x_meta_map.clear();
 
-  map<string, string, ltstr_nocase>& m = env->get_map();
-  map<string, string, ltstr_nocase>::iterator iter;
-  for (iter = m.begin(); iter != m.end(); ++iter) {
+  for (const auto& kv: env->get_map()) {
     const char *prefix;
-    const string& header_name = iter->first;
-    const string& val = iter->second;
+    const string& header_name = kv.first;
+    const string& val = kv.second;
     for (int prefix_num = 0; (prefix = meta_prefixes[prefix_num].str) != NULL; prefix_num++) {
       int len = meta_prefixes[prefix_num].len;
       const char *p = header_name.c_str();
@@ -411,12 +409,10 @@ void req_info::init_meta_info(bool *found_bad_meta)
         }
         name_low[j] = 0;
 
-        map<string, string>::iterator iter;
-        iter = x_meta_map.find(name_low);
-        if (iter != x_meta_map.end()) {
-          string old = iter->second;
-          int pos = old.find_last_not_of(" \t"); /* get rid of any whitespaces after the value */
-          old = old.substr(0, pos + 1);
+        auto it = x_meta_map.find(name_low);
+        if (it != x_meta_map.end()) {
+          string old = it->second;
+          boost::algorithm::trim_right(old);
           old.append(",");
           old.append(val);
           x_meta_map[name_low] = old;
@@ -426,8 +422,8 @@ void req_info::init_meta_info(bool *found_bad_meta)
       }
     }
   }
-  for (iter = x_meta_map.begin(); iter != x_meta_map.end(); ++iter) {
-    dout(10) << "x>> " << iter->first << ":" << rgw::crypt_sanitize::x_meta_map{iter->first, iter->second} << dendl;
+  for (const auto& kv: x_meta_map) {
+    dout(10) << "x>> " << kv.first << ":" << rgw::crypt_sanitize::x_meta_map{kv.first, kv.second} << dendl;
   }
 }
 
