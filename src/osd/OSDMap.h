@@ -1245,11 +1245,12 @@ private:
 public:
   int build_simple(CephContext *cct, epoch_t e, uuid_d &fsid,
 		   int num_osd) {
-    build_simple_optioned(cct, e, fsid, num_osd, 0, 0, false);
+    return build_simple_optioned(cct, e, fsid, num_osd, 0, 0, false);
   }
   int build_simple_with_pool(CephContext *cct, epoch_t e, uuid_d &fsid,
 			     int num_osd, int pg_bits, int pgp_bits) {
-    build_simple_optioned(cct, e, fsid, num_osd, pg_bits, pgp_bits, true);
+    return build_simple_optioned(cct, e, fsid, num_osd,
+				 pg_bits, pgp_bits, true);
   }
   static int _build_crush_types(CrushWrapper& crush);
   static int build_simple_crush_map(CephContext *cct, CrushWrapper& crush,
