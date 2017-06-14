@@ -39,7 +39,6 @@
 #include "auth/AuthMethodList.h"
 #include "auth/RotatingKeyRing.h"
 
-
 #define dout_subsys ceph_subsys_monc
 #undef dout_prefix
 #define dout_prefix *_dout << "monclient" << (_hunting() ? "(hunting)":"") << ": "

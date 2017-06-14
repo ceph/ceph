@@ -359,6 +359,35 @@ instances or all radosgw-admin commands can be put into the ``[global]`` or the
 :Default: ``false``
 
 
+``rgw bucket quota ttl``
+
+:Description: The amount of time in seconds cached quota information is
+              trusted.  After this timeout, the quota information will be
+              re-fetched from the cluster.
+:Type: Integer
+:Default: ``600``
+
+
+``rgw user quota bucket sync interval``
+
+:Description: The amount of time in seconds bucket quota information is
+              accumulated before syncing to the cluster.  During this time,
+              other RGW instances will not see the changes in bucket quota
+              stats from operations on this instance.
+:Type: Integer
+:Default: ``180``
+
+
+``rgw user quota sync interval``
+
+:Description: The amount of time in seconds user quota information is
+              accumulated before syncing to the cluster.  During this time,
+              other RGW instances will not see the changes in user quota stats
+              from operations on this instance.
+:Type: Integer
+:Default: ``180``
+
+
 ``rgw bucket default quota max objects``
 
 :Description: Default max number of objects per bucket. Set on new users,
@@ -392,6 +421,13 @@ instances or all radosgw-admin commands can be put into the ``[global]`` or the
               if no other quota is specified.  Has no effect on existing users.
 :Type: Integer
 :Default: ``-1``
+
+
+``rgw verify ssl``
+
+:Description: Verify SSL certificates while making requests.
+:Type: Boolean
+:Default: ``true``
 
 
 Regions

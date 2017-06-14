@@ -17,6 +17,7 @@
 
 #include "include/xlist.h"
 #include "msg/msg_types.h"
+#include "mon/mon_types.h"
 
 #include "auth/AuthServiceHandler.h"
 #include "osd/OSDMap.h"
@@ -39,6 +40,8 @@ struct Subscription {
 
 struct MonSession : public RefCountedObject {
   ConnectionRef con;
+  int con_type = 0;
+  uint64_t con_features = 0;  // zero if AnonConnection
   entity_inst_t inst;
   utime_t session_timeout;
   utime_t time_established;
@@ -60,13 +63,20 @@ struct MonSession : public RefCountedObject {
 
   MonSession(const entity_inst_t& i, Connection *c) :
     RefCountedObject(g_ceph_context),
-    con(c), inst(i), closed(false), item(this),
+    con(c),
+    con_type(c->get_peer_type()),
+    con_features(0),
+    inst(i), closed(false), item(this),
     auid(0),
     global_id(0),
     osd_epoch(0),
     auth_handler(NULL),
     proxy_con(NULL), proxy_tid(0) {
     time_established = ceph_clock_now();
+    if (c->get_messenger()) {
+      // only fill in features if this is a non-anonymous connection
+      con_features = c->get_features();
+    }
   }
   ~MonSession() override {
     //generic_dout(0) << "~MonSession " << this << dendl;
@@ -92,6 +102,7 @@ struct MonSessionMap {
   xlist<MonSession*> sessions;
   map<string, xlist<Subscription*>* > subs;
   multimap<int, MonSession*> by_osd;
+  FeatureMap feature_map; // type -> features -> count
 
   MonSessionMap() {}
   ~MonSessionMap() {
@@ -123,6 +134,9 @@ struct MonSessionMap {
 	  break;
 	}
     }
+    if (s->con_features) {
+      feature_map.rm(s->con_type, s->con_features);
+    }
     s->closed = true;
     s->put();
   }
@@ -133,6 +147,9 @@ struct MonSessionMap {
     sessions.push_back(&s->item);
     if (i.name.is_osd())
       by_osd.insert(pair<int,MonSession*>(i.name.num(), s));
+    if (s->con_features) {
+      feature_map.add(s->con_type, s->con_features);
+    }
     s->get();  // caller gets a ref
     return s;
   }

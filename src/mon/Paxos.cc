@@ -17,6 +17,7 @@
 #include "Monitor.h"
 #include "messages/MMonPaxos.h"
 
+#include "mon/mon_types.h"
 #include "common/config.h"
 #include "include/assert.h"
 #include "include/stringify.h"
@@ -1113,6 +1114,7 @@ void Paxos::handle_lease(MonOpRequestRef op)
   ack->last_committed = last_committed;
   ack->first_committed = first_committed;
   ack->lease_timestamp = ceph_clock_now();
+  ::encode(mon->session_map.feature_map, ack->feature_map);
   lease->get_connection()->send_message(ack);
 
   // (re)set timeout event.
@@ -1136,7 +1138,11 @@ void Paxos::handle_lease_ack(MonOpRequestRef op)
   }
   else if (acked_lease.count(from) == 0) {
     acked_lease.insert(from);
-    
+    if (ack->feature_map.length()) {
+      auto p = ack->feature_map.begin();
+      FeatureMap& t = mon->quorum_feature_map[from];
+      ::decode(t, p);
+    }
     if (acked_lease == mon->get_quorum()) {
       // yay!
       dout(10) << "handle_lease_ack from " << ack->get_source() 

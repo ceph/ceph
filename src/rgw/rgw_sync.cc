@@ -20,9 +20,10 @@
 #include "rgw_cr_rados.h"
 #include "rgw_cr_rest.h"
 #include "rgw_http_client.h"
-#include "rgw_boost_asio_yield.h"
 
 #include "cls/lock/cls_lock_client.h"
+
+#include <boost/asio/yield.hpp>
 
 #define dout_subsys ceph_subsys_rgw
 

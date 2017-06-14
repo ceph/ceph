@@ -16,6 +16,10 @@
 #ifndef CEPH_RGW_COMMON_H
 #define CEPH_RGW_COMMON_H
 
+#include <array>
+
+#include <boost/utility/string_view.hpp>
+
 #include "common/ceph_crypto.h"
 #include "common/perf_counters.h"
 #include "acconfig.h"
@@ -200,6 +204,7 @@ using ceph::crypto::MD5;
 #define ERR_MALFORMED_DOC        2204
 #define ERR_NO_ROLE_FOUND        2205
 #define ERR_DELETE_CONFLICT      2206
+#define ERR_NO_SUCH_BUCKET_POLICY  2207
 #define ERR_BUSY_RESHARDING      2300
 
 #ifndef UINT32_MAX
@@ -1381,7 +1386,7 @@ class RGWEnv;
 namespace rgw {
   namespace auth {
     namespace s3 {
-      class RGWGetPolicyV2Extractor;
+      class AWSBrowserUploadAbstractor;
     }
     class Completer;
   }
@@ -1692,26 +1697,6 @@ inline ostream& operator<<(ostream& out, const rgw_obj_index_key &o) {
   }
 }
 
-struct rgw_aws4_auth {
-  string date;
-  string expires;
-  string credential;
-  string signedheaders;
-  string signed_hdrs;
-  string access_key_id;
-  string credential_scope;
-  string canonical_uri;
-  string canonical_qs;
-  string canonical_hdrs;
-  string signature;
-  string new_signature;
-  string payload_hash;
-  string seed_signature;
-  string signing_key;
-  char signing_k[CEPH_CRYPTO_HMACSHA256_DIGESTSIZE];
-  bufferlist bl;
-};
-
 struct req_init_state {
   /* Keeps [[tenant]:]bucket until we parse the token. */
   string url_bucket;
@@ -1785,7 +1770,7 @@ struct req_state {
      * through a well-defined interface. For more details, see rgw_auth.h. */
     std::unique_ptr<rgw::auth::Identity> identity;
 
-    std::unique_ptr<rgw::auth::Completer> completer;
+    std::shared_ptr<rgw::auth::Completer> completer;
 
     /* A container for credentials of the S3's browser upload. It's necessary
      * because: 1) the ::authenticate() method of auth engines and strategies
@@ -1795,10 +1780,13 @@ struct req_state {
       /* Writer. */
       friend class RGWPostObj_ObjStore_S3;
       /* Reader. */
-      friend class rgw::auth::s3::RGWGetPolicyV2Extractor;
+      friend class rgw::auth::s3::AWSBrowserUploadAbstractor;
 
       std::string access_key;
       std::string signature;
+      std::string x_amz_algorithm;
+      std::string x_amz_credential;
+      std::string x_amz_date;
       ceph::bufferlist encoded_policy;
     } s3_postobj_creds;
   } auth;
@@ -1814,14 +1802,8 @@ struct req_state {
    * Being system user means we also have the admin status. */
   bool system_request;
 
-  /* aws4 auth support */
-  bool aws4_auth_needs_complete;
-  bool aws4_auth_streaming_mode;
-  unique_ptr<rgw_aws4_auth> aws4_auth;
-
   string canned_acl;
   bool has_acl_header;
-  const char *http_auth;
   bool local_source; /* source is local */
 
   int prot_flags;
@@ -2063,13 +2045,24 @@ inline ostream& operator<<(ostream& out, const rgw_obj &o) {
   return out << o.bucket.name << ":" << o.get_oid();
 }
 
-static inline void buf_to_hex(const unsigned char *buf, int len, char *str)
+static inline void buf_to_hex(const unsigned char* const buf,
+                              const size_t len,
+                              char* const str)
 {
-  int i;
   str[0] = '\0';
-  for (i = 0; i < len; i++) {
-    sprintf(&str[i*2], "%02x", (int)buf[i]);
+  for (size_t i = 0; i < len; i++) {
+    ::sprintf(&str[i*2], "%02x", static_cast<int>(buf[i]));
   }
+}
+
+template<size_t N> static inline std::array<char, N * 2 + 1>
+buf_to_hex(const std::array<unsigned char, N>& buf)
+{
+  static_assert(N > 0, "The input array must be at least one element long");
+
+  std::array<char, N * 2 + 1> hex_dest;
+  buf_to_hex(buf.data(), N, hex_dest.data());
+  return hex_dest;
 }
 
 static inline int hexdigit(char c)
@@ -2161,12 +2154,20 @@ extern string rgw_string_unquote(const string& s);
 extern void parse_csv_string(const string& ival, vector<string>& ovals);
 extern int parse_key_value(string& in_str, string& key, string& val);
 extern int parse_key_value(string& in_str, const char *delim, string& key, string& val);
+
+extern boost::optional<std::pair<boost::string_view, boost::string_view>>
+parse_key_value(const boost::string_view& in_str,
+                const boost::string_view& delim);
+extern boost::optional<std::pair<boost::string_view, boost::string_view>>
+parse_key_value(const boost::string_view& in_str);
+
+
 /** time parsing */
 extern int parse_time(const char *time_str, real_time *time);
 extern bool parse_rfc2616(const char *s, struct tm *t);
 extern bool parse_iso8601(const char *s, struct tm *t, uint32_t *pns = NULL, bool extended_format = true);
 extern string rgw_trim_whitespace(const string& src);
-extern boost::string_ref rgw_trim_whitespace(const boost::string_ref& src);
+extern boost::string_view rgw_trim_whitespace(const boost::string_view& src);
 extern string rgw_trim_quotes(const string& val);
 
 extern void rgw_to_iso8601(const real_time& t, char *dest, int buf_size);
@@ -2214,9 +2215,8 @@ extern bool verify_object_permission_no_policy(struct req_state *s,
 /** Convert an input URL into a sane object name
  * by converting %-escaped strings into characters, etc*/
 extern void rgw_uri_escape_char(char c, string& dst);
-extern bool url_decode(const std::string& src_str,
-                       std::string& dest_str,
-                       bool in_query = false);
+extern std::string url_decode(const boost::string_view& src_str,
+                              bool in_query = false);
 extern void url_encode(const std::string& src,
                        string& dst);
 extern std::string url_encode(const std::string& src);
@@ -2224,15 +2224,72 @@ extern std::string url_encode(const std::string& src);
 /* destination should be CEPH_CRYPTO_HMACSHA1_DIGESTSIZE bytes long */
 extern void calc_hmac_sha1(const char *key, int key_len,
                           const char *msg, int msg_len, char *dest);
-/* destination should be CEPH_CRYPTO_HMACSHA256_DIGESTSIZE bytes long */
-extern void calc_hmac_sha256(const char *key, int key_len, const char *msg, int msg_len, char *dest);
-extern void calc_hash_sha256(const char *msg, int len, string& dest);
-extern void calc_hash_sha256(const string& msg, string& dest);
 
-using ceph::crypto::SHA256;
-extern SHA256* calc_hash_sha256_open_stream();
-extern void    calc_hash_sha256_update_stream(SHA256 *hash, const char *msg, int len);
-extern string  calc_hash_sha256_close_stream(SHA256 **hash);
+using sha1_digest_t = \
+  std::array<char, CEPH_CRYPTO_HMACSHA1_DIGESTSIZE>;
+
+static inline sha1_digest_t
+calc_hmac_sha1(const boost::string_view& key, const boost::string_view& msg) {
+  sha1_digest_t dest;
+  calc_hmac_sha1(key.data(), key.size(), msg.data(), msg.size(), dest.data());
+  return dest;
+}
+
+/* destination should be CEPH_CRYPTO_HMACSHA256_DIGESTSIZE bytes long */
+extern void calc_hmac_sha256(const char *key, int key_len,
+                             const char *msg, int msg_len,
+                             char *dest);
+
+using sha256_digest_t = \
+  std::array<unsigned char, CEPH_CRYPTO_HMACSHA256_DIGESTSIZE>;
+
+static inline sha256_digest_t
+calc_hmac_sha256(const char *key, const int key_len,
+                 const char *msg, const int msg_len) {
+  std::array<unsigned char, CEPH_CRYPTO_HMACSHA256_DIGESTSIZE> dest;
+  calc_hmac_sha256(key, key_len, msg, msg_len,
+                   reinterpret_cast<char*>(dest.data()));
+  return dest;
+}
+
+static inline sha256_digest_t
+calc_hmac_sha256(const boost::string_view& key, const boost::string_view& msg) {
+  std::array<unsigned char, CEPH_CRYPTO_HMACSHA256_DIGESTSIZE> dest;
+  calc_hmac_sha256(key.data(), key.size(),
+                   msg.data(), msg.size(),
+                   reinterpret_cast<char*>(dest.data()));
+  return dest;
+}
+
+static inline sha256_digest_t
+calc_hmac_sha256(const std::vector<unsigned char>& key,
+                 const boost::string_view& msg) {
+  std::array<unsigned char, CEPH_CRYPTO_HMACSHA256_DIGESTSIZE> dest;
+  calc_hmac_sha256(reinterpret_cast<const char*>(key.data()), key.size(),
+                   msg.data(), msg.size(),
+                   reinterpret_cast<char*>(dest.data()));
+  return dest;
+}
+
+template<size_t KeyLenN>
+static inline sha256_digest_t
+calc_hmac_sha256(const std::array<unsigned char, KeyLenN>& key,
+                 const boost::string_view& msg) {
+  std::array<unsigned char, CEPH_CRYPTO_HMACSHA256_DIGESTSIZE> dest;
+  calc_hmac_sha256(reinterpret_cast<const char*>(key.data()), key.size(),
+                   msg.data(), msg.size(),
+                   reinterpret_cast<char*>(dest.data()));
+  return dest;
+}
+
+extern sha256_digest_t calc_hash_sha256(const boost::string_view& msg);
+
+extern ceph::crypto::SHA256* calc_hash_sha256_open_stream();
+extern void calc_hash_sha256_update_stream(ceph::crypto::SHA256* hash,
+                                           const char* msg,
+                                           int len);
+extern std::string calc_hash_sha256_close_stream(ceph::crypto::SHA256** phash);
+extern std::string calc_hash_sha256_restart_stream(ceph::crypto::SHA256** phash);
 
 extern int rgw_parse_op_type_list(const string& str, uint32_t *perm);
 

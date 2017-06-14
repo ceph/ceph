@@ -5881,8 +5881,8 @@ void OSD::send_failures()
   utime_t now = ceph_clock_now();
   while (!failure_queue.empty()) {
     int osd = failure_queue.begin()->first;
-    entity_inst_t i = osdmap->get_inst(osd);
     if (!failure_pending.count(osd)) {
+      entity_inst_t i = osdmap->get_inst(osd);
       int failed_for = (int)(double)(now - failure_queue.begin()->second);
       monc->send_mon_message(new MOSDFailure(monc->get_fsid(), i, failed_for,
 					     osdmap->get_epoch()));
@@ -7527,12 +7527,6 @@ void OSD::handle_osd_map(MOSDMap *m)
     rerequest_full_maps();
   }
 
-  if (last <= superblock.newest_map) {
-    dout(10) << " no new maps here, dropping" << dendl;
-    m->put();
-    return;
-  }
-
   if (superblock.oldest_map) {
     // make sure we at least keep pace with incoming maps
     trim_maps(m->oldest_map, last - first + 1, skip_maps);
@@ -9060,12 +9054,13 @@ void OSD::do_recovery(
    * queue_recovery_after_sleep.
    */
   if (cct->_conf->osd_recovery_sleep > 0 && service.recovery_needs_sleep) {
-    auto recovery_requeue_callback = new FunctionContext([this, pg, queued, reserved_pushes](int r) {
+    PGRef pgref(pg);
+    auto recovery_requeue_callback = new FunctionContext([this, pgref, queued, reserved_pushes](int r) {
       dout(20) << "do_recovery wake up at "
                << ceph_clock_now()
 	       << ", re-queuing recovery" << dendl;
       service.recovery_needs_sleep = false;
-      service.queue_recovery_after_sleep(pg, queued, reserved_pushes);
+      service.queue_recovery_after_sleep(pgref.get(), queued, reserved_pushes);
     });
     Mutex::Locker l(service.recovery_sleep_lock);
 

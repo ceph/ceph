@@ -3,6 +3,7 @@
 
 #include "ObjectCopyRequest.h"
 #include "librados/snap_set_diff.h"
+#include "librbd/ExclusiveLock.h"
 #include "librbd/ObjectMap.h"
 #include "librbd/Utils.h"
 #include "common/errno.h"
@@ -210,6 +211,17 @@ void ObjectCopyRequest<I>::send_write_object() {
     }
   }
 
+  Context *finish_op_ctx;
+  {
+    RWLock::RLocker owner_locker(m_local_image_ctx->owner_lock);
+    finish_op_ctx = start_local_op(m_local_image_ctx->owner_lock);
+  }
+  if (finish_op_ctx == nullptr) {
+    derr << ": lost exclusive lock" << dendl;
+    finish(-EROFS);
+    return;
+  }
+
   dout(20) << ": "
            << "local_snap_seq=" << local_snap_seq << ", "
            << "local_snaps=" << local_snap_ids << dendl;
@@ -270,8 +282,11 @@ void ObjectCopyRequest<I>::send_write_object() {
     }
   }
 
-  librados::AioCompletion *comp = create_rados_callback<
-    ObjectCopyRequest<I>, &ObjectCopyRequest<I>::handle_write_object>(this);
+  auto ctx = new FunctionContext([this, finish_op_ctx](int r) {
+      handle_write_object(r);
+      finish_op_ctx->complete(0);
+    });
+  librados::AioCompletion *comp = create_rados_callback(ctx);
   int r = m_local_io_ctx.aio_operate(m_local_oid, comp, &op, local_snap_seq,
                                      local_snap_ids);
   assert(r == 0);
@@ -303,12 +318,13 @@ void ObjectCopyRequest<I>::handle_write_object(int r) {
 
 template <typename I>
 void ObjectCopyRequest<I>::send_update_object_map() {
-
+  m_local_image_ctx->owner_lock.get_read();
   m_local_image_ctx->snap_lock.get_read();
   if (!m_local_image_ctx->test_features(RBD_FEATURE_OBJECT_MAP,
                                         m_local_image_ctx->snap_lock) ||
       m_snap_object_states.empty()) {
     m_local_image_ctx->snap_lock.put_read();
+    m_local_image_ctx->owner_lock.put_read();
     finish(0);
     return;
   } else if (m_local_image_ctx->object_map == nullptr) {
@@ -316,6 +332,7 @@ void ObjectCopyRequest<I>::send_update_object_map() {
     derr << ": object map is not initialized" << dendl;
 
     m_local_image_ctx->snap_lock.put_read();
+    m_local_image_ctx->owner_lock.put_read();
     finish(-EINVAL);
     return;
   }
@@ -330,13 +347,28 @@ void ObjectCopyRequest<I>::send_update_object_map() {
            << "object_state=" << static_cast<uint32_t>(snap_object_state.second)
            << dendl;
 
+  auto finish_op_ctx = start_local_op(m_local_image_ctx->owner_lock);
+  if (finish_op_ctx == nullptr) {
+    derr << ": lost exclusive lock" << dendl;
+    m_local_image_ctx->snap_lock.put_read();
+    m_local_image_ctx->owner_lock.put_read();
+    finish(-EROFS);
+    return;
+  }
+
+  auto ctx = new FunctionContext([this, finish_op_ctx](int r) {
+      handle_update_object_map(r);
+      finish_op_ctx->complete(0);
+    });
+
   RWLock::WLocker object_map_locker(m_local_image_ctx->object_map_lock);
   bool sent = m_local_image_ctx->object_map->template aio_update<
-    ObjectCopyRequest<I>, &ObjectCopyRequest<I>::handle_update_object_map>(
+    Context, &Context::complete>(
       snap_object_state.first, m_object_number, snap_object_state.second, {},
-      {}, this);
+      {}, ctx);
   assert(sent);
   m_local_image_ctx->snap_lock.put_read();
+  m_local_image_ctx->owner_lock.put_read();
 }
 
 template <typename I>
@@ -349,6 +381,15 @@ void ObjectCopyRequest<I>::handle_update_object_map(int r) {
     return;
   }
   finish(0);
+}
+
+template <typename I>
+Context *ObjectCopyRequest<I>::start_local_op(RWLock &owner_lock) {
+  assert(m_local_image_ctx->owner_lock.is_locked());
+  if (m_local_image_ctx->exclusive_lock == nullptr) {
+    return nullptr;
+  }
+  return m_local_image_ctx->exclusive_lock->start_op();
 }
 
 template <typename I>

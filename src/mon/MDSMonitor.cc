@@ -969,6 +969,20 @@ bool MDSMonitor::preprocess_command(MonOpRequestRef op)
       f->close_section();
     }
     f->flush(ds);
+  } else if (prefix == "mds versions") {
+    if (!f)
+      f.reset(Formatter::create("json-pretty"));
+    count_metadata("ceph_version", f.get());
+    f->flush(ds);
+    r = 0;
+  } else if (prefix == "mds count-metadata") {
+    if (!f)
+      f.reset(Formatter::create("json-pretty"));
+    string field;
+    cmd_getval(g_ceph_context, cmdmap, "property", field);
+    count_metadata(field, f.get());
+    f->flush(ds);
+    r = 0;
   } else if (prefix == "mds getmap") {
     epoch_t e;
     int64_t epocharg;
@@ -1772,6 +1786,26 @@ int MDSMonitor::load_metadata(map<mds_gid_t, Metadata>& m)
   bufferlist::iterator it = bl.begin();
   ::decode(m, it);
   return 0;
+}
+
+void MDSMonitor::count_metadata(const string& field, Formatter *f)
+{
+  map<string,int> by_val;
+  map<mds_gid_t,Metadata> meta;
+  load_metadata(meta);
+  for (auto& p : meta) {
+    auto q = p.second.find(field);
+    if (q == p.second.end()) {
+      by_val["unknown"]++;
+    } else {
+      by_val[q->second]++;
+    }
+  }
+  f->open_object_section(field.c_str());
+  for (auto& p : by_val) {
+    f->dump_int(p.first.c_str(), p.second);
+  }
+  f->close_section();
 }
 
 int MDSMonitor::dump_metadata(const std::string &who, Formatter *f, ostream& err)

@@ -44,7 +44,6 @@
 #include "rgw_coroutine.h"
 #include "rgw_compression.h"
 
-#include "rgw_boost_asio_yield.h"
 #undef fork // fails to compile RGWPeriod::fork() below
 
 #include "common/Clock.h"
@@ -72,8 +71,6 @@ using namespace librados;
 #include "rgw_reshard.h"
 
 #include "compressor/Compressor.h"
-
-#include <atomic>
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
@@ -3489,7 +3486,7 @@ class RGWIndexCompletionManager {
 
   int num_shards;
 
-  atomic_t cur_shard;
+  std::atomic<int> cur_shard;
 
 
 public:
@@ -3513,8 +3510,8 @@ public:
   }
 
   int next_shard() {
-    int result = cur_shard.read() % num_shards;
-    cur_shard.inc();
+    int result = cur_shard % num_shards;
+    cur_shard++;
     return result;
   }
 
@@ -9075,13 +9072,14 @@ int RGWRados::get_obj_state_impl(RGWObjectCtx *rctx, const RGWBucketInfo& bucket
   s->accounted_size = s->size;
 
   auto iter = s->attrset.find(RGW_ATTR_COMPRESSION);
-  if (iter != s->attrset.end()) {
+  const bool compressed = (iter != s->attrset.end());
+  if (compressed) {
     // use uncompressed size for accounted_size
     try {
       RGWCompressionInfo info;
       auto p = iter->second.begin();
       ::decode(info, p);
-      s->accounted_size = info.orig_size;
+      s->accounted_size = info.orig_size; 
     } catch (buffer::error&) {
       dout(0) << "ERROR: could not decode compression info for object: " << obj << dendl;
       return -EIO;
@@ -9106,6 +9104,8 @@ int RGWRados::get_obj_state_impl(RGWObjectCtx *rctx, const RGWBucketInfo& bucket
       s->manifest.set_head(bucket_info.placement_rule, obj, s->size); /* patch manifest to reflect the head we just read, some manifests might be
                                              broken due to old bugs */
       s->size = s->manifest.get_obj_size();
+      if (!compressed)
+        s->accounted_size = s->size;
     } catch (buffer::error& err) {
       ldout(cct, 0) << "ERROR: couldn't decode manifest" << dendl;
       return -EIO;

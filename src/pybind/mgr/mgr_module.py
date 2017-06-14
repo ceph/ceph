@@ -165,6 +165,14 @@ class MgrModule(object):
         # any ``COMMANDS``
         raise NotImplementedError()
 
+    def get_mgr_id(self):
+        """
+        Retrieve the mgr id.
+
+        :return: str
+        """
+        return ceph_state.get_mgr_id()
+
     def get_config(self, key):
         """
         Retrieve the value of a persistent configuration setting
@@ -173,6 +181,15 @@ class MgrModule(object):
         :return: str
         """
         return ceph_state.get_config(self._handle, key)
+
+    def get_config_prefix(self, key_prefix):
+        """
+        Retrieve a dict of config values with the given prefix
+
+        :param key_prefix: str
+        :return: str
+        """
+        return ceph_state.get_config_prefix(self._handle, key_prefix)
 
     def set_config(self, key, val):
         """

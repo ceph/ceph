@@ -20,13 +20,13 @@ extern "C" {
 #include "builder.h"
 }
 
+#include "include/assert.h"
 #include "include/err.h"
 #include "include/encoding.h"
 
 
 #include "common/Mutex.h"
 
-#include "include/assert.h"
 #define BUG_ON(x) assert(!(x))
 
 namespace ceph {

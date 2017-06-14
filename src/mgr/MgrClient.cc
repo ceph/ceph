@@ -236,10 +236,10 @@ void MgrClient::send_report()
 	session->declared.insert(path);
       }
 
-      ::encode(static_cast<uint64_t>(data.u64.read()), report->packed);
+      ::encode(static_cast<uint64_t>(data.u64), report->packed);
       if (data.type & PERFCOUNTER_LONGRUNAVG) {
-        ::encode(static_cast<uint64_t>(data.avgcount.read()), report->packed);
-        ::encode(static_cast<uint64_t>(data.avgcount2.read()), report->packed);
+        ::encode(static_cast<uint64_t>(data.avgcount), report->packed);
+        ::encode(static_cast<uint64_t>(data.avgcount2), report->packed);
       }
     }
     ENCODE_FINISH(report->packed);

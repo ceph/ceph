@@ -4429,9 +4429,7 @@ int main(int argc, const char **argv)
     break;
   case OPT_USER_RM:
     ret = user.remove(user_op, &err_msg);
-    if (ret == -ENOENT) {
-      cerr << err_msg << std::endl;
-    } else if (ret < 0) {
+    if (ret < 0) {
       cerr << "could not remove user: " << err_msg << std::endl;
       return -ret;
     }
@@ -4933,7 +4931,11 @@ int main(int argc, const char **argv)
   if (opt_cmd == OPT_BUCKET_STATS) {
     bucket_op.set_fetch_stats(true);
 
-    RGWBucketAdminOp::info(store, bucket_op, f);
+    int r = RGWBucketAdminOp::info(store, bucket_op, f);
+    if (r < 0) {
+      cerr << "failure: " << cpp_strerror(-r) << ": " << err << std::endl;
+      return -r;
+    }
   }
 
   if (opt_cmd == OPT_BUCKET_LINK) {
@@ -6637,7 +6639,7 @@ next:
     map<int, string> markers;
     ret = store->get_bi_log_status(bucket_info, shard_id, markers);
     if (ret < 0) {
-      cerr << "ERROR: trim_bi_log_entries(): " << cpp_strerror(-ret) << std::endl;
+      cerr << "ERROR: get_bi_log_status(): " << cpp_strerror(-ret) << std::endl;
       return -ret;
     }
     formatter->open_object_section("entries");

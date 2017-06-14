@@ -514,7 +514,7 @@ function run_osd() {
 
     mkdir -p $osd_data
     ceph-disk $ceph_disk_args \
-        prepare $osd_data || return 1
+        prepare --filestore $osd_data || return 1
 
     activate_osd $dir $id "$@"
 }
@@ -535,9 +535,7 @@ function run_osd_bluestore() {
     ceph-disk $ceph_disk_args \
         prepare --bluestore $osd_data || return 1
 
-    local ceph_osd_args
-    ceph_osd_args+=" --enable-experimental-unrecoverable-data-corrupting-features=bluestore"
-    activate_osd $dir $id $ceph_osd_args "$@"
+    activate_osd $dir $id "$@"
 }
 
 function test_run_osd() {
@@ -655,7 +653,6 @@ function activate_osd() {
     ceph_disk_args+=" --prepend-to-path="
 
     local ceph_args="$CEPH_ARGS"
-    ceph_args+=" --enable-experimental-unrecoverable-data-corrupting-features=bluestore"
     ceph_args+=" --osd-failsafe-full-ratio=.99"
     ceph_args+=" --osd-journal-size=100"
     ceph_args+=" --osd-scrub-load-threshold=2000"
@@ -967,7 +964,7 @@ function get_not_primary() {
 
     local primary=$(get_primary $poolname $objectname)
     ceph --format json osd map $poolname $objectname 2>/dev/null | \
-        jq ".acting | map(select (. != $primary)) | first"
+        jq ".acting | map(select (. != $primary)) | .[0]"
 }
 
 function test_get_not_primary() {
@@ -1020,7 +1017,6 @@ function objectstore_tool() {
 	journal_args=" --journal-path $osd_data/journal"
     fi
     ceph-objectstore-tool \
-	--enable-experimental-unrecoverable-data-corrupting-features=bluestore \
         --data-path $osd_data \
         $journal_args \
         "$@" || return 1
@@ -1642,18 +1638,24 @@ function test_wait_background() {
 
 function flush_pg_stats()
 {
+    local timeout=${1:-$TIMEOUT}
+
     ids=`ceph osd ls`
     seqs=''
     for osd in $ids; do
 	    seq=`ceph tell osd.$osd flush_pg_stats`
 	    seqs="$seqs $osd-$seq"
     done
+
     for s in $seqs; do
 	    osd=`echo $s | cut -d - -f 1`
 	    seq=`echo $s | cut -d - -f 2`
 	    echo "waiting osd.$osd seq $seq"
 	    while test $(ceph osd last-stat-seq $osd) -lt $seq; do
             sleep 1
+            if [ $((timeout--)) -eq 0 ]; then
+                return 1
+            fi
         done
     done
 }

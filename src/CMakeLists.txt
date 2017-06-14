@@ -483,6 +483,7 @@ set(libcommon_files
   ${async_rdma_common_srcs}
   ${dpdk_common_srcs}
   msg/msg_types.cc
+  common/reverse.c
   common/hobject.cc
   osd/OSDMap.cc
   osd/OSDMapMapping.cc
@@ -556,7 +557,8 @@ if(HAVE_INTEL)
 elseif(HAVE_POWER8)
   list(APPEND libcommon_files
     common/crc32c_ppc.c
-    common/crc32c_ppc_asm.S)
+    common/crc32c_ppc_asm.S
+    common/crc32c_ppc_fast_zero_asm.S)
 endif(HAVE_INTEL)
 
 if(LINUX)
@@ -900,9 +902,9 @@ if(WITH_TESTS AND WITH_DMCLOCK_TESTS)
   add_subdirectory(dmclock/support/test)
 endif(WITH_TESTS AND WITH_DMCLOCK_TESTS)
 
-if(HAVE_INTEL)
+if(HAVE_INTEL AND HAVE_BETTER_YASM_ELF64)
   add_subdirectory(crypto/isa-l)
-endif(HAVE_INTEL)
+endif(HAVE_INTEL AND HAVE_BETTER_YASM_ELF64)
 
 if(WITH_TESTS)
 

@@ -1406,6 +1406,28 @@ int OSDMonitor::load_metadata(int osd, map<string, string>& m, ostream *err)
   return 0;
 }
 
+void OSDMonitor::count_metadata(const string& field, Formatter *f)
+{
+  map<string,int> by_val;
+  for (int osd = 0; osd < osdmap.get_max_osd(); ++osd) {
+    if (osdmap.is_up(osd)) {
+      map<string,string> meta;
+      load_metadata(osd, meta, nullptr);
+      auto p = meta.find(field);
+      if (p == meta.end()) {
+	by_val["unknown"]++;
+      } else {
+	by_val[p->second]++;
+      }
+    }
+  }
+  f->open_object_section(field.c_str());
+  for (auto& p : by_val) {
+    f->dump_int(p.first.c_str(), p.second);
+  }
+  f->close_section();
+}
+
 int OSDMonitor::get_osd_objectstore_type(int osd, string *type)
 {
   map<string, string> metadata;
@@ -4238,6 +4260,20 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
       f->close_section();
     }
     f->flush(rdata);
+  } else if (prefix == "osd versions") {
+    if (!f)
+      f.reset(Formatter::create("json-pretty"));
+    count_metadata("ceph_version", f.get());
+    f->flush(rdata);
+    r = 0;
+  } else if (prefix == "osd count-metadata") {
+    if (!f)
+      f.reset(Formatter::create("json-pretty"));
+    string field;
+    cmd_getval(g_ceph_context, cmdmap, "property", field);
+    count_metadata(field, f.get());
+    f->flush(rdata);
+    r = 0;
   } else if (prefix == "osd map") {
     string poolstr, objstr, namespacestr;
     cmd_getval(g_ceph_context, cmdmap, "pool", poolstr);
@@ -8173,6 +8209,45 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 	 << ceph_release_name(vno);
       err = -EPERM;
       goto reply;
+    }
+    string sure;
+    cmd_getval(g_ceph_context, cmdmap, "sure", sure);
+    if (sure != "--yes-i-really-mean-it") {
+      FeatureMap m;
+      mon->get_combined_feature_map(&m);
+      uint64_t features = ceph_release_features(vno);
+      bool first = true;
+      bool ok = true;
+      for (int type : {
+	    CEPH_ENTITY_TYPE_CLIENT,
+	    CEPH_ENTITY_TYPE_MDS,
+	    CEPH_ENTITY_TYPE_MGR }) {
+	auto p = m.m.find(type);
+	if (p == m.m.end()) {
+	  continue;
+	}
+	for (auto& q : p->second) {
+	  uint64_t missing = ~q.first & features;
+	  if (missing) {
+	    if (first) {
+	      ss << "cannot set require_min_compat_client to " << v << ": ";
+	    } else {
+	      ss << "; ";
+	    }
+	    first = false;
+	    ss << q.second << " connected " << ceph_entity_type_name(type)
+	       << "(s) look like " << ceph_release_name(
+		 ceph_release_from_features(q.first))
+	       << " (missing 0x" << std::hex << missing << std::dec << ")";
+	    ok = false;
+	  }
+	}
+      }
+      if (!ok) {
+	ss << "; add --yes-i-really-mean-it to do it anyway";
+	err = -EPERM;
+	goto reply;
+      }
     }
     ss << "set require_min_compat_client to " << ceph_release_name(vno);
     pending_inc.new_require_min_compat_client = vno;

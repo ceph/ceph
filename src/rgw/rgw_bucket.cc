@@ -994,6 +994,7 @@ int RGWBucket::check_bad_index_multipart(RGWBucketAdminOpState& op_state,
 
   map<string, bool> common_prefixes;
 
+  string ns = "multipart";
   bool is_truncated;
   map<string, bool> meta_objs;
   map<rgw_obj_index_key, string> all_objs;
@@ -1010,6 +1011,7 @@ int RGWBucket::check_bad_index_multipart(RGWBucketAdminOpState& op_state,
   RGWRados::Bucket::List list_op(&target);
 
   list_op.params.list_versions = true;
+  list_op.params.ns = ns;
 
   do {
     vector<rgw_bucket_dir_entry> result;
@@ -1023,15 +1025,9 @@ int RGWBucket::check_bad_index_multipart(RGWBucketAdminOpState& op_state,
 
     vector<rgw_bucket_dir_entry>::iterator iter;
     for (iter = result.begin(); iter != result.end(); ++iter) {
-      rgw_bucket_dir_entry& ent = *iter;
-
-      rgw_obj obj(bucket, ent.key);
-      obj.key.ns.clear();
-
-      rgw_obj_index_key key;
-      obj.key.get_index_key(&key);
-
-      string oid = key.name;
+      rgw_obj_index_key key = iter->key;
+      rgw_obj obj(bucket, key);
+      string oid = obj.get_oid();
 
       int pos = oid.find_last_of('.');
       if (pos < 0) {
@@ -1054,8 +1050,6 @@ int RGWBucket::check_bad_index_multipart(RGWBucketAdminOpState& op_state,
 
   for (auto aiter = all_objs.begin(); aiter != all_objs.end(); ++aiter) {
     string& name = aiter->second;
-
-    rgw_obj_index_key index_key(aiter->first);
 
     if (meta_objs.find(name) == meta_objs.end()) {
       objs_to_unlink.push_back(aiter->first);
@@ -1933,7 +1927,7 @@ int RGWDataChangesLog::trim_entries(int shard_id, const real_time& start_time, c
 
   ret = store->time_log_trim(oids[shard_id], start_time, end_time, start_marker, end_marker);
 
-  if (ret == -ENOENT)
+  if (ret == -ENOENT || ret == -ENODATA)
     ret = 0;
 
   return ret;
@@ -1944,7 +1938,7 @@ int RGWDataChangesLog::trim_entries(const real_time& start_time, const real_time
 {
   for (int shard = 0; shard < num_shards; shard++) {
     int ret = store->time_log_trim(oids[shard], start_time, end_time, start_marker, end_marker);
-    if (ret == -ENOENT) {
+    if (ret == -ENOENT || ret == -ENODATA) {
       continue;
     }
     if (ret < 0)
@@ -2114,7 +2108,7 @@ public:
       return ret;
 
     /*
-     * We're unlinking the bucket but we don't want to update the entrypoint here — we're removing
+     * We're unlinking the bucket but we don't want to update the entrypoint here - we're removing
      * it immediately and don't want to invalidate our cached objv_version or the bucket obj removal
      * will incorrectly fail.
      */

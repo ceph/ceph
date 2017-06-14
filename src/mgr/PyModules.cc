@@ -338,9 +338,8 @@ int PyModules::init()
   Mutex::Locker locker(lock);
 
   global_handle = this;
-  // namespace in config-key prefixed by "mgr/<id>/"
-  config_prefix = std::string(g_conf->name.get_type_str()) + "/" +
-	          g_conf->name.get_id() + "/";
+  // namespace in config-key prefixed by "mgr/"
+  config_prefix = std::string(g_conf->name.get_type_str()) + "/";
 
   // Set up global python interpreter
   Py_SetProgramName(const_cast<char*>(PYTHON_EXECUTABLE));
@@ -433,7 +432,9 @@ void PyModules::shutdown()
     auto module = i.second.get();
     const auto& name = i.first;
     dout(10) << "waiting for module " << name << " to shutdown" << dendl;
+    lock.Unlock();
     module->shutdown();
+    lock.Lock();
     dout(10) << "module " << name << " shutdown" << dendl;
   }
 
@@ -511,6 +512,26 @@ bool PyModules::get_config(const std::string &handle,
   } else {
     return false;
   }
+}
+
+PyObject *PyModules::get_config_prefix(const std::string &handle,
+    const std::string &prefix) const
+{
+  PyThreadState *tstate = PyEval_SaveThread();
+  Mutex::Locker l(lock);
+  PyEval_RestoreThread(tstate);
+
+  const std::string base_prefix = config_prefix + handle + "/";
+  const std::string global_prefix = base_prefix + prefix;
+  dout(4) << __func__ << "prefix: " << global_prefix << dendl;
+
+  PyFormatter f;
+  for (auto p = config_cache.lower_bound(global_prefix);
+       p != config_cache.end() && p->first.find(global_prefix) == 0;
+       ++p) {
+    f.dump_string(p->first.c_str() + base_prefix.size(), p->second);
+  }
+  return f.get();
 }
 
 void PyModules::set_config(const std::string &handle,

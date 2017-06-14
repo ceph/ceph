@@ -7,6 +7,7 @@
 #include <string>
 #include <boost/tokenizer.hpp>
 #include <boost/algorithm/string.hpp>
+#include <boost/utility/string_view.hpp>
 
 #include "json_spirit/json_spirit.h"
 #include "common/ceph_json.h"
@@ -85,6 +86,7 @@ rgw_http_errors rgw_http_s3_errors({
     { ERR_NO_SUCH_UPLOAD, {404, "NoSuchUpload" }},
     { ERR_NOT_FOUND, {404, "Not Found"}},
     { ERR_NO_SUCH_LC, {404, "NoSuchLifecycleConfiguration"}},
+    { ERR_NO_SUCH_BUCKET_POLICY, {404, "NoSuchBucketPolicy"}},
     { ERR_METHOD_NOT_ALLOWED, {405, "MethodNotAllowed" }},
     { ETIMEDOUT, {408, "RequestTimeout" }},
     { EEXIST, {409, "BucketAlreadyExists" }},
@@ -264,8 +266,6 @@ req_state::req_state(CephContext* _cct, RGWEnv* e, RGWUserInfo* u)
   bucket_acl = NULL;
   object_acl = NULL;
   expect_cont = false;
-  aws4_auth_needs_complete = false;
-  aws4_auth_streaming_mode = false;
 
   header_ended = false;
   obj_size = 0;
@@ -280,7 +280,6 @@ req_state::req_state(CephContext* _cct, RGWEnv* e, RGWUserInfo* u)
   bucket_exists = false;
   has_bad_meta = false;
   length = NULL;
-  http_auth = NULL;
   local_source = false;
 
   obj_ctx = NULL;
@@ -455,17 +454,6 @@ string rgw_string_unquote(const string& s)
   return s.substr(1, len - 2);
 }
 
-static void trim_whitespace(const string& src, string& dst)
-{
-  const char *spacestr = " \t\n\r\f\v";
-  auto start = src.find_first_not_of(spacestr);
-  if (start == string::npos)
-    return;
-
-  auto end = src.find_last_not_of(spacestr);
-  dst = src.substr(start, end - start + 1);
-}
-
 static bool check_str_end(const char *s)
 {
   if (!s)
@@ -546,8 +534,7 @@ bool parse_iso8601(const char *s, struct tm *t, uint32_t *pns, bool extended_for
     dout(0) << "parse_iso8601 failed" << dendl;
     return false;
   }
-  string str;
-  trim_whitespace(p, str);
+  const boost::string_view str = rgw_trim_whitespace(boost::string_view(p));
   int len = str.size();
 
   if (len == 0 || (len == 1 && str[0] == 'Z'))
@@ -558,8 +545,8 @@ bool parse_iso8601(const char *s, struct tm *t, uint32_t *pns, bool extended_for
     return false;
 
   uint32_t ms;
-  string nsstr = str.substr(1,  len - 2);
-  int r = stringtoul(nsstr, &ms);
+  boost::string_view nsstr = str.substr(1,  len - 2);
+  int r = stringtoul(nsstr.to_string(), &ms);
   if (r < 0)
     return false;
 
@@ -597,10 +584,8 @@ int parse_key_value(string& in_str, const char *delim, string& key, string& val)
   if (pos == string::npos)
     return -EINVAL;
 
-  trim_whitespace(in_str.substr(0, pos), key);
-  pos++;
-
-  trim_whitespace(in_str.substr(pos), val);
+  key = rgw_trim_whitespace(in_str.substr(0, pos));
+  val = rgw_trim_whitespace(in_str.substr(pos + 1));
 
   return 0;
 }
@@ -608,6 +593,27 @@ int parse_key_value(string& in_str, const char *delim, string& key, string& val)
 int parse_key_value(string& in_str, string& key, string& val)
 {
   return parse_key_value(in_str, "=", key,val);
+}
+
+boost::optional<std::pair<boost::string_view, boost::string_view>>
+parse_key_value(const boost::string_view& in_str,
+                const boost::string_view& delim)
+{
+  const size_t pos = in_str.find(delim);
+  if (pos == boost::string_view::npos) {
+    return boost::none;
+  }
+
+  const auto key = rgw_trim_whitespace(in_str.substr(0, pos));
+  const auto val = rgw_trim_whitespace(in_str.substr(pos + 1));
+
+  return std::make_pair(key, val);
+}
+
+boost::optional<std::pair<boost::string_view, boost::string_view>>
+parse_key_value(const boost::string_view& in_str)
+{
+  return parse_key_value(in_str, "=");
 }
 
 int parse_time(const char *time_str, real_time *time)
@@ -678,24 +684,21 @@ void calc_hmac_sha256(const char *key, int key_len,
   memcpy(dest, hash_sha256, CEPH_CRYPTO_HMACSHA256_DIGESTSIZE);
 }
 
+using ceph::crypto::SHA256;
+
 /*
  * calculate the sha256 hash value of a given msg
  */
-void calc_hash_sha256(const char *msg, int len, string& dest)
+sha256_digest_t calc_hash_sha256(const boost::string_view& msg)
 {
-  char hash_sha256[CEPH_CRYPTO_HMACSHA256_DIGESTSIZE];
+  std::array<unsigned char, CEPH_CRYPTO_HMACSHA256_DIGESTSIZE> hash;
 
-  SHA256 hash;
-  hash.Update((const unsigned char *)msg, len);
-  hash.Final((unsigned char *)hash_sha256);
+  SHA256 hasher;
+  hasher.Update(reinterpret_cast<const unsigned char*>(msg.data()), msg.size());
+  hasher.Final(hash.data());
 
-  char hex_str[(CEPH_CRYPTO_SHA256_DIGESTSIZE * 2) + 1];
-  buf_to_hex((unsigned char *)hash_sha256, CEPH_CRYPTO_SHA256_DIGESTSIZE, hex_str);
-
-  dest = std::string(hex_str);
+  return hash;
 }
-
-using ceph::crypto::SHA256;
 
 SHA256* calc_hash_sha256_open_stream()
 {
@@ -724,6 +727,14 @@ string calc_hash_sha256_close_stream(SHA256 **phash)
   *phash = NULL;
   
   return std::string(hex_str);
+}
+
+std::string calc_hash_sha256_restart_stream(SHA256 **phash)
+{
+  const auto hash = calc_hash_sha256_close_stream(phash);
+  *phash = calc_hash_sha256_open_stream();
+
+  return hash;
 }
 
 int gen_rand_base64(CephContext *cct, char *dest, int size) /* size should be the required string size + 1 */
@@ -897,10 +908,8 @@ int RGWHTTPArgs::parse()
        end = true;
        fpos = str.size(); 
     }
-    string substr, nameval;
-    substr = str.substr(pos, fpos - pos);
-    url_decode(substr, nameval, true);
-    NameVal nv(nameval);
+    std::string nameval = url_decode(str.substr(pos, fpos - pos), true);
+    NameVal nv(std::move(nameval));
     int ret = nv.parse();
     if (ret >= 0) {
       string& name = nv.get_name();
@@ -1326,43 +1335,39 @@ static char hex_to_num(char c)
   return hex_table.to_num(c);
 }
 
-bool url_decode(const string& src_str, string& dest_str, bool in_query)
+std::string url_decode(const boost::string_view& src_str, bool in_query)
 {
-  const char *src = src_str.c_str();
-  char dest[src_str.size() + 1];
-  int pos = 0;
-  char c;
+  std::string dest_str;
+  dest_str.reserve(src_str.length() + 1);
 
-  while (*src) {
+  for (auto src = std::begin(src_str); src != std::end(src_str); ++src) {
     if (*src != '%') {
       if (!in_query || *src != '+') {
-        if (*src == '?') in_query = true;
-        dest[pos++] = *src++;
+        if (*src == '?') {
+          in_query = true;
+        }
+        dest_str.push_back(*src);
       } else {
-        dest[pos++] = ' ';
-        ++src;
+        dest_str.push_back(' ');
       }
     } else {
+      /* 3 == strlen("%%XX") */
+      if (std::distance(src, std::end(src_str)) < 3) {
+        break;
+      }
+
       src++;
-      if (!*src)
-        break;
-      char c1 = hex_to_num(*src++);
-      if (!*src)
-        break;
-      c = c1 << 4;
-      if (c1 < 0)
-        return false;
-      c1 = hex_to_num(*src++);
-      if (c1 < 0)
-        return false;
-      c |= c1;
-      dest[pos++] = c;
+      const char c1 = hex_to_num(*src++);
+      const char c2 = hex_to_num(*src);
+      if (c1 < 0 || c2 < 0) {
+        return std::string();
+      } else {
+        dest_str.push_back(c1 << 4 | c2);
+      }
     }
   }
-  dest[pos] = 0;
-  dest_str = dest;
 
-  return true;
+  return dest_str;
 }
 
 void rgw_uri_escape_char(char c, string& dst)
@@ -1450,9 +1455,9 @@ string rgw_trim_whitespace(const string& src)
   return src.substr(start, end - start + 1);
 }
 
-boost::string_ref rgw_trim_whitespace(const boost::string_ref& src)
+boost::string_view rgw_trim_whitespace(const boost::string_view& src)
 {
-  boost::string_ref res = src;
+  boost::string_view res = src;
 
   while (res.size() > 0 && std::isspace(res.front())) {
     res.remove_prefix(1);
@@ -1525,7 +1530,7 @@ int RGWUserCaps::get_cap(const string& cap, string& type, uint32_t *pperm)
 {
   int pos = cap.find('=');
   if (pos >= 0) {
-    trim_whitespace(cap.substr(0, pos), type);
+    type = rgw_trim_whitespace(cap.substr(0, pos));
   }
 
   if (!is_valid_cap_type(type))

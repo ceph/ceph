@@ -130,8 +130,9 @@ int RGWRESTSimpleRequest::execute(RGWAccessKey& key, const char *method, const c
                             canonical_header);
 
   string digest;
-  int ret = rgw_get_s3_header_digest(canonical_header, key.key, digest);
-  if (ret < 0) {
+  try {
+    digest = rgw::auth::s3::get_v2_signature(cct, canonical_header, key.key);
+  } catch (int ret) {
     return ret;
   }
 
@@ -233,8 +234,9 @@ int RGWRESTSimpleRequest::sign_request(RGWAccessKey& key, RGWEnv& env, req_info&
   ldout(cct, 10) << "generated canonical header: " << canonical_header << dendl;
 
   string digest;
-  int ret = rgw_get_s3_header_digest(canonical_header, key.key, digest);
-  if (ret < 0) {
+  try {
+    digest = rgw::auth::s3::get_v2_signature(cct, canonical_header, key.key);
+  } catch (int ret) {
     return ret;
   }
 

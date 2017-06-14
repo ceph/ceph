@@ -115,7 +115,6 @@ BuildRequires:	gperftools-devel >= 2.4
 BuildRequires:  jq
 BuildRequires:	leveldb-devel > 1.2
 BuildRequires:	libaio-devel
-BuildRequires:	libatomic_ops-devel
 BuildRequires:	libblkid-devel >= 2.17
 BuildRequires:	libcurl-devel
 BuildRequires:	libudev-devel
@@ -128,8 +127,10 @@ BuildRequires:	pkgconfig
 BuildRequires:	python
 BuildRequires:	python-devel
 BuildRequires:	python-nose
+BuildRequires:	python-pecan
 BuildRequires:	python-requests
 BuildRequires:	python-virtualenv
+BuildRequires:	python-werkzeug
 BuildRequires:	snappy-devel
 BuildRequires:	udev
 BuildRequires:	util-linux

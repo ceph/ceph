@@ -187,6 +187,12 @@ ceph_get_server(PyObject *self, PyObject *args)
 }
 
 static PyObject*
+ceph_get_mgr_id(PyObject *self, PyObject *args)
+{
+  return PyString_FromString(g_conf->name.get_id().c_str());
+}
+
+static PyObject*
 ceph_config_get(PyObject *self, PyObject *args)
 {
   char *handle = nullptr;
@@ -199,12 +205,25 @@ ceph_config_get(PyObject *self, PyObject *args)
   std::string value;
   bool found = global_handle->get_config(handle, what, &value);
   if (found) {
-    derr << "ceph_config_get " << what << " found: " << value.c_str() << dendl;
+    dout(10) << "ceph_config_get " << what << " found: " << value.c_str() << dendl;
     return PyString_FromString(value.c_str());
   } else {
     derr << "ceph_config_get " << what << " not found " << dendl;
     Py_RETURN_NONE;
   }
+}
+
+static PyObject*
+ceph_config_get_prefix(PyObject *self, PyObject *args)
+{
+  char *handle = nullptr;
+  char *prefix = nullptr;
+  if (!PyArg_ParseTuple(args, "ss:ceph_config_get", &handle, &prefix)) {
+    derr << "Invalid args!" << dendl;
+    return nullptr;
+  }
+
+  return global_handle->get_config_prefix(handle, prefix);
 }
 
 static PyObject*
@@ -313,8 +332,12 @@ PyMethodDef CephStateMethods[] = {
      "Get a service's metadata"},
     {"send_command", ceph_send_command, METH_VARARGS,
      "Send a mon command"},
+    {"get_mgr_id", ceph_get_mgr_id, METH_NOARGS,
+     "Get the mgr id"},
     {"get_config", ceph_config_get, METH_VARARGS,
      "Get a configuration value"},
+    {"get_config_prefix", ceph_config_get_prefix, METH_VARARGS,
+     "Get all configuration values with a given prefix"},
     {"set_config", ceph_config_set, METH_VARARGS,
      "Set a configuration value"},
     {"get_counter", get_counter, METH_VARARGS,

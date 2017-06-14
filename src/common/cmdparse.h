@@ -3,10 +3,11 @@
 #ifndef CEPH_COMMON_CMDPARSE_H
 #define CEPH_COMMON_CMDPARSE_H
 
-#include <boost/variant.hpp>
 #include <vector>
 #include <stdexcept>
 #include <ostream>
+#include <boost/variant.hpp>
+#include "include/assert.h"	// boost clobbers this
 #include "common/Formatter.h"
 #include "common/BackTrace.h"
 

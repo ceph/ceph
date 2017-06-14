@@ -439,9 +439,9 @@ TEST(PGTempMap, basic)
 {
   PGTempMap m;
   pg_t a(1,1);
-  for (unsigned i=3; i<1000; ++i) {
+  for (auto i=3; i<1000; ++i) {
     pg_t x(i, 1);
-    m.set(x, {i});
+    m.set(x, {static_cast<int>(i)});
   }
   pg_t b(2,1);
   m.set(a, {1, 2});

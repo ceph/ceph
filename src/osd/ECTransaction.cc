@@ -169,6 +169,7 @@ void ECTransaction::generate_transactions(
 	bufferlist bl(op.updated_snaps->second.size() * 8 + 8);
 	::encode(op.updated_snaps->second, bl);
 	entry->snaps.swap(bl);
+	entry->snaps.reassign_to_mempool(mempool::mempool_osd_pglog);
       }
 
       ldpp_dout(dpp, 20) << "generate_transactions: "

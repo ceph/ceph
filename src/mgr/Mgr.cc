@@ -345,9 +345,10 @@ void Mgr::load_config()
       std::ostringstream cmd_json;
       cmd_json << "{\"prefix\": \"config-key get\", \"key\": \"" << key << "\"}";
       get_cmd.run(monc, cmd_json.str());
+      lock.Unlock();
       get_cmd.wait();
+      lock.Lock();
       assert(get_cmd.r == 0);
-
       loaded[key] = get_cmd.outbl.to_str();
     }
   }

@@ -407,17 +407,17 @@ function list_missing_erasure_coded() {
     done
 
     id=${osds0[0]}
-    ceph-objectstore-tool --data-path $dir/$id --enable-experimental-unrecoverable-data-corrupting-features=bluestore \
+    ceph-objectstore-tool --data-path $dir/$id \
         MOBJ0 remove || return 1
     id=${osds0[1]}
-    ceph-objectstore-tool --data-path $dir/$id --enable-experimental-unrecoverable-data-corrupting-features=bluestore \
+    ceph-objectstore-tool --data-path $dir/$id \
         MOBJ0 remove || return 1
 
     id=${osds1[1]}
-    ceph-objectstore-tool --data-path $dir/$id --enable-experimental-unrecoverable-data-corrupting-features=bluestore \
+    ceph-objectstore-tool --data-path $dir/$id \
         MOBJ1 remove || return 1
     id=${osds1[2]}
-    ceph-objectstore-tool --data-path $dir/$id --enable-experimental-unrecoverable-data-corrupting-features=bluestore \
+    ceph-objectstore-tool --data-path $dir/$id \
         MOBJ1 remove || return 1
 
     for id in $(seq 0 2) ; do
