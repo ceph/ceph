@@ -576,11 +576,6 @@ if(WITH_LTTNG AND WITH_EVENTTRACE)
   list(APPEND libcommon_files common/EventTrace.cc)
 endif()
 
-set(mon_common_files
-  auth/AuthSessionHandler.cc
-  auth/cephx/CephxSessionHandler.cc
-  erasure-code/ErasureCodePlugin.cc)
-add_library(mon_common_objs OBJECT ${mon_common_files})
 set(common_mountcephfs_files
   common/armor.c
   common/safe_io.c
