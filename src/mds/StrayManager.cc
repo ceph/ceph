@@ -384,6 +384,11 @@ bool StrayManager::_consume(CDentry *dn, bool trunc, uint32_t ops_required)
 {
   const int files_avail = g_conf->mds_max_purge_files - files_purging;
 
+  if (!started) {
+    dout(20) << __func__ << ": haven't started purging yet" << dendl;
+    return false;
+  }
+
   if (files_avail <= 0) {
     dout(20) << __func__ << ": throttling on max files" << dendl;
     return false;
@@ -651,6 +656,13 @@ bool StrayManager::__eval_stray(CDentry *dn, bool delay)
   }
 }
 
+void StrayManager::activate()
+{
+  dout(10) << __func__ << dendl;
+  started = true;
+  _advance();
+}
+
 bool StrayManager::eval_stray(CDentry *dn, bool delay)
 {
   // avoid nested eval_stray
@@ -756,7 +768,7 @@ void StrayManager::migrate_stray(CDentry *dn, mds_rank_t to)
 
 StrayManager::StrayManager(MDSRank *mds)
   : delayed_eval_stray(member_offset(CDentry, item_stray)),
-    mds(mds), logger(NULL),
+    mds(mds), logger(NULL), started(false),
     ops_in_flight(0), files_purging(0),
     max_purge_ops(0), 
     num_strays(0), num_strays_purging(0), num_strays_delayed(0),

@@ -2262,7 +2262,8 @@ CDentry* Server::prepare_stray_dentry(MDRequestRef& mdr, CInode *in)
 
   CDir *straydir = mdcache->get_stray_dir(in);
 
-  if (!check_fragment_space(mdr, straydir))
+  if (!mdr->client_request->is_replay() &&
+      !check_fragment_space(mdr, straydir))
     return NULL;
 
   straydn = mdcache->get_or_create_stray_dentry(in);
