@@ -1846,7 +1846,7 @@ class RGWRados
   int get_olh_target_state(RGWObjectCtx& rctx, rgw_obj& obj, RGWObjState *olh_state,
                            RGWObjState **target_state);
   int get_system_obj_state_impl(RGWObjectCtx *rctx, rgw_obj& obj, RGWObjState **state, RGWObjVersionTracker *objv_tracker);
-  int get_obj_state_impl(RGWObjectCtx *rctx, rgw_obj& obj, RGWObjState **state, bool follow_olh);
+  int get_obj_state_impl(RGWObjectCtx *rctx, rgw_obj& obj, RGWObjState **state, bool follow_olh, bool assume_noent = false);
   int append_atomic_test(RGWObjectCtx *rctx, rgw_obj& obj,
                          librados::ObjectOperation& op, RGWObjState **state);
 
@@ -2206,7 +2206,7 @@ public:
     bool bs_initialized;
 
   protected:
-    int get_state(RGWObjState **pstate, bool follow_olh);
+    int get_state(RGWObjState **pstate, bool follow_olh, bool assume_noent = false);
     void invalidate_state();
 
     int prepare_atomic_modification(librados::ObjectWriteOperation& op, bool reset_obj, const string *ptag,
@@ -2312,6 +2312,9 @@ public:
 
       explicit Write(RGWRados::Object *_target) : target(_target) {}
 
+      int _do_write_meta(uint64_t size,
+                     map<std::string, bufferlist>& attrs,
+                     bool assume_noent);
       int write_meta(uint64_t size,  map<std::string, bufferlist>& attrs);
       int write_data(const char *data, uint64_t ofs, uint64_t len, bool exclusive);
     };
@@ -2687,7 +2690,7 @@ public:
                         map<string, bufferlist>* rmattrs);
 
   int get_system_obj_state(RGWObjectCtx *rctx, rgw_obj& obj, RGWObjState **state, RGWObjVersionTracker *objv_tracker);
-  int get_obj_state(RGWObjectCtx *rctx, rgw_obj& obj, RGWObjState **state, bool follow_olh);
+  int get_obj_state(RGWObjectCtx *rctx, rgw_obj& obj, RGWObjState **state, bool follow_olh, bool assume_noent = false);
   int get_obj_state(RGWObjectCtx *rctx, rgw_obj& obj, RGWObjState **state) {
     return get_obj_state(rctx, obj, state, true);
   }
