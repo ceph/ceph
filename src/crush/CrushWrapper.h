@@ -997,14 +997,17 @@ public:
     return set_rule_step(ruleno, step, CRUSH_RULE_EMIT, 0, 0);
   }
 
-  int add_simple_ruleset(string name, string root_name, string failure_domain_type,
-			 string mode, int rule_type, ostream *err = 0);
+  int add_simple_rule(
+    string name, string root_name, string failure_domain_type,
+    string mode, int rule_type, ostream *err = 0);
+
   /**
-   * @param rno ruleset id to use, -1 to pick the lowest available
+   * @param rno rule[set] id to use, -1 to pick the lowest available
    */
-  int add_simple_ruleset_at(string name, string root_name,
-                            string failure_domain_type, string mode,
-                            int rule_type, int rno, ostream *err = 0);
+  int add_simple_rule_at(
+    string name, string root_name,
+    string failure_domain_type, string mode,
+    int rule_type, int rno, ostream *err = 0);
 
   int remove_rule(int ruleno);
 

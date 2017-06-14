@@ -7733,7 +7733,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       ss << "rule " << name << " already exists";
       err = 0;
     } else {
-      int ruleno = newcrush.add_simple_ruleset(name, root, type, mode,
+      int ruleno = newcrush.add_simple_rule(name, root, type, mode,
 					       pg_pool_t::TYPE_REPLICATED, &ss);
       if (ruleno < 0) {
 	err = ruleno;
