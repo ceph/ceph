@@ -635,8 +635,10 @@ public:
     return p->offset + x_off;
   }
 
-  /// return true if the entire range is allocated (mapped to extents on disk)
-  bool is_allocated(uint64_t b_off, uint64_t b_len) const {
+  // validate whether or not the status of pextents within the given range
+  // meets the requirement(allocated or unallocated).
+  bool _validate_range(uint64_t b_off, uint64_t b_len,
+                       bool require_allocated) const {
     auto p = extents.begin();
     assert(p != extents.end());
     while (b_off >= p->length) {
@@ -647,11 +649,12 @@ public:
     b_len += b_off;
     while (b_len) {
       assert(p != extents.end());
-      if (!p->is_valid()) {
-	return false;
+      if (require_allocated != p->is_valid()) {
+        return false;
       }
+
       if (p->length >= b_len) {
-	return true;
+        return true;
       }
       b_len -= p->length;
       ++p;
@@ -659,29 +662,16 @@ public:
     assert(0 == "we should not get here");
   }
 
+  /// return true if the entire range is allocated
+  /// (mapped to extents on disk)
+  bool is_allocated(uint64_t b_off, uint64_t b_len) const {
+    return _validate_range(b_off, b_len, true);
+  }
+
   /// return true if the entire range is unallocated
-  ///  (not mapped to extents on disk)
+  /// (not mapped to extents on disk)
   bool is_unallocated(uint64_t b_off, uint64_t b_len) const {
-    auto p = extents.begin();
-    assert(p != extents.end());
-    while (b_off >= p->length) {
-      b_off -= p->length;
-      ++p;
-      assert(p != extents.end());
-    }
-    b_len += b_off;
-    while (b_len) {
-      assert(p != extents.end());
-      if (p->is_valid()) {
-	return false;
-      }
-      if (p->length >= b_len) {
-	return true;
-      }
-      b_len -= p->length;
-      ++p;
-    }
-    assert(0 == "we should not get here");
+    return _validate_range(b_off, b_len, false);
   }
 
   /// return true if the logical range has never been used
