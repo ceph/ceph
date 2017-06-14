@@ -114,12 +114,12 @@ public:
 /**
  * No-op for callers expecting MDSInternalContextBase
  */
-class C_MDSInternalNoop : public MDSInternalContextBase
+class C_MDSInternalNoop final : public MDSInternalContextBase
 {
   virtual MDSRank* get_mds() {assert(0);}
 public:
   void finish(int r) {}
-  void complete(int r) {}
+  void complete(int r) { delete this; }
 };
 
 
