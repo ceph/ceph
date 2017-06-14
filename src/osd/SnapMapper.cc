@@ -271,6 +271,8 @@ int SnapMapper::get_next_objects_to_trim(
     while (out->size() < max) {
       pair<string, bufferlist> next;
       r = backend.get_next(pos, &next);
+      dout(20) << __func__ << " get_next(" << pos << ") returns " << r
+	       << " " << next << dendl;
       if (r != 0) {
 	break; // Done
       }

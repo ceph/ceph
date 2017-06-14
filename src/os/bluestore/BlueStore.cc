@@ -6897,6 +6897,8 @@ int BlueStore::OmapIteratorImpl::upper_bound(const string& after)
   if (o->onode.has_omap()) {
     string key;
     get_omap_key(o->onode.nid, after, &key);
+    lgeneric_dout(c->store->cct,20) << __func__ << " after " << after << " key "
+	     << pretty_binary_string(key) << dendl;
     it->upper_bound(key);
   } else {
     it = KeyValueDB::Iterator();
@@ -6910,6 +6912,8 @@ int BlueStore::OmapIteratorImpl::lower_bound(const string& to)
   if (o->onode.has_omap()) {
     string key;
     get_omap_key(o->onode.nid, to, &key);
+    lgeneric_dout(c->store->cct,20) << __func__ << " to " << to << " key "
+	     << pretty_binary_string(key) << dendl;
     it->lower_bound(key);
   } else {
     it = KeyValueDB::Iterator();
@@ -6920,7 +6924,13 @@ int BlueStore::OmapIteratorImpl::lower_bound(const string& to)
 bool BlueStore::OmapIteratorImpl::valid()
 {
   RWLock::RLocker l(c->lock);
-  return o->onode.has_omap() && it && it->valid() && it->raw_key().second <= tail;
+  bool r = o->onode.has_omap() && it && it->valid() &&
+    it->raw_key().second <= tail;
+  if (it && it->valid()) {
+    lgeneric_dout(c->store->cct,20) << __func__ << " is at"
+	     << pretty_binary_string(it->raw_key().second) << dendl;
+  }
+  return r;
 }
 
 int BlueStore::OmapIteratorImpl::next(bool validate)
