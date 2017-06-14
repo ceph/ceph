@@ -267,7 +267,6 @@ req_state::req_state(CephContext* _cct, RGWEnv* e, RGWUserInfo* u)
   object_acl = NULL;
   expect_cont = false;
 
-  header_ended = false;
   obj_size = 0;
   prot_flags = 0;
 
