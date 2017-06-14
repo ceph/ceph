@@ -2893,7 +2893,7 @@ void OSDMap::generate_test_instances(list<OSDMap*>& o)
   CephContext *cct = new CephContext(CODE_ENVIRONMENT_UTILITY);
   o.push_back(new OSDMap);
   uuid_d fsid;
-  o.back()->build_simple(cct, 1, fsid, 16, 7, 8);
+  o.back()->build_simple(cct, 1, fsid, 16);
   o.back()->created = o.back()->modified = utime_t(1, 2);  // fix timestamp
   o.back()->blacklist[entity_addr_t()] = utime_t(5, 6);
   cct->put();
@@ -3227,8 +3227,9 @@ bool OSDMap::crush_ruleset_in_use(int ruleset) const
   return false;
 }
 
-int OSDMap::build_simple(CephContext *cct, epoch_t e, uuid_d &fsid,
-			  int nosd, int pg_bits, int pgp_bits)
+int OSDMap::build_simple_optioned(CephContext *cct, epoch_t e, uuid_d &fsid,
+				  int nosd, int pg_bits, int pgp_bits,
+				  bool default_pool)
 {
   ldout(cct, 10) << "build_simple on " << nosd
 		 << " osds" << dendl;
@@ -3267,6 +3268,7 @@ int OSDMap::build_simple(CephContext *cct, epoch_t e, uuid_d &fsid,
     set_max_osd(maxosd + 1);
   }
 
+
   stringstream ss;
   int r;
   if (nosd >= 0)
@@ -3274,6 +3276,42 @@ int OSDMap::build_simple(CephContext *cct, epoch_t e, uuid_d &fsid,
   else
     r = build_simple_crush_map_from_conf(cct, *crush, &ss);
   assert(r == 0);
+
+  int poolbase = get_max_osd() ? get_max_osd() : 1;
+
+  int const default_replicated_rule = crush->get_osd_pool_default_crush_replicated_ruleset(cct);
+  assert(default_replicated_rule >= 0);
+
+  if (default_pool) {
+    // pgp_num <= pg_num
+    if (pgp_bits > pg_bits)
+      pgp_bits = pg_bits;
+
+    vector<string> pool_names;
+    pool_names.push_back("rbd");
+    for (auto &plname : pool_names) {
+      int64_t pool = ++pool_max;
+      pools[pool].type = pg_pool_t::TYPE_REPLICATED;
+      pools[pool].flags = cct->_conf->osd_pool_default_flags;
+      if (cct->_conf->osd_pool_default_flag_hashpspool)
+	pools[pool].set_flag(pg_pool_t::FLAG_HASHPSPOOL);
+      if (cct->_conf->osd_pool_default_flag_nodelete)
+	pools[pool].set_flag(pg_pool_t::FLAG_NODELETE);
+      if (cct->_conf->osd_pool_default_flag_nopgchange)
+	pools[pool].set_flag(pg_pool_t::FLAG_NOPGCHANGE);
+      if (cct->_conf->osd_pool_default_flag_nosizechange)
+	pools[pool].set_flag(pg_pool_t::FLAG_NOSIZECHANGE);
+      pools[pool].size = cct->_conf->osd_pool_default_size;
+      pools[pool].min_size = cct->_conf->get_osd_pool_default_min_size();
+      pools[pool].crush_rule = default_replicated_rule;
+      pools[pool].object_hash = CEPH_STR_HASH_RJENKINS;
+      pools[pool].set_pg_num(poolbase << pg_bits);
+      pools[pool].set_pgp_num(poolbase << pgp_bits);
+      pools[pool].last_change = epoch;
+      pool_name[pool] = plname;
+      name_pool[plname] = pool;
+    }
+  }
 
   for (int i=0; i<get_max_osd(); i++) {
     set_state(i, 0);
