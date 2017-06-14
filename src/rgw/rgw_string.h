@@ -125,4 +125,13 @@ static inline StringT create_n_reserve(const size_t reserve_len)
   return ret;
 }
 
+/* std::strlen() isn't guaranteed to be computable at compile-time. Although
+ * newer GCCs actually do that, Clang doesn't. Please be aware this function
+ * IS NOT A DROP-IN REPLACEMENT FOR STRLEN -- it returns a different result
+ * for strings having \0 in the middle. */
+template<size_t N>
+static inline constexpr size_t sarrlen(const char (&arr)[N]) {
+  return N - 1;
+}
+
 #endif
