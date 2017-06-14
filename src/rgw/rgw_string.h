@@ -9,30 +9,31 @@
 
 #include <boost/container/small_vector.hpp>
 #include <boost/utility/string_view.hpp>
+
 struct ltstr_nocase
 {
-  bool operator()(const string& s1, const string& s2) const
+  bool operator()(const std::string& s1, const std::string& s2) const
   {
     return strcasecmp(s1.c_str(), s2.c_str()) < 0;
   }
 };
 
-static inline int stringcasecmp(const string& s1, const string& s2)
+static inline int stringcasecmp(const std::string& s1, const std::string& s2)
 {
   return strcasecmp(s1.c_str(), s2.c_str());
 }
 
-static inline int stringcasecmp(const string& s1, const char *s2)
+static inline int stringcasecmp(const std::string& s1, const char *s2)
 {
   return strcasecmp(s1.c_str(), s2);
 }
 
-static inline int stringcasecmp(const string& s1, int ofs, int size, const string& s2)
+static inline int stringcasecmp(const std::string& s1, int ofs, int size, const std::string& s2)
 {
   return strncasecmp(s1.c_str() + ofs, s2.c_str(), size);
 }
 
-static inline int stringtoll(const string& s, int64_t *val)
+static inline int stringtoll(const std::string& s, int64_t *val)
 {
   char *end;
 
@@ -48,7 +49,7 @@ static inline int stringtoll(const string& s, int64_t *val)
   return 0;
 }
 
-static inline int stringtoull(const string& s, uint64_t *val)
+static inline int stringtoull(const std::string& s, uint64_t *val)
 {
   char *end;
 
@@ -64,7 +65,7 @@ static inline int stringtoull(const string& s, uint64_t *val)
   return 0;
 }
 
-static inline int stringtol(const string& s, int32_t *val)
+static inline int stringtol(const std::string& s, int32_t *val)
 {
   char *end;
 
@@ -80,7 +81,7 @@ static inline int stringtol(const string& s, int32_t *val)
   return 0;
 }
 
-static inline int stringtoul(const string& s, uint32_t *val)
+static inline int stringtoul(const std::string& s, uint32_t *val)
 {
   char *end;
 
