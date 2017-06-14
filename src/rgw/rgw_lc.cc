@@ -505,8 +505,8 @@ int RGWLC::bucket_lc_post(int index, int max_lock_sec, pair<string, int >& entry
       ret = cls_rgw_lc_rm_entry(store->lc_pool_ctx, obj_names[index],  entry);
       if (ret < 0) {
         dout(0) << "RGWLC::bucket_lc_post() failed to remove entry " << obj_names[index] << dendl;
-        goto clean;
       }
+      goto clean;
     } else if (result < 0) {
       entry.second = lc_failed;
     } else {
