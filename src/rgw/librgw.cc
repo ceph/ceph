@@ -11,6 +11,7 @@
  * Foundation.  See file COPYING.
  *
  */
+#include "include/compat.h"
 #include <sys/types.h>
 #include <string.h>
 #include <chrono>

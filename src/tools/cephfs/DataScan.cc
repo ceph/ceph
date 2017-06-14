@@ -12,6 +12,7 @@
  *
  */
 
+#include "include/compat.h"
 #include "common/errno.h"
 #include "common/ceph_argparse.h"
 #include <fstream>

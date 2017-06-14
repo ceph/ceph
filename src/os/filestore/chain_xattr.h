@@ -4,6 +4,7 @@
 #ifndef __CEPH_OSD_CHAIN_XATTR_H
 #define __CEPH_OSD_CHAIN_XATTR_H
 
+#include "include/compat.h"
 #include <errno.h>
 #include <stdio.h>
 #include "common/xattr.h"
