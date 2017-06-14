@@ -273,30 +273,39 @@ void PrimaryLogPG::OpContext::finish_read(PrimaryLogPG *pg)
   }
 }
 
-class CopyFromCallback: public PrimaryLogPG::CopyCallback {
+struct OpFinisher {
+  OSDOp &osd_op;
+
+  OpFinisher(OSDOp &osd_op) : osd_op(osd_op) {
+  }
+  virtual ~OpFinisher() {
+    osd_op.op_finisher = nullptr;
+  }
+
+  virtual int execute() = 0;
+};
+
+class CopyFromCallback : public PrimaryLogPG::CopyCallback {
 public:
-  PrimaryLogPG::CopyResults *results;
-  int retval;
+  PrimaryLogPG::CopyResults *results = nullptr;
   PrimaryLogPG::OpContext *ctx;
-  explicit CopyFromCallback(PrimaryLogPG::OpContext *ctx_)
-    : results(NULL),
-      retval(0),
-      ctx(ctx_) {}
+  OSDOp &osd_op;
+
+  CopyFromCallback(PrimaryLogPG::OpContext *ctx, OSDOp &osd_op)
+    : ctx(ctx), osd_op(osd_op) {
+  }
   ~CopyFromCallback() override {}
 
   void finish(PrimaryLogPG::CopyCallbackResults results_) override {
     results = results_.get<1>();
     int r = results_.get<0>();
-    retval = r;
 
     // for finish_copyfrom
     ctx->user_at_version = results->user_version;
 
     if (r >= 0) {
       ctx->pg->execute_ctx(ctx);
-    }
-    ctx->copy_cb = NULL;
-    if (r < 0) {
+    } else {
       if (r != -ECANCELED) { // on cancel just toss it out; client resends
 	if (ctx->op)
 	  ctx->pg->osd->reply_op_error(ctx->op, r);
@@ -314,8 +323,18 @@ public:
   uint64_t get_data_size() {
     return results->object_size;
   }
-  int get_result() {
-    return retval;
+};
+
+struct CopyFromFinisher : public OpFinisher {
+  CopyFromCallback *copy_from_callback;  
+
+  CopyFromFinisher(OSDOp &osd_op, CopyFromCallback *copy_from_callback)
+    : OpFinisher(osd_op), copy_from_callback(copy_from_callback) {
+  }
+
+  int execute() override {
+    copy_from_callback->ctx->pg->finish_copyfrom(copy_from_callback);
+    return 0;
   }
 };
 
@@ -3362,6 +3381,23 @@ void PrimaryLogPG::execute_ctx(OpContext *ctx)
   issue_repop(repop, ctx);
   eval_repop(repop);
   repop->put();
+}
+
+void PrimaryLogPG::close_op_ctx(OpContext *ctx) {
+  release_object_locks(ctx->lock_manager);
+
+  if (ctx->ops != nullptr) {
+    for (auto &osd_op : *ctx->ops) {
+      delete osd_op.op_finisher;
+    }
+  }
+  ctx->op_t.reset();
+
+  for (auto p = ctx->on_finish.begin(); p != ctx->on_finish.end();
+       ctx->on_finish.erase(p++)) {
+    (*p)();
+  }
+  delete ctx;
 }
 
 void PrimaryLogPG::reply_ctx(OpContext *ctx, int r)
@@ -6549,7 +6585,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 		   src_oloc.hash,
 		   src_snapid,
 		   src_version);
-	if (!ctx->copy_cb) {
+	if (osd_op.op_finisher == nullptr) {
 	  // start
 	  pg_t raw_pg;
 	  get_osdmap()->object_locator_to_pg(src_name, src_oloc, raw_pg);
@@ -6561,8 +6597,8 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	    result = -EINVAL;
 	    break;
 	  }
-	  CopyFromCallback *cb = new CopyFromCallback(ctx);
-	  ctx->copy_cb = cb;
+	  CopyFromCallback *cb = new CopyFromCallback(ctx, osd_op);
+	  osd_op.op_finisher = new CopyFromFinisher(osd_op, cb);
 	  start_copy(cb, ctx->obc, src, src_oloc, src_version,
 		     op.copy_from.flags,
 		     false,
@@ -6571,9 +6607,8 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  result = -EINPROGRESS;
 	} else {
 	  // finish
-	  assert(ctx->copy_cb->get_result() >= 0);
-	  finish_copyfrom(ctx);
-	  result = 0;
+	  result = osd_op.op_finisher->execute();
+	  assert(result == 0);
 	}
       }
       break;
@@ -8159,12 +8194,12 @@ void PrimaryLogPG::_write_copy_chunk(CopyOpRef cop, PGTransaction *t)
   cop->temp_cursor = cop->cursor;
 }
 
-void PrimaryLogPG::finish_copyfrom(OpContext *ctx)
+void PrimaryLogPG::finish_copyfrom(CopyFromCallback *cb)
 {
+  OpContext *ctx = cb->ctx;
   dout(20) << "finish_copyfrom on " << ctx->obs->oi.soid << dendl;
-  ObjectState& obs = ctx->new_obs;
-  CopyFromCallback *cb = static_cast<CopyFromCallback*>(ctx->copy_cb);
 
+  ObjectState& obs = ctx->new_obs;
   if (obs.exists) {
     dout(20) << __func__ << ": exists, removing" << dendl;
     ctx->op_t->remove(obs.oi.soid);

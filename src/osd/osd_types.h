@@ -4869,6 +4869,7 @@ struct ScrubMap {
 WRITE_CLASS_ENCODER(ScrubMap::object)
 WRITE_CLASS_ENCODER(ScrubMap)
 
+struct OpFinisher;
 
 struct OSDOp {
   ceph_osd_op op;
@@ -4876,6 +4877,8 @@ struct OSDOp {
 
   bufferlist indata, outdata;
   errorcode32_t rval;
+
+  OpFinisher *op_finisher = nullptr;
 
   OSDOp() : rval(0) {
     memset(&op, 0, sizeof(ceph_osd_op));
