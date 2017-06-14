@@ -408,7 +408,7 @@ struct bluestore_blob_use_tracker_t {
   /// return false if there are some references to the blob,
   /// in this case release_units contains pextents
   /// (identified by their offsets relative to the blob start)
-  //  that are not used any more and can be safely deallocated. 
+  ///  that are not used any more and can be safely deallocated.
   bool put(
     uint32_t offset,
     uint32_t len,
@@ -471,7 +471,6 @@ struct bluestore_blob_use_tracker_t {
   static void generate_test_instances(list<bluestore_blob_use_tracker_t*>& o);
 private:
   void allocate();
-  void fall_back_to_per_au(uint32_t _num_au, uint32_t _au_size);
 };
 WRITE_CLASS_DENC(bluestore_blob_use_tracker_t)
 ostream& operator<<(ostream& out, const bluestore_blob_use_tracker_t& rm);
@@ -480,7 +479,7 @@ ostream& operator<<(ostream& out, const bluestore_blob_use_tracker_t& rm);
 struct bluestore_blob_t {
 private:
   PExtentVector extents;              ///< raw data position on device
-  uint32_t logical_length = 0;        ///< < original length of data stored in the blob
+  uint32_t logical_length = 0;        ///< original length of data stored in the blob
   uint32_t compressed_length = 0;     ///< compressed length if any
 
 public:
