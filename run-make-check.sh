@@ -29,6 +29,7 @@ function get_processors() {
 
 function run() {
     local install_cmd
+    local which_pkg="which"
     if test -f /etc/redhat-release ; then
         source /etc/os-release
         if ! type bc > /dev/null 2>&1 ; then
@@ -40,6 +41,8 @@ function run() {
         else
             install_cmd="yum install -y"
         fi
+    else
+        which_pkg="debianutils"
     fi
 
     type apt-get > /dev/null 2>&1 && install_cmd="apt-get install -y"
@@ -51,7 +54,7 @@ function run() {
         exit 1
     fi
     if [ -n "$install_cmd" ]; then
-        $DRY_RUN sudo $install_cmd ccache jq
+        $DRY_RUN sudo $install_cmd ccache jq $which_pkg
     else
         echo "WARNING: Don't know how to install packages" >&2
     fi
