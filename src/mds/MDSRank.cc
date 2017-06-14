@@ -978,8 +978,42 @@ void MDSRank::boot_start(BootStep step, int r)
       break;
     case MDS_BOOT_REPLAY_DONE:
       assert(is_any_replay());
+
+      // Sessiontable and inotable should be in sync after replay, validate
+      // that they are consistent.
+      validate_sessions();
+
       replay_done();
       break;
+  }
+}
+
+void MDSRank::validate_sessions()
+{
+  assert(mds_lock.is_locked_by_me());
+  std::vector<Session*> victims;
+
+  // Identify any sessions which have state inconsistent with other,
+  // after they have been loaded from rados during startup.
+  // Mitigate bugs like: http://tracker.ceph.com/issues/16842
+  const auto &sessions = sessionmap.get_sessions();
+  for (const auto &i : sessions) {
+    Session *session = i.second;
+    interval_set<inodeno_t> badones;
+    if (inotable->intersects_free(session->info.prealloc_inos, &badones)) {
+      clog->error() << "Client session loaded with invalid preallocated "
+                          "inodes, evicting session " << *session;
+
+      // Make the session consistent with inotable so that it can
+      // be cleanly torn down
+      session->info.prealloc_inos.subtract(badones);
+
+      victims.push_back(session);
+    }
+  }
+
+  for (const auto &session: victims) {
+    server->kill_session(session, nullptr);
   }
 }
 
