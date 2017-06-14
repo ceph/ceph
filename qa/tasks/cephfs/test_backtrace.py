@@ -50,7 +50,8 @@ class TestBacktrace(CephFSTestCase):
         new_pool_id = get_pool_id(new_pool_name)
 
         # That an object which has switched pools gets its backtrace updated
-        self.mount_a.run_shell(["setfattr", "-n", "ceph.file.layout.pool", "-v", new_pool_name, "./parent_b/alpha"])
+        self.mount_a.setfattr("./parent_b/alpha",
+                              "ceph.file.layout.pool", new_pool_name)
         self.fs.mds_asok(["flush", "journal"])
         backtrace_old_pool = self.fs.read_backtrace(file_ino, pool=old_data_pool_name)
         self.assertEqual(backtrace_old_pool['pool'], new_pool_id)
@@ -70,7 +71,8 @@ class TestBacktrace(CephFSTestCase):
         self.assertEqual(['alpha', 'parent_c'], [a['dname'] for a in backtrace_new_pool['ancestors']])
 
         # That layout is written to new pool after change to other field in layout
-        self.mount_a.run_shell(["setfattr", "-n", "ceph.file.layout.object_size", "-v", "8388608", "./parent_c/alpha"])
+        self.mount_a.setfattr("./parent_c/alpha",
+                              "ceph.file.layout.object_size", "8388608")
 
         self.fs.mds_asok(["flush", "journal"])
         new_pool_layout = self.fs.read_layout(file_ino, pool=new_pool_name)

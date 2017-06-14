@@ -568,13 +568,33 @@ class CephFSMount(object):
             # gives you [''] instead of []
             return []
 
+    def setfattr(self, path, key, val):
+        """
+        Wrap setfattr.
+
+        :param path: relative to mount point
+        :param key: xattr name
+        :param val: xattr value
+        :return: None
+        """
+        self.run_shell(["setfattr", "-n", key, "-v", val, path])
+
     def getfattr(self, path, attr):
         """
-        Wrap getfattr: return the values of a named xattr on one file.
+        Wrap getfattr: return the values of a named xattr on one file, or
+        None if the attribute is not found.
 
         :return: a string
         """
-        p = self.run_shell(["getfattr", "--only-values", "-n", attr, path])
+        p = self.run_shell(["getfattr", "--only-values", "-n", attr, path], wait=False)
+        try:
+            p.wait()
+        except CommandFailedError as e:
+            if e.exitstatus == 1 and "No such attribute" in p.stderr.getvalue():
+                return None
+            else:
+                raise
+
         return p.stdout.getvalue()
 
     def df(self):

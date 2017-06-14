@@ -345,6 +345,7 @@ protected:
   MetaSession *_open_mds_session(mds_rank_t mds);
   void _close_mds_session(MetaSession *s);
   void _closed_mds_session(MetaSession *s);
+  bool _any_stale_sessions() const;
   void _kick_stale_sessions();
   void handle_client_session(MClientSession *m);
   void send_reconnect(MetaSession *s);
