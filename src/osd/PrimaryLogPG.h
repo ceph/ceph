@@ -177,6 +177,7 @@ public:
   typedef boost::tuple<int, CopyResults*> CopyCallbackResults;
 
   friend class CopyFromCallback;
+  friend class CopyFromFinisher;
   friend class PromoteCallback;
 
   struct ProxyReadOp {
@@ -540,8 +541,6 @@ public:
 
     mempool::osd_pglog::vector<pair<osd_reqid_t, version_t> > extra_reqids;
 
-    CopyFromCallback *copy_cb;
-
     hobject_t new_temp_oid, discard_temp_oid;  ///< temp objects we should start/stop tracking
 
     list<std::function<void()>> on_applied;
@@ -600,7 +599,6 @@ public:
       data_off(0), reply(NULL), pg(_pg),
       num_read(0),
       num_write(0),
-      copy_cb(NULL),
       sent_reply(false),
       async_read_result(0),
       inflightreads(0),
@@ -620,7 +618,6 @@ public:
       data_off(0), reply(NULL), pg(_pg),
       num_read(0),
       num_write(0),
-      copy_cb(NULL),
       async_read_result(0),
       inflightreads(0),
       lock_type(ObjectContext::RWState::RWNONE) {}
@@ -794,16 +791,7 @@ protected:
    *
    * @param ctx [in] ctx to clean up
    */
-  void close_op_ctx(OpContext *ctx) {
-    release_object_locks(ctx->lock_manager);
-    ctx->op_t.reset();
-    for (auto p = ctx->on_finish.begin();
-	 p != ctx->on_finish.end();
-	 ctx->on_finish.erase(p++)) {
-      (*p)();
-    }
-    delete ctx;
-  }
+  void close_op_ctx(OpContext *ctx);
 
   /**
    * Releases locks
@@ -1286,7 +1274,7 @@ protected:
     return size;
   }
   void _copy_some(ObjectContextRef obc, CopyOpRef cop);
-  void finish_copyfrom(OpContext *ctx);
+  void finish_copyfrom(CopyFromCallback *cb);
   void finish_promote(int r, CopyResults *results, ObjectContextRef obc);
   void cancel_copy(CopyOpRef cop, bool requeue);
   void cancel_copy_ops(bool requeue);
