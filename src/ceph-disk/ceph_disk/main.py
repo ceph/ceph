@@ -5560,8 +5560,8 @@ def make_destroy_parser(subparsers):
         formatter_class=argparse.RawDescriptionHelpFormatter,
         description=textwrap.fill(textwrap.dedent("""\ Destroy the OSD located at PATH.  It removes the OSD from the
         cluster and marks it destroyed. An OSD must be down before it
-        can be destroyed. Once it is destroy, a new OSD can be created
-        in its place, resuing the same OSD id and position (e.g. after
+        can be destroyed. Once it is destroyed, a new OSD can be created
+        in its place, reusing the same OSD id and position (e.g. after
         a failed HDD or SSD is replaced).  Alternatively, if the
         --purge option is also specified, the OSD is removed from the
         CRUSH map and the OSD id is deallocated.""")),
