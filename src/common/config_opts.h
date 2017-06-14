@@ -804,6 +804,7 @@ OPTION(osd_heartbeat_interval, OPT_INT, 6)       // (seconds) how often we ping 
 OPTION(osd_heartbeat_grace, OPT_INT, 20)
 OPTION(osd_heartbeat_min_peers, OPT_INT, 10)     // minimum number of peers
 OPTION(osd_heartbeat_use_min_delay_socket, OPT_BOOL, false) // prio the heartbeat tcp socket and set dscp as CS6 on it if true
+OPTION(osd_heartbeat_min_size, OPT_INT, 2000) // the minimum size of OSD heartbeat messages to send
 
 // max number of parallel snap trims/pg
 OPTION(osd_pg_max_concurrent_snap_trims, OPT_U64, 2)

@@ -12,6 +12,17 @@
  * 
  */
 
+
+/**
+ * This is used to send pings between daemons (so far, the OSDs) for
+ * heartbeat purposes. We include a timestamp and distinguish between
+ * outgoing pings and responses to those. If you set the
+ * min_message in the constructor, the message will inflate itself
+ * to the specified size -- this is good for dealing with network
+ * issues with jumbo frames. See http://tracker.ceph.com/issues/20087
+ *
+ */
+
 #ifndef CEPH_MOSDPING_H
 #define CEPH_MOSDPING_H
 
@@ -23,7 +34,7 @@
 
 class MOSDPing : public Message {
 
-  static const int HEAD_VERSION = 2;
+  static const int HEAD_VERSION = 3;
   static const int COMPAT_VERSION = 2;
 
  public:
@@ -52,13 +63,15 @@ class MOSDPing : public Message {
   __u8 op;
   osd_peer_stat_t peer_stat;
   utime_t stamp;
+  uint32_t min_message_size;
 
-  MOSDPing(const uuid_d& f, epoch_t e, __u8 o, utime_t s)
+  MOSDPing(const uuid_d& f, epoch_t e, __u8 o, utime_t s, uint32_t min_message)
     : Message(MSG_OSD_PING, HEAD_VERSION, COMPAT_VERSION),
-      fsid(f), map_epoch(e), peer_as_of_epoch(0), op(o), stamp(s)
+      fsid(f), map_epoch(e), peer_as_of_epoch(0), op(o), stamp(s),
+      min_message_size(min_message)
   { }
   MOSDPing()
-    : Message(MSG_OSD_PING, HEAD_VERSION, COMPAT_VERSION)
+    : Message(MSG_OSD_PING, HEAD_VERSION, COMPAT_VERSION), min_message_size(0)
   {}
 private:
   ~MOSDPing() override {}
@@ -72,6 +85,12 @@ public:
     ::decode(op, p);
     ::decode(peer_stat, p);
     ::decode(stamp, p);
+    if (header.version >= 3) {
+      bufferlist size_bl;
+      int payload_mid_length = p.get_off();
+      ::decode(size_bl, p);
+      min_message_size = size_bl.length() + payload_mid_length;
+    }
   }
   void encode_payload(uint64_t features) override {
     ::encode(fsid, payload);
@@ -80,6 +99,10 @@ public:
     ::encode(op, payload);
     ::encode(peer_stat, payload);
     ::encode(stamp, payload);
+    bufferptr size_bp(MAX(min_message_size - payload.length(), 0));
+    bufferlist size_bl;;
+    size_bl.push_back(size_bp);
+    ::encode(size_bl, payload);
   }
 
   const char *get_type_name() const override { return "osd_ping"; }
