@@ -3466,9 +3466,10 @@ int OSDMap::build_simple_crush_rules(
     crush.get_type_name(cct->_conf->osd_crush_chooseleaf_type);
 
   int r;
-  r = crush.add_simple_ruleset_at("replicated_ruleset", root, failure_domain,
-                                  "firstn", pg_pool_t::TYPE_REPLICATED,
-                                  crush_rule, ss);
+  r = crush.add_simple_rule_at(
+    "replicated_ruleset", root, failure_domain,
+    "firstn", pg_pool_t::TYPE_REPLICATED,
+    crush_rule, ss);
   if (r < 0)
     return r;
   // do not add an erasure rule by default or else we will implicitly

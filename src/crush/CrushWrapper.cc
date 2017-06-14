@@ -1297,10 +1297,11 @@ void CrushWrapper::reweight(CephContext *cct)
   }
 }
 
-int CrushWrapper::add_simple_ruleset_at(string name, string root_name,
-                                        string failure_domain_name,
-                                        string mode, int rule_type,
-                                        int rno, ostream *err)
+int CrushWrapper::add_simple_rule_at(
+  string name, string root_name,
+  string failure_domain_name,
+  string mode, int rule_type,
+  int rno, ostream *err)
 {
   if (rule_exists(name)) {
     if (err)
@@ -1383,13 +1384,14 @@ int CrushWrapper::add_simple_ruleset_at(string name, string root_name,
   return rno;
 }
 
-int CrushWrapper::add_simple_ruleset(string name, string root_name,
-                                     string failure_domain_name,
-                                     string mode, int rule_type,
-                                     ostream *err)
+int CrushWrapper::add_simple_rule(
+  string name, string root_name,
+  string failure_domain_name,
+  string mode, int rule_type,
+  ostream *err)
 {
-  return add_simple_ruleset_at(name, root_name, failure_domain_name, mode,
-                               rule_type, -1, err);
+  return add_simple_rule_at(name, root_name, failure_domain_name, mode,
+			    rule_type, -1, err);
 }
 
 int CrushWrapper::get_rule_weight_osd_map(unsigned ruleno, map<int,float> *pmap)

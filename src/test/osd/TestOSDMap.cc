@@ -56,9 +56,10 @@ public:
     osdmap.apply_incremental(pending_inc);
 
     // Create an EC ruleset and a pool using it
-    int r = osdmap.crush->add_simple_ruleset("erasure", "default", "osd",
-					     "indep", pg_pool_t::TYPE_ERASURE,
-					     &cerr);
+    int r = osdmap.crush->add_simple_rule(
+      "erasure", "default", "osd",
+      "indep", pg_pool_t::TYPE_ERASURE,
+      &cerr);
 
     OSDMap::Incremental new_pool_inc(osdmap.get_epoch() + 1);
     new_pool_inc.new_pool_max = osdmap.get_pool_max();

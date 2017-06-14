@@ -896,7 +896,7 @@ int main(int argc, const char **argv)
       cerr << "rule " << rule_name << " already exists" << std::endl;
       return EXIT_FAILURE;
     }
-    int r = crush.add_simple_ruleset(rule_name, rule_root, rule_type, rule_mode,
+    int r = crush.add_simple_rule(rule_name, rule_root, rule_type, rule_mode,
       pg_pool_t::TYPE_REPLICATED, &err);
     if (r < 0) {
       cerr << err.str() << std::endl;
