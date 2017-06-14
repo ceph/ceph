@@ -133,6 +133,7 @@ class CephAnsible(Task):
         """
 
         args = [
+            'ANSIBLE_STDOUT_CALLBACK=debug',
             'ansible-playbook', '-vv',
             '-i', 'inven.yml', 'site.yml'
         ]
