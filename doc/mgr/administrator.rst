@@ -79,9 +79,10 @@ OPTION(mgr_module_path, OPT_STR, CEPH_PKGLIBDIR "/mgr") // where to load python 
 :Type: String
 :Default: ``"/var/lib/ceph/mgr/$cluster-$id"``
 
-``mgr beacon period``
+``mgr tick period``
 
-:Description: How many seconds between mgr beacons to monitors
+:Description: How many seconds between mgr beacons to monitors, and other
+              periodic checks.
 :Type: Integer
 :Default: ``5``
 
