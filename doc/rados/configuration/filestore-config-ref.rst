@@ -192,7 +192,7 @@ The following settings provide limits on the size of filestore queue.
 :Description: Defines the maximum number of in progress operations the file store accepts before blocking on queuing new operations. 
 :Type: Integer
 :Required: No. Minimal impact on performance.
-:Default: ``500``
+:Default: ``50``
 
 
 ``filestore queue max bytes``
@@ -203,20 +203,6 @@ The following settings provide limits on the size of filestore queue.
 :Default: ``100 << 20``
 
 
-``filestore queue committing max ops``
-
-:Description: The maximum number of operations the filestore can commit. 
-:Type: Integer
-:Required: No
-:Default: ``500``
-
-
-``filestore queue committing max bytes``
-
-:Description: The maximum number of bytes the filestore can commit.
-:Type: Integer
-:Required: No
-:Default: ``100 << 20``
 
 
 .. index:: filestore; timeouts
