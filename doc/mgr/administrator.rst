@@ -25,6 +25,15 @@ of ``ceph status``, which should now include a mgr status line::
 
     mgr active: $name
 
+Client authentication
+---------------------
+The manager is a new daemon which requires new CephX capabilities. If you upgrade
+a cluster from an old version of Ceph, or use the default install/deploy tools,
+your admin client should get this capability automatically. If you use tooling from
+elsewhere, you may get EACCES errors when invoking certain ceph cluster commands.
+To fix that, add a "mgr allow *" stanza to your client's cephx capabilities by
+`Modifying User Capabilities`_.
+
 High availability
 -----------------
 
@@ -92,3 +101,4 @@ OPTION(mgr_module_path, OPT_STR, CEPH_PKGLIBDIR "/mgr") // where to load python 
 :Type: Integer
 :Default: ``30``
 
+.. _Modifying User Capabilities: ../rados/operations/user-management#modify-user-capabilities
