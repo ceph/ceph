@@ -1323,6 +1323,10 @@ protected:
   friend class C_ChecksumRead;
 
   int do_extent_cmp(OpContext *ctx, OSDOp& osd_op);
+  int finish_extent_cmp(OSDOp& osd_op, const bufferlist &read_bl);
+
+  friend class C_ExtentCmpRead;
+
   int do_read(OpContext *ctx, OSDOp& osd_op);
   int do_sparse_read(OpContext *ctx, OSDOp& osd_op);
   int do_writesame(OpContext *ctx, OSDOp& osd_op);
