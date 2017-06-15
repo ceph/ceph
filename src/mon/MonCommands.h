@@ -769,10 +769,11 @@ COMMAND("osd lost " \
 	"name=sure,type=CephChoices,strings=--yes-i-really-mean-it,req=false", \
 	"mark osd as permanently lost. THIS DESTROYS DATA IF NO MORE REPLICAS EXIST, BE CAREFUL", \
 	"osd", "rw", "cli,rest")
-COMMAND("osd create " \
+COMMAND_WITH_FLAG("osd create " \
 	"name=uuid,type=CephUUID,req=false " \
 	"name=id,type=CephOsdName,req=false", \
-	"create new osd (with optional UUID and ID)", "osd", "rw", "cli,rest")
+	"create new osd (with optional UUID and ID)", "osd", "rw", "cli,rest",
+	FLAG(DEPRECATED))
 COMMAND("osd new " \
         "name=uuid,type=CephUUID,req=true " \
         "name=id,type=CephOsdName,req=false", \
