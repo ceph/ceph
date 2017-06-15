@@ -17,6 +17,7 @@
 #include "rgw_rest_s3.h"
 
 class RGWHandler_REST_S3Website : public RGWHandler_REST_S3 {
+  bool web_dir() const;
 protected:
   int retarget(RGWOp *op, RGWOp **new_op) override;
   // TODO: this should be virtual I think, and ensure that it's always
