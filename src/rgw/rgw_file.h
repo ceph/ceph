@@ -1085,8 +1085,6 @@ namespace rgw {
 
     MkObjResult mkdir(RGWFileHandle* parent, const char *name, struct stat *st,
 		      uint32_t mask, uint32_t flags);
-    MkObjResult mkdir2(RGWFileHandle* parent, const char *name, struct stat *st,
-		      uint32_t mask, uint32_t flags);
 
     int unlink(RGWFileHandle* rgw_fh, const char *name,
 	       uint32_t flags = FLAG_NONE);
