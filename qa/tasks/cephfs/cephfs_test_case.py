@@ -102,6 +102,7 @@ class CephFSTestCase(CephTestCase):
         # To avoid any issues with e.g. unlink bugs, we destroy and recreate
         # the filesystem rather than just doing a rm -rf of files
         self.mds_cluster.mds_stop()
+        self.mds_cluster.mds_fail()
         self.mds_cluster.delete_all_filesystems()
         self.fs = None # is now invalid!
 
