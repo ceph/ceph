@@ -19,6 +19,7 @@ if len(sys.argv) < 3:
 
 addr = sys.argv[1]
 auth = ('admin', sys.argv[2])
+headers = {'Content-type': 'application/json'}
 
 request = None
 
@@ -26,6 +27,7 @@ request = None
 request = requests.post(
     addr + '/pool?wait=yes',
     data=json.dumps({'name': 'supertestfriends', 'pg_num': 128}),
+    headers=headers,
     verify=False,
     auth=auth)
 print(request.text)
@@ -82,6 +84,7 @@ for method, endpoint, args in screenplay:
     request = getattr(requests, method)(
         url,
         data=json.dumps(args),
+        headers=headers,
         verify=False,
         auth=auth)
     print(request.text)
