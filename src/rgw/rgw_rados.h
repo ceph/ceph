@@ -1172,7 +1172,7 @@ struct RGWZoneParams : RGWSystemMetaObj {
 
   RGWAccessKey system_key;
 
-  map<string, RGWZonePlacementInfo> placement_pools;
+  map<string, RGWZonePlacementInfo> placement_rules;
 
   string realm_id;
 
@@ -1215,7 +1215,7 @@ struct RGWZoneParams : RGWSystemMetaObj {
     ::encode(user_uid_pool, bl);
     RGWSystemMetaObj::encode(bl);
     ::encode(system_key, bl);
-    ::encode(placement_pools, bl);
+    ::encode(placement_rules, bl);
     ::encode(metadata_heap, bl);
     ::encode(realm_id, bl);
     ::encode(lc_pool, bl);
@@ -1246,7 +1246,7 @@ struct RGWZoneParams : RGWSystemMetaObj {
     if (struct_v >= 3)
       ::decode(system_key, bl);
     if (struct_v >= 4)
-      ::decode(placement_pools, bl);
+      ::decode(placement_rules, bl);
     if (struct_v >= 5)
       ::decode(metadata_heap, bl);
     if (struct_v >= 6) {
@@ -1277,7 +1277,7 @@ struct RGWZoneParams : RGWSystemMetaObj {
   static void generate_test_instances(list<RGWZoneParams*>& o);
 
   bool find_placement(const rgw_data_placement_target& placement, string *placement_id) {
-    for (const auto& pp : placement_pools) {
+    for (const auto& pp : placement_rules) {
       const RGWZonePlacementInfo& info = pp.second;
       if (info.index_pool == placement.index_pool.to_str() &&
           info.data_pool == placement.data_pool.to_str() &&
@@ -1290,8 +1290,8 @@ struct RGWZoneParams : RGWSystemMetaObj {
   }
 
   bool get_placement(const string& placement_id, RGWZonePlacementInfo *placement) const {
-    auto iter = placement_pools.find(placement_id);
-    if (iter == placement_pools.end()) {
+    auto iter = placement_rules.find(placement_id);
+    if (iter == placement_rules.end()) {
       return false;
     }
     *placement = iter->second;
@@ -1314,8 +1314,8 @@ struct RGWZoneParams : RGWSystemMetaObj {
     if (placement_id.empty()) {
       return false;
     }
-    auto iter = placement_pools.find(placement_id);
-    if (iter == placement_pools.end()) {
+    auto iter = placement_rules.find(placement_id);
+    if (iter == placement_rules.end()) {
       return false;
     }
     if (!obj.in_extra_data) {

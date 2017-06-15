@@ -4,7 +4,7 @@ void test_rgw_add_placement(RGWZoneGroup *zonegroup, RGWZoneParams *zone_params,
 {
   zonegroup->placement_targets[name] = { name };
 
-  RGWZonePlacementInfo& pinfo = zone_params->placement_pools[name];
+  RGWZonePlacementInfo& pinfo = zone_params->placement_rules[name];
   pinfo.index_pool = rgw_pool(name + ".index").to_str();
   pinfo.data_pool = rgw_pool(name + ".data").to_str();
   pinfo.data_extra_pool = rgw_pool(name + ".extra").to_str();

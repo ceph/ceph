@@ -4187,7 +4187,7 @@ int main(int argc, const char **argv)
             return EINVAL;
           }
 
-          RGWZonePlacementInfo& info = zone.placement_pools[placement_id];
+          RGWZonePlacementInfo& info = zone.placement_rules[placement_id];
 
           info.index_pool = *index_pool;
           info.data_pool = *data_pool;
@@ -4201,8 +4201,8 @@ int main(int argc, const char **argv)
             info.compression_type = *compression_type;
           }
         } else if (opt_cmd == OPT_ZONE_PLACEMENT_MODIFY) {
-          auto p = zone.placement_pools.find(placement_id);
-          if (p == zone.placement_pools.end()) {
+          auto p = zone.placement_rules.find(placement_id);
+          if (p == zone.placement_rules.end()) {
             cerr << "ERROR: zone placement target '" << placement_id
                 << "' not found" << std::endl;
             return -ENOENT;
@@ -4224,7 +4224,7 @@ int main(int argc, const char **argv)
             info.compression_type = *compression_type;
           }
         } else if (opt_cmd == OPT_ZONE_PLACEMENT_RM) {
-          zone.placement_pools.erase(placement_id);
+          zone.placement_rules.erase(placement_id);
         }
 
         ret = zone.update();
@@ -4245,7 +4245,7 @@ int main(int argc, const char **argv)
 	  cerr << "unable to initialize zone: " << cpp_strerror(-ret) << std::endl;
 	  return -ret;
 	}
-	encode_json("placement_pools", zone.placement_pools, formatter);
+	encode_json("placement_rules", zone.placement_rules, formatter);
 	formatter->flush(cout);
       }
       break;
