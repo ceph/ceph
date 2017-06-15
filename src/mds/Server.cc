@@ -6920,6 +6920,8 @@ bool Server::_rename_prepare_witness(MDRequestRef& mdr, mds_rank_t who, set<mds_
     req->destdnpath.push_dentry(dn->name);
   if (straydn)
     mdcache->replicate_stray(straydn, who, req->stray);
+
+  req->srcdn_auth = mdr->more()->srcdn_auth_mds;
   
   // srcdn auth will verify our current witness list is sufficient
   req->witnesses = witnesse;
@@ -7470,7 +7472,17 @@ void Server::handle_slave_rename_prep(MDRequestRef& mdr)
 	   << " " << mdr->slave_request->srcdnpath 
 	   << " to " << mdr->slave_request->destdnpath
 	   << dendl;
-  
+
+  if (mdr->slave_request->is_interrupted()) {
+    dout(10) << " slave request interrupted, sending noop reply" << dendl;
+    MMDSSlaveRequest *reply= new MMDSSlaveRequest(mdr->reqid, mdr->attempt, MMDSSlaveRequest::OP_RENAMEPREPACK);
+    reply->mark_interrupted();
+    mds->send_message_mds(reply, mdr->slave_to_mds);
+    mdr->slave_request->put();
+    mdr->slave_request = 0;
+    return;
+  }
+
   // discover destdn
   filepath destpath(mdr->slave_request->destdnpath);
   dout(10) << " dest " << destpath << dendl;
@@ -8233,7 +8245,9 @@ void Server::handle_slave_rename_prep_ack(MDRequestRef& mdr, MMDSSlaveRequest *a
 
   // witnessed?  or add extra witnesses?
   assert(mdr->more()->witnessed.count(from) == 0);
-  if (ack->witnesses.empty()) {
+  if (ack->is_interrupted()) {
+    dout(10) << " slave request interrupted, noop" << dendl;
+  } else if (ack->witnesses.empty()) {
     mdr->more()->witnessed.insert(from);
     if (!ack->is_not_journaled())
       mdr->more()->has_journaled_slaves = true;

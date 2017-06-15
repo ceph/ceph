@@ -494,6 +494,7 @@ protected:
   bool rejoins_pending;
   set<mds_rank_t> rejoin_gather;      // nodes from whom i need a rejoin
   set<mds_rank_t> rejoin_sent;        // nodes i sent a rejoin to
+  set<mds_rank_t> rejoin_ack_sent;    // nodes i sent a rejoin to
   set<mds_rank_t> rejoin_ack_gather;  // nodes from whom i need a rejoin ack
   map<mds_rank_t,map<inodeno_t,map<client_t,Capability::Import> > > rejoin_imported_caps;
   map<inodeno_t,pair<mds_rank_t,map<client_t,Capability::Export> > > rejoin_slave_exports;
