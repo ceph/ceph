@@ -904,7 +904,6 @@ protected:
   list<OpRequestRef>            waiting_for_scrub;
 
   list<OpRequestRef>            waiting_for_cache_not_full;
-  list<OpRequestRef>            waiting_for_all_missing;
   map<hobject_t, list<OpRequestRef>> waiting_for_unreadable_object,
 			     waiting_for_degraded_object,
 			     waiting_for_blocked_object;
