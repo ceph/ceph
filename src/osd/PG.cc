@@ -799,7 +799,6 @@ void PG::check_past_interval_bounds() const
       derr << info.pgid << " required past_interval bounds are"
 	   << " empty [" << rpib << ") but past_intervals is not: "
 	   << past_intervals << dendl;
-      assert(past_intervals.empty());
     }
   } else {
     if (past_intervals.empty()) {
