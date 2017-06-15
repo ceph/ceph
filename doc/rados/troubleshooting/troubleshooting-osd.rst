@@ -417,7 +417,57 @@ Possible solutions
 - Upgrade Ceph
 - Restart OSDs
 
+Debugging Slow Requests
+-----------------------
 
+If you run "ceph daemon osd.<id> dump_historic_ops" or "dump_ops_in_flight",
+you will see a set of operations and a list of events each operation went
+through. These are briefly described below.
+
+Events from the Messenger layer:
+
+- header_read: when the messenger first started reading the message off the wire
+- throttled: when the messenger tried to acquire memory throttle space to read
+  the message into memory
+- all_read: when the messenger finished reading the message off the wire
+- dispatched: when the messenger gave the message to the OSD
+- Initiated: <This is identical to header_read. The existence of both is a
+  historical oddity.
+
+Events from the OSD as it prepares operations
+
+- queued_for_pg: the op has been put into the queue for processing by its PG
+- reached_pg: the PG has started doing the op
+- waiting for *: the op is waiting for some other work to complete before it
+  can proceed (a new OSDMap; for its object target to scrub; for the PG to
+  finish peering; all as specified in the message)
+- started: the op has been accepted as something the OSD should actually do
+  (reasons not to do it: failed security/permission checks; out-of-date local
+  state; etc) and is now actually being performed
+- waiting for subops from: the op has been sent to replica OSDs
+
+Events from the FileStore
+
+- commit_queued_for_journal_write: the op has been given to the FileStore
+- write_thread_in_journal_buffer: the op is in the journal's buffer and waiting
+  to be persisted (as the next disk write)
+- journaled_completion_queued: the op was journaled to disk and its callback
+  queued for invocation
+
+Events from the OSD after stuff has been given to local disk
+
+- op_commit: the op has been committed (ie, written to journal) by the
+  primary OSD
+- op_applied: The op has been write()'en to the backing FS (ie, applied in
+  memory but not flushed out to disk) on the primary
+- sub_op_applied: op_applied, but for a replica's "subop"
+- sub_op_committed: op_commited, but for a replica's subop (only for EC pools)
+- sub_op_commit_rec/sub_op_apply_rec from <X>: the primary marks this when it
+  hears about the above, but for a particular replica <X>
+- commit_sent: we sent a reply back to the client (or primary OSD, for sub ops)
+
+Many of these events are seemingly redundant, but cross important boundaries in
+the internal code (such as passing data across locks into new threads).
 
 Flapping OSDs
 =============
