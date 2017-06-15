@@ -7,7 +7,7 @@
 #include "PaxosService.h"
 #include "mon/PGMap.h"
 
-class PGStatService;
+class MonPGStatService;
 class MgrPGStatService;
 
 class MgrStatMonitor : public PaxosService {
@@ -65,7 +65,7 @@ public:
 
   void print_summary(Formatter *f, std::ostream *ss) const;
 
-  PGStatService *get_pg_stat_service();
+  MonPGStatService *get_pg_stat_service();
 
   friend class C_Updated;
 };

@@ -11,7 +11,7 @@
 #include "messages/MStatfs.h"
 #include "messages/MStatfsReply.h"
 
-class MgrPGStatService : public PGStatService {
+class MgrPGStatService : public MonPGStatService {
   PGMapDigest& digest;
 public:
   MgrPGStatService(PGMapDigest& d) : digest(d) {}
@@ -63,7 +63,7 @@ MgrStatMonitor::MgrStatMonitor(Monitor *mn, Paxos *p, const string& service_name
 
 MgrStatMonitor::~MgrStatMonitor() = default;
 
-PGStatService *MgrStatMonitor::get_pg_stat_service()
+MonPGStatService *MgrStatMonitor::get_pg_stat_service()
 {
   return pgservice.get();
 }
