@@ -1160,9 +1160,7 @@ static inline std::string make_uri(const std::string& bucket_name,
 				   const std::string& object_name) {
   std::string uri("/");
   uri.reserve(bucket_name.length() + object_name.length() + 2);
-  uri += bucket_name;
-  uri += "/";
-  uri += object_name;
+  uri.append(bucket_name).append("/").append(object_name);
   return uri;
 }
 
