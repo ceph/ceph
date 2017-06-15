@@ -1276,19 +1276,6 @@ struct RGWZoneParams : RGWSystemMetaObj {
   void decode_json(JSONObj *obj);
   static void generate_test_instances(list<RGWZoneParams*>& o);
 
-  bool find_placement(const rgw_data_placement_target& placement, string *placement_id) {
-    for (const auto& pp : placement_rules) {
-      const RGWZonePlacementInfo& info = pp.second;
-      if (info.index_pool == placement.index_pool.to_str() &&
-          info.data_pool == placement.data_pool.to_str() &&
-          info.data_extra_pool == placement.data_extra_pool.to_str()) {
-        *placement_id = pp.first;
-        return true;
-      }
-    }
-    return false;
-  }
-
   bool get_placement(const string& placement_id, RGWZonePlacementInfo *placement) const {
     auto iter = placement_rules.find(placement_id);
     if (iter == placement_rules.end()) {
