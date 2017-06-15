@@ -1972,20 +1972,13 @@ void BlueStore::ExtentMap::update(KeyValueDB::Transaction t,
 	  // avoid resharding the trailing shard, even if it is small
 	  else if (n != shards.end() &&
 		   len < g_conf->bluestore_extent_map_shard_min_size) {
-	    // we are small; combine with a neighbor
-	    if (p == shards.begin() && endoff == OBJECT_MAX_SIZE) {
-	      // we are an only shard
-	      request_reshard(0, OBJECT_MAX_SIZE);
-	      return;
-	    } else if (p == shards.begin()) {
-	      // combine with next shard
+            assert(endoff != OBJECT_MAX_SIZE);
+	    if (p == shards.begin()) {
+	      // we are the first shard, combine with next shard
 	      request_reshard(p->shard_info->offset, endoff + 1);
-	    } else if (endoff == OBJECT_MAX_SIZE) {
-	      // combine with previous shard
-	      request_reshard(prev_p->shard_info->offset, endoff);
-	      return;
 	    } else {
-	      // combine with the smaller of the two
+	      // combine either with the previous shard or the next,
+	      // whichever is smaller
 	      if (prev_p->shard_info->bytes > n->shard_info->bytes) {
 		request_reshard(p->shard_info->offset, endoff + 1);
 	      } else {
@@ -2302,8 +2295,6 @@ bool BlueStore::ExtentMap::encode_some(
 
   unsigned n = 0;
   size_t bound = 0;
-  denc(struct_v, bound);
-  denc_varint(0, bound);
   bool must_reshard = false;
   for (auto p = start;
        p != extent_map.end() && p->logical_offset < end;
@@ -2316,20 +2307,25 @@ bool BlueStore::ExtentMap::encode_some(
       request_reshard(p->blob_start(), p->blob_end());
       must_reshard = true;
     }
-    denc_varint(0, bound); // blobid
-    denc_varint(0, bound); // logical_offset
-    denc_varint(0, bound); // len
-    denc_varint(0, bound); // blob_offset
+    if (!must_reshard) {
+      denc_varint(0, bound); // blobid
+      denc_varint(0, bound); // logical_offset
+      denc_varint(0, bound); // len
+      denc_varint(0, bound); // blob_offset
 
-    p->blob->bound_encode(
-      bound,
-      struct_v,
-      p->blob->shared_blob->get_sbid(),
-      false);
+      p->blob->bound_encode(
+        bound,
+        struct_v,
+        p->blob->shared_blob->get_sbid(),
+        false);
+    }
   }
   if (must_reshard) {
     return true;
   }
+
+  denc(struct_v, bound);
+  denc_varint(0, bound); // number of extents
 
   {
     auto app = bl.get_contiguous_appender(bound);
@@ -5314,7 +5310,7 @@ int BlueStore::fsck(bool deep)
 
   mempool_thread.init();
 
-  // we need finishrs and kv_{sync,fainlize}_thread *just* for replay
+  // we need finishers and kv_{sync,finalize}_thread *just* for replay
   _kv_start();
   r = _deferred_replay();
   _kv_stop();

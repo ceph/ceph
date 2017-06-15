@@ -11,8 +11,8 @@
  * at a time single thread can be active as well as single biggest
  * contiguous allocation that can be requested.
  *
- * Rest of the nodes are classified into three catagories:
- *   root note or Allocator
+ * Rest of the nodes are classified into three categories:
+ *   root node or Allocator
  *   internal nodes or BitMapAreaIN
  *   final nodes that contains Zones called BitMapAreaLeaf
  * This classification is according to their own implmentation of some
