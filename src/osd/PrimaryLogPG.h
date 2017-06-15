@@ -530,7 +530,8 @@ public:
     ObjectContextRef clone_obc;    // if we created a clone
     ObjectContextRef snapset_obc;  // if we created/deleted a snapdir
 
-    int data_off;        // FIXME: we may want to kill this msgr hint off at some point!
+    // FIXME: we may want to kill this msgr hint off at some point!
+    boost::optional<int> data_off = boost::none;
 
     MOSDOpReply *reply;
 
@@ -569,7 +570,6 @@ public:
     // pending async reads <off, len, op_flags> -> <outbl, outr>
     list<pair<boost::tuple<uint64_t, uint64_t, unsigned>,
 	      pair<bufferlist*, Context*> > > pending_async_reads;
-    int async_read_result;
     int inflightreads;
     friend struct OnReadComplete;
     void start_async_reads(PrimaryLogPG *pg);
@@ -596,11 +596,10 @@ public:
       bytes_written(0), bytes_read(0), user_at_version(0),
       current_osd_subop_num(0),
       obc(obc),
-      data_off(0), reply(NULL), pg(_pg),
+      reply(NULL), pg(_pg),
       num_read(0),
       num_write(0),
       sent_reply(false),
-      async_read_result(0),
       inflightreads(0),
       lock_type(ObjectContext::RWState::RWNONE) {
       if (obc->ssc) {
@@ -615,10 +614,9 @@ public:
       ignore_cache(false), ignore_log_op_stats(false), update_log_only(false),
       bytes_written(0), bytes_read(0), user_at_version(0),
       current_osd_subop_num(0),
-      data_off(0), reply(NULL), pg(_pg),
+      reply(NULL), pg(_pg),
       num_read(0),
       num_write(0),
-      async_read_result(0),
       inflightreads(0),
       lock_type(ObjectContext::RWState::RWNONE) {}
     void reset_obs(ObjectContextRef obc) {
@@ -1240,11 +1238,10 @@ protected:
   // -- copyfrom --
   map<hobject_t, CopyOpRef> copy_ops;
 
-  int fill_in_copy_get(
-    OpContext *ctx,
-    bufferlist::iterator& bp,
-    OSDOp& op,
-    ObjectContextRef& obc);
+  int do_copy_get(OpContext *ctx, bufferlist::iterator& bp, OSDOp& op,
+		  ObjectContextRef& obc);
+  int finish_copy_get();
+
   void fill_in_copy_get_noent(OpRequestRef& op, hobject_t oid,
                               OSDOp& osd_op);
 
@@ -1318,8 +1315,7 @@ protected:
   int do_xattr_cmp_str(int op, string& v1s, bufferlist& xattr);
 
   // -- checksum --
-  int do_checksum(OpContext *ctx, OSDOp& osd_op, bufferlist::iterator *bl_it,
-		  bool *async_read);
+  int do_checksum(OpContext *ctx, OSDOp& osd_op, bufferlist::iterator *bl_it);
   int finish_checksum(OSDOp& osd_op, Checksummer::CSumType csum_type,
                       bufferlist::iterator *init_value_bl_it,
                       const bufferlist &read_bl);
@@ -1327,6 +1323,8 @@ protected:
   friend class C_ChecksumRead;
 
   int do_extent_cmp(OpContext *ctx, OSDOp& osd_op);
+  int do_read(OpContext *ctx, OSDOp& osd_op);
+  int do_sparse_read(OpContext *ctx, OSDOp& osd_op);
   int do_writesame(OpContext *ctx, OSDOp& osd_op);
 
   bool pgls_filter(PGLSFilter *filter, hobject_t& sobj, bufferlist& outdata);
