@@ -3256,7 +3256,9 @@ void *BlueStore::MempoolThread::entry()
 
     float bytes_per_onode = (float)meta_bytes / (float)onode_num;
     size_t num_shards = store->cache_shards.size();
-    uint64_t shard_target = store->cct->_conf->bluestore_cache_size / num_shards;
+    float target_ratio = store->cache_meta_ratio + store->cache_data_ratio;
+    // A little sloppy but should be close enough
+    uint64_t shard_target = target_ratio * (store->cct->_conf->bluestore_cache_size / num_shards);
 
     for (auto i : store->cache_shards) {
       i->trim(shard_target,
