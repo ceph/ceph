@@ -15,6 +15,7 @@
 #ifndef CEPH_LOGCLIENT_H
 #define CEPH_LOGCLIENT_H
 
+#include <atomic>
 #include "common/LogEntry.h"
 #include "common/Mutex.h"
 

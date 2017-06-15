@@ -1052,7 +1052,7 @@ static const crypt_option_names crypt_options[] = {
 };
 
 static boost::string_view get_crypt_attribute(
-    RGWEnv* env,
+    const RGWEnv* env,
     std::map<std::string,
              RGWPostObj_ObjStore::post_form_part,
              const ltstr_nocase>* parts,

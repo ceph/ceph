@@ -393,16 +393,16 @@ public:
   void init(CephContext *cct);
   void init(CephContext *cct, char **envp);
   void set(const boost::string_ref& name, const boost::string_ref& val);
-  const char *get(const char *name, const char *def_val = NULL);
-  int get_int(const char *name, int def_val = 0);
+  const char *get(const char *name, const char *def_val = nullptr) const;
+  int get_int(const char *name, int def_val = 0) const;
   bool get_bool(const char *name, bool def_val = 0);
-  size_t get_size(const char *name, size_t def_val = 0);
-  bool exists(const char *name);
-  bool exists_prefix(const char *prefix);
+  size_t get_size(const char *name, size_t def_val = 0) const;
+  bool exists(const char *name) const;
+  bool exists_prefix(const char *prefix) const;
 
   void remove(const char *name);
 
-  std::map<string, string, ltstr_nocase>& get_map() { return env_map; }
+  const std::map<string, string, ltstr_nocase>& get_map() const { return env_map; }
 };
 
 enum http_op {
@@ -1397,7 +1397,7 @@ namespace rgw {
 
 
 struct req_info {
-  RGWEnv *env;
+  const RGWEnv *env;
   RGWHTTPArgs args;
   map<string, string> x_meta_map;
 
@@ -1410,7 +1410,7 @@ struct req_info {
   string request_params;
   string domain;
 
-  req_info(CephContext *cct, RGWEnv *_env);
+  req_info(CephContext *cct, const RGWEnv *env);
   void rebuild_from(req_info& src);
   void init_meta_info(bool *found_bad_meta);
 };
@@ -1725,7 +1725,6 @@ struct req_state {
   map<string, string> generic_attrs;
   rgw_err err;
   bool expect_cont;
-  bool header_ended;
   uint64_t obj_size;
   bool enable_ops_log;
   bool enable_usage_log;
