@@ -333,10 +333,11 @@ def remove_installed_packages(ctx):
 
 
 def remove_ceph_data(ctx):
-    log.info("Removing ceph data...")
+    log.info("Removing any stale ceph data...")
     ctx.cluster.run(
         args=[
             'sudo', 'rm', '-rf', '/etc/ceph',
+            run.Raw('/var/run/ceph*'),
         ],
     )
     install_task.purge_data(ctx)
