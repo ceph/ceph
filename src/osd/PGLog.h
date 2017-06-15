@@ -1121,7 +1121,7 @@ public:
     set<string> *log_keys_debug = 0,
     bool debug_verify_stored_missing = false
     ) {
-    ldpp_dout(dpp, 20) << "read_log_and_missing coll " << pg_coll
+    ldpp_dout(dpp, 20) << __func__ << " " << info.pgid << " coll " << pg_coll
 		       << " log_oid " << log_oid << dendl;
 
     // legacy?
@@ -1146,7 +1146,7 @@ public:
 	bufferlist::iterator bp = bl.begin();
 	if (p->key() == "divergent_priors") {
 	  ::decode(divergent_priors, bp);
-	  ldpp_dout(dpp, 20) << "read_log_and_missing " << divergent_priors.size()
+	  ldpp_dout(dpp, 20) << __func__ << " " << divergent_priors.size()
 			     << " divergent_priors" << dendl;
 	  has_divergent_priors = true;
 	  debug_verify_stored_missing = false;
@@ -1161,7 +1161,7 @@ public:
 	} else {
 	  pg_log_entry_t e;
 	  e.decode_with_checksum(bp);
-	  ldpp_dout(dpp, 20) << "read_log_and_missing " << e << dendl;
+	  ldpp_dout(dpp, 20) << __func__ << " " << e << dendl;
 	  if (!entries.empty()) {
 	    pg_log_entry_t last_e(entries.back());
 	    assert(last_e.version.version < e.version.version);
@@ -1183,9 +1183,10 @@ public:
     if (has_divergent_priors || debug_verify_stored_missing) {
       // build missing
       if (debug_verify_stored_missing || info.last_complete < info.last_update) {
-	ldpp_dout(dpp, 10) << "read_log_and_missing checking for missing items over interval ("
-			   << info.last_complete
-			   << "," << info.last_update << "]" << dendl;
+	ldpp_dout(dpp, 10) << __func__
+			   << " checking for missing items over interval ("
+			   << info.last_complete << "," << info.last_update
+			   << "]" << dendl;
 
 	set<hobject_t> did;
 	set<hobject_t> checked;
@@ -1212,7 +1213,7 @@ public:
 	  if (r >= 0) {
 	    object_info_t oi(bv);
 	    if (oi.version < i->version) {
-	      ldpp_dout(dpp, 15) << "read_log_and_missing  missing " << *i
+	      ldpp_dout(dpp, 15) << __func__ << " missing " << *i
 				 << " (have " << oi.version << ")" << dendl;
 	      if (debug_verify_stored_missing) {
 		auto miter = missing.get_items().find(i->soid);
@@ -1225,7 +1226,7 @@ public:
 	      }
 	    }
 	  } else {
-	    ldpp_dout(dpp, 15) << "read_log_and_missing  missing " << *i << dendl;
+	    ldpp_dout(dpp, 15) << __func__ << " missing " << *i << dendl;
 	    if (debug_verify_stored_missing) {
 	      auto miter = missing.get_items().find(i->soid);
 	      assert(miter != missing.get_items().end());
@@ -1298,7 +1299,7 @@ public:
 		 * so let's check that.
 		 */
 	      if (oi.version > i->first && tolerate_divergent_missing_log) {
-		ldpp_dout(dpp, 0) << "read_log divergent_priors entry (" << *i
+		ldpp_dout(dpp, 0) << __func__ << " read_log divergent_priors entry (" << *i
 				  << ") inconsistent with disk state (" <<  oi
 				  << "), assuming it is tracker.ceph.com/issues/17916"
 				  << dendl;
@@ -1306,7 +1307,7 @@ public:
 		assert(oi.version == i->first);
 	      }
 	    } else {
-	      ldpp_dout(dpp, 15) << "read_log_and_missing  missing " << *i << dendl;
+	      ldpp_dout(dpp, 15) << __func__ << " missing " << *i << dendl;
 	      missing.add(i->second, i->first, eversion_t());
 	    }
 	  }
@@ -1321,7 +1322,7 @@ public:
 	(*clear_divergent_priors) = false;
       missing.flush();
     }
-    ldpp_dout(dpp, 10) << "read_log_and_missing done" << dendl;
+    ldpp_dout(dpp, 10) << __func__ << " done" << dendl;
   }
 };
 

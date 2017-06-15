@@ -759,7 +759,7 @@ void PGBackend::be_compare_scrubmaps(
       else if (object_error.has_shallow_errors())
 	++shallow_errors;
       store->add_object_error(k->pool, object_error);
-      errorstream << pgid.pgid << " soid " << *k
+      errorstream << __func__ << " " << pgid.pgid << " soid " << *k
 		  << ": failed to pick suitable object info\n";
       continue;
     }
@@ -792,8 +792,8 @@ void PGBackend::be_compare_scrubmaps(
 	  // Only true if be_compare_scrub_objects() found errors and put something
 	  // in ss.
 	  if (found)
-	    errorstream << pgid << " shard " << j->first << ": soid " << *k
-		      << " " << ss.str() << "\n";
+	    errorstream << __func__ << " " << pgid << " shard "
+		      << j->first << ": soid " << *k << " " << ss.str() << "\n";
 	} else if (found) {
 	  // Track possible shard to use as authoritative, if needed
 	  // There are errors, without identifying the shard
@@ -808,15 +808,15 @@ void PGBackend::be_compare_scrubmaps(
 	shard_map[j->first].set_missing();
 	// Can't have any other errors if there is no information available
 	++shallow_errors;
-	errorstream << pgid << " shard " << j->first << " missing " << *k
-		    << "\n";
+	errorstream << __func__ << " " << pgid << " shard "
+		    << j->first << " missing " << *k << "\n";
       }
       object_error.add_shard(j->first, shard_map[j->first]);
     }
 
     if (auth_list.empty()) {
       if (object_errors.empty()) {
-        errorstream << pgid.pgid << " soid " << *k
+        errorstream << __func__ << " " << pgid.pgid << " soid " << *k
 		  << ": failed to pick suitable auth object\n";
         goto out;
       }
@@ -866,7 +866,7 @@ void PGBackend::be_compare_scrubmaps(
       if (auth_oi.is_data_digest() && auth_object.digest_present &&
 	  auth_oi.data_digest != auth_object.digest) {
         assert(shard_map[auth->first].has_data_digest_mismatch_oi());
-	errorstream << pgid << " recorded data digest 0x"
+	errorstream << __func__ << " " << pgid << " recorded data digest 0x"
 		    << std::hex << auth_oi.data_digest << " != on disk 0x"
 		    << auth_object.digest << std::dec << " on " << auth_oi.soid
 		    << "\n";
@@ -876,7 +876,7 @@ void PGBackend::be_compare_scrubmaps(
       if (auth_oi.is_omap_digest() && auth_object.omap_digest_present &&
 	  auth_oi.omap_digest != auth_object.omap_digest) {
         assert(shard_map[auth->first].has_omap_digest_mismatch_oi());
-	errorstream << pgid << " recorded omap digest 0x"
+	errorstream << __func__ << " " << pgid << " recorded omap digest 0x"
 		    << std::hex << auth_oi.omap_digest << " != on disk 0x"
 		    << auth_object.omap_digest << std::dec
 		    << " on " << auth_oi.soid << "\n";

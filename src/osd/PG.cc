@@ -796,7 +796,7 @@ void PG::check_past_interval_bounds() const
       osd->clog->error() << info.pgid << " required past_interval bounds are"
 			 << " empty [" << rpib << ") but past_intervals is not: "
 			 << past_intervals;
-      derr << info.pgid << " required past_interval bounds are"
+      derr << __func__ << " " << info.pgid << " required past_interval bounds are"
 	   << " empty [" << rpib << ") but past_intervals is not: "
 	   << past_intervals << dendl;
       assert(past_intervals.empty());
@@ -806,7 +806,7 @@ void PG::check_past_interval_bounds() const
       osd->clog->error() << info.pgid << " required past_interval bounds are"
 			 << " not empty [" << rpib << ") but past_intervals "
 			 << past_intervals << " is empty";
-      derr << info.pgid << " required past_interval bounds are"
+      derr << __func__ << " " << info.pgid << " required past_interval bounds are"
 	   << " not empty [" << rpib << ") but past_intervals "
 	   << past_intervals << " is empty" << dendl;
       assert(!past_intervals.empty());
@@ -817,7 +817,7 @@ void PG::check_past_interval_bounds() const
       osd->clog->error() << info.pgid << " past_intervals [" << apib
 			 << ") start interval does not contain the required"
 			 << " bound [" << rpib << ") start";
-      derr << info.pgid << " past_intervals [" << apib
+      derr << __func__ << " " << info.pgid << " past_intervals [" << apib
 	   << ") start interval does not contain the required"
 	   << " bound [" << rpib << ") start" << dendl;
       assert(0 == "past_interval start interval mismatch");
@@ -826,7 +826,7 @@ void PG::check_past_interval_bounds() const
       osd->clog->error() << info.pgid << " past_interal bound [" << apib
 			 << ") end does not match required [" << rpib
 			 << ") end";
-      derr << info.pgid << " past_interal bound [" << apib
+      derr << __func__ << " " << info.pgid << " past_interval bound [" << apib
 	   << ") end does not match required [" << rpib
 	   << ") end" << dendl;
       assert(0 == "past_interval end mismatch");
@@ -2337,7 +2337,7 @@ void PG::release_backoffs(const hobject_t& begin, const hobject_t& end)
 
 void PG::clear_backoffs()
 {
-  dout(10) << __func__ << " " << dendl;
+  dout(10) << __func__ << dendl;
   map<hobject_t,set<BackoffRef>> ls;
   {
     Mutex::Locker l(backoff_lock);
@@ -3309,8 +3309,8 @@ void PG::log_weirdness()
     // sloppy check
     if ((pg_log.get_log().log.begin()->version <= pg_log.get_tail()))
       osd->clog->error() << info.pgid
-			<< " log bound mismatch, info (" << pg_log.get_tail() << ","
-			<< pg_log.get_head() << "]"
+			<< " log bound mismatch, info (tail,head] ("
+			<< pg_log.get_tail() << "," << pg_log.get_head() << "]"
 			<< " actual ["
 			<< pg_log.get_log().log.begin()->version << ","
 			 << pg_log.get_log().log.rbegin()->version << "]";
@@ -3592,13 +3592,15 @@ bool PG::sched_scrub()
 	} else {
 	  osd->clog->error() << "osd." << osd->whoami
 			     << " pg " << info.pgid
-			     << " Regular scrub request, losing deep-scrub details";
+			     << " Regular scrub request, deep-scrub details "
+			     << "will be lost";
 	}
       }
       queue_scrub();
     } else {
       // none declined, since scrubber.reserved is set
-      dout(20) << "sched_scrub: reserved " << scrubber.reserved_peers << ", waiting for replicas" << dendl;
+      dout(20) << __func__ << " reserved " << scrubber.reserved_peers
+               << ", waiting for replicas" << dendl;
     }
   }
 
@@ -4681,7 +4683,7 @@ void PG::scrub_compare_maps()
       scrubber.store.get(),
       info.pgid, acting,
       ss);
-    dout(2) << ss.str() << dendl;
+    dout(2) << __func__ << " -> " << ss.str() << dendl;
 
     if (!ss.str().empty()) {
       osd->clog->error(ss);
@@ -4756,7 +4758,7 @@ bool PG::scrub_process_inconsistent()
   // authoriative only store objects which missing or inconsistent.
   if (!scrubber.authoritative.empty()) {
     stringstream ss;
-    ss << info.pgid << " " << mode << " "
+    ss << __func__ << " " << info.pgid << " " << mode << " "
        << scrubber.missing.size() << " missing, "
        << scrubber.inconsistent.size() << " inconsistent objects";
     dout(2) << ss.str() << dendl;
@@ -4818,7 +4820,7 @@ void PG::scrub_finish()
 
   {
     stringstream oss;
-    oss << info.pgid.pgid << " " << mode << " ";
+    oss << __func__ << " " << info.pgid.pgid << " " << mode << " ";
     int total_errors = scrubber.shallow_errors + scrubber.deep_errors;
     if (total_errors)
       oss << total_errors << " errors";
@@ -4826,7 +4828,7 @@ void PG::scrub_finish()
       oss << "ok";
     if (!deep_scrub && info.stats.stats.sum.num_deep_scrub_errors)
       oss << " ( " << info.stats.stats.sum.num_deep_scrub_errors
-          << " remaining deep scrub error details lost)";
+          << " remaining deep scrub error details will be lost)";
     if (repair)
       oss << ", " << scrubber.fixed << " fixed";
     if (total_errors)
@@ -6978,9 +6980,12 @@ boost::statechart::result PG::RecoveryState::Active::react(const ActMap&)
       pg->all_unfound_are_queried_or_lost(pg->get_osdmap())) {
     if (pg->cct->_conf->osd_auto_mark_unfound_lost) {
       pg->osd->clog->error() << pg->info.pgid.pgid << " has " << unfound
-			    << " objects unfound and apparently lost, would automatically marking lost but NOT IMPLEMENTED";
+			    << " objects unfound and apparently lost, would automatically"
+			    << " mark these objects lost but this feature is not yet implemented"
+			    << " (osd_auto_mark_unfound_lost)";
     } else
-      pg->osd->clog->error() << pg->info.pgid.pgid << " has " << unfound << " objects unfound and apparently lost";
+      pg->osd->clog->error() << pg->info.pgid.pgid << " has " << unfound
+                             << " objects unfound and apparently lost";
   }
 
   if (pg->is_active()) {
