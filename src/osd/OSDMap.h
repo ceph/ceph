@@ -996,7 +996,7 @@ public:
 
 private:
   /// pg -> (raw osd list)
-  int _pg_to_raw_osds(
+  void _pg_to_raw_osds(
     const pg_pool_t& pool, pg_t pg,
     vector<int> *osds,
     ps_t *ppps) const;
@@ -1037,14 +1037,13 @@ public:
    * by anybody for data mapping purposes.
    * raw and primary must be non-NULL
    */
-  int pg_to_raw_osds(pg_t pg, vector<int> *raw, int *primary) const;
+  void pg_to_raw_osds(pg_t pg, vector<int> *raw, int *primary) const;
   /// map a pg to its acting set. @return acting set size
-  int pg_to_acting_osds(const pg_t& pg, vector<int> *acting,
+  void pg_to_acting_osds(const pg_t& pg, vector<int> *acting,
                         int *acting_primary) const {
     _pg_to_up_acting_osds(pg, NULL, NULL, acting, acting_primary);
-    return acting->size();
   }
-  int pg_to_acting_osds(pg_t pg, vector<int>& acting) const {
+  void pg_to_acting_osds(pg_t pg, vector<int>& acting) const {
     return pg_to_acting_osds(pg, &acting, NULL);
   }
   /**
@@ -1180,26 +1179,26 @@ public:
   /* rank is -1 (stray), 0 (primary), 1,2,3,... (replica) */
   int get_pg_acting_rank(pg_t pg, int osd) const {
     vector<int> group;
-    int nrep = pg_to_acting_osds(pg, group);
-    return calc_pg_rank(osd, group, nrep);
+    pg_to_acting_osds(pg, group);
+    return calc_pg_rank(osd, group, group.size());
   }
   /* role is -1 (stray), 0 (primary), 1 (replica) */
   int get_pg_acting_role(const pg_t& pg, int osd) const {
     vector<int> group;
-    int nrep = pg_to_acting_osds(pg, group);
-    return calc_pg_role(osd, group, nrep);
+    pg_to_acting_osds(pg, group);
+    return calc_pg_role(osd, group, group.size());
   }
 
   bool osd_is_valid_op_target(pg_t pg, int osd) const {
     int primary;
     vector<int> group;
-    int nrep = pg_to_acting_osds(pg, &group, &primary);
+    pg_to_acting_osds(pg, &group, &primary);
     if (osd == primary)
       return true;
     if (pg_is_ec(pg))
       return false;
 
-    return calc_pg_role(osd, group, nrep) >= 0;
+    return calc_pg_role(osd, group, group.size()) >= 0;
   }
 
   int clean_pg_upmaps(
