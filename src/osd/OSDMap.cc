@@ -1869,7 +1869,7 @@ void OSDMap::_remove_nonexistent_osds(const pg_pool_t& pool,
   }
 }
 
-int OSDMap::_pg_to_raw_osds(
+void OSDMap::_pg_to_raw_osds(
   const pg_pool_t& pool, pg_t pg,
   vector<int> *osds,
   ps_t *ppps) const
@@ -1887,8 +1887,6 @@ int OSDMap::_pg_to_raw_osds(
 
   if (ppps)
     *ppps = pps;
-
-  return osds->size();
 }
 
 int OSDMap::_pick_primary(const vector<int>& osds) const
@@ -2061,17 +2059,16 @@ void OSDMap::_get_temp_osds(const pg_pool_t& pool, pg_t pg,
   }
 }
 
-int OSDMap::pg_to_raw_osds(pg_t pg, vector<int> *raw, int *primary) const
+void OSDMap::pg_to_raw_osds(pg_t pg, vector<int> *raw, int *primary) const
 {
   *primary = -1;
   raw->clear();
   const pg_pool_t *pool = get_pg_pool(pg.pool());
   if (!pool)
-    return 0;
-  int r = _pg_to_raw_osds(*pool, pg, raw, NULL);
+    return;
+  _pg_to_raw_osds(*pool, pg, raw, NULL);
   if (primary)
     *primary = _pick_primary(*raw);
-  return r;
 }
 
 void OSDMap::pg_to_raw_up(pg_t pg, vector<int> *up, int *primary) const
@@ -2092,7 +2089,7 @@ void OSDMap::pg_to_raw_up(pg_t pg, vector<int> *up, int *primary) const
   *primary = _pick_primary(raw);
   _apply_primary_affinity(pps, *pool, up, primary);
 }
-  
+
 void OSDMap::_pg_to_up_acting_osds(
   const pg_t& pg, vector<int> *up, int *up_primary,
   vector<int> *acting, int *acting_primary,
