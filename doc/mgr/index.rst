@@ -26,5 +26,7 @@ sensible.
     :maxdepth: 1
 
     Installation and Configuration <administrator>
+    Dashboard <dashboard>
+    RESTful <restful>
     Writing plugins <plugins>
 
