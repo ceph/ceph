@@ -4300,6 +4300,32 @@ RGWHandler_REST* RGWRESTMgr_S3::get_handler(struct req_state *s)
   return handler;
 }
 
+bool RGWHandler_REST_S3Website::web_dir() const {
+  std::string subdir_name;
+  url_decode(s->object.name, subdir_name);
+
+  if (subdir_name.empty()) {
+    return false;
+  } else if (subdir_name.back() == '/') {
+    subdir_name.pop_back();
+  }
+
+  rgw_obj obj(s->bucket, subdir_name);
+
+  RGWObjectCtx& obj_ctx = *static_cast<RGWObjectCtx *>(s->obj_ctx);
+  obj_ctx.set_atomic(obj);
+  obj_ctx.set_prefetch_data(obj);
+
+  RGWObjState* state = nullptr;
+  if (store->get_obj_state(&obj_ctx, obj, &state, false) < 0) {
+    return false;
+  }
+  if (! state->exists) {
+    return false;
+  }
+  return state->exists;
+}
+
 int RGWHandler_REST_S3Website::retarget(RGWOp* op, RGWOp** new_op) {
   *new_op = op;
   ldout(s->cct, 10) << __func__ << "Starting retarget" << dendl;
@@ -4321,7 +4347,7 @@ int RGWHandler_REST_S3Website::retarget(RGWOp* op, RGWOp** new_op) {
   }
 
   rgw_obj_key new_obj;
-  s->bucket_info.website_conf.get_effective_key(s->object.name, &new_obj.name);
+  s->bucket_info.website_conf.get_effective_key(s->object.name, &new_obj.name, web_dir());
   ldout(s->cct, 10) << "retarget get_effective_key " << s->object << " -> "
 		    << new_obj << dendl;
 
