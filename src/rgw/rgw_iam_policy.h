@@ -9,6 +9,7 @@
 #include <cstdint>
 #include <iostream>
 #include <string>
+#include <fnmatch.h>
 
 #include <boost/algorithm/string/predicate.hpp>
 #include <boost/container/flat_map.hpp>
@@ -359,6 +360,18 @@ struct Condition {
     }
   };
 
+  struct string_like : public std::binary_function<const std::string,
+                                                     const std::string,
+                                                     bool> {
+    bool operator ()(const std::string& s1,
+                    const std::string& s2) const {
+      if(fnmatch(s2.c_str(), s1.c_str(), 0) == 0){
+        return true;
+      }else{
+        return false;
+      }
+    }
+  };
 
   template<typename F>
   static bool orrible(F&& f, const std::string& c,
