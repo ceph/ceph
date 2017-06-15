@@ -663,6 +663,7 @@ class Module(MgrModule):
                         MonStatus).data,
                     "osd_map": osd_map,
                     "clog": list(global_instance().log_buffer),
+                    "audit_log": list(global_instance().audit_buffer),
                     "pools": pools
                 }
 
