@@ -304,23 +304,18 @@ bool MgrStandby::ms_dispatch(Message *m)
   Mutex::Locker l(lock);
   dout(4) << state_str() << " " << *m << dendl;
 
-  switch (m->get_type()) {
-    case MSG_MGR_MAP:
-      handle_mgr_map(static_cast<MMgrMap*>(m));
-      break;
-
-    default:
-      if (active_mgr) {
-	auto am = active_mgr;
-        lock.Unlock();
-        am->ms_dispatch(m);
-        lock.Lock();
-      } else {
-        return false;
-      }
+  if (m->get_type() == MSG_MGR_MAP) {
+    handle_mgr_map(static_cast<MMgrMap*>(m));
+    return true;
+  } else if (active_mgr) {
+    auto am = active_mgr;
+    lock.Unlock();
+    bool handled = am->ms_dispatch(m);
+    lock.Lock();
+    return handled;
+  } else {
+    return false;
   }
-
-  return true;
 }
 
 
