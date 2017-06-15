@@ -89,8 +89,6 @@ private:
 
   void export_empties();
   int localize_balancer();
-  bool check_targets(const balance_state_t& state);
-  void hit_targets(const balance_state_t& state);
   void send_heartbeat();
   void handle_heartbeat(MHeartbeat *m);
   void find_exports(CDir *dir,
