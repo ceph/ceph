@@ -1066,10 +1066,6 @@ endif(WITH_RADOSGW)
 install(FILES
   sample.ceph.conf
   DESTINATION ${CMAKE_INSTALL_DOCDIR})
-install(FILES
-  fetch_config
-  DESTINATION ${CMAKE_INSTALL_DOCDIR}
-  RENAME sample.fetch_config)
 
 # Now create a useable config.h
 configure_file(
