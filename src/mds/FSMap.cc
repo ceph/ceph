@@ -18,6 +18,8 @@
 #include <sstream>
 using std::stringstream;
 
+#include "mon/health_check.h"
+
 
 void Filesystem::dump(Formatter *f) const
 {
@@ -325,6 +327,30 @@ bool FSMap::check_health(void)
     changed |= i.second->mds_map.check_health((mds_rank_t)standby_daemons.size());
   }
   return changed;
+}
+
+void FSMap::get_health_checks(health_check_map_t *checks) const
+{
+  mds_rank_t standby_count_wanted = 0;
+  for (const auto &i : filesystems) {
+    const auto &fs = i.second;
+    health_check_map_t fschecks;
+    fs->mds_map.get_health_checks(&fschecks);
+    checks->merge(fschecks);
+    standby_count_wanted = std::max(
+      standby_count_wanted,
+      fs->mds_map.get_standby_count_wanted((mds_rank_t)standby_daemons.size()));
+  }
+
+  // MDS_INSUFFICIENT_STANDBY
+  if (standby_count_wanted) {
+    std::ostringstream oss, dss;
+    oss << "insufficient standby daemons available";
+    auto& d = checks->add("MDS_INSUFFICIENT_STANDBY", HEALTH_WARN, oss.str());
+    dss << "have " << standby_daemons.size() << "; want " << standby_count_wanted
+	<< " more";
+    d.detail.push_back(dss.str());
+  }
 }
 
 void FSMap::encode(bufferlist& bl, uint64_t features) const

@@ -14,6 +14,7 @@
 
 #include <sstream>
 #include <boost/utility.hpp>
+#include <boost/regex.hpp>
 
 #include "MDSMonitor.h"
 #include "FSCommands.h"
@@ -99,6 +100,8 @@ void MDSMonitor::update_from_paxos(bool *need_bootstrap)
 	   << ", my e " << fsmap.epoch << dendl;
   assert(version > fsmap.epoch);
 
+  load_health();
+
   // read and decode
   bufferlist fsmap_bl;
   fsmap_bl.clear();
@@ -174,6 +177,65 @@ void MDSMonitor::encode_pending(MonitorDBStore::TransactionRef t)
   }
   pending_daemon_health_rm.clear();
   remove_from_metadata(t);
+
+  // health
+  health_check_map_t new_checks;
+  const auto info_map = pending_fsmap.get_mds_info();
+  for (const auto &i : info_map) {
+    const auto &gid = i.first;
+    const auto &info = i.second;
+    if (pending_daemon_health_rm.count(gid)) {
+      continue;
+    }
+    MDSHealth health;
+    auto p = pending_daemon_health.find(gid);
+    if (p != pending_daemon_health.end()) {
+      health = p->second;
+    } else {
+      bufferlist bl;
+      mon->store->get(MDS_HEALTH_PREFIX, stringify(gid), bl);
+      if (!bl.length()) {
+	derr << "Missing health data for MDS " << gid << dendl;
+	continue;
+      }
+      bufferlist::iterator bl_i = bl.begin();
+      health.decode(bl_i);
+    }
+    for (const auto &metric : health.metrics) {
+      int const rank = info.rank;
+      health_check_t *check = &new_checks.add(
+	mds_metric_name(metric.type),
+	metric.sev,
+	mds_metric_summary(metric.type));
+      ostringstream ss;
+      ss << "mds" << info.name << "(mds." << rank << "): " << metric.message;
+      for (auto p = metric.metadata.begin();
+	   p != metric.metadata.end();
+	   ++p) {
+	if (p != metric.metadata.begin()) {
+	  ss << ", ";
+	}
+	ss << p->first << ": " << p->second;
+      }
+      check->detail.push_back(ss.str());
+    }
+  }
+  pending_fsmap.get_health_checks(&new_checks);
+  for (auto& p : new_checks.checks) {
+    p.second.summary = boost::regex_replace(
+      p.second.summary,
+      boost::regex("%num%"),
+      stringify(p.second.detail.size()));
+    p.second.summary = boost::regex_replace(
+      p.second.summary,
+      boost::regex("%plurals%"),
+      p.second.detail.size() > 1 ? "s" : "");
+    p.second.summary = boost::regex_replace(
+      p.second.summary,
+      boost::regex("%isorare%"),
+      p.second.detail.size() > 1 ? "are" : "is");
+  }
+  encode_health(new_checks, t);
 }
 
 version_t MDSMonitor::get_trim_to()

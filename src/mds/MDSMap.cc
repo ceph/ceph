@@ -18,6 +18,8 @@
 #include <sstream>
 using std::stringstream;
 
+#include "mon/health_check.h"
+
 
 // features
 CompatSet get_mdsmap_compat_set_all() {
@@ -401,6 +403,78 @@ void MDSMap::get_health(list<pair<health_status_t,string> >& summary,
 	<< ((laggy.size() > 1) ? " are":" is")
 	<< " laggy";
     summary.push_back(make_pair(HEALTH_WARN, oss.str()));
+  }
+}
+
+void MDSMap::get_health_checks(health_check_map_t *checks) const
+{
+  // FS_WITH_FAILED_MDS
+  // MDS_FAILED
+  if (!failed.empty()) {
+    health_check_t& fscheck = checks->add(
+      "FS_WITH_FAILED_MDS", HEALTH_WARN,
+      "%num% filesystem%plurals% %isorare% have a failed mds daemon");
+    ostringstream ss;
+    ss << "fs " << fs_name << " has " << failed.size() << " failed mds"
+       << (failed.size() > 1 ? "s" : "");
+    fscheck.detail.push_back(ss.str());
+
+    health_check_t& check = checks->add("MDS_FAILED", HEALTH_ERR,
+					 "%num% mds daemon%plurals% down");
+    for (auto p : failed) {
+      std::ostringstream oss;
+      oss << "fs " << fs_name << " mds." << p << " has failed";
+      check.detail.push_back(oss.str());
+    }
+  }
+
+  // MDS_DAMAGED
+  if (!damaged.empty()) {
+    health_check_t& check = checks->add("MDS_DAMAGED", HEALTH_ERR,
+					"%num% mds daemon%plurals% damaged");
+    for (auto p : damaged) {
+      std::ostringstream oss;
+      oss << "fs " << fs_name << " mds." << p << " is damaged";
+      check.detail.push_back(oss.str());
+    }
+  }
+
+  // FS_DEGRADED
+  // MDS_DEGRADED
+  if (is_degraded()) {
+    health_check_t& fscheck = checks->add(
+      "FS_DEGRADED", HEALTH_WARN,
+      "%num% filesystem%plurals% %isorare% degraded");
+    ostringstream ss;
+    ss << "fs " << fs_name << " is degraded";
+    fscheck.detail.push_back(ss.str());
+
+    list<string> detail;
+    for (mds_rank_t i = mds_rank_t(0); i< get_max_mds(); i++) {
+      if (!is_up(i))
+	continue;
+      mds_gid_t gid = up.find(i)->second;
+      map<mds_gid_t,mds_info_t>::const_iterator info = mds_info.find(gid);
+      stringstream ss;
+      ss << "fs " << fs_name << " mds." << info->second.name << " at "
+	 << info->second.addr << " rank " << i;
+      if (is_resolve(i))
+	ss << " is resolving";
+      if (is_replay(i))
+	ss << " is replaying journal";
+      if (is_rejoin(i))
+	ss << " is rejoining";
+      if (is_reconnect(i))
+	ss << " is reconnecting to clients";
+      if (ss.str().length())
+	detail.push_back(ss.str());
+    }
+    if (!detail.empty()) {
+      health_check_t& check = checks->add(
+	"MDS_DEGRADED", HEALTH_WARN,
+	"%num% mds daemon%plurals% %isorare% degraded");
+      check.detail.insert(check.detail.end(), detail.begin(), detail.end());
+    }
   }
 }
 
