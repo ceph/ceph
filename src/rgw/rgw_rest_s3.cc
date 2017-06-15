@@ -847,6 +847,9 @@ int RGWSetBucketWebsite_ObjStore_S3::get_params()
     return r;
   }
 
+  bufferptr in_ptr(data, len);
+  in_data.append(in_ptr);
+
   RGWXMLDecoder::XMLParser parser;
   if (!parser.init()) {
     ldout(s->cct, 0) << "ERROR: failed to initialize parser" << dendl;
