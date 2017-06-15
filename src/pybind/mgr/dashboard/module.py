@@ -68,7 +68,9 @@ class Module(MgrModule):
         self.log.info("Constructing module {0}: instance {1}".format(
             __name__, _global_instance))
 
+        self.log_primed = False
         self.log_buffer = collections.deque(maxlen=LOG_BUFFER_SIZE)
+        self.audit_buffer = collections.deque(maxlen=LOG_BUFFER_SIZE)
 
         # Keep a librados instance for those that need it.
         self._rados = None
@@ -117,9 +119,13 @@ class Module(MgrModule):
 
     def notify(self, notify_type, notify_val):
         if notify_type == "clog":
-            log.info("clog: {0}".format(notify_val["message"]))
-            log.info("clog: {0}".format(json.dumps(notify_val)))
-            self.log_buffer.appendleft(notify_val)
+            # Only store log messages once we've done our initial load,
+            # so that we don't end up duplicating.
+            if self.log_primed:
+                if notify_val['channel'] == "audit":
+                    self.audit_buffer.appendleft(notify_val)
+                else:
+                    self.log_buffer.appendleft(notify_val)
         elif notify_type == "pg_summary":
             self.update_pool_stats()
         else:
@@ -376,6 +382,30 @@ class Module(MgrModule):
 
         jinja_loader = jinja2.FileSystemLoader(current_dir)
         env = jinja2.Environment(loader=jinja_loader)
+
+        result = CommandResult("")
+        self.send_command(result, "mon", "", json.dumps({
+            "prefix":"log last",
+            "format": "json"
+            }), "")
+        r, outb, outs = result.wait()
+        if r != 0:
+            # Oh well.  We won't let this stop us though.
+            self.log.error("Error fetching log history (r={0}, \"{1}\")".format(
+                r, outs))
+        else:
+            try:
+                lines = json.loads(outb)
+            except ValueError:
+                self.log.error("Error decoding log history")
+            else:
+                for l in lines:
+                    if l['channel'] == 'audit':
+                        self.audit_buffer.appendleft(l)
+                    else:
+                        self.log_buffer.appendleft(l)
+
+        self.log_primed = True
 
         class Root(object):
             def _toplevel_data(self):
