@@ -44,6 +44,14 @@ set(isa_srcs
   ${isal_src_dir}/erasure_code/gf_6vect_dot_prod_avx.asm
   ${isal_src_dir}/erasure_code/gf_vect_dot_prod_avx.asm
   ${isal_src_dir}/erasure_code/gf_vect_mul_sse.asm
+  ${isal_src_dir}/erasure_code/gf_2vect_dot_prod_avx512.asm
+  ${isal_src_dir}/erasure_code/gf_2vect_mad_avx512.asm
+  ${isal_src_dir}/erasure_code/gf_3vect_dot_prod_avx512.asm
+  ${isal_src_dir}/erasure_code/gf_3vect_mad_avx512.asm
+  ${isal_src_dir}/erasure_code/gf_4vect_dot_prod_avx512.asm
+  ${isal_src_dir}/erasure_code/gf_4vect_mad_avx512.asm
+  ${isal_src_dir}/erasure_code/gf_vect_dot_prod_avx512.asm
+  ${isal_src_dir}/erasure_code/gf_vect_mad_avx512.asm
   ErasureCodeIsa.cc
   ErasureCodeIsaTableCache.cc
   ErasureCodePluginIsa.cc
@@ -56,7 +64,7 @@ add_library(ec_isa SHARED
 add_dependencies(ec_isa ${CMAKE_SOURCE_DIR}/src/ceph_ver.h)
 target_link_libraries(ec_isa ${EXTRALIBS})
 set_target_properties(ec_isa PROPERTIES
-  VERSION 2.14.0
+  VERSION 2.16.0
   SOVERSION 2
   INSTALL_RPATH "")
 install(TARGETS ec_isa DESTINATION ${erasure_plugin_dir})
