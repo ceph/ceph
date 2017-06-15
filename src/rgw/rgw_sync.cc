@@ -20,6 +20,7 @@
 #include "rgw_cr_rados.h"
 #include "rgw_cr_rest.h"
 #include "rgw_http_client.h"
+#include "rgw_sync_trace.h"
 
 #include "cls/lock/cls_lock_client.h"
 
