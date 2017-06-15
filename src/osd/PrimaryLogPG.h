@@ -460,6 +460,7 @@ public:
   ceph_tid_t get_tid() override { return osd->get_tid(); }
 
   LogClientTemp clog_error() override { return osd->clog->error(); }
+  LogClientTemp clog_warn() override { return osd->clog->warn(); }
 
   struct watch_disconnect_t {
     uint64_t cookie;

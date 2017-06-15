@@ -2615,7 +2615,7 @@ function TEST_periodic_scrub_replicated() {
     pg_scrub $pg
     sleep 1
     set_config osd ${primary} osd_scrub_backoff_ratio $scrub_backoff_ratio
-    grep -q "Regular scrub request, losing deep-scrub details" $dir/osd.${primary}.log || return 1
+    grep -q "Regular scrub request, deep-scrub details will be lost" $dir/osd.${primary}.log || return 1
 
     # deep-scrub error is no longer present
     rados list-inconsistent-obj $pg | jq '.' | grep -qv $objname || return 1
