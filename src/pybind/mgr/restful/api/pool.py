@@ -34,7 +34,11 @@ class PoolId(RestController):
         """
         Modify the information for the pool id
         """
-        args = request.json
+	try:
+            args = request.json
+        except ValueError:
+            response.status = 400
+            return {'message': 'Bad request: malformed JSON or wrong Content-Type'}
 
         # Get the pool info for its name
         pool = module.instance.get_pool_by_id(self.pool_id)
