@@ -285,7 +285,7 @@ class Module(MgrModule):
             port=server_port,
             app=make_app(
                 root='restful.api.Root',
-                hooks = lambda: [ErrorHook()],
+                hooks = [ErrorHook()],  # use a callable if pecan >= 0.3.2
             ),
             ssl_context=(cert_fname, pkey_fname),
         )
