@@ -820,11 +820,11 @@ void OSDService::check_full_status(float ratio)
     dout(10) << __func__ << " " << get_full_state_name(cur_state)
 	     << " -> " << get_full_state_name(new_state) << dendl;
     if (new_state == FAILSAFE) {
-      clog->error() << "failsafe engaged, dropping updates, now "
+      clog->error() << "full status failsafe engaged, dropping updates, now "
 		    << (int)roundf(ratio * 100) << "% full";
     } else if (cur_state == FAILSAFE) {
-      clog->error() << "failsafe disengaged, no longer dropping updates, now "
-		    << (int)roundf(ratio * 100) << "% full";
+      clog->error() << "full status failsafe disengaged, no longer dropping "
+		     << "updates, now " << (int)roundf(ratio * 100) << "% full";
     }
     cur_state = new_state;
   }
@@ -7819,7 +7819,7 @@ void OSD::_committed_osd_maps(epoch_t first, epoch_t last, MOSDMap *m)
       } else if (!osdmap->get_hb_back_addr(whoami).probably_equals(
 		   hb_back_server_messenger->get_myaddr())) {
 	clog->error() << "map e" << osdmap->get_epoch()
-		      << " had wrong hb back addr ("
+		      << " had wrong heartbeat back addr ("
 		      << osdmap->get_hb_back_addr(whoami)
 		      << " != my " << hb_back_server_messenger->get_myaddr()
 		      << ")";
@@ -7827,7 +7827,7 @@ void OSD::_committed_osd_maps(epoch_t first, epoch_t last, MOSDMap *m)
 		 !osdmap->get_hb_front_addr(whoami).probably_equals(
 		   hb_front_server_messenger->get_myaddr())) {
 	clog->error() << "map e" << osdmap->get_epoch()
-		      << " had wrong hb front addr ("
+		      << " had wrong heartbeat front addr ("
 		      << osdmap->get_hb_front_addr(whoami)
 		      << " != my " << hb_front_server_messenger->get_myaddr()
 		      << ")";
