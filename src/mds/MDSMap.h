@@ -59,6 +59,7 @@
 */
 
 class CephContext;
+class health_check_map_t;
 
 extern CompatSet get_mdsmap_compat_set_all();
 extern CompatSet get_mdsmap_compat_set_default();
@@ -461,6 +462,8 @@ public:
 
   void get_health(list<pair<health_status_t,std::string> >& summary,
 		  list<pair<health_status_t,std::string> > *detail) const;
+
+  void get_health_checks(health_check_map_t *checks) const;
 
   typedef enum
   {
