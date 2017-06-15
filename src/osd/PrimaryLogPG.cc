@@ -418,10 +418,6 @@ void PrimaryLogPG::on_local_recover(
 	waiting_for_unreadable_object.erase(unreadable_object_entry);
       }
     }
-    if (pg_log.get_missing().get_items().size() == 0) {
-      requeue_ops(waiting_for_all_missing);
-      waiting_for_all_missing.clear();
-    }
   } else {
     t->register_on_applied(
       new C_OSD_AppliedRecoveredObjectReplica(this));
@@ -569,12 +565,6 @@ void PrimaryLogPG::wait_for_unreadable_object(
   maybe_kick_recovery(soid);
   waiting_for_unreadable_object[soid].push_back(op);
   op->mark_delayed("waiting for missing object");
-}
-
-void PrimaryLogPG::wait_for_all_missing(OpRequestRef op)
-{
-  waiting_for_all_missing.push_back(op);
-  op->mark_delayed("waiting for all missing");
 }
 
 bool PrimaryLogPG::is_degraded_or_backfilling_object(const hobject_t& soid)
@@ -10471,8 +10461,6 @@ void PrimaryLogPG::mark_all_unfound_lost(
     std::move(manager),
     boost::optional<std::function<void(void)> >(
       [=]() {
-	requeue_ops(waiting_for_all_missing);
-	waiting_for_all_missing.clear();
 	for (auto& p : waiting_for_unreadable_object) {
 	  release_backoffs(p.first);
 	}
@@ -10759,10 +10747,8 @@ void PrimaryLogPG::on_change(ObjectStore::Transaction *t)
 
   if (is_primary()) {
     requeue_ops(waiting_for_cache_not_full);
-    requeue_ops(waiting_for_all_missing);
   } else {
     waiting_for_cache_not_full.clear();
-    waiting_for_all_missing.clear();
   }
   objects_blocked_on_cache_full.clear();
 
