@@ -1030,7 +1030,7 @@ def osd_scrub_pgs(ctx, config):
     indicate the last scrub completed.  Time out if no progess is made
     here after two minutes.
     """
-    retries = 12
+    retries = 20
     delays = 10
     cluster_name = config['cluster']
     manager = ctx.managers[cluster_name]
@@ -1044,8 +1044,7 @@ def osd_scrub_pgs(ctx, config):
         log.info("Waiting for all osds to be active and clean.")
         time.sleep(delays)
     if not all_clean:
-        log.info("Scrubbing terminated -- not all pgs were active and clean.")
-        return
+        raise RuntimeError("Scrubbing terminated -- not all pgs were active and clean.")
     check_time_now = time.localtime()
     time.sleep(1)
     all_roles = teuthology.all_roles(ctx.cluster)
@@ -1074,8 +1073,7 @@ def osd_scrub_pgs(ctx, config):
         else:
             gap_cnt += 1
             if gap_cnt > retries:
-                log.info('Exiting scrub checking -- not all pgs scrubbed.')
-                return
+                raise RuntimeError('Exiting scrub checking -- not all pgs scrubbed.')
         if loop:
             log.info('Still waiting for all pgs to be scrubbed.')
             time.sleep(delays)
