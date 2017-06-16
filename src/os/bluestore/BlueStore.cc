@@ -4327,8 +4327,13 @@ int BlueStore::_open_db(bool create)
       }
       bluefs_shared_bdev = BlueFS::BDEV_SLOW;
       bluefs_single_shared_device = false;
-    } else {
+    } else if (::lstat(bfn.c_str(), &st) == -1) {
       bluefs_shared_bdev = BlueFS::BDEV_DB;
+    } else {
+      //symlink exist is bug
+      derr << __func__ << " " << bfn << " link target doesn't exist" << dendl;
+      r = -errno;
+      goto free_bluefs;
     }
 
     // shared device
@@ -4383,8 +4388,13 @@ int BlueStore::_open_db(bool create)
       }
       cct->_conf->set_val("rocksdb_separate_wal_dir", "true");
       bluefs_single_shared_device = false;
-    } else {
+    } else if (::lstat(bfn.c_str(), &st) == -1) {
       cct->_conf->set_val("rocksdb_separate_wal_dir", "false");
+    } else {
+      //symlink exist is bug
+      derr << __func__ << " " << bfn << " link target doesn't exist" << dendl;
+      r = -errno;
+      goto free_bluefs;
     }
 
     if (create) {
