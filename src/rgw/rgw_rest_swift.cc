@@ -1664,7 +1664,7 @@ void RGWInfo_ObjStore_SWIFT::list_swift_data(Formatter& formatter,
 
   for (const auto& placement_targets : zonegroup.placement_targets) {
     formatter.open_object_section("policy");
-    if (placement_targets.second.id.compare(zonegroup.default_placement) == 0)
+    if (placement_targets.second.id.compare(zonegroup.default_placement_id) == 0)
       formatter.dump_bool("default", true);
     formatter.dump_string("name", placement_targets.second.id.c_str());
     formatter.close_section();

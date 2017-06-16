@@ -3771,7 +3771,7 @@ int main(int argc, const char **argv)
                 << placement_id << "'" << std::endl;
             return -ENOENT;
           }
-          zonegroup.default_placement = placement_id;
+          zonegroup.default_placement_id = placement_id;
         }
 
         zonegroup.post_process_params();

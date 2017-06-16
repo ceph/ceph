@@ -1457,7 +1457,7 @@ struct RGWZoneGroup : public RGWSystemMetaObj {
   map<string, RGWZone> zones;
 
   map<string, RGWZoneGroupPlacementTarget> placement_targets;
-  string default_placement;
+  std::string default_placement_id;
 
   list<string> hostnames;
   list<string> hostnames_s3website;
@@ -1504,7 +1504,7 @@ struct RGWZoneGroup : public RGWSystemMetaObj {
     ::encode(master_zone, bl);
     ::encode(zones, bl);
     ::encode(placement_targets, bl);
-    ::encode(default_placement, bl);
+    ::encode(default_placement_id, bl);
     ::encode(hostnames, bl);
     ::encode(hostnames_s3website, bl);
     RGWSystemMetaObj::encode(bl);
@@ -1521,7 +1521,7 @@ struct RGWZoneGroup : public RGWSystemMetaObj {
     ::decode(master_zone, bl);
     ::decode(zones, bl);
     ::decode(placement_targets, bl);
-    ::decode(default_placement, bl);
+    ::decode(default_placement_id, bl);
     if (struct_v >= 2) {
       ::decode(hostnames, bl);
     }

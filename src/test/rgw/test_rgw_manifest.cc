@@ -225,7 +225,7 @@ TEST(TestRGWManifest, head_only_obj) {
 
   list<rgw_obj> objs;
 
-  gen_obj(env, obj_size, 512 * 1024, 4 * 1024 * 1024, &manifest, env.zonegroup.default_placement, &bucket, &head, &gen, &objs);
+  gen_obj(env, obj_size, 512 * 1024, 4 * 1024 * 1024, &manifest, env.zonegroup.default_placement_id, &bucket, &head, &gen, &objs);
 
   cout <<  " manifest.get_obj_size()=" << manifest.get_obj_size() << std::endl;
   cout <<  " manifest.get_head_size()=" << manifest.get_head_size() << std::endl;
@@ -261,7 +261,7 @@ TEST(TestRGWManifest, obj_with_head_and_tail) {
   int stripe_size = 4 * 1024 * 1024;
   int head_size = 512 * 1024;
 
-  gen_obj(env, obj_size, head_size, stripe_size, &manifest, env.zonegroup.default_placement, &bucket, &head, &gen, &objs);
+  gen_obj(env, obj_size, head_size, stripe_size, &manifest, env.zonegroup.default_placement_id, &bucket, &head, &gen, &objs);
 
   list<rgw_obj>::iterator liter;
 
@@ -313,7 +313,7 @@ TEST(TestRGWManifest, multipart) {
     rgw_obj head;
     for (ofs = 0; ofs < part_size; ofs += stripe_size) {
       if (ofs == 0) {
-        int r = gen.create_begin(g_ceph_context, &manifest, env.zonegroup.default_placement, bucket, head);
+        int r = gen.create_begin(g_ceph_context, &manifest, env.zonegroup.default_placement_id, bucket, head);
         ASSERT_EQ(r, 0);
         continue;
       }

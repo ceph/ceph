@@ -10,7 +10,7 @@ void test_rgw_add_placement(RGWZoneGroup *zonegroup, RGWZoneParams *zone_params,
   pinfo.data_extra_pool = rgw_pool(name + ".extra").to_str();
   
   if (is_default) {
-    zonegroup->default_placement = name;
+    zonegroup->default_placement_id = name;
   }
 }
 

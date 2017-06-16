@@ -123,7 +123,7 @@ static bool rgw_get_obj_data_pool(const RGWZoneGroup& zonegroup, const RGWZonePa
 {
   if (!zone_params.get_head_data_pool(placement_id, obj, pool)) {
     RGWZonePlacementInfo placement;
-    if (!zone_params.get_placement(zonegroup.default_placement, &placement)) {
+    if (!zone_params.get_placement(zonegroup.default_placement_id, &placement)) {
       return false;
     }
 
@@ -243,9 +243,9 @@ int RGWZoneGroup::create_default(bool old_format)
   is_master = true;
 
   RGWZoneGroupPlacementTarget placement_target;
-  placement_target.id = "default-placement";
+  placement_target.id = "default-placement-id";
   placement_targets[placement_target.id] = placement_target;
-  default_placement = "default-placement";
+  default_placement_id = "default-placement-id";
 
   RGWZoneParams zone_params(default_zone_name);
 
@@ -446,8 +446,8 @@ void RGWZoneGroup::post_process_params()
     }
   }
 
-  if (default_placement.empty() && !placement_targets.empty()) {
-    default_placement = placement_targets.begin()->first;
+  if (default_placement_id.empty() && !placement_targets.empty()) {
+    default_placement_id = placement_targets.begin()->first;
   }
 }
 
@@ -1715,7 +1715,7 @@ int RGWZoneParams::create(bool exclusive)
     default_placement.index_pool = name + "." + default_bucket_index_pool_suffix;
     default_placement.data_pool =  name + "." + default_storage_pool_suffix;
     default_placement.data_extra_pool = name + "." + default_storage_extra_pool_suffix;
-    placement_rules["default-placement"] = default_placement;
+    placement_rules["default-placement-id"] = default_placement;
   }
 
   r = fix_pool_names();
@@ -4797,7 +4797,7 @@ int RGWRados::open_bucket_index_ctx(const RGWBucketInfo& bucket_info, librados::
 {
   const string *rule = &bucket_info.placement_rule;
   if (rule->empty()) {
-    rule = &zonegroup.default_placement;
+    rule = &zonegroup.default_placement_id;
   }
   auto iter = zone_params.placement_rules.find(*rule);
   if (iter == zone_params.placement_rules.end()) {
@@ -5849,7 +5849,7 @@ int RGWRados::select_new_bucket_location(RGWUserInfo& user_info, const string& z
   if (rule.empty()) {
     rule = user_info.default_placement;
     if (rule.empty())
-      rule = zonegroup.default_placement;
+      rule = zonegroup.default_placement_id;
   }
 
   if (rule.empty()) {
