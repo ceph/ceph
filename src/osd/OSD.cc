@@ -9359,6 +9359,8 @@ const char** OSD::get_tracked_conf_keys() const
     "osd_recovery_delay_start",
     "osd_client_message_size_cap",
     "osd_client_message_cap",
+    "osd_heartbeat_min_size",
+    "osd_heartbeat_interval",
     NULL
   };
   return KEYS;
