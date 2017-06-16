@@ -3465,10 +3465,10 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
     // set rval before running handlers so that handlers
     // can change it if e.g. decoding fails
     if (*pr)
-      **pr = ceph_to_host_errno(p->rval);
+      **pr = ceph_to_hostos_errno(p->rval);
     if (*ph) {
       ldout(cct, 10) << " op " << i << " handler " << *ph << dendl;
-      (*ph)->complete(ceph_to_host_errno(p->rval));
+      (*ph)->complete(ceph_to_hostos_errno(p->rval));
       *ph = NULL;
     }
   }

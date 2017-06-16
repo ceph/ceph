@@ -539,6 +539,16 @@ set(libcommon_files
   ${auth_files}
   ${mds_files})
 
+if(FREEBSD)
+  list(APPEND libcommon_files common/freebsd_errno.cc)
+elseif(DARWIN)
+  list(APPEND libcommon_files common/darwin_errno.cc)
+elseif(SUN)
+  list(APPEND libcommon_files common/solaris_errno.cc)
+elseif(AIX)
+  list(APPEND libcommon_files common/aix_errno.cc)
+endif()
+
 if(HAVE_ARM)
   list(APPEND libcommon_files arch/arm.c)
 elseif(HAVE_INTEL)
