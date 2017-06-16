@@ -2236,7 +2236,7 @@ public:
       bci.info.bucket.tenant = tenant_name;
       ret = store->select_bucket_location_by_rule(bci.info.placement_rule, &rule_info);
       if (ret < 0) {
-        ldout(store->ctx(), 0) << "ERROR: select_bucket_placement() returned " << ret << dendl;
+        ldout(store->ctx(), 0) << "ERROR: select_bucket_location_by_rule() returned " << ret << dendl;
         return ret;
       }
       bci.info.index_type = rule_info.index_type;
