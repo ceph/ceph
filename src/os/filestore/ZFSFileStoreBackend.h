@@ -18,6 +18,9 @@ private:
 public:
   explicit ZFSFileStoreBackend(FileStore *fs);
   ~ZFSFileStoreBackend();
+  const char *get_name() override {
+    return "zfs";
+  }
   int detect_features();
   bool can_checkpoint();
   int create_current();
