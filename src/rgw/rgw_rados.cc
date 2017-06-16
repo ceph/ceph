@@ -1715,11 +1715,11 @@ int RGWZoneParams::create(bool exclusive)
   if (r < 0) {
     ldout(store->ctx(), 10) << "couldn't find old placement rules, setting up default one for the zone" << dendl;
     /* a new system, let's set new placement info */
-    RGWZonePlacementInfo default_placement;
-    default_placement.index_pool = name + "." + default_bucket_index_pool_suffix;
-    default_placement.data_pool =  name + "." + default_storage_pool_suffix;
-    default_placement.data_extra_pool = name + "." + default_storage_extra_pool_suffix;
-    placement_rules["default-placement-id"] = default_placement;
+    RGWZonePlacementInfo default_placement_info;
+    default_placement_info.index_pool = name + "." + default_bucket_index_pool_suffix;
+    default_placement_info.data_pool =  name + "." + default_storage_pool_suffix;
+    default_placement_info.data_extra_pool = name + "." + default_storage_extra_pool_suffix;
+    placement_rules["default-placement-id"] = default_placement_info;
   }
 
   r = fix_pool_names();

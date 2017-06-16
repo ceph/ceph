@@ -463,12 +463,12 @@ void test_rgw_init_env(RGWZoneGroup *zonegroup, RGWZoneParams *zone_params);
 struct test_rgw_env {
   RGWZoneGroup zonegroup;
   RGWZoneParams zone_params;
-  rgw_data_placement_target default_placement;
+  rgw_data_placement_target placement_target;
 
   test_rgw_env() {
     test_rgw_init_env(&zonegroup, &zone_params);
-    default_placement.data_pool = rgw_pool(zone_params.placement_rules[zonegroup.default_placement_id].data_pool);
-    default_placement.data_extra_pool = rgw_pool(zone_params.placement_rules[zonegroup.default_placement_id].data_extra_pool);
+    placement_target.data_pool = rgw_pool(zone_params.placement_rules[zonegroup.default_placement_id].data_pool);
+    placement_target.data_extra_pool = rgw_pool(zone_params.placement_rules[zonegroup.default_placement_id].data_extra_pool);
   }
 
   rgw_data_placement_target get_placement(const std::string& placement_id) {

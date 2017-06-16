@@ -16,7 +16,7 @@ void test_rgw_add_placement(RGWZoneGroup *zonegroup, RGWZoneParams *zone_params,
 
 void test_rgw_init_env(RGWZoneGroup *zonegroup, RGWZoneParams *zone_params)
 {
-  test_rgw_add_placement(zonegroup, zone_params, "default-placement", true);
+  test_rgw_add_placement(zonegroup, zone_params, "default-placement-id", true);
 
 }
 
