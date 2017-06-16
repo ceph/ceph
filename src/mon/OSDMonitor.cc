@@ -6774,7 +6774,7 @@ int OSDMonitor::prepare_command_osd_destroy(
   // defying PaxosService and all laws of nature. Therefore, as we may
   // be used during 'osd purge', let's keep the caller responsible for
   // proposing.
-
+  assert(err == 0);
   return 0;
 }
 
@@ -6830,8 +6830,8 @@ int OSDMonitor::prepare_command_osd_purge(
     } else {
       may_be_idempotent = false;
     }
-    assert(0 == err);
   }
+  assert(0 == err);
 
   if (may_be_idempotent && !osdmap.exists(id)) {
     dout(10) << __func__ << " osd." << id << " does not exist and "
