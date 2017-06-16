@@ -132,6 +132,8 @@ target_link_libraries(ceph_test_rgw_iam_policy
   )
 set_target_properties(ceph_test_rgw_iam_policy PROPERTIES COMPILE_FLAGS ${UNITTEST_CXX_FLAGS})
 
-# unitttest_rgw_string
-add_executable(unittest_rgw_string test_rgw_string.cc)
-add_ceph_unittest(unittest_rgw_string ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_rgw_string)
+if(CMAKE_CXX_COMPILER_ID STREQUAL Clang)
+    # unitttest_rgw_string
+    add_executable(unittest_rgw_string test_rgw_string.cc)
+    add_ceph_unittest(unittest_rgw_string ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_rgw_string)
+endif()
