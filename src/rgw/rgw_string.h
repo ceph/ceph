@@ -9,30 +9,31 @@
 
 #include <boost/container/small_vector.hpp>
 #include <boost/utility/string_view.hpp>
+
 struct ltstr_nocase
 {
-  bool operator()(const string& s1, const string& s2) const
+  bool operator()(const std::string& s1, const std::string& s2) const
   {
     return strcasecmp(s1.c_str(), s2.c_str()) < 0;
   }
 };
 
-static inline int stringcasecmp(const string& s1, const string& s2)
+static inline int stringcasecmp(const std::string& s1, const std::string& s2)
 {
   return strcasecmp(s1.c_str(), s2.c_str());
 }
 
-static inline int stringcasecmp(const string& s1, const char *s2)
+static inline int stringcasecmp(const std::string& s1, const char *s2)
 {
   return strcasecmp(s1.c_str(), s2);
 }
 
-static inline int stringcasecmp(const string& s1, int ofs, int size, const string& s2)
+static inline int stringcasecmp(const std::string& s1, int ofs, int size, const std::string& s2)
 {
   return strncasecmp(s1.c_str() + ofs, s2.c_str(), size);
 }
 
-static inline int stringtoll(const string& s, int64_t *val)
+static inline int stringtoll(const std::string& s, int64_t *val)
 {
   char *end;
 
@@ -48,7 +49,7 @@ static inline int stringtoll(const string& s, int64_t *val)
   return 0;
 }
 
-static inline int stringtoull(const string& s, uint64_t *val)
+static inline int stringtoull(const std::string& s, uint64_t *val)
 {
   char *end;
 
@@ -64,7 +65,7 @@ static inline int stringtoull(const string& s, uint64_t *val)
   return 0;
 }
 
-static inline int stringtol(const string& s, int32_t *val)
+static inline int stringtol(const std::string& s, int32_t *val)
 {
   char *end;
 
@@ -80,7 +81,7 @@ static inline int stringtol(const string& s, int32_t *val)
   return 0;
 }
 
-static inline int stringtoul(const string& s, uint32_t *val)
+static inline int stringtoul(const std::string& s, uint32_t *val)
 {
   char *end;
 
@@ -112,19 +113,6 @@ sview2cstr(const boost::string_view& sv)
   return cstr;
 }
 
-/* We need this helper function because the interface of std::string::reserve
- * doesn't provide the chaining ability in the type append(). It's required
- * to concatenate string without reallocations in a way const-correct manner. */
-template <class StringT>
-static inline StringT create_n_reserve(const size_t reserve_len)
-{
-  StringT ret;
-  /* I would love to see reserve() returning "basic_string&" instead of "void"
-   * in the standard library! */
-  ret.reserve(reserve_len);
-  return ret;
-}
-
 /* std::strlen() isn't guaranteed to be computable at compile-time. Although
  * newer GCCs actually do that, Clang doesn't. Please be aware this function
  * IS NOT A DROP-IN REPLACEMENT FOR STRLEN -- it returns a different result
@@ -132,6 +120,100 @@ static inline StringT create_n_reserve(const size_t reserve_len)
 template<size_t N>
 static inline constexpr size_t sarrlen(const char (&arr)[N]) {
   return N - 1;
+}
+
+namespace detail {
+
+// variadic sum() to add up string lengths for reserve()
+static inline constexpr size_t sum() { return 0; }
+template <typename... Args>
+constexpr size_t sum(size_t v, Args... args) { return v + sum(args...); }
+
+// traits for string_size()
+template <typename T>
+struct string_traits {
+  static constexpr size_t size(const T& s) { return s.size(); }
+};
+// specializations for char*/const char* use strlen()
+template <>
+struct string_traits<const char*> {
+  static constexpr size_t size(const char* s) { return std::strlen(s); }
+};
+template <>
+struct string_traits<char*> : string_traits<const char*> {};
+// specializations for char[]/const char[] also use strlen()
+template <std::size_t N>
+struct string_traits<const char[N]> : string_traits<const char*> {};
+template <std::size_t N>
+struct string_traits<char[N]> : string_traits<const char*> {};
+
+// helpers for string_cat_reserve()
+static inline void append_to(std::string& s) {}
+template <typename... Args>
+void append_to(std::string& s, const boost::string_view& v, const Args&... args)
+{
+  s.append(v.begin(), v.end());
+  append_to(s, args...);
+}
+
+// helpers for string_join_reserve()
+static inline void join_next(std::string& s, const boost::string_view& d) {}
+template <typename... Args>
+void join_next(std::string& s, const boost::string_view& d,
+               const boost::string_view& v, const Args&... args)
+{
+  s.append(d.begin(), d.end());
+  s.append(v.begin(), v.end());
+  join_next(s, d, args...);
+}
+
+static inline void join(std::string& s, const boost::string_view& d) {}
+template <typename... Args>
+void join(std::string& s, const boost::string_view& d,
+          const boost::string_view& v, const Args&... args)
+{
+  s.append(v.begin(), v.end());
+  join_next(s, d, args...);
+}
+
+} // namespace detail
+
+/// return the length of a c string, string literal, or string type
+template <typename T>
+constexpr size_t string_size(const T& s)
+{
+  return detail::string_traits<T>::size(s);
+}
+
+/// concatenates the given string arguments, returning as a std::string that
+/// gets preallocated with reserve()
+template <typename... Args>
+std::string string_cat_reserve(const Args&... args)
+{
+  size_t total_size = detail::sum(string_size(args)...);
+  std::string result;
+  result.reserve(total_size);
+  detail::append_to(result, args...);
+  return result;
+}
+
+/// joins the given string arguments with a delimiter, returning as a
+/// std::string that gets preallocated with reserve()
+template <typename... Args>
+std::string string_join_reserve(const boost::string_view& delim,
+                                const Args&... args)
+{
+  size_t delim_size = delim.size() * std::max<ssize_t>(0, sizeof...(args) - 1);
+  size_t total_size = detail::sum(string_size(args)...) + delim_size;
+  std::string result;
+  result.reserve(total_size);
+  detail::join(result, delim, args...);
+  return result;
+}
+template <typename... Args>
+std::string string_join_reserve(char delim, const Args&... args)
+{
+  return string_join_reserve(boost::string_view{&delim, 1}, args...);
 }
 
 #endif

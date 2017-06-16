@@ -646,21 +646,13 @@ get_v4_canon_req_hash(CephContext* cct,
 {
   ldout(cct, 10) << "payload request hash = " << request_payload_hash << dendl;
 
-  const size_t total_len = http_verb.length() + canonical_uri.length() + \
-    canonical_qs.length() + canonical_hdrs.length() + signed_hdrs.length() + \
-    request_payload_hash.length() + std::strlen("\n") * 5;
-  const auto canonical_req = create_n_reserve<std::string>(total_len)
-    .append(http_verb.data(), http_verb.length())
-    .append("\n", std::strlen("\n"))
-    .append(canonical_uri)
-    .append("\n", std::strlen("\n"))
-    .append(canonical_qs)
-    .append("\n", std::strlen("\n"))
-    .append(canonical_hdrs)
-    .append("\n", std::strlen("\n"))
-    .append(signed_hdrs.data(), signed_hdrs.length())
-    .append("\n", std::strlen("\n"))
-    .append(request_payload_hash.data(), request_payload_hash.length());
+  const auto canonical_req = string_join_reserve("\n",
+    http_verb,
+    canonical_uri,
+    canonical_qs,
+    canonical_hdrs,
+    signed_hdrs,
+    request_payload_hash);
 
   const auto canonical_req_hash = calc_hash_sha256(canonical_req);
 
@@ -684,17 +676,14 @@ get_v4_string_to_sign(CephContext* const cct,
                       const sha256_digest_t& canonreq_hash)
 {
   const auto hexed_cr_hash = buf_to_hex(canonreq_hash);
+  const boost::string_view hexed_cr_hash_str(hexed_cr_hash.data(),
+                                             hexed_cr_hash.size() - 1);
 
-  const size_t total_len = algorithm.length() + request_date.length() + \
-    credential_scope.length() + hexed_cr_hash.size() - 1 + std::strlen("\n") * 3;
-  const auto string_to_sign = create_n_reserve<std::string>(total_len)
-    .append(algorithm.data(), algorithm.length())
-    .append("\n", std::strlen("\n"))
-    .append(request_date.data(), request_date.length())
-    .append("\n", std::strlen("\n"))
-    .append(credential_scope.data(), credential_scope.length())
-    .append("\n", std::strlen("\n"))
-    .append(hexed_cr_hash.data(), hexed_cr_hash.size() - 1);
+  const auto string_to_sign = string_join_reserve("\n",
+    algorithm,
+    request_date,
+    credential_scope,
+    hexed_cr_hash_str);
 
   ldout(cct, 10) << "string to sign = "
                  << rgw::crypt_sanitize::log_content{string_to_sign}
@@ -919,25 +908,13 @@ AWSv4ComplMulti::ChunkMeta::create_next(CephContext* const cct,
 std::string
 AWSv4ComplMulti::calc_chunk_signature(const std::string& payload_hash) const
 {
-  const size_t algorithm_len = std::strlen(AWS4_HMAC_SHA256_STR);
-  const size_t empty_hash_len = std::strlen(AWS4_EMPTY_PAYLOAD_HASH);
-
-  /* We want to avoid reallocations when concatenating the string_to_sign. */
-  const size_t total_len = algorithm_len + date.length() + \
-    credential_scope.length() + prev_chunk_signature.length() + \
-    empty_hash_len + payload_hash.length() + std::strlen("\n") * 5;
-  const auto string_to_sign = create_n_reserve<std::string>(total_len)
-    .append(AWS4_HMAC_SHA256_STR, algorithm_len)
-    .append("\n", std::strlen("\n"))
-    .append(date.data(), date.length())
-    .append("\n", std::strlen("\n"))
-    .append(credential_scope.data(), credential_scope.length())
-    .append("\n", std::strlen("\n"))
-    .append(prev_chunk_signature)
-    .append("\n", std::strlen("\n"))
-    .append(AWS4_EMPTY_PAYLOAD_HASH, empty_hash_len)
-    .append("\n", std::strlen("\n"))
-    .append(payload_hash);
+  const auto string_to_sign = string_join_reserve("\n",
+    AWS4_HMAC_SHA256_STR,
+    date,
+    credential_scope,
+    prev_chunk_signature,
+    AWS4_EMPTY_PAYLOAD_HASH,
+    payload_hash);
 
   ldout(cct, 20) << "AWSv4ComplMulti: string_to_sign=\n" << string_to_sign
                  << dendl;
