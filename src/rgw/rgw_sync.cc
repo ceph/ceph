@@ -1426,7 +1426,7 @@ public:
         }
       }
 
-      ldout(sync_env->cct, 0) << *this << ": adjusting marker pos=" << sync_marker.marker << dendl;
+      ldout(sync_env->cct, 4) << *this << ": adjusting marker pos=" << sync_marker.marker << dendl;
       stack_to_pos.erase(iter);
     }
   }
@@ -1509,12 +1509,10 @@ public:
         collect_children();
       } while ((int)entries.size() == max_entries && can_adjust_marker);
 
-ldout(cct, 0) << __FILE__ << ":" << __LINE__ << ":" << *this << ": num_spawned()=" << num_spawned() << dendl;
       while (num_spawned() > 1) {
         yield wait_for_child();
         collect_children();
       }
-ldout(cct, 0) << __FILE__ << ":" << __LINE__ << ":" << *this << ": num_spawned()=" << num_spawned() << dendl;
 
       if (!lost_lock) {
         /* update marker to reflect we're done with full sync */
@@ -1526,7 +1524,7 @@ ldout(cct, 0) << __FILE__ << ":" << __LINE__ << ":" << *this << ": num_spawned()
 	  temp_marker->marker = std::move(temp_marker->next_step_marker);
 	  temp_marker->next_step_marker.clear();
 	  temp_marker->realm_epoch = realm_epoch;
-	  ldout(sync_env->cct, 0) << *this << ": saving marker pos=" << temp_marker->marker << " realm_epoch=" << realm_epoch << dendl;
+	  ldout(sync_env->cct, 4) << *this << ": saving marker pos=" << temp_marker->marker << " realm_epoch=" << realm_epoch << dendl;
 
 	  using WriteMarkerCR = RGWSimpleRadosWriteCR<rgw_meta_sync_marker>;
 	  yield call(new WriteMarkerCR(sync_env->async_rados, sync_env->store,
@@ -1599,7 +1597,7 @@ ldout(cct, 0) << __FILE__ << ":" << __LINE__ << ":" << *this << ": num_spawned()
       }
       // if the period has advanced, we can't use the existing marker
       if (sync_marker.realm_epoch < realm_epoch) {
-        ldout(sync_env->cct, 0) << "clearing marker=" << sync_marker.marker
+        ldout(sync_env->cct, 4) << "clearing marker=" << sync_marker.marker
             << " from old realm_epoch=" << sync_marker.realm_epoch
             << " (now " << realm_epoch << ')' << dendl;
         sync_marker.realm_epoch = realm_epoch;
