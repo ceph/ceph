@@ -3486,7 +3486,7 @@ class RGWIndexCompletionManager {
 
   int num_shards;
 
-  std::atomic<int> cur_shard;
+  std::atomic<int> cur_shard {0};
 
 
 public:
