@@ -4,6 +4,7 @@
 #ifndef CEPH_RGW_STRING_H
 #define CEPH_RGW_STRING_H
 
+#include <errno.h>
 #include <stdlib.h>
 #include <limits.h>
 
