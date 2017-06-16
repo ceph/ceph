@@ -3288,8 +3288,8 @@ def start_daemon(
         elif os.path.exists(os.path.join(path, 'bsdrc')):
             command_check_call(
                 [
-                    '/usr/local/etc/rc.d/ceph start osd.{osd_id}'
-                    .format(osd_id=osd_id),
+                    '/usr/sbin/service', 'ceph', 'start',
+                    'osd.{osd_id}'.format(osd_id=osd_id),
                 ],
             )
         else:
