@@ -3768,7 +3768,7 @@ PrimaryLogPG::OpContextUPtr PrimaryLogPG::trim_object(
       old_snaps,
       new_snaps);
 
-    obc->obs.oi = object_info_t(coid);
+    coi = object_info_t(coid);
 
     ctx->at_version.version++;
   } else {
@@ -3838,20 +3838,19 @@ PrimaryLogPG::OpContextUPtr PrimaryLogPG::trim_object(
       ctx->delta_stats.num_objects--;
       if (oi.is_dirty()) {
 	ctx->delta_stats.num_objects_dirty--;
-	oi.clear_flag(object_info_t::FLAG_DIRTY);
       }
       if (oi.is_omap())
 	ctx->delta_stats.num_objects_omap--;
       if (oi.is_whiteout()) {
 	dout(20) << __func__ << " trimming whiteout on " << oi.soid << dendl;
 	ctx->delta_stats.num_whiteouts--;
-	oi.clear_flag(object_info_t::FLAG_WHITEOUT);
       }
-      if (oi.is_cache_pinned())
+      if (oi.is_cache_pinned()) {
 	ctx->delta_stats.num_objects_pinned--;
+      }
     }
     ctx->snapset_obc->obs.exists = false;
-    obc->obs.oi = object_info_t(coid);
+    ctx->snapset_obc->obs.oi = object_info_t(snapoid);
     t->remove(snapoid);
   } else {
     dout(10) << coid << " filtering snapset on " << snapoid << dendl;
@@ -5961,6 +5960,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  result = -EINVAL;
 	  break;
 	}
+        oi.set_flag(object_info_t::FLAG_MANIFEST);
 	oi.manifest.redirect_target = target;
 	oi.manifest.type = object_manifest_t::TYPE_REDIRECT;
 	t->truncate(soid, 0);

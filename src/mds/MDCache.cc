@@ -2879,6 +2879,7 @@ void MDCache::handle_mds_failure(mds_rank_t who)
 
   rejoin_gather.insert(who);
   rejoin_sent.erase(who);        // i need to send another
+  rejoin_ack_sent.erase(who);    // i need to send another
   rejoin_ack_gather.erase(who);  // i'll need/get another.
 
   dout(10) << " resolve_gather " << resolve_gather << dendl;
@@ -2938,6 +2939,13 @@ void MDCache::handle_mds_failure(mds_rank_t who)
 	dout(10) << " slave request " << *mdr << " uncommitted, will resolve shortly" << dendl;
 	add_ambiguous_slave_update(p->first, mdr->slave_to_mds);
       }
+    } else if (mdr->slave_request) {
+      MMDSSlaveRequest *slave_req = mdr->slave_request;
+      // FIXME: Slave rename request can arrive after we notice mds failure.
+      // 	This can cause mds to crash (does not affect integrity of FS).
+      if (slave_req->get_op() == MMDSSlaveRequest::OP_RENAMEPREP &&
+	  slave_req->srcdn_auth == who)
+	slave_req->mark_interrupted();
     }
     
     // failed node is slave?
@@ -5929,11 +5937,16 @@ void MDCache::rejoin_send_acks()
   rejoin_unlinked_inodes.clear();
   
   // send acks to everyone in the recovery set
-  map<mds_rank_t,MMDSCacheRejoin*> ack;
+  map<mds_rank_t,MMDSCacheRejoin*> acks;
   for (set<mds_rank_t>::iterator p = recovery_set.begin();
        p != recovery_set.end();
-       ++p) 
-    ack[*p] = new MMDSCacheRejoin(MMDSCacheRejoin::OP_ACK);
+       ++p) {
+    if (rejoin_ack_sent.count(*p))
+      continue;
+    acks[*p] = new MMDSCacheRejoin(MMDSCacheRejoin::OP_ACK);
+  }
+
+  rejoin_ack_sent = recovery_set;
   
   // walk subtrees
   for (map<CDir*,set<CDir*> >::iterator p = subtrees.begin(); 
@@ -5956,8 +5969,11 @@ void MDCache::rejoin_send_acks()
       for (compact_map<mds_rank_t,unsigned>::iterator r = dir->replicas_begin();
 	   r != dir->replicas_end();
 	   ++r) {
-	ack[r->first]->add_strong_dirfrag(dir->dirfrag(), ++r->second, dir->dir_rep);
-	ack[r->first]->add_dirfrag_base(dir);
+	auto it = acks.find(r->first);
+	if (it == acks.end())
+	  continue;
+	it->second->add_strong_dirfrag(dir->dirfrag(), ++r->second, dir->dir_rep);
+	it->second->add_dirfrag_base(dir);
       }
 	   
       for (CDir::map_t::iterator q = dir->items.begin();
@@ -5975,7 +5991,10 @@ void MDCache::rejoin_send_acks()
 	for (compact_map<mds_rank_t,unsigned>::iterator r = dn->replicas_begin();
 	     r != dn->replicas_end();
 	     ++r) {
-	  ack[r->first]->add_strong_dentry(dir->dirfrag(), dn->name, dn->first, dn->last,
+	  auto it = acks.find(r->first);
+	  if (it == acks.end())
+	    continue;
+	  it->second->add_strong_dentry(dir->dirfrag(), dn->name, dn->first, dn->last,
 					   dnl->is_primary() ? dnl->get_inode()->ino():inodeno_t(0),
 					   dnl->is_remote() ? dnl->get_remote_ino():inodeno_t(0),
 					   dnl->is_remote() ? dnl->get_remote_d_type():0,
@@ -5992,10 +6011,13 @@ void MDCache::rejoin_send_acks()
 	for (compact_map<mds_rank_t,unsigned>::iterator r = in->replicas_begin();
 	     r != in->replicas_end();
 	     ++r) {
-	  ack[r->first]->add_inode_base(in, mds->mdsmap->get_up_features());
+	  auto it = acks.find(r->first);
+	  if (it == acks.end())
+	    continue;
+	  it->second->add_inode_base(in, mds->mdsmap->get_up_features());
 	  bufferlist bl;
 	  in->_encode_locks_state_for_rejoin(bl, r->first);
-	  ack[r->first]->add_inode_locks(in, ++r->second, bl);
+	  it->second->add_inode_locks(in, ++r->second, bl);
 	}
 	
 	// subdirs in this subtree?
@@ -6009,19 +6031,25 @@ void MDCache::rejoin_send_acks()
     for (compact_map<mds_rank_t,unsigned>::iterator r = root->replicas_begin();
 	 r != root->replicas_end();
 	 ++r) {
-      ack[r->first]->add_inode_base(root, mds->mdsmap->get_up_features());
+      auto it = acks.find(r->first);
+      if (it == acks.end())
+	continue;
+      it->second->add_inode_base(root, mds->mdsmap->get_up_features());
       bufferlist bl;
       root->_encode_locks_state_for_rejoin(bl, r->first);
-      ack[r->first]->add_inode_locks(root, ++r->second, bl);
+      it->second->add_inode_locks(root, ++r->second, bl);
     }
   if (myin)
     for (compact_map<mds_rank_t,unsigned>::iterator r = myin->replicas_begin();
 	 r != myin->replicas_end();
 	 ++r) {
-      ack[r->first]->add_inode_base(myin, mds->mdsmap->get_up_features());
+      auto it = acks.find(r->first);
+      if (it == acks.end())
+	continue;
+      it->second->add_inode_base(myin, mds->mdsmap->get_up_features());
       bufferlist bl;
       myin->_encode_locks_state_for_rejoin(bl, r->first);
-      ack[r->first]->add_inode_locks(myin, ++r->second, bl);
+      it->second->add_inode_locks(myin, ++r->second, bl);
     }
 
   // include inode base for any inodes whose scatterlocks may have updated
@@ -6031,14 +6059,16 @@ void MDCache::rejoin_send_acks()
     CInode *in = *p;
     for (compact_map<mds_rank_t,unsigned>::iterator r = in->replicas_begin();
 	 r != in->replicas_end();
-	 ++r)
-      ack[r->first]->add_inode_base(in, mds->mdsmap->get_up_features());
+	 ++r) {
+      auto it = acks.find(r->first);
+      if (it == acks.end())
+	continue;
+      it->second->add_inode_base(in, mds->mdsmap->get_up_features());
+    }
   }
 
   // send acks
-  for (map<mds_rank_t,MMDSCacheRejoin*>::iterator p = ack.begin();
-       p != ack.end();
-       ++p) {
+  for (auto p = acks.begin(); p != acks.end(); ++p) {
     ::encode(rejoin_imported_caps[p->first], p->second->imported_caps);
     mds->send_message_mds(p->second, p->first);
   }
@@ -6807,9 +6837,7 @@ void MDCache::trim_non_auth()
        ++p) 
     p->first->get(CDir::PIN_SUBTREETEMP);
 
-  // note first auth item we see.  
-  // when we see it the second time, stop.
-  CDentry *first_auth = 0;
+  list<CDentry*> auth_list;
   
   // trim non-auth items from the lru
   for (;;) {
@@ -6825,20 +6853,10 @@ void MDCache::trim_non_auth()
 
     if (dn->is_auth()) {
       // add back into lru (at the top)
-      if (dn->state_test(CDentry::STATE_BOTTOMLRU))
-	bottom_lru.lru_insert_mid(dn);
-      else
-	lru.lru_insert_top(dn);
+      auth_list.push_back(dn);
 
       if (dnl->is_remote() && dnl->get_inode() && !dnl->get_inode()->is_auth())
 	dn->unlink_remote(dnl);
-
-      if (!first_auth) {
-	first_auth = dn;
-      } else {
-	if (first_auth == dn) 
-	  break;
-      }
     } else {
       // non-auth.  expire.
       CDir *dir = dn->get_dir();
@@ -6874,6 +6892,13 @@ void MDCache::trim_non_auth()
       if (!dir->is_subtree_root() && dir->get_num_any() == 0)
 	dir->inode->close_dirfrag(dir->get_frag());
     }
+  }
+
+  for (auto dn : auth_list) {
+      if (dn->state_test(CDentry::STATE_BOTTOMLRU))
+	bottom_lru.lru_insert_mid(dn);
+      else
+	lru.lru_insert_top(dn);
   }
 
   // move everything in the pintail to the top bit of the lru.
@@ -10731,13 +10756,26 @@ void MDCache::adjust_dir_fragments(CInode *diri,
 
     // are my constituent bits subtrees?  if so, i will be too.
     // (it's all or none, actually.)
-    bool was_subtree = false;
-    set<CDir*> new_bounds;
-    for (list<CDir*>::iterator p = srcfrags.begin(); p != srcfrags.end(); ++p) {
-      CDir *dir = *p;
+    bool any_subtree = false;
+    for (CDir *dir : srcfrags) {
       if (dir->is_subtree_root()) {
+	any_subtree = true;
+	break;
+      }
+    }
+    set<CDir*> new_bounds;
+    if (any_subtree)  {
+      for (CDir *dir : srcfrags) {
+	// this simplifies the code that find subtrees underneath the dirfrag
+	if (!dir->is_subtree_root()) {
+	  dir->state_set(CDir::STATE_AUXSUBTREE);
+	  adjust_subtree_auth(dir, mds->get_nodeid());
+	}
+      }
+
+      for (CDir *dir : srcfrags) {
+	assert(dir->is_subtree_root());
 	dout(10) << " taking srcfrag subtree bounds from " << *dir << dendl;
-	was_subtree = true;
 	map<CDir*, set<CDir*> >::iterator q = subtrees.find(dir);
 	set<CDir*>::iterator r = q->second.begin();
 	while (r != subtrees[dir].end()) {
@@ -10745,7 +10783,7 @@ void MDCache::adjust_dir_fragments(CInode *diri,
 	  subtrees[dir].erase(r++);
 	}
 	subtrees.erase(q);
-	
+
 	// remove myself as my parent's bound
 	if (parent_subtree)
 	  subtrees[parent_subtree].erase(dir);
@@ -10756,7 +10794,7 @@ void MDCache::adjust_dir_fragments(CInode *diri,
     CDir *f = new CDir(diri, basefrag, this, srcfrags.front()->is_auth());
     f->merge(srcfrags, waiters, replay);
 
-    if (was_subtree) {
+    if (any_subtree) {
       assert(f->is_subtree_root());
       subtrees[f].swap(new_bounds);
       if (parent_subtree)
