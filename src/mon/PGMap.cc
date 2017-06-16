@@ -680,8 +680,10 @@ void PGMapDigest::dump_pool_stats_full(
       if (pm != ecp.end() && pk != ecp.end()) {
 	int k = atoi(pk->second.c_str());
 	int m = atoi(pm->second.c_str());
-	avail = avail * k / (m + k);
-	raw_used_rate = (float)(m + k) / k;
+	int mk = m + k;
+	assert(mk != 0);
+	avail = avail * k / mk;
+	raw_used_rate = (float)mk / k;
       } else {
 	raw_used_rate = 0.0;
       }
