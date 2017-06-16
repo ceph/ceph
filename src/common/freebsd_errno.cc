@@ -23,7 +23,7 @@
 // and the Linux error as value
 // Use the fact that the arry is initialised per default on all 0's
 // And we do not translate for 0's, but return the original value.
-static const__s32 hostos_to_ceph_conv[256] = {
+static const __s32 ceph_to_hostos_conv[256] = {
 //       Linux errno  FreeBSD errno
        C2H_ERRNO(11,  EAGAIN),	
        C2H_ERRNO(35,  EDEADLK),	
@@ -129,7 +129,7 @@ static const__s32 hostos_to_ceph_conv[256] = {
 // and the Linux error as value
 // Use the fact that the arry is initialised per default on all 0's
 // And we do not translate for 0's, but return the original value.
-static const__s32 hostos_to_ceph_conv[256] = {
+static const __s32 hostos_to_ceph_conv[256] = {
 	//        FreeBSD errno Linux errno
 	H2C_ERRNO(EDEADLK,	35),   	/* Resource deadlock avoided */
         H2C_ERRNO(EAGAIN,	11),   	/* Resource temporarily unavailable */
