@@ -53,6 +53,13 @@ std::map<int, std::string> grantee_type_map = boost::assign::map_list_of
                            (BL_TYPE_GROUP, "Group")
                            (BL_TYPE_UNKNOWN, "unknown");
 
+std::map<const string, const uint32_t> rgw_perm_map = boost::assign::map_list_of
+      ("READ", RGW_PERM_READ)
+      ("WRITE", RGW_PERM_WRITE)
+      ("READ_ACP", RGW_PERM_READ_ACP)
+      ("WRITE_ACP", RGW_PERM_WRITE_ACP)
+      ("FULL_CONTROL", RGW_PERM_FULL_CONTROL);
+
 void *RGWBL::BLWorker::entry() {
   do {
     utime_t start = ceph_clock_now();
@@ -588,6 +595,7 @@ int RGWBL::bucket_bl_process(string& shard_id)
          // Log obj acl granting 
          // The owner of log obj is LDG(bl_deliver), so LDG has full control permission in default
          // According to S3, target bucket has full control permission in default 
+         // The target grants in request xml should be set into log obj's acl
          // http://docs.aws.amazon.com/AmazonS3/latest/dev/ServerLogs.html
          RGWAccessControlPolicy tobject_policy(cct);
          bufferlist bl;
@@ -615,6 +623,32 @@ int RGWBL::bucket_bl_process(string& shard_id)
          // add owner of target bucket full control permission in default
          tbucket_owner_new_grant.set_canon(tbucket_owner.user_id, tbucket_owner.display_name, RGW_PERM_FULL_CONTROL);
          tobject_acl.add_grant(&tbucket_owner_new_grant);
+         // add operating permission introduced from target grants in request xml
+         ACLGrant target_grant;
+         const std::vector<BLGrant> & bl_grant = status.get_target_grants();
+         uint32_t rgw_permission = RGW_PERM_NONE;
+         for (auto grant_iter = bl_grant.begin(); grant_iter != bl_grant.end(); grant_iter++) {
+           rgw_permission = rgw_perm_map[grant_iter->get_permission()];
+           if (grant_iter->get_type() == grantee_type_map[BL_TYPE_CANON_USER]) {
+             rgw_user canonical_user(grant_iter->get_id());
+             target_grant.set_canon(canonical_user, grant_iter->get_display_name(), 
+		                    rgw_permission);
+           } else if (grant_iter->get_type() == grantee_type_map[BL_TYPE_GROUP]) {
+#define LOG_DELIVER_GROUP   "http://acs.amazonaws.com/groups/s3/LogDelivery"
+	     if (grant_iter->get_uri() != LOG_DELIVER_GROUP) {
+               std::string uri = grant_iter->get_uri();
+               target_grant.set_group(target_grant.uri_to_group(uri), 
+		                      rgw_permission);
+             }
+           } else if (grant_iter->get_type() == grantee_type_map[BL_TYPE_EMAIL_USER]) {
+             RGWUserInfo email_user;
+             std::string email_addr = grant_iter->get_email_address();
+             rgw_get_user_info_by_email(store, email_addr, email_user);
+             target_grant.set_canon(email_user.user_id, email_user.display_name,
+		                    rgw_permission);
+           }
+           tobject_acl.add_grant(&target_grant);
+         }
          tobject_policy.encode(bl);
          tobject_attrs[RGW_ATTR_ACL] = bl;
       }
