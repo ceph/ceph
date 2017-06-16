@@ -243,8 +243,8 @@ int RGWZoneGroup::create_default(bool old_format)
   is_master = true;
 
   RGWZoneGroupPlacementTarget placement_target;
-  placement_target.name = "default-placement";
-  placement_targets[placement_target.name] = placement_target;
+  placement_target.id = "default-placement";
+  placement_targets[placement_target.id] = placement_target;
   default_placement = "default-placement";
 
   RGWZoneParams zone_params(default_zone_name);
@@ -437,11 +437,11 @@ void RGWZoneGroup::post_process_params()
 
     for (auto iter = zone_params.placement_rules.begin();
          iter != zone_params.placement_rules.end(); ++iter) {
-      const string& placement_name = iter->first;
-      if (placement_targets.find(placement_name) == placement_targets.end()) {
+      const std::string& placement_id = iter->first;
+      if (placement_targets.find(placement_id) == placement_targets.end()) {
         RGWZoneGroupPlacementTarget placement_target;
-        placement_target.name = placement_name;
-        placement_targets[placement_name] = placement_target;
+        placement_target.id = placement_id;
+        placement_targets[placement_id] = placement_target;
       }
     }
   }

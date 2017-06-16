@@ -1414,7 +1414,7 @@ struct RGWDefaultZoneGroupInfo {
 WRITE_CLASS_ENCODER(RGWDefaultZoneGroupInfo)
 
 struct RGWZoneGroupPlacementTarget {
-  string name;
+  string id;
   set<string> tags;
 
   bool user_permitted(list<string>& user_tags) {
@@ -1431,14 +1431,14 @@ struct RGWZoneGroupPlacementTarget {
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
-    ::encode(name, bl);
+    ::encode(id, bl);
     ::encode(tags, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::iterator& bl) {
     DECODE_START(1, bl);
-    ::decode(name, bl);
+    ::decode(id, bl);
     ::decode(tags, bl);
     DECODE_FINISH(bl);
   }

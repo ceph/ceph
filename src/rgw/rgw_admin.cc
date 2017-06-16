@@ -3743,7 +3743,7 @@ int main(int argc, const char **argv)
 
         if (opt_cmd == OPT_ZONEGROUP_PLACEMENT_ADD) {
           RGWZoneGroupPlacementTarget target;
-          target.name = placement_id;
+          target.id = placement_id;
           for (auto& t : tags) {
             target.tags.insert(t);
           }
@@ -3756,7 +3756,7 @@ int main(int argc, const char **argv)
               target.tags.insert(t);
             }
           }
-          target.name = placement_id;
+          target.id = placement_id;
           for (auto& t : tags_rm) {
             target.tags.erase(t);
           }
@@ -3767,7 +3767,7 @@ int main(int argc, const char **argv)
           zonegroup.placement_targets.erase(placement_id);
         } else if (opt_cmd == OPT_ZONEGROUP_PLACEMENT_DEFAULT) {
           if (!zonegroup.placement_targets.count(placement_id)) {
-            cerr << "failed to find a zonegroup placement target named '"
+            cerr << "failed to find a zonegroup placement target id '"
                 << placement_id << "'" << std::endl;
             return -ENOENT;
           }
