@@ -6,5 +6,5 @@ rados -p rbd load-gen \
     --max-object-size 1048576 \
     --max-ops 128 \
     --max-backlog 128 \
-    --percent 90 \
+    --read-percent 90 \
     --run-length 600
