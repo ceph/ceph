@@ -131,7 +131,7 @@ int RGWRESTSimpleRequest::execute(RGWAccessKey& key, const char *method, const c
 
   string digest;
   try {
-    digest = rgw::auth::s3::get_v2_signature(cct, canonical_header, key.key);
+    digest = rgw::auth::s3::get_v2_signature(cct, key.key, canonical_header);
   } catch (int ret) {
     return ret;
   }
@@ -232,7 +232,7 @@ int RGWRESTSimpleRequest::sign_request(RGWAccessKey& key, RGWEnv& env, req_info&
 
   string digest;
   try {
-    digest = rgw::auth::s3::get_v2_signature(cct, canonical_header, key.key);
+    digest = rgw::auth::s3::get_v2_signature(cct, key.key, canonical_header);
   } catch (int ret) {
     return ret;
   }
