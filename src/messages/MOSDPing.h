@@ -34,8 +34,8 @@
 
 class MOSDPing : public Message {
 
-  static const int HEAD_VERSION = 3;
-  static const int COMPAT_VERSION = 2;
+  static const int HEAD_VERSION = 4;
+  static const int COMPAT_VERSION = 4;
 
  public:
   enum {
@@ -59,16 +59,14 @@ class MOSDPing : public Message {
   }
 
   uuid_d fsid;
-  epoch_t map_epoch, peer_as_of_epoch;
+  epoch_t map_epoch;
   __u8 op;
-  osd_peer_stat_t peer_stat;
   utime_t stamp;
   uint32_t min_message_size;
 
   MOSDPing(const uuid_d& f, epoch_t e, __u8 o, utime_t s, uint32_t min_message)
     : Message(MSG_OSD_PING, HEAD_VERSION, COMPAT_VERSION),
-      fsid(f), map_epoch(e), peer_as_of_epoch(0), op(o), stamp(s),
-      min_message_size(min_message)
+      fsid(f), map_epoch(e), op(o), stamp(s), min_message_size(min_message)
   { }
   MOSDPing()
     : Message(MSG_OSD_PING, HEAD_VERSION, COMPAT_VERSION), min_message_size(0)
@@ -81,9 +79,15 @@ public:
     bufferlist::iterator p = payload.begin();
     ::decode(fsid, p);
     ::decode(map_epoch, p);
-    ::decode(peer_as_of_epoch, p);
-    ::decode(op, p);
-    ::decode(peer_stat, p);
+    if (header.version < 4) {
+      osd_peer_stat_t peer_stat;
+      epoch_t peer_as_of_epoch;
+      ::decode(peer_as_of_epoch, p);
+      ::decode(op, p);
+      ::decode(peer_stat, p);
+    } else {
+      ::decode(op, p);
+    }
     ::decode(stamp, p);
     if (header.version >= 3) {
       int payload_mid_length = p.get_off();
@@ -96,11 +100,20 @@ public:
   void encode_payload(uint64_t features) override {
     ::encode(fsid, payload);
     ::encode(map_epoch, payload);
-    ::encode(peer_as_of_epoch, payload);
-    ::encode(op, payload);
-    ::encode(peer_stat, payload);
+    
+    // with luminous, we drop peer_as_of_epoch and peer_stat
+    if (!HAVE_FEATURE(features, SERVER_LUMINOUS)) { 
+      epoch_t dummy_epoch = {};
+      osd_peer_stat_t dummy_stat = {};
+      header.version = 3;
+      header.compat_version = 2;
+      ::encode(dummy_epoch, payload);
+      ::encode(op, payload);   
+      ::encode(dummy_stat, payload);
+    } else {
+      ::encode(op, payload);
+    }
     ::encode(stamp, payload);
-
     size_t s = 0;
     if (min_message_size > payload.length())
       s = min_message_size - payload.length();
@@ -112,11 +125,11 @@ public:
       // that at runtime we are only adding a bufferptr reference to it.
       static char zeros[16384] = {};
       while (s > sizeof(zeros)) {
-	payload.append(buffer::create_static(sizeof(zeros), zeros));
-	s -= sizeof(zeros);
+        payload.append(buffer::create_static(sizeof(zeros), zeros));
+        s -= sizeof(zeros);
       }
       if (s) {
-	payload.append(buffer::create_static(s, zeros));
+        payload.append(buffer::create_static(s, zeros));
       }
     }
   }
@@ -125,7 +138,6 @@ public:
   void print(ostream& out) const override {
     out << "osd_ping(" << get_op_name(op)
 	<< " e" << map_epoch
-      //<< " as_of " << peer_as_of_epoch
 	<< " stamp " << stamp
 	<< ")";
   }
