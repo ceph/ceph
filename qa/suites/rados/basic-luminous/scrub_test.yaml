@@ -1,5 +1,6 @@
 overrides:
   ceph:
+    wait-for-scrub: false
     log-whitelist:
     - '!= data_digest'
     - '!= omap_digest'
