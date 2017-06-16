@@ -3,10 +3,7 @@
 
 #include "common/config_validators.h"
 #include "include/stringify.h"
-#include "include/rbd/features.h"
-#include <map>
-#include <sstream>
-#include <vector>
+
 #include <boost/algorithm/string.hpp>
 #include <boost/lexical_cast.hpp>
 #include <boost/regex.hpp>

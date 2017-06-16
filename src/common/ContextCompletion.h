@@ -3,7 +3,6 @@
 #ifndef CEPH_ASYNC_COMPLETION_H
 #define CEPH_ASYNC_COMPLETION_H
 
-#include "include/int_types.h"
 #include "include/Context.h"
 
 namespace ceph {

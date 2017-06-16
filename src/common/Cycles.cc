@@ -28,13 +28,7 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
-
-#include <errno.h>
-#include <sys/time.h>
-
-#include "errno.h"
 #include "debug.h"
-#include "Initialize.h"
 #include "Cycles.h"
 
 double Cycles::cycles_per_sec = 0;

@@ -16,13 +16,7 @@
 #define CEPH_COMMON_ENTITY_NAME_H
 
 #include <ifaddrs.h>
-#include <netinet/in.h>
-#include <iosfwd>
-#include <stdint.h>
-#include <string>
 
-#include "include/encoding.h"
-#include "include/buffer_fwd.h"
 #include "msg/msg_types.h"
 
 /* Represents a Ceph entity name.

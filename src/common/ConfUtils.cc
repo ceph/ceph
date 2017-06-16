@@ -13,13 +13,8 @@
  */
 
 #include <algorithm>
-#include <errno.h>
 #include <map>
 #include <sstream>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <string>
 #include <sys/stat.h>
 #include <iostream>
 
@@ -28,7 +23,6 @@
 #include "common/utf8.h"
 #include "common/ConfUtils.h"
 
-using std::cerr;
 using std::ostringstream;
 using std::pair;
 using std::string;

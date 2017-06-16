@@ -12,18 +12,10 @@
  *
  */
 
-#include <sys/types.h>
-#include <netinet/in.h>
-#include <arpa/nameser.h>
 #include <arpa/inet.h>
-#include <resolv.h>
 
 #include "dns_resolve.h"
-
-#include "acconfig.h"
 #include "common/debug.h"
-#include "msg/msg_types.h"
-
 
 #define dout_subsys ceph_subsys_
 

@@ -21,12 +21,6 @@
 #include "common/likely.h"
 #include "common/Clock.h"
 #include "log/Log.h"
-#include "include/assert.h"
-
-#include <iostream>
-#include <pthread.h>
-#include <streambuf>
-#include <sstream>
 
 extern void dout_emergency(const char * const str);
 extern void dout_emergency(const std::string &str);
