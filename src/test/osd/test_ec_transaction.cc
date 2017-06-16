@@ -81,3 +81,44 @@ TEST(ectransaction, two_writes_nearby)
   ASSERT_EQ(0u, plan.to_read.size());
   ASSERT_EQ(1u, plan.will_write.size());
 }
+
+TEST(ectransaction, many_writes)
+{
+  hobject_t h;
+  PGTransactionUPtr t(new PGTransaction);
+  bufferlist a, b;
+  a.append_zero(512);
+  b.append_zero(4096);
+  t->create(h);
+
+  ECUtil::stripe_info_t sinfo(2, 8192);
+  // write 2801664~512
+  // write 2802176~512
+  // write 2802688~512
+  // write 2803200~512
+  t->write(h, 2801664, a.length(), a, 0);
+  t->write(h, 2802176, a.length(), a, 0);
+  t->write(h, 2802688, a.length(), a, 0);
+  t->write(h, 2803200, a.length(), a, 0);
+
+  // write 2805760~4096
+  // write 2809856~4096
+  // write 2813952~4096
+  t->write(h, 2805760, b.length(), b, 0);
+  t->write(h, 2809856, b.length(), b, 0);
+  t->write(h, 2813952, b.length(), b, 0);
+
+  auto plan = ECTransaction::get_write_plan(
+    sinfo,
+    std::move(t),
+    [&](const hobject_t &i) {
+      ECUtil::HashInfoRef ref(new ECUtil::HashInfo(1));
+      return ref;
+    },
+    &dpp);
+  generic_derr << "to_read " << plan.to_read << dendl;
+  generic_derr << "will_write " << plan.will_write << dendl;
+
+  ASSERT_EQ(0u, plan.to_read.size());
+  ASSERT_EQ(1u, plan.will_write.size());
+}
