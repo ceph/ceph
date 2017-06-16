@@ -1623,9 +1623,17 @@ bool OSDMonitor::can_mark_down(int i)
 bool OSDMonitor::can_mark_up(int i)
 {
   if (osdmap.test_flag(CEPH_OSDMAP_NOUP)) {
-    dout(5) << "can_mark_up NOUP flag set, will not mark osd." << i << " up" << dendl;
+    dout(5) << __func__ << " NOUP flag set, will not mark osd." << i
+            << " up" << dendl;
     return false;
   }
+
+  if (osdmap.is_noup(i)) {
+    dout(5) << __func__ << " osd." << i << " is marked as noup, "
+            << "will not mark it up" << dendl;
+    return false;
+  }
+
   return true;
 }
 
@@ -1671,9 +1679,17 @@ bool OSDMonitor::can_mark_out(int i)
 bool OSDMonitor::can_mark_in(int i)
 {
   if (osdmap.test_flag(CEPH_OSDMAP_NOIN)) {
-    dout(5) << "can_mark_in NOIN flag set, will not mark osd." << i << " in" << dendl;
+    dout(5) << __func__ << " NOIN flag set, will not mark osd." << i
+            << " in" << dendl;
     return false;
   }
+
+  if (osdmap.is_noin(i)) {
+    dout(5) << __func__ << " osd." << i << " is marked as noin, "
+            << "will not mark it in" << dendl;
+    return false;
+  }
+
   return true;
 }
 
@@ -3508,6 +3524,19 @@ void OSDMonitor::get_health(list<pair<health_status_t,string> >& summary,
         }
       }
 
+      // warn if there is any noup osds.
+      vector<int> noup_osds;
+      osdmap.get_noup_osds(&noup_osds);
+      if (noup_osds.size()) {
+        ostringstream ss;
+        ss << noup_osds.size() << " noup osd(s)";
+        summary.push_back(make_pair(HEALTH_WARN, ss.str()));
+        if (detail) {
+          ss << ": " << noup_osds;
+          detail->push_back(make_pair(HEALTH_WARN, ss.str()));
+        }
+      }
+
       // warn if there is any nodown osds.
       vector<int> nodown_osds;
       osdmap.get_nodown_osds(&nodown_osds);
@@ -3517,6 +3546,19 @@ void OSDMonitor::get_health(list<pair<health_status_t,string> >& summary,
         summary.push_back(make_pair(HEALTH_WARN, ss.str()));
         if (detail) {
           ss << ": " << nodown_osds;
+          detail->push_back(make_pair(HEALTH_WARN, ss.str()));
+        }
+      }
+
+      // warn if there is any noin osds.
+      vector<int> noin_osds;
+      osdmap.get_noin_osds(&noin_osds);
+      if (noin_osds.size()) {
+        ostringstream ss;
+        ss << noin_osds.size() << " noin osd(s)";
+        summary.push_back(make_pair(HEALTH_WARN, ss.str()));
+        if (detail) {
+          ss << ": " << noin_osds;
           detail->push_back(make_pair(HEALTH_WARN, ss.str()));
         }
       }
@@ -8278,10 +8320,28 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 						get_last_committed() + 1));
       return true;
     }
-  } else if (prefix == "osd add-noout" ||
-             prefix == "osd add-nodown") {
+  } else if (prefix == "osd add-noup" ||
+             prefix == "osd add-nodown" ||
+             prefix == "osd add-noin" ||
+             prefix == "osd add-noout") {
 
-    bool noout = prefix == "osd add-noout";
+    enum {
+      OP_NOUP,
+      OP_NODOWN,
+      OP_NOIN,
+      OP_NOOUT,
+    } option;
+
+    if (prefix == "osd add-noup") {
+      option = OP_NOUP;
+    } else if (prefix == "osd add-nodown") {
+      option = OP_NODOWN;
+    } else if (prefix == "osd add-noin") {
+      option = OP_NOIN;
+    } else {
+      option = OP_NOOUT;
+    }
+
     bool any = false;
     bool stop = false;
 
@@ -8317,46 +8377,73 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
           continue;
         }
 
-        if (noout) {
-          if (osdmap.is_out(osd)) {
-            ss << "osd." << osd << " is already out. ";
+        switch (option) {
+        case OP_NOUP:
+          if (osdmap.is_up(osd)) {
+            ss << "osd." << osd << " is already up. ";
             continue;
           }
 
-          if (osdmap.is_noout(osd)) { // already noout?
-            // continue to check if there is any pending "rm-noout" request
-            if (pending_inc.pending_osd_has_state(osd, CEPH_OSD_NOOUT)) {
-              // cancel it
-              pending_inc.pending_osd_state_clear(osd, CEPH_OSD_NOOUT);
+          if (osdmap.is_noup(osd)) {
+            if (pending_inc.pending_osd_state_clear(osd, CEPH_OSD_NOUP))
               any = true;
-            }
-
-            continue;
+          } else {
+            pending_inc.pending_osd_state_set(osd, CEPH_OSD_NOUP);
+            any = true;
           }
 
-          pending_inc.pending_osd_state_set(osd, CEPH_OSD_NOOUT);
-          any = true;
-        } else {
-          // nodown
+          break;
 
+        case OP_NODOWN:
           if (osdmap.is_down(osd)) {
             ss << "osd." << osd << " is already down. ";
             continue;
           }
 
-          if (osdmap.is_nodown(osd)) { // already nodown?
-            // continue to check if there is any pending "rm-nodown" request
-            if (pending_inc.pending_osd_has_state(osd, CEPH_OSD_NODOWN)) {
-              // cancel it
-              pending_inc.pending_osd_state_clear(osd, CEPH_OSD_NODOWN);
+          if (osdmap.is_nodown(osd)) {
+            if (pending_inc.pending_osd_state_clear(osd, CEPH_OSD_NODOWN))
               any = true;
-            }
+          } else {
+            pending_inc.pending_osd_state_set(osd, CEPH_OSD_NODOWN);
+            any = true;
+          }
 
+          break;
+
+        case OP_NOIN:
+          if (osdmap.is_in(osd)) {
+            ss << "osd." << osd << " is already in. ";
             continue;
           }
 
-          pending_inc.pending_osd_state_set(osd, CEPH_OSD_NODOWN);
-          any = true;
+          if (osdmap.is_noin(osd)) {
+            if (pending_inc.pending_osd_state_clear(osd, CEPH_OSD_NOIN))
+              any = true;
+          } else {
+            pending_inc.pending_osd_state_set(osd, CEPH_OSD_NOIN);
+            any = true;
+          }
+
+          break;
+
+        case OP_NOOUT:
+          if (osdmap.is_out(osd)) {
+            ss << "osd." << osd << " is already out. ";
+            continue;
+          }
+
+          if (osdmap.is_noout(osd)) {
+            if (pending_inc.pending_osd_state_clear(osd, CEPH_OSD_NOOUT))
+              any = true;
+          } else {
+            pending_inc.pending_osd_state_set(osd, CEPH_OSD_NOOUT);
+            any = true;
+          }
+
+          break;
+
+        default:
+	  assert(0 == "invalid option");
         }
       }
     }
@@ -8367,47 +8454,96 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
                                  get_last_committed() + 1));
       return true;
     }
-  } else if (prefix == "osd rm-noout" ||
-             prefix == "osd rm-nodown") {
+  } else if (prefix == "osd rm-noup" ||
+             prefix == "osd rm-nodown" ||
+             prefix == "osd rm-noin" ||
+             prefix == "osd rm-noout") {
+
+    enum {
+      OP_NOUP,
+      OP_NODOWN,
+      OP_NOIN,
+      OP_NOOUT,
+    } option;
+
+    if (prefix == "osd rm-noup") {
+      option = OP_NOUP;
+    } else if (prefix == "osd rm-nodown") {
+      option = OP_NODOWN;
+    } else if (prefix == "osd rm-noin") {
+      option = OP_NOIN;
+    } else {
+      option = OP_NOOUT;
+    }
 
     bool any = false;
     bool stop = false;
-    bool noout = prefix == "osd rm-noout";
 
     vector<string> idvec;
     cmd_getval(g_ceph_context, cmdmap, "ids", idvec);
 
     for (unsigned j = 0; j < idvec.size() && !stop; j++) {
+
       vector<int> osds;
 
       // wildcard?
       if (j == 0 &&
           (idvec[0] == "any" || idvec[0] == "all" || idvec[0] == "*")) {
 
-        // touch previous noout/nodown osds only
-        if (noout) {
-          osdmap.get_noout_osds(&osds);
-        } else {
+        // touch previous noup/nodown/noin/noout osds only
+        switch (option) {
+        case OP_NOUP:
+          osdmap.get_noup_osds(&osds);
+          break;
+        case OP_NODOWN:
           osdmap.get_nodown_osds(&osds);
+          break;
+        case OP_NOIN:
+          osdmap.get_noin_osds(&osds);
+          break;
+        case OP_NOOUT:
+          osdmap.get_noout_osds(&osds);
+          break;
+        default:
+          assert(0 == "invalid option");
         }
 
-        // cancel pending noout/nodown requests too,
-        // if there is any
+        // cancel any pending noup/nodown/noin/noout requests too
         vector<int> pending_state_osds;
         (void) pending_inc.get_pending_state_osds(&pending_state_osds);
         for (auto &p : pending_state_osds) {
-          if (noout) {
-            if (!osdmap.is_noout(p) &&
-                pending_inc.pending_osd_has_state(p, CEPH_OSD_NOOUT)) {
-              pending_inc.pending_osd_state_clear(p, CEPH_OSD_NOOUT);
+
+          switch (option) {
+          case OP_NOUP:
+            if (!osdmap.is_noup(p) &&
+                pending_inc.pending_osd_state_clear(p, CEPH_OSD_NOUP)) {
               any = true;
             }
-          } else {
+            break;
+
+          case OP_NODOWN:
             if (!osdmap.is_nodown(p) &&
-                pending_inc.pending_osd_has_state(p, CEPH_OSD_NODOWN)) {
-              pending_inc.pending_osd_state_clear(p, CEPH_OSD_NODOWN);
+                pending_inc.pending_osd_state_clear(p, CEPH_OSD_NODOWN)) {
               any = true;
             }
+            break;
+
+          case OP_NOIN:
+            if (!osdmap.is_noin(p) &&
+                pending_inc.pending_osd_state_clear(p, CEPH_OSD_NOIN)) {
+              any = true;
+            }
+            break;
+
+          case OP_NOOUT:
+            if (!osdmap.is_noout(p) &&
+                pending_inc.pending_osd_state_clear(p, CEPH_OSD_NOOUT)) {
+              any = true;
+            }
+            break;
+
+          default:
+            assert(0 == "invalid option");
           }
         }
 
@@ -8433,33 +8569,49 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
           continue;
         }
 
-        if (noout) {
-          if (osdmap.is_noout(osd)) {
-            pending_inc.pending_osd_state_set(osd, CEPH_OSD_NOOUT);
-            any = true;
-          } else {
-            // noout flag is not set or has already been successfully cancelled
-            // continue to check pending_inc
-            if (pending_inc.pending_osd_has_state(osd, CEPH_OSD_NOOUT)) {
-              // cancel pending noout flag
-              pending_inc.pending_osd_state_clear(osd, CEPH_OSD_NOOUT);
+        switch (option) {
+          case OP_NOUP:
+            if (osdmap.is_noup(osd)) {
+              pending_inc.pending_osd_state_set(osd, CEPH_OSD_NOUP);
+              any = true;
+            } else if (pending_inc.pending_osd_state_clear(
+              osd, CEPH_OSD_NOUP)) {
               any = true;
             }
-          }
-        } else {
-          // nodown
-          if (osdmap.is_nodown(osd)) {
-            pending_inc.pending_osd_state_set(osd, CEPH_OSD_NODOWN);
-            any = true;
-          } else {
-            // nodown flag is not set or has already been successfully cancelled
-            // continue to check pending_inc
-            if (pending_inc.pending_osd_has_state(osd, CEPH_OSD_NODOWN)) {
-              // cancel pending nodown flag
-              pending_inc.pending_osd_state_clear(osd, CEPH_OSD_NODOWN);
+            break;
+
+          case OP_NODOWN:
+            if (osdmap.is_nodown(osd)) {
+              pending_inc.pending_osd_state_set(osd, CEPH_OSD_NODOWN);
+              any = true;
+            } else if (pending_inc.pending_osd_state_clear(
+              osd, CEPH_OSD_NODOWN)) {
               any = true;
             }
-          }
+            break;
+
+          case OP_NOIN:
+            if (osdmap.is_noin(osd)) {
+              pending_inc.pending_osd_state_set(osd, CEPH_OSD_NOIN);
+              any = true;
+            } else if (pending_inc.pending_osd_state_clear(
+              osd, CEPH_OSD_NOIN)) {
+              any = true;
+            }
+            break;
+
+          case OP_NOOUT:
+            if (osdmap.is_noout(osd)) {
+              pending_inc.pending_osd_state_set(osd, CEPH_OSD_NOOUT);
+              any = true;
+            } else if (pending_inc.pending_osd_state_clear(
+              osd, CEPH_OSD_NOOUT)) {
+              any = true;
+            }
+            break;
+
+          default:
+            assert(0 == "invalid option");
         }
       }
     }
