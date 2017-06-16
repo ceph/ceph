@@ -32,8 +32,13 @@ TEST(string_size, types)
   ASSERT_EQ(3u, string_size(mno));
   ASSERT_EQ(3u, string_size(pqr));
 
-  constexpr auto compile_time_size = string_size(jkl);
-  ASSERT_EQ(3u, compile_time_size);
+  constexpr auto compile_time_string_view_size = string_size(jkl);
+  ASSERT_EQ(3u, compile_time_string_view_size);
+  constexpr auto compile_time_string_literal_size = string_size(mno);
+  ASSERT_EQ(3u, compile_time_string_literal_size);
+
+  char arr[] = {'a', 'b', 'c'}; // not null-terminated
+  ASSERT_THROW(string_size(arr), std::invalid_argument);
 }
 
 TEST(string_cat_reserve, types)
