@@ -155,6 +155,31 @@ public:
       string _prefix = this->get_target_prefix();
       out << "<TargetPrefix>" << _prefix << "</TargetPrefix>";
 
+      if (enabled.target_grants_specified) {
+        out << "<TargetGrants>";
+        const std::vector<BLGrant> &bl_grants = this->get_target_grants();
+        for (auto grant_iter = bl_grants.begin(); grant_iter != bl_grants.end(); grant_iter++) {
+          out << "<Grant>";
+          std::string _type = grant_iter->get_type();
+          out << "<Grantee xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" xsi:type=\"" 
+              << _type << "\">";
+          if (_type == grantee_type_map[BL_TYPE_CANON_USER]) {
+            out << "<ID>" << grant_iter->get_id() << "</ID>";
+            std::string _display_name = grant_iter->get_display_name();
+            if (!_display_name.empty()) {
+              out << "<DisplayName>" << _display_name << "</DisplayName>";
+            }
+          } else if (_type == grantee_type_map[BL_TYPE_EMAIL_USER]) {
+            out << "<EmailAddress>" << grant_iter->get_email_address() << "</EmailAddress>";
+          } else if (_type == grantee_type_map[BL_TYPE_GROUP]) {
+            out << "<URI>" << grant_iter->get_uri() << "</URI>";
+          }
+          out << "</Grantee>";
+          out << "<Permission>" << grant_iter->get_permission() << "</Permission>";
+          out << "</Grant>";
+        }
+        out << "</TargetGrants>";
+      }
       out << "</LoggingEnabled>";
     }
     out << "</BucketLoggingStatus>";
