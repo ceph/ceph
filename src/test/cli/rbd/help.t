@@ -277,7 +277,7 @@
     --journal-splay-width arg number of active journal objects
     --journal-object-size arg size of journal objects
     --journal-pool arg        pool for journal objects
-    -s [ --size ] arg         image size (in M/G/T)
+    -s [ --size ] arg         image size (in M/G/T) [default: M]
   
   Image Features:
     (*) supports enabling/disabling on existing images
@@ -1240,7 +1240,7 @@
   Optional arguments
     -p [ --pool ] arg    pool name
     --image arg          image name
-    -s [ --size ] arg    image size (in M/G/T)
+    -s [ --size ] arg    image size (in M/G/T) [default: M]
     --allow-shrink       permit shrinking
     --no-progress        disable progress output
   
