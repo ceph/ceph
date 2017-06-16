@@ -5333,17 +5333,12 @@ void RGWListBucketMultiparts::execute()
   }
   marker_meta = marker.get_meta();
 
-  RGWRados::Bucket target(store, s->bucket_info);
-  RGWRados::Bucket::List list_op(&target);
+  op_ret = list_bucket_multiparts(store, s->bucket_info, prefix, marker_meta, delimiter,
+                                  max_uploads, &objs, &common_prefixes, &is_truncated);
+  if (op_ret < 0) {
+    return;
+  }
 
-  list_op.params.prefix = prefix;
-  list_op.params.delim = delimiter;
-  list_op.params.marker = marker_meta;
-  list_op.params.ns = mp_ns;
-  list_op.params.filter = &mp_filter;
-
-  op_ret = list_op.list_objects(max_uploads, &objs, &common_prefixes,
-				&is_truncated);
   if (!objs.empty()) {
     vector<rgw_bucket_dir_entry>::iterator iter;
     RGWMultipartUploadEntry entry;
