@@ -187,6 +187,7 @@ bool MgrStatMonitor::prepare_report(MonOpRequestRef op)
   bufferlist bl = m->get_data();
   auto p = bl.begin();
   ::decode(pending_digest, p);
+  dout(10) << __func__ << " " << pending_digest << dendl;
   pending_health_summary.swap(m->health_summary);
   pending_health_detail.swap(m->health_detail);
   return true;
