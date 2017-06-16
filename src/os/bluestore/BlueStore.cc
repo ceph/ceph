@@ -2478,9 +2478,9 @@ void BlueStore::ExtentMap::bound_encode_spanning_blobs(size_t& p)
 
   denc(struct_v, p);
   denc_varint((uint32_t)0, p);
-  size_t key_size = 0;
-  denc_varint((uint32_t)0, key_size);
-  p += spanning_blob_map.size() * key_size;
+  size_t key_size = spanning_blob_map.size();
+  denc_varint(key_size, p);
+  p += key_size * sizeof(int);
   for (const auto& i : spanning_blob_map) {
     i.second->bound_encode(p, struct_v, i.second->shared_blob->get_sbid(), true);
   }
