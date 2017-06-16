@@ -136,10 +136,10 @@ void _usage()
   cout << "  zone set                   set zone cluster params (requires infile)\n";
   cout << "  zone list                  list all zones set on this cluster\n";
   cout << "  zone rename                rename a zone\n";
-  cout << "  zone placement list        list zone's placement targets\n";
-  cout << "  zone placement add         add a zone placement target\n";
-  cout << "  zone placement modify      modify a zone placement target\n";
-  cout << "  zone placement rm          remove a zone placement target\n";
+  cout << "  zone placement list        list zone's placement rules\n";
+  cout << "  zone placement add         add a zone placement rule\n";
+  cout << "  zone placement modify      modify a zone placement rule\n";
+  cout << "  zone placement rm          remove a zone placement rule\n";
   cout << "  pool add                   add an existing pool for data placement\n";
   cout << "  pool rm                    remove an existing pool from data placement set\n";
   cout << "  pools list                 list placement active set\n";
@@ -247,17 +247,17 @@ void _usage()
   cout << "   --source-zone             specify the source zone (for data sync)\n";
   cout << "   --default                 set entity (realm, zonegroup, zone) as default\n";
   cout << "   --read-only               set zone as read-only (when adding to zonegroup)\n";
-  cout << "   --placement-id            placement id for zonegroup placement commands\n";
+  cout << "   --placement-id            placement rule id for zonegroup/zone placement commands\n";
   cout << "   --tags=<list>             list of tags for zonegroup placement add and modify commands\n";
   cout << "   --tags-add=<list>         list of tags to add for zonegroup placement modify command\n";
   cout << "   --tags-rm=<list>          list of tags to remove for zonegroup placement modify command\n";
   cout << "   --endpoints=<list>        zone endpoints\n";
-  cout << "   --index_pool=<pool>       placement target index pool\n";
-  cout << "   --data-pool=<pool>        placement target data pool\n";
-  cout << "   --data-extra-pool=<pool>  placement target data extra (non-ec) pool\n";
+  cout << "   --index-pool=<pool>       placement rule index pool for zone placement commands\n";
+  cout << "   --data-pool=<pool>        placement rule data pool for zone placement commands\n";
+  cout << "   --data-extra-pool=<pool>  placement rule data extra (non-ec) pool for zone placement commands\n";
   cout << "   --placement-index-type=<type>\n";
-  cout << "                             placement target index type (normal, indexless, or #id)\n";
-  cout << "   --compression=<type>      placement target compression type (plugin name or empty/none)\n";
+  cout << "                             placement rule index type (normal, indexless, or #id) for zone placement commands\n";
+  cout << "   --compression=<type>      placement rule compression type (plugin name or empty/none) for zone placement commands\n";
   cout << "   --tier-type=<type>        zone tier type\n";
   cout << "   --tier-config=<k>=<v>[,...]\n";
   cout << "                             set zone tier config keys, values\n";
@@ -4203,8 +4203,8 @@ int main(int argc, const char **argv)
         } else if (opt_cmd == OPT_ZONE_PLACEMENT_MODIFY) {
           auto p = zone.placement_rules.find(placement_id);
           if (p == zone.placement_rules.end()) {
-            cerr << "ERROR: zone placement target '" << placement_id
-                << "' not found" << std::endl;
+            cerr << "failed to find a zone placement id '"
+                 << placement_id << "'" << std::endl;
             return -ENOENT;
           }
           auto& info = p->second;

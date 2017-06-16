@@ -80,10 +80,10 @@
     zone set                   set zone cluster params (requires infile)
     zone list                  list all zones set on this cluster
     zone rename                rename a zone
-    zone placement list        list zone's placement targets
-    zone placement add         add a zone placement target
-    zone placement modify      modify a zone placement target
-    zone placement rm          remove a zone placement target
+    zone placement list        list zone's placement rules
+    zone placement add         add a zone placement rule
+    zone placement modify      modify a zone placement rule
+    zone placement rm          remove a zone placement rule
     pool add                   add an existing pool for data placement
     pool rm                    remove an existing pool from data placement set
     pools list                 list placement active set
@@ -191,17 +191,17 @@
      --source-zone             specify the source zone (for data sync)
      --default                 set entity (realm, zonegroup, zone) as default
      --read-only               set zone as read-only (when adding to zonegroup)
-     --placement-id            placement id for zonegroup placement commands
+     --placement-id            placement rule id for zonegroup/zone placement commands
      --tags=<list>             list of tags for zonegroup placement add and modify commands
      --tags-add=<list>         list of tags to add for zonegroup placement modify command
      --tags-rm=<list>          list of tags to remove for zonegroup placement modify command
      --endpoints=<list>        zone endpoints
-     --index_pool=<pool>       placement target index pool
-     --data-pool=<pool>        placement target data pool
-     --data-extra-pool=<pool>  placement target data extra (non-ec) pool
+     --index-pool=<pool>       placement rule index pool for zone placement commands
+     --data-pool=<pool>        placement rule data pool for zone placement commands
+     --data-extra-pool=<pool>  placement rule data extra (non-ec) pool for zone placement commands
      --placement-index-type=<type>
-                               placement target index type (normal, indexless, or #id)
-     --compression=<type>      placement target compression type (plugin name or empty/none)
+                               placement rule index type (normal, indexless, or #id) for zone placement commands
+     --compression=<type>      placement rule compression type (plugin name or empty/none) for zone placement commands
      --tier-type=<type>        zone tier type
      --tier-config=<k>=<v>[,...]
                                set zone tier config keys, values
