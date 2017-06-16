@@ -99,10 +99,22 @@ public:
     ::encode(op, payload);
     ::encode(peer_stat, payload);
     ::encode(stamp, payload);
-    bufferptr size_bp(MAX(min_message_size - payload.length(), 0));
-    bufferlist size_bl;;
-    size_bl.push_back(size_bp);
-    ::encode(size_bl, payload);
+
+    bufferlist pad;
+    size_t s = MAX(min_message_size - payload.length(), 0);
+    // this should be big enough for normal min_message padding sizes. since
+    // we are targetting jumbo ethernet frames around 9000 bytes, 16k should
+    // be more than sufficient!  the compiler will statically zero this so
+    // that at runtime we are only adding a bufferptr reference to it.
+    static char zeros[16384] = {};
+    while (s > sizeof(zeros)) {
+      pad.append(buffer::create_static(sizeof(zeros), zeros));
+      s -= sizeof(zeros);
+    }
+    if (s) {
+      pad.append(buffer::create_static(s, zeros));
+    }
+    ::encode(pad, payload);
   }
 
   const char *get_type_name() const override { return "osd_ping"; }
