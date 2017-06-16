@@ -86,10 +86,11 @@ public:
     ::decode(peer_stat, p);
     ::decode(stamp, p);
     if (header.version >= 3) {
-      bufferlist size_bl;
       int payload_mid_length = p.get_off();
-      ::decode(size_bl, p);
-      min_message_size = size_bl.length() + payload_mid_length;
+      uint32_t size;
+      ::decode(size, p);
+      p.advance(size);
+      min_message_size = size + payload_mid_length;
     }
   }
   void encode_payload(uint64_t features) {
@@ -105,20 +106,18 @@ public:
       s = min_message_size - payload.length();
     ::encode((uint32_t)s, payload);
     if (s) {
-      bufferlist pad;
       // this should be big enough for normal min_message padding sizes. since
       // we are targetting jumbo ethernet frames around 9000 bytes, 16k should
       // be more than sufficient!  the compiler will statically zero this so
       // that at runtime we are only adding a bufferptr reference to it.
       static char zeros[16384] = {};
       while (s > sizeof(zeros)) {
-	pad.append(buffer::create_static(sizeof(zeros), zeros));
+	payload.append(buffer::create_static(sizeof(zeros), zeros));
 	s -= sizeof(zeros);
       }
       if (s) {
-	pad.append(buffer::create_static(s, zeros));
+	payload.append(buffer::create_static(s, zeros));
       }
-      ::encode(pad, payload);
     }
   }
 
