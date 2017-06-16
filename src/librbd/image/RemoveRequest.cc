@@ -250,12 +250,12 @@ Context *RemoveRequest<I>::handle_check_image_watchers(int *result) {
     return nullptr;
   }
 
-  check_image_consistency_group();
+  check_group();
   return nullptr;
 }
 
 template<typename I>
-void RemoveRequest<I>::check_image_consistency_group() {
+void RemoveRequest<I>::check_group() {
   ldout(m_cct, 20) << dendl;
 
   librados::ObjectReadOperation op;
@@ -263,7 +263,7 @@ void RemoveRequest<I>::check_image_consistency_group() {
 
   using klass = RemoveRequest<I>;
   librados::AioCompletion *rados_completion = create_rados_callback<
-    klass, &klass::handle_check_image_consistency_group>(this);
+    klass, &klass::handle_check_group>(this);
   m_out_bl.clear();
   int r = m_image_ctx->md_ctx.aio_operate(m_header_oid, rados_completion, &op,
                                           &m_out_bl);
@@ -272,23 +272,21 @@ void RemoveRequest<I>::check_image_consistency_group() {
 }
 
 template<typename I>
-Context *RemoveRequest<I>::handle_check_image_consistency_group(int *result) {
+Context *RemoveRequest<I>::handle_check_group(int *result) {
   ldout(m_cct, 20) << ": r=" << *result << dendl;
 
-  if (*result < 0) {
-    lderr(m_cct) << "error fetching consistency group for image: "
+  cls::rbd::GroupSpec s;
+  if (*result == 0) {
+    bufferlist::iterator it = m_out_bl.begin();
+    *result = librbd::cls_client::image_get_group_finish(&it, &s);
+  }
+  if (*result < 0 && *result != -EOPNOTSUPP) {
+    lderr(m_cct) << "error fetching group for image: "
                  << cpp_strerror(*result) << dendl;
     send_close_image(*result);
     return nullptr;
   }
 
-  cls::rbd::GroupSpec s;
-  bufferlist::iterator it = m_out_bl.begin();
-  *result = librbd::cls_client::image_get_group_finish(&it, &s);
-  if (*result < 0) {
-    send_close_image(*result);
-    return nullptr;
-  }
   if (s.is_valid()) {
     lderr(m_cct) << "image is in a group - not removing" << dendl;
     send_close_image(-EMLINK);
@@ -296,7 +294,6 @@ Context *RemoveRequest<I>::handle_check_image_consistency_group(int *result) {
   }
 
   trim_image();
-
   return nullptr;
 }
 

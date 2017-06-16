@@ -149,8 +149,8 @@ private:
   void check_image_watchers();
   Context *handle_check_image_watchers(int *result);
 
-  void check_image_consistency_group();
-  Context *handle_check_image_consistency_group(int *result);
+  void check_group();
+  Context *handle_check_group(int *result);
 
   void trim_image();
   Context *handle_trim_image(int *result);
