@@ -199,6 +199,33 @@ public:
       string _prefix = this->get_target_prefix();
       encode_xml("TargetPrefix", _prefix, f);
 
+      if (enabled.target_grants_specified) {
+        f->open_object_section("TargetGrants");
+        const std::vector<BLGrant> &bl_grants = this->get_target_grants();
+        for (auto grant_iter = bl_grants.begin(); grant_iter != bl_grants.end(); grant_iter++) {
+          f->open_object_section("Grant");
+          std::string _type = grant_iter->get_type();
+          std::string _grantee = "<Grantee xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" xsi:type=\""
+                                 + _type + "\">";
+          f->write_raw_data(_grantee.c_str());
+          if (_type == grantee_type_map[BL_TYPE_CANON_USER]) {
+            encode_xml("ID", grant_iter->get_id(), f);
+            std::string _display_name = grant_iter->get_display_name();
+            if (!_display_name.empty()) {
+              encode_xml("DisplayName", _display_name, f);
+            }
+          } else if (_type == grantee_type_map[BL_TYPE_EMAIL_USER]) {
+            encode_xml("EmailAddress", grant_iter->get_email_address(), f);
+          } else if (_type == grantee_type_map[BL_TYPE_GROUP]) {
+            encode_xml("URI", grant_iter->get_uri(), f);
+          }
+          f->write_raw_data("</Grantee>");
+          encode_xml("Permission", grant_iter->get_permission(), f);
+          f->close_section();  // Grant
+        }
+        f->close_section();  // TargetGrants
+      }
+
       f->close_section(); // LoggingEnabled
     }
 

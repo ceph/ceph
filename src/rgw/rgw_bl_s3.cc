@@ -152,6 +152,7 @@ int RGWBucketLoggingStatus_S3::rebuild(RGWRados *store, RGWBucketLoggingStatus& 
     dest.enabled.set_true();
     dest.enabled.set_target_bucket(this->get_target_bucket());
     dest.enabled.set_target_prefix(this->get_target_prefix());
+    dest.enabled.target_grants_specified = this->enabled.target_grants_specified;
     dest.enabled.set_target_grants(this->get_target_grants());
     ldout(cct, 20) << "bl is_enabled, create new bl config"  << dendl;
   } else {

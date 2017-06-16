@@ -265,6 +265,7 @@ public:
      ::encode(status, bl);
      ::encode(target_bucket, bl);
      ::encode(target_prefix, bl);
+     ::encode(target_grants_specified, bl);
      ::encode(target_grants, bl);
      ENCODE_FINISH(bl);
    }
@@ -273,6 +274,7 @@ public:
      ::decode(status, bl);
      ::decode(target_bucket, bl);
      ::decode(target_prefix, bl);
+     ::decode(target_grants_specified, bl);
      ::decode(target_grants, bl);
      DECODE_FINISH(bl);
    }
