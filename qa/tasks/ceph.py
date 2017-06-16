@@ -1037,11 +1037,12 @@ def osd_scrub_pgs(ctx, config):
     all_clean = False
     for _ in range(0, retries):
         stats = manager.get_pg_stats()
-        states = [stat['state'] for stat in stats]
-        if len(set(states)) == 1 and states[0] == 'active+clean':
+        bad = [stat['pgid'] for stat in stats if 'active+clean' not in stat['state']]
+        if not bad:
             all_clean = True
             break
-        log.info("Waiting for all osds to be active and clean.")
+        log.info(
+            "Waiting for all osds to be active and clean, waiting on %s" % bad)
         time.sleep(delays)
     if not all_clean:
         raise RuntimeError("Scrubbing terminated -- not all pgs were active and clean.")
