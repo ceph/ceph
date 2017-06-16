@@ -72,7 +72,7 @@ function TEST_filestore_to_bluestore() {
     # and make sure mon is sync'ed
     flush_pg_stats
 
-    ceph -s | grep '20 active+clean' || return 1
+    wait_for_clean || return 1
 }
 
 main osd-dup "$@"
