@@ -1421,28 +1421,46 @@ function test_mon_osd()
   ceph osd dump | grep 'osd.0.*in'
   ceph osd find 0
 
+  ceph osd add-nodown 0 1
+  ceph health detail | grep 'nodown osd(s).*0.*1'
+  ceph osd rm-nodown 0 1
+  ! ceph health detail | grep 'nodown osd(s).*0.*1'
+
+  ceph osd out 0 # so we can mark it as noin later
+  ceph osd add-noin 0
+  ceph health detail | grep 'noin osd(s).*0'
+  ceph osd rm-noin 0
+  ! ceph health detail | grep 'noin osd(s).*0'
+  ceph osd in 0
+
   ceph osd add-noout 0
   ceph health detail | grep 'noout osd(s).*0'
   ceph osd rm-noout 0
   ! ceph health detail | grep 'noout osds(s).*0'
 
-  ceph osd add-nodown 0 1
-  ceph health detail | grep 'nodown osd(s).*0.*1'
-  ceph osd rm-nodown all
-  ! ceph health detail | grep 'nodown osd(s).*0.*1'
+  # test osd id parse
+  expect_false ceph osd add-noup 797er
+  expect_false ceph osd add-nodown u9uwer
+  expect_false ceph osd add-noin 78~15
+  expect_false ceph osd add-noout 0 all 1
+
+  expect_false ceph osd rm-noup 1234567
+  expect_false ceph osd rm-nodown fsadf7
+  expect_false ceph osd rm-noin 0 1 any
+  expect_false ceph osd rm-noout 790-fd
 
   ids=`ceph osd ls-tree default`
   for osd in $ids
   do
-    ceph osd add-noout $osd
     ceph osd add-nodown $osd
+    ceph osd add-noout $osd
   done
-  ceph -s | grep 'noout osd(s)'
   ceph -s | grep 'nodown osd(s)'
-  ceph osd rm-noout any
+  ceph -s | grep 'noout osd(s)'
   ceph osd rm-nodown any
-  ! ceph -s | grep 'noout osd(s)'
+  ceph osd rm-noout all
   ! ceph -s | grep 'nodown osd(s)'
+  ! ceph -s | grep 'noout osd(s)'
 
   # make sure mark out preserves weight
   ceph osd reweight osd.0 .5
