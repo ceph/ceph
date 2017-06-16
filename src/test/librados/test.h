@@ -34,9 +34,6 @@ std::string create_one_pool_pp(const std::string &pool_name,
 			       const std::map<std::string, std::string> &config);
 std::string create_one_ec_pool_pp(const std::string &pool_name,
 			    librados::Rados &cluster);
-std::string set_pg_num(
-    rados_t *cluster, const std::string &pool_name, uint32_t pg_num);
-
 std::string connect_cluster(rados_t *cluster);
 std::string connect_cluster_pp(librados::Rados &cluster);
 std::string connect_cluster_pp(librados::Rados &cluster,
