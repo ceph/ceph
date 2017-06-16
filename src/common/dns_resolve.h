@@ -14,13 +14,10 @@
 #ifndef CEPH_DNS_RESOLVE_H
 #define CEPH_DNS_RESOLVE_H
 
-#include <string>
-#include <sys/types.h>
 #include <netinet/in.h>
 #include <resolv.h>
 
 #include "common/Mutex.h"
-#include "common/ceph_context.h"
 
 struct entity_addr_t;
 
