@@ -500,7 +500,7 @@ public:
 WRITE_CLASS_ENCODER_FEATURES(PGMap::Incremental)
 WRITE_CLASS_ENCODER_FEATURES(PGMap)
 
-inline ostream& operator<<(ostream& out, const PGMap& m) {
+inline ostream& operator<<(ostream& out, const PGMapDigest& m) {
   m.print_oneline_summary(NULL, &out);
   return out;
 }
