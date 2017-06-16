@@ -969,13 +969,17 @@ public:
   AsyncReserver<spg_t> snap_reserver;
   void queue_for_snap_trim(PG *pg);
 
-  void queue_for_scrub(PG *pg) {
+  void queue_for_scrub(PG *pg, bool with_high_priority) {
+    unsigned scrub_queue_priority = pg->scrubber.priority;
+    if (with_high_priority && scrub_queue_priority < cct->_conf->osd_client_op_priority) {
+      scrub_queue_priority = cct->_conf->osd_client_op_priority;
+    }
     enqueue_back(
       pg->info.pgid,
       PGQueueable(
 	PGScrub(pg->get_osdmap()->get_epoch()),
 	cct->_conf->osd_scrub_cost,
-	pg->scrubber.priority,
+	scrub_queue_priority,
 	ceph_clock_now(),
 	entity_inst_t(),
 	pg->get_osdmap()->get_epoch()));
