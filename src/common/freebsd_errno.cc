@@ -123,7 +123,7 @@ static const__s32 hostos_to_ceph_conv[256] = {
        C2H_ERRNO(131, ENOTRECOVERABLE),	
        C2H_ERRNO(132, EPERM),	 //TODO ERFKILL
        C2H_ERRNO(133, EPERM),	 //TODO EHWPOISON
-    }
+    };
 
 // Build a table with the FreeBSD error as index
 // and the Linux error as value
