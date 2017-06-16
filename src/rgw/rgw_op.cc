@@ -2425,6 +2425,42 @@ void RGWPutBL::execute()
        s->err.message = "The XML you provided was not well-formed or did not validate against our published schema";
        return;
      }
+
+     std::vector<BLGrant> bl_grants = status->enabled.get_target_grants();
+     if (status->enabled.target_grants_specified && 
+         (bl_grants.size() != 0)) {
+       for (auto grant_iter = bl_grants.begin(); grant_iter != bl_grants.end(); grant_iter++) {
+         if (!(grant_iter->grantee_specified && 
+              (grant_iter->id_specified || grant_iter->email_address_specified || grant_iter->uri_specified) &&
+              grant_iter->permission_specified)) {
+           ldout(s->cct, 0) << "PutBL grantee and id or email address or uri and permission should be all specified." << dendl;
+           op_ret = -ERR_MALFORMED_XML;
+           s->err.message = "The XML you provided was not well-formed or did not validate against our published schema";
+           return;
+         }  
+         
+         if ((grant_iter->get_type() == grantee_type_map[BL_TYPE_CANON_USER]) && !grant_iter->id_specified) {
+           ldout(s->cct, 0) << "PutBL -- when grantee type is CanonicalUser, id should be specified." << dendl;
+           op_ret = -ERR_MALFORMED_XML;
+           s->err.message = "The XML you provided was not well-formed or did not validate against our published schema";
+           return;
+         }
+
+	 if ((grant_iter->get_type() == grantee_type_map[BL_TYPE_EMAIL_USER]) && !grant_iter->email_address_specified) {
+           ldout(s->cct, 0) << "PutBL -- when grantee type is AmazonCustomerByEmail, email address should be specified." << dendl;
+           op_ret = -ERR_MALFORMED_XML;
+           s->err.message = "The XML you provided was not well-formed or did not validate against our published schema";
+           return;
+         }
+
+         if ((grant_iter->get_type() == grantee_type_map[BL_TYPE_GROUP]) && !grant_iter->uri_specified) {
+           ldout(s->cct, 0) << "PutBL -- when grantee type is Group, uri should be specified." << dendl;
+           op_ret = -ERR_MALFORMED_XML;
+           s->err.message = "The XML you provided was not well-formed or did not validate against our published schema";
+           return;
+         }
+       } 
+     }
  
      map<string, bufferlist> tbucket_attrs;
      RGWBucketInfo tbucket_info;

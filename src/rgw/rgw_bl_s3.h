@@ -45,6 +45,76 @@ public:
   string& to_str() { return data; }
 };
 
+class BLTargetGrants_S3 : public BLTargetGrants, public XMLObj
+{
+public:
+  BLTargetGrants_S3(CephContext *_cct) : BLTargetGrants(_cct) {}
+  BLTargetGrants_S3() {}
+  ~BLTargetGrants_S3() override {}
+  string& to_str() { return data; }
+
+  bool xml_end(const char *el) override;
+};
+
+class BLGrant_S3 : public BLGrant, public XMLObj
+{
+public:
+  BLGrant_S3(CephContext *_cct) : BLGrant(_cct) {}
+  BLGrant_S3() {}
+  ~BLGrant_S3() override {}
+  string& to_str() { return data; }
+
+  bool xml_end(const char *el) override;
+};
+
+class BLGrantee_S3 : public XMLObj
+{
+public:
+  BLGrantee_S3() {}
+  ~BLGrantee_S3() override {}
+  string& to_str() { return data; }
+};
+
+class BLID_S3 : public XMLObj
+{
+public:
+  BLID_S3() {}
+  ~BLID_S3() override {}
+  string& to_str() { return data; }
+};
+
+class BLDisplayName_S3 : public XMLObj
+{
+public:
+  BLDisplayName_S3() {}
+  ~BLDisplayName_S3() override {}
+  string& to_str() { return data; }
+};
+
+class BLEmailAddress_S3 : public XMLObj
+{
+public:
+  BLEmailAddress_S3() {}
+  ~BLEmailAddress_S3() override {}
+  string& to_str() { return data; }
+};
+
+class BLURI_S3 : public XMLObj
+{
+public:
+  BLURI_S3() {}
+  ~BLURI_S3() override {}
+  string& to_str() { return data; }
+};
+
+class BLPermission_S3 : public XMLObj
+{
+public:
+  BLPermission_S3() {}
+  ~BLPermission_S3() override {}
+  string& to_str() { return data; }
+};
+
 class BLLoggingEnabled_S3 : public BLLoggingEnabled, public XMLObj
 {
 public:

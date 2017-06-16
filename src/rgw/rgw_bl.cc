@@ -47,6 +47,12 @@ const char* BL_STATUS[] = {
   "COMPLETE"
 };
 
+std::map<int, std::string> grantee_type_map = boost::assign::map_list_of
+                           (BL_TYPE_CANON_USER, "CanonicalUser")
+                           (BL_TYPE_EMAIL_USER, "AmazonCustomerByEmail")
+                           (BL_TYPE_GROUP, "Group")
+                           (BL_TYPE_UNKNOWN, "unknown");
+
 void *RGWBL::BLWorker::entry() {
   do {
     utime_t start = ceph_clock_now();

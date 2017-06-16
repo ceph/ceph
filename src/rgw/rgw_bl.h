@@ -20,6 +20,7 @@
 #include <string>
 #include <iostream>
 #include <include/types.h>
+#include <boost/assign.hpp>
 
 #include "common/debug.h"
 
@@ -48,6 +49,15 @@ typedef enum {
   bl_acl_error,
   bl_complete,
 }BL_BUCKET_STATUS;
+
+enum BLGranteeTypeEnum {
+  BL_TYPE_CANON_USER = 0,
+  BL_TYPE_EMAIL_USER = 1,
+  BL_TYPE_GROUP      = 2,
+  BL_TYPE_UNKNOWN    = 3,
+};
+
+extern std::map<int, std::string> grantee_type_map;
 
 class RGWBL {
   CephContext *cct;
@@ -106,6 +116,94 @@ class RGWBL {
 
 };
 
+class BLGrant
+{
+protected:
+  CephContext *cct;
+  std::string type;
+  std::string id;
+  std::string display_name;
+  std::string email_address;
+  std::string uri;
+  std::string permission;
+
+public:
+  bool id_specified;
+  bool email_address_specified;
+  bool uri_specified;
+  bool permission_specified;
+  bool grantee_specified;
+  
+  BLGrant() : cct(nullptr), id_specified(false), email_address_specified(false),
+              uri_specified(false), permission_specified(false), grantee_specified(false) {};
+  BLGrant(CephContext *_cct) : cct(_cct), id_specified(false), email_address_specified(false),
+              uri_specified(false), permission_specified(false), grantee_specified(false) {};
+  ~BLGrant() {};
+
+  const std::string& get_type() const {
+    return type;
+  }
+
+  const std::string& get_id() const {
+    return id;
+  }
+
+  const std::string& get_display_name() const {
+    return display_name;
+  }
+
+  const std::string& get_email_address() const {
+    return email_address;
+  }
+
+  const std::string& get_uri() const {
+    return uri;
+  }
+
+  const std::string& get_permission() const {
+    return permission;
+  }
+
+  void encode(bufferlist& bl) const {
+     ENCODE_START(1, 1, bl);
+     ::encode(type, bl);
+     ::encode(id, bl);
+     ::encode(display_name, bl);
+     ::encode(email_address, bl);
+     ::encode(uri, bl);
+     ::encode(permission, bl);
+     ENCODE_FINISH(bl);
+   }
+   void decode(bufferlist::iterator& bl) {
+     DECODE_START_LEGACY_COMPAT_LEN(1, 1, 1, bl);
+     ::decode(type, bl);
+     ::decode(id, bl);
+     ::decode(display_name, bl);
+     ::decode(email_address, bl);
+     ::decode(uri, bl);
+     ::decode(permission, bl);
+     DECODE_FINISH(bl);
+   }
+};
+WRITE_CLASS_ENCODER(BLGrant)
+
+class BLTargetGrants
+{
+protected:
+  CephContext *cct;
+  std::vector<BLGrant> grants;
+
+public:
+
+  BLTargetGrants() : cct(nullptr) {};
+  BLTargetGrants(CephContext *_cct) : cct(_cct) {};
+  ~BLTargetGrants() {};
+
+  std::vector<BLGrant> get_grants() const {
+    return grants;
+  }
+};
+
 class BLLoggingEnabled
 {
 protected:
@@ -113,15 +211,17 @@ protected:
   bool status;
   string target_bucket;
   string target_prefix;
+  std::vector<BLGrant> target_grants;
 
 public:
   bool target_bucket_specified;
   bool target_prefix_specified;
+  bool target_grants_specified;
 
   BLLoggingEnabled() : cct(nullptr), status(false), target_bucket_specified(false),
-                       target_prefix_specified(false) {};
+                       target_prefix_specified(false), target_grants_specified(false) {};
   BLLoggingEnabled(CephContext *_cct) : cct(_cct), status(false), target_bucket_specified(false),
-                       target_prefix_specified(false) {};
+                       target_prefix_specified(false), target_grants_specified(false) {};
   ~BLLoggingEnabled(){};
 
   void set_true() {
@@ -144,6 +244,10 @@ public:
     return target_prefix;
   }
 
+  const std::vector<BLGrant> get_target_grants() const {
+    return target_grants;
+  }
+
   void set_target_bucket(string _bucket) {
     target_bucket =  _bucket;
   }
@@ -151,12 +255,17 @@ public:
   void set_target_prefix(string _prefix) {
     target_prefix =  _prefix;
   }
+  
+  void set_target_grants(std::vector<BLGrant> grants) {
+    target_grants = grants;
+  }
 
   void encode(bufferlist& bl) const {
      ENCODE_START(1, 1, bl);
      ::encode(status, bl);
      ::encode(target_bucket, bl);
      ::encode(target_prefix, bl);
+     ::encode(target_grants, bl);
      ENCODE_FINISH(bl);
    }
    void decode(bufferlist::iterator& bl) {
@@ -164,6 +273,7 @@ public:
      ::decode(status, bl);
      ::decode(target_bucket, bl);
      ::decode(target_prefix, bl);
+     ::decode(target_grants, bl);
      DECODE_FINISH(bl);
    }
 };
@@ -210,6 +320,10 @@ class RGWBucketLoggingStatus
 
   string get_target_bucket() const {
     return enabled.get_target_bucket();
+  }
+
+  std::vector<BLGrant> get_target_grants() const {
+    return enabled.get_target_grants();
   }
 
 };
