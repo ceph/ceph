@@ -6143,7 +6143,6 @@ int BlueStore::_do_read(
   uint32_t op_flags)
 {
   FUNCTRACE();
-  boost::intrusive::set<Extent>::iterator ep, eend;
   int r = 0;
 
   dout(20) << __func__ << " 0x" << std::hex << offset << "~" << length
