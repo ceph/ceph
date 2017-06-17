@@ -1,0 +1,5 @@
+tasks:
+- install:
+- deepsea:
+    repo: https://github.com/smithfarm/DeepSea.git
+    branch: master
