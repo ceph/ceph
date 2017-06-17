@@ -10342,7 +10342,7 @@ int BlueStore::_do_remove(
           if (b.is_shared() &&
               std::find(unshared_blobs.begin(), unshared_blobs.end(),
                         sb) != unshared_blobs.end()) {
-            dout(20) << __func__ << "  unsharing " << *e.blob << dendl;
+            dout(20) << __func__ << "  " << e << dendl;
             bluestore_blob_t& blob = e.blob->dirty_blob();
             blob.clear_flag(bluestore_blob_t::FLAG_SHARED);
             if (e.logical_offset < b_start) {
