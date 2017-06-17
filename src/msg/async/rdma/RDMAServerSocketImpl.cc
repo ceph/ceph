@@ -56,7 +56,7 @@ int RDMAServerSocketImpl::listen(entity_addr_t &sa, const SocketOptions &opt)
     goto err;
   }
 
-  rc = ::listen(server_setup_socket, 128);
+  rc = ::listen(server_setup_socket, cct->_conf->ms_tcp_listen_backlog);
   if (rc < 0) {
     rc = -errno;
     lderr(cct) << __func__ << " unable to listen on " << sa << ": " << cpp_strerror(errno) << dendl;

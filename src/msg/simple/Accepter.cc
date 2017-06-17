@@ -211,7 +211,7 @@ int Accepter::bind(const entity_addr_t &bind_addr, const set<int>& avoid_ports)
   ldout(msgr->cct,10) <<  __func__ << " bound to " << listen_addr << dendl;
 
   // listen!
-  rc = ::listen(listen_sd, 128);
+  rc = ::listen(listen_sd, msgr->cct->_conf->ms_tcp_listen_backlog);
   if (rc < 0) {
     rc = -errno;
     lderr(msgr->cct) <<  __func__ << " unable to listen on " << listen_addr
