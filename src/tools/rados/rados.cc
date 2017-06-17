@@ -83,7 +83,7 @@ void usage(ostream& out)
 "OBJECT COMMANDS\n"
 "   get <obj-name> [outfile]         fetch object\n"
 "   put <obj-name> [infile] [--offset offset]\n"
-"                                    write object write object start offset(default:0)\n"
+"                                    write object with start offset (default:0)\n"
 "   append <obj-name> [infile]       append object\n"
 "   truncate <obj-name> length       truncate object\n"
 "   create <obj-name>                create object\n"
