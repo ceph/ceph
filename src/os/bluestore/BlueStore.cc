@@ -1941,6 +1941,7 @@ void BlueStore::ExtentMap::update(KeyValueDB::Transaction t,
     auto p = shards.begin();
     auto prev_p = p;
     while (p != shards.end()) {
+      assert(p->shard_info->offset >= prev_p->shard_info->offset);
       auto n = p;
       ++n;
       if (p->dirty) {
@@ -2112,7 +2113,7 @@ void BlueStore::ExtentMap::reshard(
 
   // reshard
   unsigned estimate = 0;
-  unsigned offset = 0;
+  unsigned offset = needs_reshard_begin;
   vector<bluestore_onode_t::shard_info> new_shard_info;
   unsigned max_blob_end = 0;
   Extent dummy(needs_reshard_begin);
@@ -2129,11 +2130,11 @@ void BlueStore::ExtentMap::reshard(
     if (estimate &&
 	estimate + extent_avg > target + (would_span ? slop : 0)) {
       // new shard
-      if (offset == 0) {
+      if (offset == needs_reshard_begin) {
 	new_shard_info.emplace_back(bluestore_onode_t::shard_info());
 	new_shard_info.back().offset = offset;
 	dout(20) << __func__ << "  new shard 0x" << std::hex << offset
-		 << std::dec << dendl;
+                 << std::dec << dendl;
       }
       offset = e->logical_offset;
       new_shard_info.emplace_back(bluestore_onode_t::shard_info());
@@ -2143,9 +2144,9 @@ void BlueStore::ExtentMap::reshard(
       estimate = 0;
     }
     estimate += extent_avg;
-    unsigned bb = e->blob_start();
-    if (bb < spanning_scan_begin) {
-      spanning_scan_begin = bb;
+    unsigned bs = e->blob_start();
+    if (bs < spanning_scan_begin) {
+      spanning_scan_begin = bs;
     }
     uint32_t be = e->blob_end();
     if (be > max_blob_end) {
