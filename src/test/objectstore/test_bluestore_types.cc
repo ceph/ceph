@@ -1029,54 +1029,6 @@ TEST(Blob, legacy_decode)
     ASSERT_TRUE(Bres.get_blob_use_tracker().equal(Bres2.get_blob_use_tracker()));
   }
 }
-TEST(ExtentMap, find_lextent)
-{
-  BlueStore store(g_ceph_context, "", 4096);
-  BlueStore::LRUCache cache(g_ceph_context);
-  BlueStore::CollectionRef coll(new BlueStore::Collection(&store, &cache, coll_t()));
-  BlueStore::Onode onode(coll.get(), ghobject_t(), "");
-  BlueStore::ExtentMap em(&onode);
-  BlueStore::BlobRef br(new BlueStore::Blob);
-  br->shared_blob = new BlueStore::SharedBlob(coll.get());
-
-  ASSERT_EQ(em.extent_map.end(), em.find_lextent(0));
-  ASSERT_EQ(em.extent_map.end(), em.find_lextent(100));
-
-  em.extent_map.insert(*new BlueStore::Extent(100, 0, 100, br));
-  auto a = em.find(100);
-  ASSERT_EQ(em.extent_map.end(), em.find_lextent(0));
-  ASSERT_EQ(em.extent_map.end(), em.find_lextent(99));
-  ASSERT_EQ(a, em.find_lextent(100));
-  ASSERT_EQ(a, em.find_lextent(101));
-  ASSERT_EQ(a, em.find_lextent(199));
-  ASSERT_EQ(em.extent_map.end(), em.find_lextent(200));
-
-  em.extent_map.insert(*new BlueStore::Extent(200, 0, 100, br));
-  auto b = em.find(200);
-  ASSERT_EQ(em.extent_map.end(), em.find_lextent(0));
-  ASSERT_EQ(em.extent_map.end(), em.find_lextent(99));
-  ASSERT_EQ(a, em.find_lextent(100));
-  ASSERT_EQ(a, em.find_lextent(101));
-  ASSERT_EQ(a, em.find_lextent(199));
-  ASSERT_EQ(b, em.find_lextent(200));
-  ASSERT_EQ(b, em.find_lextent(299));
-  ASSERT_EQ(em.extent_map.end(), em.find_lextent(300));
-
-  em.extent_map.insert(*new BlueStore::Extent(400, 0, 100, br));
-  auto d = em.find(400);
-  ASSERT_EQ(em.extent_map.end(), em.find_lextent(0));
-  ASSERT_EQ(em.extent_map.end(), em.find_lextent(99));
-  ASSERT_EQ(a, em.find_lextent(100));
-  ASSERT_EQ(a, em.find_lextent(101));
-  ASSERT_EQ(a, em.find_lextent(199));
-  ASSERT_EQ(b, em.find_lextent(200));
-  ASSERT_EQ(b, em.find_lextent(299));
-  ASSERT_EQ(em.extent_map.end(), em.find_lextent(300));
-  ASSERT_EQ(em.extent_map.end(), em.find_lextent(399));
-  ASSERT_EQ(d, em.find_lextent(400));
-  ASSERT_EQ(d, em.find_lextent(499));
-  ASSERT_EQ(em.extent_map.end(), em.find_lextent(500));
-}
 
 TEST(ExtentMap, seek_lextent)
 {
