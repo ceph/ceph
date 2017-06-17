@@ -1979,13 +1979,13 @@ void aio_read_test_data(librbd::Image& image, const char *expected, off_t off, s
 
 void read_test_data(librbd::Image& image, const char *expected, off_t off, size_t expected_len, uint32_t iohint, bool *passed)
 {
-  int read, total_read = 0;
+  int read;
   size_t len = expected_len;
   ceph::bufferlist bl;
   if (iohint)
-    read = image.read2(off + total_read, len, bl, iohint);
+    read = image.read2(off, len, bl, iohint);
   else
-    read = image.read(off + total_read, len, bl);
+    read = image.read(off, len, bl);
   ASSERT_TRUE(read >= 0);
   std::string bl_str(bl.c_str(), read);
 
