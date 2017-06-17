@@ -1904,11 +1904,10 @@ private:
   uint64_t kv_ios = 0;
   uint64_t kv_throttle_costs = 0;
 
+  // cache trim control
   float cache_meta_ratio = 0;   ///< cache ratio dedicated to metadata
   float cache_kv_ratio = 0;     ///< cache ratio dedicated to kv (e.g., rocksdb)
   float cache_data_ratio = 0;   ///< cache ratio dedicated to object data
-
-  // cache trim control
 
   std::mutex vstatfs_lock;
   volatile_statfs vstatfs;
