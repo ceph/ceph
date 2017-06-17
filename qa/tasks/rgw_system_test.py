@@ -6,7 +6,7 @@ from teuthology.orchestra import run
 log = logging.getLogger(__name__)
 import os
 import pwd
-
+import cStringIO
 
 class Test(object):
 
@@ -253,6 +253,59 @@ def task(ctx, config):
 
     config['port_number'] = '8080'
     test_config = config['config']
+
+    # re weight osds
+
+    """
+    
+    # this code may be come of use in future, so just keep in comment. 
+
+    out = cStringIO.StringIO()
+    clients[0].run(args=['sudo', 'ceph', 'osd', 'df'], stdout=out)
+    var = out.readlines()
+
+    osd_weights = {i.split()[0]:i.split()[1] for i in var[1:len(var)-2]}
+
+    for id, weight in osd_weights.items():
+        clients[0].run(args=[run.Raw(
+            'sudo ceph osd reweight %s %s' % (id, weight))])
+
+    """
+
+    # get the cluster size
+
+    out = cStringIO.StringIO()
+    clients[0].run(args=['sudo', 'ceph', 'df'], stdout=out)
+    var = out.readlines()
+    cluster_size = dict(zip(var[1].split(), var[2].split()))
+
+    available_cluster_size = int(cluster_size['AVAIL'][:-1]) * 1024  # size in MBs
+
+    log.info('cluster available size from parsing: %s' % available_cluster_size)
+
+    available_cluster_size = available_cluster_size / 3  # assuming the replication size is 3, i.e the default value
+
+    log.info('calculated available size: %s' % available_cluster_size)
+
+    usable_size = int(
+        (float(60) / float(100)) * available_cluster_size)  # 60 % of cluster size is being used for automation tests
+
+    osize = usable_size / \
+            (int(test_config['user_count']) *
+             int(test_config['bucket_count']) *
+             int(test_config['objects_count']))
+
+    if osize < 10:
+        log.error('test does not support small size objects less than 10 MB ')
+        exit(1)
+
+    test_config['min_file_size'] = osize - 5
+    test_config['max_file_size'] = osize
+
+    log.info('calucated object max size: %s' % test_config['max_file_size'])
+    log.info('calucated object min size: %s' % test_config['min_file_size'])
+
+    clients[0].run(args=['sudo', 'ceph', 'osd', 'crush', 'tunables', 'optimal'])
 
     # basic Upload
 
@@ -510,5 +563,9 @@ def task(ctx, config):
 
         log.info("Deleting repos")
 
-        clients[0].run(args=[run.Raw(
-            'sudo rm -rf venv rgw-tests *.json Download.* Download *.mpFile  x* key.*  Mp.* *.key.*')])
+        cleanup = lambda x: clients[0].run(args=[run.Raw('sudo rm -rf %s' % x)])
+
+        soot = ['venv', 'rgw-tests', '*.json', 'Download.*', 'Download', '*.mpFile', 'x*', 'key.*', 'Mp.*',
+                '*.key.*']
+
+        map(cleanup, soot)
