@@ -831,10 +831,8 @@ public:
     /// ensure a range of the map is marked dirty
     void dirty_range(uint32_t offset, uint32_t length);
 
+    /// for seek_lextent test
     extent_map_t::iterator find(uint64_t offset);
-
-    /// find a lextent that includes offset
-    extent_map_t::iterator find_lextent(uint64_t offset);
 
     /// seek to the first lextent including or after offset
     extent_map_t::iterator seek_lextent(uint64_t offset);
