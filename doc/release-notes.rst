@@ -92,6 +92,7 @@ Major Changes from Kraken
     by "ceph tell mds.<id> ..."
 
 - *MGR*
+
   * ceph-mgr supports a default dashboard
   * ceph-mgr introduces a new pecan based rest API
 
