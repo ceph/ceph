@@ -803,3 +803,16 @@ def test_set_bucket_website():
             if e.error_code == 'MethodNotAllowed':
                 raise SkipTest("test_set_bucket_website skipped. Requires rgw_enable_static_website = 1.")
         assert(bucket.get_website_configuration_with_xml()[1] == website_cfg.to_xml())
+
+def test_set_bucket_policy():
+    policy = '''{
+  "Version": "2012-10-17",
+  "Statement": [{
+    "Effect": "Allow",
+    "Principal": "*"
+  }]
+}'''
+    buckets, zone_bucket = create_bucket_per_zone_in_realm()
+    for _, bucket in zone_bucket:
+        bucket.set_policy(policy)
+        assert(bucket.get_policy() == policy)

@@ -16,6 +16,7 @@
 
 #include "common/Clock.h"
 #include "common/armor.h"
+#include "common/errno.h"
 #include "common/mime.h"
 #include "common/utf8.h"
 #include "common/ceph_json.h"
@@ -6468,9 +6469,18 @@ void RGWPutBucketPolicy::execute()
     return;
   }
 
+  bufferlist in_data = bufferlist::static_from_mem(data, len);
+
+  if (!store->is_meta_master()) {
+    op_ret = forward_request_to_master(s, NULL, store, in_data, nullptr);
+    if (op_ret < 0) {
+      ldout(s->cct, 20) << "forward_request_to_master returned ret=" << op_ret << dendl;
+      return;
+    }
+  }
+
   try {
-    Policy p(s->cct, s->bucket_tenant,
-	     bufferlist::static_from_mem(data, len));
+    Policy p(s->cct, s->bucket_tenant, in_data);
     auto attrs = s->bucket_attrs;
     attrs[RGW_ATTR_IAM_POLICY].clear();
     attrs[RGW_ATTR_IAM_POLICY].append(p.text);
@@ -6480,6 +6490,7 @@ void RGWPutBucketPolicy::execute()
       op_ret = 0; /* lost a race, but it's ok because policies are immutable */
     }
   } catch (rgw::IAM::PolicyParseException& e) {
+    ldout(s->cct, 20) << "failed to parse policy: " << e.what() << dendl;
     op_ret = -EINVAL;
   }
 }
