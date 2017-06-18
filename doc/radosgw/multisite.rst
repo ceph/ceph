@@ -74,58 +74,8 @@ In this guide, the ``rgw1`` host will serve as the master zone of the
 master zone group; and, the ``rgw2`` host will serve as the secondary zone
 of the master zone group.
 
-Pools
-=====
-
-We recommend using the `Ceph Placement Group’s per Pool
-Calculator <http://ceph.com/pgcalc/>`__ to calculate a
-suitable number of placement groups for the pools the ``ceph-radosgw``
-daemon will create. Set the calculated values as defaults in your Ceph
-configuration file. For example:
-
-::
-
-    osd pool default pg num = 50
-    osd pool default pgp num = 50
-
-.. note:: Make this change to the Ceph configuration file on your
-          storage cluster; then, either make a runtime change to the
-          configuration so that it will use those defaults when the gateway
-          instance creates the pools.
-
-Alternatively, create the pools manually. See
-`Pools <http://docs.ceph.com/docs/master/rados/operations/pools/#pools>`__
-for details on creating pools.
-
-Pool names particular to a zone follow the naming convention
-``{zone-name}.pool-name``. For example, a zone named ``us-east`` will
-have the following pools:
-
--  ``.rgw.root``
-
--  ``us-east.rgw.control``
-
--  ``us-east.rgw.data.root``
-
--  ``us-east.rgw.gc``
-
--  ``us-east.rgw.log``
-
--  ``us-east.rgw.intent-log``
-
--  ``us-east.rgw.usage``
-
--  ``us-east.rgw.users.keys``
-
--  ``us-east.rgw.users.email``
-
--  ``us-east.rgw.users.swift``
-
--  ``us-east.rgw.users.uid``
-
--  ``us-east.rgw.buckets.index``
-
--  ``us-east.rgw.buckets.data``
+See `Pools`_ for instructions on creating and tuning pools for Ceph
+Object Storage.
 
 
 Configuring a Master Zone
@@ -1504,3 +1454,6 @@ instance.
 |                                     | keeping inter-zone group          |         |                       |
 |                                     | synchronization progress.         |         |                       |
 +-------------------------------------+-----------------------------------+---------+-----------------------+
+
+
+.. _`Pools`: ../pools
