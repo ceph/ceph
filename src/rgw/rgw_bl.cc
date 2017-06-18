@@ -642,6 +642,19 @@ int RGWBL::bucket_bl_process(string& shard_id)
                std::string uri = grant_iter->get_uri();
                target_grant.set_group(target_grant.uri_to_group(uri), 
 		                      rgw_permission);
+             } else {
+               std::string bl_deliver_accesskey = store->get_zone_params().bl_deliver_key.id;
+               RGWUserInfo bl_deliver;
+
+               if (bl_deliver.user_id.empty() &&
+                   rgw_get_user_info_by_access_key(store, bl_deliver_accesskey, bl_deliver) < 0) {
+                 ldout(cct, 10) << __func__ << "bl_deliver --> grant user does not exist:"
+                                << bl_deliver_accesskey << dendl;
+                 return -EINVAL;
+               } else {
+                 target_grant.set_canon(bl_deliver.user_id, bl_deliver.display_name,
+                                        rgw_permission);
+               }
              }
            } else if (grant_iter->get_type() == grantee_type_map[BL_TYPE_EMAIL_USER]) {
              RGWUserInfo email_user;
