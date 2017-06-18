@@ -221,6 +221,11 @@ static void log_usage(struct req_state *s, const string& op_name)
   if (!s->is_err())
     data.successful_ops = 1;
 
+  ldout(s->cct, 30) << "log_usage: bucket_name=" << bucket_name
+	<< " tenant=" << s->bucket_tenant
+	<< ", bytes_sent=" << bytes_sent << ", bytes_received="
+	<< bytes_received << ", success=" << data.successful_ops << dendl;
+
   entry.add(op_name, data);
 
   utime_t ts = ceph_clock_now();
