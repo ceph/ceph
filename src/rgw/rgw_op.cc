@@ -2439,22 +2439,66 @@ void RGWPutBL::execute()
            return;
          }  
          
-         if ((grant_iter->get_type() == grantee_type_map[BL_TYPE_CANON_USER]) && !grant_iter->id_specified) {
-           ldout(s->cct, 0) << "PutBL -- when grantee type is CanonicalUser, id should be specified." << dendl;
-           op_ret = -ERR_MALFORMED_XML;
-           s->err.message = "The XML you provided was not well-formed or did not validate against our published schema";
-           return;
-         }
+         std::string type = grant_iter->get_type();
+         if (type == grantee_type_map[BL_TYPE_CANON_USER]) {
+           if (!grant_iter->id_specified) {
+             ldout(s->cct, 0) << "PutBL -- when grantee type is CanonicalUser, id should be specified." << dendl;
+             op_ret = -ERR_MALFORMED_XML;
+             s->err.message = "The XML you provided was not well-formed or did not validate against our published schema";
+             return;
+           }
 
-	 if ((grant_iter->get_type() == grantee_type_map[BL_TYPE_EMAIL_USER]) && !grant_iter->email_address_specified) {
-           ldout(s->cct, 0) << "PutBL -- when grantee type is AmazonCustomerByEmail, email address should be specified." << dendl;
-           op_ret = -ERR_MALFORMED_XML;
-           s->err.message = "The XML you provided was not well-formed or did not validate against our published schema";
-           return;
-         }
+           // verify id validity
+           std::string id = grant_iter->get_id();
+           rgw_user uid(id);
+           RGWUserInfo user_info;
+           int user_ret = rgw_get_user_info_by_uid(store, uid, user_info);
+           if (user_ret < 0) {
+             ldout(s->cct, 0) << "PutBL -- when grantee type is CanonicalUser, get user info failed!" << dendl;
+             op_ret = -EINVAL;
+             s->err.message = "Invalid id";
+             return;
+           }
+         } else if (type == grantee_type_map[BL_TYPE_EMAIL_USER]) {
+           if (!grant_iter->email_address_specified) {
+             ldout(s->cct, 0) << "PutBL -- when grantee type is AmazonCustomerByEmail, email address should be specified." << dendl;
+             op_ret = -ERR_MALFORMED_XML;
+             s->err.message = "The XML you provided was not well-formed or did not validate against our published schema";
+             return;
+           }
 
-         if ((grant_iter->get_type() == grantee_type_map[BL_TYPE_GROUP]) && !grant_iter->uri_specified) {
-           ldout(s->cct, 0) << "PutBL -- when grantee type is Group, uri should be specified." << dendl;
+           // verify email address validity
+           std::string email_address = grant_iter->get_email_address();
+           RGWUserInfo user_info;
+           int user_ret = rgw_get_user_info_by_email(store, email_address, user_info);
+           if (user_ret < 0) {
+             ldout(s->cct, 0) << "PutBL -- when grantee type is AmazonCustomerByEmail, get user info failed!" << dendl;
+             op_ret = -ERR_UNRESOLVABLE_EMAIL;
+             s->err.message = "The e-mail address you provided does not match any account on record.";
+             return;
+           }
+         } else if (type == grantee_type_map[BL_TYPE_GROUP]) {
+           if (!grant_iter->uri_specified) {
+             ldout(s->cct, 0) << "PutBL -- when grantee type is Group, uri should be specified." << dendl;
+             op_ret = -ERR_MALFORMED_XML;
+             s->err.message = "The XML you provided was not well-formed or did not validate against our published schema";
+             return;
+           }
+
+           // verify group uri validity
+#define RGW_URI_ALL_USERS	"http://acs.amazonaws.com/groups/global/AllUsers"
+#define RGW_URI_AUTH_USERS	"http://acs.amazonaws.com/groups/global/AuthenticatedUsers"
+#define RGW_URI_LOG_DELIVERY    "http://acs.amazonaws.com/groups/s3/LogDelivery"
+	   std::string group = grant_iter->get_uri();
+	   if (group != RGW_URI_LOG_DELIVERY && group != RGW_URI_ALL_USERS
+               && group != RGW_URI_AUTH_USERS) {
+             ldout(s->cct, 0) << "PutBL -- when grantee type is Group, uri is not in the pre-define groups!" << dendl;
+             op_ret = -EINVAL;
+             s->err.message = "Invalid group uri";
+             return;
+           }
+         } else {
+           ldout(s->cct, 0) << "PutBL -- Error grantee type: " << type << dendl;
            op_ret = -ERR_MALFORMED_XML;
            s->err.message = "The XML you provided was not well-formed or did not validate against our published schema";
            return;
