@@ -5609,7 +5609,7 @@ void OSD::_preboot(epoch_t oldest, epoch_t newest)
   // if our map within recent history, try to add ourselves to the osdmap.
   if (osdmap->get_epoch() == 0) {
     derr << "waiting for initial osdmap" << dendl;
-  } else if (osdmap->test_flag(CEPH_OSDMAP_NOUP)) {
+  } else if (osdmap->test_flag(CEPH_OSDMAP_NOUP) || osdmap->is_noup(whoami)) {
     derr << "osdmap NOUP flag is set, waiting for it to clear" << dendl;
   } else if (!osdmap->test_flag(CEPH_OSDMAP_SORTBITWISE)) {
     derr << "osdmap SORTBITWISE OSDMap flag is NOT set; please set it"
@@ -7604,8 +7604,9 @@ void OSD::_committed_osd_maps(epoch_t first, epoch_t last, MOSDMap *m)
       }
     }
 
-    if (osdmap->test_flag(CEPH_OSDMAP_NOUP) !=
-	newmap->test_flag(CEPH_OSDMAP_NOUP)) {
+    if ((osdmap->test_flag(CEPH_OSDMAP_NOUP) !=
+        newmap->test_flag(CEPH_OSDMAP_NOUP)) ||
+        (osdmap->is_noup(whoami) != newmap->is_noup(whoami))) {
       dout(10) << __func__ << " NOUP flag changed in " << newmap->get_epoch()
 	       << dendl;
       if (is_booting()) {
