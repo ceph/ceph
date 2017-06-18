@@ -615,19 +615,22 @@ int RGWBL::bucket_bl_process(string& shard_id)
          tobject_owner.set_name(bl_deliver.display_name);
          ldout(cct, 20) << __func__ << "policy owner id = " << tobject_owner.get_id() << dendl;
           
-         ACLGrant ldg_new_grant;
-         ACLGrant tbucket_owner_new_grant;
+         int acl_nums = 0;
          // add LDG(bl_deliver) full control permission in default
+         ACLGrant ldg_new_grant;
          ldg_new_grant.set_canon(bl_deliver.user_id, bl_deliver.display_name, RGW_PERM_FULL_CONTROL);
          tobject_acl.add_grant(&ldg_new_grant);
+         acl_nums++;
          // add owner of target bucket full control permission in default
+         ACLGrant tbucket_owner_new_grant;
          tbucket_owner_new_grant.set_canon(tbucket_owner.user_id, tbucket_owner.display_name, RGW_PERM_FULL_CONTROL);
          tobject_acl.add_grant(&tbucket_owner_new_grant);
+         acl_nums++;
          // add operating permission introduced from target grants in request xml
          ACLGrant target_grant;
          const std::vector<BLGrant> & bl_grant = status.get_target_grants();
          uint32_t rgw_permission = RGW_PERM_NONE;
-         for (auto grant_iter = bl_grant.begin(); grant_iter != bl_grant.end(); grant_iter++) {
+         for (auto grant_iter = bl_grant.begin(); (grant_iter != bl_grant.end()) && (acl_nums < RGW_ACL_MAX_NUMS); grant_iter++) {
            rgw_permission = rgw_perm_map[grant_iter->get_permission()];
            if (grant_iter->get_type() == grantee_type_map[BL_TYPE_CANON_USER]) {
              rgw_user canonical_user(grant_iter->get_id());
@@ -648,7 +651,11 @@ int RGWBL::bucket_bl_process(string& shard_id)
 		                    rgw_permission);
            }
            tobject_acl.add_grant(&target_grant);
+           acl_nums++;
          }
+         ldout(cct, 15) << __func__ << " source bucket " << sbucket_name
+                        << " log obj ACL grants nums is " << acl_nums << dendl;
+ 
          tobject_policy.encode(bl);
          tobject_attrs[RGW_ATTR_ACL] = bl;
       }

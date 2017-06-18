@@ -29,6 +29,8 @@
 
 static constexpr char RGW_REFERER_WILDCARD[] = "*";
 
+#define RGW_ACL_MAX_NUMS         100
+
 enum ACLGranteeTypeEnum {
 /* numbers are encoded, should not change */
   ACL_TYPE_CANON_USER = 0,
