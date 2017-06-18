@@ -24,11 +24,11 @@ int RGWCivetWebFrontend::process(struct mg_connection*  const conn)
 
   RGWCivetWeb cw_client(conn);
   auto real_client_io = rgw::io::add_reordering(
-                          rgw::io::add_buffering(
+                          rgw::io::add_buffering(dout_context,
                             rgw::io::add_chunking(
                               rgw::io::add_conlen_controlling(
                                 &cw_client))));
-  RGWRestfulIO client_io(&real_client_io);
+  RGWRestfulIO client_io(dout_context, &real_client_io);
 
   RGWRequest req(env.store->get_new_req_id());
   int ret = process_request(env.store, env.rest, &req, env.uri_prefix,
