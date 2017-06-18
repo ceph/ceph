@@ -613,7 +613,7 @@ int RGWBL::bucket_bl_process(string& shard_id)
 
          tobject_owner.set_id(bl_deliver.user_id);
          tobject_owner.set_name(bl_deliver.display_name);
-         ldout(cct, 20) << __func__ << "policy owner id = " << tobject_owner.get_id() << dendl;
+         ldout(cct, 20) << __func__ << " policy owner id = " << tobject_owner.get_id() << dendl;
           
          int acl_nums = 0;
          // add LDG(bl_deliver) full control permission in default
