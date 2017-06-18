@@ -478,8 +478,16 @@ public:
       new_state[osd] |= state;
     }
 
-    void pending_osd_state_clear(int osd, unsigned state) {
+    // cancel the specified pending osd state if there is any
+    // return ture on success, false otherwise.
+    bool pending_osd_state_clear(int osd, unsigned state) {
+      if (!pending_osd_has_state(osd, state)) {
+        // never has been set or already has been cancelled.
+        return false;
+      }
+
       new_state[osd] &= ~state;
+      return true;
     }
 
   };
@@ -771,12 +779,31 @@ public:
     return !is_out(osd);
   }
 
+  bool is_noup(int osd) const {
+    return exists(osd) && (osd_state[osd] & CEPH_OSD_NOUP);
+  }
+
   bool is_nodown(int osd) const {
     return exists(osd) && (osd_state[osd] & CEPH_OSD_NODOWN);
   }
 
+  bool is_noin(int osd) const {
+    return exists(osd) && (osd_state[osd] & CEPH_OSD_NOIN);
+  }
+
   bool is_noout(int osd) const {
     return exists(osd) && (osd_state[osd] & CEPH_OSD_NOOUT);
+  }
+
+  void get_noup_osds(vector<int> *osds) const {
+    assert(osds);
+    osds->clear();
+
+    for (int i = 0; i < max_osd; i++) {
+      if (is_noup(i)) {
+        osds->push_back(i);
+      }
+    }
   }
 
   void get_nodown_osds(vector<int> *osds) const {
@@ -785,6 +812,17 @@ public:
 
     for (int i = 0; i < max_osd; i++) {
       if (is_nodown(i)) {
+        osds->push_back(i);
+      }
+    }
+  }
+
+  void get_noin_osds(vector<int> *osds) const {
+    assert(osds);
+    osds->clear();
+
+    for (int i = 0; i < max_osd; i++) {
+      if (is_noin(i)) {
         osds->push_back(i);
       }
     }
