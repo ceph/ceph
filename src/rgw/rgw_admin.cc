@@ -5204,12 +5204,6 @@ next:
       cerr << "ERROR: object not specified" << std::endl;
       return EINVAL;
     }
-    RGWBucketInfo bucket_info;
-    int ret = init_bucket(tenant, bucket_name, bucket_id, bucket_info, bucket);
-    if (ret < 0) {
-      cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
-      return -ret;
-    }
   }
 
   if (opt_cmd == OPT_OLH_GET) {
