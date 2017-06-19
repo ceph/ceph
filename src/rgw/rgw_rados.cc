@@ -5737,12 +5737,12 @@ int RGWRados::create_bucket(RGWUserInfo& owner, rgw_bucket& bucket,
 {
 #define MAX_CREATE_RETRIES 20 /* need to bound retries */
   std::string selected_placement_id;
-  RGWZonePlacementInfo rule_info;
+  RGWZonePlacementInfo placement_info;
 
   for (int i = 0; i < MAX_CREATE_RETRIES; i++) {
     int ret = 0;
     ret = select_bucket_placement(owner, zonegroup_id, requested_placement_id,
-                                  &selected_placement_id, &rule_info);
+                                  &selected_placement_id, &placement_info);
     if (ret < 0)
       return ret;
 
@@ -5766,7 +5766,7 @@ int RGWRados::create_bucket(RGWUserInfo& owner, rgw_bucket& bucket,
     info.owner = owner.user_id;
     info.zonegroup = zonegroup_id;
     info.default_placement_id = selected_placement_id;
-    info.index_type = rule_info.index_type;
+    info.index_type = placement_info.index_type;
     info.swift_ver_location = swift_ver_location;
     info.swift_versioning = (!swift_ver_location.empty());
     if (pmaster_num_shards) {
