@@ -2318,6 +2318,42 @@ function test_mon_cephdf_commands()
   expect_false test $cal_raw_used_size != $raw_used_size
 }
 
+function test_mon_pool_application()
+{
+  ceph osd pool create app_for_test 10
+
+  ceph osd pool application enable app_for_test rbd
+  expect_false ceph osd pool application enable app_for_test rgw
+  ceph osd pool application enable app_for_test rgw --yes-i-really-mean-it
+  ceph osd pool ls detail | grep "application rbd,rgw"
+  ceph osd pool ls detail --format=json | grep '"application_metadata":{"rbd":{},"rgw":{}}'
+
+  expect_false ceph osd pool application set app_for_test cephfs key value
+  ceph osd pool application set app_for_test rbd key1 value1
+  ceph osd pool application set app_for_test rbd key2 value2
+  ceph osd pool application set app_for_test rgw key1 value1
+
+  ceph osd pool ls detail --format=json | grep '"application_metadata":{"rbd":{"key1":"value1","key2":"value2"},"rgw":{"key1":"value1"}}'
+
+  ceph osd pool application rm app_for_test rgw key1
+  ceph osd pool ls detail --format=json | grep '"application_metadata":{"rbd":{"key1":"value1","key2":"value2"},"rgw":{}}'
+  ceph osd pool application rm app_for_test rbd key2
+  ceph osd pool ls detail --format=json | grep '"application_metadata":{"rbd":{"key1":"value1"},"rgw":{}}'
+  ceph osd pool application rm app_for_test rbd key1
+  ceph osd pool ls detail --format=json | grep '"application_metadata":{"rbd":{},"rgw":{}}'
+
+  expect_false ceph osd pool application disable app_for_test rgw
+  ceph osd pool application disable app_for_test rgw --yes-i-really-mean-it
+  ceph osd pool ls detail | grep "application rbd"
+  ceph osd pool ls detail --format=json | grep '"application_metadata":{"rbd":{}}'
+
+  ceph osd pool application disable app_for_test rgw --yes-i-really-mean-it
+  ceph osd pool ls detail | grep -v "application "
+  ceph osd pool ls detail --format=json | grep '"application_metadata":{}'
+
+  ceph osd pool rm app_for_test app_for_test --yes-i-really-really-mean-it
+}
+
 function test_mon_tell_help_command()
 {
   ceph tell mon.a help

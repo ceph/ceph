@@ -514,6 +514,9 @@ public:
 
   int prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
                                stringstream& ss);
+  int prepare_command_pool_application(const string &prefix,
+                                       map<string,cmd_vartype> &cmdmap,
+                                       stringstream& ss);
 
   bool handle_osd_timeouts(const utime_t &now,
 			   std::map<int,utime_t> &last_osd_report);
