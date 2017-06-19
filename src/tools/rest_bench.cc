@@ -42,6 +42,8 @@ void usage(ostream& out)
 "   -t concurrent_operations\n"
 "   --concurrent-ios=concurrent_operations\n"
 "        select bucket by name\n"
+"   --run-name\n"
+"        set name of object for record\n"
 "   -b op-size\n"
 "   --block-size=op-size\n"
 "        set the size of write ops for put or benchmarking\n"
