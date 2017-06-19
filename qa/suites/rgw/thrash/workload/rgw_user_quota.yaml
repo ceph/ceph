@@ -1,5 +1,3 @@
-# Amazon/S3.pm (cpan) not available as an rpm
-os_type: ubuntu
 tasks:
 - workunit:
     clients:
