@@ -1013,7 +1013,6 @@ public:
   }
   
   CDir* add_replica_dir(bufferlist::iterator& p, CInode *diri, mds_rank_t from, list<MDSInternalContextBase*>& finished);
-  CDir* forge_replica_dir(CInode *diri, frag_t fg, mds_rank_t from);
   CDentry *add_replica_dentry(bufferlist::iterator& p, CDir *dir, list<MDSInternalContextBase*>& finished);
   CInode *add_replica_inode(bufferlist::iterator& p, CDentry *dn, list<MDSInternalContextBase*>& finished);
 

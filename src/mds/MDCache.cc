@@ -624,7 +624,7 @@ void MDCache::open_root()
     assert(!root->is_auth());
     CDir *rootdir = root->get_dirfrag(frag_t());
     if (!rootdir) {
-      discover_dir_frag(root, frag_t(), new C_MDS_RetryOpenRoot(this));
+      open_remote_dirfrag(root, frag_t(), new C_MDS_RetryOpenRoot(this));
       return;
     }    
   }
@@ -8177,22 +8177,11 @@ CInode *MDCache::cache_traverse(const filepath& fp)
 void MDCache::open_remote_dirfrag(CInode *diri, frag_t approxfg, MDSInternalContextBase *fin) 
 {
   dout(10) << "open_remote_dir on " << *diri << dendl;
-  
   assert(diri->is_dir());
   assert(!diri->is_auth());
   assert(diri->get_dirfrag(approxfg) == 0);
 
-  mds_rank_t auth = diri->authority().first;
-
-  if (!mds->is_cluster_degraded() ||
-      mds->mdsmap->get_state(auth) >= MDSMap::STATE_REJOIN) {
-    discover_dir_frag(diri, approxfg, fin);
-  } else {
-    // mds is down or recovering.  forge a replica!
-    forge_replica_dir(diri, approxfg, auth);
-    if (fin)
-      mds->queue_waiter(fin);
-  }
+  discover_dir_frag(diri, approxfg, fin);
 }
 
 
@@ -10180,21 +10169,6 @@ CDir *MDCache::add_replica_dir(bufferlist::iterator& p, CInode *diri, mds_rank_t
     // get waiters
     diri->take_dir_waiting(df.frag, finished);
   }
-
-  return dir;
-}
-
-CDir *MDCache::forge_replica_dir(CInode *diri, frag_t fg, mds_rank_t from)
-{
-  assert(mds->mdsmap->get_state(from) < MDSMap::STATE_REJOIN);
-  
-  // forge a replica.
-  CDir *dir = diri->add_dirfrag( new CDir(diri, fg, this, false) );
-  
-  // i'm assuming this is a subtree root. 
-  adjust_subtree_auth(dir, from);
-
-  dout(7) << "forge_replica_dir added " << *dir << " while mds." << from << " is down" << dendl;
 
   return dir;
 }
