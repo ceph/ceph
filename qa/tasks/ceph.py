@@ -1052,7 +1052,12 @@ def osd_scrub_pgs(ctx, config):
     for role in teuthology.cluster_roles_of_type(all_roles, 'osd', cluster_name):
         log.info("Scrubbing {osd}".format(osd=role))
         _, _, id_ = teuthology.split_role(role)
-        manager.raw_cluster_cmd('osd', 'deep-scrub', id_)
+        # allow this to fail; in certain cases the OSD might not be up
+        # at this point.  we will catch all pgs below.
+        try:
+            manager.raw_cluster_cmd('osd', 'deep-scrub', id_)
+        except run.CommandFailedError:
+            pass
     prev_good = 0
     gap_cnt = 0
     loop = True
