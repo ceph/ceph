@@ -5798,6 +5798,25 @@ void Client::_close_sessions()
   }
 }
 
+void Client::flush_mdlog_sync()
+{
+  if (mds_requests.empty()) 
+    return;
+  for (map<mds_rank_t,MetaSession*>::iterator p = mds_sessions.begin();
+       p != mds_sessions.end();
+       ++p) {
+    MetaSession *s = p->second;
+    flush_mdlog(s);
+  }
+}
+
+void Client::flush_mdlog(MetaSession *session)
+{
+  MClientSession *m = new MClientSession(CEPH_SESSION_REQUEST_FLUSH_MDLOG);
+  session->con->send_message(m);
+}
+
+
 void Client::unmount()
 {
   Mutex::Locker lock(client_lock);
@@ -5807,6 +5826,7 @@ void Client::unmount()
   ldout(cct, 2) << "unmounting" << dendl;
   unmounting = true;
 
+  flush_mdlog_sync(); // flush the mdlog for pending requests, if any
   while (!mds_requests.empty()) {
     ldout(cct, 10) << "waiting on " << mds_requests.size() << " requests" << dendl;
     mount_cond.Wait(client_lock);
