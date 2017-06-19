@@ -724,7 +724,9 @@ int RGWGetObj::read_user_manifest_part(rgw_bucket& bucket,
   if (op_ret < 0)
     return op_ret;
 
-  if (!verify_object_permission(s, bucket_policy, &obj_policy, RGW_PERM_READ)) {
+  if (s->system_request) {
+    ldout(s->cct, 2) << "overriding permissions due to system operation" << dendl;
+  } else if (!verify_object_permission(s, bucket_policy, &obj_policy, RGW_PERM_READ)) {
     return -EPERM;
   }
 
@@ -1275,7 +1277,7 @@ void RGWGetObj::execute()
     return;
   }
   attr_iter = attrs.find(RGW_ATTR_SLO_MANIFEST);
-  if (attr_iter != attrs.end()) {
+  if (attr_iter != attrs.end() && !skip_manifest) {
     is_slo = true;
     op_ret = handle_slo_manifest(attr_iter->second);
     if (op_ret < 0) {

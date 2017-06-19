@@ -6834,7 +6834,8 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
  
   ret = conn->get_obj(user_id, info, src_obj, pmod, unmod_ptr,
                       dest_mtime_weight.zone_short_id, dest_mtime_weight.pg_ver,
-                      true, &cb, &in_stream_req);
+                      true /* prepend_meta */, true /* sync manifest */,
+                      &cb, &in_stream_req);
   if (ret < 0) {
     goto set_err_state;
   }
