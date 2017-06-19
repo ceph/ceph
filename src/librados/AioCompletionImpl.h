@@ -85,10 +85,7 @@ struct librados::AioCompletionImpl {
     return wait_for_complete();
   }
   int is_complete() {
-    lock.Lock();
-    int r = complete;
-    lock.Unlock();
-    return r;
+    return complete;
   }
   int is_safe() {
     return is_complete();
@@ -113,16 +110,10 @@ struct librados::AioCompletionImpl {
     return is_complete_and_cb();
   }
   int get_return_value() {
-    lock.Lock();
-    int r = rval;
-    lock.Unlock();
-    return r;
+    return rval;
   }
   uint64_t get_version() {
-    lock.Lock();
-    version_t v = objver;
-    lock.Unlock();
-    return v;
+    return objver;
   }
 
   void get() {
