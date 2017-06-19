@@ -791,6 +791,7 @@
   created \d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d+ (re)
   modified \d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d+ (re)
   flags 
+  crush_version 1
   full_ratio 0
   backfillfull_ratio 0
   nearfull_ratio 0

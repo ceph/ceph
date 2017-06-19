@@ -264,7 +264,7 @@ void MgrClient::send_report()
 
 void MgrClient::send_pgstats()
 {
-  if (pgstats_cb) {
+  if (pgstats_cb && session) {
     session->con->send_message(pgstats_cb());
   }
 }
