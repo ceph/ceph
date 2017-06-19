@@ -137,15 +137,21 @@ struct string_traits {
 // specializations for char*/const char* use strlen()
 template <>
 struct string_traits<const char*> {
-  static constexpr size_t size(const char* s) { return std::strlen(s); }
+  static size_t size(const char* s) { return std::strlen(s); }
 };
 template <>
 struct string_traits<char*> : string_traits<const char*> {};
-// specializations for char[]/const char[] also use strlen()
+// constexpr specializations for char[]/const char[]
 template <std::size_t N>
-struct string_traits<const char[N]> : string_traits<const char*> {};
+struct string_traits<const char[N]> {
+  static constexpr size_t size_(const char* s, size_t i) {
+    return i < N ? (*(s + i) == '\0' ? i : size_(s, i + 1))
+        : throw std::invalid_argument("Unterminated string constant.");
+  }
+  static constexpr size_t size(const char(&s)[N]) { return size_(s, 0); }
+};
 template <std::size_t N>
-struct string_traits<char[N]> : string_traits<const char*> {};
+struct string_traits<char[N]> : string_traits<const char[N]> {};
 
 // helpers for string_cat_reserve()
 static inline void append_to(std::string& s) {}
