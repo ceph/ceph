@@ -1078,6 +1078,13 @@ def osd_scrub_pgs(ctx, config):
             gap_cnt = 0
         else:
             gap_cnt += 1
+            if gap_cnt % 6 == 0:
+                for (pgid, tmval) in timez:
+                    # re-request scrub every so often in case the earlier
+                    # request was missed.  do not do it everytime because
+                    # the scrub may be in progress or not reported yet and
+                    # we will starve progress.
+                    manager.raw_cluster_cmd('pg', 'deep-scrub', pgid)
             if gap_cnt > retries:
                 raise RuntimeError('Exiting scrub checking -- not all pgs scrubbed.')
         if loop:
