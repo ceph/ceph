@@ -1206,6 +1206,15 @@ void pg_pool_t::dump(Formatter *f) const
   f->open_object_section("options");
   opts.dump(f);
   f->close_section(); // options
+  f->open_object_section("application_metadata");
+  for (auto &app_pair : application_metadata) {
+    f->open_object_section(app_pair.first.c_str());
+    for (auto &kv_pair : app_pair.second) {
+      f->dump_string(kv_pair.first.c_str(), kv_pair.second);
+    }
+    f->close_section(); // application
+  }
+  f->close_section(); // application_metadata
 }
 
 void pg_pool_t::convert_to_pg_shards(const vector<int> &from, set<pg_shard_t>* to) const {
@@ -1505,15 +1514,13 @@ void pg_pool_t::encode(bufferlist& bl, uint64_t features) const
     return;
   }
 
-  uint8_t v = 25;
+  uint8_t v = 26;
   if (!(features & CEPH_FEATURE_NEW_OSDOP_ENCODING)) {
     // this was the first post-hammer thing we added; if it's missing, encode
     // like hammer.
     v = 21;
   }
-  if ((features &
-       (CEPH_FEATURE_RESEND_ON_SPLIT|CEPH_FEATURE_SERVER_JEWEL)) !=
-      (CEPH_FEATURE_RESEND_ON_SPLIT|CEPH_FEATURE_SERVER_JEWEL)) {
+  if (!HAVE_FEATURE(features, SERVER_LUMINOUS)) {
     v = 24;
   }
 
@@ -1581,12 +1588,15 @@ void pg_pool_t::encode(bufferlist& bl, uint64_t features) const
   if (v >= 25) {
     ::encode(last_force_op_resend, bl);
   }
+  if (v >= 26) {
+    ::encode(application_metadata, bl);
+  }
   ENCODE_FINISH(bl);
 }
 
 void pg_pool_t::decode(bufferlist::iterator& bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(25, 5, 5, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(26, 5, 5, bl);
   ::decode(type, bl);
   ::decode(size, bl);
   ::decode(crush_rule, bl);
@@ -1733,6 +1743,9 @@ void pg_pool_t::decode(bufferlist::iterator& bl)
   } else {
     last_force_op_resend = last_force_op_resend_preluminous;
   }
+  if (struct_v >= 26) {
+    ::decode(application_metadata, bl);
+  }
   DECODE_FINISH(bl);
   calc_pg_masks();
   calc_grade_table();
@@ -1796,6 +1809,7 @@ void pg_pool_t::generate_test_instances(list<pg_pool_t*>& o)
   a.erasure_code_profile = "profile in osdmap";
   a.expected_num_objects = 123456;
   a.fast_read = false;
+  a.application_metadata = {{"rbd", {{"key", "value"}}}};
   o.push_back(new pg_pool_t(a));
 }
 
@@ -1854,6 +1868,15 @@ ostream& operator<<(ostream& out, const pg_pool_t& p)
   if (p.fast_read)
     out << " fast_read " << p.fast_read;
   out << p.opts;
+  if (!p.application_metadata.empty()) {
+    out << " application ";
+    for (auto it = p.application_metadata.begin();
+         it != p.application_metadata.end(); ++it) {
+      if (it != p.application_metadata.begin())
+        out << ",";
+      out << it->first;
+    }
+  }
   return out;
 }
 

@@ -897,6 +897,31 @@ COMMAND("osd pool get-quota " \
         "name=pool,type=CephPoolname ",
         "obtain object or byte limits for pool",
         "osd", "r", "cli,rest")
+COMMAND("osd pool application enable " \
+        "name=pool,type=CephPoolname " \
+        "name=app,type=CephString,goodchars=[A-Za-z0-9-_.] " \
+	"name=force,type=CephChoices,strings=--yes-i-really-mean-it,req=false", \
+        "enable use of an application <app> [cephfs,rbd,rgw] on pool <poolname>",
+        "osd", "rw", "cli,rest")
+COMMAND("osd pool application disable " \
+        "name=pool,type=CephPoolname " \
+        "name=app,type=CephString " \
+	"name=force,type=CephChoices,strings=--yes-i-really-mean-it,req=false", \
+        "disables use of an application <app> on pool <poolname>",
+        "osd", "rw", "cli,rest")
+COMMAND("osd pool application set " \
+        "name=pool,type=CephPoolname " \
+        "name=app,type=CephString " \
+        "name=key,type=CephString,goodchars=[A-Za-z0-9-_.] " \
+        "name=value,type=CephString,goodchars=[A-Za-z0-9-_.=]",
+        "sets application <app> metadata key <key> to <value> on pool <poolname>",
+        "osd", "rw", "cli,rest")
+COMMAND("osd pool application rm " \
+        "name=pool,type=CephPoolname " \
+        "name=app,type=CephString " \
+        "name=key,type=CephString",
+        "removes application <app> metadata key <key> on pool <poolname>",
+        "osd", "rw", "cli,rest")
 COMMAND("osd utilization",
 	"get basic pg distribution stats",
 	"osd", "r", "cli,rest")

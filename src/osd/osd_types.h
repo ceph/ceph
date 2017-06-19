@@ -1348,6 +1348,9 @@ public:
 
   pool_opts_t opts; ///< options
 
+  /// application -> key/value metadata
+  map<string, std::map<string, string>> application_metadata;
+
 private:
   vector<uint32_t> grade_table;
 
