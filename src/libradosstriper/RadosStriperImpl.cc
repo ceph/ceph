@@ -600,6 +600,11 @@ int libradosstriper::RadosStriperImpl::remove(const std::string& soid, int flags
       uint64_t remaining_objects = std::min(remaining_stripe_units, stripe_count);
       nb_objects = nb_complete_sets * stripe_count + remaining_objects;
     }
+
+    // We cannot have 0 objects, at least one is present
+    if (nb_objects == 0)
+        nb_objects++;
+
     // delete rados objects in reverse order
     int rcr = 0;
     for (int i = nb_objects-1; i >= 0; i--) {
