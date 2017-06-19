@@ -7995,7 +7995,7 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
 
   bool copy_itself = (dest_obj == src_obj);
   RGWObjManifest *pmanifest; 
-  ldout(cct, 0) << "dest_obj=" << dest_obj << " src_obj=" << src_obj << " copy_itself=" << (int)copy_itself << dendl;
+  ldout(cct, 20) << "dest_obj=" << dest_obj << " src_obj=" << src_obj << " copy_itself=" << (int)copy_itself << dendl;
 
   RGWRados::Object dest_op_target(this, dest_bucket_info, obj_ctx, dest_obj);
   RGWRados::Object::Write write_op(&dest_op_target);
