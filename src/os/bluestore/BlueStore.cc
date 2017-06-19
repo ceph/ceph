@@ -5742,6 +5742,23 @@ int BlueStore::fsck(bool deep)
 	} else {
 	  used_omap_head.insert(o->onode.nid);
 	}
+	// dump omap
+	KeyValueDB::Iterator it = db->get_iterator(PREFIX_OMAP);
+	string head, tail;
+	get_omap_key(o->onode.nid, string(), &head);
+	get_omap_tail(o->onode.nid, &tail);
+	it->lower_bound(head);
+	while (it->valid()) {
+	  if (it->key() >= tail) {
+	    dout(30) << __func__ << "  reached tail" << dendl;
+	    break;
+	  }
+	  string user_key;
+	  decode_omap_key(it->key(), &user_key);
+	  dout(30) << __func__ << "  got " << pretty_binary_string(it->key())
+		   << " -> " << user_key << dendl;
+	  it->next();
+	}
       }
     }
   }
