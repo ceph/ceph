@@ -10302,15 +10302,16 @@ int MDCache::send_dir_updates(CDir *dir, bool bcast)
 /* This function DOES put the passed message before returning */
 void MDCache::handle_dir_update(MDirUpdate *m)
 {
-  CDir *dir = get_dirfrag(m->get_dirfrag());
+  dirfrag_t df = m->get_dirfrag();
+  CDir *dir = get_dirfrag(df);
   if (!dir) {
-    dout(5) << "dir_update on " << m->get_dirfrag() << ", don't have it" << dendl;
+    dout(5) << "dir_update on " << df << ", don't have it" << dendl;
 
     // discover it?
     if (m->should_discover()) {
       // only try once! 
       // this is key to avoid a fragtree update race, among other things.
-      m->tried_discover();        
+      m->inc_tried_discover();
       vector<CDentry*> trace;
       CInode *in;
       filepath path = m->get_path();
@@ -10319,21 +10320,25 @@ void MDCache::handle_dir_update(MDirUpdate *m)
       int r = path_traverse(null_ref, m, NULL, path, &trace, &in, MDS_TRAVERSE_DISCOVER);
       if (r > 0)
         return;
-      assert(r == 0);
-      open_remote_dirfrag(in, m->get_dirfrag().frag, 
-			  new C_MDS_RetryMessage(mds, m));
-      return;
+      if (r == 0 &&
+	  in->ino() == df.ino &&
+	  in->get_approx_dirfrag(df.frag) == NULL) {
+	open_remote_dirfrag(in, df.frag, new C_MDS_RetryMessage(mds, m));
+	return;
+      }
     }
 
     m->put();
     return;
   }
 
-  // update
-  dout(5) << "dir_update on " << *dir << dendl;
-  dir->dir_rep = m->get_dir_rep();
-  dir->dir_rep_by = m->get_dir_rep_by();
-  
+  if (!m->has_tried_discover()) {
+    // Update if it already exists. Othwerwise it got updated by discover reply.
+    dout(5) << "dir_update on " << *dir << dendl;
+    dir->dir_rep = m->get_dir_rep();
+    dir->dir_rep_by = m->get_dir_rep_by();
+  }
+
   // done
   m->put();
 }
