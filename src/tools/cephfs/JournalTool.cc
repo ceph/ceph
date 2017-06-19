@@ -49,22 +49,25 @@ void JournalTool::usage()
     << "      export <path>\n"
     << "      reset [--force]\n"
     << "  cephfs-journal-tool [options] header <get|set <field> <value>\n"
-    << "  cephfs-journal-tool [options] event <effect> <selector> <output>\n"
+    << "  cephfs-journal-tool [options] event <effect> <selector> <output> [special options]\n"
     << "    <selector>:\n"
     << "      --range=<start>..<end>\n"
     << "      --path=<substring>\n"
     << "      --inode=<integer>\n"
     << "      --type=<UPDATE|OPEN|SESSION...><\n"
     << "      --frag=<ino>.<frag> [--dname=<dentry string>]\n"
-    << "      --alternate-pool=pool-name\n"
     << "      --client=<session id integer>\n"
     << "    <effect>: [get|apply|recover_dentries|splice]\n"
     << "    <output>: [summary|list|binary|json] [--path <path>]\n"
     << "\n"
-    << "Options:\n"
+    << "General options:\n"
     << "  --rank=filesystem:mds-rank  Journal rank (required if multiple\n"
     << "                              file systems, default is rank 0 on\n"
-    << "                              the only filesystem otherwise.\n";
+    << "                              the only filesystem otherwise.\n"
+    << "\n"
+    << "Special options\n"
+    << "  --alternate-pool <name>     Alternative metadata pool to target\n"
+    << "                              when using recover_dentries.\n";
 
   generic_client_usage();
 }
