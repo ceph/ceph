@@ -34,7 +34,7 @@
 void usage(ostream& out)
 {
   out <<					\
-"usage: rest-bench [options] <write|seq>\n"
+"usage: rest-bench [options] <write|seq|rand>\n"
 "       rest-bench [options] cleanup [--run-name run_name] [--prefix prefix]\n"
 "BENCHMARK OPTIONS\n"
 "   --seconds\n"

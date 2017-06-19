@@ -909,7 +909,7 @@ int ObjBencher::clean_up(const char* prefix, int concurrentios, const char* run_
   int prevPid;
 
   // default meta object if user does not specify one
-  const std::string run_name_meta = (run_name == NULL ? BENCH_LASTRUN_METADATA : std::string(run_name));
+  const std::string run_name_meta = ((!run_name || !run_name[0]) ? BENCH_LASTRUN_METADATA : std::string(run_name));
 
   r = fetch_bench_metadata(run_name_meta, &object_size, &num_objects, &prevPid);
   if (r < 0) {
