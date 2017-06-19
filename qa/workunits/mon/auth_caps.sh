@@ -13,7 +13,6 @@ for i in ${combinations}; do
 done
 
 # add special caps
-keymap["blank"]=`ceph auth get-or-create-key client.blank mon 'allow'` || exit 1
 keymap["all"]=`ceph auth get-or-create-key client.all mon 'allow *'` || exit 1
 
 tmp=`mktemp`
@@ -101,10 +100,10 @@ write_ops() {
   expect $ret ceph auth add client.foo $args
   expect $ret "ceph auth caps client.foo mon 'allow *' $args"
   expect $ret ceph auth get-or-create client.admin $args
-  expect $ret "ceph auth get-or-create client.bar mon 'allow' $args"
   expect $ret ceph auth get-or-create-key client.admin $args
   expect $ret ceph auth get-or-create-key client.baz $args
   expect $ret ceph auth del client.foo $args
+  expect $ret ceph auth del client.baz $args
   expect $ret ceph auth import -i $tmp $args
 }
 
@@ -124,7 +123,7 @@ for i in ${!keymap[@]}; do
 done
 
 # cleanup
-for i in ${combinations} blank all; do
+for i in ${combinations} all; do
   ceph auth del client.$i || exit 1
 done
 
