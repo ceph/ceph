@@ -2581,10 +2581,6 @@ public:
 
   int create_pool(const rgw_pool& pool);
 
-  /**
-   * create a bucket with name bucket and the given list of attrs
-   * returns 0 on success, -ERR# otherwise.
-   */
   int init_bucket_index(RGWBucketInfo& bucket_info, int num_shards);
   int select_bucket_placement(RGWUserInfo& user_info, const string& zonegroup_id, 
                               const std::string& requested_placement_id,
