@@ -5741,8 +5741,8 @@ int RGWRados::create_bucket(RGWUserInfo& owner, rgw_bucket& bucket,
 
   for (int i = 0; i < MAX_CREATE_RETRIES; i++) {
     int ret = 0;
-    ret = select_bucket_placement(owner, zonegroup_id, requested_placement_id,
-                                  &selected_placement_id, &placement_info);
+    ret = init_bucket_placement(owner, zonegroup_id, requested_placement_id,
+                                &selected_placement_id, &placement_info);
     if (ret < 0)
       return ret;
 
@@ -5910,11 +5910,15 @@ int RGWRados::get_bucket_placement_info(const std::string& placement_id, RGWZone
   return 0;
 }
 
-int RGWRados::select_bucket_placement(RGWUserInfo& user_info, const std::string& zonegroup_id,
-                                      const std::string& requested_placement_id,
-                                      std::string *pselected_placement_id,
-                                      RGWZonePlacementInfo *placement_info)
+int RGWRados::init_bucket_placement(RGWUserInfo& user_info, const std::string& zonegroup_id,
+                                    const std::string& requested_placement_id,
+                                    std::string *pselected_placement_id,
+                                    RGWZonePlacementInfo *placement_info)
 {
+  /*
+   * 1. select placement id
+   * 2. get placement info
+   */
   if (!get_zone_params().placement_rules.empty()) {
     int ret = select_bucket_placement_id(user_info, zonegroup_id,
                                          requested_placement_id, pselected_placement_id);

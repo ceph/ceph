@@ -2582,9 +2582,10 @@ public:
   int create_pool(const rgw_pool& pool);
 
   int init_bucket_index(RGWBucketInfo& bucket_info, int num_shards);
-  int select_bucket_placement(RGWUserInfo& user_info, const string& zonegroup_id, 
-                              const std::string& requested_placement_id,
-                              std::string *pselected_placement_id, RGWZonePlacementInfo *rule_info);
+  int init_bucket_placement(RGWUserInfo& user_info, const string& zonegroup_id,
+                            const std::string& requested_placement_id,
+                            std::string *pselected_placement_id,
+                            RGWZonePlacementInfo *placement_info);
   int select_bucket_placement_id(RGWUserInfo& user_info, const std::string& zonegroup_id,
                                  const std::string& requested_placement_id,
                                  std::string *pselected_placement_id);
