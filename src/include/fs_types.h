@@ -45,7 +45,7 @@ struct denc_traits<inodeno_t> {
 };
 
 inline ostream& operator<<(ostream& out, const inodeno_t& ino) {
-  return out << hex << ino.val << dec;
+  return out << hex << "0x" << ino.val << dec;
 }
 
 namespace std {
