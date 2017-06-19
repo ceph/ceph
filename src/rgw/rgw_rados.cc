@@ -122,15 +122,15 @@ static bool rgw_get_obj_data_pool(const RGWZoneGroup& zonegroup, const RGWZonePa
                                   const string& placement_id, const rgw_obj& obj, rgw_pool *pool)
 {
   if (!zone_params.get_head_data_pool(placement_id, obj, pool)) {
-    RGWZonePlacementInfo placement;
-    if (!zone_params.get_placement(zonegroup.default_placement_id, &placement)) {
+    RGWZonePlacementInfo placement_info;
+    if (!zone_params.get_placement_info(zonegroup.default_placement_id, &placement_info)) {
       return false;
     }
 
     if (!obj.in_extra_data) {
-      *pool = placement.data_pool;
+      *pool = placement_info.data_pool;
     } else {
-      *pool = placement.get_data_extra_pool();
+      *pool = placement_info.get_data_extra_pool();
     }
   }
 

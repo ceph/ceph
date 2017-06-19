@@ -1276,12 +1276,12 @@ struct RGWZoneParams : RGWSystemMetaObj {
   void decode_json(JSONObj *obj);
   static void generate_test_instances(list<RGWZoneParams*>& o);
 
-  bool get_placement(const string& placement_id, RGWZonePlacementInfo *placement) const {
+  bool get_placement_info(const std::string& placement_id, RGWZonePlacementInfo *placement_info) const {
     auto iter = placement_rules.find(placement_id);
     if (iter == placement_rules.end()) {
       return false;
     }
-    *placement = iter->second;
+    *placement_info = iter->second;
     return true;
   }
 

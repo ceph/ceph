@@ -173,7 +173,7 @@ static void test_obj_to_raw(test_rgw_env& env, const rgw_bucket& b,
   dump(f, "raw_obj", raw_obj);
 
   if (!placement_id.empty()) {
-    ASSERT_EQ(raw_obj.pool, env.get_placement(placement_id).data_pool);
+    ASSERT_EQ(raw_obj.pool, env.get_placement_target(placement_id).data_pool);
   } else {
     ASSERT_EQ(raw_obj.pool, b.explicit_placement.data_pool);
   }

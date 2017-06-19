@@ -471,7 +471,7 @@ struct test_rgw_env {
     placement_target.data_extra_pool = rgw_pool(zone_params.placement_rules[zonegroup.default_placement_id].data_extra_pool);
   }
 
-  rgw_data_placement_target get_placement(const std::string& placement_id) {
+  rgw_data_placement_target get_placement_target(const std::string& placement_id) {
     const RGWZonePlacementInfo& pi = zone_params.placement_rules[placement_id];
     rgw_data_placement_target pt;
     pt.index_pool = pi.index_pool;
