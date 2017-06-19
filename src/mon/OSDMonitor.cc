@@ -3810,6 +3810,30 @@ void OSDMonitor::get_health(list<pair<health_status_t,string> >& summary,
 	if (detail)
 	  detail->push_back(make_pair(HEALTH_WARN, ss.str()));
       }
+
+      const string& pool_name = osdmap.get_pool_name(it.first);
+      const pool_stat_t *pstat = mon->pgservice->get_pool_stat(it.first);
+      if (pstat == nullptr) {
+        continue;
+      }
+      const object_stat_sum_t& sum = pstat->stats.sum;
+
+      // application metadata is not encoded until luminous is minimum
+      // required release
+      if (osdmap.require_osd_release >= CEPH_RELEASE_LUMINOUS &&
+          sum.num_objects > 0 && pool.application_metadata.empty()) {
+        stringstream ss;
+        ss << "application not enabled on pool '" << pool_name << "'";
+
+        summary.push_back({HEALTH_WARN, ss.str()});
+        if (detail) {
+          ss << "; "
+             << "use 'ceph osd pool application enable <pool-name> "
+             << "<app-name>', where <app-name> is 'cephfs', 'rbd', 'rgw', "
+             << "or freeform for custom applications.";
+          detail->push_back({HEALTH_WARN, ss.str()});
+        }
+      }
     }
   }
 }
