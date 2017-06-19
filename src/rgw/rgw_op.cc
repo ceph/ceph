@@ -6268,9 +6268,8 @@ void RGWSetAttrs::execute()
 
   rgw_obj obj(s->bucket, s->object);
 
-  store->set_atomic(s->obj_ctx, obj);
-
   if (!s->object.empty()) {
+    store->set_atomic(s->obj_ctx, obj);
     op_ret = store->set_attrs(s->obj_ctx, s->bucket_info, obj, attrs, nullptr);
   } else {
     for (auto& iter : attrs) {
