@@ -2588,10 +2588,9 @@ void RGWCreateBucket::execute()
     rgw_bucket bucket;
     bucket.tenant = s->bucket_tenant;
     bucket.name = s->bucket_name;
-    op_ret = store->select_bucket_placement(*(s->user), zonegroup_id,
+    op_ret = store->select_bucket_placement_id(*(s->user), zonegroup_id,
                                             requested_placement_id,
-                                            &selected_placement_id, 
-                                            nullptr);
+                                            &selected_placement_id);
     if (selected_placement_id != s->bucket_info.default_placement_id) {
       op_ret = -EEXIST;
       return;
@@ -5968,11 +5967,10 @@ int RGWBulkUploadOp::handle_dir(const boost::string_ref path)
     rgw_bucket bucket;
     bucket.tenant = s->bucket_tenant;
     bucket.name = s->bucket_name;
-    op_ret = store->select_bucket_placement(*(s->user),
-                                            store->get_zonegroup().get_id(),
-                                            requested_placement_id,
-                                            &selected_placement_id,
-                                            nullptr);
+    op_ret = store->select_bucket_placement_id(*(s->user),
+                                               store->get_zonegroup().get_id(),
+                                               requested_placement_id,
+                                               &selected_placement_id);
     if (selected_placement_id != binfo.default_placement_id) {
       op_ret = -EEXIST;
       ldout(s->cct, 20) << "bulk upload: non-coherent placement rule" << dendl;
