@@ -6,3 +6,4 @@ tasks:
     config:
       user_count: 25
       bucket_count: 25
+      objects_count: 1 # set it 1 though this config is not used.

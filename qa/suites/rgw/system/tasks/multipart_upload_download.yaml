@@ -4,6 +4,7 @@ tasks:
 - rgw-system-test:
     test-name: test_multipart_upload_download
     config:
+       objects_count: 1
        user_count: 25
        bucket_count: 25
        min_file_size: 50

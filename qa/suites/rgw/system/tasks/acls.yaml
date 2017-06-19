@@ -4,6 +4,7 @@ tasks:
 - rgw-system-test:
    test-name: test_acls
    config:
+       user_count: 2
        bucket_count: 25
        objects_count: 25
        min_file_size: 50
