@@ -2530,11 +2530,7 @@ RGWOp *RGWHandler_REST_Obj_SWIFT::op_options()
 
 int RGWHandler_REST_SWIFT::authorize()
 {
-  int r = rgw::auth::Strategy::apply(auth_strategy, s);
-  if (r == -EACCES) { // XXX: hacky fix for Strategy::apply() refactoring
-    r = -EPERM;
-  }
-  return r;
+  return rgw::auth::Strategy::apply(auth_strategy, s);
 }
 
 int RGWHandler_REST_SWIFT::postauth_init()
