@@ -562,6 +562,8 @@ private:
   uint32_t get_crc() const { return crc; }
 
   ceph::shared_ptr<CrushWrapper> crush;       // hierarchical map
+private:
+  uint32_t crush_version = 1;
 
   friend class OSDMonitor;
 
@@ -613,6 +615,10 @@ public:
   void inc_epoch() { epoch++; }
 
   void set_epoch(epoch_t e);
+
+  uint32_t get_crush_version() const {
+    return crush_version;
+  }
 
   /* stamps etc */
   const utime_t& get_created() const { return created; }
