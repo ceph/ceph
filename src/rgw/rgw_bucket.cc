@@ -2234,9 +2234,9 @@ public:
       bci.info.bucket.name = bucket_name;
       bci.info.bucket.bucket_id = bucket_instance;
       bci.info.bucket.tenant = tenant_name;
-      ret = store->select_bucket_placement_info(bci.info.default_placement_id, &placement_info);
+      ret = store->get_bucket_placement_info(bci.info.default_placement_id, &placement_info);
       if (ret < 0) {
-        ldout(store->ctx(), 0) << "ERROR: select_bucket_placement_info() returned " << ret << dendl;
+        ldout(store->ctx(), 0) << "ERROR: get_bucket_placement_info() returned " << ret << dendl;
         return ret;
       }
       bci.info.index_type = placement_info.index_type;

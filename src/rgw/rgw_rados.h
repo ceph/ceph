@@ -2585,12 +2585,11 @@ public:
   int select_bucket_placement(RGWUserInfo& user_info, const string& zonegroup_id, 
                               const std::string& requested_placement_id,
                               std::string *pselected_placement_id, RGWZonePlacementInfo *rule_info);
-  int select_legacy_bucket_placement(RGWZonePlacementInfo *placement_info);
-  int select_new_bucket_location(RGWUserInfo& user_info, const std::string& zonegroup_id,
+  int select_bucket_placement_id(RGWUserInfo& user_info, const std::string& zonegroup_id,
                                  const std::string& requested_placement_id,
-                                 std::string *pselected_placement_id,
-                                 RGWZonePlacementInfo *rule_info);
-  int select_bucket_placement_info(const std::string& placement_id, RGWZonePlacementInfo *placement_info);
+                                 std::string *pselected_placement_id);
+  int get_bucket_placement_info(const std::string& placement_id, RGWZonePlacementInfo *placement_info);
+  int get_legacy_bucket_placement_info(RGWZonePlacementInfo *placement_info);
   void create_bucket_id(string *bucket_id);
 
   bool get_obj_data_pool(const string& placement_rule, const rgw_obj& obj, rgw_pool *pool);

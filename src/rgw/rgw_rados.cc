@@ -5835,10 +5835,9 @@ int RGWRados::create_bucket(RGWUserInfo& owner, rgw_bucket& bucket,
   return -ENOENT;
 }
 
-int RGWRados::select_new_bucket_location(RGWUserInfo& user_info, const std::string& zonegroup_id,
+int RGWRados::select_bucket_placement_id(RGWUserInfo& user_info, const std::string& zonegroup_id,
                                          const std::string& requested_placement_id,
-                                         std::string *pselected_placement_id,
-                                         RGWZonePlacementInfo *placement_info)
+                                         std::string *pselected_placement_id)
 {
   RGWZoneGroup zonegroup;
   int ret = get_zonegroup(zonegroup_id, zonegroup);
@@ -5879,16 +5878,16 @@ int RGWRados::select_new_bucket_location(RGWUserInfo& user_info, const std::stri
   if (pselected_placement_id)
     *pselected_placement_id = placement_id;
 
-  return select_bucket_placement_info(placement_id, placement_info);
+  return 0;
 }
 
-int RGWRados::select_bucket_placement_info(const std::string& placement_id, RGWZonePlacementInfo *placement_info)
+int RGWRados::get_bucket_placement_info(const std::string& placement_id, RGWZonePlacementInfo *placement_info)
 {
   if (placement_id.empty()) {
     /* we can only reach here if we're trying to set a bucket location from a bucket
      * created on a different zone, using a legacy / default pool configuration
      */
-    return select_legacy_bucket_placement(placement_info);
+    return get_legacy_bucket_placement_info(placement_info);
   }
 
   /*
@@ -5913,21 +5912,27 @@ int RGWRados::select_bucket_placement_info(const std::string& placement_id, RGWZ
 
 int RGWRados::select_bucket_placement(RGWUserInfo& user_info, const std::string& zonegroup_id,
                                       const std::string& requested_placement_id,
-                                      std::string *pselected_placement_id, RGWZonePlacementInfo *rule_info)
+                                      std::string *pselected_placement_id,
+                                      RGWZonePlacementInfo *placement_info)
 {
   if (!get_zone_params().placement_rules.empty()) {
-    return select_new_bucket_location(user_info, zonegroup_id, requested_placement_id,
-                                      pselected_placement_id, rule_info);
+    int ret = select_bucket_placement_id(user_info, zonegroup_id,
+                                         requested_placement_id, pselected_placement_id);
+    if (ret == 0) {
+      return get_bucket_placement_info(*pselected_placement_id, placement_info);
+    } else {
+      return ret;
+    }
   }
 
   if (pselected_placement_id) {
     pselected_placement_id->clear();
   }
 
-  return select_legacy_bucket_placement(rule_info);
+  return get_legacy_bucket_placement_info(placement_info);
 }
 
-int RGWRados::select_legacy_bucket_placement(RGWZonePlacementInfo *placement_info)
+int RGWRados::get_legacy_bucket_placement_info(RGWZonePlacementInfo *placement_info)
 {
   bufferlist map_bl;
   map<string, bufferlist> m;
