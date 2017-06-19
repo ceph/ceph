@@ -1167,7 +1167,7 @@ struct RGWBucketInfo
   uint32_t flags;
   string zonegroup;
   ceph::real_time creation_time;
-  string placement_rule;
+  std::string default_placement_id;
   bool has_instance_obj;
   RGWObjVersionTracker objv_tracker; /* we don't need to serialize this, for runtime tracking */
   obj_version ep_objv; /* entry point object version, for runtime tracking only */
@@ -1209,7 +1209,7 @@ struct RGWBucketInfo
      ::encode(zonegroup, bl);
      uint64_t ct = real_clock::to_time_t(creation_time);
      ::encode(ct, bl);
-     ::encode(placement_rule, bl);
+     ::encode(default_placement_id, bl);
      ::encode(has_instance_obj, bl);
      ::encode(quota, bl);
      ::encode(num_shards, bl);
@@ -1250,7 +1250,7 @@ struct RGWBucketInfo
 	 creation_time = ceph::real_clock::from_time_t((time_t)ct);
      }
      if (struct_v >= 7)
-       ::decode(placement_rule, bl);
+       ::decode(default_placement_id, bl);
      if (struct_v >= 8)
        ::decode(has_instance_obj, bl);
      if (struct_v >= 9)

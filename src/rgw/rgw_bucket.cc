@@ -657,7 +657,7 @@ int rgw_remove_bucket_bypass_gc(RGWRados *store, rgw_bucket& bucket,
         RGWObjManifest::obj_iterator miter = manifest.obj_begin();
         rgw_obj head_obj = manifest.get_obj();
         rgw_raw_obj raw_head_obj;
-        store->obj_to_raw(info.placement_rule, head_obj, &raw_head_obj);
+        store->obj_to_raw(info.default_placement_id, head_obj, &raw_head_obj);
 
 
         for (; miter != manifest.obj_end() && max_aio--; ++miter) {
@@ -1374,7 +1374,7 @@ static int bucket_stats(RGWRados *store, const std::string& tenant_name, std::st
   formatter->open_object_section("stats");
   formatter->dump_string("bucket", bucket.name);
   formatter->dump_string("zonegroup", bucket_info.zonegroup);
-  formatter->dump_string("placement_rule", bucket_info.placement_rule);
+  formatter->dump_string("default_placement_id", bucket_info.default_placement_id);
   ::encode_json("explicit_placement", bucket.explicit_placement, formatter);
   formatter->dump_string("id", bucket.bucket_id);
   formatter->dump_string("marker", bucket.marker);
@@ -2234,7 +2234,7 @@ public:
       bci.info.bucket.name = bucket_name;
       bci.info.bucket.bucket_id = bucket_instance;
       bci.info.bucket.tenant = tenant_name;
-      ret = store->select_bucket_location_by_rule(bci.info.placement_rule, &rule_info);
+      ret = store->select_bucket_location_by_rule(bci.info.default_placement_id, &rule_info);
       if (ret < 0) {
         ldout(store->ctx(), 0) << "ERROR: select_bucket_location_by_rule() returned " << ret << dendl;
         return ret;
@@ -2243,7 +2243,7 @@ public:
     } else {
       /* existing bucket, keep its placement */
       bci.info.bucket.explicit_placement = old_bci.info.bucket.explicit_placement;
-      bci.info.placement_rule = old_bci.info.placement_rule;
+      bci.info.default_placement_id = old_bci.info.default_placement_id;
     }
 
     // are we actually going to perform this put, or is it too old?

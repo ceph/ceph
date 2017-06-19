@@ -89,7 +89,7 @@ int list_multipart_parts(RGWRados *store, RGWBucketInfo& bucket_info, CephContex
   obj.set_in_extra_data(true);
 
   rgw_raw_obj raw_obj;
-  store->obj_to_raw(bucket_info.placement_rule, obj, &raw_obj);
+  store->obj_to_raw(bucket_info.default_placement_id, obj, &raw_obj);
 
   bool sorted_omap = is_v2_upload_id(upload_id) && !assume_unsorted;
 

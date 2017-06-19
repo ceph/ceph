@@ -392,8 +392,8 @@ static void dump_container_metadata(struct req_state *s,
     if (write_acl.size()) {
       dump_header(s, "X-Container-Write", write_acl);
     }
-    if (!s->bucket_info.placement_rule.empty()) {
-      dump_header(s, "X-Storage-Policy", s->bucket_info.placement_rule);
+    if (!s->bucket_info.default_placement_id.empty()) {
+      dump_header(s, "X-Storage-Policy", s->bucket_info.default_placement_id);
     }
 
     /* Dump user-defined metadata items and generic attrs. */

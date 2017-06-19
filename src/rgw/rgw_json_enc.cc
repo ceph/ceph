@@ -729,7 +729,7 @@ void RGWBucketInfo::dump(Formatter *f) const
   encode_json("owner", owner.to_str(), f);
   encode_json("flags", flags, f);
   encode_json("zonegroup", zonegroup, f);
-  encode_json("placement_rule", placement_rule, f);
+  encode_json("default_placement_id", default_placement_id, f);
   encode_json("has_instance_obj", has_instance_obj, f);
   encode_json("quota", quota, f);
   encode_json("num_shards", num_shards, f);
@@ -759,7 +759,7 @@ void RGWBucketInfo::decode_json(JSONObj *obj) {
   if (zonegroup.empty()) {
     JSONDecoder::decode_json("region", zonegroup, obj);
   }
-  JSONDecoder::decode_json("placement_rule", placement_rule, obj);
+  JSONDecoder::decode_json("default_placement_id", default_placement_id, obj);
   JSONDecoder::decode_json("has_instance_obj", has_instance_obj, obj);
   JSONDecoder::decode_json("quota", quota, obj);
   JSONDecoder::decode_json("num_shards", num_shards, obj);

@@ -2591,7 +2591,7 @@ void RGWCreateBucket::execute()
     op_ret = store->select_bucket_placement(*(s->user), zonegroup_id,
 					    placement_rule,
 					    &selected_placement_rule, nullptr);
-    if (selected_placement_rule != s->bucket_info.placement_rule) {
+    if (selected_placement_rule != s->bucket_info.default_placement_id) {
       op_ret = -EEXIST;
       return;
     }
@@ -2934,7 +2934,7 @@ int RGWPutObjProcessor_Multipart::prepare(RGWRados *store, string *oid_rand)
 
   manifest.set_multipart_part_rule(store->ctx()->_conf->rgw_obj_stripe_size, num);
 
-  int r = manifest_gen.create_begin(store->ctx(), &manifest, s->bucket_info.placement_rule, bucket, target_obj);
+  int r = manifest_gen.create_begin(store->ctx(), &manifest, s->bucket_info.default_placement_id, bucket, target_obj);
   if (r < 0) {
     return r;
   }
@@ -3017,7 +3017,7 @@ int RGWPutObjProcessor_Multipart::do_complete(size_t accounted_size,
 
   rgw_raw_obj raw_meta_obj;
 
-  store->obj_to_raw(s->bucket_info.placement_rule, meta_obj, &raw_meta_obj);
+  store->obj_to_raw(s->bucket_info.default_placement_id, meta_obj, &raw_meta_obj);
 
   r = store->omap_set(raw_meta_obj, p, bl);
 
@@ -3191,7 +3191,7 @@ void RGWPutObj::execute()
   off_t fst;
   off_t lst;
   const auto& compression_type = store->get_zone_params().get_compression_type(
-      s->bucket_info.placement_rule);
+      s->bucket_info.default_placement_id);
   CompressorRef plugin;
   boost::optional<RGWPutObj_Compress> compressor;
 
@@ -3626,7 +3626,7 @@ void RGWPostObj::execute()
       filter = encrypt.get();
     } else {
       const auto& compression_type = store->get_zone_params().get_compression_type(
-          s->bucket_info.placement_rule);
+          s->bucket_info.default_placement_id);
       if (compression_type != "none") {
         plugin = Compressor::create(s->cct, compression_type);
         if (!plugin) {
@@ -3871,7 +3871,7 @@ void RGWPutMetadataBucket::execute()
   rgw_get_request_metadata(s->cct, s->info, attrs, false);
 
   if (!placement_rule.empty() &&
-      placement_rule != s->bucket_info.placement_rule) {
+      placement_rule != s->bucket_info.default_placement_id) {
     op_ret = -EEXIST;
     return;
   }
@@ -5972,7 +5972,7 @@ int RGWBulkUploadOp::handle_dir(const boost::string_ref path)
                                             placement_rule,
                                             &selected_placement_rule,
                                             nullptr);
-    if (selected_placement_rule != binfo.placement_rule) {
+    if (selected_placement_rule != binfo.default_placement_id) {
       op_ret = -EEXIST;
       ldout(s->cct, 20) << "bulk upload: non-coherent placement rule" << dendl;
       return op_ret;
@@ -6150,7 +6150,7 @@ int RGWBulkUploadOp::handle_file(const boost::string_ref path,
   }
 
   const auto& compression_type = store->get_zone_params().get_compression_type(
-      binfo.placement_rule);
+      binfo.default_placement_id);
   CompressorRef plugin;
   if (compression_type != "none") {
     plugin = Compressor::create(s->cct, compression_type);

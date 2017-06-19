@@ -2413,7 +2413,7 @@ RGWPutObjProcessor_Aio::~RGWPutObjProcessor_Aio()
   rgw_raw_obj raw_head;
 
   if (!head_obj.empty()) {
-    store->obj_to_raw(bucket_info.placement_rule, head_obj, &raw_head);
+    store->obj_to_raw(bucket_info.default_placement_id, head_obj, &raw_head);
   }
 
   /** 
@@ -2619,7 +2619,7 @@ int RGWPutObjProcessor_Atomic::prepare_init(RGWRados *store, string *oid_rand)
 {
   RGWPutObjProcessor_Aio::prepare(store, oid_rand);
 
-  int r = store->get_max_chunk_size(bucket_info.placement_rule, head_obj, &max_chunk_size);
+  int r = store->get_max_chunk_size(bucket_info.default_placement_id, head_obj, &max_chunk_size);
   if (r < 0) {
     return r;
   }
@@ -2644,7 +2644,7 @@ int RGWPutObjProcessor_Atomic::prepare(RGWRados *store, string *oid_rand)
 
   manifest.set_trivial_rule(max_chunk_size, store->ctx()->_conf->rgw_obj_stripe_size);
 
-  r = manifest_gen.create_begin(store->ctx(), &manifest, bucket_info.placement_rule, head_obj.bucket, head_obj);
+  r = manifest_gen.create_begin(store->ctx(), &manifest, bucket_info.default_placement_id, head_obj.bucket, head_obj);
   if (r < 0) {
     return r;
   }
@@ -4799,7 +4799,7 @@ void RGWRados::build_bucket_index_marker(const string& shard_id_str, const strin
 
 int RGWRados::open_bucket_index_ctx(const RGWBucketInfo& bucket_info, librados::IoCtx& index_ctx)
 {
-  const string *rule = &bucket_info.placement_rule;
+  const string *rule = &bucket_info.default_placement_id;
   if (rule->empty()) {
     rule = &zonegroup.default_placement_id;
   }
@@ -5765,7 +5765,7 @@ int RGWRados::create_bucket(RGWUserInfo& owner, rgw_bucket& bucket,
     info.bucket = bucket;
     info.owner = owner.user_id;
     info.zonegroup = zonegroup_id;
-    info.placement_rule = selected_placement_rule_name;
+    info.default_placement_id = selected_placement_rule_name;
     info.index_type = rule_info.index_type;
     info.swift_ver_location = swift_ver_location;
     info.swift_versioning = (!swift_ver_location.empty());
@@ -6131,7 +6131,7 @@ int RGWRados::get_obj_head_ioctx(const RGWBucketInfo& bucket_info, const rgw_obj
   get_obj_bucket_and_oid_loc(obj, oid, key);
 
   rgw_pool pool;
-  if (!get_obj_data_pool(bucket_info.placement_rule, obj, &pool)) {
+  if (!get_obj_data_pool(bucket_info.default_placement_id, obj, &pool)) {
     ldout(cct, 0) << "ERROR: cannot get data pool for obj=" << obj << ", probably misconfiguration" << dendl;
     return -EIO;
   }
@@ -6151,7 +6151,7 @@ int RGWRados::get_obj_head_ref(const RGWBucketInfo& bucket_info, const rgw_obj& 
   get_obj_bucket_and_oid_loc(obj, ref->oid, ref->key);
 
   rgw_pool pool;
-  if (!get_obj_data_pool(bucket_info.placement_rule, obj, &pool)) {
+  if (!get_obj_data_pool(bucket_info.default_placement_id, obj, &pool)) {
     ldout(cct, 0) << "ERROR: cannot get data pool for obj=" << obj << ", probably misconfiguration" << dendl;
     return -EIO;
   }
@@ -7323,7 +7323,7 @@ int RGWRados::rewrite_obj(RGWBucketInfo& dest_bucket_info, rgw_obj& obj)
 
   uint64_t max_chunk_size;
 
-  ret = get_max_chunk_size(dest_bucket_info.placement_rule, obj, &max_chunk_size);
+  ret = get_max_chunk_size(dest_bucket_info.default_placement_id, obj, &max_chunk_size);
   if (ret < 0) {
     ldout(cct, 0) << "ERROR: failed to get max_chunk_size() for bucket " << obj.bucket << dendl;
     return ret;
@@ -7615,7 +7615,7 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
   CompressorRef plugin;
 
   const auto& compression_type = zone_params.get_compression_type(
-      dest_bucket_info.placement_rule);
+      dest_bucket_info.default_placement_id);
   if (compression_type != "none") {
     plugin = Compressor::create(cct, compression_type);
     if (!plugin) {
@@ -7924,7 +7924,7 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
   }
   uint64_t max_chunk_size;
 
-  ret = get_max_chunk_size(dest_bucket_info.placement_rule, dest_obj, &max_chunk_size);
+  ret = get_max_chunk_size(dest_bucket_info.default_placement_id, dest_obj, &max_chunk_size);
   if (ret < 0) {
     ldout(cct, 0) << "ERROR: failed to get max_chunk_size() for bucket " << dest_obj.bucket << dendl;
     return ret;
@@ -7932,11 +7932,11 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
 
   rgw_pool src_pool;
   rgw_pool dest_pool;
-  if (!get_obj_data_pool(src_bucket_info.placement_rule, src_obj, &src_pool)) {
+  if (!get_obj_data_pool(src_bucket_info.default_placement_id, src_obj, &src_pool)) {
     ldout(cct, 0) << "ERROR: failed to locate data pool for " << src_obj << dendl;
     return -EIO;
   }
-  if (!get_obj_data_pool(dest_bucket_info.placement_rule, dest_obj, &dest_pool)) {
+  if (!get_obj_data_pool(dest_bucket_info.default_placement_id, dest_obj, &dest_pool)) {
     ldout(cct, 0) << "ERROR: failed to locate data pool for " << dest_obj << dendl;
     return -EIO;
   }
@@ -8047,9 +8047,9 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
       goto done_ret;
     }
 
-    pmanifest->set_head(dest_bucket_info.placement_rule, dest_obj, first_chunk.length());
+    pmanifest->set_head(dest_bucket_info.default_placement_id, dest_obj, first_chunk.length());
   } else {
-    pmanifest->set_head(dest_bucket_info.placement_rule, dest_obj, 0);
+    pmanifest->set_head(dest_bucket_info.default_placement_id, dest_obj, 0);
   }
 
   write_op.meta.data = &first_chunk;
@@ -9044,7 +9044,7 @@ int RGWRados::get_obj_state_impl(RGWObjectCtx *rctx, const RGWBucketInfo& bucket
   s->obj = obj;
 
   rgw_raw_obj raw_obj;
-  obj_to_raw(bucket_info.placement_rule, obj, &raw_obj);
+  obj_to_raw(bucket_info.default_placement_id, obj, &raw_obj);
 
   int r = -ENOENT;
 
@@ -9104,7 +9104,7 @@ int RGWRados::get_obj_state_impl(RGWObjectCtx *rctx, const RGWBucketInfo& bucket
     try {
       ::decode(s->manifest, miter);
       s->has_manifest = true;
-      s->manifest.set_head(bucket_info.placement_rule, obj, s->size); /* patch manifest to reflect the head we just read, some manifests might be
+      s->manifest.set_head(bucket_info.default_placement_id, obj, s->size); /* patch manifest to reflect the head we just read, some manifests might be
                                              broken due to old bugs */
       s->size = s->manifest.get_obj_size();
       if (!compressed)
@@ -9663,7 +9663,7 @@ int RGWRados::Object::Read::prepare()
   const RGWBucketInfo& bucket_info = source->get_bucket_info();
 
   state.obj = astate->obj;
-  store->obj_to_raw(bucket_info.placement_rule, state.obj, &state.head_obj);
+  store->obj_to_raw(bucket_info.default_placement_id, state.obj, &state.head_obj);
 
   r = store->get_obj_head_ioctx(bucket_info, state.obj, &state.io_ctx);
   if (r < 0) {
@@ -10571,7 +10571,7 @@ int RGWRados::iterate_obj(RGWObjectCtx& obj_ctx,
   bool reading_from_head = true;
   RGWObjState *astate = NULL;
 
-  obj_to_raw(bucket_info.placement_rule, obj, &head_obj);
+  obj_to_raw(bucket_info.default_placement_id, obj, &head_obj);
 
   int r = get_obj_state(&obj_ctx, bucket_info, obj, &astate, false);
   if (r < 0) {

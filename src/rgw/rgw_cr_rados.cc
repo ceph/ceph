@@ -784,7 +784,7 @@ int RGWSyncLogTrimCR::request_complete()
 int RGWAsyncStatObj::_send_request()
 {
   rgw_raw_obj raw_obj;
-  store->obj_to_raw(bucket_info.placement_rule, obj, &raw_obj);
+  store->obj_to_raw(bucket_info.default_placement_id, obj, &raw_obj);
   return store->raw_obj_stat(raw_obj, psize, pmtime, pepoch,
                              nullptr, nullptr, objv_tracker);
 }
