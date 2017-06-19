@@ -5736,13 +5736,13 @@ int RGWRados::create_bucket(RGWUserInfo& owner, rgw_bucket& bucket,
 			    bool exclusive)
 {
 #define MAX_CREATE_RETRIES 20 /* need to bound retries */
-  string selected_placement_rule_name;
+  std::string selected_placement_id;
   RGWZonePlacementInfo rule_info;
 
   for (int i = 0; i < MAX_CREATE_RETRIES; i++) {
     int ret = 0;
     ret = select_bucket_placement(owner, zonegroup_id, placement_rule,
-                                  &selected_placement_rule_name, &rule_info);
+                                  &selected_placement_id, &rule_info);
     if (ret < 0)
       return ret;
 
@@ -5765,7 +5765,7 @@ int RGWRados::create_bucket(RGWUserInfo& owner, rgw_bucket& bucket,
     info.bucket = bucket;
     info.owner = owner.user_id;
     info.zonegroup = zonegroup_id;
-    info.default_placement_id = selected_placement_rule_name;
+    info.default_placement_id = selected_placement_id;
     info.index_type = rule_info.index_type;
     info.swift_ver_location = swift_ver_location;
     info.swift_versioning = (!swift_ver_location.empty());
@@ -5918,15 +5918,15 @@ int RGWRados::select_bucket_location_by_rule(const string& location_rule, RGWZon
 }
 
 int RGWRados::select_bucket_placement(RGWUserInfo& user_info, const string& zonegroup_id, const string& placement_rule,
-                                      string *pselected_rule_name, RGWZonePlacementInfo *rule_info)
+                                      std::string *pselected_rule_id, RGWZonePlacementInfo *rule_info)
 {
   if (!get_zone_params().placement_rules.empty()) {
     return select_new_bucket_location(user_info, zonegroup_id, placement_rule,
-                                      pselected_rule_name, rule_info);
+                                      pselected_rule_id, rule_info);
   }
 
-  if (pselected_rule_name) {
-    pselected_rule_name->clear();
+  if (pselected_rule_id) {
+    pselected_rule_id->clear();
   }
 
   return select_legacy_bucket_placement(rule_info);
