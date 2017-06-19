@@ -2584,14 +2584,15 @@ void RGWCreateBucket::execute()
   }
 
   if (s->bucket_exists) {
-    string selected_placement_rule;
+    std::string selected_placement_id;
     rgw_bucket bucket;
     bucket.tenant = s->bucket_tenant;
     bucket.name = s->bucket_name;
     op_ret = store->select_bucket_placement(*(s->user), zonegroup_id,
-					    placement_rule,
-					    &selected_placement_rule, nullptr);
-    if (selected_placement_rule != s->bucket_info.default_placement_id) {
+                                            requested_placement_id,
+                                            &selected_placement_id, 
+                                            nullptr);
+    if (selected_placement_id != s->bucket_info.default_placement_id) {
       op_ret = -EEXIST;
       return;
     }
@@ -2639,7 +2640,7 @@ void RGWCreateBucket::execute()
   }
 
   op_ret = store->create_bucket(*(s->user), s->bucket, zonegroup_id,
-                                placement_rule, s->bucket_info.swift_ver_location,
+                                requested_placement_id, s->bucket_info.swift_ver_location,
                                 pquota_info, attrs,
                                 info, pobjv, &ep_objv, creation_time,
                                 pmaster_bucket, pmaster_num_shards, true);
@@ -5961,18 +5962,18 @@ int RGWBulkUploadOp::handle_dir(const boost::string_ref path)
   }
 
 
-  std::string placement_rule;
+  std::string requested_placement_id;
   if (bucket_exists) {
-    std::string selected_placement_rule;
+    std::string selected_placement_id;
     rgw_bucket bucket;
     bucket.tenant = s->bucket_tenant;
     bucket.name = s->bucket_name;
     op_ret = store->select_bucket_placement(*(s->user),
                                             store->get_zonegroup().get_id(),
-                                            placement_rule,
-                                            &selected_placement_rule,
+                                            requested_placement_id,
+                                            &selected_placement_id,
                                             nullptr);
-    if (selected_placement_rule != binfo.default_placement_id) {
+    if (selected_placement_id != binfo.default_placement_id) {
       op_ret = -EEXIST;
       ldout(s->cct, 20) << "bulk upload: non-coherent placement rule" << dendl;
       return op_ret;
@@ -5999,7 +6000,7 @@ int RGWBulkUploadOp::handle_dir(const boost::string_ref path)
   op_ret = store->create_bucket(*(s->user),
                                 bucket,
                                 store->get_zonegroup().get_id(),
-                                placement_rule, binfo.swift_ver_location,
+                                requested_placement_id, binfo.swift_ver_location,
                                 pquota_info, attrs,
                                 out_info, pobjv, &ep_objv, creation_time,
                                 pmaster_bucket, pmaster_num_shards, true);

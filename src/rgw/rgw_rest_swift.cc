@@ -638,7 +638,7 @@ int RGWCreateBucket_ObjStore_SWIFT::get_params()
   location_constraint = store->get_zonegroup().api_name;
   get_rmattrs_from_headers(s, CONT_PUT_ATTR_PREFIX,
                            CONT_REMOVE_ATTR_PREFIX, rmattr_names);
-  placement_rule = s->info.env->get("HTTP_X_STORAGE_POLICY", "");
+  requested_placement_id = s->info.env->get("HTTP_X_STORAGE_POLICY", "");
 
   return get_swift_versioning_settings(s, swift_ver_location);
 }

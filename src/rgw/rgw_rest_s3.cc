@@ -1154,7 +1154,7 @@ int RGWCreateBucket_ObjStore_S3::get_params()
 
   size_t pos = location_constraint.find(':');
   if (pos != string::npos) {
-    placement_rule = location_constraint.substr(pos + 1);
+    requested_placement_id = location_constraint.substr(pos + 1);
     location_constraint = location_constraint.substr(0, pos);
   }
 

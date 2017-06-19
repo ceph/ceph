@@ -2586,11 +2586,13 @@ public:
    * returns 0 on success, -ERR# otherwise.
    */
   int init_bucket_index(RGWBucketInfo& bucket_info, int num_shards);
-  int select_bucket_placement(RGWUserInfo& user_info, const string& zonegroup_id, const string& rule,
-                              std::string *pselected_rule_id, RGWZonePlacementInfo *rule_info);
+  int select_bucket_placement(RGWUserInfo& user_info, const string& zonegroup_id, 
+                              const std::string& requested_placement_id,
+                              std::string *pselected_placement_id, RGWZonePlacementInfo *rule_info);
   int select_legacy_bucket_placement(RGWZonePlacementInfo *rule_info);
   int select_new_bucket_location(RGWUserInfo& user_info, const std::string& zonegroup_id,
-                                 const std::string& request_rule_id, std::string *pselected_rule_id,
+                                 const std::string& requested_placement_id,
+                                 std::string *pselected_placement_id,
                                  RGWZonePlacementInfo *rule_info);
   int select_bucket_location_by_rule(const string& location_rule, RGWZonePlacementInfo *rule_info);
   void create_bucket_id(string *bucket_id);
@@ -2600,7 +2602,7 @@ public:
 
   int create_bucket(RGWUserInfo& owner, rgw_bucket& bucket,
                             const string& zonegroup_id,
-                            const string& placement_rule,
+                            const std::string& requested_placement_id,
                             const string& swift_ver_location,
                             const RGWQuotaInfo * pquota_info,
                             map<std::string,bufferlist>& attrs,

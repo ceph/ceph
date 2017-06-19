@@ -845,7 +845,7 @@ class RGWCreateBucket : public RGWOp {
 protected:
   RGWAccessControlPolicy policy;
   string location_constraint;
-  string placement_rule;
+  std::string requested_placement_id;
   RGWBucketInfo info;
   obj_version ep_objv;
   bool has_cors;
