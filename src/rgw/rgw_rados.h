@@ -2589,7 +2589,7 @@ public:
   int select_bucket_placement(RGWUserInfo& user_info, const string& zonegroup_id, 
                               const std::string& requested_placement_id,
                               std::string *pselected_placement_id, RGWZonePlacementInfo *rule_info);
-  int select_legacy_bucket_placement(RGWZonePlacementInfo *rule_info);
+  int select_legacy_bucket_placement(RGWZonePlacementInfo *placement_info);
   int select_new_bucket_location(RGWUserInfo& user_info, const std::string& zonegroup_id,
                                  const std::string& requested_placement_id,
                                  std::string *pselected_placement_id,

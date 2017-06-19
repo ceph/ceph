@@ -5927,7 +5927,7 @@ int RGWRados::select_bucket_placement(RGWUserInfo& user_info, const std::string&
   return select_legacy_bucket_placement(rule_info);
 }
 
-int RGWRados::select_legacy_bucket_placement(RGWZonePlacementInfo *rule_info)
+int RGWRados::select_legacy_bucket_placement(RGWZonePlacementInfo *placement_info)
 {
   bufferlist map_bl;
   map<string, bufferlist> m;
@@ -6000,10 +6000,10 @@ read_omap:
     pool_name = miter->first;
   }
 
-  rule_info->data_pool = pool_name;
-  rule_info->data_extra_pool = pool_name;
-  rule_info->index_pool = pool_name;
-  rule_info->index_type = RGWBIType_Normal;
+  placement_info->data_pool = pool_name;
+  placement_info->data_extra_pool = pool_name;
+  placement_info->index_pool = pool_name;
+  placement_info->index_type = RGWBIType_Normal;
 
   return 0;
 }
