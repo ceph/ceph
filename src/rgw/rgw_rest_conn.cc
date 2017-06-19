@@ -34,7 +34,7 @@ RGWRESTConn& RGWRESTConn::operator=(RGWRESTConn&& other)
   key = std::move(other.key);
   self_zone_group = std::move(other.self_zone_group);
   remote_id = std::move(other.remote_id);
-  counter = other.counter.read();
+  counter.set(other.counter.read());
   return *this;
 }
 
