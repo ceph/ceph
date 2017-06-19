@@ -523,7 +523,7 @@ rgw::auth::Engine::result_t
 rgw::auth::AnonymousEngine::authenticate(const req_state* const s) const
 {
   if (! is_applicable(s)) {
-    return result_t::deny();
+    return result_t::deny(-EPERM);
   } else {
     RGWUserInfo user_info;
     rgw_get_anon_user(user_info);
