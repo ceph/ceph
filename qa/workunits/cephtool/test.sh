@@ -8,6 +8,7 @@ set -e
 set -o functrace
 PS4='${BASH_SOURCE[0]}:$LINENO: ${FUNCNAME[0]}:  '
 SUDO=${SUDO:-sudo}
+export CEPH_DEV=1
 
 function get_admin_socket()
 {
