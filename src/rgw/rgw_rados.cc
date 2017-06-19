@@ -5838,7 +5838,7 @@ int RGWRados::create_bucket(RGWUserInfo& owner, rgw_bucket& bucket,
 int RGWRados::select_new_bucket_location(RGWUserInfo& user_info, const std::string& zonegroup_id,
                                          const std::string& requested_placement_id,
                                          std::string *pselected_placement_id,
-                                         RGWZonePlacementInfo *rule_info)
+                                         RGWZonePlacementInfo *placement_info)
 {
   RGWZoneGroup zonegroup;
   int ret = get_zonegroup(zonegroup_id, zonegroup);
@@ -5879,16 +5879,16 @@ int RGWRados::select_new_bucket_location(RGWUserInfo& user_info, const std::stri
   if (pselected_placement_id)
     *pselected_placement_id = placement_id;
 
-  return select_bucket_location_by_rule(placement_id, rule_info);
+  return select_bucket_placement_info(placement_id, placement_info);
 }
 
-int RGWRados::select_bucket_location_by_rule(const string& location_rule, RGWZonePlacementInfo *rule_info)
+int RGWRados::select_bucket_placement_info(const std::string& placement_id, RGWZonePlacementInfo *placement_info)
 {
-  if (location_rule.empty()) {
+  if (placement_id.empty()) {
     /* we can only reach here if we're trying to set a bucket location from a bucket
      * created on a different zone, using a legacy / default pool configuration
      */
-    return select_legacy_bucket_placement(rule_info);
+    return select_legacy_bucket_placement(placement_info);
   }
 
   /*
@@ -5896,8 +5896,7 @@ int RGWRados::select_bucket_location_by_rule(const string& location_rule, RGWZon
    * checking it for the local zone, because that's where this bucket object is going to
    * reside.
    */
-  map<string, RGWZonePlacementInfo>::iterator piter = get_zone_params().placement_rules.find(location_rule);
-  if (piter == get_zone_params().placement_rules.end()) {
+  if (!get_zone_params().get_placement_info(placement_id, placement_info)) {
     /* couldn't find, means we cannot really place data for this bucket in this zone */
     if (get_zonegroup().equals(zonegroup_id)) {
       /* that's a configuration error, zone should have that rule, as we're within the requested
@@ -5907,12 +5906,6 @@ int RGWRados::select_bucket_location_by_rule(const string& location_rule, RGWZon
       /* oh, well, data is not going to be placed here, bucket object is just a placeholder */
       return 0;
     }
-  }
-
-  RGWZonePlacementInfo& placement_info = piter->second;
-
-  if (rule_info) {
-    *rule_info = placement_info;
   }
 
   return 0;

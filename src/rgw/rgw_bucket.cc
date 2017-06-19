@@ -2230,16 +2230,16 @@ public:
       string bucket_instance;
       parse_bucket(key, &tenant_name, &bucket_name, &bucket_instance);
 
-      RGWZonePlacementInfo rule_info;
+      RGWZonePlacementInfo placement_info;
       bci.info.bucket.name = bucket_name;
       bci.info.bucket.bucket_id = bucket_instance;
       bci.info.bucket.tenant = tenant_name;
-      ret = store->select_bucket_location_by_rule(bci.info.default_placement_id, &rule_info);
+      ret = store->select_bucket_placement_info(bci.info.default_placement_id, &placement_info);
       if (ret < 0) {
-        ldout(store->ctx(), 0) << "ERROR: select_bucket_location_by_rule() returned " << ret << dendl;
+        ldout(store->ctx(), 0) << "ERROR: select_bucket_placement_info() returned " << ret << dendl;
         return ret;
       }
-      bci.info.index_type = rule_info.index_type;
+      bci.info.index_type = placement_info.index_type;
     } else {
       /* existing bucket, keep its placement */
       bci.info.bucket.explicit_placement = old_bci.info.bucket.explicit_placement;

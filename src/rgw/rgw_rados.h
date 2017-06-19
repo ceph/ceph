@@ -2594,7 +2594,7 @@ public:
                                  const std::string& requested_placement_id,
                                  std::string *pselected_placement_id,
                                  RGWZonePlacementInfo *rule_info);
-  int select_bucket_location_by_rule(const string& location_rule, RGWZonePlacementInfo *rule_info);
+  int select_bucket_placement_info(const std::string& placement_id, RGWZonePlacementInfo *placement_info);
   void create_bucket_id(string *bucket_id);
 
   bool get_obj_data_pool(const string& placement_rule, const rgw_obj& obj, rgw_pool *pool);
