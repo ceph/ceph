@@ -262,7 +262,7 @@ TokenEngine::authenticate(const std::string& token,
     ldout(cct, 0) << "got expired token: " << t->get_project_name()
                   << ":" << t->get_user_name()
                   << " expired: " << t->get_expires() << dendl;
-    return result_t::deny();
+    return result_t::deny(-EPERM);
   }
 
   /* Check for necessary roles. */
@@ -281,7 +281,7 @@ TokenEngine::authenticate(const std::string& token,
   ldout(cct, 0) << "user does not hold a matching role; required roles: "
                 << g_conf->rgw_keystone_accepted_roles << dendl;
 
-  return result_t::deny();
+  return result_t::deny(-EPERM);
 }
 
 
