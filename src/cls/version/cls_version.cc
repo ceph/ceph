@@ -52,6 +52,11 @@ static int read_version(cls_method_context_t hctx, obj_version *objv, bool impli
 {
   bufferlist bl;
   int ret = cls_cxx_getxattr(hctx, VERSION_ATTR, &bl);
+#if defined(ENOATTR)
+  static_assert( ENODATA == ENOATTR, "ENODATA and ENOATRR need to be equal");
+#endif
+
+
   if (ret == -ENOENT || ret == -ENODATA) {
     objv->ver = 0;
 

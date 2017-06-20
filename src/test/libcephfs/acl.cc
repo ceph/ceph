@@ -171,6 +171,9 @@ TEST(ACL, SetACL) {
   ASSERT_EQ(generate_empty_acl(acl_buf, acl_buf_size, 0600), 0);
   ASSERT_EQ(ceph_fsetxattr(cmount, fd, ACL_EA_ACCESS, acl_buf, acl_buf_size, 0), 0);
   // ACL was deleted
+#if defined(ENOATTR)
+  static_assert( ENODATA == ENOATTR, "ENODATA and ENOATRR need to be equal");
+#endif
   ASSERT_EQ(ceph_fgetxattr(cmount, fd, ACL_EA_ACCESS, NULL, 0), -ENODATA);
 
   ASSERT_EQ(ceph_fstatx(cmount, fd, &stx, CEPH_STATX_MODE, 0), 0);

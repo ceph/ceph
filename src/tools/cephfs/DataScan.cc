@@ -1160,6 +1160,11 @@ int DataScan::scan_frags()
     op.getxattr("parent", &parent_bl, &parent_r);
     op.getxattr("layout", &layout_bl, &layout_r);
     r = metadata_io.operate(oid, &op, &op_bl);
+
+#if defined(ENOATTR)
+  static_assert( ENODATA == ENOATTR, "ENODATA and ENOATRR need to be equal");
+#endif
+
     if (r != 0 && r != -ENODATA) {
       derr << "Unexpected error reading backtrace: " << cpp_strerror(parent_r) << dendl;
       return r;

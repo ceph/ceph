@@ -21,6 +21,7 @@
 #include "rgw/rgw_acl_s3.h"
 #include "rgw_acl.h"
 
+#include "include/compat.h"
 #include "include/str_list.h"
 #include "global/global_init.h"
 #include "common/config.h"
@@ -589,6 +590,11 @@ namespace rgw {
 
   int RGWLibRequest::read_permissions(RGWOp* op) {
     /* bucket and object ops */
+
+#if defined(ENOATTR)
+  static_assert( ENODATA == ENOATTR, "ENODATA and ENOATRR need to be equal");
+#endif
+
     int ret =
       rgw_build_bucket_policies(rgwlib.get_store(), get_state());
     if (ret < 0) {

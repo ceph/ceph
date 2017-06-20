@@ -3168,6 +3168,10 @@ void Server::_lookup_ino_2(MDRequestRef& mdr, int r)
     return;
   }
 
+#if defined(ENOATTR)
+  static_assert( ENODATA == ENOATTR, "ENODATA and ENOATRR need to be equal");
+#endif
+
   // give up
   if (r == -ENOENT || r == -ENODATA)
     r = -ESTALE;

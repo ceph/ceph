@@ -403,7 +403,12 @@ class CLSRGWIssueBILogTrim : public CLSRGWConcurrentIO {
 protected:
   int issue_op(int shard_id, const string& oid) override;
   // Trim until -ENODATA is returned.
-  int valid_ret_code() override { return -ENODATA; }
+  int valid_ret_code() override { 
+    return -ENODATA; 
+#if defined(ENOATTR)
+  static_assert( ENODATA == ENOATTR, "ENODATA and ENOATRR need to be equal");
+#endif
+  }
   bool need_multiple_rounds() override { return true; }
   void add_object(int shard, const string& oid) override { objs_container[shard] = oid; }
   void reset_container(map<int, string>& objs) override {

@@ -2334,6 +2334,9 @@ TEST_P(StoreTest, SimpleAttrTest) {
   {
     bufferptr bp;
     r = store->getattr(cid, hoid, "nofoo", bp);
+#if defined(ENOATTR)
+  static_assert( ENODATA == ENOATTR, "ENODATA and ENOATRR need to be equal");
+#endif
     ASSERT_EQ(-ENODATA, r);
 
     r = store->getattr(cid, hoid, "foo", bp);

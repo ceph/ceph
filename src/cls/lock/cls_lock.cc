@@ -68,6 +68,10 @@ static int read_lock(cls_method_context_t hctx, const string& name, lock_info_t 
   string key = LOCK_PREFIX;
   key.append(name);
  
+#if defined(ENOATTR)
+  static_assert( ENODATA == ENOATTR, "ENODATA and ENOATRR need to be equal");
+#endif
+
   int r = cls_cxx_getxattr(hctx, key.c_str(), &bl);
   if (r < 0) {
     if (r ==  -ENODATA) {

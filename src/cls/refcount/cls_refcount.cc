@@ -40,6 +40,12 @@ static int read_refcount(cls_method_context_t hctx, bool implicit_ref, obj_refco
   bufferlist bl;
   objr->refs.clear();
   int ret = cls_cxx_getxattr(hctx, REFCOUNT_ATTR, &bl);
+
+#if defined(ENOATTR)
+  static_assert( ENODATA == ENOATTR, "ENODATA and ENOATRR need to be equal");
+#endif
+
+
   if (ret == -ENODATA) {
     if (implicit_ref) {
       objr->refs[wildcard_tag] = true;

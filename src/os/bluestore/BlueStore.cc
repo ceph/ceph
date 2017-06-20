@@ -6631,6 +6631,10 @@ int BlueStore::getattr(
   if (!c->exists)
     return -ENOENT;
 
+#if defined(ENOATTR)
+  static_assert( ENODATA == ENOATTR, "ENODATA and ENOATRR need to be equal");
+#endif
+
   int r;
   {
     RWLock::RLocker l(c->lock);
@@ -7633,9 +7637,6 @@ void BlueStore::_txc_state_proc(TransContext *txc)
 	  kv_queue_unsubmitted.push_back(txc);
 	  ++txc->osr->kv_committing_serially;
 	}
-	if (txc->had_ios)
-	  kv_ios++;
-	kv_throttle_costs += txc->cost;
       }
       return;
     case TransContext::STATE_KV_SUBMITTED:
@@ -8164,8 +8165,6 @@ void BlueStore::_kv_sync_thread()
     } else {
       deque<TransContext*> kv_submitting;
       deque<DeferredBatch*> deferred_done, deferred_stable;
-      uint64_t aios = 0, costs = 0;
-
       dout(20) << __func__ << " committing " << kv_queue.size()
 	       << " submitting " << kv_queue_unsubmitted.size()
 	       << " deferred done " << deferred_done_queue.size()
@@ -8175,10 +8174,6 @@ void BlueStore::_kv_sync_thread()
       kv_submitting.swap(kv_queue_unsubmitted);
       deferred_done.swap(deferred_done_queue);
       deferred_stable.swap(deferred_stable_queue);
-      aios = kv_ios;
-      costs = kv_throttle_costs;
-      kv_ios = 0;
-      kv_throttle_costs = 0;
       utime_t start = ceph_clock_now();
       l.unlock();
 
@@ -8187,13 +8182,20 @@ void BlueStore::_kv_sync_thread()
       dout(30) << __func__ << " deferred_done " << deferred_done << dendl;
       dout(30) << __func__ << " deferred_stable " << deferred_stable << dendl;
 
+      int num_aios = 0;
+      for (auto txc : kv_committing) {
+	if (txc->had_ios) {
+	  ++num_aios;
+	}
+      }
+
       bool force_flush = false;
       // if bluefs is sharing the same device as data (only), then we
       // can rely on the bluefs commit to flush the device and make
       // deferred aios stable.  that means that if we do have done deferred
       // txcs AND we are not on a single device, we need to force a flush.
       if (bluefs_single_shared_device && bluefs) {
-	if (aios) {
+	if (num_aios) {
 	  force_flush = true;
 	} else if (kv_committing.empty() && kv_submitting.empty() &&
 		   deferred_stable.empty()) {
@@ -8205,7 +8207,7 @@ void BlueStore::_kv_sync_thread()
 	force_flush = true;
 
       if (force_flush) {
-	dout(20) << __func__ << " num_aios=" << aios
+	dout(20) << __func__ << " num_aios=" << num_aios
 		 << " force_flush=" << (int)force_flush
 		 << ", flushing, deferred done->stable" << dendl;
 	// flush/barrier on block device
@@ -8264,15 +8266,14 @@ void BlueStore::_kv_sync_thread()
 	  --txc->osr->txc_with_unstable_io;
 	}
 	txc->log_state_latency(logger, l_bluestore_state_kv_queued_lat);
+	// release throttle *before* we commit.  this allows new ops
+	// to be prepared and enter pipeline while we are waiting on
+	// the kv commit sync/flush.  then hopefully on the next
+	// iteration there will already be ops awake.  otherwise, we
+	// end up going to sleep, and then wake up when the very first
+	// transaction is ready for commit.
+	throttle_bytes.put(txc->cost);
       }
-
-      // release throttle *before* we commit.  this allows new ops
-      // to be prepared and enter pipeline while we are waiting on
-      // the kv commit sync/flush.  then hopefully on the next
-      // iteration there will already be ops awake.  otherwise, we
-      // end up going to sleep, and then wake up when the very first
-      // transaction is ready for commit.
-      throttle_bytes.put(costs);
 
       PExtentVector bluefs_gift_extents;
       if (bluefs &&
@@ -8570,15 +8571,13 @@ void BlueStore::_deferred_aio_finish(OpSequencer *osr)
   }
 
   {
-    uint64_t costs = 0;
     std::lock_guard<std::mutex> l2(osr->qlock);
     for (auto& i : b->txcs) {
       TransContext *txc = &i;
       txc->state = TransContext::STATE_DEFERRED_CLEANUP;
-      costs += txc->cost;
+      txc->osr->qcond.notify_all();
+      throttle_deferred_bytes.put(txc->cost);
     }
-    osr->qcond.notify_all();
-    throttle_deferred_bytes.put(costs);
     std::lock_guard<std::mutex> l(kv_lock);
     deferred_done_queue.emplace_back(b);
   }

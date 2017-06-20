@@ -82,6 +82,10 @@ int cls_timeindex_trim(
 {
   bool done = false;
 
+#if defined(ENOATTR)
+  static_assert( ENODATA == ENOATTR, "ENODATA and ENOATRR need to be equal");
+#endif
+
   do {
     librados::ObjectWriteOperation op;
     cls_timeindex_trim(op, from_time, to_time, from_marker, to_marker);

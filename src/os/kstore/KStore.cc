@@ -1344,6 +1344,10 @@ int KStore::getattr(
     goto out;
   }
 
+#if defined(ENOATTR)
+  static_assert( ENODATA == ENOATTR, "ENODATA and ENOATRR need to be equal");
+#endif
+
   if (!o->onode.attrs.count(k)) {
     r = -ENODATA;
     goto out;

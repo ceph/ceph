@@ -63,6 +63,10 @@ int cls_log_trim(librados::IoCtx& io_ctx, const string& oid, const utime_t& from
 {
   bool done = false;
 
+#if defined(ENOATTR)
+  static_assert( ENODATA == ENOATTR, "ENODATA and ENOATRR need to be equal");
+#endif
+
   do {
     ObjectWriteOperation op;
 

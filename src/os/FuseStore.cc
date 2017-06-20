@@ -4,6 +4,7 @@
 #include "include/compat.h"
 #include "FuseStore.h"
 #include "os/ObjectStore.h"
+#include "include/compat.h"
 #include "include/stringify.h"
 #include "common/errno.h"
 
@@ -358,6 +359,11 @@ static int os_getattr(const char *path, struct stat *stbuf)
 
   case FN_OBJECT_ATTR_VAL:
     {
+
+#if defined(ENOATTR)
+  static_assert( ENODATA == ENOATTR, "ENODATA and ENOATRR need to be equal");
+#endif
+
       if (!fs->store->exists(cid, oid))
 	return -ENOENT;
       bufferptr v;

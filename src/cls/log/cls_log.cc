@@ -271,6 +271,10 @@ static int cls_log_trim(cls_method_context_t hctx, bufferlist *in, bufferlist *o
     removed = true;
   }
 
+#if defined(ENOATTR)
+  static_assert( ENODATA == ENOATTR, "ENODATA and ENOATRR need to be equal");
+#endif
+
   if (!removed)
     return -ENODATA;
 

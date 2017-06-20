@@ -57,6 +57,10 @@ static int add(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 
   double value;
 
+#if defined(ENOATTR)
+  static_assert( ENODATA == ENOATTR, "ENODATA and ENOATRR need to be equal");
+#endif
+
   if (ret == -ENODATA || bl.length() == 0) {
     value = 0;
   } else if (ret < 0) {

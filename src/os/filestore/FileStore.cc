@@ -3052,6 +3052,11 @@ void FileStore::_do_transaction(
 	// -ENOENT is normally okay
 	// ...including on a replayed OP_RMCOLL with checkpoint mode
 	ok = true;
+
+#if defined(ENOATTR)
+  static_assert( ENODATA == ENOATTR, "ENODATA and ENOATRR need to be equal");
+#endif
+
       if (r == -ENODATA)
 	ok = true;
 

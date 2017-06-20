@@ -7,6 +7,7 @@
 #include "include/compat.h"
 #include <errno.h>
 #include <stdio.h>
+#include "include/compat.h"
 #include "common/xattr.h"
 #include "include/assert.h"
 #include "include/buffer_fwd.h"
@@ -99,6 +100,10 @@ int chain_setxattr(
   static_assert(
     !skip_chain_cleanup || ensure_single_attr,
     "skip_chain_cleanup must imply ensure_single_attr");
+#if defined(ENOATTR)
+  static_assert( ENODATA == ENOATTR,
+    "Include error ENODATA needs to be ENOATTR" );
+#endif
 
   do {
     size_t chunk_size = (size < max_chunk_size ? size : max_chunk_size);

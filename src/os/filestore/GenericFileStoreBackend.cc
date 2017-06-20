@@ -359,6 +359,11 @@ int GenericFileStoreBackend::_crc_load_or_init(int fd, SloppyCRCMap *cm)
   bufferptr bp;
   int r = 0;
   int l = chain_fgetxattr(fd, SLOPPY_CRC_XATTR, buf, sizeof(buf));
+
+#if defined(ENOATTR)
+  static_assert( ENODATA == ENOATTR, "ENODATA and ENOATRR need to be equal");
+#endif
+
   if (l == -ENODATA) {
     return 0;
   }

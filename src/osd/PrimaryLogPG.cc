@@ -807,6 +807,10 @@ bool PrimaryLogPG::pgls_filter(PGLSFilter *filter, hobject_t& sobj, bufferlist& 
 {
   bufferlist bl;
 
+#if defined(ENOATTR)
+  static_assert( ENODATA == ENOATTR, "ENODATA and ENOATRR need to be equal");
+#endif
+
   // If filter has expressed an interest in an xattr, load it.
   if (!filter->get_xattr().empty()) {
     int ret = pgbackend->objects_get_attr(
@@ -10623,10 +10627,6 @@ void PrimaryLogPG::on_shutdown()
   cancel_proxy_ops(false);
   apply_and_flush_repops(false);
   cancel_log_updates();
-  // we must remove PGRefs, so do this this prior to release_backoffs() callers
-  clear_backoffs(); 
-  // clean up snap trim references
-  snap_trimmer_machine.process_event(Reset());
 
   pgbackend->on_change();
 
