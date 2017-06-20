@@ -1069,3 +1069,8 @@ int librados::RadosClient::service_daemon_update_status(
   }
   return mgrclient.service_daemon_update_status(status);
 }
+
+mon_feature_t librados::RadosClient::get_required_monitor_features() const
+{
+  return monclient.monmap.get_required_features();
+}

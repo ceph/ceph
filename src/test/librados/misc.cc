@@ -1229,3 +1229,95 @@ TEST_F(LibRadosMisc, CmpExt) {
   ASSERT_EQ(-MAX_ERRNO - 5,
 	    rados_cmpext(ioctx, "cmpextpp", mismatch_str, sizeof(mismatch_str), 0));
 }
+
+TEST_F(LibRadosMisc, Applications) {
+  char apps[128];
+  size_t app_len;
+
+  app_len = sizeof(apps);
+  ASSERT_EQ(0, rados_application_list(ioctx, apps, &app_len));
+  ASSERT_EQ(0U, app_len);
+
+  ASSERT_EQ(0, rados_application_enable(ioctx, "app1", 0));
+  ASSERT_EQ(-EPERM, rados_application_enable(ioctx, "app2", 0));
+  ASSERT_EQ(0, rados_application_enable(ioctx, "app2", 1));
+
+  ASSERT_EQ(-ERANGE, rados_application_list(ioctx, apps, &app_len));
+  ASSERT_EQ(10U, app_len);
+  ASSERT_EQ(0, rados_application_list(ioctx, apps, &app_len));
+  ASSERT_EQ(10U, app_len);
+  ASSERT_EQ(0, memcmp("app1\0app2\0", apps, app_len));
+
+  char keys[128];
+  char vals[128];
+  size_t key_len;
+  size_t val_len;
+
+  key_len = sizeof(keys);
+  val_len = sizeof(vals);
+  ASSERT_EQ(-ENOENT, rados_application_metadata_list(ioctx, "dne", keys,
+                                                     &key_len, vals, &val_len));
+  ASSERT_EQ(0, rados_application_metadata_list(ioctx, "app1", keys, &key_len,
+                                               vals, &val_len));
+  ASSERT_EQ(0U, key_len);
+  ASSERT_EQ(0U, val_len);
+
+  ASSERT_EQ(-ENOENT, rados_application_metadata_set(ioctx, "dne", "key",
+                                                    "value"));
+  ASSERT_EQ(0, rados_application_metadata_set(ioctx, "app1", "key1", "value1"));
+  ASSERT_EQ(0, rados_application_metadata_set(ioctx, "app1", "key2", "value2"));
+
+  ASSERT_EQ(-ERANGE, rados_application_metadata_list(ioctx, "app1", keys,
+                                                     &key_len, vals, &val_len));
+  ASSERT_EQ(10U, key_len);
+  ASSERT_EQ(14U, val_len);
+  ASSERT_EQ(0, rados_application_metadata_list(ioctx, "app1", keys, &key_len,
+                                               vals, &val_len));
+  ASSERT_EQ(10U, key_len);
+  ASSERT_EQ(14U, val_len);
+  ASSERT_EQ(0, memcmp("key1\0key2\0", keys, key_len));
+  ASSERT_EQ(0, memcmp("value1\0value2\0", vals, val_len));
+
+  ASSERT_EQ(0, rados_application_metadata_remove(ioctx, "app1", "key1"));
+  ASSERT_EQ(0, rados_application_metadata_list(ioctx, "app1", keys, &key_len,
+                                               vals, &val_len));
+  ASSERT_EQ(5U, key_len);
+  ASSERT_EQ(7U, val_len);
+  ASSERT_EQ(0, memcmp("key2\0", keys, key_len));
+  ASSERT_EQ(0, memcmp("value2\0", vals, val_len));
+}
+
+TEST_F(LibRadosMiscPP, Applications) {
+  std::set<std::string> expected_apps;
+  std::set<std::string> apps;
+  ASSERT_EQ(0, ioctx.application_list(&apps));
+  ASSERT_EQ(expected_apps, apps);
+
+  ASSERT_EQ(0, ioctx.application_enable("app1", false));
+  ASSERT_EQ(-EPERM, ioctx.application_enable("app2", false));
+  ASSERT_EQ(0, ioctx.application_enable("app2", true));
+
+  expected_apps = {"app1", "app2"};
+  ASSERT_EQ(0, ioctx.application_list(&apps));
+  ASSERT_EQ(expected_apps, apps);
+
+  std::map<std::string, std::string> expected_meta;
+  std::map<std::string, std::string> meta;
+  ASSERT_EQ(-ENOENT, ioctx.application_metadata_list("dne", &meta));
+  ASSERT_EQ(0, ioctx.application_metadata_list("app1", &meta));
+  ASSERT_EQ(expected_meta, meta);
+
+  ASSERT_EQ(-ENOENT, ioctx.application_metadata_set("dne", "key1", "value1"));
+  ASSERT_EQ(0, ioctx.application_metadata_set("app1", "key1", "value1"));
+  ASSERT_EQ(0, ioctx.application_metadata_set("app1", "key2", "value2"));
+
+  expected_meta = {{"key1", "value1"}, {"key2", "value2"}};
+  ASSERT_EQ(0, ioctx.application_metadata_list("app1", &meta));
+  ASSERT_EQ(expected_meta, meta);
+
+  ASSERT_EQ(0, ioctx.application_metadata_remove("app1", "key1"));
+
+  expected_meta = {{"key2", "value2"}};
+  ASSERT_EQ(0, ioctx.application_metadata_list("app1", &meta));
+  ASSERT_EQ(expected_meta, meta);
+}
