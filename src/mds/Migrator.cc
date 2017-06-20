@@ -781,6 +781,10 @@ void Migrator::export_dir(CDir *dir, mds_rank_t dest)
     dout(7) << "read-only FS, no exports for now" << dendl;
     return;
   }
+  if (!mds->mdsmap->is_active(dest)) {
+    dout(7) << "dest not active, no exports for now" << dendl;
+    return;
+  }
   if (mds->is_cluster_degraded()) {
     dout(7) << "cluster degraded, no exports for now" << dendl;
     return;
