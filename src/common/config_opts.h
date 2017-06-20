@@ -1746,6 +1746,7 @@ OPTION(mgr_connect_retry_interval, OPT_DOUBLE, 1.0)
 OPTION(mon_mgr_digest_period, OPT_INT, 5)  // How frequently to send digests
 OPTION(mon_mgr_beacon_grace, OPT_INT, 30)  // How long to wait to failover
 OPTION(mon_mgr_inactive_grace, OPT_INT, 60) // How long before health WARN -> ERR
+OPTION(mon_mgr_mkfs_grace, OPT_INT, 60) // How long before we complain about MGR_DOWN
 OPTION(rgw_crypt_require_ssl, OPT_BOOL, true) // requests including encryption key headers must be sent over ssl
 OPTION(rgw_crypt_default_encryption_key, OPT_STR, "") // base64 encoded key for encryption of rgw objects
 OPTION(rgw_crypt_s3_kms_encryption_keys, OPT_STR, "") // extra keys that may be used for aws:kms
