@@ -3,6 +3,8 @@ roles:
 tasks:
 - install:
 - ceph:
+    log-whitelist:
+      - HEALTH_WARN OSD_CACHE_NO_HIT_SET
     conf:
       global:
         osd max object name len: 460

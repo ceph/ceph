@@ -1,3 +1,7 @@
+overrides:
+  ceph:
+    log-whitelist:
+      - HEALTH_WARN MON_DOWN
 tasks:
 - mon_thrash:
     revive_delay: 20
