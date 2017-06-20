@@ -174,9 +174,9 @@ function TEST_erasure_code_pool_lrc() {
 function TEST_replicated_pool() {
     local dir=$1
     run_mon $dir a || return 1
-    ceph osd pool create replicated 12 12 replicated replicated_ruleset 2>&1 | \
+    ceph osd pool create replicated 12 12 replicated replicated_rule 2>&1 | \
         grep "pool 'replicated' created" || return 1
-    ceph osd pool create replicated 12 12 replicated replicated_ruleset 2>&1 | \
+    ceph osd pool create replicated 12 12 replicated replicated_rule 2>&1 | \
         grep 'already exists' || return 1
     # default is replicated
     ceph osd pool create replicated1 12 12 2>&1 | \

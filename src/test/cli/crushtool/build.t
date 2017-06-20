@@ -51,7 +51,7 @@
   }
   
   # rules
-  rule replicated_ruleset {
+  rule replicated_rule {
   \truleset 0 (esc)
   \ttype replicated (esc)
   \tmin_size 1 (esc)
