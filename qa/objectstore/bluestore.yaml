@@ -12,5 +12,7 @@ overrides:
         debug bdev: 20
         debug bluefs: 20
         debug rocksdb: 10
+        bluestore fsck on mount: true
+
 # this doesn't work with failures bc the log writes are not atomic across the two backends
 #        bluestore bluefs env mirror: true
