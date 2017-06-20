@@ -1554,7 +1554,7 @@ int BlueFS::_flush_range(FileWriter *h, uint64_t offset, uint64_t length)
     dout(20) << __func__ << " using partial tail 0x"
              << std::hex << partial << std::dec << dendl;
     assert(h->tail_block.length() == partial);
-    bl.claim_append(h->tail_block);
+    bl.claim_append_piecewise(h->tail_block);
     x_off -= partial;
     offset -= partial;
     length += partial;
@@ -1566,11 +1566,11 @@ int BlueFS::_flush_range(FileWriter *h, uint64_t offset, uint64_t length)
     }
   }
   if (length == partial + h->buffer.length()) {
-    bl.claim_append(h->buffer);
+    bl.claim_append_piecewise(h->buffer);
   } else {
     bufferlist t;
-    t.substr_of(h->buffer, 0, length);
-    bl.claim_append(t);
+    h->buffer.splice(0, length, &t);
+    bl.claim_append_piecewise(t);
     t.substr_of(h->buffer, length, h->buffer.length() - length);
     h->buffer.swap(t);
     dout(20) << " leaving 0x" << std::hex << h->buffer.length() << std::dec
