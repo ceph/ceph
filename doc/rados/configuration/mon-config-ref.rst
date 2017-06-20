@@ -1025,12 +1025,6 @@ Miscellaneous
 :Type: 32-bit Integer
 :Default: ``100``
 
-``mon sync fs threshold`` 
-
-:Description: Synchronize with the filesystem when writing the specified number of objects. Set it to ``0`` to disable it.
-:Type: 32-bit Integer
-:Default: ``5`` 
-
 ``mon subscribe interval`` 
 
 :Description: The refresh interval (in seconds) for subscriptions. The 
