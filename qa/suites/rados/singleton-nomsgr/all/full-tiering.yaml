@@ -5,6 +5,8 @@ overrides:
   ceph:
     log-whitelist:
       - is full
+      - HEALTH_ERR POOL_FULL
+      - HEALTH_WARN POOL_NEAR_FULL
 tasks:
 - install:
 - ceph:
