@@ -117,24 +117,37 @@ static string RGW_DEFAULT_PERIOD_ROOT_POOL = "rgw.root";
 
 #define dout_subsys ceph_subsys_rgw
 
-
 static bool rgw_get_obj_data_pool(const RGWZoneGroup& zonegroup, const RGWZoneParams& zone_params,
-                                  const string& placement_id, const rgw_obj& obj, rgw_pool *pool)
+                                  const std::string& requested_placement_id, const rgw_obj& obj,
+                                  rgw_pool *pool)
 {
-  if (!zone_params.get_head_data_pool(placement_id, obj, pool)) {
-    RGWZonePlacementInfo placement_info;
-    if (!zone_params.get_placement_info(zonegroup.default_placement_id, &placement_info)) {
-      return false;
-    }
-
+  const auto& explicit_placement = obj.bucket.explicit_placement;
+  if (!explicit_placement.data_pool.empty()) {
+    // explicit bucket placemenet wins
     if (!obj.in_extra_data) {
-      *pool = placement_info.data_pool;
+      *pool = explicit_placement.data_pool;
     } else {
-      *pool = placement_info.get_data_extra_pool();
+      *pool = explicit_placement.get_data_extra_pool();
     }
+    return true;
   }
 
-  return true;
+  RGWZonePlacementInfo placement_info;
+  if (!requested_placement_id.empty() &&
+      zone_params.get_placement_info(requested_placement_id, &placement_info)) {
+      // requested placement wins
+  } else if (!zone_params.get_placement_info(zonegroup.default_placement_id, &placement_info)) {
+        // zonegroup default placement wins
+        return false;
+  }
+
+   if (!obj.in_extra_data) {
+     *pool = placement_info.data_pool;
+   } else {
+     *pool = placement_info.get_data_extra_pool();
+   }
+
+   return true;
 }
 
 static bool rgw_obj_to_raw(const RGWZoneGroup& zonegroup, const RGWZoneParams& zone_params,
