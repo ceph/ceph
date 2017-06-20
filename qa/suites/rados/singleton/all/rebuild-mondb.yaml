@@ -15,7 +15,11 @@ tasks:
 - install:
 - ceph:
     log-whitelist:
-    - no reply from
+      - no reply from
+      - HEALTH_WARN MON_DOWN
+      - HEALTH_WARN OSDMAP_FLAGS
+      - HEALTH_WARN OSD_
+      - HEALTH_WARN PG_
 - full_sequential:
   - radosbench:
       clients: [client.0]

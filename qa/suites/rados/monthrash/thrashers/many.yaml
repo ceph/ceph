@@ -1,5 +1,7 @@
 overrides:
   ceph:
+    log-whitelist:
+      - HEALTH_WARN MON_DOWN
     conf:
       osd:
         mon client ping interval: 4

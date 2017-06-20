@@ -15,7 +15,10 @@ tasks:
 - install:
 - ceph:
     log-whitelist:
-    - wrongly marked me down
+      - wrongly marked me down
+      - HEALTH_WARN OSDMAP_FLAGS
+      - HEALTH_WARN OSD_
+      - HEALTH_WARN PG_
     conf:
       osd:
         osd min pg log entries: 5

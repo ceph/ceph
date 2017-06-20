@@ -17,6 +17,9 @@ overrides:
       - 'size 1 != size'
       - attr name mismatch
       - Regular scrub request, losing deep-scrub details
+      - HEALTH_WARN OSDMAP_FLAGS
+      - HEALTH_WARN OSD_
+      - HEALTH_WARN PG_
     conf:
       osd:
         filestore debug inject read err: true

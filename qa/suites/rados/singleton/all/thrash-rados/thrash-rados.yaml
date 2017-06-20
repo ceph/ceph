@@ -16,7 +16,7 @@ tasks:
 - install:
 - ceph:
     log-whitelist:
-    - wrongly marked me down
+      - wrongly marked me down
 - thrashosds:
     op_delay: 30
     clean_interval: 120

@@ -5,6 +5,9 @@ overrides:
     log-whitelist:
       - MDS in read-only mode
       - force file system read-only
+      - HEALTH_WARN OSD_FLAGS
+      - HEALTH_ERR OSD_FULL
+      - HEALTH_WARN MDS_READ_ONLY
 tasks:
 - install:
 - ceph:
