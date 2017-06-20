@@ -1361,14 +1361,6 @@ static int bucket_stats(RGWRados *store, const std::string& tenant_name, std::st
 
   rgw_bucket& bucket = bucket_info.bucket;
 
-  string bucket_ver, master_ver;
-  string max_marker;
-  int ret = store->get_bucket_stats(bucket_info, RGW_NO_SHARD, &bucket_ver, &master_ver, stats, &max_marker);
-  if (ret < 0) {
-    cerr << "error getting bucket stats ret=" << ret << std::endl;
-    return ret;
-  }
-
   utime_t ut(mtime);
 
   formatter->open_object_section("stats");
@@ -1380,14 +1372,24 @@ static int bucket_stats(RGWRados *store, const std::string& tenant_name, std::st
   formatter->dump_string("marker", bucket.marker);
   formatter->dump_stream("index_type") << bucket_info.index_type;
   ::encode_json("owner", bucket_info.owner, formatter);
+  formatter->dump_stream("mtime") << ut;
+  encode_json("bucket_quota", bucket_info.quota, formatter);
+  string bucket_ver, master_ver;
+  string max_marker; 
+  if (bucket_info.zonegroup == store->get_zonegroup().get_id()) {
+   int ret = store->get_bucket_stats(bucket_info, RGW_NO_SHARD, &bucket_ver, &master_ver, stats, &max_marker);
+    if (ret < 0) {
+      cerr << "error getting bucket stats ret=" << ret << std::endl;
+      return ret;
+    }
+
+  }
+
+  dump_bucket_usage(stats, formatter);
   formatter->dump_string("ver", bucket_ver);
   formatter->dump_string("master_ver", master_ver);
-  formatter->dump_stream("mtime") << ut;
   formatter->dump_string("max_marker", max_marker);
-  dump_bucket_usage(stats, formatter);
-  encode_json("bucket_quota", bucket_info.quota, formatter);
   formatter->close_section();
-
   return 0;
 }
 
@@ -2234,13 +2236,17 @@ public:
       bci.info.bucket.name = bucket_name;
       bci.info.bucket.bucket_id = bucket_instance;
       bci.info.bucket.tenant = tenant_name;
-      ret = store->select_bucket_location_by_rule(bci.info.placement_rule, &rule_info);
-      if (ret < 0) {
-        ldout(store->ctx(), 0) << "ERROR: select_bucket_placement() returned " << ret << dendl;
-        return ret;
+
+      if (store->get_zonegroup().get_id() == bci.info.zonegroup) {
+        ret = store->select_bucket_location_by_rule(bci.info.placement_rule, &rule_info);
+        if (ret < 0) {
+          ldout(store->ctx(), 0) << "ERROR: select_bucket_placement() returned " << ret << dendl;
+          return ret;
+        }
+
+        bci.info.index_type = rule_info.index_type;
       }
-      bci.info.index_type = rule_info.index_type;
-    } else {
+   } else {
       /* existing bucket, keep its placement */
       bci.info.bucket.explicit_placement = old_bci.info.bucket.explicit_placement;
       bci.info.placement_rule = old_bci.info.placement_rule;
@@ -2264,9 +2270,11 @@ public:
 
     objv_tracker = bci.info.objv_tracker;
 
-    ret = store->init_bucket_index(bci.info, bci.info.num_shards);
-    if (ret < 0)
-      return ret;
+    if (store->get_zonegroup().get_id() == bci.info.zonegroup) {
+      ret = store->init_bucket_index(bci.info, bci.info.num_shards);
+      if (ret < 0)
+        return ret;
+    }
 
     return STATUS_APPLIED;
   }

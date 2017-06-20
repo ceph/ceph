@@ -2313,7 +2313,6 @@ protected:
 
   bool pools_initialized;
 
-  string zonegroup_id;
   string zone_name;
   string trans_id_suffix;
 
