@@ -1137,6 +1137,10 @@ ostream& operator<<(ostream& out, const pool_opts_t& opts)
 
 // -- pg_pool_t --
 
+const char *pg_pool_t::APPLICATION_NAME_CEPHFS("cephfs");
+const char *pg_pool_t::APPLICATION_NAME_RBD("rbd");
+const char *pg_pool_t::APPLICATION_NAME_RGW("rgw");
+
 void pg_pool_t::dump(Formatter *f) const
 {
   f->dump_unsigned("flags", get_flags());

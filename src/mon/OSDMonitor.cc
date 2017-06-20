@@ -1009,6 +1009,70 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
 	    pending_inc.new_erasure_code_profiles[p.first] = newprofile;
 	  }
 	}
+
+        // auto-enable pool applications upon upgrade
+        // NOTE: this can be removed post-Luminous assuming upgrades need to
+        // proceed through Luminous
+        for (auto &pool_pair : tmp.pools) {
+          int64_t pool_id = pool_pair.first;
+          pg_pool_t pg_pool = pool_pair.second;
+          std::string pool_name = tmp.get_pool_name(pool_id);
+          uint32_t match_count = 0;
+
+          // CephFS
+          FSMap const &pending_fsmap = mon->mdsmon()->get_pending();
+          if (pending_fsmap.pool_in_use(pool_id)) {
+            dout(10) << __func__ << " auto-enabling CephFS on pool '"
+                     << pool_name << "'" << dendl;
+            pg_pool.application_metadata.insert(
+              {pg_pool_t::APPLICATION_NAME_CEPHFS, {}});
+            ++match_count;
+          }
+
+          // RBD heuristics (default OpenStack pool names from docs and
+          // ceph-ansible)
+          if (boost::algorithm::contains(pool_name, "rbd") ||
+              pool_name == "images" || pool_name == "volumes" ||
+              pool_name == "backups" || pool_name == "vms") {
+            dout(10) << __func__ << " auto-enabling RBD on pool '"
+                     << pool_name << "'" << dendl;
+            pg_pool.application_metadata.insert(
+              {pg_pool_t::APPLICATION_NAME_RBD, {}});
+            ++match_count;
+          }
+
+          // RGW heuristics
+          if (boost::algorithm::contains(pool_name, ".rgw") ||
+              boost::algorithm::contains(pool_name, ".log") ||
+              boost::algorithm::contains(pool_name, ".intent-log") ||
+              boost::algorithm::contains(pool_name, ".usage") ||
+              boost::algorithm::contains(pool_name, ".users")) {
+            dout(10) << __func__ << " auto-enabling RGW on pool '"
+                     << pool_name << "'" << dendl;
+            pg_pool.application_metadata.insert(
+              {pg_pool_t::APPLICATION_NAME_RGW, {}});
+            ++match_count;
+          }
+
+          // OpenStack gnocchi (from ceph-ansible)
+          if (pool_name == "metrics" && match_count == 0) {
+            dout(10) << __func__ << " auto-enabling OpenStack Gnocchi on pool '"
+                     << pool_name << "'" << dendl;
+            pg_pool.application_metadata.insert({"openstack_gnocchi", {}});
+            ++match_count;
+          }
+
+          if (match_count == 1) {
+            pg_pool.last_change = pending_inc.epoch;
+            pending_inc.new_pools[pool_id] = pg_pool;
+          } else if (match_count > 1) {
+            auto pstat = mon->pgservice->get_pool_stat(pool_id);
+            if (pstat != nullptr && pstat->stats.sum.num_objects > 0) {
+              mon->clog->info() << "unable to auto-enable application for pool "
+                                << "'" << pool_name << "'";
+            }
+          }
+        }
       }
     }
   }
