@@ -513,16 +513,14 @@ class TestStrays(CephFSTestCase):
 
         return rank_0_id, rank_1_id
 
-    def _force_migrate(self, from_id, to_id, path, watch_ino):
+    def _force_migrate(self, to_id, path, watch_ino):
         """
-        :param from_id: MDS id currently containing metadata
         :param to_id: MDS id to move it to
         :param path: Filesystem path (string) to move
         :param watch_ino: Inode number to look for at destination to confirm move
         :return: None
         """
-        result = self.fs.mds_asok(["export", "dir", path, "1"], from_id)
-        self.assertEqual(result["return_code"], 0)
+        self.mount_a.run_shell(["setfattr", "-n", "ceph.dir.pin", "-v", "1", path])
 
         # Poll the MDS cache dump to watch for the export completing
         migrated = False
@@ -563,7 +561,7 @@ class TestStrays(CephFSTestCase):
 
         self.mount_a.create_n_files("delete_me/file", file_count)
 
-        self._force_migrate(rank_0_id, rank_1_id, "/delete_me",
+        self._force_migrate(rank_1_id, "delete_me",
                             self.mount_a.path_to_ino("delete_me/file_0"))
 
         self.mount_a.run_shell(["rm", "-rf", Raw("delete_me/*")])
@@ -616,7 +614,7 @@ class TestStrays(CephFSTestCase):
         self.mount_a.run_shell(["touch", "dir_1/original"])
         self.mount_a.run_shell(["ln", "dir_1/original", "dir_2/linkto"])
 
-        self._force_migrate(rank_0_id, rank_1_id, "/dir_1",
+        self._force_migrate(rank_1_id, "dir_1",
                             self.mount_a.path_to_ino("dir_1/original"))
 
         # empty mds cache. otherwise mds reintegrates stray when unlink finishes
