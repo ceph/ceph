@@ -3,7 +3,8 @@ import logging
 import os
 from teuthology import misc as teuthology
 from teuthology.orchestra import run
-
+import pwd
+import yaml
 import cStringIO
 import json
 import psutil
@@ -12,7 +13,6 @@ log = logging.getLogger(__name__)
 
 
 def NFS_Ganesh_RGW_config_gen(sys_conf):
-
     ganesha_conf = '''
                 EXPORT
                 {
@@ -49,10 +49,11 @@ def NFS_Ganesh_RGW_config_gen(sys_conf):
 
         ''' % (sys_conf['user_id'],
                sys_conf['access_key'],
-                sys_conf['secret_key'],
-                sys_conf['rgw_hostname'])
+               sys_conf['secret_key'],
+               sys_conf['rgw_hostname'])
 
     return ganesha_conf
+
 
 
 @contextlib.contextmanager
@@ -66,6 +67,10 @@ def task(ctx, config):
 
     assert isinstance(config, dict), \
         "task set-repo only supports a dictionary for configuration"
+
+    test_name = config['test-name'] + ".py"
+
+    log.info('got test_name: %s' % test_name)
 
     remotes = ctx.cluster.only(teuthology.is_type('mon'))
     mon = [
@@ -85,12 +90,8 @@ def task(ctx, config):
 
     # stop native nfs-ganesha service.
 
-    rgw[0].run(args=['sudo', 'systemctl', 'stop', 'nfs-server.service']) # systemctl stop nfs-server.service
-    rgw[0].run(args=['sudo', 'systemctl', 'disable', 'nfs-server.service']) # systemctl disable nfs-server.service
-
-    # install nfs-ganesha-rgw
-
-    # rgw[0].run(args=['sudo', 'yum', 'install', 'nfs-ganesha-rgw', '-y'])
+    rgw[0].run(args=['sudo', 'systemctl', 'stop', 'nfs-server.service'])  # systemctl stop nfs-server.service
+    rgw[0].run(args=['sudo', 'systemctl', 'disable', 'nfs-server.service'])  # systemctl disable nfs-server.service
 
     sys_conf = {}
 
@@ -131,35 +132,78 @@ def task(ctx, config):
 
     ganesha_config_path_on_client = '/etc/ganesha/ganesha.conf'
 
-    teuthology.sudo_write_file(rgw[0],ganesha_config_path_on_client, ganesha_config)
+    teuthology.sudo_write_file(rgw[0], ganesha_config_path_on_client, ganesha_config)
 
     rgw[0].run(args=['cd', 'nfs-ganesha-rgw', run.Raw(';'), 'git', 'clone',
-                         'http://gitlab.osas.lab.eng.rdu2.redhat.com/ceph/ceph-qe-scripts.git'])
+                     'http://gitlab.osas.lab.eng.rdu2.redhat.com/ceph/ceph-qe-scripts.git'])
 
-    # rgw[0].run(args=['cd', 'nfs-ganesha-rgw/ceph-qe-scripts', run.Raw(';'), 'git', 'checkout', 'wip-nfs-ganesha'])
+    rgw[0].run(args=['cd', 'nfs-ganesha-rgw/ceph-qe-scripts', run.Raw(';'), 'git', 'checkout', 'wip-nfs-ganesh-tests'])
 
-    rgw[0].run(args=['sudo', 'pip', 'install', 'psutil'])
+    rgw[0].run(args=['virtualenv', 'venv'])
+    rgw[0].run(
+        args=[
+            'source',
+            'venv/bin/activate',
+            run.Raw(';'),
+            run.Raw('pip install boto names PyYaml psutil ConfigParser'),
+            run.Raw(';'),
+            'deactivate'])
 
     # kill nfs_ganesha process
 
-    rgw[0].run(args=[run.Raw('sudo python nfs-ganesha-rgw/ceph-qe-scripts/rgw/tests/nfs-ganesha/process_manage.py')])
+    """
+    
+    rgw[0].run(
+        args=[
+            run.Raw(
+                'sudo venv/bin/python2.7 nfs-ganesha-rgw/ceph-qe-scripts/rgw/lib/process_manage.py')])
+    
+    """
+
+    # rgw[0].run(args=[run.Raw('sudo python nfs-ganesha-rgw/ceph-qe-scripts/rgw/tests/nfs-ganesha/process_manage.py')])
 
     # start the nfs_ganesha service
 
-    rgw[0].run(args=['sudo', '/usr/bin/ganesha.nfsd', '-f','/etc/ganesha/ganesha.conf'])
+    rgw[0].run(args=['sudo', '/usr/bin/ganesha.nfsd', '-f', '/etc/ganesha/ganesha.conf'])
 
     rgw[0].run(args=['mkdir', '-p', run.Raw('~/ganesha-mount')])
 
     # mount NFS_Ganesha
 
     rgw[0].run(args=[run.Raw('sudo mount -v -t nfs -o nfsvers=4.1,sync,rw,noauto,soft,proto=tcp %s:/  %s' % (
-    rgw[0].shortname, '~/ganesha-mount'))])
+        rgw[0].shortname, '~/ganesha-mount'))])
 
-    # run the basic IO
+    # copy rgw user details (yaml format) to nfs node or ganesha node
+
+    rgw_user_config = dict(user_id=sys_conf['user_id'],
+                           access_key=sys_conf['access_key'],
+                           secret_key=sys_conf['secret_key'],
+                           rgw_hostname=rgw[0].shortname,
+                           ganesha_config_exists=True,
+                           already_mounted=True
+                           )
+
+    yaml_fname = 'rgw_user.yaml'
+
+    temp_yaml_file = yaml_fname + "_" + str(os.getpid()) + pwd.getpwuid(os.getuid()).pw_name
+
+    log.info('creating yaml from the config: %s' % rgw_user_config)
+    local_file = '/tmp/' + temp_yaml_file
+    with open(local_file, 'w') as outfile:
+        outfile.write(yaml.dump(rgw_user_config, default_flow_style=False))
+
+    log.info('copying yaml to the client node')
+    destination_location = 'nfs-ganesha-rgw/ceph-qe-scripts/rgw/tests/nfs-ganesha/yaml/' + yaml_fname
+    rgw[0].put_file(local_file, destination_location)
+
+    rgw[0].run(args=[run.Raw('sudo rm -rf %s' % local_file)], check_status=False)
+
+    # run the test
 
     rgw[0].run(
         args=[run.Raw(
-            'sudo python ~/nfs-ganesha-rgw/ceph-qe-scripts/rgw/tests/nfs-ganesha/basic_io.py -c 30-4-800 -p ~/ganesha-mount -r 100')])
+            'sudo venv/bin/python2.7 nfs-ganesha-rgw/ceph-qe-scripts/rgw/tests/nfs-ganesha/%s  -c '
+            'nfs-ganesha-rgw/ceph-qe-scripts/rgw/tests/nfs-ganesha/yaml/rgw_user.yaml' % test_name)])
 
     try:
         yield
@@ -170,6 +214,15 @@ def task(ctx, config):
             os.makedirs(path)
             sub = os.path.join(path, rgw[0].shortname)
             os.makedirs(sub)
+
             # teuthology.pull_directory(clients[0], '/tmp/apilog',os.path.join(sub, 'log'))
-            rgw[0].run(args=['sudo', 'rm', '-rf', run.Raw('~/nfs-ganesha-rgw')])
+
             rgw[0].run(args=['sudo', 'umount', run.Raw('~/ganesha-mount')])
+
+            cleanup = lambda x: rgw[0].run(args=[run.Raw('sudo rm -rf %s' % x)])
+
+            soot = ['venv', 'rgw-tests', '*.json', 'Download.*', 'Download', '*.mpFile', 'x*', 'key.*', 'Mp.*',
+                    '*.key.*']
+
+            map(cleanup, soot)
+
