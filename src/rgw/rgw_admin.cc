@@ -5770,11 +5770,10 @@ next:
       cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
       return -ret;
     }
-    list<rgw_obj_index_key> oid_list;
+    list<rgw_obj> oid_list;
     rgw_obj_key key(object, object_version);
-    rgw_obj_index_key index_key;
-    key.get_index_key(&index_key);
-    oid_list.push_back(index_key);
+    rgw_obj obj(bucket, key);
+    oid_list.push_back(obj);
     ret = store->remove_objs_from_index(bucket_info, oid_list);
     if (ret < 0) {
       cerr << "ERROR: remove_obj_from_index() returned error: " << cpp_strerror(-ret) << std::endl;

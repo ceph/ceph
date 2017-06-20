@@ -12868,33 +12868,30 @@ int RGWRados::cls_obj_usage_log_trim(string& oid, string& user, uint64_t start_e
   return r;
 }
 
-int RGWRados::remove_objs_from_index(RGWBucketInfo& bucket_info, list<rgw_obj_index_key>& oid_list)
+int RGWRados::remove_objs_from_index(RGWBucketInfo& bucket_info, list<rgw_obj>& oid_list)
 {
-  librados::IoCtx index_ctx;
-  string dir_oid;
-
   uint8_t suggest_flag = (get_zone().log_data ? CEPH_RGW_DIR_SUGGEST_LOG_OP : 0);
 
-  int r = open_bucket_index(bucket_info, index_ctx, dir_oid);
-  if (r < 0)
-    return r;
-
-  bufferlist updates;
-
   for (auto iter = oid_list.begin(); iter != oid_list.end(); ++iter) {
+    bufferlist updates, out;
     rgw_bucket_dir_entry entry;
-    entry.key = *iter;
+    iter->key.get_index_key(&entry.key);
     dout(2) << "RGWRados::remove_objs_from_index bucket=" << bucket_info.bucket << " obj=" << entry.key.name << ":" << entry.key.instance << dendl;
     entry.ver.epoch = (uint64_t)-1; // ULLONG_MAX, needed to that objclass doesn't skip out request
     updates.append(CEPH_RGW_REMOVE | suggest_flag);
     ::encode(entry, updates);
+    RGWRados::BucketShard bs(this);
+    int r = bs.init(iter->bucket, *iter);
+    if (r < 0) {
+      ldout(cct, 0) << "ERROR: " << __func__ << "(): failed to initialize BucketShard, obj=" << *iter << " r=" << r << dendl;
+      continue;
+    }
+    r = bs.index_ctx.exec(bs.bucket_obj, RGW_CLASS, RGW_DIR_SUGGEST_CHANGES, updates, out);
+    if (r < 0) {
+      return r;
+    }
   }
-
-  bufferlist out;
-
-  r = index_ctx.exec(dir_oid, RGW_CLASS, RGW_DIR_SUGGEST_CHANGES, updates, out);
-
-  return r;
+  return 0;
 }
 
 int RGWRados::check_disk_state(librados::IoCtx io_ctx,

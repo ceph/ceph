@@ -1976,7 +1976,22 @@ struct rgw_obj {
   rgw_obj() {}
   rgw_obj(const rgw_bucket& b, const std::string& name) : bucket(b), key(name) {}
   rgw_obj(const rgw_bucket& b, const rgw_obj_key& k) : bucket(b), key(k) {}
-  rgw_obj(const rgw_bucket& b, const rgw_obj_index_key& k) : bucket(b), key(k) {}
+  rgw_obj(const rgw_bucket& b, const rgw_obj_index_key& k) : bucket(b), key(k) {
+    if (key.ns == "multipart") {
+      ssize_t pos = key.name.find_last_of('.');
+      if (pos < 0) {
+        /* shouldn't happen*/
+        return;
+      }
+      std::string front =  key.name.substr(0, pos);
+      pos = front.find_last_of('.');
+      if (pos < 0) {
+        /* shouldn't happen*/
+        return;
+      }
+      index_hash_source = front.substr(0, pos);
+    }
+  }
 
   void init(const rgw_bucket& b, const std::string& name) {
     bucket = b;

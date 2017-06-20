@@ -428,11 +428,11 @@ int rgw_bucket_set_attrs(RGWRados *store, RGWBucketInfo& bucket_info,
   return rgw_bucket_instance_store_info(store, key, bl, false, &attrs, objv_tracker, real_time());
 }
 
-static void dump_mulipart_index_results(list<rgw_obj_index_key>& objs_to_unlink,
+static void dump_mulipart_index_results(list<rgw_obj>& objs_to_unlink,
         Formatter *f)
 {
   for (const auto& o : objs_to_unlink) {
-    f->dump_string("object",  o.name);
+    f->dump_string("object",  o.key.get_index_key_name());
   }
 }
 
@@ -1021,7 +1021,7 @@ int RGWBucket::check_bad_index_multipart(RGWBucketAdminOpState& op_state,
 
   bool is_truncated;
   map<string, bool> meta_objs;
-  map<rgw_obj_index_key, string> all_objs;
+  map<rgw_obj, string> all_objs;
 
   RGWBucketInfo bucket_info;
   RGWObjectCtx obj_ctx(store);
@@ -1049,14 +1049,13 @@ int RGWBucket::check_bad_index_multipart(RGWBucketAdminOpState& op_state,
 
     vector<rgw_bucket_dir_entry>::iterator iter;
     for (iter = result.begin(); iter != result.end(); ++iter) {
-      rgw_obj_index_key key = iter->key;
-      rgw_obj obj(bucket, key);
+      rgw_obj obj(bucket, iter->key);
       string oid = obj.get_oid();
 
       int pos = oid.find_last_of('.');
       if (pos < 0) {
         /* obj has no suffix */
-        all_objs[key] = oid;
+        all_objs[obj] = oid;
       } else {
         /* obj has suffix */
         string name = oid.substr(0, pos);
@@ -1065,14 +1064,14 @@ int RGWBucket::check_bad_index_multipart(RGWBucketAdminOpState& op_state,
         if (suffix.compare("meta") == 0) {
           meta_objs[name] = true;
         } else {
-          all_objs[key] = name;
+          all_objs[obj] = name;
         }
       }
     }
 
   } while (is_truncated);
 
-  list<rgw_obj_index_key> objs_to_unlink;
+  list<rgw_obj> objs_to_unlink;
   Formatter *f =  flusher.get_formatter();
 
   f->open_array_section("invalid_multipart_entries");
