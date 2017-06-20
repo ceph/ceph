@@ -994,7 +994,6 @@ int RGWBucket::check_bad_index_multipart(RGWBucketAdminOpState& op_state,
 
   map<string, bool> common_prefixes;
 
-  string ns = "multipart";
   bool is_truncated;
   map<string, bool> meta_objs;
   map<rgw_obj_index_key, string> all_objs;
@@ -1011,7 +1010,7 @@ int RGWBucket::check_bad_index_multipart(RGWBucketAdminOpState& op_state,
   RGWRados::Bucket::List list_op(&target);
 
   list_op.params.list_versions = true;
-  list_op.params.ns = ns;
+  list_op.params.ns = RGW_OBJ_NS_MULTIPART;
 
   do {
     vector<rgw_bucket_dir_entry> result;
