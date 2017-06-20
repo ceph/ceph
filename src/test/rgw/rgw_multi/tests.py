@@ -14,6 +14,7 @@ from itertools import combinations
 import boto
 import boto.s3.connection
 from boto.s3.website import WebsiteConfiguration
+from boto.s3.cors import CORSConfiguration
 
 from nose.tools import eq_ as eq
 from nose.plugins.attrib import attr
@@ -654,6 +655,14 @@ def test_bucket_acl():
         assert(len(bucket.get_acl().acl.grants) == 1) # single grant on owner
         bucket.set_acl('public-read')
         assert(len(bucket.get_acl().acl.grants) == 2) # new grant on AllUsers
+
+def test_bucket_cors():
+    buckets, zone_bucket = create_bucket_per_zone_in_realm()
+    for _, bucket in zone_bucket:
+        cors_cfg = CORSConfiguration()
+        cors_cfg.add_rule(['DELETE'], 'https://www.example.com', allowed_header='*', max_age_seconds=3000)
+        bucket.set_cors(cors_cfg)
+        assert(bucket.get_cors().to_xml() == cors_cfg.to_xml())
 
 def test_bucket_delete_notempty():
     zonegroup = realm.master_zonegroup()
