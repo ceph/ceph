@@ -31,9 +31,5 @@ upgrade-sequence2:
        daemons: [osd.2, osd.3]
        wait-for-healthy: false
        wait-for-osds-up: true
-   - exec:
-       mon.a:
-         - ceph osd set require_kraken_osds
-   - ceph.restart: [osd.3]
    - sleep:
        duration: 60
