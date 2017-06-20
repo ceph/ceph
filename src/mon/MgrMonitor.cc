@@ -60,6 +60,8 @@ void MgrMonitor::update_from_paxos(bool *need_bootstrap)
     dout(4) << "active server: " << map.active_addr
 	    << "(" << map.active_gid << ")" << dendl;
 
+    ever_had_active_mgr = get_value("ever_had_active_mgr");
+
     load_health();
 
     if (map.available) {
@@ -81,6 +83,27 @@ void MgrMonitor::create_pending()
   pending_map.epoch++;
 }
 
+health_status_t MgrMonitor::should_warn_about_mgr_down()
+{
+  utime_t now = ceph_clock_now();
+  // we warn if
+  //   - we've ever had an active mgr, or
+  //   - we have osds AND we've exceeded the grace period
+  // which means a new mon cluster and be HEALTH_OK indefinitely as long as
+  // no OSDs are ever created.
+  if (ever_had_active_mgr ||
+      (mon->osdmon()->osdmap.get_num_osds() > 0 &&
+       now > mon->monmap->created + g_conf->mon_mgr_mkfs_grace)) {
+    health_status_t level = HEALTH_WARN;
+    if (first_seen_inactive != utime_t() &&
+	now - first_seen_inactive > g_conf->mon_mgr_inactive_grace) {
+      level = HEALTH_ERR;
+    }
+    return level;
+  }
+  return HEALTH_OK;
+}
+
 void MgrMonitor::encode_pending(MonitorDBStore::TransactionRef t)
 {
   dout(10) << __func__ << " " << pending_map << dendl;
@@ -91,13 +114,15 @@ void MgrMonitor::encode_pending(MonitorDBStore::TransactionRef t)
 
   health_check_map_t next;
   if (!pending_map.available) {
-    health_status_t level = HEALTH_WARN;
-    utime_t now = ceph_clock_now();
-    if (first_seen_inactive != utime_t() &&
-	now - first_seen_inactive > g_conf->mon_mgr_inactive_grace) {
-      level = HEALTH_ERR;
+    auto level = should_warn_about_mgr_down();
+    if (level != HEALTH_OK) {
+      next.add("MGR_DOWN", level, "no active mgr");
+    } else {
+      dout(10) << __func__ << " no health warning (never active and new cluster)"
+	       << dendl;
     }
-    next.add("MGR_DOWN", level, "no active mgr");
+  } else {
+    put_value(t, "ever_had_active_mgr", 1);
   }
   encode_health(next, t);
 }
@@ -446,6 +471,13 @@ void MgrMonitor::tick()
       dout(4) << "Promoted standby " << pending_map.active_gid << dendl;
       propose = true;
     }
+  }
+
+  if (!pending_map.available &&
+      should_warn_about_mgr_down() != HEALTH_OK) {
+    dout(10) << " exceeded mon_mgr_mkfs_grace " << g_conf->mon_mgr_mkfs_grace
+	     << " seconds" << dendl;
+    propose = true;
   }
 
   if (propose) {
