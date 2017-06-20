@@ -15,6 +15,7 @@ import common
 
 from uuid import uuid4
 from pecan import jsonify, make_app
+from OpenSSL import crypto
 from pecan.rest import RestController
 from werkzeug.serving import make_server, make_ssl_devcert
 
@@ -212,6 +213,11 @@ class Module(MgrModule):
             "desc": "List all API keys",
             "perm": "rw"
         },
+        {
+            "cmd": "restful create-self-signed-cert",
+            "desc": "Create localized self signed certificate",
+            "perm": "rw"
+        },
     ]
 
     def __init__(self, *args, **kwargs):
@@ -227,12 +233,21 @@ class Module(MgrModule):
 
         self.server = None
 
+        self.stop_server = False
+        self.serve_event = threading.Event()
+
 
     def serve(self):
-        try:
-            self._serve()
-        except:
-            self.log.error(str(traceback.format_exc()))
+        while not self.stop_server:
+            try:
+                self._serve()
+                self.server.socket.close()
+            except:
+                self.log.error(str(traceback.format_exc()))
+
+            # Wait and clear the threading event
+            self.serve_event.wait()
+            self.serve_event.clear()
 
     def get_localized_config(self, key):
         r = self.get_config(self.get_mgr_id() + '/' + key)
@@ -297,8 +312,20 @@ class Module(MgrModule):
 
     def shutdown(self):
         try:
+            self.stop_server = True
             if self.server:
                 self.server.shutdown()
+            self.serve_event.set()
+        except:
+            self.log.error(str(traceback.format_exc()))
+            raise
+
+
+    def restart(self):
+        try:
+            if self.server:
+                self.server.shutdown()
+            self.serve_event.set()
         except:
             self.log.error(str(traceback.format_exc()))
 
@@ -330,6 +357,28 @@ class Module(MgrModule):
                 request.next()
         else:
             self.log.debug("Unhandled notification type '%s'" % notify_type)
+
+
+    def create_self_signed_cert(self):
+        # create a key pair
+        pkey = crypto.PKey()
+        pkey.generate_key(crypto.TYPE_RSA, 2048)
+
+        # create a self-signed cert
+        cert = crypto.X509()
+        cert.get_subject().O = "IT"
+        cert.get_subject().CN = "ceph-restful"
+        cert.set_serial_number(int(uuid4()))
+        cert.gmtime_adj_notBefore(0)
+        cert.gmtime_adj_notAfter(10*365*24*60*60)
+        cert.set_issuer(cert.get_subject())
+        cert.set_pubkey(pkey)
+        cert.sign(pkey, 'sha512')
+
+        return (
+            crypto.dump_certificate(crypto.FILETYPE_PEM, cert),
+            crypto.dump_privatekey(crypto.FILETYPE_PEM, pkey)
+        )
 
 
     def handle_command(self, command):
@@ -366,6 +415,19 @@ class Module(MgrModule):
                 0,
                 json.dumps(self.keys, indent=2),
                 "",
+            )
+
+        elif command['prefix'] == "restful create-self-signed-cert":
+            cert, pkey = self.create_self_signed_cert()
+
+            self.set_config(self.get_mgr_id() + '/crt', cert)
+            self.set_config(self.get_mgr_id() + '/key', pkey)
+
+            self.restart()
+            return (
+                0,
+                "Restarting RESTful API server...",
+                ""
             )
 
         else:

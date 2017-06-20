@@ -639,16 +639,8 @@ EOF
 	DASH_URLS+="http://$IP:$MGR_PORT/"
 	MGR_PORT=$(($MGR_PORT + 1000))
 
-	CERT=`mktemp`
-	PKEY=`mktemp`
-	openssl req -new -nodes -x509 \
-		-subj "/O=IT/CN=ceph-mgr-restful" \
-		-days 3650 -keyout "$PKEY" -out "$CERT" -extensions v3_ca
 	ceph_adm config-key put mgr/restful/$name/server_addr $IP
 	ceph_adm config-key put mgr/restful/$name/server_port $MGR_PORT
-	ceph_adm config-key put mgr/restful/$name/crt -i $CERT
-	ceph_adm config-key put mgr/restful/$name/key -i $PKEY
-	rm $CERT $PKEY
 
 	RESTFUL_URLS+="https://$IP:$MGR_PORT"
 	MGR_PORT=$(($MGR_PORT + 1000))
@@ -658,7 +650,8 @@ EOF
     done
 
     SF=`mktemp`
-    ceph_adm tell mgr.x restful create-key admin -o $SF
+    ceph_adm tell mgr restful create-self-signed-cert
+    ceph_adm tell mgr restful create-key admin -o $SF
     RESTFUL_SECRET=`cat $SF`
     rm $SF
 }
