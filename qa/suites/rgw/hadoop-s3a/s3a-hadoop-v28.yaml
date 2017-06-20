@@ -1,0 +1,31 @@
+os_type: centos
+os_version: "7.3"
+machine_type: vps
+overrides:
+    ceph_ansible:
+      vars:
+        ceph_conf_overrides:
+          global:
+            osd default pool size: 2
+            osd pool default pg num: 128
+            osd pool default pgp num: 128
+            debug rgw: 20 
+            debug ms: 1
+        ceph_test: true
+        ceph_dev: true
+        ceph_dev_key: https://download.ceph.com/keys/autobuild.asc
+        ceph_origin: upstream
+        journal_collocation: true
+        osd_auto_discovery: false
+        journal_size: 1024
+
+roles:
+- [mon.a, osd.0, osd.1, osd.2, rgw.0]
+- [osd.3, osd.4, osd.5]
+- [osd.6, osd.7, osd.8]
+- [mgr.x]
+tasks:
+- ssh-keys:
+- ceph-ansible:
+- s3a-hadoop:
+    hadoop-version: '2.8.0'
