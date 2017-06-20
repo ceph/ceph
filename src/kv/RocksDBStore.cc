@@ -318,7 +318,8 @@ int RocksDBStore::do_open(ostream &out, bool create_if_missing)
   }
   bbt_opts.block_size = g_conf->rocksdb_block_size;
 
-  opt.row_cache = rocksdb::NewLRUCache(row_cache_size,
+  if (row_cache_size > 0)
+    opt.row_cache = rocksdb::NewLRUCache(row_cache_size,
 				       g_conf->rocksdb_cache_shard_bits);
 
   if (g_conf->kstore_rocksdb_bloom_bits_per_key > 0) {
