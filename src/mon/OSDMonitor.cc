@@ -3115,6 +3115,27 @@ void OSDMonitor::check_pg_creates_sub(Subscription *sub)
   }
 }
 
+void OSDMonitor::do_application_enable(int64_t pool_id,
+                                       const std::string &app_name)
+{
+  assert(paxos->is_plugged());
+
+  dout(20) << __func__ << ": pool_id=" << pool_id << ", app_name=" << app_name
+           << dendl;
+
+  auto pp = osdmap.get_pg_pool(pool_id);
+  assert(pp != nullptr);
+
+  pg_pool_t p = *pp;
+  if (pending_inc.new_pools.count(pool_id)) {
+    p = pending_inc.new_pools[pool_id];
+  }
+
+  p.application_metadata.insert({app_name, {}});
+  p.last_change = pending_inc.epoch;
+  pending_inc.new_pools[pool_id] = p;
+}
+
 unsigned OSDMonitor::scan_for_creating_pgs(
   const mempool::osdmap::map<int64_t,pg_pool_t>& pools,
   const mempool::osdmap::set<int64_t>& removed_pools,

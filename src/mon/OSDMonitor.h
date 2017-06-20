@@ -539,6 +539,8 @@ public:
   void check_osdmap_sub(Subscription *sub);
   void check_pg_creates_sub(Subscription *sub);
 
+  void do_application_enable(int64_t pool_id, const std::string &app_name);
+
   void add_flag(int flag) {
     if (!(osdmap.flags & flag)) {
       if (pending_inc.new_flags < 0)
