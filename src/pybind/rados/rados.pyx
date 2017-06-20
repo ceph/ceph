@@ -151,7 +151,21 @@ cdef extern from "rados/librados.h" nogil:
     int rados_cluster_stat(rados_t cluster, rados_cluster_stat_t *result)
     int rados_cluster_fsid(rados_t cluster, char *buf, size_t len)
     int rados_blacklist_add(rados_t cluster, char *client_address, uint32_t expire_seconds)
-
+    int rados_application_enable(rados_ioctx_t io, const char *app_name,
+                                 int force)
+    int rados_application_list(rados_ioctx_t io, char *values,
+                             size_t *values_len)
+    int rados_application_metadata_get(rados_ioctx_t io, const char *app_name,
+                                       const char *key, char *value,
+                                       size_t *value_len)
+    int rados_application_metadata_set(rados_ioctx_t io, const char *app_name,
+                                       const char *key, const char *value)
+    int rados_application_metadata_remove(rados_ioctx_t io,
+                                          const char *app_name, const char *key)
+    int rados_application_metadata_list(rados_ioctx_t io,
+                                        const char *app_name, char *keys,
+                                        size_t *key_len, char *values,
+                                        size_t *value_len)
     int rados_ping_monitor(rados_t cluster, const char *mon_id, char **outstr, size_t *outstrlen)
     int rados_mon_command(rados_t cluster, const char **cmd, size_t cmdlen,
                           const char *inbuf, size_t inbuflen,
@@ -3561,6 +3575,141 @@ returned %d, but should return zero on success." % (self.name, ret))
             ret = rados_unlock(self.io, _key, _name, _cookie)
         if ret < 0:
             raise make_ex(ret, "Ioctx.rados_lock_exclusive(%s): failed to set lock %s on %s" % (self.name, name, key))
+
+    def application_enable(self, app_name, force=False):
+        """
+        Enable an application on an OSD pool
+
+        :param app_name: application name
+        :type app_name: str
+        :param force: False if only a single app should exist per pool
+        :type expire_seconds: boool
+
+        :raises: :class:`Error`
+        """
+        app_name =  cstr(app_name, 'app_name')
+        cdef:
+            char *_app_name = app_name
+            int _force = (1 if force else 0)
+
+        with nogil:
+            ret = rados_application_enable(self.io, _app_name, _force)
+        if ret < 0:
+            raise make_ex(ret, "error enabling application")
+
+    def application_list(self):
+        """
+        Returns a list of enabled applications
+
+        :returns: list of app name string
+        """
+        cdef:
+            size_t length = 128
+            char *apps = NULL
+
+        try:
+            while True:
+                apps = <char *>realloc_chk(apps, length)
+                with nogil:
+                    ret = rados_application_list(self.io, apps, &length)
+                if ret == 0:
+                    return [decode_cstr(app) for app in
+                                apps[:length].split(b'\0') if app]
+                elif ret == -errno.ENOENT:
+                    return None
+                elif ret == -errno.ERANGE:
+                    pass
+                else:
+                    raise make_ex(ret, "error listing applications")
+        finally:
+            free(apps)
+
+    def application_metadata_set(self, app_name, key, value):
+        """
+        Sets application metadata on an OSD pool
+
+        :param app_name: application name
+        :type app_name: str
+        :param key: metadata key
+        :type key: str
+        :param value: metadata value
+        :type value: str
+
+        :raises: :class:`Error`
+        """
+        app_name =  cstr(app_name, 'app_name')
+        key =  cstr(key, 'key')
+        value =  cstr(value, 'value')
+        cdef:
+            char *_app_name = app_name
+            char *_key = key
+            char *_value = value
+
+        with nogil:
+            ret = rados_application_metadata_set(self.io, _app_name, _key,
+                                                 _value)
+        if ret < 0:
+            raise make_ex(ret, "error setting application metadata")
+
+    def application_metadata_remove(self, app_name, key):
+        """
+        Remove application metadata from an OSD pool
+
+        :param app_name: application name
+        :type app_name: str
+        :param key: metadata key
+        :type key: str
+
+        :raises: :class:`Error`
+        """
+        app_name =  cstr(app_name, 'app_name')
+        key =  cstr(key, 'key')
+        cdef:
+            char *_app_name = app_name
+            char *_key = key
+
+        with nogil:
+            ret = rados_application_metadata_remove(self.io, _app_name, _key)
+        if ret < 0:
+            raise make_ex(ret, "error removing application metadata")
+
+    def application_metadata_list(self, app_name):
+        """
+        Returns a list of enabled applications
+
+        :param app_name: application name
+        :type app_name: str
+        :returns: list of key/value tuples
+        """
+        app_name =  cstr(app_name, 'app_name')
+        cdef:
+            char *_app_name = app_name
+            size_t key_length = 128
+            size_t val_length = 128
+            char *c_keys = NULL
+            char *c_vals = NULL
+
+        try:
+            while True:
+                c_keys = <char *>realloc_chk(c_keys, key_length)
+                c_vals = <char *>realloc_chk(c_vals, val_length)
+                with nogil:
+                    ret = rados_application_metadata_list(self.io, _app_name,
+                                                          c_keys, &key_length,
+                                                          c_vals, &val_length)
+                if ret == 0:
+                    keys = [decode_cstr(key) for key in
+                                c_keys[:key_length].split(b'\0') if key]
+                    vals = [decode_cstr(val) for val in
+                                c_vals[:val_length].split(b'\0') if val]
+                    return zip(keys, vals)
+                elif ret == -errno.ERANGE:
+                    pass
+                else:
+                    raise make_ex(ret, "error listing application metadata")
+        finally:
+            free(c_keys)
+            free(c_vals)
 
 
 def set_object_locator(func):
