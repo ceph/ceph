@@ -2852,6 +2852,7 @@ int RGWPutObjProcessor_Multipart::do_complete(size_t accounted_size,
   complete_writing_data();
 
   RGWRados::Object op_target(store, s->bucket_info, obj_ctx, head_obj);
+  op_target.set_versioning_disabled(true);
   RGWRados::Object::Write head_obj_op(&op_target);
 
   head_obj_op.meta.set_mtime = set_mtime;
