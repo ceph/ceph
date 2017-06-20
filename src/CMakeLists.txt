@@ -507,6 +507,7 @@ set(libcommon_files
   common/ceph_hash.cc
   common/ceph_strings.cc
   common/ceph_frag.cc
+  common/options.cc
   common/config.cc
   common/config_validators.cc
   common/utf8.c
@@ -887,6 +888,11 @@ endif(WITH_TESTS)
 add_subdirectory(compressor)
 
 add_subdirectory(tools)
+
+# to generate config header
+add_executable(
+  generate_option_header
+  common/generate_option_header.cc)
 
 # dmClock (after gmock)
 
