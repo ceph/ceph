@@ -2133,6 +2133,12 @@ int RGWPutCORS_ObjStore_S3::get_params()
     return -EINVAL;
   }
 
+  // forward bucket cors requests to meta master zone
+  if (!store->is_meta_master()) {
+    /* only need to keep this data around if we're not meta master */
+    in_data.append(data, len);
+  }
+
   if (s->cct->_conf->subsys.should_gather(ceph_subsys_rgw, 15)) {
     ldout(s->cct, 15) << "CORSConfiguration";
     cors_config->to_xml(*_dout);
