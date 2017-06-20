@@ -32,7 +32,7 @@ bool LCRule::validate()
   if (id.length() > MAX_ID_LEN) {
     return false;
   }
-  else if(expiration.empty() && noncur_expiration.empty() && mp_expiration.empty()) {
+  else if(expiration.empty() && noncur_expiration.empty() && mp_expiration.empty() && !dm_expiration) {
     return false;
   }
   else if (!expiration.empty() && expiration.get_days() <= 0) {
@@ -69,6 +69,7 @@ bool RGWLifecycleConfiguration::_add_rule(LCRule *rule)
   if (!rule->get_mp_expiration().empty()) {
     op.mp_expiration = rule->get_mp_expiration().get_days();
   }
+  op.dm_expiration = rule->get_dm_expiration();
   auto ret = prefix_map.insert(pair<string, lc_op>(rule->get_prefix(), op));
   return ret.second;
 }
@@ -228,17 +229,16 @@ int RGWLC::bucket_lc_prepare(int index)
 
 bool RGWLC::obj_has_expired(double timediff, int days)
 {
-	double cmp;
+  double cmp;
+  if (cct->_conf->rgw_lc_debug_interval <= 0) {
+    /* Normal case, run properly */
+    cmp = days*24*60*60;
+  } else {
+    /* We're in debug mode; Treat each rgw_lc_debug_interval seconds as a day */
+    cmp = days*cct->_conf->rgw_lc_debug_interval;
+  }
 
-	if (cct->_conf->rgw_lc_debug_interval <= 0) {
-		/* Normal case, run properly */
-		cmp = days*24*60*60;
-	} else {
-		/* We're in debug mode; Treat each rgw_lc_debug_interval seconds as a day */
-		cmp = days*cct->_conf->rgw_lc_debug_interval;
-	}
-
-	return (timediff >= cmp);
+  return (timediff >= cmp);
 }
 
 int RGWLC::remove_expired_obj(RGWBucketInfo& bucket_info, rgw_obj_key obj_key, bool remove_indeed)
@@ -395,7 +395,8 @@ int RGWLC::bucket_lc_process(string& shard_id)
   //bucket versioning is enabled or suspended
     rgw_obj_key pre_marker;
     for(auto prefix_iter = prefix_map.begin(); prefix_iter != prefix_map.end(); ++prefix_iter) {
-      if (!prefix_iter->second.status || (prefix_iter->second.expiration <= 0 && prefix_iter->second.noncur_expiration <= 0)) {
+      if (!prefix_iter->second.status || (prefix_iter->second.expiration <= 0 
+        && prefix_iter->second.noncur_expiration <= 0 && !prefix_iter->second.dm_expiration)) {
         continue;
       }
       if (prefix_iter != prefix_map.begin() && 
@@ -425,9 +426,11 @@ int RGWLC::bucket_lc_process(string& shard_id)
         ceph::real_time mtime;
         bool remove_indeed = true;
         int expiration;
+        bool skip_expiration;
         for (auto obj_iter = objs.begin(); obj_iter != objs.end(); ++obj_iter) {
+          skip_expiration = false;
           if (obj_iter->is_current()) {
-            if (prefix_iter->second.expiration <= 0) {
+            if (prefix_iter->second.expiration <= 0 && !prefix_iter->second.dm_expiration) {
               continue;
             }
             if (obj_iter->is_delete_marker()) {
@@ -440,12 +443,16 @@ int RGWLC::bucket_lc_process(string& shard_id)
               } else if (obj_iter->key.name.compare((obj_iter + 1)->key.name) == 0) {   //*obj_iter is delete marker and isn't the only version, do nothing.
                 continue;
               }
+              skip_expiration = prefix_iter->second.dm_expiration;
               remove_indeed = true;   //we should remove the delete marker if it's the only version
             } else {
               remove_indeed = false;
             }
             mtime = obj_iter->meta.mtime;
             expiration = prefix_iter->second.expiration;
+            if (!skip_expiration && expiration <= 0) {
+              continue;
+            }
           } else {
             if (prefix_iter->second.noncur_expiration <=0) {
               continue;
@@ -454,7 +461,7 @@ int RGWLC::bucket_lc_process(string& shard_id)
             mtime = (obj_iter == objs.begin())?pre_obj.meta.mtime:(obj_iter - 1)->meta.mtime;
             expiration = prefix_iter->second.noncur_expiration;
           }
-          if (obj_has_expired(now - ceph::real_clock::to_time_t(mtime), expiration)) {
+          if (skip_expiration || obj_has_expired(now - ceph::real_clock::to_time_t(mtime), expiration)) {
             if (obj_iter->is_visible()) {
               RGWObjectCtx rctx(store);
               rgw_obj obj(bucket_info.bucket, obj_iter->key);
