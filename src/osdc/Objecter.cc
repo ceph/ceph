@@ -3101,7 +3101,7 @@ void Objecter::_finish_op(Op *op, int r)
 
   assert(check_latest_map_ops.find(op->tid) == check_latest_map_ops.end());
 
-  inflight_ops++;
+  inflight_ops--;
 
   op->put();
 }
