@@ -43,7 +43,7 @@ root default {
 }
 
 # rules
-rule replicated_ruleset {
+rule replicated_rule {
 	ruleset 0
 	type replicated
 	min_size 1

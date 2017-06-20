@@ -419,6 +419,6 @@ if __name__ == '__main__':
     assert(r.myjson['output']['size'] == 2)
 
     r = expect('osd/pool/get.json?pool=rbd&var=crush_rule', 'GET', 200, 'json')
-    assert(r.myjson['output']['crush_rule'] == 0)
+    assert(r.myjson['output']['crush_rule'] == "replicated_rule")
 
     print('OK')

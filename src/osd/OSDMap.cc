@@ -3467,7 +3467,7 @@ int OSDMap::build_simple_crush_rules(
 
   int r;
   r = crush.add_simple_rule_at(
-    "replicated_ruleset", root, failure_domain,
+    "replicated_rule", root, failure_domain,
     "firstn", pg_pool_t::TYPE_REPLICATED,
     crush_rule, ss);
   if (r < 0)
