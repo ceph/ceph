@@ -175,26 +175,22 @@ class TestDevice(Base):
             uuid=uuid, name=name, size=size)
         assert actual_partition_number == partition_number
         command = ['sgdisk',
-                   '--new=%d:0:+%dM' % (partition_number, size),
-                   '--change-name=%d:ceph %s' % (partition_number, name),
                    '--partition-guid=%d:%s' % (partition_number, uuid),
                    '--typecode=%d:%s' % (
                        partition_number,
                        main.PTYPE['regular']['journal']['ready']),
-                   '--mbrtogpt', '--', path]
+                   '--', path]
         m_command_check_call.assert_called_with(command, exit=True)
         m_update_partition.assert_called_with(path, 'created')
 
         actual_partition_number = device.create_partition(
             uuid=uuid, name=name)
         command = ['sgdisk',
-                   '--largest-new=%d' % partition_number,
-                   '--change-name=%d:ceph %s' % (partition_number, name),
                    '--partition-guid=%d:%s' % (partition_number, uuid),
                    '--typecode=%d:%s' % (
                        partition_number,
                        main.PTYPE['regular']['journal']['ready']),
-                   '--mbrtogpt', '--', path]
+                   '--', path]
         m_command_check_call.assert_called_with(command, exit=True)
 
 
