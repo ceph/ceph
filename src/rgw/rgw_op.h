@@ -1193,7 +1193,6 @@ public:
 class RGWPutMetadataObject : public RGWOp {
 protected:
   RGWAccessControlPolicy policy;
-  string placement_rule;
   boost::optional<ceph::real_time> delete_at;
   const char *dlo_manifest;
 
