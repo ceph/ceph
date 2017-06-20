@@ -1601,24 +1601,19 @@ function test_mon_osd()
 function test_mon_crush()
 {
   f=$TEMP_DIR/map.$$
-  ceph osd getcrushmap -o $f 2> $f.epoch
+  epoch=$(ceph osd getcrushmap -o $f 2>&1 | tail -n1)
   [ -s $f ]
-  epoch=`cat $f.epoch`
   [ "$epoch" -gt 1 ]
   nextepoch=$(( $epoch + 1 ))
   echo epoch $epoch nextepoch $nextepoch
   rm -f $f.epoch
   expect_false ceph osd setcrushmap $nextepoch -i $f
-  ceph osd setcrushmap $epoch -i $f 2> $f.epoch
-  gotepoch=`cat $f.epoch`
+  gotepoch=$(ceph osd setcrushmap $epoch -i $f 2>&1 | tail -n1)
   echo gotepoch $gotepoch
-  rm -f $f.epoch
   [ "$gotepoch" -eq "$nextepoch" ]
   # should be idempotent
-  ceph osd setcrushmap $epoch -i $f 2> $f.epoch
-  gotepoch=`cat $f.epoch`
+  gotepoch=$(ceph osd setcrushmap $epoch -i $f 2>&1 | tail -n1)
   echo epoch $gotepoch
-  rm -f $f.epoch
   [ "$gotepoch" -eq "$nextepoch" ]
   rm $f
 }
