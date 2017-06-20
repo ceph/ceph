@@ -55,6 +55,9 @@ public:
   void dump(Formatter *f) const;
 //  static void generate_test_instances(list<ACLOwner*>& o);
   void set_days(const string& _days) { days = _days; }
+  string get_days_str() const{
+    return days;
+  }
   int get_days() {return atoi(days.c_str()); }
   bool empty() const{
     return days.empty();
@@ -71,6 +74,7 @@ protected:
   LCExpiration expiration;
   LCExpiration noncur_expiration;
   LCExpiration mp_expiration;
+  bool dm_expiration;
 
 public:
 
@@ -102,6 +106,10 @@ public:
     return mp_expiration;
   }
 
+  bool get_dm_expiration() {
+    return dm_expiration;
+  }
+
   void set_id(string*_id) {
     id = *_id;
   }
@@ -126,20 +134,25 @@ public:
     mp_expiration = *_mp_expiration;
   }
 
+  void set_dm_expiration(bool _dm_expiration) {
+    dm_expiration = _dm_expiration;
+  }
+
   bool validate();
   
   void encode(bufferlist& bl) const {
-     ENCODE_START(3, 1, bl);
+     ENCODE_START(4, 1, bl);
      ::encode(id, bl);
      ::encode(prefix, bl);
      ::encode(status, bl);
      ::encode(expiration, bl);
      ::encode(noncur_expiration, bl);
      ::encode(mp_expiration, bl);
+     ::encode(dm_expiration, bl);
      ENCODE_FINISH(bl);
    }
    void decode(bufferlist::iterator& bl) {
-     DECODE_START_LEGACY_COMPAT_LEN(3, 1, 1, bl);
+     DECODE_START_LEGACY_COMPAT_LEN(4, 1, 1, bl);
      ::decode(id, bl);
      ::decode(prefix, bl);
      ::decode(status, bl);
@@ -150,6 +163,9 @@ public:
      if (struct_v >= 3) {
        ::decode(mp_expiration, bl);
      }
+     if (struct_v >= 4) {
+        ::decode(dm_expiration, bl);
+     }
      DECODE_FINISH(bl);
    }
 
@@ -159,11 +175,12 @@ WRITE_CLASS_ENCODER(LCRule)
 struct lc_op
 {
   bool status;
+  bool dm_expiration;
   int expiration;
   int noncur_expiration;
   int mp_expiration;
 
-  lc_op() : status(false), expiration(0), noncur_expiration(0), mp_expiration(0) {}
+  lc_op() : status(false), dm_expiration(false), expiration(0), noncur_expiration(0), mp_expiration(0) {}
   
 };
 
