@@ -1703,6 +1703,33 @@ TEST(BufferList, is_n_page_sized) {
   }
 }
 
+TEST(BufferList, page_aligned_appender) {
+  bufferlist bl;
+  auto a = bl.get_page_aligned_appender(5);
+  a.append("asdf", 4);
+  a.flush();
+  cout << bl << std::endl;
+  ASSERT_EQ(1u, bl.get_num_buffers());
+  a.append("asdf", 4);
+  for (unsigned n = 0; n < 3 * CEPH_PAGE_SIZE; ++n) {
+    a.append("x", 1);
+  }
+  a.flush();
+  cout << bl << std::endl;
+  ASSERT_EQ(1u, bl.get_num_buffers());
+  for (unsigned n = 0; n < 3 * CEPH_PAGE_SIZE; ++n) {
+    a.append("y", 1);
+  }
+  a.flush();
+  cout << bl << std::endl;
+  ASSERT_EQ(2u, bl.get_num_buffers());
+  for (unsigned n = 0; n < 10 * CEPH_PAGE_SIZE; ++n) {
+    a.append("asdfasdfasdf", 1);
+  }
+  a.flush();
+  cout << bl << std::endl;
+}
+
 TEST(BufferList, rebuild_aligned_size_and_memory) {
   const unsigned SIMD_ALIGN = 32;
   const unsigned BUFFER_SIZE = 67;
