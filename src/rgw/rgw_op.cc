@@ -3955,6 +3955,13 @@ void RGWPutMetadataObject::execute()
   }
 
   rgw_get_request_metadata(s->cct, s->info, attrs);
+
+  if (!requested_placement_id.empty() &&
+      requested_placement_id != s->bucket_info.default_placement_id) {
+    op_ret = -EEXIST;
+    return;
+  }
+
   /* check if obj exists, read orig attrs */
   op_ret = get_obj_attrs(store, s, obj, orig_attrs);
   if (op_ret < 0) {
