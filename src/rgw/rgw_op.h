@@ -1162,7 +1162,7 @@ protected:
   uint32_t policy_rw_mask;
   RGWAccessControlPolicy policy;
   RGWCORSConfiguration cors_config;
-  string placement_rule;
+  std::string requested_placement_id;
   boost::optional<std::string> swift_ver_location;
 
 public:

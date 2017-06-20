@@ -3870,8 +3870,8 @@ void RGWPutMetadataBucket::execute()
 
   rgw_get_request_metadata(s->cct, s->info, attrs, false);
 
-  if (!placement_rule.empty() &&
-      placement_rule != s->bucket_info.default_placement_id) {
+  if (!requested_placement_id.empty() &&
+      requested_placement_id != s->bucket_info.default_placement_id) {
     op_ret = -EEXIST;
     return;
   }
