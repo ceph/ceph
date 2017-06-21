@@ -2524,6 +2524,17 @@ void RGWCreateBucket::execute()
     return;
   }
 
+  const auto& zonegroup = store->get_zonegroup();
+  if (!placement_rule.empty() &&
+      !zonegroup.placement_targets.count(placement_rule)) {
+    ldout(s->cct, 0) << "placement target (" << placement_rule << ")"
+                     << " doesn't exist in the placement targets of zonegroup"
+                     << " (" << store->get_zonegroup().api_name << ")" << dendl;
+    op_ret = -ERR_INVALID_LOCATION_CONSTRAINT;
+    s->err.message = "The specified placement target does not exist";
+    return;
+  }
+
   /* we need to make sure we read bucket info, it's not read before for this
    * specific request */
   RGWObjectCtx& obj_ctx = *static_cast<RGWObjectCtx *>(s->obj_ctx);
