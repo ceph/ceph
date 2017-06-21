@@ -403,7 +403,7 @@ if __name__ == '__main__':
     expect('osd/reweight?id=0&weight=1', 'PUT', 200, '')
 
     for v in ['pg_num', 'pgp_num', 'size', 'min_size',
-              'crush_ruleset']:
+              'crush_rule']:
         r = expect('osd/pool/get.json?pool=rbd&var=' + v, 'GET', 200, 'json')
         assert(v in r.myjson['output'])
 
@@ -418,7 +418,7 @@ if __name__ == '__main__':
     r = expect('osd/pool/get.json?pool=rbd&var=size', 'GET', 200, 'json')
     assert(r.myjson['output']['size'] == 2)
 
-    r = expect('osd/pool/get.json?pool=rbd&var=crush_ruleset', 'GET', 200, 'json')
-    assert(r.myjson['output']['crush_ruleset'] == 0)
+    r = expect('osd/pool/get.json?pool=rbd&var=crush_rule', 'GET', 200, 'json')
+    assert(r.myjson['output']['crush_rule'] == "replicated_rule")
 
     print('OK')

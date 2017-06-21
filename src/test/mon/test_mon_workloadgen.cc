@@ -499,7 +499,7 @@ class OSDStub : public TestStub
     for (auto pit = osdmap_pools.begin(); pit != osdmap_pools.end(); ++pit) {
       const int64_t pool_id = pit->first;
       const pg_pool_t &pool = pit->second;
-      int ruleno = pool.get_crush_ruleset();
+      int ruleno = pool.get_crush_rule();
 
       if (!osdmap.crush->rule_exists(ruleno)) {
 	dout(20) << __func__

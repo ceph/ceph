@@ -62,6 +62,9 @@ public:
 
 private:
   struct crush_map *crush;
+
+  bool have_uniform_rules = false;
+
   /* reverse maps */
   mutable bool have_rmaps;
   mutable std::map<string, int> type_rmap, name_rmap, rule_name_rmap;
@@ -104,6 +107,15 @@ public:
 
     set_tunables_default();
   }
+
+  /// true if any rule has a ruleset != the rule id
+  bool has_legacy_rulesets() const;
+
+  /// fix rules whose ruleid != ruleset
+  int renumber_rules_by_ruleset();
+
+  /// true if any ruleset has more than 1 rule
+  bool has_multirule_rulesets() const;
 
   // tunables
   void set_tunables_argonaut() {
@@ -985,14 +997,17 @@ public:
     return set_rule_step(ruleno, step, CRUSH_RULE_EMIT, 0, 0);
   }
 
-  int add_simple_ruleset(string name, string root_name, string failure_domain_type,
-			 string mode, int rule_type, ostream *err = 0);
+  int add_simple_rule(
+    string name, string root_name, string failure_domain_type,
+    string mode, int rule_type, ostream *err = 0);
+
   /**
-   * @param rno ruleset id to use, -1 to pick the lowest available
+   * @param rno rule[set] id to use, -1 to pick the lowest available
    */
-  int add_simple_ruleset_at(string name, string root_name,
-                            string failure_domain_type, string mode,
-                            int rule_type, int rno, ostream *err = 0);
+  int add_simple_rule_at(
+    string name, string root_name,
+    string failure_domain_type, string mode,
+    int rule_type, int rno, ostream *err = 0);
 
   int remove_rule(int ruleno);
 
@@ -1157,6 +1172,7 @@ public:
   void finalize() {
     assert(crush);
     crush_finalize(crush);
+    have_uniform_rules = !has_legacy_rulesets();
   }
 
   int update_device_class(CephContext *cct, int id, const string& class_name, const string& name);
@@ -1198,7 +1214,14 @@ public:
 
   int find_rule(int ruleset, int type, int size) const {
     if (!crush) return -1;
-    return crush_find_rule(crush, ruleset, type, size);
+    if (!have_uniform_rules) {
+      return crush_find_rule(crush, ruleset, type, size);
+    } else {
+      if (ruleset < (int)crush->max_rules &&
+	  crush->rules[ruleset])
+	return ruleset;
+      return -1;
+    }
   }
 
   bool ruleset_exists(int const ruleset) const {
@@ -1337,8 +1360,6 @@ public:
   void dump_tree(Formatter *f) const;
   static void generate_test_instances(list<CrushWrapper*>& o);
 
-  int _get_osd_pool_default_crush_replicated_ruleset(CephContext *cct,
-                                                     bool quiet);
   int get_osd_pool_default_crush_replicated_ruleset(CephContext *cct);
 
   static bool is_valid_crush_name(const string& s);

@@ -652,7 +652,7 @@ void PGMapDigest::dump_pool_stats_full(
     const pool_stat_t &stat = pg_pool_sum.at(pool_id);
 
     const pg_pool_t *pool = osd_map.get_pg_pool(pool_id);
-    int ruleno = osd_map.crush->find_rule(pool->get_crush_ruleset(),
+    int ruleno = osd_map.crush->find_rule(pool->get_crush_rule(),
                                          pool->get_type(),
                                          pool->get_size());
     int64_t avail;
@@ -876,7 +876,7 @@ void PGMap::get_rules_avail(const OSDMap& osdmap,
     if ((pool_id < 0) || (pg_pool_sum.count(pool_id) == 0))
       continue;
     const pg_pool_t *pool = osdmap.get_pg_pool(pool_id);
-    int ruleno = osdmap.crush->find_rule(pool->get_crush_ruleset(),
+    int ruleno = osdmap.crush->find_rule(pool->get_crush_rule(),
 					 pool->get_type(),
 					 pool->get_size());
     if (avail_map->count(ruleno) == 0)
@@ -3532,7 +3532,7 @@ void PGMapUpdater::register_new_pgs(
   for (const auto &p : pools) {
     int64_t poolid = p.first;
     const pg_pool_t &pool = p.second;
-    int ruleno = osd_map.crush->find_rule(pool.get_crush_ruleset(),
+    int ruleno = osd_map.crush->find_rule(pool.get_crush_rule(),
                                           pool.get_type(), pool.get_size());
     if (ruleno < 0 || !osd_map.crush->rule_exists(ruleno))
       continue;

@@ -26,7 +26,7 @@ ceph osd crush rule rm foo  # idempotent
 ceph osd crush rule rm bar
 
 # can't delete in-use rules, tho:
-expect_false ceph osd crush rule rm replicated_ruleset
+expect_false ceph osd crush rule rm replicated_rule
 
 # build a simple map
 expect_false ceph osd crush add-bucket foo osd
