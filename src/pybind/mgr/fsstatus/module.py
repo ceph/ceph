@@ -122,7 +122,7 @@ class Module(MgrModule):
                 if up:
                     gid = mdsmap['up']["mds_{0}".format(rank)]
                     info = mdsmap['info']['gid_{0}'.format(gid)]
-                    dns = self.get_latest("mds", info['name'], "mds.inodes")
+                    dns = self.get_latest("mds", info['name'], "mds_mem.dn")
                     inos = self.get_latest("mds", info['name'], "mds_mem.ino")
 
                     if rank == 0:
@@ -175,7 +175,7 @@ class Module(MgrModule):
                     continue
 
                 inos = self.get_latest("mds", daemon_info['name'], "mds_mem.ino")
-                dns = self.get_latest("mds", daemon_info['name'], "mds.inodes")
+                dns = self.get_latest("mds", daemon_info['name'], "mds_mem.dn")
 
                 activity = "Evts: " + self.format_dimless(
                     self.get_rate("mds", daemon_info['name'], "mds_log.replay"),
