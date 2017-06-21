@@ -137,7 +137,7 @@ macro(build_boost version)
   endforeach()
 
   # for header-only libraries
-  if(CMAKE_VERSION VERSION_LESS 3.0)
+  if(CMAKE_VERSION VERSION_LESS 3.3)
     # only ALIAS and INTERFACE target names allow ":" in it, but
     # INTERFACE library is not allowed until cmake 3.1
     add_custom_target(Boost.boost DEPENDS Boost)
