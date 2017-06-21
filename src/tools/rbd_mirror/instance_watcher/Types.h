@@ -44,7 +44,7 @@ struct ImagePayloadBase : public PayloadBase {
   std::string peer_mirror_uuid;
   std::string peer_image_id;
 
-  ImagePayloadBase() : PayloadBase() {
+  ImagePayloadBase() : PayloadBase(), global_image_id{""}, peer_mirror_uuid{""}, peer_image_id{""} {
   }
 
   ImagePayloadBase(uint64_t request_id, const std::string &global_image_id,
@@ -97,7 +97,7 @@ struct ImageReleasePayload : public ImagePayloadBase {
 struct SyncPayloadBase : public PayloadBase {
   std::string sync_id;
 
-  SyncPayloadBase() : PayloadBase() {
+  SyncPayloadBase() : PayloadBase(), sync_id{""} {
   }
 
   SyncPayloadBase(uint64_t request_id, const std::string &sync_id)
