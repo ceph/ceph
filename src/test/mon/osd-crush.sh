@@ -40,7 +40,7 @@ function TEST_crush_rule_create_simple() {
 
     run_mon $dir a || return 1
 
-    ceph --format xml osd crush rule dump replicated_ruleset | \
+    ceph --format xml osd crush rule dump replicated_rule | \
         egrep '<op>take</op><item>[^<]+</item><item_name>default</item_name>' | \
         grep '<op>choose_firstn</op><num>0</num><type>osd</type>' || return 1
     local ruleset=ruleset0

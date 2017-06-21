@@ -1290,9 +1290,10 @@ public:
   static int build_simple_crush_map_from_conf(CephContext *cct,
 					      CrushWrapper& crush,
 					      ostream *ss);
-  static int build_simple_crush_rulesets(CephContext *cct, CrushWrapper& crush,
-					 const string& root,
-					 ostream *ss);
+  static int build_simple_crush_rules(
+    CephContext *cct, CrushWrapper& crush,
+    const string& root,
+    ostream *ss);
 
   bool crush_ruleset_in_use(int ruleset) const;
 
