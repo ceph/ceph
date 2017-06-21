@@ -10,6 +10,7 @@
 #include "common/utf8.h"
 #include "common/ceph_json.h"
 #include "common/safe_io.h"
+#include "common/backport14.h"
 #include <boost/algorithm/string.hpp>
 #include <boost/algorithm/string/replace.hpp>
 #include <boost/utility/string_view.hpp>
@@ -23,6 +24,7 @@
 #include "rgw_user.h"
 #include "rgw_cors.h"
 #include "rgw_cors_s3.h"
+#include "rgw_tag_s3.h"
 
 #include "rgw_client_io.h"
 
@@ -290,6 +292,15 @@ int RGWGetObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t bl_ofs,
         /* User custom metadata. */
         name += sizeof(RGW_ATTR_PREFIX) - 1;
         dump_header(s, name, iter->second);
+      } else if (iter->first.compare(RGW_ATTR_TAGS) == 0) {
+        RGWObjTags obj_tags;
+        try{
+          bufferlist::iterator it = iter->second.begin();
+          obj_tags.decode(it);
+        } catch (buffer::error &err) {
+          ldout(s->cct,0) << "Error caught buffer::error couldn't decode TagSet " << dendl;
+        }
+        dump_header(s, RGW_AMZ_TAG_COUNT, obj_tags.count());
       }
     }
   }
@@ -346,6 +357,97 @@ int RGWGetObj_ObjStore_S3::get_decrypt_filter(std::unique_ptr<RGWGetDataCB> *fil
   return res;
 }
 
+void RGWGetObjTags_ObjStore_S3::send_response_data(bufferlist& bl)
+{
+  dump_errno(s);
+  end_header(s, this, "application/xml");
+  dump_start(s);
+
+  s->formatter->open_object_section_in_ns("Tagging", XMLNS_AWS_S3);
+  s->formatter->open_object_section("TagSet");
+  if (has_tags){
+    RGWObjTagSet_S3 tagset;
+    bufferlist::iterator iter = bl.begin();
+    try {
+      tagset.decode(iter);
+    } catch (buffer::error& err) {
+      ldout(s->cct,0) << "ERROR: caught buffer::error, couldn't decode TagSet" << dendl;
+      op_ret= -EIO;
+      return;
+    }
+    tagset.dump_xml(s->formatter);
+  }
+  s->formatter->close_section();
+  s->formatter->close_section();
+  rgw_flush_formatter_and_reset(s, s->formatter);
+}
+
+
+int RGWPutObjTags_ObjStore_S3::get_params()
+{
+  RGWObjTagsXMLParser parser;
+
+  if (!parser.init()){
+    return -EINVAL;
+  }
+
+  char *data=nullptr;
+  int len=0;
+
+  const auto max_size = s->cct->_conf->rgw_max_put_param_size;
+  int r = rgw_rest_read_all_input(s, &data, &len, max_size, false);
+
+  if (r < 0)
+    return r;
+
+  auto data_deleter = std::unique_ptr<char, decltype(free)*>{data, free};
+
+  if (!parser.parse(data, len, 1)) {
+    return -ERR_MALFORMED_XML;
+  }
+
+  RGWObjTagSet_S3 *obj_tags_s3;
+  RGWObjTagging_S3 *tagging;
+
+  tagging = static_cast<RGWObjTagging_S3 *>(parser.find_first("Tagging"));
+  obj_tags_s3 = static_cast<RGWObjTagSet_S3 *>(tagging->find_first("TagSet"));
+  if(!obj_tags_s3){
+    return -ERR_MALFORMED_XML;
+  }
+
+  RGWObjTags obj_tags;
+  r = obj_tags_s3->rebuild(obj_tags);
+  if (r < 0)
+    return r;
+
+  obj_tags.encode(tags_bl);
+  ldout(s->cct, 20) << "Read " << obj_tags.count() << "tags" << dendl;
+
+  return 0;
+}
+
+void RGWPutObjTags_ObjStore_S3::send_response()
+{
+  if (op_ret)
+    set_req_state_err(s, op_ret);
+  dump_errno(s);
+  end_header(s, this, "application/xml");
+  dump_start(s);
+
+}
+
+void RGWDeleteObjTags_ObjStore_S3::send_response()
+{
+  int r = op_ret;
+  if (r == -ENOENT)
+    r = 0;
+  if (!r)
+    r = STATUS_NO_CONTENT;
+
+  set_req_state_err(s, r);
+  dump_errno(s);
+  end_header(s, this);
+}
 
 void RGWListBuckets_ObjStore_S3::send_response_begin(bool has_buckets)
 {
@@ -1193,6 +1295,21 @@ int RGWPutObj_ObjStore_S3::get_params()
 
   } /* copy_source */
 
+  /* handle object tagging */
+  auto tag_str = s->info.env->get("HTTP_X_AMZ_TAGGING");
+  if (tag_str){
+    obj_tags = ceph::make_unique<RGWObjTags>();
+    ret = obj_tags->set_from_string(tag_str);
+    if (ret < 0){
+      ldout(s->cct,0) << "setting obj tags failed with " << ret << dendl;
+      if (ret == -ERR_INVALID_TAG){
+        ret = -EINVAL; //s3 returns only -EINVAL for PUT requests
+      }
+
+      return ret;
+    }
+  }
+
   return RGWPutObj_ObjStore::get_params();
 }
 
@@ -1502,8 +1619,55 @@ int RGWPostObj_ObjStore_S3::get_params()
   if (r < 0)
     return r;
 
+  r = get_tags();
+  if (r < 0)
+    return r;
+
+
   min_len = post_policy.min_length;
   max_len = post_policy.max_length;
+
+
+
+  return 0;
+}
+
+int RGWPostObj_ObjStore_S3::get_tags()
+{
+  string tags_str;
+  if (part_str(parts, "tagging", &tags_str)) {
+    RGWObjTagsXMLParser parser;
+    if (!parser.init()){
+      ldout(s->cct, 0) << "Couldn't init RGWObjTags XML parser" << dendl;
+      err_msg = "Server couldn't process the request";
+      return -EINVAL; // TODO: This class of errors in rgw code should be a 5XX error
+    }
+    if (!parser.parse(tags_str.c_str(), tags_str.size(), 1)) {
+      ldout(s->cct,0 ) << "Invalid Tagging XML" << dendl;
+      err_msg = "Invalid Tagging XML";
+      return -EINVAL;
+    }
+
+    RGWObjTagSet_S3 *obj_tags_s3;
+    RGWObjTagging_S3 *tagging;
+
+    tagging = static_cast<RGWObjTagging_S3 *>(parser.find_first("Tagging"));
+    obj_tags_s3 = static_cast<RGWObjTagSet_S3 *>(tagging->find_first("TagSet"));
+    if(!obj_tags_s3){
+      return -ERR_MALFORMED_XML;
+    }
+
+    RGWObjTags obj_tags;
+    int r = obj_tags_s3->rebuild(obj_tags);
+    if (r < 0)
+      return r;
+
+    bufferlist tags_bl;
+    obj_tags.encode(tags_bl);
+    ldout(s->cct, 20) << "Read " << obj_tags.count() << "tags" << dendl;
+    attrs[RGW_ATTR_TAGS] = tags_bl;
+  }
+
 
   return 0;
 }
@@ -2887,6 +3051,8 @@ RGWOp *RGWHandler_REST_Obj_S3::op_get()
     return new RGWListMultipart_ObjStore_S3;
   } else if (s->info.args.exists("layout")) {
     return new RGWGetObjLayout_ObjStore_S3;
+  } else if (is_tagging_op()) {
+    return new RGWGetObjTags_ObjStore_S3;
   }
   return get_obj_op(true);
 }
@@ -2905,7 +3071,10 @@ RGWOp *RGWHandler_REST_Obj_S3::op_put()
 {
   if (is_acl_op()) {
     return new RGWPutACLs_ObjStore_S3;
+  } else if (is_tagging_op()) {
+    return new RGWPutObjTags_ObjStore_S3;
   }
+
   if (s->init_state.src_bucket.empty())
     return new RGWPutObj_ObjStore_S3;
   else
@@ -2914,6 +3083,9 @@ RGWOp *RGWHandler_REST_Obj_S3::op_put()
 
 RGWOp *RGWHandler_REST_Obj_S3::op_delete()
 {
+  if (is_tagging_op()) {
+    return new RGWDeleteObjTags_ObjStore_S3;
+  }
   string upload_id = s->info.args.get("uploadId");
 
   if (upload_id.empty())

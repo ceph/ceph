@@ -40,6 +40,7 @@
 #include "rgw_client_io.h"
 #include "rgw_compression.h"
 #include "rgw_role.h"
+#include "rgw_tag_s3.h"
 #include "cls/lock/cls_lock_client.h"
 #include "cls/rgw/cls_rgw_client.h"
 
@@ -688,6 +689,95 @@ int RGWOp::verify_op_mask()
   }
 
   return 0;
+}
+
+int RGWGetObjTags::verify_permission()
+{
+  if (!verify_object_permission(s, RGW_PERM_READ))
+    return -EACCES;
+
+  return 0;
+}
+
+void RGWGetObjTags::pre_exec(){
+  rgw_bucket_object_pre_exec(s);
+}
+
+void RGWGetObjTags::execute()
+{
+  rgw_obj obj;
+  map<string,bufferlist> attrs;
+
+  obj = rgw_obj(s->bucket, s->object);
+
+  store->set_atomic(s->obj_ctx, obj);
+
+  op_ret = get_obj_attrs(store, s, obj, attrs);
+  auto tags = attrs.find(RGW_ATTR_TAGS);
+  if(tags != attrs.end()){
+    has_tags = true;
+    tags_bl.append(tags->second);
+  }
+  send_response_data(tags_bl);
+}
+
+int RGWPutObjTags::verify_permission()
+{
+  if (!verify_object_permission(s, RGW_PERM_WRITE)) {
+    return -EACCES;
+  }
+  return 0;
+}
+
+void RGWPutObjTags::execute()
+{
+
+  op_ret = get_params();
+  if (op_ret < 0)
+    return;
+
+
+  if (s->object.empty()){
+    op_ret= -EINVAL; // we only support tagging on existing objects
+    return;
+  }
+
+  rgw_obj obj;
+  obj = rgw_obj(s->bucket, s->object);
+  store->set_atomic(s->obj_ctx, obj);
+  op_ret = modify_obj_attr(store, s, obj, RGW_ATTR_TAGS, tags_bl);
+  if (op_ret == -ECANCELED){
+    op_ret = -ERR_TAG_CONFLICT;
+  }
+}
+
+void RGWDeleteObjTags::pre_exec(){
+  rgw_bucket_object_pre_exec(s);
+}
+
+
+int RGWDeleteObjTags::verify_permission(){
+
+  if (!s->object.empty()){
+    if(!verify_object_permission(s, RGW_PERM_WRITE)) {
+      return -EACCES;
+    }
+  }
+  return 0;
+}
+
+void RGWDeleteObjTags::execute() {
+  if (s->object.empty())
+    return;
+
+    rgw_obj obj;
+    obj = rgw_obj(s->bucket, s->object);
+    store->set_atomic(s->obj_ctx, obj);
+    map <string, bufferlist> attrs;
+    map <string, bufferlist> rmattr;
+    bufferlist bl;
+    rmattr[RGW_ATTR_TAGS] = bl;
+    op_ret = store->set_attrs(s->obj_ctx, s->bucket_info, obj, attrs, &rmattr);
 }
 
 int RGWOp::do_aws4_auth_completion()
@@ -3386,6 +3476,7 @@ void RGWPutObj::execute()
   populate_with_generic_attrs(s, attrs);
   rgw_get_request_metadata(s->cct, s->info, attrs);
   encode_delete_at_attr(delete_at, attrs);
+  encode_obj_tags_attr(obj_tags.get(), attrs);
 
   /* Add a custom metadata to expose the information whether an object
    * is an SLO or not. Appending the attribute must be performed AFTER

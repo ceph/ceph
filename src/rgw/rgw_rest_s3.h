@@ -59,6 +59,33 @@ public:
                          bufferlist* manifest_bl) override;
 };
 
+class RGWGetObjTags_ObjStore_S3 : public RGWGetObjTags_ObjStore
+{
+  bufferlist tags_bl;
+public:
+  RGWGetObjTags_ObjStore_S3() {}
+  ~RGWGetObjTags_ObjStore_S3() {}
+
+  void send_response_data(bufferlist &bl) override;
+};
+
+class RGWPutObjTags_ObjStore_S3 : public RGWPutObjTags_ObjStore
+{
+public:
+  RGWPutObjTags_ObjStore_S3() {}
+  ~RGWPutObjTags_ObjStore_S3() {}
+
+  int get_params() override;
+  void send_response() override;
+};
+
+class RGWDeleteObjTags_ObjStore_S3 : public RGWDeleteObjTags
+{
+public:
+  ~RGWDeleteObjTags_ObjStore_S3() override {}
+  void send_response() override;
+};
+
 class RGWListBuckets_ObjStore_S3 : public RGWListBuckets_ObjStore {
 public:
   RGWListBuckets_ObjStore_S3() {}
@@ -209,6 +236,7 @@ class RGWPostObj_ObjStore_S3 : public RGWPostObj_ObjStore {
   const rgw::auth::StrategyRegistry* auth_registry_ptr = nullptr;
 
   int get_policy();
+  int get_tags();
   void rebuild_key(string& key);
 
   std::string get_current_filename() const override;
@@ -552,8 +580,11 @@ protected:
   bool is_cors_op() {
       return s->info.args.exists("cors");
   }
+  bool is_tagging_op() {
+    return s->info.args.exists("tagging");
+  }
   bool is_obj_update_op() override {
-    return is_acl_op();
+    return is_acl_op() || is_tagging_op() ;
   }
   RGWOp *get_obj_op(bool get_data);
 
