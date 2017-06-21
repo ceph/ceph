@@ -27,20 +27,28 @@ class ConfigKeyService : public QuorumService
 {
   Paxos *paxos;
   map<string,bufferlist> config_keys;
+  version_t version;
+  bufferlist metabl;
+
+  void _store_put(MonitorDBStore::TransactionRef t, const string &key,
+		  bufferlist& bl);
+  void _store_delete(MonitorDBStore::TransactionRef t, const string &key);
+  void _store_delete_prefix(MonitorDBStore::TransactionRef t,
+			    const string &prefix);
+  void _store_finish(MonitorDBStore::TransactionRef t,
+		     Context *cb);
+  void store_put(const string &key, bufferlist &bl, Context *cb = NULL);
+  void store_delete(const string &key, Context *cb = NULL);
 
   int store_get(const string &key, bufferlist &bl);
-  void store_put(const string &key, bufferlist &bl, Context *cb = NULL);
-  void store_delete(MonitorDBStore::TransactionRef t, const string &key);
-  void store_delete(const string &key, Context *cb = NULL);
-  void store_delete_prefix(
-      MonitorDBStore::TransactionRef t,
-      const string &prefix);
   void store_list(stringstream &ss);
   void store_dump(stringstream &ss);
   bool store_exists(const string &key);
   bool store_has_prefix(const string &prefix);
 
   static const string STORE_PREFIX;
+  static const string META_PREFIX;
+  static const string META_KEY;
 
 protected:
   void service_shutdown() override { }

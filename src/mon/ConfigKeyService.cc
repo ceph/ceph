@@ -34,19 +34,135 @@ static ostream& _prefix(std::ostream *_dout, const Monitor *mon,
 }
 
 const string ConfigKeyService::STORE_PREFIX = "mon_config_key";
+const string ConfigKeyService::META_PREFIX = "mon_config_key_meta";
+const string ConfigKeyService::META_KEY = "meta";
 
 void ConfigKeyService::refresh()
 {
-  dout(10) << __func__ << dendl;
-  config_keys.clear();
-
-  KeyValueDB::Iterator iter =
-    mon->store->get_iterator(STORE_PREFIX);
-  while (iter->valid()) {
-    config_keys[iter->key()] = iter->value();
-    iter->next();
+  version_t had_version = version;
+  bufferlist bl;
+  mon->store->get(META_PREFIX, META_KEY, bl);
+  list<string> changed_keys;
+  uint32_t total_keys = 0;
+  if (bl.length()) {
+    auto p = bl.begin();
+    ::decode(version, p);
+    while (!p.end()) {
+      string k;
+      ::decode(k, p);
+      changed_keys.push_back(k);
+      ::decode(total_keys, p);
+    }
+    dout(20) << __func__ << " meta shows version " << version << " and "
+	     << changed_keys.size() << " changed keys" << dendl;
+  } else {
+    version = 0;
   }
-  dout(10) << __func__ << " loaded " << config_keys.size() << " keys" << dendl;
+
+  if (had_version && version == had_version + 1) {
+    for (auto& k : changed_keys) {
+      bufferlist bl;
+      int r = mon->store->get(STORE_PREFIX, k, bl);
+      if (r == -ENOENT) {
+	config_keys.erase(k);
+      } else if (r == 0) {
+	config_keys[k] = bl;
+      } else {
+	derr << __func__ << " got " << cpp_strerror(r) << dendl;
+	ceph_abort();
+      }
+    }
+    dout(10) << __func__ << " refreshed v" << version << " with "
+	     << changed_keys.size() << " changed keys" << dendl;
+    if (total_keys == config_keys.size()) {
+      goto out;
+    }
+    derr << " have " << config_keys.size() << " expected " << total_keys
+	 << ", doing full reload" << dendl;
+  } else if (had_version && had_version == version) {
+    dout(20) << __func__ << " still v" << version << ", no change" << dendl;
+    if (total_keys == config_keys.size()) {
+      goto out;
+    }
+    derr << " have " << config_keys.size() << " but expected " << total_keys
+	 << ", doing full reload" << dendl;
+  }
+
+  {
+    config_keys.clear();
+    KeyValueDB::Iterator iter =
+      mon->store->get_iterator(STORE_PREFIX);
+    while (iter->valid()) {
+      config_keys[iter->key()] = iter->value();
+      iter->next();
+    }
+  }
+  dout(10) << __func__ << " full reload v" << version << " with "
+	   << config_keys.size() << " keys" << dendl;
+
+out:
+  metabl.clear();
+  ::encode(version + 1, metabl);
+}
+
+void ConfigKeyService::_store_put(
+  MonitorDBStore::TransactionRef t,
+  const string &key,
+  bufferlist& bl)
+{
+  t->put(STORE_PREFIX, key, bl);
+  config_keys[key] = bl;
+  ::encode(key, metabl);
+  ::encode((uint32_t)config_keys.size(), metabl);
+}
+
+void ConfigKeyService::_store_delete(
+    MonitorDBStore::TransactionRef t,
+    const string &key)
+{
+  t->erase(STORE_PREFIX, key);
+  config_keys.erase(key);
+  ::encode(key, metabl);
+  ::encode((uint32_t)config_keys.size(), metabl);
+}
+
+void ConfigKeyService::_store_finish(
+  MonitorDBStore::TransactionRef t,
+  Context *cb)
+{
+  t->put(META_PREFIX, META_KEY, metabl);
+  if (cb)
+    paxos->queue_pending_finisher(cb);
+  paxos->trigger_propose();
+}
+
+void ConfigKeyService::_store_delete_prefix(
+    MonitorDBStore::TransactionRef t,
+    const string &prefix)
+{
+  for (auto p = config_keys.lower_bound(prefix);
+       p != config_keys.end();
+       ++p) {
+    size_t q = p->first.find(prefix);
+    if (q == string::npos || q > 0) {
+      break;
+    }
+    _store_delete(t, p->first);
+  }
+}
+
+void ConfigKeyService::store_put(const string &key, bufferlist &bl, Context *cb)
+{
+  MonitorDBStore::TransactionRef t = paxos->get_pending_transaction();
+  _store_put(t, key, bl);
+  _store_finish(t, cb);
+}
+
+void ConfigKeyService::store_delete(const string &key, Context *cb)
+{
+  MonitorDBStore::TransactionRef t = paxos->get_pending_transaction();
+  _store_delete(t, key);
+  _store_finish(t, cb);
 }
 
 int ConfigKeyService::store_get(const string &key, bufferlist &bl)
@@ -57,38 +173,6 @@ int ConfigKeyService::store_get(const string &key, bufferlist &bl)
   }
   bl = p->second;
   return 0;
-}
-
-void ConfigKeyService::get_store_prefixes(set<string>& s)
-{
-  s.insert(STORE_PREFIX);
-}
-
-void ConfigKeyService::store_put(const string &key, bufferlist &bl, Context *cb)
-{
-  MonitorDBStore::TransactionRef t = paxos->get_pending_transaction();
-  t->put(STORE_PREFIX, key, bl);
-  config_keys[key] = bl;
-  if (cb)
-    paxos->queue_pending_finisher(cb);
-  paxos->trigger_propose();
-}
-
-void ConfigKeyService::store_delete(const string &key, Context *cb)
-{
-  MonitorDBStore::TransactionRef t = paxos->get_pending_transaction();
-  store_delete(t, key);
-  if (cb)
-    paxos->queue_pending_finisher(cb);
-  paxos->trigger_propose();
-}
-
-void ConfigKeyService::store_delete(
-    MonitorDBStore::TransactionRef t,
-    const string &key)
-{
-  t->erase(STORE_PREFIX, key);
-  config_keys.erase(key);
 }
 
 bool ConfigKeyService::store_exists(const string &key)
@@ -131,19 +215,9 @@ void ConfigKeyService::store_dump(stringstream &ss)
   f.flush(ss);
 }
 
-void ConfigKeyService::store_delete_prefix(
-    MonitorDBStore::TransactionRef t,
-    const string &prefix)
+void ConfigKeyService::get_store_prefixes(set<string>& s)
 {
-  for (auto p = config_keys.lower_bound(prefix);
-       p != config_keys.end();
-       ++p) {
-    size_t q = p->first.find(prefix);
-    if (q == string::npos || q > 0) {
-      break;
-    }
-    store_delete(t, p->first);
-  }
+  s.insert(STORE_PREFIX);
 }
 
 bool ConfigKeyService::service_dispatch(MonOpRequestRef op)
@@ -267,19 +341,16 @@ bool ConfigKeyService::service_dispatch(MonOpRequestRef op)
     }
     MonitorDBStore::TransactionRef t = paxos->get_pending_transaction();
     if (key_prefix.size()) {
-      store_delete_prefix(t, key_prefix);
+      _store_delete_prefix(t, key_prefix);
     }
     p = kv.begin();
     while (p != kv.end()) {
       const string& k = *p++;
       bufferlist bl;
       bl.append(*p++);
-      t->put(STORE_PREFIX, k, bl);
-      config_keys[k] = bl;
+      _store_put(t, k, bl);
     }
-    paxos->queue_pending_finisher(
-      new Monitor::C_Command(mon, op, 0, ss.str(), 0));
-    paxos->trigger_propose();
+    _store_finish(t, new Monitor::C_Command(mon, op, 0, ss.str(), 0));
     return true;
   } else if (prefix == "config-key del" ||
              prefix == "config-key rm") {
@@ -309,10 +380,8 @@ bool ConfigKeyService::service_dispatch(MonOpRequestRef op)
       goto out;
     }
     MonitorDBStore::TransactionRef t = paxos->get_pending_transaction();
-    store_delete_prefix(t, key_prefix);
-    paxos->queue_pending_finisher(
-      new Monitor::C_Command(mon, op, 0, ss.str(), 0));
-    paxos->trigger_propose();
+    _store_delete_prefix(t, key_prefix);
+    _store_finish(t, new Monitor::C_Command(mon, op, 0, ss.str(), 0));
     return true;
 
   } else if (prefix == "config-key exists") {
@@ -377,10 +446,9 @@ void ConfigKeyService::do_osd_destroy(int32_t id, uuid_d& uuid)
 
   MonitorDBStore::TransactionRef t = paxos->get_pending_transaction();
   for (auto p : { dmcrypt_prefix, daemon_prefix }) {
-    store_delete_prefix(t, p);
+    _store_delete_prefix(t, p);
   }
-
-  paxos->trigger_propose();
+  _store_finish(t, nullptr);
 }
 
 int ConfigKeyService::validate_osd_new(
