@@ -608,7 +608,7 @@ void Client::trim_cache(bool trim_kernel_dcache)
     if (lru.lru_get_size() <= lru.lru_get_max())  break;
 
     // trim!
-    Dentry *dn = static_cast<Dentry*>(lru.lru_expire());
+    Dentry *dn = static_cast<Dentry*>(lru.lru_get_next_expire());
     if (!dn)
       break;  // done
     
