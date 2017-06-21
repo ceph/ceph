@@ -3229,12 +3229,13 @@ void BlueStore::Collection::split_cache(
 	}
 	ldout(store->cct, 20) << __func__ << "  moving " << *sb << dendl;
 	sb->coll = dest;
+	if (sb->get_sbid()) {
+	  ldout(store->cct, 20) << __func__
+				<< "   moving registration " << *sb << dendl;
+	  shared_blob_set.remove(sb);
+	  dest->shared_blob_set.add(dest, sb);
+	}
 	if (dest->cache != cache) {
-	  if (sb->get_sbid()) {
-	    ldout(store->cct, 20) << __func__ << "   moving registration " << *sb << dendl;
-	    shared_blob_set.remove(sb);
-	    dest->shared_blob_set.add(dest, sb);
-	  }
 	  for (auto& i : sb->bc.buffer_map) {
 	    if (!i.second->is_writing()) {
 	      ldout(store->cct, 20) << __func__ << "   moving " << *i.second
@@ -3244,8 +3245,6 @@ void BlueStore::Collection::split_cache(
 	  }
 	}
       }
-
-
     }
   }
 }
@@ -7800,7 +7799,7 @@ void BlueStore::_txc_write_nodes(TransContext *txc, KeyValueDB::Transaction t)
       bufferlist bl;
       ::encode(*(sb->persistent), bl);
       dout(20) << "  shared_blob 0x" << std::hex << sbid << std::dec
-	       << " is " << bl.length() << dendl;
+	       << " is " << bl.length() << " " << *sb << dendl;
       t->set(PREFIX_SHARED_BLOB, key, bl);
     }
   }
