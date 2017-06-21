@@ -285,7 +285,7 @@ PG::PG(OSDService *o, OSDMapRef curmap,
     _pool.id,
     p.shard),
   osdmap_ref(curmap), last_persisted_osdmap_ref(curmap), pool(_pool),
-  _lock("PG::_lock"),
+  _lock("PG::_lock", true),
   #ifdef PG_DEBUG_REFS
   _ref_id_lock("PG::_ref_id_lock"), _ref_id(0),
   #endif

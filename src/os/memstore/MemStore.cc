@@ -47,14 +47,11 @@ int MemStore::mount()
   int r = _load();
   if (r < 0)
     return r;
-  finisher.start();
   return 0;
 }
 
 int MemStore::umount()
 {
-  finisher.wait_for_empty();
-  finisher.stop();
   return _save();
 }
 
@@ -725,9 +722,9 @@ int MemStore::queue_transactions(Sequencer *osr,
   if (on_apply_sync)
     on_apply_sync->complete(0);
   if (on_apply)
-    finisher.queue(on_apply);
+    on_apply->complete(0);
   if (on_commit)
-    finisher.queue(on_commit);
+    on_commit->complete(0);
   return 0;
 }
 

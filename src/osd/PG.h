@@ -279,7 +279,7 @@ protected:
   void requeue_map_waiters();
 
   void update_osdmap_ref(OSDMapRef newmap) {
-    assert(_lock.is_locked_by_me());
+    Mutex::Locker l(_lock); //It's a recursive lock!
     osdmap_ref = std::move(newmap);
   }
 

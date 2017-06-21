@@ -3442,7 +3442,7 @@ public:
 			 unsigned alignment)
     : cid(cid), write_alignment(alignment), max_object_len(max_size),
       max_write_len(max_write), in_flight(0), object_gen(gen),
-      rng(rng), store(store), osr(osr), lock("State lock") {}
+      rng(rng), store(store), osr(osr), lock("State lock", true) {}
 
   int init() {
     ObjectStore::Transaction t;

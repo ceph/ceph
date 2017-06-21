@@ -196,8 +196,6 @@ private:
 
   CollectionRef get_collection(const coll_t& cid);
 
-  Finisher finisher;
-
   uint64_t used_bytes;
 
   void _do_transaction(Transaction& t);
@@ -241,7 +239,6 @@ public:
   MemStore(CephContext *cct, const string& path)
     : ObjectStore(cct, path),
       coll_lock("MemStore::coll_lock"),
-      finisher(cct),
       used_bytes(0) {}
   ~MemStore() override { }
 

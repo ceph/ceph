@@ -1877,7 +1877,7 @@ OSD::OSD(CephContext *cct_, ObjectStore *store_,
 	 MonClient *mc,
 	 const std::string &dev, const std::string &jdev) :
   Dispatcher(cct_),
-  osd_lock("OSD::osd_lock"),
+  osd_lock("OSD::osd_lock", true),
   tick_timer(cct, osd_lock),
   tick_timer_lock("OSD::tick_timer_lock"),
   tick_timer_without_osd_lock(cct, tick_timer_lock),
