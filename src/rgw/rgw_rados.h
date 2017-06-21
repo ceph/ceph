@@ -1498,6 +1498,22 @@ public:
 
   bool is_single_zonegroup(CephContext *cct, RGWRados *store);
 
+  /*
+    returns true if there are several zone groups with a least one zone
+   */
+  bool is_multi_zonegroups_with_zones()
+  {
+    int count = 0;
+    for (const auto& zg:  period_map.zonegroups) {
+      if (zg.second.zones.size() > 0) {
+	if (count++ > 0) {
+	  return true;
+	}
+      }
+    }
+    return false;
+  }
+
   int get_latest_epoch(epoch_t& epoch);
   int set_latest_epoch(epoch_t epoch, bool exclusive = false);
 
@@ -3005,7 +3021,8 @@ public:
   }
 
   bool need_to_log_metadata() {
-    return is_meta_master() && get_zone().log_meta;
+    return is_meta_master() &&
+      (get_zonegroup().zones.size() > 1 || current_period.is_multi_zonegroups_with_zones());
   }
 
   librados::Rados* get_rados_handle();
