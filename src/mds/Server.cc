@@ -7166,9 +7166,11 @@ void Server::_rename_prepare(MDRequestRef& mdr,
   if (destdn->is_auth() && !destdnl->is_null()) {
     mdcache->predirty_journal_parents(mdr, metablob, oldin, destdn->get_dir(),
 				      (destdnl->is_primary() ? PREDIRTY_PRIMARY:0)|predirty_dir, -1);
-    if (destdnl->is_primary())
+    if (destdnl->is_primary()) {
+      assert(straydn);
       mdcache->predirty_journal_parents(mdr, metablob, oldin, straydn->get_dir(),
 					PREDIRTY_PRIMARY|PREDIRTY_DIR, 1);
+    }
   }
   
   // move srcdn
@@ -7187,6 +7189,7 @@ void Server::_rename_prepare(MDRequestRef& mdr,
   // target inode
   if (!linkmerge) {
     if (destdnl->is_primary()) {
+      assert(straydn);
       if (destdn->is_auth()) {
 	// project snaprealm, too
 	if (oldin->snaprealm || dest_realm->get_newest_seq() + 1 > oldin->get_oldest_snap())
@@ -7280,8 +7283,10 @@ void Server::_rename_prepare(MDRequestRef& mdr,
   if (srcdnl->is_primary() && destdn->is_auth())
     srci->first = destdn->first;  
 
-  if (oldin && oldin->is_dir())
+  if (oldin && oldin->is_dir()) {
+    assert(straydn);
     mdcache->project_subtree_rename(oldin, destdn->get_dir(), straydn->get_dir());
+  }
   if (srci->is_dir())
     mdcache->project_subtree_rename(srci, srcdn->get_dir(), destdn->get_dir());
 
