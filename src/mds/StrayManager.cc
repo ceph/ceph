@@ -420,6 +420,7 @@ bool StrayManager::_eval_stray(CDentry *dn, bool delay)
   dout(10) << " inode is " << *dnl->get_inode() << dendl;
   CInode *in = dnl->get_inode();
   assert(in);
+  assert(!in->state_test(CInode::STATE_REJOINUNDEF));
 
   // The only dentries elegible for purging are those
   // in the stray directories

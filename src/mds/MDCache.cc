@@ -12366,8 +12366,10 @@ void MDCache::activate_stray_manager()
  *              away.
  */
 void MDCache::maybe_eval_stray(CInode *in, bool delay) {
-  if (in->inode.nlink > 0 || in->is_base() || is_readonly() || mds->is_standby_replay())
+  if (in->inode.nlink > 0 || in->is_base() || is_readonly() ||
+      mds->get_state() <= MDSMap::STATE_REJOIN)
     return;
+
   CDentry *dn = in->get_projected_parent_dn();
 
   if (dn->state_test(CDentry::STATE_PURGING)) {
