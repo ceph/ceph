@@ -38,6 +38,7 @@ static const auto signed_subresources = {
   "response-content-language",
   "response-content-type",
   "response-expires",
+  "tagging",
   "torrent",
   "uploadId",
   "uploads",
