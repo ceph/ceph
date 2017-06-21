@@ -892,6 +892,7 @@ public:
       char* op_buffer_p;
 
       bufferlist::iterator data_bl_p;
+      bufferlist::iterator op_bl_p;
 
     public:
       vector<coll_t> colls;
@@ -900,12 +901,12 @@ public:
     private:
       explicit iterator(Transaction *t)
         : t(t),
-	  data_bl_p(t->data_bl.begin()),
+          data_bl_p(t->data_bl.begin()),
+          op_bl_p(t->op_bl.begin()),
           colls(t->coll_index.size()),
           objects(t->object_index.size()) {
 
         ops = t->data.ops;
-        op_buffer_p = t->op_bl.get_contiguous(0, t->data.ops * sizeof(Op));
 
         map<coll_t, __le32>::iterator coll_index_p;
         for (coll_index_p = t->coll_index.begin();
@@ -932,8 +933,10 @@ public:
       Op* decode_op() {
         assert(ops > 0);
 
+        op_buffer_p = op_bl_p.get_current_ptr().c_str();
+        op_bl_p.advance(sizeof(Op));
+
         Op* op = reinterpret_cast<Op*>(op_buffer_p);
-        op_buffer_p += sizeof(Op);
         ops--;
 
         return op;
