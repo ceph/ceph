@@ -100,6 +100,7 @@ int main(int argc, const char **argv)
   bool tree = false;
   boost::scoped_ptr<Formatter> tree_formatter;
   bool createsimple = false;
+  bool createpool = false;
   bool create_from_conf = false;
   int num_osd = 0;
   int pg_bits = g_conf->osd_pg_bits;
@@ -162,6 +163,15 @@ int main(int argc, const char **argv)
 	exit(EXIT_FAILURE);
       }
       createsimple = true;
+    } else if (ceph_argparse_witharg(args, i, &num_osd, err, "--createsimple-with-pool",
+				     (char*)NULL)) {
+				     
+      if (!err.str().empty()) {
+	cerr << err.str() << std::endl;
+	exit(EXIT_FAILURE);
+      }
+      createsimple = true;
+      createpool = true;
     } else if (ceph_argparse_flag(args, i, "--create-from-conf", (char*)NULL)) {
       create_from_conf = true;
     } else if (ceph_argparse_flag(args, i, "--mark-up-in", (char*)NULL)) {
