@@ -3291,6 +3291,108 @@ void *BlueStore::MempoolThread::entry()
 
 // =======================================================
 
+// OmapIteratorImpl
+
+#undef dout_prefix
+#define dout_prefix *_dout << "bluestore.OmapIteratorImpl(" << this << ") "
+
+BlueStore::OmapIteratorImpl::OmapIteratorImpl(
+  CollectionRef c, OnodeRef o, KeyValueDB::Iterator it)
+  : c(c), o(o), it(it)
+{
+  RWLock::RLocker l(c->lock);
+  if (o->onode.has_omap()) {
+    get_omap_key(o->onode.nid, string(), &head);
+    get_omap_tail(o->onode.nid, &tail);
+    it->lower_bound(head);
+  }
+}
+
+int BlueStore::OmapIteratorImpl::seek_to_first()
+{
+  RWLock::RLocker l(c->lock);
+  if (o->onode.has_omap()) {
+    it->lower_bound(head);
+  } else {
+    it = KeyValueDB::Iterator();
+  }
+  return 0;
+}
+
+int BlueStore::OmapIteratorImpl::upper_bound(const string& after)
+{
+  RWLock::RLocker l(c->lock);
+  if (o->onode.has_omap()) {
+    string key;
+    get_omap_key(o->onode.nid, after, &key);
+    ldout(c->store->cct,20) << __func__ << " after " << after << " key "
+			    << pretty_binary_string(key) << dendl;
+    it->upper_bound(key);
+  } else {
+    it = KeyValueDB::Iterator();
+  }
+  return 0;
+}
+
+int BlueStore::OmapIteratorImpl::lower_bound(const string& to)
+{
+  RWLock::RLocker l(c->lock);
+  if (o->onode.has_omap()) {
+    string key;
+    get_omap_key(o->onode.nid, to, &key);
+    ldout(c->store->cct,20) << __func__ << " to " << to << " key "
+			    << pretty_binary_string(key) << dendl;
+    it->lower_bound(key);
+  } else {
+    it = KeyValueDB::Iterator();
+  }
+  return 0;
+}
+
+bool BlueStore::OmapIteratorImpl::valid()
+{
+  RWLock::RLocker l(c->lock);
+  bool r = o->onode.has_omap() && it && it->valid() &&
+    it->raw_key().second <= tail;
+  if (it && it->valid()) {
+    ldout(c->store->cct,20) << __func__ << " is at "
+			    << pretty_binary_string(it->raw_key().second)
+			    << dendl;
+  }
+  return r;
+}
+
+int BlueStore::OmapIteratorImpl::next(bool validate)
+{
+  RWLock::RLocker l(c->lock);
+  if (o->onode.has_omap()) {
+    it->next();
+    return 0;
+  } else {
+    return -1;
+  }
+}
+
+string BlueStore::OmapIteratorImpl::key()
+{
+  RWLock::RLocker l(c->lock);
+  assert(it->valid());
+  string db_key = it->raw_key().second;
+  string user_key;
+  decode_omap_key(db_key, &user_key);
+  return user_key;
+}
+
+bufferlist BlueStore::OmapIteratorImpl::value()
+{
+  RWLock::RLocker l(c->lock);
+  assert(it->valid());
+  return it->value();
+}
+
+
+// =====================================
+
 #undef dout_prefix
 #define dout_prefix *_dout << "bluestore(" << path << ") "
 
@@ -6881,91 +6983,6 @@ out:
   }
 
   return r;
-}
-
-// omap reads
-
-BlueStore::OmapIteratorImpl::OmapIteratorImpl(
-  CollectionRef c, OnodeRef o, KeyValueDB::Iterator it)
-  : c(c), o(o), it(it)
-{
-  RWLock::RLocker l(c->lock);
-  if (o->onode.has_omap()) {
-    get_omap_key(o->onode.nid, string(), &head);
-    get_omap_tail(o->onode.nid, &tail);
-    it->lower_bound(head);
-  }
-}
-
-int BlueStore::OmapIteratorImpl::seek_to_first()
-{
-  RWLock::RLocker l(c->lock);
-  if (o->onode.has_omap()) {
-    it->lower_bound(head);
-  } else {
-    it = KeyValueDB::Iterator();
-  }
-  return 0;
-}
-
-int BlueStore::OmapIteratorImpl::upper_bound(const string& after)
-{
-  RWLock::RLocker l(c->lock);
-  if (o->onode.has_omap()) {
-    string key;
-    get_omap_key(o->onode.nid, after, &key);
-    it->upper_bound(key);
-  } else {
-    it = KeyValueDB::Iterator();
-  }
-  return 0;
-}
-
-int BlueStore::OmapIteratorImpl::lower_bound(const string& to)
-{
-  RWLock::RLocker l(c->lock);
-  if (o->onode.has_omap()) {
-    string key;
-    get_omap_key(o->onode.nid, to, &key);
-    it->lower_bound(key);
-  } else {
-    it = KeyValueDB::Iterator();
-  }
-  return 0;
-}
-
-bool BlueStore::OmapIteratorImpl::valid()
-{
-  RWLock::RLocker l(c->lock);
-  return o->onode.has_omap() && it && it->valid() && it->raw_key().second <= tail;
-}
-
-int BlueStore::OmapIteratorImpl::next(bool validate)
-{
-  RWLock::RLocker l(c->lock);
-  if (o->onode.has_omap()) {
-    it->next();
-    return 0;
-  } else {
-    return -1;
-  }
-}
-
-string BlueStore::OmapIteratorImpl::key()
-{
-  RWLock::RLocker l(c->lock);
-  assert(it->valid());
-  string db_key = it->raw_key().second;
-  string user_key;
-  decode_omap_key(db_key, &user_key);
-  return user_key;
-}
-
-bufferlist BlueStore::OmapIteratorImpl::value()
-{
-  RWLock::RLocker l(c->lock);
-  assert(it->valid());
-  return it->value();
 }
 
 int BlueStore::omap_get(
