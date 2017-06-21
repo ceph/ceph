@@ -5588,7 +5588,7 @@ void Server::_unlink_local(MDRequestRef& mdr, CDentry *dn, CDentry *straydn)
   dn->pre_dirty();
 
   inode_t *pi = in->project_inode();
-  dn->make_path_string(pi->stray_prior_path);
+  dn->make_path_string(pi->stray_prior_path, true);
   mdr->add_projected_inode(in); // do this _after_ my dn->pre_dirty().. we apply that one manually.
   pi->version = in->pre_dirty();
   pi->ctime = mdr->get_op_stamp();
@@ -6778,7 +6778,7 @@ void Server::_rename_prepare(MDRequestRef& mdr,
     }
     if (tpi) {
       tpi->ctime = mdr->get_op_stamp();
-      destdn->make_path_string(tpi->stray_prior_path);
+      destdn->make_path_string(tpi->stray_prior_path, true);
       tpi->nlink--;
       if (tpi->nlink == 0)
 	oldin->state_set(CInode::STATE_ORPHAN);
