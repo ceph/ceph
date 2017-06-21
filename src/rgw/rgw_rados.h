@@ -3202,9 +3202,8 @@ public:
   int delete_obj_index(const rgw_obj& obj);
 
   /**
-   * Get the attributes for an object.
-   * bucket: name of the bucket holding the object.
-   * obj: name of the object
+   * Get an attribute for a system object.
+   * obj: the object to get attr
    * name: name of the attr to retrieve
    * dest: bufferlist to store the result in
    * Returns: 0 on success, -ERR# otherwise.
@@ -3627,11 +3626,12 @@ public:
 
   /**
    * Init pool iteration
-   * bucket: pool name in a bucket object
+   * pool: pool to use for the ctx initialization
    * ctx: context object to use for the iteration
    * Returns: 0 on success, -ERR# otherwise.
    */
   int pool_iterate_begin(const rgw_pool& pool, RGWPoolIterCtx& ctx);
+
   /**
    * Iterate over pool return object names, use optional filter
    * ctx: iteration context, initialized with pool_iterate_begin()
