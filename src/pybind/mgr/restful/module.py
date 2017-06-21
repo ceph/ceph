@@ -296,6 +296,13 @@ class Module(MgrModule):
         else:
             pkey_fname = self.get_localized_config('key_file') or '/etc/ceph/ceph-mgr-restful.key'
 
+        if not cert_fname or not pkey_fname:
+            raise RuntimeError('no certificate configured')
+        if not os.path.isfile(cert_fname):
+            raise RuntimeError('certificate %s does not exist' % cert_fname)
+        if not os.path.isfile(pkey_fname):
+            raise RuntimeError('private key %s does not exist' % pkey_fname)
+
         # Create the HTTPS werkzeug server serving pecan app
         self.server = make_server(
             host=server_addr,
