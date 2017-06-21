@@ -887,6 +887,10 @@ void Migrator::dispatch_export_dir(MDRequestRef& mdr, int count)
       export_try_cancel(dir);
       return;
     }
+
+    mds->locker->drop_locks(mdr.get());
+    mdr->drop_local_auth_pins();
+
     mds->wait_for_mdsmap(mds->mdsmap->get_epoch(), new C_M_ExportDirWait(this, mdr, count+1));
     return;
   }
