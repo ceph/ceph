@@ -735,7 +735,7 @@ protected:
   static void _merge_object_divergent_entries(
     const IndexedLog &log,               ///< [in] log to merge against
     const hobject_t &hoid,               ///< [in] object we are merging
-    const mempool::osd_pglog::list<pg_log_entry_t> &entries, ///< [in] entries for hoid to merge
+    const mempool::osd_pglog::list<pg_log_entry_t> &orig_entries, ///< [in] entries for hoid to merge
     const pg_info_t &info,              ///< [in] info for merging entries
     eversion_t olog_can_rollback_to,     ///< [in] rollback boundary
     missing_type &missing,              ///< [in,out] missing to adjust, use
@@ -743,7 +743,7 @@ protected:
     const DoutPrefixProvider *dpp        ///< [in] logging provider
     ) {
     ldpp_dout(dpp, 20) << __func__ << ": merging hoid " << hoid
-		       << " entries: " << entries << dendl;
+		       << " entries: " << orig_entries << dendl;
 
     if (hoid > info.last_backfill) {
       ldpp_dout(dpp, 10) << __func__ << ": hoid " << hoid << " after last_backfill"
@@ -752,20 +752,32 @@ protected:
     }
 
     // entries is non-empty
-    assert(!entries.empty());
+    assert(!orig_entries.empty());
+    // strip out and ignore ERROR entries
+    mempool::osd_pglog::list<pg_log_entry_t> entries;
     eversion_t last;
-    for (list<pg_log_entry_t>::const_iterator i = entries.begin();
-	 i != entries.end();
+    for (list<pg_log_entry_t>::const_iterator i = orig_entries.begin();
+	 i != orig_entries.end();
 	 ++i) {
       // all entries are on hoid
       assert(i->soid == hoid);
-      if (i != entries.begin() && i->prior_version != eversion_t()) {
+      if (i != orig_entries.begin() && i->prior_version != eversion_t()) {
 	// in increasing order of version
 	assert(i->version > last);
-	// prior_version correct
-	assert(i->prior_version == last);
+	// prior_version correct (unless it is an ERROR entry)
+	assert(i->prior_version == last || i->is_error());
       }
       last = i->version;
+      if (i->is_error()) {
+	ldpp_dout(dpp, 20) << __func__ << ": ignoring " << *i << dendl;
+      } else {
+	ldpp_dout(dpp, 20) << __func__ << ": keeping " << *i << dendl;
+	entries.push_back(*i);
+      }
+    }
+    if (entries.empty()) {
+      ldpp_dout(dpp, 10) << __func__ << ": no non-ERROR entries" << dendl;
+      return;
     }
 
     const eversion_t prior_version = entries.begin()->prior_version;
