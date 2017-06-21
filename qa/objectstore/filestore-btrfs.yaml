@@ -1,3 +1,7 @@
+# centos btrfs hits ENOSPC all the time :(
+# xenial too.  so far trusty seems to behave?
+os_type: ubuntu
+os_version: "14.04"
 overrides:
   ceph:
     fs: btrfs
