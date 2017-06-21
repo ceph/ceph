@@ -71,7 +71,7 @@ class Worker : public Thread {
     : cct(c), pool(p), done(false), id(i), perf_logger(NULL), center(c), references(0) {
     center.init(InitEventNumber);
     char name[128];
-    sprintf(name, "AsyncMessenger::Worker-%d", id);
+    sprintf(name, "AsyncMessenger::Worker-%u", id);
     // initialize perf_logger
     PerfCountersBuilder plb(cct, name, l_msgr_first, l_msgr_last);
 
