@@ -285,7 +285,7 @@ class Module(MgrModule):
             cert_tmp.flush()
             cert_fname = cert_tmp.name
         else:
-            cert_fname = self.get_localized_config('crt_file') or '/etc/ceph/ceph-mgr-restful.crt'
+            cert_fname = self.get_localized_config('crt_file')
 
         pkey = self.get_localized_config("key")
         if pkey is not None:
@@ -294,7 +294,7 @@ class Module(MgrModule):
             pkey_tmp.flush()
             pkey_fname = pkey_tmp.name
         else:
-            pkey_fname = self.get_localized_config('key_file') or '/etc/ceph/ceph-mgr-restful.key'
+            pkey_fname = self.get_localized_config('key_file')
 
         if not cert_fname or not pkey_fname:
             raise RuntimeError('no certificate configured')
