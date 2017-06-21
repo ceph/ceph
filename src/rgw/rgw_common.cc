@@ -73,6 +73,7 @@ rgw_http_errors rgw_http_s3_errors({
     { ERR_TOO_MANY_BUCKETS, {400, "TooManyBuckets" }},
     { ERR_MALFORMED_XML, {400, "MalformedXML" }},
     { ERR_AMZ_CONTENT_SHA256_MISMATCH, {400, "XAmzContentSHA256Mismatch" }},
+    { ERR_INVALID_TAG, {400, "InvalidTag"}},
     { ERR_LENGTH_REQUIRED, {411, "MissingContentLength" }},
     { EACCES, {403, "AccessDenied" }},
     { EPERM, {403, "AccessDenied" }},
@@ -94,6 +95,7 @@ rgw_http_errors rgw_http_s3_errors({
     { ERR_USER_EXIST, {409, "UserAlreadyExists" }},
     { ERR_EMAIL_EXIST, {409, "EmailExists" }},
     { ERR_KEY_EXIST, {409, "KeyExists"}},
+    { ERR_TAG_CONFLICT, {409, "OperationAborted"}},
     { ERR_INVALID_SECRET_KEY, {400, "InvalidSecretKey"}},
     { ERR_INVALID_KEY_TYPE, {400, "InvalidKeyType"}},
     { ERR_INVALID_CAP, {400, "InvalidCapability"}},
@@ -945,7 +947,8 @@ void RGWHTTPArgs::append(const string& name, const string& val)
       (name.compare("versioning") == 0) ||
       (name.compare("website") == 0) ||
       (name.compare("requestPayment") == 0) ||
-      (name.compare("torrent") == 0)) {
+      (name.compare("torrent") == 0) ||
+      (name.compare("tagging") == 0)) {
     sub_resources[name] = val;
   } else if (name[0] == 'r') { // root of all evil
     if ((name.compare("response-content-type") == 0) ||
