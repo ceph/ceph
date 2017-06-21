@@ -437,6 +437,7 @@ void AsyncConnection::process()
 #if defined(WITH_LTTNG) && defined(WITH_EVENTTRACE)
           ltt_recv_stamp = ceph_clock_now();
 #endif
+          recv_stamp = ceph_clock_now();
           ldout(async_msgr->cct, 20) << __func__ << " begin MSG" << dendl;
           ceph_msg_header header;
           ceph_msg_header_old oldheader;
@@ -492,7 +493,6 @@ void AsyncConnection::process()
           front.clear();
           middle.clear();
           data.clear();
-          recv_stamp = ceph_clock_now();
           current_header = header;
           state = STATE_OPEN_MESSAGE_THROTTLE_MESSAGE;
           break;
