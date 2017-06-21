@@ -1621,3 +1621,20 @@ def task(ctx, config):
         finally:
             if config.get('wait-for-scrub', True):
                 osd_scrub_pgs(ctx, config)
+
+            # stop logging health to clog during shutdown, or else we generate
+            # a bunch of scary messages unrelated to our actual run.
+            firstmon = teuthology.get_first_mon(ctx, config, config['cluster'])
+            (mon0_remote,) = ctx.cluster.only(firstmon).remotes.keys()
+            mon0_remote.run(
+                args=[
+                    'sudo',
+                    'ceph',
+                    '--cluster', config['cluster'],
+                    'tell',
+                    'mon.*',
+                    'injectargs',
+                    '--',
+                    '--no-mon-health-to-clog',
+                ]
+            )
