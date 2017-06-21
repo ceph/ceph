@@ -218,6 +218,69 @@ bool ConfigKeyService::service_dispatch(MonOpRequestRef op)
     // return for now; we'll put the message once it's done.
     return true;
 
+  } else if (prefix == "config-key mput" ||
+	     prefix == "config-key mput-prefix") {
+    if (!mon->is_leader()) {
+      mon->forward_request_leader(op);
+      // we forward the message; so return now.
+      return true;
+    }
+
+    string key_prefix;
+    if (prefix == "config-key mput-prefix") {
+      if (!cmd_getval(g_ceph_context, cmdmap, "key_prefix", key_prefix)) {
+	ret = -EINVAL;
+	goto out;
+      }
+      if (key_prefix.size() == 0) {
+	ss << "key_prefix must be non-empty";
+	ret = -EINVAL;
+	goto out;
+      }
+    }
+    vector<string> kv;
+    if (!cmd_getval(g_ceph_context, cmdmap, "keysandvalues", kv)) {
+      ret = -EINVAL;
+      goto out;
+    }
+    if (kv.empty() || kv.size() % 2) {
+      ss << "must have same number of keys and values";
+      ret = -EINVAL;
+      goto out;
+    }
+    auto p = kv.begin();
+    while (p != kv.end()) {
+      const string& k = *p++;
+      if (key_prefix.size() &&
+	  k.find(key_prefix) != 0) {
+	ss << "key " << k << " not under prefix " << key_prefix;
+	ret = -EINVAL;
+	goto out;
+      }
+      const string& v = *p++;
+      if (v.size() > (size_t) g_conf->mon_config_key_max_entry_size) {
+	ss << "key " << k << " value is " << v.size() << " > "
+	   << g_conf->mon_config_key_max_entry_size;
+	ret = -EFBIG; // File too large
+	goto out;
+      }
+    }
+    MonitorDBStore::TransactionRef t = paxos->get_pending_transaction();
+    if (key_prefix.size()) {
+      store_delete_prefix(t, key_prefix);
+    }
+    p = kv.begin();
+    while (p != kv.end()) {
+      const string& k = *p++;
+      bufferlist bl;
+      bl.append(*p++);
+      t->put(STORE_PREFIX, k, bl);
+      config_keys[k] = bl;
+    }
+    paxos->queue_pending_finisher(
+      new Monitor::C_Command(mon, op, 0, ss.str(), 0));
+    paxos->trigger_propose();
+    return true;
   } else if (prefix == "config-key del" ||
              prefix == "config-key rm") {
     if (!mon->is_leader()) {
@@ -232,6 +295,24 @@ bool ConfigKeyService::service_dispatch(MonOpRequestRef op)
     }
     store_delete(key, new Monitor::C_Command(mon, op, 0, "key deleted", 0));
     // return for now; we'll put the message once it's done
+    return true;
+
+  } else if (prefix == "config-key rm-prefix") {
+    if (!mon->is_leader()) {
+      mon->forward_request_leader(op);
+      return true;
+    }
+
+    string key_prefix;
+    if (!cmd_getval(g_ceph_context, cmdmap, "key_prefix", key_prefix)) {
+      ret = -EINVAL;
+      goto out;
+    }
+    MonitorDBStore::TransactionRef t = paxos->get_pending_transaction();
+    store_delete_prefix(t, key_prefix);
+    paxos->queue_pending_finisher(
+      new Monitor::C_Command(mon, op, 0, ss.str(), 0));
+    paxos->trigger_propose();
     return true;
 
   } else if (prefix == "config-key exists") {

@@ -924,12 +924,23 @@ COMMAND("config-key put " \
 	"name=key,type=CephString " \
 	"name=val,type=CephString,req=false", \
 	"put <key>, value <val>", "config-key", "rw", "cli,rest")
+COMMAND("config-key mput " \
+	"name=keysandvalues,type=CephString,n=N",
+	"mput <key1> <val1> <key2> <val2> ...", "config-key", "rw", "cli,rest")
+COMMAND("config-key mput-prefix " \
+	"name=key_prefix,type=CephString " \
+	"name=keysandvalues,type=CephString,n=N",
+	"mput-prefix <prefix> <key1> <val1> <key2> <val2> ...",
+	"config-key", "rw", "cli,rest")
 COMMAND("config-key del " \
 	"name=key,type=CephString", \
 	"delete <key>", "config-key", "rw", "cli,rest")
 COMMAND("config-key rm " \
 	"name=key,type=CephString", \
 	"rm <key>", "config-key", "rw", "cli,rest")
+COMMAND("config-key rm-prefix " \
+	"name=key_prefix,type=CephString", \
+	"rm-prefix <key-prefix>", "config-key", "rw", "cli,rest")
 COMMAND("config-key exists " \
 	"name=key,type=CephString", \
 	"check for <key>'s existence", "config-key", "r", "cli,rest")

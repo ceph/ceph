@@ -1174,6 +1174,28 @@ function gen_secrets_file()
   return 0
 }
 
+function test_mon_config_key()
+{
+  ceph config-key put aaa/hi ho
+  ceph config-key get aaa/hi | grep ho
+  ceph config-key list | grep aaa/hi
+  ceph config-key dump | grep aaa/hi | grep ho
+
+  ceph config-key mput aaa/hi there aaa/ho there
+  ceph config-key dump | grep aaa/ho | grep there
+
+  ceph config-key mput-prefix aaa/ aaa/ho no aaa/foo bar
+  expect_false ceph config-key exists aaa/hi
+  ceph config-key dump | grep aaa/ho | grep no
+  ceph config-key dump | grep aaa/foo | grep bar
+
+  ceph config-key exists aaa/foo
+  ceph config-key rm aaa/foo
+  expect_false ceph config-key exists aaa/foo
+  ceph config-key rm-prefix aaa/
+  expect_false ceph config-key exists aaa/ho
+}
+
 function test_mon_osd_create_destroy()
 {
   ceph osd new 2>&1 | grep 'EINVAL'
@@ -2385,6 +2407,7 @@ MON_TESTS+=" mon_misc"
 MON_TESTS+=" mon_mon"
 MON_TESTS+=" mon_osd"
 MON_TESTS+=" mon_crush"
+MON_TESTS+=" mon_config_key"
 MON_TESTS+=" mon_osd_create_destroy"
 MON_TESTS+=" mon_osd_pool"
 MON_TESTS+=" mon_osd_pool_quota"
