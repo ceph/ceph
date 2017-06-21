@@ -820,9 +820,7 @@ int get_data(ObjectStore *store, coll_t coll, ghobject_t hoid,
 int get_attrs(
   ObjectStore *store, coll_t coll, ghobject_t hoid,
   ObjectStore::Transaction *t, bufferlist &bl,
-  OSDriver &driver, SnapMapper &snap_mapper,
-  const ghobject_t& last_head,
-  const set<ghobject_t>& last_clones)
+  OSDriver &driver, SnapMapper &snap_mapper)
 {
   bufferlist::iterator ebliter = bl.begin();
   attr_section as;
@@ -852,7 +850,7 @@ int get_attrs(
 	}
       }
     } else {
-      if (hoid == last_head) {
+      if (hoid.hobj.is_head()) {
 	map<string,bufferlist>::iterator mi = as.data.find(SS_ATTR);
 	if (mi != as.data.end()) {
 	  SnapSet snapset;
@@ -911,9 +909,7 @@ int get_omap(ObjectStore *store, coll_t coll, ghobject_t hoid,
 int ObjectStoreTool::get_object(ObjectStore *store, coll_t coll,
 				bufferlist &bl, OSDMap &curmap,
 				bool *skipped_objects,
-				ObjectStore::Sequencer &osr,
-				ghobject_t *last_head,
-				set<ghobject_t> *last_clones)
+				ObjectStore::Sequencer &osr)
 {
   ObjectStore::Transaction tran;
   ObjectStore::Transaction *t = &tran;
@@ -963,19 +959,6 @@ int ObjectStoreTool::get_object(ObjectStore *store, coll_t coll,
 
   cout << "Write " << ob.hoid << std::endl;
 
-  // manage snap collection
-  if (ob.hoid.hobj.is_snap()) {
-    ghobject_t head = ob.hoid;
-    head.hobj = head.hobj.get_head();
-    if (head == *last_head) {
-      last_clones->insert(ob.hoid);
-    } else {
-      *last_head = head;
-      last_clones->clear();
-    }
-    last_clones->insert(ob.hoid);
-  }
-
   bufferlist ebl;
   bool done = false;
   while(!done) {
@@ -998,8 +981,7 @@ int ObjectStoreTool::get_object(ObjectStore *store, coll_t coll,
       break;
     case TYPE_ATTRS:
       if (dry_run) break;
-      ret = get_attrs(store, coll, ob.hoid, t, ebl, driver, mapper,
-		      *last_head, *last_clones);
+      ret = get_attrs(store, coll, ob.hoid, t, ebl, driver, mapper);
       if (ret) return ret;
       break;
     case TYPE_OMAP_HDR:
@@ -1328,8 +1310,6 @@ int ObjectStoreTool::do_import(ObjectStore *store, OSDSuperblock& sb,
   bool done = false;
   bool found_metadata = false;
   metadata_section ms;
-  ghobject_t last_head;
-  set<ghobject_t> last_clones;
   while(!done) {
     ret = read_section(&type, &ebl);
     if (ret)
@@ -1342,8 +1322,7 @@ int ObjectStoreTool::do_import(ObjectStore *store, OSDSuperblock& sb,
     }
     switch(type) {
     case TYPE_OBJECT_BEGIN:
-      ret = get_object(store, coll, ebl, curmap, &skipped_objects, osr,
-		       &last_head, &last_clones);
+      ret = get_object(store, coll, ebl, curmap, &skipped_objects, osr);
       if (ret) return ret;
       break;
     case TYPE_PG_METADATA:
