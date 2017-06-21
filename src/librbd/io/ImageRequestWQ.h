@@ -99,28 +99,28 @@ private:
   ImageCtxT &m_image_ctx;
   mutable RWLock m_lock;
   Contexts m_write_blocker_contexts;
-  uint32_t m_write_blockers;
+  uint32_t m_write_blockers = 0;
   bool m_require_lock_on_read = false;
-  std::atomic<unsigned> m_in_progress_writes { 0 };
   std::atomic<unsigned> m_queued_reads { 0 };
   std::atomic<unsigned> m_queued_writes { 0 };
-  std::atomic<unsigned> m_in_flight_ops { 0 };
+  std::atomic<unsigned> m_in_flight_ios { 0 };
+  std::atomic<unsigned> m_in_flight_writes { 0 };
 
-  bool m_refresh_in_progress;
+  bool m_refresh_in_progress = false;
 
-  bool m_shutdown;
-  Context *m_on_shutdown;
+  bool m_shutdown = false;
+  Context *m_on_shutdown = nullptr;
 
   inline bool writes_empty() const {
     RWLock::RLocker locker(m_lock);
     return (m_queued_writes == 0);
   }
 
-  void finish_queued_op(ImageRequest<ImageCtxT> *req);
-  void finish_in_progress_write();
+  void finish_queued_io(ImageRequest<ImageCtxT> *req);
+  void finish_in_flight_write();
 
-  int start_in_flight_op(AioCompletion *c);
-  void finish_in_flight_op();
+  int start_in_flight_io(AioCompletion *c);
+  void finish_in_flight_io();
 
   void queue(ImageRequest<ImageCtxT> *req);
 
