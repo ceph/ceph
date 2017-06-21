@@ -57,7 +57,7 @@ void JournalTool::usage()
     << "      --type=<UPDATE|OPEN|SESSION...><\n"
     << "      --frag=<ino>.<frag> [--dname=<dentry string>]\n"
     << "      --client=<session id integer>\n"
-    << "    <effect>: [get|apply|recover_dentries|splice]\n"
+    << "    <effect>: [get|recover_dentries|splice]\n"
     << "    <output>: [summary|list|binary|json] [--path <path>]\n"
     << "\n"
     << "General options:\n"
@@ -312,7 +312,7 @@ int JournalTool::main_event(std::vector<const char*> &argv)
   std::vector<const char*>::iterator arg = argv.begin();
 
   std::string command = *(arg++);
-  if (command != "get" && command != "apply" && command != "splice" && command != "recover_dentries") {
+  if (command != "get" && command != "splice" && command != "recover_dentries") {
     derr << "Unknown argument '" << command << "'" << dendl;
     usage();
     return -EINVAL;
@@ -373,25 +373,6 @@ int JournalTool::main_event(std::vector<const char*> &argv)
       derr << "Failed to scan journal (" << cpp_strerror(r) << ")" << dendl;
       return r;
     }
-  } else if (command == "apply") {
-    r = js.scan();
-    if (r) {
-      derr << "Failed to scan journal (" << cpp_strerror(r) << ")" << dendl;
-      return r;
-    }
-
-    bool dry_run = false;
-    if (arg != argv.end() && ceph_argparse_flag(argv, arg, "--dry_run", (char*)NULL)) {
-      dry_run = true;
-    }
-
-    for (JournalScanner::EventMap::iterator i = js.events.begin(); i != js.events.end(); ++i) {
-      LogEvent *le = i->second.log_event;
-      EMetaBlob const *mb = le->get_metablob();
-      if (mb) {
-        replay_offline(*mb, dry_run);
-      }
-    }
   } else if (command == "recover_dentries") {
     r = js.scan();
     if (r) {
@@ -413,7 +394,7 @@ int JournalTool::main_event(std::vector<const char*> &argv)
       LogEvent *le = i->second.log_event;
       EMetaBlob const *mb = le->get_metablob();
       if (mb) {
-        int scav_r = scavenge_dentries(*mb, dry_run, &consumed_inos);
+        int scav_r = recover_dentries(*mb, dry_run, &consumed_inos);
         if (scav_r) {
           dout(1) << "Error processing event 0x" << std::hex << i->first << std::dec
                   << ": " << cpp_strerror(scav_r) << ", continuing..." << dendl;
@@ -637,7 +618,7 @@ int JournalTool::journal_reset(bool hard)
  * @param consumed_inos output, populated with any inos inserted
  * @returns 0 on success, else negative error code
  */
-int JournalTool::scavenge_dentries(
+int JournalTool::recover_dentries(
     EMetaBlob const &metablob,
     bool const dry_run,
     std::set<inodeno_t> *consumed_inos)
@@ -962,176 +943,6 @@ int JournalTool::scavenge_dentries(
   }
 
   return r;
-}
-
-
-int JournalTool::replay_offline(EMetaBlob const &metablob, bool const dry_run)
-{
-  int r;
-
-  // Replay roots
-  for (list<ceph::shared_ptr<EMetaBlob::fullbit> >::const_iterator p = metablob.roots.begin(); p != metablob.roots.end(); ++p) {
-    EMetaBlob::fullbit const &fb = *(*p);
-    inodeno_t ino = fb.inode.ino;
-    dout(4) << "updating root 0x" << std::hex << ino << std::dec << dendl;
-
-    object_t root_oid = InodeStore::get_object_name(ino, frag_t(), ".inode");
-    dout(4) << "object id " << root_oid.name << dendl;
-
-    bufferlist inode_bl;
-    r = input.read(root_oid.name, inode_bl, (1<<22), 0);
-    InodeStore inode;
-    if (r == -ENOENT) {
-      dout(4) << "root does not exist, will create" << dendl;
-    } else {
-      dout(4) << "root exists, will modify (" << inode_bl.length() << ")" << dendl;
-      // TODO: add some kind of force option so that we can overwrite bad inodes
-      // from the journal if needed
-      bufferlist::iterator inode_bl_iter = inode_bl.begin(); 
-      std::string magic;
-      ::decode(magic, inode_bl_iter);
-      if (magic == CEPH_FS_ONDISK_MAGIC) {
-        dout(4) << "magic ok" << dendl;
-      } else {
-        dout(4) << "magic bad: '" << magic << "'" << dendl;
-      }
-      inode.decode(inode_bl_iter);
-    }
-
-    // This is a distant cousin of EMetaBlob::fullbit::update_inode, but for use
-    // on an offline InodeStore instance.  It's way simpler, because we are just
-    // uncritically hauling the data between structs.
-    inode.inode = fb.inode;
-    inode.xattrs = fb.xattrs;
-    inode.dirfragtree = fb.dirfragtree;
-    inode.snap_blob = fb.snapbl;
-    inode.symlink = fb.symlink;
-    inode.old_inodes = fb.old_inodes;
-
-    inode_bl.clear();
-    std::string magic = CEPH_FS_ONDISK_MAGIC;
-    ::encode(magic, inode_bl);
-    inode.encode(inode_bl, CEPH_FEATURES_SUPPORTED_DEFAULT);
-
-    if (!dry_run) {
-      r = output.write_full(root_oid.name, inode_bl);
-      assert(r == 0);
-    }
-  }
-
-
-
-  // TODO: respect metablob.renamed_dirino (cues us as to which dirlumps
-  // indicate renamed directories)
-
-  // Replay fullbits (dentry+inode)
-  for (list<dirfrag_t>::const_iterator lp = metablob.lump_order.begin(); lp != metablob.lump_order.end(); ++lp) {
-    dirfrag_t const &frag = *lp;
-    EMetaBlob::dirlump const &lump = metablob.lump_map.find(frag)->second;
-    lump._decode_bits();
-    object_t frag_object_id = InodeStore::get_object_name(frag.ino, frag.frag, "");
-
-    // Check for presence of dirfrag object
-    uint64_t psize;
-    time_t pmtime;
-    r = input.stat(frag_object_id.name, &psize, &pmtime);
-    if (r == -ENOENT) {
-      dout(4) << "Frag object " << frag_object_id.name << " did not exist, will create" << dendl;
-    } else if (r != 0) {
-      // FIXME: what else can happen here?  can I deal?
-      assert(r == 0);
-    } else {
-      dout(4) << "Frag object " << frag_object_id.name << " exists, will modify" << dendl;
-    }
-
-    // Write fnode to omap header of dirfrag object
-    bufferlist fnode_bl;
-    lump.fnode.encode(fnode_bl);
-    if (!dry_run) {
-      r = output.omap_set_header(frag_object_id.name, fnode_bl);
-      if (r != 0) {
-        derr << "Failed to write fnode for frag object " << frag_object_id.name << dendl;
-        return r;
-      }
-    }
-
-    // Try to get the existing dentry
-    list<ceph::shared_ptr<EMetaBlob::fullbit> > const &fb_list = lump.get_dfull();
-    for (list<ceph::shared_ptr<EMetaBlob::fullbit> >::const_iterator fbi = fb_list.begin(); fbi != fb_list.end(); ++fbi) {
-      EMetaBlob::fullbit const &fb = *(*fbi);
-
-      // Get a key like "foobar_head"
-      std::string key;
-      dentry_key_t dn_key(fb.dnlast, fb.dn.c_str());
-      dn_key.encode(key);
-
-      // See if the dentry is present
-      std::set<std::string> keys;
-      keys.insert(key);
-      std::map<std::string, bufferlist> vals;
-      r = input.omap_get_vals_by_keys(frag_object_id.name, keys, &vals);
-      assert (r == 0);  // I assume success because I checked object existed and absence of 
-                        // dentry gives me empty map instead of failure
-                        // FIXME handle failures so we can replay other events
-                        // if this one is causing some unexpected issue
-    
-      if (vals.find(key) == vals.end()) {
-        dout(4) << "dentry " << key << " does not exist, will be created" << dendl;
-      } else {
-        dout(4) << "dentry " << key << " existed already" << dendl;
-        // TODO: read out existing dentry before adding new one so that
-        // we can print a bit of info about what we're overwriting
-      }
-    
-      bufferlist dentry_bl;
-      ::encode(fb.dnfirst, dentry_bl);
-      ::encode('I', dentry_bl);
-
-      InodeStore inode;
-      inode.inode = fb.inode;
-      inode.xattrs = fb.xattrs;
-      inode.dirfragtree = fb.dirfragtree;
-      inode.snap_blob = fb.snapbl;
-      inode.symlink = fb.symlink;
-      inode.old_inodes = fb.old_inodes;
-      inode.encode_bare(dentry_bl, CEPH_FEATURES_SUPPORTED_DEFAULT);
-      
-      vals[key] = dentry_bl;
-      if (!dry_run) {
-        r = output.omap_set(frag_object_id.name, vals);
-        assert(r == 0);  // FIXME handle failures
-      }
-    }
-
-    // Replay nullbits: removal of dentries
-    list<EMetaBlob::nullbit> const &nb_list = lump.get_dnull();
-    for (list<EMetaBlob::nullbit>::const_iterator
-	iter = nb_list.begin(); iter != nb_list.end(); ++iter) {
-      EMetaBlob::nullbit const &nb = *iter;
-
-      // Get a key like "foobar_head"
-      std::string key;
-      dentry_key_t dn_key(nb.dnlast, nb.dn.c_str());
-      dn_key.encode(key);
-
-      // Remove it from the dirfrag
-      dout(4) << "Removing dentry " << key << dendl;
-      std::set<std::string> keys;
-      keys.insert(key);
-      if (!dry_run) {
-        r = output.omap_rm_keys(frag_object_id.name, keys);
-        assert(r == 0);
-      }
-    }
-  }
-
-  for (std::vector<inodeno_t>::const_iterator i = metablob.destroyed_inodes.begin();
-       i != metablob.destroyed_inodes.end(); ++i) {
-    dout(4) << "Destroyed inode: " << *i << dendl;
-    // TODO: if it was a dir, then delete its dirfrag objects
-  }
-
-  return 0;
 }
 
 
