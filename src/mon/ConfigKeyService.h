@@ -26,6 +26,7 @@ class Formatter;
 class ConfigKeyService : public QuorumService
 {
   Paxos *paxos;
+  map<string,bufferlist> config_keys;
 
   int store_get(const string &key, bufferlist &bl);
   void store_put(const string &key, bufferlist &bl, Context *cb = NULL);
@@ -62,7 +63,8 @@ public:
                   list<pair<health_status_t,string> > *detail) override { }
   bool service_dispatch(MonOpRequestRef op) override;
 
-  void start_epoch() override { }
+  void refresh() override;
+  void start_epoch() override {}
   void finish_epoch() override { }
   void cleanup() override { }
   void service_tick() override { }

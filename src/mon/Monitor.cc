@@ -846,6 +846,7 @@ void Monitor::refresh_from_paxos(bool *need_bootstrap)
   for (int i = 0; i < PAXOS_NUM; ++i) {
     paxos_service[i]->post_refresh();
   }
+  config_key_service->refresh();
 }
 
 void Monitor::register_cluster_logger()

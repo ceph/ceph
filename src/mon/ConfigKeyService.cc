@@ -35,9 +35,28 @@ static ostream& _prefix(std::ostream *_dout, const Monitor *mon,
 
 const string ConfigKeyService::STORE_PREFIX = "mon_config_key";
 
+void ConfigKeyService::refresh()
+{
+  dout(10) << __func__ << dendl;
+  config_keys.clear();
+
+  KeyValueDB::Iterator iter =
+    mon->store->get_iterator(STORE_PREFIX);
+  while (iter->valid()) {
+    config_keys[iter->key()] = iter->value();
+    iter->next();
+  }
+  dout(10) << __func__ << " loaded " << config_keys.size() << " keys" << dendl;
+}
+
 int ConfigKeyService::store_get(const string &key, bufferlist &bl)
 {
-  return mon->store->get(STORE_PREFIX, key, bl);
+  auto p = config_keys.find(key);
+  if (p == config_keys.end()) {
+    return -ENOENT;
+  }
+  bl = p->second;
+  return 0;
 }
 
 void ConfigKeyService::get_store_prefixes(set<string>& s)
@@ -49,6 +68,7 @@ void ConfigKeyService::store_put(const string &key, bufferlist &bl, Context *cb)
 {
   MonitorDBStore::TransactionRef t = paxos->get_pending_transaction();
   t->put(STORE_PREFIX, key, bl);
+  config_keys[key] = bl;
   if (cb)
     paxos->queue_pending_finisher(cb);
   paxos->trigger_propose();
@@ -68,25 +88,20 @@ void ConfigKeyService::store_delete(
     const string &key)
 {
   t->erase(STORE_PREFIX, key);
+  config_keys.erase(key);
 }
 
 bool ConfigKeyService::store_exists(const string &key)
 {
-  return mon->store->exists(STORE_PREFIX, key);
+  return config_keys.count(key);
 }
 
 void ConfigKeyService::store_list(stringstream &ss)
 {
-  KeyValueDB::Iterator iter =
-    mon->store->get_iterator(STORE_PREFIX);
-
   JSONFormatter f(true);
   f.open_array_section("keys");
-
-  while (iter->valid()) {
-    string key(iter->key());
-    f.dump_string("key", key);
-    iter->next();
+  for (auto& p : config_keys) {
+    f.dump_string("key", p.first);
   }
   f.close_section();
   f.flush(ss);
@@ -94,31 +109,23 @@ void ConfigKeyService::store_list(stringstream &ss)
 
 bool ConfigKeyService::store_has_prefix(const string &prefix)
 {
-  KeyValueDB::Iterator iter =
-    mon->store->get_iterator(STORE_PREFIX);
-
-  while (iter->valid()) {
-    string key(iter->key());
-    size_t p = key.find(prefix);
-    if (p != string::npos && p == 0) {
-      return true;
-    }
-    iter->next();
+  auto p = config_keys.lower_bound(prefix);
+  if (p == config_keys.end()) {
+    return false;
+  }
+  size_t q = p->first.find(prefix);
+  if (q != string::npos && q == 0) {
+    return true;
   }
   return false;
 }
 
 void ConfigKeyService::store_dump(stringstream &ss)
 {
-  KeyValueDB::Iterator iter =
-    mon->store->get_iterator(STORE_PREFIX);
-
   JSONFormatter f(true);
   f.open_object_section("config-key store");
-
-  while (iter->valid()) {
-    f.dump_string(iter->key().c_str(), iter->value().to_str());
-    iter->next();
+  for (auto& p : config_keys) {
+    f.dump_string(p.first.c_str(), p.second.to_str());
   }
   f.close_section();
   f.flush(ss);
@@ -128,17 +135,14 @@ void ConfigKeyService::store_delete_prefix(
     MonitorDBStore::TransactionRef t,
     const string &prefix)
 {
-  KeyValueDB::Iterator iter =
-    mon->store->get_iterator(STORE_PREFIX);
-
-  while (iter->valid()) {
-    string key(iter->key());
-
-    size_t p = key.find(prefix);
-    if (p != string::npos && p == 0) {
-      store_delete(t, key);
+  for (auto p = config_keys.lower_bound(prefix);
+       p != config_keys.end();
+       ++p) {
+    size_t q = p->first.find(prefix);
+    if (q == string::npos || q > 0) {
+      break;
     }
-    iter->next();
+    store_delete(t, p->first);
   }
 }
 

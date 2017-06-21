@@ -96,6 +96,8 @@ public:
     finish_epoch();
   }
 
+  virtual void refresh() {}
+
   epoch_t get_epoch() const {
     return epoch;
   }
