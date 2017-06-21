@@ -1519,6 +1519,14 @@ struct RGWZoneGroup : public RGWSystemMetaObj {
                bool *psync_from_all, list<string>& sync_from, list<string>& sync_from_rm);
   int remove_zone(const std::string& zone_id);
   int rename_zone(const RGWZoneParams& zone_params);
+  bool has_placement_target(const std::string& placement_id) const {
+    auto titer = placement_targets.find(placement_id);
+    if (titer != placement_targets.end()) {
+      return true;
+    }
+    return false;
+  }
+
   rgw_pool get_pool(CephContext *cct);
   const string get_default_oid(bool old_region_format = false) override;
   const string& get_info_oid_prefix(bool old_region_format = false) override;

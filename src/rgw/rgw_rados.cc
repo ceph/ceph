@@ -5852,8 +5852,8 @@ int RGWRados::select_bucket_placement_id(RGWUserInfo& user_info, const std::stri
                                          const std::string& requested_placement_id,
                                          std::string *pselected_placement_id)
 {
-  RGWZoneGroup zonegroup;
-  int ret = get_zonegroup(zonegroup_id, zonegroup);
+  RGWZoneGroup zg;
+  int ret = get_zonegroup(zonegroup_id, zg);
   if (ret < 0) {
     ldout(cct, 0) << "could not find zonegroup " << zonegroup_id << " in current period" << dendl;
     return ret;
@@ -5862,26 +5862,19 @@ int RGWRados::select_bucket_placement_id(RGWUserInfo& user_info, const std::stri
   /* find placement rule.
      Hierarchy: request rule > user default rule > zonegroup default rule
   */
-  std::string placement_id = requested_placement_id;
+  std::string placement_id = zg.has_placement_target(requested_placement_id) ? requested_placement_id : std::string();
   if (placement_id.empty()) {
-    placement_id = user_info.default_placement_id;
+    placement_id = zg.has_placement_target(user_info.default_placement_id) ? user_info.default_placement_id : std::string();
     if (placement_id.empty())
-      placement_id = zonegroup.default_placement_id;
-  }
-
-  if (placement_id.empty()) {
-    ldout(cct, 0) << "misconfiguration, should not have an empty placement id " << dendl;
-    return -EIO;
-  }
-
-  /* check that rule exists within the specific zonegroup */
-  auto titer = zonegroup.placement_targets.find(placement_id);
-  if (titer == zonegroup.placement_targets.end()) {
-    ldout(cct, 0) << "could not find placement id " << placement_id << " within zonegroup " << dendl;
-    return -EINVAL;
+      placement_id = zg.has_placement_target(zg.default_placement_id) ? zg.default_placement_id : std::string();
+      if (placement_id.empty()) { // zonegroup default rule as fallback, it should not be empty.
+        ldout(cct, 0) << "misconfiguration, zonegroup default placement id should not be empty." << dendl;
+        return -EIO;
+      }
   }
 
   /* now check tag for the rule, whether user is permitted to use rule */
+  auto titer = zg.placement_targets.find(placement_id);
   RGWZoneGroupPlacementTarget& placement_target = titer->second;
   if (!placement_target.user_permitted(user_info.placement_tags)) {
     ldout(cct, 0) << "user not permitted to use placement rule" << dendl;
