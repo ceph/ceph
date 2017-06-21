@@ -27,6 +27,7 @@
 #include "IoCtxImpl.h"
 
 struct AuthAuthorizer;
+struct Context;
 class CephContext;
 struct Connection;
 struct md_config_t;
@@ -135,6 +136,8 @@ public:
 
   int mon_command(const vector<string>& cmd, const bufferlist &inbl,
 	          bufferlist *outbl, string *outs);
+  void mon_command_async(const vector<string>& cmd, const bufferlist &inbl,
+                         bufferlist *outbl, string *outs, Context *on_finish);
   int mon_command(int rank,
 		  const vector<string>& cmd, const bufferlist &inbl,
 	          bufferlist *outbl, string *outs);

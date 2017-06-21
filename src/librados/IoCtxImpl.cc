@@ -2083,11 +2083,31 @@ void librados::IoCtxImpl::object_list_slice(
 int librados::IoCtxImpl::application_enable(const std::string& app_name,
                                             bool force)
 {
+  auto c = new PoolAsyncCompletionImpl();
+  application_enable_async(app_name, force, c);
+
+  int r = c->wait();
+  assert(r == 0);
+
+  r = c->get_return_value();
+  c->release();
+  if (r < 0) {
+    return r;
+  }
+
+  return client->wait_for_latest_osdmap();
+}
+
+void librados::IoCtxImpl::application_enable_async(const std::string& app_name,
+                                                   bool force,
+                                                   PoolAsyncCompletionImpl *c)
+{
   // pre-Luminous clusters will return -EINVAL and application won't be
   // preserved until Luminous is configured as minimim version.
   if (!client->get_required_monitor_features().contains_all(
         ceph::features::mon::FEATURE_LUMINOUS)) {
-    return -EOPNOTSUPP;
+    client->finisher.queue(new C_PoolAsync_Safe(c), -EOPNOTSUPP);
+    return;
   }
 
   std::stringstream cmd;
@@ -2103,13 +2123,8 @@ int librados::IoCtxImpl::application_enable(const std::string& app_name,
   std::vector<std::string> cmds;
   cmds.push_back(cmd.str());
   bufferlist inbl;
-  int r = client->mon_command(cmds, inbl, nullptr, nullptr);
-  if (r < 0) {
-    return r;
-  }
-
-  // ensure we have the latest osd map epoch before proceeding
-  return client->wait_for_latest_osdmap();
+  client->mon_command_async(cmds, inbl, nullptr, nullptr,
+                            new C_PoolAsync_Safe(c));
 }
 
 int librados::IoCtxImpl::application_list(std::set<std::string> *app_names)

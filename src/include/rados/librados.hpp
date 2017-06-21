@@ -1251,6 +1251,8 @@ namespace librados
     void unset_osdmap_full_try();
 
     int application_enable(const std::string& app_name, bool force);
+    int application_enable_async(const std::string& app_name,
+                                 bool force, PoolAsyncCompletion *c);
     int application_list(std::set<std::string> *app_names);
     int application_metadata_get(const std::string& app_name,
                                  const std::string &key,
