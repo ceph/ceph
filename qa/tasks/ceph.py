@@ -577,28 +577,6 @@ def cluster(ctx, config):
 
     log.info('Setting up mon nodes...')
     mons = ctx.cluster.only(teuthology.is_type('mon', cluster_name))
-    osdmap_path = '{tdir}/{cluster}.osdmap'.format(tdir=testdir,
-                                                   cluster=cluster_name)
-    run.wait(
-        mons.run(
-            args=[
-                'adjust-ulimits',
-                'ceph-coverage',
-                coverage_dir,
-                'osdmaptool',
-                '-c', conf_path,
-                '--clobber',
-                '--createsimple', '{num:d}'.format(
-                    num=teuthology.num_instances_of_type(ctx.cluster, 'osd',
-                                                         cluster_name),
-                ),
-                osdmap_path,
-                '--pg_bits', '2',
-                '--pgp_bits', '4',
-            ],
-            wait=False,
-        ),
-    )
 
     if not config.get('skip_mgr_daemons', False):
         log.info('Setting up mgr nodes...')
@@ -872,7 +850,6 @@ def cluster(ctx, config):
                     '--mkfs',
                     '-i', id_,
                     '--monmap', monmap_path,
-                    '--osdmap', osdmap_path,
                     '--keyring', keyring_path,
                 ],
             )
@@ -883,7 +860,6 @@ def cluster(ctx, config):
                 'rm',
                 '--',
                 monmap_path,
-                osdmap_path,
             ],
             wait=False,
         ),
@@ -1012,7 +988,6 @@ def cluster(ctx, config):
                     keyring_path,
                     data_dir,
                     monmap_path,
-                    osdmap_path,
                     run.Raw('{tdir}/../*.pid'.format(tdir=testdir)),
                 ],
                 wait=False,
