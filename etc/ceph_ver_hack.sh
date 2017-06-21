@@ -43,6 +43,6 @@
 #    Nathan Cutler <ncutler@suse.com>
 #
 
-(git rev-parse HEAD ; git describe) 2> /dev/null > src/.git_version
+(git rev-parse HEAD ; git describe --match 'v*') 2> /dev/null > src/.git_version
 sed -i "s/@CEPH_GIT_VER@/$(head -n1 src/.git_version)/" src/ceph_ver.h.in.cmake
 sed -i "s/@CEPH_GIT_NICE_VER@/$(tail -n1 src/.git_version)/" src/ceph_ver.h.in.cmake
