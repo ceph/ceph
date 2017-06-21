@@ -63,11 +63,10 @@ class JournalTool : public MDSUtility
 
     // Metadata backing store manipulation
     int read_lost_found(std::set<std::string> &lost);
-    int scavenge_dentries(
+    int recover_dentries(
         EMetaBlob const &metablob,
         bool const dry_run,
         std::set<inodeno_t> *consumed_inos);
-    int replay_offline(EMetaBlob const &metablob, bool const dry_run);
 
     // Splicing
     int erase_region(JournalScanner const &jp, uint64_t const pos, uint64_t const length);

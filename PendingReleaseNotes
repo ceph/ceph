@@ -1,6 +1,7 @@
 >= 12.0.0
 ------
 * The "journaler allow split entries" config setting has been removed.
+* The 'apply' mode of cephfs-journal-tool has been removed
 
 12.0.0
 ------
