@@ -61,12 +61,13 @@ class TestMisc(CephFSTestCase):
 
         self.fs.put_metadata_object_raw("key", dummyfile)
 
-        timeout = 10
+        def get_pool_df(fs, name):
+            try:
+                return fs.get_pool_df(name)['objects'] > 0
+            except RuntimeError as e:
+                return False
 
-        get_pool_df = self.fs.get_pool_df
-        self.wait_until_true(
-                lambda: get_pool_df(self.fs.metadata_pool_name)['objects'] > 0,
-                timeout=timeout)
+        self.wait_until_true(lambda: get_pool_df(self.fs, self.fs.metadata_pool_name), timeout=30)
 
         try:
             self.fs.mon_manager.raw_cluster_cmd('fs', 'new', self.fs.name,
