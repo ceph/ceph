@@ -607,6 +607,17 @@ class Thrasher:
             self.log("inning osd")
             self.in_osd()
 
+    def all_up_in(self):
+        """
+        Make sure all osds are up and fully in.
+        """
+        self.all_up();
+        for osd in self.live_osds:
+            self.ceph_manager.raw_cluster_cmd('osd', 'reweight',
+                                              str(osd), str(1))
+            self.ceph_manager.raw_cluster_cmd('osd', 'primary-affinity',
+                                              str(osd), str(1))
+
     def do_join(self):
         """
         Break out of this Ceph loop
@@ -978,7 +989,7 @@ class Thrasher:
         for service, opt, saved_value in self.saved_options:
             self._set_config(service, '*', opt, saved_value)
         self.saved_options = []
-        self.all_up()
+        self.all_up_in()
 
 
 class ObjectStoreTool:
