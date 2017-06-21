@@ -66,7 +66,7 @@ void ceph::crypto::init(CephContext *cct)
     memset(&init_params, 0, sizeof(init_params));
     init_params.length = sizeof(init_params);
 
-    uint32_t flags = NSS_INIT_READONLY;
+    uint32_t flags = (NSS_INIT_READONLY | NSS_INIT_PK11RELOAD);
     if (cct->_conf->nss_db_path.empty()) {
       flags |= (NSS_INIT_NOCERTDB | NSS_INIT_NOMODDB);
     }
