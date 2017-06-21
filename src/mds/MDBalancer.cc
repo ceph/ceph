@@ -1228,3 +1228,10 @@ void MDBalancer::add_import(CDir *dir, utime_t now)
   }
 }
 
+void MDBalancer::handle_mds_failure(mds_rank_t who)
+{
+  if (0 == who) {
+    last_epoch_over = 0;
+    last_epoch_under = 0;
+  }
+}

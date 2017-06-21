@@ -73,6 +73,8 @@ public:
    */
   void maybe_fragment(CDir *dir, bool hot);
 
+  void handle_mds_failure(mds_rank_t who);
+
 private:
   typedef struct {
     std::map<mds_rank_t, double> targets;
