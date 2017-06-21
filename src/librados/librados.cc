@@ -6469,6 +6469,14 @@ int librados::IoCtx::application_enable(const std::string& app_name,
   return io_ctx_impl->application_enable(app_name, force);
 }
 
+int librados::IoCtx::application_enable_async(const std::string& app_name,
+                                              bool force,
+                                              PoolAsyncCompletion *c)
+{
+  io_ctx_impl->application_enable_async(app_name, force, c->pc);
+  return 0;
+}
+
 int librados::IoCtx::application_list(std::set<std::string> *app_names)
 {
   return io_ctx_impl->application_list(app_names);
