@@ -3806,42 +3806,22 @@ int FileStore::_do_copy_range(int from, int to, uint64_t srcoff, uint64_t len, u
     char buf[buflen];
     while (pos < end) {
       int l = MIN(end-pos, buflen);
-      r = ::read(from, buf, l);
+      r = safe_read_exact(from, buf, l);
       dout(25) << "  read from " << pos << "~" << l << " got " << r << dendl;
       if (r < 0) {
-	if (errno == EINTR) {
-	  continue;
-	} else {
-	  r = -errno;
-	  derr << "FileStore::_do_copy_range: read error at " << pos << "~" << len
-	    << ", " << cpp_strerror(r) << dendl;
-	  break;
-	}
-      }
-      if (r == 0) {
-	// hrm, bad source range, wtf.
-	r = -ERANGE;
-	derr << "FileStore::_do_copy_range got short read result at " << pos
-	  << " of fd " << from << " len " << len << dendl;
+	derr << "FileStore::_do_copy_range: read error at " << pos << "~" << len
+	     << ", " << cpp_strerror(r) << dendl;
 	break;
       }
-      int op = 0;
-      while (op < r) {
-	int r2 = safe_write(to, buf+op, r-op);
-	dout(25) << " write to " << to << " len " << (r-op)
-	  << " got " << r2 << dendl;
-	if (r2 < 0) {
-	  r = r2;
-	  derr << "FileStore::_do_copy_range: write error at " << pos << "~"
-	    << r-op << ", " << cpp_strerror(r) << dendl;
-
-	  break;
-	}
-	op += (r-op);
-      }
-      if (r < 0)
+      assert(r == l);
+      r = safe_write(to, buf, l);
+      dout(25) << " write to " << to << " len " << l << " got " << r << dendl;
+      if (r < 0) {
+	derr << "FileStore::_do_copy_range: write error at " << pos << "~"
+	     << l << ", " << cpp_strerror(r) << dendl;
 	break;
-      pos += r;
+      }
+      pos += l;
     }
   }
 
