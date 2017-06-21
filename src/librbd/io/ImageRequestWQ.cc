@@ -26,10 +26,7 @@ ImageRequestWQ<I>::ImageRequestWQ(I *image_ctx, const string &name,
 				  time_t ti, ThreadPool *tp)
   : ThreadPool::PointerWQ<ImageRequest<I> >(name, ti, 0, tp),
     m_image_ctx(*image_ctx),
-    m_lock(util::unique_lock_name("ImageRequestWQ<I>::m_lock", this)),
-    m_write_blockers(0), m_in_progress_writes(0), m_queued_reads(0),
-    m_queued_writes(0), m_in_flight_ops(0), m_refresh_in_progress(false),
-    m_shutdown(false), m_on_shutdown(nullptr) {
+    m_lock(util::unique_lock_name("ImageRequestWQ<I>::m_lock", this)) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 5) << "ictx=" << image_ctx << dendl;
   tp->add_work_queue(this);
@@ -146,7 +143,7 @@ void ImageRequestWQ<I>::aio_read(AioCompletion *c, uint64_t off, uint64_t len,
     c->set_event_notify(true);
   }
 
-  if (!start_in_flight_op(c)) {
+  if (!start_in_flight_io(c)) {
     return;
   }
 
@@ -168,7 +165,7 @@ void ImageRequestWQ<I>::aio_read(AioCompletion *c, uint64_t off, uint64_t len,
     c->start_op();
     ImageRequest<I>::aio_read(&m_image_ctx, c, {{off, len}},
 			      std::move(read_result), op_flags, trace);
-    finish_in_flight_op();
+    finish_in_flight_io();
   }
   trace.event("finish");
 }
@@ -193,7 +190,7 @@ void ImageRequestWQ<I>::aio_write(AioCompletion *c, uint64_t off, uint64_t len,
     c->set_event_notify(true);
   }
 
-  if (!start_in_flight_op(c)) {
+  if (!start_in_flight_io(c)) {
     return;
   }
 
@@ -205,7 +202,7 @@ void ImageRequestWQ<I>::aio_write(AioCompletion *c, uint64_t off, uint64_t len,
     c->start_op();
     ImageRequest<I>::aio_write(&m_image_ctx, c, {{off, len}},
 			       std::move(bl), op_flags, trace);
-    finish_in_flight_op();
+    finish_in_flight_io();
   }
   trace.event("finish");
 }
@@ -230,7 +227,7 @@ void ImageRequestWQ<I>::aio_discard(AioCompletion *c, uint64_t off,
     c->set_event_notify(true);
   }
 
-  if (!start_in_flight_op(c)) {
+  if (!start_in_flight_io(c)) {
     return;
   }
 
@@ -242,7 +239,7 @@ void ImageRequestWQ<I>::aio_discard(AioCompletion *c, uint64_t off,
     c->start_op();
     ImageRequest<I>::aio_discard(&m_image_ctx, c, off, len,
 				 skip_partial_discard, trace);
-    finish_in_flight_op();
+    finish_in_flight_io();
   }
   trace.event("finish");
 }
@@ -264,7 +261,7 @@ void ImageRequestWQ<I>::aio_flush(AioCompletion *c, bool native_async) {
     c->set_event_notify(true);
   }
 
-  if (!start_in_flight_op(c)) {
+  if (!start_in_flight_io(c)) {
     return;
   }
 
@@ -273,7 +270,7 @@ void ImageRequestWQ<I>::aio_flush(AioCompletion *c, bool native_async) {
     queue(new ImageFlushRequest<I>(m_image_ctx, c, trace));
   } else {
     ImageRequest<I>::aio_flush(&m_image_ctx, c, trace);
-    finish_in_flight_op();
+    finish_in_flight_io();
   }
   trace.event("finish");
 }
@@ -299,7 +296,7 @@ void ImageRequestWQ<I>::aio_writesame(AioCompletion *c, uint64_t off,
     c->set_event_notify(true);
   }
 
-  if (!start_in_flight_op(c)) {
+  if (!start_in_flight_io(c)) {
     return;
   }
 
@@ -311,7 +308,7 @@ void ImageRequestWQ<I>::aio_writesame(AioCompletion *c, uint64_t off,
     c->start_op();
     ImageRequest<I>::aio_writesame(&m_image_ctx, c, off, len, std::move(bl),
 				   op_flags, trace);
-    finish_in_flight_op();
+    finish_in_flight_io();
   }
   trace.event("finish");
 }
@@ -326,9 +323,9 @@ void ImageRequestWQ<I>::shut_down(Context *on_shutdown) {
     m_shutdown = true;
 
     CephContext *cct = m_image_ctx.cct;
-    ldout(cct, 5) << __func__ << ": in_flight=" << m_in_flight_ops.load()
+    ldout(cct, 5) << __func__ << ": in_flight=" << m_in_flight_ios.load()
                   << dendl;
-    if (m_in_flight_ops > 0) {
+    if (m_in_flight_ios > 0) {
       m_on_shutdown = on_shutdown;
       return;
     }
@@ -362,7 +359,7 @@ void ImageRequestWQ<I>::block_writes(Context *on_blocked) {
     ++m_write_blockers;
     ldout(cct, 5) << &m_image_ctx << ", " << "num="
                   << m_write_blockers << dendl;
-    if (!m_write_blocker_contexts.empty() || m_in_progress_writes > 0) {
+    if (!m_write_blocker_contexts.empty() || m_in_flight_writes > 0) {
       m_write_blocker_contexts.push_back(on_blocked);
       return;
     }
@@ -438,7 +435,7 @@ void *ImageRequestWQ<I>::_void_dequeue() {
 
       // refresh will requeue the op -- don't count it as in-progress
       if (!refresh_required) {
-        m_in_progress_writes++;
+        m_in_flight_writes++;
       }
     } else if (m_require_lock_on_read) {
       return nullptr;
@@ -474,17 +471,17 @@ void ImageRequestWQ<I>::process(ImageRequest<I> *req) {
 
   req->send();
 
-  finish_queued_op(req);
+  finish_queued_io(req);
   if (req->is_write_op()) {
-    finish_in_progress_write();
+    finish_in_flight_write();
   }
   delete req;
 
-  finish_in_flight_op();
+  finish_in_flight_io();
 }
 
 template <typename I>
-void ImageRequestWQ<I>::finish_queued_op(ImageRequest<I> *req) {
+void ImageRequestWQ<I>::finish_queued_io(ImageRequest<I> *req) {
   RWLock::RLocker locker(m_lock);
   if (req->is_write_op()) {
     assert(m_queued_writes > 0);
@@ -496,12 +493,12 @@ void ImageRequestWQ<I>::finish_queued_op(ImageRequest<I> *req) {
 }
 
 template <typename I>
-void ImageRequestWQ<I>::finish_in_progress_write() {
+void ImageRequestWQ<I>::finish_in_flight_write() {
   bool writes_blocked = false;
   {
     RWLock::RLocker locker(m_lock);
-    assert(m_in_progress_writes > 0);
-    if (--m_in_progress_writes == 0 &&
+    assert(m_in_flight_writes > 0);
+    if (--m_in_flight_writes == 0 &&
         !m_write_blocker_contexts.empty()) {
       writes_blocked = true;
     }
@@ -513,7 +510,7 @@ void ImageRequestWQ<I>::finish_in_progress_write() {
 }
 
 template <typename I>
-int ImageRequestWQ<I>::start_in_flight_op(AioCompletion *c) {
+int ImageRequestWQ<I>::start_in_flight_io(AioCompletion *c) {
   RWLock::RLocker locker(m_lock);
 
   if (m_shutdown) {
@@ -524,16 +521,16 @@ int ImageRequestWQ<I>::start_in_flight_op(AioCompletion *c) {
     return false;
   }
 
-  m_in_flight_ops++;
+  m_in_flight_ios++;
   return true;
 }
 
 template <typename I>
-void ImageRequestWQ<I>::finish_in_flight_op() {
+void ImageRequestWQ<I>::finish_in_flight_io() {
   Context *on_shutdown;
   {
     RWLock::RLocker locker(m_lock);
-    if (--m_in_flight_ops > 0 || !m_shutdown) {
+    if (--m_in_flight_ios > 0 || !m_shutdown) {
       return;
     }
     on_shutdown = m_on_shutdown;
@@ -572,7 +569,7 @@ void ImageRequestWQ<I>::queue(ImageRequest<I> *req) {
     lderr(cct) << "op requires exclusive lock" << dendl;
     req->fail(-EROFS);
     delete req;
-    finish_in_flight_op();
+    finish_in_flight_io();
     return;
   }
 
@@ -597,9 +594,9 @@ void ImageRequestWQ<I>::handle_refreshed(int r, ImageRequest<I> *req) {
   if (r < 0) {
     this->process_finish();
     req->fail(r);
-    finish_queued_op(req);
+    finish_queued_io(req);
     delete req;
-    finish_in_flight_op();
+    finish_in_flight_io();
   } else {
     // since IO was stalled for refresh -- original IO order is preserved
     // if we requeue this op for work queue processing
