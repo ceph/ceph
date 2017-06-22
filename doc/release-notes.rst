@@ -77,8 +77,12 @@ Major Changes from Kraken
 
 - *RGW*:
 
-  * RGW *metadata search* with ElasticSearch now supports end user requests
-    serviced via RGW itself and now supports custom metadata fields
+  * RGW *metadata search* backed by ElasticSearch now supports end
+    user requests service via RGW itself, and also supports custom
+    metadata fields. A query language a set of RESTful APIs were
+    created for users to be able to search objects by their
+    metadata. New APIs that allow control of custom metadata fields
+    were also added.
   * RGW now supports *dynamic bucket index sharding*.  As the number
     of objects in a bucket grows, RGW will automatically reshard the
     bucket index in response.  No user intervention or bucket size
