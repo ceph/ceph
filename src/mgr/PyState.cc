@@ -266,37 +266,16 @@ ceph_config_set(PyObject *self, PyObject *args)
   Py_RETURN_NONE;
 }
 
-static entity_type_t svc_type_from_str(const std::string &type_str)
-{
-  if (type_str == std::string("mds")) {
-    return CEPH_ENTITY_TYPE_MDS;
-  } else if (type_str == std::string("osd")) {
-    return CEPH_ENTITY_TYPE_OSD;
-  } else if (type_str == std::string("mon")) {
-    return CEPH_ENTITY_TYPE_MON;
-  } else {
-    return CEPH_ENTITY_TYPE_ANY;
-  }
-}
-
 static PyObject*
 get_metadata(PyObject *self, PyObject *args)
 {
   char *handle = nullptr;
-  char *type_str = NULL;
+  char *svc_name = NULL;
   char *svc_id = NULL;
-  if (!PyArg_ParseTuple(args, "sss:get_metadata", &handle, &type_str, &svc_id)) {
+  if (!PyArg_ParseTuple(args, "sss:get_metadata", &handle, &svc_name, &svc_id)) {
     return nullptr;
   }
-
-  entity_type_t svc_type = svc_type_from_str(type_str);
-  if (svc_type == CEPH_ENTITY_TYPE_ANY) {
-    // FIXME: form a proper exception
-    return nullptr;
-  }
-
-
-  return global_handle->get_metadata_python(handle, svc_type, svc_id);
+  return global_handle->get_metadata_python(handle, svc_name, svc_id);
 }
 
 static PyObject*
@@ -330,22 +309,15 @@ static PyObject*
 get_counter(PyObject *self, PyObject *args)
 {
   char *handle = nullptr;
-  char *type_str = nullptr;
+  char *svc_name = nullptr;
   char *svc_id = nullptr;
   char *counter_path = nullptr;
-  if (!PyArg_ParseTuple(args, "ssss:get_counter", &handle, &type_str,
+  if (!PyArg_ParseTuple(args, "ssss:get_counter", &handle, &svc_name,
                                                   &svc_id, &counter_path)) {
     return nullptr;
   }
-
-  entity_type_t svc_type = svc_type_from_str(type_str);
-  if (svc_type == CEPH_ENTITY_TYPE_ANY) {
-    // FIXME: form a proper exception
-    return nullptr;
-  }
-
   return global_handle->get_counter_python(
-      handle, svc_type, svc_id, counter_path);
+      handle, svc_name, svc_id, counter_path);
 }
 
 PyMethodDef CephStateMethods[] = {

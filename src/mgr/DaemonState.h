@@ -29,7 +29,7 @@
 
 
 // Unique reference to a daemon within a cluster
-typedef std::pair<entity_type_t, std::string> DaemonKey;
+typedef std::pair<std::string, std::string> DaemonKey;
 
 // An instance of a performance counter type, within
 // a particular daemon.
@@ -146,7 +146,7 @@ class DaemonStateIndex
   bool exists(const DaemonKey &key) const;
   DaemonStatePtr get(const DaemonKey &key);
   DaemonStateCollection get_by_server(const std::string &hostname) const;
-  DaemonStateCollection get_by_type(uint8_t type) const;
+  DaemonStateCollection get_by_service(const std::string &svc_name) const;
 
   const DaemonStateCollection &get_all() const {return all;}
   const std::map<std::string, DaemonStateCollection> &get_all_servers() const
@@ -164,7 +164,8 @@ class DaemonStateIndex
    * a cluster map and want to ensure that anything absent in the map
    * is also absent in this class.
    */
-  void cull(entity_type_t daemon_type, const std::set<std::string>& names_exist);
+  void cull(const std::string& svc_name,
+	    const std::set<std::string>& names_exist);
 };
 
 #endif
