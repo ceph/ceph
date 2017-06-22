@@ -1869,7 +1869,10 @@ public:
   int get_zonegroup(RGWZoneGroup& zonegroup,
 		    const string& zonegroup_id);
 
-  bool is_single_zonegroup(CephContext *cct, RGWRados *store);
+  bool is_single_zonegroup()
+  {
+      return (period_map.zonegroups.size() == 1);
+  }
 
   int get_latest_epoch(epoch_t& epoch);
   int set_latest_epoch(epoch_t epoch, bool exclusive = false);
