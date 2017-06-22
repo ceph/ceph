@@ -1,12 +1,12 @@
 import logging
 import os
-from ceph_volume import config
+from ceph_volume import config, terminal
 
 BASE_FORMAT = "[%(name)s][%(levelname)-6s] %(message)s"
 FILE_FORMAT = "[%(asctime)s]" + BASE_FORMAT
 
 
-def setup(config=None, name='ceph-volume.log'):
+def setup(name='ceph-volume.log'):
     # if a non-root user calls help or other no-sudo-required command the
     # logger will fail to write to /var/lib/ceph/ so this /tmp/ path is used as
     # a fallback
@@ -24,7 +24,9 @@ def setup(config=None, name='ceph-volume.log'):
     config['log_path'] = log_file
     try:
         fh = logging.FileHandler(log_file)
-    except (OSError, IOError):
+    except (OSError, IOError) as err:
+        terminal.warning("Falling back to /tmp/ for logging. Can't use %s" % log_file)
+        terminal.warning(str(err))
         config['log_path'] = tmp_log_file
         fh = logging.FileHandler(tmp_log_file)
 
