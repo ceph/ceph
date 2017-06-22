@@ -174,7 +174,7 @@ void ImageRequestWQ<I>::aio_read(AioCompletion *c, uint64_t off, uint64_t len,
     trace.event("start");
   }
 
-  c->init_time(&m_image_ctx, AIO_TYPE_READ);
+  c->init_time(util::get_image_ctx(&m_image_ctx), AIO_TYPE_READ);
   ldout(cct, 20) << "ictx=" << &m_image_ctx << ", "
                  << "completion=" << c << ", off=" << off << ", "
                  << "len=" << len << ", " << "flags=" << op_flags << dendl;
@@ -215,7 +215,7 @@ void ImageRequestWQ<I>::aio_write(AioCompletion *c, uint64_t off, uint64_t len,
     trace.event("init");
   }
 
-  c->init_time(&m_image_ctx, AIO_TYPE_WRITE);
+  c->init_time(util::get_image_ctx(&m_image_ctx), AIO_TYPE_WRITE);
   ldout(cct, 20) << "ictx=" << &m_image_ctx << ", "
                  << "completion=" << c << ", off=" << off << ", "
                  << "len=" << len << ", flags=" << op_flags << dendl;
@@ -252,7 +252,7 @@ void ImageRequestWQ<I>::aio_discard(AioCompletion *c, uint64_t off,
     trace.event("init");
   }
 
-  c->init_time(&m_image_ctx, AIO_TYPE_DISCARD);
+  c->init_time(util::get_image_ctx(&m_image_ctx), AIO_TYPE_DISCARD);
   ldout(cct, 20) << "ictx=" << &m_image_ctx << ", "
                  << "completion=" << c << ", off=" << off << ", len=" << len
                  << dendl;
@@ -287,7 +287,7 @@ void ImageRequestWQ<I>::aio_flush(AioCompletion *c, bool native_async) {
     trace.event("init");
   }
 
-  c->init_time(&m_image_ctx, AIO_TYPE_FLUSH);
+  c->init_time(util::get_image_ctx(&m_image_ctx), AIO_TYPE_FLUSH);
   ldout(cct, 20) << "ictx=" << &m_image_ctx << ", "
                  << "completion=" << c << dendl;
 
@@ -320,7 +320,7 @@ void ImageRequestWQ<I>::aio_writesame(AioCompletion *c, uint64_t off,
     trace.event("init");
   }
 
-  c->init_time(&m_image_ctx, AIO_TYPE_WRITESAME);
+  c->init_time(util::get_image_ctx(&m_image_ctx), AIO_TYPE_WRITESAME);
   ldout(cct, 20) << "ictx=" << &m_image_ctx << ", "
                  << "completion=" << c << ", off=" << off << ", "
                  << "len=" << len << ", data_len = " << bl.length() << ", "
@@ -575,6 +575,7 @@ int ImageRequestWQ<I>::start_in_flight_io(AioCompletion *c) {
     CephContext *cct = m_image_ctx.cct;
     lderr(cct) << "IO received on closed image" << dendl;
 
+    c->get();
     c->fail(-ESHUTDOWN);
     return false;
   }

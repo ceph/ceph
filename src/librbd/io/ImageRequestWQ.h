@@ -24,7 +24,7 @@ class ReadResult;
 
 template <typename ImageCtxT = librbd::ImageCtx>
 class ImageRequestWQ
-  : protected ThreadPool::PointerWQ<ImageRequest<ImageCtxT> > {
+  : public ThreadPool::PointerWQ<ImageRequest<ImageCtxT> > {
 public:
   ImageRequestWQ(ImageCtxT *image_ctx, const string &name, time_t ti,
                  ThreadPool *tp);
