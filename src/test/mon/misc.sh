@@ -231,9 +231,9 @@ function TEST_mon_features() {
     jqfilter='.monmap.features.optional | length == 0'
     jq_success "$jqinput" "$jqfilter" || return 1
 
-    # validate 'mon feature list'
+    # validate 'mon feature ls'
 
-    jqinput="$(ceph mon feature list --format=json 2>/dev/null)"
+    jqinput="$(ceph mon feature ls --format=json 2>/dev/null)"
     # 'kraken' and 'luminous' are supported
     jqfilter='.all.supported[] | select(. == "kraken")'
     jq_success "$jqinput" "$jqfilter" "kraken" || return 1

@@ -197,17 +197,13 @@ Upgrade from Jewel or Kraken
    looking for the ``lumninous`` feature string in the mon map.  For
    example::
 
-     # ceph osd dump -f json-pretty
+     # ceph mon feature ls
 
-   should include::
+   should include `luminous` under persistent features::
 
-        "features": {
-            "persistent": [
-                "kraken",
-                "luminous"
-            ],
-            "optional": []
-        },
+     on current monmap (epoch NNN)
+        persistent: [kraken,luminous]
+        required: [kraken,luminous]
 
 #. Add or restart ``ceph-mgr`` daemons.  If you are upgrading from
    kraken, upgrade packages and restart ceph-mgr daemons with::

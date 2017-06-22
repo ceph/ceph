@@ -1117,7 +1117,7 @@ function test_mon_mon()
   ceph mon_status
 
   # test mon features
-  ceph mon feature list
+  ceph mon feature ls
   ceph mon feature set kraken --yes-i-really-mean-it
   expect_false ceph mon feature set abcd
   expect_false ceph mon feature set abcd --yes-i-really-mean-it
