@@ -259,6 +259,9 @@ def parse_cmdargs(args=None, target=''):
 
     parser.add_argument('-c', '--conf', dest='cephconf',
                         help='ceph configuration file')
+
+    parser.add_argument('-k', '--keyring', dest='keyring',
+                        help='ceph keyring file')
     parser.add_argument('-i', '--in-file', dest='input_file',
                         help='input file')
     parser.add_argument('-o', '--out-file', dest='output_file',
