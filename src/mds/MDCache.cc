@@ -12084,9 +12084,12 @@ void MDCache::repair_dirfrag_stats_work(MDRequestRef& mdr)
   }
 
   if (!mdr->is_auth_pinned(dir) && !dir->can_auth_pin()) {
+    dir->add_waiter(CDir::WAIT_UNFREEZE, new C_MDS_RetryRequest(this, mdr));
+
     mds->locker->drop_locks(mdr.get());
     mdr->drop_local_auth_pins();
-    dir->add_waiter(CDir::WAIT_UNFREEZE, new C_MDS_RetryRequest(this, mdr));
+    if (!mdr->remote_auth_pins.empty())
+      mds->locker->notify_freeze_waiter(dir);
     return;
   }
 
