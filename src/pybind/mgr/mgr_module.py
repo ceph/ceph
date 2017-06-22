@@ -134,7 +134,7 @@ class MgrModule(object):
         """
         Fetch the metadata for a particular service.
 
-        :param svc_type: one of 'mds', 'osd', 'mon'
+        :param svc_type: string (e.g., 'mds', 'osd', 'mon')
         :param svc_id: string
         :return: dict
         """

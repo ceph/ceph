@@ -262,7 +262,7 @@ void DaemonServer::shutdown()
 bool DaemonServer::handle_open(MMgrOpen *m)
 {
   uint32_t type = m->get_connection()->get_peer_type();
-  DaemonKey key(type, m->daemon_name);
+  DaemonKey key(ceph_entity_type_name(type), m->daemon_name);
 
   dout(4) << "from " << m->get_connection() << " name "
           << ceph_entity_type_name(type) << "." << m->daemon_name << dendl;
@@ -288,7 +288,7 @@ bool DaemonServer::handle_open(MMgrOpen *m)
 bool DaemonServer::handle_report(MMgrReport *m)
 {
   uint32_t type = m->get_connection()->get_peer_type();
-  DaemonKey key(type, m->daemon_name);
+  DaemonKey key(ceph_entity_type_name(type), m->daemon_name);
 
   dout(4) << "from " << m->get_connection() << " name "
           << ceph_entity_type_name(type) << "." << m->daemon_name << dendl;

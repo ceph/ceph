@@ -46,14 +46,15 @@ void DaemonStateIndex::_erase(const DaemonKey& dmk)
   all.erase(to_erase);
 }
 
-DaemonStateCollection DaemonStateIndex::get_by_type(uint8_t type) const
+DaemonStateCollection DaemonStateIndex::get_by_service(
+  const std::string& svc) const
 {
   Mutex::Locker l(lock);
 
   DaemonStateCollection result;
 
   for (const auto &i : all) {
-    if (i.first.first == type) {
+    if (i.first.first == svc) {
       result[i.first] = i.second;
     }
   }
@@ -86,17 +87,17 @@ DaemonStatePtr DaemonStateIndex::get(const DaemonKey &key)
   return all.at(key);
 }
 
-void DaemonStateIndex::cull(entity_type_t daemon_type,
+void DaemonStateIndex::cull(const std::string& svc_name,
 			    const std::set<std::string>& names_exist)
 {
   std::vector<string> victims;
 
   Mutex::Locker l(lock);
-  auto begin = all.lower_bound({daemon_type, ""});
+  auto begin = all.lower_bound({svc_name, ""});
   auto end = all.end();
   for (auto &i = begin; i != end; ++i) {
     const auto& daemon_key = i->first;
-    if (daemon_key.first != daemon_type)
+    if (daemon_key.first != svc_name)
       break;
     if (names_exist.count(daemon_key.second) == 0) {
       victims.push_back(daemon_key.second);
@@ -105,7 +106,7 @@ void DaemonStateIndex::cull(entity_type_t daemon_type,
 
   for (auto &i : victims) {
     dout(4) << "Removing data for " << i << dendl;
-    _erase({daemon_type, i});
+    _erase({svc_name, i});
   }
 }
 
