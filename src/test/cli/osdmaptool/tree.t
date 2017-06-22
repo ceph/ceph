@@ -1,4 +1,4 @@
-  $ osdmaptool --createsimple 3 om
+  $ osdmaptool --createsimple 3 om --with-default-pool
   osdmaptool: osdmap file 'om'
   osdmaptool: writing epoch 1 to om
 
