@@ -134,6 +134,7 @@ public:
   rgw_obj_select(const rgw_obj& _obj) : obj(_obj), is_raw(false) {}
   rgw_obj_select(const rgw_raw_obj& _raw_obj) : raw_obj(_raw_obj), is_raw(true) {}
   rgw_obj_select(const rgw_obj_select& rhs) {
+    placement_rule = rhs.placement_rule;
     is_raw = rhs.is_raw;
     if (is_raw) {
       raw_obj = rhs.raw_obj;
