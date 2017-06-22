@@ -18,12 +18,23 @@ log = logging.getLogger(__name__)
 
 class CephAnsible(Task):
     name = 'ceph_ansible'
-
+     # TODO: Eventually, we should drop _default_playbook in favor of site.yml.sample from ceph-ansible.git
     _default_playbook = [
+        # Run gather facts at the top as required by mgr-role 
+        dict(
+            hosts='all',
+            become=True,
+            tasks=[],
+        ),
         dict(
             hosts='mons',
             become=True,
             roles=['ceph-mon'],
+        ),
+        dict(
+            hosts='mgrs',
+            become=True,
+            roles=['ceph-mgr'],
         ),
         dict(
             hosts='osds',
@@ -152,6 +163,7 @@ class CephAnsible(Task):
     def generate_hosts_file(self):
         groups_to_roles = dict(
             mons='mon',
+            mgrs='mgr',
             mdss='mds',
             osds='osd',
             rgws='rgw',
