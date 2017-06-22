@@ -33,6 +33,7 @@ void usage()
   cout << "   --test-map-pgs-dump [--pool <poolid>] map all pgs" << std::endl;
   cout << "   --test-map-pgs-dump-all [--pool <poolid>] map all pgs to osds" << std::endl;
   cout << "   --mark-up-in            mark osds up and in (but do not persist)" << std::endl;
+  cout << "   --with-default-pool     include default pool when creating map" << std::endl;
   cout << "   --clear-temp            clear pg_temp and primary_temp" << std::endl;
   cout << "   --test-random           do random placements" << std::endl;
   cout << "   --test-map-pg <pgid>    map a pgid to osds" << std::endl;
@@ -100,6 +101,7 @@ int main(int argc, const char **argv)
   bool tree = false;
   boost::scoped_ptr<Formatter> tree_formatter;
   bool createsimple = false;
+  bool createpool = false;
   bool create_from_conf = false;
   int num_osd = 0;
   int pg_bits = g_conf->osd_pg_bits;
@@ -162,6 +164,8 @@ int main(int argc, const char **argv)
 	exit(EXIT_FAILURE);
       }
       createsimple = true;
+    } else if (ceph_argparse_flag(args, i, "--with-default-pool", (char*)NULL)) {
+      createpool = true;
     } else if (ceph_argparse_flag(args, i, "--create-from-conf", (char*)NULL)) {
       create_from_conf = true;
     } else if (ceph_argparse_flag(args, i, "--mark-up-in", (char*)NULL)) {
@@ -290,7 +294,12 @@ int main(int argc, const char **argv)
     }
     uuid_d fsid;
     memset(&fsid, 0, sizeof(uuid_d));
-    osdmap.build_simple_with_pool(g_ceph_context, 0, fsid, num_osd, pg_bits, pgp_bits);
+    if (createpool) {
+      osdmap.build_simple_with_pool(
+	g_ceph_context, 0, fsid, num_osd, pg_bits, pgp_bits);
+    } else {
+      osdmap.build_simple(g_ceph_context, 0, fsid, num_osd);
+    }
     modified = true;
   }
 
@@ -412,8 +421,8 @@ int main(int argc, const char **argv)
   if (!test_map_object.empty()) {
     object_t oid(test_map_object);
     if (pool == -1) {
-      cout << me << ": assuming pool 0 (use --pool to override)" << std::endl;
-      pool = 0;
+      cout << me << ": assuming pool 1 (use --pool to override)" << std::endl;
+      pool = 1;
     }
     if (!osdmap.have_pg_pool(pool)) {
       cerr << "There is no pool " << pool << std::endl;
