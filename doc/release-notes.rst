@@ -36,7 +36,7 @@ Major Changes from Kraken
       BlueStore for performance reasons.)  FIXME DOCS
 
   * *Erasure coded* pools now have full support for *overwrites*,
-    allowing them to be used with RBD and CephFS.
+    allowing them to be used with RBD and CephFS.  `Read more about EC overwrites`_.
 
   * *ceph-mgr*:
 
@@ -210,6 +210,8 @@ Major Changes from Kraken
     - ``ceph mon feature ls`` will list monitor features recorded in the
       MonMap.  ``ceph mon feature set`` will set an optional feature (none of
       these exist yet).
+
+.. _Read more about EC overwrites: ../rados/operations/erasure-code/#erasure-coding-with-overwrites
 
 Major Changes from Jewel
 ------------------------
