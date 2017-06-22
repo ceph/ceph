@@ -535,7 +535,7 @@ bool StrayManager::_eval_stray(CDentry *dn, bool delay)
      * if we can do anything with them if we happen to have them in
      * cache.
      */
-    eval_remote_stray(dn, NULL);
+    _eval_stray_remote(dn, NULL);
     return false;
   }
 }
@@ -558,8 +558,51 @@ bool StrayManager::eval_stray(CDentry *dn, bool delay)
   return ret;
 }
 
-void StrayManager::eval_remote_stray(CDentry *stray_dn, CDentry *remote_dn)
+void StrayManager::eval_remote(CDentry *remote_dn)
 {
+  dout(10) << __func__ << " " << *remote_dn << dendl;
+
+  CDentry::linkage_t *dnl = remote_dn->get_projected_linkage();
+  assert(dnl->is_remote());
+  CInode *in = dnl->get_inode();
+
+  if (!in) {
+    dout(20) << __func__ << ": no inode, cannot evaluate" << dendl;
+    return;
+  }
+
+  if (remote_dn->last != CEPH_NOSNAP) {
+    dout(20) << __func__ << ": snap dentry, cannot evaluate" << dendl;
+    return;
+  }
+
+  // refers to stray?
+  CDentry *primary_dn = in->get_projected_parent_dn();
+  assert(primary_dn != NULL);
+  if (primary_dn->get_dir()->get_inode()->is_stray()) {
+    _eval_stray_remote(primary_dn, remote_dn);
+  } else {
+    dout(20) << __func__ << ": inode's primary dn not stray" << dendl;
+  }
+}
+
+class C_RetryEvalRemote : public StrayManagerContext {
+  CDentry *dn;
+  public:
+    C_RetryEvalRemote(StrayManager *sm_, CDentry *dn_) :
+      StrayManagerContext(sm_), dn(dn_) {
+      dn->get(CDentry::PIN_PTRWAITER);
+    }
+    void finish(int r) override {
+      if (dn->get_projected_linkage()->is_remote())
+	sm->eval_remote(dn);
+      dn->put(CDentry::PIN_PTRWAITER);
+    }
+};
+
+void StrayManager::_eval_stray_remote(CDentry *stray_dn, CDentry *remote_dn)
+{
+  dout(20) << __func__ << " " << *stray_dn << dendl;
   assert(stray_dn != NULL);
   assert(stray_dn->get_dir()->get_inode()->is_stray());
   CDentry::linkage_t *stray_dnl = stray_dn->get_projected_linkage();
@@ -574,9 +617,14 @@ void StrayManager::eval_remote_stray(CDentry *stray_dn, CDentry *remote_dn)
       for (compact_set<CDentry*>::iterator p = stray_in->remote_parents.begin();
 	   p != stray_in->remote_parents.end();
 	   ++p)
-	if ((*p)->last == CEPH_NOSNAP) {
-	  remote_dn = *p;
-	  break;
+	if ((*p)->last == CEPH_NOSNAP && !(*p)->is_projected()) {
+	  if ((*p)->is_auth()) {
+	    remote_dn = *p;
+	    if (remote_dn->dir->can_auth_pin())
+	      break;
+	  } else if (!remote_dn) {
+	    remote_dn = *p;
+	  }
 	}
     }
     if (!remote_dn) {
@@ -587,8 +635,14 @@ void StrayManager::eval_remote_stray(CDentry *stray_dn, CDentry *remote_dn)
   assert(remote_dn->last == CEPH_NOSNAP);
   // NOTE: we repeat this check in _rename(), since our submission path is racey.
   if (!remote_dn->is_projected()) {
-    if (remote_dn->is_auth() && remote_dn->dir->can_auth_pin()) {
-      reintegrate_stray(stray_dn, remote_dn);
+    if (remote_dn->is_auth()) {
+      if (remote_dn->dir->can_auth_pin()) {
+	reintegrate_stray(stray_dn, remote_dn);
+      } else {
+	remote_dn->dir->add_waiter(CDir::WAIT_UNFREEZE, new C_RetryEvalRemote(this, remote_dn));
+	dout(20) << __func__ << ": not reintegrating (can't authpin remote parent)" << dendl;
+      }
+
     } else if (!remote_dn->is_auth() && stray_dn->is_auth()) {
       migrate_stray(stray_dn, remote_dn->authority().first);
     } else {

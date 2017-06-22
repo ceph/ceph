@@ -9492,59 +9492,6 @@ void MDCache::scan_stray_dir(dirfrag_t next)
   }
 }
 
-/**
- * If a remote dentry refers to an inode whose primary
- * dentry is a stray, then evaluate the inode for purging if
- * we have the auth copy, or migrate the stray to use if we
- * do not.
- */
-void MDCache::eval_remote(CDentry *remote_dn)
-{
-  assert(remote_dn);
-  dout(10) << __func__ << " " << *remote_dn << dendl;
-
-  CDentry::linkage_t *dnl = remote_dn->get_projected_linkage();
-  assert(dnl->is_remote());
-  CInode *in = dnl->get_inode();
-
-  if (!in) {
-    dout(20) << __func__ << ": no inode, cannot evaluate" << dendl;
-    return;
-  }
-
-  if (remote_dn->last != CEPH_NOSNAP) {
-    dout(20) << __func__ << ": snap dentry, cannot evaluate" << dendl;
-    return;
-  }
-
-  // refers to stray?
-  CDentry *primary_dn = in->get_projected_parent_dn();
-  assert(primary_dn != NULL);
-  if (primary_dn->get_dir()->get_inode()->is_stray()) {
-    if (in->is_auth()) {
-      dout(20) << __func__ << ": have auth for inode, evaluating" << dendl;
-
-      stray_manager.eval_remote_stray(primary_dn, remote_dn);
-    } else {
-      dout(20) << __func__ << ": do not have auth for inode, migrating " << dendl;
-      /*
-       * Inodes get filed into a stray dentry when a client unlinks
-       * the primary DN for them.  However, that doesn't mean there
-       * isn't a remote DN still in the world.  The remote DN just
-       * ends up pointing at a stray.  Strays can pretty much live
-       * forever in this scenario.
-       *
-       * Therefore, we have a special behaviour here: migrate a stray
-       * to <me> when <I> handle a client request with a trace referring
-       * to a stray inode on another MDS.
-       */
-      stray_manager.migrate_stray(primary_dn, mds->get_nodeid());
-    }
-  } else {
-    dout(20) << __func__ << ": inode's primary dn not stray" << dendl;
-  }
-}
-
 void MDCache::fetch_backtrace(inodeno_t ino, int64_t pool, bufferlist& bl, Context *fin)
 {
   object_t oid = CInode::get_object_name(ino, frag_t(), "");
