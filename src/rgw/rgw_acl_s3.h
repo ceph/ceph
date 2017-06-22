@@ -34,6 +34,37 @@ public:
   bool xml_start(const char *el, const char **attr);
 };
 
+class ACLGranteeType_S3 {
+public:
+  static const char *to_string(ACLGranteeType& type) {
+    switch (type.get_type()) {
+    case ACL_TYPE_CANON_USER:
+      return "CanonicalUser";
+    case ACL_TYPE_EMAIL_USER:
+      return "AmazonCustomerByEmail";
+    case ACL_TYPE_GROUP:
+      return "Group";
+     default:
+      return "unknown";
+    }
+  }
+
+  static void set(const char *s, ACLGranteeType& type) {
+    if (!s) {
+      type.set(ACL_TYPE_UNKNOWN);
+      return;
+    }
+    if (strcmp(s, "CanonicalUser") == 0)
+      type.set(ACL_TYPE_CANON_USER);
+    else if (strcmp(s, "AmazonCustomerByEmail") == 0)
+      type.set(ACL_TYPE_EMAIL_USER);
+    else if (strcmp(s, "Group") == 0)
+      type.set(ACL_TYPE_GROUP);
+    else
+      type.set(ACL_TYPE_UNKNOWN);
+  }
+};
+
 
 class ACLGrant_S3 : public ACLGrant, public XMLObj
 {
