@@ -577,6 +577,7 @@ void RGWOp_DATALog_List::execute() {
   real_time  ut_st, 
              ut_et;
   unsigned shard_id, max_entries = LOG_CLASS_LIST_MAX_ENTRIES;
+  unsigned left_cnt;
 
   s->info.args.get_bool("extra-info", &extra_info, false);
 
@@ -604,20 +605,25 @@ void RGWOp_DATALog_List::execute() {
       http_ret = -EINVAL;
       return;
     }
-  } 
-  
+  }
+
+  dout(10) << __func__ << " shard " << shard << " st " << st << " et " << et << " marker " 
+ 	<< marker << " max_entries "<< max_entries << dendl;
+  left_cnt = max_entries;
+
   do {
     // Note that last_marker is updated to be the marker of the last
     // entry listed
     http_ret = store->data_log->list_entries(shard_id, ut_st, ut_et, 
-					     max_entries, entries, marker,
+					     left_cnt, entries, marker,
 					     &last_marker, &truncated);
     if (http_ret < 0) 
       break;
 
-    if (!max_entries_str.empty()) 
-      max_entries -= entries.size();
-  } while (truncated && (max_entries > 0));
+    assert(max_entries >= entries.size());
+    left_cnt = max_entries - entries.size();
+    marker = last_marker;
+  } while (truncated && (left_cnt > 0));
 }
 
 void RGWOp_DATALog_List::send_response() {
