@@ -74,6 +74,7 @@ Major Changes from Kraken
     Ceph will prevent you from enabling features that will break compatibility
     with those clients.  FIXME DOCS
 
+
 - *RGW*:
 
   * RGW introduces *server side encryption* of uploaded objects with
@@ -111,6 +112,79 @@ Major Changes from Kraken
     multiple MDS daemons automatically.
   * Directory subtrees can be explicitly pinned to specific MDS daemons in
     cases where the automatic load balancing is not desired or effective.
+
+- *Miscellaneous*:
+
+  * *CLI changes*:
+
+    - The ``ceph -s`` or ``ceph status`` command has a fresh look.
+    - ``ceph {osd,mds,mon} versions`` summarizes versions of running daemons.
+    - ``ceph {osd,mds,mon} count-metadata <property>`` similarly
+      tabulates any other daemon metadata visible via the ``ceph
+      {osd,mds,mon} metadata`` commands.
+    - ``ceph features`` summarizes features and releases of connected
+      clients and daemons.
+    - ``ceph osd require-osd-release <release>`` replaces the old
+      ``require_RELEASE_osds`` flags.
+    - ``ceph osd pg-upmap``, ``ceph osd rm-pg-upmap``, ``ceph osd
+      pg-upmap-items``, ``ceph osd rm-pg-upmap-items`` can explicitly
+      manage `upmap` items (FIXME DOCS).
+    - ``ceph osd getcrushmap`` returns a crush map version number on
+      stderr, and ``ceph osd setcrushmap [version]`` will only inject
+      an updated crush map if the version matches.  This allows crush
+      maps to be updated offline and then reinjected into the cluster
+      without fear of clobbering racing changes (e.g., by newly added
+      osds or changes by other administrators).
+    - ``ceph osd create`` has been replaced by ``ceph osd new``.  This
+      should be hidden from most users by user-facing tools like
+      `ceph-disk`.
+    - ``ceph osd destroy`` will mark an OSD destroyed and remove its
+      cephx and lockbox keys.  However, the OSD id and CRUSH map entry
+      will remain in place, allowing the id to be reused by a
+      replacement device with minimal data rebalancing.
+    - ``ceph osd purge`` will remove all traces of an OSD from the
+      cluster, including its cephx encryption keys, dm-crypt lockbox
+      keys, OSD id, and crush map entry.
+    - ``ceph osd ls-tree <name>`` will output a list of OSD ids under
+      the given CRUSH name (like a host or rack name).  This is useful
+      for applying changes to entire subtrees.  For example, ``ceph
+      osd down `ceph osd ls-tree rack1```.
+    - ``ceph osd {add,rm}-{noout,noin,nodown,noup}`` allow the
+      `noout`, `nodown`, `noin`, and `noup` flags to be applied to
+      specific OSDs.
+    - ``ceph log last [n]`` will output the last *n* lines of the cluster
+      log.
+    - ``ceph mgr dump`` will dump the MgrMap, including the currently active
+      ceph-mgr daemon and any standbys.
+    - ``ceph osd crush swap-bucket <src> <dest>`` will swap the
+      contents of two CRUSH buckets in the hierarchy while preserving
+      the buckets' ids.  This allows an entire subtree of devices to
+      be replaced (e.g., to replace an entire host of FileStore OSDs
+      with newly-imaged BlueStore OSDs) without disrupting the
+      distribution of data across neighboring devices.
+    - ``ceph osd set-require-min-compat-client <release>`` configures
+      the oldest client release the cluster is required to support.
+      Other changes, like CRUSH tunables, will fail with an error if
+      they would violate this setting.  Changing this setting also
+      fails if clients older than the specified release are currently
+      connected to the cluster.
+    - ``ceph config-key dump`` dumps config-key entries and their
+      contents.  (The exist ``ceph config-key ls`` only dumps the key
+      names, not the values.)
+    - ``ceph osd set-{full,nearfull,backfillfull}-ratio`` sets the
+      cluster-wide ratio for various full thresholds (when the cluster
+      refuses IO, when the cluster warns about being close to full,
+      when an OSD will defer rebalancing a PG to itself,
+      respectively).
+    - ``ceph osd reweightn`` will specify the `reweight` values for
+      multiple OSDs in a single command.  This is equivalent to a series of
+      ``ceph osd reweight`` commands.
+    - ``ceph crush class {create,rm,ls}`` manage the new CRUSH *device
+      class* feature.  ``ceph crush set-device-class <osd> <class>``
+      will set the clas for a particular device.
+    - ``ceph mon feature ls`` will list monitor features recorded in the
+      MonMap.  ``ceph mon feature set`` will set an optional feature (none of
+      these exist yet).
 
 Major Changes from Jewel
 ------------------------
