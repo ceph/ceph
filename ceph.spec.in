@@ -1188,6 +1188,8 @@ if [ ! -e "$CERT" -o ! -e "$PKEY" ]; then
   openssl req -new -nodes -x509 \
     -subj "/O=IT/CN=ceph-mgr-restful" \
     -days 3650 -keyout "$PKEY" -out "$CERT" -extensions v3_ca
+  chown root:ceph "$CERT" "$PKEY"
+  chmod 640 "$CERT" "$PKEY"
 fi
 %if 0%{?suse_version}
 if [ $1 -eq 1 ] ; then
