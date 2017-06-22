@@ -516,10 +516,21 @@ RDMAStack::RDMAStack(CephContext *cct, const string &t): NetworkStack(cct, t)
   //
   //On RDMA MUST be called before fork
   //
+
   int rc = ibv_fork_init();
   if (rc) {
      lderr(cct) << __func__ << " failed to call ibv_for_init(). On RDMA must be called before fork. Application aborts." << dendl;
      ceph_abort();
+  }
+
+  ldout(cct, 1) << __func__ << " ms_async_rdma_enable_hugepage value is: " << cct->_conf->ms_async_rdma_enable_hugepage <<  dendl;
+  if (cct->_conf->ms_async_rdma_enable_hugepage) {
+    rc =  setenv("RDMAV_HUGEPAGES_SAFE","1",1);
+    ldout(cct, 1) << __func__ << " RDMAV_HUGEPAGES_SAFE is set as: " << getenv("RDMAV_HUGEPAGES_SAFE") <<  dendl;
+    if (rc) {
+      lderr(cct) << __func__ << " failed to export RDMA_HUGEPAGES_SAFE. On RDMA must be exported before using huge pages. Application aborts." << dendl;
+      ceph_abort();
+    }
   }
 
   //Check ulimit
@@ -548,6 +559,10 @@ RDMAStack::RDMAStack(CephContext *cct, const string &t): NetworkStack(cct, t)
 
 RDMAStack::~RDMAStack()
 {
+  if (cct->_conf->ms_async_rdma_enable_hugepage) {
+    unsetenv("RDMAV_HUGEPAGES_SAFE");	//remove env variable on destruction
+  }
+
   delete dispatcher;
 }
 
