@@ -5812,8 +5812,13 @@ void Client::flush_mdlog_sync()
 
 void Client::flush_mdlog(MetaSession *session)
 {
-  MClientSession *m = new MClientSession(CEPH_SESSION_REQUEST_FLUSH_MDLOG);
-  session->con->send_message(m);
+  // Only send this to Luminous or newer MDS daemons, older daemons
+  // will crash if they see an unknown CEPH_SESSION_* value in this msg.
+  const uint64_t features = session->con->get_features();
+  if (HAVE_FEATURE(features, SERVER_LUMINOUS)) {
+    MClientSession *m = new MClientSession(CEPH_SESSION_REQUEST_FLUSH_MDLOG);
+    session->con->send_message(m);
+  }
 }
 
 
