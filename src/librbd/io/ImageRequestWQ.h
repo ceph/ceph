@@ -7,6 +7,7 @@
 #include "include/Context.h"
 #include "common/RWLock.h"
 #include "common/WorkQueue.h"
+#include "librbd/io/Types.h"
 
 #include <list>
 #include <atomic>
@@ -62,8 +63,7 @@ public:
   void block_writes(Context *on_blocked);
   void unblock_writes();
 
-  void set_require_lock_on_read();
-  void clear_require_lock_on_read();
+  void set_require_lock(Direction direction, bool enabled);
 
 protected:
   void *_void_dequeue() override;
@@ -101,6 +101,7 @@ private:
   Contexts m_write_blocker_contexts;
   uint32_t m_write_blockers = 0;
   bool m_require_lock_on_read = false;
+  bool m_require_lock_on_write = false;
   std::atomic<unsigned> m_queued_reads { 0 };
   std::atomic<unsigned> m_queued_writes { 0 };
   std::atomic<unsigned> m_in_flight_ios { 0 };

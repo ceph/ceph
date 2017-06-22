@@ -109,8 +109,11 @@ void PreReleaseRequest<I>::send_block_writes() {
 
   {
     RWLock::RLocker owner_locker(m_image_ctx.owner_lock);
-    if (m_image_ctx.test_features(RBD_FEATURE_JOURNALING)) {
-      m_image_ctx.io_work_queue->set_require_lock_on_read();
+    if (m_image_ctx.clone_copy_on_read ||
+        m_image_ctx.test_features(RBD_FEATURE_JOURNALING)) {
+      m_image_ctx.io_work_queue->set_require_lock(io::DIRECTION_BOTH, true);
+    } else {
+      m_image_ctx.io_work_queue->set_require_lock(io::DIRECTION_WRITE, true);
     }
     m_image_ctx.io_work_queue->block_writes(ctx);
   }
