@@ -1974,7 +1974,7 @@ private:
 
   int _open_super_meta();
 
-  void open_statfs();
+  void _open_statfs();
 
   int _reconcile_bluefs_freespace();
   int _balance_bluefs_freespace(PExtentVector *extents);
