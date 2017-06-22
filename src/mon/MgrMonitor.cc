@@ -113,7 +113,7 @@ void MgrMonitor::encode_pending(MonitorDBStore::TransactionRef t)
   put_last_committed(t, pending_map.epoch);
 
   health_check_map_t next;
-  if (!pending_map.available) {
+  if (pending_map.active_gid == 0) {
     auto level = should_warn_about_mgr_down();
     if (level != HEALTH_OK) {
       next.add("MGR_DOWN", level, "no active mgr");
@@ -401,7 +401,7 @@ void MgrMonitor::get_health(
     return;
   }
 
-  if (!map.available) {
+  if (map.active_gid == 0) {
     auto level = HEALTH_WARN;
     // do not escalate to ERR if they are still upgrading to jewel.
     if (mon->osdmon()->osdmap.require_osd_release >= CEPH_RELEASE_LUMINOUS) {
