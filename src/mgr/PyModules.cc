@@ -260,6 +260,10 @@ PyObject *PyModules::get_python(const std::string &what)
     }
     f.dump_string("json", json.to_str());
     return f.get();
+  } else if (what == "mgr_map") {
+    PyFormatter f;
+    mgr_map.dump(&f);
+    return f.get();
   } else {
     derr << "Python module requested unknown data '" << what << "'" << dendl;
     Py_RETURN_NONE;

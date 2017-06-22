@@ -23,6 +23,7 @@
 #include "osdc/Objecter.h"
 #include "client/Client.h"
 #include "common/LogClient.h"
+#include "mon/MgrMap.h"
 
 #include "DaemonState.h"
 #include "ClusterState.h"
@@ -41,6 +42,12 @@ class PyModules
   Client   &client;
   Finisher &finisher;
 
+  // Hold a copy of the latest MgrMap.  We don't call up to get
+  // this, because higher layers don't actually store it: it's
+  // only stored here for the benefit of modules that are
+  // interested in it.
+  MgrMap mgr_map;
+
   mutable Mutex lock{"PyModules"};
 
   std::string get_site_packages();
@@ -55,6 +62,11 @@ public:
             Finisher &f);
 
   ~PyModules();
+
+  void update_mgr_map(const MgrMap &new_map)
+  {
+    mgr_map = new_map;
+  }
 
   // FIXME: wrap for send_command?
   MonClient &get_monc() {return monc;}
