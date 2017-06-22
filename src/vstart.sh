@@ -650,8 +650,8 @@ EOF
     done
 
     SF=`mktemp`
-    ceph_adm tell mgr restful create-self-signed-cert
-    ceph_adm tell mgr restful create-key admin -o $SF
+    ceph_adm tell mgr.x restful create-self-signed-cert
+    ceph_adm tell mgr.x restful create-key admin -o $SF
     RESTFUL_SECRET=`cat $SF`
     rm $SF
 }
