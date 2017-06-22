@@ -61,7 +61,6 @@
 #include "messages/MLog.h"
 
 #include "messages/MGenericMessage.h"
-#include "messages/MPing.h"
 #include "messages/MOSDPing.h"
 #include "messages/MOSDFailure.h"
 #include "messages/MOSDMarkMeDown.h"
