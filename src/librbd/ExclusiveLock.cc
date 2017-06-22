@@ -147,8 +147,14 @@ template <typename I>
 void ExclusiveLock<I>::handle_init_complete(uint64_t features) {
   ldout(m_image_ctx.cct, 10) << ": features=" << features << dendl;
 
-  if ((features & RBD_FEATURE_JOURNALING) != 0) {
-    m_image_ctx.io_work_queue->set_require_lock_on_read();
+  {
+    RWLock::RLocker owner_locker(m_image_ctx.owner_lock);
+    if (m_image_ctx.clone_copy_on_read ||
+        (features & RBD_FEATURE_JOURNALING) != 0) {
+      m_image_ctx.io_work_queue->set_require_lock(io::DIRECTION_BOTH, true);
+    } else {
+      m_image_ctx.io_work_queue->set_require_lock(io::DIRECTION_WRITE, true);
+    }
   }
 
   Mutex::Locker locker(ML<I>::m_lock);
@@ -161,7 +167,7 @@ void ExclusiveLock<I>::shutdown_handler(int r, Context *on_finish) {
 
   {
     RWLock::WLocker owner_locker(m_image_ctx.owner_lock);
-    m_image_ctx.io_work_queue->clear_require_lock_on_read();
+    m_image_ctx.io_work_queue->set_require_lock(io::DIRECTION_BOTH, false);
     m_image_ctx.exclusive_lock = nullptr;
   }
 
@@ -269,7 +275,7 @@ void ExclusiveLock<I>::handle_post_acquired_lock(int r) {
 
   if (r >= 0) {
     m_image_ctx.image_watcher->notify_acquired_lock();
-    m_image_ctx.io_work_queue->clear_require_lock_on_read();
+    m_image_ctx.io_work_queue->set_require_lock(io::DIRECTION_BOTH, false);
     m_image_ctx.io_work_queue->unblock_writes();
   }
 
@@ -311,7 +317,7 @@ void ExclusiveLock<I>::post_release_lock_handler(bool shutting_down, int r,
   } else {
     {
       RWLock::WLocker owner_locker(m_image_ctx.owner_lock);
-      m_image_ctx.io_work_queue->clear_require_lock_on_read();
+      m_image_ctx.io_work_queue->set_require_lock(io::DIRECTION_BOTH, false);
       m_image_ctx.exclusive_lock = nullptr;
     }
 

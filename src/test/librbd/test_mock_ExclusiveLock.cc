@@ -214,24 +214,25 @@ public:
       .WillOnce(Return(ret_val));
   }
 
-  void expect_set_require_lock_on_read(MockExclusiveLockImageCtx &mock_image_ctx) {
-    EXPECT_CALL(*mock_image_ctx.io_work_queue, set_require_lock_on_read());
-  }
-
-  void expect_clear_require_lock_on_read(MockExclusiveLockImageCtx &mock_image_ctx) {
-    EXPECT_CALL(*mock_image_ctx.io_work_queue, clear_require_lock_on_read());
+  void expect_set_require_lock(MockExclusiveLockImageCtx &mock_image_ctx,
+                               io::Direction direction, bool enabled) {
+    EXPECT_CALL(*mock_image_ctx.io_work_queue, set_require_lock(direction,
+                                                                enabled));
   }
 
   void expect_block_writes(MockExclusiveLockImageCtx &mock_image_ctx) {
     EXPECT_CALL(*mock_image_ctx.io_work_queue, block_writes(_))
                   .WillOnce(CompleteContext(0, mock_image_ctx.image_ctx->op_work_queue));
-    if ((mock_image_ctx.features & RBD_FEATURE_JOURNALING) != 0) {
-      expect_set_require_lock_on_read(mock_image_ctx);
+    if (mock_image_ctx.clone_copy_on_read ||
+        (mock_image_ctx.features & RBD_FEATURE_JOURNALING) != 0) {
+      expect_set_require_lock(mock_image_ctx, io::DIRECTION_BOTH, true);
+    } else {
+      expect_set_require_lock(mock_image_ctx, io::DIRECTION_WRITE, true);
     }
   }
 
   void expect_unblock_writes(MockExclusiveLockImageCtx &mock_image_ctx) {
-    expect_clear_require_lock_on_read(mock_image_ctx);
+    expect_set_require_lock(mock_image_ctx, io::DIRECTION_BOTH, false);
     EXPECT_CALL(*mock_image_ctx.io_work_queue, unblock_writes());
   }
 

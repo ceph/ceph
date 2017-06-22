@@ -392,28 +392,36 @@ void ImageRequestWQ<I>::unblock_writes() {
 }
 
 template <typename I>
-void ImageRequestWQ<I>::set_require_lock_on_read() {
+void ImageRequestWQ<I>::set_require_lock(Direction direction, bool enabled) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << dendl;
 
-  RWLock::WLocker locker(m_lock);
-  m_require_lock_on_read = true;
-}
-
-template <typename I>
-void ImageRequestWQ<I>::clear_require_lock_on_read() {
-  CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 20) << dendl;
-
+  bool wake_up = false;
   {
     RWLock::WLocker locker(m_lock);
-    if (!m_require_lock_on_read) {
-      return;
+    switch (direction) {
+    case DIRECTION_READ:
+      wake_up = (enabled != m_require_lock_on_read);
+      m_require_lock_on_read = enabled;
+      break;
+    case DIRECTION_WRITE:
+      wake_up = (enabled != m_require_lock_on_write);
+      m_require_lock_on_write = enabled;
+      break;
+    case DIRECTION_BOTH:
+      wake_up = (enabled != m_require_lock_on_read ||
+                 enabled != m_require_lock_on_write);
+      m_require_lock_on_read = enabled;
+      m_require_lock_on_write = enabled;
+      break;
     }
-
-    m_require_lock_on_read = false;
   }
-  this->signal();
+
+  // wake up the thread pool whenever the state changes so that
+  // we can re-request the lock if required
+  if (wake_up) {
+    this->signal();
+  }
 }
 
 template <typename I>
