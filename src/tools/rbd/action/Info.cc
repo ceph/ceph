@@ -140,6 +140,17 @@ static int do_show_info(librados::IoCtx &io_ctx, librbd::Image& image,
   if (-1 != group_spec.pool)
     group_string = stringify(group_spec.pool) + "." + group_spec.name;
 
+  struct timespec create_timestamp;
+  image.get_create_timestamp(&create_timestamp);
+
+  string create_timestamp_str = "";
+  if(create_timestamp.tv_sec != 0) {
+    time_t timestamp = create_timestamp.tv_sec;
+    create_timestamp_str = ctime(&timestamp);
+    create_timestamp_str = create_timestamp_str.substr(0,
+        create_timestamp_str.length() - 1);
+  }
+
   if (f) {
     f->open_object_section("image");
     if (!imgname.empty()) {
@@ -184,6 +195,15 @@ static int do_show_info(librados::IoCtx &io_ctx, librbd::Image& image,
     } else {
       std::cout << "\tconsistency group: " << group_string
 		<< std::endl;
+    }
+  }
+
+  if (!create_timestamp_str.empty()) {
+    if (f) {
+      f->dump_string("create_timestamp", create_timestamp_str);
+    } else {
+      std::cout << "\tcreate_timestamp: " << create_timestamp_str
+                << std::endl;
     }
   }
 

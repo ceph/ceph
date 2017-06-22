@@ -52,6 +52,9 @@ private:
    *            V2_GET_STRIPE_UNIT_COUNT            |
    *                |                               |
    *                v                               |
+   *            V2_GET_CREATE_TIMESTAMP             |
+   *                |                               |
+   *                v                               |
    *            V2_GET_DATA_POOL                    |
    *                |                               |
    *                v                               |
@@ -104,6 +107,9 @@ private:
 
   void send_v2_get_stripe_unit_count();
   Context *handle_v2_get_stripe_unit_count(int *result);
+
+  void send_v2_get_create_timestamp();
+  Context *handle_v2_get_create_timestamp(int *result);
 
   void send_v2_get_data_pool();
   Context *handle_v2_get_data_pool(int *result);

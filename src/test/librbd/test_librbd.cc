@@ -448,6 +448,49 @@ TEST_F(TestLibRBD, GetBlockNamePrefixPP)
   ASSERT_LT(0U, image.get_block_name_prefix().size());
 }
 
+TEST_F(TestLibRBD, TestGetCreateTimestamp)
+{
+  REQUIRE_FORMAT_V2();
+
+  rados_ioctx_t ioctx;
+  ASSERT_EQ(0, rados_ioctx_create(_cluster, m_pool_name.c_str(), &ioctx));
+
+  rbd_image_t image;
+  int order = 0;
+  std::string name = get_temp_image_name();
+
+  ASSERT_EQ(0, create_image(ioctx, name.c_str(), 0, &order));
+  ASSERT_EQ(0, rbd_open(ioctx, name.c_str(), &image, NULL));
+
+  struct timespec timestamp;
+  ASSERT_EQ(0, rbd_get_create_timestamp(image, &timestamp));
+  ASSERT_LT(0, timestamp.tv_sec);
+
+  ASSERT_EQ(0, rbd_close(image));
+
+  rados_ioctx_destroy(ioctx);
+}
+
+TEST_F(TestLibRBD, GetCreateTimestampPP)
+{
+  REQUIRE_FORMAT_V2();
+
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, _rados.ioctx_create(m_pool_name.c_str(), ioctx));
+
+  librbd::RBD rbd;
+  librbd::Image image;
+  int order = 0;
+  std::string name = get_temp_image_name();
+
+  ASSERT_EQ(0, create_image_pp(rbd, ioctx, name.c_str(), 0, &order));
+  ASSERT_EQ(0, rbd.open(ioctx, image, name.c_str(), NULL));
+
+  struct timespec timestamp;
+  ASSERT_EQ(0, image.get_create_timestamp(&timestamp));
+  ASSERT_LT(0, timestamp.tv_sec);
+}
+
 TEST_F(TestLibRBD, OpenAio)
 {
   rados_ioctx_t ioctx;
