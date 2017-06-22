@@ -526,11 +526,16 @@ void Journaler::_finish_flush(int r, uint64_t start, ceph::real_time stamp)
 		 << dendl;
 
   // kick waiters <= safe_pos
-  while (!waitfor_safe.empty()) {
-    if (waitfor_safe.begin()->first > safe_pos)
-      break;
-    finish_contexts(cct, waitfor_safe.begin()->second);
-    waitfor_safe.erase(waitfor_safe.begin());
+  if (!waitfor_safe.empty()) {
+    list<Context*> ls;
+    while (!waitfor_safe.empty()) {
+      auto it = waitfor_safe.begin();
+      if (it->first > safe_pos)
+	break;
+      ls.splice(ls.end(), it->second);
+      waitfor_safe.erase(it);
+    }
+    finish_contexts(cct, ls);
   }
 }
 
