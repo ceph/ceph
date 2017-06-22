@@ -73,7 +73,10 @@ Major Changes from Kraken
     connect to the cluster via ``ceph osd set-require-min-compat-client`` and
     Ceph will prevent you from enabling features that will break compatibility
     with those clients.  FIXME DOCS
-
+  * Several `sleep` settings, include ``osd_recovery_sleep``,
+    ``osd_snap_trim_sleep``, and ``osd_scrub_sleep`` have been
+    reimplemented to work efficiently.  (These are used in some cases
+    to work around issues throttling background work.)
 
 - *RGW*:
 
