@@ -224,6 +224,34 @@ class CephAnsible(Task):
         os.remove(self.inventory)
         os.remove(self.playbook_file)
         os.remove(self.extra_vars_file)
+        # run purge-cluster that teardowns the cluster
+        args = [
+            'ANSIBLE_STDOUT_CALLBACK=debug',
+            'ansible-playbook', '-vv',
+            '-e', 'ireallymeanit=yes',
+            '-i', 'inven.yml', 'infrastructure-playbooks/purge-cluster.yml'
+        ]
+        log.debug("Running %s", args)
+        str_args = ' '.join(args)
+        installer_node = self.ceph_installer
+        if self.config.get('rhbuild'):
+            installer_node.run(
+                args=[
+                    run.Raw('cd ~/ceph-ansible'),
+                    run.Raw(';'),
+                    run.Raw(str_args)
+                ]
+            )
+        else:
+            installer_node.run(
+                args=[
+                    run.Raw('cd ~/ceph-ansible'),
+                    run.Raw(';'),
+                    run.Raw('source venv/bin/activate'),
+                    run.Raw(';'),
+                    run.Raw(str_args)
+                ]
+            )
 
     def wait_for_ceph_health(self):
         with contextutil.safe_while(sleep=15, tries=6,

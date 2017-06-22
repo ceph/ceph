@@ -41,6 +41,11 @@ class TestCephAnsibleTask(TestTask):
         )
         self.patcher_get_scratch_devices.start()
 
+        self.patcher_teardown = patch(
+            'teuthology.task.ceph_ansible.CephAnsible.teardown',
+        )
+        self.patcher_teardown.start()
+
         def fake_set_iface_and_cidr(self):
             self._interface = 'eth0'
             self._cidr = '172.21.0.0/20'
@@ -54,6 +59,7 @@ class TestCephAnsibleTask(TestTask):
     def stop_patchers(self):
         self.patcher_get_scratch_devices.stop()
         self.patcher_remote.stop()
+        self.patcher_teardown.stop()
 
     def test_playbook_none(self):
         skip(SKIP_IRRELEVANT)
