@@ -637,7 +637,7 @@ int RGWBL::bucket_bl_process(string& shard_id)
            } else if (acl_grantee_type == ACL_TYPE_GROUP) {
 #define RGW_URI_ALL_USERS	"http://acs.amazonaws.com/groups/global/AllUsers"
 #define RGW_URI_AUTH_USERS	"http://acs.amazonaws.com/groups/global/AuthenticatedUsers"
-#define RGW_URI_LOG_DELIVERY    "http://acs.amazonaws.com/groups/s3/LogDelivery"
+#define RGW_URI_LOG_DELIVERY    "http://acs.amazonaws.com/groups/s3/LogDelivery"        //TODO cleanup redundant define
 	     if (grant_iter->get_uri() != RGW_URI_LOG_DELIVERY) {
                std::string uri = grant_iter->get_uri();
                target_grant.set_group(target_grant.uri_to_group(uri), 
