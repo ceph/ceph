@@ -1907,7 +1907,7 @@ int OSDMap::_pick_primary(const vector<int>& osds) const
   return -1;
 }
 
-void OSDMap::_apply_remap(const pg_pool_t& pi, pg_t raw_pg, vector<int> *raw) const
+void OSDMap::_apply_upmap(const pg_pool_t& pi, pg_t raw_pg, vector<int> *raw) const
 {
   pg_t pg = pi.raw_pg_to_pg(raw_pg);
   auto p = pg_upmap.find(pg);
@@ -2092,7 +2092,7 @@ void OSDMap::pg_to_raw_up(pg_t pg, vector<int> *up, int *primary) const
   vector<int> raw;
   ps_t pps;
   _pg_to_raw_osds(*pool, pg, &raw, &pps);
-  _apply_remap(*pool, pg, &raw);
+  _apply_upmap(*pool, pg, &raw);
   _raw_to_up_osds(*pool, raw, up);
   *primary = _pick_primary(raw);
   _apply_primary_affinity(pps, *pool, up, primary);
@@ -2125,7 +2125,7 @@ void OSDMap::_pg_to_up_acting_osds(
   _get_temp_osds(*pool, pg, &_acting, &_acting_primary);
   if (_acting.empty() || up || up_primary) {
     _pg_to_raw_osds(*pool, pg, &raw, &pps);
-    _apply_remap(*pool, pg, &raw);
+    _apply_upmap(*pool, pg, &raw);
     _raw_to_up_osds(*pool, raw, &_up);
     _up_primary = _pick_primary(_up);
     _apply_primary_affinity(pps, *pool, &_up, &_up_primary);

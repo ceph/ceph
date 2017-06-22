@@ -8759,7 +8759,10 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     pending_inc.new_primary_temp[pgid] = osd;
     ss << "set " << pgid << " primary_temp mapping to " << osd;
     goto update;
-  } else if (prefix == "osd pg-upmap") {
+  } else if (prefix == "osd pg-upmap" ||
+             prefix == "osd rm-pg-upmap" ||
+             prefix == "osd pg-upmap-items" ||
+             prefix == "osd rm-pg-upmap-items") {
     if (osdmap.require_osd_release < CEPH_RELEASE_LUMINOUS) {
       ss << "you must complete the upgrade and set require_osd_release ="
 	 << "luminous before using the new interface";
@@ -8796,193 +8799,138 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       err = -ENOENT;
       goto reply;
     }
-    if (pending_inc.new_pg_upmap.count(pgid) ||
-	pending_inc.old_pg_upmap.count(pgid)) {
-      dout(10) << __func__ << " waiting for pending update on " << pgid << dendl;
-      wait_for_finished_proposal(op, new C_RetryMessage(this, op));
-      return true;
+
+    enum {
+      OP_PG_UPMAP,
+      OP_RM_PG_UPMAP,
+      OP_PG_UPMAP_ITEMS,
+      OP_RM_PG_UPMAP_ITEMS,
+    } option;
+
+    if (prefix == "osd pg-upmap") {
+      option = OP_PG_UPMAP;
+    } else if (prefix == "osd rm-pg-upmap") {
+      option = OP_RM_PG_UPMAP;
+    } else if (prefix == "osd pg-upmap-items") {
+      option = OP_PG_UPMAP_ITEMS;
+    } else {
+      option = OP_RM_PG_UPMAP_ITEMS;
     }
-    vector<int64_t> id_vec;
-    if (!cmd_getval(g_ceph_context, cmdmap, "id", id_vec)) {
-      ss << "unable to parse 'id' value(s) '"
-         << cmd_vartype_stringify(cmdmap["id"]) << "'";
-      err = -EINVAL;
-      goto reply;
-    }
-    vector<int32_t> new_pg_upmap;
-    for (auto osd : id_vec) {
-      if (osd != CRUSH_ITEM_NONE && !osdmap.exists(osd)) {
-        ss << "osd." << osd << " does not exist";
-        err = -ENOENT;
-        goto reply;
+
+    // check pending upmap changes
+    switch (option) {
+    case OP_PG_UPMAP: // fall through
+    case OP_RM_PG_UPMAP:
+      if (pending_inc.new_pg_upmap.count(pgid) ||
+          pending_inc.old_pg_upmap.count(pgid)) {
+        dout(10) << __func__ << " waiting for pending update on "
+                 << pgid << dendl;
+        wait_for_finished_proposal(op, new C_RetryMessage(this, op));
+        return true;
       }
-      new_pg_upmap.push_back(osd);
-    }
+      break;
 
-    pending_inc.new_pg_upmap[pgid] = mempool::osdmap::vector<int32_t>(
-      new_pg_upmap.begin(), new_pg_upmap.end());
-    ss << "set " << pgid << " pg_upmap mapping to " << new_pg_upmap;
-    goto update;
-  } else if (prefix == "osd rm-pg-upmap") {
-    if (osdmap.require_osd_release < CEPH_RELEASE_LUMINOUS) {
-      ss << "you must complete the upgrade and set require_osd_release ="
-	 << "luminous before using the new interface";
-      err = -EPERM;
-      goto reply;
-    }
-    if (osdmap.require_min_compat_client < CEPH_RELEASE_LUMINOUS) {
-      ss << "require_min_compat_client "
-	 << ceph_release_name(osdmap.require_min_compat_client)
-	 << " < luminous, which is required for pg-upmap";
-      err = -EPERM;
-      goto reply;
-    }
-    err = check_cluster_features(CEPH_FEATUREMASK_OSDMAP_PG_UPMAP, ss);
-    if (err == -EAGAIN)
-      goto wait;
-    if (err < 0)
-      goto reply;
-    string pgidstr;
-    if (!cmd_getval(g_ceph_context, cmdmap, "pgid", pgidstr)) {
-      ss << "unable to parse 'pgid' value '"
-         << cmd_vartype_stringify(cmdmap["pgid"]) << "'";
-      err = -EINVAL;
-      goto reply;
-    }
-    pg_t pgid;
-    if (!pgid.parse(pgidstr.c_str())) {
-      ss << "invalid pgid '" << pgidstr << "'";
-      err = -EINVAL;
-      goto reply;
-    }
-    if (pending_inc.new_pg_upmap.count(pgid) ||
-	pending_inc.old_pg_upmap.count(pgid)) {
-      dout(10) << __func__ << " waiting for pending update on " << pgid << dendl;
-      wait_for_finished_proposal(op, new C_RetryMessage(this, op));
-      return true;
-    }
-
-    pending_inc.old_pg_upmap.insert(pgid);
-    ss << "clear " << pgid << " pg_upmap mapping";
-    goto update;
-  } else if (prefix == "osd pg-upmap-items") {
-    if (osdmap.require_osd_release < CEPH_RELEASE_LUMINOUS) {
-      ss << "you must complete the upgrade and set require_osd_release ="
-	 << "luminous before using the new interface";
-      err = -EPERM;
-      goto reply;
-    }
-    if (osdmap.require_min_compat_client < CEPH_RELEASE_LUMINOUS) {
-      ss << "require_min_compat_client "
-	 << ceph_release_name(osdmap.require_min_compat_client)
-	 << " < luminous, which is required for pg-upmap";
-      err = -EPERM;
-      goto reply;
-    }
-    err = check_cluster_features(CEPH_FEATUREMASK_OSDMAP_PG_UPMAP, ss);
-    if (err == -EAGAIN)
-      goto wait;
-    if (err < 0)
-      goto reply;
-    string pgidstr;
-    if (!cmd_getval(g_ceph_context, cmdmap, "pgid", pgidstr)) {
-      ss << "unable to parse 'pgid' value '"
-         << cmd_vartype_stringify(cmdmap["pgid"]) << "'";
-      err = -EINVAL;
-      goto reply;
-    }
-    pg_t pgid;
-    if (!pgid.parse(pgidstr.c_str())) {
-      ss << "invalid pgid '" << pgidstr << "'";
-      err = -EINVAL;
-      goto reply;
-    }
-    if (!osdmap.pg_exists(pgid)) {
-      ss << "pg " << pgid << " does not exist";
-      err = -ENOENT;
-      goto reply;
-    }
-    if (pending_inc.new_pg_upmap_items.count(pgid) ||
-	pending_inc.old_pg_upmap_items.count(pgid)) {
-      dout(10) << __func__ << " waiting for pending update on " << pgid << dendl;
-      wait_for_finished_proposal(op, new C_RetryMessage(this, op));
-      return true;
-    }
-    vector<int64_t> id_vec;
-    if (!cmd_getval(g_ceph_context, cmdmap, "id", id_vec)) {
-      ss << "unable to parse 'id' value(s) '"
-         << cmd_vartype_stringify(cmdmap["id"]) << "'";
-      err = -EINVAL;
-      goto reply;
-    }
-    if (id_vec.size() % 2) {
-      ss << "you must specify pairs of osd ids to be remapped";
-      err = -EINVAL;
-      goto reply;
-    }
-    vector<pair<int32_t,int32_t>> new_pg_upmap_items;
-    for (auto p = id_vec.begin(); p != id_vec.end(); ++p) {
-      int from = *p++;
-      int to = *p;
-      if (!osdmap.exists(from)) {
-	ss << "osd." << from << " does not exist";
-	err = -ENOENT;
-	goto reply;
+    case OP_PG_UPMAP_ITEMS: // fall through
+    case OP_RM_PG_UPMAP_ITEMS:
+      if (pending_inc.new_pg_upmap_items.count(pgid) ||
+          pending_inc.old_pg_upmap_items.count(pgid)) {
+        dout(10) << __func__ << " waiting for pending update on "
+                 << pgid << dendl;
+        wait_for_finished_proposal(op, new C_RetryMessage(this, op));
+        return true;
       }
-      if (to != CRUSH_ITEM_NONE && !osdmap.exists(to)) {
-	ss << "osd." << to << " does not exist";
-	err = -ENOENT;
-	goto reply;
+      break;
+
+    default:
+      assert(0 == "invalid option");
+    }
+
+    switch (option) {
+    case OP_PG_UPMAP:
+      {
+        vector<int64_t> id_vec;
+        if (!cmd_getval(g_ceph_context, cmdmap, "id", id_vec)) {
+          ss << "unable to parse 'id' value(s) '"
+             << cmd_vartype_stringify(cmdmap["id"]) << "'";
+          err = -EINVAL;
+          goto reply;
+        }
+
+        vector<int32_t> new_pg_upmap;
+        for (auto osd : id_vec) {
+          if (osd != CRUSH_ITEM_NONE && !osdmap.exists(osd)) {
+            ss << "osd." << osd << " does not exist";
+            err = -ENOENT;
+            goto reply;
+          }
+          new_pg_upmap.push_back(osd);
+        }
+
+        pending_inc.new_pg_upmap[pgid] = mempool::osdmap::vector<int32_t>(
+          new_pg_upmap.begin(), new_pg_upmap.end());
+        ss << "set " << pgid << " pg_upmap mapping to " << new_pg_upmap;
       }
-      new_pg_upmap_items.push_back(make_pair(from, to));
+      break;
+
+    case OP_RM_PG_UPMAP:
+      {
+        pending_inc.old_pg_upmap.insert(pgid);
+        ss << "clear " << pgid << " pg_upmap mapping";
+      }
+      break;
+
+    case OP_PG_UPMAP_ITEMS:
+      {
+        vector<int64_t> id_vec;
+        if (!cmd_getval(g_ceph_context, cmdmap, "id", id_vec)) {
+          ss << "unable to parse 'id' value(s) '"
+             << cmd_vartype_stringify(cmdmap["id"]) << "'";
+          err = -EINVAL;
+          goto reply;
+        }
+
+        if (id_vec.size() % 2) {
+          ss << "you must specify pairs of osd ids to be remapped";
+          err = -EINVAL;
+          goto reply;
+        }
+
+        vector<pair<int32_t,int32_t>> new_pg_upmap_items;
+        for (auto p = id_vec.begin(); p != id_vec.end(); ++p) {
+          int from = *p++;
+          int to = *p;
+          if (!osdmap.exists(from)) {
+            ss << "osd." << from << " does not exist";
+            err = -ENOENT;
+            goto reply;
+          }
+          if (to != CRUSH_ITEM_NONE && !osdmap.exists(to)) {
+            ss << "osd." << to << " does not exist";
+            err = -ENOENT;
+            goto reply;
+          }
+          new_pg_upmap_items.push_back(make_pair(from, to));
+        }
+
+        pending_inc.new_pg_upmap_items[pgid] =
+          mempool::osdmap::vector<pair<int32_t,int32_t>>(
+          new_pg_upmap_items.begin(), new_pg_upmap_items.end());
+        ss << "set " << pgid << " pg_upmap_items mapping to "
+           << new_pg_upmap_items;
+      }
+      break;
+
+    case OP_RM_PG_UPMAP_ITEMS:
+      {
+        pending_inc.old_pg_upmap_items.insert(pgid);
+        ss << "clear " << pgid << " pg_upmap_items mapping";
+      }
+      break;
+
+    default:
+      assert(0 == "invalid option");
     }
 
-    pending_inc.new_pg_upmap_items[pgid] =
-      mempool::osdmap::vector<pair<int32_t,int32_t>>(
-      new_pg_upmap_items.begin(), new_pg_upmap_items.end());
-    ss << "set " << pgid << " pg_upmap_items mapping to " << new_pg_upmap_items;
-    goto update;
-  } else if (prefix == "osd rm-pg-upmap-items") {
-    if (osdmap.require_osd_release < CEPH_RELEASE_LUMINOUS) {
-      ss << "you must complete the upgrade and set require_osd_release ="
-	 << "luminous before using the new interface";
-      err = -EPERM;
-      goto reply;
-    }
-    if (osdmap.require_min_compat_client < CEPH_RELEASE_LUMINOUS) {
-      ss << "require_min_compat_client "
-	 << ceph_release_name(osdmap.require_min_compat_client)
-	 << " < luminous, which is required for pg-upmap";
-      err = -EPERM;
-      goto reply;
-    }
-    err = check_cluster_features(CEPH_FEATUREMASK_OSDMAP_PG_UPMAP, ss);
-    if (err == -EAGAIN)
-      goto wait;
-    if (err < 0)
-      goto reply;
-    string pgidstr;
-    if (!cmd_getval(g_ceph_context, cmdmap, "pgid", pgidstr)) {
-      ss << "unable to parse 'pgid' value '"
-         << cmd_vartype_stringify(cmdmap["pgid"]) << "'";
-      err = -EINVAL;
-      goto reply;
-    }
-    pg_t pgid;
-    if (!pgid.parse(pgidstr.c_str())) {
-      ss << "invalid pgid '" << pgidstr << "'";
-      err = -EINVAL;
-      goto reply;
-    }
-    if (pending_inc.new_pg_upmap_items.count(pgid) ||
-	pending_inc.old_pg_upmap_items.count(pgid)) {
-      dout(10) << __func__ << " waiting for pending update on " << pgid << dendl;
-      wait_for_finished_proposal(op, new C_RetryMessage(this, op));
-      return true;
-    }
-
-    pending_inc.old_pg_upmap_items.insert(pgid);
-    ss << "clear " << pgid << " pg_upmap_items mapping";
     goto update;
   } else if (prefix == "osd primary-affinity") {
     int64_t id;
