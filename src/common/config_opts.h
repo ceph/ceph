@@ -1752,6 +1752,8 @@ OPTION(debug_deliberately_leak_memory, OPT_BOOL, false)
 
 OPTION(rgw_swift_custom_header, OPT_STR, "") // option to enable swift custom headers
 
+OPTION(rgw_swift_need_stats, OPT_BOOL, true) // option to enable stats on bucket listing for swift
+
 /* resharding tunables */
 OPTION(rgw_reshard_num_logs, OPT_INT, 16)
 OPTION(rgw_reshard_bucket_lock_duration, OPT_INT, 120) // duration of lock on bucket obj during resharding
