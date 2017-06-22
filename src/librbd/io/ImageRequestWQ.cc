@@ -192,8 +192,9 @@ void ImageRequestWQ<I>::aio_read(AioCompletion *c, uint64_t off, uint64_t len,
   RWLock::RLocker owner_locker(m_image_ctx.owner_lock);
   if (m_image_ctx.non_blocking_aio || writes_blocked() || !writes_empty() ||
       require_lock_on_read()) {
-    queue(new ImageReadRequest<I>(m_image_ctx, c, {{off, len}},
-				  std::move(read_result), op_flags, trace));
+    queue(ImageRequest<I>::create_read_request(
+            m_image_ctx, c, {{off, len}}, std::move(read_result), op_flags,
+            trace));
   } else {
     c->start_op();
     ImageRequest<I>::aio_read(&m_image_ctx, c, {{off, len}},
@@ -229,8 +230,8 @@ void ImageRequestWQ<I>::aio_write(AioCompletion *c, uint64_t off, uint64_t len,
 
   RWLock::RLocker owner_locker(m_image_ctx.owner_lock);
   if (m_image_ctx.non_blocking_aio || writes_blocked()) {
-    queue(new ImageWriteRequest<I>(m_image_ctx, c, {{off, len}},
-				   std::move(bl), op_flags, trace));
+    queue(ImageRequest<I>::create_write_request(
+            m_image_ctx, c, {{off, len}}, std::move(bl), op_flags, trace));
   } else {
     c->start_op();
     ImageRequest<I>::aio_write(&m_image_ctx, c, {{off, len}},
@@ -266,8 +267,8 @@ void ImageRequestWQ<I>::aio_discard(AioCompletion *c, uint64_t off,
 
   RWLock::RLocker owner_locker(m_image_ctx.owner_lock);
   if (m_image_ctx.non_blocking_aio || writes_blocked()) {
-    queue(new ImageDiscardRequest<I>(m_image_ctx, c, off, len,
-				     skip_partial_discard, trace));
+    queue(ImageRequest<I>::create_discard_request(
+            m_image_ctx, c, off, len, skip_partial_discard, trace));
   } else {
     c->start_op();
     ImageRequest<I>::aio_discard(&m_image_ctx, c, off, len,
@@ -300,7 +301,7 @@ void ImageRequestWQ<I>::aio_flush(AioCompletion *c, bool native_async) {
 
   RWLock::RLocker owner_locker(m_image_ctx.owner_lock);
   if (m_image_ctx.non_blocking_aio || writes_blocked() || !writes_empty()) {
-    queue(new ImageFlushRequest<I>(m_image_ctx, c, trace));
+    queue(ImageRequest<I>::create_flush_request(m_image_ctx, c, trace));
   } else {
     ImageRequest<I>::aio_flush(&m_image_ctx, c, trace);
     finish_in_flight_io();
@@ -335,8 +336,8 @@ void ImageRequestWQ<I>::aio_writesame(AioCompletion *c, uint64_t off,
 
   RWLock::RLocker owner_locker(m_image_ctx.owner_lock);
   if (m_image_ctx.non_blocking_aio || writes_blocked()) {
-    queue(new ImageWriteSameRequest<I>(m_image_ctx, c, off, len, std::move(bl),
-				       op_flags, trace));
+    queue(ImageRequest<I>::create_writesame_request(
+            m_image_ctx, c, off, len, std::move(bl), op_flags, trace));
   } else {
     c->start_op();
     ImageRequest<I>::aio_writesame(&m_image_ctx, c, off, len, std::move(bl),
