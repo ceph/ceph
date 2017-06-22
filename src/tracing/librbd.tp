@@ -1934,6 +1934,28 @@ TRACEPOINT_EVENT(librbd, get_stripe_count_exit,
     )
 )
 
+TRACEPOINT_EVENT(librbd, get_create_timestamp_enter,
+    TP_ARGS(
+        void*, imagectx,
+        const char*, name,
+        char, read_only),
+    TP_FIELDS(
+        ctf_integer_hex(void*, imagectx, imagectx)
+        ctf_string(name, name)
+        ctf_integer(char, read_only, read_only)
+    )
+)
+
+TRACEPOINT_EVENT(librbd, get_create_timestamp_exit,
+    TP_ARGS(
+        int, retval,
+        struct timespec*, timestamp),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+        ctf_integer(uint64_t, timestamp, timestamp->tv_sec)
+    )
+)
+
 TRACEPOINT_EVENT(librbd, get_features_enter,
     TP_ARGS(
         void*, imagectx,
