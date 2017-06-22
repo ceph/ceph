@@ -45,13 +45,35 @@ platforms.  Generally speaking, there is very little dependence on
 specific distributions aside from the kernel and system initialization
 package (i.e., sysvinit, upstart, systemd).
 
+Luminous (12.2.z)
+-----------------
+
++----------+----------+--------------------+--------------+---------+------------+
+| Distro   | Release  | Code Name          | Kernel       | Notes   | Testing    |
++==========+==========+====================+==============+=========+============+
+| CentOS   | 7        | N/A                | linux-3.10.0 | 3       | B, I, C    |
++----------+----------+--------------------+--------------+---------+------------+
+| Debian   | 8.0      | Jessie             | linux-3.16.0 | 1, 2    | B, I       |
++----------+----------+--------------------+--------------+---------+------------+
+| Debian   | 9.0      | Stretch            | linux-4.9    | 1, 2    | B, I       |
++----------+----------+--------------------+--------------+---------+------------+
+| Fedora   | 22       | N/A                | linux-3.14.0 |         | B, I       |
++----------+----------+--------------------+--------------+---------+------------+
+| RHEL     | 7        | Maipo              | linux-3.10.0 |         | B, I       |
++----------+----------+--------------------+--------------+---------+------------+
+| Ubuntu   | 14.04    | Trusty Tahr        | linux-3.13.0 |         | B, I, C    |
++----------+----------+--------------------+--------------+---------+------------+
+| Ubuntu   | 16.04    | Xenial Xerus       | linux-4.4.0  | 3       | B, I, C    |
++----------+----------+--------------------+--------------+---------+------------+
+
+
 Infernalis (9.2.z) and Jewel (10.2.z)
 -------------------------------------
 
 +----------+----------+--------------------+--------------+---------+------------+
 | Distro   | Release  | Code Name          | Kernel       | Notes   | Testing    | 
 +==========+==========+====================+==============+=========+============+
-| CentOS   | 7        | N/A                | linux-3.10.0 |         | B, I, C    |
+| CentOS   | 7        | N/A                | linux-3.10.0 | 3       | B, I, C    |
 +----------+----------+--------------------+--------------+---------+------------+
 | Debian   | 8.0      | Jessie             | linux-3.16.0 | 1, 2    | B, I       |
 +----------+----------+--------------------+--------------+---------+------------+
@@ -114,6 +136,9 @@ Notes
 - **2**: The default kernel has an old Ceph client that we do not recommend
   for kernel client (kernel RBD or the Ceph file system).  Upgrade to a
   recommended kernel.
+
+- **3**: The default kernel regularly fails in QA when the ``btrfs``
+  file system is used.  We do not recommend using ``btrfs`` for backing Ceph OSDs.
 
 
 Testing
