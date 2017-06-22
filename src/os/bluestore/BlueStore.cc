@@ -3981,9 +3981,6 @@ int BlueStore::_check_or_set_bdev_label(
 
 void BlueStore::_set_alloc_sizes(void)
 {
-  min_alloc_size_order = ctz(min_alloc_size);
-  assert(min_alloc_size == 1u << min_alloc_size_order);
-
   max_alloc_size = cct->_conf->bluestore_max_alloc_size;
 
   if (cct->_conf->bluestore_prefer_deferred_size) {
@@ -5076,7 +5073,6 @@ int BlueStore::mkfs()
 	min_alloc_size = cct->_conf->bluestore_min_alloc_size_ssd;
       }
     }
-    _set_alloc_sizes();
     {
       bufferlist bl;
       ::encode((uint64_t)min_alloc_size, bl);
@@ -7438,6 +7434,8 @@ int BlueStore::_open_super_meta()
       uint64_t val;
       ::decode(val, p);
       min_alloc_size = val;
+      min_alloc_size_order = ctz(val);
+      assert(min_alloc_size == 1u << min_alloc_size_order);
     } catch (buffer::error& e) {
       derr << __func__ << " unable to read min_alloc_size" << dendl;
       return -EIO;
@@ -10020,12 +10018,11 @@ void BlueStore::_choose_write_options(
 
     dout(20) << __func__ << " will prefer large blob and csum sizes" << dendl;
 
-    auto order = min_alloc_size_order.load();
     if (o->onode.expected_write_size) {
-      wctx->csum_order = std::max(order,
+      wctx->csum_order = std::max(min_alloc_size_order,
 			          (uint8_t)ctz(o->onode.expected_write_size));
     } else {
-      wctx->csum_order = order;
+      wctx->csum_order = min_alloc_size_order;
     }
 
     if (wctx->compress) {
