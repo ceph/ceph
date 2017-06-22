@@ -69,7 +69,7 @@ ImageRequestWQ<I>::ImageRequestWQ(I *image_ctx, const string &name,
     m_lock(util::unique_lock_name("ImageRequestWQ<I>::m_lock", this)) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 5) << "ictx=" << image_ctx << dendl;
-  tp->add_work_queue(this);
+  this->register_work_queue();
 }
 
 template <typename I>
