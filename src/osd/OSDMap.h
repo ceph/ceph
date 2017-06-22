@@ -1051,7 +1051,7 @@ private:
 			       vector<int> *osds, int *primary) const;
 
   /// apply pg_upmap[_items] mappings
-  void _apply_remap(const pg_pool_t& pi, pg_t pg, vector<int> *raw) const;
+  void _apply_upmap(const pg_pool_t& pi, pg_t pg, vector<int> *raw) const;
 
   /// pg -> (up osd list)
   void _raw_to_up_osds(const pg_pool_t& pool, const vector<int>& raw,
