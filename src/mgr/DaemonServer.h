@@ -89,6 +89,11 @@ private:
 
   void _prune_pending_service_map();
 
+  utime_t started_at;
+  bool pgmap_ready = false;
+  std::set<int32_t> reported_osds;
+  void maybe_ready(int32_t osd_id);
+
 public:
   int init(uint64_t gid, entity_addr_t client_addr);
   void shutdown();
