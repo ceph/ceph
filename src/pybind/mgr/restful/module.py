@@ -218,6 +218,11 @@ class Module(MgrModule):
             "desc": "Create localized self signed certificate",
             "perm": "rw"
         },
+        {
+            "cmd": "restful restart",
+            "desc": "Restart API server",
+            "perm": "rw"
+        },
     ]
 
     def __init__(self, *args, **kwargs):
@@ -431,6 +436,14 @@ class Module(MgrModule):
             self.set_config(self.get_mgr_id() + '/key', pkey)
 
             self.restart()
+            return (
+                0,
+                "Restarting RESTful API server...",
+                ""
+            )
+
+        elif command['prefix'] == 'restful restart':
+            self.restart();
             return (
                 0,
                 "Restarting RESTful API server...",
