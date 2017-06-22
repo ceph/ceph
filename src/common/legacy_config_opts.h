@@ -1536,6 +1536,7 @@ OPTION(rgw_sync_log_trim_interval, OPT_INT) // time in seconds between attempts 
 
 OPTION(rgw_sync_data_inject_err_probability, OPT_DOUBLE) // range [0, 1]
 OPTION(rgw_sync_meta_inject_err_probability, OPT_DOUBLE) // range [0, 1]
+OPTION(rgw_sync_trace_history_size, OPT_INT) // max number of complete sync trace entries to keep
 
 
 OPTION(rgw_period_push_interval, OPT_DOUBLE) // seconds to wait before retrying "period push"

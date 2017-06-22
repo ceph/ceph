@@ -60,6 +60,7 @@ class RGWAsyncRadosProcessor;
 class RGWMetaSyncStatusManager;
 class RGWMetaSyncCR;
 class RGWRESTConn;
+class RGWSyncTraceManager;
 
 class RGWSyncErrorLogger {
   RGWRados *store;
@@ -162,18 +163,19 @@ public:
 };
 
 struct RGWMetaSyncEnv {
-  CephContext *cct;
-  RGWRados *store;
-  RGWRESTConn *conn;
-  RGWAsyncRadosProcessor *async_rados;
-  RGWHTTPManager *http_manager;
-  RGWSyncErrorLogger *error_logger;
+  CephContext *cct{nullptr};
+  RGWRados *store{nullptr};
+  RGWRESTConn *conn{nullptr};
+  RGWAsyncRadosProcessor *async_rados{nullptr};
+  RGWHTTPManager *http_manager{nullptr};
+  RGWSyncErrorLogger *error_logger{nullptr};
+  RGWSyncTraceManager *sync_tracer{nullptr};
 
-  RGWMetaSyncEnv() : cct(NULL), store(NULL), conn(NULL), async_rados(NULL), http_manager(NULL), error_logger(NULL) {}
+  RGWMetaSyncEnv() {}
 
   void init(CephContext *_cct, RGWRados *_store, RGWRESTConn *_conn,
             RGWAsyncRadosProcessor *_async_rados, RGWHTTPManager *_http_manager,
-            RGWSyncErrorLogger *_error_logger);
+            RGWSyncErrorLogger *_error_logger, RGWSyncTraceManager *_sync_tracer);
 
   string shard_obj_name(int shard_id);
   string status_oid();
@@ -186,9 +188,10 @@ class RGWRemoteMetaLog : public RGWCoroutinesManager {
 
   RGWHTTPManager http_manager;
   RGWMetaSyncStatusManager *status_manager;
-  RGWSyncErrorLogger *error_logger;
+  RGWSyncErrorLogger *error_logger{nullptr};
+  RGWSyncTraceManager *sync_tracer{nullptr};
 
-  RGWMetaSyncCR *meta_sync_cr;
+  RGWMetaSyncCR *meta_sync_cr{nullptr};
 
   RGWSyncBackoff backoff;
 
@@ -205,7 +208,7 @@ public:
     : RGWCoroutinesManager(_store->ctx(), _store->get_cr_registry()),
       store(_store), conn(NULL), async_rados(async_rados),
       http_manager(store->ctx(), completion_mgr),
-      status_manager(_sm), error_logger(NULL), meta_sync_cr(NULL) {}
+      status_manager(_sm) {}
 
   ~RGWRemoteMetaLog() override;
 
