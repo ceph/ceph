@@ -26,6 +26,7 @@
 #include "include/str_list.h"
 #include "rgw_bl.h"
 #include "rgw_xml.h"
+#include "rgw_acl_s3.h"
 
 using namespace std;
 
@@ -158,20 +159,23 @@ public:
       if (enabled.target_grants_specified) {
         out << "<TargetGrants>";
         const std::vector<BLGrant> &bl_grants = this->get_target_grants();
+        ACLGranteeType grantee_type;
         for (auto grant_iter = bl_grants.begin(); grant_iter != bl_grants.end(); grant_iter++) {
           out << "<Grant>";
           std::string _type = grant_iter->get_type();
           out << "<Grantee xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" xsi:type=\"" 
               << _type << "\">";
-          if (_type == grantee_type_map[BL_TYPE_CANON_USER]) {
+          ACLGranteeType_S3::set(_type.c_str(), grantee_type);
+          ACLGranteeTypeEnum acl_grantee_type = grantee_type.get_type();
+          if (acl_grantee_type == ACL_TYPE_CANON_USER) {
             out << "<ID>" << grant_iter->get_id() << "</ID>";
             std::string _display_name = grant_iter->get_display_name();
             if (!_display_name.empty()) {
               out << "<DisplayName>" << _display_name << "</DisplayName>";
             }
-          } else if (_type == grantee_type_map[BL_TYPE_EMAIL_USER]) {
+          } else if (acl_grantee_type == ACL_TYPE_EMAIL_USER) {
             out << "<EmailAddress>" << grant_iter->get_email_address() << "</EmailAddress>";
-          } else if (_type == grantee_type_map[BL_TYPE_GROUP]) {
+          } else if (acl_grantee_type == ACL_TYPE_GROUP) {
             out << "<URI>" << grant_iter->get_uri() << "</URI>";
           }
           out << "</Grantee>";
@@ -202,21 +206,24 @@ public:
       if (enabled.target_grants_specified) {
         f->open_object_section("TargetGrants");
         const std::vector<BLGrant> &bl_grants = this->get_target_grants();
+        ACLGranteeType grantee_type;
         for (auto grant_iter = bl_grants.begin(); grant_iter != bl_grants.end(); grant_iter++) {
           f->open_object_section("Grant");
           std::string _type = grant_iter->get_type();
           std::string _grantee = "<Grantee xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" xsi:type=\""
                                  + _type + "\">";
           f->write_raw_data(_grantee.c_str());
-          if (_type == grantee_type_map[BL_TYPE_CANON_USER]) {
+          ACLGranteeType_S3::set(_type.c_str(), grantee_type);
+          ACLGranteeTypeEnum acl_grantee_type = grantee_type.get_type();
+          if (acl_grantee_type == ACL_TYPE_CANON_USER) {
             encode_xml("ID", grant_iter->get_id(), f);
             std::string _display_name = grant_iter->get_display_name();
             if (!_display_name.empty()) {
               encode_xml("DisplayName", _display_name, f);
             }
-          } else if (_type == grantee_type_map[BL_TYPE_EMAIL_USER]) {
+          } else if (acl_grantee_type ==  ACL_TYPE_EMAIL_USER) {
             encode_xml("EmailAddress", grant_iter->get_email_address(), f);
-          } else if (_type == grantee_type_map[BL_TYPE_GROUP]) {
+          } else if (acl_grantee_type == ACL_TYPE_GROUP) {
             encode_xml("URI", grant_iter->get_uri(), f);
           }
           f->write_raw_data("</Grantee>");

@@ -50,15 +50,6 @@ typedef enum {
   bl_complete,
 }BL_BUCKET_STATUS;
 
-enum BLGranteeTypeEnum {
-  BL_TYPE_CANON_USER = 0,
-  BL_TYPE_EMAIL_USER = 1,
-  BL_TYPE_GROUP      = 2,
-  BL_TYPE_UNKNOWN    = 3,
-};
-
-extern std::map<int, std::string> grantee_type_map;
-
 class RGWBL {
   CephContext *cct;
   RGWRados *store;

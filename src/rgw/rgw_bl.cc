@@ -30,6 +30,7 @@
 #include "common/Clock.h"
 #include "rgw_rest_client.h"
 #include "rgw_user.h"
+#include "rgw_acl_s3.h"
 
 
 #define dout_context g_ceph_context
@@ -46,12 +47,6 @@ const char* BL_STATUS[] = {
   "ACL_ERROR",
   "COMPLETE"
 };
-
-std::map<int, std::string> grantee_type_map = boost::assign::map_list_of
-                           (BL_TYPE_CANON_USER, "CanonicalUser")
-                           (BL_TYPE_EMAIL_USER, "AmazonCustomerByEmail")
-                           (BL_TYPE_GROUP, "Group")
-                           (BL_TYPE_UNKNOWN, "unknown");
 
 std::map<const string, const uint32_t> rgw_perm_map = boost::assign::map_list_of
       ("READ", RGW_PERM_READ)
@@ -630,15 +625,20 @@ int RGWBL::bucket_bl_process(string& shard_id)
          ACLGrant target_grant;
          const std::vector<BLGrant> & bl_grant = status.get_target_grants();
          uint32_t rgw_permission = RGW_PERM_NONE;
+         ACLGranteeType grantee_type;
          for (auto grant_iter = bl_grant.begin(); (grant_iter != bl_grant.end()) && (acl_nums < RGW_ACL_MAX_NUMS); grant_iter++) {
            rgw_permission = rgw_perm_map[grant_iter->get_permission()];
-           if (grant_iter->get_type() == grantee_type_map[BL_TYPE_CANON_USER]) {
+           ACLGranteeType_S3::set(grant_iter->get_type().c_str(), grantee_type);
+           ACLGranteeTypeEnum acl_grantee_type = grantee_type.get_type();
+           if (acl_grantee_type == ACL_TYPE_CANON_USER) {
              rgw_user canonical_user(grant_iter->get_id());
              target_grant.set_canon(canonical_user, grant_iter->get_display_name(), 
 		                    rgw_permission);
-           } else if (grant_iter->get_type() == grantee_type_map[BL_TYPE_GROUP]) {
-#define LOG_DELIVER_GROUP   "http://acs.amazonaws.com/groups/s3/LogDelivery"
-	     if (grant_iter->get_uri() != LOG_DELIVER_GROUP) {
+           } else if (acl_grantee_type == ACL_TYPE_GROUP) {
+#define RGW_URI_ALL_USERS	"http://acs.amazonaws.com/groups/global/AllUsers"
+#define RGW_URI_AUTH_USERS	"http://acs.amazonaws.com/groups/global/AuthenticatedUsers"
+#define RGW_URI_LOG_DELIVERY    "http://acs.amazonaws.com/groups/s3/LogDelivery"
+	     if (grant_iter->get_uri() != RGW_URI_LOG_DELIVERY) {
                std::string uri = grant_iter->get_uri();
                target_grant.set_group(target_grant.uri_to_group(uri), 
 		                      rgw_permission);
@@ -656,7 +656,7 @@ int RGWBL::bucket_bl_process(string& shard_id)
                                         rgw_permission);
                }
              }
-           } else if (grant_iter->get_type() == grantee_type_map[BL_TYPE_EMAIL_USER]) {
+           } else if (acl_grantee_type == ACL_TYPE_EMAIL_USER) {
              RGWUserInfo email_user;
              std::string email_addr = grant_iter->get_email_address();
              rgw_get_user_info_by_email(store, email_addr, email_user);

@@ -2429,6 +2429,7 @@ void RGWPutBL::execute()
      std::vector<BLGrant> bl_grants = status->enabled.get_target_grants();
      if (status->enabled.target_grants_specified && 
          (bl_grants.size() != 0)) {
+       ACLGranteeType grantee_type;
        for (auto grant_iter = bl_grants.begin(); grant_iter != bl_grants.end(); grant_iter++) {
          if (!(grant_iter->grantee_specified && 
               (grant_iter->id_specified || grant_iter->email_address_specified || grant_iter->uri_specified) &&
@@ -2439,8 +2440,9 @@ void RGWPutBL::execute()
            return;
          }  
          
-         std::string type = grant_iter->get_type();
-         if (type == grantee_type_map[BL_TYPE_CANON_USER]) {
+         ACLGranteeType_S3::set(grant_iter->get_type().c_str(), grantee_type);
+         ACLGranteeTypeEnum acl_grantee_type = grantee_type.get_type();
+         if (acl_grantee_type == ACL_TYPE_CANON_USER) {
            if (!grant_iter->id_specified) {
              ldout(s->cct, 0) << "PutBL -- when grantee type is CanonicalUser, id should be specified." << dendl;
              op_ret = -ERR_MALFORMED_XML;
@@ -2459,7 +2461,7 @@ void RGWPutBL::execute()
              s->err.message = "Invalid id";
              return;
            }
-         } else if (type == grantee_type_map[BL_TYPE_EMAIL_USER]) {
+         } else if (acl_grantee_type == ACL_TYPE_EMAIL_USER) {
            if (!grant_iter->email_address_specified) {
              ldout(s->cct, 0) << "PutBL -- when grantee type is AmazonCustomerByEmail, email address should be specified." << dendl;
              op_ret = -ERR_MALFORMED_XML;
@@ -2477,7 +2479,7 @@ void RGWPutBL::execute()
              s->err.message = "The e-mail address you provided does not match any account on record.";
              return;
            }
-         } else if (type == grantee_type_map[BL_TYPE_GROUP]) {
+         } else if (acl_grantee_type == ACL_TYPE_GROUP) {
            if (!grant_iter->uri_specified) {
              ldout(s->cct, 0) << "PutBL -- when grantee type is Group, uri should be specified." << dendl;
              op_ret = -ERR_MALFORMED_XML;
@@ -2498,7 +2500,7 @@ void RGWPutBL::execute()
              return;
            }
          } else {
-           ldout(s->cct, 0) << "PutBL -- Error grantee type: " << type << dendl;
+           ldout(s->cct, 0) << "PutBL -- Error grantee type: " << acl_grantee_type << dendl;
            op_ret = -ERR_MALFORMED_XML;
            s->err.message = "The XML you provided was not well-formed or did not validate against our published schema";
            return;
