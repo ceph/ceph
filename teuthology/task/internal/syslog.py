@@ -128,6 +128,8 @@ def syslog(ctx, config):
                     run.Raw('|'),
                     'grep', '-v', 'ceph-create-keys: INFO',
                     run.Raw('|'),
+                    'grep', '-v', 'INFO:ceph-create-keys',
+                    run.Raw('|'),
                     'head', '-n', '1',
                 ],
                 stdout=StringIO(),
