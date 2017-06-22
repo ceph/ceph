@@ -353,8 +353,7 @@ void MgrMonitor::send_digests()
     MMgrDigest *mdigest = new MMgrDigest;
 
     JSONFormatter f;
-    std::list<std::string> health_strs;
-    mon->get_health(health_strs, nullptr, &f);
+    mon->get_health_status(true, &f, nullptr, nullptr, nullptr);
     f.flush(mdigest->health_json);
     f.reset();
 
