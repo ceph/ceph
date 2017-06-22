@@ -1199,7 +1199,7 @@ struct RGWZoneParams : RGWSystemMetaObj {
   int create(bool exclusive = true) override;
   int fix_pool_names();
 
-  const string& get_compression_type(const string& placement_rule) const;
+  const string& get_compression_type(const string& placement_id) const;
   
   void encode(bufferlist& bl) const override {
     ENCODE_START(10, 1, bl);

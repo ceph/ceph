@@ -1830,10 +1830,10 @@ int RGWZoneParams::set_as_default(bool exclusive)
   return RGWSystemMetaObj::set_as_default(exclusive);
 }
 
-const string& RGWZoneParams::get_compression_type(const string& placement_rule) const
+const string& RGWZoneParams::get_compression_type(const string& placement_id) const
 {
   static const std::string NONE{"none"};
-  auto p = placement_rules.find(placement_rule);
+  auto p = placement_rules.find(placement_id);
   if (p == placement_rules.end()) {
     return NONE;
   }
