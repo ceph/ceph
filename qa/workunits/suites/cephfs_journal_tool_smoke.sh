@@ -71,7 +71,7 @@ if [ ! -s $BINARY_OUTPUT ] ; then
     echo "Export to $BINARY_OUTPUT failed"
     exit -1
 fi
-$BIN event apply summary
+$BIN event recover_dentries summary
 $BIN event splice summary
 
 echo "Rolling back journal to original state..."
