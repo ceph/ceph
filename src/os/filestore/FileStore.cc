@@ -3928,14 +3928,14 @@ void FileStore::sync_entry()
 
     utime_t startwait = ceph_clock_now();
     if (!force_sync) {
-      dout(20) << "sync_entry waiting for max_interval " << max_interval << dendl;
+      dout(20) << __func__ << " waiting for max_interval " << max_interval << dendl;
       sync_cond.WaitInterval(lock, max_interval);
     } else {
-      dout(20) << "sync_entry not waiting, force_sync set" << dendl;
+      dout(20) << __func__ << " not waiting, force_sync set" << dendl;
     }
 
     if (force_sync) {
-      dout(20) << "sync_entry force_sync set" << dendl;
+      dout(20) << __func__ << " force_sync set" << dendl;
       force_sync = false;
     } else if (stop) {
       dout(20) << __func__ << " stop set" << dendl;
@@ -3944,11 +3944,11 @@ void FileStore::sync_entry()
       // wait for at least the min interval
       utime_t woke = ceph_clock_now();
       woke -= startwait;
-      dout(20) << "sync_entry woke after " << woke << dendl;
+      dout(20) << __func__ << " woke after " << woke << dendl;
       if (woke < min_interval) {
 	utime_t t = min_interval;
 	t -= woke;
-	dout(20) << "sync_entry waiting for another " << t
+	dout(20) << __func__ << " waiting for another " << t
 		 << " to reach min interval " << min_interval << dendl;
 	sync_cond.WaitInterval(lock, t);
       }
@@ -3972,7 +3972,7 @@ void FileStore::sync_entry()
 
       logger->set(l_filestore_committing, 1);
 
-      dout(15) << "sync_entry committing " << cp << dendl;
+      dout(15) << __func__ << " committing " << cp << dendl;
       stringstream errstream;
       if (cct->_conf->filestore_debug_omap_check && !object_map->check(errstream)) {
 	derr << errstream.str() << dendl;
@@ -4041,7 +4041,7 @@ void FileStore::sync_entry()
       utime_t done = ceph_clock_now();
       utime_t lat = done - start;
       utime_t dur = done - startwait;
-      dout(10) << "sync_entry commit took " << lat << ", interval was " << dur << dendl;
+      dout(10) << __func__ << " commit took " << lat << ", interval was " << dur << dendl;
 
       logger->inc(l_filestore_commitcycle);
       logger->tinc(l_filestore_commitcycle_latency, lat);
@@ -4069,7 +4069,7 @@ void FileStore::sync_entry()
 	}
       }
 
-      dout(15) << "sync_entry committed to op_seq " << cp << dendl;
+      dout(15) << __func__ << " committed to op_seq " << cp << dendl;
 
       sync_entry_timeo_lock.Lock();
       timer.cancel_event(sync_entry_timeo);
@@ -4082,11 +4082,11 @@ void FileStore::sync_entry()
     finish_contexts(cct, fin, 0);
     fin.clear();
     if (!sync_waiters.empty()) {
-      dout(10) << "sync_entry more waiters, committing again" << dendl;
+      dout(10) << __func__ << " more waiters, committing again" << dendl;
       goto again;
     }
     if (!stop && journal && journal->should_commit_now()) {
-      dout(10) << "sync_entry journal says we should commit again (probably is/was full)" << dendl;
+      dout(10) << __func__ << " journal says we should commit again (probably is/was full)" << dendl;
       goto again;
     }
   }
