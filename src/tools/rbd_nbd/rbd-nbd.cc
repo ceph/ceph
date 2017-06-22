@@ -43,6 +43,7 @@
 #include "common/errno.h"
 #include "common/module.h"
 #include "common/safe_io.h"
+#include "common/TextTable.h"
 #include "common/ceph_argparse.h"
 #include "common/Preforker.h"
 #include "global/global_init.h"
@@ -81,6 +82,13 @@ static bool set_max_part = false;
 static bool exclusive = false;
 static int nbd = -1;
 
+static enum {
+  None,
+  Connect,
+  Disconnect,
+  List
+} cmd = None;
+
 #define RBD_NBD_BLKSIZE 512UL
 
 #ifdef CEPH_BIG_ENDIAN
@@ -91,6 +99,8 @@ static int nbd = -1;
 #error "Could not determine endianess"
 #endif
 #define htonll(a) ntohll(a)
+
+static int parse_args(vector<const char*>& args);
 
 static void handle_signal(int signum)
 {
@@ -817,54 +827,100 @@ static int parse_imgpath(const std::string &imgpath)
   return 0;
 }
 
+static int get_mapped_info(int pid)
+{
+  int r;
+  std::string path = "/proc/" + stringify(pid) + "/cmdline";
+  std::ifstream ifs;
+  std::string cmdline;
+  std::vector<const char*> args;
+
+  ifs.open(path.c_str(), std::ifstream::in);
+  assert (ifs.is_open());
+  ifs >> cmdline;
+
+  for (unsigned i = 0; i < cmdline.size(); i++) {
+    const char *arg = &cmdline[i];
+    if (i == 0) {
+      if (strcmp(basename(arg) , "rbd-nbd") != 0) {
+        return -EINVAL;
+      } 
+    } else { 
+      args.push_back(arg);    
+    }
+    
+    while (cmdline[i] != '\0') {
+      i++;
+    }
+  }
+
+  r = parse_args(args);
+  return r;
+}
+
+static int get_map_pid(const std::string& pid_path)
+{
+  int pid = 0;
+  std::ifstream ifs;
+  ifs.open(pid_path.c_str(), std::ifstream::in);
+  if (!ifs.is_open()) {
+    return 0;
+  }
+  ifs >> pid;
+  return pid;
+}
+
 static int do_list_mapped_devices()
 {
-  char path[64];
-  int m = 0;
-  int fd[2];
+  bool r;
+  bool should_print = false;
+  int index = 0;
+  int pid = 0;
+  TextTable tbl;
 
-  if (socketpair(AF_UNIX, SOCK_STREAM, 0, fd) == -1) {
-    int r = -errno;
-    cerr << "rbd-nbd: socketpair failed: " << cpp_strerror(-r) << std::endl;
-    return r;
-  }
+  tbl.define_column("pid", TextTable::LEFT, TextTable::LEFT);
+  tbl.define_column("pool", TextTable::LEFT, TextTable::LEFT);
+  tbl.define_column("image", TextTable::LEFT, TextTable::LEFT);
+  tbl.define_column("snap", TextTable::LEFT, TextTable::LEFT);
+  tbl.define_column("device", TextTable::LEFT, TextTable::LEFT);
 
   while (true) {
-    snprintf(path, sizeof(path), "/dev/nbd%d", m);
-    int nbd = open_device(path);
-    if (nbd < 0)
+    std::string nbd_path = "/sys/block/nbd" + stringify(index);
+    if(access(nbd_path.c_str(), F_OK) != 0) {
       break;
-    if (ioctl(nbd, NBD_SET_SOCK, fd[0]) != 0)
-      cout << path << std::endl;
-    else
-      ioctl(nbd, NBD_CLEAR_SOCK);
-    close(nbd);
-    m++;
+    }
+    std::string pid_path = nbd_path + "/pid";
+    pid = get_map_pid(pid_path);
+
+    if(pid > 0) {
+      r = get_mapped_info(pid);
+      if (r < 0) {
+        index++;
+        continue;
+      } 
+      should_print = true;
+      if (snapname.empty()) {
+        snapname = "-";
+      }
+      tbl << pid << poolname << imgname << snapname 
+          << "/dev/nbd" + stringify(index) << TextTable::endrow;
+    }
+
+    index++;
   }
 
-  close(fd[0]);
-  close(fd[1]);
-
+  if (should_print) {
+    cout << tbl;
+  }
   return 0;
 }
 
-static int rbd_nbd(int argc, const char *argv[])
+static int parse_args(vector<const char*>& args)
 {
-  int r;
-  enum {
-    None,
-    Connect,
-    Disconnect,
-    List
-  } cmd = None;
-
-  vector<const char*> args;
-
-  argv_to_vec(argc, argv, args);
-  md_config_t().parse_argv(args);
-
   std::vector<const char*>::iterator i;
   std::ostringstream err;
+
+  md_config_t().parse_argv(args);
 
   for (i = args.begin(); i != args.end(); ) {
     if (ceph_argparse_flag(args, i, "-h", "--help", (char*)NULL)) {
@@ -874,20 +930,20 @@ static int rbd_nbd(int argc, const char *argv[])
     } else if (ceph_argparse_witharg(args, i, &nbds_max, err, "--nbds_max", (char *)NULL)) {
       if (!err.str().empty()) {
         cerr << err.str() << std::endl;
-        return EXIT_FAILURE;
+        return -EINVAL;
       }
       if (nbds_max < 0) {
         cerr << "rbd-nbd: Invalid argument for nbds_max!" << std::endl;
-        return EXIT_FAILURE;
+        return -EINVAL;
       }
     } else if (ceph_argparse_witharg(args, i, &max_part, err, "--max_part", (char *)NULL)) {
       if (!err.str().empty()) {
         cerr << err.str() << std::endl;
-        return EXIT_FAILURE;
+        return -EINVAL;
       }
       if ((max_part < 0) || (max_part > 255)) {
         cerr << "rbd-nbd: Invalid argument for max_part(0~255)!" << std::endl;
-        return EXIT_FAILURE;
+        return -EINVAL;
       }
       set_max_part = true;
     } else if (ceph_argparse_flag(args, i, "--read-only", (char *)NULL)) {
@@ -908,30 +964,30 @@ static int rbd_nbd(int argc, const char *argv[])
       cmd = List;
     } else {
       cerr << "rbd-nbd: unknown command: " << *args.begin() << std::endl;
-      return EXIT_FAILURE;
+      return -EINVAL;
     }
     args.erase(args.begin());
   }
 
   if (cmd == None) {
     cerr << "rbd-nbd: must specify command" << std::endl;
-    return EXIT_FAILURE;
+    return -EINVAL;
   }
 
   switch (cmd) {
     case Connect:
       if (args.begin() == args.end()) {
         cerr << "rbd-nbd: must specify image-or-snap-spec" << std::endl;
-        return EXIT_FAILURE;
+        return -EINVAL;
       }
       if (parse_imgpath(string(*args.begin())) < 0)
-        return EXIT_FAILURE;
+        return -EINVAL;
       args.erase(args.begin());
       break;
     case Disconnect:
       if (args.begin() == args.end()) {
         cerr << "rbd-nbd: must specify nbd device path" << std::endl;
-        return EXIT_FAILURE;
+        return -EINVAL;
       }
       devpath = *args.begin();
       args.erase(args.begin());
@@ -943,33 +999,49 @@ static int rbd_nbd(int argc, const char *argv[])
 
   if (args.begin() != args.end()) {
     cerr << "rbd-nbd: unknown args: " << *args.begin() << std::endl;
-    return EXIT_FAILURE;
+    return -EINVAL;
+  }
+
+  return 0;
+}
+
+static int rbd_nbd(int argc, const char *argv[])
+{
+  int r;
+
+  vector<const char*> args;
+
+  argv_to_vec(argc, argv, args);
+
+  r = parse_args(args);
+  if (r < 0) {
+    return r;
   }
 
   switch (cmd) {
     case Connect:
       if (imgname.empty()) {
         cerr << "rbd-nbd: image name was not specified" << std::endl;
-        return EXIT_FAILURE;
+        return -EINVAL;
       }
 
       r = do_map(argc, argv);
       if (r < 0)
-        return EXIT_FAILURE;
+        return -EINVAL;
       break;
     case Disconnect:
       r = do_unmap();
       if (r < 0)
-        return EXIT_FAILURE;
+        return -EINVAL;
       break;
     case List:
       r = do_list_mapped_devices();
       if (r < 0)
-        return EXIT_FAILURE;
+        return -EINVAL;
       break;
     default:
       usage();
-      return EXIT_FAILURE;
+      return -EINVAL;
   }
 
   return 0;
@@ -977,5 +1049,9 @@ static int rbd_nbd(int argc, const char *argv[])
 
 int main(int argc, const char *argv[])
 {
-  return rbd_nbd(argc, argv);
+  int r = rbd_nbd(argc, argv);
+  if (r < 0) {
+    return EXIT_FAILURE;
+  }
+  return 0;
 }
