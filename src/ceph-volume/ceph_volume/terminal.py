@@ -111,12 +111,12 @@ def write(msg):
 
 
 def error(msg):
-    return _Write(prefix=red_arrow).write(msg)
+    return _Write(prefix=red_arrow).raw(msg)
 
 
 def warning(msg):
-    return _Write(prefix=yellow_arrow).write(msg)
+    return _Write(prefix=yellow_arrow).raw(msg)
 
 
 def success(msg):
-    return _Write(prefix=green_arrow).write(msg)
+    return _Write(prefix=green_arrow).raw(msg)
