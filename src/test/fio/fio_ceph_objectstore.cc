@@ -87,10 +87,16 @@ struct Engine {
       ostringstream ostr;
       Formatter* f = Formatter::create("json-pretty", "json-pretty", "json-pretty");
       os->dump_perf_counters(f);
+      ostr << "FIO plugin ";
       f->flush(ostr);
+      if (g_conf->rocksdb_perf) {
+        os->get_db_statistics(f);
+        ostr << "FIO get_db_statistics ";
+        f->flush(ostr);
+      }
       delete f;
       os->umount();
-      dout(0) << "FIO plugin " << ostr.str() << dendl;
+      dout(0) <<  ostr.str() << dendl;
     }
   }
 };
