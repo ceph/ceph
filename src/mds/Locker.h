@@ -80,6 +80,7 @@ public:
 		     CInode *auth_pin_freeze=NULL,
 		     bool auth_pin_nonblock=false);
 
+  void notify_freeze_waiter(MDSCacheObject *o);
   void cancel_locking(MutationImpl *mut, set<CInode*> *pneed_issue);
   void drop_locks(MutationImpl *mut, set<CInode*> *pneed_issue=0);
   void set_xlocks_done(MutationImpl *mut, bool skip_dentry=false);

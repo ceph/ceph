@@ -2256,24 +2256,7 @@ void Server::handle_slave_auth_pin(MDRequestRef& mdr)
 	(*p)->add_waiter(CDir::WAIT_UNFREEZE, new C_MDS_RetryRequest(mdcache, mdr));
 	mdr->drop_local_auth_pins();
 
-	CDir *dir = NULL;
-	if (CInode *in = dynamic_cast<CInode*>(*p)) {
-	  if (!in->is_root())
-	    dir = in->get_parent_dir();
-	} else if (CDentry *dn = dynamic_cast<CDentry*>(*p)) {
-	  dir = dn->get_dir();
-	} else {
-	  ceph_abort();
-	}
-	if (dir) {
-	  if (dir->is_freezing_dir())
-	    mdcache->fragment_freeze_inc_num_waiters(dir);
-	  if (dir->is_freezing_tree()) {
-	    while (!dir->is_freezing_tree_root())
-	      dir = dir->get_parent_dir();
-	    mdcache->migrator->export_freeze_inc_num_waiters(dir);
-	  }
-	}
+	mds->locker->notify_freeze_waiter(*p);
 	return;
       }
     }
@@ -2825,6 +2808,8 @@ CInode* Server::rdlock_path_pin_ref(MDRequestRef& mdr, int n,
        */
       mds->locker->drop_locks(mdr.get(), NULL);
       mdr->drop_local_auth_pins();
+      if (!mdr->remote_auth_pins.empty())
+	mds->locker->notify_freeze_waiter(ref);
       return 0;
     }
 
@@ -2970,7 +2955,7 @@ CDir* Server::try_open_auth_dirfrag(CInode *diri, frag_t fg, MDRequestRef& mdr)
   if (!dir && diri->is_frozen()) {
     dout(10) << "try_open_auth_dirfrag: dir inode is frozen, waiting " << *diri << dendl;
     assert(diri->get_parent_dir());
-    diri->get_parent_dir()->add_waiter(CDir::WAIT_UNFREEZE, new C_MDS_RetryRequest(mdcache, mdr));
+    diri->add_waiter(CInode::WAIT_UNFREEZE, new C_MDS_RetryRequest(mdcache, mdr));
     return 0;
   }
 
