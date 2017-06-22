@@ -11,6 +11,12 @@
 #include <string>
 #include <boost/circular_buffer.hpp>
 
+#define SSTR(o) ({      \
+  std::stringstream ss; \
+  ss << o;              \
+  ss.str();             \
+})
+
 enum RGWSyncTraceNodeState {
   SNS_INACTIVE = 0,
   SNS_ACTIVE   = 1,
@@ -23,6 +29,8 @@ using RGWSyncTraceNodeRef = std::shared_ptr<RGWSyncTraceNode>;
 
 class RGWSyncTraceNode {
   friend class RGWSyncTraceManager;
+
+  CephContext *cct;
 
   RGWSyncTraceManager *manager{nullptr};
   RGWSyncTraceNodeRef parent;
@@ -37,19 +45,23 @@ protected:
   std::string trigger;
   std::string id;
 
+  std::string prefix;
+
   uint64_t handle;
 
 public:
-  RGWSyncTraceNode(RGWSyncTraceManager *_manager, RGWSyncTraceNodeRef& _parent,
+  RGWSyncTraceNode(CephContext *_cct, RGWSyncTraceManager *_manager, const RGWSyncTraceNodeRef& _parent,
            const std::string& _type, const std::string& _trigger, const std::string& _id);
 
   void set_state(RGWSyncTraceNodeState s);
-  void set(const std::string& s) {
-    status = s;
-  }
+  void log(int level, const std::string& s);
 
   std::string to_str() {
-    return trigger + ":" + id + ": " + status;
+    return prefix + " " + status;
+  }
+
+  const string& get_prefix() {
+    return prefix;
   }
 
   void finish(int ret);
@@ -64,6 +76,8 @@ public:
 class RGWSyncTraceManager {
   friend class RGWSyncTraceNode;
 
+  CephContext *cct;
+
   std::map<uint64_t, RGWSyncTraceNodeRef> nodes;
   boost::circular_buffer<RGWSyncTraceNodeRef> complete_nodes;
 
@@ -77,10 +91,13 @@ protected:
   }
 
 public:
-  RGWSyncTraceManager(int max_lru) {}
+  RGWSyncTraceManager(CephContext *_cct, int max_lru) : cct(_cct) {}
+
+  const RGWSyncTraceNodeRef root_node;
 
   RGWSyncTraceNodeRef& add_node(RGWSyncTraceNode *node);
   void finish_node(RGWSyncTraceNode *node);
+
 };
 
 

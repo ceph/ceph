@@ -35,6 +35,7 @@ class RGWObjectExpirer;
 class RGWMetaSyncProcessorThread;
 class RGWDataSyncProcessorThread;
 class RGWSyncLogTrimThread;
+class RGWSyncTraceManager;
 class RGWRESTConn;
 struct RGWZoneGroup;
 struct RGWZoneParams;
@@ -2261,6 +2262,7 @@ class RGWRados
   RGWMetaNotifier *meta_notifier;
   RGWDataNotifier *data_notifier;
   RGWMetaSyncProcessorThread *meta_sync_processor_thread;
+  RGWSyncTraceManager *sync_tracer;
   map<string, RGWDataSyncProcessorThread *> data_sync_processor_threads;
 
   RGWSyncLogTrimThread *sync_log_trimmer{nullptr};
@@ -2507,6 +2509,9 @@ public:
   }
   const RGWSyncModuleInstanceRef& get_sync_module() {
     return sync_module;
+  }
+  RGWSyncTraceManager *get_sync_tracer() {
+    return sync_tracer;
   }
 
   int get_required_alignment(const rgw_pool& pool, uint64_t *alignment);

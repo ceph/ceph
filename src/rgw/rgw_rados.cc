@@ -69,6 +69,7 @@ using namespace librados;
 
 #include "rgw_object_expirer_core.h"
 #include "rgw_sync.h"
+#include "rgw_sync_trace.h"
 #include "rgw_data_sync.h"
 #include "rgw_realm_watcher.h"
 #include "rgw_reshard.h"
@@ -3672,6 +3673,7 @@ void RGWRados::finalize()
       sync_log_trimmer->stop();
     }
   }
+  delete sync_tracer;
   if (async_rados) {
     async_rados->stop();
   }
@@ -4522,6 +4524,9 @@ int RGWRados::init_complete()
     meta_notifier = new RGWMetaNotifier(this, md_log);
     meta_notifier->start();
   }
+
+  /* init it anyway, might run sync through radosgw-admin explicitly */
+  sync_tracer = new RGWSyncTraceManager(cct, cct->_conf->rgw_sync_trace_history_size);
 
   if (run_sync_thread) {
     Mutex::Locker l(meta_sync_thread_lock);

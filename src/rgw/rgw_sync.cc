@@ -349,13 +349,14 @@ int RGWMetaSyncStatusManager::init()
 
 void RGWMetaSyncEnv::init(CephContext *_cct, RGWRados *_store, RGWRESTConn *_conn,
                           RGWAsyncRadosProcessor *_async_rados, RGWHTTPManager *_http_manager,
-                          RGWSyncErrorLogger *_error_logger) {
+                          RGWSyncErrorLogger *_error_logger, RGWSyncTraceManager *_sync_tracer) {
   cct = _cct;
   store = _store;
   conn = _conn;
   async_rados = _async_rados;
   http_manager = _http_manager;
   error_logger = _error_logger;
+  sync_tracer = _sync_tracer;
 }
 
 string RGWMetaSyncEnv::status_oid()
@@ -1349,17 +1350,19 @@ class RGWMetaSyncShardCR : public RGWCoroutine {
 
   int total_entries = 0;
 
+  RGWSyncTraceNodeRef tn;
 public:
   RGWMetaSyncShardCR(RGWMetaSyncEnv *_sync_env, const rgw_pool& _pool,
                      const std::string& period, epoch_t realm_epoch,
                      RGWMetadataLog* mdlog, uint32_t _shard_id,
                      rgw_meta_sync_marker& _marker,
-                     const std::string& period_marker, bool *_reset_backoff)
+                     const std::string& period_marker, bool *_reset_backoff,
+                     RGWSyncTraceNodeRef& _tn)
     : RGWCoroutine(_sync_env->cct), sync_env(_sync_env), pool(_pool),
       period(period), realm_epoch(realm_epoch), mdlog(mdlog),
       shard_id(_shard_id), sync_marker(_marker),
       period_marker(period_marker), inc_lock("RGWMetaSyncShardCR::inc_lock"),
-      reset_backoff(_reset_backoff) {
+      reset_backoff(_reset_backoff), tn(_tn) {
     *reset_backoff = false;
   }
 
@@ -1452,6 +1455,7 @@ public:
     int max_entries = OMAP_GET_MAX_ENTRIES;
     reenter(&full_cr) {
       set_status("full_sync");
+      tn->log(10, "start");
       oid = full_sync_index_shard_oid(shard_id);
       can_adjust_marker = true;
       /* grab lock */
@@ -1501,6 +1505,7 @@ public:
           drain_all();
           return retcode;
         }
+        tn->log(20, SSTR("retrieved " << entries.size() << " to sync"));
         iter = entries.begin();
         for (; iter != entries.end(); ++iter) {
           ldout(sync_env->cct, 20) << __func__ << ": full sync: " << iter->first << dendl;
@@ -1749,21 +1754,33 @@ class RGWMetaSyncShardControlCR : public RGWBackoffControlCR
   rgw_meta_sync_marker sync_marker;
   const std::string period_marker;
 
+  RGWSyncTraceNodeRef tn_parent;
+  RGWSyncTraceNodeRef tn;
+
   static constexpr bool exit_on_error = false; // retry on all errors
 public:
   RGWMetaSyncShardControlCR(RGWMetaSyncEnv *_sync_env, const rgw_pool& _pool,
                             const std::string& period, epoch_t realm_epoch,
                             RGWMetadataLog* mdlog, uint32_t _shard_id,
                             const rgw_meta_sync_marker& _marker,
-                            std::string&& period_marker)
+                            std::string&& period_marker,
+                            RGWSyncTraceNodeRef& _tn_parent)
     : RGWBackoffControlCR(_sync_env->cct, exit_on_error), sync_env(_sync_env),
       pool(_pool), period(period), realm_epoch(realm_epoch), mdlog(mdlog),
       shard_id(_shard_id), sync_marker(_marker),
-      period_marker(std::move(period_marker)) {}
+      period_marker(std::move(period_marker)),
+      tn_parent(_tn_parent) {
+        tn = sync_env->sync_tracer->add_node(new RGWSyncTraceNode(sync_env->cct,
+                                                                  sync_env->sync_tracer, 
+                                                                  tn_parent,
+                                                                  "shard",
+                                                                  string(),
+                                                                  SSTR(shard_id)));
+      }
 
   RGWCoroutine *alloc_cr() override {
     return new RGWMetaSyncShardCR(sync_env, pool, period, realm_epoch, mdlog,
-                                  shard_id, sync_marker, period_marker, backoff_ptr());
+                                  shard_id, sync_marker, period_marker, backoff_ptr(), tn);
   }
 
   RGWCoroutine *alloc_finisher_cr() override {
@@ -1780,6 +1797,7 @@ class RGWMetaSyncCR : public RGWCoroutine {
   RGWPeriodHistory::Cursor cursor; //< sync position in period history
   RGWPeriodHistory::Cursor next; //< next period in history
   rgw_meta_sync_status sync_status;
+  RGWSyncTraceNodeRef tn;
 
   std::mutex mutex; //< protect access to shard_crs
 
@@ -1797,12 +1815,24 @@ public:
                 const rgw_meta_sync_status& _sync_status)
     : RGWCoroutine(_sync_env->cct), sync_env(_sync_env),
       pool(sync_env->store->get_zone_params().log_pool),
-      cursor(cursor), sync_status(_sync_status) {}
+      cursor(cursor), sync_status(_sync_status) {
+    tn = sync_env->sync_tracer->add_node(new RGWSyncTraceNode(sync_env->cct,
+                                                              sync_env->sync_tracer, 
+                                                              sync_env->sync_tracer->root_node,
+                                                              "meta",
+                                                              string(),
+                                                              string()));
+  }
+
+  ~RGWMetaSyncCR() {
+    tn->finish(ret);
+  }
 
   int operate() override {
     reenter(this) {
       // loop through one period at a time
       for (;;) {
+        tn->log(1, "start");
         if (cursor == sync_env->store->period_history->get_current()) {
           next = RGWPeriodHistory::Cursor{};
           if (cursor) {
@@ -1824,6 +1854,8 @@ public:
           auto& period_id = sync_status.sync_info.period;
           auto realm_epoch = sync_status.sync_info.realm_epoch;
           auto mdlog = sync_env->store->meta_mgr->get_log(period_id);
+
+          tn->log(1, SSTR("realm epoch=" << realm_epoch << " period id=" << period_id));
 
           // prevent wakeup() from accessing shard_crs while we're spawning them
           std::lock_guard<std::mutex> lock(mutex);
@@ -1848,7 +1880,7 @@ public:
             using ShardCR = RGWMetaSyncShardControlCR;
             auto cr = new ShardCR(sync_env, pool, period_id, realm_epoch,
                                   mdlog, shard_id, marker,
-                                  std::move(period_marker));
+                                  std::move(period_marker), tn);
             auto stack = spawn(cr, false);
             shard_crs[shard_id] = RefPair{cr, stack};
           }
@@ -1900,6 +1932,7 @@ void RGWRemoteMetaLog::init_sync_env(RGWMetaSyncEnv *env) {
   env->async_rados = async_rados;
   env->http_manager = &http_manager;
   env->error_logger = error_logger;
+  env->sync_tracer = store->get_sync_tracer();
 }
 
 int RGWRemoteMetaLog::read_sync_status(rgw_meta_sync_status *sync_status)
@@ -2830,7 +2863,8 @@ class MetaPeerTrimShardCollectCR : public RGWShardCollectCR {
       env(env), mdlog(mdlog), period_id(env.current.get_period().get_id())
   {
     meta_env.init(cct, env.store, env.store->rest_master_conn,
-                  env.store->get_async_rados(), env.http, nullptr);
+                  env.store->get_async_rados(), env.http, nullptr,
+                  env.store->get_sync_tracer());
   }
 
   bool spawn_next() override;
