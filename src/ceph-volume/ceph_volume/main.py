@@ -77,7 +77,7 @@ lvm
                            check_version=False)
         parser.parse_args()
         ceph_volume.config['verbosity'] = parser.get('--log', 'info')
-        log.setup(ceph_volume.config)
+        log.setup()
         self.enable_plugins()
         parser.catch_help = self.help()
         parser.catch_version = ceph_volume.__version__
