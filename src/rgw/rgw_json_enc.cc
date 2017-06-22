@@ -448,7 +448,7 @@ void RGWUserInfo::dump(Formatter *f) const
   if (system) { /* no need to show it for every user */
     encode_json("system", (bool)system, f);
   }
-  encode_json("default_placement", default_placement, f);
+  encode_json("default_placement_id", default_placement_id, f);
   encode_json("placement_tags", placement_tags, f);
   encode_json("bucket_quota", bucket_quota, f);
   encode_json("user_quota", user_quota, f);
@@ -525,7 +525,7 @@ void RGWUserInfo::decode_json(JSONObj *obj)
   bool sys = false;
   JSONDecoder::decode_json("system", sys, obj);
   system = (__u8)sys;
-  JSONDecoder::decode_json("default_placement", default_placement, obj);
+  JSONDecoder::decode_json("default_placement_id", default_placement_id, obj);
   JSONDecoder::decode_json("placement_tags", placement_tags, obj);
   JSONDecoder::decode_json("bucket_quota", bucket_quota, obj);
   JSONDecoder::decode_json("user_quota", user_quota, obj);

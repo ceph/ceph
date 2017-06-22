@@ -5851,7 +5851,7 @@ int RGWRados::select_new_bucket_location(RGWUserInfo& user_info, const string& z
   /* find placement rule. Hierarchy: request rule > user default rule > zonegroup default rule */
   string rule = request_rule;
   if (rule.empty()) {
-    rule = user_info.default_placement;
+    rule = user_info.default_placement_id;
     if (rule.empty())
       rule = zonegroup.default_placement_id;
   }
