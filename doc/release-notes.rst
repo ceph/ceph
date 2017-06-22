@@ -143,6 +143,17 @@ Major Changes from Kraken
 
 - *Miscellaneous*:
 
+  * Release packages are now being built for *Debian Stretch*.  The
+    distributions we build for now includes:
+
+    - CentOS 7 (x86_64 and aarch64)
+    - Debian 8 Jessie (x86_64)
+    - Debian 9 Stretch (x86_64)
+    - Ubuntu 16.04 Xenial (x86_64 and aarch64)
+    - Ubuntu 14.04 Trusty (x86_64)
+
+    Note that QA is limited to CentOS and Ubuntu (xenial and trusty).
+
   * *CLI changes*:
 
     - The ``ceph -s`` or ``ceph status`` command has a fresh look.
