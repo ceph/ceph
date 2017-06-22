@@ -251,24 +251,28 @@ int RGWZoneGroup::create_default(bool old_format)
 
   int r = zone_params.init(cct, store, false);
   if (r < 0) {
-    ldout(cct, 0) << "create_default: error initializing zone params: " << cpp_strerror(-r) << dendl;
+    ldout(cct, 0) << __func__ << " zone_params::init() init zone_params for default zone "
+                  << default_zone_name << " error: " << cpp_strerror(-r) << dendl;
     return r;
   }
 
   r = zone_params.create_default();
   if (r < 0 && r != -EEXIST) {
-    ldout(cct, 0) << "create_default: error in create_default  zone params: " << cpp_strerror(-r) << dendl;
+    ldout(cct, 0) <<  __func__ << " zone_params::create_default() for default zone "
+                  << default_zone_name << " error: " << cpp_strerror(-r) << dendl;
     return r;
   } else if (r == -EEXIST) {
-    ldout(cct, 10) << "zone_params::create_default() returned -EEXIST, we raced with another default zone_params creation" << dendl;
+    ldout(cct, 10) << __func__ << " zone_params::create_default() returned -EEXIST,"
+                   << " we raced with another default zone_params creation" << dendl;
     zone_params.clear_id();
     r = zone_params.init(cct, store);
     if (r < 0) {
-      ldout(cct, 0) << "create_default: error in init existing zone params: " << cpp_strerror(-r) << dendl;
+      ldout(cct, 0) << __func__ << " zone_params::init() init existing zone_params for zone"
+                    << default_zone_name <<  " error: " << cpp_strerror(-r) << dendl;
       return r;
     }
-    ldout(cct, 20) << "zone_params::create_default() " << zone_params.get_name() << " id " << zone_params.get_id()
-		   << dendl;
+    ldout(cct, 20) << __func__ << "zone_params::create_default()"
+                   << " name " << zone_params.get_name() << " id " << zone_params.get_id() << dendl;
   }
   
   RGWZone& default_zone = zones[zone_params.get_id()];
@@ -278,12 +282,12 @@ int RGWZoneGroup::create_default(bool old_format)
   
   r = create();
   if (r < 0 && r != -EEXIST) {
-    ldout(cct, 0) << "error storing zone group info: " << cpp_strerror(-r) << dendl;
+    ldout(cct, 0) << __func__ << " storing zone group info error: " << cpp_strerror(-r) << dendl;
     return r;
   }
 
   if (r == -EEXIST) {
-    ldout(cct, 10) << "create_default() returned -EEXIST, we raced with another zonegroup creation" << dendl;
+    ldout(cct, 10) << __func__ << " returned -EEXIST, we raced with another zonegroup creation" << dendl;
     id.clear();
     r = init(cct, store);
     if (r < 0) {
