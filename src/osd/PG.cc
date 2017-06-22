@@ -1725,7 +1725,8 @@ void PG::activate(ObjectStore::Transaction& t,
         for (list<pg_log_entry_t>::iterator p = m->log.log.begin();
              p != m->log.log.end();
              ++p)
-	  if (p->soid <= pi.last_backfill)
+	  if (p->soid <= pi.last_backfill &&
+	      !p->is_error())
 	    pm.add_next_event(*p);
       }
       
