@@ -77,18 +77,22 @@ Major Changes from Kraken
 
 - *RGW*:
 
-  * RGW introduces *server side encryption* of uploaded objects with
-    three options for the management of encryption keys: automatic
-    encryption (only recommended for test setups), customer provided
-    keys similar to Amazon SSE-C specification, and through the use of
-    an external key management service (Openstack Barbician) similar
-    to Amazon SSE-KMS specification.
   * RGW *metadata search* with ElasticSearch now supports end user requests
     serviced via RGW itself and now supports custom metadata fields
   * RGW now supports *dynamic bucket index sharding*.  As the number
     of objects in a bucket grows, RGW will automatically reshard the
     bucket index in response.  No user intervention or bucket size
     capacity planning is required.
+  * RGW introduces *server side encryption* of uploaded objects with
+    three options for the management of encryption keys: automatic
+    encryption (only recommended for test setups), customer provided
+    keys similar to Amazon SSE-C specification, and through the use of
+    an external key management service (Openstack Barbician) similar
+    to Amazon SSE-KMS specification.
+  * RGW now has preliminary AWS-like bucket policy API support.  For
+    now, policy is a means to express a range of new authorization
+    concepts.  In the future it will be the founation for additional
+    auth capabilities such as STS and group policy.
   * RGW has consolidated the several metadata index pools via the use of rados
     namespaces.
 
@@ -99,6 +103,23 @@ Major Changes from Kraken
   * RBD mirroring's rbd-mirror daemon is now highly available. We
     recommend deploying several instances of rbd-mirror for
     reliability.
+  * The default 'rbd' pool is no longer created automatically during
+    cluster creation. Additionally, the name of the default pool used
+    by the rbd CLI when no pool is specified can be overridden via a
+    new ``rbd default pool = <pool name>`` configuration option.
+  * Initial support for deferred image deletion via new ``rbd
+    trash`` CLI commands. Images, even ones actively in-use by
+    clones, can be moved to the trash and deleted at a later time.
+  * New pool-level ``rbd mirror pool promote`` and ``rbd mirror pool
+    demote`` commands to batch promote/demote all mirrored images
+    within a pool.
+  * Mirroring now optionally supports a configurable replication delay
+    via the ``rbd mirroring replay delay = <seconds>`` configuration
+    option.
+  * Improved discard handling when the object map feature is enabled.
+  * rbd CLI ``import`` and ``copy`` commands now detect sparse and
+    preserve sparse regions.
+  * Snapshots will now include a creation timestamp
 
 - *CephFS*:
 
