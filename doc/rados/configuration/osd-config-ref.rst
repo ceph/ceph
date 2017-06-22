@@ -785,13 +785,6 @@ Miscellaneous
 :Default: ``false`` 
 
 
-``osd preserve trimmed log``
-
-:Description: Preserves trimmed log files, but uses more disk space.
-:Type: Boolean
-:Default: ``false``
-
-
 ``osd fast fail on connection refused``
 
 :Description: If this option is enabled, crashed OSDs are marked down
