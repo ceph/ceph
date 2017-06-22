@@ -9299,9 +9299,8 @@ int RGWRados::Object::Stat::finish()
 }
 
 /**
- * Get the attributes for an object.
- * bucket: name of the bucket holding the object.
- * obj: name of the object
+ * Get an attribute for a system object.
+ * obj: the object to get attr
  * name: name of the attr to retrieve
  * dest: bufferlist to store the result in
  * Returns: 0 on success, -ERR# otherwise.
@@ -9641,28 +9640,6 @@ int RGWRados::set_attrs(void *ctx, const RGWBucketInfo& bucket_info, rgw_obj& ob
   return 0;
 }
 
-/**
- * Get data about an object out of RADOS and into memory.
- * bucket: name of the bucket the object is in.
- * obj: name/key of the object to read
- * data: if get_data==true, this pointer will be set
- *    to an address containing the object's data/value
- * attrs: if non-NULL, the pointed-to map will contain
- *    all the attrs of the object when this function returns
- * mod_ptr: if non-NULL, compares the object's mtime to *mod_ptr,
- *    and if mtime is smaller it fails.
- * unmod_ptr: if non-NULL, compares the object's mtime to *unmod_ptr,
- *    and if mtime is >= it fails.
- * if_match/nomatch: if non-NULL, compares the object's etag attr
- *    to the string and, if it doesn't/does match, fails out.
- * get_data: if true, the object's data/value will be read out, otherwise not
- * err: Many errors will result in this structure being filled
- *    with extra informatin on the error.
- * Returns: -ERR# on failure, otherwise
- *          (if get_data==true) length of read data,
- *          (if get_data==false) length of the object
- */
-// P3 XXX get_data is not seen used anywhere.
 int RGWRados::Object::Read::prepare()
 {
   RGWRados *store = source->get_store();
