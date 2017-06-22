@@ -111,8 +111,11 @@
                 return format_number(n, 1024, ['B', 'KiB', 'MiB', 'GiB', 'TiB', 'PiB']);
             };
 
-            <!--rivet.formatters.mon_summary = function(mon_map) {-->
-            <!--}-->
+            /* This is useful if you need to display some alternative text
+             * when a collection is empty using rv-hide */
+            rivets.formatters.length = function(val) {
+              return val.length;
+            }
 
             rivets.bind($("#health"), toplevel_data);
             rivets.bind($("section.sidebar"), toplevel_data);
@@ -122,21 +125,101 @@
 
       <link rel="shortcut icon" href="http://ceph.com/wp-content/themes/ceph/favicon.ico">
       <link rel="shortcut icon" href="/static/favicon.ico">
+
+    <style>
+        div.box {
+            background-color: #222d32;
+            color: #fff;
+        }
+
+        div.info-box {
+            background-color: #222d32;
+            color: #fff;
+        }
+
+        .box {
+            border-top-color: #b8c7ce;
+        }
+
+        div.box-header {
+            color: #b8c7ce;
+        }
+
+        a.logo {
+            background-color: #222d32;
+        }
+
+        body {
+            background-color: #222d32;
+        }
+
+        .navbar {
+            background-color: #222d32;
+            color: #222d32;
+        }
+
+        div#content {
+            background-color: #424d52;
+            color: #ddd;
+        }
+
+        div.progress-bar {
+            border-width: 1px;
+            border-color: #ddd;
+        }
+
+        .ceph-log {
+            font-family: monospace;
+            background-color: #333;
+            color: #ddd;
+        }
+
+        .nav-tabs>li.active>a {
+            background-color: #424d52;
+            color: #ddd;
+        }
+
+        .navbar a {
+            color: #b8c7ce;
+        }
+
+        .ceph-none-found {
+            color: #8aa4af;
+            font-style: italic;
+            padding-left: 15px;
+            padding-right: 5px;
+            padding-top: 5px;
+            padding-bottom: 5px;
+        }
+
+        table.ceph-chartbox {
+            margin-left: 40px;
+        }
+
+        .ceph-chartbox td {
+            padding-left: 35px;
+            text-align: center;
+            font-weight: bold;
+        }
+
+    </style>
+
 </head>
 
-<body class="hold-transition skin-blue sidebar-mini">
+<body class="hold-transition sidebar-mini sidebar-collapse">
 <div class="wrapper">
 
-  <!-- Main Header -->
+    <!-- Main Header -->
     <header class="main-header">
         <!-- Logo -->
         <a href="/" class="logo">
-            <!--
-          <span class="logo-mini"><b>A</b>LT</span>
-          <span class="logo-lg"><b>Admin</b>LTE</span> -->
       <span class="logo-lg">
         <img src="/static/Ceph_Logo_Standard_RGB_White_120411_fa.png"
              width="123px" height="34px"/>
+          </span>
+      <span class="logo-mini">
+        <img src="/static/logo-mini.png"
+             width="34px" height="34px"/>
           </span>
         </a>
 
@@ -165,17 +248,19 @@
         </nav>
     </header>
   <!-- Left side column. contains the logo and sidebar -->
-  <aside class="main-sidebar">
+  <aside class="main-sidebar skin-blue">
 
     <!-- sidebar: style can be found in sidebar.less -->
     <section class="sidebar">
       <!-- Sidebar Menu -->
       <ul class="sidebar-menu">
         <!-- Optionally, you can add icons to the links -->
-        <li><a href="/health"><i class="fa fa-heart"></i>
+        <li><a href="/health">
+            <i class="fa fa-heartbeat" rv-style="health_status | health_color"></i>
             <span>Cluster health</span></a>
         </li>
-        <li><a href="/servers"><i class="fa fa-server"></i>
+        <li><a href="/servers">
+            <i class="fa fa-server"></i>
             <span>Servers</span></a>
         </li>
         <li class="treeview active">
@@ -188,6 +273,7 @@
             <li rv-each-pool="rbd_pools">
                 <a rv-href="pool.url">{pool.name}</a>
             </li>
+            <li class="ceph-none-found" rv-hide="rbd_pools | length">None found</li>
           </ul>
         </li>
         <li class="treeview active">
@@ -200,6 +286,7 @@
             <li rv-each-filesystem="filesystems">
                 <a rv-href="filesystem.url">{filesystem.name}</a>
             </li>
+            <li class="ceph-none-found" rv-hide="filesystems | length">None found</li>
           </ul>
         </li>
       </ul>
