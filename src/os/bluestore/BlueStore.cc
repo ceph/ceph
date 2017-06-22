@@ -4837,7 +4837,7 @@ int BlueStore::_open_collections(int *errors)
   return 0;
 }
 
-void BlueStore::open_statfs()
+void BlueStore::_open_statfs()
 {
   bufferlist bl;
   int r = db->get(PREFIX_STAT, "bluestore_statfs", &bl);
@@ -4845,8 +4845,7 @@ void BlueStore::open_statfs()
     if (size_t(bl.length()) >= sizeof(vstatfs.values)) {
       auto it = bl.begin();
       vstatfs.decode(it);
-    }
-    else {
+    } else {
       dout(10) << __func__ << " store_statfs is corrupt, using empty" << dendl;
     }
   }
@@ -7450,7 +7449,7 @@ int BlueStore::_open_super_meta()
     dout(10) << __func__ << " min_alloc_size 0x" << std::hex << min_alloc_size
 	     << std::dec << dendl;
   }
-  open_statfs();
+  _open_statfs();
   _set_alloc_sizes();
   _set_throttle_params();
 
