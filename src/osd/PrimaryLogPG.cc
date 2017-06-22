@@ -1877,13 +1877,13 @@ void PrimaryLogPG::do_op(OpRequestRef& op)
     }
   }
 
-  if (op->includes_pg_op()) {
-    return do_pg_op(op);
-  }
-
   if (!op_has_sufficient_caps(op)) {
     osd->reply_op_error(op, -EPERM);
     return;
+  }
+
+  if (op->includes_pg_op()) {
+    return do_pg_op(op);
   }
 
   // object name too long?
