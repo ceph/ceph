@@ -373,6 +373,9 @@ public:
     PointerWQ(string n, time_t ti, time_t sti, ThreadPool* p)
       : WorkQueue_(n, ti, sti), m_pool(p), m_processing(0) {
     }
+    void register_work_queue() {
+      m_pool->add_work_queue(this);
+    }
     virtual void _clear() {
       assert(m_pool->_lock.is_locked());
       m_items.clear();
@@ -576,7 +579,7 @@ public:
   ContextWQ(const string &name, time_t ti, ThreadPool *tp)
     : ThreadPool::PointerWQ<Context>(name, ti, 0, tp),
       m_lock("ContextWQ::m_lock") {
-    tp->add_work_queue(this);
+    this->register_work_queue();
   }
 
   void queue(Context *ctx, int result = 0) {
