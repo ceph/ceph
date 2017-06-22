@@ -54,7 +54,7 @@ int RGWListBuckets_ObjStore_SWIFT::get_params()
     limit = (uint64_t)l;
   }
 
-  if (need_stats) {
+  if (s->cct->_conf->rgw_swift_need_stats) {
     bool stats, exists;
     int r = s->info.args.get_bool("stats", &stats, &exists);
 
@@ -65,6 +65,8 @@ int RGWListBuckets_ObjStore_SWIFT::get_params()
     if (exists) {
       need_stats = stats;
     }
+  } else {
+    need_stats = false;
   }
 
   return 0;
