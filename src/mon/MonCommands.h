@@ -749,13 +749,12 @@ COMMAND("osd pg-temp " \
 COMMAND("osd pg-upmap " \
 	"name=pgid,type=CephPgid " \
 	"name=id,type=CephOsdName,n=N", \
-	"set pg_upmap mapping <pgid>:[<id> [<id>...]] primary <primary> (developers only)", \
+	"set pg_upmap mapping <pgid>:[<id> [<id>...]] (developers only)", \
         "osd", "rw", "cli,rest")
 COMMAND("osd rm-pg-upmap " \
 	"name=pgid,type=CephPgid",					\
 	"clear pg_upmap mapping for <pgid> (developers only)", \
         "osd", "rw", "cli,rest")
-
 COMMAND("osd pg-upmap-items " \
 	"name=pgid,type=CephPgid " \
 	"name=id,type=CephOsdName,n=N", \
