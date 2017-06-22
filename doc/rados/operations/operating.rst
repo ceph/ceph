@@ -8,9 +8,9 @@
 Running Ceph with systemd
 ==========================
 
-For all distributions that support systemd (CentOS 7, Fedora, Debian Jessie
-8.x, SUSE), ceph daemons are now managed using native systemd files instead of
-the legacy sysvinit scripts.  For example::
+For all distributions that support systemd (CentOS 7, Fedora, Debian
+Jessie 8 and later, SUSE), ceph daemons are now managed using native
+systemd files instead of the legacy sysvinit scripts.  For example::
 
         sudo systemctl start ceph.target       # start all daemons
         sudo systemctl status ceph-osd@12      # check status of osd.12
