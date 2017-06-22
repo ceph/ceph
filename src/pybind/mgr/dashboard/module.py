@@ -546,21 +546,36 @@ class Module(MgrModule):
                 return clients
 
             @cherrypy.expose
-            def clients(self, fs_id):
-                template = env.get_template("clients.html")
+            def clients(self, fscid_str):
+                try:
+                    fscid = int(fscid_str)
+                except ValueError:
+                    raise cherrypy.HTTPError(400,
+                        "Invalid filesystem id {0}".format(fscid_str))
 
-                toplevel_data = self._toplevel_data()
+                try:
+                    fs_name = FsMap(global_instance().get(
+                        "fs_map")).get_filesystem(fscid)['mdsmap']['fs_name']
+                except NotFound:
+                    log.warning("Missing FSCID, dumping fsmap:\n{0}".format(
+                        json.dumps(global_instance().get("fs_map"), indent=2)
+                    ))
+                    raise cherrypy.HTTPError(404,
+                                             "No filesystem with id {0}".format(fscid))
 
-                clients = self._clients(int(fs_id))
+                clients = self._clients(fscid)
                 global_instance().log.debug(json.dumps(clients, indent=2))
                 content_data = {
                     "clients": clients,
-                    "fscid": fs_id
+                    "fs_name": fs_name,
+                    "fscid": fscid,
+                    "fs_url": "/filesystem/" + fscid_str + "/"
                 }
 
+                template = env.get_template("clients.html")
                 return template.render(
                     ceph_version=global_instance().version,
-                    toplevel_data=json.dumps(toplevel_data, indent=2),
+                    toplevel_data=json.dumps(self._toplevel_data(), indent=2),
                     content_data=json.dumps(content_data, indent=2)
                 )
 
@@ -631,7 +646,6 @@ class Module(MgrModule):
                 )
 
             def _servers(self):
-                servers = global_instance().list_servers()
                 return {
                     'servers': global_instance().list_servers()
                 }
@@ -690,14 +704,21 @@ class Module(MgrModule):
                 # to UI
                 del osd_map['pg_temp']
 
+                df = global_instance().get("df")
+                df['stats']['total_objects'] = sum(
+                    [p['stats']['objects'] for p in df['pools']])
+
                 return {
                     "health": self._health_data(),
                     "mon_status": global_instance().get_sync_object(
                         MonStatus).data,
+                    "fs_map": global_instance().get_sync_object(FsMap).data,
                     "osd_map": osd_map,
                     "clog": list(global_instance().log_buffer),
                     "audit_log": list(global_instance().audit_buffer),
-                    "pools": pools
+                    "pools": pools,
+                    "mgr_map": global_instance().get("mgr_map"),
+                    "df": df
                 }
 
             @cherrypy.expose
