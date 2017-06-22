@@ -149,13 +149,18 @@ int RGWMetadataLog::list_entries(void *handle,
     *truncated = false;
     return 0;
   }
-
+  
+  list<cls_log_entry> log_entries;
+  
   int ret = store->time_log_list(ctx->cur_oid, ctx->from_time, ctx->end_time,
-				 max_entries, entries, ctx->marker,
+				 max_entries, log_entries, ctx->marker,
 				 last_marker, truncated);
   if ((ret < 0) && (ret != -ENOENT))
     return ret;
 
+  ctx->marker = *last_marker;
+  entries.splice(entries.end(), log_entries);
+  
   if (ret == -ENOENT)
     *truncated = false;
 
