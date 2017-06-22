@@ -3410,9 +3410,12 @@ void PGMapUpdater::check_osd_map(
       my_pg_num = q->second;
     unsigned pg_num = pi.get_pg_num();
     if (my_pg_num != pg_num) {
+      ldout(cct,10) << __func__ << " pool " << poolid << " pg_num " << pg_num
+		    << " != my pg_num " << my_pg_num << dendl;
       for (unsigned ps = my_pg_num; ps < pg_num; ++ps) {
 	pg_t pgid(ps, poolid);
 	if (pending_inc->pg_stat_updates.count(pgid) == 0) {
+	  ldout(cct,20) << __func__ << " adding " << pgid << dendl;
 	  pg_stat_t &stats = pending_inc->pg_stat_updates[pgid];
 	  stats.last_fresh = osdmap.get_modified();
 	  stats.last_active = osdmap.get_modified();
