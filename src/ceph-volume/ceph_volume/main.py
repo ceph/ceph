@@ -6,7 +6,7 @@ import logging
 from tambo import Transport
 import ceph_volume
 from ceph_volume.decorators import catches
-from ceph_volume import log
+from ceph_volume import log, devices
 
 
 class Volume(object):
@@ -14,36 +14,35 @@ class Volume(object):
 ceph-volume: Deploy Ceph OSDs using different device technologies like lvm or
 physical disks
 
-Version: %s
+Version: {version}
 
 Global Options:
 --log, --logging    Set the level of logging. Acceptable values:
                     debug, warning, error, critical
 --log-path          Change the default location ('/var/lib/ceph') for logging
 
-Log Path: %s
+Log Path: {log_path}
 
-Subcommands:
-lvm
-%s
-
-%s
+{sub_help}
+{plugins}
+{environ_vars}
     """
 
     def __init__(self, argv=None, parse=True):
-        self.mapper = {}
+        self.mapper = {'lvm': devices.lvm.LVM}
         self.plugin_help = "No plugins found/loaded"
         if argv is None:
             argv = sys.argv
         if parse:
             self.main(argv)
 
-    def help(self):
-        return self._help % (
-            ceph_volume.__version__,
-            ceph_volume.config.get('log_path'),
-            self.plugin_help,
-            self.get_environ_vars()
+    def help(self, sub_help=None):
+        return self._help.format(
+            version=ceph_volume.__version__,
+            log_path=ceph_volume.config.get('log_path'),
+            plugins=self.plugin_help,
+            sub_help=sub_help,
+            environ_vars=self.get_environ_vars()
         )
 
     def get_environ_vars(self):
@@ -54,7 +53,7 @@ lvm
         if not environ_vars:
             return ''
         else:
-            environ_vars.insert(0, 'Environ Variables:')
+            environ_vars.insert(0, '\nEnviron Variables:')
             return '\n'.join(environ_vars)
 
     def enable_plugins(self):
@@ -68,8 +67,10 @@ lvm
         self.plugin_help = '\n'.join(['%-19s %s\n' % (
             plugin.name, getattr(plugin, 'help_menu', ''))
             for plugin in plugins])
+        if self.plugin_help:
+            self.plugin_help = '\nPlugins:\n' + self.plugin_help
 
-    @catches((KeyboardInterrupt, RuntimeError))
+    @catches()
     def main(self, argv):
         options = [['--log', '--logging']]
         parser = Transport(argv, mapper=self.mapper,
@@ -79,7 +80,7 @@ lvm
         ceph_volume.config['verbosity'] = parser.get('--log', 'info')
         log.setup()
         self.enable_plugins()
-        parser.catch_help = self.help()
+        parser.catch_help = self.help(parser.subhelp())
         parser.catch_version = ceph_volume.__version__
         parser.mapper = self.mapper
         if len(argv) <= 1:
