@@ -1603,7 +1603,7 @@ const vector<pair<string, RGWInfo_ObjStore_SWIFT::info>> RGWInfo_ObjStore_SWIFT:
     {"slo", {false, RGWInfo_ObjStore_SWIFT::list_slo_data}},
     {"account_quotas", {false, nullptr}},
     {"staticweb", {false, nullptr}},
-    {"tempauth", {false, nullptr}},
+    {"tempauth", {false, RGWInfo_ObjStore_SWIFT::list_tempauth_data}},
 };
 
 void RGWInfo_ObjStore_SWIFT::execute()
@@ -1678,6 +1678,14 @@ void RGWInfo_ObjStore_SWIFT::list_swift_data(Formatter& formatter,
   formatter.close_section();
 }
 
+void RGWInfo_ObjStore_SWIFT::list_tempauth_data(Formatter& formatter,
+                                                 const md_config_t& config,
+                                                 RGWRados& store)
+{
+  formatter.open_object_section("tempauth");
+  formatter.dump_bool("account_acls", true);
+  formatter.close_section();
+}
 void RGWInfo_ObjStore_SWIFT::list_tempurl_data(Formatter& formatter,
                                                 const md_config_t& config,
                                                 RGWRados& store)
