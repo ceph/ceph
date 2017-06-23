@@ -1225,7 +1225,9 @@ public:
 		auto miter = missing.get_items().find(i->soid);
 		assert(miter != missing.get_items().end());
 		assert(miter->second.need == i->version);
-		assert(miter->second.have == oi.version);
+		// the 'have' version is reset if an object is deleted,
+		// then created again
+		assert(miter->second.have == oi.version || miter->second.have == eversion_t());
 		checked.insert(i->soid);
 	      } else {
 		missing.add(i->soid, i->version, oi.version, i->is_delete());
