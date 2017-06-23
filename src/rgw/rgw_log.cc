@@ -13,6 +13,7 @@
 #include "rgw_rados.h"
 #include "rgw_client_io.h"
 #include "rgw_rest.h"
+#include "cls/lock/cls_lock_client.h"
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -403,13 +404,27 @@ int rgw_log_op(RGWRados *store, RGWREST* const rest, struct req_state *s,
   else
     localtime_r(&t, &bdt);
 
+  std::string oid = render_log_object_name(s->cct->_conf->rgw_log_object_name, &bdt,
+                                           s->bucket.bucket_id, entry.bucket);
+
+  rados::cls::lock::Lock l(oid);
+  utime_t time(3600, 0);               // the default time granularity of ops log is hour, so set the duration of lock to 3600 secs.
+  l.set_duration(time);
+  librados::IoCtx *ctx = store->get_log_pool_ctx();
+
   int ret = 0;
 
   if (s->cct->_conf->rgw_ops_log_rados) {
-    string oid = render_log_object_name(s->cct->_conf->rgw_log_object_name, &bdt,
-				        s->bucket.bucket_id, entry.bucket);
-
     rgw_raw_obj obj(store->get_zone_params().log_pool, oid);
+
+    ret = l.lock_exclusive(ctx, oid);
+    if (ret < 0 && ret != -EEXIST) {
+      ldout(s->cct, 0) << "rgw_log_op failed to acquire lock " << oid
+                       << " ret: " << ret << dendl;
+      goto done;
+    }
+
+    ldout(s->cct, 10) << "rgw_log_op acquire lock name = " << oid << dendl;
 
     ret = store->append_async(obj, bl.length(), bl);
     if (ret == -ENOENT) {
@@ -425,8 +440,10 @@ int rgw_log_op(RGWRados *store, RGWREST* const rest, struct req_state *s,
     olog->log(entry);
   }
 done:
-  if (ret < 0)
+  if (ret < 0) {
     ldout(s->cct, 0) << "ERROR: failed to log entry" << dendl;
+    l.unlock(ctx, oid);
+  }
 
   return ret;
 }
