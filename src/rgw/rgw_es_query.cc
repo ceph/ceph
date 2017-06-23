@@ -184,7 +184,7 @@ public:
 };
 
 class ESQueryNodeLeafVal_Int : public ESQueryNodeLeafVal {
-  int64_t val;
+  int64_t val{0};
 public:
   ESQueryNodeLeafVal_Int() {}
   bool init(const string& str_val, string *perr) override {
