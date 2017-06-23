@@ -218,7 +218,7 @@ Major Changes from Kraken
     - ``ceph osd reweightn`` will specify the `reweight` values for
       multiple OSDs in a single command.  This is equivalent to a series of
       ``ceph osd reweight`` commands.
-    - ``ceph crush class {create,rm,ls}`` manage the new CRUSH *device
+    - ``ceph crush class {create,rm,ls,rename}`` manage the new CRUSH *device
       class* feature.  ``ceph crush set-device-class <osd> <class>``
       will set the clas for a particular device.
     - ``ceph mon feature ls`` will list monitor features recorded in the
