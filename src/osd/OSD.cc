@@ -2537,6 +2537,18 @@ int OSD::init()
 	  const auto lec = pg->pg_stats_publish.get_effective_last_epoch_clean();
 	  min_last_epoch_clean = min(min_last_epoch_clean, lec);
 	  min_last_epoch_clean_pgs.push_back(pg->info.pgid.pgid);
+	  {
+            op_stat_t op_stat;
+            op_stat.op_num = pg->op_num.load();
+            op_stat.op_latency = pg->op_latency.load();
+            op_stat.rd_num = pg->rd_num.load();
+            op_stat.rd_latency = pg->rd_latency.load();
+            op_stat.wr_num = pg->wr_num.load();
+            op_stat.wr_latency = pg->wr_latency.load();
+
+            m->op_stat[pg->info.pgid.pgid] = op_stat;
+            pg->clear_op_stat();
+          }
         }
         pg->pg_stats_publish_lock.Unlock();
       }

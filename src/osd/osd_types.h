@@ -1986,6 +1986,38 @@ WRITE_CLASS_ENCODER(pg_stat_t)
 bool operator==(const pg_stat_t& l, const pg_stat_t& r);
 
 /*
+ * aggregate op-related stats
+ */
+struct op_stat_t {
+  uint64_t op_num = 0;
+  uint64_t op_latency = 0; // in nanoseconds
+  uint64_t rd_num = 0;
+  uint64_t rd_latency = 0; // in nanoseconds
+  uint64_t wr_num = 0;
+  uint64_t wr_latency = 0; // in nanoseconds
+
+  // for memory caching only
+  uint64_t op_average_latency;
+  uint64_t rd_average_latency;
+  uint64_t wr_average_latency;
+
+  void add(const op_stat_t& o) {
+    op_num = o.op_num;
+    op_latency = o.op_latency;
+    rd_num = o.rd_num;
+    rd_latency = o.rd_latency;
+    wr_num = o.wr_num;
+    wr_latency = o.wr_latency;
+  }
+
+  void dump(Formatter *f) const;
+  void encode(bufferlist &bl) const;
+  void decode(bufferlist::iterator &bl);
+  static void generate_test_instances(list<op_stat_t*>& o);
+};
+WRITE_CLASS_ENCODER(op_stat_t)
+
+/*
  * summation over an entire pool
  */
 struct pool_stat_t {
