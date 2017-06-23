@@ -803,8 +803,9 @@ void MDSMonitor::on_active()
   tick();
   update_logger();
 
-  if (mon->is_leader())
-    mon->clog->info() << "fsmap " << fsmap;
+  if (mon->is_leader()) {
+    mon->clog->debug() << "fsmap " << fsmap;
+  }
 }
 
 void MDSMonitor::get_health(list<pair<health_status_t, string> >& summary,
