@@ -32,7 +32,18 @@ function run() {
     local dir=$1
     shift
 
-    export CEPH_MON="127.0.0.1:7107" # git grep '\<7107\>' : there must be only one
+    # Grab a random port from 7109 - 7200, this should maybe be reworked
+    for port in `seq 7109 7200 | shuf` ; do
+        if ! $(nc -z localhost "$port" > /dev/null); then
+            export CEPH_MON="127.0.0.1:${port}"
+            break
+        fi
+    done
+    if [ -z "$CEPH_MON" ]; then
+        echo "Failed to find open port to run mon on"
+        return 1
+    fi
+
     export CEPH_ARGS
     CEPH_ARGS+="--fsid=$(uuidgen) --auth-supported=none "
     CEPH_ARGS+="--mon-host=$CEPH_MON "
@@ -2587,9 +2598,14 @@ function TEST_periodic_scrub_replicated() {
     rados list-inconsistent-obj $pg | jq '.' | grep -qv $objname || return 1
 }
 
-
-main osd-scrub-repair "$@"
-
+if [ -z "$@" ] ; then
+    main osd-scrub-repair
+else
+    for func in $@
+    do
+        main osd-scrub-repair-${func}
+    done
+fi
 # Local Variables:
 # compile-command: "cd ../.. ; make -j4 && \
 #    test/osd/osd-scrub-repair.sh # TEST_corrupt_and_repair_replicated"
