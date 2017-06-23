@@ -102,8 +102,8 @@ class ESQueryCompiler {
   ESEntityTypeMap *generic_type_map{nullptr};
   ESEntityTypeMap *custom_type_map{nullptr};
 
-  map<string, string, ltstr_nocase> *field_aliases;
-  set<string> *restricted_fields;
+  map<string, string, ltstr_nocase> *field_aliases = nullptr;
+  set<string> *restricted_fields = nullptr;
 
 public:
   ESQueryCompiler(const string& query, list<pair<string, string> > *prepend_eq_conds, const string& _custom_prefix) : parser(query), custom_prefix(_custom_prefix) {
