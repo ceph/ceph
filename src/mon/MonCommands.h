@@ -423,7 +423,7 @@ COMMAND("mon remove " \
 COMMAND("mon rm " \
 	"name=name,type=CephString", \
 	"remove monitor named <name>", "mon", "rw", "cli,rest")
-COMMAND("mon feature list " \
+COMMAND("mon feature ls " \
         "name=with_value,type=CephChoices,strings=--with-value,req=false", \
         "list available mon map features to be set/unset", \
         "mon", "r", "cli,rest")
