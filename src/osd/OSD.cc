@@ -7339,7 +7339,8 @@ void OSD::trim_maps(epoch_t oldest, int nreceived, bool skip_maps)
   if (num > 0) {
     service.publish_superblock(superblock);
     write_superblock(t);
-    store->queue_transaction(service.meta_osr.get(), std::move(t), nullptr);
+    int tr = store->queue_transaction(service.meta_osr.get(), std::move(t), nullptr);
+    assert(tr == 0);
   }
   // we should not remove the cached maps
   assert(min <= service.map_cache.cached_key_lower_bound());
