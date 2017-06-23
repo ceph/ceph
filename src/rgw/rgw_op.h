@@ -770,6 +770,7 @@ public:
   virtual int get_params() = 0;
   void send_response() override = 0;
   const string name() override { return "put_bucket_logging"; }
+  RGWOpType get_type() override { return RGW_OP_PUT_BUCKET_LOGGING; }
   uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
 };
 
