@@ -562,8 +562,12 @@ class TeuthologyOpenStack(OpenStack):
         log.info("Detected local YAML file {}".format(fp))
         machine = self.username + "@" + self.instance.get_floating_ip_or_ip()
 
+        sshopts=('-o ConnectTimeout=3 -o UserKnownHostsFile=/dev/null '
+                 '-o StrictHostKeyChecking=no')
+
         def ssh_command(s):
-            return "ssh -i {k} {m} sh -c \\\"{s}\\\"".format(
+            return "ssh {o} -i {k} {m} sh -c \\\"{s}\\\"".format(
+                o=sshopts,
                 k=self.key_filename,
                 m=machine,
                 s=s,
@@ -595,7 +599,8 @@ class TeuthologyOpenStack(OpenStack):
             aug_dn=remote_dn,
         ))
         misc.sh(command) # will throw exception on failure
-        command = "scp -i {k} {yamlfile} {m}:{dn}".format(
+        command = "scp {o} -i {k} {yamlfile} {m}:{dn}".format(
+            o=sshopts,
             k=self.key_filename,
             yamlfile=fp,
             m=machine,
