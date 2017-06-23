@@ -6,22 +6,12 @@ as arguments to this script so that it can parse the suffix into arguments that
 
 import sys
 import logging
-from ceph_volume import log
-from ceph_volume import process
+from ceph_volume import log, process
+from ceph_volume.exceptions import SuffixParsingError
+
 
 log.setup(name='ceph-volume-systemd.log')
 logger = logging.getLogger('systemd')
-
-
-class SuffixParsingError(SystemExit):
-
-    def __init__(self, suffix, part=None):
-        self.suffix = suffix
-        self.part = part
-        SystemExit.__init__(self, self.__str__())
-
-    def __str__(self):
-        return 'Unable to parse the %s from systemd suffix: %s' % (self.part, self.suffix)
 
 
 def parse_subcommand(string):

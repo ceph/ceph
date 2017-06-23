@@ -72,6 +72,7 @@ Log Path: {log_path}
 
     @catches()
     def main(self, argv):
+        # XXX Port the CLI args to user arparse
         options = [['--log', '--logging']]
         parser = Transport(argv, mapper=self.mapper,
                            options=options, check_help=False,
