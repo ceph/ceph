@@ -2046,7 +2046,7 @@ protected:
   rgw_bucket bucket;
   map<RGWObjCategory, RGWStorageStats> *stats;
 public:
-  explicit RGWGetBucketStats_CB(rgw_bucket& _bucket) : bucket(_bucket), stats(NULL) {}
+  explicit RGWGetBucketStats_CB(const rgw_bucket& _bucket) : bucket(_bucket), stats(NULL) {}
   ~RGWGetBucketStats_CB() override {}
   virtual void handle_response(int r) = 0;
   virtual void set_response(map<RGWObjCategory, RGWStorageStats> *_stats) {
@@ -3512,7 +3512,7 @@ public:
   int check_quota(const rgw_user& bucket_owner, rgw_bucket& bucket,
                   RGWQuotaInfo& user_quota, RGWQuotaInfo& bucket_quota, uint64_t obj_size);
 
-  int check_bucket_shards(const RGWBucketInfo& bucket_info, rgw_bucket& bucket,
+  int check_bucket_shards(const RGWBucketInfo& bucket_info, const rgw_bucket& bucket,
 			  RGWQuotaInfo& bucket_quota);
 
   int add_bucket_to_reshard(const RGWBucketInfo& bucket_info, uint32_t new_num_shards);

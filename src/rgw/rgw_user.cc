@@ -77,6 +77,11 @@ int rgw_user_sync_all_stats(RGWRados *store, const rgw_user& user_id)
         ldout(cct, 0) << "ERROR: could not sync bucket stats: ret=" << ret << dendl;
         return ret;
       }
+      RGWQuotaInfo bucket_quota;
+      ret = store->check_bucket_shards(bucket_info, bucket_info.bucket, bucket_quota);
+      if (ret < 0) {
+	ldout(cct, 0) << "ERROR in check_bucket_shards: " << cpp_strerror(-ret)<< dendl;
+      }
     }
   } while (is_truncated);
 
