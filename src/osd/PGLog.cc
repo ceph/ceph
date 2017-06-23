@@ -398,7 +398,7 @@ void PGLog::_merge_object_divergent_entries(
 		       << *objiter->second << ", already merged" << dendl;
 
     // ensure missing has been updated appropriately
-    if (objiter->second->is_update()) {
+    if (objiter->second->is_update() || objiter->second->is_delete()) {
       assert(missing.is_missing(hoid) &&
 	     missing.missing[hoid].need == objiter->second->version);
     } else {
