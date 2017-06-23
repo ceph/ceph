@@ -1,7 +1,20 @@
 import os
 import sys
-from ceph_volume import terminal
+from ceph_volume import terminal, exceptions
 from functools import wraps
+
+
+def needs_root(func):
+    """
+    Check for super user privileges on functions/methods. Raise
+    ``SuperUserError`` with a nice message.
+    """
+    @wraps(func)
+    def is_root(*a, **kw):
+        if not os.getuid() == 0:
+            raise exceptions.SuperUserError()
+        return func
+    return is_root
 
 
 def catches(catch=None, handler=None, exit=True):
