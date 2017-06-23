@@ -11,6 +11,7 @@ roles:
 - - mon.a
   - osd.0
   - osd.1
+  - mgr.x
 - - mon.b
   - mon.c
   - osd.2
