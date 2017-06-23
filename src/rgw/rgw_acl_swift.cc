@@ -371,7 +371,7 @@ bool RGWAccessControlPolicy_SWIFTAcct::create(RGWRados * const store,
   return true;
 }
 
-void RGWAccessControlPolicy_SWIFTAcct::to_str(std::string& acl_str) const
+boost::optional<std::string> RGWAccessControlPolicy_SWIFTAcct::to_str() const
 {
   std::vector<std::string> admin;
   std::vector<std::string> readwrite;
@@ -403,6 +403,12 @@ void RGWAccessControlPolicy_SWIFTAcct::to_str(std::string& acl_str) const
     }
   }
 
+  /* If there is no grant to serialize, let's exit earlier to not return
+   * an empty JSON object which brakes the functional tests of Swift. */
+  if (admin.empty() && readwrite.empty() && readonly.empty()) {
+    return boost::none;
+  }
+
   /* Serialize the groups. */
   JSONFormatter formatter;
 
@@ -421,5 +427,5 @@ void RGWAccessControlPolicy_SWIFTAcct::to_str(std::string& acl_str) const
   std::ostringstream oss;
   formatter.flush(oss);
 
-  acl_str = oss.str();
+  return oss.str();
 }

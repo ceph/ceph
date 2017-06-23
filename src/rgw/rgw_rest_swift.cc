@@ -130,10 +130,9 @@ static void dump_account_metadata(struct req_state * const s,
   }
 
   /* Dump account ACLs */
-  string acct_acl;
-  policy.to_str(acct_acl);
-  if (acct_acl.size()) {
-    dump_header(s, "X-Account-Access-Control", std::move(acct_acl));
+  auto account_acls = policy.to_str();
+  if (account_acls) {
+    dump_header(s, "X-Account-Access-Control", std::move(*account_acls));
   }
 }
 
