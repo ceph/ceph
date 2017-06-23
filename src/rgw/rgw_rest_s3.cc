@@ -3492,13 +3492,7 @@ null_completer_factory(const boost::optional<std::string>& secret_key)
 }
 
 
-using AWSVerAbstractor = AWSEngine::VersionAbstractor;
-
-std::tuple<AWSVerAbstractor::access_key_id_t,
-           AWSVerAbstractor::client_signature_t,
-           AWSVerAbstractor::string_to_sign_t,
-           AWSVerAbstractor::signature_factory_t,
-           AWSVerAbstractor::completer_factory_t>
+AWSEngine::VersionAbstractor::auth_data_t
 AWSGeneralAbstractor::get_auth_data(const req_state* const s) const
 {
   AwsVersion version;
@@ -3525,11 +3519,7 @@ AWSGeneralAbstractor::get_v4_canonical_headers(
                                                  using_qs, false);
 }
 
-std::tuple<AWSVerAbstractor::access_key_id_t,
-           AWSVerAbstractor::client_signature_t,
-           AWSVerAbstractor::string_to_sign_t,
-           AWSVerAbstractor::signature_factory_t,
-           AWSVerAbstractor::completer_factory_t>
+AWSEngine::VersionAbstractor::auth_data_t
 AWSGeneralAbstractor::get_auth_data_v4(const req_state* const s,
                                        /* FIXME: const. */
                                        bool using_qs) const
@@ -3711,11 +3701,7 @@ AWSGeneralBoto2Abstractor::get_v4_canonical_headers(
 }
 
 
-std::tuple<AWSVerAbstractor::access_key_id_t,
-           AWSVerAbstractor::client_signature_t,
-           AWSVerAbstractor::string_to_sign_t,
-           AWSVerAbstractor::signature_factory_t,
-           AWSVerAbstractor::completer_factory_t>
+AWSEngine::VersionAbstractor::auth_data_t
 AWSGeneralAbstractor::get_auth_data_v2(const req_state* const s) const
 {
   boost::string_view access_key_id;
@@ -3779,11 +3765,7 @@ AWSGeneralAbstractor::get_auth_data_v2(const req_state* const s) const
 }
 
 
-std::tuple<AWSVerAbstractor::access_key_id_t,
-           AWSVerAbstractor::client_signature_t,
-           AWSVerAbstractor::string_to_sign_t,
-           AWSVerAbstractor::signature_factory_t,
-           AWSVerAbstractor::completer_factory_t>
+AWSEngine::VersionAbstractor::auth_data_t
 AWSBrowserUploadAbstractor::get_auth_data_v2(const req_state* const s) const
 {
   return {
@@ -3795,11 +3777,7 @@ AWSBrowserUploadAbstractor::get_auth_data_v2(const req_state* const s) const
   };
 }
 
-std::tuple<AWSVerAbstractor::access_key_id_t,
-           AWSVerAbstractor::client_signature_t,
-           AWSVerAbstractor::string_to_sign_t,
-           AWSVerAbstractor::signature_factory_t,
-           AWSVerAbstractor::completer_factory_t>
+AWSEngine::VersionAbstractor::auth_data_t
 AWSBrowserUploadAbstractor::get_auth_data_v4(const req_state* const s) const
 {
   const boost::string_view credential = s->auth.s3_postobj_creds.x_amz_credential;
@@ -3828,11 +3806,7 @@ AWSBrowserUploadAbstractor::get_auth_data_v4(const req_state* const s) const
   };
 }
 
-std::tuple<AWSVerAbstractor::access_key_id_t,
-           AWSVerAbstractor::client_signature_t,
-           AWSVerAbstractor::string_to_sign_t,
-           AWSVerAbstractor::signature_factory_t,
-           AWSVerAbstractor::completer_factory_t>
+AWSEngine::VersionAbstractor::auth_data_t
 AWSBrowserUploadAbstractor::get_auth_data(const req_state* const s) const
 {
   if (s->auth.s3_postobj_creds.x_amz_algorithm == AWS4_HMAC_SHA256_STR) {
@@ -3849,25 +3823,18 @@ AWSBrowserUploadAbstractor::get_auth_data(const req_state* const s) const
 AWSEngine::result_t
 AWSEngine::authenticate(const req_state* const s) const
 {
-  boost::string_view access_key_id;
-  boost::string_view signature;
-  VersionAbstractor::string_to_sign_t string_to_sign;
-
-  VersionAbstractor::signature_factory_t signature_factory;
-  VersionAbstractor::completer_factory_t completer_factory;
-
   /* Small reminder: an ver_abstractor is allowed to throw! */
-  std::tie(access_key_id,
-           signature,
-           string_to_sign,
-           signature_factory,
-           completer_factory) = ver_abstractor.get_auth_data(s);
+  const auto auth_data = ver_abstractor.get_auth_data(s);
 
-  if (access_key_id.empty() || signature.empty()) {
+  if (auth_data.access_key_id.empty() || auth_data.client_signature.empty()) {
     return result_t::deny(-EINVAL);
   } else {
-    return authenticate(access_key_id, signature, string_to_sign,
-                        signature_factory, completer_factory, s);
+    return authenticate(auth_data.access_key_id,
+		        auth_data.client_signature,
+			auth_data.string_to_sign,
+                        auth_data.signature_factory,
+			auth_data.completer_factory,
+			s);
   }
 }
 
