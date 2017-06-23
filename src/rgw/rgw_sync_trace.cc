@@ -41,22 +41,23 @@ void RGWSyncTraceNode::log(int level, const string& s)
   ldout(cct, level) << "RGW-SYNC:" << to_str() << dendl;
 }
 
-void RGWSyncTraceNode::finish(int ret) {
-  char buf[32];
-  snprintf(buf, sizeof(buf), "status=%d", ret);
-
-  status = buf;
-
+void RGWSyncTraceNode::finish()
+{
   manager->finish_node(this);
 }
 
 
-RGWSyncTraceNodeRef& RGWSyncTraceManager::add_node(RGWSyncTraceNode *node)
+RGWSTNCRef RGWSyncTraceManager::add_node(RGWSyncTraceNode *node)
 {
   RWLock::WLocker wl(lock);
   RGWSyncTraceNodeRef& ref = nodes[node->handle];
   ref.reset(node);
-  return ref;
+  return RGWSTNCRef(new RGWSyncTraceNodeContainer(ref));
+}
+
+RGWSyncTraceNodeContainer::~RGWSyncTraceNodeContainer()
+{
+  tn->finish();
 }
 
 void RGWSyncTraceManager::finish_node(RGWSyncTraceNode *node)

@@ -4,6 +4,7 @@
 #include "rgw_coroutine.h"
 #include "rgw_http_client.h"
 #include "rgw_meta_sync_status.h"
+#include "rgw_sync_trace.h"
 
 #include "include/stringify.h"
 #include "common/RWLock.h"
@@ -201,6 +202,8 @@ class RGWRemoteMetaLog : public RGWCoroutinesManager {
   int store_sync_info(const rgw_meta_sync_info& sync_info);
 
   std::atomic<bool> going_down = { false };
+
+  RGWSTNCRef tn;
 
 public:
   RGWRemoteMetaLog(RGWRados *_store, RGWAsyncRadosProcessor *async_rados,

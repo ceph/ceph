@@ -24,8 +24,10 @@ enum RGWSyncTraceNodeState {
 
 class RGWSyncTraceManager;
 class RGWSyncTraceNode;
+class RGWSyncTraceNodeContainer;
 
 using RGWSyncTraceNodeRef = std::shared_ptr<RGWSyncTraceNode>;
+using RGWSTNCRef = std::shared_ptr<RGWSyncTraceNodeContainer>;
 
 class RGWSyncTraceNode {
   friend class RGWSyncTraceManager;
@@ -53,8 +55,11 @@ public:
   RGWSyncTraceNode(CephContext *_cct, RGWSyncTraceManager *_manager, const RGWSyncTraceNodeRef& _parent,
            const std::string& _type, const std::string& _trigger, const std::string& _id);
 
-  void set_state(RGWSyncTraceNodeState s);
+  void set_state(RGWSyncTraceNodeState s) {
+    state = s;
+  }
   void log(int level, const std::string& s);
+  void finish();
 
   std::string to_str() {
     return prefix + " " + status;
@@ -64,11 +69,40 @@ public:
     return prefix;
   }
 
-  void finish(int ret);
-
   std::ostream& operator<<(std::ostream& os) { 
     os << to_str();
     return os;            
+  }
+};
+
+/*
+ * a container to RGWSyncTraceNodeRef, responsible to keep track
+ * of live nodes, and when last ref is dropped, calls ->finish()
+ * so that node moves to the retired list in the manager
+ */
+class RGWSyncTraceNodeContainer {
+  RGWSyncTraceNodeRef tn;
+public:
+  RGWSyncTraceNodeContainer(RGWSyncTraceNodeRef& _tn) : tn(_tn) {}
+
+  ~RGWSyncTraceNodeContainer();
+
+  RGWSyncTraceNodeRef& operator*() {
+    return tn;
+  }
+
+  RGWSyncTraceNodeRef& operator->() {
+    return tn;
+  }
+
+  void set_state(RGWSyncTraceNodeState s) {
+    return tn->set_state(s);
+  }
+  void log(int level, const std::string& s) {
+    return tn->log(level, s);
+  }
+  RGWSyncTraceNodeRef& ref() {
+    return tn;
   }
 };
 
@@ -95,7 +129,7 @@ public:
 
   const RGWSyncTraceNodeRef root_node;
 
-  RGWSyncTraceNodeRef& add_node(RGWSyncTraceNode *node);
+  RGWSTNCRef add_node(RGWSyncTraceNode *node);
   void finish_node(RGWSyncTraceNode *node);
 
 };
