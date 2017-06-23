@@ -81,8 +81,12 @@ struct MockImageCtx {
       group_spec(image_ctx.group_spec),
       layout(image_ctx.layout),
       io_work_queue(new io::MockImageRequestWQ()),
+      m_timer(image_ctx.m_timer),
+      m_timer_lock(image_ctx.m_timer_lock),
       op_work_queue(new MockContextWQ()),
       readahead_max_bytes(image_ctx.readahead_max_bytes),
+      max_write_iops(image_ctx.max_write_iops),
+      max_read_iops(image_ctx.max_read_iops),
       event_socket(image_ctx.event_socket),
       parent(NULL), operations(new MockOperations()),
       state(new MockImageState()),
@@ -262,12 +266,16 @@ struct MockImageCtx {
   std::list<Context*> async_requests_waiters;
 
   io::MockImageRequestWQ *io_work_queue;
+  SafeTimer *m_timer;
+  Mutex *m_timer_lock;
   MockContextWQ *op_work_queue;
 
   cache::MockImageCache *image_cache = nullptr;
 
   MockReadahead readahead;
   uint64_t readahead_max_bytes;
+  uint64_t max_write_iops;
+  uint64_t max_read_iops;
 
   EventSocket &event_socket;
 

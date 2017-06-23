@@ -62,6 +62,20 @@ struct ImageRequestWQ<I>::C_RefreshFinish : public Context {
 };
 
 template <typename I>
+struct ImageRequestWQ<I>::C_ThrottlingTask : public Context {
+  ImageRequestWQ *work_queue;
+  QoSThrottle *qos_throttle;
+
+  C_ThrottlingTask(ImageRequestWQ *work_queue,
+		           QoSThrottle *qos_throttle)
+    : work_queue(work_queue), qos_throttle(qos_throttle) {
+  }
+  void finish(int r) override {
+    work_queue->update_throttling(r, qos_throttle);
+  }
+};
+
+template <typename I>
 ImageRequestWQ<I>::ImageRequestWQ(I *image_ctx, const string &name,
 				  time_t ti, ThreadPool *tp)
   : ThreadPool::PointerWQ<ImageRequest<I> >(name, ti, 0, tp),
@@ -466,6 +480,11 @@ void *ImageRequestWQ<I>::_void_dequeue() {
   {
     RWLock::RLocker locker(m_lock);
     bool write_op = peek_item->is_write_op();
+    if (reserve_throttle_iops(write_op)) {
+      // do throttle
+      return nullptr;
+    }
+
     lock_required = is_lock_required(write_op);
     if (write_op) {
       if (!lock_required && m_write_blockers > 0) {
@@ -535,14 +554,29 @@ void ImageRequestWQ<I>::process(ImageRequest<I> *req) {
                  << "req=" << req << dendl;
 
   req->send();
+  bool is_write = req->is_write_op();
+  if (is_write && m_image_ctx.max_write_iops) {
+    write_qos_status.set_prev_limit(ceph_clock_now());
+  } else if (!is_write && m_image_ctx.max_read_iops) {
+    read_qos_status.set_prev_limit(ceph_clock_now());
+  }
 
   finish_queued_io(req);
-  if (req->is_write_op()) {
+  if (is_write) {
     finish_in_flight_write();
   }
   delete req;
 
   finish_in_flight_io();
+}
+
+template <typename I>
+void ImageRequestWQ<I>::schedule_throttling_task(QoSThrottle* qos_throttle,
+                                                utime_t ts) {
+  Mutex::Locker timer_locker(*m_image_ctx.throttling_timer_lock);
+  C_ThrottlingTask* throttling_task = new C_ThrottlingTask(this, qos_throttle);
+  qos_throttle->set_throttling_flag(true);
+  m_image_ctx.throttling_timer->add_event_at(ts, throttling_task);
 }
 
 template <typename I>
@@ -689,6 +723,60 @@ void ImageRequestWQ<I>::handle_blocked_writes(int r) {
   for (auto ctx : contexts) {
     ctx->complete(0);
   }
+}
+
+template <typename I>
+void ImageRequestWQ<I>::update_throttling(int r, QoSThrottle* qos_throttle) {
+  // disable throttling
+  qos_throttle->set_throttling_flag(false);
+
+  // this is not a safe callback, drop throttling_timer_lock
+  m_image_ctx.throttling_timer_lock->Unlock();
+
+  // signal worker thread
+  this->signal();
+
+  // obtain throttling_timer_lock before return to timer thread entry loop
+  m_image_ctx.throttling_timer_lock->Lock();
+}
+
+template <typename I>
+bool ImageRequestWQ<I>::reserve_throttle_iops(bool is_write) {
+  bool res = false;
+  uint64_t max_iops = 0;
+  QoSThrottle* qos_throttle = NULL;
+
+  if (is_write) {
+    max_iops = m_image_ctx.max_write_iops;
+    qos_throttle = &write_qos_status;
+  } else {
+    max_iops = m_image_ctx.max_read_iops;
+    qos_throttle = &read_qos_status;
+  }
+
+  if (max_iops && (qos_throttle->get_throttling_flag()
+     || check_throttle_iops(qos_throttle, max_iops))) {
+    res = true;
+  }
+
+  return res;
+}
+
+template <typename I>
+bool ImageRequestWQ<I>::check_throttle_iops(QoSThrottle* qos_throttle,
+                                            uint64_t max_iops) {
+  bool res = false;
+  utime_t now = ceph_clock_now();
+  utime_t cur_limit = qos_throttle->get_last_io_time();
+  cur_limit += (double)(1.0 / max_iops);
+  if (cur_limit > now) {
+    ldout(m_image_ctx.cct, 1) << "we ahead by "
+                               << cur_limit - now
+                               << ", active throttling" << dendl;
+    schedule_throttling_task(qos_throttle, cur_limit);
+    res = true;
+  }
+  return res;
 }
 
 template class librbd::io::ImageRequestWQ<librbd::ImageCtx>;

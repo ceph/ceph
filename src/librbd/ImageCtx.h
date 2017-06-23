@@ -155,6 +155,8 @@ namespace librbd {
     xlist<operation::ResizeRequest<ImageCtx>*> resize_reqs;
 
     io::ImageRequestWQ<ImageCtx> *io_work_queue;
+    SafeTimer *throttling_timer;
+    Mutex *throttling_timer_lock;
     xlist<io::AioCompletion*> completed_reqs;
     EventSocket event_socket;
 

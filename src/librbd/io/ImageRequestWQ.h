@@ -28,6 +28,30 @@ class ImageRequestWQ
 public:
   ImageRequestWQ(ImageCtxT *image_ctx, const string &name, time_t ti,
                  ThreadPool *tp);
+  class QoSThrottle {
+  public:
+    QoSThrottle() : throttling_active(false) {}
+
+    utime_t get_last_io_time() const {
+      return last_io_time;
+    }
+
+    void set_last_io_time(utime_t limit) {
+      last_io_time = limit;
+    }
+
+    void set_throttling_flag(bool flag) {
+      throttling_active = flag;
+    }
+
+    bool get_throttling_flag() {
+      return throttling_active;
+    }
+
+  private:
+    utime_t last_io_time;
+    bool throttling_active;
+  };
 
   ssize_t read(uint64_t off, uint64_t len, ReadResult &&read_result,
                int op_flags);
@@ -72,6 +96,7 @@ private:
   struct C_AcquireLock;
   struct C_BlockedWrites;
   struct C_RefreshFinish;
+  struct C_ThrottlingTask;
 
   ImageCtxT &m_image_ctx;
   mutable RWLock m_lock;
@@ -89,6 +114,8 @@ private:
   Context *m_on_shutdown = nullptr;
 
   bool is_lock_required(bool write_op) const;
+
+  QoSThrottle write_qos_status, read_qos_status;
 
   inline bool require_lock_on_read() const {
     RWLock::RLocker locker(m_lock);
@@ -111,6 +138,10 @@ private:
   void handle_acquire_lock(int r, ImageRequest<ImageCtxT> *req);
   void handle_refreshed(int r, ImageRequest<ImageCtxT> *req);
   void handle_blocked_writes(int r);
+  void schedule_throttling_task(QoSThrottle * qos_status, utime_t ts);
+  void update_throttling(int r, QoSThrottle* qos_status);
+  bool reserve_throttle_iops(bool is_write);
+  bool check_throttle_iops(QoSThrottle* qos_status, uint64_t max_iops);
 };
 
 } // namespace io
