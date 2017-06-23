@@ -18,7 +18,7 @@ struct BackTrace {
   size_t size;
   char **strings;
 
-  explicit BackTrace(int s) : skip(s) {
+  explicit BackTrace(int s) : skip(s), array{} {
 #ifdef HAVE_EXECINFO_H
     size = backtrace(array, max);
     strings = backtrace_symbols(array, size);
