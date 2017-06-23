@@ -257,7 +257,6 @@ class TestStandbyReplay(CephFSTestCase):
 
         # Create FS alpha and get mds_a to come up as active
         fs_a = self.mds_cluster.newfs("alpha")
-        fs_a.set_allow_multimds(True)
         fs_a.set_max_mds(2)
 
         self.mds_cluster.mds_restart(mds_a)
@@ -412,8 +411,6 @@ class TestMultiFilesystems(CephFSTestCase):
     def test_grow_shrink(self):
         # Usual setup...
         fs_a, fs_b = self._setup_two()
-        fs_a.set_allow_multimds(True)
-        fs_b.set_allow_multimds(True)
 
         # Increase max_mds on fs_b, see a standby take up the role
         fs_b.set_max_mds(2)
@@ -570,10 +567,8 @@ class TestMultiFilesystems(CephFSTestCase):
 
         # Create two filesystems which should have two ranks each
         fs_a = self.mds_cluster.newfs("alpha")
-        fs_a.set_allow_multimds(True)
 
         fs_b = self.mds_cluster.newfs("bravo")
-        fs_b.set_allow_multimds(True)
 
         fs_a.set_max_mds(2)
         fs_b.set_max_mds(2)

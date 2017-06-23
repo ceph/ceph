@@ -492,7 +492,6 @@ class TestStrays(CephFSTestCase):
 
     def _setup_two_ranks(self):
         # Set up two MDSs
-        self.fs.set_allow_multimds(True)
         self.fs.set_max_mds(2)
 
         # See that we have two active MDSs

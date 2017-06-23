@@ -160,7 +160,6 @@ class TestJournalRepair(CephFSTestCase):
         """
 
         # Set max_mds to 2
-        self.fs.set_allow_multimds(True)
         self.fs.set_max_mds(2)
 
         # See that we have two active MDSs
