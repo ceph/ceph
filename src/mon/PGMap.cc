@@ -821,6 +821,69 @@ void PGMapDigest::dump_object_stat_sum(
   }
 }
 
+void PGMap::calc_pool_op_latency()
+{
+  for (auto &p : pool_op_stat) {
+    auto &op_stat = p.second;
+    uint64_t op_average_latency = 0;
+    uint64_t rd_average_latency = 0;
+    uint64_t wr_average_latency = 0;
+
+    if (op_stat.op_num)
+      op_average_latency = op_stat.op_latency / op_stat.op_num;
+
+    if (op_stat.rd_num)
+      rd_average_latency = op_stat.rd_latency / op_stat.rd_num;
+
+    if (op_stat.wr_num)
+      wr_average_latency = op_stat.wr_latency / op_stat.wr_num;
+
+    if (g_conf->mgr_op_latency_in_us) {
+      op_average_latency /= 1000;
+      rd_average_latency /= 1000;
+      wr_average_latency /= 1000;
+    } else { // to milliseconds
+      op_average_latency /= 1000000;
+      rd_average_latency /= 1000000;
+      wr_average_latency /= 1000000;
+    }
+
+    op_stat.op_average_latency = op_average_latency;
+    op_stat.rd_average_latency = rd_average_latency;
+    op_stat.wr_average_latency = wr_average_latency;
+
+    op_stat.op_num = 0;
+    op_stat.op_latency = 0;
+    op_stat.rd_num = 0;
+    op_stat.rd_latency = 0;
+    op_stat.wr_num = 0;
+    op_stat.wr_latency = 0;
+  }
+}
+
+uint64_t PGMap::get_pool_op_latency(int pool, int type) const
+{
+  uint64_t average_latency = 0;
+  auto it = pool_op_stat.find(pool);
+  if (it != pool_op_stat.end()) {
+    auto &op_stat = it->second;
+    switch (type) {
+    case op_latency_type_misc:
+      average_latency = op_stat.op_average_latency;
+      break;
+    case op_latency_type_rd:
+      average_latency = op_stat.rd_average_latency;
+      break;
+    case op_latency_type_wr:
+      average_latency = op_stat.wr_average_latency;
+      break;
+    default:
+      break;
+    }
+  }
+  return average_latency;
+}
+
 int64_t PGMap::get_rule_avail(const OSDMap& osdmap, int ruleno) const
 {
   map<int,float> wm;
@@ -1670,6 +1733,12 @@ void PGMap::dump_pool_stats(Formatter *f) const
     if (q != num_pg_by_pool.end())
       f->dump_unsigned("num_pg", q->second);
     p->second.dump(f);
+    f->dump_unsigned("op_latency",
+          get_pool_op_latency(p->first, op_latency_type_misc));
+    f->dump_unsigned("rd_latency",
+          get_pool_op_latency(p->first, op_latency_type_rd));
+    f->dump_unsigned("wr_latency",
+          get_pool_op_latency(p->first, op_latency_type_wr));
     f->close_section();
   }
   f->close_section();
@@ -1809,8 +1878,14 @@ void PGMap::dump_pool_stats(ostream& ss, bool header) const
     tab.define_column("BYTES", TextTable::LEFT, TextTable::RIGHT);
     tab.define_column("LOG", TextTable::LEFT, TextTable::RIGHT);
     tab.define_column("DISK_LOG", TextTable::LEFT, TextTable::RIGHT);
+    tab.define_column("OP_LATENCY", TextTable::LEFT, TextTable::RIGHT);
+    tab.define_column("RD_LATENCY", TextTable::LEFT, TextTable::RIGHT);
+    tab.define_column("WR_LATENCY", TextTable::LEFT, TextTable::RIGHT);
   } else {
     tab.define_column("", TextTable::LEFT, TextTable::LEFT);
+    tab.define_column("", TextTable::LEFT, TextTable::RIGHT);
+    tab.define_column("", TextTable::LEFT, TextTable::RIGHT);
+    tab.define_column("", TextTable::LEFT, TextTable::RIGHT);
     tab.define_column("", TextTable::LEFT, TextTable::RIGHT);
     tab.define_column("", TextTable::LEFT, TextTable::RIGHT);
     tab.define_column("", TextTable::LEFT, TextTable::RIGHT);
@@ -1833,6 +1908,9 @@ void PGMap::dump_pool_stats(ostream& ss, bool header) const
         << p->second.stats.sum.num_bytes
         << p->second.log_size
         << p->second.ondisk_log_size
+        << get_pool_op_latency(p->first, op_latency_type_misc)
+        << get_pool_op_latency(p->first, op_latency_type_rd)
+        << get_pool_op_latency(p->first, op_latency_type_wr)
         << TextTable::endrow;
   }
 
