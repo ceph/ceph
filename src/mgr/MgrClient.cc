@@ -218,8 +218,8 @@ void MgrClient::send_report()
       }
     }
     for (const auto &i : by_path) {
-      auto& path = i.first;
-      auto& data = *(i.second);
+      auto path = i.first;
+      auto data = *(i.second);
 
       if (session->declared.count(path) == 0) {
 	ldout(cct,20) << __func__ << " declare " << path << dendl;
