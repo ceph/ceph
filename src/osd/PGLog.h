@@ -799,7 +799,7 @@ protected:
       assert(objiter->second->version > last_divergent_update);
 
       // ensure missing has been updated appropriately
-      if (objiter->second->is_update()) {
+      if (objiter->second->is_update() || objiter->second->is_client_delete()) {
 	assert(missing.is_missing(hoid) &&
 	       missing.get_items().at(hoid).need == objiter->second->version);
       } else {
