@@ -224,6 +224,7 @@ Major Changes from Kraken
     - ``ceph mon feature ls`` will list monitor features recorded in the
       MonMap.  ``ceph mon feature set`` will set an optional feature (none of
       these exist yet).
+    - ``ceph tell <daemon> help`` will now return a usage summary.
 
 .. _Read more about EC overwrites: ../rados/operations/erasure-code/#erasure-coding-with-overwrites
 
