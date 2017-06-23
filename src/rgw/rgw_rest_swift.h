@@ -235,6 +235,7 @@ public:
   void execute() override;
   void send_response() override;
   static void list_swift_data(Formatter& formatter, const md_config_t& config, RGWRados& store);
+  static void list_tempauth_data(Formatter& formatter, const md_config_t& config, RGWRados& store);
   static void list_tempurl_data(Formatter& formatter, const md_config_t& config, RGWRados& store);
   static void list_slo_data(Formatter& formatter, const md_config_t& config, RGWRados& store);
   static bool is_expired(const std::string& expires, CephContext* cct);
