@@ -649,11 +649,14 @@ EOF
         run 'mgr' $CEPH_BIN/ceph-mgr -i $name $ARGS
     done
 
-    SF=`mktemp`
-    ceph_adm tell mgr restful create-self-signed-cert
-    ceph_adm tell mgr restful create-key admin -o $SF
-    RESTFUL_SECRET=`cat $SF`
-    rm $SF
+    if ceph_adm tell mgr restful create-self-signed-cert; then
+        SF=`mktemp`
+        ceph_adm tell mgr restful create-key admin -o $SF
+        RESTFUL_SECRET=`cat $SF`
+        rm $SF
+    else 
+        echo MGR Restful is not working, perhaps the package is not installed?
+    fi
 }
 
 start_mds() {
