@@ -41,6 +41,7 @@ using namespace std;
 // forward declaration
 class CephContext;
 class CrushWrapper;
+class health_check_map_t;
 
 // FIXME C++11 does not have std::equal for two differently-typed containers.
 // use this until we move to c++14
@@ -1362,6 +1363,8 @@ public:
   void dump(Formatter *f) const;
   static void generate_test_instances(list<OSDMap*>& o);
   bool check_new_blacklist_entries() const { return new_blacklist_entries; }
+
+  void check_health(health_check_map_t *checks) const;
 };
 WRITE_CLASS_ENCODER_FEATURES(OSDMap)
 WRITE_CLASS_ENCODER_FEATURES(OSDMap::Incremental)
