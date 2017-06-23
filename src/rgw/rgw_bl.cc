@@ -358,13 +358,30 @@ int RGWBL::bucket_bl_deliver(string opslog_obj, const rgw_bucket target_bucket,
   struct rgw_log_entry entry;
   int entry_nums = 0;
   std::vector<std::string> uploaded_obj_keys;
+
+  rados::cls::lock::Lock l(opslog_obj);
+  librados::IoCtx *ctx = store->get_log_pool_ctx();
+
+  ret = l.lock_exclusive(ctx, opslog_obj);
+  if (ret < 0) {
+    ldout(cct, 0) << "RGWBL::bucket_bl_deliver failed to acquire lock "
+                  << opslog_obj << " ret: " << ret << dendl;
+    // The positive return value is intended, failed to get lock should not
+    // affect delivering other ops logs which are not locked.
+    // If return negative value, the loop in bucket_bl_process will break,
+    // the ops logs which are not locked will be not delivered.
+    // If return 0, the locked ops log will be removed.
+    // So we return positive value EBUSY here.
+    ret = EBUSY;
+    goto exit;
+  }
  
   do {
     ret = store->log_show_next(sh, &entry);
     if (ret < 0) {
       ldout(cct, 20) << "RGWBL::bucket_bl_deliver log_show_next obj=" << opslog_obj
                      << " failed ret=" << cpp_strerror(-ret) << dendl;
-      return ret;
+      goto exit;
     }
     
 #define MAX_OPSLOG_UPLOAD_ENTRIES 10000
@@ -386,7 +403,8 @@ int RGWBL::bucket_bl_deliver(string opslog_obj, const rgw_bucket target_bucket,
       string target_key = render_target_key(cct, target_prefix);
       if (target_key.empty()) {
         ldout(cct, 0) << __func__ << " render target object failed" << dendl;
-        return -1;
+        ret = -EINVAL;
+        goto exit;
       }
 
       rgw_obj tobject(target_bucket, target_key);
@@ -415,7 +433,8 @@ int RGWBL::bucket_bl_deliver(string opslog_obj, const rgw_bucket target_bucket,
           } 
           ldout(cct, 0) << __func__ << " get bucket_info failed! ret = " 
                         << bucket_ret << dendl;
-          return bucket_ret;
+          ret = bucket_ret;
+          goto exit;
         } 
         
         for (auto key_iter = uploaded_obj_keys.begin(); key_iter != uploaded_obj_keys.end(); key_iter++) {
@@ -426,12 +445,19 @@ int RGWBL::bucket_bl_deliver(string opslog_obj, const rgw_bucket target_bucket,
                           << del_ret << " obj_key = " << target_key << dendl;
           }
         }
-        
-        return upload_ret;
+
+        ret = upload_ret;
+        goto exit;
       }
       uploaded_obj_keys.push_back(target_key);  
     }
   } while (ret > 0);
+
+exit:
+  l.unlock(ctx, opslog_obj);
+  if (ret != 0) {
+    return ret;
+  }
 
   ldout(cct, 20) << __func__ << " cleanup phrase:" << dendl;
   int remove_ret = bucket_bl_remove(opslog_obj);
