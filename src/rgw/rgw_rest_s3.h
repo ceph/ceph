@@ -697,12 +697,15 @@ public:
       std::function<rgw::auth::Completer::cmplptr_t(
         const boost::optional<std::string>& secret_key)>;
 
-    virtual std::tuple<access_key_id_t,
-                       client_signature_t,
-                       string_to_sign_t,
-                       signature_factory_t,
-                       completer_factory_t>
-    get_auth_data(const req_state* s) const = 0;
+    struct auth_data_t {
+      access_key_id_t access_key_id;
+      client_signature_t client_signature;
+      string_to_sign_t string_to_sign;
+      signature_factory_t signature_factory;
+      completer_factory_t completer_factory;
+    };
+
+    virtual auth_data_t get_auth_data(const req_state* s) const = 0;
   };
 
 protected:
@@ -745,31 +748,15 @@ class AWSGeneralAbstractor : public AWSEngine::VersionAbstractor {
                            const boost::string_view& signedheaders,
                            const bool using_qs) const;
 
-  std::tuple<access_key_id_t,
-             client_signature_t,
-             string_to_sign_t,
-             signature_factory_t,
-             completer_factory_t>
-  get_auth_data_v2(const req_state* s) const;
-
-  std::tuple<access_key_id_t,
-             client_signature_t,
-             string_to_sign_t,
-             signature_factory_t,
-             completer_factory_t>
-  get_auth_data_v4(const req_state* s, bool using_qs) const;
+  auth_data_t get_auth_data_v2(const req_state* s) const;
+  auth_data_t get_auth_data_v4(const req_state* s, bool using_qs) const;
 
 public:
   AWSGeneralAbstractor(CephContext* const cct)
     : cct(cct) {
   }
 
-  std::tuple<access_key_id_t,
-             client_signature_t,
-             string_to_sign_t,
-             signature_factory_t,
-             completer_factory_t>
-  get_auth_data(const req_state* s) const override;
+  auth_data_t get_auth_data(const req_state* s) const override;
 };
 
 class AWSGeneralBoto2Abstractor : public AWSGeneralAbstractor {
@@ -788,12 +775,6 @@ class AWSBrowserUploadAbstractor : public AWSEngine::VersionAbstractor {
                        static_cast<std::string::size_type>(bl.length()));
   }
 
-  using auth_data_t = std::tuple<access_key_id_t,
-                                 client_signature_t,
-                                 string_to_sign_t,
-                                 signature_factory_t,
-                                 completer_factory_t>;
-
   auth_data_t get_auth_data_v2(const req_state* s) const;
   auth_data_t get_auth_data_v4(const req_state* s) const;
 
@@ -801,12 +782,7 @@ public:
   AWSBrowserUploadAbstractor(CephContext*) {
   }
 
-  std::tuple<access_key_id_t,
-             client_signature_t,
-             string_to_sign_t,
-             signature_factory_t,
-             completer_factory_t>
-  get_auth_data(const req_state* s) const override;
+  auth_data_t get_auth_data(const req_state* s) const override;
 };
 
 
