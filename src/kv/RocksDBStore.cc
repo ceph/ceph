@@ -716,8 +716,12 @@ int RocksDBStore::get(
     std::string value;
     std::string bound = combine_strings(prefix, *i);
     auto status = db->Get(rocksdb::ReadOptions(), rocksdb::Slice(bound), &value);
-    if (status.ok())
+    if (status.ok()) {
       (*out)[*i].append(value);
+    } else if (status.IsIOError()) {
+      ceph_abort_msg(cct, status.ToString());
+    }
+
   }
   utime_t lat = ceph_clock_now() - start;
   logger->inc(l_rocksdb_gets);
@@ -739,8 +743,10 @@ int RocksDBStore::get(
   s = db->Get(rocksdb::ReadOptions(), rocksdb::Slice(k), &value);
   if (s.ok()) {
     out->append(value);
-  } else {
+  } else if (s.IsNotFound()) {
     r = -ENOENT;
+  } else {
+    ceph_abort_msg(cct, s.ToString());
   }
   utime_t lat = ceph_clock_now() - start;
   logger->inc(l_rocksdb_gets);
@@ -763,8 +769,10 @@ int RocksDBStore::get(
   s = db->Get(rocksdb::ReadOptions(), rocksdb::Slice(k), &value);
   if (s.ok()) {
     out->append(value);
-  } else {
+  } else if (s.IsNotFound()) {
     r = -ENOENT;
+  } else {
+    ceph_abort_msg(cct, s.ToString());
   }
   utime_t lat = ceph_clock_now() - start;
   logger->inc(l_rocksdb_gets);
@@ -882,17 +890,20 @@ RocksDBStore::RocksDBWholeSpaceIteratorImpl::~RocksDBWholeSpaceIteratorImpl()
 int RocksDBStore::RocksDBWholeSpaceIteratorImpl::seek_to_first()
 {
   dbiter->SeekToFirst();
+  assert(!dbiter->status().IsIOError());
   return dbiter->status().ok() ? 0 : -1;
 }
 int RocksDBStore::RocksDBWholeSpaceIteratorImpl::seek_to_first(const string &prefix)
 {
   rocksdb::Slice slice_prefix(prefix);
   dbiter->Seek(slice_prefix);
+  assert(!dbiter->status().IsIOError());
   return dbiter->status().ok() ? 0 : -1;
 }
 int RocksDBStore::RocksDBWholeSpaceIteratorImpl::seek_to_last()
 {
   dbiter->SeekToLast();
+  assert(!dbiter->status().IsIOError());
   return dbiter->status().ok() ? 0 : -1;
 }
 int RocksDBStore::RocksDBWholeSpaceIteratorImpl::seek_to_last(const string &prefix)
@@ -934,6 +945,7 @@ int RocksDBStore::RocksDBWholeSpaceIteratorImpl::next()
   if (valid()) {
     dbiter->Next();
   }
+  assert(!dbiter->status().IsIOError());
   return dbiter->status().ok() ? 0 : -1;
 }
 int RocksDBStore::RocksDBWholeSpaceIteratorImpl::prev()
@@ -941,6 +953,7 @@ int RocksDBStore::RocksDBWholeSpaceIteratorImpl::prev()
   if (valid()) {
     dbiter->Prev();
   }
+  assert(!dbiter->status().IsIOError());
   return dbiter->status().ok() ? 0 : -1;
 }
 string RocksDBStore::RocksDBWholeSpaceIteratorImpl::key()
