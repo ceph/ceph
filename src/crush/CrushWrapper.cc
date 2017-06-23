@@ -1537,21 +1537,24 @@ int CrushWrapper::bucket_remove_item(crush_bucket *bucket, int item)
   return crush_bucket_remove_item(crush, bucket, item);
 }
 
-int CrushWrapper::update_device_class(CephContext *cct, int id, const string& class_name, const string& name)
+int CrushWrapper::update_device_class(int id,
+                                      const string& class_name,
+                                      const string& name,
+                                      ostream *ss)
 {
   int class_id = get_class_id(class_name);
   if (class_id < 0) {
-    ldout(cct, 0) << "update_device_class class " << class_name << " does not exist " << dendl;
+    *ss << "class " << class_name << " does not exist";
     return -ENOENT;
   }
   if (id < 0) {
-    ldout(cct, 0) << "update_device_class " << name << " id " << id << " is negative " << dendl;
+    *ss << name << " id " << id << " is negative";
     return -EINVAL;
   }
   assert(item_exists(id));
 
   if (class_map.count(id) != 0 && class_map[id] == class_id) {
-    ldout(cct, 5) << "update_device_class " << name << " already set to class " << class_name << dendl;
+    *ss << name << " already set to class " << class_name;
     return 0;
   }
 
