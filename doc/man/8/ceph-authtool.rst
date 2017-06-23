@@ -21,6 +21,7 @@ Synopsis
   [ -a | --add-key *base64_key* ]
   [ --cap *subsystem* *capability* ]
   [ --caps *capfile* ]
+  [ --mode *mode* ]
 
 
 Description
@@ -86,6 +87,10 @@ Options
 .. option:: --caps *capsfile*
 
    will set all of capabilities associated with a given key, for all subsystems
+
+ .. option:: --mode *mode*
+
+    will set the desired file mode to the keyring e.g: 0644, defaults to 0600
 
 
 Capabilities
@@ -172,9 +177,9 @@ value is the capability string (see above).
 Example
 =======
 
-To create a new keyring containing a key for client.foo::
+To create a new keyring containing a key for client.foo with a 0644 file mode::
 
-        ceph-authtool -C -n client.foo --gen-key keyring
+        ceph-authtool -C -n client.foo --gen-key keyring --mode 0644
 
 To associate some capabilities with the key (namely, the ability to
 mount a Ceph filesystem)::
