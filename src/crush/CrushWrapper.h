@@ -466,6 +466,22 @@ public:
     class_name.erase(class_id);
     return 0;
   }
+
+  int rename_class(const string& srcname, const string& dstname) {
+    auto p = class_rname.find(srcname);
+    if (p == class_rname.end())
+      return -ENOENT;
+    int class_id = p->second;
+    auto q = class_name.find(class_id);
+    if (q == class_name.end())
+      return -ENOENT;
+    class_rname.erase(srcname);
+    class_name.erase(class_id);
+    class_rname[dstname] = class_id;
+    class_name[class_id] = dstname;
+    return 0;
+  }
+
   int get_or_create_class_id(const string& name) {
     int c = get_class_id(name);
     if (c < 0) {
