@@ -14,11 +14,11 @@ struct BackTrace {
   const static int max = 100;
 
   int skip;
-  void *array[max];
+  void *array[max]{};
   size_t size;
   char **strings;
 
-  explicit BackTrace(int s) : skip(s), array{} {
+  explicit BackTrace(int s) : skip(s) {
 #ifdef HAVE_EXECINFO_H
     size = backtrace(array, max);
     strings = backtrace_symbols(array, size);
