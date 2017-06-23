@@ -709,6 +709,7 @@ OPTION(osd_erasure_code_plugins, OPT_STR,
        " isa"
 #endif
        ) // list of erasure code plugins
+OPTION(osd_pool_default_expected_objects_per_pg, OPT_U64, 0)
 
 // Allows the "peered" state for recovery and backfill below min_size
 OPTION(osd_allow_recovery_below_min_size, OPT_BOOL, true)
@@ -1305,7 +1306,7 @@ OPTION(filestore_op_thread_timeout, OPT_INT, 60)
 OPTION(filestore_op_thread_suicide_timeout, OPT_INT, 180)
 OPTION(filestore_commit_timeout, OPT_FLOAT, 600)
 OPTION(filestore_fiemap_threshold, OPT_INT, 4096)
-OPTION(filestore_merge_threshold, OPT_INT, 10)
+OPTION(filestore_merge_threshold, OPT_INT, -10)
 OPTION(filestore_split_multiple, OPT_INT, 2)
 OPTION(filestore_update_to, OPT_INT, 1000)
 OPTION(filestore_blackhole, OPT_BOOL, false)     // drop any new transactions on the floor
