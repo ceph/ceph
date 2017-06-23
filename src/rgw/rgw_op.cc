@@ -5156,7 +5156,7 @@ void RGWCompleteMultipart::execute()
           op_ret = -ERR_INVALID_PART;
           return;
         }
-        int new_ofs; // offset in compression data for new part
+        int64_t new_ofs; // offset in compression data for new part
         if (cs_info.blocks.size() > 0)
           new_ofs = cs_info.blocks.back().new_ofs + cs_info.blocks.back().len;
         else
