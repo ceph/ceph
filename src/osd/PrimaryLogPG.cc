@@ -4634,6 +4634,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
   const hobject_t& soid = oi.soid;
 
   bool first_read = true;
+  bool cmpext_munged = false;
 
   PGTransaction* t = ctx->op_t.get();
 
@@ -4652,6 +4653,19 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
     dout(10) << "do_osd_op  " << osd_op << dendl;
 
     bufferlist::iterator bp = osd_op.indata.begin();
+
+    if ((op.op == CEPH_OSD_OP_CHECKSUM)
+			    && (osd_op.indata.length() > sizeof(op.checksum))) {
+      // CEPH_OSD_OP_CHECKSUM opcode was used in SES < 5 for CMPEXT.
+      // This is detectable via the data buffer size, which is *always* a single
+      // sector for old cmpext reqs.
+      dout(10) << "munging CACHE_PIN -> CMPEXT datalen:"
+	       << osd_op.indata.length() << " payloadlen:"
+	       << op.payload_len << " sizeof(struct):"
+	       << sizeof(op.checksum) << dendl;
+      op.op = CEPH_OSD_OP_CMPEXT;
+      cmpext_munged = true;
+    }
 
     // user-visible modifcation?
     switch (op.op) {
@@ -4703,6 +4717,12 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
       ++ctx->num_read;
       tracepoint(osd, do_osd_op_pre_extent_cmp, soid.oid.name.c_str(), soid.snap.val, oi.size, oi.truncate_seq, op.extent.offset, op.extent.length, op.extent.truncate_size, op.extent.truncate_seq);
       result = do_extent_cmp(ctx, osd_op);
+      if (cmpext_munged && (result <= -MAX_ERRNO)) {
+	dout(10) << "munging mismatch: " << (-result - MAX_ERRNO) << dendl;
+	// SES < 5 mismatch returns -EILSEQ, with offset sent as response data
+	::encode(-result - MAX_ERRNO, osd_op.outdata);
+	result = -EILSEQ;
+      }
       break;
 
     case CEPH_OSD_OP_SYNC_READ:
@@ -4799,6 +4819,11 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
       break;
 
     case CEPH_OSD_OP_CHECKSUM:
+      derr << "CEPH_OSD_OP_CHECKSUM: datalen:"
+	       << osd_op.indata.length() << " payloadlen:"
+	       << op.payload_len << " sizeof(struct):"
+	       << sizeof(op.checksum) << dendl;
+
       ++ctx->num_read;
       {
 	tracepoint(osd, do_osd_op_pre_checksum, soid.oid.name.c_str(),
