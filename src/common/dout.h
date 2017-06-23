@@ -16,6 +16,8 @@
 #ifndef CEPH_DOUT_H
 #define CEPH_DOUT_H
 
+#include <type_traits>
+
 #include "global/global_context.h"
 #include "common/config.h"
 #include "common/likely.h"
@@ -50,10 +52,13 @@ public:
     if (0) {								\
       char __array[((v >= -1) && (v <= 200)) ? 0 : -1] __attribute__((unused)); \
     }									\
-    static size_t _log_exp_length=80; \
+    static size_t _log_exp_length = 80; 				\
     ceph::logging::Entry *_dout_e = cct->_log->create_entry(v, sub, &_log_exp_length);	\
     ostream _dout_os(&_dout_e->m_streambuf);				\
-    CephContext *_dout_cct = cct;					\
+    static_assert(std::is_convertible<decltype(&*cct), 			\
+				      CephContext* >::value,		\
+		  "provided cct must be compatible with CephContext*"); \
+    auto _dout_cct = cct;						\
     std::ostream* _dout = &_dout_os;
 
 #define lsubdout(cct, sub, v)  dout_impl(cct, ceph_subsys_##sub, v) dout_prefix
