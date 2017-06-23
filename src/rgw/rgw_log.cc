@@ -71,6 +71,27 @@ string render_log_object_name(const string& format,
       case 'n':
 	o += bucket_name;
 	continue;
+      case 'u':
+        {
+#define OPSLOG_UNIQUE_STRING_LEN    16
+          static bool unique_str_specified = false;
+          static std::string unique_str;
+          if (!unique_str_specified) {
+            unique_str_specified = true;
+            char unique_string_buf[OPSLOG_UNIQUE_STRING_LEN + 1];
+            int get_randstr_ret = gen_rand_alphanumeric_plain(g_ceph_context, unique_string_buf,
+                                                              sizeof(unique_string_buf));
+            if (get_randstr_ret < 0) {
+              char pid_buf[8];
+              sprintf(pid_buf, "%d", ::getpid());
+              unique_str = std::string(pid_buf);
+            } else {
+              unique_str = std::string(unique_string_buf);
+            }
+          }
+          o += unique_str;
+        }
+	continue;
       default:
 	// unknown code
 	sprintf(buf, "%%%c", format[i]);
@@ -406,6 +427,7 @@ int rgw_log_op(RGWRados *store, RGWREST* const rest, struct req_state *s,
 
   std::string oid = render_log_object_name(s->cct->_conf->rgw_log_object_name, &bdt,
                                            s->bucket.bucket_id, entry.bucket);
+  ldout(s->cct, 15) << "rgw_log_op get ops log obj oid: " << oid << dendl;
 
   rados::cls::lock::Lock l(oid);
   utime_t time(3600, 0);               // the default time granularity of ops log is hour, so set the duration of lock to 3600 secs.
