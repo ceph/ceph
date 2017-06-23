@@ -897,7 +897,7 @@ public:
                             ) const override {
     return aplptr_t(
       new rgw::auth::RemoteApplier(cct, store, std::move(acl_alg), info,
-                                   false /* no implicit tenants */));
+                                   cct->_conf->rgw_keystone_implicit_tenants));
   }
 
   aplptr_t create_apl_local(CephContext* const cct,
