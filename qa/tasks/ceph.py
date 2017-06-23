@@ -327,6 +327,17 @@ def crush_setup(ctx, config):
 
 
 @contextlib.contextmanager
+def create_rbd_pool(ctx, config):
+    cluster_name = config['cluster']
+    first_mon = teuthology.get_first_mon(ctx, config, cluster_name)
+    (mon_remote,) = ctx.cluster.only(first_mon).remotes.iterkeys()
+    log.info('Creating RBD pool')
+    mon_remote.run(
+        args=['sudo', 'ceph', '--cluster', cluster_name,
+              'osd', 'pool', 'create', 'rbd', '8'])
+    yield
+
+@contextlib.contextmanager
 def cephfs_setup(ctx, config):
     cluster_name = config['cluster']
     testdir = teuthology.get_testdir(ctx)
@@ -1578,6 +1589,7 @@ def task(ctx, config):
         lambda: run_daemon(ctx=ctx, config=config, type_='mgr'),
         lambda: crush_setup(ctx=ctx, config=config),
         lambda: run_daemon(ctx=ctx, config=config, type_='osd'),
+        lambda: create_rbd_pool(ctx=ctx, config=config),
         lambda: cephfs_setup(ctx=ctx, config=config),
         lambda: run_daemon(ctx=ctx, config=config, type_='mds'),
     ]
