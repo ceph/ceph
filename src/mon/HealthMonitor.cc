@@ -265,6 +265,31 @@ bool HealthMonitor::check_member_health()
 				   mon->monmap->get_inst(mon->get_leader()));
     }
   }
+
+  // OSD_NO_DOWN_OUT_INTERVAL
+  {
+    // Warn if 'mon_osd_down_out_interval' is set to zero.
+    // Having this option set to zero on the leader acts much like the
+    // 'noout' flag.  It's hard to figure out what's going wrong with clusters
+    // without the 'noout' flag set but acting like that just the same, so
+    // we report a HEALTH_WARN in case this option is set to zero.
+    // This is an ugly hack to get the warning out, but until we find a way
+    // to spread global options throughout the mon cluster and have all mons
+    // using a base set of the same options, we need to work around this sort
+    // of things.
+    // There's also the obvious drawback that if this is set on a single
+    // monitor on a 3-monitor cluster, this warning will only be shown every
+    // third monitor connection.
+    if (g_conf->mon_warn_on_osd_down_out_interval_zero &&
+        g_conf->mon_osd_down_out_interval == 0) {
+      ostringstream ss, ds;
+      ss << "mon%plurals% %names %hasorhave% mon_osd_down_out_interval set to 0";
+      auto& d = next.add("OSD_NO_DOWN_OUT_INTERVAL", HEALTH_WARN, ss.str());
+      ds << "mon." << mon->name << " has mon_osd_down_out_interval set to 0";
+      d.detail.push_back(ds.str());
+    }
+  }
+
   return changed;
 }
 
