@@ -2545,8 +2545,8 @@ void Monitor::log_health(
     if (q == previous.checks.end()) {
       // new
       ostringstream ss;
-      ss << p.second.severity << " " << p.first << ": "
-	 << p.second.summary;
+      ss << "Health check failed: " << p.second.summary << " ("
+         << p.first << ")";
       if (p.second.severity == HEALTH_WARN)
 	clog->warn() << ss.str();
       else
@@ -2556,8 +2556,7 @@ void Monitor::log_health(
 	  p.second.severity != q->second.severity) {
 	// summary or severity changed (ignore detail changes at this level)
 	ostringstream ss;
-	ss << p.second.severity << " " << p.first << " (update): "
-	   << p.second.summary;
+        ss << "Health check update: " << p.second.summary << " (" << p.first << ")";
 	if (p.second.severity == HEALTH_WARN)
 	  clog->warn() << ss.str();
 	else
@@ -2569,8 +2568,34 @@ void Monitor::log_health(
     if (!updated.checks.count(p.first)) {
       // cleared
       ostringstream ss;
-      ss << HEALTH_OK << " " << p.first << ": " << p.second.summary;
-      clog->info() << ss.str();
+      if (p.first == "DEGRADED_OBJECTS") {
+        clog->info() << "All degraded objects recovered";
+      } else if (p.first == "OSD_FLAGS") {
+        clog->info() << "OSD flags cleared";
+      } else {
+        clog->info() << "Health check cleared: " << p.first << " (was: "
+                     << p.second.summary << ")";
+      }
+    }
+  }
+
+  if (previous.checks.size() && updated.checks.size() == 0) {
+    // We might be going into a fully healthy state, check
+    // other subsystems
+    bool any_checks = false;
+    for (auto& svc : paxos_service) {
+      if (&(svc->get_health_checks()) == &(previous)) {
+        // Ignore the ones we're clearing right now
+        continue;
+      }
+
+      if (svc->get_health_checks().checks.size() > 0) {
+        any_checks = true;
+        break;
+      }
+    }
+    if (!any_checks) {
+      clog->info() << "Cluster is now healthy";
     }
   }
 }
