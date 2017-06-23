@@ -15,6 +15,7 @@
 #include "common/Readahead.h"
 #include "common/RWLock.h"
 #include "common/snap_types.h"
+#include "common/Timer.h"
 #include "common/zipkin_trace.h"
 
 #include "include/buffer_fwd.h"
@@ -155,6 +156,8 @@ namespace librbd {
     xlist<operation::ResizeRequest<ImageCtx>*> resize_reqs;
 
     io::ImageRequestWQ<ImageCtx> *io_work_queue;
+    SafeTimer *m_timer;
+    Mutex *m_timer_lock;
     xlist<io::AioCompletion*> completed_reqs;
     EventSocket event_socket;
 

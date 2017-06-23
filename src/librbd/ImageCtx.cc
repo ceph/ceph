@@ -197,7 +197,9 @@ struct C_InvalidateCache : public Context {
       state(new ImageState<>(this)),
       operations(new Operations<>(*this)),
       exclusive_lock(nullptr), object_map(nullptr),
-      io_work_queue(nullptr), op_work_queue(nullptr),
+      io_work_queue(nullptr),
+      m_timer(nullptr), m_timer_lock(nullptr),
+      op_work_queue(nullptr),
       asok_hook(nullptr),
       trace_endpoint("librbd")
   {
@@ -210,6 +212,7 @@ struct C_InvalidateCache : public Context {
 
     ThreadPool *thread_pool;
     get_thread_pool_instance(cct, &thread_pool, &op_work_queue);
+    get_timer_instance(cct, &m_timer, &m_timer_lock);
     io_work_queue = new io::ImageRequestWQ<>(
       this, "librbd::io_work_queue", cct->_conf->rbd_op_thread_timeout,
       thread_pool);
