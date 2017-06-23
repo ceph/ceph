@@ -99,7 +99,6 @@ class TestSessionMap(CephFSTestCase):
         self.fs.wait_for_daemons()
 
         # I would like two MDSs, so that I can do an export dir later
-        self.fs.set_allow_multimds(True)
         self.fs.set_max_mds(2)
         self.fs.wait_for_daemons()
 
