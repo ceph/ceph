@@ -3608,11 +3608,13 @@ AWSGeneralAbstractor::get_auth_data_v4(const req_state* const s,
    * aws4_auth_needs_complete and aws4_auth_streaming_mode are set to false
    * by default. We don't need to change that. */
   if (is_v4_payload_unsigned(exp_payload_hash) || is_v4_payload_empty(s)) {
-    return std::make_tuple(access_key_id,
-                           client_signature,
-                           std::move(string_to_sign),
-                           sig_factory,
-                           null_completer_factory);
+    return {
+      access_key_id,
+      client_signature,
+      std::move(string_to_sign),
+      sig_factory,
+      null_completer_factory
+    };
   } else {
     /* We're going to handle a signed payload. Be aware that even empty HTTP
      * body (no payload) requires verification:
@@ -3645,11 +3647,13 @@ AWSGeneralAbstractor::get_auth_data_v4(const req_state* const s,
       const auto cmpl_factory = std::bind(AWSv4ComplSingle::create,
                                           s,
                                           std::placeholders::_1);
-      return std::make_tuple(access_key_id,
-                             client_signature,
-                             std::move(string_to_sign),
-                             sig_factory,
-                             cmpl_factory);
+      return {
+        access_key_id,
+        client_signature,
+        std::move(string_to_sign),
+        sig_factory,
+        cmpl_factory
+      };
     } else {
       /* IMHO "streamed" doesn't fit too good here. I would prefer to call
        * it "chunked" but let's be coherent with Amazon's terminology. */
@@ -3685,11 +3689,13 @@ AWSGeneralAbstractor::get_auth_data_v4(const req_state* const s,
                                           credential_scope,
                                           client_signature,
                                           std::placeholders::_1);
-      return std::make_tuple(access_key_id,
-                             client_signature,
-                             std::move(string_to_sign),
-                             sig_factory,
-                             cmpl_factory);
+      return {
+        access_key_id,
+        client_signature,
+        std::move(string_to_sign),
+        sig_factory,
+        cmpl_factory
+      };
     }
   }
 }
@@ -3764,11 +3770,13 @@ AWSGeneralAbstractor::get_auth_data_v2(const req_state* const s) const
     throw -ERR_REQUEST_TIME_SKEWED;
   }
 
-  return std::make_tuple(std::move(access_key_id),
-                         std::move(signature),
-                         std::move(string_to_sign),
-                         rgw::auth::s3::get_v2_signature,
-                         null_completer_factory);
+  return {
+    std::move(access_key_id),
+    std::move(signature),
+    std::move(string_to_sign),
+    rgw::auth::s3::get_v2_signature,
+    null_completer_factory
+  };
 }
 
 
@@ -3779,11 +3787,13 @@ std::tuple<AWSVerAbstractor::access_key_id_t,
            AWSVerAbstractor::completer_factory_t>
 AWSBrowserUploadAbstractor::get_auth_data_v2(const req_state* const s) const
 {
-  return std::make_tuple(s->auth.s3_postobj_creds.access_key,
-                         s->auth.s3_postobj_creds.signature,
-                         to_string(s->auth.s3_postobj_creds.encoded_policy),
-                         rgw::auth::s3::get_v2_signature,
-                         null_completer_factory);
+  return {
+    s->auth.s3_postobj_creds.access_key,
+    s->auth.s3_postobj_creds.signature,
+    s->auth.s3_postobj_creds.encoded_policy.to_str(),
+    rgw::auth::s3::get_v2_signature,
+    null_completer_factory
+  };
 }
 
 std::tuple<AWSVerAbstractor::access_key_id_t,
@@ -3810,11 +3820,13 @@ AWSBrowserUploadAbstractor::get_auth_data_v4(const req_state* const s) const
                                      std::placeholders::_2,
                                      std::placeholders::_3);
 
-  return std::make_tuple(access_key_id,
-                         s->auth.s3_postobj_creds.signature,
-                         to_string(s->auth.s3_postobj_creds.encoded_policy),
-                         sig_factory,
-                         null_completer_factory);
+  return {
+    access_key_id,
+    s->auth.s3_postobj_creds.signature,
+    s->auth.s3_postobj_creds.encoded_policy.to_str(),
+    sig_factory,
+    null_completer_factory
+  };
 }
 
 std::tuple<AWSVerAbstractor::access_key_id_t,
@@ -3827,7 +3839,7 @@ AWSBrowserUploadAbstractor::get_auth_data(const req_state* const s) const
   if (s->auth.s3_postobj_creds.x_amz_algorithm == AWS4_HMAC_SHA256_STR) {
     ldout(s->cct, 0) << "Signature verification algorithm AWS v4"
                      << " (AWS4-HMAC-SHA256)" << dendl;
-    return get_auth_data_v2(s);
+    return get_auth_data_v4(s);
   } else {
     ldout(s->cct, 0) << "Signature verification algorithm AWS v2" << dendl;
     return get_auth_data_v2(s);
