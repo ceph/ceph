@@ -54,5 +54,12 @@
 #define RGW_LC_GET_HEAD "lc_get_head"
 #define RGW_LC_LIST_ENTRIES "lc_list_entries"
 
+/* bucket logging */
+#define RGW_BL_SET_ENTRY "bl_set_entry"
+#define RGW_BL_RM_ENTRY "bl_rm_entry"
+#define RGW_BL_GET_NEXT_ENTRY "bl_get_next_entry"
+#define RGW_BL_PUT_HEAD "bl_put_head"
+#define RGW_BL_GET_HEAD "bl_get_head"
+#define RGW_BL_LIST_ENTRIES "bl_list_entries"
 
 #endif

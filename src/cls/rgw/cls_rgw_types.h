@@ -1114,4 +1114,31 @@ struct cls_rgw_reshard_entry
 };
 WRITE_CLASS_ENCODER(cls_rgw_reshard_entry)
 
+struct cls_rgw_bl_obj_head
+{
+  time_t start_date;
+  string marker;
+
+  cls_rgw_bl_obj_head() {}
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    uint64_t t = start_date;
+    ::encode(t, bl);
+    ::encode(marker, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::iterator& bl) {
+    DECODE_START(1, bl);
+    uint64_t t;
+    ::decode(t, bl);
+    start_date = static_cast<time_t>(t);
+    ::decode(marker, bl);
+    DECODE_FINISH(bl);
+  }
+
+};
+WRITE_CLASS_ENCODER(cls_rgw_bl_obj_head)
+
 #endif

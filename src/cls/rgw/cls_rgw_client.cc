@@ -943,3 +943,104 @@ int CLSRGWIssueSetBucketResharding::issue_op(int shard_id, const string& oid)
   return issue_set_bucket_resharding(io_ctx, oid, entry, &manager);
 }
 
+int cls_rgw_bl_get_head(IoCtx& io_ctx, string& oid, cls_rgw_bl_obj_head& head)
+{
+  bufferlist in, out;
+  int r = io_ctx.exec(oid, RGW_CLASS, RGW_BL_GET_HEAD, in, out);
+  if (r < 0)
+    return r;
+
+  cls_rgw_bl_get_head_ret ret;
+  try {
+    bufferlist::iterator iter = out.begin();
+    ::decode(ret, iter);
+  } catch (buffer::error& err) {
+    return -EIO;
+  }
+  head = ret.head;
+
+ return r;
+}
+
+int cls_rgw_bl_put_head(IoCtx& io_ctx, string& oid, cls_rgw_bl_obj_head& head)
+{
+  bufferlist in, out;
+  cls_rgw_bl_put_head_op call;
+  call.head = head;
+  ::encode(call, in);
+  int r = io_ctx.exec(oid, RGW_CLASS, RGW_BL_PUT_HEAD, in, out);
+  return r;
+}
+
+int cls_rgw_bl_get_next_entry(IoCtx& io_ctx, string& oid, string& marker, pair<string, int>& entry)
+{
+  bufferlist in, out;
+  cls_rgw_bl_get_next_entry_op call;
+  call.marker = marker;
+  ::encode(call, in);
+  int r = io_ctx.exec(oid, RGW_CLASS, RGW_BL_GET_NEXT_ENTRY, in, out);
+  if (r < 0)
+    return r;
+
+  cls_rgw_bl_get_next_entry_ret ret;
+  try {
+    bufferlist::iterator iter = out.begin();
+    ::decode(ret, iter);
+  } catch (buffer::error& err) {
+    return -EIO;
+  }
+  entry = ret.entry;
+
+ return r;
+}
+
+int cls_rgw_bl_rm_entry(IoCtx& io_ctx, string& oid, pair<string, int>& entry)
+{
+  bufferlist in, out;
+  cls_rgw_bl_rm_entry_op call;
+  call.entry = entry;
+  ::encode(call, in);
+  int r = io_ctx.exec(oid, RGW_CLASS, RGW_BL_RM_ENTRY, in, out);
+ return r;
+}
+
+int cls_rgw_bl_set_entry(IoCtx& io_ctx, string& oid, pair<string, int>& entry)
+{
+  bufferlist in, out;
+  cls_rgw_bl_set_entry_op call;
+  call.entry = entry;
+  ::encode(call, in);
+  int r = io_ctx.exec(oid, RGW_CLASS, RGW_BL_SET_ENTRY, in, out);
+  return r;
+}
+
+int cls_rgw_bl_list(IoCtx& io_ctx, string& oid,
+                    const string& marker,
+                    uint32_t max_entries,
+                    map<string, int>& entries)
+{
+  bufferlist in, out;
+  cls_rgw_bl_list_entries_op op;
+
+  entries.clear();
+
+  op.marker = marker;
+  op.max_entries = max_entries;
+
+  ::encode(op, in);
+
+  int r = io_ctx.exec(oid, RGW_CLASS, RGW_BL_LIST_ENTRIES, in, out);
+  if (r < 0)
+    return r;
+
+  cls_rgw_bl_list_entries_ret ret;
+  try {
+    bufferlist::iterator iter = out.begin();
+    ::decode(ret, iter);
+  } catch (buffer::error& err) {
+    return -EIO;
+  }
+  entries.insert(ret.entries.begin(),ret.entries.end());
+
+ return r;
+}
