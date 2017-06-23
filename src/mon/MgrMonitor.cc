@@ -381,8 +381,9 @@ void MgrMonitor::cancel_timer()
 
 void MgrMonitor::on_active()
 {
-  if (mon->is_leader())
-    mon->clog->info() << "mgrmap e" << map.epoch << ": " << map;
+  if (mon->is_leader()) {
+    mon->clog->debug() << "mgrmap e" << map.epoch << ": " << map;
+  }
 }
 
 void MgrMonitor::get_health(
