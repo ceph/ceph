@@ -7070,8 +7070,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 
     dout(5) << action << " crush item id " << osdid << " name '"
 	    << name << "' device_class " << device_class << dendl;
-    err = newcrush.update_device_class(g_ceph_context, osdid, device_class, name);
-
+    err = newcrush.update_device_class(osdid, device_class, name, &ss);
     if (err < 0)
       goto reply;
 

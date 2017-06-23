@@ -1191,7 +1191,7 @@ public:
     have_uniform_rules = !has_legacy_rulesets();
   }
 
-  int update_device_class(CephContext *cct, int id, const string& class_name, const string& name);
+  int update_device_class(int id, const string& class_name, const string& name, ostream *ss);
   int device_class_clone(int original, int device_class, int *clone);
   bool class_is_in_use(int class_id);
   int populate_classes();
