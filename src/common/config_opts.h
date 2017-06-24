@@ -1190,7 +1190,6 @@ OPTION(kstore_nid_prealloc, OPT_U64, 1024)
 OPTION(kstore_sync_transaction, OPT_BOOL, false)
 OPTION(kstore_sync_submit_transaction, OPT_BOOL, false)
 OPTION(kstore_onode_map_size, OPT_U64, 1024)
-OPTION(kstore_cache_tails, OPT_BOOL, true)
 OPTION(kstore_default_stripe_size, OPT_INT, 65536)
 
 OPTION(filestore_omap_backend, OPT_STR, "rocksdb")
