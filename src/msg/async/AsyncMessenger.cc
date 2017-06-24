@@ -165,12 +165,16 @@ void Processor::accept()
   opts.nodelay = msgr->cct->_conf->ms_tcp_nodelay;
   opts.rcbuf_size = msgr->cct->_conf->ms_tcp_rcvbuf;
   opts.priority = msgr->get_socket_priority();
+  Worker *w;
   while (true) {
     entity_addr_t addr;
     ConnectedSocket cli_socket;
-    Worker *w = worker;
-    if (!msgr->get_stack()->support_local_listen_table())
+    if (msgr->get_stack()->support_local_listen_table()) {
+      w = worker;
+      w->references++;
+    } else {
       w = msgr->get_stack()->get_worker();
+    }
     int r = listen_socket.accept(&cli_socket, opts, &addr, w);
     if (r == 0) {
       ldout(msgr->cct, 10) << __func__ << " accepted incoming on sd " << cli_socket.fd() << dendl;
@@ -178,6 +182,7 @@ void Processor::accept()
       msgr->add_accept(w, std::move(cli_socket), addr);
       continue;
     } else {
+      w->release_worker();
       if (r == -EINTR) {
         continue;
       } else if (r == -EAGAIN) {
