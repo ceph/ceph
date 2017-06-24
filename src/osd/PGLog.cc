@@ -596,14 +596,6 @@ void PGLog::append_log_entries_update_missing(
     }
     if (cmp(p->soid, last_backfill, last_backfill_bitwise) <= 0) {
       missing.add_next_event(*p);
-      if (rollbacker) {
-	// hack to match PG::mark_all_unfound_lost
-	if (p->is_lost_delete() && p->mod_desc.can_rollback()) {
-	  rollbacker->try_stash(p->soid, p->version.version);
-	} else if (p->is_lost_delete()) {
-	  rollbacker->remove(p->soid);
-	}
-      }
     }
   }
   if (log)
@@ -1001,9 +993,7 @@ void PGLog::read_log(ObjectStore *store, coll_t pg_coll,
 	continue;
       if (did.count(i->soid)) continue;
       did.insert(i->soid);
-      
-      if (i->is_delete()) continue;
-      
+
       bufferlist bv;
       int r = store->getattr(
 	pg_coll,
