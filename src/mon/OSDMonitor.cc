@@ -8856,6 +8856,22 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
           goto reply;
         }
 
+        int pool_min_size = osdmap.get_pg_pool_min_size(pgid);
+        if ((int)id_vec.size() < pool_min_size) {
+          ss << "num of osds (" << id_vec.size() <<") < pool min size ("
+             << pool_min_size << ")";
+          err = -EINVAL;
+          goto reply;
+        }
+
+        int pool_size = osdmap.get_pg_pool_size(pgid);
+        if ((int)id_vec.size() > pool_size) {
+          ss << "num of osds (" << id_vec.size() <<") > pool size ("
+             << pool_size << ")";
+          err = -EINVAL;
+          goto reply;
+        }
+
         vector<int32_t> new_pg_upmap;
         for (auto osd : id_vec) {
           if (osd != CRUSH_ITEM_NONE && !osdmap.exists(osd)) {
@@ -8891,6 +8907,14 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 
         if (id_vec.size() % 2) {
           ss << "you must specify pairs of osd ids to be remapped";
+          err = -EINVAL;
+          goto reply;
+        }
+
+        int pool_size = osdmap.get_pg_pool_size(pgid);
+        if ((int)(id_vec.size() / 2) > pool_size) {
+          ss << "num of osd pairs (" << id_vec.size() / 2 <<") > pool size ("
+             << pool_size << ")";
           err = -EINVAL;
           goto reply;
         }
