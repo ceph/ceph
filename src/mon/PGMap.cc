@@ -683,6 +683,7 @@ void PGMapDigest::dump_pool_stats_full(
 	int mk = m + k;
 	assert(mk != 0);
 	avail = avail * k / mk;
+	assert(k != 0);
 	raw_used_rate = (float)mk / k;
       } else {
 	raw_used_rate = 0.0;
