@@ -942,6 +942,6 @@ COMMAND("config-key dump", "dump keys and values", "config-key", "r", "cli,rest"
 COMMAND("mgr dump "				     \
 	"name=epoch,type=CephInt,range=0,req=false", \
 	"dump the latest MgrMap",		     \
-	"mgr", "rw", "cli,rest")
+	"mgr", "r", "cli,rest")
 COMMAND("mgr fail name=who,type=CephString", \
 	"treat the named manager daemon as failed", "mgr", "rw", "cli,rest")
