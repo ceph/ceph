@@ -8920,6 +8920,8 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
         }
 
         vector<pair<int32_t,int32_t>> new_pg_upmap_items;
+        ostringstream items;
+        items << "[";
         for (auto p = id_vec.begin(); p != id_vec.end(); ++p) {
           int from = *p++;
           int to = *p;
@@ -8934,13 +8936,16 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
             goto reply;
           }
           new_pg_upmap_items.push_back(make_pair(from, to));
+          items << from << "->" << to << ",";
         }
+        string out(items.str());
+        out.resize(out.size() - 1); // drop last ','
+        out += "]";
 
         pending_inc.new_pg_upmap_items[pgid] =
           mempool::osdmap::vector<pair<int32_t,int32_t>>(
           new_pg_upmap_items.begin(), new_pg_upmap_items.end());
-        ss << "set " << pgid << " pg_upmap_items mapping to "
-           << new_pg_upmap_items;
+        ss << "set " << pgid << " pg_upmap_items mapping to " << out;
       }
       break;
 
