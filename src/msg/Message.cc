@@ -82,6 +82,8 @@ using namespace std;
 #include "messages/MOSDRepScrub.h"
 #include "messages/MOSDPGScan.h"
 #include "messages/MOSDPGBackfill.h"
+#include "messages/MOSDPGRecoveryDelete.h"
+#include "messages/MOSDPGRecoveryDeleteReply.h"
 
 #include "messages/MRemoveSnaps.h"
 
@@ -509,6 +511,12 @@ Message *decode_message(CephContext *cct, int crcflags,
     break;
   case MSG_OSD_PG_PUSH_REPLY:
     m = new MOSDPGPushReply;
+    break;
+  case MSG_OSD_PG_RECOVERY_DELETE:
+    m = new MOSDPGRecoveryDelete;
+    break;
+  case MSG_OSD_PG_RECOVERY_DELETE_REPLY:
+    m = new MOSDPGRecoveryDeleteReply;
     break;
   case MSG_OSD_EC_WRITE:
     m = new MOSDECSubOpWrite;

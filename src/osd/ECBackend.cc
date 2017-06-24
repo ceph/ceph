@@ -686,9 +686,16 @@ void ECBackend::recover_object(
 }
 
 bool ECBackend::can_handle_while_inactive(
-  OpRequestRef _op)
+  OpRequestRef op)
 {
-  return false;
+  dout(10) << __func__ << ": " << op << dendl;
+  switch (op->get_req()->get_type()) {
+  case MSG_OSD_PG_RECOVERY_DELETE:
+  case MSG_OSD_PG_RECOVERY_DELETE_REPLY:
+    return true;
+  default:
+    return false;
+  }
 }
 
 bool ECBackend::handle_message(

@@ -134,6 +134,8 @@ bool ReplicatedBackend::can_handle_while_inactive(OpRequestRef op)
   dout(10) << __func__ << ": " << op << dendl;
   switch (op->get_req()->get_type()) {
   case MSG_OSD_PG_PULL:
+  case MSG_OSD_PG_RECOVERY_DELETE:
+  case MSG_OSD_PG_RECOVERY_DELETE_REPLY:
     return true;
   case MSG_OSD_SUBOP: {
     MOSDSubOp *m = static_cast<MOSDSubOp*>(op->get_req());

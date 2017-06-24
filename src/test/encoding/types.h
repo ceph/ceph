@@ -560,6 +560,10 @@ MESSAGE(MOSDPGNotify)
 MESSAGE(MOSDPGQuery)
 #include "messages/MOSDPGRemove.h"
 MESSAGE(MOSDPGRemove)
+#include "messages/MOSDPGRecoveryDelete.h"
+MESSAGE(MOSDPGRecoveryDelete)
+#include "messages/MOSDPGRecoveryDeleteReply.h"
+MESSAGE(MOSDPGRecoveryDeleteReply)
 #include "messages/MOSDPGScan.h"
 MESSAGE(MOSDPGScan)
 #include "messages/MOSDPGTemp.h"
