@@ -51,7 +51,7 @@ function run() {
         exit 1
     fi
     if [ -n "$install_cmd" ]; then
-        $DRY_RUN sudo $install_cmd ccache jq which
+        $DRY_RUN sudo $install_cmd ccache jq
     else
         echo "WARNING: Don't know how to install packages" >&2
     fi
