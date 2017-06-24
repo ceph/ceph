@@ -494,12 +494,17 @@ void OSDMonitor::start_mapping()
 	     << dendl;
     mapping_job->abort();
   }
-  auto fin = new C_UpdateCreatingPGs(this, osdmap.get_epoch());
-  mapping_job = mapping.start_update(osdmap, mapper,
-				     g_conf->mon_osd_mapping_pgs_per_chunk);
-  dout(10) << __func__ << " started mapping job " << mapping_job.get()
-	   << " at " << fin->start << dendl;
-  mapping_job->set_finish_event(fin);
+  if (!osdmap.get_pools().empty()) {
+    auto fin = new C_UpdateCreatingPGs(this, osdmap.get_epoch());
+    mapping_job = mapping.start_update(osdmap, mapper,
+				       g_conf->mon_osd_mapping_pgs_per_chunk);
+    dout(10) << __func__ << " started mapping job " << mapping_job.get()
+	     << " at " << fin->start << dendl;
+    mapping_job->set_finish_event(fin);
+  } else {
+    dout(10) << __func__ << " no pools, no mapping job" << dendl;
+    mapping_job = nullptr;
+  }
 }
 
 void OSDMonitor::update_msgr_features()
@@ -794,7 +799,9 @@ void OSDMonitor::maybe_prime_pg_temp()
   next.deepish_copy_from(osdmap);
   next.apply_incremental(pending_inc);
 
-  if (all) {
+  if (next.get_pools().empty()) {
+    dout(10) << __func__ << " no pools, no pg_temp priming" << dendl;
+  } else if (all) {
     PrimeTempJob job(next, this);
     mapper.queue(&job, g_conf->mon_osd_mapping_pgs_per_chunk);
     if (job.wait_for(g_conf->mon_osd_prime_pg_temp_max_time)) {
