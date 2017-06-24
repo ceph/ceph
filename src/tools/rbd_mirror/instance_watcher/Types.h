@@ -21,21 +21,36 @@ namespace instance_watcher {
 enum NotifyOp {
   NOTIFY_OP_IMAGE_ACQUIRE  = 0,
   NOTIFY_OP_IMAGE_RELEASE  = 1,
+  NOTIFY_OP_SYNC_REQUEST   = 2,
+  NOTIFY_OP_SYNC_START     = 3,
 };
 
-struct ImagePayloadBase {
+struct PayloadBase {
   uint64_t request_id;
+
+  PayloadBase() : request_id(0) {
+  }
+
+  PayloadBase(uint64_t request_id) : request_id(request_id) {
+  }
+
+  void encode(bufferlist &bl) const;
+  void decode(__u8 version, bufferlist::iterator &iter);
+  void dump(Formatter *f) const;
+};
+
+struct ImagePayloadBase : public PayloadBase {
   std::string global_image_id;
   std::string peer_mirror_uuid;
   std::string peer_image_id;
 
-  ImagePayloadBase() : request_id(0) {
+  ImagePayloadBase() : PayloadBase() {
   }
 
   ImagePayloadBase(uint64_t request_id, const std::string &global_image_id,
                    const std::string &peer_mirror_uuid,
                    const std::string &peer_image_id)
-    : request_id(request_id), global_image_id(global_image_id),
+    : PayloadBase(request_id), global_image_id(global_image_id),
       peer_mirror_uuid(peer_mirror_uuid), peer_image_id(peer_image_id) {
   }
 
@@ -79,6 +94,43 @@ struct ImageReleasePayload : public ImagePayloadBase {
   void dump(Formatter *f) const;
 };
 
+struct SyncPayloadBase : public PayloadBase {
+  std::string sync_id;
+
+  SyncPayloadBase() : PayloadBase() {
+  }
+
+  SyncPayloadBase(uint64_t request_id, const std::string &sync_id)
+    : PayloadBase(request_id), sync_id(sync_id) {
+  }
+
+  void encode(bufferlist &bl) const;
+  void decode(__u8 version, bufferlist::iterator &iter);
+  void dump(Formatter *f) const;
+};
+
+struct SyncRequestPayload : public SyncPayloadBase {
+  static const NotifyOp NOTIFY_OP = NOTIFY_OP_SYNC_REQUEST;
+
+  SyncRequestPayload() : SyncPayloadBase() {
+  }
+
+  SyncRequestPayload(uint64_t request_id, const std::string &sync_id)
+    : SyncPayloadBase(request_id, sync_id) {
+  }
+};
+
+struct SyncStartPayload : public SyncPayloadBase {
+  static const NotifyOp NOTIFY_OP = NOTIFY_OP_SYNC_START;
+
+  SyncStartPayload() : SyncPayloadBase() {
+  }
+
+  SyncStartPayload(uint64_t request_id, const std::string &sync_id)
+    : SyncPayloadBase(request_id, sync_id) {
+  }
+};
+
 struct UnknownPayload {
   static const NotifyOp NOTIFY_OP = static_cast<NotifyOp>(-1);
 
@@ -92,6 +144,8 @@ struct UnknownPayload {
 
 typedef boost::variant<ImageAcquirePayload,
                        ImageReleasePayload,
+                       SyncRequestPayload,
+                       SyncStartPayload,
                        UnknownPayload> Payload;
 
 struct NotifyMessage {

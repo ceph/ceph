@@ -61,6 +61,8 @@ TEST(test_client, full_bore_timing) {
   int milliseconds = (end - start) / std::chrono::milliseconds(1);
   EXPECT_LT(10000, milliseconds) << "timing too fast to be correct";
   EXPECT_GT(12000, milliseconds) << "timing suspiciously slow";
+
+  delete client;
 }
 
 
@@ -120,4 +122,6 @@ TEST(test_client, paused_timing) {
   EXPECT_LT(15000 - 500, milliseconds) << "timing too fast to be correct";
   EXPECT_GT(17000 - 500, milliseconds) << "timing suspiciously slow";
   t.join();
+
+  delete client;
 }

@@ -1,6 +1,7 @@
 >= 12.0.0
 ------
 * The "journaler allow split entries" config setting has been removed.
+* The 'apply' mode of cephfs-journal-tool has been removed
 
 12.0.0
 ------
@@ -137,3 +138,47 @@
   to zero will effectively disable the health check.
 * The "ceph mds tell ..." command has been removed.  It is superceded
   by "ceph tell mds.<id> ..."
+
+12.1.0
+------
+
+* The ``mon_osd_max_op_age`` option has been renamed to
+  ``mon_osd_warn_op_age`` (default: 32 seconds), to indicate we
+  generate a warning at this age.  There is also a new
+  ``mon_osd_err_op_age_ratio`` that is a expressed as a multitple of
+  ``mon_osd_warn_op_age`` (default: 128, for roughly 60 minutes) to
+  control when an error is generated.
+
+* The default maximum size for a single RADOS object has been reduced from
+  100GB to 128MB.  The 100GB limit was completely impractical in practice
+  while the 128MB limit is a bit high but not unreasonable.  If you have an
+  application written directly to librados that is using objects larger than
+  128MB you may need to adjust ``osd_max_object_size``.
+
+* The semantics of the 'rados ls' and librados object listing
+  operations have always been a bit confusing in that "whiteout"
+  objects (which logically don't exist and will return ENOENT if you
+  try to access them) are included in the results.  Previously
+  whiteouts only occurred in cache tier pools.  In luminous, logically
+  deleted but snapshotted objects now result in a whiteout object, and
+  as a result they will appear in 'rados ls' results, even though
+  trying to read such an object will result in ENOENT.  The 'rados
+  listsnaps' operation can be used in such a case to enumerate which
+  snapshots are present.
+
+  This may seem a bit strange, but is less strange than having a
+  deleted-but-snapshotted object not appear at all and be completely
+  hidden from librados's ability to enumerate objects.  Future
+  versions of Ceph will likely include an alternative object
+  enumeration interface that makes it more natural and efficient to
+  enumerate all objects along with their snapshot and clone metadata.
+
+* The deprecated 'crush_ruleset' property has finally been removed; please use
+  'crush_rule' instead for the 'osd pool get ...' and 'osd pool set ..' commands.
+
+* The 'osd pool default crush replicated ruleset' option has been
+  removed and replaced by the 'osd pool default crush rule' option.
+  By default it is -1, which means the mon will pick the first type
+  replicated rule in the CRUSH map for replicated pools.  Erasure
+  coded pools have rules that are automatically created for them if they are
+  not specified at pool creation time.

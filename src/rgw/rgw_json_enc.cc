@@ -705,12 +705,17 @@ void RGWBWRoutingRules::decode_json(JSONObj *obj) {
 
 void RGWBucketWebsiteConf::dump(Formatter *f) const
 {
-  encode_json("index_doc_suffix", index_doc_suffix, f);
-  encode_json("error_doc", error_doc, f);
-  encode_json("routing_rules", routing_rules, f);
+  if (!redirect_all.hostname.empty()) {
+    encode_json("redirect_all", redirect_all, f);
+  } else {
+    encode_json("index_doc_suffix", index_doc_suffix, f);
+    encode_json("error_doc", error_doc, f);
+    encode_json("routing_rules", routing_rules, f);
+  }
 }
 
 void RGWBucketWebsiteConf::decode_json(JSONObj *obj) {
+  JSONDecoder::decode_json("redirect_all", redirect_all, obj);
   JSONDecoder::decode_json("index_doc_suffix", index_doc_suffix, obj);
   JSONDecoder::decode_json("error_doc", error_doc, obj);
   JSONDecoder::decode_json("routing_rules", routing_rules, obj);

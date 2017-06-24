@@ -1344,6 +1344,7 @@ public:
    * return true if any inconsistency/missing is repaired, false otherwise
    */
   bool scrub_process_inconsistent();
+  bool ops_blocked_by_scrub() const;
   void scrub_finish();
   void scrub_clear_state();
   void _scan_snaps(ScrubMap &map);
@@ -2372,7 +2373,7 @@ public:
 
   virtual void kick_snap_trim() = 0;
   virtual void snap_trimmer_scrub_complete() = 0;
-  bool requeue_scrub();
+  bool requeue_scrub(bool high_priority = false);
   void queue_recovery(bool front = false);
   bool queue_scrub();
   unsigned get_scrub_priority();
@@ -2382,7 +2383,7 @@ public:
 
 
   bool append_log_entries_update_missing(
-    const mempool::osd::list<pg_log_entry_t> &entries,
+    const mempool::osd_pglog::list<pg_log_entry_t> &entries,
     ObjectStore::Transaction &t);
 
   /**
@@ -2390,7 +2391,7 @@ public:
    * actingbackfill logs and missings (also missing_loc)
    */
   void merge_new_log_entries(
-    const mempool::osd::list<pg_log_entry_t> &entries,
+    const mempool::osd_pglog::list<pg_log_entry_t> &entries,
     ObjectStore::Transaction &t);
 
   void reset_interval_flush();

@@ -346,7 +346,6 @@ def cephfs_setup(ctx, config):
         all_roles = [item for remote_roles in mdss.remotes.values() for item in remote_roles]
         num_active = len([r for r in all_roles if is_active_mds(r)])
 
-        fs.set_allow_multimds(True)
         fs.set_max_mds(num_active)
         fs.set_allow_dirfrags(True)
 
@@ -1030,29 +1029,34 @@ def osd_scrub_pgs(ctx, config):
     indicate the last scrub completed.  Time out if no progess is made
     here after two minutes.
     """
-    retries = 12
+    retries = 20
     delays = 10
     cluster_name = config['cluster']
     manager = ctx.managers[cluster_name]
     all_clean = False
     for _ in range(0, retries):
         stats = manager.get_pg_stats()
-        states = [stat['state'] for stat in stats]
-        if len(set(states)) == 1 and states[0] == 'active+clean':
+        bad = [stat['pgid'] for stat in stats if 'active+clean' not in stat['state']]
+        if not bad:
             all_clean = True
             break
-        log.info("Waiting for all osds to be active and clean.")
+        log.info(
+            "Waiting for all osds to be active and clean, waiting on %s" % bad)
         time.sleep(delays)
     if not all_clean:
-        log.info("Scrubbing terminated -- not all pgs were active and clean.")
-        return
+        raise RuntimeError("Scrubbing terminated -- not all pgs were active and clean.")
     check_time_now = time.localtime()
     time.sleep(1)
     all_roles = teuthology.all_roles(ctx.cluster)
     for role in teuthology.cluster_roles_of_type(all_roles, 'osd', cluster_name):
         log.info("Scrubbing {osd}".format(osd=role))
         _, _, id_ = teuthology.split_role(role)
-        manager.raw_cluster_cmd('osd', 'deep-scrub', id_)
+        # allow this to fail; in certain cases the OSD might not be up
+        # at this point.  we will catch all pgs below.
+        try:
+            manager.raw_cluster_cmd('osd', 'deep-scrub', id_)
+        except run.CommandFailedError:
+            pass
     prev_good = 0
     gap_cnt = 0
     loop = True
@@ -1073,9 +1077,15 @@ def osd_scrub_pgs(ctx, config):
             gap_cnt = 0
         else:
             gap_cnt += 1
+            if gap_cnt % 6 == 0:
+                for (pgid, tmval) in timez:
+                    # re-request scrub every so often in case the earlier
+                    # request was missed.  do not do it everytime because
+                    # the scrub may be in progress or not reported yet and
+                    # we will starve progress.
+                    manager.raw_cluster_cmd('pg', 'deep-scrub', pgid)
             if gap_cnt > retries:
-                log.info('Exiting scrub checking -- not all pgs scrubbed.')
-                return
+                raise RuntimeError('Exiting scrub checking -- not all pgs scrubbed.')
         if loop:
             log.info('Still waiting for all pgs to be scrubbed.')
             time.sleep(delays)

@@ -733,15 +733,6 @@ void MDBalancer::prep_rebalance(int beat)
   try_rebalance(state);
 }
 
-void MDBalancer::hit_targets(const balance_state_t& state)
-{
-  utime_t now = ceph_clock_now();
-  for (auto &it : state.targets) {
-    mds_rank_t target = it.first;
-    mds->hit_export_target(now, target, g_conf->mds_bal_target_decay);
-  }
-}
-
 int MDBalancer::mantle_prep_rebalance()
 {
   balance_state_t state;
@@ -797,9 +788,6 @@ int MDBalancer::mantle_prep_rebalance()
 
 void MDBalancer::try_rebalance(balance_state_t& state)
 {
-  if (!check_targets(state))
-    return;
-
   if (g_conf->mds_thrash_exports) {
     dout(5) << "mds_thrash is on; not performing standard rebalance operation!"
 	    << dendl;
@@ -948,18 +936,6 @@ void MDBalancer::try_rebalance(balance_state_t& state)
 
   dout(5) << "rebalance done" << dendl;
   mds->mdcache->show_subtrees();
-}
-
-
-/* Check that all targets are in the MDSMap export_targets for my rank. */
-bool MDBalancer::check_targets(const balance_state_t& state)
-{
-  for (const auto &it : state.targets) {
-    if (!mds->is_export_target(it.first)) {
-      return false;
-    }
-  }
-  return true;
 }
 
 void MDBalancer::find_exports(CDir *dir,

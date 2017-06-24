@@ -455,6 +455,10 @@ void Server::handle_client_session(MClientSession *m)
     finish_flush_session(session, m->get_seq());
     break;
 
+  case CEPH_SESSION_REQUEST_FLUSH_MDLOG:
+    mdlog->flush();
+    break;
+
   default:
     ceph_abort();
   }
@@ -5320,7 +5324,9 @@ void Server::_link_local_finish(MDRequestRef& mdr, CDentry *dn, CInode *targeti,
   dout(10) << "_link_local_finish " << *dn << " to " << *targeti << dendl;
 
   // link and unlock the NEW dentry
-  dn->pop_projected_linkage();
+  CDentry::linkage_t *dnl = dn->pop_projected_linkage();
+  if (!dnl->get_inode())
+    dn->link_remote(dnl, targeti);
   dn->mark_dirty(dnpv, mdr->ls);
 
   // target inode
@@ -5438,7 +5444,9 @@ void Server::_link_remote_finish(MDRequestRef& mdr, bool inc,
 
   if (inc) {
     // link the new dentry
-    dn->pop_projected_linkage();
+    CDentry::linkage_t *dnl = dn->pop_projected_linkage();
+    if (!dnl->get_inode())
+      dn->link_remote(dnl, targeti);
     dn->mark_dirty(dpv, mdr->ls);
   } else {
     // unlink main dentry
@@ -5948,7 +5956,7 @@ void Server::_unlink_local(MDRequestRef& mdr, CDentry *dn, CDentry *straydn)
   dn->pre_dirty();
 
   inode_t *pi = in->project_inode();
-  dn->make_path_string(pi->stray_prior_path);
+  dn->make_path_string(pi->stray_prior_path, true);
   mdr->add_projected_inode(in); // do this _after_ my dn->pre_dirty().. we apply that one manually.
   pi->version = in->pre_dirty();
   pi->ctime = mdr->get_op_stamp();
@@ -6920,6 +6928,8 @@ bool Server::_rename_prepare_witness(MDRequestRef& mdr, mds_rank_t who, set<mds_
     req->destdnpath.push_dentry(dn->name);
   if (straydn)
     mdcache->replicate_stray(straydn, who, req->stray);
+
+  req->srcdn_auth = mdr->more()->srcdn_auth_mds;
   
   // srcdn auth will verify our current witness list is sufficient
   req->witnesses = witnesse;
@@ -7136,7 +7146,7 @@ void Server::_rename_prepare(MDRequestRef& mdr,
     if (tpi) {
       tpi->ctime = mdr->get_op_stamp();
       tpi->change_attr++;
-      destdn->make_path_string(tpi->stray_prior_path);
+      destdn->make_path_string(tpi->stray_prior_path, true);
       tpi->nlink--;
       if (tpi->nlink == 0)
 	oldin->state_set(CInode::STATE_ORPHAN);
@@ -7291,8 +7301,6 @@ void Server::_rename_apply(MDRequestRef& mdr, CDentry *srcdn, CDentry *destdn, C
   CDentry::linkage_t *destdnl = destdn->get_linkage();
 
   CInode *oldin = destdnl->get_inode();
-  
-  bool imported_inode = false;
 
   // primary+remote link merge?
   bool linkmerge = (srcdnl->get_inode() == destdnl->get_inode() &&
@@ -7392,7 +7400,6 @@ void Server::_rename_apply(MDRequestRef& mdr, CDentry *srcdn, CDentry *destdn, C
       
       // hack: fix auth bit
       in->state_set(CInode::STATE_AUTH);
-      imported_inode = true;
 
       mdr->clear_ambiguous_auth();
     }
@@ -7417,7 +7424,7 @@ void Server::_rename_apply(MDRequestRef& mdr, CDentry *srcdn, CDentry *destdn, C
 
   // update subtree map?
   if (destdnl->is_primary() && in->is_dir()) 
-    mdcache->adjust_subtree_after_rename(in, srcdn->get_dir(), true, imported_inode);
+    mdcache->adjust_subtree_after_rename(in, srcdn->get_dir(), true);
 
   if (straydn && oldin->is_dir())
     mdcache->adjust_subtree_after_rename(oldin, destdn->get_dir(), true);
@@ -7470,7 +7477,17 @@ void Server::handle_slave_rename_prep(MDRequestRef& mdr)
 	   << " " << mdr->slave_request->srcdnpath 
 	   << " to " << mdr->slave_request->destdnpath
 	   << dendl;
-  
+
+  if (mdr->slave_request->is_interrupted()) {
+    dout(10) << " slave request interrupted, sending noop reply" << dendl;
+    MMDSSlaveRequest *reply= new MMDSSlaveRequest(mdr->reqid, mdr->attempt, MMDSSlaveRequest::OP_RENAMEPREPACK);
+    reply->mark_interrupted();
+    mds->send_message_mds(reply, mdr->slave_to_mds);
+    mdr->slave_request->put();
+    mdr->slave_request = 0;
+    return;
+  }
+
   // discover destdn
   filepath destpath(mdr->slave_request->destdnpath);
   dout(10) << " dest " << destpath << dendl;
@@ -8233,7 +8250,9 @@ void Server::handle_slave_rename_prep_ack(MDRequestRef& mdr, MMDSSlaveRequest *a
 
   // witnessed?  or add extra witnesses?
   assert(mdr->more()->witnessed.count(from) == 0);
-  if (ack->witnesses.empty()) {
+  if (ack->is_interrupted()) {
+    dout(10) << " slave request interrupted, noop" << dendl;
+  } else if (ack->witnesses.empty()) {
     mdr->more()->witnessed.insert(from);
     if (!ack->is_not_journaled())
       mdr->more()->has_journaled_slaves = true;

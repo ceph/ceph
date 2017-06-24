@@ -38,7 +38,6 @@ makedepends="
 	keyutils-dev
 	leveldb-dev
 	libaio-dev
-	libatomic_ops-dev
 	libedit-dev
 	libressl-dev
 	libtirpc-dev
@@ -167,7 +166,6 @@ package() {
 		|| return 1
 
 	chmod 0644 $pkgdir$_docdir/ceph/sample.ceph.conf || return 1
-	chmod 0644 $pkgdir$_docdir/ceph/sample.fetch_config || return 1
 
 	# udev rules
 	install -m 0644 -D udev/50-rbd.rules $pkgdir$_udevrulesdir/50-rbd.rules || return 1
@@ -193,7 +191,6 @@ base() {
 		xfsprogs
 	"
 
-	_pkg $_docdir/ceph sample.ceph.conf sample.fetch_config
 	_pkg $_bindir crushtool monmaptool osdmaptool ceph-run ceph-detect-init
 	_pkg $_sbindir ceph-create-keys mount.ceph
 	_pkg $_libexecdir/ceph ceph_common.sh

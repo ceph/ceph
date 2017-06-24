@@ -174,7 +174,6 @@ private:
   TestOp *gen_op(RadosTestContext &context, TestOpType type)
   {
     string oid, oid2;
-    //cout << "oids not in use " << context.oid_not_in_use.size() << std::endl;
     assert(context.oid_not_in_use.size());
 
     switch (type) {
@@ -465,14 +464,12 @@ int main(int argc, char **argv)
       set_redirect = true;
     } else {
       cerr << "unknown arg " << argv[i] << std::endl;
-      //usage();
       exit(1);
     }
   }
 
   if (op_weights.empty()) {
     cerr << "No operations specified" << std::endl;
-    //usage();
     exit(1);
   }
 

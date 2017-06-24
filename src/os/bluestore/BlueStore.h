@@ -132,6 +132,7 @@ public:
   void _set_csum();
   void _set_compression();
   void _set_throttle_params();
+  int _set_cache_sizes();
 
   class TransContext;
 
@@ -775,6 +776,7 @@ public:
     }
 
     void update(KeyValueDB::Transaction t, bool force);
+    decltype(BlueStore::Blob::id) allocate_spanning_blob_id();
     void reshard(
       KeyValueDB *db,
       KeyValueDB::Transaction t);
@@ -829,10 +831,8 @@ public:
     /// ensure a range of the map is marked dirty
     void dirty_range(uint32_t offset, uint32_t length);
 
+    /// for seek_lextent test
     extent_map_t::iterator find(uint64_t offset);
-
-    /// find a lextent that includes offset
-    extent_map_t::iterator find_lextent(uint64_t offset);
 
     /// seek to the first lextent including or after offset
     extent_map_t::iterator seek_lextent(uint64_t offset);
@@ -1067,7 +1067,9 @@ public:
       --num_blobs;
     }
 
-    void trim(uint64_t target_bytes, float target_meta_ratio,
+    void trim(uint64_t target_bytes,
+	      float target_meta_ratio,
+	      float target_data_ratio,
 	      float bytes_per_onode);
 
     void trim_all();
@@ -1392,6 +1394,63 @@ public:
   class OpSequencer;
   typedef boost::intrusive_ptr<OpSequencer> OpSequencerRef;
 
+  struct volatile_statfs{
+    enum {
+      STATFS_ALLOCATED = 0,
+      STATFS_STORED,
+      STATFS_COMPRESSED_ORIGINAL,
+      STATFS_COMPRESSED,
+      STATFS_COMPRESSED_ALLOCATED,
+      STATFS_LAST
+    };
+    int64_t values[STATFS_LAST];
+    volatile_statfs() {
+      memset(this, 0, sizeof(volatile_statfs));
+    }
+    void reset() {
+      *this = volatile_statfs();
+    }
+    volatile_statfs& operator+=(const volatile_statfs& other) {
+      for (size_t i = 0; i < STATFS_LAST; ++i) {
+	values[i] += other.values[i];
+      }
+      return *this;
+    }
+    int64_t& allocated() {
+      return values[STATFS_ALLOCATED];
+    }
+    int64_t& stored() {
+      return values[STATFS_STORED];
+    }
+    int64_t& compressed_original() {
+      return values[STATFS_COMPRESSED_ORIGINAL];
+    }
+    int64_t& compressed() {
+      return values[STATFS_COMPRESSED];
+    }
+    int64_t& compressed_allocated() {
+      return values[STATFS_COMPRESSED_ALLOCATED];
+    }
+    bool is_empty() {
+      return values[STATFS_ALLOCATED] == 0 &&
+	values[STATFS_STORED] == 0 &&
+	values[STATFS_COMPRESSED] == 0 &&
+	values[STATFS_COMPRESSED_ORIGINAL] == 0 &&
+	values[STATFS_COMPRESSED_ALLOCATED] == 0;
+    }
+    void decode(bufferlist::iterator& it) {
+      for (size_t i = 0; i < STATFS_LAST; i++) {
+	::decode(values[i], it);
+      }
+    }
+
+    void encode(bufferlist& bl) {
+      for (size_t i = 0; i < STATFS_LAST; i++) {
+	::encode(values[i], bl);
+      }
+    }
+  };
+
   struct TransContext : public AioContext {
     MEMPOOL_CLASS_HELPERS();
 
@@ -1480,57 +1539,7 @@ public:
     bluestore_deferred_transaction_t *deferred_txn = nullptr; ///< if any
 
     interval_set<uint64_t> allocated, released;
-    struct volatile_statfs{
-      enum {
-        STATFS_ALLOCATED = 0,
-        STATFS_STORED,
-        STATFS_COMPRESSED_ORIGINAL,
-        STATFS_COMPRESSED,
-        STATFS_COMPRESSED_ALLOCATED,
-        STATFS_LAST
-      };
-      int64_t values[STATFS_LAST];
-      volatile_statfs() {
-        memset(this, 0, sizeof(volatile_statfs));
-      }
-      void reset() {
-        *this = volatile_statfs();
-      }
-      int64_t& allocated() {
-        return values[STATFS_ALLOCATED];
-      }
-      int64_t& stored() {
-        return values[STATFS_STORED];
-      }
-      int64_t& compressed_original() {
-        return values[STATFS_COMPRESSED_ORIGINAL];
-      }
-      int64_t& compressed() {
-        return values[STATFS_COMPRESSED];
-      }
-      int64_t& compressed_allocated() {
-        return values[STATFS_COMPRESSED_ALLOCATED];
-      }
-      bool is_empty() {
-        return values[STATFS_ALLOCATED] == 0 &&
-          values[STATFS_STORED] == 0 &&
-          values[STATFS_COMPRESSED] == 0 &&
-          values[STATFS_COMPRESSED_ORIGINAL] == 0 &&
-          values[STATFS_COMPRESSED_ALLOCATED] == 0;
-      }
-      void decode(bufferlist::iterator& it) {
-        for (size_t i = 0; i < STATFS_LAST; i++) {
-          ::decode(values[i], it);
-        }
-      }
-
-      void encode(bufferlist& bl) {
-        for (size_t i = 0; i < STATFS_LAST; i++) {
-          ::encode(values[i], bl);
-        }
-      }
-    } statfs_delta;
-
+    volatile_statfs statfs_delta;
 
     IOContext ioc;
     bool had_ios = false;  ///< true if we submitted IOs before our kv txn
@@ -1866,7 +1875,7 @@ private:
   size_t block_size_order = 0; ///< bits to shift to get block size
 
   uint64_t min_alloc_size = 0; ///< minimum allocation unit (power of 2)
-  int deferred_batch_ops = 0; ///< deferred batch size
+  std::atomic<int> deferred_batch_ops = {0}; ///< deferred batch size
 
   ///< bits for min_alloc_size
   std::atomic<uint8_t> min_alloc_size_order = {0};
@@ -1894,6 +1903,12 @@ private:
   uint64_t kv_throttle_costs = 0;
 
   // cache trim control
+  float cache_meta_ratio = 0;   ///< cache ratio dedicated to metadata
+  float cache_kv_ratio = 0;     ///< cache ratio dedicated to kv (e.g., rocksdb)
+  float cache_data_ratio = 0;   ///< cache ratio dedicated to object data
+
+  std::mutex vstatfs_lock;
+  volatile_statfs vstatfs;
 
   struct MempoolThread : public Thread {
     BlueStore *store;
@@ -1958,6 +1973,8 @@ private:
 			       bool create);
 
   int _open_super_meta();
+
+  void open_statfs();
 
   int _reconcile_bluefs_freespace();
   int _balance_bluefs_freespace(PExtentVector *extents);
@@ -2082,6 +2099,8 @@ public:
   bool needs_journal() override { return false; };
   bool wants_journal() override { return false; };
   bool allows_journal() override { return false; };
+
+  bool is_rotational() override;
 
   static int get_block_device_fsid(CephContext* cct, const string& path,
 				   uuid_d *fsid);
@@ -2505,6 +2524,19 @@ private:
 	     uint32_t fadvise_flags);
   void _pad_zeros(bufferlist *bl, uint64_t *offset,
 		  uint64_t chunk_size);
+
+  void _choose_write_options(CollectionRef& c,
+                             OnodeRef o,
+                             uint32_t fadvise_flags,
+                             WriteContext *wctx);
+
+  int _do_gc(TransContext *txc,
+             CollectionRef& c,
+             OnodeRef o,
+             const GarbageCollector& gc,
+             const WriteContext& wctx,
+             uint64_t *dirty_start,
+             uint64_t *dirty_end);
 
   int _do_write(TransContext *txc,
 		CollectionRef &c,

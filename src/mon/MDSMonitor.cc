@@ -503,6 +503,7 @@ bool MDSMonitor::prepare_beacon(MonOpRequestRef op)
           mon->osdmon()->wait_for_writeable(op, new C_RetryMessage(this, op));
           return false;
         }
+        mon->clog->info() << "MDS daemon '" << m->get_name() << "' restarted";
 	fail_mds_gid(existing);
         failed_mds = true;
       }
@@ -969,6 +970,20 @@ bool MDSMonitor::preprocess_command(MonOpRequestRef op)
       f->close_section();
     }
     f->flush(ds);
+  } else if (prefix == "mds versions") {
+    if (!f)
+      f.reset(Formatter::create("json-pretty"));
+    count_metadata("ceph_version", f.get());
+    f->flush(ds);
+    r = 0;
+  } else if (prefix == "mds count-metadata") {
+    if (!f)
+      f.reset(Formatter::create("json-pretty"));
+    string field;
+    cmd_getval(g_ceph_context, cmdmap, "property", field);
+    count_metadata(field, f.get());
+    f->flush(ds);
+    r = 0;
   } else if (prefix == "mds getmap") {
     epoch_t e;
     int64_t epocharg;
@@ -1774,6 +1789,26 @@ int MDSMonitor::load_metadata(map<mds_gid_t, Metadata>& m)
   return 0;
 }
 
+void MDSMonitor::count_metadata(const string& field, Formatter *f)
+{
+  map<string,int> by_val;
+  map<mds_gid_t,Metadata> meta;
+  load_metadata(meta);
+  for (auto& p : meta) {
+    auto q = p.second.find(field);
+    if (q == p.second.end()) {
+      by_val["unknown"]++;
+    } else {
+      by_val[q->second]++;
+    }
+  }
+  f->open_object_section(field.c_str());
+  for (auto& p : by_val) {
+    f->dump_int(p.first.c_str(), p.second);
+  }
+  f->close_section();
+}
+
 int MDSMonitor::dump_metadata(const std::string &who, Formatter *f, ostream& err)
 {
   assert(f);
@@ -1886,12 +1921,24 @@ void MDSMonitor::maybe_replace_gid(mds_gid_t gid,
     << " " << ceph_mds_state_name(info.state)
     << " since " << beacon.stamp << dendl;
 
+  // We will only take decisive action (replacing/removing a daemon)
+  // if we have some indicating that some other daemon(s) are successfully
+  // getting beacons through recently.
+  utime_t latest_beacon;
+  for (const auto & i : last_beacon) {
+    latest_beacon = MAX(i.second.stamp, latest_beacon);
+  }
+  const bool may_replace = latest_beacon >
+    (ceph_clock_now() -
+     MAX(g_conf->mds_beacon_interval, g_conf->mds_beacon_grace * 0.5));
+
   // are we in?
   // and is there a non-laggy standby that can take over for us?
   mds_gid_t sgid;
   if (info.rank >= 0 &&
       info.state != MDSMap::STATE_STANDBY &&
       info.state != MDSMap::STATE_STANDBY_REPLAY &&
+      may_replace &&
       !pending_fsmap.get_filesystem(fscid)->mds_map.test_flag(CEPH_MDSMAP_DOWN) &&
       (sgid = pending_fsmap.find_replacement_for({fscid, info.rank}, info.name,
                 g_conf->mon_force_standby_active)) != MDS_GID_NONE)
@@ -1902,6 +1949,11 @@ void MDSMonitor::maybe_replace_gid(mds_gid_t gid,
       << info.rank << "." << info.inc
       << " " << ceph_mds_state_name(info.state)
       << " with " << sgid << "/" << si.name << " " << si.addr << dendl;
+
+    mon->clog->warn() << "MDS daemon '" << info.name << "'"
+                      << " is not responding, replacing it "
+                      << "as rank " << info.rank
+                      << " with standby '" << si.name << "'";
 
     // Remember what NS the old one was in
     const fs_cluster_id_t fscid = pending_fsmap.mds_roles.at(gid);
@@ -1914,11 +1966,14 @@ void MDSMonitor::maybe_replace_gid(mds_gid_t gid,
     pending_fsmap.promote(sgid, fs, info.rank);
 
     *mds_propose = true;
-  } else if (info.state == MDSMap::STATE_STANDBY_REPLAY || 
-             info.state == MDSMap::STATE_STANDBY) {
+  } else if ((info.state == MDSMap::STATE_STANDBY_REPLAY ||
+             info.state == MDSMap::STATE_STANDBY) && may_replace) {
     dout(10) << " failing and removing " << gid << " " << info.addr << " mds." << info.rank 
       << "." << info.inc << " " << ceph_mds_state_name(info.state)
       << dendl;
+    mon->clog->info() << "MDS standby '"  << info.name
+                      << "' is not responding, removing it from the set of "
+                      << "standbys";
     fail_mds_gid(gid);
     *mds_propose = true;
   } else if (!info.laggy()) {

@@ -92,6 +92,8 @@ public:
 
   bool get_config(const std::string &handle,
       const std::string &key, std::string *val) const;
+  PyObject *get_config_prefix(const std::string &handle,
+			      const std::string &prefix) const;
   void set_config(const std::string &handle,
       const std::string &key, const std::string &val);
 

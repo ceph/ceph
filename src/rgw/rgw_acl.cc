@@ -24,6 +24,12 @@ void RGWAccessControlList::_add_grant(ACLGrant *grant)
   switch (type.get_type()) {
   case ACL_TYPE_REFERER:
     referer_list.emplace_back(grant->get_referer(), perm.get_permissions());
+
+    /* We're specially handling the Swift's .r:* as the S3 API has a similar
+     * concept and thus we can have a small portion of compatibility here. */
+     if (grant->get_referer() == RGW_REFERER_WILDCARD) {
+       acl_group_map[ACL_GROUP_ALL_USERS] |= perm.get_permissions();
+     }
     break;
   case ACL_TYPE_GROUP:
     acl_group_map[grant->get_group()] |= perm.get_permissions();
@@ -71,27 +77,26 @@ uint32_t RGWAccessControlList::get_group_perm(ACLGroupTypeEnum group,
   return 0;
 }
 
-uint32_t RGWAccessControlList::get_referer_perm(const std::string http_referer,
+uint32_t RGWAccessControlList::get_referer_perm(const uint32_t current_perm,
+                                                const std::string http_referer,
                                                 const uint32_t perm_mask)
 {
   ldout(cct, 5) << "Searching permissions for referer=" << http_referer
                 << " mask=" << perm_mask << dendl;
 
-  /* FIXME: C++11 doesn't have std::rbegin nor std::rend. We would like to
-   * switch when C++14 becomes available. */
-  const auto iter = std::find_if(referer_list.crbegin(), referer_list.crend(),
-    [&http_referer](const ACLReferer& r) -> bool {
-      return r.is_match(http_referer);
+  /* This function is bacically a transformation from current perm to
+   * a new one that takes into consideration the Swift's HTTP referer-
+   * based ACLs. We need to go through all items to respect negative
+   * grants. */
+  uint32_t referer_perm = current_perm;
+  for (const auto& r : referer_list) {
+    if (r.is_match(http_referer)) {
+       referer_perm = r.perm;
     }
-  );
-
-  if (referer_list.crend() == iter) {
-    ldout(cct, 5) << "Permissions for referer not found" << dendl;
-    return 0;
-  } else {
-    ldout(cct, 5) << "Found referer permission=" << iter->perm << dendl;
-    return iter->perm & perm_mask;
   }
+
+  ldout(cct, 5) << "Found referer permission=" << referer_perm << dendl;
+  return referer_perm & perm_mask;
 }
 
 uint32_t RGWAccessControlPolicy::get_perm(const rgw::auth::Identity& auth_identity,
@@ -123,7 +128,7 @@ uint32_t RGWAccessControlPolicy::get_perm(const rgw::auth::Identity& auth_identi
 
   /* Should we continue looking up even deeper? */
   if (nullptr != http_referer && (perm & perm_mask) != perm_mask) {
-    perm |= acl.get_referer_perm(http_referer, perm_mask);
+    perm = acl.get_referer_perm(perm, http_referer, perm_mask);
   }
 
   ldout(cct, 5) << "-- Getting permissions done for identity=" << auth_identity

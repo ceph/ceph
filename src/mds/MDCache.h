@@ -196,6 +196,11 @@ public:
     stray_manager.notify_stray_created();
   }
 
+  void eval_remote(CDentry *dn)
+  {
+    stray_manager.eval_remote(dn);
+  }
+
   // -- client caps --
   uint64_t              last_cap_id;
   
@@ -264,9 +269,9 @@ protected:
 public:
   bool is_subtrees() { return !subtrees.empty(); }
   void list_subtrees(list<CDir*>& ls);
-  void adjust_subtree_auth(CDir *root, mds_authority_t auth, bool do_eval=true);
-  void adjust_subtree_auth(CDir *root, mds_rank_t a, mds_rank_t b=CDIR_AUTH_UNKNOWN, bool do_eval=true) {
-    adjust_subtree_auth(root, mds_authority_t(a,b), do_eval); 
+  void adjust_subtree_auth(CDir *root, mds_authority_t auth);
+  void adjust_subtree_auth(CDir *root, mds_rank_t a, mds_rank_t b=CDIR_AUTH_UNKNOWN) {
+    adjust_subtree_auth(root, mds_authority_t(a,b));
   }
   void adjust_bounded_subtree_auth(CDir *dir, set<CDir*>& bounds, mds_authority_t auth);
   void adjust_bounded_subtree_auth(CDir *dir, set<CDir*>& bounds, mds_rank_t a) {
@@ -278,7 +283,7 @@ public:
   }
   void map_dirfrag_set(list<dirfrag_t>& dfs, set<CDir*>& result);
   void try_subtree_merge(CDir *root);
-  void try_subtree_merge_at(CDir *root, bool do_eval=true);
+  void try_subtree_merge_at(CDir *root, set<CInode*> *to_eval);
   void subtree_merge_writebehind_finish(CInode *in, MutationRef& mut);
   void eval_subtree_root(CInode *diri);
   CDir *get_subtree_root(CDir *dir);
@@ -297,8 +302,7 @@ public:
   void verify_subtree_bounds(CDir *root, const list<dirfrag_t>& bounds);
 
   void project_subtree_rename(CInode *diri, CDir *olddir, CDir *newdir);
-  void adjust_subtree_after_rename(CInode *diri, CDir *olddir,
-                                   bool pop, bool imported = false);
+  void adjust_subtree_after_rename(CInode *diri, CDir *olddir, bool pop);
 
   void get_auth_subtrees(set<CDir*>& s);
   void get_fullauth_subtrees(set<CDir*>& s);
@@ -494,6 +498,7 @@ protected:
   bool rejoins_pending;
   set<mds_rank_t> rejoin_gather;      // nodes from whom i need a rejoin
   set<mds_rank_t> rejoin_sent;        // nodes i sent a rejoin to
+  set<mds_rank_t> rejoin_ack_sent;    // nodes i sent a rejoin to
   set<mds_rank_t> rejoin_ack_gather;  // nodes from whom i need a rejoin ack
   map<mds_rank_t,map<inodeno_t,map<client_t,Capability::Import> > > rejoin_imported_caps;
   map<inodeno_t,pair<mds_rank_t,map<client_t,Capability::Export> > > rejoin_slave_exports;
@@ -970,7 +975,6 @@ public:
 
   // -- stray --
 public:
-  void eval_remote(CDentry *dn);
   void fetch_backtrace(inodeno_t ino, int64_t pool, bufferlist& bl, Context *fin);
   uint64_t get_num_strays() const { return stray_manager.get_num_strays(); }
 
@@ -1009,7 +1013,6 @@ public:
   }
   
   CDir* add_replica_dir(bufferlist::iterator& p, CInode *diri, mds_rank_t from, list<MDSInternalContextBase*>& finished);
-  CDir* forge_replica_dir(CInode *diri, frag_t fg, mds_rank_t from);
   CDentry *add_replica_dentry(bufferlist::iterator& p, CDir *dir, list<MDSInternalContextBase*>& finished);
   CInode *add_replica_inode(bufferlist::iterator& p, CDentry *dn, list<MDSInternalContextBase*>& finished);
 
@@ -1116,14 +1119,14 @@ public:
   void discard_delayed_expire(CDir *dir);
 
 protected:
-  void dump_cache(const char *fn, Formatter *f,
+  int dump_cache(const char *fn, Formatter *f,
 		  const std::string& dump_root = "",
 		  int depth = -1);
 public:
-  void dump_cache() {dump_cache(NULL, NULL);}
-  void dump_cache(const std::string &filename);
-  void dump_cache(Formatter *f);
-  void dump_cache(const std::string& dump_root, int depth, Formatter *f);
+  int dump_cache() { return dump_cache(NULL, NULL); }
+  int dump_cache(const std::string &filename);
+  int dump_cache(Formatter *f);
+  int dump_cache(const std::string& dump_root, int depth, Formatter *f);
 
   void dump_resolve_status(Formatter *f) const;
   void dump_rejoin_status(Formatter *f) const;

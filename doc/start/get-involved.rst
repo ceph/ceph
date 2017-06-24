@@ -12,11 +12,11 @@ These are exciting times in the Ceph community! Get involved!
 | **Blog**             | Check the Ceph Blog_ periodically to keep track | http://ceph.com/community/blog/               |
 |                      | of Ceph progress and important announcements.   |                                               |
 +----------------------+-------------------------------------------------+-----------------------------------------------+
-| **Planet Ceph**      | Check the blog aggregation on Planet Ceph for   | http://ceph.com/community/planet-ceph/        |
+| **Planet Ceph**      | Check the blog aggregation on Planet Ceph for   | https://ceph.com/category/planet/             |
 |                      | interesting stories, information and            |                                               |
 |                      | experiences from the community.                 |                                               |
 +----------------------+-------------------------------------------------+-----------------------------------------------+
-| **Wiki**             | Check the Ceph Wiki is a source for more        | https://wiki.ceph.com/                        |
+| **Wiki**             | Check the Ceph Wiki is a source for more        | http://wiki.ceph.com/                         |
 |                      | community and development related topics. You   |                                               |
 |                      | can find there information about blueprints,    |                                               |
 |                      | meetups, the Ceph Developer Summits and more.   |                                               |

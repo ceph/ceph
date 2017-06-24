@@ -211,7 +211,7 @@ OPTION(ms_bind_retry_delay, OPT_INT, 5) // Delay between attemps to bind
 OPTION(ms_bind_retry_count, OPT_INT, 6) // If binding fails, how many times do we retry to bind
 OPTION(ms_bind_retry_delay, OPT_INT, 6) // Delay between attemps to bind
 #endif
-OPTION(ms_bind_before_connect, OPT_BOOL, true)
+OPTION(ms_bind_before_connect, OPT_BOOL, false)
 OPTION(ms_rwthread_stack_bytes, OPT_U64, 1024 << 10)
 OPTION(ms_tcp_read_timeout, OPT_U64, 900)
 OPTION(ms_pq_max_tokens_per_priority, OPT_U64, 16777216)
@@ -264,7 +264,6 @@ OPTION(inject_early_sigterm, OPT_BOOL, false)
 
 OPTION(mon_data, OPT_STR, "/var/lib/ceph/mon/$cluster-$id")
 OPTION(mon_initial_members, OPT_STR, "")    // list of initial cluster mon ids; if specified, need majority to form initial quorum and create new cluster
-OPTION(mon_sync_fs_threshold, OPT_INT, 5)   // sync() when writing this many objects; 0 to disable.
 OPTION(mon_compact_on_start, OPT_BOOL, false)  // compact leveldb on ceph-mon start
 OPTION(mon_compact_on_bootstrap, OPT_BOOL, false)  // trigger leveldb compaction on bootstrap
 OPTION(mon_compact_on_trim, OPT_BOOL, true)       // compact (a prefix) when we trim old states
@@ -289,7 +288,8 @@ OPTION(mon_osd_down_out_interval, OPT_INT, 600) // seconds
 OPTION(mon_osd_down_out_subtree_limit, OPT_STR, "rack")   // smallest crush unit/type that we will not automatically mark out
 OPTION(mon_osd_min_up_ratio, OPT_DOUBLE, .3)    // min osds required to be up to mark things down
 OPTION(mon_osd_min_in_ratio, OPT_DOUBLE, .75)   // min osds required to be in to mark things out
-OPTION(mon_osd_max_op_age, OPT_DOUBLE, 32)     // max op age before we get concerned (make it a power of 2)
+OPTION(mon_osd_warn_op_age, OPT_DOUBLE, 32)     // max op age before we generate a warning (make it a power of 2)
+OPTION(mon_osd_err_op_age_ratio, OPT_DOUBLE, 128)  // when to generate an error, as multiple of mon_osd_warn_op_age
 OPTION(mon_osd_max_split_count, OPT_INT, 32) // largest number of PGs per "involved" OSD to let split create
 OPTION(mon_osd_allow_primary_temp, OPT_BOOL, false)  // allow primary_temp to be set in the osdmap
 OPTION(mon_osd_allow_primary_affinity, OPT_BOOL, false)  // allow primary_affinity to be set in the osdmap
@@ -341,6 +341,7 @@ OPTION(mon_max_osd, OPT_INT, 10000)
 OPTION(mon_probe_timeout, OPT_DOUBLE, 2.0)
 OPTION(mon_client_bytes, OPT_U64, 100ul << 20)  // client msg data allowed in memory (in bytes)
 OPTION(mon_mgr_proxy_client_bytes_ratio, OPT_FLOAT, .3) // ratio of mon_client_bytes that can be consumed by proxied mgr commands before we error out to client
+OPTION(mon_log_max_summary, OPT_U64, 50)
 OPTION(mon_daemon_bytes, OPT_U64, 400ul << 20)  // mds, osd message memory cap (in bytes)
 OPTION(mon_max_log_entries_per_event, OPT_INT, 4096)
 OPTION(mon_reweight_min_pgs_per_osd, OPT_U64, 10)   // min pgs per osd for reweight-by-pg command
@@ -688,8 +689,7 @@ OPTION(osd_crush_chooseleaf_type, OPT_INT, 1) // 1 = host
 OPTION(osd_pool_use_gmt_hitset, OPT_BOOL, true) // try to use gmt for hitset archive names if all osds in cluster support it.
 OPTION(osd_crush_update_on_start, OPT_BOOL, true)
 OPTION(osd_crush_initial_weight, OPT_DOUBLE, -1) // if >=0, the initial weight is for newly added osds.
-OPTION(osd_pool_default_crush_rule, OPT_INT, -1) // deprecated for osd_pool_default_crush_replicated_ruleset
-OPTION(osd_pool_default_crush_replicated_ruleset, OPT_INT, CEPH_DEFAULT_CRUSH_REPLICATED_RULESET)
+OPTION(osd_pool_default_crush_rule, OPT_INT, -1)
 OPTION(osd_pool_erasure_code_stripe_unit, OPT_U32, 4096) // in bytes
 OPTION(osd_pool_default_size, OPT_INT, 3)
 OPTION(osd_pool_default_min_size, OPT_INT, 0)  // 0 means no specific default; ceph will use size-size/2
@@ -753,7 +753,7 @@ OPTION(osd_inject_failure_on_pg_removal, OPT_BOOL, false)
 OPTION(osd_max_markdown_period , OPT_INT, 600)
 OPTION(osd_max_markdown_count, OPT_INT, 5)
 
-OPTION(osd_op_threads, OPT_INT, 2)    // 0 == no threading
+OPTION(osd_peering_wq_threads, OPT_INT, 2)
 OPTION(osd_peering_wq_batch_size, OPT_U64, 20)
 OPTION(osd_op_pq_max_tokens_per_priority, OPT_U64, 4194304)
 OPTION(osd_op_pq_min_cost, OPT_U64, 65536)
@@ -761,8 +761,12 @@ OPTION(osd_disk_threads, OPT_INT, 1)
 OPTION(osd_disk_thread_ioprio_class, OPT_STR, "") // rt realtime be best effort idle
 OPTION(osd_disk_thread_ioprio_priority, OPT_INT, -1) // 0-7
 OPTION(osd_recover_clone_overlap, OPT_BOOL, true)   // preserve clone_overlap during recovery/migration
-OPTION(osd_op_num_threads_per_shard, OPT_INT, 2)
-OPTION(osd_op_num_shards, OPT_INT, 5)
+OPTION(osd_op_num_threads_per_shard, OPT_INT, 0)
+OPTION(osd_op_num_threads_per_shard_hdd, OPT_INT, 1)
+OPTION(osd_op_num_threads_per_shard_ssd, OPT_INT, 2)
+OPTION(osd_op_num_shards, OPT_INT, 0)
+OPTION(osd_op_num_shards_hdd, OPT_INT, 5)
+OPTION(osd_op_num_shards_ssd, OPT_INT, 8)
 OPTION(osd_op_queue, OPT_STR, "wpq") // PrioritzedQueue (prio), Weighted Priority Queue (wpq), or debug_random
 OPTION(osd_op_queue_cut_off, OPT_STR, "low") // Min priority to go to strict queue. (low, high, debug_random)
 
@@ -798,6 +802,7 @@ OPTION(osd_heartbeat_interval, OPT_INT, 6)       // (seconds) how often we ping 
 OPTION(osd_heartbeat_grace, OPT_INT, 20)
 OPTION(osd_heartbeat_min_peers, OPT_INT, 10)     // minimum number of peers
 OPTION(osd_heartbeat_use_min_delay_socket, OPT_BOOL, false) // prio the heartbeat tcp socket and set dscp as CS6 on it if true
+OPTION(osd_heartbeat_min_size, OPT_INT, 2000) // the minimum size of OSD heartbeat messages to send
 
 // max number of parallel snap trims/pg
 OPTION(osd_pg_max_concurrent_snap_trims, OPT_U64, 2)
@@ -939,7 +944,9 @@ OPTION(rocksdb_separate_wal_dir, OPT_BOOL, false) // use $path.wal for wal
 SAFE_OPTION(rocksdb_db_paths, OPT_STR, "")   // path,size( path,size)*
 OPTION(rocksdb_log_to_ceph_log, OPT_BOOL, true)  // log to ceph log
 OPTION(rocksdb_cache_size, OPT_U64, 128*1024*1024)  // default rocksdb cache size
+OPTION(rocksdb_cache_row_ratio, OPT_FLOAT, .2)   // ratio of cache for row (vs block)
 OPTION(rocksdb_cache_shard_bits, OPT_INT, 4)  // rocksdb block cache shard bits, 4 bit -> 16 shards
+OPTION(rocksdb_cache_type, OPT_STR, "lru") // 'lru' or 'clock'
 OPTION(rocksdb_block_size, OPT_INT, 4*1024)  // default rocksdb block size
 OPTION(rocksdb_perf, OPT_BOOL, false) // Enabling this will have 5-10% impact on performance for the stats collection
 OPTION(rocksdb_collect_compaction_stats, OPT_BOOL, false) //For rocksdb, this behavior will be an overhead of 5%~10%, collected only rocksdb_perf is enabled.
@@ -987,7 +994,7 @@ OPTION(osd_recovery_op_warn_multiple, OPT_U32, 16)
 OPTION(osd_mon_shutdown_timeout, OPT_DOUBLE, 5)
 OPTION(osd_shutdown_pgref_assert, OPT_BOOL, false) // crash if the OSD has stray PG refs on shutdown
 
-OPTION(osd_max_object_size, OPT_U64, 100*1024L*1024L*1024L) // OSD's maximum object size
+OPTION(osd_max_object_size, OPT_U64, 128*1024L*1024L) // OSD's maximum object size
 OPTION(osd_max_object_name_len, OPT_U32, 2048) // max rados object name len
 OPTION(osd_max_object_namespace_len, OPT_U32, 256) // max rados object namespace len
 OPTION(osd_max_attr_name_len, OPT_U32, 100)    // max rados attr name len; cannot go higher than 100 chars for file system backends
@@ -1129,13 +1136,14 @@ OPTION(bluestore_cache_type, OPT_STR, "2q")   // lru, 2q
 OPTION(bluestore_2q_cache_kin_ratio, OPT_DOUBLE, .5)    // kin page slot size / max page slot size
 OPTION(bluestore_2q_cache_kout_ratio, OPT_DOUBLE, .5)   // number of kout page slot / total number of page slot
 OPTION(bluestore_cache_size, OPT_U64, 1024*1024*1024)
-OPTION(bluestore_cache_meta_ratio, OPT_DOUBLE, .9)
+OPTION(bluestore_cache_meta_ratio, OPT_DOUBLE, .7)
+OPTION(bluestore_cache_kv_ratio, OPT_DOUBLE, .2)
 OPTION(bluestore_kvbackend, OPT_STR, "rocksdb")
 OPTION(bluestore_allocator, OPT_STR, "bitmap")     // stupid | bitmap
 OPTION(bluestore_freelist_blocks_per_key, OPT_INT, 128)
 OPTION(bluestore_bitmapallocator_blocks_per_zone, OPT_INT, 1024) // must be power of 2 aligned, e.g., 512, 1024, 2048...
 OPTION(bluestore_bitmapallocator_span_size, OPT_INT, 1024) // must be power of 2 aligned, e.g., 512, 1024, 2048...
-OPTION(bluestore_max_deferred_txc, OPT_INT, 32)
+OPTION(bluestore_max_deferred_txc, OPT_U64, 32)
 OPTION(bluestore_rocksdb_options, OPT_STR, "compression=kNoCompression,max_write_buffer_number=4,min_write_buffer_number_to_merge=1,recycle_log_file_num=4,write_buffer_size=268435456,writable_file_max_buffer_size=0,compaction_readahead_size=2097152")
 OPTION(bluestore_fsck_on_mount, OPT_BOOL, false)
 OPTION(bluestore_fsck_on_mount_deep, OPT_BOOL, true)
@@ -1146,7 +1154,7 @@ OPTION(bluestore_fsck_on_mkfs_deep, OPT_BOOL, false)
 OPTION(bluestore_sync_submit_transaction, OPT_BOOL, false) // submit kv txn in queueing thread (not kv_sync_thread)
 OPTION(bluestore_throttle_bytes, OPT_U64, 64*1024*1024)
 OPTION(bluestore_throttle_deferred_bytes, OPT_U64, 128*1024*1024)
-OPTION(bluestore_throttle_cost_per_io_hdd, OPT_U64, 1500000)
+OPTION(bluestore_throttle_cost_per_io_hdd, OPT_U64, 670000)
 OPTION(bluestore_throttle_cost_per_io_ssd, OPT_U64, 4000)
 OPTION(bluestore_throttle_cost_per_io, OPT_U64, 0)
 OPTION(bluestore_deferred_batch_ops, OPT_U64, 0)
@@ -1167,6 +1175,8 @@ OPTION(bluestore_debug_inject_read_err, OPT_BOOL, false)
 OPTION(bluestore_debug_randomize_serial_transaction, OPT_INT, 0)
 OPTION(bluestore_debug_omit_block_device_write, OPT_BOOL, false)
 OPTION(bluestore_debug_fsck_abort, OPT_BOOL, false)
+OPTION(bluestore_debug_omit_kv_commit, OPT_BOOL, false)
+OPTION(bluestore_debug_permit_any_bdev_label, OPT_BOOL, false)
 OPTION(bluestore_shard_finishers, OPT_BOOL, false)
 
 OPTION(kstore_max_ops, OPT_U64, 512)
@@ -1180,7 +1190,6 @@ OPTION(kstore_nid_prealloc, OPT_U64, 1024)
 OPTION(kstore_sync_transaction, OPT_BOOL, false)
 OPTION(kstore_sync_submit_transaction, OPT_BOOL, false)
 OPTION(kstore_onode_map_size, OPT_U64, 1024)
-OPTION(kstore_cache_tails, OPT_BOOL, true)
 OPTION(kstore_default_stripe_size, OPT_INT, 65536)
 
 OPTION(filestore_omap_backend, OPT_STR, "rocksdb")
@@ -1212,7 +1221,7 @@ OPTION(filestore_index_retry_probability, OPT_DOUBLE, 0)
 // Allow object read error injection
 OPTION(filestore_debug_inject_read_err, OPT_BOOL, false)
 
-OPTION(filestore_debug_omap_check, OPT_BOOL, 0) // Expensive debugging check on sync
+OPTION(filestore_debug_omap_check, OPT_BOOL, false) // Expensive debugging check on sync
 OPTION(filestore_omap_header_cache_size, OPT_INT, 1024)
 
 // Use omap for xattrs for attrs over
@@ -1337,7 +1346,7 @@ OPTION(journal_discard, OPT_BOOL, false) //using ssd disk as journal, whether su
 
 OPTION(fio_dir, OPT_STR, "/tmp/fio") // fio data directory for fio-objectstore
 
-OPTION(rados_mon_op_timeout, OPT_DOUBLE, 0) // how many seconds to wait for a response from the monitor before returning an error from a rados operation. 0 means on limit.
+OPTION(rados_mon_op_timeout, OPT_DOUBLE, 0) // how many seconds to wait for a response from the monitor before returning an error from a rados operation. 0 means no limit.
 OPTION(rados_osd_op_timeout, OPT_DOUBLE, 0) // how many seconds to wait for a response from osds before returning an error from a rados operation. 0 means no limit.
 OPTION(rados_tracing, OPT_BOOL, false) // true if LTTng-UST tracepoints should be enabled
 
@@ -1374,6 +1383,9 @@ OPTION(rbd_auto_exclusive_lock_until_manual_request, OPT_BOOL, true) // whether 
 OPTION(rbd_mirroring_resync_after_disconnect, OPT_BOOL, false) // automatically start image resync after mirroring is disconnected due to being laggy
 OPTION(rbd_mirroring_replay_delay, OPT_INT, 0) // time-delay in seconds for rbd-mirror asynchronous replication
 
+OPTION(rbd_default_pool, OPT_STR, "rbd") // default pool for storing images
+OPTION_VALIDATOR(rbd_default_pool)
+
 /*
  * The following options change the behavior for librbd's image creation methods that
  * don't require all of the parameters. These are provided so that older programs
@@ -1395,6 +1407,7 @@ OPTION(rbd_default_order, OPT_INT, 22)
 OPTION(rbd_default_stripe_count, OPT_U64, 0) // changing requires stripingv2 feature
 OPTION(rbd_default_stripe_unit, OPT_U64, 0) // changing to non-object size requires stripingv2 feature
 OPTION(rbd_default_data_pool, OPT_STR, "") // optional default pool for storing image data blocks
+OPTION_VALIDATOR(rbd_default_data_pool)
 
 /**
  * RBD features are only applicable for v2 images. This setting accepts either
@@ -1553,6 +1566,7 @@ OPTION(rgw_op_thread_suicide_timeout, OPT_INT, 0)
 OPTION(rgw_thread_pool_size, OPT_INT, 100)
 OPTION(rgw_num_control_oids, OPT_INT, 8)
 OPTION(rgw_num_rados_handles, OPT_U32, 1)
+OPTION(rgw_verify_ssl, OPT_BOOL, true) // should http_client try to verify ssl when sent https request
 
 /* The following are tunables for caches of RGW NFS (and other file
  * client) objects.

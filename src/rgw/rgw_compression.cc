@@ -34,7 +34,7 @@ int RGWPutObj_Compress::handle_data(bufferlist& bl, off_t ofs, void **phandle, r
         compressed = true;
     
         compression_block newbl;
-        int bs = blocks.size();
+        size_t bs = blocks.size();
         newbl.old_ofs = ofs;
         newbl.new_ofs = bs > 0 ? blocks[bs-1].len + blocks[bs-1].new_ofs : 0;
         newbl.len = in_bl.length();
@@ -76,23 +76,24 @@ int RGWGetObj_Decompress::handle_data(bufferlist& bl, off_t bl_ofs, off_t bl_len
     lderr(cct) << "Cannot load compressor of type " << cs_info->compression_type << dendl;
     return -EIO;
   }
-  bufferlist out_bl, in_bl;
+  bufferlist out_bl, in_bl, temp_in_bl;
+  bl.copy(bl_ofs, bl_len, temp_in_bl); 
   bl_ofs = 0;
   if (waiting.length() != 0) {
     in_bl.append(waiting);
-    in_bl.append(bl);        
+    in_bl.append(temp_in_bl);        
     waiting.clear();
   } else {
-    in_bl.claim(bl);
+    in_bl.claim(temp_in_bl);
   }
   bl_len = in_bl.length();
-  
+
   while (first_block <= last_block) {
     bufferlist tmp, tmp_out;
-    int ofs_in_bl = first_block->new_ofs - cur_ofs;
-    if (ofs_in_bl + (unsigned)first_block->len > bl_len) {
+    off_t ofs_in_bl = first_block->new_ofs - cur_ofs;
+    if (ofs_in_bl + (off_t)first_block->len > bl_len) {
       // not complete block, put it to waiting
-      int tail = bl_len - ofs_in_bl;
+      unsigned tail = bl_len - ofs_in_bl;
       in_bl.copy(ofs_in_bl, tail, waiting);
       cur_ofs -= tail;
       break;
@@ -129,8 +130,8 @@ int RGWGetObj_Decompress::fixup_range(off_t& ofs, off_t& end)
     if (cs_info->blocks.size() > 1) {
       vector<compression_block>::iterator fb, lb;
       // not bad to use auto for lambda, I think
-      auto cmp_u = [] (off_t ofs, const compression_block& e) { return (unsigned)ofs < e.old_ofs; };
-      auto cmp_l = [] (const compression_block& e, off_t ofs) { return e.old_ofs < (unsigned)ofs; };
+      auto cmp_u = [] (off_t ofs, const compression_block& e) { return (uint64_t)ofs < e.old_ofs; };
+      auto cmp_l = [] (const compression_block& e, off_t ofs) { return e.old_ofs <= (uint64_t)ofs; };
       fb = upper_bound(cs_info->blocks.begin()+1,
                        cs_info->blocks.end(),
                        ofs,
@@ -150,7 +151,7 @@ int RGWGetObj_Decompress::fixup_range(off_t& ofs, off_t& end)
   q_len = end - last_block->old_ofs + 1;
 
   ofs = first_block->new_ofs;
-  end = last_block->new_ofs + last_block->len;
+  end = last_block->new_ofs + last_block->len - 1;
 
   first_data = true;
   cur_ofs = ofs;

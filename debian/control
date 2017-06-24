@@ -26,7 +26,6 @@ Build-Depends: bc,
 	       jq,
                junit4,
                libaio-dev,
-               libatomic-ops-dev,
                libbabeltrace-ctf-dev,
                libbabeltrace-dev,
                libblkid-dev (>= 2.17),
@@ -52,9 +51,11 @@ Build-Depends: bc,
                python-all-dev,
                python-cherrypy3,
                python-nose,
+	       python-pecan,
 	       python-prettytable,
 	       python-setuptools,
                python-sphinx,
+	       python-werkzeug,
                python3-all-dev,
                python3-setuptools,
                virtualenv | python-virtualenv,
@@ -160,16 +161,16 @@ Description: debugging symbols for ceph-mds
 Package: ceph-mgr
 Architecture: linux-any
 Depends: ceph-base (= ${binary:Version}),
+         python-openssl,
          python-pecan,
          python-werkzeug,
-         openssl,
          ${misc:Depends},
          ${python:Depends},
 	 python-cherrypy3,
          ${shlibs:Depends}
 Replaces: ceph (<< 0.93-417)
 Breaks: ceph (<< 0.93-417)
-Description: metadata server for the ceph distributed file system
+Description: manager for the ceph distributed storage system
  Ceph is a massively scalable, open-source, distributed
  storage system that runs on commodity hardware and delivers object,
  block and file system storage.

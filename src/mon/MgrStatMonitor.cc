@@ -11,7 +11,7 @@
 #include "messages/MStatfs.h"
 #include "messages/MStatfsReply.h"
 
-class MgrPGStatService : public PGStatService {
+class MgrPGStatService : public MonPGStatService {
   PGMapDigest& digest;
 public:
   MgrPGStatService(PGMapDigest& d) : digest(d) {}
@@ -63,7 +63,7 @@ MgrStatMonitor::MgrStatMonitor(Monitor *mn, Paxos *p, const string& service_name
 
 MgrStatMonitor::~MgrStatMonitor() = default;
 
-PGStatService *MgrStatMonitor::get_pg_stat_service()
+MonPGStatService *MgrStatMonitor::get_pg_stat_service()
 {
   return pgservice.get();
 }
@@ -100,6 +100,11 @@ void MgrStatMonitor::create_pending()
 void MgrStatMonitor::encode_pending(MonitorDBStore::TransactionRef t)
 {
   ++version;
+  if (version < mon->pgmon()->get_last_committed()) {
+    // fast-forward to pgmon version to ensure clients don't see a
+    // jump back in time for MGetPoolStats and MStatFs.
+    version = mon->pgmon()->get_last_committed() + 1;
+  }
   dout(10) << " " << version << dendl;
   bufferlist bl;
   ::encode(pending_digest, bl, mon->get_quorum_con_features());
@@ -182,6 +187,7 @@ bool MgrStatMonitor::prepare_report(MonOpRequestRef op)
   bufferlist bl = m->get_data();
   auto p = bl.begin();
   ::decode(pending_digest, p);
+  dout(10) << __func__ << " " << pending_digest << dendl;
   pending_health_summary.swap(m->health_summary);
   pending_health_detail.swap(m->health_detail);
   return true;

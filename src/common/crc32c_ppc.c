@@ -7,9 +7,12 @@
  * 2 of the License, or (at your option) any later version.
  */
 #define CRC_TABLE
+#define FAST_ZERO_TABLE
+
 #include "acconfig.h"
 #include "include/int_types.h"
 #include "crc32c_ppc_constants.h"
+#include "reverse.h"
 
 #include <stdlib.h>
 #include <strings.h>
@@ -35,8 +38,38 @@ static unsigned int crc32_align(unsigned int crc, unsigned char const *p,
 }
 #endif
 
-
 #ifdef HAVE_POWER8
+static inline unsigned long polynomial_multiply(unsigned int a, unsigned int b) {
+        vector unsigned int va = {a, 0, 0, 0};
+        vector unsigned int vb = {b, 0, 0, 0};
+        vector unsigned long vt;
+
+        __asm__("vpmsumw %0,%1,%2" : "=v"(vt) : "v"(va), "v"(vb));
+
+        return vt[0];
+}
+
+unsigned int barrett_reduction(unsigned long val);
+
+static inline unsigned int gf_multiply(unsigned int a, unsigned int b) {
+        return barrett_reduction(polynomial_multiply(a, b));
+}
+
+unsigned int append_zeros(unsigned int crc, unsigned long length) {
+        unsigned long i = 0;
+
+        while (length) {
+                if (length & 1) {
+                        crc = gf_multiply(crc, crc_zero[i]);
+                }
+                i++;
+                length /= 2;
+        }
+
+        return crc;
+}
+
+
 unsigned int __crc32_vpmsum(unsigned int crc, unsigned char const *p,
                             unsigned long len);
 
@@ -79,19 +112,23 @@ out:
 }
 
 /* This wrapper function works around the fact that crc32_vpmsum 
- * does not gracefully handle the case where the data pointer is NULL.  There
- * may be room for performance improvement here.
+ * does not gracefully handle the case where the data pointer is NULL.
  */
 uint32_t ceph_crc32c_ppc(uint32_t crc, unsigned char const *data, unsigned len)
 {
-  unsigned char *buf2;
-
   if (!data) {
-    buf2 = malloc(len);
-    bzero(buf2, len);
-    crc = crc32_vpmsum(crc, buf2, len);
-    free(buf2);
+    /* Handle the NULL buffer case. */
+#ifdef REFLECT
+    crc = reverse_bits(crc);
+#endif
+
+    crc = append_zeros(crc, len);
+
+#ifdef REFLECT
+    crc = reverse_bits(crc);
+#endif
   } else {
+    /* Handle the valid buffer case. */
     crc = crc32_vpmsum(crc, data, (unsigned long)len);
   }
   return crc;

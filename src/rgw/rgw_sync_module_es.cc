@@ -2,7 +2,6 @@
 #include "rgw_coroutine.h"
 #include "rgw_sync_module.h"
 #include "rgw_data_sync.h"
-#include "rgw_boost_asio_yield.h"
 #include "rgw_sync_module_es.h"
 #include "rgw_sync_module_es_rest.h"
 #include "rgw_rest_conn.h"
@@ -11,6 +10,8 @@
 #include "rgw_es_query.h"
 
 #include "include/str_list.h"
+
+#include <boost/asio/yield.hpp>
 
 #define dout_subsys ceph_subsys_rgw
 

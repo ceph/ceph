@@ -175,17 +175,39 @@
             <div class="box-header">
                 Cluster log
             </div>
-            <div class="box-body" style="font-family:monospace; background-color: #ddd; color: #333">
-                <span >
-                    <span rv-each-line="clog">
-                        { line.stamp }&nbsp;{line.priority}&nbsp;
-                        <span  rv-style="line | log_color">
-                            <span style="font-weight: bold;">
-                                { line.message }
-                            </span><br>
+            <div class="box-body">
+                <ul class="nav nav-tabs">
+                  <li class="active"><a data-toggle="tab" href="#clog">Cluster log</a></li>
+                  <li><a data-toggle="tab" href="#audit_log">Audit log</a></li>
+                </ul>
+                <div class="tab-content" style="font-family:monospace; background-color: #ddd; color: #333">
+                    <div id="clog" class="tab-pane fade in active">
+                        <span>
+                            <span rv-each-line="clog">
+                                { line.stamp }&nbsp;{line.priority}&nbsp;
+                                <span  rv-style="line | log_color">
+                                    <span style="font-weight: bold;">
+                                        { line.message }
+                                    </span><br>
+                                </span>
+                            </span>
                         </span>
-                    </span>
-                </span>
+                    </div>
+                    <div id="audit_log" class="tab-pane fade in">
+                        <span>
+                            <span rv-each-line="audit_log">
+                                { line.stamp }&nbsp;{line.priority}&nbsp;
+                                <span  rv-style="line | log_color">
+                                    <span style="font-weight: bold;">
+                                        { line.message }
+                                    </span><br>
+                                </span>
+                            </span>
+                        </span>
+
+                    </div>
+                </div>
+
             </div>
 
         </div>

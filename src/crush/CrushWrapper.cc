@@ -12,6 +12,65 @@
 
 #define dout_subsys ceph_subsys_crush
 
+bool CrushWrapper::has_legacy_rulesets() const
+{
+  for (unsigned i=0; i<crush->max_rules; i++) {
+    crush_rule *r = crush->rules[i];
+    if (r &&
+	r->mask.ruleset != i) {
+      return true;
+    }
+  }
+  return false;
+}
+
+int CrushWrapper::renumber_rules_by_ruleset()
+{
+  int max_ruleset = 0;
+  for (unsigned i=0; i<crush->max_rules; i++) {
+    crush_rule *r = crush->rules[i];
+    if (r && r->mask.ruleset >= max_ruleset) {
+      max_ruleset = r->mask.ruleset + 1;
+    }
+  }
+  struct crush_rule **newrules =
+    (crush_rule**)calloc(1, max_ruleset * sizeof(crush_rule*));
+  for (unsigned i=0; i<crush->max_rules; i++) {
+    crush_rule *r = crush->rules[i];
+    if (!r)
+      continue;
+    if (newrules[r->mask.ruleset]) {
+      // collision, we can't do it.
+      free(newrules);
+      return -EINVAL;
+    }
+    newrules[r->mask.ruleset] = r;
+  }
+
+  // success, swap!
+  free(crush->rules);
+  crush->rules = newrules;
+  crush->max_rules = max_ruleset;
+  return 0;
+}
+
+bool CrushWrapper::has_multirule_rulesets() const
+{
+  for (unsigned i=0; i<crush->max_rules; i++) {
+    crush_rule *r = crush->rules[i];
+    if (!r)
+      continue;
+    for (unsigned j=i+1; j<crush->max_rules; j++) {
+      crush_rule *s = crush->rules[j];
+      if (!s)
+	continue;
+      if (r->mask.ruleset == s->mask.ruleset)
+	return true;
+    }
+  }
+  return false;
+}
+
 bool CrushWrapper::has_v2_rules() const
 {
   for (unsigned i=0; i<crush->max_rules; i++) {
@@ -677,6 +736,64 @@ int CrushWrapper::get_children(int id, list<int> *children)
   return b->size;
 }
 
+int CrushWrapper::_get_leaves(int id, list<int> *leaves)
+{
+  assert(leaves);
+
+  // Already leaf?
+  if (id >= 0) {
+    leaves->push_back(id);
+    return 0;
+  }
+
+  crush_bucket *b = get_bucket(id);
+  if (IS_ERR(b)) {
+    return -ENOENT;
+  }
+
+  for (unsigned n = 0; n < b->size; n++) {
+    if (b->items[n] >= 0) {
+      leaves->push_back(b->items[n]);
+    } else {
+      // is a bucket, do recursive call
+      int r = _get_leaves(b->items[n], leaves);
+      if (r < 0) {
+        return r;
+      }
+    }
+  }
+
+  return 0; // all is well
+}
+
+int CrushWrapper::get_leaves(const string &name, set<int> *leaves)
+{
+  assert(leaves);
+  leaves->clear();
+
+  if (!name_exists(name)) {
+    return -ENOENT;
+  }
+
+  int id = get_item_id(name);
+  if (id >= 0) {
+    // already leaf
+    leaves->insert(id);
+    return 0;
+  }
+
+  list<int> unordered;
+  int r = _get_leaves(id, &unordered);
+  if (r < 0) {
+    return r;
+  }
+
+  for (auto &p : unordered) {
+    leaves->insert(p);
+  }
+
+  return 0;
+}
 
 int CrushWrapper::insert_item(CephContext *cct, int item, float weight, string name,
 			      const map<string,string>& loc)  // typename -> bucketname
@@ -1180,10 +1297,11 @@ void CrushWrapper::reweight(CephContext *cct)
   }
 }
 
-int CrushWrapper::add_simple_ruleset_at(string name, string root_name,
-                                        string failure_domain_name,
-                                        string mode, int rule_type,
-                                        int rno, ostream *err)
+int CrushWrapper::add_simple_rule_at(
+  string name, string root_name,
+  string failure_domain_name,
+  string mode, int rule_type,
+  int rno, ostream *err)
 {
   if (rule_exists(name)) {
     if (err)
@@ -1266,13 +1384,14 @@ int CrushWrapper::add_simple_ruleset_at(string name, string root_name,
   return rno;
 }
 
-int CrushWrapper::add_simple_ruleset(string name, string root_name,
-                                     string failure_domain_name,
-                                     string mode, int rule_type,
-                                     ostream *err)
+int CrushWrapper::add_simple_rule(
+  string name, string root_name,
+  string failure_domain_name,
+  string mode, int rule_type,
+  ostream *err)
 {
-  return add_simple_ruleset_at(name, root_name, failure_domain_name, mode,
-                               rule_type, -1, err);
+  return add_simple_rule_at(name, root_name, failure_domain_name, mode,
+			    rule_type, -1, err);
 }
 
 int CrushWrapper::get_rule_weight_osd_map(unsigned ruleno, map<int,float> *pmap)
@@ -2272,26 +2391,6 @@ void CrushWrapper::generate_test_instances(list<CrushWrapper*>& o)
   // fixme
 }
 
-int CrushWrapper::_get_osd_pool_default_crush_replicated_ruleset(CephContext *cct,
-                                                                 bool quiet)
-{
-  int crush_ruleset = cct->_conf->osd_pool_default_crush_rule;
-  if (crush_ruleset == -1) {
-    crush_ruleset = cct->_conf->osd_pool_default_crush_replicated_ruleset;
-  } else if (!quiet) {
-    ldout(cct, 0) << "osd_pool_default_crush_rule is deprecated "
-                  << "use osd_pool_default_crush_replicated_ruleset instead"
-                  << dendl;
-    ldout(cct, 0) << "osd_pool_default_crush_rule = "
-                  << cct->_conf-> osd_pool_default_crush_rule << " overrides "
-                  << "osd_pool_default_crush_replicated_ruleset = "
-                  << cct->_conf->osd_pool_default_crush_replicated_ruleset
-                  << dendl;
-  }
-
-  return crush_ruleset;
-}
-
 /**
  * Determine the default CRUSH ruleset ID to be used with
  * newly created replicated pools.
@@ -2300,14 +2399,12 @@ int CrushWrapper::_get_osd_pool_default_crush_replicated_ruleset(CephContext *cc
  */
 int CrushWrapper::get_osd_pool_default_crush_replicated_ruleset(CephContext *cct)
 {
-  int crush_ruleset = _get_osd_pool_default_crush_replicated_ruleset(cct,
-                                                                     false);
-  if (crush_ruleset == CEPH_DEFAULT_CRUSH_REPLICATED_RULESET) {
+  int crush_ruleset = cct->_conf->osd_pool_default_crush_rule;
+  if (crush_ruleset < 0) {
     crush_ruleset = find_first_ruleset(pg_pool_t::TYPE_REPLICATED);
   } else if (!ruleset_exists(crush_ruleset)) {
     crush_ruleset = -1; // match find_first_ruleset() retval
   }
-
   return crush_ruleset;
 }
 

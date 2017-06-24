@@ -782,9 +782,11 @@ void MDLog::_trim_expired_segments()
     // this was the oldest segment, adjust expire pos
     if (journaler->get_expire_pos() < ls->end) {
       journaler->set_expire_pos(ls->end);
+      logger->set(l_mdl_expos, ls->end);
+    } else {
+      logger->set(l_mdl_expos, ls->offset);
     }
     
-    logger->set(l_mdl_expos, ls->offset);
     logger->inc(l_mdl_segtrm);
     logger->inc(l_mdl_evtrm, ls->num_events);
     

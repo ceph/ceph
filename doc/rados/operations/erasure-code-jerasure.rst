@@ -6,7 +6,7 @@ The *jerasure* plugin is the most generic and flexible plugin, it is
 also the default for Ceph erasure coded pools. 
 
 The *jerasure* plugin encapsulates the `Jerasure
-<https://bitbucket.org/jimplank/jerasure/>`_ library. It is
+<http://jerasure.org>`_ library. It is
 recommended to read the *jerasure* documentation to get a better
 understanding of the parameters.
 

@@ -799,7 +799,6 @@ void PG::check_past_interval_bounds() const
       derr << info.pgid << " required past_interval bounds are"
 	   << " empty [" << rpib << ") but past_intervals is not: "
 	   << past_intervals << dendl;
-      assert(past_intervals.empty());
     }
   } else {
     if (past_intervals.empty()) {
@@ -1726,7 +1725,8 @@ void PG::activate(ObjectStore::Transaction& t,
         for (list<pg_log_entry_t>::iterator p = m->log.log.begin();
              p != m->log.log.end();
              ++p)
-	  if (p->soid <= pi.last_backfill)
+	  if (p->soid <= pi.last_backfill &&
+	      !p->is_error())
 	    pm.add_next_event(*p);
       }
       
@@ -1935,7 +1935,7 @@ void PG::all_activated_and_committed()
         AllReplicasActivated())));
 }
 
-bool PG::requeue_scrub()
+bool PG::requeue_scrub(bool high_priority)
 {
   assert(is_locked());
   if (scrub_queued) {
@@ -1944,7 +1944,7 @@ bool PG::requeue_scrub()
   } else {
     dout(10) << __func__ << ": queueing" << dendl;
     scrub_queued = true;
-    osd->queue_for_scrub(this);
+    osd->queue_for_scrub(this, high_priority);
     return true;
   }
 }
@@ -3664,7 +3664,11 @@ void PG::do_replica_scrub_map(OpRequestRef op)
   --scrubber.waiting_on;
   scrubber.waiting_on_whom.erase(m->from);
   if (scrubber.waiting_on == 0) {
-    requeue_scrub();
+    if (ops_blocked_by_scrub()) {
+      requeue_scrub(true);
+    } else {
+      requeue_scrub(false);
+    }
   }
 }
 
@@ -3700,7 +3704,11 @@ void PG::sub_op_scrub_map(OpRequestRef op)
   scrubber.waiting_on_whom.erase(m->from);
 
   if (scrubber.waiting_on == 0) {
-    requeue_scrub();
+    if (ops_blocked_by_scrub()) {
+      requeue_scrub(true);
+    } else {
+      requeue_scrub(false);
+    }
   }
 }
 
@@ -4797,6 +4805,10 @@ bool PG::scrub_process_inconsistent()
   return (!scrubber.authoritative.empty() && repair);
 }
 
+bool PG::ops_blocked_by_scrub() const {
+  return (waiting_for_scrub.size() != 0);
+}
+
 // the part that actually finalizes a scrub
 void PG::scrub_finish() 
 {
@@ -4928,7 +4940,7 @@ void PG::share_pg_info()
 }
 
 bool PG::append_log_entries_update_missing(
-  const mempool::osd::list<pg_log_entry_t> &entries,
+  const mempool::osd_pglog::list<pg_log_entry_t> &entries,
   ObjectStore::Transaction &t)
 {
   assert(!entries.empty());
@@ -4955,7 +4967,7 @@ bool PG::append_log_entries_update_missing(
 
 
 void PG::merge_new_log_entries(
-  const mempool::osd::list<pg_log_entry_t> &entries,
+  const mempool::osd_pglog::list<pg_log_entry_t> &entries,
   ObjectStore::Transaction &t)
 {
   dout(10) << __func__ << " " << entries << dendl;

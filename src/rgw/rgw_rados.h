@@ -2046,7 +2046,7 @@ protected:
   rgw_bucket bucket;
   map<RGWObjCategory, RGWStorageStats> *stats;
 public:
-  explicit RGWGetBucketStats_CB(rgw_bucket& _bucket) : bucket(_bucket), stats(NULL) {}
+  explicit RGWGetBucketStats_CB(const rgw_bucket& _bucket) : bucket(_bucket), stats(NULL) {}
   ~RGWGetBucketStats_CB() override {}
   virtual void handle_response(int r) = 0;
   virtual void set_response(map<RGWObjCategory, RGWStorageStats> *_stats) {
@@ -2465,6 +2465,16 @@ public:
   const string& get_current_period_id() {
     return current_period.get_id();
   }
+
+  bool has_zonegroup_api(const std::string& api) const {
+    if (!current_period.get_id().empty()) {
+      const auto& zonegroups_by_api = current_period.get_map().zonegroups_by_api;
+      if (zonegroups_by_api.find(api) != zonegroups_by_api.end())
+        return true;
+    }
+    return false;
+  }
+
   // pulls missing periods for period_history
   std::unique_ptr<RGWPeriodPuller> period_puller;
   // maintains a connected history of periods
@@ -3192,9 +3202,8 @@ public:
   int delete_obj_index(const rgw_obj& obj);
 
   /**
-   * Get the attributes for an object.
-   * bucket: name of the bucket holding the object.
-   * obj: name of the object
+   * Get an attribute for a system object.
+   * obj: the object to get attr
    * name: name of the attr to retrieve
    * dest: bufferlist to store the result in
    * Returns: 0 on success, -ERR# otherwise.
@@ -3503,7 +3512,7 @@ public:
   int check_quota(const rgw_user& bucket_owner, rgw_bucket& bucket,
                   RGWQuotaInfo& user_quota, RGWQuotaInfo& bucket_quota, uint64_t obj_size);
 
-  int check_bucket_shards(const RGWBucketInfo& bucket_info, rgw_bucket& bucket,
+  int check_bucket_shards(const RGWBucketInfo& bucket_info, const rgw_bucket& bucket,
 			  RGWQuotaInfo& bucket_quota);
 
   int add_bucket_to_reshard(const RGWBucketInfo& bucket_info, uint32_t new_num_shards);
@@ -3557,7 +3566,7 @@ public:
   }
 
   bool need_to_log_metadata() {
-    return get_zone().log_meta;
+    return is_meta_master() && get_zone().log_meta;
   }
 
   librados::Rados* get_rados_handle();
@@ -3617,11 +3626,12 @@ public:
 
   /**
    * Init pool iteration
-   * bucket: pool name in a bucket object
+   * pool: pool to use for the ctx initialization
    * ctx: context object to use for the iteration
    * Returns: 0 on success, -ERR# otherwise.
    */
   int pool_iterate_begin(const rgw_pool& pool, RGWPoolIterCtx& ctx);
+
   /**
    * Iterate over pool return object names, use optional filter
    * ctx: iteration context, initialized with pool_iterate_begin()

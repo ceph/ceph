@@ -41,7 +41,7 @@
 
 using namespace Hypertable;
 
-atomic_t CephBroker::ms_next_fd = ATOMIC_INIT(0);
+std::atomic<int> CephBroker::ms_next_fd{0};
 
 /* A thread-safe version of strerror */
 static std::string cpp_strerror(int err)

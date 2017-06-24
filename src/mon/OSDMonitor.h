@@ -316,20 +316,20 @@ private:
 			ErasureCodeProfile &profile,
 			bool force,
 			ostream *ss);
-  int crush_ruleset_create_erasure(const string &name,
-				   const string &profile,
-				   int *ruleset,
-				   ostream *ss);
-  int get_crush_ruleset(const string &ruleset_name,
-			int *crush_ruleset,
+  int crush_rule_create_erasure(const string &name,
+				const string &profile,
+				int *rule,
+				ostream *ss);
+  int get_crush_rule(const string &rule_name,
+			int *crush_rule,
 			ostream *ss);
   int get_erasure_code(const string &erasure_code_profile,
 		       ErasureCodeInterfaceRef *erasure_code,
 		       ostream *ss) const;
-  int prepare_pool_crush_ruleset(const unsigned pool_type,
+  int prepare_pool_crush_rule(const unsigned pool_type,
 				 const string &erasure_code_profile,
-				 const string &ruleset_name,
-				 int *crush_ruleset,
+				 const string &rule_name,
+				 int *crush_rule,
 				 ostream *ss);
   bool erasure_code_profile_in_use(
     const mempool::osdmap::map<int64_t, pg_pool_t> &pools,
@@ -347,8 +347,8 @@ private:
 				unsigned *stripe_width,
 				ostream *ss);
   int prepare_new_pool(string& name, uint64_t auid,
-		       int crush_ruleset,
-		       const string &crush_ruleset_name,
+		       int crush_rule,
+		       const string &crush_rule_name,
                        unsigned pg_num, unsigned pgp_num,
 		       const string &erasure_code_profile,
                        const unsigned pool_type,
@@ -429,6 +429,7 @@ private:
   OpTracker op_tracker;
 
   int load_metadata(int osd, map<string, string>& m, ostream *err);
+  void count_metadata(const string& field, Formatter *f);
   int get_osd_objectstore_type(int osd, std::string *type);
   bool is_pool_currently_all_bluestore(int64_t pool_id, const pg_pool_t &pool,
 				       ostream *err);
@@ -464,6 +465,8 @@ private:
   void check_pg_creates_subs();
   epoch_t send_pg_creates(int osd, Connection *con, epoch_t next);
 
+  int32_t _allocate_osd_id(int32_t* existing_id);
+
 public:
   OSDMonitor(CephContext *cct, Monitor *mn, Paxos *p, const string& service_name);
 
@@ -475,6 +478,41 @@ public:
   bool preprocess_command(MonOpRequestRef op);
   bool prepare_command(MonOpRequestRef op);
   bool prepare_command_impl(MonOpRequestRef op, map<string,cmd_vartype>& cmdmap);
+
+  int validate_osd_create(
+      const int32_t id,
+      const uuid_d& uuid,
+      const bool check_osd_exists,
+      int32_t* existing_id,
+      stringstream& ss);
+  int prepare_command_osd_create(
+      const int32_t id,
+      const uuid_d& uuid,
+      int32_t* existing_id,
+      stringstream& ss);
+  void do_osd_create(const int32_t id, const uuid_d& uuid, int32_t* new_id);
+  int prepare_command_osd_purge(int32_t id, stringstream& ss);
+  int prepare_command_osd_destroy(int32_t id, stringstream& ss);
+  int _prepare_command_osd_crush_remove(
+      CrushWrapper &newcrush,
+      int32_t id,
+      int32_t ancestor,
+      bool has_ancestor,
+      bool unlink_only);
+  void do_osd_crush_remove(CrushWrapper& newcrush);
+  int prepare_command_osd_crush_remove(
+      CrushWrapper &newcrush,
+      int32_t id,
+      int32_t ancestor,
+      bool has_ancestor,
+      bool unlink_only);
+  int prepare_command_osd_remove(int32_t id);
+  int prepare_command_osd_new(
+      MonOpRequestRef op,
+      const map<string,cmd_vartype>& cmdmap,
+      const map<string,string>& secrets,
+      stringstream &ss,
+      Formatter *f);
 
   int prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
                                stringstream& ss);

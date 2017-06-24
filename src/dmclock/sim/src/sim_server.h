@@ -143,6 +143,8 @@ namespace crimson {
 	}
 
 	delete[] threads;
+
+	delete priority_queue;
       }
 
       void post(const TestRequest& request,

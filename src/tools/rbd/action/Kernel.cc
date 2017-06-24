@@ -259,8 +259,10 @@ static void print_error_description(const char *poolname, const char *imgname,
       } else {
         std::cout << "You can disable features unsupported by the kernel "
                   << "with \"rbd feature disable ";
-        if (poolname != at::DEFAULT_POOL_NAME)
+
+        if (poolname != utils::get_default_pool_name()) {
           std::cout << poolname << "/";
+        }
         std::cout << imgname;
       }
     } else {

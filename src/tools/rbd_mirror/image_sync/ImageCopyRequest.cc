@@ -7,7 +7,6 @@
 #include "common/errno.h"
 #include "common/Timer.h"
 #include "journal/Journaler.h"
-#include "librbd/ExclusiveLock.h"
 #include "librbd/Utils.h"
 #include "tools/rbd_mirror/ProgressContext.h"
 
@@ -142,7 +141,6 @@ void ImageCopyRequest<I>::send_object_copies() {
 
   bool complete;
   {
-    RWLock::RLocker owner_locker(m_local_image_ctx->owner_lock);
     Mutex::Locker locker(m_lock);
     for (int i = 0; i < cct->_conf->rbd_concurrent_management_ops; ++i) {
       send_next_object_copy();
@@ -174,7 +172,6 @@ void ImageCopyRequest<I>::send_object_copies() {
 
 template <typename I>
 void ImageCopyRequest<I>::send_next_object_copy() {
-  assert(m_local_image_ctx->owner_lock.is_locked());
   assert(m_lock.is_locked());
 
   if (m_canceled && m_ret_val == 0) {
@@ -192,20 +189,8 @@ void ImageCopyRequest<I>::send_next_object_copy() {
 
   ++m_current_ops;
 
-  Context *finish_op_ctx = nullptr;
-  if (m_local_image_ctx->exclusive_lock != nullptr) {
-    finish_op_ctx = m_local_image_ctx->exclusive_lock->start_op();
-  }
-  if (finish_op_ctx == nullptr) {
-    derr << ": lost exclusive lock" << dendl;
-    finish(-EROFS);
-    return;
-  }
-
-  auto ctx = new FunctionContext([this, finish_op_ctx](int r) {
-      handle_object_copy(r);
-      finish_op_ctx->complete(0);
-    });
+  Context *ctx = create_context_callback<
+    ImageCopyRequest<I>, &ImageCopyRequest<I>::handle_object_copy>(this);
   ObjectCopyRequest<I> *req = ObjectCopyRequest<I>::create(
     m_local_image_ctx, m_remote_image_ctx, &m_snap_map, ono, ctx);
   req->send();
@@ -218,7 +203,6 @@ void ImageCopyRequest<I>::handle_object_copy(int r) {
   int percent;
   bool complete;
   {
-    RWLock::RLocker owner_locker(m_local_image_ctx->owner_lock);
     Mutex::Locker locker(m_lock);
     assert(m_current_ops > 0);
     --m_current_ops;

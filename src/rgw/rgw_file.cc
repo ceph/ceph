@@ -92,7 +92,10 @@ namespace rgw {
 	auto ux_key = req.get_attr(RGW_ATTR_UNIX_KEY1);
 	auto ux_attrs = req.get_attr(RGW_ATTR_UNIX1);
 	if (ux_key && ux_attrs) {
-	  rgw_fh->decode_attrs(ux_key, ux_attrs);
+	  bool old_key = rgw_fh->decode_attrs(ux_key, ux_attrs);
+	  if (old_key) {
+	    update_fhk(rgw_fh);
+	  }
 	}
 	if (! (flags & RGWFileHandle::FLAG_LOCKED)) {
 	  rgw_fh->mtx.unlock();
@@ -118,12 +121,7 @@ namespace rgw {
      * mechanism to avoid this is to store leaf object names with an
      * object locator w/o trailing slash */
 
-    /* mutating path */
-    std::string obj_path{parent->relative_object_name()};
-    if ((obj_path.length() > 0) &&
-	(obj_path.back() != '/'))
-      obj_path += "/";
-    obj_path += path;
+    std::string obj_path = parent->format_child_name(path, false);
 
     for (auto ix : { 0, 1, 2 }) {
       switch (ix) {
@@ -149,7 +147,10 @@ namespace rgw {
 	    auto ux_key = req.get_attr(RGW_ATTR_UNIX_KEY1);
 	    auto ux_attrs = req.get_attr(RGW_ATTR_UNIX1);
 	    if (ux_key && ux_attrs) {
-	      rgw_fh->decode_attrs(ux_key, ux_attrs);
+	      bool old_key = rgw_fh->decode_attrs(ux_key, ux_attrs);
+	      if (old_key) {
+		update_fhk(rgw_fh);
+	      }
 	    }
 	  }
 	  goto done;
@@ -180,7 +181,10 @@ namespace rgw {
 	    auto ux_key = req.get_attr(RGW_ATTR_UNIX_KEY1);
 	    auto ux_attrs = req.get_attr(RGW_ATTR_UNIX1);
 	    if (ux_key && ux_attrs) {
-	      rgw_fh->decode_attrs(ux_key, ux_attrs);
+	      bool old_key = rgw_fh->decode_attrs(ux_key, ux_attrs);
+	      if (old_key) {
+		update_fhk(rgw_fh);
+	      }
 	    }
 	  }
 	  goto done;
@@ -306,10 +310,8 @@ namespace rgw {
 	unref(bkt_fh);
       }
 
-      /* XXXX remove uri and deal with bucket and object names */
-      string uri = "/";
-      uri += name;
-      RGWDeleteBucketRequest req(cct, get_user(), uri);
+      string bname{name};
+      RGWDeleteBucketRequest req(cct, get_user(), bname);
       rc = rgwlib.get_fe()->execute_req(&req);
       if (! rc) {
 	rc = req.get_ret();
@@ -493,9 +495,18 @@ namespace rgw {
   MkObjResult RGWLibFS::mkdir(RGWFileHandle* parent, const char *name,
 			      struct stat *st, uint32_t mask, uint32_t flags)
   {
-    MkObjResult mkr{nullptr, -EINVAL};
     int rc, rc2;
+    rgw_file_handle *lfh;
 
+    rc = rgw_lookup(get_fs(), parent->get_fh(), name, &lfh,
+		    RGW_LOOKUP_FLAG_NONE);
+    if (! rc) {
+      /* conflict! */
+      rc = rgw_fh_rele(get_fs(), lfh, RGW_FH_RELE_FLAG_NONE);
+      return MkObjResult{nullptr, -EEXIST};
+    }
+
+    MkObjResult mkr{nullptr, -EINVAL};
     LookupFHResult fhr;
     RGWFileHandle* rgw_fh = nullptr;
     buffer::list ux_key, ux_attrs;
@@ -534,8 +545,7 @@ namespace rgw {
 	return mkr;
       }
 
-      string uri = "/" + bname; /* XXX get rid of URI some day soon */
-      RGWCreateBucketRequest req(get_context(), get_user(), uri);
+      RGWCreateBucketRequest req(get_context(), get_user(), bname);
 
       /* save attrs */
       req.emplace_attr(RGW_ATTR_UNIX_KEY1, std::move(ux_key));
@@ -546,15 +556,7 @@ namespace rgw {
     } else {
       /* create an object representing the directory */
       buffer::list bl;
-      string dir_name = /* XXX get rid of this some day soon, too */
-	parent->relative_object_name();
-
-      /* creating objects w/leading '/' makes a mess */
-      if ((dir_name.size() > 0) &&
-	  (dir_name.back() != '/'))
-	dir_name += "/";
-      dir_name += name;
-      dir_name += "/";
+      string dir_name = parent->format_child_name(name, true);
 
       /* need valid S3 name (characters, length <= 1024, etc) */
       rc = valid_fs_object_name(dir_name);
@@ -619,11 +621,7 @@ namespace rgw {
     }
 
     /* expand and check name */
-    std::string obj_name{parent->relative_object_name()};
-    if ((obj_name.size() > 0) &&
-	(obj_name.back() != '/'))
-      obj_name += "/";
-    obj_name += name;
+    std::string obj_name = parent->format_child_name(name, false);
     rc = valid_fs_object_name(obj_name);
     if (rc != 0) {
       return MkObjResult{nullptr, rc};
@@ -745,6 +743,41 @@ namespace rgw {
     return 0;
   } /* RGWLibFS::setattr */
 
+  /* called under rgw_fh->mtx held */
+  void RGWLibFS::update_fhk(RGWFileHandle *rgw_fh)
+  {
+    int rc, rc2;
+    string obj_name{rgw_fh->relative_object_name()};
+    buffer::list ux_key, ux_attrs;
+
+    if (rgw_fh->is_dir() &&
+	(likely(! rgw_fh->is_bucket()))) {
+      obj_name += "/";
+    }
+
+    lsubdout(get_context(), rgw, 17)
+      << __func__
+      << " update old versioned fhk : " << obj_name
+      << dendl;
+
+    RGWSetAttrsRequest req(cct, get_user(), rgw_fh->bucket_name(), obj_name);
+
+    rgw_fh->encode_attrs(ux_key, ux_attrs);
+
+    /* update ux_key only */
+    req.emplace_attr(RGW_ATTR_UNIX_KEY1, std::move(ux_key));
+
+    rc = rgwlib.get_fe()->execute_req(&req);
+    rc2 = req.get_ret();
+
+    if ((rc != 0) || (rc2 != 0)) {
+      lsubdout(get_context(), rgw, 17)
+	<< __func__
+	<< " update fhk failed : " << obj_name
+	<< dendl;
+    }
+  } /* RGWLibFS::update_fhk */
+
   void RGWLibFS::close()
   {
     state.flags |= FLAG_CLOSED;
@@ -760,7 +793,7 @@ namespace rgw {
 	  << fh->name
 	  << " before ObjUnref refs=" << fh->get_refcnt()
 	  << dendl;
-	fs->fh_lru.unref(fh, cohort::lru::FLAG_NONE);
+	fs->unref(fh);
       }
     };
 
@@ -932,7 +965,7 @@ namespace rgw {
        * no unsafe iterators reaching it either--n.b., this constraint
        * is binding oncode which may in future attempt to e.g.,
        * cause the eviction of objects in LRU order */
-      (void) get_fs()->fh_lru.unref(parent, cohort::lru::FLAG_NONE);
+      (void) get_fs()->unref(parent);
     }
   }
 
@@ -944,16 +977,23 @@ namespace rgw {
     rgw::encode(*this, ux_attrs1);
   } /* RGWFileHandle::encode_attrs */
 
-  void RGWFileHandle::decode_attrs(const ceph::buffer::list* ux_key1,
+  bool RGWFileHandle::decode_attrs(const ceph::buffer::list* ux_key1,
 				   const ceph::buffer::list* ux_attrs1)
   {
+    bool old_key = false;
     fh_key fhk;
     auto bl_iter_key1  = const_cast<buffer::list*>(ux_key1)->begin();
     rgw::decode(fhk, bl_iter_key1);
-    assert(this->fh.fh_hk == fhk.fh_hk);
+    if (fhk.version >= 2) {
+      assert(this->fh.fh_hk == fhk.fh_hk);
+    } else {
+      old_key = true;
+    }
 
     auto bl_iter_unix1 = const_cast<buffer::list*>(ux_attrs1)->begin();
     rgw::decode(*this, bl_iter_unix1);
+
+    return old_key;
   } /* RGWFileHandle::decode_attrs */
 
   bool RGWFileHandle::reclaim() {

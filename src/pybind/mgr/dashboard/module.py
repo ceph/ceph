@@ -31,6 +31,7 @@ from mgr_module import MgrModule, CommandResult
 from types import OsdMap, NotFound, Config, FsMap, MonMap, \
     PgSummary, Health, MonStatus
 
+import rados
 from rbd_ls import RbdLs
 from cephfs_clients import CephFSClients
 
@@ -41,6 +42,12 @@ log = logging.getLogger("dashboard")
 # How many cluster log lines shall we hold onto in our
 # python module for the convenience of the GUI?
 LOG_BUFFER_SIZE = 30
+
+# cherrypy likes to sys.exit on error.  don't let it take us down too!
+def os_exit_noop():
+    pass
+
+os._exit = os_exit_noop
 
 
 def recurse_refs(root, path):
@@ -61,7 +68,12 @@ class Module(MgrModule):
         self.log.info("Constructing module {0}: instance {1}".format(
             __name__, _global_instance))
 
+        self.log_primed = False
         self.log_buffer = collections.deque(maxlen=LOG_BUFFER_SIZE)
+        self.audit_buffer = collections.deque(maxlen=LOG_BUFFER_SIZE)
+
+        # Keep a librados instance for those that need it.
+        self._rados = None
 
         # Stateful instances of RbdLs, hold cached results.  Key to dict
         # is pool name.
@@ -75,6 +87,28 @@ class Module(MgrModule):
         self.pool_stats = defaultdict(lambda: defaultdict(
             lambda: collections.deque(maxlen=10)))
 
+    @property
+    def rados(self):
+        """
+        A librados instance to be shared by any classes within
+        this mgr module that want one.
+        """
+        if self._rados:
+            return self._rados
+
+        from mgr_module import ceph_state
+        ctx_capsule = ceph_state.get_context()
+        self._rados = rados.Rados(context=ctx_capsule)
+        self._rados.connect()
+
+        return self._rados
+
+    def get_localized_config(self, key):
+        r = self.get_config(self.get_mgr_id() + '/' + key)
+        if r is None:
+            r = self.get_config(key)
+        return r
+
     def update_pool_stats(self):
         df = global_instance().get("df")
         pool_stats = dict([(p['id'], p['stats']) for p in df['pools']])
@@ -85,9 +119,13 @@ class Module(MgrModule):
 
     def notify(self, notify_type, notify_val):
         if notify_type == "clog":
-            log.info("clog: {0}".format(notify_val["message"]))
-            log.info("clog: {0}".format(json.dumps(notify_val)))
-            self.log_buffer.appendleft(notify_val)
+            # Only store log messages once we've done our initial load,
+            # so that we don't end up duplicating.
+            if self.log_primed:
+                if notify_val['channel'] == "audit":
+                    self.audit_buffer.appendleft(notify_val)
+                else:
+                    self.log_buffer.appendleft(notify_val)
         elif notify_type == "pg_summary":
             self.update_pool_stats()
         else:
@@ -103,26 +141,26 @@ class Module(MgrModule):
             data['crush'] = self.get("osd_map_crush")
             data['crush_map_text'] = self.get("osd_map_crush_map_text")
             data['osd_metadata'] = self.get("osd_metadata")
-            obj = OsdMap(data['epoch'], data)
+            obj = OsdMap(data)
         elif object_type == Config:
             data = self.get("config")
-            obj = Config(0, data)
+            obj = Config( data)
         elif object_type == MonMap:
             data = self.get("mon_map")
-            obj = MonMap(data['epoch'], data)
+            obj = MonMap(data)
         elif object_type == FsMap:
             data = self.get("fs_map")
-            obj = FsMap(data['epoch'], data)
+            obj = FsMap(data)
         elif object_type == PgSummary:
             data = self.get("pg_summary")
             self.log.debug("JSON: {0}".format(data))
-            obj = PgSummary(0, data)
+            obj = PgSummary(data)
         elif object_type == Health:
             data = self.get("health")
-            obj = Health(0, json.loads(data['json']))
+            obj = Health(json.loads(data['json']))
         elif object_type == MonStatus:
             data = self.get("mon_status")
-            obj = MonStatus(0, json.loads(data['json']))
+            obj = MonStatus(json.loads(data['json']))
         else:
             raise NotImplementedError(object_type)
 
@@ -144,6 +182,11 @@ class Module(MgrModule):
         log.info("Stopping server...")
         cherrypy.engine.exit()
         log.info("Stopped server")
+
+        log.info("Stopping librados...")
+        if self._rados:
+            self._rados.shutdown()
+        log.info("Stopped librados.")
 
     def get_latest(self, daemon_type, daemon_name, stat):
         data = self.get_counter(daemon_type, daemon_name, stat)[stat]
@@ -339,6 +382,30 @@ class Module(MgrModule):
 
         jinja_loader = jinja2.FileSystemLoader(current_dir)
         env = jinja2.Environment(loader=jinja_loader)
+
+        result = CommandResult("")
+        self.send_command(result, "mon", "", json.dumps({
+            "prefix":"log last",
+            "format": "json"
+            }), "")
+        r, outb, outs = result.wait()
+        if r != 0:
+            # Oh well.  We won't let this stop us though.
+            self.log.error("Error fetching log history (r={0}, \"{1}\")".format(
+                r, outs))
+        else:
+            try:
+                lines = json.loads(outb)
+            except ValueError:
+                self.log.error("Error decoding log history")
+            else:
+                for l in lines:
+                    if l['channel'] == 'audit':
+                        self.audit_buffer.appendleft(l)
+                    else:
+                        self.log_buffer.appendleft(l)
+
+        self.log_primed = True
 
         class Root(object):
             def _toplevel_data(self):
@@ -546,6 +613,7 @@ class Module(MgrModule):
                 )
 
             def _servers(self):
+                servers = global_instance().list_servers()
                 return {
                     'servers': global_instance().list_servers()
                 }
@@ -572,7 +640,7 @@ class Module(MgrModule):
 
                     def get_rate(series):
                         if len(series) >= 2:
-                            return (series[0][1] - series[1][1]) / float(series[0][0] - series[1][0])
+                            return (float(series[0][1]) - float(series[1][1])) / (float(series[0][0]) - float(series[1][0]))
                         else:
                             return 0
 
@@ -595,6 +663,7 @@ class Module(MgrModule):
                         MonStatus).data,
                     "osd_map": osd_map,
                     "clog": list(global_instance().log_buffer),
+                    "audit_log": list(global_instance().audit_buffer),
                     "pools": pools
                 }
 
@@ -663,8 +732,10 @@ class Module(MgrModule):
 
                 return dict(result)
 
-        server_addr = self.get_config('server_addr') or '127.0.0.1'
-        server_port = self.get_config('server_port') or '7000'
+        server_addr = self.get_localized_config('server_addr')
+        server_port = self.get_localized_config('server_port') or '7000'
+        if server_addr is None:
+            raise RuntimeError('no server_addr configured; try "ceph config-key put mgr/dashboard/server_addr <ip>"')
         log.info("server_addr: %s server_port: %s" % (server_addr, server_port))
         cherrypy.config.update({
             'server.socket_host': server_addr,

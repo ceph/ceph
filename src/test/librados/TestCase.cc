@@ -368,19 +368,38 @@ void RadosTestPP::cleanup_namespace(librados::IoCtx ioctx, std::string ns)
 {
   ioctx.snap_set_read(librados::SNAP_HEAD);
   ioctx.set_namespace(ns);
-  for (NObjectIterator it = ioctx.nobjects_begin();
-       it != ioctx.nobjects_end(); ++it) {
-    ioctx.locator_set_key(it->get_locator());
-    ObjectWriteOperation op;
-    op.remove();
-
-    librados::AioCompletion *completion = s_cluster.aio_create_completion();
-    auto sg = make_scope_guard([&] { completion->release(); });
-
-    ASSERT_EQ(0, ioctx.aio_operate(it->get_oid(), completion, &op,
-				   librados::OPERATION_IGNORE_CACHE));
-    completion->wait_for_safe();
-    ASSERT_EQ(0, completion->get_return_value());
+  int tries = 600;
+  while (--tries) {
+    int got_enoent = 0;
+    for (NObjectIterator it = ioctx.nobjects_begin();
+	 it != ioctx.nobjects_end(); ++it) {
+      ioctx.locator_set_key(it->get_locator());
+      ObjectWriteOperation op;
+      op.remove();
+      librados::AioCompletion *completion = s_cluster.aio_create_completion();
+      auto sg = make_scope_guard([&] { completion->release(); });
+      ASSERT_EQ(0, ioctx.aio_operate(it->get_oid(), completion, &op,
+				     librados::OPERATION_IGNORE_CACHE));
+      completion->wait_for_safe();
+      if (completion->get_return_value() == -ENOENT) {
+	++got_enoent;
+	std::cout << " got ENOENT removing " << it->get_oid() << std::endl;
+      } else {
+	ASSERT_EQ(0, completion->get_return_value());
+      }
+    }
+    if (!got_enoent) {
+      break;
+    }
+    std::cout << " got ENOENT on " << got_enoent
+	      << " objects, waiting a bit for snap"
+	      << " trimming before retrying " << tries << " more times..."
+	      << std::endl;
+    sleep(1);
+  }
+  if (tries == 0) {
+    std::cout << "failed to clean up" << std::endl;
+    ASSERT_TRUE(false);
   }
 }
 

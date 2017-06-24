@@ -239,7 +239,7 @@ struct ceph_mon_subscribe_ack {
 #define CEPH_MDSMAP_ALLOW_CLASSICS (CEPH_MDSMAP_ALLOW_SNAPS | CEPH_MDSMAP_ALLOW_MULTIMDS | \
 				    CEPH_MDSMAP_ALLOW_DIRFRAGS)
 
-#define CEPH_MDSMAP_DEFAULTS CEPH_MDSMAP_ALLOW_DIRFRAGS
+#define CEPH_MDSMAP_DEFAULTS CEPH_MDSMAP_ALLOW_DIRFRAGS | CEPH_MDSMAP_ALLOW_MULTIMDS
 
 /*
  * mds states
@@ -305,7 +305,8 @@ enum {
 	CEPH_SESSION_FORCE_RO,
     // A response to REQUEST_OPEN indicating that the client should
     // permanently desist from contacting the MDS
-	CEPH_SESSION_REJECT
+	CEPH_SESSION_REJECT,
+        CEPH_SESSION_REQUEST_FLUSH_MDLOG
 };
 
 extern const char *ceph_session_op_name(int op);

@@ -36,7 +36,7 @@ if(${WITH_BABELTRACE})
     global
     babeltrace
     babeltrace-ctf
-    ${Boost_DATE_TIME_LIBRARY}
+    Boost::date_time
     )
   install(TARGETS rbd-replay-prep DESTINATION bin)
 endif(${WITH_BABELTRACE})

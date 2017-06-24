@@ -37,8 +37,8 @@ you may write data with one API and retrieve it with the other.
    :maxdepth: 1
 
    Manual Install w/Civetweb <../../install/install-ceph-gateway>
-   Federated Configuration (Deprecated) <federated-config>
    Multisite Configuration <multisite>
+   Configuring Pools <pools>
    Config Reference <config-ref>
    Admin Guide <admin>
    S3 API <s3>
@@ -52,7 +52,6 @@ you may write data with one API and retrieve it with the other.
    Server-Side Encryption <encryption>
    Bucket Policy <bucketpolicy>
    Data Layout in RADOS <layout>
-   Upgrade to Older Versions of Jewel <upgrade_to_jewel>
    troubleshooting
    Manpage radosgw <../../man/8/radosgw>
    Manpage radosgw-admin <../../man/8/radosgw-admin>

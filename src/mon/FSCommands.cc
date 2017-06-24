@@ -298,13 +298,14 @@ public:
         });
       }
     } else if (var == "balancer") {
-      if (val.empty())
+      if (val.empty()) {
         ss << "unsetting the metadata load balancer";
-      else 
+      } else {
         ss << "setting the metadata load balancer to " << val;
-        fsmap.modify_filesystem(
-            fs->fscid,
-            [val](std::shared_ptr<Filesystem> fs)
+      }
+      fsmap.modify_filesystem(
+	fs->fscid,
+	[val](std::shared_ptr<Filesystem> fs)
         {
           fs->mds_map.set_balancer(val);
         });
@@ -369,12 +370,6 @@ public:
 		});
 	ss << "disallowed increasing the cluster size past 1";
       } else {
-	string confirm;
-	if (!cmd_getval(g_ceph_context, cmdmap, "confirm", confirm) ||
-	    confirm != "--yes-i-really-mean-it") {
-	  ss << EXPERIMENTAL_WARNING;
-	  return -EPERM;
-	}
         fsmap.modify_filesystem(
             fs->fscid,
             [](std::shared_ptr<Filesystem> fs)

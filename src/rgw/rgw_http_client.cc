@@ -355,6 +355,11 @@ int RGWHTTPClient::init_request(const char *method, const char *url, rgw_http_re
   if (has_send_len) {
     curl_easy_setopt(easy_handle, CURLOPT_INFILESIZE, (void *)send_len); 
   }
+  if (!verify_ssl) {
+    curl_easy_setopt(easy_handle, CURLOPT_SSL_VERIFYPEER, 0L);
+    curl_easy_setopt(easy_handle, CURLOPT_SSL_VERIFYHOST, 0L);
+    dout(20) << "ssl verification is set to off" << dendl;
+  }
   curl_easy_setopt(easy_handle, CURLOPT_PRIVATE, (void *)req_data);
 
   return 0;

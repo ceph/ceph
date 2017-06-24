@@ -483,6 +483,7 @@ set(libcommon_files
   ${async_rdma_common_srcs}
   ${dpdk_common_srcs}
   msg/msg_types.cc
+  common/reverse.c
   common/hobject.cc
   osd/OSDMap.cc
   osd/OSDMapMapping.cc
@@ -533,9 +534,20 @@ set(libcommon_files
   common/fs_types.cc
   common/dns_resolve.cc
   common/hostname.cc
+  common/util.cc
   arch/probe.cc
   ${auth_files}
   ${mds_files})
+
+if(FREEBSD)
+  list(APPEND libcommon_files common/freebsd_errno.cc)
+elseif(DARWIN)
+  list(APPEND libcommon_files common/darwin_errno.cc)
+elseif(SUN)
+  list(APPEND libcommon_files common/solaris_errno.cc)
+elseif(AIX)
+  list(APPEND libcommon_files common/aix_errno.cc)
+endif()
 
 if(HAVE_ARM)
   list(APPEND libcommon_files arch/arm.c)
@@ -556,7 +568,8 @@ if(HAVE_INTEL)
 elseif(HAVE_POWER8)
   list(APPEND libcommon_files
     common/crc32c_ppc.c
-    common/crc32c_ppc_asm.S)
+    common/crc32c_ppc_asm.S
+    common/crc32c_ppc_fast_zero_asm.S)
 endif(HAVE_INTEL)
 
 if(LINUX)
@@ -573,11 +586,6 @@ if(WITH_LTTNG AND WITH_EVENTTRACE)
   list(APPEND libcommon_files common/EventTrace.cc)
 endif()
 
-set(mon_common_files
-  auth/AuthSessionHandler.cc
-  auth/cephx/CephxSessionHandler.cc
-  erasure-code/ErasureCodePlugin.cc)
-add_library(mon_common_objs OBJECT ${mon_common_files})
 set(common_mountcephfs_files
   common/armor.c
   common/safe_io.c
@@ -605,13 +613,13 @@ set(ceph_common_objs
   $<TARGET_OBJECTS:crush_objs>)
 set(ceph_common_deps
   json_spirit erasure_code rt ${LIB_RESOLV}
-  ${Boost_THREAD_LIBRARY}
-  ${Boost_SYSTEM_LIBRARY}
-  ${Boost_REGEX_LIBRARY}
-  ${Boost_RANDOM_LIBRARY}
-  ${Boost_PROGRAM_OPTIONS_LIBRARY}
-  ${Boost_DATE_TIME_LIBRARY}
-  ${Boost_IOSTREAMS_LIBRARY}
+  Boost::thread
+  Boost::system
+  Boost::regex
+  Boost::random
+  Boost::program_options
+  Boost::date_time
+  Boost::iostreams
   ${BLKID_LIBRARIES}
   ${Backtrace_LIBRARIES}
   ${BLKIN_LIBRARIES}
@@ -687,7 +695,7 @@ if (WITH_MGR)
                  $<TARGET_OBJECTS:heap_profiler_objs>)
   target_include_directories(ceph-mgr PRIVATE "${PYTHON_INCLUDE_DIRS}")
   target_link_libraries(ceph-mgr osdc client global-static common
-      ${Boost_PYTHON_LIBRARY} ${PYTHON_LIBRARIES} ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS} ${ALLOC_LIBS})
+      Boost::python ${PYTHON_LIBRARIES} ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS} ${ALLOC_LIBS})
   set_target_properties(ceph-mgr PROPERTIES
     INSTALL_RPATH "")
   install(TARGETS ceph-mgr DESTINATION bin)
@@ -769,10 +777,6 @@ target_link_libraries(ceph-dencoder
 install(TARGETS ceph-dencoder DESTINATION bin)
 
 # Monitor
-set(common_util_src
-  common/util.cc)
-add_library(common_util_obj OBJECT ${common_util_src})
-
 add_subdirectory(mon)
 set(ceph_mon_srcs
   ceph_mon.cc)
@@ -859,8 +863,7 @@ add_subdirectory(osd)
 
 set(ceph_osd_srcs
   ceph_osd.cc)
-add_executable(ceph-osd ${ceph_osd_srcs}
-  $<TARGET_OBJECTS:common_util_obj>)
+add_executable(ceph-osd ${ceph_osd_srcs})
 add_dependencies(ceph-osd erasure_code_plugins)
 target_link_libraries(ceph-osd osd os global-static common
   ${BLKID_LIBRARIES} ${RDMA_LIBRARIES})
@@ -874,10 +877,9 @@ install(TARGETS ceph-osd DESTINATION bin)
 add_subdirectory(mds)
 set(ceph_mds_srcs
   ceph_mds.cc)
-add_executable(ceph-mds ${ceph_mds_srcs}
-  $<TARGET_OBJECTS:common_util_obj>)
+add_executable(ceph-mds ${ceph_mds_srcs})
 target_link_libraries(ceph-mds mds ${CMAKE_DL_LIBS} global-static common
-  ${Boost_THREAD_LIBRARY})
+  Boost::thread)
 set_target_properties(ceph-mds PROPERTIES
   INSTALL_RPATH "")
 install(TARGETS ceph-mds DESTINATION bin)
@@ -908,9 +910,9 @@ if(WITH_TESTS AND WITH_DMCLOCK_TESTS)
   add_subdirectory(dmclock/support/test)
 endif(WITH_TESTS AND WITH_DMCLOCK_TESTS)
 
-if(HAVE_INTEL)
+if(HAVE_INTEL AND HAVE_BETTER_YASM_ELF64)
   add_subdirectory(crypto/isa-l)
-endif(HAVE_INTEL)
+endif(HAVE_INTEL AND HAVE_BETTER_YASM_ELF64)
 
 if(WITH_TESTS)
 
@@ -1086,10 +1088,6 @@ endif(WITH_RADOSGW)
 install(FILES
   sample.ceph.conf
   DESTINATION ${CMAKE_INSTALL_DOCDIR})
-install(FILES
-  fetch_config
-  DESTINATION ${CMAKE_INSTALL_DOCDIR}
-  RENAME sample.fetch_config)
 
 # Now create a useable config.h
 configure_file(

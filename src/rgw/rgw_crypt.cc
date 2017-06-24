@@ -9,7 +9,7 @@
 #include <rgw/rgw_b64.h>
 #include <rgw/rgw_rest_s3.h>
 #include "include/assert.h"
-#include <boost/utility/string_ref.hpp>
+#include <boost/utility/string_view.hpp>
 #include <rgw/rgw_keystone.h>
 #include "include/str_map.h"
 #include "crypto/crypto_accel.h"
@@ -713,61 +713,23 @@ int RGWGetObj_BlockDecrypt::handle_data(bufferlist& bl, off_t bl_ofs, off_t bl_l
     part_ofs -= parts_len[i];
     i++;
   }
-  if (cache.length() > 0) {
-    //append before operation.
-    off_t append_size = block_size - cache.length();
-    if (append_size > bl_len)
-      append_size = bl_len;
-    char *src = bl.get_contiguous(bl_ofs, append_size);
-    cache.append(src,append_size);
-    bl_ofs += append_size;
-    bl_len -= append_size;
-
-    if (cache.length() == block_size) {
-      bufferlist data;
-      if (! crypt->decrypt(cache, 0, block_size, data, part_ofs) ) {
-        return -ERR_INTERNAL_ERROR;
-      }
-      part_ofs += block_size;
-
-      off_t send_size = block_size - enc_begin_skip;
-      if (ofs + enc_begin_skip + send_size > end + 1) {
-        send_size = end + 1 - ofs - enc_begin_skip;
-      }
-      res = next->handle_data(data, enc_begin_skip, send_size);
-
-      enc_begin_skip = 0;
-      cache.clear();
-      ofs += block_size;
-      if (res != 0)
-        return res;
+  bl.copy(bl_ofs, bl_len, cache);
+  off_t aligned_size = cache.length() & ~(block_size - 1);
+  if (aligned_size > 0) {
+    bufferlist data;
+    if (! crypt->decrypt(cache, 0, aligned_size, data, part_ofs) ) {
+      return -ERR_INTERNAL_ERROR;
     }
+    off_t send_size = aligned_size - enc_begin_skip;
+    if (ofs + enc_begin_skip + send_size > end + 1) {
+      send_size = end + 1 - ofs - enc_begin_skip;
+    }
+    res = next->handle_data(data, enc_begin_skip, send_size);
+    enc_begin_skip = 0;
+    ofs += aligned_size;
+    cache.splice(0, aligned_size);
   }
-  if (bl_len > 0) {
-    off_t aligned_size = bl_len & ~(block_size - 1);
-    //save remainder
-    off_t remainder = bl_len - aligned_size;
-    if(remainder > 0) {
-      bl.copy(bl_ofs + aligned_size, remainder, cache);
-    }
-    if (aligned_size > 0) {
-      bufferlist data;
-      if (! crypt->decrypt(bl, bl_ofs, aligned_size, data, part_ofs) ) {
-        return -ERR_INTERNAL_ERROR;
-      }
-      part_ofs += aligned_size;
-      off_t send_size = aligned_size - enc_begin_skip;
-      if (ofs + enc_begin_skip + send_size > end + 1) {
-        send_size = end + 1 - ofs - enc_begin_skip;
-      }
-      res = next->handle_data(data, enc_begin_skip, send_size);
-      enc_begin_skip = 0;
-      ofs += aligned_size;
-      if (res != 0)
-        return res;
-    }
-  }
-  return 0;
+  return res;
 }
 
 /**
@@ -830,62 +792,27 @@ int RGWPutObj_BlockEncrypt::handle_data(bufferlist& bl,
     }
     return res;
   }
-  off_t bl_ofs = 0;
-  if (cache.length() > 0) {
-    //append before operation.
-    off_t size = block_size - cache.length();
-    if (size > bl.length())
-      size = bl.length();
-    if (size > 0) {
-      char *src = bl.get_contiguous(0, size);
-      cache.append(src,size);
-      bl_ofs += size;
-    }
-    if (cache.length() == block_size) {
-      bufferlist data;
-      if (! crypt->encrypt(cache, 0, block_size, data, ofs)) {
-        return -ERR_INTERNAL_ERROR;
-      }
-      res = next->handle_data(data, ofs, phandle, pobj, again);
-      cache.clear();
-      ofs += block_size;
-      if (res != 0)
-        return res;
-    }
-  }
-  if (bl_ofs < bl.length()) {
-    off_t aligned_size = (bl.length() - bl_ofs) & ~(block_size - 1);
-    //save remainder
-    off_t remainder = (bl.length() - bl_ofs) - aligned_size;
-    if(remainder > 0) {
-      bl.copy(bl_ofs + aligned_size, remainder, cache);
-    }
-    if (aligned_size > 0) {
-      bufferlist data;
-      if (! crypt->encrypt(bl, bl_ofs, aligned_size, data, ofs) ) {
-        return -ERR_INTERNAL_ERROR;
-      }
-      res=next->handle_data(data, ofs, phandle, pobj, again);
-      ofs += aligned_size;
-      if (res != 0)
-        return res;
-    }
-  }
+
+  cache.append(bl);
+  off_t proc_size = cache.length() & ~(block_size - 1);
   if (bl.length() == 0) {
-    if (cache.length() > 0) {
-      /*flush cached data*/
-      bufferlist data;
-      if (! crypt->encrypt(cache, 0, cache.length(), data, ofs) ) {
-        return -ERR_INTERNAL_ERROR;
-      }
-      res = next->handle_data(data, ofs, phandle, pobj, again);
-      ofs += cache.length();
-      cache.clear();
-      if (res != 0)
-        return res;
+    proc_size = cache.length();
+  }
+  if (proc_size > 0) {
+    bufferlist data;
+    if (! crypt->encrypt(cache, 0, proc_size, data, ofs) ) {
+      return -ERR_INTERNAL_ERROR;
     }
+    res = next->handle_data(data, ofs, phandle, pobj, again);
+    ofs += proc_size;
+    cache.splice(0, proc_size);
+    if (res < 0)
+      return res;
+  }
+
+  if (bl.length() == 0) {
     /*replicate 0-sized handle_data*/
-    res = next->handle_data(cache, ofs, phandle, pobj, again);
+    res = next->handle_data(bl, ofs, phandle, pobj, again);
   }
   return res;
 }
@@ -923,8 +850,8 @@ static int get_barbican_url(CephContext * const cct,
 }
 
 static int request_key_from_barbican(CephContext *cct,
-                              boost::string_ref key_id,
-                              boost::string_ref key_selector,
+                              boost::string_view key_id,
+                              boost::string_view key_selector,
                               const std::string& barbican_token,
                               std::string& actual_key) {
   std::string secret_url;
@@ -967,8 +894,8 @@ static map<string,string> get_str_map(const string &str) {
 }
 
 static int get_actual_key_from_kms(CephContext *cct,
-                            boost::string_ref key_id,
-                            boost::string_ref key_selector,
+                            boost::string_view key_id,
+                            boost::string_view key_selector,
                             std::string& actual_key)
 {
   int res = 0;
@@ -1012,7 +939,7 @@ static int get_actual_key_from_kms(CephContext *cct,
 
 static inline void set_attr(map<string, bufferlist>& attrs,
                             const char* key,
-                            boost::string_ref value)
+                            boost::string_view value)
 {
   bufferlist bl;
   bl.append(value.data(), value.size());
@@ -1051,8 +978,8 @@ static const crypt_option_names crypt_options[] = {
     {"HTTP_X_AMZ_SERVER_SIDE_ENCRYPTION_AWS_KMS_KEY_ID",      "x-amz-server-side-encryption-aws-kms-key-id"},
 };
 
-static boost::string_ref get_crypt_attribute(
-    RGWEnv* env,
+static boost::string_view get_crypt_attribute(
+    const RGWEnv* env,
     std::map<std::string,
              RGWPostObj_ObjStore::post_form_part,
              const ltstr_nocase>* parts,
@@ -1065,16 +992,16 @@ static boost::string_ref get_crypt_attribute(
     auto iter
       = parts->find(crypt_options[option].post_part_name);
     if (iter == parts->end())
-      return boost::string_ref();
+      return boost::string_view();
     bufferlist& data = iter->second.data;
-    boost::string_ref str = boost::string_ref(data.c_str(), data.length());
+    boost::string_view str = boost::string_view(data.c_str(), data.length());
     return rgw_trim_whitespace(str);
   } else {
     const char* hdr = env->get(crypt_options[option].http_header_name, nullptr);
     if (hdr != nullptr) {
-      return boost::string_ref(hdr);
+      return boost::string_view(hdr);
     } else {
-      return boost::string_ref();
+      return boost::string_view();
     }
   }
 }
@@ -1091,7 +1018,7 @@ int rgw_s3_prepare_encrypt(struct req_state* s,
   int res = 0;
   crypt_http_responses.clear();
   {
-    boost::string_ref req_sse_ca =
+    boost::string_view req_sse_ca =
         get_crypt_attribute(s->info.env, parts, X_AMZ_SERVER_SIDE_ENCRYPTION_CUSTOMER_ALGORITHM);
     if (! req_sse_ca.empty()) {
       if (req_sse_ca != "AES256") {
@@ -1106,7 +1033,7 @@ int rgw_s3_prepare_encrypt(struct req_state* s,
       if (key_bin.size() != AES_256_CBC::AES_256_KEYSIZE) {
         return -ERR_INVALID_REQUEST;
       }
-      boost::string_ref keymd5 =
+      boost::string_view keymd5 =
           get_crypt_attribute(s->info.env, parts, X_AMZ_SERVER_SIDE_ENCRYPTION_CUSTOMER_KEY_MD5);
       std::string keymd5_bin = from_base64(keymd5);
       if (keymd5_bin.size() != CEPH_CRYPTO_MD5_DIGESTSIZE) {
@@ -1135,7 +1062,7 @@ int rgw_s3_prepare_encrypt(struct req_state* s,
       return 0;
     }
     /* AMAZON server side encryption with KMS (key management service) */
-    boost::string_ref req_sse =
+    boost::string_view req_sse =
         get_crypt_attribute(s->info.env, parts, X_AMZ_SERVER_SIDE_ENCRYPTION);
     if (! req_sse.empty()) {
       if (req_sse != "aws:kms") {
@@ -1145,7 +1072,7 @@ int rgw_s3_prepare_encrypt(struct req_state* s,
           !s->info.env->exists("SERVER_PORT_SECURE")) {
         return -ERR_INVALID_REQUEST;
       }
-      boost::string_ref key_id =
+      boost::string_view key_id =
           get_crypt_attribute(s->info.env, parts, X_AMZ_SERVER_SIDE_ENCRYPTION_AWS_KMS_KEY_ID);
       if (key_id.empty()) {
         return -ERR_INVALID_ACCESS_KEY;

@@ -1733,7 +1733,7 @@ int OSD::mkfs(CephContext *cct, ObjectStore *store, const string &dev,
     goto free_store;
   }
 
-  store->set_cache_shards(cct->_conf->osd_op_num_shards);
+  store->set_cache_shards(1);  // doesn't matter for mkfs!
 
   ret = store->mount();
   if (ret) {
@@ -1901,12 +1901,15 @@ OSD::OSD(CephContext *cct_, ObjectStore *store_,
   clog(log_client.create_channel()),
   whoami(id),
   dev_path(dev), journal_path(jdev),
+  store_is_rotational(store->is_rotational()),
   trace_endpoint("0.0.0.0", 0, "osd"),
   asok_hook(NULL),
   osd_compat(get_osd_compat_set()),
-  osd_tp(cct, "OSD::osd_tp", "tp_osd", cct->_conf->osd_op_threads, "osd_op_threads"),
+  peering_tp(cct, "OSD::peering_tp", "tp_peering",
+	     cct->_conf->osd_peering_wq_threads,
+	     "osd_peering_tp_threads"),
   osd_op_tp(cct, "OSD::osd_op_tp", "tp_osd_tp",
-    cct->_conf->osd_op_num_threads_per_shard * cct->_conf->osd_op_num_shards),
+	    get_num_op_threads()),
   disk_tp(cct, "OSD::disk_tp", "tp_osd_disk", cct->_conf->osd_disk_threads, "osd_disk_threads"),
   command_tp(cct, "OSD::command_tp", "tp_osd_cmd",  1),
   session_waiting_lock("OSD::session_waiting_lock"),
@@ -1926,7 +1929,7 @@ OSD::OSD(CephContext *cct_, ObjectStore *store_,
   op_queue(get_io_queue()),
   op_prio_cutoff(get_io_prio_cut()),
   op_shardedwq(
-    cct->_conf->osd_op_num_shards,
+    get_num_op_shards(),
     this,
     cct->_conf->osd_op_thread_timeout,
     cct->_conf->osd_op_thread_suicide_timeout,
@@ -1935,7 +1938,7 @@ OSD::OSD(CephContext *cct_, ObjectStore *store_,
     this,
     cct->_conf->osd_op_thread_timeout,
     cct->_conf->osd_op_thread_suicide_timeout,
-    &osd_tp),
+    &peering_tp),
   map_lock("OSD::map_lock"),
   pg_map_lock("OSD::pg_map_lock"),
   last_pg_create_epoch(0),
@@ -2303,6 +2306,26 @@ int OSD::enable_disable_fuse(bool stop)
   return 0;
 }
 
+int OSD::get_num_op_shards()
+{
+  if (cct->_conf->osd_op_num_shards)
+    return cct->_conf->osd_op_num_shards;
+  if (store_is_rotational)
+    return cct->_conf->osd_op_num_shards_hdd;
+  else
+    return cct->_conf->osd_op_num_shards_ssd;
+}
+
+int OSD::get_num_op_threads()
+{
+  if (cct->_conf->osd_op_num_threads_per_shard)
+    return get_num_op_shards() * cct->_conf->osd_op_num_threads_per_shard;
+  if (store_is_rotational)
+    return get_num_op_shards() * cct->_conf->osd_op_num_threads_per_shard_hdd;
+  else
+    return get_num_op_shards() * cct->_conf->osd_op_num_threads_per_shard_ssd;
+}
+
 int OSD::init()
 {
   CompatSet initial, diff;
@@ -2316,11 +2339,12 @@ int OSD::init()
   service.recovery_sleep_timer.init();
 
   // mount.
-  dout(2) << "mounting " << dev_path << " "
-	  << (journal_path.empty() ? "(no journal)" : journal_path) << dendl;
+  dout(2) << "init " << dev_path
+	  << " (looks like " << (store_is_rotational ? "hdd" : "ssd") << ")"
+	  << dendl;
   assert(store);  // call pre_init() first!
 
-  store->set_cache_shards(cct->_conf->osd_op_num_shards);
+  store->set_cache_shards(get_num_op_shards());
 
   int r = store->mount();
   if (r < 0) {
@@ -2527,7 +2551,7 @@ int OSD::init()
   monc->set_log_client(&log_client);
   update_log_config();
 
-  osd_tp.start();
+  peering_tp.start();
   osd_op_tp.start();
   disk_tp.start();
   command_tp.start();
@@ -3222,9 +3246,9 @@ int OSD::shutdown()
   heartbeat_lock.Unlock();
   heartbeat_thread.join();
 
-  osd_tp.drain();
+  peering_tp.drain();
   peering_wq.clear();
-  osd_tp.stop();
+  peering_tp.stop();
   dout(10) << "osd tp stopped" << dendl;
 
   osd_op_tp.drain();
@@ -4669,8 +4693,8 @@ void OSD::handle_osd_ping(MOSDPing *m)
 
       Message *r = new MOSDPing(monc->get_fsid(),
 				curmap->get_epoch(),
-				MOSDPing::PING_REPLY,
-				m->stamp);
+				MOSDPing::PING_REPLY, m->stamp,
+				cct->_conf->osd_heartbeat_min_size);
       m->get_connection()->send_message(r);
 
       if (curmap->is_up(from)) {
@@ -4687,7 +4711,8 @@ void OSD::handle_osd_ping(MOSDPing *m)
 	Message *r = new MOSDPing(monc->get_fsid(),
 				  curmap->get_epoch(),
 				  MOSDPing::YOU_DIED,
-				  m->stamp);
+				  m->stamp,
+				  cct->_conf->osd_heartbeat_min_size);
 	m->get_connection()->send_message(r);
       }
     }
@@ -4865,14 +4890,14 @@ void OSD::heartbeat()
     dout(30) << "heartbeat sending ping to osd." << peer << dendl;
     i->second.con_back->send_message(new MOSDPing(monc->get_fsid(),
 					  service.get_osdmap()->get_epoch(),
-					  MOSDPing::PING,
-					  now));
+					  MOSDPing::PING, now,
+					  cct->_conf->osd_heartbeat_min_size));
 
     if (i->second.con_front)
       i->second.con_front->send_message(new MOSDPing(monc->get_fsid(),
 					     service.get_osdmap()->get_epoch(),
-						     MOSDPing::PING,
-						     now));
+					     MOSDPing::PING, now,
+					  cct->_conf->osd_heartbeat_min_size));
   }
 
   logger->set(l_osd_hb_to, heartbeat_peers.size());
@@ -5582,7 +5607,9 @@ void OSD::_preboot(epoch_t oldest, epoch_t newest)
   heartbeat();
 
   // if our map within recent history, try to add ourselves to the osdmap.
-  if (osdmap->test_flag(CEPH_OSDMAP_NOUP)) {
+  if (osdmap->get_epoch() == 0) {
+    derr << "waiting for initial osdmap" << dendl;
+  } else if (osdmap->test_flag(CEPH_OSDMAP_NOUP) || osdmap->is_noup(whoami)) {
     derr << "osdmap NOUP flag is set, waiting for it to clear" << dendl;
   } else if (!osdmap->test_flag(CEPH_OSDMAP_SORTBITWISE)) {
     derr << "osdmap SORTBITWISE OSDMap flag is NOT set; please set it"
@@ -5740,6 +5767,7 @@ void OSD::_collect_metadata(map<string,string> *pm)
 
   // backend
   (*pm)["osd_objectstore"] = store->get_type();
+  (*pm)["rotational"] = store_is_rotational ? "1" : "0";
   store->collect_metadata(pm);
 
   collect_sys_info(pm, cct);
@@ -5856,8 +5884,8 @@ void OSD::send_failures()
   utime_t now = ceph_clock_now();
   while (!failure_queue.empty()) {
     int osd = failure_queue.begin()->first;
-    entity_inst_t i = osdmap->get_inst(osd);
     if (!failure_pending.count(osd)) {
+      entity_inst_t i = osdmap->get_inst(osd);
       int failed_for = (int)(double)(now - failure_queue.begin()->second);
       monc->send_mon_message(new MOSDFailure(monc->get_fsid(), i, failed_for,
 					     osdmap->get_epoch()));
@@ -7502,12 +7530,6 @@ void OSD::handle_osd_map(MOSDMap *m)
     rerequest_full_maps();
   }
 
-  if (last <= superblock.newest_map) {
-    dout(10) << " no new maps here, dropping" << dendl;
-    m->put();
-    return;
-  }
-
   if (superblock.oldest_map) {
     // make sure we at least keep pace with incoming maps
     trim_maps(m->oldest_map, last - first + 1, skip_maps);
@@ -7543,6 +7565,10 @@ void OSD::_committed_osd_maps(epoch_t first, epoch_t last, MOSDMap *m)
     return;
   }
   Mutex::Locker l(osd_lock);
+  if (is_stopping()) {
+    dout(10) << __func__ << " bailing, we are shutting down" << dendl;
+    return;
+  }
   map_lock.get_write();
 
   bool do_shutdown = false;
@@ -7582,8 +7608,9 @@ void OSD::_committed_osd_maps(epoch_t first, epoch_t last, MOSDMap *m)
       }
     }
 
-    if (osdmap->test_flag(CEPH_OSDMAP_NOUP) !=
-	newmap->test_flag(CEPH_OSDMAP_NOUP)) {
+    if ((osdmap->test_flag(CEPH_OSDMAP_NOUP) !=
+        newmap->test_flag(CEPH_OSDMAP_NOUP)) ||
+        (osdmap->is_noup(whoami) != newmap->is_noup(whoami))) {
       dout(10) << __func__ << " NOUP flag changed in " << newmap->get_epoch()
 	       << dendl;
       if (is_booting()) {
@@ -9035,12 +9062,13 @@ void OSD::do_recovery(
    * queue_recovery_after_sleep.
    */
   if (cct->_conf->osd_recovery_sleep > 0 && service.recovery_needs_sleep) {
-    auto recovery_requeue_callback = new FunctionContext([this, pg, queued, reserved_pushes](int r) {
+    PGRef pgref(pg);
+    auto recovery_requeue_callback = new FunctionContext([this, pgref, queued, reserved_pushes](int r) {
       dout(20) << "do_recovery wake up at "
                << ceph_clock_now()
 	       << ", re-queuing recovery" << dendl;
       service.recovery_needs_sleep = false;
-      service.queue_recovery_after_sleep(pg, queued, reserved_pushes);
+      service.queue_recovery_after_sleep(pgref.get(), queued, reserved_pushes);
     });
     Mutex::Locker l(service.recovery_sleep_lock);
 
@@ -9338,6 +9366,8 @@ const char** OSD::get_tracked_conf_keys() const
     "osd_recovery_delay_start",
     "osd_client_message_size_cap",
     "osd_client_message_cap",
+    "osd_heartbeat_min_size",
+    "osd_heartbeat_interval",
     NULL
   };
   return KEYS;

@@ -362,11 +362,16 @@ void RDMADispatcher::handle_tx_event(ibv_wc *cqe, int n)
       }
     }
 
-    // FIXME: why not tx?
-    if (global_infiniband->get_memory_manager()->is_tx_buffer(chunk->buffer))
+    //TX completion may come either from regular send message or from 'fin' message.
+    //In the case of 'fin' wr_id points to the QueuePair.
+    if (global_infiniband->get_memory_manager()->is_tx_buffer(chunk->buffer)) {
       tx_chunks.push_back(chunk);
-    else
+    } else if (reinterpret_cast<QueuePair*>(response->wr_id)->get_local_qp_number() == response->qp_num ) {
+      ldout(cct, 1) << __func__ << " sending of the disconnect msg completed" << dendl;
+    } else {
       ldout(cct, 1) << __func__ << " not tx buffer, chunk " << chunk << dendl;
+      ceph_abort();
+    }
   }
 
   perf_logger->inc(l_msgr_rdma_tx_total_wc, n);
@@ -511,10 +516,21 @@ RDMAStack::RDMAStack(CephContext *cct, const string &t): NetworkStack(cct, t)
   //
   //On RDMA MUST be called before fork
   //
+
   int rc = ibv_fork_init();
   if (rc) {
      lderr(cct) << __func__ << " failed to call ibv_for_init(). On RDMA must be called before fork. Application aborts." << dendl;
      ceph_abort();
+  }
+
+  ldout(cct, 1) << __func__ << " ms_async_rdma_enable_hugepage value is: " << cct->_conf->ms_async_rdma_enable_hugepage <<  dendl;
+  if (cct->_conf->ms_async_rdma_enable_hugepage) {
+    rc =  setenv("RDMAV_HUGEPAGES_SAFE","1",1);
+    ldout(cct, 1) << __func__ << " RDMAV_HUGEPAGES_SAFE is set as: " << getenv("RDMAV_HUGEPAGES_SAFE") <<  dendl;
+    if (rc) {
+      lderr(cct) << __func__ << " failed to export RDMA_HUGEPAGES_SAFE. On RDMA must be exported before using huge pages. Application aborts." << dendl;
+      ceph_abort();
+    }
   }
 
   //Check ulimit
@@ -543,6 +559,10 @@ RDMAStack::RDMAStack(CephContext *cct, const string &t): NetworkStack(cct, t)
 
 RDMAStack::~RDMAStack()
 {
+  if (cct->_conf->ms_async_rdma_enable_hugepage) {
+    unsetenv("RDMAV_HUGEPAGES_SAFE");	//remove env variable on destruction
+  }
+
   delete dispatcher;
 }
 

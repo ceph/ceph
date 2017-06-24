@@ -969,13 +969,17 @@ public:
   AsyncReserver<spg_t> snap_reserver;
   void queue_for_snap_trim(PG *pg);
 
-  void queue_for_scrub(PG *pg) {
+  void queue_for_scrub(PG *pg, bool with_high_priority) {
+    unsigned scrub_queue_priority = pg->scrubber.priority;
+    if (with_high_priority && scrub_queue_priority < cct->_conf->osd_client_op_priority) {
+      scrub_queue_priority = cct->_conf->osd_client_op_priority;
+    }
     enqueue_back(
       pg->info.pgid,
       PGQueueable(
 	PGScrub(pg->get_osdmap()->get_epoch()),
 	cct->_conf->osd_scrub_cost,
-	pg->scrubber.priority,
+	scrub_queue_priority,
 	ceph_clock_now(),
 	entity_inst_t(),
 	pg->get_osdmap()->get_epoch()));
@@ -1323,6 +1327,8 @@ protected:
   int whoami;
   std::string dev_path, journal_path;
 
+  bool store_is_rotational = true;
+
   ZTracer::Endpoint trace_endpoint;
   void create_logger();
   void create_recoverystate_perf();
@@ -1473,7 +1479,7 @@ public:
 
 private:
 
-  ThreadPool osd_tp;
+  ThreadPool peering_tp;
   ShardedThreadPool osd_op_tp;
   ThreadPool disk_tp;
   ThreadPool command_tp;
@@ -2472,6 +2478,9 @@ private:
   void handle_osd_ping(class MOSDPing *m);
 
   int init_op_flags(OpRequestRef& op);
+
+  int get_num_op_shards();
+  int get_num_op_threads();
 
 public:
   static int peek_meta(ObjectStore *store, string& magic,

@@ -309,7 +309,7 @@ bool MonmapMonitor::preprocess_command(MonOpRequestRef op)
     if (p != mon->monmap)
        delete p;
 
-  } else if (prefix == "mon feature list") {
+  } else if (prefix == "mon feature ls") {
    
     bool list_with_value = false;
     string with_value;

@@ -243,7 +243,7 @@ namespace crimson {
     }
 
     void pop() {
-      remove(0);
+      remove(HeapIndex(0));
     }
 
     void remove(Iterator& i) {

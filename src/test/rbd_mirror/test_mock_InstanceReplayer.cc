@@ -4,7 +4,7 @@
 #include "test/librbd/mock/MockImageCtx.h"
 #include "test/rbd_mirror/test_mock_fixture.h"
 #include "tools/rbd_mirror/ImageReplayer.h"
-#include "tools/rbd_mirror/ImageSyncThrottler.h"
+#include "tools/rbd_mirror/InstanceWatcher.h"
 #include "tools/rbd_mirror/InstanceReplayer.h"
 #include "tools/rbd_mirror/Threads.h"
 
@@ -38,6 +38,10 @@ struct Threads<librbd::MockTestImageCtx> {
 };
 
 template<>
+struct InstanceWatcher<librbd::MockTestImageCtx> {
+};
+
+template<>
 struct ImageReplayer<librbd::MockTestImageCtx> {
   static ImageReplayer* s_instance;
   std::string global_image_id;
@@ -45,7 +49,7 @@ struct ImageReplayer<librbd::MockTestImageCtx> {
   static ImageReplayer *create(
     Threads<librbd::MockTestImageCtx> *threads,
     std::shared_ptr<ImageDeleter> image_deleter,
-    ImageSyncThrottlerRef<librbd::MockTestImageCtx> image_sync_throttler,
+    InstanceWatcher<librbd::MockTestImageCtx> *instance_watcher,
     RadosRef local, const std::string &local_mirror_uuid, int64_t local_pool_id,
     const std::string &global_image_id) {
     assert(s_instance != nullptr);
@@ -83,14 +87,6 @@ struct ImageReplayer<librbd::MockTestImageCtx> {
   MOCK_METHOD0(is_blacklisted, bool());
 };
 
-template<>
-struct ImageSyncThrottler<librbd::MockTestImageCtx> {
-  ImageSyncThrottler() {
-  }
-  virtual ~ImageSyncThrottler() {
-  }
-};
-
 ImageReplayer<librbd::MockTestImageCtx>* ImageReplayer<librbd::MockTestImageCtx>::s_instance = nullptr;
 
 } // namespace mirror
@@ -112,6 +108,7 @@ class TestMockInstanceReplayer : public TestMockFixture {
 public:
   typedef ImageReplayer<librbd::MockTestImageCtx> MockImageReplayer;
   typedef InstanceReplayer<librbd::MockTestImageCtx> MockInstanceReplayer;
+  typedef InstanceWatcher<librbd::MockTestImageCtx> MockInstanceWatcher;
   typedef Threads<librbd::MockTestImageCtx> MockThreads;
 
   void SetUp() override {
@@ -122,8 +119,6 @@ public:
     m_image_deleter.reset(
       new rbd::mirror::ImageDeleter(m_threads->work_queue, m_threads->timer,
                                     &m_threads->timer_lock));
-    m_image_sync_throttler.reset(
-      new rbd::mirror::ImageSyncThrottler<librbd::MockTestImageCtx>());
   }
 
   void TearDown() override {
@@ -133,14 +128,13 @@ public:
 
   MockThreads *m_mock_threads;
   std::shared_ptr<rbd::mirror::ImageDeleter> m_image_deleter;
-  std::shared_ptr<rbd::mirror::ImageSyncThrottler<librbd::MockTestImageCtx>>
-    m_image_sync_throttler;
 };
 
 TEST_F(TestMockInstanceReplayer, AcquireReleaseImage) {
+  MockInstanceWatcher mock_instance_watcher;
   MockImageReplayer mock_image_replayer;
   MockInstanceReplayer instance_replayer(
-    m_mock_threads, m_image_deleter, m_image_sync_throttler,
+    m_mock_threads, m_image_deleter,
     rbd::mirror::RadosRef(new librados::Rados(m_local_io_ctx)),
     "local_mirror_uuid", m_local_io_ctx.get_id());
 
@@ -166,8 +160,9 @@ TEST_F(TestMockInstanceReplayer, AcquireReleaseImage) {
     .WillOnce(Return(true));
   EXPECT_CALL(mock_image_replayer, start(nullptr, false));
 
-  instance_replayer.acquire_image(global_image_id, "remote_mirror_uuid",
-                                  "remote_image_id", &on_acquire);
+  instance_replayer.acquire_image(&mock_instance_watcher, global_image_id,
+                                  "remote_mirror_uuid", "remote_image_id",
+                                  &on_acquire);
   ASSERT_EQ(0, on_acquire.wait());
 
   // Release

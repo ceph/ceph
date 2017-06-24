@@ -50,6 +50,7 @@ struct MockManagedLock {
   MOCK_CONST_METHOD0(is_shutdown, bool());
 
   MOCK_CONST_METHOD0(is_state_post_acquiring, bool());
+  MOCK_CONST_METHOD0(is_state_pre_releasing, bool());
   MOCK_CONST_METHOD0(is_state_locked, bool());
 };
 
@@ -145,6 +146,10 @@ struct ManagedLock<MockTestImageCtx> {
 
   bool is_state_post_acquiring() const {
     return MockManagedLock::get_instance().is_state_post_acquiring();
+  }
+
+  bool is_state_pre_releasing() const {
+    return MockManagedLock::get_instance().is_state_pre_releasing();
   }
 
   bool is_state_locked() const {
@@ -264,6 +269,8 @@ struct MockListener : public LeaderWatcher<librbd::MockTestImageCtx>::Listener {
 
   MOCK_METHOD1(post_acquire_handler, void(Context *));
   MOCK_METHOD1(pre_release_handler, void(Context *));
+
+  MOCK_METHOD1(update_leader_handler, void(const std::string &));
 };
 
 MockListener *MockListener::s_instance = nullptr;
@@ -370,6 +377,8 @@ public:
     EXPECT_CALL(mock_managed_lock, is_state_post_acquiring())
       .Times(AtLeast(0)).WillRepeatedly(Return(false));
     EXPECT_CALL(mock_managed_lock, is_state_locked())
+      .Times(AtLeast(0)).WillRepeatedly(Return(false));
+    EXPECT_CALL(mock_managed_lock, is_state_pre_releasing())
       .Times(AtLeast(0)).WillRepeatedly(Return(false));
   }
 
@@ -627,6 +636,7 @@ TEST_F(TestMockLeaderWatcher, Break) {
   expect_is_shutdown(mock_managed_lock);
   expect_is_leader(mock_managed_lock);
   expect_destroy(mock_managed_lock);
+  EXPECT_CALL(listener, update_leader_handler(_));
 
   InSequence seq;
 

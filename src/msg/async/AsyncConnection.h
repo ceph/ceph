@@ -294,8 +294,8 @@ class AsyncConnection : public Connection {
   PerfCounters *logger;
   int global_seq;
   __u32 connect_seq, peer_global_seq;
-  atomic64_t out_seq;
-  atomic64_t ack_left, in_seq;
+  std::atomic<uint64_t> out_seq{0};
+  std::atomic<uint64_t> ack_left{0}, in_seq{0};
   int state;
   int state_after_send;
   ConnectedSocket cs;

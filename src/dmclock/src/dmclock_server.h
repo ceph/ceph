@@ -117,23 +117,24 @@ namespace crimson {
 
       RequestTag(const RequestTag& prev_tag,
 		 const ClientInfo& client,
-		 const ReqParams& req_params,
-		 const Time& time,
+		 const uint32_t delta,
+		 const uint32_t rho,
+		 const Time time,
 		 const double cost = 0.0) :
 	reservation(cost + tag_calc(time,
 				    prev_tag.reservation,
 				    client.reservation_inv,
-				    req_params.rho,
+				    rho,
 				    true)),
 	proportion(tag_calc(time,
 			    prev_tag.proportion,
 			    client.weight_inv,
-			    req_params.delta,
+			    delta,
 			    true)),
 	limit(tag_calc(time,
 		       prev_tag.limit,
 		       client.limit_inv,
-		       req_params.delta,
+		       delta,
 		       false)),
 	ready(false)
 #ifndef DO_NOT_DELAY_TAG_CALC
@@ -143,7 +144,15 @@ namespace crimson {
 	assert(reservation < max_tag || proportion < max_tag);
       }
 
-      RequestTag(double _res, double _prop, double _lim, const Time& _arrival) :
+      RequestTag(const RequestTag& prev_tag,
+		 const ClientInfo& client,
+		 const ReqParams req_params,
+		 const Time time,
+		 const double cost = 0.0) :
+	RequestTag(prev_tag, client, req_params.delta, req_params.rho, time, cost)
+      { /* empty */ }
+
+      RequestTag(double _res, double _prop, double _lim, const Time _arrival) :
 	reservation(_res),
 	proportion(_prop),
 	limit(_lim),
@@ -189,7 +198,7 @@ namespace crimson {
 
     private:
 
-      static double tag_calc(const Time& time,
+      static double tag_calc(const Time time,
 			     double prev,
 			     double increment,
 			     uint32_t dist_req_val,
@@ -737,11 +746,11 @@ namespace crimson {
 
 
       // data_mtx must be held by caller
-      void do_add_request(RequestRef&&     request,
-			  const C&         client_id,
+      void do_add_request(RequestRef&& request,
+			  const C& client_id,
 			  const ReqParams& req_params,
-			  const Time       time,
-			  const double     cost = 0.0) {
+			  const Time time,
+			  const double cost = 0.0) {
 	++tick;
 
 	// this pointer will help us create a reference to a shared
@@ -822,8 +831,11 @@ namespace crimson {
 	RequestTag tag(0, 0, 0, time);
 
 	if (!client.has_request()) {
-	  tag = RequestTag(client.get_req_tag(), client.info,
-			   req_params, time, cost);
+	  tag = RequestTag(client.get_req_tag(),
+			   client.info,
+			   req_params,
+			   time,
+			   cost);
 
 	  // copy tag to previous tag for client
 	  client.update_req_tag(tag, tick);
@@ -867,8 +879,9 @@ namespace crimson {
 						  RequestRef& request)> process) {
 	// gain access to data
 	ClientRec& top = heap.top();
-	ClientReq& first = top.next_request();
-	RequestRef request = std::move(first.request);
+
+	RequestRef request = std::move(top.next_request().request);
+	RequestTag tag = top.next_request().tag;
 
 	// pop request and adjust heaps
 	top.pop_request();
@@ -876,8 +889,8 @@ namespace crimson {
 #ifndef DO_NOT_DELAY_TAG_CALC
 	if (top.has_request()) {
 	  ClientReq& next_first = top.next_request();
-	  next_first.tag = RequestTag(first.tag, top.info,
-	                              ReqParams(top.cur_delta, top.cur_rho),
+	  next_first.tag = RequestTag(tag, top.info,
+				      top.cur_delta, top.cur_rho,
 				      next_first.tag.arrival);
 
   	  // copy tag to previous tag for client
@@ -1423,10 +1436,10 @@ namespace crimson {
 
 
       void add_request(typename super::RequestRef&& request,
-		       const C&         client_id,
+		       const C& client_id,
 		       const ReqParams& req_params,
-		       const Time       time,
-		       double           addl_cost = 0.0) {
+		       const Time time,
+		       double addl_cost = 0.0) {
 	typename super::DataGuard g(this->data_mtx);
 #ifdef PROFILE
 	add_request_timer.start();
@@ -1577,6 +1590,7 @@ namespace crimson {
 
       void sched_at(Time when) {
 	std::lock_guard<std::mutex> l(sched_ahead_mtx);
+	if (this->finishing) return;
 	if (TimeZero == sched_ahead_when || when < sched_ahead_when) {
 	  sched_ahead_when = when;
 	  sched_ahead_cv.notify_one();

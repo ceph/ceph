@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 
 # abort on failure
 set -e
@@ -115,6 +115,8 @@ filestore_path=
 VSTART_SEC="client.vstart.sh"
 
 MON_ADDR=""
+DASH_URLS=""
+RESTFUL_URLS=""
 
 conf_fn="$CEPH_CONF_PATH/ceph.conf"
 keyring_fn="$CEPH_CONF_PATH/keyring"
@@ -409,6 +411,11 @@ prepare_conf() {
         plugin dir = $CEPH_LIB
         osd pool default erasure code profile = plugin=jerasure technique=reed_sol_van k=2 m=1 ruleset-failure-domain=osd
         rgw frontends = $rgw_frontend port=$CEPH_RGW_PORT
+        ; needed for s3tests
+        rgw enable static website = 1
+        rgw crypt s3 kms encryption keys = testkey-1=YmluCmJvb3N0CmJvb3N0LWJ1aWxkCmNlcGguY29uZgo= testkey-2=aWIKTWFrZWZpbGUKbWFuCm91dApzcmMKVGVzdGluZwo=
+        rgw crypt require ssl = false
+        rgw lc debug interval = 10
         filestore fd cache size = 32
         run dir = $CEPH_OUT_DIR
         enable experimental unrecoverable data corrupting features = *
@@ -452,7 +459,7 @@ $CMDSDEBUG
         mds root ino gid = `id -g`
 $extra_conf
 [mgr]
-        mgr modules = rest fsstatus dashboard
+        mgr modules = restful fsstatus dashboard
         mgr data = $CEPH_DEV_DIR/mgr.\$id
         mgr module path = $MGR_PYTHON_PATH
         mon reweight min pgs per osd = 4
@@ -493,7 +500,6 @@ $extra_conf
 [mon]
         mon pg warn min per osd = 3
         mon osd allow primary affinity = true
-        mon osd allow pg upmap = true
         mon reweight min pgs per osd = 4
         mon osd prime pg temp = true
         crushtool = $CEPH_BIN/crushtool
@@ -609,6 +615,8 @@ EOF
 
 start_mgr() {
     local mgr=0
+    # avoid monitors on nearby ports (which test/*.sh use extensively)
+    MGR_PORT=$(($CEPH_PORT + 1000))
     for name in x y z a b c d e f g h i j k l m n o p
     do
         [ $mgr -eq $CEPH_NUM_MGR ] && break
@@ -625,9 +633,29 @@ start_mgr() {
         host = $HOSTNAME
 EOF
 
+	ceph_adm config-key put mgr/dashboard/$name/server_addr $IP
+	ceph_adm config-key put mgr/dashboard/$name/server_port $MGR_PORT
+	DASH_URLS+="http://$IP:$MGR_PORT/"
+	MGR_PORT=$(($MGR_PORT + 1000))
+
+	ceph_adm config-key put mgr/restful/$name/server_addr $IP
+	ceph_adm config-key put mgr/restful/$name/server_port $MGR_PORT
+
+	RESTFUL_URLS+="https://$IP:$MGR_PORT"
+	MGR_PORT=$(($MGR_PORT + 1000))
+
         echo "Starting mgr.${name}"
         run 'mgr' $CEPH_BIN/ceph-mgr -i $name $ARGS
     done
+
+    if ceph_adm tell mgr restful create-self-signed-cert; then
+        SF=`mktemp`
+        ceph_adm tell mgr restful create-key admin -o $SF
+        RESTFUL_SECRET=`cat $SF`
+        rm $SF
+    else 
+        echo MGR Restful is not working, perhaps the package is not installed?
+    fi
 }
 
 start_mds() {
@@ -957,6 +985,10 @@ fi
 
 echo "started.  stop.sh to stop.  see out/* (e.g. 'tail -f out/????') for debug output."
 
+echo ""
+echo "dashboard urls: $DASH_URLS"
+echo "  restful urls: $RESTFUL_URLS"
+echo "  w/ user/pass: admin / $RESTFUL_SECRET"
 echo ""
 echo "export PYTHONPATH=./pybind:$PYTHONPATH"
 echo "export LD_LIBRARY_PATH=$CEPH_LIB"

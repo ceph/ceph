@@ -1877,13 +1877,13 @@ void PrimaryLogPG::do_op(OpRequestRef& op)
     }
   }
 
-  if (op->includes_pg_op()) {
-    return do_pg_op(op);
-  }
-
   if (!op_has_sufficient_caps(op)) {
     osd->reply_op_error(op, -EPERM);
     return;
+  }
+
+  if (op->includes_pg_op()) {
+    return do_pg_op(op);
   }
 
   // object name too long?
@@ -2358,7 +2358,7 @@ void PrimaryLogPG::record_write_error(OpRequestRef op, const hobject_t &soid,
   assert(op->may_write());
   const osd_reqid_t &reqid = static_cast<const MOSDOp*>(op->get_req())->get_reqid();
   ObjectContextRef obc;
-  mempool::osd::list<pg_log_entry_t> entries;
+  mempool::osd_pglog::list<pg_log_entry_t> entries;
   entries.push_back(pg_log_entry_t(pg_log_entry_t::ERROR, soid,
 				   get_next_version(), eversion_t(), 0,
 				   reqid, utime_t(), r));
@@ -3767,6 +3767,9 @@ PrimaryLogPG::OpContextUPtr PrimaryLogPG::trim_object(
       coid,
       old_snaps,
       new_snaps);
+
+    coi = object_info_t(coid);
+
     ctx->at_version.version++;
   } else {
     // save adjusted snaps for this object
@@ -3835,20 +3838,19 @@ PrimaryLogPG::OpContextUPtr PrimaryLogPG::trim_object(
       ctx->delta_stats.num_objects--;
       if (oi.is_dirty()) {
 	ctx->delta_stats.num_objects_dirty--;
-	oi.clear_flag(object_info_t::FLAG_DIRTY);
       }
       if (oi.is_omap())
 	ctx->delta_stats.num_objects_omap--;
       if (oi.is_whiteout()) {
 	dout(20) << __func__ << " trimming whiteout on " << oi.soid << dendl;
 	ctx->delta_stats.num_whiteouts--;
-	oi.clear_flag(object_info_t::FLAG_WHITEOUT);
       }
-      if (oi.is_cache_pinned())
+      if (oi.is_cache_pinned()) {
 	ctx->delta_stats.num_objects_pinned--;
+      }
     }
     ctx->snapset_obc->obs.exists = false;
-    
+    ctx->snapset_obc->obs.oi = object_info_t(snapoid);
     t->remove(snapoid);
   } else {
     dout(10) << coid << " filtering snapset on " << snapoid << dendl;
@@ -5991,6 +5993,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  result = -EINVAL;
 	  break;
 	}
+        oi.set_flag(object_info_t::FLAG_MANIFEST);
 	oi.manifest.redirect_target = target;
 	oi.manifest.type = object_manifest_t::TYPE_REDIRECT;
 	t->truncate(soid, 0);
@@ -8985,7 +8988,12 @@ void PrimaryLogPG::op_applied(const eversion_t &applied_version)
   if (is_primary()) {
     if (scrubber.active) {
       if (last_update_applied == scrubber.subset_last_update) {
-        requeue_scrub();
+        if (ops_blocked_by_scrub()) {
+          requeue_scrub(true);
+        } else {
+          requeue_scrub(false);
+        }
+
       }
     } else {
       assert(scrubber.start == scrubber.end);
@@ -9245,7 +9253,7 @@ void PrimaryLogPG::simple_opc_submit(OpContextUPtr ctx)
 
 
 void PrimaryLogPG::submit_log_entries(
-  const mempool::osd::list<pg_log_entry_t> &entries,
+  const mempool::osd_pglog::list<pg_log_entry_t> &entries,
   ObcLockManager &&manager,
   boost::optional<std::function<void(void)> > &&_on_complete,
   OpRequestRef op,
@@ -10216,7 +10224,11 @@ void PrimaryLogPG::_applied_recovered_object(ObjectContextRef obc)
   // requeue an active chunky scrub waiting on recovery ops
   if (!deleting && active_pushes == 0
       && scrubber.is_chunky_scrub_active()) {
-    requeue_scrub();
+    if (ops_blocked_by_scrub()) {
+      requeue_scrub(true);
+    } else {
+      requeue_scrub(false);
+    }
   }
 
   unlock();
@@ -10415,7 +10427,7 @@ void PrimaryLogPG::mark_all_unfound_lost(
   pg_log.get_log().print(*_dout);
   *_dout << dendl;
 
-  mempool::osd::list<pg_log_entry_t> log_entries;
+  mempool::osd_pglog::list<pg_log_entry_t> log_entries;
 
   utime_t mtime = ceph_clock_now();
   map<hobject_t, pg_missing_item>::const_iterator m =

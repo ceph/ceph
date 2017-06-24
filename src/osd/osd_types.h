@@ -1247,7 +1247,7 @@ struct pg_pool_t {
   uint64_t flags;           ///< FLAG_*
   __u8 type;                ///< TYPE_*
   __u8 size, min_size;      ///< number of osds in each pg
-  __u8 crush_ruleset;       ///< crush placement rule set
+  __u8 crush_rule;          ///< crush placement rule
   __u8 object_hash;         ///< hash mapping object name to ps
 private:
   __u32 pg_num, pgp_num;    ///< number of pgs
@@ -1370,7 +1370,7 @@ public:
 
   pg_pool_t()
     : flags(0), type(0), size(0), min_size(0),
-      crush_ruleset(0), object_hash(0),
+      crush_rule(0), object_hash(0),
       pg_num(0), pgp_num(0),
       last_change(0),
       last_force_op_resend(0),
@@ -1424,7 +1424,7 @@ public:
   unsigned get_type() const { return type; }
   unsigned get_size() const { return size; }
   unsigned get_min_size() const { return min_size; }
-  int get_crush_ruleset() const { return crush_ruleset; }
+  int get_crush_rule() const { return crush_rule; }
   int get_object_hash() const { return object_hash; }
   const char *get_object_hash_name() const {
     return ceph_str_hash_name(get_object_hash());
@@ -3126,7 +3126,9 @@ public:
     TRY_DELETE = 6,
     ROLLBACK_EXTENTS = 7
   };
-  ObjectModDesc() : can_local_rollback(true), rollback_info_completed(false) {}
+  ObjectModDesc() : can_local_rollback(true), rollback_info_completed(false) {
+    bl.reassign_to_mempool(mempool::mempool_osd_pglog);
+  }
   void claim(ObjectModDesc &other) {
     bl.clear();
     bl.claim(other.bl);
@@ -3305,7 +3307,7 @@ struct pg_log_entry_t {
   bufferlist snaps;   // only for clone entries
   hobject_t  soid;
   osd_reqid_t reqid;  // caller+tid to uniquely identify request
-  vector<pair<osd_reqid_t, version_t> > extra_reqids;
+  mempool::osd_pglog::vector<pair<osd_reqid_t, version_t> > extra_reqids;
   eversion_t version, prior_version, reverting_to;
   version_t user_version; // the user version for this entry
   utime_t     mtime;  // this is the _user_ mtime, mind you
@@ -3317,7 +3319,9 @@ struct pg_log_entry_t {
 
   pg_log_entry_t()
    : user_version(0), return_code(0), op(0),
-     invalid_hash(false), invalid_pool(false) {}
+     invalid_hash(false), invalid_pool(false) {
+    snaps.reassign_to_mempool(mempool::mempool_osd_pglog);
+  }
   pg_log_entry_t(int _op, const hobject_t& _soid,
                 const eversion_t& v, const eversion_t& pv,
                 version_t uv,
@@ -3325,8 +3329,9 @@ struct pg_log_entry_t {
                 int return_code)
    : soid(_soid), reqid(rid), version(v), prior_version(pv), user_version(uv),
      mtime(mt), return_code(return_code), op(_op),
-     invalid_hash(false), invalid_pool(false)
-     {}
+     invalid_hash(false), invalid_pool(false) {
+    snaps.reassign_to_mempool(mempool::mempool_osd_pglog);
+  }
       
   bool is_clone() const { return op == CLONE; }
   bool is_modify() const { return op == MODIFY; }
@@ -3412,14 +3417,14 @@ protected:
   eversion_t rollback_info_trimmed_to;
 
 public:
-  mempool::osd::list<pg_log_entry_t> log;  // the actual log.
+  mempool::osd_pglog::list<pg_log_entry_t> log;  // the actual log.
   
   pg_log_t() = default;
   pg_log_t(const eversion_t &last_update,
 	   const eversion_t &log_tail,
 	   const eversion_t &can_rollback_to,
 	   const eversion_t &rollback_info_trimmed_to,
-	   mempool::osd::list<pg_log_entry_t> &&entries)
+	   mempool::osd_pglog::list<pg_log_entry_t> &&entries)
     : head(last_update), tail(log_tail), can_rollback_to(can_rollback_to),
       rollback_info_trimmed_to(rollback_info_trimmed_to),
       log(std::move(entries)) {}
@@ -3450,7 +3455,7 @@ public:
 
 
   pg_log_t split_out_child(pg_t child_pgid, unsigned split_bits) {
-    mempool::osd::list<pg_log_entry_t> oldlog, childlog;
+    mempool::osd_pglog::list<pg_log_entry_t> oldlog, childlog;
     oldlog.swap(log);
 
     eversion_t old_tail;
@@ -3474,11 +3479,11 @@ public:
       std::move(childlog));
   }
 
-  mempool::osd::list<pg_log_entry_t> rewind_from_head(eversion_t newhead) {
+  mempool::osd_pglog::list<pg_log_entry_t> rewind_from_head(eversion_t newhead) {
     assert(newhead >= tail);
 
-    mempool::osd::list<pg_log_entry_t>::iterator p = log.end();
-    mempool::osd::list<pg_log_entry_t> divergent;
+    mempool::osd_pglog::list<pg_log_entry_t>::iterator p = log.end();
+    mempool::osd_pglog::list<pg_log_entry_t> divergent;
     while (true) {
       if (p == log.begin()) {
 	// yikes, the whole thing is divergent!
@@ -4152,7 +4157,7 @@ struct object_copy_data_t {
   snapid_t snap_seq;
 
   ///< recent reqids on this object
-  vector<pair<osd_reqid_t, version_t> > reqids;
+  mempool::osd_pglog::vector<pair<osd_reqid_t, version_t> > reqids;
 
   uint64_t truncate_seq;
   uint64_t truncate_size;
@@ -4503,6 +4508,8 @@ struct object_info_t {
       s += "|omap_digest";
     if (flags & FLAG_CACHE_PIN)
       s += "|cache_pin";
+    if (flags & FLAG_MANIFEST)
+      s += "|manifest";
     if (s.length())
       return s.substr(1);
     return s;
@@ -4564,7 +4571,7 @@ struct object_info_t {
     return test_flag(FLAG_CACHE_PIN);
   }
   bool has_manifest() const {
-    return !manifest.is_empty();
+    return test_flag(FLAG_MANIFEST);
   }
 
   void set_data_digest(__u32 d) {

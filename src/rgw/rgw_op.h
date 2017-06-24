@@ -207,6 +207,7 @@ protected:
   bool is_slo;
   string lo_etag;
   bool rgwx_stat; /* extended rgw stat operation */
+  string version_id;
 
   // compression attrs
   RGWCompressionInfo cs_info;
@@ -747,6 +748,7 @@ public:
 
 class RGWSetBucketWebsite : public RGWOp {
 protected:
+  bufferlist in_data;
   RGWBucketWebsiteConf website_conf;
 public:
   RGWSetBucketWebsite() {}
@@ -1421,6 +1423,7 @@ public:
 class RGWPutCORS : public RGWOp {
 protected:
   bufferlist cors_bl;
+  bufferlist in_data;
 
 public:
   RGWPutCORS() {}

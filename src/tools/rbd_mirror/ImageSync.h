@@ -24,6 +24,8 @@ namespace mirror {
 
 class ProgressContext;
 
+template <typename> class InstanceWatcher;
+
 namespace image_sync { template <typename> class ImageCopyRequest; }
 namespace image_sync { template <typename> class SnapshotCopyRequest; }
 
@@ -39,28 +41,36 @@ public:
                            Mutex *timer_lock, const std::string &mirror_uuid,
                            Journaler *journaler,
                            MirrorPeerClientMeta *client_meta,
-                           ContextWQ *work_queue, Context *on_finish,
-			   ProgressContext *progress_ctx = nullptr) {
+                           ContextWQ *work_queue,
+                           InstanceWatcher<ImageCtxT> *instance_watcher,
+                           Context *on_finish,
+                           ProgressContext *progress_ctx = nullptr) {
     return new ImageSync(local_image_ctx, remote_image_ctx, timer, timer_lock,
                          mirror_uuid, journaler, client_meta, work_queue,
-                         on_finish, progress_ctx);
+                         instance_watcher, on_finish, progress_ctx);
   }
 
   ImageSync(ImageCtxT *local_image_ctx, ImageCtxT *remote_image_ctx,
             SafeTimer *timer, Mutex *timer_lock, const std::string &mirror_uuid,
             Journaler *journaler, MirrorPeerClientMeta *client_meta,
-            ContextWQ *work_queue, Context *on_finish,
-            ProgressContext *progress_ctx = nullptr);
+            ContextWQ *work_queue, InstanceWatcher<ImageCtxT> *instance_watcher,
+            Context *on_finish, ProgressContext *progress_ctx = nullptr);
   ~ImageSync() override;
 
   void send() override;
   void cancel() override;
+
+protected:
+  void finish(int r) override;
 
 private:
   /**
    * @verbatim
    *
    * <start>
+   *    |
+   *    v
+   * NOTIFY_SYNC_REQUEST
    *    |
    *    v
    * PRUNE_CATCH_UP_SYNC_POINT
@@ -100,6 +110,7 @@ private:
   Journaler *m_journaler;
   MirrorPeerClientMeta *m_client_meta;
   ContextWQ *m_work_queue;
+  InstanceWatcher<ImageCtxT> *m_instance_watcher;
   ProgressContext *m_progress_ctx;
 
   SnapMap m_snap_map;
@@ -110,6 +121,9 @@ private:
   image_sync::SnapshotCopyRequest<ImageCtxT> *m_snapshot_copy_request = nullptr;
   image_sync::ImageCopyRequest<ImageCtxT> *m_image_copy_request = nullptr;
   decltype(ImageCtxT::object_map) m_object_map = nullptr;
+
+  void send_notify_sync_request();
+  void handle_notify_sync_request(int r);
 
   void send_prune_catch_up_sync_point();
   void handle_prune_catch_up_sync_point(int r);

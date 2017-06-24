@@ -21,9 +21,6 @@ source $CEPH_ROOT/qa/workunits/ceph-helpers.sh
 # Set to "yes" in order to ignore diff errors and save results to update test
 getjson="no"
 
-termwidth=$(stty -a | head -1 | sed -e 's/.*columns \([0-9]*\).*/\1/')
-if test -n "$termwidth" -a "$termwidth" != "0"; then termwidth="-W ${termwidth}"; fi
-
 # Ignore the epoch and filter out the attr '_' value because it has date information and won't match
 jqfilter='.inconsistents | (.[].shards[].attrs[] | select(.name == "_") | .value) |= "----Stripped-by-test----"'
 sortkeys='import json; import sys ; JSON=sys.stdin.read() ; ud = json.loads(JSON) ; print json.dumps(ud, sort_keys=True, indent=2)'
@@ -407,17 +404,17 @@ function list_missing_erasure_coded() {
     done
 
     id=${osds0[0]}
-    ceph-objectstore-tool --data-path $dir/$id --enable-experimental-unrecoverable-data-corrupting-features=bluestore \
+    ceph-objectstore-tool --data-path $dir/$id \
         MOBJ0 remove || return 1
     id=${osds0[1]}
-    ceph-objectstore-tool --data-path $dir/$id --enable-experimental-unrecoverable-data-corrupting-features=bluestore \
+    ceph-objectstore-tool --data-path $dir/$id \
         MOBJ0 remove || return 1
 
     id=${osds1[1]}
-    ceph-objectstore-tool --data-path $dir/$id --enable-experimental-unrecoverable-data-corrupting-features=bluestore \
+    ceph-objectstore-tool --data-path $dir/$id \
         MOBJ1 remove || return 1
     id=${osds1[2]}
-    ceph-objectstore-tool --data-path $dir/$id --enable-experimental-unrecoverable-data-corrupting-features=bluestore \
+    ceph-objectstore-tool --data-path $dir/$id \
         MOBJ1 remove || return 1
 
     for id in $(seq 0 2) ; do
@@ -921,7 +918,7 @@ function TEST_corrupt_scrub_replicated() {
 EOF
 
     jq "$jqfilter" $dir/json | python -c "$sortkeys" | sed -e "$sedfilter" > $dir/csjson
-    diff -y $termwidth $dir/checkcsjson $dir/csjson || test $getjson = "yes" || return 1
+    diff ${DIFFCOLOPTS} $dir/checkcsjson $dir/csjson || test $getjson = "yes" || return 1
     if test $getjson = "yes"
     then
         jq '.' $dir/json > save1.json
@@ -1555,7 +1552,7 @@ EOF
 EOF
 
     jq "$jqfilter" $dir/json | python -c "$sortkeys" | sed -e "$sedfilter" > $dir/csjson
-    diff -y $termwidth $dir/checkcsjson $dir/csjson || test $getjson = "yes" || return 1
+    diff ${DIFFCOLOPTS} $dir/checkcsjson $dir/csjson || test $getjson = "yes" || return 1
     if test $getjson = "yes"
     then
         jq '.' $dir/json > save2.json

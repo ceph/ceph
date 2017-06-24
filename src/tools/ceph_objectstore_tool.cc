@@ -861,14 +861,24 @@ int get_attrs(
 	  cout << "snapset " << snapset << std::endl;
 	  if (!snapset.is_legacy()) {
 	    for (auto& p : snapset.clone_snaps) {
-	      hobject_t clone = hoid.hobj;
-	      clone.snap = p.first;
+	      ghobject_t clone = hoid;
+	      clone.hobj.snap = p.first;
 	      set<snapid_t> snaps(p.second.begin(), p.second.end());
+	      if (!store->exists(coll, clone)) {
+		// no clone, skip.  this is probably a cache pool.  this works
+		// because we use a separate transaction per object and clones
+		// come before head in the archive.
+		if (debug)
+		  cerr << "\tskipping missing " << clone << " (snaps "
+		       << snaps << ")" << std::endl;
+		continue;
+	      }
 	      if (debug)
-		cerr << "\tsetting " << clone << " snaps " << snaps << std::endl;
+		cerr << "\tsetting " << clone.hobj << " snaps " << snaps
+		     << std::endl;
 	      OSDriver::OSTransaction _t(driver.get_transaction(t));
 	      assert(!snaps.empty());
-	      snap_mapper.add_oid(clone, snaps, &_t);
+	      snap_mapper.add_oid(clone.hobj, snaps, &_t);
 	    }
 	  }
 	} else {

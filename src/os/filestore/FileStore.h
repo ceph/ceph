@@ -481,6 +481,9 @@ public:
   bool needs_journal() override {
     return false;
   }
+
+  bool is_rotational() override;
+
   void dump_perf_counters(Formatter *f) override {
     f->open_object_section("perf_counters");
     logger->dump_formatted(f, false);
@@ -864,6 +867,7 @@ public:
   virtual int syncfs() = 0;
   virtual bool has_fiemap() = 0;
   virtual bool has_seek_data_hole() = 0;
+  virtual bool is_rotational() = 0;
   virtual int do_fiemap(int fd, off_t start, size_t len, struct fiemap **pfiemap) = 0;
   virtual int clone_range(int from, int to, uint64_t srcoff, uint64_t len, uint64_t dstoff) = 0;
   virtual int set_alloc_hint(int fd, uint64_t hint) = 0;

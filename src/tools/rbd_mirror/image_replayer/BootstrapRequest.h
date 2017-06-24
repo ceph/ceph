@@ -27,6 +27,9 @@ namespace mirror {
 
 class ProgressContext;
 
+template <typename> class ImageSync;
+template <typename> class InstanceWatcher;
+
 namespace image_replayer {
 
 template <typename ImageCtxT = librbd::ImageCtx>
@@ -40,7 +43,7 @@ public:
   static BootstrapRequest* create(
         librados::IoCtx &local_io_ctx,
         librados::IoCtx &remote_io_ctx,
-        ImageSyncThrottlerRef<ImageCtxT> image_sync_throttler,
+        InstanceWatcher<ImageCtxT> *instance_watcher,
         ImageCtxT **local_image_ctx,
         const std::string &local_image_id,
         const std::string &remote_image_id,
@@ -55,7 +58,7 @@ public:
         bool *do_resync,
         ProgressContext *progress_ctx = nullptr) {
     return new BootstrapRequest(local_io_ctx, remote_io_ctx,
-                                image_sync_throttler, local_image_ctx,
+                                instance_watcher, local_image_ctx,
                                 local_image_id, remote_image_id,
                                 global_image_id, work_queue, timer, timer_lock,
                                 local_mirror_uuid, remote_mirror_uuid,
@@ -65,7 +68,7 @@ public:
 
   BootstrapRequest(librados::IoCtx &local_io_ctx,
                    librados::IoCtx &remote_io_ctx,
-                   ImageSyncThrottlerRef<ImageCtxT> image_sync_throttler,
+                   InstanceWatcher<ImageCtxT> *instance_watcher,
                    ImageCtxT **local_image_ctx,
                    const std::string &local_image_id,
                    const std::string &remote_image_id,
@@ -145,7 +148,7 @@ private:
 
   librados::IoCtx &m_local_io_ctx;
   librados::IoCtx &m_remote_io_ctx;
-  ImageSyncThrottlerRef<ImageCtxT> m_image_sync_throttler;
+  InstanceWatcher<ImageCtxT> *m_instance_watcher;
   ImageCtxT **m_local_image_ctx;
   std::string m_local_image_id;
   std::string m_remote_image_id;
@@ -159,6 +162,7 @@ private:
   MirrorPeerClientMeta *m_client_meta;
   ProgressContext *m_progress_ctx;
   bool *m_do_resync;
+
   Mutex m_lock;
   bool m_canceled = false;
 
@@ -168,6 +172,7 @@ private:
   ImageCtxT *m_remote_image_ctx = nullptr;
   bool m_primary = false;
   int m_ret_val = 0;
+  ImageSync<ImageCtxT> *m_image_sync = nullptr;
 
   bufferlist m_out_bl;
 

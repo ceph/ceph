@@ -2583,8 +2583,11 @@ void CDir::set_dir_auth(mds_authority_t a)
       inode->adjust_nested_auth_pins(-1, NULL);
     
     // unpin parent of frozen dir/tree?
-    if (inode->is_auth() && (is_frozen_tree_root() || is_frozen_dir()))
-      inode->auth_unpin(this);
+    if (inode->is_auth()) {
+      assert(!is_frozen_tree_root());
+      if (is_frozen_dir())
+	inode->auth_unpin(this);
+    }
   } 
   if (was_subtree && !is_subtree_root()) {
     dout(10) << " old subtree root, adjusting auth_pins" << dendl;
@@ -2594,8 +2597,11 @@ void CDir::set_dir_auth(mds_authority_t a)
       inode->adjust_nested_auth_pins(1, NULL);
 
     // pin parent of frozen dir/tree?
-    if (inode->is_auth() && (is_frozen_tree_root() || is_frozen_dir()))
-      inode->auth_pin(this);
+    if (inode->is_auth()) {
+      assert(!is_frozen_tree_root());
+      if (is_frozen_dir())
+	inode->auth_pin(this);
+    }
   }
 
   // newly single auth?
@@ -2774,13 +2780,30 @@ void CDir::_freeze_tree()
     state_clear(STATE_FREEZINGTREE);   // actually, this may get set again by next context?
     --num_freezing_trees;
   }
+
+  if (is_auth()) {
+    mds_authority_t auth;
+    bool was_subtree = is_subtree_root();
+    if (was_subtree) {
+      auth = get_dir_auth();
+    } else {
+      // temporarily prevent parent subtree from becoming frozen.
+      inode->auth_pin(this);
+      // create new subtree
+      auth = authority();
+    }
+
+    assert(auth.first >= 0);
+    assert(auth.second == CDIR_AUTH_UNKNOWN);
+    auth.second = auth.first;
+    inode->mdcache->adjust_subtree_auth(this, auth);
+    if (!was_subtree)
+      inode->auth_unpin(this);
+  }
+
   state_set(STATE_FROZENTREE);
   ++num_frozen_trees;
   get(PIN_FROZEN);
-
-  // auth_pin inode for duration of freeze, if we are not a subtree root.
-  if (is_auth() && !is_subtree_root())
-    inode->auth_pin(this);
 }
 
 void CDir::unfreeze_tree()
@@ -2794,9 +2817,16 @@ void CDir::unfreeze_tree()
 
     put(PIN_FROZEN);
 
-    // unpin  (may => FREEZEABLE)   FIXME: is this order good?
-    if (is_auth() && !is_subtree_root())
-      inode->auth_unpin(this);
+    if (is_auth()) {
+      // must be subtree
+      assert(is_subtree_root());
+      // for debug purpose, caller should ensure 'dir_auth.second == dir_auth.first'
+      mds_authority_t auth = get_dir_auth();
+      assert(auth.first >= 0);
+      assert(auth.second == auth.first);
+      auth.second = CDIR_AUTH_UNKNOWN;
+      inode->mdcache->adjust_subtree_auth(this, auth);
+    }
 
     // waiters?
     finish_waiting(WAIT_UNFREEZE);

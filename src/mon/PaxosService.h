@@ -53,7 +53,9 @@ class PaxosService {
    */
   bool proposing;
 
- protected:
+  bool need_immediate_propose = false;
+
+protected:
   /**
    * Services implementing us used to depend on the Paxos version, back when
    * each service would have a Paxos instance for itself. However, now we only
@@ -355,6 +357,15 @@ public:
    * @returns 'true' if the Paxos system should propose; 'false' otherwise.
    */
   virtual bool should_propose(double &delay);
+
+  /**
+   * force an immediate propose.
+   *
+   * This is meant to be called from prepare_update(op).
+   */
+  void force_immediate_propose() {
+    need_immediate_propose = true;
+  }
 
   /**
    * @defgroup PaxosService_h_courtesy Courtesy functions

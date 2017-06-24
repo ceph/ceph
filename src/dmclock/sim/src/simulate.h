@@ -88,6 +88,17 @@ namespace crimson {
 	// empty
       }
 
+      ~Simulation() {
+	for (auto c : clients) {
+	  TC* cp = c.second;
+	  delete cp;
+	}
+
+	for (auto s : servers) {
+	  delete s.second;
+	}
+      }
+
       uint get_client_count() const { return client_count; }
       uint get_server_count() const { return server_count; }
       TC& get_client(ClientId id) { return *clients[id]; }

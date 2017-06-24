@@ -46,6 +46,7 @@ using ::testing::DoDefault;
 using ::testing::InSequence;
 using ::testing::Invoke;
 using ::testing::Return;
+using ::testing::ReturnNew;
 using ::testing::WithArg;
 
 namespace {
@@ -86,6 +87,11 @@ public:
 
     ASSERT_EQ(0, create_image(rbd, m_local_io_ctx, m_image_name, m_image_size));
     ASSERT_EQ(0, open_image(m_local_io_ctx, m_image_name, &m_local_image_ctx));
+  }
+
+  void expect_start_op(librbd::MockExclusiveLock &mock_exclusive_lock) {
+    EXPECT_CALL(mock_exclusive_lock, start_op()).WillOnce(
+      ReturnNew<FunctionContext>([](int) {}));
   }
 
   void expect_list_snaps(librbd::MockTestImageCtx &mock_image_ctx,
@@ -346,9 +352,11 @@ TEST_F(TestMockImageSyncObjectCopyRequest, DNE) {
   librbd::MockTestImageCtx mock_remote_image_ctx(*m_remote_image_ctx);
   librbd::MockTestImageCtx mock_local_image_ctx(*m_local_image_ctx);
 
+  librbd::MockExclusiveLock mock_exclusive_lock;
+  mock_local_image_ctx.exclusive_lock = &mock_exclusive_lock;
+
   librbd::MockObjectMap mock_object_map;
   mock_local_image_ctx.object_map = &mock_object_map;
-
   expect_test_features(mock_local_image_ctx);
 
   C_SaferCond ctx;
@@ -374,6 +382,9 @@ TEST_F(TestMockImageSyncObjectCopyRequest, Write) {
   librbd::MockTestImageCtx mock_remote_image_ctx(*m_remote_image_ctx);
   librbd::MockTestImageCtx mock_local_image_ctx(*m_local_image_ctx);
 
+  librbd::MockExclusiveLock mock_exclusive_lock;
+  mock_local_image_ctx.exclusive_lock = &mock_exclusive_lock;
+
   librbd::MockObjectMap mock_object_map;
   mock_local_image_ctx.object_map = &mock_object_map;
 
@@ -392,7 +403,9 @@ TEST_F(TestMockImageSyncObjectCopyRequest, Write) {
   expect_list_snaps(mock_remote_image_ctx, mock_remote_io_ctx, 0);
   expect_set_snap_read(mock_remote_io_ctx, m_remote_snap_ids[0]);
   expect_sparse_read(mock_remote_io_ctx, 0, one.range_end(), 0);
+  expect_start_op(mock_exclusive_lock);
   expect_write(mock_local_io_ctx, 0, one.range_end(), {0, {}}, 0);
+  expect_start_op(mock_exclusive_lock);
   expect_update_object_map(mock_local_image_ctx, mock_object_map,
                            m_local_snap_ids[0], OBJECT_EXISTS, 0);
 
@@ -413,6 +426,9 @@ TEST_F(TestMockImageSyncObjectCopyRequest, ReadMissingStaleSnapSet) {
   ASSERT_EQ(0, create_snap("sync"));
   librbd::MockTestImageCtx mock_remote_image_ctx(*m_remote_image_ctx);
   librbd::MockTestImageCtx mock_local_image_ctx(*m_local_image_ctx);
+
+  librbd::MockExclusiveLock mock_exclusive_lock;
+  mock_local_image_ctx.exclusive_lock = &mock_exclusive_lock;
 
   librbd::MockObjectMap mock_object_map;
   mock_local_image_ctx.object_map = &mock_object_map;
@@ -449,12 +465,15 @@ TEST_F(TestMockImageSyncObjectCopyRequest, ReadMissingStaleSnapSet) {
   expect_list_snaps(mock_remote_image_ctx, mock_remote_io_ctx, 0);
   expect_set_snap_read(mock_remote_io_ctx, m_remote_snap_ids[3]);
   expect_sparse_read(mock_remote_io_ctx, 0, one.range_end(), 0);
+  expect_start_op(mock_exclusive_lock);
   expect_write(mock_local_io_ctx, 0, one.range_end(),
                {m_local_snap_ids[1], {m_local_snap_ids[1],
                                       m_local_snap_ids[0]}},
                 0);
+  expect_start_op(mock_exclusive_lock);
   expect_update_object_map(mock_local_image_ctx, mock_object_map,
                            m_local_snap_ids[2], OBJECT_EXISTS, 0);
+  expect_start_op(mock_exclusive_lock);
   expect_update_object_map(mock_local_image_ctx, mock_object_map,
                            m_local_snap_ids[3], OBJECT_EXISTS_CLEAN, 0);
 
@@ -471,6 +490,9 @@ TEST_F(TestMockImageSyncObjectCopyRequest, ReadMissingUpToDateSnapMap) {
   ASSERT_EQ(0, create_snap("sync"));
   librbd::MockTestImageCtx mock_remote_image_ctx(*m_remote_image_ctx);
   librbd::MockTestImageCtx mock_local_image_ctx(*m_local_image_ctx);
+
+  librbd::MockExclusiveLock mock_exclusive_lock;
+  mock_local_image_ctx.exclusive_lock = &mock_exclusive_lock;
 
   librbd::MockObjectMap mock_object_map;
   mock_local_image_ctx.object_map = &mock_object_map;
@@ -503,6 +525,9 @@ TEST_F(TestMockImageSyncObjectCopyRequest, ReadError) {
   librbd::MockTestImageCtx mock_remote_image_ctx(*m_remote_image_ctx);
   librbd::MockTestImageCtx mock_local_image_ctx(*m_local_image_ctx);
 
+  librbd::MockExclusiveLock mock_exclusive_lock;
+  mock_local_image_ctx.exclusive_lock = &mock_exclusive_lock;
+
   librbd::MockObjectMap mock_object_map;
   mock_local_image_ctx.object_map = &mock_object_map;
 
@@ -533,6 +558,9 @@ TEST_F(TestMockImageSyncObjectCopyRequest, WriteError) {
   librbd::MockTestImageCtx mock_remote_image_ctx(*m_remote_image_ctx);
   librbd::MockTestImageCtx mock_local_image_ctx(*m_local_image_ctx);
 
+  librbd::MockExclusiveLock mock_exclusive_lock;
+  mock_local_image_ctx.exclusive_lock = &mock_exclusive_lock;
+
   librbd::MockObjectMap mock_object_map;
   mock_local_image_ctx.object_map = &mock_object_map;
 
@@ -551,6 +579,7 @@ TEST_F(TestMockImageSyncObjectCopyRequest, WriteError) {
   expect_list_snaps(mock_remote_image_ctx, mock_remote_io_ctx, 0);
   expect_set_snap_read(mock_remote_io_ctx, m_remote_snap_ids[0]);
   expect_sparse_read(mock_remote_io_ctx, 0, one.range_end(), 0);
+  expect_start_op(mock_exclusive_lock);
   expect_write(mock_local_io_ctx, 0, one.range_end(), {0, {}}, -EINVAL);
 
   request->send();
@@ -577,6 +606,9 @@ TEST_F(TestMockImageSyncObjectCopyRequest, WriteSnaps) {
   librbd::MockTestImageCtx mock_remote_image_ctx(*m_remote_image_ctx);
   librbd::MockTestImageCtx mock_local_image_ctx(*m_local_image_ctx);
 
+  librbd::MockExclusiveLock mock_exclusive_lock;
+  mock_local_image_ctx.exclusive_lock = &mock_exclusive_lock;
+
   librbd::MockObjectMap mock_object_map;
   mock_local_image_ctx.object_map = &mock_object_map;
 
@@ -595,15 +627,20 @@ TEST_F(TestMockImageSyncObjectCopyRequest, WriteSnaps) {
   expect_list_snaps(mock_remote_image_ctx, mock_remote_io_ctx, 0);
   expect_set_snap_read(mock_remote_io_ctx, m_remote_snap_ids[0]);
   expect_sparse_read(mock_remote_io_ctx, 0, one.range_end(), 0);
+  expect_start_op(mock_exclusive_lock);
   expect_write(mock_local_io_ctx, 0, one.range_end(), {0, {}}, 0);
   expect_set_snap_read(mock_remote_io_ctx, m_remote_snap_ids[2]);
   expect_sparse_read(mock_remote_io_ctx, two, 0);
+  expect_start_op(mock_exclusive_lock);
   expect_write(mock_local_io_ctx, two,
                {m_local_snap_ids[0], {m_local_snap_ids[0]}}, 0);
+  expect_start_op(mock_exclusive_lock);
   expect_update_object_map(mock_local_image_ctx, mock_object_map,
                            m_local_snap_ids[0], OBJECT_EXISTS, 0);
+  expect_start_op(mock_exclusive_lock);
   expect_update_object_map(mock_local_image_ctx, mock_object_map,
                            m_local_snap_ids[1], OBJECT_EXISTS, 0);
+  expect_start_op(mock_exclusive_lock);
   expect_update_object_map(mock_local_image_ctx, mock_object_map,
                            m_local_snap_ids[2], OBJECT_EXISTS_CLEAN, 0);
 
@@ -629,6 +666,9 @@ TEST_F(TestMockImageSyncObjectCopyRequest, Trim) {
   librbd::MockTestImageCtx mock_remote_image_ctx(*m_remote_image_ctx);
   librbd::MockTestImageCtx mock_local_image_ctx(*m_local_image_ctx);
 
+  librbd::MockExclusiveLock mock_exclusive_lock;
+  mock_local_image_ctx.exclusive_lock = &mock_exclusive_lock;
+
   librbd::MockObjectMap mock_object_map;
   mock_local_image_ctx.object_map = &mock_object_map;
 
@@ -647,10 +687,14 @@ TEST_F(TestMockImageSyncObjectCopyRequest, Trim) {
   expect_list_snaps(mock_remote_image_ctx, mock_remote_io_ctx, 0);
   expect_set_snap_read(mock_remote_io_ctx, m_remote_snap_ids[0]);
   expect_sparse_read(mock_remote_io_ctx, 0, one.range_end(), 0);
+  expect_start_op(mock_exclusive_lock);
   expect_write(mock_local_io_ctx, 0, one.range_end(), {0, {}}, 0);
+  expect_start_op(mock_exclusive_lock);
   expect_truncate(mock_local_io_ctx, trim_offset, 0);
+  expect_start_op(mock_exclusive_lock);
   expect_update_object_map(mock_local_image_ctx, mock_object_map,
                            m_local_snap_ids[0], OBJECT_EXISTS, 0);
+  expect_start_op(mock_exclusive_lock);
   expect_update_object_map(mock_local_image_ctx, mock_object_map,
                            m_local_snap_ids[1], OBJECT_EXISTS, 0);
 
@@ -673,6 +717,9 @@ TEST_F(TestMockImageSyncObjectCopyRequest, Remove) {
   librbd::MockTestImageCtx mock_remote_image_ctx(*m_remote_image_ctx);
   librbd::MockTestImageCtx mock_local_image_ctx(*m_local_image_ctx);
 
+  librbd::MockExclusiveLock mock_exclusive_lock;
+  mock_local_image_ctx.exclusive_lock = &mock_exclusive_lock;
+
   librbd::MockObjectMap mock_object_map;
   mock_local_image_ctx.object_map = &mock_object_map;
 
@@ -691,10 +738,14 @@ TEST_F(TestMockImageSyncObjectCopyRequest, Remove) {
   expect_list_snaps(mock_remote_image_ctx, mock_remote_io_ctx, 0);
   expect_set_snap_read(mock_remote_io_ctx, m_remote_snap_ids[1]);
   expect_sparse_read(mock_remote_io_ctx, 0, one.range_end(), 0);
+  expect_start_op(mock_exclusive_lock);
   expect_write(mock_local_io_ctx, 0, one.range_end(), {0, {}}, 0);
+  expect_start_op(mock_exclusive_lock);
   expect_remove(mock_local_io_ctx, 0);
+  expect_start_op(mock_exclusive_lock);
   expect_update_object_map(mock_local_image_ctx, mock_object_map,
                            m_local_snap_ids[0], OBJECT_EXISTS, 0);
+  expect_start_op(mock_exclusive_lock);
   expect_update_object_map(mock_local_image_ctx, mock_object_map,
                            m_local_snap_ids[1], OBJECT_EXISTS_CLEAN, 0);
 

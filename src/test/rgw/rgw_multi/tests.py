@@ -13,6 +13,8 @@ from itertools import combinations
 
 import boto
 import boto.s3.connection
+from boto.s3.website import WebsiteConfiguration
+from boto.s3.cors import CORSConfiguration
 
 from nose.tools import eq_ as eq
 from nose.plugins.attrib import attr
@@ -654,6 +656,14 @@ def test_bucket_acl():
         bucket.set_acl('public-read')
         assert(len(bucket.get_acl().acl.grants) == 2) # new grant on AllUsers
 
+def test_bucket_cors():
+    buckets, zone_bucket = create_bucket_per_zone_in_realm()
+    for _, bucket in zone_bucket:
+        cors_cfg = CORSConfiguration()
+        cors_cfg.add_rule(['DELETE'], 'https://www.example.com', allowed_header='*', max_age_seconds=3000)
+        bucket.set_cors(cors_cfg)
+        assert(bucket.get_cors().to_xml() == cors_cfg.to_xml())
+
 def test_bucket_delete_notempty():
     zonegroup = realm.master_zonegroup()
     zonegroup_conns = ZonegroupConns(zonegroup)
@@ -791,3 +801,27 @@ def test_zonegroup_remove():
 
     # validate the resulting period
     zonegroup.period.update(z1, commit=True)
+
+def test_set_bucket_website():
+    buckets, zone_bucket = create_bucket_per_zone_in_realm()
+    for _, bucket in zone_bucket:
+        website_cfg = WebsiteConfiguration(suffix='index.html',error_key='error.html')
+        try:
+            bucket.set_website_configuration(website_cfg)
+        except boto.exception.S3ResponseError as e:
+            if e.error_code == 'MethodNotAllowed':
+                raise SkipTest("test_set_bucket_website skipped. Requires rgw_enable_static_website = 1.")
+        assert(bucket.get_website_configuration_with_xml()[1] == website_cfg.to_xml())
+
+def test_set_bucket_policy():
+    policy = '''{
+  "Version": "2012-10-17",
+  "Statement": [{
+    "Effect": "Allow",
+    "Principal": "*"
+  }]
+}'''
+    buckets, zone_bucket = create_bucket_per_zone_in_realm()
+    for _, bucket in zone_bucket:
+        bucket.set_policy(policy)
+        assert(bucket.get_policy() == policy)

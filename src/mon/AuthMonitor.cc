@@ -17,6 +17,8 @@
 #include "mon/AuthMonitor.h"
 #include "mon/Monitor.h"
 #include "mon/MonitorDBStore.h"
+#include "mon/ConfigKeyService.h"
+#include "mon/OSDMonitor.h"
 
 #include "messages/MMonCommand.h"
 #include "messages/MAuth.h"
@@ -26,6 +28,7 @@
 
 #include "auth/AuthServiceHandler.h"
 #include "auth/KeyRing.h"
+#include "include/stringify.h"
 #include "include/assert.h"
 
 #define dout_subsys ceph_subsys_mon
@@ -656,14 +659,344 @@ int AuthMonitor::import_keyring(KeyRing& keyring)
       dout(0) << "import: no caps supplied" << dendl;
       return -EINVAL;
     }
-    KeyServerData::Incremental auth_inc;
-    auth_inc.name = p->first;
-    auth_inc.auth = p->second;
-    auth_inc.op = KeyServerData::AUTH_INC_ADD;
-    dout(10) << " importing " << auth_inc.name << dendl;
-    dout(30) << "    " << auth_inc.auth << dendl;
-    push_cephx_inc(auth_inc);
+    int err = add_entity(p->first, p->second);
+    assert(err == 0);
   }
+  return 0;
+}
+
+int AuthMonitor::remove_entity(const EntityName &entity)
+{
+  dout(10) << __func__ << " " << entity << dendl;
+  if (!mon->key_server.contains(entity))
+    return -ENOENT;
+
+  KeyServerData::Incremental auth_inc;
+  auth_inc.name = entity;
+  auth_inc.op = KeyServerData::AUTH_INC_DEL;
+  push_cephx_inc(auth_inc);
+
+  return 0;
+}
+
+bool AuthMonitor::entity_is_pending(EntityName& entity)
+{
+  // are we about to have it?
+  for (auto& p : pending_auth) {
+    if (p.inc_type == AUTH_DATA) {
+      KeyServerData::Incremental inc;
+      bufferlist::iterator q = p.auth_data.begin();
+      ::decode(inc, q);
+      if (inc.op == KeyServerData::AUTH_INC_ADD &&
+          inc.name == entity) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+int AuthMonitor::exists_and_matches_entity(
+    const auth_entity_t& entity,
+    bool has_secret,
+    stringstream& ss)
+{
+  return exists_and_matches_entity(entity.name, entity.auth,
+                                   entity.auth.caps, has_secret, ss);
+}
+
+int AuthMonitor::exists_and_matches_entity(
+    const EntityName& name,
+    const EntityAuth& auth,
+    const map<string,bufferlist>& caps,
+    bool has_secret,
+    stringstream& ss)
+{
+
+  dout(20) << __func__ << " entity " << name << " auth " << auth
+           << " caps " << caps << " has_secret " << has_secret << dendl;
+
+  EntityAuth existing_auth;
+  // does entry already exist?
+  if (mon->key_server.get_auth(name, existing_auth)) {
+    // key match?
+    if (has_secret) {
+      if (existing_auth.key.get_secret().cmp(auth.key.get_secret())) {
+        ss << "entity " << name << " exists but key does not match";
+        return -EEXIST;
+      }
+    }
+
+    // caps match?
+    if (caps.size() != existing_auth.caps.size()) {
+      ss << "entity " << name << " exists but caps do not match";
+      return -EINVAL;
+    }
+    for (auto& it : caps) {
+      if (existing_auth.caps.count(it.first) == 0 ||
+          !existing_auth.caps[it.first].contents_equal(it.second)) {
+        ss << "entity " << name << " exists but cap "
+          << it.first << " does not match";
+        return -EINVAL;
+      }
+    }
+
+    // they match, no-op
+    return 0;
+  }
+  return -ENOENT;
+}
+
+int AuthMonitor::add_entity(
+    const EntityName& name,
+    const EntityAuth& auth)
+{
+
+  // okay, add it.
+  KeyServerData::Incremental auth_inc;
+  auth_inc.op = KeyServerData::AUTH_INC_ADD;
+  auth_inc.name = name;
+  auth_inc.auth = auth;
+
+  dout(10) << " importing " << auth_inc.name << dendl;
+  dout(30) << "    " << auth_inc.auth << dendl;
+  push_cephx_inc(auth_inc);
+  return 0;
+}
+
+int AuthMonitor::validate_osd_destroy(
+    int32_t id,
+    const uuid_d& uuid,
+    EntityName& cephx_entity,
+    EntityName& lockbox_entity,
+    stringstream& ss)
+{
+  assert(paxos->is_plugged());
+
+  dout(10) << __func__ << " id " << id << " uuid " << uuid << dendl;
+
+  string cephx_str = "osd." + stringify(id);
+  string lockbox_str = "client.osd-lockbox." + stringify(uuid);
+
+  if (!cephx_entity.from_str(cephx_str)) {
+    dout(10) << __func__ << " invalid cephx entity '"
+             << cephx_str << "'" << dendl;
+    ss << "invalid cephx key entity '" << cephx_str << "'";
+    return -EINVAL;
+  }
+
+  if (!lockbox_entity.from_str(lockbox_str)) {
+    dout(10) << __func__ << " invalid lockbox entity '"
+             << lockbox_str << "'" << dendl;
+    ss << "invalid lockbox key entity '" << lockbox_str << "'";
+    return -EINVAL;
+  }
+
+  if (!mon->key_server.contains(cephx_entity) &&
+      !mon->key_server.contains(lockbox_entity)) {
+    return -ENOENT;
+  }
+
+  return 0;
+}
+
+int AuthMonitor::do_osd_destroy(
+    const EntityName& cephx_entity,
+    const EntityName& lockbox_entity)
+{
+  assert(paxos->is_plugged());
+
+  dout(10) << __func__ << " cephx " << cephx_entity
+                       << " lockbox " << lockbox_entity << dendl;
+
+  bool removed = false;
+
+  int err = remove_entity(cephx_entity);
+  if (err == -ENOENT) {
+    dout(10) << __func__ << " " << cephx_entity << " does not exist" << dendl;
+  } else {
+    removed = true;
+  }
+
+  err = remove_entity(lockbox_entity);
+  if (err == -ENOENT) {
+    dout(10) << __func__ << " " << lockbox_entity << " does not exist" << dendl;
+  } else {
+    removed = true;
+  }
+
+  if (!removed) {
+    dout(10) << __func__ << " entities do not exist -- no-op." << dendl;
+    return 0;
+  }
+
+  // given we have paxos plugged, this will not result in a proposal
+  // being triggered, but it will still be needed so that we get our
+  // pending state encoded into the paxos' pending transaction.
+  propose_pending();
+  return 0;
+}
+
+bufferlist _encode_cap(const string& cap)
+{
+  bufferlist bl;
+  ::encode(cap, bl);
+  return bl;
+}
+
+int _create_auth(
+    EntityAuth& auth,
+    const string& key,
+    const map<string,bufferlist>& caps)
+{
+  if (key.empty())
+    return -EINVAL;
+  try {
+    auth.key.decode_base64(key);
+  } catch (buffer::error& e) {
+    return -EINVAL;
+  }
+  auth.caps = caps;
+  return 0;
+}
+
+int AuthMonitor::validate_osd_new(
+    int32_t id,
+    const uuid_d& uuid,
+    const string& cephx_secret,
+    const string& lockbox_secret,
+    auth_entity_t& cephx_entity,
+    auth_entity_t& lockbox_entity,
+    stringstream& ss)
+{
+
+  dout(10) << __func__ << " osd." << id << " uuid " << uuid << dendl;
+
+  map<string,bufferlist> cephx_caps = {
+    { "osd", _encode_cap("allow *") },
+    { "mon", _encode_cap("allow profile osd") },
+    { "mgr", _encode_cap("allow profile osd") }
+  };
+  map<string,bufferlist> lockbox_caps = {
+    { "mon", _encode_cap("allow command \"config-key get\" "
+        "with key=\"dm-crypt/osd/" +
+        stringify(uuid) +
+        "/luks\"") }
+  };
+
+  bool has_lockbox = !lockbox_secret.empty();
+
+  string cephx_name = "osd." + stringify(id);
+  string lockbox_name = "client.osd-lockbox." + stringify(uuid);
+
+  if (!cephx_entity.name.from_str(cephx_name)) {
+    dout(10) << __func__ << " invalid cephx entity '"
+             << cephx_name << "'" << dendl;
+    ss << "invalid cephx key entity '" << cephx_name << "'";
+    return -EINVAL;
+  }
+
+  if (has_lockbox) {
+    if (!lockbox_entity.name.from_str(lockbox_name)) {
+      dout(10) << __func__ << " invalid cephx lockbox entity '"
+               << lockbox_name << "'" << dendl;
+      ss << "invalid cephx lockbox entity '" << lockbox_name << "'";
+      return -EINVAL;
+    }
+  }
+
+  if (entity_is_pending(cephx_entity.name) ||
+      (has_lockbox && entity_is_pending(lockbox_entity.name))) {
+    // If we have pending entities for either the cephx secret or the
+    // lockbox secret, then our safest bet is to retry the command at
+    // a later time. These entities may be pending because an `osd new`
+    // command has been run (which is unlikely, due to the nature of
+    // the operation, which will force a paxos proposal), or (more likely)
+    // because a competing client created those entities before we handled
+    // the `osd new` command. Regardless, let's wait and see.
+    return -EAGAIN;
+  }
+
+  if (!is_valid_cephx_key(cephx_secret)) {
+    ss << "invalid cephx secret.";
+    return -EINVAL;
+  }
+
+  if (has_lockbox && !is_valid_cephx_key(lockbox_secret)) {
+    ss << "invalid cephx lockbox secret.";
+    return -EINVAL;
+  }
+
+  int err = _create_auth(cephx_entity.auth, cephx_secret, cephx_caps);
+  assert(0 == err);
+
+  bool cephx_is_idempotent = false, lockbox_is_idempotent = false;
+  err = exists_and_matches_entity(cephx_entity, true, ss);
+
+  if (err != -ENOENT) {
+    if (err < 0) {
+      return err;
+    }
+    assert(0 == err);
+    cephx_is_idempotent = true;
+  }
+
+  if (has_lockbox) {
+    err = _create_auth(lockbox_entity.auth, lockbox_secret, lockbox_caps);
+    assert(err == 0);
+    err = exists_and_matches_entity(lockbox_entity, true, ss);
+    if (err != -ENOENT) {
+      if (err < 0) {
+        return err;
+      }
+      assert(0 == err);
+      lockbox_is_idempotent = true;
+    }
+  }
+
+  if (cephx_is_idempotent && (!has_lockbox || lockbox_is_idempotent)) {
+    return EEXIST;
+  }
+
+  return 0;
+}
+
+int AuthMonitor::do_osd_new(
+    const auth_entity_t& cephx_entity,
+    const auth_entity_t& lockbox_entity,
+    bool has_lockbox)
+{
+  assert(paxos->is_plugged());
+
+  dout(10) << __func__ << " cephx " << cephx_entity.name
+           << " lockbox ";
+  if (has_lockbox) {
+    *_dout << lockbox_entity.name;
+  } else {
+    *_dout << "n/a";
+  }
+  *_dout << dendl;
+
+  // we must have validated before reaching this point.
+  // if keys exist, then this means they also match; otherwise we would
+  // have failed before calling this function.
+  bool cephx_exists = mon->key_server.contains(cephx_entity.name);
+
+  if (!cephx_exists) {
+    int err = add_entity(cephx_entity.name, cephx_entity.auth);
+    assert(0 == err);
+  }
+
+  if (has_lockbox &&
+      !mon->key_server.contains(lockbox_entity.name)) {
+    int err = add_entity(lockbox_entity.name, lockbox_entity.auth);
+    assert(0 == err);
+  }
+
+  // given we have paxos plugged, this will not result in a proposal
+  // being triggered, but it will still be needed so that we get our
+  // pending state encoded into the paxos' pending transaction.
+  propose_pending();
   return 0;
 }
 
@@ -769,20 +1102,10 @@ bool AuthMonitor::prepare_command(MonOpRequestRef op)
     }
 
     // are we about to have it?
-    for (vector<Incremental>::iterator p = pending_auth.begin();
-        p != pending_auth.end();
-        ++p) {
-      if (p->inc_type == AUTH_DATA) {
-        KeyServerData::Incremental inc;
-        bufferlist::iterator q = p->auth_data.begin();
-        ::decode(inc, q);
-        if (inc.op == KeyServerData::AUTH_INC_ADD &&
-            inc.name == entity) {
-          wait_for_finished_proposal(op,
-              new Monitor::C_Command(mon, op, 0, rs, get_last_committed() + 1));
-          return true;
-        }
-      }
+    if (entity_is_pending(entity)) {
+      wait_for_finished_proposal(op,
+          new Monitor::C_Command(mon, op, 0, rs, get_last_committed() + 1));
+      return true;
     }
 
     // build new caps from provided arguments (if available)
@@ -814,53 +1137,31 @@ bool AuthMonitor::prepare_command(MonOpRequestRef op)
       }
     }
 
-    // does entry already exist?
-    if (mon->key_server.get_auth(auth_inc.name, auth_inc.auth)) {
-      // key match?
-      if (has_keyring) {
-        if (auth_inc.auth.key.get_secret().cmp(new_inc.key.get_secret())) {
-	  ss << "entity " << auth_inc.name << " exists but key does not match";
-	  err = -EINVAL;
-	  goto done;
-	}
+    err = exists_and_matches_entity(auth_inc.name, new_inc,
+                                    new_caps, has_keyring, ss);
+    // if entity/key/caps do not exist in the keyring, just fall through
+    // and add the entity; otherwise, make sure everything matches (in
+    // which case it's a no-op), because if not we must fail.
+    if (err != -ENOENT) {
+      if (err < 0) {
+        goto done;
       }
-
-      // caps match?
-      if (new_caps.size() != auth_inc.auth.caps.size()) {
-	ss << "entity " << auth_inc.name << " exists but caps do not match";
-	err = -EINVAL;
-	goto done;
-      }
-      for (map<string,bufferlist>::iterator it = new_caps.begin();
-	   it != new_caps.end(); ++it) {
-        if (auth_inc.auth.caps.count(it->first) == 0 ||
-            !auth_inc.auth.caps[it->first].contents_equal(it->second)) {
-          ss << "entity " << auth_inc.name << " exists but cap "
-	     << it->first << " does not match";
-          err = -EINVAL;
-          goto done;
-        }
-      }
-
-      // they match, no-op
-      err = 0;
+      // no-op.
+      assert(err == 0);
       goto done;
     }
+    err = 0;
 
     // okay, add it.
-    auth_inc.op = KeyServerData::AUTH_INC_ADD;
-    auth_inc.auth.caps = new_caps;
-    if (has_keyring) {
-      auth_inc.auth.key = new_inc.key;
-    } else {
+    if (!has_keyring) {
       dout(10) << "AuthMonitor::prepare_command generating random key for "
-               << auth_inc.name << dendl;
-      auth_inc.auth.key.create(g_ceph_context, CEPH_CRYPTO_AES);
+        << auth_inc.name << dendl;
+      new_inc.key.create(g_ceph_context, CEPH_CRYPTO_AES);
     }
+    new_inc.caps = new_caps;
 
-    dout(10) << " importing " << auth_inc.name << dendl;
-    dout(30) << "    " << auth_inc.auth << dendl;
-    push_cephx_inc(auth_inc);
+    err = add_entity(auth_inc.name, new_inc);
+    assert(err == 0);
 
     ss << "added key for " << auth_inc.name;
     getline(ss, rs);
@@ -1015,7 +1316,6 @@ bool AuthMonitor::prepare_command(MonOpRequestRef op)
 					      get_last_committed() + 1));
     return true;
   }
-
 done:
   rdata.append(ds);
   getline(ss, rs, '\0');

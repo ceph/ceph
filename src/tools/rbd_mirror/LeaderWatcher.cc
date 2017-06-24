@@ -46,6 +46,11 @@ LeaderWatcher<I>::~LeaderWatcher() {
 }
 
 template <typename I>
+std::string LeaderWatcher<I>::get_instance_id() {
+  return stringify(m_notifier_id);
+}
+
+template <typename I>
 int LeaderWatcher<I>::init() {
   C_SaferCond init_ctx;
   init(&init_ctx);
@@ -552,8 +557,10 @@ void LeaderWatcher<I>::handle_get_locker(int r,
     return;
   }
 
+  bool notify_listener = false;
   if (m_locker != locker) {
     m_locker = locker;
+    notify_listener = true;
     if (m_acquire_attempts > 1) {
       dout(10) << "new lock owner detected -- resetting heartbeat counter"
                << dendl;
@@ -566,10 +573,27 @@ void LeaderWatcher<I>::handle_get_locker(int r,
     dout(0) << "breaking leader lock after " << m_acquire_attempts << " "
             << "failed attempts to acquire" << dendl;
     break_leader_lock();
-  } else {
-    schedule_acquire_leader_lock(1);
-    m_timer_op_tracker.finish_op();
+    return;
   }
+
+  schedule_acquire_leader_lock(1);
+
+  if (!notify_listener) {
+    m_timer_op_tracker.finish_op();
+    return;
+  }
+
+  auto ctx = new FunctionContext(
+    [this](int r) {
+      std::string instance_id;
+      if (get_leader_instance_id(&instance_id)) {
+        m_listener->update_leader_handler(instance_id);
+      }
+      Mutex::Locker timer_locker(m_threads->timer_lock);
+      Mutex::Locker locker(m_lock);
+      m_timer_op_tracker.finish_op();
+    });
+  m_work_queue->queue(ctx, 0);
 }
 
 template <typename I>

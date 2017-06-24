@@ -351,7 +351,7 @@ void MDSRankDispatcher::shutdown()
   finisher->stop(); // no flushing
   mds_lock.Lock();
 
-  if (objecter->initialized.read())
+  if (objecter->initialized)
     objecter->shutdown();
 
   monc->shutdown();
@@ -1919,10 +1919,15 @@ bool MDSRankDispatcher::handle_asok_command(
   } else if (command == "dump cache") {
     Mutex::Locker l(mds_lock);
     string path;
+    int r;
     if(!cmd_getval(g_ceph_context, cmdmap, "path", path)) {
-      mdcache->dump_cache(f);
+      r = mdcache->dump_cache(f);
     } else {
-      mdcache->dump_cache(path);
+      r = mdcache->dump_cache(path);
+    }
+
+    if (r != 0) {
+      ss << "Failed to dump cache: " << cpp_strerror(r);
     }
   } else if (command == "dump tree") {
     string root;
@@ -1932,7 +1937,10 @@ bool MDSRankDispatcher::handle_asok_command(
       depth = -1;
     {
       Mutex::Locker l(mds_lock);
-      mdcache->dump_cache(root, depth, f);
+      int r = mdcache->dump_cache(root, depth, f);
+      if (r != 0) {
+        ss << "Failed to dump tree: " << cpp_strerror(r);
+      }
     }
   } else if (command == "force_readonly") {
     Mutex::Locker l(mds_lock);

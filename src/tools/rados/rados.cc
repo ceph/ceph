@@ -83,7 +83,7 @@ void usage(ostream& out)
 "OBJECT COMMANDS\n"
 "   get <obj-name> [outfile]         fetch object\n"
 "   put <obj-name> [infile] [--offset offset]\n"
-"                                    write object write object start offset(default:0)\n"
+"                                    write object with start offset (default:0)\n"
 "   append <obj-name> [infile]       append object\n"
 "   truncate <obj-name> length       truncate object\n"
 "   create <obj-name>                create object\n"
@@ -2030,7 +2030,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
       tab.define_column("COPIES", TextTable::LEFT, TextTable::RIGHT);
       tab.define_column("MISSING_ON_PRIMARY", TextTable::LEFT, TextTable::RIGHT);
       tab.define_column("UNFOUND", TextTable::LEFT, TextTable::RIGHT);
-      tab.define_column("DEGRAED", TextTable::LEFT, TextTable::RIGHT);
+      tab.define_column("DEGRADED", TextTable::LEFT, TextTable::RIGHT);
       tab.define_column("RD_OPS", TextTable::LEFT, TextTable::RIGHT);
       tab.define_column("RD", TextTable::LEFT, TextTable::RIGHT);
       tab.define_column("WR_OPS", TextTable::LEFT, TextTable::RIGHT);

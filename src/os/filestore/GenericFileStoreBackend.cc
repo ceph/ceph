@@ -39,6 +39,7 @@
 #include "common/errno.h"
 #include "common/config.h"
 #include "common/sync_filesystem.h"
+#include "common/blkdev.h"
 
 #include "common/SloppyCRCMap.h"
 #include "os/filestore/chain_xattr.h"
@@ -63,7 +64,30 @@ GenericFileStoreBackend::GenericFileStoreBackend(FileStore *fs):
   m_filestore_fiemap(cct()->_conf->filestore_fiemap),
   m_filestore_seek_data_hole(cct()->_conf->filestore_seek_data_hole),
   m_filestore_fsync_flushes_journal_data(cct()->_conf->filestore_fsync_flushes_journal_data),
-  m_filestore_splice(cct()->_conf->filestore_splice) {}
+  m_filestore_splice(cct()->_conf->filestore_splice)
+{
+  // rotational?
+  {
+    // NOTE: the below won't work on btrfs; we'll assume rotational.
+    string fn = get_basedir_path();
+    int fd = ::open(fn.c_str(), O_RDONLY);
+    if (fd < 0) {
+      return;
+    }
+    char partition[PATH_MAX], devname[PATH_MAX];
+    int r = get_device_by_fd(fd, partition, devname, sizeof(devname));
+    if (r < 0) {
+      dout(1) << "unable to get device name for " << get_basedir_path() << ": "
+	      << cpp_strerror(r) << dendl;
+      m_rotational = true;
+    } else {
+      m_rotational = block_device_is_rotational(devname);
+      dout(20) << __func__ << " devname " << devname
+	       << " rotational " << (int)m_rotational << dendl;
+    }
+    ::close(fd);
+  }
+}
 
 int GenericFileStoreBackend::detect_features()
 {

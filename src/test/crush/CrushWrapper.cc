@@ -896,7 +896,7 @@ TEST(CrushWrapper, dump_rules) {
 				"osd.0", loc));
   }
 
-  // no ruleset by default
+  // no rule by default
   {
     Formatter *f = Formatter::create("json-pretty");
     f->open_array_section("rules");
@@ -909,9 +909,9 @@ TEST(CrushWrapper, dump_rules) {
   }
 
   string name("NAME");
-  int ruleset = c->add_simple_ruleset(name, root_name, failure_domain_type,
-				      "firstn", pg_pool_t::TYPE_ERASURE);
-  EXPECT_EQ(0, ruleset);
+  int rule = c->add_simple_rule(name, root_name, failure_domain_type,
+				   "firstn", pg_pool_t::TYPE_ERASURE);
+  EXPECT_EQ(0, rule);
 
   {
     Formatter *f = Formatter::create("xml");
@@ -924,7 +924,7 @@ TEST(CrushWrapper, dump_rules) {
 
   {
     Formatter *f = Formatter::create("xml");
-    c->dump_rule(ruleset, f);
+    c->dump_rule(rule, f);
     stringstream ss;
     f->flush(ss);
     delete f;
@@ -1032,7 +1032,7 @@ TEST(CrushWrapper, choose_args_compat) {
   item = 2;
   c.insert_item(g_ceph_context, item, weight, "osd.2", loc);
 
-  assert(c.add_simple_ruleset("rule1", "r11", "host", "firstn", pg_pool_t::TYPE_ERASURE) >= 0);
+  assert(c.add_simple_rule("rule1", "r11", "host", "firstn", pg_pool_t::TYPE_ERASURE) >= 0);
 
   int id = c.get_item_id("b1");
 
@@ -1102,7 +1102,7 @@ TEST(CrushWrapper, remove_unused_root) {
   loc["root"] = "default";
   c.insert_item(g_ceph_context, item, weight, "osd.2", loc);
 
-  assert(c.add_simple_ruleset("rule1", "r11", "host", "firstn", pg_pool_t::TYPE_ERASURE) >= 0);
+  assert(c.add_simple_rule("rule1", "r11", "host", "firstn", pg_pool_t::TYPE_ERASURE) >= 0);
   ASSERT_TRUE(c.name_exists("default"));
   ASSERT_TRUE(c.name_exists("r11"));
   ASSERT_TRUE(c.name_exists("r12"));
@@ -1346,7 +1346,7 @@ TEST(CrushWrapper, try_remap_rule) {
   {
     cout << "take + choose + emit" << std::endl;
     ostringstream err;
-    int rule = c.add_simple_ruleset("one", "default", "osd", "firstn", 0, &err);
+    int rule = c.add_simple_rule("one", "default", "osd", "firstn", 0, &err);
     ASSERT_EQ(rule, 0);
 
     vector<int> orig = { 0, 3, 9 };
@@ -1382,7 +1382,7 @@ TEST(CrushWrapper, try_remap_rule) {
   {
     cout << "take + chooseleaf + emit" << std::endl;
     ostringstream err;
-    int rule = c.add_simple_ruleset("two", "default", "host", "firstn", 0, &err);
+    int rule = c.add_simple_rule("two", "default", "host", "firstn", 0, &err);
     ASSERT_EQ(rule, 1);
 
     vector<int> orig = { 0, 3, 9 };

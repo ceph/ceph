@@ -97,7 +97,7 @@ public:
      * It's a reverse_iterator because rend() is a natural representation for
      * tail, and rbegin() works nicely for head.
      */
-    mempool::osd::list<pg_log_entry_t>::reverse_iterator
+    mempool::osd_pglog::list<pg_log_entry_t>::reverse_iterator
       rollback_info_trimmed_to_riter;
 
     template <typename F>
@@ -179,7 +179,7 @@ public:
       advance_can_rollback_to(head, [&](const pg_log_entry_t &entry) {});
     }
 
-    mempool::osd::list<pg_log_entry_t> rewind_from_head(eversion_t newhead) {
+    mempool::osd_pglog::list<pg_log_entry_t> rewind_from_head(eversion_t newhead) {
       auto divergent = pg_log_t::rewind_from_head(newhead);
       index();
       reset_rollback_info_trimmed_to_riter();
@@ -284,8 +284,7 @@ public:
       }
       p = extra_caller_ops.find(r);
       if (p != extra_caller_ops.end()) {
-	for (vector<pair<osd_reqid_t, version_t> >::const_iterator i =
-	       p->second->extra_reqids.begin();
+	for (auto i = p->second->extra_reqids.begin();
 	     i != p->second->extra_reqids.end();
 	     ++i) {
 	  if (i->first == r) {
@@ -302,7 +301,7 @@ public:
 
     /// get a (bounded) list of recent reqids for the given object
     void get_object_reqids(const hobject_t& oid, unsigned max,
-			   vector<pair<osd_reqid_t, version_t> > *pls) const {
+			   mempool::osd_pglog::vector<pair<osd_reqid_t, version_t> > *pls) const {
        // make sure object is present at least once before we do an
        // O(n) search.
       if (!(indexed_data & PGLOG_INDEXED_OBJECTS)) {
@@ -351,8 +350,7 @@ public:
 	}
         
 	if (to_index & PGLOG_INDEXED_EXTRA_CALLER_OPS) {
-	  for (vector<pair<osd_reqid_t, version_t> >::const_iterator j =
-		 i->extra_reqids.begin();
+	  for (auto j = i->extra_reqids.begin();
 	       j != i->extra_reqids.end();
 	       ++j) {
             extra_caller_ops.insert(
@@ -389,8 +387,7 @@ public:
         }
       }
       if (indexed_data & PGLOG_INDEXED_EXTRA_CALLER_OPS) {
-        for (vector<pair<osd_reqid_t, version_t> >::const_iterator j =
-	       e.extra_reqids.begin();
+        for (auto j = e.extra_reqids.begin();
 	     j != e.extra_reqids.end();
 	     ++j) {
 	  extra_caller_ops.insert(make_pair(j->first, &e));
@@ -417,8 +414,7 @@ public:
         }
       }
       if (indexed_data & PGLOG_INDEXED_EXTRA_CALLER_OPS) {
-        for (vector<pair<osd_reqid_t, version_t> >::const_iterator j =
-	       e.extra_reqids.begin();
+        for (auto j = e.extra_reqids.begin();
              j != e.extra_reqids.end();
              ++j) {
           for (ceph::unordered_multimap<osd_reqid_t,pg_log_entry_t*>::iterator k =
@@ -465,8 +461,7 @@ public:
       }
       
       if (indexed_data & PGLOG_INDEXED_EXTRA_CALLER_OPS) {
-        for (vector<pair<osd_reqid_t, version_t> >::const_iterator j =
-	       e.extra_reqids.begin();
+        for (auto j = e.extra_reqids.begin();
 	     j != e.extra_reqids.end();
 	     ++j) {
 	  extra_caller_ops.insert(make_pair(j->first, &(log.back())));
@@ -589,10 +584,6 @@ public:
     missing.add(oid, need, have);
   }
 
-  void missing_add_event(const pg_log_entry_t &e) {
-    missing.add_next_event(e);
-  }
-
   //////////////////// get or set log ////////////////////
 
   const IndexedLog &get_log() const { return log; }
@@ -712,10 +703,10 @@ public:
 
 protected:
   static void split_by_object(
-    mempool::osd::list<pg_log_entry_t> &entries,
-    map<hobject_t, mempool::osd::list<pg_log_entry_t>> *out_entries) {
+    mempool::osd_pglog::list<pg_log_entry_t> &entries,
+    map<hobject_t, mempool::osd_pglog::list<pg_log_entry_t>> *out_entries) {
     while (!entries.empty()) {
-      mempool::osd::list<pg_log_entry_t> &out_list = (*out_entries)[entries.front().soid];
+      auto &out_list = (*out_entries)[entries.front().soid];
       out_list.splice(out_list.end(), entries, entries.begin());
     }
   }
@@ -744,7 +735,7 @@ protected:
   static void _merge_object_divergent_entries(
     const IndexedLog &log,               ///< [in] log to merge against
     const hobject_t &hoid,               ///< [in] object we are merging
-    const mempool::osd::list<pg_log_entry_t> &entries, ///< [in] entries for hoid to merge
+    const mempool::osd_pglog::list<pg_log_entry_t> &orig_entries, ///< [in] entries for hoid to merge
     const pg_info_t &info,              ///< [in] info for merging entries
     eversion_t olog_can_rollback_to,     ///< [in] rollback boundary
     missing_type &missing,              ///< [in,out] missing to adjust, use
@@ -752,7 +743,7 @@ protected:
     const DoutPrefixProvider *dpp        ///< [in] logging provider
     ) {
     ldpp_dout(dpp, 20) << __func__ << ": merging hoid " << hoid
-		       << " entries: " << entries << dendl;
+		       << " entries: " << orig_entries << dendl;
 
     if (hoid > info.last_backfill) {
       ldpp_dout(dpp, 10) << __func__ << ": hoid " << hoid << " after last_backfill"
@@ -761,20 +752,32 @@ protected:
     }
 
     // entries is non-empty
-    assert(!entries.empty());
+    assert(!orig_entries.empty());
+    // strip out and ignore ERROR entries
+    mempool::osd_pglog::list<pg_log_entry_t> entries;
     eversion_t last;
-    for (list<pg_log_entry_t>::const_iterator i = entries.begin();
-	 i != entries.end();
+    for (list<pg_log_entry_t>::const_iterator i = orig_entries.begin();
+	 i != orig_entries.end();
 	 ++i) {
       // all entries are on hoid
       assert(i->soid == hoid);
-      if (i != entries.begin() && i->prior_version != eversion_t()) {
+      if (i != orig_entries.begin() && i->prior_version != eversion_t()) {
 	// in increasing order of version
 	assert(i->version > last);
-	// prior_version correct
-	assert(i->prior_version == last);
+	// prior_version correct (unless it is an ERROR entry)
+	assert(i->prior_version == last || i->is_error());
       }
       last = i->version;
+      if (i->is_error()) {
+	ldpp_dout(dpp, 20) << __func__ << ": ignoring " << *i << dendl;
+      } else {
+	ldpp_dout(dpp, 20) << __func__ << ": keeping " << *i << dendl;
+	entries.push_back(*i);
+      }
+    }
+    if (entries.empty()) {
+      ldpp_dout(dpp, 10) << __func__ << ": no non-ERROR entries" << dendl;
+      return;
     }
 
     const eversion_t prior_version = entries.begin()->prior_version;
@@ -926,16 +929,16 @@ protected:
   template <typename missing_type>
   static void _merge_divergent_entries(
     const IndexedLog &log,               ///< [in] log to merge against
-    mempool::osd::list<pg_log_entry_t> &entries,       ///< [in] entries to merge
+    mempool::osd_pglog::list<pg_log_entry_t> &entries,       ///< [in] entries to merge
     const pg_info_t &oinfo,              ///< [in] info for merging entries
     eversion_t olog_can_rollback_to,     ///< [in] rollback boundary
     missing_type &omissing,              ///< [in,out] missing to adjust, use
     LogEntryHandler *rollbacker,         ///< [in] optional rollbacker object
     const DoutPrefixProvider *dpp        ///< [in] logging provider
     ) {
-    map<hobject_t, mempool::osd::list<pg_log_entry_t> > split;
+    map<hobject_t, mempool::osd_pglog::list<pg_log_entry_t> > split;
     split_by_object(entries, &split);
-    for (map<hobject_t, mempool::osd::list<pg_log_entry_t>>::iterator i = split.begin();
+    for (map<hobject_t, mempool::osd_pglog::list<pg_log_entry_t>>::iterator i = split.begin();
 	 i != split.end();
 	 ++i) {
       _merge_object_divergent_entries(
@@ -959,7 +962,7 @@ protected:
     const pg_log_entry_t& oe,
     const pg_info_t& info,
     LogEntryHandler *rollbacker) {
-    mempool::osd::list<pg_log_entry_t> entries;
+    mempool::osd_pglog::list<pg_log_entry_t> entries;
     entries.push_back(oe);
     _merge_object_divergent_entries(
       log,
@@ -988,7 +991,7 @@ public:
   static bool append_log_entries_update_missing(
     const hobject_t &last_backfill,
     bool last_backfill_bitwise,
-    const mempool::osd::list<pg_log_entry_t> &entries,
+    const mempool::osd_pglog::list<pg_log_entry_t> &entries,
     bool maintain_rollback,
     IndexedLog *log,
     missing_type &missing,
@@ -1024,7 +1027,7 @@ public:
   bool append_new_log_entries(
     const hobject_t &last_backfill,
     bool last_backfill_bitwise,
-    const mempool::osd::list<pg_log_entry_t> &entries,
+    const mempool::osd_pglog::list<pg_log_entry_t> &entries,
     LogEntryHandler *rollbacker) {
     bool invalidate_stats = append_log_entries_update_missing(
       last_backfill,

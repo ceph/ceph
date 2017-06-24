@@ -260,15 +260,19 @@ void DaemonServer::shutdown()
 
 bool DaemonServer::handle_open(MMgrOpen *m)
 {
-  DaemonKey key(
-      m->get_connection()->get_peer_type(),
-      m->daemon_name);
+  uint32_t type = m->get_connection()->get_peer_type();
+  DaemonKey key(type, m->daemon_name);
 
   dout(4) << "from " << m->get_connection() << " name "
-          << m->daemon_name << dendl;
+          << ceph_entity_type_name(type) << "." << m->daemon_name << dendl;
 
   auto configure = new MMgrConfigure();
-  configure->stats_period = g_conf->mgr_stats_period;
+  if (m->get_connection()->get_peer_type() == entity_name_t::TYPE_CLIENT) {
+    // We don't want clients to send us stats
+    configure->stats_period = 0;
+  } else {
+    configure->stats_period = g_conf->mgr_stats_period;
+  }
   m->get_connection()->send_message(configure);
 
   if (daemon_state.exists(key)) {
@@ -282,12 +286,18 @@ bool DaemonServer::handle_open(MMgrOpen *m)
 
 bool DaemonServer::handle_report(MMgrReport *m)
 {
-  DaemonKey key(
-      m->get_connection()->get_peer_type(),
-      m->daemon_name);
+  uint32_t type = m->get_connection()->get_peer_type();
+  DaemonKey key(type, m->daemon_name);
 
   dout(4) << "from " << m->get_connection() << " name "
-          << m->daemon_name << dendl;
+          << ceph_entity_type_name(type) << "." << m->daemon_name << dendl;
+
+  if (m->get_connection()->get_peer_type() == entity_name_t::TYPE_CLIENT) {
+    // Clients should not be sending us stats
+    dout(4) << "rejecting report from client " << m->daemon_name << dendl;
+    m->put();
+    return true;
+  }
 
   DaemonStatePtr daemon;
   if (daemon_state.exists(key)) {
@@ -540,7 +550,8 @@ bool DaemonServer::handle_command(MCommand *m)
     if (!_allowed_command(session.get(), py_command.module, prefix, cmdctx->cmdmap,
                           param_str_map, &py_command)) {
       dout(1) << " access denied" << dendl;
-      ss << "access denied";
+      ss << "access denied; does your client key have mgr caps?"
+	" See http://docs.ceph.com/docs/master/mgr/administrator/#client-authentication";
       cmdctx->reply(-EACCES, ss);
       return true;
     }
@@ -552,7 +563,8 @@ bool DaemonServer::handle_command(MCommand *m)
       audit_clog->info() << "from='" << session->inst << "' "
                          << "entity='" << session->entity_name << "' "
                          << "cmd=" << m->cmd << ":  access denied";
-      ss << "access denied";
+      ss << "access denied' does your client key have mgr caps?"
+	" See http://docs.ceph.com/docs/master/mgr/administrator/#client-authentication";
       cmdctx->reply(-EACCES, ss);
       return true;
     }
@@ -768,6 +780,20 @@ bool DaemonServer::handle_command(MCommand *m)
 			      &on_finish->from_mon, &on_finish->outs, on_finish);
       return true;
     }
+  } else if (prefix == "osd df") {
+    string method;
+    cmd_getval(g_ceph_context, cmdctx->cmdmap, "output_method", method);
+    r = cluster_state.with_pgservice([&](const PGMapStatService& pgservice) {
+	return cluster_state.with_osdmap([&](const OSDMap& osdmap) {
+	    print_osd_utilization(osdmap, &pgservice, ss,
+				  f.get(), method == "tree");
+				  
+	    cmdctx->odata.append(ss);
+	    return 0;
+	  });
+      });
+    cmdctx->reply(r, "");
+    return true;
   } else {
     r = cluster_state.with_pgmap([&](const PGMap& pg_map) {
 	return cluster_state.with_osdmap([&](const OSDMap& osdmap) {
@@ -826,14 +852,10 @@ void DaemonServer::send_report()
 	  // FIXME: no easy way to get mon features here.  this will do for
 	  // now, though, as long as we don't make a backward-incompat change.
 	  pg_map.encode_digest(osdmap, m->get_data(), CEPH_FEATURES_ALL);
-
+	  dout(10) << pg_map << dendl;
 	  pg_map.get_health(g_ceph_context, osdmap,
 			    m->health_summary,
 			    &m->health_detail);
-
-	  if (osdmap.require_osd_release >= CEPH_RELEASE_LUMINOUS) {
-	    clog->info() << "pgmap v" << pg_map.version << ": " << pg_map;
-	  }
 	});
     });
   // TODO? We currently do not notify the PyModules
