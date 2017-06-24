@@ -5472,10 +5472,10 @@ int OSDMonitor::prepare_pool_stripe_width(const unsigned pool_type,
 }
 
 int OSDMonitor::prepare_pool_crush_rule(const unsigned pool_type,
-					   const string &erasure_code_profile,
-					   const string &rule_name,
-					   int *crush_rule,
-					   ostream *ss)
+					const string &erasure_code_profile,
+					const string &rule_name,
+					int *crush_rule,
+					ostream *ss)
 {
 
   if (*crush_rule < 0) {
@@ -5483,7 +5483,7 @@ int OSDMonitor::prepare_pool_crush_rule(const unsigned pool_type,
     case pg_pool_t::TYPE_REPLICATED:
       {
 	if (rule_name == "") {
-	  //Use default rule
+	  // Use default rule
 	  *crush_rule = osdmap.crush->get_osd_pool_default_crush_replicated_ruleset(g_ceph_context);
 	  if (*crush_rule < 0) {
 	    // Errors may happen e.g. if no valid rule is available
@@ -5534,8 +5534,8 @@ int OSDMonitor::prepare_pool_crush_rule(const unsigned pool_type,
 }
 
 int OSDMonitor::get_crush_rule(const string &rule_name,
-				  int *crush_rule,
-				  ostream *ss)
+			       int *crush_rule,
+			       ostream *ss)
 {
   int ret;
   ret = osdmap.crush->get_rule_id(rule_name);
@@ -5553,7 +5553,7 @@ int OSDMonitor::get_crush_rule(const string &rule_name,
 	       << " try again" << dendl;
       return -EAGAIN;
     } else {
-      //Cannot find it , return error
+      // Cannot find it , return error
       *ss << "specified rule " << rule_name << " doesn't exist";
       return ret;
     }
@@ -5623,9 +5623,9 @@ int OSDMonitor::prepare_new_pool(string& name, uint64_t auid,
     r = tester.test();
   } else {
     r = tester.test_with_crushtool(g_conf->crushtool.c_str(),
-				 osdmap.get_max_osd(),
-				 g_conf->mon_lease,
-				 crush_rule);
+				   osdmap.get_max_osd(),
+				   g_conf->mon_lease,
+				   crush_rule);
   }
   if (r) {
     dout(10) << " tester.test_with_crushtool returns " << r
@@ -7539,7 +7539,6 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     } while (false);
 
   } else if (prefix == "osd crush reweight-all") {
-    // osd crush reweight <name> <weight>
     CrushWrapper newcrush;
     _get_pending_crush(newcrush);
 
@@ -9053,7 +9052,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     wait_for_finished_proposal(
 	op,
 	new Monitor::C_Command(mon, op, 0, rs, rdata, get_last_committed() + 1));
-      return true;
+    return true;
   } else if (prefix == "osd lost") {
     int64_t id;
     if (!cmd_getval(g_ceph_context, cmdmap, "id", id)) {
@@ -9180,7 +9179,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     // make sure authmon is writeable.
     if (!mon->authmon()->is_writeable()) {
       dout(10) << __func__ << " waiting for auth mon to be writeable for "
-               << "osd destroy" << dendl;
+               << "osd new" << dendl;
       mon->authmon()->wait_for_writeable(op, new C_RetryMessage(this, op));
       return false;
     }
