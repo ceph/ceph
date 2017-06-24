@@ -768,20 +768,6 @@ bool DaemonServer::handle_command(MCommand *m)
 			      &on_finish->from_mon, &on_finish->outs, on_finish);
       return true;
     }
-  } else if (prefix == "osd df") {
-    string method;
-    cmd_getval(g_ceph_context, cmdctx->cmdmap, "output_method", method);
-    r = cluster_state.with_pgservice([&](const PGMapStatService& pgservice) {
-	return cluster_state.with_osdmap([&](const OSDMap& osdmap) {
-	    print_osd_utilization(osdmap, &pgservice, ss,
-				  f ? f.get() : nullptr, method == "tree");
-				  
-	    cmdctx->odata.append(ss);
-	    return 0;
-	  });
-      });
-    cmdctx->reply(r, "");
-    return true;
   } else {
     r = cluster_state.with_pgmap([&](const PGMap& pg_map) {
 	return cluster_state.with_osdmap([&](const OSDMap& osdmap) {
