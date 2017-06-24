@@ -157,6 +157,7 @@ void ParallelPGMapper::queue(
   Job *job,
   unsigned pgs_per_item)
 {
+  bool any = false;
   for (auto& p : job->osdmap->get_pools()) {
     for (unsigned ps = 0; ps < p.second.get_pg_num(); ps += pgs_per_item) {
       unsigned ps_end = MIN(ps + pgs_per_item, p.second.get_pg_num());
@@ -164,6 +165,8 @@ void ParallelPGMapper::queue(
       wq.queue(new Item(job, p.first, ps, ps_end));
       ldout(cct, 20) << __func__ << " " << job << " " << p.first << " [" << ps
 		     << "," << ps_end << ")" << dendl;
+      any = true;
     }
   }
+  assert(any);
 }
