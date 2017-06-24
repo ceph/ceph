@@ -987,7 +987,7 @@ static opt_mapping_t opt_mapping = boost::assign::map_list_of
 	     pool_opts_t::CSUM_MIN_BLOCK, pool_opts_t::INT));
 
 bool pool_opts_t::is_opt_name(const std::string& name) {
-    return opt_mapping.find(name) != opt_mapping.end();
+    return opt_mapping.count(name);
 }
 
 pool_opts_t::opt_desc_t pool_opts_t::get_opt_desc(const std::string& name) {
@@ -997,7 +997,7 @@ pool_opts_t::opt_desc_t pool_opts_t::get_opt_desc(const std::string& name) {
 }
 
 bool pool_opts_t::is_set(pool_opts_t::key_t key) const {
-    return opts.find(key) != opts.end();
+    return opts.count(key);
 }
 
 const pool_opts_t::value_t& pool_opts_t::get(pool_opts_t::key_t key) const {
