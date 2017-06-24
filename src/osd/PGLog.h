@@ -799,7 +799,7 @@ protected:
       assert(objiter->second->version > last_divergent_update);
 
       // ensure missing has been updated appropriately
-      if (objiter->second->is_update() || objiter->second->is_client_delete()) {
+      if (objiter->second->is_update() || objiter->second->is_delete()) {
 	assert(missing.is_missing(hoid) &&
 	       missing.get_items().at(hoid).need == objiter->second->version);
       } else {
@@ -1008,14 +1008,6 @@ public:
       if (p->soid <= last_backfill &&
 	  !p->is_error()) {
 	missing.add_next_event(*p);
-	if (rollbacker) {
-	  // hack to match PG::mark_all_unfound_lost
-	  if (maintain_rollback && p->is_lost_delete() && p->can_rollback()) {
-	    rollbacker->try_stash(p->soid, p->version.version);
-	  } else if (p->is_lost_delete()) {
-	    rollbacker->remove(p->soid);
-	  }
-	}
       }
     }
     return invalidate_stats;
@@ -1206,9 +1198,6 @@ public:
 	    continue;
 	  if (did.count(i->soid)) continue;
 	  did.insert(i->soid);
-
-	  // TODO: enable only if we aren't tracking deletes in the log
-	  if (i->is_lost_delete()) continue;
 
 	  bufferlist bv;
 	  int r = store->getattr(
