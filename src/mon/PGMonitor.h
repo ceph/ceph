@@ -33,11 +33,11 @@ using namespace std;
 #include "mon/MonitorDBStore.h"
 
 class MPGStats;
-class MonPGStatService;
+class PGStatService;
 
 class PGMonitor : public PaxosService {
   PGMap pg_map;
-  std::unique_ptr<MonPGStatService> pgservice;
+  std::unique_ptr<PGStatService> pgservice;
 
   bool do_delete = false;   ///< propose deleting pgmap data
   bool did_delete = false;  ///< we already deleted pgmap data
@@ -131,7 +131,7 @@ public:
   void check_subs();
   bool check_sub(Subscription *sub);
 
-  MonPGStatService *get_pg_stat_service();
+  PGStatService *get_pg_stat_service();
 
 private:
   // no copying allowed

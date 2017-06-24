@@ -59,6 +59,24 @@ public:
   virtual bool is_creating_pg(pg_t pgid) const {
     ceph_abort();
   }
+  /**
+   * For upgrades. If the PGMap has newer data than the monitor's new
+   * creating_pgs (scan_epoch), insert them into the passed pending_creates.
+   */
+  virtual unsigned maybe_add_creating_pgs(epoch_t scan_epoch,
+     const mempool::osdmap::map<int64_t,pg_pool_t>& pools,
+     creating_pgs_t *pending_creates) const {
+    ceph_abort();
+    return 0;
+  }
+  /**
+   * For upgrades. If some PGs are created before all OSDs are luminous
+   * and start sending MOSDPGCreated, we need to be sync with pgmap
+   *
+   */
+  virtual void maybe_trim_creating_pgs(creating_pgs_t *creates) const {
+    ceph_abort();
+  }
   virtual epoch_t get_min_last_epoch_clean() const {
     ceph_abort();
   }
@@ -89,30 +107,6 @@ public:
     ceph_abort();
   }
 
-};
-
-class MonPGStatService : public PGStatService {
-public:
-  MonPGStatService() : PGStatService() {}
-  virtual ~MonPGStatService() {}
-  /**
-   * For upgrades. If the PGMap has newer data than the monitor's new
-   * creating_pgs (scan_epoch), insert them into the passed pending_creates.
-   */
-  virtual unsigned maybe_add_creating_pgs(epoch_t scan_epoch,
-     const mempool::osdmap::map<int64_t,pg_pool_t>& pools,
-     creating_pgs_t *pending_creates) const {
-    ceph_abort();
-    return 0;
-  }
-  /**
-   * For upgrades. If some PGs are created before all OSDs are luminous
-   * and start sending MOSDPGCreated, we need to be sync with pgmap
-   *
-   */
-  virtual void maybe_trim_creating_pgs(creating_pgs_t *creates) const {
-    ceph_abort();
-  }
   virtual int reweight_by_utilization(const OSDMap &osd_map,
 			      int oload,
 			      double max_changef,

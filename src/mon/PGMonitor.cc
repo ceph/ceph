@@ -1169,7 +1169,7 @@ bool PGMonitor::check_sub(Subscription *sub)
   return true;
 }
 
-class PGMapStatService : public MonPGStatService {
+class PGMapStatService : public PGStatService {
   const PGMap& pgmap;
   PGMonitor *pgmon;
 public:
@@ -1308,7 +1308,7 @@ public:
   }
 };
 
-MonPGStatService *PGMonitor::get_pg_stat_service()
+PGStatService *PGMonitor::get_pg_stat_service()
 {
   if (!pgservice) {
     pgservice.reset(new PGMapStatService(pg_map, this));

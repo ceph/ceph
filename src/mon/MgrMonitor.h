@@ -18,7 +18,7 @@
 #include "MgrMap.h"
 #include "PaxosService.h"
 
-class MonPGStatService;
+class PGStatService;
 
 class MgrMonitor: public PaxosService
 {
