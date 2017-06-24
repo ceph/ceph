@@ -1076,8 +1076,7 @@ if [ $FIRST_ARG -ge 1 ] ; then
 fi
 
 %files common
-%docdir %{_docdir}
-%docdir %{_docdir}/ceph
+%dir %{_docdir}/ceph
 %doc %{_docdir}/ceph/sample.ceph.conf
 %doc %{_docdir}/ceph/COPYING
 %{_bindir}/ceph
