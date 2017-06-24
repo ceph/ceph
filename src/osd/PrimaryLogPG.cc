@@ -13846,6 +13846,9 @@ void PrimaryLogPG::_scrub_finish()
     publish_stats_to_osd();
     share_pg_info();
   }
+  // Clear object context cache to get repair information
+  if (repair)
+    object_contexts.clear();
 }
 
 bool PrimaryLogPG::check_osdmap_full(const set<pg_shard_t> &missing_on)
