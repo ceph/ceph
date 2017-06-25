@@ -6,6 +6,8 @@ High level status display commands
 from collections import defaultdict
 from prettytable import PrettyTable
 import prettytable
+import fnmatch
+import errno
 
 from mgr_module import MgrModule
 
@@ -19,7 +21,7 @@ class Module(MgrModule):
             "perm": "r"
         },
         {
-            "cmd": "osd perf "
+            "cmd": "osd status "
                    "name=bucket,type=CephString,req=false",
             "desc": "Show the status of OSDs within a bucket, or all",
             "perm": "r"
@@ -234,15 +236,34 @@ class Module(MgrModule):
 
         return 0, "", output
 
-    def handle_osd_perf(self, cmd):
+    def handle_osd_status(self, cmd):
         osd_table = PrettyTable(['id', 'host', 'used', 'avail', 'wr ops', 'wr data', 'rd ops', 'rd data'])
         osdmap = self.get("osd_map")
+
+        filter_osds = set()
+        bucket_filter = None
+        if 'bucket' in cmd:
+            self.log.debug("Filtering to bucket '{0}'".format(cmd['bucket']))
+            bucket_filter = cmd['bucket']
+            crush = self.get("osd_map_crush")
+            found = False
+            for bucket in crush['buckets']:
+                if fnmatch.fnmatch(bucket['name'], bucket_filter):
+                    found = True
+                    filter_osds.update([i['id'] for i in bucket['items']])
+
+            if not found:
+                msg = "Bucket '{0}' not found".format(bucket_filter)
+                return errno.ENOENT, msg, ""
 
         # Build dict of OSD ID to stats
         osd_stats = dict([(o['osd'], o) for o in self.get("osd_stats")['osd_stats']])
 
         for osd in osdmap['osds']:
             osd_id = osd['osd']
+            if bucket_filter and osd_id not in filter_osds:
+                continue
+
             metadata = self.get_metadata('osd', "%s" % osd_id)
             stats = osd_stats[osd_id]
 
@@ -263,8 +284,8 @@ class Module(MgrModule):
 
         if cmd['prefix'] == "fs status":
             return self.handle_fs_status(cmd)
-        elif cmd['prefix'] == "osd perf":
-            return self.handle_osd_perf(cmd)
+        elif cmd['prefix'] == "osd status":
+            return self.handle_osd_status(cmd)
         else:
             # mgr should respect our self.COMMANDS and not call us for
             # any prefix we don't advertise
