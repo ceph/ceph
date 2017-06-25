@@ -1875,24 +1875,26 @@ private:
   size_t block_size_order = 0; ///< bits to shift to get block size
 
   uint64_t min_alloc_size = 0; ///< minimum allocation unit (power of 2)
-  std::atomic<int> deferred_batch_ops = {0}; ///< deferred batch size
-
   ///< bits for min_alloc_size
-  std::atomic<uint8_t> min_alloc_size_order = {0};
+  uint8_t min_alloc_size_order = 0;
   static_assert(std::numeric_limits<uint8_t>::max() >
 		std::numeric_limits<decltype(min_alloc_size)>::digits,
 		"not enough bits for min_alloc_size");
 
-  ///< size threshold for forced deferred writes
-  std::atomic<uint64_t> prefer_deferred_size = {0};
-
   ///< maximum allocation unit (power of 2)
   std::atomic<uint64_t> max_alloc_size = {0};
+
+  ///< number threshold for forced deferred writes
+  std::atomic<int> deferred_batch_ops = {0};
+
+  ///< size threshold for forced deferred writes
+  std::atomic<uint64_t> prefer_deferred_size = {0};
 
   ///< approx cost per io, in bytes
   std::atomic<uint64_t> throttle_cost_per_io = {0};
 
-  std::atomic<Compressor::CompressionMode> comp_mode = {Compressor::COMP_NONE}; ///< compression mode
+  std::atomic<Compressor::CompressionMode> comp_mode =
+    {Compressor::COMP_NONE}; ///< compression mode
   CompressorRef compressor;
   std::atomic<uint64_t> comp_min_blob_size = {0};
   std::atomic<uint64_t> comp_max_blob_size = {0};
@@ -1974,7 +1976,7 @@ private:
 
   int _open_super_meta();
 
-  void open_statfs();
+  void _open_statfs();
 
   int _reconcile_bluefs_freespace();
   int _balance_bluefs_freespace(PExtentVector *extents);
