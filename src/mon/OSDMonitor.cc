@@ -7070,8 +7070,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 
     dout(5) << action << " crush item id " << osdid << " name '"
 	    << name << "' device_class " << device_class << dendl;
-    err = newcrush.update_device_class(g_ceph_context, osdid, device_class, name);
-
+    err = newcrush.update_device_class(osdid, device_class, name, &ss);
     if (err < 0)
       goto reply;
 
@@ -7215,6 +7214,53 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     newcrush.encode(pending_inc.crush, mon->get_quorum_con_features());
     ss << "removed class " << device_class << " with id " << class_id
        << " from crush map";
+    goto update;
+
+  } else if (prefix == "osd crush class rename") {
+    string srcname, dstname;
+    if (!cmd_getval(g_ceph_context, cmdmap, "srcname", srcname)) {
+      err = -EINVAL;
+      goto reply;
+    }
+
+    if (!cmd_getval(g_ceph_context, cmdmap, "dstname", dstname)) {
+      err = -EINVAL;
+      goto reply;
+    }
+
+    CrushWrapper newcrush;
+    _get_pending_crush(newcrush);
+
+    if (!newcrush.class_exists(srcname)) {
+      err = -ENOENT;
+      ss << "class '" << srcname << "' does not exist";
+      goto reply;
+    }
+
+    if (newcrush.class_exists(dstname)) {
+      err = -EEXIST;
+      ss << "class '" << dstname << "' already exists";
+      goto reply;
+    }
+
+    int class_id = newcrush.get_class_id(srcname);
+
+    if (newcrush.class_is_in_use(class_id)) {
+      err = -EBUSY;
+      ss << "class '" << srcname << "' is in use";
+      goto reply;
+    }
+
+    err = newcrush.rename_class(srcname, dstname);
+    if (err < 0) {
+      ss << "fail to rename '" << srcname << "' to '" << dstname << "':"
+         << cpp_strerror(err);
+      goto reply;
+    }
+
+    pending_inc.crush.clear();
+    newcrush.encode(pending_inc.crush, mon->get_quorum_con_features());
+    ss << "rename class '" << srcname << "' to '" << dstname << "'";
     goto update;
     
   } else if (osdid_present &&
@@ -7414,6 +7460,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     int r = newcrush.swap_bucket(g_ceph_context, sid, did);
     if (r < 0) {
       ss << "failed to swap bucket contents: " << cpp_strerror(r);
+      err = r;
       goto reply;
     }
     ss << "swapped bucket of " << source << " to " << dest;
