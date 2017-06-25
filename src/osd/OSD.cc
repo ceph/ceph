@@ -9853,10 +9853,10 @@ void OSD::ShardedOpWQ::_process(uint32_t thread_index, heartbeat_handle_d *hb)
   if (sdata->pqueue->empty()) {
     dout(20) << __func__ << " empty q, waiting" << dendl;
     // optimistically sleep a moment; maybe another work item will come along.
-    sdata->sdata_op_ordering_lock.Unlock();
     osd->cct->get_heartbeat_map()->reset_timeout(hb,
       osd->cct->_conf->threadpool_default_timeout, 0);
     sdata->sdata_lock.Lock();
+    sdata->sdata_op_ordering_lock.Unlock();
     sdata->sdata_cond.WaitInterval(sdata->sdata_lock,
       utime_t(osd->cct->_conf->threadpool_empty_queue_max_wait, 0));
     sdata->sdata_lock.Unlock();
