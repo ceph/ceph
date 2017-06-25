@@ -22,6 +22,7 @@
 
 #include "osdc/Objecter.h"
 #include "client/Client.h"
+#include "common/LogClient.h"
 
 #include "DaemonState.h"
 #include "ClusterState.h"
@@ -35,6 +36,7 @@ class PyModules
   DaemonStateIndex &daemon_state;
   ClusterState &cluster_state;
   MonClient &monc;
+  LogChannelRef clog;
   Objecter &objecter;
   Client   &client;
   Finisher &finisher;
@@ -49,7 +51,7 @@ public:
   static std::string config_prefix;
 
   PyModules(DaemonStateIndex &ds, ClusterState &cs, MonClient &mc,
-            Objecter &objecter_, Client &client_,
+            LogChannelRef clog_, Objecter &objecter_, Client &client_,
             Finisher &f);
 
   ~PyModules();
