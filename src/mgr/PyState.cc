@@ -152,7 +152,24 @@ ceph_send_command(PyObject *self, PyObject *args)
       return nullptr;
     }
   } else if (std::string(type) == "pg") {
-    // TODO: expose objecter::pg_command
+    pg_t pgid;
+    if (!pgid.parse(name)) {
+      delete c;
+      string msg("invalid pgid: ");
+      msg.append("\"").append(name).append("\"");
+      PyErr_SetString(PyExc_ValueError, msg.c_str());
+      return nullptr;
+    }
+
+    ceph_tid_t tid;
+    global_handle->get_objecter().pg_command(
+        pgid,
+        {cmd_json},
+        {},
+        &tid,
+        &c->outbl,
+        &c->outs,
+        c);
     return nullptr;
   } else {
     string msg("unknown service type: ");
