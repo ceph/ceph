@@ -135,6 +135,10 @@ function TEST_mon_classes() {
     ceph osd crush class create CLASS || return 1
     ceph osd crush class create CLASS || return 1 # idempotent
     ceph osd crush class ls | grep CLASS  || return 1
+    ceph osd crush class rename CLASS TEMP || return 1
+    ceph osd crush class ls | grep TEMP || return 1
+    ceph osd crush class rename TEMP CLASS || return 1
+    ceph osd crush class ls | grep CLASS  || return 1
     ceph osd crush class rm CLASS || return 1
     expect_failure $dir ENOENT ceph osd crush class rm CLASS || return 1
 }

@@ -466,6 +466,22 @@ public:
     class_name.erase(class_id);
     return 0;
   }
+
+  int rename_class(const string& srcname, const string& dstname) {
+    auto p = class_rname.find(srcname);
+    if (p == class_rname.end())
+      return -ENOENT;
+    int class_id = p->second;
+    auto q = class_name.find(class_id);
+    if (q == class_name.end())
+      return -ENOENT;
+    class_rname.erase(srcname);
+    class_name.erase(class_id);
+    class_rname[dstname] = class_id;
+    class_name[class_id] = dstname;
+    return 0;
+  }
+
   int get_or_create_class_id(const string& name) {
     int c = get_class_id(name);
     if (c < 0) {
@@ -1175,7 +1191,7 @@ public:
     have_uniform_rules = !has_legacy_rulesets();
   }
 
-  int update_device_class(CephContext *cct, int id, const string& class_name, const string& name);
+  int update_device_class(int id, const string& class_name, const string& name, ostream *ss);
   int device_class_clone(int original, int device_class, int *clone);
   bool class_is_in_use(int class_id);
   int populate_classes();
