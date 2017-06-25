@@ -20,6 +20,8 @@ openstack:
 tasks:
 - install:
     tag: v0.94.6
+    exclude_packages: [ 'libcephfs-java', 'libcephfs-jni' ]
+    extra_packages: [ 'libradosstriper1', 'python-rados', 'python-cephfs', 'python-rbd' ]
 - ceph:
     fs: xfs
 - install.upgrade:
