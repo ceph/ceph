@@ -94,11 +94,11 @@ Major Changes from Kraken
     three options for the management of encryption keys: automatic
     encryption (only recommended for test setups), customer provided
     keys similar to Amazon SSE-C specification, and through the use of
-    an external key management service (Openstack Barbician) similar
+    an external key management service (Openstack Barbican) similar
     to Amazon SSE-KMS specification.
   * RGW now has preliminary AWS-like bucket policy API support.  For
     now, policy is a means to express a range of new authorization
-    concepts.  In the future it will be the founation for additional
+    concepts.  In the future it will be the foundation for additional
     auth capabilities such as STS and group policy.
   * RGW has consolidated the several metadata index pools via the use of rados
     namespaces.
@@ -220,7 +220,7 @@ Major Changes from Kraken
       ``ceph osd reweight`` commands.
     - ``ceph crush class {create,rm,ls,rename}`` manage the new CRUSH *device
       class* feature.  ``ceph crush set-device-class <osd> <class>``
-      will set the clas for a particular device.
+      will set the class for a particular device.
     - ``ceph mon feature ls`` will list monitor features recorded in the
       MonMap.  ``ceph mon feature set`` will set an optional feature (none of
       these exist yet).
@@ -305,12 +305,12 @@ Upgrade from Jewel or Kraken
 
 #. Upgrade monitors by installing the new packages and restarting the
    monitor daemons.  Note that, unlike prior releases, the ceph-mon
-   daemons *msut* be upgraded first.::
+   daemons *must* be upgraded first.::
 
      # systemctl restart ceph-mon.target
 
    Verify the monitor upgrade is complete once all monitors are up by
-   looking for the ``lumninous`` feature string in the mon map.  For
+   looking for the ``luminous`` feature string in the mon map.  For
    example::
 
      # ceph mon feature ls
