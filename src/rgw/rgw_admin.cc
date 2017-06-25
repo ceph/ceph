@@ -198,6 +198,7 @@ void _usage()
   cout << "   --tenant=<tenant>         tenant name\n";
   cout << "   --uid=<id>                user id\n";
   cout << "   --subuser=<name>          subuser name\n";
+  cout << "   --all-subuser             trim all subusers usage log\n";
   cout << "   --access-key=<key>        S3 access key\n";
   cout << "   --email=<email>\n";
   cout << "   --secret/--secret-key=<key>\n";
@@ -2267,11 +2268,13 @@ int main(int argc, const char **argv)
   common_init_finish(g_ceph_context);
 
   rgw_user user_id;
+  std::string uid_str;
   string tenant;
   std::string access_key, secret_key, user_email, display_name;
   std::string bucket_name, pool_name, object;
   rgw_pool pool;
   std::string date, subuser, access, format;
+  bool subuser_specified = false;
   std::string start_date, end_date;
   std::string key_type_str;
   std::string period_id, period_epoch, remote, url;
@@ -2413,7 +2416,7 @@ int main(int argc, const char **argv)
       usage();
       return 0;
     } else if (ceph_argparse_witharg(args, i, &val, "-i", "--uid", (char*)NULL)) {
-      user_id.from_str(val);
+      uid_str = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--tenant", (char*)NULL)) {
       tenant = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--access-key", (char*)NULL)) {
@@ -2730,6 +2733,8 @@ int main(int argc, const char **argv)
       perm_policy_doc = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--path-prefix", (char*)NULL)) {
       path_prefix = val;
+    } else if (ceph_argparse_binary_flag(args, i, (int*)&subuser_specified, NULL, "--all-subuser", (char*)NULL)) {
+      //do nothing
     } else if (strncmp(*i, "-", 1) == 0) {
       cerr << "ERROR: invalid flag " << *i << std::endl;
       return EINVAL;
@@ -4254,6 +4259,11 @@ int main(int argc, const char **argv)
     return 0;
   }
 
+  if (user_id.validate_str(uid_str) < 0) {
+    cerr << "'$' is an reserved letter, --uid can't start with '$'" << std::endl;
+    return -EINVAL;
+  }
+
   if (!user_id.empty()) {
     user_op.set_user_id(user_id);
     bucket_op.set_user_id(user_id);
@@ -5096,7 +5106,7 @@ next:
     }
 
 
-    ret = RGWUsage::show(store, user_id, start_epoch, end_epoch,
+    ret = RGWUsage::show(store, user_id, subuser, start_epoch, end_epoch,
 			 show_log_entries, show_log_sum, &categories,
 			 f);
     if (ret < 0) {
@@ -5106,11 +5116,18 @@ next:
   }
 
   if (opt_cmd == OPT_USAGE_TRIM) {
-    if (user_id.empty() && !yes_i_really_mean_it) {
+    if (user_id.empty() && !subuser_specified && !yes_i_really_mean_it) { 
       cerr << "usage trim without user specified will remove *all* users data" << std::endl;
       cerr << "do you really mean it? (requires --yes-i-really-mean-it)" << std::endl;
-      return 1;
+      return -EPERM;
     }
+
+    if (user_id.empty() && subuser_specified && !yes_i_really_mean_it) {
+      cerr << "usage trim with --all-subuser specified will remove *all* subusers data" << std::endl;
+      cerr << "do you really mean it? (requires --yes-i-really-mean-it)" << std::endl;
+      return -EPERM;
+    }
+
     int ret;
     uint64_t start_epoch = 0;
     uint64_t end_epoch = (uint64_t)-1;
@@ -5132,9 +5149,10 @@ next:
       }
     }
 
-    ret = RGWUsage::trim(store, user_id, start_epoch, end_epoch);
+    ret = RGWUsage::trim(store, user_id, subuser, start_epoch, end_epoch,
+                         subuser_specified);
     if (ret < 0) {
-      cerr << "ERROR: read_usage() returned ret=" << ret << std::endl;
+      cerr << "ERROR: trim_usage() returned ret=" << ret << std::endl;
       return 1;
     }
   }

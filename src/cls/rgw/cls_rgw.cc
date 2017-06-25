@@ -2726,31 +2726,52 @@ static int rgw_bi_log_trim(cls_method_context_t hctx, bufferlist *in, bufferlist
   return 0;
 }
 
-static void usage_record_prefix_by_time(uint64_t epoch, string& key)
+static void usage_record_prefix_by_time(const uint64_t epoch, string& key)
 {
   char buf[32];
   snprintf(buf, sizeof(buf), "%011llu", (long long unsigned)epoch);
   key = buf;
 }
 
-static void usage_record_prefix_by_user(string& user, uint64_t epoch, string& key)
+static void usage_record_prefix_by_user(const string& user, const uint64_t epoch, string& key)
 {
   char buf[user.size() + 32];
   snprintf(buf, sizeof(buf), "%s_%011llu_", user.c_str(), (long long unsigned)epoch);
   key = buf;
 }
 
-static void usage_record_name_by_time(uint64_t epoch, const string& user, string& bucket, string& key)
+static void usage_record_prefix_by_subuser(const string& user, const string& subuser,
+                                           const uint64_t epoch, string& key)
+{
+  char buf[user.size() + subuser.size() + 32];
+  snprintf(buf, sizeof(buf), "$%s:%s_%011llu_",
+	   user.c_str(), subuser.c_str(), (long long unsigned)epoch);
+  key = buf;
+}
+
+static void usage_record_name_by_time(const uint64_t epoch, const string& user,
+                                      const string& bucket, string& key)
 {
   char buf[32 + user.size() + bucket.size()];
   snprintf(buf, sizeof(buf), "%011llu_%s_%s", (long long unsigned)epoch, user.c_str(), bucket.c_str());
   key = buf;
 }
 
-static void usage_record_name_by_user(const string& user, uint64_t epoch, string& bucket, string& key)
+static void usage_record_name_by_user(const string& user, const uint64_t epoch,
+                                      const string& bucket, string& key)
 {
   char buf[32 + user.size() + bucket.size()];
   snprintf(buf, sizeof(buf), "%s_%011llu_%s", user.c_str(), (long long unsigned)epoch, bucket.c_str());
+  key = buf;
+}
+
+static void usage_record_name_by_subuser(const string& user, const string& subuser,
+                                         const uint64_t epoch, const string& bucket,
+                                         string& key)
+{
+  char buf[32 + user.size() + subuser.size() + bucket.size()];
+  snprintf(buf, sizeof(buf), "$%s:%s_%011llu_%s", user.c_str(), subuser.c_str(),
+	   (long long unsigned)epoch, bucket.c_str());
   key = buf;
 }
 
@@ -2790,9 +2811,11 @@ int rgw_user_usage_log_add(cls_method_context_t hctx, bufferlist *in, bufferlist
 
     rgw_user *puser = (entry.payer.empty() ? &entry.owner : &entry.payer);
 
-    usage_record_name_by_time(entry.epoch, puser->to_str(), entry.bucket, key_by_time);
-
-    CLS_LOG(10, "rgw_user_usage_log_add user=%s bucket=%s\n", puser->to_str().c_str(), entry.bucket.c_str());
+    if (entry.subuser.empty()) {
+      usage_record_name_by_time(entry.epoch, puser->to_str(), entry.bucket, key_by_time);
+      CLS_LOG(10, "rgw_user_usage_log_add user=%s bucket=%s\n",
+	      puser->to_str().c_str(), entry.bucket.c_str());
+    }
 
     bufferlist record_bl;
     int ret = cls_cxx_map_get_val(hctx, key_by_time, &record_bl);
@@ -2816,7 +2839,13 @@ int rgw_user_usage_log_add(cls_method_context_t hctx, bufferlist *in, bufferlist
       return ret;
 
     string key_by_user;
-    usage_record_name_by_user(puser->to_str(), entry.epoch, entry.bucket, key_by_user);
+
+    if (entry.subuser.empty())
+      usage_record_name_by_user(puser->to_str(), entry.epoch, entry.bucket, key_by_user);
+    else
+      usage_record_name_by_subuser(puser->to_str(), entry.subuser, entry.epoch,
+				   entry.bucket, key_by_user);
+
     ret = cls_cxx_map_set_val(hctx, key_by_user, &new_record_bl);
     if (ret < 0)
       return ret;
@@ -2826,9 +2855,11 @@ int rgw_user_usage_log_add(cls_method_context_t hctx, bufferlist *in, bufferlist
 }
 
 static int usage_iterate_range(cls_method_context_t hctx, uint64_t start, uint64_t end,
-                            string& user, string& key_iter, uint32_t max_entries, bool *truncated,
-                            int (*cb)(cls_method_context_t, const string&, rgw_usage_log_entry&, void *),
-                            void *param)
+			       const string& user, const string& subuser, bool subuser_specified,
+			       string& key_iter, uint32_t max_entries, bool *truncated,
+			       int (*cb)(cls_method_context_t, const string&,
+					 rgw_usage_log_entry&, void *),
+			       void *param)
 {
   CLS_LOG(10, "usage_iterate_range");
 
@@ -2837,8 +2868,10 @@ static int usage_iterate_range(cls_method_context_t hctx, uint64_t start, uint64
   string filter_prefix;
   string start_key, end_key;
   bool by_user = !user.empty();
+  bool by_subuser = !subuser.empty();
   uint32_t i = 0;
   string user_key;
+  string subuser_key;
 
   if (truncated)
     *truncated = false;
@@ -2846,15 +2879,30 @@ static int usage_iterate_range(cls_method_context_t hctx, uint64_t start, uint64
   if (!by_user) {
     usage_record_prefix_by_time(end, end_key);
   } else {
-    user_key = user;
-    user_key.append("_");
+    if (!by_subuser) {
+      user_key = user;
+      user_key += "_";
+    } else {
+      subuser_key = "$";
+      subuser_key += user;
+      subuser_key += ":";
+      subuser_key += subuser;
+      subuser_key += "_";
+    }
   }
 
   if (key_iter.empty()) {
     if (by_user) {
-      usage_record_prefix_by_user(user, start, start_key);
+      if (!by_subuser) {
+	usage_record_prefix_by_user(user, start, start_key);
+      } else {
+	usage_record_prefix_by_subuser(user, subuser, start, start_key);
+      }
     } else {
       usage_record_prefix_by_time(start, start_key);
+      if (subuser_specified) {
+	start_key = "$" + start_key;
+      }
     }
   } else {
     start_key = key_iter;
@@ -2874,14 +2922,20 @@ static int usage_iterate_range(cls_method_context_t hctx, uint64_t start, uint64
     for (; iter != keys.end(); ++iter) {
       const string& key = iter->first;
       rgw_usage_log_entry e;
+      CLS_LOG(20, "usage_iterate_range iterating key=%s, done", key.c_str());
 
       if (!by_user && key.compare(end_key) >= 0) {
-        CLS_LOG(20, "usage_iterate_range reached key=%s, done", key.c_str());
+        CLS_LOG(20, "usage by_time usage_iterate_range reached key=%s, done", key.c_str());
         return 0;
       }
 
-      if (by_user && key.compare(0, user_key.size(), user_key) != 0) {
-        CLS_LOG(20, "usage_iterate_range reached key=%s, done", key.c_str());
+      if (!by_subuser && by_user && key.compare(0, user_key.size(), user_key) != 0) {
+        CLS_LOG(20, "usage by_user usage_iterate_range reached key=%s, done", key.c_str());
+        return 0;
+      }
+
+      if (by_subuser && by_user && key.compare(0, subuser_key.size(), subuser_key) != 0) {
+        CLS_LOG(20, "usage by_subuser usage_iterate_range reached key=%s, done", key.c_str());
         return 0;
       }
 
@@ -2892,9 +2946,21 @@ static int usage_iterate_range(cls_method_context_t hctx, uint64_t start, uint64
       if (e.epoch < start)
 	continue;
 
+      if (by_user && by_subuser && (e.subuser != subuser)) {
+        CLS_LOG(0, "usage by_subuser subuser mismatched, subuser=%s but entry.subuser=%s.",
+		subuser.c_str(), e.subuser.c_str());
+        return -EINVAL;
+      }
+
       /* keys are sorted by epoch, so once we're past end we're done */
       if (e.epoch >= end)
         return 0;
+
+      if (subuser_specified) {
+	if (e.subuser.empty()) {
+	  continue;
+	}
+      }
 
       ret = cb(hctx, key, e, param);
       if (ret < 0)
@@ -2924,7 +2990,7 @@ static int usage_log_read_cb(cls_method_context_t hctx, const string& key, rgw_u
   } else {
     puser = &entry.owner;
   }
-  rgw_user_bucket ub(puser->to_str(), entry.bucket);
+  rgw_user_bucket ub(puser->to_str(), entry.bucket, entry.subuser);
   rgw_usage_log_entry& le = (*usage)[ub];
   le.aggregate(entry);
 
@@ -2950,7 +3016,10 @@ int rgw_user_usage_log_read(cls_method_context_t hctx, bufferlist *in, bufferlis
   string iter = op.iter;
 #define MAX_ENTRIES 1000
   uint32_t max_entries = (op.max_entries ? op.max_entries : MAX_ENTRIES);
-  int ret = usage_iterate_range(hctx, op.start_epoch, op.end_epoch, op.owner, iter, max_entries, &ret_info.truncated, usage_log_read_cb, (void *)usage);
+  int ret = usage_iterate_range(hctx, op.start_epoch, op.end_epoch,
+				op.owner, op.subuser, false,
+				iter, max_entries, &ret_info.truncated,
+				usage_log_read_cb, (void *)usage);
   if (ret < 0)
     return ret;
 
@@ -2967,8 +3036,12 @@ static int usage_log_trim_cb(cls_method_context_t hctx, const string& key, rgw_u
   string key_by_user;
 
   string o = entry.owner.to_str();
-  usage_record_name_by_time(entry.epoch, o, entry.bucket, key_by_time);
-  usage_record_name_by_user(o, entry.epoch, entry.bucket, key_by_user);
+  if (entry.subuser.empty()) {
+    usage_record_name_by_time(entry.epoch, o, entry.bucket, key_by_time);
+    usage_record_name_by_user(o, entry.epoch, entry.bucket, key_by_user);
+  } else {
+    usage_record_name_by_subuser(o, entry.subuser, entry.epoch, entry.bucket, key_by_user);
+  }
 
   int ret = cls_cxx_map_remove_key(hctx, key_by_time);
   if (ret < 0)
@@ -2997,7 +3070,9 @@ int rgw_user_usage_log_trim(cls_method_context_t hctx, bufferlist *in, bufferlis
   }
 
   string iter;
-  ret = usage_iterate_range(hctx, op.start_epoch, op.end_epoch, op.user, iter, 0, NULL, usage_log_trim_cb, NULL);
+  ret = usage_iterate_range(hctx, op.start_epoch, op.end_epoch,
+			    op.user, op.subuser, op.subuser_specified,
+			    iter, 0, NULL, usage_log_trim_cb, NULL);
   if (ret < 0)
     return ret;
 

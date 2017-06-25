@@ -16,13 +16,15 @@ class RGWRados;
 class RGWUsage
 {
 public:
-  static int show(RGWRados *store, rgw_user& uid, uint64_t start_epoch,
-	          uint64_t end_epoch, bool show_log_entries, bool show_log_sum,
+  static int show(RGWRados *store, rgw_user& uid, string& subuser,
+		  uint64_t start_epoch, uint64_t end_epoch,
+		  bool show_log_entries, bool show_log_sum,
 		  std::map<std::string, bool> *categories,
 	          RGWFormatterFlusher& flusher);
 
-  static int trim(RGWRados *store, rgw_user& uid, uint64_t start_epoch,
-	          uint64_t end_epoch);
+  static int trim(RGWRados *store, rgw_user& uid, string& subuser,
+                  uint64_t start_epoch, uint64_t end_epoch,
+                  bool subuser_specified);
 };
 
 

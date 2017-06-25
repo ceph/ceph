@@ -472,13 +472,13 @@ void cls_rgw_encode_suggestion(char op, rgw_bucket_dir_entry& dirent, bufferlist
 void cls_rgw_suggest_changes(librados::ObjectWriteOperation& o, bufferlist& updates);
 
 /* usage logging */
-int cls_rgw_usage_log_read(librados::IoCtx& io_ctx, string& oid, string& user,
+int cls_rgw_usage_log_read(librados::IoCtx& io_ctx, string& oid, string& user,const string& subuser,
                            uint64_t start_epoch, uint64_t end_epoch, uint32_t max_entries,
                            string& read_iter, map<rgw_user_bucket, rgw_usage_log_entry>& usage,
                            bool *is_truncated);
 
-void cls_rgw_usage_log_trim(librados::ObjectWriteOperation& op, string& user,
-                           uint64_t start_epoch, uint64_t end_epoch);
+void cls_rgw_usage_log_trim(librados::ObjectWriteOperation& op, string& user, string& subuser,
+                           uint64_t start_epoch, uint64_t end_epoch, bool subuser_specified);
 
 void cls_rgw_usage_log_add(librados::ObjectWriteOperation& op, rgw_usage_log_info& info);
 

@@ -771,6 +771,7 @@ struct rgw_usage_log_entry {
   rgw_user owner;
   rgw_user payer; /* if empty, same as owner */
   string bucket;
+  string subuser;
   uint64_t epoch;
   rgw_usage_data total_usage; /* this one is kept for backwards compatibility */
   map<string, rgw_usage_data> usage_map;
@@ -778,9 +779,10 @@ struct rgw_usage_log_entry {
   rgw_usage_log_entry() : epoch(0) {}
   rgw_usage_log_entry(string& o, string& b) : owner(o), bucket(b), epoch(0) {}
   rgw_usage_log_entry(string& o, string& p, string& b) : owner(o), payer(p), bucket(b), epoch(0) {}
+  rgw_usage_log_entry(string& o, string& p, string& b, string& sb) : owner(o), payer(p), bucket(b), subuser(sb), epoch(0)  {}
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(3, 1, bl);
+    ENCODE_START(4, 1, bl);
     ::encode(owner.to_str(), bl);
     ::encode(bucket, bl);
     ::encode(epoch, bl);
@@ -790,12 +792,13 @@ struct rgw_usage_log_entry {
     ::encode(total_usage.successful_ops, bl);
     ::encode(usage_map, bl);
     ::encode(payer.to_str(), bl);
+    ::encode(subuser, bl);
     ENCODE_FINISH(bl);
   }
 
 
    void decode(bufferlist::iterator& bl) {
-    DECODE_START(3, bl);
+    DECODE_START(4, bl);
     string s;
     ::decode(s, bl);
     owner.from_str(s);
@@ -815,6 +818,9 @@ struct rgw_usage_log_entry {
       ::decode(p, bl);
       payer.from_str(p);
     }
+    if (struct_v >= 4) {
+      ::decode(subuser, bl);
+    }
     DECODE_FINISH(bl);
   }
 
@@ -825,6 +831,9 @@ struct rgw_usage_log_entry {
       epoch = e.epoch;
       payer = e.payer;
     }
+
+    if (subuser.empty() && !(e.subuser.empty()))
+      subuser = e.subuser;
 
     map<string, rgw_usage_data>::const_iterator iter;
     for (iter = e.usage_map.begin(); iter != e.usage_map.end(); ++iter) {
@@ -872,31 +881,42 @@ WRITE_CLASS_ENCODER(rgw_usage_log_info)
 struct rgw_user_bucket {
   string user;
   string bucket;
+  string subuser;
 
   rgw_user_bucket() {}
   rgw_user_bucket(const string& u, const string& b) : user(u), bucket(b) {}
+  rgw_user_bucket(const string& u, const string& b, const string& sb) : user(u), bucket(b), subuser(sb) {}
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(1, 1, bl);
+    ENCODE_START(2, 1, bl);
     ::encode(user, bl);
     ::encode(bucket, bl);
+    ::encode(subuser, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::iterator& bl) {
-    DECODE_START(1, bl);
+    DECODE_START(2, bl);
     ::decode(user, bl);
     ::decode(bucket, bl);
+    if (struct_v >= 2) {
+      ::decode(subuser, bl);
+    }
     DECODE_FINISH(bl);
   }
 
   bool operator<(const rgw_user_bucket& ub2) const {
-    int comp = user.compare(ub2.user);
-    if (comp < 0)
+    int ucomp = user.compare(ub2.user);
+    if (ucomp < 0) {
       return true;
-    else if (!comp)
-      return bucket.compare(ub2.bucket) < 0;
-
+    } else if (!ucomp) {
+      int bcomp = bucket.compare(ub2.bucket);
+      if (bcomp < 0) {
+        return true;
+      } else if (!bcomp) {
+        return subuser.compare(ub2.subuser) < 0;
+      }
+    }
     return false;
   }
 };

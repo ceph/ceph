@@ -328,7 +328,13 @@ void RGWOp_Subuser_Create::execute()
   RGWUserAdminOpState op_state;
 
   RESTArgs::get_string(s, "uid", uid_str, &uid_str);
-  rgw_user uid(uid_str);
+  rgw_user uid;
+
+  if (uid.validate_str(uid_str) < 0){
+    ldout(s->cct, 0) << "'$' is an reserved letter, --uid can't start with '$'" << dendl;
+    http_ret = -EINVAL;
+    return;
+  }
 
   RESTArgs::get_string(s, "subuser", subuser, &subuser);
   RESTArgs::get_string(s, "access-key", access_key, &access_key);

@@ -391,6 +391,7 @@ int RGWGetUsage_ObjStore_S3::get_params()
 {
   start_date = s->info.args.get("start-date");
   end_date = s->info.args.get("end-date"); 
+  subuser_name = s->info.args.get("subuser"); 
   return 0;
 }
 
@@ -445,6 +446,8 @@ void RGWGetUsage_ObjStore_S3::send_response()
         }
         formatter->open_object_section("User");
         formatter->dump_string("Owner", ub.user);
+	if (!ub.subuser.empty())
+          formatter->dump_string("Subuser", ub.subuser);
         formatter->open_array_section("Buckets");
         user_section_open = true;
         last_owner = ub.user;
@@ -476,6 +479,8 @@ void RGWGetUsage_ObjStore_S3::send_response()
        const rgw_usage_log_entry& entry = siter->second;
        formatter->open_object_section("User");
        formatter->dump_string("User", siter->first);
+       if (!entry.subuser.empty())
+         formatter->dump_string("Subuser", entry.subuser);
        dump_usage_categories_info(formatter, entry, &categories);
        rgw_usage_data total_usage;
        entry.sum(total_usage, categories);

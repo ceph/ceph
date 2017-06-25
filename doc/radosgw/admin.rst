@@ -479,36 +479,58 @@ Usage
 The Ceph Object Gateway logs usage for each user. You can track
 user usage within date ranges too.
 
-- Add ``rgw enable usage log = true`` in [client.rgw] section of ceph.conf and restart the radosgw service. 
+- Add ``rgw enable usage log = true`` in [client.rgw] section of
+  ceph.conf and restart the radosgw service.
 
-Options include: 
+The Ceph Object Gateway also logs usage for each subuser (that belongs
+to a particular user). You can track subuser usage within date ranges
+too.
+
+- Add ``rgw enable usage log = true`` and ``rgw enable usage log at
+  subuser level = true`` in [client.rgw] section of ceph.conf and
+  restart the radosgw service.
+
+Options include:
 
 - **Start Date:** The ``--start-date`` option allows you to filter usage
   stats from a particular start date (**format:** ``yyyy-mm-dd[HH:MM:SS]``).
 
 - **End Date:** The ``--end-date`` option allows you to filter usage up
-  to a particular date (**format:** ``yyyy-mm-dd[HH:MM:SS]``). 
-  
+  to a particular date (**format:** ``yyyy-mm-dd[HH:MM:SS]``).
+
 - **Log Entries:** The ``--show-log-entries`` option allows you to specify
-  whether or not to include log entries with the usage stats 
+  whether or not to include log entries with the usage stats
   (options: ``true`` | ``false``).
 
-.. note:: You may specify time with minutes and seconds, but it is stored 
+.. note:: You may specify time with minutes and seconds, but it is stored
    with 1 hour resolution.
+
+.. caution:: subuser usage logging is currently supported only by
+             local authentication engines (like AWS S3v2, AWS S3v4).
+             External engines (like Keystone, LDAP) are not covered.
 
 
 Show Usage
 ----------
 
-To show usage statistics, specify the ``usage show``. To show usage for a
-particular user, you must specify a user ID. You may also specify a start date,
-end date, and whether or not to show log entries.::
+To show user usage statistics, specify the ``usage show``. To show
+usage for a particular user, you must specify a user ID. You may also
+specify a start date, end date, and whether or not to show log
+entries.::
 
 	radosgw-admin usage show --uid=johndoe --start-date=2012-03-01 --end-date=2012-04-01
 
 You may also show a summary of usage information for all users by omitting a user ID. ::
 
 	radosgw-admin usage show --show-log-entries=false
+
+To show subuser usage statistics, specify the ``usage show``. To show
+usage for a particular subuser belongs to a particular user, you must
+specify a user ID and a subuser ID. You may also specify a start date,
+end date, and whether or not to show log entries.::
+
+	radosgw-admin usage show --uid=johndoe --subuser=johndoe:swift \
+	                         --start-date=2012-03-01 --end-date=2012-04-01
 
 
 Trim Usage
@@ -519,8 +541,18 @@ usage logs for all users and for specific users. You may also specify date
 ranges for trim operations. ::
 
 	radosgw-admin usage trim --start-date=2010-01-01 --end-date=2010-12-31
-	radosgw-admin usage trim --uid=johndoe	
+	radosgw-admin usage trim --uid=johndoe
 	radosgw-admin usage trim --uid=johndoe --end-date=2013-12-31
+
+You can trim usage logs for all subusers and for specific subusers. ::
+
+	radosgw-admin usage trim --all-subuser --yes-i-really-mean-it
+	radosgw-admin usage trim --uid=johndoe --subuser=johndoe:swift
+
+
+.. caution:: user usage log and subuser usage log are maintained
+             separately, trim all users' usage log will *not* trim all
+             subusers' usage log.
 
 
 .. _radosgw-admin: ../../man/8/radosgw-admin/

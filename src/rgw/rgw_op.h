@@ -595,6 +595,7 @@ protected:
   map<rgw_user_bucket, rgw_usage_log_entry> usage;
   map<string, rgw_usage_log_entry> summary_map;
   cls_user_header header;
+  std::string subuser_name;
 public:
   RGWGetUsage() : sent_data(false), show_log_entries(true), show_log_sum(true){
   }

@@ -72,6 +72,15 @@ struct rgw_user {
     }
   }
 
+  int validate_str(const std::string& str) {
+    if (str.find('$') == 0) {
+      return -EINVAL;
+    } else {
+      from_str(str);
+      return 0;
+    }
+  }
+
   rgw_user& operator=(const string& str) {
     from_str(str);
     return *this;

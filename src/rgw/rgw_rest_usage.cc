@@ -26,12 +26,14 @@ void RGWOp_Usage_Get::execute() {
   map<std::string, bool> categories;
 
   string uid_str;
+  string subuser_str;
   uint64_t start, end;
   bool show_entries;
   bool show_summary;
 
   RESTArgs::get_string(s, "uid", uid_str, &uid_str);
   rgw_user uid(uid_str);
+  RESTArgs::get_string(s, "subuser", subuser_str, &subuser_str);
 
   RESTArgs::get_epoch(s, "start", 0, &start);
   RESTArgs::get_epoch(s, "end", (uint64_t)-1, &end);
@@ -50,7 +52,8 @@ void RGWOp_Usage_Get::execute() {
     }
   }
 
-  http_ret = RGWUsage::show(store, uid, start, end, show_entries, show_summary, &categories, flusher);
+  http_ret = RGWUsage::show(store, uid, subuser_str, start, end, show_entries,
+			    show_summary, &categories, flusher);
 }
 
 class RGWOp_Usage_Delete : public RGWRESTOp {
@@ -68,10 +71,13 @@ public:
 
 void RGWOp_Usage_Delete::execute() {
   string uid_str;
+  string subuser_str;
   uint64_t start, end;
+  bool subuser_specified = false;
 
   RESTArgs::get_string(s, "uid", uid_str, &uid_str);
   rgw_user uid(uid_str);
+  RESTArgs::get_string(s, "subuser", subuser_str, &subuser_str);
 
   RESTArgs::get_epoch(s, "start", 0, &start);
   RESTArgs::get_epoch(s, "end", (uint64_t)-1, &end);
@@ -81,13 +87,14 @@ void RGWOp_Usage_Delete::execute() {
       end == (uint64_t)-1) {
     bool remove_all;
     RESTArgs::get_bool(s, "remove-all", false, &remove_all);
+    RESTArgs::get_bool(s, "all-subuser", false, &subuser_specified);
     if (!remove_all) {
       http_ret = -EINVAL;
       return;
     }
   }
 
-  http_ret = RGWUsage::trim(store, uid, start, end);
+  http_ret = RGWUsage::trim(store, uid, subuser_str, start, end, subuser_specified);
 }
 
 RGWOp *RGWHandler_Usage::op_get()
