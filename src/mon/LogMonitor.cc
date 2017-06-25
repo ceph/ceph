@@ -403,13 +403,42 @@ bool LogMonitor::preprocess_command(MonOpRequestRef op)
     if (f) {
       f->open_array_section("tail");
     }
+
+    std::string level_str;
+    clog_type level;
+    if (cmd_getval(g_ceph_context, cmdmap, "level", level_str)) {
+      if (level_str == "debug") {
+        level = CLOG_DEBUG;
+      } else if (level_str == "info") {
+        level = CLOG_INFO;
+      } else if (level_str == "sec") {
+        level = CLOG_SEC;
+      } else if (level_str == "warn") {
+        level = CLOG_WARN;
+      } else if (level_str == "error") {
+        level = CLOG_ERROR;
+      } else {
+        ss << "Invalid severity '" << level_str << "'";
+        mon->reply_command(op, -EINVAL, ss.str(), get_last_committed());
+        return true;
+      }
+    } else {
+      level = CLOG_INFO;
+    }
+
     auto p = summary.tail.end();
     while (num > 0 && p != summary.tail.begin()) {
-      num--;
+      if (p->prio >= level) {
+        num--;
+      }
       --p;
     }
     ostringstream ss;
     for ( ; p != summary.tail.end(); ++p) {
+      if (p->prio < level) {
+        continue;
+      }
+
       if (f) {
 	f->dump_object("entry", *p);
       } else {
