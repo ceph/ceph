@@ -56,9 +56,10 @@ void Journaler::create(file_layout_t *l, stream_format_t const sf)
   journal_stream.set_format(sf);
   _set_layout(l);
 
-  prezeroing_pos = prezero_pos = write_pos = flush_pos = safe_pos =
-    read_pos = requested_pos = received_pos =
-    expire_pos = trimming_pos = trimmed_pos = layout.get_period();
+  prezeroing_pos = prezero_pos = write_pos = flush_pos =
+    safe_pos = read_pos = requested_pos = received_pos =
+    expire_pos = trimming_pos = trimmed_pos =
+    next_safe_pos = layout.get_period();
 
   ldout(cct, 1) << "created blank journal at inode 0x" << std::hex << ino
 		<< std::dec << ", format=" << stream_format << dendl;
@@ -219,7 +220,7 @@ void Journaler::_finish_reread_head(int r, bufferlist& bl, Context *finish)
       finish->complete(-EINVAL);
       return;
     }
-    prezeroing_pos = prezero_pos = write_pos = flush_pos = safe_pos
+    prezeroing_pos = prezero_pos = write_pos = flush_pos = safe_pos = next_safe_pos
       = h.write_pos;
     expire_pos = h.expire_pos;
     trimmed_pos = trimming_pos = h.trimmed_pos;
@@ -280,7 +281,7 @@ void Journaler::_finish_read_head(int r, bufferlist& bl)
     return;
   }
 
-  prezeroing_pos = prezero_pos = write_pos = flush_pos = safe_pos
+  prezeroing_pos = prezero_pos = write_pos = flush_pos = safe_pos = next_safe_pos
     = h.write_pos;
   read_pos = requested_pos = received_pos = expire_pos = h.expire_pos;
   trimmed_pos = trimming_pos = h.trimmed_pos;
@@ -328,7 +329,7 @@ void Journaler::_finish_reprobe(int r, uint64_t new_end,
   ldout(cct, 1) << "_finish_reprobe new_end = " << new_end
 	  << " (header had " << write_pos << ")."
 	  << dendl;
-  prezeroing_pos = prezero_pos = write_pos = flush_pos = safe_pos = new_end;
+  prezeroing_pos = prezero_pos = write_pos = flush_pos = safe_pos = next_safe_pos = new_end;
   state = STATE_ACTIVE;
   onfinish->complete(r);
 }
@@ -355,7 +356,7 @@ void Journaler::_finish_probe_end(int r, uint64_t end)
 
   state = STATE_ACTIVE;
 
-  prezeroing_pos = prezero_pos = write_pos = flush_pos = safe_pos = end;
+  prezeroing_pos = prezero_pos = write_pos = flush_pos = safe_pos = next_safe_pos = end;
 
 out:
   // done.
@@ -491,7 +492,6 @@ void Journaler::_finish_flush(int r, uint64_t start, ceph::real_time stamp)
     return;
   }
 
-  assert(start >= safe_pos);
   assert(start < flush_pos);
 
   // calc latency?
@@ -501,12 +501,13 @@ void Journaler::_finish_flush(int r, uint64_t start, ceph::real_time stamp)
   }
 
   // adjust safe_pos
-  assert(pending_safe.count(start));
-  pending_safe.erase(start);
+  auto it = pending_safe.find(start);
+  assert(it != pending_safe.end());
+  pending_safe.erase(it);
   if (pending_safe.empty())
-    safe_pos = flush_pos;
+    safe_pos = next_safe_pos;
   else
-    safe_pos = *pending_safe.begin();
+    safe_pos = pending_safe.begin()->second;
 
   ldout(cct, 10) << "_finish_flush safe from " << start
 		 << ", pending_safe " << pending_safe
@@ -593,6 +594,13 @@ uint64_t Journaler::append_entry(bufferlist& bl)
     ldout(cct, 10) << " flushing completed object(s) (su " << su << " wro "
 		   << write_obj << " flo " << flush_obj << ")" << dendl;
     _do_flush(write_buf.length() - write_off);
+
+    // if _do_flush() skips flushing some data, it does not update next_safe_pos.
+    if (write_buf.length() > 0 &&
+	write_buf.length() <= wrote) { // the unflushed data are within this entry
+      // set next_safe_pos to end of previous entry
+      next_safe_pos = write_pos - wrote;
+    }
   }
 
   return write_pos;
@@ -645,13 +653,14 @@ void Journaler::_do_flush(unsigned amount)
   SnapContext snapc;
 
   Context *onsafe = new C_Flush(this, flush_pos, now);  // on COMMIT
-  pending_safe.insert(flush_pos);
+  pending_safe[flush_pos] = next_safe_pos;
 
   bufferlist write_bl;
 
   // adjust pointers
   if (len == write_buf.length()) {
     write_bl.swap(write_buf);
+    next_safe_pos = write_pos;
   } else {
     write_buf.splice(0, len, &write_bl);
   }
@@ -978,7 +987,7 @@ void Journaler::_issue_read(uint64_t len)
     ldout(cct, 10) << "_issue_read requested_pos = safe_pos = " << safe_pos
 		   << ", waiting" << dendl;
     assert(write_pos > requested_pos);
-    if (flush_pos == safe_pos) {
+    if (pending_safe.empty()) {
       _flush(NULL);
     }
     assert(flush_pos > safe_pos);
@@ -1077,7 +1086,7 @@ bool Journaler::_is_readable()
       "adjusting write_pos to " << read_pos << dendl;
 
     // adjust write_pos
-    prezeroing_pos = prezero_pos = write_pos = flush_pos = safe_pos = read_pos;
+    prezeroing_pos = prezero_pos = write_pos = flush_pos = safe_pos = next_safe_pos = read_pos;
     assert(write_buf.length() == 0);
 
     // reset read state
