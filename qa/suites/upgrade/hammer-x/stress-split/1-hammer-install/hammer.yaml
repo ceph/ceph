@@ -1,6 +1,8 @@
 tasks:
 - install:
     branch: hammer
+    exclude_packages: [ 'libcephfs-java', 'libcephfs-jni' ]
+    extra_packages: [ 'libradosstriper1', 'python-rados', 'python-cephfs', 'python-rbd' ]
 - print: "**** done install hammer"
 - ceph:
     fs: xfs
