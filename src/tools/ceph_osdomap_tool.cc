@@ -107,31 +107,31 @@ int main(int argc, char **argv) {
   if (r < 0) {
     std::cerr << "Store open got: " << cpp_strerror(r) << std::endl;
     std::cerr << "Output: " << out.str() << std::endl;
-    goto done;
+    return r;
   }
   // We don't call omap.init() here because it will repair
   // the DBObjectMap which we might want to examine for diagnostic
   // reasons.  Instead use --command repair.
-  r = 0;
-
 
   if (cmd == "dump-raw-keys") {
     KeyValueDB::WholeSpaceIterator i = store->get_iterator();
     for (i->seek_to_first(); i->valid(); i->next()) {
       std::cout << i->raw_key() << std::endl;
     }
+    return 0;
   } else if (cmd == "dump-raw-key-vals") {
     KeyValueDB::WholeSpaceIterator i = store->get_iterator();
     for (i->seek_to_first(); i->valid(); i->next()) {
       std::cout << i->raw_key() << std::endl;
       i->value().hexdump(std::cout);
     }
+    return 0;
   } else if (cmd == "dump-objects") {
     vector<ghobject_t> objects;
     r = omap.list_objects(&objects);
     if (r < 0) {
       std::cerr << "list_objects got: " << cpp_strerror(r) << std::endl;
-      goto done;
+      return r;
     }
     for (vector<ghobject_t>::iterator i = objects.begin();
 	 i != objects.end();
@@ -140,13 +140,13 @@ int main(int argc, char **argv) {
         continue;
       std::cout << *i << std::endl;
     }
-    r = 0;
+    return 0;
   } else if (cmd == "dump-objects-with-keys") {
     vector<ghobject_t> objects;
     r = omap.list_objects(&objects);
     if (r < 0) {
       std::cerr << "list_objects got: " << cpp_strerror(r) << std::endl;
-      goto done;
+      return r;
     }
     for (vector<ghobject_t>::iterator i = objects.begin();
 	 i != objects.end();
@@ -160,6 +160,7 @@ int main(int argc, char **argv) {
 	j->value().hexdump(std::cout);
       }
     }
+    return 0;
   } else if (cmd == "check" || cmd == "repair") {
     ostringstream ss;
     bool repair = (cmd == "repair");
@@ -168,28 +169,23 @@ int main(int argc, char **argv) {
       std::cerr << ss.str() << std::endl;
       if (r > 0) {
         std::cerr << "check got " << r << " error(s)" << std::endl;
-        r = 1;
-        goto done;
+        return 1;
       }
     }
     std::cout << (repair ? "repair" : "check") << " succeeded" << std::endl;
+    return 0;
   } else if (cmd == "dump-headers") {
     vector<DBObjectMap::_Header> headers;
     r = omap.list_object_headers(&headers);
     if (r < 0) {
       std::cerr << "list_object_headers got: " << cpp_strerror(r) << std::endl;
-      r = 1;
-      goto done;
+      return 1;
     }
     for (auto i : headers)
       std::cout << i << std::endl;
+    return 0;
   } else {
     std::cerr << "Did not recognize command " << cmd << std::endl;
-    r = 1;
-    goto done;
+    return 1;
   }
-  r = 0;
-
-  done:
-  return r;
 }
