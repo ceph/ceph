@@ -426,16 +426,27 @@ bool LogMonitor::preprocess_command(MonOpRequestRef op)
       level = CLOG_INFO;
     }
 
+    std::string channel;
+    if (!cmd_getval(g_ceph_context, cmdmap, "channel", channel)) {
+      channel = CLOG_CHANNEL_DEFAULT;
+    }
+
+    // We'll apply this twice, once while counting out lines
+    // and once while outputting them.
+    auto match = [level, channel](const LogEntry &entry) {
+      return entry.prio >= level && (entry.channel == channel || channel == "*");
+    };
+
     auto p = summary.tail.end();
     while (num > 0 && p != summary.tail.begin()) {
-      if (p->prio >= level) {
+      if (match(*p)) {
         num--;
       }
       --p;
     }
     ostringstream ss;
     for ( ; p != summary.tail.end(); ++p) {
-      if (p->prio < level) {
+      if (!match(*p)) {
         continue;
       }
 
