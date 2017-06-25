@@ -106,10 +106,15 @@ class Module(MgrModule):
     def handle_fs_status(self, cmd):
         output = ""
 
+        fs_filter = cmd.get('fs', None)
+
         mds_versions = defaultdict(list)
 
         fsmap = self.get("fs_map")
         for filesystem in fsmap['filesystems']:
+            if fs_filter and filesystem['mdsmap']['fs_name'] != fs_filter:
+                continue
+
             rank_table = PrettyTable(
                 ("Rank", "State", "MDS", "Activity", "dns", "inos"),
                 hrules=prettytable.FRAME
