@@ -474,7 +474,7 @@ int RDMAWorker::get_reged_mem(RDMAConnectedSocketImpl *o, std::vector<Chunk*> &c
   size_t got = global_infiniband->get_memory_manager()->get_tx_buffer_size() * r;
   ldout(cct, 30) << __func__ << " need " << bytes << " bytes, reserve " << got << " registered  bytes, inflight " << dispatcher->inflight << dendl;
   stack->get_dispatcher()->inflight += r;
-  if (got == bytes)
+  if (got >= bytes)
     return r;
 
   if (o) {
@@ -499,7 +499,7 @@ void RDMAWorker::handle_pending_message()
       ldout(cct, 20) << __func__ << " sent pending bl socket=" << o << " r=" << r << dendl;
       if (r < 0) {
         if (r == -EAGAIN) {
-          pending_sent_conns.push_front(o);
+          pending_sent_conns.push_back(o);
           dispatcher->make_pending_worker(this);
           return ;
         }
