@@ -3185,7 +3185,8 @@ void OSDMap::print_tree(Formatter *f, ostream *out, unsigned filter) const
   }
 }
 
-void OSDMap::print_summary(Formatter *f, ostream& out) const
+void OSDMap::print_summary(Formatter *f, ostream& out,
+			   const string& prefix) const
 {
   if (f) {
     f->open_object_section("osdmap");
@@ -3206,7 +3207,7 @@ void OSDMap::print_summary(Formatter *f, ostream& out) const
     out << "\n";
     uint64_t important_flags = flags & ~CEPH_OSDMAP_SEMIHIDDEN_FLAGS;
     if (important_flags)
-      out << "            flags " << get_flag_string(important_flags) << "\n";
+      out << prefix << "flags " << get_flag_string(important_flags) << "\n";
   }
 }
 
