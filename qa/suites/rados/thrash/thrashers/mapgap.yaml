@@ -5,6 +5,9 @@ overrides:
     - objects unfound and apparently lost
     - osd_map_cache_size
     conf:
+      global:
+        osd_verify_sparse_read_holes: true
+        filestore_seek_data_hole: true
       mon:
         mon min osdmap epochs: 2
       osd:
