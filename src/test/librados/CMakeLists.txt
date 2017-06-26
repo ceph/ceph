@@ -158,6 +158,7 @@ install(TARGETS
   ceph_test_rados_api_lock
   ceph_test_rados_api_misc
   ceph_test_rados_api_pool
+  ceph_test_rados_api_service
   ceph_test_rados_api_snapshots
   ceph_test_rados_api_stat
   ceph_test_rados_api_tier
