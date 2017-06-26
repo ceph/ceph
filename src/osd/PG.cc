@@ -3998,7 +3998,7 @@ void PG::repair_object(
   bv.push_back(po.attrs[OI_ATTR]);
   object_info_t oi(bv);
   if (bad_peer != primary) {
-    peer_missing[bad_peer].add(soid, oi.version, eversion_t());
+    peer_missing[bad_peer].add(soid, oi.version, eversion_t(), false);
   } else {
     // We should only be scrubbing if the PG is clean.
     assert(waiting_for_unreadable_object.empty());

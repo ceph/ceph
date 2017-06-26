@@ -3803,15 +3803,33 @@ void pg_missing_t::resort(bool sort_bitwise)
 
 void pg_missing_t::encode(bufferlist &bl) const
 {
-  ENCODE_START(3, 2, bl);
+  ENCODE_START(4, 2, bl);
   ::encode(missing, bl);
+  // since pg_missing_t::item was not versioned, we encode the new flags
+  // field here explicitly
+  map<hobject_t, uint8_t, hobject_t::ComparatorWithDefault> missing_flags;
+  for (const auto &p : missing) {
+    if (p.second.flags != pg_missing_t::item::FLAG_NONE) {
+      missing_flags.insert(make_pair(p.first,
+				     static_cast<uint8_t>(p.second.flags)));
+    }
+  }
+  ::encode(missing_flags, bl);
   ENCODE_FINISH(bl);
 }
 
 void pg_missing_t::decode(bufferlist::iterator &bl, int64_t pool)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(3, 2, 2, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(4, 2, 2, bl);
   ::decode(missing, bl);
+  if (struct_v >= 4) {
+    map<hobject_t, uint8_t, hobject_t::ComparatorWithDefault> missing_flags;
+    ::decode(missing_flags, bl);
+    for (const auto &p : missing_flags) {
+      assert(missing.find(p.first) != missing.end());
+      missing[p.first].flags = static_cast<pg_missing_t::item::missing_flags_t>(p.second);
+    }
+  }
   DECODE_FINISH(bl);
 
   if (struct_v < 3) {
@@ -3854,7 +3872,8 @@ void pg_missing_t::generate_test_instances(list<pg_missing_t*>& o)
 {
   o.push_back(new pg_missing_t);
   o.push_back(new pg_missing_t);
-  o.back()->add(hobject_t(object_t("foo"), "foo", 123, 456, 0, ""), eversion_t(5, 6), eversion_t(5, 1));
+  o.back()->add(hobject_t(object_t("foo"), "foo", 123, 456, 0, ""), eversion_t(5, 6), eversion_t(5, 1), false);
+  o.back()->add(hobject_t(object_t("foo"), "foo", 123, 456, 0, ""), eversion_t(5, 6), eversion_t(5, 1), true);
 }
 
 ostream& operator<<(ostream& out, const pg_missing_t::item& i) 
@@ -3921,41 +3940,40 @@ eversion_t pg_missing_t::have_old(const hobject_t& oid) const
  */
 void pg_missing_t::add_next_event(const pg_log_entry_t& e)
 {
-  if (e.is_update()) {
-    map<hobject_t, item, hobject_t::ComparatorWithDefault>::iterator missing_it;
-    missing_it = missing.find(e.soid);
-    bool is_missing_divergent_item = missing_it != missing.end();
-    if (e.prior_version == eversion_t() || e.is_clone()) {
-      // new object.
-      if (is_missing_divergent_item) {  // use iterator
-        rmissing.erase((missing_it->second).need.version);
-        missing_it->second = item(e.version, eversion_t());  // .have = nil
-      } else  // create new element in missing map
-        missing[e.soid] = item(e.version, eversion_t());     // .have = nil
-    } else if (is_missing_divergent_item) {
-      // already missing (prior).
+  map<hobject_t, item, hobject_t::ComparatorWithDefault>::iterator missing_it;
+  missing_it = missing.find(e.soid);
+  bool is_missing_divergent_item = missing_it != missing.end();
+  if (e.prior_version == eversion_t() || e.is_clone()) {
+    // new object.
+    if (is_missing_divergent_item) {  // use iterator
       rmissing.erase((missing_it->second).need.version);
-      (missing_it->second).need = e.version;  // leave .have unchanged.
-    } else if (e.is_backlog()) {
-      // May not have prior version
-      assert(0 == "these don't exist anymore");
-    } else {
-      // not missing, we must have prior_version (if any)
-      assert(!is_missing_divergent_item);
-      missing[e.soid] = item(e.version, e.prior_version);
-    }
-    rmissing[e.version.version] = e.soid;
-  } else
-    rm(e.soid, e.version);
+      missing_it->second = item(e.version, eversion_t(), e.is_delete());  // .have = nil
+    } else  // create new element in missing map
+      missing[e.soid] = item(e.version, eversion_t(), e.is_delete());     // .have = nil
+  } else if (is_missing_divergent_item) {
+    // already missing (prior).
+    rmissing.erase((missing_it->second).need.version);
+    (missing_it->second).need = e.version;  // leave .have unchanged.
+    missing_it->second.set_delete(e.is_delete());
+  } else if (e.is_backlog()) {
+    // May not have prior version
+    assert(0 == "these don't exist anymore");
+  } else {
+    // not missing, we must have prior_version (if any)
+    assert(!is_missing_divergent_item);
+    missing[e.soid] = item(e.version, e.prior_version, e.is_delete());
+  }
+  rmissing[e.version.version] = e.soid;
 }
 
-void pg_missing_t::revise_need(hobject_t oid, eversion_t need)
+void pg_missing_t::revise_need(hobject_t oid, eversion_t need, bool is_delete)
 {
   if (missing.count(oid)) {
     rmissing.erase(missing[oid].need.version);
     missing[oid].need = need;            // no not adjust .have
+    missing[oid].set_delete(is_delete);
   } else {
-    missing[oid] = item(need, eversion_t());
+    missing[oid] = item(need, eversion_t(), is_delete);
   }
   rmissing[need.version] = oid;
 }
@@ -3967,9 +3985,10 @@ void pg_missing_t::revise_have(hobject_t oid, eversion_t have)
   }
 }
 
-void pg_missing_t::add(const hobject_t& oid, eversion_t need, eversion_t have)
+void pg_missing_t::add(const hobject_t& oid, eversion_t need, eversion_t have,
+		       bool is_delete)
 {
-  missing[oid] = item(need, have);
+  missing[oid] = item(need, have, is_delete);
   rmissing[need.version] = oid;
 }
 
@@ -3990,7 +4009,7 @@ void pg_missing_t::got(const hobject_t& oid, eversion_t v)
 {
   std::map<hobject_t, pg_missing_t::item, hobject_t::ComparatorWithDefault>::iterator p = missing.find(oid);
   assert(p != missing.end());
-  assert(p->second.need <= v);
+  assert(p->second.need <= v || p->second.is_delete());
   got(p);
 }
 
@@ -4010,7 +4029,8 @@ void pg_missing_t::split_into(
        i != missing.end();
        ) {
     if ((i->first.get_hash() & mask) == child_pgid.m_seed) {
-      omissing->add(i->first, i->second.need, i->second.have);
+      omissing->add(i->first, i->second.need, i->second.have,
+		    i->second.is_delete());
       rm(i++);
     } else {
       ++i;

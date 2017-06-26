@@ -2764,9 +2764,15 @@ inline ostream& operator<<(ostream& out, const pg_log_t& log)
 struct pg_missing_t {
   struct item {
     eversion_t need, have;
-    item() {}
-    explicit item(eversion_t n) : need(n) {}  // have no old version
-    item(eversion_t n, eversion_t h) : need(n), have(h) {}
+    enum missing_flags_t {
+      FLAG_NONE = 0,
+      FLAG_DELETE = 1,
+    } flags;
+    item() : flags(FLAG_NONE) {}
+    explicit item(eversion_t n) : need(n), flags(FLAG_NONE) {}  // have no old version
+    item(eversion_t n, eversion_t h, bool is_delete=false) : need(n), have(h) {
+      set_delete(is_delete);
+    }
 
     void encode(bufferlist& bl) const {
       ::encode(need, bl);
@@ -2776,15 +2782,45 @@ struct pg_missing_t {
       ::decode(need, bl);
       ::decode(have, bl);
     }
+
+    void set_delete(bool is_delete) {
+      flags = is_delete ? FLAG_DELETE : FLAG_NONE;
+    }
+
+    bool is_delete() const {
+      return (flags & FLAG_DELETE) == FLAG_DELETE;
+    }
+
+    void encode_with_flags(bufferlist& bl) const {
+      encode(bl);
+      ::encode(static_cast<uint8_t>(flags), bl);
+    }
+
+    void decode_with_flags(bufferlist::iterator& bl) {
+      decode(bl);
+      // no versioning on this, but it's stored in a single omap value,
+      // so just check for the end of the bufferlist
+      if (!bl.end()) {
+	uint8_t f;
+	::decode(f, bl);
+	flags = static_cast<missing_flags_t>(f);
+      }
+    }
+
     void dump(Formatter *f) const {
       f->dump_stream("need") << need;
       f->dump_stream("have") << have;
+      f->dump_stream("flags") << (flags == FLAG_NONE ? "none" : "delete");
     }
     static void generate_test_instances(list<item*>& o) {
       o.push_back(new item);
       o.push_back(new item);
       o.back()->need = eversion_t(1, 2);
       o.back()->have = eversion_t(1, 1);
+      o.push_back(new item);
+      o.back()->need = eversion_t(3, 5);
+      o.back()->have = eversion_t(3, 4);
+      o.back()->flags = FLAG_DELETE;
     }
   }; 
   WRITE_CLASS_ENCODER(item)
@@ -2799,9 +2835,9 @@ struct pg_missing_t {
   bool is_missing(const hobject_t& oid, eversion_t v) const;
   eversion_t have_old(const hobject_t& oid) const;
   void add_next_event(const pg_log_entry_t& e);
-  void revise_need(hobject_t oid, eversion_t need);
+  void revise_need(hobject_t oid, eversion_t need, bool is_delete);
   void revise_have(hobject_t oid, eversion_t have);
-  void add(const hobject_t& oid, eversion_t need, eversion_t have);
+  void add(const hobject_t& oid, eversion_t need, eversion_t have, bool is_delete);
   void rm(const hobject_t& oid, eversion_t v);
   void rm(const std::map<hobject_t, pg_missing_t::item, hobject_t::ComparatorWithDefault>::iterator &m);
   void got(const hobject_t& oid, eversion_t v);

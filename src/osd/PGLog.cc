@@ -440,7 +440,7 @@ void PGLog::_merge_object_divergent_entries(
       ldpp_dout(dpp, 10) << __func__ << ": hoid " << hoid
 			 << " missing.have is " << missing.missing[hoid].have
 			 << ", adjusting" << dendl;
-      missing.revise_need(hoid, prior_version);
+      missing.revise_need(hoid, prior_version, false);
       if (prior_version <= info.log_tail) {
 	ldpp_dout(dpp, 10) << __func__ << ": hoid " << hoid
 			   << " prior_version " << prior_version
@@ -490,7 +490,7 @@ void PGLog::_merge_object_divergent_entries(
 		       << "removing and adding to missing" << dendl;
     if (rollbacker && !object_not_in_store)
       rollbacker->remove(hoid);
-    missing.add(hoid, prior_version, eversion_t());
+    missing.add(hoid, prior_version, eversion_t(), false);
     if (prior_version <= info.log_tail) {
       ldpp_dout(dpp, 10) << __func__ << ": hoid " << hoid
 			 << " prior_version " << prior_version
@@ -600,7 +600,7 @@ void PGLog::append_log_entries_update_missing(
 	// hack to match PG::mark_all_unfound_lost
 	if (p->is_lost_delete() && p->mod_desc.can_rollback()) {
 	  rollbacker->try_stash(p->soid, p->version.version);
-	} else if (p->is_delete()) {
+	} else if (p->is_lost_delete()) {
 	  rollbacker->remove(p->soid);
 	}
       }
@@ -1015,11 +1015,11 @@ void PGLog::read_log(ObjectStore *store, coll_t pg_coll,
 	if (oi.version < i->version) {
 	  ldpp_dout(dpp, 15) << "read_log  missing " << *i
 			     << " (have " << oi.version << ")" << dendl;
-	  missing.add(i->soid, i->version, oi.version);
+	  missing.add(i->soid, i->version, oi.version, i->is_delete());
 	}
       } else {
 	ldpp_dout(dpp, 15) << "read_log  missing " << *i << dendl;
-	missing.add(i->soid, i->version, eversion_t());
+	missing.add(i->soid, i->version, eversion_t(), i->is_delete());
       }
     }
     for (map<eversion_t, hobject_t>::reverse_iterator i =
@@ -1066,7 +1066,7 @@ void PGLog::read_log(ObjectStore *store, coll_t pg_coll,
 	}
       } else {
 	ldpp_dout(dpp, 15) << "read_log  missing " << *i << dendl;
-	missing.add(i->second, i->first, eversion_t());
+	missing.add(i->second, i->first, eversion_t(), false);
       }
     }
   }

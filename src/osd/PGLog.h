@@ -529,12 +529,8 @@ public:
     missing.revise_have(oid, have);
   }
 
-  void revise_need(hobject_t oid, eversion_t need) {
-    missing.revise_need(oid, need);
-  }
-
   void missing_add(const hobject_t& oid, eversion_t need, eversion_t have) {
-    missing.add(oid, need, have);
+    missing.add(oid, need, have, false);
   }
 
   void missing_rm(map<hobject_t, pg_missing_t::item, hobject_t::ComparatorWithDefault>::const_iterator m) {
