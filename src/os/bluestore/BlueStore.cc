@@ -5077,6 +5077,17 @@ int BlueStore::mkfs()
 	min_alloc_size = cct->_conf->bluestore_min_alloc_size_ssd;
       }
     }
+
+    // make sure min_alloc_size is power of 2 aligned.
+    if (!ISP2(min_alloc_size)) {
+      derr << __func__ << " min_alloc_size 0x"
+           << std::hex << min_alloc_size << std::dec
+           << " is not power of 2 aligned!"
+           << dendl;
+      r = -EINVAL;
+      goto out_close_fm;
+    }
+
     {
       bufferlist bl;
       ::encode((uint64_t)min_alloc_size, bl);
