@@ -767,8 +767,34 @@ OPTION(osd_op_num_threads_per_shard_ssd, OPT_INT, 2)
 OPTION(osd_op_num_shards, OPT_INT, 0)
 OPTION(osd_op_num_shards_hdd, OPT_INT, 5)
 OPTION(osd_op_num_shards_ssd, OPT_INT, 8)
-OPTION(osd_op_queue, OPT_STR, "wpq") // PrioritzedQueue (prio), Weighted Priority Queue (wpq), or debug_random
+
+// PrioritzedQueue (prio), Weighted Priority Queue (wpq ; default),
+// mclock_opclass, mclock_client, or debug_random. "mclock_opclass"
+// and "mclock_client" are based on the mClock/dmClock algorithm
+// (Gulati, et al. 2010). "mclock_opclass" prioritizes based on the
+// class the operation belongs to. "mclock_client" does the same but
+// also works to ienforce fairness between clients. "debug_random"
+// chooses among all four with equal probability.
+OPTION(osd_op_queue, OPT_STR, "wpq")
+
 OPTION(osd_op_queue_cut_off, OPT_STR, "low") // Min priority to go to strict queue. (low, high, debug_random)
+
+// mClock priority queue parameters for five types of ops
+OPTION(osd_op_queue_mclock_client_op_res, OPT_DOUBLE, 1000.0)
+OPTION(osd_op_queue_mclock_client_op_wgt, OPT_DOUBLE, 500.0)
+OPTION(osd_op_queue_mclock_client_op_lim, OPT_DOUBLE, 0.0)
+OPTION(osd_op_queue_mclock_osd_subop_res, OPT_DOUBLE, 1000.0)
+OPTION(osd_op_queue_mclock_osd_subop_wgt, OPT_DOUBLE, 500.0)
+OPTION(osd_op_queue_mclock_osd_subop_lim, OPT_DOUBLE, 0.0)
+OPTION(osd_op_queue_mclock_snap_res, OPT_DOUBLE, 0.0)
+OPTION(osd_op_queue_mclock_snap_wgt, OPT_DOUBLE, 1.0)
+OPTION(osd_op_queue_mclock_snap_lim, OPT_DOUBLE, 0.001)
+OPTION(osd_op_queue_mclock_recov_res, OPT_DOUBLE, 0.0)
+OPTION(osd_op_queue_mclock_recov_wgt, OPT_DOUBLE, 1.0)
+OPTION(osd_op_queue_mclock_recov_lim, OPT_DOUBLE, 0.001)
+OPTION(osd_op_queue_mclock_scrub_res, OPT_DOUBLE, 0.0)
+OPTION(osd_op_queue_mclock_scrub_wgt, OPT_DOUBLE, 1.0)
+OPTION(osd_op_queue_mclock_scrub_lim, OPT_DOUBLE, 0.001)
 
 OPTION(osd_ignore_stale_divergent_priors, OPT_BOOL, false) // do not assert on divergent_prior entries which aren't in the log and whose on-disk objects are newer
 
