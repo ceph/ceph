@@ -1,9 +1,9 @@
 # Try to find xfs
 # Once done, this will define
 #
-# XFS_FOUND - system has Profiler
-# XFS_INCLUDE_DIR - the Profiler include directories
-# XFS_LIBRARIES - link these to use Profiler
+# XFS_FOUND - system has libxfs
+# XFS_INCLUDE_DIR - the libxfs include directories
+# XFS_LIBRARIES - link these to use libxfs
 
 if(XFS_INCLUDE_DIR AND XFS_LIBRARIES)
 	set(XFS_FIND_QUIETLY TRUE)

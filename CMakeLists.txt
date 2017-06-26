@@ -214,10 +214,16 @@ set(HAVE_LIBFUSE ${FUSE_FOUND})
 endif(${WITH_FUSE})
 
 option(WITH_XFS "XFS is here" ON)
-if(${WITH_XFS})
-find_package(xfs)
-set(HAVE_LIBXFS ${XFS_FOUND})
-endif(${WITH_XFS})
+if(WITH_XFS)
+  find_package(xfs)
+  set(HAVE_LIBXFS ${XFS_FOUND})
+endif()
+
+option(WITH_ZFS "enable LibZFS if found" OFF)
+if(WITH_ZFS)
+  find_package(zfs)
+  set(HAVE_LIBZFS ${ZFS_FOUND})
+endif()
 
 option(WITH_SPDK "Enable SPDK" OFF)
 if(WITH_SPDK)
@@ -463,7 +469,6 @@ if(${HAVE_BABELTRACE})
 endif(${HAVE_BABELTRACE})
 
 option(DEBUG_GATHER "C_Gather debugging is enabled" ON)
-option(HAVE_LIBZFS "LibZFS is enabled" OFF)
 option(ENABLE_COVERAGE "Coverage is enabled" OFF)
 option(PG_DEBUG_REFS "PG Ref debugging is enabled" OFF)
 
