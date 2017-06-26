@@ -5066,10 +5066,10 @@ int RGWRados::Bucket::List::list_objects(int max, vector<RGWObjEnt> *result,
               truncated = true;
               goto done;
             }
+            next_marker = prefix_key;
             (*common_prefixes)[prefix_key] = true;
 
             int marker_delim_pos = cur_marker.name.find(params.delim, cur_prefix.size());
-            next_marker = cur_marker.name.substr(0, marker_delim_pos + 1);
 
             skip_after_delim = cur_marker.name.substr(0, marker_delim_pos);
             skip_after_delim.append(bigger_than_delim);
