@@ -21,6 +21,7 @@
 #include "osdc/Objecter.h"
 #include "mon/MonClient.h"
 #include "mon/PGMap.h"
+#include "mgr/ServiceMap.h"
 
 class MMgrDigest;
 class MMonMgrReport;
@@ -37,6 +38,7 @@ protected:
   MonClient *monc;
   Objecter *objecter;
   FSMap fsmap;
+  ServiceMap servicemap;
   mutable Mutex lock;
 
   MgrMap mgr_map;
@@ -65,12 +67,20 @@ public:
   void set_objecter(Objecter *objecter_);
   void set_fsmap(FSMap const &new_fsmap);
   void set_mgr_map(MgrMap const &new_mgrmap);
+  void set_service_map(ServiceMap const &new_service_map);
 
   void notify_osdmap(const OSDMap &osd_map);
 
   bool have_fsmap() const {
     Mutex::Locker l(lock);
     return fsmap.get_epoch() > 0;
+  }
+
+  template<typename Callback, typename...Args>
+  void with_servicemap(Callback&& cb, Args&&...args) const
+  {
+    Mutex::Locker l(lock);
+    std::forward<Callback>(cb)(servicemap, std::forward<Args>(args)...);
   }
 
   template<typename Callback, typename...Args>

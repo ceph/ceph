@@ -30,6 +30,7 @@
 #include "messages/MCommand.h"
 #include "messages/MCommandReply.h"
 #include "messages/MLog.h"
+#include "messages/MServiceMap.h"
 
 #include "Mgr.h"
 
@@ -184,6 +185,7 @@ void Mgr::init()
   monc->sub_want("log-info", 0, 0);
   monc->sub_want("mgrdigest", 0, 0);
   monc->sub_want("fsmap", 0, 0);
+  monc->sub_want("servicemap", 0, 0);
 
   dout(4) << "waiting for OSDMap..." << dendl;
   // Subscribe to OSDMap update to pass on to ClusterState
@@ -457,6 +459,13 @@ void Mgr::handle_log(MLog *m)
   m->put();
 }
 
+void Mgr::handle_service_map(MServiceMap *m)
+{
+  dout(10) << "e" << m->service_map.epoch << dendl;
+  cluster_state.set_service_map(m->service_map);
+  server.got_service_map();
+}
+
 bool Mgr::ms_dispatch(Message *m)
 {
   dout(4) << *m << dendl;
@@ -483,6 +492,11 @@ bool Mgr::ms_dispatch(Message *m)
       // Continuous subscribe, so that we can generate notifications
       // for our MgrPyModules
       objecter->maybe_request_map();
+      m->put();
+      break;
+    case MSG_SERVICE_MAP:
+      handle_service_map((MServiceMap*)m);
+      py_modules.notify_all("service_map", "");
       m->put();
       break;
     case MSG_LOG:
