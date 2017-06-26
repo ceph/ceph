@@ -17,7 +17,6 @@ class RGWGetObj_Decompress : public RGWGetObj_Filter
   bool partial_content;
   vector<compression_block>::iterator first_block, last_block;
   off_t q_ofs, q_len;
-  bool first_data;
   uint64_t cur_ofs;
   bufferlist waiting;
 public:
