@@ -261,24 +261,52 @@ void DaemonServer::shutdown()
 
 bool DaemonServer::handle_open(MMgrOpen *m)
 {
-  uint32_t type = m->get_connection()->get_peer_type();
-  DaemonKey key(ceph_entity_type_name(type), m->daemon_name);
+  DaemonKey key;
+  if (!m->service_name.empty()) {
+    key.first = m->service_name;
+  } else {
+    key.first = ceph_entity_type_name(m->get_connection()->get_peer_type());
+  }
+  key.second = m->daemon_name;
 
-  dout(4) << "from " << m->get_connection() << " name "
-          << ceph_entity_type_name(type) << "." << m->daemon_name << dendl;
+  dout(4) << "from " << m->get_connection() << "  " << key << dendl;
 
   auto configure = new MMgrConfigure();
-  if (m->get_connection()->get_peer_type() == entity_name_t::TYPE_CLIENT) {
-    // We don't want clients to send us stats
-    configure->stats_period = 0;
-  } else {
-    configure->stats_period = g_conf->mgr_stats_period;
-  }
+  configure->stats_period = g_conf->mgr_stats_period;
   m->get_connection()->send_message(configure);
 
   if (daemon_state.exists(key)) {
     dout(20) << "updating existing DaemonState for " << m->daemon_name << dendl;
     daemon_state.get(key)->perf_counters.clear();
+  }
+
+  if (m->service_daemon) {
+    DaemonStatePtr daemon;
+    if (daemon_state.exists(key)) {
+      daemon = daemon_state.get(key);
+    } else {
+      dout(4) << "constructing new DaemonState for " << key << dendl;
+      daemon = std::make_shared<DaemonState>(daemon_state.types);
+      // FIXME: crap, we don't know the hostname at this stage.
+      daemon->key = key;
+      daemon_state.insert(daemon);
+    }
+    daemon->service_daemon = true;
+    daemon->metadata = m->daemon_metadata;
+    daemon->service_status = m->daemon_status;
+
+    utime_t now = ceph_clock_now();
+    auto d = pending_service_map.get_daemon(m->service_name,
+					    m->daemon_name);
+    if (d->gid != (uint64_t)m->get_source().num()) {
+      dout(10) << "registering " << key << " in pending_service_map" << dendl;
+      d->gid = m->get_source().num();
+      d->addr = m->get_source_addr();
+      d->start_epoch = pending_service_map.epoch;
+      d->start_stamp = now;
+      d->metadata = m->daemon_metadata;
+      pending_service_map_dirty = pending_service_map.epoch;
+    }
   }
 
   m->put();
@@ -287,36 +315,53 @@ bool DaemonServer::handle_open(MMgrOpen *m)
 
 bool DaemonServer::handle_report(MMgrReport *m)
 {
-  uint32_t type = m->get_connection()->get_peer_type();
-  DaemonKey key(ceph_entity_type_name(type), m->daemon_name);
+  DaemonKey key;
+  if (!m->service_name.empty()) {
+    key.first = m->service_name;
+  } else {
+    key.first = ceph_entity_type_name(m->get_connection()->get_peer_type());
+  }
+  key.second = m->daemon_name;
 
-  dout(4) << "from " << m->get_connection() << " name "
-          << ceph_entity_type_name(type) << "." << m->daemon_name << dendl;
+  dout(4) << "from " << m->get_connection() << " " << key << dendl;
 
-  if (m->get_connection()->get_peer_type() == entity_name_t::TYPE_CLIENT) {
-    // Clients should not be sending us stats
-    dout(4) << "rejecting report from client " << m->daemon_name << dendl;
+  if (m->get_connection()->get_peer_type() == entity_name_t::TYPE_CLIENT &&
+      m->service_name.empty()) {
+    // Clients should not be sending us stats unless they are declaring
+    // themselves to be a daemon for some service.
+    dout(4) << "rejecting report from non-daemon client " << m->daemon_name
+	    << dendl;
     m->put();
     return true;
   }
 
   DaemonStatePtr daemon;
   if (daemon_state.exists(key)) {
-    dout(20) << "updating existing DaemonState for " << m->daemon_name << dendl;
+    dout(20) << "updating existing DaemonState for " << key << dendl;
     daemon = daemon_state.get(key);
   } else {
-    dout(4) << "constructing new DaemonState for " << m->daemon_name << dendl;
+    dout(4) << "constructing new DaemonState for " << key << dendl;
     daemon = std::make_shared<DaemonState>(daemon_state.types);
     // FIXME: crap, we don't know the hostname at this stage.
     daemon->key = key;
     daemon_state.insert(daemon);
     // FIXME: we should request metadata at this stage
   }
-
   assert(daemon != nullptr);
   auto &daemon_counters = daemon->perf_counters;
   daemon_counters.update(m);
-  
+
+  if (daemon->service_daemon) {
+    utime_t now = ceph_clock_now();
+    if (m->daemon_status) {
+      daemon->service_status = *m->daemon_status;
+      daemon->service_status_stamp = now;
+    }
+    daemon->last_service_beacon = now;
+  } else if (m->daemon_status) {
+    derr << "got status from non-daemon " << key << dendl;
+  }
+
   m->put();
   return true;
 }
@@ -842,11 +887,61 @@ bool DaemonServer::handle_command(MCommand *m)
   }
 }
 
+void DaemonServer::_prune_pending_service_map()
+{
+  utime_t cutoff = ceph_clock_now();
+  cutoff -= g_conf->mgr_service_beacon_grace;
+  auto p = pending_service_map.services.begin();
+  while (p != pending_service_map.services.end()) {
+    auto q = p->second.daemons.begin();
+    while (q != p->second.daemons.end()) {
+      DaemonKey key(p->first, q->first);
+      if (!daemon_state.exists(key)) {
+	derr << "missing key " << key << dendl;
+	++q;
+	continue;
+      }
+      auto daemon = daemon_state.get(key);
+      if (daemon->last_service_beacon == utime_t()) {
+	// we must have just restarted; assume they are alive now.
+	daemon->last_service_beacon = ceph_clock_now();
+	++q;
+	continue;
+      }
+      if (daemon->last_service_beacon < cutoff) {
+	dout(10) << "pruning stale " << p->first << "." << q->first
+		 << " last_beacon " << daemon->last_service_beacon << dendl;
+	q = p->second.daemons.erase(q);
+	pending_service_map_dirty = pending_service_map.epoch;
+      } else {
+	++q;
+      }
+    }
+    if (p->second.daemons.empty()) {
+      p = pending_service_map.services.erase(p);
+      pending_service_map_dirty = pending_service_map.epoch;
+    } else {
+      ++p;
+    }
+  }
+}
+
 void DaemonServer::send_report()
 {
   auto m = new MMonMgrReport();
   cluster_state.with_pgmap([&](const PGMap& pg_map) {
       cluster_state.update_delta_stats();
+
+      if (pending_service_map.epoch) {
+	_prune_pending_service_map();
+	if (pending_service_map_dirty >= pending_service_map.epoch) {
+	  pending_service_map.modified = ceph_clock_now();
+	  ::encode(pending_service_map, m->service_map_bl, CEPH_FEATURES_ALL);
+	  dout(10) << "sending service_map e" << pending_service_map.epoch
+		   << dendl;
+	  pending_service_map.epoch++;
+	}
+      }
 
       // FIXME: reporting health detail here might be a bad idea?
       cluster_state.with_osdmap([&](const OSDMap& osdmap) {
@@ -863,4 +958,40 @@ void DaemonServer::send_report()
   // TODO: respect needs_send, so we send the report only if we are asked to do
   //       so, or the state is updated.
   monc->send_mon_message(m);
+}
+
+void DaemonServer::got_service_map()
+{
+  Mutex::Locker l(lock);
+
+  cluster_state.with_servicemap([&](const ServiceMap& service_map) {
+      if (pending_service_map.epoch == 0) {
+	// we just started up
+	dout(10) << "got initial map e" << service_map.epoch << dendl;
+	pending_service_map = service_map;
+      } else {
+	// we we already active and therefore must have persisted it,
+	// which means ours is the same or newer.
+	dout(10) << "got updated map e" << service_map.epoch << dendl;
+      }
+      pending_service_map.epoch = service_map.epoch + 1;
+    });
+
+  // cull missing daemons, populate new ones
+  for (auto& p : pending_service_map.services) {
+    std::set<std::string> names;
+    for (auto& q : p.second.daemons) {
+      names.insert(q.first);
+      DaemonKey key(p.first, q.first);
+      if (!daemon_state.exists(key)) {
+	auto daemon = std::make_shared<DaemonState>(daemon_state.types);
+	daemon->key = key;
+	daemon_state.insert(daemon);
+	daemon->metadata = q.second.metadata;
+	daemon->service_daemon = true;
+	dout(10) << "added missing " << key << dendl;
+      }
+    }
+    daemon_state.cull(p.first, names);
+  }
 }

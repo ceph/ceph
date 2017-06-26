@@ -1749,6 +1749,7 @@ OPTION(mgr_mon_bytes, OPT_U64, 128*1048576)   // bytes from mons
 OPTION(mgr_mon_messages, OPT_U64, 128)        // messages from mons
 
 OPTION(mgr_connect_retry_interval, OPT_DOUBLE, 1.0)
+OPTION(mgr_service_beacon_grace, OPT_DOUBLE, 60.0)
 
 OPTION(mon_mgr_digest_period, OPT_INT, 5)  // How frequently to send digests
 OPTION(mon_mgr_beacon_grace, OPT_INT, 30)  // How long to wait to failover

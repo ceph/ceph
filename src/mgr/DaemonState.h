@@ -102,6 +102,12 @@ class DaemonState
   // The metadata (hostname, version, etc) sent from the daemon
   std::map<std::string, std::string> metadata;
 
+  // Ephemeral state
+  bool service_daemon = false;
+  utime_t service_status_stamp;
+  std::map<std::string, std::string> service_status;
+  utime_t last_service_beacon;
+
   // The perf counters received in MMgrReport messages
   DaemonPerfCounters perf_counters;
 
