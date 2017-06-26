@@ -28,6 +28,7 @@
 #include "common/errno.h"
 #include "include/buffer.h"
 #include "include/stringify.h"
+#include "include/util.h"
 
 #include "messages/MLog.h"
 #include "msg/Messenger.h"
@@ -1040,6 +1041,8 @@ int librados::RadosClient::service_daemon_register(
   if (service.empty() || name.empty()) {
     return -EINVAL;
   }
+
+  collect_sys_info(&daemon_metadata, cct);
 
   ldout(cct,10) << __func__ << " " << service << "." << name << dendl;
   service_daemon = true;
