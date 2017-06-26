@@ -3677,6 +3677,7 @@ typedef void (*rados_log_callback_t)(void *arg,
  */
 typedef void (*rados_log_callback2_t)(void *arg,
 				     const char *line,
+				     const char *channel,
 				     const char *who,
 				     const char *name,
 				     uint64_t sec, uint64_t nsec,
