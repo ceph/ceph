@@ -398,6 +398,8 @@ function run_mon() {
 	--mon-allow-pool-delete \
         "$@" || return 1
 
+    ceph osd pool create rbd 8
+
     cat > $dir/ceph.conf <<EOF
 [global]
 fsid = $(get_config mon $id fsid)
@@ -417,12 +419,12 @@ function test_run_mon() {
 
     run_mon $dir a --mon-initial-members=a || return 1
     # rbd has not been deleted / created, hence it has pool id 0
-    ceph osd dump | grep "pool 0 'rbd'" || return 1
+    ceph osd dump | grep "pool 1 'rbd'" || return 1
     kill_daemons $dir || return 1
 
     run_mon $dir a || return 1
     # rbd has been deleted / created, hence it does not have pool id 0
-    ! ceph osd dump | grep "pool 0 'rbd'" || return 1
+    ! ceph osd dump | grep "pool 1 'rbd'" || return 1
     local size=$(CEPH_ARGS='' ceph --format=json daemon $dir/ceph-mon.a.asok \
         config get osd_pool_default_size)
     test "$size" = '{"osd_pool_default_size":"3"}' || return 1
@@ -1160,7 +1162,7 @@ function test_get_last_scrub_stamp() {
     run_mgr $dir x || return 1
     run_osd $dir 0 || return 1
     wait_for_clean || return 1
-    stamp=$(get_last_scrub_stamp 1.0)
+    stamp=$(get_last_scrub_stamp 2.0)
     test -n "$stamp" || return 1
     teardown $dir || return 1
 }
@@ -1355,9 +1357,9 @@ function test_repair() {
     run_mgr $dir x || return 1
     run_osd $dir 0 || return 1
     wait_for_clean || return 1
-    repair 1.0 || return 1
+    repair 2.0 || return 1
     kill_daemons $dir KILL osd || return 1
-    ! TIMEOUT=1 repair 1.0 || return 1
+    ! TIMEOUT=1 repair 2.0 || return 1
     teardown $dir || return 1
 }
 #######################################################################
@@ -1394,9 +1396,9 @@ function test_pg_scrub() {
     run_mgr $dir x || return 1
     run_osd $dir 0 || return 1
     wait_for_clean || return 1
-    pg_scrub 1.0 || return 1
+    pg_scrub 2.0 || return 1
     kill_daemons $dir KILL osd || return 1
-    ! TIMEOUT=1 pg_scrub 1.0 || return 1
+    ! TIMEOUT=1 pg_scrub 2.0 || return 1
     teardown $dir || return 1
 }
 
@@ -1485,7 +1487,7 @@ function test_wait_for_scrub() {
     run_mgr $dir x || return 1
     run_osd $dir 0 || return 1
     wait_for_clean || return 1
-    local pgid=1.0
+    local pgid=2.0
     ceph pg repair $pgid
     local last_scrub=$(get_last_scrub_stamp $pgid)
     wait_for_scrub $pgid "$last_scrub" || return 1

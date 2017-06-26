@@ -1711,7 +1711,7 @@ function test_mon_pg()
 
   ceph pg debug unfound_objects_exist
   ceph pg debug degraded_pgs_exist
-  ceph pg deep-scrub 0.0
+  ceph pg deep-scrub 1.0
   ceph pg dump
   ceph pg dump pgs_brief --format=json
   ceph pg dump pgs --format=json
@@ -1729,31 +1729,31 @@ function test_mon_pg()
   ceph pg dump_stuck undersized
   ceph pg dump_stuck degraded
   ceph pg ls
-  ceph pg ls 0
+  ceph pg ls 1
   ceph pg ls stale
   expect_false ceph pg ls scrubq
   ceph pg ls active stale repair recovering
-  ceph pg ls 0 active
-  ceph pg ls 0 active stale
+  ceph pg ls 1 active
+  ceph pg ls 1 active stale
   ceph pg ls-by-primary osd.0
-  ceph pg ls-by-primary osd.0 0
+  ceph pg ls-by-primary osd.0 1
   ceph pg ls-by-primary osd.0 active
   ceph pg ls-by-primary osd.0 active stale
-  ceph pg ls-by-primary osd.0 0 active stale
+  ceph pg ls-by-primary osd.0 1 active stale
   ceph pg ls-by-osd osd.0
-  ceph pg ls-by-osd osd.0 0
+  ceph pg ls-by-osd osd.0 1
   ceph pg ls-by-osd osd.0 active
   ceph pg ls-by-osd osd.0 active stale
-  ceph pg ls-by-osd osd.0 0 active stale
+  ceph pg ls-by-osd osd.0 1 active stale
   ceph pg ls-by-pool rbd
   ceph pg ls-by-pool rbd active stale
   # can't test this...
   # ceph pg force_create_pg
   ceph pg getmap -o $TEMP_DIR/map.$$
   [ -s $TEMP_DIR/map.$$ ]
-  ceph pg map 0.0 | grep acting
-  ceph pg repair 0.0
-  ceph pg scrub 0.0
+  ceph pg map 1.0 | grep acting
+  ceph pg repair 1.0
+  ceph pg scrub 1.0
 
   ceph osd set-full-ratio .962
   ceph osd dump | grep '^full_ratio 0.962'
@@ -1790,8 +1790,8 @@ function test_mon_pg()
   wait_for_health_ok
 
   ceph pg stat | grep 'pgs:'
-  ceph pg 0.0 query
-  ceph tell 0.0 query
+  ceph pg 1.0 query
+  ceph tell 1.0 query
   ceph quorum enter
   ceph quorum_status
   ceph report | grep osd_stats
@@ -1818,11 +1818,11 @@ function test_mon_pg()
   expect_false ceph osd primary-affinity osd.9999 .5
   ceph osd primary-affinity osd.0 1
 
-  ceph osd pg-temp 0.0 0 1 2
-  ceph osd pg-temp 0.0 osd.1 osd.0 osd.2
+  ceph osd pg-temp 1.0 0 1 2
+  ceph osd pg-temp 1.0 osd.1 osd.0 osd.2
   expect_false ceph osd pg-temp asdf qwer
-  expect_false ceph osd pg-temp 0.0 asdf
-  expect_false ceph osd pg-temp 0.0
+  expect_false ceph osd pg-temp 1.0 asdf
+  expect_false ceph osd pg-temp 1.0
 
   # don't test ceph osd primary-temp for now
 }
