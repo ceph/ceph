@@ -279,6 +279,19 @@ get_metadata(PyObject *self, PyObject *args)
 }
 
 static PyObject*
+get_daemon_status(PyObject *self, PyObject *args)
+{
+  char *handle = nullptr;
+  char *svc_name = NULL;
+  char *svc_id = NULL;
+  if (!PyArg_ParseTuple(args, "sss:get_daemon_status", &handle, &svc_name,
+			&svc_id)) {
+    return nullptr;
+  }
+  return global_handle->get_daemon_status_python(handle, svc_name, svc_id);
+}
+
+static PyObject*
 ceph_log(PyObject *self, PyObject *args)
 {
   int level = 0;
@@ -327,6 +340,8 @@ PyMethodDef CephStateMethods[] = {
      "Get a server object"},
     {"get_metadata", get_metadata, METH_VARARGS,
      "Get a service's metadata"},
+    {"get_daemon_status", get_daemon_status, METH_VARARGS,
+     "Get a service's status"},
     {"send_command", ceph_send_command, METH_VARARGS,
      "Send a mon command"},
     {"get_mgr_id", ceph_get_mgr_id, METH_NOARGS,
