@@ -186,7 +186,7 @@ int CephxClientHandler::handle_response(int ret, bufferlist::iterator& indata)
 	    << error << dendl;
 	  return -EINVAL;
 	} else {
-	  rotating_secrets->set_secrets(secrets);
+	  rotating_secrets->set_secrets(std::move(secrets));
 	}
       }
     }
