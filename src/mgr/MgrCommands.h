@@ -110,3 +110,8 @@ COMMAND("osd repair " \
 	"name=who,type=CephString", \
 	"initiate repair on osd <who>, or use <all|any|*> to repair all", \
         "osd", "rw", "cli,rest")
+
+COMMAND("service dump",
+        "dump service map", "service", "r", "cli,rest")
+COMMAND("service status",
+        "dump service state", "service", "r", "cli,rest")

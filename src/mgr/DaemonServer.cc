@@ -621,6 +621,51 @@ bool DaemonServer::handle_command(MCommand *m)
     << "entity='" << session->entity_name << "' "
     << "cmd=" << m->cmd << ": dispatch";
 
+  // ----------------
+  // service map commands
+  if (prefix == "service dump") {
+    if (!f)
+      f.reset(Formatter::create("json-pretty"));
+    cluster_state.with_servicemap([&](const ServiceMap &service_map) {
+	f->dump_object("service_map", service_map);
+      });
+    f->flush(cmdctx->odata);
+    cmdctx->reply(0, ss);
+    return true;
+  }
+  if (prefix == "service status") {
+    if (!f)
+      f.reset(Formatter::create("json-pretty"));
+    // only include state from services that are in the persisted service map
+    f->open_object_section("service_status");
+    ServiceMap s;
+    cluster_state.with_servicemap([&](const ServiceMap& service_map) {
+	s = service_map;
+      });
+    for (auto& p : s.services) {
+      f->open_object_section(p.first.c_str());
+      for (auto& q : p.second.daemons) {
+	f->open_object_section(q.first.c_str());
+	DaemonKey key(p.first, q.first);
+	assert(daemon_state.exists(key));
+	auto daemon = daemon_state.get(key);
+	f->dump_stream("status_stamp") << daemon->service_status_stamp;
+	f->dump_stream("last_beacon") << daemon->last_service_beacon;
+	f->open_object_section("status");
+	for (auto& r : daemon->service_status) {
+	  f->dump_string(r.first.c_str(), r.second);
+	}
+	f->close_section();
+	f->close_section();
+      }
+      f->close_section();
+    }
+    f->close_section();
+    f->flush(cmdctx->odata);
+    cmdctx->reply(0, ss);
+    return true;
+  }
+
   // -----------
   // PG commands
 
