@@ -3689,6 +3689,47 @@ CEPH_RADOS_API int rados_monitor_log(rados_t cluster, const char *level,
 CEPH_RADOS_API int rados_monitor_log2(rados_t cluster, const char *level,
 				      rados_log_callback2_t cb, void *arg);
 
+
+/**
+ * register daemon instance for a service
+ *
+ * Register us as a daemon providing a particular service.  We identify
+ * the service (e.g., 'rgw') and our instance name (e.g., 'rgw.$hostname').
+ * The metadata is a map of keys and values with arbitrary static metdata
+ * for this instance.  The encoding is a series of NULL-terminated strings,
+ * alternating key names and values, terminating with an empty key name.
+ * For example,  "foo\0bar\0this\0that\0\0" is the dict {foo=bar,this=that}.
+ *
+ * For the lifetime of the librados instance, regular beacons will be sent
+ * to the cluster to maintain our registration in the service map.
+ *
+ * @param cluster handle
+ * @param service service name
+ * @param daemon deamon instance name
+ * @param metadata_dict static daemon metadata dict
+ */
+CEPH_RADOS_API int rados_service_register(
+  rados_t cluster,
+  const char *service,
+  const char *daemon,
+  const char *metadata_dict);
+
+/**
+ * update daemon status
+ *
+ * Update our mutable status information in the service map.
+ *
+ * The status dict is encoded the same way the daemon metadata is encoded
+ * for rados_service_register.  For example, "foo\0bar\0this\0that\0\0" is
+ * {foo=bar,this=that}.
+ *
+ * @param cluster rados cluster handle
+ * @param status_dict status dict
+ */
+CEPH_RADOS_API int rados_service_update_status(
+  rados_t cluster,
+  const char *status_dict);
+
 /** @} Mon/OSD/PG commands */
 
 /*

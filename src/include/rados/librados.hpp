@@ -1298,6 +1298,13 @@ namespace librados
     int conf_set(const char *option, const char *value);
     int conf_get(const char *option, std::string &val);
 
+    int service_daemon_register(
+      const std::string& service,  ///< service name (e.g., 'rgw')
+      const std::string& name,     ///< daemon name (e.g., 'gwfoo')
+      const std::map<std::string,std::string>& metadata); ///< static metadata about daemon
+    int service_daemon_update_status(
+      const std::map<std::string,std::string>& status);
+
     int pool_create(const char *name);
     int pool_create(const char *name, uint64_t auid);
     int pool_create(const char *name, uint64_t auid, uint8_t crush_rule);
