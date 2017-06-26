@@ -99,12 +99,16 @@
     <!-- Main content -->
     <section class="content">
 
-    Overall status: <span rv-style="health.overall_status | health_color">{health.overall_status}</span>
+    <div class="box-body">
+    Overall status: <span rv-style="health.status | health_color">{health.status}</span>
 
     <ul>
-        <li rv-each-summary="health.summary">
-            {summary.severity}: {summary.summary}
-        </li>
+        <ul>
+            <li rv-each-check="health.checks">
+                <span rv-style="check.severity | health_color">{check.type}</span>:
+                {check.message}
+            </li>
+        </ul>
     </ul>
 
         <div class="row">
