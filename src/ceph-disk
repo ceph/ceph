@@ -88,6 +88,7 @@ DMCRYPT_TOBE_UUID =         '89c57f98-2fe5-4dc0-89c1-5ec00ceff2be'
 DMCRYPT_JOURNAL_TOBE_UUID = '89c57f98-2fe5-4dc0-89c1-35865ceff2be'
 
 DEFAULT_FS_TYPE = 'xfs'
+SYSFS = '/sys'
 
 MOUNT_OPTIONS = dict(
     btrfs='noatime,user_subvol_rm_allowed',
@@ -358,6 +359,38 @@ def platform_information():
         str(codename).strip()
     )
 
+#
+# An alternative block_path implementation would be
+#
+#   name = basename(dev)
+#   return /sys/devices/virtual/block/$name
+#
+# It is however more fragile because it relies on the fact
+# that the basename of the device the user will use always
+# matches the one the driver will use. On Ubuntu 14.04, for
+# instance, when multipath creates a partition table on
+#
+#   /dev/mapper/353333330000007d0 -> ../dm-0
+#
+# it will create partition devices named
+#
+#   /dev/mapper/353333330000007d0-part1
+#
+# which is the same device as /dev/dm-1 but not a symbolic
+# link to it:
+#
+#   ubuntu@other:~$ ls -l /dev/mapper /dev/dm-1
+#   brw-rw---- 1 root disk 252, 1 Aug 15 17:52 /dev/dm-1
+#   lrwxrwxrwx 1 root root        7 Aug 15 17:52 353333330000007d0 -> ../dm-0
+#   brw-rw---- 1 root disk 252,   1 Aug 15 17:52 353333330000007d0-part1
+#
+# Using the basename in this case fails.
+#
+def block_path(dev):
+    path = os.path.realpath(dev)
+    rdev = os.stat(path).st_rdev
+    (M, m) = (os.major(rdev), os.minor(rdev))
+    return "{sysfs}/dev/block/{M}:{m}".format(sysfs=SYSFS, M=M, m=m)
 
 def get_dev_name(path):
     """
@@ -447,21 +480,22 @@ def list_all_partitions():
     """
     dev_part_list = {}
     for name in os.listdir('/sys/block'):
+        LOG.debug("list_all_partitions: " + name)
         # /dev/fd0 may hang http://tracker.ceph.com/issues/6827
         if re.match(r'^fd\d$', name):
             continue
-        if not os.path.exists(os.path.join('/sys/block', name, 'device')):
-            continue
-        dev_part_list[name] = list_partitions(name)
+        dev_part_list[name] = list_partitions(os.path.join('/dev', name))
     return dev_part_list
 
 
-def list_partitions(basename):
+def list_partitions(dev):
     """
     Return a list of partitions on the given device name
     """
+    dev = os.path.realpath(dev)
     partitions = []
-    for name in os.listdir(os.path.join('/sys/block', basename)):
+    basename = os.path.basename(dev)
+    for name in os.listdir(block_path(dev)):
         if name.startswith(basename):
             partitions.append(name)
     return partitions
@@ -561,8 +595,7 @@ def verify_not_in_use(dev, check_partitions=False):
         raise Error('Device %s is in use by a device-mapper mapping (dm-crypt?)' % dev, ','.join(holders))
 
     if check_partitions and not is_partition(dev):
-        basename = get_dev_name(os.path.realpath(dev))
-        for partname in list_partitions(basename):
+        for partname in list_partitions(dev):
             partition = get_dev_path(partname)
             if is_mounted(partition):
                 raise Error('Device is mounted', partition)
@@ -2359,11 +2392,10 @@ def get_dev_fs(dev):
 
 
 def split_dev_base_partnum(dev):
-    if 'loop' in dev or 'cciss' in dev or 'nvme' in dev:
-        return re.match('(.*\d+)p(\d+)', dev).group(1, 2)
-    else:
-        return re.match('(\D+)(\d+)', dev).group(1, 2)
-
+    b = block_path(dev)
+    partnum = open(os.path.join(b, 'partition')).read().strip()
+    base = get_partition_base(dev)
+    return (base, partnum)
 
 def get_partition_type(part):
     """
