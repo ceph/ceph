@@ -84,6 +84,8 @@ void RDMADispatcher::polling_start()
   if (t.joinable()) 
     return; // dispatcher thread already running 
 
+  get_stack()->get_infiniband().get_memory_manager()->set_rx_stat_logger(perf_logger);
+
   tx_cc = get_stack()->get_infiniband().create_comp_channel(cct);
   assert(tx_cc);
   rx_cc = get_stack()->get_infiniband().create_comp_channel(cct);
@@ -155,6 +157,12 @@ void RDMADispatcher::post_chunk_to_pool(Chunk* chunk) {
   Mutex::Locker l(lock);
   get_stack()->get_infiniband().post_chunk_to_pool(chunk);
   perf_logger->dec(l_msgr_rdma_rx_bufs_in_use);
+  // handle a case when we have a limited number of
+  // rx buffers and we could not post a required amount when polling
+  if (post_backlog > 0) {
+    ldout(cct, 20) << __func__ << " post_backlog is " << post_backlog << dendl;
+    post_backlog -= get_stack()->get_infiniband().post_chunks_to_srq(post_backlog);
+  }
 }
 
 void RDMADispatcher::polling()
@@ -186,7 +194,9 @@ void RDMADispatcher::polling()
       perf_logger->inc(l_msgr_rdma_rx_bufs_in_use, rx_ret);
 
       Mutex::Locker l(lock);//make sure connected socket alive when pass wc
-      get_stack()->get_infiniband().post_chunks_to_srq(rx_ret);
+
+      post_backlog += rx_ret - get_stack()->get_infiniband().post_chunks_to_srq(rx_ret);
+
       for (int i = 0; i < rx_ret; ++i) {
         ibv_wc* response = &wc[i];
         Chunk* chunk = reinterpret_cast<Chunk *>(response->wr_id);
