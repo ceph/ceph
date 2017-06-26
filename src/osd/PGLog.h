@@ -576,12 +576,8 @@ public:
     missing.revise_have(oid, have);
   }
 
-  void revise_need(hobject_t oid, eversion_t need) {
-    missing.revise_need(oid, need);
-  }
-
   void missing_add(const hobject_t& oid, eversion_t need, eversion_t have) {
-    missing.add(oid, need, have);
+    missing.add(oid, need, have, false);
   }
 
   //////////////////// get or set log ////////////////////
@@ -857,7 +853,7 @@ protected:
 	ldpp_dout(dpp, 10) << __func__ << ": hoid " << hoid
 			   << " missing.have is " << missing.get_items().at(hoid).have
 			   << ", adjusting" << dendl;
-	missing.revise_need(hoid, prior_version);
+	missing.revise_need(hoid, prior_version, false);
 	if (prior_version <= info.log_tail) {
 	  ldpp_dout(dpp, 10) << __func__ << ": hoid " << hoid
 			     << " prior_version " << prior_version
@@ -915,7 +911,7 @@ protected:
 	  rollbacker->trim(i);
 	}
       }
-      missing.add(hoid, prior_version, eversion_t());
+      missing.add(hoid, prior_version, eversion_t(), false);
       if (prior_version <= info.log_tail) {
 	ldpp_dout(dpp, 10) << __func__ << ": hoid " << hoid
 			   << " prior_version " << prior_version
@@ -1016,7 +1012,7 @@ public:
 	  // hack to match PG::mark_all_unfound_lost
 	  if (maintain_rollback && p->is_lost_delete() && p->can_rollback()) {
 	    rollbacker->try_stash(p->soid, p->version.version);
-	  } else if (p->is_delete()) {
+	  } else if (p->is_lost_delete()) {
 	    rollbacker->remove(p->soid);
 	  }
 	}
@@ -1163,9 +1159,11 @@ public:
 	} else if (p->key() == "rollback_info_trimmed_to") {
 	  ::decode(on_disk_rollback_info_trimmed_to, bp);
 	} else if (p->key().substr(0, 7) == string("missing")) {
-	  pair<hobject_t, pg_missing_item> p;
-	  ::decode(p, bp);
-	  missing.add(p.first, p.second.need, p.second.have);
+	  hobject_t oid;
+	  pg_missing_item item;
+	  ::decode(oid, bp);
+	  item.decode_with_flags(bp);
+	  missing.add(oid, item.need, item.have, item.is_delete());
 	} else {
 	  pg_log_entry_t e;
 	  e.decode_with_checksum(bp);
@@ -1209,7 +1207,8 @@ public:
 	  if (did.count(i->soid)) continue;
 	  did.insert(i->soid);
 
-	  if (i->is_delete()) continue;
+	  // TODO: enable only if we aren't tracking deletes in the log
+	  if (i->is_lost_delete()) continue;
 
 	  bufferlist bv;
 	  int r = store->getattr(
@@ -1229,19 +1228,25 @@ public:
 		assert(miter->second.have == oi.version);
 		checked.insert(i->soid);
 	      } else {
-		missing.add(i->soid, i->version, oi.version);
+		missing.add(i->soid, i->version, oi.version, i->is_delete());
 	      }
 	    }
 	  } else {
 	    ldpp_dout(dpp, 15) << "read_log_and_missing  missing " << *i << dendl;
 	    if (debug_verify_stored_missing) {
 	      auto miter = missing.get_items().find(i->soid);
-	      assert(miter != missing.get_items().end());
-	      assert(miter->second.need == i->version);
-	      assert(miter->second.have == eversion_t());
+	      if (i->is_delete()) {
+		assert(miter == missing.get_items().end() ||
+		       (miter->second.need == i->version &&
+			miter->second.have == eversion_t()));
+	      } else {
+		assert(miter != missing.get_items().end());
+		assert(miter->second.need == i->version);
+		assert(miter->second.have == eversion_t());
+	      }
 	      checked.insert(i->soid);
 	    } else {
-	      missing.add(i->soid, i->version, eversion_t());
+	      missing.add(i->soid, i->version, eversion_t(), i->is_delete());
 	    }
 	  }
 	}
@@ -1252,7 +1257,8 @@ public:
 	    if (i.second.need > log.tail ||
 	      i.first > info.last_backfill) {
 	      ldpp_dout(dpp, -1) << __func__ << ": invalid missing set entry found "
-				 << i.first
+				 << i.first << " " << i.second << " log tail = "
+				 << log.tail << " last_backfill = " << info.last_backfill
 				 << dendl;
 	      assert(0 == "invalid missing set entry found");
 	    }
@@ -1266,7 +1272,7 @@ public:
 	      object_info_t oi(bv);
 	      assert(oi.version == i.second.have);
 	    } else {
-	      assert(eversion_t() == i.second.have);
+	      assert(i.second.is_delete() || eversion_t() == i.second.have);
 	    }
 	  }
 	} else {
@@ -1315,7 +1321,7 @@ public:
 	      }
 	    } else {
 	      ldpp_dout(dpp, 15) << "read_log_and_missing  missing " << *i << dendl;
-	      missing.add(i->second, i->first, eversion_t());
+	      missing.add(i->second, i->first, eversion_t(), false);
 	    }
 	  }
 	}

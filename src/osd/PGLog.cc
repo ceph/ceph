@@ -671,7 +671,8 @@ void PGLog::_write_log_and_missing(
       if (!missing.is_missing(obj, &item)) {
 	to_remove.insert(key);
       } else {
-	::encode(make_pair(obj, item), (*km)[key]);
+	::encode(obj, (*km)[key]);
+	item.encode_with_flags((*km)[key]);
       }
     });
   if (require_rollback) {
