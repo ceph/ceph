@@ -2776,10 +2776,12 @@ int RGWRunBucketSyncCoroutine::operate()
         meta_sync_env.init(cct, sync_env->store, sync_env->store->rest_master_conn, sync_env->async_rados,
                            sync_env->http_manager, sync_env->error_logger, sync_env->sync_tracer);
 
+#warning FIXME replace root_node with actual parent node
         call(new RGWMetaSyncSingleEntryCR(&meta_sync_env, raw_key,
                                           string() /* no marker */,
                                           MDLOG_STATUS_COMPLETE,
-                                          NULL /* no marker tracker */));
+                                          NULL /* no marker tracker */,
+                                          meta_sync_env.sync_tracer->root_node));
       }
       if (retcode < 0) {
         ldout(sync_env->cct, 0) << "ERROR: failed to fetch bucket instance info for " << bucket_str{bs.bucket} << dendl;
