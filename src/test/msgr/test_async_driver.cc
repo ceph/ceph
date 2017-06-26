@@ -154,6 +154,7 @@ void* echoclient(void *arg)
   int connect_sd = ::socket(AF_INET, SOCK_STREAM, 0);
   if (connect_sd >= 0) {
     r = connect(connect_sd, (struct sockaddr*)&sa, sizeof(sa));
+    assert(r == 0);
     int t = 0;
   
     do {
@@ -226,21 +227,22 @@ TEST_P(EventDriverTest, NetworkSocketTest) {
     tv.tv_sec = 5;
     tv.tv_usec = 0;
     r = driver->event_wait(fired_events, &tv);
-    ASSERT_EQ(r, 1);
-    ASSERT_EQ(fired_events[0].mask, EVENT_READABLE);
+    ASSERT_EQ(1, r);
+    ASSERT_EQ(EVENT_READABLE, fired_events[0].mask);
 
     fired_events.clear();
     char data[100];
     r = ::read(client_sd, data, sizeof(data));
     if (r == 0)
       break;
-    ASSERT_TRUE(r > 0);
+    ASSERT_GT(r, 0);
     r = driver->add_event(client_sd, EVENT_READABLE, EVENT_WRITABLE);
+    ASSERT_EQ(0, r);
     r = driver->event_wait(fired_events, &tv);
-    ASSERT_EQ(r, 1);
+    ASSERT_EQ(1, r);
     ASSERT_EQ(fired_events[0].mask, EVENT_WRITABLE);
     r = write(client_sd, data, strlen(data));
-    ASSERT_EQ(r, (int)strlen(data));
+    ASSERT_EQ((int)strlen(data), r);
     driver->del_event(client_sd, EVENT_READABLE|EVENT_WRITABLE,
                       EVENT_WRITABLE);
   } while (1);
