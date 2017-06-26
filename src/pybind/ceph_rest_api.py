@@ -20,7 +20,7 @@ from ceph_argparse import \
 # Globals and defaults
 #
 
-DEFAULT_ADDR = '0.0.0.0'
+DEFAULT_ADDR = '::'
 DEFAULT_PORT = '5000'
 DEFAULT_ID = 'restapi'
 
