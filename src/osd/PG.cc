@@ -247,6 +247,7 @@ PG::PG(OSDService *o, OSDMapRef curmap,
 #ifdef PG_DEBUG_REFS
   osd->add_pgid(p, this);
 #endif
+  info.hit_set.current_info.using_gmt = pool.info.use_gmt_hitset;
 }
 
 PG::~PG()
