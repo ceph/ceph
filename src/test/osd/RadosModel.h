@@ -2113,8 +2113,7 @@ class UnsetRedirectOp : public TestOp {
 public:
   string oid;
   librados::ObjectWriteOperation op;
-  librados::AioCompletion *completion;
-  librados::AioCompletion *comp;
+  librados::AioCompletion *comp = nullptr;
 
   UnsetRedirectOp(int n,
 	   RadosTestContext *context,
