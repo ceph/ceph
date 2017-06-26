@@ -338,8 +338,8 @@ private:
   bool m_ec_pool;
   bool m_balance_reads;
   bool m_set_redirect;
-  int m_redirect_objects;
-  int m_initial_redirected_objects; 
+  int m_redirect_objects{0};
+  int m_initial_redirected_objects{0}; 
 };
 
 int main(int argc, char **argv)
