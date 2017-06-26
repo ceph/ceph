@@ -702,7 +702,8 @@ int RGWGetObjTags::verify_permission()
   return 0;
 }
 
-void RGWGetObjTags::pre_exec(){
+void RGWGetObjTags::pre_exec()
+{
   rgw_bucket_object_pre_exec(s);
 }
 
@@ -736,11 +737,9 @@ int RGWPutObjTags::verify_permission()
 
 void RGWPutObjTags::execute()
 {
-
   op_ret = get_params();
   if (op_ret < 0)
     return;
-
 
   if (s->object.empty()){
     op_ret= -EINVAL; // we only support tagging on existing objects
@@ -756,14 +755,15 @@ void RGWPutObjTags::execute()
   }
 }
 
-void RGWDeleteObjTags::pre_exec(){
+void RGWDeleteObjTags::pre_exec()
+{
   rgw_bucket_object_pre_exec(s);
 }
 
 
-int RGWDeleteObjTags::verify_permission(){
-
-  if (!s->object.empty()){
+int RGWDeleteObjTags::verify_permission()
+{
+  if (!s->object.empty()) {
     if (!verify_object_permission(s,
 				  s->object.instance.empty() ?
 				  rgw::IAM::s3DeleteObjectTagging:
