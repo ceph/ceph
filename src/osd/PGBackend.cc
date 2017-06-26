@@ -24,6 +24,8 @@
 #include "PGBackend.h"
 #include "OSD.h"
 #include "erasure-code/ErasureCodePlugin.h"
+#include "messages/MOSDPGRecoveryDelete.h"
+#include "messages/MOSDPGRecoveryDeleteReply.h"
 
 #define dout_subsys ceph_subsys_osd
 #define DOUT_PREFIX_ARGS this
@@ -31,6 +33,140 @@
 #define dout_prefix _prefix(_dout, this)
 static ostream& _prefix(std::ostream *_dout, PGBackend *pgb) {
   return *_dout << pgb->get_parent()->gen_dbg_prefix();
+}
+
+void PGBackend::recover_delete_object(const hobject_t &oid, eversion_t v,
+				      RecoveryHandle *h)
+{
+  assert(get_parent()->get_actingbackfill_shards().size() > 0);
+  for (const auto& shard : get_parent()->get_actingbackfill_shards()) {
+    if (shard == get_parent()->whoami_shard())
+      continue;
+    if (get_parent()->get_shard_missing(shard).is_missing(oid)) {
+      dout(20) << __func__ << " will remove " << oid << " " << v << " from "
+	       << shard << dendl;
+      h->deletes[shard].push_back(make_pair(oid, v));
+      get_parent()->begin_peer_recover(shard, oid);
+    }
+  }
+}
+
+void PGBackend::send_recovery_deletes(int prio,
+				      const map<pg_shard_t, vector<pair<hobject_t, eversion_t> > > &deletes)
+{
+  for (const auto& p : deletes) {
+    const auto& shard = p.first;
+    const auto& objects = p.second;
+    ConnectionRef con = get_parent()->get_con_osd_cluster(
+      shard.osd,
+      get_osdmap()->get_epoch());
+    if (!con)
+      continue;
+    auto it = objects.begin();
+    while (it != objects.end()) {
+      uint64_t cost = 0;
+      uint64_t deletes = 0;
+      spg_t target_pg = spg_t(get_parent()->get_info().pgid.pgid, shard.shard);
+      MOSDPGRecoveryDelete *msg =
+	new MOSDPGRecoveryDelete(get_parent()->whoami_shard(),
+				 target_pg,
+				 get_osdmap()->get_epoch());
+      msg->set_priority(prio);
+
+      while (it != objects.end() &&
+	     cost < g_conf->osd_max_push_cost &&
+	     deletes < g_conf->osd_max_push_objects) {
+	dout(20) << __func__ << ": sending recovery delete << " << it->first
+		 << " " << it->second << " to osd." << shard << dendl;
+	msg->objects.push_back(*it);
+	cost += g_conf->osd_push_per_object_cost;
+	++deletes;
+	++it;
+      }
+
+      msg->set_cost(cost);
+      get_parent()->send_message_osd_cluster(msg, con);
+    }
+  }
+}
+
+bool PGBackend::handle_message(OpRequestRef op)
+{
+  switch (op->get_req()->get_type()) {
+  case MSG_OSD_PG_RECOVERY_DELETE:
+    handle_recovery_delete(op);
+    return true;
+
+  case MSG_OSD_PG_RECOVERY_DELETE_REPLY:
+    handle_recovery_delete_reply(op);
+    return true;
+
+  default:
+    break;
+  }
+
+  return _handle_message(op);
+}
+
+void PGBackend::handle_recovery_delete(OpRequestRef op)
+{
+  const MOSDPGRecoveryDelete *m = static_cast<const MOSDPGRecoveryDelete *>(op->get_req());
+  assert(m->get_type() == MSG_OSD_PG_RECOVERY_DELETE);
+  dout(20) << __func__ << " " << op << dendl;
+
+  op->mark_started();
+
+  C_GatherBuilder gather(g_ceph_context);
+  for (const auto &p : m->objects) {
+    get_parent()->remove_missing_object(p.first, p.second, gather.new_sub());
+  }
+
+  MOSDPGRecoveryDeleteReply *reply = new MOSDPGRecoveryDeleteReply;
+  reply->from = get_parent()->whoami_shard();
+  reply->set_priority(m->get_priority());
+  reply->pgid = spg_t(get_parent()->get_info().pgid.pgid, m->from.shard);
+  reply->map_epoch = m->map_epoch;
+  reply->objects = m->objects;
+  ConnectionRef conn = m->get_connection();
+
+  gather.set_finisher(new FunctionContext(
+    [=](int) {
+      get_parent()->send_message_osd_cluster(reply, conn.get());
+    }));
+  gather.activate();
+}
+
+void PGBackend::handle_recovery_delete_reply(OpRequestRef op)
+{
+  const MOSDPGRecoveryDeleteReply *m = static_cast<const MOSDPGRecoveryDeleteReply *>(op->get_req());
+  assert(m->get_type() == MSG_OSD_PG_RECOVERY_DELETE_REPLY);
+  dout(20) << __func__ << " " << op << dendl;
+
+  for (const auto &p : m->objects) {
+    ObjectRecoveryInfo recovery_info;
+    hobject_t oid = p.first;
+    recovery_info.version = p.second;
+    object_stat_sum_t peer_stat;
+    get_parent()->on_peer_recover(m->from, oid, recovery_info, peer_stat);
+    bool peers_recovered = true;
+    for (const auto& shard : get_parent()->get_actingbackfill_shards()) {
+      if (shard == get_parent()->whoami_shard())
+	continue;
+      if (get_parent()->get_shard_missing(shard).is_missing(oid)) {
+	dout(20) << __func__ << " " << oid << " still missing on at least "
+		 << shard << dendl;
+	peers_recovered = false;
+	break;
+      }
+    }
+    if (peers_recovered && !get_parent()->get_local_missing().is_missing(oid)) {
+      dout(20) << __func__ << " completed recovery, local_missing = "
+	       << get_parent()->get_local_missing() << dendl;
+      object_stat_sum_t stat_diff;
+      stat_diff.num_objects_recovered = 1;
+      get_parent()->on_global_recover(p.first, stat_diff, true);
+    }
+  }
 }
 
 // -- ObjectModDesc --

@@ -65,7 +65,7 @@ public:
   bool can_handle_while_inactive(OpRequestRef op);
 
   /// @see PGBackend::handle_message
-  bool handle_message(
+  bool _handle_message(
     OpRequestRef op
     );
 

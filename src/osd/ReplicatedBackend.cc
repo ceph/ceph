@@ -75,6 +75,7 @@ void ReplicatedBackend::run_recovery_op(
   RPGHandle *h = static_cast<RPGHandle *>(_h);
   send_pushes(priority, h->pushes);
   send_pulls(priority, h->pulls);
+  send_recovery_deletes(priority, h->deletes);
   delete h;
 }
 
@@ -134,8 +135,6 @@ bool ReplicatedBackend::can_handle_while_inactive(OpRequestRef op)
   dout(10) << __func__ << ": " << op << dendl;
   switch (op->get_req()->get_type()) {
   case MSG_OSD_PG_PULL:
-  case MSG_OSD_PG_RECOVERY_DELETE:
-  case MSG_OSD_PG_RECOVERY_DELETE_REPLY:
     return true;
   case MSG_OSD_SUBOP: {
     MOSDSubOp *m = static_cast<MOSDSubOp*>(op->get_req());
@@ -156,7 +155,7 @@ bool ReplicatedBackend::can_handle_while_inactive(OpRequestRef op)
   }
 }
 
-bool ReplicatedBackend::handle_message(
+bool ReplicatedBackend::_handle_message(
   OpRequestRef op
   )
 {
@@ -878,8 +877,7 @@ struct C_ReplicatedBackend_OnPullComplete : GenContext<ThreadPool::TPHandle&> {
 	bc->pulling.find(*i);
       assert(j != bc->pulling.end());
       if (!bc->start_pushes(*i, j->second.obc, h)) {
-	bc->get_parent()->on_global_recover(
-	  *i, j->second.stat);
+	bc->get_parent()->on_global_recover(*i, j->second.stat, false);
       }
       bc->pulling.erase(*i);
       handle.reset_tp_timeout();
@@ -1833,8 +1831,7 @@ bool ReplicatedBackend::handle_pull_response(
   if (complete) {
     pi.stat.num_objects_recovered++;
     to_continue->push_back(hoid);
-    get_parent()->on_local_recover(
-      hoid, pi.recovery_info, pi.obc, t);
+    get_parent()->on_local_recover(hoid, pi.recovery_info, pi.obc, false, t);
     pull_from_peer[from].erase(hoid);
     if (pull_from_peer[from].empty())
       pull_from_peer.erase(from);
@@ -1878,6 +1875,7 @@ void ReplicatedBackend::handle_push(
       pop.recovery_info.soid,
       pop.recovery_info,
       ObjectContextRef(), // ok, is replica
+      false,
       t);
 }
 
@@ -2178,9 +2176,8 @@ bool ReplicatedBackend::handle_push_reply(pg_shard_t peer, PushReplyOp &op, Push
       pushing[soid].erase(peer);
       pi = NULL;
 
-
       if (pushing[soid].empty()) {
-	get_parent()->on_global_recover(soid, stat);
+	get_parent()->on_global_recover(soid, stat, false);
 	pushing.erase(soid);
       } else {
 	dout(10) << "pushed " << soid << ", still waiting for push ack from "
