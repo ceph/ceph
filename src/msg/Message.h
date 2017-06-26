@@ -198,6 +198,7 @@
 #define MSG_MGR_DIGEST               0x705
 // *** cephmgr -> ceph-mon
 #define MSG_MON_MGR_REPORT        0x706
+#define MSG_SERVICE_MAP           0x707
 
 // ======================================================
 

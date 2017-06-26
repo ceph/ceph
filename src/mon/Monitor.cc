@@ -4619,6 +4619,8 @@ void Monitor::handle_subscribe(MonOpRequestRef op)
       logmon()->check_sub(s->sub_map[p->first]);
     } else if (p->first == "mgrmap" || p->first == "mgrdigest") {
       mgrmon()->check_sub(s->sub_map[p->first]);
+    } else if (p->first == "servicemap") {
+      mgrstatmon()->check_sub(s->sub_map[p->first]);
     }
   }
 

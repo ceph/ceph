@@ -6,6 +6,7 @@
 #include "include/Context.h"
 #include "PaxosService.h"
 #include "mon/PGMap.h"
+#include "mgr/ServiceMap.h"
 
 class MonPGStatService;
 class MgrPGStatService;
@@ -16,11 +17,13 @@ class MgrStatMonitor : public PaxosService {
   PGMapDigest digest;
   list<pair<health_status_t,string>> health_summary;
   list<pair<health_status_t,string>> health_detail;
+  ServiceMap service_map;
 
   // pending commit
   PGMapDigest pending_digest;
   list<pair<health_status_t,string>> pending_health_summary;
   list<pair<health_status_t,string>> pending_health_detail;
+  bufferlist pending_service_map_bl;
 
   std::unique_ptr<MgrPGStatService> pgservice;
 
@@ -66,6 +69,9 @@ public:
   void print_summary(Formatter *f, std::ostream *ss) const;
 
   MonPGStatService *get_pg_stat_service();
+  const ServiceMap& get_service_map() {
+    return service_map;
+  }
 
   friend class C_Updated;
 };
