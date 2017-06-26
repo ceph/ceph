@@ -354,8 +354,14 @@ public:
 	*v = i->second.need;
       return true;
     }
+    bool is_deleted(const hobject_t &hoid) const {
+      auto i = needs_recovery_map.find(hoid);
+      if (i == needs_recovery_map.end())
+	return false;
+      return i->second.is_delete();
+    }
     bool is_unfound(const hobject_t &hoid) const {
-      return needs_recovery(hoid) && (
+      return needs_recovery(hoid) && !is_deleted(hoid) && (
 	!missing_loc.count(hoid) ||
 	!(*is_recoverable)(missing_loc.find(hoid)->second));
     }
@@ -396,6 +402,9 @@ public:
 	if (j == needs_recovery_map.end()) {
 	  needs_recovery_map.insert(*i);
 	} else {
+	  lgeneric_dout(pg->cct, 0) << this << " " << pg->info.pgid << " unexpected need for "
+				    << i->first << " have " << j->second
+				    << " tried to add " << i->second << dendl;
 	  assert(i->second.need == j->second.need);
 	}
       }
@@ -466,6 +475,8 @@ public:
 	return; // recovered!
 
       needs_recovery_map[hoid] = *item;
+      if (item->is_delete())
+	return;
       auto mliter =
 	missing_loc.insert(make_pair(hoid, set<pg_shard_t>())).first;
       assert(info.last_backfill.is_max());
