@@ -28,6 +28,7 @@ set(rbd_srcs
   action/MirrorImage.cc
   action/Nbd.cc
   action/ObjectMap.cc
+  action/Pool.cc
   action/Remove.cc
   action/Rename.cc
   action/Resize.cc
