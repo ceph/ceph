@@ -773,18 +773,19 @@ int RGWDeleteObjTags::verify_permission(){
   return 0;
 }
 
-void RGWDeleteObjTags::execute() {
+void RGWDeleteObjTags::execute()
+{
   if (s->object.empty())
     return;
 
-    rgw_obj obj;
-    obj = rgw_obj(s->bucket, s->object);
-    store->set_atomic(s->obj_ctx, obj);
-    map <string, bufferlist> attrs;
-    map <string, bufferlist> rmattr;
-    bufferlist bl;
-    rmattr[RGW_ATTR_TAGS] = bl;
-    op_ret = store->set_attrs(s->obj_ctx, s->bucket_info, obj, attrs, &rmattr);
+  rgw_obj obj;
+  obj = rgw_obj(s->bucket, s->object);
+  store->set_atomic(s->obj_ctx, obj);
+  map <string, bufferlist> attrs;
+  map <string, bufferlist> rmattr;
+  bufferlist bl;
+  rmattr[RGW_ATTR_TAGS] = bl;
+  op_ret = store->set_attrs(s->obj_ctx, s->bucket_info, obj, attrs, &rmattr);
 }
 
 int RGWOp::do_aws4_auth_completion()
