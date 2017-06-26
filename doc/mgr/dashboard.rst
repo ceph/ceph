@@ -11,5 +11,22 @@ configuration key facility. So we can configure them like::
   ceph config-key put mgr/dashboard/$name/server_port $PORT
 
 where ``$name`` is the ID of the ceph-mgr who is hosting this dashboard web app.
-If they are not configured, the web app will be bound to ``127.0.0.1:7000``.
 
+These settings can also be configured cluster-wide and not manager specific, eg:
+
+  ceph config-key put mgr/dashboard/server_addr $IP
+  ceph config-key put mgr/dashboard/server_port $PORT
+
+If the port is not configured, the web app will bind to port ``7000``.
+
+Setting the IP to ``::`` makes the dashboard bind to all available IPv4 and IPv6
+addresses.
+
+In addition, make sure that the *dashboard* module is enabled in the ceph.conf
+configuration file:
+
+  [mgr]
+  mgr_modules = dashboard
+
+Please note that the dashboard will *only* start on the manager which is active
+at that moment. Query the Ceph cluster status to see which manager is active.
