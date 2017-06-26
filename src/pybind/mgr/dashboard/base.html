@@ -39,7 +39,7 @@
 
             var refresh = function() {
                 $.get("/toplevel_data", function(data) {
-                    _.extend(toplevel_data.health, data.health);
+                    _.extend(toplevel_data, data);
                     setTimeout(refresh, refresh_interval);
                 });
             };
@@ -57,6 +57,14 @@
                     return "color: #FFC200;";
                 } else if (status_str == "HEALTH_ERR") {
                     return "color: #ff0000;"
+                }
+            }
+
+            rivets.formatters.health_ok = function(status_str) {
+                if (status_str == "HEALTH_OK") {
+                    return true;
+                } else {
+                    return false;
                 }
             }
 
@@ -106,7 +114,7 @@
             <!--rivet.formatters.mon_summary = function(mon_map) {-->
             <!--}-->
 
-            rivets.bind($("#health"), toplevel_data.health);
+            rivets.bind($("#health"), toplevel_data);
             rivets.bind($("section.sidebar"), toplevel_data);
             setTimeout(refresh, refresh_interval);
         });
@@ -140,10 +148,11 @@
                 <span class="sr-only">Toggle navigation</span>
             </a>
 
-            <div id="health" style="font-size: 20px; padding: 12px 12px;">
-                Health:&nbsp;
-                <span rv-style="overall_status | health_color">
-                    {overall_status}
+            <div id="health" style="font-size: 18px; padding: 12px 12px;">
+                <span rv-hide="health_status | health_ok" >
+                    <span rv-style="health_status | health_color">
+                        {health_status}
+                    </span>
                 </span>
             </div>
 
