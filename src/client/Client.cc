@@ -7568,11 +7568,11 @@ int Client::getdir(const char *relpath, list<string>& contents)
 int Client::open(const char *relpath, int flags, mode_t mode, int stripe_unit,
     int stripe_count, int object_size, const char *data_pool)
 {
-  ldout(cct, 3) << "open enter(" << relpath << ", " << flags << "," << mode << ") = " << dendl;
+  ldout(cct, 3) << "open enter(" << relpath << ", " << ceph_flags_sys2wire(flags) << "," << mode << ") = " << dendl;
   Mutex::Locker lock(client_lock);
   tout(cct) << "open" << std::endl;
   tout(cct) << relpath << std::endl;
-  tout(cct) << flags << std::endl;
+  tout(cct) << ceph_flags_sys2wire(flags) << std::endl;
 
   uid_t uid = get_uid();
   gid_t gid = get_gid();
@@ -7644,7 +7644,7 @@ int Client::open(const char *relpath, int flags, mode_t mode, int stripe_unit,
   
  out:
   tout(cct) << r << std::endl;
-  ldout(cct, 3) << "open exit(" << path << ", " << flags << ") = " << r << dendl;
+  ldout(cct, 3) << "open exit(" << path << ", " << ceph_flags_sys2wire(flags) << ") = " << r << dendl;
   return r;
 }
 
@@ -7845,7 +7845,8 @@ void Client::_put_fh(Fh *f)
 
 int Client::_open(Inode *in, int flags, mode_t mode, Fh **fhp, int uid, int gid)
 {
-  int cmode = ceph_flags_to_mode(flags);
+  // use normalized flags to generate cmode
+  int cmode = ceph_flags_to_mode(ceph_flags_sys2wire(flags));
   if (cmode < 0)
     return -EINVAL;
   int want = ceph_caps_for_mode(cmode);
@@ -7866,8 +7867,8 @@ int Client::_open(Inode *in, int flags, mode_t mode, Fh **fhp, int uid, int gid)
     MetaRequest *req = new MetaRequest(CEPH_MDS_OP_OPEN);
     filepath path;
     in->make_nosnap_relative_path(path);
-    req->set_filepath(path); 
-    req->head.args.open.flags = flags & ~O_CREAT;
+    req->set_filepath(path);
+    req->head.args.open.flags = ceph_flags_sys2wire(flags & ~O_CREAT);
     req->head.args.open.mode = mode;
     req->head.args.open.pool = -1;
     if (cct->_conf->client_debug_getattr_caps)
@@ -10600,7 +10601,8 @@ int Client::_create(Inode *dir, const char *name, int flags, mode_t mode,
     return -EDQUOT;
   }
 
-  int cmode = ceph_flags_to_mode(flags);
+  // use normalized flags to generate cmode
+  int cmode = ceph_flags_to_mode(ceph_flags_sys2wire(flags));
   if (cmode < 0)
     return -EINVAL;
 
@@ -10621,7 +10623,7 @@ int Client::_create(Inode *dir, const char *name, int flags, mode_t mode,
   path.push_dentry(name);
   req->set_filepath(path);
   req->set_inode(dir);
-  req->head.args.open.flags = flags | O_CREAT;
+  req->head.args.open.flags = ceph_flags_sys2wire(flags | O_CREAT);
 
   req->head.args.open.stripe_unit = stripe_unit;
   req->head.args.open.stripe_count = stripe_count;
@@ -11325,10 +11327,10 @@ int Client::ll_open(Inode *in, int flags, Fh **fhp, int uid, int gid)
 
   vinodeno_t vino = _get_vino(in);
 
-  ldout(cct, 3) << "ll_open " << vino << " " << flags << dendl;
+  ldout(cct, 3) << "ll_open " << vino << " " << ceph_flags_sys2wire(flags) << dendl;
   tout(cct) << "ll_open" << std::endl;
   tout(cct) << vino.ino.val << std::endl;
-  tout(cct) << flags << std::endl;
+  tout(cct) << ceph_flags_sys2wire(flags) << std::endl;
 
   int r;
   if (uid < 0) {
@@ -11349,8 +11351,8 @@ int Client::ll_open(Inode *in, int flags, Fh **fhp, int uid, int gid)
     ll_unclosed_fh_set.insert(fhptr);
   }
   tout(cct) << (unsigned long)fhptr << std::endl;
-  ldout(cct, 3) << "ll_open " << vino << " " << flags << " = " << r << " (" <<
-    fhptr << ")" << dendl;
+  ldout(cct, 3) << "ll_open " << vino << " " << ceph_flags_sys2wire(flags) <<
+      " = " << r << " (" << fhptr << ")" << dendl;
   return r;
 }
 
@@ -11363,12 +11365,12 @@ int Client::ll_create(Inode *parent, const char *name, mode_t mode,
   vinodeno_t vparent = _get_vino(parent);
 
   ldout(cct, 3) << "ll_create " << vparent << " " << name << " 0" << oct <<
-    mode << dec << " " << flags << ", uid " << uid << ", gid " << gid << dendl;
+    mode << dec << " " << ceph_flags_sys2wire(flags)<< ", uid " << uid << ", gid " << gid << dendl;
   tout(cct) << "ll_create" << std::endl;
   tout(cct) << vparent.ino.val << std::endl;
   tout(cct) << name << std::endl;
   tout(cct) << mode << std::endl;
-  tout(cct) << flags << std::endl;
+  tout(cct) << ceph_flags_sys2wire(flags) << std::endl;
 
   bool created = false;
   InodeRef in;
@@ -11425,7 +11427,7 @@ out:
   tout(cct) << (unsigned long)fhptr << std::endl;
   tout(cct) << attr->st_ino << std::endl;
   ldout(cct, 3) << "ll_create " << parent << " " << name << " 0" << oct <<
-    mode << dec << " " << flags << " = " << r << " (" << fhptr << " " <<
+    mode << dec << " " << ceph_flags_sys2wire(flags) << " = " << r << " (" << fhptr << " " <<
     hex << attr->st_ino << dec << ")" << dendl;
 
   // passing an Inode in outp requires an additional ref

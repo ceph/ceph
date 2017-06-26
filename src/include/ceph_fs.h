@@ -380,6 +380,20 @@ extern const char *ceph_mds_op_name(int op);
 #define CEPH_SETATTR_ATIME_NOW	(1 << 8)
 
 /*
+ * open request flags
+ */
+#define CEPH_O_RDONLY          00000000
+#define CEPH_O_WRONLY          00000001
+#define CEPH_O_RDWR            00000002
+#define CEPH_O_CREAT           00000100
+#define CEPH_O_EXCL            00000200
+#define CEPH_O_TRUNC           00001000
+#define CEPH_O_DIRECTORY       00200000
+#define CEPH_O_NOFOLLOW        00400000
+
+int ceph_flags_sys2wire(int flags);
+
+/*
  * Ceph setxattr request flags.
  */
 #define CEPH_XATTR_CREATE  (1 << 0)
