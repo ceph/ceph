@@ -1185,6 +1185,24 @@ public:
   }
 };
 
+RGWMetaSyncSingleEntryCR::RGWMetaSyncSingleEntryCR(RGWMetaSyncEnv *_sync_env,
+		           const string& _raw_key, const string& _entry_marker,
+                           const RGWMDLogStatus& _op_status,
+                           RGWMetaSyncShardMarkerTrack *_marker_tracker, const RGWSyncTraceNodeRef& _tn_parent) : RGWCoroutine(_sync_env->cct),
+                                                      sync_env(_sync_env),
+						      raw_key(_raw_key), entry_marker(_entry_marker),
+                                                      op_status(_op_status),
+                                                      pos(0), sync_status(0),
+                                                      marker_tracker(_marker_tracker), tries(0) {
+  error_injection = (sync_env->cct->_conf->rgw_sync_meta_inject_err_probability > 0);
+  tn = sync_env->sync_tracer->add_node(new RGWSyncTraceNode(sync_env->cct,
+                                                            sync_env->sync_tracer, 
+                                                            _tn_parent,
+                                                            "entry",
+                                                            string(),
+                                                            raw_key));
+}
+
 int RGWMetaSyncSingleEntryCR::operate() {
   reenter(this) {
 #define NUM_TRANSIENT_ERROR_RETRIES 10
@@ -1196,7 +1214,7 @@ int RGWMetaSyncSingleEntryCR::operate() {
     }
 
     if (op_status != MDLOG_STATUS_COMPLETE) {
-      ldout(sync_env->cct, 20) << "skipping pending operation" << dendl;
+      tn->log(20, "skipping pending operation");
       yield call(marker_tracker->finish(entry_marker));
       if (retcode < 0) {
         return set_cr_error(retcode);
@@ -1208,7 +1226,7 @@ int RGWMetaSyncSingleEntryCR::operate() {
         pos = raw_key.find(':');
         section = raw_key.substr(0, pos);
         key = raw_key.substr(pos + 1);
-        ldout(sync_env->cct, 20) << "fetching remote metadata: " << section << ":" << key << (tries == 0 ? "" : " (retry)") << dendl;
+        tn->log(10, SSTR("fetching remote metadata entry" << (tries == 0 ? "" : " (retry)")));
         call(new RGWReadRemoteMetadataCR(sync_env, section, key, &md_bl));
       }
 
@@ -1238,8 +1256,10 @@ int RGWMetaSyncSingleEntryCR::operate() {
     retcode = 0;
     for (tries = 0; tries < NUM_TRANSIENT_ERROR_RETRIES; tries++) {
       if (sync_status != -ENOENT) {
+        tn->log(10, SSTR("storing local metadata entry"));
           yield call(new RGWMetaStoreEntryCR(sync_env, raw_key, md_bl));
       } else {
+        tn->log(10, SSTR("removing local metadata entry"));
           yield call(new RGWMetaRemoveEntryCR(sync_env, raw_key));
       }
       if ((retcode == -EAGAIN || retcode == -ECANCELED) && (tries < NUM_TRANSIENT_ERROR_RETRIES - 1)) {
@@ -1535,7 +1555,7 @@ public:
           } else {
             // fetch remote and write locally
             yield {
-              RGWCoroutinesStack *stack = spawn(new RGWMetaSyncSingleEntryCR(sync_env, iter->first, iter->first, MDLOG_STATUS_COMPLETE, marker_tracker), false);
+              RGWCoroutinesStack *stack = spawn(new RGWMetaSyncSingleEntryCR(sync_env, iter->first, iter->first, MDLOG_STATUS_COMPLETE, marker_tracker, tn->ref()), false);
               // stack_to_pos holds a reference to the stack
               stack_to_pos[stack] = iter->first;
               pos_to_prev[iter->first] = marker;
@@ -1611,6 +1631,7 @@ public:
   int incremental_sync() {
     reenter(&incremental_cr) {
       set_status("incremental_sync");
+      tn->log(10, "start incremental sync");
       can_adjust_marker = true;
       /* grab lock */
       if (!lease_cr) { /* could have had  a lease_cr lock from previous state */
@@ -1628,12 +1649,14 @@ public:
           if (lease_cr->is_done()) {
             ldout(cct, 5) << "lease cr failed, done early " << dendl;
             drain_all();
+            tn->log(10, "failed to take lease");
             return lease_cr->get_ret_status();
           }
           set_sleeping(true);
           yield;
         }
       }
+      tn->log(10, "took lease");
       // if the period has advanced, we can't use the existing marker
       if (sync_marker.realm_epoch < realm_epoch) {
         ldout(sync_env->cct, 4) << "clearing marker=" << sync_marker.marker
@@ -1659,12 +1682,13 @@ public:
       do {
         if (!lease_cr->is_locked()) {
           lost_lock = true;
+          tn->log(10, "lost lease");
           break;
         }
 #define INCREMENTAL_MAX_ENTRIES 100
-	ldout(sync_env->cct, 20) << __func__ << ":" << __LINE__ << ": shard_id=" << shard_id << " mdlog_marker=" << mdlog_marker << " sync_marker.marker=" << sync_marker.marker << " period_marker=" << period_marker << dendl;
+        ldout(sync_env->cct, 20) << __func__ << ":" << __LINE__ << ": shard_id=" << shard_id << " mdlog_marker=" << mdlog_marker << " sync_marker.marker=" << sync_marker.marker << " period_marker=" << period_marker << dendl;
         if (!period_marker.empty() && period_marker <= mdlog_marker) {
-          ldout(cct, 10) << "mdlog_marker past period_marker=" << period_marker << dendl;
+          tn->log(10, SSTR("finished syncing current period: mdlog_marker=" << mdlog_marker << " sync_marker=" << sync_marker.marker << " period_marker=" << period_marker));
           done_with_period = true;
           break;
         }
@@ -1676,21 +1700,21 @@ public:
                                                   mdlog_marker, &mdlog_marker));
 	}
         if (retcode < 0) {
-          ldout(sync_env->cct, 10) << *this << ": failed to fetch more log entries, retcode=" << retcode << dendl;
+          tn->log(10, SSTR(*this << ": failed to fetch more log entries, retcode=" << retcode));
           yield lease_cr->go_down();
           drain_all();
           *reset_backoff = false; // back off and try again later
           return retcode;
         }
         *reset_backoff = true; /* if we got to this point, all systems function */
-	ldout(sync_env->cct, 20) << __func__ << ":" << __LINE__ << ": shard_id=" << shard_id << " mdlog_marker=" << mdlog_marker << " sync_marker.marker=" << sync_marker.marker << dendl;
 	if (mdlog_marker > max_marker) {
+          tn->log(20, SSTR("mdlog_marker=" << mdlog_marker << " sync_marker=" << sync_marker.marker));
           marker = max_marker;
           yield call(new RGWReadMDLogEntriesCR(sync_env, mdlog, shard_id,
                                                &max_marker, INCREMENTAL_MAX_ENTRIES,
                                                &log_entries, &truncated));
           if (retcode < 0) {
-            ldout(sync_env->cct, 10) << *this << ": failed to list mdlog entries, retcode=" << retcode << dendl;
+            tn->log(10, SSTR("failed to list mdlog entries, retcode=" << retcode));
             yield lease_cr->go_down();
             drain_all();
             *reset_backoff = false; // back off and try again later
@@ -1700,24 +1724,24 @@ public:
             if (!period_marker.empty() && period_marker <= log_iter->id) {
               done_with_period = true;
               if (period_marker < log_iter->id) {
-                ldout(cct, 10) << "found key=" << log_iter->id
-                    << " past period_marker=" << period_marker << dendl;
+                tn->log(10, SSTR("found key=" << log_iter->id
+                    << " past period_marker=" << period_marker));
                 break;
               }
               ldout(cct, 10) << "found key at period_marker=" << period_marker << dendl;
               // sync this entry, then return control to RGWMetaSyncCR
             }
             if (!mdlog_entry.convert_from(*log_iter)) {
-              ldout(sync_env->cct, 0) << __func__ << ":" << __LINE__ << ": ERROR: failed to convert mdlog entry, shard_id=" << shard_id << " log_entry: " << log_iter->id << ":" << log_iter->section << ":" << log_iter->name << ":" << log_iter->timestamp << " ... skipping entry" << dendl;
+              tn->log(0, SSTR("ERROR: failed to convert mdlog entry, shard_id=" << shard_id << " log_entry: " << log_iter->id << ":" << log_iter->section << ":" << log_iter->name << ":" << log_iter->timestamp << " ... skipping entry"));
               continue;
             }
-            ldout(sync_env->cct, 20) << __func__ << ":" << __LINE__ << ": shard_id=" << shard_id << " log_entry: " << log_iter->id << ":" << log_iter->section << ":" << log_iter->name << ":" << log_iter->timestamp << dendl;
+            tn->log(20, SSTR(" log_entry: " << log_iter->id << ":" << log_iter->section << ":" << log_iter->name << ":" << log_iter->timestamp));
             if (!marker_tracker->start(log_iter->id, 0, log_iter->timestamp.to_real_time())) {
               ldout(sync_env->cct, 0) << "ERROR: cannot start syncing " << log_iter->id << ". Duplicate entry?" << dendl;
             } else {
               raw_key = log_iter->section + ":" + log_iter->name;
               yield {
-                RGWCoroutinesStack *stack = spawn(new RGWMetaSyncSingleEntryCR(sync_env, raw_key, log_iter->id, mdlog_entry.log_data.status, marker_tracker), false);
+                RGWCoroutinesStack *stack = spawn(new RGWMetaSyncSingleEntryCR(sync_env, raw_key, log_iter->id, mdlog_entry.log_data.status, marker_tracker, tn->ref()), false);
                 assert(stack);
                 // stack_to_pos holds a reference to the stack
                 stack_to_pos[stack] = log_iter->id;
@@ -1731,7 +1755,7 @@ public:
 	ldout(sync_env->cct, 20) << __func__ << ":" << __LINE__ << ": shard_id=" << shard_id << " mdlog_marker=" << mdlog_marker << " max_marker=" << max_marker << " sync_marker.marker=" << sync_marker.marker << " period_marker=" << period_marker << dendl;
         if (done_with_period) {
           // return control to RGWMetaSyncCR and advance to the next period
-          ldout(sync_env->cct, 10) << *this << ": done with period" << dendl;
+          tn->log(10, SSTR(*this << ": done with period"));
           break;
         }
 	if (mdlog_marker == max_marker && can_adjust_marker) {
