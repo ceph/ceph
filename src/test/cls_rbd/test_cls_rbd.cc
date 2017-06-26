@@ -431,7 +431,7 @@ TEST_F(TestClsRbd, get_create_timestamp)
 
   utime_t timestamp;
   ASSERT_EQ(0, get_create_timestamp(&ioctx, oid, &timestamp));
-  ASSERT_LT(0, timestamp.tv.tv_sec);
+  ASSERT_LT(0U, timestamp.tv.tv_sec);
 
   ioctx.close();
 }
