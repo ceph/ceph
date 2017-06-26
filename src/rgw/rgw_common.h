@@ -1306,7 +1306,7 @@ struct RGWBucketInfo
   bool versioned() const { return (flags & BUCKET_VERSIONED) != 0; }
   int versioning_status() { return flags & (BUCKET_VERSIONED | BUCKET_VERSIONS_SUSPENDED); }
   bool versioning_enabled() { return versioning_status() == BUCKET_VERSIONED; }
-  bool datasync_flag_enabled() { return (flags & BUCKET_DATASYNC_DISABLED) == 0; }
+  bool datasync_flag_enabled() const { return (flags & BUCKET_DATASYNC_DISABLED) == 0; }
 
   bool has_swift_versioning() const {
     /* A bucket may be versioned through one mechanism only. */
