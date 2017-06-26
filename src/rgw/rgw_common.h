@@ -49,6 +49,7 @@ using ceph::crypto::MD5;
 #define RGW_AMZ_PREFIX "x-amz-"
 #define RGW_AMZ_META_PREFIX RGW_AMZ_PREFIX "meta-"
 #define RGW_AMZ_WEBSITE_REDIRECT_LOCATION RGW_AMZ_PREFIX "website-redirect-location"
+#define RGW_AMZ_TAG_COUNT RGW_AMZ_PREFIX "tagging-count"
 
 #define RGW_SYS_PARAM_PREFIX "rgwx-"
 
@@ -78,6 +79,7 @@ using ceph::crypto::MD5;
 
 #define RGW_ATTR_PG_VER 	RGW_ATTR_PREFIX "pg_ver"
 #define RGW_ATTR_SOURCE_ZONE    RGW_ATTR_PREFIX "source_zone"
+#define RGW_ATTR_TAGS           RGW_ATTR_PREFIX RGW_AMZ_PREFIX "tagging"
 
 #define RGW_ATTR_TEMPURL_KEY1   RGW_ATTR_META_PREFIX "temp-url-key"
 #define RGW_ATTR_TEMPURL_KEY2   RGW_ATTR_META_PREFIX "temp-url-key-2"
@@ -206,6 +208,8 @@ using ceph::crypto::MD5;
 #define ERR_DELETE_CONFLICT      2206
 #define ERR_NO_SUCH_BUCKET_POLICY  2207
 #define ERR_INVALID_LOCATION_CONSTRAINT 2208
+#define ERR_TAG_CONFLICT         2209
+#define ERR_INVALID_TAG          2210
 
 #define ERR_BUSY_RESHARDING      2300
 
@@ -472,7 +476,9 @@ enum RGWOpType {
   RGW_OP_PUT_BUCKET_POLICY,
   RGW_OP_GET_BUCKET_POLICY,
   RGW_OP_DELETE_BUCKET_POLICY,
-
+  RGW_OP_PUT_OBJ_TAGGING,
+  RGW_OP_GET_OBJ_TAGGING,
+  RGW_OP_DELETE_OBJ_TAGGING,
   /* rgw specific */
   RGW_OP_ADMIN_SET_METADATA,
   RGW_OP_GET_OBJ_LAYOUT,
@@ -2221,7 +2227,6 @@ extern std::string url_decode(const boost::string_view& src_str,
 extern void url_encode(const std::string& src,
                        string& dst);
 extern std::string url_encode(const std::string& src);
-
 /* destination should be CEPH_CRYPTO_HMACSHA1_DIGESTSIZE bytes long */
 extern void calc_hmac_sha1(const char *key, int key_len,
                           const char *msg, int msg_len, char *dest);

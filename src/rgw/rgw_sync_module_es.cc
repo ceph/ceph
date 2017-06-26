@@ -263,6 +263,7 @@ struct es_obj_metadata {
     map<string, string> custom_meta;
     RGWAccessControlPolicy policy;
     set<string> permissions;
+    RGWObjTags obj_tags;
 
     for (auto i : attrs) {
       const string& attr_name = i.first;
@@ -302,6 +303,9 @@ struct es_obj_metadata {
             }
           }
         }
+      } else if (name == "x-amz-tagging") {
+        auto tags_bl = val.begin();
+        ::decode(obj_tags, tags_bl);
       } else {
         if (name != "pg_ver" &&
             name != "source_zone" &&
@@ -396,7 +400,18 @@ struct es_obj_metadata {
       }
       f->close_section();
     }
-    f->close_section();
+    f->close_section(); // meta
+    const auto& m = obj_tags.get_tags();
+    if (m.size() > 0){
+      f->open_array_section("tagging");
+      for (const auto &it : m) {
+        f->open_object_section("tag");
+        ::encode_json("key", it.first, f);
+        ::encode_json("value",it.second, f);
+        f->close_section();
+      }
+      f->close_section(); // tagging
+    }
   }
 };
 

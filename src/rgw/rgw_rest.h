@@ -161,6 +161,18 @@ public:
   int get_params() override;
 };
 
+class RGWGetObjTags_ObjStore : public RGWGetObjTags {
+public:
+  RGWGetObjTags_ObjStore() {};
+  ~RGWGetObjTags_ObjStore() {};
+};
+
+class RGWPutObjTags_ObjStore: public RGWPutObjTags {
+public:
+  RGWPutObjTags_ObjStore() {};
+  ~RGWPutObjTags_ObjStore() {};
+};
+
 class RGWListBuckets_ObjStore : public RGWListBuckets {
 public:
   RGWListBuckets_ObjStore() {}
