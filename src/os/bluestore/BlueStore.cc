@@ -1323,55 +1323,59 @@ int BlueStore::BufferSpace::_discard(Cache* cache, uint32_t offset, uint32_t len
 
 void BlueStore::BufferSpace::read(
   Cache* cache, 
-  uint32_t offset, uint32_t length,
+  uint32_t offset,
+  uint32_t length,
   BlueStore::ready_regions_t& res,
   interval_set<uint32_t>& res_intervals)
 {
-  std::lock_guard<std::recursive_mutex> l(cache->lock);
   res.clear();
   res_intervals.clear();
   uint32_t want_bytes = length;
   uint32_t end = offset + length;
-  for (auto i = _data_lower_bound(offset);
-       i != buffer_map.end() && offset < end && i->first < end;
-       ++i) {
-    Buffer *b = i->second.get();
-    assert(b->end() > offset);
-    if (b->is_writing() || b->is_clean()) {
-      if (b->offset < offset) {
-	uint32_t skip = offset - b->offset;
-	uint32_t l = MIN(length, b->length - skip);
-	res[offset].substr_of(b->data, skip, l);
-	res_intervals.insert(offset, l);
-	offset += l;
-	length -= l;
-	if (!b->is_writing()) {
+
+  {
+    std::lock_guard<std::recursive_mutex> l(cache->lock);
+    for (auto i = _data_lower_bound(offset);
+         i != buffer_map.end() && offset < end && i->first < end;
+         ++i) {
+      Buffer *b = i->second.get();
+      assert(b->end() > offset);
+      if (b->is_writing() || b->is_clean()) {
+        if (b->offset < offset) {
+	  uint32_t skip = offset - b->offset;
+	  uint32_t l = MIN(length, b->length - skip);
+	  res[offset].substr_of(b->data, skip, l);
+	  res_intervals.insert(offset, l);
+	  offset += l;
+	  length -= l;
+	  if (!b->is_writing()) {
+	    cache->_touch_buffer(b);
+	  }
+	  continue;
+        }
+        if (b->offset > offset) {
+	  uint32_t gap = b->offset - offset;
+	  if (length <= gap) {
+	    break;
+	  }
+	  offset += gap;
+	  length -= gap;
+        }
+        if (!b->is_writing()) {
 	  cache->_touch_buffer(b);
-	}
-	continue;
-      }
-      if (b->offset > offset) {
-	uint32_t gap = b->offset - offset;
-	if (length <= gap) {
-	  break;
-	}
-	offset += gap;
-	length -= gap;
-      }
-      if (!b->is_writing()) {
-	cache->_touch_buffer(b);
-      }
-      if (b->length > length) {
-	res[offset].substr_of(b->data, 0, length);
-	res_intervals.insert(offset, length);
-        break;
-      } else {
-	res[offset].append(b->data);
-	res_intervals.insert(offset, b->length);
-        if (b->length == length)
+        }
+        if (b->length > length) {
+	  res[offset].substr_of(b->data, 0, length);
+	  res_intervals.insert(offset, length);
           break;
-	offset += b->length;
-	length -= b->length;
+        } else {
+	  res[offset].append(b->data);
+	  res_intervals.insert(offset, b->length);
+          if (b->length == length)
+            break;
+	  offset += b->length;
+	  length -= b->length;
+        }
       }
     }
   }
