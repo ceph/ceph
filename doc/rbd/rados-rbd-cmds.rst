@@ -13,6 +13,17 @@ details.
 .. important:: To use Ceph Block Device commands, you must have access to 
    a running Ceph cluster.
 
+Create a Block Device Pool
+==========================
+
+#. On the admin node, use the ``ceph`` tool to `create a pool`_.
+
+#. On the admin node, use the ``rbd`` tool to initialize the pool for use by RBD::
+
+        rbd pool init <pool-name>
+
+.. note:: The ``rbd`` tool assumes a default pool name of 'rbd' when not
+   provided.
 
 Creating a Block Device Image
 =============================
@@ -112,6 +123,6 @@ For example::
 	rbd rm swimmingpool/bar
 
 
-
+.. _create a pool: ../../rados/operations/pools/#create-a-pool
 .. _Storage Pools: ../../rados/operations/pools
 .. _RBD – Manage RADOS Block Device (RBD) Images: ../../man/8/rbd/
