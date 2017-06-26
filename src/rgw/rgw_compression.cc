@@ -99,17 +99,33 @@ int RGWGetObj_Decompress::handle_data(bufferlist& bl, off_t bl_ofs, off_t bl_len
       break;
     }
     in_bl.copy(ofs_in_bl, first_block->len, tmp);
-    int cr = compressor->decompress(tmp, tmp_out);
-    if (cr < 0) {
-      lderr(cct) << "Compression failed with exit code " << cr << dendl;
-      return cr;
+    int r = compressor->decompress(tmp, tmp_out);
+    if (r < 0) {
+      lderr(cct) << "Compression failed with exit code " << r << dendl;
+      return r;
     }
     if (first_block == last_block && partial_content)
       tmp_out.copy(0, q_len, out_bl);
-    else
-      out_bl.append(tmp_out);
+    else {
+      out_bl.append(tmp_out);    
+      if (cct->_conf->rgw_max_chunk_size && (out_bl.length() >= cct->_conf->rgw_max_chunk_size)) {
+        if (first_data && partial_content && out_bl.length() != 0)
+          bl_ofs =  q_ofs;
+        
+        if (first_data && out_bl.length() != 0)
+          first_data = false;
+        
+        r = next->handle_data(out_bl, bl_ofs, out_bl.length() - bl_ofs);
+        if (r < 0) {
+          lderr(cct) << "handle_data failed with exit code " << r << dendl;
+          return r;       
+        }  
+        bl_ofs = 0;
+        out_bl.clear();
+      }
+    }
     ++first_block;
-  }
+ }
 
   if (first_data && partial_content && out_bl.length() != 0)
     bl_ofs =  q_ofs;
@@ -119,7 +135,12 @@ int RGWGetObj_Decompress::handle_data(bufferlist& bl, off_t bl_ofs, off_t bl_len
 
   cur_ofs += bl_len;
 
-  return next->handle_data(out_bl, bl_ofs, out_bl.length() - bl_ofs);
+  if (out_bl.length()) {
+    assert(out_bl.length() >= bl_ofs); 
+    return next->handle_data(out_bl, bl_ofs, out_bl.length() - bl_ofs);
+  } 
+
+  return 0;
 }
 
 int RGWGetObj_Decompress::fixup_range(off_t& ofs, off_t& end)
