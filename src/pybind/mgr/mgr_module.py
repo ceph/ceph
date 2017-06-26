@@ -140,6 +140,16 @@ class MgrModule(object):
         """
         return ceph_state.get_metadata(self._handle, svc_type, svc_id)
 
+    def get_daemon_status(self, svc_type, svc_id):
+        """
+        Fetch the latest status for a particular service daemon.
+
+        :param svc_type: string (e.g., 'rgw')
+        :param svc_id: string
+        :return: dict
+        """
+        return ceph_state.get_daemon_status(self._handle, svc_type, svc_id)
+
     def send_command(self, *args, **kwargs):
         """
         Called by the plugin to send a command to the mon

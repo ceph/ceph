@@ -131,6 +131,18 @@ PyObject *PyModules::get_metadata_python(
   return f.get();
 }
 
+PyObject *PyModules::get_daemon_status_python(
+  std::string const &handle,
+  const std::string &svc_name,
+  const std::string &svc_id)
+{
+  auto metadata = daemon_state.get(DaemonKey(svc_name, svc_id));
+  PyFormatter f;
+  for (const auto &i : metadata->service_status) {
+    f.dump_string(i.first.c_str(), i.second);
+  }
+  return f.get();
+}
 
 PyObject *PyModules::get_python(const std::string &what)
 {
