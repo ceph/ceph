@@ -269,6 +269,18 @@ void MonCapGrant::expand_profile_mon(const EntityName& name) const
     profile_grants.push_back(MonCapGrant("osd", MON_CAP_R));
     profile_grants.push_back(MonCapGrant("pg", MON_CAP_R));
   }
+  if (profile == "rbd") {
+    profile_grants.push_back(MonCapGrant("mon", MON_CAP_R));
+    profile_grants.push_back(MonCapGrant("osd", MON_CAP_R));
+    profile_grants.push_back(MonCapGrant("pg", MON_CAP_R));
+
+    // exclusive lock dead-client blacklisting (IP+nonce required)
+    profile_grants.push_back(MonCapGrant("osd blacklist"));
+    profile_grants.back().command_args["blacklistop"] = StringConstraint(
+      StringConstraint::MATCH_TYPE_EQUAL, "add");
+    profile_grants.back().command_args["addr"] = StringConstraint(
+      StringConstraint::MATCH_TYPE_REGEX, "^[^/]/[0-9]*$");
+  }
 
   if (profile == "role-definer") {
     // grants ALL caps to the auth subsystem, read-only on the
