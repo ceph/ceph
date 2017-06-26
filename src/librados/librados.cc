@@ -2346,6 +2346,20 @@ int librados::Rados::conf_get(const char *option, std::string &val)
   return 0;
 }
 
+int librados::Rados::service_daemon_register(
+  const std::string& service,  ///< service name (e.g., 'rgw')
+  const std::string& name,     ///< daemon name (e.g., 'gwfoo')
+  const std::map<std::string,std::string>& metadata) ///< static metadata about daemon
+{
+  return client->service_daemon_register(service, name, metadata);
+}
+
+int librados::Rados::service_daemon_update_status(
+  const std::map<std::string,std::string>& status)
+{
+  return client->service_daemon_update_status(status);
+}
+
 int librados::Rados::pool_create(const char *name)
 {
   string str(name);
