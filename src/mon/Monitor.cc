@@ -2601,7 +2601,7 @@ void Monitor::get_cluster_status(stringstream &ss, Formatter *f)
     monmap->dump(f);
     f->close_section();
     f->open_object_section("osdmap");
-    osdmon()->osdmap.print_summary(f, cout);
+    osdmon()->osdmap.print_summary(f, cout, string(12, ' '));
     f->close_section();
     f->open_object_section("pgmap");
     pgservice->print_summary(f, NULL);
@@ -2613,6 +2613,8 @@ void Monitor::get_cluster_status(stringstream &ss, Formatter *f)
     f->open_object_section("mgrmap");
     mgrmon()->get_map().print_summary(f, nullptr);
     f->close_section();
+
+    f->dump_object("servicemap", mgrstatmon()->get_service_map());
     f->close_section();
   } else {
 
@@ -2621,31 +2623,49 @@ void Monitor::get_cluster_status(stringstream &ss, Formatter *f)
     ss << "    health: " << joinify(health.begin(), health.end(), 
 				  string("\n            ")) << "\n";
     ss << "\n \n  services:\n";
-    const auto quorum_names = get_quorum_names();
-    const auto mon_count = monmap->mon_info.size();
-    ss << "    mon: " << mon_count << " daemons, quorum "
-       << quorum_names;
-    if (quorum_names.size() != mon_count) {
-      std::list<std::string> out_of_q;
-      for (size_t i = 0; i < monmap->ranks.size(); ++i) {
-        if (quorum.count(i) == 0) {
-          out_of_q.push_back(monmap->ranks[i]);
-        }
+    {
+      size_t maxlen = 3;
+      auto& service_map = mgrstatmon()->get_service_map();
+      for (auto& p : service_map.services) {
+	maxlen = std::max(maxlen, p.first.size());
       }
-      ss << ", out of quorum: " << joinify(out_of_q.begin(),
-                                           out_of_q.end(), std::string(", "));
-    }
-    ss << "\n";
-    if (mgrmon()->in_use()) {
-      ss << "    mgr: ";
-      mgrmon()->get_map().print_summary(nullptr, &ss);
+      string spacing(maxlen - 3, ' ');
+      const auto quorum_names = get_quorum_names();
+      const auto mon_count = monmap->mon_info.size();
+      ss << "    mon: " << spacing << mon_count << " daemons, quorum "
+	 << quorum_names;
+      if (quorum_names.size() != mon_count) {
+	std::list<std::string> out_of_q;
+	for (size_t i = 0; i < monmap->ranks.size(); ++i) {
+	  if (quorum.count(i) == 0) {
+	    out_of_q.push_back(monmap->ranks[i]);
+	  }
+	}
+	ss << ", out of quorum: " << joinify(out_of_q.begin(),
+					     out_of_q.end(), std::string(", "));
+      }
       ss << "\n";
+      if (mgrmon()->in_use()) {
+	ss << "    mgr: " << spacing;
+	mgrmon()->get_map().print_summary(nullptr, &ss);
+	ss << "\n";
+      }
+      if (mdsmon()->get_fsmap().filesystem_count() > 0) {
+	ss << "    mds: " << spacing << mdsmon()->get_fsmap() << "\n";
+      }
+      ss << "    osd: " << spacing;
+      osdmon()->osdmap.print_summary(NULL, ss, string(maxlen + 6, ' '));
+      ss << "\n";
+      for (auto& p : service_map.services) {
+	set<string> active;
+	for (auto& q : p.second.daemons) {
+	  active.insert(q.first);
+	}
+	ss << "    " << p.first << ": " << string(maxlen - p.first.size(), ' ')
+	   << p.second.daemons.size() << " active: "
+	   << active << "\n";
+      }
     }
-    if (mdsmon()->get_fsmap().filesystem_count() > 0) {
-      ss << "    mds: " << mdsmon()->get_fsmap() << "\n";
-    }
-    ss << "    osd: ";
-    osdmon()->osdmap.print_summary(NULL, ss);
 
     ss << "\n \n  data:\n";
     pgservice->print_summary(NULL, &ss);
