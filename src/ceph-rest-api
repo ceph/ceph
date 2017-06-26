@@ -49,4 +49,7 @@ if 'pdb.py' in files:
     app.run(host=app.ceph_addr, port=app.ceph_port,
             debug=True, use_reloader=False, use_debugger=False)
 else:
-    app.run(host=app.ceph_addr, port=app.ceph_port)
+    if __name__ == '__main__':
+        app.run(host=app.ceph_addr, port=app.ceph_port)
+    else:
+        application = app
