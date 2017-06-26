@@ -249,6 +249,7 @@ public:
     const hobject_t &oid,
     const ObjectRecoveryInfo &recovery_info,
     ObjectContextRef obc,
+    bool is_delete,
     ObjectStore::Transaction *t
     ) override;
   void on_peer_recover(
@@ -261,7 +262,8 @@ public:
     const hobject_t oid) override;
   void on_global_recover(
     const hobject_t &oid,
-    const object_stat_sum_t &stat_diff) override;
+    const object_stat_sum_t &stat_diff,
+    bool is_delete) override;
   void failed_push(const list<pg_shard_t> &from, const hobject_t &soid) override;
   void primary_failed(const hobject_t &soid) override;
   bool primary_error(const hobject_t& soid, eversion_t v) override;
@@ -270,6 +272,9 @@ public:
     const hobject_t &soid,
     const object_stat_sum_t &delta_stats) override;
   void on_primary_error(const hobject_t &oid, eversion_t v) override;
+  void remove_missing_object(const hobject_t &oid,
+			     eversion_t v,
+			     Context *on_complete) override;
 
   template<class T> class BlessedGenContext;
   class BlessedContext;
@@ -1073,6 +1078,8 @@ protected:
 
   int prep_object_replica_pushes(const hobject_t& soid, eversion_t v,
 				 PGBackend::RecoveryHandle *h);
+  int prep_object_replica_deletes(const hobject_t& soid, eversion_t v,
+				  PGBackend::RecoveryHandle *h);
 
   void finish_degraded_object(const hobject_t& oid);
 

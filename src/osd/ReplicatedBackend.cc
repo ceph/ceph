@@ -124,6 +124,7 @@ void ReplicatedBackend::run_recovery_op(
   RPGHandle *h = static_cast<RPGHandle *>(_h);
   send_pushes(priority, h->pushes);
   send_pulls(priority, h->pulls);
+  send_recovery_deletes(priority, h->deletes);
   delete h;
 }
 
@@ -185,15 +186,13 @@ bool ReplicatedBackend::can_handle_while_inactive(OpRequestRef op)
   dout(10) << __func__ << ": " << op << dendl;
   switch (op->get_req()->get_type()) {
   case MSG_OSD_PG_PULL:
-  case MSG_OSD_PG_RECOVERY_DELETE:
-  case MSG_OSD_PG_RECOVERY_DELETE_REPLY:
     return true;
   default:
     return false;
   }
 }
 
-bool ReplicatedBackend::handle_message(
+bool ReplicatedBackend::_handle_message(
   OpRequestRef op
   )
 {
@@ -862,7 +861,7 @@ struct C_ReplicatedBackend_OnPullComplete : GenContext<ThreadPool::TPHandle&> {
 	bc->get_parent()->primary_error(i.hoid, obc->obs.oi.version);
       } else if (!started) {
 	bc->get_parent()->on_global_recover(
-	  i.hoid, i.stat);
+	  i.hoid, i.stat, false);
       }
       handle.reset_tp_timeout();
     }
@@ -1810,7 +1809,7 @@ bool ReplicatedBackend::handle_pull_response(
     clear_pull_from(piter);
     to_continue->push_back({hoid, pi.stat});
     get_parent()->on_local_recover(
-      hoid, pi.recovery_info, pi.obc, t);
+      hoid, pi.recovery_info, pi.obc, false, t);
     return false;
   } else {
     response->soid = pop.soid;
@@ -1851,6 +1850,7 @@ void ReplicatedBackend::handle_push(
       pop.recovery_info.soid,
       pop.recovery_info,
       ObjectContextRef(), // ok, is replica
+      false,
       t);
 }
 
@@ -2144,10 +2144,9 @@ done:
 
       if (pushing[soid].empty()) {
 	if (!error)
-	  get_parent()->on_global_recover(soid, stat);
+	  get_parent()->on_global_recover(soid, stat, false);
 	else
 	  get_parent()->on_primary_error(soid, v);
-
 	pushing.erase(soid);
       } else {
 	// This looks weird, but we erased the current peer and need to remember
