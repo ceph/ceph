@@ -769,7 +769,7 @@ TEST_F(PGLogTest, merge_old_entry) {
     oe.op = pg_log_entry_t::MODIFY;
     oe.prior_version = eversion_t();
 
-    missing.add(oe.soid, eversion_t(1,1), eversion_t());
+    missing.add(oe.soid, eversion_t(1,1), eversion_t(), false);
 
     missing.flush();
     EXPECT_FALSE(is_dirty());
@@ -1096,9 +1096,10 @@ TEST_F(PGLogTest, merge_log) {
     EXPECT_EQ(1U, log.objects.count(divergent_object));
     EXPECT_EQ(4U, log.log.size());
     /* DELETE entries from olog that are appended to the hed of the
-       log are also added to remove_snap.
+       log, and the divergent version of the object is removed (added
+       to remove_snap)
      */
-    EXPECT_EQ(0x7U, remove_snap.front().get_hash());
+    EXPECT_EQ(0x9U, remove_snap.front().get_hash());
     EXPECT_EQ(log.head, info.last_update);
     EXPECT_TRUE(info.purged_snaps.contains(purged_snap));
     EXPECT_TRUE(is_dirty());
@@ -1572,7 +1573,7 @@ TEST_F(PGLogTest, proc_replica_log) {
       e.prior_version = eversion_t(1, 1);
       e.soid = divergent_object;
       divergent_object = e.soid;
-      omissing.add(divergent_object, e.version, eversion_t());
+      omissing.add(divergent_object, e.version, eversion_t(), false);
       e.op = pg_log_entry_t::MODIFY;
       olog.log.push_back(e);
       olog.head = e.version;
@@ -1665,7 +1666,7 @@ TEST_F(PGLogTest, proc_replica_log) {
       e.prior_version = eversion_t(1, 1);
       e.soid.set_hash(0x9);
       divergent_object = e.soid;
-      omissing.add(divergent_object, e.version, eversion_t());
+      omissing.add(divergent_object, e.version, eversion_t(), false);
       e.op = pg_log_entry_t::MODIFY;
       olog.log.push_back(e);
       olog.head = e.version;
@@ -1696,7 +1697,7 @@ TEST_F(PGLogTest, merge_log_1) {
 
   t.div.push_back(mk_ple_mod(mk_obj(1), mk_evt(10, 101), mk_evt(10, 100)));
 
-  t.final.add(mk_obj(1), mk_evt(10, 100), mk_evt(0, 0));
+  t.final.add(mk_obj(1), mk_evt(10, 100), mk_evt(0, 0), false);
 
   t.toremove.insert(mk_obj(1));
 
@@ -1725,7 +1726,7 @@ TEST_F(PGLogTest, merge_log_3) {
   t.div.push_back(mk_ple_mod(mk_obj(1), mk_evt(10, 101), mk_evt(10, 100)));
   t.div.push_back(mk_ple_mod_rb(mk_obj(1), mk_evt(10, 102), mk_evt(10, 101)));
 
-  t.final.add(mk_obj(1), mk_evt(10, 100), mk_evt(0, 0));
+  t.final.add(mk_obj(1), mk_evt(10, 100), mk_evt(0, 0), false);
 
   t.toremove.insert(mk_obj(1));
 
@@ -1740,8 +1741,8 @@ TEST_F(PGLogTest, merge_log_4) {
   t.div.push_back(mk_ple_mod_rb(mk_obj(1), mk_evt(10, 101), mk_evt(10, 100)));
   t.div.push_back(mk_ple_mod_rb(mk_obj(1), mk_evt(10, 102), mk_evt(10, 101)));
 
-  t.init.add(mk_obj(1), mk_evt(10, 102), mk_evt(0, 0));
-  t.final.add(mk_obj(1), mk_evt(10, 100), mk_evt(0, 0));
+  t.init.add(mk_obj(1), mk_evt(10, 102), mk_evt(0, 0), false);
+  t.final.add(mk_obj(1), mk_evt(10, 100), mk_evt(0, 0), false);
 
   t.setup();
   run_test_case(t);
@@ -1756,7 +1757,7 @@ TEST_F(PGLogTest, merge_log_5) {
 
   t.auth.push_back(mk_ple_mod(mk_obj(1), mk_evt(11, 101), mk_evt(10, 100)));
 
-  t.final.add(mk_obj(1), mk_evt(11, 101), mk_evt(0, 0));
+  t.final.add(mk_obj(1), mk_evt(11, 101), mk_evt(0, 0), false);
 
   t.toremove.insert(mk_obj(1));
 
@@ -1770,7 +1771,7 @@ TEST_F(PGLogTest, merge_log_6) {
 
   t.auth.push_back(mk_ple_mod(mk_obj(1), mk_evt(11, 101), mk_evt(10, 100)));
 
-  t.final.add(mk_obj(1), mk_evt(11, 101), mk_evt(10, 100));
+  t.final.add(mk_obj(1), mk_evt(11, 101), mk_evt(10, 100), false);
 
   t.setup();
   run_test_case(t);
@@ -1782,8 +1783,8 @@ TEST_F(PGLogTest, merge_log_7) {
 
   t.auth.push_back(mk_ple_mod(mk_obj(1), mk_evt(11, 101), mk_evt(10, 100)));
 
-  t.init.add(mk_obj(1), mk_evt(10, 100), mk_evt(8, 80));
-  t.final.add(mk_obj(1), mk_evt(11, 101), mk_evt(8, 80));
+  t.init.add(mk_obj(1), mk_evt(10, 100), mk_evt(8, 80), false);
+  t.final.add(mk_obj(1), mk_evt(11, 101), mk_evt(8, 80), false);
 
   t.setup();
   run_test_case(t);
@@ -1795,9 +1796,8 @@ TEST_F(PGLogTest, merge_log_8) {
 
   t.auth.push_back(mk_ple_dt(mk_obj(1), mk_evt(11, 101), mk_evt(10, 100)));
 
-  t.init.add(mk_obj(1), mk_evt(10, 100), mk_evt(8, 80));
-
-  t.toremove.insert(mk_obj(1));
+  t.init.add(mk_obj(1), mk_evt(10, 100), mk_evt(8, 80), false);
+  t.final.add(mk_obj(1), mk_evt(11, 101), mk_evt(8, 80), true);
 
   t.setup();
   run_test_case(t);
@@ -1809,7 +1809,7 @@ TEST_F(PGLogTest, merge_log_prior_version_have) {
 
   t.div.push_back(mk_ple_mod(mk_obj(1), mk_evt(10, 101), mk_evt(10, 100)));
 
-  t.init.add(mk_obj(1), mk_evt(10, 101), mk_evt(10, 100));
+  t.init.add(mk_obj(1), mk_evt(10, 101), mk_evt(10, 100), false);
 
   t.setup();
   run_test_case(t);
@@ -1825,7 +1825,7 @@ TEST_F(PGLogTest, merge_log_split_missing_entries_at_head) {
   t.setup();
   t.set_div_bounds(mk_evt(9, 79), mk_evt(8, 69));
   t.set_auth_bounds(mk_evt(15, 160), mk_evt(9, 77));
-  t.final.add(mk_obj(1), mk_evt(15, 150), mk_evt(8, 70));
+  t.final.add(mk_obj(1), mk_evt(15, 150), mk_evt(8, 70), false);
   run_test_case(t);
 }
 
@@ -1838,7 +1838,7 @@ TEST_F(PGLogTest, olog_tail_gt_log_tail_split) {
   t.setup();
   t.set_div_bounds(mk_evt(15, 153), mk_evt(15, 151));
   t.set_auth_bounds(mk_evt(15, 156), mk_evt(10, 99));
-  t.final.add(mk_obj(1), mk_evt(15, 155), mk_evt(15, 150));
+  t.final.add(mk_obj(1), mk_evt(15, 155), mk_evt(15, 150), false);
   run_test_case(t);
 }
 
@@ -1852,7 +1852,7 @@ TEST_F(PGLogTest, olog_tail_gt_log_tail_split2) {
   t.setup();
   t.set_div_bounds(mk_evt(15, 153), mk_evt(15, 151));
   t.set_auth_bounds(mk_evt(16, 156), mk_evt(10, 99));
-  t.final.add(mk_obj(1), mk_evt(16, 155), mk_evt(0, 0));
+  t.final.add(mk_obj(1), mk_evt(16, 155), mk_evt(0, 0), false);
   t.toremove.insert(mk_obj(1));
   run_test_case(t);
 }

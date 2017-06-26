@@ -682,7 +682,7 @@ TEST(pg_missing_t, have_missing)
   hobject_t oid(object_t("objname"), "key", 123, 456, 0, "");
   pg_missing_t missing;
   EXPECT_FALSE(missing.have_missing());
-  missing.add(oid, eversion_t(), eversion_t());
+  missing.add(oid, eversion_t(), eversion_t(), false);
   EXPECT_TRUE(missing.have_missing());
 }
 
@@ -691,7 +691,7 @@ TEST(pg_missing_t, claim)
   hobject_t oid(object_t("objname"), "key", 123, 456, 0, "");
   pg_missing_t missing;
   EXPECT_FALSE(missing.have_missing());
-  missing.add(oid, eversion_t(), eversion_t());
+  missing.add(oid, eversion_t(), eversion_t(), false);
   EXPECT_TRUE(missing.have_missing());
 
   pg_missing_t other;
@@ -708,7 +708,7 @@ TEST(pg_missing_t, is_missing)
     hobject_t oid(object_t("objname"), "key", 123, 456, 0, "");
     pg_missing_t missing;
     EXPECT_FALSE(missing.is_missing(oid));
-    missing.add(oid, eversion_t(), eversion_t());
+    missing.add(oid, eversion_t(), eversion_t(), false);
     EXPECT_TRUE(missing.is_missing(oid));
   }
 
@@ -718,7 +718,7 @@ TEST(pg_missing_t, is_missing)
     pg_missing_t missing;
     eversion_t need(10,5);
     EXPECT_FALSE(missing.is_missing(oid, eversion_t()));
-    missing.add(oid, need, eversion_t());
+    missing.add(oid, need, eversion_t(), false);
     EXPECT_TRUE(missing.is_missing(oid));
     EXPECT_FALSE(missing.is_missing(oid, eversion_t()));
     EXPECT_TRUE(missing.is_missing(oid, need));
@@ -730,7 +730,7 @@ TEST(pg_missing_t, have_old)
   hobject_t oid(object_t("objname"), "key", 123, 456, 0, "");
   pg_missing_t missing;
   EXPECT_EQ(eversion_t(), missing.have_old(oid));
-  missing.add(oid, eversion_t(), eversion_t());
+  missing.add(oid, eversion_t(), eversion_t(), false);
   EXPECT_EQ(eversion_t(), missing.have_old(oid));
   eversion_t have(1,1);
   missing.revise_have(oid, have);
@@ -873,44 +873,13 @@ TEST(pg_missing_t, add_next_event)
     e.op = pg_log_entry_t::DELETE;
     EXPECT_TRUE(e.is_delete());
     missing.add_next_event(e);
-    EXPECT_FALSE(missing.have_missing());
-  }
-
-  // ERROR op should only be used for dup detection
-  {
-    pg_missing_t missing;
-    pg_log_entry_t e = sample_e;
-
-    e.op = pg_log_entry_t::ERROR;
-    e.return_code = -ENOENT;
-    EXPECT_FALSE(e.is_update());
-    EXPECT_FALSE(e.object_is_indexed());
-    EXPECT_TRUE(e.reqid_is_indexed());
-    EXPECT_FALSE(missing.is_missing(oid));
-    missing.add_next_event(e);
-    EXPECT_FALSE(missing.is_missing(oid));
-    EXPECT_FALSE(e.object_is_indexed());
-    EXPECT_TRUE(e.reqid_is_indexed());
-  }
-
-  // ERROR op should not affect previous entries
-  {
-    pg_missing_t missing;
-    pg_log_entry_t modify = sample_e;
-
-    modify.op = pg_log_entry_t::MODIFY;
-    EXPECT_FALSE(missing.is_missing(oid));
-    missing.add_next_event(modify);
     EXPECT_TRUE(missing.is_missing(oid));
-    EXPECT_EQ(missing.get_items().at(oid).need, version);
-
-    pg_log_entry_t error = sample_e;
-    error.op = pg_log_entry_t::ERROR;
-    error.return_code = -ENOENT;
-    error.version = eversion_t(11, 5);
-    missing.add_next_event(error);
-    EXPECT_TRUE(missing.is_missing(oid));
-    EXPECT_EQ(missing.get_items().at(oid).need, version);
+    EXPECT_EQ(prior_version, missing.get_items().at(oid).have);
+    EXPECT_EQ(version, missing.get_items().at(oid).need);
+    EXPECT_TRUE(missing.get_items().at(oid).is_delete());
+    EXPECT_EQ(oid, missing.get_rmissing().at(e.version.version));
+    EXPECT_EQ(1U, missing.num_missing());
+    EXPECT_EQ(1U, missing.get_rmissing().size());
   }
 }
 
@@ -921,7 +890,7 @@ TEST(pg_missing_t, revise_need)
   // create a new entry
   EXPECT_FALSE(missing.is_missing(oid));
   eversion_t need(10,10);
-  missing.revise_need(oid, need);
+  missing.revise_need(oid, need, false);
   EXPECT_TRUE(missing.is_missing(oid));
   EXPECT_EQ(eversion_t(), missing.get_items().at(oid).have);
   EXPECT_EQ(need, missing.get_items().at(oid).need);
@@ -930,7 +899,7 @@ TEST(pg_missing_t, revise_need)
   missing.revise_have(oid, have);
   eversion_t new_need(10,12);
   EXPECT_EQ(have, missing.get_items().at(oid).have);
-  missing.revise_need(oid, new_need);
+  missing.revise_need(oid, new_need, false);
   EXPECT_EQ(have, missing.get_items().at(oid).have);
   EXPECT_EQ(new_need, missing.get_items().at(oid).need);
 }
@@ -946,7 +915,7 @@ TEST(pg_missing_t, revise_have)
   EXPECT_FALSE(missing.is_missing(oid));
   // update an existing entry
   eversion_t need(10,12);
-  missing.add(oid, need, have);
+  missing.add(oid, need, have, false);
   EXPECT_TRUE(missing.is_missing(oid));
   eversion_t new_have(2,2);
   EXPECT_EQ(have, missing.get_items().at(oid).have);
@@ -962,7 +931,7 @@ TEST(pg_missing_t, add)
   EXPECT_FALSE(missing.is_missing(oid));
   eversion_t have(1,1);
   eversion_t need(10,10);
-  missing.add(oid, need, have);
+  missing.add(oid, need, have, false);
   EXPECT_TRUE(missing.is_missing(oid));
   EXPECT_EQ(have, missing.get_items().at(oid).have);
   EXPECT_EQ(need, missing.get_items().at(oid).need);
@@ -977,7 +946,7 @@ TEST(pg_missing_t, rm)
     EXPECT_FALSE(missing.is_missing(oid));
     epoch_t epoch = 10;
     eversion_t need(epoch,10);
-    missing.add(oid, need, eversion_t());
+    missing.add(oid, need, eversion_t(), false);
     EXPECT_TRUE(missing.is_missing(oid));
     // rm of an older version is a noop
     missing.rm(oid, eversion_t(epoch / 2,20));
@@ -991,7 +960,7 @@ TEST(pg_missing_t, rm)
     hobject_t oid(object_t("objname"), "key", 123, 456, 0, "");
     pg_missing_t missing;
     EXPECT_FALSE(missing.is_missing(oid));
-    missing.add(oid, eversion_t(), eversion_t());
+    missing.add(oid, eversion_t(), eversion_t(), false);
     EXPECT_TRUE(missing.is_missing(oid));
     auto m = missing.get_items().find(oid);
     missing.rm(m);
@@ -1013,7 +982,7 @@ TEST(pg_missing_t, got)
     EXPECT_FALSE(missing.is_missing(oid));
     epoch_t epoch = 10;
     eversion_t need(epoch,10);
-    missing.add(oid, need, eversion_t());
+    missing.add(oid, need, eversion_t(), false);
     EXPECT_TRUE(missing.is_missing(oid));
     // assert if that the version to be removed is lower than the version of the object
     {
@@ -1029,7 +998,7 @@ TEST(pg_missing_t, got)
     hobject_t oid(object_t("objname"), "key", 123, 456, 0, "");
     pg_missing_t missing;
     EXPECT_FALSE(missing.is_missing(oid));
-    missing.add(oid, eversion_t(), eversion_t());
+    missing.add(oid, eversion_t(), eversion_t(), false);
     EXPECT_TRUE(missing.is_missing(oid));
     auto m = missing.get_items().find(oid);
     missing.got(m);
@@ -1044,8 +1013,8 @@ TEST(pg_missing_t, split_into)
   uint32_t hash2 = 2;
   hobject_t oid2(object_t("objname"), "key2", 123, hash2, 0, "");
   pg_missing_t missing;
-  missing.add(oid1, eversion_t(), eversion_t());
-  missing.add(oid2, eversion_t(), eversion_t());
+  missing.add(oid1, eversion_t(), eversion_t(), false);
+  missing.add(oid2, eversion_t(), eversion_t(), false);
   pg_t child_pgid;
   child_pgid.m_seed = 1;
   pg_missing_t child;
