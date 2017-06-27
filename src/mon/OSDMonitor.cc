@@ -1016,6 +1016,10 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
         for (auto &pool_pair : tmp.pools) {
           int64_t pool_id = pool_pair.first;
           pg_pool_t pg_pool = pool_pair.second;
+          if (pg_pool.is_tier()) {
+            continue;
+          }
+
           std::string pool_name = tmp.get_pool_name(pool_id);
           uint32_t match_count = 0;
 
@@ -3906,7 +3910,8 @@ void OSDMonitor::get_health(list<pair<health_status_t,string> >& summary,
       // application metadata is not encoded until luminous is minimum
       // required release
       if (osdmap.require_osd_release >= CEPH_RELEASE_LUMINOUS &&
-          sum.num_objects > 0 && pool.application_metadata.empty()) {
+          sum.num_objects > 0 && pool.application_metadata.empty() &&
+          !pool.is_tier()) {
         stringstream ss;
         ss << "application not enabled on pool '" << pool_name << "'";
 
@@ -6367,6 +6372,11 @@ int OSDMonitor::prepare_command_pool_application(const string &prefix,
       return -EINVAL;
     }
 
+    if (p.is_tier()) {
+      ss << "application must be enabled on base tier";
+      return -EINVAL;
+    }
+
     string force;
     cmd_getval(g_ceph_context, cmdmap, "force", force);
 
@@ -6409,6 +6419,11 @@ int OSDMonitor::prepare_command_pool_application(const string &prefix,
     ss << "disable application '" << app << "' on pool '" << pool_name << "'";
 
   } else if (boost::algorithm::ends_with(prefix, "set")) {
+    if (p.is_tier()) {
+      ss << "application metadata must be set on base tier";
+      return -EINVAL;
+    }
+
     if (!app_exists) {
       ss << "application '" << app << "' is not enabled on pool '" << pool_name
          << "'";
