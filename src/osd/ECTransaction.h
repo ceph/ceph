@@ -51,10 +51,6 @@ namespace ECTransaction {
 	uint64_t projected_size =
 	  hinfo->get_projected_total_logical_size(sinfo);
 
-	if (i.second.has_source()) {
-	  plan.invalidates_cache = true;
-	}
-
 	if (i.second.deletes_first()) {
 	  ldpp_dout(dpp, 20) << __func__ << ": delete, setting projected size"
 			     << " to 0" << dendl;
@@ -63,6 +59,8 @@ namespace ECTransaction {
 
 	hobject_t source;
 	if (i.second.has_source(&source)) {
+	  plan.invalidates_cache = true;
+
 	  ECUtil::HashInfoRef shinfo = get_hinfo(source);
 	  projected_size = shinfo->get_projected_total_logical_size(sinfo);
 	  plan.hash_infos[source] = shinfo;
