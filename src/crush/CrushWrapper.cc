@@ -1283,6 +1283,31 @@ int CrushWrapper::trim_roots_with_class(bool unused)
   return 0;
 }
 
+int32_t CrushWrapper::_alloc_class_id() const {
+  if (class_name.empty()) {
+    return 0;
+  }
+  int32_t class_id = class_name.rbegin()->first + 1;
+  if (class_id >= 0) {
+    return class_id;
+  }
+  // wrapped, pick a random start and do exhaustive search
+  uint32_t upperlimit = numeric_limits<int32_t>::max() + 1;
+  class_id = rand() % upperlimit;
+  const auto start = class_id;
+  do {
+    if (!class_name.count(class_id)) {
+      return class_id;
+    } else {
+      class_id++;
+      if (class_id < 0) {
+        class_id = 0;
+      }
+    }
+  } while (class_id != start);
+  assert(0 == "no available class id");
+}
+
 void CrushWrapper::reweight(CephContext *cct)
 {
   set<int> roots;

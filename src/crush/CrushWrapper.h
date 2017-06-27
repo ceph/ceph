@@ -482,10 +482,12 @@ public:
     return 0;
   }
 
+  int32_t _alloc_class_id() const;
+
   int get_or_create_class_id(const string& name) {
     int c = get_class_id(name);
     if (c < 0) {
-      int i = class_name.size();
+      int i = _alloc_class_id();
       class_name[i] = name;
       class_rname[name] = i;
       return i;
