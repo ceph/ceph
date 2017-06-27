@@ -10375,7 +10375,8 @@ int BlueStore::_do_remove(
   OnodeRef o)
 {
   set<SharedBlob*> maybe_unshared_blobs;
-  _do_truncate(txc, c, o, 0, &maybe_unshared_blobs);
+  bool is_gen = !o->oid.is_no_gen();
+  _do_truncate(txc, c, o, 0, is_gen ? &maybe_unshared_blobs : nullptr);
   if (o->onode.has_omap()) {
     o->flush();
     _do_omap_clear(txc, o->onode.nid);
@@ -10397,73 +10398,81 @@ int BlueStore::_do_remove(
   o->onode = bluestore_onode_t();
   _debug_obj_on_delete(o->oid);
 
-  if (!o->oid.is_no_gen() &&
-      !maybe_unshared_blobs.empty()) {
-    // see if we can unshare blobs still referenced by the head
-    dout(10) << __func__ << " gen and maybe_unshared_blobs "
-	     << maybe_unshared_blobs << dendl;
-    ghobject_t nogen = o->oid;
-    nogen.generation = ghobject_t::NO_GEN;
-    OnodeRef h = c->onode_map.lookup(nogen);
-    if (h && h->exists) {
-      dout(20) << __func__ << " checking for unshareable blobs on " << h
-	       << " " << h->oid << dendl;
-      map<SharedBlob*,bluestore_extent_ref_map_t> expect;
-      for (auto& e : h->extent_map.extent_map) {
-	const bluestore_blob_t& b = e.blob->get_blob();
-	SharedBlob *sb = e.blob->shared_blob.get();
-	if (b.is_shared() &&
-	    sb->loaded &&
-	    maybe_unshared_blobs.count(sb)) {
-	  b.map(e.blob_offset, e.length, [&](uint64_t off, uint64_t len) {
-	      expect[sb].get(off, len);
-	      return 0;
-	    });
-	}
-      }
-      vector<SharedBlob*> unshared_blobs;
-      unshared_blobs.reserve(maybe_unshared_blobs.size());
-      for (auto& p : expect) {
-	dout(20) << " ? " << *p.first << " vs " << p.second << dendl;
-	if (p.first->persistent->ref_map == p.second) {
-	  SharedBlob *sb = p.first;
-	  dout(20) << __func__ << "  unsharing " << *sb << dendl;
-	  unshared_blobs.push_back(sb);
-	  txc->unshare_blob(sb);
-	  uint64_t sbid = c->make_blob_unshared(sb);
-	  string key;
-	  get_shared_blob_key(sbid, &key);
-	  txc->t->rmkey(PREFIX_SHARED_BLOB, key);
-	}
-      }
+  if (!is_gen || maybe_unshared_blobs.empty()) {
+    return 0;
+  }
 
-      if (!unshared_blobs.empty()) {
-        uint32_t b_start = OBJECT_MAX_SIZE;
-        uint32_t b_end = 0;
-        for (auto& e : h->extent_map.extent_map) {
-          const bluestore_blob_t& b = e.blob->get_blob();
-          SharedBlob *sb = e.blob->shared_blob.get();
-          if (b.is_shared() &&
-              std::find(unshared_blobs.begin(), unshared_blobs.end(),
-                        sb) != unshared_blobs.end()) {
-            dout(20) << __func__ << "  unsharing " << e << dendl;
-            bluestore_blob_t& blob = e.blob->dirty_blob();
-            blob.clear_flag(bluestore_blob_t::FLAG_SHARED);
-            if (e.logical_offset < b_start) {
-              b_start = e.logical_offset;
-            }
-            if (e.logical_end() > b_end) {
-              b_end = e.logical_end();
-            }
-          }
-        }
+  // see if we can unshare blobs still referenced by the head
+  dout(10) << __func__ << " gen and maybe_unshared_blobs "
+	   << maybe_unshared_blobs << dendl;
+  ghobject_t nogen = o->oid;
+  nogen.generation = ghobject_t::NO_GEN;
+  OnodeRef h = c->onode_map.lookup(nogen);
 
-        assert(b_end > b_start);
-	h->extent_map.dirty_range(b_start, b_end - b_start);
-	txc->write_onode(h);
+  if (!h || !h->exists) {
+    return 0;
+  }
+
+  dout(20) << __func__ << " checking for unshareable blobs on " << h
+	   << " " << h->oid << dendl;
+  map<SharedBlob*,bluestore_extent_ref_map_t> expect;
+  for (auto& e : h->extent_map.extent_map) {
+    const bluestore_blob_t& b = e.blob->get_blob();
+    SharedBlob *sb = e.blob->shared_blob.get();
+    if (b.is_shared() &&
+	sb->loaded &&
+	maybe_unshared_blobs.count(sb)) {
+      b.map(e.blob_offset, e.length, [&](uint64_t off, uint64_t len) {
+        expect[sb].get(off, len);
+	return 0;
+      });
+    }
+  }
+
+  vector<SharedBlob*> unshared_blobs;
+  unshared_blobs.reserve(maybe_unshared_blobs.size());
+  for (auto& p : expect) {
+    dout(20) << " ? " << *p.first << " vs " << p.second << dendl;
+    if (p.first->persistent->ref_map == p.second) {
+      SharedBlob *sb = p.first;
+      dout(20) << __func__ << "  unsharing " << *sb << dendl;
+      unshared_blobs.push_back(sb);
+      txc->unshare_blob(sb);
+      uint64_t sbid = c->make_blob_unshared(sb);
+      string key;
+      get_shared_blob_key(sbid, &key);
+      txc->t->rmkey(PREFIX_SHARED_BLOB, key);
+    }
+  }
+
+  if (unshared_blobs.empty()) {
+    return 0;
+  }
+
+  uint32_t b_start = OBJECT_MAX_SIZE;
+  uint32_t b_end = 0;
+  for (auto& e : h->extent_map.extent_map) {
+    const bluestore_blob_t& b = e.blob->get_blob();
+    SharedBlob *sb = e.blob->shared_blob.get();
+    if (b.is_shared() &&
+        std::find(unshared_blobs.begin(), unshared_blobs.end(),
+                  sb) != unshared_blobs.end()) {
+      dout(20) << __func__ << "  unsharing " << e << dendl;
+      bluestore_blob_t& blob = e.blob->dirty_blob();
+      blob.clear_flag(bluestore_blob_t::FLAG_SHARED);
+      if (e.logical_offset < b_start) {
+        b_start = e.logical_offset;
+      }
+      if (e.logical_end() > b_end) {
+        b_end = e.logical_end();
       }
     }
   }
+
+  assert(b_end > b_start);
+  h->extent_map.dirty_range(b_start, b_end - b_start);
+  txc->write_onode(h);
+
   return 0;
 }
 
