@@ -2913,7 +2913,6 @@ int FileStore::fiemap(coll_t cid, const ghobject_t& oid,
   } else {
     uint64_t i;
     struct fiemap_extent *extent = NULL;
-    struct fiemap_extent *last = NULL;
 
 more:
     r = backend->do_fiemap(**fd, offset, len, &fiemap);
@@ -2935,6 +2934,7 @@ more:
 
     i = 0;
 
+    struct fiemap_extent *last = NULL;
     while (i < fiemap->fm_mapped_extents) {
       struct fiemap_extent *next = extent + 1;
 
@@ -2955,7 +2955,7 @@ more:
         extent->fe_length = offset + len - extent->fe_logical;
       exomap[extent->fe_logical] = extent->fe_length;
       i++;
-      extent++;
+      last = extent++;
     }
     const bool is_last = last->fe_flags & FIEMAP_EXTENT_LAST;
     free(fiemap);
