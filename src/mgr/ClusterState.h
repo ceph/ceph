@@ -15,6 +15,7 @@
 #define CLUSTER_STATE_H_
 
 #include "mds/FSMap.h"
+#include "mon/MgrMap.h"
 #include "common/Mutex.h"
 
 #include "osdc/Objecter.h"
@@ -38,6 +39,8 @@ protected:
   FSMap fsmap;
   mutable Mutex lock;
 
+  MgrMap mgr_map;
+
   set<int64_t> existing_pools; ///< pools that exist, as of PGMap epoch
   PGMap pg_map;
   PGMap::Incremental pending_inc;
@@ -57,10 +60,11 @@ public:
   const bufferlist &get_health() const {return health_json;}
   const bufferlist &get_mon_status() const {return mon_status_json;}
 
-  ClusterState(MonClient *monc_, Objecter *objecter_);
+  ClusterState(MonClient *monc_, Objecter *objecter_, const MgrMap& mgrmap);
 
   void set_objecter(Objecter *objecter_);
   void set_fsmap(FSMap const &new_fsmap);
+  void set_mgr_map(MgrMap const &new_mgrmap);
 
   void notify_osdmap(const OSDMap &osd_map);
 
@@ -74,6 +78,13 @@ public:
   {
     Mutex::Locker l(lock);
     std::forward<Callback>(cb)(fsmap, std::forward<Args>(args)...);
+  }
+
+  template<typename Callback, typename...Args>
+  void with_mgrmap(Callback&& cb, Args&&...args) const
+  {
+    Mutex::Locker l(lock);
+    std::forward<Callback>(cb)(mgr_map, std::forward<Args>(args)...);
   }
 
   template<typename Callback, typename...Args>
