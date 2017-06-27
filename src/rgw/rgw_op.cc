@@ -774,8 +774,9 @@ int RGWDeleteObjTags::verify_permission(){
 }
 
 void RGWDeleteObjTags::execute() {
-  if (s->object.empty())
+  if (s->object.empty()) {
     return;
+  }
 
     rgw_obj obj;
     obj = rgw_obj(s->bucket, s->object);
