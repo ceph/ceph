@@ -655,19 +655,25 @@ public:
       log.can_rollback_to = v;
   }
 
-  void activate_not_complete(pg_info_t &info) {
+  void reset_complete_to(pg_info_t *info) {
     log.complete_to = log.log.begin();
-    while (log.complete_to->version <
+    while (!missing.missing.empty() && log.complete_to->version <
 	   missing.missing[missing.rmissing.begin()->second].need)
       ++log.complete_to;
     assert(log.complete_to != log.log.end());
     if (log.complete_to == log.log.begin()) {
-      info.last_complete = eversion_t();
+      if (info)
+	info->last_complete = eversion_t();
     } else {
       --log.complete_to;
-      info.last_complete = log.complete_to->version;
+      if (info)
+	info->last_complete = log.complete_to->version;
       ++log.complete_to;
     }
+  }
+
+  void activate_not_complete(pg_info_t &info) {
+    reset_complete_to(&info);
     log.last_requested = 0;
   }
 
@@ -794,6 +800,17 @@ public:
       this);
     if (!entries.empty()) {
       mark_writeout_from(entries.begin()->version);
+      if (entries.begin()->is_lost_delete()) {
+	// hack: since lost deletes queue recovery directly, and don't
+	// go through activate_not_complete() again, our complete_to
+	// iterator may still point at log.end(). Reset it to point
+	// before these new lost_delete entries.  This only occurs
+	// when lost+delete entries are initially added, which is
+	// always in a list of solely lost_delete entries, so it is
+	// sufficient to check whether the first entry is a
+	// lost_delete
+	reset_complete_to(nullptr);
+      }
     }
   }
 
