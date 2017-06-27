@@ -14,7 +14,7 @@ struct BackTrace {
   const static int max = 100;
 
   int skip;
-  void *array[max];
+  void *array[max]{};
   size_t size;
   char **strings;
 
