@@ -1,3 +1,6 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab
+//
 #include <syslog.h>
 #include <boost/algorithm/string/predicate.hpp>
 
@@ -34,6 +37,27 @@ void LogEntryKey::generate_test_instances(list<LogEntryKey*>& o)
 {
   o.push_back(new LogEntryKey);
   o.push_back(new LogEntryKey(entity_inst_t(), utime_t(1,2), 34));
+}
+
+clog_type LogEntry::str_to_level(std::string const &str)
+{
+  std::string level_str = str;
+  std::transform(level_str.begin(), level_str.end(), level_str.begin(),
+      [](char c) {return std::tolower(c);});
+
+  if (level_str == "debug") {
+    return CLOG_DEBUG;
+  } else if (level_str == "info") {
+    return CLOG_INFO;
+  } else if (level_str == "sec") {
+    return CLOG_SEC;
+  } else if (level_str == "warn" | level_str == "warning") {
+    return CLOG_WARN;
+  } else if (level_str == "error" | level_str == "err") {
+    return CLOG_ERROR;
+  } else {
+    return CLOG_UNKNOWN;
+  }
 }
 
 // ----
@@ -274,3 +298,4 @@ void LogSummary::generate_test_instances(list<LogSummary*>& o)
   o.push_back(new LogSummary);
   // more!
 }
+
