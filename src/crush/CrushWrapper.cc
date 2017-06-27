@@ -1498,7 +1498,7 @@ int CrushWrapper::bucket_add_item(crush_bucket *bucket, int item, int weight)
       weight_set->size = new_size;
     }
     if (arg->ids_size) {
-      arg->ids = (int*)realloc(arg->ids, new_size * sizeof(int));
+      arg->ids = (__s32 *)realloc(arg->ids, new_size * sizeof(__s32));
       assert(arg->ids_size + 1 == new_size);
       arg->ids[arg->ids_size] = item;
       arg->ids_size = new_size;
@@ -1530,7 +1530,7 @@ int CrushWrapper::bucket_remove_item(crush_bucket *bucket, int item)
       assert(arg->ids_size - 1 == new_size);
       for (__u32 k = position; k < new_size; k++)
 	arg->ids[k] = arg->ids[k+1];
-      arg->ids = (int*)realloc(arg->ids, new_size * sizeof(int));
+      arg->ids = (__s32 *)realloc(arg->ids, new_size * sizeof(__s32));
       arg->ids_size = new_size;
     }
   }
@@ -1915,7 +1915,7 @@ void CrushWrapper::decode(bufferlist::iterator& blp)
 	      ::decode(weight_set->weights[l], blp);
 	  }
 	  ::decode(arg->ids_size, blp);
-	  arg->ids = (int*)calloc(arg->ids_size, sizeof(int));
+	  arg->ids = (__s32 *)calloc(arg->ids_size, sizeof(__s32));
 	  for (__u32 k = 0; k < arg->ids_size; k++)
 	    ::decode(arg->ids[k], blp);
 	}

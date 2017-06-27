@@ -232,7 +232,7 @@ int CrushCompiler::decompile_weight_set(crush_weight_set *weight_set,
   return 0;
 }
 
-int CrushCompiler::decompile_ids(int *ids,
+int CrushCompiler::decompile_ids(__s32 *ids,
                                  __u32 size,
                                  ostream &out)
 {
@@ -972,7 +972,7 @@ int CrushCompiler::parse_choose_arg_ids(iter_t const& i, int bucket_id, crush_ch
     return -1;
   }
   arg->ids_size = size;
-  arg->ids = (int *)calloc(arg->ids_size, sizeof(int));
+  arg->ids = (__s32 *)calloc(arg->ids_size, sizeof(__s32));
   __u32 pos = 0;
   for (iter_t p = i->children.begin() + 2; pos < size; p++, pos++)
     arg->ids[pos] = int_node(*p);
