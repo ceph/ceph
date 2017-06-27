@@ -412,7 +412,6 @@ prepare_conf() {
         osd pool default erasure code profile = plugin=jerasure technique=reed_sol_van k=2 m=1 ruleset-failure-domain=osd
         rgw frontends = $rgw_frontend port=$CEPH_RGW_PORT
         ; needed for s3tests
-        rgw enable static website = 1
         rgw crypt s3 kms encryption keys = testkey-1=YmluCmJvb3N0CmJvb3N0LWJ1aWxkCmNlcGguY29uZgo= testkey-2=aWIKTWFrZWZpbGUKbWFuCm91dApzcmMKVGVzdGluZwo=
         rgw crypt require ssl = false
         rgw lc debug interval = 10
