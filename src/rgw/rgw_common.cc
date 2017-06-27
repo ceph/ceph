@@ -108,6 +108,7 @@ rgw_http_errors rgw_http_s3_errors({
     { ERR_INTERNAL_ERROR, {500, "InternalError" }},
     { ERR_NOT_IMPLEMENTED, {501, "NotImplemented" }},
     { ERR_SERVICE_UNAVAILABLE, {503, "ServiceUnavailable"}},
+    { ERR_ZERO_IN_URL, {400, "InvalidRequest" }},
 });
 
 rgw_http_errors rgw_http_swift_errors({
@@ -118,6 +119,10 @@ rgw_http_errors rgw_http_swift_errors({
     { ERR_BAD_URL, {412, "Bad URL" }},
     { ERR_NOT_SLO_MANIFEST, {400, "Not an SLO manifest" }},
     { ERR_QUOTA_EXCEEDED, {413, "QuotaExceeded" }},
+    /* FIXME(rzarzynski): we need to find a way to apply Swift's error handling
+     * procedures also for ERR_ZERO_IN_URL. This make a problem as the validation
+     * is performed very early, even before setting the req_state::proto_flags. */
+    { ERR_ZERO_IN_URL, {412, "Invalid UTF8 or contains NULL"}},
 });
 
 int rgw_perf_start(CephContext *cct)
