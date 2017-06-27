@@ -12,6 +12,7 @@
 #include "rapidjson/reader.h"
 
 #include "rgw_auth.h"
+#include <arpa/inet.h>
 #include "rgw_iam_policy.h"
 
 namespace {
