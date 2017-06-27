@@ -850,7 +850,6 @@ OPTION(osd_mon_ack_timeout, OPT_DOUBLE, 30.0) // time out a mon if it doesn't ac
 OPTION(osd_stats_ack_timeout_factor, OPT_DOUBLE, 2.0) // multiples of mon_ack_timeout
 OPTION(osd_stats_ack_timeout_decay, OPT_DOUBLE, .9)
 OPTION(osd_default_data_pool_replay_window, OPT_INT, 45)
-OPTION(osd_preserve_trimmed_log, OPT_BOOL, false)
 OPTION(osd_auto_mark_unfound_lost, OPT_BOOL, false)
 OPTION(osd_recovery_delay_start, OPT_FLOAT, 0)
 OPTION(osd_recovery_max_active, OPT_U64, 3)
