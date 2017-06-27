@@ -2424,27 +2424,46 @@ void Monitor::do_health_to_clog(bool force)
 
   dout(10) << __func__ << (force ? " (force)" : "") << dendl;
 
-  list<string> status;
-  health_status_t overall = get_health(status, NULL, NULL);
+  if (osdmon()->osdmap.require_osd_release >= CEPH_RELEASE_LUMINOUS) {
+    string summary;
+    health_status_t level = get_health_status(false, nullptr, &summary);
+    if (!force &&
+	summary == health_status_cache.summary &&
+	level == health_status_cache.overall)
+      return;
+    if (level == HEALTH_OK)
+      clog->info() << summary;
+    else if (level == HEALTH_WARN)
+      clog->warn() << summary;
+    else if (level == HEALTH_ERR)
+      clog->error() << summary;
+    else
+      ceph_abort();
+    health_status_cache.summary = summary;
+    health_status_cache.overall = level;
+  } else {
+    // for jewel only
+    list<string> status;
+    health_status_t overall = get_health(status, NULL, NULL);
+    dout(25) << __func__
+	     << (force ? " (force)" : "")
+	     << dendl;
 
-  dout(25) << __func__
-           << (force ? " (force)" : "")
-           << dendl;
+    string summary = joinify(status.begin(), status.end(), string("; "));
 
-  string summary = joinify(status.begin(), status.end(), string("; "));
+    if (!force &&
+	overall == health_status_cache.overall &&
+	!health_status_cache.summary.empty() &&
+	health_status_cache.summary == summary) {
+      // we got a dup!
+      return;
+    }
 
-  if (!force &&
-      overall == health_status_cache.overall &&
-      !health_status_cache.summary.empty() &&
-      health_status_cache.summary == summary) {
-    // we got a dup!
-    return;
+    clog->info() << summary;
+
+    health_status_cache.overall = overall;
+    health_status_cache.summary = summary;
   }
-
-  clog->info() << summary;
-
-  health_status_cache.overall = overall;
-  health_status_cache.summary = summary;
 }
 
 health_status_t Monitor::get_health_status(
