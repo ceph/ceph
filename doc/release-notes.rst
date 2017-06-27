@@ -195,6 +195,11 @@ Major Changes from Kraken
       log.
     - ``ceph mgr dump`` will dump the MgrMap, including the currently active
       ceph-mgr daemon and any standbys.
+    - ``ceph mgr module ls`` will list active ceph-mgr modules.
+    - ``ceph mgr module {enable,disable} <name>`` will enable or
+      disable the named mgr module.  The module must be present in the
+      configured `mgr_module_path` on the host(s) where `ceph-mgr` is
+      running.
     - ``ceph osd crush swap-bucket <src> <dest>`` will swap the
       contents of two CRUSH buckets in the hierarchy while preserving
       the buckets' ids.  This allows an entire subtree of devices to

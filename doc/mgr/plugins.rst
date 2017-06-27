@@ -21,13 +21,10 @@ Installing a plugin
 -------------------
 
 Once your module is present in the location set by the
-``mgr module path`` configuration setting, add its name
-to the ``mgr modules`` configuration setting and restart the ceph-mgr
-daemon to load it.
+``mgr module path`` configuration setting, you can enable it
+via the ``ceph mgr module enable`` command::
 
-If you're working within a Ceph vstart cluster then your module
-should be found in the default pybind/mgr location, and you only
-have to add it to ``mgr modules`` to get it loaded.
+  ceph mgr module enable mymodule
 
 Note that the MgrModule interface is not stable, so any modules maintained
 outside of the Ceph tree are liable to break when run against any newer

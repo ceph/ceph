@@ -24,12 +24,13 @@ If you had already enabled the module, restart ceph-mgr after installing depende
 Enabling
 ========
 
-Add this to your ceph.conf on nodes where you run ceph-mgr:
+Enable the module with::
 
-::
+  ceph mgr module enable dashboard
 
-    [mgr]                                                                           
-        mgr modules = dashboard
+You can see currently enabled modules with::
+
+  ceph mgr module ls
 
 If you use any other ceph-mgr modules, make sure they're in the list too.
 
