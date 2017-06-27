@@ -1213,6 +1213,7 @@ public:
     set<pg_shard_t> waiting_on_whom;
     int shallow_errors;
     int deep_errors;
+    int large_omap_objects = 0;
     int fixed;
     ScrubMap primary_scrubmap;
     map<pg_shard_t, ScrubMap> received_maps;
@@ -1328,6 +1329,7 @@ public:
       subset_last_update = eversion_t();
       shallow_errors = 0;
       deep_errors = 0;
+      large_omap_objects = 0;
       fixed = 0;
       deep = false;
       seed = 0;
