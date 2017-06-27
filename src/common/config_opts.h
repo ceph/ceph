@@ -1165,6 +1165,7 @@ OPTION(bluestore_2q_cache_kout_ratio, OPT_DOUBLE, .5)   // number of kout page s
 OPTION(bluestore_cache_size, OPT_U64, 3*1024*1024*1024)
 OPTION(bluestore_cache_meta_ratio, OPT_DOUBLE, .7)
 OPTION(bluestore_cache_kv_ratio, OPT_DOUBLE, .2)
+OPTION(bluestore_cache_kv_max, OPT_U64, 512*1024*1024) // limit the maximum amont of cache for the kv store
 OPTION(bluestore_kvbackend, OPT_STR, "rocksdb")
 OPTION(bluestore_allocator, OPT_STR, "bitmap")     // stupid | bitmap
 OPTION(bluestore_freelist_blocks_per_key, OPT_INT, 128)
