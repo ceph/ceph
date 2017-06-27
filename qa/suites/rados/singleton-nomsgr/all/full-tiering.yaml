@@ -20,6 +20,7 @@ tasks:
     client.0:
       - ceph osd pool create ec-ca 1 1
       - ceph osd pool create ec 1 1 erasure default
+      - ceph osd pool application enable ec rados
       - ceph osd tier add ec ec-ca
       - ceph osd tier cache-mode ec-ca readproxy
       - ceph osd tier set-overlay ec ec-ca

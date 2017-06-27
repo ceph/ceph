@@ -17,3 +17,4 @@ tasks:
       - sudo ceph osd pool set cache hit_set_count 8
       - sudo ceph osd pool set cache hit_set_period 60
       - sudo ceph osd pool set cache target_max_objects 250
+      - rbd pool init rbd

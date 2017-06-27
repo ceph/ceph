@@ -4,7 +4,9 @@ IMAGE_FEATURES="layering,exclusive-lock,object-map,fast-diff"
 
 create_pools() {
     ceph osd pool create images 100
+    rbd pool init images
     ceph osd pool create volumes 100
+    rbd pool init volumes
 }
 
 delete_pools() {
