@@ -135,9 +135,6 @@ class Thrasher:
         except Exception:
             manager.raw_cluster_cmd('--', 'mon', 'tell', '*', 'injectargs',
                                     '--mon-osd-down-out-interval 0')
-        self.thread = gevent.spawn(self.do_thrash)
-        if self.dump_ops_enable == "true":
-            self.dump_ops_thread = gevent.spawn(self.do_dump_ops)
         if self.config.get('powercycle') or not self.cmd_exists_on_osds("ceph-objectstore-tool"):
             self.ceph_objectstore_tool = False
             self.test_rm_past_intervals = False
@@ -152,6 +149,10 @@ class Thrasher:
                 self.config.get('ceph_objectstore_tool', True)
             self.test_rm_past_intervals = \
                 self.config.get('test_rm_past_intervals', True)
+        # spawn do_thrash
+        self.thread = gevent.spawn(self.do_thrash)
+        if self.dump_ops_enable == "true":
+            self.dump_ops_thread = gevent.spawn(self.do_dump_ops)
 
     def cmd_exists_on_osds(self, cmd):
         allremotes = self.ceph_manager.ctx.cluster.only(\
