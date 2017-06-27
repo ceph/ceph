@@ -21,8 +21,8 @@ from . import rpm, deb, redhat
 log = logging.getLogger(__name__)
 
 def get_upgrade_version(ctx, config, remote):
-    gitbuilder = _get_gitbuilder_project(ctx, remote, config)
-    version = gitbuilder.version
+    builder = _get_builder_project(ctx, remote, config)
+    version = builder.version
     return version
 
 def verify_package_version(ctx, config, remote):

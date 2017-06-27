@@ -57,7 +57,7 @@ class TestInstall(object):
         m_get_package_version.return_value = "11.0.0"
         install.get_upgrade_version(Mock(), Mock(), Mock())
 
-    @patch("teuthology.task.install._get_gitbuilder_project")
+    @patch("teuthology.task.install._get_builder_project")
     @patch("teuthology.task.install.packaging.get_package_version")
     def test_verify_ceph_version_success(self, m_get_package_version,
                                          m_gitbuilder_project):
