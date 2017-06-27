@@ -595,6 +595,11 @@ typedef ceph::shared_ptr<const OSDMap> OSDMapRef;
      uint32_t seed,
      ScrubMap::object &o,
      ThreadPool::TPHandle &handle) = 0;
+   void be_large_omap_check(
+     const map<pg_shard_t,ScrubMap*> &maps,
+     const set<hobject_t> &master_set,
+     int& large_omap_objects,
+     ostream &warnstream) const;
 
    static PGBackend *build_pg_backend(
      const pg_pool_t &pool,
