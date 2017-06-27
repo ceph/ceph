@@ -2353,9 +2353,11 @@ function test_mds_tell_help_command()
   ceph osd pool delete fs_metadata fs_metadata --yes-i-really-really-mean-it
 }
 
-function test_mgr_tell_help_command()
+function test_mgr_tell()
 {
   ceph tell mgr help
+  ceph tell mgr fs status
+  ceph tell mgr osd status
 }
 
 #
@@ -2414,7 +2416,7 @@ MDS_TESTS+=" mon_mds"
 MDS_TESTS+=" mon_mds_metadata"
 MDS_TESTS+=" mds_tell_help_command"
 
-MGR_TESTS+=" mgr_tell_help_command"
+MGR_TESTS+=" mgr_tell"
 
 TESTS+=$MON_TESTS
 TESTS+=$OSD_TESTS
