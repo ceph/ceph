@@ -134,35 +134,67 @@ const string PREFIX_SHARED_BLOB = "X"; // u64 offset -> shared_blob_t
 template<typename S>
 static void append_escaped(const string &in, S *out)
 {
-  char hexbyte[8];
+  char hexbyte[in.length() * 3 + 1];
+  char* ptr = &hexbyte[0];
   for (string::const_iterator i = in.begin(); i != in.end(); ++i) {
     if (*i <= '#') {
-      snprintf(hexbyte, sizeof(hexbyte), "#%02x", (uint8_t)*i);
-      out->append(hexbyte);
+      *ptr++ = '#';
+      *ptr++ = "0123456789abcdef"[(*i >> 4) & 0x0f];
+      *ptr++ = "0123456789abcdef"[*i & 0x0f];
     } else if (*i >= '~') {
-      snprintf(hexbyte, sizeof(hexbyte), "~%02x", (uint8_t)*i);
-      out->append(hexbyte);
+      *ptr++ = '~';
+      *ptr++ = "0123456789abcdef"[(*i >> 4) & 0x0f];
+      *ptr++ = "0123456789abcdef"[*i & 0x0f];
     } else {
-      out->push_back(*i);
+      *ptr++  = *i;
     }
   }
-  out->push_back('!');
+  *ptr++ = '!';
+  out->append(hexbyte, ptr - &hexbyte[0]);
+}
+
+inline unsigned h2i(char c)
+{
+  if ((c >= '0') && (c <= '9')) {
+    return c - 0x30;
+  } else if ((c >= 'a') && (c <= 'f')) {
+    return c - 'a' + 10;
+  } else if ((c >= 'A') && (c <= 'F')) {
+    return c - 'A' + 10;
+  } else {
+    return 256; // make it always larger than 255
+  }
 }
 
 static int decode_escaped(const char *p, string *out)
 {
+  char buff[256];
+  char* ptr = &buff[0];
+  char* max = &buff[252];
   const char *orig_p = p;
   while (*p && *p != '!') {
     if (*p == '#' || *p == '~') {
-      unsigned hex;
-      int r = sscanf(++p, "%2x", &hex);
-      if (r < 1)
-	return -EINVAL;
-      out->push_back((char)hex);
-      p += 2;
+      unsigned hex = 0;
+      p++;
+      hex = h2i(*p++) << 4;
+      if (hex > 255) {
+        return -EINVAL;
+      }
+      hex |= h2i(*p++);
+      if (hex > 255) {
+        return -EINVAL;
+      }
+      *ptr++ = hex;
     } else {
-      out->push_back(*p++);
+      *ptr++ = *p++;
     }
+    if (ptr > max) {
+       out->append(buff, ptr-buff);
+       ptr = &buff[0];
+    }
+  }
+  if (ptr != buff) {
+     out->append(buff, ptr-buff);
   }
   return p - orig_p;
 }
