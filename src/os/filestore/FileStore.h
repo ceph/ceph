@@ -94,6 +94,7 @@ enum {
   l_filestore_bytes,
   l_filestore_apply_latency,
   l_filestore_queue_transaction_latency_avg,
+  l_filestore_sync_pause_max_lat,
   l_filestore_last,
 };
 

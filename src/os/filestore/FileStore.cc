@@ -629,6 +629,7 @@ FileStore::FileStore(CephContext* cct, const std::string &base,
   plb.add_time_avg(l_filestore_commitcycle_latency, "commitcycle_latency", "Average latency of commit");
   plb.add_u64_counter(l_filestore_journal_full, "journal_full", "Journal writes while full");
   plb.add_time_avg(l_filestore_queue_transaction_latency_avg, "queue_transaction_latency_avg", "Store operation queue latency");
+  plb.add_time(l_filestore_sync_pause_max_lat, "sync_pause_max_latency", "Max latency of op_wq pause before syncfs");
 
   logger = plb.create_perf_counters();
 
@@ -4010,8 +4011,7 @@ void FileStore::sync_entry()
 	  }
 	  dout(20) << " done waiting for checkpoint " << cid << " to complete" << dendl;
 	}
-      } else
-      {
+      } else {
 	apply_manager.commit_started();
 	op_tp.unpause();
 
@@ -4043,6 +4043,10 @@ void FileStore::sync_entry()
       utime_t lat = done - start;
       utime_t dur = done - startwait;
       dout(10) << __FUNC__ << ": commit took " << lat << ", interval was " << dur << dendl;
+      utime_t max_pause_lat = logger->tget(l_filestore_sync_pause_max_lat);
+      if (max_pause_lat == utime_t() || max_pause_lat < dur - lat) {
+        logger->tinc(l_filestore_sync_pause_max_lat, dur - lat);
+      }
 
       logger->inc(l_filestore_commitcycle);
       logger->tinc(l_filestore_commitcycle_latency, lat);
