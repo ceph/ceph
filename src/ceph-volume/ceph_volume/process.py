@@ -82,5 +82,49 @@ def run(command, **kw):
         if stop_on_error:
             raise RuntimeError(msg)
         else:
-            terminal.warning(msg)
+            if terminal_logging:
+                terminal.warning(msg)
             logger.warning(msg)
+
+
+def call(command, **kw):
+    """
+    Similar to ``subprocess.Popen`` with the following changes:
+
+    * returns stdout, stderr, and exit code (vs. just the exit code)
+    * logs the full contents of stderr and stdout (separately) to the file log
+
+    By default, no terminal output is given, not even the command that is going
+    to run.
+
+    Useful when system calls are needed to act on output, and that same output
+    shouldn't get displayed on the terminal.
+
+    :param terminal_logging: Log command to terminal, defaults to False
+    """
+    terminal_logging = kw.get('terminal_logging', False)
+    command_msg = "Running command: %s" % ' '.join(command)
+    logger.info(command_msg)
+    if terminal_logging:
+        terminal.write(command_msg)
+
+    process = subprocess.Popen(
+        command,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        close_fds=True,
+        **kw
+    )
+
+    returncode = process.wait()
+    stdout = process.stdout.read().splitlines()
+    stderr = process.stderr.read().splitlines()
+
+    # the following can get a messed up order in the log if the system call
+    # returns output with both stderr and stdout intermingled. This separates
+    # that.
+    for line in stdout:
+        log_output('stdout', line, False)
+    for line in stderr:
+        log_output('stderr', line, False)
+    return stdout, stderr, returncode
