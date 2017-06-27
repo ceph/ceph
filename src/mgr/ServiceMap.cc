@@ -56,6 +56,7 @@ void ServiceMap::Service::encode(bufferlist& bl, uint64_t features) const
 {
   ENCODE_START(1, 1, bl);
   ::encode(daemons, bl, features);
+  ::encode(summary, bl);
   ENCODE_FINISH(bl);
 }
 
@@ -63,12 +64,14 @@ void ServiceMap::Service::decode(bufferlist::iterator& p)
 {
   DECODE_START(1, p);
   ::decode(daemons, p);
+  ::decode(summary, p);
   DECODE_FINISH(p);
 }
 
 void ServiceMap::Service::dump(Formatter *f) const
 {
   f->open_object_section("daemons");
+  f->dump_string("summary", summary);
   for (auto& p : daemons) {
     f->dump_object(p.first.c_str(), p.second);
   }

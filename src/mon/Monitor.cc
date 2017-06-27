@@ -2657,13 +2657,8 @@ void Monitor::get_cluster_status(stringstream &ss, Formatter *f)
       osdmon()->osdmap.print_summary(NULL, ss, string(maxlen + 6, ' '));
       ss << "\n";
       for (auto& p : service_map.services) {
-	set<string> active;
-	for (auto& q : p.second.daemons) {
-	  active.insert(q.first);
-	}
 	ss << "    " << p.first << ": " << string(maxlen - p.first.size(), ' ')
-	   << p.second.daemons.size() << " active: "
-	   << active << "\n";
+	   << p.second.get_summary() << "\n";
       }
     }
 
