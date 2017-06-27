@@ -394,13 +394,6 @@ OSD
 :Required: No
 :Default: 1
 
-``osd preserve trimmed log``
-
-:Description: Preserves trimmed logs after trimming.
-:Type: Boolean
-:Required: No
-:Default: ``false``
-
 
 ``osd tmapput sets uses tmap``
 
