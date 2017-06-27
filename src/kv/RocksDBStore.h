@@ -76,6 +76,7 @@ class RocksDBStore : public KeyValueDB {
   string options_str;
 
   uint64_t cache_size = 0;
+  bool set_cache_flag = false;
 
   int do_open(ostream &out, bool create_if_missing);
 
@@ -439,6 +440,7 @@ err:
 
   int set_cache_size(uint64_t s) override {
     cache_size = s;
+    set_cache_flag = true;
     return 0;
   }
 
