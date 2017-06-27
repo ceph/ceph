@@ -4493,7 +4493,7 @@ void OSDMap::check_health(health_check_map_t *checks) const
     }
   }
 
-  // OSD_FLAGS
+  // OSDMAP_FLAGS
   {
     // warn about flags
     uint64_t warn_flags =
@@ -4515,7 +4515,32 @@ void OSDMap::check_health(health_check_map_t *checks) const
       ostringstream ss;
       ss << get_flag_string(get_flags() & warn_flags)
 	 << " flag(s) set";
-      checks->add("OSD_FLAGS", HEALTH_WARN, ss.str());
+      checks->add("OSDMAP_FLAGS", HEALTH_WARN, ss.str());
+    }
+  }
+
+  // OSD_FLAGS
+  {
+    list<string> detail;
+    const unsigned flags =
+      CEPH_OSD_NOUP |
+      CEPH_OSD_NOIN |
+      CEPH_OSD_NODOWN |
+      CEPH_OSD_NOOUT;
+    for (int i = 0; i < max_osd; ++i) {
+      if (osd_state[i] & flags) {
+	ostringstream ss;
+	set<string> states;
+	OSDMap::calc_state_set(osd_state[i] & flags, states);
+	ss << "osd." << i << " has flags " << states;
+	detail.push_back(ss.str());
+      }
+    }
+    if (!detail.empty()) {
+      ostringstream ss;
+      ss << detail.size() << " osd(s) have {NOUP,NODOWN,NOIN,NOOUT} flags set";
+      auto& d = checks->add("OSD_FLAGS", HEALTH_WARN, ss.str());
+      d.detail.swap(detail);
     }
   }
 
