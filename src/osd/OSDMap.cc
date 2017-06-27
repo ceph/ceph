@@ -1947,7 +1947,6 @@ void OSDMap::_apply_upmap(const pg_pool_t& pi, pg_t raw_pg, vector<int> *raw) co
       }
       if (!exists && pos >= 0) {
 	(*raw)[pos] = r.second;
-	return;
       }
     }
   }
