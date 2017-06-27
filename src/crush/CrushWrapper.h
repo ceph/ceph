@@ -442,24 +442,24 @@ public:
     return class_rname.count(name);
   }
   const char *get_class_name(int i) const {
-    std::map<int,string>::const_iterator p = class_name.find(i);
+    auto p = class_name.find(i);
     if (p != class_name.end())
       return p->second.c_str();
     return 0;
   }
   int get_class_id(const string& name) const {
-    std::map<string,int>::const_iterator p = class_rname.find(name);
+    auto p = class_rname.find(name);
     if (p != class_rname.end())
       return p->second;
     else
       return -EINVAL;
   }
   int remove_class_name(const string& name) {
-    std::map<string,int>::const_iterator p = class_rname.find(name);
+    auto p = class_rname.find(name);
     if (p == class_rname.end())
       return -ENOENT;
     int class_id = p->second;
-    std::map<int,string>::const_iterator q = class_name.find(class_id);
+    auto q = class_name.find(class_id);
     if (q == class_name.end())
       return -ENOENT;
     class_rname.erase(name);
