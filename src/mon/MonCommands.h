@@ -952,9 +952,10 @@ COMMAND("mgr fail name=who,type=CephString", \
 	"treat the named manager daemon as failed", "mgr", "rw", "cli,rest")
 COMMAND("mgr module ls",
 	"list active mgr modules", "mgr", "r", "cli,rest")
-COMMAND("mgr module enable "			\
-	"name=module,type=CephString",
+COMMAND("mgr module enable "						\
+	"name=module,type=CephString "					\
+	"name=force,type=CephChoices,strings=--force,req=false",
 	"enable mgr module", "mgr", "rw", "cli,rest")
-COMMAND("mgr module disable "			\
+COMMAND("mgr module disable "						\
 	"name=module,type=CephString",
-	"enable mgr module", "mgr", "rw", "cli,rest")
+	"disable mgr module", "mgr", "rw", "cli,rest")

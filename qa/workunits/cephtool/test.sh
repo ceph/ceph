@@ -713,8 +713,11 @@ function test_mon_misc()
 
   ceph mgr dump
   ceph mgr module ls
-  ceph mgr module enable foo
-  ceph mgr module disable foo
+  ceph mgr module enable restful
+  expect_false ceph mgr module enable foodne
+  ceph mgr module enable foodne --force
+  ceph mgr module disable foodne
+  ceph mgr module disable foodnebizbangbash
 
   ceph mon metadata a
   ceph mon metadata
