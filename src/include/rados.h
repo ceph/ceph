@@ -424,6 +424,7 @@ enum {
 
 #define EOLDSNAPC    85  /* ORDERSNAP flag set; writer has old snapc*/
 #define EBLACKLISTED 108 /* blacklisted */
+#define ERECOVERING  109 /* balanced reads arrived while targeting object hasn't been recovered */
 
 /* xattr comparison */
 enum {
