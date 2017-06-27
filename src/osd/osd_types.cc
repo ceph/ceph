@@ -1942,11 +1942,12 @@ void object_stat_sum_t::dump(Formatter *f) const
   f->dump_int("num_evict_mode_full", num_evict_mode_full);
   f->dump_int("num_objects_pinned", num_objects_pinned);
   f->dump_int("num_legacy_snapsets", num_legacy_snapsets);
+  f->dump_int("num_large_omap_objects", num_large_omap_objects);
 }
 
 void object_stat_sum_t::encode(bufferlist& bl) const
 {
-  ENCODE_START(16, 14, bl);
+  ENCODE_START(17, 14, bl);
 #if defined(CEPH_LITTLE_ENDIAN)
   bl.append((char *)(&num_bytes), sizeof(object_stat_sum_t));
 #else
@@ -1985,6 +1986,7 @@ void object_stat_sum_t::encode(bufferlist& bl) const
   ::encode(num_objects_pinned, bl);
   ::encode(num_objects_missing, bl);
   ::encode(num_legacy_snapsets, bl);
+  ::encode(num_large_omap_objects, bl);
 #endif
   ENCODE_FINISH(bl);
 }
@@ -1992,7 +1994,7 @@ void object_stat_sum_t::encode(bufferlist& bl) const
 void object_stat_sum_t::decode(bufferlist::iterator& bl)
 {
   bool decode_finish = false;
-  DECODE_START(16, bl);
+  DECODE_START(17, bl);
 #if defined(CEPH_LITTLE_ENDIAN)
   if (struct_v >= 16) {
     bl.copy(sizeof(object_stat_sum_t), (char*)(&num_bytes));
@@ -2039,6 +2041,9 @@ void object_stat_sum_t::decode(bufferlist::iterator& bl)
     } else {
       num_legacy_snapsets = num_object_clones;  // upper bound
     }
+    if (struct_v >= 17) {
+      ::decode(num_large_omap_objects, bl);
+    }
   }
   DECODE_FINISH(bl);
 }
@@ -2078,6 +2083,7 @@ void object_stat_sum_t::generate_test_instances(list<object_stat_sum_t*>& o)
   a.num_evict_mode_some = 1;
   a.num_evict_mode_full = 0;
   a.num_objects_pinned = 20;
+  a.num_large_omap_objects = 5;
   o.push_back(new object_stat_sum_t(a));
 }
 
@@ -2118,6 +2124,7 @@ void object_stat_sum_t::add(const object_stat_sum_t& o)
   num_evict_mode_full += o.num_evict_mode_full;
   num_objects_pinned += o.num_objects_pinned;
   num_legacy_snapsets += o.num_legacy_snapsets;
+  num_large_omap_objects += o.num_large_omap_objects;
 }
 
 void object_stat_sum_t::sub(const object_stat_sum_t& o)
@@ -2157,6 +2164,7 @@ void object_stat_sum_t::sub(const object_stat_sum_t& o)
   num_evict_mode_full -= o.num_evict_mode_full;
   num_objects_pinned -= o.num_objects_pinned;
   num_legacy_snapsets -= o.num_legacy_snapsets;
+  num_large_omap_objects -= o.num_large_omap_objects;
 }
 
 bool operator==(const object_stat_sum_t& l, const object_stat_sum_t& r)
@@ -2196,7 +2204,8 @@ bool operator==(const object_stat_sum_t& l, const object_stat_sum_t& r)
     l.num_evict_mode_some == r.num_evict_mode_some &&
     l.num_evict_mode_full == r.num_evict_mode_full &&
     l.num_objects_pinned == r.num_objects_pinned &&
-    l.num_legacy_snapsets == r.num_legacy_snapsets;
+    l.num_legacy_snapsets == r.num_legacy_snapsets &&
+    l.num_large_omap_objects == r.num_large_omap_objects;
 }
 
 // -- object_stat_collection_t --
@@ -5586,7 +5595,7 @@ void ScrubMap::generate_test_instances(list<ScrubMap*>& o)
 void ScrubMap::object::encode(bufferlist& bl) const
 {
   bool compat_read_error = read_error || ec_hash_mismatch || ec_size_mismatch;
-  ENCODE_START(8, 7, bl);
+  ENCODE_START(9, 7, bl);
   ::encode(size, bl);
   ::encode(negative, bl);
   ::encode(attrs, bl);
@@ -5601,12 +5610,15 @@ void ScrubMap::object::encode(bufferlist& bl) const
   ::encode(read_error, bl);
   ::encode(ec_hash_mismatch, bl);
   ::encode(ec_size_mismatch, bl);
+  ::encode(large_omap_object_found, bl);
+  ::encode(large_omap_object_key_count, bl);
+  ::encode(large_omap_object_value_size, bl);
   ENCODE_FINISH(bl);
 }
 
 void ScrubMap::object::decode(bufferlist::iterator& bl)
 {
-  DECODE_START(8, bl);
+  DECODE_START(9, bl);
   ::decode(size, bl);
   bool tmp, compat_read_error = false;
   ::decode(tmp, bl);
@@ -5638,6 +5650,12 @@ void ScrubMap::object::decode(bufferlist::iterator& bl)
   // If older encoder found a read_error, set read_error
   if (compat_read_error && !read_error && !ec_hash_mismatch && !ec_size_mismatch)
     read_error = true;
+  if (struct_v >= 9) {
+    ::decode(tmp, bl);
+    large_omap_object_found = tmp;
+    ::decode(large_omap_object_key_count, bl);
+    ::decode(large_omap_object_value_size, bl);
+  }
   DECODE_FINISH(bl);
 }
 
