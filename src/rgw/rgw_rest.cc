@@ -2212,6 +2212,10 @@ int RGWREST::preprocess(struct req_state *s, rgw::io::BasicClient* cio)
   }
 
   s->decoded_uri = url_decode(s->info.request_uri);
+  /* Validate for being free of the '\0' buried in the middle of the string. */
+  if (std::strlen(s->decoded_uri.c_str()) != s->decoded_uri.length()) {
+    return -ERR_ZERO_IN_URL;
+  }
 
   /* FastCGI specification, section 6.3
    * http://www.fastcgi.com/devkit/doc/fcgi-spec.html#S6.3
