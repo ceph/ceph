@@ -674,3 +674,32 @@ PyObject *PyModules::get_context()
   return capsule;
 }
 
+static void _list_modules(
+  const std::string path,
+  std::set<std::string> *modules)
+{
+  DIR *dir = opendir(path.c_str());
+  if (!dir) {
+    return;
+  }
+  struct dirent *entry = NULL;
+  while ((entry = readdir(dir)) != NULL) {
+    string n(entry->d_name);
+    string fn = path + "/" + n;
+    struct stat st;
+    int r = ::stat(fn.c_str(), &st);
+    if (r == 0 && S_ISDIR(st.st_mode)) {
+      string initfn = fn + "/module.py";
+      r = ::stat(initfn.c_str(), &st);
+      if (r == 0) {
+	modules->insert(n);
+      }
+    }
+  }
+  closedir(dir);
+}
+
+void PyModules::list_modules(std::set<std::string> *modules)
+{
+  _list_modules(g_conf->mgr_module_path, modules);
+}

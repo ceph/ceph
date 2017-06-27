@@ -148,16 +148,20 @@ void MgrStandby::send_beacon()
 {
   assert(lock.is_locked_by_me());
   dout(1) << state_str() << dendl;
-  dout(10) << "sending beacon as gid " << monc.get_global_id() << dendl;
 
+  set<string> modules;
+  PyModules::list_modules(&modules);
   bool available = active_mgr != nullptr && active_mgr->is_initialized();
   auto addr = available ? active_mgr->get_server_addr() : entity_addr_t();
+  dout(10) << "sending beacon as gid " << monc.get_global_id()
+	   << " modules " << modules << dendl;
+
   MMgrBeacon *m = new MMgrBeacon(monc.get_fsid(),
 				 monc.get_global_id(),
                                  g_conf->name.get_id(),
                                  addr,
-                                 available);
-                                 
+                                 available,
+				 modules);
   monc.send_mon_message(m);
 }
 

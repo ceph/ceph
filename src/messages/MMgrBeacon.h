@@ -22,7 +22,7 @@
 
 class MMgrBeacon : public PaxosServiceMessage {
 
-  static const int HEAD_VERSION = 2;
+  static const int HEAD_VERSION = 3;
   static const int COMPAT_VERSION = 1;
 
 protected:
@@ -31,6 +31,7 @@ protected:
   bool available;
   std::string name;
   uuid_d fsid;
+  std::set<std::string> available_modules;
 
 public:
   MMgrBeacon()
@@ -40,10 +41,11 @@ public:
   }
 
   MMgrBeacon(const uuid_d& fsid_, uint64_t gid_, const std::string &name_,
-             entity_addr_t server_addr_, bool available_)
+             entity_addr_t server_addr_, bool available_,
+	     const std::set<std::string>& module_list)
     : PaxosServiceMessage(MSG_MGR_BEACON, 0, HEAD_VERSION, COMPAT_VERSION),
       gid(gid_), server_addr(server_addr_), available(available_), name(name_),
-      fsid(fsid_)
+      fsid(fsid_), available_modules(module_list)
   {
   }
 
@@ -52,6 +54,7 @@ public:
   bool get_available() const { return available; }
   const std::string& get_name() const { return name; }
   const uuid_d& get_fsid() const { return fsid; }
+  std::set<std::string>& get_available_modules() { return available_modules; }
 
 private:
   ~MMgrBeacon() override {}
@@ -62,7 +65,8 @@ public:
 
   void print(ostream& out) const override {
     out << get_type_name() << " mgr." << name << "(" << fsid << ","
-	<< gid << ", " << server_addr << ", " << available << ")";
+	<< gid << ", " << server_addr << ", " << available
+	<< ")";
   }
 
   void encode_payload(uint64_t features) override {
@@ -72,6 +76,7 @@ public:
     ::encode(available, payload);
     ::encode(name, payload);
     ::encode(fsid, payload);
+    ::encode(available_modules, payload);
   }
   void decode_payload() override {
     bufferlist::iterator p = payload.begin();
@@ -82,6 +87,9 @@ public:
     ::decode(name, p);
     if (header.version >= 2) {
       ::decode(fsid, p);
+    }
+    if (header.version >= 3) {
+      ::decode(available_modules, p);
     }
   }
 };

@@ -213,6 +213,12 @@ bool MgrMonitor::prepare_beacon(MonOpRequestRef op)
       pending_map.available = m->get_available();
       updated = true;
     }
+    if (pending_map.available_modules != m->get_available_modules()) {
+      dout(4) << "available_modules " << m->get_available_modules()
+	      << " (was " << pending_map.available_modules << ")" << dendl;
+      pending_map.available_modules = m->get_available_modules();
+      updated = true;
+    }
   } else if (pending_map.active_gid == 0) {
     // There is no currently active daemon, select this one.
     if (pending_map.standbys.count(m->get_gid())) {
@@ -224,14 +230,26 @@ bool MgrMonitor::prepare_beacon(MonOpRequestRef op)
 	    << pending_map.active_name << ")" << dendl;
     pending_map.active_gid = m->get_gid();
     pending_map.active_name = m->get_name();
+    pending_map.available_modules = m->get_available_modules();
 
     updated = true;
   } else {
     if (pending_map.standbys.count(m->get_gid()) > 0) {
       dout(10) << "from existing standby " << m->get_gid() << dendl;
+      if (pending_map.standbys[m->get_gid()].available_modules !=
+	  m->get_available_modules()) {
+	dout(10) << "existing standby " << m->get_gid() << " available_modules "
+		 << m->get_available_modules() << " (was "
+		 << pending_map.standbys[m->get_gid()].available_modules << ")"
+		 << dendl;
+	pending_map.standbys[m->get_gid()].available_modules =
+	  m->get_available_modules();
+	updated = true;
+      }
     } else {
       dout(10) << "new standby " << m->get_gid() << dendl;
-      pending_map.standbys[m->get_gid()] = {m->get_gid(), m->get_name()};
+      pending_map.standbys[m->get_gid()] = {m->get_gid(), m->get_name(),
+					    m->get_available_modules()};
       updated = true;
     }
   }
@@ -601,6 +619,15 @@ bool MgrMonitor::prepare_command(MonOpRequestRef op)
     cmd_getval(g_ceph_context, cmdmap, "module", module);
     if (module.empty()) {
       r = -EINVAL;
+      goto out;
+    }
+    string force;
+    cmd_getval(g_ceph_context, cmdmap, "force", force);
+    if (!pending_map.all_support_module(module) &&
+	force != "--force") {
+      ss << "all mgr daemons do not support module '" << module << "', pass "
+	 << "--force to force enablement";
+      r = -ENOENT;
       goto out;
     }
     pending_map.modules.insert(module);
