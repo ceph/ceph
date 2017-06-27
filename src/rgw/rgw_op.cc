@@ -753,12 +753,13 @@ int RGWGetObj::read_user_manifest_part(rgw_bucket& bucket, RGWObjEnt& ent, RGWAc
 }
 
 static int iterate_user_manifest_parts(CephContext *cct, RGWRados *store, off_t ofs, off_t end,
-                                       rgw_bucket& bucket, string& obj_prefix, RGWAccessControlPolicy *bucket_policy,
+                                       RGWBucketInfo *pbucket_info, string& obj_prefix, RGWAccessControlPolicy *bucket_policy,
                                        uint64_t *ptotal_len,
                                        uint64_t *pobj_size,
                                        int (*cb)(rgw_bucket& bucket, RGWObjEnt& ent, RGWAccessControlPolicy *bucket_policy,
                                                  off_t start_ofs, off_t end_ofs, void *param), void *cb_param)
 {
+  rgw_bucket& bucket = pbucket_info->bucket;
   uint64_t obj_ofs = 0, len_count = 0;
   bool found_start = false, found_end = false, handled_end = false;
   string delim;
@@ -767,7 +768,7 @@ static int iterate_user_manifest_parts(CephContext *cct, RGWRados *store, off_t 
 
   utime_t start_time = ceph_clock_now(cct);
 
-  RGWRados::Bucket target(store, bucket);
+  RGWRados::Bucket target(store, *pbucket_info);
   RGWRados::Bucket::List list_op(&target);
 
   list_op.params.prefix = obj_prefix;
@@ -853,9 +854,10 @@ int RGWGetObj::handle_user_manifest(const char *prefix)
 
   RGWAccessControlPolicy _bucket_policy(s->cct);
   RGWAccessControlPolicy *bucket_policy;
+  RGWBucketInfo bucket_info;
+  RGWBucketInfo *pbucket_info;
 
   if (bucket_name.compare(s->bucket.name) != 0) {
-    RGWBucketInfo bucket_info;
     map<string, bufferlist> bucket_attrs;
     RGWObjectCtx obj_ctx(store);
     int r = store->get_bucket_info(obj_ctx, bucket_name, bucket_info, NULL, &bucket_attrs);
@@ -864,6 +866,7 @@ int RGWGetObj::handle_user_manifest(const char *prefix)
       return r;
     }
     bucket = bucket_info.bucket;
+    pbucket_info = &bucket_info;
     rgw_obj_key no_obj;
     bucket_policy = &_bucket_policy;
     r = read_policy(store, s, bucket_info, bucket_attrs, bucket_policy, bucket, no_obj);
@@ -873,11 +876,12 @@ int RGWGetObj::handle_user_manifest(const char *prefix)
     }
   } else {
     bucket = s->bucket;
+    pbucket_info = &s->bucket_info;
     bucket_policy = s->bucket_acl;
   }
 
   /* dry run to find out total length */
-  int r = iterate_user_manifest_parts(s->cct, store, ofs, end, bucket, obj_prefix, bucket_policy, &total_len, &s->obj_size, NULL, NULL);
+  int r = iterate_user_manifest_parts(s->cct, store, ofs, end, pbucket_info, obj_prefix, bucket_policy, &total_len, &s->obj_size, NULL, NULL);
   if (r < 0)
     return r;
 
@@ -887,7 +891,7 @@ int RGWGetObj::handle_user_manifest(const char *prefix)
     return 0;
   }
 
-  r = iterate_user_manifest_parts(s->cct, store, ofs, end, bucket, obj_prefix, bucket_policy, NULL, NULL, get_obj_user_manifest_iterate_cb, (void *)this);
+  r = iterate_user_manifest_parts(s->cct, store, ofs, end, pbucket_info, obj_prefix, bucket_policy, NULL, NULL, get_obj_user_manifest_iterate_cb, (void *)this);
   if (r < 0)
     return r;
 
@@ -1259,7 +1263,7 @@ void RGWListBucket::execute()
     } 
   }
 
-  RGWRados::Bucket target(store, s->bucket);
+  RGWRados::Bucket target(store, s->bucket_info);
   RGWRados::Bucket::List list_op(&target);
 
   list_op.params.prefix = prefix;
@@ -1416,7 +1420,7 @@ void RGWCreateBucket::execute()
   if (s->bucket_exists) {
     string selected_placement_rule;
     rgw_bucket bucket;
-    ret = store->select_bucket_placement(s->user, region_name, placement_rule, s->bucket_name_str, bucket, &selected_placement_rule);
+    ret = store->select_bucket_placement(s->user, region_name, placement_rule, s->bucket_name_str, bucket, &selected_placement_rule, NULL);
     if (selected_placement_rule != s->bucket_info.placement_rule) {
       ret = -EEXIST;
       return;
@@ -3353,7 +3357,7 @@ void RGWListBucketMultiparts::execute()
   }
   marker_meta = marker.get_meta();
 
-  RGWRados::Bucket target(store, s->bucket);
+  RGWRados::Bucket target(store, s->bucket_info);
   RGWRados::Bucket::List list_op(&target);
 
   list_op.params.prefix = prefix;

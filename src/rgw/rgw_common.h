@@ -757,6 +757,11 @@ enum RGWBucketFlags {
   BUCKET_VERSIONS_SUSPENDED = 0x4,
 };
 
+enum RGWBucketIndexType {
+  RGWBIType_Normal = 0,
+  RGWBIType_Indexless = 1,
+};
+
 struct RGWBucketInfo
 {
   enum BIShardsHashType {
@@ -786,8 +791,10 @@ struct RGWBucketInfo
   // Represents the shard number for blind bucket.
   const static uint32_t NUM_SHARDS_BLIND_BUCKET;
 
+  RGWBucketIndexType index_type;
+
   void encode(bufferlist& bl) const {
-     ENCODE_START(11, 4, bl);
+     ENCODE_START(12, 4, bl);
      ::encode(bucket, bl);
      ::encode(owner, bl);
      ::encode(flags, bl);
@@ -799,6 +806,7 @@ struct RGWBucketInfo
      ::encode(quota, bl);
      ::encode(num_shards, bl);
      ::encode(bucket_index_shard_hash_type, bl);
+     ::encode((uint32_t)index_type, bl);
      ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator& bl) {
@@ -825,6 +833,13 @@ struct RGWBucketInfo
        ::decode(num_shards, bl);
      if (struct_v >= 11)
        ::decode(bucket_index_shard_hash_type, bl);
+     if (struct_v >= 12) {       
+       uint32_t it;
+       ::decode(it, bl);
+       index_type = (RGWBucketIndexType)it;
+     } else {
+       index_type = RGWBIType_Normal;
+     }
      DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;

@@ -2421,6 +2421,7 @@ int rgw_policy_from_attrset(CephContext *cct, map<string, bufferlist>& attrset, 
   return 0;
 }
 
+
 /** 
  * get listing of the objects in a bucket.
  * bucket: bucket to list contents of
@@ -2660,10 +2661,12 @@ int RGWRados::create_bucket(RGWUserInfo& owner, rgw_bucket& bucket,
 			    bool exclusive)
 {
 #define MAX_CREATE_RETRIES 20 /* need to bound retries */
-  string selected_placement_rule;
+  string selected_placement_rule_name;
+  RGWZonePlacementInfo rule_info;
+
   for (int i = 0; i < MAX_CREATE_RETRIES; i++) {
     int ret = 0;
-    ret = select_bucket_placement(owner, region_name, placement_rule, bucket.name, bucket, &selected_placement_rule);
+    ret = select_bucket_placement(owner, region_name, placement_rule, bucket.name, bucket, &selected_placement_rule_name, &rule_info);
     if (ret < 0)
       return ret;
     bufferlist bl;
@@ -2704,7 +2707,8 @@ int RGWRados::create_bucket(RGWUserInfo& owner, rgw_bucket& bucket,
     info.bucket = bucket;
     info.owner = owner.user_id;
     info.region = region_name;
-    info.placement_rule = selected_placement_rule;
+    info.placement_rule = selected_placement_rule_name;
+    info.index_type = rule_info.index_type;
     info.num_shards = bucket_index_max_shards;
     info.bucket_index_shard_hash_type = RGWBucketInfo::MOD;
     if (!creation_time)
@@ -2759,7 +2763,7 @@ int RGWRados::create_bucket(RGWUserInfo& owner, rgw_bucket& bucket,
 }
 
 int RGWRados::select_new_bucket_location(RGWUserInfo& user_info, const string& region_name, const string& request_rule,
-                                         const string& bucket_name, rgw_bucket& bucket, string *pselected_rule)
+                                         const string& bucket_name, rgw_bucket& bucket, string *pselected_rule, RGWZonePlacementInfo *rule_info)
 {
   /* first check that rule exists within the specific region */
   map<string, RGWRegion>::iterator riter = region_map.regions.find(region_name);
@@ -2801,10 +2805,11 @@ int RGWRados::select_new_bucket_location(RGWUserInfo& user_info, const string& r
   if (pselected_rule)
     *pselected_rule = rule;
   
-  return set_bucket_location_by_rule(rule, bucket_name, bucket);
+  return set_bucket_location_by_rule(rule, bucket_name, bucket, rule_info);
 }
 
-int RGWRados::set_bucket_location_by_rule(const string& location_rule, const std::string& bucket_name, rgw_bucket& bucket)
+int RGWRados::set_bucket_location_by_rule(const string& location_rule, const std::string& bucket_name, rgw_bucket& bucket,
+					  RGWZonePlacementInfo *rule_info)
 {
   bucket.name = bucket_name;
 
@@ -2812,7 +2817,7 @@ int RGWRados::set_bucket_location_by_rule(const string& location_rule, const std
     /* we can only reach here if we're trying to set a bucket location from a bucket
      * created on a different zone, using a legacy / default pool configuration
      */
-    return select_legacy_bucket_placement(bucket_name, bucket);
+      return select_legacy_bucket_placement(bucket_name, bucket, rule_info);
   }
 
   /*
@@ -2839,24 +2844,31 @@ int RGWRados::set_bucket_location_by_rule(const string& location_rule, const std
   bucket.data_extra_pool = placement_info.data_extra_pool;
   bucket.index_pool = placement_info.index_pool;
 
+  if (rule_info) {
+    *rule_info = placement_info;
+  }
+
   return 0;
 
 }
 
 int RGWRados::select_bucket_placement(RGWUserInfo& user_info, const string& region_name, const string& placement_rule,
-                                      const string& bucket_name, rgw_bucket& bucket, string *pselected_rule)
+                                      const string& bucket_name, rgw_bucket& bucket, string *pselected_rule_name,
+				      RGWZonePlacementInfo *rule_info)
 {
   if (!zone.placement_pools.empty()) {
-    return select_new_bucket_location(user_info, region_name, placement_rule, bucket_name, bucket, pselected_rule);
+    return select_new_bucket_location(user_info, region_name, placement_rule, bucket_name, bucket, pselected_rule_name, rule_info);
   }
 
-  if (pselected_rule)
-    pselected_rule->clear();
+  if (pselected_rule_name) {
+    pselected_rule_name->clear();
+  }
 
-  return select_legacy_bucket_placement(bucket_name, bucket);
+	  return select_legacy_bucket_placement(bucket_name, bucket, rule_info);
 }
 
-int RGWRados::select_legacy_bucket_placement(const string& bucket_name, rgw_bucket& bucket)
+int RGWRados::select_legacy_bucket_placement(const string& bucket_name, rgw_bucket& bucket,
+                                             RGWZonePlacementInfo *rule_info)
 {
   bufferlist map_bl;
   map<string, bufferlist> m;
@@ -2930,6 +2942,11 @@ read_omap:
   bucket.data_pool = pool_name;
   bucket.index_pool = pool_name;
   bucket.name = bucket_name;
+
+  rule_info->data_pool = pool_name;
+  rule_info->data_extra_pool = pool_name;
+  rule_info->index_pool = pool_name;
+  rule_info->index_type = RGWBIType_Normal;
 
   return 0;
 
@@ -3455,7 +3472,7 @@ int RGWRados::Object::Write::write_meta(uint64_t size,
 
   bool versioned_op = (target->versioning_enabled() || is_olh || versioned_target);
 
-  RGWRados::Bucket bop(store, bucket);
+  RGWRados::Bucket bop(store, target->get_bucket_info());
   RGWRados::Bucket::UpdateIndex index_op(&bop, obj, state);
 
   if (versioned_op) {
@@ -4878,7 +4895,7 @@ int RGWRados::Object::Delete::delete_obj()
 
   bool ret_not_existed = (!state->exists);
 
-  RGWRados::Bucket bop(store, bucket);
+  RGWRados::Bucket bop(store, target->get_bucket_info());
   RGWRados::Bucket::UpdateIndex index_op(&bop, obj, state);
 
   index_op.set_bilog_flags(params.bilog_flags);
@@ -4974,7 +4991,16 @@ int RGWRados::delete_obj_index(rgw_obj& obj)
   get_obj_bucket_and_oid_loc(obj, bucket, oid, key);
 
   string tag;
-  RGWRados::Bucket bop(this, bucket);
+  RGWObjectCtx obj_ctx(this);
+
+  RGWBucketInfo bucket_info;
+  int ret = get_bucket_instance_info(obj_ctx, bucket, bucket_info, NULL, NULL);
+  if (ret < 0) {
+    ldout(cct, 0) << "ERROR: " << __func__ << "() get_bucket_instance_info(bucket=" << bucket << ") returned ret=" << ret << dendl;
+    return ret;
+  }
+
+  RGWRados::Bucket bop(this, bucket_info);
   RGWRados::Bucket::UpdateIndex index_op(&bop, obj, NULL);
 
   int r = index_op.complete_del(-1 /* pool */, 0, NULL);
@@ -5456,8 +5482,17 @@ int RGWRados::set_attrs(void *ctx, rgw_obj& obj,
   if (!op.size())
     return 0;
 
+  RGWObjectCtx obj_ctx(this);
+
+  RGWBucketInfo bucket_info;
+  int ret = get_bucket_instance_info(obj_ctx, bucket, bucket_info, NULL, NULL);
+  if (ret < 0) {
+    ldout(cct, 0) << "ERROR: " << __func__ << "() get_bucket_instance_info(bucket=" << bucket << ") returned ret=" << ret << dendl;
+    return ret;
+  }
+
   bufferlist bl;
-  RGWRados::Bucket bop(this, bucket);
+  RGWRados::Bucket bop(this, bucket_info);
   RGWRados::Bucket::UpdateIndex index_op(&bop, obj, state);
 
   string tag;
@@ -5706,6 +5741,9 @@ int RGWRados::SystemObject::Read::stat(RGWObjVersionTracker *objv_tracker)
 
 int RGWRados::Bucket::UpdateIndex::prepare(RGWModifyOp op)
 {
+  if (blind) {
+    return 0;
+  }
   RGWRados *store = target->get_store();
   BucketShard *bs;
   int ret = get_bucket_shard(&bs);
@@ -5736,6 +5774,9 @@ int RGWRados::Bucket::UpdateIndex::complete(int64_t poolid, uint64_t epoch, uint
                                     utime_t& ut, string& etag, string& content_type, bufferlist *acl_bl, RGWObjCategory category,
                                     list<rgw_obj_key> *remove_objs)
 {
+  if (blind) {
+    return 0;
+  }
   RGWRados *store = target->get_store();
   BucketShard *bs;
   int ret = get_bucket_shard(&bs);
@@ -5768,6 +5809,9 @@ int RGWRados::Bucket::UpdateIndex::complete(int64_t poolid, uint64_t epoch, uint
 int RGWRados::Bucket::UpdateIndex::complete_del(int64_t poolid, uint64_t epoch,
                                                 list<rgw_obj_key> *remove_objs)
 {
+  if (blind) {
+    return 0;
+  }
   RGWRados *store = target->get_store();
   BucketShard *bs;
   int ret = get_bucket_shard(&bs);
@@ -5781,6 +5825,9 @@ int RGWRados::Bucket::UpdateIndex::complete_del(int64_t poolid, uint64_t epoch,
 
 int RGWRados::Bucket::UpdateIndex::cancel()
 {
+  if (blind) {
+    return 0;
+  }
   RGWRados *store = target->get_store();
   BucketShard *bs;
   int ret = get_bucket_shard(&bs);
@@ -9272,7 +9319,7 @@ int RGWRados::delete_obj_aio(rgw_obj& obj, rgw_bucket& bucket,
   }
 
   if (keep_index_consistent) {
-    RGWRados::Bucket bop(this, bucket_info.bucket);
+    RGWRados::Bucket bop(this, bucket_info);
     RGWRados::Bucket::UpdateIndex index_op(&bop, obj, astate);
 
     ret = index_op.prepare(CLS_RGW_OP_DEL);

@@ -1043,7 +1043,7 @@ int do_check_object_locator(const string& bucket_name, bool fix, bool remove_bad
   map<string, bool> common_prefixes;
   string ns;
 
-  RGWRados::Bucket target(store, bucket);
+  RGWRados::Bucket target(store, bucket_info);
   RGWRados::Bucket::List list_op(&target);
 
   string marker;
@@ -2074,7 +2074,7 @@ int main(int argc, char **argv)
       map<string, bool> common_prefixes;
       string ns;
 
-      RGWRados::Bucket target(store, bucket);
+      RGWRados::Bucket target(store, bucket_info);
       RGWRados::Bucket::List list_op(&target);
 
       list_op.params.prefix = prefix;

@@ -719,21 +719,30 @@ struct RGWZonePlacementInfo {
   string index_pool;
   string data_pool;
   string data_extra_pool; /* if not set we should use data_pool */
+  RGWBucketIndexType index_type;
+
+  RGWZonePlacementInfo() : index_type(RGWBIType_Normal) {}
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(4, 1, bl);
+    ENCODE_START(5, 1, bl);
     ::encode(index_pool, bl);
     ::encode(data_pool, bl);
     ::encode(data_extra_pool, bl);
+    ::encode((uint32_t)index_type, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::iterator& bl) {
-    DECODE_START(4, bl);
+    DECODE_START(5, bl);
     ::decode(index_pool, bl);
     ::decode(data_pool, bl);
     if (struct_v >= 4) {
       ::decode(data_extra_pool, bl);
+    }
+    if (struct_v >= 5) {
+      uint32_t it;
+      ::decode(it, bl);
+      index_type = (RGWBucketIndexType)it;
     }
     DECODE_FINISH(bl);
   }
@@ -1410,11 +1419,15 @@ public:
    */
   virtual int init_bucket_index(rgw_bucket& bucket, int num_shards);
   int select_bucket_placement(RGWUserInfo& user_info, const string& region_name, const std::string& rule,
-                              const std::string& bucket_name, rgw_bucket& bucket, string *pselected_rule);
-  int select_legacy_bucket_placement(const string& bucket_name, rgw_bucket& bucket);
+                              const std::string& bucket_name, rgw_bucket& bucket, string *pselected_rule,
+			      RGWZonePlacementInfo *rule_info);
+  int select_legacy_bucket_placement(const string& bucket_name, rgw_bucket& bucket,
+				     RGWZonePlacementInfo *rule_info);
   int select_new_bucket_location(RGWUserInfo& user_info, const string& region_name, const string& rule,
-                                 const std::string& bucket_name, rgw_bucket& bucket, string *pselected_rule);
-  int set_bucket_location_by_rule(const string& location_rule, const std::string& bucket_name, rgw_bucket& bucket);
+                                 const std::string& bucket_name, rgw_bucket& bucket, string *pselected_rule,
+				 RGWZonePlacementInfo *rule_info);
+  int set_bucket_location_by_rule(const string& location_rule, const std::string& bucket_name, rgw_bucket& bucket,
+				  RGWZonePlacementInfo *rule_info);
   void create_bucket_id(string *bucket_id);
   virtual int create_bucket(RGWUserInfo& owner, rgw_bucket& bucket,
                             const string& region_name,
@@ -1675,13 +1688,15 @@ public:
 
   class Bucket {
     RGWRados *store;
+    RGWBucketInfo bucket_info;
     rgw_bucket& bucket;
 
   public:
-    Bucket(RGWRados *_store, rgw_bucket& _bucket) : store(_store), bucket(_bucket) {}
+    Bucket(RGWRados *_store, RGWBucketInfo& _bucket_info) : store(_store), bucket_info(_bucket_info), bucket(bucket_info.bucket) {}
 
     RGWRados *get_store() { return store; }
     rgw_bucket& get_bucket() { return bucket; }
+    RGWBucketInfo& get_bucket_info() { return bucket_info; }
 
     class UpdateIndex {
       RGWRados::Bucket *target;
@@ -1691,10 +1706,13 @@ public:
       uint16_t bilog_flags;
       BucketShard bs;
       bool bs_initialized;
+      bool blind;
     public:
 
       UpdateIndex(RGWRados::Bucket *_target, rgw_obj& _obj, RGWObjState *_state) : target(_target), obj(_obj), obj_state(_state), bilog_flags(0),
-                                                                                   bs(target->get_store()), bs_initialized(false) {}
+                                                                                   bs(target->get_store()), bs_initialized(false) {
+                                                                                     blind = (target->get_bucket_info().index_type == RGWBIType_Indexless);
+                                                                                   }
 
       int get_bucket_shard(BucketShard **pbs) {
         if (!bs_initialized) {
