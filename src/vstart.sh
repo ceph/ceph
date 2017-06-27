@@ -458,7 +458,6 @@ $CMDSDEBUG
         mds root ino gid = `id -g`
 $extra_conf
 [mgr]
-        mgr modules = restful status dashboard
         mgr data = $CEPH_DEV_DIR/mgr.\$id
         mgr module path = $MGR_PYTHON_PATH
         mon reweight min pgs per osd = 4
@@ -497,6 +496,7 @@ $COSDMEMSTORE
 $COSDSHORT
 $extra_conf
 [mon]
+        mgr initial modules = restful status dashboard
         mon pg warn min per osd = 3
         mon osd allow primary affinity = true
         mon reweight min pgs per osd = 4

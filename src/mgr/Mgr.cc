@@ -568,11 +568,22 @@ void Mgr::handle_fs_map(MFSMap* m)
   daemon_state.cull(CEPH_ENTITY_TYPE_MDS, names_exist);
 }
 
-void Mgr::got_mgr_map(const MgrMap& m)
+bool Mgr::got_mgr_map(const MgrMap& m)
 {
   Mutex::Locker l(lock);
   dout(10) << m << dendl;
+
+  set<string> old_modules;
+  cluster_state.with_mgrmap([&](const MgrMap& m) {
+      old_modules = m.modules;
+    });
+  if (m.modules != old_modules) {
+    derr << "mgrmap module list changed to (" << m.modules << "), respawn"
+	 << dendl;
+    return true;
+  }
   cluster_state.set_mgr_map(m);
+  return false;
 }
 
 void Mgr::handle_mgr_digest(MMgrDigest* m)

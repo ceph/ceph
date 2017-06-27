@@ -15,7 +15,6 @@
 #include "PyState.h"
 #include "Gil.h"
 
-#include <boost/tokenizer.hpp>
 #include "common/errno.h"
 #include "include/stringify.h"
 
@@ -363,8 +362,11 @@ int PyModules::init()
   std::list<std::string> failed_modules;
 
   // Load python code
-  boost::tokenizer<> tok(g_conf->mgr_modules);
-  for(const auto& module_name : tok) {
+  set<string> ls;
+  cluster_state.with_mgrmap([&](const MgrMap& m) {
+      ls = m.modules;
+    });
+  for (const auto& module_name : ls) {
     dout(1) << "Loading python module '" << module_name << "'" << dendl;
     auto mod = std::unique_ptr<MgrPyModule>(new MgrPyModule(module_name, sys_path, pMainThreadState));
     int r = mod->load();

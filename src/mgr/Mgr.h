@@ -85,7 +85,7 @@ public:
   void handle_osd_map();
   void handle_log(MLog *m);
 
-  void got_mgr_map(const MgrMap& m);
+  bool got_mgr_map(const MgrMap& m);
 
   bool ms_dispatch(Message *m);
 
