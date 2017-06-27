@@ -3026,7 +3026,7 @@ void Monitor::handle_command(MonOpRequestRef op)
     end -= start;
     dout(1) << "finished manual compaction in " << end << " seconds" << dendl;
     ostringstream oss;
-    oss << "compacted leveldb in " << end;
+    oss << "compacted " << g_conf->get_val<std::string>("mon_keyvaluedb") << " in " << end << " seconds";
     rs = oss.str();
     r = 0;
   }
