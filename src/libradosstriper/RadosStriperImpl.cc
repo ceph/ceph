@@ -693,10 +693,12 @@ int libradosstriper::RadosStriperImpl::aio_generic_stat
     cdata->m_getxattrRC = rc;
     multi_completion->complete_request(rc);
     multi_completion->put();
+    delete multi_completion;
     return rc;
   }
   cdata->put();
   multi_completion->put();
+  delete multi_completion;
   return 0;
 }
 
