@@ -78,23 +78,29 @@
                 }
             }
 
-            rivets.formatters.dimless = function(n){
+            var format_number = function(n, divisor, units) {
                 var width=4;
-                var units = [' ', 'k', 'M', 'G', 'T', 'P'];
                 var unit = 0;
 
-                while (Math.floor(n / (1000**unit)).toString().length > width - 1) {
+                while (Math.floor(n / (divisor**unit)).toString().length > width - 1) {
                     unit = unit + 1;
                 }
 
                 var truncated_float;
                 if (unit > 0) {
-                    truncated_float = truncate((n / Math.pow(1000.0, unit)).toString(), width);
+                    truncated_float = truncate((n / Math.pow(divisor, unit)).toString(), width);
                 } else {
                     truncated_float = truncate(n, width);
                 }
 
                 return truncated_float + units[unit];
+            }
+
+            rivets.formatters.dimless = function(n){
+                return format_number(n, 1000, [' ', 'k', 'M', 'G', 'T', 'P'])
+            };
+            rivets.formatters.dimless_binary = function(n){
+                return format_number(n, 1024, ['B', 'KiB', 'MiB', 'GiB', 'TiB', 'PiB']);
             };
 
             <!--rivet.formatters.mon_summary = function(mon_map) {-->
@@ -162,6 +168,18 @@
         </li>
         <li><a href="/servers"><i class="fa fa-server"></i>
             <span>Servers</span></a>
+        </li>
+        <li class="treeview active">
+          <a href="#"><i class="fa fa-hdd-o"></i> <span>Block</span>
+            <span class="pull-right-container">
+              <i class="fa fa-angle-left pull-right"></i>
+            </span>
+          </a>
+          <ul class="treeview-menu menu-open">
+            <li rv-each-pool="rbd_pools">
+                <a rv-href="pool.url">{pool.name}</a>
+            </li>
+          </ul>
         </li>
         <li class="treeview active">
           <a href="#"><i class="fa fa-folder"></i> <span>Filesystems</span>
