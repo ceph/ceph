@@ -110,6 +110,17 @@ BuildRequires:	checkpolicy
 BuildRequires:	selinux-policy-devel
 BuildRequires:	/usr/share/selinux/devel/policyhelp
 %endif
+%if 0%{with make_check}
+%if 0%{?fedora} || 0%{?rhel}
+BuildRequires:	python-cherrypy
+BuildRequires:	python-werkzeug
+%endif
+%if 0%{?suse_version}
+BuildRequires:	python-CherryPy
+BuildRequires:	python-werkzeug
+%endif
+BuildRequires:	python-pecan
+%endif
 BuildRequires:	bc
 BuildRequires:	gperf
 BuildRequires:  cmake
@@ -136,10 +147,8 @@ BuildRequires:  procps
 BuildRequires:	python
 BuildRequires:	python-devel
 BuildRequires:	python-nose
-BuildRequires:	python-pecan
 BuildRequires:	python-requests
 BuildRequires:	python-virtualenv
-BuildRequires:	python-werkzeug
 BuildRequires:	snappy-devel
 BuildRequires:	udev
 BuildRequires:	util-linux
@@ -167,7 +176,6 @@ BuildRequires:	keyutils-devel
 BuildRequires:  libopenssl-devel
 BuildRequires:  lsb-release
 BuildRequires:  openldap2-devel
-BuildRequires:	python-CherryPy
 BuildRequires:	python-Cython
 BuildRequires:	python-PrettyTable
 BuildRequires:	python-Sphinx
@@ -184,7 +192,6 @@ BuildRequires:  openldap-devel
 BuildRequires:  openssl-devel
 BuildRequires:  redhat-lsb-core
 BuildRequires:	Cython
-BuildRequires:	python-cherrypy
 BuildRequires:	python-prettytable
 BuildRequires:	python-sphinx
 %endif
