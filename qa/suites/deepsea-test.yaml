@@ -1,4 +1,6 @@
 ceph_cm: salt
+os_type: sle
+os_version: "12.3"
 roles:
 - [master.a]
 - [node.1]
