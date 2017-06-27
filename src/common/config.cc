@@ -603,6 +603,7 @@ int md_config_t::parse_option(std::vector<const char*>& args,
   }
 
   if (ret != 0 || !error_message.empty()) {
+    assert(option_name);
     if (oss) {
       *oss << "Parse error setting " << option_name << " to '"
            << val << "' using injectargs";
