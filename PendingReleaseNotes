@@ -182,3 +182,7 @@
   replicated rule in the CRUSH map for replicated pools.  Erasure
   coded pools have rules that are automatically created for them if they are
   not specified at pool creation time.
+
+* The `status` ceph-mgr module is enabled by default, and initially provides two
+  commands: `ceph tell mgr osd status` and `ceph tell mgr fs status`.  These
+  are high level colorized views to complement the existing CLI.
