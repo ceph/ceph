@@ -49,6 +49,7 @@ tasks:
 - ceph:
    fs: xfs
    skip_mgr_daemons: true
+   add_osds_to_crush: true
 - print: "**** done ceph xfs"
 - sequential:
    - workload
