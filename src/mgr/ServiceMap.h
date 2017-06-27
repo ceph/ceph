@@ -6,6 +6,7 @@
 #include <string>
 #include <map>
 #include <list>
+#include <sstream>
 
 #include "include/utime.h"
 #include "include/buffer.h"
@@ -31,11 +32,25 @@ struct ServiceMap {
 
   struct Service {
     map<std::string,Daemon> daemons;
+    std::string summary;   ///< summary status string for 'ceph -s'
 
     void encode(bufferlist& bl, uint64_t features) const;
     void decode(bufferlist::iterator& p);
     void dump(Formatter *f) const;
     static void generate_test_instances(std::list<Service*>& ls);
+
+    std::string get_summary() const {
+      if (summary.size()) {
+	return summary;
+      }
+      if (daemons.empty()) {
+	return "no daemons active";
+      }
+      std::ostringstream ss;
+      ss << daemons.size() << (daemons.size() > 1 ? "daemonss" : "daemon")
+	 << " active";
+      return ss.str();
+    }
   };
 
   epoch_t epoch = 0;
