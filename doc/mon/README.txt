@@ -24,4 +24,6 @@ Also, for future reference, we consider that:
   - diamond shaped nodes refer to state changes;
   - dotted lines illustrate a message being sent from the Leader to the Peon,
   or vice-versa.
+  
+  test
 
