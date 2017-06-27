@@ -14,6 +14,7 @@
 
 #include <arpa/inet.h>
 
+#include "include/scope_guard.h"
 #include "dns_resolve.h"
 #include "common/debug.h"
 
@@ -102,9 +103,10 @@ int DNSResolver::resolve_cname(CephContext *cct, const string& hostname,
   if (r < 0) {
     return r;
   }
+  auto put_state = make_scope_guard([res, this] {
+      this->put_state(res);
+    });
 #endif
-
-  int ret;
 
 #define LARGE_ENOUGH_DNS_BUFSIZE 1024
   unsigned char buf[LARGE_ENOUGH_DNS_BUFSIZE];
@@ -128,8 +130,7 @@ int DNSResolver::resolve_cname(CephContext *cct, const string& hostname,
 #endif
   if (len < 0) {
     lderr(cct) << "res_query() failed" << dendl;
-    ret = 0;
-    goto done;
+    return 0;
   }
 
   answer = buf;
@@ -139,15 +140,13 @@ int DNSResolver::resolve_cname(CephContext *cct, const string& hostname,
   /* read query */
   if ((len = dn_expand(answer, answend, pt, host, sizeof(host))) < 0) {
     lderr(cct) << "ERROR: dn_expand() failed" << dendl;
-    ret = -EINVAL;
-    goto done;
+    return -EINVAL;
   }
   pt += len;
 
   if (pt + 4 > answend) {
     lderr(cct) << "ERROR: bad reply" << dendl;
-    ret = -EIO;
-    goto done;
+    return -EIO;
   }
 
   int type;
@@ -156,24 +155,21 @@ int DNSResolver::resolve_cname(CephContext *cct, const string& hostname,
   if (type != ns_t_cname) {
     lderr(cct) << "ERROR: failed response type: type=" << type <<
       " (was expecting " << ns_t_cname << ")" << dendl;
-    ret = -EIO;
-    goto done;
+    return -EIO;
   }
 
   pt += NS_INT16SZ; /* class */
 
   /* read answer */
   if ((len = dn_expand(answer, answend, pt, host, sizeof(host))) < 0) {
-    ret = 0;
-    goto done;
+    return 0;
   }
   pt += len;
   ldout(cct, 20) << "name=" << host << dendl;
 
   if (pt + 10 > answend) {
     lderr(cct) << "ERROR: bad reply" << dendl;
-    ret = -EIO;
-    goto done;
+    return -EIO;
   }
 
   NS_GET16(type, pt);
@@ -182,19 +178,13 @@ int DNSResolver::resolve_cname(CephContext *cct, const string& hostname,
   pt += NS_INT16SZ; /* size */
 
   if ((len = dn_expand(answer, answend, pt, host, sizeof(host))) < 0) {
-    ret = 0;
-    goto done;
+    return 0;
   }
   ldout(cct, 20) << "cname host=" << host << dendl;
   *cname = host;
 
   *found = true;
-  ret = 0;
-done:
-#ifdef HAVE_RES_NQUERY
-  put_state(res);
-#endif
-  return ret;
+  return 0;
 }
 
 
@@ -282,9 +272,11 @@ int DNSResolver::resolve_srv_hosts(CephContext *cct, const string& service_name,
   if (r < 0) {
     return r;
   }
+  auto put_state = make_scope_guard([res, this] {
+      this->put_state(res);
+    });
 #endif
 
-  int ret;
   u_char nsbuf[NS_PACKETSZ];
   int num_hosts;
 
@@ -307,13 +299,11 @@ int DNSResolver::resolve_srv_hosts(CephContext *cct, const string& service_name,
 #endif
   if (len < 0) {
     lderr(cct) << "res_search() failed" << dendl;
-    ret = len;
-    goto done;
+    return len;
   }
   else if (len == 0) {
     ldout(cct, 20) << "No hosts found for service " << query_str << dendl;
-    ret = 0;
-    goto done;
+    return 0;
   }
 
   ns_msg handle;
@@ -323,8 +313,7 @@ int DNSResolver::resolve_srv_hosts(CephContext *cct, const string& service_name,
   num_hosts = ns_msg_count (handle, ns_s_an);
   if (num_hosts == 0) {
     ldout(cct, 20) << "No hosts found for service " << query_str << dendl;
-    ret = 0;
-    goto done;
+    return 0;
   }
 
   ns_rr rr;
@@ -334,8 +323,7 @@ int DNSResolver::resolve_srv_hosts(CephContext *cct, const string& service_name,
     int r;
     if ((r = ns_parserr(&handle, ns_s_an, i, &rr)) < 0) {
       lderr(cct) << "Error while parsing DNS record" << dendl;
-      ret = r;
-      goto done;
+      return r;
     }
 
     string full_srv_name = ns_rr_name(rr);
@@ -363,15 +351,9 @@ int DNSResolver::resolve_srv_hosts(CephContext *cct, const string& service_name,
       target = target.substr(0, target.find(srv_domain));
       (*srv_hosts)[target] = addr;
     }
-
   }
 
-  ret = 0;
-done:
-#ifdef HAVE_RES_NQUERY
-  put_state(res);
-#endif
-  return ret;
+  return 0;
 }
 
 }
