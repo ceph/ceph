@@ -427,6 +427,16 @@ def run_qemu(ctx, config):
         log.debug('checking that qemu tests succeeded...')
         for client in config.iterkeys():
             (remote,) = ctx.cluster.only(client).remotes.keys()
+
+            # ensure we have permissions to all the logs
+            log_dir = '{tdir}/archive/qemu/{client}'.format(tdir=testdir,
+                                                            client=client)
+            remote.run(
+                args=[
+                    'sudo', 'chmod', 'a+rw', '-R', log_dir
+                    ]
+                )
+
             # teardown nfs mount
             _teardown_nfs_mount(remote, client)
             # check for test status
