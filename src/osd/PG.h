@@ -925,6 +925,13 @@ protected:
 
   // stats that persist lazily
   object_stat_collection_t unstable_stats;
+  std::atomic<uint64_t> op_num = {0};
+  std::atomic<uint64_t> op_latency = {0};
+  std::atomic<uint64_t> rd_num = {0};
+  std::atomic<uint64_t> rd_latency = {0};
+  std::atomic<uint64_t> wr_num = {0};
+  std::atomic<uint64_t> wr_latency = {0};
+  void clear_op_stat();
 
   // publish stats
   Mutex pg_stats_publish_lock;

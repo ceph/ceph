@@ -87,6 +87,17 @@ void ClusterState::ingest_pgstats(MPGStats *stats)
     }
 
     pending_inc.pg_stat_updates[pgid] = pg_stats;
+
+    for (const auto &p : stats->op_stat) {
+      auto &op_stat = p.second;
+      pg_map.pool_op_stat[p.first.pool()].add(op_stat);
+    }
+
+    utime_t now = ceph_clock_now();
+    if (now - pg_map.last_sampled >= g_conf->mgr_op_latency_sample_interval) {
+       pg_map.calc_pool_op_latency();
+       pg_map.last_sampled = now;
+    }
   }
 }
 

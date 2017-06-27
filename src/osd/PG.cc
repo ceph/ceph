@@ -3432,6 +3432,16 @@ void PG::requeue_ops(list<OpRequestRef> &ls)
   ls.clear();
 }
 
+void PG::clear_op_stat()
+{
+  op_num = 0;
+  rd_num = 0;
+  wr_num = 0;
+  op_latency = 0;
+  rd_latency = 0;
+  wr_latency = 0;
+}
+
 void PG::requeue_map_waiters()
 {
   epoch_t epoch = get_osdmap()->get_epoch();

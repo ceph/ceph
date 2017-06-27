@@ -223,6 +223,8 @@ public:
 
   // mapping of osd to most recently reported osdmap epoch
   mempool::pgmap::unordered_map<int32_t,epoch_t> osd_epochs;
+  map<int, op_stat_t> pool_op_stat; // FIXME: use unordered_map instead?
+  utime_t last_sampled = ceph_clock_now();
 
   class Incremental {
   public:
@@ -325,6 +327,15 @@ public:
     per_pool_sum_deltas_stamps.erase(pool);
     per_pool_sum_delta.erase(pool);
   }
+
+  enum {
+    op_latency_type_misc,
+    op_latency_type_rd,
+    op_latency_type_wr,
+    op_latency_type_max
+  };
+  void calc_pool_op_latency();
+  uint64_t get_pool_op_latency(int pool, int type) const;
 
  private:
   void update_delta(
