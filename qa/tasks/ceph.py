@@ -576,28 +576,6 @@ def cluster(ctx, config):
 
     log.info('Setting up mon nodes...')
     mons = ctx.cluster.only(teuthology.is_type('mon', cluster_name))
-    osdmap_path = '{tdir}/{cluster}.osdmap'.format(tdir=testdir,
-                                                   cluster=cluster_name)
-    run.wait(
-        mons.run(
-            args=[
-                'adjust-ulimits',
-                'ceph-coverage',
-                coverage_dir,
-                'osdmaptool',
-                '-c', conf_path,
-                '--clobber',
-                '--createsimple', '{num:d}'.format(
-                    num=teuthology.num_instances_of_type(ctx.cluster, 'osd',
-                                                         cluster_name),
-                ),
-                osdmap_path,
-                '--pg_bits', '2',
-                '--pgp_bits', '4',
-            ],
-            wait=False,
-        ),
-    )
 
     if not config.get('skip_mgr_daemons', False):
         log.info('Setting up mgr nodes...')
@@ -871,7 +849,6 @@ def cluster(ctx, config):
                     '--mkfs',
                     '-i', id_,
                     '--monmap', monmap_path,
-                    '--osdmap', osdmap_path,
                     '--keyring', keyring_path,
                 ],
             )
@@ -882,7 +859,6 @@ def cluster(ctx, config):
                 'rm',
                 '--',
                 monmap_path,
-                osdmap_path,
             ],
             wait=False,
         ),
@@ -1011,7 +987,6 @@ def cluster(ctx, config):
                     keyring_path,
                     data_dir,
                     monmap_path,
-                    osdmap_path,
                     run.Raw('{tdir}/../*.pid'.format(tdir=testdir)),
                 ],
                 wait=False,
@@ -1123,6 +1098,51 @@ def run_daemon(ctx, config, type_):
             if not is_type_(role):
                 continue
             _, _, id_ = teuthology.split_role(role)
+
+            if type_ == 'osd':
+                datadir='/var/lib/ceph/osd/ceph-' + id_
+                osd_uuid = teuthology.get_file(
+                    remote=remote,
+                    path=datadir + '/fsid',
+                    sudo=True,
+                ).strip()
+                try:
+                    remote.run(
+                        args=[
+                            'sudo',
+                            'ceph',
+                            'osd',
+                            'new',
+                            osd_uuid,
+                            id_,
+                        ]
+                    )
+                except:
+                    # fallback to pre-luminous
+                    remote.run(
+                        args=[
+                            'sudo',
+                            'ceph',
+                            'osd',
+                            'create',
+                            osd_uuid,
+                            id_,
+                        ]
+                    )
+                if config.get('add_osds_to_crush'):
+                    remote.run(
+                        args=[
+                            'sudo',
+                            'ceph',
+                            'osd',
+                            'crush',
+                            'create-or-move',
+                            'osd.' + id_,
+                            '1.0',
+                            'host=localhost',
+                            'root=default',
+                        ]
+                    )
 
             run_cmd = [
                 'sudo',
