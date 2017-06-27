@@ -1907,7 +1907,7 @@ function corrupt_scrub_erasure() {
 EOF
 
     jq "$jqfilter" $dir/json | python -c "$sortkeys" | sed -e "$sedfilter" > $dir/csjson
-    diff -y $termwidth $dir/checkcsjson $dir/csjson || test $getjson = "yes" || return 1
+    diff ${DIFFCOLOPTS} $dir/checkcsjson $dir/csjson || test $getjson = "yes" || return 1
     if test $getjson = "yes"
     then
         jq '.' $dir/json > save3.json
@@ -2491,7 +2491,7 @@ EOF
     fi
 
     jq "$jqfilter" $dir/json | python -c "$sortkeys" | sed -e "$sedfilter" > $dir/csjson
-    diff -y $termwidth $dir/checkcsjson $dir/csjson || test $getjson = "yes" || return 1
+    diff ${DIFFCOLOPTS} $dir/checkcsjson $dir/csjson || test $getjson = "yes" || return 1
     if test $getjson = "yes"
     then
       if [ "$allow_overwrites" = "true" ]
