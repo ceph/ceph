@@ -1038,6 +1038,24 @@ public:
     return p && pgid.ps() < p->get_pg_num();
   }
 
+  int get_pg_pool_min_size(pg_t pgid) const {
+    if (!pg_exists(pgid)) {
+      return -ENOENT;
+    }
+    const pg_pool_t *p = get_pg_pool(pgid.pool());
+    assert(p);
+    return p->get_min_size();
+  }
+
+  int get_pg_pool_size(pg_t pgid) const {
+    if (!pg_exists(pgid)) {
+      return -ENOENT;
+    }
+    const pg_pool_t *p = get_pg_pool(pgid.pool());
+    assert(p);
+    return p->get_size();
+  }
+
 private:
   /// pg -> (raw osd list)
   void _pg_to_raw_osds(

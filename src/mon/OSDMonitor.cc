@@ -5472,10 +5472,10 @@ int OSDMonitor::prepare_pool_stripe_width(const unsigned pool_type,
 }
 
 int OSDMonitor::prepare_pool_crush_rule(const unsigned pool_type,
-					   const string &erasure_code_profile,
-					   const string &rule_name,
-					   int *crush_rule,
-					   ostream *ss)
+					const string &erasure_code_profile,
+					const string &rule_name,
+					int *crush_rule,
+					ostream *ss)
 {
 
   if (*crush_rule < 0) {
@@ -5483,7 +5483,7 @@ int OSDMonitor::prepare_pool_crush_rule(const unsigned pool_type,
     case pg_pool_t::TYPE_REPLICATED:
       {
 	if (rule_name == "") {
-	  //Use default rule
+	  // Use default rule
 	  *crush_rule = osdmap.crush->get_osd_pool_default_crush_replicated_ruleset(g_ceph_context);
 	  if (*crush_rule < 0) {
 	    // Errors may happen e.g. if no valid rule is available
@@ -5534,8 +5534,8 @@ int OSDMonitor::prepare_pool_crush_rule(const unsigned pool_type,
 }
 
 int OSDMonitor::get_crush_rule(const string &rule_name,
-				  int *crush_rule,
-				  ostream *ss)
+			       int *crush_rule,
+			       ostream *ss)
 {
   int ret;
   ret = osdmap.crush->get_rule_id(rule_name);
@@ -5553,7 +5553,7 @@ int OSDMonitor::get_crush_rule(const string &rule_name,
 	       << " try again" << dendl;
       return -EAGAIN;
     } else {
-      //Cannot find it , return error
+      // Cannot find it , return error
       *ss << "specified rule " << rule_name << " doesn't exist";
       return ret;
     }
@@ -5623,9 +5623,9 @@ int OSDMonitor::prepare_new_pool(string& name, uint64_t auid,
     r = tester.test();
   } else {
     r = tester.test_with_crushtool(g_conf->crushtool.c_str(),
-				 osdmap.get_max_osd(),
-				 g_conf->mon_lease,
-				 crush_rule);
+				   osdmap.get_max_osd(),
+				   g_conf->mon_lease,
+				   crush_rule);
   }
   if (r) {
     dout(10) << " tester.test_with_crushtool returns " << r
@@ -6021,6 +6021,12 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
       ss << "ec overwrites can only be enabled for an erasure coded pool";
       return -EINVAL;
     }
+    stringstream err;
+    if (!g_conf->mon_debug_no_require_bluestore_for_ec_overwrites &&
+	!is_pool_currently_all_bluestore(pool, p, &err)) {
+      ss << "pool must only be stored on bluestore for scrubbing to work: " << err.str();
+      return -EINVAL;
+    }
     if (val == "true" || (interr.empty() && n == 1)) {
 	p.flags |= pg_pool_t::FLAG_EC_OVERWRITES;
     } else if (val == "false" || (interr.empty() && n == 0)) {
@@ -6028,12 +6034,6 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
       return -EINVAL;
     } else {
       ss << "expecting value 'true', 'false', '0', or '1'";
-      return -EINVAL;
-    }
-    stringstream err;
-    if (!g_conf->mon_debug_no_require_bluestore_for_ec_overwrites &&
-	!is_pool_currently_all_bluestore(pool, p, &err)) {
-      ss << "pool must only be stored on bluestore for scrubbing to work: " << err.str();
       return -EINVAL;
     }
   } else if (var == "target_max_objects") {
@@ -7586,7 +7586,6 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     } while (false);
 
   } else if (prefix == "osd crush reweight-all") {
-    // osd crush reweight <name> <weight>
     CrushWrapper newcrush;
     _get_pending_crush(newcrush);
 
@@ -7729,7 +7728,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     }
 
     if (tunable == "straw_calc_version") {
-      if (value < 0 || value > 1) {
+      if (value != 0 && value != 1) {
 	ss << "value must be 0 or 1; got " << value;
 	err = -EINVAL;
 	goto reply;
@@ -8253,10 +8252,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       return prepare_unset_flag(op, CEPH_OSDMAP_NODEEP_SCRUB);
     else if (key == "notieragent")
       return prepare_unset_flag(op, CEPH_OSDMAP_NOTIERAGENT);
-    else if (key == "sortbitwise") {
-      ss << "the sortbitwise flag is required and cannot be unset";
-      err = -EPERM;
-    } else {
+    else {
       ss << "unrecognized flag '" << key << "'";
       err = -EINVAL;
     }
@@ -8903,6 +8899,22 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
           goto reply;
         }
 
+        int pool_min_size = osdmap.get_pg_pool_min_size(pgid);
+        if ((int)id_vec.size() < pool_min_size) {
+          ss << "num of osds (" << id_vec.size() <<") < pool min size ("
+             << pool_min_size << ")";
+          err = -EINVAL;
+          goto reply;
+        }
+
+        int pool_size = osdmap.get_pg_pool_size(pgid);
+        if ((int)id_vec.size() > pool_size) {
+          ss << "num of osds (" << id_vec.size() <<") > pool size ("
+             << pool_size << ")";
+          err = -EINVAL;
+          goto reply;
+        }
+
         vector<int32_t> new_pg_upmap;
         for (auto osd : id_vec) {
           if (osd != CRUSH_ITEM_NONE && !osdmap.exists(osd)) {
@@ -8942,7 +8954,17 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
           goto reply;
         }
 
+        int pool_size = osdmap.get_pg_pool_size(pgid);
+        if ((int)(id_vec.size() / 2) > pool_size) {
+          ss << "num of osd pairs (" << id_vec.size() / 2 <<") > pool size ("
+             << pool_size << ")";
+          err = -EINVAL;
+          goto reply;
+        }
+
         vector<pair<int32_t,int32_t>> new_pg_upmap_items;
+        ostringstream items;
+        items << "[";
         for (auto p = id_vec.begin(); p != id_vec.end(); ++p) {
           int from = *p++;
           int to = *p;
@@ -8957,13 +8979,16 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
             goto reply;
           }
           new_pg_upmap_items.push_back(make_pair(from, to));
+          items << from << "->" << to << ",";
         }
+        string out(items.str());
+        out.resize(out.size() - 1); // drop last ','
+        out += "]";
 
         pending_inc.new_pg_upmap_items[pgid] =
           mempool::osdmap::vector<pair<int32_t,int32_t>>(
           new_pg_upmap_items.begin(), new_pg_upmap_items.end());
-        ss << "set " << pgid << " pg_upmap_items mapping to "
-           << new_pg_upmap_items;
+        ss << "set " << pgid << " pg_upmap_items mapping to " << out;
       }
       break;
 
@@ -9074,7 +9099,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     wait_for_finished_proposal(
 	op,
 	new Monitor::C_Command(mon, op, 0, rs, rdata, get_last_committed() + 1));
-      return true;
+    return true;
   } else if (prefix == "osd lost") {
     int64_t id;
     if (!cmd_getval(g_ceph_context, cmdmap, "id", id)) {
@@ -9201,7 +9226,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     // make sure authmon is writeable.
     if (!mon->authmon()->is_writeable()) {
       dout(10) << __func__ << " waiting for auth mon to be writeable for "
-               << "osd destroy" << dendl;
+               << "osd new" << dendl;
       mon->authmon()->wait_for_writeable(op, new C_RetryMessage(this, op));
       return false;
     }
@@ -9339,10 +9364,21 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 	utime_t expires = ceph_clock_now();
 	double d;
 	// default one hour
-	cmd_getval(g_ceph_context, cmdmap, "expire", d, double(60*60));
+	cmd_getval(g_ceph_context, cmdmap, "expire", d,
+          g_conf->mon_osd_blacklist_default_expire);
 	expires += d;
 
 	pending_inc.new_blacklist[addr] = expires;
+
+        {
+          // cancel any pending un-blacklisting request too
+          auto it = std::find(pending_inc.old_blacklist.begin(),
+            pending_inc.old_blacklist.end(), addr);
+          if (it != pending_inc.old_blacklist.end()) {
+            pending_inc.old_blacklist.erase(it);
+          }
+        }
+
 	ss << "blacklisting " << addr << " until " << expires << " (" << d << " sec)";
 	getline(ss, rs);
 	wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, 0, rs,
