@@ -508,7 +508,7 @@ int HashIndex::pre_split_folder(uint32_t pg_num, uint64_t expected_num_objs)
   const ps_t ps = spgid.pgid.ps();
 
   // the most significant bits of pg_num
-  const int pg_num_bits = calc_num_bits(pg_num - 1);
+  const int pg_num_bits = calc_num_bits(std::max(1u, pg_num - 1));
   ps_t tmp_id = ps;
   // calculate the number of levels we only create one sub folder
   int num = pg_num_bits / 4;
