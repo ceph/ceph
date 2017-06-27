@@ -76,12 +76,6 @@ OPTION(mgr_module_path, OPT_STR, CEPH_PKGLIBDIR "/mgr") // where to load python 
 :Type: String
 :Default: ``"<library dir>/mgr"``
 
-``mgr modules``
-
-:Description: List of python modules to load
-:Type: String
-:Default: ``"rest"`` (Load the REST API module only)
-
 ``mgr data``
 
 :Description: Path to load daemon data (such as keyring)
