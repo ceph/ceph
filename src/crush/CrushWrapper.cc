@@ -1756,11 +1756,12 @@ void CrushWrapper::encode(bufferlist& bl, uint64_t features) const
     ::encode(class_name, bl);
     ::encode(class_bucket, bl);
 
-    ::encode(choose_args.size(), bl);
+    __u32 size = (__u32)choose_args.size();
+    ::encode(size, bl);
     for (auto c : choose_args) {
       ::encode(c.first, bl);
       crush_choose_arg_map arg_map = c.second;
-      __u32 size = 0;
+      size = 0;
       for (__u32 i = 0; i < arg_map.size; i++) {
 	crush_choose_arg *arg = &arg_map.args[i];
 	if (arg->weight_set_size == 0 &&
@@ -1889,9 +1890,9 @@ void CrushWrapper::decode(bufferlist::iterator& blp)
       cleanup_classes();
     }
     if (!blp.end()) {
-      size_t choose_args_size;
+      __u32 choose_args_size;
       ::decode(choose_args_size, blp);
-      for (size_t i = 0; i < choose_args_size; i++) {
+      for (__u32 i = 0; i < choose_args_size; i++) {
 	uint64_t choose_args_index;
 	::decode(choose_args_index, blp);
 	crush_choose_arg_map arg_map;
