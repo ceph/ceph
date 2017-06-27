@@ -10458,6 +10458,7 @@ int BlueStore::_do_remove(
           }
         }
 
+        assert(b_end > b_start);
 	h->extent_map.dirty_range(b_start, b_end - b_start);
 	txc->write_onode(h);
       }
