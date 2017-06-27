@@ -41,7 +41,7 @@ Log Path: {log_path}
             version=ceph_volume.__version__,
             log_path=ceph_volume.config.get('log_path'),
             plugins=self.plugin_help,
-            sub_help=sub_help,
+            sub_help=sub_help.strip('\n'),
             environ_vars=self.get_environ_vars()
         )
 
