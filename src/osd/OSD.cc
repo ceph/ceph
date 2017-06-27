@@ -2110,8 +2110,8 @@ bool OSD::asok_command(string admin_command, cmdmap_t& cmdmap, string format,
       it->wi.name.dump(f);
       f->close_section(); //entity_name_t
 
-      f->dump_int("cookie", it->wi.cookie);
-      f->dump_int("timeout", it->wi.timeout_seconds);
+      f->dump_unsigned("cookie", it->wi.cookie);
+      f->dump_unsigned("timeout", it->wi.timeout_seconds);
 
       f->open_object_section("entity_addr_t");
       it->wi.addr.dump(f);
