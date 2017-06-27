@@ -1130,6 +1130,20 @@ def run_daemon(ctx, config, type_):
                             id_,
                         ]
                     )
+                if config.get('add_osds_to_crush'):
+                    remote.run(
+                        args=[
+                            'sudo',
+                            'ceph',
+                            'osd',
+                            'crush',
+                            'create-or-move',
+                            'osd.' + id_,
+                            '1.0',
+                            'host=localhost',
+                            'root=default',
+                        ]
+                    )
 
             run_cmd = [
                 'sudo',
