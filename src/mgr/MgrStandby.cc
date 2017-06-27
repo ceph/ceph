@@ -282,12 +282,13 @@ void MgrStandby::handle_mgr_map(MMgrMap* mmap)
   if (active_in_map) {
     if (!active_mgr) {
       dout(1) << "Activating!" << dendl;
-      active_mgr.reset(new Mgr(&monc, client_messenger.get(), &objecter,
+      active_mgr.reset(new Mgr(&monc, map, client_messenger.get(), &objecter,
 			       &client, clog, audit_clog));
       active_mgr->background_init();
       dout(1) << "I am now active" << dendl;
     } else {
       dout(10) << "I was already active" << dendl;
+      active_mgr->got_mgr_map(map);
     }
   } else {
     if (active_mgr != nullptr) {

@@ -22,8 +22,15 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "mgr " << __func__ << " "
 
-ClusterState::ClusterState(MonClient *monc_, Objecter *objecter_)
-  : monc(monc_), objecter(objecter_), lock("ClusterState"), pgservice(pg_map)
+ClusterState::ClusterState(
+  MonClient *monc_,
+  Objecter *objecter_,
+  const MgrMap& mgrmap)
+  : monc(monc_),
+    objecter(objecter_),
+    lock("ClusterState"),
+    mgr_map(mgrmap),
+    pgservice(pg_map)
 {}
 
 void ClusterState::set_objecter(Objecter *objecter_)
@@ -38,6 +45,12 @@ void ClusterState::set_fsmap(FSMap const &new_fsmap)
   Mutex::Locker l(lock);
 
   fsmap = new_fsmap;
+}
+
+void ClusterState::set_mgr_map(MgrMap const &new_mgrmap)
+{
+  Mutex::Locker l(lock);
+  mgr_map = new_mgrmap;
 }
 
 void ClusterState::load_digest(MMgrDigest *m)
