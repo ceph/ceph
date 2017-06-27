@@ -48,6 +48,17 @@ class TestInstall(object):
 
     @patch("teuthology.task.install._get_builder_project")
     @patch("teuthology.task.install.packaging.get_package_version")
+    def test_get_upgrade_version(self, m_get_package_version,
+                                         m_gitbuilder_project):
+        gb = Mock()
+        gb.version = "11.0.0"
+        gb.project = "ceph"
+        m_gitbuilder_project.return_value = gb
+        m_get_package_version.return_value = "11.0.0"
+        install.get_upgrade_version(Mock(), Mock(), Mock())
+
+    @patch("teuthology.task.install._get_builder_project")
+    @patch("teuthology.task.install.packaging.get_package_version")
     def test_verify_ceph_version_success(self, m_get_package_version,
                                          m_gitbuilder_project):
         gb = Mock()
@@ -102,11 +113,24 @@ class TestInstall(object):
         )
         assert install.get_flavor(config) == 'notcmalloc'
 
+    def test_upgrade_is_downgrade(self):
+        assert_ok_vals = [
+	    ('9.0.0', '10.0.0'),
+	    ('10.2.2-63-g8542898-1trusty', '10.2.2-64-gabcdef1-1trusty'),
+	    ('11.0.0-918.g13c13c7', '11.0.0-2165.gabcdef1')
+	]
+	for t in assert_ok_vals:
+            assert install._upgrade_is_downgrade(t[0], t[1]) == False
+
+    @patch("teuthology.packaging.get_package_version")
     @patch("teuthology.misc.get_system_type")
     @patch("teuthology.task.install.verify_package_version")
+    @patch("teuthology.task.install.get_upgrade_version")
     def test_upgrade_common(self,
+                            m_get_upgrade_version,
                             m_verify_package_version,
-                            m_get_system_type):
+                            m_get_system_type,
+                            m_get_package_version):
         expected_system_type = 'deb'
         def make_remote():
             remote = Mock()
@@ -146,6 +170,8 @@ class TestInstall(object):
                 },
             ],
         }
+	m_get_upgrade_version.return_value = "11.0.0"
+        m_get_package_version.return_value = "10.2.4"
         m_get_system_type.return_value = "deb"
         def upgrade(ctx, node, remote, pkgs, system_type):
             assert system_type == expected_system_type

@@ -11,6 +11,7 @@ from teuthology.parallel import parallel
 from teuthology.orchestra import run
 from teuthology.task import ansible
 
+from distutils.version import LooseVersion
 from .util import (
     _get_builder_project, get_flavor, ship_utilities,
 )
@@ -19,6 +20,10 @@ from . import rpm, deb, redhat
 
 log = logging.getLogger(__name__)
 
+def get_upgrade_version(ctx, config, remote):
+    builder = _get_builder_project(ctx, remote, config)
+    version = builder.version
+    return version
 
 def verify_package_version(ctx, config, remote):
     """
@@ -330,6 +335,10 @@ def upgrade_remote_to_config(ctx, config):
 
     return result
 
+def _upgrade_is_downgrade(installed_version, upgrade_version):
+    assert installed_version, "installed_version is empty"
+    assert upgrade_version, "upgrade_version is empty"
+    return LooseVersion(installed_version) > LooseVersion(upgrade_version)
 
 def upgrade_common(ctx, config, deploy_style):
     """
@@ -351,6 +360,20 @@ def upgrade_common(ctx, config, deploy_style):
             proj=project, system_type=system_type, pkgs=', '.join(pkgs)))
         # FIXME: again, make extra_pkgs distro-agnostic
         pkgs += extra_pkgs
+
+        installed_version = packaging.get_package_version(remote, 'ceph-common')
+        upgrade_version = get_upgrade_version(ctx, remote, node)
+        log.info("Ceph {s} upgrade from {i} to {u}".format(
+            s=system_type,
+            i=installed_version,
+            u=upgrade_version
+        ))
+	if _upgrade_is_downgrade(installed_version, upgrade_version):
+            raise RuntimeError(
+                "An attempt to upgrade from a higher version to a lower one "
+                "will always fail. Hint: check tags in the target git branch."
+            )
+
 
         deploy_style(ctx, node, remote, pkgs, system_type)
         verify_package_version(ctx, node, remote)
