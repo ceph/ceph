@@ -9,8 +9,8 @@ openstack:
 tasks:
 - install:
 - deepsea:
-    repo: https://github.com/smithfarm/DeepSea.git
-    branch: wip-qa-suite
+    repo: https://github.com/SUSE/DeepSea.git
+    branch: master
 - exec:
     master.a:
       - sleep 1000000000 # forever

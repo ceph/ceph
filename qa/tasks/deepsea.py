@@ -28,8 +28,8 @@ class DeepSea(Task):
     minions are properly linked to the master. TODO: The role types are stored
     in the role grain on the minions.
 
-    After that, the DeepSea git repo is cloned to the master node (in
-    accordance with the "repo" and "branch" options, if given).
+    After that, the DeepSea git repo is cloned to the master node in
+    accordance with the "repo" and "branch" options, if given (see below).
 
     Finally, the task iterates over the list of commands given in the "exec"
     property, executing each one inside the 'qa/' directory of the DeepSea repo
