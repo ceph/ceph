@@ -600,7 +600,7 @@ static int update_paxos(MonitorDBStore& st)
     MonitorDBStore::Transaction t;
     const char* prefixes[] = {"auth", "osdmap",
 	    "pgmap", "pgmap_pg", "pgmap_meta"};
-    for (const char** prefix = &prefixes[0]; prefix != prefixes + sizeof(prefixes); prefix++) {
+    for (const char** prefix = &prefixes[0]; prefix != prefixes + sizeof(prefixes) / sizeof(*prefixes); prefix++) {
       for (KeyValueDB::Iterator i = st.get_iterator(*prefix); i->valid(); i->next()) {
 	bufferlist value = i->value();
 	t.put(*prefix, i->key(), value);
