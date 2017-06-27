@@ -1916,7 +1916,7 @@ int RGWHandler_REST::init_permissions(RGWOp* op)
 
 int RGWHandler_REST::read_permissions(RGWOp* op_obj)
 {
-  bool only_bucket;
+  bool only_bucket = false;
 
   switch (s->op) {
   case OP_HEAD:
