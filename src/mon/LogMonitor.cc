@@ -407,17 +407,8 @@ bool LogMonitor::preprocess_command(MonOpRequestRef op)
     std::string level_str;
     clog_type level;
     if (cmd_getval(g_ceph_context, cmdmap, "level", level_str)) {
-      if (level_str == "debug") {
-        level = CLOG_DEBUG;
-      } else if (level_str == "info") {
-        level = CLOG_INFO;
-      } else if (level_str == "sec") {
-        level = CLOG_SEC;
-      } else if (level_str == "warn") {
-        level = CLOG_WARN;
-      } else if (level_str == "error") {
-        level = CLOG_ERROR;
-      } else {
+      level = LogEntry::str_to_level(level_str);
+      if (level == CLOG_UNKNOWN) {
         ss << "Invalid severity '" << level_str << "'";
         mon->reply_command(op, -EINVAL, ss.str(), get_last_committed());
         return true;
@@ -525,17 +516,11 @@ bool LogMonitor::prepare_command(MonOpRequestRef op)
 
 int LogMonitor::sub_name_to_id(const string& n)
 {
-  if (n == "log-debug")
-    return CLOG_DEBUG;
-  if (n == "log-info")
-    return CLOG_INFO;
-  if (n == "log-sec")
-    return CLOG_SEC;
-  if (n == "log-warn")
-    return CLOG_WARN;
-  if (n == "log-error")
-    return CLOG_ERROR;
-  return CLOG_UNKNOWN;
+  if (n.substr(0, 4) == "log-" && n.size() > 4) {
+    return LogEntry::str_to_level(n.substr(4));
+  } else {
+    return CLOG_UNKNOWN;
+  }
 }
 
 void LogMonitor::check_subs()
