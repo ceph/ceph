@@ -712,6 +712,9 @@ function test_mon_misc()
   ceph_watch_wait "$mymsg"
 
   ceph mgr dump
+  ceph mgr module ls
+  ceph mgr module enable foo
+  ceph mgr module disable foo
 
   ceph mon metadata a
   ceph mon metadata

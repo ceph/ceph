@@ -288,7 +288,10 @@ void MgrStandby::handle_mgr_map(MMgrMap* mmap)
       dout(1) << "I am now active" << dendl;
     } else {
       dout(10) << "I was already active" << dendl;
-      active_mgr->got_mgr_map(map);
+      bool need_respawn = active_mgr->got_mgr_map(map);
+      if (need_respawn) {
+	respawn();
+      }
     }
   } else {
     if (active_mgr != nullptr) {

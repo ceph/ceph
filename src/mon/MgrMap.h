@@ -68,6 +68,8 @@ public:
 
   std::map<uint64_t, StandbyInfo> standbys;
 
+  std::set<std::string> modules;
+
   epoch_t get_epoch() const { return epoch; }
   entity_addr_t get_active_addr() const { return active_addr; }
   uint64_t get_active_gid() const { return active_gid; }
@@ -76,25 +78,29 @@ public:
 
   void encode(bufferlist& bl, uint64_t features) const
   {
-    ENCODE_START(1, 1, bl);
+    ENCODE_START(2, 1, bl);
     ::encode(epoch, bl);
     ::encode(active_addr, bl, features);
     ::encode(active_gid, bl);
     ::encode(available, bl);
     ::encode(active_name, bl);
     ::encode(standbys, bl);
+    ::encode(modules, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::iterator& p)
   {
-    DECODE_START(1, p);
+    DECODE_START(2, p);
     ::decode(epoch, p);
     ::decode(active_addr, p);
     ::decode(active_gid, p);
     ::decode(available, p);
     ::decode(active_name, p);
     ::decode(standbys, p);
+    if (struct_v >= 2) {
+      ::decode(modules, p);
+    }
     DECODE_FINISH(p);
   }
 
@@ -110,6 +116,11 @@ public:
       f->dump_int("gid", i.second.gid);
       f->dump_string("name", i.second.name);
       f->close_section();
+    }
+    f->close_section();
+    f->open_array_section("modules");
+    for (auto& i : modules) {
+      f->dump_string("module", i);
     }
     f->close_section();
   }
