@@ -34,7 +34,7 @@
 void usage(ostream& out)
 {
   out <<					\
-"usage: rest-bench [options] <write|seq>\n"
+"usage: rest-bench [options] <write|seq|rand>\n"
 "       rest-bench [options] cleanup [--run-name run_name] [--prefix prefix]\n"
 "BENCHMARK OPTIONS\n"
 "   --seconds\n"
@@ -42,6 +42,8 @@ void usage(ostream& out)
 "   -t concurrent_operations\n"
 "   --concurrent-ios=concurrent_operations\n"
 "        select bucket by name\n"
+"   --run-name\n"
+"        set name of object for record\n"
 "   -b op-size\n"
 "   --block-size=op-size\n"
 "        set the size of write ops for put or benchmarking\n"

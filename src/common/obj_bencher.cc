@@ -167,7 +167,7 @@ int ObjBencher::aio_bench(
   int prevPid = 0;
 
   // default metadata object is used if user does not specify one
-  const std::string run_name_meta = (run_name == NULL ? BENCH_LASTRUN_METADATA : std::string(run_name));
+  const std::string run_name_meta = ((!run_name || !run_name[0]) ? BENCH_LASTRUN_METADATA : std::string(run_name));
 
   //get data from previous write run, if available
   if (operation != OP_WRITE) {
@@ -618,6 +618,7 @@ int ObjBencher::seq_read_bench(int seconds_to_run, int num_objects, int concurre
     //start new read and check data if requested
     start_times[slot] = ceph_clock_now(cct);
     create_completion(slot, _aio_cb, (void *)&lc);
+    contents[slot]->clear();
     r = aio_read(newName, slot, contents[slot], data.object_size);
     if (r < 0) {
       goto ERR;
@@ -822,6 +823,7 @@ int ObjBencher::rand_read_bench(int seconds_to_run, int num_objects, int concurr
     //start new read and check data if requested
     start_times[slot] = ceph_clock_now(g_ceph_context);
     create_completion(slot, _aio_cb, (void *)&lc);
+    contents[slot]->clear();
     r = aio_read(newName, slot, contents[slot], data.object_size);
     if (r < 0) {
       goto ERR;
@@ -907,7 +909,7 @@ int ObjBencher::clean_up(const char* prefix, int concurrentios, const char* run_
   int prevPid;
 
   // default meta object if user does not specify one
-  const std::string run_name_meta = (run_name == NULL ? BENCH_LASTRUN_METADATA : std::string(run_name));
+  const std::string run_name_meta = ((!run_name || !run_name[0]) ? BENCH_LASTRUN_METADATA : std::string(run_name));
 
   r = fetch_bench_metadata(run_name_meta, &object_size, &num_objects, &prevPid);
   if (r < 0) {
