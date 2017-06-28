@@ -1674,17 +1674,17 @@ class Device(object):
                 raise Error('%s device size (%sM) is not big enough for %s'
                             % (self.path, self.get_dev_size(), name))
         else:
-            end = '100%'
+            end = '100%%'
 
         LOG.debug('Creating %s partition num %d size %d on %s',
                   name, num, size, self.path)
         command_check_call(
             [
-               'parted',
-               self.path,
-               'mkpart',
-               '{num}:ceph {name}'.format(num=num, name=name),
-               '0:{end}'.format(end=end)
+                'parted',
+                self.path,
+                'mkpart',
+                '{num}:ceph {name}'.format(num=num, name=name),
+                '0:{end}'.format(end=end),
             ],
             exit=True
         )
