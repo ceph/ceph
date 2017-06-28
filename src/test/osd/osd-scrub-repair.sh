@@ -1684,16 +1684,16 @@ function corrupt_scrub_erasure() {
         },
         {
           "size": 9,
+          "shard": 0,
           "errors": [
             "size_mismatch_oi"
           ],
-          "shard": 1,
           "osd": 1
         },
         {
           "size": 2048,
+          "shard": 1,
           "errors": [],
-          "shard": 0,
           "osd": 2
         }
       ],
@@ -1721,16 +1721,16 @@ function corrupt_scrub_erasure() {
           "osd": 0
         },
         {
+          "shard": 0,
           "errors": [
             "missing"
           ],
-          "shard": 1,
           "osd": 1
         },
         {
           "size": 2048,
+          "shard": 1,
           "errors": [],
-          "shard": 0,
           "osd": 2
         }
       ],
@@ -1783,6 +1783,10 @@ function corrupt_scrub_erasure() {
           "osd": 0
         },
         {
+          "osd": 1,
+          "shard": 0,
+          "errors": [],
+          "size": 2048,
           "attrs": [
             {
               "Base64": true,
@@ -1809,13 +1813,13 @@ function corrupt_scrub_erasure() {
               "value": "AwIdAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
               "name": "snapset"
             }
-          ],
-          "size": 2048,
-          "errors": [],
-          "shard": 1,
-          "osd": 1
+          ]
         },
         {
+          "osd": 2,
+          "shard": 1,
+          "errors": [],
+          "size": 2048,
           "attrs": [
             {
               "Base64": true,
@@ -1842,11 +1846,7 @@ function corrupt_scrub_erasure() {
               "value": "AwIdAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
               "name": "snapset"
             }
-          ],
-          "size": 2048,
-          "errors": [],
-          "shard": 0,
-          "osd": 2
+          ]
         }
       ],
       "selected_object_info": "3:5e723e06:::EOBJ4:head(45'6 client.4289.0:1 dirty|data_digest|omap_digest s 7 uv 6 dd 2ddbf8f5 od ffffffff alloc_hint [0 0 0])",
@@ -1873,16 +1873,16 @@ function corrupt_scrub_erasure() {
         },
         {
           "size": 4096,
+          "shard": 0,
           "errors": [
             "size_mismatch_oi"
           ],
-          "shard": 1,
           "osd": 1
         },
         {
           "size": 2048,
+          "shard": 1,
           "errors": [],
-          "shard": 0,
           "osd": 2
         }
       ],
@@ -1947,19 +1947,19 @@ EOF
         },
         {
           "size": 9,
+          "shard": 0,
           "errors": [
             "read_error",
             "size_mismatch_oi"
           ],
-          "shard": 1,
           "osd": 1
         },
         {
           "data_digest": "0x00000000",
           "omap_digest": "0xffffffff",
           "size": 2048,
+          "shard": 1,
           "errors": [],
-          "shard": 0,
           "osd": 2
         }
       ],
@@ -1990,18 +1990,18 @@ EOF
           "osd": 0
         },
         {
+          "shard": 0,
           "errors": [
             "missing"
           ],
-          "shard": 1,
           "osd": 1
         },
         {
           "data_digest": "0x00000000",
           "omap_digest": "0xffffffff",
           "size": 2048,
+          "shard": 1,
           "errors": [],
-          "shard": 0,
           "osd": 2
         }
       ],
@@ -2087,7 +2087,7 @@ EOF
           "omap_digest": "0xffffffff",
           "size": 2048,
           "errors": [],
-          "shard": 1,
+          "shard": 0,
           "osd": 1
         },
         {
@@ -2122,7 +2122,7 @@ EOF
           "omap_digest": "0xffffffff",
           "size": 2048,
           "errors": [],
-          "shard": 0,
+          "shard": 1,
           "osd": 2
         }
       ],
@@ -2157,7 +2157,7 @@ EOF
           "errors": [
             "size_mismatch_oi"
           ],
-          "shard": 1,
+          "shard": 0,
           "osd": 1
         },
         {
@@ -2165,7 +2165,7 @@ EOF
           "omap_digest": "0xffffffff",
           "size": 2048,
           "errors": [],
-          "shard": 0,
+          "shard": 1,
           "osd": 2
         }
       ],
@@ -2206,19 +2206,19 @@ EOF
         },
         {
           "size": 9,
+          "shard": 0,
           "errors": [
             "read_error",
             "size_mismatch_oi"
           ],
-          "shard": 1,
           "osd": 1
         },
         {
           "data_digest": "0x04cfa72f",
           "omap_digest": "0xffffffff",
           "size": 2048,
+          "shard": 1,
           "errors": [],
-          "shard": 0,
           "osd": 2
         }
       ],
@@ -2253,7 +2253,7 @@ EOF
           "omap_digest": "0xffffffff",
           "size": 2048,
           "errors": [],
-          "shard": 1,
+          "shard": 0,
           "osd": 1
         },
         {
@@ -2261,7 +2261,7 @@ EOF
           "omap_digest": "0xffffffff",
           "size": 2048,
           "errors": [],
-          "shard": 0,
+          "shard": 1,
           "osd": 2
         }
       ],
@@ -2289,18 +2289,18 @@ EOF
           "osd": 0
         },
         {
+          "osd": 1,
+          "shard": 0,
           "errors": [
             "missing"
-          ],
-          "shard": 1,
-          "osd": 1
+          ]
         },
         {
           "data_digest": "0x04cfa72f",
           "omap_digest": "0xffffffff",
           "size": 2048,
+          "shard": 1,
           "errors": [],
-          "shard": 0,
           "osd": 2
         }
       ],
@@ -2355,6 +2355,12 @@ EOF
           "osd": 0
         },
         {
+          "osd": 1,
+          "shard": 0,
+          "errors": [],
+          "size": 2048,
+          "omap_digest": "0xffffffff",
+          "data_digest": "0x04cfa72f",
           "attrs": [
             {
               "Base64": true,
@@ -2381,15 +2387,15 @@ EOF
               "value": "AwIdAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
               "name": "snapset"
             }
-          ],
-          "data_digest": "0x04cfa72f",
-          "omap_digest": "0xffffffff",
-          "size": 2048,
-          "errors": [],
-          "shard": 1,
-          "osd": 1
+          ]
         },
         {
+          "osd": 2,
+          "shard": 1,
+          "errors": [],
+          "size": 2048,
+          "omap_digest": "0xffffffff",
+          "data_digest": "0x04cfa72f",
           "attrs": [
             {
               "Base64": true,
@@ -2416,13 +2422,7 @@ EOF
               "value": "AwIdAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
               "name": "snapset"
             }
-          ],
-          "data_digest": "0x04cfa72f",
-          "omap_digest": "0xffffffff",
-          "size": 2048,
-          "errors": [],
-          "shard": 0,
-          "osd": 2
+          ]
         }
       ],
       "selected_object_info": "3:5e723e06:::EOBJ4:head(45'6 client.4289.0:1 dirty|data_digest|omap_digest s 7 uv 6 dd 2ddbf8f5 od ffffffff alloc_hint [0 0 0])",
@@ -2451,19 +2451,19 @@ EOF
         },
         {
           "size": 4096,
+          "shard": 0,
           "errors": [
             "size_mismatch_oi",
             "ec_size_error"
           ],
-          "shard": 1,
           "osd": 1
         },
         {
           "data_digest": "0x04cfa72f",
           "omap_digest": "0xffffffff",
           "size": 2048,
+          "shard": 1,
           "errors": [],
-          "shard": 0,
           "osd": 2
         }
       ],
