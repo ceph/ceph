@@ -1943,6 +1943,8 @@ int RGWHandler_REST::read_permissions(RGWOp* op_obj)
   case OP_DELETE:
     if (!s->info.args.exists("tagging")){
       only_bucket = true;
+    } else {
+      only_bucket = false;
     }
     break;
   case OP_OPTIONS:
