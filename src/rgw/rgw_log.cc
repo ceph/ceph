@@ -208,10 +208,6 @@ static void log_usage(struct req_state *s, const string& op_name)
     bucket_name = "-"; /* bucket not found, use the invalid '-' as bucket name */
   }
 
-  string u = user.to_str();
-  string p = payer.to_str();
-  rgw_usage_log_entry entry(u, p, bucket_name);
-
   uint64_t bytes_sent = ACCOUNTING_IO(s)->get_bytes_sent();
   uint64_t bytes_received = ACCOUNTING_IO(s)->get_bytes_received();
 
@@ -221,10 +217,24 @@ static void log_usage(struct req_state *s, const string& op_name)
   if (!s->is_err())
     data.successful_ops = 1;
 
+  string u = user.to_str();
+  string p = payer.to_str();
+
+  if (!u.empty() && s->cct->_conf->rgw_enable_usage_log_at_subuser_level) {
+    const auto subuser = s->auth.identity->get_subuser_name();
+    if (subuser && !(subuser->empty())) {
+      ldout(s->cct, 10) << "subuser usage log subuser=" << *subuser << dendl;
+      rgw_usage_log_entry sentry(u, p, bucket_name);
+      utime_t sts = ceph_clock_now();
+      sentry.add(*subuser, op_name, data);
+      usage_logger->insert(sts, sentry);
+    }
+  } 
+
+  rgw_usage_log_entry entry(u, p, bucket_name);
   entry.add(op_name, data);
 
   utime_t ts = ceph_clock_now();
-
   usage_logger->insert(ts, entry);
 }
 
