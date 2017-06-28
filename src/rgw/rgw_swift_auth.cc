@@ -219,7 +219,7 @@ TempURLEngine::authenticate(const req_state* const s) const
 
   if (is_expired(temp_url_expires)) {
     ldout(cct, 5) << "temp url link expired" << dendl;
-    return result_t::reject();
+    return result_t::reject(-EPERM);
   }
 
   /* We need to verify two paths because of compliance with Swift, Tempest
