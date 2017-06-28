@@ -4044,7 +4044,7 @@ void FileStore::sync_entry()
       utime_t dur = done - startwait;
       dout(10) << __FUNC__ << ": commit took " << lat << ", interval was " << dur << dendl;
       utime_t max_pause_lat = logger->tget(l_filestore_sync_pause_max_lat);
-      if (max_pause_lat == utime_t() || max_pause_lat < dur - lat) {
+      if (max_pause_lat < dur - lat) {
         logger->tinc(l_filestore_sync_pause_max_lat, dur - lat);
       }
 
