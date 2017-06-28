@@ -2616,14 +2616,11 @@ void PGMap::get_health_checks(
 	: state(s), severity(v) {}
     };
     vector<info_t> state_checks = {
-      { PG_STATE_STALE },
       { PG_STATE_DOWN },
       { PG_STATE_UNDERSIZED },
       { PG_STATE_DEGRADED },
       { PG_STATE_INCONSISTENT, HEALTH_ERR },
-      { PG_STATE_PEERING },
       { PG_STATE_REPAIR },
-      { PG_STATE_RECOVERING },
       { PG_STATE_RECOVERY_WAIT },
       { PG_STATE_INCOMPLETE, HEALTH_ERR },
       { PG_STATE_BACKFILL_WAIT },
