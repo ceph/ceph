@@ -753,6 +753,11 @@ static boost::optional<Principal> parse_principal(CephContext* cct, TokenID t,
 	  return Principal::role(std::move(a->account),
 				 match[2]);
 	}
+
+  if (match[1] == "group") {
+	return Principal::group(std::move(a->account),
+			       match[2]);
+      }
       }
     } else {
       if (std::none_of(s.begin(), s.end(),
@@ -765,8 +770,6 @@ static boost::optional<Principal> parse_principal(CephContext* cct, TokenID t,
 	return Principal::tenant(std::move(s));
       }
     }
-  }
-
   ldout(cct, 0) << "Supplied principal is discarded: " << s << dendl;
   return boost::none;
 }

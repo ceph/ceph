@@ -33,15 +33,18 @@ transform_old_authinfo(const req_state* const s)
     const rgw_user id;
     const int perm_mask;
     const bool is_admin;
+    const RGWUserInfo* user_info;
   public:
     DummyIdentityApplier(CephContext* const cct,
                          const rgw_user& auth_id,
                          const int perm_mask,
-                         const bool is_admin)
+                         const bool is_admin,
+                         const RGWUserInfo* user_info)
       : cct(cct),
         id(auth_id),
         perm_mask(perm_mask),
-        is_admin(is_admin) {
+        is_admin(is_admin),
+        user_info(user_info) {
     }
 
     uint32_t get_perms_from_aclspec(const aclspec_t& aclspec) const override {
@@ -66,7 +69,11 @@ transform_old_authinfo(const req_state* const s)
 		   (p.get_tenant() == id.tenant) &&
 		   (p.get_id() == id.id)) {
 	  return true;
-	}
+	} else if (p.is_group()) {
+    if (std::find(user_info->groups.begin(), user_info->groups.end(), p.get_group()) != user_info->groups.end()) {
+      return true;
+    }
+  }
       }
       return false;
     }
@@ -88,7 +95,8 @@ transform_old_authinfo(const req_state* const s)
                                  s->perm_mask,
   /* System user has admin permissions by default - it's supposed to pass
    * through any security check. */
-                                 s->system_request));
+                                 s->system_request,
+                                 s->user));
 }
 
 } /* namespace auth */
@@ -479,6 +487,11 @@ bool rgw::auth::LocalApplier::is_identity(const idset_t& ids) const {
     } else if (id.is_user() &&
 	       (id.get_tenant() == user_info.user_id.tenant) &&
 	       (id.get_id() == user_info.user_id.id)) {
+      return true;
+    } else if (id.is_group() &&
+            (std::find(user_info.groups.begin(),
+                      user_info.groups.end(),
+                      id.get_group()) != user_info.groups.end())) {
       return true;
     }
   }

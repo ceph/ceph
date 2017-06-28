@@ -115,15 +115,19 @@ WRITE_CLASS_ENCODER(rgw_user)
 namespace rgw {
 namespace auth {
 class Principal {
-  enum types { User, Role, Tenant, Wildcard };
+  enum types { User, Role, Tenant, Group, Wildcard };
   types t;
   rgw_user u;
+  string g;
 
   Principal(types t)
     : t(t) {}
 
   Principal(types t, std::string&& n, std::string i)
     : t(t), u(std::move(n), std::move(i)) {}
+
+  Principal(types t, std::string&& g)
+    : t(t), g(g) {}
 
 public:
 
@@ -143,6 +147,11 @@ public:
     return Principal(Tenant, std::move(t), {});
   }
 
+  static Principal group(std::string&& t, std::string&& g) {
+    string group = t + "$" + g;
+    return Principal(Group, std::move(group));
+  }
+
   bool is_wildcard() const {
     return t == Wildcard;
   }
@@ -159,12 +168,21 @@ public:
     return t == Tenant;
   }
 
+  bool is_group() const {
+    return t == Group;
+  }
+
   const std::string& get_tenant() const {
     return u.tenant;
   }
 
   const std::string& get_id() const {
     return u.id;
+  }
+
+  const std::string& get_group() const {
+    ceph_assert(t != Wildcard && t != Tenant);
+    return g;
   }
 
   bool operator ==(const Principal& o) const {
