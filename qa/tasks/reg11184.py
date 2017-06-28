@@ -55,6 +55,9 @@ def task(ctx, config):
     # create 1 pg pool
     log.info('creating foo')
     manager.raw_cluster_cmd('osd', 'pool', 'create', 'foo', '1')
+    manager.raw_cluster_cmd(
+        'osd', 'pool', 'application', 'enable',
+        pool_name, 'rados', run.Raw('||'), 'true')
 
     # Remove extra pool to simlify log output
     manager.raw_cluster_cmd('osd', 'pool', 'delete', 'rbd', 'rbd', '--yes-i-really-really-mean-it')

@@ -82,7 +82,9 @@ protected:
     cache_pool_name = get_temp_pool_name();
     ASSERT_EQ(0, s_cluster.pool_create(cache_pool_name.c_str()));
     RadosTestPP::SetUp();
+
     ASSERT_EQ(0, cluster.ioctx_create(cache_pool_name.c_str(), cache_ioctx));
+    cache_ioctx.application_enable("rados", true);
     cache_ioctx.set_namespace(nspace);
   }
   void TearDown() override {
@@ -1761,6 +1763,7 @@ TEST_F(LibRadosTierPP, FlushWriteRaces) {
   ASSERT_EQ(0, cluster.pool_create(cache_pool_name.c_str()));
   IoCtx cache_ioctx;
   ASSERT_EQ(0, cluster.ioctx_create(cache_pool_name.c_str(), cache_ioctx));
+  cache_ioctx.application_enable("rados", true);
   IoCtx ioctx;
   ASSERT_EQ(0, cluster.ioctx_create(pool_name.c_str(), ioctx));
 
@@ -2830,7 +2833,9 @@ protected:
     cache_pool_name = get_temp_pool_name();
     ASSERT_EQ(0, s_cluster.pool_create(cache_pool_name.c_str()));
     RadosTestECPP::SetUp();
+
     ASSERT_EQ(0, cluster.ioctx_create(cache_pool_name.c_str(), cache_ioctx));
+    cache_ioctx.application_enable("rados", true);
     cache_ioctx.set_namespace(nspace);
   }
   void TearDown() override {
@@ -4426,6 +4431,7 @@ TEST_F(LibRadosTierECPP, FlushWriteRaces) {
   ASSERT_EQ(0, cluster.pool_create(cache_pool_name.c_str()));
   IoCtx cache_ioctx;
   ASSERT_EQ(0, cluster.ioctx_create(cache_pool_name.c_str(), cache_ioctx));
+  cache_ioctx.application_enable("rados", true);
   IoCtx ioctx;
   ASSERT_EQ(0, cluster.ioctx_create(pool_name.c_str(), ioctx));
 
@@ -4772,6 +4778,7 @@ TEST_F(LibRadosTierECPP, CallForcesPromote) {
   ASSERT_EQ(0, cluster.pool_create(cache_pool_name.c_str()));
   IoCtx cache_ioctx;
   ASSERT_EQ(0, cluster.ioctx_create(cache_pool_name.c_str(), cache_ioctx));
+  cache_ioctx.application_enable("rados", true);
   IoCtx ioctx;
   ASSERT_EQ(0, cluster.ioctx_create(pool_name.c_str(), ioctx));
 
