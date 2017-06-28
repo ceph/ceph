@@ -58,6 +58,7 @@ void PGBackend::recover_delete_object(const hobject_t &oid, eversion_t v,
 void PGBackend::send_recovery_deletes(int prio,
 				      const map<pg_shard_t, vector<pair<hobject_t, eversion_t> > > &deletes)
 {
+  epoch_t min_epoch = get_parent()->get_last_peering_reset_epoch();
   for (const auto& p : deletes) {
     const auto& shard = p.first;
     const auto& objects = p.second;
@@ -74,7 +75,8 @@ void PGBackend::send_recovery_deletes(int prio,
       MOSDPGRecoveryDelete *msg =
 	new MOSDPGRecoveryDelete(get_parent()->whoami_shard(),
 				 target_pg,
-				 get_osdmap()->get_epoch());
+				 get_osdmap()->get_epoch(),
+				 min_epoch);
       msg->set_priority(prio);
 
       while (it != objects.end() &&
@@ -130,6 +132,7 @@ void PGBackend::handle_recovery_delete(OpRequestRef op)
   reply->set_priority(m->get_priority());
   reply->pgid = spg_t(get_parent()->get_info().pgid.pgid, m->from.shard);
   reply->map_epoch = m->map_epoch;
+  reply->min_epoch = m->min_epoch;
   reply->objects = m->objects;
   ConnectionRef conn = m->get_connection();
 
