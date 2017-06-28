@@ -498,11 +498,7 @@ static inline std::string aws4_uri_encode(const std::string& src)
 static inline std::string aws4_uri_recode(const boost::string_view& src)
 {
   std::string decoded = url_decode(src);
-  if (decoded.length() != src.length()) {
-    return src.to_string();
-  } else {
-    return aws4_uri_encode(decoded);
-  }
+  return aws4_uri_encode(decoded);
 }
 
 std::string get_v4_canonical_qs(const req_info& info, const bool using_qs)
