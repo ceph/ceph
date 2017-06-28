@@ -2585,6 +2585,8 @@ function TEST_periodic_scrub_replicated() {
 
     # Can't upgrade with this set
     ceph osd set nodeep-scrub
+    # Let map change propagate to OSDs
+    sleep 2
 
     # Fake a schedule scrub
     local last_scrub=$(get_last_scrub_stamp $pg)
