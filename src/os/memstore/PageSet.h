@@ -58,7 +58,7 @@ struct Page {
     ::encode(offset, bl);
   }
   void decode(bufferlist::iterator &p, size_t page_size) {
-    ::decode_array_nohead(data, page_size, p);
+    p.copy(page_size, data);
     ::decode(offset, p);
   }
 
