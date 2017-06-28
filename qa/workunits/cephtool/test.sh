@@ -1944,6 +1944,40 @@ function test_mon_osd_pool_set()
   ceph osd pool delete $TEST_POOL_GETSET $TEST_POOL_GETSET --yes-i-really-really-mean-it
 
   ceph osd pool get rbd crush_rule | grep 'crush_rule: '
+
+  ceph osd pool get $TEST_POOL_GETSET compression_mode | expect_false grep '.'
+  ceph osd pool set $TEST_POOL_GETSET compression_mode aggressive
+  ceph osd pool get $TEST_POOL_GETSET compression_mode | grep 'aggressive'
+  ceph osd pool set $TEST_POOL_GETSET compression_mode unset
+  ceph osd pool get $TEST_POOL_GETSET compression_mode | expect_false grep '.'
+
+  ceph osd pool get $TEST_POOL_GETSET compression_algorithm | expect_false grep '.'
+  ceph osd pool set $TEST_POOL_GETSET compression_algorithm zlib
+  ceph osd pool get $TEST_POOL_GETSET compression_algorithm | grep 'zlib'
+  ceph osd pool set $TEST_POOL_GETSET compression_algorithm unset
+  ceph osd pool get $TEST_POOL_GETSET compression_algorithm | expect_false grep '.'
+
+  ceph osd pool get $TEST_POOL_GETSET compression_required_ratio | expect_false grep '.'
+  expect_false ceph osd pool set $TEST_POOL_GETSET compression_required_ratio 1.1
+  expect_false ceph osd pool set $TEST_POOL_GETSET compression_required_ratio -.2
+  ceph osd pool set $TEST_POOL_GETSET compression_required_ratio .2
+  ceph osd pool get $TEST_POOL_GETSET compression_required_ratio | grep '.2'
+  ceph osd pool set $TEST_POOL_GETSET compression_required_ratio 0
+  ceph osd pool get $TEST_POOL_GETSET compression_required_ratio | expect_false grep '.'
+
+  ceph osd pool get $TEST_POOL_GETSET csum_type | expect_false grep '.'
+  ceph osd pool set $TEST_POOL_GETSET csum_type crc32c
+  ceph osd pool get $TEST_POOL_GETSET csum_type | grep 'crc32c'
+  ceph osd pool set $TEST_POOL_GETSET csum_type unset
+  ceph osd pool get $TEST_POOL_GETSET csum_type | expect_false grep '.'
+
+  for size in compression_max_blob_size compression_min_blob_size csum_max_block csum_min_block; do
+      ceph osd pool get $TEST_POOL_GETSET $size | expect_false grep '.'
+      ceph osd pool set $TEST_POOL_GETSET $size 100
+      ceph osd pool get $TEST_POOL_GETSET $size | grep '100'
+      ceph osd pool set $TEST_POOL_GETSET $size 0
+      ceph osd pool get $TEST_POOL_GETSET $size | expect_false grep '.'
+  done
 }
 
 function test_mon_osd_tiered_pool_set()
