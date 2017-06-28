@@ -5096,9 +5096,9 @@ next:
     }
 
 
-    ret = RGWUsage::show(store, user_id, start_epoch, end_epoch,
-			 show_log_entries, show_log_sum, &categories,
-			 f);
+    ret = RGWUsage::show(store, user_id, subuser, start_epoch, end_epoch,
+                         show_log_entries, show_log_sum,
+                         &categories, f);
     if (ret < 0) {
       cerr << "ERROR: failed to show usage" << std::endl;
       return 1;
