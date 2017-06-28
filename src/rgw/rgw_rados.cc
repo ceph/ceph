@@ -4527,6 +4527,10 @@ int RGWRados::init_complete()
 
   /* init it anyway, might run sync through radosgw-admin explicitly */
   sync_tracer = new RGWSyncTraceManager(cct, cct->_conf->rgw_sync_trace_history_size);
+  ret = sync_tracer->hook_to_admin_command();
+  if (ret < 0) {
+    return ret;
+  }
 
   if (run_sync_thread) {
     Mutex::Locker l(meta_sync_thread_lock);
