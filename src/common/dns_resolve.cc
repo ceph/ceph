@@ -350,8 +350,13 @@ int DNSResolver::resolve_srv_hosts(CephContext *cct, const string& service_name,
     if (r == 0) {
       addr.set_port(port);
       string target = full_target;
-      assert(target.find(srv_domain) != target.npos);
-      target = target.substr(0, target.find(srv_domain));
+      auto end = target.find(srv_domain);
+      if (end == target.npos) {
+	lderr(cct) << "resolved target not in search domain: "
+		   << target << " / " << srv_domain << dendl;
+	return -EINVAL;
+      }
+      target = target.substr(0, end);
       (*srv_hosts)[target] = {priority, addr};
     }
   }
