@@ -6140,28 +6140,28 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
       auto cmode = Compressor::get_comp_mode_type(val);
       if (!cmode) {
 	ss << "unrecognized compression mode '" << val << "'";
-	return EINVAL;
+	return -EINVAL;
       }
     } else if (var == "compression_algorithm") {
       auto alg = Compressor::get_comp_alg_type(val);
       if (!alg) {
         ss << "unrecognized compression_algorithm '" << val << "'";
-	return EINVAL;
+	return -EINVAL;
       }
     } else if (var == "compression_required_ratio") {
       if (floaterr.length()) {
         ss << "error parsing float value '" << val << "': " << floaterr;
         return -EINVAL;
       }
-      if (f < 0 || f>1) {
+      if (f < 0 || f > 1) {
         ss << "compression_required_ratio is out of range (0-1): '" << val << "'";
-	return EINVAL;
+	return -EINVAL;
       }
     } else if (var == "csum_type") {
       auto t = val != "unset" ? Checksummer::get_csum_string_type(val) : 0;
       if (t < 0 ) {
         ss << "unrecognized csum_type '" << val << "'";
-	return EINVAL;
+	return -EINVAL;
       }
       //preserve csum_type numeric value
       n = t;
