@@ -25,7 +25,7 @@ RDMAConnectedSocketImpl::RDMAConnectedSocketImpl(CephContext *cct, Infiniband* i
   : cct(cct), connected(0), error(0), infiniband(ib),
     dispatcher(s), worker(w), lock("RDMAConnectedSocketImpl::lock"),
     is_server(false), con_handler(new C_handle_connection(this)),
-    active(false)
+    active(false), pending(false)
 {
   qp = infiniband->create_queue_pair(
 				     cct, s->get_tx_cq(), s->get_rx_cq(), IBV_QPT_RC);
