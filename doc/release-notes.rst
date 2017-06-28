@@ -331,7 +331,7 @@ Upgrade from Jewel or Kraken
    you can deploy new daemons with tools like ceph-deploy or ceph-ansible.  For
    example,::
 
-     # ceph-deploy mgr HOST
+     # ceph-deploy mgr create HOST
 
    Verify the ceph-mgr daemons are running by checking ``ceph -s``::
 
