@@ -1506,6 +1506,12 @@ void pg_pool_t::encode(bufferlist& bl, uint64_t features) const
     // this was the first post-hammer thing we added; if it's missing, encode
     // like hammer.
     v = 21;
+    if (!(features & CEPH_FEATURE_OSD_HITSET_GMT)) {
+      // CEPH_FEATURE_OSD_HITSET_GMT requires pg_pool_t v21 which has
+      // use_gmt_hitset, and two fields added before v21.
+      // See http://tracker.ceph.com/issues/19508
+      v = 17;
+    }
   }
 
   ENCODE_START(v, 5, bl);
