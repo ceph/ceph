@@ -233,7 +233,8 @@ OPTION(ms_async_set_affinity, OPT_BOOL, true)
 // If ms_async_affinity_cores is empty, all threads will be bind to current running
 // core
 OPTION(ms_async_affinity_cores, OPT_STR, "")
-OPTION(ms_async_rdma_device_name, OPT_STR, "")
+OPTION(ms_async_rdma_public_device_name, OPT_STR, "")
+OPTION(ms_async_rdma_cluster_device_name, OPT_STR, "")
 OPTION(ms_async_rdma_enable_hugepage, OPT_BOOL, false)
 OPTION(ms_async_rdma_buffer_size, OPT_INT, 128 << 10)
 OPTION(ms_async_rdma_send_buffers, OPT_U32, 1024)
