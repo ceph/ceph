@@ -19,7 +19,7 @@
 #include <map>
 #include <sstream>
 #include <string>
-
+#include <boost/regex.hpp>
 
 using namespace librados;
 using std::map;
@@ -856,6 +856,14 @@ protected:
     ASSERT_EQ("", create_one_ec_pool_pp(pool_name, s_cluster));
     src_pool_name = get_temp_pool_name();
     ASSERT_EQ(0, s_cluster.pool_create(src_pool_name.c_str()));
+
+    librados::IoCtx ioctx;
+    ASSERT_EQ(0, s_cluster.ioctx_create(pool_name.c_str(), ioctx));
+    ioctx.application_enable("rados", true);
+
+    librados::IoCtx src_ioctx;
+    ASSERT_EQ(0, s_cluster.ioctx_create(src_pool_name.c_str(), src_ioctx));
+    src_ioctx.application_enable("rados", true);
   }
   static void TearDownTestCase() {
     ASSERT_EQ(0, s_cluster.pool_delete(src_pool_name.c_str()));
@@ -1231,22 +1239,37 @@ TEST_F(LibRadosMisc, CmpExt) {
 }
 
 TEST_F(LibRadosMisc, Applications) {
+  const char *cmd[] = {"{\"prefix\":\"osd dump\"}", nullptr};
+  char *buf, *st;
+  size_t buflen, stlen;
+  ASSERT_EQ(0, rados_mon_command(cluster, (const char **)cmd, 1, "", 0, &buf,
+                                 &buflen, &st, &stlen));
+  ASSERT_LT(0u, buflen);
+  string result(buf);
+  rados_buffer_free(buf);
+  rados_buffer_free(st);
+  if (!boost::regex_search(result, boost::regex("require_osd_release [l-z]"))) {
+    std::cout << "SKIPPING";
+    return;
+  }
+
   char apps[128];
   size_t app_len;
 
   app_len = sizeof(apps);
   ASSERT_EQ(0, rados_application_list(ioctx, apps, &app_len));
-  ASSERT_EQ(0U, app_len);
+  ASSERT_EQ(6U, app_len);
+  ASSERT_EQ(0, memcmp("rados\0", apps, app_len));
 
-  ASSERT_EQ(0, rados_application_enable(ioctx, "app1", 0));
+  ASSERT_EQ(0, rados_application_enable(ioctx, "app1", 1));
   ASSERT_EQ(-EPERM, rados_application_enable(ioctx, "app2", 0));
   ASSERT_EQ(0, rados_application_enable(ioctx, "app2", 1));
 
   ASSERT_EQ(-ERANGE, rados_application_list(ioctx, apps, &app_len));
-  ASSERT_EQ(10U, app_len);
+  ASSERT_EQ(16U, app_len);
   ASSERT_EQ(0, rados_application_list(ioctx, apps, &app_len));
-  ASSERT_EQ(10U, app_len);
-  ASSERT_EQ(0, memcmp("app1\0app2\0", apps, app_len));
+  ASSERT_EQ(16U, app_len);
+  ASSERT_EQ(0, memcmp("app1\0app2\0rados\0", apps, app_len));
 
   char keys[128];
   char vals[128];
@@ -1288,16 +1311,28 @@ TEST_F(LibRadosMisc, Applications) {
 }
 
 TEST_F(LibRadosMiscPP, Applications) {
-  std::set<std::string> expected_apps;
+  bufferlist inbl, outbl;
+  string outs;
+  ASSERT_EQ(0, cluster.mon_command("{\"prefix\": \"osd dump\"}",
+				   inbl, &outbl, &outs));
+  ASSERT_LT(0u, outbl.length());
+  ASSERT_LE(0u, outs.length());
+  if (!boost::regex_search(outbl.to_str(),
+                           boost::regex("require_osd_release [l-z]"))) {
+    std::cout << "SKIPPING";
+    return;
+  }
+
+  std::set<std::string> expected_apps = {"rados"};
   std::set<std::string> apps;
   ASSERT_EQ(0, ioctx.application_list(&apps));
   ASSERT_EQ(expected_apps, apps);
 
-  ASSERT_EQ(0, ioctx.application_enable("app1", false));
+  ASSERT_EQ(0, ioctx.application_enable("app1", true));
   ASSERT_EQ(-EPERM, ioctx.application_enable("app2", false));
   ASSERT_EQ(0, ioctx.application_enable("app2", true));
 
-  expected_apps = {"app1", "app2"};
+  expected_apps = {"app1", "app2", "rados"};
   ASSERT_EQ(0, ioctx.application_list(&apps));
   ASSERT_EQ(expected_apps, apps);
 

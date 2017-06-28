@@ -99,6 +99,8 @@ int main(int argc, const char **argv)
 	  << "': error " << ret << std::endl;
      return 1;
   }
+  ioctx.application_enable("rados", true);
+
   librados::ObjectWriteOperation op;
   op.create(true);
   ret = ioctx.operate(oid, &op);

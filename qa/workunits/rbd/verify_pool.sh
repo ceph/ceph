@@ -11,7 +11,7 @@ set_up () {
   tear_down
   ceph osd pool create $POOL_NAME $PG_NUM
   ceph osd pool mksnap $POOL_NAME snap
-  rbd pool init images
+  rbd pool init $POOL_NAME
 }
 
 trap tear_down EXIT HUP INT

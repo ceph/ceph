@@ -49,6 +49,17 @@ std::string create_one_pool(
     return oss.str();
   }
 
+  rados_ioctx_t ioctx;
+  ret = rados_ioctx_create(*cluster, pool_name.c_str(), &ioctx);
+  if (ret < 0) {
+    rados_shutdown(*cluster);
+    std::ostringstream oss;
+    oss << "rados_ioctx_create(" << pool_name << ") failed with error " << ret;
+    return oss.str();
+  }
+
+  rados_application_enable(ioctx, "rados", 1);
+  rados_ioctx_destroy(ioctx);
   return "";
 }
 
@@ -155,6 +166,17 @@ std::string create_one_pool_pp(const std::string &pool_name, Rados &cluster,
     oss << "cluster.pool_create(" << pool_name << ") failed with error " << ret;
     return oss.str();
   }
+
+  IoCtx ioctx;
+  ret = cluster.ioctx_create(pool_name.c_str(), ioctx);
+  if (ret < 0) {
+    cluster.shutdown();
+    std::ostringstream oss;
+    oss << "cluster.ioctx_create(" << pool_name << ") failed with error "
+        << ret;
+    return oss.str();
+  }
+  ioctx.application_enable("rados", true);
   return "";
 }
 

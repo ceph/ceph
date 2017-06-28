@@ -1,4 +1,5 @@
 from __future__ import print_function
+from nose import SkipTest
 from nose.tools import eq_ as eq, ok_ as ok, assert_raises
 from rados import (Rados, Error, RadosStateError, Object, ObjectExists,
                    ObjectNotFound, ObjectBusy, requires, opt,
@@ -860,6 +861,15 @@ class TestIoctx(object):
         [i.remove() for i in self.ioctx.list_objects()]
 
     def test_applications(self):
+        cmd = {"prefix":"osd dump", "format":"json"}
+        ret, buf, errs = self.rados.mon_command(json.dumps(cmd), b'')
+        eq(ret, 0)
+        assert len(buf) > 0
+        release = json.loads(buf.decode("utf-8")).get("require_osd_release",
+                                                      None)
+        if not release or release[0] < 'l':
+            raise SkipTest
+
         eq([], self.ioctx.application_list())
 
         self.ioctx.application_enable("app1")

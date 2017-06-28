@@ -90,6 +90,7 @@ public:
     EXPECT_EQ(0, m_local_cluster->pool_create(m_local_pool_name.c_str()));
     EXPECT_EQ(0, m_local_cluster->ioctx_create(m_local_pool_name.c_str(),
 					      m_local_ioctx));
+    m_local_ioctx.application_enable("rbd", true);
 
     EXPECT_EQ("", connect_cluster_pp(m_remote_cluster));
     EXPECT_EQ(0, m_remote_cluster.conf_set("rbd_cache", "false"));
@@ -101,6 +102,8 @@ public:
 
     EXPECT_EQ(0, m_remote_cluster.ioctx_create(m_remote_pool_name.c_str(),
 					       m_remote_ioctx));
+    m_remote_ioctx.application_enable("rbd", true);
+
     EXPECT_EQ(0, librbd::api::Mirror<>::mode_set(m_remote_ioctx,
                                                  RBD_MIRROR_MODE_POOL));
 

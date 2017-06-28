@@ -85,6 +85,7 @@ public:
     if (m_open_pool_sem)
       m_open_pool_sem->post();
     rados_ioctx_destroy(io_ctx);
+    rados_pool_delete(cl, m_pool_name.c_str());
     rados_shutdown(cl);
     return 0;
   }
