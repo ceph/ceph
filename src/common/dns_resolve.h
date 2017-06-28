@@ -18,8 +18,7 @@
 #include <resolv.h>
 
 #include "common/Mutex.h"
-
-struct entity_addr_t;
+#include "msg/msg_types.h"		// for entity_addr_t
 
 namespace ceph {
 
@@ -78,6 +77,11 @@ class DNSResolver {
     };
 
 
+    struct Record {
+      uint16_t priority;
+      entity_addr_t addr;
+    };
+
     int resolve_cname(CephContext *cct, const std::string& hostname,
         std::string *cname, bool *found);
 
@@ -103,7 +107,7 @@ class DNSResolver {
      * @returns 0 on success, negative error code on failure
      */
     int resolve_srv_hosts(CephContext *cct, const std::string& service_name,
-        const SRV_Protocol trans_protocol, std::map<std::string, entity_addr_t> *srv_hosts);
+        const SRV_Protocol trans_protocol, std::map<std::string, Record> *srv_hosts);
 
     /**
      * Returns the list of hostnames and addresses that provide a given
@@ -119,7 +123,7 @@ class DNSResolver {
      */
     int resolve_srv_hosts(CephContext *cct, const std::string& service_name,
         const SRV_Protocol trans_protocol, const std::string& domain,
-        std::map<std::string, entity_addr_t> *srv_hosts);
+        std::map<std::string, Record> *srv_hosts);
 
   private:
     DNSResolver() : lock("DNSResolver") { resolv_h = new ResolvHWrapper(); }

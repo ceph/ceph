@@ -258,13 +258,14 @@ int DNSResolver::resolve_ip_addr(CephContext *cct, res_state *res, const string&
 }
 
 int DNSResolver::resolve_srv_hosts(CephContext *cct, const string& service_name, 
-    const SRV_Protocol trans_protocol, map<string, entity_addr_t> *srv_hosts) {
+    const SRV_Protocol trans_protocol,
+    map<string, DNSResolver::Record> *srv_hosts) {
   return this->resolve_srv_hosts(cct, service_name, trans_protocol, "", srv_hosts);
 }
 
 int DNSResolver::resolve_srv_hosts(CephContext *cct, const string& service_name, 
     const SRV_Protocol trans_protocol, const string& domain,
-    map<string, entity_addr_t> *srv_hosts) {
+    map<string, DNSResolver::Record> *srv_hosts) {
 
 #ifdef HAVE_RES_NQUERY
   res_state res;
@@ -331,11 +332,13 @@ int DNSResolver::resolve_srv_hosts(CephContext *cct, const string& service_name,
     string srv_domain = full_srv_name.substr(full_srv_name.find(protocol)
         + protocol.length());
 
-    int port = ns_get16(ns_rr_rdata(rr) + (NS_INT16SZ * 2)); /* port = rdata + priority + weight */
+    auto rdata = ns_rr_rdata(rr);
+    uint16_t priority = ns_get16(rdata); rdata += NS_INT16SZ;
+    rdata += NS_INT16SZ;	// weight
+    uint16_t port = ns_get16(rdata); rdata += NS_INT16SZ;
     memset(full_target, 0, sizeof(full_target));
     ns_name_uncompress(ns_msg_base(handle), ns_msg_end(handle),
-                       ns_rr_rdata(rr) + (NS_INT16SZ * 3), /* comp_dn = rdata + priority + weight + port */
-                       full_target, sizeof(full_target));
+                       rdata, full_target, sizeof(full_target));
 
     entity_addr_t addr;
 #ifdef HAVE_RES_NQUERY
@@ -349,12 +352,10 @@ int DNSResolver::resolve_srv_hosts(CephContext *cct, const string& service_name,
       string target = full_target;
       assert(target.find(srv_domain) != target.npos);
       target = target.substr(0, target.find(srv_domain));
-      (*srv_hosts)[target] = addr;
+      (*srv_hosts)[target] = {priority, addr};
     }
   }
-
   return 0;
 }
 
 }
-
