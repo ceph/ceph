@@ -336,8 +336,33 @@ int rgw_log_op(RGWRados *store, RGWREST* const rest, struct req_state *s,
   if (s->enable_usage_log)
     log_usage(s, op_name);
 
-  if (!s->enable_ops_log)
-    return 0;
+  // overwrite ops log config
+  // enable ops log when bucket logging is enabled
+  if (!s->enable_ops_log) {
+    if (s->bucket_attrs.empty()) {
+      RGWObjectCtx obj_ctx(store);
+      int ret = store->get_bucket_info(obj_ctx, s->bucket_tenant, s->bucket_name,
+                                       s->bucket_info, NULL, &s->bucket_attrs);
+      if (ret != 0)
+        return 0;
+    }
+
+    map<string, bufferlist>::iterator siter = s->bucket_attrs.find(RGW_ATTR_BL);
+    if (siter == s->bucket_attrs.end())
+      return 0;
+
+    RGWBucketLoggingStatus status(s->cct);
+    bufferlist::iterator iter(&siter->second);
+    try {
+        status.decode(iter);
+      } catch (const buffer::error& e) {
+        ldout(s->cct, 20) << __func__ <<  " decode bucket logging status failed" << dendl;
+        return 0;
+      }
+
+    if (!status.is_enabled())
+      return 0;
+  }
 
   if (s->bucket_name.empty()) {
     ldout(s->cct, 5) << "nothing to log for operation" << dendl;

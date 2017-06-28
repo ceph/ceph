@@ -11,19 +11,13 @@ Logging``, or so called ``Bucket Logging``.
 Configuration
 =============
 
-Enable Ops Log
---------------
+Config Log Delivery Port
+------------------------
 
-First we need to enable Ceph Object Gateway to record ops log by
-adding following config to ``ceph.conf`` ::
-
-  [global]
-          rgw enable ops log = true
-
-Then we also need to specify port which Ceph Object Gateway would use
+We need to specify port which Ceph Object Gateway would use
 to upload bucket logging file. For example, if we setup a Ceph cluster
-by using ``vstart.sh`` script, it would start Ceph Object Gateway on
-8000 by default, so you need to add following config to ``ceph.conf`` ::
+by using ``vstart.sh`` script, it would start Ceph Object Gateway instance
+on ``8000`` by default, so you need to add following config to ``ceph.conf`` ::
 
           rgw bl url = "http://localhost:8000"
 
