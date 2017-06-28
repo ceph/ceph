@@ -17,6 +17,8 @@
 #include "auth/RotatingKeyRing.h"
 #include "json_spirit/json_spirit_writer.h"
 
+#include "mon/MonCommand.h"
+
 #include "messages/MMgrOpen.h"
 #include "messages/MMgrConfigure.h"
 #include "messages/MMonMgrReport.h"
@@ -402,21 +404,9 @@ bool DaemonServer::handle_report(MMgrReport *m)
   return true;
 }
 
-struct MgrCommand {
-  string cmdstring;
-  string helpstring;
-  string module;
-  string perm;
-  string availability;
-
-  bool requires_perm(char p) const {
-    return (perm.find(p) != string::npos);
-  }
-
-} mgr_commands[] = {
-
+std::vector<MonCommand> mgr_commands = {
 #define COMMAND(parsesig, helptext, module, perm, availability) \
-  {parsesig, helptext, module, perm, availability},
+  {parsesig, helptext, module, perm, availability, 0},
 #include "MgrCommands.h"
 #undef COMMAND
 };
@@ -444,16 +434,14 @@ void DaemonServer::_generate_command_map(
   }
 }
 
-const MgrCommand *DaemonServer::_get_mgrcommand(
+const MonCommand *DaemonServer::_get_mgrcommand(
   const string &cmd_prefix,
-  MgrCommand *cmds,
-  int cmds_size)
+  const std::vector<MonCommand> &cmds)
 {
-  MgrCommand *this_cmd = NULL;
-  for (MgrCommand *cp = cmds;
-       cp < &cmds[cmds_size]; cp++) {
-    if (cp->cmdstring.compare(0, cmd_prefix.size(), cmd_prefix) == 0) {
-      this_cmd = cp;
+  const MonCommand *this_cmd = nullptr;
+  for (const auto &cmd : cmds) {
+    if (cmd.cmdstring.compare(0, cmd_prefix.size(), cmd_prefix) == 0) {
+      this_cmd = &cmd;
       break;
     }
   }
@@ -466,7 +454,7 @@ bool DaemonServer::_allowed_command(
   const string &prefix,
   const map<string,cmd_vartype>& cmdmap,
   const map<string,string>& param_str_map,
-  const MgrCommand *this_cmd) {
+  const MonCommand *this_cmd) {
 
   if (s->entity_name.is_mon()) {
     // mon is all-powerful.  even when it is forwarding commands on behalf of
@@ -593,42 +581,52 @@ bool DaemonServer::handle_command(MCommand *m)
   dout(4) << "prefix=" << prefix << dendl;
 
   if (prefix == "get_command_descriptions") {
-    int cmdnum = 0;
-
     dout(10) << "reading commands from python modules" << dendl;
     auto py_commands = py_modules.get_commands();
 
-    JSONFormatter f;
-    f.open_object_section("command_descriptions");
-    for (const auto &pyc : py_commands) {
-      ostringstream secname;
-      secname << "cmd" << setfill('0') << std::setw(3) << cmdnum;
-      dout(20) << "Dumping " << pyc.cmdstring << " (" << pyc.helpstring
-               << ")" << dendl;
-      dump_cmddesc_to_json(&f, secname.str(), pyc.cmdstring, pyc.helpstring,
-			   "mgr", pyc.perm, "cli", 0);
-      cmdnum++;
-    }
+    bool binary = false;
+    cmd_getval(g_ceph_context, cmdctx->cmdmap, "binary", binary);
+    if (binary) {
+      std::vector<MonCommand> commands = mgr_commands;
+      for (const auto &pyc : py_commands) {
+        commands.push_back({pyc.cmdstring, pyc.helpstring, "mgr",
+                            pyc.perm, "cli", MonCommand::FLAG_MGR});
+      }
+      ::encode(commands, cmdctx->odata);
+    } else {
+      int cmdnum = 0;
 
-    for (const auto &cp : mgr_commands) {
-      ostringstream secname;
-      secname << "cmd" << setfill('0') << std::setw(3) << cmdnum;
-      dump_cmddesc_to_json(&f, secname.str(), cp.cmdstring, cp.helpstring,
-			   cp.module, cp.perm, cp.availability, 0);
-      cmdnum++;
+      JSONFormatter f;
+      f.open_object_section("command_descriptions");
+      for (const auto &pyc : py_commands) {
+        ostringstream secname;
+        secname << "cmd" << setfill('0') << std::setw(3) << cmdnum;
+        dout(20) << "Dumping " << pyc.cmdstring << " (" << pyc.helpstring
+                 << ")" << dendl;
+        dump_cmddesc_to_json(&f, secname.str(), pyc.cmdstring, pyc.helpstring,
+                             "mgr", pyc.perm, "cli", 0);
+        cmdnum++;
+      }
+
+      for (const auto &cp : mgr_commands) {
+        ostringstream secname;
+        secname << "cmd" << setfill('0') << std::setw(3) << cmdnum;
+        dump_cmddesc_to_json(&f, secname.str(), cp.cmdstring, cp.helpstring,
+                             cp.module, cp.req_perms, cp.availability, 0);
+        cmdnum++;
+      }
+      f.close_section();	// command_descriptions
+      f.flush(cmdctx->odata);
     }
-    f.close_section();	// command_descriptions
-    f.flush(cmdctx->odata);
     cmdctx->reply(0, ss);
     return true;
   }
 
   // lookup command
-  const MgrCommand *mgr_cmd = _get_mgrcommand(prefix, mgr_commands,
-                                              ARRAY_SIZE(mgr_commands));
+  const MonCommand *mgr_cmd = _get_mgrcommand(prefix, mgr_commands);
   _generate_command_map(cmdctx->cmdmap, param_str_map);
   if (!mgr_cmd) {
-    MgrCommand py_command = {"", "", "py", "rw", "cli"};
+    MonCommand py_command = {"", "", "py", "rw", "cli"};
     if (!_allowed_command(session.get(), py_command.module, prefix, cmdctx->cmdmap,
                           param_str_map, &py_command)) {
       dout(1) << " access denied" << dendl;
