@@ -1,0 +1,65 @@
+#
+# Test the expected behavior of the code that ensures proper encoding
+# when
+#
+#    CEPH_FEATURE_OSD_HITSET_GMT
+#
+# feature is not active (prevents mon overload on upgrade to jewel)
+#
+# for details, see http://tracker.ceph.com/issues/19508
+#
+roles:
+- - mon.a
+  - osd.0
+  - osd.1
+- - osd.2
+openstack:
+- volumes: # attached to each instance
+    count: 2
+    size: 10 # GB
+tasks:
+- install:
+    tag: v0.94.6
+    exclude_packages: [ 'libcephfs-java', 'libcephfs-jni' ]
+    extra_packages: [ 'libradosstriper1', 'python-rados', 'python-cephfs', 'python-rbd' ]
+- ceph:
+    fs: xfs
+- install.upgrade:
+    osd.0:
+- ceph.restart:
+    daemons: [osd.0]
+    wait-for-osds-up: false
+    wait-for-healthy: true
+- exec:
+    osd.0:
+      - |-
+        set -ex
+        ceph daemon osd.0 log flush
+        ! grep -E "failed to encode map e[0-9]+ with expected crc" /var/log/ceph/ceph-osd.0.log
+
+- install.upgrade:
+    osd.2:
+- ceph.restart:
+    daemons: [mon.a, osd.1, osd.2]
+    wait-for-healthy: false
+- exec:
+    mon.a:
+      - sleep 300 # http://tracker.ceph.com/issues/17808
+      - ceph osd set sortbitwise
+      - ceph osd set require_jewel_osds
+- ceph.healthy:
+- exec:
+    mon.a:
+      - |-
+        set -ex
+        ceph daemon mon.a log flush
+        ceph daemon osd.0 log flush
+        ceph daemon osd.1 log flush
+        ! grep -E "failed to encode map e[0-9]+ with expected crc" /var/log/ceph/ceph*.log
+
+    osd.2:
+      - |-
+        set -ex
+        ceph daemon osd.2 log flush
+        ! grep -E "failed to encode map e[0-9]+ with expected crc" /var/log/ceph/ceph*.log
+
