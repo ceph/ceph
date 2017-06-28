@@ -1255,11 +1255,9 @@ namespace crimson {
 	switch(next.type) {
 	case super::NextReqType::none:
 	  return result;
-	  break;
 	case super::NextReqType::future:
 	  result.data = next.when_ready;
 	  return result;
-	  break;
 	case super::NextReqType::returning:
 	  // to avoid nesting, break out and let code below handle this case
 	  break;
