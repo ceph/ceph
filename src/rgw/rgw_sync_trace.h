@@ -5,6 +5,7 @@
 
 #include "common/Mutex.h"
 #include "common/RWLock.h"
+#include "common/admin_socket.h"
 
 #include <set>
 #include <ostream>
@@ -51,6 +52,7 @@ protected:
 
   uint64_t handle;
 
+  boost::circular_buffer<string> history;
 public:
   RGWSyncTraceNode(CephContext *_cct, RGWSyncTraceManager *_manager, const RGWSyncTraceNodeRef& _parent,
            const std::string& _type, const std::string& _trigger, const std::string& _id);
@@ -73,6 +75,12 @@ public:
     os << to_str();
     return os;            
   }
+
+  boost::circular_buffer<string>& get_history() {
+    return history;
+  }
+
+  bool match(const string& search_term, bool search_history);
 };
 
 /*
@@ -107,7 +115,7 @@ public:
 };
 
 
-class RGWSyncTraceManager {
+class RGWSyncTraceManager : public AdminSocketHook {
   friend class RGWSyncTraceNode;
 
   CephContext *cct;
@@ -119,19 +127,24 @@ class RGWSyncTraceManager {
 
   atomic64_t count;
 
+  std::list<std::array<string, 3> > admin_commands;
 protected:
   uint64_t alloc_handle() {
     return count.inc();
   }
 
 public:
-  RGWSyncTraceManager(CephContext *_cct, int max_lru) : cct(_cct) {}
+#warning complete_nodes size configurable
+  RGWSyncTraceManager(CephContext *_cct, int max_lru) : cct(_cct), complete_nodes(512) {}
+  ~RGWSyncTraceManager();
 
   const RGWSyncTraceNodeRef root_node;
 
   RGWSTNCRef add_node(RGWSyncTraceNode *node);
   void finish_node(RGWSyncTraceNode *node);
 
+  int hook_to_admin_command();
+  bool call(std::string command, cmdmap_t& cmdmap, std::string format, bufferlist& out);
 };
 
 
