@@ -314,7 +314,10 @@ public:
   int64_t get_first_data_pool() const { return *data_pools.begin(); }
   int64_t get_metadata_pool() const { return metadata_pool; }
   bool is_data_pool(int64_t poolid) const {
-    return std::binary_search(data_pools.begin(), data_pools.end(), poolid);
+    auto p = std::find(data_pools.begin(), data_pools.end(), poolid);
+    if (p == data_pools.end())
+      return false;
+    return true;
   }
 
   bool pool_in_use(int64_t poolid) const {
