@@ -106,8 +106,8 @@ Pool specific commands
 :command:`listwatchers` *name*
   List the watchers of object name.
 
-:command:`ls` *outfile*
-  List objects in given pool and write to outfile.
+:command:`ls` *outfile* [ --regex *pattern* ]
+  List objects in given pool and write to outfile. Only the matched objects are listed if --regex option is specified.
 
 :command:`lssnap`
   List snapshots for given pool.
