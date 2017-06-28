@@ -1206,6 +1206,8 @@ void BlueFS::_compact_log_async(std::unique_lock<std::mutex>& l)
 
   // 2. prepare compacted log
   bluefs_transaction_t t;
+  //avoid record two times in log_t and _compact_log_dump_metadata.
+  log_t.clear();
   _compact_log_dump_metadata(&t);
 
   // conservative estimate for final encoded size
