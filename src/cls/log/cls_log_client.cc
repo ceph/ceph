@@ -95,11 +95,11 @@ public:
         bufferlist::iterator iter = outbl.begin();
         ::decode(ret, iter);
         if (entries)
-	  *entries = ret.entries;
+          *entries = std::move(ret.entries);
         if (truncated)
           *truncated = ret.truncated;
         if (marker)
-          *marker = ret.marker;
+          *marker = std::move(ret.marker);
       } catch (buffer::error& err) {
         // nothing we can do about it atm
       }
