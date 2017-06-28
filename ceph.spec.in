@@ -117,7 +117,7 @@ BuildRequires:	python-werkzeug
 %endif
 %if 0%{?suse_version}
 BuildRequires:	python-CherryPy
-BuildRequires:	python-werkzeug
+BuildRequires:	python-Werkzeug
 %endif
 BuildRequires:	python-pecan
 %endif
