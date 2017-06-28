@@ -605,14 +605,12 @@ function TEST_corrupt_scrub_replicated() {
     pg_scrub $pg
 
     rados list-inconsistent-pg $poolname > $dir/json || return 1
-    cat $dir/json
     # Check pg count
     test $(jq '. | length' $dir/json) = "1" || return 1
     # Check pgid
     test $(jq -r '.[0]' $dir/json) = $pg || return 1
 
     rados list-inconsistent-obj $pg > $dir/json || return 1
-    cat $dir/json
     # Get epoch for repair-get requests
     epoch=$(jq .epoch $dir/json)
 
@@ -978,14 +976,12 @@ EOF
     pg_deep_scrub $pg
 
     rados list-inconsistent-pg $poolname > $dir/json || return 1
-    cat $dir/json
     # Check pg count
     test $(jq '. | length' $dir/json) = "1" || return 1
     # Check pgid
     test $(jq -r '.[0]' $dir/json) = $pg || return 1
 
     rados list-inconsistent-obj $pg > $dir/json || return 1
-    cat $dir/json
     # Get epoch for repair-get requests
     epoch=$(jq .epoch $dir/json)
 
@@ -1666,14 +1662,12 @@ function corrupt_scrub_erasure() {
     pg_scrub $pg
 
     rados list-inconsistent-pg $poolname > $dir/json || return 1
-    cat $dir/json
     # Check pg count
     test $(jq '. | length' $dir/json) = "1" || return 1
     # Check pgid
     test $(jq -r '.[0]' $dir/json) = $pg || return 1
 
     rados list-inconsistent-obj $pg > $dir/json || return 1
-    cat $dir/json
     # Get epoch for repair-get requests
     epoch=$(jq .epoch $dir/json)
 
@@ -1927,14 +1921,12 @@ EOF
     pg_deep_scrub $pg
 
     rados list-inconsistent-pg $poolname > $dir/json || return 1
-    cat $dir/json
     # Check pg count
     test $(jq '. | length' $dir/json) = "1" || return 1
     # Check pgid
     test $(jq -r '.[0]' $dir/json) = $pg || return 1
 
     rados list-inconsistent-obj $pg > $dir/json || return 1
-    cat $dir/json
     # Get epoch for repair-get requests
     epoch=$(jq .epoch $dir/json)
 
