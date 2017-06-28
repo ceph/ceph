@@ -72,7 +72,8 @@ void usage(ostream& out)
 "   purge <pool-name> --yes-i-really-really-mean-it\n"
 "                                    remove all objects from pool <pool-name> without removing it\n"
 "   df                               show per-pool and total usage\n"
-"   ls                               list objects in pool\n\n"
+"   ls [--regex pattern]             list objects in pool\n"
+"                                    only the matched objects are listed if --regex option is specified\n"
 "   chown 123                        change the pool owner to auid 123\n"
 "\n"
 "POOL SNAP COMMANDS\n"
@@ -1601,6 +1602,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
 {
   int ret;
   bool create_pool = false;
+  const char *regex = NULL;
   const char *pool_name = NULL;
   const char *target_pool_name = NULL;
   string oloc, target_oloc, nspace, target_nspace;
@@ -1655,6 +1657,10 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
   i = opts.find("pool");
   if (i != opts.end()) {
     pool_name = i->second.c_str();
+  }
+  i = opts.find("regex");
+  if (i != opts.end()) {
+    regex = i->second.c_str();
   }
   i = opts.find("target_pool");
   if (i != opts.end()) {
@@ -2135,8 +2141,16 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
       if (formatter)
         formatter->open_array_section("objects");
       try {
-	librados::NObjectIterator i = io_ctx.nobjects_begin();
-	librados::NObjectIterator i_end = io_ctx.nobjects_end();
+        librados::NObjectIterator i;
+        if (regex == NULL) {
+          i = io_ctx.nobjects_begin();
+        } else {
+          bufferlist filter_bl;
+          ::encode("name", filter_bl);
+          ::encode(regex, filter_bl);
+          i = io_ctx.nobjects_begin(filter_bl);
+        }
+        auto i_end = io_ctx.nobjects_end();
 	for (; i != i_end; ++i) {
 	  if (use_striper) {
 	    // in case of --striper option, we only list striped
@@ -3622,6 +3636,8 @@ int main(int argc, const char **argv)
       opts["pool"] = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--target-pool", (char*)NULL)) {
       opts["target_pool"] = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--regex", (char*)NULL)) {
+      opts["regex"] = val; 
     } else if (ceph_argparse_witharg(args, i, &val, "--object-locator" , (char *)NULL)) {
       opts["object_locator"] = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--target-locator" , (char *)NULL)) {
