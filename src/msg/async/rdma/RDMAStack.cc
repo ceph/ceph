@@ -49,7 +49,6 @@ RDMADispatcher::RDMADispatcher(CephContext* c, RDMAStack* s)
   PerfCountersBuilder plb(cct, "AsyncMessenger::RDMADispatcher", l_msgr_rdma_dispatcher_first, l_msgr_rdma_dispatcher_last);
 
   plb.add_u64_counter(l_msgr_rdma_polling, "polling", "Whether dispatcher thread is polling");
-  plb.add_u64_counter(l_msgr_rdma_inflight_tx_chunks, "inflight_tx_chunks", "The number of inflight tx chunks");
   plb.add_u64_counter(l_msgr_rdma_rx_bufs_in_use, "rx_bufs_in_use", "The number of rx buffers that are holding data and being processed");
   plb.add_u64_counter(l_msgr_rdma_rx_bufs_total, "rx_bufs_total", "The total number of rx buffers");
 
@@ -241,7 +240,6 @@ void RDMADispatcher::polling()
       // for dead_queue_pairs).
       // Additionally, don't delete qp while outstanding_buffers isn't empty,
       // because we need to check qp's state before sending
-      perf_logger->set(l_msgr_rdma_inflight_tx_chunks, inflight);
       if (num_dead_queue_pair) {
         Mutex::Locker l(lock); // FIXME reuse dead qp because creating one qp costs 1 ms
         for (auto &i : dead_queue_pairs) {
@@ -442,10 +440,7 @@ void RDMADispatcher::post_tx_buffer(std::vector<Chunk*> &chunks)
   if (chunks.empty())
     return ;
 
-  inflight -= chunks.size();
   get_stack()->get_infiniband().get_memory_manager()->return_tx(chunks);
-  ldout(cct, 30) << __func__ << " release " << chunks.size()
-                 << " chunks, inflight " << inflight << dendl;
   notify_pending_workers();
 }
 
@@ -525,8 +520,7 @@ int RDMAWorker::get_reged_mem(RDMAConnectedSocketImpl *o, std::vector<Chunk*> &c
   int r = get_stack()->get_infiniband().get_tx_buffers(c, bytes);
   assert(r >= 0);
   size_t got = get_stack()->get_infiniband().get_memory_manager()->get_tx_buffer_size() * r;
-  ldout(cct, 30) << __func__ << " need " << bytes << " bytes, reserve " << got << " registered  bytes, inflight " << dispatcher->inflight << dendl;
-  stack->get_dispatcher().inflight += r;
+  ldout(cct, 30) << __func__ << " need " << bytes << " bytes, reserve " << got << " registered  bytes " << dendl;
   if (got >= bytes)
     return r;
 

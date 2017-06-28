@@ -134,7 +134,6 @@ enum {
   l_msgr_rdma_dispatcher_first = 94000,
 
   l_msgr_rdma_polling,
-  l_msgr_rdma_inflight_tx_chunks,
   l_msgr_rdma_rx_bufs_in_use,
   l_msgr_rdma_rx_bufs_total,
 
