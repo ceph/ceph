@@ -21,13 +21,13 @@ from util.rados import (rados, create_ec_pool,
 log = logging.getLogger(__name__)
 
 @contextlib.contextmanager
-def start_rgw(ctx, config):
+def start_rgw(ctx, config, clients):
     """
     Start rgw on remote sites.
     """
     log.info('Starting rgw...')
     testdir = teuthology.get_testdir(ctx)
-    for client in config.keys():
+    for client in clients:
         (remote,) = ctx.cluster.only(client).remotes.iterkeys()
         cluster_name, daemon_type, client_id = teuthology.split_role(client)
         client_with_id = daemon_type + '.' + client_id
@@ -130,11 +130,12 @@ def assign_ports(ctx, config):
     return role_endpoints
 
 @contextlib.contextmanager
-def create_pools(ctx, config):
+def create_pools(ctx, clients):
     """Create replicated or erasure coded data pools for rgw."""
 
     log.info('Creating data pools')
-    for client in config.keys():
+    for client in clients:
+        log.debug("Obtaining remote for client {}".format(client))
         (remote,) = ctx.cluster.only(client).remotes.iterkeys()
         data_pool = '.rgw.buckets'
         cluster_name, daemon_type, client_id = teuthology.split_role(client)
@@ -151,10 +152,10 @@ def create_pools(ctx, config):
     yield
 
 @contextlib.contextmanager
-def configure_compression(ctx, config, compression):
+def configure_compression(ctx, clients, compression):
     """ set a compression type in the default zone placement """
     log.info('Configuring compression type = %s', compression)
-    for client, c_config in config.iteritems():
+    for client in clients:
         # XXX: the 'default' zone and zonegroup aren't created until we run RGWRados::init_complete().
         # issue a 'radosgw-admin user list' command to trigger this
         rgwadmin(ctx, client, cmd=['user', 'list'], check_status=True)
@@ -206,6 +207,8 @@ def task(ctx, config):
     elif isinstance(config, list):
         config = dict((name, None) for name in config)
 
+    clients = config.keys() # http://tracker.ceph.com/issues/20417
+
     overrides = ctx.config.get('overrides', {})
     teuthology.deep_merge(config, overrides.get('rgw', {}))
 
@@ -220,16 +223,18 @@ def task(ctx, config):
     ctx.rgw.compression_type = config.pop('compression type', None)
     ctx.rgw.config = config
 
+    log.debug("config is {}".format(config))
+    log.debug("client list is {}".format(clients))
     subtasks = [
-        lambda: create_pools(ctx=ctx, config=config),
+        lambda: create_pools(ctx=ctx, clients=clients),
     ]
     if ctx.rgw.compression_type:
         subtasks.extend([
-            lambda: configure_compression(ctx=ctx, config=config,
+            lambda: configure_compression(ctx=ctx, clients=clients,
                                           compression=ctx.rgw.compression_type),
         ])
     subtasks.extend([
-        lambda: start_rgw(ctx=ctx, config=config),
+        lambda: start_rgw(ctx=ctx, config=config, clients=clients),
     ])
 
     with contextutil.nested(*subtasks):

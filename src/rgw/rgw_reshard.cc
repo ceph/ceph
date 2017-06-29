@@ -885,7 +885,7 @@ void RGWReshard::stop_processor()
     worker->join();
   }
   delete worker;
-  worker = NULL;
+  worker = nullptr;
 }
 
 void *RGWReshard::ReshardWorker::entry() {

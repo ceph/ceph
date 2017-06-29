@@ -78,7 +78,7 @@ protected:
     void stop();
   };
 
-  ReshardWorker *worker;
+  ReshardWorker *worker = nullptr;
   std::atomic<bool> down_flag = { false };
 
   string get_logshard_key(const string& tenant, const string& bucket_name);

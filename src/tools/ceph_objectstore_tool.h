@@ -34,9 +34,7 @@ class ObjectStoreTool : public RadosDump
     int get_object(
       ObjectStore *store, coll_t coll,
       bufferlist &bl, OSDMap &curmap, bool *skipped_objects,
-      ObjectStore::Sequencer &osr,
-      ghobject_t *last_head,
-      set<ghobject_t> *last_clones);
+      ObjectStore::Sequencer &osr);
     int export_file(
         ObjectStore *store, coll_t cid, ghobject_t &obj);
     int export_files(ObjectStore *store, coll_t coll);
