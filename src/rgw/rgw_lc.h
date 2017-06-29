@@ -242,8 +242,8 @@ WRITE_CLASS_ENCODER(RGWLifecycleConfiguration)
 class RGWLC {
   CephContext *cct;
   RGWRados *store;
-  int max_objs;
-  string *obj_names;
+  int max_objs{0};
+  string *obj_names{nullptr};
   std::atomic<bool> down_flag = { false };
   string cookie;
 
