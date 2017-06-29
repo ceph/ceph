@@ -1650,21 +1650,30 @@ int rgw_lookup(struct rgw_fs *rgw_fs,
 	return -ENOENT;
     }
   } else {
-    /* lookup in a readdir callback */
-    enum rgw_fh_type fh_type = fh_type_of(flags);
+    /* special: after readdir--note extra ref()! */
+    if (unlikely((strcmp(path, "..") == 0))) {
+      rgw_fh = parent;
+      lsubdout(fs->get_context(), rgw, 17)
+	<< __func__ << "BANG"<< *rgw_fh
+	<< dendl;
+      fs->ref(rgw_fh);
+    } else {
+      /* lookup in a readdir callback */
+      enum rgw_fh_type fh_type = fh_type_of(flags);
 
-    uint32_t sl_flags = (flags & RGW_LOOKUP_FLAG_RCB)
-      ? RGWFileHandle::FLAG_NONE
-      : RGWFileHandle::FLAG_EXACT_MATCH;
+      uint32_t sl_flags = (flags & RGW_LOOKUP_FLAG_RCB)
+	? RGWFileHandle::FLAG_NONE
+	: RGWFileHandle::FLAG_EXACT_MATCH;
 
-    fhr = fs->stat_leaf(parent, path, fh_type, sl_flags);
-    if (! get<0>(fhr)) {
-      if (! (flags & RGW_LOOKUP_FLAG_CREATE))
-	return -ENOENT;
-      else
-	fhr = fs->lookup_fh(parent, path, RGWFileHandle::FLAG_CREATE);
+      fhr = fs->stat_leaf(parent, path, fh_type, sl_flags);
+      if (! get<0>(fhr)) {
+	if (! (flags & RGW_LOOKUP_FLAG_CREATE))
+	  return -ENOENT;
+	else
+	  fhr = fs->lookup_fh(parent, path, RGWFileHandle::FLAG_CREATE);
+      }
+      rgw_fh = get<0>(fhr);
     }
-    rgw_fh = get<0>(fhr);
   } /* !root */
 
   struct rgw_file_handle *rfh = rgw_fh->get_fh();
