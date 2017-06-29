@@ -42,7 +42,7 @@ public:
   int create_ruleset(const string &name,
 			     CrushWrapper &crush,
 			     ostream *ss) const override {
-    return crush.add_simple_rule(name, "default", "host",
+    return crush.add_simple_rule(name, "default", "host", "",
 				 "indep", pg_pool_t::TYPE_ERASURE, ss);
   }
   

@@ -55,6 +55,7 @@ ErasureCodeIsa::create_ruleset(const string &name,
     name,
     ruleset_root,
     ruleset_failure_domain,
+    "",
     "indep",
     pg_pool_t::TYPE_ERASURE,
     ss);

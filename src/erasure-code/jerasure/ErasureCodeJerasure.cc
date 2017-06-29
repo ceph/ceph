@@ -47,7 +47,7 @@ int ErasureCodeJerasure::create_ruleset(const string &name,
 					ostream *ss) const
 {
   int ruleid = crush.add_simple_rule(
-    name, ruleset_root, ruleset_failure_domain,
+    name, ruleset_root, ruleset_failure_domain, "",
     "indep", pg_pool_t::TYPE_ERASURE, ss);
   if (ruleid < 0)
     return ruleid;

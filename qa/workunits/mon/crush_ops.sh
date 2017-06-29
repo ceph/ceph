@@ -19,6 +19,13 @@ ceph osd crush rule create-simple foo default host
 ceph osd crush rule create-simple foo default host
 ceph osd crush rule create-simple bar default host
 
+ceph osd crush class create ssd
+ceph osd crush class create hdd
+ceph osd crush set-device-class osd.0 ssd
+ceph osd crush set-device-class osd.1 hdd
+ceph osd crush rule create-replicated foo-ssd default host ssd
+ceph osd crush rule create-replicated foo-hdd default host hdd
+
 ceph osd crush rule ls | grep foo
 
 ceph osd crush rule rm foo
