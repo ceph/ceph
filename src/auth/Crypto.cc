@@ -468,9 +468,6 @@ public:
 #ifdef USE_NSS
 class CryptoAES_256_CBCKeyHandler : public CryptoKeyHandler {
 public:
-	CryptoAES_256_CBCKeyHandler() {
-	}
-
 	~CryptoAES_256_CBCKeyHandler() {
 	  cleanup();
 	}
@@ -481,6 +478,7 @@ public:
 	    std::string *error) const override {
 	  return cbc_transform(in, out, true, error);
 	}
+
 	int decrypt(
 	    const bufferlist& in,
 	    bufferlist& out,
@@ -496,16 +494,18 @@ public:
 	  SECItem keyItem;
 	  CK_AES_CBC_ENCRYPT_DATA_PARAMS cbc_params = {0};
 	  SECItem ivItem;
+
 	  slot = PK11_GetBestSlot(CKM_AES_CBC, NULL);
 	  if (slot) {
 	    keyItem.type = siBuffer;
 	    keyItem.data = reinterpret_cast<unsigned char*>(const_cast<char*>(key.c_str()));
 	    keyItem.len = CryptoAES_256_CBC::KEY_SIZE;
+
 	    symkey = PK11_ImportSymKey(slot, CKM_AES_CBC, PK11_OriginUnwrap, CKA_UNWRAP, &keyItem, NULL);
 	    if (symkey) {
 	      memcpy(cbc_params.iv, iv.c_str(), CryptoAES_256_CBC::IV_SIZE);
 	      ivItem.type = siBuffer;
-	      ivItem.data = (unsigned char*)&cbc_params;
+	      ivItem.data = reinterpret_cast<unsigned char*>(&cbc_params);
 	      ivItem.len = sizeof(cbc_params);
 
 	      param = PK11_ParamFromIV(CKM_AES_CBC, &ivItem);
@@ -524,6 +524,10 @@ public:
 	}
 
 private:
+  PK11SlotInfo *slot = nullptr;
+  PK11SymKey *symkey = nullptr;
+  SECItem *param = nullptr;
+
   void cleanup() {
     if (param) {
       SECITEM_FreeItem(param, PR_TRUE);
@@ -539,10 +543,6 @@ private:
     }
   }
 
-  PK11SlotInfo *slot = nullptr;
-  PK11SymKey *symkey = nullptr;
-  SECItem *param = nullptr;
-
   int cbc_transform(
       const bufferlist& in,
       bufferlist& out,
@@ -556,44 +556,30 @@ private:
     } else {
       bufferptr p(in.length());
       bufferlist _in(in);
-      if (cbc_transform(
-          reinterpret_cast<const unsigned char*>(_in.c_str()),
-          in.length(),
-          reinterpret_cast<unsigned char*>(p.c_str()),
-          encrypt, error)) {
+
+      SECStatus ret;
+      PK11Context *ectx;
+      int written = 0;
+
+      ectx = PK11_CreateContextBySymKey(CKM_AES_CBC, encrypt?CKA_ENCRYPT:CKA_DECRYPT, symkey, param);
+      if (ectx) {
+        ret = PK11_CipherOp(ectx,
+                            reinterpret_cast<unsigned char*>(p.c_str()),
+                            &written,
+                            in.length(),
+                            reinterpret_cast<const unsigned char*>(_in.c_str()),
+                            in.length());
+        PK11_DestroyContext(ectx, PR_TRUE);
+      }
+      if (ectx && (ret == SECSuccess) && ((size_t)written == in.length())) {
         result = 0;
         out.append(p);
-      }
-    }
-    return result;
-  }
-
-  bool cbc_transform(
-      const unsigned char* in,
-      size_t size,
-      unsigned char* out,
-      bool encrypt,
-      std::string *error) const
-  {
-    bool result = false;
-    SECStatus ret;
-    PK11Context *ectx;
-    int written = 0;
-
-    ectx = PK11_CreateContextBySymKey(CKM_AES_CBC, encrypt?CKA_ENCRYPT:CKA_DECRYPT, symkey, param);
-    if (ectx) {
-      ret = PK11_CipherOp(ectx,
-                          out, &written, size,
-                          in, size);
-      PK11_DestroyContext(ectx, PR_TRUE);
-    }
-    if (ectx && (ret == SECSuccess) && (written == (int)size)) {
-      result = true;
-    } else {
-      if (error != nullptr) {
-        std::ostringstream ss;
-        ss << "Failed to perform AES-CBC encryption: " << PR_GetError();
-        *error = ss.str();
+      } else {
+        if (error != nullptr) {
+          std::ostringstream ss;
+          ss << "Failed to perform AES-CBC encryption: " << PR_GetError();
+          *error = ss.str();
+        }
       }
     }
     return result;
@@ -604,9 +590,6 @@ private:
 
 class CryptoAES_256_CBCKeyHandler : public CryptoKeyHandler {
 public:
-  CryptoAES_256_CBCKeyHandler() {
-  }
-
   int encrypt(
       const bufferlist& in,
       bufferlist& out,
@@ -628,9 +611,11 @@ public:
     this->iv = iv;
     return true;
   }
+
 private:
   bufferptr secret;
   bufferptr iv;
+
   int cbc_transform(
       const bufferlist& in,
       bufferlist& out,
@@ -710,9 +695,6 @@ CryptoKeyHandler *CryptoAES_256_CBC::get_key_handler(
 
 class CryptoAES_256_ECBKeyHandler : public CryptoKeyHandler {
 public:
-  CryptoAES_256_ECBKeyHandler() {
-  }
-
   ~CryptoAES_256_ECBKeyHandler() {
     cleanup();
   }
@@ -787,51 +769,36 @@ private:
     } else {
       bufferptr p(in.length());
       bufferlist _in(in);
-      if (ecb_transform(
-          reinterpret_cast<const unsigned char*>(_in.c_str()),
-          in.length(),
-          reinterpret_cast<unsigned char*>(p.c_str()),
-          do_encrypt,
-          error)) {
-        result = 0;
-        out.append(p);
-      }
-    }
-    return result;
-  }
+      const unsigned char* data_in = reinterpret_cast<const unsigned char*>(_in.c_str());
+      size_t data_size = in.length();
+      unsigned char* data_out = reinterpret_cast<unsigned char*>(p.c_str());
 
-  bool ecb_transform(
-      const unsigned char* data_in,
-      size_t data_size,
-      unsigned char* data_out,
-      bool do_encrypt,
-      std::string *error) const
-  {
-    bool result = false;
-    SECStatus ret;
-    PK11Context *ectx;
-    int written;
-    unsigned int written2;
+      SECStatus ret;
+      PK11Context *ectx;
+      int written;
+      unsigned int written2;
 
-    ectx = PK11_CreateContextBySymKey(
-        CKM_AES_ECB, do_encrypt?CKA_ENCRYPT:CKA_DECRYPT, symkey, param);
-    if (ectx) {
-      ret = PK11_CipherOp(ectx, data_out, &written,
-                          data_size, data_in, data_size);
-      if (ret == SECSuccess) {
-        ret = PK11_DigestFinal(ectx,
-                               data_out + written, &written2,
-                               data_size - written);
+      ectx = PK11_CreateContextBySymKey(
+          CKM_AES_ECB, do_encrypt?CKA_ENCRYPT:CKA_DECRYPT, symkey, param);
+      if (ectx) {
+        ret = PK11_CipherOp(ectx, data_out, &written,
+                            data_size, data_in, data_size);
+        if (ret == SECSuccess) {
+          ret = PK11_DigestFinal(ectx,
+                                 data_out + written, &written2,
+                                 data_size - written);
+        }
+        PK11_DestroyContext(ectx, PR_TRUE);
       }
-      PK11_DestroyContext(ectx, PR_TRUE);
-    }
-    if (ectx && (ret == SECSuccess) && ((size_t)(written + written2) == data_size)) {
-        result = true;
-    } else {
-      if (error != nullptr) {
-        std::ostringstream ss;
-        ss << "Failed to perform AES-CBC encryption: " << PR_GetError();
-        *error = ss.str();
+      if (ectx && (ret == SECSuccess) && ((size_t)(written + written2) == data_size)) {
+          result = 0;
+          out.append(p);
+      } else {
+        if (error != nullptr) {
+          std::ostringstream ss;
+          ss << "Failed to perform AES-CBC encryption: " << PR_GetError();
+          *error = ss.str();
+        }
       }
     }
     return result;
@@ -842,12 +809,10 @@ private:
 
 class CryptoAES_256_ECBKeyHandler : public CryptoKeyHandler {
 public:
-  CryptoAES_256_ECBKeyHandler() {
-  }
-
   int encrypt(const bufferlist& in, bufferlist& out, std::string *error) const {
     return ecb_transform(in, out, true, error);
   }
+
   int decrypt(const bufferlist& in, bufferlist& out, std::string *error) const {
     return ecb_transform(in, out, false, error);
   }
@@ -957,8 +922,6 @@ CryptoKeyHandler *CryptoAES_256_ECB::get_key_handler(
 
 class CryptoAES_256_CTRKeyHandler : public CryptoKeyHandler {
 public:
-  CryptoAES_256_CTRKeyHandler() {
-  }
   ~CryptoAES_256_CTRKeyHandler() {
     cleanup();
   }
@@ -973,6 +936,7 @@ public:
       return -EINVAL;
     }
   }
+
   int decrypt(
       const bufferlist& in,
       bufferlist& out,
@@ -1091,9 +1055,6 @@ private:
 
 class CryptoAES_256_CTRKeyHandler : public CryptoKeyHandler {
 public:
-  CryptoAES_256_CTRKeyHandler() {
-  }
-
   int encrypt(
       const bufferlist& in,
       bufferlist& out,
@@ -1135,7 +1096,7 @@ private:
         (size + CryptoAES_256_CTR::KEY_SIZE - 1)
         / CryptoAES_256_CTR::KEY_SIZE * CryptoAES_256_CTR::KEY_SIZE);
 
-    if ((input.length() % CryptoAES_256_CTR::BLOCK_SIZE) != 0) {
+    if ((size % CryptoAES_256_CTR::BLOCK_SIZE) != 0) {
       if (error) {
         *error = "Input size is not multiple of 16";
       }
