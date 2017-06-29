@@ -40,7 +40,7 @@ class PosixNetworkStack : public NetworkStack {
   vector<std::thread> threads;
 
  public:
-  explicit PosixNetworkStack(CephContext *c, const string &t);
+  explicit PosixNetworkStack(CephContext *c, const string &t, string mname);
 
   int get_cpuid(int id) const {
     if (coreids.empty())

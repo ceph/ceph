@@ -68,6 +68,7 @@ class RDMADispatcher {
 
   std::thread t;
   CephContext *cct;
+  Infiniband* ib;
   Infiniband::CompletionQueue* tx_cq;
   Infiniband::CompletionQueue* rx_cq;
   Infiniband::CompletionChannel *tx_cc, *rx_cc;
@@ -117,7 +118,7 @@ class RDMADispatcher {
  public:
   PerfCounters *perf_logger;
 
-  explicit RDMADispatcher(CephContext* c, RDMAStack* s);
+  explicit RDMADispatcher(CephContext* c, Infiniband* ib, RDMAStack* s);
   virtual ~RDMADispatcher();
   void handle_async_event();
 
@@ -171,6 +172,7 @@ class RDMAWorker : public Worker {
   typedef Infiniband::MemoryManager MemoryManager;
   typedef std::vector<Chunk*>::iterator ChunkIter;
   RDMAStack *stack;
+  Infiniband* infiniband;
   EventCallbackRef tx_handler;
   std::list<RDMAConnectedSocketImpl*> pending_sent_conns;
   RDMADispatcher* dispatcher = nullptr;
@@ -199,6 +201,7 @@ class RDMAWorker : public Worker {
     pending_sent_conns.remove(o);
   }
   void handle_pending_message();
+  void set_ib(Infiniband* ib) { infiniband = ib; }  
   void set_stack(RDMAStack *s) { stack = s; }
   void notify_worker() {
     center.dispatch_event_external(tx_handler);
@@ -305,8 +308,9 @@ class RDMAStack : public NetworkStack {
   std::atomic<bool> fork_finished = {false};
 
  public:
-  explicit RDMAStack(CephContext *cct, const string &t);
+  explicit RDMAStack(CephContext *cct, const string &t, string mname);
   virtual ~RDMAStack();
+  void init(CephContext* cct, Infiniband* ib);
   virtual bool support_zero_copy_read() const override { return false; }
   virtual bool nonblock_connect_need_writable_event() const { return false; }
 
