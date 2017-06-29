@@ -38,6 +38,7 @@
 #include "Paxos.h"
 #include "Session.h"
 #include "PGStatService.h"
+#include "MonCommand.h"
 
 #include "common/LogClient.h"
 #include "auth/cephx/CephxKeyServer.h"
@@ -113,7 +114,6 @@ struct MRoute;
 struct MForward;
 struct MTimeCheck;
 struct MMonHealth;
-struct MonCommand;
 
 #define COMPAT_SET_LOC "feature_set"
 
@@ -960,8 +960,7 @@ private:
   Monitor& operator=(const Monitor &rhs);
 
 public:
-  static void format_command_descriptions(const MonCommand *commands,
-					  unsigned commands_size,
+  static void format_command_descriptions(const std::vector<MonCommand> &commands,
 					  Formatter *f,
 					  bufferlist *rdata,
 					  bool hide_mgr_flag=false);
@@ -981,97 +980,6 @@ public:
 #define CEPH_MON_FEATURE_INCOMPAT_KRAKEN CompatSet::Feature(8, "support monmap features")
 // make sure you add your feature to Monitor::get_supported_features
 
-struct MonCommand {
-  string cmdstring;
-  string helpstring;
-  string module;
-  string req_perms;
-  string availability;
-  uint64_t flags;
 
-  // MonCommand flags
-  static const uint64_t FLAG_NONE       = 0;
-  static const uint64_t FLAG_NOFORWARD  = 1 << 0;
-  static const uint64_t FLAG_OBSOLETE   = 1 << 1;
-  static const uint64_t FLAG_DEPRECATED = 1 << 2;
-  static const uint64_t FLAG_MGR        = 1 << 3;
-
-  bool has_flag(uint64_t flag) const { return (flags & flag) != 0; }
-  void set_flag(uint64_t flag) { flags |= flag; }
-  void unset_flag(uint64_t flag) { flags &= ~flag; }
-
-  void encode(bufferlist &bl) const {
-    /*
-     * very naughty: deliberately unversioned because individual commands
-     * shouldn't be encoded standalone, only as a full set (which we do
-     * version, see encode_array() below).
-     */
-    ::encode(cmdstring, bl);
-    ::encode(helpstring, bl);
-    ::encode(module, bl);
-    ::encode(req_perms, bl);
-    ::encode(availability, bl);
-  }
-  void decode(bufferlist::iterator &bl) {
-    ::decode(cmdstring, bl);
-    ::decode(helpstring, bl);
-    ::decode(module, bl);
-    ::decode(req_perms, bl);
-    ::decode(availability, bl);
-  }
-  bool is_compat(const MonCommand* o) const {
-    return cmdstring == o->cmdstring &&
-	module == o->module && req_perms == o->req_perms &&
-	availability == o->availability;
-  }
-
-  bool is_noforward() const {
-    return has_flag(MonCommand::FLAG_NOFORWARD);
-  }
-
-  bool is_obsolete() const {
-    return has_flag(MonCommand::FLAG_OBSOLETE);
-  }
-
-  bool is_deprecated() const {
-    return has_flag(MonCommand::FLAG_DEPRECATED);
-  }
-
-  bool is_mgr() const {
-    return has_flag(MonCommand::FLAG_MGR);
-  }
-
-  static void encode_array(const MonCommand *cmds, int size, bufferlist &bl) {
-    ENCODE_START(2, 1, bl);
-    uint16_t s = size;
-    ::encode(s, bl);
-    ::encode_array_nohead(cmds, size, bl);
-    for (int i = 0; i < size; i++)
-      ::encode(cmds[i].flags, bl);
-    ENCODE_FINISH(bl);
-  }
-  static void decode_array(MonCommand **cmds, int *size,
-                           bufferlist::iterator &bl) {
-    DECODE_START(2, bl);
-    uint16_t s = 0;
-    ::decode(s, bl);
-    *size = s;
-    *cmds = new MonCommand[*size];
-    ::decode_array_nohead(*cmds, *size, bl);
-    if (struct_v >= 2) {
-      for (int i = 0; i < *size; i++)
-	::decode((*cmds)[i].flags, bl);
-    } else {
-      for (int i = 0; i < *size; i++)
-	(*cmds)[i].flags = 0;
-    }
-    DECODE_FINISH(bl);
-  }
-
-  bool requires_perm(char p) const {
-    return (req_perms.find(p) != string::npos); 
-  }
-};
-WRITE_CLASS_ENCODER(MonCommand)
 
 #endif
