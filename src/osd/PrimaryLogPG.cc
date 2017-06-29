@@ -1888,21 +1888,21 @@ void PrimaryLogPG::do_op(OpRequestRef& op)
 
   // object name too long?
   if (m->get_oid().name.size() > cct->_conf->osd_max_object_name_len) {
-    dout(4) << "do_op name is longer than "
+    dout(4) << __func__ << ": name is longer than "
 	    << cct->_conf->osd_max_object_name_len
 	    << " bytes" << dendl;
     osd->reply_op_error(op, -ENAMETOOLONG);
     return;
   }
   if (m->get_hobj().get_key().size() > cct->_conf->osd_max_object_name_len) {
-    dout(4) << "do_op locator is longer than "
+    dout(4) << __func__ << " locator is longer than "
 	    << cct->_conf->osd_max_object_name_len
 	    << " bytes" << dendl;
     osd->reply_op_error(op, -ENAMETOOLONG);
     return;
   }
   if (m->get_hobj().nspace.size() > cct->_conf->osd_max_object_namespace_len) {
-    dout(4) << "do_op namespace is longer than "
+    dout(4) << __func__ << " namespace is longer than "
 	    << cct->_conf->osd_max_object_namespace_len
 	    << " bytes" << dendl;
     osd->reply_op_error(op, -ENAMETOOLONG);
@@ -1910,7 +1910,7 @@ void PrimaryLogPG::do_op(OpRequestRef& op)
   }
 
   if (int r = osd->store->validate_hobject_key(head)) {
-    dout(4) << "do_op object " << head << " invalid for backing store: "
+    dout(4) << __func__ << " object " << head << " invalid for backing store: "
 	    << r << dendl;
     osd->reply_op_error(op, r);
     return;
@@ -1918,7 +1918,7 @@ void PrimaryLogPG::do_op(OpRequestRef& op)
 
   // blacklisted?
   if (get_osdmap()->is_blacklisted(m->get_source_addr())) {
-    dout(10) << "do_op " << m->get_source_addr() << " is blacklisted" << dendl;
+    dout(10) << __func__ << m->get_source_addr() << " is blacklisted" << dendl;
     osd->reply_op_error(op, -EBLACKLISTED);
     return;
   }
@@ -1971,7 +1971,7 @@ void PrimaryLogPG::do_op(OpRequestRef& op)
     if (cct->_conf->osd_max_write_size &&
         m->get_data_len() > cct->_conf->osd_max_write_size << 20) {
       // journal can't hold commit!
-      derr << "do_op msg data len " << m->get_data_len()
+      derr << __func__ << " msg data len " << m->get_data_len()
            << " > osd_max_write_size " << (cct->_conf->osd_max_write_size << 20)
            << " on " << *m << dendl;
       osd->reply_op_error(op, -OSD_WRITETOOBIG);
@@ -1979,7 +1979,7 @@ void PrimaryLogPG::do_op(OpRequestRef& op)
     }
   }
 
-  dout(10) << "do_op " << *m
+  dout(10) << __func__ << *m
 	   << (op->may_write() ? " may_write" : "")
 	   << (op->may_read() ? " may_read" : "")
 	   << (op->may_cache() ? " may_cache" : "")
