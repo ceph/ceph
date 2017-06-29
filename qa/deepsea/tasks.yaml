@@ -1,3 +1,6 @@
 tasks:
 - install:
 - deepsea:
+    repo: null
+    branch: null
+    exec: null
