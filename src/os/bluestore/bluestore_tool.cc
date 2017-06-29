@@ -100,28 +100,28 @@ int main(int argc, char **argv)
 						   po::include_positional);
   } catch(po::error &e) {
     std::cerr << e.what() << std::endl;
-    return 1;
+    exit(EXIT_FAILURE);
   }
 
   if (vm.count("help")) {
     usage(po_all);
-    return 1;
+    exit(EXIT_SUCCESS);
   }
   if (action.empty()) {
     cerr << "must specify an action; --help for help" << std::endl;
-    return 1;
+    exit(EXIT_FAILURE);
   }
 
   if (action == "fsck") {
     if (path.empty()) {
       cerr << "must specify bluestore path" << std::endl;
-      exit(1);
+      exit(EXIT_FAILURE);
     }
   }
   if (action == "show-label") {
     if (devs.empty() && path.empty()) {
       cerr << "must specify bluestore path *or* raw device(s)" << std::endl;
-      exit(1);
+      exit(EXIT_FAILURE);
     }
     cout << "infering bluefs devices from bluestore path" << std::endl;
     for (auto fn : {"block", "block.wal", "block.db"}) {
@@ -170,7 +170,7 @@ int main(int argc, char **argv)
     int r = bluestore.fsck(fsck_deep);
     if (r < 0) {
       cerr << "error from fsck: " << cpp_strerror(r) << std::endl;
-      return 1;
+      exit(EXIT_FAILURE);
     }
   }
   else if (action == "show-label") {
@@ -182,7 +182,7 @@ int main(int argc, char **argv)
       if (r < 0) {
 	cerr << "unable to read label for " << i << ": "
 	     << cpp_strerror(r) << std::endl;
-	exit(1);
+	exit(EXIT_FAILURE);
       }
       jf.open_object_section(i.c_str());
       label.dump(&jf);
@@ -202,7 +202,7 @@ int main(int argc, char **argv)
       if (r < 0) {
 	cerr << "unable to read label for " << i << ": "
 	     << cpp_strerror(r) << std::endl;
-	exit(1);
+	exit(EXIT_FAILURE);
       }
       int id = -1;
       if (label.description == "main")
@@ -217,7 +217,7 @@ int main(int argc, char **argv)
 	int r = fs.add_block_device(id, i);
 	if (r < 0) {
 	  cerr << "unable to open " << i << ": " << cpp_strerror(r) << std::endl;
-	  exit(1);
+	  exit(EXIT_FAILURE);
 	}
       }
     }
@@ -230,7 +230,7 @@ int main(int argc, char **argv)
       if (r < 0) {
 	cerr << "unable to open " << main << ": " << cpp_strerror(r)
 	     << std::endl;
-	exit(1);
+	exit(EXIT_FAILURE);
       }
     }
 
@@ -238,14 +238,14 @@ int main(int argc, char **argv)
     if (r < 0) {
       cerr << "unable to mount bluefs: " << cpp_strerror(r)
 	   << std::endl;
-      exit(1);
+      exit(EXIT_FAILURE);
     }
 
     vector<string> dirs;
     r = fs.readdir("", &dirs);
     if (r < 0) {
       cerr << "readdir in root failed: " << cpp_strerror(r) << std::endl;
-      exit(1);
+      exit(EXIT_FAILURE);
     }
     for (auto& dir : dirs) {
       if (dir[0] == '.')
@@ -255,14 +255,14 @@ int main(int argc, char **argv)
       r = fs.readdir(dir, &ls);
       if (r < 0) {
 	cerr << "readdir " << dir << " failed: " << cpp_strerror(r) << std::endl;
-	exit(1);
+	exit(EXIT_FAILURE);
       }
       string full = out_dir + "/" + dir;
       r = ::mkdir(full.c_str(), 0755);
       if (r < 0) {
         r = -errno;
 	cerr << "mkdir " << full << " failed: " << cpp_strerror(r) << std::endl;
-	exit(1);
+	exit(EXIT_FAILURE);
       }
       for (auto& file : ls) {
 	if (file[0] == '.')
@@ -273,14 +273,14 @@ int main(int argc, char **argv)
 	r = fs.stat(dir, file, &size, &mtime);
 	if (r < 0) {
 	  cerr << "stat " << file << " failed: " << cpp_strerror(r) << std::endl;
-	  exit(1);
+	  exit(EXIT_FAILURE);
 	}
 	string path = out_dir + "/" + dir + "/" + file;
 	int fd = ::open(path.c_str(), O_CREAT|O_WRONLY|O_TRUNC, 0644);
 	if (fd < 0) {
 	  r = -errno;
 	  cerr << "open " << path << " failed: " << cpp_strerror(r) << std::endl;
-	  exit(1);
+	  exit(EXIT_FAILURE);
 	}
 	assert(fd >= 0);
 	if (size > 0) {
@@ -289,7 +289,7 @@ int main(int argc, char **argv)
 	  if (r < 0) {
 	    cerr << "open_for_read " << dir << "/" << file << " failed: "
 		 << cpp_strerror(r) << std::endl;
-	    exit(1);
+	    exit(EXIT_FAILURE);
 	  }
 	  int pos = 0;
 	  int left = size;
@@ -299,13 +299,13 @@ int main(int argc, char **argv)
 	    if (r <= 0) {
 	      cerr << "read " << dir << "/" << file << " from " << pos
 		   << " failed: " << cpp_strerror(r) << std::endl;
-	      exit(1);
+	      exit(EXIT_FAILURE);
 	    }
 	    int rc = bl.write_fd(fd);
 	    if (rc < 0) {
 	      cerr << "write to " << path << " failed: "
 		   << cpp_strerror(r) << std::endl;
-	      exit(1);
+	      exit(EXIT_FAILURE);
 	    }
 	    pos += r;
 	    left -= r;
