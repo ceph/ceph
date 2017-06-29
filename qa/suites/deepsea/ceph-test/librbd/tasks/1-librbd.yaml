@@ -2,3 +2,7 @@ overrides:
   deepsea:
     exec:
     - suites/ceph-test/librbd.sh
+tasks:
+- exec:
+    client.0:
+      - "ceph_test_librbd"
