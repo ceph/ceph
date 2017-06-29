@@ -500,6 +500,7 @@ int main(int argc, const char **argv)
           derr << err_msg << dendl;
         prefork.exit(err);
       }
+      setsid();
       global_init_postfork_start(g_ceph_context);
     }
     common_init_finish(g_ceph_context);
