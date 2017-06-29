@@ -56,7 +56,7 @@ screenplay = [
     ('get',    '/osd', {}),
     ('get',    '/osd/0', {}),
     ('get',    '/osd/0/command', {}),
-    ('get',    '/pool/0', {}),
+    ('get',    '/pool/1', {}),
     ('get',    '/server', {}),
     ('get',    '/server/' + aserver, {}),
     ('post',   '/osd/0/command', {'command': 'scrub'}),

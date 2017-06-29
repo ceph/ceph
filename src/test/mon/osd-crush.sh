@@ -254,6 +254,8 @@ function TEST_crush_repair_faulty_crushmap() {
     run_mon $dir b --public-addr $MONB || return 1
     run_mon $dir c --public-addr $MONC || return 1
 
+    ceph osd pool create rbd 8
+
     local empty_map=$dir/empty_map
     :> $empty_map.txt
     crushtool -c $empty_map.txt -o $empty_map.map || return 1
