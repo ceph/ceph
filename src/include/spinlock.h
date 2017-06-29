@@ -21,39 +21,14 @@
 
 namespace ceph {
 
-class Spinlock;
+class spinlock;
 
 inline void spin_lock(std::atomic_flag& lock);
 inline void spin_unlock(std::atomic_flag& lock);
-inline void spin_lock(ceph::Spinlock& lock);
-inline void spin_unlock(ceph::Spinlock& lock);
+inline void spin_lock(ceph::spinlock& lock);
+inline void spin_unlock(ceph::spinlock& lock);
 
-class Spinlock {
-  mutable std::atomic_flag spinlock = ATOMIC_FLAG_INIT;
-
-public:
-  /// acquire spinlock
-  void lock() const {
-    ceph::spin_lock(spinlock);
-  }
-  /// release spinlock
-  void unlock() const {
-    ceph::spin_unlock(spinlock);
-  }
-
-  // Scoped control of a Spinlock:
-  class Locker {
-    const Spinlock& spinlock;
-  public:
-    Locker(const Spinlock& s) : spinlock(s) {
-      spinlock.lock();
-    }
-    ~Locker() {
-      spinlock.unlock();
-    }
-  };
-};
-
+/* A pre-packaged spinlock type modelling BasicLockable: */
 class spinlock final
 {
   std::atomic_flag af = ATOMIC_FLAG_INIT;
@@ -63,29 +38,9 @@ class spinlock final
     ceph::spin_lock(af);
   }
  
-  void unlock() {
+  void unlock() noexcept {
     ceph::spin_unlock(af);
   }
-};
-
-/* A scoped RAII spinlock similar to std::lock_guard<>. The lock is acquired
-on construction, and released on destruction. (std::lock_guard<> cannot be used
-directly because std::atomic_flag does not model a /simple lockable/ type.) */
-class spinlock_guard [final]
-{
- std::atomic_flag& spinlock;
-
- public:
- spinlock_guard(std::atomic_flag& spinlock_) 
-  : spinlock(spinlock)
- {
-    ceph::spin_lock(spinlock);
- }
-
- ~spinlock_guard()
- {
-    ceph::spin_unlock(spinlock);
- }
 };
 
 } // namespace ceph
@@ -114,22 +69,22 @@ inline void spin_unlock(std::atomic_flag *lock)
  spin_unlock(*lock);
 }
 
-inline void spin_lock(ceph::Spinlock& lock)
+inline void spin_lock(ceph::spinlock& lock)
 {
  lock.lock();
 }
 
-inline void spin_unlock(ceph::Spinlock& lock)
+inline void spin_unlock(ceph::spinlock& lock)
 {
  lock.unlock();
 }
 
-inline void spin_lock(ceph::Spinlock *lock)
+inline void spin_lock(ceph::spinlock *lock)
 {
  spin_lock(*lock);
 }
 
-inline void spin_unlock(ceph::Spinlock *lock)
+inline void spin_unlock(ceph::spinlock *lock)
 {
  spin_unlock(*lock);
 }
