@@ -40,7 +40,7 @@ public:
   const char *get_type_name() const override { return "monmgrreport"; }
 
   void print(ostream& out) const override {
-    out << get_type_name();
+    out << get_type_name() << "(" << health_checks.checks.size() << " checks)";
   }
 
   void encode_payload(uint64_t features) override {
