@@ -128,7 +128,8 @@ public:
 
   template<typename T>
   void lookup_or_create_singleton_object(T*& p, const std::string &name) {
-    ceph::spin_lock(&_associated_objs_lock);
+    ceph::spin_lock_guard lg(_associated_objs_lock);
+
     if (!_associated_objs.count(name)) {
       p = new T(this);
       _associated_objs[name] = new TypedSingletonWrapper<T>(p);
@@ -138,7 +139,6 @@ public:
       assert(wrapper != NULL);
       p = wrapper->singleton;
     }
-    ceph::spin_unlock(&_associated_objs_lock);
   }
   /**
    * get a crypto handler
@@ -186,21 +186,18 @@ public:
   void register_fork_watcher(ForkWatcher *w) {
     ceph::spin_lock_guard lg(_fork_watchers_lock);
     _fork_watchers.push_back(w);
-    ceph::spin_unlock(&_fork_watchers_lock);
   }
 
   void notify_pre_fork() {
     ceph::spin_lock_guard lg(_fork_watchers_lock);
     for (auto &&t : _fork_watchers)
       t->handle_pre_fork();
-    ceph::spin_unlock(&_fork_watchers_lock);
   }
 
   void notify_post_fork() {
-    ceph::spin_lock(&_fork_watchers_lock);
+    ceph::spin_unlock(&_fork_watchers_lock);
     for (auto &&t : _fork_watchers)
       t->handle_post_fork();
-    ceph::spin_unlock(&_fork_watchers_lock);
   }
 
 private:
