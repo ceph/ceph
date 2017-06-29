@@ -192,7 +192,10 @@ class Volumes(list):
         )
         if len(lvs) > 1:
             raise MultipleLVsError(lv_name, lv_path)
-        return lvs[0]
+        try:
+            return lvs[0]
+        except IndexError:
+            return None
 
 
 class Volume(object):
