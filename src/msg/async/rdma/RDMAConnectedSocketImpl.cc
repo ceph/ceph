@@ -212,6 +212,12 @@ void RDMAConnectedSocketImpl::handle_connection() {
     return;
   }
 
+  if (1 == connected) {
+    ldout(cct, 1) << __func__ << " warnning: logic failed: read len: " << r << dendl;
+    fault();
+    return;
+  }
+
   if (!is_server) {// syn + ack from server
     my_msg.peer_qpn = peer_msg.qpn;
     ldout(cct, 20) << __func__ << " peer msg :  < " << peer_msg.qpn << ", " << peer_msg.psn
@@ -233,6 +239,8 @@ void RDMAConnectedSocketImpl::handle_connection() {
         ldout(cct, 10) << __func__ << " server is already active." << dendl;
         return ;
       }
+      r = activate();
+      assert(!r);
       r = infiniband->send_msg(cct, tcp_fd, my_msg);
       if (r < 0) {
         ldout(cct, 1) << __func__ << " server ack failed." << dendl;
@@ -240,11 +248,10 @@ void RDMAConnectedSocketImpl::handle_connection() {
         fault();
         return ;
       }
-      r = activate();
-      assert(!r);
     } else { // ack from client
       connected = 1;
-      cleanup();
+      ldout(cct, 10) << __func__ << " handshake of rdma is done. server connected: " << connected << dendl;
+      //cleanup();
       submit(false);
       notify();
     }
@@ -256,6 +263,16 @@ ssize_t RDMAConnectedSocketImpl::read(char* buf, size_t len)
   uint64_t i = 0;
   int r = ::read(notify_fd, &i, sizeof(i));
   ldout(cct, 20) << __func__ << " notify_fd : " << i << " in " << my_msg.qpn << " r = " << r << dendl;
+  
+  if (!active) {
+    ldout(cct, 1) << __func__ << " when ib not active. len: " << len << dendl;
+    return -EAGAIN;
+  }
+  
+  if (0 == connected) {
+    ldout(cct, 1) << __func__ << " when ib not connected. len: " << len <<dendl;
+    return -EAGAIN;
+  }
   ssize_t read = 0;
   if (!buffers.empty())
     read = read_buffers(buf,len);
