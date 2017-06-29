@@ -7794,8 +7794,48 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       ss << "rule " << name << " already exists";
       err = 0;
     } else {
-      int ruleno = newcrush.add_simple_rule(name, root, type, mode,
+      int ruleno = newcrush.add_simple_rule(name, root, type, "", mode,
 					       pg_pool_t::TYPE_REPLICATED, &ss);
+      if (ruleno < 0) {
+	err = ruleno;
+	goto reply;
+      }
+
+      pending_inc.crush.clear();
+      newcrush.encode(pending_inc.crush, mon->get_quorum_con_features());
+    }
+    getline(ss, rs);
+    wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, 0, rs,
+					      get_last_committed() + 1));
+    return true;
+
+  } else if (prefix == "osd crush rule create-replicated") {
+    string name, root, type, device_class;
+    cmd_getval(g_ceph_context, cmdmap, "name", name);
+    cmd_getval(g_ceph_context, cmdmap, "root", root);
+    cmd_getval(g_ceph_context, cmdmap, "type", type);
+    cmd_getval(g_ceph_context, cmdmap, "class", device_class);
+
+    if (osdmap.crush->rule_exists(name)) {
+      // The name is uniquely associated to a ruleid and the rule it contains
+      // From the user point of view, the rule is more meaningfull.
+      ss << "rule " << name << " already exists";
+      err = 0;
+      goto reply;
+    }
+
+    CrushWrapper newcrush;
+    _get_pending_crush(newcrush);
+
+    if (newcrush.rule_exists(name)) {
+      // The name is uniquely associated to a ruleid and the rule it contains
+      // From the user point of view, the rule is more meaningfull.
+      ss << "rule " << name << " already exists";
+      err = 0;
+    } else {
+      int ruleno = newcrush.add_simple_rule(
+	name, root, type, device_class,
+	"firstn", pg_pool_t::TYPE_REPLICATED, &ss);
       if (ruleno < 0) {
 	err = ruleno;
 	goto reply;

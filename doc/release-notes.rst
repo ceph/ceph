@@ -224,9 +224,14 @@ Major Changes from Kraken
     - ``ceph osd reweightn`` will specify the `reweight` values for
       multiple OSDs in a single command.  This is equivalent to a series of
       ``ceph osd reweight`` commands.
-    - ``ceph crush class {create,rm,ls,rename}`` manage the new CRUSH *device
-      class* feature.  ``ceph crush set-device-class <osd> <class>``
-      will set the class for a particular device.
+    - ``ceph osd crush class {create,rm,ls,rename}`` manage the new
+      CRUSH *device class* feature.  ``ceph crush set-device-class
+      <osd> <class>`` will set the class for a particular device.
+    - ``ceph osd crush rule create-replicated`` replaces the old
+      ``ceph osd crush rule create-simple`` command to create a CRUSH
+      rule for a replicated pool.  Notably it takes a `class` argument
+      for the *device class* the rule should target (e.g., `ssd` or
+      `hdd`).
     - ``ceph mon feature ls`` will list monitor features recorded in the
       MonMap.  ``ceph mon feature set`` will set an optional feature (none of
       these exist yet).

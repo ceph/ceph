@@ -1015,6 +1015,7 @@ public:
 
   int add_simple_rule(
     string name, string root_name, string failure_domain_type,
+    string device_class,
     string mode, int rule_type, ostream *err = 0);
 
   /**
@@ -1022,7 +1023,7 @@ public:
    */
   int add_simple_rule_at(
     string name, string root_name,
-    string failure_domain_type, string mode,
+    string failure_domain_type, string device_class, string mode,
     int rule_type, int rno, ostream *err = 0);
 
   int remove_rule(int ruleno);
