@@ -112,17 +112,6 @@ MonCommand mon_commands[] = {
 #include <mon/MonCommands.h>
 #undef COMMAND
 #undef COMMAND_WITH_FLAG
-
-  // FIXME: slurp up the Mgr commands too
-
-#define COMMAND(parsesig, helptext, modulename, req_perms, avail)	\
-  {parsesig, helptext, modulename, req_perms, avail, FLAG(MGR)},
-#define COMMAND_WITH_FLAG(parsesig, helptext, modulename, req_perms, avail, flags) \
-  {parsesig, helptext, modulename, req_perms, avail, flags | FLAG(MGR)},
-#include <mgr/MgrCommands.h>
-#undef COMMAND
-#undef COMMAND_WITH_FLAG
-
 };
 
 
@@ -2855,26 +2844,23 @@ bool Monitor::_allowed_command(MonSession *s, string &module, string &prefix,
   return capable;
 }
 
-void Monitor::format_command_descriptions(const MonCommand *commands,
-					  unsigned commands_size,
+void Monitor::format_command_descriptions(const std::vector<MonCommand> &commands,
 					  Formatter *f,
 					  bufferlist *rdata,
 					  bool hide_mgr_flag)
 {
   int cmdnum = 0;
   f->open_object_section("command_descriptions");
-  for (const MonCommand *cp = commands;
-       cp < &commands[commands_size]; cp++) {
-
-    unsigned flags = cp->flags;
+  for (const auto &cmd : commands) {
+    unsigned flags = cmd.flags;
     if (hide_mgr_flag) {
       flags &= ~MonCommand::FLAG_MGR;
     }
     ostringstream secname;
     secname << "cmd" << setfill('0') << std::setw(3) << cmdnum;
     dump_cmddesc_to_json(f, secname.str(),
-			 cp->cmdstring, cp->helpstring, cp->module,
-			 cp->req_perms, cp->availability, flags);
+			 cmd.cmdstring, cmd.helpstring, cmd.module,
+			 cmd.req_perms, cmd.availability, flags);
     cmdnum++;
   }
   f->close_section();	// command_descriptions
@@ -2985,9 +2971,16 @@ void Monitor::handle_command(MonOpRequestRef op)
     // hide mgr commands until luminous upgrade is complete
     bool hide_mgr_flag =
       osdmon()->osdmap.require_osd_release < CEPH_RELEASE_LUMINOUS;
-    format_command_descriptions(leader_supported_mon_commands,
-				leader_supported_mon_commands_size, f, &rdata,
-				hide_mgr_flag);
+
+    std::vector<MonCommand> commands;
+    commands = static_cast<MgrMonitor*>(
+        paxos_service[PAXOS_MGR])->get_command_descs();
+
+    for (int i = 0 ; i < leader_supported_mon_commands_size; ++i) {
+      commands.push_back(leader_supported_mon_commands[i]);
+    }
+
+    format_command_descriptions(commands, f, &rdata, hide_mgr_flag);
     delete f;
     reply_command(op, 0, "", rdata, 0);
     return;
