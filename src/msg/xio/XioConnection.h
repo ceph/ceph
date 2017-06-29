@@ -72,7 +72,7 @@ private:
   entity_inst_t peer;
   struct xio_session *session;
   struct xio_connection	*conn;
-  pthread_spinlock_t sp;
+  std::atomic_flag sp = ATOMIC_FLAG_INIT;
   std::atomic<int64_t> send = { 0 };
   std::atomic<int64_t> recv = { 0 };
   uint32_t n_reqs; // Accelio-initiated reqs in progress (!counting partials)
@@ -241,19 +241,24 @@ private:
   friend class XioSend;
 
   int on_disconnect_event() {
+    std::lock_guard<ceph::spinlock> lg(sp);
+
     connected = false;
-    pthread_spin_lock(&sp);
     discard_out_queues(CState::OP_FLAG_LOCKED);
-    pthread_spin_unlock(&sp);
+
     return 0;
   }
 
   int on_teardown_event() {
-    pthread_spin_lock(&sp);
+
+    {
+    std::lock_guard<ceph::spinlock> lg(sp);
+
     if (conn)
       xio_connection_destroy(conn);
     conn = NULL;
-    pthread_spin_unlock(&sp);
+    }
+
     this->put();
     return 0;
   }

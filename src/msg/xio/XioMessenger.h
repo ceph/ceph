@@ -47,7 +47,7 @@ private:
   static std::atomic<uint64_t> nInstances = { 0 };
   std::atomic<uint64_t> nsessions = { 0 };
   std::atomic<bool> shutdown_called = { false };
-  ceph::Spinlock conns_sp;
+  ceph::spinlock conns_sp;
   XioConnection::ConnList conns_list;
   XioConnection::EntitySet conns_entity_map;
   XioPortals portals;
