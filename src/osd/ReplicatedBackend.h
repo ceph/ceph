@@ -48,7 +48,7 @@ public:
     int priority) override;
 
   /// @see PGBackend::recover_object
-  void recover_object(
+  int recover_object(
     const hobject_t &hoid,
     eversion_t v,
     ObjectContextRef head,
@@ -255,7 +255,7 @@ private:
 			       bufferlist data_received,
 			       interval_set<uint64_t> *intervals_usable,
 			       bufferlist *data_usable);
-  void _failed_push(pg_shard_t from, const hobject_t &soid);
+  void _failed_pull(pg_shard_t from, const hobject_t &soid);
 
   void send_pushes(int prio, map<pg_shard_t, vector<PushOp> > &pushes);
   void prep_push_op_blank(const hobject_t& soid, PushOp *op);
@@ -297,15 +297,15 @@ private:
     const hobject_t &soid,
     ObjectContextRef obj,
     RPGHandle *h);
-  void prep_push_to_replica(
+  int prep_push_to_replica(
     ObjectContextRef obc, const hobject_t& soid, pg_shard_t peer,
     PushOp *pop, bool cache_dont_need = true);
-  void prep_push(
+  int prep_push(
     ObjectContextRef obc,
     const hobject_t& oid, pg_shard_t dest,
     PushOp *op,
     bool cache_dont_need);
-  void prep_push(
+  int prep_push(
     ObjectContextRef obc,
     const hobject_t& soid, pg_shard_t peer,
     eversion_t version,

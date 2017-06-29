@@ -316,13 +316,12 @@ int MemStore::read(
     uint64_t offset,
     size_t len,
     bufferlist& bl,
-    uint32_t op_flags,
-    bool allow_eio)
+    uint32_t op_flags)
 {
   CollectionHandle c = get_collection(cid);
   if (!c)
     return -ENOENT;
-  return read(c, oid, offset, len, bl, op_flags, allow_eio);
+  return read(c, oid, offset, len, bl, op_flags);
 }
 
 int MemStore::read(
@@ -331,8 +330,7 @@ int MemStore::read(
   uint64_t offset,
   size_t len,
   bufferlist& bl,
-  uint32_t op_flags,
-  bool allow_eio)
+  uint32_t op_flags)
 {
   Collection *c = static_cast<Collection*>(c_.get());
   dout(10) << __func__ << " " << c->cid << " " << oid << " "

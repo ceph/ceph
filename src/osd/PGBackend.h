@@ -104,12 +104,22 @@ typedef ceph::shared_ptr<const OSDMap> OSDMapRef;
        const hobject_t oid) = 0;
 
      virtual void failed_push(const list<pg_shard_t> &from, const hobject_t &soid) = 0;
+     virtual void primary_failed(const hobject_t &soid) = 0;
+     virtual bool primary_error(const hobject_t& soid, eversion_t v) = 0;
      
      virtual void cancel_pull(const hobject_t &soid) = 0;
 
      virtual void apply_stats(
        const hobject_t &soid,
        const object_stat_sum_t &delta_stats) = 0;
+
+     /**
+      * Called when a read on the primary fails when pushing
+      */
+     virtual void on_primary_error(
+       const hobject_t &oid,
+       eversion_t v
+       ) = 0;
 
 
      /**
@@ -331,7 +341,7 @@ typedef ceph::shared_ptr<const OSDMap> OSDMapRef;
     * @param missing [in] set of info, missing pairs for queried nodes
     * @param overlaps [in] mapping of object to file offset overlaps
     */
-   virtual void recover_object(
+   virtual int recover_object(
      const hobject_t &hoid, ///< [in] object to recover
      eversion_t v,          ///< [in] version to recover
      ObjectContextRef head,  ///< [in] context of the head/snapdir object
