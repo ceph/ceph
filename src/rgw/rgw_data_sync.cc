@@ -1828,7 +1828,7 @@ public:
         rgw_raw_obj obj(store->get_zone_params().log_pool, sync_status_oid);
 
         if (info.syncstopped) {
-          call(new RGWSimpleRadosDeleteCR(sync_env->async_rados, store, obj));
+          call(new RGWRadosRemoveCR(store, obj));
         } else {
           status.state = rgw_bucket_shard_sync_info::StateFullSync;
           status.inc_marker.position = info.max_marker;
@@ -2695,8 +2695,7 @@ int RGWBucketShardIncrementalSyncCR::operate()
       yield {
         const string& oid = RGWBucketSyncStatusManager::status_oid(sync_env->source_zone, bs);
         RGWRados *store = sync_env->store;
-        call(new RGWSimpleRadosDeleteCR(sync_env->async_rados, store,
-                                        rgw_raw_obj{store->get_zone_params().log_pool, oid}));
+        call(new RGWRadosRemoveCR(store, rgw_raw_obj{store->get_zone_params().log_pool, oid}));
       }
       return set_cr_done();
     }
