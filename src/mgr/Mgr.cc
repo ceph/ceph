@@ -632,3 +632,14 @@ void Mgr::tick()
   dout(10) << dendl;
   server.send_report();
 }
+
+std::vector<MonCommand> Mgr::get_command_set() const
+{
+  Mutex::Locker l(lock);
+
+  std::vector<MonCommand> commands = DaemonServer::mgr_commands;
+  std::vector<MonCommand> py_commands = py_modules.get_commands();
+  commands.insert(commands.end(), py_commands.begin(), py_commands.end());
+  return commands;
+}
+
