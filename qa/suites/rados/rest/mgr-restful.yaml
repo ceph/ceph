@@ -8,8 +8,8 @@ tasks:
       - (MGR_DOWN)
 - exec:
     mon.a:
-      - ceph tell mgr.x restful create-key admin
-      - ceph tell mgr.x restful create-self-signed-cert
+      - ceph restful create-key admin
+      - ceph restful create-self-signed-cert
 - ceph.restart: [mgr.x]
 - workunit:
     clients:

@@ -55,16 +55,19 @@ daemon as failed using ``ceph mgr fail <mgr name>``.
 Calling module commands
 -----------------------
 
-Where a module implements command line hooks, using the Ceph CLI's
-``tell`` command to call them like this::
+Where a module implements command line hooks, the commands will
+be accessible as ordinary Ceph commands::
 
-    ceph tell mgr <command | help>
+    ceph <command | help>
+
+If you would like to see the list of commands handled by the
+manager (where normal ``ceph help`` would show all mon and mgr commands),
+you can send a command directly to the manager daemon::
+
+    ceph tell mgr help
 
 Note that it is not necessary to address a particular mgr instance,
 simply ``mgr`` will pick the current active daemon.
-
-Use the ``help`` command to get a list of available commands from all
-modules.
 
 Configuration
 -------------
