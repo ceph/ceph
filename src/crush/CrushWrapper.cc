@@ -300,6 +300,21 @@ void CrushWrapper::find_roots(set<int>& roots) const
   }
 }
 
+void CrushWrapper::find_nonshadow_roots(set<int>& roots) const
+{
+  for (int i = 0; i < crush->max_buckets; i++) {
+    if (!crush->buckets[i])
+      continue;
+    crush_bucket *b = crush->buckets[i];
+    if (_search_item_exists(b->id))
+      continue;
+    const char *name = get_item_name(b->id);
+    if (name && !is_valid_crush_name(name))
+      continue;
+    roots.insert(b->id);
+  }
+}
+
 bool CrushWrapper::subtree_contains(int root, int item) const
 {
   if (root == item)
