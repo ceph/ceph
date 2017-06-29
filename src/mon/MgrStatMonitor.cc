@@ -244,11 +244,12 @@ bool MgrStatMonitor::prepare_report(MonOpRequestRef op)
   bufferlist bl = m->get_data();
   auto p = bl.begin();
   ::decode(pending_digest, p);
-  dout(10) << __func__ << " " << pending_digest << dendl;
   pending_health_checks.swap(m->health_checks);
   if (m->service_map_bl.length()) {
     pending_service_map_bl.swap(m->service_map_bl);
   }
+  dout(10) << __func__ << " " << pending_digest << ", "
+	   << pending_health_checks.checks.size() << " health checks" << dendl;
   return true;
 }
 
