@@ -1904,7 +1904,9 @@ int rgw_dir_suggest_changes(cls_method_context_t hctx, bufferlist *in, bufferlis
     return rc;
   }
 
-  timespan tag_timeout(header.tag_timeout ? header.tag_timeout : CEPH_RGW_TAG_TIMEOUT);
+  timespan tag_timeout(
+    std::chrono::seconds(
+      header.tag_timeout ? header.tag_timeout : CEPH_RGW_TAG_TIMEOUT));
 
   bufferlist::iterator in_iter = in->begin();
 
