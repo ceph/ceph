@@ -1,6 +1,6 @@
 tasks:
 - install:
 - deepsea:
-    repo: null
-    branch: null
-    exec: null
+    repo: https://github.com/SUSE/DeepSea.git
+    branch: master
+    exec: []
