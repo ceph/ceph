@@ -19,6 +19,7 @@
 #include <boost/icl/interval_map.hpp>
 #include <boost/algorithm/string/join.hpp>
 #include "common/SubProcess.h"
+#include "common/fork_function.h"
 
 void CrushTester::set_device_weight(int dev, float f)
 {
@@ -357,6 +358,18 @@ void CrushTester::write_integer_indexed_scalar_data_string(vector<string> &dst, 
 
   // write the data buffer to the destination
   dst.push_back( data_buffer.str() );
+}
+
+int CrushTester::test_with_fork(int timeout)
+{
+  ostringstream sink;
+  int r = fork_function(timeout, sink, [&]() {
+      return test();
+    });
+  if (r == -ETIMEDOUT) {
+    err << "timed out during smoke test (" << timeout << " seconds)";
+  }
+  return r;
 }
 
 int CrushTester::test_with_crushtool(const char *crushtool_cmd,

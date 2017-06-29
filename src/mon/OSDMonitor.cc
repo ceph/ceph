@@ -5624,19 +5624,13 @@ int OSDMonitor::prepare_new_pool(string& name, uint64_t auid,
   _get_pending_crush(newcrush);
   ostringstream err;
   CrushTester tester(newcrush, err);
-  // use the internal crush tester if crushtool config is empty
-  if (g_conf->crushtool.empty()) {
-    r = tester.test();
-  } else {
-    r = tester.test_with_crushtool(g_conf->crushtool.c_str(),
-				   osdmap.get_max_osd(),
-				   g_conf->mon_lease,
-				   crush_rule);
-  }
-  if (r) {
-    dout(10) << " tester.test_with_crushtool returns " << r
+  tester.set_max_x(50);
+  tester.set_rule(crush_rule);
+  r = tester.test_with_fork(g_conf->mon_lease);
+  if (r < 0) {
+    dout(10) << " tester.test_with_fork returns " << r
 	     << ": " << err.str() << dendl;
-    *ss << "crushtool check failed with " << r << ": " << err.str();
+    *ss << "crush test failed with " << r << ": " << err.str();
     return r;
   }
   unsigned size, min_size;
@@ -7039,16 +7033,12 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     dout(10) << " testing map" << dendl;
     stringstream ess;
     CrushTester tester(crush, ess);
-    // XXX: Use mon_lease as a timeout value for crushtool.
-    // If the crushtool consistently takes longer than 'mon_lease' seconds,
-    // then we would consistently trigger an election before the command
-    // finishes, having a flapping monitor unable to hold quorum.
-    int r = tester.test_with_crushtool(g_conf->crushtool.c_str(),
-				       osdmap.get_max_osd(),
-				       g_conf->mon_lease);
+    tester.set_max_x(50);
+    int r = tester.test_with_fork(g_conf->mon_lease);
     if (r < 0) {
-      derr << "error on crush map: " << ess.str() << dendl;
-      ss << "Failed crushmap test: " << ess.str();
+      dout(10) << " tester.test_with_fork returns " << r
+	       << ": " << ess.str() << dendl;
+      ss << "crush smoke test failed with " << r << ": " << ess.str();
       err = r;
       goto reply;
     }
