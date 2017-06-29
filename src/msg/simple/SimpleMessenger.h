@@ -285,7 +285,7 @@ private:
   /// counter for the global seq our connection protocol uses
   __u32 global_seq;
   /// lock to protect the global_seq
-  std::atomic_flag global_seq_lock { false };
+  ceph::spinlock global_seq_lock;
 
   /**
    * hash map of addresses to Pipes
@@ -358,7 +358,7 @@ public:
    * @return a global sequence ID that nobody else has seen.
    */
   __u32 get_global_seq(__u32 old=0) {
-    std::lock_guard<ceph::spinlock> lg(global_seq_lock);
+    std::lock_guard<decltype(global_seq_lock)> lg(global_seq_lock);
 
     if (old > global_seq)
       global_seq = old;
