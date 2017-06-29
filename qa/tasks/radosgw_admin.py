@@ -98,13 +98,27 @@ def task(ctx, config):
     swift_secret1='gpS2G9RREMrnbqlp29PP2D36kgPR1tm72n5fPYfL'
     swift_secret2='ri2VJQcKSYATOY6uaDUX7pxgkW+W1YmC6OCxPHwy'
 
+    s3_subuser1='s3foo1'
+    s3_subuser1_access_key='1te6NH5mcdcq0Tc5i8i7'
+    s3_subuser1_secret_key='My4IOauQoL18Gp2zM7lC1vLmoawgqcYP/YGcWfXY'
+
     bucket_name='myfoo'
     bucket_name2='mybar'
+    sbucket_name='subusermyfoo'
 
     # connect to rgw
     connection = boto.s3.connection.S3Connection(
         aws_access_key_id=access_key,
         aws_secret_access_key=secret_key,
+        is_secure=False,
+        port=remote_port,
+        host=remote_host,
+        calling_format=boto.s3.connection.OrdinaryCallingFormat(),
+        )
+
+    sconnection = boto.s3.connection.S3Connection(
+        aws_access_key_id=s3_subuser1_access_key,
+        aws_secret_access_key=s3_subuser1_secret_key,
         is_secure=False,
         port=remote_port,
         host=remote_host,
@@ -245,6 +259,21 @@ def task(ctx, config):
             ], check_status=True)
     assert len(out['swift_keys']) == 0
     assert len(out['subusers']) == 0
+
+    # TESTCASE 'add-s3-subuser','key','create','s3 sub-user key','succeeds'
+    s3subuser_access = 'full'
+    (err, out) = rgwadmin(ctx, client, [
+            'subuser', 'create', '--uid', user1,
+            '--subuser', s3_subuser1,
+            '--access-key', s3_subuser1_access_key,
+            '--secret', s3_subuser1_secret_key,
+            '--aceess', s3subuser_access,
+            '--key-type', 's3',
+            ], check_status=True)
+    assert len(out['subusers']) == 1
+    assert out['subusers'][0]['id'] == (user1+':'+s3_subuser1) and out['subusers'][0]['permissions'] == s3subuser_access 
+    assert out['keys'][0]['access_key'] == s3_subuser1_access_key or out['keys'][1]['access_key'] == s3_subuser1_access_key
+    assert out['keys'][0]['secret_key'] == s3_subuser1_secret_key or out['keys'][1]['secret_key'] == s3_subuser1_secret_key
 
     # TESTCASE 'bucket-stats','bucket','stats','no session/buckets','succeeds, empty list'
     (err, out) = rgwadmin(ctx, client, ['bucket', 'stats', '--uid', user1],
@@ -420,6 +449,18 @@ def task(ctx, config):
 
     # TODO: show log by bucket+date
 
+
+    # using subuser key pair to generate serveral usae logs
+    # for following subuser usage show test.
+    sbucket1 = sconnection.create_bucket(sbucket_name + '1')
+    sbucket2 = sconnection.create_bucket(sbucket_name + '2')
+    sbucket3 = sconnection.create_bucket(sbucket_name + '3')
+    sbucket4 = sconnection.create_bucket(sbucket_name + '4')
+    sbucket1.delete()
+    sbucket2.delete()
+    sbucket3.delete()
+    sbucket4.delete()
+
     # need to wait for all usage data to get flushed, should take up to 30 seconds
     timestamp = time.time()
     while time.time() - timestamp <= (20 * 60):      # wait up to 20 minutes
@@ -463,6 +504,33 @@ def task(ctx, config):
         assert entry['category'] == cat
         assert entry['successful_ops'] > 0
 
+    # TESTCASE 'usage-show4' 'usage' 'show' 'subuser usage' 'succeeds'
+    (err, out) = rgwadmin(ctx, client, ['usage', 'show', '--uid', user1,
+                                        '--subuser', s3_subuser1],
+                          check_status=True)
+    assert len(out['entries']) > 0
+    assert len(out['summary']) > 0
+    user_summary = out['summary'][0]
+    for entry in user_summary['categories']:
+        assert entry['successful_ops'] > 0
+    assert user_summary['user'] == user1
+    assert user_summary['subuser'] == s3_subuser1
+
+    # TESTCASE 'usage-show5' 'usage' 'show' 'subuser usage categories' 'succeeds'
+    test_categories = ['create_bucket', 'delete_bucket']
+    for cat in test_categories:
+        (err, out) = rgwadmin(ctx, client, ['usage', 'show', '--uid', user1,
+                                            '--subuser', s3_subuser1,
+                                            '--categories', cat],
+                              check_status=True)
+        assert len(out['summary']) > 0
+        user_summary = out['summary'][0]
+        assert user_summary['user'] == user1
+        assert len(user_summary['categories']) == 1
+        entry = user_summary['categories'][0]
+        assert entry['category'] == cat
+        assert entry['successful_ops'] > 0
+
     # the usage flush interval is 30 seconds, wait that much an then some
     # to make sure everything has been flushed
     time.sleep(35)
@@ -472,6 +540,11 @@ def task(ctx, config):
         check_status=True)
     (err, out) = rgwadmin(ctx, client, ['usage', 'show', '--uid', user1],
         check_status=True)
+    assert len(out['entries']) == 0
+    assert len(out['summary']) == 0
+    (err, out) = rgwadmin(ctx, client, ['usage', 'show', '--uid', user1,
+                                        '--subuser', s3_subuser1],
+                          check_status=True)
     assert len(out['entries']) == 0
     assert len(out['summary']) == 0
 
