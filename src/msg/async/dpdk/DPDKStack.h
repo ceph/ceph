@@ -241,7 +241,7 @@ class DPDKWorker : public Worker {
 class DPDKStack : public NetworkStack {
   vector<std::function<void()> > funcs;
  public:
-  explicit DPDKStack(CephContext *cct, const string &t): NetworkStack(cct, t) {
+  explicit DPDKStack(CephContext *cct, const string &t, string mname): NetworkStack(cct, t, mname) {
     funcs.resize(cct->_conf->ms_async_max_op_threads);
   }
   virtual bool support_zero_copy_read() const override { return true; }
