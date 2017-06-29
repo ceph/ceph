@@ -1,0 +1,4 @@
+overrides:
+  deepsea:
+    exec:
+    - suites/ceph-test/librbd.sh
