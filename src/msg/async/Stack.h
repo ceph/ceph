@@ -290,6 +290,7 @@ class NetworkStack : public CephContext::ForkWatcher {
   unsigned num_workers = 0;
   Spinlock pool_spin;
   bool started = false;
+  std::string mname;
 
   std::function<void ()> add_thread(unsigned i);
 
@@ -297,7 +298,7 @@ class NetworkStack : public CephContext::ForkWatcher {
   CephContext *cct;
   vector<Worker*> workers;
 
-  explicit NetworkStack(CephContext *c, const string &t);
+  explicit NetworkStack(CephContext *c, const string &t, string mname = "empty");
  public:
   NetworkStack(const NetworkStack &) = delete;
   NetworkStack& operator=(const NetworkStack &) = delete;
@@ -307,7 +308,7 @@ class NetworkStack : public CephContext::ForkWatcher {
   }
 
   static std::shared_ptr<NetworkStack> create(
-          CephContext *c, const string &type);
+          CephContext *c, const string &type, string mname = "empty");
 
   static Worker* create_worker(
           CephContext *c, const string &t, unsigned i);
