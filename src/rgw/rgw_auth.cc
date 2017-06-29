@@ -488,27 +488,9 @@ bool rgw::auth::LocalApplier::is_identity(const idset_t& ids) const {
 void rgw::auth::LocalApplier::to_str(std::ostream& out) const {
   out << "rgw::auth::LocalApplier(acct_user=" << user_info.user_id
       << ", acct_name=" << user_info.display_name
-      << ", subuser=" << subuser
+      << ", subuser=" << get_subuser_name()
       << ", perm_mask=" << get_perm_mask()
       << ", is_admin=" << static_cast<bool>(user_info.admin) << ")";
-}
-
-uint32_t rgw::auth::LocalApplier::get_perm_mask(const std::string& subuser_name,
-                                                const RGWUserInfo &uinfo) const
-{
-  if (! subuser_name.empty() && subuser_name != NO_SUBUSER) {
-    const auto iter = uinfo.subusers.find(subuser_name);
-
-    if (iter != std::end(uinfo.subusers)) {
-      return iter->second.perm_mask;
-    } else {
-      /* Subuser specified but not found. */
-      return RGW_PERM_NONE;
-    }
-  } else {
-    /* Due to backward compatibility. */
-    return RGW_PERM_FULL_CONTROL;
-  }
 }
 
 void rgw::auth::LocalApplier::load_acct_info(RGWUserInfo& user_info) const /* out */

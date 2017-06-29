@@ -21,7 +21,6 @@ namespace auth {
 
 using Exception = std::system_error;
 
-
 /* Load information about identity that will be used by RGWOp to authorize
  * any operation that comes from an authenticated user. */
 class Identity {
@@ -68,6 +67,11 @@ public:
   /* Verify whether a given identity corresponds to an identity in the
      provided set */
   virtual bool is_identity(const idset_t& ids) const = 0;
+
+  virtual const boost::optional<const std::string&> get_subuser_name() const {
+    return boost::none;
+  };
+
 };
 
 inline std::ostream& operator<<(std::ostream& out,
@@ -443,12 +447,37 @@ public:
 class LocalApplier : public IdentityApplier {
   using aclspec_t = rgw::auth::Identity::aclspec_t;
 
+  const struct subuser_t {
+    std::string name;
+    uint32_t perm_mask;
+  } subuser;
+
+  const subuser_t
+  parse_subuser_info(const std::string& subuser_name,
+		     const RGWUserInfo &uinfo)
+  {
+    uint32_t perm_mask;
+    std::string name;
+    if (subuser_name != NO_SUBUSER) {
+      const auto iter = uinfo.subusers.find(subuser_name);
+
+      if (iter != std::end(uinfo.subusers)) {
+	perm_mask = iter->second.perm_mask;
+	name = iter->second.name;
+      } else {
+	/* Subuser specified but not found. */
+	perm_mask = RGW_PERM_NONE;
+      }
+    } else {
+      /* Due to backward compatibility. */
+      perm_mask = RGW_PERM_FULL_CONTROL;
+    }
+    return subuser_t { name, perm_mask };
+  }
+
+
 protected:
   const RGWUserInfo user_info;
-  const std::string subuser;
-
-  uint32_t get_perm_mask(const std::string& subuser_name,
-                         const RGWUserInfo &uinfo) const;
 
 public:
   static const std::string NO_SUBUSER;
@@ -456,18 +485,21 @@ public:
   LocalApplier(CephContext* const cct,
                const RGWUserInfo& user_info,
                std::string subuser)
-    : user_info(user_info),
-      subuser(std::move(subuser)) {
-  }
-
+      : subuser(parse_subuser_info(subuser, user_info)),
+        user_info(user_info) { }
 
   uint32_t get_perms_from_aclspec(const aclspec_t& aclspec) const override;
   bool is_admin_of(const rgw_user& uid) const override;
   bool is_owner_of(const rgw_user& uid) const override;
   bool is_identity(const idset_t& ids) const override;
   uint32_t get_perm_mask() const override {
-    return get_perm_mask(subuser, user_info);
+    return subuser.perm_mask;
   }
+
+  const boost::optional<const std::string&> get_subuser_name() const override {
+    return subuser.name;
+  }
+
   void to_str(std::ostream& out) const override;
   void load_acct_info(RGWUserInfo& user_info) const override; /* out */
 

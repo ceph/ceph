@@ -17,6 +17,12 @@ Note: this feature is disabled by default, can be enabled by setting ``rgw
 enable usage log = true`` in the appropriate section of ceph.conf. For changes
 in ceph.conf to take effect, radosgw process restart is needed.
 
+Note: If you want more fine-grained request bandwith usage information, subuser
+level usage log can be enabled by setting ``rgw enable usage log = true`` and
+``rgw enable usage log at subuser level = true`` in the appropriate section of
+ceph.conf. For changes in ceph.conf to take effect, radosgw process restart is
+needed.
+
 :caps: usage=read
 
 Syntax
@@ -37,6 +43,13 @@ Request Parameters
 :Description: The user for which the information is requested. If not specified will apply to all users.
 :Type: String
 :Example: ``foo_user``
+:Required: No
+
+``subuser``
+
+:Description: The subuser name for which the information is requested.
+:Type: String
+:Example: ``foo_subuser``
 :Required: No
 
 ``start``
