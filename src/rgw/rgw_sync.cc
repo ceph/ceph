@@ -291,7 +291,6 @@ int RGWRemoteMetaLog::init()
                                                            sync_env.sync_tracer, 
                                                            sync_env.sync_tracer->root_node,
                                                            "meta",
-                                                           string(),
                                                            string()));
 
   return 0;
@@ -816,10 +815,15 @@ class RGWFetchAllMetaCR : public RGWCoroutine {
 public:
   RGWFetchAllMetaCR(RGWMetaSyncEnv *_sync_env, int _num_shards,
                     map<uint32_t, rgw_meta_sync_marker>& _markers,
-                    RGWSTNCRef& _tn) : RGWCoroutine(_sync_env->cct), sync_env(_sync_env),
+                    RGWSyncTraceNodeRef& _tn_parent) : RGWCoroutine(_sync_env->cct), sync_env(_sync_env),
 						      num_shards(_num_shards),
 						      ret_status(0), lease_cr(nullptr), lease_stack(nullptr),
-                                                      lost_lock(false), failed(false), markers(_markers), tn(_tn) {
+                                                      lost_lock(false), failed(false), markers(_markers) {
+    tn = sync_env->sync_tracer->add_node(new RGWSyncTraceNode(sync_env->cct,
+                                         sync_env->sync_tracer, 
+                                         _tn_parent,
+                                         "fetch_all_meta",
+                                         string()));
   }
 
   ~RGWFetchAllMetaCR() override {
@@ -902,7 +906,7 @@ public:
                                                               entrypoint, pairs, &result));
           }
           if (get_ret_status() < 0) {
-            ldout(cct, 0) << "ERROR: failed to fetch metadata section: " << *sections_iter << dendl;
+            tn->log(0, SSTR("ERROR: failed to fetch metadata section: " << *sections_iter));
             yield entries_index->finish();
             yield lease_cr->go_down();
             drain_all();
@@ -916,13 +920,13 @@ public:
             }
             yield; // allow entries_index consumer to make progress
 
-            ldout(cct, 20) << "list metadata: section=" << *sections_iter << " key=" << *iter << dendl;
+            tn->log(20, SSTR("list metadata: section=" << *sections_iter << " key=" << *iter));
             string s = *sections_iter + ":" + *iter;
             int shard_id;
             RGWRados *store = sync_env->store;
             int ret = store->meta_mgr->get_log_shard_id(*sections_iter, *iter, &shard_id);
             if (ret < 0) {
-              ldout(cct, 0) << "ERROR: could not determine shard id for " << *sections_iter << ":" << *iter << dendl;
+              tn->log(0, SSTR("ERROR: could not determine shard id for " << *sections_iter << ":" << *iter));
               ret_status = ret;
               break;
             }
@@ -994,13 +998,21 @@ class RGWReadRemoteMetadataCR : public RGWCoroutine {
 
   bufferlist *pbl;
 
+  RGWSTNCRef tn;
+
 public:
   RGWReadRemoteMetadataCR(RGWMetaSyncEnv *_sync_env,
-                                                      const string& _section, const string& _key, bufferlist *_pbl) : RGWCoroutine(_sync_env->cct), sync_env(_sync_env),
+                                                      const string& _section, const string& _key, bufferlist *_pbl,
+                                                      const RGWSyncTraceNodeRef& _tn_parent) : RGWCoroutine(_sync_env->cct), sync_env(_sync_env),
                                                       http_op(NULL),
                                                       section(_section),
                                                       key(_key),
 						      pbl(_pbl) {
+    tn = sync_env->sync_tracer->add_node(new RGWSyncTraceNode(sync_env->cct,
+                                         sync_env->sync_tracer, 
+                                         _tn_parent,
+                                         "read_remote_meta",
+                                         section + ":" + key));
   }
 
   int operate() override {
@@ -1199,7 +1211,6 @@ RGWMetaSyncSingleEntryCR::RGWMetaSyncSingleEntryCR(RGWMetaSyncEnv *_sync_env,
                                                             sync_env->sync_tracer, 
                                                             _tn_parent,
                                                             "entry",
-                                                            string(),
                                                             raw_key));
 }
 
@@ -1221,13 +1232,14 @@ int RGWMetaSyncSingleEntryCR::operate() {
       }
       return set_cr_done();
     }
+    tn->set_flag(RGW_SNS_FLAG_ACTIVE);
     for (tries = 0; tries < NUM_TRANSIENT_ERROR_RETRIES; tries++) {
       yield {
         pos = raw_key.find(':');
         section = raw_key.substr(0, pos);
         key = raw_key.substr(pos + 1);
         tn->log(10, SSTR("fetching remote metadata entry" << (tries == 0 ? "" : " (retry)")));
-        call(new RGWReadRemoteMetadataCR(sync_env, section, key, &md_bl));
+        call(new RGWReadRemoteMetadataCR(sync_env, section, key, &md_bl, tn->ref()));
       }
 
       sync_status = retcode;
@@ -1243,7 +1255,7 @@ int RGWMetaSyncSingleEntryCR::operate() {
       }
 
       if (sync_status < 0) {
-        ldout(sync_env->cct, 10) << *this << ": failed to send read remote metadata entry: section=" << section << " key=" << key << " status=" << sync_status << dendl;
+        tn->log(10, SSTR("failed to send read remote metadata entry: section=" << section << " key=" << key << " status=" << sync_status));
         log_error() << "failed to send read remote metadata entry: section=" << section << " key=" << key << " status=" << sync_status << std::endl;
         yield call(sync_env->error_logger->log_error_cr(sync_env->conn->get_remote_id(), section, key, -sync_status,
                                                         string("failed to read remote metadata entry: ") + cpp_strerror(-sync_status)));
@@ -1277,8 +1289,10 @@ int RGWMetaSyncSingleEntryCR::operate() {
       sync_status = retcode;
     }
     if (sync_status < 0) {
+      tn->log(10, SSTR("failed, status=" << sync_status));
       return set_cr_error(sync_status);
     }
+    tn->log(10, "success");
     return set_cr_done();
   }
   return 0;
@@ -1505,9 +1519,8 @@ public:
       }
       while (!lease_cr->is_locked()) {
         if (lease_cr->is_done()) {
-          ldout(cct, 5) << "lease cr failed, done early " << dendl;
           drain_all();
-          tn->log(10, "failed to take lease");
+          tn->log(5, "failed to take lease");
           return lease_cr->get_ret_status();
         }
         set_sleeping(true);
@@ -1538,20 +1551,21 @@ public:
                                              marker, &entries, max_entries));
         if (retcode < 0) {
           ldout(sync_env->cct, 0) << "ERROR: " << __func__ << "(): RGWRadosGetOmapKeysCR() returned ret=" << retcode << dendl;
+          tn->log(0, SSTR("ERROR: failed to list omap keys, status=" << retcode));
           yield lease_cr->go_down();
           drain_all();
           return retcode;
         }
         tn->log(20, SSTR("retrieved " << entries.size() << " entries to sync"));
         if (entries.size() > 0) {
-          tn->set_state(SNS_ACTIVE); /* actually have entries to sync */
+          tn->set_flag(RGW_SNS_FLAG_ACTIVE); /* actually have entries to sync */
         }
         iter = entries.begin();
         for (; iter != entries.end(); ++iter) {
-          ldout(sync_env->cct, 20) << __func__ << ": full sync: " << iter->first << dendl;
+          tn->log(20, SSTR("full sync: " << iter->first));
           total_entries++;
           if (!marker_tracker->start(iter->first, total_entries, real_time())) {
-            ldout(sync_env->cct, 0) << "ERROR: cannot start syncing " << iter->first << ". Duplicate entry?" << dendl;
+            tn->log(0, SSTR("ERROR: cannot start syncing " << iter->first << ". Duplicate entry?"));
           } else {
             // fetch remote and write locally
             yield {
@@ -1566,7 +1580,7 @@ public:
         collect_children();
       } while ((int)entries.size() == max_entries && can_adjust_marker);
 
-      tn->set_state(SNS_INACTIVE); /* actually have entries to sync */
+      tn->unset_flag(RGW_SNS_FLAG_ACTIVE); /* actually have entries to sync */
 
       while (num_spawned() > 1) {
         yield wait_for_child();
@@ -1618,6 +1632,8 @@ public:
         return -EBUSY;
       }
 
+      tn->log(10, "full sync complete");
+
       // apply the sync marker update
       assert(temp_marker);
       sync_marker = std::move(*temp_marker);
@@ -1647,7 +1663,6 @@ public:
         }
         while (!lease_cr->is_locked()) {
           if (lease_cr->is_done()) {
-            ldout(cct, 5) << "lease cr failed, done early " << dendl;
             drain_all();
             tn->log(10, "failed to take lease");
             return lease_cr->get_ret_status();
@@ -1708,6 +1723,7 @@ public:
         }
         *reset_backoff = true; /* if we got to this point, all systems function */
 	if (mdlog_marker > max_marker) {
+          tn->set_flag(RGW_SNS_FLAG_ACTIVE); /* actually have entries to sync */
           tn->log(20, SSTR("mdlog_marker=" << mdlog_marker << " sync_marker=" << sync_marker.marker));
           marker = max_marker;
           yield call(new RGWReadMDLogEntriesCR(sync_env, mdlog, shard_id,
@@ -1759,10 +1775,13 @@ public:
           break;
         }
 	if (mdlog_marker == max_marker && can_adjust_marker) {
+          tn->unset_flag(RGW_SNS_FLAG_ACTIVE);
 #define INCREMENTAL_INTERVAL 20
 	  yield wait(utime_t(INCREMENTAL_INTERVAL, 0));
 	}
       } while (can_adjust_marker);
+
+      tn->unset_flag(RGW_SNS_FLAG_ACTIVE);
 
       while (num_spawned() > 1) {
         yield wait_for_child();
@@ -1820,7 +1839,6 @@ public:
                                                                   sync_env->sync_tracer, 
                                                                   tn_parent,
                                                                   "shard",
-                                                                  string(),
                                                                   SSTR(shard_id)));
       }
 
@@ -2168,7 +2186,7 @@ int RGWRemoteMetaLog::run_sync()
     switch ((rgw_meta_sync_info::SyncState)sync_status.sync_info.state) {
       case rgw_meta_sync_info::StateBuildingFullSyncMaps:
         tn->log(20, "building full sync maps");
-        r = run(new RGWFetchAllMetaCR(&sync_env, num_shards, sync_status.sync_markers, tn));
+        r = run(new RGWFetchAllMetaCR(&sync_env, num_shards, sync_status.sync_markers, tn->ref()));
         if (r == -EBUSY || r == -EAGAIN) {
           backoff.backoff_sleep();
           continue;

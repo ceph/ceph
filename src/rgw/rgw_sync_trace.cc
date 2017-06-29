@@ -12,19 +12,16 @@ using namespace std;
 #define dout_subsys ceph_subsys_rgw_sync
 
 #warning history size configurable
-RGWSyncTraceNode::RGWSyncTraceNode(CephContext *_cct, RGWSyncTraceManager *_manager, const RGWSyncTraceNodeRef& _parent,
-                   const string& _type, const string& _trigger, const string& _id) : cct(_cct),
-                                                                                     manager(_manager),
-                                                                                     parent(_parent),
-                                                                                     type(_type),
-                                                                                     trigger(_trigger),
-                                                                                     id(_id), history(32)
+RGWSyncTraceNode::RGWSyncTraceNode(CephContext *_cct, RGWSyncTraceManager *_manager,
+                                   const RGWSyncTraceNodeRef& _parent,
+                                   const string& _type, const string& _id) : cct(_cct),
+                                                                             manager(_manager),
+                                                                             parent(_parent),
+                                                                             type(_type),
+                                                                             id(_id), history(32)
 {
   if (parent.get()) {
     prefix = parent->get_prefix();
-  }
-  if (!trigger.empty()) {
-    prefix += trigger + ":";
   }
 
   if (!type.empty()) {
@@ -102,7 +99,8 @@ int RGWSyncTraceManager::hook_to_admin_command()
   AdminSocket *admin_socket = cct->get_admin_socket();
 
   admin_commands = { { "sync trace show", "sync trace show name=search,type=CephString,req=false", "sync trace show [filter_str]: show current multisite tracing information" },
-                     { "sync trace history", "sync trace history name=search,type=CephString,req=false", "sync trace history [filter_str]: show history of multisite tracing information" } };
+                     { "sync trace history", "sync trace history name=search,type=CephString,req=false", "sync trace history [filter_str]: show history of multisite tracing information" },
+                     { "sync trace active", "sync trace active name=search,type=CephString,req=false", "show active multisite sync entities information" } };
   for (auto cmd : admin_commands) {
     int r = admin_socket->register_command(cmd[0], cmd[1], this,
                                            cmd[2]);
@@ -132,6 +130,7 @@ bool RGWSyncTraceManager::call(std::string command, cmdmap_t& cmdmap, std::strin
 	    bufferlist& out) {
 
   bool show_history = (command == "sync trace history");
+  bool show_active = (command == "sync trace active");
 
   string search;
 
@@ -153,6 +152,9 @@ bool RGWSyncTraceManager::call(std::string command, cmdmap_t& cmdmap, std::strin
     if (!search.empty() && !entry->match(search, show_history)) {
       continue;
     }
+    if (show_active && !entry->test_flags(RGW_SNS_FLAG_ACTIVE)) {
+      continue;
+    }
     dump_node(entry.get(), show_history, f);
     f.flush(ss);
   }
@@ -161,6 +163,9 @@ bool RGWSyncTraceManager::call(std::string command, cmdmap_t& cmdmap, std::strin
   f.open_array_section("complete");
   for (auto& entry : complete_nodes) {
     if (!search.empty() && !entry->match(search, show_history)) {
+      continue;
+    }
+    if (show_active && !entry->test_flags(RGW_SNS_FLAG_ACTIVE)) {
       continue;
     }
     dump_node(entry.get(), show_history, f);
