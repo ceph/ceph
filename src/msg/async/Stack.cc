@@ -14,6 +14,8 @@
  *
  */
 
+#include <mutex>
+
 #include "include/compat.h"
 #include "common/Cond.h"
 #include "common/errno.h"
@@ -123,21 +125,20 @@ NetworkStack::NetworkStack(CephContext *c, const string &t): type(t), started(fa
 
 void NetworkStack::start()
 {
-  {
-    std::lock_guard<decltype(pool_spin)> lg(pool_spin);
+  std::unique_lock<decltype(pool_spin)> lk(pool_spin);
 
-    if (started) {
-      return ;
-    }
-
-    for (unsigned i = 0; i < num_workers; ++i) {
-      if (workers[i]->is_init())
-        continue;
-      std::function<void ()> thread = add_thread(i);
-      spawn_worker(i, std::move(thread));
-    }
-    started = true;
+  if (started) {
+    return ;
   }
+
+  for (unsigned i = 0; i < num_workers; ++i) {
+    if (workers[i]->is_init())
+      continue;
+    std::function<void ()> thread = add_thread(i);
+    spawn_worker(i, std::move(thread));
+  }
+  started = true;
+  lk.unlock();
 
   for (unsigned i = 0; i < num_workers; ++i)
     workers[i]->wait_for_init();
@@ -151,20 +152,19 @@ Worker* NetworkStack::get_worker()
   unsigned min_load = std::numeric_limits<int>::max();
   Worker* current_best = nullptr;
 
-  {
-    std::lock_guard<decltype(pool_spin)> lg(pool_spin);
-    // find worker with least references
-    // tempting case is returning on references == 0, but in reality
-    // this will happen so rarely that there's no need for special case.
-    for (unsigned i = 0; i < num_workers; ++i) {
-      unsigned worker_load = workers[i]->references.load();
-      if (worker_load < min_load) {
-        current_best = workers[i];
-        min_load = worker_load;
-      }
+  pool_spin.lock();
+  // find worker with least references
+  // tempting case is returning on references == 0, but in reality
+  // this will happen so rarely that there's no need for special case.
+  for (unsigned i = 0; i < num_workers; ++i) {
+    unsigned worker_load = workers[i]->references.load();
+    if (worker_load < min_load) {
+      current_best = workers[i];
+      min_load = worker_load;
     }
   }
 
+  pool_spin.unlock();
   assert(current_best);
   ++current_best->references;
   return current_best;
@@ -172,14 +172,12 @@ Worker* NetworkStack::get_worker()
 
 void NetworkStack::stop()
 {
-  std::lock_guard<decltype(pool_spin)> lg(pool_spin);
-
+  std::lock_guard<decltype(pool_spin)> lk(pool_spin);
   for (unsigned i = 0; i < num_workers; ++i) {
     workers[i]->done = true;
     workers[i]->center.wakeup();
     join_worker(i);
   }
-
   started = false;
 }
 
@@ -208,16 +206,13 @@ void NetworkStack::drain()
 {
   ldout(cct, 30) << __func__ << " started." << dendl;
   pthread_t cur = pthread_self();
-
-  {
-    std::locked_guard lg(pool_spin);
-    C_drain drain(num_workers);
-    for (unsigned i = 0; i < num_workers; ++i) {
-      assert(cur != workers[i]->center.get_owner());
-      workers[i]->center.dispatch_event_external(EventCallbackRef(&drain));
-    }
+  pool_spin.lock();
+  C_drain drain(num_workers);
+  for (unsigned i = 0; i < num_workers; ++i) {
+    assert(cur != workers[i]->center.get_owner());
+    workers[i]->center.dispatch_event_external(EventCallbackRef(&drain));
   }
-
+  pool_spin.unlock();
   drain.wait();
   ldout(cct, 30) << __func__ << " end." << dendl;
 }
