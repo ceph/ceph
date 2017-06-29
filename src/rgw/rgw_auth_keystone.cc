@@ -262,7 +262,7 @@ TokenEngine::authenticate(const std::string& token,
     ldout(cct, 0) << "got expired token: " << t->get_project_name()
                   << ":" << t->get_user_name()
                   << " expired: " << t->get_expires() << dendl;
-    return result_t::deny();
+    return result_t::deny(-EPERM);
   }
 
   /* Check for necessary roles. */
@@ -281,7 +281,7 @@ TokenEngine::authenticate(const std::string& token,
   ldout(cct, 0) << "user does not hold a matching role; required roles: "
                 << g_conf->rgw_keystone_accepted_roles << dendl;
 
-  return result_t::deny();
+  return result_t::deny(-EPERM);
 }
 
 
@@ -289,9 +289,9 @@ TokenEngine::authenticate(const std::string& token,
  * Try to validate S3 auth against keystone s3token interface
  */
 std::pair<boost::optional<rgw::keystone::TokenEnvelope>, int>
-EC2Engine::get_from_keystone(const std::string& access_key_id,
+EC2Engine::get_from_keystone(const boost::string_view& access_key_id,
                              const std::string& string_to_sign,
-                             const std::string& signature) const
+                             const boost::string_view& signature) const
 {
   /* prepare keystone url */
   std::string keystone_url = config.get_endpoint_url();
@@ -335,9 +335,9 @@ EC2Engine::get_from_keystone(const std::string& access_key_id,
   JSONFormatter credentials(false);
   credentials.open_object_section("");
   credentials.open_object_section("credentials");
-  credentials.dump_string("access", access_key_id);
+  credentials.dump_string("access", sview2cstr(access_key_id).data());
   credentials.dump_string("token", rgw::to_base64(string_to_sign));
-  credentials.dump_string("signature", signature);
+  credentials.dump_string("signature", sview2cstr(signature).data());
   credentials.close_section();
   credentials.close_section();
 
@@ -413,11 +413,14 @@ EC2Engine::get_creds_info(const EC2Engine::token_envelope_t& token,
   };
 }
 
-rgw::auth::Engine::result_t EC2Engine::authenticate(const std::string& access_key_id,
-                                                    const std::string& signature,
-                                                    const std::string& string_to_sign,
-                                                    /* Passthorugh only! */
-                                                    const req_state* s) const
+rgw::auth::Engine::result_t EC2Engine::authenticate(
+  const boost::string_view& access_key_id,
+  const boost::string_view& signature,
+  const string_to_sign_t& string_to_sign,
+  const signature_factory_t&,
+  const completer_factory_t& completer_factory,
+  /* Passthorugh only! */
+  const req_state* s) const
 {
   /* This will be initialized on the first call to this method. In C++11 it's
    * also thread-safe. */
@@ -472,7 +475,7 @@ rgw::auth::Engine::result_t EC2Engine::authenticate(const std::string& access_ke
 
     auto apl = apl_factory->create_apl_remote(cct, s, get_acl_strategy(*t),
                                               get_creds_info(*t, accepted_roles.admin));
-    return result_t::grant(std::move(apl));
+    return result_t::grant(std::move(apl), completer_factory(boost::none));
   }
 }
 

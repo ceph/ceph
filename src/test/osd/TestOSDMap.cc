@@ -56,9 +56,10 @@ public:
     osdmap.apply_incremental(pending_inc);
 
     // Create an EC ruleset and a pool using it
-    int r = osdmap.crush->add_simple_ruleset("erasure", "default", "osd",
-					     "indep", pg_pool_t::TYPE_ERASURE,
-					     &cerr);
+    int r = osdmap.crush->add_simple_rule(
+      "erasure", "default", "osd",
+      "indep", pg_pool_t::TYPE_ERASURE,
+      &cerr);
 
     OSDMap::Incremental new_pool_inc(osdmap.get_epoch() + 1);
     new_pool_inc.new_pool_max = osdmap.get_pool_max();
@@ -70,7 +71,7 @@ public:
     p->set_pg_num(64);
     p->set_pgp_num(64);
     p->type = pg_pool_t::TYPE_ERASURE;
-    p->crush_ruleset = r;
+    p->crush_rule = r;
     new_pool_inc.new_pool_names[pool_id] = "ec";
     osdmap.apply_incremental(new_pool_inc);
   }
@@ -354,16 +355,6 @@ TEST_F(OSDMapTest, KeepsNecessaryTemps) {
 TEST_F(OSDMapTest, PrimaryAffinity) {
   set_up_map();
 
-  /*
-  osdmap.print(cout);
-  Formatter *f = Formatter::create("json-pretty");
-  f->open_object_section("CRUSH");
-  osdmap.crush->dump(f);
-  f->close_section();
-  f->flush(cout);
-  delete f;
-  */
-
   int n = get_num_osds();
   for (map<int64_t,pg_pool_t>::const_iterator p = osdmap.get_pools().begin();
        p != osdmap.get_pools().end();
@@ -376,7 +367,6 @@ TEST_F(OSDMapTest, PrimaryAffinity) {
       vector<int> primary(n, 0);
       test_mappings(0, 10000, &any, &first, &primary);
       for (int i=0; i<n; ++i) {
-	//cout << "osd." << i << " " << any[i] << " " << first[i] << " " << primary[i] << std::endl;
 	ASSERT_LT(0, any[i]);
 	ASSERT_LT(0, first[i]);
 	ASSERT_LT(0, primary[i]);
@@ -391,7 +381,6 @@ TEST_F(OSDMapTest, PrimaryAffinity) {
       vector<int> primary(n, 0);
       test_mappings(pool, 10000, &any, &first, &primary);
       for (int i=0; i<n; ++i) {
-	//cout << "osd." << i << " " << any[i] << " " << first[i] << " " << primary[i] << std::endl;
 	ASSERT_LT(0, any[i]);
 	if (i >= 2) {
 	  ASSERT_LT(0, first[i]);
@@ -413,7 +402,6 @@ TEST_F(OSDMapTest, PrimaryAffinity) {
       vector<int> primary(n, 0);
       test_mappings(pool, 10000, &any, &first, &primary);
       for (int i=0; i<n; ++i) {
-	//cout << "osd." << i << " " << any[i] << " " << first[i] << " " << primary[i] << std::endl;
 	ASSERT_LT(0, any[i]);
 	if (i >= 2) {
 	  ASSERT_LT(0, first[i]);

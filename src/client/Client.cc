@@ -608,7 +608,7 @@ void Client::trim_cache(bool trim_kernel_dcache)
     if (lru.lru_get_size() <= lru.lru_get_max())  break;
 
     // trim!
-    Dentry *dn = static_cast<Dentry*>(lru.lru_expire());
+    Dentry *dn = static_cast<Dentry*>(lru.lru_get_next_expire());
     if (!dn)
       break;  // done
     
@@ -2763,11 +2763,19 @@ void Client::kick_requests(MetaSession *session)
   for (map<ceph_tid_t, MetaRequest*>::iterator p = mds_requests.begin();
        p != mds_requests.end();
        ++p) {
-    if (p->second->got_unsafe)
+    MetaRequest *req = p->second;
+    if (req->got_unsafe)
       continue;
-    if (p->second->retry_attempt > 0)
+    if (req->aborted()) {
+      if (req->caller_cond) {
+	req->kick = true;
+	req->caller_cond->Signal();
+      }
+      continue;
+    }
+    if (req->retry_attempt > 0)
       continue; // new requests only
-    if (p->second->mds == session->mds_num) {
+    if (req->mds == session->mds_num) {
       send_request(p->second, session);
     }
   }
@@ -2787,6 +2795,8 @@ void Client::resend_unsafe_requests(MetaSession *session)
        ++p) {
     MetaRequest *req = p->second;
     if (req->got_unsafe)
+      continue;
+    if (req->aborted())
       continue;
     if (req->retry_attempt == 0)
       continue; // old requests only
@@ -5788,6 +5798,30 @@ void Client::_close_sessions()
   }
 }
 
+void Client::flush_mdlog_sync()
+{
+  if (mds_requests.empty()) 
+    return;
+  for (map<mds_rank_t,MetaSession*>::iterator p = mds_sessions.begin();
+       p != mds_sessions.end();
+       ++p) {
+    MetaSession *s = p->second;
+    flush_mdlog(s);
+  }
+}
+
+void Client::flush_mdlog(MetaSession *session)
+{
+  // Only send this to Luminous or newer MDS daemons, older daemons
+  // will crash if they see an unknown CEPH_SESSION_* value in this msg.
+  const uint64_t features = session->con->get_features();
+  if (HAVE_FEATURE(features, SERVER_LUMINOUS)) {
+    MClientSession *m = new MClientSession(CEPH_SESSION_REQUEST_FLUSH_MDLOG);
+    session->con->send_message(m);
+  }
+}
+
+
 void Client::unmount()
 {
   Mutex::Locker lock(client_lock);
@@ -5797,6 +5831,7 @@ void Client::unmount()
   ldout(cct, 2) << "unmounting" << dendl;
   unmounting = true;
 
+  flush_mdlog_sync(); // flush the mdlog for pending requests, if any
   while (!mds_requests.empty()) {
     ldout(cct, 10) << "waiting on " << mds_requests.size() << " requests" << dendl;
     mount_cond.Wait(client_lock);
@@ -9444,8 +9479,9 @@ int Client::statfs(const char *path, struct statvfs *stbuf,
     // as the filesystem statistics.
     const fsblkcnt_t total = quota_root->quota.max_bytes >> CEPH_BLOCK_SHIFT;
     const fsblkcnt_t used = quota_root->rstat.rbytes >> CEPH_BLOCK_SHIFT;
-    const fsblkcnt_t free = total - used;
-
+    // It is possible for a quota to be exceeded: arithmetic here must
+    // handle case where used > total.
+    const fsblkcnt_t free = total > used ? total - used : 0;
 
     stbuf->f_blocks = total;
     stbuf->f_bfree = free;
@@ -9511,9 +9547,12 @@ int Client::_do_filelock(Inode *in, Fh *fh, int lock_type, int op, int sleep,
     // enable interrupt
     switch_interrupt_cb(callback_handle, req->get());
     ret = make_request(req, fh->actor_perms, NULL, NULL, -1, &bl);
-
     // disable interrupt
     switch_interrupt_cb(callback_handle, NULL);
+    if (ret == 0 && req->aborted()) {
+      // effect of this lock request has been revoked by the 'lock intr' request
+      ret = req->get_abort_code();
+    }
     put_request(req);
   } else {
     ret = make_request(req, fh->actor_perms, NULL, NULL, -1, &bl);
@@ -9572,6 +9611,12 @@ int Client::_do_filelock(Inode *in, Fh *fh, int lock_type, int op, int sleep,
 
 int Client::_interrupt_filelock(MetaRequest *req)
 {
+  // Set abort code, but do not kick. The abort code prevents the request
+  // from being re-sent.
+  req->abort(-EINTR);
+  if (req->mds < 0)
+    return 0; // haven't sent the request
+
   Inode *in = req->inode();
 
   int lock_type;

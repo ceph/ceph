@@ -981,6 +981,7 @@ inline ostream& operator<<(ostream& out, const osd_stat_t& s) {
 #define PG_STATE_SNAPTRIM      (1<<26) // trimming snaps
 #define PG_STATE_SNAPTRIM_WAIT (1<<27) // queued to trim snaps
 #define PG_STATE_RECOVERY_TOOFULL (1<<28) // recovery can't proceed: too full
+#define PG_STATE_SNAPTRIM_ERROR (1<<29) // error stopped trimming snaps
 
 std::string pg_state_string(int state);
 std::string pg_vector_string(const vector<int32_t> &a);
@@ -1247,7 +1248,7 @@ struct pg_pool_t {
   uint64_t flags;           ///< FLAG_*
   __u8 type;                ///< TYPE_*
   __u8 size, min_size;      ///< number of osds in each pg
-  __u8 crush_ruleset;       ///< crush placement rule set
+  __u8 crush_rule;          ///< crush placement rule
   __u8 object_hash;         ///< hash mapping object name to ps
 private:
   __u32 pg_num, pgp_num;    ///< number of pgs
@@ -1370,7 +1371,7 @@ public:
 
   pg_pool_t()
     : flags(0), type(0), size(0), min_size(0),
-      crush_ruleset(0), object_hash(0),
+      crush_rule(0), object_hash(0),
       pg_num(0), pgp_num(0),
       last_change(0),
       last_force_op_resend(0),
@@ -1424,7 +1425,7 @@ public:
   unsigned get_type() const { return type; }
   unsigned get_size() const { return size; }
   unsigned get_min_size() const { return min_size; }
-  int get_crush_ruleset() const { return crush_ruleset; }
+  int get_crush_rule() const { return crush_rule; }
   int get_object_hash() const { return object_hash; }
   const char *get_object_hash_name() const {
     return ceph_str_hash_name(get_object_hash());
@@ -4508,6 +4509,8 @@ struct object_info_t {
       s += "|omap_digest";
     if (flags & FLAG_CACHE_PIN)
       s += "|cache_pin";
+    if (flags & FLAG_MANIFEST)
+      s += "|manifest";
     if (s.length())
       return s.substr(1);
     return s;
@@ -4569,7 +4572,7 @@ struct object_info_t {
     return test_flag(FLAG_CACHE_PIN);
   }
   bool has_manifest() const {
-    return !manifest.is_empty();
+    return test_flag(FLAG_MANIFEST);
   }
 
   void set_data_digest(__u32 d) {

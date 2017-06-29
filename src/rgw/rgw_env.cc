@@ -50,7 +50,7 @@ const char *rgw_conf_get(const map<string, string, ltstr_nocase>& conf_map, cons
   return iter->second.c_str();
 }
 
-const char *RGWEnv::get(const char *name, const char *def_val)
+const char *RGWEnv::get(const char *name, const char *def_val) const
 {
   return rgw_conf_get(env_map, name, def_val);
 }
@@ -65,7 +65,7 @@ int rgw_conf_get_int(const map<string, string, ltstr_nocase>& conf_map, const ch
   return atoi(s);  
 }
 
-int RGWEnv::get_int(const char *name, int def_val)
+int RGWEnv::get_int(const char *name, int def_val) const
 {
   return rgw_conf_get_int(env_map, name, def_val);
 }
@@ -85,28 +85,35 @@ bool RGWEnv::get_bool(const char *name, bool def_val)
   return rgw_conf_get_bool(env_map, name, def_val);
 }
 
-size_t RGWEnv::get_size(const char *name, size_t def_val)
+size_t RGWEnv::get_size(const char *name, size_t def_val) const
 {
-  map<string, string, ltstr_nocase>::iterator iter = env_map.find(name);
+  const auto iter = env_map.find(name);
   if (iter == env_map.end())
     return def_val;
 
-  const char *s = iter->second.c_str();
-  return atoll(s);  
+  size_t sz;
+  try{
+    sz = stoull(iter->second);
+  } catch(...){
+    /* it is very unlikely that we'll ever encounter out_of_range, but let's
+       return the default eitherway */
+    sz = def_val;
+  }
+
+  return sz;
 }
 
-bool RGWEnv::exists(const char *name)
+bool RGWEnv::exists(const char *name) const
 {
-  map<string, string, ltstr_nocase>::iterator iter = env_map.find(name);
-  return (iter != env_map.end());
+  return env_map.find(name)!= env_map.end();
 }
 
-bool RGWEnv::exists_prefix(const char *prefix)
+bool RGWEnv::exists_prefix(const char *prefix) const
 {
   if (env_map.empty() || prefix == NULL)
     return false;
 
-  map<string, string, ltstr_nocase>::iterator iter = env_map.lower_bound(prefix);
+  const auto iter = env_map.lower_bound(prefix);
   if (iter == env_map.end())
     return false;
 

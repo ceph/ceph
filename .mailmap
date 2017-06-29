@@ -59,6 +59,8 @@ Chen Dihao <tobeg3oogle@gmail.com>
 Chendi Xue <chendi.xue@intel.com>
 Chendi Xue <chendi.xue@intel.com> <xuechendi@gmail.com>
 Cheng Cheng <ccheng.leo@gmail.com>
+Chu Hua-Rong <hrchu@cht.com.tw>
+Chu Hua-Rong <hrchu@cht.com.tw> <petertc@gmail.com>
 Chris Holcombe <chris.holcombe@nebula.com> <xfactor973@gmail.com>
 Christian Brunner <christian@brunner-muc.de> <chb@muc.de>
 Christian Marie <pingu@anchor.net.au> <christian@ponies.io>
@@ -140,9 +142,11 @@ Haomai Wang <haomai@xsky.com> <haomai@xsky.io>
 Haomai Wang <haomai@xsky.com> <yuyuyu101@163.com>
 Harry Harrington <git-harry@live.co.uk>
 Hazem Amara <hazem.amara@telecom-bretagne.eu> <hazem@hazem-Inspiron-3537.(none)>
+He Chuang <hechuang@xsky.com>
 Henry C Chang <henry_c_chang@tcloudcomputing.com> <henry.cy.chang@gmail.com>
 Hervé Rousseau <hroussea@cern.ch>
 Holger Macht <hmacht@suse.de> <holger@homac.de>
+Hongtong Liu <hongtong.liu@istuary.com>
 Hong Zhangoole <hong.zhangoole@gmail.com>
 Huamin Chen <hchen@redhat.com>
 Huang Jun <hjwsm1989@gmail.com>
@@ -174,6 +178,8 @@ Jenkins <jenkins@ceph.com> <jenkins-build@trusty-small-unique--68a2c286-dc75-466
 Jenkins <jenkins@ceph.com> <jenkins-build@trusty-small-unique--e64d6d03-305d-46bd-9a2c-9b546e06937e.localdomain>
 Jenkins <jenkins@ceph.com> Jenkins Build Slave User <jenkins-build@trusty-small-unique--a7f82f5f-8832-433e-a632-928924f47e04.localdomain>
 Jenkins <jenkins@ceph.com> Jenkins Build Slave User <ceph-release-team@redhat.com>
+Jesse Williamson <jesse.williamson@suse.com>
+Jesse Williamson <jesse.williamson@suse.com> <jwilliamson@suse.de>
 Jiang Heng <jiangheng0511@gmail.com>
 Jiantao He <hejiantao5@gmail.com>
 Jian Wen <wenjian@letv.com> <wenjianhn@gmail.com>
@@ -206,6 +212,7 @@ Jonas Keidel <jonas@jonas-keidel.de>
 Jordan Dorne <jordan.dorne@gmail.com>
 Josh Durgin <jdurgin@redhat.com>
 Josh Durgin <jdurgin@redhat.com> <joshd@redhat.com>
+Josh Durgin <jdurgin@redhat.com> <jduring@redhat.com>
 Josh Durgin <josh.durgin@inktank.com> <joshd@hq.newdream.net>
 Josh Durgin <josh.durgin@inktank.com> <josh.durgin@dreamhost.com>
 Kacper Kowalik <xarthisius@gentoo.org>
@@ -222,8 +229,10 @@ Leo Zhang <nguzcf@gmail.com>
 Luo Kexue <luo.kexue@zte.com.cn>
 Luo Runbing <runsisi@hust.edu.cn>
 Luo Runbing <runsisi@zte.com.cn>
+Li Hongjie <lihongjie@cmss.chinamobile.com>
 Li Wang <li.wang@kylin-cloud.com> <liwang@ubuntukylin.com>
 Linfei Hou <hou.linfei@h3c.com>
+Liu Hong <liuhong@cmss.chinamobile.com>
 Liu Peiyan <liu.peiyang@h3c.com>
 Li Tianqing <tianqing@unitedstack.com>
 Liu Yang <yippeetry@gmail.com>
@@ -260,6 +269,7 @@ Min Chen <minchen@ubuntukylin.com>
 MingXin Liu <mingxin.liu@kylin-cloud.com> <mingxinliu@ubuntukylin.com>
 Mingyue Zhao <zhao.mingyue@h3c.com>
 Mykola Golub <mgolub@mirantis.com> <mgolub@zhuzha.mirantis.lviv.net>
+Myoungwon Oh <omwmw@sk.com>
 Nathan Cutler <ncutler@suse.com>
 Nathan Cutler <ncutler@suse.com> <nculter@suse.com>
 Nathan Cutler <ncutler@suse.com> <ncutler@suse.cz>
@@ -354,7 +364,8 @@ Shehbaz Jaffer <shehbaz.jaffer@mail.utoronto.ca> <shehbazjaffer007@gmail.com>
 Shinobu Kinjo <shinobu@redhat.com> <shinobu@linux.com> 
 Shinobu Kinjo <shinobu@redhat.com> <ceph@ceph-stack.redhat.com>
 Shishir Gowda <shishir.gowda@sandisk.com>
-shiqi <m13913886148@gmail.com> <1454927420@qq.com>
+Shiqi <m13913886148@gmail.com>
+Shiqi <m13913886148@gmail.com> <1454927420@qq.com>
 Shu, Xinxin <xinxin.shu@intel.com>
 Shun Song <song.shun3@zte.com.cn>
 Shun Song <song.shun3@zte.com.cn> <songshun134@126.com>
@@ -388,6 +399,7 @@ Tobias Suckow <tobias@suckow.biz>
 Tommi Virtanen <tv@inktank.com> <tommi.virtanen@dreamhost.com>
 Tommi Virtanen <tv@inktank.com> <tv@eagain.net>
 Tommi Virtanen <tv@inktank.com> <tv@hq.newdream.net>
+Tone Zhang <tone.zhang@linaro.org>
 Travis Rhoden <trhoden@redhat.com> <trhoden@gmail.com>
 Tyler Brekke <tyler.brekke@inktank.com>
 Uday Mullangi <udaymjl@gmail.com>
@@ -435,6 +447,7 @@ Yannick Atchy Dalama <yannick.atchy.dalama@gmail.com>
 Yankun Li <liyankun@unitedstack.com> <YankunLi@users.noreply.github.com>
 Yan, Zheng <zheng.z.yan@intel.com>
 Yan, Zheng <zheng.z.yan@intel.com> <ukernel@gmail.com>
+Yanchun Bai <yanchun.bai@istuary.com>
 Yehua Chen <chen.yehua@h3c.com>
 Yehua Chen <chen.yehua@h3c.com> <root@ubuntu1.com>
 Yehuda Sadeh <yehuda@inktank.com> <yehdua@inktank.com>
@@ -453,6 +466,7 @@ Yehuda Sadeh <ysadehwe@redhat.com> <yehuda@redhat.com.>
 Yongqiang He <he.yongqiang@h3c.com>
 Yongyue Sun <abioy.sun@gmail.com>
 You Ji <youji@ebay.com>
+Yunfei Guan <yunfei.guan@xtaotech.com>
 Yuan Zhou <yuan.zhou@intel.com> <dunk007@gmail.com>
 Yunchuan Wen <yunchuan.wen@kylin-cloud.com> <yunchuanwen@ubuntukylin.com>
 Yuri Weinstein <yuriw@redhat.com> <yweinste@redhat.com>

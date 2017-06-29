@@ -652,7 +652,7 @@ void PGMapDigest::dump_pool_stats_full(
     const pool_stat_t &stat = pg_pool_sum.at(pool_id);
 
     const pg_pool_t *pool = osd_map.get_pg_pool(pool_id);
-    int ruleno = osd_map.crush->find_rule(pool->get_crush_ruleset(),
+    int ruleno = osd_map.crush->find_rule(pool->get_crush_rule(),
                                          pool->get_type(),
                                          pool->get_size());
     int64_t avail;
@@ -680,8 +680,11 @@ void PGMapDigest::dump_pool_stats_full(
       if (pm != ecp.end() && pk != ecp.end()) {
 	int k = atoi(pk->second.c_str());
 	int m = atoi(pm->second.c_str());
-	avail = avail * k / (m + k);
-	raw_used_rate = (float)(m + k) / k;
+	int mk = m + k;
+	assert(mk != 0);
+	avail = avail * k / mk;
+	assert(k != 0);
+	raw_used_rate = (float)mk / k;
       } else {
 	raw_used_rate = 0.0;
       }
@@ -874,7 +877,7 @@ void PGMap::get_rules_avail(const OSDMap& osdmap,
     if ((pool_id < 0) || (pg_pool_sum.count(pool_id) == 0))
       continue;
     const pg_pool_t *pool = osdmap.get_pg_pool(pool_id);
-    int ruleno = osdmap.crush->find_rule(pool->get_crush_ruleset(),
+    int ruleno = osdmap.crush->find_rule(pool->get_crush_rule(),
 					 pool->get_type(),
 					 pool->get_size());
     if (avail_map->count(ruleno) == 0)
@@ -1132,6 +1135,7 @@ void PGMap::apply_incremental(CephContext *cct, const Incremental& inc)
     if (t != osd_stat.end()) {
       stat_osd_sub(t->first, t->second);
       osd_stat.erase(t);
+      osd_epochs.erase(*p);
     }
 
     // remove these old osds from full/nearfull set(s), too
@@ -2586,6 +2590,8 @@ void PGMap::get_health(
       note["backfill_toofull"] += p->second;
     if (p->first & PG_STATE_RECOVERY_TOOFULL)
       note["recovery_toofull"] += p->second;
+    if (p->first & PG_STATE_SNAPTRIM_ERROR)
+      note["snaptrim_error"] += p->second;
   }
 
   mempool::pgmap::unordered_map<pg_t, pg_stat_t> stuck_pgs;
@@ -2763,7 +2769,7 @@ void PGMap::get_health(
 	}
 	if (num_warn) {
 	  ostringstream ss2;
-	  ss2 << num_err << " osds have slow requests";
+	  ss2 << num_warn << " osds have slow requests";
 	  summary.push_back(make_pair(HEALTH_WARN, ss2.str()));
 	  detail->push_back(make_pair(HEALTH_WARN, ss2.str()));
 	}
@@ -3407,9 +3413,12 @@ void PGMapUpdater::check_osd_map(
       my_pg_num = q->second;
     unsigned pg_num = pi.get_pg_num();
     if (my_pg_num != pg_num) {
+      ldout(cct,10) << __func__ << " pool " << poolid << " pg_num " << pg_num
+		    << " != my pg_num " << my_pg_num << dendl;
       for (unsigned ps = my_pg_num; ps < pg_num; ++ps) {
 	pg_t pgid(ps, poolid);
 	if (pending_inc->pg_stat_updates.count(pgid) == 0) {
+	  ldout(cct,20) << __func__ << " adding " << pgid << dendl;
 	  pg_stat_t &stats = pending_inc->pg_stat_updates[pgid];
 	  stats.last_fresh = osdmap.get_modified();
 	  stats.last_active = osdmap.get_modified();
@@ -3529,7 +3538,7 @@ void PGMapUpdater::register_new_pgs(
   for (const auto &p : pools) {
     int64_t poolid = p.first;
     const pg_pool_t &pool = p.second;
-    int ruleno = osd_map.crush->find_rule(pool.get_crush_ruleset(),
+    int ruleno = osd_map.crush->find_rule(pool.get_crush_rule(),
                                           pool.get_type(), pool.get_size());
     if (ruleno < 0 || !osd_map.crush->rule_exists(ruleno))
       continue;

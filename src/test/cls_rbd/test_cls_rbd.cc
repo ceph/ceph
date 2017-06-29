@@ -421,6 +421,21 @@ TEST_F(TestClsRbd, get_object_prefix)
   ioctx.close();
 }
 
+TEST_F(TestClsRbd, get_create_timestamp)
+{
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, _rados.ioctx_create(_pool_name.c_str(), ioctx));
+
+  string oid = get_temp_image_name();
+  ASSERT_EQ(0, create_image(&ioctx, oid, 0, 22, 0, oid, -1));
+
+  utime_t timestamp;
+  ASSERT_EQ(0, get_create_timestamp(&ioctx, oid, &timestamp));
+  ASSERT_LT(0U, timestamp.tv.tv_sec);
+
+  ioctx.close();
+}
+
 TEST_F(TestClsRbd, get_data_pool)
 {
   librados::IoCtx ioctx;

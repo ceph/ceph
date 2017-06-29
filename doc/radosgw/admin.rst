@@ -438,6 +438,20 @@ new user, and that quota is enabled.  See ``rgw bucket default quota max objects
 ``rgw bucket default quota max size``, ``rgw user default quota max objects``, and
 ``rgw user default quota max size`` in `Ceph Object Gateway Config Reference`_
 
+Quota Cache
+-----------
+
+Quota statistics are cached on each RGW instance.  If there are multiple
+instances, then the cache can keep quotas from being perfectly enforced, as
+each instance will have a different view of quotas.  The options that control
+this are ``rgw bucket quota ttl``, ``rgw user quota bucket sync interval`` and
+``rgw user quota sync interval``.  The higher these values are, the more
+efficient quota operations are, but the more out-of-sync multiple instances
+will be.  The lower these values are, the closer to perfect enforcement
+multiple instances will achieve.  If all three are 0, then quota caching is
+effectively disabled, and multiple instances will have perfect quota
+enforcement.  See `Ceph Object Gateway Config Reference`_
+
 Reading / Writing Global Quotas
 -------------------------------
 

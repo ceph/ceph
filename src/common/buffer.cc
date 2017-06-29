@@ -1815,6 +1815,16 @@ static std::atomic_flag buffer_debug_lock = ATOMIC_FLAG_INIT;
     bl.last_p = bl.begin();
   }
 
+  void buffer::list::claim_append_piecewise(list& bl)
+  {
+    // steal the other guy's buffers
+    for (std::list<buffer::ptr>::const_iterator i = bl.buffers().begin();
+        i != bl.buffers().end(); i++) {
+      append(*i, 0, i->length());
+    }
+    bl.clear();
+  }
+
   void buffer::list::copy(unsigned off, unsigned len, char *dest) const
   {
     if (off + len > length())

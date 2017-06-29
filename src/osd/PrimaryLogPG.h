@@ -1386,7 +1386,7 @@ public:
 
   void handle_backoff(OpRequestRef& op);
 
-  OpContextUPtr trim_object(bool first, const hobject_t &coid);
+  int trim_object(bool first, const hobject_t &coid, OpContextUPtr *ctxp);
   void snap_trimmer(epoch_t e) override;
   void kick_snap_trim() override;
   void snap_trimmer_scrub_complete() override;
@@ -1672,6 +1672,7 @@ private:
       pending = nullptr;
       auto *pg = context< SnapTrimmer >().pg;
       pg->state_clear(PG_STATE_SNAPTRIM_WAIT);
+      pg->state_clear(PG_STATE_SNAPTRIM_ERROR);
       pg->publish_stats_to_osd();
     }
   };

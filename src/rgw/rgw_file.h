@@ -91,42 +91,50 @@ namespace rgw {
   struct fh_key
   {
     rgw_fh_hk fh_hk;
+    uint32_t version;
 
     static constexpr uint64_t seed = 8675309;
 
-    fh_key() {}
+    fh_key() : version(0) {}
 
     fh_key(const rgw_fh_hk& _hk)
-      : fh_hk(_hk) {
+      : fh_hk(_hk), version(0) {
       // nothing
     }
 
-    fh_key(const uint64_t bk, const uint64_t ok) {
+    fh_key(const uint64_t bk, const uint64_t ok)
+      : version(0) {
       fh_hk.bucket = bk;
       fh_hk.object = ok;
     }
 
-    fh_key(const uint64_t bk, const char *_o) {
+    fh_key(const uint64_t bk, const char *_o)
+      : version(0) {
       fh_hk.bucket = bk;
       fh_hk.object = XXH64(_o, ::strlen(_o), seed);
     }
     
-    fh_key(const std::string& _b, const std::string& _o) {
+    fh_key(const std::string& _b, const std::string& _o)
+      : version(0) {
       fh_hk.bucket = XXH64(_b.c_str(), _o.length(), seed);
       fh_hk.object = XXH64(_o.c_str(), _o.length(), seed);
     }
 
     void encode(buffer::list& bl) const {
-      ENCODE_START(1, 1, bl);
+      ENCODE_START(2, 1, bl);
       ::encode(fh_hk.bucket, bl);
       ::encode(fh_hk.object, bl);
+      ::encode((uint32_t)2, bl);
       ENCODE_FINISH(bl);
     }
 
     void decode(bufferlist::iterator& bl) {
-      DECODE_START(1, bl);
+      DECODE_START(2, bl);
       ::decode(fh_hk.bucket, bl);
       ::decode(fh_hk.object, bl);
+      if (struct_v >= 2) {
+	::decode(version, bl);
+      }
       DECODE_FINISH(bl);
     }
   }; /* fh_key */
@@ -446,12 +454,15 @@ namespace rgw {
       return full_object_name(true /* omit_bucket */);
     }
 
-    inline std::string format_child_name(const std::string& cbasename) const {
+    inline std::string format_child_name(const std::string& cbasename,
+                                         bool is_dir) const {
       std::string child_name{relative_object_name()};
       if ((child_name.size() > 0) &&
 	  (child_name.back() != '/'))
 	child_name += "/";
       child_name += cbasename;
+      if (is_dir)
+	child_name += "/";
       return child_name;
     }
 
@@ -610,7 +621,7 @@ namespace rgw {
     void encode_attrs(ceph::buffer::list& ux_key1,
 		      ceph::buffer::list& ux_attrs1);
 
-    void decode_attrs(const ceph::buffer::list* ux_key1,
+    bool decode_attrs(const ceph::buffer::list* ux_key1,
 		      const ceph::buffer::list* ux_attrs1);
 
     void invalidate();
@@ -979,7 +990,7 @@ namespace rgw {
 	<< " (" << obj_name << ")"
 	<< dendl;
 
-      fh_key fhk = parent->make_fhk(key_name);
+      fh_key fhk = parent->make_fhk(obj_name);
 
     retry:
       RGWFileHandle* fh =
@@ -1063,6 +1074,9 @@ namespace rgw {
     int setattr(RGWFileHandle* rgw_fh, struct stat* st, uint32_t mask,
 		uint32_t flags);
 
+    void update_fhk(RGWFileHandle *rgw_fh);
+
+
     LookupFHResult stat_bucket(RGWFileHandle* parent, const char *path,
 			       RGWLibFS::BucketStats& bs,
 			       uint32_t flags);
@@ -1081,8 +1095,6 @@ namespace rgw {
 		      uint32_t mask, uint32_t flags);
 
     MkObjResult mkdir(RGWFileHandle* parent, const char *name, struct stat *st,
-		      uint32_t mask, uint32_t flags);
-    MkObjResult mkdir2(RGWFileHandle* parent, const char *name, struct stat *st,
 		      uint32_t mask, uint32_t flags);
 
     int unlink(RGWFileHandle* rgw_fh, const char *name,
@@ -1133,7 +1145,6 @@ namespace rgw {
       if (! fh) {
 	if (unlikely(fh_hk == root_fh.fh.fh_hk)) {
 	  fh = &root_fh;
-	  ref(fh);
 	}
       }
 
@@ -1536,11 +1547,11 @@ class RGWCreateBucketRequest : public RGWLibRequest,
 			       public RGWCreateBucket /* RGWOp */
 {
 public:
-  std::string& uri;
+  const std::string& bucket_name;
 
   RGWCreateBucketRequest(CephContext* _cct, RGWUserInfo *_user,
-			std::string& _uri)
-    : RGWLibRequest(_cct, _user), uri(_uri) {
+			std::string& _bname)
+    : RGWLibRequest(_cct, _user), bucket_name(_bname) {
     op = this;
   }
 
@@ -1568,6 +1579,7 @@ public:
     s->info.method = "PUT";
     s->op = OP_PUT;
 
+    string uri = "/" + bucket_name;
     /* XXX derp derp derp */
     s->relative_uri = uri;
     s->info.request_uri = uri; // XXX
@@ -1603,11 +1615,11 @@ class RGWDeleteBucketRequest : public RGWLibRequest,
 			       public RGWDeleteBucket /* RGWOp */
 {
 public:
-  std::string& uri;
+  const std::string& bucket_name;
 
   RGWDeleteBucketRequest(CephContext* _cct, RGWUserInfo *_user,
-			std::string& _uri)
-    : RGWLibRequest(_cct, _user), uri(_uri) {
+			std::string& _bname)
+    : RGWLibRequest(_cct, _user), bucket_name(_bname) {
     op = this;
   }
 
@@ -1630,6 +1642,7 @@ public:
     s->info.method = "DELETE";
     s->op = OP_DELETE;
 
+    string uri = "/" + bucket_name;
     /* XXX derp derp derp */
     s->relative_uri = uri;
     s->info.request_uri = uri; // XXX
@@ -2324,12 +2337,12 @@ public:
 
     src_bucket_name = src_parent->bucket_name();
     // need s->src_bucket_name?
-    src_object.name = src_parent->format_child_name(src_name);
+    src_object.name = src_parent->format_child_name(src_name, false);
     // need s->src_object?
 
     dest_bucket_name = dst_parent->bucket_name();
     // need s->bucket.name?
-    dest_object = dst_parent->format_child_name(dst_name);
+    dest_object = dst_parent->format_child_name(dst_name, false);
     // need s->object_name?
 
     int rc = valid_s3_object_name(dest_object);
@@ -2339,8 +2352,7 @@ public:
     /* XXX and fixup key attr (could optimize w/string ref and
      * dest_object) */
     buffer::list ux_key;
-    std::string key_name{dst_parent->make_key_name(dst_name.c_str())};
-    fh_key fhk = dst_parent->make_fhk(key_name);
+    fh_key fhk = dst_parent->make_fhk(dst_name);
     rgw::encode(fhk, ux_key);
     emplace_attr(RGW_ATTR_UNIX_KEY1, std::move(ux_key));
 

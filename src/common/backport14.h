@@ -57,6 +57,12 @@ inline typename uniquity<T>::array make_unique(std::size_t n) {
 template<typename T, class... Args>
 typename uniquity<T>::verboten
 make_unique(Args&&...) = delete;
+
+// The constexpr variant of std::max().
+template<class T>
+constexpr const T& max(const T& a, const T& b) {
+  return a < b ? b : a;
+}
 } // namespace _backport14
 
 namespace _backport17 {
@@ -72,6 +78,7 @@ constexpr std::size_t size(const T (&array)[N]) noexcept {
 } // namespace _backport17
 using _backport14::make_unique;
 using _backport17::size;
+using _backport14::max;
 } // namespace ceph
 
 #endif // CEPH_COMMON_BACKPORT14_H

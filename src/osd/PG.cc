@@ -799,7 +799,6 @@ void PG::check_past_interval_bounds() const
       derr << info.pgid << " required past_interval bounds are"
 	   << " empty [" << rpib << ") but past_intervals is not: "
 	   << past_intervals << dendl;
-      assert(past_intervals.empty());
     }
   } else {
     if (past_intervals.empty()) {
@@ -995,7 +994,7 @@ void PG::clear_primary_state()
 PG::Scrubber::Scrubber()
  : reserved(false), reserve_failed(false),
    epoch_start(0),
-   active(false), queue_snap_trim(false),
+   active(false),
    waiting_on(0), shallow_errors(0), deep_errors(0), fixed(0),
    must_scrub(false), must_deep_scrub(false), must_repair(false),
    auto_repair(false),
@@ -1726,7 +1725,8 @@ void PG::activate(ObjectStore::Transaction& t,
         for (list<pg_log_entry_t>::iterator p = m->log.log.begin();
              p != m->log.log.end();
              ++p)
-	  if (p->soid <= pi.last_backfill)
+	  if (p->soid <= pi.last_backfill &&
+	      !p->is_error())
 	    pm.add_next_event(*p);
       }
       
@@ -1935,7 +1935,7 @@ void PG::all_activated_and_committed()
         AllReplicasActivated())));
 }
 
-bool PG::requeue_scrub()
+bool PG::requeue_scrub(bool high_priority)
 {
   assert(is_locked());
   if (scrub_queued) {
@@ -1944,7 +1944,7 @@ bool PG::requeue_scrub()
   } else {
     dout(10) << __func__ << ": queueing" << dendl;
     scrub_queued = true;
-    osd->queue_for_scrub(this);
+    osd->queue_for_scrub(this, high_priority);
     return true;
   }
 }
@@ -2003,27 +2003,16 @@ struct C_PG_FinishRecovery : public Context {
 
 void PG::mark_clean()
 {
-  // only mark CLEAN if we have the desired number of replicas AND we
-  // are not remapped.
-  if (actingset.size() == get_osdmap()->get_pg_size(info.pgid.pgid) &&
-      up == acting)
+  if (actingset.size() == get_osdmap()->get_pg_size(info.pgid.pgid)) {
     state_set(PG_STATE_CLEAN);
-
-  // NOTE: this is actually a bit premature: we haven't purged the
-  // strays yet.
-  info.history.last_epoch_clean = get_osdmap()->get_epoch();
-  info.history.last_interval_clean = info.history.same_interval_since;
-
-  past_intervals.clear();
-  dirty_big_info = true;
-
-  if (is_active()) {
-    /* The check is needed because if we are below min_size we're not
-     * actually active */
-    kick_snap_trim();
+    info.history.last_epoch_clean = get_osdmap()->get_epoch();
+    info.history.last_interval_clean = info.history.same_interval_since;
+    past_intervals.clear();
+    dirty_big_info = true;
+    dirty_info = true;
   }
 
-  dirty_info = true;
+  kick_snap_trim();
 }
 
 unsigned PG::get_recovery_priority()
@@ -3664,7 +3653,11 @@ void PG::do_replica_scrub_map(OpRequestRef op)
   --scrubber.waiting_on;
   scrubber.waiting_on_whom.erase(m->from);
   if (scrubber.waiting_on == 0) {
-    requeue_scrub();
+    if (ops_blocked_by_scrub()) {
+      requeue_scrub(true);
+    } else {
+      requeue_scrub(false);
+    }
   }
 }
 
@@ -3700,7 +3693,11 @@ void PG::sub_op_scrub_map(OpRequestRef op)
   scrubber.waiting_on_whom.erase(m->from);
 
   if (scrubber.waiting_on == 0) {
-    requeue_scrub();
+    if (ops_blocked_by_scrub()) {
+      requeue_scrub(true);
+    } else {
+      requeue_scrub(false);
+    }
   }
 }
 
@@ -4603,6 +4600,11 @@ void PG::chunky_scrub(ThreadPool::TPHandle &handle)
         scrubber.state = PG::Scrubber::INACTIVE;
         done = true;
 
+	if (!snap_trimq.empty()) {
+	  dout(10) << "scrub finished, requeuing snap_trimmer" << dendl;
+	  snap_trimmer_scrub_complete();
+	}
+
         break;
 
       default:
@@ -4626,11 +4628,6 @@ void PG::scrub_clear_state()
     osd->dec_scrubs_active();
 
   requeue_ops(waiting_for_scrub);
-
-  if (scrubber.queue_snap_trim) {
-    dout(10) << "scrub finished, requeuing snap_trimmer" << dendl;
-    snap_trimmer_scrub_complete();
-  }
 
   scrubber.reset();
 
@@ -4795,6 +4792,10 @@ bool PG::scrub_process_inconsistent()
     }
   }
   return (!scrubber.authoritative.empty() && repair);
+}
+
+bool PG::ops_blocked_by_scrub() const {
+  return (waiting_for_scrub.size() != 0);
 }
 
 // the part that actually finalizes a scrub
@@ -6830,7 +6831,10 @@ PG::RecoveryState::Clean::Clean(my_context ctx)
     ceph_abort();
   }
   pg->finish_recovery(*context< RecoveryMachine >().get_on_safe_context_list());
-  pg->mark_clean();
+
+  if (pg->is_active()) {
+    pg->mark_clean();
+  }
 
   pg->share_pg_info();
   pg->publish_stats_to_osd();

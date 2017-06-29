@@ -362,11 +362,16 @@ void RDMADispatcher::handle_tx_event(ibv_wc *cqe, int n)
       }
     }
 
-    // FIXME: why not tx?
-    if (global_infiniband->get_memory_manager()->is_tx_buffer(chunk->buffer))
+    //TX completion may come either from regular send message or from 'fin' message.
+    //In the case of 'fin' wr_id points to the QueuePair.
+    if (global_infiniband->get_memory_manager()->is_tx_buffer(chunk->buffer)) {
       tx_chunks.push_back(chunk);
-    else
+    } else if (reinterpret_cast<QueuePair*>(response->wr_id)->get_local_qp_number() == response->qp_num ) {
+      ldout(cct, 1) << __func__ << " sending of the disconnect msg completed" << dendl;
+    } else {
       ldout(cct, 1) << __func__ << " not tx buffer, chunk " << chunk << dendl;
+      ceph_abort();
+    }
   }
 
   perf_logger->inc(l_msgr_rdma_tx_total_wc, n);
@@ -412,6 +417,7 @@ RDMAWorker::RDMAWorker(CephContext *c, unsigned i)
   plb.add_u64_counter(l_msgr_rdma_tx_bytes, "tx_bytes", "The bytes of tx chunks transmitted");
   plb.add_u64_counter(l_msgr_rdma_rx_chunks, "rx_chunks", "The number of rx chunks transmitted");
   plb.add_u64_counter(l_msgr_rdma_rx_bytes, "rx_bytes", "The bytes of rx chunks transmitted");
+  plb.add_u64_counter(l_msgr_rdma_pending_sent_conns, "pending_sent_conns", "The count of pending sent conns");
 
   perf_logger = plb.create_perf_counters();
   cct->get_perfcounters_collection()->add(perf_logger);
@@ -469,12 +475,15 @@ int RDMAWorker::get_reged_mem(RDMAConnectedSocketImpl *o, std::vector<Chunk*> &c
   size_t got = global_infiniband->get_memory_manager()->get_tx_buffer_size() * r;
   ldout(cct, 30) << __func__ << " need " << bytes << " bytes, reserve " << got << " registered  bytes, inflight " << dispatcher->inflight << dendl;
   stack->get_dispatcher()->inflight += r;
-  if (got == bytes)
+  if (got >= bytes)
     return r;
 
   if (o) {
-    if (pending_sent_conns.back() != o)
+    if (!o->is_pending()) {
       pending_sent_conns.push_back(o);
+      perf_logger->inc(l_msgr_rdma_pending_sent_conns, 1);
+      o->set_pending(1);
+    }
     dispatcher->make_pending_worker(this);
   }
   return r;
@@ -484,25 +493,22 @@ int RDMAWorker::get_reged_mem(RDMAConnectedSocketImpl *o, std::vector<Chunk*> &c
 void RDMAWorker::handle_pending_message()
 {
   ldout(cct, 20) << __func__ << " pending conns " << pending_sent_conns.size() << dendl;
-  std::set<RDMAConnectedSocketImpl*> done;
   while (!pending_sent_conns.empty()) {
     RDMAConnectedSocketImpl *o = pending_sent_conns.front();
     pending_sent_conns.pop_front();
-    if (!done.count(o)) {
-      done.insert(o);
-      ssize_t r = o->submit(false);
-      ldout(cct, 20) << __func__ << " sent pending bl socket=" << o << " r=" << r << dendl;
-      if (r < 0) {
-        if (r == -EAGAIN) {
-          pending_sent_conns.push_front(o);
-          dispatcher->make_pending_worker(this);
-          return ;
-        }
-        o->fault();
+    ssize_t r = o->submit(false);
+    ldout(cct, 20) << __func__ << " sent pending bl socket=" << o << " r=" << r << dendl;
+    if (r < 0) {
+      if (r == -EAGAIN) {
+        pending_sent_conns.push_back(o);
+        dispatcher->make_pending_worker(this);
+        return ;
       }
+      o->fault();
     }
+    o->set_pending(0);
+    perf_logger->dec(l_msgr_rdma_pending_sent_conns, 1);
   }
-
   dispatcher->notify_pending_workers();
 }
 
@@ -511,10 +517,21 @@ RDMAStack::RDMAStack(CephContext *cct, const string &t): NetworkStack(cct, t)
   //
   //On RDMA MUST be called before fork
   //
+
   int rc = ibv_fork_init();
   if (rc) {
      lderr(cct) << __func__ << " failed to call ibv_for_init(). On RDMA must be called before fork. Application aborts." << dendl;
      ceph_abort();
+  }
+
+  ldout(cct, 1) << __func__ << " ms_async_rdma_enable_hugepage value is: " << cct->_conf->ms_async_rdma_enable_hugepage <<  dendl;
+  if (cct->_conf->ms_async_rdma_enable_hugepage) {
+    rc =  setenv("RDMAV_HUGEPAGES_SAFE","1",1);
+    ldout(cct, 1) << __func__ << " RDMAV_HUGEPAGES_SAFE is set as: " << getenv("RDMAV_HUGEPAGES_SAFE") <<  dendl;
+    if (rc) {
+      lderr(cct) << __func__ << " failed to export RDMA_HUGEPAGES_SAFE. On RDMA must be exported before using huge pages. Application aborts." << dendl;
+      ceph_abort();
+    }
   }
 
   //Check ulimit
@@ -543,6 +560,10 @@ RDMAStack::RDMAStack(CephContext *cct, const string &t): NetworkStack(cct, t)
 
 RDMAStack::~RDMAStack()
 {
+  if (cct->_conf->ms_async_rdma_enable_hugepage) {
+    unsetenv("RDMAV_HUGEPAGES_SAFE");	//remove env variable on destruction
+  }
+
   delete dispatcher;
 }
 

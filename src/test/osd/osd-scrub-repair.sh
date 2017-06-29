@@ -17,15 +17,21 @@
 source $(dirname $0)/../detect-build-env-vars.sh
 source $CEPH_ROOT/qa/workunits/ceph-helpers.sh
 
+if [ `uname` = FreeBSD ]; then
+    # erasure coding overwrites are only tested on Bluestore 
+    # erasure coding on filestore is unsafe
+    # http://docs.ceph.com/docs/master/rados/operations/erasure-code/#erasure-coding-with-overwrites
+    use_ec_overwrite=false
+else
+    use_ec_overwrite=true
+fi
+
 # Test development and debugging
 # Set to "yes" in order to ignore diff errors and save results to update test
 getjson="no"
 
-termwidth=$(stty -a | head -1 | sed -e 's/.*columns \([0-9]*\).*/\1/')
-if test -n "$termwidth" -a "$termwidth" != "0"; then termwidth="-W ${termwidth}"; fi
-
 # Ignore the epoch and filter out the attr '_' value because it has date information and won't match
-jqfilter='.inconsistents | (.[].shards[].attrs[] | select(.name == "_") | .value) |= "----Stripped-by-test----"'
+jqfilter='.inconsistents | (.[].shards[].attrs[]? | select(.name == "_") | .value) |= "----Stripped-by-test----"'
 sortkeys='import json; import sys ; JSON=sys.stdin.read() ; ud = json.loads(JSON) ; print json.dumps(ud, sort_keys=True, indent=2)'
 
 # Remove items are not consistent across runs, the pg interval and client
@@ -240,7 +246,9 @@ function TEST_auto_repair_erasure_coded_appends() {
 }
 
 function TEST_auto_repair_erasure_coded_overwrites() {
-    auto_repair_erasure_coded $1 true
+    if [ "$use_ec_overwrite" = "true" ]; then
+        auto_repair_erasure_coded $1 true
+    fi
 }
 
 function corrupt_and_repair_jerasure() {
@@ -271,7 +279,9 @@ function TEST_corrupt_and_repair_jerasure_appends() {
 }
 
 function TEST_corrupt_and_repair_jerasure_overwrites() {
-    corrupt_and_repair_jerasure $1 true
+    if [ "$use_ec_overwrite" = "true" ]; then
+        corrupt_and_repair_jerasure $1 true
+    fi
 }
 
 function corrupt_and_repair_lrc() {
@@ -302,7 +312,9 @@ function TEST_corrupt_and_repair_lrc_appends() {
 }
 
 function TEST_corrupt_and_repair_lrc_overwrites() {
-    corrupt_and_repair_jerasure $1 true
+    if [ "$use_ec_overwrite" = "true" ]; then
+        corrupt_and_repair_jerasure $1 true
+    fi
 }
 
 function unfound_erasure_coded() {
@@ -368,7 +380,9 @@ function TEST_unfound_erasure_coded_appends() {
 }
 
 function TEST_unfound_erasure_coded_overwrites() {
-    unfound_erasure_coded $1 true
+    if [ "$use_ec_overwrite" = "true" ]; then
+        unfound_erasure_coded $1 true
+    fi
 }
 
 #
@@ -446,7 +460,9 @@ function TEST_list_missing_erasure_coded_appends() {
 }
 
 function TEST_list_missing_erasure_coded_overwrites() {
-    list_missing_erasure_coded $1 true
+    if [ "$use_ec_overwrite" = "true" ]; then
+        list_missing_erasure_coded $1 true
+    fi
 }
 
 #
@@ -921,7 +937,7 @@ function TEST_corrupt_scrub_replicated() {
 EOF
 
     jq "$jqfilter" $dir/json | python -c "$sortkeys" | sed -e "$sedfilter" > $dir/csjson
-    diff -y $termwidth $dir/checkcsjson $dir/csjson || test $getjson = "yes" || return 1
+    diff ${DIFFCOLOPTS} $dir/checkcsjson $dir/csjson || test $getjson = "yes" || return 1
     if test $getjson = "yes"
     then
         jq '.' $dir/json > save1.json
@@ -1555,7 +1571,7 @@ EOF
 EOF
 
     jq "$jqfilter" $dir/json | python -c "$sortkeys" | sed -e "$sedfilter" > $dir/csjson
-    diff -y $termwidth $dir/checkcsjson $dir/csjson || test $getjson = "yes" || return 1
+    diff ${DIFFCOLOPTS} $dir/checkcsjson $dir/csjson || test $getjson = "yes" || return 1
     if test $getjson = "yes"
     then
         jq '.' $dir/json > save2.json
@@ -1891,7 +1907,7 @@ function corrupt_scrub_erasure() {
 EOF
 
     jq "$jqfilter" $dir/json | python -c "$sortkeys" | sed -e "$sedfilter" > $dir/csjson
-    diff -y $termwidth $dir/checkcsjson $dir/csjson || test $getjson = "yes" || return 1
+    diff ${DIFFCOLOPTS} $dir/checkcsjson $dir/csjson || test $getjson = "yes" || return 1
     if test $getjson = "yes"
     then
         jq '.' $dir/json > save3.json
@@ -2475,7 +2491,7 @@ EOF
     fi
 
     jq "$jqfilter" $dir/json | python -c "$sortkeys" | sed -e "$sedfilter" > $dir/csjson
-    diff -y $termwidth $dir/checkcsjson $dir/csjson || test $getjson = "yes" || return 1
+    diff ${DIFFCOLOPTS} $dir/checkcsjson $dir/csjson || test $getjson = "yes" || return 1
     if test $getjson = "yes"
     then
       if [ "$allow_overwrites" = "true" ]
@@ -2501,7 +2517,9 @@ function TEST_corrupt_scrub_erasure_appends() {
 }
 
 function TEST_corrupt_scrub_erasure_overwrites() {
-    corrupt_scrub_erasure $1 true
+    if [ "$use_ec_overwrite" = "true" ]; then
+        corrupt_scrub_erasure $1 true
+    fi
 }
 
 #

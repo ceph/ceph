@@ -1461,7 +1461,7 @@ TEST_P(MessengerTest, MarkdownTest) {
   client_msgr->start();
 
   int i = 1000;
-  int64_t last = 0;
+  uint64_t last = 0;
   bool equal = false;
   uint64_t equal_count = 0;
   while (i--) {

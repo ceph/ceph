@@ -35,13 +35,17 @@ int RGWLoadGenRequestEnv::sign(RGWAccessKey& access_key)
                                  sub_resources,
                                  canonical_header);
 
-  int ret = rgw_get_s3_header_digest(canonical_header, access_key.key, digest);
-  if (ret < 0) {
+  headers["HTTP_DATE"] = date_str;
+  try {
+    /* FIXME(rzarzynski): kill the dependency on g_ceph_context. */
+    const auto signature = static_cast<std::string>(
+      rgw::auth::s3::get_v2_signature(g_ceph_context, canonical_header,
+                                      access_key.key));
+    headers["HTTP_AUTHORIZATION"] = \
+      std::string("AWS ") + access_key.id + ":" + signature;
+  } catch (int ret) {
     return ret;
   }
-
-  headers["HTTP_DATE"] = date_str;
-  headers["HTTP_AUTHORIZATION"] = string("AWS ") + access_key.id + ":" + digest;
 
   return 0;
 }

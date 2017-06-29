@@ -1190,7 +1190,6 @@ public:
 
     // common to both scrubs
     bool active;
-    bool queue_snap_trim;
     int waiting_on;
     set<pg_shard_t> waiting_on_whom;
     int shallow_errors;
@@ -1292,7 +1291,6 @@ public:
     // clear all state
     void reset() {
       active = false;
-      queue_snap_trim = false;
       waiting_on = 0;
       waiting_on_whom.clear();
       if (active_rep_scrub) {
@@ -1344,6 +1342,7 @@ public:
    * return true if any inconsistency/missing is repaired, false otherwise
    */
   bool scrub_process_inconsistent();
+  bool ops_blocked_by_scrub() const;
   void scrub_finish();
   void scrub_clear_state();
   void _scan_snaps(ScrubMap &map);
@@ -2372,7 +2371,7 @@ public:
 
   virtual void kick_snap_trim() = 0;
   virtual void snap_trimmer_scrub_complete() = 0;
-  bool requeue_scrub();
+  bool requeue_scrub(bool high_priority = false);
   void queue_recovery(bool front = false);
   bool queue_scrub();
   unsigned get_scrub_priority();

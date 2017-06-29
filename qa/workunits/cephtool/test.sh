@@ -8,6 +8,7 @@ set -e
 set -o functrace
 PS4='${BASH_SOURCE[0]}:$LINENO: ${FUNCNAME[0]}:  '
 SUDO=${SUDO:-sudo}
+export CEPH_DEV=1
 
 function get_admin_socket()
 {
@@ -292,24 +293,6 @@ function test_tiering_agent()
   ceph osd tier remove $slow $fast
   ceph osd pool delete $fast $fast --yes-i-really-really-mean-it
   ceph osd pool delete $slow $slow --yes-i-really-really-mean-it
-}
-
-function flush_pg_stats()
-{
-    ids=`ceph osd ls`
-    seqs=''
-    for osd in $ids
-    do
-	seq=`ceph tell osd.$osd flush_pg_stats`
-	seqs="$seqs $osd-$seq"
-    done
-    for s in $seqs
-    do
-	osd=`echo $s | cut -d - -f 1`
-	seq=`echo $s | cut -d - -f 2`
-	echo "waiting osd.$osd seq $seq"
-	while test $(ceph osd last-stat-seq $osd) -lt $seq; do sleep 1 ; done
-    done
 }
 
 function test_tiering_1()
@@ -693,6 +676,8 @@ function test_mon_misc()
   ceph osd dump | grep '^epoch'
   ceph --concise osd dump | grep '^epoch'
 
+  ceph osd df | grep 'MIN/MAX VAR'
+
   # df
   ceph df > $TMPFILE
   grep GLOBAL $TMPFILE
@@ -912,8 +897,9 @@ function test_mon_mds()
   ceph mds remove_data_pool $data3_pool
   ceph osd pool delete data2 data2 --yes-i-really-really-mean-it
   ceph osd pool delete data3 data3 --yes-i-really-really-mean-it
+  ceph mds set allow_multimds false
   expect_false ceph mds set_max_mds 4
-  ceph mds set allow_multimds true --yes-i-really-mean-it
+  ceph mds set allow_multimds true
   ceph mds set_max_mds 4
   ceph mds set_max_mds 3
   ceph mds set_max_mds 256
@@ -1132,7 +1118,7 @@ function test_mon_mon()
   ceph mon_status
 
   # test mon features
-  ceph mon feature list
+  ceph mon feature ls
   ceph mon feature set kraken --yes-i-really-mean-it
   expect_false ceph mon feature set abcd
   expect_false ceph mon feature set abcd --yes-i-really-mean-it
@@ -1437,6 +1423,47 @@ function test_mon_osd()
   ceph osd dump | grep 'osd.0.*in'
   ceph osd find 0
 
+  ceph osd add-nodown 0 1
+  ceph health detail | grep 'nodown osd(s).*0.*1'
+  ceph osd rm-nodown 0 1
+  ! ceph health detail | grep 'nodown osd(s).*0.*1'
+
+  ceph osd out 0 # so we can mark it as noin later
+  ceph osd add-noin 0
+  ceph health detail | grep 'noin osd(s).*0'
+  ceph osd rm-noin 0
+  ! ceph health detail | grep 'noin osd(s).*0'
+  ceph osd in 0
+
+  ceph osd add-noout 0
+  ceph health detail | grep 'noout osd(s).*0'
+  ceph osd rm-noout 0
+  ! ceph health detail | grep 'noout osds(s).*0'
+
+  # test osd id parse
+  expect_false ceph osd add-noup 797er
+  expect_false ceph osd add-nodown u9uwer
+  expect_false ceph osd add-noin 78~15
+  expect_false ceph osd add-noout 0 all 1
+
+  expect_false ceph osd rm-noup 1234567
+  expect_false ceph osd rm-nodown fsadf7
+  expect_false ceph osd rm-noin 0 1 any
+  expect_false ceph osd rm-noout 790-fd
+
+  ids=`ceph osd ls-tree default`
+  for osd in $ids
+  do
+    ceph osd add-nodown $osd
+    ceph osd add-noout $osd
+  done
+  ceph -s | grep 'nodown osd(s)'
+  ceph -s | grep 'noout osd(s)'
+  ceph osd rm-nodown any
+  ceph osd rm-noout all
+  ! ceph -s | grep 'nodown osd(s)'
+  ! ceph -s | grep 'noout osd(s)'
+
   # make sure mark out preserves weight
   ceph osd reweight osd.0 .5
   ceph osd dump | grep ^osd.0 | grep 'weight 0.5'
@@ -1444,11 +1471,6 @@ function test_mon_osd()
   ceph osd in 0
   ceph osd dump | grep ^osd.0 | grep 'weight 0.5'
 
-  f=$TEMP_DIR/map.$$
-  ceph osd getcrushmap -o $f
-  [ -s $f ]
-  ceph osd setcrushmap -i $f
-  rm $f
   ceph osd getmap -o $f
   [ -s $f ]
   rm $f
@@ -1575,6 +1597,26 @@ function test_mon_osd()
   ceph osd blocked-by
 
   ceph osd stat | grep up,
+}
+
+function test_mon_crush()
+{
+  f=$TEMP_DIR/map.$$
+  epoch=$(ceph osd getcrushmap -o $f 2>&1 | tail -n1)
+  [ -s $f ]
+  [ "$epoch" -gt 1 ]
+  nextepoch=$(( $epoch + 1 ))
+  echo epoch $epoch nextepoch $nextepoch
+  rm -f $f.epoch
+  expect_false ceph osd setcrushmap $nextepoch -i $f
+  gotepoch=$(ceph osd setcrushmap $epoch -i $f 2>&1 | tail -n1)
+  echo gotepoch $gotepoch
+  [ "$gotepoch" -eq "$nextepoch" ]
+  # should be idempotent
+  gotepoch=$(ceph osd setcrushmap $epoch -i $f 2>&1 | tail -n1)
+  echo epoch $gotepoch
+  [ "$gotepoch" -eq "$nextepoch" ]
+  rm $f
 }
 
 function test_mon_osd_pool()
@@ -1792,7 +1834,7 @@ function test_mon_osd_pool_set()
   wait_for_clean
   ceph osd pool get $TEST_POOL_GETSET all
 
-  for s in pg_num pgp_num size min_size crush_rule crush_ruleset; do
+  for s in pg_num pgp_num size min_size crush_rule; do
     ceph osd pool get $TEST_POOL_GETSET $s
   done
 
@@ -1901,7 +1943,6 @@ function test_mon_osd_pool_set()
   ceph osd pool set $TEST_POOL_GETSET nodelete 0
   ceph osd pool delete $TEST_POOL_GETSET $TEST_POOL_GETSET --yes-i-really-really-mean-it
 
-  ceph osd pool get rbd crush_ruleset | grep 'crush_ruleset: 0'
   ceph osd pool get rbd crush_rule | grep 'crush_rule: '
 }
 
@@ -2344,6 +2385,7 @@ MON_TESTS+=" auth_profiles"
 MON_TESTS+=" mon_misc"
 MON_TESTS+=" mon_mon"
 MON_TESTS+=" mon_osd"
+MON_TESTS+=" mon_crush"
 MON_TESTS+=" mon_osd_create_destroy"
 MON_TESTS+=" mon_osd_pool"
 MON_TESTS+=" mon_osd_pool_quota"

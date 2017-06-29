@@ -1871,7 +1871,6 @@ TEST_F(PGLogTest, filter_log_1) {
     int num_internal = 10;
 
     // Set up splitting map
-    //ceph::shared_ptr<OSDMap> osdmap(new OSDMap());
     OSDMap *osdmap = new OSDMap;
     uuid_d test_uuid;
     test_uuid.generate_random();
@@ -1909,7 +1908,6 @@ TEST_F(PGLogTest, filter_log_1) {
         log.log.push_back(e);
         if (i == 1)
           log.tail = e.version;
-        //cout << "object " << e.soid << std::endl;
       }
       log.head = e.version;
       log.index();

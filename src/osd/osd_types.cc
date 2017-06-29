@@ -54,6 +54,7 @@ const char *ceph_osd_flag_name(unsigned flag)
   case CEPH_OSD_FLAG_KNOWN_REDIR: return "known_if_redirected";
   case CEPH_OSD_FLAG_FULL_TRY: return "full_try";
   case CEPH_OSD_FLAG_FULL_FORCE: return "full_force";
+  case CEPH_OSD_FLAG_IGNORE_REDIRECT: return "ignore_redirect";
   default: return "???";
   }
 }
@@ -834,6 +835,8 @@ std::string pg_state_string(int state)
     oss << "snaptrim+";
   if (state & PG_STATE_SNAPTRIM_WAIT)
     oss << "snaptrim_wait+";
+  if (state & PG_STATE_SNAPTRIM_ERROR)
+    oss << "snaptrim_error+";
   string ret(oss.str());
   if (ret.length() > 0)
     ret.resize(ret.length() - 1);
@@ -891,6 +894,8 @@ int pg_string_state(const std::string& state)
     type = PG_STATE_SNAPTRIM;
   else if (state == "snaptrim_wait")
     type = PG_STATE_SNAPTRIM_WAIT;
+  else if (state == "snaptrim_error")
+    type = PG_STATE_SNAPTRIM_ERROR;
   else
     type = -1;
   return type;
@@ -986,7 +991,7 @@ static opt_mapping_t opt_mapping = boost::assign::map_list_of
 	     pool_opts_t::CSUM_MIN_BLOCK, pool_opts_t::INT));
 
 bool pool_opts_t::is_opt_name(const std::string& name) {
-    return opt_mapping.find(name) != opt_mapping.end();
+    return opt_mapping.count(name);
 }
 
 pool_opts_t::opt_desc_t pool_opts_t::get_opt_desc(const std::string& name) {
@@ -996,7 +1001,7 @@ pool_opts_t::opt_desc_t pool_opts_t::get_opt_desc(const std::string& name) {
 }
 
 bool pool_opts_t::is_set(pool_opts_t::key_t key) const {
-    return opts.find(key) != opts.end();
+    return opts.count(key);
 }
 
 const pool_opts_t::value_t& pool_opts_t::get(pool_opts_t::key_t key) const {
@@ -1139,7 +1144,7 @@ void pg_pool_t::dump(Formatter *f) const
   f->dump_int("type", get_type());
   f->dump_int("size", get_size());
   f->dump_int("min_size", get_min_size());
-  f->dump_int("crush_ruleset", get_crush_ruleset());
+  f->dump_int("crush_rule", get_crush_rule());
   f->dump_int("object_hash", get_object_hash());
   f->dump_unsigned("pg_num", get_pg_num());
   f->dump_unsigned("pg_placement_num", get_pgp_num());
@@ -1405,7 +1410,7 @@ void pg_pool_t::encode(bufferlist& bl, uint64_t features) const
     ::encode(struct_v, bl);
     ::encode(type, bl);
     ::encode(size, bl);
-    ::encode(crush_ruleset, bl);
+    ::encode(crush_rule, bl);
     ::encode(object_hash, bl);
     ::encode(pg_num, bl);
     ::encode(pgp_num, bl);
@@ -1433,7 +1438,7 @@ void pg_pool_t::encode(bufferlist& bl, uint64_t features) const
     ::encode(struct_v, bl);
     ::encode(type, bl);
     ::encode(size, bl);
-    ::encode(crush_ruleset, bl);
+    ::encode(crush_rule, bl);
     ::encode(object_hash, bl);
     ::encode(pg_num, bl);
     ::encode(pgp_num, bl);
@@ -1460,7 +1465,7 @@ void pg_pool_t::encode(bufferlist& bl, uint64_t features) const
     ENCODE_START(14, 5, bl);
     ::encode(type, bl);
     ::encode(size, bl);
-    ::encode(crush_ruleset, bl);
+    ::encode(crush_rule, bl);
     ::encode(object_hash, bl);
     ::encode(pg_num, bl);
     ::encode(pgp_num, bl);
@@ -1515,7 +1520,7 @@ void pg_pool_t::encode(bufferlist& bl, uint64_t features) const
   ENCODE_START(v, 5, bl);
   ::encode(type, bl);
   ::encode(size, bl);
-  ::encode(crush_ruleset, bl);
+  ::encode(crush_rule, bl);
   ::encode(object_hash, bl);
   ::encode(pg_num, bl);
   ::encode(pgp_num, bl);
@@ -1581,10 +1586,10 @@ void pg_pool_t::encode(bufferlist& bl, uint64_t features) const
 
 void pg_pool_t::decode(bufferlist::iterator& bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(24, 5, 5, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(25, 5, 5, bl);
   ::decode(type, bl);
   ::decode(size, bl);
-  ::decode(crush_ruleset, bl);
+  ::decode(crush_rule, bl);
   ::decode(object_hash, bl);
   ::decode(pg_num, bl);
   ::decode(pgp_num, bl);
@@ -1620,7 +1625,7 @@ void pg_pool_t::decode(bufferlist::iterator& bl)
     // crash_replay_interval appropriately.  unfortunately, we can't
     // be precise here.  this should be good enough to preserve replay
     // on the data pool for the majority of cluster upgrades, though.
-    if (crush_ruleset == 0 && auid == 0)
+    if (crush_rule == 0 && auid == 0)
       crash_replay_interval = 60;
     else
       crash_replay_interval = 0;
@@ -1740,7 +1745,7 @@ void pg_pool_t::generate_test_instances(list<pg_pool_t*>& o)
 
   a.type = TYPE_REPLICATED;
   a.size = 2;
-  a.crush_ruleset = 3;
+  a.crush_rule = 3;
   a.object_hash = 4;
   a.pg_num = 6;
   a.pgp_num = 5;
@@ -1799,7 +1804,7 @@ ostream& operator<<(ostream& out, const pg_pool_t& p)
   out << p.get_type_name()
       << " size " << p.get_size()
       << " min_size " << p.get_min_size()
-      << " crush_ruleset " << p.get_crush_ruleset()
+      << " crush_rule " << p.get_crush_rule()
       << " object_hash " << p.get_object_hash_name()
       << " pg_num " << p.get_pg_num()
       << " pgp_num " << p.get_pgp_num()
@@ -5057,14 +5062,16 @@ void object_info_t::encode(bufferlist& bl, uint64_t features) const
   ::encode(expected_object_size, bl);
   ::encode(expected_write_size, bl);
   ::encode(alloc_hint_flags, bl);
-  ::encode(manifest, bl);
+  if (has_manifest()) {
+    ::encode(manifest, bl);
+  }
   ENCODE_FINISH(bl);
 }
 
 void object_info_t::decode(bufferlist::iterator& bl)
 {
   object_locator_t myoloc;
-  DECODE_START_LEGACY_COMPAT_LEN(16, 8, 8, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(17, 8, 8, bl);
   map<entity_name_t, watch_info_t> old_watchers;
   ::decode(soid, bl);
   ::decode(myoloc, bl);
@@ -5147,7 +5154,9 @@ void object_info_t::decode(bufferlist::iterator& bl)
     alloc_hint_flags = 0;
   }
   if (struct_v >= 17) {
-    ::decode(manifest, bl);
+    if (has_manifest()) {
+      ::decode(manifest, bl);
+    }
   }
   DECODE_FINISH(bl);
 }

@@ -457,6 +457,39 @@ public:
 
     /// propage update pools' snap metadata to any of their tiers
     int propagate_snaps_to_tiers(CephContext *cct, const OSDMap &base);
+
+    /// filter out osds with any pending state changing
+    size_t get_pending_state_osds(vector<int> *osds) {
+      assert(osds);
+      osds->clear();
+
+      for (auto &p : new_state) {
+        osds->push_back(p.first);
+      }
+
+      return osds->size();
+    }
+
+    bool pending_osd_has_state(int osd, unsigned state) {
+      return new_state.count(osd) && (new_state[osd] & state) != 0;
+    }
+
+    void pending_osd_state_set(int osd, unsigned state) {
+      new_state[osd] |= state;
+    }
+
+    // cancel the specified pending osd state if there is any
+    // return ture on success, false otherwise.
+    bool pending_osd_state_clear(int osd, unsigned state) {
+      if (!pending_osd_has_state(osd, state)) {
+        // never has been set or already has been cancelled.
+        return false;
+      }
+
+      new_state[osd] &= ~state;
+      return true;
+    }
+
   };
   
 private:
@@ -529,6 +562,8 @@ private:
   uint32_t get_crc() const { return crc; }
 
   ceph::shared_ptr<CrushWrapper> crush;       // hierarchical map
+private:
+  uint32_t crush_version = 1;
 
   friend class OSDMonitor;
 
@@ -580,6 +615,10 @@ public:
   void inc_epoch() { epoch++; }
 
   void set_epoch(epoch_t e);
+
+  uint32_t get_crush_version() const {
+    return crush_version;
+  }
 
   /* stamps etc */
   const utime_t& get_created() const { return created; }
@@ -634,6 +673,7 @@ public:
 
   void get_all_osds(set<int32_t>& ls) const;
   void get_up_osds(set<int32_t>& ls) const;
+  void get_out_osds(set<int32_t>& ls) const;
   unsigned get_num_pg_temp() const {
     return pg_temp->size();
   }
@@ -743,6 +783,66 @@ public:
 
   bool is_in(int osd) const {
     return !is_out(osd);
+  }
+
+  bool is_noup(int osd) const {
+    return exists(osd) && (osd_state[osd] & CEPH_OSD_NOUP);
+  }
+
+  bool is_nodown(int osd) const {
+    return exists(osd) && (osd_state[osd] & CEPH_OSD_NODOWN);
+  }
+
+  bool is_noin(int osd) const {
+    return exists(osd) && (osd_state[osd] & CEPH_OSD_NOIN);
+  }
+
+  bool is_noout(int osd) const {
+    return exists(osd) && (osd_state[osd] & CEPH_OSD_NOOUT);
+  }
+
+  void get_noup_osds(vector<int> *osds) const {
+    assert(osds);
+    osds->clear();
+
+    for (int i = 0; i < max_osd; i++) {
+      if (is_noup(i)) {
+        osds->push_back(i);
+      }
+    }
+  }
+
+  void get_nodown_osds(vector<int> *osds) const {
+    assert(osds);
+    osds->clear();
+
+    for (int i = 0; i < max_osd; i++) {
+      if (is_nodown(i)) {
+        osds->push_back(i);
+      }
+    }
+  }
+
+  void get_noin_osds(vector<int> *osds) const {
+    assert(osds);
+    osds->clear();
+
+    for (int i = 0; i < max_osd; i++) {
+      if (is_noin(i)) {
+        osds->push_back(i);
+      }
+    }
+  }
+
+  void get_noout_osds(vector<int> *osds) const {
+    assert(osds);
+    osds->clear();
+
+    for (int i = 0; i < max_osd; i++) {
+      if (is_noout(i)) {
+        osds->push_back(i);
+      }
+    }
   }
 
   /**
@@ -938,9 +1038,27 @@ public:
     return p && pgid.ps() < p->get_pg_num();
   }
 
+  int get_pg_pool_min_size(pg_t pgid) const {
+    if (!pg_exists(pgid)) {
+      return -ENOENT;
+    }
+    const pg_pool_t *p = get_pg_pool(pgid.pool());
+    assert(p);
+    return p->get_min_size();
+  }
+
+  int get_pg_pool_size(pg_t pgid) const {
+    if (!pg_exists(pgid)) {
+      return -ENOENT;
+    }
+    const pg_pool_t *p = get_pg_pool(pgid.pool());
+    assert(p);
+    return p->get_size();
+  }
+
 private:
   /// pg -> (raw osd list)
-  int _pg_to_raw_osds(
+  void _pg_to_raw_osds(
     const pg_pool_t& pool, pg_t pg,
     vector<int> *osds,
     ps_t *ppps) const;
@@ -951,7 +1069,7 @@ private:
 			       vector<int> *osds, int *primary) const;
 
   /// apply pg_upmap[_items] mappings
-  void _apply_remap(const pg_pool_t& pi, pg_t pg, vector<int> *raw) const;
+  void _apply_upmap(const pg_pool_t& pi, pg_t pg, vector<int> *raw) const;
 
   /// pg -> (up osd list)
   void _raw_to_up_osds(const pg_pool_t& pool, const vector<int>& raw,
@@ -981,14 +1099,13 @@ public:
    * by anybody for data mapping purposes.
    * raw and primary must be non-NULL
    */
-  int pg_to_raw_osds(pg_t pg, vector<int> *raw, int *primary) const;
+  void pg_to_raw_osds(pg_t pg, vector<int> *raw, int *primary) const;
   /// map a pg to its acting set. @return acting set size
-  int pg_to_acting_osds(const pg_t& pg, vector<int> *acting,
+  void pg_to_acting_osds(const pg_t& pg, vector<int> *acting,
                         int *acting_primary) const {
     _pg_to_up_acting_osds(pg, NULL, NULL, acting, acting_primary);
-    return acting->size();
   }
-  int pg_to_acting_osds(pg_t pg, vector<int>& acting) const {
+  void pg_to_acting_osds(pg_t pg, vector<int>& acting) const {
     return pg_to_acting_osds(pg, &acting, NULL);
   }
   /**
@@ -1124,26 +1241,26 @@ public:
   /* rank is -1 (stray), 0 (primary), 1,2,3,... (replica) */
   int get_pg_acting_rank(pg_t pg, int osd) const {
     vector<int> group;
-    int nrep = pg_to_acting_osds(pg, group);
-    return calc_pg_rank(osd, group, nrep);
+    pg_to_acting_osds(pg, group);
+    return calc_pg_rank(osd, group, group.size());
   }
   /* role is -1 (stray), 0 (primary), 1 (replica) */
   int get_pg_acting_role(const pg_t& pg, int osd) const {
     vector<int> group;
-    int nrep = pg_to_acting_osds(pg, group);
-    return calc_pg_role(osd, group, nrep);
+    pg_to_acting_osds(pg, group);
+    return calc_pg_role(osd, group, group.size());
   }
 
   bool osd_is_valid_op_target(pg_t pg, int osd) const {
     int primary;
     vector<int> group;
-    int nrep = pg_to_acting_osds(pg, &group, &primary);
+    pg_to_acting_osds(pg, &group, &primary);
     if (osd == primary)
       return true;
     if (pg_is_ec(pg))
       return false;
 
-    return calc_pg_role(osd, group, nrep) >= 0;
+    return calc_pg_role(osd, group, group.size()) >= 0;
   }
 
   int clean_pg_upmaps(
@@ -1165,6 +1282,8 @@ public:
     const set<int64_t>& pools,        ///< [optional] restrict to pool
     Incremental *pending_inc
     );
+
+  int get_osds_by_bucket_name(const string &name, set<int> *osds) const;
 
   /*
    * handy helpers to build simple maps...
@@ -1189,9 +1308,10 @@ public:
   static int build_simple_crush_map_from_conf(CephContext *cct,
 					      CrushWrapper& crush,
 					      ostream *ss);
-  static int build_simple_crush_rulesets(CephContext *cct, CrushWrapper& crush,
-					 const string& root,
-					 ostream *ss);
+  static int build_simple_crush_rules(
+    CephContext *cct, CrushWrapper& crush,
+    const string& root,
+    ostream *ss);
 
   bool crush_ruleset_in_use(int ruleset) const;
 
@@ -1241,5 +1361,12 @@ inline ostream& operator<<(ostream& out, const OSDMap& m) {
   return out;
 }
 
+class PGStatService;
+
+void print_osd_utilization(const OSDMap& osdmap,
+			   const PGStatService *pgstat,
+			   ostream& out,
+			   Formatter *f,
+			   bool tree);
 
 #endif

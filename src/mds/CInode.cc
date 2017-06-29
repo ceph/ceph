@@ -339,11 +339,16 @@ void CInode::mark_dirty_rstat()
     dout(10) << "mark_dirty_rstat" << dendl;
     state_set(STATE_DIRTYRSTAT);
     get(PIN_DIRTYRSTAT);
-    CDentry *dn = get_projected_parent_dn();
-    CDir *pdir = dn->dir;
-    pdir->dirty_rstat_inodes.push_back(&dirty_rstat_item);
-
-    mdcache->mds->locker->mark_updated_scatterlock(&pdir->inode->nestlock);
+    CDentry *pdn = get_projected_parent_dn();
+    if (pdn->is_auth()) {
+      CDir *pdir = pdn->dir;
+      pdir->dirty_rstat_inodes.push_back(&dirty_rstat_item);
+      mdcache->mds->locker->mark_updated_scatterlock(&pdir->inode->nestlock);
+    } else {
+      // under cross-MDS rename.
+      // DIRTYRSTAT flag will get cleared when rename finishes
+      assert(state_test(STATE_AMBIGUOUSAUTH));
+    }
   }
 }
 void CInode::clear_dirty_rstat()

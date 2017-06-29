@@ -24,6 +24,7 @@
 #include "messages/MCommandReply.h"
 #include "messages/MPGStats.h"
 #include "messages/MOSDScrub.h"
+#include "common/errno.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_mgr
@@ -176,7 +177,7 @@ bool DaemonServer::ms_verify_authorizer(Connection *con,
     if (peer_type == CEPH_ENTITY_TYPE_OSD) {
       Mutex::Locker l(lock);
       s->osd_id = atoi(s->entity_name.get_id().c_str());
-      dout(10) << __func__ << " registering osd." << s->osd_id << " session "
+      dout(10) << "registering osd." << s->osd_id << " session "
 	       << s << " con " << con << dendl;
       osd_cons[s->osd_id].insert(con);
     }
@@ -214,7 +215,7 @@ bool DaemonServer::ms_handle_reset(Connection *con)
     }
     session->put(); // SessionRef takes a ref
     Mutex::Locker l(lock);
-    dout(10) << __func__ << " unregistering osd." << session->osd_id
+    dout(10) << "unregistering osd." << session->osd_id
 	     << "  session " << session << " con " << con << dendl;
     osd_cons[session->osd_id].erase(con);
   }
@@ -250,10 +251,10 @@ bool DaemonServer::ms_dispatch(Message *m)
 
 void DaemonServer::shutdown()
 {
-  dout(10) << __func__ << dendl;
+  dout(10) << "begin" << dendl;
   msgr->shutdown();
   msgr->wait();
-  dout(10) << __func__ << " done" << dendl;
+  dout(10) << "done" << dendl;
 }
 
 
@@ -451,7 +452,7 @@ bool DaemonServer::handle_command(MCommand *m)
         con->mark_disposable();
       }
 
-      dout(1) << "do_command r=" << r << " " << rs << dendl;
+      dout(1) << "handle_command " << cpp_strerror(r) << " " << rs << dendl;
       if (con) {
         MCommandReply *reply = new MCommandReply(r, rs);
         reply->set_tid(m->get_tid());
@@ -550,7 +551,8 @@ bool DaemonServer::handle_command(MCommand *m)
     if (!_allowed_command(session.get(), py_command.module, prefix, cmdctx->cmdmap,
                           param_str_map, &py_command)) {
       dout(1) << " access denied" << dendl;
-      ss << "access denied";
+      ss << "access denied; does your client key have mgr caps?"
+	" See http://docs.ceph.com/docs/master/mgr/administrator/#client-authentication";
       cmdctx->reply(-EACCES, ss);
       return true;
     }
@@ -562,7 +564,8 @@ bool DaemonServer::handle_command(MCommand *m)
       audit_clog->info() << "from='" << session->inst << "' "
                          << "entity='" << session->entity_name << "' "
                          << "cmd=" << m->cmd << ":  access denied";
-      ss << "access denied";
+      ss << "access denied' does your client key have mgr caps?"
+	" See http://docs.ceph.com/docs/master/mgr/administrator/#client-authentication";
       cmdctx->reply(-EACCES, ss);
       return true;
     }
@@ -778,6 +781,20 @@ bool DaemonServer::handle_command(MCommand *m)
 			      &on_finish->from_mon, &on_finish->outs, on_finish);
       return true;
     }
+  } else if (prefix == "osd df") {
+    string method;
+    cmd_getval(g_ceph_context, cmdctx->cmdmap, "output_method", method);
+    r = cluster_state.with_pgservice([&](const PGMapStatService& pgservice) {
+	return cluster_state.with_osdmap([&](const OSDMap& osdmap) {
+	    print_osd_utilization(osdmap, &pgservice, ss,
+				  f.get(), method == "tree");
+				  
+	    cmdctx->odata.append(ss);
+	    return 0;
+	  });
+      });
+    cmdctx->reply(r, "");
+    return true;
   } else {
     r = cluster_state.with_pgmap([&](const PGMap& pg_map) {
 	return cluster_state.with_osdmap([&](const OSDMap& osdmap) {
@@ -836,7 +853,7 @@ void DaemonServer::send_report()
 	  // FIXME: no easy way to get mon features here.  this will do for
 	  // now, though, as long as we don't make a backward-incompat change.
 	  pg_map.encode_digest(osdmap, m->get_data(), CEPH_FEATURES_ALL);
-
+	  dout(10) << pg_map << dendl;
 	  pg_map.get_health(g_ceph_context, osdmap,
 			    m->health_summary,
 			    &m->health_detail);

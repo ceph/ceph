@@ -166,22 +166,6 @@ static ostream& _prefix(std::ostream* _dout, int whoami, epoch_t epoch) {
   return *_dout << "osd." << whoami << " " << epoch << " ";
 }
 
-void PGQueueable::RunVis::operator()(const OpRequestRef &op) {
-  return osd->dequeue_op(pg, op, handle);
-}
-
-void PGQueueable::RunVis::operator()(const PGSnapTrim &op) {
-  return pg->snap_trimmer(op.epoch_queued);
-}
-
-void PGQueueable::RunVis::operator()(const PGScrub &op) {
-  return pg->scrub(op.epoch_queued, handle);
-}
-
-void PGQueueable::RunVis::operator()(const PGRecovery &op) {
-  return osd->do_recovery(pg.get(), op.epoch_queued, op.reserved_pushes, handle);
-}
-
 //Initial features in new superblock.
 //Features here are also automatically upgraded
 CompatSet OSD::get_osd_initial_compat_set() {
@@ -2964,6 +2948,11 @@ void OSD::create_logger()
     l_osd_op_rw_prepare_lat, "op_rw_prepare_latency",
     "Latency of read-modify-write operations (excluding queue time and wait for finished)");
 
+  osd_plb.add_time_avg(l_osd_op_before_queue_op_lat, "op_before_queue_op_lat",
+    "Latency of IO before calling queue(before really queue into ShardedOpWq)"); // client io before queue op_wq latency
+  osd_plb.add_time_avg(l_osd_op_before_dequeue_op_lat, "op_before_dequeue_op_lat",
+    "Latency of IO before calling dequeue_op(already dequeued and get PG lock)"); // client io before dequeue_op latency
+
   osd_plb.add_u64_counter(
     l_osd_sop, "subop", "Suboperations");
   osd_plb.add_u64_counter(
@@ -4693,8 +4682,8 @@ void OSD::handle_osd_ping(MOSDPing *m)
 
       Message *r = new MOSDPing(monc->get_fsid(),
 				curmap->get_epoch(),
-				MOSDPing::PING_REPLY,
-				m->stamp);
+				MOSDPing::PING_REPLY, m->stamp,
+				cct->_conf->osd_heartbeat_min_size);
       m->get_connection()->send_message(r);
 
       if (curmap->is_up(from)) {
@@ -4711,7 +4700,8 @@ void OSD::handle_osd_ping(MOSDPing *m)
 	Message *r = new MOSDPing(monc->get_fsid(),
 				  curmap->get_epoch(),
 				  MOSDPing::YOU_DIED,
-				  m->stamp);
+				  m->stamp,
+				  cct->_conf->osd_heartbeat_min_size);
 	m->get_connection()->send_message(r);
       }
     }
@@ -4889,14 +4879,14 @@ void OSD::heartbeat()
     dout(30) << "heartbeat sending ping to osd." << peer << dendl;
     i->second.con_back->send_message(new MOSDPing(monc->get_fsid(),
 					  service.get_osdmap()->get_epoch(),
-					  MOSDPing::PING,
-					  now));
+					  MOSDPing::PING, now,
+					  cct->_conf->osd_heartbeat_min_size));
 
     if (i->second.con_front)
       i->second.con_front->send_message(new MOSDPing(monc->get_fsid(),
 					     service.get_osdmap()->get_epoch(),
-						     MOSDPing::PING,
-						     now));
+					     MOSDPing::PING, now,
+					  cct->_conf->osd_heartbeat_min_size));
   }
 
   logger->set(l_osd_hb_to, heartbeat_peers.size());
@@ -5606,7 +5596,9 @@ void OSD::_preboot(epoch_t oldest, epoch_t newest)
   heartbeat();
 
   // if our map within recent history, try to add ourselves to the osdmap.
-  if (osdmap->test_flag(CEPH_OSDMAP_NOUP)) {
+  if (osdmap->get_epoch() == 0) {
+    derr << "waiting for initial osdmap" << dendl;
+  } else if (osdmap->test_flag(CEPH_OSDMAP_NOUP) || osdmap->is_noup(whoami)) {
     derr << "osdmap NOUP flag is set, waiting for it to clear" << dendl;
   } else if (!osdmap->test_flag(CEPH_OSDMAP_SORTBITWISE)) {
     derr << "osdmap SORTBITWISE OSDMap flag is NOT set; please set it"
@@ -5881,8 +5873,8 @@ void OSD::send_failures()
   utime_t now = ceph_clock_now();
   while (!failure_queue.empty()) {
     int osd = failure_queue.begin()->first;
-    entity_inst_t i = osdmap->get_inst(osd);
     if (!failure_pending.count(osd)) {
+      entity_inst_t i = osdmap->get_inst(osd);
       int failed_for = (int)(double)(now - failure_queue.begin()->second);
       monc->send_mon_message(new MOSDFailure(monc->get_fsid(), i, failed_for,
 					     osdmap->get_epoch()));
@@ -7527,12 +7519,6 @@ void OSD::handle_osd_map(MOSDMap *m)
     rerequest_full_maps();
   }
 
-  if (last <= superblock.newest_map) {
-    dout(10) << " no new maps here, dropping" << dendl;
-    m->put();
-    return;
-  }
-
   if (superblock.oldest_map) {
     // make sure we at least keep pace with incoming maps
     trim_maps(m->oldest_map, last - first + 1, skip_maps);
@@ -7568,6 +7554,10 @@ void OSD::_committed_osd_maps(epoch_t first, epoch_t last, MOSDMap *m)
     return;
   }
   Mutex::Locker l(osd_lock);
+  if (is_stopping()) {
+    dout(10) << __func__ << " bailing, we are shutting down" << dendl;
+    return;
+  }
   map_lock.get_write();
 
   bool do_shutdown = false;
@@ -7607,8 +7597,9 @@ void OSD::_committed_osd_maps(epoch_t first, epoch_t last, MOSDMap *m)
       }
     }
 
-    if (osdmap->test_flag(CEPH_OSDMAP_NOUP) !=
-	newmap->test_flag(CEPH_OSDMAP_NOUP)) {
+    if ((osdmap->test_flag(CEPH_OSDMAP_NOUP) !=
+        newmap->test_flag(CEPH_OSDMAP_NOUP)) ||
+        (osdmap->is_noup(whoami) != newmap->is_noup(whoami))) {
       dout(10) << __func__ << " NOUP flag changed in " << newmap->get_epoch()
 	       << dendl;
       if (is_booting()) {
@@ -9209,6 +9200,7 @@ void OSD::enqueue_op(spg_t pg, OpRequestRef& op, epoch_t epoch)
   op->osd_trace.keyval("priority", op->get_req()->get_priority());
   op->osd_trace.keyval("cost", op->get_req()->get_cost());
   op->mark_queued_for_pg();
+  logger->tinc(l_osd_op_before_queue_op_lat, latency);
   op_shardedwq.queue(make_pair(pg, PGQueueable(op, epoch)));
 }
 
@@ -9232,6 +9224,8 @@ void OSD::dequeue_op(
 	   << " latency " << latency
 	   << " " << *(op->get_req())
 	   << " pg " << *pg << dendl;
+
+  logger->tinc(l_osd_op_before_dequeue_op_lat, latency);
 
   Session *session = static_cast<Session *>(
     op->get_req()->get_connection()->get_priv());
@@ -9364,6 +9358,8 @@ const char** OSD::get_tracked_conf_keys() const
     "osd_recovery_delay_start",
     "osd_client_message_size_cap",
     "osd_client_message_cap",
+    "osd_heartbeat_min_size",
+    "osd_heartbeat_interval",
     NULL
   };
   return KEYS;
@@ -9724,6 +9720,7 @@ void OSD::PeeringWQ::_dequeue(list<PG*> *out) {
   in_use.insert(out->begin(), out->end());
 }
 
+
 // =============================================================
 
 #undef dout_context
@@ -9849,10 +9846,10 @@ void OSD::ShardedOpWQ::_process(uint32_t thread_index, heartbeat_handle_d *hb)
   if (sdata->pqueue->empty()) {
     dout(20) << __func__ << " empty q, waiting" << dendl;
     // optimistically sleep a moment; maybe another work item will come along.
-    sdata->sdata_op_ordering_lock.Unlock();
     osd->cct->get_heartbeat_map()->reset_timeout(hb,
       osd->cct->_conf->threadpool_default_timeout, 0);
     sdata->sdata_lock.Lock();
+    sdata->sdata_op_ordering_lock.Unlock();
     sdata->sdata_cond.WaitInterval(sdata->sdata_lock,
       utime_t(osd->cct->_conf->threadpool_empty_queue_max_wait, 0));
     sdata->sdata_lock.Unlock();
@@ -10116,3 +10113,21 @@ int heap(CephContext& cct, cmdmap_t& cmdmap, Formatter& f, std::ostream& os)
  
 }} // namespace ceph::osd_cmds
 
+
+std::ostream& operator<<(std::ostream& out, const OSD::io_queue& q) {
+  switch(q) {
+  case OSD::io_queue::prioritized:
+    out << "prioritized";
+    break;
+  case OSD::io_queue::weightedpriority:
+    out << "weightedpriority";
+    break;
+  case OSD::io_queue::mclock_opclass:
+    out << "mclock_opclass";
+    break;
+  case OSD::io_queue::mclock_client:
+    out << "mclock_client";
+    break;
+  }
+  return out;
+}

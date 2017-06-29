@@ -1033,62 +1033,6 @@ static void show_roles_info(vector<RGWRole>& roles, Formatter* formatter)
   formatter->flush(cout);
 }
 
-static void dump_bucket_usage(map<RGWObjCategory, RGWStorageStats>& stats, Formatter *formatter)
-{
-  map<RGWObjCategory, RGWStorageStats>::iterator iter;
-
-  formatter->open_object_section("usage");
-  for (iter = stats.begin(); iter != stats.end(); ++iter) {
-    RGWStorageStats& s = iter->second;
-    const char *cat_name = rgw_obj_category_name(iter->first);
-    formatter->open_object_section(cat_name);
-    formatter->dump_int("size", s.size);
-    formatter->dump_int("size_actual", s.size_rounded);
-    formatter->dump_int("size_kb", rgw_rounded_kb(s.size));
-    formatter->dump_int("size_kb_actual", rgw_rounded_kb(s.size_rounded));
-    formatter->dump_int("num_objects", s.num_objects);
-    formatter->close_section();
-    formatter->flush(cout);
-  }
-  formatter->close_section();
-}
-
-int bucket_stats(rgw_bucket& bucket, int shard_id, Formatter *formatter)
-{
-  RGWBucketInfo bucket_info;
-  real_time mtime;
-  RGWObjectCtx obj_ctx(store);
-  int r = store->get_bucket_info(obj_ctx, bucket.tenant, bucket.name, bucket_info, &mtime);
-  if (r < 0)
-    return r;
-
-  map<RGWObjCategory, RGWStorageStats> stats;
-  string bucket_ver, master_ver;
-  string max_marker;
-  int ret = store->get_bucket_stats(bucket_info, shard_id, &bucket_ver, &master_ver, stats, &max_marker);
-  if (ret < 0) {
-    cerr << "error getting bucket stats ret=" << ret << std::endl;
-    return ret;
-  }
-  formatter->open_object_section("stats");
-  formatter->dump_string("bucket", bucket.name);
-  formatter->dump_string("zonegroup", bucket_info.zonegroup);
-  formatter->dump_string("placement_rule", bucket_info.placement_rule);
-  ::encode_json("explicit_placement", bucket.explicit_placement, formatter);
-  formatter->dump_string("id", bucket.bucket_id);
-  formatter->dump_string("marker", bucket.marker);
-  formatter->dump_stream("index_type") << bucket_info.index_type;
-  ::encode_json("owner", bucket_info.owner, formatter);
-  formatter->dump_int("mtime", utime_t(mtime));
-  formatter->dump_string("ver", bucket_ver);
-  formatter->dump_string("master_ver", master_ver);
-  formatter->dump_string("max_marker", max_marker);
-  dump_bucket_usage(stats, formatter);
-  formatter->close_section();
-
-  return 0;
-}
-
 class StoreDestructor {
   RGWRados *store;
 public:
@@ -1243,7 +1187,7 @@ static bool dump_string(const char *field_name, bufferlist& bl, Formatter *f)
 {
   string val;
   if (bl.length() > 0) {
-    val.assign(bl.c_str(), bl.length());
+    val.assign(bl.c_str());
   }
   f->dump_string(field_name, val);
 

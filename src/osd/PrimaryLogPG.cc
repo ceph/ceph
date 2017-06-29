@@ -1877,13 +1877,13 @@ void PrimaryLogPG::do_op(OpRequestRef& op)
     }
   }
 
-  if (op->includes_pg_op()) {
-    return do_pg_op(op);
-  }
-
   if (!op_has_sufficient_caps(op)) {
     osd->reply_op_error(op, -EPERM);
     return;
+  }
+
+  if (op->includes_pg_op()) {
+    return do_pg_op(op);
   }
 
   // object name too long?
@@ -3612,24 +3612,29 @@ void PrimaryLogPG::do_backfill_remove(OpRequestRef op)
   assert(r == 0);
 }
 
-PrimaryLogPG::OpContextUPtr PrimaryLogPG::trim_object(
-  bool first, const hobject_t &coid)
+int PrimaryLogPG::trim_object(
+  bool first, const hobject_t &coid, PrimaryLogPG::OpContextUPtr *ctxp)
 {
+  *ctxp = NULL;
   // load clone info
   bufferlist bl;
   ObjectContextRef obc = get_object_context(coid, false, NULL);
-  if (!obc) {
-    derr << __func__ << " could not find coid " << coid << dendl;
-    ceph_abort();
+  if (!obc || !obc->ssc || !obc->ssc->exists) {
+    osd->clog->error() << __func__ << ": Can not trim " << coid
+      << " repair needed " << (obc ? "(no obc->ssc or !exists)" : "(no obc)");
+    return -ENOENT;
   }
-  assert(obc->ssc);
 
   hobject_t snapoid(
     coid.oid, coid.get_key(),
     obc->ssc->snapset.head_exists ? CEPH_NOSNAP:CEPH_SNAPDIR, coid.get_hash(),
     info.pgid.pool(), coid.get_namespace());
   ObjectContextRef snapset_obc = get_object_context(snapoid, false);
-  assert(snapset_obc);
+  if (!snapset_obc) {
+    osd->clog->error() << __func__ << ": Can not trim " << coid
+      << " repair needed, no snapset obc for " << snapoid;
+    return -ENOENT;
+  }
 
   SnapSet& snapset = obc->ssc->snapset;
 
@@ -3645,21 +3650,21 @@ PrimaryLogPG::OpContextUPtr PrimaryLogPG::trim_object(
     if (p == snapset.clone_snaps.end()) {
       osd->clog->error() << __func__ << " No clone_snaps in snapset " << snapset
 			 << " for " << coid << "\n";
-      return NULL;
+      return -ENOENT;
     }
     old_snaps.insert(snapset.clone_snaps[coid.snap].begin(),
 		     snapset.clone_snaps[coid.snap].end());
   }
   if (old_snaps.empty()) {
     osd->clog->error() << __func__ << " No object info snaps for " << coid;
-    return NULL;
+    return -ENOENT;
   }
 
   dout(10) << coid << " old_snaps " << old_snaps
 	   << " old snapset " << snapset << dendl;
   if (snapset.seq == 0) {
     osd->clog->error() << __func__ << " No snapset.seq for " << coid;
-    return NULL;
+    return -ENOENT;
   }
 
   set<snapid_t> new_snaps;
@@ -3676,7 +3681,7 @@ PrimaryLogPG::OpContextUPtr PrimaryLogPG::trim_object(
     p = std::find(snapset.clones.begin(), snapset.clones.end(), coid.snap);
     if (p == snapset.clones.end()) {
       osd->clog->error() << __func__ << " Snap " << coid.snap << " not in clones";
-      return NULL;
+      return -ENOENT;
     }
   }
 
@@ -3689,7 +3694,7 @@ PrimaryLogPG::OpContextUPtr PrimaryLogPG::trim_object(
 	first)) {
     close_op_ctx(ctx.release());
     dout(10) << __func__ << ": Unable to get a wlock on " << coid << dendl;
-    return NULL;
+    return -ENOLCK;
   }
 
   if (!ctx->lock_manager.get_snaptrimmer_write(
@@ -3698,7 +3703,7 @@ PrimaryLogPG::OpContextUPtr PrimaryLogPG::trim_object(
 	first)) {
     close_op_ctx(ctx.release());
     dout(10) << __func__ << ": Unable to get a wlock on " << snapoid << dendl;
-    return NULL;
+    return -ENOLCK;
   }
 
   ctx->at_version = get_next_version();
@@ -3767,6 +3772,9 @@ PrimaryLogPG::OpContextUPtr PrimaryLogPG::trim_object(
       coid,
       old_snaps,
       new_snaps);
+
+    coi = object_info_t(coid);
+
     ctx->at_version.version++;
   } else {
     // save adjusted snaps for this object
@@ -3835,20 +3843,19 @@ PrimaryLogPG::OpContextUPtr PrimaryLogPG::trim_object(
       ctx->delta_stats.num_objects--;
       if (oi.is_dirty()) {
 	ctx->delta_stats.num_objects_dirty--;
-	oi.clear_flag(object_info_t::FLAG_DIRTY);
       }
       if (oi.is_omap())
 	ctx->delta_stats.num_objects_omap--;
       if (oi.is_whiteout()) {
 	dout(20) << __func__ << " trimming whiteout on " << oi.soid << dendl;
 	ctx->delta_stats.num_whiteouts--;
-	oi.clear_flag(object_info_t::FLAG_WHITEOUT);
       }
-      if (oi.is_cache_pinned())
+      if (oi.is_cache_pinned()) {
 	ctx->delta_stats.num_objects_pinned--;
+      }
     }
     ctx->snapset_obc->obs.exists = false;
-    
+    ctx->snapset_obc->obs.oi = object_info_t(snapoid);
     t->remove(snapoid);
   } else {
     dout(10) << coid << " filtering snapset on " << snapoid << dendl;
@@ -3883,7 +3890,8 @@ PrimaryLogPG::OpContextUPtr PrimaryLogPG::trim_object(
     t->setattrs(snapoid, attrs);
   }
 
-  return ctx;
+  *ctxp = std::move(ctx);
+  return 0;
 }
 
 void PrimaryLogPG::kick_snap_trim()
@@ -5958,6 +5966,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  result = -EINVAL;
 	  break;
 	}
+        oi.set_flag(object_info_t::FLAG_MANIFEST);
 	oi.manifest.redirect_target = target;
 	oi.manifest.type = object_manifest_t::TYPE_REDIRECT;
 	t->truncate(soid, 0);
@@ -8952,7 +8961,12 @@ void PrimaryLogPG::op_applied(const eversion_t &applied_version)
   if (is_primary()) {
     if (scrubber.active) {
       if (last_update_applied == scrubber.subset_last_update) {
-        requeue_scrub();
+        if (ops_blocked_by_scrub()) {
+          requeue_scrub(true);
+        } else {
+          requeue_scrub(false);
+        }
+
       }
     } else {
       assert(scrubber.start == scrubber.end);
@@ -9573,6 +9587,7 @@ ObjectContextRef PrimaryLogPG::get_object_context(
 	object_info_t oi(soid);
 	SnapSetContext *ssc = get_snapset_context(
 	  soid, true, 0, false);
+        assert(ssc);
 	obc = create_object_context(oi, ssc);
 	dout(10) << __func__ << ": " << obc << " " << soid
 		 << " " << obc->rwstate
@@ -9620,7 +9635,13 @@ ObjectContextRef PrimaryLogPG::get_object_context(
     dout(10) << __func__ << ": creating obc from disk: " << obc
 	     << dendl;
   }
-  assert(obc->ssc);
+
+  // XXX: Caller doesn't expect this
+  if (obc->ssc == NULL) {
+    derr << __func__ << ": obc->ssc not available, not returning context" << dendl;
+    return ObjectContextRef();   // -ENOENT!
+  }
+
   dout(10) << __func__ << ": " << obc << " " << soid
 	   << " " << obc->rwstate
 	   << " oi: " << obc->obs.oi
@@ -9997,7 +10018,12 @@ SnapSetContext *PrimaryLogPG::get_snapset_context(
     _register_snapset_context(ssc);
     if (bv.length()) {
       bufferlist::iterator bvp = bv.begin();
-      ssc->snapset.decode(bvp);
+      try {
+	ssc->snapset.decode(bvp);
+      } catch (buffer::error& e) {
+        dout(0) << __func__ << " Can't decode snapset: " << e << dendl;
+	return NULL;
+      }
       ssc->exists = true;
     } else {
       ssc->exists = false;
@@ -10183,7 +10209,11 @@ void PrimaryLogPG::_applied_recovered_object(ObjectContextRef obc)
   // requeue an active chunky scrub waiting on recovery ops
   if (!deleting && active_pushes == 0
       && scrubber.is_chunky_scrub_active()) {
-    requeue_scrub();
+    if (ops_blocked_by_scrub()) {
+      requeue_scrub(true);
+    } else {
+      requeue_scrub(false);
+    }
   }
 
   unlock();
@@ -13816,6 +13846,9 @@ void PrimaryLogPG::_scrub_finish()
     publish_stats_to_osd();
     share_pg_info();
   }
+  // Clear object context cache to get repair information
+  if (repair)
+    object_contexts.clear();
 }
 
 bool PrimaryLogPG::check_osdmap_full(const set<pg_shard_t> &missing_on)
@@ -13871,7 +13904,6 @@ boost::statechart::result PrimaryLogPG::NotTrimming::react(const KickTrim&)
   }
   if (pg->scrubber.active) {
     ldout(pg->cct, 10) << " scrubbing, will requeue snap_trimmer after" << dendl;
-    pg->scrubber.queue_snap_trim = true;
     return transit< WaitScrub >();
   } else {
     return transit< Trimming >();
@@ -13905,6 +13937,7 @@ PrimaryLogPG::AwaitAsyncWork::AwaitAsyncWork(my_context ctx)
   context< SnapTrimmer >().log_enter(state_name);
   context< SnapTrimmer >().pg->osd->queue_for_snap_trim(pg);
   pg->state_set(PG_STATE_SNAPTRIM);
+  pg->state_clear(PG_STATE_SNAPTRIM_ERROR);
   pg->publish_stats_to_osd();
 }
 
@@ -13963,18 +13996,26 @@ boost::statechart::result PrimaryLogPG::AwaitAsyncWork::react(const DoSnapWork&)
   for (auto &&object: to_trim) {
     // Get next
     ldout(pg->cct, 10) << "AwaitAsyncWork react trimming " << object << dendl;
-    OpContextUPtr ctx = pg->trim_object(in_flight.empty(), object);
-    if (!ctx) {
-      ldout(pg->cct, 10) << "could not get write lock on obj "
-			 << object << dendl;
-      if (in_flight.empty()) {
+    OpContextUPtr ctx;
+    int error = pg->trim_object(in_flight.empty(), object, &ctx);
+    if (error) {
+      if (error == -ENOLCK) {
+	ldout(pg->cct, 10) << "could not get write lock on obj "
+			   << object << dendl;
+      } else {
+	pg->state_set(PG_STATE_SNAPTRIM_ERROR);
+	ldout(pg->cct, 10) << "Snaptrim error=" << error << dendl;
+      }
+      if (!in_flight.empty()) {
+	ldout(pg->cct, 10) << "letting the ones we already started finish" << dendl;
+	return transit< WaitRepops >();
+      }
+      if (error == -ENOLCK) {
 	ldout(pg->cct, 10) << "waiting for it to clear"
 			   << dendl;
 	return transit< WaitRWLock >();
-
       } else {
-	ldout(pg->cct, 10) << "letting the ones we already started finish" << dendl;
-	return transit< WaitRepops >();
+        return transit< NotTrimming >();
       }
     }
 
@@ -13983,8 +14024,13 @@ boost::statechart::result PrimaryLogPG::AwaitAsyncWork::react(const DoSnapWork&)
       [pg, object, &in_flight]() {
 	assert(in_flight.find(object) != in_flight.end());
 	in_flight.erase(object);
-	if (in_flight.empty())
-	  pg->snap_trimmer_machine.process_event(RepopsComplete());
+	if (in_flight.empty()) {
+	  if (pg->state_test(PG_STATE_SNAPTRIM_ERROR)) {
+	    pg->snap_trimmer_machine.process_event(Reset());
+	  } else {
+	    pg->snap_trimmer_machine.process_event(RepopsComplete());
+	  }
+	}
       });
 
     pg->simple_opc_submit(std::move(ctx));

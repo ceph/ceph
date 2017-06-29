@@ -28,6 +28,7 @@ roles:
   - osd.0
   - osd.1
   - osd.2
+  - mgr.x
 - - mon.b
   - mon.c
   - osd.3
@@ -47,6 +48,8 @@ tasks:
 - print: "**** done v10.2.0 install"
 - ceph:
    fs: xfs
+   skip_mgr_daemons: true
+   add_osds_to_crush: true
 - print: "**** done ceph xfs"
 - sequential:
    - workload
@@ -207,4 +210,17 @@ upgrade-sequence_x:
        daemons: [osd.5]
        wait-for-healthy: false
        wait-for-up-osds: true
+   - exec:
+      mgr.x:
+        - mkdir -p /var/lib/ceph/mgr/ceph-x
+        - ceph auth get-or-create-key mgr.x mon 'allow profile mgr'
+        - ceph auth export mgr.x > /var/lib/ceph/mgr/ceph-x/keyring
+   - ceph.restart:
+       daemons: [mgr.x]
+       wait-for-healthy: false
+   - exec:
+       osd.0:
+         - ceph osd require-osd-release luminous
+         - ceph osd set-require-min-compat-client luminous
+   - ceph.healthy:
    - print: "**** done ceph.restart all -x branch mds/osd/mon"

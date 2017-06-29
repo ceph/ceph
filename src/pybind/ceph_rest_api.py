@@ -20,7 +20,7 @@ from ceph_argparse import \
 # Globals and defaults
 #
 
-DEFAULT_ADDR = '0.0.0.0'
+DEFAULT_ADDR = '::'
 DEFAULT_PORT = '5000'
 DEFAULT_ID = 'restapi'
 
@@ -28,6 +28,12 @@ DEFAULT_BASEURL = '/api/v0.1'
 DEFAULT_LOG_LEVEL = 'warning'
 DEFAULT_LOGDIR = '/var/log/ceph'
 # default client name will be 'client.<DEFAULT_ID>'
+
+# network failure could keep the underlying json_command() waiting forever,
+# set a timeout, so it bails out on timeout.
+DEFAULT_TIMEOUT = 20
+# and retry in that case.
+DEFAULT_TRIES = 5
 
 # 'app' must be global for decorators, etc.
 APPNAME = '__main__'
@@ -481,9 +487,18 @@ def handler(catchall_path=None, fmt=None, target=None):
         cmdtarget = ('mon', '')
 
     app.logger.debug('sending command prefix %s argdict %s', prefix, argdict)
-    ret, outbuf, outs = json_command(app.ceph_cluster, prefix=prefix,
-                                     target=cmdtarget,
-                                     inbuf=flask.request.data, argdict=argdict)
+
+    for _ in range(DEFAULT_TRIES):
+        ret, outbuf, outs = json_command(app.ceph_cluster, prefix=prefix,
+                                         target=cmdtarget,
+                                         inbuf=flask.request.data,
+                                         argdict=argdict,
+                                         timeout=DEFAULT_TIMEOUT)
+        if ret != -errno.EINTR:
+            break
+    else:
+        return make_response(fmt, '',
+                             'Timedout: {0} ({1})'.format(outs, ret), 504)
     if ret:
         return make_response(fmt, '', 'Error: {0} ({1})'.format(outs, ret), 400)
 

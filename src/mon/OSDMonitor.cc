@@ -544,6 +544,23 @@ void OSDMonitor::on_active()
 void OSDMonitor::on_restart()
 {
   last_osd_report.clear();
+
+  if (mon->is_leader()) {
+    // fix ruleset != ruleid
+    if (osdmap.crush->has_legacy_rulesets() &&
+	!osdmap.crush->has_multirule_rulesets()) {
+      CrushWrapper newcrush;
+      _get_pending_crush(newcrush);
+      int r = newcrush.renumber_rules_by_ruleset();
+      if (r >= 0) {
+	dout(1) << __func__ << " crush map has ruleset != rule id; fixing" << dendl;
+	pending_inc.crush.clear();
+	newcrush.encode(pending_inc.crush, mon->get_quorum_con_features());
+      } else {
+	dout(10) << __func__ << " unable to renumber rules by ruleset" << dendl;
+      }
+    }
+  }
 }
 
 void OSDMonitor::on_shutdown()
@@ -569,323 +586,6 @@ void OSDMonitor::update_logger()
   mon->cluster_logger->set(l_cluster_num_osd_up, osdmap.get_num_up_osds());
   mon->cluster_logger->set(l_cluster_num_osd_in, osdmap.get_num_in_osds());
   mon->cluster_logger->set(l_cluster_osd_epoch, osdmap.get_epoch());
-}
-
-template <typename F>
-class OSDUtilizationDumper : public CrushTreeDumper::Dumper<F> {
-public:
-  typedef CrushTreeDumper::Dumper<F> Parent;
-
-  OSDUtilizationDumper(const CrushWrapper *crush, const OSDMap *osdmap_,
-		       const PGStatService *pgs_, bool tree_) :
-    Parent(crush),
-    osdmap(osdmap_),
-    pgs(pgs_),
-    tree(tree_),
-    average_util(average_utilization()),
-    min_var(-1),
-    max_var(-1),
-    stddev(0),
-    sum(0) {
-  }
-
-protected:
-  void dump_stray(F *f) {
-    for (int i = 0; i < osdmap->get_max_osd(); i++) {
-      if (osdmap->exists(i) && !this->is_touched(i))
-	dump_item(CrushTreeDumper::Item(i, 0, 0), f);
-    }
-  }
-
-  void dump_item(const CrushTreeDumper::Item &qi, F *f) override {
-    if (!tree && qi.is_bucket())
-      return;
-
-    float reweight = qi.is_bucket() ? -1 : osdmap->get_weightf(qi.id);
-    int64_t kb = 0, kb_used = 0, kb_avail = 0;
-    double util = 0;
-    if (get_bucket_utilization(qi.id, &kb, &kb_used, &kb_avail))
-      if (kb_used && kb)
-        util = 100.0 * (double)kb_used / (double)kb;
-
-    double var = 1.0;
-    if (average_util)
-      var = util / average_util;
-
-    size_t num_pgs = qi.is_bucket() ? 0 : pgs->get_num_pg_by_osd(qi.id);
-
-    dump_item(qi, reweight, kb, kb_used, kb_avail, util, var, num_pgs, f);
-
-    if (!qi.is_bucket() && reweight > 0) {
-      if (min_var < 0 || var < min_var)
-	min_var = var;
-      if (max_var < 0 || var > max_var)
-	max_var = var;
-
-      double dev = util - average_util;
-      dev *= dev;
-      stddev += reweight * dev;
-      sum += reweight;
-    }
-  }
-
-  virtual void dump_item(const CrushTreeDumper::Item &qi,
-			 float &reweight,
-			 int64_t kb,
-			 int64_t kb_used,
-			 int64_t kb_avail,
-			 double& util,
-			 double& var,
-			 const size_t num_pgs,
-			 F *f) = 0;
-
-  double dev() {
-    return sum > 0 ? sqrt(stddev / sum) : 0;
-  }
-
-  double average_utilization() {
-    int64_t kb = 0, kb_used = 0;
-    for (int i = 0; i < osdmap->get_max_osd(); i++) {
-      if (!osdmap->exists(i) || osdmap->get_weight(i) == 0)
-	continue;
-      int64_t kb_i, kb_used_i, kb_avail_i;
-      if (get_osd_utilization(i, &kb_i, &kb_used_i, &kb_avail_i)) {
-	kb += kb_i;
-	kb_used += kb_used_i;
-      }
-    }
-    return kb > 0 ? 100.0 * (double)kb_used / (double)kb : 0;
-  }
-
-  bool get_osd_utilization(int id, int64_t* kb, int64_t* kb_used,
-			   int64_t* kb_avail) const {
-    const osd_stat_t *p = pgs->get_osd_stat(id);
-    if (!p) return false;
-    *kb = p->kb;
-    *kb_used = p->kb_used;
-    *kb_avail = p->kb_avail;
-    return *kb > 0;
-  }
-
-  bool get_bucket_utilization(int id, int64_t* kb, int64_t* kb_used,
-			      int64_t* kb_avail) const {
-    if (id >= 0) {
-      if (osdmap->is_out(id)) {
-        *kb = 0;
-        *kb_used = 0;
-        *kb_avail = 0;
-        return true;
-      }
-      return get_osd_utilization(id, kb, kb_used, kb_avail);
-    }
-
-    *kb = 0;
-    *kb_used = 0;
-    *kb_avail = 0;
-
-    for (int k = osdmap->crush->get_bucket_size(id) - 1; k >= 0; k--) {
-      int item = osdmap->crush->get_bucket_item(id, k);
-      int64_t kb_i = 0, kb_used_i = 0, kb_avail_i = 0;
-      if (!get_bucket_utilization(item, &kb_i, &kb_used_i, &kb_avail_i))
-	return false;
-      *kb += kb_i;
-      *kb_used += kb_used_i;
-      *kb_avail += kb_avail_i;
-    }
-    return *kb > 0;
-  }
-
-protected:
-  const OSDMap *osdmap;
-  const PGStatService *pgs;
-  bool tree;
-  double average_util;
-  double min_var;
-  double max_var;
-  double stddev;
-  double sum;
-};
-
-class OSDUtilizationPlainDumper : public OSDUtilizationDumper<TextTable> {
-public:
-  typedef OSDUtilizationDumper<TextTable> Parent;
-
-  OSDUtilizationPlainDumper(const CrushWrapper *crush, const OSDMap *osdmap,
-		     const PGStatService *pgs, bool tree) :
-    Parent(crush, osdmap, pgs, tree) {}
-
-  void dump(TextTable *tbl) {
-    tbl->define_column("ID", TextTable::LEFT, TextTable::RIGHT);
-    tbl->define_column("WEIGHT", TextTable::LEFT, TextTable::RIGHT);
-    tbl->define_column("REWEIGHT", TextTable::LEFT, TextTable::RIGHT);
-    tbl->define_column("SIZE", TextTable::LEFT, TextTable::RIGHT);
-    tbl->define_column("USE", TextTable::LEFT, TextTable::RIGHT);
-    tbl->define_column("AVAIL", TextTable::LEFT, TextTable::RIGHT);
-    tbl->define_column("%USE", TextTable::LEFT, TextTable::RIGHT);
-    tbl->define_column("VAR", TextTable::LEFT, TextTable::RIGHT);
-    tbl->define_column("PGS", TextTable::LEFT, TextTable::RIGHT);
-    if (tree)
-      tbl->define_column("TYPE NAME", TextTable::LEFT, TextTable::LEFT);
-
-    Parent::dump(tbl);
-
-    dump_stray(tbl);
-
-    *tbl << "" << "" << "TOTAL"
-	 << si_t(pgs->get_osd_sum().kb << 10)
-	 << si_t(pgs->get_osd_sum().kb_used << 10)
-	 << si_t(pgs->get_osd_sum().kb_avail << 10)
-	 << lowprecision_t(average_util)
-	 << ""
-	 << TextTable::endrow;
-  }
-
-protected:
-  struct lowprecision_t {
-    float v;
-    explicit lowprecision_t(float _v) : v(_v) {}
-  };
-  friend std::ostream &operator<<(ostream& out, const lowprecision_t& v);
-
-  using OSDUtilizationDumper<TextTable>::dump_item;
-  void dump_item(const CrushTreeDumper::Item &qi,
-			 float &reweight,
-			 int64_t kb,
-			 int64_t kb_used,
-			 int64_t kb_avail,
-			 double& util,
-			 double& var,
-			 const size_t num_pgs,
-			 TextTable *tbl) override {
-    *tbl << qi.id
-	 << weightf_t(qi.weight)
-	 << weightf_t(reweight)
-	 << si_t(kb << 10)
-	 << si_t(kb_used << 10)
-	 << si_t(kb_avail << 10)
-	 << lowprecision_t(util)
-	 << lowprecision_t(var);
-
-    if (qi.is_bucket()) {
-      *tbl << "-";
-    } else {
-      *tbl << num_pgs;
-    }
-
-    if (tree) {
-      ostringstream name;
-      for (int k = 0; k < qi.depth; k++)
-	name << "    ";
-      if (qi.is_bucket()) {
-	int type = crush->get_bucket_type(qi.id);
-	name << crush->get_type_name(type) << " "
-	     << crush->get_item_name(qi.id);
-      } else {
-	name << "osd." << qi.id;
-      }
-      *tbl << name.str();
-    }
-
-    *tbl << TextTable::endrow;
-  }
-
-public:
-  string summary() {
-    ostringstream out;
-    out << "MIN/MAX VAR: " << lowprecision_t(min_var)
-	<< "/" << lowprecision_t(max_var) << "  "
-	<< "STDDEV: " << lowprecision_t(dev());
-    return out.str();
-  }
-};
-
-ostream& operator<<(ostream& out,
-		    const OSDUtilizationPlainDumper::lowprecision_t& v)
-{
-  if (v.v < -0.01) {
-    return out << "-";
-  } else if (v.v < 0.001) {
-    return out << "0";
-  } else {
-    std::streamsize p = out.precision();
-    return out << std::fixed << std::setprecision(2) << v.v << std::setprecision(p);
-  }
-}
-
-class OSDUtilizationFormatDumper : public OSDUtilizationDumper<Formatter> {
-public:
-  typedef OSDUtilizationDumper<Formatter> Parent;
-
-  OSDUtilizationFormatDumper(const CrushWrapper *crush, const OSDMap *osdmap,
-			     const PGStatService *pgs, bool tree) :
-    Parent(crush, osdmap, pgs, tree) {}
-
-  void dump(Formatter *f) {
-    f->open_array_section("nodes");
-    Parent::dump(f);
-    f->close_section();
-
-    f->open_array_section("stray");
-    dump_stray(f);
-    f->close_section();
-  }
-
-protected:
-  using OSDUtilizationDumper<Formatter>::dump_item;
-  void dump_item(const CrushTreeDumper::Item &qi,
-			 float &reweight,
-			 int64_t kb,
-			 int64_t kb_used,
-			 int64_t kb_avail,
-			 double& util,
-			 double& var,
-			 const size_t num_pgs,
-			 Formatter *f) override {
-    f->open_object_section("item");
-    CrushTreeDumper::dump_item_fields(crush, qi, f);
-    f->dump_float("reweight", reweight);
-    f->dump_int("kb", kb);
-    f->dump_int("kb_used", kb_used);
-    f->dump_int("kb_avail", kb_avail);
-    f->dump_float("utilization", util);
-    f->dump_float("var", var);
-    f->dump_unsigned("pgs", num_pgs);
-    CrushTreeDumper::dump_bucket_children(crush, qi, f);
-    f->close_section();
-  }
-
-public:
-  void summary(Formatter *f) {
-    f->open_object_section("summary");
-    f->dump_int("total_kb", pgs->get_osd_sum().kb);
-    f->dump_int("total_kb_used", pgs->get_osd_sum().kb_used);
-    f->dump_int("total_kb_avail", pgs->get_osd_sum().kb_avail);
-    f->dump_float("average_utilization", average_util);
-    f->dump_float("min_var", min_var);
-    f->dump_float("max_var", max_var);
-    f->dump_float("dev", dev());
-    f->close_section();
-  }
-};
-
-void OSDMonitor::print_utilization(ostream &out, Formatter *f, bool tree) const
-{
-  const CrushWrapper *crush = osdmap.crush.get();
-
-  if (f) {
-    f->open_object_section("df");
-    OSDUtilizationFormatDumper d(crush, &osdmap, mon->pgservice, tree);
-    d.dump(f);
-    d.summary(f);
-    f->close_section();
-    f->flush(out);
-  } else {
-    OSDUtilizationPlainDumper d(crush, &osdmap, mon->pgservice, tree);
-    TextTable tbl;
-    d.dump(&tbl);
-    out << tbl
-	<< d.summary() << "\n";
-  }
 }
 
 void OSDMonitor::create_pending()
@@ -1910,18 +1610,26 @@ bool OSDMonitor::prepare_mark_me_down(MonOpRequestRef op)
 bool OSDMonitor::can_mark_down(int i)
 {
   if (osdmap.test_flag(CEPH_OSDMAP_NODOWN)) {
-    dout(5) << "can_mark_down NODOWN flag set, will not mark osd." << i << " down" << dendl;
+    dout(5) << __func__ << " NODOWN flag set, will not mark osd." << i
+            << " down" << dendl;
     return false;
   }
+
+  if (osdmap.is_nodown(i)) {
+    dout(5) << __func__ << " osd." << i << " is marked as nodown, "
+            << "will not mark it down" << dendl;
+    return false;
+  }
+
   int num_osds = osdmap.get_num_osds();
   if (num_osds == 0) {
-    dout(5) << "can_mark_down no osds" << dendl;
+    dout(5) << __func__ << " no osds" << dendl;
     return false;
   }
   int up = osdmap.get_num_up_osds() - pending_inc.get_net_marked_down(&osdmap);
   float up_ratio = (float)up / (float)num_osds;
   if (up_ratio < g_conf->mon_osd_min_up_ratio) {
-    dout(2) << "can_mark_down current up_ratio " << up_ratio << " < min "
+    dout(2) << __func__ << " current up_ratio " << up_ratio << " < min "
 	    << g_conf->mon_osd_min_up_ratio
 	    << ", will not mark osd." << i << " down" << dendl;
     return false;
@@ -1932,9 +1640,17 @@ bool OSDMonitor::can_mark_down(int i)
 bool OSDMonitor::can_mark_up(int i)
 {
   if (osdmap.test_flag(CEPH_OSDMAP_NOUP)) {
-    dout(5) << "can_mark_up NOUP flag set, will not mark osd." << i << " up" << dendl;
+    dout(5) << __func__ << " NOUP flag set, will not mark osd." << i
+            << " up" << dendl;
     return false;
   }
+
+  if (osdmap.is_noup(i)) {
+    dout(5) << __func__ << " osd." << i << " is marked as noup, "
+            << "will not mark it up" << dendl;
+    return false;
+  }
+
   return true;
 }
 
@@ -1948,6 +1664,13 @@ bool OSDMonitor::can_mark_out(int i)
     dout(5) << __func__ << " NOOUT flag set, will not mark osds out" << dendl;
     return false;
   }
+
+  if (osdmap.is_noout(i)) {
+    dout(5) << __func__ << " osd." << i << " is marked as noout, "
+            << "will not mark it out" << dendl;
+    return false;
+  }
+
   int num_osds = osdmap.get_num_osds();
   if (num_osds == 0) {
     dout(5) << __func__ << " no osds" << dendl;
@@ -1973,9 +1696,17 @@ bool OSDMonitor::can_mark_out(int i)
 bool OSDMonitor::can_mark_in(int i)
 {
   if (osdmap.test_flag(CEPH_OSDMAP_NOIN)) {
-    dout(5) << "can_mark_in NOIN flag set, will not mark osd." << i << " in" << dendl;
+    dout(5) << __func__ << " NOIN flag set, will not mark osd." << i
+            << " in" << dendl;
     return false;
   }
+
+  if (osdmap.is_noin(i)) {
+    dout(5) << __func__ << " osd." << i << " is marked as noin, "
+            << "will not mark it in" << dendl;
+    return false;
+  }
+
   return true;
 }
 
@@ -3279,7 +3010,7 @@ unsigned OSDMonitor::scan_for_creating_pgs(
   for (auto& p : pools) {
     int64_t poolid = p.first;
     const pg_pool_t& pool = p.second;
-    int ruleno = osdmap.crush->find_rule(pool.get_crush_ruleset(),
+    int ruleno = osdmap.crush->find_rule(pool.get_crush_rule(),
 					 pool.get_type(), pool.get_size());
     if (ruleno < 0 || !osdmap.crush->rule_exists(ruleno))
       continue;
@@ -3809,6 +3540,58 @@ void OSDMonitor::get_health(list<pair<health_status_t,string> >& summary,
 	  detail->push_back(make_pair(HEALTH_WARN, ss.str()));
         }
       }
+
+      // warn if there is any noup osds.
+      vector<int> noup_osds;
+      osdmap.get_noup_osds(&noup_osds);
+      if (noup_osds.size()) {
+        ostringstream ss;
+        ss << noup_osds.size() << " noup osd(s)";
+        summary.push_back(make_pair(HEALTH_WARN, ss.str()));
+        if (detail) {
+          ss << ": " << noup_osds;
+          detail->push_back(make_pair(HEALTH_WARN, ss.str()));
+        }
+      }
+
+      // warn if there is any nodown osds.
+      vector<int> nodown_osds;
+      osdmap.get_nodown_osds(&nodown_osds);
+      if (nodown_osds.size()) {
+        ostringstream ss;
+        ss << nodown_osds.size() << " nodown osd(s)";
+        summary.push_back(make_pair(HEALTH_WARN, ss.str()));
+        if (detail) {
+          ss << ": " << nodown_osds;
+          detail->push_back(make_pair(HEALTH_WARN, ss.str()));
+        }
+      }
+
+      // warn if there is any noin osds.
+      vector<int> noin_osds;
+      osdmap.get_noin_osds(&noin_osds);
+      if (noin_osds.size()) {
+        ostringstream ss;
+        ss << noin_osds.size() << " noin osd(s)";
+        summary.push_back(make_pair(HEALTH_WARN, ss.str()));
+        if (detail) {
+          ss << ": " << noin_osds;
+          detail->push_back(make_pair(HEALTH_WARN, ss.str()));
+        }
+      }
+
+      // warn if there is any noout osds.
+      vector<int> noout_osds;
+      osdmap.get_noout_osds(&noout_osds);
+      if (noout_osds.size()) {
+        ostringstream ss;
+        ss << noout_osds.size() << " noout osd(s)";
+        summary.push_back(make_pair(HEALTH_WARN, ss.str()));
+        if (detail) {
+          ss << ": " << noout_osds;
+          detail->push_back(make_pair(HEALTH_WARN, ss.str()));
+        }
+      }
     }
     // note: we leave it to ceph-mgr to generate details health warnings
     // with actual osd utilizations
@@ -3887,6 +3670,16 @@ void OSDMonitor::get_health(list<pair<health_status_t,string> >& summary,
 	ostringstream ss;
 	ss << problem_cache_pools << " cache pools are missing hit_sets";
 	summary.push_back(make_pair(HEALTH_WARN, ss.str()));
+      }
+    }
+
+    if (osdmap.crush->has_multirule_rulesets()) {
+      ostringstream ss;
+      ss << "CRUSH map contains multirule rulesets";
+      summary.push_back(make_pair(HEALTH_WARN, ss.str()));
+      if (detail) {
+	ss << "; please manually fix the map";
+	detail->push_back(make_pair(HEALTH_WARN, ss.str()));
       }
     }
 
@@ -3983,7 +3776,7 @@ void OSDMonitor::dump_info(Formatter *f)
 namespace {
   enum osd_pool_get_choices {
     SIZE, MIN_SIZE, CRASH_REPLAY_INTERVAL,
-    PG_NUM, PGP_NUM, CRUSH_RULE, CRUSH_RULESET, HASHPSPOOL,
+    PG_NUM, PGP_NUM, CRUSH_RULE, HASHPSPOOL,
     NODELETE, NOPGCHANGE, NOSIZECHANGE,
     WRITE_FADVISE_DONTNEED, NOSCRUB, NODEEP_SCRUB,
     HIT_SET_TYPE, HIT_SET_PERIOD, HIT_SET_COUNT, HIT_SET_FPP,
@@ -4057,7 +3850,8 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
 	   prefix == "osd tree" ||
 	   prefix == "osd ls" ||
 	   prefix == "osd getmap" ||
-	   prefix == "osd getcrushmap") {
+	   prefix == "osd getcrushmap" ||
+	   prefix == "osd ls-tree") {
     string val;
 
     epoch_t epoch = 0;
@@ -4159,14 +3953,50 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
       ss << "got osdmap epoch " << p->get_epoch();
     } else if (prefix == "osd getcrushmap") {
       p->crush->encode(rdata, mon->get_quorum_con_features());
-      ss << "got crush map from osdmap epoch " << p->get_epoch();
+      ss << p->get_crush_version();
+    } else if (prefix == "osd ls-tree") {
+      string bucket_name;
+      cmd_getval(g_ceph_context, cmdmap, "name", bucket_name);
+      set<int> osds;
+      r = p->get_osds_by_bucket_name(bucket_name, &osds);
+      if (r == -ENOENT) {
+        ss << "\"" << bucket_name << "\" does not exist";
+        goto reply;
+      } else if (r < 0) {
+        ss << "can not parse bucket name:\"" << bucket_name << "\"";
+        goto reply;
+      }
+
+      if (f) {
+        f->open_array_section("osds");
+        for (auto &i : osds) {
+          if (osdmap.exists(i)) {
+            f->dump_int("osd", i);
+          }
+        }
+        f->close_section();
+        f->flush(ds);
+      } else {
+        bool first = true;
+        for (auto &i : osds) {
+          if (osdmap.exists(i)) {
+            if (!first)
+              ds << "\n";
+            first = false;
+            ds << i;
+          }
+        }
+      }
+
+      rdata.append(ds);
     }
     if (p != &osdmap)
       delete p;
   } else if (prefix == "osd df") {
     string method;
     cmd_getval(g_ceph_context, cmdmap, "output_method", method);
-    print_utilization(ds, f ? f.get() : NULL, method == "tree");
+    print_osd_utilization(osdmap, mon->pgservice, ds,
+			  f.get(), method == "tree");
     rdata.append(ds);
   } else if (prefix == "osd getmaxosd") {
     if (f) {
@@ -4534,7 +4364,6 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
       {"crash_replay_interval", CRASH_REPLAY_INTERVAL},
       {"pg_num", PG_NUM}, {"pgp_num", PGP_NUM},
       {"crush_rule", CRUSH_RULE},
-      {"crush_ruleset", CRUSH_RULESET},
       {"hashpspool", HASHPSPOOL}, {"nodelete", NODELETE},
       {"nopgchange", NOPGCHANGE}, {"nosizechange", NOSIZECHANGE},
       {"noscrub", NOSCRUB}, {"nodeep-scrub", NODEEP_SCRUB},
@@ -4653,15 +4482,12 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
 			p->get_crash_replay_interval());
 	    break;
 	  case CRUSH_RULE:
-	    if (osdmap.crush->rule_exists(p->get_crush_ruleset())) {
+	    if (osdmap.crush->rule_exists(p->get_crush_rule())) {
 	      f->dump_string("crush_rule", osdmap.crush->get_rule_name(
-			       p->get_crush_ruleset()));
+			       p->get_crush_rule()));
 	    } else {
-	      f->dump_string("crush_rule", stringify(p->get_crush_ruleset()));
+	      f->dump_string("crush_rule", stringify(p->get_crush_rule()));
 	    }
-	    break;
-	  case CRUSH_RULESET:
-	    f->dump_int("crush_ruleset", p->get_crush_ruleset());
 	    break;
 	  case HASHPSPOOL:
 	  case NODELETE:
@@ -4817,15 +4643,12 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
 	      p->get_crash_replay_interval() << "\n";
 	    break;
 	  case CRUSH_RULE:
-	    if (osdmap.crush->rule_exists(p->get_crush_ruleset())) {
+	    if (osdmap.crush->rule_exists(p->get_crush_rule())) {
 	      ss << "crush_rule: " << osdmap.crush->get_rule_name(
-		p->get_crush_ruleset()) << "\n";
+		p->get_crush_rule()) << "\n";
 	    } else {
-	      ss << "crush_rule: " << p->get_crush_ruleset() << "\n";
+	      ss << "crush_rule: " << p->get_crush_rule() << "\n";
 	    }
-	    break;
-	  case CRUSH_RULESET:
-	    ss << "crush_ruleset: " << p->get_crush_ruleset() << "\n";
 	    break;
 	  case HIT_SET_PERIOD:
 	    ss << "hit_set_period: " << p->hit_set_period << "\n";
@@ -5021,7 +4844,7 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
     } else {
       int ruleno = osdmap.crush->get_rule_id(name);
       if (ruleno < 0) {
-	ss << "unknown crush ruleset '" << name << "'";
+	ss << "unknown crush rule '" << name << "'";
 	r = ruleno;
 	goto reply;
       }
@@ -5273,14 +5096,14 @@ int OSDMonitor::prepare_new_pool(MonOpRequestRef op)
     return -EPERM;
   string erasure_code_profile;
   stringstream ss;
-  string ruleset_name;
+  string rule_name;
   if (m->auid)
-    return prepare_new_pool(m->name, m->auid, m->crush_rule, ruleset_name,
+    return prepare_new_pool(m->name, m->auid, m->crush_rule, rule_name,
 			    0, 0,
                             erasure_code_profile,
 			    pg_pool_t::TYPE_REPLICATED, 0, FAST_READ_OFF, &ss);
   else
-    return prepare_new_pool(m->name, session->auid, m->crush_rule, ruleset_name,
+    return prepare_new_pool(m->name, session->auid, m->crush_rule, rule_name,
 			    0, 0,
                             erasure_code_profile,
 			    pg_pool_t::TYPE_REPLICATED, 0, FAST_READ_OFF, &ss);
@@ -5388,14 +5211,14 @@ int OSDMonitor::normalize_profile(const string& profilename,
   return 0;
 }
 
-int OSDMonitor::crush_ruleset_create_erasure(const string &name,
+int OSDMonitor::crush_rule_create_erasure(const string &name,
 					     const string &profile,
-					     int *ruleset,
+					     int *rule,
 					     ostream *ss)
 {
   int ruleid = osdmap.crush->get_rule_id(name);
   if (ruleid != -ENOENT) {
-    *ruleset = osdmap.crush->get_rule_mask_ruleset(ruleid);
+    *rule = osdmap.crush->get_rule_mask_ruleset(ruleid);
     return -EEXIST;
   }
 
@@ -5404,7 +5227,7 @@ int OSDMonitor::crush_ruleset_create_erasure(const string &name,
 
   ruleid = newcrush.get_rule_id(name);
   if (ruleid != -ENOENT) {
-    *ruleset = newcrush.get_rule_mask_ruleset(ruleid);
+    *rule = newcrush.get_rule_mask_ruleset(ruleid);
     return -EALREADY;
   } else {
     ErasureCodeInterfaceRef erasure_code;
@@ -5418,7 +5241,7 @@ int OSDMonitor::crush_ruleset_create_erasure(const string &name,
     erasure_code.reset();
     if (err < 0)
       return err;
-    *ruleset = err;
+    *rule = err;
     pending_inc.crush.clear();
     newcrush.encode(pending_inc.crush, mon->get_quorum_con_features());
     return 0;
@@ -5648,40 +5471,40 @@ int OSDMonitor::prepare_pool_stripe_width(const unsigned pool_type,
   return err;
 }
 
-int OSDMonitor::prepare_pool_crush_ruleset(const unsigned pool_type,
-					   const string &erasure_code_profile,
-					   const string &ruleset_name,
-					   int *crush_ruleset,
-					   ostream *ss)
+int OSDMonitor::prepare_pool_crush_rule(const unsigned pool_type,
+					const string &erasure_code_profile,
+					const string &rule_name,
+					int *crush_rule,
+					ostream *ss)
 {
 
-  if (*crush_ruleset < 0) {
+  if (*crush_rule < 0) {
     switch (pool_type) {
     case pg_pool_t::TYPE_REPLICATED:
       {
-	if (ruleset_name == "") {
-	  //Use default ruleset
-	  *crush_ruleset = osdmap.crush->get_osd_pool_default_crush_replicated_ruleset(g_ceph_context);
-	  if (*crush_ruleset < 0) {
-	    // Errors may happen e.g. if no valid ruleset is available
-	    *ss << "No suitable CRUSH ruleset exists, check "
+	if (rule_name == "") {
+	  // Use default rule
+	  *crush_rule = osdmap.crush->get_osd_pool_default_crush_replicated_ruleset(g_ceph_context);
+	  if (*crush_rule < 0) {
+	    // Errors may happen e.g. if no valid rule is available
+	    *ss << "No suitable CRUSH rule exists, check "
                 << "'osd pool default crush *' config options";
 	    return -ENOENT;
 	  }
 	} else {
-	  return get_crush_ruleset(ruleset_name, crush_ruleset, ss);
+	  return get_crush_rule(rule_name, crush_rule, ss);
 	}
       }
       break;
     case pg_pool_t::TYPE_ERASURE:
       {
-	int err = crush_ruleset_create_erasure(ruleset_name,
+	int err = crush_rule_create_erasure(rule_name,
 					       erasure_code_profile,
-					       crush_ruleset, ss);
+					       crush_rule, ss);
 	switch (err) {
 	case -EALREADY:
-	  dout(20) << "prepare_pool_crush_ruleset: ruleset "
-		   << ruleset_name << " try again" << dendl;
+	  dout(20) << "prepare_pool_crush_rule: rule "
+		   << rule_name << " try again" << dendl;
 	  // fall through
 	case 0:
 	  // need to wait for the crush rule to be proposed before proceeding
@@ -5695,14 +5518,14 @@ int OSDMonitor::prepare_pool_crush_ruleset(const unsigned pool_type,
       }
       break;
     default:
-      *ss << "prepare_pool_crush_ruleset: " << pool_type
+      *ss << "prepare_pool_crush_rule: " << pool_type
 	 << " is not a known pool type";
       return -EINVAL;
       break;
     }
   } else {
-    if (!osdmap.crush->ruleset_exists(*crush_ruleset)) {
-      *ss << "CRUSH ruleset " << *crush_ruleset << " not found";
+    if (!osdmap.crush->ruleset_exists(*crush_rule)) {
+      *ss << "CRUSH rule " << *crush_rule << " not found";
       return -ENOENT;
     }
   }
@@ -5710,28 +5533,28 @@ int OSDMonitor::prepare_pool_crush_ruleset(const unsigned pool_type,
   return 0;
 }
 
-int OSDMonitor::get_crush_ruleset(const string &ruleset_name,
-				  int *crush_ruleset,
-				  ostream *ss)
+int OSDMonitor::get_crush_rule(const string &rule_name,
+			       int *crush_rule,
+			       ostream *ss)
 {
   int ret;
-  ret = osdmap.crush->get_rule_id(ruleset_name);
+  ret = osdmap.crush->get_rule_id(rule_name);
   if (ret != -ENOENT) {
     // found it, use it
-    *crush_ruleset = ret;
+    *crush_rule = ret;
   } else {
     CrushWrapper newcrush;
     _get_pending_crush(newcrush);
 
-    ret = newcrush.get_rule_id(ruleset_name);
+    ret = newcrush.get_rule_id(rule_name);
     if (ret != -ENOENT) {
       // found it, wait for it to be proposed
-      dout(20) << __func__ << ": ruleset " << ruleset_name
+      dout(20) << __func__ << ": rule " << rule_name
 	       << " try again" << dendl;
       return -EAGAIN;
     } else {
-      //Cannot find it , return error
-      *ss << "specified ruleset " << ruleset_name << " doesn't exist";
+      // Cannot find it , return error
+      *ss << "specified rule " << rule_name << " doesn't exist";
       return ret;
     }
   }
@@ -5741,8 +5564,8 @@ int OSDMonitor::get_crush_ruleset(const string &ruleset_name,
 /**
  * @param name The name of the new pool
  * @param auid The auid of the pool owner. Can be -1
- * @param crush_ruleset The crush rule to use. If <0, will use the system default
- * @param crush_ruleset_name The crush rule to use, if crush_rulset <0
+ * @param crush_rule The crush rule to use. If <0, will use the system default
+ * @param crush_rule_name The crush rule to use, if crush_rulset <0
  * @param pg_num The pg_num to use. If set to 0, will use the system default
  * @param pgp_num The pgp_num to use. If set to 0, will use the system default
  * @param erasure_code_profile The profile name in OSDMap to be used for erasure code
@@ -5754,8 +5577,8 @@ int OSDMonitor::get_crush_ruleset(const string &ruleset_name,
  * @return 0 on success, negative errno on failure.
  */
 int OSDMonitor::prepare_new_pool(string& name, uint64_t auid,
-				 int crush_ruleset,
-				 const string &crush_ruleset_name,
+				 int crush_rule,
+				 const string &crush_rule_name,
                                  unsigned pg_num, unsigned pgp_num,
 				 const string &erasure_code_profile,
                                  const unsigned pool_type,
@@ -5785,10 +5608,10 @@ int OSDMonitor::prepare_new_pool(string& name, uint64_t auid,
     return -EINVAL;
   }
   int r;
-  r = prepare_pool_crush_ruleset(pool_type, erasure_code_profile,
-				 crush_ruleset_name, &crush_ruleset, ss);
+  r = prepare_pool_crush_rule(pool_type, erasure_code_profile,
+				 crush_rule_name, &crush_rule, ss);
   if (r) {
-    dout(10) << " prepare_pool_crush_ruleset returns " << r << dendl;
+    dout(10) << " prepare_pool_crush_rule returns " << r << dendl;
     return r;
   }
   CrushWrapper newcrush;
@@ -5800,9 +5623,9 @@ int OSDMonitor::prepare_new_pool(string& name, uint64_t auid,
     r = tester.test();
   } else {
     r = tester.test_with_crushtool(g_conf->crushtool.c_str(),
-				 osdmap.get_max_osd(),
-				 g_conf->mon_lease,
-				 crush_ruleset);
+				   osdmap.get_max_osd(),
+				   g_conf->mon_lease,
+				   crush_rule);
   }
   if (r) {
     dout(10) << " tester.test_with_crushtool returns " << r
@@ -5817,7 +5640,7 @@ int OSDMonitor::prepare_new_pool(string& name, uint64_t auid,
     return r;
   }
 
-  if (!osdmap.crush->check_crush_rule(crush_ruleset, pool_type, size, *ss)) {
+  if (!osdmap.crush->check_crush_rule(crush_rule, pool_type, size, *ss)) {
     return -EINVAL;
   }
 
@@ -5877,7 +5700,7 @@ int OSDMonitor::prepare_new_pool(string& name, uint64_t auid,
 
   pi->size = size;
   pi->min_size = min_size;
-  pi->crush_ruleset = crush_ruleset;
+  pi->crush_rule = crush_rule;
   pi->expected_num_objects = expected_num_objects;
   pi->object_hash = CEPH_STR_HASH_RJENKINS;
   pi->set_pg_num(pg_num);
@@ -6106,21 +5929,7 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
     if (!osdmap.crush->check_crush_rule(id, p.get_type(), p.get_size(), ss)) {
       return -EINVAL;
     }
-    p.crush_ruleset = id;
-  } else if (var == "crush_ruleset") {
-    if (interr.length()) {
-      ss << "error parsing integer value '" << val << "': " << interr;
-      return -EINVAL;
-    }
-    if (!osdmap.crush->ruleset_exists(n)) {
-      ss << "crush ruleset " << n << " does not exist";
-      return -ENOENT;
-    }
-
-    if (!osdmap.crush->check_crush_rule(n, p.get_type(), p.get_size(), ss)) {
-      return -EINVAL;
-    }
-    p.crush_ruleset = n;
+    p.crush_rule = id;
   } else if (var == "nodelete" || var == "nopgchange" ||
 	     var == "nosizechange" || var == "write_fadvise_dontneed" ||
 	     var == "noscrub" || var == "nodeep-scrub") {
@@ -6212,6 +6021,12 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
       ss << "ec overwrites can only be enabled for an erasure coded pool";
       return -EINVAL;
     }
+    stringstream err;
+    if (!g_conf->mon_debug_no_require_bluestore_for_ec_overwrites &&
+	!is_pool_currently_all_bluestore(pool, p, &err)) {
+      ss << "pool must only be stored on bluestore for scrubbing to work: " << err.str();
+      return -EINVAL;
+    }
     if (val == "true" || (interr.empty() && n == 1)) {
 	p.flags |= pg_pool_t::FLAG_EC_OVERWRITES;
     } else if (val == "false" || (interr.empty() && n == 0)) {
@@ -6219,12 +6034,6 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
       return -EINVAL;
     } else {
       ss << "expecting value 'true', 'false', '0', or '1'";
-      return -EINVAL;
-    }
-    stringstream err;
-    if (!g_conf->mon_debug_no_require_bluestore_for_ec_overwrites &&
-	!is_pool_currently_all_bluestore(pool, p, &err)) {
-      ss << "pool must only be stored on bluestore for scrubbing to work: " << err.str();
       return -EINVAL;
     }
   } else if (var == "target_max_objects") {
@@ -7013,7 +6822,7 @@ int OSDMonitor::prepare_command_osd_destroy(
   // defying PaxosService and all laws of nature. Therefore, as we may
   // be used during 'osd purge', let's keep the caller responsible for
   // proposing.
-
+  assert(err == 0);
   return 0;
 }
 
@@ -7069,8 +6878,8 @@ int OSDMonitor::prepare_command_osd_purge(
     } else {
       may_be_idempotent = false;
     }
-    assert(0 == err);
   }
+  assert(0 == err);
 
   if (may_be_idempotent && !osdmap.exists(id)) {
     dout(10) << __func__ << " osd." << id << " does not exist and "
@@ -7145,6 +6954,11 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
  
   if (prefix == "osd setcrushmap" ||
       (prefix == "osd crush set" && !osdid_present)) {
+    if (pending_inc.crush.length()) {
+      dout(10) << __func__ << " waiting for pending crush update " << dendl;
+      wait_for_finished_proposal(op, new C_RetryMessage(this, op));
+      return true;
+    }
     dout(10) << "prepare_command setting new crush map" << dendl;
     bufferlist data(m->get_data());
     CrushWrapper crush;
@@ -7157,17 +6971,48 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       ss << "Failed to parse crushmap: " << e.what();
       goto reply;
     }
+  
+    int64_t prior_version = 0;
+    if (cmd_getval(g_ceph_context, cmdmap, "prior_version", prior_version)) {
+      if (prior_version == osdmap.get_crush_version() - 1) {
+	// see if we are a resend of the last update.  this is imperfect
+	// (multiple racing updaters may not both get reliable success)
+	// but we expect crush updaters (via this interface) to be rare-ish.
+	bufferlist current, proposed;
+	osdmap.crush->encode(current, mon->get_quorum_con_features());
+	crush.encode(proposed, mon->get_quorum_con_features());
+	if (current.contents_equal(proposed)) {
+	  dout(10) << __func__
+		   << " proposed matches current and version equals previous"
+		   << dendl;
+	  err = 0;
+	  ss << osdmap.get_crush_version();
+	  goto reply;
+	}
+      }
+      if (prior_version != osdmap.get_crush_version()) {
+	err = -EPERM;
+	ss << "prior_version " << prior_version << " != crush version "
+	   << osdmap.get_crush_version();
+	goto reply;
+      }
+    }
 
+    if (crush.has_legacy_rulesets()) {
+      err = -EINVAL;
+      ss << "crush maps with ruleset != ruleid are no longer allowed";
+      goto reply;
+    }
     if (!validate_crush_against_features(&crush, ss)) {
       err = -EINVAL;
       goto reply;
     }
-    
+
     const auto& osdmap_pools = osdmap.get_pools();
     for (auto pit = osdmap_pools.begin(); pit != osdmap_pools.end(); ++pit) {
       const int64_t pool_id = pit->first;
       const pg_pool_t &pool = pit->second;
-      int ruleno = pool.get_crush_ruleset();
+      int ruleno = pool.get_crush_rule();
       if (!crush.rule_exists(ruleno)) {
 	ss << " the crush rule no "<< ruleno << " for pool id " << pool_id << " is in use";
 	err = -EINVAL;
@@ -7196,7 +7041,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     dout(10) << " result " << ess.str() << dendl;
 
     pending_inc.crush = data;
-    ss << "set crush map";
+    ss << osdmap.get_crush_version() + 1;
     goto update;
 
   } else if (prefix == "osd crush set-device-class") {
@@ -7225,8 +7070,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 
     dout(5) << action << " crush item id " << osdid << " name '"
 	    << name << "' device_class " << device_class << dendl;
-    err = newcrush.update_device_class(g_ceph_context, osdid, device_class, name);
-
+    err = newcrush.update_device_class(osdid, device_class, name, &ss);
     if (err < 0)
       goto reply;
 
@@ -7370,6 +7214,53 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     newcrush.encode(pending_inc.crush, mon->get_quorum_con_features());
     ss << "removed class " << device_class << " with id " << class_id
        << " from crush map";
+    goto update;
+
+  } else if (prefix == "osd crush class rename") {
+    string srcname, dstname;
+    if (!cmd_getval(g_ceph_context, cmdmap, "srcname", srcname)) {
+      err = -EINVAL;
+      goto reply;
+    }
+
+    if (!cmd_getval(g_ceph_context, cmdmap, "dstname", dstname)) {
+      err = -EINVAL;
+      goto reply;
+    }
+
+    CrushWrapper newcrush;
+    _get_pending_crush(newcrush);
+
+    if (!newcrush.class_exists(srcname)) {
+      err = -ENOENT;
+      ss << "class '" << srcname << "' does not exist";
+      goto reply;
+    }
+
+    if (newcrush.class_exists(dstname)) {
+      err = -EEXIST;
+      ss << "class '" << dstname << "' already exists";
+      goto reply;
+    }
+
+    int class_id = newcrush.get_class_id(srcname);
+
+    if (newcrush.class_is_in_use(class_id)) {
+      err = -EBUSY;
+      ss << "class '" << srcname << "' is in use";
+      goto reply;
+    }
+
+    err = newcrush.rename_class(srcname, dstname);
+    if (err < 0) {
+      ss << "fail to rename '" << srcname << "' to '" << dstname << "':"
+         << cpp_strerror(err);
+      goto reply;
+    }
+
+    pending_inc.crush.clear();
+    newcrush.encode(pending_inc.crush, mon->get_quorum_con_features());
+    ss << "rename class '" << srcname << "' to '" << dstname << "'";
     goto update;
     
   } else if (osdid_present &&
@@ -7569,6 +7460,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     int r = newcrush.swap_bucket(g_ceph_context, sid, did);
     if (r < 0) {
       ss << "failed to swap bucket contents: " << cpp_strerror(r);
+      err = r;
       goto reply;
     }
     ss << "swapped bucket of " << source << " to " << dest;
@@ -7694,7 +7586,6 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     } while (false);
 
   } else if (prefix == "osd crush reweight-all") {
-    // osd crush reweight <name> <weight>
     CrushWrapper newcrush;
     _get_pending_crush(newcrush);
 
@@ -7837,7 +7728,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     }
 
     if (tunable == "straw_calc_version") {
-      if (value < 0 || value > 1) {
+      if (value != 0 && value != 1) {
 	ss << "value must be 0 or 1; got " << value;
 	err = -EINVAL;
 	goto reply;
@@ -7872,9 +7763,9 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       mode = "firstn";
 
     if (osdmap.crush->rule_exists(name)) {
-      // The name is uniquely associated to a ruleid and the ruleset it contains
-      // From the user point of view, the ruleset is more meaningfull.
-      ss << "ruleset " << name << " already exists";
+      // The name is uniquely associated to a ruleid and the rule it contains
+      // From the user point of view, the rule is more meaningfull.
+      ss << "rule " << name << " already exists";
       err = 0;
       goto reply;
     }
@@ -7883,12 +7774,12 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     _get_pending_crush(newcrush);
 
     if (newcrush.rule_exists(name)) {
-      // The name is uniquely associated to a ruleid and the ruleset it contains
-      // From the user point of view, the ruleset is more meaningfull.
-      ss << "ruleset " << name << " already exists";
+      // The name is uniquely associated to a ruleid and the rule it contains
+      // From the user point of view, the rule is more meaningfull.
+      ss << "rule " << name << " already exists";
       err = 0;
     } else {
-      int ruleno = newcrush.add_simple_ruleset(name, root, type, mode,
+      int ruleno = newcrush.add_simple_rule(name, root, type, mode,
 					       pg_pool_t::TYPE_REPLICATED, &ss);
       if (ruleno < 0) {
 	err = ruleno;
@@ -8046,8 +7937,8 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       }
     }
 
-    int ruleset;
-    err = crush_ruleset_create_erasure(name, profile, &ruleset, &ss);
+    int rule;
+    err = crush_rule_create_erasure(name, profile, &rule, &ss);
     if (err < 0) {
       switch(err) {
       case -EEXIST: // return immediately
@@ -8064,7 +7955,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 	break;
       }
     } else {
-      ss << "created ruleset " << name << " at " << ruleset;
+      ss << "created rule " << name << " at " << rule;
     }
 
     getline(ss, rs);
@@ -8361,10 +8252,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       return prepare_unset_flag(op, CEPH_OSDMAP_NODEEP_SCRUB);
     else if (key == "notieragent")
       return prepare_unset_flag(op, CEPH_OSDMAP_NOTIERAGENT);
-    else if (key == "sortbitwise") {
-      ss << "the sortbitwise flag is required and cannot be unset";
-      err = -EPERM;
-    } else {
+    else {
       ss << "unrecognized flag '" << key << "'";
       err = -EINVAL;
     }
@@ -8417,79 +8305,406 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 	     prefix == "osd rm") {
 
     bool any = false;
+    bool stop = false;
+    bool verbose = true;
 
     vector<string> idvec;
     cmd_getval(g_ceph_context, cmdmap, "ids", idvec);
-    for (unsigned j = 0; j < idvec.size(); j++) {
-      long osd = parse_osd_id(idvec[j].c_str(), &ss);
-      if (osd < 0) {
-	ss << "invalid osd id" << osd;
-	err = -EINVAL;
-	continue;
-      } else if (!osdmap.exists(osd)) {
-	ss << "osd." << osd << " does not exist. ";
-	continue;
-      }
-      if (prefix == "osd down") {
-	if (osdmap.is_down(osd)) {
-	  ss << "osd." << osd << " is already down. ";
-	} else {
-	  pending_inc.new_state[osd] = CEPH_OSD_UP;
-	  ss << "marked down osd." << osd << ". ";
-	  any = true;
-	}
-      } else if (prefix == "osd out") {
-	if (osdmap.is_out(osd)) {
-	  ss << "osd." << osd << " is already out. ";
-	} else {
-	  pending_inc.new_weight[osd] = CEPH_OSD_OUT;
-	  if (osdmap.osd_weight[osd]) {
-	    if (pending_inc.new_xinfo.count(osd) == 0) {
-	      pending_inc.new_xinfo[osd] = osdmap.osd_xinfo[osd];
-	    }
-	    pending_inc.new_xinfo[osd].old_weight = osdmap.osd_weight[osd];
-	  }
-	  ss << "marked out osd." << osd << ". ";
-	  any = true;
-	}
-      } else if (prefix == "osd in") {
-	if (osdmap.is_in(osd)) {
-	  ss << "osd." << osd << " is already in. ";
-	} else {
-	  if (osdmap.osd_xinfo[osd].old_weight > 0) {
-	    pending_inc.new_weight[osd] = osdmap.osd_xinfo[osd].old_weight;
-	    if (pending_inc.new_xinfo.count(osd) == 0) {
-	      pending_inc.new_xinfo[osd] = osdmap.osd_xinfo[osd];
-	    }
-	    pending_inc.new_xinfo[osd].old_weight = 0;
-	  } else {
-	    pending_inc.new_weight[osd] = CEPH_OSD_IN;
-	  }
-	  ss << "marked in osd." << osd << ". ";
-	  any = true;
-	}
-      } else if (prefix == "osd rm") {
-        err = prepare_command_osd_remove(osd);
+    for (unsigned j = 0; j < idvec.size() && !stop; j++) {
+      set<int> osds;
 
-        if (err == -EBUSY) {
-	  if (any)
-	    ss << ", ";
-          ss << "osd." << osd << " is still up; must be down before removal. ";
-	} else {
-          assert(err == 0);
-	  if (any) {
-	    ss << ", osd." << osd;
-          } else {
-	    ss << "removed osd." << osd;
-          }
-	  any = true;
-	}
+      // wildcard?
+      if (j == 0 &&
+          (idvec[0] == "any" || idvec[0] == "all" || idvec[0] == "*")) {
+        if (prefix == "osd in") {
+          // touch out osds only
+          osdmap.get_out_osds(osds);
+        } else {
+          osdmap.get_all_osds(osds);
+        }
+        stop = true;
+        verbose = false; // so the output is less noisy.
+      } else {
+        long osd = parse_osd_id(idvec[j].c_str(), &ss);
+        if (osd < 0) {
+          ss << "invalid osd id" << osd;
+          err = -EINVAL;
+          continue;
+        } else if (!osdmap.exists(osd)) {
+          ss << "osd." << osd << " does not exist. ";
+          continue;
+        }
+
+        osds.insert(osd);
+      }
+
+      for (auto &osd : osds) {
+        if (prefix == "osd down") {
+	  if (osdmap.is_down(osd)) {
+            if (verbose)
+	      ss << "osd." << osd << " is already down. ";
+	  } else {
+            pending_inc.pending_osd_state_set(osd, CEPH_OSD_UP);
+	    ss << "marked down osd." << osd << ". ";
+	    any = true;
+	  }
+        } else if (prefix == "osd out") {
+	  if (osdmap.is_out(osd)) {
+            if (verbose)
+	      ss << "osd." << osd << " is already out. ";
+	  } else {
+	    pending_inc.new_weight[osd] = CEPH_OSD_OUT;
+	    if (osdmap.osd_weight[osd]) {
+	      if (pending_inc.new_xinfo.count(osd) == 0) {
+	        pending_inc.new_xinfo[osd] = osdmap.osd_xinfo[osd];
+	      }
+	      pending_inc.new_xinfo[osd].old_weight = osdmap.osd_weight[osd];
+	    }
+	    ss << "marked out osd." << osd << ". ";
+	    any = true;
+	  }
+        } else if (prefix == "osd in") {
+	  if (osdmap.is_in(osd)) {
+            if (verbose)
+	      ss << "osd." << osd << " is already in. ";
+	  } else {
+	    if (osdmap.osd_xinfo[osd].old_weight > 0) {
+	      pending_inc.new_weight[osd] = osdmap.osd_xinfo[osd].old_weight;
+	      if (pending_inc.new_xinfo.count(osd) == 0) {
+	        pending_inc.new_xinfo[osd] = osdmap.osd_xinfo[osd];
+	      }
+	      pending_inc.new_xinfo[osd].old_weight = 0;
+	    } else {
+	      pending_inc.new_weight[osd] = CEPH_OSD_IN;
+	    }
+	    ss << "marked in osd." << osd << ". ";
+	    any = true;
+	  }
+        } else if (prefix == "osd rm") {
+          err = prepare_command_osd_remove(osd);
+
+          if (err == -EBUSY) {
+	    if (any)
+	      ss << ", ";
+            ss << "osd." << osd << " is still up; must be down before removal. ";
+	  } else {
+            assert(err == 0);
+	    if (any) {
+	      ss << ", osd." << osd;
+            } else {
+	      ss << "removed osd." << osd;
+            }
+	    any = true;
+	  }
+        }
       }
     }
     if (any) {
       getline(ss, rs);
       wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, err, rs,
 						get_last_committed() + 1));
+      return true;
+    }
+  } else if (prefix == "osd add-noup" ||
+             prefix == "osd add-nodown" ||
+             prefix == "osd add-noin" ||
+             prefix == "osd add-noout") {
+
+    enum {
+      OP_NOUP,
+      OP_NODOWN,
+      OP_NOIN,
+      OP_NOOUT,
+    } option;
+
+    if (prefix == "osd add-noup") {
+      option = OP_NOUP;
+    } else if (prefix == "osd add-nodown") {
+      option = OP_NODOWN;
+    } else if (prefix == "osd add-noin") {
+      option = OP_NOIN;
+    } else {
+      option = OP_NOOUT;
+    }
+
+    bool any = false;
+    bool stop = false;
+
+    vector<string> idvec;
+    cmd_getval(g_ceph_context, cmdmap, "ids", idvec);
+    for (unsigned j = 0; j < idvec.size() && !stop; j++) {
+
+      set<int> osds;
+
+      // wildcard?
+      if (j == 0 &&
+          (idvec[0] == "any" || idvec[0] == "all" || idvec[0] == "*")) {
+        osdmap.get_all_osds(osds);
+        stop = true;
+      } else {
+        // try traditional single osd way
+
+        long osd = parse_osd_id(idvec[j].c_str(), &ss);
+        if (osd < 0) {
+          // ss has reason for failure
+          ss << ", unable to parse osd id:\"" << idvec[j] << "\". ";
+          err = -EINVAL;
+          continue;
+        }
+
+        osds.insert(osd);
+      }
+
+      for (auto &osd : osds) {
+
+        if (!osdmap.exists(osd)) {
+          ss << "osd." << osd << " does not exist. ";
+          continue;
+        }
+
+        switch (option) {
+        case OP_NOUP:
+          if (osdmap.is_up(osd)) {
+            ss << "osd." << osd << " is already up. ";
+            continue;
+          }
+
+          if (osdmap.is_noup(osd)) {
+            if (pending_inc.pending_osd_state_clear(osd, CEPH_OSD_NOUP))
+              any = true;
+          } else {
+            pending_inc.pending_osd_state_set(osd, CEPH_OSD_NOUP);
+            any = true;
+          }
+
+          break;
+
+        case OP_NODOWN:
+          if (osdmap.is_down(osd)) {
+            ss << "osd." << osd << " is already down. ";
+            continue;
+          }
+
+          if (osdmap.is_nodown(osd)) {
+            if (pending_inc.pending_osd_state_clear(osd, CEPH_OSD_NODOWN))
+              any = true;
+          } else {
+            pending_inc.pending_osd_state_set(osd, CEPH_OSD_NODOWN);
+            any = true;
+          }
+
+          break;
+
+        case OP_NOIN:
+          if (osdmap.is_in(osd)) {
+            ss << "osd." << osd << " is already in. ";
+            continue;
+          }
+
+          if (osdmap.is_noin(osd)) {
+            if (pending_inc.pending_osd_state_clear(osd, CEPH_OSD_NOIN))
+              any = true;
+          } else {
+            pending_inc.pending_osd_state_set(osd, CEPH_OSD_NOIN);
+            any = true;
+          }
+
+          break;
+
+        case OP_NOOUT:
+          if (osdmap.is_out(osd)) {
+            ss << "osd." << osd << " is already out. ";
+            continue;
+          }
+
+          if (osdmap.is_noout(osd)) {
+            if (pending_inc.pending_osd_state_clear(osd, CEPH_OSD_NOOUT))
+              any = true;
+          } else {
+            pending_inc.pending_osd_state_set(osd, CEPH_OSD_NOOUT);
+            any = true;
+          }
+
+          break;
+
+        default:
+	  assert(0 == "invalid option");
+        }
+      }
+    }
+
+    if (any) {
+      getline(ss, rs);
+      wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, err, rs,
+                                 get_last_committed() + 1));
+      return true;
+    }
+  } else if (prefix == "osd rm-noup" ||
+             prefix == "osd rm-nodown" ||
+             prefix == "osd rm-noin" ||
+             prefix == "osd rm-noout") {
+
+    enum {
+      OP_NOUP,
+      OP_NODOWN,
+      OP_NOIN,
+      OP_NOOUT,
+    } option;
+
+    if (prefix == "osd rm-noup") {
+      option = OP_NOUP;
+    } else if (prefix == "osd rm-nodown") {
+      option = OP_NODOWN;
+    } else if (prefix == "osd rm-noin") {
+      option = OP_NOIN;
+    } else {
+      option = OP_NOOUT;
+    }
+
+    bool any = false;
+    bool stop = false;
+
+    vector<string> idvec;
+    cmd_getval(g_ceph_context, cmdmap, "ids", idvec);
+
+    for (unsigned j = 0; j < idvec.size() && !stop; j++) {
+
+      vector<int> osds;
+
+      // wildcard?
+      if (j == 0 &&
+          (idvec[0] == "any" || idvec[0] == "all" || idvec[0] == "*")) {
+
+        // touch previous noup/nodown/noin/noout osds only
+        switch (option) {
+        case OP_NOUP:
+          osdmap.get_noup_osds(&osds);
+          break;
+        case OP_NODOWN:
+          osdmap.get_nodown_osds(&osds);
+          break;
+        case OP_NOIN:
+          osdmap.get_noin_osds(&osds);
+          break;
+        case OP_NOOUT:
+          osdmap.get_noout_osds(&osds);
+          break;
+        default:
+          assert(0 == "invalid option");
+        }
+
+        // cancel any pending noup/nodown/noin/noout requests too
+        vector<int> pending_state_osds;
+        (void) pending_inc.get_pending_state_osds(&pending_state_osds);
+        for (auto &p : pending_state_osds) {
+
+          switch (option) {
+          case OP_NOUP:
+            if (!osdmap.is_noup(p) &&
+                pending_inc.pending_osd_state_clear(p, CEPH_OSD_NOUP)) {
+              any = true;
+            }
+            break;
+
+          case OP_NODOWN:
+            if (!osdmap.is_nodown(p) &&
+                pending_inc.pending_osd_state_clear(p, CEPH_OSD_NODOWN)) {
+              any = true;
+            }
+            break;
+
+          case OP_NOIN:
+            if (!osdmap.is_noin(p) &&
+                pending_inc.pending_osd_state_clear(p, CEPH_OSD_NOIN)) {
+              any = true;
+            }
+            break;
+
+          case OP_NOOUT:
+            if (!osdmap.is_noout(p) &&
+                pending_inc.pending_osd_state_clear(p, CEPH_OSD_NOOUT)) {
+              any = true;
+            }
+            break;
+
+          default:
+            assert(0 == "invalid option");
+          }
+        }
+
+        stop = true;
+      } else {
+        // try traditional single osd way
+
+        long osd = parse_osd_id(idvec[j].c_str(), &ss);
+        if (osd < 0) {
+          // ss has reason for failure
+          ss << ", unable to parse osd id:\"" << idvec[j] << "\". ";
+          err = -EINVAL;
+          continue;
+        }
+
+        osds.push_back(osd);
+      }
+
+      for (auto &osd : osds) {
+
+        if (!osdmap.exists(osd)) {
+          ss << "osd." << osd << " does not exist. ";
+          continue;
+        }
+
+        switch (option) {
+          case OP_NOUP:
+            if (osdmap.is_noup(osd)) {
+              pending_inc.pending_osd_state_set(osd, CEPH_OSD_NOUP);
+              any = true;
+            } else if (pending_inc.pending_osd_state_clear(
+              osd, CEPH_OSD_NOUP)) {
+              any = true;
+            }
+            break;
+
+          case OP_NODOWN:
+            if (osdmap.is_nodown(osd)) {
+              pending_inc.pending_osd_state_set(osd, CEPH_OSD_NODOWN);
+              any = true;
+            } else if (pending_inc.pending_osd_state_clear(
+              osd, CEPH_OSD_NODOWN)) {
+              any = true;
+            }
+            break;
+
+          case OP_NOIN:
+            if (osdmap.is_noin(osd)) {
+              pending_inc.pending_osd_state_set(osd, CEPH_OSD_NOIN);
+              any = true;
+            } else if (pending_inc.pending_osd_state_clear(
+              osd, CEPH_OSD_NOIN)) {
+              any = true;
+            }
+            break;
+
+          case OP_NOOUT:
+            if (osdmap.is_noout(osd)) {
+              pending_inc.pending_osd_state_set(osd, CEPH_OSD_NOOUT);
+              any = true;
+            } else if (pending_inc.pending_osd_state_clear(
+              osd, CEPH_OSD_NOOUT)) {
+              any = true;
+            }
+            break;
+
+          default:
+            assert(0 == "invalid option");
+        }
+      }
+    }
+
+    if (any) {
+      getline(ss, rs);
+      wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, err, rs,
+                                 get_last_committed() + 1));
       return true;
     }
   } else if (prefix == "osd pg-temp") {
@@ -8587,7 +8802,10 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     pending_inc.new_primary_temp[pgid] = osd;
     ss << "set " << pgid << " primary_temp mapping to " << osd;
     goto update;
-  } else if (prefix == "osd pg-upmap") {
+  } else if (prefix == "osd pg-upmap" ||
+             prefix == "osd rm-pg-upmap" ||
+             prefix == "osd pg-upmap-items" ||
+             prefix == "osd rm-pg-upmap-items") {
     if (osdmap.require_osd_release < CEPH_RELEASE_LUMINOUS) {
       ss << "you must complete the upgrade and set require_osd_release ="
 	 << "luminous before using the new interface";
@@ -8624,193 +8842,167 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       err = -ENOENT;
       goto reply;
     }
-    if (pending_inc.new_pg_upmap.count(pgid) ||
-	pending_inc.old_pg_upmap.count(pgid)) {
-      dout(10) << __func__ << " waiting for pending update on " << pgid << dendl;
-      wait_for_finished_proposal(op, new C_RetryMessage(this, op));
-      return true;
+
+    enum {
+      OP_PG_UPMAP,
+      OP_RM_PG_UPMAP,
+      OP_PG_UPMAP_ITEMS,
+      OP_RM_PG_UPMAP_ITEMS,
+    } option;
+
+    if (prefix == "osd pg-upmap") {
+      option = OP_PG_UPMAP;
+    } else if (prefix == "osd rm-pg-upmap") {
+      option = OP_RM_PG_UPMAP;
+    } else if (prefix == "osd pg-upmap-items") {
+      option = OP_PG_UPMAP_ITEMS;
+    } else {
+      option = OP_RM_PG_UPMAP_ITEMS;
     }
-    vector<int64_t> id_vec;
-    if (!cmd_getval(g_ceph_context, cmdmap, "id", id_vec)) {
-      ss << "unable to parse 'id' value(s) '"
-         << cmd_vartype_stringify(cmdmap["id"]) << "'";
-      err = -EINVAL;
-      goto reply;
-    }
-    vector<int32_t> new_pg_upmap;
-    for (auto osd : id_vec) {
-      if (osd != CRUSH_ITEM_NONE && !osdmap.exists(osd)) {
-        ss << "osd." << osd << " does not exist";
-        err = -ENOENT;
-        goto reply;
+
+    // check pending upmap changes
+    switch (option) {
+    case OP_PG_UPMAP: // fall through
+    case OP_RM_PG_UPMAP:
+      if (pending_inc.new_pg_upmap.count(pgid) ||
+          pending_inc.old_pg_upmap.count(pgid)) {
+        dout(10) << __func__ << " waiting for pending update on "
+                 << pgid << dendl;
+        wait_for_finished_proposal(op, new C_RetryMessage(this, op));
+        return true;
       }
-      new_pg_upmap.push_back(osd);
-    }
+      break;
 
-    pending_inc.new_pg_upmap[pgid] = mempool::osdmap::vector<int32_t>(
-      new_pg_upmap.begin(), new_pg_upmap.end());
-    ss << "set " << pgid << " pg_upmap mapping to " << new_pg_upmap;
-    goto update;
-  } else if (prefix == "osd rm-pg-upmap") {
-    if (osdmap.require_osd_release < CEPH_RELEASE_LUMINOUS) {
-      ss << "you must complete the upgrade and set require_osd_release ="
-	 << "luminous before using the new interface";
-      err = -EPERM;
-      goto reply;
-    }
-    if (osdmap.require_min_compat_client < CEPH_RELEASE_LUMINOUS) {
-      ss << "require_min_compat_client "
-	 << ceph_release_name(osdmap.require_min_compat_client)
-	 << " < luminous, which is required for pg-upmap";
-      err = -EPERM;
-      goto reply;
-    }
-    err = check_cluster_features(CEPH_FEATUREMASK_OSDMAP_PG_UPMAP, ss);
-    if (err == -EAGAIN)
-      goto wait;
-    if (err < 0)
-      goto reply;
-    string pgidstr;
-    if (!cmd_getval(g_ceph_context, cmdmap, "pgid", pgidstr)) {
-      ss << "unable to parse 'pgid' value '"
-         << cmd_vartype_stringify(cmdmap["pgid"]) << "'";
-      err = -EINVAL;
-      goto reply;
-    }
-    pg_t pgid;
-    if (!pgid.parse(pgidstr.c_str())) {
-      ss << "invalid pgid '" << pgidstr << "'";
-      err = -EINVAL;
-      goto reply;
-    }
-    if (pending_inc.new_pg_upmap.count(pgid) ||
-	pending_inc.old_pg_upmap.count(pgid)) {
-      dout(10) << __func__ << " waiting for pending update on " << pgid << dendl;
-      wait_for_finished_proposal(op, new C_RetryMessage(this, op));
-      return true;
-    }
-
-    pending_inc.old_pg_upmap.insert(pgid);
-    ss << "clear " << pgid << " pg_upmap mapping";
-    goto update;
-  } else if (prefix == "osd pg-upmap-items") {
-    if (osdmap.require_osd_release < CEPH_RELEASE_LUMINOUS) {
-      ss << "you must complete the upgrade and set require_osd_release ="
-	 << "luminous before using the new interface";
-      err = -EPERM;
-      goto reply;
-    }
-    if (osdmap.require_min_compat_client < CEPH_RELEASE_LUMINOUS) {
-      ss << "require_min_compat_client "
-	 << ceph_release_name(osdmap.require_min_compat_client)
-	 << " < luminous, which is required for pg-upmap";
-      err = -EPERM;
-      goto reply;
-    }
-    err = check_cluster_features(CEPH_FEATUREMASK_OSDMAP_PG_UPMAP, ss);
-    if (err == -EAGAIN)
-      goto wait;
-    if (err < 0)
-      goto reply;
-    string pgidstr;
-    if (!cmd_getval(g_ceph_context, cmdmap, "pgid", pgidstr)) {
-      ss << "unable to parse 'pgid' value '"
-         << cmd_vartype_stringify(cmdmap["pgid"]) << "'";
-      err = -EINVAL;
-      goto reply;
-    }
-    pg_t pgid;
-    if (!pgid.parse(pgidstr.c_str())) {
-      ss << "invalid pgid '" << pgidstr << "'";
-      err = -EINVAL;
-      goto reply;
-    }
-    if (!osdmap.pg_exists(pgid)) {
-      ss << "pg " << pgid << " does not exist";
-      err = -ENOENT;
-      goto reply;
-    }
-    if (pending_inc.new_pg_upmap_items.count(pgid) ||
-	pending_inc.old_pg_upmap_items.count(pgid)) {
-      dout(10) << __func__ << " waiting for pending update on " << pgid << dendl;
-      wait_for_finished_proposal(op, new C_RetryMessage(this, op));
-      return true;
-    }
-    vector<int64_t> id_vec;
-    if (!cmd_getval(g_ceph_context, cmdmap, "id", id_vec)) {
-      ss << "unable to parse 'id' value(s) '"
-         << cmd_vartype_stringify(cmdmap["id"]) << "'";
-      err = -EINVAL;
-      goto reply;
-    }
-    if (id_vec.size() % 2) {
-      ss << "you must specify pairs of osd ids to be remapped";
-      err = -EINVAL;
-      goto reply;
-    }
-    vector<pair<int32_t,int32_t>> new_pg_upmap_items;
-    for (auto p = id_vec.begin(); p != id_vec.end(); ++p) {
-      int from = *p++;
-      int to = *p;
-      if (!osdmap.exists(from)) {
-	ss << "osd." << from << " does not exist";
-	err = -ENOENT;
-	goto reply;
+    case OP_PG_UPMAP_ITEMS: // fall through
+    case OP_RM_PG_UPMAP_ITEMS:
+      if (pending_inc.new_pg_upmap_items.count(pgid) ||
+          pending_inc.old_pg_upmap_items.count(pgid)) {
+        dout(10) << __func__ << " waiting for pending update on "
+                 << pgid << dendl;
+        wait_for_finished_proposal(op, new C_RetryMessage(this, op));
+        return true;
       }
-      if (to != CRUSH_ITEM_NONE && !osdmap.exists(to)) {
-	ss << "osd." << to << " does not exist";
-	err = -ENOENT;
-	goto reply;
+      break;
+
+    default:
+      assert(0 == "invalid option");
+    }
+
+    switch (option) {
+    case OP_PG_UPMAP:
+      {
+        vector<int64_t> id_vec;
+        if (!cmd_getval(g_ceph_context, cmdmap, "id", id_vec)) {
+          ss << "unable to parse 'id' value(s) '"
+             << cmd_vartype_stringify(cmdmap["id"]) << "'";
+          err = -EINVAL;
+          goto reply;
+        }
+
+        int pool_min_size = osdmap.get_pg_pool_min_size(pgid);
+        if ((int)id_vec.size() < pool_min_size) {
+          ss << "num of osds (" << id_vec.size() <<") < pool min size ("
+             << pool_min_size << ")";
+          err = -EINVAL;
+          goto reply;
+        }
+
+        int pool_size = osdmap.get_pg_pool_size(pgid);
+        if ((int)id_vec.size() > pool_size) {
+          ss << "num of osds (" << id_vec.size() <<") > pool size ("
+             << pool_size << ")";
+          err = -EINVAL;
+          goto reply;
+        }
+
+        vector<int32_t> new_pg_upmap;
+        for (auto osd : id_vec) {
+          if (osd != CRUSH_ITEM_NONE && !osdmap.exists(osd)) {
+            ss << "osd." << osd << " does not exist";
+            err = -ENOENT;
+            goto reply;
+          }
+          new_pg_upmap.push_back(osd);
+        }
+
+        pending_inc.new_pg_upmap[pgid] = mempool::osdmap::vector<int32_t>(
+          new_pg_upmap.begin(), new_pg_upmap.end());
+        ss << "set " << pgid << " pg_upmap mapping to " << new_pg_upmap;
       }
-      new_pg_upmap_items.push_back(make_pair(from, to));
+      break;
+
+    case OP_RM_PG_UPMAP:
+      {
+        pending_inc.old_pg_upmap.insert(pgid);
+        ss << "clear " << pgid << " pg_upmap mapping";
+      }
+      break;
+
+    case OP_PG_UPMAP_ITEMS:
+      {
+        vector<int64_t> id_vec;
+        if (!cmd_getval(g_ceph_context, cmdmap, "id", id_vec)) {
+          ss << "unable to parse 'id' value(s) '"
+             << cmd_vartype_stringify(cmdmap["id"]) << "'";
+          err = -EINVAL;
+          goto reply;
+        }
+
+        if (id_vec.size() % 2) {
+          ss << "you must specify pairs of osd ids to be remapped";
+          err = -EINVAL;
+          goto reply;
+        }
+
+        int pool_size = osdmap.get_pg_pool_size(pgid);
+        if ((int)(id_vec.size() / 2) > pool_size) {
+          ss << "num of osd pairs (" << id_vec.size() / 2 <<") > pool size ("
+             << pool_size << ")";
+          err = -EINVAL;
+          goto reply;
+        }
+
+        vector<pair<int32_t,int32_t>> new_pg_upmap_items;
+        ostringstream items;
+        items << "[";
+        for (auto p = id_vec.begin(); p != id_vec.end(); ++p) {
+          int from = *p++;
+          int to = *p;
+          if (!osdmap.exists(from)) {
+            ss << "osd." << from << " does not exist";
+            err = -ENOENT;
+            goto reply;
+          }
+          if (to != CRUSH_ITEM_NONE && !osdmap.exists(to)) {
+            ss << "osd." << to << " does not exist";
+            err = -ENOENT;
+            goto reply;
+          }
+          new_pg_upmap_items.push_back(make_pair(from, to));
+          items << from << "->" << to << ",";
+        }
+        string out(items.str());
+        out.resize(out.size() - 1); // drop last ','
+        out += "]";
+
+        pending_inc.new_pg_upmap_items[pgid] =
+          mempool::osdmap::vector<pair<int32_t,int32_t>>(
+          new_pg_upmap_items.begin(), new_pg_upmap_items.end());
+        ss << "set " << pgid << " pg_upmap_items mapping to " << out;
+      }
+      break;
+
+    case OP_RM_PG_UPMAP_ITEMS:
+      {
+        pending_inc.old_pg_upmap_items.insert(pgid);
+        ss << "clear " << pgid << " pg_upmap_items mapping";
+      }
+      break;
+
+    default:
+      assert(0 == "invalid option");
     }
 
-    pending_inc.new_pg_upmap_items[pgid] =
-      mempool::osdmap::vector<pair<int32_t,int32_t>>(
-      new_pg_upmap_items.begin(), new_pg_upmap_items.end());
-    ss << "set " << pgid << " pg_upmap_items mapping to " << new_pg_upmap_items;
-    goto update;
-  } else if (prefix == "osd rm-pg-upmap-items") {
-    if (osdmap.require_osd_release < CEPH_RELEASE_LUMINOUS) {
-      ss << "you must complete the upgrade and set require_osd_release ="
-	 << "luminous before using the new interface";
-      err = -EPERM;
-      goto reply;
-    }
-    if (osdmap.require_min_compat_client < CEPH_RELEASE_LUMINOUS) {
-      ss << "require_min_compat_client "
-	 << ceph_release_name(osdmap.require_min_compat_client)
-	 << " < luminous, which is required for pg-upmap";
-      err = -EPERM;
-      goto reply;
-    }
-    err = check_cluster_features(CEPH_FEATUREMASK_OSDMAP_PG_UPMAP, ss);
-    if (err == -EAGAIN)
-      goto wait;
-    if (err < 0)
-      goto reply;
-    string pgidstr;
-    if (!cmd_getval(g_ceph_context, cmdmap, "pgid", pgidstr)) {
-      ss << "unable to parse 'pgid' value '"
-         << cmd_vartype_stringify(cmdmap["pgid"]) << "'";
-      err = -EINVAL;
-      goto reply;
-    }
-    pg_t pgid;
-    if (!pgid.parse(pgidstr.c_str())) {
-      ss << "invalid pgid '" << pgidstr << "'";
-      err = -EINVAL;
-      goto reply;
-    }
-    if (pending_inc.new_pg_upmap_items.count(pgid) ||
-	pending_inc.old_pg_upmap_items.count(pgid)) {
-      dout(10) << __func__ << " waiting for pending update on " << pgid << dendl;
-      wait_for_finished_proposal(op, new C_RetryMessage(this, op));
-      return true;
-    }
-
-    pending_inc.old_pg_upmap_items.insert(pgid);
-    ss << "clear " << pgid << " pg_upmap_items mapping";
     goto update;
   } else if (prefix == "osd primary-affinity") {
     int64_t id;
@@ -8907,7 +9099,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     wait_for_finished_proposal(
 	op,
 	new Monitor::C_Command(mon, op, 0, rs, rdata, get_last_committed() + 1));
-      return true;
+    return true;
   } else if (prefix == "osd lost") {
     int64_t id;
     if (!cmd_getval(g_ceph_context, cmdmap, "id", id)) {
@@ -9034,7 +9226,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     // make sure authmon is writeable.
     if (!mon->authmon()->is_writeable()) {
       dout(10) << __func__ << " waiting for auth mon to be writeable for "
-               << "osd destroy" << dendl;
+               << "osd new" << dendl;
       mon->authmon()->wait_for_writeable(op, new C_RetryMessage(this, op));
       return false;
     }
@@ -9172,10 +9364,21 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 	utime_t expires = ceph_clock_now();
 	double d;
 	// default one hour
-	cmd_getval(g_ceph_context, cmdmap, "expire", d, double(60*60));
+	cmd_getval(g_ceph_context, cmdmap, "expire", d,
+          g_conf->mon_osd_blacklist_default_expire);
 	expires += d;
 
 	pending_inc.new_blacklist[addr] = expires;
+
+        {
+          // cancel any pending un-blacklisting request too
+          auto it = std::find(pending_inc.old_blacklist.begin(),
+            pending_inc.old_blacklist.end(), addr);
+          if (it != pending_inc.old_blacklist.end()) {
+            pending_inc.old_blacklist.erase(it);
+          }
+        }
+
 	ss << "blacklisting " << addr << " until " << expires << " (" << d << " sec)";
 	getline(ss, rs);
 	wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, 0, rs,
@@ -9326,9 +9529,9 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       goto reply;
     }
 
-    bool implicit_ruleset_creation = false;
-    string ruleset_name;
-    cmd_getval(g_ceph_context, cmdmap, "ruleset", ruleset_name);
+    bool implicit_rule_creation = false;
+    string rule_name;
+    cmd_getval(g_ceph_context, cmdmap, "rule", rule_name);
     string erasure_code_profile;
     cmd_getval(g_ceph_context, cmdmap, "erasure_code_profile", erasure_code_profile);
 
@@ -9354,24 +9557,24 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 	  goto wait;
 	}
       }
-      if (ruleset_name == "") {
-	implicit_ruleset_creation = true;
+      if (rule_name == "") {
+	implicit_rule_creation = true;
 	if (erasure_code_profile == "default") {
-	  ruleset_name = "erasure-code";
+	  rule_name = "erasure-code";
 	} else {
-	  dout(1) << "implicitly use ruleset named after the pool: "
+	  dout(1) << "implicitly use rule named after the pool: "
 		<< poolstr << dendl;
-	  ruleset_name = poolstr;
+	  rule_name = poolstr;
 	}
       }
     } else {
-      //NOTE:for replicated pool,cmd_map will put ruleset_name to erasure_code_profile field
-      ruleset_name = erasure_code_profile;
+      //NOTE:for replicated pool,cmd_map will put rule_name to erasure_code_profile field
+      rule_name = erasure_code_profile;
     }
 
-    if (!implicit_ruleset_creation && ruleset_name != "") {
-      int ruleset;
-      err = get_crush_ruleset(ruleset_name, &ruleset, &ss);
+    if (!implicit_rule_creation && rule_name != "") {
+      int rule;
+      err = get_crush_rule(rule_name, &rule, &ss);
       if (err == -EAGAIN) {
 	wait_for_finished_proposal(op, new C_RetryMessage(this, op));
 	return true;
@@ -9398,7 +9601,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     
     err = prepare_new_pool(poolstr, 0, // auid=0 for admin created pool
 			   -1, // default crush rule
-			   ruleset_name,
+			   rule_name,
 			   pg_num, pgp_num,
 			   erasure_code_profile, pool_type,
                            (uint64_t)expected_num_objects,

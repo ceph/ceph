@@ -59,6 +59,9 @@ COMMAND("osd perf", \
         "osd", \
         "r", \
         "cli,rest")
+COMMAND("osd df " \
+	"name=output_method,type=CephChoices,strings=plain|tree,req=false", \
+	"show OSD utilization", "osd", "r", "cli,rest")
 COMMAND("osd blocked-by", \
 	"print histogram of which OSDs are blocking their peers", \
 	"osd", "r", "cli,rest")

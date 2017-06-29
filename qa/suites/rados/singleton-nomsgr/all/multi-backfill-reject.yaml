@@ -31,3 +31,6 @@ tasks:
       - sudo ceph osd in 0 1
 - sleep:
     duration: 60
+- exec:
+    client.0:
+      - sudo ceph osd pool set foo size 2

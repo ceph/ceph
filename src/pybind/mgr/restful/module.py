@@ -15,6 +15,7 @@ import common
 
 from uuid import uuid4
 from pecan import jsonify, make_app
+from OpenSSL import crypto
 from pecan.rest import RestController
 from werkzeug.serving import make_server, make_ssl_devcert
 
@@ -212,6 +213,16 @@ class Module(MgrModule):
             "desc": "List all API keys",
             "perm": "rw"
         },
+        {
+            "cmd": "restful create-self-signed-cert",
+            "desc": "Create localized self signed certificate",
+            "perm": "rw"
+        },
+        {
+            "cmd": "restful restart",
+            "desc": "Restart API server",
+            "perm": "rw"
+        },
     ]
 
     def __init__(self, *args, **kwargs):
@@ -227,12 +238,21 @@ class Module(MgrModule):
 
         self.server = None
 
+        self.stop_server = False
+        self.serve_event = threading.Event()
+
 
     def serve(self):
-        try:
-            self._serve()
-        except:
-            self.log.error(str(traceback.format_exc()))
+        while not self.stop_server:
+            try:
+                self._serve()
+                self.server.socket.close()
+            except:
+                self.log.error(str(traceback.format_exc()))
+
+            # Wait and clear the threading event
+            self.serve_event.wait()
+            self.serve_event.clear()
 
     def get_localized_config(self, key):
         r = self.get_config(self.get_mgr_id() + '/' + key)
@@ -256,7 +276,9 @@ class Module(MgrModule):
             separators=(',', ': '),
         )
 
-        server_addr = self.get_localized_config('server_addr') or '127.0.0.1'
+        server_addr = self.get_localized_config('server_addr')
+        if server_addr is None:
+            raise RuntimeError('no server_addr configured; try "ceph config-key put mgr/restful/server_addr <ip>"')
         server_port = int(self.get_localized_config('server_port') or '8003')
         self.log.info('server_addr: %s server_port: %d',
                       server_addr, server_port)
@@ -268,7 +290,7 @@ class Module(MgrModule):
             cert_tmp.flush()
             cert_fname = cert_tmp.name
         else:
-            cert_fname = self.get_localized_config('crt_file') or '/etc/ceph/ceph-mgr-restful.crt'
+            cert_fname = self.get_localized_config('crt_file')
 
         pkey = self.get_localized_config("key")
         if pkey is not None:
@@ -277,7 +299,14 @@ class Module(MgrModule):
             pkey_tmp.flush()
             pkey_fname = pkey_tmp.name
         else:
-            pkey_fname = self.get_localized_config('key_file') or '/etc/ceph/ceph-mgr-restful.key'
+            pkey_fname = self.get_localized_config('key_file')
+
+        if not cert_fname or not pkey_fname:
+            raise RuntimeError('no certificate configured')
+        if not os.path.isfile(cert_fname):
+            raise RuntimeError('certificate %s does not exist' % cert_fname)
+        if not os.path.isfile(pkey_fname):
+            raise RuntimeError('private key %s does not exist' % pkey_fname)
 
         # Create the HTTPS werkzeug server serving pecan app
         self.server = make_server(
@@ -285,7 +314,7 @@ class Module(MgrModule):
             port=server_port,
             app=make_app(
                 root='restful.api.Root',
-                hooks = lambda: [ErrorHook()],
+                hooks = [ErrorHook()],  # use a callable if pecan >= 0.3.2
             ),
             ssl_context=(cert_fname, pkey_fname),
         )
@@ -295,8 +324,20 @@ class Module(MgrModule):
 
     def shutdown(self):
         try:
+            self.stop_server = True
             if self.server:
                 self.server.shutdown()
+            self.serve_event.set()
+        except:
+            self.log.error(str(traceback.format_exc()))
+            raise
+
+
+    def restart(self):
+        try:
+            if self.server:
+                self.server.shutdown()
+            self.serve_event.set()
         except:
             self.log.error(str(traceback.format_exc()))
 
@@ -328,6 +369,28 @@ class Module(MgrModule):
                 request.next()
         else:
             self.log.debug("Unhandled notification type '%s'" % notify_type)
+
+
+    def create_self_signed_cert(self):
+        # create a key pair
+        pkey = crypto.PKey()
+        pkey.generate_key(crypto.TYPE_RSA, 2048)
+
+        # create a self-signed cert
+        cert = crypto.X509()
+        cert.get_subject().O = "IT"
+        cert.get_subject().CN = "ceph-restful"
+        cert.set_serial_number(int(uuid4()))
+        cert.gmtime_adj_notBefore(0)
+        cert.gmtime_adj_notAfter(10*365*24*60*60)
+        cert.set_issuer(cert.get_subject())
+        cert.set_pubkey(pkey)
+        cert.sign(pkey, 'sha512')
+
+        return (
+            crypto.dump_certificate(crypto.FILETYPE_PEM, cert),
+            crypto.dump_privatekey(crypto.FILETYPE_PEM, pkey)
+        )
 
 
     def handle_command(self, command):
@@ -364,6 +427,27 @@ class Module(MgrModule):
                 0,
                 json.dumps(self.keys, indent=2),
                 "",
+            )
+
+        elif command['prefix'] == "restful create-self-signed-cert":
+            cert, pkey = self.create_self_signed_cert()
+
+            self.set_config(self.get_mgr_id() + '/crt', cert)
+            self.set_config(self.get_mgr_id() + '/key', pkey)
+
+            self.restart()
+            return (
+                0,
+                "Restarting RESTful API server...",
+                ""
+            )
+
+        elif command['prefix'] == 'restful restart':
+            self.restart();
+            return (
+                0,
+                "Restarting RESTful API server...",
+                ""
             )
 
         else:
@@ -419,7 +503,7 @@ class Module(MgrModule):
         osds_by_pool = {}
         for pool_id, pool in pools.items():
             pool_osds = None
-            for rule in [r for r in crush_rules if r['ruleset'] == pool['crush_ruleset']]:
+            for rule in [r for r in crush_rules if r['rule_id'] == pool['crush_rule']]:
                 if rule['min_size'] <= pool['size'] <= rule['max_size']:
                     pool_osds = common.crush_rule_osds(self.get('osd_map_tree')['nodes'], rule)
 

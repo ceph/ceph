@@ -1,6 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
+#include "include/compat.h"
 #include <errno.h>
 #include <stdlib.h>
 #include <sys/types.h>
@@ -1852,7 +1853,7 @@ void RGWPeriodMap::decode(bufferlist::iterator& bl) {
        iter != zonegroups.end(); ++iter) {
     RGWZoneGroup& zonegroup = iter->second;
     zonegroups_by_api[zonegroup.api_name] = zonegroup;
-    if (zonegroup.is_master) {
+    if (zonegroup.is_master_zonegroup()) {
       master_zonegroup = zonegroup.get_id();
     }
   }
@@ -1873,7 +1874,7 @@ static uint32_t gen_short_zone_id(const std::string zone_id)
 
 int RGWPeriodMap::update(const RGWZoneGroup& zonegroup, CephContext *cct)
 {
-  if (zonegroup.is_master && (!master_zonegroup.empty() && zonegroup.get_id() != master_zonegroup)) {
+  if (zonegroup.is_master_zonegroup() && (!master_zonegroup.empty() && zonegroup.get_id() != master_zonegroup)) {
     ldout(cct,0) << "Error updating periodmap, multiple master zonegroups configured "<< dendl;
     ldout(cct,0) << "master zonegroup: " << master_zonegroup << " and  " << zonegroup.get_id() <<dendl;
     return -EINVAL;
@@ -1891,7 +1892,7 @@ int RGWPeriodMap::update(const RGWZoneGroup& zonegroup, CephContext *cct)
     zonegroups_by_api[zonegroup.api_name] = zonegroup;
   }
 
-  if (zonegroup.is_master) {
+  if (zonegroup.is_master_zonegroup()) {
     master_zonegroup = zonegroup.get_id();
   } else if (master_zonegroup == zonegroup.get_id()) {
     master_zonegroup = "";
@@ -1993,7 +1994,7 @@ void RGWZoneGroupMap::decode(bufferlist::iterator& bl) {
        iter != zonegroups.end(); ++iter) {
     RGWZoneGroup& zonegroup = iter->second;
     zonegroups_by_api[zonegroup.api_name] = zonegroup;
-    if (zonegroup.is_master) {
+    if (zonegroup.is_master_zonegroup()) {
       master_zonegroup = zonegroup.get_name();
     }
   }
@@ -3486,7 +3487,7 @@ class RGWIndexCompletionManager {
 
   int num_shards;
 
-  std::atomic<int> cur_shard;
+  std::atomic<int> cur_shard {0};
 
 
 public:
@@ -3942,7 +3943,7 @@ int RGWRados::replace_region_with_zonegroup()
 	  ldout(cct, 0) <<  __func__ << " failed init region "<< *iter << ": " << cpp_strerror(-ret) << dendl;
 	  return ret;
       }
-      if (region.is_master) {
+      if (region.is_master_zonegroup()) {
 	master_region = region.get_id();
 	master_zone = region.master_zone;
       }
@@ -4234,7 +4235,7 @@ int RGWRados::init_zg_from_local(bool *creating_defaults)
     }
   }
   ldout(cct, 20) << "zonegroup " << zonegroup.get_name() << dendl;
-  if (zonegroup.is_master) {
+  if (zonegroup.is_master_zonegroup()) {
     // use endpoints from the zonegroup's master zone
     auto master = zonegroup.zones.find(zonegroup.master_zone);
     if (master == zonegroup.zones.end()) {
@@ -7995,7 +7996,7 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
 
   bool copy_itself = (dest_obj == src_obj);
   RGWObjManifest *pmanifest; 
-  ldout(cct, 0) << "dest_obj=" << dest_obj << " src_obj=" << src_obj << " copy_itself=" << (int)copy_itself << dendl;
+  ldout(cct, 20) << "dest_obj=" << dest_obj << " src_obj=" << src_obj << " copy_itself=" << (int)copy_itself << dendl;
 
   RGWRados::Object dest_op_target(this, dest_bucket_info, obj_ctx, dest_obj);
   RGWRados::Object::Write write_op(&dest_op_target);
@@ -8175,7 +8176,7 @@ int RGWRados::copy_obj_data(RGWObjectCtx& obj_ctx,
 
 bool RGWRados::is_meta_master()
 {
-  if (!get_zonegroup().is_master) {
+  if (!get_zonegroup().is_master_zonegroup()) {
     return false;
   }
 
@@ -8196,7 +8197,7 @@ bool RGWRados::is_syncing_bucket_meta(const rgw_bucket& bucket)
   }
 
   /* zonegroup is not master zonegroup */
-  if (!get_zonegroup().is_master) {
+  if (!get_zonegroup().is_master_zonegroup()) {
     return false;
   }
 
@@ -9000,8 +9001,8 @@ int RGWRados::get_system_obj_state_impl(RGWObjectCtx *rctx, rgw_raw_obj& obj, RG
   s->obj_tag = s->attrset[RGW_ATTR_ID_TAG];
 
   if (s->obj_tag.length())
-    ldout(cct, 20) << "get_system_obj_state: setting s->obj_tag to " 
-                   << string(s->obj_tag.c_str(), s->obj_tag.length()) << dendl;
+    ldout(cct, 20) << "get_system_obj_state: setting s->obj_tag to "
+                   << s->obj_tag.c_str() << dendl;
   else
     ldout(cct, 20) << "get_system_obj_state: s->obj_tag was set empty" << dendl;
 
@@ -9152,7 +9153,7 @@ int RGWRados::get_obj_state_impl(RGWObjectCtx *rctx, const RGWBucketInfo& bucket
     }
   }
   if (s->obj_tag.length())
-    ldout(cct, 20) << "get_obj_state: setting s->obj_tag to " << string(s->obj_tag.c_str(), s->obj_tag.length()) << dendl;
+    ldout(cct, 20) << "get_obj_state: setting s->obj_tag to " << s->obj_tag.c_str() << dendl;
   else
     ldout(cct, 20) << "get_obj_state: s->obj_tag was set empty" << dendl;
 
@@ -9298,9 +9299,8 @@ int RGWRados::Object::Stat::finish()
 }
 
 /**
- * Get the attributes for an object.
- * bucket: name of the bucket holding the object.
- * obj: name of the object
+ * Get an attribute for a system object.
+ * obj: the object to get attr
  * name: name of the attr to retrieve
  * dest: bufferlist to store the result in
  * Returns: 0 on success, -ERR# otherwise.
@@ -9640,28 +9640,6 @@ int RGWRados::set_attrs(void *ctx, const RGWBucketInfo& bucket_info, rgw_obj& ob
   return 0;
 }
 
-/**
- * Get data about an object out of RADOS and into memory.
- * bucket: name of the bucket the object is in.
- * obj: name/key of the object to read
- * data: if get_data==true, this pointer will be set
- *    to an address containing the object's data/value
- * attrs: if non-NULL, the pointed-to map will contain
- *    all the attrs of the object when this function returns
- * mod_ptr: if non-NULL, compares the object's mtime to *mod_ptr,
- *    and if mtime is smaller it fails.
- * unmod_ptr: if non-NULL, compares the object's mtime to *unmod_ptr,
- *    and if mtime is >= it fails.
- * if_match/nomatch: if non-NULL, compares the object's etag attr
- *    to the string and, if it doesn't/does match, fails out.
- * get_data: if true, the object's data/value will be read out, otherwise not
- * err: Many errors will result in this structure being filled
- *    with extra informatin on the error.
- * Returns: -ERR# on failure, otherwise
- *          (if get_data==true) length of read data,
- *          (if get_data==false) length of the object
- */
-// P3 XXX get_data is not seen used anywhere.
 int RGWRados::Object::Read::prepare()
 {
   RGWRados *store = source->get_store();
@@ -13101,7 +13079,7 @@ int RGWRados::cls_user_remove_bucket(rgw_raw_obj& obj, const cls_user_bucket& bu
   return 0;
 }
 
-int RGWRados::check_bucket_shards(const RGWBucketInfo& bucket_info, rgw_bucket& bucket,
+int RGWRados::check_bucket_shards(const RGWBucketInfo& bucket_info, const rgw_bucket& bucket,
 				  RGWQuotaInfo& bucket_quota)
 {
   if (!cct->_conf->rgw_dynamic_resharding) {
@@ -13120,6 +13098,9 @@ int RGWRados::check_bucket_shards(const RGWBucketInfo& bucket_info, rgw_bucket& 
   }
 
   if (need_resharding) {
+    ldout(cct, 20) << __func__ << " bucket " << bucket.name << " need resharding " <<
+      " old num shards " << bucket_info.num_shards << " new num shards " << suggested_num_shards <<
+      dendl;
     return add_bucket_to_reshard(bucket_info, suggested_num_shards);
   }
 

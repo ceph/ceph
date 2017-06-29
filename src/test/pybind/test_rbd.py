@@ -335,6 +335,11 @@ class TestImage(object):
     def test_block_name_prefix(self):
         assert_not_equal(b'', self.image.block_name_prefix())
 
+    def test_create_timestamp(self):
+        timestamp = self.image.create_timestamp()
+        assert_not_equal(0, timestamp.year)
+        assert_not_equal(1970, timestamp.year)
+
     def test_invalidate_cache(self):
         self.image.write(b'abc', 0)
         eq(b'abc', self.image.read(0, 3))

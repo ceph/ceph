@@ -111,6 +111,8 @@ set(rgw_a_srcs
   rgw_rest_user.cc
   rgw_role.cc
   rgw_swift_auth.cc
+  rgw_tag.cc
+  rgw_tag_s3.cc
   rgw_tools.cc
   rgw_usage.cc
   rgw_user.cc
@@ -172,8 +174,8 @@ add_library(radosgw_a STATIC ${radosgw_srcs}
 target_link_libraries(radosgw_a rgw_a ${SSL_LIBRARIES})
 if(WITH_RADOSGW_BEAST_FRONTEND)
   target_link_libraries(radosgw_a
-    ${Boost_COROUTINE_LIBRARY}
-    ${Boost_CONTEXT_LIBRARY})
+    Boost::coroutine
+    Boost::context)
 endif()
 
 add_executable(radosgw rgw_main.cc)

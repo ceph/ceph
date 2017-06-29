@@ -19,6 +19,7 @@
 #include "Mgr.h"
 
 #include "mon/MonClient.h"
+#include "common/errno.h"
 #include "common/version.h"
 
 #include "PyState.h"
@@ -120,7 +121,10 @@ ceph_send_command(PyObject *self, PyObject *args)
     std::string err;
     uint64_t osd_id = strict_strtoll(name, 10, &err);
     if (!err.empty()) {
-      // TODO: raise exception
+      delete c;
+      string msg("invalid osd_id: ");
+      msg.append("\"").append(name).append("\"");
+      PyErr_SetString(PyExc_ValueError, msg.c_str());
       return nullptr;
     }
 
@@ -142,14 +146,35 @@ ceph_send_command(PyObject *self, PyObject *args)
         &c->outs,
         c);
     if (r != 0) {
-      // TODO: raise exception
+      string msg("failed to send command to mds: ");
+      msg.append(cpp_strerror(r));
+      PyErr_SetString(PyExc_RuntimeError, msg.c_str());
       return nullptr;
     }
   } else if (std::string(type) == "pg") {
-    // TODO: expose objecter::pg_command
+    pg_t pgid;
+    if (!pgid.parse(name)) {
+      delete c;
+      string msg("invalid pgid: ");
+      msg.append("\"").append(name).append("\"");
+      PyErr_SetString(PyExc_ValueError, msg.c_str());
+      return nullptr;
+    }
+
+    ceph_tid_t tid;
+    global_handle->get_objecter().pg_command(
+        pgid,
+        {cmd_json},
+        {},
+        &tid,
+        &c->outbl,
+        &c->outs,
+        c);
     return nullptr;
   } else {
-    // TODO: raise exception
+    string msg("unknown service type: ");
+    msg.append(type);
+    PyErr_SetString(PyExc_ValueError, msg.c_str());
     return nullptr;
   }
 
