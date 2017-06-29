@@ -260,6 +260,7 @@ int main(int argc, char **argv)
       string full = out_dir + "/" + dir;
       r = ::mkdir(full.c_str(), 0755);
       if (r < 0) {
+        r = -errno;
 	cerr << "mkdir " << full << " failed: " << cpp_strerror(r) << std::endl;
 	exit(1);
       }
