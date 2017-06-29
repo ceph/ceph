@@ -1566,6 +1566,45 @@ int CrushWrapper::update_device_class(int id,
   return 1;
 }
 
+int CrushWrapper::get_item_class_id(int item, ostream *ss) const
+{
+  if (!item_exists(item)) {
+    if (ss) {
+      *ss << "item " << item << "does not exist";
+    }
+    return -ENOENT;
+  }
+  auto it = class_map.find(item);
+  if (it == class_map.end()) {
+    if (ss) {
+      *ss << "item " << item << "does not belong to any class yet";
+    }
+    return -ENOENT;
+  }
+  return it->second;
+}
+
+int CrushWrapper::get_item_class_name(int item,
+                                      string *class_name,
+                                      ostream *ss) const
+{
+  int class_id = get_item_class_id(item, ss);
+  if (class_id < 0) {
+    // ss has reason for failure
+    return class_id;
+  }
+  const char* name = get_class_name(class_id);
+  if (name) {
+    class_name->clear();
+    class_name->append(name);
+    return 0;
+  }
+  if (ss) {
+    *ss << "item " << item << "does not have a name";
+  }
+  return -ENOENT;
+}
+
 int CrushWrapper::device_class_clone(int original_id, int device_class, int *clone)
 {
   const char *item_name = get_item_name(original_id);

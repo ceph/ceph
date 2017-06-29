@@ -1192,6 +1192,8 @@ public:
   }
 
   int update_device_class(int id, const string& class_name, const string& name, ostream *ss);
+  int get_item_class_id(int item, ostream *ss) const;
+  int get_item_class_name(int item, string *class_name, ostream *ss) const;
   int device_class_clone(int original, int device_class, int *clone);
   bool class_is_in_use(int class_id);
   int populate_classes();
