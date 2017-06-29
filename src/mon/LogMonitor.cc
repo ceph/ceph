@@ -499,6 +499,7 @@ bool LogMonitor::prepare_command(MonOpRequestRef op)
     le.stamp = m->get_recv_stamp();
     le.seq = 0;
     le.prio = CLOG_INFO;
+    le.channel = CLOG_CHANNEL_DEFAULT;
     le.msg = str_join(logtext, " ");
     pending_summary.add(le);
     pending_summary.prune(g_conf->mon_log_max_summary);
