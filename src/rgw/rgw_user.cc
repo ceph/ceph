@@ -1735,6 +1735,7 @@ int RGWUser::init(RGWUserAdminOpState& op_state)
   }
 
   if (!uid.empty() && (uid.compare(RGW_USER_ANON_ID) != 0)) {
+    op_state.set_reserved_user(false);
     found = (rgw_get_user_info_by_uid(store, uid, user_info, &op_state.objv) >= 0);
     op_state.found_by_uid = found;
   }

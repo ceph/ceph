@@ -4333,6 +4333,10 @@ int main(int argc, const char **argv)
   if (!user_id.empty() || !subuser.empty()) {
     ret = user.init(store, user_op);
     if (ret < 0) {
+      if (opt_cmd == OPT_USER_CREATE && user_op.is_reserved_user()) {
+          cerr << "uid: " << user_id << " is reserved by radosgw,"
+	       << " please choose another uid." << std::endl;
+      }
       cerr << "user.init failed: " << cpp_strerror(-ret) << std::endl;
       return -ret;
     }

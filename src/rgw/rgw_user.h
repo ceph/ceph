@@ -179,6 +179,7 @@ struct RGWUserAdminOpState {
 
   // operation attributes
   bool existing_user;
+  bool reserved_user;
   bool existing_key;
   bool existing_subuser;
   bool existing_email;
@@ -388,6 +389,7 @@ struct RGWUserAdminOpState {
   bool is_populated() { return populated; }
   bool is_initialized() { return initialized; }
   bool has_existing_user() { return existing_user; }
+  bool is_reserved_user() { return reserved_user; }
   bool has_existing_key() { return existing_key; }
   bool has_existing_subuser() { return existing_subuser; }
   bool has_existing_email() { return existing_email; }
@@ -409,6 +411,7 @@ struct RGWUserAdminOpState {
   void clear_populated() { populated = false; }
   void set_initialized() { initialized = true; }
   void set_existing_user(bool flag) { existing_user = flag; }
+  void set_reserved_user(bool flag) { reserved_user = flag; }
   void set_existing_key(bool flag) { existing_key = flag; }
   void set_existing_subuser(bool flag) { existing_subuser = flag; }
   void set_existing_email(bool flag) { existing_email = flag; }
@@ -488,6 +491,7 @@ struct RGWUserAdminOpState {
     op_mask = 0;
 
     existing_user = false;
+    reserved_user = true;
     existing_key = false;
     existing_subuser = false;
     existing_email = false;
