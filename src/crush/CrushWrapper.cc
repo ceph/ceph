@@ -1562,11 +1562,7 @@ int CrushWrapper::update_device_class(int id,
                                       const string& name,
                                       ostream *ss)
 {
-  int class_id = get_class_id(class_name);
-  if (class_id < 0) {
-    *ss << "class " << class_name << " does not exist";
-    return -ENOENT;
-  }
+  int class_id = get_or_create_class_id(class_name);
   if (id < 0) {
     *ss << name << " id " << id << " is negative";
     return -EINVAL;
