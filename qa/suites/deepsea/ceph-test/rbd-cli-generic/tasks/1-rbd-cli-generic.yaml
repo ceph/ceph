@@ -1,0 +1,9 @@
+overrides:
+  deepsea:
+    exec:
+    - suites/ceph-test/librbd.sh
+tasks:
+- workunit:
+    clients:
+      client.0:
+        - rbd/cli_generic.sh
