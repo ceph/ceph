@@ -70,6 +70,7 @@ const char *parse_good[] = {
   "allow pool foo namespace=nfoo rwx; allow pool bar namespace nbar object_prefix rbd r",
   "allow pool foo namespace=\"\" rwx; allow pool bar namespace='' object_prefix rbd r",
   "allow pool foo namespace \"\" rwx; allow pool bar namespace '' object_prefix rbd r",
+  "allow profile abc, allow profile abc pool=bar, allow profile abc pool=bar namespace=foo",
   0
 };
 
@@ -1006,3 +1007,13 @@ TEST(OSDCap, AllowClassMultiRWX) {
   ASSERT_FALSE(cap.is_capable("bar", "", 0, "foo", false, false, {{"foo", false, false, false}, {"bar", false, true, false}}));
   ASSERT_FALSE(cap.is_capable("bar", "", 0, "foo", false, false, {{"foo", false, false, false}, {"bar", false, false, false}}));
 }
+
+TEST(OSDCap, AllowProfile) {
+  OSDCap cap;
+  ASSERT_TRUE(cap.parse("allow profile read-only, allow profile read-write pool abc", NULL));
+  ASSERT_FALSE(cap.allow_all());
+  ASSERT_FALSE(cap.is_capable("foo", "", 0, "asdf", true, true, {}));
+  ASSERT_TRUE(cap.is_capable("foo", "", 0, "asdf", true, false, {}));
+  ASSERT_TRUE(cap.is_capable("abc", "", 0, "asdf", false, true, {}));
+}
+

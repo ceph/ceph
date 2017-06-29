@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 /*
  * Ceph - scalable distributed file system
@@ -7,10 +7,10 @@
  *
  * This is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
- * License version 2.1, as published by the Free Software 
+ * License version 2.1, as published by the Free Software
  * Foundation.  See file COPYING.
- * 
- * OSDCaps: Hold the capabilities associated with a single authenticated 
+ *
+ * OSDCaps: Hold the capabilities associated with a single authenticated
  * user key. These are specified by text strings of the form
  * "allow r" (which allows reading anything on the OSD)
  * "allow rwx auid foo" (which allows full access to listed auids)
@@ -32,6 +32,10 @@ using std::ostream;
 
 #include "include/types.h"
 #include "OpRequest.h"
+
+#include <list>
+#include <vector>
+#include <boost/optional.hpp>
 
 static const __u8 OSD_CAP_R     = (1 << 1);      // read
 static const __u8 OSD_CAP_W     = (1 << 2);      // write
@@ -74,22 +78,39 @@ struct OSDCapSpec {
 
 ostream& operator<<(ostream& out, const OSDCapSpec& s);
 
+struct OSDCapPoolNamespace {
+  std::string pool_name;
+  boost::optional<std::string> nspace = boost::none;
+
+  OSDCapPoolNamespace() {
+  }
+  OSDCapPoolNamespace(const std::string& pool_name,
+                      const boost::optional<std::string>& nspace = boost::none)
+    : pool_name(pool_name), nspace(nspace) {
+  }
+
+  bool is_match(const std::string& pn, const std::string& ns) const;
+  bool is_match_all() const;
+};
+
+ostream& operator<<(ostream& out, const OSDCapPoolNamespace& pns);
+
 
 struct OSDCapMatch {
   // auid and pool_name/nspace are mutually exclusive
-  int64_t auid;
-  std::string pool_name;
-  bool is_nspace;      // true if nspace is defined; false if not constrained.
-  std::string nspace;
-
+  int64_t auid = CEPH_AUTH_UID_DEFAULT;
+  OSDCapPoolNamespace pool_namespace;
   std::string object_prefix;
 
-  OSDCapMatch() : auid(CEPH_AUTH_UID_DEFAULT), is_nspace(false) {}
-  OSDCapMatch(std::string pl, std::string pre) :
-	auid(CEPH_AUTH_UID_DEFAULT), pool_name(pl), is_nspace(false), object_prefix(pre) {}
-  OSDCapMatch(std::string pl, std::string ns, std::string pre) :
-	auid(CEPH_AUTH_UID_DEFAULT), pool_name(pl), is_nspace(true), nspace(ns), object_prefix(pre) {}
-  OSDCapMatch(uint64_t auid, std::string pre) : auid(auid), is_nspace(false), object_prefix(pre) {}
+  OSDCapMatch() {}
+  OSDCapMatch(const OSDCapPoolNamespace& pns) : pool_namespace(pns) {}
+  OSDCapMatch(const std::string& pl, const std::string& pre)
+    : pool_namespace(pl), object_prefix(pre) {}
+  OSDCapMatch(const std::string& pl, const std::string& ns,
+              const std::string& pre)
+    : pool_namespace(pl, ns), object_prefix(pre) {}
+  OSDCapMatch(uint64_t auid, const std::string& pre)
+    : auid(auid), object_prefix(pre) {}
 
   /**
    * check if given request parameters match our constraints
@@ -100,19 +121,54 @@ struct OSDCapMatch {
    * @param object object name
    * @return true if we match, false otherwise
    */
-  bool is_match(const std::string& pool_name, const std::string& nspace_name, int64_t pool_auid, const std::string& object) const;
+  bool is_match(const std::string& pool_name, const std::string& nspace_name,
+                int64_t pool_auid, const std::string& object) const;
   bool is_match_all() const;
 };
 
 ostream& operator<<(ostream& out, const OSDCapMatch& m);
 
 
+struct OSDCapProfile {
+  std::string name;
+  OSDCapPoolNamespace pool_namespace;
+
+  OSDCapProfile() {
+  }
+  OSDCapProfile(const std::string& name,
+                const std::string& pool_name,
+                const boost::optional<std::string>& nspace = boost::none)
+    : name(name), pool_namespace(pool_name, nspace) {
+  }
+
+  inline bool is_valid() const {
+    return !name.empty();
+  }
+};
+
+ostream& operator<<(ostream& out, const OSDCapProfile& m);
+
 struct OSDCapGrant {
   OSDCapMatch match;
   OSDCapSpec spec;
+  OSDCapProfile profile;
+
+  // explicit grants that a profile grant expands to; populated as
+  // needed by expand_profile() and cached here.
+  mutable std::list<OSDCapGrant> profile_grants;
 
   OSDCapGrant() {}
-  OSDCapGrant(OSDCapMatch m, OSDCapSpec s) : match(m), spec(s) {}
+  OSDCapGrant(const OSDCapMatch& m, const OSDCapSpec& s) : match(m), spec(s) {}
+  OSDCapGrant(const OSDCapProfile& profile) : profile(profile) {
+  }
+
+  bool allow_all() const;
+  bool is_capable(const string& pool_name, const string& ns, int64_t pool_auid,
+                  const string& object, bool op_may_read, bool op_may_write,
+                  const std::vector<OpRequest::ClassInfo>& classes,
+                  std::vector<bool>* class_allowed) const;
+
+  void expand_profile() const;
 };
 
 ostream& operator<<(ostream& out, const OSDCapGrant& g);
