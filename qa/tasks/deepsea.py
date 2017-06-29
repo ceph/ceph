@@ -29,22 +29,24 @@ class DeepSea(Task):
     in the role grain on the minions.
 
     After that, the DeepSea git repo is cloned to the master node in
-    accordance with the "repo" and "branch" options, if given (see below).
+    accordance with the "repo" and "branch" options (see below).
 
     Finally, the task iterates over the list of commands given in the "exec"
     property, executing each one inside the 'qa/' directory of the DeepSea repo
     clone.
 
-    Possible options for this task are:
+    This task takes three mandatory options:
 
-        repo: (DeepSea git repo, defaults to https://github.com/SUSE/DeepSea.git)
-        branch: (DeepSea git branch, defaults to master)
+        repo: (DeepSea git repo, e.g. https://github.com/SUSE/DeepSea.git)
+        branch: (DeepSea git branch, e.g. master)
         exec: (list of commands, relative to qa/ of the DeepSea repo)
 
     Example:
 
         tasks
         - deepsea:
+            repo: https://github.com/SUSE/DeepSea.git
+            branch: wip-foo
             exec:
             - suites/basic/health-ok.sh
 
@@ -57,15 +59,21 @@ class DeepSea(Task):
         log.debug("Initial config is {}".format(config))
 
         # make sure self.config dict has values for important keys
-        if config is None:
-            config = {}
+        assert config is not None, \
+            'deepsea task needs configuration (repo, branch, exec)'
         assert isinstance(config, dict), \
             'deepsea task only accepts a dict for configuration'
-        self.config["repo"] = config.get('repo', 'https://github.com/SUSE/DeepSea.git')
-        self.config["branch"] = config.get('branch', 'master')
-        self.config["exec"] = config.get('exec', ['suites/basic/health-ok.sh'])
+        assert 'exec' in config, \
+            'deepsea task needs configuration (exec)'
         assert isinstance(self.config["exec"], list), \
             'exec property of deepsea yaml must be a list'
+
+        def _check_config_key(key, default_value):
+            if key not in config or not config[key]:
+                config[key] = default_value
+
+        _check_config_key('repo', 'https://github.com/SUSE/DeepSea.git')
+        _check_config_key('branch', 'master')
 
         log.debug("Munged config is {}".format(config))
 
