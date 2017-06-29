@@ -395,11 +395,12 @@ public:
    * @return a global sequence ID that nobody else has seen.
    */
   __u32 get_global_seq(__u32 old=0) {
-    ceph::spin_lock(&global_seq_lock);
+    std::lock_guard<ceph::spinlock> lg(global_seq_lock);
+
     if (old > global_seq)
       global_seq = old;
     __u32 ret = ++global_seq;
-    ceph::spin_unlock(&global_seq_lock);
+
     return ret;
   }
   /**
