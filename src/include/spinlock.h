@@ -54,6 +54,40 @@ public:
   };
 };
 
+class spinlock final
+{
+  std::atomic_flag af = ATOMIC_FLAG_INIT;
+
+  public:
+  void lock() {
+    ceph::spin_lock(af);
+  }
+ 
+  void unlock() {
+    ceph::spin_unlock(af);
+  }
+};
+
+/* A scoped RAII spinlock similar to std::lock_guard<>. The lock is acquired
+on construction, and released on destruction. (std::lock_guard<> cannot be used
+directly because std::atomic_flag does not model a /simple lockable/ type.) */
+class spinlock_guard [final]
+{
+ std::atomic_flag& spinlock;
+
+ public:
+ spinlock_guard(std::atomic_flag& spinlock_) 
+  : spinlock(spinlock)
+ {
+    ceph::spin_lock(spinlock);
+ }
+
+ ~spinlock_guard()
+ {
+    ceph::spin_unlock(spinlock);
+ }
+};
+
 } // namespace ceph
 
 // Free functions:
