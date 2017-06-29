@@ -231,8 +231,8 @@ def run_tests(ctx, config):
     attrs = ["!fails_on_rgw"]
     for client, client_config in config.iteritems():
         args = [
-            'S3TEST_CONF={tdir}/archive/s3-tests.{client}.conf'.format(tdir=testdir, client=client),
-            'BOTO_CONFIG={tdir}/boto.cfg'.format(tdir=testdir),
+            run.Raw('S3TEST_CONF={tdir}/archive/s3-tests.{client}.conf'.format(tdir=testdir, client=client)),
+            run.Raw('BOTO_CONFIG={tdir}/boto.cfg'.format(tdir=testdir)),
             '{tdir}/s3-tests/virtualenv/bin/nosetests'.format(tdir=testdir),
             '-w',
             '{tdir}/s3-tests'.format(tdir=testdir),
