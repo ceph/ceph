@@ -33,6 +33,18 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "mgr.server " << __func__ << " "
 
+
+/* The set of statically defined (C++-handled) commands.  This
+ * does not include the Python-defined commands, which are loaded
+ * in PyModules */
+const std::vector<MonCommand> DaemonServer::mgr_commands = {
+#define COMMAND(parsesig, helptext, module, perm, availability) \
+  {parsesig, helptext, module, perm, availability, 0},
+#include "MgrCommands.h"
+#undef COMMAND
+};
+
+
 DaemonServer::DaemonServer(MonClient *monc_,
                            Finisher &finisher_,
 			   DaemonStateIndex &daemon_state_,
@@ -404,12 +416,6 @@ bool DaemonServer::handle_report(MMgrReport *m)
   return true;
 }
 
-std::vector<MonCommand> mgr_commands = {
-#define COMMAND(parsesig, helptext, module, perm, availability) \
-  {parsesig, helptext, module, perm, availability, 0},
-#include "MgrCommands.h"
-#undef COMMAND
-};
 
 void DaemonServer::_generate_command_map(
   map<string,cmd_vartype>& cmdmap,
@@ -582,42 +588,30 @@ bool DaemonServer::handle_command(MCommand *m)
 
   if (prefix == "get_command_descriptions") {
     dout(10) << "reading commands from python modules" << dendl;
-    auto py_commands = py_modules.get_commands();
+    const auto py_commands = py_modules.get_commands();
 
-    bool binary = false;
-    cmd_getval(g_ceph_context, cmdctx->cmdmap, "binary", binary);
-    if (binary) {
-      std::vector<MonCommand> commands = mgr_commands;
-      for (const auto &pyc : py_commands) {
-        commands.push_back({pyc.cmdstring, pyc.helpstring, "mgr",
-                            pyc.perm, "cli", MonCommand::FLAG_MGR});
-      }
-      ::encode(commands, cmdctx->odata);
-    } else {
-      int cmdnum = 0;
+    int cmdnum = 0;
+    JSONFormatter f;
+    f.open_object_section("command_descriptions");
 
-      JSONFormatter f;
-      f.open_object_section("command_descriptions");
-      for (const auto &pyc : py_commands) {
-        ostringstream secname;
-        secname << "cmd" << setfill('0') << std::setw(3) << cmdnum;
-        dout(20) << "Dumping " << pyc.cmdstring << " (" << pyc.helpstring
-                 << ")" << dendl;
-        dump_cmddesc_to_json(&f, secname.str(), pyc.cmdstring, pyc.helpstring,
-                             "mgr", pyc.perm, "cli", 0);
-        cmdnum++;
-      }
+    auto dump_cmd = [&cmdnum, &f](const MonCommand &mc){
+      ostringstream secname;
+      secname << "cmd" << setfill('0') << std::setw(3) << cmdnum;
+      dump_cmddesc_to_json(&f, secname.str(), mc.cmdstring, mc.helpstring,
+                           mc.module, mc.req_perms, mc.availability, 0);
+      cmdnum++;
+    };
 
-      for (const auto &cp : mgr_commands) {
-        ostringstream secname;
-        secname << "cmd" << setfill('0') << std::setw(3) << cmdnum;
-        dump_cmddesc_to_json(&f, secname.str(), cp.cmdstring, cp.helpstring,
-                             cp.module, cp.req_perms, cp.availability, 0);
-        cmdnum++;
-      }
-      f.close_section();	// command_descriptions
-      f.flush(cmdctx->odata);
+    for (const auto &pyc : py_commands) {
+      dump_cmd(pyc);
     }
+
+    for (const auto &mgr_cmd : mgr_commands) {
+      dump_cmd(mgr_cmd);
+    }
+
+    f.close_section();	// command_descriptions
+    f.flush(cmdctx->odata);
     cmdctx->reply(0, ss);
     return true;
   }
@@ -935,7 +929,7 @@ bool DaemonServer::handle_command(MCommand *m)
 
   // None of the special native commands, 
   MgrPyModule *handler = nullptr;
-  auto py_commands = py_modules.get_commands();
+  auto py_commands = py_modules.get_py_commands();
   for (const auto &pyc : py_commands) {
     auto pyc_prefix = cmddesc_get_prefix(pyc.cmdstring);
     dout(1) << "pyc_prefix: '" << pyc_prefix << "'" << dendl;

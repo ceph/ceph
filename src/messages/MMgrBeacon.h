@@ -16,13 +16,14 @@
 #define CEPH_MMGRBEACON_H
 
 #include "messages/PaxosServiceMessage.h"
+#include "mon/MonCommand.h"
 
 #include "include/types.h"
 
 
 class MMgrBeacon : public PaxosServiceMessage {
 
-  static const int HEAD_VERSION = 3;
+  static const int HEAD_VERSION = 4;
   static const int COMPAT_VERSION = 1;
 
 protected:
@@ -32,6 +33,9 @@ protected:
   std::string name;
   uuid_d fsid;
   std::set<std::string> available_modules;
+
+  // Only populated during activation
+  std::vector<MonCommand> command_descs;
 
 public:
   MMgrBeacon()
@@ -56,6 +60,16 @@ public:
   const uuid_d& get_fsid() const { return fsid; }
   std::set<std::string>& get_available_modules() { return available_modules; }
 
+  void set_command_descs(const std::vector<MonCommand> &cmds)
+  {
+    command_descs = cmds;
+  }
+
+  const std::vector<MonCommand> &get_command_descs()
+  {
+    return command_descs;
+  }
+
 private:
   ~MMgrBeacon() override {}
 
@@ -77,6 +91,7 @@ public:
     ::encode(name, payload);
     ::encode(fsid, payload);
     ::encode(available_modules, payload);
+    ::encode(command_descs, payload);
   }
   void decode_payload() override {
     bufferlist::iterator p = payload.begin();
@@ -90,6 +105,9 @@ public:
     }
     if (header.version >= 3) {
       ::decode(available_modules, p);
+    }
+    if (header.version >= 4) {
+      ::decode(command_descs, p);
     }
   }
 };

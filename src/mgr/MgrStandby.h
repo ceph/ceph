@@ -59,6 +59,8 @@ protected:
   void _update_log_config();
   void send_beacon();
 
+  bool available_in_map;
+
 public:
   MgrStandby(int argc, const char **argv);
   ~MgrStandby() override;
