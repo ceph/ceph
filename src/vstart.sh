@@ -661,9 +661,9 @@ EOF
         run 'mgr' $CEPH_BIN/ceph-mgr -i $name $ARGS
     done
 
-    if ceph_adm tell mgr restful create-self-signed-cert; then
+    if ceph_adm restful create-self-signed-cert; then
         SF=`mktemp`
-        ceph_adm tell mgr restful create-key admin -o $SF
+        ceph_adm restful create-key admin -o $SF
         RESTFUL_SECRET=`cat $SF`
         rm $SF
     else 
