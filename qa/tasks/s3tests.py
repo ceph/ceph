@@ -253,8 +253,8 @@ def run_tests(ctx, config):
     for client, client_config in config.iteritems():
         (remote,) = ctx.cluster.only(client).remotes.keys()
         args = [
-            'S3TEST_CONF={tdir}/archive/s3-tests.{client}.conf'.format(tdir=testdir, client=client),
-            'BOTO_CONFIG={tdir}/boto.cfg'.format(tdir=testdir)
+            run.Raw('S3TEST_CONF={tdir}/archive/s3-tests.{client}.conf'.format(tdir=testdir, client=client)),
+            run.Raw('BOTO_CONFIG={tdir}/boto.cfg'.format(tdir=testdir)),
             ]
         # the 'requests' library comes with its own ca bundle to verify ssl
         # certificates - override that to use the system's ca bundle, which
