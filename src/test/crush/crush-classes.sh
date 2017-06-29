@@ -113,6 +113,7 @@ function TEST_set_device_class() {
 
     ceph osd crush set-device-class osd.0 ssd || return 1
     ceph osd crush set-device-class osd.1 ssd || return 1
+    ceph osd crush tree | grep '\"class\": \"ssd\"' || return 1
 
     ok=false
     for delay in 2 4 8 16 32 64 128 256 ; do

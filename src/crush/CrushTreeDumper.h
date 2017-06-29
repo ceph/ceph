@@ -159,6 +159,11 @@ namespace CrushTreeDumper {
       f->dump_stream("name") << "osd." << qi.id;
       f->dump_string("type", crush->get_type_name(0));
       f->dump_int("type_id", 0);
+      string class_name;
+      int r = crush->get_item_class_name(qi.id, &class_name, nullptr);
+      if (r == 0) {
+        f->dump_string("class", class_name);
+      }
       f->dump_float("crush_weight", qi.weight);
       f->dump_unsigned("depth", qi.depth);
     }
