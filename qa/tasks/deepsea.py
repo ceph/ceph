@@ -54,6 +54,8 @@ class DeepSea(Task):
     def __init__(self, ctx, config):
         super(DeepSea, self).__init__(ctx, config)
 
+        log.debug("Initial config is {}".format(config))
+
         # make sure self.config dict has values for important keys
         if config is None:
             config = {}
@@ -64,6 +66,8 @@ class DeepSea(Task):
         self.config["exec"] = config.get('exec', ['suites/basic/health-ok.sh'])
         assert isinstance(self.config["exec"], list), \
             'exec property of deepsea yaml must be a list'
+
+        log.debug("Munged config is {}".format(config))
 
         # prepare the list of commands to be executed on the master node
         self.exec_cmd = []
