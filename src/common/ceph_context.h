@@ -129,7 +129,7 @@ public:
 
   template<typename T>
   void lookup_or_create_singleton_object(T*& p, const std::string &name) {
-    std::lock_guard<decltype(_associated_objs_lock)> lg(_associated_objs_lock);
+    std::lock_guard<ceph::spinlock> lg(_associated_objs_lock);
 
     if (!_associated_objs.count(name)) {
       p = new T(this);
@@ -185,12 +185,12 @@ public:
   };
 
   void register_fork_watcher(ForkWatcher *w) {
-    std::lock_guard<decltype(_fork_watchers_lock)> lg(_fork_watchers_lock);
+    std::lock_guard<ceph::spinlock> lg(_fork_watchers_lock);
     _fork_watchers.push_back(w);
   }
 
   void notify_pre_fork() {
-    std::lock_guard<decltype(_fork_watchers_lock)> lg(_fork_watchers_lock);
+    std::lock_guard<ceph::spinlock> lg(_fork_watchers_lock);
     for (auto &&t : _fork_watchers)
       t->handle_pre_fork();
   }

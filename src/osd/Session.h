@@ -135,9 +135,9 @@ struct Session : public RefCountedObject {
   Mutex session_dispatch_lock;
   boost::intrusive::list<OpRequest> waiting_on_map;
 
-  ceph::Spinlock sent_epoch_lock;
+  ceph::spinlock sent_epoch_lock;
   epoch_t last_sent_epoch;
-  ceph::Spinlock received_map_lock;
+  ceph::spinlock received_map_lock;
   epoch_t received_map_epoch; // largest epoch seen in MOSDMap from here
 
   /// protects backoffs; orders inside Backoff::lock *and* PG::backoff_lock
