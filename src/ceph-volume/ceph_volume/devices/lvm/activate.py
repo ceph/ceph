@@ -9,7 +9,15 @@ def activate_filestore(lvs):
     # find the osd
     osd_lv = lvs.get(lv_tags={'ceph.type': 'osd'})
     osd_id = osd_lv.tags['ceph.osd_id']
-    osd_journal = lvs.get(lv_tags={'ceph.type': 'journal'})
+    # it may have a volume with a journal
+    osd_journal_lv = lvs.get(lv_tags={'ceph.type': 'journal'})
+    if not osd_journal_lv:
+        osd_journal = osd_lv.tags.get('ceph.journal_device')
+    else:
+        osd_journal = osd_journal.lv_path
+
+    if not osd_journal:
+        raise RuntimeError('unable to detect an lv or device journal for OSD %s' % osd_id)
 
     # mount the osd
     source = osd_lv.lv_path
@@ -17,9 +25,10 @@ def activate_filestore(lvs):
     process.call(['sudo', 'mount', '-v', source, destination])
 
     # ensure that the symlink for the journal is there
-    source = osd_journal.lv_path
-    destination = '/var/lib/ceph/osd/ceph-%s/journal' % osd_id
-    process.call(['sudo', 'ln', '-s', source, destination])
+    if not os.path.exists(osd_journal):
+        source = osd_journal
+        destination = '/var/lib/ceph/osd/ceph-%s/journal' % osd_id
+        process.call(['sudo', 'ln', '-s', source, destination])
 
     # start the OSD
     systemctl.start_osd(osd_id)
