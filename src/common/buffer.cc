@@ -43,9 +43,8 @@ using namespace ceph;
 #define CEPH_BUFFER_APPEND_SIZE (CEPH_BUFFER_ALLOC_UNIT - sizeof(raw_combined))
 
 #ifdef BUFFER_DEBUG
-static std::atomic_flag buffer_debug_lock = ATOMIC_FLAG_INIT;
-# define bdout { ceph::spin_lock(&buffer_debug_lock); std::cout
-# define bendl std::endl; ceph::spin_unlock(&buffer_debug_lock); }
+# define bdout { std::lock_guard<ceph::spinlock> lg(ceph::spinlock()); std::cout
+# define bendl std::endl; }
 #else
 # define bdout if (0) { std::cout
 # define bendl std::endl; }
@@ -174,7 +173,7 @@ static std::atomic_flag buffer_debug_lock = ATOMIC_FLAG_INIT;
     std::atomic<unsigned> nref { 0 };
     int mempool = mempool::mempool_buffer_anon;
 
-    mutable std::atomic_flag crc_spinlock = ATOMIC_FLAG_INIT;
+    mutable ceph::spinlock crc_spinlock;
     map<pair<size_t, size_t>, pair<uint32_t, uint32_t> > crc_map;
 
     explicit raw(unsigned l)
@@ -247,7 +246,7 @@ static std::atomic_flag buffer_debug_lock = ATOMIC_FLAG_INIT;
     }
     bool get_crc(const pair<size_t, size_t> &fromto,
          pair<uint32_t, uint32_t> *crc) const {
-      ceph::spin_lock_guard lg(crc_spinlock);
+      std::lock_guard<decltype(crc_spinlock)> lg(crc_spinlock);
       map<pair<size_t, size_t>, pair<uint32_t, uint32_t> >::const_iterator i =
       crc_map.find(fromto);
       if (i == crc_map.end()) {
@@ -258,11 +257,11 @@ static std::atomic_flag buffer_debug_lock = ATOMIC_FLAG_INIT;
     }
     void set_crc(const pair<size_t, size_t> &fromto,
          const pair<uint32_t, uint32_t> &crc) {
-      ceph::spin_lock_guard lg(crc_spinlock);
+      std::lock_guard<decltype(crc_spinlock)> lg(crc_spinlock);
       crc_map[fromto] = crc;
     }
     void invalidate_crc() {
-      ceph::spin_lock_guard lg(crc_spinlock);
+      std::lock_guard<decltype(crc_spinlock)> lg(crc_spinlock);
       if (crc_map.size() != 0) {
         crc_map.clear();
       }

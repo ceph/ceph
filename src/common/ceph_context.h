@@ -16,6 +16,7 @@
 #define CEPH_CEPHCONTEXT_H
 
 #include <set>
+#include <mutex>
 #include <atomic>
 
 #include <boost/noncopyable.hpp>
@@ -128,7 +129,7 @@ public:
 
   template<typename T>
   void lookup_or_create_singleton_object(T*& p, const std::string &name) {
-    ceph::spin_lock_guard lg(_associated_objs_lock);
+    std::lock_guard<decltype(_associated_objs_lock)> lg(_associated_objs_lock);
 
     if (!_associated_objs.count(name)) {
       p = new T(this);
@@ -184,12 +185,12 @@ public:
   };
 
   void register_fork_watcher(ForkWatcher *w) {
-    ceph::spin_lock_guard lg(_fork_watchers_lock);
+    std::lock_guard<decltype(_fork_watchers_lock)> lg(_fork_watchers_lock);
     _fork_watchers.push_back(w);
   }
 
   void notify_pre_fork() {
-    ceph::spin_lock_guard lg(_fork_watchers_lock);
+    std::lock_guard<decltype(_fork_watchers_lock)> lg(_fork_watchers_lock);
     for (auto &&t : _fork_watchers)
       t->handle_pre_fork();
   }
@@ -244,7 +245,7 @@ private:
   AdminSocket *_admin_socket;
 
   /* lock which protects service thread creation, destruction, etc. */
-  std::atomic_flag _service_thread_lock { false };
+  ceph::spinlock _service_thread_lock;
 
   /* The collection of profiling loggers associated with this context */
   PerfCountersCollection *_perf_counters_collection;
@@ -255,10 +256,10 @@ private:
 
   ceph::HeartbeatMap *_heartbeat_map;
 
-  std::atomic_flag _associated_objs_lock { false };
+  ceph::spinlock _associated_objs_lock;
   std::map<std::string, SingletonWrapper*> _associated_objs;
 
-  std::atomic_flag _fork_watchers_lock { false };
+  ceph::spinlock _fork_watchers_lock;
   std::vector<ForkWatcher*> _fork_watchers;
 
   // crypto
@@ -267,7 +268,7 @@ private:
 
   // experimental
   CephContextObs *_cct_obs;
-  std::atomic_flag _feature_lock { false };
+  ceph::spinlock _feature_lock;
   std::set<std::string> _experimental_features;
 
   PluginRegistry *_plugin_registry;
@@ -285,7 +286,7 @@ private:
     l_cct_last
   };
   PerfCounters *_cct_perf;
-  std::atomic_flag _cct_perf_lock { false };
+  ceph::spinlock _cct_perf_lock;
 
   friend class CephContextObs;
 };

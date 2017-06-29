@@ -13,6 +13,7 @@
  *
  */
 
+#include <mutex>
 #include <iostream>
 
 #include <pthread.h>
@@ -324,7 +325,7 @@ bool CephContext::check_experimental_feature_enabled(const std::string& feat)
 bool CephContext::check_experimental_feature_enabled(const std::string& feat,
 						     std::ostream *message)
 {
-  std::lock_guard<ceph::spinlock>(_feature_lock);
+  std::unique_lock<decltype(_feature_lock)> lg(_feature_lock);
 
   bool enabled = (_experimental_features.count(feat) ||
 		  _experimental_features.count("*"));
@@ -753,15 +754,15 @@ void CephContext::reopen_logs()
 
 void CephContext::join_service_thread()
 {
-  {
-  std::lock_guard<ceph::spinlock> lg(_service_thread_lock);
+  std::unique_lock<decltype(_service_thread_lock)> lg(_service_thread_lock);
 
   CephContextServiceThread *thread = _service_thread;
   if (!thread) {
     return;
   }
   _service_thread = NULL;
-  }
+
+  lg.unlock();
 
   thread->exit_thread();
   thread->join();
@@ -795,11 +796,10 @@ void CephContext::enable_perf_counter()
   plb.add_u64(l_cct_unhealthy_workers, "unhealthy_workers", "Unhealthy workers");
   PerfCounters *perf_tmp = plb.create_perf_counters();
 
-  {
-  std::lock_guard<ceph::spinlock> lg(_cct_perf_lock);
+  std::unique_lock<decltype(_cct_perf_lock)> lg(_cct_perf_lock);
   assert(_cct_perf == NULL);
   _cct_perf = perf_tmp;
-  }
+  lg.unlock();
 
   _perf_counters_collection->add(_cct_perf);
 }
@@ -815,7 +815,7 @@ void CephContext::disable_perf_counter()
 
 void CephContext::refresh_perf_values()
 {
-  std::lock_guard<ceph::spinlock> lg(_cct_perf_lock);
+  std::lock_guard<decltype(_cct_perf_lock)> lg(_cct_perf_lock);
 
   if (_cct_perf) {
     _cct_perf->set(l_cct_total_workers, _heartbeat_map->get_total_workers());
