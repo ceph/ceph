@@ -339,10 +339,11 @@ def bootstrap_teuthology(dest_path):
         boot_proc = subprocess.Popen(cmd, shell=True, cwd=dest_path, env=env,
                                      stdout=subprocess.PIPE,
                                      stderr=subprocess.STDOUT)
+        out, err = boot_proc.communicate()
         returncode = boot_proc.wait()
         log.info("Bootstrap exited with status %s", returncode)
         if returncode != 0:
-            for line in boot_proc.stdout.readlines():
+            for line in out.split():
                 log.warn(line.strip())
             venv_path = os.path.join(dest_path, 'virtualenv')
             log.info("Removing %s", venv_path)
