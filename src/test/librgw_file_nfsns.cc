@@ -937,7 +937,7 @@ TEST(LibRGW, HIER1) {
 	  << " elt.name=" << elt.name
 	  << dendl;
 	rc = rgw_lookup(fs, parent_fh, elt.name.c_str(), &elt.fh,
-			RGW_LOOKUP_FLAG_NONE);
+			RGW_LOOKUP_FLAG_RCB);
 	ASSERT_EQ(rc, 0);
 	// XXXX
 	RGWFileHandle* efh = get_rgwfh(elt.fh);
