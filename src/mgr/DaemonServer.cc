@@ -1000,6 +1000,13 @@ void DaemonServer::send_report()
 
 	  pg_map.get_health_checks(g_ceph_context, osdmap,
 				   &m->health_checks);
+	  dout(10) << m->health_checks.checks.size() << " health checks"
+		   << dendl;
+	  dout(20) << "health checks:\n";
+	  JSONFormatter jf(true);
+	  jf.dump_object("health_checks", m->health_checks);
+	  jf.flush(*_dout);
+	  *_dout << dendl;
 	});
     });
   // TODO? We currently do not notify the PyModules
