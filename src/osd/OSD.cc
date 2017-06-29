@@ -2457,6 +2457,13 @@ int OSD::init()
 
   {
     epoch_t bind_epoch = osdmap->get_epoch();
+    if (bind_epoch != superblock.current_epoch){
+      derr << "OSD::init: superblock.current_epoch: "
+        << superblock.current_epoch << " but osdmap.epoch: "
+        << bind_epoch << dendl;
+      r = -EINVAL;
+      goto out;
+    }
     service.set_epochs(NULL, NULL, &bind_epoch);
   }
 
