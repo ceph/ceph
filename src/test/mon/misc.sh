@@ -40,6 +40,7 @@ function TEST_osd_pool_get_set() {
 
     setup $dir || return 1
     run_mon $dir a || return 1
+    ceph osd pool create $TEST_POOL 8
 
     local flag
     for flag in nodelete nopgchange nosizechange write_fadvise_dontneed noscrub nodeep-scrub; do
