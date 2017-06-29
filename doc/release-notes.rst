@@ -326,10 +326,10 @@ Upgrade from Jewel or Kraken
 
      # systemctl ceph-mgr.target
 
-   If you are upgrading from jewel, you should have new ceph-mgr daemons
-   automatically appear on the same hosts as the ceph-mon daemons.  If not,
-   you can deploy new daemons with tools like ceph-deploy or ceph-ansible.  For
-   example,::
+   If you are upgrading from kraken, you may already have ceph-mgr
+   daemons deployed.  If not, or if you are upgrading from jewel, you
+   can deploy new daemons with tools like ceph-deploy or ceph-ansible.
+   For example,::
 
      # ceph-deploy mgr create HOST
 
