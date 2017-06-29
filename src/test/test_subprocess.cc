@@ -21,6 +21,7 @@
 #include "common/SubProcess.h"
 #include "common/safe_io.h"
 #include "gtest/gtest.h"
+#include "common/fork_function.h"
 
 bool read_from_fd(int fd, std::string &out) {
   out.clear();
@@ -265,4 +266,28 @@ TEST(SubProcessTimed, SubshellTimedout)
   ASSERT_EQ(sh.join(), 128 + SIGTERM);
   std::cerr << "err: " << sh.err() << std::endl;
   ASSERT_FALSE(sh.err().c_str()[0] == '\0');
+}
+
+TEST(fork_function, normal)
+{
+  ASSERT_EQ(0, fork_function(10, std::cerr, [&]() { return 0; }));
+  ASSERT_EQ(1, fork_function(10, std::cerr, [&]() { return 1; }));
+  ASSERT_EQ(13, fork_function(10, std::cerr, [&]() { return 13; }));
+  ASSERT_EQ(-1, fork_function(10, std::cerr, [&]() { return -1; }));
+  ASSERT_EQ(-13, fork_function(10, std::cerr, [&]() { return -13; }));
+  ASSERT_EQ(-ETIMEDOUT,
+	    fork_function(10, std::cerr, [&]() { return -ETIMEDOUT; }));
+}
+
+TEST(fork_function, timeout)
+{
+  ASSERT_EQ(-ETIMEDOUT, fork_function(2, std::cerr, [&]() {
+	sleep(60);
+	return 0; }));
+  ASSERT_EQ(-ETIMEDOUT, fork_function(2, std::cerr, [&]() {
+	sleep(60);
+	return 1; }));
+  ASSERT_EQ(-ETIMEDOUT, fork_function(2, std::cerr, [&]() {
+	sleep(60);
+	return -111; }));
 }
