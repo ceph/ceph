@@ -189,7 +189,12 @@ def task(ctx, config):
     swift_secret1 = 'gpS2G9RREMrnbqlp29PP2D36kgPR1tm72n5fPYfL'
     swift_secret2 = 'ri2VJQcKSYATOY6uaDUX7pxgkW+W1YmC6OCxPHwy'
 
+    s3_subuser1 = 's3foo1'
+    s3_subuser1_access_key = '1te6NH5mcdcq0Tc5i8i7'
+    s3_subuser1_secret_key = 'My4IOauQoL18Gp2zM7lC1vLmoawgqcYP/YGcWfXY'
+
     bucket_name = 'myfoo'
+    sbucket_name = 'subusermyfoo'
 
     # legend (test cases can be easily grep-ed out)
     # TESTCASE 'testname','object','method','operation','assertion'
@@ -368,6 +373,20 @@ def task(ctx, config):
     assert len(out['swift_keys']) == 0
     assert len(out['subusers']) == 0
 
+    # TESTCASE 'add-s3-subuser','key','create','s3 sub-user key','succeeds'
+    s3subuser_access = 'full'
+    (ret, out) = rgwadmin_rest(admin_conn,
+            ['subuser', 'create'],
+            {'uid' : user1,
+             'subuser' : s3_subuser1,
+             'access-key' : s3_subuser1_access_key,
+             'secret-key' : s3_subuser1_secret_key,
+             'access' : s3subuser_access,
+             'key-type' : 's3'
+            })
+
+    assert ret == 200
+
     # TESTCASE 'bucket-stats','bucket','info','no session/buckets','succeeds, empty list'
     (ret, out) = rgwadmin_rest(admin_conn, ['bucket', 'info'], {'uid' :  user1})
     assert ret == 200
@@ -377,6 +396,15 @@ def task(ctx, config):
     connection = boto.s3.connection.S3Connection(
         aws_access_key_id=access_key,
         aws_secret_access_key=secret_key,
+        is_secure=False,
+        port=7280,
+        host=remote_host,
+        calling_format=boto.s3.connection.OrdinaryCallingFormat(),
+        )
+
+    sconnection = boto.s3.connection.S3Connection(
+        aws_access_key_id=s3_subuser1_access_key,
+        aws_secret_access_key=s3_subuser1_secret_key,
         is_secure=False,
         port=7280,
         host=remote_host,
@@ -504,6 +532,17 @@ def task(ctx, config):
     useless_key.delete()
     useless_bucket.delete()
 
+    # using subuser key pair to generate serveral usage logs
+    # for following subuser usage show test.
+    sbucket1 = sconnection.create_bucket(sbucket_name + '1')
+    sbucket2 = sconnection.create_bucket(sbucket_name + '2')
+    sbucket3 = sconnection.create_bucket(sbucket_name + '3')
+    sbucket4 = sconnection.create_bucket(sbucket_name + '4')
+    sbucket1.delete()
+    sbucket2.delete()
+    sbucket3.delete()
+    sbucket4.delete()
+
     # wait for the statistics to flush
     time.sleep(60)
 
@@ -550,10 +589,42 @@ def task(ctx, config):
         assert entry['category'] == cat
         assert entry['successful_ops'] > 0
 
+    # TESTCASE 'usage-show4' 'usage' 'show' 'subuser usage' 'succeeds'
+    (ret, out) = rgwadmin_rest(admin_conn, ['usage', 'show'], {'uid' : user1,
+                                                               'subuser' : s3_subuser1})
+    assert ret == 200
+    assert len(out['entries']) > 0
+    assert len(out['summary']) > 0
+    user_summary = out['summary'][0]
+    for entry in user_summary['categories']:
+        assert entry['successful_ops'] > 0
+    assert user_summary['user'] == user1
+    assert user_summary['subuser'] == s3_subuser1;
+
+    # TESTCASE 'usage-show5' 'usage' 'show' 'subuser usage categories' 'succeeds'
+    test_categories = ['create_bucket','delete_bucket']
+    for cat in test_categories:
+        (ret, out) = rgwadmin_rest(admin_conn, ['usage', 'show'], {'uid' : user1,
+                                                                   'subuser' : s3_subuser1,
+                                                                   'categories' : cat})
+        assert ret == 200
+        assert len(out['summary']) > 0
+        user_summary = out['summary'][0]
+        assert user_summary['user'] == user1
+        assert len(user_summary['categories']) == 1
+        entry = user_summary['categories'][0]
+        assert entry['category'] == cat
+        assert entry['successful_ops'] > 0
+
     # TESTCASE 'usage-trim' 'usage' 'trim' 'user usage' 'succeeds, usage removed'
     (ret, out) = rgwadmin_rest(admin_conn, ['usage', 'trim'], {'uid' : user1})
     assert ret == 200
     (ret, out) = rgwadmin_rest(admin_conn, ['usage', 'show'], {'uid' : user1})
+    assert ret == 200
+    assert len(out['entries']) == 0
+    assert len(out['summary']) == 0
+    (ret, out) = rgwadmin_rest(admin_conn, ['usage', 'show'], {'uid' : user1,
+                                                               'subuser' : s3_subuser1,})
     assert ret == 200
     assert len(out['entries']) == 0
     assert len(out['summary']) == 0
