@@ -25,6 +25,46 @@ void usage(po::options_description &desc)
   cout << desc << std::endl;
 }
 
+void validate_path(CephContext *cct, const string& path, bool bluefs)
+{
+  BlueStore bluestore(cct, path);
+  string type;
+  int r = bluestore.read_meta("type", &type);
+  if (r < 0) {
+    cerr << "failed to load os-type: " << cpp_strerror(r) << std::endl;
+    exit(EXIT_FAILURE);
+  }
+  if (type != "bluestore") {
+    cerr << "expected bluestore, but type is " << type << std::endl;
+    exit(EXIT_FAILURE);
+  }
+  if (!bluefs) {
+    return;
+  }
+
+  string kv_backend;
+  r = bluestore.read_meta("kv_backend", &kv_backend);
+  if (r < 0) {
+    cerr << "failed to load kv_backend: " << cpp_strerror(r) << std::endl;
+    exit(EXIT_FAILURE);
+  }
+  if (kv_backend != "rocksdb") {
+    cerr << "expect kv_backend to be rocksdb, but is " << kv_backend
+         << std::endl;
+    exit(EXIT_FAILURE);
+  }
+  string bluefs_enabled;
+  r = bluestore.read_meta("bluefs", &bluefs_enabled);
+  if (r < 0) {
+    cerr << "failed to load do_bluefs: " << cpp_strerror(r) << std::endl;
+    exit(EXIT_FAILURE);
+  }
+  if (bluefs_enabled != "1") {
+    cerr << "bluefs not enabled for rocksdb" << std::endl;
+    exit(EXIT_FAILURE);
+  }
+}
+
 int main(int argc, char **argv)
 {
   string out_dir;
@@ -78,8 +118,7 @@ int main(int argc, char **argv)
       exit(1);
     }
   }
-  if (action == "bluefs-export" ||
-      action == "show-label") {
+  if (action == "show-label") {
     if (devs.empty() && path.empty()) {
       cerr << "must specify bluestore path *or* raw device(s)" << std::endl;
       exit(1);
@@ -90,6 +129,24 @@ int main(int argc, char **argv)
       struct stat st;
       if (::stat(p.c_str(), &st) == 0) {
 	devs.push_back(p);
+      }
+    }
+  }
+  if (action == "bluefs-export") {
+    if (path.empty()) {
+      cerr << "must specify bluestore path" << std::endl;
+      exit(EXIT_FAILURE);
+    }
+    if (out_dir.empty()) {
+      cerr << "must specify out-dir to export bluefs" << std::endl;
+      exit(EXIT_FAILURE);
+    }
+    cout << "infering bluefs devices from bluestore path" << std::endl;
+    for (auto fn : {"block", "block.wal", "block.db"}) {
+      string p = path + "/" + fn;
+      struct stat st;
+      if (::stat(p.c_str(), &st) == 0) {
+        devs.push_back(p);
       }
     }
   }
@@ -108,6 +165,7 @@ int main(int argc, char **argv)
 
   if (action == "fsck" ||
       action == "fsck-deep") {
+    validate_path(cct.get(), path, false);
     BlueStore bluestore(cct.get(), path);
     int r = bluestore.fsck(fsck_deep);
     if (r < 0) {
@@ -134,10 +192,7 @@ int main(int argc, char **argv)
     jf.flush(cout);
   }
   else if (action == "bluefs-export") {
-    if (out_dir.empty()) {
-      cerr << "must specify out-dir to export bluefs" << std::endl;
-      exit(1);
-    }
+    validate_path(cct.get(), path, true);
     BlueFS fs(&(*cct));
     string main;
     set<int> got;
