@@ -737,7 +737,7 @@ double sfence()
 double test_spinlock()
 {
   int count = 1000000;
-  ceph::Spinlock lock;
+  ceph::spinlock lock;
   uint64_t start = Cycles::rdtsc();
   for (int i = 0; i < count; i++) {
     lock.lock();

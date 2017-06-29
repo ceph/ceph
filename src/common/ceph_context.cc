@@ -291,7 +291,7 @@ public:
                           const std::set <std::string> &changed) override {
     if (changed.count(
 	  "enable_experimental_unrecoverable_data_corrupting_features")) {
-      ceph::spin_lock_guard lg(cct->_feature_lock);
+      std::lock_guard<ceph::spinlock> lg(cct->_feature_lock);
       get_str_set(
 	conf->enable_experimental_unrecoverable_data_corrupting_features,
 	cct->_experimental_features);
@@ -324,7 +324,7 @@ bool CephContext::check_experimental_feature_enabled(const std::string& feat)
 bool CephContext::check_experimental_feature_enabled(const std::string& feat,
 						     std::ostream *message)
 {
-  ceph::spin_lock_guard(_feature_lock);
+  std::lock_guard<ceph::spinlock>(_feature_lock);
 
   bool enabled = (_experimental_features.count(feat) ||
 		  _experimental_features.count("*"));
@@ -721,7 +721,7 @@ void CephContext::init_crypto()
 void CephContext::start_service_thread()
 {
   {
-  ceph::spin_lock_guard lg(_service_thread_lock);
+  std::lock_guard<ceph::spinlock> lg(_service_thread_lock);
 
   if (_service_thread) {
     return;
@@ -746,7 +746,7 @@ void CephContext::start_service_thread()
 
 void CephContext::reopen_logs()
 {
-  ceph::spin_lock_guard lg(_service_thread_lock);
+  std::lock_guard<ceph::spinlock> lg(_service_thread_lock);
   if (_service_thread)
     _service_thread->reopen_logs();
 }
@@ -754,7 +754,7 @@ void CephContext::reopen_logs()
 void CephContext::join_service_thread()
 {
   {
-  ceph::spin_lock_guard lg(_service_thread_lock);
+  std::lock_guard<ceph::spinlock> lg(_service_thread_lock);
 
   CephContextServiceThread *thread = _service_thread;
   if (!thread) {
@@ -796,7 +796,7 @@ void CephContext::enable_perf_counter()
   PerfCounters *perf_tmp = plb.create_perf_counters();
 
   {
-  ceph::spin_lock_guard lg(_cct_perf_lock);
+  std::lock_guard<ceph::spinlock> lg(_cct_perf_lock);
   assert(_cct_perf == NULL);
   _cct_perf = perf_tmp;
   }
@@ -808,14 +808,14 @@ void CephContext::disable_perf_counter()
 {
   _perf_counters_collection->remove(_cct_perf);
 
-  ceph::spin_lock_guard lg(_cct_perf_lock);
+  std::lock_guard<ceph::spinlock> lg(_cct_perf_lock);
   delete _cct_perf;
   _cct_perf = NULL;
 }
 
 void CephContext::refresh_perf_values()
 {
-  ceph::spin_lock_guard lg(_cct_perf_lock);
+  std::lock_guard<ceph::spinlock> lg(_cct_perf_lock);
 
   if (_cct_perf) {
     _cct_perf->set(l_cct_total_workers, _heartbeat_map->get_total_workers());

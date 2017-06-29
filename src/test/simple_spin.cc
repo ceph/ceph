@@ -93,10 +93,10 @@ TEST(SimpleSpin, Test2)
 {
  const auto n = 2000000U;
 
- // ceph::Spinlock:
+ // ceph::spinlock:
  {
  counter = 0;
- ceph::Spinlock l;
+ ceph::spinlock l;
 
  ASSERT_EQ(0, counter);
  auto result = check_lock_unlock(n, counter, l);
@@ -129,3 +129,4 @@ TEST(SimpleSpin, spinlock_guard)
 
   ASSERT_EQ(2*n, counter);
 }
+
