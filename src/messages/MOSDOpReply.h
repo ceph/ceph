@@ -236,6 +236,7 @@ public:
       ::decode(do_redirect, p);
       if (do_redirect)
 	::decode(redirect, p);
+      decode_trace(p);
     } else if (header.version < 2) {
       ceph_osd_reply_head head;
       ::decode(head, p);
