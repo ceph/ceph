@@ -65,7 +65,7 @@ protected:
     void stop();
   };
 
-  OEWorker *worker;
+  OEWorker *worker{nullptr};
   std::atomic<bool> down_flag = { false };
 
 public:
