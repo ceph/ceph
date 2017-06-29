@@ -56,7 +56,10 @@ protected:
   SafeTimer timer;
   Finisher finisher;
 
+  // Track receipt of initial data during startup
   Cond fs_map_cond;
+  bool digest_received;
+  Cond digest_cond;
 
   PyModules py_modules;
   DaemonStateIndex daemon_state;
