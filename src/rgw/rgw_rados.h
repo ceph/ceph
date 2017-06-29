@@ -2669,7 +2669,7 @@ public:
       } stat_params;
 
       struct ReadParams {
-        rgw_cache_entry_info *cache_info;
+        rgw_cache_entry_info *cache_info{nullptr};
         map<string, bufferlist> *attrs;
 
         ReadParams() : attrs(NULL) {}
