@@ -3077,7 +3077,7 @@ public:
     tbl->define_column("TYPE NAME", TextTable::LEFT, TextTable::LEFT);
     tbl->define_column("UP/DOWN", TextTable::LEFT, TextTable::RIGHT);
     tbl->define_column("REWEIGHT", TextTable::LEFT, TextTable::RIGHT);
-    tbl->define_column("PRIMARY-AFFINITY", TextTable::LEFT, TextTable::RIGHT);
+    tbl->define_column("PRI-AFF", TextTable::LEFT, TextTable::RIGHT);
 
     Parent::dump(tbl);
 
