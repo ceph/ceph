@@ -247,29 +247,25 @@ static std::atomic_flag buffer_debug_lock = ATOMIC_FLAG_INIT;
     }
     bool get_crc(const pair<size_t, size_t> &fromto,
          pair<uint32_t, uint32_t> *crc) const {
-      ceph::spin_lock(&crc_spinlock);
+      ceph::spin_lock_guard lg(crc_spinlock);
       map<pair<size_t, size_t>, pair<uint32_t, uint32_t> >::const_iterator i =
       crc_map.find(fromto);
       if (i == crc_map.end()) {
-          ceph::spin_unlock(&crc_spinlock);
           return false;
       }
       *crc = i->second;
-      ceph::spin_unlock(&crc_spinlock);
       return true;
     }
     void set_crc(const pair<size_t, size_t> &fromto,
          const pair<uint32_t, uint32_t> &crc) {
-      ceph::spin_lock(&crc_spinlock);
+      ceph::spin_lock_guard lg(crc_spinlock);
       crc_map[fromto] = crc;
-      ceph::spin_unlock(&crc_spinlock);
     }
     void invalidate_crc() {
-      ceph::spin_lock(&crc_spinlock);
+      ceph::spin_lock_guard lg(crc_spinlock);
       if (crc_map.size() != 0) {
         crc_map.clear();
       }
-      ceph::spin_unlock(&crc_spinlock);
     }
   };
 

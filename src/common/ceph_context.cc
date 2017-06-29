@@ -291,11 +291,10 @@ public:
                           const std::set <std::string> &changed) override {
     if (changed.count(
 	  "enable_experimental_unrecoverable_data_corrupting_features")) {
-      ceph::spin_lock(&cct->_feature_lock);
+      ceph::spin_lock_guard lg(cct->_feature_lock);
       get_str_set(
 	conf->enable_experimental_unrecoverable_data_corrupting_features,
 	cct->_experimental_features);
-      ceph::spin_unlock(&cct->_feature_lock);
       if (getenv("CEPH_DEV") == NULL) {
         if (!cct->_experimental_features.empty()) {
           if (cct->_experimental_features.count("*")) {
@@ -325,10 +324,10 @@ bool CephContext::check_experimental_feature_enabled(const std::string& feat)
 bool CephContext::check_experimental_feature_enabled(const std::string& feat,
 						     std::ostream *message)
 {
-  ceph::spin_lock(&_feature_lock);
+  ceph::spin_lock_guard(_feature_lock);
+
   bool enabled = (_experimental_features.count(feat) ||
 		  _experimental_features.count("*"));
-  ceph::spin_unlock(&_feature_lock);
 
   if (enabled) {
     (*message) << "WARNING: experimental feature '" << feat << "' is enabled\n";
@@ -721,14 +720,15 @@ void CephContext::init_crypto()
 
 void CephContext::start_service_thread()
 {
-  ceph::spin_lock(&_service_thread_lock);
+  {
+  ceph::spin_lock_guard lg(_service_thread_lock);
+
   if (_service_thread) {
-    ceph::spin_unlock(&_service_thread_lock);
     return;
   }
   _service_thread = new CephContextServiceThread(this);
   _service_thread->create("service");
-  ceph::spin_unlock(&_service_thread_lock);
+  }
 
   // make logs flush on_exit()
   if (_conf->log_flush_on_exit)
@@ -746,22 +746,22 @@ void CephContext::start_service_thread()
 
 void CephContext::reopen_logs()
 {
-  ceph::spin_lock(&_service_thread_lock);
+  ceph::spin_lock_guard lg(_service_thread_lock);
   if (_service_thread)
     _service_thread->reopen_logs();
-  ceph::spin_unlock(&_service_thread_lock);
 }
 
 void CephContext::join_service_thread()
 {
-  ceph::spin_lock(&_service_thread_lock);
+  {
+  ceph::spin_lock_guard lg(_service_thread_lock);
+
   CephContextServiceThread *thread = _service_thread;
   if (!thread) {
-    ceph::spin_unlock(&_service_thread_lock);
     return;
   }
   _service_thread = NULL;
-  ceph::spin_unlock(&_service_thread_lock);
+  }
 
   thread->exit_thread();
   thread->join();
@@ -795,10 +795,11 @@ void CephContext::enable_perf_counter()
   plb.add_u64(l_cct_unhealthy_workers, "unhealthy_workers", "Unhealthy workers");
   PerfCounters *perf_tmp = plb.create_perf_counters();
 
-  ceph::spin_lock(&_cct_perf_lock);
+  {
+  ceph::spin_lock_guard lg(_cct_perf_lock);
   assert(_cct_perf == NULL);
   _cct_perf = perf_tmp;
-  ceph::spin_unlock(&_cct_perf_lock);
+  }
 
   _perf_counters_collection->add(_cct_perf);
 }
@@ -807,20 +808,19 @@ void CephContext::disable_perf_counter()
 {
   _perf_counters_collection->remove(_cct_perf);
 
-  ceph::spin_lock(&_cct_perf_lock);
+  ceph::spin_lock_guard lg(_cct_perf_lock);
   delete _cct_perf;
   _cct_perf = NULL;
-  ceph::spin_unlock(&_cct_perf_lock);
 }
 
 void CephContext::refresh_perf_values()
 {
-  ceph::spin_lock(&_cct_perf_lock);
+  ceph::spin_lock_guard lg(_cct_perf_lock);
+
   if (_cct_perf) {
     _cct_perf->set(l_cct_total_workers, _heartbeat_map->get_total_workers());
     _cct_perf->set(l_cct_unhealthy_workers, _heartbeat_map->get_unhealthy_workers());
   }
-  ceph::spin_unlock(&_cct_perf_lock);
 }
 
 AdminSocket *CephContext::get_admin_socket()
