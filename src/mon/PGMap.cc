@@ -2702,34 +2702,6 @@ void PGMap::get_health_checks(
 			  now, max, &inactive->detail);
 	++num_inactive;
       }
-      if (!(i.second.state & PG_STATE_CLEAN) &&
-	  i.second.last_clean < cutoff) {
-	if (!unclean) {
-	  unclean = &checks->add("PG_STUCK_UNCLEAN", HEALTH_ERR, "");
-	}
-	note_stuck_detail(i.first, i.second, "unclean", i.second.last_clean,
-			  now, max, &unclean->detail);
-	++num_unclean;
-      }
-      if ((i.second.state & PG_STATE_DEGRADED) &&
-	  i.second.last_undegraded < cutoff) {
-	if (!degraded) {
-	  degraded = &checks->add("PG_STUCK_DEGRADED", HEALTH_ERR, "");
-	}
-	note_stuck_detail(i.first, i.second, "degraded",
-			  i.second.last_undegraded, now, max, &degraded->detail);
-	++num_degraded;
-      }
-      if ((i.second.state & PG_STATE_UNDERSIZED) &&
-	  i.second.last_fullsized < cutoff) {
-	if (!undersized) {
-	  undersized = &checks->add("PG_STUCK_UNDERSIZED", HEALTH_ERR, "");
-	}
-	note_stuck_detail(i.first, i.second, "undersized",
-			  i.second.last_fullsized, now, max,
-			  &undersized->detail);
-	++num_undersized;
-      }
       if ((i.second.state & PG_STATE_STALE) &&
 	  i.second.last_unstale < cutoff) {
 	if (!stale) {
@@ -2738,6 +2710,34 @@ void PGMap::get_health_checks(
 	note_stuck_detail(i.first, i.second, "stale", i.second.last_unstale,
 			  now, max, &stale->detail);
 	++num_stale;
+      }
+      if (!(i.second.state & PG_STATE_CLEAN) &&
+	  i.second.last_clean < cutoff) {
+	if (!unclean) {
+	  unclean = &checks->add("PG_STUCK_UNCLEAN", HEALTH_WARN, "");
+	}
+	note_stuck_detail(i.first, i.second, "unclean", i.second.last_clean,
+			  now, max, &unclean->detail);
+	++num_unclean;
+      }
+      if ((i.second.state & PG_STATE_DEGRADED) &&
+	  i.second.last_undegraded < cutoff) {
+	if (!degraded) {
+	  degraded = &checks->add("PG_STUCK_DEGRADED", HEALTH_WARN, "");
+	}
+	note_stuck_detail(i.first, i.second, "degraded",
+			  i.second.last_undegraded, now, max, &degraded->detail);
+	++num_degraded;
+      }
+      if ((i.second.state & PG_STATE_UNDERSIZED) &&
+	  i.second.last_fullsized < cutoff) {
+	if (!undersized) {
+	  undersized = &checks->add("PG_STUCK_UNDERSIZED", HEALTH_WARN, "");
+	}
+	note_stuck_detail(i.first, i.second, "undersized",
+			  i.second.last_fullsized, now, max,
+			  &undersized->detail);
+	++num_undersized;
       }
     }
     if (inactive) {
