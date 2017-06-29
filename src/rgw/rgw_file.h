@@ -1313,7 +1313,7 @@ public:
     op = this;
   }
 
-  bool only_bucket() override { return false; }
+  bool only_bucket() override { return true; }
 
   int op_init() override {
     // assign store, s, and dialect_handler
@@ -1476,7 +1476,7 @@ public:
     op = this;
   }
 
-  bool only_bucket() override { return false; }
+  bool only_bucket() override { return true; }
 
   int op_init() override {
     // assign store, s, and dialect_handler
@@ -2092,7 +2092,7 @@ public:
     op = this;
   }
 
-  bool only_bucket() override { return false; }
+  bool only_bucket() override { return true; }
 
   int op_init() override {
     // assign store, s, and dialect_handler
