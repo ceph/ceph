@@ -259,30 +259,6 @@ class CephAnsible(Task):
         ctx = self.ctx
         if ctx.archive is not None and \
                 not (ctx.config.get('archive-on-error') and ctx.summary['success']):
-            # collect logs
-            log.info('Compressing logs...')
-            run.wait(
-                ctx.cluster.run(
-                    args=[
-                        'sudo',
-                        'find',
-                        '/var/log/ceph',
-                        '-name',
-                        '*.log',
-                        '-print0',
-                        run.Raw('|'),
-                        'sudo',
-                        'xargs',
-                        '-0',
-                        '--no-run-if-empty',
-                        '--',
-                        'gzip',
-                        '--',
-                    ],
-                    check_status=False,
-                ),
-            )
-
             log.info('Archiving logs...')
             path = os.path.join(ctx.archive, 'remote')
             os.makedirs(path)
