@@ -64,7 +64,7 @@ namespace CrushTreeDumper {
   class Dumper : public list<Item> {
   public:
     explicit Dumper(const CrushWrapper *crush_) : crush(crush_) {
-      crush->find_roots(roots);
+      crush->find_nonshadow_roots(roots);
       root = roots.begin();
     }
 

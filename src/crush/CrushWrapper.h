@@ -563,6 +563,14 @@ public:
   void find_roots(set<int>& roots) const;
 
   /**
+   * find tree roots that are not shadow (device class) items
+   *
+   * These are parentless nodes in the map that are not shadow
+   * items for device classes.
+   */
+  void find_nonshadow_roots(set<int>& roots) const;
+
+  /**
    * see if an item is contained within a subtree
    *
    * @param root haystack
