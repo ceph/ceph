@@ -1722,9 +1722,9 @@ class RGWRequest;
 struct req_state {
   CephContext *cct;
   rgw::io::BasicClient *cio;
-  RGWRequest *req; /// XXX: re-remove??
+  RGWRequest *req{nullptr}; /// XXX: re-remove??
   http_op op;
-  RGWOpType op_type;
+  RGWOpType op_type{};
   bool content_started;
   int format;
   ceph::Formatter *formatter;
