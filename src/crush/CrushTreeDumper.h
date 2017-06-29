@@ -150,6 +150,10 @@ namespace CrushTreeDumper {
   inline void dump_item_fields(const CrushWrapper *crush,
 			       const Item &qi, Formatter *f) {
     f->dump_int("id", qi.id);
+    const char *c = crush->get_item_class(qi.id);
+    if (!c)
+      c = "";
+    f->dump_string("device_class", c);
     if (qi.is_bucket()) {
       int type = crush->get_bucket_type(qi.id);
       f->dump_string("name", crush->get_item_name(qi.id));
