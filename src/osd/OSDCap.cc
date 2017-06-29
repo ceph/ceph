@@ -25,7 +25,7 @@ using std::ostream;
 using std::vector;
 
 ostream& operator<<(ostream& out, const osd_rwxa_t& p)
-{ 
+{
   if (p == OSD_CAP_ANY)
     return out << "*";
 
@@ -53,42 +53,79 @@ ostream& operator<<(ostream& out, const OSDCapSpec& s)
   return out;
 }
 
-ostream& operator<<(ostream& out, const OSDCapMatch& m)
+ostream& operator<<(ostream& out, const OSDCapPoolNamespace& pns)
 {
-  if (m.auid != -1LL) {
-    out << "auid " << m.auid << " ";
+  if (!pns.pool_name.empty()) {
+    out << "pool " << pns.pool_name << " ";
   }
-  if (m.object_prefix.length()) {
-    out << "object_prefix " << m.object_prefix << " ";
-  }
-  if (m.pool_name.length()) {
-    out << "pool " << m.pool_name << " ";
-  }
-  if (m.is_nspace) {
+  if (pns.nspace) {
     out << "namespace ";
-    if (m.nspace.length() == 0)
+    if (pns.nspace->empty()) {
       out << "\"\"";
-    else
-      out << m.nspace;
+    } else {
+      out << *pns.nspace;
+    }
     out << " ";
   }
   return out;
 }
 
-bool OSDCapMatch::is_match(const string& pn, const string& ns, int64_t pool_auid, const string& object) const
+ostream& operator<<(ostream& out, const OSDCapMatch& m)
+{
+  if (m.auid != -1LL) {
+    out << "auid " << m.auid << " ";
+  } else {
+    out << m.pool_namespace;
+  }
+
+  if (m.object_prefix.length()) {
+    out << "object_prefix " << m.object_prefix << " ";
+  }
+  return out;
+}
+
+ostream& operator<<(ostream& out, const OSDCapProfile& m)
+{
+  out << "profile " << m.name << " ";
+  out << m.pool_namespace;
+  return out;
+}
+
+bool OSDCapPoolNamespace::is_match(const std::string& pn,
+                                   const std::string& ns) const
+{
+  if (!pool_name.empty()) {
+    if (pool_name != pn) {
+      return false;
+    }
+  }
+  if (nspace) {
+    if (*nspace != ns) {
+      return false;
+    }
+  }
+  return true;
+}
+
+bool OSDCapPoolNamespace::is_match_all() const
+{
+  if (!pool_name.empty())
+    return false;
+  if (nspace)
+    return false;
+  return true;
+}
+
+bool OSDCapMatch::is_match(const string& pn, const string& ns,
+                           int64_t pool_auid, const string& object) const
 {
   if (auid >= 0) {
     if (auid != pool_auid)
       return false;
+  } else if (!pool_namespace.is_match(pn, ns)) {
+    return false;
   }
-  if (pool_name.length()) {
-    if (pool_name != pn)
-      return false;
-  }
-  if (is_nspace) {
-    if (nspace != ns)
-      return false;
-  }
+
   if (object_prefix.length()) {
     if (object.find(object_prefix) != 0)
       return false;
@@ -98,28 +135,125 @@ bool OSDCapMatch::is_match(const string& pn, const string& ns, int64_t pool_auid
 
 bool OSDCapMatch::is_match_all() const
 {
-  if (auid >= 0)
+  if (auid >= 0) {
     return false;
-  if (pool_name.length())
+  } else if (!pool_namespace.is_match_all()) {
     return false;
-  if (is_nspace)
+  }
+
+  if (object_prefix.length()) {
     return false;
-  if (object_prefix.length())
-    return false;
+  }
   return true;
 }
 
 ostream& operator<<(ostream& out, const OSDCapGrant& g)
 {
-  return out << "grant(" << g.match << g.spec << ")";
+  out << "grant(";
+  if (g.profile.is_valid()) {
+    out << g.profile;
+  } else {
+    out << g.match << g.spec;
+  }
+  out << ")";
+  return out;
 }
 
+bool OSDCapGrant::allow_all() const
+{
+  if (profile.is_valid()) {
+    expand_profile();
+    return std::any_of(profile_grants.cbegin(), profile_grants.cend(),
+                       [](const OSDCapGrant& grant) {
+        return grant.allow_all();
+      });
+  }
+
+  return (match.is_match_all() && spec.allow_all());
+}
+
+bool OSDCapGrant::is_capable(const string& pool_name, const string& ns,
+                             int64_t pool_auid, const string& object,
+                             bool op_may_read, bool op_may_write,
+                             const std::vector<OpRequest::ClassInfo>& classes,
+                             std::vector<bool>* class_allowed) const
+{
+  osd_rwxa_t allow = 0;
+  if (profile.is_valid()) {
+    expand_profile();
+    return std::any_of(profile_grants.cbegin(), profile_grants.cend(),
+                       [&](const OSDCapGrant& grant) {
+        return grant.is_capable(pool_name, ns, pool_auid, object, op_may_read,
+                                op_may_write, classes, class_allowed);
+      });
+  } else {
+    if (match.is_match(pool_name, ns, pool_auid, object)) {
+      allow = allow | spec.allow;
+      if ((op_may_read && !(allow & OSD_CAP_R)) ||
+          (op_may_write && !(allow & OSD_CAP_W))) {
+        return false;
+      }
+      if (!classes.empty()) {
+        // check 'allow *'
+        if (spec.allow_all()) {
+          return true;
+        }
+
+        // compare this grant to each class in the operation
+        for (size_t i = 0; i < classes.size(); ++i) {
+          // check 'allow class foo'
+          if (!spec.class_name.empty() && classes[i].name == spec.class_name) {
+            (*class_allowed)[i] = true;
+            continue;
+          }
+          // check 'allow x | class-{rw}': must be on whitelist
+          if (!classes[i].whitelisted) {
+            continue;
+          }
+          if ((classes[i].read && !(allow & OSD_CAP_CLS_R)) ||
+              (classes[i].write && !(allow & OSD_CAP_CLS_W))) {
+            continue;
+          }
+          (*class_allowed)[i] = true;
+        }
+        if (!std::all_of(class_allowed->cbegin(), class_allowed->cend(),
+              [](bool v) { return v; })) {
+          return false;
+        }
+      }
+      return true;
+    }
+  }
+  return false;
+}
+
+void OSDCapGrant::expand_profile() const
+{
+  // only generate this list once
+  if (!profile_grants.empty()) {
+    return;
+  }
+
+  if (profile.name == "read-only") {
+    // grants READ-ONLY caps to the OSD
+    profile_grants.emplace_back(OSDCapMatch(profile.pool_namespace),
+                                OSDCapSpec(osd_rwxa_t(OSD_CAP_R)));
+    return;
+  }
+  if (profile.name == "read-write") {
+    // grants READ-WRITE caps to the OSD
+    profile_grants.emplace_back(OSDCapMatch(profile.pool_namespace),
+                                OSDCapSpec(osd_rwxa_t(OSD_CAP_R | OSD_CAP_W)));
+  }
+}
 
 bool OSDCap::allow_all() const
 {
-  for (vector<OSDCapGrant>::const_iterator p = grants.begin(); p != grants.end(); ++p)
-    if (p->match.is_match_all() && p->spec.allow_all())
+  for (auto &grant : grants) {
+    if (grant.allow_all()) {
       return true;
+    }
+  }
   return false;
 }
 
@@ -129,47 +263,15 @@ void OSDCap::set_allow_all()
   grants.push_back(OSDCapGrant(OSDCapMatch(), OSDCapSpec(OSD_CAP_ANY)));
 }
 
-bool OSDCap::is_capable(const string& pool_name, const string& ns, int64_t pool_auid,
-			const string& object, bool op_may_read, bool op_may_write,
+bool OSDCap::is_capable(const string& pool_name, const string& ns,
+                        int64_t pool_auid, const string& object,
+                        bool op_may_read, bool op_may_write,
 			const std::vector<OpRequest::ClassInfo>& classes) const
 {
-  const size_t num_classes = classes.size();
-  std::vector<bool> class_allowed(num_classes, false);
-  osd_rwxa_t allow = 0;
-  for (vector<OSDCapGrant>::const_iterator p = grants.begin();
-       p != grants.end(); ++p) {
-    if (p->match.is_match(pool_name, ns, pool_auid, object)) {
-      allow = allow | p->spec.allow;
-      if ((op_may_read && !(allow & OSD_CAP_R)) ||
-          (op_may_write && !(allow & OSD_CAP_W)))
-        continue;
-      if (num_classes) {
-        // check 'allow *'
-        if (p->spec.allow_all())
-          return true;
-        // compare this grant to each class in the operation
-        for (size_t i = 0; i < num_classes; i++) {
-          // check 'allow class foo'
-          if (classes[i].name == p->spec.class_name &&
-              !p->spec.class_name.empty()) {
-            class_allowed[i] = true;
-            continue;
-          }
-          // check 'allow x | class-{rw}': must be on whitelist
-          if (!classes[i].whitelisted)
-            continue;
-          if ((classes[i].read && !(allow & OSD_CAP_CLS_R)) ||
-              (classes[i].write && !(allow & OSD_CAP_CLS_W))) {
-            continue;
-          }
-          class_allowed[i] = true;
-        }
-        if (std::all_of(class_allowed.cbegin(), class_allowed.cend(),
-              [](bool v) { return v; }))
-          return true;
-        else
-          continue;
-      }
+  std::vector<bool> class_allowed(classes.size(), false);
+  for (auto &grant : grants) {
+    if (grant.is_capable(pool_name, ns, pool_auid, object, op_may_read,
+                         op_may_write, classes, &class_allowed)) {
       return true;
     }
   }
@@ -210,16 +312,17 @@ struct OSDCapParser : qi::grammar<Iterator, OSDCap()>
 
     spaces = +ascii::space;
 
-
-    // match := [pool[=]<poolname> [namespace[=]<namespace>] | auid <123>] [object_prefix <prefix>]
     pool_name %= -(spaces >> lit("pool") >> (lit('=') | spaces) >> str);
     nspace %= (spaces >> lit("namespace") >> (lit('=') | spaces) >> estr);
+
+    // match := [pool[=]<poolname> [namespace[=]<namespace>] | auid <123>] [object_prefix <prefix>]
     auid %= (spaces >> lit("auid") >> spaces >> int_);
     object_prefix %= -(spaces >> lit("object_prefix") >> spaces >> str);
 
-    match = ( (auid >> object_prefix)                 [_val = phoenix::construct<OSDCapMatch>(_1, _2)] |
-             (pool_name >> nspace >> object_prefix)   [_val = phoenix::construct<OSDCapMatch>(_1, _2, _3)] |
-             (pool_name >> object_prefix)             [_val = phoenix::construct<OSDCapMatch>(_1, _2)]);
+    match = (
+      (auid >> object_prefix)                 [_val = phoenix::construct<OSDCapMatch>(_1, _2)] |
+      (pool_name >> nspace >> object_prefix)  [_val = phoenix::construct<OSDCapMatch>(_1, _2, _3)] |
+      (pool_name >> object_prefix)            [_val = phoenix::construct<OSDCapMatch>(_1, _2)]);
 
     // rwxa := * | [r][w][x] [class-read] [class-write]
     rwxa =
@@ -234,19 +337,27 @@ struct OSDCapParser : qi::grammar<Iterator, OSDCap()>
 	  (spaces >> lit("class-write")[_val |= OSD_CAP_CLS_W]) ));
 
     // capspec := * | rwx | class <name> [classcap]
-    capspec =
-      rwxa                                            [_val = phoenix::construct<OSDCapSpec>(_1)] |
-      ( spaces >> lit("class") >> spaces >> ((str >> spaces >> str)   [_val = phoenix::construct<OSDCapSpec>(_1, _2)] |
-			 str                          [_val = phoenix::construct<OSDCapSpec>(_1, string())] ));
+    class_name %= (spaces >> lit("class") >> spaces >> str);
+    class_cap %= -(spaces >> str);
+    capspec = (
+      (rwxa)                    [_val = phoenix::construct<OSDCapSpec>(_1)] |
+      (class_name >> class_cap) [_val = phoenix::construct<OSDCapSpec>(_1, _2)]);
+
+    // profile := profile <name> [pool[=]<pool> [namespace[=]<namespace>]]
+    profile_name %= (spaces >> lit("profile") >> spaces >> str);
+    profile = (
+      (profile_name >> pool_name >> nspace) [_val = phoenix::construct<OSDCapProfile>(_1, _2, _3)] |
+      (profile_name >> pool_name)           [_val = phoenix::construct<OSDCapProfile>(_1, _2)]);
 
     // grant := allow match capspec
     grant = (*ascii::blank >> lit("allow") >>
-	     ((capspec >> match)       [_val = phoenix::construct<OSDCapGrant>(_2, _1)] |
-	      (match >> capspec)       [_val = phoenix::construct<OSDCapGrant>(_1, _2)]) >>
-	     *ascii::blank);
+	     ((capspec >> match) [_val = phoenix::construct<OSDCapGrant>(_2, _1)] |
+	      (match >> capspec) [_val = phoenix::construct<OSDCapGrant>(_1, _2)] |
+              (profile)          [_val = phoenix::construct<OSDCapGrant>(_1)]
+             ) >> *ascii::blank);
     // osdcap := grant [grant ...]
     grants %= (grant % (lit(';') | lit(',')));
-    osdcap = grants  [_val = phoenix::construct<OSDCap>(_1)]; 
+    osdcap = grants  [_val = phoenix::construct<OSDCap>(_1)];
   }
   qi::rule<Iterator> spaces;
   qi::rule<Iterator, unsigned()> rwxa;
@@ -254,11 +365,15 @@ struct OSDCapParser : qi::grammar<Iterator, OSDCap()>
   qi::rule<Iterator, string()> unquoted_word;
   qi::rule<Iterator, string()> str, estr;
   qi::rule<Iterator, int()> auid;
+  qi::rule<Iterator, string()> class_name;
+  qi::rule<Iterator, string()> class_cap;
   qi::rule<Iterator, OSDCapSpec()> capspec;
   qi::rule<Iterator, string()> pool_name;
   qi::rule<Iterator, string()> nspace;
   qi::rule<Iterator, string()> object_prefix;
   qi::rule<Iterator, OSDCapMatch()> match;
+  qi::rule<Iterator, string()> profile_name;
+  qi::rule<Iterator, OSDCapProfile()> profile;
   qi::rule<Iterator, OSDCapGrant()> grant;
   qi::rule<Iterator, std::vector<OSDCapGrant>()> grants;
   qi::rule<Iterator, OSDCap()> osdcap;
