@@ -263,7 +263,8 @@ function build_rpm_repo() {
     local base=$3
 
     if [ "$suse" = true ] ; then
-        sudo zypper -n install createrepo
+        sudo zypper --non-interactive --no-gpg-checks refresh
+        sudo zypper --non-interactive install --no-recommends createrepo
     else
         sudo yum install -y createrepo
     fi
