@@ -245,6 +245,24 @@ void OSDCapGrant::expand_profile() const
     profile_grants.emplace_back(OSDCapMatch(profile.pool_namespace),
                                 OSDCapSpec(osd_rwxa_t(OSD_CAP_R | OSD_CAP_W)));
   }
+
+  if (profile.name == "rbd") {
+    // RBD read-write grant
+    profile_grants.emplace_back(OSDCapMatch("", "", "rbd_children"),
+                                OSDCapSpec(osd_rwxa_t(OSD_CAP_CLS_R)));
+    profile_grants.emplace_back(OSDCapMatch("", "", "rbd_mirroring"),
+                                OSDCapSpec(osd_rwxa_t(OSD_CAP_CLS_R)));
+    profile_grants.emplace_back(OSDCapMatch(profile.pool_namespace),
+                                OSDCapSpec(osd_rwxa_t(OSD_CAP_R |
+                                                      OSD_CAP_W |
+                                                      OSD_CAP_X)));
+  }
+  if (profile.name == "rbd-read-only") {
+    // RBD read-only grant
+    profile_grants.emplace_back(OSDCapMatch(profile.pool_namespace),
+                                OSDCapSpec(osd_rwxa_t(OSD_CAP_R |
+                                                      OSD_CAP_CLS_R)));
+  }
 }
 
 bool OSDCap::allow_all() const

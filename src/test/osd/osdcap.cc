@@ -1015,5 +1015,23 @@ TEST(OSDCap, AllowProfile) {
   ASSERT_FALSE(cap.is_capable("foo", "", 0, "asdf", true, true, {}));
   ASSERT_TRUE(cap.is_capable("foo", "", 0, "asdf", true, false, {}));
   ASSERT_TRUE(cap.is_capable("abc", "", 0, "asdf", false, true, {}));
+
+  // RBD
+  cap.grants.clear();
+  ASSERT_TRUE(cap.parse("allow profile rbd pool abc", NULL));
+  ASSERT_FALSE(cap.allow_all());
+  ASSERT_FALSE(cap.is_capable("foo", "", 0, "asdf", true, true, {}));
+  ASSERT_FALSE(cap.is_capable("foo", "", 0, "rbd_children", true, false, {}));
+  ASSERT_TRUE(cap.is_capable("foo", "", 0, "rbd_children", false, false,
+                             {{"rbd", true, false, true}}));
+  ASSERT_TRUE(cap.is_capable("abc", "", 0, "asdf", true, true,
+                             {{"rbd", true, true, true}}));
+
+  cap.grants.clear();
+  ASSERT_TRUE(cap.parse("allow profile rbd-read-only pool abc", NULL));
+  ASSERT_FALSE(cap.allow_all());
+  ASSERT_FALSE(cap.is_capable("foo", "", 0, "rbd_children", true, false, {}));
+  ASSERT_TRUE(cap.is_capable("abc", "", 0, "asdf", true, false,
+                             {{"rbd", true, false, true}}));
 }
 
