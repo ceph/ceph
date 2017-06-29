@@ -2852,7 +2852,9 @@ void PGMap::get_health_checks(
   // TOO_FEW_PGS
   int num_in = osdmap.get_num_in_osds();
   int sum_pg_up = MAX(pg_sum.up, static_cast<int32_t>(pg_stat.size()));
-  if (num_in && cct->_conf->mon_pg_warn_min_per_osd > 0) {
+  if (num_in &&
+      cct->_conf->mon_pg_warn_min_per_osd > 0 &&
+      osdmap.get_pools().size() > 0) {
     int per = sum_pg_up / num_in;
     if (per < cct->_conf->mon_pg_warn_min_per_osd && per) {
       ostringstream ss;
