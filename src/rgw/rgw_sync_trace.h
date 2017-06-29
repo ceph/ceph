@@ -18,10 +18,8 @@
   ss.str();             \
 })
 
-enum RGWSyncTraceNodeState {
-  SNS_INACTIVE = 0,
-  SNS_ACTIVE   = 1,
-};
+#define RGW_SNS_FLAG_ACTIVE   1
+#define RGW_SNS_FLAG_ERROR    2
 
 class RGWSyncTraceManager;
 class RGWSyncTraceNode;
@@ -38,14 +36,13 @@ class RGWSyncTraceNode {
   RGWSyncTraceManager *manager{nullptr};
   RGWSyncTraceNodeRef parent;
 
-  RGWSyncTraceNodeState state{SNS_INACTIVE};
+  uint16_t state{0};
   std::string status;
 
   Mutex lock{"RGWSyncTraceNode::lock"};
 
 protected:
   std::string type;
-  std::string trigger;
   std::string id;
 
   std::string prefix;
@@ -55,10 +52,16 @@ protected:
   boost::circular_buffer<string> history;
 public:
   RGWSyncTraceNode(CephContext *_cct, RGWSyncTraceManager *_manager, const RGWSyncTraceNodeRef& _parent,
-           const std::string& _type, const std::string& _trigger, const std::string& _id);
+           const std::string& _type, const std::string& _id);
 
-  void set_state(RGWSyncTraceNodeState s) {
-    state = s;
+  void set_flag(uint16_t s) {
+    state |= s;
+  }
+  void unset_flag(uint16_t s) {
+    state &= ~s;
+  }
+  bool test_flags(uint16_t f) {
+    return (state & f) == f;
   }
   void log(int level, const std::string& s);
   void finish();
@@ -103,8 +106,14 @@ public:
     return tn;
   }
 
-  void set_state(RGWSyncTraceNodeState s) {
-    return tn->set_state(s);
+  void set_flag(uint16_t flag) {
+    tn->set_flag(flag);
+  }
+  void unset_flag(uint16_t flag) {
+    tn->unset_flag(flag);
+  }
+  bool test_flags(uint16_t f) {
+    return tn->test_flags(f);
   }
   void log(int level, const std::string& s) {
     return tn->log(level, s);
