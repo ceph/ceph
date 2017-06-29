@@ -5250,7 +5250,7 @@ void TestOpsSocketHook::test_ops(OSDService *service, ObjectStore *store,
     if (pool < 0 && isdigit(poolstr[0]))
       pool = atoll(poolstr.c_str());
     if (pool < 0) {
-      ss << "Invalid pool" << poolstr;
+      ss << "Invalid pool '" << poolstr << "''";
       return;
     }
 
