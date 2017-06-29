@@ -177,8 +177,8 @@ def task(ctx, config):
 
     user1 = 'foo'
     user2 = 'fud'
-    subuser1 = 'foo:foo1'
-    subuser2 = 'foo:foo2'
+    swift_subuser1 = 'foo:foo1'
+    swift_subuser2 = 'foo:foo2'
     display_name1 = 'Foo'
     display_name2 = 'Fud'
     email = 'foo@foo.com'
@@ -300,7 +300,7 @@ def task(ctx, config):
     # TESTCASE 'add-swift-key','key','create','swift key','succeeds'
     (ret, out) = rgwadmin_rest(admin_conn,
             ['subuser', 'create'],
-            {'subuser' : subuser1,
+            {'subuser' : swift_subuser1,
              'secret-key' : swift_secret1,
              'key-type' : 'swift'
             })
@@ -311,13 +311,13 @@ def task(ctx, config):
     (ret, out) = rgwadmin_rest(admin_conn, ['user', 'info'], {'uid' : user1})
     assert ret == 200
     assert len(out['swift_keys']) == 1
-    assert out['swift_keys'][0]['user'] == subuser1
+    assert out['swift_keys'][0]['user'] == swift_subuser1
     assert out['swift_keys'][0]['secret_key'] == swift_secret1
 
     # TESTCASE 'add-swift-subuser','key','create','swift sub-user key','succeeds'
     (ret, out) = rgwadmin_rest(admin_conn,
             ['subuser', 'create'],
-            {'subuser' : subuser2,
+            {'subuser' : swift_subuser2,
              'secret-key' : swift_secret2,
              'key-type' : 'swift'
             })
@@ -328,13 +328,13 @@ def task(ctx, config):
     (ret, out) = rgwadmin_rest(admin_conn, ['user', 'info'], {'uid' :  user1})
     assert ret == 200
     assert len(out['swift_keys']) == 2
-    assert out['swift_keys'][0]['user'] == subuser2 or out['swift_keys'][1]['user'] == subuser2
+    assert out['swift_keys'][0]['user'] == swift_subuser2 or out['swift_keys'][1]['user'] == swift_subuser2
     assert out['swift_keys'][0]['secret_key'] == swift_secret2 or out['swift_keys'][1]['secret_key'] == swift_secret2
 
     # TESTCASE 'rm-swift-key1','key','rm','subuser','succeeds, one key is removed'
     (ret, out) = rgwadmin_rest(admin_conn,
             ['key', 'rm'],
-            {'subuser' : subuser1,
+            {'subuser' : swift_subuser1,
              'key-type' :'swift'
             })
 
@@ -346,7 +346,7 @@ def task(ctx, config):
     # TESTCASE 'rm-subuser','subuser','rm','subuser','success, subuser is removed'
     (ret, out) = rgwadmin_rest(admin_conn,
             ['subuser', 'rm'],
-            {'subuser' : subuser1
+            {'subuser' : swift_subuser1
             })
 
     assert ret == 200
@@ -357,7 +357,7 @@ def task(ctx, config):
     # TESTCASE 'rm-subuser-with-keys','subuser','rm','subuser','succeeds, second subser and key is removed'
     (ret, out) = rgwadmin_rest(admin_conn,
             ['subuser', 'rm'],
-            {'subuser' : subuser2,
+            {'subuser' : swift_subuser2,
              'key-type' : 'swift',
              '{purge-keys' :True
             })
