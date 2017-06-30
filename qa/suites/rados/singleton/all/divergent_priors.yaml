@@ -16,7 +16,7 @@ overrides:
       - HEALTH_WARN OSDMAP_FLAGS
       - HEALTH_WARN OSD_
       - HEALTH_WARN PG_
-      - HEALTH_WARN DEGRADED_OBJECTS
+      - HEALTH_WARN OBJECT_DEGRADED
     conf:
       osd:
         debug osd: 5
