@@ -344,9 +344,10 @@ class AsyncConnection : public Connection {
   unsigned msg_left;
   uint64_t cur_msg_size;
   ceph_msg_header current_header;
+  bufferptr front, middle;
   bufferlist data_buf;
   bufferlist::iterator data_blp;
-  bufferlist front, middle, data;
+  bufferlist data;
   ceph_msg_connect connect_msg;
   // Connecting state
   bool got_bad_auth;

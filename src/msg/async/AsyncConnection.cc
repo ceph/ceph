@@ -482,9 +482,8 @@ void AsyncConnection::process()
           }
 
           // Reset state
+          front = middle = bufferptr{};
           data_buf.clear();
-          front.clear();
-          middle.clear();
           data.clear();
           recv_stamp = ceph_clock_now();
           current_header = header;
@@ -564,14 +563,15 @@ void AsyncConnection::process()
           // read front
           unsigned front_len = current_header.front_len;
           if (front_len) {
-            if (!front.length())
-              front.push_back(buffer::create(front_len));
+            if (!front.have_raw())
+              front = buffer::create(front_len);
 
-            r = read_until(front_len, front.c_str());
+            r = read_until(front_len - front.offset(), front.c_str());
             if (r < 0) {
               ldout(async_msgr->cct, 1) << __func__ << " read message front failed" << dendl;
               goto fail;
             } else if (r > 0) {
+              front.set_offset(front.offset() + r);
               break;
             }
 
@@ -585,14 +585,15 @@ void AsyncConnection::process()
           // read middle
           unsigned middle_len = current_header.middle_len;
           if (middle_len) {
-            if (!middle.length())
-              middle.push_back(buffer::create(middle_len));
+            if (!middle.have_raw())
+              middle = buffer::create(middle_len);
 
-            r = read_until(middle_len, middle.c_str());
+            r = read_until(middle_len - middle.offset(), middle.c_str());
             if (r < 0) {
               ldout(async_msgr->cct, 1) << __func__ << " read message middle failed" << dendl;
               goto fail;
             } else if (r > 0) {
+              middle.set_offset(middle.offset() + r);
               break;
             }
             ldout(async_msgr->cct, 20) << __func__ << " got middle " << middle.length() << dendl;
@@ -692,8 +693,13 @@ void AsyncConnection::process()
 
           ldout(async_msgr->cct, 20) << __func__ << " got " << front.length() << " + " << middle.length()
                               << " + " << data.length() << " byte message" << dendl;
-          Message *message = decode_message(async_msgr->cct, async_msgr->crcflags, current_header, footer,
-                                            front, middle, data, this);
+          bufferlist front_bl, middle_bl;
+          front_bl.push_back(std::move(front));
+          middle_bl.push_back(std::move(middle));
+          Message *message = decode_message(async_msgr->cct,
+					    async_msgr->crcflags,
+					    current_header, footer,
+                                            front_bl, middle_bl, data, this);
           if (!message) {
             ldout(async_msgr->cct, 1) << __func__ << " decode message failed " << dendl;
             goto fail;
