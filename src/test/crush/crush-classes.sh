@@ -115,8 +115,9 @@ function TEST_set_device_class() {
 
     TEST_classes $dir || return 1
 
-    ceph osd crush set-device-class osd.0 ssd || return 1
-    ceph osd crush set-device-class osd.1 ssd || return 1
+    ceph osd crush set-device-class ssd osd.0 || return 1
+    ceph osd crush set-device-class ssd osd.1 || return 1
+    ceph osd crush set-device-class ssd 0 1 || return 1 # should be idempotent
 
     ok=false
     for delay in 2 4 8 16 32 64 128 256 ; do
