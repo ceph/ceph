@@ -38,27 +38,27 @@ public:
 
 #if 0 // more work needed here
   Request create_client_op(epoch_t e, uint64_t owner) {
-    return Request(spg_t(), PGQueueable(OpRequestRef(), e));
+    return Request(spg_t(), OpQueueItem(OpRequestRef(), e));
   }
 #endif
 
   Request create_snaptrim(epoch_t e, uint64_t owner) {
     return Request(spg_t(),
-		   PGQueueable(PGSnapTrim(e),
+		   OpQueueItem(PGSnapTrim(e),
 			       12, 12,
 			       utime_t(), owner, e));
   }
 
   Request create_scrub(epoch_t e, uint64_t owner) {
     return Request(spg_t(),
-		   PGQueueable(PGScrub(e),
+		   OpQueueItem(PGScrub(e),
 			       12, 12,
 			       utime_t(), owner, e));
   }
 
   Request create_recovery(epoch_t e, uint64_t owner) {
     return Request(spg_t(),
-		   PGQueueable(PGRecovery(e, 64),
+		   OpQueueItem(PGRecovery(e, 64),
 			       12, 12,
 			       utime_t(), owner, e));
   }

@@ -19,6 +19,7 @@
 
 #include "msg/Dispatcher.h"
 
+#include "common/backport14.h"
 #include "common/Mutex.h"
 #include "common/RWLock.h"
 #include "common/Timer.h"
@@ -40,7 +41,7 @@
 #include "OpRequest.h"
 #include "Session.h"
 
-#include "osd/PGQueueable.h"
+#include "osd/OpQueueItem.h"
 
 #include <atomic>
 #include <map>
@@ -366,8 +367,8 @@ public:
   GenContextWQ recovery_gen_wq;
   ClassHandler  *&class_handler;
 
-  void enqueue_back(spg_t pgid, PGQueueable qi);
-  void enqueue_front(spg_t pgid, PGQueueable qi);
+  void enqueue_back(spg_t pgid, OpQueueItem qi);
+  void enqueue_front(spg_t pgid, OpQueueItem qi);
 
   void maybe_inject_dispatch_delay() {
     if (g_conf->osd_debug_inject_dispatch_delay_probability > 0) {
@@ -866,7 +867,7 @@ public:
     }
     enqueue_back(
       pg->get_pgid(),
-      PGQueueable(
+      OpQueueItem(
 	PGScrub(pg->get_osdmap()->get_epoch()),
 	cct->_conf->osd_scrub_cost,
 	scrub_queue_priority,
@@ -894,7 +895,7 @@ private:
     assert(recovery_lock.is_locked_by_me());
     enqueue_back(
       p.second->get_pgid(),
-      PGQueueable(
+      OpQueueItem(
 	PGRecovery(p.first, reserved_pushes),
 	cct->_conf->osd_recovery_cost,
 	cct->_conf->osd_recovery_priority,
@@ -1617,10 +1618,10 @@ private:
    * wake_pg_waiters, and (2) when wake_pg_waiters just ran, waiting_for_pg
    * and already requeued the items.
    */
-  friend class PGQueueable;
+  friend class OpQueueItem;
 
   class ShardedOpWQ
-    : public ShardedThreadPool::ShardedWQ<pair<spg_t,PGQueueable>>
+    : public ShardedThreadPool::ShardedWQ<pair<spg_t,OpQueueItem>>
   {
     struct ShardData {
       Mutex sdata_lock;
@@ -1631,7 +1632,7 @@ private:
       OSDMapRef waiting_for_pg_osdmap;
       struct pg_slot {
 	PGRef pg;                     ///< cached pg reference [optional]
-	deque<PGQueueable> to_process; ///< order items for this slot
+	deque<OpQueueItem> to_process; ///< order items for this slot
 	int num_running = 0;          ///< _process threads doing pg lookup/lock
 
 	/// true if pg does/did not exist. if so all new items go directly to
@@ -1649,9 +1650,9 @@ private:
       unordered_map<spg_t,pg_slot> pg_slots;
 
       /// priority queue
-      std::unique_ptr<OpQueue< pair<spg_t, PGQueueable>, uint64_t>> pqueue;
+      std::unique_ptr<OpQueue< pair<spg_t, OpQueueItem>, uint64_t>> pqueue;
 
-      void _enqueue_front(pair<spg_t, PGQueueable> item, unsigned cutoff) {
+      void _enqueue_front(pair<spg_t, OpQueueItem> item, unsigned cutoff) {
 	unsigned priority = item.second.get_priority();
 	unsigned cost = item.second.get_cost();
 	if (priority >= cutoff)
@@ -1673,20 +1674,18 @@ private:
 				 false, cct) {
 	if (opqueue == io_queue::weightedpriority) {
 	  pqueue = std::unique_ptr
-	    <WeightedPriorityQueue<pair<spg_t,PGQueueable>,uint64_t>>(
-	      new WeightedPriorityQueue<pair<spg_t,PGQueueable>,uint64_t>(
+	    <WeightedPriorityQueue<pair<spg_t,OpQueueItem>,uint64_t>>(
+	      new WeightedPriorityQueue<pair<spg_t,OpQueueItem>,uint64_t>(
 		max_tok_per_prio, min_cost));
 	} else if (opqueue == io_queue::prioritized) {
 	  pqueue = std::unique_ptr
-	    <PrioritizedQueue<pair<spg_t,PGQueueable>,uint64_t>>(
-	      new PrioritizedQueue<pair<spg_t,PGQueueable>,uint64_t>(
+	    <PrioritizedQueue<pair<spg_t,OpQueueItem>,uint64_t>>(
+	      new PrioritizedQueue<pair<spg_t,OpQueueItem>,uint64_t>(
 		max_tok_per_prio, min_cost));
 	} else if (opqueue == io_queue::mclock_opclass) {
-	  pqueue = std::unique_ptr
-	    <ceph::mClockOpClassQueue>(new ceph::mClockOpClassQueue(cct));
+	  pqueue = ceph::make_unique<ceph::mClockOpClassQueue>(cct);
 	} else if (opqueue == io_queue::mclock_client) {
-	  pqueue = std::unique_ptr
-	    <ceph::mClockClientQueue>(new ceph::mClockClientQueue(cct));
+	  pqueue = ceph::make_unique<ceph::mClockClientQueue>(cct);
 	}
       }
     }; // struct ShardData
@@ -1701,7 +1700,7 @@ private:
 		time_t ti,
 		time_t si,
 		ShardedThreadPool* tp)
-      : ShardedThreadPool::ShardedWQ<pair<spg_t,PGQueueable>>(ti, si, tp),
+      : ShardedThreadPool::ShardedWQ<pair<spg_t,OpQueueItem>>(ti, si, tp),
         osd(o),
         num_shards(pnum_shards) {
       for (uint32_t i = 0; i < num_shards; i++) {
@@ -1740,10 +1739,10 @@ private:
     void _process(uint32_t thread_index, heartbeat_handle_d *hb) override;
 
     /// enqueue a new item
-    void _enqueue(pair <spg_t, PGQueueable> item) override;
+    void _enqueue(pair <spg_t, OpQueueItem> item) override;
 
     /// requeue an old item (at the front of the line)
-    void _enqueue_front(pair <spg_t, PGQueueable> item) override;
+    void _enqueue_front(pair <spg_t, OpQueueItem> item) override;
       
     void return_waiting_threads() override {
       for(uint32_t i = 0; i < num_shards; i++) {
@@ -1776,7 +1775,7 @@ private:
       uint64_t reserved_pushes_to_free;
       Pred(spg_t pg, list<OpRequestRef> *out_ops = 0)
 	: pgid(pg), out_ops(out_ops), reserved_pushes_to_free(0) {}
-      void accumulate(const PGQueueable &op) {
+      void accumulate(const OpQueueItem &op) {
 	reserved_pushes_to_free += op.get_reserved_pushes();
 	if (out_ops) {
 	  boost::optional<OpRequestRef> mop = op.maybe_get_op();
@@ -1784,7 +1783,7 @@ private:
 	    out_ops->push_front(*mop);
 	}
       }
-      bool operator()(const pair<spg_t, PGQueueable> &op) {
+      bool operator()(const pair<spg_t, OpQueueItem> &op) {
 	if (op.first == pgid) {
 	  accumulate(op.second);
 	  return true;

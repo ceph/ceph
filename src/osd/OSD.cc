@@ -1674,12 +1674,12 @@ void OSDService::handle_misdirected_op(PG *pg, OpRequestRef op)
 	       << " in e" << m->get_map_epoch() << "/" << osdmap->get_epoch();
 }
 
-void OSDService::enqueue_back(spg_t pgid, PGQueueable qi)
+void OSDService::enqueue_back(spg_t pgid, OpQueueItem qi)
 {
   osd->op_shardedwq.queue(make_pair(pgid, qi));
 }
 
-void OSDService::enqueue_front(spg_t pgid, PGQueueable qi)
+void OSDService::enqueue_front(spg_t pgid, OpQueueItem qi)
 {
   osd->op_shardedwq.queue_front(make_pair(pgid, qi));
 }
@@ -1695,7 +1695,7 @@ void OSDService::queue_for_snap_trim(PG *pg)
   osd->op_shardedwq.queue(
     make_pair(
       pg->pg_id,
-      PGQueueable(
+      OpQueueItem(
 	PGSnapTrim(pg->get_osdmap()->get_epoch()),
 	cct->_conf->osd_snap_trim_cost,
 	cct->_conf->osd_snap_trim_priority,
@@ -8909,7 +8909,7 @@ void OSD::enqueue_op(spg_t pg, OpRequestRef& op, epoch_t epoch)
   op->osd_trace.keyval("cost", op->get_req()->get_cost());
   op->mark_queued_for_pg();
   logger->tinc(l_osd_op_before_queue_op_lat, latency);
-  op_shardedwq.queue(make_pair(pg, PGQueueable(op, epoch)));
+  op_shardedwq.queue(make_pair(pg, OpQueueItem(op, epoch)));
 }
 
 
@@ -9569,7 +9569,7 @@ void OSD::ShardedOpWQ::_process(uint32_t thread_index, heartbeat_handle_d *hb)
       return;
     }
   }
-  pair<spg_t, PGQueueable> item = sdata->pqueue->dequeue();
+  pair<spg_t, OpQueueItem> item = sdata->pqueue->dequeue();
   if (osd->is_stopping()) {
     sdata->sdata_op_ordering_lock.Unlock();
     return;    // OSD shutdown, discard.
@@ -9609,7 +9609,7 @@ void OSD::ShardedOpWQ::_process(uint32_t thread_index, heartbeat_handle_d *hb)
 
   osd->service.maybe_inject_dispatch_delay();
 
-  boost::optional<PGQueueable> qi;
+  boost::optional<OpQueueItem> qi;
 
   // we don't use a Mutex::Locker here because of the
   // osd->service.release_reserved_pushes() call below
@@ -9743,7 +9743,7 @@ void OSD::ShardedOpWQ::_process(uint32_t thread_index, heartbeat_handle_d *hb)
   pg->unlock();
 }
 
-void OSD::ShardedOpWQ::_enqueue(pair<spg_t, PGQueueable> item) {
+void OSD::ShardedOpWQ::_enqueue(pair<spg_t, OpQueueItem> item) {
   uint32_t shard_index =
     item.first.hash_to_shard(shard_list.size());
 
@@ -9769,7 +9769,7 @@ void OSD::ShardedOpWQ::_enqueue(pair<spg_t, PGQueueable> item) {
 
 }
 
-void OSD::ShardedOpWQ::_enqueue_front(pair<spg_t, PGQueueable> item)
+void OSD::ShardedOpWQ::_enqueue_front(pair<spg_t, OpQueueItem> item)
 {
   uint32_t shard_index = item.first.hash_to_shard(shard_list.size());
   ShardData* sdata = shard_list[shard_index];

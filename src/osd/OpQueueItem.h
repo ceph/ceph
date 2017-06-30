@@ -54,7 +54,7 @@ struct PGRecovery {
 };
 
 
-class PGQueueable {
+class OpQueueItem {
   typedef boost::variant<
     OpRequestRef,
     PGSnapTrim,
@@ -95,33 +95,33 @@ class PGQueueable {
     }
   };
 
-  friend ostream& operator<<(ostream& out, const PGQueueable& q) {
+  friend ostream& operator<<(ostream& out, const OpQueueItem& q) {
     StringifyVis v;
-    return out << "PGQueueable(" << boost::apply_visitor(v, q.qvariant)
+    return out << "OpQueueItem(" << boost::apply_visitor(v, q.qvariant)
 	       << " prio " << q.priority << " cost " << q.cost
 	       << " e" << q.map_epoch << ")";
   }
 
 public:
 
-  PGQueueable(OpRequestRef op, epoch_t e)
+  OpQueueItem(OpRequestRef op, epoch_t e)
     : qvariant(op), cost(op->get_req()->get_cost()),
       priority(op->get_req()->get_priority()),
       start_time(op->get_req()->get_recv_stamp()),
       owner(op->get_req()->get_source().num()),
       map_epoch(e)
     {}
-  PGQueueable(
+  OpQueueItem(
     const PGSnapTrim &op, int cost, unsigned priority, utime_t start_time,
     uint64_t owner, epoch_t e)
     : qvariant(op), cost(cost), priority(priority), start_time(start_time),
       owner(owner), map_epoch(e) {}
-  PGQueueable(
+  OpQueueItem(
     const PGScrub &op, int cost, unsigned priority, utime_t start_time,
     uint64_t owner, epoch_t e)
     : qvariant(op), cost(cost), priority(priority), start_time(start_time),
       owner(owner), map_epoch(e) {}
-  PGQueueable(
+  OpQueueItem(
     const PGRecovery &op, int cost, unsigned priority, utime_t start_time,
     uint64_t owner, epoch_t e)
     : qvariant(op), cost(cost), priority(priority), start_time(start_time),
@@ -145,4 +145,4 @@ public:
   uint64_t get_owner() const { return owner; }
   epoch_t get_map_epoch() const { return map_epoch; }
   const QVariant& get_variant() const { return qvariant; }
-}; // struct PGQueueable
+}; // struct OpQueueItem
