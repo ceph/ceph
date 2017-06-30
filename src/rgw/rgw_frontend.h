@@ -50,6 +50,10 @@ public:
     return out;
   }
 
+  const std::string& get_config() {
+    return config;
+  }
+
   std::map<std::string, std::string>& get_config_map() {
     return config_map;
   }
