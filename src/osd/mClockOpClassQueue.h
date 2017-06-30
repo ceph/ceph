@@ -21,14 +21,14 @@
 
 #include "common/config.h"
 #include "common/ceph_context.h"
-#include "osd/PGQueueable.h"
+#include "osd/OpQueueItem.h"
 
 #include "common/mClockPriorityQueue.h"
 
 
 namespace ceph {
 
-  using Request = std::pair<spg_t, PGQueueable>;
+  using Request = std::pair<spg_t, OpQueueItem>;
   using Client = entity_inst_t;
 
 
