@@ -2,6 +2,7 @@ overrides:
   ceph:
     log-whitelist:
     - wrongly marked me down
+    - HEALTH_WARN OSDMAP_FLAGS
 tasks:
 - workunit:
     clients:
