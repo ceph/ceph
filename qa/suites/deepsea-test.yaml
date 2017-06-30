@@ -3,7 +3,7 @@ os_type: sle
 os_version: "12.3"
 roles:
 - [master.a]
-- [node.1]
+- [node.1, client.0]
 openstack:
 - volumes: # attached to each instance
     count: 2
@@ -13,6 +13,7 @@ tasks:
 - deepsea:
     repo: https://github.com/SUSE/DeepSea.git
     branch: master
+    exec: ['suites/basic/health-ok.sh']
 - exec:
     master.a:
       - sleep 1000000000 # forever
