@@ -103,12 +103,6 @@ class Module(MgrModule):
 
         return self._rados
 
-    def get_localized_config(self, key):
-        r = self.get_config(self.get_mgr_id() + '/' + key)
-        if r is None:
-            r = self.get_config(key)
-        return r
-
     def update_pool_stats(self):
         df = global_instance().get("df")
         pool_stats = dict([(p['id'], p['stats']) for p in df['pools']])
