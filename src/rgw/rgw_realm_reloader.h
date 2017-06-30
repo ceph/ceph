@@ -32,7 +32,8 @@ class RGWRealmReloader : public RGWRealmWatcher::Watcher {
     virtual void resume(RGWRados* store) = 0;
   };
 
-  RGWRealmReloader(RGWRados*& store, Pauser* frontends);
+  RGWRealmReloader(RGWRados*& store, std::map<std::string, std::string>& service_map_meta,
+                   Pauser* frontends);
   ~RGWRealmReloader() override;
 
   /// respond to realm notifications by scheduling a reload()
@@ -46,6 +47,7 @@ class RGWRealmReloader : public RGWRealmWatcher::Watcher {
 
   /// main()'s RGWRados pointer as a reference, modified by reload()
   RGWRados*& store;
+  std::map<std::string, std::string>& service_map_meta;
   Pauser *const frontends;
 
   /// reload() takes a significant amount of time, so we don't want to run
