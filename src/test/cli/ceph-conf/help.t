@@ -26,7 +26,7 @@
   
   EXAMPLES
   [$] ceph-conf --name mon.0 -c /etc/ceph/ceph.conf 'mon addr' (re)
-  Find out what the value of 'mon add' is for monitor 0.
+  Find out what the value of 'mon addr' is for monitor 0.
   
   [$] ceph-conf -l mon (re)
   List sections beginning with 'mon'.

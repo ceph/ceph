@@ -981,6 +981,7 @@ inline ostream& operator<<(ostream& out, const osd_stat_t& s) {
 #define PG_STATE_SNAPTRIM      (1<<26) // trimming snaps
 #define PG_STATE_SNAPTRIM_WAIT (1<<27) // queued to trim snaps
 #define PG_STATE_RECOVERY_TOOFULL (1<<28) // recovery can't proceed: too full
+#define PG_STATE_SNAPTRIM_ERROR (1<<29) // error stopped trimming snaps
 
 std::string pg_state_string(int state);
 std::string pg_vector_string(const vector<int32_t> &a);
@@ -4658,6 +4659,7 @@ struct ObjectRecoveryProgress {
   bool first;
   bool data_complete;
   bool omap_complete;
+  bool error = false;
 
   ObjectRecoveryProgress()
     : data_recovered_to(0),

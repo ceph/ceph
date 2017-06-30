@@ -1,4 +1,4 @@
-  $ osdmaptool --createsimple 3 myosdmap
+  $ osdmaptool --createsimple 3 myosdmap --with-default-pool
   osdmaptool: osdmap file 'myosdmap'
   osdmaptool: writing epoch 1 to myosdmap
   $ osdmaptool --export-crush oc myosdmap

@@ -41,7 +41,7 @@ public:
     int priority
     ) override;
 
-  void recover_object(
+  int recover_object(
     const hobject_t &hoid,
     eversion_t v,
     ObjectContextRef head,

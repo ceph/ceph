@@ -417,6 +417,7 @@ RDMAWorker::RDMAWorker(CephContext *c, unsigned i)
   plb.add_u64_counter(l_msgr_rdma_tx_bytes, "tx_bytes", "The bytes of tx chunks transmitted");
   plb.add_u64_counter(l_msgr_rdma_rx_chunks, "rx_chunks", "The number of rx chunks transmitted");
   plb.add_u64_counter(l_msgr_rdma_rx_bytes, "rx_bytes", "The bytes of rx chunks transmitted");
+  plb.add_u64_counter(l_msgr_rdma_pending_sent_conns, "pending_sent_conns", "The count of pending sent conns");
 
   perf_logger = plb.create_perf_counters();
   cct->get_perfcounters_collection()->add(perf_logger);
@@ -474,12 +475,15 @@ int RDMAWorker::get_reged_mem(RDMAConnectedSocketImpl *o, std::vector<Chunk*> &c
   size_t got = global_infiniband->get_memory_manager()->get_tx_buffer_size() * r;
   ldout(cct, 30) << __func__ << " need " << bytes << " bytes, reserve " << got << " registered  bytes, inflight " << dispatcher->inflight << dendl;
   stack->get_dispatcher()->inflight += r;
-  if (got == bytes)
+  if (got >= bytes)
     return r;
 
   if (o) {
-    if (pending_sent_conns.back() != o)
+    if (!o->is_pending()) {
       pending_sent_conns.push_back(o);
+      perf_logger->inc(l_msgr_rdma_pending_sent_conns, 1);
+      o->set_pending(1);
+    }
     dispatcher->make_pending_worker(this);
   }
   return r;
@@ -489,25 +493,22 @@ int RDMAWorker::get_reged_mem(RDMAConnectedSocketImpl *o, std::vector<Chunk*> &c
 void RDMAWorker::handle_pending_message()
 {
   ldout(cct, 20) << __func__ << " pending conns " << pending_sent_conns.size() << dendl;
-  std::set<RDMAConnectedSocketImpl*> done;
   while (!pending_sent_conns.empty()) {
     RDMAConnectedSocketImpl *o = pending_sent_conns.front();
     pending_sent_conns.pop_front();
-    if (!done.count(o)) {
-      done.insert(o);
-      ssize_t r = o->submit(false);
-      ldout(cct, 20) << __func__ << " sent pending bl socket=" << o << " r=" << r << dendl;
-      if (r < 0) {
-        if (r == -EAGAIN) {
-          pending_sent_conns.push_front(o);
-          dispatcher->make_pending_worker(this);
-          return ;
-        }
-        o->fault();
+    ssize_t r = o->submit(false);
+    ldout(cct, 20) << __func__ << " sent pending bl socket=" << o << " r=" << r << dendl;
+    if (r < 0) {
+      if (r == -EAGAIN) {
+        pending_sent_conns.push_back(o);
+        dispatcher->make_pending_worker(this);
+        return ;
       }
+      o->fault();
     }
+    o->set_pending(0);
+    perf_logger->dec(l_msgr_rdma_pending_sent_conns, 1);
   }
-
   dispatcher->notify_pending_workers();
 }
 

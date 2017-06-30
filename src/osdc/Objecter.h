@@ -2083,7 +2083,9 @@ private:
     }
   }
   void ms_fast_dispatch(Message *m) override {
-    ms_dispatch(m);
+    if (!ms_dispatch(m)) {
+      m->put();
+    }
   }
 
   void handle_osd_op_reply(class MOSDOpReply *m);
@@ -2201,7 +2203,7 @@ public:
       onfinish);
     submit_command(c, ptid);
   }
-  void pg_command(pg_t pgid, vector<string>& cmd,
+  void pg_command(pg_t pgid, const vector<string>& cmd,
 		 const bufferlist& inbl, ceph_tid_t *ptid,
 		 bufferlist *poutbl, string *prs, Context *onfinish) {
     CommandOp *c = new CommandOp(

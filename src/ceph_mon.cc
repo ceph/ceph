@@ -368,8 +368,8 @@ int main(int argc, const char **argv)
 	  string name;
 	  monmap.get_addr_name(a, name);
 	  monmap.rename(name, g_conf->name.get_id());
-	  cout << argv[0] << ": renaming mon." << name << " " << a
-	       << " to mon." << g_conf->name.get_id() << std::endl;
+	  dout(0) << argv[0] << ": renaming mon." << name << " " << a
+	       << " to mon." << g_conf->name.get_id() << dendl;
 	}
       } else {
 	// is a local address listed without a name?  if so, name myself.
@@ -382,12 +382,12 @@ int main(int argc, const char **argv)
 	  monmap.get_addr_name(local, name);
 
 	  if (name.compare(0, 7, "noname-") == 0) {
-	    cout << argv[0] << ": mon." << name << " " << local
-		 << " is local, renaming to mon." << g_conf->name.get_id() << std::endl;
+	    dout(0) << argv[0] << ": mon." << name << " " << local
+		 << " is local, renaming to mon." << g_conf->name.get_id() << dendl;
 	    monmap.rename(name, g_conf->name.get_id());
 	  } else {
-	    cout << argv[0] << ": mon." << name << " " << local
-		 << " is local, but not 'noname-' + something; not assuming it's me" << std::endl;
+	    dout(0) << argv[0] << ": mon." << name << " " << local
+		 << " is local, but not 'noname-' + something; not assuming it's me" << dendl;
 	  }
 	}
       }
@@ -395,7 +395,7 @@ int main(int argc, const char **argv)
 
     if (!g_conf->fsid.is_zero()) {
       monmap.fsid = g_conf->fsid;
-      cout << argv[0] << ": set fsid to " << g_conf->fsid << std::endl;
+      dout(0) << argv[0] << ": set fsid to " << g_conf->fsid << dendl;
     }
     
     if (monmap.fsid.is_zero()) {
@@ -435,8 +435,8 @@ int main(int argc, const char **argv)
       exit(1);
     }
     store.close();
-    cout << argv[0] << ": created monfs at " << g_conf->mon_data 
-	 << " for " << g_conf->name << std::endl;
+    dout(0) << argv[0] << ": created monfs at " << g_conf->mon_data 
+	 << " for " << g_conf->name << dendl;
     return 0;
   }
 
@@ -500,6 +500,7 @@ int main(int argc, const char **argv)
           derr << err_msg << dendl;
         prefork.exit(err);
       }
+      setsid();
       global_init_postfork_start(g_ceph_context);
     }
     common_init_finish(g_ceph_context);
@@ -726,11 +727,11 @@ int main(int argc, const char **argv)
     prefork.exit(1);
   }
 
-  cout << "starting " << g_conf->name << " rank " << rank
+  dout(0) << "starting " << g_conf->name << " rank " << rank
        << " at " << ipaddr
        << " mon_data " << g_conf->mon_data
        << " fsid " << monmap.get_fsid()
-       << std::endl;
+       << dendl;
 
   // start monitor
   mon = new Monitor(g_ceph_context, g_conf->name.get_id(), store,

@@ -63,6 +63,7 @@ def task(ctx, config):
 #                            '--mon-osd-report-timeout 90',
                             '--mon-pg-stuck-threshold 10')
 
+    # all active+clean
     check_stuck(
         manager,
         num_inactive=0,
@@ -76,10 +77,11 @@ def task(ctx, config):
     manager.flush_pg_stats([1])
     manager.wait_for_recovery(timeout)
 
+    # all active+clean+remapped
     check_stuck(
         manager,
         num_inactive=0,
-        num_unclean=num_pgs,
+        num_unclean=0,
         num_stale=0,
         )
 
@@ -87,6 +89,7 @@ def task(ctx, config):
     manager.flush_pg_stats([0, 1])
     manager.wait_for_clean(timeout)
 
+    # all active+clean
     check_stuck(
         manager,
         num_inactive=0,

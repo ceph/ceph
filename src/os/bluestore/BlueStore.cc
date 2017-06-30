@@ -134,35 +134,67 @@ const string PREFIX_SHARED_BLOB = "X"; // u64 offset -> shared_blob_t
 template<typename S>
 static void append_escaped(const string &in, S *out)
 {
-  char hexbyte[8];
+  char hexbyte[in.length() * 3 + 1];
+  char* ptr = &hexbyte[0];
   for (string::const_iterator i = in.begin(); i != in.end(); ++i) {
     if (*i <= '#') {
-      snprintf(hexbyte, sizeof(hexbyte), "#%02x", (uint8_t)*i);
-      out->append(hexbyte);
+      *ptr++ = '#';
+      *ptr++ = "0123456789abcdef"[(*i >> 4) & 0x0f];
+      *ptr++ = "0123456789abcdef"[*i & 0x0f];
     } else if (*i >= '~') {
-      snprintf(hexbyte, sizeof(hexbyte), "~%02x", (uint8_t)*i);
-      out->append(hexbyte);
+      *ptr++ = '~';
+      *ptr++ = "0123456789abcdef"[(*i >> 4) & 0x0f];
+      *ptr++ = "0123456789abcdef"[*i & 0x0f];
     } else {
-      out->push_back(*i);
+      *ptr++  = *i;
     }
   }
-  out->push_back('!');
+  *ptr++ = '!';
+  out->append(hexbyte, ptr - &hexbyte[0]);
+}
+
+inline unsigned h2i(char c)
+{
+  if ((c >= '0') && (c <= '9')) {
+    return c - 0x30;
+  } else if ((c >= 'a') && (c <= 'f')) {
+    return c - 'a' + 10;
+  } else if ((c >= 'A') && (c <= 'F')) {
+    return c - 'A' + 10;
+  } else {
+    return 256; // make it always larger than 255
+  }
 }
 
 static int decode_escaped(const char *p, string *out)
 {
+  char buff[256];
+  char* ptr = &buff[0];
+  char* max = &buff[252];
   const char *orig_p = p;
   while (*p && *p != '!') {
     if (*p == '#' || *p == '~') {
-      unsigned hex;
-      int r = sscanf(++p, "%2x", &hex);
-      if (r < 1)
-	return -EINVAL;
-      out->push_back((char)hex);
-      p += 2;
+      unsigned hex = 0;
+      p++;
+      hex = h2i(*p++) << 4;
+      if (hex > 255) {
+        return -EINVAL;
+      }
+      hex |= h2i(*p++);
+      if (hex > 255) {
+        return -EINVAL;
+      }
+      *ptr++ = hex;
     } else {
-      out->push_back(*p++);
+      *ptr++ = *p++;
     }
+    if (ptr > max) {
+       out->append(buff, ptr-buff);
+       ptr = &buff[0];
+    }
+  }
+  if (ptr != buff) {
+     out->append(buff, ptr-buff);
   }
   return p - orig_p;
 }
@@ -3437,17 +3469,6 @@ BlueStore::BlueStore(CephContext *cct,
   _init_logger();
   cct->_conf->add_observer(this);
   set_cache_shards(1);
-
-  if (cct->_conf->bluestore_shard_finishers) {
-    m_finisher_num = cct->_conf->osd_op_num_shards;
-  }
-
-  for (int i = 0; i < m_finisher_num; ++i) {
-    ostringstream oss;
-    oss << "finisher-" << i;
-    Finisher *f = new Finisher(cct, oss.str(), "finisher");
-    finishers.push_back(f);
-  }
 }
 
 BlueStore::~BlueStore()
@@ -3981,9 +4002,6 @@ int BlueStore::_check_or_set_bdev_label(
 
 void BlueStore::_set_alloc_sizes(void)
 {
-  min_alloc_size_order = ctz(min_alloc_size);
-  assert(min_alloc_size == 1u << min_alloc_size_order);
-
   max_alloc_size = cct->_conf->bluestore_max_alloc_size;
 
   if (cct->_conf->bluestore_prefer_deferred_size) {
@@ -4837,7 +4855,7 @@ int BlueStore::_open_collections(int *errors)
   return 0;
 }
 
-void BlueStore::open_statfs()
+void BlueStore::_open_statfs()
 {
   bufferlist bl;
   int r = db->get(PREFIX_STAT, "bluestore_statfs", &bl);
@@ -4845,8 +4863,7 @@ void BlueStore::open_statfs()
     if (size_t(bl.length()) >= sizeof(vstatfs.values)) {
       auto it = bl.begin();
       vstatfs.decode(it);
-    }
-    else {
+    } else {
       dout(10) << __func__ << " store_statfs is corrupt, using empty" << dendl;
     }
   }
@@ -5077,7 +5094,6 @@ int BlueStore::mkfs()
 	min_alloc_size = cct->_conf->bluestore_min_alloc_size_ssd;
       }
     }
-    _set_alloc_sizes();
     {
       bufferlist bl;
       ::encode((uint64_t)min_alloc_size, bl);
@@ -5089,27 +5105,23 @@ int BlueStore::mkfs()
     db->submit_transaction_sync(t);
   }
 
-  r = _open_alloc();
-  if (r < 0)
-    goto out_close_fm;
 
   r = write_meta("kv_backend", cct->_conf->bluestore_kvbackend);
   if (r < 0)
-    goto out_close_alloc;
+    goto out_close_fm;
+
   r = write_meta("bluefs", stringify((int)cct->_conf->bluestore_bluefs));
   if (r < 0)
-    goto out_close_alloc;
+    goto out_close_fm;
 
   if (fsid != old_fsid) {
     r = _write_fsid();
     if (r < 0) {
       derr << __func__ << " error writing fsid: " << cpp_strerror(r) << dendl;
-      goto out_close_alloc;
+      goto out_close_fm;
     }
   }
 
- out_close_alloc:
-  _close_alloc();
  out_close_fm:
   _close_fm();
  out_close_db:
@@ -6154,13 +6166,12 @@ int BlueStore::read(
   uint64_t offset,
   size_t length,
   bufferlist& bl,
-  uint32_t op_flags,
-  bool allow_eio)
+  uint32_t op_flags)
 {
   CollectionHandle c = _get_collection(cid);
   if (!c)
     return -ENOENT;
-  return read(c, oid, offset, length, bl, op_flags, allow_eio);
+  return read(c, oid, offset, length, bl, op_flags);
 }
 
 int BlueStore::read(
@@ -6169,8 +6180,7 @@ int BlueStore::read(
   uint64_t offset,
   size_t length,
   bufferlist& bl,
-  uint32_t op_flags,
-  bool allow_eio)
+  uint32_t op_flags)
 {
   utime_t start = ceph_clock_now();
   Collection *c = static_cast<Collection *>(c_.get());
@@ -6200,10 +6210,13 @@ int BlueStore::read(
   }
 
  out:
-  assert(allow_eio || r != -EIO);
   if (r == 0 && _debug_data_eio(oid)) {
     r = -EIO;
     derr << __func__ << " " << c->cid << " " << oid << " INJECT EIO" << dendl;
+  } else if (cct->_conf->bluestore_debug_random_read_err &&
+    (rand() % (int)(cct->_conf->bluestore_debug_random_read_err * 100.0)) == 0) {
+    dout(0) << __func__ << ": inject random EIO" << dendl;
+    r = -EIO;
   }
   dout(10) << __func__ << " " << cid << " " << oid
 	   << " 0x" << std::hex << offset << "~" << length << std::dec
@@ -7443,6 +7456,8 @@ int BlueStore::_open_super_meta()
       uint64_t val;
       ::decode(val, p);
       min_alloc_size = val;
+      min_alloc_size_order = ctz(val);
+      assert(min_alloc_size == 1u << min_alloc_size_order);
     } catch (buffer::error& e) {
       derr << __func__ << " unable to read min_alloc_size" << dendl;
       return -EIO;
@@ -7450,7 +7465,7 @@ int BlueStore::_open_super_meta()
     dout(10) << __func__ << " min_alloc_size 0x" << std::hex << min_alloc_size
 	     << std::dec << dendl;
   }
-  open_statfs();
+  _open_statfs();
   _set_alloc_sizes();
   _set_throttle_params();
 
@@ -9465,8 +9480,8 @@ void BlueStore::_do_write_small(
 	    _pad_zeros(&bl, &b_off0, chunk_size);
 
 	    dout(20) << __func__ << " reuse blob " << *b << std::hex
-		     << " (" << b_off0 << "~" << bl.length() << ")"
-		     << " (" << b_off << "~" << length << ")"
+		     << " (0x" << b_off0 << "~" << bl.length() << ")"
+		     << " (0x" << b_off << "~" << length << ")"
 		     << std::dec << dendl;
 
 	    o->extent_map.punch_hole(c, offset, length, &wctx->old_extents);
@@ -9510,8 +9525,8 @@ void BlueStore::_do_write_small(
 	  _pad_zeros(&bl, &b_off0, chunk_size);
 
 	  dout(20) << __func__ << " reuse blob " << *b << std::hex
-		    << " (" << b_off0 << "~" << bl.length() << ")"
-		    << " (" << b_off << "~" << length << ")"
+		    << " (0x" << b_off0 << "~" << bl.length() << ")"
+		    << " (0x" << b_off << "~" << length << ")"
 		    << std::dec << dendl;
 
 	  o->extent_map.punch_hole(c, offset, length, &wctx->old_extents);
@@ -9593,7 +9608,7 @@ void BlueStore::_do_write_big(
 	    b_off = offset - ep->blob_start();
             prev_ep = end; // to avoid check below
 	    dout(20) << __func__ << " reuse blob " << *b << std::hex
-		     << " (" << b_off << "~" << l << ")" << std::dec << dendl;
+		     << " (0x" << b_off << "~" << l << ")" << std::dec << dendl;
 	  } else {
 	    ++ep;
 	    any_change = true;
@@ -9607,7 +9622,7 @@ void BlueStore::_do_write_big(
 	    b = prev_ep->blob;
 	    b_off = offset - prev_ep->blob_start();
 	    dout(20) << __func__ << " reuse blob " << *b << std::hex
-		     << " (" << b_off << "~" << l << ")" << std::dec << dendl;
+		     << " (0x" << b_off << "~" << l << ")" << std::dec << dendl;
 	  } else if (prev_ep != begin) {
 	    --prev_ep;
 	    any_change = true;
@@ -10025,12 +10040,11 @@ void BlueStore::_choose_write_options(
 
     dout(20) << __func__ << " will prefer large blob and csum sizes" << dendl;
 
-    auto order = min_alloc_size_order.load();
     if (o->onode.expected_write_size) {
-      wctx->csum_order = std::max(order,
+      wctx->csum_order = std::max(min_alloc_size_order,
 			          (uint8_t)ctz(o->onode.expected_write_size));
     } else {
-      wctx->csum_order = order;
+      wctx->csum_order = min_alloc_size_order;
     }
 
     if (wctx->compress) {

@@ -59,6 +59,33 @@ public:
                          bufferlist* manifest_bl) override;
 };
 
+class RGWGetObjTags_ObjStore_S3 : public RGWGetObjTags_ObjStore
+{
+  bufferlist tags_bl;
+public:
+  RGWGetObjTags_ObjStore_S3() {}
+  ~RGWGetObjTags_ObjStore_S3() {}
+
+  void send_response_data(bufferlist &bl) override;
+};
+
+class RGWPutObjTags_ObjStore_S3 : public RGWPutObjTags_ObjStore
+{
+public:
+  RGWPutObjTags_ObjStore_S3() {}
+  ~RGWPutObjTags_ObjStore_S3() {}
+
+  int get_params() override;
+  void send_response() override;
+};
+
+class RGWDeleteObjTags_ObjStore_S3 : public RGWDeleteObjTags
+{
+public:
+  ~RGWDeleteObjTags_ObjStore_S3() override {}
+  void send_response() override;
+};
+
 class RGWListBuckets_ObjStore_S3 : public RGWListBuckets_ObjStore {
 public:
   RGWListBuckets_ObjStore_S3() {}
@@ -209,6 +236,7 @@ class RGWPostObj_ObjStore_S3 : public RGWPostObj_ObjStore {
   const rgw::auth::StrategyRegistry* auth_registry_ptr = nullptr;
 
   int get_policy();
+  int get_tags();
   void rebuild_key(string& key);
 
   std::string get_current_filename() const override;
@@ -552,8 +580,11 @@ protected:
   bool is_cors_op() {
       return s->info.args.exists("cors");
   }
+  bool is_tagging_op() {
+    return s->info.args.exists("tagging");
+  }
   bool is_obj_update_op() override {
-    return is_acl_op();
+    return is_acl_op() || is_tagging_op() ;
   }
   RGWOp *get_obj_op(bool get_data);
 
@@ -697,12 +728,15 @@ public:
       std::function<rgw::auth::Completer::cmplptr_t(
         const boost::optional<std::string>& secret_key)>;
 
-    virtual std::tuple<access_key_id_t,
-                       client_signature_t,
-                       string_to_sign_t,
-                       signature_factory_t,
-                       completer_factory_t>
-    get_auth_data(const req_state* s) const = 0;
+    struct auth_data_t {
+      access_key_id_t access_key_id;
+      client_signature_t client_signature;
+      string_to_sign_t string_to_sign;
+      signature_factory_t signature_factory;
+      completer_factory_t completer_factory;
+    };
+
+    virtual auth_data_t get_auth_data(const req_state* s) const = 0;
   };
 
 protected:
@@ -745,31 +779,15 @@ class AWSGeneralAbstractor : public AWSEngine::VersionAbstractor {
                            const boost::string_view& signedheaders,
                            const bool using_qs) const;
 
-  std::tuple<access_key_id_t,
-             client_signature_t,
-             string_to_sign_t,
-             signature_factory_t,
-             completer_factory_t>
-  get_auth_data_v2(const req_state* s) const;
-
-  std::tuple<access_key_id_t,
-             client_signature_t,
-             string_to_sign_t,
-             signature_factory_t,
-             completer_factory_t>
-  get_auth_data_v4(const req_state* s, bool using_qs) const;
+  auth_data_t get_auth_data_v2(const req_state* s) const;
+  auth_data_t get_auth_data_v4(const req_state* s, bool using_qs) const;
 
 public:
   AWSGeneralAbstractor(CephContext* const cct)
     : cct(cct) {
   }
 
-  std::tuple<access_key_id_t,
-             client_signature_t,
-             string_to_sign_t,
-             signature_factory_t,
-             completer_factory_t>
-  get_auth_data(const req_state* s) const override;
+  auth_data_t get_auth_data(const req_state* s) const override;
 };
 
 class AWSGeneralBoto2Abstractor : public AWSGeneralAbstractor {
@@ -788,12 +806,6 @@ class AWSBrowserUploadAbstractor : public AWSEngine::VersionAbstractor {
                        static_cast<std::string::size_type>(bl.length()));
   }
 
-  using auth_data_t = std::tuple<access_key_id_t,
-                                 client_signature_t,
-                                 string_to_sign_t,
-                                 signature_factory_t,
-                                 completer_factory_t>;
-
   auth_data_t get_auth_data_v2(const req_state* s) const;
   auth_data_t get_auth_data_v4(const req_state* s) const;
 
@@ -801,12 +813,7 @@ public:
   AWSBrowserUploadAbstractor(CephContext*) {
   }
 
-  std::tuple<access_key_id_t,
-             client_signature_t,
-             string_to_sign_t,
-             signature_factory_t,
-             completer_factory_t>
-  get_auth_data(const req_state* s) const override;
+  auth_data_t get_auth_data(const req_state* s) const override;
 };
 
 

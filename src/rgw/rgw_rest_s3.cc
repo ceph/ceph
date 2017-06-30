@@ -10,6 +10,7 @@
 #include "common/utf8.h"
 #include "common/ceph_json.h"
 #include "common/safe_io.h"
+#include "common/backport14.h"
 #include <boost/algorithm/string.hpp>
 #include <boost/algorithm/string/replace.hpp>
 #include <boost/utility/string_view.hpp>
@@ -23,6 +24,7 @@
 #include "rgw_user.h"
 #include "rgw_cors.h"
 #include "rgw_cors_s3.h"
+#include "rgw_tag_s3.h"
 
 #include "rgw_client_io.h"
 
@@ -290,6 +292,15 @@ int RGWGetObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t bl_ofs,
         /* User custom metadata. */
         name += sizeof(RGW_ATTR_PREFIX) - 1;
         dump_header(s, name, iter->second);
+      } else if (iter->first.compare(RGW_ATTR_TAGS) == 0) {
+        RGWObjTags obj_tags;
+        try{
+          bufferlist::iterator it = iter->second.begin();
+          obj_tags.decode(it);
+        } catch (buffer::error &err) {
+          ldout(s->cct,0) << "Error caught buffer::error couldn't decode TagSet " << dendl;
+        }
+        dump_header(s, RGW_AMZ_TAG_COUNT, obj_tags.count());
       }
     }
   }
@@ -346,6 +357,97 @@ int RGWGetObj_ObjStore_S3::get_decrypt_filter(std::unique_ptr<RGWGetDataCB> *fil
   return res;
 }
 
+void RGWGetObjTags_ObjStore_S3::send_response_data(bufferlist& bl)
+{
+  dump_errno(s);
+  end_header(s, this, "application/xml");
+  dump_start(s);
+
+  s->formatter->open_object_section_in_ns("Tagging", XMLNS_AWS_S3);
+  s->formatter->open_object_section("TagSet");
+  if (has_tags){
+    RGWObjTagSet_S3 tagset;
+    bufferlist::iterator iter = bl.begin();
+    try {
+      tagset.decode(iter);
+    } catch (buffer::error& err) {
+      ldout(s->cct,0) << "ERROR: caught buffer::error, couldn't decode TagSet" << dendl;
+      op_ret= -EIO;
+      return;
+    }
+    tagset.dump_xml(s->formatter);
+  }
+  s->formatter->close_section();
+  s->formatter->close_section();
+  rgw_flush_formatter_and_reset(s, s->formatter);
+}
+
+
+int RGWPutObjTags_ObjStore_S3::get_params()
+{
+  RGWObjTagsXMLParser parser;
+
+  if (!parser.init()){
+    return -EINVAL;
+  }
+
+  char *data=nullptr;
+  int len=0;
+
+  const auto max_size = s->cct->_conf->rgw_max_put_param_size;
+  int r = rgw_rest_read_all_input(s, &data, &len, max_size, false);
+
+  if (r < 0)
+    return r;
+
+  auto data_deleter = std::unique_ptr<char, decltype(free)*>{data, free};
+
+  if (!parser.parse(data, len, 1)) {
+    return -ERR_MALFORMED_XML;
+  }
+
+  RGWObjTagSet_S3 *obj_tags_s3;
+  RGWObjTagging_S3 *tagging;
+
+  tagging = static_cast<RGWObjTagging_S3 *>(parser.find_first("Tagging"));
+  obj_tags_s3 = static_cast<RGWObjTagSet_S3 *>(tagging->find_first("TagSet"));
+  if(!obj_tags_s3){
+    return -ERR_MALFORMED_XML;
+  }
+
+  RGWObjTags obj_tags;
+  r = obj_tags_s3->rebuild(obj_tags);
+  if (r < 0)
+    return r;
+
+  obj_tags.encode(tags_bl);
+  ldout(s->cct, 20) << "Read " << obj_tags.count() << "tags" << dendl;
+
+  return 0;
+}
+
+void RGWPutObjTags_ObjStore_S3::send_response()
+{
+  if (op_ret)
+    set_req_state_err(s, op_ret);
+  dump_errno(s);
+  end_header(s, this, "application/xml");
+  dump_start(s);
+
+}
+
+void RGWDeleteObjTags_ObjStore_S3::send_response()
+{
+  int r = op_ret;
+  if (r == -ENOENT)
+    r = 0;
+  if (!r)
+    r = STATUS_NO_CONTENT;
+
+  set_req_state_err(s, r);
+  dump_errno(s);
+  end_header(s, this);
+}
 
 void RGWListBuckets_ObjStore_S3::send_response_begin(bool has_buckets)
 {
@@ -1193,6 +1295,21 @@ int RGWPutObj_ObjStore_S3::get_params()
 
   } /* copy_source */
 
+  /* handle object tagging */
+  auto tag_str = s->info.env->get("HTTP_X_AMZ_TAGGING");
+  if (tag_str){
+    obj_tags = ceph::make_unique<RGWObjTags>();
+    ret = obj_tags->set_from_string(tag_str);
+    if (ret < 0){
+      ldout(s->cct,0) << "setting obj tags failed with " << ret << dendl;
+      if (ret == -ERR_INVALID_TAG){
+        ret = -EINVAL; //s3 returns only -EINVAL for PUT requests
+      }
+
+      return ret;
+    }
+  }
+
   return RGWPutObj_ObjStore::get_params();
 }
 
@@ -1502,8 +1619,55 @@ int RGWPostObj_ObjStore_S3::get_params()
   if (r < 0)
     return r;
 
+  r = get_tags();
+  if (r < 0)
+    return r;
+
+
   min_len = post_policy.min_length;
   max_len = post_policy.max_length;
+
+
+
+  return 0;
+}
+
+int RGWPostObj_ObjStore_S3::get_tags()
+{
+  string tags_str;
+  if (part_str(parts, "tagging", &tags_str)) {
+    RGWObjTagsXMLParser parser;
+    if (!parser.init()){
+      ldout(s->cct, 0) << "Couldn't init RGWObjTags XML parser" << dendl;
+      err_msg = "Server couldn't process the request";
+      return -EINVAL; // TODO: This class of errors in rgw code should be a 5XX error
+    }
+    if (!parser.parse(tags_str.c_str(), tags_str.size(), 1)) {
+      ldout(s->cct,0 ) << "Invalid Tagging XML" << dendl;
+      err_msg = "Invalid Tagging XML";
+      return -EINVAL;
+    }
+
+    RGWObjTagSet_S3 *obj_tags_s3;
+    RGWObjTagging_S3 *tagging;
+
+    tagging = static_cast<RGWObjTagging_S3 *>(parser.find_first("Tagging"));
+    obj_tags_s3 = static_cast<RGWObjTagSet_S3 *>(tagging->find_first("TagSet"));
+    if(!obj_tags_s3){
+      return -ERR_MALFORMED_XML;
+    }
+
+    RGWObjTags obj_tags;
+    int r = obj_tags_s3->rebuild(obj_tags);
+    if (r < 0)
+      return r;
+
+    bufferlist tags_bl;
+    obj_tags.encode(tags_bl);
+    ldout(s->cct, 20) << "Read " << obj_tags.count() << "tags" << dendl;
+    attrs[RGW_ATTR_TAGS] = tags_bl;
+  }
+
 
   return 0;
 }
@@ -2887,6 +3051,8 @@ RGWOp *RGWHandler_REST_Obj_S3::op_get()
     return new RGWListMultipart_ObjStore_S3;
   } else if (s->info.args.exists("layout")) {
     return new RGWGetObjLayout_ObjStore_S3;
+  } else if (is_tagging_op()) {
+    return new RGWGetObjTags_ObjStore_S3;
   }
   return get_obj_op(true);
 }
@@ -2905,7 +3071,10 @@ RGWOp *RGWHandler_REST_Obj_S3::op_put()
 {
   if (is_acl_op()) {
     return new RGWPutACLs_ObjStore_S3;
+  } else if (is_tagging_op()) {
+    return new RGWPutObjTags_ObjStore_S3;
   }
+
   if (s->init_state.src_bucket.empty())
     return new RGWPutObj_ObjStore_S3;
   else
@@ -2914,6 +3083,9 @@ RGWOp *RGWHandler_REST_Obj_S3::op_put()
 
 RGWOp *RGWHandler_REST_Obj_S3::op_delete()
 {
+  if (is_tagging_op()) {
+    return new RGWDeleteObjTags_ObjStore_S3;
+  }
   string upload_id = s->info.args.get("uploadId");
 
   if (upload_id.empty())
@@ -3493,13 +3665,7 @@ null_completer_factory(const boost::optional<std::string>& secret_key)
 }
 
 
-using AWSVerAbstractor = AWSEngine::VersionAbstractor;
-
-std::tuple<AWSVerAbstractor::access_key_id_t,
-           AWSVerAbstractor::client_signature_t,
-           AWSVerAbstractor::string_to_sign_t,
-           AWSVerAbstractor::signature_factory_t,
-           AWSVerAbstractor::completer_factory_t>
+AWSEngine::VersionAbstractor::auth_data_t
 AWSGeneralAbstractor::get_auth_data(const req_state* const s) const
 {
   AwsVersion version;
@@ -3526,11 +3692,7 @@ AWSGeneralAbstractor::get_v4_canonical_headers(
                                                  using_qs, false);
 }
 
-std::tuple<AWSVerAbstractor::access_key_id_t,
-           AWSVerAbstractor::client_signature_t,
-           AWSVerAbstractor::string_to_sign_t,
-           AWSVerAbstractor::signature_factory_t,
-           AWSVerAbstractor::completer_factory_t>
+AWSEngine::VersionAbstractor::auth_data_t
 AWSGeneralAbstractor::get_auth_data_v4(const req_state* const s,
                                        /* FIXME: const. */
                                        bool using_qs) const
@@ -3608,11 +3770,13 @@ AWSGeneralAbstractor::get_auth_data_v4(const req_state* const s,
    * aws4_auth_needs_complete and aws4_auth_streaming_mode are set to false
    * by default. We don't need to change that. */
   if (is_v4_payload_unsigned(exp_payload_hash) || is_v4_payload_empty(s)) {
-    return std::make_tuple(access_key_id,
-                           client_signature,
-                           std::move(string_to_sign),
-                           sig_factory,
-                           null_completer_factory);
+    return {
+      access_key_id,
+      client_signature,
+      std::move(string_to_sign),
+      sig_factory,
+      null_completer_factory
+    };
   } else {
     /* We're going to handle a signed payload. Be aware that even empty HTTP
      * body (no payload) requires verification:
@@ -3636,6 +3800,7 @@ AWSGeneralAbstractor::get_auth_data_v4(const req_state* const s,
         case RGW_OP_ADMIN_SET_METADATA:
         case RGW_OP_SET_BUCKET_WEBSITE:
         case RGW_OP_PUT_BUCKET_POLICY:
+        case RGW_OP_PUT_OBJ_TAGGING:
           break;
         default:
           dout(10) << "ERROR: AWS4 completion for this operation NOT IMPLEMENTED" << dendl;
@@ -3645,11 +3810,13 @@ AWSGeneralAbstractor::get_auth_data_v4(const req_state* const s,
       const auto cmpl_factory = std::bind(AWSv4ComplSingle::create,
                                           s,
                                           std::placeholders::_1);
-      return std::make_tuple(access_key_id,
-                             client_signature,
-                             std::move(string_to_sign),
-                             sig_factory,
-                             cmpl_factory);
+      return {
+        access_key_id,
+        client_signature,
+        std::move(string_to_sign),
+        sig_factory,
+        cmpl_factory
+      };
     } else {
       /* IMHO "streamed" doesn't fit too good here. I would prefer to call
        * it "chunked" but let's be coherent with Amazon's terminology. */
@@ -3685,11 +3852,13 @@ AWSGeneralAbstractor::get_auth_data_v4(const req_state* const s,
                                           credential_scope,
                                           client_signature,
                                           std::placeholders::_1);
-      return std::make_tuple(access_key_id,
-                             client_signature,
-                             std::move(string_to_sign),
-                             sig_factory,
-                             cmpl_factory);
+      return {
+        access_key_id,
+        client_signature,
+        std::move(string_to_sign),
+        sig_factory,
+        cmpl_factory
+      };
     }
   }
 }
@@ -3706,11 +3875,7 @@ AWSGeneralBoto2Abstractor::get_v4_canonical_headers(
 }
 
 
-std::tuple<AWSVerAbstractor::access_key_id_t,
-           AWSVerAbstractor::client_signature_t,
-           AWSVerAbstractor::string_to_sign_t,
-           AWSVerAbstractor::signature_factory_t,
-           AWSVerAbstractor::completer_factory_t>
+AWSEngine::VersionAbstractor::auth_data_t
 AWSGeneralAbstractor::get_auth_data_v2(const req_state* const s) const
 {
   boost::string_view access_key_id;
@@ -3764,33 +3929,29 @@ AWSGeneralAbstractor::get_auth_data_v2(const req_state* const s) const
     throw -ERR_REQUEST_TIME_SKEWED;
   }
 
-  return std::make_tuple(std::move(access_key_id),
-                         std::move(signature),
-                         std::move(string_to_sign),
-                         rgw::auth::s3::get_v2_signature,
-                         null_completer_factory);
+  return {
+    std::move(access_key_id),
+    std::move(signature),
+    std::move(string_to_sign),
+    rgw::auth::s3::get_v2_signature,
+    null_completer_factory
+  };
 }
 
 
-std::tuple<AWSVerAbstractor::access_key_id_t,
-           AWSVerAbstractor::client_signature_t,
-           AWSVerAbstractor::string_to_sign_t,
-           AWSVerAbstractor::signature_factory_t,
-           AWSVerAbstractor::completer_factory_t>
+AWSEngine::VersionAbstractor::auth_data_t
 AWSBrowserUploadAbstractor::get_auth_data_v2(const req_state* const s) const
 {
-  return std::make_tuple(s->auth.s3_postobj_creds.access_key,
-                         s->auth.s3_postobj_creds.signature,
-                         to_string(s->auth.s3_postobj_creds.encoded_policy),
-                         rgw::auth::s3::get_v2_signature,
-                         null_completer_factory);
+  return {
+    s->auth.s3_postobj_creds.access_key,
+    s->auth.s3_postobj_creds.signature,
+    s->auth.s3_postobj_creds.encoded_policy.to_str(),
+    rgw::auth::s3::get_v2_signature,
+    null_completer_factory
+  };
 }
 
-std::tuple<AWSVerAbstractor::access_key_id_t,
-           AWSVerAbstractor::client_signature_t,
-           AWSVerAbstractor::string_to_sign_t,
-           AWSVerAbstractor::signature_factory_t,
-           AWSVerAbstractor::completer_factory_t>
+AWSEngine::VersionAbstractor::auth_data_t
 AWSBrowserUploadAbstractor::get_auth_data_v4(const req_state* const s) const
 {
   const boost::string_view credential = s->auth.s3_postobj_creds.x_amz_credential;
@@ -3810,24 +3971,22 @@ AWSBrowserUploadAbstractor::get_auth_data_v4(const req_state* const s) const
                                      std::placeholders::_2,
                                      std::placeholders::_3);
 
-  return std::make_tuple(access_key_id,
-                         s->auth.s3_postobj_creds.signature,
-                         to_string(s->auth.s3_postobj_creds.encoded_policy),
-                         sig_factory,
-                         null_completer_factory);
+  return {
+    access_key_id,
+    s->auth.s3_postobj_creds.signature,
+    s->auth.s3_postobj_creds.encoded_policy.to_str(),
+    sig_factory,
+    null_completer_factory
+  };
 }
 
-std::tuple<AWSVerAbstractor::access_key_id_t,
-           AWSVerAbstractor::client_signature_t,
-           AWSVerAbstractor::string_to_sign_t,
-           AWSVerAbstractor::signature_factory_t,
-           AWSVerAbstractor::completer_factory_t>
+AWSEngine::VersionAbstractor::auth_data_t
 AWSBrowserUploadAbstractor::get_auth_data(const req_state* const s) const
 {
   if (s->auth.s3_postobj_creds.x_amz_algorithm == AWS4_HMAC_SHA256_STR) {
     ldout(s->cct, 0) << "Signature verification algorithm AWS v4"
                      << " (AWS4-HMAC-SHA256)" << dendl;
-    return get_auth_data_v2(s);
+    return get_auth_data_v4(s);
   } else {
     ldout(s->cct, 0) << "Signature verification algorithm AWS v2" << dendl;
     return get_auth_data_v2(s);
@@ -3838,25 +3997,18 @@ AWSBrowserUploadAbstractor::get_auth_data(const req_state* const s) const
 AWSEngine::result_t
 AWSEngine::authenticate(const req_state* const s) const
 {
-  boost::string_view access_key_id;
-  boost::string_view signature;
-  VersionAbstractor::string_to_sign_t string_to_sign;
-
-  VersionAbstractor::signature_factory_t signature_factory;
-  VersionAbstractor::completer_factory_t completer_factory;
-
   /* Small reminder: an ver_abstractor is allowed to throw! */
-  std::tie(access_key_id,
-           signature,
-           string_to_sign,
-           signature_factory,
-           completer_factory) = ver_abstractor.get_auth_data(s);
+  const auto auth_data = ver_abstractor.get_auth_data(s);
 
-  if (access_key_id.empty() || signature.empty()) {
+  if (auth_data.access_key_id.empty() || auth_data.client_signature.empty()) {
     return result_t::deny(-EINVAL);
   } else {
-    return authenticate(access_key_id, signature, string_to_sign,
-                        signature_factory, completer_factory, s);
+    return authenticate(auth_data.access_key_id,
+		        auth_data.client_signature,
+			auth_data.string_to_sign,
+                        auth_data.signature_factory,
+			auth_data.completer_factory,
+			s);
   }
 }
 

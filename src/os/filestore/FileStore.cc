@@ -629,6 +629,7 @@ FileStore::FileStore(CephContext* cct, const std::string &base,
   plb.add_time_avg(l_filestore_commitcycle_latency, "commitcycle_latency", "Average latency of commit");
   plb.add_u64_counter(l_filestore_journal_full, "journal_full", "Journal writes while full");
   plb.add_time_avg(l_filestore_queue_transaction_latency_avg, "queue_transaction_latency_avg", "Store operation queue latency");
+  plb.add_time(l_filestore_sync_pause_max_lat, "sync_pause_max_latency", "Max latency of op_wq pause before syncfs");
 
   logger = plb.create_perf_counters();
 
@@ -3183,8 +3184,7 @@ int FileStore::read(
   uint64_t offset,
   size_t len,
   bufferlist& bl,
-  uint32_t op_flags,
-  bool allow_eio)
+  uint32_t op_flags)
 {
   int got;
   tracepoint(objectstore, read_enter, _cid.c_str(), offset, len);
@@ -3220,10 +3220,6 @@ int FileStore::read(
   if (got < 0) {
     dout(10) << __FUNC__ << ": (" << cid << "/" << oid << ") pread error: " << cpp_strerror(got) << dendl;
     lfn_close(fd);
-    if (!(allow_eio || !m_filestore_fail_eio || got != -EIO)) {
-      derr << __FUNC__ << ": (" << cid << "/" << oid << ") pread error: " << cpp_strerror(got) << dendl;
-      assert(0 == "eio on pread");
-    }
     return got;
   }
   bptr.set_length(got);   // properly size the buffer
@@ -3253,6 +3249,10 @@ int FileStore::read(
 	   << got << "/" << len << dendl;
   if (cct->_conf->filestore_debug_inject_read_err &&
       debug_data_eio(oid)) {
+    return -EIO;
+  } else if (cct->_conf->filestore_debug_random_read_err &&
+    (rand() % (int)(cct->_conf->filestore_debug_random_read_err * 100.0)) == 0) {
+    dout(0) << __func__ << ": inject random EIO" << dendl;
     return -EIO;
   } else {
     tracepoint(objectstore, read_exit, got);
@@ -4010,8 +4010,7 @@ void FileStore::sync_entry()
 	  }
 	  dout(20) << " done waiting for checkpoint " << cid << " to complete" << dendl;
 	}
-      } else
-      {
+      } else {
 	apply_manager.commit_started();
 	op_tp.unpause();
 
@@ -4043,6 +4042,10 @@ void FileStore::sync_entry()
       utime_t lat = done - start;
       utime_t dur = done - startwait;
       dout(10) << __FUNC__ << ": commit took " << lat << ", interval was " << dur << dendl;
+      utime_t max_pause_lat = logger->tget(l_filestore_sync_pause_max_lat);
+      if (max_pause_lat < dur - lat) {
+        logger->tinc(l_filestore_sync_pause_max_lat, dur - lat);
+      }
 
       logger->inc(l_filestore_commitcycle);
       logger->tinc(l_filestore_commitcycle_latency, lat);

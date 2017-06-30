@@ -393,6 +393,7 @@ OPTION(mon_keyvaluedb, OPT_STR, "rocksdb")   // type of keyvaluedb backend
 
 // UNSAFE -- TESTING ONLY! Allows addition of a cache tier with preexisting snaps
 OPTION(mon_debug_unsafe_allow_tier_with_nonempty_snaps, OPT_BOOL, false)
+OPTION(mon_osd_blacklist_default_expire, OPT_DOUBLE, 60*60) // default one hour
 
 OPTION(paxos_stash_full_interval, OPT_INT, 25)   // how often (in commits) to stash a full copy of the PaxosService state
 OPTION(paxos_max_join_drift, OPT_INT, 10) // max paxos iterations before we must first sync the monitor stores
@@ -767,8 +768,34 @@ OPTION(osd_op_num_threads_per_shard_ssd, OPT_INT, 2)
 OPTION(osd_op_num_shards, OPT_INT, 0)
 OPTION(osd_op_num_shards_hdd, OPT_INT, 5)
 OPTION(osd_op_num_shards_ssd, OPT_INT, 8)
-OPTION(osd_op_queue, OPT_STR, "wpq") // PrioritzedQueue (prio), Weighted Priority Queue (wpq), or debug_random
+
+// PrioritzedQueue (prio), Weighted Priority Queue (wpq ; default),
+// mclock_opclass, mclock_client, or debug_random. "mclock_opclass"
+// and "mclock_client" are based on the mClock/dmClock algorithm
+// (Gulati, et al. 2010). "mclock_opclass" prioritizes based on the
+// class the operation belongs to. "mclock_client" does the same but
+// also works to ienforce fairness between clients. "debug_random"
+// chooses among all four with equal probability.
+OPTION(osd_op_queue, OPT_STR, "wpq")
+
 OPTION(osd_op_queue_cut_off, OPT_STR, "low") // Min priority to go to strict queue. (low, high, debug_random)
+
+// mClock priority queue parameters for five types of ops
+OPTION(osd_op_queue_mclock_client_op_res, OPT_DOUBLE, 1000.0)
+OPTION(osd_op_queue_mclock_client_op_wgt, OPT_DOUBLE, 500.0)
+OPTION(osd_op_queue_mclock_client_op_lim, OPT_DOUBLE, 0.0)
+OPTION(osd_op_queue_mclock_osd_subop_res, OPT_DOUBLE, 1000.0)
+OPTION(osd_op_queue_mclock_osd_subop_wgt, OPT_DOUBLE, 500.0)
+OPTION(osd_op_queue_mclock_osd_subop_lim, OPT_DOUBLE, 0.0)
+OPTION(osd_op_queue_mclock_snap_res, OPT_DOUBLE, 0.0)
+OPTION(osd_op_queue_mclock_snap_wgt, OPT_DOUBLE, 1.0)
+OPTION(osd_op_queue_mclock_snap_lim, OPT_DOUBLE, 0.001)
+OPTION(osd_op_queue_mclock_recov_res, OPT_DOUBLE, 0.0)
+OPTION(osd_op_queue_mclock_recov_wgt, OPT_DOUBLE, 1.0)
+OPTION(osd_op_queue_mclock_recov_lim, OPT_DOUBLE, 0.001)
+OPTION(osd_op_queue_mclock_scrub_res, OPT_DOUBLE, 0.0)
+OPTION(osd_op_queue_mclock_scrub_wgt, OPT_DOUBLE, 1.0)
+OPTION(osd_op_queue_mclock_scrub_lim, OPT_DOUBLE, 0.001)
 
 OPTION(osd_ignore_stale_divergent_priors, OPT_BOOL, false) // do not assert on divergent_prior entries which aren't in the log and whose on-disk objects are newer
 
@@ -823,7 +850,6 @@ OPTION(osd_mon_ack_timeout, OPT_DOUBLE, 30.0) // time out a mon if it doesn't ac
 OPTION(osd_stats_ack_timeout_factor, OPT_DOUBLE, 2.0) // multiples of mon_ack_timeout
 OPTION(osd_stats_ack_timeout_decay, OPT_DOUBLE, .9)
 OPTION(osd_default_data_pool_replay_window, OPT_INT, 45)
-OPTION(osd_preserve_trimmed_log, OPT_BOOL, false)
 OPTION(osd_auto_mark_unfound_lost, OPT_BOOL, false)
 OPTION(osd_recovery_delay_start, OPT_FLOAT, 0)
 OPTION(osd_recovery_max_active, OPT_U64, 3)
@@ -897,6 +923,7 @@ OPTION(osd_debug_reject_backfill_probability, OPT_DOUBLE, 0)
 OPTION(osd_debug_inject_copyfrom_error, OPT_BOOL, false)  // inject failure during copyfrom completion
 OPTION(osd_debug_misdirected_ops, OPT_BOOL, false)
 OPTION(osd_debug_skip_full_check_in_recovery, OPT_BOOL, false)
+OPTION(osd_debug_random_push_read_error, OPT_DOUBLE, 0)
 OPTION(osd_debug_verify_cached_snaps, OPT_BOOL, false)
 OPTION(osd_enable_op_tracker, OPT_BOOL, true) // enable/disable OSD op tracking
 OPTION(osd_num_op_tracker_shard, OPT_U32, 32) // The number of shards for holding the ops
@@ -1135,7 +1162,7 @@ OPTION(bluestore_cache_trim_max_skip_pinned, OPT_U32, 64) // skip this many onod
 OPTION(bluestore_cache_type, OPT_STR, "2q")   // lru, 2q
 OPTION(bluestore_2q_cache_kin_ratio, OPT_DOUBLE, .5)    // kin page slot size / max page slot size
 OPTION(bluestore_2q_cache_kout_ratio, OPT_DOUBLE, .5)   // number of kout page slot / total number of page slot
-OPTION(bluestore_cache_size, OPT_U64, 1024*1024*1024)
+OPTION(bluestore_cache_size, OPT_U64, 3*1024*1024*1024)
 OPTION(bluestore_cache_meta_ratio, OPT_DOUBLE, .7)
 OPTION(bluestore_cache_kv_ratio, OPT_DOUBLE, .2)
 OPTION(bluestore_kvbackend, OPT_STR, "rocksdb")
@@ -1178,6 +1205,7 @@ OPTION(bluestore_debug_fsck_abort, OPT_BOOL, false)
 OPTION(bluestore_debug_omit_kv_commit, OPT_BOOL, false)
 OPTION(bluestore_debug_permit_any_bdev_label, OPT_BOOL, false)
 OPTION(bluestore_shard_finishers, OPT_BOOL, false)
+OPTION(bluestore_debug_random_read_err, OPT_DOUBLE, 0)
 
 OPTION(kstore_max_ops, OPT_U64, 512)
 OPTION(kstore_max_bytes, OPT_U64, 64*1024*1024)
@@ -1220,6 +1248,7 @@ OPTION(filestore_index_retry_probability, OPT_DOUBLE, 0)
 
 // Allow object read error injection
 OPTION(filestore_debug_inject_read_err, OPT_BOOL, false)
+OPTION(filestore_debug_random_read_err, OPT_DOUBLE, 0)
 
 OPTION(filestore_debug_omap_check, OPT_BOOL, false) // Expensive debugging check on sync
 OPTION(filestore_omap_header_cache_size, OPT_INT, 1024)
@@ -1701,7 +1730,7 @@ OPTION(rgw_shard_warning_threshold, OPT_DOUBLE, 90) // pct of safe max
 OPTION(rgw_swift_versioning_enabled, OPT_BOOL, false) // whether swift object versioning feature is enabled
 
 OPTION(mgr_module_path, OPT_STR, CEPH_PKGLIBDIR "/mgr") // where to load python modules from
-OPTION(mgr_modules, OPT_STR, "restful")  // Which modules to load
+OPTION(mgr_modules, OPT_STR, "restful status")  // Which modules to load
 OPTION(mgr_data, OPT_STR, "/var/lib/ceph/mgr/$cluster-$id") // where to find keyring etc
 OPTION(mgr_tick_period, OPT_INT, 2)  // How frequently to tick
 OPTION(mgr_stats_period, OPT_INT, 5) // How frequently clients send stats

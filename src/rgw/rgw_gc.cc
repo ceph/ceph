@@ -222,6 +222,10 @@ int RGWGC::process(int index, int max_secs)
         }
       }
     }
+    if (!remove_tags.empty()) {
+      RGWGC::remove(index, remove_tags);
+      remove_tags.clear();
+    }
   } while (truncated);
 
 done:

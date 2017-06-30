@@ -24,6 +24,7 @@
 #include "messages/MCommandReply.h"
 #include "messages/MPGStats.h"
 #include "messages/MOSDScrub.h"
+#include "common/errno.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_mgr
@@ -176,7 +177,7 @@ bool DaemonServer::ms_verify_authorizer(Connection *con,
     if (peer_type == CEPH_ENTITY_TYPE_OSD) {
       Mutex::Locker l(lock);
       s->osd_id = atoi(s->entity_name.get_id().c_str());
-      dout(10) << __func__ << " registering osd." << s->osd_id << " session "
+      dout(10) << "registering osd." << s->osd_id << " session "
 	       << s << " con " << con << dendl;
       osd_cons[s->osd_id].insert(con);
     }
@@ -214,7 +215,7 @@ bool DaemonServer::ms_handle_reset(Connection *con)
     }
     session->put(); // SessionRef takes a ref
     Mutex::Locker l(lock);
-    dout(10) << __func__ << " unregistering osd." << session->osd_id
+    dout(10) << "unregistering osd." << session->osd_id
 	     << "  session " << session << " con " << con << dendl;
     osd_cons[session->osd_id].erase(con);
   }
@@ -250,10 +251,10 @@ bool DaemonServer::ms_dispatch(Message *m)
 
 void DaemonServer::shutdown()
 {
-  dout(10) << __func__ << dendl;
+  dout(10) << "begin" << dendl;
   msgr->shutdown();
   msgr->wait();
-  dout(10) << __func__ << " done" << dendl;
+  dout(10) << "done" << dendl;
 }
 
 
@@ -451,7 +452,7 @@ bool DaemonServer::handle_command(MCommand *m)
         con->mark_disposable();
       }
 
-      dout(1) << "do_command r=" << r << " " << rs << dendl;
+      dout(1) << "handle_command " << cpp_strerror(r) << " " << rs << dendl;
       if (con) {
         MCommandReply *reply = new MCommandReply(r, rs);
         reply->set_tid(m->get_tid());

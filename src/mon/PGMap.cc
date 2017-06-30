@@ -683,6 +683,7 @@ void PGMapDigest::dump_pool_stats_full(
 	int mk = m + k;
 	assert(mk != 0);
 	avail = avail * k / mk;
+	assert(k != 0);
 	raw_used_rate = (float)mk / k;
       } else {
 	raw_used_rate = 0.0;
@@ -2589,6 +2590,8 @@ void PGMap::get_health(
       note["backfill_toofull"] += p->second;
     if (p->first & PG_STATE_RECOVERY_TOOFULL)
       note["recovery_toofull"] += p->second;
+    if (p->first & PG_STATE_SNAPTRIM_ERROR)
+      note["snaptrim_error"] += p->second;
   }
 
   mempool::pgmap::unordered_map<pg_t, pg_stat_t> stuck_pgs;
@@ -2870,6 +2873,10 @@ void PGMap::get_health(
   // pg skew
   int num_in = osdmap.get_num_in_osds();
   int sum_pg_up = MAX(pg_sum.up, static_cast<int32_t>(pg_stat.size()));
+  int sum_objects = pg_sum.stats.sum.num_objects;
+  if (sum_objects < cct->_conf->mon_pg_warn_min_objects) {
+    return;
+  }
   if (num_in && cct->_conf->mon_pg_warn_min_per_osd > 0) {
     int per = sum_pg_up / num_in;
     if (per < cct->_conf->mon_pg_warn_min_per_osd && per) {
