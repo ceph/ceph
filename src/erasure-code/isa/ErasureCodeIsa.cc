@@ -19,8 +19,7 @@
 #include "common/debug.h"
 #include "ErasureCodeIsa.h"
 #include "xor_op.h"
-#include "crush/CrushWrapper.h"
-#include "osd/osd_types.h"
+#include "include/assert.h"
 using namespace std;
 
 // -----------------------------------------------------------------------------
@@ -46,27 +45,6 @@ _prefix(std::ostream* _dout)
 const std::string ErasureCodeIsaDefault::DEFAULT_K("7");
 const std::string ErasureCodeIsaDefault::DEFAULT_M("3");
 
-int
-ErasureCodeIsa::create_rule(const string &name,
-			    CrushWrapper &crush,
-			    ostream *ss) const
-{
-  int ruleid = crush.add_simple_rule(
-    name,
-    rule_root,
-    rule_failure_domain,
-    "",
-    "indep",
-    pg_pool_t::TYPE_ERASURE,
-    ss);
-
-  if (ruleid < 0)
-    return ruleid;
-  else {
-    crush.set_rule_mask_max_size(ruleid, get_chunk_count());
-    return ruleid;
-  }
-}
 
 // -----------------------------------------------------------------------------
 
@@ -74,18 +52,11 @@ int
 ErasureCodeIsa::init(ErasureCodeProfile &profile, ostream *ss)
 {
   int err = 0;
-  err |= to_string("crush-root", profile,
-		   &rule_root,
-		   DEFAULT_RULE_ROOT, ss);
-  err |= to_string("crush-failure-domain", profile,
-		   &rule_failure_domain,
-		   DEFAULT_RULE_FAILURE_DOMAIN, ss);
   err |= parse(profile, ss);
   if (err)
     return err;
   prepare();
-  ErasureCode::init(profile, ss);
-  return err;
+  return ErasureCode::init(profile, ss);
 }
 
 // -----------------------------------------------------------------------------
