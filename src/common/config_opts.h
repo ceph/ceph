@@ -585,7 +585,6 @@ OPTION(mds_kill_import_at, OPT_INT, 0)
 OPTION(mds_kill_link_at, OPT_INT, 0)
 OPTION(mds_kill_rename_at, OPT_INT, 0)
 OPTION(mds_kill_openc_at, OPT_INT, 0)
-OPTION(mds_kill_journal_at, OPT_INT, 0)
 OPTION(mds_kill_journal_expire_at, OPT_INT, 0)
 OPTION(mds_kill_journal_replay_at, OPT_INT, 0)
 OPTION(mds_journal_format, OPT_U32, 1)  // Default to most recent JOURNAL_FORMAT_*
