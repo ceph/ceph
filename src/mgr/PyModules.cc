@@ -40,9 +40,9 @@ std::string PyModules::config_prefix;
 // because ServeThread is still an "incomplete" type there
 
 PyModules::PyModules(DaemonStateIndex &ds, ClusterState &cs,
-	  MonClient &mc, Objecter &objecter_, Client &client_,
-	  Finisher &f)
-  : daemon_state(ds), cluster_state(cs), monc(mc),
+	  MonClient &mc, LogChannelRef clog_, Objecter &objecter_,
+          Client &client_, Finisher &f)
+  : daemon_state(ds), cluster_state(cs), monc(mc), clog(clog_),
     objecter(objecter_), client(client_), finisher(f),
     lock("PyModules")
 {}
@@ -360,6 +360,8 @@ int PyModules::init()
   // thread state becomes NULL)
   pMainThreadState = PyEval_SaveThread();
 
+  std::list<std::string> failed_modules;
+
   // Load python code
   boost::tokenizer<> tok(g_conf->mgr_modules);
   for(const auto& module_name : tok) {
@@ -371,11 +373,17 @@ int PyModules::init()
       // or the right thread state (this is deliberate).
       derr << "Error loading module '" << module_name << "': "
         << cpp_strerror(r) << dendl;
+      failed_modules.push_back(module_name);
       // Don't drop out here, load the other modules
     } else {
       // Success!
       modules[module_name] = std::move(mod);
     }
+  }
+
+  if (!failed_modules.empty()) {
+    clog->error() << "Failed to load ceph-mgr modules: " << joinify(
+        failed_modules.begin(), failed_modules.end(), std::string(", "));
   }
 
   return 0;
