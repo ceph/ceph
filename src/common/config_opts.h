@@ -1053,6 +1053,7 @@ OPTION(bdev_inject_crash_flush_delay, OPT_INT, 2) // wait N more seconds on flus
 OPTION(bdev_aio, OPT_BOOL, true)
 OPTION(bdev_aio_poll_ms, OPT_INT, 250)  // milliseconds
 OPTION(bdev_aio_max_queue_depth, OPT_INT, 1024)
+OPTION(bdev_aio_reap_max, OPT_INT, 16)
 OPTION(bdev_block_size, OPT_INT, 4096)
 OPTION(bdev_debug_aio, OPT_BOOL, false)
 OPTION(bdev_debug_aio_suicide_timeout, OPT_FLOAT, 60.0)

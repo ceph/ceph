@@ -340,7 +340,7 @@ void KernelDevice::_aio_thread()
   int inject_crash_count = 0;
   while (!aio_stop) {
     dout(40) << __func__ << " polling" << dendl;
-    int max = 16;
+    int max = cct->_conf->bdev_aio_reap_max;
     aio_t *aio[max];
     int r = aio_queue.get_next_completed(cct->_conf->bdev_aio_poll_ms,
 					 aio, max);
