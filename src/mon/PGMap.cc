@@ -3044,8 +3044,8 @@ void PGMap::get_health_checks(
     checks->add("OBJECT_UNFOUND", HEALTH_WARN, ss.str());
   }
 
-  // SLOW_REQUESTS
-  // STUCK_REQUESTS
+  // REQUEST_SLOW
+  // REQUEST_STUCK
   if (cct->_conf->mon_osd_warn_op_age > 0 &&
       osd_sum.op_queue_age_hist.upper_bound() >
       cct->_conf->mon_osd_warn_op_age) {
@@ -3096,7 +3096,7 @@ void PGMap::get_health_checks(
       ostringstream ss;
       ss << warn << " slow requests are blocked > "
 	 << cct->_conf->mon_osd_warn_op_age << " sec";
-      auto& d = checks->add("SLOW_REQUESTS", HEALTH_WARN, ss.str());
+      auto& d = checks->add("REQUEST_SLOW", HEALTH_WARN, ss.str());
       d.detail.swap(warn_detail);
       int left = max;
       for (auto& p : warn_osd_by_max) {
@@ -3117,7 +3117,7 @@ void PGMap::get_health_checks(
       ostringstream ss;
       ss << warn << " stuck requests are blocked > "
 	 << err_age << " sec";
-      auto& d = checks->add("STUCK_REQUESTS", HEALTH_ERR, ss.str());
+      auto& d = checks->add("REQUEST_STUCK", HEALTH_ERR, ss.str());
       d.detail.swap(error_detail);
       int left = max;
       for (auto& p : error_osd_by_max) {
