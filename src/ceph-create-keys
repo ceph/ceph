@@ -29,8 +29,8 @@ def get_ceph_gid():
         gid = -1
     return gid
 
-def wait_for_quorum(cluster, mon_id):
-    wait_count = 600  # 10 minutes
+def wait_for_quorum(cluster, mon_id, wait_count=600):
+    # wait 10 minutes by default
     while wait_count > 0:
         p = subprocess.Popen(
             args=[
@@ -74,10 +74,10 @@ def wait_for_quorum(cluster, mon_id):
         break
 
     if wait_count == 0:
-        raise SystemExit("ceph-mon was not able to join quorum within 10 minutes")
+        raise SystemExit("ceph-mon was not able to join quorum within %d seconds" % wait_count)
 
 
-def get_key(cluster, mon_id):
+def get_key(cluster, mon_id, wait_count=600):
     path = '/etc/ceph/{cluster}.client.admin.keyring'.format(
         cluster=cluster,
         )
@@ -93,7 +93,6 @@ def get_key(cluster, mon_id):
         os.makedirs(pathdir)
         os.chmod(pathdir, 0770)
         os.chown(pathdir, get_ceph_uid(), get_ceph_gid())
-    wait_count = 600  # 10 minutes
     while wait_count > 0:
         try:
             with file(tmp, 'w') as f:
@@ -172,10 +171,10 @@ def get_key(cluster, mon_id):
                     raise
 
     if wait_count == 0:
-        raise SystemExit("Could not get or create the admin key after 10 minutes")
+        raise SystemExit("Could not get or create the admin key after %d seconds" % wait_count)
 
 
-def bootstrap_key(cluster, type_):
+def bootstrap_key(cluster, type_, wait_count=600):
     path = '/var/lib/ceph/bootstrap-{type}/{cluster}.keyring'.format(
         type=type_,
         cluster=cluster,
@@ -205,7 +204,6 @@ def bootstrap_key(cluster, type_):
         os.chmod(pathdir, 0770)
         os.chown(pathdir, get_ceph_uid(), get_ceph_gid())
 
-    wait_count = 600  # 10 minutes
     while wait_count > 0:
         try:
             with file(tmp, 'w') as f:
@@ -237,7 +235,7 @@ def bootstrap_key(cluster, type_):
                 else:
                     raise
     if wait_count == 0:
-        raise SystemExit("Could not get or create %s bootstrap key after 10 minutes" % type_)
+        raise SystemExit("Could not get or create %s bootstrap key after %d seconds" % (type_, wait_count))
 
 
 def parse_args():
@@ -260,8 +258,15 @@ def parse_args():
         help='id of a ceph-mon that is coming up',
         required=True,
         )
+    parser.add_argument(
+        '--timeout', '-t',
+        metavar='TIMEOUT',
+        type=int,
+        help='timeout in seconds to wait',
+        )
     parser.set_defaults(
         cluster='ceph',
+        timeout=600,
         )
     parser.set_defaults(
         # we want to hold on to this, for later
@@ -282,20 +287,23 @@ def main():
         level=loglevel,
         )
 
-    wait_for_quorum(cluster=args.cluster, mon_id=args.id)
-    get_key(cluster=args.cluster, mon_id=args.id)
+    wait_for_quorum(cluster=args.cluster, mon_id=args.id, wait_count=args.timeout)
+    get_key(cluster=args.cluster, mon_id=args.id, wait_count=args.timeout)
 
     bootstrap_key(
         cluster=args.cluster,
         type_='osd',
+        wait_count=args.timeout,
         )
     bootstrap_key(
         cluster=args.cluster,
         type_='rgw',
+        wait_count=args.timeout,
         )
     bootstrap_key(
         cluster=args.cluster,
         type_='mds',
+        wait_count=args.timeout,
         )
 
 
