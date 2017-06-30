@@ -484,13 +484,22 @@ class Module(MgrModule):
 
     def get_mons(self):
         mon_map_mons = self.get('mon_map')['mons']
-        mon_status = json.loads(self.get('mon_status')['json'])
+        mon_status = self.get('mon_status')['json']
+        # We can get None or '' from the above command but that is not
+        # json-decodable, we need to work around this by loading it only
+        # when we get a non-empty string from the command
+        if mon_status:
+            mon_status = json.loads(mon_status)
 
         # Add more information
         for mon in mon_map_mons:
-            mon['in_quorum'] = mon['rank'] in mon_status['quorum']
             mon['server'] = self.get_metadata("mon", mon['name'])['hostname']
-            mon['leader'] = mon['rank'] == mon_status['quorum'][0]
+            if mon_status:
+                mon['in_quorum'] = mon['rank'] in mon_status['quorum']
+                mon['leader'] = mon['rank'] == mon_status['quorum'][0]
+            else:
+                mon['in_quorum'] = None
+                mon['leader'] = None
 
         return mon_map_mons
 
