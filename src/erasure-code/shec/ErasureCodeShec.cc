@@ -27,8 +27,6 @@ using namespace std;
 
 #include "common/debug.h"
 #include "ErasureCodeShec.h"
-#include "crush/CrushWrapper.h"
-#include "osd/osd_types.h"
 extern "C" {
 #include "jerasure/include/jerasure.h"
 #include "jerasure/include/galois.h"
@@ -47,42 +45,15 @@ static ostream& _prefix(std::ostream* _dout)
   return *_dout << "ErasureCodeShec: ";
 }
 
-int ErasureCodeShec::create_rule(const string &name,
-				    CrushWrapper &crush,
-				    ostream *ss) const
-{
-  int ruleid = crush.add_simple_rule(
-    name,
-    rule_root,
-    rule_failure_domain,
-    "",
-    "indep",
-    pg_pool_t::TYPE_ERASURE,
-    ss);
-  if (ruleid < 0) {
-    return ruleid;
-  } else {
-    crush.set_rule_mask_max_size(ruleid, get_chunk_count());
-    return ruleid;
-  }
-}
-
 int ErasureCodeShec::init(ErasureCodeProfile &profile,
 			  ostream *ss)
 {
   int err = 0;
-  err |= ErasureCode::to_string("crush-root", profile,
-		   &rule_root,
-		   DEFAULT_RULE_ROOT, ss);
-  err |= ErasureCode::to_string("crush-failure-domain", profile,
-		   &rule_failure_domain,
-		   DEFAULT_RULE_FAILURE_DOMAIN, ss);
   err |= parse(profile);
   if (err)
     return err;
   prepare();
-  ErasureCode::init(profile, ss);
-  return err;
+  return ErasureCode::init(profile, ss);
 }
 
 unsigned int ErasureCodeShec::get_chunk_size(unsigned int object_size) const

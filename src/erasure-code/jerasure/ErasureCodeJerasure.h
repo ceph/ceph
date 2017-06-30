@@ -20,9 +20,6 @@
 
 #include "erasure-code/ErasureCode.h"
 
-#define DEFAULT_RULE_ROOT "default"
-#define DEFAULT_RULE_FAILURE_DOMAIN "host"
-
 class ErasureCodeJerasure : public ErasureCode {
 public:
   int k;
@@ -44,17 +41,11 @@ public:
     w(0),
     DEFAULT_W("8"),
     technique(_technique),
-    rule_root(DEFAULT_RULE_ROOT),
-    rule_failure_domain(DEFAULT_RULE_FAILURE_DOMAIN),
     per_chunk_alignment(false)
   {}
 
   ~ErasureCodeJerasure() override {}
   
-  int create_rule(const std::string &name,
-		  CrushWrapper &crush,
-		  std::ostream *ss) const override;
-
   unsigned int get_chunk_count() const override {
     return k + m;
   }

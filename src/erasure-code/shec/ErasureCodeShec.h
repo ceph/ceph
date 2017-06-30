@@ -24,9 +24,6 @@
 #include "erasure-code/ErasureCode.h"
 #include "ErasureCodeShecTableCache.h"
 
-#define DEFAULT_RULE_ROOT "default"
-#define DEFAULT_RULE_FAILURE_DOMAIN "host"
-
 class ErasureCodeShec : public ErasureCode {
 
 public:
@@ -45,8 +42,6 @@ public:
   int w;
   int DEFAULT_W;
   int technique;
-  string rule_root;
-  string rule_failure_domain;
   int *matrix;
 
   ErasureCodeShec(const int _technique,
@@ -61,16 +56,10 @@ public:
     w(0),
     DEFAULT_W(8),
     technique(_technique),
-    rule_root(DEFAULT_RULE_ROOT),
-    rule_failure_domain(DEFAULT_RULE_FAILURE_DOMAIN),
     matrix(0)
   {}
 
   ~ErasureCodeShec() override {}
-
-  int create_rule(const string &name,
-		  CrushWrapper &crush,
-		  ostream *ss) const override;
 
   unsigned int get_chunk_count() const override {
     return k + m;
