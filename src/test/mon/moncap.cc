@@ -57,6 +57,8 @@ const char *parse_good[] = {
   "allow command abc.def with arg=foo arg2=bar, allow service foo r",
   "allow command \"foo bar\" with arg=\"baz\"",
   "allow command \"foo bar\" with arg=\"baz.xx\"",
+  "profile osd",
+  "profile \"mds-bootstrap\", profile foo",
   0
 };
 

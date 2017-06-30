@@ -500,7 +500,8 @@ struct MonCapParser : qi::grammar<Iterator, MonCap()>
                              >> spaces >> rwxa;
 
     // profile foo
-    profile_match %= -spaces >> lit("allow") >> spaces >> lit("profile") >> (lit('=') | spaces)
+    profile_match %= -spaces >> -(lit("allow") >> spaces)
+                             >> lit("profile") >> (lit('=') | spaces)
 			     >> qi::attr(string())
 			     >> str
 			     >> qi::attr(string())
