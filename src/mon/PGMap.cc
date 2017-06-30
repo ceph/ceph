@@ -3003,7 +3003,7 @@ void PGMap::get_health_checks(
     }
   }
 
-  // DEGRADED_OBJECTS
+  // OBJECT_DEGRADED
   if (pg_sum.stats.sum.num_objects_degraded &&
       pg_sum.stats.sum.num_object_copies > 0) {
     double pc = (double)pg_sum.stats.sum.num_objects_degraded /
@@ -3014,10 +3014,10 @@ void PGMap::get_health_checks(
     ss << pg_sum.stats.sum.num_objects_degraded
        << "/" << pg_sum.stats.sum.num_object_copies << " objects degraded ("
        << b << "%)";
-    checks->add("DEGRADED_OBJECTS", HEALTH_WARN, ss.str());
+    checks->add("OBJECT_DEGRADED", HEALTH_WARN, ss.str());
   }
 
-  // MISPLACED_OBJECTS
+  // OBJECT_MISPLACED
   if (pg_sum.stats.sum.num_objects_misplaced &&
       pg_sum.stats.sum.num_object_copies > 0) {
     double pc = (double)pg_sum.stats.sum.num_objects_misplaced /
@@ -3028,10 +3028,10 @@ void PGMap::get_health_checks(
     ss << pg_sum.stats.sum.num_objects_misplaced
        << "/" << pg_sum.stats.sum.num_object_copies << " objects misplaced ("
        << b << "%)";
-    checks->add("MISPLACED_OBJECTS", HEALTH_WARN, ss.str());
+    checks->add("OBJECT_MISPLACED", HEALTH_WARN, ss.str());
   }
 
-  // UNFOUND_OBJECTS
+  // OBJECT_UNFOUND
   if (pg_sum.stats.sum.num_objects_unfound &&
       pg_sum.stats.sum.num_objects) {
     double pc = (double)pg_sum.stats.sum.num_objects_unfound /
@@ -3041,7 +3041,7 @@ void PGMap::get_health_checks(
     ostringstream ss;
     ss << pg_sum.stats.sum.num_objects_unfound
        << "/" << pg_sum.stats.sum.num_objects << " unfound (" << b << "%)";
-    checks->add("UNFOUND_OBJECTS", HEALTH_WARN, ss.str());
+    checks->add("OBJECT_UNFOUND", HEALTH_WARN, ss.str());
   }
 
   // SLOW_REQUESTS
