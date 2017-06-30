@@ -98,7 +98,7 @@ cdef extern from "rados/librados.h" nogil:
     ctypedef void (*rados_callback_t)(rados_completion_t cb, void *arg)
     ctypedef void (*rados_log_callback_t)(void *arg, const char *line, const char *who,
                                           uint64_t sec, uint64_t nsec, uint64_t seq, const char *level, const char *msg)
-    ctypedef void (*rados_log_callback2_t)(void *arg, const char *line, const char *who, const char *name,
+    ctypedef void (*rados_log_callback2_t)(void *arg, const char *line, const char *channel, const char *who, const char *name,
                                           uint64_t sec, uint64_t nsec, uint64_t seq, const char *level, const char *msg)
 
 
@@ -563,12 +563,13 @@ cdef int __monitor_callback(void *arg, const char *line, const char *who,
     cb_info[0](cb_info[1], line, who, sec, nsec, seq, level, msg)
     return 0
 
-cdef int __monitor_callback2(void *arg, const char *line, const char *who,
+cdef int __monitor_callback2(void *arg, const char *line, const char *channel,
+                             const char *who,
                              const char *name,
                              uint64_t sec, uint64_t nsec, uint64_t seq,
                              const char *level, const char *msg) with gil:
     cdef object cb_info = <object>arg
-    cb_info[0](cb_info[1], line, name, who, sec, nsec, seq, level, msg)
+    cb_info[0](cb_info[1], line, channel, name, who, sec, nsec, seq, level, msg)
     return 0
 
 
