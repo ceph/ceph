@@ -3,6 +3,11 @@ overrides:
     exec:
     - suites/ceph-test/librbd.sh
 tasks:
+# the "exec" task runs commands as root
+- exec:
+    client.0:
+      - "chmod a+r /etc/ceph/ceph.client.admin.keyring"
+# the "workunit" task runs commands as the user "ubuntu"
 - workunit:
     clients:
       client.0:
