@@ -388,15 +388,18 @@ class Error(Exception):
 
 class OSError(Error):
     """ `OSError` class, derived from `Error` """
-    def __init__(self, errno, strerror):
+    def __init__(self, message, errno=None):
+        super(OSError, self).__init__(message)
         self.errno = errno
-        self.strerror = strerror
 
     def __str__(self):
-        return '[Errno {0}] {1}'.format(self.errno, self.strerror)
+        msg = super(OSError, self).__str__()
+        if self.errno is None:
+            return msg
+        return '[errno {0}] {1}'.format(self.errno, msg)
 
     def __reduce__(self):
-        return (self.__class__, (self.errno, self.strerror))
+        return (self.__class__, (self.message, self.errno))
 
 class PermissionError(OSError):
     pass
@@ -490,9 +493,9 @@ cdef make_ex(ret, msg):
     """
     ret = abs(ret)
     if ret in errno_to_exception:
-        return errno_to_exception[ret](ret, msg)
+        return errno_to_exception[ret](msg, errno=ret)
     else:
-        return Error(ret, msg + (": error code %d" % ret))
+        return OSError(msg, errno=ret)
 
 
 cdef rados_ioctx_t convert_ioctx(rados.Ioctx ioctx) except? NULL:
