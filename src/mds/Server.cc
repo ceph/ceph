@@ -2629,7 +2629,6 @@ CDentry* Server::rdlock_path_xlock_dentry(MDRequestRef& mdr, int n,
 
   CDir *dir = traverse_to_auth_dir(mdr, mdr->dn[n], refpath);
   if (!dir) return 0;
-  dout(10) << "rdlock_path_xlock_dentry dir " << *dir << dendl;
 
   // make sure we can auth_pin (or have already authpinned) dir
   if (dir->is_frozen()) {
