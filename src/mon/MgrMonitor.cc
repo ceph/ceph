@@ -579,6 +579,7 @@ bool MgrMonitor::prepare_command(MonOpRequestRef op)
       promote_standby();
     }
   } else {
+    ss << "Command '" << prefix << "' not implemented!";
     r = -ENOSYS;
   }
 
