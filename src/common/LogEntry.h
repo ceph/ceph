@@ -115,6 +115,7 @@ struct LogEntry {
   void decode(bufferlist::iterator& bl);
   void dump(Formatter *f) const;
   static void generate_test_instances(list<LogEntry*>& o);
+  static clog_type str_to_level(std::string const &str);
 };
 WRITE_CLASS_ENCODER_FEATURES(LogEntry)
 

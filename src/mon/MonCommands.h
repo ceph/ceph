@@ -197,7 +197,10 @@ COMMAND_WITH_FLAG("scrub", "scrub the monitor stores", \
 COMMAND("fsid", "show cluster FSID/UUID", "mon", "r", "cli,rest")
 COMMAND("log name=logtext,type=CephString,n=N", \
 	"log supplied text to the monitor log", "mon", "rw", "cli,rest")
-COMMAND("log last name=num,type=CephInt,range=1,req=false", \
+COMMAND("log last "
+        "name=num,type=CephInt,range=1,req=false "
+        "name=level,type=CephChoices,strings=debug|info|sec|warn|error,req=false "
+        "name=channel,type=CephChoices,strings=*|cluster|audit,req=false", \
 	"print last few lines of the cluster log", \
 	"mon", "rw", "cli,rest")
 COMMAND_WITH_FLAG("injectargs " \
