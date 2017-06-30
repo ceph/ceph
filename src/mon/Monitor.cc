@@ -2432,11 +2432,11 @@ void Monitor::do_health_to_clog(bool force)
 	level == health_status_cache.overall)
       return;
     if (level == HEALTH_OK)
-      clog->info() << summary;
+      clog->info() << "overall " << summary;
     else if (level == HEALTH_WARN)
-      clog->warn() << summary;
+      clog->warn() << "overall " << summary;
     else if (level == HEALTH_ERR)
-      clog->error() << summary;
+      clog->error() << "overall " << summary;
     else
       ceph_abort();
     health_status_cache.summary = summary;
