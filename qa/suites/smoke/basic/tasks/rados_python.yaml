@@ -1,7 +1,6 @@
 tasks:
 - install:
 - ceph:
-    fs: btrfs
     log-whitelist:
       - wrongly marked me down
 - ceph-fuse:
