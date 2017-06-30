@@ -527,9 +527,10 @@ COMMAND("osd crush add " \
 	"add or update crushmap position and weight for <name> with <weight> and location <args>", \
 	"osd", "rw", "cli,rest")
 COMMAND("osd crush set-device-class " \
-	"name=id,type=CephOsdName " \
-	"name=class,type=CephString ", \
-	"set the <class> of the device <name>", \
+        "name=class,type=CephString " \
+	"name=ids,type=CephString,n=N", \
+	"set the <class> of the osd(s) <id> [<id>...]," \
+        "or use <all|any|*> to set all.", \
 	"osd", "rw", "cli,rest")
 COMMAND("osd crush create-or-move " \
 	"name=id,type=CephOsdName " \
