@@ -154,6 +154,8 @@ public:
 
   virtual int check(std::ostream &out, bool repair = false) { return 0; }
 
+  virtual void compact() {}
+
   typedef KeyValueDB::GenericIteratorImpl ObjectMapIteratorImpl;
   typedef ceph::shared_ptr<ObjectMapIteratorImpl> ObjectMapIterator;
   virtual ObjectMapIterator get_iterator(const ghobject_t &oid) {

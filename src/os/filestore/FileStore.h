@@ -640,6 +640,12 @@ public:
   set<ghobject_t> mdata_error_set; // getattr(),stat() will return -EIO
   void inject_data_error(const ghobject_t &oid) override;
   void inject_mdata_error(const ghobject_t &oid) override;
+
+  void compact() override {
+    assert(object_map);
+    object_map->compact();
+  }
+
   void debug_obj_on_delete(const ghobject_t &oid);
   bool debug_data_eio(const ghobject_t &oid);
   bool debug_mdata_eio(const ghobject_t &oid);
