@@ -5,7 +5,7 @@ overrides:
 tasks:
 - exec:
     client.0:
-      - sudo ceph osd erasure-code-profile set teuthologyprofile ruleset-failure-domain=osd m=1 k=2
+      - sudo ceph osd erasure-code-profile set teuthologyprofile crush-failure-domain=osd m=1 k=2
       - sudo ceph osd pool create base 4 4 erasure teuthologyprofile
       - sudo ceph osd pool set base min_size 2
       - sudo ceph osd pool create cache 4

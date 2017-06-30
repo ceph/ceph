@@ -77,7 +77,7 @@ TEST_P(ParameterTest, parameter_all)
   ErasureCodeProfile *profile = new ErasureCodeProfile();
   (*profile)["plugin"] = "shec";
   (*profile)["technique"] = "";
-  (*profile)["ruleset-failure-domain"] = "osd";
+  (*profile)["crush-failure-domain"] = "osd";
   (*profile)["k"] = k;
   (*profile)["m"] = m;
   (*profile)["c"] = c;
@@ -90,8 +90,8 @@ TEST_P(ParameterTest, parameter_all)
   EXPECT_EQ(i_c, shec->c);
   EXPECT_EQ(8, shec->w);
   EXPECT_EQ(ErasureCodeShec::MULTIPLE, shec->technique);
-  EXPECT_STREQ("default", shec->ruleset_root.c_str());
-  EXPECT_STREQ("osd", shec->ruleset_failure_domain.c_str());
+  EXPECT_STREQ("default", shec->rule_root.c_str());
+  EXPECT_STREQ("osd", shec->rule_failure_domain.c_str());
   EXPECT_TRUE(shec->matrix != NULL);
   EXPECT_EQ(0, result);
 
@@ -215,7 +215,7 @@ TEST_P(ParameterTest, parameter_all)
   EXPECT_FALSE(out1 == in);
   EXPECT_TRUE(usable == in);
 
-  //create_ruleset
+  //create_rule
   stringstream ss;
   CrushWrapper *crush = new CrushWrapper;
   crush->create();
@@ -242,7 +242,7 @@ TEST_P(ParameterTest, parameter_all)
     }
   }
 
-  result = shec->create_ruleset("myrule", *crush, &ss);
+  result = shec->create_rule("myrule", *crush, &ss);
   EXPECT_EQ(0, result);
   EXPECT_STREQ("myrule", crush->rule_name_map[0].c_str());
 

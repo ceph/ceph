@@ -201,7 +201,7 @@ TEST(ErasureCodeExample, decode)
   EXPECT_EQ(-ERANGE, example.decode_concat(degraded, &out));
 }
 
-TEST(ErasureCodeExample, create_ruleset)
+TEST(ErasureCodeExample, create_rule)
 {
   CrushWrapper *c = new CrushWrapper;
   c->create();
@@ -229,7 +229,7 @@ TEST(ErasureCodeExample, create_ruleset)
 
   stringstream ss;
   ErasureCodeExample example;
-  EXPECT_EQ(0, example.create_ruleset("myrule", *c, &ss));
+  EXPECT_EQ(0, example.create_rule("myrule", *c, &ss));
 }
 
 /*

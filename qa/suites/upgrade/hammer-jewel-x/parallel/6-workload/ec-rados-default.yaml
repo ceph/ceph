@@ -9,7 +9,7 @@ workload2:
         name: teuthologyprofile2
         k: 2
         m: 1
-        ruleset-failure-domain: osd
+        crush-failure-domain: osd
       clients: [client.0]
       ops: 4000
       objects: 50

@@ -57,9 +57,9 @@ For example::
 To create a pool, execute:: 
 
 	ceph osd pool create {pool-name} {pg-num} [{pgp-num}] [replicated] \
-             [crush-ruleset-name] [expected-num-objects]
+             [crush-rule-name] [expected-num-objects]
 	ceph osd pool create {pool-name} {pg-num}  {pgp-num}   erasure \
-             [erasure-code-profile] [crush-ruleset-name] [expected_num_objects]
+             [erasure-code-profile] [crush-rule-name] [expected_num_objects]
 
 Where: 
 
@@ -104,10 +104,10 @@ Where:
 :Required: No. 
 :Default: replicated
 
-``[crush-ruleset-name]``
+``[crush-rule-name]``
 
-:Description: The name of a CRUSH ruleset to use for this pool.  The specified
-              ruleset must exist.
+:Description: The name of a CRUSH rule to use for this pool.  The specified
+              rule must exist.
 
 :Type: String
 :Required: No. 

@@ -153,7 +153,7 @@ ceph osd pool delete "${POOL}" "${POOL}" --yes-i-really-really-mean-it
 
 PROFILE="alloc_hint-ecprofile"
 POOL="alloc_hint-ec"
-ceph osd erasure-code-profile set "${PROFILE}" k=2 m=1 ruleset-failure-domain=osd
+ceph osd erasure-code-profile set "${PROFILE}" k=2 m=1 crush-failure-domain=osd
 ceph osd erasure-code-profile get "${PROFILE}" # just so it's logged
 ceph osd pool create "${POOL}" "${NUM_PG}" "${NUM_PGP}" erasure "${PROFILE}"
 

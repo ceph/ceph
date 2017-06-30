@@ -129,7 +129,7 @@ void* thread1(void* pParam)
     ErasureCodeProfile *profile = new ErasureCodeProfile();
     (*profile)["plugin"] = "shec";
     (*profile)["technique"] = "multiple";
-    (*profile)["ruleset-failure-domain"] = "osd";
+    (*profile)["crush-failure-domain"] = "osd";
     (*profile)["k"] = param->k;
     (*profile)["m"] = param->m;
     (*profile)["c"] = param->c;
@@ -147,8 +147,8 @@ void* thread1(void* pParam)
     EXPECT_EQ(i_c, shec->c);
     EXPECT_EQ(i_w, shec->w);
     EXPECT_EQ(ErasureCodeShec::MULTIPLE, shec->technique);
-    EXPECT_STREQ("default", shec->ruleset_root.c_str());
-    EXPECT_STREQ("osd", shec->ruleset_failure_domain.c_str());
+    EXPECT_STREQ("default", shec->rule_root.c_str());
+    EXPECT_STREQ("osd", shec->rule_failure_domain.c_str());
     EXPECT_TRUE(shec->matrix != NULL);
     if ((shec->matrix == NULL)) {
       std::cout << "matrix is null" << std::endl;

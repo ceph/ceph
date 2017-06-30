@@ -16,8 +16,9 @@ To create a new *shec* erasure code profile::
              [k={data-chunks}] \
              [m={coding-chunks}] \
              [c={durability-estimator}] \
-             [ruleset-root={root}] \
-             [ruleset-failure-domain={bucket-type}] \
+             [crush-root={root}] \
+             [crush-failure-domain={bucket-type}] \
+             [crush-device-class={device-class}] \
              [directory={directory}] \
              [--force]
 
@@ -52,7 +53,7 @@ Where:
 :Required: No.
 :Default: 2
 
-``ruleset-root={root}``
+``crush-root={root}``
 
 :Description: The name of the crush bucket used for the first step of
               the ruleset. For intance **step take default**.
@@ -61,7 +62,7 @@ Where:
 :Required: No.
 :Default: default
 
-``ruleset-failure-domain={bucket-type}``
+``crush-failure-domain={bucket-type}``
 
 :Description: Ensure that no two chunks are in a bucket with the same
               failure domain. For instance, if the failure domain is
@@ -72,6 +73,16 @@ Where:
 :Type: String
 :Required: No.
 :Default: host
+
+``crush-device-class={device-class}``
+
+:Description: Restrict placement to devices of a specific class (e.g.,
+              ``ssd`` or ``hdd``), using the crush device class names
+              in the CRUSH map.
+
+:Type: String
+:Required: No.
+:Default:
 
 ``directory={directory}``
 
@@ -129,5 +140,5 @@ Erasure code profile examples
         $ ceph osd erasure-code-profile set SHECprofile \
              plugin=shec \
              k=8 m=4 c=3 \
-             ruleset-failure-domain=host
+             crush-failure-domain=host
         $ ceph osd pool create shecpool 256 256 erasure SHECprofile

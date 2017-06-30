@@ -970,6 +970,31 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
 			  << "required " << ceph_release_name(mv);
 	pending_inc.new_require_min_compat_client = mv;
       }
+
+      if (osdmap.require_osd_release < CEPH_RELEASE_LUMINOUS) {
+	// convert ec profile ruleset-* -> crush-*
+	for (auto& p : tmp.erasure_code_profiles) {
+	  bool changed = false;
+	  map<string,string> newprofile;
+	  for (auto& q : p.second) {
+	    if (q.first.find("ruleset-") == 0) {
+	      string key = "crush-";
+	      key += q.first.substr(8);
+	      newprofile[key] = q.second;
+	      changed = true;
+	      dout(20) << " updating ec profile " << p.first
+		       << " key " << q.first << " -> " << key << dendl;
+	    } else {
+	      newprofile[q.first] = q.second;
+	    }
+	  }
+	  if (changed) {
+	    dout(10) << " updated ec profile " << p.first << ": "
+		     << newprofile << dendl;
+	    pending_inc.new_erasure_code_profiles[p.first] = newprofile;
+	  }
+	}
+      }
     }
   }
 
@@ -5243,7 +5268,7 @@ int OSDMonitor::crush_rule_create_erasure(const string &name,
       return err;
     }
 
-    err = erasure_code->create_ruleset(name, newcrush, ss);
+    err = erasure_code->create_rule(name, newcrush, ss);
     erasure_code.reset();
     if (err < 0)
       return err;

@@ -166,14 +166,14 @@ key=value pairs stored in an `erasure code profile`_.
 ::
  
  $ ceph osd erasure-code-profile set myprofile \
-     ruleset-failure-domain=osd
+     crush-failure-domain=osd
  $ ceph osd erasure-code-profile get myprofile
  directory=/usr/lib/ceph/erasure-code
  k=2
  m=1
  plugin=jerasure
  technique=reed_sol_van
- ruleset-failure-domain=osd
+ crush-failure-domain=osd
  $ ceph osd pool create ecpool 12 12 erasure myprofile
 
 The *plugin* is dynamically loaded from *directory*  and expected to

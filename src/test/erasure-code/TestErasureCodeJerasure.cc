@@ -277,7 +277,7 @@ TEST(ErasureCodeTest, encode)
   }
 }
 
-TEST(ErasureCodeTest, create_ruleset)
+TEST(ErasureCodeTest, create_rule)
 {
   CrushWrapper *c = new CrushWrapper;
   c->create();
@@ -316,9 +316,9 @@ TEST(ErasureCodeTest, create_ruleset)
     profile["m"] = "2";
     profile["w"] = "8";
     jerasure.init(profile, &cerr);
-    int ruleset = jerasure.create_ruleset("myrule", *c, &ss);
+    int ruleset = jerasure.create_rule("myrule", *c, &ss);
     EXPECT_EQ(0, ruleset);
-    EXPECT_EQ(-EEXIST, jerasure.create_ruleset("myrule", *c, &ss));
+    EXPECT_EQ(-EEXIST, jerasure.create_rule("myrule", *c, &ss));
     //
     // the minimum that is expected from the created ruleset is to
     // successfully map get_chunk_count() devices from the crushmap,
@@ -339,9 +339,9 @@ TEST(ErasureCodeTest, create_ruleset)
     profile["k"] = "2";
     profile["m"] = "2";
     profile["w"] = "8";
-    profile["ruleset-root"] = "BAD";
+    profile["crush-root"] = "BAD";
     jerasure.init(profile, &cerr);
-    EXPECT_EQ(-ENOENT, jerasure.create_ruleset("otherrule", *c, &ss));
+    EXPECT_EQ(-ENOENT, jerasure.create_rule("otherrule", *c, &ss));
     EXPECT_EQ("root item BAD does not exist", ss.str());
   }
   {
@@ -351,9 +351,9 @@ TEST(ErasureCodeTest, create_ruleset)
     profile["k"] = "2";
     profile["m"] = "2";
     profile["w"] = "8";
-    profile["ruleset-failure-domain"] = "WORSE";
+    profile["crush-failure-domain"] = "WORSE";
     jerasure.init(profile, &cerr);
-    EXPECT_EQ(-EINVAL, jerasure.create_ruleset("otherrule", *c, &ss));
+    EXPECT_EQ(-EINVAL, jerasure.create_rule("otherrule", *c, &ss));
     EXPECT_EQ("unknown type WORSE", ss.str());
   }
 }

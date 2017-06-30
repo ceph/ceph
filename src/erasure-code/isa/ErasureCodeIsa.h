@@ -30,8 +30,8 @@
 #include "ErasureCodeIsaTableCache.h"
 // -----------------------------------------------------------------------------
 
-#define DEFAULT_RULESET_ROOT "default"
-#define DEFAULT_RULESET_FAILURE_DOMAIN "host"
+#define DEFAULT_RULE_ROOT "default"
+#define DEFAULT_RULE_FAILURE_DOMAIN "host"
 
 class ErasureCodeIsa : public ErasureCode {
 public:
@@ -46,8 +46,8 @@ public:
 
   ErasureCodeIsaTableCache &tcache;
   const char *technique;
-  std::string ruleset_root;
-  std::string ruleset_failure_domain;
+  std::string rule_root;
+  std::string rule_failure_domain;
 
   ErasureCodeIsa(const char *_technique,
                  ErasureCodeIsaTableCache &_tcache) :
@@ -56,8 +56,8 @@ public:
   w(0),
   tcache(_tcache),
   technique(_technique),
-  ruleset_root(DEFAULT_RULESET_ROOT),
-  ruleset_failure_domain(DEFAULT_RULESET_FAILURE_DOMAIN)
+  rule_root(DEFAULT_RULE_ROOT),
+  rule_failure_domain(DEFAULT_RULE_FAILURE_DOMAIN)
   {
   }
 
@@ -66,9 +66,9 @@ public:
   {
   }
 
-  int create_ruleset(const std::string &name,
-                             CrushWrapper &crush,
-                             std::ostream *ss) const override;
+  int create_rule(const std::string &name,
+		  CrushWrapper &crush,
+		  std::ostream *ss) const override;
 
   unsigned int
   get_chunk_count() const override

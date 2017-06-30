@@ -27,7 +27,7 @@ observed.::
         $ ceph osd erasure-code-profile set LRCprofile \
              plugin=lrc \
              k=4 m=2 l=3 \
-             ruleset-failure-domain=host
+             crush-failure-domain=host
         $ ceph osd pool create lrcpool 12 12 erasure LRCprofile
 
 
@@ -40,8 +40,8 @@ OSD is in the same rack as the lost chunk.::
         $ ceph osd erasure-code-profile set LRCprofile \
              plugin=lrc \
              k=4 m=2 l=3 \
-             ruleset-locality=rack \
-             ruleset-failure-domain=host
+             crush-locality=rack \
+             crush-failure-domain=host
         $ ceph osd pool create lrcpool 12 12 erasure LRCprofile
 
 
@@ -55,9 +55,10 @@ To create a new lrc erasure code profile::
              k={data-chunks} \
              m={coding-chunks} \
              l={locality} \
-             [ruleset-root={root}] \
-             [ruleset-locality={bucket-type}] \
-             [ruleset-failure-domain={bucket-type}] \
+             [crush-root={root}] \
+             [crush-locality={bucket-type}] \
+             [crush-failure-domain={bucket-type}] \
+             [crush-device-class={device-class}] \
              [directory={directory}] \
              [--force]
 
@@ -94,7 +95,7 @@ Where:
 :Required: Yes.
 :Example: 3
 
-``ruleset-root={root}``
+``crush-root={root}``
 
 :Description: The name of the crush bucket used for the first step of
               the ruleset. For intance **step take default**.
@@ -103,7 +104,7 @@ Where:
 :Required: No.
 :Default: default
 
-``ruleset-locality={bucket-type}``
+``crush-locality={bucket-type}``
 
 :Description: The type of the crush bucket in which each set of chunks
               defined by **l** will be stored. For instance, if it is
@@ -115,7 +116,7 @@ Where:
 :Type: String
 :Required: No.
 
-``ruleset-failure-domain={bucket-type}``
+``crush-failure-domain={bucket-type}``
 
 :Description: Ensure that no two chunks are in a bucket with the same
               failure domain. For instance, if the failure domain is
@@ -126,6 +127,16 @@ Where:
 :Type: String
 :Required: No.
 :Default: host
+
+``crush-device-class={device-class}``
+
+:Description: Restrict placement to devices of a specific class (e.g.,
+              ``ssd`` or ``hdd``), using the crush device class names
+              in the CRUSH map.
+
+:Type: String
+:Required: No.
+:Default:
 
 ``directory={directory}``
 
@@ -220,7 +231,7 @@ OSD is in the same rack as the lost chunk.::
                        [ "cDDD____", "" ],
                        [ "____cDDD", "" ],
                      ]' \
-             ruleset-steps='[
+             crush-steps='[
                              [ "choose", "rack", 2 ],
                              [ "chooseleaf", "host", 4 ],
                             ]'
@@ -351,7 +362,7 @@ racks.
 
 For instance::
 
-   ruleset-steps='[ [ "choose", "rack", 2 ], [ "chooseleaf", "host", 4 ] ]'
+   crush-steps='[ [ "choose", "rack", 2 ], [ "chooseleaf", "host", 4 ] ]'
 
 will create a ruleset that will select two crush buckets of type
 *rack* and for each of them choose four OSDs, each of them located in

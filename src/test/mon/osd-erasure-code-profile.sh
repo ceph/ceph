@@ -142,9 +142,9 @@ function TEST_set_idempotent() {
     #
     profile=profileidempotent1
     ! ceph osd erasure-code-profile ls | grep $profile || return 1
-    ceph osd erasure-code-profile set $profile k=2 ruleset-failure-domain=osd 2>&1 || return 1
+    ceph osd erasure-code-profile set $profile k=2 crush-failure-domain=osd 2>&1 || return 1
     ceph osd erasure-code-profile ls | grep $profile || return 1
-    ceph osd erasure-code-profile set $profile k=2 ruleset-failure-domain=osd 2>&1 || return 1
+    ceph osd erasure-code-profile set $profile k=2 crush-failure-domain=osd 2>&1 || return 1
     ceph osd erasure-code-profile rm $profile # cleanup
 
     #
@@ -152,9 +152,9 @@ function TEST_set_idempotent() {
     #
     profile=profileidempotent2
     ! ceph osd erasure-code-profile ls | grep $profile || return 1
-    ceph osd erasure-code-profile set $profile plugin=lrc k=4 m=2 l=3 ruleset-failure-domain=osd 2>&1 || return 1
+    ceph osd erasure-code-profile set $profile plugin=lrc k=4 m=2 l=3 crush-failure-domain=osd 2>&1 || return 1
     ceph osd erasure-code-profile ls | grep $profile || return 1
-    ceph osd erasure-code-profile set $profile plugin=lrc k=4 m=2 l=3 ruleset-failure-domain=osd 2>&1 || return 1
+    ceph osd erasure-code-profile set $profile plugin=lrc k=4 m=2 l=3 crush-failure-domain=osd 2>&1 || return 1
     ceph osd erasure-code-profile rm $profile # cleanup
 }
 
