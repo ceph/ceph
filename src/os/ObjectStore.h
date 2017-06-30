@@ -1575,6 +1575,10 @@ public:
     return true;
   }
 
+  virtual string get_default_device_class() {
+    return is_rotational() ? "hdd" : "ssd";
+  }
+
   virtual bool can_sort_nibblewise() {
     return false;   // assume a backend cannot, unless it says otherwise
   }
