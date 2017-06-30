@@ -14,22 +14,22 @@
 
 
 #include "PG.h"
-#include "PGQueueable.h"
+#include "OpQueueItem.h"
 #include "OSD.h"
 
 
-void PGQueueable::RunVis::operator()(const OpRequestRef &op) {
+void OpQueueItem::RunVis::operator()(const OpRequestRef &op) {
   osd->dequeue_op(pg, op, handle);
 }
 
-void PGQueueable::RunVis::operator()(const PGSnapTrim &op) {
+void OpQueueItem::RunVis::operator()(const PGSnapTrim &op) {
   pg->snap_trimmer(op.epoch_queued);
 }
 
-void PGQueueable::RunVis::operator()(const PGScrub &op) {
+void OpQueueItem::RunVis::operator()(const PGScrub &op) {
   pg->scrub(op.epoch_queued, handle);
 }
 
-void PGQueueable::RunVis::operator()(const PGRecovery &op) {
+void OpQueueItem::RunVis::operator()(const PGRecovery &op) {
   osd->do_recovery(pg.get(), op.epoch_queued, op.reserved_pushes, handle);
 }

@@ -31,7 +31,7 @@ set(osd_srcs
   ExtentCache.cc
   mClockOpClassQueue.cc
   mClockClientQueue.cc
-  PGQueueable.cc
+  OpQueueItem.cc
   ${CMAKE_SOURCE_DIR}/src/common/TrackedOp.cc
   ${osd_cyg_functions_src}
   ${osdc_osd_srcs})

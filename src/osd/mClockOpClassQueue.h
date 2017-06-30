@@ -21,16 +21,15 @@
 
 #include "common/config.h"
 #include "common/ceph_context.h"
-#include "osd/PGQueueable.h"
+#include "osd/OpQueueItem.h"
 
 #include "common/mClockPriorityQueue.h"
 
 
 namespace ceph {
 
-  using Request = std::pair<spg_t, PGQueueable>;
+  using Request = std::pair<spg_t, OpQueueItem>;
   using Client = uint64_t;
-
 
   // This class exists to bridge the ceph code, which treats the class
   // as the client, and the queue, where the class is

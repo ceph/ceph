@@ -9062,7 +9062,7 @@ void PrimaryLogPG::op_applied(const eversion_t &applied_version)
 	    scrubber.active_rep_scrub->get_req())->scrub_to) {
 	osd->enqueue_back(
 	  info.pgid,
-	  PGQueueable(scrubber.active_rep_scrub, get_osdmap()->get_epoch()));
+	  OpQueueItem(scrubber.active_rep_scrub, get_osdmap()->get_epoch()));
 	scrubber.active_rep_scrub = OpRequestRef();
       }
     }
@@ -10299,7 +10299,7 @@ void PrimaryLogPG::_applied_recovered_object_replica()
 	scrubber.active_rep_scrub->get_req())->chunky) {
     osd->enqueue_back(
       info.pgid,
-      PGQueueable(scrubber.active_rep_scrub, get_osdmap()->get_epoch()));
+      OpQueueItem(scrubber.active_rep_scrub, get_osdmap()->get_epoch()));
     scrubber.active_rep_scrub = OpRequestRef();
   }
   unlock();
