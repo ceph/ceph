@@ -840,6 +840,11 @@ public:
     TrackedOpRef op = TrackedOpRef(),
     ThreadPool::TPHandle *handle = NULL) override;
 
+  void compact() override {
+    assert(db);
+    db->compact();
+  }
+  
 private:
   // --------------------------------------------------------
   // write ops
