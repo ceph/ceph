@@ -36,6 +36,7 @@ namespace ceph {
     // for CRUSH rule
     std::string rule_root;
     std::string rule_failure_domain;
+    std::string rule_device_class;
 
     ~ErasureCode() override {}
 
