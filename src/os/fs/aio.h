@@ -11,6 +11,7 @@
 #include <boost/container/small_vector.hpp>
 
 #include "include/buffer.h"
+#include "include/types.h"
 
 struct aio_t {
   struct iocb iocb;  // must be first element; see shenanigans in aio_queue_t
@@ -55,6 +56,8 @@ struct aio_queue_t {
   int max_iodepth;
   io_context_t ctx;
 
+  typedef list<aio_t>::iterator aio_iter;
+
   explicit aio_queue_t(unsigned max_iodepth)
     : max_iodepth(max_iodepth),
       ctx(0) {
@@ -83,6 +86,8 @@ struct aio_queue_t {
   }
 
   int submit(aio_t &aio, int *retries);
+  int submit_batch(aio_iter begin, aio_iter end, uint16_t aios_size, 
+		   void *priv, int *retries);
   int get_next_completed(int timeout_ms, aio_t **paio, int max);
 };
 
