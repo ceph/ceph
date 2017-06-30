@@ -191,6 +191,21 @@ class MgrModule(object):
         """
         return ceph_state.get_config_prefix(self._handle, key_prefix)
 
+    def get_localized_config(self, key, default=None):
+        """
+        Retrieve localized configuration for this ceph-mgr instance
+        :param key: str
+        :param default: str
+        :return: str
+        """
+        r = self.get_config(self.get_mgr_id() + '/' + key)
+        if r is None:
+            r = self.get_config(key)
+
+        if r is None:
+            r = default
+        return r
+
     def set_config(self, key, val):
         """
         Set the value of a persistent configuration setting
@@ -199,6 +214,15 @@ class MgrModule(object):
         :param val: str
         """
         ceph_state.set_config(self._handle, key, val)
+
+    def set_localized_config(self, key, val):
+        """
+        Set localized configuration for this ceph-mgr instance
+        :param key: str
+        :param default: str
+        :return: str
+        """
+        return self.set_config(self.get_mgr_id() + '/' + key, val)
 
     def set_config_json(self, key, val):
         """
@@ -221,3 +245,4 @@ class MgrModule(object):
             return None
         else:
             return json.loads(raw)
+
