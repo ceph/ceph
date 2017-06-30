@@ -26,6 +26,10 @@ ceph osd crush set-device-class osd.1 hdd
 ceph osd crush rule create-replicated foo-ssd default host ssd
 ceph osd crush rule create-replicated foo-hdd default host hdd
 
+ceph osd erasure-code-profile set ec-foo-ssd crush-device-class=ssd m=2 k=2
+ceph osd pool create ec-foo 2 erasure ec-foo-ssd
+ceph osd pool rm ec-foo ec-foo --yes-i-really-really-mean-it
+
 ceph osd crush rule ls | grep foo
 
 ceph osd crush rule rm foo

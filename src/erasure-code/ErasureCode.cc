@@ -43,6 +43,9 @@ int ErasureCode::init(
   err |= to_string("crush-failure-domain", profile,
 		   &rule_failure_domain,
 		   DEFAULT_RULE_FAILURE_DOMAIN, ss);
+  err |= to_string("crush-device-class", profile,
+		   &rule_device_class,
+		   "", ss);
   if (err)
     return err;
   _profile = profile;
@@ -58,7 +61,7 @@ int ErasureCode::create_rule(
     name,
     rule_root,
     rule_failure_domain,
-    "",
+    rule_device_class,
     "indep",
     pg_pool_t::TYPE_ERASURE,
     ss);
