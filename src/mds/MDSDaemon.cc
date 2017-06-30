@@ -78,8 +78,6 @@ public:
   explicit C_MDS_Tick(MDSDaemon *m) : mds_daemon(m) {}
   void finish(int r) override {
     assert(mds_daemon->mds_lock.is_locked_by_me());
-
-    mds_daemon->tick_event = 0;
     mds_daemon->tick();
   }
 };
