@@ -5032,7 +5032,9 @@ def main(argv):
         path = os.environ.get('PATH', os.defpath)
         os.environ['PATH'] = args.prepend_to_path + ":" + path
 
-    setup_statedir(args.statedir)
+    if args.func.__name__ != 'main_trigger':
+        # trigger may run when statedir is unavailable and does not use it
+        setup_statedir(args.statedir)
     setup_sysconfdir(args.sysconfdir)
 
     global CEPH_PREF_USER
