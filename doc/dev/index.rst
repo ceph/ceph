@@ -1149,7 +1149,7 @@ reduce the number of tests that are triggered. For instance::
   teuthology-suite --suite rados --subset 0/4000
 
 will run as few tests as possible. The tradeoff in this case is that
-some tests will only run on ``xfs`` and not on ``ext4`` or ``btrfs``,
+not all combinations of test variations will together,
 but no matter how small a ratio is provided in the ``--subset``,
 teuthology will still ensure that all files in the suite are in at
 least one test. Understanding the actual logic that drives this
