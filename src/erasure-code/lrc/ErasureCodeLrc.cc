@@ -56,6 +56,20 @@ int ErasureCodeLrc::create_rule(const string &name,
     return -ENOENT;
   }
   int root = crush.get_item_id(rule_root);
+  if (rule_device_class.size()) {
+    if (!crush.class_exists(rule_device_class)) {
+      *ss << "device class " << rule_device_class << " does not exist";
+      return -ENOENT;
+    }
+    int c = crush.get_class_id(rule_device_class);
+    if (crush.class_bucket.count(root) == 0 ||
+	crush.class_bucket[root].count(c) == 0) {
+      *ss << "root item " << rule_root << " has no devices with class "
+	  << rule_device_class;
+      return -EINVAL;
+    }
+    root = crush.class_bucket[root][c];
+  }
 
   int rule = 0;
   int rno = 0;
@@ -393,6 +407,9 @@ int ErasureCodeLrc::parse_rule(ErasureCodeProfile &profile,
   err |= to_string("crush-root", profile,
 		   &rule_root,
 		   "default", ss);
+  err |= to_string("crush-device-class", profile,
+		   &rule_device_class,
+		   "", ss);
 
   if (profile.count("crush-steps") != 0) {
     rule_steps.clear();

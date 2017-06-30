@@ -63,6 +63,7 @@ public:
   unsigned int chunk_count;
   unsigned int data_chunk_count;
   std::string rule_root;
+  std::string rule_device_class;
   struct Step {
     Step(std::string _op, std::string _type, int _n) :
       op(_op),
