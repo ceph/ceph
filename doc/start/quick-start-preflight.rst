@@ -85,9 +85,9 @@ For CentOS 7, perform the following steps:
 	gpgkey=https://download.ceph.com/keys/release.asc
 
 
-#. Update your repository and install ``ceph-deploy``::
+#. Update your repository and install ``ceph-deploy`` & ``ceph``::
 
-	sudo yum update && sudo yum install ceph-deploy
+	sudo yum update && sudo yum install ceph ceph-deploy
 
 
 .. note:: You can also use the EU mirror eu.ceph.com for downloading your packages.
