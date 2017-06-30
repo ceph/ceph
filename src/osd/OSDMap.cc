@@ -2999,6 +2999,10 @@ void OSDMap::print(ostream& out) const
   }
   out << "min_compat_client " << ceph_release_name(get_min_compat_client())
       << "\n";
+  if (require_osd_release > 0) {
+    out << "require_osd_release " << ceph_release_name(require_osd_release)
+	<< "\n";
+  }
   if (get_cluster_snapshot().length())
     out << "cluster_snapshot " << get_cluster_snapshot() << "\n";
   out << "\n";

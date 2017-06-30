@@ -194,3 +194,7 @@
 * Certain extra fields in the 'ceph health' structured output that
   used to appear if the mons were low on disk space (which duplicated
   the information in the normal health warning messages) are now gone.
+
+* The `status` ceph-mgr module is enabled by default, and initially provides two
+  commands: `ceph tell mgr osd status` and `ceph tell mgr fs status`.  These
+  are high level colorized views to complement the existing CLI.

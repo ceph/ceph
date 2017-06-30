@@ -29,6 +29,7 @@
 #include "auth/Auth.h"
 #include "common/Finisher.h"
 #include "common/Timer.h"
+#include "mon/MgrMap.h"
 
 #include "DaemonServer.h"
 #include "PyModules.h"
@@ -83,6 +84,10 @@ public:
   void handle_fs_map(MFSMap* m);
   void handle_osd_map();
   void handle_log(MLog *m);
+  void update_mgr_map(MgrMap &new_map)
+  {
+    py_modules.update_mgr_map(new_map);
+  }
 
   bool ms_dispatch(Message *m);
 

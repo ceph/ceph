@@ -924,6 +924,7 @@ OPTION(osd_debug_reject_backfill_probability, OPT_DOUBLE, 0)
 OPTION(osd_debug_inject_copyfrom_error, OPT_BOOL, false)  // inject failure during copyfrom completion
 OPTION(osd_debug_misdirected_ops, OPT_BOOL, false)
 OPTION(osd_debug_skip_full_check_in_recovery, OPT_BOOL, false)
+OPTION(osd_debug_random_push_read_error, OPT_DOUBLE, 0)
 OPTION(osd_debug_verify_cached_snaps, OPT_BOOL, false)
 OPTION(osd_enable_op_tracker, OPT_BOOL, true) // enable/disable OSD op tracking
 OPTION(osd_num_op_tracker_shard, OPT_U32, 32) // The number of shards for holding the ops
@@ -1162,7 +1163,7 @@ OPTION(bluestore_cache_trim_max_skip_pinned, OPT_U32, 64) // skip this many onod
 OPTION(bluestore_cache_type, OPT_STR, "2q")   // lru, 2q
 OPTION(bluestore_2q_cache_kin_ratio, OPT_DOUBLE, .5)    // kin page slot size / max page slot size
 OPTION(bluestore_2q_cache_kout_ratio, OPT_DOUBLE, .5)   // number of kout page slot / total number of page slot
-OPTION(bluestore_cache_size, OPT_U64, 1024*1024*1024)
+OPTION(bluestore_cache_size, OPT_U64, 3*1024*1024*1024)
 OPTION(bluestore_cache_meta_ratio, OPT_DOUBLE, .7)
 OPTION(bluestore_cache_kv_ratio, OPT_DOUBLE, .2)
 OPTION(bluestore_kvbackend, OPT_STR, "rocksdb")
@@ -1205,6 +1206,7 @@ OPTION(bluestore_debug_fsck_abort, OPT_BOOL, false)
 OPTION(bluestore_debug_omit_kv_commit, OPT_BOOL, false)
 OPTION(bluestore_debug_permit_any_bdev_label, OPT_BOOL, false)
 OPTION(bluestore_shard_finishers, OPT_BOOL, false)
+OPTION(bluestore_debug_random_read_err, OPT_DOUBLE, 0)
 
 OPTION(kstore_max_ops, OPT_U64, 512)
 OPTION(kstore_max_bytes, OPT_U64, 64*1024*1024)
@@ -1247,6 +1249,7 @@ OPTION(filestore_index_retry_probability, OPT_DOUBLE, 0)
 
 // Allow object read error injection
 OPTION(filestore_debug_inject_read_err, OPT_BOOL, false)
+OPTION(filestore_debug_random_read_err, OPT_DOUBLE, 0)
 
 OPTION(filestore_debug_omap_check, OPT_BOOL, false) // Expensive debugging check on sync
 OPTION(filestore_omap_header_cache_size, OPT_INT, 1024)
@@ -1728,7 +1731,7 @@ OPTION(rgw_shard_warning_threshold, OPT_DOUBLE, 90) // pct of safe max
 OPTION(rgw_swift_versioning_enabled, OPT_BOOL, false) // whether swift object versioning feature is enabled
 
 OPTION(mgr_module_path, OPT_STR, CEPH_PKGLIBDIR "/mgr") // where to load python modules from
-OPTION(mgr_modules, OPT_STR, "restful")  // Which modules to load
+OPTION(mgr_modules, OPT_STR, "restful status")  // Which modules to load
 OPTION(mgr_data, OPT_STR, "/var/lib/ceph/mgr/$cluster-$id") // where to find keyring etc
 OPTION(mgr_tick_period, OPT_INT, 2)  // How frequently to tick
 OPTION(mgr_stats_period, OPT_INT, 5) // How frequently clients send stats

@@ -98,7 +98,7 @@ cdef extern from "rados/librados.h" nogil:
     ctypedef void (*rados_callback_t)(rados_completion_t cb, void *arg)
     ctypedef void (*rados_log_callback_t)(void *arg, const char *line, const char *who,
                                           uint64_t sec, uint64_t nsec, uint64_t seq, const char *level, const char *msg)
-    ctypedef void (*rados_log_callback2_t)(void *arg, const char *line, const char *who, const char *name,
+    ctypedef void (*rados_log_callback2_t)(void *arg, const char *line, const char *channel, const char *who, const char *name,
                                           uint64_t sec, uint64_t nsec, uint64_t seq, const char *level, const char *msg)
 
 
@@ -312,13 +312,18 @@ class InvalidArgumentError(Error):
 
 class OSError(Error):
     """ `OSError` class, derived from `Error` """
-    def __init__(self, errno, strerror):
+    def __init__(self, message, errno=None):
+        super(OSError, self).__init__(message)
         self.errno = errno
-        self.strerror = strerror
 
     def __str__(self):
-        return '[Errno {0}] {1}'.format(self.errno, self.strerror)
+        msg = super(OSError, self).__str__()
+        if self.errno is None:
+            return msg
+        return '[errno {0}] {1}'.format(self.errno, msg)
 
+    def __reduce__(self):
+        return (self.__class__, (self.message, self.errno))
 
 class InterruptedOrTimeoutError(OSError):
     """ `InterruptedOrTimeoutError` class, derived from `OSError` """
@@ -432,9 +437,9 @@ cdef make_ex(ret, msg):
     """
     ret = abs(ret)
     if ret in errno_to_exception:
-        return errno_to_exception[ret](ret, msg)
+        return errno_to_exception[ret](msg, errno=ret)
     else:
-        return Error(ret, msg + (": error code %d" % ret))
+        return OSError(msg, errno=ret)
 
 
 # helper to specify an optional argument, where in addition to `cls`, `None`
@@ -558,12 +563,13 @@ cdef int __monitor_callback(void *arg, const char *line, const char *who,
     cb_info[0](cb_info[1], line, who, sec, nsec, seq, level, msg)
     return 0
 
-cdef int __monitor_callback2(void *arg, const char *line, const char *who,
+cdef int __monitor_callback2(void *arg, const char *line, const char *channel,
+                             const char *who,
                              const char *name,
                              uint64_t sec, uint64_t nsec, uint64_t seq,
                              const char *level, const char *msg) with gil:
     cdef object cb_info = <object>arg
-    cb_info[0](cb_info[1], line, name, who, sec, nsec, seq, level, msg)
+    cb_info[0](cb_info[1], line, channel, name, who, sec, nsec, seq, level, msg)
     return 0
 
 
