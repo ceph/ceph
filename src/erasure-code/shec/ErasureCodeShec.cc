@@ -47,18 +47,23 @@ static ostream& _prefix(std::ostream* _dout)
   return *_dout << "ErasureCodeShec: ";
 }
 
-int ErasureCodeShec::create_ruleset(const string &name,
+int ErasureCodeShec::create_rule(const string &name,
 				    CrushWrapper &crush,
 				    ostream *ss) const
 {
   int ruleid = crush.add_simple_rule(
-    name, ruleset_root, ruleset_failure_domain, "",
-    "indep", pg_pool_t::TYPE_ERASURE, ss);
+    name,
+    rule_root,
+    rule_failure_domain,
+    "",
+    "indep",
+    pg_pool_t::TYPE_ERASURE,
+    ss);
   if (ruleid < 0) {
     return ruleid;
   } else {
     crush.set_rule_mask_max_size(ruleid, get_chunk_count());
-    return crush.get_rule_mask_ruleset(ruleid);
+    return ruleid;
   }
 }
 
@@ -66,12 +71,12 @@ int ErasureCodeShec::init(ErasureCodeProfile &profile,
 			  ostream *ss)
 {
   int err = 0;
-  err |= ErasureCode::to_string("ruleset-root", profile,
-		   &ruleset_root,
-		   DEFAULT_RULESET_ROOT, ss);
-  err |= ErasureCode::to_string("ruleset-failure-domain", profile,
-		   &ruleset_failure_domain,
-		   DEFAULT_RULESET_FAILURE_DOMAIN, ss);
+  err |= ErasureCode::to_string("crush-root", profile,
+		   &rule_root,
+		   DEFAULT_RULE_ROOT, ss);
+  err |= ErasureCode::to_string("crush-failure-domain", profile,
+		   &rule_failure_domain,
+		   DEFAULT_RULE_FAILURE_DOMAIN, ss);
   err |= parse(profile);
   if (err)
     return err;

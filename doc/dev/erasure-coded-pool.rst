@@ -60,13 +60,13 @@ Set up an erasure-coded pool and the associated crush ruleset::
 Set the ruleset failure domain to osd (instead of the host which is the default)::
 
  $ ceph osd erasure-code-profile set myprofile \
-     ruleset-failure-domain=osd
+     crush-failure-domain=osd
  $ ceph osd erasure-code-profile get myprofile
  k=2
  m=1
  plugin=jerasure
  technique=reed_sol_van
- ruleset-failure-domain=osd
+ crush-failure-domain=osd
  $ ceph osd pool create ecpool 12 12 erasure myprofile
 
 Control the parameters of the erasure code plugin::
@@ -127,11 +127,11 @@ Remove a profile that is no longer in use (otherwise it will fail with EBUSY)::
 Set the ruleset to take ssd (instead of default)::
 
  $ ceph osd erasure-code-profile set myprofile \
-     ruleset-root=ssd
+     crush-root=ssd
  $ ceph osd erasure-code-profile get myprofile
  k=2
  m=1
  plugin=jerasure
  technique=reed_sol_van
- ruleset-root=ssd
+ crush-root=ssd
 

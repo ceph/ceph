@@ -409,7 +409,7 @@ prepare_conf() {
         mon data avail crit = 1
         erasure code dir = $EC_PATH
         plugin dir = $CEPH_LIB
-        osd pool default erasure code profile = plugin=jerasure technique=reed_sol_van k=2 m=1 ruleset-failure-domain=osd
+        osd pool default erasure code profile = plugin=jerasure technique=reed_sol_van k=2 m=1 crush-failure-domain=osd
         rgw frontends = $rgw_frontend port=$CEPH_RGW_PORT
         ; needed for s3tests
         rgw crypt s3 kms encryption keys = testkey-1=YmluCmJvb3N0CmJvb3N0LWJ1aWxkCmNlcGguY29uZgo= testkey-2=aWIKTWFrZWZpbGUKbWFuCm91dApzcmMKVGVzdGluZwo=

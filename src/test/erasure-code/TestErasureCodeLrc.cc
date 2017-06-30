@@ -26,69 +26,69 @@
 #include "gtest/gtest.h"
 
 
-TEST(ErasureCodeLrc, parse_ruleset)
+TEST(ErasureCodeLrc, parse_rule)
 {
   ErasureCodeLrc lrc(g_conf->get_val<std::string>("erasure_code_dir"));
-  EXPECT_EQ("default", lrc.ruleset_root);
-  EXPECT_EQ("host", lrc.ruleset_steps.front().type);
+  EXPECT_EQ("default", lrc.rule_root);
+  EXPECT_EQ("host", lrc.rule_steps.front().type);
 
   ErasureCodeProfile profile;
-  profile["ruleset-root"] = "other";
-  EXPECT_EQ(0, lrc.parse_ruleset(profile, &cerr));
-  EXPECT_EQ("other", lrc.ruleset_root);
+  profile["crush-root"] = "other";
+  EXPECT_EQ(0, lrc.parse_rule(profile, &cerr));
+  EXPECT_EQ("other", lrc.rule_root);
 
-  profile["ruleset-steps"] = "[]";
-  EXPECT_EQ(0, lrc.parse_ruleset(profile, &cerr));
-  EXPECT_TRUE(lrc.ruleset_steps.empty());
+  profile["crush-steps"] = "[]";
+  EXPECT_EQ(0, lrc.parse_rule(profile, &cerr));
+  EXPECT_TRUE(lrc.rule_steps.empty());
 
-  profile["ruleset-steps"] = "0";
-  EXPECT_EQ(ERROR_LRC_ARRAY, lrc.parse_ruleset(profile, &cerr));
+  profile["crush-steps"] = "0";
+  EXPECT_EQ(ERROR_LRC_ARRAY, lrc.parse_rule(profile, &cerr));
 
-  profile["ruleset-steps"] = "{";
-  EXPECT_EQ(ERROR_LRC_PARSE_JSON, lrc.parse_ruleset(profile, &cerr));
+  profile["crush-steps"] = "{";
+  EXPECT_EQ(ERROR_LRC_PARSE_JSON, lrc.parse_rule(profile, &cerr));
 
-  profile["ruleset-steps"] = "[0]";
-  EXPECT_EQ(ERROR_LRC_ARRAY, lrc.parse_ruleset(profile, &cerr));
+  profile["crush-steps"] = "[0]";
+  EXPECT_EQ(ERROR_LRC_ARRAY, lrc.parse_rule(profile, &cerr));
 
-  profile["ruleset-steps"] = "[[0]]";
-  EXPECT_EQ(ERROR_LRC_RULESET_OP, lrc.parse_ruleset(profile, &cerr));
+  profile["crush-steps"] = "[[0]]";
+  EXPECT_EQ(ERROR_LRC_RULE_OP, lrc.parse_rule(profile, &cerr));
 
-  profile["ruleset-steps"] = "[[\"choose\", 0]]";
-  EXPECT_EQ(ERROR_LRC_RULESET_TYPE, lrc.parse_ruleset(profile, &cerr));
+  profile["crush-steps"] = "[[\"choose\", 0]]";
+  EXPECT_EQ(ERROR_LRC_RULE_TYPE, lrc.parse_rule(profile, &cerr));
 
-  profile["ruleset-steps"] = "[[\"choose\", \"host\", []]]";
-  EXPECT_EQ(ERROR_LRC_RULESET_N, lrc.parse_ruleset(profile, &cerr));
+  profile["crush-steps"] = "[[\"choose\", \"host\", []]]";
+  EXPECT_EQ(ERROR_LRC_RULE_N, lrc.parse_rule(profile, &cerr));
 
-  profile["ruleset-steps"] = "[[\"choose\", \"host\", 2]]";
-  EXPECT_EQ(0, lrc.parse_ruleset(profile, &cerr));
+  profile["crush-steps"] = "[[\"choose\", \"host\", 2]]";
+  EXPECT_EQ(0, lrc.parse_rule(profile, &cerr));
 
-  const ErasureCodeLrc::Step &step = lrc.ruleset_steps.front();
+  const ErasureCodeLrc::Step &step = lrc.rule_steps.front();
   EXPECT_EQ("choose", step.op);
   EXPECT_EQ("host", step.type);
   EXPECT_EQ(2, step.n);
 
-  profile["ruleset-steps"] =
+  profile["crush-steps"] =
     "["
     " [\"choose\", \"rack\", 2], "
     " [\"chooseleaf\", \"host\", 5], "
     "]";
-  EXPECT_EQ(0, lrc.parse_ruleset(profile, &cerr));
-  EXPECT_EQ(2U, lrc.ruleset_steps.size());
+  EXPECT_EQ(0, lrc.parse_rule(profile, &cerr));
+  EXPECT_EQ(2U, lrc.rule_steps.size());
   {
-    const ErasureCodeLrc::Step &step = lrc.ruleset_steps[0];
+    const ErasureCodeLrc::Step &step = lrc.rule_steps[0];
     EXPECT_EQ("choose", step.op);
     EXPECT_EQ("rack", step.type);
     EXPECT_EQ(2, step.n);
   }
   {
-    const ErasureCodeLrc::Step &step = lrc.ruleset_steps[1];
+    const ErasureCodeLrc::Step &step = lrc.rule_steps[1];
     EXPECT_EQ("chooseleaf", step.op);
     EXPECT_EQ("host", step.type);
     EXPECT_EQ(5, step.n);
   }
 }
 
-TEST(ErasureCodeTest, create_ruleset)
+TEST(ErasureCodeTest, create_rule)
 {
   CrushWrapper *c = new CrushWrapper;
   c->create();
@@ -131,19 +131,19 @@ TEST(ErasureCodeTest, create_ruleset)
   c->finalize();
 
   ErasureCodeLrc lrc(g_conf->get_val<std::string>("erasure_code_dir"));
-  EXPECT_EQ(0, lrc.create_ruleset("rule1", *c, &cerr));
+  EXPECT_EQ(0, lrc.create_rule("rule1", *c, &cerr));
 
   ErasureCodeProfile profile;
   unsigned int racks = 2;
   unsigned int hosts = 5;
-  profile["ruleset-steps"] =
+  profile["crush-steps"] =
     "["
     " [\"choose\", \"rack\", " + stringify(racks) + "], "
     " [\"chooseleaf\", \"host\", " + stringify(hosts) + "], "
     "]";
   const char *rule_name = "rule2";
-  EXPECT_EQ(0, lrc.parse_ruleset(profile, &cerr));
-  EXPECT_EQ(1, lrc.create_ruleset(rule_name, *c, &cerr));
+  EXPECT_EQ(0, lrc.parse_rule(profile, &cerr));
+  EXPECT_EQ(1, lrc.create_rule(rule_name, *c, &cerr));
 
   vector<__u32> weight;
   for (int o = 0; o < c->get_max_devices(); o++)
@@ -178,7 +178,7 @@ TEST(ErasureCodeLrc, parse_kml)
   EXPECT_EQ(ERROR_LRC_ALL_OR_NOTHING, lrc.parse_kml(profile, &cerr));
   const char *generated[] = { "mapping",
 			      "layers",
-			      "ruleset-steps" };
+			      "crush-steps" };
   profile["m"] = "2";
   profile["l"] = "3";
 
@@ -208,38 +208,38 @@ TEST(ErasureCodeLrc, parse_kml)
 	    " [ \"____DDDc\", \"\" ],"
 	    "]", profile["layers"]);
   EXPECT_EQ("DD__DD__", profile["mapping"]);
-  EXPECT_EQ("chooseleaf", lrc.ruleset_steps[0].op);
-  EXPECT_EQ("host", lrc.ruleset_steps[0].type);
-  EXPECT_EQ(0, lrc.ruleset_steps[0].n);
-  EXPECT_EQ(1U, lrc.ruleset_steps.size());
+  EXPECT_EQ("chooseleaf", lrc.rule_steps[0].op);
+  EXPECT_EQ("host", lrc.rule_steps[0].type);
+  EXPECT_EQ(0, lrc.rule_steps[0].n);
+  EXPECT_EQ(1U, lrc.rule_steps.size());
   profile.erase(profile.find("mapping"));
   profile.erase(profile.find("layers"));
 
   profile["k"] = "4";
   profile["m"] = "2";
   profile["l"] = "3";
-  profile["ruleset-failure-domain"] = "osd";
+  profile["crush-failure-domain"] = "osd";
   EXPECT_EQ(0, lrc.parse_kml(profile, &cerr));
-  EXPECT_EQ("chooseleaf", lrc.ruleset_steps[0].op);
-  EXPECT_EQ("osd", lrc.ruleset_steps[0].type);
-  EXPECT_EQ(0, lrc.ruleset_steps[0].n);
-  EXPECT_EQ(1U, lrc.ruleset_steps.size());
+  EXPECT_EQ("chooseleaf", lrc.rule_steps[0].op);
+  EXPECT_EQ("osd", lrc.rule_steps[0].type);
+  EXPECT_EQ(0, lrc.rule_steps[0].n);
+  EXPECT_EQ(1U, lrc.rule_steps.size());
   profile.erase(profile.find("mapping"));
   profile.erase(profile.find("layers"));
 
   profile["k"] = "4";
   profile["m"] = "2";
   profile["l"] = "3";
-  profile["ruleset-failure-domain"] = "osd";
-  profile["ruleset-locality"] = "rack";
+  profile["crush-failure-domain"] = "osd";
+  profile["crush-locality"] = "rack";
   EXPECT_EQ(0, lrc.parse_kml(profile, &cerr));
-  EXPECT_EQ("choose", lrc.ruleset_steps[0].op);
-  EXPECT_EQ("rack", lrc.ruleset_steps[0].type);
-  EXPECT_EQ(2, lrc.ruleset_steps[0].n);
-  EXPECT_EQ("chooseleaf", lrc.ruleset_steps[1].op);
-  EXPECT_EQ("osd", lrc.ruleset_steps[1].type);
-  EXPECT_EQ(4, lrc.ruleset_steps[1].n);
-  EXPECT_EQ(2U, lrc.ruleset_steps.size());
+  EXPECT_EQ("choose", lrc.rule_steps[0].op);
+  EXPECT_EQ("rack", lrc.rule_steps[0].type);
+  EXPECT_EQ(2, lrc.rule_steps[0].n);
+  EXPECT_EQ("chooseleaf", lrc.rule_steps[1].op);
+  EXPECT_EQ("osd", lrc.rule_steps[1].type);
+  EXPECT_EQ(4, lrc.rule_steps[1].n);
+  EXPECT_EQ(2U, lrc.rule_steps.size());
   profile.erase(profile.find("mapping"));
   profile.erase(profile.find("layers"));
 }

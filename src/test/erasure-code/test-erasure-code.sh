@@ -56,7 +56,7 @@ function create_erasure_coded_pool() {
     local poolname=$1
 
     ceph osd erasure-code-profile set myprofile \
-        ruleset-failure-domain=osd || return 1
+        crush-failure-domain=osd || return 1
     ceph osd pool create $poolname 12 12 erasure myprofile \
         || return 1
     wait_for_clean || return 1
@@ -162,7 +162,7 @@ function TEST_rados_put_get_lrc_advanced() {
     ceph osd erasure-code-profile set $profile \
         plugin=lrc \
         mapping=DD_ \
-        ruleset-steps='[ [ "chooseleaf", "osd", 0 ] ]' \
+        crush-steps='[ [ "chooseleaf", "osd", 0 ] ]' \
         layers='[ [ "DDc", "" ] ]'  || return 1
     ceph osd pool create $poolname 12 12 erasure $profile \
         || return 1
@@ -181,7 +181,7 @@ function TEST_rados_put_get_lrc_kml() {
     ceph osd erasure-code-profile set $profile \
         plugin=lrc \
         k=4 m=2 l=3 \
-        ruleset-failure-domain=osd || return 1
+        crush-failure-domain=osd || return 1
     ceph osd pool create $poolname 12 12 erasure $profile \
         || return 1
 
@@ -201,7 +201,7 @@ function TEST_rados_put_get_isa() {
 
     ceph osd erasure-code-profile set profile-isa \
         plugin=isa \
-        ruleset-failure-domain=osd || return 1
+        crush-failure-domain=osd || return 1
     ceph osd pool create $poolname 1 1 erasure profile-isa \
         || return 1
 
@@ -221,7 +221,7 @@ function TEST_rados_put_get_jerasure() {
     ceph osd erasure-code-profile set $profile \
         plugin=jerasure \
         k=4 m=2 \
-        ruleset-failure-domain=osd || return 1
+        crush-failure-domain=osd || return 1
     ceph osd pool create $poolname 12 12 erasure $profile \
         || return 1
 
@@ -241,7 +241,7 @@ function TEST_rados_put_get_shec() {
     ceph osd erasure-code-profile set $profile \
         plugin=shec \
         k=2 m=1 c=1 \
-        ruleset-failure-domain=osd || return 1
+        crush-failure-domain=osd || return 1
     ceph osd pool create $poolname 12 12 erasure $profile \
         || return 1
 
@@ -316,7 +316,7 @@ function TEST_chunk_mapping() {
         plugin=lrc \
         layers='[ [ "_DD", "" ] ]' \
         mapping='_DD' \
-        ruleset-steps='[ [ "choose", "osd", 0 ] ]' || return 1
+        crush-steps='[ [ "choose", "osd", 0 ] ]' || return 1
     ceph osd erasure-code-profile get remap-profile
     ceph osd pool create remap-pool 12 12 erasure remap-profile \
         || return 1

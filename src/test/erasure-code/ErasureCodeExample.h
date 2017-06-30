@@ -39,7 +39,7 @@ class ErasureCodeExample : public ErasureCode {
 public:
   ~ErasureCodeExample() override {}
 
-  int create_ruleset(const string &name,
+  int create_rule(const string &name,
 			     CrushWrapper &crush,
 			     ostream *ss) const override {
     return crush.add_simple_rule(name, "default", "host", "",

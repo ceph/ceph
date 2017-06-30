@@ -47,14 +47,14 @@ const std::string ErasureCodeIsaDefault::DEFAULT_K("7");
 const std::string ErasureCodeIsaDefault::DEFAULT_M("3");
 
 int
-ErasureCodeIsa::create_ruleset(const string &name,
-                               CrushWrapper &crush,
-                               ostream *ss) const
+ErasureCodeIsa::create_rule(const string &name,
+			    CrushWrapper &crush,
+			    ostream *ss) const
 {
   int ruleid = crush.add_simple_rule(
     name,
-    ruleset_root,
-    ruleset_failure_domain,
+    rule_root,
+    rule_failure_domain,
     "",
     "indep",
     pg_pool_t::TYPE_ERASURE,
@@ -64,7 +64,7 @@ ErasureCodeIsa::create_ruleset(const string &name,
     return ruleid;
   else {
     crush.set_rule_mask_max_size(ruleid, get_chunk_count());
-    return crush.get_rule_mask_ruleset(ruleid);
+    return ruleid;
   }
 }
 
@@ -74,12 +74,12 @@ int
 ErasureCodeIsa::init(ErasureCodeProfile &profile, ostream *ss)
 {
   int err = 0;
-  err |= to_string("ruleset-root", profile,
-		   &ruleset_root,
-		   DEFAULT_RULESET_ROOT, ss);
-  err |= to_string("ruleset-failure-domain", profile,
-		   &ruleset_failure_domain,
-		   DEFAULT_RULESET_FAILURE_DOMAIN, ss);
+  err |= to_string("crush-root", profile,
+		   &rule_root,
+		   DEFAULT_RULE_ROOT, ss);
+  err |= to_string("crush-failure-domain", profile,
+		   &rule_failure_domain,
+		   DEFAULT_RULE_FAILURE_DOMAIN, ss);
   err |= parse(profile, ss);
   if (err)
     return err;
