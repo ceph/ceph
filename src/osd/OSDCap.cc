@@ -362,16 +362,16 @@ struct OSDCapParser : qi::grammar<Iterator, OSDCap()>
       (class_name >> class_cap) [_val = phoenix::construct<OSDCapSpec>(_1, _2)]);
 
     // profile := profile <name> [pool[=]<pool> [namespace[=]<namespace>]]
-    profile_name %= (spaces >> lit("profile") >> spaces >> str);
+    profile_name %= (lit("profile") >> (lit('=') | spaces) >> str);
     profile = (
       (profile_name >> pool_name >> nspace) [_val = phoenix::construct<OSDCapProfile>(_1, _2, _3)] |
       (profile_name >> pool_name)           [_val = phoenix::construct<OSDCapProfile>(_1, _2)]);
 
     // grant := allow match capspec
-    grant = (*ascii::blank >> lit("allow") >>
-	     ((capspec >> match) [_val = phoenix::construct<OSDCapGrant>(_2, _1)] |
-	      (match >> capspec) [_val = phoenix::construct<OSDCapGrant>(_1, _2)] |
-              (profile)          [_val = phoenix::construct<OSDCapGrant>(_1)]
+    grant = (*ascii::blank >>
+	     ((lit("allow") >> capspec >> match)  [_val = phoenix::construct<OSDCapGrant>(_2, _1)] |
+	      (lit("allow") >> match >> capspec)  [_val = phoenix::construct<OSDCapGrant>(_1, _2)] |
+              (profile)                           [_val = phoenix::construct<OSDCapGrant>(_1)]
              ) >> *ascii::blank);
     // osdcap := grant [grant ...]
     grants %= (grant % (lit(';') | lit(',')));

@@ -70,7 +70,7 @@ const char *parse_good[] = {
   "allow pool foo namespace=nfoo rwx; allow pool bar namespace nbar object_prefix rbd r",
   "allow pool foo namespace=\"\" rwx; allow pool bar namespace='' object_prefix rbd r",
   "allow pool foo namespace \"\" rwx; allow pool bar namespace '' object_prefix rbd r",
-  "allow profile abc, allow profile abc pool=bar, allow profile abc pool=bar namespace=foo",
+  "profile abc, profile abc pool=bar, profile abc pool=bar namespace=foo",
   0
 };
 
@@ -1010,7 +1010,7 @@ TEST(OSDCap, AllowClassMultiRWX) {
 
 TEST(OSDCap, AllowProfile) {
   OSDCap cap;
-  ASSERT_TRUE(cap.parse("allow profile read-only, allow profile read-write pool abc", NULL));
+  ASSERT_TRUE(cap.parse("profile read-only, profile read-write pool abc", NULL));
   ASSERT_FALSE(cap.allow_all());
   ASSERT_FALSE(cap.is_capable("foo", "", 0, "asdf", true, true, {}));
   ASSERT_TRUE(cap.is_capable("foo", "", 0, "asdf", true, false, {}));
@@ -1018,7 +1018,7 @@ TEST(OSDCap, AllowProfile) {
 
   // RBD
   cap.grants.clear();
-  ASSERT_TRUE(cap.parse("allow profile rbd pool abc", NULL));
+  ASSERT_TRUE(cap.parse("profile rbd pool abc", NULL));
   ASSERT_FALSE(cap.allow_all());
   ASSERT_FALSE(cap.is_capable("foo", "", 0, "asdf", true, true, {}));
   ASSERT_FALSE(cap.is_capable("foo", "", 0, "rbd_children", true, false, {}));
@@ -1028,7 +1028,7 @@ TEST(OSDCap, AllowProfile) {
                              {{"rbd", true, true, true}}));
 
   cap.grants.clear();
-  ASSERT_TRUE(cap.parse("allow profile rbd-read-only pool abc", NULL));
+  ASSERT_TRUE(cap.parse("profile rbd-read-only pool abc", NULL));
   ASSERT_FALSE(cap.allow_all());
   ASSERT_FALSE(cap.is_capable("foo", "", 0, "rbd_children", true, false, {}));
   ASSERT_TRUE(cap.is_capable("abc", "", 0, "asdf", true, false,
