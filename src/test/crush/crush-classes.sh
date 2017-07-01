@@ -116,7 +116,9 @@ function TEST_set_device_class() {
     TEST_classes $dir || return 1
 
     ceph osd crush set-device-class ssd osd.0 || return 1
+    ceph osd crush class ls-osd ssd | grep 0 || return 1
     ceph osd crush set-device-class ssd osd.1 || return 1
+    ceph osd crush class ls-osd ssd | grep 1 || return 1
     ceph osd crush set-device-class ssd 0 1 || return 1 # should be idempotent
 
     ok=false
