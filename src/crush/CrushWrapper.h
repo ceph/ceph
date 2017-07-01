@@ -525,6 +525,13 @@ public:
       }
     }
   }
+  void class_remove_item(int i) {
+    auto it = class_map.find(i);
+    if (it == class_map.end()) {
+      return;
+    }
+    class_map.erase(it);
+  }
   int can_rename_item(const string& srcname,
 		      const string& dstname,
 		      ostream *ss) const;
