@@ -637,6 +637,10 @@ COMMAND("osd crush class rename " \
 COMMAND("osd crush class ls", \
 	"list all crush device classes", \
 	"osd", "r", "cli,rest")
+COMMAND("osd crush class ls-osd " \
+        "name=class,type=CephString,goodchars=[A-Za-z0-9-_]", \
+        "list all osds belonging to the specific <class>", \
+        "osd", "r", "cli,rest")
 COMMAND("osd setmaxosd " \
 	"name=newmax,type=CephInt,range=0", \
 	"set new maximum osd value", "osd", "rw", "cli,rest")

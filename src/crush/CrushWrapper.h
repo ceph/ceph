@@ -510,7 +510,19 @@ public:
     class_map[i] = c;
     return c;
   }
-
+  void get_devices_by_class(const string &name, set<int> *devices) const {
+    assert(devices);
+    devices->clear();
+    if (!class_exists(name)) {
+      return;
+    }
+    auto cid = get_class_id(name);
+    for (auto& p : class_map) {
+      if (p.first >= 0 && p.second == cid) {
+        devices->insert(p.first);
+      }
+    }
+  }
   int can_rename_item(const string& srcname,
 		      const string& dstname,
 		      ostream *ss) const;
