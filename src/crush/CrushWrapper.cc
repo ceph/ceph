@@ -1596,7 +1596,7 @@ int CrushWrapper::device_class_clone(int original_id, int device_class, int *clo
     return 0;
   }
   crush_bucket *original = get_bucket(original_id);
-  if (original == NULL)
+  if (IS_ERR(original))
     return -ENOENT;
   crush_bucket *copy = crush_make_bucket(crush,
 					 original->alg,
