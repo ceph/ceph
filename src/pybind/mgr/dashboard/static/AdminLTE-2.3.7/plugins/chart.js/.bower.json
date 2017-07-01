@@ -1,0 +1,18 @@
+{
+  "name": "chart.js",
+  "description": "Simple HTML5 charts using the canvas element.",
+  "homepage": "http://www.chartjs.org",
+  "license": "MIT",
+  "version": "2.4.0",
+  "main": "./dist/Chart.js",
+  "_release": "2.4.0",
+  "_resolution": {
+    "type": "version",
+    "tag": "v2.4.0",
+    "commit": "324a82b78b12f0c409723071b621ae64b22c812f"
+  },
+  "_source": "https://github.com/nnnick/Chart.js.git",
+  "_target": "2.4.0",
+  "_originalSource": "Chart.js",
+  "_direct": true
+}

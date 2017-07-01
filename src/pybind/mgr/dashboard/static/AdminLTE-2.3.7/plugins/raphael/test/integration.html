@@ -1,0 +1,101 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01//EN"
+    "http://www.w3.org/TR/html4/strict.dtd">
+<html>
+  <head>
+    <title>Raphael - Integration Tests</title>
+    <script src="vendor/jquery.js" type="text/javascript"></script>
+    <script src="../raphael.js" type="text/javascript"></script>
+    <script type="text/javascript">
+      var variations = [
+        {stroke: "#000"},
+        {stroke: "#000", fill: "#000"},
+        {stroke: "#000", fill: "#000", opacity: .1},
+        {fill: "#000", stroke: "#f00", "stroke-width": "5px"}
+      ];
+
+      function drawPrimitives(target, primitive, x, y, width, height, curve) {
+        var canvas = Raphael(target, 500, 120);
+        $.each(variations, function(index, variation) {
+          canvas[primitive](x + (index * 110), y, width, height, curve).attr(variation);
+        });
+      }
+
+      function embedImages(image) {
+        var canvas = Raphael("images", 500, 120);
+        canvas.image(image, 0, 5, 100, 100);
+        canvas.image(image, 110, 5, 100, 100).attr({opacity: "0.75"});
+        canvas.image(image, 220, 5, 100, 100).attr({opacity: "0.5"});
+        canvas.image(image, 330, 5, 100, 100).attr({opacity: "0.25"});
+      }
+
+      function drawLines(target, method, treatment, x, y, X, Y, width) {
+        var canvas = Raphael(target, 600, 120);
+        $.each(variations, function(index, variation) {
+          canvas.path(variation)[treatment]().moveTo(x + (index * 110),y)[method](X,Y, width);
+        });
+      }
+
+      function drawCurves(target, method, treatment, x, y, x1, y1, x2, y2, x3, y3) {
+        var canvas = Raphael(target, 600, 120);
+        $.each(variations, function(index, variation) {
+          canvas.path(variation)[treatment]().moveTo(x + (index * 110), y)[method](x1, y1, x2, y2, x3, y3);
+        });
+      }
+
+      function drawqCurves(target, method, treatment, x, y, x1, y1, x2, y2) {
+        var canvas = Raphael(target, 600, 120);
+        $.each(variations, function(index, variation) {
+          var c = canvas.path(variation)[treatment]().moveTo(x + (index * 110), y)[method](x1, y1, x2, y2);
+          alert(c.node.path);
+        });
+      }
+
+      window.onload = function () {
+        drawPrimitives("circles", "circle", 50, 55, 50, 50);
+        drawPrimitives("squares", "rect", 0, 5, 100, 100);
+        drawPrimitives("rounded-squares", "rect", 0, 5, 100, 100, 20);
+        drawPrimitives("ellipses", "ellipse", 50, 55, 50, 30);
+        embedImages("image/raphael.png");
+        drawLines("absolute-line", "lineTo", "absolutely", 5, 5, 100, 100)
+        drawLines("relative-line", "lineTo", "relatively", 5, 5, 100, 100)
+        drawLines("absolute-linec", "cplineTo", "absolutely", 5, 5, 100, 100, 50)
+        drawLines("relative-linec", "cplineTo", "relatively", 5, 5, 100, 100, 50)
+        drawCurves("absolute-curve", "curveTo", "absolutely", 5, 5, 10, 30, 90, 60, 30, 100)
+        drawCurves("relative-curve", "curveTo", "relatively", 5, 5, 10, 30, 90, 60, 30, 100)
+        drawqCurves("absolute-qcurve", "qcurveTo", "absolutely", 5, 5, 10, 50, 90, 100)
+        drawqCurves("relative-qcurve", "qcurveTo", "relatively", 5, 5, 10, 50, 90, 100)
+      };
+    </script>
+  </head>
+  <body>
+    <h1>Raphael Integration Tests</h1>
+    <h2>Primitives</h2>
+    <h3>Should draw 4 circles</h3>
+    <div id="circles"></div>
+    <h3>Should draw 4 squares</h3>
+    <div id="squares"></div>
+    <h3>Should draw 4 squares with rounded corners</h3>
+    <div id="rounded-squares"></div>
+    <h3>Should draw 4 ellipses</h3>
+    <div id="ellipses"></div>
+    <h3>Should embed 4 images with decreasing opacity</h3>
+    <div id="images"></div>
+    <h2>Paths</h2>
+    <h3>Should draw 4 straight lines to an absolute point</h3>
+    <div id="absolute-line"></div>
+    <h3>Should draw 4 straight lines to a relative point</h3>
+    <div id="relative-line"></div>
+    <h3>Should draw 4 curved lines to an absolute point</h3>
+    <div id="absolute-linec"></div>
+    <h3>Should draw 4 curved lines to a relative point</h3>
+    <div id="relative-linec"></div>
+    <h3>Should draw 4 bicubic curves to an absolute point</h3>
+    <div id="absolute-curve"></div>
+    <h3>Should draw 4 bicubic curves to a relative point</h3>
+    <div id="relative-curve"></div>
+    <h3>Should draw 4 quadratic curves to an absolute point</h3>
+    <div id="absolute-qcurve"></div>
+    <h3>Should draw 4 quadratic curves to a relative point</h3>
+    <div id="relative-qcurve"></div>
+  </body>
+</html>
