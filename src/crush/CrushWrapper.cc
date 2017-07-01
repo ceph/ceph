@@ -335,11 +335,13 @@ bool CrushWrapper::_maybe_remove_last_instance(CephContext *cct, int item, bool 
     crush_remove_bucket(crush, t);
     if (class_bucket.count(item) != 0)
       class_bucket.erase(item);
+    class_remove_item(item);
   }
   if ((item >= 0 || !unlink_only) && name_map.count(item)) {
     ldout(cct, 5) << "_maybe_remove_last_instance removing name for item " << item << dendl;
     name_map.erase(item);
     have_rmaps = false;
+    class_remove_item(item);
   }
   return true;
 }
