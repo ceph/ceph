@@ -682,6 +682,18 @@ static int do_map(int argc, const char *argv[], Config *cfg)
   }
 
   if (!cfg->snapname.empty()) {
+    bool is_protected = false;
+    r = image.snap_is_protected(cfg->snapname.c_str(), &is_protected);
+    if (r < 0) {
+      cerr << "rbd-nbd: failed to get protect info of snap " << cfg->snapname
+           << ": " << cpp_strerror(r) << std::endl;
+      goto close_nbd;
+    } else if (!is_protected) {
+      cerr << "rbd-nbd: snapshot must be protected" << std::endl;
+      r = -EINVAL;
+      goto close_nbd;
+    }
+
     r = image.snap_set(cfg->snapname.c_str());
     if (r < 0)
       goto close_nbd;
