@@ -34,8 +34,8 @@ Linux Kernel
 
 - **B-tree File System (Btrfs)**
 
-  If you use the ``btrfs`` file system with Ceph, we recommend using a
-  recent Linux kernel (3.14 or later).
+  We recommand *against* using ``btrfs`` with Ceph.  However, if you
+  insist on using ``btrfs``, we recommend using a recent Linux kernel.
 
 Platforms
 =========
@@ -130,15 +130,15 @@ Notes
 -----
 
 - **1**: The default kernel has an older version of ``btrfs`` that we do not
-  recommend for ``ceph-osd`` storage nodes.  Upgrade to a recommended
-  kernel or use ``XFS``.
+  recommend for ``ceph-osd`` storage nodes.  We recommend using ``XFS``.
 
 - **2**: The default kernel has an old Ceph client that we do not recommend
   for kernel client (kernel RBD or the Ceph file system).  Upgrade to a
   recommended kernel.
 
 - **3**: The default kernel regularly fails in QA when the ``btrfs``
-  file system is used.  We do not recommend using ``btrfs`` for backing Ceph OSDs.
+  file system is used.  We do not recommend using ``btrfs`` for
+  backing Ceph OSDs.
 
 
 Testing

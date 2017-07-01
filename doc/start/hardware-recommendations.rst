@@ -52,10 +52,7 @@ Data Storage
 Plan your data storage configuration carefully. There are significant cost and
 performance tradeoffs to consider when planning for data storage. Simultaneous
 OS operations, and simultaneous request for read and write operations from
-multiple daemons against a single drive can slow performance considerably. There
-are also file system limitations to consider: btrfs is not quite stable enough
-for production, but it has the ability to journal and write data simultaneously,
-whereas XFS does not.
+multiple daemons against a single drive can slow performance considerably.
 
 .. important:: Since Ceph has to write all data to the journal before it can 
    send an ACK (for XFS at least), having the journal and OSD 
@@ -99,8 +96,7 @@ You may run multiple Ceph OSD Daemons per hard disk drive, but this will likely
 lead to resource contention and diminish the overall throughput. You may store a
 journal and object data on the same drive, but this may increase the time it
 takes to journal a write and ACK to the client. Ceph must write to the journal
-before it can ACK the write. The btrfs filesystem can write journal data and
-object data simultaneously, whereas XFS cannot.
+before it can ACK the write.
 
 Ceph best practices dictate that you should run operating systems, OSD data and
 OSD journals on separate drives.
