@@ -1498,7 +1498,7 @@ int CrushWrapper::bucket_add_item(crush_bucket *bucket, int item, int weight)
       weight_set->size = new_size;
     }
     if (arg->ids_size) {
-      arg->ids = (int*)realloc(arg->ids, new_size * sizeof(int));
+      arg->ids = (__s32 *)realloc(arg->ids, new_size * sizeof(__s32));
       assert(arg->ids_size + 1 == new_size);
       arg->ids[arg->ids_size] = item;
       arg->ids_size = new_size;
@@ -1530,7 +1530,7 @@ int CrushWrapper::bucket_remove_item(crush_bucket *bucket, int item)
       assert(arg->ids_size - 1 == new_size);
       for (__u32 k = position; k < new_size; k++)
 	arg->ids[k] = arg->ids[k+1];
-      arg->ids = (int*)realloc(arg->ids, new_size * sizeof(int));
+      arg->ids = (__s32 *)realloc(arg->ids, new_size * sizeof(__s32));
       arg->ids_size = new_size;
     }
   }
@@ -1756,11 +1756,12 @@ void CrushWrapper::encode(bufferlist& bl, uint64_t features) const
     ::encode(class_name, bl);
     ::encode(class_bucket, bl);
 
-    ::encode(choose_args.size(), bl);
+    __u32 size = (__u32)choose_args.size();
+    ::encode(size, bl);
     for (auto c : choose_args) {
       ::encode(c.first, bl);
       crush_choose_arg_map arg_map = c.second;
-      __u32 size = 0;
+      size = 0;
       for (__u32 i = 0; i < arg_map.size; i++) {
 	crush_choose_arg *arg = &arg_map.args[i];
 	if (arg->weight_set_size == 0 &&
@@ -1889,9 +1890,9 @@ void CrushWrapper::decode(bufferlist::iterator& blp)
       cleanup_classes();
     }
     if (!blp.end()) {
-      size_t choose_args_size;
+      __u32 choose_args_size;
       ::decode(choose_args_size, blp);
-      for (size_t i = 0; i < choose_args_size; i++) {
+      for (__u32 i = 0; i < choose_args_size; i++) {
 	uint64_t choose_args_index;
 	::decode(choose_args_index, blp);
 	crush_choose_arg_map arg_map;
@@ -1914,7 +1915,7 @@ void CrushWrapper::decode(bufferlist::iterator& blp)
 	      ::decode(weight_set->weights[l], blp);
 	  }
 	  ::decode(arg->ids_size, blp);
-	  arg->ids = (int*)calloc(arg->ids_size, sizeof(int));
+	  arg->ids = (__s32 *)calloc(arg->ids_size, sizeof(__s32));
 	  for (__u32 k = 0; k < arg->ids_size; k++)
 	    ::decode(arg->ids[k], blp);
 	}

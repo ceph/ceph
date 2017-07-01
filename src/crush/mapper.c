@@ -312,8 +312,8 @@ static inline __u32 *get_choose_arg_weights(const struct crush_bucket_straw2 *bu
   return arg->weight_set[position].weights;
 }
 
-static inline int *get_choose_arg_ids(const struct crush_bucket_straw2 *bucket,
-                                        const struct crush_choose_arg *arg)
+static inline __s32 *get_choose_arg_ids(const struct crush_bucket_straw2 *bucket,
+					const struct crush_choose_arg *arg)
 {
   if ((arg == NULL) || (arg->ids == NULL))
     return bucket->h.items;
@@ -328,7 +328,7 @@ static int bucket_straw2_choose(const struct crush_bucket_straw2 *bucket,
 	unsigned int u;
 	__s64 ln, draw, high_draw = 0;
         __u32 *weights = get_choose_arg_weights(bucket, arg, position);
-        int *ids = get_choose_arg_ids(bucket, arg);
+        __s32 *ids = get_choose_arg_ids(bucket, arg);
 	for (i = 0; i < bucket->h.size; i++) {
                 dprintk("weight 0x%x item %d\n", weights[i], ids[i]);
 		if (weights[i]) {
