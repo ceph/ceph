@@ -263,7 +263,19 @@ public:
       buffer_map[b->offset].reset(b);
       if (b->is_writing()) {
 	b->data.reassign_to_mempool(mempool::mempool_bluestore_writing);
-        writing.push_back(*b);
+        if (writing.empty() || writing.rbegin()->seq <= b->seq) {
+          writing.push_back(*b);
+        } else {
+          auto it = writing.begin();
+          while (it->seq < b->seq) {
+            ++it;
+          }
+
+          assert(it->seq >= b->seq);
+          // note that this will insert b before it
+          // hence the order is maintained
+          writing.insert(it, *b);
+        }
       } else {
 	b->data.reassign_to_mempool(mempool::mempool_bluestore_cache_data);
 	cache->_add_buffer(b, level, near);
