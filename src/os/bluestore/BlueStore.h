@@ -1831,7 +1831,7 @@ private:
   interval_set<uint64_t> bluefs_extents;  ///< block extents owned by bluefs
   interval_set<uint64_t> bluefs_extents_reclaiming; ///< currently reclaiming
 
-  std::mutex deferred_lock;
+  std::mutex deferred_lock, deferred_submit_lock;
   std::atomic<uint64_t> deferred_seq = {0};
   deferred_osr_queue_t deferred_queue; ///< osr's with deferred io pending
   int deferred_queue_size = 0;         ///< num txc's queued across all osrs
@@ -2024,12 +2024,8 @@ private:
 
   bluestore_deferred_op_t *_get_deferred_op(TransContext *txc, OnodeRef o);
   void _deferred_queue(TransContext *txc);
-  void deferred_try_submit() {
-    std::lock_guard<std::mutex> l(deferred_lock);
-    _deferred_try_submit();
-  }
-  void _deferred_try_submit();
-  void _deferred_submit(OpSequencer *osr);
+  void deferred_try_submit();
+  void _deferred_submit_unlock(OpSequencer *osr);
   void _deferred_aio_finish(OpSequencer *osr);
   int _deferred_replay();
 
