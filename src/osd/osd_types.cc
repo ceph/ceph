@@ -5284,6 +5284,7 @@ ostream &ObjectRecoveryProgress::print(ostream &out) const
 	     << ", data_complete:" << ( data_complete ? "true" : "false" )
 	     << ", omap_recovered_to:" << omap_recovered_to
 	     << ", omap_complete:" << ( omap_complete ? "true" : "false" )
+	     << ", error:" << ( error ? "true" : "false" )
 	     << ")";
 }
 

@@ -34,15 +34,11 @@ Recommended
 
 We currently recommend ``XFS`` for production deployments.
 
-We used to recommend ``btrfs`` for testing, development, and any non-critical
-deployments becuase it has the most promising set of features.  However, we
-now plan to avoid using a kernel file system entirely with the new BlueStore
-backend.  ``btrfs`` is still supported and has a comparatively compelling
-set of features, but be mindful of its stability and support status in your
-Linux distribution.
-
 Not recommended
 ---------------
+
+We recommand *against* using ``btrfs`` due to the lack of a stable
+version to test against and frequent bugs in the ENOSPC handling.
 
 We recommend *against* using ``ext4`` due to limitations in the size
 of xattrs it can store, and the problems this causes with the way Ceph
@@ -64,36 +60,3 @@ following configuration option::
           to use RGW or other librados clients that do not properly
           handle or politely surface any resulting ENAMETOOLONG
           errors.
-
-
-Filesystem Background Info
-==========================
-
-The ``XFS``, ``btrfs`` and ``ext4`` file systems provide numerous
-advantages in highly scaled data storage environments when `compared`_
-to ``ext3``.
-
-``XFS``, ``btrfs`` and ``ext4`` are `journaling file systems`_, which means that
-they are more robust when recovering from crashes, power outages, etc. These
-filesystems journal all of the changes they will make before performing writes.
-
-``XFS`` was developed for Silicon Graphics, and is a mature and stable
-filesystem. By contrast, ``btrfs`` is a relatively new file system that aims
-to address the long-standing wishes of system administrators working with 
-large scale data storage environments. ``btrfs`` has some unique features
-and advantages compared to other Linux filesystems. 
-
-``btrfs`` is a `copy-on-write`_ filesystem. It supports file creation
-timestamps and checksums that verify metadata integrity, so it can detect
-bad copies of data and fix them with the good copies. The copy-on-write 
-capability means that ``btrfs`` can support snapshots that are writable.
-``btrfs`` supports transparent compression and other features.
-
-``btrfs`` also incorporates multi-device management into the file system,
-which enables you to support heterogeneous disk storage infrastructure,
-data allocation policies. The community also aims to provide ``fsck``, 
-deduplication, and data encryption support in the future.
-
-.. _copy-on-write: http://en.wikipedia.org/wiki/Copy-on-write
-.. _compared: http://en.wikipedia.org/wiki/Comparison_of_file_systems
-.. _journaling file systems: http://en.wikipedia.org/wiki/Journaling_file_system

@@ -2101,7 +2101,7 @@ bool OSD::asok_command(string admin_command, cmdmap_t& cmdmap, string format,
     for (list<obj_watch_item_t>::iterator it = watchers.begin();
 	it != watchers.end(); ++it) {
 
-      f->open_array_section("watch");
+      f->open_object_section("watch");
 
       f->dump_string("namespace", it->obj.nspace);
       f->dump_string("object", it->obj.oid.name);
@@ -2110,8 +2110,8 @@ bool OSD::asok_command(string admin_command, cmdmap_t& cmdmap, string format,
       it->wi.name.dump(f);
       f->close_section(); //entity_name_t
 
-      f->dump_int("cookie", it->wi.cookie);
-      f->dump_int("timeout", it->wi.timeout_seconds);
+      f->dump_unsigned("cookie", it->wi.cookie);
+      f->dump_unsigned("timeout", it->wi.timeout_seconds);
 
       f->open_object_section("entity_addr_t");
       it->wi.addr.dump(f);
@@ -9113,9 +9113,27 @@ void OSD::do_recovery(
     if (!more && pg->have_unfound()) {
       pg->discover_all_missing(*rctx.query_map);
       if (rctx.query_map->empty()) {
-	dout(10) << "do_recovery  no luck, giving up on this pg for now" << dendl;
+	string action;
+        if (pg->state_test(PG_STATE_BACKFILL)) {
+	  auto evt = PG::CephPeeringEvtRef(new PG::CephPeeringEvt(
+	    queued,
+	    queued,
+	    PG::CancelBackfill()));
+	  pg->queue_peering_event(evt);
+	  action = "in backfill";
+        } else if (pg->state_test(PG_STATE_RECOVERING)) {
+	  auto evt = PG::CephPeeringEvtRef(new PG::CephPeeringEvt(
+	    queued,
+	    queued,
+	    PG::CancelRecovery()));
+	  pg->queue_peering_event(evt);
+	  action = "in recovery";
+	} else {
+	  action = "already out of recovery/backfill";
+	}
+	dout(10) << __func__ << ": no luck, giving up on this pg for now (" << action << ")" << dendl;
       } else {
-	dout(10) << "do_recovery  no luck, giving up on this pg for now" << dendl;
+	dout(10) << __func__ << ": no luck, giving up on this pg for now (queue_recovery)" << dendl;
 	pg->queue_recovery();
       }
     }

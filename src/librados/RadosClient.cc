@@ -1001,7 +1001,9 @@ void librados::RadosClient::handle_log(MLog *m)
 		 stamp.tv_sec, stamp.tv_nsec,
 		 e.seq, level.c_str(), e.msg.c_str());
 	if (log_cb2)
-	  log_cb2(log_cb_arg, line.c_str(), who.c_str(), name.c_str(),
+	  log_cb2(log_cb_arg, line.c_str(),
+		  e.channel.c_str(),
+		  who.c_str(), name.c_str(),
 		  stamp.tv_sec, stamp.tv_nsec,
 		  e.seq, level.c_str(), e.msg.c_str());
       }
