@@ -246,3 +246,10 @@ class MgrModule(object):
         else:
             return json.loads(raw)
 
+    def self_test(self):
+        """
+        Run a self-test on the module. Override this function and implement
+        a best as possible self-test for (automated) testing of the module
+        :return: bool
+        """
+        pass
