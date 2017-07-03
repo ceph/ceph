@@ -1044,6 +1044,8 @@ public:
   uint32_t seq = 0;
 
   void update_osd_stat(vector<int>& hb_peers);
+  osd_stat_t set_osd_stat(const struct store_statfs_t &stbuf,
+                          vector<int>& hb_peers);
   osd_stat_t get_osd_stat() {
     Mutex::Locker l(stat_lock);
     ++seq;
