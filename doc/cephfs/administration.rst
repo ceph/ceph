@@ -81,16 +81,28 @@ These commands act on specific mds daemons or ranks.
 
 ::
 
-    mds fail <gid/name/role
+    mds fail <gid/name/role>
 
-This command deactivates an MDS causing it to flush its entire journal to
-backing RADOS objects and close all open client sessions. Deactivating an MDS
-is primarily intended for bringing down a rank after reducing the number of
-active MDS (max_mds).
+Mark an MDS daemon as failed.  This is equivalent to what the cluster
+would do if an MDS daemon had failed to send a message to the mon
+for ``mds_beacon_grace`` second.  If the daemon was active and a suitable
+standby is available, using ``mds fail`` will force a failover to the standby.
+
+If the MDS daemon was in reality still running, then using ``mds fail``
+will cause the daemon to restart.  If it was active and a standby was
+available, then the "failed" daemon will return as a standby.
 
 ::
 
     mds deactivate <role>
+
+Deactivate an MDS, causing it to flush its entire journal to
+backing RADOS objects and close all open client sessions. Deactivating an MDS
+is primarily intended for bringing down a rank after reducing the number of
+active MDS (max_mds).
+
+Use ``mds deactivate`` in conjunction with adjustments to ``max_mds`` to
+shrink an MDS cluster.  See :doc:`/cephfs/multimds`
 
 ::
 
