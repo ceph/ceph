@@ -399,6 +399,7 @@ TYPE(cls::rbd::MirrorImage)
 #include "cls/lock/cls_lock_types.h"
 TYPE(rados::cls::lock::locker_id_t)
 TYPE_FEATUREFUL(rados::cls::lock::locker_info_t)
+TYPE_FEATUREFUL(rados::cls::lock::lock_info_t)
 
 #include "cls/lock/cls_lock_ops.h"
 TYPE(cls_lock_lock_op)
