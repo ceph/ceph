@@ -5111,7 +5111,7 @@ void OSD::_collect_metadata(map<string,string> *pm)
   (*pm)["hb_back_addr"] = stringify(hb_back_server_messenger->get_myaddr());
 
   // backend
-  (*pm)["osd_objectstore"] = g_conf->osd_objectstore;
+  (*pm)["osd_objectstore"] = store->get_type();
   store->collect_metadata(pm);
 
   collect_sys_info(pm, g_ceph_context);
