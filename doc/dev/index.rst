@@ -599,6 +599,29 @@ on GitHub in the pull request itself.
 You can (and should) also test your modifications before you open a PR. 
 Refer to the `Testing`_ chapter for details.
 
+Notes on PR make check test
+^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+The GitHub ``make check`` test is driven by a Jenkins instance.
+
+Jenkins merges the PR branch into the latest version of the base branch before
+starting the build, so you don't have to rebase the PR to pick up any fixes.
+
+You can trigger the PR tests at any time by adding a comment to the PR - the
+comment should contain the string "test this please". Since a human subscribed
+to the PR might interpret that as a request for him or her to test the PR, it's
+good to write the request as "Jenkins, test this please".
+
+The `make check`_ log is the place to go if there is a failure and you're not
+sure what caused it. To reach it, first click on "details" (next to the `make
+check`_ test in the PR) to get into the Jenkins web GUI, and then click on
+"Console Output" (on the left).
+
+Jenkins is set up to grep the log for strings known to have been associated
+with `make check`_ failures in the past. However, there is no guarantee that
+the strings are associated with any given `make check`_ failure. You have to
+dig into the log to be sure.
+
 Integration tests AKA ceph-qa-suite
 -----------------------------------
 
