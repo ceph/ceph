@@ -210,6 +210,7 @@ class MDSRank {
       purge_queue.handle_conf_change(conf, changed, *mdsmap);
     }
 
+    void update_mlogger();
   protected:
     // Flag to indicate we entered shutdown: anyone seeing this to be true
     // after taking mds_lock must drop out.
