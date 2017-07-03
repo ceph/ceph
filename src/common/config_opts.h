@@ -1743,6 +1743,8 @@ OPTION(mgr_mds_bytes, OPT_U64, 128*1048576)   // bytes from mdss
 OPTION(mgr_mds_messages, OPT_U64, 128)        // messages from mdss
 OPTION(mgr_mon_bytes, OPT_U64, 128*1048576)   // bytes from mons
 OPTION(mgr_mon_messages, OPT_U64, 128)        // messages from mons
+OPTION(mgr_image_perf_cleanup_interval, OPT_INT, 300)
+OPTION(mgr_image_perf_calc_interval, OPT_INT, 5)
 
 OPTION(mgr_connect_retry_interval, OPT_DOUBLE, 1.0)
 

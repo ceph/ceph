@@ -21,6 +21,7 @@
 
 #include "common/Mutex.h"
 #include "common/LogClient.h"
+#include "common/Timer.h"
 
 #include <msg/Messenger.h>
 #include <mon/MonClient.h>
@@ -35,6 +36,7 @@ class MMgrOpen;
 class MMonMgrReport;
 class MCommand;
 struct MgrCommand;
+class MgrDaemonHook;
 
 
 /**
@@ -68,6 +70,11 @@ protected:
 
   Mutex lock;
 
+  std::map<string, imageperf_t> imgsmap;
+  SafeTimer timer;
+  utime_t last_sample;
+  MgrDaemonHook *m_mgrdaemon_hook;
+
   static void _generate_command_map(map<string,cmd_vartype>& cmdmap,
                                     map<string,string> &param_str_map);
   static const MgrCommand *_get_mgrcommand(const string &cmd_prefix,
@@ -77,6 +84,8 @@ protected:
     const map<string,cmd_vartype>& cmdmap,
     const map<string,string>& param_str_map,
     const MgrCommand *this_cmd);
+  void perf_stat_start();
+  void do_perf_calc();
 
 private:
   friend class ReplyOnFinish;
@@ -116,7 +125,22 @@ public:
   bool handle_report(MMgrReport *m);
   bool handle_command(MCommand *m);
   void send_report();
+  void dump_imgs_perf(Formatter *fmt, set<string> &who);
+  void dump_imgs_perf(ostream& ss, set<string> &who);
 };
+
+class MgrDaemonHook : public AdminSocketHook {
+  DaemonServer *m_server;
+
+public:
+  MgrDaemonHook(DaemonServer *_server)
+    : m_server(_server) {
+  }
+
+  bool call(std::string command, cmdmap_t& cmdmap, std::string format,
+            bufferlist& out) override;
+};
+
 
 #endif
 
