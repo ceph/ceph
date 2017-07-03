@@ -1245,9 +1245,9 @@ version_t Paxos::get_new_proposal_number(version_t gt)
     last_pn = gt;
   
   // update. make it unique among all monitors.
-  last_pn /= 100;
+  last_pn >> 7;
   last_pn++;
-  last_pn *= 100;
+  last_pn << 7;
   last_pn += (version_t)mon->rank;
 
   // write
