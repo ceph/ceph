@@ -1852,6 +1852,12 @@ function test_mon_stdin_stdout()
   ceph config-key get test_key -o - | grep -c foo | grep -q 1
 }
 
+function test_osd_compact()
+{
+  ceph tell osd.1 compact
+  ceph daemon osd.1 compact
+}
+
 #
 # New tests should be added to the TESTS array below
 #
@@ -1895,6 +1901,7 @@ MON_TESTS+=" mon_stdin_stdout"
 OSD_TESTS+=" osd_bench"
 OSD_TESTS+=" osd_negative_filestore_merge_threshold"
 OSD_TESTS+=" tiering_agent"
+OSD_TESTS+=" osd_compact"
 
 MDS_TESTS+=" mds_tell"
 MDS_TESTS+=" mon_mds"
