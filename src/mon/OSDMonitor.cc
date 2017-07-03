@@ -9509,7 +9509,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     string pool_type_str;
     cmd_getval(g_ceph_context, cmdmap, "pool_type", pool_type_str);
     if (pool_type_str.empty())
-      pool_type_str = pg_pool_t::get_default_type();
+      pool_type_str = g_conf->osd_pool_default_type;
 
     string poolstr;
     cmd_getval(g_ceph_context, cmdmap, "pool", poolstr);
