@@ -904,6 +904,11 @@ int FileStore::mkfs()
     goto close_fsid_fd;
   }
 
+  if (basefs.f_type == BTRFS_SUPER_MAGIC &&
+      !g_ceph_context->check_experimental_feature_enabled("btrfs")) {
+    derr <<__FUNC__ << ": deprecated btrfs support is not enabled" << dendl;
+    goto close_fsid_fd;
+  }
   create_backend(basefs.f_type);
 
   ret = backend->create_current();
@@ -1158,6 +1163,11 @@ int FileStore::_detect_fs()
 
   blk_size = st.f_bsize;
 
+  if (st.f_type == BTRFS_SUPER_MAGIC &&
+      !g_ceph_context->check_experimental_feature_enabled("btrfs")) {
+    derr <<__FUNC__ << ": deprecated btrfs support is not enabled" << dendl;
+    return -EPERM;
+  }
   create_backend(st.f_type);
 
   r = backend->detect_features();
