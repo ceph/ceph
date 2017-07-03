@@ -58,7 +58,7 @@ class Activate(object):
         Activate OSDs by discovering them with LVM and mounting them in their
         appropriate destination:
 
-            ceph-volume lvm activate {ID} {UUID}
+            ceph-volume lvm activate {ID} {FSID}
 
         The lvs associated with the OSD need to have been prepared previously,
         so that all needed tags and metadata exist.
@@ -70,17 +70,27 @@ class Activate(object):
             description=sub_command_help,
         )
 
-        parser.add_argument('id', nargs='?', help='The ID of the OSD, usually an integer, like 0')
-        parser.add_argument('fsid', nargs='?', help='The FSID of the OSD, similar to a SHA1')
+        parser.add_argument(
+            'id',
+            metavar='ID',
+            nargs='?',
+            help='The ID of the OSD, usually an integer, like 0'
+        )
+        parser.add_argument(
+            'fsid',
+            metavar='FSID',
+            nargs='?',
+            help='The FSID of the OSD, similar to a SHA1'
+        )
         parser.add_argument(
             '--bluestore',
             action='store_true', default=False,
-            help='filestore objectstore',
+            help='filestore objectstore (not yet implemented)',
         )
         parser.add_argument(
             '--filestore',
             action='store_true', default=True,
-            help='filestore objectstore',
+            help='filestore objectstore (current default)',
         )
         args = parser.parse_args(self.argv[1:])
         self.activate(args)
