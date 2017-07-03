@@ -4212,15 +4212,15 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
     }
     goto reply;
 
-  } else if ((prefix == "osd scrub" ||
-	      prefix == "osd deep-scrub" ||
-	      prefix == "osd repair")) {
+  } else if (prefix == "osd scrub" ||
+	     prefix == "osd deep-scrub" ||
+	     prefix == "osd repair") {
     string whostr;
     cmd_getval(g_ceph_context, cmdmap, "who", whostr);
     vector<string> pvec;
     get_str_vec(prefix, pvec);
 
-    if (whostr == "*") {
+    if (whostr == "*" || whostr == "all" || whostr == "any") {
       ss << "osds ";
       int c = 0;
       for (int i = 0; i < osdmap.get_max_osd(); i++)

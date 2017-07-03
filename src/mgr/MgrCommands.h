@@ -100,10 +100,13 @@ COMMAND("osd test-reweight-by-pg " \
 
 COMMAND("osd scrub " \
 	"name=who,type=CephString", \
-	"initiate scrub on osd <who>", "osd", "rw", "cli,rest")
+	"initiate scrub on osd <who>, or use <all|any|*> to scrub all", \
+        "osd", "rw", "cli,rest")
 COMMAND("osd deep-scrub " \
 	"name=who,type=CephString", \
-	"initiate deep scrub on osd <who>", "osd", "rw", "cli,rest")
+	"initiate deep scrub on osd <who>, or use <all|any|*> to deep scrub all", \
+        "osd", "rw", "cli,rest")
 COMMAND("osd repair " \
 	"name=who,type=CephString", \
-	"initiate repair on osd <who>", "osd", "rw", "cli,rest")
+	"initiate repair on osd <who>, or use <all|any|*> to repair all", \
+        "osd", "rw", "cli,rest")

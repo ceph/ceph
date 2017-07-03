@@ -635,7 +635,7 @@ bool DaemonServer::handle_command(MCommand *m)
     get_str_vec(prefix, pvec);
 
     set<int> osds;
-    if (whostr == "*") {
+    if (whostr == "*" || whostr == "all" || whostr == "any") {
       cluster_state.with_osdmap([&](const OSDMap& osdmap) {
 	  for (int i = 0; i < osdmap.get_max_osd(); i++)
 	    if (osdmap.is_up(i)) {
