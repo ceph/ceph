@@ -614,6 +614,7 @@ set(ceph_common_objs
   $<TARGET_OBJECTS:crush_objs>)
 set(ceph_common_deps
   json_spirit erasure_code rt ${LIB_RESOLV}
+  Boost::filesystem
   Boost::thread
   Boost::system
   Boost::regex

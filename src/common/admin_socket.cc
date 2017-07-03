@@ -20,8 +20,11 @@
 #include "common/version.h"
 #include "include/compat.h"
 
+#include <boost/filesystem/path.hpp>
+
 #include <poll.h>
 #include <sys/un.h>
+#include <sys/wait.h>
 
 // re-include our assert to clobber the system one; fix dout:
 #include "include/assert.h"
@@ -160,53 +163,35 @@ std::string AdminSocket::destroy_shutdown_pipe()
   return "";
 }
 
-std::string AdminSocket::bind_and_listen(const std::string &sock_path, int *fd)
+std::string AdminSocket::do_bind(int fd, const std::string &path)
 {
-  ldout(m_cct, 5) << "bind_and_listen " << sock_path << dendl;
-
   struct sockaddr_un address;
-  if (sock_path.size() > sizeof(address.sun_path) - 1) {
+  if (path.size() > sizeof(address.sun_path) - 1) {
     ostringstream oss;
     oss << "AdminSocket::bind_and_listen: "
-	<< "The UNIX domain socket path " << sock_path << " is too long! The "
+	<< "The UNIX domain socket path " << path << " is too long! The "
 	<< "maximum length on this system is "
 	<< (sizeof(address.sun_path) - 1);
-    return oss.str();
-  }
-  int sock_fd = socket(PF_UNIX, SOCK_STREAM, 0);
-  if (sock_fd < 0) {
-    int err = errno;
-    ostringstream oss;
-    oss << "AdminSocket::bind_and_listen: "
-	<< "failed to create socket: " << cpp_strerror(err);
-    return oss.str();
-  }
-  int r = fcntl(sock_fd, F_SETFD, FD_CLOEXEC);
-  if (r < 0) {
-    r = errno;
-    VOID_TEMP_FAILURE_RETRY(::close(sock_fd));
-    ostringstream oss;
-    oss << "AdminSocket::bind_and_listen: failed to fcntl on socket: " << cpp_strerror(r);
     return oss.str();
   }
   memset(&address, 0, sizeof(struct sockaddr_un));
   address.sun_family = AF_UNIX;
   snprintf(address.sun_path, sizeof(address.sun_path),
-	   "%s", sock_path.c_str());
-  if (::bind(sock_fd, (struct sockaddr*)&address,
+	   "%s", path.c_str());
+  if (::bind(fd, (struct sockaddr*)&address,
 	   sizeof(struct sockaddr_un)) != 0) {
     int err = errno;
     if (err == EADDRINUSE) {
-      AdminSocketClient client(sock_path);
+      AdminSocketClient client(path);
       bool ok;
       client.ping(&ok);
       if (ok) {
-	ldout(m_cct, 20) << "socket " << sock_path << " is in use" << dendl;
+	ldout(m_cct, 20) << "socket " << path << " is in use" << dendl;
 	err = EEXIST;
       } else {
-	ldout(m_cct, 20) << "unlink stale file " << sock_path << dendl;
-	VOID_TEMP_FAILURE_RETRY(unlink(sock_path.c_str()));
-	if (::bind(sock_fd, (struct sockaddr*)&address,
+	ldout(m_cct, 20) << "unlink stale file " << path << dendl;
+	VOID_TEMP_FAILURE_RETRY(::unlink(path.c_str()));
+	if (::bind(fd, (struct sockaddr*)&address,
 		 sizeof(struct sockaddr_un)) == 0) {
 	  err = 0;
 	} else {
@@ -217,21 +202,126 @@ std::string AdminSocket::bind_and_listen(const std::string &sock_path, int *fd)
     if (err != 0) {
       ostringstream oss;
       oss << "AdminSocket::bind_and_listen: "
-	  << "failed to bind the UNIX domain socket to '" << sock_path
+	  << "failed to bind the UNIX domain socket to '" << path
 	  << "': " << cpp_strerror(err);
-      close(sock_fd);
+      VOID_TEMP_FAILURE_RETRY(::unlink(path.c_str()));
       return oss.str();
     }
   }
-  if (listen(sock_fd, 5) != 0) {
+
+  return "";
+}
+
+std::string AdminSocket::bind_and_listen(const std::string &sock_path, int *fd)
+{
+  ldout(m_cct, 5) << "bind_and_listen " << sock_path << dendl;
+
+  int sock_fd = ::socket(PF_UNIX, SOCK_STREAM, 0);
+  if (sock_fd < 0) {
     int err = errno;
     ostringstream oss;
-    oss << "AdminSocket::bind_and_listen: "
-	  << "failed to listen to socket: " << cpp_strerror(err);
-    close(sock_fd);
-    VOID_TEMP_FAILURE_RETRY(unlink(sock_path.c_str()));
+    oss << "bind_and_listen: failed to create socket: " << cpp_strerror(err);
     return oss.str();
   }
+  if (::fcntl(sock_fd, F_SETFD, FD_CLOEXEC) == -1) {
+    int err = errno;
+    VOID_TEMP_FAILURE_RETRY(::close(sock_fd));
+    ostringstream oss;
+    oss << "bind_and_listen: failed to fcntl on socket: " << cpp_strerror(err);
+    return oss.str();
+  }
+
+  if (sock_path.size() < sizeof(((struct sockaddr_un*)0)->sun_path)) {
+    const auto &status = do_bind(sock_fd, sock_path);
+    if (status.size()) {
+      VOID_TEMP_FAILURE_RETRY(::close(sock_fd));
+      return status;
+    }
+  } else {
+    int p[2];
+    if (::pipe(p) == -1) {
+      int err = errno;
+      VOID_TEMP_FAILURE_RETRY(::close(sock_fd));
+      ostringstream oss;
+      oss << "bind_and_listen: failed to create pipe: " << cpp_strerror(err);
+      return oss.str();
+    }
+    if (::fcntl(p[0], F_SETFD, FD_CLOEXEC) == -1 || ::fcntl(p[1], F_SETFD, FD_CLOEXEC) == -1) {
+      int err = errno;
+      VOID_TEMP_FAILURE_RETRY(::close(sock_fd));
+      VOID_TEMP_FAILURE_RETRY(::close(p[0]));
+      VOID_TEMP_FAILURE_RETRY(::close(p[1]));
+      ostringstream oss;
+      oss << "bind_and_listen: failed to fcntl on socket: " << cpp_strerror(err);
+      return oss.str();
+    }
+
+    pid_t child = ::fork();
+    if (child == 0) {
+      VOID_TEMP_FAILURE_RETRY(::close(p[0]));
+      boost::filesystem::path path(sock_path);
+      auto dirname = path.parent_path();
+      auto basename = path.filename();
+      if (::chdir(dirname.c_str()) == -1) {
+        int err = errno;
+        ostringstream oss;
+        oss << "asok_connect: failed to chdir to socket dir '" << dirname << "': " << cpp_strerror(err);
+        const auto &s = oss.str();
+        auto _ = safe_write(p[1], s.c_str(), s.size());
+        (void)_;
+        ::_exit(EXIT_FAILURE);
+      }
+      const auto &status = do_bind(sock_fd, basename.string());
+      if (status.size() > 0) {
+        auto _ = safe_write(p[1], status.c_str(), status.size());
+        (void)_;
+        ::_exit(EXIT_FAILURE);
+      }
+      ::_exit(EXIT_SUCCESS);
+    } else if (child > 0) {
+      int status;
+      VOID_TEMP_FAILURE_RETRY(::close(p[1]));
+      int result = TEMP_FAILURE_RETRY(::waitpid(child, &status, 0));
+      if (result == -1) {
+        int err = errno;
+        VOID_TEMP_FAILURE_RETRY(::close(sock_fd));
+        VOID_TEMP_FAILURE_RETRY(::close(p[0]));
+        VOID_TEMP_FAILURE_RETRY(::unlink(sock_path.c_str()));
+        ostringstream oss;
+        oss << "bind_and_listen: failed to wait for helper process: " << cpp_strerror(err);
+        return oss.str();
+      }
+      if (status) {
+        ldout(m_cct, 5) << "bind_and_listen: child exited with non-zero status " << status << dendl;
+        char buf[4096];
+        ssize_t r = safe_read(p[0], buf, sizeof buf);
+        if (r > 0) {
+          VOID_TEMP_FAILURE_RETRY(::close(sock_fd));
+          VOID_TEMP_FAILURE_RETRY(::close(p[0]));
+          VOID_TEMP_FAILURE_RETRY(::unlink(sock_path.c_str()));
+          return std::string(buf, (size_t)r);
+        }
+      }
+      VOID_TEMP_FAILURE_RETRY(::close(p[0]));
+    } else {
+      VOID_TEMP_FAILURE_RETRY(::close(p[0]));
+      VOID_TEMP_FAILURE_RETRY(::close(p[1]));
+      const auto &status = do_bind(sock_fd, sock_path);
+      if (status.size()) {
+        return status;
+      }
+    }
+  }
+
+  if (::listen(sock_fd, 5) == -1) {
+    int err = errno;
+    ostringstream oss;
+    oss << "bind_and_listen: failed to listen to socket: " << cpp_strerror(err);
+    VOID_TEMP_FAILURE_RETRY(::close(sock_fd));
+    VOID_TEMP_FAILURE_RETRY(::unlink(sock_path.c_str()));
+    return oss.str();
+  }
+
   *fd = sock_fd;
   return "";
 }

@@ -10,6 +10,7 @@ License version 2, as published by the Free Software
 Foundation.  See file COPYING.
 """
 
+import os
 import sys
 import json
 import socket
@@ -40,7 +41,30 @@ def admin_socket(asok_path, cmd, format=''):
     def do_sockio(path, cmd_bytes):
         """ helper: do all the actual low-level stream I/O """
         sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-        sock.connect(path)
+        try:
+            sock.connect(path)
+        except socket.error as e:
+            if "AF_UNIX path too long" != str(e):
+                raise e
+            fds = os.pipe()
+            child = os.fork()
+            if child == 0:
+                os.close(fds[0])
+                try:
+                    os.chdir(os.path.dirname(path))
+                    sock.connect(os.path.basename(path))
+                except Exception as e:
+                    os.write(fds[1], str(e))
+                    os._exit(1)
+                os._exit(0)
+            else:
+                os.close(fds[1])
+                (pid, status) = os.waitpid(child, 0)
+                errors = os.read(fds[0], 4096)
+                os.close(fds[0])
+                if len(errors) > 0:
+                    raise RuntimeError(errors)
+
         try:
             sock.sendall(cmd_bytes + b'\0')
             len_str = sock.recv(4)
