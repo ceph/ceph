@@ -332,6 +332,11 @@ OPTION(mon_warn_on_crush_straw_calc_version_zero, OPT_BOOL, true) // warn if cru
 OPTION(mon_warn_on_osd_down_out_interval_zero, OPT_BOOL, true) // warn if 'mon_osd_down_out_interval == 0'
 OPTION(mon_warn_on_cache_pools_without_hit_sets, OPT_BOOL, true)
 OPTION(mon_warn_osd_usage_min_max_delta, OPT_FLOAT, .40) // warn if difference between min and max OSD utilizations exceeds specified amount
+// note that for ec, the minimal sensible configuration is 2 + 1,
+// so 3 is applicable for both replicated pools and ec pools
+OPTION(mon_suggested_pool_size, OPT_U32, 3)
+OPTION(mon_warn_on_unsafe_pool_size, OPT_BOOL, true)
+OPTION(mon_warn_on_unsafe_pool_min_size, OPT_BOOL, true)
 OPTION(mon_min_osdmap_epochs, OPT_INT, 500)
 OPTION(mon_max_pgmap_epochs, OPT_INT, 500)
 OPTION(mon_max_log_epochs, OPT_INT, 500)

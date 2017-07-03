@@ -1364,6 +1364,7 @@ public:
   static void generate_test_instances(list<OSDMap*>& o);
   bool check_new_blacklist_entries() const { return new_blacklist_entries; }
 
+  unsigned get_pool_suggested_min_size(const pg_pool_t &pool) const;
   void check_health(health_check_map_t *checks) const;
 };
 WRITE_CLASS_ENCODER_FEATURES(OSDMap)

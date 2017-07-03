@@ -31,6 +31,8 @@
 #include "crush/CrushTreeDumper.h"
 #include "common/Clock.h"
 #include "mon/PGStatService.h"
+#include "erasure-code/ErasureCodePlugin.h"
+#include "erasure-code/ErasureCodeInterface.h"
  
 #define dout_subsys ceph_subsys_osd
 
@@ -4265,6 +4267,43 @@ void print_osd_utilization(const OSDMap& osdmap,
   }
 }
 
+unsigned OSDMap::get_pool_suggested_min_size(const pg_pool_t &pool) const
+{
+  unsigned suggested_min_size = 0;
+  switch (pool.get_type()) {
+  case pg_pool_t::TYPE_REPLICATED:
+    suggested_min_size = pool.get_size() - pool.get_size() / 2;
+    break;
+  case pg_pool_t::TYPE_ERASURE:
+    {
+      ErasureCodeInterfaceRef erasure_code;
+      ostringstream ss;
+      ErasureCodeProfile profile =
+        get_erasure_code_profile(pool.erasure_code_profile);
+      ErasureCodeProfile::const_iterator plugin = profile.find("plugin");
+      if (plugin == profile.end()) {
+        break;
+      }
+      ErasureCodePluginRegistry &instance =
+        ErasureCodePluginRegistry::instance();
+      int err = instance.factory(plugin->second,
+                                 g_conf->get_val<std::string>("erasure_code_dir"),
+                                 profile,
+                                 &erasure_code,
+                                 &ss);
+      if (err == 0) {
+        auto size = erasure_code->get_chunk_count();
+        suggested_min_size = std::min(erasure_code->get_data_chunk_count() + 1,
+          size);
+      }
+    }
+    break;
+  default:
+    assert(0 == "unrecongnized pool type");
+  }
+  return suggested_min_size;
+}
+
 void OSDMap::check_health(health_check_map_t *checks) const
 {
   int num_osds = get_num_osds();
@@ -4605,21 +4644,71 @@ void OSDMap::check_health(health_check_map_t *checks) const
 
   // POOL_FULL
   {
-    list<string> detail;
+    enum {
+      WARN_POOL_FULL,
+      WARN_POOL_SIZE,
+      WARN_POOL_MIN_SIZE,
+      WARN_POOL_MAX_TYPE,
+    };
+
+    vector<list<string>> detail(WARN_POOL_MAX_TYPE);
     for (auto it : get_pools()) {
+      const string& pool_name = get_pool_name(it.first);
       const pg_pool_t &pool = it.second;
       if (pool.has_flag(pg_pool_t::FLAG_FULL)) {
-	const string& pool_name = get_pool_name(it.first);
 	stringstream ss;
 	ss << "pool '" << pool_name << "' is full";
-	detail.push_back(ss.str());
+	detail[WARN_POOL_FULL].push_back(ss.str());
+      }
+      if (g_conf->mon_warn_on_unsafe_pool_size) {
+        auto suggested_size = g_conf->mon_suggested_pool_size;
+        if (pool.get_size() < suggested_size) {
+           stringstream ss;
+           ss << "pool '" << pool_name << "' size (" << pool.get_size()
+              << ") < suggested value (" << suggested_size << ")";
+           detail[WARN_POOL_SIZE].push_back(ss.str());
+        }
+      }
+      if (g_conf->mon_warn_on_unsafe_pool_min_size) {
+        auto suggested_min_size = get_pool_suggested_min_size(pool);
+        if (pool.get_min_size() < suggested_min_size) {
+          stringstream ss;
+          ss << "pool '" << pool_name << "' min size ("
+             << pool.get_min_size()
+             << ") < suggested value (" << suggested_min_size << ")";
+          detail[WARN_POOL_MIN_SIZE].push_back(ss.str());
+        }
       }
     }
     if (!detail.empty()) {
-      ostringstream ss;
-      ss << detail.size() << " pool(s) full";
-      auto& d = checks->add("POOL_FULL", HEALTH_WARN, ss.str());
-      d.detail.swap(detail);
+      if (!detail[WARN_POOL_FULL].empty()) {
+        ostringstream ss;
+        ss << detail[WARN_POOL_FULL].size() << " pool(s) full";
+        auto& d = checks->add("POOL_FULL", HEALTH_WARN, ss.str());
+        d.detail.swap(detail[WARN_POOL_FULL]);
+      }
+      if (!detail[WARN_POOL_SIZE].empty()) {
+        ostringstream ss;
+        auto num = detail[WARN_POOL_SIZE].size();
+        if (num == 1) {
+          ss << "1 pool has unsafe pool size";
+        } else {
+          ss << num << " pools have unsafe pool size";
+        }
+        auto& d = checks->add("POOL_UNSAFE_SIZE", HEALTH_WARN, ss.str());
+        d.detail.swap(detail[WARN_POOL_SIZE]);
+      }
+      if (!detail[WARN_POOL_MIN_SIZE].empty()) {
+        ostringstream ss;
+        auto num = detail[WARN_POOL_MIN_SIZE].size();
+        if (num == 1) {
+          ss << "1 pool has unsafe pool min_size";
+        } else {
+          ss << num << " pools have unsafe pool min_size";
+        }
+        auto& d = checks->add("POOL_UNSAFE_MIN_SIZE", HEALTH_WARN, ss.str());
+        d.detail.swap(detail[WARN_POOL_MIN_SIZE]);
+      }
     }
   }
 }
