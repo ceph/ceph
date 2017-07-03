@@ -1,4 +1,5 @@
 import argparse
+import os
 from textwrap import dedent
 from ceph_volume import process
 from ceph_volume.systemd import systemctl
@@ -71,5 +72,15 @@ class Activate(object):
 
         parser.add_argument('id', nargs='?', help='The ID of the OSD, usually an integer, like 0')
         parser.add_argument('fsid', nargs='?', help='The FSID of the OSD, similar to a SHA1')
+        parser.add_argument(
+            '--bluestore',
+            action='store_true', default=False,
+            help='filestore objectstore',
+        )
+        parser.add_argument(
+            '--filestore',
+            action='store_true', default=True,
+            help='filestore objectstore',
+        )
         args = parser.parse_args(self.argv[1:])
         self.activate(args)
