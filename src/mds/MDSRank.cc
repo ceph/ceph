@@ -657,12 +657,17 @@ bool MDSRank::_dispatch(Message *m, bool new_msg)
   }
   */
 
+  update_mlogger();
+  return true;
+}
+
+void MDSRank::update_mlogger()
+{
   if (mlogger) {
     mlogger->set(l_mdm_ino, CInode::count());
     mlogger->set(l_mdm_dir, CDir::count());
     mlogger->set(l_mdm_dn, CDentry::count());
     mlogger->set(l_mdm_cap, Capability::count());
-
     mlogger->set(l_mdm_inoa, CInode::increments());
     mlogger->set(l_mdm_inos, CInode::decrements());
     mlogger->set(l_mdm_dira, CDir::increments());
@@ -671,11 +676,8 @@ bool MDSRank::_dispatch(Message *m, bool new_msg)
     mlogger->set(l_mdm_dns, CDentry::decrements());
     mlogger->set(l_mdm_capa, Capability::increments());
     mlogger->set(l_mdm_caps, Capability::decrements());
-
     mlogger->set(l_mdm_buf, buffer::get_total_alloc());
   }
-
-  return true;
 }
 
 /*

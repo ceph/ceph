@@ -7437,6 +7437,7 @@ void MDCache::check_memory_usage()
 	   << ", " << Capability::count() << " caps, " << caps_per_inode << " caps per inode"
 	   << dendl;
 
+  mds->update_mlogger();
   mds->mlogger->set(l_mdm_rss, last.get_rss());
   mds->mlogger->set(l_mdm_heap, last.get_heap());
 
