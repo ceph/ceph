@@ -589,9 +589,9 @@ When your PR hits GitHub, the Ceph project's `Continuous Integration (CI)
 infrastructure will test it automatically. At the time of this writing
 (March 2016), the automated CI testing included a test to check that the
 commits in the PR are properly signed (see `Submitting patches`_) and a
-``make check`` test.
+`make check`_ test.
 
-The latter, ``make check``, builds the PR and runs it through a battery of
+The latter, `make check`_, builds the PR and runs it through a battery of
 tests. These tests run on machines operated by the Ceph Continuous
 Integration (CI) team. When the tests complete, the result will be shown
 on GitHub in the pull request itself.
@@ -602,7 +602,7 @@ Refer to the `Testing`_ chapter for details.
 Notes on PR make check test
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-The GitHub ``make check`` test is driven by a Jenkins instance.
+The GitHub `make check`_ test is driven by a Jenkins instance.
 
 Jenkins merges the PR branch into the latest version of the base branch before
 starting the build, so you don't have to rebase the PR to pick up any fixes.
@@ -692,26 +692,28 @@ flagged for backporting, in which case the status should be changed to
 Testing
 =======
 
-Ceph has two types of tests: "make check" tests and integration tests.
+Ceph has two types of tests: `make check`_ tests and integration tests.
 The former are run via `GNU Make <https://www.gnu.org/software/make/>`,
 and the latter are run via the `teuthology framework`_. The following two
-chapters examine the "make check" and integration tests in detail.
+chapters examine the `make check`_ and integration tests in detail.
+
+.. _`make check`:
 
 Testing - make check
 ====================
 
-After compiling Ceph, the ``make check`` command can be used to run the
+After compiling Ceph, the `make check`_ command can be used to run the
 code through a battery of tests covering various aspects of Ceph. For
-inclusion in "make check", a test must:
+inclusion in `make check`_, a test must:
 
 * bind ports that do not conflict with other tests
 * not require root access
 * not require more than one machine to run
 * complete within a few minutes
 
-While it is possible to run ``make check`` directly, it can be tricky to
+While it is possible to run `make check`_ directly, it can be tricky to
 correctly set up your environment. Fortunately, a script is provided to
-make it easier run "make check" on your code. It can be run from the
+make it easier run `make check`_ on your code. It can be run from the
 top-level directory of the Ceph source tree by doing::
 
     $ ./run-make-check.sh
@@ -724,12 +726,12 @@ minutes to three hours to complete, but it's worth the wait.
 Future sections
 ---------------
 
-* Principles of make check tests
+* Principles of `make check`_ tests
 * Where to find test results
 * How to interpret test results
 * Find the corresponding source code
-* Writing make check tests
-* Make check caveats
+* Writing `make check`_ tests
+* Caveats
 
 Testing - integration tests
 ===========================
