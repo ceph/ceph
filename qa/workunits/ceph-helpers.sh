@@ -1066,7 +1066,6 @@ function test_is_clean() {
     setup $dir || return 1
     run_mon $dir a --osd_pool_default_size=1 || return 1
     run_osd $dir 0 || return 1
-    ! is_clean || return 1
     wait_for_clean || return 1
     is_clean || return 1
     teardown $dir || return 1
@@ -1343,19 +1342,20 @@ function erasure_code_plugin_exists() {
     local plugin=$1
     local status
     local grepstr
+    local s
     case `uname` in
         FreeBSD) grepstr="Cannot open.*$plugin" ;;
         *) grepstr="$plugin.*No such file" ;;
     esac
 
-    if ceph osd erasure-code-profile set TESTPROFILE plugin=$plugin 2>&1 |
-        grep "$grepstr" ; then
-        # display why the string was rejected.
-        ceph osd erasure-code-profile set TESTPROFILE plugin=$plugin
-        status=1
-    else
-        status=0
+    s=$(ceph osd erasure-code-profile set TESTPROFILE plugin=$plugin 2>&1)
+    local status=$?
+    if [ $status -eq 0 ]; then
         ceph osd erasure-code-profile rm TESTPROFILE
+    elif ! echo $s | grep --quiet "$grepstr" ; then
+        status=1
+        # display why the string was rejected.
+        echo $s
     fi
     return $status
 }
