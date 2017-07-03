@@ -72,6 +72,7 @@
 #include "common/cmdparse.h"
 #include "include/str_list.h"
 #include "include/str_map.h"
+#include "include/scope_guard.h"
 
 #include "json_spirit/json_spirit_reader.h"
 
@@ -3883,6 +3884,12 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
       p->decode(osdmap_bl);
     }
 
+    auto sg = make_scope_guard([&] {
+      if (p != &osdmap) {
+        delete p;
+      }
+    });
+
     if (prefix == "osd dump") {
       stringstream ds;
       if (f) {
@@ -3996,8 +4003,6 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
 
       rdata.append(ds);
     }
-    if (p != &osdmap)
-      delete p;
   } else if (prefix == "osd df") {
     string method;
     cmd_getval(g_ceph_context, cmdmap, "output_method", method);
