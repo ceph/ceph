@@ -1089,7 +1089,7 @@ private:
   mutable int64_t injectfull = 0;
   s_names injectfull_state = NONE;
   float get_failsafe_full_ratio();
-  void check_full_status(const osd_stat_t &stat);
+  void check_full_status(float ratio);
   bool _check_full(s_names type, ostream &ss) const;
 public:
   bool check_failsafe_full(ostream &ss) const;

@@ -750,11 +750,10 @@ float OSDService::get_failsafe_full_ratio()
   return full_ratio;
 }
 
-void OSDService::check_full_status(const osd_stat_t &osd_stat)
+void OSDService::check_full_status(float ratio)
 {
   Mutex::Locker l(full_status_lock);
 
-  float ratio = ((float)osd_stat.kb_used) / ((float)osd_stat.kb);
   cur_ratio = ratio;
 
   // The OSDMap ratios take precendence.  So if the failsafe is .95 and
@@ -950,7 +949,8 @@ void OSDService::update_osd_stat(vector<int>& hb_peers)
 
   dout(20) << "update_osd_stat " << osd_stat << dendl;
 
-  check_full_status(osd_stat);
+  float ratio = ((float)osd_stat.kb_used) / ((float)osd_stat.kb);
+  check_full_status(ratio);
 }
 
 bool OSDService::check_osdmap_full(const set<pg_shard_t> &missing_on)
