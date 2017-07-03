@@ -2898,6 +2898,38 @@ void RGWDeleteMultiObj_ObjStore_S3::end_response()
   rgw_flush_formatter_and_reset(s, s->formatter);
 }
 
+void RGWGetObjLayout_ObjStore_S3::send_response()
+{
+  if (op_ret)
+    set_req_state_err(s, op_ret);
+  dump_errno(s);
+  end_header(s, this, "application/json");
+
+  JSONFormatter f;
+
+  if (op_ret < 0) {
+    return;
+  }
+
+  f.open_object_section("result");
+  ::encode_json("head", head_obj, &f);
+  ::encode_json("manifest", *manifest, &f);
+  f.open_array_section("data_location");
+  for (auto miter = manifest->obj_begin(); miter != manifest->obj_end(); ++miter) {
+    f.open_object_section("obj");
+    rgw_obj loc = miter.get_location();
+    ::encode_json("ofs", miter.get_ofs(), &f);
+    ::encode_json("loc", loc, &f);
+    ::encode_json("loc_ofs", miter.location_ofs(), &f);
+    ::encode_json("loc_size", miter.get_stripe_size(), &f);
+    f.close_section();
+    rgw_flush_formatter(s, &f);
+  }
+  f.close_section();
+  f.close_section();
+  rgw_flush_formatter(s, &f);
+}
+
 RGWOp *RGWHandler_REST_Service_S3::op_get()
 {
   if (is_usage_op()) {
@@ -3035,6 +3067,8 @@ RGWOp *RGWHandler_REST_Obj_S3::op_get()
     return new RGWGetACLs_ObjStore_S3;
   } else if (s->info.args.exists("uploadId")) {
     return new RGWListMultipart_ObjStore_S3;
+  } else if (s->info.args.exists("layout")) {
+    return new RGWGetObjLayout_ObjStore_S3;
   }
   return get_obj_op(true);
 }

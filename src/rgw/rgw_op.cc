@@ -5517,6 +5517,29 @@ void RGWSetAttrs::execute()
   }
 }
 
+void RGWGetObjLayout::pre_exec()
+{
+  rgw_bucket_object_pre_exec(s);
+}
+
+void RGWGetObjLayout::execute()
+{
+  rgw_obj obj(s->bucket, s->object.name);
+  obj.set_instance(s->object.instance);
+  target = new RGWRados::Object(store, s->bucket_info, *static_cast<RGWObjectCtx *>(s->obj_ctx), obj);
+  RGWRados::Object::Read stat_op(target);
+
+  op_ret = stat_op.prepare();
+  if (op_ret < 0) {
+    return;
+  }
+
+  head_obj = stat_op.state.obj;
+
+  op_ret = target->get_manifest(&manifest);
+}
+
+
 RGWHandler::~RGWHandler()
 {
 }
