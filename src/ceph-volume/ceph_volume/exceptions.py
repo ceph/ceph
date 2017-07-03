@@ -25,3 +25,13 @@ class MultipleLVsError(Exception):
     def __str__(self):
         msg = "Got more than 1 result looking for %s with path: %s" % (self.lv_name, self.lv_path)
         return msg
+
+
+class MultipleVGsError(Exception):
+
+    def __init__(self, vg_name):
+        self.vg_name = vg_name
+
+    def __str__(self):
+        msg = "Got more than 1 result looking for volume group: %s" % self.vg_name
+        return msg
