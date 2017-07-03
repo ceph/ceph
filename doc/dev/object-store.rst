@@ -57,6 +57,9 @@
     "PrimaryLogPG" -> "OSDMap"
 
     "ObjectStore" -> "FileStore"
+    "ObjectStore" -> "BlueStore"
+
+    "BlueStore" -> "rocksdb"
 
     "FileStore" -> "xfs"
     "FileStore" -> "btrfs"

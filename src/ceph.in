@@ -51,12 +51,16 @@ PRIO_DEBUGONLY = 0
 PRIO_DEFAULT = PRIO_USEFUL
 
 # Make life easier on developers:
-# If in src/, and .libs and pybind exist here, assume we're running
-# from a Ceph source dir and tweak PYTHONPATH and LD_LIBRARY_PATH
-# to use local files
+# If our parent dir contains CMakeCache.txt and bin/init-ceph,
+# assume we're running from a build dir (i.e. src/build/bin/ceph)
+# and tweak sys.path and LD_LIBRARY_PATH to use built files.
+# Since this involves re-execing, if CEPH_DBG is set in the environment
+# re-exec with -mpdb.  Also, if CEPH_DEV is in the env, suppress
+# the warning message about the DEVELOPER MODE.
 
 MYPATH = os.path.abspath(__file__)
 MYDIR = os.path.dirname(MYPATH)
+MYPDIR = os.path.dirname(MYDIR)
 DEVMODEMSG = '*** DEVELOPER MODE: setting PATH, PYTHONPATH and LD_LIBRARY_PATH ***'
 
 
@@ -91,10 +95,10 @@ def get_pythonlib_dir():
     """Returns the name of a distutils build directory"""
     return "lib.{version[0]}".format(version=sys.version_info)
 
-if os.path.exists(os.path.join(os.getcwd(), "CMakeCache.txt")) \
-     and os.path.exists(os.path.join(os.getcwd(), "bin/init-ceph")):
+if os.path.exists(os.path.join(MYPDIR, "CMakeCache.txt")) \
+     and os.path.exists(os.path.join(MYPDIR, "bin/init-ceph")):
     src_path = None
-    for l in open("./CMakeCache.txt"):
+    for l in open(os.path.join(MYPDIR, "CMakeCache.txt")):
         if l.startswith("ceph_SOURCE_DIR:STATIC="):
             src_path = l.split("=")[1].strip()
 
@@ -103,8 +107,8 @@ if os.path.exists(os.path.join(os.getcwd(), "CMakeCache.txt")) \
         pass
     else:
         # Developer mode, but in a cmake build dir instead of the src dir
-        lib_path = os.path.join(os.getcwd(), "lib")
-        bin_path = os.path.join(os.getcwd(), "bin")
+        lib_path = os.path.join(MYPDIR, "lib")
+        bin_path = os.path.join(MYPDIR, "bin")
         pybind_path = os.path.join(src_path, "src", "pybind")
         pythonlib_path = os.path.join(lib_path,
                                       "cython_modules",

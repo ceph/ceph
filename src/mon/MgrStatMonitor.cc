@@ -131,6 +131,10 @@ void MgrStatMonitor::get_health(list<pair<health_status_t,string> >& summary,
 				list<pair<health_status_t,string> > *detail,
 				CephContext *cct) const
 {
+  if (mon->osdmon()->osdmap.require_osd_release < CEPH_RELEASE_LUMINOUS) {
+    return;
+  }
+
   summary.insert(summary.end(), health_summary.begin(), health_summary.end());
   if (detail) {
     detail->insert(detail->end(), health_detail.begin(), health_detail.end());

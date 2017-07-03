@@ -271,7 +271,7 @@ struct crush_weight_set {
  *
  */
 struct crush_choose_arg {
-  int *ids;                             /*!< values to use instead of items */
+  __s32 *ids;                           /*!< values to use instead of items */
   __u32 ids_size;                       /*!< size of the __ids__ array */
   struct crush_weight_set *weight_set;  /*!< weight replacements for a given position */
   __u32 weight_set_size;                /*!< size of the __weight_set__ array */
