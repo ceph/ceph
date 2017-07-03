@@ -253,8 +253,8 @@ void _usage()
   cout << "   --tags-rm=<list>          list of tags to remove for zonegroup placement modify command\n";
   cout << "   --endpoints=<list>        zone endpoints\n";
   cout << "   --index_pool=<pool>       placement target index pool\n";
-  cout << "   --data_pool=<pool>        placement target data pool\n";
-  cout << "   --data_extra_pool=<pool>  placement target data extra (non-ec) pool\n";
+  cout << "   --data-pool=<pool>        placement target data pool\n";
+  cout << "   --data-extra-pool=<pool>  placement target data extra (non-ec) pool\n";
   cout << "   --placement-index-type=<type>\n";
   cout << "                             placement target index type (normal, indexless, or #id)\n";
   cout << "   --compression=<type>      placement target compression type (plugin name or empty/none)\n";
