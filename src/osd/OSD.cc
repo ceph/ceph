@@ -919,15 +919,31 @@ void OSDService::set_injectfull(s_names type, int64_t count)
   injectfull = count;
 }
 
+osd_stat_t OSDService::set_osd_stat(const struct store_statfs_t &stbuf,
+                                    vector<int>& hb_peers)
+{
+  uint64_t bytes = stbuf.total;
+  uint64_t used = bytes - stbuf.available;
+  uint64_t avail = stbuf.available;
+
+  osd->logger->set(l_osd_stat_bytes, bytes);
+  osd->logger->set(l_osd_stat_bytes_used, used);
+  osd->logger->set(l_osd_stat_bytes_avail, avail);
+
+  {
+    Mutex::Locker l(stat_lock);
+    osd_stat.hb_peers.swap(hb_peers);
+    osd->op_tracker.get_age_ms_histogram(&osd_stat.op_queue_age_hist);
+    osd_stat.kb = bytes >> 10;
+    osd_stat.kb_used = used >> 10;
+    osd_stat.kb_avail = avail >> 10;
+    return osd_stat;
+  }
+}
+
 void OSDService::update_osd_stat(vector<int>& hb_peers)
 {
-  Mutex::Locker lock(stat_lock);
-
-  osd_stat.hb_peers.swap(hb_peers);
-
-  osd->op_tracker.get_age_ms_histogram(&osd_stat.op_queue_age_hist);
-
-  // fill in osd stats too
+  // load osd stats first
   struct store_statfs_t stbuf;
   int r = osd->store->statfs(&stbuf);
   if (r < 0) {
@@ -935,21 +951,10 @@ void OSDService::update_osd_stat(vector<int>& hb_peers)
     return;
   }
 
-  uint64_t bytes = stbuf.total;
-  uint64_t used = bytes - stbuf.available;
-  uint64_t avail = stbuf.available;
-
-  osd_stat.kb = bytes >> 10;
-  osd_stat.kb_used = used >> 10;
-  osd_stat.kb_avail = avail >> 10;
-
-  osd->logger->set(l_osd_stat_bytes, bytes);
-  osd->logger->set(l_osd_stat_bytes_used, used);
-  osd->logger->set(l_osd_stat_bytes_avail, avail);
-
-  dout(20) << "update_osd_stat " << osd_stat << dendl;
-
-  float ratio = ((float)osd_stat.kb_used) / ((float)osd_stat.kb);
+  auto new_stat = set_osd_stat(stbuf, hb_peers);
+  dout(20) << "update_osd_stat " << new_stat << dendl;
+  assert(new_stat.kb);
+  float ratio = ((float)new_stat.kb_used) / ((float)new_stat.kb);
   check_full_status(ratio);
 }
 
