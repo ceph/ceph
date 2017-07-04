@@ -85,9 +85,9 @@ For CentOS 7, perform the following steps:
 	gpgkey=https://download.ceph.com/keys/release.asc
 
 
-#. Update your repository and install ``ceph-deploy`` & ``ceph``::
+#. Update your repository and install ``ceph-deploy`` ::
 
-	sudo yum update && sudo yum install ceph ceph-deploy
+	sudo yum update && sudo yum install ceph-deploy
 
 
 .. note:: You can also use the EU mirror eu.ceph.com for downloading your packages.
@@ -123,6 +123,21 @@ Ceph Node Setup
 The admin node must be have password-less SSH access to Ceph nodes.
 When ceph-deploy logs in to a Ceph node as a user, that particular
 user must have passwordless ``sudo`` privileges.
+
+
+Install NTP
+-----------
+
+On CentOS / RHEL, execute::
+
+	sudo yum install ceph
+
+On Debian / Ubuntu, execute::
+
+	sudo apt-get install ceph
+
+
+If installed, you can verify by ``ceph -v``
 
 
 Install NTP
