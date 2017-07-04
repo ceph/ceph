@@ -717,6 +717,16 @@ int RGWBL::bucket_bl_process(string& shard_id)
 	final_ret = r;
 	break;
       } else {
+        std::size_t pos = opslog_obj.find(filter);
+        // "YYYY-mm-dd-HH-MM-SS-" bucket id is start from the 20th pos of opslog obj name when
+        // bucket logging is enabled;
+        if (pos == std::string::npos || pos != 20) {
+          ldout(cct, 10) << __func__
+                        << "The log record before enable bucket logging should not be deliver"
+                        << dendl;
+          continue;
+        }
+
 	int r = bucket_bl_deliver(opslog_obj, tbucket, tprefix, tobject_attrs);
 	if (r < 0 ){
 	  final_ret = r;

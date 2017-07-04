@@ -64,6 +64,15 @@ string render_log_object_name(const string& format,
       case 'M':
 	sprintf(buf, "%.2d", dt->tm_min);
 	break;
+      case 'S':
+        {
+          if (dt->tm_sec < 30) {
+            sprintf(buf, "%.2d", 0);
+          } else {
+            sprintf(buf, "%.2d", 30);
+          }
+        }
+        break;
 
       case 'i':
 	o += bucket_id;
@@ -336,31 +345,29 @@ int rgw_log_op(RGWRados *store, RGWREST* const rest, struct req_state *s,
   if (s->enable_usage_log)
     log_usage(s, op_name);
 
-  // overwrite ops log config
-  // enable ops log when bucket logging is enabled
-  if (!s->enable_ops_log) {
-    if (s->bucket_attrs.empty()) {
-      RGWObjectCtx obj_ctx(store);
-      int ret = store->get_bucket_info(obj_ctx, s->bucket_tenant, s->bucket_name,
-                                       s->bucket_info, NULL, &s->bucket_attrs);
-      if (ret != 0)
-        return 0;
-    }
-
-    map<string, bufferlist>::iterator siter = s->bucket_attrs.find(RGW_ATTR_BL);
-    if (siter == s->bucket_attrs.end())
+  RGWBucketLoggingStatus status(s->cct);
+  if (s->bucket_attrs.empty()) {
+    RGWObjectCtx obj_ctx(store);
+    int ret = store->get_bucket_info(obj_ctx, s->bucket_tenant, s->bucket_name,
+                                     s->bucket_info, NULL, &s->bucket_attrs);
+    if (ret != 0 && !s->enable_ops_log)
       return 0;
+  }
 
-    RGWBucketLoggingStatus status(s->cct);
+  map<string, bufferlist>::iterator siter = s->bucket_attrs.find(RGW_ATTR_BL);
+  if (siter != s->bucket_attrs.end()) {
     bufferlist::iterator iter(&siter->second);
     try {
-        status.decode(iter);
-      } catch (const buffer::error& e) {
-        ldout(s->cct, 20) << __func__ <<  " decode bucket logging status failed" << dendl;
-        return 0;
-      }
+      status.decode(iter);
+    } catch (const buffer::error& e) {
+      ldout(s->cct, 20) << __func__ <<  " decode bucket logging status failed" << dendl;
+      return 0;
+    }
+  }
 
-    if (!status.is_enabled())
+  // overwrite ops log config
+  // enable ops log when bucket logging is enabled
+  if (!s->enable_ops_log && !status.is_enabled()) {
       return 0;
   }
 
@@ -451,12 +458,22 @@ int rgw_log_op(RGWRados *store, RGWREST* const rest, struct req_state *s,
   else
     localtime_r(&t, &bdt);
 
-  std::string oid = render_log_object_name(s->cct->_conf->rgw_log_object_name, &bdt,
-                                           s->bucket.bucket_id, entry.bucket);
+  std::string oid;
+  if (status.is_enabled()) {
+    std::string rgw_log_obj_name = "%Y-%m-%d-%H-%M-%S-%i-%n-%u";
+    oid = render_log_object_name(rgw_log_obj_name, &bdt,
+                                 s->bucket.bucket_id, entry.bucket);
+  } else {
+    oid = render_log_object_name(s->cct->_conf->rgw_log_object_name, &bdt,
+                                 s->bucket.bucket_id, entry.bucket);
+  }
   ldout(s->cct, 15) << "rgw_log_op get ops log obj oid: " << oid << dendl;
 
   rados::cls::lock::Lock l(oid);
-  utime_t time(3600, 0);               // the default time granularity of ops log is hour, so set the duration of lock to 3600 secs.
+  // the default rgw_usage_log_tick_interval is 30 secs, so for keep
+  // consistent with usage log, we set the default value of
+  // rgw_bl_ops_log_lock_duration to 30 secs.
+  utime_t time(s->cct->_conf->rgw_bl_ops_log_lock_duration, 0);
   l.set_duration(time);
   librados::IoCtx *ctx = store->get_log_pool_ctx();
 
@@ -465,14 +482,16 @@ int rgw_log_op(RGWRados *store, RGWREST* const rest, struct req_state *s,
   if (s->cct->_conf->rgw_ops_log_rados) {
     rgw_raw_obj obj(store->get_zone_params().log_pool, oid);
 
-    ret = l.lock_exclusive(ctx, oid);
-    if (ret < 0 && ret != -EEXIST) {
-      ldout(s->cct, 0) << "rgw_log_op failed to acquire lock " << oid
-                       << " ret: " << ret << dendl;
-      goto done;
-    }
+    if (status.is_enabled()) {
+      ret = l.lock_exclusive(ctx, oid);
+      if (ret < 0 && ret != -EEXIST) {
+        ldout(s->cct, 0) << "rgw_log_op failed to acquire lock " << oid
+                         << " ret: " << ret << dendl;
+        goto done;
+      }
 
-    ldout(s->cct, 10) << "rgw_log_op acquire lock name = " << oid << dendl;
+      ldout(s->cct, 10) << "rgw_log_op acquire lock name = " << oid << dendl;
+    }
 
     ret = store->append_async(obj, bl.length(), bl);
     if (ret == -ENOENT) {
@@ -490,7 +509,9 @@ int rgw_log_op(RGWRados *store, RGWREST* const rest, struct req_state *s,
 done:
   if (ret < 0) {
     ldout(s->cct, 0) << "ERROR: failed to log entry" << dendl;
-    l.unlock(ctx, oid);
+    if (status.is_enabled()) {
+      l.unlock(ctx, oid);
+    }
   }
 
   return ret;
