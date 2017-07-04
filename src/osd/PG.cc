@@ -1677,7 +1677,7 @@ void PG::activate(ObjectStore::Transaction& t,
 	 * behind.
 	 */
 	// backfill
-	osd->clog->info() << info.pgid << " starting backfill to osd." << peer
+	osd->clog->debug() << info.pgid << " starting backfill to osd." << peer
 			 << " from (" << pi.log_tail << "," << pi.last_update
 			  << "] " << pi.last_backfill
 			 << " to " << info.last_update;
