@@ -657,7 +657,10 @@ namespace rgw {
     typedef cohort::lru::TreeX<RGWFileHandle, FhTree, FhLT, FhEQ, fh_key,
 			       std::mutex> FHCache;
 
-    virtual ~RGWFileHandle() {}
+    virtual ~RGWFileHandle();
+
+    friend std::ostream& operator<<(std::ostream &os,
+				    RGWFileHandle const &rgw_fh);
 
     class Factory : public cohort::lru::ObjectFactory
     {
@@ -694,6 +697,22 @@ namespace rgw {
 
   static inline RGWFileHandle* get_rgwfh(struct rgw_file_handle* fh) {
     return static_cast<RGWFileHandle*>(fh->fh_private);
+  }
+
+  static inline enum rgw_fh_type fh_type_of(uint32_t flags) {
+    enum rgw_fh_type fh_type;
+    switch(flags & RGW_LOOKUP_TYPE_FLAGS)
+    {
+    case RGW_LOOKUP_FLAG_DIR:
+      fh_type = RGW_FS_TYPE_DIRECTORY;
+      break;
+    case RGW_LOOKUP_FLAG_FILE:
+      fh_type = RGW_FS_TYPE_FILE;
+      break;
+    default:
+      fh_type = RGW_FS_TYPE_NIL;
+    };
+    return fh_type;
   }
 
   typedef std::tuple<RGWFileHandle*, uint32_t> LookupFHResult;
@@ -820,7 +839,7 @@ namespace rgw {
     void release_evict(RGWFileHandle* fh) {
       /* remove from cache, releases sentinel ref */
       fh_cache.remove(fh->fh.fh_hk.object, fh,
-		      RGWFileHandle::FHCache::FLAG_NONE);
+		      RGWFileHandle::FHCache::FLAG_LOCK);
       /* release call-path ref */
       (void) fh_lru.unref(fh, cohort::lru::FLAG_NONE);
     }
@@ -892,6 +911,11 @@ namespace rgw {
       }
       lat.lock->unlock(); /* !LATCHED */
       get<0>(fhr) = fh;
+      if (fh) {
+	    lsubdout(get_context(), rgw, 17)
+	      << __func__ << " 1 " << *fh
+	      << dendl;
+      }
       return fhr;
     } /* lookup_fh(const fh_key&) */
 
@@ -961,6 +985,10 @@ namespace rgw {
 	  /* inserts, releasing latch */
 	  fh_cache.insert_latched(fh, lat, RGWFileHandle::FHCache::FLAG_UNLOCK);
 	  get<1>(fhr) |= RGWFileHandle::FLAG_CREATE;
+	  /* ref parent (non-initial ref cannot fail on valid object) */
+	  if (! parent->is_root()) {
+	    (void) fh_lru.ref(parent, cohort::lru::FLAG_NONE);
+	  }
 	  goto out; /* !LATCHED */
 	} else {
 	  lat.lock->unlock();
@@ -970,15 +998,24 @@ namespace rgw {
       lat.lock->unlock(); /* !LATCHED */
     out:
       get<0>(fhr) = fh;
+      if (fh) {
+	    lsubdout(get_context(), rgw, 17)
+	      << __func__ << " 2 " << *fh
+	      << dendl;
+      }
       return fhr;
     } /*  lookup_fh(RGWFileHandle*, const char *, const uint32_t) */
 
     inline void unref(RGWFileHandle* fh) {
-      (void) fh_lru.unref(fh, cohort::lru::FLAG_NONE);
+      if (likely(! fh->is_root())) {
+	(void) fh_lru.unref(fh, cohort::lru::FLAG_NONE);
+      }
     }
 
     inline RGWFileHandle* ref(RGWFileHandle* fh) {
-      fh_lru.ref(fh, cohort::lru::FLAG_NONE);
+      if (likely(! fh->is_root())) {
+	fh_lru.ref(fh, cohort::lru::FLAG_NONE);
+      }
       return fh;
     }
 
@@ -991,7 +1028,8 @@ namespace rgw {
 			       const char *path, uint32_t flags);
 
     LookupFHResult stat_leaf(RGWFileHandle* parent, const char *path,
-			     uint32_t flags);
+			     enum rgw_fh_type type = RGW_FS_TYPE_NIL,
+			     uint32_t flags = RGWFileHandle::FLAG_NONE);
 
     int read(RGWFileHandle* rgw_fh, uint64_t offset, size_t length,
 	     size_t* bytes_read, void* buffer, uint32_t flags);
@@ -1169,7 +1207,7 @@ public:
     *offset = off;
     /* update traversal cache */
     rgw_fh->add_marker(off, marker, RGW_FS_TYPE_DIRECTORY);
-    rcb(name.data(), cb_arg, off);
+    rcb(name.data(), cb_arg, off, RGW_LOOKUP_FLAG_DIR);
     return 0;
   }
 
@@ -1259,7 +1297,10 @@ public:
     *offset = off;
     /* update traversal cache */
     rgw_fh->add_marker(off, marker, type);
-    rcb(name.data(), cb_arg, off); // XXX has to be legit C-style string
+    rcb(name.data(), cb_arg, off,
+	(type == RGW_FS_TYPE_DIRECTORY) ?
+	RGW_LOOKUP_FLAG_DIR :
+	RGW_LOOKUP_FLAG_FILE);
     return 0;
   }
 
