@@ -894,6 +894,53 @@ int RGWRealm::notify_new_period(const RGWPeriod& period)
   return notify_zone(bl);
 }
 
+std::string RGWPeriodConfig::get_oid(const std::string& realm_id)
+{
+  if (realm_id.empty()) {
+    return "period_config.default";
+  }
+  return "period_config." + realm_id;
+}
+
+rgw_pool RGWPeriodConfig::get_pool(CephContext *cct)
+{
+  const auto& pool_name = cct->_conf->rgw_period_root_pool;
+  if (pool_name.empty()) {
+    return {RGW_DEFAULT_PERIOD_ROOT_POOL};
+  }
+  return {pool_name};
+}
+
+int RGWPeriodConfig::read(RGWRados *store, const std::string& realm_id)
+{
+  RGWObjectCtx obj_ctx(store);
+  const auto& pool = get_pool(store->ctx());
+  const auto& oid = get_oid(realm_id);
+  bufferlist bl;
+
+  int ret = rgw_get_system_obj(store, obj_ctx, pool, oid, bl, nullptr, nullptr);
+  if (ret < 0) {
+    return ret;
+  }
+  try {
+    bufferlist::iterator iter = bl.begin();
+    ::decode(*this, iter);
+  } catch (buffer::error& err) {
+    return -EIO;
+  }
+  return 0;
+}
+
+int RGWPeriodConfig::write(RGWRados *store, const std::string& realm_id)
+{
+  const auto& pool = get_pool(store->ctx());
+  const auto& oid = get_oid(realm_id);
+  bufferlist bl;
+  ::encode(*this, bl);
+  return rgw_put_system_obj(store, pool, oid, bl.c_str(), bl.length(),
+                            false, nullptr, real_time(), nullptr);
+}
+
 int RGWPeriod::init(CephContext *_cct, RGWRados *_store, const string& period_realm_id,
 		    const string& period_realm_name, bool setup_obj)
 {
@@ -1253,6 +1300,12 @@ int RGWPeriod::update()
     }
   }
 
+  ret = period_config.read(store, realm_id);
+  if (ret < 0 && ret != -ENOENT) {
+    ldout(cct, 0) << "ERROR: failed to read period config: "
+        << cpp_strerror(ret) << dendl;
+    return ret;
+  }
   return 0;
 }
 
@@ -1275,6 +1328,13 @@ int RGWPeriod::reflect()
       }
     }
   }
+
+  int r = period_config.write(store, realm_id);
+  if (r < 0) {
+    ldout(cct, 0) << "ERROR: failed to store period config: "
+        << cpp_strerror(-r) << dendl;
+    return r;
+  }
   return 0;
 }
 
@@ -1285,20 +1345,6 @@ void RGWPeriod::fork()
   id = get_staging_id(realm_id);
   period_map.reset();
   realm_epoch++;
-}
-
-void RGWPeriod::update(const RGWZoneGroupMap& map)
-{
-  ldout(cct, 20) << __func__ << " realm " << realm_id << " period " << id << dendl;
-  for (std::map<string, RGWZoneGroup>::const_iterator iter = map.zonegroups.begin();
-       iter != map.zonegroups.end(); ++iter) {
-    period_map.zonegroups_by_api[iter->second.api_name] = iter->second;
-    period_map.zonegroups[iter->second.get_name()] = iter->second;
-  }
-
-  period_config.bucket_quota = map.bucket_quota;
-  period_config.user_quota = map.user_quota;
-  period_map.master_zonegroup = map.master_zonegroup;
 }
 
 int RGWPeriod::update_sync_status()
@@ -3838,6 +3884,14 @@ int RGWRados::init_complete()
     if (ret < 0) {
       return ret;
     }
+    // read period_config into current_period
+    auto& period_config = current_period.get_config();
+    ret = period_config.read(this, zonegroup.realm_id);
+    if (ret < 0 && ret != -ENOENT) {
+      ldout(cct, 0) << "ERROR: failed to read period config: "
+          << cpp_strerror(ret) << dendl;
+      return ret;
+    }
   }
 
   ldout(cct, 10) << "Cannot find current period zone using local zone" << dendl;
@@ -5257,7 +5311,7 @@ done:
  * create a rados pool, associated meta info
  * returns 0 on success, -ERR# otherwise.
  */
-int RGWRados::create_pool(rgw_bucket& bucket) 
+int RGWRados::create_pool(const rgw_bucket& bucket) 
 {
   int ret = 0;
 

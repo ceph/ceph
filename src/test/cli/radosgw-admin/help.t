@@ -42,6 +42,10 @@
     quota set                  set quota params
     quota enable               enable quota
     quota disable              disable quota
+    global quota get           view global quota params
+    global quota set           set global quota params
+    global quota enable        enable a global quota
+    global quota disable       disable a global quota
     realm create               create a new realm
     realm delete               delete a realm
     realm get                  show realm info
