@@ -3406,9 +3406,11 @@ void RGWRados::finalize()
     delete finisher;
   }
   if (meta_notifier) {
+    meta_notifier->stop();
     delete meta_notifier;
   }
   if (data_notifier) {
+    data_notifier->stop();
     delete data_notifier;
   }
   delete data_log;
