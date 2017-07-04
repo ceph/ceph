@@ -8339,6 +8339,11 @@ int RGWRados::delete_obj(RGWObjectCtx& obj_ctx,
 
 int RGWRados::delete_system_obj(rgw_obj& obj, RGWObjVersionTracker *objv_tracker)
 {
+  if (obj.get_object().empty()) {
+    ldout(cct, 1) << "delete_system_obj got empty object name "
+        << obj << ", returning EINVAL" << dendl;
+    return -EINVAL;
+  }
   rgw_rados_ref ref;
   rgw_bucket bucket;
   int r = get_obj_ref(obj, &ref, &bucket);
