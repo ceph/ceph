@@ -4262,6 +4262,7 @@ ostream& operator<<(ostream& out, const pg_missing_item& i)
   out << i.need;
   if (i.have != eversion_t())
     out << "(" << i.have << ")";
+  out << " flags = " << i.flag_str();
   return out;
 }
 

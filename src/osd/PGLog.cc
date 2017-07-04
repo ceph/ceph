@@ -458,6 +458,7 @@ void PGLog::write_log_and_missing(
       !touched_log,
       require_rollback,
       clear_divergent_priors,
+      &rebuilt_missing_with_deletes,
       (pg_log_debug ? &log_keys_debug : 0));
     undirty();
   } else {
@@ -487,7 +488,8 @@ void PGLog::write_log_and_missing(
     const coll_t& coll,
     const ghobject_t &log_oid,
     const pg_missing_tracker_t &missing,
-    bool require_rollback)
+    bool require_rollback,
+    bool *rebuilt_missing_with_deletes)
 {
   _write_log_and_missing(
     t, km, log, coll, log_oid,
@@ -496,7 +498,7 @@ void PGLog::write_log_and_missing(
     eversion_t(),
     set<eversion_t>(),
     missing,
-    true, require_rollback, false, 0);
+    true, require_rollback, false, rebuilt_missing_with_deletes, 0);
 }
 
 void PGLog::_write_log_and_missing_wo_missing(
@@ -602,6 +604,7 @@ void PGLog::_write_log_and_missing(
   bool touch_log,
   bool require_rollback,
   bool clear_divergent_priors,
+  bool *rebuilt_missing_with_deletes, // in/out param
   set<string> *log_keys_debug
   ) {
   set<string> to_remove;
@@ -664,6 +667,12 @@ void PGLog::_write_log_and_missing(
     //dout(10) << "write_log_and_missing: writing divergent_priors" << dendl;
     to_remove.insert("divergent_priors");
   }
+  // since we encode individual missing items instead of a whole
+  // missing set, we need another key to store this bit of state
+  if (*rebuilt_missing_with_deletes) {
+    (*km)["may_include_deletes_in_missing"] = bufferlist();
+    *rebuilt_missing_with_deletes = false;
+  }
   missing.get_changed(
     [&](const hobject_t &obj) {
       string key = string("missing/") + obj.to_str();
@@ -671,8 +680,8 @@ void PGLog::_write_log_and_missing(
       if (!missing.is_missing(obj, &item)) {
 	to_remove.insert(key);
       } else {
-	::encode(obj, (*km)[key]);
-	item.encode_with_flags((*km)[key]);
+	uint64_t features = missing.may_include_deletes ? CEPH_FEATURE_OSD_RECOVERY_DELETES : 0;
+	::encode(make_pair(obj, item), (*km)[key], features);
       }
     });
   if (require_rollback) {
