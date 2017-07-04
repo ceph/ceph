@@ -101,6 +101,8 @@ public:
 
   void log(const std::string &handle,
            int level, const std::string &record);
+
+  static void list_modules(std::set<std::string> *modules);
 };
 
 #endif

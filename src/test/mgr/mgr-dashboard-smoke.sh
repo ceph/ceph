@@ -25,7 +25,9 @@ function run() {
         FSID=$(uuidgen) 
         export CEPH_ARGS
         CEPH_ARGS+="--fsid=$FSID --auth-supported=none "
-        CEPH_ARGS+="--mon-initial-members=a --mon-host=$MON"
+        CEPH_ARGS+="--mon-initial-members=a --mon-host=$MON "
+        CEPH_ARGS+="--mgr-initial-modules=dashbaord "
+	CEPH_ARGS+="--mon-host=$MON"
         run_mon $dir a --public-addr $MON || return 1
     )
 
@@ -33,7 +35,6 @@ function run() {
     export CEPH_ARGS="--mon_host $MON "
     ceph config-key put mgr/x/dashboard/server_port 7001
     MGR_ARGS+="--mgr_module_path=${CEPH_ROOT}/src/pybind/mgr "
-    MGR_ARGS+="--mgr_modules=dashboard "
     run_mgr $dir x ${MGR_ARGS} || return 1
 
     tries=0

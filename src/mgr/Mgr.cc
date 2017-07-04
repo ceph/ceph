@@ -39,7 +39,8 @@
 #define dout_prefix *_dout << "mgr " << __func__ << " "
 
 
-Mgr::Mgr(MonClient *monc_, Messenger *clientm_, Objecter *objecter_,
+Mgr::Mgr(MonClient *monc_, const MgrMap& mgrmap,
+	 Messenger *clientm_, Objecter *objecter_,
 	 Client* client_, LogChannelRef clog_, LogChannelRef audit_clog_) :
   monc(monc_),
   objecter(objecter_),
@@ -50,7 +51,7 @@ Mgr::Mgr(MonClient *monc_, Messenger *clientm_, Objecter *objecter_,
   finisher(g_ceph_context, "Mgr", "mgr-fin"),
   py_modules(daemon_state, cluster_state, *monc, clog_, *objecter, *client,
              finisher),
-  cluster_state(monc, nullptr),
+  cluster_state(monc, nullptr, mgrmap),
   server(monc, finisher, daemon_state, cluster_state, py_modules,
          clog_, audit_clog_),
   initialized(false),
@@ -567,6 +568,23 @@ void Mgr::handle_fs_map(MFSMap* m)
   daemon_state.cull(CEPH_ENTITY_TYPE_MDS, names_exist);
 }
 
+bool Mgr::got_mgr_map(const MgrMap& m)
+{
+  Mutex::Locker l(lock);
+  dout(10) << m << dendl;
+
+  set<string> old_modules;
+  cluster_state.with_mgrmap([&](const MgrMap& m) {
+      old_modules = m.modules;
+    });
+  if (m.modules != old_modules) {
+    derr << "mgrmap module list changed to (" << m.modules << "), respawn"
+	 << dendl;
+    return true;
+  }
+  cluster_state.set_mgr_map(m);
+  return false;
+}
 
 void Mgr::handle_mgr_digest(MMgrDigest* m)
 {

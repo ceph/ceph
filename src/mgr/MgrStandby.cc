@@ -148,16 +148,20 @@ void MgrStandby::send_beacon()
 {
   assert(lock.is_locked_by_me());
   dout(1) << state_str() << dendl;
-  dout(10) << "sending beacon as gid " << monc.get_global_id() << dendl;
 
+  set<string> modules;
+  PyModules::list_modules(&modules);
   bool available = active_mgr != nullptr && active_mgr->is_initialized();
   auto addr = available ? active_mgr->get_server_addr() : entity_addr_t();
+  dout(10) << "sending beacon as gid " << monc.get_global_id()
+	   << " modules " << modules << dendl;
+
   MMgrBeacon *m = new MMgrBeacon(monc.get_fsid(),
 				 monc.get_global_id(),
                                  g_conf->name.get_id(),
                                  addr,
-                                 available);
-                                 
+                                 available,
+				 modules);
   monc.send_mon_message(m);
 }
 
@@ -282,12 +286,16 @@ void MgrStandby::handle_mgr_map(MMgrMap* mmap)
   if (active_in_map) {
     if (!active_mgr) {
       dout(1) << "Activating!" << dendl;
-      active_mgr.reset(new Mgr(&monc, client_messenger.get(), &objecter,
+      active_mgr.reset(new Mgr(&monc, map, client_messenger.get(), &objecter,
 			       &client, clog, audit_clog));
       active_mgr->background_init();
       dout(1) << "I am now active" << dendl;
     } else {
       dout(10) << "I was already active" << dendl;
+      bool need_respawn = active_mgr->got_mgr_map(map);
+      if (need_respawn) {
+	respawn();
+      }
     }
   } else {
     if (active_mgr != nullptr) {
