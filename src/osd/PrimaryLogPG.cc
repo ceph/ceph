@@ -10661,6 +10661,11 @@ void PrimaryLogPG::on_shutdown()
   // handles queue races
   deleting = true;
 
+  if (recovery_queued) {
+    recovery_queued = false;
+    osd->clear_queued_recovery(this);
+  }
+
   clear_scrub_reserved();
   scrub_clear_state();
 
