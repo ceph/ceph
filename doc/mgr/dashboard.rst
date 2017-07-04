@@ -22,11 +22,9 @@ If the port is not configured, the web app will bind to port ``7000``.
 Setting the IP to ``::`` makes the dashboard bind to all available IPv4 and IPv6
 addresses.
 
-In addition, make sure that the *dashboard* module is enabled in the ceph.conf
-configuration file:
+In addition, make sure that the *dashboard* module is enabled with::
 
-  [mgr]
-  mgr_modules = dashboard
+  ceph mgr module enable dashboard
 
 Please note that the dashboard will *only* start on the manager which is active
 at that moment. Query the Ceph cluster status to see which manager is active.
