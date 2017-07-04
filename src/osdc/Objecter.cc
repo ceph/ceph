@@ -2699,6 +2699,7 @@ int Objecter::_calc_target(op_target_t *t, epoch_t *last_force_resend,
   osdmap->pg_to_up_acting_osds(pgid, &up, &up_primary,
 			       &acting, &acting_primary);
   bool sort_bitwise = osdmap->test_flag(CEPH_OSDMAP_SORTBITWISE);
+  bool recovery_deletes = osdmap->test_flag(CEPH_OSDMAP_RECOVERY_DELETES);
   unsigned prev_seed = ceph_stable_mod(pgid.ps(), t->pg_num, t->pg_num_mask);
   if (any_change && pg_interval_t::is_new_interval(
 	t->acting_primary,
@@ -2717,6 +2718,8 @@ int Objecter::_calc_target(op_target_t *t, epoch_t *last_force_resend,
 	pg_num,
 	t->sort_bitwise,
 	sort_bitwise,
+	t->recovery_deletes,
+	recovery_deletes,
 	pg_t(prev_seed, pgid.pool(), pgid.preferred()))) {
     force_resend = true;
   }
@@ -2744,6 +2747,7 @@ int Objecter::_calc_target(op_target_t *t, epoch_t *last_force_resend,
     t->pg_num = pg_num;
     t->pg_num_mask = pi->get_pg_num_mask();
     t->sort_bitwise = sort_bitwise;
+    t->recovery_deletes = recovery_deletes;
     ldout(cct, 10) << __func__ << " "
 		   << " pgid " << pgid << " acting " << acting << dendl;
     t->used_replica = false;

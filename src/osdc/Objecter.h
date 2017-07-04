@@ -1208,6 +1208,7 @@ public:
     int size; ///< the size of the pool when were were last mapped
     int min_size; ///< the min size of the pool when were were last mapped
     bool sort_bitwise; ///< whether the hobject_t sort order is bitwise
+    bool recovery_deletes = false; ///< whether the deletes are performed during recovery instead of peering
 
     bool used_replica;
     bool paused;
