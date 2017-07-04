@@ -1306,10 +1306,13 @@ bool Locker::rdlock_start(SimpleLock *lock, MDRequestRef& mut, bool as_anon)
       // okay, we actually need to kick the head's lock to get ourselves synced up.
       CInode *head = mdcache->get_inode(in->ino());
       assert(head);
-      SimpleLock *hlock = head->get_lock(lock->get_type());
+      SimpleLock *hlock = head->get_lock(CEPH_LOCK_IFILE);
+      if (hlock->get_state() == LOCK_SYNC)
+	hlock = head->get_lock(lock->get_type());
+
       if (hlock->get_state() != LOCK_SYNC) {
 	dout(10) << "rdlock_start trying head inode " << *head << dendl;
-	if (!rdlock_start(head->get_lock(lock->get_type()), mut, true)) // ** as_anon, no rdlock on EXCL **
+	if (!rdlock_start(hlock, mut, true)) // ** as_anon, no rdlock on EXCL **
 	  return false;
 	// oh, check our lock again then
       }
