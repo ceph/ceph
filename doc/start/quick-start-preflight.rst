@@ -125,7 +125,7 @@ When ceph-deploy logs in to a Ceph node as a user, that particular
 user must have passwordless ``sudo`` privileges.
 
 
-Install NTP
+Install Ceph
 -----------
 
 On CentOS / RHEL, execute::
