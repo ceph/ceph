@@ -101,6 +101,7 @@ set(rgw_a_srcs
   rgw_rest_client.cc
   rgw_rest_config.cc
   rgw_rest_conn.cc
+  rgw_rest_group.cc
   rgw_rest_log.cc
   rgw_rest_metadata.cc
   rgw_rest_opstate.cc

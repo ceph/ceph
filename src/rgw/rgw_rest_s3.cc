@@ -38,6 +38,7 @@
 #include "rgw_ldap.h"
 #include "rgw_token.h"
 #include "rgw_rest_role.h"
+#include "rgw_rest_group.h"
 #include "rgw_crypt.h"
 #include "rgw_crypt_sanitize.h"
 
@@ -2945,6 +2946,22 @@ RGWOp *RGWHandler_REST_Service_S3::op_post()
       return new RGWListRolePolicies;
     if (action.compare("DeleteRolePolicy") == 0)
       return new RGWDeleteRolePolicy;
+    if (action.compare("CreateGroup") == 0)
+      return new RGWCreateGroup;
+    if (action.compare("AddUserToGroup") == 0)
+      return new RGWAddUserToGroup;
+    if (action.compare("GetGroup") == 0)
+      return new RGWGetGroup;
+    if (action.compare("RemoveUserFromGroup") == 0)
+      return new RGWRemoveUserFromGroup;
+    if (action.compare("UpdateGroup") == 0)
+      return new RGWUpdateGroup;
+    if (action.compare("ListGroups") == 0)
+      return new RGWListGroups;
+    if (action.compare("ListGroupsForUser") == 0)
+      return new RGWListGroupsForUser;
+    if (action.compare("DeleteGroup") == 0)
+      return new RGWDeleteGroup;
   }
   return NULL;
 }

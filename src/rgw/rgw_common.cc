@@ -94,6 +94,8 @@ rgw_http_errors rgw_http_s3_errors({
     { ERR_NO_SUCH_USER, {404, "NoSuchUser"}},
     { ERR_NO_ROLE_FOUND, {404, "NoSuchEntity"}},
     { ERR_NO_SUCH_SUBUSER, {404, "NoSuchSubUser"}},
+    { ERR_NO_USER_FOUND, {404, "NoSuchEntity"}},
+    { ERR_NO_GROUP_FOUND, {404, "NoSuchEntity"}},
     { ERR_METHOD_NOT_ALLOWED, {405, "MethodNotAllowed" }},
     { ETIMEDOUT, {408, "RequestTimeout" }},
     { EEXIST, {409, "BucketAlreadyExists" }},
@@ -103,6 +105,8 @@ rgw_http_errors rgw_http_s3_errors({
     { ERR_TAG_CONFLICT, {409, "OperationAborted"}},
     { ERR_ROLE_EXISTS, {409, "EntityAlreadyExists"}},
     { ERR_DELETE_CONFLICT, {409, "DeleteConflict"}},
+    { ERR_GROUP_EXISTS, {409, "EntityAlreadyExists"}},
+    { ERR_GROUP_NOT_EMPTY, {409, "DeleteConflict"}},
     { ERR_INVALID_SECRET_KEY, {400, "InvalidSecretKey"}},
     { ERR_INVALID_KEY_TYPE, {400, "InvalidKeyType"}},
     { ERR_INVALID_CAP, {400, "InvalidCapability"}},
@@ -1738,7 +1742,8 @@ bool RGWUserCaps::is_valid_cap_type(const string& tp)
                                     "bilog",
                                     "mdlog",
                                     "datalog",
-                                    "opstate" };
+                                    "opstate",
+                                    "groups"};
 
   for (unsigned int i = 0; i < sizeof(cap_type) / sizeof(char *); ++i) {
     if (tp.compare(cap_type[i]) == 0) {
