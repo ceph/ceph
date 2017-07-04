@@ -15,6 +15,7 @@
 #include <chrono>
 #include <thread>
 #include <mutex>
+#include <list>
 #include <vector>
 #include <deque>
 #include <algorithm>
@@ -25,6 +26,7 @@
 #include <boost/variant.hpp>
 #include <boost/utility/string_ref.hpp>
 #include <boost/optional.hpp>
+#include <boost/functional/hash.hpp>
 #include "xxhash.h"
 #include "include/buffer.h"
 #include "common/cohort_lru.h"
@@ -175,6 +177,243 @@ namespace rgw {
 
   typedef std::tuple<bool, bool> DecodeAttrsResult;
 
+  struct owner_key {
+    uint64_t client;
+    uint64_t owner;
+    uint64_t pid;
+
+    owner_key(uint64_t c, uint64_t o, uint64_t p)
+      : client(c), owner(o), pid(p) {}
+
+    friend inline int owner_key_cmp(const owner_key& l,
+                                    const owner_key& r) {
+      if (l.client != r.client)
+        return l.client > r.client ? 1 : -1;
+      if (l.owner != r.owner)
+        return l.owner > r.owner ? 1 : -1;
+      if (l.owner & (1ULL << 63))
+        return 0;
+      if (l.pid != r.pid)
+        return l.pid > r.pid ? 1 : -1;
+      return 0;
+    }
+
+    friend inline bool operator==(const owner_key& l, const owner_key& r) {
+      return owner_key_cmp(l, r) == 0;
+    }
+  };
+
+  struct owner_key_hasher {
+    size_t operator()(const owner_key& k) const
+    {
+      using boost::hash_value;
+      using boost::hash_combine;
+
+      size_t seed = 0;
+
+      hash_combine(seed, hash_value(k.client));
+      hash_combine(seed, hash_value(k.owner));
+      hash_combine(seed, hash_value(k.pid));
+
+      return seed;
+    }
+  };
+
+  struct flock_owner_vertex;
+  struct flock_owner {
+    owner_key key;
+    uint64_t refs;
+    flock_owner_vertex *vertex;
+
+    flock_owner() : key(0, 0, 0), refs(1), vertex(nullptr) {}
+    flock_owner(uint64_t c, uint64_t o, uint64_t p)
+      : key(c, o, p), refs(1), vertex(nullptr) {}
+    flock_owner(owner_key &k) : key(k), refs(1), vertex(nullptr) {}
+
+    friend inline int flock_owner_cmp(const flock_owner& l,
+                                      const flock_owner& r) {
+      return owner_key_cmp(l.key, r.key);
+    }
+
+    friend inline ostream& operator<<(ostream& out, const flock_owner& o) {
+      out << "[ client: " << o.key.client << ", owner: " << o.key.owner
+          << " pid:" << o.key.pid << " ]"
+          << std::endl;
+      return out;
+    }
+
+    friend inline bool operator==(const flock_owner& l,
+                                  const flock_owner& r) {
+      return flock_owner_cmp(l, r) == 0;
+    }
+  };
+
+  struct flock_vertex;
+  struct flock {
+
+    static constexpr uint32_t TYPE_SHARED =	0x0001;
+    static constexpr uint32_t TYPE_EXCL   =	0x0002;
+    static constexpr uint32_t TYPE_UNLOCK =	0x0003;
+
+    uint64_t start;
+    uint64_t end;
+    uint32_t type;
+    flock_owner &owner;
+    flock_vertex *vertex;
+    bool blocked;
+
+    flock(uint64_t _start, uint64_t _len, uint32_t _type, flock_owner &_owner)
+      : start(_start), end(_start + _len - 1), owner(_owner), vertex(nullptr),
+      blocked(false) {
+      switch (_type) {
+      case RGW_FS_TYPE_FL_RDLOCK:
+        type = TYPE_SHARED;
+        break;
+      case RGW_FS_TYPE_FL_WRLOCK:
+        type = TYPE_EXCL;
+        break;
+      default:
+        type = TYPE_UNLOCK;
+        break;
+      }
+    }
+
+    void convert_flock(struct rgw_flock *fl) {
+      fl->offset = start;
+      fl->length = end - start + 1;
+      fl->client = owner.key.client;
+      fl->owner = owner.key.owner;
+      fl->pid = owner.key.pid;
+      switch (type) {
+      case TYPE_EXCL:
+        fl->type = RGW_FS_TYPE_FL_WRLOCK;
+	break;
+      case TYPE_SHARED:
+        fl->type = RGW_FS_TYPE_FL_RDLOCK;
+	break;
+      default:
+        fl->type = RGW_FS_TYPE_FL_UNLOCK;
+	break;
+      }
+    }
+
+    flock& operator=(const flock& lk) {
+      start = lk.start;
+      end = lk.end;
+      type = lk.type;
+      owner = lk.owner;
+      vertex = lk.vertex;
+      blocked = lk.blocked;
+      return *this;
+    }
+
+    friend inline ostream& operator<<(ostream& out, const flock& l) {
+      out << "{ start: " << l.start << ", end: " << l.end
+          << ", type: " << (int)l.type << ", owner: " << l.owner << " }"
+          << std::endl;
+      return out;
+    }
+
+    friend inline int flock_cmp(const flock& l, const flock& r)
+    {
+      int ret = flock_owner_cmp(l.owner, r.owner);
+      if (ret)
+        return ret;
+      if (l.start != r.start)
+        return l.start > r.start ? 1 : -1;
+      if (l.end != r.end)
+        return l.end > r.end ? 1 : -1;
+      if (l.type != r.type)
+        return l.type > r.type ? 1 : -1;
+      return 0;
+    }
+
+    friend inline bool operator<(const flock& l, const flock& r)
+    {
+      return flock_cmp(l, r) < 0;
+    }
+
+    friend inline bool operator==(const flock& l, const flock& r) {
+      return flock_cmp(l, r) == 0;
+    }
+
+    friend inline bool operator!=(const flock& l, const flock& r) {
+      return flock_cmp(l, r) != 0;
+    }
+  };
+
+  inline bool overlap_within(const flock &l, const flock &r) {
+    return (l.start >= r.start) && (l.end <= r.end);
+  }
+
+  inline bool overlap_covers(const flock &l, const flock &r) {
+    return (l.start < r.start) && (l.end > r.end);
+  }
+
+  inline bool overlap_at_tail(const flock &l, const flock &r) {
+    return (l.start > r.start) && (l.end > r.end);
+  }
+
+  inline bool overlap_at_head(const flock &l, const flock &r) {
+    return (l.start < r.start) && (l.end < r.end);
+  }
+
+  inline bool flock_overlap(const flock &l, const flock &r) {
+    return !((l.end < r.start) || (l.start > r.end));
+  }
+
+  inline bool flock_block(const flock &l, const flock &r) {
+    return !(l.owner == r.owner) &&
+           flock_overlap(l, r) &&
+           (l.type == flock::TYPE_EXCL || r.type == flock::TYPE_EXCL);
+  }
+
+  struct flock_edge;
+  struct flock_vertex {
+    std::list<flock_edge*> outedges;
+    std::list<flock_edge*> inedges;
+    flock &lock;
+
+    flock_vertex(flock &_lock) : lock(_lock) {}
+  };
+
+  struct flock_edge {
+    flock_vertex *from;
+    flock_vertex *to;
+
+    flock_edge(flock_vertex *_fr, flock_vertex *_to)
+      : from(_fr), to(_to) {};
+  };
+
+  struct flock_owner_edge;
+  struct flock_owner_vertex {
+    std::list<flock_owner_edge*> outedges;
+    std::list<flock_owner_edge*> inedges;
+    flock_owner &owner;
+    uint32_t order;
+    uint32_t gen;
+
+    flock_owner_vertex(flock_owner &_owner, uint32_t _order, uint32_t _gen)
+      : owner(_owner), order(_order), gen(_gen) {};
+  };
+
+  struct flock_owner_edge {
+    flock_owner_vertex *from;
+    flock_owner_vertex *to;
+    int refs;
+
+    flock_owner_edge(flock_owner_vertex *f, flock_owner_vertex *t)
+      : from(f), to(t), refs(1) {};
+  };
+
+  struct flock_owner_graph {
+    std::vector<flock_owner_vertex*> vertices;
+    uint32_t gen;
+    uint32_t next_order;
+
+    flock_owner_graph() : gen(0), next_order(0) {};
+  };
+
   class RGWFileHandle : public cohort::lru::Object
   {
     struct rgw_file_handle fh;
@@ -228,6 +467,300 @@ namespace rgw {
       directory() : flags(FLAG_NONE), last_readdir{0,0} {}
     };
 
+    struct flock_state {
+      RGWFileHandle &rgw_fh;
+      std::multimap<uint64_t, flock> active_flocks;
+      std::multimap<uint64_t, flock> pending_flocks;
+      std::condition_variable blocked_cond;     // blocked flockes wait on this
+      std::mutex state_mtx;
+
+      using flock_iterator = std::multimap<uint64_t, flock>::iterator;
+
+      flock_state(RGWFileHandle &_fh) : rgw_fh(_fh) {}
+
+      flock_iterator no_flock() {
+        return active_flocks.end();
+      }
+
+      flock_iterator no_pending_flock() {
+        return pending_flocks.end();
+      }
+
+      flock_iterator find_last_overlap(flock &target, bool self) {
+        auto last = active_flocks.upper_bound(target.end);
+        if (last == active_flocks.begin()) {
+          return no_flock();
+        }
+        auto curr = --last;
+        while (self && !(curr->second.owner == target.owner)) {
+          if (curr == active_flocks.begin()) {
+            return no_flock();
+          }
+          curr--;
+        }
+        return curr;
+      }
+
+      flock_iterator find_first_overlap(flock &target, bool self) {
+        auto last = find_last_overlap(target, self);
+        if (last == no_flock()) {
+          return no_flock();
+        }
+        auto curr = last;
+        auto first = no_flock();
+        while (flock_overlap(curr->second, target)) {
+          if (self) {
+            if (curr->second.owner == target.owner) {
+              first = curr;
+            }
+          } else {
+            first = curr;
+          }
+          if (curr == active_flocks.begin()) {
+            break;
+          }
+          curr--;
+        }
+        return first;
+      }
+
+      flock_iterator find_last_block(flock &target) {
+        auto last = active_flocks.upper_bound(target.end);
+        if (last == active_flocks.begin()) {
+          return no_flock();
+        }
+        auto curr = --last;
+        while (flock_overlap(curr->second, target)) {
+          if (flock_block(curr->second, target)) {
+            return curr;
+          }
+          if (curr == active_flocks.begin()) {
+            break;
+          }
+          curr--;
+        }
+        return no_flock();
+      }
+
+      flock_iterator find_first_block(flock &target) {
+        auto last = find_last_block(target);
+        if (last == no_flock()) {
+          return no_flock();
+        }
+        auto curr = last;
+        auto first = no_flock();
+        while (flock_overlap(curr->second, target)) {
+          if (!flock_block(curr->second, target)) {
+            continue;
+          }
+          first = curr;
+          if (curr == active_flocks.begin()) {
+            break;
+          }
+          curr--;
+        }
+        return first;
+      }
+
+      flock_iterator find_last_pending_overlap(flock &target, bool self) {
+        auto last = pending_flocks.upper_bound(target.end);
+        if (last == pending_flocks.begin()) {
+          return no_pending_flock();
+        }
+        auto curr = --last;
+        while (self && !(curr->second.owner == target.owner)) {
+          if (curr == pending_flocks.begin()) {
+            return curr;
+          }
+          curr--;
+        }
+        return no_pending_flock();
+      }
+
+      flock_iterator find_last_pending_block(flock &target) {
+        auto last = pending_flocks.upper_bound(target.end);
+        if (last == pending_flocks.begin()) {
+          return no_pending_flock();
+        }
+        auto curr = --last;
+        while (flock_overlap(curr->second, target)) {
+          if (flock_block(curr->second, target)) {
+            return curr;
+          }
+          if (curr == pending_flocks.begin()) {
+            break;
+          }
+          curr--;
+        }
+        return no_pending_flock();
+      }
+
+      int add_edge(flock &fr, flock &to);
+
+      void del_edge(flock &fr, flock &to);
+
+      void check_for_grants(flock &target, bool all, std::list<flock> &grants,
+                            unique_lock &guard);
+
+      void purge_inedges(flock &target) {
+        for (auto &e : target.vertex->inedges) {
+          del_edge(e->from->lock, e->to->lock);
+        }
+      }
+
+      void purge_outedges(flock &target) {
+        for (auto &e : target.vertex->outedges) {
+          del_edge(e->from->lock, e->to->lock);
+        }
+      }
+
+      int add_outedges_for_pendings(flock &target) {
+        auto curr = find_last_pending_block(target);
+        while (curr != no_pending_flock() && flock_overlap(curr->second, target)) {
+          if (flock_block(curr->second, target)) {
+            int ret = add_edge(curr->second, target);
+            if (ret) {
+              purge_inedges(target);
+              return ret;
+            }
+          }
+          if (curr == pending_flocks.begin()) {
+            break;
+          }
+          curr--;
+        }
+        return 0;
+      }
+
+      int add_inedges_for_all(flock &target) {
+        auto curr = find_last_block(target);
+        while (curr != no_flock() && flock_overlap(curr->second, target)) {
+          if (flock_block(curr->second, target)) {
+            int ret = add_edge(target, curr->second);
+            if (ret) {
+              purge_outedges(target);
+              return ret;
+            }
+          }
+          if (curr == active_flocks.begin()) {
+            break;
+          }
+          curr--;
+        }
+
+        auto curr2 = find_last_pending_block(target);
+        while (curr2 != no_pending_flock() && flock_overlap(curr2->second, target)) {
+          if (flock_block(curr2->second, target)) {
+            int ret = add_edge(target, curr2->second);
+            if (ret) {
+              purge_outedges(target);
+              return ret;
+            }
+          }
+          if (curr2 == pending_flocks.begin()) {
+            break;
+          }
+          curr2--;
+        }
+        return 0;
+      }
+
+      flock_iterator set_start(flock_iterator &overlap, uint64_t start,
+                               std::list<flock> &grants, unique_lock &guard) {
+        flock &lk = overlap->second;
+        lk.start = start;
+
+        check_for_grants(lk, false, grants, guard);
+        active_flocks.emplace(start, lk);
+        overlap = active_flocks.erase(overlap);
+        return overlap;
+      }
+
+      flock_iterator set_end(flock_iterator &overlap, uint64_t end,
+                             std::list<flock> &grants, unique_lock &guard) {
+        overlap->second.end = end;
+        check_for_grants(overlap->second, false, grants, guard);
+        return overlap;
+      }
+
+      flock_iterator split(flock_iterator &overlap, flock &target,
+                           std::list<flock> &grants, unique_lock &guard) {
+        flock lk = overlap->second;
+        lk.vertex = nullptr;
+        lk.start = target.end + 1;
+        add_outedges_for_pendings(lk);
+
+        overlap = set_end(overlap, target.start - 1, grants, guard);
+
+        active_flocks.emplace(lk.start, lk);
+        return overlap;
+      }
+
+      int activate(flock &target, unique_lock &guard) {
+        std::list<flock> grants;
+        grants.emplace_back(target);
+
+        while (!grants.empty()) {
+          auto iter = grants.begin();
+          auto curr = find_last_overlap(*iter, true);
+          while (flock_overlap(curr->second, *iter) &&
+                 curr->second.owner == target.owner) {
+            if (overlap_within(curr->second, *iter)) {
+              check_for_grants(curr->second, true, grants, guard);
+              curr = active_flocks.erase(curr);
+            } else if (overlap_covers(curr->second, *iter)) {
+              curr = split(curr, *iter, grants, guard);
+            } else if (overlap_at_tail(curr->second, *iter)) {
+              curr = set_start(curr, target.end + 1, grants, guard);
+            } else if (overlap_at_head(curr->second, *iter)) {
+              curr = set_end(curr, iter->start - 1, grants, guard);
+            } else {
+              /* no overlap, never here */
+              break;
+            }
+            if (curr == active_flocks.begin()) {
+              break;
+            }
+            curr--;
+          }
+          if (iter->type != flock::TYPE_UNLOCK) {
+            active_flocks.emplace(iter->start, *iter);
+          }
+          grants.erase(iter);
+        }
+        return 0;
+      }
+
+      void wait_on_pending(unique_lock &guard, flock &target) {
+        pending_flocks.emplace(target.start, target);
+        pending_sleep(guard, target);
+      }
+
+      void pending_sleep(unique_lock &guard, flock &target) {
+        target.blocked = true;
+        blocked_cond.wait(guard, [&] { return !target.blocked; });
+      }
+
+      void pending_wakeup(unique_lock &guard, flock &target) {
+        target.blocked = false;
+        auto iter = pending_flocks.begin();
+        while (iter != no_pending_flock()) {
+          if (iter->second == target) {
+            pending_flocks.erase(iter);
+            break;
+          }
+          iter++;
+        }
+        guard.unlock();
+        blocked_cond.notify_all();
+      }
+
+      void clear_all() {
+        active_flocks.clear();
+        pending_flocks.clear();
+      }
+    } flock_state;
+
     void clear_state();
 
     boost::variant<file, directory> variant_type;
@@ -262,8 +795,8 @@ namespace rgw {
 
   private:
     RGWFileHandle(RGWLibFS* _fs)
-      : fs(_fs), bucket(nullptr), parent(nullptr), variant_type{directory()},
-	depth(0), flags(FLAG_NONE)
+      : fs(_fs), bucket(nullptr), parent(nullptr), flock_state(*this),
+        variant_type{directory()}, depth(0), flags(FLAG_NONE)
       {
 	/* root */
 	fh.fh_type = RGW_FS_TYPE_DIRECTORY;
@@ -302,7 +835,7 @@ namespace rgw {
     RGWFileHandle(RGWLibFS* _fs, RGWFileHandle* _parent,
 		  const fh_key& _fhk, std::string& _name, uint32_t _flags)
       : fs(_fs), bucket(nullptr), parent(_parent), name(std::move(_name)),
-	fhk(_fhk), flags(_flags) {
+      fhk(_fhk), flock_state(*this), flags(_flags) {
 
       if (parent->is_root()) {
 	fh.fh_type = RGW_FS_TYPE_DIRECTORY;
@@ -741,6 +1274,18 @@ namespace rgw {
       }
     }; /* Factory */
 
+    int setlk(struct rgw_flock *fl, uint32_t flags);
+
+    int getlk(struct rgw_flock *fl, uint32_t flags);
+
+    int insert_flock(flock &target, uint32_t flags);
+
+    int remove_flock(flock &target, uint32_t flags);
+
+    int remove_pending_flock(flock &target, uint32_t flags);
+
+    int find_flock(flock &target, uint32_t flags);
+
   }; /* RGWFileHandle */
 
   WRITE_CLASS_ENCODER(RGWFileHandle);
@@ -781,6 +1326,13 @@ namespace rgw {
 
     RGWFileHandle::FHCache fh_cache;
     RGWFileHandle::FhLRU fh_lru;
+
+    std::mutex owner_graph_mtx;
+    flock_owner_graph owner_graph;
+    std::mutex owner_cache_mtx;
+    std::unordered_multimap<owner_key,
+                            flock_owner,
+                            owner_key_hasher> owner_cache;
     
     std::string uid; // should match user.user_id, iiuc
 
@@ -1099,6 +1651,225 @@ namespace rgw {
 	fh_lru.ref(fh, cohort::lru::FLAG_NONE);
       }
       return fh;
+    }
+
+    flock_owner_vertex *ograph_insert_vertex(flock_owner *o) {
+      lock_guard guard(owner_graph_mtx);
+
+      if (o->vertex) {
+        return o->vertex;
+      }
+
+      flock_owner_vertex *v = new flock_owner_vertex(*o, owner_graph.next_order,
+                                                     owner_graph.gen);
+      owner_graph.vertices.emplace_back(v);
+      owner_graph.next_order++;
+      o->vertex = v;
+      return v;
+    }
+
+    void ograph_remove_vertex(flock_owner_vertex *v) {
+      lock_guard guard(owner_graph_mtx);
+
+      assert(v->outedges.empty());
+      assert(v->inedges.empty());
+
+      bool deleted = false;
+      auto iter = std::begin(owner_graph.vertices);
+      while (iter != std::end(owner_graph.vertices)) {
+        if ((*iter)->owner == v->owner) {
+          iter = owner_graph.vertices.erase(iter);
+          owner_graph.next_order--;
+          deleted = true;
+          v->owner.vertex = nullptr;
+          delete v;
+        } else {
+          if (deleted) {
+            (*iter)->order--;
+          }
+          iter++;
+        }
+      }
+    }
+
+    int ograph_find_forwards(flock_owner_vertex *fr, flock_owner_vertex *to,
+                             std::list<flock_owner_vertex *> &to_forwards,
+                             std::vector<uint32_t> &orders) {
+      int count = 1;
+      to_forwards.emplace_back(to);
+      auto iter = std::begin(to_forwards);
+      while (iter != std::end(to_forwards)) {
+        for (auto &e : to->outedges) {
+          if (e->to->order < fr->order &&
+              e->to->gen != owner_graph.gen) {
+            to_forwards.emplace_back(e->to);
+            orders.emplace_back(e->to->order);
+            count++;
+          }
+        }
+        iter++;
+      }
+      return count;
+    }
+
+    int ograph_find_backwards(flock_owner_vertex *fr, flock_owner_vertex *to,
+                              std::list<flock_owner_vertex *> &fr_backwards,
+                              std::vector<uint32_t> &orders) {
+      int count = 1;
+      fr_backwards.emplace_back(fr);
+      auto iter = std::begin(fr_backwards);
+      while (iter != std::end(fr_backwards)) {
+        for (auto &e : fr->inedges) {
+          if (e->from->order > to->order &&
+              e->from->gen != owner_graph.gen) {
+            fr_backwards.emplace_back(e->from);
+            orders.emplace_back(e->from->order);
+            count++;
+          }
+        }
+        iter++;
+      }
+      return count;
+    }
+
+    void ograph_reorder(std::list<flock_owner_vertex *> to_forwards,
+                        std::list<flock_owner_vertex *> fr_backwards,
+                        std::vector<uint32_t> orders) {
+
+      int i = 0;
+      for (auto &v : fr_backwards) {
+        v->order = orders[i++];;
+        owner_graph.vertices[v->order] = v;
+      }
+      for (auto &v : to_forwards) {
+        v->order = orders[i++];;
+        owner_graph.vertices[v->order] = v;
+      }
+    }
+
+    int ograph_add_edge(flock_owner_vertex *fr,
+                        flock_owner_vertex *to) {
+      lock_guard guard(owner_graph_mtx);
+
+      for (auto &e : fr->outedges) {
+        if (e->to == to) {
+          e->refs++;
+          return 0;
+        }
+      }
+
+      /* reorder so 'fr' sits before 'to' in graph */
+      if (fr->order > to->order) {
+        std::list<flock_owner_vertex *> to_forwards;    /* reachable from 'to' */
+        std::list<flock_owner_vertex *> fr_backwards;   /* reaches 'fr' */
+        std::vector<uint32_t> orders;   /* for reordering */
+
+        owner_graph.gen++;
+        /* wrap */
+        if (owner_graph.gen == 0) {
+          for (auto &v : owner_graph.vertices) {
+            v->gen = 0;
+          }
+          owner_graph.gen++;
+        }
+
+        /* those after 'to' */
+        int forwardN = ograph_find_forwards(fr, to, to_forwards, orders);
+        if (forwardN < 0) {
+          return -EDEADLK;
+        }
+        /* those before 'fr' */
+        ograph_find_backwards(fr, to, fr_backwards, orders);
+
+        auto comp = [](flock_owner_vertex *a, flock_owner_vertex *b)
+                      { return a->order < b->order; };
+        std::sort(orders.begin(), orders.end());
+        to_forwards.sort(comp);
+        fr_backwards.sort(comp);
+
+        ograph_reorder(to_forwards, fr_backwards, orders);
+      }
+
+      flock_owner_edge *e = new flock_owner_edge(fr, to);
+      fr->outedges.emplace_back(e);
+      to->inedges.emplace_back(e);
+
+      return 0;
+    }
+
+    void ograph_del_edge(flock_owner_vertex *fr,
+                         flock_owner_vertex *to) {
+      lock_guard guard(owner_graph_mtx);
+
+      auto iter = std::begin(fr->outedges);
+      while (iter != std::end(fr->outedges)) {
+        if ((*iter)->to == to) {
+          (*iter)->refs--;
+          if ((*iter)->refs == 0) {
+            iter = fr->outedges.erase(iter);
+            auto iter2 = std::begin(to->inedges);
+            while (iter2 != std::end(to->inedges)) {
+              if ((*iter2)->from == fr) {
+                iter2 = to->inedges.erase(iter2);
+                break;
+              }
+              iter2++;
+            }
+          }
+          break;
+        }
+        iter++;
+      }
+    }
+
+    bool ograph_reaches(flock_owner_vertex *fr,
+                        flock_owner_vertex *to) {
+      lock_guard guard(owner_graph_mtx);
+
+      if (fr == to) {
+        return true;
+      }
+
+      for (auto &e : fr->outedges) {
+        if (ograph_reaches(e->to, to)) {
+          return true;
+        }
+      }
+      return false;
+    }
+
+    void ograph_display() {
+      lock_guard guard(owner_graph_mtx);
+
+      lsubdout(cct, rgw, 17) << "[" << dendl;
+      for (auto &v : owner_graph.vertices)
+        lsubdout(cct, rgw, 17) << v->owner << "; " << dendl;
+      lsubdout(cct, rgw, 17) << "]" << dendl;
+    }
+
+    flock_owner &lookup_owner(uint64_t client, uint64_t owner, uint64_t pid) {
+      lock_guard guard(owner_cache_mtx);
+      owner_key key(client, owner, pid);
+
+      auto owners = owner_cache.equal_range(key);
+      for (auto o = owners.first; o != owners.second; o++) {
+        if (o->first == key) {
+          return o->second;
+        }
+      }
+      auto new_owner = owner_cache.emplace(key, key);
+      return new_owner->second;
+    }
+
+    void remove_owner(flock_owner &owner) {
+      lock_guard guard(owner_cache_mtx);
+
+      auto owners = owner_cache.equal_range(owner.key);
+      for (auto o = owners.first; o != owners.second; o++) {
+        if (o->first == owner.key) {
+          owner_cache.erase(o);
+        }
+      }
     }
 
     int getattr(RGWFileHandle* rgw_fh, struct stat* st);

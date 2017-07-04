@@ -73,15 +73,31 @@ struct rgw_fs
 struct rgw_statvfs {
     uint64_t  f_bsize;    /* file system block size */
     uint64_t  f_frsize;   /* fragment size */
-    uint64_t     f_blocks;   /* size of fs in f_frsize units */
-    uint64_t     f_bfree;    /* # free blocks */
-    uint64_t     f_bavail;   /* # free blocks for unprivileged users */
-    uint64_t     f_files;    /* # inodes */
-    uint64_t     f_ffree;    /* # free inodes */
-    uint64_t     f_favail;   /* # free inodes for unprivileged users */
-    uint64_t     f_fsid[2];     /* file system ID */
-    uint64_t     f_flag;     /* mount flags */
-    uint64_t     f_namemax;  /* maximum filename length */
+    uint64_t  f_blocks;   /* size of fs in f_frsize units */
+    uint64_t  f_bfree;    /* # free blocks */
+    uint64_t  f_bavail;   /* # free blocks for unprivileged users */
+    uint64_t  f_files;    /* # inodes */
+    uint64_t  f_ffree;    /* # free inodes */
+    uint64_t  f_favail;   /* # free inodes for unprivileged users */
+    uint64_t  f_fsid[2];     /* file system ID */
+    uint64_t  f_flag;     /* mount flags */
+    uint64_t  f_namemax;  /* maximum filename length */
+};
+
+enum rgw_fl_type {
+  RGW_FS_TYPE_FL_RDLOCK = 0,
+  RGW_FS_TYPE_FL_WRLOCK,
+  RGW_FS_TYPE_FL_UNLOCK,
+  RGW_FS_TYPE_FL_CANCEL,
+};
+
+struct rgw_flock {
+    uint64_t offset;
+    uint64_t length;
+    uint64_t client;
+    uint64_t owner;
+    uint64_t pid;
+    enum rgw_fl_type type;
 };
 
 
@@ -348,6 +364,20 @@ int rgw_fsync(struct rgw_fs *rgw_fs, struct rgw_file_handle *fh,
 
 int rgw_commit(struct rgw_fs *rgw_fs, struct rgw_file_handle *fh,
 	       uint64_t offset, uint64_t length, uint32_t flags);
+
+
+/*
+   NFS lock operation
+*/
+
+#define RGW_LOCK_FLAG_NONE          0x0000
+#define RGW_LOCK_FLAG_NONBLOCK      0x0001
+
+int rgw_setlk(struct rgw_fs *rgw_fs, struct rgw_file_handle *fh,
+              struct rgw_flock *fl, uint32_t flags);
+
+int rgw_getlk(struct rgw_fs *rgw_fs, struct rgw_file_handle *fh,
+              struct rgw_flock *fl, uint32_t flags);
 
 #ifdef __cplusplus
 }

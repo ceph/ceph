@@ -966,6 +966,8 @@ namespace rgw {
        * cause the eviction of objects in LRU order */
       (void) get_fs()->unref(parent);
     }
+
+    flock_state.clear_all();
   }
 
   void RGWFileHandle::encode_attrs(ceph::buffer::list& ux_key1,
@@ -1399,6 +1401,183 @@ namespace rgw {
     return op_ret;
   } /* exec_continue */
 
+  int RGWFileHandle::flock_state::add_edge(flock &fr, flock &to) {
+    if (fr.vertex == nullptr) {
+      fr.vertex = new flock_vertex(fr);
+    }
+    if (to.vertex == nullptr) {
+      to.vertex = new flock_vertex(to);
+    }
+
+    rgw_fh.get_fs()->ograph_insert_vertex(&fr.owner);
+    rgw_fh.get_fs()->ograph_insert_vertex(&to.owner);
+
+    int ret = rgw_fh.get_fs()->ograph_add_edge(fr.owner.vertex,
+                                               to.owner.vertex);
+    if (ret) {
+      return ret;
+    }
+
+    flock_edge *e = new flock_edge(fr.vertex, to.vertex);
+    fr.vertex->outedges.emplace_back(e);
+    to.vertex->inedges.emplace_back(e);
+    return 0;
+  } /* RGWFileHandle::flock_state::add_edge */
+
+  void RGWFileHandle::flock_state::del_edge(flock &fr, flock &to) {
+    rgw_fh.get_fs()->ograph_del_edge(fr.owner.vertex, to.owner.vertex);
+
+    auto iter = fr.vertex->outedges.begin();
+    while (iter != fr.vertex->outedges.end()) {
+      if ((*iter)->from->lock == fr && (*iter)->to->lock == to) {
+        fr.vertex->outedges.erase(iter);
+        break;
+      }
+      iter++;
+    }
+    auto iter2 = to.vertex->inedges.begin();
+    while (iter2 != to.vertex->inedges.end()) {
+      if ((*iter2)->from->lock == fr && (*iter2)->to->lock == to) {
+        to.vertex->inedges.erase(iter2);
+        break;
+      }
+      iter2++;
+    }
+  } /* RGWFileHandle::flock_state::del_edge */
+
+  void RGWFileHandle::flock_state::check_for_grants(flock &target, bool all,
+                                                    std::list<flock> &grants,
+                                                    unique_lock &guard) {
+    if (target.vertex == nullptr) {
+      return;
+    }
+
+    auto iter = target.vertex->inedges.begin();
+    while (iter != target.vertex->inedges.end()) {
+      flock &from = (*iter)->from->lock;
+      if (all || !flock_block(from, target)) {
+        rgw_fh.get_fs()->ograph_del_edge(from.owner.vertex,
+                                         target.owner.vertex);
+        iter = target.vertex->inedges.erase(iter);
+        auto iter2 = from.vertex->outedges.begin();
+        while (iter2 != from.vertex->outedges.end()) {
+          if ((*iter2)->to->lock == target) {
+            iter2 = from.vertex->outedges.erase(iter2);
+            break;
+          }
+          iter2++;
+        }
+        if (from.vertex->outedges.empty()) {
+          /* wakeup here ! */
+          pending_wakeup(guard, from);
+          grants.emplace_back(from);
+        }
+      } else {
+        iter++;
+      }
+    }
+  } /* RGWFileHandle::flock_state::check_for_grants */
+
+  int RGWFileHandle::insert_flock(flock &target, uint32_t flags)
+  {
+    int ret;
+
+    unique_lock guard(flock_state.state_mtx);
+
+    if (flock_state.find_last_block(target) != flock_state.no_flock()) {
+      if (flags & RGW_LOCK_FLAG_NONBLOCK) {
+        /* TODO: refcount owner */
+        return -EWOULDBLOCK;
+      }
+      ret = flock_state.add_inedges_for_all(target);
+      if (ret) {
+        /* TODO: cleanup flock, flock_owner */
+        return ret;
+      }
+      flock_state.wait_on_pending(guard, target);  /* sleep here ! */
+      return 0;
+    }
+    ret = flock_state.add_outedges_for_pendings(target);
+    if (ret) {
+      return ret;
+    }
+
+    return flock_state.activate(target, guard);
+  } /* RGWFileHandle::insert_flock */
+
+  int RGWFileHandle::remove_flock(flock &target, uint32_t flags)
+  {
+    unique_lock guard(flock_state.state_mtx);
+
+    return flock_state.activate(target, guard);
+  } /* RGWFileHandle::remove_flock */
+
+  int RGWFileHandle::remove_pending_flock(flock &target, uint32_t flags)
+  {
+    return 0;
+  } /* RGWFileHandle::remove_pending_flock */
+
+  int RGWFileHandle::find_flock(flock &target, uint32_t flags)
+  {
+    lock_guard guard(flock_state.state_mtx);
+
+    auto iter = flock_state.find_first_block(target);
+    if (iter != flock_state.no_flock()) {
+      target = iter->second;
+      return 1;
+    }
+    auto iter2 = flock_state.find_first_overlap(target, false);
+    if (iter2 != flock_state.no_flock()) {
+      target = iter2->second;
+      return 2;
+    }
+    return 0;
+  } /* RGWFileHandle::find_flock */
+
+  int RGWFileHandle::setlk(struct rgw_flock *fl, uint32_t flags)
+  {
+    if (fl->offset >= get_size()) {
+      return -EINVAL;
+    }
+
+    if (fl->length == 0) {
+      fl->length = get_size();
+    }
+
+    flock_owner &owner = fs->lookup_owner(fl->client, fl->owner, fl->pid);
+    flock target(fl->offset, fl->length, fl->type, owner);
+
+    if (fl->type == RGW_FS_TYPE_FL_UNLOCK) {
+      return remove_flock(target, flags);
+    } else if (fl->type == RGW_FS_TYPE_FL_CANCEL) {
+      return remove_pending_flock(target, flags);
+    } else {
+      return insert_flock(target, flags);
+    }
+  } /* RGWFileHandle::setlk */
+
+  int RGWFileHandle::getlk(struct rgw_flock *fl, uint32_t flags)
+  {
+    if (fl->offset >= get_size()) {
+      return -EINVAL;
+    }
+
+    if (fl->length == 0) {
+      fl->length = get_size();
+    }
+
+    flock_owner &owner = fs->lookup_owner(fl->client, fl->owner, fl->pid);
+    flock target(fl->offset, fl->length, fl->type, owner);
+
+    int ret = find_flock(target, flags);
+    if (!ret) {
+      fl->type = RGW_FS_TYPE_FL_UNLOCK;
+    } else {
+      target.convert_flock(fl);
+    }
+    return ret == 1 ? -EWOULDBLOCK : 0;
+  } /* RGWFileHandle::getlk */
+
   int RGWWriteRequest::exec_finish()
   {
     buffer::list bl, aclbl, ux_key, ux_attrs;
@@ -1745,9 +1924,6 @@ int rgw_lookup(struct rgw_fs *rgw_fs,
     /* special: after readdir--note extra ref()! */
     if (unlikely((strcmp(path, "..") == 0))) {
       rgw_fh = parent;
-      lsubdout(fs->get_context(), rgw, 17)
-	<< __func__ << "BANG"<< *rgw_fh
-	<< dendl;
       fs->ref(rgw_fh);
     } else {
       /* lookup in a readdir callback */
@@ -2082,6 +2258,34 @@ int rgw_commit(struct rgw_fs *rgw_fs, struct rgw_file_handle *fh,
   RGWFileHandle* rgw_fh = get_rgwfh(fh);
 
   return rgw_fh->commit(offset, length, RGWFileHandle::FLAG_NONE);
+}
+
+int rgw_setlk(struct rgw_fs *rgw_fs, struct rgw_file_handle *fh,
+              struct rgw_flock *fl, uint32_t flags)
+{
+  RGWFileHandle* rgw_fh = get_rgwfh(fh);
+
+  if (! rgw_fh->is_file())
+    return -EISDIR;
+
+  if (! rgw_fh->is_open())
+    return -EPERM;
+
+  return rgw_fh->setlk(fl, flags);
+}
+
+int rgw_getlk(struct rgw_fs *rgw_fs, struct rgw_file_handle *fh,
+              struct rgw_flock *fl, uint32_t flags)
+{
+  RGWFileHandle* rgw_fh = get_rgwfh(fh);
+
+  if (! rgw_fh->is_file())
+    return -EISDIR;
+
+  if (! rgw_fh->is_open())
+    return -EPERM;
+
+  return rgw_fh->getlk(fl, flags);
 }
 
 } /* extern "C" */
