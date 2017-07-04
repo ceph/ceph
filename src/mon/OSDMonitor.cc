@@ -3255,7 +3255,8 @@ void OSDMonitor::tick()
 
 	  do_propose = true;
 
-	  mon->clog->info() << "osd." << o << " out (down for " << down << ")";
+	  mon->clog->info() << "Marking osd." << o << " out (has been down for "
+                            << int(down.sec()) << " seconds)";
 	} else
 	  continue;
       }
@@ -8403,6 +8404,17 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 	      pending_inc.new_xinfo[osd].old_weight = osdmap.osd_weight[osd];
 	    }
 	    ss << "marked out osd." << osd << ". ";
+            std::ostringstream msg;
+            msg << "Client " << op->get_session()->entity_name
+                << " marked osd." << osd << " out";
+            if (osdmap.is_up(osd)) {
+              msg << ", while it was still marked up";
+            } else {
+              msg << ", after it was down for " << int(down_pending_out[osd].sec())
+                  << " seconds";
+            }
+
+            mon->clog->info() << msg.str();
 	    any = true;
 	  }
         } else if (prefix == "osd in") {
