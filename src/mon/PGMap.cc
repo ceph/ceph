@@ -2553,207 +2553,262 @@ namespace {
   }
 }
 
-static void note_stuck_detail(
-  pg_t pgid,
-  const pg_stat_t& stat,
-  const char *what,
-  utime_t since,
-  utime_t now,
-  unsigned max,
-  list<string> *detail)
-{
-  if (detail->size() >= max) {
-    return;
-  }
-  ostringstream ss;
-  ss << "pg " << pgid << " is stuck " << what;
-  if (since == utime_t()) {
-    ss << " since forever";
-  } else {
-    utime_t dur = now - since;
-    ss << " for " << dur;
-  }
-  ss << ", current state " << pg_state_string(stat.state)
-     << ", last acting " << stat.acting;
-  detail->push_back(ss.str());
-}
-
-static void note_stuck_summary(
-  const char *what,
-  unsigned num,
-  unsigned max,
-  health_check_t *check)
-{
-  ostringstream ss;
-  ss << num << " pgs stuck " << what;
-  check->summary = ss.str();
-  if (num > max) {
-    ostringstream ss;
-    ss << "+ " << (max - num) << " more pgs";
-    check->detail.push_back(ss.str());
-  }
-}
-
 void PGMap::get_health_checks(
   CephContext *cct,
   const OSDMap& osdmap,
   health_check_map_t *checks) const
 {
-  unsigned max = cct->_conf->mon_health_max_detail;
-  auto& pools = osdmap.get_pools();
   utime_t now = ceph_clock_now();
+  const unsigned max = cct->_conf->mon_health_max_detail;
+  const auto& pools = osdmap.get_pools();
 
   checks->clear();
 
-  // PG_{STALE,DOWN,UNDERSIZED,DEGRADED,INCONSISTENT,PEERING,REPAIR,...}
-  {
-    struct info_t {
-      unsigned state;
-      health_status_t severity;
-      unsigned num = 0;
-      health_check_t *check = nullptr;
-      info_t(unsigned s, health_status_t v = HEALTH_WARN)
-	: state(s), severity(v) {}
-    };
-    vector<info_t> state_checks = {
-      { PG_STATE_DOWN },
-      { PG_STATE_UNDERSIZED },
-      { PG_STATE_DEGRADED },
-      { PG_STATE_INCONSISTENT, HEALTH_ERR },
-      { PG_STATE_REPAIR },
-      { PG_STATE_RECOVERY_WAIT },
-      { PG_STATE_INCOMPLETE, HEALTH_ERR },
-      { PG_STATE_BACKFILL_WAIT },
-      { PG_STATE_BACKFILL },
-      { PG_STATE_BACKFILL_TOOFULL },
-      { PG_STATE_RECOVERY_TOOFULL }
-    };
-    vector<info_t> active_checks;
-    for (auto& i : num_pg_by_state) {
-      for (auto& j : state_checks) {
-	if ((i.first & j.state) && !j.check) {
-	  string err = string("PG_") + pg_state_string(j.state);
-	  boost::to_upper(err);
-	  j.check = &checks->add(err, j.severity, "");
-	  active_checks.push_back(j);
-	}
-      }
+  typedef enum pg_consequence_t {
+    UNAVAILABLE = 1,   // Client IO to the pool may block
+    DEGRADED = 2,      // Fewer than the requested number of replicas are present
+    DEGRADED_FULL = 3, // Fewer than the request number of replicas may be present
+                       //  and insufficiet resources are present to fix this
+    DAMAGED = 4        // The data may be missing or inconsistent on disk and
+                       //  requires repair
+  } pg_consequence_t;
+
+  // For a given PG state, how should it be reported at the pool level?
+  class PgStateResponse {
+    public:
+    pg_consequence_t consequence;
+    typedef std::function< utime_t(const pg_stat_t&) > stuck_cb;
+    stuck_cb stuck_since;
+    bool invert;
+
+    PgStateResponse(const pg_consequence_t &c, stuck_cb s)
+      : consequence(c), stuck_since(s), invert(false)
+    {
     }
-    if (!active_checks.empty()) {
-      // scan pgs
-      for (auto& i : pg_stat) {
-	for (auto& j : active_checks) {
-	  if (i.second.state & j.state) {
-	    if (++j.num <= max) {
-	      ostringstream ss;
-	      ss << "pg " << i.first << " is "
-		 << pg_state_string(i.second.state);
-	      ss << ", acting " << i.second.acting;
-	      if (i.second.stats.sum.num_objects_unfound)
-		ss << ", " << i.second.stats.sum.num_objects_unfound
-		   << " unfound";
-	      if (j.state & PG_STATE_INCOMPLETE) {
-		const pg_pool_t *pi = osdmap.get_pg_pool(i.first.pool());
-		if (pi && pi->min_size > 1) {
-		  ss << " (reducing pool "
-		     << osdmap.get_pool_name(i.first.pool())
-		     << " min_size from " << (int)pi->min_size
-		     << " may help; search ceph.com/docs for 'incomplete')";
-		}
-	      }
-	      j.check->detail.push_back(ss.str());
-	    }
-	  }
-	}
-      }
-      for (auto& j : active_checks) {
-	ostringstream ss;
-	ss << j.num << " pgs " << pg_state_string(j.state);
-        j.check->summary = ss.str();
-        if (j.num > max) {
-	  ostringstream ss;
-	  ss << "+ " << (max - j.num) << " more pgs";
-	  j.check->detail.push_back(ss.str());
-	}
+
+    PgStateResponse(const pg_consequence_t &c, stuck_cb s, bool i)
+      : consequence(c), stuck_since(s), invert(i)
+    {
+    }
+  };
+
+  // Record the PG state counts that contributed to a reported pool state
+  class PgCauses {
+    public:
+    // Map of PG_STATE_* to number of pgs in that state.
+    std::map<unsigned, unsigned> states;
+
+    // List of all PG IDs that had a state contributing
+    // to this health condition.
+    std::set<pg_t> pgs;
+
+    std::map<pg_t, std::string> pg_messages;
+  };
+
+  // Map of PG state to how to respond to it
+  std::map<unsigned, PgStateResponse> state_to_response = {
+    // Immediate reports
+    { PG_STATE_INCONSISTENT,     {DAMAGED,     {}} },
+    { PG_STATE_INCOMPLETE,       {DEGRADED,    {}} },
+    { PG_STATE_REPAIR,           {DAMAGED,     {}} },
+    { PG_STATE_SNAPTRIM_ERROR,   {DAMAGED,     {}} },
+    { PG_STATE_BACKFILL_TOOFULL, {DEGRADED,    {}} },
+    { PG_STATE_RECOVERY_TOOFULL, {DEGRADED,    {}} },
+    { PG_STATE_DEGRADED,         {DEGRADED,    {}} },
+    { PG_STATE_DOWN,             {UNAVAILABLE, {}} },
+    // Delayed (wait until stuck) reports
+    { PG_STATE_PEERING,          {UNAVAILABLE, [](const pg_stat_t &p){return p.last_peered;}    } },
+    { PG_STATE_UNDERSIZED,       {DEGRADED,    [](const pg_stat_t &p){return p.last_fullsized;} } },
+    { PG_STATE_STALE,            {UNAVAILABLE, [](const pg_stat_t &p){return p.last_unstale;}   } },
+    // Delayed and inverted reports
+    { PG_STATE_ACTIVE,           {UNAVAILABLE, [](const pg_stat_t &p){return p.last_active;}, true} },
+    { PG_STATE_CLEAN,            {DEGRADED,    [](const pg_stat_t &p){return p.last_clean;}, true} }
+  };
+
+  // Specialized state printer that takes account of inversion of
+  // ACTIVE, CLEAN checks.
+  auto state_name = [](const uint32_t &state) {
+    // Special cases for the states that are inverted checks
+    if (state == PG_STATE_CLEAN) {
+      return std::string("unclean");
+    } else if (state == PG_STATE_ACTIVE) {
+      return std::string("inactive");
+    } else {
+      return pg_state_string(state);
+    }
+  };
+
+  // Map of what is wrong to information about why, implicitly also stores
+  // the list of what is wrong.
+  std::map<pg_consequence_t, PgCauses> detected;
+
+  // Optimisation: trim down the number of checks to apply based on
+  // the summary counters
+  std::map<unsigned, PgStateResponse> possible_responses;
+  for (const auto &i : num_pg_by_state) {
+    for (const auto &j : state_to_response) {
+      if (!j.second.invert) {
+        // Check for normal tests by seeing if any pgs have the flag
+        if (i.first & j.first) {
+          possible_responses.insert(j);
+        }
       }
     }
   }
 
-  // PG_STUCK_{INACTIVE,UNCLEAN,UNDERSIZED,DEGRADED,STALE}
-  {
-    utime_t cutoff = now - utime_t(cct->_conf->mon_pg_stuck_threshold, 0);
-    health_check_t *inactive = 0;
-    health_check_t *unclean = 0;
-    health_check_t *degraded = 0;
-    health_check_t *undersized = 0;
-    health_check_t *stale = 0;
-    unsigned num_inactive = 0;
-    unsigned num_unclean = 0;
-    unsigned num_degraded = 0;
-    unsigned num_undersized = 0;
-    unsigned num_stale = 0;
-    for (auto& i : pg_stat) {
-      if (!(i.second.state & PG_STATE_ACTIVE) &&
-	  i.second.last_active < cutoff) {
-	if (!inactive) {
-	  inactive = &checks->add("PG_STUCK_INACTIVE", HEALTH_ERR, "");
-	}
-	note_stuck_detail(i.first, i.second, "inactive", i.second.last_active,
-			  now, max, &inactive->detail);
-	++num_inactive;
-      }
-      if ((i.second.state & PG_STATE_STALE) &&
-	  i.second.last_unstale < cutoff) {
-	if (!stale) {
-	  stale = &checks->add("PG_STUCK_STALE", HEALTH_ERR, "");
-	}
-	note_stuck_detail(i.first, i.second, "stale", i.second.last_unstale,
-			  now, max, &stale->detail);
-	++num_stale;
-      }
-      if (!(i.second.state & PG_STATE_CLEAN) &&
-	  i.second.last_clean < cutoff) {
-	if (!unclean) {
-	  unclean = &checks->add("PG_STUCK_UNCLEAN", HEALTH_WARN, "");
-	}
-	note_stuck_detail(i.first, i.second, "unclean", i.second.last_clean,
-			  now, max, &unclean->detail);
-	++num_unclean;
-      }
-      if ((i.second.state & PG_STATE_DEGRADED) &&
-	  i.second.last_undegraded < cutoff) {
-	if (!degraded) {
-	  degraded = &checks->add("PG_STUCK_DEGRADED", HEALTH_WARN, "");
-	}
-	note_stuck_detail(i.first, i.second, "degraded",
-			  i.second.last_undegraded, now, max, &degraded->detail);
-	++num_degraded;
-      }
-      if ((i.second.state & PG_STATE_UNDERSIZED) &&
-	  i.second.last_fullsized < cutoff) {
-	if (!undersized) {
-	  undersized = &checks->add("PG_STUCK_UNDERSIZED", HEALTH_WARN, "");
-	}
-	note_stuck_detail(i.first, i.second, "undersized",
-			  i.second.last_fullsized, now, max,
-			  &undersized->detail);
-	++num_undersized;
+  for (const auto &j : state_to_response) {
+    if (j.second.invert) {
+      // Check for inverted tests by seeing if not-all pgs have the flag
+      const auto &found = num_pg_by_state.find(j.first);
+      if (found == num_pg_by_state.end() || found->second != num_pg) {
+        possible_responses.insert(j);
       }
     }
-    if (inactive) {
-      note_stuck_summary("inactive", num_inactive, max, inactive);
+  }
+
+  utime_t cutoff = now - utime_t(cct->_conf->mon_pg_stuck_threshold, 0);
+  // Loop over all PGs, if there are any possibly-unhealthy states in there
+  if (!possible_responses.empty()) {
+    for (const auto& i : pg_stat) {
+      const auto &pg_id = i.first;
+      const auto &pg_info = i.second;
+
+      for (const auto &j : state_to_response) {
+        const auto &pg_response_state = j.first;
+        const auto &pg_response = j.second;
+
+        // Apply the state test
+        if (!(bool(pg_info.state & pg_response_state) != pg_response.invert)) {
+          continue;
+        }
+
+        // Apply stuckness test if needed
+        if (pg_response.stuck_since) {
+          // Delayed response, check for stuckness
+          utime_t last_whatever = pg_response.stuck_since(pg_info);
+          if (last_whatever >= cutoff) {
+            // Not stuck enough, ignore.
+            continue;
+          } else {
+
+          }
+        }
+
+        auto &causes = detected[pg_response.consequence];
+        causes.states[pg_response_state]++;
+        causes.pgs.insert(pg_id);
+
+        // Don't bother composing detail string if we have already recorded
+        // too many
+        if (causes.pg_messages.size() > max) {
+          continue;
+        }
+
+        std::ostringstream ss;
+        if (pg_response.stuck_since) {
+          utime_t since = pg_response.stuck_since(pg_info);
+          ss << "pg " << pg_id << " is stuck " << state_name(pg_response_state);
+          if (since == utime_t()) {
+            ss << " since forever";
+          } else {
+            utime_t dur = now - since;
+            ss << " for " << dur;
+          }
+          ss << ", current state " << pg_state_string(pg_info.state)
+             << ", last acting " << pg_info.acting;
+        } else {
+          ss << "pg " << pg_id << " is "
+             << pg_state_string(pg_info.state);
+          ss << ", acting " << pg_info.acting;
+          if (pg_info.stats.sum.num_objects_unfound) {
+            ss << ", " << pg_info.stats.sum.num_objects_unfound
+               << " unfound";
+          }
+        }
+
+        if (pg_info.state & PG_STATE_INCOMPLETE) {
+          const pg_pool_t *pi = osdmap.get_pg_pool(pg_id.pool());
+          if (pi && pi->min_size > 1) {
+            ss << " (reducing pool "
+               << osdmap.get_pool_name(pg_id.pool())
+               << " min_size from " << (int)pi->min_size
+               << " may help; search ceph.com/docs for 'incomplete')";
+          }
+        }
+
+        causes.pg_messages[pg_id] = ss.str();
+      }
     }
-    if (unclean) {
-      note_stuck_summary("unclean", num_unclean, max, unclean);
+  } else {
+    dout(10) << __func__ << " skipping loop over PGs: counters look OK" << dendl;
+  }
+
+  for (const auto &i : detected) {
+    std::string health_code;
+    health_status_t sev;
+    std::string summary;
+    switch(i.first) {
+      case UNAVAILABLE:
+        health_code = "PG_AVAILABILITY";
+        sev = HEALTH_WARN;
+        summary = "Reduced data availability: ";
+        break;
+      case DEGRADED:
+        health_code = "PG_DEGRADED";
+        summary = "Degraded data redundancy: ";
+        sev = HEALTH_WARN;
+        break;
+      case DEGRADED_FULL:
+        health_code = "PG_DEGRADED_FULL";
+        summary = "Degraded data redundancy (low space): ";
+        sev = HEALTH_ERR;
+        break;
+      case DAMAGED:
+        health_code = "PG_DAMAGED";
+        summary = "Possible data damage: ";
+        sev = HEALTH_ERR;
+        break;
+      default:
+        assert(false);
     }
-    if (degraded) {
-      note_stuck_summary("degraded", num_degraded, max, degraded);
+
+    if (i.first == DEGRADED) {
+      if (pg_sum.stats.sum.num_objects_degraded &&
+          pg_sum.stats.sum.num_object_copies > 0) {
+        double pc = (double)pg_sum.stats.sum.num_objects_degraded /
+          (double)pg_sum.stats.sum.num_object_copies * (double)100.0;
+        char b[20];
+        snprintf(b, sizeof(b), "%.3lf", pc);
+        ostringstream ss;
+        ss << pg_sum.stats.sum.num_objects_degraded
+           << "/" << pg_sum.stats.sum.num_object_copies << " objects degraded ("
+           << b << "%)";
+
+        // Throw in a comma for the benefit of the following PG counts
+        summary += ss.str() + ", ";
+      }
     }
-    if (undersized) {
-      note_stuck_summary("undersized", num_undersized, max, undersized);
+
+    // Compose summary message saying how many PGs in what states led
+    // to this health check failing
+    std::vector<std::string> pg_msgs;
+    for (const auto &j : i.second.states) {
+      std::ostringstream msg;
+      msg << j.second << (j.second > 1 ? " pgs " : " pg ") << state_name(j.first);
+      pg_msgs.push_back(msg.str());
     }
-    if (stale) {
-      note_stuck_summary("stale", num_stale, max, stale);
+    summary += joinify(pg_msgs.begin(), pg_msgs.end(), std::string(", "));
+
+
+
+    health_check_t *check = &checks->add(
+        health_code,
+        sev,
+        summary);
+
+    // Compose list of PGs contributing to this health check failing
+    for (const auto &j : i.second.pg_messages) {
+      check->detail.push_back(j.second);
     }
   }
 
@@ -3001,20 +3056,6 @@ void PGMap::get_health_checks(
       auto& d = checks->add("POOL_NEAR_FULL", HEALTH_WARN, ss.str());
       d.detail.swap(nearfull_detail);
     }
-  }
-
-  // OBJECT_DEGRADED
-  if (pg_sum.stats.sum.num_objects_degraded &&
-      pg_sum.stats.sum.num_object_copies > 0) {
-    double pc = (double)pg_sum.stats.sum.num_objects_degraded /
-      (double)pg_sum.stats.sum.num_object_copies * (double)100.0;
-    char b[20];
-    snprintf(b, sizeof(b), "%.3lf", pc);
-    ostringstream ss;
-    ss << pg_sum.stats.sum.num_objects_degraded
-       << "/" << pg_sum.stats.sum.num_object_copies << " objects degraded ("
-       << b << "%)";
-    checks->add("OBJECT_DEGRADED", HEALTH_WARN, ss.str());
   }
 
   // OBJECT_MISPLACED
