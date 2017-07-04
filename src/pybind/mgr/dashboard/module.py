@@ -536,7 +536,7 @@ class Module(MgrModule):
                         client['hostname'] = client['client_metadata']['hostname']
                     elif "kernel_version" in client['client_metadata']:
                         client['type'] = "kernel"
-                        client['version'] = client['kernel_version']
+                        client['version'] = client['client_metadata']['kernel_version']
                         client['hostname'] = client['client_metadata']['hostname']
                     else:
                         client['type'] = "unknown"
