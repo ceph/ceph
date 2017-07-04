@@ -497,6 +497,7 @@ protected:
   /// Log is clean on [dirty_to, dirty_from)
   bool touched_log;
   bool clear_divergent_priors;
+  bool rebuilt_missing_with_deletes = false;
 
   void mark_dirty_to(eversion_t to) {
     if (to > dirty_to)
@@ -517,7 +518,8 @@ public:
       (dirty_from != eversion_t::max()) ||
       (writeout_from != eversion_t::max()) ||
       !(trimmed.empty()) ||
-      !missing.is_clean();
+      !missing.is_clean() ||
+      rebuilt_missing_with_deletes;
   }
   void mark_log_for_rewrite() {
     mark_dirty_to(eversion_t::max());
@@ -805,7 +807,8 @@ protected:
       assert(objiter->second->version > last_divergent_update);
 
       // ensure missing has been updated appropriately
-      if (objiter->second->is_update() || objiter->second->is_delete()) {
+      if (objiter->second->is_update() ||
+	  (missing.may_include_deletes && objiter->second->is_delete())) {
 	assert(missing.is_missing(hoid) &&
 	       missing.get_items().at(hoid).need == objiter->second->version);
       } else {
@@ -1013,7 +1016,23 @@ public:
       }
       if (p->soid <= last_backfill &&
 	  !p->is_error()) {
-	missing.add_next_event(*p);
+	if (missing.may_include_deletes) {
+	  missing.add_next_event(*p);
+	} else {
+	  if (p->is_delete()) {
+	    missing.rm(p->soid, p->version);
+	  } else {
+	    missing.add_next_event(*p);
+	  }
+	  if (rollbacker) {
+	    // hack to match PG::mark_all_unfound_lost
+	    if (maintain_rollback && p->is_lost_delete() && p->can_rollback()) {
+	      rollbacker->try_stash(p->soid, p->version.version);
+	    } else if (p->is_delete()) {
+	      rollbacker->remove(p->soid);
+	    }
+	  }
+	}
       }
     }
     return invalidate_stats;
@@ -1070,7 +1089,8 @@ public:
     const coll_t& coll,
     const ghobject_t &log_oid,
     const pg_missing_tracker_t &missing,
-    bool require_rollback);
+    bool require_rollback,
+    bool *rebuilt_missing_set_with_deletes);
 
   static void _write_log_and_missing_wo_missing(
     ObjectStore::Transaction& t,
@@ -1101,6 +1121,7 @@ public:
     bool touch_log,
     bool require_rollback,
     bool clear_divergent_priors,
+    bool *rebuilt_missing_with_deletes,
     set<string> *log_keys_debug
     );
 
@@ -1149,6 +1170,7 @@ public:
     ObjectMap::ObjectMapIterator p = store->get_omap_iterator(log_coll, log_oid);
     map<eversion_t, hobject_t> divergent_priors;
     bool has_divergent_priors = false;
+    missing.may_include_deletes = false;
     list<pg_log_entry_t> entries;
     if (p) {
       for (p->seek_to_first(); p->valid() ; p->next(false)) {
@@ -1167,11 +1189,16 @@ public:
 	  ::decode(on_disk_can_rollback_to, bp);
 	} else if (p->key() == "rollback_info_trimmed_to") {
 	  ::decode(on_disk_rollback_info_trimmed_to, bp);
+	} else if (p->key() == "may_include_deletes_in_missing") {
+	  missing.may_include_deletes = true;
 	} else if (p->key().substr(0, 7) == string("missing")) {
 	  hobject_t oid;
 	  pg_missing_item item;
 	  ::decode(oid, bp);
-	  item.decode_with_flags(bp);
+	  ::decode(item, bp);
+	  if (item.is_delete()) {
+	    assert(missing.may_include_deletes);
+	  }
 	  missing.add(oid, item.need, item.have, item.is_delete());
 	} else {
 	  pg_log_entry_t e;
@@ -1215,6 +1242,9 @@ public:
 	    continue;
 	  if (did.count(i->soid)) continue;
 	  did.insert(i->soid);
+
+	  if (!missing.may_include_deletes && i->is_delete())
+	    continue;
 
 	  bufferlist bv;
 	  int r = store->getattr(
