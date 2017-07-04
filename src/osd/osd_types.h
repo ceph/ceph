@@ -2776,13 +2776,37 @@ struct pg_missing_t {
       set_delete(is_delete);
     }
 
-    void encode(bufferlist& bl) const {
-      ::encode(need, bl);
-      ::encode(have, bl);
+    void encode(bufferlist& bl, uint64_t features) const {
+      if ((features & CEPH_FEATURE_OSD_RECOVERY_DELETES) == CEPH_FEATURE_OSD_RECOVERY_DELETES) {
+	// encoding a zeroed eversion_t to differentiate between this and
+	// legacy unversioned encoding - a need value of 0'0 is not
+	// possible. This can be replaced with the legacy encoding
+	// macros post-luminous.
+	eversion_t e;
+	::encode(e, bl);
+	::encode(need, bl);
+	::encode(have, bl);
+	::encode(static_cast<uint8_t>(flags), bl);
+      } else {
+	// legacy unversioned encoding
+	::encode(need, bl);
+	::encode(have, bl);
+      }
     }
     void decode(bufferlist::iterator& bl) {
-      ::decode(need, bl);
-      ::decode(have, bl);
+      eversion_t e;
+      ::decode(e, bl);
+      if (e != eversion_t()) {
+	// legacy encoding, this is the need value
+	need = e;
+	::decode(have, bl);
+      } else {
+	::decode(need, bl);
+	::decode(have, bl);
+	uint8_t f;
+	::decode(f, bl);
+	flags = static_cast<missing_flags_t>(f);
+      }
     }
 
     void set_delete(bool is_delete) {
@@ -2793,26 +2817,18 @@ struct pg_missing_t {
       return (flags & FLAG_DELETE) == FLAG_DELETE;
     }
 
-    void encode_with_flags(bufferlist& bl) const {
-      encode(bl);
-      ::encode(static_cast<uint8_t>(flags), bl);
-    }
-
-    void decode_with_flags(bufferlist::iterator& bl) {
-      decode(bl);
-      // no versioning on this, but it's stored in a single omap value,
-      // so just check for the end of the bufferlist
-      if (!bl.end()) {
-	uint8_t f;
-	::decode(f, bl);
-	flags = static_cast<missing_flags_t>(f);
+    string flag_str() const {
+      if (flags == FLAG_NONE) {
+	return "none";
+      } else {
+	return "delete";
       }
     }
 
     void dump(Formatter *f) const {
       f->dump_stream("need") << need;
       f->dump_stream("have") << have;
-      f->dump_stream("flags") << (flags == FLAG_NONE ? "none" : "delete");
+      f->dump_stream("flags") << flag_str();
     }
     static void generate_test_instances(list<item*>& o) {
       o.push_back(new item);
@@ -2825,10 +2841,11 @@ struct pg_missing_t {
       o.back()->flags = FLAG_DELETE;
     }
   }; 
-  WRITE_CLASS_ENCODER(item)
+  WRITE_CLASS_ENCODER_FEATURES(item)
 
   map<hobject_t, item, hobject_t::ComparatorWithDefault> missing;  // oid -> (need v, have v)
   map<version_t, hobject_t> rmissing;  // v -> oid
+  bool may_include_deletes = false;
 
   unsigned int num_missing() const;
   bool have_missing() const;
@@ -2858,7 +2875,7 @@ struct pg_missing_t {
   void dump(Formatter *f) const;
   static void generate_test_instances(list<pg_missing_t*>& o);
 };
-WRITE_CLASS_ENCODER(pg_missing_t::item)
+WRITE_CLASS_ENCODER_FEATURES(pg_missing_t::item)
 WRITE_CLASS_ENCODER(pg_missing_t)
 
 ostream& operator<<(ostream& out, const pg_missing_t::item& i);

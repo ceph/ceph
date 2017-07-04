@@ -398,7 +398,8 @@ void PGLog::_merge_object_divergent_entries(
 		       << *objiter->second << ", already merged" << dendl;
 
     // ensure missing has been updated appropriately
-    if (objiter->second->is_update() || objiter->second->is_delete()) {
+    if (objiter->second->is_update() ||
+	(missing.may_include_deletes && objiter->second->is_delete())) {
       assert(missing.is_missing(hoid) &&
 	     missing.missing[hoid].need == objiter->second->version);
     } else {
@@ -595,7 +596,23 @@ void PGLog::append_log_entries_update_missing(
       log->index(ne);
     }
     if (cmp(p->soid, last_backfill, last_backfill_bitwise) <= 0) {
-      missing.add_next_event(*p);
+      if (missing.may_include_deletes) {
+	missing.add_next_event(*p);
+      } else {
+	if (p->is_delete()) {
+	  missing.rm(p->soid, p->version);
+	} else {
+	  missing.add_next_event(*p);
+	}
+	if (rollbacker) {
+	  // hack to match PG::mark_all_unfound_lost
+	  if (p->is_lost_delete() && p->mod_desc.can_rollback()) {
+	    rollbacker->try_stash(p->soid, p->version.version);
+	  } else if (p->is_delete()) {
+	    rollbacker->remove(p->soid);
+	  }
+	}
+      }
     }
   }
   if (log)
@@ -993,6 +1010,9 @@ void PGLog::read_log(ObjectStore *store, coll_t pg_coll,
 	continue;
       if (did.count(i->soid)) continue;
       did.insert(i->soid);
+
+      if (!missing.may_include_deletes && i->is_delete())
+	continue;
 
       bufferlist bv;
       int r = store->getattr(

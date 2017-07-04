@@ -3809,17 +3809,8 @@ void pg_missing_t::resort(bool sort_bitwise)
 void pg_missing_t::encode(bufferlist &bl) const
 {
   ENCODE_START(4, 2, bl);
-  ::encode(missing, bl);
-  // since pg_missing_t::item was not versioned, we encode the new flags
-  // field here explicitly
-  map<hobject_t, uint8_t, hobject_t::ComparatorWithDefault> missing_flags;
-  for (const auto &p : missing) {
-    if (p.second.flags != pg_missing_t::item::FLAG_NONE) {
-      missing_flags.insert(make_pair(p.first,
-				     static_cast<uint8_t>(p.second.flags)));
-    }
-  }
-  ::encode(missing_flags, bl);
+  ::encode(missing, bl, may_include_deletes ? CEPH_FEATURE_OSD_RECOVERY_DELETES : (uint64_t)0);
+  ::encode(may_include_deletes, bl);
   ENCODE_FINISH(bl);
 }
 
@@ -3828,12 +3819,7 @@ void pg_missing_t::decode(bufferlist::iterator &bl, int64_t pool)
   DECODE_START_LEGACY_COMPAT_LEN(4, 2, 2, bl);
   ::decode(missing, bl);
   if (struct_v >= 4) {
-    map<hobject_t, uint8_t, hobject_t::ComparatorWithDefault> missing_flags;
-    ::decode(missing_flags, bl);
-    for (const auto &p : missing_flags) {
-      assert(missing.find(p.first) != missing.end());
-      missing[p.first].flags = static_cast<pg_missing_t::item::missing_flags_t>(p.second);
-    }
+    ::decode(may_include_deletes, bl);
   }
   DECODE_FINISH(bl);
 
@@ -3871,6 +3857,7 @@ void pg_missing_t::dump(Formatter *f) const
     f->close_section();
   }
   f->close_section();
+  f->dump_bool("may_include_deletes", may_include_deletes);
 }
 
 void pg_missing_t::generate_test_instances(list<pg_missing_t*>& o)
@@ -3886,12 +3873,14 @@ ostream& operator<<(ostream& out, const pg_missing_t::item& i)
   out << i.need;
   if (i.have != eversion_t())
     out << "(" << i.have << ")";
+  out << " flags = " << i.flag_str();
   return out;
 }
 
 ostream& operator<<(ostream& out, const pg_missing_t& missing) 
 {
-  out << "missing(" << missing.num_missing();
+  out << "missing(" << missing.num_missing()
+      << " may_include_deletes = " << missing.may_include_deletes;
   //if (missing.num_lost()) out << ", " << missing.num_lost() << " lost";
   out << ")";
   return out;
@@ -3912,6 +3901,9 @@ void pg_missing_t::swap(pg_missing_t& o)
 {
   missing.swap(o.missing);
   rmissing.swap(o.rmissing);
+  bool tmp_may_include_deletes = o.may_include_deletes;
+  o.may_include_deletes = may_include_deletes;
+  may_include_deletes = tmp_may_include_deletes;
 }
 
 bool pg_missing_t::is_missing(const hobject_t& oid) const
@@ -4029,6 +4021,7 @@ void pg_missing_t::split_into(
   unsigned split_bits,
   pg_missing_t *omissing)
 {
+  omissing->may_include_deletes = may_include_deletes;
   unsigned mask = ~((~0)<<split_bits);
   for (map<hobject_t, item, hobject_t::ComparatorWithDefault>::iterator i = missing.begin();
        i != missing.end();

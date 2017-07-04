@@ -542,6 +542,10 @@ public:
     missing.add_next_event(e);
   }
 
+  void set_may_include_deletes(bool inc) {
+    missing.may_include_deletes = inc;
+  }
+
   //////////////////// get or set log ////////////////////
 
   const IndexedLog &get_log() const { return log; }
