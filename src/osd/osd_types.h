@@ -2680,6 +2680,8 @@ public:
     unsigned new_pg_num,
     bool old_sort_bitwise,
     bool new_sort_bitwise,
+    bool old_recovery_deletes,
+    bool new_recovery_deletes,
     pg_t pgid
     );
 
@@ -2722,6 +2724,7 @@ public:
     PastIntervals *past_intervals,              ///< [out] intervals
     ostream *out = 0                            ///< [out] debug ostream
     );
+
   friend ostream& operator<<(ostream& out, const PastIntervals &i);
 
   template <typename F>
