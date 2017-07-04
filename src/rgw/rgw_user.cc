@@ -1419,11 +1419,11 @@ int RGWSubUserPool::execute_remove(RGWUserAdminOpState& op_state,
   siter = subuser_map->find(subuser_str);
   if (siter == subuser_map->end()){
     set_err_msg(err_msg, "subuser not found: " + subuser_str);
-    return -EINVAL;
+    return -ERR_NO_SUCH_SUBUSER;
   }
   if (!op_state.has_existing_subuser()) {
     set_err_msg(err_msg, "subuser not found: " + subuser_str);
-    return -EINVAL;
+    return -ERR_NO_SUCH_SUBUSER;
   }
 
   // always purge all associate keys
@@ -1479,7 +1479,7 @@ int RGWSubUserPool::execute_modify(RGWUserAdminOpState& op_state, std::string *e
 
   if (!op_state.has_existing_subuser()) {
     set_err_msg(err_msg, "subuser does not exist");
-    return -EINVAL;
+    return -ERR_NO_SUCH_SUBUSER;
   }
 
   subuser_pair.first = subuser_str;
