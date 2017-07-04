@@ -29,6 +29,7 @@ struct SnapRealm {
 protected:
   // cache
   mutable snapid_t cached_seq;           // max seq over self and all past+present parents.
+  mutable uint64_t cached_destroy_seq;
   mutable snapid_t cached_last_created;  // max last_created over all past+present parents
   mutable snapid_t cached_last_destroyed;
   mutable set<snapid_t> cached_snaps;
@@ -58,6 +59,7 @@ public:
   map<client_t, xlist<Capability*>* > client_caps;   // to identify clients who need snap notifications
 
   SnapRealm(MDCache *c, CInode *in) : 
+    cached_destroy_seq(0),
     srnode(),
     mdcache(c), inode(in),
     open(false), parent(0),
@@ -86,12 +88,15 @@ public:
   void close_parents();
 
   void prune_past_parents();
-  bool has_past_parents() const { return !srnode.past_parents.empty(); }
+  bool has_past_parents() const {
+    return !srnode.past_parent_snaps.empty() ||
+	   !srnode.past_parents.empty();
+  }
 
   void build_snap_set(set<snapid_t>& s, 
 		      snapid_t& max_seq, snapid_t& max_last_created, snapid_t& max_last_destroyed,
 		      snapid_t first, snapid_t last) const;
-  void get_snap_info(map<snapid_t,SnapInfo*>& infomap, snapid_t first=0, snapid_t last=CEPH_NOSNAP);
+  void get_snap_info(map<snapid_t, const SnapInfo*>& infomap, snapid_t first=0, snapid_t last=CEPH_NOSNAP);
 
   const bufferlist& get_snap_trace();
   void build_snap_trace(bufferlist& snapbl) const;

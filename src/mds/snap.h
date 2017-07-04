@@ -29,14 +29,14 @@ struct SnapInfo {
   utime_t stamp;
   string name;
 
-  string long_name; ///< cached _$ino_$name
+  mutable string long_name; ///< cached _$ino_$name
   
   void encode(bufferlist &bl) const;
   void decode(bufferlist::iterator &bl);
   void dump(Formatter *f) const;
   static void generate_test_instances(list<SnapInfo*>& ls);
 
-  std::string_view get_long_name();
+  std::string_view get_long_name() const;
 };
 WRITE_CLASS_ENCODER(SnapInfo)
 
@@ -77,6 +77,7 @@ struct sr_t {
   snapid_t current_parent_since;
   map<snapid_t, SnapInfo> snaps;
   map<snapid_t, snaplink_t> past_parents;  // key is "last" (or NOSNAP)
+  set<snapid_t> past_parent_snaps;
 
   sr_t()
     : seq(0), created(0),

@@ -8522,7 +8522,7 @@ void Server::handle_client_lssnap(MDRequestRef& mdr)
     return;
 
   SnapRealm *realm = diri->find_snaprealm();
-  map<snapid_t,SnapInfo*> infomap;
+  map<snapid_t,const SnapInfo*> infomap;
   realm->get_snap_info(infomap, diri->get_oldest_snap());
 
   unsigned max_entries = req->head.args.readdir.max_entries;
@@ -8545,7 +8545,7 @@ void Server::handle_client_lssnap(MDRequestRef& mdr)
 
   __u32 num = 0;
   bufferlist dnbl;
-  map<snapid_t,SnapInfo*>::iterator p = infomap.upper_bound(last_snapid);
+  auto p = infomap.upper_bound(last_snapid);
   for (; p != infomap.end() && num < max_entries; ++p) {
     dout(10) << p->first << " -> " << *p->second << dendl;
 
