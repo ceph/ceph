@@ -15,6 +15,7 @@ from teuthology.parallel import parallel
 from teuthology import misc as teuthology
 from tempfile import NamedTemporaryFile
 from teuthology.orchestra import run
+from teuthology.packaging import install_package, remove_package
 
 log = logging.getLogger(__name__)
 
@@ -64,6 +65,14 @@ or
     yield
 
 
+def get_ioengine_package_name(ioengine, remote):
+    system_type = teuthology.get_system_type(remote)
+    if ioengine == 'rbd':
+        return 'librbd1-devel' if system_type == 'rpm' else 'librbd-dev'
+    else:
+        return None
+
+
 def run_fio(remote, config, rbd_test_dir):
     """
     create fio config file with options based on above config
@@ -110,23 +119,17 @@ def run_fio(remote, config, rbd_test_dir):
     if config.get('fio-version'):
         fio_version=config['fio-version']
 
-    fio_config.write('norandommap\n')
-    if ioengine == 'rbd':
-        fio_config.write('invalidate=0\n')
-    #handle package required for librbd engine
+    # handle package required for ioengine, if any
     sn=remote.shortname
-    system_type= teuthology.get_system_type(remote)
-    if system_type == 'rpm' and ioengine == 'rbd':
-        log.info("Installing librbd1 devel package on {sn}".format(sn=sn))
-        remote.run(args=['sudo', 'yum' , 'install', 'librbd1-devel', '-y'])
-    elif ioengine == 'rbd':
-        log.info("Installing librbd devel package on {sn}".format(sn=sn))
-        remote.run(args=['sudo', 'apt-get', '-y',
-                         '--force-yes',
-                         'install', 'librbd-dev'])
+    ioengine_pkg = get_ioengine_package_name(ioengine, remote)
+    if ioengine_pkg:
+        install_package(ioengine_pkg, remote)
+
+    fio_config.write('norandommap\n')
     if ioengine == 'rbd':
         fio_config.write('clientname=admin\n')
         fio_config.write('pool=rbd\n')
+        fio_config.write('invalidate=0\n')
     for frmt in formats:
         for feature in features:
            log.info("Creating rbd images on {sn}".format(sn=sn))
@@ -206,9 +209,5 @@ def run_fio(remote, config, rbd_test_dir):
                 remote.run(args=['sudo', 'rbd', 'unmap', str(image['device'])])
         log.info("Cleaning up fio install")
         remote.run(args=['rm','-rf', run.Raw(rbd_test_dir)])
-        if system_type == 'rpm' and ioengine == 'rbd':
-            log.info("Uninstall librbd1 devel package on {sn}".format(sn=sn))
-            remote.run(args=['sudo', 'yum' , 'remove', 'librbd1-devel', '-y'])
-        elif ioengine == 'rbd':
-            log.info("Uninstall librbd devel package on {sn}".format(sn=sn))
-            remote.run(args=['sudo', 'apt-get', '-y', 'remove', 'librbd-dev'])
+        if ioengine_pkg:
+            remove_package(ioengine_pkg, remote)
