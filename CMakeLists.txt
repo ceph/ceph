@@ -459,14 +459,14 @@ endif(${WITH_LTTNG})
 option(WITH_OSD_INSTRUMENT_FUNCTIONS OFF)
 
 #option for Babeltrace
-option(HAVE_BABELTRACE "Babeltrace libraries are enabled" ON)
-if(${HAVE_BABELTRACE})
+option(WITH_BABELTRACE "Babeltrace libraries are enabled" ON)
+if(WITH_BABELTRACE)
+  set(HAVE_BABELTRACE ON)
   find_package(babeltrace REQUIRED)
-  set(WITH_BABELTRACE ${BABELTRACE_FOUND})
   set(HAVE_BABELTRACE_BABELTRACE_H ${BABELTRACE_FOUND})
   set(HAVE_BABELTRACE_CTF_EVENTS_H ${BABELTRACE_FOUND})
   set(HAVE_BABELTRACE_CTF_ITERATOR_H ${BABELTRACE_FOUND})
-endif(${HAVE_BABELTRACE})
+endif(WITH_BABELTRACE)
 
 option(DEBUG_GATHER "C_Gather debugging is enabled" ON)
 option(ENABLE_COVERAGE "Coverage is enabled" OFF)
