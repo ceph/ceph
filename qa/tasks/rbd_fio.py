@@ -8,8 +8,8 @@
 import contextlib
 import json
 import logging
+import os
 import StringIO
-import re
 
 from teuthology.parallel import parallel
 from teuthology import misc as teuthology
@@ -69,8 +69,22 @@ def get_ioengine_package_name(ioengine, remote):
     system_type = teuthology.get_system_type(remote)
     if ioengine == 'rbd':
         return 'librbd1-devel' if system_type == 'rpm' else 'librbd-dev'
+    elif ioengine == 'libaio':
+        return 'libaio-devel' if system_type == 'rpm' else 'libaio-dev'
     else:
         return None
+
+
+def run_rbd_map(remote, image, iodepth):
+    iodepth = max(iodepth, 128)  # RBD_QUEUE_DEPTH_DEFAULT
+    out = StringIO.StringIO()
+    remote.run(args=['sudo', 'rbd', 'map', '-o', 'queue_depth={}'.format(iodepth), image], stdout=out)
+    dev = out.getvalue().rstrip('\n')
+    teuthology.sudo_write_file(
+        remote,
+        '/sys/block/{}/queue/nr_requests'.format(os.path.basename(dev)),
+        str(iodepth))
+    return dev
 
 
 def run_fio(remote, config, rbd_test_dir):
@@ -91,7 +105,8 @@ def run_fio(remote, config, rbd_test_dir):
         fio_config.write('bs={bs}\n'.format(bs=bs))
     else:
         fio_config.write('bs=4k\n')
-    fio_config.write('iodepth=2\n')
+    iodepth = config.get('io-depth', 2)
+    fio_config.write('iodepth={iod}\n'.format(iod=iodepth))
     if config.get('fio-io-size'):
         size=config['fio-io-size']
         fio_config.write('size={size}\n'.format(size=size))
@@ -130,6 +145,8 @@ def run_fio(remote, config, rbd_test_dir):
         fio_config.write('clientname=admin\n')
         fio_config.write('pool=rbd\n')
         fio_config.write('invalidate=0\n')
+    elif ioengine == 'libaio':
+        fio_config.write('direct=1\n')
     for frmt in formats:
         for feature in features:
            log.info("Creating rbd images on {sn}".format(sn=sn))
@@ -145,18 +162,13 @@ def run_fio(remote, config, rbd_test_dir):
            remote.run(args=create_args)
            remote.run(args=['rbd', 'info', rbd_name])
            if ioengine != 'rbd':
-               out=StringIO.StringIO()
-               remote.run(args=['sudo', 'rbd', 'map', rbd_name ],stdout=out)
-               dev=re.search(r'(/dev/rbd\d+)',out.getvalue())
-               rbd_dev=dev.group(1)
+               rbd_dev = run_rbd_map(remote, rbd_name, iodepth)
                if config.get('test-clone-io'):
                     log.info("Testing clones using fio")
                     remote.run(args=['rbd', 'snap', 'create', rbd_snap_name])
                     remote.run(args=['rbd', 'snap', 'protect', rbd_snap_name])
                     remote.run(args=['rbd', 'clone', rbd_snap_name, rbd_clone_name])
-                    remote.run(args=['sudo', 'rbd', 'map', rbd_clone_name], stdout=out)
-                    dev=re.search(r'(/dev/rbd\d+)',out.getvalue())
-                    rbd_clone_dev=dev.group(1)
+                    rbd_clone_dev = run_rbd_map(remote, rbd_clone_name, iodepth)
                fio_config.write('[{rbd_dev}]\n'.format(rbd_dev=rbd_dev))
                if config.get('rw'):
                    rw=config['rw']
