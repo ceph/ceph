@@ -16,6 +16,11 @@ cleanup() {
   # ensure teuthology can clean up the logs
   [ -d ${STACK_LOG_PATH} ] && chmod -R a+rwx ${STACK_LOG_PATH}
 
+  mkdir ${STACK_LOG_PATH}/etc
+  cp -dpr /etc/cinder ${STACK_LOG_PATH}/etc || true
+  cp -dpr /etc/glance ${STACK_LOG_PATH}/etc || true
+  cp -dpr /etc/nova ${STACK_LOG_PATH}/etc || true
+
   # kill all OpenStack services
   if [ -d ${STACK_OPT_PATH}/devstack ]; then
     cd ${STACK_OPT_PATH}/devstack
@@ -44,6 +49,7 @@ SERVICE_PASSWORD=secretservice
 SERVICE_TOKEN=111222333444
 SWIFT_HASH=1234123412341234
 ROOTSLEEP=0
+NOVNC_FROM_PACKAGE=True
 ENABLED_SERVICES=c-api,c-bak,c-sch,c-vol,ceilometer-acentral,ceilometer-acompute,ceilometer-alarm-evaluator,ceilometer-alarm-notifier,ceilometer-anotification,ceilometer-api,ceilometer-collector,cinder,dstat,g-api,g-reg,horizon,key,mysql,n-api,n-cauth,n-cond,n-cpu,n-novnc,n-obj,n-sch,peakmem_tracker,placement-api,q-agt,q-dhcp,q-l3,q-meta,q-metering,q-svc,rabbit,s-account,s-container,s-object,s-proxy,tempest
 SKIP_EXERCISES=boot_from_volume,bundle,client-env,euca
 SYSLOG=False

@@ -263,7 +263,19 @@ public:
       buffer_map[b->offset].reset(b);
       if (b->is_writing()) {
 	b->data.reassign_to_mempool(mempool::mempool_bluestore_writing);
-        writing.push_back(*b);
+        if (writing.empty() || writing.rbegin()->seq <= b->seq) {
+          writing.push_back(*b);
+        } else {
+          auto it = writing.begin();
+          while (it->seq < b->seq) {
+            ++it;
+          }
+
+          assert(it->seq >= b->seq);
+          // note that this will insert b before it
+          // hence the order is maintained
+          writing.insert(it, *b);
+        }
       } else {
 	b->data.reassign_to_mempool(mempool::mempool_bluestore_cache_data);
 	cache->_add_buffer(b, level, near);
@@ -2186,16 +2198,14 @@ public:
     uint64_t offset,
     size_t len,
     bufferlist& bl,
-    uint32_t op_flags = 0,
-    bool allow_eio = false) override;
+    uint32_t op_flags = 0) override;
   int read(
     CollectionHandle &c,
     const ghobject_t& oid,
     uint64_t offset,
     size_t len,
     bufferlist& bl,
-    uint32_t op_flags = 0,
-    bool allow_eio = false) override;
+    uint32_t op_flags = 0) override;
   int _do_read(
     Collection *c,
     OnodeRef o,

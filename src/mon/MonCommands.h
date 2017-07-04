@@ -197,7 +197,10 @@ COMMAND_WITH_FLAG("scrub", "scrub the monitor stores", \
 COMMAND("fsid", "show cluster FSID/UUID", "mon", "r", "cli,rest")
 COMMAND("log name=logtext,type=CephString,n=N", \
 	"log supplied text to the monitor log", "mon", "rw", "cli,rest")
-COMMAND("log last name=num,type=CephInt,range=1,req=false", \
+COMMAND("log last "
+        "name=num,type=CephInt,range=1,req=false "
+        "name=level,type=CephChoices,strings=debug|info|sec|warn|error,req=false "
+        "name=channel,type=CephChoices,strings=*|cluster|audit,req=false", \
 	"print last few lines of the cluster log", \
 	"mon", "rw", "cli,rest")
 COMMAND_WITH_FLAG("injectargs " \
@@ -301,7 +304,8 @@ COMMAND("mds compat show", "show mds compatibility settings", \
 	"mds", "r", "cli,rest")
 COMMAND_WITH_FLAG("mds stop name=who,type=CephString", "stop mds", \
 	"mds", "rw", "cli,rest", FLAG(DEPRECATED))
-COMMAND("mds deactivate name=who,type=CephString", "stop mds", \
+COMMAND("mds deactivate name=who,type=CephString",
+        "clean up specified MDS rank (use with `set max_mds` to shrink cluster)", \
 	"mds", "rw", "cli,rest")
 COMMAND_WITH_FLAG("mds set_max_mds " \
 	"name=maxmds,type=CephInt,range=0", \
@@ -320,7 +324,8 @@ COMMAND("mds set_state " \
 	"name=state,type=CephInt,range=0|20", \
 	"set mds state of <gid> to <numeric-state>", "mds", "rw", "cli,rest")
 COMMAND("mds fail name=who,type=CephString", \
-	"force mds to status failed", "mds", "rw", "cli,rest")
+	"Mark MDS failed: trigger a failover if a standby is available",
+        "mds", "rw", "cli,rest")
 COMMAND("mds repaired name=rank,type=CephString", \
 	"mark a damaged MDS rank as no longer damaged", "mds", "rw", "cli,rest")
 COMMAND("mds rm " \

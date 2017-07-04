@@ -213,8 +213,7 @@ void OSDMonitor::create_initial()
     newmap.decode(bl);
     newmap.set_fsid(mon->monmap->fsid);
   } else {
-    newmap.build_simple(g_ceph_context, 0, mon->monmap->fsid, 0,
-			g_conf->osd_pg_bits, g_conf->osd_pgp_bits);
+    newmap.build_simple(g_ceph_context, 0, mon->monmap->fsid, 0);
   }
   newmap.set_epoch(1);
   newmap.created = newmap.modified = ceph_clock_now();
@@ -495,12 +494,17 @@ void OSDMonitor::start_mapping()
 	     << dendl;
     mapping_job->abort();
   }
-  auto fin = new C_UpdateCreatingPGs(this, osdmap.get_epoch());
-  mapping_job = mapping.start_update(osdmap, mapper,
-				     g_conf->mon_osd_mapping_pgs_per_chunk);
-  dout(10) << __func__ << " started mapping job " << mapping_job.get()
-	   << " at " << fin->start << dendl;
-  mapping_job->set_finish_event(fin);
+  if (!osdmap.get_pools().empty()) {
+    auto fin = new C_UpdateCreatingPGs(this, osdmap.get_epoch());
+    mapping_job = mapping.start_update(osdmap, mapper,
+				       g_conf->mon_osd_mapping_pgs_per_chunk);
+    dout(10) << __func__ << " started mapping job " << mapping_job.get()
+	     << " at " << fin->start << dendl;
+    mapping_job->set_finish_event(fin);
+  } else {
+    dout(10) << __func__ << " no pools, no mapping job" << dendl;
+    mapping_job = nullptr;
+  }
 }
 
 void OSDMonitor::update_msgr_features()
@@ -795,7 +799,9 @@ void OSDMonitor::maybe_prime_pg_temp()
   next.deepish_copy_from(osdmap);
   next.apply_incremental(pending_inc);
 
-  if (all) {
+  if (next.get_pools().empty()) {
+    dout(10) << __func__ << " no pools, no pg_temp priming" << dendl;
+  } else if (all) {
     PrimeTempJob job(next, this);
     mapper.queue(&job, g_conf->mon_osd_mapping_pgs_per_chunk);
     if (job.wait_for(g_conf->mon_osd_prime_pg_temp_max_time)) {
@@ -6136,32 +6142,37 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
       return -EINVAL;
     }
   } else if (pool_opts_t::is_opt_name(var)) {
+    bool unset = val == "unset";
     if (var == "compression_mode") {
-      auto cmode = Compressor::get_comp_mode_type(val);
-      if (!cmode) {
-	ss << "unrecognized compression mode '" << val << "'";
-	return EINVAL;
+      if (!unset) {
+        auto cmode = Compressor::get_comp_mode_type(val);
+        if (!cmode) {
+	  ss << "unrecognized compression mode '" << val << "'";
+	  return -EINVAL;
+        }
       }
     } else if (var == "compression_algorithm") {
-      auto alg = Compressor::get_comp_alg_type(val);
-      if (!alg) {
-        ss << "unrecognized compression_algorithm '" << val << "'";
-	return EINVAL;
+      if (!unset) {
+        auto alg = Compressor::get_comp_alg_type(val);
+        if (!alg) {
+          ss << "unrecognized compression_algorithm '" << val << "'";
+	  return -EINVAL;
+        }
       }
     } else if (var == "compression_required_ratio") {
       if (floaterr.length()) {
         ss << "error parsing float value '" << val << "': " << floaterr;
         return -EINVAL;
       }
-      if (f < 0 || f>1) {
+      if (f < 0 || f > 1) {
         ss << "compression_required_ratio is out of range (0-1): '" << val << "'";
-	return EINVAL;
+	return -EINVAL;
       }
     } else if (var == "csum_type") {
-      auto t = val != "unset" ? Checksummer::get_csum_string_type(val) : 0;
+      auto t = unset ? 0 : Checksummer::get_csum_string_type(val);
       if (t < 0 ) {
         ss << "unrecognized csum_type '" << val << "'";
-	return EINVAL;
+	return -EINVAL;
       }
       //preserve csum_type numeric value
       n = t;
@@ -6179,7 +6190,7 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
     pool_opts_t::opt_desc_t desc = pool_opts_t::get_opt_desc(var);
     switch (desc.type) {
     case pool_opts_t::STR:
-      if (val.empty()) {
+      if (unset) {
 	p.opts.unset(desc.key);
       } else {
 	p.opts.set(desc.key, static_cast<std::string>(val));
@@ -6214,7 +6225,11 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
     ss << "unrecognized variable '" << var << "'";
     return -EINVAL;
   }
-  ss << "set pool " << pool << " " << var << " to " << val;
+  if (val != "unset") {
+    ss << "set pool " << pool << " " << var << " to " << val;
+  } else {
+    ss << "unset pool " << pool << " " << var;
+  }
   p.last_change = pending_inc.epoch;
   pending_inc.new_pools[pool] = p;
   return 0;

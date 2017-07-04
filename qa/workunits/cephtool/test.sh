@@ -1711,7 +1711,7 @@ function test_mon_pg()
 
   ceph pg debug unfound_objects_exist
   ceph pg debug degraded_pgs_exist
-  ceph pg deep-scrub 0.0
+  ceph pg deep-scrub 1.0
   ceph pg dump
   ceph pg dump pgs_brief --format=json
   ceph pg dump pgs --format=json
@@ -1729,31 +1729,31 @@ function test_mon_pg()
   ceph pg dump_stuck undersized
   ceph pg dump_stuck degraded
   ceph pg ls
-  ceph pg ls 0
+  ceph pg ls 1
   ceph pg ls stale
   expect_false ceph pg ls scrubq
   ceph pg ls active stale repair recovering
-  ceph pg ls 0 active
-  ceph pg ls 0 active stale
+  ceph pg ls 1 active
+  ceph pg ls 1 active stale
   ceph pg ls-by-primary osd.0
-  ceph pg ls-by-primary osd.0 0
+  ceph pg ls-by-primary osd.0 1
   ceph pg ls-by-primary osd.0 active
   ceph pg ls-by-primary osd.0 active stale
-  ceph pg ls-by-primary osd.0 0 active stale
+  ceph pg ls-by-primary osd.0 1 active stale
   ceph pg ls-by-osd osd.0
-  ceph pg ls-by-osd osd.0 0
+  ceph pg ls-by-osd osd.0 1
   ceph pg ls-by-osd osd.0 active
   ceph pg ls-by-osd osd.0 active stale
-  ceph pg ls-by-osd osd.0 0 active stale
+  ceph pg ls-by-osd osd.0 1 active stale
   ceph pg ls-by-pool rbd
   ceph pg ls-by-pool rbd active stale
   # can't test this...
   # ceph pg force_create_pg
   ceph pg getmap -o $TEMP_DIR/map.$$
   [ -s $TEMP_DIR/map.$$ ]
-  ceph pg map 0.0 | grep acting
-  ceph pg repair 0.0
-  ceph pg scrub 0.0
+  ceph pg map 1.0 | grep acting
+  ceph pg repair 1.0
+  ceph pg scrub 1.0
 
   ceph osd set-full-ratio .962
   ceph osd dump | grep '^full_ratio 0.962'
@@ -1790,8 +1790,8 @@ function test_mon_pg()
   wait_for_health_ok
 
   ceph pg stat | grep 'pgs:'
-  ceph pg 0.0 query
-  ceph tell 0.0 query
+  ceph pg 1.0 query
+  ceph tell 1.0 query
   ceph quorum enter
   ceph quorum_status
   ceph report | grep osd_stats
@@ -1818,11 +1818,11 @@ function test_mon_pg()
   expect_false ceph osd primary-affinity osd.9999 .5
   ceph osd primary-affinity osd.0 1
 
-  ceph osd pg-temp 0.0 0 1 2
-  ceph osd pg-temp 0.0 osd.1 osd.0 osd.2
+  ceph osd pg-temp 1.0 0 1 2
+  ceph osd pg-temp 1.0 osd.1 osd.0 osd.2
   expect_false ceph osd pg-temp asdf qwer
-  expect_false ceph osd pg-temp 0.0 asdf
-  expect_false ceph osd pg-temp 0.0
+  expect_false ceph osd pg-temp 1.0 asdf
+  expect_false ceph osd pg-temp 1.0
 
   # don't test ceph osd primary-temp for now
 }
@@ -1944,6 +1944,40 @@ function test_mon_osd_pool_set()
   ceph osd pool delete $TEST_POOL_GETSET $TEST_POOL_GETSET --yes-i-really-really-mean-it
 
   ceph osd pool get rbd crush_rule | grep 'crush_rule: '
+
+  ceph osd pool get $TEST_POOL_GETSET compression_mode | expect_false grep '.'
+  ceph osd pool set $TEST_POOL_GETSET compression_mode aggressive
+  ceph osd pool get $TEST_POOL_GETSET compression_mode | grep 'aggressive'
+  ceph osd pool set $TEST_POOL_GETSET compression_mode unset
+  ceph osd pool get $TEST_POOL_GETSET compression_mode | expect_false grep '.'
+
+  ceph osd pool get $TEST_POOL_GETSET compression_algorithm | expect_false grep '.'
+  ceph osd pool set $TEST_POOL_GETSET compression_algorithm zlib
+  ceph osd pool get $TEST_POOL_GETSET compression_algorithm | grep 'zlib'
+  ceph osd pool set $TEST_POOL_GETSET compression_algorithm unset
+  ceph osd pool get $TEST_POOL_GETSET compression_algorithm | expect_false grep '.'
+
+  ceph osd pool get $TEST_POOL_GETSET compression_required_ratio | expect_false grep '.'
+  expect_false ceph osd pool set $TEST_POOL_GETSET compression_required_ratio 1.1
+  expect_false ceph osd pool set $TEST_POOL_GETSET compression_required_ratio -.2
+  ceph osd pool set $TEST_POOL_GETSET compression_required_ratio .2
+  ceph osd pool get $TEST_POOL_GETSET compression_required_ratio | grep '.2'
+  ceph osd pool set $TEST_POOL_GETSET compression_required_ratio 0
+  ceph osd pool get $TEST_POOL_GETSET compression_required_ratio | expect_false grep '.'
+
+  ceph osd pool get $TEST_POOL_GETSET csum_type | expect_false grep '.'
+  ceph osd pool set $TEST_POOL_GETSET csum_type crc32c
+  ceph osd pool get $TEST_POOL_GETSET csum_type | grep 'crc32c'
+  ceph osd pool set $TEST_POOL_GETSET csum_type unset
+  ceph osd pool get $TEST_POOL_GETSET csum_type | expect_false grep '.'
+
+  for size in compression_max_blob_size compression_min_blob_size csum_max_block csum_min_block; do
+      ceph osd pool get $TEST_POOL_GETSET $size | expect_false grep '.'
+      ceph osd pool set $TEST_POOL_GETSET $size 100
+      ceph osd pool get $TEST_POOL_GETSET $size | grep '100'
+      ceph osd pool set $TEST_POOL_GETSET $size 0
+      ceph osd pool get $TEST_POOL_GETSET $size | expect_false grep '.'
+  done
 }
 
 function test_mon_osd_tiered_pool_set()
@@ -2353,9 +2387,11 @@ function test_mds_tell_help_command()
   ceph osd pool delete fs_metadata fs_metadata --yes-i-really-really-mean-it
 }
 
-function test_mgr_tell_help_command()
+function test_mgr_tell()
 {
   ceph tell mgr help
+  ceph tell mgr fs status
+  ceph tell mgr osd status
 }
 
 #
@@ -2414,7 +2450,7 @@ MDS_TESTS+=" mon_mds"
 MDS_TESTS+=" mon_mds_metadata"
 MDS_TESTS+=" mds_tell_help_command"
 
-MGR_TESTS+=" mgr_tell_help_command"
+MGR_TESTS+=" mgr_tell"
 
 TESTS+=$MON_TESTS
 TESTS+=$OSD_TESTS
@@ -2488,6 +2524,8 @@ if [[ $do_list -eq 1 ]]; then
   list_tests ;
   exit 0
 fi
+
+ceph osd pool create rbd 10
 
 if test -z "$tests_to_run" ; then
   tests_to_run="$TESTS"

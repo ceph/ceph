@@ -24,6 +24,7 @@ Major Changes from Kraken
 - *RADOS*:
 
   * *BlueStore*:
+
     - The new *BlueStore* backend for *ceph-osd* is now stable and the new
       default for newly created OSDs.  BlueStore manages data stored by each OSD
       by directly managing the physical HDDs or SSDs without the use of an
@@ -126,7 +127,7 @@ Major Changes from Kraken
   * Improved discard handling when the object map feature is enabled.
   * rbd CLI ``import`` and ``copy`` commands now detect sparse and
     preserve sparse regions.
-  * Snapshots will now include a creation timestamp
+  * Images and Snapshots will now include a creation timestamp
 
 - *CephFS*:
 
@@ -326,16 +327,17 @@ Upgrade from Jewel or Kraken
 
      # systemctl ceph-mgr.target
 
-   If you are upgrading from jewel, you should have new ceph-mgr daemons
-   automatically appear on the same hosts as the ceph-mon daemons.  If not,
-   you can deploy new daemons with tools like ceph-deploy or ceph-ansible.  For
-   example,::
+   If you are upgrading from kraken, you may already have ceph-mgr
+   daemons deployed.  If not, or if you are upgrading from jewel, you
+   can deploy new daemons with tools like ceph-deploy or ceph-ansible.
+   For example,::
 
      # ceph-deploy mgr create HOST
 
    Verify the ceph-mgr daemons are running by checking ``ceph -s``::
 
      # ceph -s
+
      ...
        services:
         mon: 3 daemons, quorum foo,bar,baz
