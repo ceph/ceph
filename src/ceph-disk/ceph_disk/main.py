@@ -3085,6 +3085,67 @@ def move_mount(
     )
 
 
+#
+# For upgrade purposes, to make sure there are no competing units,
+# both --runtime unit and the default should be disabled. There can be
+# two units at the same time: one with --runtime and another without
+# it. If, for any reason (manual or ceph-disk) the two units co-exist
+# they will compete with each other.
+#
+def systemd_disable(
+    path,
+    osd_id,
+):
+    # ensure there is no duplicate ceph-osd@.service
+    for style in ([], ['--runtime']):
+        command_check_call(
+            [
+                'systemctl',
+                'disable',
+                'ceph-osd@{osd_id}'.format(osd_id=osd_id),
+            ] + style,
+        )
+
+
+def systemd_start(
+    path,
+    osd_id,
+):
+    systemd_disable(path, osd_id)
+    if is_mounted(path):
+        style = ['--runtime']
+    else:
+        style = []
+    command_check_call(
+        [
+            'systemctl',
+            'enable',
+            'ceph-osd@{osd_id}'.format(osd_id=osd_id),
+        ] + style,
+    )
+    command_check_call(
+        [
+            'systemctl',
+            'start',
+            'ceph-osd@{osd_id}'.format(osd_id=osd_id),
+        ],
+    )
+
+
+def systemd_stop(
+    path,
+    osd_id,
+):
+    systemd_disable(path, osd_id)
+    command_check_call(
+        [
+            'systemctl',
+            'stop',
+            'ceph-osd@{osd_id}'.format(osd_id=osd_id),
+        ],
+    )
+
+
 def start_daemon(
     cluster,
     osd_id,
@@ -3128,29 +3189,7 @@ def start_daemon(
                 ],
             )
         elif os.path.exists(os.path.join(path, 'systemd')):
-            # ensure there is no duplicate ceph-osd@.service
-            command_check_call(
-                [
-                    'systemctl',
-                    'disable',
-                    'ceph-osd@{osd_id}'.format(osd_id=osd_id),
-                ],
-            )
-            command_check_call(
-                [
-                    'systemctl',
-                    'enable',
-                    '--runtime',
-                    'ceph-osd@{osd_id}'.format(osd_id=osd_id),
-                ],
-            )
-            command_check_call(
-                [
-                    'systemctl',
-                    'start',
-                    'ceph-osd@{osd_id}'.format(osd_id=osd_id),
-                ],
-            )
+            systemd_start(path, osd_id)
         elif os.path.exists(os.path.join(path, 'openrc')):
             base_script = '/etc/init.d/ceph-osd'
             osd_script = '{base}.{osd_id}'.format(
@@ -3208,21 +3247,7 @@ def stop_daemon(
                 ],
             )
         elif os.path.exists(os.path.join(path, 'systemd')):
-            command_check_call(
-                [
-                    'systemctl',
-                    'disable',
-                    '--runtime',
-                    'ceph-osd@{osd_id}'.format(osd_id=osd_id),
-                ],
-            )
-            command_check_call(
-                [
-                    'systemctl',
-                    'stop',
-                    'ceph-osd@{osd_id}'.format(osd_id=osd_id),
-                ],
-            )
+            systemd_stop(path, osd_id)
         elif os.path.exists(os.path.join(path, 'openrc')):
             command_check_call(
                 [
