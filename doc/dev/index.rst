@@ -723,15 +723,13 @@ command to complete successfully on x86_64 (other architectures may have
 different constraints). Depending on your hardware, it can take from 20
 minutes to three hours to complete, but it's worth the wait.
 
-Future sections
----------------
+Caveats
+-------
 
-* Principles of `make check`_ tests
-* Where to find test results
-* How to interpret test results
-* Find the corresponding source code
-* Writing `make check`_ tests
-* Caveats
+1. Unlike the various Ceph daemons and ``ceph-fuse``, the `make check`_ tests
+   are linked against the default memory allocator (glibc) unless explicitly
+   linked against something else. This enables tools like valgrind to be used
+   in the tests.
 
 Testing - integration tests
 ===========================
