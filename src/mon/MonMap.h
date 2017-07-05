@@ -39,8 +39,15 @@ struct mon_info_t {
    * and other monitors.
    */
   entity_addr_t public_addr;
+  /**
+   * the priority of the mon, the lower value the more preferred
+   */
+  uint16_t priority{0};
 
-  mon_info_t(string &n, entity_addr_t& p_addr)
+  mon_info_t(const string& n, const entity_addr_t& p_addr, uint16_t p)
+    : name(n), public_addr(p_addr), priority(p)
+  {}
+  mon_info_t(const string &n, const entity_addr_t& p_addr)
     : name(n), public_addr(p_addr)
   { }
 
@@ -139,18 +146,25 @@ public:
   /**
    * Add new monitor to the monmap
    *
+   * @param m monitor info of the new monitor
+   */
+  void add(mon_info_t &&m) {
+    assert(mon_info.count(m.name) == 0);
+    assert(addr_mons.count(m.public_addr) == 0);
+    mon_info[m.name] = std::move(m);
+    calc_ranks();
+  }
+
+  /**
+   * Add new monitor to the monmap
+   *
    * @param name Monitor name (i.e., 'foo' in 'mon.foo')
    * @param addr Monitor's public address
    */
   void add(const string &name, const entity_addr_t &addr) {
-    assert(mon_info.count(name) == 0);
-    assert(addr_mons.count(addr) == 0);
-    mon_info_t &m = mon_info[name];
-    m.name = name;
-    m.public_addr = addr;
-    calc_ranks();
+    add(mon_info_t(name, addr));
   }
- 
+
   /**
    * Remove monitor from the monmap
    *
