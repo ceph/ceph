@@ -1945,8 +1945,7 @@ void Monitor::win_election(epoch_t epoch, set<int>& active, uint64_t features,
   }
 
   Metadata my_meta;
-  collect_sys_info(&my_meta, g_ceph_context);
-  my_meta["addr"] = stringify(messenger->get_myaddr());
+  collect_metadata(&my_meta);
   update_mon_metadata(rank, std::move(my_meta));
 }
 
@@ -1976,10 +1975,16 @@ void Monitor::lose_election(epoch_t epoch, set<int> &q, int l,
 
   if (quorum_con_features & CEPH_FEATURE_MON_METADATA) {
     Metadata sys_info;
-    collect_sys_info(&sys_info, g_ceph_context);
+    collect_metadata(&sys_info);
     messenger->send_message(new MMonMetadata(sys_info),
 			    monmap->get_inst(get_leader()));
   }
+}
+
+void Monitor::collect_metadata(Metadata *m)
+{
+  collect_sys_info(m, g_ceph_context);
+  (*m)["addr"] = stringify(messenger->get_myaddr());
 }
 
 void Monitor::finish_election()
