@@ -2446,7 +2446,7 @@ BlueStore::OnodeRef BlueStore::Collection::get_onode(
     assert(r >= 0);
     on = new Onode(this, oid, key);
     on->exists = true;
-    bufferptr::iterator p = v.front().begin();
+    bufferptr::iterator p = v.front().begin_deep();
     on->onode.decode(p);
 
     // initialize extent_map
