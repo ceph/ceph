@@ -97,16 +97,10 @@ public:
   typedef RefreshRequest<MockRefreshImageCtx> MockRefreshRequest;
   typedef RefreshParentRequest<MockRefreshImageCtx> MockRefreshParentRequest;
 
-  void expect_is_lock_required(MockRefreshImageCtx &mock_image_ctx, bool require_lock) {
-    EXPECT_CALL(*mock_image_ctx.io_work_queue, is_lock_required()).WillOnce(Return(require_lock));
-  }
-
-  void expect_set_require_lock_on_read(MockRefreshImageCtx &mock_image_ctx) {
-    EXPECT_CALL(*mock_image_ctx.io_work_queue, set_require_lock_on_read());
-  }
-
-  void expect_clear_require_lock_on_read(MockRefreshImageCtx &mock_image_ctx) {
-    EXPECT_CALL(*mock_image_ctx.io_work_queue, clear_require_lock_on_read());
+  void expect_set_require_lock(MockRefreshImageCtx &mock_image_ctx,
+                               librbd::io::Direction direction, bool enabled) {
+    EXPECT_CALL(*mock_image_ctx.io_work_queue, set_require_lock(direction,
+                                                                enabled));
   }
 
   void expect_v1_read_header(MockRefreshImageCtx &mock_image_ctx, int r) {
@@ -637,7 +631,6 @@ TEST_F(TestMockImageRefreshRequest, DisableExclusiveLock) {
   expect_get_flags(mock_image_ctx, 0);
   expect_get_group(mock_image_ctx, 0);
   expect_refresh_parent_is_required(mock_refresh_parent_request, false);
-  expect_clear_require_lock_on_read(mock_image_ctx);
   expect_shut_down_exclusive_lock(mock_image_ctx, *mock_exclusive_lock, 0);
 
   C_SaferCond ctx;
@@ -742,58 +735,6 @@ TEST_F(TestMockImageRefreshRequest, JournalDisabledByPolicy) {
   ASSERT_EQ(0, ctx.wait());
 }
 
-TEST_F(TestMockImageRefreshRequest, ExclusiveLockWithCoR) {
-  REQUIRE_FEATURE(RBD_FEATURE_EXCLUSIVE_LOCK);
-
-  std::string val;
-  ASSERT_EQ(0, _rados.conf_get("rbd_clone_copy_on_read", val));
-  if (val == "false") {
-    std::cout << "SKIPPING due to disabled rbd_copy_on_read" << std::endl;
-    return;
-  }
-
-  librbd::ImageCtx *ictx;
-  ASSERT_EQ(0, open_image(m_image_name, &ictx));
-
-  MockRefreshImageCtx mock_image_ctx(*ictx);
-  MockRefreshParentRequest mock_refresh_parent_request;
-
-  MockExclusiveLock mock_exclusive_lock;
-  mock_image_ctx.exclusive_lock = &mock_exclusive_lock;
-
-  if (ictx->test_features(RBD_FEATURE_JOURNALING)) {
-    ASSERT_EQ(0, ictx->operations->update_features(RBD_FEATURE_JOURNALING,
-                                                   false));
-  }
-
-  if (ictx->test_features(RBD_FEATURE_FAST_DIFF)) {
-    ASSERT_EQ(0, ictx->operations->update_features(RBD_FEATURE_FAST_DIFF,
-                                                   false));
-  }
-
-  if (ictx->test_features(RBD_FEATURE_OBJECT_MAP)) {
-    ASSERT_EQ(0, ictx->operations->update_features(RBD_FEATURE_OBJECT_MAP,
-                                                   false));
-  }
-
-  expect_op_work_queue(mock_image_ctx);
-  expect_test_features(mock_image_ctx);
-
-  InSequence seq;
-  expect_get_mutable_metadata(mock_image_ctx, 0);
-  expect_get_flags(mock_image_ctx, 0);
-  expect_get_group(mock_image_ctx, 0);
-  expect_refresh_parent_is_required(mock_refresh_parent_request, false);
-  expect_is_lock_required(mock_image_ctx, true);
-  expect_set_require_lock_on_read(mock_image_ctx);
-
-  C_SaferCond ctx;
-  MockRefreshRequest *req = new MockRefreshRequest(mock_image_ctx, false, false, &ctx);
-  req->send();
-
-  ASSERT_EQ(0, ctx.wait());
-}
-
 TEST_F(TestMockImageRefreshRequest, EnableJournalWithExclusiveLock) {
   REQUIRE_FEATURE(RBD_FEATURE_JOURNALING);
 
@@ -873,7 +814,7 @@ TEST_F(TestMockImageRefreshRequest, EnableJournalWithoutExclusiveLock) {
   expect_get_flags(mock_image_ctx, 0);
   expect_get_group(mock_image_ctx, 0);
   expect_refresh_parent_is_required(mock_refresh_parent_request, false);
-  expect_set_require_lock_on_read(mock_image_ctx);
+  expect_set_require_lock(mock_image_ctx, librbd::io::DIRECTION_BOTH, true);
 
   C_SaferCond ctx;
   MockRefreshRequest *req = new MockRefreshRequest(mock_image_ctx, false, false, &ctx);
@@ -917,7 +858,9 @@ TEST_F(TestMockImageRefreshRequest, DisableJournal) {
   expect_get_group(mock_image_ctx, 0);
   expect_refresh_parent_is_required(mock_refresh_parent_request, false);
   expect_block_writes(mock_image_ctx, 0);
-  expect_clear_require_lock_on_read(mock_image_ctx);
+  if (!mock_image_ctx.clone_copy_on_read) {
+    expect_set_require_lock(mock_image_ctx, librbd::io::DIRECTION_READ, false);
+  }
   expect_close_journal(mock_image_ctx, *mock_journal, 0);
   expect_unblock_writes(mock_image_ctx);
 

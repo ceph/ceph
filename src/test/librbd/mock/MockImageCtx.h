@@ -83,6 +83,7 @@ struct MockImageCtx {
       io_work_queue(new io::MockImageRequestWQ()),
       op_work_queue(new MockContextWQ()),
       readahead_max_bytes(image_ctx.readahead_max_bytes),
+      event_socket(image_ctx.event_socket),
       parent(NULL), operations(new MockOperations()),
       state(new MockImageState()),
       image_watcher(NULL), object_map(NULL),
@@ -103,7 +104,8 @@ struct MockImageCtx {
           image_ctx.journal_max_concurrent_object_sets),
       mirroring_resync_after_disconnect(
           image_ctx.mirroring_resync_after_disconnect),
-      mirroring_replay_delay(image_ctx.mirroring_replay_delay)
+      mirroring_replay_delay(image_ctx.mirroring_replay_delay),
+      non_blocking_aio(image_ctx.non_blocking_aio)
   {
     md_ctx.dup(image_ctx.md_ctx);
     data_ctx.dup(image_ctx.data_ctx);
@@ -191,6 +193,8 @@ struct MockImageCtx {
   MOCK_METHOD0(notify_update, void());
   MOCK_METHOD1(notify_update, void(Context *));
 
+  MOCK_CONST_METHOD0(get_exclusive_lock_policy, exclusive_lock::Policy*());
+
   MOCK_CONST_METHOD0(get_journal_policy, journal::Policy*());
   MOCK_CONST_METHOD1(set_journal_policy, void(journal::Policy*));
 
@@ -265,6 +269,8 @@ struct MockImageCtx {
   MockReadahead readahead;
   uint64_t readahead_max_bytes;
 
+  EventSocket &event_socket;
+
   MockImageCtx *parent;
   MockOperations *operations;
   MockImageState *state;
@@ -290,6 +296,7 @@ struct MockImageCtx {
   int journal_max_concurrent_object_sets;
   bool mirroring_resync_after_disconnect;
   int mirroring_replay_delay;
+  bool non_blocking_aio;
 };
 
 } // namespace librbd

@@ -33,6 +33,31 @@ public:
     m_trace.event("finish");
   }
 
+  static ImageRequest* create_read_request(ImageCtxT &image_ctx,
+                                           AioCompletion *aio_comp,
+                                           Extents &&image_extents,
+                                           ReadResult &&read_result,
+                                           int op_flags,
+                                           const ZTracer::Trace &parent_trace);
+  static ImageRequest* create_write_request(ImageCtxT &image_ctx,
+                                            AioCompletion *aio_comp,
+                                            Extents &&image_extents,
+                                            bufferlist &&bl, int op_flags,
+                                            const ZTracer::Trace &parent_trace);
+  static ImageRequest* create_discard_request(ImageCtxT &image_ctx,
+                                              AioCompletion *aio_comp,
+                                              uint64_t off, uint64_t len,
+                                              bool skip_partial_discard,
+                                              const ZTracer::Trace &parent_trace);
+  static ImageRequest* create_flush_request(ImageCtxT &image_ctx,
+                                            AioCompletion *aio_comp,
+                                            const ZTracer::Trace &parent_trace);
+  static ImageRequest* create_writesame_request(ImageCtxT &image_ctx,
+                                                AioCompletion *aio_comp,
+                                                uint64_t off, uint64_t len,
+                                                bufferlist &&bl, int op_flags,
+                                                const ZTracer::Trace &parent_trace);
+
   static void aio_read(ImageCtxT *ictx, AioCompletion *c,
                        Extents &&image_extents, ReadResult &&read_result,
                        int op_flags, const ZTracer::Trace &parent_trace);

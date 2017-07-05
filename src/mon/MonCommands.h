@@ -304,7 +304,8 @@ COMMAND("mds compat show", "show mds compatibility settings", \
 	"mds", "r", "cli,rest")
 COMMAND_WITH_FLAG("mds stop name=who,type=CephString", "stop mds", \
 	"mds", "rw", "cli,rest", FLAG(DEPRECATED))
-COMMAND("mds deactivate name=who,type=CephString", "stop mds", \
+COMMAND("mds deactivate name=who,type=CephString",
+        "clean up specified MDS rank (use with `set max_mds` to shrink cluster)", \
 	"mds", "rw", "cli,rest")
 COMMAND_WITH_FLAG("mds set_max_mds " \
 	"name=maxmds,type=CephInt,range=0", \
@@ -323,7 +324,8 @@ COMMAND("mds set_state " \
 	"name=state,type=CephInt,range=0|20", \
 	"set mds state of <gid> to <numeric-state>", "mds", "rw", "cli,rest")
 COMMAND("mds fail name=who,type=CephString", \
-	"force mds to status failed", "mds", "rw", "cli,rest")
+	"Mark MDS failed: trigger a failover if a standby is available",
+        "mds", "rw", "cli,rest")
 COMMAND("mds repaired name=rank,type=CephString", \
 	"mark a damaged MDS rank as no longer damaged", "mds", "rw", "cli,rest")
 COMMAND("mds rm " \
@@ -953,3 +955,12 @@ COMMAND("mgr dump "				     \
 	"mgr", "r", "cli,rest")
 COMMAND("mgr fail name=who,type=CephString", \
 	"treat the named manager daemon as failed", "mgr", "rw", "cli,rest")
+COMMAND("mgr module ls",
+	"list active mgr modules", "mgr", "r", "cli,rest")
+COMMAND("mgr module enable "						\
+	"name=module,type=CephString "					\
+	"name=force,type=CephChoices,strings=--force,req=false",
+	"enable mgr module", "mgr", "rw", "cli,rest")
+COMMAND("mgr module disable "						\
+	"name=module,type=CephString",
+	"disable mgr module", "mgr", "rw", "cli,rest")

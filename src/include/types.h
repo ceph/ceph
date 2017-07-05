@@ -489,10 +489,13 @@ struct errorcode32_t {
   // cppcheck-suppress noExplicitConstructor
   errorcode32_t(int32_t i) : code(i) {}
 
-  operator int() const { return code; }
-  int operator==(int i) {
-    return code==i;
-  }
+  operator int() const  { return code; }
+  int* operator&()      { return &code; }
+  int operator==(int i) { return code == i; }
+  int operator>(int i)  { return code > i; }
+  int operator>=(int i) { return code >= i; }
+  int operator<(int i)  { return code < i; }
+  int operator<=(int i) { return code <= i; }
 
   void encode(bufferlist &bl) const {
     __s32 newcode = hostos_to_ceph_errno(code);
