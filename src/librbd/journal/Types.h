@@ -36,7 +36,7 @@ enum EventType {
   EVENT_TYPE_RENAME          = 10,
   EVENT_TYPE_RESIZE          = 11,
   EVENT_TYPE_FLATTEN         = 12,
-  EVENT_TYPE_DEMOTE          = 13,
+  EVENT_TYPE_DEMOTE_PROMOTE  = 13,
   EVENT_TYPE_SNAP_LIMIT      = 14,
   EVENT_TYPE_UPDATE_FEATURES = 15,
   EVENT_TYPE_METADATA_SET    = 16,
@@ -285,8 +285,9 @@ struct FlattenEvent : public OpEventBase {
   using OpEventBase::dump;
 };
 
-struct DemoteEvent {
-  static const EventType TYPE = static_cast<EventType>(EVENT_TYPE_DEMOTE);
+struct DemotePromoteEvent {
+  static const EventType TYPE = static_cast<EventType>(
+    EVENT_TYPE_DEMOTE_PROMOTE);
 
   void encode(bufferlist& bl) const;
   void decode(__u8 version, bufferlist::iterator& it);
@@ -364,7 +365,7 @@ typedef boost::variant<AioDiscardEvent,
                        RenameEvent,
                        ResizeEvent,
                        FlattenEvent,
-                       DemoteEvent,
+                       DemotePromoteEvent,
 		       SnapLimitEvent,
                        UpdateFeaturesEvent,
                        MetadataSetEvent,

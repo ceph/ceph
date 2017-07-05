@@ -723,7 +723,7 @@ int Journal<I>::demote() {
       return r;
     }
 
-    journal::EventEntry event_entry{journal::DemoteEvent{}};
+    journal::EventEntry event_entry{journal::DemotePromoteEvent{}};
     bufferlist event_entry_bl;
     ::encode(event_entry, event_entry_bl);
 
