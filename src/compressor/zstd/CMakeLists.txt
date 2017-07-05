@@ -34,7 +34,7 @@ set(zstd_sources
 
 add_library(ceph_zstd SHARED ${zstd_sources})
 add_dependencies(ceph_zstd ${CMAKE_SOURCE_DIR}/src/ceph_ver.h)
-target_link_libraries(ceph_zstd zstd)
+target_link_libraries(ceph_zstd zstd global ceph-common)
 set_target_properties(ceph_zstd PROPERTIES VERSION 2.0.0 SOVERSION 2)
 install(TARGETS ceph_zstd DESTINATION ${compressor_plugin_dir})
 

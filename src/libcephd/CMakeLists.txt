@@ -20,7 +20,7 @@ set(merge_libs
   common
   common_utf8
   erasure_code
-  global
+  global-static
   json_spirit
   kv
   mds
