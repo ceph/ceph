@@ -918,6 +918,9 @@ OPTION(osd_snap_trim_cost, OPT_U32, 1<<20) // set default cost equal to 1MB io
 OPTION(osd_scrub_priority, OPT_U32, 5)
 // set default cost equal to 50MB io
 OPTION(osd_scrub_cost, OPT_U32, 50<<20) 
+// set requested scrub priority higher than scrub priority to make the
+// requested scrubs jump the queue of scheduled scrubs
+OPTION(osd_requested_scrub_priority, OPT_U32, 120)
 
 OPTION(osd_recovery_priority, OPT_U32, 5)
 // set default cost equal to 20MB io

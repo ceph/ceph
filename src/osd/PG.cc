@@ -2076,6 +2076,8 @@ bool PG::queue_scrub()
   if (is_scrubbing()) {
     return false;
   }
+  scrubber.priority = scrubber.must_scrub ?
+         cct->_conf->osd_requested_scrub_priority : get_scrub_priority();
   scrubber.must_scrub = false;
   state_set(PG_STATE_SCRUBBING);
   if (scrubber.must_deep_scrub) {
