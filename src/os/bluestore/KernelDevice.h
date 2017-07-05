@@ -35,7 +35,7 @@ class KernelDevice : public BlockDevice {
   interval_set<uint64_t> debug_inflight;
 
   Mutex flush_lock;
-  atomic_t io_since_flush;
+  atomic_t io_since_flush = {false};
 
   FS::aio_queue_t aio_queue;
   aio_callback_t aio_callback;
