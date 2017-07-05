@@ -874,6 +874,7 @@ struct RGWObjState {
   ceph::real_time mtime;
   uint64_t epoch;
   bufferlist obj_tag;
+  bufferlist tail_tag;
   string write_tag;
   bool fake_tag;
   RGWObjManifest manifest;
@@ -907,6 +908,9 @@ struct RGWObjState {
     epoch = rhs.epoch;
     if (rhs.obj_tag.length()) {
       obj_tag = rhs.obj_tag;
+    }
+    if (rhs.tail_tag.length()) {
+      tail_tag = rhs.tail_tag;
     }
     write_tag = rhs.write_tag;
     fake_tag = rhs.fake_tag;
@@ -2702,7 +2706,7 @@ public:
     void invalidate_state();
 
     int prepare_atomic_modification(librados::ObjectWriteOperation& op, bool reset_obj, const string *ptag,
-                                    const char *ifmatch, const char *ifnomatch, bool removal_op);
+                                    const char *ifmatch, const char *ifnomatch, bool removal_op, bool modify_tail);
     int complete_atomic_modification();
 
   public:
@@ -2798,17 +2802,19 @@ public:
         bool canceled;
         const string *user_data;
         rgw_zone_set *zones_trace;
+        bool modify_tail;
 
         MetaParams() : mtime(NULL), rmattrs(NULL), data(NULL), manifest(NULL), ptag(NULL),
                  remove_objs(NULL), category(RGW_OBJ_CATEGORY_MAIN), flags(0),
-                 if_match(NULL), if_nomatch(NULL), olh_epoch(0), canceled(false), user_data(nullptr), zones_trace(nullptr) {}
+                 if_match(NULL), if_nomatch(NULL), olh_epoch(0), canceled(false), user_data(nullptr), zones_trace(nullptr),
+                 modify_tail(false) {}
       } meta;
 
       explicit Write(RGWRados::Object *_target) : target(_target) {}
 
       int _do_write_meta(uint64_t size, uint64_t accounted_size,
                      map<std::string, bufferlist>& attrs,
-                     bool assume_noent,
+                     bool modify_tail, bool assume_noent,
                      void *index_op);
       int write_meta(uint64_t size, uint64_t accounted_size,
                      map<std::string, bufferlist>& attrs);
