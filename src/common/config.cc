@@ -81,7 +81,7 @@ struct md_config_t::option_##name##_t {     \
 #define SAFE_OPTION(name, type, def_val)
 #define SUBSYS(name, log, gather)
 #define DEFAULT_SUBSYS(log, gather)
-#include "common/config_opts.h"
+#include "common/legacy_config_opts.h"
 #undef OPTION
 #undef OPTION_VALIDATOR
 #undef SAFE_OPTION
@@ -127,7 +127,7 @@ md_config_t::md_config_t()
 #define SAFE_OPTION(name, type, def_val) OPTION(name, type, def_val)
 #define SUBSYS(name, log, gather)
 #define DEFAULT_SUBSYS(log, gather)
-#include "common/config_opts.h"
+#include "common/legacy_config_opts.h"
 #undef OPTION_OPT_INT
 #undef OPTION_OPT_LONGLONG
 #undef OPTION_OPT_STR
@@ -154,7 +154,7 @@ md_config_t::md_config_t()
 #define SAFE_OPTION(name, type, def_val) OPTION4(name, type, def_val, true)
 #define SUBSYS(name, log, gather)
 #define DEFAULT_SUBSYS(log, gather)
-#include "common/config_opts.h"
+#include "common/legacy_config_opts.h"
 #undef OPTION4
 #undef OPTION
 #undef OPTION_VALIDATOR
@@ -179,7 +179,7 @@ void md_config_t::init_subsys()
 #define OPTION(a, b, c)
 #define OPTION_VALIDATOR(a)
 #define SAFE_OPTION(a, b, c)
-#include "common/config_opts.h"
+#include "common/legacy_config_opts.h"
 #undef OPTION
 #undef OPTION_VALIDATOR
 #undef SAFE_OPTION

@@ -47,5 +47,5 @@ string convert_type(string t) {
 
 int main(int argc, char **argv)
 {
-  #include "common/config_opts.h"
+  #include "common/legacy_config_opts.h"
 }
