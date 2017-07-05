@@ -1028,7 +1028,7 @@ int NVMEDevice::aio_write(
 int NVMEDevice::write(uint64_t off, bufferlist &bl, bool buffered)
 {
   // FIXME: there is presumably a more efficient way to do this...
-  IOContext ioc(NULL);
+  IOContext ioc(cct, NULL);
   aio_write(off, bl, &ioc, buffered);
   ioc.aio_wait();
   return 0;
