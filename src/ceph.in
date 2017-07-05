@@ -899,7 +899,10 @@ def main():
     try:
         if childargs and childargs[0] == 'ping':
             return ping_monitor(cluster_handle, childargs[1], timeout)
-        run_in_thread(cluster_handle.connect, timeout=timeout)
+        result = run_in_thread(cluster_handle.connect, timeout=timeout)
+        if type(result) is tuple and result[0] == -errno.EINTR:
+            print('Cluster connection interrupted or timed out', file=sys.stderr)
+            return 1
     except KeyboardInterrupt:
         print('Cluster connection aborted', file=sys.stderr)
         return 1
