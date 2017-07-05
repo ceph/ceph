@@ -492,11 +492,16 @@ class CephFilepath(CephArgtype):
     Openable file
     """
     def valid(self, s, partial=False):
+        cleanup = False
+        if not os.path.exists(s):
+            cleanup = True
         try:
             f = open(s, 'a+')
         except Exception as e:
             raise ArgumentValid('can\'t open {0}: {1}'.format(s, e))
         f.close()
+        if cleanup:
+            os.remove(s)
         self.val = s
 
     def __str__(self):
