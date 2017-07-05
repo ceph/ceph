@@ -4797,7 +4797,7 @@ struct OSDOp {
   sobject_t soid;
 
   bufferlist indata, outdata;
-  int32_t rval;
+  errorcode32_t rval;
 
   OSDOp() : rval(0) {
     memset(&op, 0, sizeof(ceph_osd_op));
