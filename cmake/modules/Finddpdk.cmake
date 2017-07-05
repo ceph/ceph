@@ -71,5 +71,5 @@ if (EXISTS ${WITH_DPDK_MLX5})
   list(APPEND check_LIBRARIES -libverbs)
 endif()
   set(DPDK_LIBRARIES
-    -Wl,--whole-archive ${check_LIBRARIES} -lpthread -Wl,--no-whole-archive)
+    -Wl,--whole-archive ${check_LIBRARIES} -Wl,--no-whole-archive)
 endif(DPDK_FOUND)
