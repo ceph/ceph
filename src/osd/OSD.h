@@ -2113,6 +2113,10 @@ protected:
     }
     pg_stat_queue_lock.Unlock();
   }
+  void clear_outstanding_pg_stats(){
+    Mutex::Locker l(pg_stat_queue_lock);
+    outstanding_pg_stats.clear();
+  }
 
   ceph_tid_t get_tid() {
     return service.get_tid();
