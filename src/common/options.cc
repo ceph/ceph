@@ -4,7 +4,8 @@
 #include "acconfig.h"
 #include "options.h"
 
-Option _ceph_options[] = {
+
+const std::vector<Option> ceph_options = {
 
   // ** global basics **
 
@@ -5086,11 +5087,5 @@ Option _ceph_options[] = {
   Option("rgw_reshard_thread_interval", Option::TYPE_INT, Option::LEVEL_ADVANCED)
   .set_default(60 * 10)
   .set_description(""),
-
-  
-  // ** end **
-  Option("", Option::TYPE_INT, Option::LEVEL_BASIC)
 };
 
-
-Option *ceph_options = _ceph_options;

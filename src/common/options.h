@@ -119,5 +119,5 @@ struct Option {
   }
 };
 
-// array of ceph options.  the last one will have a blank name.
-extern struct Option *ceph_options;
+extern const std::vector<Option> ceph_options;
+
