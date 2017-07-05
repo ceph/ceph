@@ -640,6 +640,7 @@ bool MgrMonitor::prepare_command(MonOpRequestRef op)
     }
     pending_map.modules.erase(module);
   } else {
+    ss << "Command '" << prefix << "' not implemented!";
     r = -ENOSYS;
   }
 
