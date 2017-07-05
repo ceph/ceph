@@ -210,7 +210,7 @@ struct C_InvalidateCache : public Context {
 
     ThreadPool *thread_pool;
     get_thread_pool_instance(cct, &thread_pool, &op_work_queue);
-    io_work_queue = new io::ImageRequestWQ(
+    io_work_queue = new io::ImageRequestWQ<>(
       this, "librbd::io_work_queue", cct->_conf->rbd_op_thread_timeout,
       thread_pool);
 

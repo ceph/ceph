@@ -109,6 +109,48 @@ private:
 } // anonymous namespace
 
 template <typename I>
+ImageRequest<I>* ImageRequest<I>::create_read_request(
+    I &image_ctx, AioCompletion *aio_comp, Extents &&image_extents,
+    ReadResult &&read_result, int op_flags,
+    const ZTracer::Trace &parent_trace) {
+  return new ImageReadRequest<I>(image_ctx, aio_comp,
+                                 std::move(image_extents),
+                                 std::move(read_result), op_flags,
+                                 parent_trace);
+}
+
+template <typename I>
+ImageRequest<I>* ImageRequest<I>::create_write_request(
+    I &image_ctx, AioCompletion *aio_comp, Extents &&image_extents,
+    bufferlist &&bl, int op_flags, const ZTracer::Trace &parent_trace) {
+  return new ImageWriteRequest<I>(image_ctx, aio_comp, std::move(image_extents),
+                                  std::move(bl), op_flags, parent_trace);
+}
+
+template <typename I>
+ImageRequest<I>* ImageRequest<I>::create_discard_request(
+    I &image_ctx, AioCompletion *aio_comp, uint64_t off, uint64_t len,
+    bool skip_partial_discard, const ZTracer::Trace &parent_trace) {
+  return new ImageDiscardRequest<I>(image_ctx, aio_comp, off, len,
+                                    skip_partial_discard, parent_trace);
+}
+
+template <typename I>
+ImageRequest<I>* ImageRequest<I>::create_flush_request(
+    I &image_ctx, AioCompletion *aio_comp,
+    const ZTracer::Trace &parent_trace) {
+  return new ImageFlushRequest<I>(image_ctx, aio_comp, parent_trace);
+}
+
+template <typename I>
+ImageRequest<I>* ImageRequest<I>::create_writesame_request(
+    I &image_ctx, AioCompletion *aio_comp, uint64_t off, uint64_t len,
+    bufferlist &&bl, int op_flags, const ZTracer::Trace &parent_trace) {
+  return new ImageWriteSameRequest<I>(image_ctx, aio_comp, off, len,
+                                      std::move(bl), op_flags, parent_trace);
+}
+
+template <typename I>
 void ImageRequest<I>::aio_read(I *ictx, AioCompletion *c,
                                Extents &&image_extents,
                                ReadResult &&read_result, int op_flags,
