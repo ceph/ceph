@@ -3410,7 +3410,9 @@ void Server::handle_client_openc(MDRequestRef& mdr)
     return;
   }
 
-  if (!(req->head.args.open.flags & CEPH_O_EXCL)) {
+  bool excl = req->head.args.open.flags & CEPH_O_EXCL;
+
+  if (!excl) {
     int r = mdcache->path_traverse(mdr, NULL, NULL, req->get_filepath(),
 				   &mdr->dn[0], NULL, MDS_TRAVERSE_FORWARD);
     if (r > 0) return;
@@ -3430,10 +3432,8 @@ void Server::handle_client_openc(MDRequestRef& mdr)
       }
       return;
     }
-    // r == -ENOENT
   }
 
-  bool excl = (req->head.args.open.flags & CEPH_O_EXCL);
   set<SimpleLock*> rdlocks, wrlocks, xlocks;
   file_layout_t *dir_layout = NULL;
   CDentry *dn = rdlock_path_xlock_dentry(mdr, 0, rdlocks, wrlocks, xlocks,
@@ -3491,6 +3491,7 @@ void Server::handle_client_openc(MDRequestRef& mdr)
     return;
   }
 
+  // created null dn.
   CDir *dir = dn->get_dir();
   CInode *diri = dir->get_inode();
   rdlocks.insert(&diri->authlock);
@@ -3515,8 +3516,6 @@ void Server::handle_client_openc(MDRequestRef& mdr)
     return;
   }
 
-  // created null dn.
-    
   // create inode.
   SnapRealm *realm = diri->find_snaprealm();   // use directory's realm; inode isn't attached yet.
   snapid_t follows = realm->get_newest_seq();
