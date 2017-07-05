@@ -51,6 +51,7 @@ struct MockImageCtx {
       object_set(image_ctx.object_set),
       old_format(image_ctx.old_format),
       read_only(image_ctx.read_only),
+      clone_copy_on_read(image_ctx.clone_copy_on_read),
       lockers(image_ctx.lockers),
       exclusive_locked(image_ctx.exclusive_locked),
       lock_tag(image_ctx.lock_tag),
@@ -206,6 +207,8 @@ struct MockImageCtx {
 
   bool old_format;
   bool read_only;
+
+  bool clone_copy_on_read;
 
   std::map<rados::cls::lock::locker_id_t,
            rados::cls::lock::locker_info_t> lockers;
