@@ -7616,7 +7616,7 @@ void OSD::_committed_osd_maps(epoch_t first, epoch_t last, MOSDMap *m)
       dout(10) << __func__ << " require_osd_release reached luminous in "
 	       << newmap->get_epoch() << dendl;
       clear_pg_stat_queue();
-      outstanding_pg_stats.clear();
+      clear_outstanding_pg_stats();
     }
 
     osdmap = newmap;
