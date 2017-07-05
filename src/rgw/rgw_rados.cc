@@ -6161,7 +6161,7 @@ int RGWRados::get_obj_head_ref(const RGWBucketInfo& bucket_info, const rgw_obj& 
   return 0;
 }
 
-int RGWRados::get_raw_obj_ref(const rgw_raw_obj& obj, rgw_rados_ref *ref, rgw_pool *pool)
+int RGWRados::get_raw_obj_ref(const rgw_raw_obj& obj, rgw_rados_ref *ref)
 {
   ref->oid = obj.oid;
   ref->key = obj.loc;
@@ -6174,9 +6174,6 @@ int RGWRados::get_raw_obj_ref(const rgw_raw_obj& obj, rgw_rados_ref *ref, rgw_po
   } else {
     ref->pool = obj.pool;
   }
-  if (pool) {
-    *pool = ref->pool;
-  }
   r = open_pool_ctx(ref->pool, ref->ioctx);
   if (r < 0)
     return r;
@@ -6186,9 +6183,9 @@ int RGWRados::get_raw_obj_ref(const rgw_raw_obj& obj, rgw_rados_ref *ref, rgw_po
   return 0;
 }
 
-int RGWRados::get_system_obj_ref(const rgw_raw_obj& obj, rgw_rados_ref *ref, rgw_pool *pool)
+int RGWRados::get_system_obj_ref(const rgw_raw_obj& obj, rgw_rados_ref *ref)
 {
-  return get_raw_obj_ref(obj, ref, pool);
+  return get_raw_obj_ref(obj, ref);
 }
 
 /*
@@ -6724,8 +6721,6 @@ int RGWRados::Object::Write::_do_write_meta(uint64_t size, uint64_t accounted_si
                                            void *_index_op)
 {
   RGWRados::Bucket::UpdateIndex *index_op = static_cast<RGWRados::Bucket::UpdateIndex *>(_index_op);
-  rgw_pool pool;
-  rgw_rados_ref ref;
   RGWRados *store = target->get_store();
 
   ObjectWriteOperation op;
@@ -6742,6 +6737,7 @@ int RGWRados::Object::Write::_do_write_meta(uint64_t size, uint64_t accounted_si
     return -EIO;
   }
 
+  rgw_rados_ref ref;
   r = store->get_obj_head_ref(target->get_bucket_info(), obj, &ref);
   if (r < 0)
     return r;
@@ -6981,9 +6977,8 @@ int RGWRados::put_system_obj_impl(rgw_raw_obj& obj, uint64_t size, real_time *mt
               RGWObjVersionTracker *objv_tracker,
               real_time set_mtime /* 0 for don't set */)
 {
-  rgw_pool pool;
   rgw_rados_ref ref;
-  int r = get_system_obj_ref(obj, &ref, &pool);
+  int r = get_system_obj_ref(obj, &ref);
   if (r < 0)
     return r;
 
@@ -7044,8 +7039,7 @@ int RGWRados::put_system_obj_data(void *ctx, rgw_raw_obj& obj, bufferlist& bl,
                                   RGWObjVersionTracker *objv_tracker)
 {
   rgw_rados_ref ref;
-  rgw_pool pool;
-  int r = get_system_obj_ref(obj, &ref, &pool);
+  int r = get_system_obj_ref(obj, &ref);
   if (r < 0) {
     return r;
   }
@@ -8839,8 +8833,7 @@ int RGWRados::delete_obj(RGWObjectCtx& obj_ctx,
 int RGWRados::delete_raw_obj(const rgw_raw_obj& obj)
 {
   rgw_rados_ref ref;
-  rgw_pool pool;
-  int r = get_raw_obj_ref(obj, &ref, &pool);
+  int r = get_raw_obj_ref(obj, &ref);
   if (r < 0) {
     return r;
   }
@@ -8863,8 +8856,7 @@ int RGWRados::delete_system_obj(rgw_raw_obj& obj, RGWObjVersionTracker *objv_tra
     return -EINVAL;
   }
   rgw_rados_ref ref;
-  rgw_pool pool;
-  int r = get_raw_obj_ref(obj, &ref, &pool);
+  int r = get_raw_obj_ref(obj, &ref);
   if (r < 0) {
     return r;
   }
@@ -9305,8 +9297,7 @@ int RGWRados::Object::Stat::finish()
 int RGWRados::system_obj_get_attr(rgw_raw_obj& obj, const char *name, bufferlist& dest)
 {
   rgw_rados_ref ref;
-  rgw_pool pool;
-  int r = get_system_obj_ref(obj, &ref, &pool);
+  int r = get_system_obj_ref(obj, &ref);
   if (r < 0) {
     return r;
   }
@@ -9467,8 +9458,7 @@ int RGWRados::system_obj_set_attrs(void *ctx, rgw_raw_obj& obj,
                         RGWObjVersionTracker *objv_tracker)
 {
   rgw_rados_ref ref;
-  rgw_pool pool;
-  int r = get_system_obj_ref(obj, &ref, &pool);
+  int r = get_system_obj_ref(obj, &ref);
   if (r < 0) {
     return r;
   }
@@ -10077,8 +10067,7 @@ int RGWRados::Object::Read::read(int64_t ofs, int64_t end, bufferlist& bl)
 int RGWRados::SystemObject::Read::GetObjState::get_ref(RGWRados *store, rgw_raw_obj& obj, rgw_rados_ref **pref)
 {
   if (!has_ref) {
-    rgw_pool pool;
-    int r = store->get_raw_obj_ref(obj, &ref, &pool);
+    int r = store->get_raw_obj_ref(obj, &ref);
     if (r < 0) {
       return r;
     }
@@ -12664,8 +12653,7 @@ int RGWRados::cls_obj_usage_log_add(const string& oid, rgw_usage_log_info& info)
   rgw_raw_obj obj(get_zone_params().usage_log_pool, oid);
 
   rgw_rados_ref ref;
-  rgw_pool pool;
-  int r = get_raw_obj_ref(obj, &ref, &pool);
+  int r = get_raw_obj_ref(obj, &ref);
   if (r < 0) {
     return r;
   }
@@ -12683,8 +12671,7 @@ int RGWRados::cls_obj_usage_log_read(string& oid, string& user, uint64_t start_e
   rgw_raw_obj obj(get_zone_params().usage_log_pool, oid);
 
   rgw_rados_ref ref;
-  rgw_pool pool;
-  int r = get_raw_obj_ref(obj, &ref, &pool);
+  int r = get_raw_obj_ref(obj, &ref);
   if (r < 0) {
     return r;
   }
@@ -12702,8 +12689,7 @@ int RGWRados::cls_obj_usage_log_trim(string& oid, string& user, uint64_t start_e
   rgw_raw_obj obj(get_zone_params().usage_log_pool, oid);
 
   rgw_rados_ref ref;
-  rgw_pool pool;
-  int r = get_raw_obj_ref(obj, &ref, &pool);
+  int r = get_raw_obj_ref(obj, &ref);
   if (r < 0) {
     return r;
   }
@@ -12902,8 +12888,7 @@ int RGWRados::cls_user_get_header(const string& user_id, cls_user_header *header
   rgw_raw_obj obj(get_zone_params().user_uid_pool, buckets_obj_id);
 
   rgw_rados_ref ref;
-  rgw_pool pool;
-  int r = get_raw_obj_ref(obj, &ref, &pool);
+  int r = get_raw_obj_ref(obj, &ref);
   if (r < 0) {
     return r;
   }
@@ -12928,8 +12913,7 @@ int RGWRados::cls_user_get_header_async(const string& user_id, RGWGetUserHeader_
   rgw_raw_obj obj(get_zone_params().user_uid_pool, buckets_obj_id);
 
   rgw_rados_ref ref;
-  rgw_pool pool;
-  int r = get_raw_obj_ref(obj, &ref, &pool);
+  int r = get_raw_obj_ref(obj, &ref);
   if (r < 0) {
     return r;
   }
@@ -12986,8 +12970,7 @@ int RGWRados::cls_user_list_buckets(rgw_raw_obj& obj,
                                     bool * const truncated)
 {
   rgw_rados_ref ref;
-  rgw_pool pool;
-  int r = get_raw_obj_ref(obj, &ref, &pool);
+  int r = get_raw_obj_ref(obj, &ref);
   if (r < 0) {
     return r;
   }
@@ -13009,8 +12992,7 @@ int RGWRados::cls_user_list_buckets(rgw_raw_obj& obj,
 int RGWRados::cls_user_update_buckets(rgw_raw_obj& obj, list<cls_user_bucket_entry>& entries, bool add)
 {
   rgw_rados_ref ref;
-  rgw_pool pool;
-  int r = get_raw_obj_ref(obj, &ref, &pool);
+  int r = get_raw_obj_ref(obj, &ref);
   if (r < 0) {
     return r;
   }
@@ -13035,8 +13017,7 @@ int RGWRados::complete_sync_user_stats(const rgw_user& user_id)
 int RGWRados::cls_user_complete_stats_sync(rgw_raw_obj& obj)
 {
   rgw_rados_ref ref;
-  rgw_pool pool;
-  int r = get_raw_obj_ref(obj, &ref, &pool);
+  int r = get_raw_obj_ref(obj, &ref);
   if (r < 0) {
     return r;
   }
@@ -13060,9 +13041,8 @@ int RGWRados::cls_user_add_bucket(rgw_raw_obj& obj, const cls_user_bucket_entry&
 
 int RGWRados::cls_user_remove_bucket(rgw_raw_obj& obj, const cls_user_bucket& bucket)
 {
-  rgw_pool p;
   rgw_rados_ref ref;
-  int r = get_system_obj_ref(obj, &ref, &p);
+  int r = get_system_obj_ref(obj, &ref);
   if (r < 0) {
     return r;
   }
