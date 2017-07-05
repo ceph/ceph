@@ -846,6 +846,7 @@ void Monitor::refresh_from_paxos(bool *need_bootstrap)
   for (int i = 0; i < PAXOS_NUM; ++i) {
     paxos_service[i]->post_refresh();
   }
+  load_metadata();
 }
 
 void Monitor::register_cluster_logger()
@@ -4712,48 +4713,36 @@ void Monitor::handle_mon_metadata(MonOpRequestRef op)
 
 void Monitor::update_mon_metadata(int from, Metadata&& m)
 {
-  pending_metadata.insert(make_pair(from, std::move(m)));
-
-  bufferlist bl;
-  int err = store->get(MONITOR_STORE_PREFIX, "last_metadata", bl);
-  map<int, Metadata> last_metadata;
-  if (!err) {
-    bufferlist::iterator iter = bl.begin();
-    ::decode(last_metadata, iter);
-    pending_metadata.insert(last_metadata.begin(), last_metadata.end());
-  }
+  pending_metadata[from] = std::move(m);
 
   MonitorDBStore::TransactionRef t = paxos->get_pending_transaction();
-  bl.clear();
+  bufferlist bl;
   ::encode(pending_metadata, bl);
   t->put(MONITOR_STORE_PREFIX, "last_metadata", bl);
   paxos->trigger_propose();
 }
 
-int Monitor::load_metadata(map<int, Metadata>& metadata)
+int Monitor::load_metadata()
 {
   bufferlist bl;
   int r = store->get(MONITOR_STORE_PREFIX, "last_metadata", bl);
   if (r)
     return r;
   bufferlist::iterator it = bl.begin();
-  ::decode(metadata, it);
+  ::decode(mon_metadata, it);
+
+  pending_metadata = mon_metadata;
   return 0;
 }
 
 int Monitor::get_mon_metadata(int mon, Formatter *f, ostream& err)
 {
   assert(f);
-  map<int, Metadata> last_metadata;
-  if (int r = load_metadata(last_metadata)) {
-    err << "Unable to load metadata: " << cpp_strerror(r);
-    return r;
-  }
-  if (!last_metadata.count(mon)) {
+  if (!mon_metadata.count(mon)) {
     err << "mon." << mon << " not found";
     return -EINVAL;
   }
-  const Metadata& m = last_metadata[mon];
+  const Metadata& m = mon_metadata[mon];
   for (Metadata::const_iterator p = m.begin(); p != m.end(); ++p) {
     f->dump_string(p->first.c_str(), p->second);
   }
@@ -4762,10 +4751,8 @@ int Monitor::get_mon_metadata(int mon, Formatter *f, ostream& err)
 
 void Monitor::count_metadata(const string& field, Formatter *f)
 {
-  map<int, Metadata> meta;
-  load_metadata(meta);
   map<string,int> by_val;
-  for (auto& p : meta) {
+  for (auto& p : mon_metadata) {
     auto q = p.second.find(field);
     if (q == p.second.end()) {
       by_val["unknown"]++;
@@ -4782,15 +4769,9 @@ void Monitor::count_metadata(const string& field, Formatter *f)
 
 int Monitor::print_nodes(Formatter *f, ostream& err)
 {
-  map<int, Metadata> metadata;
-  if (int r = load_metadata(metadata)) {
-    err << "Unable to load metadata.\n";
-    return r;
-  }
-
   map<string, list<int> > mons;	// hostname => mon
-  for (map<int, Metadata>::iterator it = metadata.begin();
-       it != metadata.end(); ++it) {
+  for (map<int, Metadata>::iterator it = mon_metadata.begin();
+       it != mon_metadata.end(); ++it) {
     const Metadata& m = it->second;
     Metadata::const_iterator hostname = m.find("hostname");
     if (hostname == m.end()) {
