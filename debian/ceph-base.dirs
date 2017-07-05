@@ -1,5 +1,5 @@
-var/lib/ceph/tmp
-var/lib/ceph/bootstrap-osd
 var/lib/ceph/bootstrap-mds
-var/lib/ceph/bootstrap-rgw
 var/lib/ceph/bootstrap-mgr
+var/lib/ceph/bootstrap-osd
+var/lib/ceph/bootstrap-rgw
+var/lib/ceph/tmp
