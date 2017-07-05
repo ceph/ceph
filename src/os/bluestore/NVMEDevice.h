@@ -28,6 +28,7 @@
 #include "include/interval_set.h"
 #include "common/ceph_time.h"
 #include "common/Mutex.h"
+#include "common/Cond.h"
 #include "BlockDevice.h"
 
 enum class IOCommand {
