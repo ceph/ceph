@@ -3251,6 +3251,7 @@ void PG::read_state(ObjectStore *store, bufferlist &bl)
     ghobject_t(info_struct_v < 8 ? OSD::make_pg_log_oid(pg_id) : pgmeta_oid),
     info,
     oss,
+    cct->_conf->osd_ignore_stale_divergent_priors,
     cct->_conf->osd_debug_verify_missing_on_start);
   if (oss.tellp())
     osd->clog->error() << oss.rdbuf();
