@@ -4542,7 +4542,7 @@ void OSDMap::check_health(health_check_map_t *checks) const
     }
   }
 
-  // OSD_CACHE_NO_HIT_SET
+  // CACHE_POOL_NO_HIT_SET
   if (g_conf->mon_warn_on_cache_pools_without_hit_sets) {
     list<string> detail;
     for (map<int64_t, pg_pool_t>::const_iterator p = pools.begin();
@@ -4561,7 +4561,7 @@ void OSDMap::check_health(health_check_map_t *checks) const
     if (!detail.empty()) {
       ostringstream ss;
       ss << detail.size() << " cache pools are missing hit_sets";
-      auto& d = checks->add("OSD_CACHE_NO_HIT_SET", HEALTH_WARN, ss.str());
+      auto& d = checks->add("CACHE_POOL_NO_HIT_SET", HEALTH_WARN, ss.str());
       d.detail.swap(detail);
     }
   }
