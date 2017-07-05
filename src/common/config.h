@@ -301,6 +301,11 @@ public:
   /// cluster name
   string cluster;
 
+// This macro block defines C members of the md_config_t struct
+// corresponding to the definitions in legacy_config_opts.h.
+// These C members are consumed by code that was written before
+// the new options.cc infrastructure: all newer code should
+// be consume options via explicit get() rather than C members.
 #define OPTION_OPT_INT(name) const int name;
 #define OPTION_OPT_LONGLONG(name) const long long name;
 #define OPTION_OPT_STR(name) const std::string name;

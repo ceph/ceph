@@ -41,7 +41,13 @@ string convert_type(string t) {
   << "  .set_description(\"\"),\n\n";
   
 #define OPTION_VALIDATOR(name)
-#define SAFE_OPTION(name, type, def_val) OPTION(name, type, def_val)
+#define SAFE_OPTION(name, type, def_val)            \
+  cout << "  Option(\"" << STRINGIFY(name) << "\", Option::" << convert_type(STRINGIFY(type)) \
+  << ", Option::LEVEL_ADVANCED)\n"					\
+  << "  .set_default(" << STRINGIFY(def_val) << ")\n"			\
+  << "  .set_description(\"\")\n";                  \
+  << "  .set_safe(),\n\n";
+  
 #define SUBSYS(name, log, gather)
 #define DEFAULT_SUBSYS(log, gather)
 
