@@ -1027,7 +1027,7 @@ def osd_scrub_pgs(ctx, config):
             all_clean = True
             break
         log.info(
-            "Waiting for all osds to be active and clean, waiting on %s" % bad)
+            "Waiting for all PGs to be active and clean, waiting on %s" % bad)
         time.sleep(delays)
     if not all_clean:
         raise RuntimeError("Scrubbing terminated -- not all pgs were active and clean.")
