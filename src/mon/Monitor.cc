@@ -3650,7 +3650,8 @@ void Monitor::resend_routed_requests()
 
 void Monitor::remove_session(MonSession *s)
 {
-  dout(10) << "remove_session " << s << " " << s->inst << dendl;
+  dout(10) << "remove_session " << s << " " << s->inst
+	   << " features 0x" << std::hex << s->con_features << std::dec << dendl;
   assert(s->con);
   assert(!s->closed);
   for (set<uint64_t>::iterator p = s->routed_request_tids.begin();
@@ -3764,7 +3765,9 @@ void Monitor::_ms_dispatch(Message *m)
     }
     assert(s);
     con->set_priv(s->get());
-    dout(10) << __func__ << " new session " << s << " " << *s << dendl;
+    dout(10) << __func__ << " new session " << s << " " << *s
+	     << " features 0x" << std::hex
+	     << s->con_features << std::dec << dendl;
     op->set_session(s);
 
     logger->set(l_mon_num_sessions, session_map.get_size());
