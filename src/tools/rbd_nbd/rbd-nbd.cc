@@ -26,7 +26,6 @@
 #include <string.h>
 #include <sys/types.h>
 #include <unistd.h>
-#include <assert.h>
 
 #include <linux/nbd.h>
 #include <linux/fs.h>
@@ -46,6 +45,7 @@
 #include "common/ceph_argparse.h"
 #include "common/Preforker.h"
 #include "global/global_init.h"
+#include "global/signal_handler.h"
 
 #include "include/rados/librados.hpp"
 #include "include/rbd/librbd.hpp"
@@ -75,6 +75,7 @@ static bool readonly = false;
 static int nbds_max = 0;
 static int max_part = 255;
 static bool exclusive = false;
+static int nbd = -1;
 
 #ifdef CEPH_BIG_ENDIAN
 #define ntohll(a) (a)
@@ -84,6 +85,18 @@ static bool exclusive = false;
 #error "Could not determine endianess"
 #endif
 #define htonll(a) ntohll(a)
+
+static void handle_signal(int signum)
+{
+  assert(signum == SIGINT || signum == SIGTERM);
+  derr << "*** Got signal " << sig_str(signum) << " ***" << dendl;
+  dout(20) << __func__ << ": " << "sending NBD_DISCONNECT" << dendl;
+  if (ioctl(nbd, NBD_DISCONNECT) < 0) {
+    derr << "rbd-nbd: disconnect failed: " << cpp_strerror(errno) << dendl;
+  } else {
+    dout(20) << __func__ << ": " << "disconnected" << dendl;
+  }
+}
 
 class NBDServer
 {
@@ -480,7 +493,6 @@ static int do_map()
   unsigned long size;
 
   int fd[2];
-  int nbd;
 
   uint8_t old_format;
   librbd::image_info_t info;
@@ -645,7 +657,19 @@ static int do_map()
       NBDServer server(fd[1], image);
 
       server.start();
+      
+      init_async_signal_handler();
+      register_async_signal_handler(SIGHUP, sighup_handler);
+      register_async_signal_handler_oneshot(SIGINT, handle_signal);
+      register_async_signal_handler_oneshot(SIGTERM, handle_signal);
+
       ioctl(nbd, NBD_DO_IT);
+     
+      unregister_async_signal_handler(SIGHUP, sighup_handler);
+      unregister_async_signal_handler(SIGINT, handle_signal);
+      unregister_async_signal_handler(SIGTERM, handle_signal);
+      shutdown_async_signal_handler();
+      
       server.stop();
     }
 
@@ -682,10 +706,10 @@ static int do_unmap()
     return nbd;
   }
 
-  // alert the reader thread to shut down
   if (ioctl(nbd, NBD_DISCONNECT) < 0) {
     cerr << "rbd-nbd: the device is not used" << std::endl;
   }
+
   close(nbd);
 
   return 0;
