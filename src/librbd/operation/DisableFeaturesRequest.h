@@ -4,6 +4,7 @@
 #ifndef CEPH_LIBRBD_OPERATION_DISABLE_FEATURES_REQUEST_H
 #define CEPH_LIBRBD_OPERATION_DISABLE_FEATURES_REQUEST_H
 
+#include "librbd/ImageCtx.h"
 #include "librbd/operation/Request.h"
 #include "cls/rbd/cls_rbd_client.h"
 
@@ -113,6 +114,7 @@ private:
   uint64_t m_disable_flags = 0;
   uint64_t m_features_mask = 0;
 
+  decltype(ImageCtxT::journal) m_journal = nullptr;
   cls::rbd::MirrorMode m_mirror_mode = cls::rbd::MIRROR_MODE_DISABLED;
   bufferlist m_out_bl;
 

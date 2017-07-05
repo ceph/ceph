@@ -354,14 +354,14 @@ void DisableFeaturesRequest<I>::send_close_journal() {
   {
     RWLock::WLocker locker(image_ctx.owner_lock);
     if (image_ctx.journal != nullptr) {
-
       ldout(cct, 20) << this << " " << __func__ << dendl;
 
+      std::swap(m_journal, image_ctx.journal);
       Context *ctx = create_context_callback<
 	DisableFeaturesRequest<I>,
 	&DisableFeaturesRequest<I>::handle_close_journal>(this);
 
-      image_ctx.journal->close(ctx);
+      m_journal->close(ctx);
       return;
     }
   }
@@ -378,8 +378,11 @@ Context *DisableFeaturesRequest<I>::handle_close_journal(int *result) {
   if (*result < 0) {
     lderr(cct) << "failed to close image journal: " << cpp_strerror(*result)
                << dendl;
-    return handle_finish(*result);
   }
+
+  assert(m_journal != nullptr);
+  delete m_journal;
+  m_journal = nullptr;
 
   send_remove_journal();
   return nullptr;
