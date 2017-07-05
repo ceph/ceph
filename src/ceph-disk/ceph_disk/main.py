@@ -4122,6 +4122,10 @@ def main_activate_space(name, args):
     if not os.path.exists(args.dev):
         raise Error('%s does not exist' % args.dev)
 
+    if is_suppressed(args.dev):
+        LOG.info('suppressed activate request on space %s', args.dev)
+        return
+
     cluster = None
     osd_id = None
     osd_uuid = None
