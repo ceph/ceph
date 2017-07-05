@@ -9186,10 +9186,8 @@ void OSDService::finish_recovery_op(PG *pg, const hobject_t& soid, bool dequeue)
 
 bool OSDService::is_recovery_active()
 {
-  if (recovery_ops_active > 0)
-    return true;
-
-  return false;
+  Mutex::Locker l(recovery_lock);
+  return recovery_ops_active > 0;
 }
 
 // =========================================================
