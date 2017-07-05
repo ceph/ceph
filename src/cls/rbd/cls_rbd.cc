@@ -1525,6 +1525,12 @@ int snapshot_add(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
     return -EINVAL;
   }
 
+  if (boost::get<cls::rbd::UnknownSnapshotNamespace>(
+        &snap_meta.snapshot_namespace.snapshot_namespace) != nullptr) {
+    CLS_ERR("Unknown snapshot namespace provided");
+    return -EINVAL;
+  }
+
   CLS_LOG(20, "snapshot_add name=%s id=%llu", snap_meta.name.c_str(),
 	 (unsigned long long)snap_meta.id.val);
 
