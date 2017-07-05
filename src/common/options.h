@@ -62,8 +62,10 @@ struct Option {
   value_t min, max;
   std::list<std::string> enum_allowed;
 
+  bool safe;
+
   Option(const char* name, type_t t, level_t l)
-    : name(name), type(t), level(l)
+    : name(name), type(t), level(l), safe(false)
   {}
 
   // bool is an integer, but we don't think so. teach it the hard way.
@@ -116,6 +118,21 @@ struct Option {
     min = mi;
     max = ma;
     return *this;
+  }
+
+  Option &set_safe() {
+    safe = true;
+    return *this;
+  }
+
+  /**
+   * A crude indicator of whether the value may be
+   * modified safely at runtime -- should be replaced
+   * with proper locking!
+   */
+  bool is_safe() const
+  {
+    return type == TYPE_INT || type == TYPE_FLOAT;
   }
 };
 
