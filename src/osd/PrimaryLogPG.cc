@@ -4013,12 +4013,14 @@ int PrimaryLogPG::do_extent_cmp(OpContext *ctx, OSDOp& osd_op)
     return result;
   }
 
-  if (read_op.outdata.length() != osd_op.indata.length())
-    return -EINVAL;
-
   for (uint64_t p = 0; p < osd_op.indata.length(); p++) {
-    if (read_op.outdata[p] != osd_op.indata[p]) {
-      return (-MAX_ERRNO - p);
+    if (p >= read_op.outdata.length()) {
+      if (osd_op.indata[p] != 0)
+        return (-MAX_ERRNO - p);
+    } else {
+      if (read_op.outdata[p] != osd_op.indata[p]) {
+        return (-MAX_ERRNO - p);
+      }
     }
   }
 

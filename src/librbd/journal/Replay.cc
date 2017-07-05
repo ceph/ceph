@@ -341,7 +341,8 @@ void Replay<I>::handle_event(const journal::AioDiscardEvent &event,
   bool flush_required;
   auto aio_comp = create_aio_modify_completion(on_ready, on_safe,
                                                io::AIO_TYPE_DISCARD,
-                                               &flush_required);
+                                               &flush_required,
+                                               {});
   if (aio_comp == nullptr) {
     return;
   }
@@ -370,7 +371,8 @@ void Replay<I>::handle_event(const journal::AioWriteEvent &event,
   bool flush_required;
   auto aio_comp = create_aio_modify_completion(on_ready, on_safe,
                                                io::AIO_TYPE_WRITE,
-                                               &flush_required);
+                                               &flush_required,
+                                               {});
   if (aio_comp == nullptr) {
     return;
   }
@@ -417,7 +419,8 @@ void Replay<I>::handle_event(const journal::AioWriteSameEvent &event,
   bool flush_required;
   auto aio_comp = create_aio_modify_completion(on_ready, on_safe,
                                                io::AIO_TYPE_WRITESAME,
-                                               &flush_required);
+                                               &flush_required,
+                                               {});
   if (aio_comp == nullptr) {
     return;
   }
@@ -432,6 +435,33 @@ void Replay<I>::handle_event(const journal::AioWriteSameEvent &event,
     if (flush_comp != nullptr) {
       io::ImageRequest<I>::aio_flush(&m_image_ctx, flush_comp, {});
     }
+  }
+}
+
+ template <typename I>
+ void Replay<I>::handle_event(const journal::AioCompareAndWriteEvent &event,
+                              Context *on_ready, Context *on_safe) {
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 20) << ": AIO CompareAndWrite event" << dendl;
+
+  bufferlist cmp_data = event.cmp_data;
+  bufferlist write_data = event.write_data;
+  bool flush_required;
+  auto aio_comp = create_aio_modify_completion(on_ready, on_safe,
+                                               io::AIO_TYPE_COMPARE_AND_WRITE,
+                                               &flush_required,
+                                               {-EILSEQ});
+  io::ImageRequest<I>::aio_compare_and_write(&m_image_ctx, aio_comp,
+                                             {{event.offset, event.length}},
+                                             std::move(cmp_data),
+                                             std::move(write_data),
+                                             nullptr, 0, {});
+  if (flush_required) {
+    m_lock.Lock();
+    auto flush_comp = create_aio_flush_completion(nullptr);
+    m_lock.Unlock();
+
+    io::ImageRequest<I>::aio_flush(&m_image_ctx, flush_comp, {});
   }
 }
 
@@ -826,7 +856,7 @@ void Replay<I>::handle_event(const journal::UnknownEvent &event,
 
 template <typename I>
 void Replay<I>::handle_aio_modify_complete(Context *on_ready, Context *on_safe,
-                                           int r) {
+                                           int r, std::set<int> &filters) {
   Mutex::Locker locker(m_lock);
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << ": on_ready=" << on_ready << ", "
@@ -835,6 +865,10 @@ void Replay<I>::handle_aio_modify_complete(Context *on_ready, Context *on_safe,
   if (on_ready != nullptr) {
     on_ready->complete(0);
   }
+
+  if (filters.find(r) != filters.end())
+    r = 0;
+
   if (r < 0) {
     lderr(cct) << ": AIO modify op failed: " << cpp_strerror(r) << dendl;
     on_safe->complete(r);
@@ -1004,9 +1038,11 @@ void Replay<I>::handle_op_complete(uint64_t op_tid, int r) {
 
 template <typename I>
 io::AioCompletion *
-Replay<I>::create_aio_modify_completion(Context *on_ready, Context *on_safe,
+Replay<I>::create_aio_modify_completion(Context *on_ready,
+                                        Context *on_safe,
                                         io::aio_type_t aio_type,
-                                        bool *flush_required) {
+                                        bool *flush_required,
+                                        std::set<int> &&filters) {
   Mutex::Locker locker(m_lock);
   CephContext *cct = m_image_ctx.cct;
   assert(m_on_aio_ready == nullptr);
@@ -1048,7 +1084,7 @@ Replay<I>::create_aio_modify_completion(Context *on_ready, Context *on_safe,
   // event. when flushed, the completion of the next flush will fire the
   // on_safe callback
   auto aio_comp = io::AioCompletion::create_and_start<Context>(
-    new C_AioModifyComplete(this, on_ready, on_safe),
+    new C_AioModifyComplete(this, on_ready, on_safe, std::move(filters)),
     util::get_image_ctx(&m_image_ctx), aio_type);
   return aio_comp;
 }
