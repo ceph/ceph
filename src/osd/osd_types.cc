@@ -5954,3 +5954,33 @@ ostream& operator<<(ostream& out, const store_statfs_t &s)
       << ")";
   return out;
 }
+
+void OSDOp::clear_data(vector<OSDOp>& ops)
+{
+  for (unsigned i = 0; i < ops.size(); i++) {
+    OSDOp& op = ops[i];
+    op.outdata.clear();
+    if (ceph_osd_op_type_attr(op.op.op) &&
+        op.op.xattr.name_len &&
+	op.indata.length() >= op.op.xattr.name_len) {
+      bufferptr bp(op.op.xattr.name_len);
+      bufferlist bl;
+      bl.append(bp);
+      bl.copy_in(0, op.op.xattr.name_len, op.indata);
+      op.indata.claim(bl);
+    } else if (ceph_osd_op_type_exec(op.op.op) &&
+               op.op.cls.class_len &&
+	       op.indata.length() >
+	         (op.op.cls.class_len + op.op.cls.method_len)) {
+      __u8 len = op.op.cls.class_len + op.op.cls.method_len;
+      bufferptr bp(len);
+      bufferlist bl;
+      bl.append(bp);
+      bl.copy_in(0, len, op.indata);
+      op.indata.claim(bl);
+    } else {
+      op.indata.clear();
+    }
+  }
+}
+
