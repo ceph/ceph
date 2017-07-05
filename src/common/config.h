@@ -323,7 +323,7 @@ public:
     struct option_##name##_t;
 #define SUBSYS(name, log, gather)
 #define DEFAULT_SUBSYS(log, gather)
-#include "common/config_opts.h"
+#include "common/legacy_config_opts.h"
 #undef OPTION_OPT_INT
 #undef OPTION_OPT_LONGLONG
 #undef OPTION_OPT_STR
@@ -398,7 +398,7 @@ enum config_subsys_id {
 #define SUBSYS(name, log, gather) \
   ceph_subsys_##name,
 #define DEFAULT_SUBSYS(log, gather)
-#include "common/config_opts.h"
+#include "common/legacy_config_opts.h"
 #undef SUBSYS
 #undef OPTION
 #undef OPTION_VALIDATOR

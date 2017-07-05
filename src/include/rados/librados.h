@@ -491,7 +491,7 @@ CEPH_RADOS_API void rados_shutdown(rados_t cluster);
  * - log_file, log_to_stderr, err_to_stderr, and log_to_syslog
  * - debug_rados, debug_objecter, debug_monc, debug_auth, or debug_ms
  *
- * All possible options can be found in src/common/config_opts.h in ceph.git
+ * See docs.ceph.com for information about available configuration options`
  *
  * @{
  */
