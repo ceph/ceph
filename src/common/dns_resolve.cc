@@ -299,7 +299,7 @@ int DNSResolver::resolve_srv_hosts(CephContext *cct, const string& service_name,
   }
 #endif
   if (len < 0) {
-    lderr(cct) << "res_search() failed" << dendl;
+    lderr(cct) << "failed for service " << query_str << dendl;
     return len;
   }
   else if (len == 0) {
