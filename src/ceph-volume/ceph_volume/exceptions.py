@@ -1,3 +1,37 @@
+import os
+
+
+class ConfigurationError(Exception):
+
+    def __init__(self, cluster_name='ceph', path='/etc/ceph', abspath=None):
+        self.cluster_name = cluster_name
+        self.path = path
+        self.abspath = abspath or "%s.conf" % os.path.join(self.path, self.cluster_name)
+
+    def __str__(self):
+        return 'Unable to load expected Ceph config at: %s' % self.abspath
+
+
+class ConfigurationSectionError(Exception):
+
+    def __init__(self, section):
+        self.section = section
+
+    def __str__(self):
+        return 'Unable to find expected configuration section: "%s"' % self.section
+
+
+class ConfigurationKeyError(Exception):
+
+    def __init__(self, section, key):
+        self.section = section
+        self.key = key
+
+    def __str__(self):
+        return 'Unable to find expected configuration key: "%s" from section "%s"' % (
+            self.key,
+            self.section
+        )
 
 
 class SuffixParsingError(Exception):
