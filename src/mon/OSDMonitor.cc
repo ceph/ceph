@@ -7171,7 +7171,12 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       err = -EINVAL; // no value!
       goto reply;
     }
-
+    if (osdmap.require_osd_release < CEPH_RELEASE_LUMINOUS) {
+      ss << "you must complete the upgrade and set require_osd_release ="
+	 << "luminous before using crush device classes";
+      err = -EPERM;
+      goto reply;
+    }
     if (!_have_pending_crush() &&
 	_get_stable_crush().class_exists(device_class)) {
       ss << "class '" << device_class << "' already exists";
@@ -7198,6 +7203,12 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     string device_class;
     if (!cmd_getval(g_ceph_context, cmdmap, "class", device_class)) {
       err = -EINVAL; // no value!
+      goto reply;
+    }
+    if (osdmap.require_osd_release < CEPH_RELEASE_LUMINOUS) {
+      ss << "you must complete the upgrade and set require_osd_release ="
+	 << "luminous before using crush device classes";
+      err = -EPERM;
       goto reply;
     }
 
@@ -7235,6 +7246,12 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     string srcname, dstname;
     if (!cmd_getval(g_ceph_context, cmdmap, "srcname", srcname)) {
       err = -EINVAL;
+      goto reply;
+    }
+    if (osdmap.require_osd_release < CEPH_RELEASE_LUMINOUS) {
+      ss << "you must complete the upgrade and set require_osd_release ="
+	 << "luminous before using crush device classes";
+      err = -EPERM;
       goto reply;
     }
 
