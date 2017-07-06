@@ -6,7 +6,7 @@ import logging
 from tambo import Transport
 import ceph_volume
 from ceph_volume.decorators import catches
-from ceph_volume import log, devices
+from ceph_volume import log, devices, configuration, conf, exceptions, terminal
 
 
 class Volume(object):
@@ -20,8 +20,10 @@ Global Options:
 --log, --logging    Set the level of logging. Acceptable values:
                     debug, warning, error, critical
 --log-path          Change the default location ('/var/lib/ceph') for logging
+--cluster           Change the default cluster name ('ceph')
 
 Log Path: {log_path}
+Ceph Conf: {ceph_path}
 
 {sub_help}
 {plugins}
@@ -39,7 +41,8 @@ Log Path: {log_path}
     def help(self, sub_help=None):
         return self._help.format(
             version=ceph_volume.__version__,
-            log_path=ceph_volume.config.get('log_path'),
+            log_path=conf.ceph_volume.get('log_path'),
+            ceph_path=self.stat_ceph_conf(),
             plugins=self.plugin_help,
             sub_help=sub_help.strip('\n'),
             environ_vars=self.get_environ_vars()
@@ -48,7 +51,7 @@ Log Path: {log_path}
     def get_environ_vars(self):
         environ_vars = []
         for key, value in os.environ.items():
-            if key.startswith('CEPH_VOLUME'):
+            if key.startswith('CEPH_'):
                 environ_vars.append("%s=%s" % (key, value))
         if not environ_vars:
             return ''
@@ -70,6 +73,19 @@ Log Path: {log_path}
         if self.plugin_help:
             self.plugin_help = '\nPlugins:\n' + self.plugin_help
 
+    def load_ceph_conf_path(self, cluster_name='ceph'):
+        abspath = '/etc/ceph/%s.conf' % cluster_name
+        ceph_conf = os.getenv('CEPH_CONF', abspath)
+        conf.ceph_volume['ceph_conf'] = ceph_conf
+
+    def stat_ceph_conf(self):
+        ceph_conf = conf.ceph_volume['ceph_conf']
+        try:
+            configuration.load(ceph_conf)
+            return terminal.green(ceph_conf)
+        except exceptions.ConfigurationError as error:
+            return terminal.red(error)
+
     @catches()
     def main(self, argv):
         # XXX Port the CLI args to user arparse
@@ -78,7 +94,9 @@ Log Path: {log_path}
                            options=options, check_help=False,
                            check_version=False)
         parser.parse_args()
-        ceph_volume.config['verbosity'] = parser.get('--log', 'info')
+        conf.ceph_volume['verbosity'] = parser.get('--log', 'info')
+        self.load_ceph_conf_path(parser.get('--cluster', 'ceph'))
+        conf.ceph_volume['verbosity'] = parser.get('--log', 'info')
         log.setup()
         self.enable_plugins()
         parser.catch_help = self.help(parser.subhelp())
