@@ -2,9 +2,9 @@
 iSCSI Gateway Requirements
 ==========================
 
-To implement the Ceph iSCSI gateway there are a few requirements. Red
-Hat recommends using two nodes for a highly available Ceph iSCSI gateway
-solution and up to four Ceph iSCSI gateway nodes.
+To implement the Ceph iSCSI gateway there are a few requirements. It is recommended
+to use two to four iSCSI gateway nodes for a highly available Ceph iSCSI gateway
+solution.
 
 For hardware recommendations, see the `Hardware Recommendation page <http://docs.ceph.com/docs/master/start/hardware-recommendations/>`_
 for more details.
