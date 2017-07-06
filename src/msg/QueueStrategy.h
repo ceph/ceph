@@ -16,6 +16,8 @@
 #ifndef QUEUE_STRATEGY_H
 #define QUEUE_STRATEGY_H
 
+#include <vector>
+#include <memory>
 #include <boost/intrusive/list.hpp>
 #include "DispatchStrategy.h"
 #include "msg/Messenger.h"
@@ -24,7 +26,7 @@ namespace bi = boost::intrusive;
 
 class QueueStrategy : public DispatchStrategy {
   Mutex lock;
-  int n_threads;
+  const int n_threads;
   bool stop;
 
   Message::Queue mqueue;
@@ -37,7 +39,6 @@ class QueueStrategy : public DispatchStrategy {
     explicit QSThread(QueueStrategy *dq) : thread_q(), dq(dq), cond() {}
     void* entry() {
       dq->entry(this);
-      delete(this);
       return NULL;
     }
 
@@ -47,7 +48,8 @@ class QueueStrategy : public DispatchStrategy {
 				       &QSThread::thread_q > > Queue;
   };
 
-  QSThread::Queue disp_threads;
+  std::vector<std::unique_ptr<QSThread>> threads; //< all threads
+  QSThread::Queue disp_threads; //< waiting threads
 
 public:
   explicit QueueStrategy(int n_threads);
