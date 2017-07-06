@@ -690,6 +690,8 @@ TEST_F(TestMockImageRefreshRequest, JournalDisabledByPolicy) {
 TEST_F(TestMockImageRefreshRequest, ExclusiveLockWithCoR) {
   REQUIRE_FEATURE(RBD_FEATURE_EXCLUSIVE_LOCK);
 
+  REQUIRE(!is_feature_enabled(RBD_FEATURE_OBJECT_MAP | RBD_FEATURE_FAST_DIFF | RBD_FEATURE_JOURNALING))
+
   std::string val;
   ASSERT_EQ(0, _rados.conf_get("rbd_clone_copy_on_read", val));
   if (val == "false") {
@@ -706,28 +708,12 @@ TEST_F(TestMockImageRefreshRequest, ExclusiveLockWithCoR) {
   MockExclusiveLock mock_exclusive_lock;
   mock_image_ctx.exclusive_lock = &mock_exclusive_lock;
 
-  if (ictx->test_features(RBD_FEATURE_JOURNALING)) {
-    ASSERT_EQ(0, ictx->operations->update_features(RBD_FEATURE_JOURNALING,
-                                                   false));
-  }
-
-  if (ictx->test_features(RBD_FEATURE_FAST_DIFF)) {
-    ASSERT_EQ(0, ictx->operations->update_features(RBD_FEATURE_FAST_DIFF,
-                                                   false));
-  }
-
-  if (ictx->test_features(RBD_FEATURE_OBJECT_MAP)) {
-    ASSERT_EQ(0, ictx->operations->update_features(RBD_FEATURE_OBJECT_MAP,
-                                                   false));
-  }
-
   expect_op_work_queue(mock_image_ctx);
   expect_test_features(mock_image_ctx);
 
   InSequence seq;
   expect_get_mutable_metadata(mock_image_ctx, 0);
   expect_get_flags(mock_image_ctx, 0);
-  expect_get_group(mock_image_ctx, 0);
   expect_refresh_parent_is_required(mock_refresh_parent_request, false);
   expect_is_lock_required(mock_image_ctx, true);
   expect_set_require_lock_on_read(mock_image_ctx);
