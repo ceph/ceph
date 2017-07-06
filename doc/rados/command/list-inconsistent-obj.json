@@ -104,6 +104,9 @@
                 "osd": {
                   "type": "integer"
                 },
+                "primary": {
+                  "type": "boolean"
+                },
                 "size": {
                   "type": "integer"
                 },
@@ -164,6 +167,7 @@
               },
               "required": [
                 "osd",
+                "primary",
                 "errors"
               ]
             }
