@@ -9459,8 +9459,7 @@ void BlueStore::_do_write_small(
 	      head_bl.append_zero(zlen);
 	      logger->inc(l_bluestore_write_pad_bytes, zlen);
 	    }
-	    head_bl.claim_append(padded);
-	    padded.swap(head_bl);
+	    padded.claim_prepend(head_bl);
 	    logger->inc(l_bluestore_write_penalty_read_ops);
 	  }
 	  if (tail_read) {
