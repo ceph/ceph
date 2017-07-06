@@ -910,7 +910,7 @@ std::string
 AWSv4ComplMulti::calc_chunk_signature(const std::string& payload_hash) const
 {
   const auto string_to_sign = string_join_reserve("\n",
-    AWS4_HMAC_SHA256_STR,
+    AWS4_HMAC_SHA256_PAYLOAD_STR,
     date,
     credential_scope,
     prev_chunk_signature,
