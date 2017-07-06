@@ -394,6 +394,16 @@ upgrade to Luminous.
 Upgrade compatibility notes, Kraken to Luminous
 -----------------------------------------------
 
+* We no longer test the FileStore ceph-osd backend in combination with
+  ``btrfs``.  We recommend against using btrfs.  If you are using
+  btrfs-based OSDs and want to upgrade to luminous you will need to
+  add the follwing to your ceph.conf::
+
+    enable experimental unrecoverable data corrupting features = btrfs
+
+  The code is mature and unlikely to change, but we are only
+  continuing to test the Jewel stable branch against btrfs.  We
+  recommend moving these OSDs to FileStore with XFS or BlueStore.
 * When assigning a network to the public network and not to
   the cluster network the network specification of the public
   network will be used for the cluster network as well.
