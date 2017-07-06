@@ -2242,65 +2242,6 @@ function test_mon_tell()
   ceph_watch_wait 'mon.b \[DBG\] from.*cmd=\[{"prefix": "version"}\]: dispatch'
 }
 
-function test_mon_crushmap_validation()
-{
-  local map=$TEMP_DIR/map
-  ceph osd getcrushmap -o $map
-
-  local crushtool_path="${TEMP_DIR}/crushtool"
-  touch "${crushtool_path}"
-  chmod +x "${crushtool_path}"
-  local crushtool_path_old=`ceph-conf --show-config-value crushtool`
-  ceph tell mon.\* injectargs --crushtool "${crushtool_path}"
-
-  printf "%s\n" \
-      "#!/bin/sh
-       cat > /dev/null
-       exit 0" > "${crushtool_path}"
-
-  ceph osd setcrushmap -i $map
-
-  printf "%s\n" \
-      "#!/bin/sh
-       cat > /dev/null
-       exit 1" > "${crushtool_path}"
-
-  expect_false ceph osd setcrushmap -i $map
-
-  printf "%s\n" \
-      "#!/bin/sh
-       cat > /dev/null
-       echo 'TEST FAIL' >&2
-       exit 1" > "${crushtool_path}"
-
-  expect_false ceph osd setcrushmap -i $map 2> $TMPFILE
-  check_response "Error EINVAL: Failed crushmap test: TEST FAIL"
-
-  local mon_lease=`ceph-conf --show-config-value mon_lease`
-  mon_lease=`echo ${mon_lease} | awk '{ printf $1 + 0 }'`
-
-  test "${mon_lease}" -gt 0
-
-  printf "%s\n" \
-      "#!/bin/sh
-       cat > /dev/null
-       sleep $((mon_lease - 1))" > "${crushtool_path}"
-
-  ceph osd setcrushmap -i $map
-
-  printf "%s\n" \
-      "#!/bin/sh
-       cat > /dev/null
-       sleep $((mon_lease + 1))" > "${crushtool_path}"
-
-  expect_false ceph osd setcrushmap -i $map 2> $TMPFILE
-  check_response "Error EINVAL: Failed crushmap test: ${crushtool_path}: timed out (${mon_lease} sec)"
-
-  ceph tell mon.\* injectargs --crushtool "${crushtool_path_old}"
-
-  rm -f "${crushtool_path}"
-}
-
 function test_mon_ping()
 {
   ceph ping mon.a
@@ -2446,7 +2387,6 @@ MON_TESTS+=" mon_osd_erasure_code"
 MON_TESTS+=" mon_osd_misc"
 MON_TESTS+=" mon_heap_profiler"
 MON_TESTS+=" mon_tell"
-MON_TESTS+=" mon_crushmap_validation"
 MON_TESTS+=" mon_ping"
 MON_TESTS+=" mon_deprecated_commands"
 MON_TESTS+=" mon_caps"
