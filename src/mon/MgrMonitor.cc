@@ -485,6 +485,13 @@ void MgrMonitor::tick()
   }
 }
 
+void MgrMonitor::on_restart()
+{
+  // Clear out the leader-specific state.
+  last_beacon.clear();
+}
+
+
 bool MgrMonitor::promote_standby()
 {
   assert(pending_map.active_gid == 0);
