@@ -9,18 +9,13 @@
 #include <boost/asio.hpp>
 #include <boost/asio/spawn.hpp>
 
-#include <beast/core/placeholders.hpp>
-#include <beast/http/read.hpp>
-#include <beast/http/string_body.hpp>
-#include <beast/http/write.hpp>
-
-#include "rgw_asio_frontend.h"
 #include "rgw_asio_client.h"
+#include "rgw_asio_frontend.h"
 
 #define dout_subsys ceph_subsys_rgw
 
-#undef dout_prefix
-#define dout_prefix (*_dout << "asio: ")
+//#undef dout_prefix
+//#define dout_prefix (*_dout << "asio: ")
 
 namespace {
 
@@ -68,6 +63,7 @@ void Pauser::wait()
 }
 
 using tcp = boost::asio::ip::tcp;
+namespace beast = boost::beast;
 
 // coroutine to handle a client connection to completion
 static void handle_connection(RGWProcessEnv& env, tcp::socket socket,
@@ -76,16 +72,13 @@ static void handle_connection(RGWProcessEnv& env, tcp::socket socket,
   auto cct = env.store->ctx();
   boost::system::error_code ec;
 
-  beast::flat_streambuf buffer{1024};
+  beast::flat_buffer buffer{4096};
 
   // read messages from the socket until eof
   for (;;) {
     // parse the header
     rgw::asio::parser_type parser;
-    do {
-      auto bytes = beast::http::async_read_some(socket, buffer, parser, yield[ec]);
-      buffer.consume(bytes);
-    } while (!ec && !parser.got_header());
+    beast::http::async_read_header(socket, buffer, parser, yield[ec]);
 
     if (ec == boost::asio::error::connection_reset ||
         ec == boost::asio::error::eof) {
@@ -96,11 +89,11 @@ static void handle_connection(RGWProcessEnv& env, tcp::socket socket,
       ldout(cct, 1) << "read failed: " << ec.message() << dendl;
       ldout(cct, 1) << "====== req done http_status=400 ======" << dendl;
       beast::http::response<beast::http::string_body> response;
-      response.status = 400;
-      response.reason = "Bad Request";
-      response.version = message.version == 10 ? 10 : 11;
-      beast::http::prepare(response);
-      beast::http::async_write(socket, std::move(response), yield[ec]);
+      response.result(beast::http::status::bad_request);
+      response.reason("Bad Request");
+      response.version(message.version() == 10 ? 10 : 11);
+      response.prepare_payload();
+      beast::http::async_write(socket, response, yield[ec]);
       // ignore ec
       return;
     }
