@@ -1463,9 +1463,7 @@ public:
 
       data_sync_module = sync_env->sync_module->get_data_handler();
 
-      if (retcode == -ENOENT) {
-        sync_status.sync_info.num_shards = num_shards;
-      } else if (retcode < 0 && retcode != -ENOENT) {
+      if (retcode < 0 && retcode != -ENOENT) {
         ldout(sync_env->cct, 0) << "ERROR: failed to fetch sync status, retcode=" << retcode << dendl;
         return set_cr_error(retcode);
       }
@@ -1473,6 +1471,7 @@ public:
       /* state: init status */
       if ((rgw_data_sync_info::SyncState)sync_status.sync_info.state == rgw_data_sync_info::StateInit) {
         ldout(sync_env->cct, 20) << __func__ << "(): init" << dendl;
+        sync_status.sync_info.num_shards = num_shards;
         uint64_t instance_id;
         get_random_bytes((char *)&instance_id, sizeof(instance_id));
         yield call(new RGWInitDataSyncStatusCoroutine(sync_env, num_shards, instance_id, &sync_status));
