@@ -358,8 +358,9 @@ class CephLab(Ansible):
     __doc__ = """
     A very simple subclass of Ansible that defaults to:
 
-    - ansible:
+    - ansible.cephlab:
         repo: {git_base}ceph-cm-ansible.git
+        branch: master
         playbook: cephlab.yml
 
     If a dynamic inventory is used, all hosts will be assigned to the
