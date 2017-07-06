@@ -2311,7 +2311,6 @@ int main(int argc, const char **argv)
   string bucket_id;
   Formatter *formatter = NULL;
   int purge_data = false;
-  RGWBucketInfo bucket_info;
   int pretty_format = false;
   int show_log_entries = true;
   int show_log_sum = true;
@@ -5147,12 +5146,6 @@ next:
     if (object.empty()) {
       cerr << "ERROR: object not specified" << std::endl;
       return EINVAL;
-    }
-    RGWBucketInfo bucket_info;
-    int ret = init_bucket(tenant, bucket_name, bucket_id, bucket_info, bucket);
-    if (ret < 0) {
-      cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
-      return -ret;
     }
   }
 
