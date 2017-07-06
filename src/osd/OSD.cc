@@ -4969,15 +4969,6 @@ void OSD::tick()
   do_waiters();
 
   tick_timer.add_event_after(OSD_TICK_INTERVAL, new C_Tick(this));
-
-  if (is_active()) {
-    const auto now = ceph::coarse_mono_clock::now();
-    const auto elapsed = now - last_sent_beacon;
-    if (chrono::duration_cast<chrono::seconds>(elapsed).count() >
-	cct->_conf->osd_beacon_report_interval) {
-      send_beacon(now);
-    }
-  }
 }
 
 void OSD::tick_without_osd_lock()
@@ -5066,6 +5057,20 @@ void OSD::tick_without_osd_lock()
       sched_scrub();
     }
     service.promote_throttle_recalibrate();
+    bool need_send_beacon = false;
+    const auto now = ceph::coarse_mono_clock::now();
+    {
+      // borrow lec lock to pretect last_sent_beacon from changing
+      Mutex::Locker l{min_last_epoch_clean_lock};
+      const auto elapsed = now - last_sent_beacon;
+      if (chrono::duration_cast<chrono::seconds>(elapsed).count() >
+        cct->_conf->osd_beacon_report_interval) {
+        need_send_beacon = true;
+      }
+    }
+    if (need_send_beacon) {
+      send_beacon(now);
+    }
   }
 
   check_ops_in_flight();
@@ -6044,12 +6049,12 @@ void OSD::send_beacon(const ceph::coarse_mono_clock::time_point& now)
       monmap.get_required_features().contains_all(
         ceph::features::mon::FEATURE_LUMINOUS)) {
     dout(20) << __func__ << " sending" << dendl;
-    last_sent_beacon = now;
     MOSDBeacon* beacon = nullptr;
     {
       Mutex::Locker l{min_last_epoch_clean_lock};
       beacon = new MOSDBeacon(osdmap->get_epoch(), min_last_epoch_clean);
       std::swap(beacon->pgs, min_last_epoch_clean_pgs);
+      last_sent_beacon = now;
     }
     monc->send_mon_message(beacon);
   } else {
