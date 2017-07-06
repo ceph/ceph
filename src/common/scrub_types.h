@@ -116,7 +116,8 @@ struct inconsistent_obj_wrapper : librados::inconsistent_obj_t {
   void set_auth_missing(const hobject_t& hoid,
                         const map<pg_shard_t, ScrubMap*>&,
 			map<pg_shard_t, shard_info_wrapper>&,
-			int &shallow_errors, int &deep_errors);
+			int &shallow_errors, int &deep_errors,
+			const pg_shard_t &primary);
   void set_version(uint64_t ver) { version = ver; }
   void encode(bufferlist& bl) const;
   void decode(bufferlist::iterator& bp);
