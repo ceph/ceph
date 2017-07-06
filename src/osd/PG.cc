@@ -951,6 +951,7 @@ map<pg_shard_t, pg_info_t>::const_iterator PG::find_best_info(
    * when you find bugs! */
   eversion_t min_last_update_acceptable = eversion_t::max();
   epoch_t max_last_epoch_started_found = 0;
+  epoch_t max_last_epoch_clean_found = 0;
   for (map<pg_shard_t, pg_info_t>::const_iterator i = infos.begin();
        i != infos.end();
        ++i) {
@@ -972,6 +973,9 @@ map<pg_shard_t, pg_info_t>::const_iterator PG::find_best_info(
       if (min_last_update_acceptable > i->second.last_update)
 	min_last_update_acceptable = i->second.last_update;
     }
+    if (max_last_epoch_clean_found < i->second.history.last_epoch_clean) {      
+	max_last_epoch_clean_found = i->second.history.last_epoch_clean;
+    }
   }
   if (min_last_update_acceptable == eversion_t::max())
     return infos.end();
@@ -988,8 +992,14 @@ map<pg_shard_t, pg_info_t>::const_iterator PG::find_best_info(
     if (p->second.last_update < min_last_update_acceptable)
       continue;
     // disqualify anyone with a too old last_epoch_started
-    if (p->second.last_epoch_started < max_last_epoch_started_found)
-      continue;
+    if (p->second.last_epoch_started < max_last_epoch_started_found) {
+      if (p->second.history.last_epoch_clean < max_last_epoch_clean_found) {
+        continue;
+      }
+      else {
+        dout(10) << "les < max les(" << max_last_epoch_started_found << "),but lc >= max lc(" << max_last_epoch_clean_found << ")" << dendl;
+      }
+    }
     // Disquality anyone who is incomplete (not fully backfilled)
     if (p->second.is_incomplete())
       continue;
@@ -7623,9 +7633,12 @@ PG::PriorSet::PriorSet(bool ec_pool,
     const pg_interval_t &interval = p->second;
     dout(10) << "build_prior " << interval << dendl;
 
-    if (interval.last < info.history.last_epoch_started)
-      break;  // we don't care
-
+    if (interval.last < info.history.last_epoch_started) {
+      if (interval.last < info.history.last_epoch_clean)
+        break;  // we don't care
+      else
+        dout(10) << "internal last < les, however last >= lc" << dendl;
+    }
     if (interval.acting.empty())
       continue;
 
