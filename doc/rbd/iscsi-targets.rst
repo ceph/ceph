@@ -9,9 +9,7 @@ block-level access is expanding to offer standard iSCSI support allowing
 wider platform usage, and potentially opening new use cases and
 customers.
 
--  CentOS 7.3 for Ansible deployments
-
--  CentOS 7.4 for command-line deployments
+-  CentOS 7.3 or newer
 
 -  A working Ceph Storage cluster, deployed with ``ceph-ansible`` or using the command-line interface
 
@@ -23,6 +21,9 @@ A choice of using Ansible or the command-line interface are the
 available deployment methods for installing and configuring the Ceph
 iSCSI gateway:
 
--  `Using Ansible <Configuring the iSCSI Target using Ansible>`_
+-  `Using Ansible`_
 
--  `Using the Command Line Interface <Configuring the iSCSI Target using the Command Line Interface>`_
+-  `Using the Command Line Interface`_
+
+.. _Using Ansible: ../iscsi-target-ansible
+.. _Using the Command Line Interface: ../iscsi-target-cli

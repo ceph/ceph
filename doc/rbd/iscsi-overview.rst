@@ -14,31 +14,34 @@ images to iSCSI clients. With Ceph’s iSCSI gateway you can effectively run a f
 integrated block-storage infrastructure with all the features and benefits of a
 conventional Storage Area Network (SAN).
 
-.. ditaa::       Cluster Network
-                +-------------+---------------+-------------+
-                |             |               |             |
-            +---+---+     +---+---+       +---+---+     +---+---+
-            | OSD 1 |     | OSD 2 |       | OSD 3 |     | OSD N |
-            +---+---+     +---+---+       +---+---+     +---+---+
-                |             |               |             |
-       +--------+             | +-----------+ |             +--------+
-       |        |             | |           | |             |        |
-       |        +-------------+-+ RBD Image +-+-------------+        |
-       |         Public Network |    {d}    |                        |
-       |                        +-----------+                        |
-       |                                                             |
-       |                     +-----------------+                     |
-       |  +--------------+   | iSCSI Initators |   +--------------+  |
-       |  | iSCSI GW -   |   | +------------+  |   | iSCSI GW -   |  |
-       +--+  RBD Module  +<--+ |  Various   |  +-->+  RBD Module  +--+
-          |              |   | |  Operating |  |   |              |
-          +--------------+   | |  Systems   |  |   +--------------+
-                             | +------------+  |
-                             +-----------------+
+.. ditaa::
+                  Cluster Network
+                 +-------------------------------------------+
+                 |             |               |             |
+             +-------+     +-------+       +-------+     +-------+
+             |       |     |       |       |       |     |       |
+             | OSD 1 |     | OSD 2 |       | OSD 3 |     | OSD N |
+             |    {s}|     |    {s}|       |    {s}|     |    {s}|
+             +-------+     +-------+       +-------+     +-------+
+                 |             |               |             |
+      +--------->|             |  +---------+  |             |<---------+
+      :          |             |  |   RBD   |  |             |          :
+      |          +----------------|  Image  |----------------+          |
+      |           Public Network  |    {d}  |                           |
+      |                           +---------+                           |
+      |                                                                 |
+      |                      +-------------------+                      |
+      |   +--------------+   |  iSCSI Initators  |   +--------------+   |
+      |   | iSCSI GW     |   |   +-----------+   |   | iSCSI GW     |   |
+      +-->|  RBD Module  |<--+   | Various   |   +-->|  RBD Module  |<--+
+          |              |   |   | Operating |   |   |              |
+          +--------------+   |   | Systems   |   |   +--------------+
+                             |   +-----------+   |
+                             +-------------------+
 
 
 .. toctree::
-  :maxdepth: 2
+  :maxdepth: 1
 
   Requirements <iscsi-requirements>
   Configuring the iSCSI Target <iscsi-targets>

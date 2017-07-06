@@ -18,33 +18,27 @@ metrics.
 
 **Installing:**
 
-1. As ``root``, enable the Ceph tools repository:
-
-   ::
-
-       # subscription-manager repos --enable=rhel-7-server-ceph-2-tools-rpms
-
-2. As ``root``, install the ``ceph-iscsi-tools`` package on each iSCSI
+1. As ``root``, install the ``ceph-iscsi-tools`` package on each iSCSI
    gateway node:
 
    ::
 
        # yum install ceph-iscsi-tools
 
-3. As ``root``, install the performance co-pilot package on each iSCSI
+2. As ``root``, install the performance co-pilot package on each iSCSI
    gateway node:
 
    ::
 
        # yum install pcp
 
-4. As ``root``, install the LIO PMDA package on each iSCSI gateway node:
+3. As ``root``, install the LIO PMDA package on each iSCSI gateway node:
 
    ::
 
        # yum install pcp-pmda-lio
 
-5. As ``root``, enable and start the performance co-pilot service on
+4. As ``root``, enable and start the performance co-pilot service on
    each iSCSI gateway node:
 
    ::
@@ -52,7 +46,7 @@ metrics.
        # systemctl enable pmcd
        # systemctl start pmcd
 
-6. As ``root``, register the ``pcp-pmda-lio`` agent:
+5. As ``root``, register the ``pcp-pmda-lio`` agent:
 
    ::
 

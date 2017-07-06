@@ -7,4 +7,4 @@ Configuring the iSCSI Initiators
 
   The iSCSI Initiator for Red Hat Enterprise Linux <iscsi-initiator-rhel>
   The iSCSI Initiator for Microsoft Windows <iscsi-initiator-win>
-  The iSCSI Initiator for VMware ESX <iscsi-initiators-esx>
+  The iSCSI Initiator for VMware ESX <iscsi-initiator-esx>
