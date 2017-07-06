@@ -195,6 +195,7 @@ int BlueFS::reclaim_blocks(unsigned id, uint64_t want,
     log_t.op_alloc_rm(id, p.offset, p.length);
   }
 
+  flush_bdev();
   r = _flush_and_sync_log(l);
   assert(r == 0);
 
@@ -1159,6 +1160,9 @@ void BlueFS::_compact_log_async(std::unique_lock<std::mutex>& l)
   // write the new entries
   log_t.op_file_update(log_file->fnode);
   log_t.op_jump(log_seq, old_log_jump_to);
+
+  flush_bdev();  // FIXME?
+
   _flush_and_sync_log(l, 0, old_log_jump_to);
 
   // 2. prepare compacted log
@@ -1280,6 +1284,7 @@ void BlueFS::_pad_bl(bufferlist& bl)
 void BlueFS::flush_log()
 {
   std::unique_lock<std::mutex> l(lock);
+  flush_bdev();
   _flush_and_sync_log(l);
 }
 
@@ -1350,7 +1355,6 @@ int BlueFS::_flush_and_sync_log(std::unique_lock<std::mutex>& l,
   log_t.seq = 0;  // just so debug output is less confusing
   log_flushing = true;
 
-  flush_bdev();
   int r = _flush(log_writer, true);
   assert(r == 0);
 
@@ -1702,12 +1706,15 @@ int BlueFS::_fsync(FileWriter *h, std::unique_lock<std::mutex>& l)
   if (r < 0)
      return r;
   uint64_t old_dirty_seq = h->file->dirty_seq;
+
   list<FS::aio_t> completed_ios;
   _claim_completed_aios(h, &completed_ios);
   lock.unlock();
   wait_for_aio(h);
   completed_ios.clear();
+  flush_bdev();
   lock.lock();
+
   if (old_dirty_seq) {
     uint64_t s = log_seq;
     dout(20) << __func__ << " file metadata was dirty (" << old_dirty_seq
@@ -1825,6 +1832,7 @@ void BlueFS::sync_metadata()
   utime_t start = ceph_clock_now();
   vector<interval_set<uint64_t>> to_release(pending_release.size());
   to_release.swap(pending_release);
+  flush_bdev(); // FIXME?
   _flush_and_sync_log(l);
   for (unsigned i = 0; i < to_release.size(); ++i) {
     for (auto p = to_release[i].begin(); p != to_release[i].end(); ++p) {
