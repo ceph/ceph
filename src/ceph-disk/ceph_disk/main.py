@@ -665,6 +665,32 @@ def get_dev_size(dev, size='megabytes'):
         os.close(fd)
 
 
+def stmode_is_diskdevice(dmode):
+    if stat.S_ISBLK(dmode):
+        return True
+    else:
+        # FreeBSD does not have block devices
+        # All disks are character devices
+        if FREEBSD and stat.S_ISCHR(dmode):
+            return True
+    return False
+
+
+def dev_is_diskdevice(dev):
+    dmode = os.stat(dev).st_mode
+    return stmode_is_diskdevice(dmode)
+
+
+def ldev_is_diskdevice(dev):
+    dmode = os.lstat(dev).st_mode
+    return stmode_is_diskdevice(dmode)
+
+
+def path_is_diskdevice(path):
+    dev = os.path.realpath(path)
+    return dev_is_diskdevice(dev)
+
+
 def get_partition_mpath(dev, pnum):
     part_re = "part{pnum}-mpath-".format(pnum=pnum)
     partitions = list_partitions_mpath(dev, part_re)
@@ -777,7 +803,7 @@ def get_partition_base(dev):
     Get the base device for a partition
     """
     dev = os.path.realpath(dev)
-    if not stat.S_ISBLK(os.lstat(dev).st_mode):
+    if ldev_is_diskdevice(dev):
         raise Error('not a block device', dev)
 
     name = get_dev_name(dev)
@@ -819,7 +845,7 @@ def is_partition(dev):
 
     dev = os.path.realpath(dev)
     st = os.lstat(dev)
-    if not stat.S_ISBLK(st.st_mode):
+    if not stmode_is_diskdevice(st.mode):
         raise Error('not a block device', dev)
 
     name = get_dev_name(dev)
@@ -2119,9 +2145,8 @@ class PrepareSpace(object):
     def set_type(self):
         name = self.name
         args = self.args
-        dmode = os.stat(args.data).st_mode
         if (self.wants_space() and
-                stat.S_ISBLK(dmode) and
+                dev_is_diskdevice(args.data) and
                 not is_partition(args.data) and
                 getattr(args, name) is None and
                 getattr(args, name + '_file') is None):
@@ -2144,7 +2169,7 @@ class PrepareSpace(object):
             return
 
         mode = os.stat(getattr(args, name)).st_mode
-        if stat.S_ISBLK(mode):
+        if stmode_is_diskdevice(mode):
             if getattr(args, name + '_file'):
                 raise Error('%s is not a regular file' % name.capitalize,
                             getattr(args, name))
@@ -2761,7 +2786,7 @@ class PrepareData(object):
 
         if stat.S_ISDIR(dmode):
             self.type = self.FILE
-        elif stat.S_ISBLK(dmode):
+        elif stmode_is_diskdevice(dmode):
             self.type = self.DEVICE
         else:
             raise Error('not a dir or block device', self.args.data)
@@ -3716,7 +3741,7 @@ def main_activate(args):
 
     with activate_lock:
         mode = os.stat(args.path).st_mode
-        if stat.S_ISBLK(mode):
+        if stmode_is_diskdevice(mode):
             if (is_partition(args.path) and
                     (get_partition_type(args.path) ==
                      PTYPE['mpath']['osd']['ready']) and
@@ -4088,8 +4113,7 @@ def get_space_osd_uuid(name, path):
     if not os.path.exists(path):
         raise Error('%s does not exist' % path)
 
-    mode = os.stat(path).st_mode
-    if not stat.S_ISBLK(mode):
+    if path_is_diskdevice(path):
         raise Error('%s is not a block device' % path)
 
     if (is_partition(path) and
@@ -4678,7 +4702,7 @@ def is_suppressed(path):
     disk = os.path.realpath(path)
     try:
         if (not disk.startswith('/dev/') or
-                not stat.S_ISBLK(os.lstat(disk).st_mode)):
+                not ldev_is_diskdevice(disk)):
             return False
         base = get_dev_name(disk)
         while len(base):
@@ -4693,7 +4717,7 @@ def set_suppress(path):
     disk = os.path.realpath(path)
     if not os.path.exists(disk):
         raise Error('does not exist', path)
-    if not stat.S_ISBLK(os.lstat(path).st_mode):
+    if ldev_is_diskdevice(path):
         raise Error('not a block device', path)
     base = get_dev_name(disk)
 
@@ -4706,7 +4730,7 @@ def unset_suppress(path):
     disk = os.path.realpath(path)
     if not os.path.exists(disk):
         raise Error('does not exist', path)
-    if not stat.S_ISBLK(os.lstat(path).st_mode):
+    if not ldev_is_diskdevice(path):
         raise Error('not a block device', path)
     assert disk.startswith('/dev/')
     base = get_dev_name(disk)
