@@ -13,6 +13,10 @@ openstack:
 tasks:
 - install:
 - ceph:
+    log-whitelist:
+      - overall HEALTH_
+      - (MON_DOWN)
+      - (PG_
 - mon_thrash:
     revive_delay: 20
     thrash_delay: 1

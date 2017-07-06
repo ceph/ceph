@@ -3,6 +3,11 @@ overrides:
     log-whitelist:
     - reached quota
     - wrongly marked me down
+    - overall HEALTH_
+    - (POOL_FULL)
+    - (SMALLER_PGP_NUM)
+    - (CACHE_POOL_NO_HIT_SET)
+    - (CACHE_POOL_NEAR_FULL)
 tasks:
 - workunit:
     clients:

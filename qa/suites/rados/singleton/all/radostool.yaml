@@ -17,6 +17,8 @@ tasks:
     - had wrong client addr
     - had wrong cluster addr
     - reached quota
+    - overall HEALTH_
+    - (POOL_FULL)
 - workunit:
     clients:
       all:

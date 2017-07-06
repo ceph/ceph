@@ -2,6 +2,12 @@ overrides:
   ceph:
     log-whitelist:
       - reached quota
+      - overall HEALTH_
+      - (CACHE_POOL_NO_HIT_SET)
+      - (POOL_FULL)
+      - (SMALLER_PGP_NUM)
+      - (REQUEST_SLOW)
+      - (CACHE_POOL_NEAR_FULL)
     conf:
       client:
         debug ms: 1

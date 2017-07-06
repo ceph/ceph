@@ -1,8 +1,9 @@
-override:
+overrides:
   ceph:
     log-whitelist:
-      - HEALTH_WARN OSD_CACHE_NO_HIT_SET
-      - HEALTH_WARN TOO_FEW_PGS
+      - overall HEALTH_
+      - (CACHE_POOL_NO_HIT_SET)
+      - (TOO_FEW_PGS)
 tasks:
 - workunit:
     clients:

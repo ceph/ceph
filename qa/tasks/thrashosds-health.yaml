@@ -1,14 +1,13 @@
-override:
+overrides:
   ceph:
     log-whitelist:
-      - HEALTH_WARN OSDMAP_FLAGS
-      - HEALTH_WARN OSD_
-      - HEALTH_WARN OSDMAP_FLAGS
-      - HEALTH_WARN PG_
-      - HEALTH_ERR OSD_
-      - HEALTH_ERR PG_
-      - HEALTH_WARN SMALLER_PGP_NUM
-      - HEALTH_WARN DEGRADED_OBJECTS
-      - HEALTH_WARN MISPLACED_OBJECTS
-      - HEALTH_WARN SLOW_REQUESTS
-      - HEALTH_WARN TOO_FEW_PGS
+      - overall HEALTH_
+      - (OSDMAP_FLAGS)
+      - (OSD_
+      - (PG_
+      - (POOL_
+      - (CACHE_POOL_
+      - (SMALLER_PGP_NUM)
+      - (OBJECT_
+      - (REQUEST_SLOW)
+      - (TOO_FEW_PGS)

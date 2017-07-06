@@ -15,12 +15,12 @@ overrides:
     - 'attr name mistmatch'
     - 'deep-scrub 1 missing, 0 inconsistent objects'
     - 'failed to pick suitable auth object'
-    - HEALTH_WARN OSDMAP_FLAGS
-    - HEALTH_WARN OSD_
-    - HEALTH_WARN PG_
-    - HEALTH_ERR PG_
-    - HEALTH_ERR OSD_SCRUB_ERRORS
-    - HEALTH_WARN TOO_FEW_PGS
+    - overall HEALTH_
+    - (OSDMAP_FLAGS)
+    - (OSD_
+    - (PG_
+    - (OSD_SCRUB_ERRORS)
+    - (TOO_FEW_PGS)
     conf:
       osd:
         osd deep scrub update digest min age: 0
