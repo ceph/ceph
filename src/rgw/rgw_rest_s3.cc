@@ -1550,7 +1550,7 @@ int RGWPostObj_ObjStore_S3::get_params()
     bool boundary;
     uint64_t chunk_size = s->cct->_conf->rgw_max_chunk_size;
     r = read_data(part.data, chunk_size, boundary, done);
-    if (!boundary) {
+    if (r < 0 || !boundary) {
       err_msg = "Couldn't find boundary";
       return -EINVAL;
     }
@@ -1819,7 +1819,7 @@ int RGWPostObj_ObjStore_S3::complete_get_params()
     bool boundary;
     uint64_t chunk_size = s->cct->_conf->rgw_max_chunk_size;
     r = read_data(part.data, chunk_size, boundary, done);
-    if (!boundary) {
+    if (r < 0 || !boundary) {
       return -EINVAL;
     }
 
