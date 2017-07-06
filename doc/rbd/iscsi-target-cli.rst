@@ -9,22 +9,21 @@ install, and configure the Ceph iSCSI gateway for basic operation.
 
 **Requirements:**
 
--  A running Red Hat Ceph Storage 2.3 cluster
+-  A running Ceph Luminous or later storage cluster
 
--  The following packages must be installed from a Red Hat Ceph Storage
-   repository:
+-  CentOS 7.4, Linux kernel v4.12 or newer
 
-   -  ``targetcli-2.1.fb46-2.el7cp`` or newer package
+-  The following packages must be installed from your Linux distribution's software repository:
 
-   -  ``python-rtslib-2.1.fb63-3.el7cp`` or newer package
+   -  ``targetcli-2.1.fb47`` or newer package
 
-   -  ``tcmu-runner-1.2.0-2.el7cp`` or newer package
+   -  ``python-rtslib-2.1.fb64`` or newer package
+
+   -  ``tcmu-runner-1.2.1`` or newer package
 
      .. IMPORTANT::
         If previous versions of these packages exist, then they must
-        be removed first before installing the newer versions. These
-        newer versions must be installed from a Red Hat Ceph Storage
-        repository.
+        be removed first before installing the newer versions.
 
 Do the following steps on the Ceph iSCSI gateway node before proceeding
 to the *Installing* section:
