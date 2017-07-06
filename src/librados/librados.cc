@@ -2729,7 +2729,7 @@ librados::AioCompletion *librados::Rados::aio_create_completion(void *cb_arg,
 								callback_t cb_complete,
 								callback_t cb_safe)
 {
-  AioCompletionImpl *c;
+  AioCompletionImpl *c = nullptr;
   int r = rados_aio_create_completion(cb_arg, cb_complete, cb_safe, (void**)&c);
   assert(r == 0);
   return new AioCompletion(c);

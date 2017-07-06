@@ -2683,7 +2683,7 @@ int RGWPutObjProcessor_Atomic::complete_writing_data()
     obj_len = (uint64_t)first_chunk.length();
   }
   while (pending_data_bl.length()) {
-    void *handle;
+    void *handle = nullptr;
     rgw_raw_obj obj;
     uint64_t max_write_size = MIN(max_chunk_size, (uint64_t)next_part_ofs - data_ofs);
     if (max_write_size > pending_data_bl.length()) {
@@ -3309,7 +3309,7 @@ int RGWRados::get_required_alignment(const rgw_pool& pool, uint64_t *alignment)
     return r;
   }
 
-  bool requires;
+  bool requires = false;
   r = ioctx.pool_requires_alignment2(&requires);
   if (r < 0) {
     ldout(cct, 0) << "ERROR: ioctx.pool_requires_alignment2() returned " 
@@ -3322,7 +3322,7 @@ int RGWRados::get_required_alignment(const rgw_pool& pool, uint64_t *alignment)
     return 0;
   }
 
-  uint64_t align;
+  uint64_t align = 0;
   r = ioctx.pool_required_alignment2(&align);
   if (r < 0) {
     ldout(cct, 0) << "ERROR: ioctx.pool_required_alignment2() returned " 
@@ -3338,7 +3338,7 @@ int RGWRados::get_required_alignment(const rgw_pool& pool, uint64_t *alignment)
 
 int RGWRados::get_max_chunk_size(const rgw_pool& pool, uint64_t *max_chunk_size)
 {
-  uint64_t alignment;
+  uint64_t alignment = 0;
   int r = get_required_alignment(pool, &alignment);
   if (r < 0) {
     return r;
