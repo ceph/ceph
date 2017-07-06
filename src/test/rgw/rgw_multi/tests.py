@@ -403,6 +403,18 @@ def disable_bucket_sync(zone, bucket_name):
     cmd = ['bucket', 'sync', 'disable', '--bucket', bucket_name] + zone.zone_args()
     zone.cluster.admin(cmd)
 
+def check_buckets_sync_status_obj_not_exist(zone, buckets):
+    for _ in range(config.checkpoint_retries):
+        cmd = ['log', 'list'] + zone.zone_arg()
+        log_list, ret = zone.cluster.admin(cmd, check_retcode=False, read_only=True)
+        for bucket in buckets:
+            if log_list.find(':'+bucket+":") >= 0:
+                break
+        else:
+            return
+        time.sleep(config.checkpoint_delay)
+    assert False
+
 def gen_bucket_name():
     global num_buckets
 
@@ -841,6 +853,47 @@ def test_set_bucket_policy():
     for _, bucket in zone_bucket:
         bucket.set_policy(policy)
         assert(bucket.get_policy() == policy)
+
+def test_bucket_sync_disable():
+    zonegroup = realm.master_zonegroup()
+    zonegroup_conns = ZonegroupConns(zonegroup)
+    buckets, zone_bucket = create_bucket_per_zone(zonegroup_conns)
+
+    for bucket_name in buckets:
+        disable_bucket_sync(realm.meta_master_zone(), bucket_name)
+
+    for zone in zonegroup.zones:
+        check_buckets_sync_status_obj_not_exist(zone, buckets)
+
+def test_bucket_sync_enable_right_after_disable():
+    zonegroup = realm.master_zonegroup()
+    zonegroup_conns = ZonegroupConns(zonegroup)
+    buckets, zone_bucket = create_bucket_per_zone(zonegroup_conns)
+
+    objnames = ['obj1', 'obj2', 'obj3', 'obj4']
+    content = 'asdasd'
+
+    for zone, bucket in zone_bucket:
+        for objname in objnames:
+            k = new_key(zone, bucket.name, objname)
+            k.set_contents_from_string(content)
+
+    for bucket_name in buckets:
+        zonegroup_bucket_checkpoint(zonegroup_conns, bucket_name)
+
+    for bucket_name in buckets:
+        disable_bucket_sync(realm.meta_master_zone(), bucket_name)
+        enable_bucket_sync(realm.meta_master_zone(), bucket_name)
+
+    objnames_2 = ['obj5', 'obj6', 'obj7', 'obj8']
+
+    for zone, bucket in zone_bucket:
+        for objname in objnames_2:
+            k = new_key(zone, bucket.name, objname)
+            k.set_contents_from_string(content)
+
+    for bucket_name in buckets:
+        zonegroup_bucket_checkpoint(zonegroup_conns, bucket_name)
 
 def test_bucket_sync_disable_enable():
     zonegroup = realm.master_zonegroup()
