@@ -2697,6 +2697,7 @@ int RGWBucketShardIncrementalSyncCR::operate()
         RGWRados *store = sync_env->store;
         call(new RGWRadosRemoveCR(store, rgw_raw_obj{store->get_zone_params().log_pool, oid}));
       }
+      lease_cr->abort();
       return set_cr_done();
     }
 
