@@ -121,6 +121,7 @@ struct shard_info_t : err_t {
   bool data_digest_present = false;
   uint32_t data_digest = 0;
   bool selected_oi = false;
+  bool primary = false;
 };
 
 struct osd_shard_t {

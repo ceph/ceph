@@ -782,6 +782,8 @@ map<pg_shard_t, ScrubMap *>::const_iterator
     }
     string error_string;
     auto& shard_info = shard_map[j->first];
+    if (j->first == get_parent()->whoami_shard())
+      shard_info.primary = true;
     if (i->second.read_error) {
       shard_info.set_read_error();
       error_string += " read_error";
@@ -929,7 +931,8 @@ void PGBackend::be_compare_scrubmaps(
     set<pg_shard_t> object_errors;
     if (auth == maps.end()) {
       object_error.set_version(0);
-      object_error.set_auth_missing(*k, maps, shard_map, shallow_errors, deep_errors);
+      object_error.set_auth_missing(*k, maps, shard_map, shallow_errors,
+	deep_errors, get_parent()->whoami_shard());
       if (object_error.has_deep_errors())
 	++deep_errors;
       else if (object_error.has_shallow_errors())
@@ -982,6 +985,7 @@ void PGBackend::be_compare_scrubmaps(
       } else {
 	cur_missing.insert(j->first);
 	shard_map[j->first].set_missing();
+        shard_map[j->first].primary = (j->first == get_parent()->whoami_shard());
 	// Can't have any other errors if there is no information available
 	++shallow_errors;
 	errorstream << pgid << " shard " << j->first << " missing " << *k
