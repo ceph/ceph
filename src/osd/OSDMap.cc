@@ -2951,6 +2951,8 @@ string OSDMap::get_flag_string(unsigned f)
     s += ",require_kraken_osds";
   if (f & CEPH_OSDMAP_REQUIRE_LUMINOUS)
     s += ",require_luminous_osds";
+  if (f & CEPH_OSDMAP_RECOVERY_DELETES)
+    s += ",recovery_deletes";
   if (s.length())
     s.erase(0, 1);
   return s;
