@@ -597,6 +597,7 @@ public:
   void win_election(epoch_t epoch, set<int>& q,
 		    uint64_t features,
                     const mon_feature_t& mon_features,
+		    const map<int,Metadata>& metadata,
 		    const MonCommand *cmdset, int cmdsize);
   void lose_election(epoch_t epoch, set<int>& q, int l,
 		     uint64_t features,

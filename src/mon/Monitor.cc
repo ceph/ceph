@@ -1870,12 +1870,16 @@ void Monitor::win_standalone_election()
   set<int> q;
   q.insert(rank);
 
-  const MonCommand *my_cmds;
-  int cmdsize;
+  map<int,Metadata> metadata;
+  collect_metadata(&metadata[0]);
+
+  const MonCommand *my_cmds = nullptr;
+  int cmdsize = 0;
   get_locally_supported_monitor_commands(&my_cmds, &cmdsize);
   win_election(elector.get_epoch(), q,
                CEPH_FEATURES_ALL,
                ceph::features::mon::get_supported(),
+	       metadata,
                my_cmds, cmdsize);
 }
 
@@ -1904,6 +1908,7 @@ void Monitor::_finish_svc_election()
 
 void Monitor::win_election(epoch_t epoch, set<int>& active, uint64_t features,
                            const mon_feature_t& mon_features,
+			   const map<int,Metadata>& metadata,
                            const MonCommand *cmdset, int cmdsize)
 {
   dout(10) << __func__ << " epoch " << epoch << " quorum " << active
@@ -1917,6 +1922,7 @@ void Monitor::win_election(epoch_t epoch, set<int>& active, uint64_t features,
   quorum = active;
   quorum_con_features = features;
   quorum_mon_features = mon_features;
+  pending_metadata = metadata;
   outside_quorum.clear();
 
   clog->info() << "mon." << name << "@" << rank
@@ -1936,6 +1942,27 @@ void Monitor::win_election(epoch_t epoch, set<int>& active, uint64_t features,
 
   logger->inc(l_mon_election_win);
 
+  // inject new metadata in first transaction.
+  {
+    // include previous metadata for missing mons (that aren't part of
+    // the current quorum).
+    map<int,Metadata> m = metadata;
+    for (unsigned rank = 0; rank < monmap->size(); ++rank) {
+      if (m.count(rank) == 0 &&
+	  mon_metadata.count(rank)) {
+	m[rank] = mon_metadata[rank];
+      }
+    }
+
+    // FIXME: This is a bit sloppy because we aren't guaranteed to submit
+    // a new transaction immediately after the election finishes.  We should
+    // do that anyway for other reasons, though.
+    MonitorDBStore::TransactionRef t = paxos->get_pending_transaction();
+    bufferlist bl;
+    ::encode(m, bl);
+    t->put(MONITOR_STORE_PREFIX, "last_metadata", bl);
+  }
+
   finish_election();
   if (monmap->size() > 1 &&
       monmap->get_epoch() > 0) {
@@ -1944,10 +1971,6 @@ void Monitor::win_election(epoch_t epoch, set<int>& active, uint64_t features,
     do_health_to_clog_interval();
     scrub_event_start();
   }
-
-  Metadata my_meta;
-  collect_metadata(&my_meta);
-  update_mon_metadata(rank, std::move(my_meta));
 }
 
 void Monitor::lose_election(epoch_t epoch, set<int> &q, int l,
@@ -1974,7 +1997,9 @@ void Monitor::lose_election(epoch_t epoch, set<int> &q, int l,
 
   finish_election();
 
-  if (quorum_con_features & CEPH_FEATURE_MON_METADATA) {
+  if ((quorum_con_features & CEPH_FEATURE_MON_METADATA) &&
+      !HAVE_FEATURE(quorum_con_features, SERVER_LUMINOUS)) {
+    // for pre-luminous mons only
     Metadata sys_info;
     collect_metadata(&sys_info);
     messenger->send_message(new MMonMetadata(sys_info),
@@ -4713,6 +4738,7 @@ void Monitor::handle_mon_metadata(MonOpRequestRef op)
 
 void Monitor::update_mon_metadata(int from, Metadata&& m)
 {
+  // NOTE: this is now for legacy (kraken or jewel) mons only.
   pending_metadata[from] = std::move(m);
 
   MonitorDBStore::TransactionRef t = paxos->get_pending_transaction();
