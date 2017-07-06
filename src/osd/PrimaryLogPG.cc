@@ -124,7 +124,7 @@ public:
 template <typename T>
 class PrimaryLogPG::BlessedGenContext : public GenContext<T> {
   PrimaryLogPGRef pg;
-  GenContext<T> *c;
+  unique_ptr<GenContext<T>> c;
   epoch_t e;
 public:
   BlessedGenContext(PrimaryLogPG *pg, GenContext<T> *c, epoch_t e)
@@ -132,9 +132,9 @@ public:
   void finish(T t) {
     pg->lock();
     if (pg->pg_has_reset_since(e))
-      delete c;
+      c.reset();
     else
-      c->complete(t);
+      c.release()->complete(t);
     pg->unlock();
   }
 };
@@ -147,7 +147,7 @@ GenContext<ThreadPool::TPHandle&> *PrimaryLogPG::bless_gencontext(
 
 class PrimaryLogPG::BlessedContext : public Context {
   PrimaryLogPGRef pg;
-  Context *c;
+  unique_ptr<Context> c;
   epoch_t e;
 public:
   BlessedContext(PrimaryLogPG *pg, Context *c, epoch_t e)
@@ -155,9 +155,9 @@ public:
   void finish(int r) {
     pg->lock();
     if (pg->pg_has_reset_since(e))
-      delete c;
+      c.reset();
     else
-      c->complete(r);
+      c.release()->complete(r);
     pg->unlock();
   }
 };

@@ -47,13 +47,13 @@ class PG_SendMessageOnConn: public Context {
 
 class PG_RecoveryQueueAsync : public Context {
   PGBackend::Listener *pg;
-  GenContext<ThreadPool::TPHandle&> *c;
+  unique_ptr<GenContext<ThreadPool::TPHandle&>> c;
   public:
   PG_RecoveryQueueAsync(
     PGBackend::Listener *pg,
     GenContext<ThreadPool::TPHandle&> *c) : pg(pg), c(c) {}
   void finish(int) {
-    pg->schedule_recovery_work(c);
+    pg->schedule_recovery_work(c.release());
   }
 };
 }
@@ -875,7 +875,11 @@ struct C_ReplicatedBackend_OnPullComplete : GenContext<ThreadPool::TPHandle&> {
   void finish(ThreadPool::TPHandle &handle) {
     ReplicatedBackend::RPGHandle *h = bc->_open_recovery_op();
     for (auto &&i: to_continue) {
-      if (!bc->start_pushes(i.hoid, i.obc, h)) {
+      auto j = bc->pulling.find(i.hoid);
+      assert(j != bc->pulling.end());
+      ObjectContextRef obc = j->second.obc;
+      bc->clear_pull(j);
+      if (!bc->start_pushes(i.hoid, obc, h)) {
 	bc->get_parent()->on_global_recover(
 	  i.hoid, i.stat);
       }
@@ -1865,10 +1869,9 @@ bool ReplicatedBackend::handle_pull_response(
 
   if (complete) {
     pi.stat.num_objects_recovered++;
-    to_continue->push_back({hoid, pi.obc, pi.stat});
+    to_continue->push_back({hoid, pi.stat});
     get_parent()->on_local_recover(
       hoid, pi.recovery_info, pi.obc, t);
-    clear_pull(pulling.find(hoid));
     return false;
   } else {
     response->soid = pop.soid;
