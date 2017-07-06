@@ -2081,7 +2081,6 @@ private:
 
   void _apply_padding(uint64_t head_pad,
 		      uint64_t tail_pad,
-		      bufferlist& bl,
 		      bufferlist& padded);
 
   // -- ondisk version ---
