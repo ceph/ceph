@@ -548,8 +548,6 @@ void MDSDaemon::reset_tick()
 
 void MDSDaemon::tick()
 {
-  tick_event = 0;
-
   // reschedule
   reset_tick();
 
