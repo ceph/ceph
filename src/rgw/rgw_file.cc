@@ -1258,6 +1258,10 @@ namespace rgw {
   int RGWWriteRequest::exec_start() {
     struct req_state* s = get_state();
 
+    auto compression_type =
+      get_store()->get_zone_params().get_compression_type(
+	s->bucket_info.placement_rule);
+
     /* not obviously supportable */
     assert(! dlo_manifest);
     assert(! slo_info);
@@ -1293,10 +1297,6 @@ namespace rgw {
     }
 
     filter = processor;
-
-    if (compression_type == "none")
-      compression_type = get_store()->get_zone_params().get_compression_type(
-	s->bucket_info.placement_rule);
     if (compression_type != "none") {
       plugin = Compressor::create(s->cct, compression_type);
     if (! plugin) {
@@ -1371,7 +1371,7 @@ namespace rgw {
 	filter = &*compressor;
       }
 
-      op_ret = put_data_and_throttle(processor, data, ofs, false);
+      op_ret = put_data_and_throttle(filter, data, ofs, false);
       if (op_ret < 0) {
 	goto done;
       }
