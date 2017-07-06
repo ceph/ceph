@@ -9,11 +9,14 @@ install, and configure the Ceph iSCSI gateway for basic operation.
 
 **Requirements:**
 
--  A running Ceph Jewel (10.2.x) cluster or newer
+-  A running Ceph Luminous (12.2.x) cluster or newer
 
--  The ``device-mapper-multipath-0.4.9-99`` or newer package
+-  The ``ceph-iscsi-config`` package installed on all the iSCSI gateway nodes
 
--  The ``targetcli-2.1.fb41-3`` or newer package
+.. NOTE::
+  The ``device-mapper-multipath-0.4.9-99`` or newer package is only required for
+  older kernel RBD based implementations. This package is not required for newer
+  ``librbd`` based implementations.
 
 **Installing:**
 
@@ -35,16 +38,15 @@ install, and configure the Ceph iSCSI gateway for basic operation.
           ceph-igw-2
 
 .. NOTE::
-  The ``ceph-iscsi-config`` package is installed on the Ceph iSCSI gateway nodes
-  listed under the ``[ceph-iscsi-gw]`` section in the ``/etc/ansible/hosts`` file.
-  If co-locating the iSCSI gateway with an OSD node, then add this repository to
-  the OSD node.
+  If co-locating the iSCSI gateway with an OSD node, then add the OSD node to the
+  ``[ceph-iscsi-gw]`` section.
 
 **Configuring:**
 
 The ``ceph-iscsi-ansible`` package places a file in the ``/usr/share/ceph-ansible/group_vars/``
-directory called ``ceph-iscsi-gw.sample``. Create a copy of this file to ``ceph-iscsi-gw``.
-Review the following Ansible variables and descriptions, and update accordingly.
+directory called ``ceph-iscsi-gw.sample``. Create a copy of this sample file named
+``ceph-iscsi-gw.yml``. Review the following Ansible variables and descriptions,
+and update accordingly.
 
 +--------------------------------------+--------------------------------------+
 | Variable                             | Meaning/Purpose                      |
@@ -58,12 +60,13 @@ Review the following Ansible variables and descriptions, and update accordingly.
 |                                      | populate the iSCSI gateway’s         |
 |                                      | ``/etc/ceph/`` directory.            |
 +--------------------------------------+--------------------------------------+
-| ``cluster_name                       | This section provides support for    |
-| gateway_keyring                      | non-standard cluster names, but must |
-| deploy_settings``                    | be defined and executed at least on  |
-|                                      | the initial playbook run to ensure   |
-|                                      | all necessary files are deployed     |
-|                                      | correctly.                           |
+| ``cluster_name``                     | Define a custom storage cluster      |
+|                                      | name.                                |
++--------------------------------------+--------------------------------------+
+| ``gateway_keyring``                  | Define a custom keyring name.        |
++--------------------------------------+--------------------------------------+
+| ``deploy_settings``                  | If set to ``true``, then deploy the  |
+|                                      | settings when the playbook is ran.   |
 +--------------------------------------+--------------------------------------+
 | ``perform_system_checks``            | This is a boolean value that checks  |
 |                                      | for multipath and lvm configuration  |
@@ -138,23 +141,6 @@ Review the following Ansible variables and descriptions, and update accordingly.
   retrieving the gateway’s IQN name. The iSCSI initiator name is located in the
   ``/etc/iscsi/initiatorname.iscsi`` file.
 
-.. NOTE::
-  If using previously configured RBD images, then verify that the following
-  features are enabled:
-
-  -  ``layering``
-
-  -  ``exclusive-lock``
-
-  If these features are not enable, then RBD mapping failures will occur across
-  the iSCSI gateway nodes. Also, if enabled, disable these features:
-
-  -  ``object-map``
-
-  -  ``fast-diff``
-
-  -  ``deep-flatten``
-
 **Deploying:**
 
 On the Ansible installer node, perform the following steps.
@@ -170,25 +156,23 @@ On the Ansible installer node, perform the following steps.
     The Ansible playbook will handle RPM dependencies, RBD creation
     and Linux IO configuration.
 
-   .. WARNING::
-    On stand-alone iSCSI gateway nodes, verify that the correct Red
-    Hat Ceph Storage 2 software repositories are enabled. If they are
-    disabled or unavailable, the wrong packages will be installed.
-
-2. Verify the configuration:
+2. Verify the configuration from an iSCSI gateway node:
 
    ::
 
-       # targetcli ls
+       # gwcli ls
+
+   .. NOTE::
+    For more information on using the ``gwcli`` command to install and configure
+    a Ceph iSCSI gateaway, see the `Configuring the iSCSI Target using the Command Line Interface`_
+    section.
 
    .. IMPORTANT::
-    Only use the ``targetcli`` tool to view the iSCSI gateway
-    configuration settings. Attempting to use the ``targetcli`` tool
-    to change the configuration will result in the following issues,
-    such as ALUA misconfiguration and path failover problems. There
-    is the potential to corrupt data, to have mismatched
-    configuration across iSCSI gateways, and to have mismatched WWN
-    information, which will lead to client multipath problems.
+    Attempting to use the ``targetcli`` tool to change the configuration will
+    result in the following issues, such as ALUA misconfiguration and path failover
+    problems. There is the potential to corrupt data, to have mismatched
+    configuration across iSCSI gateways, and to have mismatched WWN information,
+    which will lead to client multipath problems.
 
 **Service Management:**
 
@@ -358,3 +342,6 @@ correct mode is chosen, this operation will delete data.
     ceph-igw-1                 : ok=3    changed=2    unreachable=0    failed=0
     ceph-igw-2                 : ok=3    changed=2    unreachable=0    failed=0
     localhost                  : ok=2    changed=0    unreachable=0    failed=0
+
+
+.. _Configuring the iSCSI Target using the Command Line Interface: ../iscsi-target-cli
