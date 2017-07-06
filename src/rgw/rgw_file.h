@@ -2190,7 +2190,6 @@ public:
   RGWPutObjProcessor* processor;
   RGWPutObjDataProcessor* filter;
   boost::optional<RGWPutObj_Compress> compressor;
-  std::string compression_type = "none";
   CompressorRef plugin;
   buffer::list data;
   uint64_t timer_id;
