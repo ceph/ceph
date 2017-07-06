@@ -2171,6 +2171,9 @@ public:
 
   uint64_t get_min_acting_features() const { return acting_features; }
   uint64_t get_min_upacting_features() const { return upacting_features; }
+  bool perform_deletes_during_peering() const {
+    return !(get_osdmap()->test_flag(CEPH_OSDMAP_RECOVERY_DELETES));
+  }
 
   /// true if we will sort hobjects bitwise for this pg interval
   bool get_sort_bitwise() const {

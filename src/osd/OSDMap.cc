@@ -2386,6 +2386,8 @@ string OSDMap::get_flag_string(unsigned f)
     s += ",sortbitwise";
   if (f & CEPH_OSDMAP_REQUIRE_JEWEL)
     s += ",require_jewel_osds";
+  if (f & CEPH_OSDMAP_RECOVERY_DELETES)
+    s += ",recovery_deletes";
   if (s.length())
     s.erase(0, 1);
   return s;

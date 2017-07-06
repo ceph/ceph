@@ -125,6 +125,11 @@ void OSDMonitor::create_initial()
   // new clusters should sort bitwise by default.
   newmap.set_flag(CEPH_OSDMAP_SORTBITWISE);
 
+  if (!g_conf->mon_debug_init_recovery_deletes) {
+    // new clusters should set recovery deletes by default.
+    newmap.set_flag(CEPH_OSDMAP_RECOVERY_DELETES);
+  }
+
   // new cluster should require jewel by default
   newmap.set_flag(CEPH_OSDMAP_REQUIRE_JEWEL);
 
@@ -1997,6 +2002,14 @@ bool OSDMonitor::preprocess_boot(MonOpRequestRef op)
     mon->clog->info() << "disallowing boot of OSD "
 		      << m->get_orig_source_inst()
 		      << " because 'sortbitwise' osdmap flag is set and OSD lacks the OSD_BITWISE_HOBJ_SORT feature\n";
+    goto ignore;
+  }
+
+  if (osdmap.test_flag(CEPH_OSDMAP_RECOVERY_DELETES) &&
+      !(m->osd_features & CEPH_FEATURE_OSD_RECOVERY_DELETES)) {
+    mon->clog->info() << "disallowing boot of OSD "
+		      << m->get_orig_source_inst()
+		      << " because 'recovery_deletes' osdmap flag is set and OSD lacks the OSD_RECOVERY_DELETES feature";
     goto ignore;
   }
 
@@ -6408,6 +6421,14 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       } else {
 	ss << "not all up OSDs have OSD_BITWISE_HOBJ_SORT feature";
 	err = -EPERM;
+      }
+    } else if (key == "recovery_deletes") {
+      if (osdmap.get_up_osd_features() & CEPH_FEATURE_OSD_RECOVERY_DELETES) {
+	return prepare_set_flag(op, CEPH_OSDMAP_RECOVERY_DELETES);
+      } else {
+	ss << "not all up OSDs have OSD_RECOVERY_DELETES feature";
+	err = -EPERM;
+	goto reply;
       }
     } else if (key == "require_jewel_osds") {
       if (osdmap.get_up_osd_features() & CEPH_FEATURE_SERVER_JEWEL) {
