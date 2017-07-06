@@ -4,12 +4,11 @@ iSCSI Targets
 
 Traditionally, block-level access to a Ceph storage cluster has been
 limited to QEMU and ``librbd``, which is a key enabler for adoption
-within OpenStack environments. Starting with the Ceph Jewel release,
+within OpenStack environments. Starting with the Ceph Luminous release,
 block-level access is expanding to offer standard iSCSI support allowing
-wider platform usage, and potentially opening new use cases and
-customers.
+wider platform usage, and potentially opening new use cases.
 
--  CentOS 7.3 or newer
+-  CentOS 7.4 or newer
 
 -  A working Ceph Storage cluster, deployed with ``ceph-ansible`` or using the command-line interface
 
@@ -21,9 +20,8 @@ A choice of using Ansible or the command-line interface are the
 available deployment methods for installing and configuring the Ceph
 iSCSI gateway:
 
--  `Using Ansible`_
+.. toctree::
+  :maxdepth: 1
 
--  `Using the Command Line Interface`_
-
-.. _Using Ansible: ../iscsi-target-ansible
-.. _Using the Command Line Interface: ../iscsi-target-cli
+  Using Ansible <iscsi-target-ansible>
+  Using the Command Line Interface <iscsi-target-cli>
