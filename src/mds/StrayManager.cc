@@ -545,6 +545,7 @@ void StrayManager::activate()
 {
   dout(10) << __func__ << dendl;
   started = true;
+  purge_queue.activate();
 }
 
 bool StrayManager::eval_stray(CDentry *dn, bool delay)
