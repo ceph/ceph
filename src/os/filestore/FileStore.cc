@@ -2280,19 +2280,18 @@ void FileStore::_journaled_ahead(OpSequencer *osr, Op *o, Context *ondisk)
 
   o->trace.event("writeahead journal finished");
 
-  // do ondisk completions async, to prevent any onreadable_sync completions
-  // getting blocked behind an ondisk completion.
-  if (ondisk) {
-    dout(10) << " queueing ondisk " << ondisk << dendl;
-    ondisk_finishers[osr->id % m_ondisk_finisher_num]->queue(ondisk);
-  }
-
   // this should queue in order because the journal does it's completions in order.
   queue_op(osr, o);
 
   list<Context*> to_queue;
   osr->dequeue_journal(&to_queue);
 
+  // do ondisk completions async, to prevent any onreadable_sync completions
+  // getting blocked behind an ondisk completion.
+  if (ondisk) {
+    dout(10) << " queueing ondisk " << ondisk << dendl;
+    ondisk_finishers[osr->id % m_ondisk_finisher_num]->queue(ondisk);
+  }
   if (!to_queue.empty()) {
     ondisk_finishers[osr->id % m_ondisk_finisher_num]->queue(to_queue);
   }
