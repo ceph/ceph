@@ -6,8 +6,9 @@ tasks:
       # to invoke e.g. pg dump during teardown.
       wait-for-scrub: false
       log-whitelist:
-        - HEALTH_WRN MGR_DOWN
-        - HEALTH_ERR MGR_DOWN
+        - overall HEALTH_
+        - (MGR_DOWN)
+        - (PG_
   - cephfs_test_runner:
       modules:
         - tasks.mgr.test_failover

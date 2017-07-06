@@ -21,11 +21,11 @@ tasks:
     - must scrub before tier agent can activate
     - failsafe engaged, dropping updates
     - failsafe disengaged, no longer dropping updates
-    - HEALTH_WARN OSDMAP_FLAGS
-    - HEALTH_WARN OSD_
-    - HEALTH_WARN PG_
-    - HEALTH_ERR PG_
-    - HEALTH_WARN SMALLER_PG_NUM
+    - overall HEALTH_
+    - (OSDMAP_FLAGS)
+    - (OSD_
+    - (PG_
+    - (SMALLER_PG_NUM)
 - workunit:
     clients:
       all:

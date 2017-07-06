@@ -16,8 +16,13 @@ tasks:
 - install:
 - ceph:
     log-whitelist:
-    - wrongly marked me down
-    - had wrong client addr
+      - wrongly marked me down
+      - had wrong client addr
+      - overall HEALTH_
+      - (OSDMAP_FLAGS)
+      - (OSD_
+      - (PG_
+      - (OBJECT_DEGRADED)
     conf:
       client.rest0:
         debug ms: 1

@@ -15,11 +15,9 @@ tasks:
 - ceph:
     log-whitelist:
       - objects unfound and apparently lost
-      - HEALTH_WARN OSDMAP_FLAGS
-      - HEALTH_WARN OSD_
-      - HEALTH_WARN PG_
-      - HEALTH_ERR PG_
-      - HEALTH_WARN UNFOUND_OBJECTS
-      - HEALTH_WARN MISPLACED_OBJECTS
-      - HEALTH_WARN DEGRADED_OBJECTS
+      - overall HEALTH_
+      - (OSDMAP_FLAGS)
+      - (OSD_
+      - (PG_
+      - (OBJECT_
 - rep_lost_unfound_delete:

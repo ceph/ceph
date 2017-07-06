@@ -18,7 +18,8 @@ tasks:
         osd pool default min size : 1
     log-whitelist:
       - objects unfound and apparently lost
-      - HEALTH_WARN OSDMAP_FLAGS
-      - HEALTH_WARN OSD_
-      - HEALTH_WARN PG_
+      - overall HEALTH_
+      - (OSDMAP_FLAGS)
+      - (OSD_
+      - (PG_
 - peer:
