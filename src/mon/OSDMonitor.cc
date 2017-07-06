@@ -230,6 +230,7 @@ void OSDMonitor::create_initial()
     derr << __func__ << " mon_debug_no_require_luminous=true" << dendl;
   } else {
     newmap.require_osd_release = CEPH_RELEASE_LUMINOUS;
+    newmap.flags |= CEPH_OSDMAP_RECOVERY_DELETES;
     newmap.full_ratio = g_conf->mon_osd_full_ratio;
     if (newmap.full_ratio > 1.0) newmap.full_ratio /= 100;
     newmap.backfillfull_ratio = g_conf->mon_osd_backfillfull_ratio;
@@ -8397,6 +8398,10 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       goto reply;
     }
     pending_inc.new_require_osd_release = rel;
+    if (rel >= CEPH_RELEASE_LUMINOUS &&
+	!osdmap.test_flag(CEPH_OSDMAP_RECOVERY_DELETES)) {
+      return prepare_set_flag(op, CEPH_OSDMAP_RECOVERY_DELETES);
+    }
     goto update;
   } else if (prefix == "osd cluster_snap") {
     // ** DISABLE THIS FOR NOW **
