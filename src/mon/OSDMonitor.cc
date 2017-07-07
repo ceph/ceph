@@ -7060,6 +7060,12 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     goto update;
 
   } else if (prefix == "osd crush set-device-class") {
+    if (osdmap.require_osd_release < CEPH_RELEASE_LUMINOUS) {
+      ss << "you must complete the upgrade and set require_osd_release ="
+	 << "luminous before using crush device classes";
+      err = -EPERM;
+      goto reply;
+    }
     if (!osdmap.exists(osdid)) {
       err = -ENOENT;
       ss << name << " does not exist.  create it before updating the crush map";
