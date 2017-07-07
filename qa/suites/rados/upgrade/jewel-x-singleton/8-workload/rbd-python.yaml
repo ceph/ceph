@@ -3,7 +3,6 @@ meta:
    librbd python api tests
 tasks:
 - workunit:
-    branch: jewel
     clients:
       client.0:
         - rbd/test_librbd_python.sh
