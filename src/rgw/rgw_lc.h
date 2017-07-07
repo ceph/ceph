@@ -62,19 +62,31 @@ public:
   void dump(Formatter *f) const;
 //  static void generate_test_instances(list<ACLOwner*>& o);
   void set_days(const string& _days) { days = _days; }
-  string get_days_str() const{
+  string get_days_str() const {
     return days;
   }
-  int get_days() {return atoi(days.c_str()); }
+  int get_days() const {return atoi(days.c_str()); }
   bool has_days() const {
     return !days.empty();
   }
   void set_date(const string& _date) { date = _date; }
-  string get_date() const{
+  string get_date() const {
     return date;
   }
   bool has_date() const {
     return !date.empty();
+  }
+  bool empty() const {
+    return days.empty() && date.empty();
+  }
+  bool valid() const {
+    if (!days.empty() && !date.empty()) {
+      return false;
+    } else if (!days.empty() && get_days() <= 0) {
+      return false;
+    }
+    //We've checked date in xml parsing
+    return true;
   }
 };
 WRITE_CLASS_ENCODER(LCExpiration)
@@ -152,7 +164,7 @@ public:
     dm_expiration = _dm_expiration;
   }
 
-  bool validate();
+  bool valid();
   
   void encode(bufferlist& bl) const {
      ENCODE_START(4, 1, bl);
@@ -241,7 +253,7 @@ public:
 
   int check_and_add_rule(LCRule* rule);
 
-  bool validate();
+  bool valid();
 
   multimap<string, LCRule>& get_rule_map() { return rule_map; }
   map<string, lc_op>& get_prefix_map() { return prefix_map; }
