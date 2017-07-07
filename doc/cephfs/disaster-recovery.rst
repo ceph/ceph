@@ -130,18 +130,20 @@ objects.
 
 Finally, you can regenerate metadata objects for missing files
 and directories based on the contents of a data pool.  This is
-a two-phase process.  First, scanning *all* objects to calculate
+a three-phase process.  First, scanning *all* objects to calculate
 size and mtime metadata for inodes.  Second, scanning the first
-object from every file to collect this metadata and inject
-it into the metadata pool.
+object from every file to collect this metadata and inject it into
+the metadata pool. Third, checking inode linkages and fixing found
+errors.
 
 ::
 
     cephfs-data-scan scan_extents <data pool>
     cephfs-data-scan scan_inodes <data pool>
+    cephfs-data-scan scan_links
 
-This command may take a *very long* time if there are many
-files or very large files in the data pool.
+'scan_extents' and 'scan_inodes' commands may take a *very long* time
+if there are many files or very large files in the data pool.
 
 To accelerate the process, run multiple instances of the tool.
 
@@ -246,7 +248,7 @@ it with empty file system data structures:
     ceph osd pool create recovery <pg-num> replicated <crush-ruleset-name>
     ceph fs new recovery-fs recovery <data pool> --allow-dangerous-metadata-overlay
     cephfs-data-scan init --force-init --filesystem recovery-fs --alternate-pool recovery
-    ceph fs reset recovery-fs --yes-i-realy-mean-it
+    ceph fs reset recovery-fs --yes-i-really-mean-it
     cephfs-table-tool recovery-fs:all reset session
     cephfs-table-tool recovery-fs:all reset snap
     cephfs-table-tool recovery-fs:all reset inode
@@ -256,8 +258,9 @@ results to the alternate pool:
 
 ::
 
-    cephfs-data-scan scan_extents --alternate-pool recovery --filesystem <original filesystem name>
+    cephfs-data-scan scan_extents --alternate-pool recovery --filesystem <original filesystem name> <original data pool name>
     cephfs-data-scan scan_inodes --alternate-pool recovery --filesystem <original filesystem name> --force-corrupt --force-init <original data pool name>
+    cephfs-data-scan scan_links --filesystem recovery-fs
 
 If the damaged filesystem contains dirty journal data, it may be recovered next
 with:
@@ -267,10 +270,10 @@ with:
     cephfs-journal-tool --rank=<original filesystem name>:0 event recover_dentries list --alternate-pool recovery
     cephfs-journal-tool --rank recovery-fs:0 journal reset --force
 
-After recovery, some recovered directories will have incorrect link counts.
-Ensure the parameter mds_debug_scatterstat is set to false (the default) to
-prevent the MDS from checking the link counts, then run a forward scrub to
-repair them. Ensure you have an MDS running and issue:
+After recovery, some recovered directories will have incorrect statistics.
+Ensure the parameters mds_verify_scatter and mds_debug_scatterstat are set
+to false (the default) to prevent the MDS from checking the statistics, then
+run a forward scrub to repair them. Ensure you have an MDS running and issue:
 
 ::
 
