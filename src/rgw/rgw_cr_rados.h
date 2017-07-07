@@ -442,11 +442,6 @@ public:
 class RGWRadosRemoveOmapKeysCR : public RGWSimpleCoroutine {
   RGWRados *store;
 
-  string marker;
-  map<string, bufferlist> *entries;
-  int max_entries;
-
-  int rval;
   librados::IoCtx ioctx;
 
   set<string> keys;
@@ -454,7 +449,7 @@ class RGWRadosRemoveOmapKeysCR : public RGWSimpleCoroutine {
   rgw_bucket pool;
   string oid;
 
-  RGWAioCompletionNotifier *cn;
+  boost::intrusive_ptr<RGWAioCompletionNotifier> cn;
 
 public:
   RGWRadosRemoveOmapKeysCR(RGWRados *_store,
@@ -465,9 +460,7 @@ public:
 
   int send_request();
 
-  int request_complete() {
-    return rval;
-  }
+  int request_complete();
 };
 
 class RGWSimpleRadosLockCR : public RGWSimpleCoroutine {
