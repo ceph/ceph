@@ -720,6 +720,15 @@ int JournalTool::recover_dentries(
       read_keys.insert(key);
     }
 
+    list<EMetaBlob::nullbit> const &nb_list = lump.get_dnull();
+    for (auto& nb : nb_list) {
+      // Get a key like "foobar_head"
+      std::string key;
+      dentry_key_t dn_key(nb.dnlast, nb.dn.c_str());
+      dn_key.encode(key);
+      read_keys.insert(key);
+    }
+
     // Perform bulk read of existing dentries
     std::map<std::string, bufferlist> read_vals;
     r = input.omap_get_vals_by_keys(frag_oid.name, read_keys, &read_vals);
@@ -866,12 +875,64 @@ int JournalTool::recover_dentries(
       }
     }
 
+    std::set<std::string> null_vals;
+    for (auto& nb : nb_list) {
+      std::string key;
+      dentry_key_t dn_key(nb.dnlast, nb.dn.c_str());
+      dn_key.encode(key);
+
+      dout(4) << "inspecting nullbit " << frag_oid.name << "/" << nb.dn
+	<< dendl;
+
+      auto it = read_vals.find(key);
+      if (it != read_vals.end()) {
+	dout(4) << "dentry exists, will remove" << dendl;
+
+	bufferlist::iterator q = it->second.begin();
+	snapid_t dnfirst;
+	::decode(dnfirst, q);
+	char dentry_type;
+	::decode(dentry_type, q);
+
+	bool remove_dentry = false;
+	if (dentry_type == 'L') {
+	  dout(10) << "Existing hardlink inode in slot to be (maybe) removed "
+	    << "by null journal dn '" << nb.dn.c_str()
+	    << "' with lump fnode version " << lump.fnode.version
+	    << "vs existing fnode version " << old_fnode_version << dendl;
+	  remove_dentry = old_fnode_version < lump.fnode.version;
+	} else if (dentry_type == 'I') {
+	  dout(10) << "Existing full inode in slot to be (maybe) removed "
+	    << "by null journal dn '" << nb.dn.c_str()
+	    << "' with lump fnode version " << lump.fnode.version
+	    << "vs existing fnode version " << old_fnode_version << dendl;
+	  remove_dentry = old_fnode_version < lump.fnode.version;
+	} else {
+	  dout(4) << "corrupt dentry in backing store, will remove" << dendl;
+	  remove_dentry = true;
+	}
+
+	if (remove_dentry)
+	  null_vals.insert(key);
+      }
+    }
+
     // Write back any new/changed dentries
     if (!write_vals.empty()) {
       r = output.omap_set(frag_oid.name, write_vals);
       if (r != 0) {
 	derr << "error writing dentries to " << frag_oid.name
 	     << ": " << cpp_strerror(r) << dendl;
+	return r;
+      }
+    }
+
+    // remove any null dentries
+    if (!null_vals.empty()) {
+      r = output.omap_rm_keys(frag_oid.name, null_vals);
+      if (r != 0) {
+	derr << "error removing dentries from " << frag_oid.name
+	  << ": " << cpp_strerror(r) << dendl;
 	return r;
       }
     }
