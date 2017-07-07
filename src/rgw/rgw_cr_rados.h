@@ -441,18 +441,13 @@ public:
 class RGWRadosRemoveOmapKeysCR : public RGWSimpleCoroutine {
   RGWRados *store;
 
-  string marker;
-  map<string, bufferlist> *entries;
-  int max_entries;
-
-  int rval;
   rgw_rados_ref ref;
 
   set<string> keys;
 
   rgw_raw_obj obj;
 
-  RGWAioCompletionNotifier *cn;
+  boost::intrusive_ptr<RGWAioCompletionNotifier> cn;
 
 public:
   RGWRadosRemoveOmapKeysCR(RGWRados *_store,
@@ -463,9 +458,7 @@ public:
 
   int send_request() override;
 
-  int request_complete() override {
-    return rval;
-  }
+  int request_complete() override;
 };
 
 class RGWRadosRemoveCR : public RGWSimpleCoroutine {

@@ -316,6 +316,15 @@ int RGWRadosRemoveOmapKeysCR::send_request() {
   return ref.ioctx.aio_operate(ref.oid, cn->completion(), &op);
 }
 
+int RGWRadosRemoveOmapKeysCR::request_complete()
+{
+  int r = cn->completion()->get_return_value();
+
+  set_status() << "request complete; ret=" << r;
+
+  return r;
+}
+
 RGWRadosRemoveCR::RGWRadosRemoveCR(RGWRados *store, const rgw_raw_obj& obj)
   : RGWSimpleCoroutine(store->ctx()), store(store), obj(obj)
 {
