@@ -3911,7 +3911,7 @@ void OSDMonitor::get_health(list<pair<health_status_t,string> >& summary,
       // required release
       if (osdmap.require_osd_release >= CEPH_RELEASE_LUMINOUS &&
           sum.num_objects > 0 && pool.application_metadata.empty() &&
-          !pool.is_tier()) {
+          !pool.is_tier() && !g_conf->mon_debug_no_require_luminous) {
         stringstream ss;
         ss << "application not enabled on pool '" << pool_name << "'";
 
