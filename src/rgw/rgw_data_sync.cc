@@ -471,9 +471,12 @@ class RGWInitDataSyncStatusCoroutine : public RGWCoroutine {
   string cookie;
   rgw_data_sync_status *status;
   map<int, RGWDataChangesLogInfo> shards_info;
+
+  RGWSTNCRef tn;
 public:
   RGWInitDataSyncStatusCoroutine(RGWDataSyncEnv *_sync_env, uint32_t num_shards,
                                  uint64_t instance_id,
+                                 RGWSyncTraceNodeRef& _tn_parent,
                                  rgw_data_sync_status *status)
     : RGWCoroutine(_sync_env->cct), sync_env(_sync_env), store(sync_env->store),
       pool(store->get_zone_params().log_pool),
@@ -489,6 +492,12 @@ public:
     cookie = buf;
 
     sync_status_oid = RGWDataSyncStatusManager::sync_status_oid(sync_env->source_zone);
+
+    tn = sync_env->sync_tracer->add_node(new RGWSyncTraceNode(sync_env->cct,
+                                         sync_env->sync_tracer, 
+                                         _tn_parent,
+                                         "init_data_sync_status",
+                                         string()));
   }
 
   int operate() override {
@@ -627,6 +636,12 @@ int RGWRemoteDataLog::init(const string& _source_zone, RGWRESTConn *_conn, RGWSy
     return ret;
   }
 
+  tn = sync_env.sync_tracer->add_node(new RGWSyncTraceNode(sync_env.cct,
+                                                           sync_env.sync_tracer, 
+                                                           sync_env.sync_tracer->root_node,
+                                                           "data",
+                                                           string()));
+
   initialized = true;
 
   return 0;
@@ -668,7 +683,7 @@ int RGWRemoteDataLog::init_sync_status(int num_shards)
   sync_env_local.http_manager = &http_manager;
   uint64_t instance_id;
   get_random_bytes((char *)&instance_id, sizeof(instance_id));
-  ret = crs.run(new RGWInitDataSyncStatusCoroutine(&sync_env_local, num_shards, instance_id, &sync_status));
+  ret = crs.run(new RGWInitDataSyncStatusCoroutine(&sync_env_local, num_shards, instance_id, tn->ref(), &sync_status));
   http_manager.stop();
   return ret;
 }
@@ -1090,10 +1105,14 @@ class RGWDataSyncShardCR : public RGWCoroutine {
   uint32_t retry_backoff_secs;
 
   RGWDataSyncDebugLogger logger;
+
+  RGWSTNCRef tn;
 public:
   RGWDataSyncShardCR(RGWDataSyncEnv *_sync_env,
                      rgw_pool& _pool,
-		     uint32_t _shard_id, rgw_data_sync_marker& _marker, bool *_reset_backoff) : RGWCoroutine(_sync_env->cct),
+		     uint32_t _shard_id, rgw_data_sync_marker& _marker,
+                     RGWSTNCRef& _tn,
+                     bool *_reset_backoff) : RGWCoroutine(_sync_env->cct),
                                                       sync_env(_sync_env),
 						      pool(_pool),
 						      shard_id(_shard_id),
@@ -1101,7 +1120,7 @@ public:
                                                       marker_tracker(NULL), truncated(false), remote_trimmed(RemoteNotTrimmed), inc_lock("RGWDataSyncShardCR::inc_lock"),
                                                       total_entries(0), spawn_window(BUCKET_SHARD_SYNC_SPAWN_WINDOW), reset_backoff(NULL),
                                                       lease_cr(nullptr), lease_stack(nullptr), error_repo(nullptr), max_error_entries(DATA_SYNC_MAX_ERR_ENTRIES),
-                                                      retry_backoff_secs(RETRY_BACKOFF_SECS_DEFAULT) {
+                                                      retry_backoff_secs(RETRY_BACKOFF_SECS_DEFAULT), tn(_tn) {
     set_description() << "data sync shard source_zone=" << sync_env->source_zone << " shard_id=" << shard_id;
     status_oid = RGWDataSyncStatusManager::shard_obj_name(sync_env->source_zone, shard_id);
     error_oid = status_oid + ".retry";
@@ -1136,14 +1155,14 @@ public:
       case rgw_data_sync_marker::FullSync:
         r = full_sync();
         if (r < 0) {
-          ldout(cct, 10) << "sync: full_sync: shard_id=" << shard_id << " r=" << r << dendl;
+          tn->log(10, SSTR("ERROR: r=" << r));
           return set_cr_error(r);
         }
         return 0;
       case rgw_data_sync_marker::IncrementalSync:
         r  = incremental_sync();
         if (r < 0) {
-          ldout(cct, 10) << "sync: incremental_sync: shard_id=" << shard_id << " r=" << r << dendl;
+          tn->log(10, SSTR("ERROR: r=" << r));
           return set_cr_error(r);
         }
         return 0;
@@ -1385,17 +1404,24 @@ class RGWDataSyncShardControlCR : public RGWBackoffControlCR {
   uint32_t shard_id;
   rgw_data_sync_marker sync_marker;
 
+  RGWSTNCRef tn;
 public:
   RGWDataSyncShardControlCR(RGWDataSyncEnv *_sync_env, rgw_pool& _pool,
-		     uint32_t _shard_id, rgw_data_sync_marker& _marker) : RGWBackoffControlCR(_sync_env->cct, false),
+		     uint32_t _shard_id, rgw_data_sync_marker& _marker,
+                     RGWSyncTraceNodeRef& _tn_parent) : RGWBackoffControlCR(_sync_env->cct, false),
                                                       sync_env(_sync_env),
 						      pool(_pool),
 						      shard_id(_shard_id),
 						      sync_marker(_marker) {
+    tn = sync_env->sync_tracer->add_node(new RGWSyncTraceNode(sync_env->cct,
+                                         sync_env->sync_tracer, 
+                                         _tn_parent,
+                                         "shard",
+                                         SSTR(shard_id)));
   }
 
   RGWCoroutine *alloc_cr() override {
-    return new RGWDataSyncShardCR(sync_env, pool, shard_id, sync_marker, backoff_ptr());
+    return new RGWDataSyncShardCR(sync_env, pool, shard_id, sync_marker, tn, backoff_ptr());
   }
 
   RGWCoroutine *alloc_finisher_cr() override {
@@ -1432,14 +1458,16 @@ class RGWDataSyncCR : public RGWCoroutine {
 
   RGWDataSyncDebugLogger logger;
 
+  RGWSTNCRef tn;
+
   RGWDataSyncModule *data_sync_module{nullptr};
 public:
-  RGWDataSyncCR(RGWDataSyncEnv *_sync_env, uint32_t _num_shards, bool *_reset_backoff) : RGWCoroutine(_sync_env->cct),
+  RGWDataSyncCR(RGWDataSyncEnv *_sync_env, uint32_t _num_shards, RGWSTNCRef& _tn, bool *_reset_backoff) : RGWCoroutine(_sync_env->cct),
                                                       sync_env(_sync_env),
                                                       num_shards(_num_shards),
                                                       marker_tracker(NULL),
                                                       shard_crs_lock("RGWDataSyncCR::shard_crs_lock"),
-                                                      reset_backoff(_reset_backoff), logger(sync_env, "Data", "all") {
+                                                      reset_backoff(_reset_backoff), logger(sync_env, "Data", "all"), tn(_tn) {
 
   }
 
@@ -1458,19 +1486,19 @@ public:
       data_sync_module = sync_env->sync_module->get_data_handler();
 
       if (retcode < 0 && retcode != -ENOENT) {
-        ldout(sync_env->cct, 0) << "ERROR: failed to fetch sync status, retcode=" << retcode << dendl;
+        tn->log(0, SSTR("ERROR: failed to fetch sync status, retcode=" << retcode));
         return set_cr_error(retcode);
       }
 
       /* state: init status */
       if ((rgw_data_sync_info::SyncState)sync_status.sync_info.state == rgw_data_sync_info::StateInit) {
-        ldout(sync_env->cct, 20) << __func__ << "(): init" << dendl;
+        tn->log(20, SSTR("init"));
         sync_status.sync_info.num_shards = num_shards;
         uint64_t instance_id;
         get_random_bytes((char *)&instance_id, sizeof(instance_id));
-        yield call(new RGWInitDataSyncStatusCoroutine(sync_env, num_shards, instance_id, &sync_status));
+        yield call(new RGWInitDataSyncStatusCoroutine(sync_env, num_shards, instance_id, tn->ref(), &sync_status));
         if (retcode < 0) {
-          ldout(sync_env->cct, 0) << "ERROR: failed to init sync, retcode=" << retcode << dendl;
+          tn->log(0, SSTR("ERROR: failed to init sync, retcode=" << retcode));
           return set_cr_error(retcode);
         }
         // sets state = StateBuildingFullSyncMaps
@@ -1481,17 +1509,17 @@ public:
       data_sync_module->init(sync_env, sync_status.sync_info.instance_id);
 
       if  ((rgw_data_sync_info::SyncState)sync_status.sync_info.state == rgw_data_sync_info::StateBuildingFullSyncMaps) {
+        tn->log(10, SSTR("building full sync maps"));
         /* call sync module init here */
         yield call(data_sync_module->init_sync(sync_env));
         if (retcode < 0) {
-          ldout(sync_env->cct, 0) << "ERROR: sync module init_sync() failed, retcode=" << retcode << dendl;
+          tn->log(0, SSTR("ERROR: sync module init_sync() failed, retcode=" << retcode));
           return set_cr_error(retcode);
         }
         /* state: building full sync maps */
-        ldout(sync_env->cct, 20) << __func__ << "(): building full sync maps" << dendl;
         yield call(new RGWListBucketIndexesCR(sync_env, &sync_status));
         if (retcode < 0) {
-          ldout(sync_env->cct, 0) << "ERROR: failed to build full sync maps, retcode=" << retcode << dendl;
+          tn->log(0, SSTR("ERROR: failed to build full sync maps, retcode=" << retcode));
           return set_cr_error(retcode);
         }
         sync_status.sync_info.state = rgw_data_sync_info::StateSync;
@@ -1499,7 +1527,7 @@ public:
         /* update new state */
         yield call(set_sync_info_cr());
         if (retcode < 0) {
-          ldout(sync_env->cct, 0) << "ERROR: failed to write sync status, retcode=" << retcode << dendl;
+          tn->log(0, SSTR("ERROR: failed to write sync status, retcode=" << retcode));
           return set_cr_error(retcode);
         }
 
@@ -1511,7 +1539,7 @@ public:
           for (map<uint32_t, rgw_data_sync_marker>::iterator iter = sync_status.sync_markers.begin();
                iter != sync_status.sync_markers.end(); ++iter) {
             RGWDataSyncShardControlCR *cr = new RGWDataSyncShardControlCR(sync_env, sync_env->store->get_zone_params().log_pool,
-                                                                          iter->first, iter->second);
+                                                                          iter->first, iter->second, tn->ref());
             cr->get();
             shard_crs_lock.Lock();
             shard_crs[iter->first] = cr;
@@ -1597,13 +1625,21 @@ class RGWDataSyncControlCR : public RGWBackoffControlCR
   RGWDataSyncEnv *sync_env;
   uint32_t num_shards;
 
+  RGWSTNCRef tn;
+
 public:
-  RGWDataSyncControlCR(RGWDataSyncEnv *_sync_env, uint32_t _num_shards) : RGWBackoffControlCR(_sync_env->cct, true),
-                                                      sync_env(_sync_env), num_shards(_num_shards) {
+  RGWDataSyncControlCR(RGWDataSyncEnv *_sync_env, uint32_t _num_shards,
+                       RGWSyncTraceNodeRef& _tn_parent) : RGWBackoffControlCR(_sync_env->cct, true),
+                                                          sync_env(_sync_env), num_shards(_num_shards) {
+    tn = sync_env->sync_tracer->add_node(new RGWSyncTraceNode(sync_env->cct,
+                                         sync_env->sync_tracer, 
+                                         _tn_parent,
+                                         "sync",
+                                         string()));
   }
 
   RGWCoroutine *alloc_cr() override {
-    return new RGWDataSyncCR(sync_env, num_shards, backoff_ptr());
+    return new RGWDataSyncCR(sync_env, num_shards, tn, backoff_ptr());
   }
 
   void wakeup(int shard_id, set<string>& keys) {
@@ -1620,6 +1656,7 @@ public:
     m.Unlock();
 
     if (cr) {
+      tn->log(20, SSTR("notify shard=" << shard_id << " keys=" << keys));
       cr->wakeup(shard_id, keys);
     }
 
@@ -1638,7 +1675,7 @@ void RGWRemoteDataLog::wakeup(int shard_id, set<string>& keys) {
 int RGWRemoteDataLog::run_sync(int num_shards)
 {
   lock.get_write();
-  data_sync_cr = new RGWDataSyncControlCR(&sync_env, num_shards);
+  data_sync_cr = new RGWDataSyncControlCR(&sync_env, num_shards, tn->ref());
   data_sync_cr->get(); // run() will drop a ref, so take another
   lock.unlock();
 
