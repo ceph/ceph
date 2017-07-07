@@ -293,6 +293,12 @@ void FSMap::reset_filesystem(fs_cluster_id_t fscid)
   new_fs->mds_map.standby_count_wanted = fs->mds_map.standby_count_wanted;
   new_fs->mds_map.enabled = true;
 
+  // Remember mds ranks that have ever started. (They should load old inotable
+  // instead of creating new one if they start again.)
+  new_fs->mds_map.stopped.insert(fs->mds_map.in.begin(), fs->mds_map.in.end());
+  new_fs->mds_map.stopped.insert(fs->mds_map.stopped.begin(), fs->mds_map.stopped.end());
+  new_fs->mds_map.stopped.erase(mds_rank_t(0));
+
   // Persist the new FSMap
   filesystems[new_fs->fscid] = new_fs;
 }
