@@ -322,7 +322,7 @@ int PosixWorker::listen(entity_addr_t &sa, const SocketOptions &opt,
     return r;
   }
 
-  r = ::listen(listen_sd, 128);
+  r = ::listen(listen_sd, cct->_conf->ms_tcp_listen_backlog);
   if (r < 0) {
     r = -errno;
     lderr(cct) << __func__ << " unable to listen on " << sa << ": " << cpp_strerror(r) << dendl;
