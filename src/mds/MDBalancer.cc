@@ -641,8 +641,6 @@ void MDBalancer::prep_rebalance(int beat)
       return;
     }
 
-    last_epoch_over = beat_epoch;
-
     // am i over long enough?
     if (last_epoch_under && beat_epoch - last_epoch_under < 2) {
       dout(5) << "  i am overloaded, but only for " << (beat_epoch - last_epoch_under) << " epochs" << dendl;
@@ -1228,3 +1226,9 @@ void MDBalancer::add_import(CDir *dir, utime_t now)
   }
 }
 
+void MDBalancer::handle_mds_failure(mds_rank_t who)
+{
+  if (0 == who) {
+    last_epoch_under = 0;
+  }
+}

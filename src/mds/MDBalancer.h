@@ -42,7 +42,7 @@ public:
     messenger(msgr),
     mon_client(monc),
     beat_epoch(0),
-    last_epoch_under(0), last_epoch_over(0), my_load(0.0), target_load(0.0)
+    last_epoch_under(0), my_load(0.0), target_load(0.0)
     { }
 
   mds_load_t get_load(utime_t);
@@ -72,6 +72,8 @@ public:
    * \param hot whether the directory's temperature is enough to split it
    */
   void maybe_fragment(CDir *dir, bool hot);
+
+  void handle_mds_failure(mds_rank_t who);
 
 private:
   typedef struct {
@@ -123,7 +125,6 @@ private:
   int beat_epoch;
 
   int last_epoch_under;
-  int last_epoch_over;
   string bal_code;
   string bal_version;
 

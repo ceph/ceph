@@ -2895,6 +2895,9 @@ void MDCache::handle_mds_failure(mds_rank_t who)
   // tell the migrator too.
   migrator->handle_mds_failure_or_stop(who);
 
+  // tell the balancer too.
+  mds->balancer->handle_mds_failure(who);
+
   // clean up any requests slave to/from this node
   list<MDRequestRef> finish;
   for (ceph::unordered_map<metareqid_t, MDRequestRef>::iterator p = active_requests.begin();
