@@ -359,6 +359,11 @@ int RGWBL::bucket_bl_deliver(string opslog_obj, const rgw_bucket target_bucket,
   int entry_nums = 0;
   std::vector<std::string> uploaded_obj_keys;
 
+#define MAX_OPSLOG_UPLOAD_ENTRIES 10000
+  int max_entries = cct->_conf->rgw_bl_max_ops_log_entries;
+  if (max_entries < 0)
+    max_entries = MAX_OPSLOG_UPLOAD_ENTRIES;
+
   rados::cls::lock::Lock l(opslog_obj);
   librados::IoCtx *ctx = store->get_bl_pool_ctx();
 
@@ -384,13 +389,12 @@ int RGWBL::bucket_bl_deliver(string opslog_obj, const rgw_bucket target_bucket,
       goto exit;
     }
     
-#define MAX_OPSLOG_UPLOAD_ENTRIES 10000
     if (ret > 0) {
       format_opslog_entry(entry, &opslog_buffer);
       entry_nums += 1;
     }
 
-    if (entry_nums == MAX_OPSLOG_UPLOAD_ENTRIES || ret == 0) { 
+    if (entry_nums == max_entries || ret == 0) {
       entry_nums = 0;
 
       if (opslog_buffer.length() == 0) {
