@@ -45,10 +45,12 @@ you may write data with one API and retrieve it with the other.
    Swift API <swift>
    Admin Ops API <adminops>
    Python binding <api>
+   Export over NFS <nfs>
    OpenStack Keystone Integration <keystone>
    OpenStack Barbican Integration <barbican>
    Multi-tenancy <multitenancy>
    Compression <compression>
+   LDAP Authentication <ldap-auth>
    Server-Side Encryption <encryption>
    Bucket Policy <bucketpolicy>
    Data Layout in RADOS <layout>

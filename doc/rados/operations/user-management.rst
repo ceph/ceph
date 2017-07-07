@@ -361,6 +361,7 @@ are often restricted to accessing a particular pool. ::
 
 
 .. _modify-user-capabilities:
+
 Modify User Capabilities
 ------------------------
 
