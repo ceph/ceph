@@ -24,6 +24,7 @@ class TestExports(CephFSTestCase):
 
     def test_export_pin(self):
         self.fs.set_max_mds(2)
+        self.fs.wait_for_daemons()
 
         status = self.fs.status()
 
