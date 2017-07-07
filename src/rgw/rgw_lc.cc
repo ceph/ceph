@@ -27,22 +27,15 @@ const char* LC_STATUS[] = {
 using namespace std;
 using namespace librados;
 
-bool LCRule::validate()
+bool LCRule::valid()
 {
   if (id.length() > MAX_ID_LEN) {
     return false;
   }
-  else if(!expiration.has_days() && !expiration.has_date() && 
-    !noncur_expiration.has_days() && !mp_expiration.has_days() && !dm_expiration) {
+  else if(expiration.empty() && noncur_expiration.empty() && mp_expiration.empty() && !dm_expiration) {
     return false;
   }
-  else if (expiration.has_days() && expiration.get_days() <= 0) {
-    return false;
-  }
-  else if (noncur_expiration.has_days() && noncur_expiration.get_days() <=0) {
-    return false;
-  }
-  else if (mp_expiration.has_days() && mp_expiration.get_days() <= 0) {
+  else if (!expiration.valid() || !noncur_expiration.valid() || !mp_expiration.valid()) {
     return false;
   }
   return true;
@@ -80,7 +73,7 @@ bool RGWLifecycleConfiguration::_add_rule(LCRule *rule)
 
 int RGWLifecycleConfiguration::check_and_add_rule(LCRule *rule)
 {
-  if (!rule->validate()) {
+  if (!rule->valid()) {
     return -EINVAL;
   }
   string id;
@@ -111,7 +104,7 @@ bool RGWLifecycleConfiguration::has_same_action(const lc_op& first, const lc_op&
 
 //Rules are conflicted: if one rule's prefix starts with other rule's prefix, and these two rules
 //define same action. 
-bool RGWLifecycleConfiguration::validate() 
+bool RGWLifecycleConfiguration::valid() 
 {
   if (prefix_map.size() < 2) {
     return true;

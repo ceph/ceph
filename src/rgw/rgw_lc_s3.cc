@@ -31,6 +31,7 @@ bool LCExpiration_S3::xml_end(const char * el) {
     }
   } else {
     date = lc_date->get_data();
+    //We need return xml error according to S3
     if (boost::none == ceph::from_iso_8601(date)) {
       return false;
     }
@@ -127,15 +128,15 @@ void LCRule_S3::to_xml(CephContext *cct, ostream& out) {
   out << "<ID>" << id << "</ID>";
   out << "<Prefix>" << prefix << "</Prefix>";
   out << "<Status>" << status << "</Status>";
-  if (expiration.has_days() || expiration.has_date() || dm_expiration) {
+  if (!expiration.empty() || dm_expiration) {
     LCExpiration_S3 expir(expiration.get_days_str(), expiration.get_date(), dm_expiration);
     expir.to_xml(out);
   }
-  if (noncur_expiration.has_days()) {
+  if (!noncur_expiration.empty()) {
     LCNoncurExpiration_S3& noncur_expir = static_cast<LCNoncurExpiration_S3&>(noncur_expiration);
     noncur_expir.to_xml(out);
   }
-  if (mp_expiration.has_days()) {
+  if (!mp_expiration.empty()) {
     LCMPExpiration_S3& mp_expir = static_cast<LCMPExpiration_S3&>(mp_expiration);
     mp_expir.to_xml(out);
   }
@@ -152,7 +153,7 @@ int RGWLifecycleConfiguration_S3::rebuild(RGWRados *store, RGWLifecycleConfigura
     if (ret < 0)
       return ret;
   }
-  if (!dest.validate()) {
+  if (!dest.valid()) {
     ret = -ERR_INVALID_REQUEST;
   }
   return ret;

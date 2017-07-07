@@ -152,15 +152,15 @@ public:
     encode_xml("ID", id, f);
     encode_xml("Prefix", prefix, f);
     encode_xml("Status", status, f);
-    if (expiration.has_days() || expiration.has_date() || dm_expiration) {
+    if (!expiration.empty() || dm_expiration) {
       LCExpiration_S3 expir(expiration.get_days_str(), expiration.get_date(), dm_expiration);
       expir.dump_xml(f);
     }
-    if (noncur_expiration.has_days()) {
+    if (!noncur_expiration.empty()) {
       const LCNoncurExpiration_S3& noncur_expir = static_cast<const LCNoncurExpiration_S3&>(noncur_expiration);
       noncur_expir.dump_xml(f);
     }
-    if (mp_expiration.has_days()) {
+    if (!mp_expiration.empty()) {
       const LCMPExpiration_S3& mp_expir = static_cast<const LCMPExpiration_S3&>(mp_expiration);
       mp_expir.dump_xml(f);
     }
