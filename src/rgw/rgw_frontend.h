@@ -213,7 +213,7 @@ public:
     if (uid_str.empty()) {
       derr << "ERROR: uid param must be specified for loadgen frontend"
 	   << dendl;
-      return EINVAL;
+      return -EINVAL;
     }
 
     rgw_user uid(uid_str);
