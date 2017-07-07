@@ -131,8 +131,15 @@ override_dh_installinit:
 	dh_installinit -p ceph-base --name ceph --no-start
 	dh_installinit -p radosgw --no-start
 
-override_dh_systemd_start:
+	# NOTE: execute systemd helpers so they pickup dh_install'ed units and targets
+	dh_systemd_enable
 	dh_systemd_start --no-restart-on-upgrade
+
+override_dh_systemd_enable:
+	# systemd enable done as part of dh_installinit
+
+override_dh_systemd_start:
+	# systemd start done as part of dh_installinit
 
 override_dh_strip:
 	dh_strip -pceph-mds --dbg-package=ceph-mds-dbg
