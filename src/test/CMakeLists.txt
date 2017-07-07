@@ -361,7 +361,7 @@ target_link_libraries(ceph_test_rgw_token
   ${EXTRALIBS}
   )
 
-# librgw_file_gp (just the rgw_file get-put bucket ops)
+# test_rgw_ldap
 add_executable(test_rgw_ldap
   ${CMAKE_SOURCE_DIR}/src/rgw/rgw_ldap.cc
   test_rgw_ldap.cc
