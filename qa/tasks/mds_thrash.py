@@ -360,15 +360,17 @@ class MDSThrasher(Greenlet):
                     self.fs.set_max_mds(new_max_mds)
                     stats['max_mds'] += 1
 
-                    # Now randomly deactivate mds if we shrank
-                    # TODO: it's desirable to deactivate in order. Make config to do random.
-                    targets = filter(lambda r: r['rank'] > 0, status.get_ranks(self.fs.id)) # can't deactivate 0
-                    for target in random.sample(targets, max(0, max_mds-new_max_mds)):
-                        self.log("deactivating rank %d" % target['rank'])
-                        self.fs.deactivate(target['rank'])
-                        stats['deactivate'] += 1
-
-                    status = self.wait_for_stable()[0]
+                    targets = filter(lambda r: r['rank'] >= new_max_mds, status.get_ranks(self.fs.id))
+                    if len(targets) > 0:
+                        # deactivate mds in decending order
+                        targets = sorted(targets, key=lambda r: r['rank'], reverse=True)
+                        for target in targets:
+                            self.log("deactivating rank %d" % target['rank'])
+                            self.fs.deactivate(target['rank'])
+                            stats['deactivate'] += 1
+                            status = self.wait_for_stable()[0]
+                    else:
+                        status = self.wait_for_stable()[0]
 
             count = 0
             for info in status.get_ranks(self.fs.id):
