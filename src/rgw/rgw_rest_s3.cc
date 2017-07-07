@@ -3428,6 +3428,7 @@ int RGW_Auth_S3::authorize(RGWRados *store, struct req_state *s)
     return 0;
 
   } else {
+    /* Authorization in Header */
 
     /* AWS4 */
 
@@ -3570,6 +3571,9 @@ int RGW_Auth_S3::authorize_v4(RGWRados *store, struct req_state *s, bool force_b
 {
   string::size_type pos;
   bool using_qs;
+  /* used for pre-signatured url, We shouldn't return -ERR_REQUEST_TIME_SKEWED when 
+     current time <= X-Amz-Expires */
+  bool qsr = false;
 
   uint64_t now_req = 0;
   uint64_t now = ceph_clock_now();
@@ -3605,12 +3609,12 @@ int RGW_Auth_S3::authorize_v4(RGWRados *store, struct req_state *s, bool force_b
       return -EPERM;
 
     s->aws4_auth->expires = s->info.args.get("X-Amz-Expires");
-    if (s->aws4_auth->expires.size() != 0) {
+    if (!s->aws4_auth->expires.empty()) {
       /* X-Amz-Expires provides the time period, in seconds, for which
          the generated presigned URL is valid. The minimum value
          you can set is 1, and the maximum is 604800 (seven days) */
       time_t exp = atoll(s->aws4_auth->expires.c_str());
-      if ((exp < 1) || (exp > 604800)) {
+      if ((exp < 1) || (exp > 7*24*60*60)) {
         dout(10) << "NOTICE: exp out of range, exp = " << exp << dendl;
         return -EPERM;
       }
@@ -3620,12 +3624,17 @@ int RGW_Auth_S3::authorize_v4(RGWRados *store, struct req_state *s, bool force_b
         dout(10) << "NOTICE: now = " << now << ", now_req = " << now_req << ", exp = " << exp << dendl;
         return -EPERM;
       }
+      qsr = true;
     }
 
-    if ( (now_req < now - RGW_AUTH_GRACE_MINS * 60) ||
-         (now_req > now + RGW_AUTH_GRACE_MINS * 60) ) {
+    if ((now_req < now - RGW_AUTH_GRACE_MINS * 60 ||
+       now_req > now + RGW_AUTH_GRACE_MINS * 60) && !qsr) {
       dout(10) << "NOTICE: request time skew too big." << dendl;
-      dout(10) << "now_req = " << now_req << " now = " << now << "; now - RGW_AUTH_GRACE_MINS=" << now - RGW_AUTH_GRACE_MINS * 60 << "; now + RGW_AUTH_GRACE_MINS=" << now + RGW_AUTH_GRACE_MINS * 60 << dendl;
+      dout(10) << "now_req = " << now_req << " now = " << now
+               << "; now - RGW_AUTH_GRACE_MINS=" 
+               << now - RGW_AUTH_GRACE_MINS * 60
+               << "; now + RGW_AUTH_GRACE_MINS="
+               << now + RGW_AUTH_GRACE_MINS * 60 << dendl;
       return -ERR_REQUEST_TIME_SKEWED;
     }
 
