@@ -5542,7 +5542,7 @@ int RGWRados::Bucket::List::list_objects(int max, vector<rgw_bucket_dir_entry> *
     bigger_than_delim = buf;
 
     /* if marker points at a common prefix, fast forward it into its upperbound string */
-    int delim_pos = cur_marker.name.find(params.delim, params.prefix.size());
+    int delim_pos = cur_marker.name.find(params.delim, cur_prefix.size());
     if (delim_pos >= 0) {
       string s = cur_marker.name.substr(0, delim_pos);
       s.append(bigger_than_delim);
@@ -5626,7 +5626,9 @@ int RGWRados::Bucket::List::list_objects(int max, vector<rgw_bucket_dir_entry> *
             next_marker = prefix_key;
             (*common_prefixes)[prefix_key] = true;
 
-            skip_after_delim = obj.name.substr(0, delim_pos);
+            int marker_delim_pos = cur_marker.name.find(params.delim, cur_prefix.size());
+
+            skip_after_delim = cur_marker.name.substr(0, marker_delim_pos);
             skip_after_delim.append(bigger_than_delim);
 
             ldout(cct, 20) << "skip_after_delim=" << skip_after_delim << dendl;
