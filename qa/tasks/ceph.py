@@ -1111,7 +1111,8 @@ def run_daemon(ctx, config, type_):
             _, _, id_ = teuthology.split_role(role)
 
             if type_ == 'osd':
-                datadir='/var/lib/ceph/osd/ceph-' + id_
+                datadir='/var/lib/ceph/osd/{cluster}-{id}'.format(
+                    cluster=cluster_name, id=id_)
                 osd_uuid = teuthology.get_file(
                     remote=remote,
                     path=datadir + '/fsid',
