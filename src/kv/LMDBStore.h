@@ -120,9 +120,8 @@ public:
       const bufferlist &bl) override;
   };
 
-  KeyValueDB::Transaction get_transaction() {
-    return std::shared_ptr< LMDBTransactionImpl >(
-      new LMDBTransactionImpl(this));
+  KeyValueDB::Transaction get_transaction() override {
+    return std::make_shared<LMDBTransactionImpl>(this);
   }
 
   int submit_transaction(KeyValueDB::Transaction t);
