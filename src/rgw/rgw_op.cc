@@ -849,8 +849,12 @@ int RGWGetObj::read_user_manifest_part(rgw_bucket& bucket,
 
   /* We can use global user_acl because LOs cannot have segments
    * stored inside different accounts. */
-  if (!verify_object_permission(s, s->user_acl.get(), bucket_policy,
-          &obj_policy, RGW_PERM_READ)) {
+  if (s->system_request) {
+    ldout(s->cct, 2) << "overriding permissions due to system operation" << dendl;
+  } else if (s->auth_identity->is_admin_of(s->user->user_id)) {
+    ldout(s->cct, 2) << "overriding permissions due to admin operation" << dendl;
+  } else if (!verify_object_permission(s, s->user_acl.get(), bucket_policy,
+                                       &obj_policy, RGW_PERM_READ)) {
     return -EPERM;
   }
 
@@ -1427,7 +1431,7 @@ void RGWGetObj::execute()
     return;
   }
   attr_iter = attrs.find(RGW_ATTR_SLO_MANIFEST);
-  if (attr_iter != attrs.end()) {
+  if (attr_iter != attrs.end() && !skip_manifest) {
     is_slo = true;
     op_ret = handle_slo_manifest(attr_iter->second);
     if (op_ret < 0) {
