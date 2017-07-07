@@ -196,6 +196,9 @@ def make_release_notes(gh, repo, ref, plaintext, verbose, strict, use_tags):
                 title = split_component(title, gh, number)
 
             title = title.strip(' \t\n\r\f\v\.\,\;\:\-\=')
+            # escape asterisks, which is used by reStructuredTextrst for inline
+            # emphasis
+            title = title.replace('*', '\*')
             pr2info[number] = (author, title, message)
 
             for issue in set(issues):
