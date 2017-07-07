@@ -606,7 +606,9 @@ TEST_F(CReadOpsTest, Omap) {
   rados_write_op_omap_rm_keys(op, keys, 2);
   EXPECT_EQ(-ECANCELED, rados_write_op_operate(op, ioctx, obj, NULL, 0));
   rados_release_write_op(op);
-  ASSERT_EQ(-ECANCELED, r_vals);
+
+  // see http://tracker.ceph.com/issues/19518
+  //ASSERT_EQ(-ECANCELED, r_vals);
 
   // verifying the keys are still there, and then remove them
   op = rados_create_write_op();
