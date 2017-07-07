@@ -132,17 +132,9 @@ Setup Ceph Client Authentication
 If you have `cephx authentication`_ enabled, create a new user for Nova/Cinder
 and Glance. Execute the following::
 
-    ceph auth get-or-create client.glance mon 'allow r' osd 'allow class-read object_prefix rbd_children, allow rwx pool=images'
-    ceph auth get-or-create client.cinder-backup mon 'allow r' osd 'allow class-read object_prefix rbd_children, allow rwx pool=backups'
-
-If you run an OpenStack version before Mitaka, create the following ``client.cinder`` key::
-
-    ceph auth get-or-create client.cinder mon 'allow r' osd 'allow class-read object_prefix rbd_children, allow rwx pool=volumes, allow rwx pool=vms, allow rx pool=images'
-
-Since Mitaka introduced the support of RBD snapshots while doing a snapshot of a Nova instance,
-we need to allow the ``client.cinder`` key write access to the ``images`` pool; therefore, create the following key::
-
-    ceph auth get-or-create client.cinder mon 'allow r' osd 'allow class-read object_prefix rbd_children, allow rwx pool=volumes, allow rwx pool=vms, allow rwx pool=images'
+    ceph auth get-or-create client.glance mon 'profile rbd' osd 'profile rbd pool=images'
+    ceph auth get-or-create client.cinder mon 'profile rbd' osd 'profile rbd pool=volumes, profile rbd pool=vms, profile rbd pool=images'
+    ceph auth get-or-create client.cinder-backup mon 'profile rbd' osd 'profile rbd pool=backups'
 
 Add the keyrings for ``client.cinder``, ``client.glance``, and
 ``client.cinder-backup`` to the appropriate nodes and change their ownership::
