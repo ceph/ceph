@@ -64,7 +64,7 @@ add_library(ec_isa SHARED
 add_dependencies(ec_isa ${CMAKE_SOURCE_DIR}/src/ceph_ver.h)
 target_link_libraries(ec_isa ${EXTRALIBS})
 set_target_properties(ec_isa PROPERTIES
-  VERSION 2.16.0
+  VERSION 2.18.0
   SOVERSION 2
   INSTALL_RPATH "")
 install(TARGETS ec_isa DESTINATION ${erasure_plugin_dir})
