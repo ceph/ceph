@@ -193,6 +193,9 @@ protected:
 
   virtual int apply_layout_settings() { ceph_abort(); return 0; }
 
+  /// Read index-wide settings (should be called after construction)
+  virtual int read_settings() { return 0; }
+
   /// Virtual destructor
   virtual ~CollectionIndex() {}
 };
