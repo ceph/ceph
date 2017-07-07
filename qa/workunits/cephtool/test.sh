@@ -1779,23 +1779,24 @@ function test_mon_pg()
 
   # Check health status
   ceph osd set-nearfull-ratio .913
-  ceph health | grep 'HEALTH_ERR.*Full ratio(s) out of order'
-  ceph health detail | grep 'backfillfull_ratio (0.912) < nearfull_ratio (0.913), increased'
+  ceph health -f json | grep OSD_OUT_OF_ORDER_FULL
+  ceph health detail | grep OSD_OUT_OF_ORDER_FULL
   ceph osd set-nearfull-ratio .892
   ceph osd set-backfillfull-ratio .963
-  ceph health detail | grep 'full_ratio (0.962) < backfillfull_ratio (0.963), increased'
+  ceph health -f json | grep OSD_OUT_OF_ORDER_FULL
+  ceph health detail | grep OSD_OUT_OF_ORDER_FULL
   ceph osd set-backfillfull-ratio .912
 
   # Check injected full results
   $SUDO ceph --admin-daemon $(get_admin_socket osd.0) injectfull nearfull
-  wait_for_health "HEALTH_WARN.*1 nearfull osd(s)"
+  wait_for_health "OSD_NEARFULL"
   $SUDO ceph --admin-daemon $(get_admin_socket osd.1) injectfull backfillfull
-  wait_for_health "HEALTH_WARN.*1 backfillfull osd(s)"
+  wait_for_health "OSD_BACKFILLFULL"
   $SUDO ceph --admin-daemon $(get_admin_socket osd.2) injectfull failsafe
   # failsafe and full are the same as far as the monitor is concerned
-  wait_for_health "HEALTH_ERR.*1 full osd(s)"
+  wait_for_health "OSD_FULL"
   $SUDO ceph --admin-daemon $(get_admin_socket osd.0) injectfull full
-  wait_for_health "HEALTH_ERR.*2 full osd(s)"
+  wait_for_health "OSD_FULL"
   ceph health detail | grep "osd.0 is full"
   ceph health detail | grep "osd.2 is full"
   ceph health detail | grep "osd.1 is backfill full"
