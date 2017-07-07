@@ -254,12 +254,6 @@ class Module(MgrModule):
             self.serve_event.wait()
             self.serve_event.clear()
 
-    def get_localized_config(self, key):
-        r = self.get_config(self.get_mgr_id() + '/' + key)
-        if r is None:
-            r = self.get_config(key)
-        return r
-
     def refresh_keys(self):
         self.keys = {}
         rawkeys = self.get_config_prefix('keys/') or {}

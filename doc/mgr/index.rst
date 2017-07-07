@@ -28,5 +28,6 @@ sensible.
     Installation and Configuration <administrator>
     Dashboard <dashboard>
     RESTful <restful>
+    Zabbix <zabbix>
     Writing plugins <plugins>
 
