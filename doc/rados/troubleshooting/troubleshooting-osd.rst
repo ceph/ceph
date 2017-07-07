@@ -442,7 +442,7 @@ Events from the OSD as it prepares operations
 
 - queued_for_pg: the op has been put into the queue for processing by its PG
 - reached_pg: the PG has started doing the op
-- waiting for *: the op is waiting for some other work to complete before it
+- waiting for \*: the op is waiting for some other work to complete before it
   can proceed (a new OSDMap; for its object target to scrub; for the PG to
   finish peering; all as specified in the message)
 - started: the op has been accepted as something the OSD should actually do
