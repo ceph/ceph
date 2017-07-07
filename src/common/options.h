@@ -6,6 +6,8 @@
 #include <string>
 #include <list>
 #include <boost/variant.hpp>
+#include "msg/msg_types.h"
+#include "include/uuid.h"
 
 //#include "include/uuid.h"
 //#include "msg/msg_types.h"
@@ -39,12 +41,13 @@ struct Option {
   };
 
   using value_t = boost::variant<
+    boost::blank,
     std::string,
     int64_t,
     double,
-    bool/*,
+    bool,
     entity_addr_t,
-    uuid_d*/>;
+    uuid_d>;
   const std::string name;
   const type_t type;
   const level_t level;
@@ -64,9 +67,34 @@ struct Option {
 
   bool safe;
 
-  Option(const char* name, type_t t, level_t l)
+  Option(std::string const &name, type_t t, level_t l)
     : name(name), type(t), level(l), safe(false)
-  {}
+  {
+    // While value_t is nullable (via boost::blank), we don't ever
+    // want it set that way in an Option instance: within an instance,
+    // the type of ::value should always match the declared type.
+    if (type == TYPE_INT) {
+      value = int64_t(0);
+    } else if (type == TYPE_STR) {
+      value = std::string("");
+    } else if (type == TYPE_FLOAT) {
+      value = 0.0;
+    } else if (type == TYPE_BOOL) {
+      value = false;
+    } else if (type == TYPE_ADDR) {
+      value = entity_addr_t();
+    } else if (type == TYPE_UUID) {
+      value = uuid_d();
+    } else {
+      ceph_abort();
+    }
+  }
+
+  // const char * must be explicit to avoid it being treated as an int
+  Option& set_value(value_t& v, const char *new_value) {
+    v = std::string(new_value);
+    return *this;
+  }
 
   // bool is an integer, but we don't think so. teach it the hard way.
   template<typename T>
@@ -82,13 +110,25 @@ struct Option {
   }
   template<typename T, typename is_integer<T>::type = 0>
   Option& set_value(value_t& v, T new_value) {
-    v = int64_t(new_value);
+    if (type == TYPE_INT) {
+      v = int64_t(new_value);
+    } else if (type == TYPE_FLOAT) {
+      v = double(new_value);
+    } else if (type == TYPE_BOOL) {
+      v = bool(new_value);
+    } else {
+      std::cerr << "Bad type in set_value: " << name << ": "
+                << typeid(T).name() << std::endl;
+      ceph_abort();
+    }
     return *this;
   }
+
   template<typename T>
   Option& set_default(const T& v) {
     return set_value(value, v);
   }
+
   template<typename T>
   Option& set_daemon_default(const T& v) {
     return set_value(daemon_value, v);

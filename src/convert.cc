@@ -1,6 +1,6 @@
 
 #include <iostream>
-#include "include/acconfig.h"
+//#include "include/acconfig.h"
 using namespace std;
 #define _STR(x) #x
 #define STRINGIFY(x) _STR(x)
@@ -45,12 +45,9 @@ string convert_type(string t) {
   cout << "  Option(\"" << STRINGIFY(name) << "\", Option::" << convert_type(STRINGIFY(type)) \
   << ", Option::LEVEL_ADVANCED)\n"					\
   << "  .set_default(" << STRINGIFY(def_val) << ")\n"			\
-  << "  .set_description(\"\")\n";                  \
+  << "  .set_description(\"\")\n"                  \
   << "  .set_safe(),\n\n";
   
-#define SUBSYS(name, log, gather)
-#define DEFAULT_SUBSYS(log, gather)
-
 int main(int argc, char **argv)
 {
   #include "common/legacy_config_opts.h"
