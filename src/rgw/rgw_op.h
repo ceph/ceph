@@ -740,7 +740,7 @@ public:
 
 class RGWPutBL : public RGWOp {
 protected:
-  size_t len;
+  int len;
   char *data;
   string cookie;
   RGWBucketLoggingStatus bl_status;

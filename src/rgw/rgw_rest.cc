@@ -902,26 +902,8 @@ int RGWGetObj_ObjStore::get_params()
 
 int RGWPutBL_ObjStore::get_params()
 {
-  size_t cl = 0;
-  if (s->length)
-    cl = atoll(s->length);
-  if (cl) {
-    data = (char *)malloc(cl + 1);
-    if (!data) {
-       op_ret = -ENOMEM;
-       return op_ret;
-    }
-    const auto read_len = recv_body(s, data, cl);
-    if (read_len < 0) {
-      return read_len;
-    } else {
-      len = read_len;
-    }
-    data[len] = '\0';
-  } else {
-    len = 0;
-  }
-
+  const auto max_size = s->cct->_conf->rgw_max_put_param_size;
+  op_ret = rgw_rest_read_all_input(s, &data, &len, max_size, false);
   return op_ret;
 }
 
