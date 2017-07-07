@@ -4,9 +4,3 @@ tasks:
     clients:
       all:
         - fs/quota
-
-overrides:
-  ceph:
-    conf:
-      client:
-        client quota: true
