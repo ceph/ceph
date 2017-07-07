@@ -126,7 +126,7 @@ public:
   /**
    * Add a (created) bucket to the user's bucket list.
    */
-  void add(RGWBucketEnt& bucket) {
+  void add(const RGWBucketEnt& bucket) {
     buckets[bucket.bucket.name] = bucket;
   }
 
