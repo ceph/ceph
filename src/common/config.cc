@@ -906,6 +906,10 @@ int md_config_t::_get_val(const char *key, std::string *value) const {
     ostringstream oss;
     if (bool *flag = boost::get<bool>(&config_value)) {
       oss << (*flag ? "true" : "false");
+    } else if (float *fp = boost::get<float>(&config_value)) {
+      oss << std::fixed << *fp ;
+    } else if (double *dp = boost::get<double>(&config_value)) {
+      oss << std::fixed << *dp ;
     } else {
       oss << config_value;
     }
@@ -922,29 +926,21 @@ int md_config_t::_get_val(const char *key, char **buf, int len) const
   if (!key)
     return -EINVAL;
 
-  string k(ConfFile::normalize_key_name(key));
-
-  config_value_t cval = _get_val(k.c_str());
-  if (!boost::get<invalid_config_value_t>(&cval)) {
-    ostringstream oss;
-    if (bool *flagp = boost::get<bool>(&cval)) {
-      oss << (*flagp ? "true" : "false");
-    } else {
-      oss << cval;
-    }
-    string str(oss.str());
-    int l = strlen(str.c_str()) + 1;
+  string val ;
+  if (!_get_val(key, &val)) {
+    int l = val.length() + 1;
     if (len == -1) {
       *buf = (char*)malloc(l);
       if (!*buf)
         return -ENOMEM;
-      strcpy(*buf, str.c_str());
+      strncpy(*buf, val.c_str(), l);
       return 0;
     }
-    snprintf(*buf, len, "%s", str.c_str());
+    snprintf(*buf, len, "%s", val.c_str());
     return (l > len) ? -ENAMETOOLONG : 0;
   }
 
+  string k(ConfFile::normalize_key_name(key));
   // subsys?
   for (int o = 0; o < subsys.get_num(); o++) {
     std::string as_option = "debug_" + subsys.get_name(o);
