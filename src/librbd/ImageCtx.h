@@ -203,6 +203,11 @@ namespace librbd {
     journal::Policy *journal_policy = nullptr;
 
     ZTracer::Endpoint trace_endpoint;
+    SafeTimer *m_report_timer = nullptr;
+    Mutex *report_timer_lock = nullptr;
+    Context *m_report_callback = nullptr;
+
+    op_stat_t m_perfstat;
 
     static bool _filter_metadata_confs(const string &prefix, std::map<string, bool> &configs,
                                        const map<string, bufferlist> &pairs, map<string, bufferlist> *res);
@@ -230,6 +235,10 @@ namespace librbd {
     void init_layout();
     void perf_start(std::string name);
     void perf_stop();
+    void perf_report_start();
+    void perf_report_stop();
+    void send_report();
+    int get_report_data(op_stat_t *rpdata);
     void set_read_flag(unsigned flag);
     int get_read_flags(librados::snap_t snap_id);
     int snap_set(cls::rbd::SnapshotNamespace in_snap_namespace,

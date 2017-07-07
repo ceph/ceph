@@ -1415,6 +1415,7 @@ OPTION(rbd_validate_names, OPT_BOOL, true) // true if image specs should be vali
 OPTION(rbd_auto_exclusive_lock_until_manual_request, OPT_BOOL, true) // whether to automatically acquire/release exclusive lock until it is explicitly requested, i.e. before we know the user of librbd is properly using the lock API
 OPTION(rbd_mirroring_resync_after_disconnect, OPT_BOOL, false) // automatically start image resync after mirroring is disconnected due to being laggy
 OPTION(rbd_mirroring_replay_delay, OPT_INT, 0) // time-delay in seconds for rbd-mirror asynchronous replication
+OPTION(rbd_perf_report_period, OPT_DOUBLE, 5.0)
 
 OPTION(rbd_default_pool, OPT_STR, "rbd") // default pool for storing images
 OPTION_VALIDATOR(rbd_default_pool)
@@ -1746,6 +1747,8 @@ OPTION(mgr_mds_bytes, OPT_U64, 128*1048576)   // bytes from mdss
 OPTION(mgr_mds_messages, OPT_U64, 128)        // messages from mdss
 OPTION(mgr_mon_bytes, OPT_U64, 128*1048576)   // bytes from mons
 OPTION(mgr_mon_messages, OPT_U64, 128)        // messages from mons
+OPTION(mgr_image_perf_cleanup_interval, OPT_INT, 300)
+OPTION(mgr_image_perf_calc_interval, OPT_INT, 5)
 
 OPTION(mgr_connect_retry_interval, OPT_DOUBLE, 1.0)
 

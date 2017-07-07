@@ -107,3 +107,14 @@ COMMAND("osd deep-scrub " \
 COMMAND("osd repair " \
 	"name=who,type=CephString", \
 	"initiate repair on osd <who>", "osd", "rw", "cli,rest")
+//mgr
+COMMAND("mgr report imgs_perf "				\
+	"name=name,type=CephString "			\
+	"name=id,type=CephString",			\
+	"report pool image perf data from clients",     \
+	"mgr", "rw", "cli,rest")
+
+COMMAND("mgr dump imgs_perf "				\
+	"name=dumpcontents,type=CephString,n=N,req=false",
+	"dump image perf statistics",     		\
+	"mgr", "r", "cli,rest")
