@@ -720,7 +720,7 @@ static optional<Principal> parse_principal(CephContext* cct, TokenID t,
 			  ECMAScript | optimize);
     smatch match;
     if (regex_match(a->resource, match, rx)) {
-      ceph_assert(match.size() == 2);
+      ceph_assert(match.size() == 3);
 
       if (match[1] == "user") {
 	return Principal::user(std::move(a->account),
