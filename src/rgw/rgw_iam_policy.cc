@@ -922,9 +922,9 @@ bool Condition::eval(const Environment& env) const {
 
     // Implement actual StringLike with wildcarding later
   case TokenID::StringLike:
-    return orrible(std::equal_to<std::string>(), s, vals);
+    return orrible(string_like(), s, vals);
   case TokenID::StringNotLike:
-    return orrible(std::not2(std::equal_to<std::string>()),
+    return orrible(std::not2(string_like()),
 		   s, vals);
 
     // Numeric
