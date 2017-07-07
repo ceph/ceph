@@ -7060,6 +7060,12 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     goto update;
 
   } else if (prefix == "osd crush set-device-class") {
+    if (osdmap.require_osd_release < CEPH_RELEASE_LUMINOUS) {
+      ss << "you must complete the upgrade and 'ceph osd require-osd-release "
+	 << "luminous' before using crush device classes";
+      err = -EPERM;
+      goto reply;
+    }
     if (!osdmap.exists(osdid)) {
       err = -ENOENT;
       ss << name << " does not exist.  create it before updating the crush map";
@@ -7172,8 +7178,8 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       goto reply;
     }
     if (osdmap.require_osd_release < CEPH_RELEASE_LUMINOUS) {
-      ss << "you must complete the upgrade and set require_osd_release ="
-	 << "luminous before using crush device classes";
+      ss << "you must complete the upgrade and 'ceph osd require-osd-release "
+	 << "luminous' before using crush device classes";
       err = -EPERM;
       goto reply;
     }
@@ -7206,8 +7212,8 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       goto reply;
     }
     if (osdmap.require_osd_release < CEPH_RELEASE_LUMINOUS) {
-      ss << "you must complete the upgrade and set require_osd_release ="
-	 << "luminous before using crush device classes";
+      ss << "you must complete the upgrade and 'ceph osd require-osd-release "
+	 << "luminous' before using crush device classes";
       err = -EPERM;
       goto reply;
     }
@@ -7249,8 +7255,8 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       goto reply;
     }
     if (osdmap.require_osd_release < CEPH_RELEASE_LUMINOUS) {
-      ss << "you must complete the upgrade and set require_osd_release ="
-	 << "luminous before using crush device classes";
+      ss << "you must complete the upgrade and 'ceph osd require-osd-release "
+	 << "luminous' before using crush device classes";
       err = -EPERM;
       goto reply;
     }
@@ -8082,8 +8088,8 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 	     prefix == "osd set-backfillfull-ratio" ||
              prefix == "osd set-nearfull-ratio") {
     if (osdmap.require_osd_release < CEPH_RELEASE_LUMINOUS) {
-      ss << "you must complete the upgrade and set require_osd_release ="
-	 << "luminous before using the new interface";
+      ss << "you must complete the upgrade and 'ceph osd require-osd-release "
+	 << "luminous' before using the new interface";
       err = -EPERM;
       goto reply;
     }
@@ -8107,8 +8113,8 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     return true;
   } else if (prefix == "osd set-require-min-compat-client") {
     if (osdmap.require_osd_release < CEPH_RELEASE_LUMINOUS) {
-      ss << "you must complete the upgrade and set require_osd_release ="
-	 << "luminous before using the new interface";
+      ss << "you must complete the upgrade and 'ceph osd require-osd-release "
+	 << "luminous' before using the new interface";
       err = -EPERM;
       goto reply;
     }
@@ -8839,8 +8845,8 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
              prefix == "osd pg-upmap-items" ||
              prefix == "osd rm-pg-upmap-items") {
     if (osdmap.require_osd_release < CEPH_RELEASE_LUMINOUS) {
-      ss << "you must complete the upgrade and set require_osd_release ="
-	 << "luminous before using the new interface";
+      ss << "you must complete the upgrade and 'ceph osd require-osd-release "
+	 << "luminous' before using the new interface";
       err = -EPERM;
       goto reply;
     }
