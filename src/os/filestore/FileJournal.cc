@@ -460,15 +460,6 @@ int FileJournal::open(uint64_t fs_op_seq)
   read_pos = header.start;
   uint64_t seq = header.start_seq;
 
-  // last_committed_seq is 1 before the start of the journal or
-  // 0 if the start is 0
-  last_committed_seq = seq > 0 ? seq - 1 : seq;
-  if (last_committed_seq < fs_op_seq) {
-    dout(2) << "open advancing committed_seq " << last_committed_seq
-	    << " to fs op_seq " << fs_op_seq << dendl;
-    last_committed_seq = fs_op_seq;
-  }
-
   while (1) {
     bufferlist bl;
     off64_t old_pos = read_pos;
@@ -861,7 +852,7 @@ int FileJournal::prepare_multi_write(bufferlist& bl, uint64_t& orig_ops, uint64_
           }
           print_header(header);
         }
-        
+
         return -ENOSPC;  // hrm, full on first op
       }
       if (eleft) {
@@ -1417,7 +1408,7 @@ int FileJournal::write_aio_bl(off64_t& pos, bufferlist& bl, uint64_t seq)
     aio_lock.Unlock();
 
     iocb *piocb = &aio.iocb;
-    
+
     // 2^16 * 125us = ~8 seconds, so max sleep is ~16 seconds
     int attempts = 16;
     int delay = 125;
