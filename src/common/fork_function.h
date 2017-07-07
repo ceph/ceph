@@ -46,6 +46,21 @@ static inline int fork_function(
   }
 
   // we are forker (first child)
+
+  // close all fds
+  int maxfd = sysconf(_SC_OPEN_MAX);
+  if (maxfd == -1)
+    maxfd = 16384;
+  for (int fd = 0; fd <= maxfd; fd++) {
+    if (fd == STDIN_FILENO)
+      continue;
+    if (fd == STDOUT_FILENO)
+      continue;
+    if (fd == STDERR_FILENO)
+      continue;
+    ::close(fd);
+  }
+
   sigset_t mask, oldmask;
   int pid;
 
