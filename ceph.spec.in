@@ -908,6 +908,7 @@ fi
 
 %postun base
 /sbin/ldconfig
+test -n "$FIRST_ARG" || FIRST_ARG=$1
 %if 0%{?suse_version}
 DISABLE_RESTART_ON_UPDATE="yes"
 %service_del_postun ceph-disk@\*.service ceph.target
