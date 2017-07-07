@@ -71,11 +71,11 @@ To configure Ceph for use with ``libvirt``, perform the following steps:
 
         rbd pool init <pool-name>
 
-#. `Create a Ceph User`_ (or use ``client.admin`` for version 0.9.7 and 
-   earlier). The following example uses the Ceph user name ``client.libvirt`` 
+#. `Create a Ceph User`_ (or use ``client.admin`` for version 0.9.7 and
+   earlier). The following example uses the Ceph user name ``client.libvirt``
    and references ``libvirt-pool``. ::
 
-	ceph auth get-or-create client.libvirt mon 'allow r' osd 'allow class-read object_prefix rbd_children, allow rwx pool=libvirt-pool'
+	ceph auth get-or-create client.libvirt mon 'profile rbd' osd 'profile rbd pool=libvirt-pool'
 	
    Verify the name exists. :: 
    
