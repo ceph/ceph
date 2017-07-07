@@ -111,6 +111,9 @@ int JournalingObjectStore::journal_replay(uint64_t fs_op_seq)
   if (err < 0)
     return err;
 
+  if (!count)
+    journal->committed_thru(fs_op_seq);
+
   return count;
 }
 
