@@ -25,14 +25,6 @@ are in this directory when executing ``ceph-deploy``.
    if you are logged in as a different user, because it will not issue ``sudo``
    commands needed on the remote host.
 
-.. topic:: Disable ``requiretty``
-
-   On some distributions (e.g., CentOS), you may receive an error while trying
-   to execute ``ceph-deploy`` commands. If ``requiretty`` is set
-   by default, disable it by executing ``sudo visudo`` and locate the
-   ``Defaults requiretty`` setting. Change it to ``Defaults:ceph !requiretty`` to
-   ensure that ``ceph-deploy`` can connect using the ``ceph`` user and execute
-   commands with ``sudo``.
 
 Create a Cluster
 ================
