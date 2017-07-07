@@ -5588,7 +5588,7 @@ int OSDMonitor::prepare_new_pool(string& name, uint64_t auid,
                                  unsigned pg_num, unsigned pgp_num,
 				 const string &erasure_code_profile,
                                  const unsigned pool_type,
-                                 const uint64_t expected_num_objects,
+				 uint64_t expected_num_objects,
                                  FastReadType fast_read,
 				 ostream *ss)
 {
@@ -5703,6 +5703,12 @@ int OSDMonitor::prepare_new_pool(string& name, uint64_t auid,
     pi->use_gmt_hitset = true;
   else
     pi->use_gmt_hitset = false;
+
+  if (!expected_num_objects &&
+      g_conf->osd_pool_default_expected_objects_per_pg > 0) {
+    expected_num_objects = g_conf->osd_pool_default_expected_objects_per_pg *
+      pg_num;
+  }
 
   pi->size = size;
   pi->min_size = min_size;
