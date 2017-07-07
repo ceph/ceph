@@ -1121,38 +1121,24 @@ def run_daemon(ctx, config, type_):
                 try:
                     remote.run(
                         args=[
-                            'sudo',
-                            'ceph',
-                            'osd',
-                            'new',
-                            osd_uuid,
-                            id_,
+                            'sudo', 'ceph', '--cluster', cluster_name,
+                            'osd', 'new', osd_uuid, id_,
                         ]
                     )
                 except:
                     # fallback to pre-luminous
                     remote.run(
                         args=[
-                            'sudo',
-                            'ceph',
-                            'osd',
-                            'create',
-                            osd_uuid,
-                            id_,
+                            'sudo', 'ceph', '--cluster', cluster_name,
+                            'osd', 'create', osd_uuid, id_,
                         ]
                     )
                 if config.get('add_osds_to_crush'):
                     remote.run(
                         args=[
-                            'sudo',
-                            'ceph',
-                            'osd',
-                            'crush',
-                            'create-or-move',
-                            'osd.' + id_,
-                            '1.0',
-                            'host=localhost',
-                            'root=default',
+                            'sudo', 'ceph', '--cluster', cluster_name,
+                            'osd', 'crush', 'create-or-move', 'osd.' + id_,
+                            '1.0', 'host=localhost', 'root=default',
                         ]
                     )
 
