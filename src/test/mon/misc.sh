@@ -151,36 +151,6 @@ function TEST_no_segfault_for_bad_keyring() {
     teardown $dir || return 1
 }
 
-function jq_success() {
-  input="$1"
-  filter="$2"
-  expects="\"$3\""
-
-  in_escaped=$(printf %s "$input" | sed "s/'/'\\\\''/g")
-  filter_escaped=$(printf %s "$filter" | sed "s/'/'\\\\''/g")
-
-  ret=$(echo "$in_escaped" | jq "$filter_escaped")
-  if [[ "$ret" == "true" ]]; then
-    return 0
-  elif [[ -n "$expects" ]]; then
-    if [[ "$ret" == "$expects" ]]; then
-      return 0
-    fi
-  fi
-  return 1
-  input=$1
-  filter=$2
-  expects="$3"
-
-  ret="$(echo $input | jq \"$filter\")"
-  if [[ "$ret" == "true" ]]; then
-    return 0
-  elif [[ -n "$expects" && "$ret" == "$expects" ]]; then
-    return 0
-  fi
-  return 1
-}
-
 function TEST_mon_features() {
     local dir=$1
     setup $dir || return 1
@@ -199,17 +169,6 @@ function TEST_mon_features() {
     run_mon $dir a --public-addr $MONA || return 1
     run_mon $dir b --public-addr $MONB || return 1
     timeout 120 ceph -s > /dev/null || return 1
-
-    # NOTE:
-    # jq only support --exit-status|-e from version 1.4 forwards, which makes
-    # returning on error waaaay prettier and straightforward.
-    # However, the current automated upstream build is running with v1.3,
-    # which has no idea what -e is. Hence the convoluted error checking we
-    # need. Sad.
-    # The next time someone changes this code, please check if v1.4 is now
-    # a thing, and, if so, please change these to use -e. Thanks.
-
-    # jq '.all.supported | select([.[] == "foo"] | any)'
 
     # expect monmap to contain 3 monitors (a, b, and c)
     jqinput="$(ceph mon_status --format=json 2>/dev/null)"

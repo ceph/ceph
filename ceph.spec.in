@@ -131,6 +131,7 @@ BuildRequires:	python-pecan
 BuildRequires:	python-requests
 BuildRequires:	python-virtualenv
 BuildRequires:	python-werkzeug
+BuildRequires:	socat
 BuildRequires:	snappy-devel
 BuildRequires:	udev
 BuildRequires:	util-linux
