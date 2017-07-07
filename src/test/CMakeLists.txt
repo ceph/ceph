@@ -902,5 +902,10 @@ add_executable(unittest_pageset test_pageset.cc)
 add_ceph_unittest(unittest_pageset ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_pageset)
 target_link_libraries(unittest_pageset global)
 
+# unittest_future
+add_executable(unittest_future test_future.cc)
+add_ceph_unittest(unittest_future ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_future)
+target_link_libraries(unittest_future ${Boost_SYSTEM_LIBRARY} ${Boost_THREAD_LIBRARY})
+
 #make check ends here
 
