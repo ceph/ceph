@@ -520,13 +520,13 @@ static int get_swift_container_settings(req_state * const s,
 
   if (read_attr || write_attr) {
     RGWAccessControlPolicy_SWIFT swift_policy(s->cct);
-    const bool r = swift_policy.create(store,
-                                s->user->user_id,
-                                s->user->display_name,
-                                read_list,
-                                write_list);
-    if (r != true) {
-      return -EINVAL;
+    const auto r = swift_policy.create(store,
+                                       s->user->user_id,
+                                       s->user->display_name,
+                                       read_list,
+                                       write_list);
+    if (r < 0) {
+      return r;
     }
 
     *policy = swift_policy;
