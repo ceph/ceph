@@ -1742,7 +1742,7 @@ int RGWPostObj_ObjStore_S3::get_policy()
       /* Populate the owner info. */
       s->owner.set_id(s->user->user_id);
       s->owner.set_name(s->user->display_name);
-      ldout(s->cct, 0) << "Successful Signature Verification!" << dendl;
+      ldout(s->cct, 20) << "Successful Signature Verification!" << dendl;
     }
 
     ceph::bufferlist decoded_policy;
@@ -1755,7 +1755,7 @@ int RGWPostObj_ObjStore_S3::get_policy()
     }
 
     decoded_policy.append('\0'); // NULL terminate
-    ldout(s->cct, 0) << "POST policy: " << decoded_policy.c_str() << dendl;
+    ldout(s->cct, 20) << "POST policy: " << decoded_policy.c_str() << dendl;
 
 
     int r = post_policy.from_json(decoded_policy, err_msg);
