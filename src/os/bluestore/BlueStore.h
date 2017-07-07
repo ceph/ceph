@@ -1917,6 +1917,7 @@ private:
   uint64_t kv_throttle_costs = 0;
 
   // cache trim control
+  uint64_t cache_size = 0;      ///< total cache size
   float cache_meta_ratio = 0;   ///< cache ratio dedicated to metadata
   float cache_kv_ratio = 0;     ///< cache ratio dedicated to kv (e.g., rocksdb)
   float cache_data_ratio = 0;   ///< cache ratio dedicated to object data

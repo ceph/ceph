@@ -1163,10 +1163,12 @@ OPTION(bluestore_cache_trim_max_skip_pinned, OPT_U32, 64) // skip this many onod
 OPTION(bluestore_cache_type, OPT_STR, "2q")   // lru, 2q
 OPTION(bluestore_2q_cache_kin_ratio, OPT_DOUBLE, .5)    // kin page slot size / max page slot size
 OPTION(bluestore_2q_cache_kout_ratio, OPT_DOUBLE, .5)   // number of kout page slot / total number of page slot
-OPTION(bluestore_cache_size, OPT_U64, 3*1024*1024*1024)
+OPTION(bluestore_cache_size, OPT_U64, 0)
+OPTION(bluestore_cache_size_hdd, OPT_U64, 1*1024*1024*1024)
+OPTION(bluestore_cache_size_ssd, OPT_U64, 3*1024*1024*1024)
 OPTION(bluestore_cache_meta_ratio, OPT_DOUBLE, .01)
 OPTION(bluestore_cache_kv_ratio, OPT_DOUBLE, .99)
-OPTION(bluestore_cache_kv_max, OPT_U64, 512*1024*1024) // limit the maximum amont of cache for the kv store
+OPTION(bluestore_cache_kv_max, OPT_U64, 512*1024*1024) // limit the maximum amount of cache for the kv store
 OPTION(bluestore_kvbackend, OPT_STR, "rocksdb")
 OPTION(bluestore_allocator, OPT_STR, "bitmap")     // stupid | bitmap
 OPTION(bluestore_freelist_blocks_per_key, OPT_INT, 128)

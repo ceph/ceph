@@ -3316,7 +3316,7 @@ void *BlueStore::MempoolThread::entry()
     size_t num_shards = store->cache_shards.size();
     float target_ratio = store->cache_meta_ratio + store->cache_data_ratio;
     // A little sloppy but should be close enough
-    uint64_t shard_target = target_ratio * (store->cct->_conf->bluestore_cache_size / num_shards);
+    uint64_t shard_target = target_ratio * (store->cache_size / num_shards);
 
     for (auto i : store->cache_shards) {
       i->trim(shard_target,
@@ -3689,10 +3689,20 @@ void BlueStore::_set_blob_size()
 
 int BlueStore::_set_cache_sizes()
 {
+  assert(bdev);
+  if (cct->_conf->bluestore_cache_size) {
+    cache_size = cct->_conf->bluestore_cache_size;
+  } else {
+    // choose global cache size based on backend type
+    if (bdev->is_rotational()) {
+      cache_size = cct->_conf->bluestore_cache_size_hdd;
+    } else {
+      cache_size = cct->_conf->bluestore_cache_size_ssd;
+    }
+  }
   cache_meta_ratio = cct->_conf->bluestore_cache_meta_ratio;
   cache_kv_ratio = cct->_conf->bluestore_cache_kv_ratio;
 
-  double cache_size = cct->_conf->bluestore_cache_size;
   double cache_kv_max = cct->_conf->bluestore_cache_kv_max;
   double cache_kv_max_ratio = 0;
 
@@ -3732,7 +3742,8 @@ int BlueStore::_set_cache_sizes()
     // deal with floating point imprecision
     cache_data_ratio = 0;
   }
-  dout(1) << __func__ << " meta " << cache_meta_ratio
+  dout(1) << __func__ << " cache_size " << cache_size
+          << " meta " << cache_meta_ratio
 	  << " kv " << cache_kv_ratio
 	  << " data " << cache_data_ratio
 	  << dendl;
@@ -3914,12 +3925,6 @@ int BlueStore::get_block_device_fsid(CephContext* cct, const string& path,
 
 int BlueStore::_open_path()
 {
-  // initial sanity check
-  int r = _set_cache_sizes();
-  if (r < 0) {
-    return r;
-  }
-
   assert(path_fd < 0);
   path_fd = ::open(path.c_str(), O_DIRECTORY);
   if (path_fd < 0) {
@@ -4093,6 +4098,11 @@ int BlueStore::_open_bdev(bool create)
   block_mask = ~(block_size - 1);
   block_size_order = ctz(block_size);
   assert(block_size == 1u << block_size_order);
+  // and set cache_size based on device type
+  r = _set_cache_sizes();
+  if (r < 0) {
+    goto fail_close;
+  }
   return 0;
 
  fail_close:
@@ -4640,7 +4650,7 @@ int BlueStore::_open_db(bool create)
   FreelistManager::setup_merge_operators(db);
   db->set_merge_operator(PREFIX_STAT, merge_op);
 
-  db->set_cache_size(cct->_conf->bluestore_cache_size * cache_kv_ratio);
+  db->set_cache_size(cache_size * cache_kv_ratio);
 
   if (kv_backend == "rocksdb")
     options = cct->_conf->bluestore_rocksdb_options;
