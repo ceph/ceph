@@ -72,6 +72,7 @@
 #include "common/cmdparse.h"
 #include "include/str_list.h"
 #include "include/str_map.h"
+#include "include/scope_guard.h"
 
 #include "json_spirit/json_spirit_reader.h"
 
@@ -3883,6 +3884,12 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
       p->decode(osdmap_bl);
     }
 
+    auto sg = make_scope_guard([&] {
+      if (p != &osdmap) {
+        delete p;
+      }
+    });
+
     if (prefix == "osd dump") {
       stringstream ds;
       if (f) {
@@ -3996,8 +4003,6 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
 
       rdata.append(ds);
     }
-    if (p != &osdmap)
-      delete p;
   } else if (prefix == "osd df") {
     string method;
     cmd_getval(g_ceph_context, cmdmap, "output_method", method);
@@ -4207,15 +4212,15 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
     }
     goto reply;
 
-  } else if ((prefix == "osd scrub" ||
-	      prefix == "osd deep-scrub" ||
-	      prefix == "osd repair")) {
+  } else if (prefix == "osd scrub" ||
+	     prefix == "osd deep-scrub" ||
+	     prefix == "osd repair") {
     string whostr;
     cmd_getval(g_ceph_context, cmdmap, "who", whostr);
     vector<string> pvec;
     get_str_vec(prefix, pvec);
 
-    if (whostr == "*") {
+    if (whostr == "*" || whostr == "all" || whostr == "any") {
       ss << "osds ";
       int c = 0;
       for (int i = 0; i < osdmap.get_max_osd(); i++)
@@ -9532,7 +9537,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     string pool_type_str;
     cmd_getval(g_ceph_context, cmdmap, "pool_type", pool_type_str);
     if (pool_type_str.empty())
-      pool_type_str = pg_pool_t::get_default_type();
+      pool_type_str = g_conf->osd_pool_default_type;
 
     string poolstr;
     cmd_getval(g_ceph_context, cmdmap, "pool", poolstr);
@@ -10755,7 +10760,7 @@ bool OSDMonitor::_check_remove_tier(
 int OSDMonitor::_prepare_remove_pool(
   int64_t pool, ostream *ss, bool no_fake)
 {
-  dout(10) << "_prepare_remove_pool " << pool << dendl;
+  dout(10) << __func__ << " " << pool << dendl;
   const pg_pool_t *p = osdmap.get_pg_pool(pool);
   int r = _check_remove_pool(pool, *p, ss);
   if (r < 0)
@@ -10772,7 +10777,7 @@ int OSDMonitor::_prepare_remove_pool(
   }
 
   if (pending_inc.old_pools.count(pool)) {
-    dout(10) << "_prepare_remove_pool " << pool << " already pending removal"
+    dout(10) << __func__ << " " << pool << " already pending removal"
 	     << dendl;
     return 0;
   }
@@ -10789,23 +10794,42 @@ int OSDMonitor::_prepare_remove_pool(
   // remove
   pending_inc.old_pools.insert(pool);
 
-  // remove any pg_temp mappings for this pool too
+  // remove any pg_temp mappings for this pool
   for (auto p = osdmap.pg_temp->begin();
        p != osdmap.pg_temp->end();
        ++p) {
     if (p->first.pool() == (uint64_t)pool) {
-      dout(10) << "_prepare_remove_pool " << pool << " removing obsolete pg_temp "
+      dout(10) << __func__ << " " << pool << " removing obsolete pg_temp "
 	       << p->first << dendl;
       pending_inc.new_pg_temp[p->first].clear();
     }
   }
+  // remove any primary_temp mappings for this pool
   for (auto p = osdmap.primary_temp->begin();
       p != osdmap.primary_temp->end();
       ++p) {
     if (p->first.pool() == (uint64_t)pool) {
-      dout(10) << "_prepare_remove_pool " << pool
+      dout(10) << __func__ << " " << pool
                << " removing obsolete primary_temp" << p->first << dendl;
       pending_inc.new_primary_temp[p->first] = -1;
+    }
+  }
+  // remove any pg_upmap mappings for this pool
+  for (auto& p : osdmap.pg_upmap) {
+    if (p.first.pool() == (uint64_t)pool) {
+      dout(10) << __func__ << " " << pool
+               << " removing obsolete pg_upmap "
+               << p.first << dendl;
+      pending_inc.old_pg_upmap.insert(p.first);
+    }
+  }
+  // remove any pg_upmap_items mappings for this pool
+  for (auto& p : osdmap.pg_upmap_items) {
+    if (p.first.pool() == (uint64_t)pool) {
+      dout(10) << __func__ << " " << pool
+               << " removing obsolete pg_upmap_items " << p.first
+               << dendl;
+      pending_inc.old_pg_upmap_items.insert(p.first);
     }
   }
   return 0;

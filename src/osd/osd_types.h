@@ -1115,9 +1115,6 @@ struct pg_pool_t {
   const char *get_type_name() const {
     return get_type_name(type);
   }
-  static const char* get_default_type() {
-    return "replicated";
-  }
 
   enum {
     FLAG_HASHPSPOOL = 1<<0, // hash pg seed and pool together (instead of adding)

@@ -1044,6 +1044,8 @@ public:
   uint32_t seq = 0;
 
   void update_osd_stat(vector<int>& hb_peers);
+  osd_stat_t set_osd_stat(const struct store_statfs_t &stbuf,
+                          vector<int>& hb_peers);
   osd_stat_t get_osd_stat() {
     Mutex::Locker l(stat_lock);
     ++seq;
@@ -1089,7 +1091,7 @@ private:
   mutable int64_t injectfull = 0;
   s_names injectfull_state = NONE;
   float get_failsafe_full_ratio();
-  void check_full_status(const osd_stat_t &stat);
+  void check_full_status(float ratio);
   bool _check_full(s_names type, ostream &ss) const;
 public:
   bool check_failsafe_full(ostream &ss) const;
