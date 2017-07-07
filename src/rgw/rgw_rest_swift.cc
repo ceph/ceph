@@ -605,8 +605,7 @@ static int get_swift_versioning_settings(
     swift_ver_location = boost::in_place(std::string());
   }
 
-  std::string vloc = s->info.env->get("HTTP_X_VERSIONS_LOCATION", "");
-  if (vloc.size()) {
+  if (s->info.env->exists("HTTP_X_VERSIONS_LOCATION")) {
     /* If the Swift's versioning is globally disabled but someone wants to
      * enable it for a given container, new version of Swift will generate
      * the precondition failed error. */
@@ -614,7 +613,7 @@ static int get_swift_versioning_settings(
       return -ERR_PRECONDITION_FAILED;
     }
 
-    swift_ver_location = std::move(vloc);
+    swift_ver_location = s->info.env->get("HTTP_X_VERSIONS_LOCATION", "");
   }
 
   return 0;
