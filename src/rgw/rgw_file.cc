@@ -1124,6 +1124,7 @@ namespace rgw {
 	  << __func__
 	  << " " << object_name()
 	  << " non-0 initial write position " << off
+	  << " (mounting with -o sync required)"
 	  << dendl;
 	return -EIO;
       }
@@ -1297,8 +1298,13 @@ namespace rgw {
     op_ret = 0;
 
     /* check guards (e.g., contig write) */
-    if (eio)
+    if (eio) {
+      ldout(s->cct, 5)
+        << " chunks arrived in wrong order"
+        << " (mounting with -o sync required)"
+        << dendl;
       return -EIO;
+    }
 
     size_t len = data.length();
     if (! len)
