@@ -6,6 +6,7 @@
 #include "rgw_bucket.h"
 
 #include "rgw_sync_module.h"
+#include "rgw_sync_trace.h"
 
 #include "common/RWLock.h"
 #include "common/ceph_json.h"
@@ -248,6 +249,8 @@ class RGWRemoteDataLog : public RGWCoroutinesManager {
 
   RWLock lock;
   RGWDataSyncControlCR *data_sync_cr;
+
+  RGWSTNCRef tn;
 
   bool initialized;
 
