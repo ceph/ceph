@@ -1323,7 +1323,7 @@ static bool object_is_expired(map<string, bufferlist>& attrs) {
       return false;
     }
 
-    if (delete_at <= ceph_clock_now()) {
+    if (delete_at <= ceph_clock_now() && !delete_at.is_zero()) {
       return true;
     }
   }
@@ -3175,7 +3175,7 @@ void RGWPutObj::execute()
   }
 
   op_ret = processor->complete(s->obj_size, etag, &mtime, real_time(), attrs,
-                               delete_at, if_match, if_nomatch);
+                               (delete_at ? *delete_at : real_time()), if_match, if_nomatch);
 
   /* produce torrent */
   if (s->cct->_conf->rgw_torrent_flag && (ofs == torrent.get_data_len()))
@@ -3346,7 +3346,8 @@ void RGWPostObj::execute()
     emplace_attr(RGW_ATTR_COMPRESSION, std::move(tmp));
   }
 
-  op_ret = processor.complete(s->obj_size, etag, NULL, real_time(), attrs, delete_at);
+  op_ret = processor.complete(s->obj_size, etag, NULL, real_time(), attrs,
+                              (delete_at ? *delete_at : real_time()));
 }
 
 
@@ -4010,7 +4011,7 @@ void RGWCopyObj::execute()
                            copy_if_newer,
 			   attrs, RGW_OBJ_CATEGORY_MAIN,
 			   olh_epoch,
-			   delete_at,
+			   (delete_at ? *delete_at : real_time()),
 			   (version_id.empty() ? NULL : &version_id),
 			   &s->req_id, /* use req_id as tag */
 			   &etag,
