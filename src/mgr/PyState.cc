@@ -172,6 +172,7 @@ ceph_send_command(PyObject *self, PyObject *args)
         c);
     return nullptr;
   } else {
+    delete c;
     string msg("unknown service type: ");
     msg.append(type);
     PyErr_SetString(PyExc_ValueError, msg.c_str());
