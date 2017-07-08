@@ -1,7 +1,7 @@
   $ crushtool -c $TESTDIR/rules.txt --create-replicated-rule foo default host -o one > /dev/null
   $ crushtool -d one
   # begin crush map
-
+  
   # devices
   device 0 osd.0 class ssd
   device 1 osd.1 class ssd
@@ -9,12 +9,12 @@
   device 3 osd.3 class hdd
   device 4 osd.4 class hdd
   device 5 osd.5 class hdd
-
+  
   # types
   type 0 osd
   type 1 host
   type 2 root
-
+  
   # buckets
   host foo {
   \tid -3\t\t# do not change unnecessarily (esc)
@@ -48,7 +48,7 @@
   \titem foo weight 3.000 (esc)
   \titem bar weight 3.000 (esc)
   }
-
+  
   # rules
   rule data {
   \truleset 0 (esc)
@@ -68,8 +68,13 @@
   \tstep chooseleaf firstn 0 type host (esc)
   \tstep emit (esc)
   }
-
+  
   # end crush map
+
+
+
+
+
 
 
 
@@ -78,7 +83,7 @@
   $ crushtool -c $TESTDIR/rules.txt --create-replicated-rule foo-ssd default host -o two --device-class ssd > /dev/null
   $ crushtool -d two
   # begin crush map
-
+  
   # devices
   device 0 osd.0 class ssd
   device 1 osd.1 class ssd
@@ -86,12 +91,12 @@
   device 3 osd.3 class hdd
   device 4 osd.4 class hdd
   device 5 osd.5 class hdd
-
+  
   # types
   type 0 osd
   type 1 host
   type 2 root
-
+  
   # buckets
   host foo {
   \tid -3\t\t# do not change unnecessarily (esc)
@@ -125,7 +130,7 @@
   \titem foo weight 3.000 (esc)
   \titem bar weight 3.000 (esc)
   }
-
+  
   # rules
   rule data {
   \truleset 0 (esc)
@@ -145,5 +150,10 @@
   \tstep chooseleaf firstn 0 type host (esc)
   \tstep emit (esc)
   }
-
+  
   # end crush map
+
+
+
+
+
