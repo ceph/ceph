@@ -849,18 +849,37 @@ public:
     return (float)get_item_weight_in_loc(id, loc) / (float)0x10000;
   }
 
+  int validate_weightf(float weight) {
+    uint64_t iweight = weight * 0x10000;
+    if (iweight > std::numeric_limits<int>::max()) {
+      return -EOVERFLOW;
+    }
+    return 0;
+  }
   int adjust_item_weight(CephContext *cct, int id, int weight);
   int adjust_item_weightf(CephContext *cct, int id, float weight) {
+    int r = validate_weightf(weight);
+    if (r < 0) {
+      return r;
+    }
     return adjust_item_weight(cct, id, (int)(weight * (float)0x10000));
   }
   int adjust_item_weight_in_loc(CephContext *cct, int id, int weight, const map<string,string>& loc);
   int adjust_item_weightf_in_loc(CephContext *cct, int id, float weight, const map<string,string>& loc) {
+    int r = validate_weightf(weight);
+    if (r < 0) {
+      return r;
+    }
     return adjust_item_weight_in_loc(cct, id, (int)(weight * (float)0x10000), loc);
   }
   void reweight(CephContext *cct);
 
   int adjust_subtree_weight(CephContext *cct, int id, int weight);
   int adjust_subtree_weightf(CephContext *cct, int id, float weight) {
+    int r = validate_weightf(weight);
+    if (r < 0) {
+      return r;
+    }
     return adjust_subtree_weight(cct, id, (int)(weight * (float)0x10000));
   }
 
