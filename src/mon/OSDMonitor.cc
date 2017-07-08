@@ -8913,7 +8913,9 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     if (osdmap.require_min_compat_client < CEPH_RELEASE_LUMINOUS) {
       ss << "min_compat_client "
 	 << ceph_release_name(osdmap.require_min_compat_client)
-	 << " < luminous, which is required for pg-upmap";
+	 << " < luminous, which is required for pg-upmap. "
+         << "Try 'ceph osd set-require-min-compat-client luminous' "
+         << "before using the new interface";
       err = -EPERM;
       goto reply;
     }
