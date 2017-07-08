@@ -246,6 +246,7 @@ Monitor Settings
 
 
 ``mon osd laggy max interval``
+
 :Description: Maximum value of ``laggy_interval`` in laggy estimations (in seconds).
               Monitor uses an adaptive approach to evaluate the ``laggy_interval`` of
               a certain OSD. This value will be used to calculate the grace time for

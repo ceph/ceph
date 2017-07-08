@@ -295,7 +295,7 @@ Manager daemon configuration
 
 On each node where you run a ceph-mon daemon, you should also set up a ceph-mgr daemon.
 
-See `../mgr/administrator`_
+See :doc:`../mgr/administrator`
 
 Adding OSDs
 ===========

@@ -47,35 +47,35 @@ In other words, histogram of type "18" is a histogram of unsigned 64-bit integer
 
 Here is an example of the schema output::
 
-{
-    "AsyncMessenger::Worker-0": {},
-    "AsyncMessenger::Worker-1": {},
-    "AsyncMessenger::Worker-2": {},
-    "mutex-WBThrottle::lock": {},
-    "objecter": {},
-    "osd": {
-        "op_r_latency_out_bytes_histogram": {
-            "type": 18,
-            "description": "Histogram of operation latency (including queue time) + data read",
-            "nick": ""
-        },
-        "op_w_latency_in_bytes_histogram": {
-            "type": 18,
-            "description": "Histogram of operation latency (including queue time) + data written",
-            "nick": ""
-        },
-        "op_rw_latency_in_bytes_histogram": {
-            "type": 18,
-            "description": "Histogram of rw operation latency (including queue time) + data written",
-            "nick": ""
-        },
-        "op_rw_latency_out_bytes_histogram": {
-            "type": 18,
-            "description": "Histogram of rw operation latency (including queue time) + data read",
-            "nick": ""
+    {
+        "AsyncMessenger::Worker-0": {},
+        "AsyncMessenger::Worker-1": {},
+        "AsyncMessenger::Worker-2": {},
+        "mutex-WBThrottle::lock": {},
+        "objecter": {},
+        "osd": {
+            "op_r_latency_out_bytes_histogram": {
+                "type": 18,
+                "description": "Histogram of operation latency (including queue time) +   da  ta read",
+                "nick": ""
+            },
+            "op_w_latency_in_bytes_histogram": {
+                "type": 18,
+                "description": "Histogram of operation latency (including queue time) +   da  ta written",
+                "nick": ""
+            },
+            "op_rw_latency_in_bytes_histogram": {
+                "type": 18,
+                "description": "Histogram of rw operation latency (including queue time)   +   data written",
+                "nick": ""
+            },
+            "op_rw_latency_out_bytes_histogram": {
+                "type": 18,
+                "description": "Histogram of rw operation latency (including queue time)   +   data read",
+                "nick": ""
+            }
         }
     }
-}
 
 
 Dump
