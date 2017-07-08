@@ -4,6 +4,7 @@ Workunit task -- Run ceph on sets of specific clients
 import logging
 import pipes
 import os
+import re
 
 from copy import deepcopy
 from util import get_remote_for_role
@@ -377,9 +378,12 @@ def _run_tests(ctx, refspec, role, tests, env, subdir=None, timeout=None):
         remote.run(logger=log.getChild(role),
                    args=refspec.clone(git_url, clonedir))
     except CommandFailedError:
-        if not git_url.endswith('/ceph-ci.git'):
+        if git_url.endswith('/ceph-ci.git'):
+            alt_git_url = git_url.replace('/ceph-ci.git', '/ceph.git')
+        elif git_url.endswith('/ceph-ci'):
+            alt_git_url = re.sub(r'/ceph-ci$', '/ceph.git', git_url)
+        else:
             raise
-        alt_git_url = git_url.replace('/ceph-ci.git', '/ceph.git')
         log.info(
             "failed to check out '%s' from %s; will also try in %s",
             refspec,
