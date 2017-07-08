@@ -119,15 +119,6 @@ function TEST_crush_rule_create_erasure() {
     ceph osd erasure-code-profile ls | grep default || return 1
     ceph osd crush rule rm $ruleset || return 1
     ! ceph osd crush rule ls | grep $ruleset || return 1
-    #
-    # verify that if the crushmap contains a bugous ruleset,
-    # it will prevent the creation of a pool.
-    #
-    local crushtool_path_old=`ceph-conf --show-config-value crushtool`
-    ceph tell mon.\* injectargs --crushtool "false"
-
-    expect_failure $dir "Error EINVAL" \
-        ceph osd pool create mypool 1 1 erasure || return 1
 }
 
 function check_ruleset_id_match_rule_id() {
@@ -237,69 +228,6 @@ function TEST_crush_tree() {
 
     ceph osd crush tree --format=xml | \
         $XMLSTARLET val -e -r $CEPH_ROOT/src/test/mon/osd-crush-tree.rng - || return 1
-}
-
-# NB: disable me if i am too time consuming
-function TEST_crush_repair_faulty_crushmap() {
-    local dir=$1
-    fsid=$(uuidgen)
-    MONA=127.0.0.1:7113 # git grep '\<7113\>' : there must be only one
-    MONB=127.0.0.1:7114 # git grep '\<7114\>' : there must be only one
-    MONC=127.0.0.1:7115 # git grep '\<7115\>' : there must be only one
-    CEPH_ARGS_orig=$CEPH_ARGS
-    CEPH_ARGS="--fsid=$fsid --auth-supported=none "
-    CEPH_ARGS+="--mon-initial-members=a,b,c "
-    CEPH_ARGS+="--mon-host=$MONA,$MONB,$MONC "
-    run_mon $dir a --public-addr $MONA || return 1
-    run_mon $dir b --public-addr $MONB || return 1
-    run_mon $dir c --public-addr $MONC || return 1
-
-    ceph osd pool create rbd 8
-
-    local empty_map=$dir/empty_map
-    :> $empty_map.txt
-    crushtool -c $empty_map.txt -o $empty_map.map || return 1
-
-    local crushtool_path_old=`ceph-conf --show-config-value crushtool`
-    ceph tell mon.\* injectargs --crushtool "true"
-    
-    
-    #import empty crushmap should failture.because the default pool rbd use the rule
-    ceph osd setcrushmap -i $empty_map.map  2>&1|grep "Error EINVAL:  the crush rule no"|| return 1
-
-    #remove the default pool rbd
-    ceph osd pool delete rbd rbd --yes-i-really-really-mean-it || return 1
-
-    #now it can be successful to set the empty crush map
-    ceph osd setcrushmap -i $empty_map.map || return 1
-
-    # should be an empty crush map without any buckets
-    success=false
-    for delay in 1 2 4 8 16 32 64 128 256 ; do
-        if test $(ceph osd crush dump --format=json | \
-                  jq '.buckets | length == 0') == true ; then
-            success=true
-            break
-        fi
-        sleep $delay
-    done
-    if ! $success ; then
-        ceph osd crush dump --format=json-pretty
-        return 1
-    fi
-    # bring them down, the "ceph" commands will try to hunt for other monitor in
-    # vain, after mon.a is offline
-    kill_daemons $dir || return 1
-    # rewrite the monstore with the good crush map,
-    $CEPH_ROOT/src/tools/ceph-monstore-update-crush.sh --rewrite $dir/a || return 1
-
-    run_mon $dir a --public-addr $MONA || return 1
-    run_mon $dir b --public-addr $MONB || return 1
-    run_mon $dir c --public-addr $MONC || return 1
-    # the buckets are back
-    test $(ceph osd crush dump --format=json | \
-           jq '.buckets | length > 0') == true || return 1
-    CEPH_ARGS=$CEPH_ARGS_orig
 }
 
 main osd-crush "$@"
