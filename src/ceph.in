@@ -886,10 +886,7 @@ def main():
         if not timeout:
             timeout = 5
 
-        hdr('Monitor commands:')
-        print('[Contacting monitor, timeout after %d seconds]' % timeout)
-
-    if childargs and childargs[0] == 'ping':
+    if childargs and childargs[0] == 'ping' and not parsed_args.help:
         if len(childargs) < 2:
             print('"ping" requires a monitor name as argument: "ping mon.<id>"', file=sys.stderr)
             return 1
@@ -897,7 +894,7 @@ def main():
         # for completion let timeout be really small
         timeout = 3
     try:
-        if childargs and childargs[0] == 'ping':
+        if childargs and childargs[0] == 'ping' and not parsed_args.help:
             return ping_monitor(cluster_handle, childargs[1], timeout)
         run_in_thread(cluster_handle.connect, timeout=timeout)
     except KeyboardInterrupt:
@@ -909,7 +906,12 @@ def main():
     except Exception as e:
         print(str(e), file=sys.stderr)
         return 1
+
     if parsed_args.help:
+        hdr('Monitor commands:')
+        if verbose:
+            print('[Contacting monitor, timeout after %d seconds]' % timeout)
+
         return do_extended_help(parser, childargs, ('mon', ''), ' '.join(childargs))
 
     # implement "tell service.id help"
