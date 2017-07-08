@@ -3,7 +3,7 @@
 ===============
 
 v12.1.0 Luminous (RC)
-====================
+=====================
 
 This is the first release candidate for Luminous, the next long term
 stable release.
@@ -295,7 +295,7 @@ Major Changes from Jewel
 
 Upgrade from Jewel or Kraken
 ----------------------------
-.. _Upgrading
+.. _Upgrading:
 
 #. Ensure that the ``sortbitwise`` flag is enabled::
 
@@ -594,7 +594,7 @@ Notable Changes since v12.0.3
 * cmake: check the existence of gperf before using it (`pr#15164 <https://github.com/ceph/ceph/pull/15164>`_, Kefu Chai)
 * cmake: do not add dependencies to INTERFACE library on cmake < 3.3 (`pr#15813 <https://github.com/ceph/ceph/pull/15813>`_, Kefu Chai)
 * cmake: do not link libcommon against some libs (`pr#15340 <https://github.com/ceph/ceph/pull/15340>`_, Willem Jan Withagen)
-* cmake: exclude *.css while generating ctags (`pr#15663 <https://github.com/ceph/ceph/pull/15663>`_, Leo Zhang)
+* cmake: exclude \*.css while generating ctags (`pr#15663 <https://github.com/ceph/ceph/pull/15663>`_, Leo Zhang)
 * cmake: fix boost components for WITH_SYSTEM_BOOST (`pr#15160 <https://github.com/ceph/ceph/pull/15160>`_, Bassam Tabbara)
 * cmake: improved build speed by 5x when using ccache (`pr#15147 <https://github.com/ceph/ceph/pull/15147>`_, Bassam Tabbara)
 * cmake: link against fcgi only if enabled (`pr#15425 <https://github.com/ceph/ceph/pull/15425>`_, Yao Zongyou)
@@ -708,7 +708,7 @@ Notable Changes since v12.0.3
 * core: src/ceph.in: Use env(CEPH_DEV) to suppress noise from ceph (`pr#14746 <https://github.com/ceph/ceph/pull/14746>`_, Willem Jan Withagen)
 * core,tests: ceph-disk: sensible default for block.db (`pr#15576 <https://github.com/ceph/ceph/pull/15576>`_, Loic Dachary)
 * core,tests: ceph_test_rados_api_*: wait for snap trim on ENOENT during cleanup (`issue#19948 <http://tracker.ceph.com/issues/19948>`_, `pr#15638 <https://github.com/ceph/ceph/pull/15638>`_, Sage Weil)
-* core,tests: qa/suites/rados/*/at-end: wait for healthy before scrubbing (`pr#15245 <https://github.com/ceph/ceph/pull/15245>`_, Sage Weil)
+* core,tests: qa/suites/rados/\*/at-end: wait for healthy before scrubbing (`pr#15245 <https://github.com/ceph/ceph/pull/15245>`_, Sage Weil)
 * core,tests: qa/suites/rados/singleton-nomsg/health-warnings: behave on ext4 (`issue#20043 <http://tracker.ceph.com/issues/20043>`_, `pr#15207 <https://github.com/ceph/ceph/pull/15207>`_, Sage Weil)
 * core,tests: qa/suites/rados: temporarily remove scrub_test from basic/ until post-luminous (`issue#19935 <http://tracker.ceph.com/issues/19935>`_, `pr#15202 <https://github.com/ceph/ceph/pull/15202>`_, Sage Weil)
 * core,tests: qa/suites/upgrade/kraken-x: enable experimental for bluestore (`pr#15359 <https://github.com/ceph/ceph/pull/15359>`_, Sage Weil)
@@ -834,7 +834,7 @@ Notable Changes since v12.0.3
 * mon: fix mon_keyvaluedb application (`pr#15059 <https://github.com/ceph/ceph/pull/15059>`_, Sage Weil)
 * mon: Incorrect expression in PGMap::get_health() (`pr#15648 <https://github.com/ceph/ceph/pull/15648>`_, Jos Collin)
 * mon: it's no need to get pg action_primary osd twice in pg scrub (`pr#15313 <https://github.com/ceph/ceph/pull/15313>`_, linbing)
-* mon: Log errors at startup (`issue#14088 <http://tracker.ceph.com/issues/14088>`_, `pr#15723 <https://
+* mon: Log errors at startup (`issue#14088 <http://tracker.ceph.com/issues/14088>`_, `pr#15723 <https://github.com/ceph/ceph/pull/15723>`_, Ziye Yang)
 * mon: mon/MgrMonitor: send digests only if is_active() (`pr#15109 <https://github.com/ceph/ceph/pull/15109>`_, Kefu Chai)
 * mon: mon/MonClient: cancel pending commands on shutdown (`issue#20051 <http://tracker.ceph.com/issues/20051>`_, `pr#15227 <https://github.com/ceph/ceph/pull/15227>`_, Kefu Chai, Sage Weil)
 * mon: {mon,osd,mds} {versions,count-metadata} (`pr#15436 <https://github.com/ceph/ceph/pull/15436>`_, Sage Weil)
@@ -947,7 +947,7 @@ Notable Changes since v12.0.3
 * tests: qa/suites/rados/thrash: make sure osds have map before legacy scrub (`pr#15117 <https://github.com/ceph/ceph/pull/15117>`_, Sage Weil)
 * tests: qa/suites/rados/upgrade: restart mds (`pr#15517 <https://github.com/ceph/ceph/pull/15517>`_, Sage Weil)
 * tests: qa/tasks/ceph_manager: 'ceph $service tell ...' is obsolete (`pr#15252 <https://github.com/ceph/ceph/pull/15252>`_, Sage Weil)
-* tests: qa/tasks/rebuild_mondb: grant "mgr:allow *" to client.admin (`issue#19439 <http://tracker.ceph.com/issues/19439>`_, `pr#14284 <https://github.com/ceph/ceph/pull/14284>`_, Kefu Chai)
+* tests: qa/tasks/rebuild_mondb: grant "mgr:allow \*" to client.admin (`issue#19439 <http://tracker.ceph.com/issues/19439>`_, `pr#14284 <https://github.com/ceph/ceph/pull/14284>`_, Kefu Chai)
 * tests: qa/tasks/repair_test: unset flags we set (`pr#15296 <https://github.com/ceph/ceph/pull/15296>`_, Sage Weil)
 * tests: qa/workunits/ceph-helpers.sh: use syntax understood by jq 1.3 (`pr#15530 <https://github.com/ceph/ceph/pull/15530>`_, Kefu Chai)
 * tests: Rename FileJournal object to distinguish (`pr#15279 <https://github.com/ceph/ceph/pull/15279>`_, Jos Collin)
@@ -1241,7 +1241,7 @@ Notable Changes
 * rbd,tests: qa: krbd write-after-checksum tests (`pr#14836 <https://github.com/ceph/ceph/pull/14836>`_, Ilya Dryomov)
 * rbd,tests: qa/workunits/rbd: increased trash deferment period (`pr#14846 <https://github.com/ceph/ceph/pull/14846>`_, Jason Dillaman)
 * rbd,tests: qa/workunits: switch to OpenStack Ocata release for RBD testing (`pr#14465 <https://github.com/ceph/ceph/pull/14465>`_, Jason Dillaman)
-* rbd,tests: test/librbd/test_librbd.cc: set *features even if RBD_FEATURES is unset (`issue#19865 <http://tracker.ceph.com/issues/19865>`_, `pr#14965 <https://github.com/ceph/ceph/pull/14965>`_, Dan Mick)
+* rbd,tests: test/librbd/test_librbd.cc: set \*features even if RBD_FEATURES is unset (`issue#19865 <http://tracker.ceph.com/issues/19865>`_, `pr#14965 <https://github.com/ceph/ceph/pull/14965>`_, Dan Mick)
 * rbd,tests: test/librbd/test_notify.py: don't disable feature in slave (`issue#19716 <http://tracker.ceph.com/issues/19716>`_, `pr#14751 <https://github.com/ceph/ceph/pull/14751>`_, Mykola Golub)
 * rbd,tests: test/rbd_mirror: race in TestMockLeaderWatcher.AcquireError (`issue#19405 <http://tracker.ceph.com/issues/19405>`_, `pr#14741 <https://github.com/ceph/ceph/pull/14741>`_, Mykola Golub)
 * rbd,tests: test: remove hard-coded image name from RBD metadata test (`issue#19798 <http://tracker.ceph.com/issues/19798>`_, `pr#14848 <https://github.com/ceph/ceph/pull/14848>`_, Jason Dillaman)
@@ -1547,7 +1547,7 @@ Notable Changes
 * msg/async: Postpone bind if network stack is not ready (`pr#14414 <https://github.com/ceph/ceph/pull/14414>`_, Amir Vadai, Haomai Wang)
 * msg: src/msg/async: Update fix broken compilation for Posix (`pr#14336 <https://github.com/ceph/ceph/pull/14336>`_, Sarit Zubakov)
 * NVMEDevice: remove unnessary dpdk header file (`pr#14650 <https://github.com/ceph/ceph/pull/14650>`_, optimistyzy)
-* osd: add "heap *" admin command (`issue#15475 <http://tracker.ceph.com/issues/15475>`_, `pr#13073 <https://github.com/ceph/ceph/pull/13073>`_, Jesse Williamson)
+* osd: add "heap \*" admin command (`issue#15475 <http://tracker.ceph.com/issues/15475>`_, `pr#13073 <https://github.com/ceph/ceph/pull/13073>`_, Jesse Williamson)
 * osd: add override in headers files (`pr#13962 <https://github.com/ceph/ceph/pull/13962>`_, liuchang0812)
 * osd: Cleanup-Updated OSDMap.cc with C++11 style range-for loops (`pr#14381 <https://github.com/ceph/ceph/pull/14381>`_, Jos Collin)
 * osd: combine unstable stats with info.stats when publish stats to osd (`pr#14060 <https://github.com/ceph/ceph/pull/14060>`_, Mingxin Liu)
@@ -4628,7 +4628,7 @@ Notable Changes
 * tests: Add test for global static non-POD segfault (`pr#10486 <http://github.com/ceph/ceph/pull/10486>`_, Brad Hubbard)
 * tests: populate /dev/disk/by-partuuid for scsi_debug (`issue#17100 <http://tracker.ceph.com/issues/17100>`_, `pr#10824 <http://github.com/ceph/ceph/pull/10824>`_, Loic Dachary)
 * tests: use a fixture for memstore clone testing (`pr#11190 <http://github.com/ceph/ceph/pull/11190>`_, Kefu Chai)
-* tests: run-*make-check.sh: Make DRY_RUN actually mean a dry run (`pr#11074 <http://github.com/ceph/ceph/pull/11074>`_, Brad Hubbard)
+* tests: run-\*make-check.sh: Make DRY_RUN actually mean a dry run (`pr#11074 <http://github.com/ceph/ceph/pull/11074>`_, Brad Hubbard)
 * tests: run-cmake-check.sh: Actually run the tests (`pr#11075 <http://github.com/ceph/ceph/pull/11075>`_, Brad Hubbard)
 * tests: run-cmake-check.sh: Init submodules (`pr#11091 <http://github.com/ceph/ceph/pull/11091>`_, Brad Hubbard)
 * tests: run-make-check.sh: Make DRY_RUN actually do a dry run (`pr#11092 <http://github.com/ceph/ceph/pull/11092>`_, Brad Hubbard)
@@ -5009,7 +5009,7 @@ For more detailed information, see :download:`the complete changelog <changelog/
 * mon: the %USED of ceph df is wrong (`issue#16933 <http://tracker.ceph.com/issues/16933>`_, `pr#10860 <http://github.com/ceph/ceph/pull/10860>`_, Kefu Chai)
 * osd: condition OSDMap encoding on features (`issue#18015 <http://tracker.ceph.com/issues/18015>`_, `pr#12167 <http://github.com/ceph/ceph/pull/12167>`_, Sage Weil)
 * osd: PG::_update_calc_stats wrong for CRUSH_ITEM_NONE up set items (`issue#16998 <http://tracker.ceph.com/issues/16998>`_, `pr#10883 <http://github.com/ceph/ceph/pull/10883>`_, Samuel Just)
-* osd: PG::choose_acting valgrind error or ./common/hobject.h: 182: FAILED assert(!max || (*this == hobject_t(hobject_t::get_max()))) (`issue#13967 <http://tracker.ceph.com/issues/13967>`_, `pr#10885 <http://github.com/ceph/ceph/pull/10885>`_, Tao Chang)
+* osd: PG::choose_acting valgrind error or ./common/hobject.h: 182: FAILED assert(!max || (\*this == hobject_t(hobject_t::get_max()))) (`issue#13967 <http://tracker.ceph.com/issues/13967>`_, `pr#10885 <http://github.com/ceph/ceph/pull/10885>`_, Tao Chang)
 * osd: Potential crash during journal::Replay shut down (`issue#16433 <http://tracker.ceph.com/issues/16433>`_, `pr#10645 <http://github.com/ceph/ceph/pull/10645>`_, Jason Dillaman)
 * osd: add peer_addr in heartbeat_check log message (`issue#15762 <http://tracker.ceph.com/issues/15762>`_, `pr#9739 <http://github.com/ceph/ceph/pull/9739>`_, Vikhyat Umrao, Sage Weil)
 * osd: adjust scrub boundary to object without SnapSet (`issue#17470 <http://tracker.ceph.com/issues/17470>`_, `pr#11311 <http://github.com/ceph/ceph/pull/11311>`_, Samuel Just)
@@ -7052,7 +7052,7 @@ Notable Changes since Infernalis
 * tests: unittest_bufferlist: fix hexdump test (`pr#7152 <http://github.com/ceph/ceph/pull/7152>`_, Sage Weil)
 * tests: unittest_ipaddr: fix segv (`pr#7154 <http://github.com/ceph/ceph/pull/7154>`_, Sage Weil)
 * test/system/rados_list_parallel: print oid if rados_write fails (`issue#15240 <http://tracker.ceph.com/issues/15240>`_, `pr#8309 <http://github.com/ceph/ceph/pull/8309>`_, Kefu Chai)
-* test/system/*: use dynamically generated pool name (`issue#15240 <http://tracker.ceph.com/issues/15240>`_, `pr#8318 <http://github.com/ceph/ceph/pull/8318>`_, Kefu Chai)
+* test/system/\*: use dynamically generated pool name (`issue#15240 <http://tracker.ceph.com/issues/15240>`_, `pr#8318 <http://github.com/ceph/ceph/pull/8318>`_, Kefu Chai)
 * test/test-erasure-code.sh: disable pg_temp priming (`issue#15211 <http://tracker.ceph.com/issues/15211>`_, `pr#8260 <http://github.com/ceph/ceph/pull/8260>`_, Sage Weil)
 * test: TestMirroringWatcher test cases were not closing images (`pr#8435 <http://github.com/ceph/ceph/pull/8435>`_, Jason Dillaman)
 * test/TestPGLog: fix the FTBFS (`issue#14930 <http://tracker.ceph.com/issues/14930>`_, `pr#7855 <http://github.com/ceph/ceph/pull/7855>`_, Kefu Chai)
@@ -7766,7 +7766,7 @@ Notable Changes since v10.1.0
 * script: subscription-manager support (`issue#14972 <http://tracker.ceph.com/issues/14972>`_, `pr#7907 <http://github.com/ceph/ceph/pull/7907>`_, Loic Dachary)
 * set 128MB tcmalloc cache size by bytes (`pr#8427 <http://github.com/ceph/ceph/pull/8427>`_, Star Guo)
 * systemd: set up environment in rbdmap unit file (`issue#14984 <http://tracker.ceph.com/issues/14984>`_, `pr#8222 <http://github.com/ceph/ceph/pull/8222>`_, Nathan Cutler)
-* test/system/*: use dynamically generated pool name (`issue#15240 <http://tracker.ceph.com/issues/15240>`_, `pr#8318 <http://github.com/ceph/ceph/pull/8318>`_, Kefu Chai)
+* test/system/\*: use dynamically generated pool name (`issue#15240 <http://tracker.ceph.com/issues/15240>`_, `pr#8318 <http://github.com/ceph/ceph/pull/8318>`_, Kefu Chai)
 * test/system/rados_list_parallel: print oid if rados_write fails (`issue#15240 <http://tracker.ceph.com/issues/15240>`_, `pr#8309 <http://github.com/ceph/ceph/pull/8309>`_, Kefu Chai)
 * test/test-erasure-code.sh: disable pg_temp priming (`issue#15211 <http://tracker.ceph.com/issues/15211>`_, `pr#8260 <http://github.com/ceph/ceph/pull/8260>`_, Sage Weil)
 * test/test_pool_create.sh: fix port (`pr#8361 <http://github.com/ceph/ceph/pull/8361>`_, Sage Weil)
@@ -10609,7 +10609,7 @@ Other Notable Changes
 * msgr: OpTracker needs to release the message throttle in _unregistered (`issue#14248 <http://tracker.ceph.com/issues/14248>`_, `pr#11938 <http://github.com/ceph/ceph/pull/11938>`_, Samuel Just)
 * msgr: simple/Pipe: error decoding addr (`issue#18072 <http://tracker.ceph.com/issues/18072>`_, `pr#12266 <http://github.com/ceph/ceph/pull/12266>`_, Sage Weil)
 * osd: PG::_update_calc_stats wrong for CRUSH_ITEM_NONE up set items (`issue#16998 <http://tracker.ceph.com/issues/16998>`_, `pr#11933 <http://github.com/ceph/ceph/pull/11933>`_, Samuel Just)
-* osd: PG::choose_acting valgrind error or ./common/hobject.h: 182: FAILED assert(!max || (*this == hobject_t(hobject_t::get_max()))) (`issue#13967 <http://tracker.ceph.com/issues/13967>`_, `pr#11932 <http://github.com/ceph/ceph/pull/11932>`_, Tao Chang)
+* osd: PG::choose_acting valgrind error or ./common/hobject.h: 182: FAILED assert(!max || (\*this == hobject_t(hobject_t::get_max()))) (`issue#13967 <http://tracker.ceph.com/issues/13967>`_, `pr#11932 <http://github.com/ceph/ceph/pull/11932>`_, Tao Chang)
 * osd: ReplicatedBackend::build_push_op: add a second config to limit omap entries/chunk independently of object data (`issue#16128 <http://tracker.ceph.com/issues/16128>`_, `pr#12417 <http://github.com/ceph/ceph/pull/12417>`_, Wanlong Gao)
 * osd: crash on EIO during deep-scrubbing (`issue#16034 <http://tracker.ceph.com/issues/16034>`_, `pr#11935 <http://github.com/ceph/ceph/pull/11935>`_, Nathan Cutler)
 * osd: filestore: FALLOC_FL_PUNCH_HOLE must be used with FALLOC_FL_KEEP_SIZE (`issue#18446 <http://tracker.ceph.com/issues/18446>`_, `pr#13041 <http://github.com/ceph/ceph/pull/13041>`_, xinxin shu)
@@ -10677,7 +10677,7 @@ For more detailed information, see :download:`the complete changelog <changelog/
 Notable Changes
 ---------------
 
-* build/ops: rocksdb do not link against tcmalloc if it's disabled (`issue#14799 <http://tracker.ceph.com/issues/14799`_, `pr#10750 <http://github.com/ceph/ceph/pull/10750>`_, Sage Weil, Kefu Chai)
+* build/ops: rocksdb do not link against tcmalloc if it's disabled (`issue#14799 <http://tracker.ceph.com/issues/14799>`_, `pr#10750 <http://github.com/ceph/ceph/pull/10750>`_, Sage Weil, Kefu Chai)
 * build/ops: Add -D_LARGEFILE64_SOURCE to Linux build. (`issue#16611 <http://tracker.ceph.com/issues/16611>`_, `pr#10182 <http://github.com/ceph/ceph/pull/10182>`_, Ira Cooper)
 * build/ops: boost uuid makes valgrind complain (`issue#12736 <http://tracker.ceph.com/issues/12736>`_, `pr#9741 <http://github.com/ceph/ceph/pull/9741>`_, Sage Weil, Rohan Mars)
 * build/ops: ceph-disk s/by-parttype-uuid/by-parttypeuuid/ (`issue#15867 <http://tracker.ceph.com/issues/15867>`_, `pr#9107 <http://github.com/ceph/ceph/pull/9107>`_, Nathan Cutler)

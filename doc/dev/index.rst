@@ -1203,7 +1203,7 @@ Since testing in the cloud is done using the `ceph-workbench
 ceph-qa-suite`_ tool, you will need to install that first. It is designed
 to be installed via Docker, so if you don't have Docker running on your
 development machine, take care of that first. You can follow `the official
-tutorial<https://docs.docker.com/engine/installation/>`_ to install if
+tutorial <https://docs.docker.com/engine/installation/>`_ to install if
 you have not installed yet.
 
 Once Docker is up and running, install ``ceph-workbench`` by following the
@@ -1433,7 +1433,7 @@ The following instructions should work on jewel and above.
 Step 1 - build Ceph
 -------------------
 
-Refer to :doc:`install/build-ceph`.
+Refer to :doc:`/install/build-ceph`.
 
 You can do step 2 separately while it is building.
 
