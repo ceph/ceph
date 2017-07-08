@@ -130,7 +130,6 @@ int KernelDevice::open(const string& p)
   } else {
     size = st.st_size;
   }
-  size &= ~(block_size);
 
   {
     char partition[PATH_MAX], devname[PATH_MAX];
