@@ -62,7 +62,7 @@ def task(ctx, config):
               name: teuthologyprofile
               k: 2
               m: 1
-              ruleset-failure-domain: osd
+              crush-failure-domain: osd
             pool_snaps: true
 	    write_fadvise_dontneed: true
             runs: 10

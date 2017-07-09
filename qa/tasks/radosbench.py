@@ -29,7 +29,7 @@ def task(ctx, config):
           name: teuthologyprofile
           k: 2
           m: 1
-          ruleset-failure-domain: osd
+          crush-failure-domain: osd
         cleanup: false (defaults to true)
         type: <write|seq|rand> (defaults to write)
     example:

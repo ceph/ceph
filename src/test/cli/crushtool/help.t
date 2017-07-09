@@ -62,6 +62,11 @@
                            create crush rule <name> to start from <root>,
                            replicate across buckets of type <type>, using
                            a choose mode of <firstn|indep>
+     -i mapfn --create-replicated-rule name root type
+                           create crush rule <name> to start from <root>,
+                           replicate across buckets of type <type>
+     --device-class <class>
+                           use device class <class> for new rule
      -i mapfn --remove-rule name
                            remove the specified crush rule
   

@@ -5,6 +5,6 @@ overrides:
       name: testprofile
       k: 3
       m: 1
-      ruleset-failure-domain: osd
+      crush-failure-domain: osd
   s3tests:
     slow_backend: true

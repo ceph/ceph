@@ -713,7 +713,7 @@ def main(argv):
 
     print("Created Replicated pool #{repid}".format(repid=REPID))
 
-    cmd = "{path}/ceph osd erasure-code-profile set {prof} ruleset-failure-domain=osd".format(prof=PROFNAME, path=CEPH_BIN)
+    cmd = "{path}/ceph osd erasure-code-profile set {prof} crush-failure-domain=osd".format(prof=PROFNAME, path=CEPH_BIN)
     logging.debug(cmd)
     call(cmd, shell=True, stdout=nullfd, stderr=nullfd)
     cmd = "{path}/ceph osd erasure-code-profile get {prof}".format(prof=PROFNAME, path=CEPH_BIN)

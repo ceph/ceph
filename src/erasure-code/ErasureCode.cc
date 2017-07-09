@@ -22,10 +22,56 @@
 
 #include "common/strtol.h"
 #include "include/buffer.h"
+#include "crush/CrushWrapper.h"
+#include "osd/osd_types.h"
 
 using namespace std;
 
 const unsigned ErasureCode::SIMD_ALIGN = 32;
+
+#define DEFAULT_RULE_ROOT "default"
+#define DEFAULT_RULE_FAILURE_DOMAIN "host"
+
+int ErasureCode::init(
+  ErasureCodeProfile &profile,
+  std::ostream *ss)
+{
+  int err = 0;
+  err |= to_string("crush-root", profile,
+		   &rule_root,
+		   DEFAULT_RULE_ROOT, ss);
+  err |= to_string("crush-failure-domain", profile,
+		   &rule_failure_domain,
+		   DEFAULT_RULE_FAILURE_DOMAIN, ss);
+  err |= to_string("crush-device-class", profile,
+		   &rule_device_class,
+		   "", ss);
+  if (err)
+    return err;
+  _profile = profile;
+  return 0;
+}
+
+int ErasureCode::create_rule(
+  const std::string &name,
+  CrushWrapper &crush,
+  std::ostream *ss) const
+{
+  int ruleid = crush.add_simple_rule(
+    name,
+    rule_root,
+    rule_failure_domain,
+    rule_device_class,
+    "indep",
+    pg_pool_t::TYPE_ERASURE,
+    ss);
+
+  if (ruleid < 0)
+    return ruleid;
+
+  crush.set_rule_mask_max_size(ruleid, get_chunk_count());
+  return ruleid;
+}
 
 int ErasureCode::sanity_check_k(int k, ostream *ss)
 {
