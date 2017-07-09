@@ -971,6 +971,31 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
 			  << "required " << ceph_release_name(mv);
 	pending_inc.new_require_min_compat_client = mv;
       }
+
+      if (osdmap.require_osd_release < CEPH_RELEASE_LUMINOUS) {
+	// convert ec profile ruleset-* -> crush-*
+	for (auto& p : tmp.erasure_code_profiles) {
+	  bool changed = false;
+	  map<string,string> newprofile;
+	  for (auto& q : p.second) {
+	    if (q.first.find("ruleset-") == 0) {
+	      string key = "crush-";
+	      key += q.first.substr(8);
+	      newprofile[key] = q.second;
+	      changed = true;
+	      dout(20) << " updating ec profile " << p.first
+		       << " key " << q.first << " -> " << key << dendl;
+	    } else {
+	      newprofile[q.first] = q.second;
+	    }
+	  }
+	  if (changed) {
+	    dout(10) << " updated ec profile " << p.first << ": "
+		     << newprofile << dendl;
+	    pending_inc.new_erasure_code_profiles[p.first] = newprofile;
+	  }
+	}
+      }
     }
   }
 
@@ -5248,7 +5273,7 @@ int OSDMonitor::crush_rule_create_erasure(const string &name,
       return err;
     }
 
-    err = erasure_code->create_ruleset(name, newcrush, ss);
+    err = erasure_code->create_rule(name, newcrush, ss);
     erasure_code.reset();
     if (err < 0)
       return err;
@@ -7812,8 +7837,48 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       ss << "rule " << name << " already exists";
       err = 0;
     } else {
-      int ruleno = newcrush.add_simple_rule(name, root, type, mode,
+      int ruleno = newcrush.add_simple_rule(name, root, type, "", mode,
 					       pg_pool_t::TYPE_REPLICATED, &ss);
+      if (ruleno < 0) {
+	err = ruleno;
+	goto reply;
+      }
+
+      pending_inc.crush.clear();
+      newcrush.encode(pending_inc.crush, mon->get_quorum_con_features());
+    }
+    getline(ss, rs);
+    wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, 0, rs,
+					      get_last_committed() + 1));
+    return true;
+
+  } else if (prefix == "osd crush rule create-replicated") {
+    string name, root, type, device_class;
+    cmd_getval(g_ceph_context, cmdmap, "name", name);
+    cmd_getval(g_ceph_context, cmdmap, "root", root);
+    cmd_getval(g_ceph_context, cmdmap, "type", type);
+    cmd_getval(g_ceph_context, cmdmap, "class", device_class);
+
+    if (osdmap.crush->rule_exists(name)) {
+      // The name is uniquely associated to a ruleid and the rule it contains
+      // From the user point of view, the rule is more meaningfull.
+      ss << "rule " << name << " already exists";
+      err = 0;
+      goto reply;
+    }
+
+    CrushWrapper newcrush;
+    _get_pending_crush(newcrush);
+
+    if (newcrush.rule_exists(name)) {
+      // The name is uniquely associated to a ruleid and the rule it contains
+      // From the user point of view, the rule is more meaningfull.
+      ss << "rule " << name << " already exists";
+      err = 0;
+    } else {
+      int ruleno = newcrush.add_simple_rule(
+	name, root, type, device_class,
+	"firstn", pg_pool_t::TYPE_REPLICATED, &ss);
       if (ruleno < 0) {
 	err = ruleno;
 	goto reply;

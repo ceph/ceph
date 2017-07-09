@@ -909,7 +909,7 @@ TEST(CrushWrapper, dump_rules) {
   }
 
   string name("NAME");
-  int rule = c->add_simple_rule(name, root_name, failure_domain_type,
+  int rule = c->add_simple_rule(name, root_name, failure_domain_type, "",
 				   "firstn", pg_pool_t::TYPE_ERASURE);
   EXPECT_EQ(0, rule);
 
@@ -1032,7 +1032,8 @@ TEST(CrushWrapper, choose_args_compat) {
   item = 2;
   c.insert_item(g_ceph_context, item, weight, "osd.2", loc);
 
-  assert(c.add_simple_rule("rule1", "r11", "host", "firstn", pg_pool_t::TYPE_ERASURE) >= 0);
+  assert(c.add_simple_rule("rule1", "r11", "host", "",
+			   "firstn", pg_pool_t::TYPE_ERASURE) >= 0);
 
   int id = c.get_item_id("b1");
 
@@ -1102,7 +1103,8 @@ TEST(CrushWrapper, remove_unused_root) {
   loc["root"] = "default";
   c.insert_item(g_ceph_context, item, weight, "osd.2", loc);
 
-  assert(c.add_simple_rule("rule1", "r11", "host", "firstn", pg_pool_t::TYPE_ERASURE) >= 0);
+  assert(c.add_simple_rule("rule1", "r11", "host", "",
+			   "firstn", pg_pool_t::TYPE_ERASURE) >= 0);
   ASSERT_TRUE(c.name_exists("default"));
   ASSERT_TRUE(c.name_exists("r11"));
   ASSERT_TRUE(c.name_exists("r12"));
@@ -1346,7 +1348,8 @@ TEST(CrushWrapper, try_remap_rule) {
   {
     cout << "take + choose + emit" << std::endl;
     ostringstream err;
-    int rule = c.add_simple_rule("one", "default", "osd", "firstn", 0, &err);
+    int rule = c.add_simple_rule("one", "default", "osd", "",
+				 "firstn", 0, &err);
     ASSERT_EQ(rule, 0);
 
     vector<int> orig = { 0, 3, 9 };
@@ -1382,7 +1385,8 @@ TEST(CrushWrapper, try_remap_rule) {
   {
     cout << "take + chooseleaf + emit" << std::endl;
     ostringstream err;
-    int rule = c.add_simple_rule("two", "default", "host", "firstn", 0, &err);
+    int rule = c.add_simple_rule("two", "default", "host", "",
+				 "firstn", 0, &err);
     ASSERT_EQ(rule, 1);
 
     vector<int> orig = { 0, 3, 9 };

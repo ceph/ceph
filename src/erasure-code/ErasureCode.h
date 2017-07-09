@@ -33,16 +33,22 @@ namespace ceph {
     std::vector<int> chunk_mapping;
     ErasureCodeProfile _profile;
 
+    // for CRUSH rule
+    std::string rule_root;
+    std::string rule_failure_domain;
+    std::string rule_device_class;
+
     ~ErasureCode() override {}
 
-    int init(ErasureCodeProfile &profile, std::ostream *ss) override {
-      _profile = profile;
-      return 0;
-    }
+    int init(ErasureCodeProfile &profile, std::ostream *ss) override;
 
     const ErasureCodeProfile &get_profile() const override {
       return _profile;
     }
+
+    int create_rule(const std::string &name,
+		    CrushWrapper &crush,
+		    std::ostream *ss) const;
 
     int sanity_check_k(int k, std::ostream *ss);
 

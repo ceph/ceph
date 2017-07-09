@@ -57,7 +57,7 @@ def cmd_erasure_code_profile(profile_name, profile):
 
     If profile is {}, it is replaced with 
 
-      { 'k': '2', 'm': '1', 'ruleset-failure-domain': 'osd'}
+      { 'k': '2', 'm': '1', 'crush-failure-domain': 'osd'}
 
     for backward compatibility. In previous versions of teuthology,
     these values were hardcoded as function arguments and some yaml
@@ -71,7 +71,7 @@ def cmd_erasure_code_profile(profile_name, profile):
         profile = {
             'k': '2',
             'm': '1',
-            'ruleset-failure-domain': 'osd'
+            'crush-failure-domain': 'osd'
         }
     return [
         'osd', 'erasure-code-profile', 'set',

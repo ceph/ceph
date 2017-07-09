@@ -224,9 +224,14 @@ Major Changes from Kraken
     - ``ceph osd reweightn`` will specify the `reweight` values for
       multiple OSDs in a single command.  This is equivalent to a series of
       ``ceph osd reweight`` commands.
-    - ``ceph crush class {create,rm,ls,rename}`` manage the new CRUSH *device
-      class* feature.  ``ceph crush set-device-class <osd> <class>``
-      will set the class for a particular device.
+    - ``ceph osd crush class {create,rm,ls,rename}`` manage the new
+      CRUSH *device class* feature.  ``ceph crush set-device-class
+      <osd> <class>`` will set the class for a particular device.
+    - ``ceph osd crush rule create-replicated`` replaces the old
+      ``ceph osd crush rule create-simple`` command to create a CRUSH
+      rule for a replicated pool.  Notably it takes a `class` argument
+      for the *device class* the rule should target (e.g., `ssd` or
+      `hdd`).
     - ``ceph mon feature ls`` will list monitor features recorded in the
       MonMap.  ``ceph mon feature set`` will set an optional feature (none of
       these exist yet).
@@ -303,6 +308,8 @@ Upgrade from Jewel or Kraken
 
 #. Make sure your cluster is stable and healthy (no down or
    recoverying OSDs).  (Optional, but recommended.)
+
+#. Do not create any new erasure-code pools while upgrading the monitors.
 
 #. Set the ``noout`` flag for the duration of the upgrade. (Optional
    but recommended.)::
@@ -404,6 +411,15 @@ Upgrade compatibility notes, Kraken to Luminous
   The code is mature and unlikely to change, but we are only
   continuing to test the Jewel stable branch against btrfs.  We
   recommend moving these OSDs to FileStore with XFS or BlueStore.
+* The ``ruleset-*`` properties for the erasure code profiles have been
+  renamed to ``crush-*`` to (1) move away from the obsolete 'ruleset'
+  term and to be more clear about their purpose.  There is also a new
+  optional ``crush-device-class`` property to specify a CRUSH device
+  class to use for the erasure coded pool.  Existing erasure code
+  profiles will be converted automatically when upgrade completes
+  (when the ``ceph osd require-osd-release luminous`` command is run)
+  but any provisioning tools that create erasure coded pools may need
+  to be updated.
 * When assigning a network to the public network and not to
   the cluster network the network specification of the public
   network will be used for the cluster network as well.

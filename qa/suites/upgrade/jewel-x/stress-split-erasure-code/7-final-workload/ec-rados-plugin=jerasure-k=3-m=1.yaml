@@ -21,7 +21,7 @@ tasks:
       k: 3
       m: 1
       technique: reed_sol_van
-      ruleset-failure-domain: osd
+      crush-failure-domain: osd
     op_weights:
       read: 100
       write: 0

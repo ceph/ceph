@@ -60,7 +60,7 @@ public:
 
     // Create an EC ruleset and a pool using it
     int r = osdmap.crush->add_simple_rule(
-      "erasure", "default", "osd",
+      "erasure", "default", "osd", "",
       "indep", pg_pool_t::TYPE_ERASURE,
       &cerr);
 
