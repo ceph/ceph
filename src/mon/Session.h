@@ -206,7 +206,7 @@ struct MonSessionMap {
     } else {
       sub = new Subscription(s, what);
       s->sub_map[what] = sub;
-      
+
       if (!subs.count(what))
 	subs[what] = new xlist<Subscription*>;
       subs[what]->push_back(&sub->type_item);
@@ -227,7 +227,7 @@ inline ostream& operator<<(ostream& out, const MonSession& s)
 {
   out << "MonSession(" << s.inst << " is "
       << (s.closed ? "closed" : "open");
-  out << s.caps << ")";
+  out << " " << s.caps << ")";
   return out;
 }
 
