@@ -9,7 +9,6 @@
 #include "common/WorkQueue.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/cache/file/ImageStore.h"
-#include "librbd/cache/file/JournalStore.h"
 #include "librbd/cache/file/MetaStore.h"
 #include "librbd/cache/file/StupidPolicy.h"
 #include "librbd/cache/file/Types.h"
@@ -424,58 +423,6 @@ struct C_ModifyBlockBuffer : public BlockGuard::C_BlockIORequest {
 };
 
 template <typename I>
-struct C_AppendEventToJournal : public BlockGuard::C_BlockIORequest {
-  JournalStore<I> &journal_store;
-  uint64_t tid;
-  uint64_t block;
-  IOType io_type;
-
-  C_AppendEventToJournal(CephContext *cct, JournalStore<I> &journal_store,
-                         uint64_t tid, uint64_t block, IOType io_type,
-                         C_BlockIORequest *next_block_request)
-    : C_BlockIORequest(cct, next_block_request),
-      journal_store(journal_store), tid(tid), block(block), io_type(io_type) {
-  }
-
-  virtual void send() override {
-    ldout(cct, 20) << "(" << get_name() << "): "
-                   << "tid=" << tid << ", "
-                   << "block=" << block << ", "
-                   << "io_type=" << io_type << dendl;
-    journal_store.append_event(tid, block, io_type, this);
-  }
-  virtual const char *get_name() const override {
-    return "C_AppendEventToJournal";
-  }
-};
-
-template <typename I>
-struct C_DemoteBlockToJournal : public BlockGuard::C_BlockIORequest {
-  JournalStore<I> &journal_store;
-  uint64_t block;
-  const bufferlist &bl;
-
-  C_DemoteBlockToJournal(CephContext *cct, JournalStore<I> &journal_store,
-                         uint64_t block, const bufferlist &bl,
-                         C_BlockIORequest *next_block_request)
-    : C_BlockIORequest(cct, next_block_request),
-      journal_store(journal_store), block(block), bl(bl) {
-  }
-
-  virtual void send() override {
-    ldout(cct, 20) << "(" << get_name() << "): "
-                   << "block=" << block << dendl;
-
-    bufferlist copy_bl;
-    copy_bl.append(bl);
-    journal_store.demote_block(block, std::move(copy_bl), this);
-  }
-  virtual const char *get_name() const override {
-    return "C_DemoteBlockToJournal";
-  }
-};
-
-template <typename I>
 struct C_ReadBlockRequest : public BlockGuard::C_BlockRequest {
   I &image_ctx;
   ImageWriteback<I> &image_writeback;
@@ -585,7 +532,6 @@ struct C_WriteBlockRequest : BlockGuard::C_BlockRequest {
   I &image_ctx;
   ImageWriteback<I> &image_writeback;
   Policy &policy;
-  JournalStore<I> &journal_store;
   ImageStore<I> &image_store;
   ReleaseBlock &release_block;
   bufferlist bl;
@@ -594,12 +540,11 @@ struct C_WriteBlockRequest : BlockGuard::C_BlockRequest {
   Buffers promote_buffers;
 
   C_WriteBlockRequest(I &image_ctx, ImageWriteback<I> &image_writeback,
-                      Policy &policy, JournalStore<I> &journal_store,
-                      ImageStore<I> &image_store, ReleaseBlock &release_block,
+                      Policy &policy, ImageStore<I> &image_store, ReleaseBlock &release_block,
                       bufferlist &&bl, uint32_t block_size, Context *on_finish)
     : C_BlockRequest(on_finish),
       image_ctx(image_ctx), image_writeback(image_writeback), policy(policy),
-      journal_store(journal_store), image_store(image_store),
+      image_store(image_store),
       release_block(release_block), bl(std::move(bl)), block_size(block_size) {
   }
 
@@ -709,7 +654,6 @@ struct C_WritebackRequest : public Context {
   I &image_ctx;
   ImageWriteback<I> &image_writeback;
   Policy &policy;
-  JournalStore<I> &journal_store;
   ImageStore<I> &image_store;
   const ReleaseBlock &release_block;
   util::AsyncOpTracker &async_op_tracker;
@@ -722,14 +666,13 @@ struct C_WritebackRequest : public Context {
   bufferlist bl;
 
   C_WritebackRequest(I &image_ctx, ImageWriteback<I> &image_writeback,
-                     Policy &policy, JournalStore<I> &journal_store,
-                     ImageStore<I> &image_store,
+                     Policy &policy, ImageStore<I> &image_store,
                      const ReleaseBlock &release_block,
                      util::AsyncOpTracker &async_op_tracker, uint64_t tid,
                      uint64_t block, IOType io_type, bool demoted,
                      uint32_t block_size)
     : image_ctx(image_ctx), image_writeback(image_writeback),
-      policy(policy), journal_store(journal_store), image_store(image_store),
+      policy(policy), image_store(image_store),
       release_block(release_block), async_op_tracker(async_op_tracker),
       tid(tid), block(block), io_type(io_type), demoted(demoted),
       block_size(block_size) {
@@ -750,11 +693,7 @@ struct C_WritebackRequest : public Context {
     Context *ctx = util::create_context_callback<
       C_WritebackRequest<I>,
       &C_WritebackRequest<I>::handle_read_from_cache>(this);
-    if (demoted) {
-      journal_store.get_writeback_block(tid, &bl, ctx);
-    } else {
       image_store.read_block(block, {{0, block_size}}, &bl, ctx);
-    }
   }
 
   void handle_read_from_cache(int r) {
@@ -809,10 +748,10 @@ struct C_WritebackRequest : public Context {
       policy.clear_dirty(block);
     }
 
-    Context *ctx = util::create_context_callback<
+    /*Context *ctx = util::create_context_callback<
       C_WritebackRequest<I>,
       &C_WritebackRequest<I>::handle_commit_event>(this);
-    journal_store.commit_event(tid, ctx);
+    journal_store.commit_event(tid, ctx);*/
   }
 
   void handle_commit_event(int r) {
@@ -902,7 +841,7 @@ void FileImageCache<I>::aio_write(Extents &&image_extents,
 
   // TODO handle fadvise flags
   BlockGuard::C_BlockRequest *req = new C_WriteBlockRequest<I>(
-    m_image_ctx, m_image_writeback, *m_policy, *m_journal_store, *m_image_store,
+    m_image_ctx, m_image_writeback, *m_policy, *m_image_store,
     m_release_block, std::move(bl), BLOCK_SIZE, on_finish);
   map_blocks(IO_TYPE_WRITE, std::move(image_extents), req);
 }
@@ -992,7 +931,7 @@ void FileImageCache<I>::init(Context *on_finish) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << dendl;
 
-  // chain the initialization of the meta, image, and journal stores
+  // chain the initialization of the meta, image stores
   Context *ctx = new FunctionContext(
     [this, on_finish](int r) {
       if (r >= 0) {
@@ -1008,19 +947,6 @@ void FileImageCache<I>::init(Context *on_finish) {
         ctx->complete(r);
         return;
       }
-
-      // TODO: do not enable journal store if writeback disabled
-      m_journal_store = new JournalStore<I>(m_image_ctx, m_block_guard,
-                                            *m_meta_store);
-      m_journal_store->init(ctx);
-    });
-  ctx = new FunctionContext(
-    [this, ctx](int r) {
-      if (r < 0) {
-        ctx->complete(r);
-        return;
-      }
-
       m_image_store = new ImageStore<I>(m_image_ctx, *m_meta_store);
       m_image_store->init(ctx);
     });
@@ -1035,10 +961,9 @@ void FileImageCache<I>::shut_down(Context *on_finish) {
 
   // TODO flush all in-flight IO and pending writeback prior to shut down
 
-  // chain the shut down of the journal, image, and meta stores
+  // chain the shut down of the image, and meta stores
   Context *ctx = new FunctionContext(
     [this, on_finish](int r) {
-      delete m_journal_store;
       delete m_image_store;
       delete m_meta_store;
       on_finish->complete(r);
@@ -1064,15 +989,6 @@ void FileImageCache<I>::shut_down(Context *on_finish) {
           });
       }
       m_image_store->shut_down(next_ctx);
-    });
-  ctx = new FunctionContext(
-    [this, ctx](int r) {
-      m_journal_store->shut_down(ctx);
-    });
-  ctx = new FunctionContext(
-    [this, ctx](int r) {
-      // flush writeback journal to OSDs
-      flush(ctx);
     });
 
   {
@@ -1235,8 +1151,7 @@ void FileImageCache<I>::process_writeback_dirty_blocks() {
     uint64_t block;
     IOType io_type;
     bool demoted;
-    int r = m_journal_store->get_writeback_event(&tid, &block, &io_type,
-                                                 &demoted);
+    int r = 0;
     //int r = m_policy->get_writeback_block(&block);
     if (r == -ENODATA || r == -EBUSY) {
       // nothing to writeback
@@ -1249,8 +1164,8 @@ void FileImageCache<I>::process_writeback_dirty_blocks() {
 
     // block is now detained -- safe for writeback
     C_WritebackRequest<I> *req = new C_WritebackRequest<I>(
-      m_image_ctx, m_image_writeback, *m_policy, *m_journal_store,
-      *m_image_store, m_release_block, m_async_op_tracker, tid, block, io_type,
+      m_image_ctx, m_image_writeback, *m_policy, *m_image_store,
+      m_release_block, m_async_op_tracker, tid, block, io_type,
       demoted, BLOCK_SIZE);
     req->send();
   }
@@ -1316,24 +1231,6 @@ void FileImageCache<I>::invalidate(Extents&& image_extents,
 
 template <typename I>
 void FileImageCache<I>::flush(Context *on_finish) {
-  CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 20) << dendl;
-
-  // TODO -- need deferred set for tracking op ordering
-  if (m_journal_store->is_writeback_pending()) {
-    Mutex::Locker locker(m_lock);
-    m_post_work_contexts.push_back(new FunctionContext(
-      [this, on_finish](int r) {
-        flush(on_finish);
-      }));
-  }
-
-  on_finish->complete(0);
-
-  // TODO
-  // internal flush -- nothing to writeback but make sure
-  // in-flight IO is flushed
-  //aio_flush(on_finish);
 }
 
 } // namespace cache

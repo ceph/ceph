@@ -21,7 +21,6 @@ namespace cache {
 namespace file {
 
 template <typename> class ImageStore;
-template <typename> class JournalStore;
 template <typename> class MetaStore;
 
 } // namespace file
@@ -68,7 +67,6 @@ private:
 
   file::Policy *m_policy = nullptr;
   file::MetaStore<ImageCtx> *m_meta_store = nullptr;
-  file::JournalStore<ImageCtx> *m_journal_store = nullptr;
   file::ImageStore<ImageCtx> *m_image_store = nullptr;
 
   ReleaseBlock m_release_block;

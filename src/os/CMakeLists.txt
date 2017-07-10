@@ -1,3 +1,7 @@
+set(libos_cache_srcs
+  CacheStore/SyncFile.cc)
+add_library(cachestore STATIC ${libos_cache_srcs})
+
 set(libos_srcs
   ObjectStore.cc
   Transaction.cc

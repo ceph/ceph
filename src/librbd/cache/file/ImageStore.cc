@@ -5,7 +5,6 @@
 #include "include/buffer.h"
 #include "common/dout.h"
 #include "librbd/ImageCtx.h"
-#include "librbd/cache/file/MetaStore.h"
 #include "librbd/cache/file/Types.h"
 
 #define dout_subsys ceph_subsys_rbd
@@ -20,7 +19,7 @@ namespace file {
 template <typename I>
 ImageStore<I>::ImageStore(I &image_ctx, MetaStore<I> &metastore)
   : m_image_ctx(image_ctx), m_metastore(metastore),
-    m_cache_file(image_ctx, *image_ctx.op_work_queue,
+    m_cache_file(image_ctx.cct, *image_ctx.op_work_queue,
                  image_ctx.id + ".image_cache") {
 }
 

@@ -19,7 +19,7 @@ namespace file {
 template <typename I>
 MetaStore<I>::MetaStore(I &image_ctx, uint32_t block_size)
   : m_image_ctx(image_ctx), m_block_size(block_size),
-    m_aio_file(image_ctx, *image_ctx.op_work_queue, image_ctx.id + ".meta") {
+    m_aio_file(image_ctx.cct, *image_ctx.op_work_queue, image_ctx.id + ".meta") {
 }
 
 template <typename I>

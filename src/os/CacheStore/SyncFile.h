@@ -1,26 +1,25 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
-#ifndef CEPH_LIBRBD_CACHE_FILE_AIO_FILE
-#define CEPH_LIBRBD_CACHE_FILE_AIO_FILE
+#ifndef CEPH_LIBOS_CACHE_STORE_SYNC_FILE
+#define CEPH_LIBOS_CACHE_STORE_SYNC_FILE
 
 #include "include/buffer_fwd.h"
 #include <string>
 
 struct Context;
 struct ContextWQ;
+class CephContext;
 
-namespace librbd {
+namespace os {
 
 struct ImageCtx;
 
-namespace cache {
-namespace file {
+namespace CacheStore {
 
-template <typename ImageCtxT>
 class SyncFile {
 public:
-  SyncFile(ImageCtxT &image_ctx, ContextWQ &work_queue, const std::string &name);
+  SyncFile(CephContext *cct, ContextWQ &work_queue, const std::string &name);
   ~SyncFile();
 
   // TODO use IO queue instead of individual commands so operations can be
@@ -44,7 +43,7 @@ public:
   uint64_t filesize();
 
 private:
-  ImageCtxT &m_image_ctx;
+  CephContext *cct;
   ContextWQ &m_work_queue;
   std::string m_name;
   int m_fd = -1;
@@ -56,10 +55,7 @@ private:
   int fdatasync();
 };
 
-} // namespace file
-} // namespace cache
-} // namespace librbd
+} // namespace CacheStore
+} // namespace os
 
-extern template class librbd::cache::file::SyncFile<librbd::ImageCtx>;
-
-#endif // CEPH_LIBRBD_CACHE_FILE_AIO_FILE
+#endif // CEPH_LIBOS_CACHE_STORE_SYNC_FILE

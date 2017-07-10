@@ -2,7 +2,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
-#include "librbd/cache/file/SyncFile.h"
+#include "os/CacheStore/SyncFile.h"
 #include "include/Context.h"
 #include "common/dout.h"
 #include "common/WorkQueue.h"
@@ -19,28 +19,23 @@
 #define dout_prefix *_dout << "librbd::file::SyncFile: " << this << " " \
                            <<  __func__ << ": "
 
-namespace librbd {
-namespace cache {
-namespace file {
+namespace os {
+namespace CacheStore {
 
-template <typename I>
-SyncFile<I>::SyncFile(I &image_ctx, ContextWQ &work_queue,
+SyncFile::SyncFile(CephContext *cct, ContextWQ &work_queue,
                     const std::string &name)
-  : m_image_ctx(image_ctx), m_work_queue(work_queue){
-  CephContext *cct = m_image_ctx.cct;
+  : cct(cct), m_work_queue(work_queue){
   m_name = cct->_conf->rbd_persistent_cache_path + "/rbd_cache." + name;
 }
 
-template <typename I>
-SyncFile<I>::~SyncFile() {
+SyncFile::~SyncFile() {
   // TODO force proper cleanup
   if (m_fd != -1) {
     ::close(m_fd);
   }
 }
 
-template <typename I>
-void SyncFile<I>::open(Context *on_finish) {
+void SyncFile::open(Context *on_finish) {
   while (true) {
     m_fd = ::open(m_name.c_str(), O_CREAT | O_DIRECT | O_NOATIME | O_RDWR | O_SYNC,
                   S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP);
@@ -58,8 +53,7 @@ void SyncFile<I>::open(Context *on_finish) {
   on_finish->complete(0);
 }
 
-template <typename I>
-void SyncFile<I>::close(Context *on_finish) {
+void SyncFile::close(Context *on_finish) {
   assert(m_fd >= 0);
   while (true) {
     int r = ::close(m_fd);
@@ -78,32 +72,27 @@ void SyncFile<I>::close(Context *on_finish) {
   on_finish->complete(0);
 }
 
-template <typename I>
-void SyncFile<I>::read(uint64_t offset, uint64_t length, ceph::bufferlist *bl,
+void SyncFile::read(uint64_t offset, uint64_t length, ceph::bufferlist *bl,
                       Context *on_finish) {
   on_finish->complete(read(offset, length, bl));
 }
 
-template <typename I>
-void SyncFile<I>::write(uint64_t offset, ceph::bufferlist &&bl,
+void SyncFile::write(uint64_t offset, ceph::bufferlist &&bl,
                        bool fdatasync, Context *on_finish) {
   on_finish->complete(write(offset, bl, fdatasync));
   //on_finish->complete(0);
 }
 
-template <typename I>
-void SyncFile<I>::discard(uint64_t offset, uint64_t length, bool fdatasync,
+void SyncFile::discard(uint64_t offset, uint64_t length, bool fdatasync,
                          Context *on_finish) {
   on_finish->complete(discard(offset, length, fdatasync));
 }
 
-template <typename I>
-void SyncFile<I>::truncate(uint64_t length, bool fdatasync, Context *on_finish) {
+void SyncFile::truncate(uint64_t length, bool fdatasync, Context *on_finish) {
   on_finish->complete(truncate(length, fdatasync));
 }
 
-template <typename I>
-void SyncFile<I>::fsync(Context *on_finish) {
+void SyncFile::fsync(Context *on_finish) {
   int r = ::fsync(m_fd);
   if (r == -1) {
     r = -errno;
@@ -113,16 +102,13 @@ void SyncFile<I>::fsync(Context *on_finish) {
   on_finish->complete(0);
 }
 
-template <typename I>
-void SyncFile<I>::fdatasync(Context *on_finish) {
+void SyncFile::fdatasync(Context *on_finish) {
   on_finish->complete(fdatasync());
 }
 
-template <typename I>
-int SyncFile<I>::write(uint64_t offset, const ceph::bufferlist &bl,
+int SyncFile::write(uint64_t offset, const ceph::bufferlist &bl,
                       bool sync) {
   sync = false;
-  CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << "offset=" << offset << ", "
                  << "length=" << bl.length() << dendl;
 
@@ -148,10 +134,8 @@ int SyncFile<I>::write(uint64_t offset, const ceph::bufferlist &bl,
   return r;
 }
 
-template <typename I>
-int SyncFile<I>::read(uint64_t offset, uint64_t length, ceph::bufferlist *bl) {
+int SyncFile::read(uint64_t offset, uint64_t length, ceph::bufferlist *bl) {
 
-  CephContext *cct = m_image_ctx.cct;
   bufferptr bp = buffer::create(length);
   bl->push_back(bp);
 
@@ -188,9 +172,7 @@ int SyncFile<I>::read(uint64_t offset, uint64_t length, ceph::bufferlist *bl) {
   return count;
 }
 
-template <typename I>
-int SyncFile<I>::discard(uint64_t offset, uint64_t length, bool sync) {
-  CephContext *cct = m_image_ctx.cct;
+int SyncFile::discard(uint64_t offset, uint64_t length, bool sync) {
   ldout(cct, 20) << "offset=" << offset << ", "
                  << "length=" << length << dendl;
 
@@ -214,9 +196,7 @@ int SyncFile<I>::discard(uint64_t offset, uint64_t length, bool sync) {
   return r;
 }
 
-template <typename I>
-int SyncFile<I>::truncate(uint64_t length, bool sync) {
-  CephContext *cct = m_image_ctx.cct;
+int SyncFile::truncate(uint64_t length, bool sync) {
   ldout(cct, 20) << "length=" << length << dendl;
 
   int r;
@@ -238,9 +218,7 @@ int SyncFile<I>::truncate(uint64_t length, bool sync) {
   return r;
 }
 
-template <typename I>
-int SyncFile<I>::fdatasync() {
-  CephContext *cct = m_image_ctx.cct;
+int SyncFile::fdatasync() {
   ldout(cct, 20) << dendl;
 
   int r = ::fdatasync(m_fd);
@@ -251,9 +229,7 @@ int SyncFile<I>::fdatasync() {
   return 0;
 }
 
-template <typename I>
-uint64_t SyncFile<I>::filesize() {
-  CephContext *cct = m_image_ctx.cct;
+uint64_t SyncFile::filesize() {
   ldout(cct, 20) << dendl;
 
   struct stat file_st;
@@ -262,8 +238,5 @@ uint64_t SyncFile<I>::filesize() {
   return file_st.st_size;
 }
 
-} // namespace file
-} // namespace cache
-} // namespace librbd
-
-template class librbd::cache::file::SyncFile<librbd::ImageCtx>;
+} // namespace CacheStore
+} // namespace os
