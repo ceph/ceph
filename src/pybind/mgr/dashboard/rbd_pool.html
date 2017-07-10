@@ -10,14 +10,24 @@
             var refresh = function() {
                 $.get("/rbd_pool_data/" + content_data.pool_name  + "/", function(data) {
                     content_data.images = data;
-                    setTimeout(refresh, 5000);
+                    setTimeout(refresh, 10000);
                 });
             };
 
             console.log(content_data);
 
             rivets.bind($("div#content"), content_data);
-            setTimeout(refresh, 5000);
+            setTimeout(refresh, 10000);
+
+            $('#images').DataTable({
+                'paging'      : true,
+                'pageLength'  : 15,
+                'lengthChange': false,
+                'searching'   : true,
+                'ordering'    : true,
+                'info'        : false,
+                'autoWidth'   : false
+            });
         });
 </script>
 
@@ -34,7 +44,7 @@
             <h3 class="box-title">Images</h3>
         </div>
         <div class="box-body">
-            <table class="table table-bordered">
+            <table id="images" class="table table-bordered">
                 <thead>
                 <tr>
                     <th>Name</th>
