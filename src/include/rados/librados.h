@@ -48,6 +48,7 @@ extern "C" {
 #define LIBRADOS_VERSION_CODE LIBRADOS_VERSION(LIBRADOS_VER_MAJOR, LIBRADOS_VER_MINOR, LIBRADOS_VER_EXTRA)
 
 #define LIBRADOS_SUPPORTS_WATCH 1
+#define LIBRADOS_SUPPORTS_SERVICES 1
 
 /* RADOS lock flags
  * They are also defined in cls_lock_types.h. Keep them in sync!
