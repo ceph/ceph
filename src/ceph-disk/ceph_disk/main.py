@@ -2596,7 +2596,7 @@ class Lockbox(object):
 
     def create_partition(self):
         self.device = Device.factory(self.args.lockbox, argparse.Namespace())
-        partition_number = 3
+        partition_number = 5
         self.device.create_partition(uuid=self.args.lockbox_uuid,
                                      name='lockbox',
                                      num=partition_number,
