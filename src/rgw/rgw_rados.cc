@@ -4824,6 +4824,10 @@ int RGWRados::open_bucket_index_ctx(const RGWBucketInfo& bucket_info, librados::
   }
   auto iter = zone_params.placement_pools.find(*rule);
   if (iter == zone_params.placement_pools.end()) {
+    rule = &zonegroup.default_placement;
+    iter = zone_params.placement_pools.find(*rule);
+  }
+  if (iter == zone_params.placement_pools.end()) {
     ldout(cct, 0) << "could not find placement rule " << *rule << " within zonegroup " << dendl;
     return -EINVAL;
   }
@@ -5868,21 +5872,30 @@ int RGWRados::select_new_bucket_location(RGWUserInfo& user_info, const string& z
 
   /* now check that tag exists within zonegroup */
   /* find placement rule. Hierarchy: request rule > user default rule > zonegroup default rule */
-  string rule = request_rule;
-  if (rule.empty()) {
-    rule = user_info.default_placement;
-    if (rule.empty())
-      rule = zonegroup.default_placement;
+  const string *rule = &request_rule;
+  if (rule->empty()) {
+    rule = &user_info.default_placement;
+    if (rule->empty())
+      rule = &zonegroup.default_placement;
   }
 
-  if (rule.empty()) {
+  if (rule->empty()) {
     ldout(cct, 0) << "misconfiguration, should not have an empty placement rule name" << dendl;
     return -EIO;
   }
 
-  map<string, RGWZoneGroupPlacementTarget>::iterator titer = zonegroup.placement_targets.find(rule);
+  auto titer = zonegroup.placement_targets.find(*rule);
+
+  // if the given placement target doesn't exist in this zonegroup, fall back
+  // to the default placement
+  if (titer == zonegroup.placement_targets.end() &&
+      rule != &zonegroup.default_placement) {
+    rule = &zonegroup.default_placement;
+    titer = zonegroup.placement_targets.find(*rule);
+  }
+
   if (titer == zonegroup.placement_targets.end()) {
-    ldout(cct, 0) << "could not find placement rule " << rule << " within zonegroup " << dendl;
+    ldout(cct, 0) << "could not find placement rule " << *rule << " within zonegroup " << dendl;
     return -EINVAL;
   }
 
@@ -5894,9 +5907,9 @@ int RGWRados::select_new_bucket_location(RGWUserInfo& user_info, const string& z
   }
 
   if (pselected_rule_name)
-    *pselected_rule_name = rule;
+    *pselected_rule_name = *rule;
 
-  return select_bucket_location_by_rule(rule, rule_info);
+  return select_bucket_location_by_rule(*rule, rule_info);
 }
 
 int RGWRados::select_bucket_location_by_rule(const string& location_rule, RGWZonePlacementInfo *rule_info)
