@@ -5,6 +5,8 @@ import logging
 import time
 
 from teuthology import misc
+from teuthology.exceptions import (CommandCrashedError, CommandFailedError,
+                                   ConnectionLostError)
 from teuthology.orchestra import run
 from teuthology.salt import Salt
 from teuthology.task import Task
@@ -153,7 +155,7 @@ class DeepSea(Task):
         self.salt.master_remote.run(args = ['sudo', 'salt-key', '-L'])
 
         self.log.info("iterating over all the test nodes...")
-        for _remote, roles_for_host in self.ctx.cluster.remotes.iteritems():
+        for _remote in self.ctx.cluster.remotes.iterkeys():
             self.log.info("minion configuration for {}".format(_remote.hostname))
             _remote.run(args = ['sudo', 'systemctl', 'status',
                 'salt-minion.service'])
@@ -175,7 +177,7 @@ class DeepSea(Task):
 
     def purge_osds(self):
         # replace this hack with DeepSea purge when it's ready
-        for _remote, _ in self.ctx.cluster.remotes.iteritems():
+        for _remote in self.ctx.cluster.remotes.iterkeys():
             self.log.info("stopping OSD services on {}"
                 .format(_remote.hostname))
             _remote.run(args=[
@@ -189,18 +191,24 @@ class DeepSea(Task):
                 'for f in vdb2 vdc2 ; do test -b /dev/$f && umount /dev/$f || true ; done'
                 ])
 
-    def gather_logs(self):
-        self.log.info("summary: {}".format(self.ctx.summary))
-        for _remote, _ in self.ctx.cluster.remotes.iteritems():
-            self.log.info("gathering Salt logs from remote {}".format(_remote.hostname))
+    def gather_logs(self, logdir):
+        for _remote in self.ctx.cluster.remotes.iterkeys():
+            try:
+                _remote.run(args = [
+                    'sudo', 'test', '-d', '/var/log/{}/'.format(logdir),
+                    ])
+            except CommandFailedError:
+                continue
+            self.log.info("Gathering {} logs from remote {}"
+                .format(logdir, _remote.hostname))
             _remote.run(args = [
-                'sudo', 'cp', '-a', '/var/log/salt/',
+                'sudo', 'cp', '-a', '/var/log/{}/'.format(logdir),
                 '/home/ubuntu/cephtest/archive/',
                 run.Raw(';'),
                 'sudo', 'chown', '-R', 'ubuntu',
-                '/home/ubuntu/cephtest/archive/salt/',
+                '/home/ubuntu/cephtest/archive/{}/'.format(logdir),
                 run.Raw(';'),
-                'find', '/home/ubuntu/cephtest/archive/salt/',
+                'find', '/home/ubuntu/cephtest/archive/{}/'.format(logdir),
                 '-type', 'f', '-print0',
                 run.Raw('|'),
                 'xargs', '-0', '--no-run-if-empty', '--', 'gzip', '--'
@@ -208,7 +216,8 @@ class DeepSea(Task):
 
     def end(self):
         self.purge_osds()
-        self.gather_logs()
+        self.gather_logs('salt')
+        self.gather_logs('ganesha')
         super(DeepSea, self).end()
 
 task = DeepSea
