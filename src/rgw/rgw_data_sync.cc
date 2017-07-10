@@ -635,28 +635,6 @@ void RGWRemoteDataLog::finish()
   stop();
 }
 
-int RGWRemoteDataLog::get_shard_info(int shard_id)
-{
-  char buf[32];
-  snprintf(buf, sizeof(buf), "%d", shard_id);
-
-  rgw_http_param_pair pairs[] = { { "type", "data" },
-                                  { "id", buf },
-                                  { "info", NULL },
-                                  { NULL, NULL } };
-
-  RGWDataChangesLogInfo info;
-  int ret = sync_env.conn->get_json_resource("/admin/log", pairs, info);
-  if (ret < 0) {
-    ldout(store->ctx(), 0) << "ERROR: failed to fetch datalog info" << dendl;
-    return ret;
-  }
-
-  ldout(store->ctx(), 20) << "remote datalog, shard_id=" << shard_id << " marker=" << info.marker << dendl;
-
-  return 0;
-}
-
 int RGWRemoteDataLog::read_sync_status(rgw_data_sync_status *sync_status)
 {
   // cannot run concurrently with run_sync(), so run in a separate manager
