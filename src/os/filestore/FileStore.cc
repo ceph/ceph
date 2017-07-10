@@ -3984,7 +3984,10 @@ void FileStore::sync_entry()
       sync_entry_timeo_lock.Lock();
       SyncEntryTimeout *sync_entry_timeo =
 	new SyncEntryTimeout(cct, m_filestore_commit_timeout);
-      timer.add_event_after(m_filestore_commit_timeout, sync_entry_timeo);
+      if (!timer.add_event_after(m_filestore_commit_timeout,
+				 sync_entry_timeo)) {
+	sync_entry_timeo = nullptr;
+      }
       sync_entry_timeo_lock.Unlock();
 
       logger->set(l_filestore_committing, 1);
@@ -4091,9 +4094,10 @@ void FileStore::sync_entry()
 
       dout(15) << __FUNC__ << ": committed to op_seq " << cp << dendl;
 
-      sync_entry_timeo_lock.Lock();
-      timer.cancel_event(sync_entry_timeo);
-      sync_entry_timeo_lock.Unlock();
+      if (sync_entry_timeo) {
+	Mutex::Locker lock(sync_entry_timeo_lock);
+	timer.cancel_event(sync_entry_timeo);
+      }
     } else {
       op_tp.unpause();
     }
