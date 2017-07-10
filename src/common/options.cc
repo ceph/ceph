@@ -490,6 +490,10 @@ const std::vector<Option> ceph_options = {
   .set_default(false)
   .set_description(""),
 
+  Option("ms_tcp_listen_backlog", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  .set_default(512)
+  .set_description(""),
+
   Option("ms_rwthread_stack_bytes", Option::TYPE_INT, Option::LEVEL_ADVANCED)
   .set_default(1024 << 10)
   .set_description(""),
@@ -2977,7 +2981,7 @@ const std::vector<Option> ceph_options = {
   .set_description(""),
 
   Option("rocksdb_cache_row_ratio", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
-  .set_default(.2)
+  .set_default(0)
   .set_description(""),
 
   Option("rocksdb_cache_shard_bits", Option::TYPE_INT, Option::LEVEL_ADVANCED)
@@ -3170,6 +3174,10 @@ const std::vector<Option> ceph_options = {
 
   Option("bdev_aio_max_queue_depth", Option::TYPE_INT, Option::LEVEL_ADVANCED)
   .set_default(1024)
+  .set_description(""),
+
+  Option("bdev_aio_reap_max", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  .set_default(16)
   .set_description(""),
 
   Option("bdev_block_size", Option::TYPE_INT, Option::LEVEL_ADVANCED)
@@ -3469,11 +3477,15 @@ const std::vector<Option> ceph_options = {
   .set_description(""),
 
   Option("bluestore_cache_meta_ratio", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
-  .set_default(.7)
+  .set_default(.01)
   .set_description(""),
 
   Option("bluestore_cache_kv_ratio", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
-  .set_default(.2)
+  .set_default(.99)
+  .set_description(""),
+
+  Option("bluestore_cache_kv_max", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  .set_default(512*1024*1024)
   .set_description(""),
 
   Option("bluestore_kvbackend", Option::TYPE_STR, Option::LEVEL_ADVANCED)
