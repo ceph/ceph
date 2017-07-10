@@ -39,9 +39,9 @@
 class MCommand;
 class MMgrDigest;
 class MLog;
+class MServiceMap;
 class Objecter;
 class Client;
-
 
 class MgrPyModule;
 
@@ -84,6 +84,7 @@ public:
   void handle_fs_map(MFSMap* m);
   void handle_osd_map();
   void handle_log(MLog *m);
+  void handle_service_map(MServiceMap *m);
 
   bool got_mgr_map(const MgrMap& m);
 

@@ -53,6 +53,12 @@ void ClusterState::set_mgr_map(MgrMap const &new_mgrmap)
   mgr_map = new_mgrmap;
 }
 
+void ClusterState::set_service_map(ServiceMap const &new_service_map)
+{
+  Mutex::Locker l(lock);
+  servicemap = new_service_map;
+}
+
 void ClusterState::load_digest(MMgrDigest *m)
 {
   health_json = std::move(m->health_json);

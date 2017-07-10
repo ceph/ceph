@@ -30,6 +30,7 @@
 #include "messages/MCommand.h"
 #include "messages/MCommandReply.h"
 #include "messages/MLog.h"
+#include "messages/MServiceMap.h"
 
 #include "Mgr.h"
 
@@ -93,14 +94,13 @@ public:
   {
     daemon_state.clear_updating(key);
     if (r == 0) {
-      if (key.first == CEPH_ENTITY_TYPE_MDS) {
+      if (key.first == "mds") {
         json_spirit::mValue json_result;
         bool read_ok = json_spirit::read(
             outbl.to_str(), json_result);
         if (!read_ok) {
           dout(1) << "mon returned invalid JSON for "
-                  << ceph_entity_type_name(key.first)
-                  << "." << key.second << dendl;
+                  << key.first << "." << key.second << dendl;
           return;
         }
 
@@ -134,14 +134,14 @@ public:
 
           daemon_state.insert(state);
         }
-      } else if (key.first == CEPH_ENTITY_TYPE_OSD) {
+      } else if (key.first == "osd") {
       } else {
         ceph_abort();
       }
     } else {
       dout(1) << "mon failed to return metadata for "
-              << ceph_entity_type_name(key.first)
-              << "." << key.second << ": " << cpp_strerror(r) << dendl;
+              << key.first << "." << key.second << ": "
+	      << cpp_strerror(r) << dendl;
     }
   }
 };
@@ -185,6 +185,7 @@ void Mgr::init()
   monc->sub_want("log-info", 0, 0);
   monc->sub_want("mgrdigest", 0, 0);
   monc->sub_want("fsmap", 0, 0);
+  monc->sub_want("servicemap", 0, 0);
 
   dout(4) << "waiting for OSDMap..." << dendl;
   // Subscribe to OSDMap update to pass on to ClusterState
@@ -260,7 +261,7 @@ void Mgr::load_all_metadata()
     }
 
     DaemonStatePtr dm = std::make_shared<DaemonState>(daemon_state.types);
-    dm->key = DaemonKey(CEPH_ENTITY_TYPE_MDS,
+    dm->key = DaemonKey("mds",
                         daemon_meta.at("name").get_str());
     dm->hostname = daemon_meta.at("hostname").get_str();
 
@@ -282,7 +283,7 @@ void Mgr::load_all_metadata()
     }
 
     DaemonStatePtr dm = std::make_shared<DaemonState>(daemon_state.types);
-    dm->key = DaemonKey(CEPH_ENTITY_TYPE_MON,
+    dm->key = DaemonKey("mon",
                         daemon_meta.at("name").get_str());
     dm->hostname = daemon_meta.at("hostname").get_str();
 
@@ -305,7 +306,7 @@ void Mgr::load_all_metadata()
     dout(4) << osd_metadata.at("hostname").get_str() << dendl;
 
     DaemonStatePtr dm = std::make_shared<DaemonState>(daemon_state.types);
-    dm->key = DaemonKey(CEPH_ENTITY_TYPE_OSD,
+    dm->key = DaemonKey("osd",
                         stringify(osd_metadata.at("id").get_int()));
     dm->hostname = osd_metadata.at("hostname").get_str();
 
@@ -401,7 +402,7 @@ void Mgr::handle_osd_map()
 
       // Consider whether to update the daemon metadata (new/restarted daemon)
       bool update_meta = false;
-      const auto k = DaemonKey(CEPH_ENTITY_TYPE_OSD, stringify(osd_id));
+      const auto k = DaemonKey("osd", stringify(osd_id));
       if (daemon_state.is_updating(k)) {
         continue;
       }
@@ -446,7 +447,7 @@ void Mgr::handle_osd_map()
   });
 
   // TODO: same culling for MonMap
-  daemon_state.cull(CEPH_ENTITY_TYPE_OSD, names_exist);
+  daemon_state.cull("osd", names_exist);
 }
 
 void Mgr::handle_log(MLog *m)
@@ -456,6 +457,13 @@ void Mgr::handle_log(MLog *m)
   }
 
   m->put();
+}
+
+void Mgr::handle_service_map(MServiceMap *m)
+{
+  dout(10) << "e" << m->service_map.epoch << dendl;
+  cluster_state.set_service_map(m->service_map);
+  server.got_service_map();
 }
 
 bool Mgr::ms_dispatch(Message *m)
@@ -484,6 +492,11 @@ bool Mgr::ms_dispatch(Message *m)
       // Continuous subscribe, so that we can generate notifications
       // for our MgrPyModules
       objecter->maybe_request_map();
+      m->put();
+      break;
+    case MSG_SERVICE_MAP:
+      handle_service_map((MServiceMap*)m);
+      py_modules.notify_all("service_map", "");
       m->put();
       break;
     case MSG_LOG:
@@ -525,7 +538,7 @@ void Mgr::handle_fs_map(MFSMap* m)
     // Remember which MDS exists so that we can cull any that don't
     names_exist.insert(info.name);
 
-    const auto k = DaemonKey(CEPH_ENTITY_TYPE_MDS, info.name);
+    const auto k = DaemonKey("mds", info.name);
     if (daemon_state.is_updating(k)) {
       continue;
     }
@@ -565,7 +578,7 @@ void Mgr::handle_fs_map(MFSMap* m)
           {}, &c->outbl, &c->outs, c);
     }
   }
-  daemon_state.cull(CEPH_ENTITY_TYPE_MDS, names_exist);
+  daemon_state.cull("mds", names_exist);
 }
 
 bool Mgr::got_mgr_map(const MgrMap& m)

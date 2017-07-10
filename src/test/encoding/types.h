@@ -166,6 +166,11 @@ TYPE(LevelDBStoreStats)
 #include "mon/CreatingPGs.h"
 TYPE(creating_pgs_t)
 
+#include "mgr/ServiceMap.h"
+TYPE_FEATUREFUL(ServiceMap)
+TYPE_FEATUREFUL(ServiceMap::Service)
+TYPE_FEATUREFUL(ServiceMap::Daemon)
+
 #include "os/filestore/DBObjectMap.h"
 TYPE(DBObjectMap::_Header)
 TYPE(DBObjectMap::State)

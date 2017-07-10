@@ -10,6 +10,7 @@
 #include "messages/MMonMgrReport.h"
 #include "messages/MStatfs.h"
 #include "messages/MStatfsReply.h"
+#include "messages/MServiceMap.h"
 
 class MgrPGStatService : public MonPGStatService {
   PGMapDigest& digest;
@@ -72,6 +73,8 @@ void MgrStatMonitor::create_initial()
 {
   dout(10) << dendl;
   version = 0;
+  service_map.epoch = 1;
+  ::encode(service_map, pending_service_map_bl, CEPH_FEATURES_ALL);
 }
 
 void MgrStatMonitor::update_from_paxos(bool *need_bootstrap)
@@ -86,7 +89,11 @@ void MgrStatMonitor::update_from_paxos(bool *need_bootstrap)
     ::decode(digest, p);
     ::decode(health_summary, p);
     ::decode(health_detail, p);
+    ::decode(service_map, p);
+    dout(10) << __func__ << " v" << version
+	     << " service_map e" << service_map.epoch << dendl;
   }
+  check_subs();
 }
 
 void MgrStatMonitor::create_pending()
@@ -95,6 +102,8 @@ void MgrStatMonitor::create_pending()
   pending_digest = digest;
   pending_health_summary = health_summary;
   pending_health_detail = health_detail;
+  pending_service_map_bl.clear();
+  ::encode(service_map, pending_service_map_bl, mon->get_quorum_con_features());
 }
 
 void MgrStatMonitor::encode_pending(MonitorDBStore::TransactionRef t)
@@ -110,6 +119,8 @@ void MgrStatMonitor::encode_pending(MonitorDBStore::TransactionRef t)
   ::encode(pending_digest, bl, mon->get_quorum_con_features());
   ::encode(pending_health_summary, bl);
   ::encode(pending_health_detail, bl);
+  assert(pending_service_map_bl.length());
+  bl.append(pending_service_map_bl);
   put_version(t, version, bl);
   put_last_committed(t, version);
 }
@@ -194,6 +205,9 @@ bool MgrStatMonitor::prepare_report(MonOpRequestRef op)
   dout(10) << __func__ << " " << pending_digest << dendl;
   pending_health_summary.swap(m->health_summary);
   pending_health_detail.swap(m->health_detail);
+  if (m->service_map_bl.length()) {
+    pending_service_map_bl.swap(m->service_map_bl);
+  }
   return true;
 }
 
@@ -263,4 +277,41 @@ bool MgrStatMonitor::preprocess_statfs(MonOpRequestRef op)
   reply->h.st = mon->pgservice->get_statfs();
   mon->send_reply(op, reply);
   return true;
+}
+
+void MgrStatMonitor::check_sub(Subscription *sub)
+{
+  const auto epoch = mon->monmap->get_epoch();
+  dout(10) << __func__
+	   << " next " << sub->next
+	   << " have " << epoch << dendl;
+  if (sub->next <= service_map.epoch) {
+    auto m = new MServiceMap(service_map);
+    sub->session->con->send_message(m);
+    if (sub->onetime) {
+      mon->with_session_map([this, sub](MonSessionMap& session_map) {
+	  session_map.remove_sub(sub);
+	});
+    } else {
+      sub->next = epoch + 1;
+    }
+  }
+}
+
+void MgrStatMonitor::check_subs()
+{
+  dout(10) << __func__ << dendl;
+  if (!service_map.epoch) {
+    return;
+  }
+  auto subs = mon->session_map.subs.find("servicemap");
+  if (subs == mon->session_map.subs.end()) {
+    return;
+  }
+  auto p = subs->second->begin();
+  while (!p.end()) {
+    auto sub = *p;
+    ++p;
+    check_sub(sub);
+  }
 }

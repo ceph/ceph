@@ -72,7 +72,15 @@ protected:
   // our reports (hook for use by OSD)
   std::function<MPGStats*()> pgstats_cb;
 
+  // for service registration and beacon
+  bool service_daemon = false;
+  bool daemon_dirty_status = false;
+  std::string service_name, daemon_name;
+  std::map<std::string,std::string> daemon_metadata;
+  std::map<std::string,std::string> daemon_status;
+
   void reconnect();
+  void _send_open();
 
 public:
   MgrClient(CephContext *cct_, Messenger *msgr_);
@@ -103,6 +111,13 @@ public:
   int start_command(const vector<string>& cmd, const bufferlist& inbl,
 		    bufferlist *outbl, string *outs,
 		    Context *onfinish);
+
+  int service_daemon_register(
+    const std::string& service,
+    const std::string& name,
+    const std::map<std::string,std::string>& metadata);
+  int service_daemon_update_status(
+    const std::map<std::string,std::string>& status);
 };
 
 #endif
