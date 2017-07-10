@@ -47,7 +47,7 @@ struct ServiceMap {
 	return "no daemons active";
       }
       std::ostringstream ss;
-      ss << daemons.size() << (daemons.size() > 1 ? "daemonss" : "daemon")
+      ss << daemons.size() << (daemons.size() > 1 ? " daemons" : " daemon")
 	 << " active";
       return ss.str();
     }
