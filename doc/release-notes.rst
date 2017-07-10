@@ -226,7 +226,7 @@ Major Changes from Kraken
       ``ceph osd reweight`` commands.
     - ``ceph osd crush class {create,rm,ls,rename}`` manage the new
       CRUSH *device class* feature.  ``ceph crush set-device-class
-      <osd> <class>`` will set the class for a particular device.
+      <class> <osd> [<osd>...]`` will set the class for particular devices.
     - ``ceph osd crush rule create-replicated`` replaces the old
       ``ceph osd crush rule create-simple`` command to create a CRUSH
       rule for a replicated pool.  Notably it takes a `class` argument
