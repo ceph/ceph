@@ -19,7 +19,6 @@ OPTION(public_addr, OPT_ADDR, entity_addr_t())
 OPTION(cluster_addr, OPT_ADDR, entity_addr_t())
 OPTION(public_network, OPT_STR, "")
 OPTION(cluster_network, OPT_STR, "")
-OPTION(num_client, OPT_INT, 1)
 OPTION(monmap, OPT_STR, "")
 OPTION(mon_host, OPT_STR, "")
 OPTION(mon_dns_srv_name, OPT_STR, "ceph-mon")
@@ -35,7 +34,6 @@ OPTION(setgroup, OPT_STR, "")        // gid or group name
 OPTION(setuser_match_path, OPT_STR, "")  // make setuser/group conditional on this path matching ownership
 OPTION(pid_file, OPT_STR, "") // default changed by common_preinit()
 OPTION(chdir, OPT_STR, "/")
-OPTION(max_open_files, OPT_LONGLONG, 0)
 OPTION(restapi_log_level, OPT_STR, "") 	// default set by Python code
 OPTION(restapi_base_url, OPT_STR, "")	// "
 OPTION(fatal_signal_handlers, OPT_BOOL, true)
