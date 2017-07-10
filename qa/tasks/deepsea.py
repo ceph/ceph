@@ -198,7 +198,12 @@ class DeepSea(Task):
                 '/home/ubuntu/cephtest/archive/',
                 run.Raw(';'),
                 'sudo', 'chown', '-R', 'ubuntu',
-                '/home/ubuntu/cephtest/archive/'
+                '/home/ubuntu/cephtest/archive/salt/',
+                run.Raw(';'),
+                'find', '/home/ubuntu/cephtest/archive/salt/',
+                '-type', 'f', '-print0',
+                run.Raw('|'),
+                'xargs', '-0', '--no-run-if-empty', '--', 'gzip', '--'
                 ])
 
     def end(self):
