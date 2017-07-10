@@ -14,6 +14,9 @@
       <element name="id">
         <text/>
       </element>
+      <element name="device_class">
+        <text/>
+      </element>
       <element name="name">
         <text/>
       </element>
@@ -34,6 +37,9 @@
   <define name="bucket">
     <element name="bucket">
       <element name="id">
+        <text/>
+      </element>
+      <element name="device_class">
         <text/>
       </element>
       <element name="name">

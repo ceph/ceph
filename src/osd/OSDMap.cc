@@ -3072,11 +3072,12 @@ public:
 
   void dump(TextTable *tbl) {
     tbl->define_column("ID", TextTable::LEFT, TextTable::RIGHT);
+    tbl->define_column("CLASS", TextTable::LEFT, TextTable::RIGHT);
     tbl->define_column("WEIGHT", TextTable::LEFT, TextTable::RIGHT);
     tbl->define_column("TYPE NAME", TextTable::LEFT, TextTable::LEFT);
     tbl->define_column("UP/DOWN", TextTable::LEFT, TextTable::RIGHT);
     tbl->define_column("REWEIGHT", TextTable::LEFT, TextTable::RIGHT);
-    tbl->define_column("PRIMARY-AFFINITY", TextTable::LEFT, TextTable::RIGHT);
+    tbl->define_column("PRI-AFF", TextTable::LEFT, TextTable::RIGHT);
 
     Parent::dump(tbl);
 
@@ -3089,8 +3090,11 @@ public:
 
 protected:
   void dump_item(const CrushTreeDumper::Item &qi, TextTable *tbl) override {
-
+    const char *c = crush->get_item_class(qi.id);
+    if (!c)
+      c = "";
     *tbl << qi.id
+	 << c
 	 << weightf_t(qi.weight);
 
     ostringstream name;
@@ -4072,6 +4076,7 @@ public:
 
   void dump(TextTable *tbl) {
     tbl->define_column("ID", TextTable::LEFT, TextTable::RIGHT);
+    tbl->define_column("CLASS", TextTable::LEFT, TextTable::RIGHT);
     tbl->define_column("WEIGHT", TextTable::LEFT, TextTable::RIGHT);
     tbl->define_column("REWEIGHT", TextTable::LEFT, TextTable::RIGHT);
     tbl->define_column("SIZE", TextTable::LEFT, TextTable::RIGHT);
@@ -4087,7 +4092,9 @@ public:
 
     dump_stray(tbl);
 
-    *tbl << "" << "" << "TOTAL"
+    *tbl << ""
+	 << ""
+	 << "" << "TOTAL"
 	 << si_t(pgs->get_osd_sum().kb << 10)
 	 << si_t(pgs->get_osd_sum().kb_used << 10)
 	 << si_t(pgs->get_osd_sum().kb_avail << 10)
@@ -4113,7 +4120,11 @@ protected:
 			 double& var,
 			 const size_t num_pgs,
 			 TextTable *tbl) override {
+    const char *c = crush->get_item_class(qi.id);
+    if (!c)
+      c = "";
     *tbl << qi.id
+	 << c
 	 << weightf_t(qi.weight)
 	 << weightf_t(reweight)
 	 << si_t(kb << 10)
