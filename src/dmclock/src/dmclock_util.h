@@ -30,11 +30,17 @@ namespace crimson {
 
 
     inline Time get_time() {
+#if defined(__linux__)
+      struct timespec now;
+      clock_gettime(CLOCK_REALTIME, &now);
+      return now.tv_sec + (now.tv_nsec / 1.0e9);
+#else
       struct timeval now;
       auto result = gettimeofday(&now, NULL);
       (void) result;
       assert(0 == result);
-      return now.tv_sec + (now.tv_usec / 1000000.0);
+      return now.tv_sec + (now.tv_usec / 1.0e6);
+#endif
     }
 
     std::string format_time(const Time& time, uint modulo = 1000);
