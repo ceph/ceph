@@ -4664,6 +4664,12 @@ int RGWRados::list_periods(list<string>& periods)
   return 0;
 }
 
+void RGWRados::update_stats(const rgw_user& bucket_owner, rgw_bucket& bucket,
+                            int obj_delta, uint64_t added_bytes, uint64_t removed_bytes)
+{
+  dout(20) << __func__ << ": obj_delta=" << obj_delta << ", added_bytes=" << added_bytes << ", removed_bytes=" << removed_bytes << dendl;
+  quota_handler->update_stats(bucket_owner, bucket, obj_delta, added_bytes, removed_bytes);
+}
 
 int RGWRados::list_periods(const string& current_period, list<string>& periods)
 {
@@ -8616,6 +8622,27 @@ void RGWRados::cls_obj_check_mtime(ObjectOperation& op, const real_time& mtime, 
   cls_rgw_obj_check_mtime(op, mtime, high_precision_time, type);
 }
 
+int RGWRados::Object::Delete::delete_obj_bypass_gc()
+{
+  /* Try to delete object same way like radosgw-admin with --bypass-gc option does. */
+  int max_concurrent_ios = target->store->ctx()->_conf->rgw_remove_object_max_concurrent_ios;
+  std::list<librados::AioCompletion*> handles;
+  cls_rgw_obj_key cls_key(target->obj.key.get_index_key_name(), target->obj.key.instance);
+
+  return rgw_remove_object_bypass_gc(target->store, target->obj.bucket, target->bucket_info,
+                                     target->ctx, cls_key,
+                                     max_concurrent_ios, true,
+                                     handles);
+}
+
+int RGWRados::Object::Delete::delete_obj()
+{
+  if(target->store->ctx()->_conf->rgw_remove_object_always_bypass_gc) {
+    return delete_obj_bypass_gc();
+  } else {
+    return delete_obj_with_gc();
+  }
+}
 
 /**
  * Delete an object.
@@ -8623,7 +8650,7 @@ void RGWRados::cls_obj_check_mtime(ObjectOperation& op, const real_time& mtime, 
  * obj: name of the object to delete
  * Returns: 0 on success, -ERR# otherwise.
  */
-int RGWRados::Object::Delete::delete_obj()
+int RGWRados::Object::Delete::delete_obj_with_gc()
 {
   RGWRados *store = target->get_store();
   rgw_obj& src_obj = target->get_obj();
