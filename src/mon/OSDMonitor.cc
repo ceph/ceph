@@ -7859,6 +7859,15 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     cmd_getval(g_ceph_context, cmdmap, "type", type);
     cmd_getval(g_ceph_context, cmdmap, "class", device_class);
 
+    if (!device_class.empty()) {
+      if (osdmap.require_osd_release < CEPH_RELEASE_LUMINOUS) {
+        ss << "you must complete the upgrade and 'ceph osd require-osd-release "
+           << "luminous' before using crush device classes";
+        err = -EPERM;
+        goto reply;
+      }
+    }
+
     if (osdmap.crush->rule_exists(name)) {
       // The name is uniquely associated to a ruleid and the rule it contains
       // From the user point of view, the rule is more meaningfull.
