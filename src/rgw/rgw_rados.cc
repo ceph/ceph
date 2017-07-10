@@ -5891,17 +5891,8 @@ int RGWRados::select_bucket_location_by_rule(const string& location_rule, RGWZon
    * reside.
    */
   map<string, RGWZonePlacementInfo>::iterator piter = get_zone_params().placement_pools.find(location_rule);
-  if (piter == get_zone_params().placement_pools.end()) {
-    /* couldn't find, means we cannot really place data for this bucket in this zone */
-    if (get_zonegroup().equals(zonegroup_id)) {
-      /* that's a configuration error, zone should have that rule, as we're within the requested
-       * zonegroup */
-      return -EINVAL;
-    } else {
-      /* oh, well, data is not going to be placed here, bucket object is just a placeholder */
-      return 0;
-    }
-  }
+  if (piter == get_zone_params().placement_pools.end()) 
+    return -EINVAL;
 
   RGWZonePlacementInfo& placement_info = piter->second;
 
