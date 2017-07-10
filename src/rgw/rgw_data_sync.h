@@ -262,7 +262,6 @@ public:
   int read_log_info(rgw_datalog_info *log_info);
   int read_source_log_shards_info(map<int, RGWDataChangesLogInfo> *shards_info);
   int read_source_log_shards_next(map<int, string> shard_markers, map<int, rgw_datalog_shard_data> *result);
-  int get_shard_info(int shard_id);
   int read_sync_status(rgw_data_sync_status *sync_status);
   int init_sync_status(int num_shards);
   int run_sync(int num_shards);
