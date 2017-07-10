@@ -835,7 +835,7 @@ public:
                                                 sync_env->store,
                                                 rgw_raw_obj(sync_env->store->get_zone_params().log_pool, sync_env->status_oid()),
                                                 lock_name, lock_duration, this));
-        lease_stack = spawn(lease_cr.get(), false);
+        lease_stack.reset(spawn(lease_cr.get(), false));
       }
       while (!lease_cr->is_locked()) {
         if (lease_cr->is_done()) {
