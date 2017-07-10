@@ -3789,6 +3789,10 @@ int OSDMap::calc_pg_upmaps(
 		     << " pgs " << pgs << dendl;
     }
 
+    if (osd_weight_total == 0) {
+      lderr(cct) << __func__ << " abort due to osd_weight_total == 0" << dendl;
+      break;
+    }
     float pgs_per_weight = total_pgs / osd_weight_total;
     ldout(cct, 10) << " osd_weight_total " << osd_weight_total << dendl;
     ldout(cct, 10) << " pgs_per_weight " << pgs_per_weight << dendl;
@@ -3838,6 +3842,7 @@ int OSDMap::calc_pg_upmaps(
       int osd = p->second;
       float deviation = p->first;
       float target = osd_weight[osd] * pgs_per_weight;
+      assert(target > 0);
       if (deviation/target < max_deviation_ratio) {
 	ldout(cct, 10) << " osd." << osd
 		       << " target " << target
