@@ -4246,6 +4246,7 @@ int BlueStore::_open_alloc()
     ++num;
     bytes += length;
   }
+  fm->enumerate_reset();
   dout(1) << __func__ << " loaded " << pretty_si_t(bytes)
 	  << " in " << num << " extents"
 	  << dendl;
@@ -5963,6 +5964,7 @@ int BlueStore::fsck(bool deep)
 	++errors;
       }
     }
+    fm->enumerate_reset();
     size_t count = used_blocks.count();
     if (used_blocks.size() != count) {
       assert(used_blocks.size() > count);
