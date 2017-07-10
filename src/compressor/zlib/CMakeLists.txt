@@ -39,7 +39,7 @@ endif(HAVE_INTEL_SSE4_1 AND HAVE_BETTER_YASM_ELF64)
 
 add_library(ceph_zlib SHARED ${zlib_sources})
 add_dependencies(ceph_zlib ${CMAKE_SOURCE_DIR}/src/ceph_ver.h)
-target_link_libraries(ceph_zlib ${ZLIB_LIBRARIES})
+target_link_libraries(ceph_zlib ${ZLIB_LIBRARIES} global ceph-common)
 target_include_directories(ceph_zlib PRIVATE "${CMAKE_SOURCE_DIR}/src/isa-l/include")
 set_target_properties(ceph_zlib PROPERTIES
   VERSION 2.0.0

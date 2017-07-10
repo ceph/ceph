@@ -11,7 +11,7 @@ add_library(global-static STATIC
   $<TARGET_OBJECTS:libglobal_objs>
   $<TARGET_OBJECTS:global_common_objs>)
 
-add_library(global STATIC
+add_library(global SHARED
   $<TARGET_OBJECTS:libglobal_objs>
   $<TARGET_OBJECTS:global_common_objs>)
 target_link_libraries(global ceph-common ${DPDK_LIBRARIES} ${EXTRALIBS})
