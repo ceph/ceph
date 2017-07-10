@@ -27,6 +27,7 @@
 
 #include "auth/AuthAuthorizeHandler.h"
 
+#include "ServiceMap.h"
 #include "MgrSession.h"
 #include "DaemonState.h"
 
@@ -66,6 +67,9 @@ protected:
   /// connections for osds
   ceph::unordered_map<int,set<ConnectionRef>> osd_cons;
 
+  ServiceMap pending_service_map;  // uncommitted
+  epoch_t pending_service_map_dirty = 0;
+
   Mutex lock;
 
   static void _generate_command_map(map<string,cmd_vartype>& cmdmap,
@@ -82,6 +86,8 @@ private:
   friend class ReplyOnFinish;
   bool _reply(MCommand* m,
 	      int ret, const std::string& s, const bufferlist& payload);
+
+  void _prune_pending_service_map();
 
 public:
   int init(uint64_t gid, entity_addr_t client_addr);
@@ -116,6 +122,7 @@ public:
   bool handle_report(MMgrReport *m);
   bool handle_command(MCommand *m);
   void send_report();
+  void got_service_map();
 };
 
 #endif

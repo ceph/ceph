@@ -2332,8 +2332,6 @@ protected:
 
   bool pools_initialized;
 
-  string zonegroup_id;
-  string zone_name;
   string trans_id_suffix;
 
   RGWQuotaHandler *quota_handler;
@@ -2564,6 +2562,8 @@ public:
   int convert_regionmap();
   int initialize();
   void finalize();
+
+  int register_to_service_map(const string& daemon_type, const map<string, string>& meta);
 
   void schedule_context(Context *c);
 
@@ -3537,6 +3537,9 @@ public:
   int add_bucket_to_reshard(const RGWBucketInfo& bucket_info, uint32_t new_num_shards);
 
   uint64_t instance_id();
+  const string& zone_name() {
+    return get_zone_params().get_name();
+  }
   const string& zone_id() {
     return get_zone_params().get_id();
   }

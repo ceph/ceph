@@ -15,6 +15,8 @@
 #ifndef CEPH_MMGRREPORT_H_
 #define CEPH_MMGRREPORT_H_
 
+#include <boost/optional.hpp>
+
 #include "msg/Message.h"
 
 #include "common/perf_counters.h"
@@ -55,7 +57,7 @@ WRITE_CLASS_ENCODER(PerfCounterType)
 
 class MMgrReport : public Message
 {
-  static const int HEAD_VERSION = 2;
+  static const int HEAD_VERSION = 4;
   static const int COMPAT_VERSION = 1;
 
 public:
@@ -76,6 +78,10 @@ public:
   bufferlist packed;
 
   std::string daemon_name;
+  std::string service_name;  // optional; otherwise infer from entity type
+
+  // for service registration
+  boost::optional<std::map<std::string,std::string>> daemon_status;
 
   void decode_payload() override
   {
@@ -85,6 +91,10 @@ public:
     ::decode(packed, p);
     if (header.version >= 2)
       ::decode(undeclare_types, p);
+    if (header.version >= 3) {
+      ::decode(service_name, p);
+      ::decode(daemon_status, p);
+    }
   }
 
   void encode_payload(uint64_t features) override {
@@ -92,12 +102,26 @@ public:
     ::encode(declare_types, payload);
     ::encode(packed, payload);
     ::encode(undeclare_types, payload);
+    ::encode(service_name, payload);
+    ::encode(daemon_status, payload);
   }
 
   const char *get_type_name() const override { return "mgrreport"; }
   void print(ostream& out) const override {
-    out << get_type_name() << "(+" << declare_types.size() << "-" << undeclare_types.size()
-        << " packed " << packed.length() << ")";
+    out << get_type_name() << "(";
+    if (service_name.length()) {
+      out << service_name;
+    } else {
+      out << ceph_entity_type_name(get_source().type());
+    }
+    out << "." << daemon_name
+	<< " +" << declare_types.size()
+	<< "-" << undeclare_types.size()
+        << " packed " << packed.length();
+    if (daemon_status) {
+      out << " status=" << daemon_status->size();
+    }
+    out << ")";
   }
 
   MMgrReport()

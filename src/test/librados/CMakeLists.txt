@@ -120,6 +120,15 @@ set_target_properties(ceph_test_rados_api_lock PROPERTIES COMPILE_FLAGS
 target_link_libraries(ceph_test_rados_api_lock
   rados_a ${UNITTEST_LIBS} radostest)
 
+# ceph_test_rados_api_service
+add_executable(ceph_test_rados_api_service
+  service.cc
+  )
+set_target_properties(ceph_test_rados_api_service PROPERTIES COMPILE_FLAGS
+  ${UNITTEST_CXX_FLAGS})
+target_link_libraries(ceph_test_rados_api_service
+  rados_a global ${UNITTEST_LIBS} radostest)
+
 # ceph_test_rados_api_tier
 add_executable(ceph_test_rados_api_tier
   tier.cc
@@ -149,6 +158,7 @@ install(TARGETS
   ceph_test_rados_api_lock
   ceph_test_rados_api_misc
   ceph_test_rados_api_pool
+  ceph_test_rados_api_service
   ceph_test_rados_api_snapshots
   ceph_test_rados_api_stat
   ceph_test_rados_api_tier

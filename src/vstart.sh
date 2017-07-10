@@ -974,8 +974,12 @@ do_rgw()
     RGWSUDO=
     [ $CEPH_RGW_PORT -lt 1024 ] && RGWSUDO=sudo
     n=$(($CEPH_NUM_RGW - 1))
-    for rgw in `seq 0 $n`; do
-	run 'rgw' $RGWSUDO $CEPH_BIN/radosgw -c $conf_fn --log-file=${CEPH_OUT_DIR}/rgw.$rgw.log ${RGWDEBUG} --debug-ms=1
+    i=0
+    for rgw in j k l m n o p q r s t u v; do
+	ceph_adm auth get-or-create client.rgw.$rgw mon 'allow rw' osd 'allow rwx' mgr 'allow rw' -o $CEPH_DEV_DIR/rgw.$rgw.keyring
+	run 'rgw' $RGWSUDO $CEPH_BIN/radosgw -c $conf_fn --log-file=${CEPH_OUT_DIR}/rgw.$rgw.log ${RGWDEBUG} --debug-ms=1 -n client.rgw.$rgw -k $CEPH_DEV_DIR/rgw.$rgw.keyring
+	i=$(($i + 1))
+        [ $i -eq $CEPH_NUM_RGW ] && break
     done
 }
 if [ "$CEPH_NUM_RGW" -gt 0 ]; then

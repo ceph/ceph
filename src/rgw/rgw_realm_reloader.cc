@@ -9,6 +9,8 @@
 #include "rgw_rest.h"
 #include "rgw_user.h"
 
+#include "common/errno.h"
+
 #define dout_subsys ceph_subsys_rgw
 
 #undef dout_prefix
@@ -21,8 +23,10 @@
 static constexpr bool USE_SAFE_TIMER_CALLBACKS = false;
 
 
-RGWRealmReloader::RGWRealmReloader(RGWRados*& store, Pauser* frontends)
+RGWRealmReloader::RGWRealmReloader(RGWRados*& store, std::map<std::string, std::string>& service_map_meta,
+                                   Pauser* frontends)
   : store(store),
+    service_map_meta(service_map_meta),
     frontends(frontends),
     timer(store->ctx(), mutex, USE_SAFE_TIMER_CALLBACKS),
     mutex("RGWRealmReloader"),
@@ -142,6 +146,13 @@ void RGWRealmReloader::reload()
 
       RGWStoreManager::close_storage(store_cleanup);
     }
+  }
+
+  int r = store->register_to_service_map("rgw", service_map_meta);
+  if (r < 0) {
+    lderr(cct) << "ERROR: failed to register to service map: " << cpp_strerror(-r) << dendl;
+
+    /* ignore error */
   }
 
   ldout(cct, 1) << "Finishing initialization of new store" << dendl;

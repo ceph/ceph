@@ -37,6 +37,7 @@ class MMonMgrReport : public PaxosServiceMessage {
 public:
   // PGMapDigest is in data payload
   list<pair<health_status_t,std::string>> health_summary, health_detail;
+  bufferlist service_map_bl;  // encoded ServiceMap
 
   MMonMgrReport()
     : PaxosServiceMessage(MSG_MON_MGR_REPORT, 0, HEAD_VERSION, COMPAT_VERSION)
@@ -55,12 +56,14 @@ public:
     paxos_encode();
     ::encode(health_summary, payload);
     ::encode(health_detail, payload);
+    ::encode(service_map_bl, payload);
   }
   void decode_payload() override {
     bufferlist::iterator p = payload.begin();
     paxos_decode(p);
     ::decode(health_summary, p);
     ::decode(health_detail, p);
+    ::decode(service_map_bl, p);
   }
 };
 
