@@ -1126,11 +1126,11 @@ def run_daemon(ctx, config, type_):
                         ]
                     )
                 except:
-                    # fallback to pre-luminous
+                    # fallback to pre-luminous (hammer or jewel)
                     remote.run(
                         args=[
                             'sudo', 'ceph', '--cluster', cluster_name,
-                            'osd', 'create', osd_uuid, id_,
+                            'osd', 'create', osd_uuid,
                         ]
                     )
                 if config.get('add_osds_to_crush'):
