@@ -2299,7 +2299,7 @@ int RGWUserAdminOp_User::info(RGWRados *store, RGWUserAdminOpState& op_state,
     return ret;
 
   if (!op_state.has_existing_user())
-    return -ENOENT;
+    return -ERR_NO_SUCH_USER;
 
   Formatter *formatter = flusher.get_formatter();
 
@@ -2367,8 +2367,11 @@ int RGWUserAdminOp_User::modify(RGWRados *store, RGWUserAdminOpState& op_state,
   Formatter *formatter = flusher.get_formatter();
 
   ret = user.modify(op_state, NULL);
-  if (ret < 0)
+  if (ret < 0) {
+    if (ret == -ENOENT)
+      ret = -ERR_NO_SUCH_USER;
     return ret;
+  }
 
   ret = user.info(info, NULL);
   if (ret < 0)
@@ -2394,6 +2397,8 @@ int RGWUserAdminOp_User::remove(RGWRados *store, RGWUserAdminOpState& op_state,
 
   ret = user.remove(op_state, NULL);
 
+  if (ret == -ENOENT)
+    ret = -ERR_NO_SUCH_USER;
   return ret;
 }
 
@@ -2405,6 +2410,9 @@ int RGWUserAdminOp_Subuser::create(RGWRados *store, RGWUserAdminOpState& op_stat
   int ret = user.init(store, op_state);
   if (ret < 0)
     return ret;
+
+  if (!op_state.has_existing_user())
+    return -ERR_NO_SUCH_USER;
 
   Formatter *formatter = flusher.get_formatter();
 
@@ -2432,6 +2440,9 @@ int RGWUserAdminOp_Subuser::modify(RGWRados *store, RGWUserAdminOpState& op_stat
   int ret = user.init(store, op_state);
   if (ret < 0)
     return ret;
+
+  if (!op_state.has_existing_user())
+    return -ERR_NO_SUCH_USER;
 
   Formatter *formatter = flusher.get_formatter();
 
@@ -2461,6 +2472,9 @@ int RGWUserAdminOp_Subuser::remove(RGWRados *store, RGWUserAdminOpState& op_stat
     return ret;
 
 
+  if (!op_state.has_existing_user())
+    return -ERR_NO_SUCH_USER;
+
   ret = user.subusers.remove(op_state, NULL);
   if (ret < 0)
     return ret;
@@ -2476,6 +2490,9 @@ int RGWUserAdminOp_Key::create(RGWRados *store, RGWUserAdminOpState& op_state,
   int ret = user.init(store, op_state);
   if (ret < 0)
     return ret;
+
+  if (!op_state.has_existing_user())
+    return -ERR_NO_SUCH_USER;
 
   Formatter *formatter = flusher.get_formatter();
 
@@ -2511,6 +2528,9 @@ int RGWUserAdminOp_Key::remove(RGWRados *store, RGWUserAdminOpState& op_state,
   if (ret < 0)
     return ret;
 
+  if (!op_state.has_existing_user())
+    return -ERR_NO_SUCH_USER;
+
 
   ret = user.keys.remove(op_state, NULL);
   if (ret < 0)
@@ -2527,6 +2547,9 @@ int RGWUserAdminOp_Caps::add(RGWRados *store, RGWUserAdminOpState& op_state,
   int ret = user.init(store, op_state);
   if (ret < 0)
     return ret;
+
+  if (!op_state.has_existing_user())
+    return -ERR_NO_SUCH_USER;
 
   Formatter *formatter = flusher.get_formatter();
 
@@ -2555,6 +2578,9 @@ int RGWUserAdminOp_Caps::remove(RGWRados *store, RGWUserAdminOpState& op_state,
   int ret = user.init(store, op_state);
   if (ret < 0)
     return ret;
+
+  if (!op_state.has_existing_user())
+    return -ERR_NO_SUCH_USER;
 
   Formatter *formatter = flusher.get_formatter();
 
