@@ -1,7 +1,10 @@
-tasks:
-- install:
-- ceph:
+overrides:
+  ceph:
     log-whitelist:
     - wrongly marked me down
     - objects unfound and apparently lost
+tasks:
 - thrashosds:
+    timeout: 1200
+    chance_pgnum_grow: 2
+    chance_pgpnum_fix: 1
