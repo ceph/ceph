@@ -1831,8 +1831,10 @@ function test_mon_pg()
   expect_false ceph osd primary-affinity osd.9999 .5
   ceph osd primary-affinity osd.0 1
 
-  ceph osd pg-temp 1.0 0 1 2
-  ceph osd pg-temp 1.0 osd.1 osd.0 osd.2
+  ceph osd pool set rbd size 2
+  ceph osd pg-temp 1.0 0 1
+  ceph osd pg-temp 1.0 osd.1 osd.0
+  expect_false ceph osd pg-temp 1.0 0 1 2
   expect_false ceph osd pg-temp asdf qwer
   expect_false ceph osd pg-temp 1.0 asdf
   expect_false ceph osd pg-temp 1.0

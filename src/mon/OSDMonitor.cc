@@ -8856,6 +8856,22 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       new_pg_temp.push_back(osd);
     }
 
+    int pool_min_size = osdmap.get_pg_pool_min_size(pgid);
+    if ((int)new_pg_temp.size() < pool_min_size) {
+      ss << "num of osds (" << new_pg_temp.size() <<") < pool min size ("
+         << pool_min_size << ")";
+      err = -EINVAL;
+      goto reply;
+    }
+
+    int pool_size = osdmap.get_pg_pool_size(pgid);
+    if ((int)new_pg_temp.size() > pool_size) {
+      ss << "num of osds (" << new_pg_temp.size() <<") > pool size ("
+         << pool_size << ")";
+      err = -EINVAL;
+      goto reply;
+    }
+
     pending_inc.new_pg_temp[pgid] = mempool::osdmap::vector<int>(
       new_pg_temp.begin(), new_pg_temp.end());
     ss << "set " << pgid << " pg_temp mapping to " << new_pg_temp;
