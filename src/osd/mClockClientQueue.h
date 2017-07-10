@@ -61,7 +61,7 @@ namespace ceph {
 
   public:
 
-    mClockClientQueue(CephContext *cct);
+    mClockClientQueue(CephContext *cct, bool allow_limit_break = true);
 
     static crimson::dmclock::ClientInfo
     op_class_client_info_f(const InnerClient& client);

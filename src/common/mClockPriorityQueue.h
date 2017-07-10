@@ -28,7 +28,8 @@
 // the following is done to unclobber _ASSERT_H so it returns to the
 // way ceph likes it
 #include "include/assert.h"
-
+#include "osd/osd_types.h"
+#include "osd/PGQueueable.h"
 
 namespace ceph {
 
@@ -218,8 +219,9 @@ namespace ceph {
   public:
 
     mClockQueue(
-      const typename dmc::PullPriorityQueue<K,T,true>::ClientInfoFunc& info_func) :
-      queue(info_func, true)
+      const typename dmc::PullPriorityQueue<K,T,true>::ClientInfoFunc& info_func,
+      bool _allow_limit_break = true) :
+      queue(info_func, _allow_limit_break)
     {
       // empty
     }
@@ -338,9 +340,16 @@ namespace ceph {
       }
 
       auto pr = queue.pull_request();
-      assert(pr.is_retn());
-      auto& retn = pr.get_retn();
-      return *(retn.request);
+      if (pr.is_retn()) {
+        auto& retn = pr.get_retn();
+        return *(retn.request);
+      } else if (pr.is_future()) {
+        T ret = T(spg_t(), PGQueueable(pr.getTime()));
+        return ret;
+      } else {
+        //should not reach here
+        assert(0);
+      }
     }
 
     Retn _dequeue() {
@@ -363,10 +372,17 @@ namespace ceph {
       }
 
       auto pr = queue.pull_request();
-      assert(pr.is_retn());
-      auto& retn = pr.get_retn();
-      resp_params = retn.phase;
-      return std::make_pair(*(retn.request), resp_params);
+      if (pr.is_retn()) {
+        auto& retn = pr.get_retn();
+	resp_params = retn.phase;
+        return std::make_pair(*(retn.request), resp_params);
+      } else if (pr.is_future()) {
+        T ret = T(spg_t(), PGQueueable(pr.getTime()));
+	return std::make_pair(ret, resp_params);
+      } else {
+        //should not reach here
+        assert(0);
+      }
     }
 
     void dump(ceph::Formatter *f) const override final {

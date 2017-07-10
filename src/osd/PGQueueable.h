@@ -70,6 +70,7 @@ class PGQueueable {
   entity_inst_t owner;
   epoch_t map_epoch;    ///< an epoch we expect the PG to exist in
   dmc::ReqParams qos_params;
+  utime_t future_time;     ///< time to dequeue next op
 
   struct RunVis : public boost::static_visitor<> {
     OSD *osd;
@@ -134,6 +135,9 @@ public:
     const entity_inst_t &owner, epoch_t e)
     : qvariant(op), cost(cost), priority(priority), start_time(start_time),
       owner(owner), map_epoch(e) {}
+  PGQueueable(double _time_to_run) : cost(-1) {
+    future_time.set_from_double(_time_to_run);
+  }
 
   const boost::optional<OpRequestRef> maybe_get_op() const {
     const OpRequestRef *op = boost::get<OpRequestRef>(&qvariant);
@@ -154,4 +158,6 @@ public:
   epoch_t get_map_epoch() const { return map_epoch; }
   const QVariant& get_variant() const { return qvariant; }
   dmc::ReqParams get_qos_params() const { return qos_params; }
+  bool is_future() const { return future_time > utime_t(); }
+  utime_t get_future_time() const { return future_time; }
 }; // struct PGQueueable

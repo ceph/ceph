@@ -18,13 +18,15 @@
 #include "gtest/gtest.h"
 #include "common/mClockPriorityQueue.h"
 
-
 struct Request {
   int value;
   Request() = default;
   Request(const Request& o) = default;
   Request(int value) :
     value(value)
+  {}
+  Request(spg_t pgid, PGQueueable op) :
+    value(0)
   {}
 };
 

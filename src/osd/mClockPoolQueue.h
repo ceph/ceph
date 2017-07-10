@@ -63,7 +63,7 @@ namespace ceph {
 
   public:
 
-    mClockPoolQueue(CephContext *cct);
+    mClockPoolQueue(CephContext *cct, bool allow_limit_break = true);
 
     void set_mclock_service(OSDService *service);
 

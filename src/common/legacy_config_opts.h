@@ -684,6 +684,7 @@ OPTION(osd_peering_wq_threads, OPT_INT)
 OPTION(osd_peering_wq_batch_size, OPT_U64)
 OPTION(osd_op_pq_max_tokens_per_priority, OPT_U64)
 OPTION(osd_op_pq_min_cost, OPT_U64)
+OPTION(osd_op_pq_mclock_allow_limit_break, OPT_BOOL)
 OPTION(osd_disk_threads, OPT_INT)
 OPTION(osd_disk_thread_ioprio_class, OPT_STR) // rt realtime be best effort idle
 OPTION(osd_disk_thread_ioprio_priority, OPT_INT) // 0-7

@@ -96,8 +96,9 @@ namespace ceph {
   mClockPoolQueue::pg_queueable_visitor_t
   mClockPoolQueue::pg_queueable_visitor;
 
-  mClockPoolQueue::mClockPoolQueue(CephContext *cct) :
-    queue(&mClockPoolQueue::op_class_client_info_f)
+  mClockPoolQueue::mClockPoolQueue(CephContext *cct,
+                                   bool _allow_limit_break) :
+    queue(&mClockPoolQueue::op_class_client_info_f, _allow_limit_break)
   {
     // manage the singleton
     if (!mclock_op_tags) {
@@ -187,8 +188,10 @@ namespace ceph {
   inline Request mClockPoolQueue::dequeue() {
     std::pair<Request, dmc::PhaseType> retn = queue._dequeue();
 
-    if (boost::optional<OpRequestRef> _op = retn.first.second.maybe_get_op()) {
-      (*_op)->qos_resp = retn.second;
+    if (!retn.first.second.is_future()) {
+      if (boost::optional<OpRequestRef> _op = retn.first.second.maybe_get_op()) {
+	(*_op)->qos_resp = retn.second;
+      }
     }
     return retn.first;
   }

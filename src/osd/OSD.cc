@@ -9914,6 +9914,17 @@ void OSD::ShardedOpWQ::_process(uint32_t thread_index, heartbeat_handle_d *hb)
     sdata->sdata_op_ordering_lock.Unlock();
     return;    // OSD shutdown, discard.
   }
+  if (item.second.is_future()) {
+    utime_t t = item.second.get_future_time();
+    dout(20) << __func__ << " dequeue future request, pgid: " << item.first
+             << ", delay " << t.to_nsec() - ceph_clock_now().to_nsec() << " nanoseconds." << dendl;
+    sdata->sdata_lock.Lock();
+    sdata->sdata_op_ordering_lock.Unlock();
+    sdata->sdata_cond.WaitUntil(sdata->sdata_lock, t);
+    sdata->sdata_lock.Unlock();
+    return;
+  }
+
   PGRef pg;
   uint64_t requeue_seq;
   {

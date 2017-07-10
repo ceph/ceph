@@ -1670,7 +1670,7 @@ private:
       ShardData(
 	string lock_name, string ordering_lock,
 	uint64_t max_tok_per_prio, uint64_t min_cost, CephContext *cct,
-	io_queue opqueue)
+	io_queue opqueue, bool allow_limit_break)
 	: sdata_lock(lock_name.c_str(), false, true, false, cct),
 	  sdata_op_ordering_lock(ordering_lock.c_str(), false, true,
 				 false, cct) {
@@ -1686,13 +1686,13 @@ private:
 		max_tok_per_prio, min_cost));
 	} else if (opqueue == io_queue::mclock_opclass) {
 	  pqueue = std::unique_ptr
-	    <ceph::mClockOpClassQueue>(new ceph::mClockOpClassQueue(cct));
+	    <ceph::mClockOpClassQueue>(new ceph::mClockOpClassQueue(cct, allow_limit_break));
 	} else if (opqueue == io_queue::mclock_client) {
 	  pqueue = std::unique_ptr
-	    <ceph::mClockClientQueue>(new ceph::mClockClientQueue(cct));
+	    <ceph::mClockClientQueue>(new ceph::mClockClientQueue(cct, allow_limit_break));
 	} else if (opqueue == io_queue::mclock_pool) {
 	  pqueue = std::unique_ptr
-	    <ceph::mClockPoolQueue>(new ceph::mClockPoolQueue(cct));
+	    <ceph::mClockPoolQueue>(new ceph::mClockPoolQueue(cct, allow_limit_break));
 	}
       }
     }; // struct ShardData
@@ -1719,7 +1719,8 @@ private:
 	ShardData* one_shard = new ShardData(
 	  lock_name, order_lock,
 	  osd->cct->_conf->osd_op_pq_max_tokens_per_priority, 
-	  osd->cct->_conf->osd_op_pq_min_cost, osd->cct, osd->op_queue);
+	  osd->cct->_conf->osd_op_pq_min_cost, osd->cct, osd->op_queue,
+	  osd->cct->_conf->osd_op_pq_mclock_allow_limit_break);
 	if (osd->op_queue == io_queue::mclock_pool) {
 	  ceph::mClockPoolQueue* pq = 
 	    dynamic_cast<ceph::mClockPoolQueue *>(one_shard->pqueue.get());
