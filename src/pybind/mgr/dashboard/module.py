@@ -744,8 +744,8 @@ class Module(MgrModule):
 
                 return dict(result)
 
-        server_addr = self.get_localized_config('server_addr')
-        server_port = self.get_localized_config('server_port') or '7000'
+        server_addr = self.get_localized_config('server_addr', '::')
+        server_port = self.get_localized_config('server_port', '7000')
         if server_addr is None:
             raise RuntimeError('no server_addr configured; try "ceph config-key put mgr/dashboard/server_addr <ip>"')
         log.info("server_addr: %s server_port: %s" % (server_addr, server_port))
