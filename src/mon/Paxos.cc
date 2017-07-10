@@ -1133,10 +1133,10 @@ void Paxos::handle_lease_ack(MonOpRequestRef op)
   int from = ack->get_source().num();
 
   if (!lease_ack_timeout_event) {
-    dout(10) << "handle_lease_ack from " << ack->get_source() 
+    dout(10) << "handle_lease_ack from " << ack->get_source()
 	     << " -- stray (probably since revoked)" << dendl;
-  }
-  else if (acked_lease.count(from) == 0) {
+
+  } else if (acked_lease.count(from) == 0) {
     acked_lease.insert(from);
     if (ack->feature_map.length()) {
       auto p = ack->feature_map.begin();
@@ -1145,20 +1145,20 @@ void Paxos::handle_lease_ack(MonOpRequestRef op)
     }
     if (acked_lease == mon->get_quorum()) {
       // yay!
-      dout(10) << "handle_lease_ack from " << ack->get_source() 
+      dout(10) << "handle_lease_ack from " << ack->get_source()
 	       << " -- got everyone" << dendl;
       mon->timer.cancel_event(lease_ack_timeout_event);
       lease_ack_timeout_event = 0;
 
 
     } else {
-      dout(10) << "handle_lease_ack from " << ack->get_source() 
+      dout(10) << "handle_lease_ack from " << ack->get_source()
 	       << " -- still need "
 	       << mon->get_quorum().size() - acked_lease.size()
 	       << " more" << dendl;
     }
   } else {
-    dout(10) << "handle_lease_ack from " << ack->get_source() 
+    dout(10) << "handle_lease_ack from " << ack->get_source()
 	     << " dup (lagging!), ignoring" << dendl;
   }
 
