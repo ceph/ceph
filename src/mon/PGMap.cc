@@ -2792,11 +2792,11 @@ void PGMap::get_health(
     float diff = max_osd_usage - min_osd_usage;
     if (diff > cct->_conf->mon_warn_osd_usage_min_max_delta) {
       ostringstream ss;
-      ss << "difference between min (" << roundf(min_osd_usage*1000.0)/100.0
-	 << "%) and max (" << roundf(max_osd_usage*1000.0)/100.0
-	 << "%) osd usage " << roundf(diff*1000.0)/100.0 << "% > "
-	 << roundf(cct->_conf->mon_warn_osd_usage_min_max_delta*1000.0)/100.0
-	 << " (mon_warn_osd_usage_min_max_delta)";
+      ss << "difference between min (" << roundf(min_osd_usage*1000.0)/10.0
+	 << "%) and max (" << roundf(max_osd_usage*1000.0)/10.0
+	 << "%) osd usage " << roundf(diff*1000.0)/10.0 << "% > "
+	 << roundf(cct->_conf->mon_warn_osd_usage_min_max_delta*1000.0)/10.0
+	 << "% (mon_warn_osd_usage_min_max_delta)";
       summary.push_back(make_pair(HEALTH_WARN, ss.str()));
       if (detail)
         detail->push_back(make_pair(HEALTH_WARN, ss.str()));
