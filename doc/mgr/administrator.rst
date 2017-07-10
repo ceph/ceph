@@ -96,4 +96,4 @@ OPTION(mgr_module_path, OPT_STR, CEPH_PKGLIBDIR "/mgr") // where to load python 
 :Type: Integer
 :Default: ``30``
 
-.. _Modifying User Capabilities: ../rados/operations/user-management#modify-user-capabilities
+.. _Modifying User Capabilities: ../../rados/operations/user-management/#modify-user-capabilities
