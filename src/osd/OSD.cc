@@ -2872,7 +2872,9 @@ int OSD::shutdown()
 #ifdef PG_DEBUG_REFS
 	p->second->dump_live_ids();
 #endif
-        ceph_abort();
+	if (cct->_conf->osd_shutdown_pgref_assert) {
+	  ceph_abort();
+	}
       }
       p->second->unlock();
       p->second->put("PGMap");
