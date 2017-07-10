@@ -256,11 +256,13 @@
       <!-- Sidebar Menu -->
       <ul class="sidebar-menu">
         <!-- Optionally, you can add icons to the links -->
-        <li><a href="/health">
+        <li class="{%if path_info=='/' or path_info.startswith('/health')%}active{%endif%}">
+            <a href="/health">
             <i class="fa fa-heartbeat" rv-style="health_status | health_color"></i>
             <span>Cluster health</span></a>
         </li>
-        <li class="treeview active">
+        PATH: {{ path_info }}
+        <li class="treeview{%if path_info.startswith(('/server', '/osd'))%} active{%endif%}">
           <a href="#"><i class="fa fa-server"></i> <span>Cluster</span>
             <span class="pull-right-container">
               <i class="fa fa-angle-left pull-right"></i>
@@ -275,7 +277,7 @@
             </li>
           </ul>
         </li>
-        <li class="treeview active">
+        <li class="treeview{%if path_info.startswith('/rbd')%} active{%endif%}">
           <a href="#"><i class="fa fa-hdd-o"></i> <span>Block</span>
             <span class="pull-right-container">
               <i class="fa fa-angle-left pull-right"></i>
@@ -288,7 +290,7 @@
             <li class="ceph-none-found" rv-hide="rbd_pools | length">None found</li>
           </ul>
         </li>
-        <li class="treeview active">
+        <li class="treeview{%if path_info.startswith(('/filesystem/', '/clients/'))%} active{%endif%}">
           <a href="#"><i class="fa fa-folder"></i> <span>Filesystems</span>
             <span class="pull-right-container">
               <i class="fa fa-angle-left pull-right"></i>

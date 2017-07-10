@@ -467,6 +467,7 @@ class Module(MgrModule):
 
                 return template.render(
                     ceph_version=global_instance().version,
+                    path_info=cherrypy.request.path_info,
                     toplevel_data=json.dumps(toplevel_data, indent=2),
                     content_data=json.dumps(content_data, indent=2)
                 )
@@ -534,6 +535,7 @@ class Module(MgrModule):
                 template = env.get_template("clients.html")
                 return template.render(
                     ceph_version=global_instance().version,
+                    path_info=cherrypy.request.path_info,
                     toplevel_data=json.dumps(self._toplevel_data(), indent=2),
                     content_data=json.dumps(content_data, indent=2)
                 )
@@ -577,6 +579,7 @@ class Module(MgrModule):
 
                 return template.render(
                     ceph_version=global_instance().version,
+                    path_info=cherrypy.request.path_info,
                     toplevel_data=json.dumps(toplevel_data, indent=2),
                     content_data=json.dumps(content_data, indent=2)
                 )
@@ -591,6 +594,7 @@ class Module(MgrModule):
                 template = env.get_template("health.html")
                 return template.render(
                     ceph_version=global_instance().version,
+                    path_info=cherrypy.request.path_info,
                     toplevel_data=json.dumps(self._toplevel_data(), indent=2),
                     content_data=json.dumps(self._health(), indent=2)
                 )
@@ -600,6 +604,7 @@ class Module(MgrModule):
                 template = env.get_template("servers.html")
                 return template.render(
                     ceph_version=global_instance().version,
+                    path_info=cherrypy.request.path_info,
                     toplevel_data=json.dumps(self._toplevel_data(), indent=2),
                     content_data=json.dumps(self._servers(), indent=2)
                 )
@@ -792,6 +797,7 @@ class Module(MgrModule):
 
                 return template.render(
                     ceph_version=global_instance().version,
+                    path_info='/osd' + cherrypy.request.path_info,
                     toplevel_data=json.dumps(toplevel_data, indent=2),
                     content_data=json.dumps(self._osd(osd_id), indent=2)
                 )
@@ -885,6 +891,7 @@ class Module(MgrModule):
 
                 return template.render(
                     ceph_version=global_instance().version,
+                    path_info='/osd' + cherrypy.request.path_info,
                     toplevel_data=json.dumps(toplevel_data, indent=2),
                     content_data=json.dumps(content_data, indent=2)
                 )
