@@ -24,11 +24,6 @@
 #include "mon/MonClient.h"
 #include "osdc/Objecter.h"
 
-#include "DaemonServer.h"
-#include "PyModules.h"
-
-#include "DaemonState.h"
-#include "ClusterState.h"
 
 class MMgrMap;
 class Mgr;
