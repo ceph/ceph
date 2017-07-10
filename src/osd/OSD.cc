@@ -2074,7 +2074,7 @@ bool OSD::asok_command(string admin_command, cmdmap_t& cmdmap, string format,
     curmap->get_blacklist(&bl);
     for (list<pair<entity_addr_t,utime_t> >::iterator it = bl.begin();
 	it != bl.end(); ++it) {
-      f->open_array_section("entry");
+      f->open_object_section("entry");
       f->open_object_section("entity_addr_t");
       it->first.dump(f);
       f->close_section(); //entity_addr_t
@@ -4974,15 +4974,6 @@ void OSD::tick()
   do_waiters();
 
   tick_timer.add_event_after(OSD_TICK_INTERVAL, new C_Tick(this));
-
-  if (is_active()) {
-    const auto now = ceph::coarse_mono_clock::now();
-    const auto elapsed = now - last_sent_beacon;
-    if (chrono::duration_cast<chrono::seconds>(elapsed).count() >
-	cct->_conf->osd_beacon_report_interval) {
-      send_beacon(now);
-    }
-  }
 }
 
 void OSD::tick_without_osd_lock()
@@ -5071,6 +5062,20 @@ void OSD::tick_without_osd_lock()
       sched_scrub();
     }
     service.promote_throttle_recalibrate();
+    bool need_send_beacon = false;
+    const auto now = ceph::coarse_mono_clock::now();
+    {
+      // borrow lec lock to pretect last_sent_beacon from changing
+      Mutex::Locker l{min_last_epoch_clean_lock};
+      const auto elapsed = now - last_sent_beacon;
+      if (chrono::duration_cast<chrono::seconds>(elapsed).count() >
+        cct->_conf->osd_beacon_report_interval) {
+        need_send_beacon = true;
+      }
+    }
+    if (need_send_beacon) {
+      send_beacon(now);
+    }
   }
 
   check_ops_in_flight();
@@ -6049,12 +6054,12 @@ void OSD::send_beacon(const ceph::coarse_mono_clock::time_point& now)
       monmap.get_required_features().contains_all(
         ceph::features::mon::FEATURE_LUMINOUS)) {
     dout(20) << __func__ << " sending" << dendl;
-    last_sent_beacon = now;
     MOSDBeacon* beacon = nullptr;
     {
       Mutex::Locker l{min_last_epoch_clean_lock};
       beacon = new MOSDBeacon(osdmap->get_epoch(), min_last_epoch_clean);
       std::swap(beacon->pgs, min_last_epoch_clean_pgs);
+      last_sent_beacon = now;
     }
     monc->send_mon_message(beacon);
   } else {
@@ -7622,7 +7627,7 @@ void OSD::_committed_osd_maps(epoch_t first, epoch_t last, MOSDMap *m)
       dout(10) << __func__ << " require_osd_release reached luminous in "
 	       << newmap->get_epoch() << dendl;
       clear_pg_stat_queue();
-      outstanding_pg_stats.clear();
+      clear_outstanding_pg_stats();
     }
 
     osdmap = newmap;
@@ -9192,10 +9197,8 @@ void OSDService::finish_recovery_op(PG *pg, const hobject_t& soid, bool dequeue)
 
 bool OSDService::is_recovery_active()
 {
-  if (recovery_ops_active > 0)
-    return true;
-
-  return false;
+  Mutex::Locker l(recovery_lock);
+  return recovery_ops_active > 0;
 }
 
 // =========================================================
@@ -9359,8 +9362,13 @@ const char** OSD::get_tracked_conf_keys() const
   static const char* KEYS[] = {
     "osd_max_backfills",
     "osd_min_recovery_priority",
-    "osd_op_complaint_time", "osd_op_log_threshold",
-    "osd_op_history_size", "osd_op_history_duration",
+    "osd_max_trimming_pgs",
+    "osd_op_complaint_time",
+    "osd_op_log_threshold",
+    "osd_op_history_size",
+    "osd_op_history_duration",
+    "osd_op_history_slow_op_size",
+    "osd_op_history_slow_op_threshold",
     "osd_enable_op_tracker",
     "osd_map_cache_size",
     "osd_map_max_advance",

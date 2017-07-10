@@ -616,8 +616,6 @@ public:
    */
   vector<PaxosService*> paxos_service;
 
-  PaxosService *get_paxos_service_by_name(const string& name);
-
   class PGMonitor *pgmon() {
     return (class PGMonitor *)paxos_service[PAXOS_PGMAP];
   }

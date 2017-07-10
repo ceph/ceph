@@ -147,7 +147,7 @@ public:
 
   bool check_failures(utime_t now);
   bool check_failure(utime_t now, int target_osd, failure_info_t& fi);
-  void force_failure(utime_t now, int target_osd, int by);
+  void force_failure(int target_osd, int by);
 
   // the time of last msg(MSG_ALIVE and MSG_PGTEMP) proposed without delay
   utime_t last_attempted_minwait_time;
