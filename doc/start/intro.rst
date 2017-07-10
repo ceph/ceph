@@ -41,8 +41,8 @@ required when running Ceph Filesystem clients.
 - **MDSs**: A :term:`Ceph Metadata Server` (MDS, ``ceph-mds``) stores
   metadata on behalf of the :term:`Ceph Filesystem` (i.e., Ceph Block
   Devices and Ceph Object Storage do not use MDS). Ceph Metadata
-  Servers allow POSIX file system users to execute basic commands like
-  ``ls``, ``find``, etc. without placing an enormous burden on the
+  Servers allow POSIX file system users to execute basic commands (like
+  ``ls``, ``find``, etc.) without placing an enormous burden on the
   Ceph Storage Cluster.
 
 Ceph stores data as objects within logical storage pools. Using the
