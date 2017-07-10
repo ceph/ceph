@@ -291,6 +291,41 @@ OSDService::~OSDService()
   delete objecter;
 }
 
+
+
+#ifdef PG_DEBUG_REFS
+void OSDService::add_pgid(spg_t pgid, PG *pg){
+  Mutex::Locker l(pgid_lock);
+  if (!pgid_tracker.count(pgid)) {
+    live_pgs[pgid] = pg;
+  }
+  pgid_tracker[pgid]++;
+}
+void OSDService::remove_pgid(spg_t pgid, PG *pg)
+{
+  Mutex::Locker l(pgid_lock);
+  assert(pgid_tracker.count(pgid));
+  assert(pgid_tracker[pgid] > 0);
+  pgid_tracker[pgid]--;
+  if (pgid_tracker[pgid] == 0) {
+    pgid_tracker.erase(pgid);
+    live_pgs.erase(pgid);
+  }
+}
+void OSDService::dump_live_pgids()
+{
+  Mutex::Locker l(pgid_lock);
+  derr << "live pgids:" << dendl;
+  for (map<spg_t, int>::const_iterator i = pgid_tracker.cbegin();
+       i != pgid_tracker.cend();
+       ++i) {
+    derr << "\t" << *i << dendl;
+    live_pgs[i->first]->dump_live_ids();
+  }
+}
+#endif
+
+
 void OSDService::_start_split(spg_t parent, const set<spg_t> &children)
 {
   for (set<spg_t>::const_iterator i = children.begin();
@@ -9102,7 +9137,7 @@ struct C_CompleteSplits : public Context {
 	 ++i) {
       osd->pg_map_lock.get_write();
       (*i)->lock();
-      PG *pg = (*i).get();
+      PG *pg = i->get();
       osd->add_newly_split_pg(pg, &rctx);
       if (!((*i)->deleting)) {
         set<spg_t> to_complete;
@@ -9110,7 +9145,7 @@ struct C_CompleteSplits : public Context {
         osd->service.complete_split(to_complete);
       }
       osd->pg_map_lock.put_write();
-      osd->dispatch_context_transaction(rctx, &**i);
+      osd->dispatch_context_transaction(rctx, pg);
       (*i)->unlock();
       osd->wake_pg_waiters((*i)->info.pgid);
     }

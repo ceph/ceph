@@ -100,7 +100,7 @@ void PG::put(const char* tag)
   {
     Mutex::Locker l(_ref_id_lock);
     auto tag_counts_entry = _tag_counts.find(tag);
-    assert(_tag_counts_entry != _tag_counts.end());
+    assert(tag_counts_entry != _tag_counts.end());
     --tag_counts_entry->second;
     if (tag_counts_entry->second == 0) {
       _tag_counts.erase(tag_counts_entry);
