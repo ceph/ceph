@@ -32,9 +32,9 @@ from types import OsdMap, NotFound, Config, FsMap, MonMap, \
     PgSummary, Health, MonStatus
 
 import rados
+import rbd_mirroring
 from rbd_ls import RbdLs, RbdPoolLs
 from cephfs_clients import CephFSClients
-
 
 log = logging.getLogger("dashboard")
 
@@ -82,6 +82,9 @@ class Module(MgrModule):
         # Stateful instance of RbdPoolLs, hold cached list of RBD
         # pools
         self.rbd_pool_ls = RbdPoolLs(self)
+
+        # Stateful instance of RbdMirroring, hold cached results.
+        self.rbd_mirroring = rbd_mirroring.Controller(self)
 
         # Stateful instances of CephFSClients, hold cached results.  Key to
         # dict is FSCID
@@ -438,6 +441,11 @@ class Module(MgrModule):
                     for name in data
                 ], key=lambda k: k['name'])
 
+                status, rbd_mirroring = global_instance().rbd_mirroring.toplevel.get()
+                if rbd_mirroring is None:
+                    log.warning("Failed to get RBD mirroring summary")
+                    rbd_mirroring = {}
+
                 fsmap = global_instance().get_sync_object(FsMap)
                 filesystems = [
                     {
@@ -450,6 +458,7 @@ class Module(MgrModule):
 
                 return {
                     'rbd_pools': rbd_pools,
+                    'rbd_mirroring': rbd_mirroring,
                     'health_status': self._health_data()['status'],
                     'filesystems': filesystems
                 }
@@ -588,6 +597,32 @@ class Module(MgrModule):
             @cherrypy.tools.json_out()
             def rbd_pool_data(self, pool_name):
                 return self._rbd_pool(pool_name)
+
+            def _rbd_mirroring(self):
+                status, data = global_instance().rbd_mirroring.content_data.get()
+                if data is None:
+                    log.warning("Failed to get RBD mirroring status")
+                    return {}
+                return data
+
+            @cherrypy.expose
+            def rbd_mirroring(self):
+                template = env.get_template("rbd_mirroring.html")
+
+                toplevel_data = self._toplevel_data()
+                content_data = self._rbd_mirroring()
+
+                return template.render(
+                    ceph_version=global_instance().version,
+                    path_info=cherrypy.request.path_info,
+                    toplevel_data=json.dumps(toplevel_data, indent=2),
+                    content_data=json.dumps(content_data, indent=2)
+                )
+
+            @cherrypy.expose
+            @cherrypy.tools.json_out()
+            def rbd_mirroring_data(self):
+                return self._rbd_mirroring()
 
             @cherrypy.expose
             def health(self):
