@@ -189,13 +189,21 @@ class DeepSea(Task):
                 'for f in vdb2 vdc2 ; do test -b /dev/$f && umount /dev/$f || true ; done'
                 ])
 
-    def gather_nfs_ganesha_log(self):
-        self.log.info("gathering NFS-Ganesha log")
+    def gather_logs(self):
         self.log.info("summary: {}".format(self.ctx.summary))
+        for _remote, _ in self.ctx.cluster.remotes.iteritems():
+            self.log.info("gathering Salt logs from remote {}".format(_remote.hostname))
+            _remote.run(args = [
+                'sudo', 'cp', '-a', '/var/log/salt/',
+                '/home/ubuntu/cephtest/archive/',
+                run.Raw(';'),
+                'sudo', 'chown', '-R', 'ubuntu',
+                '/home/ubuntu/cephtest/archive/'
+                ])
 
     def end(self):
         self.purge_osds()
-        self.gather_nfs_ganesha_log()
+        self.gather_logs()
         super(DeepSea, self).end()
 
 task = DeepSea
