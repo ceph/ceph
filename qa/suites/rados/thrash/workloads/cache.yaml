@@ -25,6 +25,6 @@ tasks:
       write: 100
       delete: 50
       copy_from: 50
-      flush: 50
-      try_flush: 50
-      evict: 50
+      cache_flush: 50
+      cache_try_flush: 50
+      cache_evict: 50
