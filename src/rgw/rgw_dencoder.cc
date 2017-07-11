@@ -12,13 +12,14 @@
 
 static string shadow_ns = RGW_OBJ_NS_SHADOW;
 
-static void init_bucket(rgw_bucket *b, const char *t, const char *n, const char *dp, const char *ip, const char *m, const char *id)
+static void init_bucket(rgw_bucket *b, const char *t, const char *n, const char *dp, const char *dtp, const char *ip, const char *m, const char *id)
 {
   b->tenant = t;
   b->name = n;
   b->marker = m;
   b->bucket_id = id;
   b->explicit_placement.data_pool = rgw_pool(dp);
+  b->explicit_placement.data_tail_pool = rgw_pool(dtp);
   b->explicit_placement.index_pool = rgw_pool(ip);
 }
 
