@@ -971,35 +971,31 @@ int md_config_t::_get_val_from_conf_file(const std::vector <std::string> &sectio
   return -ENOENT;
 }
 
-int md_config_t::set_val_impl(const std::string &val, const Option &opt,
+int md_config_t::set_val_impl(const std::string &raw_val, const Option &opt,
                               std::string *error_message)
 {
   assert(lock.is_locked());
 
-  // TODO: hook validators back in
-#if 0
+  std::string val = raw_val;
   if (opt.validator) {
-    int r = opt.validator(&value, error_message);
+    int r = opt.validator(&val, error_message);
     if (r < 0) {
       return r;
     }
   }
-#endif
 
   Option::value_t new_value;
   if (opt.type == Option::TYPE_INT) {
-    std::string err;
-    int64_t f = strict_si_cast<int64_t>(val.c_str(), &err);
-    if (!err.empty()) {
+    int64_t f = strict_si_cast<int64_t>(val.c_str(), error_message);
+    if (!error_message->empty()) {
       return -EINVAL;
     }
     new_value = f;
   } else if (opt.type == Option::TYPE_STR) {
     new_value = val;
   } else if (opt.type == Option::TYPE_FLOAT) {
-    std::string err;
-    double f = strict_strtod(val.c_str(), &err);
-    if (!err.empty()) {
+    double f = strict_strtod(val.c_str(), error_message);
+    if (!error_message->empty()) {
       return -EINVAL;
     } else {
       new_value = f;
@@ -1010,9 +1006,8 @@ int md_config_t::set_val_impl(const std::string &val, const Option &opt,
     } else if (strcasecmp(val.c_str(), "true") == 0) {
       new_value = true;
     } else {
-      std::string err;
-      int b = strict_strtol(val.c_str(), 10, &err);
-      if (!err.empty()) {
+      int b = strict_strtol(val.c_str(), 10, error_message);
+      if (!error_message->empty()) {
 	return -EINVAL;
       }
       new_value = !!b;
