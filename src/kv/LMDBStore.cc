@@ -220,9 +220,19 @@ int LMDBStore::submit_transaction(KeyValueDB::Transaction t)
 { 
   int rc;
   utime_t start = ceph_clock_now();
+
+  MDB_txn *txn = NULL;  // One write txn per thread!
+  rc = mdb_txn_begin(env.get(), NULL, 0, &txn);
+  if (rc != 0) {
+    derr << __FILE__ << ":" << __LINE__ << " " << mdb_strerror(rc) << dendl;
+    mdb_txn_abort(txn);
+    return -1;
+  }
+
   LMDBTransactionImpl * _t =
     static_cast<LMDBTransactionImpl *>(t.get());
-  rc = mdb_txn_commit(_t->txn);
+  _t->do_tasks(txn, dbi);
+  rc = mdb_txn_commit(txn);
   utime_t lat = ceph_clock_now() - start;
   logger->inc(l_lmdb_txns);
   logger->tinc(l_lmdb_submit_latency, lat);
@@ -233,33 +243,89 @@ int LMDBStore::submit_transaction_sync(KeyValueDB::Transaction t)
 {
   int rc;
   utime_t start = ceph_clock_now();
+
+  MDB_txn *txn = NULL;  // One write txn per thread!
+ 
+  rc = mdb_txn_begin(env.get(), NULL, 0, &txn);
+  if (rc != 0) { 
+    derr << __FILE__ << ":" << __LINE__ << " " << mdb_strerror(rc) << dendl;
+    mdb_txn_abort(txn);
+    return -1;
+  }
+
   LMDBTransactionImpl * _t =
     static_cast<LMDBTransactionImpl *>(t.get());
-  MDB_env *_env = mdb_txn_env(_t->txn);
-  rc = mdb_txn_commit(_t->txn);
-  rc = mdb_env_sync(_env, 1);
+  _t->do_tasks(txn, dbi);
+  rc = mdb_txn_commit(txn);
+  rc = mdb_env_sync(env.get(), 1);
+
   utime_t lat = ceph_clock_now() - start;
   logger->inc(l_lmdb_txns);
   logger->tinc(l_lmdb_submit_sync_latency, lat);
   return (rc == 0) ? 0 : -1;
 }
 
+void LMDBStore::LMDBPutTask::submit(MDB_txn *txn, MDB_dbi dbi) {
+  MDB_val k, v;
+  k.mv_size = key.size();
+  k.mv_data = (void *)key.data();
+  v.mv_size = value.size();
+  v.mv_data = (void *)value.data();
+  mdb_put(txn, dbi, &k, &v, 0);
+}
+
+void LMDBStore::LMDBDelTask::submit(MDB_txn *txn, MDB_dbi dbi) {
+  MDB_val k;
+  k.mv_size = key.size();
+  k.mv_data = (void *)key.data();
+  mdb_del(txn, dbi, &k, NULL);
+}
+
+void LMDBStore::LMDBMergeTask::submit(MDB_txn *txn, MDB_dbi dbi) {
+  MDB_val k, v, nv;
+  k.mv_size = key.size();
+  k.mv_data = (void *)key.data();
+  string new_value;
+
+  int rc = mdb_get(txn, dbi, &k, &v);
+
+  // Check each prefix
+  for (auto& p : db->merge_ops) {
+    if (p.first.compare(0, p.first.length(),
+                        key.c_str(), p.first.length()) == 0 &&
+        key.c_str()[p.first.length()] == 0) {
+      if (rc == 0) {
+        p.second->merge((const char *)v.mv_data, v.mv_size, value.c_str(),
+                        value.length(), &new_value);
+      } else {
+        p.second->merge_nonexistent(value.c_str(), value.length(), &new_value);
+      }
+      break;
+    }
+  }
+
+  nv.mv_size = new_value.length();
+  nv.mv_data = (void *)new_value.c_str();
+  mdb_put(txn, dbi, &k, &nv, 0);
+}
+
 LMDBStore::LMDBTransactionImpl::LMDBTransactionImpl(LMDBStore *_db)
 {
-  int rc;
   db = _db;
   dbi = db->dbi;
-  rc = mdb_txn_begin(db->env.get(), NULL, 0, &txn);
-  if (rc != 0) {
-    derr << __FILE__ << ":" << __LINE__ << " " << mdb_strerror(rc) << dendl;
-    mdb_txn_abort(txn);
-    db = NULL;
-    dbi = 0;
-  }
-  rc = mdb_dbi_open(txn, NULL, 0, &dbi);
-  if (rc != 0) {
-    derr << __FILE__ << ":" << __LINE__ << " " << mdb_strerror(rc) << dendl;
-    mdb_txn_abort(txn);
+}
+
+LMDBStore::LMDBTransactionImpl::~LMDBTransactionImpl() {
+}
+
+void LMDBStore::LMDBTransactionImpl::do_tasks(MDB_txn *txn, MDB_dbi dbi) {
+  int i = 0;
+  
+  while (!tasks.empty()) {
+    auto task = std::move(tasks.front());
+    task->submit(txn, dbi);
+    tasks.pop();
+    ++i;
   }
 }
 
@@ -271,38 +337,26 @@ void LMDBStore::LMDBTransactionImpl::set(
   buffers.push_back(to_set_bl);
   bufferlist &bl = *(buffers.rbegin());
   string kk = combine_strings(prefix, key);
-  keys.push_back(kk);
-  MDB_val k, v;
-  k.mv_size = keys.rbegin()->size();
-  k.mv_data = (void *)keys.rbegin()->data();
-  v.mv_size = bl.length();
-  v.mv_data = (void *)bl.c_str();
-  mdb_put(txn, dbi, &k, &v, 0);
+  string value = string((char *)bl.c_str(), bl.length());
+  tasks.push(std::unique_ptr<LMDBPutTask>(new LMDBPutTask(kk, value)));
 }
 
 void LMDBStore::LMDBTransactionImpl::rmkey(const string &prefix,
 					         const string &key)
 {
   string kk = combine_strings(prefix, key);
-  keys.push_back(kk);
-  MDB_val k;
-  k.mv_size = keys.rbegin()->size();
-  k.mv_data = (void *)keys.rbegin()->data();
-  mdb_del(txn, dbi, &k, NULL);
+  tasks.push(std::unique_ptr<LMDBDelTask>(new LMDBDelTask(kk)));
 }
 
 void LMDBStore::LMDBTransactionImpl::rmkeys_by_prefix(const string &prefix)
 { 
+
   KeyValueDB::Iterator it = db->get_iterator(prefix);
   for (it->seek_to_first();
        it->valid();
         it->next()) {
     string key = combine_strings(prefix, it->key());
-    keys.push_back(key);
-    MDB_val k;
-    k.mv_size = keys.rbegin()->size();
-    k.mv_data = (void *)keys.rbegin()->data();
-    mdb_del(txn, dbi, &k, NULL);
+    tasks.push(std::unique_ptr<LMDBDelTask>(new LMDBDelTask(key)));
   }
 }
 
@@ -317,11 +371,7 @@ void LMDBStore::LMDBTransactionImpl::rm_range_keys(const string &prefix,
       break;
     }
     string key = combine_strings(prefix, it->key());
-    keys.push_back(key);
-    MDB_val k;
-    k.mv_size = keys.rbegin()->size();
-    k.mv_data = (void *)keys.rbegin()->data();
-    mdb_del(txn, dbi, &k, NULL);
+    tasks.push(std::unique_ptr<LMDBDelTask>(new LMDBDelTask(key)));
     it->next();
   }
 }
@@ -331,12 +381,6 @@ void LMDBStore::LMDBTransactionImpl::merge(const string& prefix,
                                            const bufferlist &to_set_bl)
 {
   std::string bound = combine_strings(prefix, key);
-  auto it  = db->get_iterator(prefix);
-  MDB_val k, v, nv;
-  k.mv_size = bound.size();
-  k.mv_data = (void *)bound.data();
-  int rc = mdb_get(txn, dbi, &k, &v);
-  string new_value;
 
   const char* nd;
   size_t ndl = to_set_bl.length();
@@ -356,29 +400,9 @@ void LMDBStore::LMDBTransactionImpl::merge(const string& prefix,
     nd = bl.c_str();
   }
 
-  // Check each prefix
-  for (auto& p : db->merge_ops) {
-    if (p.first.compare(0, p.first.length(),
-                        bound.c_str(), p.first.length()) == 0 &&
-        bound.c_str()[p.first.length()] == 0) {
-      if (rc == 0) {
-        string existing_value = string((const char *)v.mv_data, v.mv_size);
-        p.second->merge(existing_value.c_str(), existing_value.length(),
-                        nd, ndl,
-                        &new_value);
-      } else {
-        p.second->merge_nonexistent(nd, ndl, &new_value);
-      }
-      break;
-    }
-  }
-
-  nv.mv_size = new_value.length();
-  nv.mv_data = (void *)new_value.c_str();
-  rc = mdb_put(txn, dbi, &k, &nv, 0);
-  lgeneric_dout(g_ceph_context, 0) << __func__ << " rc: " << rc << dendl;
+  tasks.push(std::unique_ptr<LMDBMergeTask>(
+             new LMDBMergeTask(bound, string(nd, ndl), db)));
 }
-
 
 int LMDBStore::get(
     const string &prefix,
@@ -391,12 +415,8 @@ int LMDBStore::get(
        i != keys.end(); ++i) {
     it->lower_bound(*i);
     bool v = it->valid();
-//    lgeneric_dout(g_ceph_context, 0) << __func__ << " prefix: " << prefix << ", *i: " << *i << ", valid: " << v <<dendl;
-//    if (v)
-//      lgeneric_dout(g_ceph_context, 0) << __func__ << " key: " << it->key() << dendl;
     if (v && it->key() == *i) {
-//      lgeneric_dout(g_ceph_context, 0) << __func__ << " before value()" << dendl;
-      out->insert(make_pair(*i, it->value()));
+        (*out)[*i].append(it->value());
     } else if (!v)
       break;
   }
@@ -442,16 +462,13 @@ bool LMDBStore::check_omap_dir(string &omap_dir)
   int rc = _test_init(omap_dir); 
   return (rc == 0) ? true : false;
 }
-LMDBStore::LMDBWholeSpaceIteratorImpl::LMDBWholeSpaceIteratorImpl(LMDBStore *store)
+LMDBStore::LMDBWholeSpaceIteratorImpl::LMDBWholeSpaceIteratorImpl(LMDBStore *_store)
 {
+  store = _store;
   int rc = 1;
   MDB_env *env = store->env.get();
   MDB_dbi dbi = store->dbi;
   rc = mdb_txn_begin(env, NULL, MDB_RDONLY, &txn);
-  if (rc != 0) {
-    derr << __FILE__ << ":" << __LINE__ << " " << mdb_strerror(rc) << dendl;
-  }
-  rc = mdb_dbi_open(txn, NULL, 0, &dbi);
   if (rc != 0) {
     derr << __FILE__ << ":" << __LINE__ << " " << mdb_strerror(rc) << dendl;
   }
@@ -461,6 +478,7 @@ LMDBStore::LMDBWholeSpaceIteratorImpl::LMDBWholeSpaceIteratorImpl(LMDBStore *sto
   }
   invalid = false;
 }
+
 LMDBStore::LMDBWholeSpaceIteratorImpl::~LMDBWholeSpaceIteratorImpl()
 {
   if (cursor) {
@@ -478,6 +496,7 @@ int LMDBStore::LMDBWholeSpaceIteratorImpl::seek_to_first()
   int rc = mdb_cursor_get(cursor, NULL, NULL, MDB_FIRST);
   return (rc == 0) ? 0 : -1;
 }
+
 int LMDBStore::LMDBWholeSpaceIteratorImpl::seek_to_first(const string &prefix)
 {
   int rc;
@@ -492,12 +511,14 @@ int LMDBStore::LMDBWholeSpaceIteratorImpl::seek_to_first(const string &prefix)
   }
   return (rc == 0) ? 0 : -1;
 }
+
 int LMDBStore::LMDBWholeSpaceIteratorImpl::seek_to_last()
 {
   invalid = false;
   int rc = mdb_cursor_get(cursor, NULL, NULL, MDB_LAST);
   return (rc == 0) ? 0 : -1;
 }
+
 int LMDBStore::LMDBWholeSpaceIteratorImpl::seek_to_last(const string &prefix)
 {
   int rc;
@@ -523,6 +544,7 @@ int LMDBStore::LMDBWholeSpaceIteratorImpl::seek_to_last(const string &prefix)
   }
   return (rc == 0) ? 0 : 1;
 }
+
 int LMDBStore::LMDBWholeSpaceIteratorImpl::upper_bound(const string &prefix, const string &after)
 {
   int rc;
@@ -541,38 +563,25 @@ int LMDBStore::LMDBWholeSpaceIteratorImpl::lower_bound(const string &prefix, con
   int rc;
   invalid = false;
   MDB_val key;
+
   string bound = combine_strings(prefix, to);
   key.mv_size = bound.size();
   key.mv_data = (void *)bound.data();
   rc = mdb_cursor_get(cursor, &key, NULL, MDB_SET_RANGE);
-
-  string kstring = string((const char *)key.mv_data, key.mv_size);
-  lgeneric_dout(g_ceph_context, 0) << __func__ << " prefix: " << prefix << " key: " << to << " rc: " << rc << dendl;
-  lgeneric_dout(g_ceph_context, 0) << __func__ << " key before: " << kstring << dendl;
-
-  if (rc != 0) {
-    lgeneric_dout(g_ceph_context, 0) << __func__ << " Setting Invalid" << dendl;
-    invalid = true;
-    rc = mdb_cursor_get(cursor, NULL, NULL, MDB_LAST);
-  }
-  lgeneric_dout(g_ceph_context, 0) << __func__ << " key after: " << kstring << dendl;
   return (rc == 0) ? 0 : 1;
 }
+
 bool LMDBStore::LMDBWholeSpaceIteratorImpl::valid()
 {
   if (invalid) {
-//    lgeneric_dout(g_ceph_context, 0) << __func__ << " invalid set true" << dendl;
     return false;
   }
   MDB_val k, v;
   int rc = mdb_cursor_get(cursor, &k, &v, MDB_GET_CURRENT);
-  if (rc == 0) {
-    string key = string((const char *)k.mv_data, k.mv_size);    
-    string value = string((const char *)v.mv_data, v.mv_size);
-//    lgeneric_dout(g_ceph_context, 0) << __func__ << " key: " << key << ", value: " << value << ", rc: " << rc << dendl;
-  }
   return (rc == 0) ? true : false;
+
 }
+
 int LMDBStore::LMDBWholeSpaceIteratorImpl::next()
 {
   int rc = 1;
@@ -583,6 +592,7 @@ int LMDBStore::LMDBWholeSpaceIteratorImpl::next()
   }
   return 0;
 }
+
 int LMDBStore::LMDBWholeSpaceIteratorImpl::prev()
 {
   int rc = 1;
@@ -593,6 +603,7 @@ int LMDBStore::LMDBWholeSpaceIteratorImpl::prev()
   }
   return 0;
 }
+
 string LMDBStore::LMDBWholeSpaceIteratorImpl::key()
 {
   string key, out_key;
@@ -605,6 +616,7 @@ string LMDBStore::LMDBWholeSpaceIteratorImpl::key()
   split_key(key, 0, &out_key);
   return out_key;
 }
+
 pair<string,string> LMDBStore::LMDBWholeSpaceIteratorImpl::raw_key()
 {
   string prefix, key, out;
@@ -617,20 +629,21 @@ pair<string,string> LMDBStore::LMDBWholeSpaceIteratorImpl::raw_key()
   split_key(out, &prefix, &key);
   return make_pair(prefix, key);
 }
+
 bool LMDBStore::LMDBWholeSpaceIteratorImpl::raw_key_is_prefixed(const string &prefix) {
-  string key, out;
   MDB_val k, v;
   int rc = mdb_cursor_get(cursor, &k, &v, MDB_GET_CURRENT);
   if (rc != 0) {
     derr << __FILE__ << ":" << __LINE__ << " " << mdb_strerror(rc) << dendl;
   }
-  out = string((const char *)k.mv_data, k.mv_size);
-  if ((out.length() > prefix.length() && key[prefix.length()] == '\0')) {
-    return memcmp(out.c_str(), prefix.c_str(), prefix.length()) == 0;
+  const char* kdata = (const char *) k.mv_data;
+  if ((k.mv_size > prefix.length() && kdata[prefix.length()] == '\0')) {
+    return memcmp(kdata, prefix.c_str(), prefix.length()) == 0;
   } else {
     return false;
   }
 }
+
 bufferlist LMDBStore::LMDBWholeSpaceIteratorImpl::value()
 {
   MDB_val k, v;
@@ -640,10 +653,9 @@ bufferlist LMDBStore::LMDBWholeSpaceIteratorImpl::value()
     derr << __FILE__ << ":" << __LINE__ << " " << mdb_strerror(rc) << dendl;
   }
   value = string((const char *)v.mv_data, v.mv_size);
-//  lgeneric_dout(g_ceph_context, 0) << __func__ << " value: " << value << dendl;
-
   return to_bufferlist(value);
 }
+
 int LMDBStore::LMDBWholeSpaceIteratorImpl::status()
 {
   int rc = mdb_cursor_get(cursor, NULL, NULL, MDB_GET_CURRENT);
@@ -660,11 +672,8 @@ string LMDBStore::past_prefix(const string &prefix)
   return limit;
 }
 
-
 LMDBStore::WholeSpaceIterator LMDBStore::_get_iterator()
 {
-  return std::shared_ptr<KeyValueDB::WholeSpaceIteratorImpl>(
-    new LMDBWholeSpaceIteratorImpl(this)
-  );
+  return std::make_shared<LMDBWholeSpaceIteratorImpl>(this);
 }
 

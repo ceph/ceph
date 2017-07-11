@@ -6,9 +6,8 @@
 #include "KeyValueDB.h"
 #include <set>
 #include <map>
+#include <queue>
 #include <string>
-#include <tr1/memory>
-#include <boost/scoped_ptr.hpp>
 
 #include <errno.h>
 #include "common/errno.h"
@@ -39,10 +38,9 @@ class LMDBStore : public KeyValueDB {
   CephContext *cct;
   PerfCounters *logger;
   string path;
-  boost::shared_ptr<MDB_env> env;
+  std::shared_ptr<MDB_env> env;
   MDB_dbi dbi;
   int do_open(ostream &out, bool create_if_missing);
-
 
 public:
 
@@ -89,16 +87,45 @@ public:
 
   void close();
 
+  class LMDBTask {
+  public:
+    virtual void submit(MDB_txn *txn, MDB_dbi dbi) {}; 
+  };
+
+  class LMDBPutTask : public LMDBTask {
+  public:
+    LMDBPutTask(string key, string value) : key(key), value(value) {};
+    string key, value;
+    void submit(MDB_txn *txn, MDB_dbi dbi) override;
+  };
+
+  class LMDBDelTask : public LMDBTask {
+  public:
+    LMDBDelTask(string key) : key(key) {};
+    string key;
+    void submit(MDB_txn *txn, MDB_dbi dbi) override;
+  };
+
+  class LMDBMergeTask : public LMDBTask {
+  public:
+    LMDBMergeTask(string key, string value, LMDBStore *db) : 
+      key(key), value(value), db(db) {};
+    string key;
+    string value;
+    LMDBStore *db;
+    void submit(MDB_txn *txn, MDB_dbi dbi) override;
+  };
+
   class LMDBTransactionImpl : public KeyValueDB::TransactionImpl {
   public:
-    MDB_txn *txn;
     list<bufferlist> buffers;
     list<string> keys;
+    std::queue<std::unique_ptr<LMDBTask>> tasks;
     LMDBStore *db;
     MDB_dbi dbi;
-
     LMDBTransactionImpl(LMDBStore *_db);
-    ~LMDBTransactionImpl(){}
+    ~LMDBTransactionImpl();
+    void do_tasks(MDB_txn *txn, MDB_dbi dbi);
     void set(
       const string &prefix,
       const string &key,
@@ -135,11 +162,12 @@ public:
   class LMDBWholeSpaceIteratorImpl :
     public KeyValueDB::WholeSpaceIteratorImpl {
   protected:
+    LMDBStore *store;
     MDB_cursor *cursor;
     MDB_txn *txn;
     bool invalid;
   public:
-    LMDBWholeSpaceIteratorImpl(LMDBStore *store);
+    LMDBWholeSpaceIteratorImpl(LMDBStore *_store);
    
     ~LMDBWholeSpaceIteratorImpl();
 
