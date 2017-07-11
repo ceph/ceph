@@ -840,7 +840,7 @@ namespace rgw {
 
     /* max events to gc in one cycle */
     uint32_t max_ev =
-      std::max(1, get_context()->_conf->rgw_nfs_max_gc);
+      std::max(int64_t(1), get_context()->_conf->rgw_nfs_max_gc);
 
     struct timespec now, expire_ts;
     event_vector ve;
