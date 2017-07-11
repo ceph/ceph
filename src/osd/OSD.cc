@@ -3456,7 +3456,12 @@ int OSD::update_crush_device_class()
     string("\"class\": \"") + device_class + string("\", ") +
     string("\"ids\": [\"") + stringify(whoami) + string("\"]}");
 
-  return mon_cmd_maybe_osd_create(cmd);
+  r = mon_cmd_maybe_osd_create(cmd);
+  if (r == -EPERM) {
+    r = 0;
+  }
+
+  return r;
 }
 
 void OSD::write_superblock(ObjectStore::Transaction& t)
