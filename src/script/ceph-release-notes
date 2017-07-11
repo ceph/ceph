@@ -3,8 +3,10 @@
 # https://gist.github.com/aisrael/b2b78d9dfdd176a232b9
 """To run this script first install the dependencies
 
+  IMPORTANT NOTE: This script requires python 2. It does not work with python 3.
+  Make sure the value passed with --python is the python 2 binary on your system.
 
-  virtualenv v
+  virtualenv --python=/usr/bin/python2 v
   source v/bin/activate
   pip install githubpy GitPython requests
 
