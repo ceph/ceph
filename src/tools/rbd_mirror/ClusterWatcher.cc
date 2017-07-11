@@ -4,6 +4,7 @@
 #include "ClusterWatcher.h"
 #include "common/debug.h"
 #include "common/errno.h"
+#include "cls/rbd/cls_rbd_client.h"
 #include "librbd/internal.h"
 #include "librbd/api/Mirror.h"
 
@@ -89,14 +90,17 @@ void ClusterWatcher::read_pool_peers(PoolPeers *pool_peers,
       continue;
     }
 
-    rbd_mirror_mode_t mirror_mode;
-    r = librbd::api::Mirror<>::mode_get(ioctx, &mirror_mode);
-    if (r < 0) {
+    cls::rbd::MirrorMode mirror_mode_internal;
+    r = librbd::cls_client::mirror_mode_get(&ioctx, &mirror_mode_internal);
+    if (r == -EPERM) {
+      dout(10) << "access denied querying pool " << pool_name << dendl;
+      continue;
+    } else if (r < 0) {
       derr << "could not tell whether mirroring was enabled for " << pool_name
 	   << " : " << cpp_strerror(r) << dendl;
       continue;
     }
-    if (mirror_mode == RBD_MIRROR_MODE_DISABLED) {
+    if (mirror_mode_internal == cls::rbd::MIRROR_MODE_DISABLED) {
       dout(10) << "mirroring is disabled for pool " << pool_name << dendl;
       continue;
     }
