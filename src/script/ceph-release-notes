@@ -211,13 +211,13 @@ def make_release_notes(gh, repo, ref, plaintext, verbose, strict, use_tags):
     print (" done collecting merges.")
 
     if strict:
-        for (issue, prs) in issue2prs.iteritems():
+        for (issue, prs) in issue2prs.items():
             if len(prs) > 1:
                 print (">>>>>>> " + str(len(prs)) + " pr for issue " +
                        issue + " " + str(prs))
 
     for (pr, (author, title, message)) in sorted(
-        pr2info.iteritems(), key=lambda (k, v): (v[2], v[1])
+        pr2info.items(), key=lambda k, v: (v[2], v[1])
     ):
         if pr in pr2issues:
             if plaintext:
