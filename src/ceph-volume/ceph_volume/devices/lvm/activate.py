@@ -2,13 +2,14 @@ import argparse
 import os
 from textwrap import dedent
 from ceph_volume import process
+from ceph_volume.util import activate as activate_utils
 from ceph_volume.systemd import systemctl
 import api
 
 
 def activate_filestore(lvs):
     # find the osd
-    osd_lv = lvs.get(lv_tags={'ceph.type': 'osd'})
+    osd_lv = lvs.get(lv_tags={'ceph.type': 'data'})
     osd_id = osd_lv.tags['ceph.osd_id']
     # it may have a volume with a journal
     osd_journal_lv = lvs.get(lv_tags={'ceph.type': 'journal'})
@@ -31,6 +32,9 @@ def activate_filestore(lvs):
         destination = '/var/lib/ceph/osd/ceph-%s/journal' % osd_id
         process.call(['sudo', 'ln', '-s', source, destination])
 
+    # register the osd
+    activate_utils.add_osd_to_mon(osd_id)
+
     # start the OSD
     systemctl.start_osd(osd_id)
 
@@ -51,6 +55,8 @@ class Activate(object):
         lvs = api.Volumes()
         # filter them down for the OSD ID and FSID we need to activate
         lvs.filter(lv_tags={'ceph.osd_id': args.id, 'ceph.osd_fsid': args.fsid})
+        if not lvs:
+            raise RuntimeError('could not find osd.%s with fsid %s' % (args.id, args.fsid))
         activate_filestore(lvs)
 
     def main(self):
