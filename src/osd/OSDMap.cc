@@ -297,8 +297,14 @@ bool OSDMap::containing_subtree_is_down(CephContext *cct, int id, int subtree_ty
   }
 }
 
-bool OSDMap::subtree_type_is_down(CephContext *cct, int id, int subtree_type, set<int> *down_in_osds, set<int> *up_in_osds,
-                                           set<int> *subtree_up, unordered_map<int, set<int> > *subtree_type_down) const
+bool OSDMap::subtree_type_is_down(
+  CephContext *cct,
+  int id,
+  int subtree_type,
+  set<int> *down_in_osds,
+  set<int> *up_in_osds,
+  set<int> *subtree_up,
+  unordered_map<int, set<int> > *subtree_type_down) const
 {
   if (id >= 0) {
     bool is_down_ret = is_down(id);
@@ -320,7 +326,9 @@ bool OSDMap::subtree_type_is_down(CephContext *cct, int id, int subtree_type, se
   list<int> children;
   crush->get_children(id, &children);
   for (const auto &child : children) {
-    if (!subtree_type_is_down(cct, child, crush->get_bucket_type(child), down_in_osds, up_in_osds, subtree_up, subtree_type_down)) {
+    if (!subtree_type_is_down(
+	  cct, child, crush->get_bucket_type(child),
+	  down_in_osds, up_in_osds, subtree_up, subtree_type_down)) {
       subtree_up->insert(id);
       return false;
     }
