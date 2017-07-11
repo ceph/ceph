@@ -29,7 +29,7 @@ void RGWObjManifestPart::generate_test_instances(std::list<RGWObjManifestPart*>&
 
   RGWObjManifestPart *p = new RGWObjManifestPart;
   rgw_bucket b;
-  init_bucket(&b, "tenant", "bucket", ".pool", ".index_pool", "marker_", "12");
+  init_bucket(&b, "tenant", "bucket", ".pool", ".tail_pool", ".index_pool", "marker_", "12");
 
   p->loc = rgw_obj(b, "object");
   p->loc_ofs = 512 * 1024;
@@ -146,7 +146,7 @@ void RGWObjManifest::generate_test_instances(std::list<RGWObjManifest*>& o)
   for (int i = 0; i<10; i++) {
     RGWObjManifestPart p;
     rgw_bucket b;
-    init_bucket(&b, "tenant", "bucket", ".pool", ".index_pool", "marker_", "12");
+    init_bucket(&b, "tenant", "bucket", ".pool", ".tail_pool", ".index_pool", "marker_", "12");
     p.loc = rgw_obj(b, "object");
     p.loc_ofs = 0;
     p.size = 512 * 1024;
@@ -425,7 +425,7 @@ void RGWUserInfo::generate_test_instances(list<RGWUserInfo*>& o)
 void rgw_bucket::generate_test_instances(list<rgw_bucket*>& o)
 {
   rgw_bucket *b = new rgw_bucket;
-  init_bucket(b, "tenant", "name", "pool", ".index_pool", "marker", "123");
+  init_bucket(b, "tenant", "name", "pool", ".tail_pool", ".index_pool", "marker", "123");
   o.push_back(b);
   o.push_back(new rgw_bucket);
 }
@@ -433,7 +433,7 @@ void rgw_bucket::generate_test_instances(list<rgw_bucket*>& o)
 void RGWBucketInfo::generate_test_instances(list<RGWBucketInfo*>& o)
 {
   RGWBucketInfo *i = new RGWBucketInfo;
-  init_bucket(&i->bucket, "tenant", "bucket", "pool", ".index_pool", "marker", "10");
+  init_bucket(&i->bucket, "tenant", "bucket", "pool", ".tail_pool", ".index_pool", "marker", "10");
   i->owner = "owner";
   i->flags = BUCKET_SUSPENDED;
   o.push_back(i);
@@ -471,7 +471,7 @@ void RGWOLHInfo::generate_test_instances(list<RGWOLHInfo*> &o)
 void RGWBucketEnt::generate_test_instances(list<RGWBucketEnt*>& o)
 {
   RGWBucketEnt *e = new RGWBucketEnt;
-  init_bucket(&e->bucket, "tenant", "bucket", "pool", ".index_pool", "marker", "10");
+  init_bucket(&e->bucket, "tenant", "bucket", "pool", ".tail_pool", ".index_pool", "marker", "10");
   e->size = 1024;
   e->size_rounded = 4096;
   e->count = 1;
@@ -492,7 +492,7 @@ void RGWUploadPartInfo::generate_test_instances(list<RGWUploadPartInfo*>& o)
 void rgw_obj::generate_test_instances(list<rgw_obj*>& o)
 {
   rgw_bucket b;
-  init_bucket(&b, "tenant", "bucket", "pool", ".index_pool", "marker", "10");
+  init_bucket(&b, "tenant", "bucket", "pool", ".tail_pool", ".index_pool", "marker", "10");
   rgw_obj *obj = new rgw_obj(b, "object");
   o.push_back(obj);
   o.push_back(new rgw_obj);
