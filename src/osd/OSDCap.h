@@ -155,11 +155,12 @@ struct OSDCapGrant {
 
   // explicit grants that a profile grant expands to; populated as
   // needed by expand_profile() and cached here.
-  mutable std::list<OSDCapGrant> profile_grants;
+  std::list<OSDCapGrant> profile_grants;
 
   OSDCapGrant() {}
   OSDCapGrant(const OSDCapMatch& m, const OSDCapSpec& s) : match(m), spec(s) {}
   OSDCapGrant(const OSDCapProfile& profile) : profile(profile) {
+    expand_profile();
   }
 
   bool allow_all() const;
@@ -168,7 +169,7 @@ struct OSDCapGrant {
                   const std::vector<OpRequest::ClassInfo>& classes,
                   std::vector<bool>* class_allowed) const;
 
-  void expand_profile() const;
+  void expand_profile();
 };
 
 ostream& operator<<(ostream& out, const OSDCapGrant& g);

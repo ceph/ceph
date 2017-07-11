@@ -86,7 +86,7 @@ ostream& operator<<(ostream& out, const OSDCapMatch& m)
 
 ostream& operator<<(ostream& out, const OSDCapProfile& m)
 {
-  out << "profile " << m.name << " ";
+  out << "profile " << m.name;
   out << m.pool_namespace;
   return out;
 }
@@ -151,7 +151,15 @@ ostream& operator<<(ostream& out, const OSDCapGrant& g)
 {
   out << "grant(";
   if (g.profile.is_valid()) {
-    out << g.profile;
+    out << g.profile << " [";
+    for (auto it = g.profile_grants.cbegin();
+         it != g.profile_grants.cend(); ++it) {
+      if (it != g.profile_grants.cbegin()) {
+        out << ",";
+      }
+      out << *it;
+    }
+    out << "]";
   } else {
     out << g.match << g.spec;
   }
@@ -162,7 +170,6 @@ ostream& operator<<(ostream& out, const OSDCapGrant& g)
 bool OSDCapGrant::allow_all() const
 {
   if (profile.is_valid()) {
-    expand_profile();
     return std::any_of(profile_grants.cbegin(), profile_grants.cend(),
                        [](const OSDCapGrant& grant) {
         return grant.allow_all();
@@ -180,7 +187,6 @@ bool OSDCapGrant::is_capable(const string& pool_name, const string& ns,
 {
   osd_rwxa_t allow = 0;
   if (profile.is_valid()) {
-    expand_profile();
     return std::any_of(profile_grants.cbegin(), profile_grants.cend(),
                        [&](const OSDCapGrant& grant) {
         return grant.is_capable(pool_name, ns, pool_auid, object, op_may_read,
@@ -227,13 +233,8 @@ bool OSDCapGrant::is_capable(const string& pool_name, const string& ns,
   return false;
 }
 
-void OSDCapGrant::expand_profile() const
+void OSDCapGrant::expand_profile()
 {
-  // only generate this list once
-  if (!profile_grants.empty()) {
-    return;
-  }
-
   if (profile.name == "read-only") {
     // grants READ-ONLY caps to the OSD
     profile_grants.emplace_back(OSDCapMatch(profile.pool_namespace),
