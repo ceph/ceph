@@ -37,12 +37,14 @@ def mkdir_p(path, chown=True):
         os.chown(path, uid, gid)
 
 
-def chown(path, ceph_user=True):
+def chown(path, recursive=True, ceph_user=True):
     """
     ``chown`` a path to the ceph user (uid and guid fetched at runtime)
     """
     uid, gid = get_ceph_user_ids()
     if os.path.islink(path):
         path = os.path.realpath(path)
-    process.run(['chown', '-R', 'ceph:ceph', path])
-    #os.chown(path, uid, gid)
+    if recursive:
+        process.run(['chown', '-R', 'ceph:ceph', path])
+    else:
+        os.chown(path, uid, gid)
