@@ -1336,6 +1336,23 @@ struct RGWZoneParams : RGWSystemMetaObj {
     }
     return true;
   }
+
+  bool get_tail_data_pool(const string& placement_id, const rgw_obj& obj, rgw_pool *pool) const {
+    const rgw_data_placement_target& explicit_placement = obj.bucket.explicit_placement;
+    if (!explicit_placement.data_pool.empty()) {
+      *pool = explicit_placement.get_data_tail_pool();
+      return true;
+    }
+    if (placement_id.empty()) {
+      return false;
+    }
+    auto iter = placement_pools.find(placement_id);
+    if (iter == placement_pools.end()) {
+      return false;
+    }
+    *pool = iter->second.get_data_tail_pool();
+    return true;
+  }
 };
 WRITE_CLASS_ENCODER(RGWZoneParams)
 
