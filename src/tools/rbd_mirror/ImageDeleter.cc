@@ -11,6 +11,7 @@
  * Foundation.  See file COPYING.
  *
  */
+
 #include <boost/bind.hpp>
 #include <map>
 #include <set>
@@ -61,9 +62,10 @@ public:
   virtual bool call(Formatter *f, stringstream *ss) = 0;
 };
 
+template <typename I>
 class StatusCommand : public ImageDeleterAdminSocketCommand {
 public:
-  explicit StatusCommand(ImageDeleter *image_del) : image_del(image_del) {}
+  explicit StatusCommand(ImageDeleter<I> *image_del) : image_del(image_del) {}
 
   bool call(Formatter *f, stringstream *ss) override {
     image_del->print_status(f, ss);
@@ -71,7 +73,7 @@ public:
   }
 
 private:
-  ImageDeleter *image_del;
+  ImageDeleter<I> *image_del;
 };
 
 struct DeleteJournalPolicy : public librbd::journal::Policy {
@@ -89,9 +91,10 @@ struct DeleteJournalPolicy : public librbd::journal::Policy {
 
 } // anonymous namespace
 
+template <typename I>
 class ImageDeleterAdminSocketHook : public AdminSocketHook {
 public:
-  ImageDeleterAdminSocketHook(CephContext *cct, ImageDeleter *image_del) :
+  ImageDeleterAdminSocketHook(CephContext *cct, ImageDeleter<I> *image_del) :
     admin_socket(cct->get_admin_socket()) {
 
     std::string command;
@@ -101,7 +104,7 @@ public:
     r = admin_socket->register_command(command, command, this,
 				       "get status for image deleter");
     if (r == 0) {
-      commands[command] = new StatusCommand(image_del);
+      commands[command] = new StatusCommand<I>(image_del);
     }
 
   }
@@ -132,21 +135,23 @@ private:
   Commands commands;
 };
 
-ImageDeleter::ImageDeleter(ContextWQ *work_queue, SafeTimer *timer,
-                           Mutex *timer_lock)
+template <typename I>
+ImageDeleter<I>::ImageDeleter(ContextWQ *work_queue, SafeTimer *timer,
+                              Mutex *timer_lock)
   : m_running(true),
     m_work_queue(work_queue),
     m_delete_lock("rbd::mirror::ImageDeleter::Delete"),
     m_image_deleter_thread(this),
     m_failed_timer(timer),
     m_failed_timer_lock(timer_lock),
-    m_asok_hook(new ImageDeleterAdminSocketHook(g_ceph_context, this))
+    m_asok_hook(new ImageDeleterAdminSocketHook<I>(g_ceph_context, this))
 {
   set_failed_timer_interval(g_ceph_context->_conf->rbd_mirror_delete_retry_interval);
   m_image_deleter_thread.create("image_deleter");
 }
 
-ImageDeleter::~ImageDeleter() {
+template <typename I>
+ImageDeleter<I>::~ImageDeleter() {
   dout(20) << "enter" << dendl;
 
   m_running = false;
@@ -162,7 +167,8 @@ ImageDeleter::~ImageDeleter() {
   dout(20) << "return" << dendl;
 }
 
-void ImageDeleter::run() {
+template <typename I>
+void ImageDeleter<I>::run() {
   dout(20) << "enter" << dendl;
   while(m_running) {
     m_delete_lock.Lock();
@@ -196,9 +202,10 @@ void ImageDeleter::run() {
   }
 }
 
-void ImageDeleter::schedule_image_delete(RadosRef local_rados,
-                                         int64_t local_pool_id,
-                                         const std::string& global_image_id) {
+template <typename I>
+void ImageDeleter<I>::schedule_image_delete(RadosRef local_rados,
+                                            int64_t local_pool_id,
+                                            const std::string& global_image_id) {
   dout(20) << "enter" << dendl;
 
   Mutex::Locker locker(m_delete_lock);
@@ -216,10 +223,11 @@ void ImageDeleter::schedule_image_delete(RadosRef local_rados,
   m_delete_queue_cond.Signal();
 }
 
-void ImageDeleter::wait_for_scheduled_deletion(int64_t local_pool_id,
-                                               const std::string &global_image_id,
-                                               Context *ctx,
-                                               bool notify_on_failed_retry) {
+template <typename I>
+void ImageDeleter<I>::wait_for_scheduled_deletion(int64_t local_pool_id,
+                                                  const std::string &global_image_id,
+                                                  Context *ctx,
+                                                  bool notify_on_failed_retry) {
 
   ctx = new FunctionContext([this, ctx](int r) {
       m_work_queue->queue(ctx, r);
@@ -243,8 +251,9 @@ void ImageDeleter::wait_for_scheduled_deletion(int64_t local_pool_id,
   (*del_info)->notify_on_failed_retry = notify_on_failed_retry;
 }
 
-void ImageDeleter::cancel_waiter(int64_t local_pool_id,
-                                 const std::string &global_image_id) {
+template <typename I>
+void ImageDeleter<I>::cancel_waiter(int64_t local_pool_id,
+                                    const std::string &global_image_id) {
   Mutex::Locker locker(m_delete_lock);
   auto del_info = find_delete_info(local_pool_id, global_image_id);
   if (!del_info) {
@@ -257,8 +266,8 @@ void ImageDeleter::cancel_waiter(int64_t local_pool_id,
   }
 }
 
-bool ImageDeleter::process_image_delete() {
-
+template <typename I>
+bool ImageDeleter<I>::process_image_delete() {
   stringstream ss;
   m_active_delete->to_string(ss);
   std::string del_info_str = ss.str();
@@ -458,10 +467,10 @@ bool ImageDeleter::process_image_delete() {
   return true;
 }
 
-int ImageDeleter::image_has_snapshots_and_children(IoCtx *ioctx,
-                                                   string& image_id,
-                                                   bool *has_snapshots) {
-
+template <typename I>
+int ImageDeleter<I>::image_has_snapshots_and_children(IoCtx *ioctx,
+                                                      string& image_id,
+                                                      bool *has_snapshots) {
   string header_oid = librbd::util::header_name(image_id);
   ::SnapContext snapc;
   int r = cls_client::get_snapcontext(ioctx, header_oid, &snapc);
@@ -476,7 +485,8 @@ int ImageDeleter::image_has_snapshots_and_children(IoCtx *ioctx,
   return 0;
 }
 
-void ImageDeleter::complete_active_delete(int r) {
+template <typename I>
+void ImageDeleter<I>::complete_active_delete(int r) {
   dout(20) << dendl;
 
   Mutex::Locker delete_locker(m_delete_lock);
@@ -484,7 +494,8 @@ void ImageDeleter::complete_active_delete(int r) {
   m_active_delete.reset();
 }
 
-void ImageDeleter::enqueue_failed_delete(int error_code) {
+template <typename I>
+void ImageDeleter<I>::enqueue_failed_delete(int error_code) {
   dout(20) << "enter" << dendl;
 
   if (error_code == -EBLACKLISTED) {
@@ -503,13 +514,14 @@ void ImageDeleter::enqueue_failed_delete(int error_code) {
   m_delete_lock.Unlock();
   if (was_empty) {
     FunctionContext *ctx = new FunctionContext(
-      boost::bind(&ImageDeleter::retry_failed_deletions, this));
+      boost::bind(&ImageDeleter<I>::retry_failed_deletions, this));
     Mutex::Locker l(*m_failed_timer_lock);
     m_failed_timer->add_event_after(m_failed_interval, ctx);
   }
 }
 
-void ImageDeleter::retry_failed_deletions() {
+template <typename I>
+void ImageDeleter<I>::retry_failed_deletions() {
   dout(20) << "enter" << dendl;
 
   Mutex::Locker l(m_delete_lock);
@@ -525,8 +537,10 @@ void ImageDeleter::retry_failed_deletions() {
   }
 }
 
-unique_ptr<ImageDeleter::DeleteInfo> const* ImageDeleter::find_delete_info(
-    int64_t local_pool_id, const std::string &global_image_id) {
+template <typename I>
+unique_ptr<typename ImageDeleter<I>::DeleteInfo> const*
+ImageDeleter<I>::find_delete_info(int64_t local_pool_id,
+                                  const std::string &global_image_id) {
   assert(m_delete_lock.is_locked());
 
   if (m_active_delete && m_active_delete->match(local_pool_id,
@@ -549,7 +563,8 @@ unique_ptr<ImageDeleter::DeleteInfo> const* ImageDeleter::find_delete_info(
   return nullptr;
 }
 
-void ImageDeleter::print_status(Formatter *f, stringstream *ss) {
+template <typename I>
+void ImageDeleter<I>::print_status(Formatter *f, stringstream *ss) {
   dout(20) << "enter" << dendl;
 
   if (f) {
@@ -578,7 +593,8 @@ void ImageDeleter::print_status(Formatter *f, stringstream *ss) {
   }
 }
 
-void ImageDeleter::DeleteInfo::notify(int r) {
+template <typename I>
+void ImageDeleter<I>::DeleteInfo::notify(int r) {
   if (on_delete) {
     dout(20) << "executing image deletion handler r=" << r << dendl;
 
@@ -588,13 +604,15 @@ void ImageDeleter::DeleteInfo::notify(int r) {
   }
 }
 
-void ImageDeleter::DeleteInfo::to_string(stringstream& ss) {
+template <typename I>
+void ImageDeleter<I>::DeleteInfo::to_string(stringstream& ss) {
   ss << "[" << "local_pool_id=" << local_pool_id << ", ";
   ss << "global_image_id=" << global_image_id << "]";
 }
 
-void ImageDeleter::DeleteInfo::print_status(Formatter *f, stringstream *ss,
-                                            bool print_failure_info) {
+template <typename I>
+void ImageDeleter<I>::DeleteInfo::print_status(Formatter *f, stringstream *ss,
+                                               bool print_failure_info) {
   if (f) {
     f->open_object_section("delete_info");
     f->dump_int("local_pool_id", local_pool_id);
@@ -610,7 +628,8 @@ void ImageDeleter::DeleteInfo::print_status(Formatter *f, stringstream *ss,
   }
 }
 
-vector<string> ImageDeleter::get_delete_queue_items() {
+template <typename I>
+vector<string> ImageDeleter<I>::get_delete_queue_items() {
   vector<string> items;
 
   Mutex::Locker l(m_delete_lock);
@@ -621,7 +640,8 @@ vector<string> ImageDeleter::get_delete_queue_items() {
   return items;
 }
 
-vector<pair<string, int> > ImageDeleter::get_failed_queue_items() {
+template <typename I>
+vector<pair<string, int> > ImageDeleter<I>::get_failed_queue_items() {
   vector<pair<string, int> > items;
 
   Mutex::Locker l(m_delete_lock);
@@ -633,9 +653,12 @@ vector<pair<string, int> > ImageDeleter::get_failed_queue_items() {
   return items;
 }
 
-void ImageDeleter::set_failed_timer_interval(double interval) {
+template <typename I>
+void ImageDeleter<I>::set_failed_timer_interval(double interval) {
   this->m_failed_interval = interval;
 }
 
 } // namespace mirror
 } // namespace rbd
+
+template class rbd::mirror::ImageDeleter<librbd::ImageCtx>;

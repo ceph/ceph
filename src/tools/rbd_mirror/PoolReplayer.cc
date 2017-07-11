@@ -206,7 +206,7 @@ private:
 } // anonymous namespace
 
 PoolReplayer::PoolReplayer(Threads<librbd::ImageCtx> *threads,
-			   std::shared_ptr<ImageDeleter> image_deleter,
+			   ImageDeleter<>* image_deleter,
 			   int64_t local_pool_id, const peer_t &peer,
 			   const std::vector<const char*> &args) :
   m_threads(threads),

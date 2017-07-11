@@ -72,8 +72,7 @@ public:
   };
 
   static ImageReplayer *create(
-    Threads<librbd::ImageCtx> *threads,
-    std::shared_ptr<ImageDeleter> image_deleter,
+    Threads<librbd::ImageCtx> *threads, ImageDeleter<ImageCtxT>* image_deleter,
     InstanceWatcher<ImageCtxT> *instance_watcher,
     RadosRef local, const std::string &local_mirror_uuid, int64_t local_pool_id,
     const std::string &global_image_id) {
@@ -86,7 +85,7 @@ public:
   }
 
   ImageReplayer(Threads<librbd::ImageCtx> *threads,
-                std::shared_ptr<ImageDeleter> image_deleter,
+                ImageDeleter<ImageCtxT>* image_deleter,
                 InstanceWatcher<ImageCtxT> *instance_watcher,
                 RadosRef local, const std::string &local_mirror_uuid,
                 int64_t local_pool_id, const std::string &global_image_id);
@@ -283,7 +282,7 @@ private:
   };
 
   Threads<librbd::ImageCtx> *m_threads;
-  std::shared_ptr<ImageDeleter> m_image_deleter;
+  ImageDeleter<ImageCtxT>* m_image_deleter;
   InstanceWatcher<ImageCtxT> *m_instance_watcher;
 
   RemoteImages m_remote_images;
