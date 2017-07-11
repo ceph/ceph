@@ -1,5 +1,6 @@
 
 import ceph_state  #noqa
+import ceph_osdmap  #noqa
 import json
 import logging
 import threading
@@ -28,6 +29,14 @@ class CommandResult(object):
     def wait(self):
         self.ev.wait()
         return self.r, self.outb, self.outs
+
+
+class OSDMap(object):
+    def __init__(self, handle):
+        self._handle = handle
+
+    def get_epoch(self):
+        return ceph_osdmap.get_epoch(self._handle)
 
 
 class MgrModule(object):
@@ -253,3 +262,11 @@ class MgrModule(object):
         :return: bool
         """
         pass
+
+    def get_osdmap(self):
+        """
+        Get a handle to an OSDMap.  If epoch==0, get a handle for the latest
+        OSDMap.
+        :return: OSDMap
+        """
+        return OSDMap(ceph_state.get_osdmap())
