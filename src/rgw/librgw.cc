@@ -103,7 +103,7 @@ namespace rgw {
       auto expire_s = cct->_conf->rgw_nfs_namespace_expire_secs;
 
       /* delay between gc cycles */
-      auto delay_s = std::max(1, std::min(MIN_EXPIRE_S, expire_s/2));
+      auto delay_s = std::max(int64_t(1), std::min(int64_t(MIN_EXPIRE_S), expire_s/2));
 
       unique_lock uniq(mtx);
     restart:
