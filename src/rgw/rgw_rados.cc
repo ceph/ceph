@@ -7970,19 +7970,19 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
     return ret;
   }
 
-  rgw_pool src_pool;
-  rgw_pool dest_pool;
-  if (!get_obj_data_pool(src_bucket_info.placement_rule, src_obj, &src_pool)) {
+
+  rgw_pool s_data_tail_pool;
+  rgw_pool d_data_tail_pool;
+  if (!zone_params.get_tail_data_pool(src_bucket_info.placement_rule, src_obj, &s_data_tail_pool)) {
     ldout(cct, 0) << "ERROR: failed to locate data pool for " << src_obj << dendl;
     return -EIO;
   }
-  if (!get_obj_data_pool(dest_bucket_info.placement_rule, dest_obj, &dest_pool)) {
+  if (!zone_params.get_tail_data_pool(dest_bucket_info.placement_rule, dest_obj, &d_data_tail_pool)) {
     ldout(cct, 0) << "ERROR: failed to locate data pool for " << dest_obj << dendl;
     return -EIO;
   }
 
-
-  bool copy_data = !astate->has_manifest || (src_pool != dest_pool);
+  bool copy_data = !astate->has_manifest || (s_data_tail_pool != d_data_tail_pool);
   bool copy_first = false;
   if (astate->has_manifest) {
     if (!astate->manifest.has_tail()) {
