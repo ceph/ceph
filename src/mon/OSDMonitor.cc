@@ -7859,6 +7859,15 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     cmd_getval(g_ceph_context, cmdmap, "type", type);
     cmd_getval(g_ceph_context, cmdmap, "class", device_class);
 
+    if (!device_class.empty()) {
+      if (osdmap.require_osd_release < CEPH_RELEASE_LUMINOUS) {
+        ss << "you must complete the upgrade and 'ceph osd require-osd-release "
+           << "luminous' before using crush device classes";
+        err = -EPERM;
+        goto reply;
+      }
+    }
+
     if (osdmap.crush->rule_exists(name)) {
       // The name is uniquely associated to a ruleid and the rule it contains
       // From the user point of view, the rule is more meaningfull.
@@ -8847,6 +8856,22 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       new_pg_temp.push_back(osd);
     }
 
+    int pool_min_size = osdmap.get_pg_pool_min_size(pgid);
+    if ((int)new_pg_temp.size() < pool_min_size) {
+      ss << "num of osds (" << new_pg_temp.size() <<") < pool min size ("
+         << pool_min_size << ")";
+      err = -EINVAL;
+      goto reply;
+    }
+
+    int pool_size = osdmap.get_pg_pool_size(pgid);
+    if ((int)new_pg_temp.size() > pool_size) {
+      ss << "num of osds (" << new_pg_temp.size() <<") > pool size ("
+         << pool_size << ")";
+      err = -EINVAL;
+      goto reply;
+    }
+
     pending_inc.new_pg_temp[pgid] = mempool::osdmap::vector<int>(
       new_pg_temp.begin(), new_pg_temp.end());
     ss << "set " << pgid << " pg_temp mapping to " << new_pg_temp;
@@ -8913,7 +8938,9 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     if (osdmap.require_min_compat_client < CEPH_RELEASE_LUMINOUS) {
       ss << "min_compat_client "
 	 << ceph_release_name(osdmap.require_min_compat_client)
-	 << " < luminous, which is required for pg-upmap";
+	 << " < luminous, which is required for pg-upmap. "
+         << "Try 'ceph osd set-require-min-compat-client luminous' "
+         << "before using the new interface";
       err = -EPERM;
       goto reply;
     }
@@ -9020,7 +9047,18 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
             err = -ENOENT;
             goto reply;
           }
+          auto it = std::find(new_pg_upmap.begin(), new_pg_upmap.end(), osd);
+          if (it != new_pg_upmap.end()) {
+            ss << "osd." << osd << " already exists, ";
+            continue;
+          }
           new_pg_upmap.push_back(osd);
+        }
+
+        if (new_pg_upmap.empty()) {
+          ss << "no valid upmap items(pairs) is specified";
+          err = -EINVAL;
+          goto reply;
         }
 
         pending_inc.new_pg_upmap[pgid] = mempool::osdmap::vector<int32_t>(
@@ -9066,6 +9104,10 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
         for (auto p = id_vec.begin(); p != id_vec.end(); ++p) {
           int from = *p++;
           int to = *p;
+          if (from == to) {
+            ss << "from osd." << from << " == to osd." << to << ", ";
+            continue;
+          }
           if (!osdmap.exists(from)) {
             ss << "osd." << from << " does not exist";
             err = -ENOENT;
@@ -9082,6 +9124,12 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
         string out(items.str());
         out.resize(out.size() - 1); // drop last ','
         out += "]";
+
+        if (new_pg_upmap_items.empty()) {
+          ss << "no valid upmap items(pairs) is specified";
+          err = -EINVAL;
+          goto reply;
+        }
 
         pending_inc.new_pg_upmap_items[pgid] =
           mempool::osdmap::vector<pair<int32_t,int32_t>>(

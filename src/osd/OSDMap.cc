@@ -1920,7 +1920,7 @@ void OSDMap::_apply_upmap(const pg_pool_t& pi, pg_t raw_pg, vector<int> *raw) co
       }
     }
     *raw = vector<int>(p->second.begin(), p->second.end());
-    return;
+    // continue to check and apply pg_upmap_items if any
   }
 
   auto q = pg_upmap_items.find(pg);
@@ -3794,6 +3794,10 @@ int OSDMap::calc_pg_upmaps(
 		     << " pgs " << pgs << dendl;
     }
 
+    if (osd_weight_total == 0) {
+      lderr(cct) << __func__ << " abort due to osd_weight_total == 0" << dendl;
+      break;
+    }
     float pgs_per_weight = total_pgs / osd_weight_total;
     ldout(cct, 10) << " osd_weight_total " << osd_weight_total << dendl;
     ldout(cct, 10) << " pgs_per_weight " << pgs_per_weight << dendl;
@@ -3843,6 +3847,7 @@ int OSDMap::calc_pg_upmaps(
       int osd = p->second;
       float deviation = p->first;
       float target = osd_weight[osd] * pgs_per_weight;
+      assert(target > 0);
       if (deviation/target < max_deviation_ratio) {
 	ldout(cct, 10) << " osd." << osd
 		       << " target " << target
