@@ -759,8 +759,6 @@ int md_config_t::set_val(const std::string &key, const char *val, bool meta)
   if (meta)
     expand_meta(v, &std::cerr);
 
-  std::cerr << "set_val: expanded '" << std::string(val) << "' to '" << v << "'" << std::endl;
-
   string k(ConfFile::normalize_key_name(key));
 
   // subsystems?
@@ -991,6 +989,12 @@ int md_config_t::set_val_impl(const std::string &raw_val, const Option &opt,
       return -EINVAL;
     }
     new_value = f;
+  } else if (opt.type == Option::TYPE_UINT) {
+    uint64_t f = strict_si_cast<uint64_t>(val.c_str(), error_message);
+    if (!error_message->empty()) {
+      return -EINVAL;
+    }
+    new_value = f;
   } else if (opt.type == Option::TYPE_STR) {
     new_value = val;
   } else if (opt.type == Option::TYPE_FLOAT) {
@@ -1058,6 +1062,7 @@ class assign_visitor : public boost::static_visitor<>
   void operator()( T md_config_t::* ptr) const
   {
     T *member = const_cast<T *>(&(conf->*(boost::get<const T md_config_t::*>(ptr))));
+
     *member = boost::get<T>(val);
   }
 };
