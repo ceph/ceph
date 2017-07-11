@@ -72,12 +72,21 @@ static void handle_connection(RGWProcessEnv& env, tcp::socket socket,
   auto cct = env.store->ctx();
   boost::system::error_code ec;
 
-  beast::flat_buffer buffer{4096};
+  // limit header to 4k, since we read it all into a single buffer
+  constexpr size_t header_limit = 4096;
+  // don't impose a limit on the body, since we read it in pieces
+  constexpr size_t body_limit = std::numeric_limits<size_t>::max();
+
+  beast::flat_buffer buffer;
 
   // read messages from the socket until eof
   for (;;) {
-    // parse the header
+    // configure the parser
     rgw::asio::parser_type parser;
+    parser.header_limit(header_limit);
+    parser.body_limit(body_limit);
+
+    // parse the header
     beast::http::async_read_header(socket, buffer, parser, yield[ec]);
 
     if (ec == boost::asio::error::connection_reset ||
