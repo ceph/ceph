@@ -1428,14 +1428,16 @@ bool OSDMonitor::should_propose(double& delay)
 
   // propose as fast as possible if updating up_thru or pg_temp
   // want to merge OSDMap changes as much as possible
-  if ((pending_inc.new_primary_temp.size() == 1
-      || pending_inc.new_up_thru.size() == 1)
-      && pending_inc.new_state.size() < 2) {
+  if ((pending_inc.new_primary_temp.size() >= 
+      (unsigned)g_conf->paxos_ptemp_merge_bound
+      || pending_inc.new_up_thru.size() >= 
+      (unsigned)g_conf->paxos_upthru_merge_bound)
+      && pending_inc.new_state.size() < (unsigned)g_conf->paxos_nstate_bound) {
     dout(15) << " propose as fast as possible for up_thru/pg_temp" << dendl;
 
     utime_t now = ceph_clock_now();
     if (now - last_attempted_minwait_time > g_conf->paxos_propose_interval
-	&& now - paxos->get_last_commit_time() > g_conf->paxos_min_wait) {
+      || now - paxos->get_last_commit_time() > g_conf->paxos_min_wait) {
       delay = g_conf->paxos_min_wait;
       last_attempted_minwait_time = now;
       return true;
