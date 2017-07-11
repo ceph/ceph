@@ -37,7 +37,7 @@ class RemoteProcess(object):
     deadlock_warning = "Using PIPE for %s without wait=False would deadlock"
 
     def __init__(self, client, args, check_status=True, hostname=None,
-                 label=None, timeout=None, wait=True, logger=None):
+                 label=None, timeout=None, wait=True, logger=None, cwd=None):
         """
         Create the object. Does not initiate command execution.
 
@@ -54,6 +54,8 @@ class RemoteProcess(object):
                              exec_command of paramiko
         :param wait:         Whether self.wait() will be called automatically
         :param logger:       Alternative logger to use (optional)
+        :param cwd:          Directory in which the command will be executed
+                             (optional)
         """
         self.client = client
         self.args = args
@@ -61,6 +63,10 @@ class RemoteProcess(object):
             self.command = args
         else:
             self.command = quote(args)
+
+        if cwd:
+            self.command = '(cd {cwd} && exec {cmd})'.format(
+                           cwd=cwd, cmd=self.command)
 
         self.check_status = check_status
         self.label = label
@@ -358,6 +364,7 @@ def run(
     name=None,
     label=None,
     timeout=None,
+    cwd=None,
 ):
     """
     Run a command remotely.  If any of 'args' contains shell metacharacters
@@ -389,6 +396,7 @@ def run(
     :param label: Can be used to label or describe what the command is doing.
     :param timeout: timeout value for args to complete on remote channel of
                     paramiko
+    :param cwd: Directory in which the command should be executed.
     """
     try:
         transport = client.get_transport()
@@ -405,7 +413,8 @@ def run(
     if timeout:
         log.info("Running command with timeout %d", timeout)
     r = RemoteProcess(client, args, check_status=check_status, hostname=name,
-                      label=label, timeout=timeout, wait=wait, logger=logger)
+                      label=label, timeout=timeout, wait=wait, logger=logger,
+                      cwd=cwd)
     r.execute()
     r.setup_stdin(stdin)
     r.setup_output_stream(stderr, 'stderr')
