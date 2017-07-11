@@ -46,6 +46,7 @@
 #include "common/TextTable.h"
 #include "common/ceph_argparse.h"
 #include "common/Preforker.h"
+#include "common/version.h"
 #include "global/global_init.h"
 #include "global/signal_handler.h"
 
@@ -98,6 +99,9 @@ static enum {
 } cmd = None;
 
 #define RBD_NBD_BLKSIZE 512UL
+
+#define HELP_INFO 1
+#define VERSION_INFO 2
 
 #ifdef CEPH_BIG_ENDIAN
 #define ntohll(a) (a)
@@ -931,7 +935,9 @@ static int parse_args(vector<const char*>& args, std::ostream *err_msg, Config *
 
   for (i = args.begin(); i != args.end(); ) {
     if (ceph_argparse_flag(args, i, "-h", "--help", (char*)NULL)) {
-      return -ENODATA;
+      return HELP_INFO;
+    } else if (ceph_argparse_flag(args, i, "-v", "--version", (char*)NULL)) {
+      return VERSION_INFO;
     } else if (ceph_argparse_witharg(args, i, &cfg->devpath, "--device", (char *)NULL)) {
     } else if (ceph_argparse_witharg(args, i, &cfg->nbds_max, err, "--nbds_max", (char *)NULL)) {
       if (!err.str().empty()) {
@@ -1020,10 +1026,14 @@ static int rbd_nbd(int argc, const char *argv[])
 
   std::ostringstream err_msg;
   r = parse_args(args, &err_msg, &cfg);
-  if (r == -ENODATA) {
+  if (r == HELP_INFO) {
     usage();
     return 0;
-  } else if (r < 0) {
+  } else if (r == VERSION_INFO) {
+    std::cout << pretty_version_to_str() << std::endl;
+    return 0;
+  }
+  else if (r < 0) {
     cerr << err_msg.str() << std::endl;
     return r;
   }
