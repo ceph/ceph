@@ -74,7 +74,7 @@ int ceph_resolve_file_search(const std::string& filename_list,
 
 
 
-md_config_t::md_config_t()
+md_config_t::md_config_t(bool is_daemon)
   : cluster(""),
   lock("md_config_t", true, false)
 {
@@ -112,8 +112,12 @@ md_config_t::md_config_t()
 
   // Load default values from the schema
   for (const auto &i : schema) {
-    // TODO: select daemon default if appropriate.
-    values[i.first] = i.second.value;
+    bool has_daemon_default = !boost::get<boost::blank>(&i.second.daemon_value);
+    if (is_daemon && has_daemon_default) {
+      values[i.first] = i.second.daemon_value;
+    } else {
+      values[i.first] = i.second.value;
+    }
   }
 
   // Copy out values (defaults) into any legacy (C struct member) fields

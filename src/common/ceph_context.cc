@@ -530,9 +530,20 @@ void CephContext::do_command(std::string command, cmdmap_t& cmdmap,
 }
 
 
+static bool is_daemon(uint32_t module_type)
+{
+  if (module_type == CEPH_ENTITY_TYPE_OSD ||
+      module_type == CEPH_ENTITY_TYPE_MDS ||
+      module_type == CEPH_ENTITY_TYPE_MON) {
+    return true;
+  } else {
+    return false;
+  }
+}
+
 CephContext::CephContext(uint32_t module_type_, int init_flags_)
   : nref(1),
-    _conf(new md_config_t()),
+    _conf(new md_config_t(is_daemon(module_type_))),
     _log(NULL),
     _module_type(module_type_),
     _init_flags(init_flags_),

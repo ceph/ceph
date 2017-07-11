@@ -103,7 +103,7 @@ public:
    } opt_type_t;
 
   // Create a new md_config_t structure.
-  md_config_t();
+  md_config_t(bool is_daemon=false);
   ~md_config_t();
 
   // Adds a new observer to this configuration. You can do this at any time,

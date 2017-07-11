@@ -57,7 +57,6 @@ struct Option {
 
   value_t value;
   value_t daemon_value;
-  value_t nondaemon_value;
 
   std::list<std::string> tags;
   std::list<std::string> see_also;
@@ -150,10 +149,6 @@ struct Option {
   template<typename T>
   Option& set_daemon_default(const T& v) {
     return set_value(daemon_value, v);
-  }
-  template<typename T>
-  Option& set_nondaemon_default(const T& v) {
-    return set_value(nondaemon_value, v);
   }
   Option& add_tag(const char* t) {
     tags.push_back(t);
