@@ -2583,10 +2583,14 @@ int OSD::init()
     }
   }
 
-  r = update_crush_device_class();
-  if (r < 0) {
-    osd_lock.Lock();
-    goto monout;
+  if (osdmap->require_osd_release >= CEPH_RELEASE_LUMINOUS) {
+    dout(5) << __func__ << " require_osd_release reached luminous in "
+            << osdmap->get_epoch() << ", enable auto device class" << dendl;
+    r = update_crush_device_class();
+    if (r < 0) {
+      osd_lock.Lock();
+      goto monout;
+    }
   }
 
   r = update_crush_location();
