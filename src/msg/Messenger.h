@@ -580,11 +580,11 @@ public:
    * If none of our Dispatchers can handle it, ceph_abort().
    */
   void ms_fast_dispatch(Message *m) {
-    m->set_dispatch_stamp(ceph_clock_now());
     for (list<Dispatcher*>::iterator p = fast_dispatchers.begin();
 	 p != fast_dispatchers.end();
 	 ++p) {
       if ((*p)->ms_can_fast_dispatch(m)) {
+        m->set_dispatch_stamp(ceph_clock_now());
 	(*p)->ms_fast_dispatch(m);
 	return;
       }
@@ -610,12 +610,14 @@ public:
    *  one reference to it.
    */
   void ms_deliver_dispatch(Message *m) {
-    m->set_dispatch_stamp(ceph_clock_now());
     for (list<Dispatcher*>::iterator p = dispatchers.begin();
 	 p != dispatchers.end();
 	 ++p) {
-      if ((*p)->ms_dispatch(m))
+      utime_t dispatch_stamp = ceph_clock_now();
+      if ((*p)->ms_dispatch(m)) {
+        m->set_dispatch_stamp(dispatch_stamp);
 	return;
+      }
     }
     lsubdout(cct, ms, 0) << "ms_deliver_dispatch: unhandled message " << m << " " << *m << " from "
 			 << m->get_source_inst() << dendl;
