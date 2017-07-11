@@ -99,11 +99,11 @@ class _Write(object):
 
 
 def stdout(msg):
-    return _Write(prefix=' stdout: ').raw(msg)
+    return _Write(prefix=blue(' stdout: ')).raw(msg)
 
 
 def stderr(msg):
-    return _Write(prefix=' stderr: ').raw(msg)
+    return _Write(prefix=yellow(' stderr: ')).raw(msg)
 
 
 def write(msg):
