@@ -11,6 +11,7 @@
 #include "PoolReplayer.h"
 #include "ImageDeleter.h"
 #include "types.h"
+#include "ServiceDaemon.h"
 
 #include <set>
 #include <map>
@@ -61,6 +62,7 @@ private:
   Mutex m_lock;
   Cond m_cond;
   RadosRef m_local;
+  ServiceDaemon<librbd::ImageCtx> m_service_daemon;
 
   // monitor local cluster for config changes in peers
   std::unique_ptr<ClusterWatcher> m_local_cluster_watcher;

@@ -20,6 +20,7 @@ namespace mirror {
 template <typename> class ImageDeleter;
 template <typename> class ImageReplayer;
 template <typename> class InstanceWatcher;
+template <typename> class ServiceDaemon;
 template <typename> struct Threads;
 
 template <typename ImageCtxT = librbd::ImageCtx>
@@ -27,17 +28,19 @@ class InstanceReplayer {
 public:
   static InstanceReplayer* create(
       Threads<ImageCtxT> *threads,
+      ServiceDaemon<ImageCtxT>* service_daemon,
       ImageDeleter<ImageCtxT>* image_deleter,
       RadosRef local_rados, const std::string &local_mirror_uuid,
       int64_t local_pool_id) {
-    return new InstanceReplayer(threads, image_deleter, local_rados,
-                                local_mirror_uuid, local_pool_id);
+    return new InstanceReplayer(threads, service_daemon, image_deleter,
+                                local_rados, local_mirror_uuid, local_pool_id);
   }
   void destroy() {
     delete this;
   }
 
   InstanceReplayer(Threads<ImageCtxT> *threads,
+                   ServiceDaemon<ImageCtxT>* service_daemon,
 		   ImageDeleter<ImageCtxT>* image_deleter,
 		   RadosRef local_rados, const std::string &local_mirror_uuid,
 		   int64_t local_pool_id);
@@ -109,6 +112,7 @@ private:
   typedef std::set<Peer> Peers;
 
   Threads<ImageCtxT> *m_threads;
+  ServiceDaemon<ImageCtxT>* m_service_daemon;
   ImageDeleter<ImageCtxT>* m_image_deleter;
   RadosRef m_local_rados;
   std::string m_local_mirror_uuid;

@@ -7,6 +7,7 @@
 #include "librbd/internal.h"
 #include "librbd/api/Mirror.h"
 #include "tools/rbd_mirror/ClusterWatcher.h"
+#include "tools/rbd_mirror/ServiceDaemon.h"
 #include "tools/rbd_mirror/types.h"
 #include "test/rbd_mirror/test_fixture.h"
 #include "test/librados/test.h"
@@ -34,7 +35,10 @@ public:
   {
     m_cluster = std::make_shared<librados::Rados>();
     EXPECT_EQ("", connect_cluster_pp(*m_cluster));
-    m_cluster_watcher.reset(new ClusterWatcher(m_cluster, m_lock));
+    m_service_daemon.reset(new rbd::mirror::ServiceDaemon<>(g_ceph_context,
+                                                            m_cluster));
+    m_cluster_watcher.reset(new ClusterWatcher(m_cluster, m_lock,
+                                               m_service_daemon.get()));
   }
 
   ~TestClusterWatcher() override {
@@ -126,8 +130,9 @@ public:
     ASSERT_EQ(m_pool_peers, m_cluster_watcher->get_pool_peers());
   }
 
-  Mutex m_lock;
   RadosRef m_cluster;
+  Mutex m_lock;
+  unique_ptr<rbd::mirror::ServiceDaemon<>> m_service_daemon;
   unique_ptr<ClusterWatcher> m_cluster_watcher;
 
   set<string> m_pools;

@@ -35,10 +35,11 @@
 #include "librbd/io/ImageRequestWQ.h"
 #include "librbd/io/ReadResult.h"
 #include "tools/rbd_mirror/types.h"
+#include "tools/rbd_mirror/ImageDeleter.h"
 #include "tools/rbd_mirror/ImageReplayer.h"
 #include "tools/rbd_mirror/InstanceWatcher.h"
+#include "tools/rbd_mirror/ServiceDaemon.h"
 #include "tools/rbd_mirror/Threads.h"
-#include "tools/rbd_mirror/ImageDeleter.h"
 
 #include "test/librados/test.h"
 #include "gtest/gtest.h"
@@ -115,8 +116,11 @@ public:
     m_threads = new rbd::mirror::Threads<>(reinterpret_cast<CephContext*>(
       m_local_ioctx.cct()));
 
+    m_service_daemon.reset(new rbd::mirror::ServiceDaemon<>(g_ceph_context,
+                                                            m_local_cluster));
     m_image_deleter.reset(new rbd::mirror::ImageDeleter<>(
-      m_threads->work_queue, m_threads->timer, &m_threads->timer_lock));
+      m_threads->work_queue, m_threads->timer, &m_threads->timer_lock,
+      m_service_daemon.get()));
     m_instance_watcher = rbd::mirror::InstanceWatcher<>::create(
         m_local_ioctx, m_threads->work_queue, nullptr);
     m_instance_watcher->handle_acquire_leader();
@@ -366,6 +370,7 @@ public:
   static int _image_number;
 
   rbd::mirror::Threads<> *m_threads = nullptr;
+  unique_ptr<rbd::mirror::ServiceDaemon<>> m_service_daemon;
   std::unique_ptr<rbd::mirror::ImageDeleter<>> m_image_deleter;
   std::shared_ptr<librados::Rados> m_local_cluster;
   librados::Rados m_remote_cluster;

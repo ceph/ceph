@@ -29,9 +29,10 @@ namespace librbd { class ImageCtx; }
 namespace rbd {
 namespace mirror {
 
-template <typename> struct Threads;
 template <typename> class InstanceReplayer;
 template <typename> class InstanceWatcher;
+template <typename> class ServiceDaemon;
+template <typename> struct Threads;
 
 /**
  * Controls mirroring for a single remote cluster.
@@ -39,6 +40,7 @@ template <typename> class InstanceWatcher;
 class PoolReplayer {
 public:
   PoolReplayer(Threads<librbd::ImageCtx> *threads,
+               ServiceDaemon<librbd::ImageCtx>* service_daemon,
 	       ImageDeleter<>* image_deleter,
 	       int64_t local_pool_id, const peer_t &peer,
 	       const std::vector<const char*> &args);
@@ -102,6 +104,7 @@ private:
   void handle_update_leader(const std::string &leader_instance_id);
 
   Threads<librbd::ImageCtx> *m_threads;
+  ServiceDaemon<librbd::ImageCtx>* m_service_daemon;
   ImageDeleter<>* m_image_deleter;
   mutable Mutex m_lock;
   Cond m_cond;
