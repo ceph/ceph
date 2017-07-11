@@ -15,20 +15,15 @@ def setup(name='ceph-volume.log'):
     root_logger = logging.getLogger()
     # The default path is where all ceph log files are, and will get rotated by
     # Ceph's logrotate rules.
-    default_log_path = os.environ.get('CEPH_VOLUME_LOG_PATH', '/var/log/ceph/')
-    log_path = conf.ceph_volume.get('--log-path', default_log_path)
-    log_file = os.path.join(log_path, 'ceph-volume.log')
 
     root_logger.setLevel(logging.DEBUG)
 
-    # File Logger
-    conf.ceph_volume['log_path'] = log_file
     try:
-        fh = logging.FileHandler(log_file)
+        fh = logging.FileHandler(conf.log_path)
     except (OSError, IOError) as err:
-        terminal.warning("Falling back to /tmp/ for logging. Can't use %s" % log_file)
+        terminal.warning("Falling back to /tmp/ for logging. Can't use %s" % conf.log_path)
         terminal.warning(str(err))
-        conf.ceph_volume['log_path'] = tmp_log_file
+        conf.log_path = tmp_log_file
         fh = logging.FileHandler(tmp_log_file)
 
     fh.setLevel(logging.DEBUG)
