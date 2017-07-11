@@ -44,6 +44,7 @@ namespace {
 
   bool do_create = false;
   bool do_delete = false;
+  bool do_large = false;
   bool do_verify = false;
   bool do_hexdump = false;
 
@@ -59,8 +60,8 @@ namespace {
   std::uniform_int_distribution<uint8_t> uint_dist;
   std::mt19937 rng;
 
-  constexpr int iovcnt = 16;
-  constexpr int page_size = 65536;
+  constexpr int iovcnt = 4;
+  constexpr int page_size = /* 65536 */ 4 * 1024*1024;
   constexpr int seed = 8675309;
 
   struct ZPage
@@ -159,7 +160,8 @@ namespace {
     }
   }; /* ZPageSet */
 
-  ZPageSet zp_set1{iovcnt}; // 1M random data in 16 64K pages
+  ZPageSet zp_set1{iovcnt}; // random data
+  ZPageSet zp_set2{iovcnt}; // random data in 64K pages
 
   struct {
     int argc;
@@ -207,6 +209,7 @@ TEST(LibRGW, LOOKUP_OBJECT) {
   ASSERT_EQ(ret, 0);
 }
 
+#if 0
 TEST(LibRGW, OPEN1) {
   int ret = rgw_open(fs, object_fh, 0 /* posix flags */, RGW_OPEN_FLAG_NONE);
   ASSERT_EQ(ret, 0);
@@ -258,6 +261,61 @@ TEST(LibRGW, GET_OBJECT) {
 TEST(LibRGW, CLOSE2) {
   int ret = rgw_close(fs, object_fh, RGW_CLOSE_FLAG_NONE);
   ASSERT_EQ(ret, 0);
+}
+#endif
+
+TEST (LibRGW, LARGE1) {
+  if (do_large) {
+    int ret;
+
+    ret = rgw_open(fs, object_fh, 0 /* posix flags */, RGW_OPEN_FLAG_NONE);
+    ASSERT_EQ(ret, 0);
+
+    size_t nbytes;
+    struct iovec *iovs = zp_set1.get_iovs();
+    off_t offset = 0;
+
+    for (int ix = 0; ix < iovcnt; ++ix) {
+      struct iovec *iov = &iovs[ix];
+      // write iov->iov_len
+      ret = rgw_write(fs, object_fh, offset, iov->iov_len, &nbytes,
+		      iov->iov_base, RGW_WRITE_FLAG_NONE);
+      offset += iov->iov_len;
+      ASSERT_EQ(ret, 0);
+      ASSERT_EQ(nbytes, iov->iov_len);
+    }
+
+    ret = rgw_close(fs, object_fh, RGW_CLOSE_FLAG_NONE);
+    ASSERT_EQ(ret, 0);
+  } /* do_large */
+}
+
+TEST (LibRGW, LARGE2) {
+  if (do_large) {
+    int ret;
+    if (do_verify) {
+      ret = rgw_open(fs, object_fh, 0 /* posix flags */, RGW_OPEN_FLAG_NONE);
+      ASSERT_EQ(ret, 0);
+
+      size_t nread;
+      off_t offset2 = 0;
+      struct iovec *iovs2 = zp_set2.get_iovs();
+      for (int ix = 0; ix < iovcnt; ++ix) {
+	struct iovec *iov2 = &iovs2[ix];
+	ret = rgw_read(fs, object_fh, offset2, iov2->iov_len, &nread,
+		       iov2->iov_base, RGW_READ_FLAG_NONE);
+	iov2->iov_len = nread;
+	offset2 += iov2->iov_len;
+	ASSERT_EQ(ret, 0);
+      }
+      zp_set1.cksum();
+      zp_set2.cksum();
+      ASSERT_TRUE(zp_set1 == zp_set2);
+
+      ret = rgw_close(fs, object_fh, RGW_CLOSE_FLAG_NONE);
+      ASSERT_EQ(ret, 0);
+    }
+  } /* do_large */
 }
 
 TEST(LibRGW, STAT_OBJECT) {
@@ -345,6 +403,9 @@ int main(int argc, char *argv[])
     } else if (ceph_argparse_flag(args, arg_iter, "--delete",
 					    (char*) nullptr)) {
       do_delete = true;
+    } else if (ceph_argparse_flag(args, arg_iter, "--large",
+					    (char*) nullptr)) {
+      do_large = true;
     } else if (ceph_argparse_flag(args, arg_iter, "--hexdump",
 					    (char*) nullptr)) {
       do_hexdump = true;
