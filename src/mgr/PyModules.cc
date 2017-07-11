@@ -264,6 +264,14 @@ PyObject *PyModules::get_python(const std::string &what)
         }
     );
     return f.get();
+  } else if (what == "pg_status") {
+    PyFormatter f;
+    cluster_state.with_pgmap(
+        [&f](const PGMap &pg_map) {
+	  pg_map.print_summary(&f, nullptr);
+        }
+    );
+    return f.get();
 
   } else if (what == "df") {
     PyFormatter f;
