@@ -104,6 +104,7 @@ o3=`ceph osd create`
 ceph osd crush add $o3 123 root=default
 ceph osd tree | grep osd.$o3 | grep 123
 ceph osd crush reweight osd.$o3 113
+expect_false ceph osd crush reweight osd.$o3 123456
 ceph osd tree | grep osd.$o3 | grep 113
 ceph osd crush rm osd.$o3
 ceph osd rm osd.$o3
@@ -116,6 +117,7 @@ ceph osd crush add $o5 123 root=default host=foobaz
 ceph osd tree | grep osd.$o4 | grep 123
 ceph osd tree | grep osd.$o5 | grep 123
 ceph osd crush reweight-subtree foobaz 155
+expect_false ceph osd crush reweight-subtree foobaz 123456
 ceph osd tree | grep osd.$o4 | grep 155
 ceph osd tree | grep osd.$o5 | grep 155
 ceph osd crush rm osd.$o4

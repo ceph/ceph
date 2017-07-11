@@ -822,6 +822,11 @@ int CrushWrapper::insert_item(CephContext *cct, int item, float weight, string n
   if (!is_valid_crush_loc(cct, loc))
     return -EINVAL;
 
+  int r = validate_weightf(weight);
+  if (r < 0) {
+    return r;
+  }
+
   if (name_exists(name)) {
     if (get_item_id(name) != item) {
       ldout(cct, 10) << "device name '" << name << "' already exists as id "
@@ -1035,6 +1040,11 @@ int CrushWrapper::update_item(CephContext *cct, int item, float weight, string n
 
   if (!is_valid_crush_loc(cct, loc))
     return -EINVAL;
+
+  ret = validate_weightf(weight);
+  if (ret < 0) {
+    return ret;
+  }
 
   // compare quantized (fixed-point integer) weights!  
   int iweight = (int)(weight * (float)0x10000);
