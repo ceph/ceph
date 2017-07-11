@@ -857,6 +857,9 @@ class Module(MgrModule):
             'engine.autoreload.on': False
         })
 
+        osdmap = self.get_osdmap()
+        log.info("latest osdmap is %d" % osdmap.get_epoch())
+
         static_dir = os.path.join(current_dir, 'static')
         conf = {
             "/static": {
