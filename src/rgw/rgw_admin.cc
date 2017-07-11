@@ -254,6 +254,7 @@ void _usage()
   cout << "   --endpoints=<list>        zone endpoints\n";
   cout << "   --index-pool=<pool>       placement target index pool\n";
   cout << "   --data-pool=<pool>        placement target data pool\n";
+  cout << "   --data-tail-pool=<pool>   placement target data tail pool\n";
   cout << "   --data-extra-pool=<pool>  placement target data extra (non-ec) pool\n";
   cout << "   --placement-index-type=<type>\n";
   cout << "                             placement target index type (normal, indexless, or #id)\n";
@@ -2406,6 +2407,7 @@ int main(int argc, const char **argv)
 
   boost::optional<string> index_pool;
   boost::optional<string> data_pool;
+  boost::optional<string> data_tail_pool;
   boost::optional<string> data_extra_pool;
   RGWBucketIndexType placement_index_type = RGWBIType_Normal;
   bool index_type_specified = false;
@@ -2707,6 +2709,8 @@ int main(int argc, const char **argv)
       index_pool = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--data-pool", (char*)NULL)) {
       data_pool = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--data-tail-pool", (char*)NULL)) {
+      data_tail_pool = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--data-extra-pool", (char*)NULL)) {
       data_extra_pool = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--placement-index-type", (char*)NULL)) {
@@ -4209,6 +4213,9 @@ int main(int argc, const char **argv)
           if (data_extra_pool) {
             info.data_extra_pool = *data_extra_pool;
           }
+          if (data_tail_pool) { 
+            info.data_tail_pool = *data_tail_pool;
+          }
           if (index_type_specified) {
             info.index_type = placement_index_type;
           }
@@ -4228,6 +4235,9 @@ int main(int argc, const char **argv)
           }
           if (data_pool && !data_pool->empty()) {
             info.data_pool = *data_pool;
+          }
+          if (data_tail_pool) { 
+            info.data_tail_pool = *data_tail_pool;
           }
           if (data_extra_pool) {
             info.data_extra_pool = *data_extra_pool;
