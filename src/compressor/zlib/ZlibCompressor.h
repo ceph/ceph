@@ -21,8 +21,10 @@
 
 class ZlibCompressor : public Compressor {
   bool isal_enabled;
+  CephContext *const cct;
 public:
-  ZlibCompressor(bool isal) : Compressor(COMP_ALG_ZLIB, "zlib"), isal_enabled(isal) {}
+  ZlibCompressor(CephContext *cct, bool isal)
+    : Compressor(COMP_ALG_ZLIB, "zlib"), isal_enabled(isal), cct(cct) {}
 
   int compress(const bufferlist &in, bufferlist &out) override;
   int decompress(const bufferlist &in, bufferlist &out) override;
