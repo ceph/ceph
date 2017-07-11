@@ -2950,14 +2950,6 @@ string OSDMap::get_flag_string() const
   return get_flag_string(flags);
 }
 
-struct qi {
-  int item;
-  int depth;
-  float weight;
-  qi() : item(0), depth(0), weight(0) {}
-  qi(int i, int d, float w) : item(i), depth(d), weight(w) {}
-};
-
 void OSDMap::print_pools(ostream& out) const
 {
   for (const auto &pool : pools) {
