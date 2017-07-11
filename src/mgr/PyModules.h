@@ -83,6 +83,7 @@ public:
      const std::string svc_type,
      const std::string &svc_id);
   PyObject *get_context();
+  PyObject *get_osdmap();
 
   std::map<std::string, std::string> config_cache;
 
