@@ -220,13 +220,6 @@ RGWRadosSetOmapKeysCR::RGWRadosSetOmapKeysCR(RGWRados *_store,
   s << "]";
 }
 
-RGWRadosSetOmapKeysCR::~RGWRadosSetOmapKeysCR()
-{
-  if (cn) {
-    cn->put();
-  }
-}
-
 int RGWRadosSetOmapKeysCR::send_request()
 {
   int r = store->get_raw_obj_ref(obj, &ref);
@@ -241,7 +234,6 @@ int RGWRadosSetOmapKeysCR::send_request()
   op.omap_set(entries);
 
   cn = stack->create_completion_notifier();
-  cn->get();
   return ref.ioctx.aio_operate(ref.oid, cn->completion(), &op);
 }
 
@@ -264,10 +256,6 @@ RGWRadosGetOmapKeysCR::RGWRadosGetOmapKeysCR(RGWRados *_store,
                                                 obj(_obj), cn(NULL)
 {
   set_description() << "set omap keys dest=" << obj << " marker=" << marker;
-}
-
-RGWRadosGetOmapKeysCR::~RGWRadosGetOmapKeysCR()
-{
 }
 
 int RGWRadosGetOmapKeysCR::send_request() {
@@ -294,10 +282,6 @@ RGWRadosRemoveOmapKeysCR::RGWRadosRemoveOmapKeysCR(RGWRados *_store,
                                                 obj(_obj), cn(NULL)
 {
   set_description() << "remove omap keys dest=" << obj << " keys=" << keys;
-}
-
-RGWRadosRemoveOmapKeysCR::~RGWRadosRemoveOmapKeysCR()
-{
 }
 
 int RGWRadosRemoveOmapKeysCR::send_request() {
@@ -701,19 +685,11 @@ RGWRadosTimelogAddCR::RGWRadosTimelogAddCR(RGWRados *_store, const string& _oid,
   entries.push_back(entry);
 }
 
-RGWRadosTimelogAddCR::~RGWRadosTimelogAddCR()
-{
-  if (cn) {
-    cn->put();
-  }
-}
-
 int RGWRadosTimelogAddCR::send_request()
 {
   set_status() << "sending request";
 
   cn = stack->create_completion_notifier();
-  cn->get();
   return store->time_log_add(oid, entries, cn->completion(), true);
 }
 
@@ -741,19 +717,11 @@ RGWRadosTimelogTrimCR::RGWRadosTimelogTrimCR(RGWRados *store,
       << " from_marker=" << from_marker << " to_marker=" << to_marker;
 }
 
-RGWRadosTimelogTrimCR::~RGWRadosTimelogTrimCR()
-{
-  if (cn) {
-    cn->put();
-  }
-}
-
 int RGWRadosTimelogTrimCR::send_request()
 {
   set_status() << "sending request";
 
   cn = stack->create_completion_notifier();
-  cn->get();
   return store->time_log_trim(oid, start_time, end_time, from_marker,
                               to_marker, cn->completion());
 }
