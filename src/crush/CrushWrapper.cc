@@ -300,6 +300,21 @@ void CrushWrapper::find_roots(set<int>& roots) const
   }
 }
 
+void CrushWrapper::find_nonshadow_roots(set<int>& roots) const
+{
+  for (int i = 0; i < crush->max_buckets; i++) {
+    if (!crush->buckets[i])
+      continue;
+    crush_bucket *b = crush->buckets[i];
+    if (_search_item_exists(b->id))
+      continue;
+    const char *name = get_item_name(b->id);
+    if (name && !is_valid_crush_name(name))
+      continue;
+    roots.insert(b->id);
+  }
+}
+
 bool CrushWrapper::subtree_contains(int root, int item) const
 {
   if (root == item)
@@ -1300,8 +1315,10 @@ void CrushWrapper::reweight(CephContext *cct)
 int CrushWrapper::add_simple_rule_at(
   string name, string root_name,
   string failure_domain_name,
+  string device_class,
   string mode, int rule_type,
-  int rno, ostream *err)
+  int rno,
+  ostream *err)
 {
   if (rule_exists(name)) {
     if (err)
@@ -1339,6 +1356,22 @@ int CrushWrapper::add_simple_rule_at(
 	*err << "unknown type " << failure_domain_name;
       return -EINVAL;
     }
+  }
+  if (device_class.size()) {
+    if (!class_exists(device_class)) {
+      if (err)
+	*err << "device class " << device_class << " does not exist";
+      return -EINVAL;
+    }
+    int c = get_class_id(device_class);
+    if (class_bucket.count(root) == 0 ||
+	class_bucket[root].count(c) == 0) {
+      if (err)
+	*err << "root " << root_name << " has no devices with class "
+	     << device_class;
+      return -EINVAL;
+    }
+    root = class_bucket[root][c];
   }
   if (mode != "firstn" && mode != "indep") {
     if (err)
@@ -1387,10 +1420,12 @@ int CrushWrapper::add_simple_rule_at(
 int CrushWrapper::add_simple_rule(
   string name, string root_name,
   string failure_domain_name,
+  string device_class,
   string mode, int rule_type,
   ostream *err)
 {
-  return add_simple_rule_at(name, root_name, failure_domain_name, mode,
+  return add_simple_rule_at(name, root_name, failure_domain_name, device_class,
+			    mode,
 			    rule_type, -1, err);
 }
 

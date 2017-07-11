@@ -15,11 +15,13 @@
 #define CLUSTER_STATE_H_
 
 #include "mds/FSMap.h"
+#include "mon/MgrMap.h"
 #include "common/Mutex.h"
 
 #include "osdc/Objecter.h"
 #include "mon/MonClient.h"
 #include "mon/PGMap.h"
+#include "mgr/ServiceMap.h"
 
 class MMgrDigest;
 class MMonMgrReport;
@@ -36,7 +38,10 @@ protected:
   MonClient *monc;
   Objecter *objecter;
   FSMap fsmap;
+  ServiceMap servicemap;
   mutable Mutex lock;
+
+  MgrMap mgr_map;
 
   set<int64_t> existing_pools; ///< pools that exist, as of PGMap epoch
   PGMap pg_map;
@@ -57,10 +62,12 @@ public:
   const bufferlist &get_health() const {return health_json;}
   const bufferlist &get_mon_status() const {return mon_status_json;}
 
-  ClusterState(MonClient *monc_, Objecter *objecter_);
+  ClusterState(MonClient *monc_, Objecter *objecter_, const MgrMap& mgrmap);
 
   void set_objecter(Objecter *objecter_);
   void set_fsmap(FSMap const &new_fsmap);
+  void set_mgr_map(MgrMap const &new_mgrmap);
+  void set_service_map(ServiceMap const &new_service_map);
 
   void notify_osdmap(const OSDMap &osd_map);
 
@@ -70,10 +77,24 @@ public:
   }
 
   template<typename Callback, typename...Args>
+  void with_servicemap(Callback&& cb, Args&&...args) const
+  {
+    Mutex::Locker l(lock);
+    std::forward<Callback>(cb)(servicemap, std::forward<Args>(args)...);
+  }
+
+  template<typename Callback, typename...Args>
   void with_fsmap(Callback&& cb, Args&&...args) const
   {
     Mutex::Locker l(lock);
     std::forward<Callback>(cb)(fsmap, std::forward<Args>(args)...);
+  }
+
+  template<typename Callback, typename...Args>
+  void with_mgrmap(Callback&& cb, Args&&...args) const
+  {
+    Mutex::Locker l(lock);
+    std::forward<Callback>(cb)(mgr_map, std::forward<Args>(args)...);
   }
 
   template<typename Callback, typename...Args>

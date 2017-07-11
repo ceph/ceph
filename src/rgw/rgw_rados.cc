@@ -1,3 +1,4 @@
+
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
@@ -426,7 +427,6 @@ void RGWZoneGroup::post_process_params()
   for (map<string, RGWZone>::iterator iter = zones.begin(); iter != zones.end(); ++iter) {
     RGWZone& zone = iter->second;
     zone.log_data = log_data;
-    zone.log_meta = (is_master && zone.id == master_zone);
 
     RGWZoneParams zone_params(zone.id, zone.name);
     int ret = zone_params.init(cct, store);
@@ -1086,11 +1086,6 @@ int RGWPeriod::get_zonegroup(RGWZoneGroup& zonegroup, const string& zonegroup_id
   }
 
   return -ENOENT;
-}
-
-bool RGWPeriod::is_single_zonegroup(CephContext *cct, RGWRados *store)
-{
-  return (period_map.zonegroups.size() == 1);
 }
 
 const string& RGWPeriod::get_latest_epoch_oid()
@@ -2562,8 +2557,10 @@ int RGWPutObjProcessor_Atomic::write_data(bufferlist& bl, off_t ofs, void **phan
 
   *pobj = cur_obj;
 
-  if (!bl.length())
+  if (!bl.length()) {
+    *phandle = nullptr;
     return 0;
+  }
 
   return RGWPutObjProcessor_Aio::handle_obj_data(cur_obj, bl, ofs - cur_part_ofs, ofs, phandle, exclusive);
 }
@@ -2688,7 +2685,7 @@ int RGWPutObjProcessor_Atomic::complete_writing_data()
     obj_len = (uint64_t)first_chunk.length();
   }
   while (pending_data_bl.length()) {
-    void *handle;
+    void *handle = nullptr;
     rgw_raw_obj obj;
     uint64_t max_write_size = MIN(max_chunk_size, (uint64_t)next_part_ofs - data_ofs);
     if (max_write_size > pending_data_bl.length()) {
@@ -3343,7 +3340,7 @@ int RGWRados::get_required_alignment(const rgw_pool& pool, uint64_t *alignment)
 
 int RGWRados::get_max_chunk_size(const rgw_pool& pool, uint64_t *max_chunk_size)
 {
-  uint64_t alignment;
+  uint64_t alignment = 0;
   int r = get_required_alignment(pool, &alignment);
   if (r < 0) {
     return r;
@@ -3757,7 +3754,6 @@ int RGWRados::init_rados()
     if (ret < 0) {
       return ret;
     }
-
     ret = r.connect();
     if (ret < 0) {
       return ret;
@@ -3781,6 +3777,28 @@ int RGWRados::init_rados()
 
   std::swap(handles, rados);
   return ret;
+}
+
+
+int RGWRados::register_to_service_map(const string& daemon_type, const map<string, string>& meta)
+{
+  map<string,string> metadata = meta;
+  metadata["num_handles"] = stringify(rados.size());
+  metadata["zonegroup_id"] = zonegroup.get_id();
+  metadata["zonegroup_name"] = zonegroup.get_name();
+  metadata["zone_name"] = zone_name();
+  metadata["zone_id"] = zone_id();;
+  string name = cct->_conf->name.get_id();
+  if (name.find("rgw.") == 0) {
+    name = name.substr(4);
+  }
+  int ret = rados[0].service_daemon_register(daemon_type, name, metadata);
+  if (ret < 0) {
+    ldout(cct, 0) << "ERROR: service_daemon_register() returned ret=" << ret << ": " << cpp_strerror(-ret) << dendl;
+    return ret;
+  }
+
+  return 0;
 }
 
 /**
@@ -5547,7 +5565,7 @@ int RGWRados::Bucket::List::list_objects(int max, vector<rgw_bucket_dir_entry> *
     bigger_than_delim = buf;
 
     /* if marker points at a common prefix, fast forward it into its upperbound string */
-    int delim_pos = cur_marker.name.find(params.delim, params.prefix.size());
+    int delim_pos = cur_marker.name.find(params.delim, cur_prefix.size());
     if (delim_pos >= 0) {
       string s = cur_marker.name.substr(0, delim_pos);
       s.append(bigger_than_delim);
@@ -5631,7 +5649,9 @@ int RGWRados::Bucket::List::list_objects(int max, vector<rgw_bucket_dir_entry> *
             next_marker = prefix_key;
             (*common_prefixes)[prefix_key] = true;
 
-            skip_after_delim = obj.name.substr(0, delim_pos);
+            int marker_delim_pos = cur_marker.name.find(params.delim, cur_prefix.size());
+
+            skip_after_delim = cur_marker.name.substr(0, marker_delim_pos);
             skip_after_delim.append(bigger_than_delim);
 
             ldout(cct, 20) << "skip_after_delim=" << skip_after_delim << dendl;
@@ -5896,7 +5916,7 @@ int RGWRados::select_bucket_location_by_rule(const string& location_rule, RGWZon
   map<string, RGWZonePlacementInfo>::iterator piter = get_zone_params().placement_pools.find(location_rule);
   if (piter == get_zone_params().placement_pools.end()) {
     /* couldn't find, means we cannot really place data for this bucket in this zone */
-    if (get_zonegroup().equals(zonegroup_id)) {
+    if (get_zonegroup().equals(zonegroup.get_id())) {
       /* that's a configuration error, zone should have that rule, as we're within the requested
        * zonegroup */
       return -EINVAL;
@@ -8202,7 +8222,7 @@ bool RGWRados::is_syncing_bucket_meta(const rgw_bucket& bucket)
   }
 
   /* single zonegroup and a single zone */
-  if (current_period.is_single_zonegroup(cct, this) && get_zonegroup().zones.size() == 1) {
+  if (current_period.is_single_zonegroup() && get_zonegroup().zones.size() == 1) {
     return false;
   }
 

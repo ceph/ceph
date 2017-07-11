@@ -72,7 +72,7 @@ Name:		ceph
 Version:	@VERSION@
 Release:	@RPM_RELEASE@%{?dist}
 %if 0%{?fedora} || 0%{?rhel}
-Epoch:		1
+Epoch:		2
 %endif
 
 # define %_epoch_prefix macro which will expand to the empty string if %epoch is undefined
@@ -861,10 +861,10 @@ cmake .. \
 %endif
 %if %{with lttng}
     -DWITH_LTTNG=ON \
-    -DHAVE_BABELTRACE=ON \
+    -DWTIH_BABELTRACE=ON \
 %else
     -DWITH_LTTNG=OFF \
-    -DHAVE_BABELTRACE=OFF \
+    -DWTIH_BABELTRACE=OFF \
 %endif
     $CEPH_EXTRA_CMAKE_ARGS \
 %if 0%{with ocf}
@@ -1063,6 +1063,7 @@ fi
 
 %postun base
 /sbin/ldconfig
+test -n "$FIRST_ARG" || FIRST_ARG=$1
 %if 0%{?suse_version}
 DISABLE_RESTART_ON_UPDATE="yes"
 %service_del_postun ceph-disk@\*.service ceph.target

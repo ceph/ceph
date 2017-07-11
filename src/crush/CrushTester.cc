@@ -19,6 +19,7 @@
 #include <boost/icl/interval_map.hpp>
 #include <boost/algorithm/string/join.hpp>
 #include "common/SubProcess.h"
+#include "common/fork_function.h"
 
 void CrushTester::set_device_weight(int dev, float f)
 {
@@ -359,47 +360,16 @@ void CrushTester::write_integer_indexed_scalar_data_string(vector<string> &dst, 
   dst.push_back( data_buffer.str() );
 }
 
-int CrushTester::test_with_crushtool(const char *crushtool_cmd,
-				     int max_id, int timeout,
-				     int ruleset)
+int CrushTester::test_with_fork(int timeout)
 {
-  SubProcessTimed crushtool(crushtool_cmd, SubProcess::PIPE, SubProcess::CLOSE, SubProcess::PIPE, timeout);
-  string opt_max_id = boost::lexical_cast<string>(max_id);
-  crushtool.add_cmd_args(
-    "-i", "-",
-    "--test", "--check", opt_max_id.c_str(),
-    "--min-x", "1",
-    "--max-x", "50",
-    NULL);
-  if (ruleset >= 0) {
-    crushtool.add_cmd_args(
-      "--ruleset",
-      stringify(ruleset).c_str(),
-      NULL);
+  ostringstream sink;
+  int r = fork_function(timeout, sink, [&]() {
+      return test();
+    });
+  if (r == -ETIMEDOUT) {
+    err << "timed out during smoke test (" << timeout << " seconds)";
   }
-  int ret = crushtool.spawn();
-  if (ret != 0) {
-    err << "failed run crushtool: " << crushtool.err();
-    return ret;
-  }
-
-  bufferlist bl;
-  ::encode(crush, bl, CEPH_FEATURES_SUPPORTED_DEFAULT);
-  bl.write_fd(crushtool.get_stdin());
-  crushtool.close_stdin();
-  bl.clear();
-  ret = bl.read_fd(crushtool.get_stderr(), 100 * 1024);
-  if (ret < 0) {
-    err << "failed read from crushtool: " << cpp_strerror(-ret);
-    return ret;
-  }
-  bl.write_stream(err);
-  if (crushtool.join() != 0) {
-    err << crushtool.err();
-    return -EINVAL;
-  }
-
-  return 0;
+  return r;
 }
 
 namespace {

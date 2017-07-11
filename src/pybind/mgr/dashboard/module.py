@@ -107,12 +107,6 @@ class Module(MgrModule):
 
         return self._rados
 
-    def get_localized_config(self, key):
-        r = self.get_config(self.get_mgr_id() + '/' + key)
-        if r is None:
-            r = self.get_config(key)
-        return r
-
     def update_pool_stats(self):
         df = global_instance().get("df")
         pool_stats = dict([(p['id'], p['stats']) for p in df['pools']])
@@ -536,7 +530,7 @@ class Module(MgrModule):
                         client['hostname'] = client['client_metadata']['hostname']
                     elif "kernel_version" in client['client_metadata']:
                         client['type'] = "kernel"
-                        client['version'] = client['kernel_version']
+                        client['version'] = client['client_metadata']['kernel_version']
                         client['hostname'] = client['client_metadata']['hostname']
                     else:
                         client['type'] = "unknown"
@@ -750,8 +744,8 @@ class Module(MgrModule):
 
                 return dict(result)
 
-        server_addr = self.get_localized_config('server_addr')
-        server_port = self.get_localized_config('server_port') or '7000'
+        server_addr = self.get_localized_config('server_addr', '::')
+        server_port = self.get_localized_config('server_port', '7000')
         if server_addr is None:
             raise RuntimeError('no server_addr configured; try "ceph config-key put mgr/dashboard/server_addr <ip>"')
         log.info("server_addr: %s server_port: %s" % (server_addr, server_port))

@@ -100,13 +100,13 @@ function TEST_ec_profile_warning() {
     wait_for_clean || return 1
 
     for plugin in ${legacy_jerasure_plugins[*]}; do
-        ceph osd erasure-code-profile set prof-${plugin} ruleset-failure-domain=osd technique=reed_sol_van plugin=${plugin} || return 1
+        ceph osd erasure-code-profile set prof-${plugin} crush-failure-domain=osd technique=reed_sol_van plugin=${plugin} || return 1
         CEPH_ARGS='' ceph --admin-daemon $dir/ceph-mon.a.asok log flush || return 1
         grep "WARNING: erasure coding profile prof-${plugin} uses plugin ${plugin}" $dir/mon.a.log || return 1
     done
 
     for plugin in ${legacy_shec_plugins[*]}; do
-        ceph osd erasure-code-profile set prof-${plugin} ruleset-failure-domain=osd plugin=${plugin} || return 1
+        ceph osd erasure-code-profile set prof-${plugin} crush-failure-domain=osd plugin=${plugin} || return 1
         CEPH_ARGS='' ceph --admin-daemon $dir/ceph-mon.a.asok log flush || return 1
         grep "WARNING: erasure coding profile prof-${plugin} uses plugin ${plugin}" $dir/mon.a.log || return 1
     done

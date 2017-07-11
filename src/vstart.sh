@@ -409,7 +409,7 @@ prepare_conf() {
         mon data avail crit = 1
         erasure code dir = $EC_PATH
         plugin dir = $CEPH_LIB
-        osd pool default erasure code profile = plugin=jerasure technique=reed_sol_van k=2 m=1 ruleset-failure-domain=osd
+        osd pool default erasure code profile = plugin=jerasure technique=reed_sol_van k=2 m=1 crush-failure-domain=osd
         rgw frontends = $rgw_frontend port=$CEPH_RGW_PORT
         ; needed for s3tests
         rgw crypt s3 kms encryption keys = testkey-1=YmluCmJvb3N0CmJvb3N0LWJ1aWxkCmNlcGguY29uZgo= testkey-2=aWIKTWFrZWZpbGUKbWFuCm91dApzcmMKVGVzdGluZwo=
@@ -458,7 +458,6 @@ $CMDSDEBUG
         mds root ino gid = `id -g`
 $extra_conf
 [mgr]
-        mgr modules = restful status dashboard
         mgr data = $CEPH_DEV_DIR/mgr.\$id
         mgr module path = $MGR_PYTHON_PATH
         mon reweight min pgs per osd = 4
@@ -497,6 +496,7 @@ $COSDMEMSTORE
 $COSDSHORT
 $extra_conf
 [mon]
+        mgr initial modules = restful status dashboard
         mon pg warn min per osd = 3
         mon osd allow primary affinity = true
         mon reweight min pgs per osd = 4
@@ -974,8 +974,12 @@ do_rgw()
     RGWSUDO=
     [ $CEPH_RGW_PORT -lt 1024 ] && RGWSUDO=sudo
     n=$(($CEPH_NUM_RGW - 1))
-    for rgw in `seq 0 $n`; do
-	run 'rgw' $RGWSUDO $CEPH_BIN/radosgw -c $conf_fn --log-file=${CEPH_OUT_DIR}/rgw.$rgw.log ${RGWDEBUG} --debug-ms=1
+    i=0
+    for rgw in j k l m n o p q r s t u v; do
+	ceph_adm auth get-or-create client.rgw.$rgw mon 'allow rw' osd 'allow rwx' mgr 'allow rw' -o $CEPH_DEV_DIR/rgw.$rgw.keyring
+	run 'rgw' $RGWSUDO $CEPH_BIN/radosgw -c $conf_fn --log-file=${CEPH_OUT_DIR}/rgw.$rgw.log ${RGWDEBUG} --debug-ms=1 -n client.rgw.$rgw -k $CEPH_DEV_DIR/rgw.$rgw.keyring
+	i=$(($i + 1))
+        [ $i -eq $CEPH_NUM_RGW ] && break
     done
 }
 if [ "$CEPH_NUM_RGW" -gt 0 ]; then

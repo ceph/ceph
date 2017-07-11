@@ -3072,11 +3072,12 @@ public:
 
   void dump(TextTable *tbl) {
     tbl->define_column("ID", TextTable::LEFT, TextTable::RIGHT);
+    tbl->define_column("CLASS", TextTable::LEFT, TextTable::RIGHT);
     tbl->define_column("WEIGHT", TextTable::LEFT, TextTable::RIGHT);
     tbl->define_column("TYPE NAME", TextTable::LEFT, TextTable::LEFT);
     tbl->define_column("UP/DOWN", TextTable::LEFT, TextTable::RIGHT);
     tbl->define_column("REWEIGHT", TextTable::LEFT, TextTable::RIGHT);
-    tbl->define_column("PRIMARY-AFFINITY", TextTable::LEFT, TextTable::RIGHT);
+    tbl->define_column("PRI-AFF", TextTable::LEFT, TextTable::RIGHT);
 
     Parent::dump(tbl);
 
@@ -3089,8 +3090,11 @@ public:
 
 protected:
   void dump_item(const CrushTreeDumper::Item &qi, TextTable *tbl) override {
-
+    const char *c = crush->get_item_class(qi.id);
+    if (!c)
+      c = "";
     *tbl << qi.id
+	 << c
 	 << weightf_t(qi.weight);
 
     ostringstream name;
@@ -3185,7 +3189,8 @@ void OSDMap::print_tree(Formatter *f, ostream *out, unsigned filter) const
   }
 }
 
-void OSDMap::print_summary(Formatter *f, ostream& out) const
+void OSDMap::print_summary(Formatter *f, ostream& out,
+			   const string& prefix) const
 {
   if (f) {
     f->open_object_section("osdmap");
@@ -3206,7 +3211,7 @@ void OSDMap::print_summary(Formatter *f, ostream& out) const
     out << "\n";
     uint64_t important_flags = flags & ~CEPH_OSDMAP_SEMIHIDDEN_FLAGS;
     if (important_flags)
-      out << "            flags " << get_flag_string(important_flags) << "\n";
+      out << prefix << "flags " << get_flag_string(important_flags) << "\n";
   }
 }
 
@@ -3471,7 +3476,7 @@ int OSDMap::build_simple_crush_rules(
 
   int r;
   r = crush.add_simple_rule_at(
-    "replicated_rule", root, failure_domain,
+    "replicated_rule", root, failure_domain, "",
     "firstn", pg_pool_t::TYPE_REPLICATED,
     crush_rule, ss);
   if (r < 0)
@@ -4071,6 +4076,7 @@ public:
 
   void dump(TextTable *tbl) {
     tbl->define_column("ID", TextTable::LEFT, TextTable::RIGHT);
+    tbl->define_column("CLASS", TextTable::LEFT, TextTable::RIGHT);
     tbl->define_column("WEIGHT", TextTable::LEFT, TextTable::RIGHT);
     tbl->define_column("REWEIGHT", TextTable::LEFT, TextTable::RIGHT);
     tbl->define_column("SIZE", TextTable::LEFT, TextTable::RIGHT);
@@ -4086,7 +4092,9 @@ public:
 
     dump_stray(tbl);
 
-    *tbl << "" << "" << "TOTAL"
+    *tbl << ""
+	 << ""
+	 << "" << "TOTAL"
 	 << si_t(pgs->get_osd_sum().kb << 10)
 	 << si_t(pgs->get_osd_sum().kb_used << 10)
 	 << si_t(pgs->get_osd_sum().kb_avail << 10)
@@ -4112,7 +4120,11 @@ protected:
 			 double& var,
 			 const size_t num_pgs,
 			 TextTable *tbl) override {
+    const char *c = crush->get_item_class(qi.id);
+    if (!c)
+      c = "";
     *tbl << qi.id
+	 << c
 	 << weightf_t(qi.weight)
 	 << weightf_t(reweight)
 	 << si_t(kb << 10)

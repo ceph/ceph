@@ -189,7 +189,7 @@ TEST(ParameterTest, combination_all)
 							 std::string>();
   (*profile)["plugin"] = "shec";
   (*profile)["technique"] = "";
-  (*profile)["ruleset-failure-domain"] = "osd";
+  (*profile)["crush-failure-domain"] = "osd";
   (*profile)["k"] = k;
   (*profile)["m"] = m;
   (*profile)["c"] = c;
@@ -202,8 +202,8 @@ TEST(ParameterTest, combination_all)
   EXPECT_EQ(i_c, shec->c);
   EXPECT_EQ(8, shec->w);
   EXPECT_EQ(ErasureCodeShec::MULTIPLE, shec->technique);
-  EXPECT_STREQ("default", shec->ruleset_root.c_str());
-  EXPECT_STREQ("osd", shec->ruleset_failure_domain.c_str());
+  EXPECT_STREQ("default", shec->rule_root.c_str());
+  EXPECT_STREQ("osd", shec->rule_failure_domain.c_str());
   EXPECT_TRUE(shec->matrix != NULL);
   EXPECT_EQ(0, result);
 

@@ -13,3 +13,5 @@ tasks:
     daemons: [mds.a]
     wait-for-up: true
     wait-for-healthy: false
+- install.upgrade:
+    client.0:

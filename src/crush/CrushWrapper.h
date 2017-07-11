@@ -563,6 +563,14 @@ public:
   void find_roots(set<int>& roots) const;
 
   /**
+   * find tree roots that are not shadow (device class) items
+   *
+   * These are parentless nodes in the map that are not shadow
+   * items for device classes.
+   */
+  void find_nonshadow_roots(set<int>& roots) const;
+
+  /**
    * see if an item is contained within a subtree
    *
    * @param root haystack
@@ -1015,6 +1023,7 @@ public:
 
   int add_simple_rule(
     string name, string root_name, string failure_domain_type,
+    string device_class,
     string mode, int rule_type, ostream *err = 0);
 
   /**
@@ -1022,7 +1031,7 @@ public:
    */
   int add_simple_rule_at(
     string name, string root_name,
-    string failure_domain_type, string mode,
+    string failure_domain_type, string device_class, string mode,
     int rule_type, int rno, ostream *err = 0);
 
   int remove_rule(int ruleno);

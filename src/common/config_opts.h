@@ -28,7 +28,6 @@ OPTION(lockdep_force_backtrace, OPT_BOOL, false) // always gather current backtr
 OPTION(run_dir, OPT_STR, "/var/run/ceph")       // the "/var/run/ceph" dir, created on daemon startup
 OPTION(admin_socket, OPT_STR, "$run_dir/$cluster-$name.asok") // default changed by common_preinit()
 OPTION(admin_socket_mode, OPT_STR, "") // permission bits to set for admin socket file, e.g., "0775", "0755"
-OPTION(crushtool, OPT_STR, "crushtool") // crushtool utility path
 
 OPTION(daemonize, OPT_BOOL, false) // default changed by common_preinit()
 OPTION(setuser, OPT_STR, "")        // uid or user name
@@ -212,6 +211,7 @@ OPTION(ms_bind_retry_count, OPT_INT, 6) // If binding fails, how many times do w
 OPTION(ms_bind_retry_delay, OPT_INT, 6) // Delay between attemps to bind
 #endif
 OPTION(ms_bind_before_connect, OPT_BOOL, false)
+OPTION(ms_tcp_listen_backlog, OPT_INT, 512)
 OPTION(ms_rwthread_stack_bytes, OPT_U64, 1024 << 10)
 OPTION(ms_tcp_read_timeout, OPT_U64, 900)
 OPTION(ms_pq_max_tokens_per_priority, OPT_U64, 16777216)
@@ -696,6 +696,7 @@ OPTION(osd_pool_default_size, OPT_INT, 3)
 OPTION(osd_pool_default_min_size, OPT_INT, 0)  // 0 means no specific default; ceph will use size-size/2
 OPTION(osd_pool_default_pg_num, OPT_INT, 8) // number of PGs for new pools. Configure in global or mon section of ceph.conf
 OPTION(osd_pool_default_pgp_num, OPT_INT, 8) // number of PGs for placement purposes. Should be equal to pg_num
+OPTION(osd_pool_default_type, OPT_STR, "replicated")
 OPTION(osd_pool_default_erasure_code_profile,
        OPT_STR,
        "plugin=jerasure "
@@ -879,7 +880,6 @@ OPTION(osd_deep_scrub_interval, OPT_FLOAT, 60*60*24*7) // once a week
 OPTION(osd_deep_scrub_randomize_ratio, OPT_FLOAT, 0.15) // scrubs will randomly become deep scrubs at this rate (0.15 -> 15% of scrubs are deep)
 OPTION(osd_deep_scrub_stride, OPT_INT, 524288)
 OPTION(osd_deep_scrub_update_digest_min_age, OPT_INT, 2*60*60)   // objects must be this old (seconds) before we update the whole-object digest on scrub
-OPTION(osd_scan_list_ping_tp_interval, OPT_U64, 100)
 OPTION(osd_class_dir, OPT_STR, CEPH_LIBDIR "/rados-classes") // where rados plugins are stored
 OPTION(osd_open_classes_on_start, OPT_BOOL, true)
 OPTION(osd_class_load_list, OPT_STR, "cephfs hello journal lock log numops "
@@ -970,8 +970,8 @@ OPTION(kinetic_use_ssl, OPT_BOOL, false) // whether to secure kinetic traffic wi
 OPTION(rocksdb_separate_wal_dir, OPT_BOOL, false) // use $path.wal for wal
 SAFE_OPTION(rocksdb_db_paths, OPT_STR, "")   // path,size( path,size)*
 OPTION(rocksdb_log_to_ceph_log, OPT_BOOL, true)  // log to ceph log
-OPTION(rocksdb_cache_size, OPT_U64, 128*1024*1024)  // default rocksdb cache size
-OPTION(rocksdb_cache_row_ratio, OPT_FLOAT, .2)   // ratio of cache for row (vs block)
+OPTION(rocksdb_cache_size, OPT_U64, 128*1024*1024)  // rocksdb cache size (unless set by bluestore/etc)
+OPTION(rocksdb_cache_row_ratio, OPT_FLOAT, 0)   // ratio of cache for row (vs block)
 OPTION(rocksdb_cache_shard_bits, OPT_INT, 4)  // rocksdb block cache shard bits, 4 bit -> 16 shards
 OPTION(rocksdb_cache_type, OPT_STR, "lru") // 'lru' or 'clock'
 OPTION(rocksdb_block_size, OPT_INT, 4*1024)  // default rocksdb block size
@@ -1054,6 +1054,7 @@ OPTION(bdev_inject_crash_flush_delay, OPT_INT, 2) // wait N more seconds on flus
 OPTION(bdev_aio, OPT_BOOL, true)
 OPTION(bdev_aio_poll_ms, OPT_INT, 250)  // milliseconds
 OPTION(bdev_aio_max_queue_depth, OPT_INT, 1024)
+OPTION(bdev_aio_reap_max, OPT_INT, 16)
 OPTION(bdev_block_size, OPT_INT, 4096)
 OPTION(bdev_debug_aio, OPT_BOOL, false)
 OPTION(bdev_debug_aio_suicide_timeout, OPT_FLOAT, 60.0)
@@ -1162,9 +1163,12 @@ OPTION(bluestore_cache_trim_max_skip_pinned, OPT_U32, 64) // skip this many onod
 OPTION(bluestore_cache_type, OPT_STR, "2q")   // lru, 2q
 OPTION(bluestore_2q_cache_kin_ratio, OPT_DOUBLE, .5)    // kin page slot size / max page slot size
 OPTION(bluestore_2q_cache_kout_ratio, OPT_DOUBLE, .5)   // number of kout page slot / total number of page slot
-OPTION(bluestore_cache_size, OPT_U64, 3*1024*1024*1024)
-OPTION(bluestore_cache_meta_ratio, OPT_DOUBLE, .7)
-OPTION(bluestore_cache_kv_ratio, OPT_DOUBLE, .2)
+OPTION(bluestore_cache_size, OPT_U64, 0)
+OPTION(bluestore_cache_size_hdd, OPT_U64, 1*1024*1024*1024)
+OPTION(bluestore_cache_size_ssd, OPT_U64, 3*1024*1024*1024)
+OPTION(bluestore_cache_meta_ratio, OPT_DOUBLE, .01)
+OPTION(bluestore_cache_kv_ratio, OPT_DOUBLE, .99)
+OPTION(bluestore_cache_kv_max, OPT_U64, 512*1024*1024) // limit the maximum amount of cache for the kv store
 OPTION(bluestore_kvbackend, OPT_STR, "rocksdb")
 OPTION(bluestore_allocator, OPT_STR, "bitmap")     // stupid | bitmap
 OPTION(bluestore_freelist_blocks_per_key, OPT_INT, 128)
@@ -1335,6 +1339,7 @@ OPTION(filestore_commit_timeout, OPT_FLOAT, 600)
 OPTION(filestore_fiemap_threshold, OPT_INT, 4096)
 OPTION(filestore_merge_threshold, OPT_INT, 10)
 OPTION(filestore_split_multiple, OPT_INT, 2)
+OPTION(filestore_split_rand_factor, OPT_U32, 20) // randomize the split threshold by adding 16 * [0, rand_factor)
 OPTION(filestore_update_to, OPT_INT, 1000)
 OPTION(filestore_blackhole, OPT_BOOL, false)     // drop any new transactions on the floor
 OPTION(filestore_fd_cache_size, OPT_INT, 128)    // FD lru size
@@ -1730,7 +1735,7 @@ OPTION(rgw_shard_warning_threshold, OPT_DOUBLE, 90) // pct of safe max
 OPTION(rgw_swift_versioning_enabled, OPT_BOOL, false) // whether swift object versioning feature is enabled
 
 OPTION(mgr_module_path, OPT_STR, CEPH_PKGLIBDIR "/mgr") // where to load python modules from
-OPTION(mgr_modules, OPT_STR, "restful status")  // Which modules to load
+OPTION(mgr_initial_modules, OPT_STR, "restful status")  // Which modules to load
 OPTION(mgr_data, OPT_STR, "/var/lib/ceph/mgr/$cluster-$id") // where to find keyring etc
 OPTION(mgr_tick_period, OPT_INT, 2)  // How frequently to tick
 OPTION(mgr_stats_period, OPT_INT, 5) // How frequently clients send stats
@@ -1744,6 +1749,7 @@ OPTION(mgr_mon_bytes, OPT_U64, 128*1048576)   // bytes from mons
 OPTION(mgr_mon_messages, OPT_U64, 128)        // messages from mons
 
 OPTION(mgr_connect_retry_interval, OPT_DOUBLE, 1.0)
+OPTION(mgr_service_beacon_grace, OPT_DOUBLE, 60.0)
 
 OPTION(mon_mgr_digest_period, OPT_INT, 5)  // How frequently to send digests
 OPTION(mon_mgr_beacon_grace, OPT_INT, 30)  // How long to wait to failover

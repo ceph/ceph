@@ -11,6 +11,8 @@
  * Foundation.  See file COPYING.
  */
 
+#include <boost/tokenizer.hpp>
+
 #include "messages/MMgrBeacon.h"
 #include "messages/MMgrMap.h"
 #include "messages/MMgrDigest.h"
@@ -35,6 +37,11 @@ static ostream& _prefix(std::ostream *_dout, Monitor *mon,
 
 void MgrMonitor::create_initial()
 {
+  boost::tokenizer<> tok(g_conf->mgr_initial_modules);
+  for (auto& m : tok) {
+    pending_map.modules.insert(m);
+  }
+  dout(10) << __func__ << " initial modules " << pending_map.modules << dendl;
 }
 
 void MgrMonitor::update_from_paxos(bool *need_bootstrap)
@@ -206,6 +213,12 @@ bool MgrMonitor::prepare_beacon(MonOpRequestRef op)
       pending_map.available = m->get_available();
       updated = true;
     }
+    if (pending_map.available_modules != m->get_available_modules()) {
+      dout(4) << "available_modules " << m->get_available_modules()
+	      << " (was " << pending_map.available_modules << ")" << dendl;
+      pending_map.available_modules = m->get_available_modules();
+      updated = true;
+    }
   } else if (pending_map.active_gid == 0) {
     // There is no currently active daemon, select this one.
     if (pending_map.standbys.count(m->get_gid())) {
@@ -217,14 +230,26 @@ bool MgrMonitor::prepare_beacon(MonOpRequestRef op)
 	    << pending_map.active_name << ")" << dendl;
     pending_map.active_gid = m->get_gid();
     pending_map.active_name = m->get_name();
+    pending_map.available_modules = m->get_available_modules();
 
     updated = true;
   } else {
     if (pending_map.standbys.count(m->get_gid()) > 0) {
       dout(10) << "from existing standby " << m->get_gid() << dendl;
+      if (pending_map.standbys[m->get_gid()].available_modules !=
+	  m->get_available_modules()) {
+	dout(10) << "existing standby " << m->get_gid() << " available_modules "
+		 << m->get_available_modules() << " (was "
+		 << pending_map.standbys[m->get_gid()].available_modules << ")"
+		 << dendl;
+	pending_map.standbys[m->get_gid()].available_modules =
+	  m->get_available_modules();
+	updated = true;
+      }
     } else {
       dout(10) << "new standby " << m->get_gid() << dendl;
-      pending_map.standbys[m->get_gid()] = {m->get_gid(), m->get_name()};
+      pending_map.standbys[m->get_gid()] = {m->get_gid(), m->get_name(),
+					    m->get_available_modules()};
       updated = true;
     }
   }
@@ -500,6 +525,13 @@ bool MgrMonitor::preprocess_command(MonOpRequestRef op)
       f->dump_object("mgrmap", m);
     }
     f->flush(rdata);
+  } else if (prefix == "mgr module ls") {
+    f->open_array_section("modules");
+    for (auto& p : map.modules) {
+      f->dump_string("module", p);
+    }
+    f->close_section();
+    f->flush(rdata);
   } else {
     return false;
   }
@@ -530,6 +562,10 @@ bool MgrMonitor::prepare_command(MonOpRequestRef op)
     mon->reply_command(op, -EACCES, "access denied", rdata, get_last_committed());
     return true;
   }
+
+  string format;
+  cmd_getval(g_ceph_context, cmdmap, "format", format, string("plain"));
+  boost::scoped_ptr<Formatter> f(Formatter::create(format));
 
   string prefix;
   cmd_getval(g_ceph_context, cmdmap, "prefix", prefix);
@@ -578,10 +614,37 @@ bool MgrMonitor::prepare_command(MonOpRequestRef op)
     if (changed && pending_map.active_gid == 0) {
       promote_standby();
     }
+  } else if (prefix == "mgr module enable") {
+    string module;
+    cmd_getval(g_ceph_context, cmdmap, "module", module);
+    if (module.empty()) {
+      r = -EINVAL;
+      goto out;
+    }
+    string force;
+    cmd_getval(g_ceph_context, cmdmap, "force", force);
+    if (!pending_map.all_support_module(module) &&
+	force != "--force") {
+      ss << "all mgr daemons do not support module '" << module << "', pass "
+	 << "--force to force enablement";
+      r = -ENOENT;
+      goto out;
+    }
+    pending_map.modules.insert(module);
+  } else if (prefix == "mgr module disable") {
+    string module;
+    cmd_getval(g_ceph_context, cmdmap, "module", module);
+    if (module.empty()) {
+      r = -EINVAL;
+      goto out;
+    }
+    pending_map.modules.erase(module);
   } else {
+    ss << "Command '" << prefix << "' not implemented!";
     r = -ENOSYS;
   }
 
+out:
   dout(4) << __func__ << " done, r=" << r << dendl;
   /* Compose response */
   string rs;

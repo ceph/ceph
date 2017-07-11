@@ -64,11 +64,17 @@ public:
   PyObject *get_python(const std::string &what);
   PyObject *get_server_python(const std::string &hostname);
   PyObject *list_servers_python();
-  PyObject *get_metadata_python(std::string const &handle,
-      entity_type_t svc_type, const std::string &svc_id);
-  PyObject *get_counter_python(std::string const &handle,
-      entity_type_t svc_type, const std::string &svc_id,
-      const std::string &path);
+  PyObject *get_metadata_python(
+    std::string const &handle,
+    const std::string &svc_name, const std::string &svc_id);
+  PyObject *get_daemon_status_python(
+    std::string const &handle,
+    const std::string &svc_name, const std::string &svc_id);
+  PyObject *get_counter_python(
+    std::string const &handle,
+    const std::string &svc_name,
+    const std::string &svc_id,
+    const std::string &path);
   PyObject *get_context();
 
   std::map<std::string, std::string> config_cache;
@@ -101,6 +107,8 @@ public:
 
   void log(const std::string &handle,
            int level, const std::string &record);
+
+  static void list_modules(std::set<std::string> *modules);
 };
 
 #endif

@@ -74,7 +74,7 @@ protected:
   LCExpiration expiration;
   LCExpiration noncur_expiration;
   LCExpiration mp_expiration;
-  bool dm_expiration;
+  bool dm_expiration = false;
 
 public:
 

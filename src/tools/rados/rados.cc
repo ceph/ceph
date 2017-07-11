@@ -2960,7 +2960,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
       usage_exit();
     if (operation != OP_WRITE) {
       if (block_size_specified) {
-        cerr << "-b|--block_size option can be used only with `write' bench test"
+        cerr << "-b|--block_size option can be used only with 'write' bench test"
              << std::endl;
         ret = -EINVAL;
         goto out;
@@ -2978,7 +2978,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
     }
 
     if (!formatter && output) {
-      cerr << "-o|--output option can be used only with '--format' option"
+      cerr << "-o|--output option can only be used with '--format' option"
            << std::endl;
       ret = -EINVAL;
       goto out;
@@ -3005,7 +3005,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
 			    concurrent_ios, op_size, object_size,
 			    max_objects, cleanup, hints, run_name, no_verify);
     if (ret != 0)
-      cerr << "error during benchmark: " << ret << std::endl;
+      cerr << "error during benchmark: " << cpp_strerror(ret) << std::endl;
     if (formatter && output)
       delete outstream;
   }
@@ -3017,7 +3017,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
     RadosBencher bencher(g_ceph_context, rados, io_ctx);
     ret = bencher.clean_up(prefix, concurrent_ios, run_name);
     if (ret != 0)
-      cerr << "error during cleanup: " << ret << std::endl;
+      cerr << "error during cleanup: " << cpp_strerror(ret) << std::endl;
   }
   else if (strcmp(nargs[0], "watch") == 0) {
     if (!pool_name || nargs.size() < 2)
@@ -3027,7 +3027,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
     uint64_t cookie;
     ret = io_ctx.watch2(oid, &cookie, &ctx);
     if (ret != 0)
-      cerr << "error calling watch: " << ret << std::endl;
+      cerr << "error calling watch: " << cpp_strerror(ret) << std::endl;
     else {
       cout << "press enter to exit..." << std::endl;
       getchar();
@@ -3044,7 +3044,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
     ::encode(msg, bl);
     ret = io_ctx.notify2(oid, bl, 10000, &replybl);
     if (ret != 0)
-      cerr << "error calling notify: " << ret << std::endl;
+      cerr << "error calling notify: " << cpp_strerror(ret) << std::endl;
     if (replybl.length()) {
       map<pair<uint64_t,uint64_t>,bufferlist> rm;
       set<pair<uint64_t,uint64_t> > missed;

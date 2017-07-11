@@ -29,7 +29,7 @@ def task(ctx, config):
           name: teuthologyprofile
           k: 2
           m: 1
-          ruleset-failure-domain: osd
+          crush-failure-domain: osd
         cleanup: false (defaults to true)
         type: <write|seq|rand> (defaults to write)
     example:
@@ -127,7 +127,7 @@ def task(ctx, config):
     try:
         yield
     finally:
-        timeout = config.get('time', 360) * 10 + 180
+        timeout = config.get('time', 360) * 30 + 300
         log.info('joining radosbench (timing out after %ss)', timeout)
         run.wait(radosbench.itervalues(), timeout=timeout)
 

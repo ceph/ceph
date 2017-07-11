@@ -39,9 +39,9 @@
 class MCommand;
 class MMgrDigest;
 class MLog;
+class MServiceMap;
 class Objecter;
 class Client;
-
 
 class MgrPyModule;
 
@@ -72,7 +72,8 @@ protected:
   bool initializing;
 
 public:
-  Mgr(MonClient *monc_, Messenger *clientm_, Objecter *objecter_,
+  Mgr(MonClient *monc_, const MgrMap& mgrmap,
+      Messenger *clientm_, Objecter *objecter_,
       Client *client_, LogChannelRef clog_, LogChannelRef audit_clog_);
   ~Mgr();
 
@@ -83,6 +84,9 @@ public:
   void handle_fs_map(MFSMap* m);
   void handle_osd_map();
   void handle_log(MLog *m);
+  void handle_service_map(MServiceMap *m);
+
+  bool got_mgr_map(const MgrMap& m);
 
   bool ms_dispatch(Message *m);
 

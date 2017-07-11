@@ -1115,9 +1115,6 @@ struct pg_pool_t {
   const char *get_type_name() const {
     return get_type_name(type);
   }
-  static const char* get_default_type() {
-    return "replicated";
-  }
 
   enum {
     FLAG_HASHPSPOOL = 1<<0, // hash pg seed and pool together (instead of adding)
@@ -4797,7 +4794,7 @@ struct OSDOp {
   sobject_t soid;
 
   bufferlist indata, outdata;
-  int32_t rval;
+  errorcode32_t rval;
 
   OSDOp() : rval(0) {
     memset(&op, 0, sizeof(ceph_osd_op));
@@ -4837,6 +4834,13 @@ struct OSDOp {
    * @param out [out] combined data buffer
    */
   static void merge_osd_op_vector_out_data(vector<OSDOp>& ops, bufferlist& out);
+
+  /**
+   * Clear data as much as possible, leave minimal data for historical op dump
+   *
+   * @param ops [in] vector of OSDOps
+   */
+  static void clear_data(vector<OSDOp>& ops);
 };
 
 ostream& operator<<(ostream& out, const OSDOp& op);

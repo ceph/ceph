@@ -597,6 +597,7 @@ public:
   void win_election(epoch_t epoch, set<int>& q,
 		    uint64_t features,
                     const mon_feature_t& mon_features,
+		    const map<int,Metadata>& metadata,
 		    const MonCommand *cmdset, int cmdsize);
   void lose_election(epoch_t epoch, set<int>& q, int l,
 		     uint64_t features,
@@ -614,8 +615,6 @@ public:
    * Vector holding the Services serviced by this Monitor.
    */
   vector<PaxosService*> paxos_service;
-
-  PaxosService *get_paxos_service_by_name(const string& name);
 
   class PGMonitor *pgmon() {
     return (class PGMonitor *)paxos_service[PAXOS_PGMAP];
@@ -696,6 +695,7 @@ public:
   int print_nodes(Formatter *f, ostream& err);
 
   // Accumulate metadata across calls to update_mon_metadata
+  map<int, Metadata> mon_metadata;
   map<int, Metadata> pending_metadata;
 
   /**
@@ -876,8 +876,9 @@ public:
   int write_default_keyring(bufferlist& bl);
   void extract_save_mon_key(KeyRing& keyring);
 
+  void collect_metadata(Metadata *m);
   void update_mon_metadata(int from, Metadata&& m);
-  int load_metadata(map<int, Metadata>& m);
+  int load_metadata();
   void count_metadata(const string& field, Formatter *f);
 
   // features

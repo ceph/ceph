@@ -635,28 +635,6 @@ void RGWRemoteDataLog::finish()
   stop();
 }
 
-int RGWRemoteDataLog::get_shard_info(int shard_id)
-{
-  char buf[32];
-  snprintf(buf, sizeof(buf), "%d", shard_id);
-
-  rgw_http_param_pair pairs[] = { { "type", "data" },
-                                  { "id", buf },
-                                  { "info", NULL },
-                                  { NULL, NULL } };
-
-  RGWDataChangesLogInfo info;
-  int ret = sync_env.conn->get_json_resource("/admin/log", pairs, info);
-  if (ret < 0) {
-    ldout(store->ctx(), 0) << "ERROR: failed to fetch datalog info" << dendl;
-    return ret;
-  }
-
-  ldout(store->ctx(), 20) << "remote datalog, shard_id=" << shard_id << " marker=" << info.marker << dendl;
-
-  return 0;
-}
-
 int RGWRemoteDataLog::read_sync_status(rgw_data_sync_status *sync_status)
 {
   // cannot run concurrently with run_sync(), so run in a separate manager
@@ -1463,9 +1441,7 @@ public:
 
       data_sync_module = sync_env->sync_module->get_data_handler();
 
-      if (retcode == -ENOENT) {
-        sync_status.sync_info.num_shards = num_shards;
-      } else if (retcode < 0 && retcode != -ENOENT) {
+      if (retcode < 0 && retcode != -ENOENT) {
         ldout(sync_env->cct, 0) << "ERROR: failed to fetch sync status, retcode=" << retcode << dendl;
         return set_cr_error(retcode);
       }
@@ -1473,6 +1449,7 @@ public:
       /* state: init status */
       if ((rgw_data_sync_info::SyncState)sync_status.sync_info.state == rgw_data_sync_info::StateInit) {
         ldout(sync_env->cct, 20) << __func__ << "(): init" << dendl;
+        sync_status.sync_info.num_shards = num_shards;
         uint64_t instance_id;
         get_random_bytes((char *)&instance_id, sizeof(instance_id));
         yield call(new RGWInitDataSyncStatusCoroutine(sync_env, num_shards, instance_id, &sync_status));

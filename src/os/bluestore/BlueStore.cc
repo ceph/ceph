@@ -3316,7 +3316,7 @@ void *BlueStore::MempoolThread::entry()
     size_t num_shards = store->cache_shards.size();
     float target_ratio = store->cache_meta_ratio + store->cache_data_ratio;
     // A little sloppy but should be close enough
-    uint64_t shard_target = target_ratio * (store->cct->_conf->bluestore_cache_size / num_shards);
+    uint64_t shard_target = target_ratio * (store->cache_size / num_shards);
 
     for (auto i : store->cache_shards) {
       i->trim(shard_target,
@@ -3689,19 +3689,46 @@ void BlueStore::_set_blob_size()
 
 int BlueStore::_set_cache_sizes()
 {
+  assert(bdev);
+  if (cct->_conf->bluestore_cache_size) {
+    cache_size = cct->_conf->bluestore_cache_size;
+  } else {
+    // choose global cache size based on backend type
+    if (bdev->is_rotational()) {
+      cache_size = cct->_conf->bluestore_cache_size_hdd;
+    } else {
+      cache_size = cct->_conf->bluestore_cache_size_ssd;
+    }
+  }
   cache_meta_ratio = cct->_conf->bluestore_cache_meta_ratio;
   cache_kv_ratio = cct->_conf->bluestore_cache_kv_ratio;
+
+  double cache_kv_max = cct->_conf->bluestore_cache_kv_max;
+  double cache_kv_max_ratio = 0;
+
+  // if cache_kv_max is negative, disable it
+  if (cache_size > 0 && cache_kv_max >= 0) {
+    cache_kv_max_ratio = (double) cache_kv_max / (double) cache_size;
+    if (cache_kv_max_ratio < 1.0 && cache_kv_max_ratio < cache_kv_ratio) {
+      dout(1) << __func__ << " max " << cache_kv_max_ratio
+            << " < ratio " << cache_kv_ratio
+            << dendl;
+      cache_meta_ratio = cache_meta_ratio + cache_kv_ratio - cache_kv_max_ratio;
+      cache_kv_ratio = cache_kv_max_ratio;
+    }
+  }  
+
   cache_data_ratio =
     (double)1.0 - (double)cache_meta_ratio - (double)cache_kv_ratio;
 
-  if (cache_meta_ratio <= 0 || cache_meta_ratio > 1.0) {
+  if (cache_meta_ratio < 0 || cache_meta_ratio > 1.0) {
     derr << __func__ << "bluestore_cache_meta_ratio (" << cache_meta_ratio
-	 << ") must be in range (0,1.0]" << dendl;
+	 << ") must be in range [0,1.0]" << dendl;
     return -EINVAL;
   }
-  if (cache_kv_ratio <= 0 || cache_kv_ratio > 1.0) {
+  if (cache_kv_ratio < 0 || cache_kv_ratio > 1.0) {
     derr << __func__ << "bluestore_cache_kv_ratio (" << cache_kv_ratio
-	 << ") must be in range (0,1.0]" << dendl;
+	 << ") must be in range [0,1.0]" << dendl;
     return -EINVAL;
   }
   if (cache_meta_ratio + cache_kv_ratio > 1.0) {
@@ -3715,7 +3742,8 @@ int BlueStore::_set_cache_sizes()
     // deal with floating point imprecision
     cache_data_ratio = 0;
   }
-  dout(1) << __func__ << " meta " << cache_meta_ratio
+  dout(1) << __func__ << " cache_size " << cache_size
+          << " meta " << cache_meta_ratio
 	  << " kv " << cache_kv_ratio
 	  << " data " << cache_data_ratio
 	  << dendl;
@@ -3897,14 +3925,8 @@ int BlueStore::get_block_device_fsid(CephContext* cct, const string& path,
 
 int BlueStore::_open_path()
 {
-  // initial sanity check
-  int r = _set_cache_sizes();
-  if (r < 0) {
-    return r;
-  }
-
   assert(path_fd < 0);
-  path_fd = ::open(path.c_str(), O_DIRECTORY);
+  path_fd = TEMP_FAILURE_RETRY(::open(path.c_str(), O_DIRECTORY));
   if (path_fd < 0) {
     int r = -errno;
     derr << __func__ << " unable to open " << path << ": " << cpp_strerror(r)
@@ -3932,7 +3954,7 @@ int BlueStore::_write_bdev_label(string path, bluestore_bdev_label_t label)
   z.zero();
   bl.append(std::move(z));
 
-  int fd = ::open(path.c_str(), O_WRONLY);
+  int fd = TEMP_FAILURE_RETRY(::open(path.c_str(), O_WRONLY));
   if (fd < 0) {
     fd = -errno;
     derr << __func__ << " failed to open " << path << ": " << cpp_strerror(fd)
@@ -3952,7 +3974,7 @@ int BlueStore::_read_bdev_label(CephContext* cct, string path,
 				bluestore_bdev_label_t *label)
 {
   dout(10) << __func__ << dendl;
-  int fd = ::open(path.c_str(), O_RDONLY);
+  int fd = TEMP_FAILURE_RETRY(::open(path.c_str(), O_RDONLY));
   if (fd < 0) {
     fd = -errno;
     derr << __func__ << " failed to open " << path << ": " << cpp_strerror(fd)
@@ -4076,6 +4098,11 @@ int BlueStore::_open_bdev(bool create)
   block_mask = ~(block_size - 1);
   block_size_order = ctz(block_size);
   assert(block_size == 1u << block_size_order);
+  // and set cache_size based on device type
+  r = _set_cache_sizes();
+  if (r < 0) {
+    goto fail_close;
+  }
   return 0;
 
  fail_close:
@@ -4623,7 +4650,7 @@ int BlueStore::_open_db(bool create)
   FreelistManager::setup_merge_operators(db);
   db->set_merge_operator(PREFIX_STAT, merge_op);
 
-  db->set_cache_size(cct->_conf->bluestore_cache_size * cache_kv_ratio);
+  db->set_cache_size(cache_size * cache_kv_ratio);
 
   if (kv_backend == "rocksdb")
     options = cct->_conf->bluestore_rocksdb_options;
@@ -7551,12 +7578,15 @@ int BlueStore::_upgrade_super()
 
 void BlueStore::_assign_nid(TransContext *txc, OnodeRef o)
 {
-  if (o->onode.nid)
+  if (o->onode.nid) {
+    assert(o->exists);
     return;
+  }
   uint64_t nid = ++nid_last;
   dout(20) << __func__ << " " << nid << dendl;
   o->onode.nid = nid;
   txc->last_nid = nid;
+  o->exists = true;
 }
 
 uint64_t BlueStore::_assign_blobid(TransContext *txc)
@@ -8052,9 +8082,11 @@ void BlueStore::_osr_drain_preceding(TransContext *txc)
   ++deferred_aggressive; // FIXME: maybe osr-local aggressive flag?
   {
     // submit anything pending
-    std::lock_guard<std::mutex> l(deferred_lock);
+    deferred_lock.lock();
     if (osr->deferred_pending) {
-      _deferred_submit(osr);
+      _deferred_submit_unlock(osr);
+    } else {
+      deferred_lock.unlock();
     }
   }
   {
@@ -8081,8 +8113,7 @@ void BlueStore::_osr_drain_all()
   ++deferred_aggressive;
   {
     // submit anything pending
-    std::lock_guard<std::mutex> l(deferred_lock);
-    _deferred_try_submit();
+    deferred_try_submit();
   }
   {
     // wake up any previously finished deferred events
@@ -8487,10 +8518,9 @@ void BlueStore::_kv_finalize_thread()
       deferred_stable.clear();
 
       if (!deferred_aggressive) {
-	std::lock_guard<std::mutex> l(deferred_lock);
 	if (deferred_queue_size >= deferred_batch_ops.load() ||
 	    throttle_deferred_bytes.past_midpoint()) {
-	  _deferred_try_submit();
+	  deferred_try_submit();
 	}
       }
 
@@ -8517,7 +8547,7 @@ bluestore_deferred_op_t *BlueStore::_get_deferred_op(
 void BlueStore::_deferred_queue(TransContext *txc)
 {
   dout(20) << __func__ << " txc " << txc << " osr " << txc->osr << dendl;
-  std::lock_guard<std::mutex> l(deferred_lock);
+  deferred_lock.lock();
   if (!txc->osr->deferred_pending &&
       !txc->osr->deferred_running) {
     deferred_queue.push_back(*txc->osr);
@@ -8539,22 +8569,31 @@ void BlueStore::_deferred_queue(TransContext *txc)
   }
   if (deferred_aggressive &&
       !txc->osr->deferred_running) {
-    _deferred_submit(txc->osr.get());
+    _deferred_submit_unlock(txc->osr.get());
+  } else {
+    deferred_lock.unlock();
   }
 }
 
-void BlueStore::_deferred_try_submit()
+void BlueStore::deferred_try_submit()
 {
   dout(20) << __func__ << " " << deferred_queue.size() << " osrs, "
 	   << deferred_queue_size << " txcs" << dendl;
+  std::lock_guard<std::mutex> l(deferred_lock);
+  vector<OpSequencerRef> osrs;
+  osrs.reserve(deferred_queue.size());
   for (auto& osr : deferred_queue) {
-    if (!osr.deferred_running) {
-      _deferred_submit(&osr);
+    osrs.push_back(&osr);
+  }
+  for (auto& osr : osrs) {
+    if (!osr->deferred_running) {
+      _deferred_submit_unlock(osr.get());
+      deferred_lock.lock();
     }
   }
 }
 
-void BlueStore::_deferred_submit(OpSequencer *osr)
+void BlueStore::_deferred_submit_unlock(OpSequencer *osr)
 {
   dout(10) << __func__ << " osr " << osr
 	   << " " << osr->deferred_pending->iomap.size() << " ios pending "
@@ -8602,6 +8641,10 @@ void BlueStore::_deferred_submit(OpSequencer *osr)
     bl.claim_append(i->second.bl);
     ++i;
   }
+
+  // demote to deferred_submit_lock, then drop that too
+  std::lock_guard<std::mutex> l(deferred_submit_lock);
+  deferred_lock.unlock();
   bdev->aio_submit(&b->ioc);
 }
 
@@ -8619,7 +8662,10 @@ void BlueStore::_deferred_aio_finish(OpSequencer *osr)
       auto q = deferred_queue.iterator_to(*osr);
       deferred_queue.erase(q);
     } else if (deferred_aggressive) {
-      _deferred_submit(osr);
+      dout(20) << __func__ << " queuing async deferred_try_submit" << dendl;
+      finishers[0]->queue(new FunctionContext([&](int) {
+	    deferred_try_submit();
+	  }));
     }
   }
 
@@ -9140,7 +9186,6 @@ int BlueStore::_touch(TransContext *txc,
 {
   dout(15) << __func__ << " " << c->cid << " " << o->oid << dendl;
   int r = 0;
-  o->exists = true;
   _assign_nid(txc, o);
   txc->write_onode(o);
   dout(10) << __func__ << " " << c->cid << " " << o->oid << " = " << r << dendl;
@@ -10262,7 +10307,6 @@ int BlueStore::_write(TransContext *txc,
   dout(15) << __func__ << " " << c->cid << " " << o->oid
 	   << " 0x" << std::hex << offset << "~" << length << std::dec
 	   << dendl;
-  o->exists = true;
   _assign_nid(txc, o);
   int r = _do_write(txc, c, o, offset, length, bl, fadvise_flags);
   txc->write_onode(o);
@@ -10281,7 +10325,6 @@ int BlueStore::_zero(TransContext *txc,
   dout(15) << __func__ << " " << c->cid << " " << o->oid
 	   << " 0x" << std::hex << offset << "~" << length << std::dec
 	   << dendl;
-  o->exists = true;
   _assign_nid(txc, o);
   int r = _do_zero(txc, c, o, offset, length);
   dout(10) << __func__ << " " << c->cid << " " << o->oid
@@ -10375,7 +10418,8 @@ int BlueStore::_do_remove(
   OnodeRef o)
 {
   set<SharedBlob*> maybe_unshared_blobs;
-  _do_truncate(txc, c, o, 0, &maybe_unshared_blobs);
+  bool is_gen = !o->oid.is_no_gen();
+  _do_truncate(txc, c, o, 0, is_gen ? &maybe_unshared_blobs : nullptr);
   if (o->onode.has_omap()) {
     o->flush();
     _do_omap_clear(txc, o->onode.nid);
@@ -10397,72 +10441,81 @@ int BlueStore::_do_remove(
   o->onode = bluestore_onode_t();
   _debug_obj_on_delete(o->oid);
 
-  if (!o->oid.is_no_gen() &&
-      !maybe_unshared_blobs.empty()) {
-    // see if we can unshare blobs still referenced by the head
-    dout(10) << __func__ << " gen and maybe_unshared_blobs "
-	     << maybe_unshared_blobs << dendl;
-    ghobject_t nogen = o->oid;
-    nogen.generation = ghobject_t::NO_GEN;
-    OnodeRef h = c->onode_map.lookup(nogen);
-    if (h && h->exists) {
-      dout(20) << __func__ << " checking for unshareable blobs on " << h
-	       << " " << h->oid << dendl;
-      map<SharedBlob*,bluestore_extent_ref_map_t> expect;
-      for (auto& e : h->extent_map.extent_map) {
-	const bluestore_blob_t& b = e.blob->get_blob();
-	SharedBlob *sb = e.blob->shared_blob.get();
-	if (b.is_shared() &&
-	    sb->loaded &&
-	    maybe_unshared_blobs.count(sb)) {
-	  b.map(e.blob_offset, e.length, [&](uint64_t off, uint64_t len) {
-	      expect[sb].get(off, len);
-	      return 0;
-	    });
-	}
-      }
-      vector<SharedBlob*> unshared_blobs;
-      unshared_blobs.reserve(maybe_unshared_blobs.size());
-      for (auto& p : expect) {
-	dout(20) << " ? " << *p.first << " vs " << p.second << dendl;
-	if (p.first->persistent->ref_map == p.second) {
-	  SharedBlob *sb = p.first;
-	  dout(20) << __func__ << "  unsharing " << *sb << dendl;
-	  unshared_blobs.push_back(sb);
-	  txc->unshare_blob(sb);
-	  uint64_t sbid = c->make_blob_unshared(sb);
-	  string key;
-	  get_shared_blob_key(sbid, &key);
-	  txc->t->rmkey(PREFIX_SHARED_BLOB, key);
-	}
-      }
+  if (!is_gen || maybe_unshared_blobs.empty()) {
+    return 0;
+  }
 
-      if (!unshared_blobs.empty()) {
-        uint32_t b_start = OBJECT_MAX_SIZE;
-        uint32_t b_end = 0;
-        for (auto& e : h->extent_map.extent_map) {
-          const bluestore_blob_t& b = e.blob->get_blob();
-          SharedBlob *sb = e.blob->shared_blob.get();
-          if (b.is_shared() &&
-              std::find(unshared_blobs.begin(), unshared_blobs.end(),
-                        sb) != unshared_blobs.end()) {
-            dout(20) << __func__ << "  unsharing " << e << dendl;
-            bluestore_blob_t& blob = e.blob->dirty_blob();
-            blob.clear_flag(bluestore_blob_t::FLAG_SHARED);
-            if (e.logical_offset < b_start) {
-              b_start = e.logical_offset;
-            }
-            if (e.logical_end() > b_end) {
-              b_end = e.logical_end();
-            }
-          }
-        }
+  // see if we can unshare blobs still referenced by the head
+  dout(10) << __func__ << " gen and maybe_unshared_blobs "
+	   << maybe_unshared_blobs << dendl;
+  ghobject_t nogen = o->oid;
+  nogen.generation = ghobject_t::NO_GEN;
+  OnodeRef h = c->onode_map.lookup(nogen);
 
-	h->extent_map.dirty_range(b_start, b_end - b_start);
-	txc->write_onode(h);
+  if (!h || !h->exists) {
+    return 0;
+  }
+
+  dout(20) << __func__ << " checking for unshareable blobs on " << h
+	   << " " << h->oid << dendl;
+  map<SharedBlob*,bluestore_extent_ref_map_t> expect;
+  for (auto& e : h->extent_map.extent_map) {
+    const bluestore_blob_t& b = e.blob->get_blob();
+    SharedBlob *sb = e.blob->shared_blob.get();
+    if (b.is_shared() &&
+	sb->loaded &&
+	maybe_unshared_blobs.count(sb)) {
+      b.map(e.blob_offset, e.length, [&](uint64_t off, uint64_t len) {
+        expect[sb].get(off, len);
+	return 0;
+      });
+    }
+  }
+
+  vector<SharedBlob*> unshared_blobs;
+  unshared_blobs.reserve(maybe_unshared_blobs.size());
+  for (auto& p : expect) {
+    dout(20) << " ? " << *p.first << " vs " << p.second << dendl;
+    if (p.first->persistent->ref_map == p.second) {
+      SharedBlob *sb = p.first;
+      dout(20) << __func__ << "  unsharing " << *sb << dendl;
+      unshared_blobs.push_back(sb);
+      txc->unshare_blob(sb);
+      uint64_t sbid = c->make_blob_unshared(sb);
+      string key;
+      get_shared_blob_key(sbid, &key);
+      txc->t->rmkey(PREFIX_SHARED_BLOB, key);
+    }
+  }
+
+  if (unshared_blobs.empty()) {
+    return 0;
+  }
+
+  uint32_t b_start = OBJECT_MAX_SIZE;
+  uint32_t b_end = 0;
+  for (auto& e : h->extent_map.extent_map) {
+    const bluestore_blob_t& b = e.blob->get_blob();
+    SharedBlob *sb = e.blob->shared_blob.get();
+    if (b.is_shared() &&
+        std::find(unshared_blobs.begin(), unshared_blobs.end(),
+                  sb) != unshared_blobs.end()) {
+      dout(20) << __func__ << "  unsharing " << e << dendl;
+      bluestore_blob_t& blob = e.blob->dirty_blob();
+      blob.clear_flag(bluestore_blob_t::FLAG_SHARED);
+      if (e.logical_offset < b_start) {
+        b_start = e.logical_offset;
+      }
+      if (e.logical_end() > b_end) {
+        b_end = e.logical_end();
       }
     }
   }
+
+  assert(b_end > b_start);
+  h->extent_map.dirty_range(b_start, b_end - b_start);
+  txc->write_onode(h);
+
   return 0;
 }
 
@@ -10759,7 +10812,6 @@ int BlueStore::_clone(TransContext *txc,
     return -EINVAL;
   }
 
-  newo->exists = true;
   _assign_nid(txc, newo);
 
   // clone data
@@ -10827,7 +10879,9 @@ int BlueStore::_do_clone_range(
   CollectionRef& c,
   OnodeRef& oldo,
   OnodeRef& newo,
-  uint64_t srcoff, uint64_t length, uint64_t dstoff)
+  uint64_t srcoff,
+  uint64_t length,
+  uint64_t dstoff)
 {
   dout(15) << __func__ << " " << c->cid << " " << oldo->oid << " -> "
 	   << newo->oid
@@ -10844,8 +10898,9 @@ int BlueStore::_do_clone_range(
     e.blob->last_encoded_id = -1;
   }
   int n = 0;
-  bool dirtied_oldo = false;
   uint64_t end = srcoff + length;
+  uint32_t dirty_range_begin = 0;
+  uint32_t dirty_range_end = 0;
   for (auto ep = oldo->extent_map.seek_lextent(srcoff);
        ep != oldo->extent_map.extent_map.end();
        ++ep) {
@@ -10866,7 +10921,12 @@ int BlueStore::_do_clone_range(
       // make sure it is shared
       if (!blob.is_shared()) {
 	c->make_blob_shared(_assign_blobid(txc), e.blob);
-	dirtied_oldo = true;  // fixme: overkill
+	if (dirty_range_begin == 0) {
+          dirty_range_begin = e.logical_offset;
+        }
+        assert(e.logical_end() > 0);
+        // -1 to exclude next potential shard
+        dirty_range_end = e.logical_end() - 1;
       } else {
 	c->load_shared_blob(e.blob->shared_blob);
       }
@@ -10913,8 +10973,9 @@ int BlueStore::_do_clone_range(
     dout(20) << __func__ << "  dst " << *ne << dendl;
     ++n;
   }
-  if (dirtied_oldo) {
-    oldo->extent_map.dirty_range(srcoff, length); // overkill
+  if (dirty_range_end > dirty_range_begin) {
+    oldo->extent_map.dirty_range(dirty_range_begin,
+      dirty_range_end - dirty_range_begin);
     txc->write_onode(oldo);
   }
   txc->write_onode(newo);
@@ -10944,7 +11005,6 @@ int BlueStore::_clone_range(TransContext *txc,
     goto out;
   }
 
-  newo->exists = true;
   _assign_nid(txc, newo);
 
   if (length > 0) {

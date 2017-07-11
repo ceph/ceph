@@ -179,16 +179,15 @@ bool rgw_create_s3_canonical_header(const req_info& info,
   if (qsr) {
     date = info.args.get("Expires");
   } else {
-    const char *str = info.env->get("HTTP_DATE");
+    const char *str = info.env->get("HTTP_X_AMZ_DATE");
     const char *req_date = str;
-    if (str) {
-      date = str;
-    } else {
-      req_date = info.env->get("HTTP_X_AMZ_DATE");
+    if (str == NULL) {
+      req_date = info.env->get("HTTP_DATE");
       if (!req_date) {
         dout(0) << "NOTICE: missing date for auth header" << dendl;
         return false;
       }
+      date = req_date;
     }
 
     if (header_time) {
@@ -499,11 +498,7 @@ static inline std::string aws4_uri_encode(const std::string& src)
 static inline std::string aws4_uri_recode(const boost::string_view& src)
 {
   std::string decoded = url_decode(src);
-  if (decoded.length() != src.length()) {
-    return src.to_string();
-  } else {
-    return aws4_uri_encode(decoded);
-  }
+  return aws4_uri_encode(decoded);
 }
 
 std::string get_v4_canonical_qs(const req_info& info, const bool using_qs)
@@ -910,7 +905,7 @@ std::string
 AWSv4ComplMulti::calc_chunk_signature(const std::string& payload_hash) const
 {
   const auto string_to_sign = string_join_reserve("\n",
-    AWS4_HMAC_SHA256_STR,
+    AWS4_HMAC_SHA256_PAYLOAD_STR,
     date,
     credential_scope,
     prev_chunk_signature,

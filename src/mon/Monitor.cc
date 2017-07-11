@@ -227,27 +227,6 @@ Monitor::Monitor(CephContext* cct_, string nm, MonitorDBStore *s,
   pgservice = mgrstatmon()->get_pg_stat_service();
 }
 
-PaxosService *Monitor::get_paxos_service_by_name(const string& name)
-{
-  if (name == "mdsmap")
-    return paxos_service[PAXOS_MDSMAP];
-  if (name == "monmap")
-    return paxos_service[PAXOS_MONMAP];
-  if (name == "osdmap")
-    return paxos_service[PAXOS_OSDMAP];
-  if (name == "pgmap")
-    return paxos_service[PAXOS_PGMAP];
-  if (name == "logm")
-    return paxos_service[PAXOS_LOG];
-  if (name == "auth")
-    return paxos_service[PAXOS_AUTH];
-  if (name == "mgr")
-    return paxos_service[PAXOS_MGR];
-
-  assert(0 == "given name does not match known paxos service");
-  return NULL;
-}
-
 Monitor::~Monitor()
 {
   for (vector<PaxosService*>::iterator p = paxos_service.begin(); p != paxos_service.end(); ++p)
@@ -296,7 +275,8 @@ void Monitor::do_admin_command(string command, cmdmap_t& cmdmap, string format,
   bool read_only = (command == "mon_status" ||
                     command == "mon metadata" ||
                     command == "quorum_status" ||
-                    command == "ops");
+                    command == "ops" ||
+                    command == "sessions");
 
   (read_only ? audit_clog->debug() : audit_clog->info())
     << "from='admin socket' entity='admin socket' "
@@ -334,6 +314,17 @@ void Monitor::do_admin_command(string command, cmdmap_t& cmdmap, string format,
     if (f) {
       f->flush(ss);
     }
+  } else if (command == "sessions") {
+
+    if (f) {
+      f->open_array_section("sessions");
+      for (auto p : session_map.sessions) {
+        f->dump_stream("session") << *p;
+      }
+      f->close_section();
+      f->flush(ss);
+    }
+
   } else {
     assert(0 == "bad AdminSocket command binding");
   }
@@ -768,6 +759,11 @@ int Monitor::preinit()
                                      admin_hook,
                                      "show the ops currently in flight");
   assert(r == 0);
+  r = admin_socket->register_command("sessions",
+                                     "sessions",
+                                     admin_hook,
+                                     "list existing sessions");
+  assert(r == 0);
 
   lock.Lock();
 
@@ -846,6 +842,7 @@ void Monitor::refresh_from_paxos(bool *need_bootstrap)
   for (int i = 0; i < PAXOS_NUM; ++i) {
     paxos_service[i]->post_refresh();
   }
+  load_metadata();
 }
 
 void Monitor::register_cluster_logger()
@@ -897,6 +894,7 @@ void Monitor::shutdown()
     admin_socket->unregister_command("quorum enter");
     admin_socket->unregister_command("quorum exit");
     admin_socket->unregister_command("ops");
+    admin_socket->unregister_command("sessions");
     delete admin_hook;
     admin_hook = NULL;
   }
@@ -1869,12 +1867,16 @@ void Monitor::win_standalone_election()
   set<int> q;
   q.insert(rank);
 
-  const MonCommand *my_cmds;
-  int cmdsize;
+  map<int,Metadata> metadata;
+  collect_metadata(&metadata[0]);
+
+  const MonCommand *my_cmds = nullptr;
+  int cmdsize = 0;
   get_locally_supported_monitor_commands(&my_cmds, &cmdsize);
   win_election(elector.get_epoch(), q,
                CEPH_FEATURES_ALL,
                ceph::features::mon::get_supported(),
+	       metadata,
                my_cmds, cmdsize);
 }
 
@@ -1903,6 +1905,7 @@ void Monitor::_finish_svc_election()
 
 void Monitor::win_election(epoch_t epoch, set<int>& active, uint64_t features,
                            const mon_feature_t& mon_features,
+			   const map<int,Metadata>& metadata,
                            const MonCommand *cmdset, int cmdsize)
 {
   dout(10) << __func__ << " epoch " << epoch << " quorum " << active
@@ -1916,6 +1919,7 @@ void Monitor::win_election(epoch_t epoch, set<int>& active, uint64_t features,
   quorum = active;
   quorum_con_features = features;
   quorum_mon_features = mon_features;
+  pending_metadata = metadata;
   outside_quorum.clear();
 
   clog->info() << "mon." << name << "@" << rank
@@ -1935,6 +1939,27 @@ void Monitor::win_election(epoch_t epoch, set<int>& active, uint64_t features,
 
   logger->inc(l_mon_election_win);
 
+  // inject new metadata in first transaction.
+  {
+    // include previous metadata for missing mons (that aren't part of
+    // the current quorum).
+    map<int,Metadata> m = metadata;
+    for (unsigned rank = 0; rank < monmap->size(); ++rank) {
+      if (m.count(rank) == 0 &&
+	  mon_metadata.count(rank)) {
+	m[rank] = mon_metadata[rank];
+      }
+    }
+
+    // FIXME: This is a bit sloppy because we aren't guaranteed to submit
+    // a new transaction immediately after the election finishes.  We should
+    // do that anyway for other reasons, though.
+    MonitorDBStore::TransactionRef t = paxos->get_pending_transaction();
+    bufferlist bl;
+    ::encode(m, bl);
+    t->put(MONITOR_STORE_PREFIX, "last_metadata", bl);
+  }
+
   finish_election();
   if (monmap->size() > 1 &&
       monmap->get_epoch() > 0) {
@@ -1943,11 +1968,6 @@ void Monitor::win_election(epoch_t epoch, set<int>& active, uint64_t features,
     do_health_to_clog_interval();
     scrub_event_start();
   }
-
-  Metadata my_meta;
-  collect_sys_info(&my_meta, g_ceph_context);
-  my_meta["addr"] = stringify(messenger->get_myaddr());
-  update_mon_metadata(rank, std::move(my_meta));
 }
 
 void Monitor::lose_election(epoch_t epoch, set<int> &q, int l,
@@ -1974,12 +1994,20 @@ void Monitor::lose_election(epoch_t epoch, set<int> &q, int l,
 
   finish_election();
 
-  if (quorum_con_features & CEPH_FEATURE_MON_METADATA) {
+  if ((quorum_con_features & CEPH_FEATURE_MON_METADATA) &&
+      !HAVE_FEATURE(quorum_con_features, SERVER_LUMINOUS)) {
+    // for pre-luminous mons only
     Metadata sys_info;
-    collect_sys_info(&sys_info, g_ceph_context);
+    collect_metadata(&sys_info);
     messenger->send_message(new MMonMetadata(sys_info),
 			    monmap->get_inst(get_leader()));
   }
+}
+
+void Monitor::collect_metadata(Metadata *m)
+{
+  collect_sys_info(m, g_ceph_context);
+  (*m)["addr"] = stringify(messenger->get_myaddr());
 }
 
 void Monitor::finish_election()
@@ -2570,7 +2598,7 @@ void Monitor::get_cluster_status(stringstream &ss, Formatter *f)
     monmap->dump(f);
     f->close_section();
     f->open_object_section("osdmap");
-    osdmon()->osdmap.print_summary(f, cout);
+    osdmon()->osdmap.print_summary(f, cout, string(12, ' '));
     f->close_section();
     f->open_object_section("pgmap");
     pgservice->print_summary(f, NULL);
@@ -2582,6 +2610,8 @@ void Monitor::get_cluster_status(stringstream &ss, Formatter *f)
     f->open_object_section("mgrmap");
     mgrmon()->get_map().print_summary(f, nullptr);
     f->close_section();
+
+    f->dump_object("servicemap", mgrstatmon()->get_service_map());
     f->close_section();
   } else {
 
@@ -2590,31 +2620,44 @@ void Monitor::get_cluster_status(stringstream &ss, Formatter *f)
     ss << "    health: " << joinify(health.begin(), health.end(), 
 				  string("\n            ")) << "\n";
     ss << "\n \n  services:\n";
-    const auto quorum_names = get_quorum_names();
-    const auto mon_count = monmap->mon_info.size();
-    ss << "    mon: " << mon_count << " daemons, quorum "
-       << quorum_names;
-    if (quorum_names.size() != mon_count) {
-      std::list<std::string> out_of_q;
-      for (size_t i = 0; i < monmap->ranks.size(); ++i) {
-        if (quorum.count(i) == 0) {
-          out_of_q.push_back(monmap->ranks[i]);
-        }
+    {
+      size_t maxlen = 3;
+      auto& service_map = mgrstatmon()->get_service_map();
+      for (auto& p : service_map.services) {
+	maxlen = std::max(maxlen, p.first.size());
       }
-      ss << ", out of quorum: " << joinify(out_of_q.begin(),
-                                           out_of_q.end(), std::string(", "));
-    }
-    ss << "\n";
-    if (mgrmon()->in_use()) {
-      ss << "    mgr: ";
-      mgrmon()->get_map().print_summary(nullptr, &ss);
+      string spacing(maxlen - 3, ' ');
+      const auto quorum_names = get_quorum_names();
+      const auto mon_count = monmap->mon_info.size();
+      ss << "    mon: " << spacing << mon_count << " daemons, quorum "
+	 << quorum_names;
+      if (quorum_names.size() != mon_count) {
+	std::list<std::string> out_of_q;
+	for (size_t i = 0; i < monmap->ranks.size(); ++i) {
+	  if (quorum.count(i) == 0) {
+	    out_of_q.push_back(monmap->ranks[i]);
+	  }
+	}
+	ss << ", out of quorum: " << joinify(out_of_q.begin(),
+					     out_of_q.end(), std::string(", "));
+      }
       ss << "\n";
+      if (mgrmon()->in_use()) {
+	ss << "    mgr: " << spacing;
+	mgrmon()->get_map().print_summary(nullptr, &ss);
+	ss << "\n";
+      }
+      if (mdsmon()->get_fsmap().filesystem_count() > 0) {
+	ss << "    mds: " << spacing << mdsmon()->get_fsmap() << "\n";
+      }
+      ss << "    osd: " << spacing;
+      osdmon()->osdmap.print_summary(NULL, ss, string(maxlen + 6, ' '));
+      ss << "\n";
+      for (auto& p : service_map.services) {
+	ss << "    " << p.first << ": " << string(maxlen - p.first.size(), ' ')
+	   << p.second.get_summary() << "\n";
+      }
     }
-    if (mdsmon()->get_fsmap().filesystem_count() > 0) {
-      ss << "    mds: " << mdsmon()->get_fsmap() << "\n";
-    }
-    ss << "    osd: ";
-    osdmon()->osdmap.print_summary(NULL, ss);
 
     ss << "\n \n  data:\n";
     pgservice->print_summary(NULL, &ss);
@@ -3650,7 +3693,8 @@ void Monitor::resend_routed_requests()
 
 void Monitor::remove_session(MonSession *s)
 {
-  dout(10) << "remove_session " << s << " " << s->inst << dendl;
+  dout(10) << "remove_session " << s << " " << s->inst
+	   << " features 0x" << std::hex << s->con_features << std::dec << dendl;
   assert(s->con);
   assert(!s->closed);
   for (set<uint64_t>::iterator p = s->routed_request_tids.begin();
@@ -3743,6 +3787,30 @@ void Monitor::_ms_dispatch(Message *m)
   if (s && s->closed) {
     return;
   }
+
+  if (src_is_mon && s) {
+    ConnectionRef con = m->get_connection();
+    if (con->get_messenger() && con->get_features() != s->con_features) {
+      // only update features if this is a non-anonymous connection
+      dout(10) << __func__ << " feature change for " << m->get_source_inst()
+               << " (was " << s->con_features
+               << ", now " << con->get_features() << ")" << dendl;
+      // connection features changed - recreate session.
+      if (s->con && s->con != con) {
+        dout(10) << __func__ << " connection for " << m->get_source_inst()
+                 << " changed from session; mark down and replace" << dendl;
+        s->con->mark_down();
+      }
+      if (s->item.is_on_list()) {
+        // forwarded messages' sessions are not in the sessions map and
+        // exist only while the op is being handled.
+        remove_session(s);
+      }
+      s->put();
+      s = nullptr;
+    }
+  }
+
   if (!s) {
     // if the sender is not a monitor, make sure their first message for a
     // session is an MAuth.  If it is not, assume it's a stray message,
@@ -3764,7 +3832,9 @@ void Monitor::_ms_dispatch(Message *m)
     }
     assert(s);
     con->set_priv(s->get());
-    dout(10) << __func__ << " new session " << s << " " << *s << dendl;
+    dout(10) << __func__ << " new session " << s << " " << *s
+	     << " features 0x" << std::hex
+	     << s->con_features << std::dec << dendl;
     op->set_session(s);
 
     logger->set(l_mon_num_sessions, session_map.get_size());
@@ -4585,6 +4655,8 @@ void Monitor::handle_subscribe(MonOpRequestRef op)
       logmon()->check_sub(s->sub_map[p->first]);
     } else if (p->first == "mgrmap" || p->first == "mgrdigest") {
       mgrmon()->check_sub(s->sub_map[p->first]);
+    } else if (p->first == "servicemap") {
+      mgrstatmon()->check_sub(s->sub_map[p->first]);
     }
   }
 
@@ -4707,48 +4779,37 @@ void Monitor::handle_mon_metadata(MonOpRequestRef op)
 
 void Monitor::update_mon_metadata(int from, Metadata&& m)
 {
-  pending_metadata.insert(make_pair(from, std::move(m)));
-
-  bufferlist bl;
-  int err = store->get(MONITOR_STORE_PREFIX, "last_metadata", bl);
-  map<int, Metadata> last_metadata;
-  if (!err) {
-    bufferlist::iterator iter = bl.begin();
-    ::decode(last_metadata, iter);
-    pending_metadata.insert(last_metadata.begin(), last_metadata.end());
-  }
+  // NOTE: this is now for legacy (kraken or jewel) mons only.
+  pending_metadata[from] = std::move(m);
 
   MonitorDBStore::TransactionRef t = paxos->get_pending_transaction();
-  bl.clear();
+  bufferlist bl;
   ::encode(pending_metadata, bl);
   t->put(MONITOR_STORE_PREFIX, "last_metadata", bl);
   paxos->trigger_propose();
 }
 
-int Monitor::load_metadata(map<int, Metadata>& metadata)
+int Monitor::load_metadata()
 {
   bufferlist bl;
   int r = store->get(MONITOR_STORE_PREFIX, "last_metadata", bl);
   if (r)
     return r;
   bufferlist::iterator it = bl.begin();
-  ::decode(metadata, it);
+  ::decode(mon_metadata, it);
+
+  pending_metadata = mon_metadata;
   return 0;
 }
 
 int Monitor::get_mon_metadata(int mon, Formatter *f, ostream& err)
 {
   assert(f);
-  map<int, Metadata> last_metadata;
-  if (int r = load_metadata(last_metadata)) {
-    err << "Unable to load metadata: " << cpp_strerror(r);
-    return r;
-  }
-  if (!last_metadata.count(mon)) {
+  if (!mon_metadata.count(mon)) {
     err << "mon." << mon << " not found";
     return -EINVAL;
   }
-  const Metadata& m = last_metadata[mon];
+  const Metadata& m = mon_metadata[mon];
   for (Metadata::const_iterator p = m.begin(); p != m.end(); ++p) {
     f->dump_string(p->first.c_str(), p->second);
   }
@@ -4757,10 +4818,8 @@ int Monitor::get_mon_metadata(int mon, Formatter *f, ostream& err)
 
 void Monitor::count_metadata(const string& field, Formatter *f)
 {
-  map<int, Metadata> meta;
-  load_metadata(meta);
   map<string,int> by_val;
-  for (auto& p : meta) {
+  for (auto& p : mon_metadata) {
     auto q = p.second.find(field);
     if (q == p.second.end()) {
       by_val["unknown"]++;
@@ -4777,15 +4836,9 @@ void Monitor::count_metadata(const string& field, Formatter *f)
 
 int Monitor::print_nodes(Formatter *f, ostream& err)
 {
-  map<int, Metadata> metadata;
-  if (int r = load_metadata(metadata)) {
-    err << "Unable to load metadata.\n";
-    return r;
-  }
-
   map<string, list<int> > mons;	// hostname => mon
-  for (map<int, Metadata>::iterator it = metadata.begin();
-       it != metadata.end(); ++it) {
+  for (map<int, Metadata>::iterator it = mon_metadata.begin();
+       it != mon_metadata.end(); ++it) {
     const Metadata& m = it->second;
     Metadata::const_iterator hostname = m.find("hostname");
     if (hostname == m.end()) {

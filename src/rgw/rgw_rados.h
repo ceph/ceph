@@ -1869,7 +1869,26 @@ public:
   int get_zonegroup(RGWZoneGroup& zonegroup,
 		    const string& zonegroup_id);
 
-  bool is_single_zonegroup(CephContext *cct, RGWRados *store);
+  bool is_single_zonegroup()
+  {
+      return (period_map.zonegroups.size() == 1);
+  }
+
+  /*
+    returns true if there are several zone groups with a least one zone
+   */
+  bool is_multi_zonegroups_with_zones()
+  {
+    int count = 0;
+    for (const auto& zg:  period_map.zonegroups) {
+      if (zg.second.zones.size() > 0) {
+	if (count++ > 0) {
+	  return true;
+	}
+      }
+    }
+    return false;
+  }
 
   int get_latest_epoch(epoch_t& epoch);
   int set_latest_epoch(epoch_t epoch, bool exclusive = false);
@@ -2313,8 +2332,6 @@ protected:
 
   bool pools_initialized;
 
-  string zonegroup_id;
-  string zone_name;
   string trans_id_suffix;
 
   RGWQuotaHandler *quota_handler;
@@ -2545,6 +2562,8 @@ public:
   int convert_regionmap();
   int initialize();
   void finalize();
+
+  int register_to_service_map(const string& daemon_type, const map<string, string>& meta);
 
   void schedule_context(Context *c);
 
@@ -3518,6 +3537,9 @@ public:
   int add_bucket_to_reshard(const RGWBucketInfo& bucket_info, uint32_t new_num_shards);
 
   uint64_t instance_id();
+  const string& zone_name() {
+    return get_zone_params().get_name();
+  }
   const string& zone_id() {
     return get_zone_params().get_id();
   }
@@ -3566,7 +3588,8 @@ public:
   }
 
   bool need_to_log_metadata() {
-    return is_meta_master() && get_zone().log_meta;
+    return is_meta_master() &&
+      (get_zonegroup().zones.size() > 1 || current_period.is_multi_zonegroups_with_zones());
   }
 
   librados::Rados* get_rados_handle();

@@ -23,6 +23,12 @@ typedef enum {
   AIO_TYPE_WRITESAME,
 } aio_type_t;
 
+enum Direction {
+  DIRECTION_READ,
+  DIRECTION_WRITE,
+  DIRECTION_BOTH
+};
+
 typedef std::vector<std::pair<uint64_t, uint64_t> > Extents;
 typedef std::map<uint64_t, uint64_t> ExtentMap;
 

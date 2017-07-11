@@ -1027,7 +1027,7 @@ def osd_scrub_pgs(ctx, config):
             all_clean = True
             break
         log.info(
-            "Waiting for all osds to be active and clean, waiting on %s" % bad)
+            "Waiting for all PGs to be active and clean, waiting on %s" % bad)
         time.sleep(delays)
     if not all_clean:
         raise RuntimeError("Scrubbing terminated -- not all pgs were active and clean.")
@@ -1111,7 +1111,8 @@ def run_daemon(ctx, config, type_):
             _, _, id_ = teuthology.split_role(role)
 
             if type_ == 'osd':
-                datadir='/var/lib/ceph/osd/ceph-' + id_
+                datadir='/var/lib/ceph/osd/{cluster}-{id}'.format(
+                    cluster=cluster_name, id=id_)
                 osd_uuid = teuthology.get_file(
                     remote=remote,
                     path=datadir + '/fsid',
@@ -1120,38 +1121,24 @@ def run_daemon(ctx, config, type_):
                 try:
                     remote.run(
                         args=[
-                            'sudo',
-                            'ceph',
-                            'osd',
-                            'new',
-                            osd_uuid,
-                            id_,
+                            'sudo', 'ceph', '--cluster', cluster_name,
+                            'osd', 'new', osd_uuid, id_,
                         ]
                     )
                 except:
-                    # fallback to pre-luminous
+                    # fallback to pre-luminous (hammer or jewel)
                     remote.run(
                         args=[
-                            'sudo',
-                            'ceph',
-                            'osd',
-                            'create',
-                            osd_uuid,
-                            id_,
+                            'sudo', 'ceph', '--cluster', cluster_name,
+                            'osd', 'create', osd_uuid,
                         ]
                     )
                 if config.get('add_osds_to_crush'):
                     remote.run(
                         args=[
-                            'sudo',
-                            'ceph',
-                            'osd',
-                            'crush',
-                            'create-or-move',
-                            'osd.' + id_,
-                            '1.0',
-                            'host=localhost',
-                            'root=default',
+                            'sudo', 'ceph', '--cluster', cluster_name,
+                            'osd', 'crush', 'create-or-move', 'osd.' + id_,
+                            '1.0', 'host=localhost', 'root=default',
                         ]
                     )
 

@@ -1138,6 +1138,11 @@ void BlueFS::_compact_log_sync()
   assert(r == 0);
   wait_for_aio(log_writer);
 
+  list<aio_t> completed_ios;
+  _claim_completed_aios(log_writer, &completed_ios);
+  flush_bdev();
+  completed_ios.clear();
+
   dout(10) << __func__ << " writing super" << dendl;
   super.log_fnode = log_file->fnode;
   ++super.version;
@@ -1206,6 +1211,8 @@ void BlueFS::_compact_log_async(std::unique_lock<std::mutex>& l)
 
   // 2. prepare compacted log
   bluefs_transaction_t t;
+  //avoid record two times in log_t and _compact_log_dump_metadata.
+  log_t.clear();
   _compact_log_dump_metadata(&t);
 
   // conservative estimate for final encoded size
@@ -1238,7 +1245,11 @@ void BlueFS::_compact_log_async(std::unique_lock<std::mutex>& l)
   // 4. wait
   dout(10) << __func__ << " waiting for compacted log to sync" << dendl;
   wait_for_aio(new_log_writer);
+
+  list<aio_t> completed_ios;
+  _claim_completed_aios(new_log_writer, &completed_ios);
   flush_bdev();
+  completed_ios.clear();
 
   // 5. retake lock
   lock.lock();

@@ -130,7 +130,6 @@ int KernelDevice::open(const string& p)
   } else {
     size = st.st_size;
   }
-  size &= ~(block_size);
 
   {
     char partition[PATH_MAX], devname[PATH_MAX];
@@ -340,7 +339,7 @@ void KernelDevice::_aio_thread()
   int inject_crash_count = 0;
   while (!aio_stop) {
     dout(40) << __func__ << " polling" << dendl;
-    int max = 16;
+    int max = cct->_conf->bdev_aio_reap_max;
     aio_t *aio[max];
     int r = aio_queue.get_next_completed(cct->_conf->bdev_aio_poll_ms,
 					 aio, max);
@@ -481,53 +480,45 @@ void KernelDevice::aio_submit(IOContext *ioc)
 	   << " pending " << ioc->num_pending.load()
 	   << " running " << ioc->num_running.load()
 	   << dendl;
+
   if (ioc->num_pending.load() == 0) {
     return;
   }
+
   // move these aside, and get our end iterator position now, as the
   // aios might complete as soon as they are submitted and queue more
   // wal aio's.
   list<aio_t>::iterator e = ioc->running_aios.begin();
   ioc->running_aios.splice(e, ioc->pending_aios);
-  list<aio_t>::iterator p = ioc->running_aios.begin();
 
   int pending = ioc->num_pending.load();
   ioc->num_running += pending;
   ioc->num_pending -= pending;
   assert(ioc->num_pending.load() == 0);  // we should be only thread doing this
+  assert(ioc->pending_aios.size() == 0);
+  
+  if (cct->_conf->bdev_debug_aio) {
+    list<aio_t>::iterator p = ioc->running_aios.begin();
+    while (p != e) {
+      for (auto& io : p->iov)
+	dout(30) << __func__ << "   iov " << (void*)io.iov_base
+		 << " len " << io.iov_len << dendl;
 
-  bool done = false;
-  while (!done) {
-    aio_t& aio = *p;
-    aio.priv = static_cast<void*>(ioc);
-    dout(20) << __func__ << "  aio " << &aio << " fd " << aio.fd
-	     << " 0x" << std::hex << aio.offset << "~" << aio.length
-	     << std::dec << dendl;
-    for (auto& io : aio.iov)
-      dout(30) << __func__ << "   iov " << (void*)io.iov_base
-	       << " len " << io.iov_len << dendl;
-
-    // be careful: as soon as we submit aio we race with completion.
-    // since we are holding a ref take care not to dereference txc at
-    // all after that point.
-    list<aio_t>::iterator cur = p;
-    ++p;
-    done = (p == e);
-
-    // do not dereference txc (or it's contents) after we submit (if
-    // done == true and we don't loop)
-    int retries = 0;
-    if (cct->_conf->bdev_debug_aio) {
       std::lock_guard<std::mutex> l(debug_queue_lock);
-      debug_aio_link(*cur);
+      debug_aio_link(*p++);
     }
-    int r = aio_queue.submit(*cur, &retries);
-    if (retries)
-      derr << __func__ << " retries " << retries << dendl;
-    if (r) {
-      derr << " aio submit got " << cpp_strerror(r) << dendl;
-      assert(r == 0);
-    }
+  }
+
+  void *priv = static_cast<void*>(ioc);
+  int r, retries = 0;
+  r = aio_queue.submit_batch(ioc->running_aios.begin(), e, 
+			     ioc->num_running.load(), priv, &retries);
+  
+  if (retries)
+    derr << __func__ << " retries " << retries << dendl;
+  if (r < 0) {
+    derr << " aio submit got " << cpp_strerror(r) << dendl;
+    assert(r == 0);
   }
 }
 

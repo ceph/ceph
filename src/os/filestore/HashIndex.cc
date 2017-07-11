@@ -25,6 +25,7 @@
 #define dout_subsys ceph_subsys_filestore
 
 const string HashIndex::SUBDIR_ATTR = "contents";
+const string HashIndex::SETTINGS_ATTR = "settings";
 const string HashIndex::IN_PROGRESS_OP_TAG = "in_progress_op";
 
 /// hex digit to integer value
@@ -358,14 +359,50 @@ int HashIndex::split_dirs(const vector<string> &path) {
 int HashIndex::apply_layout_settings() {
   vector<string> path;
   dout(10) << __func__ << " split multiple = " << split_multiplier
-	   << " merge threshold = " << merge_threshold << dendl;
+	   << " merge threshold = " << merge_threshold
+	   << " split rand factor = " << cct->_conf->filestore_split_rand_factor
+	   << dendl;
+  int r = write_settings();
+  if (r < 0)
+    return r;
   return split_dirs(path);
 }
 
 int HashIndex::_init() {
   subdir_info_s info;
   vector<string> path;
-  return set_info(path, info);
+  int r = set_info(path, info);
+  if (r < 0)
+    return r;
+  return write_settings();
+}
+
+int HashIndex::write_settings() {
+  if (cct->_conf->filestore_split_rand_factor > 0) {
+    settings.split_rand_factor = rand() % cct->_conf->filestore_split_rand_factor;
+  } else {
+    settings.split_rand_factor = 0;
+  }
+  vector<string> path;
+  bufferlist bl;
+  settings.encode(bl);
+  return add_attr_path(path, SETTINGS_ATTR, bl);
+}
+
+int HashIndex::read_settings() {
+  vector<string> path;
+  bufferlist bl;
+  int r = get_attr_path(path, SETTINGS_ATTR, bl);
+  if (r == -ENODATA)
+    return 0;
+  if (r < 0) {
+    derr << __func__ << " error reading settings: " << cpp_strerror(r) << dendl;
+    return r;
+  }
+  bufferlist::iterator it = bl.begin();
+  settings.decode(it);
+  dout(20) << __func__ << " split_rand_factor = " << settings.split_rand_factor << dendl;
+  return 0;
 }
 
 /* LFNIndex virtual method implementations */
@@ -496,7 +533,7 @@ int HashIndex::pre_split_folder(uint32_t pg_num, uint64_t expected_num_objs)
 
   // Calculate the number of leaf folders (which actually store files)
   // need to be created
-  const uint64_t objs_per_folder = (uint64_t)(abs(merge_threshold)) * (uint64_t)split_multiplier * 16;
+  const uint64_t objs_per_folder = ((uint64_t)(abs(merge_threshold)) * (uint64_t)split_multiplier + settings.split_rand_factor) * 16;
   uint64_t leavies = expected_num_objs / objs_per_folder ;
   // No need to split
   if (leavies == 0 || expected_num_objs == objs_per_folder)
@@ -705,7 +742,7 @@ bool HashIndex::must_merge(const subdir_info_s &info) {
 
 bool HashIndex::must_split(const subdir_info_s &info) {
   return (info.hash_level < (unsigned)MAX_HASH_LEVEL &&
-	  info.objs > ((unsigned)(abs(merge_threshold)) * 16 * split_multiplier));
+	  info.objs > ((unsigned)(abs(merge_threshold) * split_multiplier + settings.split_rand_factor) * 16));
 
 }
 

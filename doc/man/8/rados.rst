@@ -94,8 +94,8 @@ Pool specific commands
 :command:`get` *name* *outfile*
   Read object name from the cluster and write it to outfile.
 
-:command:`put` *name* *infile*
-  Write object name to the cluster with contents from infile.
+:command:`put` *name* *infile* [--offset offset]
+  Write object name with start offset (default:0) to the cluster with contents from infile.
 
 :command:`append` *name* *infile*
   Append object name to the cluster with contents from infile.

@@ -380,10 +380,9 @@ create the first two OSDs with the short form procedure, execute the following
 on  ``node2`` and ``node3``:
 
 
-#. Prepare the OSD. ::
+#. Prepare the OSD.
 
    On FreeBSD only existing directories can be use to create OSDs in::
-
 
 	ssh {node-name}
 	sudo ceph-disk prepare --cluster {cluster-name} --cluster-uuid {uuid} {path-to-ceph-osd-directory}
@@ -526,9 +525,9 @@ OSDs with the long form procedure, execute the following on ``node2`` and
 
    Once you start your OSD, it is ``up`` and ``in``.
 
-   For FreeBSD using rc.d init::
+   For FreeBSD using rc.d init.
 
-   After adding the OSD to ``ceph.conf``
+   After adding the OSD to ``ceph.conf``::
    
 	sudo service ceph start osd.{osd-num} 
 

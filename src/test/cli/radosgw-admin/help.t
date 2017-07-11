@@ -197,8 +197,8 @@
      --tags-rm=<list>          list of tags to remove for zonegroup placement modify command
      --endpoints=<list>        zone endpoints
      --index_pool=<pool>       placement target index pool
-     --data_pool=<pool>        placement target data pool
-     --data_extra_pool=<pool>  placement target data extra (non-ec) pool
+     --data-pool=<pool>        placement target data pool
+     --data-extra-pool=<pool>  placement target data extra (non-ec) pool
      --placement-index-type=<type>
                                placement target index type (normal, indexless, or #id)
      --compression=<type>      placement target compression type (plugin name or empty/none)

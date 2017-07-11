@@ -140,12 +140,15 @@ void MgrClient::reconnect()
   session.reset(new MgrSessionState());
   session->con = msgr->get_connection(inst);
 
+  if (service_daemon) {
+    daemon_dirty_status = true;
+  }
+
   // Don't send an open if we're just a client (i.e. doing
   // command-sending, not stats etc)
-  if (g_conf && !g_conf->name.is_client()) {
-    auto open = new MMgrOpen();
-    open->daemon_name = g_conf->name.get_id();
-    session->con->send_message(open);
+  if ((g_conf && !g_conf->name.is_client()) ||
+      service_daemon) {
+    _send_open();
   }
 
   // resend any pending commands
@@ -154,6 +157,24 @@ void MgrClient::reconnect()
     assert(session);
     assert(session->con);
     session->con->send_message(m);
+  }
+}
+
+void MgrClient::_send_open()
+{
+  if (session && session->con) {
+    auto open = new MMgrOpen();
+    if (!service_name.empty()) {
+      open->service_name = service_name;
+      open->daemon_name = daemon_name;
+    } else {
+      open->daemon_name = g_conf->name.get_id();
+    }
+    if (service_daemon) {
+      open->service_daemon = service_daemon;
+      open->daemon_metadata = daemon_metadata;
+    }
+    session->con->send_message(open);
   }
 }
 
@@ -250,7 +271,17 @@ void MgrClient::send_report()
 
   ldout(cct, 20) << "encoded " << report->packed.length() << " bytes" << dendl;
 
-  report->daemon_name = g_conf->name.get_id();
+  if (daemon_name.size()) {
+    report->daemon_name = daemon_name;
+  } else {
+    report->daemon_name = g_conf->name.get_id();
+  }
+  report->service_name = service_name;
+
+  if (daemon_dirty_status) {
+    report->daemon_status = daemon_status;
+    daemon_dirty_status = false;
+  }
 
   session->con->send_message(report);
 
@@ -354,3 +385,44 @@ bool MgrClient::handle_command_reply(MCommandReply *m)
   return true;
 }
 
+int MgrClient::service_daemon_register(
+  const std::string& service,
+  const std::string& name,
+  const std::map<std::string,std::string>& metadata)
+{
+  Mutex::Locker l(lock);
+  if (name == "osd" ||
+      name == "mds" ||
+      name == "client" ||
+      name == "mon" ||
+      name == "mgr") {
+    // normal ceph entity types are not allowed!
+    return -EINVAL;
+  }
+  if (service_daemon) {
+    return -EEXIST;
+  }
+  ldout(cct,1) << service << "." << name << " metadata " << metadata << dendl;
+  service_daemon = true;
+  service_name = service;
+  daemon_name = name;
+  daemon_metadata = metadata;
+  daemon_dirty_status = true;
+
+  // late register?
+  if (g_conf->name.is_client() && session && session->con) {
+    _send_open();
+  }
+
+  return 0;
+}
+
+int MgrClient::service_daemon_update_status(
+  const std::map<std::string,std::string>& status)
+{
+  Mutex::Locker l(lock);
+  ldout(cct,10) << status << dendl;
+  daemon_status = status;
+  daemon_dirty_status = true;
+  return 0;
+}

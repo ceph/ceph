@@ -72,6 +72,7 @@
 #include "common/cmdparse.h"
 #include "include/str_list.h"
 #include "include/str_map.h"
+#include "include/scope_guard.h"
 
 #include "json_spirit/json_spirit_reader.h"
 
@@ -970,6 +971,31 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
 			  << "required " << ceph_release_name(mv);
 	pending_inc.new_require_min_compat_client = mv;
       }
+
+      if (osdmap.require_osd_release < CEPH_RELEASE_LUMINOUS) {
+	// convert ec profile ruleset-* -> crush-*
+	for (auto& p : tmp.erasure_code_profiles) {
+	  bool changed = false;
+	  map<string,string> newprofile;
+	  for (auto& q : p.second) {
+	    if (q.first.find("ruleset-") == 0) {
+	      string key = "crush-";
+	      key += q.first.substr(8);
+	      newprofile[key] = q.second;
+	      changed = true;
+	      dout(20) << " updating ec profile " << p.first
+		       << " key " << q.first << " -> " << key << dendl;
+	    } else {
+	      newprofile[q.first] = q.second;
+	    }
+	  }
+	  if (changed) {
+	    dout(10) << " updated ec profile " << p.first << ": "
+		     << newprofile << dendl;
+	    pending_inc.new_erasure_code_profiles[p.first] = newprofile;
+	  }
+	}
+      }
     }
   }
 
@@ -1817,7 +1843,7 @@ bool OSDMonitor::check_failure(utime_t now, int target_osd, failure_info_t& fi)
   return false;
 }
 
-void OSDMonitor::force_failure(utime_t now, int target_osd, int by)
+void OSDMonitor::force_failure(int target_osd, int by)
 {
   // already pending failure?
   if (pending_inc.new_state.count(target_osd) &&
@@ -1858,7 +1884,7 @@ bool OSDMonitor::prepare_failure(MonOpRequestRef op)
     if (m->is_immediate()) {
       mon->clog->debug() << m->get_target() << " reported immediately failed by "
             << m->get_orig_source_inst();
-      force_failure(now, target_osd, reporter);
+      force_failure(target_osd, reporter);
       return true;
     }
     mon->clog->debug() << m->get_target() << " reported failed by "
@@ -3841,7 +3867,7 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
   boost::scoped_ptr<Formatter> f(Formatter::create(format));
 
   if (prefix == "osd stat") {
-    osdmap.print_summary(f.get(), ds);
+    osdmap.print_summary(f.get(), ds, "");
     if (f)
       f->flush(rdata);
     else
@@ -3882,6 +3908,12 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
       p = new OSDMap;
       p->decode(osdmap_bl);
     }
+
+    auto sg = make_scope_guard([&] {
+      if (p != &osdmap) {
+        delete p;
+      }
+    });
 
     if (prefix == "osd dump") {
       stringstream ds;
@@ -3996,8 +4028,6 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
 
       rdata.append(ds);
     }
-    if (p != &osdmap)
-      delete p;
   } else if (prefix == "osd df") {
     string method;
     cmd_getval(g_ceph_context, cmdmap, "output_method", method);
@@ -4207,15 +4237,15 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
     }
     goto reply;
 
-  } else if ((prefix == "osd scrub" ||
-	      prefix == "osd deep-scrub" ||
-	      prefix == "osd repair")) {
+  } else if (prefix == "osd scrub" ||
+	     prefix == "osd deep-scrub" ||
+	     prefix == "osd repair") {
     string whostr;
     cmd_getval(g_ceph_context, cmdmap, "who", whostr);
     vector<string> pvec;
     get_str_vec(prefix, pvec);
 
-    if (whostr == "*") {
+    if (whostr == "*" || whostr == "all" || whostr == "any") {
       ss << "osds ";
       int c = 0;
       for (int i = 0; i < osdmap.get_max_osd(); i++)
@@ -5243,7 +5273,7 @@ int OSDMonitor::crush_rule_create_erasure(const string &name,
       return err;
     }
 
-    err = erasure_code->create_ruleset(name, newcrush, ss);
+    err = erasure_code->create_rule(name, newcrush, ss);
     erasure_code.reset();
     if (err < 0)
       return err;
@@ -5624,19 +5654,13 @@ int OSDMonitor::prepare_new_pool(string& name, uint64_t auid,
   _get_pending_crush(newcrush);
   ostringstream err;
   CrushTester tester(newcrush, err);
-  // use the internal crush tester if crushtool config is empty
-  if (g_conf->crushtool.empty()) {
-    r = tester.test();
-  } else {
-    r = tester.test_with_crushtool(g_conf->crushtool.c_str(),
-				   osdmap.get_max_osd(),
-				   g_conf->mon_lease,
-				   crush_rule);
-  }
-  if (r) {
-    dout(10) << " tester.test_with_crushtool returns " << r
+  tester.set_max_x(50);
+  tester.set_rule(crush_rule);
+  r = tester.test_with_fork(g_conf->mon_lease);
+  if (r < 0) {
+    dout(10) << " tester.test_with_fork returns " << r
 	     << ": " << err.str() << dendl;
-    *ss << "crushtool check failed with " << r << ": " << err.str();
+    *ss << "crush test failed with " << r << ": " << err.str();
     return r;
   }
   unsigned size, min_size;
@@ -7039,16 +7063,12 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     dout(10) << " testing map" << dendl;
     stringstream ess;
     CrushTester tester(crush, ess);
-    // XXX: Use mon_lease as a timeout value for crushtool.
-    // If the crushtool consistently takes longer than 'mon_lease' seconds,
-    // then we would consistently trigger an election before the command
-    // finishes, having a flapping monitor unable to hold quorum.
-    int r = tester.test_with_crushtool(g_conf->crushtool.c_str(),
-				       osdmap.get_max_osd(),
-				       g_conf->mon_lease);
+    tester.set_max_x(50);
+    int r = tester.test_with_fork(g_conf->mon_lease);
     if (r < 0) {
-      derr << "error on crush map: " << ess.str() << dendl;
-      ss << "Failed crushmap test: " << ess.str();
+      dout(10) << " tester.test_with_fork returns " << r
+	       << ": " << ess.str() << dendl;
+      ss << "crush smoke test failed with " << r << ": " << ess.str();
       err = r;
       goto reply;
     }
@@ -7060,6 +7080,12 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     goto update;
 
   } else if (prefix == "osd crush set-device-class") {
+    if (osdmap.require_osd_release < CEPH_RELEASE_LUMINOUS) {
+      ss << "you must complete the upgrade and 'ceph osd require-osd-release "
+	 << "luminous' before using crush device classes";
+      err = -EPERM;
+      goto reply;
+    }
     if (!osdmap.exists(osdid)) {
       err = -ENOENT;
       ss << name << " does not exist.  create it before updating the crush map";
@@ -7171,7 +7197,12 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       err = -EINVAL; // no value!
       goto reply;
     }
-
+    if (osdmap.require_osd_release < CEPH_RELEASE_LUMINOUS) {
+      ss << "you must complete the upgrade and 'ceph osd require-osd-release "
+	 << "luminous' before using crush device classes";
+      err = -EPERM;
+      goto reply;
+    }
     if (!_have_pending_crush() &&
 	_get_stable_crush().class_exists(device_class)) {
       ss << "class '" << device_class << "' already exists";
@@ -7198,6 +7229,12 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     string device_class;
     if (!cmd_getval(g_ceph_context, cmdmap, "class", device_class)) {
       err = -EINVAL; // no value!
+      goto reply;
+    }
+    if (osdmap.require_osd_release < CEPH_RELEASE_LUMINOUS) {
+      ss << "you must complete the upgrade and 'ceph osd require-osd-release "
+	 << "luminous' before using crush device classes";
+      err = -EPERM;
       goto reply;
     }
 
@@ -7235,6 +7272,12 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     string srcname, dstname;
     if (!cmd_getval(g_ceph_context, cmdmap, "srcname", srcname)) {
       err = -EINVAL;
+      goto reply;
+    }
+    if (osdmap.require_osd_release < CEPH_RELEASE_LUMINOUS) {
+      ss << "you must complete the upgrade and 'ceph osd require-osd-release "
+	 << "luminous' before using crush device classes";
+      err = -EPERM;
       goto reply;
     }
 
@@ -7794,8 +7837,48 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       ss << "rule " << name << " already exists";
       err = 0;
     } else {
-      int ruleno = newcrush.add_simple_rule(name, root, type, mode,
+      int ruleno = newcrush.add_simple_rule(name, root, type, "", mode,
 					       pg_pool_t::TYPE_REPLICATED, &ss);
+      if (ruleno < 0) {
+	err = ruleno;
+	goto reply;
+      }
+
+      pending_inc.crush.clear();
+      newcrush.encode(pending_inc.crush, mon->get_quorum_con_features());
+    }
+    getline(ss, rs);
+    wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, 0, rs,
+					      get_last_committed() + 1));
+    return true;
+
+  } else if (prefix == "osd crush rule create-replicated") {
+    string name, root, type, device_class;
+    cmd_getval(g_ceph_context, cmdmap, "name", name);
+    cmd_getval(g_ceph_context, cmdmap, "root", root);
+    cmd_getval(g_ceph_context, cmdmap, "type", type);
+    cmd_getval(g_ceph_context, cmdmap, "class", device_class);
+
+    if (osdmap.crush->rule_exists(name)) {
+      // The name is uniquely associated to a ruleid and the rule it contains
+      // From the user point of view, the rule is more meaningfull.
+      ss << "rule " << name << " already exists";
+      err = 0;
+      goto reply;
+    }
+
+    CrushWrapper newcrush;
+    _get_pending_crush(newcrush);
+
+    if (newcrush.rule_exists(name)) {
+      // The name is uniquely associated to a ruleid and the rule it contains
+      // From the user point of view, the rule is more meaningfull.
+      ss << "rule " << name << " already exists";
+      err = 0;
+    } else {
+      int ruleno = newcrush.add_simple_rule(
+	name, root, type, device_class,
+	"firstn", pg_pool_t::TYPE_REPLICATED, &ss);
       if (ruleno < 0) {
 	err = ruleno;
 	goto reply;
@@ -8065,15 +8148,15 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 	     prefix == "osd set-backfillfull-ratio" ||
              prefix == "osd set-nearfull-ratio") {
     if (osdmap.require_osd_release < CEPH_RELEASE_LUMINOUS) {
-      ss << "you must complete the upgrade and set require_osd_release ="
-	 << "luminous before using the new interface";
+      ss << "you must complete the upgrade and 'ceph osd require-osd-release "
+	 << "luminous' before using the new interface";
       err = -EPERM;
       goto reply;
     }
     double n;
     if (!cmd_getval(g_ceph_context, cmdmap, "ratio", n)) {
       ss << "unable to parse 'ratio' value '"
-         << cmd_vartype_stringify(cmdmap["who"]) << "'";
+         << cmd_vartype_stringify(cmdmap["ratio"]) << "'";
       err = -EINVAL;
       goto reply;
     }
@@ -8090,8 +8173,8 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     return true;
   } else if (prefix == "osd set-require-min-compat-client") {
     if (osdmap.require_osd_release < CEPH_RELEASE_LUMINOUS) {
-      ss << "you must complete the upgrade and set require_osd_release ="
-	 << "luminous before using the new interface";
+      ss << "you must complete the upgrade and 'ceph osd require-osd-release "
+	 << "luminous' before using the new interface";
       err = -EPERM;
       goto reply;
     }
@@ -8822,8 +8905,8 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
              prefix == "osd pg-upmap-items" ||
              prefix == "osd rm-pg-upmap-items") {
     if (osdmap.require_osd_release < CEPH_RELEASE_LUMINOUS) {
-      ss << "you must complete the upgrade and set require_osd_release ="
-	 << "luminous before using the new interface";
+      ss << "you must complete the upgrade and 'ceph osd require-osd-release "
+	 << "luminous' before using the new interface";
       err = -EPERM;
       goto reply;
     }
@@ -9509,7 +9592,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     string pool_type_str;
     cmd_getval(g_ceph_context, cmdmap, "pool_type", pool_type_str);
     if (pool_type_str.empty())
-      pool_type_str = pg_pool_t::get_default_type();
+      pool_type_str = g_conf->osd_pool_default_type;
 
     string poolstr;
     cmd_getval(g_ceph_context, cmdmap, "pool", poolstr);
@@ -10732,7 +10815,7 @@ bool OSDMonitor::_check_remove_tier(
 int OSDMonitor::_prepare_remove_pool(
   int64_t pool, ostream *ss, bool no_fake)
 {
-  dout(10) << "_prepare_remove_pool " << pool << dendl;
+  dout(10) << __func__ << " " << pool << dendl;
   const pg_pool_t *p = osdmap.get_pg_pool(pool);
   int r = _check_remove_pool(pool, *p, ss);
   if (r < 0)
@@ -10749,7 +10832,7 @@ int OSDMonitor::_prepare_remove_pool(
   }
 
   if (pending_inc.old_pools.count(pool)) {
-    dout(10) << "_prepare_remove_pool " << pool << " already pending removal"
+    dout(10) << __func__ << " " << pool << " already pending removal"
 	     << dendl;
     return 0;
   }
@@ -10766,23 +10849,42 @@ int OSDMonitor::_prepare_remove_pool(
   // remove
   pending_inc.old_pools.insert(pool);
 
-  // remove any pg_temp mappings for this pool too
+  // remove any pg_temp mappings for this pool
   for (auto p = osdmap.pg_temp->begin();
        p != osdmap.pg_temp->end();
        ++p) {
     if (p->first.pool() == (uint64_t)pool) {
-      dout(10) << "_prepare_remove_pool " << pool << " removing obsolete pg_temp "
+      dout(10) << __func__ << " " << pool << " removing obsolete pg_temp "
 	       << p->first << dendl;
       pending_inc.new_pg_temp[p->first].clear();
     }
   }
+  // remove any primary_temp mappings for this pool
   for (auto p = osdmap.primary_temp->begin();
       p != osdmap.primary_temp->end();
       ++p) {
     if (p->first.pool() == (uint64_t)pool) {
-      dout(10) << "_prepare_remove_pool " << pool
+      dout(10) << __func__ << " " << pool
                << " removing obsolete primary_temp" << p->first << dendl;
       pending_inc.new_primary_temp[p->first] = -1;
+    }
+  }
+  // remove any pg_upmap mappings for this pool
+  for (auto& p : osdmap.pg_upmap) {
+    if (p.first.pool() == (uint64_t)pool) {
+      dout(10) << __func__ << " " << pool
+               << " removing obsolete pg_upmap "
+               << p.first << dendl;
+      pending_inc.old_pg_upmap.insert(p.first);
+    }
+  }
+  // remove any pg_upmap_items mappings for this pool
+  for (auto& p : osdmap.pg_upmap_items) {
+    if (p.first.pool() == (uint64_t)pool) {
+      dout(10) << __func__ << " " << pool
+               << " removing obsolete pg_upmap_items " << p.first
+               << dendl;
+      pending_inc.old_pg_upmap_items.insert(p.first);
     }
   }
   return 0;

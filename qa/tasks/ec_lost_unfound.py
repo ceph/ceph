@@ -34,7 +34,7 @@ def task(ctx, config):
     profile = config.get('erasure_code_profile', {
         'k': '2',
         'm': '2',
-        'ruleset-failure-domain': 'osd'
+        'crush-failure-domain': 'osd'
     })
     profile_name = profile.get('name', 'lost_unfound')
     manager.create_erasure_code_profile(profile_name, profile)

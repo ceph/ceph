@@ -2256,24 +2256,7 @@ void Server::handle_slave_auth_pin(MDRequestRef& mdr)
 	(*p)->add_waiter(CDir::WAIT_UNFREEZE, new C_MDS_RetryRequest(mdcache, mdr));
 	mdr->drop_local_auth_pins();
 
-	CDir *dir = NULL;
-	if (CInode *in = dynamic_cast<CInode*>(*p)) {
-	  if (!in->is_root())
-	    dir = in->get_parent_dir();
-	} else if (CDentry *dn = dynamic_cast<CDentry*>(*p)) {
-	  dir = dn->get_dir();
-	} else {
-	  ceph_abort();
-	}
-	if (dir) {
-	  if (dir->is_freezing_dir())
-	    mdcache->fragment_freeze_inc_num_waiters(dir);
-	  if (dir->is_freezing_tree()) {
-	    while (!dir->is_freezing_tree_root())
-	      dir = dir->get_parent_dir();
-	    mdcache->migrator->export_freeze_inc_num_waiters(dir);
-	  }
-	}
+	mds->locker->notify_freeze_waiter(*p);
 	return;
       }
     }
@@ -2825,6 +2808,8 @@ CInode* Server::rdlock_path_pin_ref(MDRequestRef& mdr, int n,
        */
       mds->locker->drop_locks(mdr.get(), NULL);
       mdr->drop_local_auth_pins();
+      if (!mdr->remote_auth_pins.empty())
+	mds->locker->notify_freeze_waiter(ref);
       return 0;
     }
 
@@ -2867,13 +2852,6 @@ CDentry* Server::rdlock_path_xlock_dentry(MDRequestRef& mdr, int n,
   CDir *dir = traverse_to_auth_dir(mdr, mdr->dn[n], refpath);
   if (!dir) return 0;
   dout(10) << "rdlock_path_xlock_dentry dir " << *dir << dendl;
-
-  // make sure we can auth_pin (or have already authpinned) dir
-  if (dir->is_frozen()) {
-    dout(7) << "waiting for !frozen/authpinnable on " << *dir << dendl;
-    dir->add_waiter(CInode::WAIT_UNFREEZE, new C_MDS_RetryRequest(mdcache, mdr));
-    return 0;
-  }
 
   CInode *diri = dir->get_inode();
   if (!mdr->reqid.name.is_mds()) {
@@ -2970,7 +2948,7 @@ CDir* Server::try_open_auth_dirfrag(CInode *diri, frag_t fg, MDRequestRef& mdr)
   if (!dir && diri->is_frozen()) {
     dout(10) << "try_open_auth_dirfrag: dir inode is frozen, waiting " << *diri << dendl;
     assert(diri->get_parent_dir());
-    diri->get_parent_dir()->add_waiter(CDir::WAIT_UNFREEZE, new C_MDS_RetryRequest(mdcache, mdr));
+    diri->add_waiter(CInode::WAIT_UNFREEZE, new C_MDS_RetryRequest(mdcache, mdr));
     return 0;
   }
 
@@ -7170,9 +7148,11 @@ void Server::_rename_prepare(MDRequestRef& mdr,
   if (destdn->is_auth() && !destdnl->is_null()) {
     mdcache->predirty_journal_parents(mdr, metablob, oldin, destdn->get_dir(),
 				      (destdnl->is_primary() ? PREDIRTY_PRIMARY:0)|predirty_dir, -1);
-    if (destdnl->is_primary())
+    if (destdnl->is_primary()) {
+      assert(straydn);
       mdcache->predirty_journal_parents(mdr, metablob, oldin, straydn->get_dir(),
 					PREDIRTY_PRIMARY|PREDIRTY_DIR, 1);
+    }
   }
   
   // move srcdn
@@ -7191,6 +7171,7 @@ void Server::_rename_prepare(MDRequestRef& mdr,
   // target inode
   if (!linkmerge) {
     if (destdnl->is_primary()) {
+      assert(straydn);
       if (destdn->is_auth()) {
 	// project snaprealm, too
 	if (oldin->snaprealm || dest_realm->get_newest_seq() + 1 > oldin->get_oldest_snap())
@@ -7284,8 +7265,10 @@ void Server::_rename_prepare(MDRequestRef& mdr,
   if (srcdnl->is_primary() && destdn->is_auth())
     srci->first = destdn->first;  
 
-  if (oldin && oldin->is_dir())
+  if (oldin && oldin->is_dir()) {
+    assert(straydn);
     mdcache->project_subtree_rename(oldin, destdn->get_dir(), straydn->get_dir());
+  }
   if (srci->is_dir())
     mdcache->project_subtree_rename(srci, srcdn->get_dir(), destdn->get_dir());
 
