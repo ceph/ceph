@@ -1644,9 +1644,10 @@ int get_zones_pool_set(CephContext* cct,
       pool_names.insert(zone.roles_pool);
       pool_names.insert(zone.reshard_pool);
       for(auto& iter : zone.placement_pools) {
-	pool_names.insert(iter.second.index_pool);
-	pool_names.insert(iter.second.data_pool);
-	pool_names.insert(iter.second.data_extra_pool);
+        pool_names.insert(iter.second.index_pool);
+        pool_names.insert(iter.second.data_pool);
+        pool_names.insert(iter.second.data_extra_pool);
+        pool_names.insert(iter.second.data_tail_pool);
       }
     }
   }
@@ -6043,6 +6044,7 @@ read_omap:
 
   rule_info->data_pool = pool_name;
   rule_info->data_extra_pool = pool_name;
+  rule_info->data_tail_pool = pool_name;
   rule_info->index_pool = pool_name;
   rule_info->index_type = RGWBIType_Normal;
 
