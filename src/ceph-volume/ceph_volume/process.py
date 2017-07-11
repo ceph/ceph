@@ -1,5 +1,6 @@
+from fcntl import fcntl, F_GETFL, F_SETFL
+from os import O_NONBLOCK, read
 import subprocess
-import sys
 from select import select
 from ceph_volume import terminal
 
@@ -13,6 +14,9 @@ def log_output(descriptor, message, terminal_logging):
     log output to both the logger and the terminal if terminal_logging is
     enabled
     """
+    if not message:
+        return
+    message = message.strip()
     line = '%s %s' % (descriptor, message)
     if terminal_logging:
         getattr(terminal, descriptor)(message)
@@ -23,22 +27,25 @@ def log_descriptors(reads, process, terminal_logging):
     """
     Helper to send output to the terminal while polling the subprocess
     """
-    err_read = out_read = None
-    while True:
-        for descriptor in reads:
-            if descriptor == process.stdout.fileno():
-                out_read = process.stdout.readline()
-                if out_read:
-                    log_output('stdout', out_read, terminal_logging)
-                    sys.stdout.flush()
-
-            if descriptor == process.stderr.fileno():
-                err_read = process.stderr.readline()
-                if err_read:
-                    log_output('stderr', err_read, terminal_logging)
-                    sys.stderr.flush()
-        if not err_read and not out_read:
-            break
+    # these fcntl are set to O_NONBLOCK for the filedescriptors coming from
+    # subprocess so that the logging does not block. Without these a prompt in
+    # a subprocess output would hang and nothing would get printed. Note how
+    # these are just set when logging subprocess, not globally.
+    stdout_flags = fcntl(process.stdout, F_GETFL) # get current p.stdout flags
+    stderr_flags = fcntl(process.stderr, F_GETFL) # get current p.stderr flags
+    fcntl(process.stdout, F_SETFL, stdout_flags | O_NONBLOCK)
+    fcntl(process.stderr, F_SETFL, stderr_flags | O_NONBLOCK)
+    descriptor_names = {
+        process.stdout.fileno(): 'stdout',
+        process.stderr.fileno(): 'stderr'
+    }
+    for descriptor in reads:
+        descriptor_name = descriptor_names[descriptor]
+        try:
+            log_output(descriptor_name, read(descriptor, 1024), terminal_logging)
+        except (IOError, OSError):
+            # nothing else to log
+            pass
 
 
 def run(command, **kw):
@@ -102,7 +109,7 @@ def call(command, **kw):
 
     :param terminal_logging: Log command to terminal, defaults to False
     """
-    terminal_logging = kw.get('terminal_logging', False)
+    terminal_logging = kw.pop('terminal_logging', False)
     command_msg = "Running command: %s" % ' '.join(command)
     logger.info(command_msg)
     if terminal_logging:
