@@ -121,17 +121,28 @@ static string RGW_DEFAULT_PERIOD_ROOT_POOL = "rgw.root";
 static bool rgw_get_obj_data_pool(const RGWZoneGroup& zonegroup, const RGWZoneParams& zone_params,
                                   const string& placement_id, const rgw_obj& obj, rgw_pool *pool)
 {
-  if (!zone_params.get_head_data_pool(placement_id, obj, pool)) {
-    RGWZonePlacementInfo placement;
-    if (!zone_params.get_placement(zonegroup.default_placement, &placement)) {
-      return false;
-    }
+  bool find;
 
-    if (!obj.in_extra_data) {
+  if (obj.is_head_obj())
+    find = zone_params.get_head_data_pool(placement_id, obj, pool);
+  else
+    find = zone_params.get_tail_data_pool(placement_id, obj, pool);
+
+  if (find)
+    return true;
+
+  RGWZonePlacementInfo placement;
+  if (!zone_params.get_placement(zonegroup.default_placement, &placement)) {
+    return false;
+  }
+  
+  if (!obj.in_extra_data) {
+    if (obj.is_head_obj())
       *pool = placement.data_pool;
-    } else {
-      *pool = placement.get_data_extra_pool();
-    }
+    else
+      *pool = placement.get_data_tail_pool();
+  } else {
+    *pool = placement.get_data_extra_pool();
   }
 
   return true;
