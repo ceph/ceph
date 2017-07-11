@@ -581,6 +581,10 @@ public:
     if (have_rmaps)
       rule_name_rmap[name] = i;
   }
+  bool is_shadow_item(int id) const {
+    const char *name = get_item_name(id);
+    return name && !is_valid_crush_name(name);
+  }
 
 
   /**
@@ -603,7 +607,15 @@ public:
    * These are parentless nodes in the map that are not shadow
    * items for device classes.
    */
-  void find_nonshadow_roots(set<int>& roots) const;
+  void find_nonshadow_roots(set<int>& roots) const {
+    set<int> all;
+    find_roots(all);
+    for (auto& p: all) {
+      if (!is_shadow_item(p)) {
+        roots.insert(p);
+      }
+    }
+  }
 
   /**
    * see if an item is contained within a subtree
