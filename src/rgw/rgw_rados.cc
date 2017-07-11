@@ -10070,6 +10070,7 @@ int RGWRados::Object::Read::read(int64_t ofs, int64_t end, bufferlist& bl)
 
   read_len = len;
 
+  librados::IoCtx tail_io_ctx;
   if (reading_from_head) {
     /* only when reading from the head object do we need to do the atomic test */
     r = store->append_atomic_test(&source->get_ctx(), source->get_bucket_info(), state.obj, op, &astate);
@@ -10094,12 +10095,19 @@ int RGWRados::Object::Read::read(int64_t ofs, int64_t end, bufferlist& bl)
         pbl = &read_bl;
       }
     }
+  } else {
+    store->open_pool_ctx(read_obj.pool, tail_io_ctx);
+    tail_io_ctx.locator_set_key(read_obj.loc);
   }
 
   ldout(cct, 20) << "rados->read obj-ofs=" << ofs << " read_ofs=" << read_ofs << " read_len=" << read_len << dendl;
   op.read(read_ofs, read_len, pbl, NULL);
 
-  r = state.io_ctx.operate(read_obj.oid, &op, NULL);
+  if (reading_from_head)
+    r = state.io_ctx.operate(read_obj.oid, &op, NULL);
+  else
+    r = tail_io_ctx.operate(read_obj.oid, &op, NULL);
+
   ldout(cct, 20) << "rados->read r=" << r << " bl.length=" << bl.length() << dendl;
 
   if (r < 0) {
@@ -10214,6 +10222,7 @@ struct get_obj_data : public RefCountedObject {
   RGWRados *rados;
   RGWObjectCtx *ctx;
   IoCtx io_ctx;
+  IoCtx tail_io_ctx;
   map<off_t, get_obj_io> io_map;
   map<off_t, librados::AioCompletion *> completion_map;
   uint64_t total_read;
@@ -10469,8 +10478,8 @@ int RGWRados::flush_read_list(struct get_obj_data *d)
 int RGWRados::get_obj_iterate_cb(RGWObjectCtx *ctx, RGWObjState *astate,
                          const RGWBucketInfo& bucket_info,
                          const rgw_obj& obj,
-		         const rgw_raw_obj& read_obj,
-			 off_t obj_ofs,
+                         const rgw_raw_obj& read_obj,
+                         off_t obj_ofs,
                          off_t read_ofs, off_t len,
                          bool is_head_obj, void *arg)
 {
@@ -10524,7 +10533,11 @@ int RGWRados::get_obj_iterate_cb(RGWObjectCtx *ctx, RGWObjState *astate,
   ldout(cct, 20) << "rados->get_obj_iterate_cb oid=" << read_obj.oid << " obj-ofs=" << obj_ofs << " read_ofs=" << read_ofs << " len=" << len << dendl;
   op.read(read_ofs, len, pbl, NULL);
 
-  librados::IoCtx io_ctx(d->io_ctx);
+  librados::IoCtx io_ctx;
+  if (is_head_obj) 
+    io_ctx = d->io_ctx;
+  else 
+    io_ctx = d->tail_io_ctx;
   io_ctx.locator_set_key(read_obj.loc);
 
   r = io_ctx.aio_operate(read_obj.oid, c, &op, NULL);
@@ -10555,11 +10568,16 @@ int RGWRados::Object::Read::iterate(int64_t ofs, int64_t end, RGWGetDataCB *cb)
 
   struct get_obj_data *data = new get_obj_data(cct);
   bool done = false;
+  rgw_pool tail_pool;
 
   RGWObjectCtx& obj_ctx = source->get_ctx();
 
   data->rados = store;
   data->io_ctx.dup(state.io_ctx);
+  store->zone_params.get_tail_data_pool(source->get_bucket_info().placement_rule,
+    state.obj, &tail_pool);
+  store->open_pool_ctx(tail_pool, data->tail_io_ctx);
+
   data->client_cb = cb;
 
   int r = store->iterate_obj(obj_ctx, source->get_bucket_info(), state.obj, ofs, end, cct->_conf->rgw_get_obj_max_req_size, _get_obj_iterate_cb, (void *)data);
