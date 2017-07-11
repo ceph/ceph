@@ -4334,23 +4334,19 @@ void OSDMap::check_health(health_check_map_t *checks) const
       for (auto j = subtree_type_down[type].begin();
 	   j != subtree_type_down[type].end();
 	   ++j) {
-	if (type == 1) {
-          list<int> children;
-          int num = crush->get_children(*j, &children);
-          num_osds_subtree[*j] = num;
-        } else {
-          list<int> children;
-          int num = 0;
-          int num_children = crush->get_children(*j, &children);
-          if (num_children == 0)
-	    continue;
-          for (auto l = children.begin(); l != children.end(); ++l) {
-            if (num_osds_subtree[*l] > 0) {
-              num = num + num_osds_subtree[*l];
-            }
-          }
-          num_osds_subtree[*j] = num;
+	list<int> children;
+	int num = 0;
+	int num_children = crush->get_children(*j, &children);
+	if (num_children == 0)
+	  continue;
+	for (auto l = children.begin(); l != children.end(); ++l) {
+	  if (*l >= 0) {
+	    ++num;
+	  } else if (num_osds_subtree[*l] > 0) {
+	    num = num + num_osds_subtree[*l];
+	  }
 	}
+	num_osds_subtree[*j] = num;
       }
     }
     num_down_in_osds = down_in_osds.size();
