@@ -1211,6 +1211,9 @@ pair<string,string> CrushWrapper::get_immediate_parent(int id, int *_ret)
     crush_bucket *b = crush->buckets[bidx];
     if (b == 0)
       continue;
+    const char *n = get_item_name(b->id);
+    if (n && !is_valid_crush_name(n))
+      continue;
     for (unsigned i = 0; i < b->size; i++)
       if (b->items[i] == id) {
         string parent_id = name_map[b->id];
@@ -1232,6 +1235,9 @@ int CrushWrapper::get_immediate_parent_id(int id, int *parent) const
   for (int bidx = 0; bidx < crush->max_buckets; bidx++) {
     crush_bucket *b = crush->buckets[bidx];
     if (b == 0)
+      continue;
+    const char *n = get_item_name(b->id);
+    if (n && !is_valid_crush_name(n))
       continue;
     for (unsigned i = 0; i < b->size; i++) {
       if (b->items[i] == id) {
