@@ -7,6 +7,7 @@
 #include "tools/rbd_mirror/ImageReplayer.h"
 #include "tools/rbd_mirror/InstanceWatcher.h"
 #include "tools/rbd_mirror/InstanceReplayer.h"
+#include "tools/rbd_mirror/ServiceDaemon.h"
 #include "tools/rbd_mirror/Threads.h"
 
 namespace librbd {
@@ -44,6 +45,10 @@ struct ImageDeleter<librbd::MockTestImageCtx> {
                                            const std::string&));
   MOCK_METHOD4(wait_for_scheduled_deletion,
                void(int64_t, const std::string&, Context*, bool));
+};
+
+template<>
+struct ServiceDaemon<librbd::MockTestImageCtx> {
 };
 
 template<>
@@ -120,6 +125,7 @@ public:
   typedef ImageReplayer<librbd::MockTestImageCtx> MockImageReplayer;
   typedef InstanceReplayer<librbd::MockTestImageCtx> MockInstanceReplayer;
   typedef InstanceWatcher<librbd::MockTestImageCtx> MockInstanceWatcher;
+  typedef ServiceDaemon<librbd::MockTestImageCtx> MockServiceDaemon;
   typedef Threads<librbd::MockTestImageCtx> MockThreads;
 
   void SetUp() override {
@@ -147,11 +153,12 @@ public:
 };
 
 TEST_F(TestMockInstanceReplayer, AcquireReleaseImage) {
+  MockServiceDaemon mock_service_daemon;
   MockImageDeleter mock_image_deleter;
   MockInstanceWatcher mock_instance_watcher;
   MockImageReplayer mock_image_replayer;
   MockInstanceReplayer instance_replayer(
-    m_mock_threads, &mock_image_deleter,
+    m_mock_threads, &mock_service_daemon, &mock_image_deleter,
     rbd::mirror::RadosRef(new librados::Rados(m_local_io_ctx)),
     "local_mirror_uuid", m_local_io_ctx.get_id());
 

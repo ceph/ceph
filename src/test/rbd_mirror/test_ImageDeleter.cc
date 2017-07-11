@@ -18,6 +18,7 @@
 #include "cls/rbd/cls_rbd_client.h"
 #include "tools/rbd_mirror/ImageDeleter.h"
 #include "tools/rbd_mirror/ImageReplayer.h"
+#include "tools/rbd_mirror/ServiceDaemon.h"
 #include "tools/rbd_mirror/Threads.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/ImageState.h"
@@ -61,12 +62,15 @@ public:
 
   void SetUp() override {
     TestFixture::SetUp();
+    m_service_daemon.reset(new rbd::mirror::ServiceDaemon<>(g_ceph_context,
+                                                            _rados));
 
     librbd::api::Mirror<>::mode_set(m_local_io_ctx, RBD_MIRROR_MODE_IMAGE);
 
     m_deleter = new rbd::mirror::ImageDeleter<>(m_threads->work_queue,
                                                 m_threads->timer,
-                                                &m_threads->timer_lock);
+                                                &m_threads->timer_lock,
+                                                m_service_daemon.get());
 
     EXPECT_EQ(0, create_image(rbd, m_local_io_ctx, m_image_name, 1 << 20));
     ImageCtx *ictx = new ImageCtx(m_image_name, "", "", m_local_io_ctx,
@@ -210,6 +214,7 @@ public:
 
   librbd::RBD rbd;
   std::string m_local_image_id;
+  std::unique_ptr<rbd::mirror::ServiceDaemon<>> m_service_daemon;
   rbd::mirror::ImageDeleter<> *m_deleter;
 };
 

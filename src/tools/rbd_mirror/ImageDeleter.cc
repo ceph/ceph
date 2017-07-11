@@ -137,9 +137,10 @@ private:
 
 template <typename I>
 ImageDeleter<I>::ImageDeleter(ContextWQ *work_queue, SafeTimer *timer,
-                              Mutex *timer_lock)
-  : m_running(true),
-    m_work_queue(work_queue),
+                              Mutex *timer_lock,
+                              ServiceDaemon<librbd::ImageCtx>* service_daemon)
+  : m_work_queue(work_queue),
+    m_service_daemon(service_daemon),
     m_delete_lock("rbd::mirror::ImageDeleter::Delete"),
     m_image_deleter_thread(this),
     m_failed_timer(timer),

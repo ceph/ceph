@@ -32,6 +32,8 @@ namespace librbd { struct ImageCtx; }
 namespace rbd {
 namespace mirror {
 
+template <typename> class ServiceDaemon;
+
 /**
  * Manage deletion of non-primary images.
  */
@@ -40,7 +42,8 @@ class ImageDeleter {
 public:
   static const int EISPRM = 1000;
 
-  ImageDeleter(ContextWQ *work_queue, SafeTimer *timer, Mutex *timer_lock);
+  ImageDeleter(ContextWQ *work_queue, SafeTimer *timer, Mutex *timer_lock,
+               ServiceDaemon<librbd::ImageCtx>* service_daemon);
   ~ImageDeleter();
   ImageDeleter(const ImageDeleter&) = delete;
   ImageDeleter& operator=(const ImageDeleter&) = delete;
@@ -100,9 +103,10 @@ private:
                       bool print_failure_info=false);
   };
 
-  std::atomic<unsigned> m_running { 0 };
+  std::atomic<unsigned> m_running { 1 };
 
   ContextWQ *m_work_queue;
+  ServiceDaemon<librbd::ImageCtx>* m_service_daemon;
 
   std::deque<std::unique_ptr<DeleteInfo> > m_delete_queue;
   Mutex m_delete_lock;

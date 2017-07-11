@@ -16,6 +16,7 @@ set(rbd_mirror_internal
   MirrorStatusWatcher.cc
   PoolReplayer.cc
   PoolWatcher.cc
+  ServiceDaemon.cc
   Threads.cc
   types.cc
   image_replayer/BootstrapRequest.cc
