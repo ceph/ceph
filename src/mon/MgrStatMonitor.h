@@ -65,6 +65,7 @@ public:
     return digest.get_last_osd_stat_seq(osd);
   }
 
+  void update_logger();
 
   void print_summary(Formatter *f, std::ostream *ss) const;
 
