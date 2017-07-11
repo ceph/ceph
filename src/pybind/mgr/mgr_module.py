@@ -1,5 +1,8 @@
 
 import ceph_state  #noqa
+import ceph_osdmap  #noqa
+import ceph_osdmap_incremental  #noqa
+import ceph_crushmap  #noqa
 import json
 import logging
 import threading
@@ -28,6 +31,44 @@ class CommandResult(object):
     def wait(self):
         self.ev.wait()
         return self.r, self.outb, self.outs
+
+
+class OSDMap(object):
+    def __init__(self, handle):
+        self._handle = handle
+
+    def get_epoch(self):
+        return ceph_osdmap.get_epoch(self._handle)
+
+    def dump(self):
+        return ceph_osdmap.dump(self._handle)
+
+    def new_incremental(self):
+        return OSDMapIncremental(ceph_osdmap.new_incremental(self._handle))
+
+    def calc_pg_upmaps(self, inc, max_deviation=.01, max_iterations=10, pools=[]):
+        return ceph_osdmap.calc_pg_upmaps(
+            self._handle,
+            inc._handle,
+            max_deviation, max_iterations, pools)
+
+
+class OSDMapIncremental(object):
+    def __init__(self, handle):
+        self._handle = handle
+
+    def get_epoch(self):
+        return ceph_osdmap_incremental.get_epoch(self._handle)
+
+    def dump(self):
+        return ceph_osdmap_incremental.dump(self._handle)
+
+class CRUSHMap(object):
+    def __init__(self, handle):
+        self._handle = handle
+
+#    def get_epoch(self):
+#        return ceph_crushmap.get_epoch(self._handle)
 
 
 class MgrModule(object):
@@ -299,3 +340,11 @@ class MgrModule(object):
         :return: bool
         """
         pass
+
+    def get_osdmap(self):
+        """
+        Get a handle to an OSDMap.  If epoch==0, get a handle for the latest
+        OSDMap.
+        :return: OSDMap
+        """
+        return OSDMap(ceph_state.get_osdmap())

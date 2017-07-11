@@ -699,6 +699,7 @@ if (WITH_MGR)
       mgr/ClusterState.cc
       mgr/PyModules.cc
       mgr/PyFormatter.cc
+      mgr/PyOSDMap.cc
       mgr/PyState.cc
       mgr/MgrPyModule.cc
       mgr/MgrStandby.cc
