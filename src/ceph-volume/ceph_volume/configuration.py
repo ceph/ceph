@@ -61,22 +61,27 @@ class Conf(configparser.SafeConfigParser):
         except (configparser.NoSectionError, configparser.NoOptionError):
             return default
 
-    def get_list(self, section, key):
+    def get_list(self, section, key, default=None, split=','):
         """
         Assumes that the value for a given key is going to be a list separated
         by commas. It gets rid of trailing comments.  If just one item is
         present it returns a list with a single item, if no key is found an
         empty list is returned.
+
+        Optionally split on other characters besides ',' and return a fallback
+        value if no items are found.
         """
         value = self.get_safe(section, key, [])
         if value == []:
+            if default is not None:
+                return default
             return value
 
         # strip comments
         value = re.split(r'\s+#', value)[0]
 
         # split on commas
-        value = value.split(',')
+        value = value.split(split)
 
         # strip spaces
         return [x.strip() for x in value]
