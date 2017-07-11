@@ -131,13 +131,78 @@ def get_lv(lv_name=None, vg_name=None, lv_path=None, lv_tags=None):
     is shared between lvs of a distinct OSD.
     """
     if not any([lv_name, vg_name, lv_path, lv_tags]):
-        raise TypeError('get_lv() requires lv_name, vg_name, lv_path, or tags (none given)')
+        return None
     lvs = Volumes()
-    matched_lvs = lvs.filter(lv_name=lv_name, lv_path=lv_path, lv_tags=lv_tags)
-    #lvs = get_lvs(lv_name=lv_name, lv_path=lv_path, lv_tags=lv_tags)
-    if len(matched_lvs) > 1:
-        raise MultipleLVsError(lv_name, lv_path)
-    return matched_lvs[0]
+    return lvs.get(lv_name=lv_name, vg_name=vg_name, lv_path=lv_path, lv_tags=lv_tags)
+
+
+def create_lv(name, group, size=None, **tags):
+    """
+    Create a Logical Volume in a Volume Group. Command looks like::
+
+        lvcreate -L 50G -n gfslv vg0
+
+    ``name``, ``group``, and ``size`` are required. Tags are optional and are "translated" to include
+    the prefixes for the Ceph LVM tag API.
+
+    """
+    # XXX add CEPH_VOLUME_LVM_DEBUG to enable -vvvv on lv operations
+    type_path_tag = {
+        'journal': 'ceph.journal_device',
+        'data': 'ceph.data_device',
+        'block': 'ceph.block',
+        'wal': 'ceph.wal',
+        'db': 'ceph.db',
+        'lockbox': 'ceph.lockbox_device',
+    }
+    if size:
+        process.run([
+            'sudo',
+            'lvcreate',
+            '--yes',
+            '-L',
+            '%sG' % size,
+            '-n', name, group
+        ])
+    # create the lv with all the space available, this is needed because the
+    # system call is different for LVM
+    else:
+        process.run([
+            'sudo',
+            'lvcreate',
+            '--yes',
+            '-l',
+            '100%FREE',
+            '-n', name, group
+        ])
+
+    lv = get_lv(lv_name=name, vg_name=group)
+    ceph_tags = {}
+    for k, v in tags.items():
+        ceph_tags['ceph.%s' % k] = v
+    lv.set_tags(ceph_tags)
+
+    # when creating a distinct type, the caller doesn't know what the path will
+    # be so this function will set it after creation using the mapping
+    path_tag = type_path_tag[tags['type']]
+    lv.set_tags(
+        {path_tag: lv.lv_path}
+    )
+    return lv
+
+
+def get_vg(vg_name=None, vg_tags=None):
+    """
+    Return a matching vg for the current system, requires ``vg_name`` or
+    ``tags``. Raises an error if more than one vg is found.
+
+    It is useful to use ``tags`` when trying to find a specific volume group,
+    but it can also lead to multiple vgs being found.
+    """
+    if not any([vg_name, vg_tags]):
+        return None
+    vgs = VolumeGroups()
+    return vgs.get(vg_name=vg_name, vg_tags=vg_tags)
 
 
 class VolumeGroups(list):
@@ -225,11 +290,13 @@ class VolumeGroups(list):
         but it can also lead to multiple vgs being found (although unlikely)
         """
         if not any([vg_name, vg_tags]):
-            raise TypeError('.get() requires vg_name or vg_tags (none given)')
+            return None
         vgs = self._filter(
             vg_name=vg_name,
             vg_tags=vg_tags
         )
+        if not vgs:
+            return None
         if len(vgs) > 1:
             # this is probably never going to happen, but it is here to keep
             # the API code consistent
@@ -330,13 +397,15 @@ class Volumes(list):
         is shared between lvs of a distinct OSD.
         """
         if not any([lv_name, vg_name, lv_path, lv_tags]):
-            raise TypeError('.get() requires lv_name, vg_name, lv_path, or tags (none given)')
+            return None
         lvs = self._filter(
             lv_name=lv_name,
             vg_name=vg_name,
             lv_path=lv_path,
             lv_tags=lv_tags
         )
+        if not lvs:
+            return None
         if len(lvs) > 1:
             raise MultipleLVsError(lv_name, lv_path)
         try:
@@ -406,13 +475,15 @@ class Volume(object):
         the current object for its tags. Meant to be a "fire and forget" type
         of modification.
         """
-        for current_key, current_value in self.tags.items():
-            if current_key == key:
-                tag = "%s=%s" % (current_key, current_value)
-                process.call(['sudo', 'lvchange', '--deltag', tag, self.lv_api['lv_path']])
-            process.call(
-                [
-                    'sudo', 'lvchange',
-                    '--addtag', '%s=%s' % (key, value), self.lv_path
-                ]
-            )
+        # remove it first if it exists
+        if self.tags.get(key):
+            current_value = self.tags[key]
+            tag = "%s=%s" % (key, current_value)
+            process.call(['sudo', 'lvchange', '--deltag', tag, self.lv_api['lv_path']])
+
+        process.call(
+            [
+                'sudo', 'lvchange',
+                '--addtag', '%s=%s' % (key, value), self.lv_path
+            ]
+        )
