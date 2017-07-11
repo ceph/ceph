@@ -1,9 +1,5 @@
 from collections import namedtuple
 
-conf = namedtuple('config', ['ceph', 'ceph_volume'])
+conf = namedtuple('config', ['ceph', 'cluster', 'verbosity', 'path', 'log_path'])
 
-conf.ceph_volume = {
-    'verbosity': 'info',
-}
-
-__version__ = '0.0.1'
+__version__ = "1.0.0"
