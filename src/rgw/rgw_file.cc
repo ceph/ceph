@@ -1296,12 +1296,13 @@ namespace rgw {
     struct req_state* s = get_state();
     op_ret = 0;
 
-    /* check guards (e.g., contig write) */
-    if (eio)
-      return -EIO;
-
     size_t len = data.length();
     if (! len)
+      return 0;
+
+    /* we should keep data ordered,
+     * do put data until we merged pinned extents */
+    if (!pinned_extent.empty())
       return 0;
 
     /* XXX we are currently synchronous--supplied data buffers cannot

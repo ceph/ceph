@@ -2193,13 +2193,13 @@ public:
   off_t real_ofs;
   size_t bytes_written;
   bool multipart;
-  bool eio;
+  std::map<off_t, bufferlist> pinned_extent;
 
   RGWWriteRequest(CephContext* _cct, RGWUserInfo *_user, RGWFileHandle* _fh,
 		  const std::string& _bname, const std::string& _oname)
     : RGWLibContinuedReq(_cct, _user), bucket_name(_bname), obj_name(_oname),
       rgw_fh(_fh), processor(nullptr), real_ofs(0), bytes_written(0),
-      multipart(false), eio(false) {
+      multipart(false) {
 
     int ret = header_init();
     if (ret == 0) {
@@ -2272,11 +2272,34 @@ public:
   }
 
   void put_data(off_t off, buffer::list& _bl) {
-    if (off != real_ofs) {
-      eio = true;
+    size_t len = _bl.length();
+
+    if (off > real_ofs) {
+      /* unordered write, pin first, will merge after the gap extent arrives */
+      pinned_extent.emplace(off, _bl);
+      return;
+    } else if (off < real_ofs) {
+      /* unaligned write, append */
+      bufferlist append_bl;
+      append_bl.substr_of(_bl, real_ofs - off, off + len - real_ofs);
+      data.claim(append_bl);
+    } else {
+      /* try merge pinned extent */
+      while (!pinned_extent.empty()) {
+	auto e = pinned_extent.find(off + len);
+	if (e != pinned_extent.end()) {
+	  /* merge extent */
+	  _bl.append(e->second);
+	  len += e->second.length();
+	  pinned_extent.erase(e);
+	} else {
+	  /* not mergable, normal write */
+	  break;
+	}
+      }
+      data.claim(_bl);
     }
-    data.claim(_bl);
-    real_ofs += data.length();
+    real_ofs = off + len;
     ofs = off; /* consumed in exec_continue() */
   }
 
