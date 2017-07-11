@@ -547,11 +547,10 @@ start_mon() {
 			--cap mgr 'allow *' \
 			"$keyring_fn"
 
-		prun $SUDO "$CEPH_BIN/ceph-authtool" --gen-key --name=client.rgw --set-uid=0 \
-		    --cap mon 'allow *' \
-		    --cap osd 'allow *' \
-		    --cap mds 'allow *' \
-		    --cap mgr 'allow *' \
+		prun $SUDO "$CEPH_BIN/ceph-authtool" --gen-key --name=client.rgw \
+		    --cap mon 'allow rw' \
+		    --cap osd 'allow rwx' \
+		    --cap mgr 'allow rw' \
 		    "$keyring_fn"
 
 		# build a fresh fs monmap, mon fs
@@ -990,7 +989,6 @@ do_rgw()
     n=$(($CEPH_NUM_RGW - 1))
     i=0
     for rgw in j k l m n o p q r s t u v; do
-	ceph_adm auth get-or-create client.rgw.$rgw mon 'allow rw' osd 'allow rwx' mgr 'allow rw' -o $CEPH_DEV_DIR/rgw.$rgw.keyring
 	echo start rgw on http://localhost:$((CEPH_RGW_PORT + i))
 	run 'rgw' $RGWSUDO $CEPH_BIN/radosgw -c $conf_fn --log-file=${CEPH_OUT_DIR}/rgw.$rgw.log ${RGWDEBUG} --debug-ms=1 -n client.rgw "--rgw_frontends=${rgw_frontend} port=$((CEPH_RGW_PORT + i))"
 	i=$(($i + 1))
