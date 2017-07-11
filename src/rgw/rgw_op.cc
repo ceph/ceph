@@ -2963,6 +2963,7 @@ int RGWPutObjProcessor_Multipart::prepare(RGWRados *store, string *oid_rand)
   cur_obj = manifest_gen.get_cur_obj(store);
   rgw_raw_obj_to_obj(bucket, cur_obj, &head_obj);
   head_obj.index_hash_source = obj_str;
+  head_obj.set_head_obj(false);
 
   r = prepare_init(store, NULL);
   if (r < 0) {
