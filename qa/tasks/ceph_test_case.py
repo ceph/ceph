@@ -83,7 +83,8 @@ class CephTestCase(unittest.TestCase):
         """
         def seen_health_warning():
             health = self.ceph_cluster.mon_manager.get_mon_health()
-            summary_strings = [s['summary'] for s in health['summary']]
+            codes = [s for s in health['checks']]
+            summary_strings = [s[1]['message'] for s in health['checks'].iteritems()]
             if len(summary_strings) == 0:
                 log.debug("Not expected number of summary strings ({0})".format(summary_strings))
                 return False
@@ -91,6 +92,8 @@ class CephTestCase(unittest.TestCase):
                 for ss in summary_strings:
                     if pattern in ss:
                          return True
+                if pattern in codes:
+                    return True
 
             log.debug("Not found expected summary strings yet ({0})".format(summary_strings))
             return False
@@ -103,7 +106,7 @@ class CephTestCase(unittest.TestCase):
         """
         def is_clear():
             health = self.ceph_cluster.mon_manager.get_mon_health()
-            return len(health['summary']) == 0
+            return len(health['checks']) == 0
 
         self.wait_until_true(is_clear, timeout)
 
