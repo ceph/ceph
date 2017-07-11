@@ -41,7 +41,7 @@ Ceph Conf: {ceph_path}
     def help(self, sub_help=None):
         return self._help.format(
             version=ceph_volume.__version__,
-            log_path=conf.ceph_volume.get('log_path'),
+            log_path=conf.log_path,
             ceph_path=self.stat_ceph_conf(),
             plugins=self.plugin_help,
             sub_help=sub_help.strip('\n'),
@@ -75,14 +75,14 @@ Ceph Conf: {ceph_path}
 
     def load_ceph_conf_path(self, cluster_name='ceph'):
         abspath = '/etc/ceph/%s.conf' % cluster_name
-        ceph_conf = os.getenv('CEPH_CONF', abspath)
-        conf.ceph_volume['ceph_conf'] = ceph_conf
+        conf.path = os.getenv('CEPH_CONF', abspath)
+        conf.cluster = cluster_name
+        conf.ceph = configuration.load(conf.path)
 
     def stat_ceph_conf(self):
-        ceph_conf = conf.ceph_volume['ceph_conf']
         try:
-            configuration.load(ceph_conf)
-            return terminal.green(ceph_conf)
+            configuration.load(conf.path)
+            return terminal.green(conf.path)
         except exceptions.ConfigurationError as error:
             return terminal.red(error)
 
@@ -94,9 +94,12 @@ Ceph Conf: {ceph_path}
                            options=options, check_help=False,
                            check_version=False)
         parser.parse_args()
-        conf.ceph_volume['verbosity'] = parser.get('--log', 'info')
+        conf.verbosity = parser.get('--log', 'info')
         self.load_ceph_conf_path(parser.get('--cluster', 'ceph'))
-        conf.ceph_volume['verbosity'] = parser.get('--log', 'info')
+        default_log_path = os.environ.get('CEPH_VOLUME_LOG_PATH', '/var/log/ceph/')
+        conf.log_path = parser.get('--log-path', default_log_path)
+        if os.path.isdir(conf.log_path):
+            conf.log_path = os.path.join(conf.log_path, 'ceph-volume.log')
         log.setup()
         self.enable_plugins()
         parser.catch_help = self.help(parser.subhelp())
