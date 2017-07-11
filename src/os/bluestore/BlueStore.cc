@@ -8599,7 +8599,7 @@ void BlueStore::deferred_try_submit()
     osrs.push_back(&osr);
   }
   for (auto& osr : osrs) {
-    if (!osr->deferred_running) {
+    if (osr->deferred_pending && !osr->deferred_running) {
       _deferred_submit_unlock(osr.get());
       deferred_lock.lock();
     }
