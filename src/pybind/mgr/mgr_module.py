@@ -260,14 +260,18 @@ class MgrModule(object):
         """
         return ceph_state.get_mgr_id()
 
-    def get_config(self, key):
+    def get_config(self, key, default=None):
         """
         Retrieve the value of a persistent configuration setting
 
         :param key: str
         :return: str
         """
-        return ceph_state.get_config(self._handle, key)
+        r = ceph_state.get_config(self._handle, key)
+        if r is None:
+            return default
+        else:
+            return r
 
     def get_config_prefix(self, key_prefix):
         """
