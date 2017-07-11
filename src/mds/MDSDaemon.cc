@@ -885,20 +885,21 @@ void MDSDaemon::handle_mds_map(MMDSMap *m)
 
   // see who i am
   addr = messenger->get_myaddr();
-  dout(10) << "map says i am " << addr << " mds." << whoami << "." << incarnation
+  dout(10) << "map says I am " << addr << " mds." << whoami << "." << incarnation
 	   << " state " << ceph_mds_state_name(new_state) << dendl;
 
   if (whoami == MDS_RANK_NONE) {
     if (mds_rank != NULL) {
+      const auto myid = monc->get_global_id();
       // We have entered a rank-holding state, we shouldn't be back
       // here!
       if (g_conf->mds_enforce_unique_name) {
         if (mds_gid_t existing = mdsmap->find_mds_gid_by_name(name)) {
           const MDSMap::mds_info_t& i = mdsmap->get_info_gid(existing);
-          if (i.global_id > monc->get_global_id()) {
-            dout(1) << "handle_mds_map i (" << addr
-                    << ") dne in the mdsmap, new instance has larger gid " << i.global_id
-                    << ", suicide" << dendl;
+          if (i.global_id > myid) {
+            dout(1) << "map replaced me with another mds." << whoami
+                    << " with gid (" << i.global_id << ") larger than myself ("
+                    << myid << "); quitting!" << dendl;
             // Call suicide() rather than respawn() because if someone else
             // has taken our ID, we don't want to keep restarting and
             // fighting them for the ID.
@@ -909,8 +910,8 @@ void MDSDaemon::handle_mds_map(MMDSMap *m)
         }
       }
 
-      dout(1) << "handle_mds_map i (" << addr
-          << ") dne in the mdsmap, respawning myself" << dendl;
+      dout(1) << "map removed me (mds." << whoami << " gid:"
+              << myid << ") from cluster due to lost contact; respawning" << dendl;
       respawn();
     }
     // MDSRank not active: process the map here to see if we have
