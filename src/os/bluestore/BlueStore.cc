@@ -9409,14 +9409,13 @@ void BlueStore::_do_write_small(
 	    b->get_blob().get_ondisk_length() >= b_off + b_len &&
 	    b->get_blob().is_unused(b_off, b_len) &&
 	    b->get_blob().is_allocated(b_off, b_len)) {
-	  bufferlist padded;
-	  _apply_padding(head_pad, tail_pad, bl, padded);
+	  _apply_padding(head_pad, tail_pad, bl);
 
 	  dout(20) << __func__ << "  write to unused 0x" << std::hex
 		   << b_off << "~" << b_len
 		   << " pad 0x" << head_pad << " + 0x" << tail_pad
 		   << std::dec << " of mutable " << *b << dendl;
-	  _buffer_cache_write(txc, b, b_off, padded,
+	  _buffer_cache_write(txc, b, b_off, bl,
 			      wctx->buffered ? 0 : Buffer::FLAG_NOCACHE);
 
 	  if (!g_conf->bluestore_debug_omit_block_device_write) {
@@ -9431,17 +9430,17 @@ void BlueStore::_do_write_small(
 		  op->extents.emplace_back(bluestore_pextent_t(offset, length));
 		  return 0;
 		});
-	      op->data = padded;
+	      op->data = bl;
 	    } else {
 	      b->get_blob().map_bl(
-		b_off, padded,
+		b_off, bl,
 		[&](uint64_t offset, bufferlist& t) {
 		  bdev->aio_write(offset, t,
 				  &txc->ioc, wctx->buffered);
 		});
 	    }
 	  }
-	  b->dirty_blob().calc_csum(b_off, padded);
+	  b->dirty_blob().calc_csum(b_off, bl);
 	  dout(20) << __func__ << "  lex old " << *ep << dendl;
 	  Extent *le = o->extent_map.set_lextent(c, offset, b_off + head_pad, length,
 						 b,
@@ -9471,8 +9470,7 @@ void BlueStore::_do_write_small(
 	    b_len % chunk_size == 0 &&
 	    b->get_blob().is_allocated(b_off, b_len)) {
 
-	  bufferlist padded;
-	  _apply_padding(head_pad, tail_pad, bl, padded);
+	  _apply_padding(head_pad, tail_pad, bl);
 
 	  dout(20) << __func__ << "  reading head 0x" << std::hex << head_read
 		   << " and tail 0x" << tail_read << std::dec << dendl;
@@ -9486,8 +9484,7 @@ void BlueStore::_do_write_small(
 	      head_bl.append_zero(zlen);
 	      logger->inc(l_bluestore_write_pad_bytes, zlen);
 	    }
-	    head_bl.claim_append(padded);
-	    padded.swap(head_bl);
+	    bl.claim_prepend(head_bl);
 	    logger->inc(l_bluestore_write_penalty_read_ops);
 	  }
 	  if (tail_read) {
@@ -9500,14 +9497,14 @@ void BlueStore::_do_write_small(
 	      tail_bl.append_zero(zlen);
 	      logger->inc(l_bluestore_write_pad_bytes, zlen);
 	    }
-	    padded.claim_append(tail_bl);
+	    bl.claim_append(tail_bl);
 	    logger->inc(l_bluestore_write_penalty_read_ops);
 	  }
 	  logger->inc(l_bluestore_write_small_pre_read);
 
 	  bluestore_deferred_op_t *op = _get_deferred_op(txc, o);
 	  op->op = bluestore_deferred_op_t::OP_WRITE;
-	  _buffer_cache_write(txc, b, b_off, padded,
+	  _buffer_cache_write(txc, b, b_off, bl,
 			      wctx->buffered ? 0 : Buffer::FLAG_NOCACHE);
 
 	  int r = b->get_blob().map(
@@ -9518,9 +9515,9 @@ void BlueStore::_do_write_small(
 	    });
 	  assert(r == 0);
 	  if (b->get_blob().csum_type) {
-	    b->dirty_blob().calc_csum(b_off, padded);
+	    b->dirty_blob().calc_csum(b_off, bl);
 	  }
-	  op->data.claim(padded);
+	  op->data.claim(bl);
 	  dout(20) << __func__ << "  deferred write 0x" << std::hex << b_off << "~"
 		   << b_len << std::dec << " of mutable " << *b
 		   << " at " << op->extents << dendl;
@@ -11432,15 +11429,10 @@ void BlueStore::flush_cache()
 
 void BlueStore::_apply_padding(uint64_t head_pad,
 			       uint64_t tail_pad,
-			       bufferlist& bl,
 			       bufferlist& padded)
 {
-  padded = bl;
   if (head_pad) {
-    bufferlist z;
-    z.append_zero(head_pad);
-    z.claim_append(padded);
-    padded.claim(z);
+    padded.prepend_zero(head_pad);
   }
   if (tail_pad) {
     padded.append_zero(tail_pad);
