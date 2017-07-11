@@ -552,7 +552,7 @@ const std::vector<Option> ceph_options = {
   .set_default(false)
   .set_description(""),
 
-  Option("ms_dispatch_throttle_bytes", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("ms_dispatch_throttle_bytes", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(100 << 20)
   .set_description(""),
 
@@ -584,23 +584,23 @@ const std::vector<Option> ceph_options = {
   .set_default(512)
   .set_description(""),
 
-  Option("ms_rwthread_stack_bytes", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("ms_rwthread_stack_bytes", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(1024 << 10)
   .set_description(""),
 
-  Option("ms_tcp_read_timeout", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("ms_tcp_read_timeout", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(900)
   .set_description(""),
 
-  Option("ms_pq_max_tokens_per_priority", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("ms_pq_max_tokens_per_priority", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(16777216)
   .set_description(""),
 
-  Option("ms_pq_min_cost", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("ms_pq_min_cost", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(65536)
   .set_description(""),
 
-  Option("ms_inject_socket_failures", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("ms_inject_socket_failures", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(0)
   .set_description(""),
 
@@ -633,11 +633,11 @@ const std::vector<Option> ceph_options = {
   .set_default(1)
   .set_description(""),
 
-  Option("ms_async_op_threads", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("ms_async_op_threads", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(3)
   .set_description(""),
 
-  Option("ms_async_max_op_threads", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("ms_async_max_op_threads", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(5)
   .set_description(""),
 
@@ -661,19 +661,19 @@ const std::vector<Option> ceph_options = {
   .set_default(128 << 10)
   .set_description(""),
 
-  Option("ms_async_rdma_send_buffers", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("ms_async_rdma_send_buffers", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(1024)
   .set_description(""),
 
-  Option("ms_async_rdma_receive_buffers", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("ms_async_rdma_receive_buffers", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(1024)
   .set_description(""),
 
-  Option("ms_async_rdma_port_num", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("ms_async_rdma_port_num", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(1)
   .set_description(""),
 
-  Option("ms_async_rdma_polling_us", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("ms_async_rdma_polling_us", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(1000)
   .set_description(""),
 
@@ -937,7 +937,7 @@ const std::vector<Option> ceph_options = {
   .set_default(50)
   .set_description(""),
 
-  Option("mon_pg_min_inactive", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("mon_pg_min_inactive", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(1)
   .set_description(""),
 
@@ -993,7 +993,7 @@ const std::vector<Option> ceph_options = {
   .set_default(false)
   .set_description(""),
 
-  Option("mon_globalid_prealloc", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("mon_globalid_prealloc", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(10000)
   .set_description(""),
 
@@ -1053,7 +1053,7 @@ const std::vector<Option> ceph_options = {
   .set_default(2.0)
   .set_description(""),
 
-  Option("mon_client_bytes", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("mon_client_bytes", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(100ul << 20)
   .set_description(""),
 
@@ -1061,11 +1061,11 @@ const std::vector<Option> ceph_options = {
   .set_default(.3)
   .set_description(""),
 
-  Option("mon_log_max_summary", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("mon_log_max_summary", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(50)
   .set_description(""),
 
-  Option("mon_daemon_bytes", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("mon_daemon_bytes", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(400ul << 20)
   .set_description(""),
 
@@ -1073,11 +1073,11 @@ const std::vector<Option> ceph_options = {
   .set_default(4096)
   .set_description(""),
 
-  Option("mon_reweight_min_pgs_per_osd", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("mon_reweight_min_pgs_per_osd", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(10)
   .set_description(""),
 
-  Option("mon_reweight_min_bytes_per_osd", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("mon_reweight_min_bytes_per_osd", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(100*1024*1024)
   .set_description(""),
 
@@ -1113,7 +1113,7 @@ const std::vector<Option> ceph_options = {
   .set_default(30)
   .set_description(""),
 
-  Option("mon_data_size_warn", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("mon_data_size_warn", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(15*1024*1024*1024)
   .set_description(""),
 
@@ -1153,7 +1153,7 @@ const std::vector<Option> ceph_options = {
   .set_default(60.0)
   .set_description(""),
 
-  Option("mon_sync_max_payload_size", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("mon_sync_max_payload_size", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(1048576)
   .set_description(""),
 
@@ -1333,7 +1333,7 @@ const std::vector<Option> ceph_options = {
   .set_default(false)
   .set_description(""),
 
-  Option("mon_client_hunt_parallel", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("mon_client_hunt_parallel", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(2)
   .set_description(""),
 
@@ -1481,7 +1481,7 @@ const std::vector<Option> ceph_options = {
   .set_default(0)
   .set_description(""),
 
-  Option("client_max_inline_size", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("client_max_inline_size", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(4096)
   .set_description(""),
 
@@ -1593,15 +1593,15 @@ const std::vector<Option> ceph_options = {
   .set_default(10.0)
   .set_description(""),
 
-  Option("objecter_inflight_op_bytes", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("objecter_inflight_op_bytes", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(1024*1024*100)
   .set_description(""),
 
-  Option("objecter_inflight_ops", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("objecter_inflight_ops", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(1024)
   .set_description(""),
 
-  Option("objecter_completion_locks_per_session", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("objecter_completion_locks_per_session", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(32)
   .set_description(""),
 
@@ -1617,11 +1617,11 @@ const std::vector<Option> ceph_options = {
   .set_default(false)
   .set_description(""),
 
-  Option("filer_max_purge_ops", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("filer_max_purge_ops", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(10)
   .set_description(""),
 
-  Option("filer_max_truncate_ops", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("filer_max_truncate_ops", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(128)
   .set_description(""),
 
@@ -1641,11 +1641,11 @@ const std::vector<Option> ceph_options = {
   .set_default("/var/lib/ceph/mds/$cluster-$id")
   .set_description(""),
 
-  Option("mds_max_file_size", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("mds_max_file_size", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(1ULL << 40)
   .set_description(""),
 
-  Option("mds_max_xattr_pairs_size", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("mds_max_xattr_pairs_size", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(64 << 10)
   .set_description(""),
 
@@ -1657,7 +1657,7 @@ const std::vector<Option> ceph_options = {
   .set_default(.7)
   .set_description(""),
 
-  Option("mds_max_file_recover", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("mds_max_file_recover", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(32)
   .set_description(""),
 
@@ -1701,7 +1701,7 @@ const std::vector<Option> ceph_options = {
   .set_default(true)
   .set_description(""),
 
-  Option("mds_sessionmap_keys_per_op", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("mds_sessionmap_keys_per_op", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(1024)
   .set_description(""),
 
@@ -1777,7 +1777,7 @@ const std::vector<Option> ceph_options = {
   .set_default(0)
   .set_description(""),
 
-  Option("mds_log_max_segments", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("mds_log_max_segments", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(30)
   .set_description(""),
 
@@ -1965,7 +1965,7 @@ const std::vector<Option> ceph_options = {
   .set_default(0)
   .set_description(""),
 
-  Option("mds_journal_format", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("mds_journal_format", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(1)
   .set_description(""),
 
@@ -2009,11 +2009,11 @@ const std::vector<Option> ceph_options = {
   .set_default(true)
   .set_description(""),
 
-  Option("mds_op_history_size", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("mds_op_history_size", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(20)
   .set_description(""),
 
-  Option("mds_op_history_duration", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("mds_op_history_duration", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(600)
   .set_description(""),
 
@@ -2025,11 +2025,11 @@ const std::vector<Option> ceph_options = {
   .set_default(5)
   .set_description(""),
 
-  Option("mds_snap_min_uid", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("mds_snap_min_uid", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(0)
   .set_description(""),
 
-  Option("mds_snap_max_uid", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("mds_snap_max_uid", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(4294967294)
   .set_description(""),
 
@@ -2037,19 +2037,19 @@ const std::vector<Option> ceph_options = {
   .set_default(false)
   .set_description(""),
 
-  Option("mds_verify_backtrace", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("mds_verify_backtrace", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(1)
   .set_description(""),
 
-  Option("mds_max_completed_flushes", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("mds_max_completed_flushes", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(100000)
   .set_description(""),
 
-  Option("mds_max_completed_requests", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("mds_max_completed_requests", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(100000)
   .set_description(""),
 
-  Option("mds_action_on_write_error", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("mds_action_on_write_error", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(1)
   .set_description(""),
 
@@ -2057,11 +2057,11 @@ const std::vector<Option> ceph_options = {
   .set_default(5)
   .set_description(""),
 
-  Option("mds_max_purge_files", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("mds_max_purge_files", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(64)
   .set_description(""),
 
-  Option("mds_max_purge_ops", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("mds_max_purge_ops", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(8192)
   .set_description(""),
 
@@ -2089,7 +2089,7 @@ const std::vector<Option> ceph_options = {
   .set_default(10000)
   .set_description(""),
 
-  Option("mds_client_writeable_range_max_inc_objs", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("mds_client_writeable_range_max_inc_objs", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(1024)
   .set_description(""),
 
@@ -2097,7 +2097,7 @@ const std::vector<Option> ceph_options = {
   .set_default(true)
   .set_description(""),
 
-  Option("osd_max_backfills", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("osd_max_backfills", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(1)
   .set_description(""),
 
@@ -2165,7 +2165,7 @@ const std::vector<Option> ceph_options = {
   .set_default(true)
   .set_description(""),
 
-  Option("osd_os_flags", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("osd_os_flags", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(0)
   .set_description(""),
 
@@ -2173,15 +2173,15 @@ const std::vector<Option> ceph_options = {
   .set_default(90)
   .set_description(""),
 
-  Option("osd_max_pgls", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("osd_max_pgls", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(1024)
   .set_description(""),
 
-  Option("osd_client_message_size_cap", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("osd_client_message_size_cap", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(500*1024L*1024L)
   .set_description(""),
 
-  Option("osd_client_message_cap", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("osd_client_message_cap", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(100)
   .set_description(""),
 
@@ -2217,7 +2217,7 @@ const std::vector<Option> ceph_options = {
   .set_default(-1)
   .set_description(""),
 
-  Option("osd_pool_erasure_code_stripe_unit", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("osd_pool_erasure_code_stripe_unit", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(4096)
   .set_description(""),
 
@@ -2235,6 +2235,10 @@ const std::vector<Option> ceph_options = {
 
   Option("osd_pool_default_pgp_num", Option::TYPE_INT, Option::LEVEL_ADVANCED)
   .set_default(8)
+  .set_description(""),
+
+  Option("osd_pool_default_type", Option::TYPE_STR, Option::LEVEL_ADVANCED)
+  .set_default("replicated")
   .set_description(""),
 
   Option("osd_pool_default_erasure_code_profile", Option::TYPE_STR, Option::LEVEL_ADVANCED)
@@ -2309,11 +2313,11 @@ const std::vector<Option> ceph_options = {
   .set_default(".ceph-internal")
   .set_description(""),
 
-  Option("osd_tier_promote_max_objects_sec", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("osd_tier_promote_max_objects_sec", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(25)
   .set_description(""),
 
-  Option("osd_tier_promote_max_bytes_sec", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("osd_tier_promote_max_bytes_sec", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(5 * 1024*1024)
   .set_description(""),
 
@@ -2389,15 +2393,15 @@ const std::vector<Option> ceph_options = {
   .set_default(2)
   .set_description(""),
 
-  Option("osd_peering_wq_batch_size", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("osd_peering_wq_batch_size", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(20)
   .set_description(""),
 
-  Option("osd_op_pq_max_tokens_per_priority", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("osd_op_pq_max_tokens_per_priority", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(4194304)
   .set_description(""),
 
-  Option("osd_op_pq_min_cost", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("osd_op_pq_min_cost", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(65536)
   .set_description(""),
 
@@ -2597,11 +2601,11 @@ const std::vector<Option> ceph_options = {
   .set_default(2000)
   .set_description(""),
 
-  Option("osd_pg_max_concurrent_snap_trims", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("osd_pg_max_concurrent_snap_trims", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(2)
   .set_description(""),
 
-  Option("osd_max_trimming_pgs", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("osd_max_trimming_pgs", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(2)
   .set_description(""),
 
@@ -2657,35 +2661,35 @@ const std::vector<Option> ceph_options = {
   .set_default(0)
   .set_description(""),
 
-  Option("osd_recovery_max_active", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("osd_recovery_max_active", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(3)
   .set_description(""),
 
-  Option("osd_recovery_max_single_start", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("osd_recovery_max_single_start", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(1)
   .set_description(""),
 
-  Option("osd_recovery_max_chunk", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("osd_recovery_max_chunk", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(8<<20)
   .set_description(""),
 
-  Option("osd_recovery_max_omap_entries_per_chunk", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("osd_recovery_max_omap_entries_per_chunk", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(64000)
   .set_description(""),
 
-  Option("osd_copyfrom_max_chunk", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("osd_copyfrom_max_chunk", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(8<<20)
   .set_description(""),
 
-  Option("osd_push_per_object_cost", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("osd_push_per_object_cost", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(1000)
   .set_description(""),
 
-  Option("osd_max_push_cost", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("osd_max_push_cost", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(8<<20)
   .set_description(""),
 
-  Option("osd_max_push_objects", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("osd_max_push_objects", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(10)
   .set_description(""),
 
@@ -2745,7 +2749,7 @@ const std::vector<Option> ceph_options = {
   .set_default(false)
   .set_description(""),
 
-  Option("osd_scrub_auto_repair_num_errors", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("osd_scrub_auto_repair_num_errors", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(5)
   .set_description(""),
 
@@ -2793,7 +2797,7 @@ const std::vector<Option> ceph_options = {
   .set_default("")
   .set_description(""),
 
-  Option("osd_default_notify_timeout", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("osd_default_notify_timeout", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(30)
   .set_description(""),
 
@@ -2801,15 +2805,15 @@ const std::vector<Option> ceph_options = {
   .set_default(0)
   .set_description(""),
 
-  Option("osd_pg_epoch_persisted_max_stale", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("osd_pg_epoch_persisted_max_stale", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(40)
   .set_description(""),
 
-  Option("osd_min_pg_log_entries", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("osd_min_pg_log_entries", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(3000)
   .set_description(""),
 
-  Option("osd_max_pg_log_entries", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("osd_max_pg_log_entries", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(10000)
   .set_description(""),
 
@@ -2817,7 +2821,7 @@ const std::vector<Option> ceph_options = {
   .set_default(1.3)
   .set_description(""),
 
-  Option("osd_pg_log_trim_min", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("osd_pg_log_trim_min", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(100)
   .set_description(""),
 
@@ -2829,7 +2833,7 @@ const std::vector<Option> ceph_options = {
   .set_default(256)
   .set_description(""),
 
-  Option("osd_max_pg_blocked_by", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("osd_max_pg_blocked_by", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(16)
   .set_description(""),
 
@@ -2885,7 +2889,7 @@ const std::vector<Option> ceph_options = {
   .set_default(false)
   .set_description(""),
 
-  Option("osd_debug_scrub_chance_rewrite_digest", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("osd_debug_scrub_chance_rewrite_digest", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(0)
   .set_description(""),
 
@@ -2929,19 +2933,19 @@ const std::vector<Option> ceph_options = {
   .set_default(true)
   .set_description(""),
 
-  Option("osd_num_op_tracker_shard", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("osd_num_op_tracker_shard", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(32)
   .set_description(""),
 
-  Option("osd_op_history_size", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("osd_op_history_size", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(20)
   .set_description(""),
 
-  Option("osd_op_history_duration", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("osd_op_history_duration", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(600)
   .set_description(""),
 
-  Option("osd_op_history_slow_op_size", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("osd_op_history_slow_op_size", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(20)
   .set_description(""),
 
@@ -2981,7 +2985,7 @@ const std::vector<Option> ceph_options = {
   .set_default(false)
   .set_description(""),
 
-  Option("osd_loop_before_reset_tphandle", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("osd_loop_before_reset_tphandle", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(64)
   .set_description(""),
 
@@ -2997,15 +3001,15 @@ const std::vector<Option> ceph_options = {
   .set_default(true)
   .set_description(""),
 
-  Option("leveldb_write_buffer_size", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("leveldb_write_buffer_size", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(8 *1024*1024)
   .set_description(""),
 
-  Option("leveldb_cache_size", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("leveldb_cache_size", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(128 *1024*1024)
   .set_description(""),
 
-  Option("leveldb_block_size", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("leveldb_block_size", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(0)
   .set_description(""),
 
@@ -3066,7 +3070,7 @@ const std::vector<Option> ceph_options = {
   .set_default(true)
   .set_description(""),
 
-  Option("rocksdb_cache_size", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("rocksdb_cache_size", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(128*1024*1024)
   .set_description(""),
 
@@ -3114,43 +3118,43 @@ const std::vector<Option> ceph_options = {
   .set_default("write_buffer_size=33554432,compression=kNoCompression")
   .set_description(""),
 
-  Option("osd_client_op_priority", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("osd_client_op_priority", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(63)
   .set_description(""),
 
-  Option("osd_recovery_op_priority", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("osd_recovery_op_priority", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(3)
   .set_description(""),
 
-  Option("osd_snap_trim_priority", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("osd_snap_trim_priority", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(5)
   .set_description(""),
 
-  Option("osd_snap_trim_cost", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("osd_snap_trim_cost", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(1<<20)
   .set_description(""),
 
-  Option("osd_scrub_priority", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("osd_scrub_priority", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(5)
   .set_description(""),
 
-  Option("osd_scrub_cost", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("osd_scrub_cost", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(50<<20)
   .set_description(""),
 
-  Option("osd_requested_scrub_priority", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("osd_requested_scrub_priority", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(120)
   .set_description(""),
 
-  Option("osd_recovery_priority", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("osd_recovery_priority", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(5)
   .set_description(""),
 
-  Option("osd_recovery_cost", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("osd_recovery_cost", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(20<<20)
   .set_description(""),
 
-  Option("osd_recovery_op_warn_multiple", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("osd_recovery_op_warn_multiple", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(16)
   .set_description(""),
 
@@ -3162,31 +3166,31 @@ const std::vector<Option> ceph_options = {
   .set_default(false)
   .set_description(""),
 
-  Option("osd_max_object_size", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("osd_max_object_size", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(128*1024L*1024L)
   .set_description(""),
 
-  Option("osd_max_object_name_len", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("osd_max_object_name_len", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(2048)
   .set_description(""),
 
-  Option("osd_max_object_namespace_len", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("osd_max_object_namespace_len", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(256)
   .set_description(""),
 
-  Option("osd_max_attr_name_len", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("osd_max_attr_name_len", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(100)
   .set_description(""),
 
-  Option("osd_max_attr_size", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("osd_max_attr_size", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(0)
   .set_description(""),
 
-  Option("osd_max_omap_entries_per_request", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("osd_max_omap_entries_per_request", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(131072)
   .set_description(""),
 
-  Option("osd_max_omap_bytes_per_request", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("osd_max_omap_bytes_per_request", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(1<<30)
   .set_description(""),
 
@@ -3202,19 +3206,19 @@ const std::vector<Option> ceph_options = {
   .set_default(false)
   .set_description(""),
 
-  Option("osd_bench_small_size_max_iops", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("osd_bench_small_size_max_iops", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(100)
   .set_description(""),
 
-  Option("osd_bench_large_size_max_throughput", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("osd_bench_large_size_max_throughput", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(100 << 20)
   .set_description(""),
 
-  Option("osd_bench_max_block_size", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("osd_bench_max_block_size", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(64 << 20)
   .set_description(""),
 
-  Option("osd_bench_duration", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("osd_bench_duration", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(30)
   .set_description(""),
 
@@ -3230,7 +3234,7 @@ const std::vector<Option> ceph_options = {
   .set_default(true)
   .set_description(""),
 
-  Option("memstore_device_bytes", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("memstore_device_bytes", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(1024*1024*1024)
   .set_description(""),
 
@@ -3238,7 +3242,7 @@ const std::vector<Option> ceph_options = {
   .set_default(true)
   .set_description(""),
 
-  Option("memstore_page_size", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("memstore_page_size", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(64 << 10)
   .set_description(""),
 
@@ -3294,19 +3298,19 @@ const std::vector<Option> ceph_options = {
   .set_default(false)
   .set_description(""),
 
-  Option("bluefs_alloc_size", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("bluefs_alloc_size", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(1048576)
   .set_description(""),
 
-  Option("bluefs_max_prefetch", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("bluefs_max_prefetch", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(1048576)
   .set_description(""),
 
-  Option("bluefs_min_log_runway", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("bluefs_min_log_runway", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(1048576)
   .set_description(""),
 
-  Option("bluefs_max_log_runway", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("bluefs_max_log_runway", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(4194304)
   .set_description(""),
 
@@ -3314,11 +3318,11 @@ const std::vector<Option> ceph_options = {
   .set_default(5.0)
   .set_description(""),
 
-  Option("bluefs_log_compact_min_size", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("bluefs_log_compact_min_size", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(16*1048576)
   .set_description(""),
 
-  Option("bluefs_min_flush_size", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("bluefs_min_flush_size", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(524288)
   .set_description(""),
 
@@ -3350,7 +3354,7 @@ const std::vector<Option> ceph_options = {
   .set_default(false)
   .set_description(""),
 
-  Option("bluestore_bluefs_min", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("bluestore_bluefs_min", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(1*1024*1024*1024)
   .set_description(""),
 
@@ -3374,7 +3378,7 @@ const std::vector<Option> ceph_options = {
   .set_default(1)
   .set_description(""),
 
-  Option("bluestore_spdk_mem", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("bluestore_spdk_mem", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(512)
   .set_description(""),
 
@@ -3382,7 +3386,7 @@ const std::vector<Option> ceph_options = {
   .set_default("0x3")
   .set_description(""),
 
-  Option("bluestore_spdk_max_io_completion", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("bluestore_spdk_max_io_completion", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(0)
   .set_description(""),
 
@@ -3390,7 +3394,7 @@ const std::vector<Option> ceph_options = {
   .set_default("")
   .set_description(""),
 
-  Option("bluestore_block_size", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("bluestore_block_size", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(10 * 1024*1024*1024)
   .set_description(""),
 
@@ -3402,7 +3406,7 @@ const std::vector<Option> ceph_options = {
   .set_default("")
   .set_description(""),
 
-  Option("bluestore_block_db_size", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("bluestore_block_db_size", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(0)
   .set_description(""),
 
@@ -3414,7 +3418,7 @@ const std::vector<Option> ceph_options = {
   .set_default("")
   .set_description(""),
 
-  Option("bluestore_block_wal_size", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("bluestore_block_wal_size", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(96 * 1024*1024)
   .set_description(""),
 
@@ -3430,39 +3434,39 @@ const std::vector<Option> ceph_options = {
   .set_default("crc32c")
   .set_description(""),
 
-  Option("bluestore_csum_min_block", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("bluestore_csum_min_block", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(4096)
   .set_description(""),
 
-  Option("bluestore_csum_max_block", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("bluestore_csum_max_block", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(64*1024)
   .set_description(""),
 
-  Option("bluestore_min_alloc_size", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("bluestore_min_alloc_size", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(0)
   .set_description(""),
 
-  Option("bluestore_min_alloc_size_hdd", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("bluestore_min_alloc_size_hdd", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(64*1024)
   .set_description(""),
 
-  Option("bluestore_min_alloc_size_ssd", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("bluestore_min_alloc_size_ssd", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(16*1024)
   .set_description(""),
 
-  Option("bluestore_max_alloc_size", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("bluestore_max_alloc_size", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(0)
   .set_description(""),
 
-  Option("bluestore_prefer_deferred_size", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("bluestore_prefer_deferred_size", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(0)
   .set_description(""),
 
-  Option("bluestore_prefer_deferred_size_hdd", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("bluestore_prefer_deferred_size_hdd", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(32768)
   .set_description(""),
 
-  Option("bluestore_prefer_deferred_size_ssd", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("bluestore_prefer_deferred_size_ssd", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(0)
   .set_description(""),
 
@@ -3474,27 +3478,27 @@ const std::vector<Option> ceph_options = {
   .set_default("snappy")
   .set_description(""),
 
-  Option("bluestore_compression_min_blob_size", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("bluestore_compression_min_blob_size", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(0)
   .set_description(""),
 
-  Option("bluestore_compression_min_blob_size_hdd", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("bluestore_compression_min_blob_size_hdd", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(128*1024)
   .set_description(""),
 
-  Option("bluestore_compression_min_blob_size_ssd", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("bluestore_compression_min_blob_size_ssd", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(8*1024)
   .set_description(""),
 
-  Option("bluestore_compression_max_blob_size", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("bluestore_compression_max_blob_size", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(0)
   .set_description(""),
 
-  Option("bluestore_compression_max_blob_size_hdd", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("bluestore_compression_max_blob_size_hdd", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(512*1024)
   .set_description(""),
 
-  Option("bluestore_compression_max_blob_size_ssd", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("bluestore_compression_max_blob_size_ssd", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(64*1024)
   .set_description(""),
 
@@ -3506,15 +3510,15 @@ const std::vector<Option> ceph_options = {
   .set_default(0)
   .set_description(""),
 
-  Option("bluestore_max_blob_size", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("bluestore_max_blob_size", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(0)
   .set_description(""),
 
-  Option("bluestore_max_blob_size_hdd", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("bluestore_max_blob_size_hdd", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(512*1024)
   .set_description(""),
 
-  Option("bluestore_max_blob_size_ssd", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("bluestore_max_blob_size_ssd", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(64*1024)
   .set_description(""),
 
@@ -3522,15 +3526,15 @@ const std::vector<Option> ceph_options = {
   .set_default(.875)
   .set_description(""),
 
-  Option("bluestore_extent_map_shard_max_size", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("bluestore_extent_map_shard_max_size", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(1200)
   .set_description(""),
 
-  Option("bluestore_extent_map_shard_target_size", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("bluestore_extent_map_shard_target_size", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(500)
   .set_description(""),
 
-  Option("bluestore_extent_map_shard_min_size", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("bluestore_extent_map_shard_min_size", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(150)
   .set_description(""),
 
@@ -3538,7 +3542,7 @@ const std::vector<Option> ceph_options = {
   .set_default(.2)
   .set_description(""),
 
-  Option("bluestore_extent_map_inline_shard_prealloc_size", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("bluestore_extent_map_inline_shard_prealloc_size", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(256)
   .set_description(""),
 
@@ -3546,7 +3550,7 @@ const std::vector<Option> ceph_options = {
   .set_default(.2)
   .set_description(""),
 
-  Option("bluestore_cache_trim_max_skip_pinned", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("bluestore_cache_trim_max_skip_pinned", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(64)
   .set_description(""),
 
@@ -3562,7 +3566,15 @@ const std::vector<Option> ceph_options = {
   .set_default(.5)
   .set_description(""),
 
-  Option("bluestore_cache_size", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("bluestore_cache_size", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+  .set_default(0)
+  .set_description(""),
+
+  Option("bluestore_cache_size_hdd", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+  .set_default(1*1024*1024*1024)
+  .set_description(""),
+
+  Option("bluestore_cache_size_ssd", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(3*1024*1024*1024)
   .set_description(""),
 
@@ -3574,7 +3586,7 @@ const std::vector<Option> ceph_options = {
   .set_default(.99)
   .set_description(""),
 
-  Option("bluestore_cache_kv_max", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("bluestore_cache_kv_max", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(512*1024*1024)
   .set_description(""),
 
@@ -3598,7 +3610,7 @@ const std::vector<Option> ceph_options = {
   .set_default(1024)
   .set_description(""),
 
-  Option("bluestore_max_deferred_txc", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("bluestore_max_deferred_txc", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(32)
   .set_description(""),
 
@@ -3634,35 +3646,35 @@ const std::vector<Option> ceph_options = {
   .set_default(false)
   .set_description(""),
 
-  Option("bluestore_throttle_bytes", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("bluestore_throttle_bytes", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(64*1024*1024)
   .set_description(""),
 
-  Option("bluestore_throttle_deferred_bytes", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("bluestore_throttle_deferred_bytes", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(128*1024*1024)
   .set_description(""),
 
-  Option("bluestore_throttle_cost_per_io_hdd", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("bluestore_throttle_cost_per_io_hdd", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(670000)
   .set_description(""),
 
-  Option("bluestore_throttle_cost_per_io_ssd", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("bluestore_throttle_cost_per_io_ssd", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(4000)
   .set_description(""),
 
-  Option("bluestore_throttle_cost_per_io", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("bluestore_throttle_cost_per_io", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(0)
   .set_description(""),
 
-  Option("bluestore_deferred_batch_ops", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("bluestore_deferred_batch_ops", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(0)
   .set_description(""),
 
-  Option("bluestore_deferred_batch_ops_hdd", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("bluestore_deferred_batch_ops_hdd", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(64)
   .set_description(""),
 
-  Option("bluestore_deferred_batch_ops_ssd", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("bluestore_deferred_batch_ops_ssd", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(16)
   .set_description(""),
 
@@ -3670,7 +3682,7 @@ const std::vector<Option> ceph_options = {
   .set_default(1024)
   .set_description(""),
 
-  Option("bluestore_blobid_prealloc", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("bluestore_blobid_prealloc", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(10240)
   .set_description(""),
 
@@ -3742,11 +3754,11 @@ const std::vector<Option> ceph_options = {
   .set_default(0)
   .set_description(""),
 
-  Option("kstore_max_ops", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("kstore_max_ops", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(512)
   .set_description(""),
 
-  Option("kstore_max_bytes", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("kstore_max_bytes", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(64*1024*1024)
   .set_description(""),
 
@@ -3770,7 +3782,7 @@ const std::vector<Option> ceph_options = {
   .set_default(true)
   .set_description(""),
 
-  Option("kstore_nid_prealloc", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("kstore_nid_prealloc", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(1024)
   .set_description(""),
 
@@ -3782,7 +3794,7 @@ const std::vector<Option> ceph_options = {
   .set_default(false)
   .set_description(""),
 
-  Option("kstore_onode_map_size", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("kstore_onode_map_size", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(1024)
   .set_description(""),
 
@@ -3802,51 +3814,51 @@ const std::vector<Option> ceph_options = {
   .set_default(true)
   .set_description(""),
 
-  Option("filestore_wbthrottle_btrfs_bytes_start_flusher", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("filestore_wbthrottle_btrfs_bytes_start_flusher", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(41943040)
   .set_description(""),
 
-  Option("filestore_wbthrottle_btrfs_bytes_hard_limit", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("filestore_wbthrottle_btrfs_bytes_hard_limit", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(419430400)
   .set_description(""),
 
-  Option("filestore_wbthrottle_btrfs_ios_start_flusher", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("filestore_wbthrottle_btrfs_ios_start_flusher", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(500)
   .set_description(""),
 
-  Option("filestore_wbthrottle_btrfs_ios_hard_limit", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("filestore_wbthrottle_btrfs_ios_hard_limit", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(5000)
   .set_description(""),
 
-  Option("filestore_wbthrottle_btrfs_inodes_start_flusher", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("filestore_wbthrottle_btrfs_inodes_start_flusher", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(500)
   .set_description(""),
 
-  Option("filestore_wbthrottle_xfs_bytes_start_flusher", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("filestore_wbthrottle_xfs_bytes_start_flusher", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(41943040)
   .set_description(""),
 
-  Option("filestore_wbthrottle_xfs_bytes_hard_limit", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("filestore_wbthrottle_xfs_bytes_hard_limit", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(419430400)
   .set_description(""),
 
-  Option("filestore_wbthrottle_xfs_ios_start_flusher", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("filestore_wbthrottle_xfs_ios_start_flusher", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(500)
   .set_description(""),
 
-  Option("filestore_wbthrottle_xfs_ios_hard_limit", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("filestore_wbthrottle_xfs_ios_hard_limit", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(5000)
   .set_description(""),
 
-  Option("filestore_wbthrottle_xfs_inodes_start_flusher", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("filestore_wbthrottle_xfs_inodes_start_flusher", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(500)
   .set_description(""),
 
-  Option("filestore_wbthrottle_btrfs_inodes_hard_limit", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("filestore_wbthrottle_btrfs_inodes_hard_limit", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(5000)
   .set_description(""),
 
-  Option("filestore_wbthrottle_xfs_inodes_hard_limit", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("filestore_wbthrottle_xfs_inodes_hard_limit", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(5000)
   .set_description(""),
 
@@ -3874,51 +3886,51 @@ const std::vector<Option> ceph_options = {
   .set_default(1024)
   .set_description(""),
 
-  Option("filestore_max_inline_xattr_size", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("filestore_max_inline_xattr_size", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(0)
   .set_description(""),
 
-  Option("filestore_max_inline_xattr_size_xfs", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("filestore_max_inline_xattr_size_xfs", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(65536)
   .set_description(""),
 
-  Option("filestore_max_inline_xattr_size_btrfs", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("filestore_max_inline_xattr_size_btrfs", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(2048)
   .set_description(""),
 
-  Option("filestore_max_inline_xattr_size_other", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("filestore_max_inline_xattr_size_other", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(512)
   .set_description(""),
 
-  Option("filestore_max_inline_xattrs", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("filestore_max_inline_xattrs", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(0)
   .set_description(""),
 
-  Option("filestore_max_inline_xattrs_xfs", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("filestore_max_inline_xattrs_xfs", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(10)
   .set_description(""),
 
-  Option("filestore_max_inline_xattrs_btrfs", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("filestore_max_inline_xattrs_btrfs", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(10)
   .set_description(""),
 
-  Option("filestore_max_inline_xattrs_other", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("filestore_max_inline_xattrs_other", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(2)
   .set_description(""),
 
-  Option("filestore_max_xattr_value_size", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("filestore_max_xattr_value_size", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(0)
   .set_description(""),
 
-  Option("filestore_max_xattr_value_size_xfs", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("filestore_max_xattr_value_size_xfs", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(64<<10)
   .set_description(""),
 
-  Option("filestore_max_xattr_value_size_btrfs", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("filestore_max_xattr_value_size_btrfs", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(64<<10)
   .set_description(""),
 
-  Option("filestore_max_xattr_value_size_other", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("filestore_max_xattr_value_size_other", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(1<<10)
   .set_description(""),
 
@@ -3930,7 +3942,7 @@ const std::vector<Option> ceph_options = {
   .set_default(65536)
   .set_description(""),
 
-  Option("filestore_max_alloc_hint_size", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("filestore_max_alloc_hint_size", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(1ULL << 20)
   .set_description(""),
 
@@ -3998,11 +4010,11 @@ const std::vector<Option> ceph_options = {
   .set_default(false)
   .set_description(""),
 
-  Option("filestore_queue_max_ops", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("filestore_queue_max_ops", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(50)
   .set_description(""),
 
-  Option("filestore_queue_max_bytes", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("filestore_queue_max_bytes", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(100 << 20)
   .set_description(""),
 
@@ -4060,6 +4072,10 @@ const std::vector<Option> ceph_options = {
 
   Option("filestore_split_multiple", Option::TYPE_INT, Option::LEVEL_ADVANCED)
   .set_default(2)
+  .set_description(""),
+
+  Option("filestore_split_rand_factor", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+  .set_default(20)
   .set_description(""),
 
   Option("filestore_update_to", Option::TYPE_INT, Option::LEVEL_ADVANCED)
@@ -4122,7 +4138,7 @@ const std::vector<Option> ceph_options = {
   .set_default(4096)
   .set_description(""),
 
-  Option("journal_max_corrupt_search", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("journal_max_corrupt_search", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(10<<20)
   .set_description(""),
 
@@ -4130,7 +4146,7 @@ const std::vector<Option> ceph_options = {
   .set_default(true)
   .set_description(""),
 
-  Option("journal_write_header_frequency", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("journal_write_header_frequency", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(0)
   .set_description(""),
 
@@ -4330,11 +4346,11 @@ const std::vector<Option> ceph_options = {
   .set_default(22)
   .set_description(""),
 
-  Option("rbd_default_stripe_count", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("rbd_default_stripe_count", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(0)
   .set_description(""),
 
-  Option("rbd_default_stripe_unit", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("rbd_default_stripe_unit", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(0)
   .set_description(""),
 
@@ -4342,11 +4358,11 @@ const std::vector<Option> ceph_options = {
   .set_default("")
   .set_description(""),
 
-  Option("rbd_journal_order", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("rbd_journal_order", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(24)
   .set_description(""),
 
-  Option("rbd_journal_splay_width", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("rbd_journal_splay_width", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(4)
   .set_description(""),
 
@@ -4370,7 +4386,7 @@ const std::vector<Option> ceph_options = {
   .set_default("")
   .set_description(""),
 
-  Option("rbd_journal_max_payload_bytes", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("rbd_journal_max_payload_bytes", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(16384)
   .set_description(""),
 
@@ -4386,7 +4402,7 @@ const std::vector<Option> ceph_options = {
   .set_default(5)
   .set_description(""),
 
-  Option("rbd_mirror_journal_max_fetch_bytes", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("rbd_mirror_journal_max_fetch_bytes", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(32768)
   .set_description(""),
 
@@ -4394,7 +4410,7 @@ const std::vector<Option> ceph_options = {
   .set_default(30)
   .set_description(""),
 
-  Option("rbd_mirror_concurrent_image_syncs", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("rbd_mirror_concurrent_image_syncs", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(5)
   .set_description(""),
 
@@ -4438,19 +4454,19 @@ const std::vector<Option> ceph_options = {
   .set_default(64 * 1024 * 1024)
   .set_description(""),
 
-  Option("rgw_max_put_size", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("rgw_max_put_size", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(5ULL*1024*1024*1024)
   .set_description(""),
 
-  Option("rgw_max_put_param_size", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("rgw_max_put_param_size", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(1 * 1024 * 1024)
   .set_description(""),
 
-  Option("rgw_override_bucket_index_max_shards", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("rgw_override_bucket_index_max_shards", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(0)
   .set_description(""),
 
-  Option("rgw_bucket_index_max_aio", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("rgw_bucket_index_max_aio", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(8)
   .set_description(""),
 
@@ -4726,7 +4742,7 @@ const std::vector<Option> ceph_options = {
   .set_default(8)
   .set_description(""),
 
-  Option("rgw_num_rados_handles", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("rgw_num_rados_handles", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(1)
   .set_description(""),
 
@@ -5062,19 +5078,19 @@ const std::vector<Option> ceph_options = {
   .set_default(1000)
   .set_description(""),
 
-  Option("rgw_objexp_gc_interval", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("rgw_objexp_gc_interval", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(60 * 10)
   .set_description(""),
 
-  Option("rgw_objexp_time_step", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("rgw_objexp_time_step", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(4096)
   .set_description(""),
 
-  Option("rgw_objexp_hints_num_shards", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("rgw_objexp_hints_num_shards", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(127)
   .set_description(""),
 
-  Option("rgw_objexp_chunk_size", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("rgw_objexp_chunk_size", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(100)
   .set_description(""),
 
@@ -5154,35 +5170,35 @@ const std::vector<Option> ceph_options = {
   .set_default(5)
   .set_description(""),
 
-  Option("mgr_client_bytes", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("mgr_client_bytes", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(128*1048576)
   .set_description(""),
 
-  Option("mgr_client_messages", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("mgr_client_messages", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(512)
   .set_description(""),
 
-  Option("mgr_osd_bytes", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("mgr_osd_bytes", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(512*1048576)
   .set_description(""),
 
-  Option("mgr_osd_messages", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("mgr_osd_messages", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(8192)
   .set_description(""),
 
-  Option("mgr_mds_bytes", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("mgr_mds_bytes", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(128*1048576)
   .set_description(""),
 
-  Option("mgr_mds_messages", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("mgr_mds_messages", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(128)
   .set_description(""),
 
-  Option("mgr_mon_bytes", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("mgr_mon_bytes", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(128*1048576)
   .set_description(""),
 
-  Option("mgr_mon_messages", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("mgr_mon_messages", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(128)
   .set_description(""),
 
@@ -5294,9 +5310,8 @@ const std::vector<Option> ceph_options = {
   .set_default(100000)
   .set_description(""),
 
-  Option("rgw_reshard_thread_interval", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  Option("rgw_reshard_thread_interval", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
   .set_default(60 * 10)
   .set_description(""),
 };
-
 

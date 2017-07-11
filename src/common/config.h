@@ -67,6 +67,7 @@ extern const char *CEPH_CONF_FILE_DEFAULT;
 struct md_config_t {
 public:
   typedef boost::variant<int64_t md_config_t::*,
+                         uint64_t md_config_t::*,
                          std::string md_config_t::*,
                          double md_config_t::*,
                          bool md_config_t::*,
@@ -275,8 +276,8 @@ public:
 #define OPTION_OPT_FLOAT(name) double name;
 #define OPTION_OPT_BOOL(name) bool name;
 #define OPTION_OPT_ADDR(name) entity_addr_t name;
-#define OPTION_OPT_U32(name) int64_t name;
-#define OPTION_OPT_U64(name) int64_t name;
+#define OPTION_OPT_U32(name) uint64_t name;
+#define OPTION_OPT_U64(name) uint64_t name;
 #define OPTION_OPT_UUID(name) uuid_d name;
 #define OPTION(name, ty, init) \
   public:                      \

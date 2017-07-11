@@ -11,6 +11,7 @@
 
 struct Option {
   enum type_t {
+    TYPE_UINT,
     TYPE_INT,
     TYPE_STR,
     TYPE_FLOAT,
@@ -21,6 +22,7 @@ struct Option {
 
   const char *type_to_str(type_t t) {
     switch (t) {
+    case TYPE_UINT: return "uint64_t";
     case TYPE_INT: return "int64_t";
     case TYPE_STR: return "std::string";
     case TYPE_FLOAT: return "double";
@@ -40,6 +42,7 @@ struct Option {
   using value_t = boost::variant<
     boost::blank,
     std::string,
+    uint64_t,
     int64_t,
     double,
     bool,
@@ -82,6 +85,8 @@ struct Option {
     // the type of ::value should always match the declared type.
     if (type == TYPE_INT) {
       value = int64_t(0);
+    } else if (type == TYPE_UINT) {
+      value = uint64_t(0);
     } else if (type == TYPE_STR) {
       value = std::string("");
     } else if (type == TYPE_FLOAT) {
@@ -115,10 +120,16 @@ struct Option {
     v = new_value;
     return *this;
   }
+
+  // For potentially ambiguous types, inspect Option::type and
+  // do some casting.  This is necessary to make sure that setting
+  // a float option to "0" actually sets the double part of variant.
   template<typename T, typename is_integer<T>::type = 0>
   Option& set_value(value_t& v, T new_value) {
     if (type == TYPE_INT) {
       v = int64_t(new_value);
+    } else if (type == TYPE_UINT) {
+      v = uint64_t(new_value);
     } else if (type == TYPE_FLOAT) {
       v = double(new_value);
     } else if (type == TYPE_BOOL) {

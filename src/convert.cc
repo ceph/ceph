@@ -22,11 +22,12 @@ string convert_type(string t) {
     return "TYPE_FLOAT";
   if (t == "OPT_BOOL")
     return "TYPE_BOOL";
-  if (t == "OPT_U32" ||
-      t == "OPT_U64" ||
-      t == "OPT_INT" ||
+  if (t == "OPT_INT" ||
       t == "OPT_LONGLONG")
     return "TYPE_INT";
+  if (t == "OPT_U32" ||
+      t == "OPT_U64")
+    return "TYPE_UINT";
   if (t == "OPT_UUID")
     return "TYPE_UUID";
   if (t == "OPT_ADDR")
