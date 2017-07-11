@@ -4,6 +4,7 @@
 #include "cls/journal/cls_journal_types.h"
 #include "librbd/journal/Replay.h"
 #include "librbd/journal/Types.h"
+#include "tools/rbd_mirror/ImageDeleter.h"
 #include "tools/rbd_mirror/ImageReplayer.h"
 #include "tools/rbd_mirror/InstanceWatcher.h"
 #include "tools/rbd_mirror/image_replayer/BootstrapRequest.h"
@@ -59,6 +60,12 @@ struct MirrorPeerClientMeta;
 
 namespace rbd {
 namespace mirror {
+
+template <>
+struct ImageDeleter<librbd::MockTestImageCtx> {
+  MOCK_METHOD3(schedule_image_delete, void(RadosRef, int64_t,
+                                           const std::string&));
+};
 
 template<>
 class InstanceWatcher<librbd::MockTestImageCtx> {
@@ -250,6 +257,7 @@ namespace mirror {
 
 class TestMockImageReplayer : public TestMockFixture {
 public:
+  typedef ImageDeleter<librbd::MockTestImageCtx> MockImageDeleter;
   typedef BootstrapRequest<librbd::MockTestImageCtx> MockBootstrapRequest;
   typedef CloseImageRequest<librbd::MockTestImageCtx> MockCloseImageRequest;
   typedef EventPreprocessor<librbd::MockTestImageCtx> MockEventPreprocessor;
@@ -265,16 +273,6 @@ public:
     librbd::RBD rbd;
     ASSERT_EQ(0, create_image(rbd, m_remote_io_ctx, m_image_name, m_image_size));
     ASSERT_EQ(0, open_image(m_remote_io_ctx, m_image_name, &m_remote_image_ctx));
-
-    m_image_deleter.reset(new rbd::mirror::ImageDeleter(m_threads->work_queue,
-                                                        m_threads->timer,
-                                                        &m_threads->timer_lock));
-    m_image_replayer = new MockImageReplayer(
-      m_threads, m_image_deleter, &m_instance_watcher,
-      rbd::mirror::RadosRef(new librados::Rados(m_local_io_ctx)),
-      "local_mirror_uuid", m_local_io_ctx.get_id(), "global image id");
-    m_image_replayer->add_remote_image(
-      "remote_mirror_uuid", m_remote_image_ctx->id, m_remote_io_ctx);
   }
 
   void TearDown() override {
@@ -446,11 +444,19 @@ public:
                       WithArg<2>(CompleteContext(on_commit_r))));
   }
 
+  void create_image_replayer(MockImageDeleter &mock_image_deleter) {
+    m_image_replayer = new MockImageReplayer(
+      m_threads, &mock_image_deleter, &m_instance_watcher,
+      rbd::mirror::RadosRef(new librados::Rados(m_local_io_ctx)),
+      "local_mirror_uuid", m_local_io_ctx.get_id(), "global image id");
+    m_image_replayer->add_remote_image(
+      "remote_mirror_uuid", m_remote_image_ctx->id, m_remote_io_ctx);
+  }
+
   librbd::ImageCtx *m_remote_image_ctx;
   librbd::ImageCtx *m_local_image_ctx = nullptr;
-  std::shared_ptr<rbd::mirror::ImageDeleter> m_image_deleter;
   MockInstanceWatcher m_instance_watcher;
-  MockImageReplayer *m_image_replayer;
+  MockImageReplayer *m_image_replayer = nullptr;
 };
 
 TEST_F(TestMockImageReplayer, StartStop) {
@@ -488,6 +494,9 @@ TEST_F(TestMockImageReplayer, StartStop) {
 
   EXPECT_CALL(mock_remote_journaler, start_live_replay(_, _));
 
+  MockImageDeleter mock_image_deleter;
+  create_image_replayer(mock_image_deleter);
+
   C_SaferCond start_ctx;
   m_image_replayer->start(&start_ctx);
   ASSERT_EQ(0, start_ctx.wait());
@@ -523,6 +532,9 @@ TEST_F(TestMockImageReplayer, LocalImagePrimary) {
   expect_send(mock_prepare_local_image_request, mock_local_image_ctx.id,
               "", 0);
 
+  MockImageDeleter mock_image_deleter;
+  create_image_replayer(mock_image_deleter);
+
   C_SaferCond start_ctx;
   m_image_replayer->start(&start_ctx);
   ASSERT_EQ(0, start_ctx.wait());
@@ -547,6 +559,9 @@ TEST_F(TestMockImageReplayer, LocalImageDNE) {
   EXPECT_CALL(mock_remote_journaler, remove_listener(_));
   expect_shut_down(mock_remote_journaler, 0);
 
+  MockImageDeleter mock_image_deleter;
+  create_image_replayer(mock_image_deleter);
+
   C_SaferCond start_ctx;
   m_image_replayer->start(&start_ctx);
   ASSERT_EQ(0, start_ctx.wait());
@@ -564,6 +579,9 @@ TEST_F(TestMockImageReplayer, PrepareLocalImageError) {
   InSequence seq;
   expect_send(mock_prepare_local_image_request, mock_local_image_ctx.id,
               "remote mirror uuid", -EINVAL);
+
+  MockImageDeleter mock_image_deleter;
+  create_image_replayer(mock_image_deleter);
 
   C_SaferCond start_ctx;
   m_image_replayer->start(&start_ctx);
@@ -590,6 +608,9 @@ TEST_F(TestMockImageReplayer, BootstrapError) {
 
   EXPECT_CALL(mock_remote_journaler, remove_listener(_));
   expect_shut_down(mock_remote_journaler, 0);
+
+  MockImageDeleter mock_image_deleter;
+  create_image_replayer(mock_image_deleter);
 
   C_SaferCond start_ctx;
   m_image_replayer->start(&start_ctx);
@@ -636,6 +657,9 @@ TEST_F(TestMockImageReplayer, StartExternalReplayError) {
   EXPECT_CALL(mock_remote_journaler, remove_listener(_));
   expect_shut_down(mock_remote_journaler, 0);
 
+  MockImageDeleter mock_image_deleter;
+  create_image_replayer(mock_image_deleter);
+
   C_SaferCond start_ctx;
   m_image_replayer->start(&start_ctx);
   ASSERT_EQ(-EINVAL, start_ctx.wait());
@@ -675,6 +699,9 @@ TEST_F(TestMockImageReplayer, StopError) {
   expect_start_external_replay(mock_local_journal, &mock_local_replay, 0);
 
   EXPECT_CALL(mock_remote_journaler, start_live_replay(_, _));
+
+  MockImageDeleter mock_image_deleter;
+  create_image_replayer(mock_image_deleter);
 
   C_SaferCond start_ctx;
   m_image_replayer->start(&start_ctx);
@@ -735,6 +762,9 @@ TEST_F(TestMockImageReplayer, Replay) {
   expect_start_external_replay(mock_local_journal, &mock_local_replay, 0);
 
   EXPECT_CALL(mock_remote_journaler, start_live_replay(_, _));
+
+  MockImageDeleter mock_image_deleter;
+  create_image_replayer(mock_image_deleter);
 
   C_SaferCond start_ctx;
   m_image_replayer->start(&start_ctx);
@@ -833,6 +863,9 @@ TEST_F(TestMockImageReplayer, DecodeError) {
 
   EXPECT_CALL(mock_remote_journaler, start_live_replay(_, _));
 
+  MockImageDeleter mock_image_deleter;
+  create_image_replayer(mock_image_deleter);
+
   C_SaferCond start_ctx;
   m_image_replayer->start(&start_ctx);
   ASSERT_EQ(0, start_ctx.wait());
@@ -923,6 +956,9 @@ TEST_F(TestMockImageReplayer, DelayedReplay) {
   expect_start_external_replay(mock_local_journal, &mock_local_replay, 0);
 
   EXPECT_CALL(mock_remote_journaler, start_live_replay(_, _));
+
+  MockImageDeleter mock_image_deleter;
+  create_image_replayer(mock_image_deleter);
 
   C_SaferCond start_ctx;
   m_image_replayer->start(&start_ctx);

@@ -3,6 +3,7 @@
 
 #include "test/librbd/mock/MockImageCtx.h"
 #include "test/rbd_mirror/test_mock_fixture.h"
+#include "tools/rbd_mirror/ImageDeleter.h"
 #include "tools/rbd_mirror/ImageReplayer.h"
 #include "tools/rbd_mirror/InstanceWatcher.h"
 #include "tools/rbd_mirror/InstanceReplayer.h"
@@ -37,6 +38,14 @@ struct Threads<librbd::MockTestImageCtx> {
   }
 };
 
+template <>
+struct ImageDeleter<librbd::MockTestImageCtx> {
+  MOCK_METHOD3(schedule_image_delete, void(RadosRef, int64_t,
+                                           const std::string&));
+  MOCK_METHOD4(wait_for_scheduled_deletion,
+               void(int64_t, const std::string&, Context*, bool));
+};
+
 template<>
 struct InstanceWatcher<librbd::MockTestImageCtx> {
 };
@@ -48,7 +57,7 @@ struct ImageReplayer<librbd::MockTestImageCtx> {
 
   static ImageReplayer *create(
     Threads<librbd::MockTestImageCtx> *threads,
-    std::shared_ptr<ImageDeleter> image_deleter,
+    ImageDeleter<librbd::MockTestImageCtx>* image_deleter,
     InstanceWatcher<librbd::MockTestImageCtx> *instance_watcher,
     RadosRef local, const std::string &local_mirror_uuid, int64_t local_pool_id,
     const std::string &global_image_id) {
@@ -103,9 +112,11 @@ using ::testing::InSequence;
 using ::testing::Invoke;
 using ::testing::Return;
 using ::testing::ReturnRef;
+using ::testing::WithArg;
 
 class TestMockInstanceReplayer : public TestMockFixture {
 public:
+  typedef ImageDeleter<librbd::MockTestImageCtx> MockImageDeleter;
   typedef ImageReplayer<librbd::MockTestImageCtx> MockImageReplayer;
   typedef InstanceReplayer<librbd::MockTestImageCtx> MockInstanceReplayer;
   typedef InstanceWatcher<librbd::MockTestImageCtx> MockInstanceWatcher;
@@ -115,10 +126,6 @@ public:
     TestMockFixture::SetUp();
 
     m_mock_threads = new MockThreads(m_threads);
-
-    m_image_deleter.reset(
-      new rbd::mirror::ImageDeleter(m_threads->work_queue, m_threads->timer,
-                                    &m_threads->timer_lock));
   }
 
   void TearDown() override {
@@ -126,15 +133,25 @@ public:
     TestMockFixture::TearDown();
   }
 
+  void expect_wait_for_scheduled_deletion(MockImageDeleter& mock_image_deleter,
+                                          const std::string& global_image_id,
+                                          int r) {
+    EXPECT_CALL(mock_image_deleter,
+                wait_for_scheduled_deletion(_, global_image_id, _, false))
+      .WillOnce(WithArg<2>(Invoke([this, r](Context *ctx) {
+                             m_threads->work_queue->queue(ctx, r);
+                           })));
+  }
+
   MockThreads *m_mock_threads;
-  std::shared_ptr<rbd::mirror::ImageDeleter> m_image_deleter;
 };
 
 TEST_F(TestMockInstanceReplayer, AcquireReleaseImage) {
+  MockImageDeleter mock_image_deleter;
   MockInstanceWatcher mock_instance_watcher;
   MockImageReplayer mock_image_replayer;
   MockInstanceReplayer instance_replayer(
-    m_mock_threads, m_image_deleter,
+    m_mock_threads, &mock_image_deleter,
     rbd::mirror::RadosRef(new librados::Rados(m_local_io_ctx)),
     "local_mirror_uuid", m_local_io_ctx.get_id());
 
@@ -144,6 +161,8 @@ TEST_F(TestMockInstanceReplayer, AcquireReleaseImage) {
     .WillRepeatedly(ReturnRef(global_image_id));
   EXPECT_CALL(mock_image_replayer, is_blacklisted())
     .WillRepeatedly(Return(false));
+
+  expect_wait_for_scheduled_deletion(mock_image_deleter, "global_image_id", 0);
 
   InSequence seq;
 

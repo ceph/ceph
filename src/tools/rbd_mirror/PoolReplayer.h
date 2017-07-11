@@ -39,7 +39,7 @@ template <typename> class InstanceWatcher;
 class PoolReplayer {
 public:
   PoolReplayer(Threads<librbd::ImageCtx> *threads,
-	       std::shared_ptr<ImageDeleter> image_deleter,
+	       ImageDeleter<>* image_deleter,
 	       int64_t local_pool_id, const peer_t &peer,
 	       const std::vector<const char*> &args);
   ~PoolReplayer();
@@ -102,7 +102,7 @@ private:
   void handle_update_leader(const std::string &leader_instance_id);
 
   Threads<librbd::ImageCtx> *m_threads;
-  std::shared_ptr<ImageDeleter> m_image_deleter;
+  ImageDeleter<>* m_image_deleter;
   mutable Mutex m_lock;
   Cond m_cond;
   std::atomic<bool> m_stopping = { false };

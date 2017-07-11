@@ -24,7 +24,7 @@ using librbd::util::create_context_callback;
 
 template <typename I>
 InstanceReplayer<I>::InstanceReplayer(
-    Threads<I> *threads, std::shared_ptr<ImageDeleter> image_deleter,
+    Threads<I> *threads, ImageDeleter<I>* image_deleter,
     RadosRef local_rados, const std::string &local_mirror_uuid,
     int64_t local_pool_id)
   : m_threads(threads), m_image_deleter(image_deleter),

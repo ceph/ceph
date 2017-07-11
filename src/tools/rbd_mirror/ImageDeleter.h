@@ -25,16 +25,17 @@
 #include <vector>
 #include <atomic>
 
+class AdminSocketHook;
 class ContextWQ;
+namespace librbd { struct ImageCtx; }
 
 namespace rbd {
 namespace mirror {
 
-class ImageDeleterAdminSocketHook;
-
 /**
  * Manage deletion of non-primary images.
  */
+template <typename ImageCtxT = librbd::ImageCtx>
 class ImageDeleter {
 public:
   static const int EISPRM = 1000;
@@ -116,7 +117,7 @@ private:
   SafeTimer *m_failed_timer;
   Mutex *m_failed_timer_lock;
 
-  ImageDeleterAdminSocketHook *m_asok_hook;
+  AdminSocketHook *m_asok_hook;
 
   void run();
   bool process_image_delete();
@@ -135,5 +136,7 @@ private:
 
 } // namespace mirror
 } // namespace rbd
+
+extern template class rbd::mirror::ImageDeleter<librbd::ImageCtx>;
 
 #endif // CEPH_RBD_MIRROR_IMAGEDELETER_H

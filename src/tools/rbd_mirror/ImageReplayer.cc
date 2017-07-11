@@ -271,7 +271,7 @@ void ImageReplayer<I>::RemoteJournalerListener::handle_update(
 
 template <typename I>
 ImageReplayer<I>::ImageReplayer(Threads<librbd::ImageCtx> *threads,
-                                shared_ptr<ImageDeleter> image_deleter,
+                                ImageDeleter<I>* image_deleter,
                                 InstanceWatcher<I> *instance_watcher,
                                 RadosRef local,
                                 const std::string &local_mirror_uuid,

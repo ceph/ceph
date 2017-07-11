@@ -238,9 +238,9 @@ int Mirror::init()
 
   m_local_cluster_watcher.reset(new ClusterWatcher(m_local, m_lock));
 
-  m_image_deleter.reset(new ImageDeleter(m_threads->work_queue,
-                                         m_threads->timer,
-                                         &m_threads->timer_lock));
+  m_image_deleter.reset(new ImageDeleter<>(m_threads->work_queue,
+                                           m_threads->timer,
+                                           &m_threads->timer_lock));
 
   return r;
 }
@@ -399,7 +399,7 @@ void Mirror::update_pool_replayers(const PoolPeers &pool_peers)
       if (m_pool_replayers.find(pool_peer) == m_pool_replayers.end()) {
         dout(20) << "starting pool replayer for " << peer << dendl;
         unique_ptr<PoolReplayer> pool_replayer(new PoolReplayer(
-	  m_threads, m_image_deleter, kv.first, peer, m_args));
+	  m_threads, m_image_deleter.get(), kv.first, peer, m_args));
 
         // TODO: make async, and retry connecting within pool replayer
         int r = pool_replayer->init();
