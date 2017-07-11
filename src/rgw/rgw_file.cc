@@ -1796,6 +1796,22 @@ int rgw_readdir(struct rgw_fs *rgw_fs,
   return rc;
 }
 
+/* project offset of dirent name */
+int rgw_dirent_offset(struct rgw_fs *rgw_fs,
+		      struct rgw_file_handle *parent_fh,
+		      const char *name, int64_t *offset,
+		      uint32_t flags)
+{
+  RGWFileHandle* parent = get_rgwfh(parent_fh);
+  if ((! parent)) {
+    /* bad parent */
+    return -EINVAL;
+  }
+  std::string sname{name};
+  int rc = parent->offset_of(sname, offset, flags);
+  return rc;
+}
+
 /*
    read data from file
 */
