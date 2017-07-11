@@ -194,6 +194,9 @@ bool RGWSyncTraceManager::call(std::string command, cmdmap_t& cmdmap, std::strin
 void RGWSyncTraceManager::finish_node(RGWSyncTraceNode *node)
 {
   RWLock::WLocker wl(lock);
+  if (!node) {
+    return;
+  }
   auto iter = nodes.find(node->handle);
   if (iter == nodes.end()) {
     /* not found, already finished */

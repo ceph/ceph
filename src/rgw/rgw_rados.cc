@@ -3673,7 +3673,6 @@ void RGWRados::finalize()
       sync_log_trimmer->stop();
     }
   }
-  delete sync_tracer;
   if (async_rados) {
     async_rados->stop();
   }
@@ -3711,6 +3710,7 @@ void RGWRados::finalize()
     delete data_notifier;
   }
   delete data_log;
+  delete sync_tracer;
   if (async_rados) {
     delete async_rados;
   }
