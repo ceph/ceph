@@ -1478,6 +1478,8 @@ int RGWPostObj_ObjStore::verify_params()
     return -ERR_TOO_LARGE;
   }
 
+  supplied_md5_b64 = s->info.env->get("HTTP_CONTENT_MD5");
+
   return 0;
 }
 
