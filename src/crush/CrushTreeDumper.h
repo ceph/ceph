@@ -50,12 +50,13 @@ namespace CrushTreeDumper {
 
   struct Item {
     int id;
+    int parent;
     int depth;
     float weight;
     list<int> children;
 
-    Item() : id(0), depth(0), weight(0) {}
-    Item(int i, int d, float w) : id(i), depth(d), weight(w) {}
+    Item() : id(0), parent(0), depth(0), weight(0) {}
+    Item(int i, int p, int d, float w) : id(i), parent(p), depth(d), weight(w) {}
 
     bool is_bucket() const { return id < 0; }
   };
@@ -103,7 +104,7 @@ namespace CrushTreeDumper {
 	  ++root;
 	if (root == roots.end())
 	  return false;
-	push_back(Item(*root, 0, crush->get_bucket_weightf(*root)));
+	push_back(Item(*root, 0, 0, crush->get_bucket_weightf(*root)));
 	++root;
       }
 
@@ -118,7 +119,7 @@ namespace CrushTreeDumper {
 	  int id = crush->get_bucket_item(qi.id, k);
 	  if (should_dump(id)) {
 	    qi.children.push_back(id);
-	    push_front(Item(id, qi.depth + 1,
+	    push_front(Item(id, qi.id, qi.depth + 1,
 			    crush->get_bucket_item_weightf(qi.id, k)));
 	  }
 	}

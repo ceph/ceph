@@ -416,7 +416,7 @@ bool CrushTester::check_name_maps(unsigned max_id) const
     // and see if the maps is also able to handle straying OSDs, whose id >= 0.
     // "ceph osd tree" will try to print them, even they are not listed in the
     // crush map.
-    crush_walker.dump_item(CrushTreeDumper::Item(0, 0, 0), NULL);
+    crush_walker.dump_item(CrushTreeDumper::Item(0, 0, 0, 0), NULL);
   } catch (const BadCrushMap& e) {
     err << e.what() << ": item#" << e.item << std::endl;
     return false;

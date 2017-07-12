@@ -2222,7 +2222,7 @@ namespace {
       set<int> roots;
       crush->find_roots(roots);
       for (set<int>::iterator root = roots.begin(); root != roots.end(); ++root) {
-	dump_item(Item(*root, 0, crush->get_bucket_weightf(*root)), f);
+	dump_item(Item(*root, 0, 0, crush->get_bucket_weightf(*root)), f);
       }
     }
 
@@ -2246,7 +2246,7 @@ namespace {
       for (int pos = 0; pos < max_pos; pos++) {
 	int id = crush->get_bucket_item(parent.id, pos);
 	float weight = crush->get_bucket_item_weightf(parent.id, pos);
-	dump_item(Item(id, parent.depth + 1, weight), f);
+	dump_item(Item(id, parent.id, parent.depth + 1, weight), f);
       }
       f->close_section();
     }
