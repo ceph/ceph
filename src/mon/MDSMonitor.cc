@@ -203,7 +203,7 @@ void MDSMonitor::encode_pending(MonitorDBStore::TransactionRef t)
     }
     for (const auto &metric : health.metrics) {
       int const rank = info.rank;
-      health_check_t *check = &new_checks.add(
+      health_check_t *check = &new_checks.get_or_add(
 	mds_metric_name(metric.type),
 	metric.sev,
 	mds_metric_summary(metric.type));
