@@ -120,3 +120,32 @@ def warning(msg):
 
 def success(msg):
     return _Write(prefix=green_arrow).raw(msg)
+
+
+def dispatch(mapper, argv=None):
+    argv = argv or sys.argv
+    for count, arg in enumerate(argv, 1):
+        if arg in mapper.keys():
+            instance = mapper.get(arg)(argv[count:])
+            if hasattr(instance, 'main'):
+                instance.main()
+                raise SystemExit(0)
+
+
+def subhelp(mapper):
+    """
+    Look at every value of every key in the mapper and will output any
+    ``class.help`` possible to return it as a string that will be sent to
+    stdout.
+    """
+    help_text_lines = []
+    for key, value in mapper.items():
+        try:
+            help_text = value.help
+        except AttributeError:
+            continue
+        help_text_lines.append("%-24s %s" % (key, help_text))
+
+    if help_text_lines:
+        return "Available subcommands:\n\n%s" % '\n'.join(help_text_lines)
+    return ''
