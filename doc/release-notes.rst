@@ -4686,10 +4686,11 @@ Notable Changes
 v10.2.8 Jewel
 =============
 
-This point release fixes a number of bugs in RADOS, CephFS, RBD, and RGW, as
-well as in ceph-disk and systemd integration.
-
-We recommend that all v10.2.x users upgrade.
+This point release brought a number of important bugfixes in all major
+components of Ceph. However, it also introduced a regression that could cause
+MDS damage, and a new release, v10.2.9, was published to address this.
+Therefore, Jewel users should *not* upgrade to this version - instead, we
+recommend upgrading directly to v10.2.9.
 
 For more detailed information, see :download:`the complete changelog <changelog/v10.2.8.txt>`.
 
