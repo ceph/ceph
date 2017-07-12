@@ -28,7 +28,7 @@
 
 namespace ceph {
 
-  using Request = std::pair<spg_t, OpQueueItem>;
+  using Request = OpQueueItem;
   using Client = uint64_t;
 
   // This class exists to bridge the ceph code, which treats the class
@@ -74,7 +74,7 @@ namespace ceph {
 				std::list<Request> *out) override final {
       queue.remove_by_filter(
 	[&cl, out] (Request&& r) -> bool {
-	  if (cl == r.second.get_owner()) {
+	  if (cl == r.get_owner()) {
 	    out->push_front(std::move(r));
 	    return true;
 	  } else {

@@ -98,22 +98,21 @@ namespace ceph {
 
   mClockOpClassQueue::osd_op_type_t
   mClockOpClassQueue::get_osd_op_type(const Request& request) {
-    osd_op_type_t type =
-      boost::apply_visitor(pg_queueable_visitor, request.second.get_variant());
-
+    switch (request.get_op_type()) {
     // if we got client_op back then we need to distinguish between
     // a client op and an osd subop.
-
-    if (osd_op_type_t::client_op != type) {
-      return type;
-      /* fixme: this should match REPOP and probably others
-    } else if (MSG_OSD_SUBOP ==
-	       boost::get<OpRequestRef>(
-		 request.second.get_variant())->get_req()->get_header().type) {
-      return osd_op_type_t::osd_subop;
-      */
-    } else {
+    case OpQueueItem::op_type_t::client_op:
       return osd_op_type_t::client_op;
+    case OpQueueItem::op_type_t::osd_subop:
+      return osd_op_type_t::osd_subop;
+    case OpQueueItem::op_type_t::bg_snaptrim:
+      return osd_op_type_t::bg_snaptrim;
+    case OpQueueItem::op_type_t::bg_recovery:
+      return osd_op_type_t::bg_recovery;
+    case OpQueueItem::op_type_t::bg_scrub:
+      return osd_op_type_t::bg_scrub;
+    default:
+      assert(0);
     }
   }
 
