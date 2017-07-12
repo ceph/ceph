@@ -105,6 +105,7 @@ class CephFSTestCase(CephTestCase):
         self.mds_cluster.mds_fail()
         self.mds_cluster.delete_all_filesystems()
         self.fs = None # is now invalid!
+        self.recovery_fs = None
 
         # In case the previous filesystem had filled up the RADOS cluster, wait for that
         # flag to pass.
