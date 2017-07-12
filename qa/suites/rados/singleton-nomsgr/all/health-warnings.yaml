@@ -10,6 +10,10 @@ tasks:
         osd max object namespace len: 64
     log-whitelist:
       - wrongly marked me down
+      - overall HEALTH_
+      - (OSDMAP_FLAGS)
+      - (OSD_
+      - (PG_
 - workunit:
     clients:
       all:

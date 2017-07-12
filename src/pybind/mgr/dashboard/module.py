@@ -434,8 +434,8 @@ class Module(MgrModule):
                 ]
 
                 return {
-                    'health': global_instance().get_sync_object(Health).data,
                     'rbd_pools': rbd_pools,
+                    'health_status': self._health_data()['status'],
                     'filesystems': filesystems
                 }
 
@@ -635,6 +635,21 @@ class Module(MgrModule):
             def servers_data(self):
                 return self._servers()
 
+            def _health_data(self):
+                health = global_instance().get_sync_object(Health).data
+                # Transform the `checks` dict into a list for the convenience
+                # of rendering from javascript.
+                checks = []
+                for k, v in health['checks'].iteritems():
+                    v['type'] = k
+                    checks.append(v)
+
+                checks = sorted(checks, cmp=lambda a, b: a['severity'] > b['severity'])
+
+                health['checks'] = checks
+
+                return health
+
             def _health(self):
                 # Fuse osdmap with pg_summary to get description of pools
                 # including their PG states
@@ -670,7 +685,7 @@ class Module(MgrModule):
                 del osd_map['pg_temp']
 
                 return {
-                    "health": global_instance().get_sync_object(Health).data,
+                    "health": self._health_data(),
                     "mon_status": global_instance().get_sync_object(
                         MonStatus).data,
                     "osd_map": osd_map,

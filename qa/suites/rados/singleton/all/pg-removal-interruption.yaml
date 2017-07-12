@@ -13,8 +13,12 @@ tasks:
 - install:
 - ceph:
     log-whitelist:
-    - wrongly marked me down
-    - slow request
+      - wrongly marked me down
+      - slow request
+      - overall HEALTH_
+      - (OSDMAP_FLAGS)
+      - (OSD_
+      - (PG_
 - exec:
     client.0:
       - sudo ceph osd pool create foo 128 128

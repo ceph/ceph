@@ -3,6 +3,9 @@ roles:
 tasks:
 - install:
 - ceph:
+    log-whitelist:
+      - overall HEALTH_
+      - (MGR_DOWN)
 - exec:
     mon.a:
       - ceph config-key put mgr/restful/x/server_addr 127.0.0.1

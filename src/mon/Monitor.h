@@ -27,10 +27,12 @@
 #include <cmath>
 
 #include "include/types.h"
+#include "include/health.h"
 #include "msg/Messenger.h"
 
 #include "common/Timer.h"
 
+#include "health_check.h"
 #include "MonMap.h"
 #include "Elector.h"
 #include "Paxos.h"
@@ -496,6 +498,7 @@ private:
   version_t timecheck_round;
   unsigned int timecheck_acks;
   utime_t timecheck_round_start;
+  friend class HealthMonitor;
   /* When we hit a skew we will start a new round based off of
    * 'mon_timecheck_skew_interval'. Each new round will be backed off
    * until we hit 'mon_timecheck_interval' -- which is the typical
@@ -648,6 +651,10 @@ public:
     return (class MgrStatMonitor*) paxos_service[PAXOS_MGRSTAT];
   }
 
+  class MgrStatMonitor *healthmon() {
+    return (class MgrStatMonitor*) paxos_service[PAXOS_MGRSTAT];
+  }
+
   friend class Paxos;
   friend class OSDMonitor;
   friend class MDSMonitor;
@@ -737,6 +744,18 @@ public:
    */
   health_status_t get_health(list<string>& status, bufferlist *detailbl,
                              Formatter *f);
+
+  health_status_t get_health_status(
+    bool want_detail,
+    Formatter *f,
+    std::string *plain,
+    const char *sep1 = " ",
+    const char *sep2 = "; ");
+  void log_health(
+    const health_check_map_t& updated,
+    const health_check_map_t& previous,
+    MonitorDBStore::TransactionRef t);
+
   void get_cluster_status(stringstream &ss, Formatter *f);
 
   void reply_command(MonOpRequestRef op, int rc, const string &rs, version_t version);

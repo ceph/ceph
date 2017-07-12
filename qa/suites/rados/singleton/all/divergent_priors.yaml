@@ -12,6 +12,12 @@ openstack:
 
 overrides:
   ceph:
+    log-whitelist:
+      - overall HEALTH_
+      - (OSDMAP_FLAGS)
+      - (OSD_
+      - (PG_
+      - (OBJECT_DEGRADED)
     conf:
       osd:
         debug osd: 5

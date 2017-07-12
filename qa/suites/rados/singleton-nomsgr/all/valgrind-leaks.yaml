@@ -7,6 +7,9 @@ overrides:
       flavor: notcmalloc
       debuginfo: true
   ceph:
+    log-whitelist:
+      - overall HEALTH_
+      - (PG_
     conf:
       global:
         osd heartbeat grace: 40
