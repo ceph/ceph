@@ -424,6 +424,7 @@ class TestDataScan(CephFSTestCase):
         self.fs.mds_restart()
         self.fs.wait_for_daemons()
         if other_pool:
+            self.fs.wait_for_daemons(other_fs)
             for mds_id in self.fs.mds_ids:
                 self.fs.mon_manager.raw_cluster_cmd('tell', "mds." + mds_id,
                                                     'injectargs', '--debug-mds=20')
