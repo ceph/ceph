@@ -1717,7 +1717,8 @@ int OSD::mkfs(CephContext *cct, ObjectStore *store, const string &dev,
 
   ret = store->mkfs();
   if (ret) {
-    derr << "OSD::mkfs: ObjectStore::mkfs failed with error " << ret << dendl;
+    derr << "OSD::mkfs: ObjectStore::mkfs failed with error "
+         << cpp_strerror(ret) << dendl;
     goto free_store;
   }
 
@@ -1725,7 +1726,8 @@ int OSD::mkfs(CephContext *cct, ObjectStore *store, const string &dev,
 
   ret = store->mount();
   if (ret) {
-    derr << "OSD::mkfs: couldn't mount ObjectStore: error " << ret << dendl;
+    derr << "OSD::mkfs: couldn't mount ObjectStore: error "
+         << cpp_strerror(ret) << dendl;
     goto free_store;
   }
 
@@ -1764,7 +1766,7 @@ int OSD::mkfs(CephContext *cct, ObjectStore *store, const string &dev,
     ret = store->apply_transaction(osr.get(), std::move(t));
     if (ret) {
       derr << "OSD::mkfs: error while writing OSD_SUPERBLOCK_GOBJECT: "
-	   << "apply_transaction returned " << ret << dendl;
+	   << "apply_transaction returned " << cpp_strerror(ret) << dendl;
       goto umount_store;
     }
   }
@@ -1775,7 +1777,8 @@ int OSD::mkfs(CephContext *cct, ObjectStore *store, const string &dev,
 
   ret = write_meta(store, sb.cluster_fsid, sb.osd_fsid, whoami);
   if (ret) {
-    derr << "OSD::mkfs: failed to write fsid file: error " << ret << dendl;
+    derr << "OSD::mkfs: failed to write fsid file: error "
+         << cpp_strerror(ret) << dendl;
     goto umount_store;
   }
 
