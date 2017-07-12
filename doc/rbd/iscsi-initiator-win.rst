@@ -8,24 +8,24 @@ The iSCSI Initiator for Microsoft Windows
 
 **iSCSI Initiator, Discovery and Setup:**
 
-1. Install the iSCSI initiator driver and MPIO tools.
+#. Install the iSCSI initiator driver and MPIO tools.
 
-2. Launch the MPIO program, click on the “Discover Multi-Paths” tab select “Add
+#. Launch the MPIO program, click on the “Discover Multi-Paths” tab select “Add
    support for iSCSI devices”.
 
-3. On the iSCSI Initiator Properties window, on the "Discovery" tab, add a target
+#. On the iSCSI Initiator Properties window, on the "Discovery" tab, add a target
    portal. Enter the IP address or DNS name and Port of the Ceph iSCSI gateway.
 
-4. On the “Targets” tab, select the target and click on “Connect”.
+#. On the “Targets” tab, select the target and click on “Connect”.
 
-5. On the “Connect To Target” window, select the “Enable multi-path” option, and
+#. On the “Connect To Target” window, select the “Enable multi-path” option, and
    click the “Advanced” button.
 
-6. Under the "Connet using" section, select a “Target portal IP” . Select the
+#. Under the "Connet using" section, select a “Target portal IP” . Select the
    “Enable CHAP login on” and enter the "Name" and "Target secret" values from the
    Ceph iSCSI Ansible client credentials section, and click OK.
 
-7. Repeat steps 5 and 6 for each target portal defined when setting up
+#. Repeat steps 5 and 6 for each target portal defined when setting up
    the iSCSI gateway.
 
 **Multipath IO Setup:**
@@ -53,13 +53,13 @@ reset is done in the MPIO tool.
     mpclaim -s -m
     MSDSM-wide Load Balance Policy: Fail Over Only
 
-1. Using the MPIO tool, from the “Targets” tab, click on the
+#. Using the MPIO tool, from the “Targets” tab, click on the
    “Devices…​” button:
 
-2. From the Devices window, select a disk and click the
+#. From the Devices window, select a disk and click the
    “MPIO…​” button:
 
-3. On the "Device Details" window the paths to each target portal is
+#. On the "Device Details" window the paths to each target portal is
    displayed. If using the ``ceph-iscsi-ansible`` setup method, the
    iSCSI gateway will use ALUA to tell the iSCSI initiator which path
    and iSCSI gateway should be used as the primary path. The Load
