@@ -111,6 +111,18 @@ class MgrModule(object):
         """
         return ceph_state.get_server(self._handle, hostname)
 
+    def get_perf_schema(self, svc_type, svc_name):
+        """
+        Called by the plugin to fetch perf counter schema info.
+        svc_name can be nullptr, as can svc_type, in which case
+        they are wildcards
+
+        :param svc_type:
+        :param svc_name:
+        :return: list of dicts describing the counters requested
+        """
+        return ceph_state.get_perf_schema(self._handle, svc_type, svc_name)
+
     def get_counter(self, svc_type, svc_name, path):
         """
         Called by the plugin to fetch data for a particular perf counter
