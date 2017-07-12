@@ -396,14 +396,12 @@ class RGWRadosSetOmapKeysCR : public RGWSimpleCoroutine {
 
   rgw_raw_obj obj;
 
-  RGWAioCompletionNotifier *cn;
+  boost::intrusive_ptr<RGWAioCompletionNotifier> cn;
 
 public:
   RGWRadosSetOmapKeysCR(RGWRados *_store,
 		      const rgw_raw_obj& _obj,
 		      map<string, bufferlist>& _entries);
-
-  ~RGWRadosSetOmapKeysCR() override;
 
   int send_request() override;
   int request_complete() override;
@@ -421,15 +419,13 @@ class RGWRadosGetOmapKeysCR : public RGWSimpleCoroutine {
 
   rgw_raw_obj obj;
 
-  RGWAioCompletionNotifier *cn;
+  boost::intrusive_ptr<RGWAioCompletionNotifier> cn;
 
 public:
   RGWRadosGetOmapKeysCR(RGWRados *_store,
 		      const rgw_raw_obj& _obj,
 		      const string& _marker,
 		      map<string, bufferlist> *_entries, int _max_entries);
-
-  ~RGWRadosGetOmapKeysCR() override;
 
   int send_request() override;
 
@@ -441,31 +437,22 @@ public:
 class RGWRadosRemoveOmapKeysCR : public RGWSimpleCoroutine {
   RGWRados *store;
 
-  string marker;
-  map<string, bufferlist> *entries;
-  int max_entries;
-
-  int rval;
   rgw_rados_ref ref;
 
   set<string> keys;
 
   rgw_raw_obj obj;
 
-  RGWAioCompletionNotifier *cn;
+  boost::intrusive_ptr<RGWAioCompletionNotifier> cn;
 
 public:
   RGWRadosRemoveOmapKeysCR(RGWRados *_store,
 		      const rgw_raw_obj& _obj,
 		      const set<string>& _keys);
 
-  ~RGWRadosRemoveOmapKeysCR() override;
-
   int send_request() override;
 
-  int request_complete() override {
-    return rval;
-  }
+  int request_complete() override;
 };
 
 class RGWRadosRemoveCR : public RGWSimpleCoroutine {
@@ -1085,12 +1072,11 @@ class RGWRadosTimelogAddCR : public RGWSimpleCoroutine {
 
   string oid;
 
-  RGWAioCompletionNotifier *cn;
+  boost::intrusive_ptr<RGWAioCompletionNotifier> cn;
 
 public:
   RGWRadosTimelogAddCR(RGWRados *_store, const string& _oid,
 		        const cls_log_entry& entry);
-  ~RGWRadosTimelogAddCR() override;
 
   int send_request() override;
   int request_complete() override;
@@ -1098,7 +1084,7 @@ public:
 
 class RGWRadosTimelogTrimCR : public RGWSimpleCoroutine {
   RGWRados *store;
-  RGWAioCompletionNotifier *cn{nullptr};
+  boost::intrusive_ptr<RGWAioCompletionNotifier> cn;
  protected:
   std::string oid;
   real_time start_time;
@@ -1111,7 +1097,6 @@ class RGWRadosTimelogTrimCR : public RGWSimpleCoroutine {
                         const real_time& start_time, const real_time& end_time,
                         const std::string& from_marker,
                         const std::string& to_marker);
-  ~RGWRadosTimelogTrimCR() override;
 
   int send_request() override;
   int request_complete() override;
