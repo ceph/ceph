@@ -38,8 +38,6 @@ class ClientIO : public io::RestfulClient,
            beast::flat_buffer& buffer);
   ~ClientIO() override;
 
-  bool get_conn_close() const { return conn_close; }
-
   void init_env(CephContext *cct) override;
   size_t complete_request() override;
   void flush() override;

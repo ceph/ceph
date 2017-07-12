@@ -9,9 +9,6 @@
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
 
-#undef dout_prefix
-#define dout_prefix (*_dout << "asio: ")
-
 using namespace rgw::asio;
 
 ClientIO::ClientIO(tcp::socket& socket,
@@ -114,9 +111,7 @@ size_t ClientIO::read_data(char* buf, size_t max)
   while (body_remaining.size && !parser.is_done()) {
     boost::system::error_code ec;
     beast::http::read_some(socket, buffer, parser, ec);
-    if (ec == boost::asio::error::connection_reset ||
-        ec == boost::asio::error::eof ||
-        ec == beast::http::error::partial_message ||
+    if (ec == beast::http::error::partial_message ||
         ec == beast::http::error::need_buffer) {
       break;
     }
