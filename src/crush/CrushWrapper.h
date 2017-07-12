@@ -1426,6 +1426,32 @@ public:
     choose_args.clear();
   }
 
+  // adjust choose_args_map weight, preserving the hierarchical summation
+  // property.  used by callers optimizing layouts by tweaking weights.
+  int _choose_args_adjust_item_weight_in_bucket(
+    CephContext *cct,
+    crush_choose_arg_map cmap,
+    int bucketid,
+    int id,
+    const vector<int>& weight,
+    ostream *ss);
+  int choose_args_adjust_item_weight(
+    CephContext *cct,
+    crush_choose_arg_map cmap,
+    int id, const vector<int>& weight,
+    ostream *ss);
+  int choose_args_adjust_item_weightf(
+    CephContext *cct,
+    crush_choose_arg_map cmap,
+    int id, const vector<double>& weightf,
+    ostream *ss) {
+    vector<int> weight(weightf.size());
+    for (unsigned i = 0; i < weightf.size(); ++i) {
+      weight[i] = (int)(weightf[i] * (float)0x10000);
+    }
+    return choose_args_adjust_item_weight(cct, cmap, id, weight, ss);
+  }
+
   template<typename WeightVector>
   void do_rule(int rule, int x, vector<int>& out, int maxout,
 	       const WeightVector& weight,
