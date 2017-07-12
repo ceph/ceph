@@ -2853,3 +2853,84 @@ int CrushWrapper::try_remap_rule(
 
   return 0;
 }
+
+
+int CrushWrapper::_choose_args_adjust_item_weight_in_bucket(
+  CephContext *cct,
+  crush_choose_arg_map cmap,
+  int bucketid,
+  int id,
+  const vector<int>& weight,
+  ostream *ss)
+{
+  int changed = 0;
+  int bidx = -1 - bucketid;
+  crush_bucket *b = crush->buckets[bidx];
+  if (bidx >= (int)cmap.size) {
+    if (ss)
+      *ss << "no weight-set for bucket " << b->id;
+    ldout(cct, 10) << __func__ << "  no crush_choose_arg for bucket " << b->id
+		   << dendl;
+    return 0;
+  }
+  crush_choose_arg *carg = &cmap.args[bidx];
+  if (carg->weight_set == NULL) {
+    if (ss)
+      *ss << "no weight-set for bucket " << b->id;
+    ldout(cct, 10) << __func__ << "  no weight_set for bucket " << b->id
+		   << dendl;
+    return 0;
+  }
+  if (carg->weight_set_size != weight.size()) {
+    if (ss)
+      *ss << "weight_set_size != " << weight.size() << " for bucket " << b->id;
+    ldout(cct, 10) << __func__ << "  weight_set_size != " << weight.size()
+		   << " for bucket " << b->id << dendl;
+    return 0;
+  }
+  for (unsigned i = 0; i < b->size; i++) {
+    if (b->items[i] == id) {
+      for (unsigned j = 0; j < weight.size(); ++j) {
+	carg->weight_set[j].weights[i] = weight[j];
+      }
+      ldout(cct, 5) << __func__ << "  set " << id << " to " << weight
+		    << " in bucket " << b->id << dendl;
+      changed++;
+    }
+  }
+  if (changed) {
+    vector<int> bucket_weight(weight.size(), 0);
+    for (unsigned i = 0; i < b->size; i++) {
+      for (unsigned j = 0; j < weight.size(); ++j) {
+	bucket_weight[j] += carg->weight_set[j].weights[i];
+      }
+    }
+    choose_args_adjust_item_weight(cct, cmap, b->id, bucket_weight, nullptr);
+  }
+  return changed;
+}
+
+int CrushWrapper::choose_args_adjust_item_weight(
+  CephContext *cct,
+  crush_choose_arg_map cmap,
+  int id,
+  const vector<int>& weight,
+  ostream *ss)
+{
+  ldout(cct, 5) << __func__ << " " << id << " weight " << weight << dendl;
+  int changed = 0;
+  for (int bidx = 0; bidx < crush->max_buckets; bidx++) {
+    crush_bucket *b = crush->buckets[bidx];
+    if (b == nullptr) {
+      continue;
+    }
+    changed += _choose_args_adjust_item_weight_in_bucket(
+      cct, cmap, b->id, id, weight, ss);
+  }
+  if (!changed) {
+    if (ss)
+      *ss << "item " << id << " not found in crush map";
+    return -ENOENT;
+  }
+  return changed;
+}
