@@ -20,7 +20,7 @@ struct Option {
     TYPE_UUID,
   };
 
-  const char *type_to_str(type_t t) {
+  const char *type_to_str(type_t t) const {
     switch (t) {
     case TYPE_UINT: return "uint64_t";
     case TYPE_INT: return "int64_t";
@@ -38,6 +38,15 @@ struct Option {
     LEVEL_ADVANCED,
     LEVEL_DEV,
   };
+
+  const char *level_to_str(level_t l) const {
+    switch(l) {
+      case LEVEL_BASIC: return "basic";
+      case LEVEL_ADVANCED: return "advanced";
+      case LEVEL_DEV: return "developer";
+      default: return "unknown";
+    }
+  }
 
   using value_t = boost::variant<
     boost::blank,
@@ -100,6 +109,8 @@ struct Option {
       ceph_abort();
     }
   }
+
+  void dump_value(const char *field_name, const value_t &v, Formatter *f) const;
 
   // const char * must be explicit to avoid it being treated as an int
   Option& set_value(value_t& v, const char *new_value) {
@@ -183,6 +194,8 @@ struct Option {
     validator = validator_;
     return *this;
   }
+
+  void dump(Formatter *f) const;
 
   /**
    * A crude indicator of whether the value may be
