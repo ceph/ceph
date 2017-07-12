@@ -25,8 +25,9 @@
 #include "osd/PGLog.h"
 #include "osd/OSDMap.h"
 #include "include/coredumpctl.h"
+#include "../objectstore/store_test_fixture.h"
 
-class PGLogTest : public ::testing::Test, protected PGLog {
+class PGLogTest : virtual public ::testing::Test, protected PGLog {
 public:
   PGLogTest() : PGLog(g_ceph_context) {}
   void SetUp() override {
@@ -43,6 +44,7 @@ public:
     ss << "obj_" << id;
     hoid.oid = ss.str();
     hoid.set_hash(id);
+    hoid.pool = 1;
     return hoid;
   }
   static eversion_t mk_evt(unsigned ep, unsigned v) {
@@ -2218,6 +2220,87 @@ TEST_F(PGLogTest, ErrorNotIndexedByObject) {
   EXPECT_EQ(del.user_version, entry->user_version);
   EXPECT_EQ(del.reqid, entry->reqid);
 }
+
+class PGLogTestRebuildMissing : public PGLogTest, public StoreTestFixture {
+public:
+  PGLogTestRebuildMissing() : PGLogTest(), StoreTestFixture("memstore") {}
+  void SetUp() override {
+    StoreTestFixture::SetUp();
+    ObjectStore::Sequencer osr(__func__);
+    ObjectStore::Transaction t;
+    test_coll = coll_t(spg_t(pg_t(1, 1)));
+    t.create_collection(test_coll, 0);
+    store->apply_transaction(&osr, std::move(t));
+    existing_oid = mk_obj(0);
+    nonexistent_oid = mk_obj(1);
+    ghobject_t existing_ghobj(existing_oid);
+    object_info_t existing_info;
+    existing_info.version = eversion_t(6, 2);
+    bufferlist enc_oi;
+    ::encode(existing_info, enc_oi, 0);
+    ObjectStore::Transaction t2;
+    t2.touch(test_coll, ghobject_t(existing_oid));
+    t2.setattr(test_coll, ghobject_t(existing_oid), OI_ATTR, enc_oi);
+    ASSERT_EQ(0u, store->apply_transaction(&osr, std::move(t2)));
+    info.last_backfill = hobject_t::get_max();
+    info.last_complete = eversion_t();
+  }
+
+  void TearDown() override {
+    clear();
+    missing.may_include_deletes = false;
+    StoreTestFixture::TearDown();
+  }
+
+  pg_info_t info;
+  coll_t test_coll;
+  hobject_t existing_oid, nonexistent_oid;
+
+  void run_rebuild_missing_test(const map<hobject_t, pg_missing_item> &expected_missing_items) {
+    rebuild_missing_set_with_deletes(store.get(), test_coll, info);
+    ASSERT_EQ(expected_missing_items, missing.get_items());
+  }
+};
+
+TEST_F(PGLogTestRebuildMissing, EmptyLog) {
+  missing.add(existing_oid, mk_evt(6, 2), mk_evt(6, 3), false);
+  missing.add(nonexistent_oid, mk_evt(7, 4), mk_evt(0, 0), false);
+  map<hobject_t, pg_missing_item> orig_missing = missing.get_items();
+  run_rebuild_missing_test(orig_missing);
+}
+
+TEST_F(PGLogTestRebuildMissing, SameVersionMod) {
+  missing.add(existing_oid, mk_evt(6, 2), mk_evt(6, 1), false);
+  log.add(mk_ple_mod(existing_oid, mk_evt(6, 2), mk_evt(6, 1)));
+  map<hobject_t, pg_missing_item> empty_missing;
+  run_rebuild_missing_test(empty_missing);
+}
+
+TEST_F(PGLogTestRebuildMissing, DelExisting) {
+  missing.add(existing_oid, mk_evt(6, 3), mk_evt(6, 2), false);
+  log.add(mk_ple_dt(existing_oid, mk_evt(7, 5), mk_evt(7, 4)));
+  map<hobject_t, pg_missing_item> expected;
+  expected[existing_oid] = pg_missing_item(mk_evt(7, 5), mk_evt(6, 2), true);
+  run_rebuild_missing_test(expected);
+}
+
+TEST_F(PGLogTestRebuildMissing, DelNonexistent) {
+  log.add(mk_ple_dt(nonexistent_oid, mk_evt(7, 5), mk_evt(7, 4)));
+  map<hobject_t, pg_missing_item> expected;
+  expected[nonexistent_oid] = pg_missing_item(mk_evt(7, 5), mk_evt(0, 0), true);
+  run_rebuild_missing_test(expected);
+}
+
+TEST_F(PGLogTestRebuildMissing, MissingNotInLog) {
+  missing.add(mk_obj(10), mk_evt(8, 12), mk_evt(8, 10), false);
+  log.add(mk_ple_dt(nonexistent_oid, mk_evt(7, 5), mk_evt(7, 4)));
+  map<hobject_t, pg_missing_item> expected;
+  expected[nonexistent_oid] = pg_missing_item(mk_evt(7, 5), mk_evt(0, 0), true);
+  expected[mk_obj(10)] = pg_missing_item(mk_evt(8, 12), mk_evt(8, 10), false);
+  run_rebuild_missing_test(expected);
+}
+
+
 
 // Local Variables:
 // compile-command: "cd ../.. ; make unittest_pglog ; ./unittest_pglog --log-to-stderr=true  --debug-osd=20 # --gtest_filter=*.* "
