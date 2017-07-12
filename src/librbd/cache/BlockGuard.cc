@@ -16,15 +16,9 @@ namespace cache {
 
 BlockGuard::BlockGuard(CephContext *cct, uint64_t cache_size,
                        uint32_t block_size)
-  : m_cct(cct), m_max_blocks(cache_size%block_size?cache_size/block_size+1:cache_size/block_size), m_block_size(block_size),
-    m_lock("librbd::cache::BlockGuard::m_lock"),
-    m_detained_block_pool(m_max_blocks),
-    m_detained_blocks_buckets(m_max_blocks),
-    m_detained_blocks(BlockToDetainedBlocks::bucket_traits(
-      &m_detained_blocks_buckets.front(), m_max_blocks)) {
-  for (auto &detained_block : m_detained_block_pool) {
-    m_free_detained_blocks.push_back(detained_block);
-  }
+  : m_cct(cct), m_max_blocks(cache_size%block_size?cache_size/block_size+1:cache_size/block_size),
+    m_block_size(block_size),
+    m_lock("librbd::cache::BlockGuard::m_lock"){
   for(auto block = 0; block < m_max_blocks; block++) {
     //chendi: initiate universal BlockIOMap
     Block* block_info = new Block(block);
@@ -81,68 +75,6 @@ void BlockGuard::create_block_ios(IOType io_type,
     ldout(m_cct, 20) << "block_io=[" << pair.second << "]" << dendl;
     block_ios->emplace_back(std::move(pair.second));
   }
-}
-
-int BlockGuard::detain(uint64_t block, BlockIO *block_io) {
-  Mutex::Locker locker(m_lock);
-  ldout(m_cct, 1) << "block=" << block << ", "
-                   << "free_slots=" << m_free_detained_blocks.size() << dendl;
-  assert(block_io == nullptr || block == block_io->block);
-
-  DetainedBlock *detained_block;
-  auto detained_block_it = m_detained_blocks.find(block);
-  if (detained_block_it != m_detained_blocks.end()) {
-    // request against an already detained block
-    detained_block = &(*detained_block_it);
-    if (block_io == nullptr) {
-      // policy is attempting to release this (busy) block
-      return -EBUSY;
-    }
-
-    if (block_io != nullptr) {
-      detained_block->block_ios.emplace_back(*block_io);
-    }
-
-    // alert the caller that the IO was detained
-    return 1;
-  } else {
-    if (m_free_detained_blocks.empty()) {
-      ldout(m_cct, 1) << "no free detained block cells" << dendl;
-      return -ENOMEM;
-    }
-
-    detained_block = &m_free_detained_blocks.front();
-    m_free_detained_blocks.pop_front();
-
-    detained_block->block = block;
-    m_detained_blocks.insert(*detained_block);
-    if (block_io != nullptr) {
-      detained_block->block_ios.emplace_back(*block_io);
-    }
-    return 0;
-  }
-}
-
-int BlockGuard::release(uint64_t block, BlockIOs *block_ios) {
-  Mutex::Locker locker(m_lock);
-  auto detained_block_it = m_detained_blocks.find(block);
-  assert(detained_block_it != m_detained_blocks.end());
-
-  auto &detained_block = *detained_block_it;
-  ldout(m_cct, 1) << "block=" << block << ", "
-                   << "pending_ios="
-                   << (detained_block.block_ios.empty() ?
-                        0 : detained_block.block_ios.size()) << ", "
-                   << "free_slots=" << m_free_detained_blocks.size() << dendl;
-
-  if (!detained_block.block_ios.empty()) {
-    block_ios->push_back(std::move(detained_block.block_ios.front()));
-    detained_block.block_ios.pop_front();
-  } else {
-    m_detained_blocks.erase(detained_block_it);
-    m_free_detained_blocks.push_back(detained_block);
-  }
-  return 0;
 }
 
 BlockGuard::C_BlockRequest::C_BlockRequest(Context *on_finish)

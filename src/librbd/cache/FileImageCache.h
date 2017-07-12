@@ -69,31 +69,16 @@ private:
   file::MetaStore<ImageCtx> *m_meta_store = nullptr;
   file::ImageStore<ImageCtx> *m_image_store = nullptr;
 
-  ReleaseBlock m_release_block;
-
   util::AsyncOpTracker m_async_op_tracker;
 
   mutable Mutex m_lock;
-  BlockGuard::BlockIOs m_deferred_block_ios;
-  BlockGuard::BlockIOs m_detained_block_ios;
-
   bool m_wake_up_scheduled = false;
 
   Contexts m_post_work_contexts;
 
   void map_blocks(IOType io_type, Extents &&image_extents,
                   BlockGuard::C_BlockRequest *block_request);
-  void map_block(bool detain_block, BlockGuard::BlockIO &&block_io);
-  void release_block(uint64_t block);
-
-  void wake_up();
-  void process_work();
-
-  bool is_work_available() const;
-  void process_writeback_dirty_blocks();
-  void process_detained_block_ios();
-  void process_deferred_block_ios();
-
+  void map_block(BlockGuard::BlockIO &&block_io);
   void invalidate(Extents&& image_extents, Context *on_finish);
 
 };

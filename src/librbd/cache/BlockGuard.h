@@ -121,11 +121,9 @@ public:
                         BlockIOs *block_ios, C_BlockRequest *block_request);
 
   // detain future IO against a specified block
-  int detain(uint64_t block, BlockIO *block_io);
-
+  //int detain(uint64_t block, BlockIO *block_io){return 0;}
   // release detained IO against a specified block
-  int release(uint64_t block, BlockIOs *block_ios);
-
+  //int release(uint64_t block, BlockIOs *block_ios){return 0;}
   inline friend std::ostream &operator<<(std::ostream &os,
                                          const BlockIOExtent& rhs) {
     os << "buffer_offset=" << rhs.buffer_offset << ", "
@@ -148,35 +146,11 @@ public:
   }
 
 private:
-  struct DetainedBlock : public boost::intrusive::list_base_hook<>,
-                         public boost::intrusive::unordered_set_base_hook<> {
-    uint64_t block;
-    BlockIOs block_ios;
-  };
-  struct DetainedBlockKey {
-    typedef uint64_t type;
-    type operator()(const DetainedBlock &detained_block) const {
-      return detained_block.block;
-    }
-  };
-
-  typedef std::vector<DetainedBlock> DetainedBlockPool;
-  typedef boost::intrusive::list<DetainedBlock> DetainedBlocks;
-  typedef boost::intrusive::unordered_set<
-    DetainedBlock,
-    boost::intrusive::key_of_value<DetainedBlockKey> > BlockToDetainedBlocks;
-  typedef BlockToDetainedBlocks::bucket_type BlockToDetainedBlocksBucket;
-  typedef std::vector<BlockToDetainedBlocksBucket> BlockToDetainedBlocksBuckets;
-
   CephContext *m_cct;
   uint32_t m_max_blocks;
   uint32_t m_block_size;
 
   Mutex m_lock;
-  DetainedBlockPool m_detained_block_pool;
-  DetainedBlocks m_free_detained_blocks;
-  BlockToDetainedBlocksBuckets m_detained_blocks_buckets;
-  BlockToDetainedBlocks m_detained_blocks;
 
   //chendi: add an universal map to pre-allocate in memory data for each block
   BlockToBlocksMap m_Block_map;

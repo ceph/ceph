@@ -126,39 +126,6 @@ void StupidPolicy<I>::clear_dirty(uint64_t block) {
 }
 
 template <typename I>
-int StupidPolicy<I>::get_writeback_block(uint64_t *block) {
-  CephContext *cct = m_image_ctx.cct;
-
-  // TODO make smarter writeback policy instead of "as fast as possible"
-
-  Mutex::Locker locker(m_lock);
-  Entry *entry = reinterpret_cast<Entry*>(m_dirty_lru.get_tail());
-  if (entry == nullptr) {
-    ldout(cct, 20) << "no dirty blocks to writeback" << dendl;
-    return -ENODATA;
-  }
-
-  int r = m_block_guard.detain(entry->block, nullptr);
-  if (r < 0) {
-    ldout(cct, 20) << "dirty block " << entry->block << " already detained"
-                   << dendl;
-    return -EBUSY;
-  }
-
-  // move to clean list to prevent "double" writeback -- since the
-  // block is detained, it cannot be evicted from the cache until
-  // writeback is complete
-  assert(entry->dirty);
-  entry->dirty = false;
-  m_dirty_lru.remove(entry);
-  m_clean_lru.insert_head(entry);
-
-  *block = entry->block;
-  ldout(cct, 20) << "block=" << *block << dendl;
-  return 0;
-}
-
-template <typename I>
 int StupidPolicy<I>::map(IOType io_type, uint64_t block, bool partial_block,
                          PolicyMapResult *policy_map_result,
                          uint64_t *replace_cache_block) {
@@ -210,28 +177,6 @@ int StupidPolicy<I>::map(IOType io_type, uint64_t block, bool partial_block,
     m_block_to_entries[block] = entry;
     m_clean_lru.insert_head(entry);
     return 0;
-  }
-
-  // if we have clean entries we can demote, attempt to steal the oldest
-  entry = reinterpret_cast<Entry*>(m_clean_lru.get_tail());
-  if (entry != nullptr) {
-    int r = m_block_guard.detain(entry->block, nullptr);
-    if (r >= 0) {
-      ldout(cct, 20) << "cache miss -- replace entry" << dendl;
-      *policy_map_result = POLICY_MAP_RESULT_REPLACE;
-      *replace_cache_block = entry->block;
-
-      m_block_to_entries.erase(entry->block);
-      m_clean_lru.remove(entry);
-
-      entry->block = block;
-      m_block_to_entries[block] = entry;
-      m_clean_lru.insert_head(entry);
-      return 0;
-    }
-    ldout(cct, 20) << "cache miss -- replacement deferred" << dendl;
-  } else {
-    ldout(cct, 20) << "cache miss" << dendl;
   }
 
   // no clean entries to evict -- treat this as a miss

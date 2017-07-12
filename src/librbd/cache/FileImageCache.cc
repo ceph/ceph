@@ -63,17 +63,14 @@ public:
 };
 
 struct C_ReleaseBlockGuard : public BlockGuard::C_BlockIORequest {
-  uint64_t block;
-  ReleaseBlock &release_block;
   BlockGuard::C_BlockRequest *block_request;
   BlockGuard::BlockIO block_io;
 
-  C_ReleaseBlockGuard(CephContext *cct, uint64_t block,
-                      ReleaseBlock &release_block,
+  C_ReleaseBlockGuard(CephContext *cct,
                       BlockGuard::C_BlockRequest *block_request,
 		      BlockGuard::BlockIO &block_io)
-    : C_BlockIORequest(cct, nullptr), block(block),
-      release_block(release_block), block_request(block_request), block_io(block_io) {
+    : C_BlockIORequest(cct, nullptr),
+      block_request(block_request), block_io(block_io) {
   }
 
   virtual void send() override {
@@ -83,7 +80,6 @@ struct C_ReleaseBlockGuard : public BlockGuard::C_BlockIORequest {
                   << " , block_io = " << block_io.block
                   << dendl;
     auto block_info = block_io.block_info;
-    //Mutex::Locker locker(block_info->lock);
     block_info->lock.lock();
     if(next_block_request == nullptr 
 	&& block_info->tail_block_io_request == this) {
@@ -102,8 +98,6 @@ struct C_ReleaseBlockGuard : public BlockGuard::C_BlockIORequest {
 
   virtual void finish(int r) override {
     ldout(cct, 20) << "(" << get_name() << "): block_io = " << block_io.block << ", r=" << r << dendl;
-    // IO operation finished -- release guard
-    release_block(block);
 
     // complete block request
     block_request->complete_request(r);
@@ -139,14 +133,13 @@ struct C_PromoteToCache : public BlockGuard::C_BlockIORequest {
 template <typename I>
 struct C_DemoteFromCache : public BlockGuard::C_BlockIORequest {
   ImageStore<I> &image_store;
-  ReleaseBlock &release_block;
   uint64_t block;
 
   C_DemoteFromCache(CephContext *cct, ImageStore<I> &image_store,
-                    ReleaseBlock &release_block, uint64_t block,
+                    uint64_t block,
                     C_BlockIORequest *next_block_request)
     : C_BlockIORequest(cct, next_block_request),
-      image_store(image_store), release_block(release_block), block(block) {
+      image_store(image_store), block(block) {
   }
 
   virtual void send() override {
@@ -158,12 +151,6 @@ struct C_DemoteFromCache : public BlockGuard::C_BlockIORequest {
     return "C_DemoteFromCache";
   }
 
-  /*virtual void finish(int r) {
-    // IO against the demote block was detained -- release
-    release_block(block);
-
-    C_BlockIORequest::finish(r);
-  }*/
 };
 
 template <typename I>
@@ -427,7 +414,6 @@ struct C_ReadBlockRequest : public BlockGuard::C_BlockRequest {
   I &image_ctx;
   ImageWriteback<I> &image_writeback;
   ImageStore<I> &image_store;
-  ReleaseBlock &release_block;
   bufferlist *bl;
 
   ExtentBuffers extent_buffers;
@@ -436,11 +422,11 @@ struct C_ReadBlockRequest : public BlockGuard::C_BlockRequest {
   C_ReadBlockRequest(I &image_ctx,
                      ImageWriteback<I> &image_writeback,
                      ImageStore<I> &image_store,
-                     ReleaseBlock &release_block, bufferlist *bl,
+                     bufferlist *bl,
                      Context *on_finish)
     : C_BlockRequest(on_finish), image_ctx(image_ctx),
-      image_writeback(image_writeback), image_store(image_store),
-      release_block(release_block), bl(bl) {
+      image_writeback(image_writeback),
+      image_store(image_store), bl(bl) {
   }
 
   virtual void remap(PolicyMapResult policy_map_result,
@@ -452,8 +438,7 @@ struct C_ReadBlockRequest : public BlockGuard::C_BlockRequest {
     // have 1024 4K requests to read a single object)
 
     // NOTE: block guard active -- must be released after IO completes
-    BlockGuard::C_BlockIORequest *req = new C_ReleaseBlockGuard(cct, block_io.block,
-                                                         release_block, this, block_io);
+    BlockGuard::C_BlockIORequest *req = new C_ReleaseBlockGuard(cct, this, block_io);
     BlockGuard::C_BlockIORequest *orig_tail_block_io_req = nullptr;
     auto block_info = block_io.block_info;
     //Mutex::Locker locker(block_info->lock);
@@ -484,7 +469,7 @@ struct C_ReadBlockRequest : public BlockGuard::C_BlockRequest {
                                                block_io.block,
                                                &promote_buffers.back(), req);
       if (policy_map_result == POLICY_MAP_RESULT_REPLACE) {
-        req = new C_DemoteFromCache<I>(cct, image_store, release_block,
+        req = new C_DemoteFromCache<I>(cct, image_store,
                                        block_io.block, req);
       }
       break;
@@ -533,19 +518,18 @@ struct C_WriteBlockRequest : BlockGuard::C_BlockRequest {
   ImageWriteback<I> &image_writeback;
   Policy &policy;
   ImageStore<I> &image_store;
-  ReleaseBlock &release_block;
   bufferlist bl;
   uint32_t block_size;
 
   Buffers promote_buffers;
 
   C_WriteBlockRequest(I &image_ctx, ImageWriteback<I> &image_writeback,
-                      Policy &policy, ImageStore<I> &image_store, ReleaseBlock &release_block,
+                      Policy &policy, ImageStore<I> &image_store,
                       bufferlist &&bl, uint32_t block_size, Context *on_finish)
     : C_BlockRequest(on_finish),
       image_ctx(image_ctx), image_writeback(image_writeback), policy(policy),
       image_store(image_store),
-      release_block(release_block), bl(std::move(bl)), block_size(block_size) {
+      bl(std::move(bl)), block_size(block_size) {
   }
 
   virtual void remap(PolicyMapResult policy_map_result,
@@ -556,8 +540,7 @@ struct C_WriteBlockRequest : BlockGuard::C_BlockRequest {
     // have 1024 4K requests to read a single object)
 
     // NOTE: block guard active -- must be released after IO completes
-    BlockGuard::C_BlockIORequest *req = new C_ReleaseBlockGuard(cct, block_io.block,
-                                                         release_block, this, block_io);
+    BlockGuard::C_BlockIORequest *req = new C_ReleaseBlockGuard(cct, this, block_io);
     auto block_info = block_io.block_info;
     std::lock_guard<std::mutex> lock(block_info->lock);
     BlockGuard::C_BlockIORequest *orig_tail_block_io_req = nullptr;
@@ -567,71 +550,11 @@ struct C_WriteBlockRequest : BlockGuard::C_BlockRequest {
     block_info->tail_block_io_request = req;
 
     if (policy_map_result == POLICY_MAP_RESULT_HIT) {
-      req = new C_DemoteFromCache<I>(cct, image_store, release_block,
+      req = new C_DemoteFromCache<I>(cct, image_store,
                                      block_io.block, req);
     }
     req = new C_WriteToImageRequest<I>(cct, image_writeback,
                                      std::move(block_io), bl, req);
-/*
-    if (policy_map_result == POLICY_MAP_RESULT_MISS) {
-      req = new C_WriteToImageRequest<I>(cct, image_writeback,
-                                         std::move(block_io), bl, req);
-    } else {
-      if (0 == policy.get_write_mode()) {
-        //write-thru
-        req = new C_WriteToImageRequest<I>(cct, image_writeback,
-                                           std::move(block_io), bl, req);
-      } else {
-        // block is now dirty -- can't be replaced until flushed
-        policy.set_dirty(block_io.block);
-      }
-      //req = new C_WriteToMetaRequest<I>(cct, meta_store, block_io.block, &policy, req);
-
-      if (block_io.partial_block) {
-        // block needs to be promoted to cache but we require a
-        // read-modify-write cycle to fully populate the block
-
-        // TODO optimize by only reading missing extents
-        promote_buffers.emplace_back();
-        if (block_io.tid > 0) {
-          req = new C_AppendEventToJournal<I>(cct, journal_store, block_io.tid,
-                                              block_io.block, IO_TYPE_WRITE,
-                                              req);
-        }
-        req = new C_PromoteToCache<I>(cct, image_store, block_io.block,
-                                      promote_buffers.back(), req);
-        req = new C_ModifyBlockBuffer(cct, block_io, bl,
-                                      &promote_buffers.back(), req);
-        if (policy_map_result == POLICY_MAP_RESULT_HIT) {
-          if (block_io.tid > 0 &&
-              journal_store.is_demote_required(block_io.block)) {
-            req = new C_DemoteBlockToJournal<I>(cct, journal_store,
-                                                block_io.block,
-                                                promote_buffers.back(), req);
-          }
-          req = new C_ReadBlockFromCacheRequest<I>(cct, image_store,
-                                                   block_io.block, BLOCK_SIZE,
-                                                   &promote_buffers.back(),
-                                                   req);
-        } else {
-          req = new C_ReadBlockFromImageRequest<I>(cct, image_writeback,
-                                                   block_io.block,
-                                                   &promote_buffers.back(),
-                                                   req);
-        }
-      } else {
-        // full block overwrite
-        req = new C_PromoteToCache<I>(cct, image_store, block_io.block,
-                                      bl, req);
-      }
-
-      if (policy_map_result == POLICY_MAP_RESULT_REPLACE) {
-        req = new C_DemoteFromCache<I>(cct, image_store, release_block,
-                                       block_io.block, req);
-      }
-    }
-*/
-    //req->send();
     //chendi: schedule send on another tread, and check if we can continue
     if (orig_tail_block_io_req != nullptr)
       orig_tail_block_io_req->next_block_request = req;
@@ -649,139 +572,6 @@ struct C_WriteBlockRequest : BlockGuard::C_BlockRequest {
   }
 };
 
-template <typename I>
-struct C_WritebackRequest : public Context {
-  I &image_ctx;
-  ImageWriteback<I> &image_writeback;
-  Policy &policy;
-  ImageStore<I> &image_store;
-  const ReleaseBlock &release_block;
-  util::AsyncOpTracker &async_op_tracker;
-  uint64_t tid;
-  uint64_t block;
-  IOType io_type;
-  bool demoted;
-  uint32_t block_size;
-
-  bufferlist bl;
-
-  C_WritebackRequest(I &image_ctx, ImageWriteback<I> &image_writeback,
-                     Policy &policy, ImageStore<I> &image_store,
-                     const ReleaseBlock &release_block,
-                     util::AsyncOpTracker &async_op_tracker, uint64_t tid,
-                     uint64_t block, IOType io_type, bool demoted,
-                     uint32_t block_size)
-    : image_ctx(image_ctx), image_writeback(image_writeback),
-      policy(policy), image_store(image_store),
-      release_block(release_block), async_op_tracker(async_op_tracker),
-      tid(tid), block(block), io_type(io_type), demoted(demoted),
-      block_size(block_size) {
-    async_op_tracker.start_op();
-  }
-  virtual ~C_WritebackRequest() {
-    async_op_tracker.finish_op();
-  }
-
-  void send() {
-    read_from_cache();
-  }
-
-  void read_from_cache() {
-    CephContext *cct = image_ctx.cct;
-    ldout(cct, 20) << "(C_WritebackRequest)" << dendl;
-
-    Context *ctx = util::create_context_callback<
-      C_WritebackRequest<I>,
-      &C_WritebackRequest<I>::handle_read_from_cache>(this);
-      image_store.read_block(block, {{0, block_size}}, &bl, ctx);
-  }
-
-  void handle_read_from_cache(int r) {
-    CephContext *cct = image_ctx.cct;
-    ldout(cct, 20) << "(C_WritebackRequest): r=" << r << dendl;
-
-    if (r < 0) {
-      lderr(cct) << "failed to read writeback block from cache: "
-                 << cpp_strerror(r) << dendl;
-      complete(r);
-      return;
-    }
-
-    write_to_image();
-  }
-
-  void write_to_image() {
-    CephContext *cct = image_ctx.cct;
-    ldout(cct, 20) << "(C_WritebackRequest)" << dendl;
-
-    Context *ctx = util::create_context_callback<
-      C_WritebackRequest<I>,
-      &C_WritebackRequest<I>::handle_write_to_image>(this);
-    image_writeback.aio_write({{block * block_size, block_size}}, std::move(bl),
-                              0, ctx);
-  }
-
-  void handle_write_to_image(int r) {
-    CephContext *cct = image_ctx.cct;
-    ldout(cct, 20) << "(C_WritebackRequest): r=" << r << dendl;
-
-    if (r < 0) {
-      lderr(cct) << "failed to read writeback block from cache: "
-                 << cpp_strerror(r) << dendl;
-      complete(r);
-      return;
-    }
-
-    commit_event();
-  }
-
-  void commit_event() {
-    if (tid == 0) {
-      complete(0);
-      return;
-    }
-
-    CephContext *cct = image_ctx.cct;
-    ldout(cct, 20) << "(C_WritebackRequest)" << dendl;
-
-    if (!demoted) {
-      policy.clear_dirty(block);
-    }
-
-    /*Context *ctx = util::create_context_callback<
-      C_WritebackRequest<I>,
-      &C_WritebackRequest<I>::handle_commit_event>(this);
-    journal_store.commit_event(tid, ctx);*/
-  }
-
-  void handle_commit_event(int r) {
-    CephContext *cct = image_ctx.cct;
-    ldout(cct, 20) << "(C_WritebackRequest): r=" << r << dendl;
-
-    if (r < 0) {
-      lderr(cct) << "failed to commit event in cache: "
-                 << cpp_strerror(r) << dendl;
-      complete(r);
-      return;
-    }
-
-    complete(0);
-  }
-
-  virtual void finish(int r) {
-    CephContext *cct = image_ctx.cct;
-    ldout(cct, 20) << "r=" << r << dendl;
-
-    if (r < 0) {
-      lderr(cct) << "failed to writeback block " << block << ": "
-                 << cpp_strerror(r) << dendl;
-      policy.set_dirty(block);
-    }
-
-    release_block(block);
-  }
-};
-
 } // anonymous namespace
 
 template <typename I>
@@ -789,18 +579,13 @@ FileImageCache<I>::FileImageCache(ImageCtx &image_ctx)
   : m_image_ctx(image_ctx), m_image_writeback(image_ctx),
     m_block_guard(image_ctx.cct, image_ctx.cct->_conf->rbd_persistent_cache_size, BLOCK_SIZE),
     m_policy(new StupidPolicy<I>(m_image_ctx, m_block_guard)),
-    m_release_block(std::bind(&FileImageCache<I>::release_block, this,
-                              std::placeholders::_1)),
     m_lock("librbd::cache::FileImageCache::m_lock") {
   CephContext *cct = m_image_ctx.cct;
-  //uint8_t write_mode = cct->_conf->rbd_persistent_cache_enabled?1:0;
-  //m_policy->set_write_mode(write_mode);
   //chendi: create threadpool for parallel cache process
   ThreadPoolSingleton *thread_pool_singleton;
   cct->lookup_or_create_singleton_object<ThreadPoolSingleton>(
     thread_pool_singleton, "librbd::cache::thread_pool");
   m_image_ctx.pcache_op_work_queue = thread_pool_singleton->pcache_op_work_queue; 
-  
 }
 
 template <typename I>
@@ -812,12 +597,10 @@ template <typename I>
 void FileImageCache<I>::aio_read(Extents &&image_extents, bufferlist *bl,
                                  int fadvise_flags, Context *on_finish) {
   CephContext *cct = m_image_ctx.cct;
-  //ldout(cct, 20) << "image_extents=" << image_extents << ", "
-  //               << "on_finish=" << on_finish << dendl;
 
   // TODO handle fadvise flags
   BlockGuard::C_BlockRequest *req = new C_ReadBlockRequest<I>(
-    m_image_ctx, m_image_writeback, *m_image_store, m_release_block, bl,
+    m_image_ctx, m_image_writeback, *m_image_store, bl,
     on_finish);
   map_blocks(IO_TYPE_READ, std::move(image_extents), req);
 }
@@ -842,7 +625,7 @@ void FileImageCache<I>::aio_write(Extents &&image_extents,
   // TODO handle fadvise flags
   BlockGuard::C_BlockRequest *req = new C_WriteBlockRequest<I>(
     m_image_ctx, m_image_writeback, *m_policy, *m_image_store,
-    m_release_block, std::move(bl), BLOCK_SIZE, on_finish);
+    std::move(bl), BLOCK_SIZE, on_finish);
   map_blocks(IO_TYPE_WRITE, std::move(image_extents), req);
 }
 
@@ -892,7 +675,6 @@ template <typename I>
 void FileImageCache<I>::aio_flush(Context *on_finish) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << "on_finish=" << on_finish << dendl;
-
   m_image_writeback.aio_flush(on_finish);
 }
 
@@ -1018,7 +800,7 @@ void FileImageCache<I>::map_blocks(IOType io_type, Extents &&image_extents,
 
   // map block IO requests to the cache or backing image based upon policy
   for (auto &block_io : block_ios) {
-    map_block(true, std::move(block_io));
+    map_block(std::move(block_io));
   }
 
   // advance the policy statistics
@@ -1027,178 +809,24 @@ void FileImageCache<I>::map_blocks(IOType io_type, Extents &&image_extents,
 }
 
 template <typename I>
-void FileImageCache<I>::map_block(bool detain_block,
-                                  BlockGuard::BlockIO &&block_io) {
+void FileImageCache<I>::map_block(BlockGuard::BlockIO &&block_io) {
   CephContext *cct = m_image_ctx.cct;
 
   int r;
-  if (detain_block) {
-    r = m_block_guard.detain(block_io.block, &block_io);
-    if (r < 0) {
-      Mutex::Locker locker(m_lock);
-      ldout(cct, 20) << "block guard full -- deferring block IO" << dendl;
-      m_deferred_block_ios.emplace_back(std::move(block_io));
-      return;
-    } else if (r > 0) {
-      ldout(cct, 20) << "block already detained" << dendl;
-      //return;
-    }
-  }
-
   IOType io_type = static_cast<IOType>(block_io.io_type);
-  /*if ((io_type == IO_TYPE_WRITE || io_type == IO_TYPE_DISCARD) &&
-      block_io.tid == 0) {
-    // TODO support non-journal mode / writethrough-only
-    r = m_journal_store->allocate_tid(&block_io.tid);
-    if (r < 0) {
-      Mutex::Locker locker(m_lock);
-      ldout(cct, 20) << "journal full -- detaining block IO" << dendl;
-      m_detained_block_ios.emplace_back(std::move(block_io));
-      return;
-    }
-  }*/
 
   PolicyMapResult policy_map_result;
   uint64_t replace_cache_block;
   r = m_policy->map(io_type, block_io.block, block_io.partial_block,
                     &policy_map_result, &replace_cache_block);
   if (r < 0) {
-    // fail this IO and release any detained IOs to the block
     lderr(cct) << "failed to map block via cache policy: " << cpp_strerror(r)
                << dendl;
     block_io.block_request->fail(r);
-    release_block(block_io.block);
     return;
   }
 
   block_io.block_request->remap(policy_map_result, std::move(block_io));
-}
-
-template <typename I>
-void FileImageCache<I>::release_block(uint64_t block) {
-  CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 20) << "block=" << block << dendl;
-
-  Mutex::Locker locker(m_lock);
-  m_block_guard.release(block, &m_detained_block_ios);
-  //wake_up();
-}
-
-template <typename I>
-void FileImageCache<I>::wake_up() {
-  assert(m_lock.is_locked());
-  if (m_wake_up_scheduled || m_async_op_tracker.is_waiting()) {
-    return;
-  }
-
-  CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 20) << dendl;
-
-  m_wake_up_scheduled = true;
-  m_async_op_tracker.start_op();
-  m_image_ctx.op_work_queue->queue(new FunctionContext(
-    [this](int r) {
-      process_work();
-    }), 0);
-}
-
-template <typename I>
-void FileImageCache<I>::process_work() {
-  CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 1) << dendl;
-
-  do {
-    //process_writeback_dirty_blocks();
-    //process_detained_block_ios();
-    //process_deferred_block_ios();
-
-    // TODO
-    Contexts post_work_contexts;
-    {
-      Mutex::Locker locker(m_lock);
-      post_work_contexts.swap(m_post_work_contexts);
-    }
-    if (!post_work_contexts.empty()) {
-      for (auto ctx : post_work_contexts) {
-        ctx->complete(0);
-      }
-      continue;
-    }
-  } while (false); // TODO need metric to only perform X amount of work per cycle
-
-  // process delayed shut down request (if any)
-  {
-    Mutex::Locker locker(m_lock);
-    m_wake_up_scheduled = false;
-    m_async_op_tracker.finish_op();
-  }
-}
-
-template <typename I>
-bool FileImageCache<I>::is_work_available() const {
-  Mutex::Locker locker(m_lock);
-  return (!m_detained_block_ios.empty() ||
-          !m_deferred_block_ios.empty());
-}
-
-template <typename I>
-void FileImageCache<I>::process_writeback_dirty_blocks() {
-  CephContext *cct = m_image_ctx.cct;
-
-  // TODO throttle the amount of in-flight writebacks
-  while (true) {
-    uint64_t tid = 0;
-    uint64_t block;
-    IOType io_type;
-    bool demoted;
-    int r = 0;
-    //int r = m_policy->get_writeback_block(&block);
-    if (r == -ENODATA || r == -EBUSY) {
-      // nothing to writeback
-      return;
-    } else if (r < 0) {
-      lderr(cct) << "failed to retrieve writeback block: "
-                 << cpp_strerror(r) << dendl;
-      return;
-    }
-
-    // block is now detained -- safe for writeback
-    C_WritebackRequest<I> *req = new C_WritebackRequest<I>(
-      m_image_ctx, m_image_writeback, *m_policy, *m_image_store,
-      m_release_block, m_async_op_tracker, tid, block, io_type,
-      demoted, BLOCK_SIZE);
-    req->send();
-  }
-}
-
-template <typename I>
-void FileImageCache<I>::process_detained_block_ios() {
-  BlockGuard::BlockIOs block_ios;
-  {
-    Mutex::Locker locker(m_lock);
-    std::swap(block_ios, m_detained_block_ios);
-  }
-
-  CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 1) << "block_ios=" << block_ios.size() << dendl;
-  for (auto &block_io : block_ios) {
-    map_block(false, std::move(block_io));
-  }
-}
-
-template <typename I>
-void FileImageCache<I>::process_deferred_block_ios() {
-  BlockGuard::BlockIOs block_ios;
-  {
-    Mutex::Locker locker(m_lock);
-    std::swap(block_ios, m_deferred_block_ios);
-  }
-
-  CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 20) << "block_ios=" << block_ios.size() << dendl;
-  for (auto &block_io : block_ios) {
-    map_block(true, std::move(block_io));
-  }
 }
 
 template <typename I>
@@ -1231,6 +859,7 @@ void FileImageCache<I>::invalidate(Extents&& image_extents,
 
 template <typename I>
 void FileImageCache<I>::flush(Context *on_finish) {
+  on_finish->complete(0);
 }
 
 } // namespace cache

@@ -29,8 +29,6 @@ public:
   virtual void set_dirty(uint64_t block) = 0;
   virtual void clear_dirty(uint64_t block) = 0;
 
-  virtual int get_writeback_block(uint64_t *block) = 0;
-
   virtual int map(IOType io_type, uint64_t block, bool partial_block,
                   PolicyMapResult *policy_map_result,
                   uint64_t *replace_cache_block) = 0;
