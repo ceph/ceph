@@ -371,12 +371,12 @@ namespace crimson {
 
 	// NB: because a deque is the underlying structure, this
 	// operation might be expensive
-	bool remove_by_req_filter_fw(std::function<bool(const R&)> filter_accum) {
+	bool remove_by_req_filter_fw(std::function<bool(R&&)> filter_accum) {
 	  bool any_removed = false;
 	  for (auto i = requests.begin();
 	       i != requests.end();
 	       /* no inc */) {
-	    if (filter_accum(*i->request)) {
+	    if (filter_accum(std::move(*i->request))) {
 	      any_removed = true;
 	      i = requests.erase(i);
 	    } else {
@@ -388,12 +388,12 @@ namespace crimson {
 
 	// NB: because a deque is the underlying structure, this
 	// operation might be expensive
-	bool remove_by_req_filter_bw(std::function<bool(const R&)> filter_accum) {
+	bool remove_by_req_filter_bw(std::function<bool(R&&)> filter_accum) {
 	  bool any_removed = false;
 	  for (auto i = requests.rbegin();
 	       i != requests.rend();
 	       /* no inc */) {
-	    if (filter_accum(*i->request)) {
+	    if (filter_accum(std::move(*i->request))) {
 	      any_removed = true;
 	      i = decltype(i){ requests.erase(std::next(i).base()) };
 	    } else {
@@ -404,7 +404,7 @@ namespace crimson {
 	}
 
 	inline bool
-	remove_by_req_filter(std::function<bool(const R&)> filter_accum,
+	remove_by_req_filter(std::function<bool(R&&)> filter_accum,
 			     bool visit_backwards) {
 	  if (visit_backwards) {
 	    return remove_by_req_filter_bw(filter_accum);
@@ -478,7 +478,7 @@ namespace crimson {
       }
 
 
-      bool remove_by_req_filter(std::function<bool(const R&)> filter_accum,
+      bool remove_by_req_filter(std::function<bool(R&&)> filter_accum,
 				bool visit_backwards = false) {
 	bool any_removed = false;
 	DataGuard g(data_mtx);
@@ -500,14 +500,14 @@ namespace crimson {
 
 
       // use as a default value when no accumulator is provide
-      static void request_sink(const R& req) {
+      static void request_sink(R&& req) {
 	// do nothing
       }
 
 
       void remove_by_client(const C& client,
 			    bool reverse = false,
-			    std::function<void (const R&)> accum = request_sink) {
+			    std::function<void (R&&)> accum = request_sink) {
 	DataGuard g(data_mtx);
 
 	auto i = client_map.find(client);
@@ -518,13 +518,13 @@ namespace crimson {
 	  for (auto j = i->second->requests.rbegin();
 	       j != i->second->requests.rend();
 	       ++j) {
-	    accum(*j->request);
+	    accum(std::move(*j->request));
 	  }
 	} else {
 	  for (auto j = i->second->requests.begin();
 	       j != i->second->requests.end();
 	       ++j) {
-	    accum(*j->request);
+	    accum(std::move(*j->request));
 	  }
 	}
 
@@ -1162,11 +1162,11 @@ namespace crimson {
       }
 
 
-      inline void add_request(const R& request,
+      inline void add_request(R&& request,
 			      const C& client_id,
 			      const ReqParams& req_params,
 			      double addl_cost = 0.0) {
-	add_request(typename super::RequestRef(new R(request)),
+	add_request(typename super::RequestRef(new R(std::move(request))),
 		    client_id,
 		    req_params,
 		    get_time(),
@@ -1174,11 +1174,11 @@ namespace crimson {
       }
 
 
-      inline void add_request(const R& request,
+      inline void add_request(R&& request,
 			      const C& client_id,
 			      double addl_cost = 0.0) {
 	static const ReqParams null_req_params;
-	add_request(typename super::RequestRef(new R(request)),
+	add_request(typename super::RequestRef(new R(std::move(request))),
 		    client_id,
 		    null_req_params,
 		    get_time(),
@@ -1187,12 +1187,12 @@ namespace crimson {
 
 
 
-      inline void add_request_time(const R& request,
+      inline void add_request_time(R&& request,
 				   const C& client_id,
 				   const ReqParams& req_params,
 				   const Time time,
 				   double addl_cost = 0.0) {
-	add_request(typename super::RequestRef(new R(request)),
+	add_request(typename super::RequestRef(new R(std::move(request))),
 		    client_id,
 		    req_params,
 		    time,
@@ -1402,11 +1402,11 @@ namespace crimson {
 
     public:
 
-      inline void add_request(const R& request,
+      inline void add_request(R&& request,
 			      const C& client_id,
 			      const ReqParams& req_params,
 			      double addl_cost = 0.0) {
-	add_request(typename super::RequestRef(new R(request)),
+	add_request(typename super::RequestRef(new R(std::move(request))),
 		    client_id,
 		    req_params,
 		    get_time(),
