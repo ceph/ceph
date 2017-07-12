@@ -167,7 +167,7 @@ void MgrStandby::send_beacon()
 
 void MgrStandby::tick()
 {
-  dout(0) << __func__ << dendl;
+  dout(10) << __func__ << dendl;
   send_beacon();
 
   if (active_mgr) {
