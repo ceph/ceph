@@ -751,13 +751,17 @@ void md_config_t::set_val_or_die(const std::string &key, const char *val)
   assert(ret == 0);
 }
 
-int md_config_t::set_val(const std::string &key, const char *val, bool meta)
+int md_config_t::set_val(const std::string &key, const char *val,
+    bool meta, std::stringstream *err_ss)
 {
   Mutex::Locker l(lock);
-  if (key.empty())
+  if (key.empty()) {
+    if (err_ss) *err_ss << "No key specified";
     return -EINVAL;
-  if (!val)
+  }
+  if (!val) {
     return -EINVAL;
+  }
 
   std::string v(val);
   if (meta)
@@ -773,13 +777,17 @@ int md_config_t::set_val(const std::string &key, const char *val, bool meta)
 	int log, gather;
 	int r = sscanf(v.c_str(), "%d/%d", &log, &gather);
 	if (r >= 1) {
-	  if (r < 2)
+	  if (r < 2) {
 	    gather = log;
-	  //	  cout << "subsys " << subsys.get_name(o) << " log " << log << " gather " << gather << std::endl;
+          }
 	  subsys.set_log_level(o, log);
 	  subsys.set_gather_level(o, gather);
+          if (err_ss) *err_ss << "Set " << k << " to " << log << "/" << gather;
 	  return 0;
 	}
+        if (err_ss) {
+          *err_ss << "Invalid debug level, should be <int> or <int>/<int>";
+        }
 	return -EINVAL;
       }
     }	
@@ -793,15 +801,23 @@ int md_config_t::set_val(const std::string &key, const char *val, bool meta)
       if (observers.find(opt.name) == observers.end()) {
         // And there is no observer to safely change it...
         // You lose.
+        if (err_ss) *err_ss << "Configuration option '" << key << "' may "
+                    "not be modified at runtime";
         return -ENOSYS;
       }
     }
 
     std::string error_message;
-    return set_val_impl(v, opt, &error_message);
+    int r = set_val_impl(v, opt, &error_message);
+    if (r == 0) {
+      if (err_ss) *err_ss << "Set " << opt.name << " to " << v;
+    } else {
+      if (err_ss) *err_ss << error_message;
+    }
+    return r;
   }
 
-  // couldn't find a configuration option with key 'key'
+  if (err_ss) *err_ss << "Configuration option not found: '" << key << "'";
   return -ENOENT;
 }
 

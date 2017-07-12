@@ -148,9 +148,11 @@ public:
 
   // Set a configuration value.
   // Metavariables will be expanded.
-  int set_val(const std::string &key, const char *val, bool meta=true);
-  int set_val(const std::string &key, const string& s, bool meta=true) {
-    return set_val(key, s.c_str(), meta);
+  int set_val(const std::string &key, const char *val, bool meta=true,
+              std::stringstream *err_ss=nullptr);
+  int set_val(const std::string &key, const string& s, bool meta=true,
+              std::stringstream *err_ss=nullptr) {
+    return set_val(key, s.c_str(), meta, err_ss);
   }
 
   // Get a configuration value.
