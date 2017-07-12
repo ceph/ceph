@@ -9110,7 +9110,14 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
             err = -ENOENT;
             goto reply;
           }
-          new_pg_upmap_items.push_back(make_pair(from, to));
+          pair<int32_t,int32_t> entry = make_pair(from, to);
+          auto it = std::find(new_pg_upmap_items.begin(),
+            new_pg_upmap_items.end(), entry);
+          if (it != new_pg_upmap_items.end()) {
+            ss << "osd." << from << " -> osd." << to << " already exists, ";
+            continue;
+          }
+          new_pg_upmap_items.push_back(entry);
           items << from << "->" << to << ",";
         }
         string out(items.str());
