@@ -3181,20 +3181,22 @@ void PGMap::get_health_checks(
   // PG_NOT_DEEP_SCRUBBED
   {
     list<string> detail, deep_detail;
-    const int age = cct->_conf->mon_warn_not_scrubbed +
+    const double age = cct->_conf->mon_warn_not_scrubbed +
       cct->_conf->mon_scrub_interval;
-    const int deep_age = cct->_conf->mon_warn_not_deep_scrubbed +
+    utime_t cutoff = now;
+    cutoff -= age;
+    const double deep_age = cct->_conf->mon_warn_not_deep_scrubbed +
       cct->_conf->osd_deep_scrub_interval;
+    utime_t deep_cutoff = now;
+    deep_cutoff -= deep_age;
     for (auto& p : pg_stat) {
-      const utime_t time_since_ls = now - p.second.last_scrub_stamp;
-      if (time_since_ls > age) {
+      if (p.second.last_scrub_stamp < cutoff) {
 	ostringstream ss;
 	ss << "pg " << p.first << " not scrubbed since "
 	   << p.second.last_scrub_stamp;
         detail.push_back(ss.str());
       }
-      const utime_t time_since_lds = now - p.second.last_deep_scrub_stamp;
-      if (time_since_lds > deep_age) {
+      if (p.second.last_deep_scrub_stamp < deep_cutoff) {
 	ostringstream ss;
 	ss << "pg " << p.first << " not deep-scrubbed since "
 	   << p.second.last_deep_scrub_stamp;
