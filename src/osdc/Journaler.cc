@@ -594,11 +594,8 @@ uint64_t Journaler::append_entry(bufferlist& bl)
     ldout(cct, 10) << " flushing completed object(s) (su " << su << " wro "
 		   << write_obj << " flo " << flush_obj << ")" << dendl;
     _do_flush(write_buf.length() - write_off);
-
-    // if _do_flush() skips flushing some data, it does not update next_safe_pos.
-    if (write_buf.length() > 0 &&
-	write_buf.length() <= wrote) { // the unflushed data are within this entry
-      // set next_safe_pos to end of previous entry
+    if (write_off) {
+      // current entry isn't being flushed, set next_safe_pos to the end of previous entry
       next_safe_pos = write_pos - wrote;
     }
   }
