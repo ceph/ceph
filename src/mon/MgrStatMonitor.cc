@@ -85,13 +85,18 @@ void MgrStatMonitor::update_from_paxos(bool *need_bootstrap)
   get_version(version, bl);
   if (version) {
     assert(bl.length());
-    auto p = bl.begin();
-    ::decode(digest, p);
-    ::decode(health_summary, p);
-    ::decode(health_detail, p);
-    ::decode(service_map, p);
-    dout(10) << __func__ << " v" << version
-	     << " service_map e" << service_map.epoch << dendl;
+    try {
+      auto p = bl.begin();
+      ::decode(digest, p);
+      ::decode(health_summary, p);
+      ::decode(health_detail, p);
+      ::decode(service_map, p);
+      dout(10) << __func__ << " v" << version
+	       << " service_map e" << service_map.epoch << dendl;
+    }
+    catch (buffer::error& e) {
+      derr << "failed to decode mgrstat state; luminous dev version?" << dendl;
+    }
   }
   check_subs();
   update_logger();
