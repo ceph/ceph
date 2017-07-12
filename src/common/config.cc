@@ -865,7 +865,7 @@ int md_config_t::_get_val(const std::string &key, std::string *value) const {
     if (bool *flag = boost::get<bool>(&config_value)) {
       oss << (*flag ? "true" : "false");
     } else if (double *dp = boost::get<double>(&config_value)) {
-      oss << std::fixed << *dp ;
+      oss << std::fixed << *dp;
     } else {
       oss << config_value;
     }
@@ -995,6 +995,8 @@ int md_config_t::set_val_impl(const std::string &raw_val, const Option &opt,
   assert(lock.is_locked());
 
   std::string val = raw_val;
+
+  // Special validator callback?
   if (opt.validator) {
     int r = opt.validator(&val, error_message);
     if (r < 0) {
@@ -1050,6 +1052,41 @@ int md_config_t::set_val_impl(const std::string &raw_val, const Option &opt,
     new_value = uuid;
   } else {
     ceph_abort();
+  }
+
+  // Generic validation: min
+  if (!boost::get<boost::blank>(&(opt.min))) {
+    if (new_value < opt.min) {
+      std::ostringstream oss;
+      oss << "Value '" << new_value << "' is below minimum " << opt.min;
+      *error_message = oss.str();
+      return -EINVAL;
+    }
+  }
+
+  // Generic validation: max
+  if (!boost::get<boost::blank>(&(opt.max))) {
+    if (new_value > opt.max) {
+      std::ostringstream oss;
+      oss << "Value '" << new_value << "' exceeds maximum " << opt.max;
+      *error_message = oss.str();
+      return -EINVAL;
+    }
+  }
+
+  // Generic validation: enum
+  if (!opt.enum_allowed.empty() && opt.type == Option::TYPE_STR) {
+    auto found = std::find(opt.enum_allowed.begin(), opt.enum_allowed.end(),
+                           boost::get<std::string>(new_value));
+    if (found == opt.enum_allowed.end()) {
+      std::ostringstream oss;
+      oss << "'" << new_value << "' is not one of the permitted "
+                 "values: " << joinify(opt.enum_allowed.begin(),
+                                       opt.enum_allowed.end(),
+                                       std::string(", "));
+      *error_message = oss.str();
+      return -EINVAL;
+    }
   }
 
   // Apply the value to its entry in the `values` map
