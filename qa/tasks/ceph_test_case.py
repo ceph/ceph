@@ -18,6 +18,7 @@ class CephTestCase(unittest.TestCase):
     # Environment references
     mounts = None
     fs = None
+    recovery_fs = None
     ceph_cluster = None
     mds_cluster = None
     mgr_cluster = None
