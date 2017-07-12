@@ -413,18 +413,22 @@ new user, and that quota is enabled.  See ``rgw bucket default quota max objects
 Reading / Writing Global Quotas
 -------------------------------
 
-You can read and write quota settings in a region map. To get a
-region map, execute the following. :: 
+You can read and write global quota settings in the period configuration. To
+view the global quota settings::
 
-	radosgw-admin regionmap get > regionmap.json
+	radosgw-admin global quota get
 
-To set quota settings for the entire region, simply modify the 
-quota settings in the region map. Then, use ``region set`` to 
-update the region map. ::
+The global quota settings can be manipulated with the ``global quota``
+counterparts of the ``quota set``, ``quota enable``, and ``quota disable``
+commands. ::
 
-	radosgw-admin region set < regionmap.json
+	radosgw-admin global quota set --quota-scope bucket --max-objects 1024
+	radosgw-admin global quota enable --quota-scope bucket
 
-.. note:: After updating the region map, you must restart the gateway.
+.. note:: In a multisite configuration, where there is a realm and period
+   present, changes to the global quotas must be committed using ``period
+   update --commit``. If there is no period present, the rados gateway(s) must
+   be restarted for the changes to take effect.
 
 
 Usage

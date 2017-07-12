@@ -92,6 +92,10 @@ void _usage()
   cout << "  quota set                  set quota params\n";
   cout << "  quota enable               enable quota\n";
   cout << "  quota disable              disable quota\n";
+  cout << "  global quota get           view global quota params\n";
+  cout << "  global quota set           set global quota params\n";
+  cout << "  global quota enable        enable a global quota\n";
+  cout << "  global quota disable       disable a global quota\n";
   cout << "  realm create               create a new realm\n";
   cout << "  realm delete               delete a realm\n";
   cout << "  realm get                  show realm info\n";
@@ -410,6 +414,10 @@ enum {
   OPT_PERIOD_LIST,
   OPT_PERIOD_UPDATE,
   OPT_PERIOD_COMMIT,
+  OPT_GLOBAL_QUOTA_GET,
+  OPT_GLOBAL_QUOTA_SET,
+  OPT_GLOBAL_QUOTA_ENABLE,
+  OPT_GLOBAL_QUOTA_DISABLE,
   OPT_SYNC_STATUS,
 };
 
@@ -425,7 +433,8 @@ static int get_cmd(const char *cmd, const char *prev_cmd, const char *prev_prev_
       strcmp(cmd, "data") == 0 ||
       strcmp(cmd, "datalog") == 0 ||
       strcmp(cmd, "error") == 0 ||
-      strcmp(cmd, "gc") == 0 || 
+      strcmp(cmd, "gc") == 0 ||
+      strcmp(cmd, "global") == 0 ||
       strcmp(cmd, "key") == 0 ||
       strcmp(cmd, "log") == 0 ||
       strcmp(cmd, "mdlog") == 0 ||
@@ -582,6 +591,16 @@ static int get_cmd(const char *cmd, const char *prev_cmd, const char *prev_prev_
       return OPT_BI_LIST;
     if (strcmp(cmd, "purge") == 0)
       return OPT_BI_PURGE;
+  } else if ((prev_prev_cmd && strcmp(prev_prev_cmd, "global") == 0) &&
+	     (strcmp(prev_cmd, "quota") == 0)) {
+    if (strcmp(cmd, "get") == 0)
+      return OPT_GLOBAL_QUOTA_GET;
+    if (strcmp(cmd, "set") == 0)
+      return OPT_GLOBAL_QUOTA_SET;
+    if (strcmp(cmd, "enable") == 0)
+      return OPT_GLOBAL_QUOTA_ENABLE;
+    if (strcmp(cmd, "disable") == 0)
+      return OPT_GLOBAL_QUOTA_DISABLE;
   } else if (strcmp(prev_cmd, "period") == 0) {
     if (strcmp(cmd, "delete") == 0)
       return OPT_PERIOD_DELETE;
@@ -1070,11 +1089,13 @@ void set_quota_info(RGWQuotaInfo& quota, int opt_cmd, int64_t max_size, int64_t 
 {
   switch (opt_cmd) {
     case OPT_QUOTA_ENABLE:
+    case OPT_GLOBAL_QUOTA_ENABLE:
       quota.enabled = true;
 
       // falling through on purpose
 
     case OPT_QUOTA_SET:
+    case OPT_GLOBAL_QUOTA_SET:
       if (have_max_objects) {
         if (max_objects < 0) {
           quota.max_objects = -1;
@@ -1091,6 +1112,7 @@ void set_quota_info(RGWQuotaInfo& quota, int opt_cmd, int64_t max_size, int64_t 
       }
       break;
     case OPT_QUOTA_DISABLE:
+    case OPT_GLOBAL_QUOTA_DISABLE:
       quota.enabled = false;
       break;
   }
@@ -2711,6 +2733,8 @@ int main(int argc, char **argv)
 			 OPT_REALM_CREATE,
 			 OPT_PERIOD_DELETE, OPT_PERIOD_GET,
 			 OPT_PERIOD_GET_CURRENT, OPT_PERIOD_LIST,
+			 OPT_GLOBAL_QUOTA_GET, OPT_GLOBAL_QUOTA_SET,
+			 OPT_GLOBAL_QUOTA_ENABLE, OPT_GLOBAL_QUOTA_DISABLE,
 			 OPT_REALM_DELETE, OPT_REALM_GET, OPT_REALM_LIST,
 			 OPT_REALM_LIST_PERIODS,
 			 OPT_REALM_GET_DEFAULT, OPT_REALM_REMOVE,
@@ -2847,6 +2871,84 @@ int main(int argc, char **argv)
         }
 
         encode_json("period", period, formatter);
+        formatter->flush(cout);
+        cout << std::endl;
+      }
+      break;
+    case OPT_GLOBAL_QUOTA_GET:
+    case OPT_GLOBAL_QUOTA_SET:
+    case OPT_GLOBAL_QUOTA_ENABLE:
+    case OPT_GLOBAL_QUOTA_DISABLE:
+      {
+        if (realm_id.empty()) {
+          RGWRealm realm(g_ceph_context, store);
+          if (!realm_name.empty()) {
+            // look up realm_id for the given realm_name
+            int ret = realm.read_id(realm_name, realm_id);
+            if (ret < 0) {
+              cerr << "ERROR: failed to read realm for " << realm_name
+                  << ": " << cpp_strerror(-ret) << std::endl;
+              return -ret;
+            }
+          } else {
+            // use default realm_id when none is given
+            int ret = realm.read_default_id(realm_id);
+            if (ret < 0 && ret != -ENOENT) { // on ENOENT, use empty realm_id
+              cerr << "ERROR: failed to read default realm: "
+                  << cpp_strerror(-ret) << std::endl;
+              return -ret;
+            }
+          }
+        }
+
+        RGWPeriodConfig period_config;
+        int ret = period_config.read(store, realm_id);
+        if (ret < 0 && ret != -ENOENT) {
+          cerr << "ERROR: failed to read period config: "
+              << cpp_strerror(-ret) << std::endl;
+          return -ret;
+        }
+
+        formatter->open_object_section("period_config");
+        if (quota_scope == "bucket") {
+          set_quota_info(period_config.bucket_quota, opt_cmd,
+                         max_size, max_objects,
+                         have_max_size, have_max_objects);
+          encode_json("bucket quota", period_config.bucket_quota, formatter);
+        } else if (quota_scope == "user") {
+          set_quota_info(period_config.user_quota, opt_cmd,
+                         max_size, max_objects,
+                         have_max_size, have_max_objects);
+          encode_json("user quota", period_config.user_quota, formatter);
+        } else if (quota_scope.empty() && opt_cmd == OPT_GLOBAL_QUOTA_GET) {
+          // if no scope is given for GET, print both
+          encode_json("bucket quota", period_config.bucket_quota, formatter);
+          encode_json("user quota", period_config.user_quota, formatter);
+        } else {
+          cerr << "ERROR: invalid quota scope specification. Please specify "
+              "either --quota-scope=bucket, or --quota-scope=user" << std::endl;
+          return EINVAL;
+        }
+        formatter->close_section();
+
+        if (opt_cmd != OPT_GLOBAL_QUOTA_GET) {
+          // write the modified period config
+          ret = period_config.write(store, realm_id);
+          if (ret < 0) {
+            cerr << "ERROR: failed to write period config: "
+                << cpp_strerror(-ret) << std::endl;
+            return -ret;
+          }
+          if (!realm_id.empty()) {
+            cout << "Global quota changes saved. Use 'period update' to apply "
+                "them to the staging period, and 'period commit' to commit the "
+                "new period." << std::endl;
+          } else {
+            cout << "Global quota changes saved. They will take effect as "
+                "the gateways are restarted." << std::endl;
+          }
+        }
+
         formatter->flush(cout);
         cout << std::endl;
       }
