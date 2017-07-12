@@ -99,4 +99,6 @@ class Activate(object):
             help='filestore objectstore (current default)',
         )
         args = parser.parse_args(self.argv[1:])
+        if len(self.argv) <= 1:
+            return parser.print_help()
         self.activate(args)

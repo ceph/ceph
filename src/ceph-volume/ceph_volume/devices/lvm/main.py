@@ -1,5 +1,6 @@
+import argparse
 from textwrap import dedent
-from tambo import Transport
+from ceph_volume import terminal
 import activate
 import prepare
 
@@ -26,14 +27,12 @@ class LVM(object):
         return self._help.format(sub_help=sub_help)
 
     def main(self):
-        options = [['--log', '--logging']]
-        parser = Transport(self.argv, mapper=self.mapper,
-                           options=options, check_help=False,
-                           check_version=False)
-        parser.parse_args()
-        parser.catch_help = self.print_help(parser.subhelp())
-        parser.mapper = self.mapper
+        terminal.dispatch(self.mapper, self.argv)
+        parser = argparse.ArgumentParser(
+            prog='ceph-volume lvm',
+            formatter_class=argparse.RawDescriptionHelpFormatter,
+            description=self.print_help(terminal.subhelp(self.mapper)),
+        )
+        parser.parse_args(self.argv)
         if len(self.argv) <= 1:
             return parser.print_help()
-        parser.dispatch()
-        parser.catches_help()

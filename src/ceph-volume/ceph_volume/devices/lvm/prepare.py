@@ -206,5 +206,7 @@ class Prepare(object):
             '--osd-fsid',
             help='Reuse an existing OSD fsid',
         )
-        args = parser.parse_args(self.argv[1:])
+        args = parser.parse_args(self.argv)
+        if len(self.argv) <= 1:
+            return parser.print_help()
         self.prepare(args)
