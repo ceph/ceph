@@ -1,7 +1,12 @@
 overrides:
   ceph:
     log-whitelist:
+      - overall HEALTH_
+      - (OSD_DOWN)
+      - (OSD_
       - wrongly marked me down
+# MDS daemon 'b' is not responding, replacing it as rank 0 with standby 'a'
+      - is not responding
     conf:
       mds:
         debug mds: 20

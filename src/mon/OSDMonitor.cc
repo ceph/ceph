@@ -17,6 +17,8 @@
  */
 
 #include <algorithm>
+#include <boost/algorithm/string.hpp>
+#include <locale>
 #include <sstream>
 
 #include "mon/OSDMonitor.h"
@@ -275,6 +277,8 @@ void OSDMonitor::update_from_paxos(bool *need_bootstrap)
     mapping_job.reset();
   }
 
+  load_health();
+
   /*
    * We will possibly have a stashed latest that *we* wrote, and we will
    * always be sure to have the oldest full map in the first..last range
@@ -532,7 +536,7 @@ void OSDMonitor::on_active()
   update_logger();
 
   if (mon->is_leader()) {
-    mon->clog->info() << "osdmap " << osdmap;
+    mon->clog->debug() << "osdmap " << osdmap;
   } else {
     list<MonOpRequestRef> ls;
     take_all_failures(ls);
@@ -1101,6 +1105,11 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
     ::encode(pending_creatings, creatings_bl);
     t->put(OSD_PG_CREATING_PREFIX, "creating", creatings_bl);
   }
+
+  // health
+  health_check_map_t next;
+  tmp.check_health(&next);
+  encode_health(next, t);
 }
 
 void OSDMonitor::trim_creating_pgs(creating_pgs_t* creating_pgs,
@@ -3246,7 +3255,8 @@ void OSDMonitor::tick()
 
 	  do_propose = true;
 
-	  mon->clog->info() << "osd." << o << " out (down for " << down << ")";
+	  mon->clog->info() << "Marking osd." << o << " out (has been down for "
+                            << int(down.sec()) << " seconds)";
 	} else
 	  continue;
       }
@@ -3365,7 +3375,7 @@ void OSDMonitor::get_health(list<pair<health_status_t,string> >& summary,
           osds.insert(i);
         }
 	continue;
-      } 
+      }
       if (osdmap.is_out(i))
         continue;
       ++num_in_osds;
@@ -3776,7 +3786,17 @@ void OSDMonitor::get_health(list<pair<health_status_t,string> >& summary,
       }
     }
 
-    get_pools_health(summary, detail);
+    for (auto it : osdmap.get_pools()) {
+      const pg_pool_t &pool = it.second;
+      if (pool.has_flag(pg_pool_t::FLAG_FULL)) {
+	const string& pool_name = osdmap.get_pool_name(it.first);
+	stringstream ss;
+	ss << "pool '" << pool_name << "' is full";
+	summary.push_back(make_pair(HEALTH_WARN, ss.str()));
+	if (detail)
+	  detail->push_back(make_pair(HEALTH_WARN, ss.str()));
+      }
+    }
   }
 }
 
@@ -5037,90 +5057,6 @@ bool OSDMonitor::update_pools_status()
   }
   return ret;
 }
-
-void OSDMonitor::get_pools_health(
-    list<pair<health_status_t,string> >& summary,
-    list<pair<health_status_t,string> > *detail) const
-{
-  auto& pools = osdmap.get_pools();
-  for (auto it = pools.begin(); it != pools.end(); ++it) {
-    const pool_stat_t *pstat = mon->pgservice->get_pool_stat(it->first);
-    if (!pstat)
-      continue;
-    const object_stat_sum_t& sum = pstat->stats.sum;
-    const pg_pool_t &pool = it->second;
-    const string& pool_name = osdmap.get_pool_name(it->first);
-
-    if (pool.has_flag(pg_pool_t::FLAG_FULL)) {
-      // uncomment these asserts if/when we update the FULL flag on pg_stat update
-      //assert((pool.quota_max_objects > 0) || (pool.quota_max_bytes > 0));
-
-      stringstream ss;
-      ss << "pool '" << pool_name << "' is full";
-      summary.push_back(make_pair(HEALTH_WARN, ss.str()));
-      if (detail)
-	detail->push_back(make_pair(HEALTH_WARN, ss.str()));
-    }
-
-    float warn_threshold = (float)g_conf->mon_pool_quota_warn_threshold/100;
-    float crit_threshold = (float)g_conf->mon_pool_quota_crit_threshold/100;
-
-    if (pool.quota_max_objects > 0) {
-      stringstream ss;
-      health_status_t status = HEALTH_OK;
-      if ((uint64_t)sum.num_objects >= pool.quota_max_objects) {
-	// uncomment these asserts if/when we update the FULL flag on pg_stat update
-        //assert(pool.has_flag(pg_pool_t::FLAG_FULL));
-      } else if (crit_threshold > 0 &&
-		 sum.num_objects >= pool.quota_max_objects*crit_threshold) {
-        ss << "pool '" << pool_name
-           << "' has " << sum.num_objects << " objects"
-           << " (max " << pool.quota_max_objects << ")";
-        status = HEALTH_ERR;
-      } else if (warn_threshold > 0 &&
-		 sum.num_objects >= pool.quota_max_objects*warn_threshold) {
-        ss << "pool '" << pool_name
-           << "' has " << sum.num_objects << " objects"
-           << " (max " << pool.quota_max_objects << ")";
-        status = HEALTH_WARN;
-      }
-      if (status != HEALTH_OK) {
-        pair<health_status_t,string> s(status, ss.str());
-        summary.push_back(s);
-        if (detail)
-          detail->push_back(s);
-      }
-    }
-
-    if (pool.quota_max_bytes > 0) {
-      health_status_t status = HEALTH_OK;
-      stringstream ss;
-      if ((uint64_t)sum.num_bytes >= pool.quota_max_bytes) {
-	// uncomment these asserts if/when we update the FULL flag on pg_stat update
-	//assert(pool.has_flag(pg_pool_t::FLAG_FULL));
-      } else if (crit_threshold > 0 &&
-		 sum.num_bytes >= pool.quota_max_bytes*crit_threshold) {
-        ss << "pool '" << pool_name
-           << "' has " << si_t(sum.num_bytes) << " bytes"
-           << " (max " << si_t(pool.quota_max_bytes) << ")";
-        status = HEALTH_ERR;
-      } else if (warn_threshold > 0 &&
-		 sum.num_bytes >= pool.quota_max_bytes*warn_threshold) {
-        ss << "pool '" << pool_name
-           << "' has " << si_t(sum.num_bytes) << " bytes"
-           << " (max " << si_t(pool.quota_max_bytes) << ")";
-        status = HEALTH_WARN;
-      }
-      if (status != HEALTH_OK) {
-        pair<health_status_t,string> s(status, ss.str());
-        summary.push_back(s);
-        if (detail)
-          detail->push_back(s);
-      }
-    }
-  }
-}
-
 
 int OSDMonitor::prepare_new_pool(MonOpRequestRef op)
 {
@@ -8468,6 +8404,17 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 	      pending_inc.new_xinfo[osd].old_weight = osdmap.osd_weight[osd];
 	    }
 	    ss << "marked out osd." << osd << ". ";
+            std::ostringstream msg;
+            msg << "Client " << op->get_session()->entity_name
+                << " marked osd." << osd << " out";
+            if (osdmap.is_up(osd)) {
+              msg << ", while it was still marked up";
+            } else {
+              msg << ", after it was down for " << int(down_pending_out[osd].sec())
+                  << " seconds";
+            }
+
+            mon->clog->info() << msg.str();
 	    any = true;
 	  }
         } else if (prefix == "osd in") {

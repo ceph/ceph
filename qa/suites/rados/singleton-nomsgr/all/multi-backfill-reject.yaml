@@ -11,6 +11,11 @@ roles:
 tasks:
 - install:
 - ceph:
+    log-whitelist:
+      - overall HEALTH_
+      - (PG_
+      - (OSD_
+      - (OBJECT_
     conf:
       osd:
         osd debug reject backfill probability: .3

@@ -15,5 +15,10 @@ tasks:
 - install:
 - ceph:
     log-whitelist:
-    - objects unfound and apparently lost
+      - objects unfound and apparently lost
+      - overall HEALTH_
+      - (OSDMAP_FLAGS)
+      - (OSD_
+      - (PG_
+      - (OBJECT_
 - ec_lost_unfound:

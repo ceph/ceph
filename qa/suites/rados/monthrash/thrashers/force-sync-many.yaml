@@ -1,3 +1,9 @@
+overrides:
+  ceph:
+    log-whitelist:
+      - overall HEALTH_
+      - (MON_DOWN)
+      - (TOO_FEW_PGS)
 tasks:
 - mon_thrash:
     revive_delay: 90

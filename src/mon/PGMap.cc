@@ -1,6 +1,8 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
+#include <boost/algorithm/string.hpp>
+
 #include "PGMap.h"
 
 #define dout_subsys ceph_subsys_mon
@@ -2548,7 +2550,671 @@ namespace {
       ss << pgs_count << " unscrubbed pgs";
       summary.push_back(make_pair(HEALTH_WARN, ss.str()));
     }
+  }
+}
 
+void PGMap::get_health_checks(
+  CephContext *cct,
+  const OSDMap& osdmap,
+  health_check_map_t *checks) const
+{
+  utime_t now = ceph_clock_now();
+  const unsigned max = cct->_conf->mon_health_max_detail;
+  const auto& pools = osdmap.get_pools();
+
+  checks->clear();
+
+  typedef enum pg_consequence_t {
+    UNAVAILABLE = 1,   // Client IO to the pool may block
+    DEGRADED = 2,      // Fewer than the requested number of replicas are present
+    DEGRADED_FULL = 3, // Fewer than the request number of replicas may be present
+                       //  and insufficiet resources are present to fix this
+    DAMAGED = 4        // The data may be missing or inconsistent on disk and
+                       //  requires repair
+  } pg_consequence_t;
+
+  // For a given PG state, how should it be reported at the pool level?
+  class PgStateResponse {
+    public:
+    pg_consequence_t consequence;
+    typedef std::function< utime_t(const pg_stat_t&) > stuck_cb;
+    stuck_cb stuck_since;
+    bool invert;
+
+    PgStateResponse(const pg_consequence_t &c, stuck_cb s)
+      : consequence(c), stuck_since(s), invert(false)
+    {
+    }
+
+    PgStateResponse(const pg_consequence_t &c, stuck_cb s, bool i)
+      : consequence(c), stuck_since(s), invert(i)
+    {
+    }
+  };
+
+  // Record the PG state counts that contributed to a reported pool state
+  class PgCauses {
+    public:
+    // Map of PG_STATE_* to number of pgs in that state.
+    std::map<unsigned, unsigned> states;
+
+    // List of all PG IDs that had a state contributing
+    // to this health condition.
+    std::set<pg_t> pgs;
+
+    std::map<pg_t, std::string> pg_messages;
+  };
+
+  // Map of PG state to how to respond to it
+  std::map<unsigned, PgStateResponse> state_to_response = {
+    // Immediate reports
+    { PG_STATE_INCONSISTENT,     {DAMAGED,     {}} },
+    { PG_STATE_INCOMPLETE,       {DEGRADED,    {}} },
+    { PG_STATE_REPAIR,           {DAMAGED,     {}} },
+    { PG_STATE_SNAPTRIM_ERROR,   {DAMAGED,     {}} },
+    { PG_STATE_BACKFILL_TOOFULL, {DEGRADED,    {}} },
+    { PG_STATE_RECOVERY_TOOFULL, {DEGRADED,    {}} },
+    { PG_STATE_DEGRADED,         {DEGRADED,    {}} },
+    { PG_STATE_DOWN,             {UNAVAILABLE, {}} },
+    // Delayed (wait until stuck) reports
+    { PG_STATE_PEERING,          {UNAVAILABLE, [](const pg_stat_t &p){return p.last_peered;}    } },
+    { PG_STATE_UNDERSIZED,       {DEGRADED,    [](const pg_stat_t &p){return p.last_fullsized;} } },
+    { PG_STATE_STALE,            {UNAVAILABLE, [](const pg_stat_t &p){return p.last_unstale;}   } },
+    // Delayed and inverted reports
+    { PG_STATE_ACTIVE,           {UNAVAILABLE, [](const pg_stat_t &p){return p.last_active;}, true} },
+    { PG_STATE_CLEAN,            {DEGRADED,    [](const pg_stat_t &p){return p.last_clean;}, true} }
+  };
+
+  // Specialized state printer that takes account of inversion of
+  // ACTIVE, CLEAN checks.
+  auto state_name = [](const uint32_t &state) {
+    // Special cases for the states that are inverted checks
+    if (state == PG_STATE_CLEAN) {
+      return std::string("unclean");
+    } else if (state == PG_STATE_ACTIVE) {
+      return std::string("inactive");
+    } else {
+      return pg_state_string(state);
+    }
+  };
+
+  // Map of what is wrong to information about why, implicitly also stores
+  // the list of what is wrong.
+  std::map<pg_consequence_t, PgCauses> detected;
+
+  // Optimisation: trim down the number of checks to apply based on
+  // the summary counters
+  std::map<unsigned, PgStateResponse> possible_responses;
+  for (const auto &i : num_pg_by_state) {
+    for (const auto &j : state_to_response) {
+      if (!j.second.invert) {
+        // Check for normal tests by seeing if any pgs have the flag
+        if (i.first & j.first) {
+          possible_responses.insert(j);
+        }
+      }
+    }
+  }
+
+  for (const auto &j : state_to_response) {
+    if (j.second.invert) {
+      // Check for inverted tests by seeing if not-all pgs have the flag
+      const auto &found = num_pg_by_state.find(j.first);
+      if (found == num_pg_by_state.end() || found->second != num_pg) {
+        possible_responses.insert(j);
+      }
+    }
+  }
+
+  utime_t cutoff = now - utime_t(cct->_conf->mon_pg_stuck_threshold, 0);
+  // Loop over all PGs, if there are any possibly-unhealthy states in there
+  if (!possible_responses.empty()) {
+    for (const auto& i : pg_stat) {
+      const auto &pg_id = i.first;
+      const auto &pg_info = i.second;
+
+      for (const auto &j : state_to_response) {
+        const auto &pg_response_state = j.first;
+        const auto &pg_response = j.second;
+
+        // Apply the state test
+        if (!(bool(pg_info.state & pg_response_state) != pg_response.invert)) {
+          continue;
+        }
+
+        // Apply stuckness test if needed
+        if (pg_response.stuck_since) {
+          // Delayed response, check for stuckness
+          utime_t last_whatever = pg_response.stuck_since(pg_info);
+          if (last_whatever >= cutoff) {
+            // Not stuck enough, ignore.
+            continue;
+          } else {
+
+          }
+        }
+
+        auto &causes = detected[pg_response.consequence];
+        causes.states[pg_response_state]++;
+        causes.pgs.insert(pg_id);
+
+        // Don't bother composing detail string if we have already recorded
+        // too many
+        if (causes.pg_messages.size() > max) {
+          continue;
+        }
+
+        std::ostringstream ss;
+        if (pg_response.stuck_since) {
+          utime_t since = pg_response.stuck_since(pg_info);
+          ss << "pg " << pg_id << " is stuck " << state_name(pg_response_state);
+          if (since == utime_t()) {
+            ss << " since forever";
+          } else {
+            utime_t dur = now - since;
+            ss << " for " << dur;
+          }
+          ss << ", current state " << pg_state_string(pg_info.state)
+             << ", last acting " << pg_info.acting;
+        } else {
+          ss << "pg " << pg_id << " is "
+             << pg_state_string(pg_info.state);
+          ss << ", acting " << pg_info.acting;
+          if (pg_info.stats.sum.num_objects_unfound) {
+            ss << ", " << pg_info.stats.sum.num_objects_unfound
+               << " unfound";
+          }
+        }
+
+        if (pg_info.state & PG_STATE_INCOMPLETE) {
+          const pg_pool_t *pi = osdmap.get_pg_pool(pg_id.pool());
+          if (pi && pi->min_size > 1) {
+            ss << " (reducing pool "
+               << osdmap.get_pool_name(pg_id.pool())
+               << " min_size from " << (int)pi->min_size
+               << " may help; search ceph.com/docs for 'incomplete')";
+          }
+        }
+
+        causes.pg_messages[pg_id] = ss.str();
+      }
+    }
+  } else {
+    dout(10) << __func__ << " skipping loop over PGs: counters look OK" << dendl;
+  }
+
+  for (const auto &i : detected) {
+    std::string health_code;
+    health_status_t sev;
+    std::string summary;
+    switch(i.first) {
+      case UNAVAILABLE:
+        health_code = "PG_AVAILABILITY";
+        sev = HEALTH_WARN;
+        summary = "Reduced data availability: ";
+        break;
+      case DEGRADED:
+        health_code = "PG_DEGRADED";
+        summary = "Degraded data redundancy: ";
+        sev = HEALTH_WARN;
+        break;
+      case DEGRADED_FULL:
+        health_code = "PG_DEGRADED_FULL";
+        summary = "Degraded data redundancy (low space): ";
+        sev = HEALTH_ERR;
+        break;
+      case DAMAGED:
+        health_code = "PG_DAMAGED";
+        summary = "Possible data damage: ";
+        sev = HEALTH_ERR;
+        break;
+      default:
+        assert(false);
+    }
+
+    if (i.first == DEGRADED) {
+      if (pg_sum.stats.sum.num_objects_degraded &&
+          pg_sum.stats.sum.num_object_copies > 0) {
+        double pc = (double)pg_sum.stats.sum.num_objects_degraded /
+          (double)pg_sum.stats.sum.num_object_copies * (double)100.0;
+        char b[20];
+        snprintf(b, sizeof(b), "%.3lf", pc);
+        ostringstream ss;
+        ss << pg_sum.stats.sum.num_objects_degraded
+           << "/" << pg_sum.stats.sum.num_object_copies << " objects degraded ("
+           << b << "%)";
+
+        // Throw in a comma for the benefit of the following PG counts
+        summary += ss.str() + ", ";
+      }
+    }
+
+    // Compose summary message saying how many PGs in what states led
+    // to this health check failing
+    std::vector<std::string> pg_msgs;
+    for (const auto &j : i.second.states) {
+      std::ostringstream msg;
+      msg << j.second << (j.second > 1 ? " pgs " : " pg ") << state_name(j.first);
+      pg_msgs.push_back(msg.str());
+    }
+    summary += joinify(pg_msgs.begin(), pg_msgs.end(), std::string(", "));
+
+
+
+    health_check_t *check = &checks->add(
+        health_code,
+        sev,
+        summary);
+
+    // Compose list of PGs contributing to this health check failing
+    for (const auto &j : i.second.pg_messages) {
+      check->detail.push_back(j.second);
+    }
+  }
+
+  // OSD_SKEWED_USAGE
+  if (cct->_conf->mon_warn_osd_usage_min_max_delta) {
+    int max_osd = -1, min_osd = -1;
+    float max_osd_usage = 0.0, min_osd_usage = 1.0;
+    for (auto p = osd_stat.begin(); p != osd_stat.end(); ++p) {
+      // kb should never be 0, but avoid divide by zero in case of corruption
+      if (p->second.kb <= 0)
+        continue;
+      float usage = ((float)p->second.kb_used) / ((float)p->second.kb);
+      if (usage > max_osd_usage) {
+        max_osd_usage = usage;
+	max_osd = p->first;
+      }
+      if (usage < min_osd_usage) {
+        min_osd_usage = usage;
+	min_osd = p->first;
+      }
+    }
+    float diff = max_osd_usage - min_osd_usage;
+    if (diff > cct->_conf->mon_warn_osd_usage_min_max_delta) {
+      auto& d = checks->add("OSD_SKEWED_USAGE", HEALTH_WARN,
+			    "skewed osd utilization");
+      ostringstream ss;
+      ss << "difference between min (osd." << min_osd << " at "
+	 << roundf(min_osd_usage*1000.0)/100.0
+	 << "%) and max (osd." << max_osd << " at "
+	 << roundf(max_osd_usage*1000.0)/100.0
+	 << "%) osd usage " << roundf(diff*1000.0)/100.0 << "% > "
+	 << roundf(cct->_conf->mon_warn_osd_usage_min_max_delta*1000.0)/100.0
+	 << " (mon_warn_osd_usage_min_max_delta)";
+      d.detail.push_back(ss.str());
+    }
+  }
+
+  // OSD_SCRUB_ERRORS
+  if (pg_sum.stats.sum.num_scrub_errors) {
+    ostringstream ss;
+    ss << pg_sum.stats.sum.num_scrub_errors << " scrub errors";
+    checks->add("OSD_SCRUB_ERRORS", HEALTH_ERR, ss.str());
+  }
+
+  // CACHE_POOL_NEAR_FULL
+  {
+    list<string> detail;
+    unsigned num_pools = 0;
+    for (auto& p : pools) {
+      if ((!p.second.target_max_objects && !p.second.target_max_bytes) ||
+	  !pg_pool_sum.count(p.first)) {
+	continue;
+      }
+      bool nearfull = false;
+      const string& name = osdmap.get_pool_name(p.first);
+      const pool_stat_t& st = get_pg_pool_sum_stat(p.first);
+      uint64_t ratio = p.second.cache_target_full_ratio_micro +
+	((1000000 - p.second.cache_target_full_ratio_micro) *
+	 cct->_conf->mon_cache_target_full_warn_ratio);
+      if (p.second.target_max_objects &&
+	  (uint64_t)(st.stats.sum.num_objects -
+		     st.stats.sum.num_objects_hit_set_archive) >
+	  p.second.target_max_objects * (ratio / 1000000.0)) {
+	ostringstream ss;
+	ss << "cache pool '" << name << "' with "
+	   << si_t(st.stats.sum.num_objects)
+	   << " objects at/near target max "
+	   << si_t(p.second.target_max_objects) << " objects";
+	detail.push_back(ss.str());
+	nearfull = true;
+      }
+      if (p.second.target_max_bytes &&
+	  (uint64_t)(st.stats.sum.num_bytes -
+		     st.stats.sum.num_bytes_hit_set_archive) >
+	  p.second.target_max_bytes * (ratio / 1000000.0)) {
+	ostringstream ss;
+	ss << "cache pool '" << name
+	   << "' with " << si_t(st.stats.sum.num_bytes)
+	   << "B at/near target max "
+	   << si_t(p.second.target_max_bytes) << "B";
+	detail.push_back(ss.str());
+	nearfull = true;
+      }
+      if (nearfull) {
+	++num_pools;
+      }
+    }
+    if (!detail.empty()) {
+      ostringstream ss;
+      ss << num_pools << " cache pools at or near target size";
+      auto& d = checks->add("CACHE_POOL_NEAR_FULL", HEALTH_WARN, ss.str());
+      d.detail.swap(detail);
+    }
+  }
+
+  // TOO_FEW_PGS
+  int num_in = osdmap.get_num_in_osds();
+  int sum_pg_up = MAX(pg_sum.up, static_cast<int32_t>(pg_stat.size()));
+  if (num_in &&
+      cct->_conf->mon_pg_warn_min_per_osd > 0 &&
+      osdmap.get_pools().size() > 0) {
+    int per = sum_pg_up / num_in;
+    if (per < cct->_conf->mon_pg_warn_min_per_osd && per) {
+      ostringstream ss;
+      ss << "too few PGs per OSD (" << per
+	 << " < min " << cct->_conf->mon_pg_warn_min_per_osd << ")";
+      checks->add("TOO_FEW_PGS", HEALTH_WARN, ss.str());
+    }
+  }
+
+  // TOO_MANY_PGS
+  if (num_in && cct->_conf->mon_pg_warn_max_per_osd > 0) {
+    int per = sum_pg_up / num_in;
+    if (per > cct->_conf->mon_pg_warn_max_per_osd) {
+      ostringstream ss;
+      ss << "too many PGs per OSD (" << per
+	 << " > max " << cct->_conf->mon_pg_warn_max_per_osd << ")";
+      checks->add("TOO_MANY_PGS", HEALTH_WARN, ss.str());
+    }
+  }
+
+  // SMALLER_PGP_NUM
+  // MANY_OBJECTS_PER_PG
+  if (!pg_stat.empty()) {
+    list<string> pgp_detail, many_detail;
+    for (auto p = pg_pool_sum.begin();
+         p != pg_pool_sum.end();
+         ++p) {
+      const pg_pool_t *pi = osdmap.get_pg_pool(p->first);
+      if (!pi)
+	continue;   // in case osdmap changes haven't propagated to PGMap yet
+      const string& name = osdmap.get_pool_name(p->first);
+      if (pi->get_pg_num() > pi->get_pgp_num() &&
+	  !(name.find(".DELETED") != string::npos &&
+	    cct->_conf->mon_fake_pool_delete)) {
+	ostringstream ss;
+	ss << "pool " << name << " pg_num "
+	   << pi->get_pg_num() << " > pgp_num " << pi->get_pgp_num();
+	pgp_detail.push_back(ss.str());
+      }
+      int average_objects_per_pg = pg_sum.stats.sum.num_objects / pg_stat.size();
+      if (average_objects_per_pg > 0 &&
+          pg_sum.stats.sum.num_objects >= cct->_conf->mon_pg_warn_min_objects &&
+          p->second.stats.sum.num_objects >=
+	  cct->_conf->mon_pg_warn_min_pool_objects) {
+	int objects_per_pg = p->second.stats.sum.num_objects / pi->get_pg_num();
+	float ratio = (float)objects_per_pg / (float)average_objects_per_pg;
+	if (cct->_conf->mon_pg_warn_max_object_skew > 0 &&
+	    ratio > cct->_conf->mon_pg_warn_max_object_skew) {
+	  ostringstream ss;
+	  ss << "pool " << name << " objects per pg ("
+	     << objects_per_pg << ") is more than " << ratio
+	     << " times cluster average ("
+	     << average_objects_per_pg << ")";
+	  many_detail.push_back(ss.str());
+	}
+      }
+    }
+    if (!pgp_detail.empty()) {
+      ostringstream ss;
+      ss << pgp_detail.size() << " pools have pg_num > pgp_num";
+      auto& d = checks->add("SMALLER_PGP_NUM", HEALTH_WARN, ss.str());
+      d.detail.swap(pgp_detail);
+    }
+    if (!many_detail.empty()) {
+      ostringstream ss;
+      ss << many_detail.size() << " pools have many more objects per pg than"
+	 << " average";
+      auto& d = checks->add("MANY_OBJECTS_PER_PG", HEALTH_WARN, ss.str());
+      d.detail.swap(many_detail);
+    }
+  }
+
+  // POOL_FULL
+  // POOL_NEAR_FULL
+  {
+    float warn_threshold = (float)g_conf->mon_pool_quota_warn_threshold/100;
+    float crit_threshold = (float)g_conf->mon_pool_quota_crit_threshold/100;
+    list<string> full_detail, nearfull_detail;
+    unsigned full_pools = 0, nearfull_pools = 0;
+    for (auto it : pools) {
+      auto it2 = pg_pool_sum.find(it.first);
+      if (it2 == pg_pool_sum.end()) {
+	continue;
+      }
+      const pool_stat_t *pstat = &it2->second;
+      const object_stat_sum_t& sum = pstat->stats.sum;
+      const string& pool_name = osdmap.get_pool_name(it.first);
+      const pg_pool_t &pool = it.second;
+      bool full = false, nearfull = false;
+      if (pool.quota_max_objects > 0) {
+	stringstream ss;
+	if ((uint64_t)sum.num_objects >= pool.quota_max_objects) {
+	} else if (crit_threshold > 0 &&
+		   sum.num_objects >= pool.quota_max_objects*crit_threshold) {
+	  ss << "pool '" << pool_name
+	     << "' has " << sum.num_objects << " objects"
+	     << " (max " << pool.quota_max_objects << ")";
+	  full_detail.push_back(ss.str());
+	  full = true;
+	} else if (warn_threshold > 0 &&
+		   sum.num_objects >= pool.quota_max_objects*warn_threshold) {
+	  ss << "pool '" << pool_name
+	     << "' has " << sum.num_objects << " objects"
+	     << " (max " << pool.quota_max_objects << ")";
+	  nearfull_detail.push_back(ss.str());
+	  nearfull = true;
+	}
+      }
+      if (pool.quota_max_bytes > 0) {
+	stringstream ss;
+	if ((uint64_t)sum.num_bytes >= pool.quota_max_bytes) {
+	} else if (crit_threshold > 0 &&
+		   sum.num_bytes >= pool.quota_max_bytes*crit_threshold) {
+	  ss << "pool '" << pool_name
+	     << "' has " << si_t(sum.num_bytes) << " bytes"
+	     << " (max " << si_t(pool.quota_max_bytes) << ")";
+	  full_detail.push_back(ss.str());
+	  full = true;
+	} else if (warn_threshold > 0 &&
+		   sum.num_bytes >= pool.quota_max_bytes*warn_threshold) {
+	  ss << "pool '" << pool_name
+	     << "' has " << si_t(sum.num_bytes) << " bytes"
+	     << " (max " << si_t(pool.quota_max_bytes) << ")";
+	  nearfull_detail.push_back(ss.str());
+	  nearfull = true;
+	}
+      }
+      if (full) {
+	++full_pools;
+      }
+      if (nearfull) {
+	++nearfull_pools;
+      }
+    }
+    if (full_pools) {
+      ostringstream ss;
+      ss << full_pools << " pools full";
+      auto& d = checks->add("POOL_FULL", HEALTH_ERR, ss.str());
+      d.detail.swap(full_detail);
+    }
+    if (nearfull_pools) {
+      ostringstream ss;
+      ss << nearfull_pools << " pools full";
+      auto& d = checks->add("POOL_NEAR_FULL", HEALTH_WARN, ss.str());
+      d.detail.swap(nearfull_detail);
+    }
+  }
+
+  // OBJECT_MISPLACED
+  if (pg_sum.stats.sum.num_objects_misplaced &&
+      pg_sum.stats.sum.num_object_copies > 0) {
+    double pc = (double)pg_sum.stats.sum.num_objects_misplaced /
+      (double)pg_sum.stats.sum.num_object_copies * (double)100.0;
+    char b[20];
+    snprintf(b, sizeof(b), "%.3lf", pc);
+    ostringstream ss;
+    ss << pg_sum.stats.sum.num_objects_misplaced
+       << "/" << pg_sum.stats.sum.num_object_copies << " objects misplaced ("
+       << b << "%)";
+    checks->add("OBJECT_MISPLACED", HEALTH_WARN, ss.str());
+  }
+
+  // OBJECT_UNFOUND
+  if (pg_sum.stats.sum.num_objects_unfound &&
+      pg_sum.stats.sum.num_objects) {
+    double pc = (double)pg_sum.stats.sum.num_objects_unfound /
+      (double)pg_sum.stats.sum.num_objects * (double)100.0;
+    char b[20];
+    snprintf(b, sizeof(b), "%.3lf", pc);
+    ostringstream ss;
+    ss << pg_sum.stats.sum.num_objects_unfound
+       << "/" << pg_sum.stats.sum.num_objects << " unfound (" << b << "%)";
+    checks->add("OBJECT_UNFOUND", HEALTH_WARN, ss.str());
+  }
+
+  // REQUEST_SLOW
+  // REQUEST_STUCK
+  if (cct->_conf->mon_osd_warn_op_age > 0 &&
+      osd_sum.op_queue_age_hist.upper_bound() >
+      cct->_conf->mon_osd_warn_op_age) {
+    list<string> warn_detail, error_detail;
+    unsigned warn = 0, error = 0;
+    float err_age =
+      cct->_conf->mon_osd_warn_op_age * cct->_conf->mon_osd_err_op_age_ratio;
+    const pow2_hist_t& h = osd_sum.op_queue_age_hist;
+    for (unsigned i = h.h.size() - 1; i > 0; --i) {
+      float ub = (float)(1 << i) / 1000.0;
+      if (ub < cct->_conf->mon_osd_warn_op_age)
+	break;
+      if (h.h[i]) {
+	ostringstream ss;
+	ss << h.h[i] << " ops are blocked > " << ub << " sec";
+	if (ub > err_age) {
+	  error += h.h[i];
+	  error_detail.push_back(ss.str());
+	} else {
+	  warn += h.h[i];
+	  warn_detail.push_back(ss.str());
+	}
+      }
+    }
+
+    map<float,set<int>> warn_osd_by_max; // max -> osds
+    map<float,set<int>> error_osd_by_max; // max -> osds
+    if (!warn_detail.empty() || !error_detail.empty()) {
+      for (auto& p : osd_stat) {
+	const pow2_hist_t& h = p.second.op_queue_age_hist;
+	for (unsigned i = h.h.size() - 1; i > 0; --i) {
+	  float ub = (float)(1 << i) / 1000.0;
+	  if (ub < cct->_conf->mon_osd_warn_op_age)
+	    break;
+	  if (h.h[i]) {
+	    if (ub > err_age) {
+	      error_osd_by_max[ub].insert(p.first);
+	    } else {
+	      warn_osd_by_max[ub].insert(p.first);
+	    }
+	    break;
+	  }
+	}
+      }
+    }
+
+    if (!warn_detail.empty()) {
+      ostringstream ss;
+      ss << warn << " slow requests are blocked > "
+	 << cct->_conf->mon_osd_warn_op_age << " sec";
+      auto& d = checks->add("REQUEST_SLOW", HEALTH_WARN, ss.str());
+      d.detail.swap(warn_detail);
+      int left = max;
+      for (auto& p : warn_osd_by_max) {
+	ostringstream ss;
+	if (p.second.size() > 1) {
+	  ss << "osds " << p.second;
+	} else {
+	  ss << "osd." << *p.second.begin();
+	}
+	ss << " have blocked requests > " << p.first << " sec";
+	d.detail.push_back(ss.str());
+	if (--left == 0) {
+	  break;
+	}
+      }
+    }
+    if (!error_detail.empty()) {
+      ostringstream ss;
+      ss << warn << " stuck requests are blocked > "
+	 << err_age << " sec";
+      auto& d = checks->add("REQUEST_STUCK", HEALTH_ERR, ss.str());
+      d.detail.swap(error_detail);
+      int left = max;
+      for (auto& p : error_osd_by_max) {
+	ostringstream ss;
+	if (p.second.size() > 1) {
+	  ss << "osds " << p.second;
+	} else {
+	  ss << "osd." << *p.second.begin();
+	}
+	ss << " have stuck requests > " << p.first << " sec";
+	d.detail.push_back(ss.str());
+	if (--left == 0) {
+	  break;
+	}
+      }
+    }
+  }
+
+  // PG_NOT_SCRUBBED
+  // PG_NOT_DEEP_SCRUBBED
+  {
+    list<string> detail, deep_detail;
+    const double age = cct->_conf->mon_warn_not_scrubbed +
+      cct->_conf->mon_scrub_interval;
+    utime_t cutoff = now;
+    cutoff -= age;
+    const double deep_age = cct->_conf->mon_warn_not_deep_scrubbed +
+      cct->_conf->osd_deep_scrub_interval;
+    utime_t deep_cutoff = now;
+    deep_cutoff -= deep_age;
+    for (auto& p : pg_stat) {
+      if (p.second.last_scrub_stamp < cutoff) {
+	ostringstream ss;
+	ss << "pg " << p.first << " not scrubbed since "
+	   << p.second.last_scrub_stamp;
+        detail.push_back(ss.str());
+      }
+      if (p.second.last_deep_scrub_stamp < deep_cutoff) {
+	ostringstream ss;
+	ss << "pg " << p.first << " not deep-scrubbed since "
+	   << p.second.last_deep_scrub_stamp;
+        deep_detail.push_back(ss.str());
+      }
+    }
+    if (!detail.empty()) {
+      ostringstream ss;
+      ss << detail.size() << " pgs not scrubbed for " << age;
+      auto& d = checks->add("PG_NOT_SCRUBBED", HEALTH_WARN, ss.str());
+      d.detail.swap(detail);
+    }
+    if (!deep_detail.empty()) {
+      ostringstream ss;
+      ss << deep_detail.size() << " pgs not deep-scrubbed for " << age;
+      auto& d = checks->add("PG_NOT_DEEP_SCRUBBED", HEALTH_WARN, ss.str());
+      d.detail.swap(deep_detail);
+    }
   }
 }
 
@@ -2934,6 +3600,70 @@ void PGMap::get_health(
 	    detail->push_back(make_pair(HEALTH_WARN, ss.str()));
 	  }
 	}
+      }
+    }
+  }
+
+  for (auto it : pools) {
+    auto it2 = pg_pool_sum.find(it.first);
+    if (it2 == pg_pool_sum.end()) {
+      continue;
+    }
+    const pool_stat_t *pstat = &it2->second;
+    const object_stat_sum_t& sum = pstat->stats.sum;
+    const string& pool_name = osdmap.get_pool_name(it.first);
+    const pg_pool_t &pool = it.second;
+
+    float warn_threshold = (float)g_conf->mon_pool_quota_warn_threshold/100;
+    float crit_threshold = (float)g_conf->mon_pool_quota_crit_threshold/100;
+
+    if (pool.quota_max_objects > 0) {
+      stringstream ss;
+      health_status_t status = HEALTH_OK;
+      if ((uint64_t)sum.num_objects >= pool.quota_max_objects) {
+      } else if (crit_threshold > 0 &&
+		 sum.num_objects >= pool.quota_max_objects*crit_threshold) {
+        ss << "pool '" << pool_name
+           << "' has " << sum.num_objects << " objects"
+           << " (max " << pool.quota_max_objects << ")";
+        status = HEALTH_ERR;
+      } else if (warn_threshold > 0 &&
+		 sum.num_objects >= pool.quota_max_objects*warn_threshold) {
+        ss << "pool '" << pool_name
+           << "' has " << sum.num_objects << " objects"
+           << " (max " << pool.quota_max_objects << ")";
+        status = HEALTH_WARN;
+      }
+      if (status != HEALTH_OK) {
+        pair<health_status_t,string> s(status, ss.str());
+        summary.push_back(s);
+        if (detail)
+          detail->push_back(s);
+      }
+    }
+
+    if (pool.quota_max_bytes > 0) {
+      health_status_t status = HEALTH_OK;
+      stringstream ss;
+      if ((uint64_t)sum.num_bytes >= pool.quota_max_bytes) {
+      } else if (crit_threshold > 0 &&
+		 sum.num_bytes >= pool.quota_max_bytes*crit_threshold) {
+        ss << "pool '" << pool_name
+           << "' has " << si_t(sum.num_bytes) << " bytes"
+           << " (max " << si_t(pool.quota_max_bytes) << ")";
+        status = HEALTH_ERR;
+      } else if (warn_threshold > 0 &&
+		 sum.num_bytes >= pool.quota_max_bytes*warn_threshold) {
+        ss << "pool '" << pool_name
+           << "' has " << si_t(sum.num_bytes) << " bytes"
+           << " (max " << si_t(pool.quota_max_bytes) << ")";
+        status = HEALTH_WARN;
+      }
+      if (status != HEALTH_OK) {
+        pair<health_status_t,string> s(status, ss.str());
+        summary.push_back(s);
+        if (detail)
+          detail->push_back(s);
       }
     }
   }

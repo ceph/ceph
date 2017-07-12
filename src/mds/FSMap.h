@@ -35,6 +35,7 @@
 #include "mds/mdstypes.h"
 
 class CephContext;
+class health_check_map_t;
 
 #define MDS_FEATURE_INCOMPAT_BASE CompatSet::Feature(1, "base v0.20")
 #define MDS_FEATURE_INCOMPAT_CLIENTRANGES CompatSet::Feature(2, "client writeable ranges")
@@ -475,6 +476,8 @@ public:
 
   void get_health(list<pair<health_status_t,std::string> >& summary,
 		  list<pair<health_status_t,std::string> > *detail) const;
+
+  void get_health_checks(health_check_map_t *checks) const;
 
   bool check_health(void);
 

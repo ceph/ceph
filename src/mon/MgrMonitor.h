@@ -22,6 +22,7 @@ class MgrMonitor: public PaxosService
 {
   MgrMap map;
   MgrMap pending_map;
+  bool ever_had_active_mgr = false;
 
   utime_t first_seen_inactive;
 
@@ -41,6 +42,8 @@ class MgrMonitor: public PaxosService
   void cancel_timer();
 
   bool check_caps(MonOpRequestRef op, const uuid_d& fsid);
+
+  health_status_t should_warn_about_mgr_down();
 
 public:
   MgrMonitor(Monitor *mn, Paxos *p, const string& service_name)
@@ -76,6 +79,8 @@ public:
   void send_digests();
 
   void on_active() override;
+  void on_restart() override;
+
   void get_health(list<pair<health_status_t,string> >& summary,
 		  list<pair<health_status_t,string> > *detail,
 		  CephContext *cct) const override;

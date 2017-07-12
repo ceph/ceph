@@ -17,17 +17,8 @@
 
 #include "messages/PaxosServiceMessage.h"
 #include "include/types.h"
-
-// health_status_t
-static inline void encode(health_status_t hs, bufferlist& bl) {
-  uint8_t v = hs;
-  ::encode(v, bl);
-}
-static inline void decode(health_status_t& hs, bufferlist::iterator& p) {
-  uint8_t v;
-  ::decode(v, p);
-  hs = health_status_t(v);
-}
+#include "include/health.h"
+#include "mon/health_check.h"
 
 class MMonMgrReport : public PaxosServiceMessage {
 
@@ -36,7 +27,7 @@ class MMonMgrReport : public PaxosServiceMessage {
 
 public:
   // PGMapDigest is in data payload
-  list<pair<health_status_t,std::string>> health_summary, health_detail;
+  health_check_map_t health_checks;
   bufferlist service_map_bl;  // encoded ServiceMap
 
   MMonMgrReport()
@@ -49,20 +40,18 @@ public:
   const char *get_type_name() const override { return "monmgrreport"; }
 
   void print(ostream& out) const override {
-    out << get_type_name();
+    out << get_type_name() << "(" << health_checks.checks.size() << " checks)";
   }
 
   void encode_payload(uint64_t features) override {
     paxos_encode();
-    ::encode(health_summary, payload);
-    ::encode(health_detail, payload);
+    ::encode(health_checks, payload);
     ::encode(service_map_bl, payload);
   }
   void decode_payload() override {
     bufferlist::iterator p = payload.begin();
     paxos_decode(p);
-    ::decode(health_summary, p);
-    ::decode(health_detail, p);
+    ::decode(health_checks, p);
     ::decode(service_map_bl, p);
   }
 };

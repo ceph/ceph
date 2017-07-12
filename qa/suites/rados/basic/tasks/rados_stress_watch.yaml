@@ -1,3 +1,9 @@
+overrides:
+  ceph:
+    log-whitelist:
+      - overall HEALTH_
+      - (CACHE_POOL_NO_HIT_SET)
+      - (TOO_FEW_PGS)
 tasks:
 - workunit:
     clients:

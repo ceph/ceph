@@ -12,5 +12,11 @@ tasks:
       global:
         osd max object name len: 460
         osd max object namespace len: 64
+    log-whitelist:
+      - overall HEALTH_
+      - (OSDMAP_FLAGS)
+      - (OSD_
+      - (PG_
+      - (TOO_FEW_PGS)
 - ceph_objectstore_tool:
     objects: 20

@@ -112,7 +112,7 @@ class TestFailover(CephFSTestCase):
         victim = standbys.pop()
         self.fs.mds_stop(victim)
         log.info("waiting for insufficient standby daemon warning")
-        self.wait_for_health("insufficient standby daemons available", grace*2)
+        self.wait_for_health("MDS_INSUFFICIENT_STANDBY", grace*2)
 
         # restart the standby, see that he becomes a standby, check health clears
         self.fs.mds_restart(victim)
@@ -127,7 +127,7 @@ class TestFailover(CephFSTestCase):
         self.assertGreaterEqual(len(standbys), 1)
         self.fs.mon_manager.raw_cluster_cmd('fs', 'set', self.fs.name, 'standby_count_wanted', str(len(standbys)+1))
         log.info("waiting for insufficient standby daemon warning")
-        self.wait_for_health("insufficient standby daemons available", grace*2)
+        self.wait_for_health("MDS_INSUFFICIENT_STANDBY", grace*2)
 
         # Set it to 0
         self.fs.mon_manager.raw_cluster_cmd('fs', 'set', self.fs.name, 'standby_count_wanted', '0')

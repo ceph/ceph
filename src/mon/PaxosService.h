@@ -77,14 +77,22 @@ protected:
    */
   bool have_pending; 
 
-protected:
+  /**
+   * health checks for this service
+   *
+   * Child must populate this during encode_pending() by calling encode_health().
+   */
+  health_check_map_t health_checks;
+public:
+  const health_check_map_t& get_health_checks() {
+    return health_checks;
+  }
 
+protected:
   /**
    * format of our state in leveldb, 0 for default
    */
   version_t format_version;
-
-
 
   /**
    * @defgroup PaxosService_h_callbacks Callback classes
@@ -427,6 +435,15 @@ public:
   virtual void get_health(list<pair<health_status_t,string> >& summary,
 			  list<pair<health_status_t,string> > *detail,
 			  CephContext *cct) const { }
+
+  void encode_health(const health_check_map_t& next,
+		     MonitorDBStore::TransactionRef t) {
+    bufferlist bl;
+    ::encode(next, bl);
+    t->put("health", service_name, bl);
+    mon->log_health(next, health_checks, t);
+  }
+  void load_health();
 
  private:
   /**

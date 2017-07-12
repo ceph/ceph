@@ -210,6 +210,7 @@ COMMAND_WITH_FLAG("injectargs " \
 COMMAND("status", "show cluster status", "mon", "r", "cli,rest")
 COMMAND("health name=detail,type=CephChoices,strings=detail,req=false", \
 	"show cluster health", "mon", "r", "cli,rest")
+COMMAND("time-sync-status", "show time sync status", "mon", "r", "cli,rest")
 COMMAND("df name=detail,type=CephChoices,strings=detail,req=false", \
 	"show cluster free space stats", "mon", "r", "cli,rest")
 COMMAND("report name=tags,type=CephString,n=N,req=false", \

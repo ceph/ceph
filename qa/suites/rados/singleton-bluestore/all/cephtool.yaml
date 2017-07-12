@@ -21,6 +21,11 @@ tasks:
     - must scrub before tier agent can activate
     - failsafe engaged, dropping updates
     - failsafe disengaged, no longer dropping updates
+    - overall HEALTH_
+    - (OSDMAP_FLAGS)
+    - (OSD_
+    - (PG_
+    - (SMALLER_PG_NUM)
 - workunit:
     clients:
       all:

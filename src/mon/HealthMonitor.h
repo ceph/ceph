@@ -14,50 +14,54 @@
 #ifndef CEPH_HEALTH_MONITOR_H
 #define CEPH_HEALTH_MONITOR_H
 
-#include "mon/QuorumService.h"
+#include "mon/PaxosService.h"
 
 //forward declaration
 namespace ceph { class Formatter; }
 class HealthService;
 
-class HealthMonitor : public QuorumService
+class HealthMonitor : public PaxosService
 {
   map<int,HealthService*> services;
-
-protected:
-  void service_shutdown() override;
+  version_t version = 0;
+  map<int,health_check_map_t> quorum_checks;  // for each quorum member
+  health_check_map_t leader_checks;           // leader only
 
 public:
-  HealthMonitor(Monitor *m) : QuorumService(m) { }
+  HealthMonitor(Monitor *m, Paxos *p, const string& service_name);
   ~HealthMonitor() override {
     assert(services.empty());
   }
-
 
   /**
    * @defgroup HealthMonitor_Inherited_h Inherited abstract methods
    * @{
    */
   void init() override;
-  void get_health(Formatter *f,
-		  list<pair<health_status_t,string> >& summary,
-		  list<pair<health_status_t,string> > *detail) override;
-  bool service_dispatch(MonOpRequestRef op) override;
 
-  void start_epoch() override;
+  void get_health(
+    list<pair<health_status_t,string> >& summary,
+    list<pair<health_status_t,string> > *detail,
+    CephContext *cct) const override {}
 
-  void finish_epoch() override;
+  bool preprocess_query(MonOpRequestRef op) override;
+  bool prepare_update(MonOpRequestRef op) override;
 
-  void cleanup() override { }
-  void service_tick() override { }
+  bool preprocess_health_checks(MonOpRequestRef op);
+  bool prepare_health_checks(MonOpRequestRef op);
 
-  int get_type() override {
-    return QuorumService::SERVICE_HEALTH;
-  }
+  bool check_leader_health();
+  bool check_member_health();
 
-  string get_name() const override {
-    return "health";
-  }
+  void create_initial() override;
+  void update_from_paxos(bool *need_bootstrap) override;
+  void create_pending() override;
+  void encode_pending(MonitorDBStore::TransactionRef t) override;
+  version_t get_trim_to() override;
+
+  void encode_full(MonitorDBStore::TransactionRef t) override { }
+
+  void tick() override;
 
   /**
    * @} // HealthMonitor_Inherited_h

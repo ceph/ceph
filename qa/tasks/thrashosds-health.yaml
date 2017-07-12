@@ -1,0 +1,13 @@
+overrides:
+  ceph:
+    log-whitelist:
+      - overall HEALTH_
+      - (OSDMAP_FLAGS)
+      - (OSD_
+      - (PG_
+      - (POOL_
+      - (CACHE_POOL_
+      - (SMALLER_PGP_NUM)
+      - (OBJECT_
+      - (REQUEST_SLOW)
+      - (TOO_FEW_PGS)

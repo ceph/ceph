@@ -16,8 +16,10 @@ tasks:
 - install:
 - ceph:
     log-whitelist:
-    - wrongly marked me down
-    - slow request
+      - wrongly marked me down
+      - slow request
+      - overall HEALTH_
+      - (CACHE_POOL_
 - exec:
     client.0:
       - sudo ceph osd pool create base 4
