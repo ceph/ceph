@@ -108,6 +108,7 @@ cache=""
 memstore=0
 bluestore=0
 rgw_frontend="civetweb"
+rgw_compression=""
 lockdep=${LOCKDEP:-1}
 
 filestore_path=
@@ -148,6 +149,7 @@ usage=$usage"\t--rgw_num specify ceph rgw count\n"
 usage=$usage"\t--mgr_num specify ceph mgr count\n"
 usage=$usage"\t--rgw_port specify ceph rgw http listen port\n"
 usage=$usage"\t--rgw_frontend specify the rgw frontend configuration\n"
+usage=$usage"\t--rgw_compression specify the rgw compression plugin\n"
 usage=$usage"\t-b, --bluestore use bluestore as the osd objectstore backend\n"
 usage=$usage"\t--memstore use memstore as the osd objectstore backend\n"
 usage=$usage"\t--cache <pool>: enable cache tiering on pool\n"
@@ -255,6 +257,10 @@ case $1 in
             ;;
     --rgw_frontend )
             rgw_frontend=$2
+            shift
+            ;;
+    --rgw_compression )
+            rgw_compression=$2
             shift
             ;;
     --filestore_path )
@@ -977,6 +983,10 @@ do_rgw()
 {
     if [ "$new" -eq 1 ]; then
 	do_rgw_create_users
+        if [ -n "$rgw_compression" ]; then
+            echo "setting compression type=$rgw_compression"
+            $CEPH_BIN/radosgw-admin zone placement modify -c $conf_fn --rgw-zone=default --placement-id=default-placement --compression=$rgw_compression > /dev/null
+        fi
     fi
     # Start server
     RGWDEBUG=""
