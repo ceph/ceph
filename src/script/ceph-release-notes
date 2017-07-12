@@ -129,6 +129,7 @@ def make_release_notes(gh, repo, ref, plaintext, verbose, strict, use_tags):
                 continue
             pr = gh.repos("ceph")("ceph").pulls(number).get()
             title = pr['title']
+            message = None
             message_lines = commit.message.split('\n')
             if not strict and len(message_lines) > 1:
                 lines = []
@@ -138,21 +139,19 @@ def make_release_notes(gh, repo, ref, plaintext, verbose, strict, use_tags):
                     line = line.strip()
                     if line:
                         lines.append(line)
+                if len(lines) == 0:
+                    continue
                 duplicates_pr_title = lines[0] == pr['title'].strip()
                 if duplicates_pr_title:
-                    lines.pop(0)
-                if len(lines) == 0:
-                    if duplicates_pr_title:
-                        message = None
-                elif len(lines) == 1:
+                    continue
+                assert len(lines) > 0, "missing message content"
+                if len(lines) == 1:
                     # assume that a single line means the intention is to
                     # re-write the PR title
                     title = lines[0]
                     message = None
                 else:
                     message = "    " + "\n    ".join(lines)
-            else:
-                message = None
             issues = []
             if pr['body']:
                 issues = fixes_re.findall(pr['body']) + tracker_re.findall(
