@@ -711,11 +711,11 @@ void md_config_t::call_all_observers()
 
     expand_all_meta();
 
-    for (obs_map_t::iterator r = observers.begin(); r != observers.end(); ++r) {
+    for (auto r = observers.begin(); r != observers.end(); ++r) {
       obs[r->second].insert(r->first);
     }
   }
-  for (std::map<md_config_obs_t*,std::set<std::string> >::iterator p = obs.begin();
+  for (auto p = obs.begin();
        p != obs.end();
        ++p) {
     p->first->handle_conf_change(this, p->second);
