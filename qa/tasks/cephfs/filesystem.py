@@ -259,9 +259,6 @@ class MDSCluster(CephCluster):
     def newfs(self, name='cephfs', create=True):
         return Filesystem(self._ctx, name=name, create=create)
 
-    def newfs_raw(self, name):
-        return Filesystem(self._ctx, create=None, name=name)
-
     def status(self):
         return FSStatus(self.mon_manager)
 
