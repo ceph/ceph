@@ -9289,7 +9289,7 @@ void BlueStore::_pad_zeros(
     bufferptr z = buffer::create_page_aligned(chunk_size);
     memset(z.c_str(), 0, front_pad);
     pad_count += front_pad;
-    memcpy(z.c_str() + front_pad, bl->get_contiguous(0, front_copy), front_copy);
+    bl->copy(0, front_copy, z.c_str() + front_pad);
     if (front_copy + front_pad < chunk_size) {
       back_pad = chunk_size - (length + front_pad);
       memset(z.c_str() + front_pad + length, 0, back_pad);
@@ -9312,8 +9312,7 @@ void BlueStore::_pad_zeros(
     back_pad = chunk_size - back_copy;
     assert(back_copy <= length);
     bufferptr tail(chunk_size);
-    memcpy(tail.c_str(), bl->get_contiguous(length - back_copy, back_copy),
-	   back_copy);
+    bl->copy(length - back_copy, back_copy, tail.c_str());
     memset(tail.c_str() + back_copy, 0, back_pad);
     bufferlist old;
     old.swap(*bl);
