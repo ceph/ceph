@@ -3,12 +3,77 @@
 
 #include "acconfig.h"
 #include "options.h"
+#include "common/Formatter.h"
 
 // Helpers for validators
 #include "include/stringify.h"
 #include <boost/algorithm/string.hpp>
 #include <boost/lexical_cast.hpp>
 #include <boost/regex.hpp>
+
+
+void Option::dump_value(const char *field_name,
+    const Option::value_t &v, Formatter *f) const
+{
+  if (boost::get<boost::blank>(&v)) {
+    // This should be nil but Formatter doesn't allow it.
+    f->dump_string(field_name, "");
+  } else if (type == TYPE_UINT) {
+    f->dump_unsigned(field_name, boost::get<uint64_t>(v));
+  } else if (type == TYPE_INT) {
+    f->dump_int(field_name, boost::get<int64_t>(v));
+  } else if (type == TYPE_STR) {
+    f->dump_string(field_name, boost::get<std::string>(v));
+  } else if (type == TYPE_FLOAT) {
+    f->dump_float(field_name, boost::get<double>(v));
+  } else if (type == TYPE_BOOL) {
+    f->dump_bool(field_name, boost::get<bool>(v));
+  } else {
+    f->dump_stream(field_name) << v;
+  }
+}
+
+void Option::dump(Formatter *f) const
+{
+  f->open_object_section("option");
+  f->dump_string("name", name);
+
+  f->dump_string("type", type_to_str(type));
+  std::string level_str;
+
+  f->dump_string("level", level_to_str(level));
+
+  f->dump_string("desc", desc);
+  f->dump_string("long_desc", long_desc);
+
+  dump_value("default", value, f);
+  dump_value("daemon_default", daemon_value, f);
+
+  f->open_array_section("tags");
+  for (const auto t : tags) {
+    f->dump_string("tag", t);
+  }
+  f->close_section();
+
+  f->open_array_section("see_also");
+  for (const auto sa : see_also) {
+    f->dump_string("see_also", sa);
+  }
+  f->close_section();
+
+  if (type == TYPE_STR) {
+    f->open_array_section("enum_values");
+    for (const auto &ea : enum_allowed) {
+      f->dump_string("enum_value", ea);
+    }
+    f->close_section();
+  }
+
+  dump_value("min", min, f);
+  dump_value("max", max, f);
+
+  f->close_section();
+}
 
 const std::vector<Option> ceph_options = {
 
