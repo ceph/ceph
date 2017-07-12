@@ -98,4 +98,11 @@ extern int list_multipart_parts(RGWRados *store, struct req_state *s,
 extern int abort_multipart_upload(RGWRados *store, CephContext *cct, RGWObjectCtx *obj_ctx,
                                 RGWBucketInfo& bucket_info, RGWMPObj& mp_obj);
 
+extern int list_bucket_multiparts(RGWRados *store, RGWBucketInfo& bucket_info,
+                                string& prefix, string& marker, string& delim,
+                                int& max_uploads, vector<rgw_bucket_dir_entry> *objs,
+                                map<string, bool> *common_prefixes, bool *is_truncated);
+
+extern int abort_bucket_multiparts(RGWRados *store, CephContext *cct, RGWBucketInfo& bucket_info,
+                                string& prefix, string& delim);
 #endif
