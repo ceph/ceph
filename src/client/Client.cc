@@ -6302,8 +6302,13 @@ int Client::mkdirs(const char *relpath, mode_t mode)
     }
     //make new dir
     r = _mkdir(cur.get(), path[i].c_str(), mode, uid, gid, &next);
+
     //check proper creation/existence
-    if (r < 0) return r;
+    if(-EEXIST == r && i < path.depth() - 1) {
+      r = _lookup(cur.get(), path[i].c_str(), CEPH_CAP_AUTH_SHARED, &next, uid, gid);
+    }
+    if (r < 0)
+      return r;
     //move to new dir and continue
     cur.swap(next);
     ldout(cct, 20) << "mkdirs: successfully created directory "
