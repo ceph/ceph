@@ -10,10 +10,6 @@ from ceph_volume import log, process
 from ceph_volume.exceptions import SuffixParsingError
 
 
-log.setup(name='ceph-volume-systemd.log')
-logger = logging.getLogger('systemd')
-
-
 def parse_subcommand(string):
     subcommand = string.rsplit('-', 1)[-1]
     if not subcommand:
@@ -25,7 +21,9 @@ def parse_osd_id(string):
     osd_id = string.split('-', 1)[0]
     if not osd_id:
         raise SuffixParsingError('OSD id', string)
-    return osd_id
+    if osd_id.isdigit():
+        return osd_id
+    raise SuffixParsingError('OSD id', string)
 
 
 def parse_osd_uuid(string):
@@ -64,6 +62,9 @@ def main(args=None):
         ceph-volume lvm 0 8715BEB4-15C5-49DE-BA6F-401086EC7B41
 
     """
+    log.setup(name='ceph-volume-systemd.log')
+    logger = logging.getLogger('systemd')
+
     args = args or sys.argv
     suffix = args[-1]
     sub_command = parse_subcommand(suffix)
