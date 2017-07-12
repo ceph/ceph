@@ -368,8 +368,8 @@ public:
   GenContextWQ recovery_gen_wq;
   ClassHandler  *&class_handler;
 
-  void enqueue_back(spg_t pgid, OpQueueItem qi);
-  void enqueue_front(spg_t pgid, OpQueueItem qi);
+  void enqueue_back(spg_t pgid, OpQueueItem&& qi);
+  void enqueue_front(spg_t pgid, OpQueueItem&& qi);
 
   void maybe_inject_dispatch_delay() {
     if (g_conf->osd_debug_inject_dispatch_delay_probability > 0) {
@@ -1652,17 +1652,17 @@ private:
       /// priority queue
       std::unique_ptr<OpQueue< pair<spg_t, OpQueueItem>, entity_inst_t>> pqueue;
 
-      void _enqueue_front(pair<spg_t, OpQueueItem> item, unsigned cutoff) {
+      void _enqueue_front(pair<spg_t, OpQueueItem>&& item, unsigned cutoff) {
 	unsigned priority = item.second.get_priority();
 	unsigned cost = item.second.get_cost();
 	if (priority >= cutoff)
 	  pqueue->enqueue_strict_front(
 	    item.second.get_owner(),
-	    priority, item);
+	    priority, std::move(item));
 	else
 	  pqueue->enqueue_front(
 	    item.second.get_owner(),
-	    priority, cost, item);
+	    priority, cost, std::move(item));
       }
 
       ShardData(
@@ -1737,10 +1737,10 @@ private:
     void _process(uint32_t thread_index, heartbeat_handle_d *hb) override;
 
     /// enqueue a new item
-    void _enqueue(pair <spg_t, OpQueueItem> item) override;
+    void _enqueue(pair <spg_t, OpQueueItem>&& item) override;
 
     /// requeue an old item (at the front of the line)
-    void _enqueue_front(pair <spg_t, OpQueueItem> item) override;
+    void _enqueue_front(pair <spg_t, OpQueueItem>&& item) override;
       
     void return_waiting_threads() override {
       for(uint32_t i = 0; i < num_shards; i++) {

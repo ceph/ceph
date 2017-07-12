@@ -74,9 +74,9 @@ namespace ceph {
     inline void remove_by_class(Client cl,
 				std::list<Request> *out) override final {
       queue.remove_by_filter(
-	[&cl, out] (const Request& r) -> bool {
+	[&cl, out] (Request&& r) -> bool {
 	  if (cl == r.second.get_owner()) {
-	    out->push_front(r);
+	    out->push_front(std::move(r));
 	    return true;
 	  } else {
 	    return false;
@@ -86,24 +86,24 @@ namespace ceph {
 
     void enqueue_strict(Client cl,
 			unsigned priority,
-			Request item) override final;
+			Request&& item) override final;
 
     // Enqueue op in the front of the strict queue
     void enqueue_strict_front(Client cl,
 			      unsigned priority,
-			      Request item) override final;
+			      Request&& item) override final;
 
     // Enqueue op in the back of the regular queue
     void enqueue(Client cl,
 		 unsigned priority,
 		 unsigned cost,
-		 Request item) override final;
+		 Request&& item) override final;
 
     // Enqueue the op in the front of the regular queue
     void enqueue_front(Client cl,
 		       unsigned priority,
 		       unsigned cost,
-		       Request item) override final;
+		       Request&& item) override final;
 
     // Return an op to be dispatch
     Request dequeue() override final;

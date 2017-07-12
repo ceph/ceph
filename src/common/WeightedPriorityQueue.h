@@ -54,10 +54,10 @@ class WeightedPriorityQueue :  public OpQueue <T, K>
       public:
         unsigned cost;
         T item;
-        ListPair(unsigned c, T& i) :
+        ListPair(unsigned c, T&& i) :
           cost(c),
-          item(i)
-          {}
+          item(std::move(i))
+	{}
     };
     class Klass : public bi::set_base_hook<>
     {
@@ -75,11 +75,11 @@ class WeightedPriorityQueue :  public OpQueue <T, K>
         { return a.key > b.key; }
       friend bool operator== (const Klass &a, const Klass &b)
         { return a.key == b.key; }
-      void insert(unsigned cost, T& item, bool front) {
+      void insert(unsigned cost, T&& item, bool front) {
         if (front) {
-          lp.push_front(*new ListPair(cost, item));
+          lp.push_front(*new ListPair(cost, std::move(item)));
         } else {
-          lp.push_back(*new ListPair(cost, item));
+          lp.push_back(*new ListPair(cost, std::move(item)));
         }
       }
       //Get the cost of the next item to dequeue
@@ -89,7 +89,7 @@ class WeightedPriorityQueue :  public OpQueue <T, K>
       }
       T pop() {
 	assert(!lp.empty());
-	T ret = lp.begin()->item;
+	T ret = std::move(lp.begin()->item);
         lp.erase_and_dispose(lp.begin(), DelItem<ListPair>());
         return ret;
       }
@@ -103,7 +103,7 @@ class WeightedPriorityQueue :  public OpQueue <T, K>
         unsigned count = 0;
         for (Lit i = --lp.end();; --i) {
           if (out) {
-            out->push_front(i->item);
+            out->push_front(std::move(i->item));
           }
           i = lp.erase_and_dispose(i, DelItem<ListPair>());
           ++count;
@@ -140,7 +140,7 @@ class WeightedPriorityQueue :  public OpQueue <T, K>
       bool empty() const {
         return klasses.empty();
       }
-      void insert(K cl, unsigned cost, T& item, bool front = false) {
+      void insert(K cl, unsigned cost, T&& item, bool front = false) {
         typename Klasses::insert_commit_data insert_data;
       	std::pair<Kit, bool> ret =
           klasses.insert_unique_check(cl, MapKey<Klass, K>(), insert_data);
@@ -148,7 +148,7 @@ class WeightedPriorityQueue :  public OpQueue <T, K>
       	  ret.first = klasses.insert_unique_commit(*new Klass(cl), insert_data);
           check_end();
 	}
-	ret.first->insert(cost, item, front);
+	ret.first->insert(cost, std::move(item), front);
       }
       unsigned get_cost() const {
         assert(!empty());
@@ -200,7 +200,7 @@ class WeightedPriorityQueue :  public OpQueue <T, K>
 	bool empty() const {
 	  return !size;
 	}
-	void insert(unsigned p, K cl, unsigned cost, T& item, bool front = false) {
+	void insert(unsigned p, K cl, unsigned cost, T&& item, bool front = false) {
 	  typename SubQueues::insert_commit_data insert_data;
       	  std::pair<typename SubQueues::iterator, bool> ret =
       	    queues.insert_unique_check(p, MapKey<SubQueue, unsigned>(), insert_data);
@@ -208,7 +208,7 @@ class WeightedPriorityQueue :  public OpQueue <T, K>
       	    ret.first = queues.insert_unique_commit(*new SubQueue(p), insert_data);
 	    total_prio += p;
       	  }
-      	  ret.first->insert(cl, cost, item, front);
+	  ret.first->insert(cl, cost, std::move(item), front);
 	  if (cost > max_cost) {
 	    max_cost = cost;
 	  }
@@ -299,17 +299,17 @@ class WeightedPriorityQueue :  public OpQueue <T, K>
     bool empty() const final {
       return !(strict.size + normal.size);
     }
-    void enqueue_strict(K cl, unsigned p, T item) final {
-      strict.insert(p, cl, 0, item);
+    void enqueue_strict(K cl, unsigned p, T&& item) final {
+      strict.insert(p, cl, 0, std::move(item));
     }
-    void enqueue_strict_front(K cl, unsigned p, T item) final {
-      strict.insert(p, cl, 0, item, true);
+    void enqueue_strict_front(K cl, unsigned p, T&& item) final {
+      strict.insert(p, cl, 0, std::move(item), true);
     }
-    void enqueue(K cl, unsigned p, unsigned cost, T item) final {
-      normal.insert(p, cl, cost, item);
+    void enqueue(K cl, unsigned p, unsigned cost, T&& item) final {
+      normal.insert(p, cl, cost, std::move(item));
     }
-    void enqueue_front(K cl, unsigned p, unsigned cost, T item) final {
-      normal.insert(p, cl, cost, item, true);
+    void enqueue_front(K cl, unsigned p, unsigned cost, T&& item) final {
+      normal.insert(p, cl, cost, std::move(item), true);
     }
     T dequeue() override {
       assert(strict.size + normal.size > 0);

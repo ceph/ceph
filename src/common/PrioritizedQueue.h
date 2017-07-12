@@ -86,26 +86,27 @@ class PrioritizedQueue : public OpQueue <T, K> {
 	tokens = 0;
       }
     }
-    void enqueue(K cl, unsigned cost, T item) {
-      q[cl].push_back(std::make_pair(cost, item));
+    void enqueue(K cl, unsigned cost, T &&item) {
+      q[cl].push_back(std::make_pair(cost, std::move(item)));
       if (cur == q.end())
 	cur = q.begin();
       size++;
     }
-    void enqueue_front(K cl, unsigned cost, T item) {
-      q[cl].push_front(std::make_pair(cost, item));
+    void enqueue_front(K cl, unsigned cost, T &&item) {
+      q[cl].push_front(std::make_pair(cost, std::move(item)));
       if (cur == q.end())
 	cur = q.begin();
       size++;
     }
-    std::pair<unsigned, T> front() const {
+    std::pair<unsigned, T> &front() const {
       assert(!(q.empty()));
       assert(cur != q.end());
       return cur->second.front();
     }
-    void pop_front() {
+    T pop_front() {
       assert(!(q.empty()));
       assert(cur != q.end());
+      T ret = std::move(cur->second.front().second);
       cur->second.pop_front();
       if (cur->second.empty()) {
 	q.erase(cur++);
@@ -116,6 +117,7 @@ class PrioritizedQueue : public OpQueue <T, K> {
 	cur = q.begin();
       }
       size--;
+      return ret;
     }
     unsigned length() const {
       assert(size >= 0);
@@ -138,7 +140,7 @@ class PrioritizedQueue : public OpQueue <T, K> {
 	       i->second.rbegin();
 	     j != i->second.rend();
 	     ++j) {
-	  out->push_front(j->second);
+	  out->push_front(std::move(j->second));
 	}
       }
       q.erase(i);
@@ -240,28 +242,28 @@ public:
     }
   }
 
-  void enqueue_strict(K cl, unsigned priority, T item) final {
-    high_queue[priority].enqueue(cl, 0, item);
+  void enqueue_strict(K cl, unsigned priority, T&& item) final {
+    high_queue[priority].enqueue(cl, 0, std::move(item));
   }
 
-  void enqueue_strict_front(K cl, unsigned priority, T item) final {
-    high_queue[priority].enqueue_front(cl, 0, item);
+  void enqueue_strict_front(K cl, unsigned priority, T&& item) final {
+    high_queue[priority].enqueue_front(cl, 0, std::move(item));
   }
 
-  void enqueue(K cl, unsigned priority, unsigned cost, T item) final {
+  void enqueue(K cl, unsigned priority, unsigned cost, T&& item) final {
     if (cost < min_cost)
       cost = min_cost;
     if (cost > max_tokens_per_subqueue)
       cost = max_tokens_per_subqueue;
-    create_queue(priority)->enqueue(cl, cost, item);
+    create_queue(priority)->enqueue(cl, cost, std::move(item));
   }
 
-  void enqueue_front(K cl, unsigned priority, unsigned cost, T item) final {
+  void enqueue_front(K cl, unsigned priority, unsigned cost, T&& item) final {
     if (cost < min_cost)
       cost = min_cost;
     if (cost > max_tokens_per_subqueue)
       cost = max_tokens_per_subqueue;
-    create_queue(priority)->enqueue_front(cl, cost, item);
+    create_queue(priority)->enqueue_front(cl, cost, std::move(item));
   }
 
   bool empty() const final {
@@ -274,7 +276,7 @@ public:
     assert(!empty());
 
     if (!(high_queue.empty())) {
-      T ret = high_queue.rbegin()->second.front().second;
+      T ret = std::move(high_queue.rbegin()->second.front().second);
       high_queue.rbegin()->second.pop_front();
       if (high_queue.rbegin()->second.empty()) {
 	high_queue.erase(high_queue.rbegin()->first);
@@ -290,9 +292,9 @@ public:
 	 ++i) {
       assert(!(i->second.empty()));
       if (i->second.front().first < i->second.num_tokens()) {
-	T ret = i->second.front().second;
 	unsigned cost = i->second.front().first;
 	i->second.take_tokens(cost);
+	T ret = std::move(i->second.front().second);
 	i->second.pop_front();
 	if (i->second.empty()) {
 	  remove_queue(i->first);
@@ -304,8 +306,8 @@ public:
 
     // if no subqueues have sufficient tokens, we behave like a strict
     // priority queue.
-    T ret = queue.rbegin()->second.front().second;
     unsigned cost = queue.rbegin()->second.front().first;
+    T ret = std::move(queue.rbegin()->second.front().second);
     queue.rbegin()->second.pop_front();
     if (queue.rbegin()->second.empty()) {
       remove_queue(queue.rbegin()->first);

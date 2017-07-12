@@ -72,9 +72,9 @@ namespace ceph {
     inline void remove_by_class(Client cl,
 				std::list<Request> *out) override final {
       queue.remove_by_filter(
-	[&cl, out] (const Request& r) -> bool {
+	[&cl, out] (Request&& r) -> bool {
 	  if (cl == r.second.get_owner()) {
-	    out->push_front(r);
+	    out->push_front(std::move(r));
 	    return true;
 	  } else {
 	    return false;
@@ -84,31 +84,31 @@ namespace ceph {
 
     inline void enqueue_strict(Client cl,
 			       unsigned priority,
-			       Request item) override final {
-      queue.enqueue_strict(get_osd_op_type(item), priority, item);
+			       Request&& item) override final {
+      queue.enqueue_strict(get_osd_op_type(item), priority, std::move(item));
     }
 
     // Enqueue op in the front of the strict queue
     inline void enqueue_strict_front(Client cl,
 				     unsigned priority,
-				     Request item) override final {
-      queue.enqueue_strict_front(get_osd_op_type(item), priority, item);
+				     Request&& item) override final {
+      queue.enqueue_strict_front(get_osd_op_type(item), priority, std::move(item));
     }
 
     // Enqueue op in the back of the regular queue
     inline void enqueue(Client cl,
 			unsigned priority,
 			unsigned cost,
-			Request item) override final {
-      queue.enqueue(get_osd_op_type(item), priority, cost, item);
+			Request&& item) override final {
+      queue.enqueue(get_osd_op_type(item), priority, cost, std::move(item));
     }
 
     // Enqueue the op in the front of the regular queue
     inline void enqueue_front(Client cl,
 			      unsigned priority,
 			      unsigned cost,
-			      Request item) override final {
-      queue.enqueue_front(get_osd_op_type(item), priority, cost, item);
+			      Request&& item) override final {
+      queue.enqueue_front(get_osd_op_type(item), priority, cost, std::move(item));
     }
 
     // Returns if the queue is empty

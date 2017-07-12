@@ -1656,14 +1656,14 @@ void OSDService::handle_misdirected_op(PG *pg, OpRequestRef op)
 	       << " in e" << m->get_map_epoch() << "/" << osdmap->get_epoch();
 }
 
-void OSDService::enqueue_back(spg_t pgid, OpQueueItem qi)
+void OSDService::enqueue_back(spg_t pgid, OpQueueItem&& qi)
 {
-  osd->op_shardedwq.queue(make_pair(pgid, qi));
+  osd->op_shardedwq.queue(make_pair(pgid, std::move(qi)));
 }
 
-void OSDService::enqueue_front(spg_t pgid, OpQueueItem qi)
+void OSDService::enqueue_front(spg_t pgid, OpQueueItem&& qi)
 {
-  osd->op_shardedwq.queue_front(make_pair(pgid, qi));
+  osd->op_shardedwq.queue_front(make_pair(pgid, std::move(qi)));
 }
 
 void OSDService::queue_for_peering(PG *pg)
@@ -10064,7 +10064,7 @@ void OSD::ShardedOpWQ::_process(uint32_t thread_index, heartbeat_handle_d *hb)
   pg->unlock();
 }
 
-void OSD::ShardedOpWQ::_enqueue(pair<spg_t, OpQueueItem> item) {
+void OSD::ShardedOpWQ::_enqueue(pair<spg_t, OpQueueItem>&& item) {
   uint32_t shard_index =
     item.first.hash_to_shard(shard_list.size());
 
@@ -10077,11 +10077,11 @@ void OSD::ShardedOpWQ::_enqueue(pair<spg_t, OpQueueItem> item) {
   dout(20) << __func__ << " " << item.first << " " << item.second << dendl;
   if (priority >= osd->op_prio_cutoff)
     sdata->pqueue->enqueue_strict(
-      item.second.get_owner(), priority, item);
+      item.second.get_owner(), priority, std::move(item));
   else
     sdata->pqueue->enqueue(
       item.second.get_owner(),
-      priority, cost, item);
+      priority, cost, std::move(item));
   sdata->sdata_op_ordering_lock.Unlock();
 
   sdata->sdata_lock.Lock();
@@ -10090,7 +10090,7 @@ void OSD::ShardedOpWQ::_enqueue(pair<spg_t, OpQueueItem> item) {
 
 }
 
-void OSD::ShardedOpWQ::_enqueue_front(pair<spg_t, OpQueueItem> item)
+void OSD::ShardedOpWQ::_enqueue_front(pair<spg_t, OpQueueItem>&& item)
 {
   uint32_t shard_index = item.first.hash_to_shard(shard_list.size());
   ShardData* sdata = shard_list[shard_index];
@@ -10111,7 +10111,7 @@ void OSD::ShardedOpWQ::_enqueue_front(pair<spg_t, OpQueueItem> item)
   } else {
     dout(20) << __func__ << " " << item.first << " " << item.second << dendl;
   }
-  sdata->_enqueue_front(item, osd->op_prio_cutoff);
+  sdata->_enqueue_front(std::move(item), osd->op_prio_cutoff);
   sdata->sdata_op_ordering_lock.Unlock();
   sdata->sdata_lock.Lock();
   sdata->sdata_cond.SignalOne();
