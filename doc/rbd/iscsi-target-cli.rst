@@ -28,43 +28,43 @@ install, and configure the Ceph iSCSI gateway for basic operation.
 Do the following steps on the Ceph iSCSI gateway node before proceeding
 to the *Installing* section:
 
-1. If the Ceph iSCSI gateway is not colocated on an OSD node, then copy
+#. If the Ceph iSCSI gateway is not colocated on an OSD node, then copy
    the Ceph configuration files, located in ``/etc/ceph/``, from a
    running Ceph node in the storage cluster to the iSCSI Gateway node.
    The Ceph configuration files must exist on the iSCSI gateway node
    under ``/etc/ceph/``.
 
-2. Install and configure the `Ceph Command-line
+#. Install and configure the `Ceph Command-line
    Interface <http://docs.ceph.com/docs/master/start/quick-rbd/#install-ceph>`_
 
-3. If needed, open TCP ports 3260 and 5000 on the firewall.
+#. If needed, open TCP ports 3260 and 5000 on the firewall.
 
-4. Create a new or use an existing RADOS Block Device (RBD).
+#. Create a new or use an existing RADOS Block Device (RBD).
 
 **Installing:**
 
-1. As ``root``, on all iSCSI gateway nodes, install the
+#. As ``root``, on all iSCSI gateway nodes, install the
    ``ceph-iscsi-cli`` package:
 
    ::
 
        # yum install ceph-iscsi-cli
 
-2. As ``root``, on all iSCSI gateway nodes, install the ``tcmu-runner``
+#. As ``root``, on all iSCSI gateway nodes, install the ``tcmu-runner``
    package:
 
    ::
 
        # yum install tcmu-runner
 
-3. As ``root``, on a iSCSI gateway node, create a file named
+#. As ``root``, on a iSCSI gateway node, create a file named
    ``iscsi-gateway.cfg`` in the ``/etc/ceph/`` directory:
 
    ::
 
        # touch /etc/ceph/iscsi-gateway.cfg
 
-   a. Edit the ``iscsi-gateway.cfg`` file and add the following lines:
+   #. Edit the ``iscsi-gateway.cfg`` file and add the following lines:
 
       ::
 
@@ -107,10 +107,10 @@ to the *Installing* section:
       .. IMPORTANT::
         The ``iscsi-gateway.cfg`` file must be identical on all iSCSI gateway nodes.
 
-   b. As ``root``, copy the ``iscsi-gateway.cfg`` file to all iSCSI
+   #. As ``root``, copy the ``iscsi-gateway.cfg`` file to all iSCSI
       gateway nodes.
 
-4. As ``root``, on all iSCSI gateway nodes, enable and start the API
+#. As ``root``, on all iSCSI gateway nodes, enable and start the API
    service:
 
    ::
@@ -120,14 +120,14 @@ to the *Installing* section:
 
 **Configuring:**
 
-1. As ``root``, on a iSCSI gateway node, start the iSCSI gateway
+#. As ``root``, on a iSCSI gateway node, start the iSCSI gateway
    command-line interface:
 
    ::
 
        # gwcli
 
-2. Creating the iSCSI gateways:
+#. Creating the iSCSI gateways:
 
    ::
 
@@ -136,14 +136,14 @@ to the *Installing* section:
        > create <iscsi_gw_name> <IP_addr_of_gw>
        > create <iscsi_gw_name> <IP_addr_of_gw>
 
-3. Adding a RADOS Block Device (RBD):
+#. Adding a RADOS Block Device (RBD):
 
    ::
 
        > cd /iscsi-target/iqn.2003-01.com.redhat.iscsi-gw:<target_name>/disks/
        >/disks/ create pool=<pool_name> image=<image_name> size=<image_size>m|g|t
 
-4. Creating a client:
+#. Creating a client:
 
    ::
 
@@ -156,7 +156,7 @@ to the *Installing* section:
       CHAP must always be configured. Without CHAP, the target will
       reject any login requests.
 
-5. Adding disks to a client:
+#. Adding disks to a client:
 
    ::
 
