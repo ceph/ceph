@@ -1,9 +1,9 @@
+import argparse
 import os
 import pkg_resources
 import sys
 import logging
 
-from tambo import Transport
 import ceph_volume
 from ceph_volume.decorators import catches
 from ceph_volume import log, devices, configuration, conf, exceptions, terminal
@@ -38,13 +38,13 @@ Ceph Conf: {ceph_path}
         if parse:
             self.main(argv)
 
-    def help(self, sub_help=None):
+    def help(self):
         return self._help.format(
             version=ceph_volume.__version__,
             log_path=conf.log_path,
             ceph_path=self.stat_ceph_conf(),
             plugins=self.plugin_help,
-            sub_help=sub_help.strip('\n'),
+            sub_help=terminal.subhelp(self.mapper),
             environ_vars=self.get_environ_vars()
         )
 
@@ -77,7 +77,9 @@ Ceph Conf: {ceph_path}
         abspath = '/etc/ceph/%s.conf' % cluster_name
         conf.path = os.getenv('CEPH_CONF', abspath)
         conf.cluster = cluster_name
-        conf.ceph = configuration.load(conf.path)
+
+    def load_log_path(self):
+        conf.log_path = os.getenv('CEPH_VOLUME_LOG_PATH', '/var/log/ceph')
 
     def stat_ceph_conf(self):
         try:
@@ -86,30 +88,61 @@ Ceph Conf: {ceph_path}
         except exceptions.ConfigurationError as error:
             return terminal.red(error)
 
+    def _get_sanitized_args(self):
+        subcommands = self.mapper.keys()
+        slice_on_index = len(sys.argv) + 1
+        pruned_args = sys.argv[1:]
+        for count, arg in enumerate(pruned_args):
+            if arg in subcommands:
+                slice_on_index = count
+                break
+        return sys.argv[:slice_on_index]
+
     @catches()
     def main(self, argv):
-        # XXX Port the CLI args to user arparse
-        options = [['--log', '--logging']]
-        parser = Transport(argv, mapper=self.mapper,
-                           options=options, check_help=False,
-                           check_version=False)
-        parser.parse_args()
-        conf.verbosity = parser.get('--log', 'info')
-        self.load_ceph_conf_path(parser.get('--cluster', 'ceph'))
-        default_log_path = os.environ.get('CEPH_VOLUME_LOG_PATH', '/var/log/ceph/')
-        conf.log_path = parser.get('--log-path', default_log_path)
-        if os.path.isdir(conf.log_path):
-            conf.log_path = os.path.join(conf.log_path, 'ceph-volume.log')
-        log.setup()
+        # these need to be available for the help, which gets parsed super
+        # early
+        self.load_ceph_conf_path()
+        self.load_log_path()
         self.enable_plugins()
-        parser.catch_help = self.help(parser.subhelp())
-        parser.catch_version = ceph_volume.__version__
-        parser.mapper = self.mapper
-        if len(argv) <= 1:
-            return parser.print_help()
-        parser.dispatch()
-        parser.catches_help()
-        parser.catches_version()
+        sanitized_args = self._get_sanitized_args()
+        help_text = self.help()
+        # no flags where passed in, return the help menu instead of waiting for
+        # argparse which will end up complaning that there are no args
+        if len(sys.argv) <= 1:
+            print help_text
+            return
+        parser = argparse.ArgumentParser(
+            prog='ceph-volume',
+            formatter_class=argparse.RawDescriptionHelpFormatter,
+            description=help_text,
+        )
+        parser.add_argument(
+            '--cluster',
+            default='ceph',
+            help='Cluster name (defaults to "ceph")',
+        )
+        parser.add_argument(
+            '--log-level',
+            default='debug',
+            help='Change the file log level (defaults to debug)',
+        )
+        parser.add_argument(
+            '--log-path',
+            default='/var/log/ceph/',
+            help='Change the log path (defaults to /var/log/ceph)',
+        )
+        args = parser.parse_args(sanitized_args)
+        conf.log_path = args.log_path
+        if os.path.isdir(conf.log_path):
+            conf.log_path = os.path.join(args.log_path, 'ceph-volume.log')
+        log.setup()
+        # set all variables from args and load everything needed according to
+        # them
+        self.load_ceph_conf_path(cluster_name=args.cluster)
+        conf.ceph = configuration.load(conf.path)
+        # dispatch to sub-commands
+        terminal.dispatch(self.mapper, sanitized_args)
 
 
 def _load_library_extensions():
