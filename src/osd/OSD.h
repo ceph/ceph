@@ -367,8 +367,8 @@ public:
   GenContextWQ recovery_gen_wq;
   ClassHandler  *&class_handler;
 
-  void enqueue_back(spg_t pgid, OpQueueItem&& qi);
-  void enqueue_front(spg_t pgid, OpQueueItem&& qi);
+  void enqueue_back(OpQueueItem&& qi);
+  void enqueue_front(OpQueueItem&& qi);
 
   void maybe_inject_dispatch_delay() {
     if (g_conf->osd_debug_inject_dispatch_delay_probability > 0) {
@@ -859,22 +859,7 @@ public:
 
   AsyncReserver<spg_t> snap_reserver;
   void queue_for_snap_trim(PG *pg);
-
-  void queue_for_scrub(PG *pg, bool with_high_priority) {
-    unsigned scrub_queue_priority = pg->scrubber.priority;
-    if (with_high_priority && scrub_queue_priority < cct->_conf->osd_client_op_priority) {
-      scrub_queue_priority = cct->_conf->osd_client_op_priority;
-    }
-    enqueue_back(
-      pg->get_pgid(),
-      OpQueueItem(
-	PGScrub(pg->get_osdmap()->get_epoch()),
-	cct->_conf->osd_scrub_cost,
-	scrub_queue_priority,
-	ceph_clock_now(),
-	0,
-	pg->get_osdmap()->get_epoch()));
-  }
+  void queue_for_scrub(PG *pg, bool with_high_priority);
 
 private:
   // -- pg recovery and associated throttling --
@@ -891,18 +876,7 @@ private:
   bool _recover_now(uint64_t *available_pushes);
   void _maybe_queue_recovery();
   void _queue_for_recovery(
-    pair<epoch_t, PGRef> p, uint64_t reserved_pushes) {
-    assert(recovery_lock.is_locked_by_me());
-    enqueue_back(
-      p.second->get_pgid(),
-      OpQueueItem(
-	PGRecovery(p.first, reserved_pushes),
-	cct->_conf->osd_recovery_cost,
-	cct->_conf->osd_recovery_priority,
-	ceph_clock_now(),
-	0,
-	p.first));
-  }
+    pair<epoch_t, PGRef> p, uint64_t reserved_pushes);
 public:
   void start_recovery_op(PG *pg, const hobject_t& soid);
   void finish_recovery_op(PG *pg, const hobject_t& soid, bool dequeue);
@@ -1618,10 +1592,10 @@ private:
    * wake_pg_waiters, and (2) when wake_pg_waiters just ran, waiting_for_pg
    * and already requeued the items.
    */
-  friend class OpQueueItem;
+  friend class PGOpItem;
 
   class ShardedOpWQ
-    : public ShardedThreadPool::ShardedWQ<pair<spg_t,OpQueueItem>>
+    : public ShardedThreadPool::ShardedWQ<OpQueueItem>
   {
     struct ShardData {
       Mutex sdata_lock;
@@ -1650,18 +1624,18 @@ private:
       unordered_map<spg_t,pg_slot> pg_slots;
 
       /// priority queue
-      std::unique_ptr<OpQueue< pair<spg_t, OpQueueItem>, uint64_t>> pqueue;
+      std::unique_ptr<OpQueue<OpQueueItem, uint64_t>> pqueue;
 
-      void _enqueue_front(pair<spg_t, OpQueueItem>&& item, unsigned cutoff) {
-	unsigned priority = item.second.get_priority();
-	unsigned cost = item.second.get_cost();
+      void _enqueue_front(OpQueueItem&& item, unsigned cutoff) {
+	unsigned priority = item.get_priority();
+	unsigned cost = item.get_cost();
 	if (priority >= cutoff)
 	  pqueue->enqueue_strict_front(
-	    item.second.get_owner(),
+	    item.get_owner(),
 	    priority, std::move(item));
 	else
 	  pqueue->enqueue_front(
-	    item.second.get_owner(),
+	    item.get_owner(),
 	    priority, cost, std::move(item));
       }
 
@@ -1673,15 +1647,13 @@ private:
 	  sdata_op_ordering_lock(ordering_lock.c_str(), false, true,
 				 false, cct) {
 	if (opqueue == io_queue::weightedpriority) {
-	  pqueue = std::unique_ptr
-	    <WeightedPriorityQueue<pair<spg_t,OpQueueItem>,uint64_t>>(
-	      new WeightedPriorityQueue<pair<spg_t,OpQueueItem>,uint64_t>(
-		max_tok_per_prio, min_cost));
+	  pqueue = ceph::make_unique<
+	    WeightedPriorityQueue<OpQueueItem,uint64_t>>(
+	        max_tok_per_prio, min_cost);
 	} else if (opqueue == io_queue::prioritized) {
-	  pqueue = std::unique_ptr
-	    <PrioritizedQueue<pair<spg_t,OpQueueItem>,uint64_t>>(
-	      new PrioritizedQueue<pair<spg_t,OpQueueItem>,uint64_t>(
-		max_tok_per_prio, min_cost));
+	  pqueue = ceph::make_unique<
+	    PrioritizedQueue<OpQueueItem,uint64_t>>(
+		max_tok_per_prio, min_cost);
 	} else if (opqueue == io_queue::mclock_opclass) {
 	  pqueue = ceph::make_unique<ceph::mClockOpClassQueue>(cct);
 	} else if (opqueue == io_queue::mclock_client) {
@@ -1700,7 +1672,7 @@ private:
 		time_t ti,
 		time_t si,
 		ShardedThreadPool* tp)
-      : ShardedThreadPool::ShardedWQ<pair<spg_t,OpQueueItem>>(ti, si, tp),
+      : ShardedThreadPool::ShardedWQ<OpQueueItem>(ti, si, tp),
         osd(o),
         num_shards(pnum_shards) {
       for (uint32_t i = 0; i < num_shards; i++) {
@@ -1739,10 +1711,10 @@ private:
     void _process(uint32_t thread_index, heartbeat_handle_d *hb) override;
 
     /// enqueue a new item
-    void _enqueue(pair <spg_t, OpQueueItem>&& item) override;
+    void _enqueue(OpQueueItem&& item) override;
 
     /// requeue an old item (at the front of the line)
-    void _enqueue_front(pair <spg_t, OpQueueItem>&& item) override;
+    void _enqueue_front(OpQueueItem&& item) override;
       
     void return_waiting_threads() override {
       for(uint32_t i = 0; i < num_shards; i++) {
@@ -1756,12 +1728,14 @@ private:
 
     void dump(Formatter *f) {
       for(uint32_t i = 0; i < num_shards; i++) {
-	ShardData* sdata = shard_list[i];
-	char lock_name[32] = {0};
-	snprintf(lock_name, sizeof(lock_name), "%s%d", "OSD:ShardedOpWQ:", i);
-	assert (NULL != sdata);
+	auto &&sdata = shard_list[i];
+
+	char queue_name[32] = {0};
+	snprintf(queue_name, sizeof(queue_name), "%s%d", "OSD:ShardedOpWQ:", i);
+	assert(NULL != sdata);
+
 	sdata->sdata_op_ordering_lock.Lock();
-	f->open_object_section(lock_name);
+	f->open_object_section(queue_name);
 	sdata->pqueue->dump(f);
 	f->close_section();
 	sdata->sdata_op_ordering_lock.Unlock();
@@ -1783,9 +1757,9 @@ private:
 	    out_ops->push_front(*mop);
 	}
       }
-      bool operator()(const pair<spg_t, OpQueueItem> &op) {
-	if (op.first == pgid) {
-	  accumulate(op.second);
+      bool operator()(const OpQueueItem &op) {
+	if (op.get_ordering_token() == pgid) {
+	  accumulate(op);
 	  return true;
 	} else {
 	  return false;
@@ -1798,8 +1772,8 @@ private:
 
     bool is_shard_empty(uint32_t thread_index) override {
       uint32_t shard_index = thread_index % num_shards; 
-      ShardData* sdata = shard_list[shard_index];
-      assert(NULL != sdata);
+      auto &&sdata = shard_list[shard_index];
+      assert(sdata);
       Mutex::Locker l(sdata->sdata_op_ordering_lock);
       return sdata->pqueue->empty();
     }

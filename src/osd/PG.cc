@@ -3457,7 +3457,14 @@ void PG::requeue_op(OpRequestRef op)
     p->second.push_front(op);
   } else {
     dout(20) << __func__ << " " << op << dendl;
-    osd->enqueue_front(info.pgid, OpQueueItem(op, get_osdmap()->get_epoch()));
+    osd->enqueue_front(
+      OpQueueItem(
+        unique_ptr<OpQueueItem::OpQueueable>(new PGOpItem(info.pgid, op)),
+	op->get_req()->get_cost(),
+	op->get_req()->get_priority(),
+	op->get_req()->get_recv_stamp(),
+	op->get_req()->get_source_inst(),
+	get_osdmap()->get_epoch()));
   }
 }
 
@@ -3466,15 +3473,7 @@ void PG::requeue_ops(list<OpRequestRef> &ls)
   for (list<OpRequestRef>::reverse_iterator i = ls.rbegin();
        i != ls.rend();
        ++i) {
-    auto p = waiting_for_map.find((*i)->get_source());
-    if (p != waiting_for_map.end()) {
-      dout(20) << __func__ << " " << *i << " (waiting_for_map " << p->first
-	       << ")" << dendl;
-      p->second.push_front(*i);
-    } else {
-      dout(20) << __func__ << " " << *i << dendl;
-      osd->enqueue_front(info.pgid, OpQueueItem(*i, get_osdmap()->get_epoch()));
-    }
+    requeue_op(*i);
   }
   ls.clear();
 }
@@ -3492,7 +3491,14 @@ void PG::requeue_map_waiters()
     } else {
       dout(20) << __func__ << " " << p->first << " " << p->second << dendl;
       for (auto q = p->second.rbegin(); q != p->second.rend(); ++q) {
-	osd->enqueue_front(info.pgid, OpQueueItem(*q, epoch));
+	auto req = *q;
+	osd->enqueue_front(OpQueueItem(
+          unique_ptr<OpQueueItem::OpQueueable>(new PGOpItem(info.pgid, req)),
+	  req->get_req()->get_cost(),
+	  req->get_req()->get_priority(),
+	  req->get_req()->get_recv_stamp(),
+	  req->get_req()->get_source_inst(),
+	  epoch));
       }
       p = waiting_for_map.erase(p);
     }
