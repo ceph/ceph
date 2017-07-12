@@ -1790,19 +1790,27 @@ function test_mon_pg()
   # Check injected full results
   $SUDO ceph --admin-daemon $(get_admin_socket osd.0) injectfull nearfull
   wait_for_health "OSD_NEARFULL"
+  ceph health detail | grep "osd.0 is near full"
+  $SUDO ceph --admin-daemon $(get_admin_socket osd.0) injectfull none
+  wait_for_health_ok
+
   $SUDO ceph --admin-daemon $(get_admin_socket osd.1) injectfull backfillfull
   wait_for_health "OSD_BACKFILLFULL"
+  ceph health detail | grep "osd.1 is backfill full"
+  $SUDO ceph --admin-daemon $(get_admin_socket osd.1) injectfull none
+  wait_for_health_ok
+
   $SUDO ceph --admin-daemon $(get_admin_socket osd.2) injectfull failsafe
   # failsafe and full are the same as far as the monitor is concerned
   wait_for_health "OSD_FULL"
+  ceph health detail | grep "osd.2 is full"
+  $SUDO ceph --admin-daemon $(get_admin_socket osd.2) injectfull none
+  wait_for_health_ok
+
   $SUDO ceph --admin-daemon $(get_admin_socket osd.0) injectfull full
   wait_for_health "OSD_FULL"
   ceph health detail | grep "osd.0 is full"
-  ceph health detail | grep "osd.2 is full"
-  ceph health detail | grep "osd.1 is backfill full"
   $SUDO ceph --admin-daemon $(get_admin_socket osd.0) injectfull none
-  $SUDO ceph --admin-daemon $(get_admin_socket osd.1) injectfull none
-  $SUDO ceph --admin-daemon $(get_admin_socket osd.2) injectfull none
   wait_for_health_ok
 
   ceph pg stat | grep 'pgs:'
