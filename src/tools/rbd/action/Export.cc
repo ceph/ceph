@@ -509,7 +509,7 @@ static int do_export(librbd::Image& image, const char *path, bool no_progress, i
     fd = STDOUT_FILENO;
     max_concurrent_ops = 1;
   } else {
-    max_concurrent_ops = max(g_conf->rbd_concurrent_management_ops, 1);
+    max_concurrent_ops = g_conf->rbd_concurrent_management_ops;
     fd = open(path, O_WRONLY | O_CREAT | O_EXCL, 0644);
     if (fd < 0) {
       return -errno;

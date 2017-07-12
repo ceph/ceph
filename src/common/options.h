@@ -205,10 +205,17 @@ struct Option {
     desc = new_desc;
     return *this;
   }
+
+  template<typename T>
+  Option& set_min(const T& mi) {
+    set_value(min, mi);
+    return *this;
+  }
+
   template<typename T>
   Option& set_min_max(const T& mi, const T& ma) {
-    min = mi;
-    max = ma;
+    set_value(min, mi);
+    set_value(max, ma);
     return *this;
   }
 
