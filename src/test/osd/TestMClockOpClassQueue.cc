@@ -89,13 +89,13 @@ TEST_F(MClockOpClassQueueTest, TestSize) {
   ASSERT_FALSE(q.empty());
   ASSERT_EQ(2u, q.length());
 
-  q.enqueue_front(client2, 12, 0, reqs.back());
+  q.enqueue_front(client2, 12, 0, std::move(reqs.back()));
   reqs.pop_back();
 
-  q.enqueue_strict_front(client3, 12, reqs.back());
+  q.enqueue_strict_front(client3, 12, std::move(reqs.back()));
   reqs.pop_back();
 
-  q.enqueue_strict_front(client2, 12, reqs.back());
+  q.enqueue_strict_front(client2, 12, std::move(reqs.back()));
   reqs.pop_back();
 
   ASSERT_FALSE(q.empty());
