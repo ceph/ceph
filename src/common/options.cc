@@ -4345,6 +4345,7 @@ const std::vector<Option> ceph_options = {
 
   Option("rbd_concurrent_management_ops", Option::TYPE_INT, Option::LEVEL_ADVANCED)
   .set_default(10)
+  .set_min(1)
   .set_description(""),
 
   Option("rbd_balance_snap_reads", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
@@ -4513,10 +4514,12 @@ const std::vector<Option> ceph_options = {
 
   Option("rbd_mirror_image_state_check_interval", Option::TYPE_INT, Option::LEVEL_ADVANCED)
   .set_default(30)
+  .set_min(1)
   .set_description(""),
 
   Option("rbd_mirror_leader_heartbeat_interval", Option::TYPE_INT, Option::LEVEL_ADVANCED)
   .set_default(5)
+  .set_min(1)
   .set_description(""),
 
   Option("rbd_mirror_leader_max_missed_heartbeats", Option::TYPE_INT, Option::LEVEL_ADVANCED)
