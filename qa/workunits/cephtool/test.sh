@@ -1603,6 +1603,12 @@ function test_mon_osd()
   expect_false ceph osd tree up down
   expect_false ceph osd tree in out
   expect_false ceph osd tree up foo
+  # make sure we reached luminous to enable crush class feature
+  ceph osd set-require-min-compat-client luminous
+  ceph osd crush class create hdd
+  ceph osd crush set-device-class hdd osd.0
+  ceph osd tree --show-shadow | grep '~hdd'
+  ceph osd tree | expect_false grep '~hdd'
 
   ceph osd metadata
   ceph osd count-metadata os
