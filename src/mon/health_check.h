@@ -100,6 +100,14 @@ struct health_check_map_t {
     r.summary = summary;
     return r;
   }
+  health_check_t& get_or_add(const std::string& code,
+			     health_status_t severity,
+			     const std::string& summary) {
+    health_check_t& r = checks[code];
+    r.severity = severity;
+    r.summary = summary;
+    return r;
+  }
 
   void merge(const health_check_map_t& o) {
     for (auto& p : o.checks) {
