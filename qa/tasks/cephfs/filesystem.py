@@ -259,6 +259,9 @@ class MDSCluster(CephCluster):
     def newfs(self, name):
         return Filesystem(self._ctx, create=name)
 
+    def newfs_raw(self, name):
+        return Filesystem(self._ctx, create=None, name=name)
+
     def status(self):
         return FSStatus(self.mon_manager)
 
@@ -362,12 +365,13 @@ class Filesystem(MDSCluster):
     This object is for driving a CephFS filesystem.  The MDS daemons driven by
     MDSCluster may be shared with other Filesystems.
     """
-    def __init__(self, ctx, fscid=None, create=None):
+    def __init__(self, ctx, fscid=None, create=None, name=None):
         super(Filesystem, self).__init__(ctx)
 
         self.id = None
-        self.name = None
         self.metadata_pool_name = None
+        self.metadata_overlay = False
+        self.data_pool_name = None
         self.data_pools = None
 
         client_list = list(misc.all_roles_of_type(self._ctx.cluster, 'client'))
@@ -383,9 +387,11 @@ class Filesystem(MDSCluster):
                 self.name = create
             if not self.legacy_configured():
                 self.create()
-        elif fscid is not None:
-            self.id = fscid
-        self.getinfo(refresh = True)
+                self.getinfo(refresh = True)
+        else:
+            if fscid is not None:
+                self.id = fscid
+            self.name = name
 
         # Stash a reference to the first created filesystem on ctx, so
         # that if someone drops to the interactive shell they can easily
@@ -411,6 +417,12 @@ class Filesystem(MDSCluster):
         self.name = fsmap['mdsmap']['fs_name']
         self.get_pool_names(status = status, refresh = refresh)
         return status
+
+    def set_name(self, name):
+        self.name = name
+
+    def set_metadata_overlay(self, overlay):
+        self.metadata_overlay = overlay
 
     def deactivate(self, rank):
         if rank < 0:
@@ -441,7 +453,10 @@ class Filesystem(MDSCluster):
             self.name = "cephfs"
         if self.metadata_pool_name is None:
             self.metadata_pool_name = "{0}_metadata".format(self.name)
-        data_pool_name = "{0}_data".format(self.name)
+        if self.data_pool_name is None:
+            data_pool_name = "{0}_data".format(self.name)
+        else:
+            data_pool_name = self.data_pool_name
 
         log.info("Creating filesystem '{0}'".format(self.name))
 
@@ -449,10 +464,16 @@ class Filesystem(MDSCluster):
 
         self.mon_manager.raw_cluster_cmd('osd', 'pool', 'create',
                                          self.metadata_pool_name, pgs_per_fs_pool.__str__())
-        self.mon_manager.raw_cluster_cmd('osd', 'pool', 'create',
-                                         data_pool_name, pgs_per_fs_pool.__str__())
-        self.mon_manager.raw_cluster_cmd('fs', 'new',
-                                         self.name, self.metadata_pool_name, data_pool_name)
+
+        if self.metadata_overlay:
+            self.mon_manager.raw_cluster_cmd('fs', 'new',
+                                             self.name, self.metadata_pool_name, data_pool_name,
+                                             '--allow-dangerous-metadata-overlay')
+        else:
+            self.mon_manager.raw_cluster_cmd('osd', 'pool', 'create',
+                                             data_pool_name, pgs_per_fs_pool.__str__())
+            self.mon_manager.raw_cluster_cmd('fs', 'new',
+                                             self.name, self.metadata_pool_name, data_pool_name)
         # Turn off spurious standby count warnings from modifying max_mds in tests.
         try:
             self.mon_manager.raw_cluster_cmd('fs', 'set', self.name, 'standby_count_wanted', '0')
@@ -500,8 +521,11 @@ class Filesystem(MDSCluster):
     def _df(self):
         return json.loads(self.mon_manager.raw_cluster_cmd("df", "--format=json-pretty"))
 
-    def get_mds_map(self):
-        return self.status().get_fsmap(self.id)['mdsmap']
+    def get_mds_map(self, fs_name=None):
+        if fs_name is None:
+            return self.status().get_fsmap(self.id)['mdsmap']
+        else:
+            return self.status().get_fsmap_byname(fs_name)
 
     def add_data_pool(self, name):
         self.mon_manager.raw_cluster_cmd('osd', 'pool', 'create', name, self.get_pgs_per_fs_pool().__str__())
@@ -552,6 +576,9 @@ class Filesystem(MDSCluster):
     def get_metadata_pool_name(self):
         return self.metadata_pool_name
 
+    def set_data_pool_name(self, name):
+        self.data_pool_name = name
+
     def get_namespace_id(self):
         return self.id
 
@@ -569,7 +596,7 @@ class Filesystem(MDSCluster):
     def get_usage(self):
         return self._df()['stats']['total_used_bytes']
 
-    def are_daemons_healthy(self):
+    def are_daemons_healthy(self, fs_name=None):
         """
         Return true if all daemons are in one of active, standby, standby-replay, and
         at least max_mds daemons are in 'active'.
@@ -584,7 +611,7 @@ class Filesystem(MDSCluster):
 
         active_count = 0
         try:
-            mds_map = self.get_mds_map()
+            mds_map = self.get_mds_map(fs_name)
         except CommandFailedError as cfe:
             # Old version, fall back to non-multi-fs commands
             if cfe.exitstatus == errno.EINVAL:
