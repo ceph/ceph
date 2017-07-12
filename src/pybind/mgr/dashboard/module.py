@@ -730,6 +730,27 @@ class Module(MgrModule):
 
                 return dict(result)
 
+            @cherrypy.expose
+            @cherrypy.tools.json_out()
+            def get_counter(self, type, id, path):
+                return global_instance().get_counter(type, id, path)
+
+            @cherrypy.expose
+            @cherrypy.tools.json_out()
+            def get_perf_schema(self, **args):
+                type = args.get('type', '')
+                id = args.get('id', '')
+                schema = global_instance().get_perf_schema(type, id)
+                ret = dict()
+                for k1 in schema.keys():    # 'perf_schema'
+                    ret[k1] = collections.OrderedDict()
+                    for k2 in sorted(schema[k1].keys()):
+                        sorted_dict = collections.OrderedDict(
+                            sorted(schema[k1][k2].items(), key=lambda i: i[0])
+                        )
+                        ret[k1][k2] = sorted_dict
+                return ret
+
         server_addr = self.get_localized_config('server_addr', '::')
         server_port = self.get_localized_config('server_port', '7000')
         if server_addr is None:
