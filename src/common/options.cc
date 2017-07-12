@@ -369,7 +369,6 @@ const std::vector<Option> ceph_options = {
     return 0;
   }),
 
-
   // unmodified
   Option("clog_to_monitors", Option::TYPE_STR, Option::LEVEL_ADVANCED)
   .set_default("default=true")
@@ -995,11 +994,7 @@ const std::vector<Option> ceph_options = {
   .set_description(""),
 
   Option("mon_pg_stuck_threshold", Option::TYPE_INT, Option::LEVEL_ADVANCED)
-  .set_default(300)
-  .set_description(""),
-
-  Option("mon_health_max_detail", Option::TYPE_INT, Option::LEVEL_ADVANCED)
-  .set_default(50)
+  .set_default(60)
   .set_description(""),
 
   Option("mon_pg_min_inactive", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
@@ -1168,6 +1163,14 @@ const std::vector<Option> ceph_options = {
 
   Option("mon_health_to_clog_tick_interval", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
   .set_default(60.0)
+  .set_description(""),
+
+  Option("mon_health_preluminous_compat", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+  .set_default(false)
+  .set_description(""),
+
+  Option("mon_health_max_detail", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  .set_default(50)
   .set_description(""),
 
   Option("mon_data_avail_crit", Option::TYPE_INT, Option::LEVEL_ADVANCED)
@@ -5271,6 +5274,10 @@ const std::vector<Option> ceph_options = {
   .set_default(1.0)
   .set_description(""),
 
+  Option("mgr_service_beacon_grace", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+  .set_default(60.0)
+  .set_description(""),
+
   Option("mon_mgr_digest_period", Option::TYPE_INT, Option::LEVEL_ADVANCED)
   .set_default(5)
   .set_description(""),
@@ -5280,6 +5287,10 @@ const std::vector<Option> ceph_options = {
   .set_description(""),
 
   Option("mon_mgr_inactive_grace", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  .set_default(60)
+  .set_description(""),
+
+  Option("mon_mgr_mkfs_grace", Option::TYPE_INT, Option::LEVEL_ADVANCED)
   .set_default(60)
   .set_description(""),
 
@@ -5359,6 +5370,10 @@ const std::vector<Option> ceph_options = {
   .set_default("")
   .set_description(""),
 
+  Option("rgw_swift_need_stats", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+  .set_default(true)
+  .set_description(""),
+
   Option("rgw_reshard_num_logs", Option::TYPE_INT, Option::LEVEL_ADVANCED)
   .set_default(16)
   .set_description(""),
@@ -5379,4 +5394,3 @@ const std::vector<Option> ceph_options = {
   .set_default(60 * 10)
   .set_description(""),
 };
-
