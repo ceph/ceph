@@ -617,6 +617,6 @@ void Mgr::handle_mgr_digest(MMgrDigest* m)
 
 void Mgr::tick()
 {
-  dout(0) << dendl;
+  dout(10) << dendl;
   server.send_report();
 }
