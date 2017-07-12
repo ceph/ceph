@@ -4,7 +4,7 @@
 
 class ObjectStore;
 
-class StoreTestFixture : public ::testing::Test {
+class StoreTestFixture : virtual public ::testing::Test {
   const std::string type;
   const std::string data_dir;
 
