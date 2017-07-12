@@ -29,9 +29,11 @@ Ceph Conf: {ceph_path}
         self.mapper = {'lvm': devices.lvm.LVM}
         self.plugin_help = "No plugins found/loaded"
         if argv is None:
-            argv = sys.argv
+            self.argv = sys.argv
+        else:
+            self.argv = argv
         if parse:
-            self.main(argv)
+            self.main(self.argv)
 
     def help(self, warning=False):
         warning = 'See "ceph-volume --help" for full list of options.' if warning else ''
@@ -87,13 +89,13 @@ Ceph Conf: {ceph_path}
 
     def _get_sanitized_args(self):
         subcommands = self.mapper.keys()
-        slice_on_index = len(sys.argv) + 1
-        pruned_args = sys.argv[1:]
+        slice_on_index = len(self.argv) + 1
+        pruned_args = self.argv[1:]
         for count, arg in enumerate(pruned_args):
             if arg in subcommands:
                 slice_on_index = count
                 break
-        return sys.argv[:slice_on_index]
+        return self.argv[:slice_on_index]
 
     @catches()
     def main(self, argv):
@@ -105,7 +107,7 @@ Ceph Conf: {ceph_path}
         sanitized_args = self._get_sanitized_args()
         # no flags where passed in, return the help menu instead of waiting for
         # argparse which will end up complaning that there are no args
-        if len(sys.argv) <= 1:
+        if len(argv) <= 1:
             print self.help(warning=True)
             return
         parser = argparse.ArgumentParser(
