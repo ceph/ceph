@@ -71,6 +71,17 @@ namespace CrushTreeDumper {
       crush->find_nonshadow_roots(roots);
       root = roots.begin();
     }
+    explicit Dumper(const CrushWrapper *crush_,
+                    const name_map_t& weight_set_names_,
+                    bool show_shadow) :
+      crush(crush_), weight_set_names(weight_set_names_) {
+      if (show_shadow) {
+        crush->find_roots(roots);
+      } else {
+        crush->find_nonshadow_roots(roots);
+      }
+      root = roots.begin();
+    }
 
     virtual ~Dumper() {}
 
@@ -229,6 +240,10 @@ namespace CrushTreeDumper {
 			      const name_map_t& weight_set_names)
       : Dumper<Formatter>(crush, weight_set_names) {}
 
+    explicit FormattingDumper(const CrushWrapper *crush,
+                              const name_map_t& weight_set_names,
+                              bool show_shadow) :
+      Dumper<Formatter>(crush, weight_set_names, show_shadow) {}
   protected:
     void dump_item(const Item &qi, Formatter *f) override {
       f->open_object_section("item");
