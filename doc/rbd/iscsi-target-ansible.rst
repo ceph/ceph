@@ -20,16 +20,16 @@ install, and configure the Ceph iSCSI gateway for basic operation.
 
 **Installing:**
 
-1. On the Ansible installer node, which could be either the administration node
+#. On the Ansible installer node, which could be either the administration node
    or a dedicated deployment node, perform the following steps:
 
-   a. As ``root``, install the ``ceph-iscsi-ansible`` package:
+   #. As ``root``, install the ``ceph-iscsi-ansible`` package:
 
       ::
 
           # yum install ceph-iscsi-ansible
 
-   b. Add an entry in ``/etc/ansible/hosts`` file for the gateway group:
+   #. Add an entry in ``/etc/ansible/hosts`` file for the gateway group:
 
       ::
 
@@ -126,8 +126,7 @@ and update accordingly.
 |                                      | connection defines an ``image_list`` |
 |                                      | which is a comma separated list of   |
 |                                      | the form                             |
-|                                      | ``pool.rbd_image[,pool.rbd_image,…​] |
-|                                      | ``.                                  |
+|                                      | ``pool.rbd_image[,pool.rbd_image]``. |
 |                                      | RBD images can be added and removed  |
 |                                      | from this list, to change the client |
 |                                      | masking. Note that there are no      |
@@ -145,7 +144,7 @@ and update accordingly.
 
 On the Ansible installer node, perform the following steps.
 
-1. As ``root``, execute the Ansible playbook:
+#. As ``root``, execute the Ansible playbook:
 
    ::
 
@@ -156,7 +155,7 @@ On the Ansible installer node, perform the following steps.
     The Ansible playbook will handle RPM dependencies, RBD creation
     and Linux IO configuration.
 
-2. Verify the configuration from an iSCSI gateway node:
+#. Verify the configuration from an iSCSI gateway node:
 
    ::
 

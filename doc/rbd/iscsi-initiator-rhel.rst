@@ -12,7 +12,7 @@ The iSCSI Initiator for Red Hat Enterprise Linux
 
 **Installing:**
 
-1. Install the iSCSI initiator and multipath tools:
+Install the iSCSI initiator and multipath tools:
 
    ::
 
@@ -21,14 +21,14 @@ The iSCSI Initiator for Red Hat Enterprise Linux
 
 **Configuring:**
 
-1. Create the default ``/etc/multipath.conf`` file and enable the
+#. Create the default ``/etc/multipath.conf`` file and enable the
    ``multiapthd`` service:
 
    ::
 
        # mpathconf --enable --with_multipathd y
 
-2. Add the following to ``/etc/multipath.conf`` file:
+#. Add the following to ``/etc/multipath.conf`` file:
 
    ::
 
@@ -46,7 +46,7 @@ The iSCSI Initiator for Red Hat Enterprise Linux
                }
        }
 
-3. Restart the ``multipathd`` service:
+#. Restart the ``multipathd`` service:
 
    ::
 
@@ -54,7 +54,7 @@ The iSCSI Initiator for Red Hat Enterprise Linux
 
 **iSCSI Discovery and Setup:**
 
-1. Discover the target portals:
+#. Discover the target portals:
 
    ::
 
@@ -62,7 +62,7 @@ The iSCSI Initiator for Red Hat Enterprise Linux
        192.168.56.101:3260,1 iqn.2003-01.org.linux-iscsi.rheln1
        192.168.56.102:3260,2 iqn.2003-01.org.linux-iscsi.rheln1
 
-2. Login to target:
+#. Login to target:
 
    ::
 
