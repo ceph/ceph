@@ -55,6 +55,12 @@ void Option::dump(Formatter *f) const
   }
   f->close_section();
 
+  f->open_array_section("services");
+  for (const auto s : services) {
+    f->dump_string("service", s);
+  }
+  f->close_section();
+
   f->open_array_section("see_also");
   for (const auto sa : see_also) {
     f->dump_string("see_also", sa);
@@ -82,33 +88,41 @@ const std::vector<Option> ceph_options = {
   Option("host", Option::TYPE_STR, Option::LEVEL_BASIC)
   .set_description("local hostname")
   .set_long_description("if blank, ceph assumes the short hostname (hostname -s)")
-  .add_tag("common"),
+  .add_service("common")
+  .add_tag("network"),
 
   Option("fsid", Option::TYPE_UUID, Option::LEVEL_BASIC)
   .set_description("cluster fsid (uuid)")
-  .add_tag("common"),
+  .add_service("common")
+  .add_tag("service"),
 
   Option("public_addr", Option::TYPE_ADDR, Option::LEVEL_BASIC)
   .set_description("public-facing address to bind to")
-  .add_tag("mon mds osd mgr"),
+  .add_service("mon mds osd mgr"),
 
   Option("cluster_addr", Option::TYPE_ADDR, Option::LEVEL_BASIC)
   .set_description("cluster-facing address to bind to")
-  .add_tag("osd"),
+  .add_service("osd")
+  .add_tag("network"),
 
   Option("public_network", Option::TYPE_ADDR, Option::LEVEL_ADVANCED)
   .set_default("")
+  .add_service("mon mds osd mgr")
+  .add_tag("network")
   .set_description(""),
 
   Option("cluster_network", Option::TYPE_STR, Option::LEVEL_ADVANCED)
   .set_default("")
+  .add_service("osd")
+  .add_tag("network")
   .set_description(""),
 
   Option("monmap", Option::TYPE_STR, Option::LEVEL_ADVANCED)
   .set_description("path to MonMap file")
   .set_long_description("This option is normally used during mkfs, but can also "
 			"be used to identify which monitors to connect to.")
-  .add_tag("mon").add_tag("mkfs"),
+  .add_service("mon")
+  .add_tag("mkfs"),
 
   Option("mon_host", Option::TYPE_STR, Option::LEVEL_BASIC)
   .set_description("list of hosts or addresses to search for a monitor")
@@ -116,83 +130,91 @@ const std::vector<Option> ceph_options = {
 			"list of IP addresses or hostnames. Hostnames are "
 			"resolved via DNS and all A or AAAA records are "
 			"included in the search list.")
-  .add_tag("common"),
+  .add_service("common"),
 
   Option("mon_dns_srv_name", Option::TYPE_STR, Option::LEVEL_ADVANCED)
   .set_description("name of DNS SRV record to check for monitor addresses")
-  .add_tag("common")
+  .add_service("common")
+  .add_tag("network")
   .add_see_also("mon_host"),
 
   // lockdep
   Option("lockdep", Option::TYPE_BOOL, Option::LEVEL_DEV)
   .set_description("enable lockdep lock dependency analyzer")
-  .add_tag("common"),
+  .add_service("common"),
 
   Option("lockdep_force_backtrace", Option::TYPE_BOOL, Option::LEVEL_DEV)
   .set_description("always gather current backtrace at every lock")
-  .add_tag("common")
+  .add_service("common")
   .add_see_also("lockdep"),
 
   Option("run_dir", Option::TYPE_STR, Option::LEVEL_ADVANCED)
   .set_daemon_default("/var/run/ceph")
   .set_description("path for the 'run' directory for storing pid and socket files")
-  .add_tag("common")
+  .add_service("common")
   .add_see_also("admin_socket"),
 
   Option("admin_socket", Option::TYPE_STR, Option::LEVEL_ADVANCED)
   .set_daemon_default("$run_dir/$cluster-$name.asok")
   .set_description("path for the runtime control socket file, used by the 'ceph daemon' command")
-  .add_tag("common"),
+  .add_service("common"),
 
   Option("admin_socket_mode", Option::TYPE_STR, Option::LEVEL_ADVANCED)
   .set_description("file mode to set for the admin socket file, e.g, '0755'")
-  .add_tag("common")
+  .add_service("common")
   .add_see_also("admin_socket"),
 
   Option("crushtool", Option::TYPE_STR, Option::LEVEL_ADVANCED)
   .set_description("name of the 'crushtool' utility")
-  .add_tag("mon"),
+  .add_service("mon"),
 
   // daemon
   Option("daemonize", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
   .set_default(false)
   .set_daemon_default(true)
   .set_description("whether to daemonize (background) after startup")
-  .add_tag("daemon")
+  .add_service("mon mgr osd mds")
+  .add_tag("service")
   .add_see_also("pid_file").add_see_also("chdir"),
 
   Option("setuser", Option::TYPE_STR, Option::LEVEL_ADVANCED)
   .set_description("uid or user name to switch to on startup")
   .set_long_description("This is normally specified by the systemd unit file.")
-  .add_tag("daemon")
+  .add_service("mon mgr osd mds")
+  .add_tag("service")
   .add_see_also("setgroup"),
 
   Option("setgroup", Option::TYPE_STR, Option::LEVEL_ADVANCED)
   .set_description("gid or group name to switch to on startup")
   .set_long_description("This is normally specified by the systemd unit file.")
-  .add_tag("daemon")
+  .add_service("mon mgr osd mds")
+  .add_tag("service")
   .add_see_also("setuser"),
 
   Option("setuser_match_path", Option::TYPE_STR, Option::LEVEL_ADVANCED)
   .set_description("if set, setuser/setgroup is condition on this path matching ownership")
   .set_long_description("If setuser or setgroup are specified, and this option is non-empty, then the uid/gid of the daemon will only be changed if the file or directory specified by this option has a matching uid and/or gid.  This exists primarily to allow switching to user ceph for OSDs to be conditional on whether the osd data contents have also been chowned after an upgrade.  This is normally specified by the systemd unit file.")
-  .add_tag("daemon").add_tag("osd")
+  .add_service("mon mgr osd mds")
+  .add_tag("service")
   .add_see_also("setuser").add_see_also("setgroup"),
 
   Option("pid_file", Option::TYPE_STR, Option::LEVEL_ADVANCED)
   .set_description("path to write a pid file (if any)")
-  .add_tag("daemon"),
+  .add_service("mon mgr osd mds")
+  .add_tag("service"),
 
   Option("chdir", Option::TYPE_STR, Option::LEVEL_ADVANCED)
   .set_description("path to chdir(2) to after daemonizing")
-  .add_tag("daemon")
+  .add_service("mon mgr osd mds")
+  .add_tag("service")
   .add_see_also("daemonize"),
 
   Option("fatal_signal_handlers", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
   .set_default(true)
   .set_description("whether to register signal handlers for SIGABRT etc that dump a stack trace")
   .set_long_description("This is normally true for daemons and values for libraries.")
-  .add_tag("daemon"),
+  .add_service("mon mgr osd mds")
+  .add_tag("service"),
 
   // restapi
   Option("restapi_log_level", Option::TYPE_STR, Option::LEVEL_ADVANCED)
@@ -206,8 +228,7 @@ const std::vector<Option> ceph_options = {
   Option("erasure_code_dir", Option::TYPE_STR, Option::LEVEL_ADVANCED)
   .set_default(CEPH_PKGLIBDIR"/erasure-code")
   .set_description("directory where erasure-code plugins can be found")
-  .add_tag("mon").add_tag("osd"),
-
+  .add_service("mon osd"),
 
   // logging
   Option("log_file", Option::TYPE_STR, Option::LEVEL_BASIC)

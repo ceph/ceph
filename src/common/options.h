@@ -6,6 +6,7 @@
 #include <string>
 #include <list>
 #include <boost/variant.hpp>
+#include "include/str_list.h"
 #include "msg/msg_types.h"
 #include "include/uuid.h"
 
@@ -33,6 +34,11 @@ struct Option {
     }
   }
 
+  /**
+   * Basic: for users, configures some externally visible functional aspect
+   * Advanced: for users, configures some internal behaviour
+   * Development: not for users.  May be dangerous, may not be documented.
+   */
   enum level_t {
     LEVEL_BASIC,
     LEVEL_ADVANCED,
@@ -67,7 +73,21 @@ struct Option {
   value_t value;
   value_t daemon_value;
 
+  // Items like mon, osd, rgw, rbd, ceph-fuse.  This is advisory metadata
+  // for presentation layers (like web dashboards, or generated docs), so that
+  // they know which options to display where.
+  // Additionally: "common" for settings that exist in any Ceph code.  Do
+  // not use common for settings that are just shared some places: for those
+  // places, list them.
+  std::list<std::string> services;
+
+  // Topics like:
+  // "service": a catchall for the boring stuff like log/asok paths.
+  // "network"
+  // "performance": a setting that may need adjustment depending on
+  //                environment/workload to get best performance.
   std::list<std::string> tags;
+
   std::list<std::string> see_also;
 
   value_t min, max;
@@ -161,8 +181,16 @@ struct Option {
   Option& set_daemon_default(const T& v) {
     return set_value(daemon_value, v);
   }
-  Option& add_tag(const char* t) {
-    tags.push_back(t);
+  Option& add_tag(const char* tags_str) {
+    for (const auto t: get_str_vec(tags_str)) {
+      tags.push_back(t);
+    }
+    return *this;
+  }
+  Option& add_service(const char* services_str) {
+    for (const auto s: get_str_vec(services_str)) {
+      services.push_back(s);
+    }
     return *this;
   }
   Option& add_see_also(const char* t) {
