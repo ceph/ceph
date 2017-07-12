@@ -59,7 +59,7 @@
 
 [mgr]
 	debug ms = 1
-	debug mgr = 30
+	debug mgr = 20
 	debug mon = 20
 	debug auth = 20
 	mon reweight min pgs per osd = 4
