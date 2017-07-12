@@ -12,15 +12,9 @@ from ceph_volume import log, devices, configuration, conf, exceptions, terminal
 class Volume(object):
     _help = """
 ceph-volume: Deploy Ceph OSDs using different device technologies like lvm or
-physical disks
+physical disks.
 
 Version: {version}
-
-Global Options:
---log, --logging    Set the level of logging. Acceptable values:
-                    debug, warning, error, critical
---log-path          Change the default location ('/var/lib/ceph') for logging
---cluster           Change the default cluster name ('ceph')
 
 Log Path: {log_path}
 Ceph Conf: {ceph_path}
@@ -28,6 +22,7 @@ Ceph Conf: {ceph_path}
 {sub_help}
 {plugins}
 {environ_vars}
+{warning}
     """
 
     def __init__(self, argv=None, parse=True):
@@ -38,8 +33,10 @@ Ceph Conf: {ceph_path}
         if parse:
             self.main(argv)
 
-    def help(self):
+    def help(self, warning=False):
+        warning = 'See "ceph-volume --help" for full list of options.' if warning else ''
         return self._help.format(
+            warning=warning,
             version=ceph_volume.__version__,
             log_path=conf.log_path,
             ceph_path=self.stat_ceph_conf(),
@@ -106,16 +103,15 @@ Ceph Conf: {ceph_path}
         self.load_log_path()
         self.enable_plugins()
         sanitized_args = self._get_sanitized_args()
-        help_text = self.help()
         # no flags where passed in, return the help menu instead of waiting for
         # argparse which will end up complaning that there are no args
         if len(sys.argv) <= 1:
-            print help_text
+            print self.help(warning=True)
             return
         parser = argparse.ArgumentParser(
             prog='ceph-volume',
             formatter_class=argparse.RawDescriptionHelpFormatter,
-            description=help_text,
+            description=self.help(),
         )
         parser.add_argument(
             '--cluster',
