@@ -3691,21 +3691,15 @@ void RGWRados::finalize()
   if (async_rados) {
     delete async_rados;
   }
-  if (use_gc_thread) {
-    gc->stop_processor();
-    obj_expirer->stop_processor();
-  }
+  
   delete gc;
   gc = NULL;
 
-  if (use_lc_thread) {
-    lc->stop_processor();
-  }
-  delete lc;
-  lc = NULL;
-
   delete obj_expirer;
   obj_expirer = NULL;
+  
+  delete lc;
+  lc = NULL;
 
   delete rest_master_conn;
 
