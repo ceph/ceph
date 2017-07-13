@@ -37,7 +37,7 @@ def mkdir_p(path, chown=True):
         os.chown(path, uid, gid)
 
 
-def chown(path, recursive=True, ceph_user=True):
+def chown(path, recursive=True):
     """
     ``chown`` a path to the ceph user (uid and guid fetched at runtime)
     """
