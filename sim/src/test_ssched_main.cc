@@ -67,11 +67,11 @@ int main(int argc, char* argv[]) {
   // lambda to post a request to the identified server; called by client
   test::SubmitFunc server_post_f =
     [&simulation](const ServerId& server_id,
-		  const sim::TestRequest& request,
+		  sim::TestRequest&& request,
 		  const ClientId& client_id,
 		  const ssched::ReqParams& req_params) {
     auto& server = simulation->get_server(server_id);
-    server.post(request, client_id, req_params);
+    server.post(std::move(request), client_id, req_params);
   };
 
   static std::vector<sim::CliInst> no_wait =
