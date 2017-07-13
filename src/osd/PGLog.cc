@@ -1083,3 +1083,57 @@ void PGLog::read_log(ObjectStore *store, coll_t pg_coll,
   ldpp_dout(dpp, 10) << "read_log done" << dendl;
 }
 
+void PGLog::rebuild_missing_set_with_deletes(ObjectStore *store,
+					     coll_t pg_coll,
+					     const pg_info_t &info)
+{
+  // save entries not generated from the current log (e.g. added due
+  // to repair, EIO handling, or divergent_priors).
+  map<hobject_t, pg_missing_t::item, hobject_t::ComparatorWithDefault> extra_missing;
+  for (const auto& p : missing.missing) {
+    if (!log.logged_object(p.first)) {
+      dout(20) << __func__ << " extra missing entry: " << p.first
+	       << " " << p.second << dendl;
+      extra_missing[p.first] = p.second;
+    }
+  }
+  missing.clear();
+  missing.may_include_deletes = true;
+
+  // go through the log and add items that are not present or older
+  // versions on disk, just as if we were reading the log + metadata
+  // off disk originally
+  set<hobject_t, hobject_t::ComparatorWithDefault> did;
+  for (list<pg_log_entry_t>::reverse_iterator i = log.log.rbegin();
+       i != log.log.rend();
+       ++i) {
+    if (i->version <= info.last_complete)
+      break;
+    if (cmp(i->soid, info.last_backfill, info.last_backfill_bitwise) > 0 ||
+	did.find(i->soid) != did.end())
+      continue;
+    did.insert(i->soid);
+
+    bufferlist bv;
+    int r = store->getattr(
+	pg_coll,
+	ghobject_t(i->soid, ghobject_t::NO_GEN, info.pgid.shard),
+	OI_ATTR,
+	bv);
+    dout(20) << __func__ << " check for log entry: " << *i << " = " << r << dendl;
+
+    if (r >= 0) {
+      object_info_t oi(bv);
+      dout(20) << __func__ << " store version = " << oi.version << dendl;
+      if (oi.version < i->version) {
+	missing.add(i->soid, i->version, oi.version, i->is_delete());
+      }
+    } else {
+      missing.add(i->soid, i->version, eversion_t(), i->is_delete());
+    }
+  }
+
+  for (const auto& p : extra_missing) {
+    missing.add(p.first, p.second.need, p.second.have, p.second.is_delete());
+  }
+}
