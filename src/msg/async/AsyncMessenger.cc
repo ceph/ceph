@@ -634,6 +634,15 @@ void AsyncMessenger::set_addr_unknowns(const entity_addr_t &addr)
   }
 }
 
+void AsyncMessenger::set_addr(const entity_addr_t &addr)
+{
+  Mutex::Locker l(lock);
+  entity_addr_t t = addr;
+  t.set_nonce(nonce);
+  set_myaddr(t);
+  _init_local_connection();
+}
+
 void AsyncMessenger::shutdown_connections(bool queue_reset)
 {
   ldout(cct,1) << __func__ << " " << dendl;

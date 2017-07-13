@@ -255,6 +255,14 @@ public:
    * @param addr The address to use as a template.
    */
   virtual void set_addr_unknowns(const entity_addr_t &addr) = 0;
+  /**
+   * Set the address for this Messenger. This is useful if the Messenger
+   * binds to a specific address but advertises a different address on the
+   * the network.
+   *
+   * @param addr The address to use.
+   */
+  virtual void set_addr(const entity_addr_t &addr) = 0;
   /// Get the default send priority.
   int get_default_send_priority() { return default_send_priority; }
   /**
