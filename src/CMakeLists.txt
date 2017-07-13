@@ -83,6 +83,9 @@ if(CMAKE_CXX_COMPILER_ID STREQUAL GNU)
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fstack-protector-strong")
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fstack-protector-strong")
   endif()
+  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Winvalid-pch")
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Winvalid-pch")
+
 endif(CMAKE_CXX_COMPILER_ID STREQUAL GNU)
 
 include(SIMDExt)
@@ -157,6 +160,8 @@ else()
   set(CMAKE_C_EXTENSIONS ON)
   set(C_STANDARD_REQUIRED ON)
 endif()
+
+include(cotire)
 
 ## Handle diagnostics color if compiler supports them.
 CHECK_C_COMPILER_FLAG("-fdiagnostics-color=always"
@@ -634,6 +639,8 @@ if(NOT WITH_SYSTEM_BOOST)
   list(APPEND ceph_common_deps ${ZLIB_LIBRARIES})
 endif()
 
+# cotire(common-objs crush_objs)
+
 set_source_files_properties(${CMAKE_SOURCE_DIR}/src/ceph_ver.c
   ${CMAKE_SOURCE_DIR}/src/common/version.cc
   ${CMAKE_SOURCE_DIR}/src/test/encoding/ceph_dencoder.cc
@@ -697,6 +704,7 @@ if (WITH_MGR)
   target_include_directories(ceph-mgr PRIVATE "${PYTHON_INCLUDE_DIRS}")
   target_link_libraries(ceph-mgr osdc client global-static common
       Boost::python ${PYTHON_LIBRARIES} ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS} ${ALLOC_LIBS})
+  cotire(ceph-mgr)
   install(TARGETS ceph-mgr DESTINATION bin)
 endif (WITH_MGR)
 
@@ -705,6 +713,7 @@ set(librados_config_srcs
 add_executable(librados-config ${librados_config_srcs})
 target_link_libraries(librados-config librados global ${BLKID_LIBRARIES} ${RDMA_LIBRARIES}
   ${CMAKE_DL_LIBS})
+cotire(librados-config)
 
 install(TARGETS librados-config DESTINATION bin)
 
@@ -773,6 +782,7 @@ target_link_libraries(ceph-dencoder
   ${EXTRALIBS}
   ${CMAKE_DL_LIBS}
   )
+cotire(ceph-dencoder)
 install(TARGETS ceph-dencoder DESTINATION bin)
 
 # Monitor
@@ -785,6 +795,7 @@ add_dependencies(ceph-mon erasure_code_plugins)
 target_link_libraries(ceph-mon mon common os global-static common
   ${EXTRALIBS}
   ${CMAKE_DL_LIBS})
+cotire(ceph-mon)
 install(TARGETS ceph-mon DESTINATION bin)
 
 # OSD/ObjectStore
@@ -864,6 +875,7 @@ add_executable(ceph-osd ${ceph_osd_srcs})
 add_dependencies(ceph-osd erasure_code_plugins)
 target_link_libraries(ceph-osd osd os global-static common
   ${BLKID_LIBRARIES} ${RDMA_LIBRARIES})
+cotire(ceph-osd)
 if(WITH_FUSE)
   target_link_libraries(ceph-osd ${FUSE_LIBRARIES})
 endif()
@@ -875,6 +887,7 @@ set(ceph_mds_srcs
 add_executable(ceph-mds ${ceph_mds_srcs})
 target_link_libraries(ceph-mds mds ${CMAKE_DL_LIBS} global-static common
   Boost::thread)
+cotire(ceph-mds)
 install(TARGETS ceph-mds DESTINATION bin)
 
 add_subdirectory(erasure-code)
@@ -998,6 +1011,7 @@ if(WITH_LIBCEPHFS)
     client/SyntheticClient.cc)
   add_executable(ceph-syn ${ceph_syn_srcs})
   target_link_libraries(ceph-syn client global-static common)
+  cotire(ceph-syn)
 
   set(mount_ceph_srcs
     mount/mount.ceph.c)
@@ -1007,6 +1021,7 @@ if(WITH_LIBCEPHFS)
   set_target_properties(mount.ceph PROPERTIES
     INSTALL_RPATH "")
   target_link_libraries(mount.ceph ${KEYUTILS_LIBRARIES})
+  cotire(mount.ceph)
 
   install(TARGETS ceph-syn DESTINATION bin)
   install(TARGETS mount.ceph DESTINATION ${CMAKE_INSTALL_SBINDIR})
@@ -1020,6 +1035,7 @@ if(WITH_FUSE)
   target_link_libraries(ceph-fuse ${ALLOC_LIBS} ${FUSE_LIBRARIES}
     client common global-static)
   set_target_properties(ceph-fuse PROPERTIES COMPILE_FLAGS "-I${FUSE_INCLUDE_DIRS}")
+  cotire(ceph-fuse)
   install(TARGETS ceph-fuse DESTINATION bin)
   install(PROGRAMS mount.fuse.ceph DESTINATION ${CMAKE_INSTALL_SBINDIR})
 endif(WITH_FUSE)
