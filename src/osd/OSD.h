@@ -2398,6 +2398,8 @@ private:
   int get_num_op_shards();
   int get_num_op_threads();
 
+  float get_osd_recovery_sleep();
+
 public:
   static int peek_meta(ObjectStore *store, string& magic,
 		       uuid_d& cluster_fsid, uuid_d& osd_fsid, int& whoami);
