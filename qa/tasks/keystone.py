@@ -258,7 +258,7 @@ def create_users(ctx, config):
                      cconfig['roles'])
     run_section_cmds(ctx, cclient, 'role add', 'name',
                      cconfig['role-mappings'])
-    run_section_cmds(ctx, cclient, 'service create', 'type',
+    run_section_cmds(ctx, cclient, 'service create', 'name',
                      cconfig['services'])
     run_section_cmds(ctx, cclient, 'endpoint create', 'service',
                      cconfig['endpoints'])
