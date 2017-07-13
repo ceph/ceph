@@ -34,18 +34,6 @@
 #define dout_prefix *_dout << "mds.beacon." << name << ' '
 
 
-class Beacon::C_MDS_BeaconSender : public Context {
-public:
-  explicit C_MDS_BeaconSender(Beacon *beacon_) : beacon(beacon_) {}
-  void finish(int r) override {
-    assert(beacon->lock.is_locked_by_me());
-    beacon->sender = NULL;
-    beacon->_send();
-  }
-private:
-  Beacon *beacon;
-};
-
 Beacon::Beacon(CephContext *cct_, MonClient *monc_, std::string name_) :
   Dispatcher(cct_), lock("Beacon"), monc(monc_), timer(g_ceph_context, lock),
   name(name_), standby_for_rank(MDS_RANK_NONE),
@@ -53,7 +41,6 @@ Beacon::Beacon(CephContext *cct_, MonClient *monc_, std::string name_) :
   awaiting_seq(-1)
 {
   last_seq = 0;
-  sender = NULL;
   was_laggy = false;
 
   epoch = 0;
@@ -192,8 +179,13 @@ void Beacon::_send()
   if (sender) {
     timer.cancel_event(sender);
   }
-  sender = new C_MDS_BeaconSender(this);
-  timer.add_event_after(g_conf->mds_beacon_interval, sender);
+  sender = timer.add_event_after(
+    g_conf->mds_beacon_interval,
+    new FunctionContext([this](int) {
+	assert(lock.is_locked_by_me());
+	sender = nullptr;
+	_send();
+      }));
 
   if (!cct->get_heartbeat_map()->is_healthy()) {
     /* If anything isn't progressing, let avoid sending a beacon so that

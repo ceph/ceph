@@ -114,7 +114,7 @@ void SafeTimer::timer_thread()
   lock.Unlock();
 }
 
-bool SafeTimer::add_event_after(double seconds, Context *callback)
+Context* SafeTimer::add_event_after(double seconds, Context *callback)
 {
   assert(lock.is_locked());
 
@@ -123,14 +123,14 @@ bool SafeTimer::add_event_after(double seconds, Context *callback)
   return add_event_at(when, callback);
 }
 
-bool SafeTimer::add_event_at(utime_t when, Context *callback)
+Context* SafeTimer::add_event_at(utime_t when, Context *callback)
 {
   assert(lock.is_locked());
   ldout(cct,10) << __func__ << " " << when << " -> " << callback << dendl;
   if (stopping) {
     ldout(cct,5) << __func__ << " already shutdown, event not added" << dendl;
     delete callback;
-    return false;
+    return nullptr;
   }
   scheduled_map_t::value_type s_val(when, callback);
   scheduled_map_t::iterator i = schedule.insert(s_val);
@@ -145,7 +145,7 @@ bool SafeTimer::add_event_at(utime_t when, Context *callback)
    * adjust our timeout. */
   if (i == schedule.begin())
     cond.Signal();
-  return true;
+  return callback;
 }
 
 bool SafeTimer::cancel_event(Context *callback)

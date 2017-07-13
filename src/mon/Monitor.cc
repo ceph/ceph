@@ -1250,10 +1250,11 @@ void Monitor::sync_reset_timeout()
   dout(10) << __func__ << dendl;
   if (sync_timeout_event)
     timer.cancel_event(sync_timeout_event);
-  sync_timeout_event = new C_MonContext(this, [this](int) {
-      sync_timeout();
-    });
-  timer.add_event_after(g_conf->mon_sync_timeout, sync_timeout_event);
+  sync_timeout_event = timer.add_event_after(
+    g_conf->mon_sync_timeout,
+    new C_MonContext(this, [this](int) {
+	sync_timeout();
+      }));
 }
 
 void Monitor::sync_finish(version_t last_committed)
@@ -1596,8 +1597,12 @@ void Monitor::reset_probe_timeout()
       probe_timeout(r);
     });
   double t = g_conf->mon_probe_timeout;
-  timer.add_event_after(t, probe_timeout_event);
-  dout(10) << "reset_probe_timeout " << probe_timeout_event << " after " << t << " seconds" << dendl;
+  if (timer.add_event_after(t, probe_timeout_event)) {
+    dout(10) << "reset_probe_timeout " << probe_timeout_event
+	     << " after " << t << " seconds" << dendl;
+  } else {
+    probe_timeout_event = nullptr;
+  }
 }
 
 void Monitor::probe_timeout(int r)
@@ -2299,14 +2304,14 @@ void Monitor::health_tick_start()
   dout(15) << __func__ << dendl;
 
   health_tick_stop();
-  health_tick_event = new C_MonContext(this, [this](int r) {
-      if (r < 0)
-        return;
-      do_health_to_clog();
-      health_tick_start();
-    });
-  timer.add_event_after(cct->_conf->mon_health_to_clog_tick_interval,
-                        health_tick_event);
+  health_tick_event = timer.add_event_after(
+    cct->_conf->mon_health_to_clog_tick_interval,
+    new C_MonContext(this, [this](int r) {
+	if (r < 0)
+	  return;
+	do_health_to_clog();
+	health_tick_start();
+      }));
 }
 
 void Monitor::health_tick_stop()
@@ -2353,7 +2358,9 @@ void Monitor::health_interval_start()
         return;
       do_health_to_clog_interval();
     });
-  timer.add_event_at(next, health_interval_event);
+  if (!timer.add_event_at(next, health_interval_event)) {
+    health_interval_event = nullptr;
+  }
 }
 
 void Monitor::health_interval_stop()
@@ -4591,10 +4598,11 @@ void Monitor::timecheck_reset_event()
            << " rounds_since_clean " << timecheck_rounds_since_clean
            << dendl;
 
-  timecheck_event = new C_MonContext(this, [this](int) {
-      timecheck_start_round();
-    });
-  timer.add_event_after(delay, timecheck_event);
+  timecheck_event = timer.add_event_after(
+    delay,
+    new C_MonContext(this, [this](int) {
+	timecheck_start_round();
+      }));
 }
 
 void Monitor::timecheck_check_skews()
@@ -5440,10 +5448,11 @@ void Monitor::scrub_event_start()
     return;
   }
 
-  scrub_event = new C_MonContext(this, [this](int) {
+  scrub_event = timer.add_event_after(
+    cct->_conf->mon_scrub_interval,
+    new C_MonContext(this, [this](int) {
       scrub_start();
-    });
-  timer.add_event_after(cct->_conf->mon_scrub_interval, scrub_event);
+      }));
 }
 
 void Monitor::scrub_event_cancel()
@@ -5467,11 +5476,11 @@ void Monitor::scrub_reset_timeout()
 {
   dout(15) << __func__ << " reset timeout event" << dendl;
   scrub_cancel_timeout();
-
-  scrub_timeout_event = new C_MonContext(this, [this](int) {
+  scrub_timeout_event = timer.add_event_after(
+    g_conf->mon_scrub_timeout,
+    new C_MonContext(this, [this](int) {
       scrub_timeout();
-    });
-  timer.add_event_after(g_conf->mon_scrub_timeout, scrub_timeout_event);
+    }));
 }
 
 /************ TICK ***************/

@@ -90,14 +90,6 @@ private:
       object_recorder->flush(future);
     }
   };
-  struct C_AppendTask : public Context {
-    ObjectRecorder *object_recorder;
-    C_AppendTask(ObjectRecorder *o) : object_recorder(o) {
-    }
-    void finish(int r) override {
-      object_recorder->handle_append_task();
-    }
-  };
   struct C_AppendFlush : public Context {
     ObjectRecorder *object_recorder;
     uint64_t tid;
@@ -132,7 +124,7 @@ private:
 
   FlushHandler m_flush_handler;
 
-  C_AppendTask *m_append_task;
+  Context *m_append_task = nullptr;
 
   mutable std::shared_ptr<Mutex> m_lock;
   AppendBuffers m_append_buffers;
