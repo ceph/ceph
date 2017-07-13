@@ -5,6 +5,7 @@
 #include "common/debug.h"
 #include "common/Formatter.h"
 #include "common/errno.h"
+#include "common/TextTable.h"
 #include "include/stringify.h"
 
 #include "CrushWrapper.h"
@@ -2214,9 +2215,11 @@ namespace {
   class TreeDumper {
     typedef CrushTreeDumper::Item Item;
     const CrushWrapper *crush;
+    const CrushTreeDumper::name_map_t& weight_set_names;
   public:
-    explicit TreeDumper(const CrushWrapper *crush)
-      : crush(crush) {}
+    explicit TreeDumper(const CrushWrapper *crush,
+			const CrushTreeDumper::name_map_t& wsnames)
+      : crush(crush), weight_set_names(wsnames) {}
 
     void dump(Formatter *f) {
       set<int> roots;
@@ -2230,12 +2233,12 @@ namespace {
     void dump_item(const Item& qi, Formatter* f) {
       if (qi.is_bucket()) {
 	f->open_object_section("bucket");
-	CrushTreeDumper::dump_item_fields(crush, qi, f);
+	CrushTreeDumper::dump_item_fields(crush, weight_set_names, qi, f);
 	dump_bucket_children(qi, f);
 	f->close_section();
       } else {
 	f->open_object_section("device");
-	CrushTreeDumper::dump_item_fields(crush, qi, f);
+	CrushTreeDumper::dump_item_fields(crush, weight_set_names, qi, f);
 	f->close_section();
       }
     }
@@ -2253,10 +2256,12 @@ namespace {
   };
 }
 
-void CrushWrapper::dump_tree(Formatter *f) const
+void CrushWrapper::dump_tree(
+  Formatter *f,
+  const CrushTreeDumper::name_map_t& weight_set_names) const
 {
   assert(f);
-  TreeDumper(this).dump(f);
+  TreeDumper(this, weight_set_names).dump(f);
 }
 
 void CrushWrapper::dump_tunables(Formatter *f) const
@@ -2426,36 +2431,69 @@ void CrushWrapper::list_rules(Formatter *f) const
   }
 }
 
-class CrushTreePlainDumper : public CrushTreeDumper::Dumper<ostream> {
+class CrushTreePlainDumper : public CrushTreeDumper::Dumper<TextTable> {
 public:
-  typedef CrushTreeDumper::Dumper<ostream> Parent;
+  typedef CrushTreeDumper::Dumper<TextTable> Parent;
 
-  explicit CrushTreePlainDumper(const CrushWrapper *crush)
-    : Parent(crush) {}
+  explicit CrushTreePlainDumper(const CrushWrapper *crush,
+				const CrushTreeDumper::name_map_t& wsnames)
+    : Parent(crush, wsnames) {}
 
-  void dump(ostream *out) {
-    *out << "ID\tWEIGHT\tTYPE NAME\n";
-    Parent::dump(out);
+  void dump(TextTable *tbl) {
+    tbl->define_column("ID", TextTable::LEFT, TextTable::RIGHT);
+    tbl->define_column("WEIGHT", TextTable::LEFT, TextTable::RIGHT);
+    for (auto& p : crush->choose_args) {
+      if (p.first == CrushWrapper::DEFAULT_CHOOSE_ARGS) {
+	tbl->define_column("(compat)", TextTable::LEFT, TextTable::RIGHT);
+      } else {
+	string name;
+	auto q = weight_set_names.find(p.first);
+	name = q != weight_set_names.end() ? q->second :
+	  stringify(p.first);
+	tbl->define_column(name.c_str(), TextTable::LEFT, TextTable::RIGHT);
+      }
+    }
+    tbl->define_column("TYPE NAME", TextTable::LEFT, TextTable::LEFT);
+    Parent::dump(tbl);
   }
 
 protected:
-  void dump_item(const CrushTreeDumper::Item &qi, ostream *out) override {
-    *out << qi.id << "\t"
-	 << weightf_t(qi.weight) << "\t";
-
-    for (int k=0; k < qi.depth; k++)
-      *out << "\t";
-
-    if (qi.is_bucket())
-    {
-      *out << crush->get_type_name(crush->get_bucket_type(qi.id)) << " "
-	   << crush->get_item_name(qi.id);
+  void dump_item(const CrushTreeDumper::Item &qi, TextTable *tbl) override {
+    *tbl << qi.id
+	 << weightf_t(qi.weight);
+    for (auto& p : crush->choose_args) {
+      if (qi.parent < 0) {
+	const crush_choose_arg_map cmap = crush->choose_args_get(p.first);
+	int bidx = -1 - qi.parent;
+	const crush_bucket *b = crush->get_bucket(qi.parent);
+	if (b &&
+	    bidx < (int)cmap.size &&
+	    cmap.args[bidx].weight_set &&
+	    cmap.args[bidx].weight_set_size >= 1) {
+	  int pos;
+	  for (pos = 0;
+	       pos < (int)cmap.args[bidx].weight_set[0].size &&
+		 b->items[pos] != qi.id;
+	       ++pos) ;
+	  *tbl << weightf_t((float)cmap.args[bidx].weight_set[0].weights[pos] /
+			    (float)0x10000);
+	  continue;
+	}
+      }
+      *tbl << "";
     }
-    else
-    {
-      *out << "osd." << qi.id;
+    ostringstream ss;
+    for (int k=0; k < qi.depth; k++) {
+      ss << "    ";
     }
-    *out << "\n";
+    if (qi.is_bucket()) {
+      ss << crush->get_type_name(crush->get_bucket_type(qi.id)) << " "
+	 << crush->get_item_name(qi.id);
+    } else {
+      ss << "osd." << qi.id;
+    }
+    *tbl << ss.str();
+    *tbl << TextTable::endrow;
   }
 };
 
@@ -2464,8 +2502,10 @@ class CrushTreeFormattingDumper : public CrushTreeDumper::FormattingDumper {
 public:
   typedef CrushTreeDumper::FormattingDumper Parent;
 
-  explicit CrushTreeFormattingDumper(const CrushWrapper *crush)
-    : Parent(crush) {}
+  explicit CrushTreeFormattingDumper(
+    const CrushWrapper *crush,
+    const CrushTreeDumper::name_map_t& wsnames)
+    : Parent(crush, wsnames) {}
 
   void dump(Formatter *f) {
     f->open_array_section("nodes");
@@ -2477,12 +2517,18 @@ public:
 };
 
 
-void CrushWrapper::dump_tree(ostream *out, Formatter *f) const
+void CrushWrapper::dump_tree(
+  ostream *out, Formatter *f,
+  const CrushTreeDumper::name_map_t& weight_set_names) const
 {
-  if (out)
-    CrushTreePlainDumper(this).dump(out);
-  if (f)
-    CrushTreeFormattingDumper(this).dump(f);
+  if (out) {
+    TextTable tbl;
+    CrushTreePlainDumper(this, weight_set_names).dump(&tbl);
+    *out << tbl;
+  }
+  if (f) {
+    CrushTreeFormattingDumper(this, weight_set_names).dump(f);
+  }
 }
 
 void CrushWrapper::generate_test_instances(list<CrushWrapper*>& o)

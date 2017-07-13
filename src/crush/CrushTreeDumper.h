@@ -18,6 +18,7 @@
 #define CRUSH_TREE_DUMPER_H
 
 #include "CrushWrapper.h"
+#include "include/stringify.h"
 
 /**
  * CrushTreeDumper:
@@ -64,7 +65,9 @@ namespace CrushTreeDumper {
   template <typename F>
   class Dumper : public list<Item> {
   public:
-    explicit Dumper(const CrushWrapper *crush_) : crush(crush_) {
+    explicit Dumper(const CrushWrapper *crush_,
+		    const name_map_t& weight_set_names_)
+      : crush(crush_), weight_set_names(weight_set_names_) {
       crush->find_nonshadow_roots(roots);
       root = roots.begin();
     }
@@ -141,6 +144,7 @@ namespace CrushTreeDumper {
 
   protected:
     const CrushWrapper *crush;
+    const name_map_t &weight_set_names;
 
   private:
     set<int> touched;
@@ -149,12 +153,12 @@ namespace CrushTreeDumper {
   };
 
   inline void dump_item_fields(const CrushWrapper *crush,
+			       const name_map_t& weight_set_names,
 			       const Item &qi, Formatter *f) {
     f->dump_int("id", qi.id);
     const char *c = crush->get_item_class(qi.id);
-    if (!c)
-      c = "";
-    f->dump_string("device_class", c);
+    if (c)
+      f->dump_string("device_class", c);
     if (qi.is_bucket()) {
       int type = crush->get_bucket_type(qi.id);
       f->dump_string("name", crush->get_item_name(qi.id));
@@ -166,6 +170,42 @@ namespace CrushTreeDumper {
       f->dump_int("type_id", 0);
       f->dump_float("crush_weight", qi.weight);
       f->dump_unsigned("depth", qi.depth);
+    }
+    if (qi.parent < 0) {
+      f->open_object_section("pool_weights");
+      for (auto& p : crush->choose_args) {
+	const crush_choose_arg_map& cmap = p.second;
+	int bidx = -1 - qi.parent;
+	const crush_bucket *b = crush->get_bucket(qi.parent);
+	if (b &&
+	    bidx < (int)cmap.size &&
+	    cmap.args[bidx].weight_set &&
+	    cmap.args[bidx].weight_set_size >= 1) {
+	  int bpos;
+	  for (bpos = 0;
+	       bpos < (int)cmap.args[bidx].weight_set[0].size &&
+		 b->items[bpos] != qi.id;
+	       ++bpos) ;
+	  string name;
+	  if (p.first == CrushWrapper::DEFAULT_CHOOSE_ARGS) {
+	    name = "(compat)";
+	  } else {
+	    auto q = weight_set_names.find(p.first);
+	    name = q != weight_set_names.end() ? q->second :
+	      stringify(p.first);
+	  }
+	  f->open_array_section(name.c_str());
+	  for (unsigned opos = 0;
+	       opos < cmap.args[bidx].weight_set_size;
+	       ++opos) {
+	    float w = (float)cmap.args[bidx].weight_set[opos].weights[bpos] /
+	      (float)0x10000;
+	    f->dump_float("weight", w);
+	  }
+	  f->close_section();
+	}
+      }
+      f->close_section();
     }
   }
 
@@ -185,7 +225,9 @@ namespace CrushTreeDumper {
 
   class FormattingDumper : public Dumper<Formatter> {
   public:
-    explicit FormattingDumper(const CrushWrapper *crush) : Dumper<Formatter>(crush) {}
+    explicit FormattingDumper(const CrushWrapper *crush,
+			      const name_map_t& weight_set_names)
+      : Dumper<Formatter>(crush, weight_set_names) {}
 
   protected:
     void dump_item(const Item &qi, Formatter *f) override {
@@ -196,7 +238,7 @@ namespace CrushTreeDumper {
     }
 
     virtual void dump_item_fields(const Item &qi, Formatter *f) {
-      CrushTreeDumper::dump_item_fields(crush, qi, f);
+      CrushTreeDumper::dump_item_fields(crush, weight_set_names, qi, f);
     }
 
     virtual void dump_bucket_children(const Item &qi, Formatter *f) {
