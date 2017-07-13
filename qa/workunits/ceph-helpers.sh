@@ -1325,8 +1325,10 @@ function test_wait_for_health_ok() {
     setup $dir || return 1
     run_mon $dir a --osd_pool_default_size=1 --osd_failsafe_full_ratio=.99 --mon_pg_warn_min_per_osd=0 || return 1
     run_mgr $dir x --mon_pg_warn_min_per_osd=0 || return 1
-    ! TIMEOUT=1 wait_for_health_ok || return 1
     run_osd $dir 0 || return 1
+    kill_daemons $dir TERM osd || return 1
+    ! TIMEOUT=1 wait_for_health_ok || return 1
+    activate_osd $dir 0 || return 1
     wait_for_health_ok || return 1
     teardown $dir || return 1
 }
