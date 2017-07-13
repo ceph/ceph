@@ -5079,11 +5079,15 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
     rs << "\n";
     rdata.append(rs.str());
   } else if (prefix == "osd crush tree") {
-    boost::scoped_ptr<Formatter> f(Formatter::create(format, "json-pretty", "json-pretty"));
-    f->open_array_section("crush_map_roots");
-    osdmap.crush->dump_tree(f.get());
-    f->close_section();
-    f->flush(rdata);
+    boost::scoped_ptr<Formatter> f(Formatter::create(format));
+    if (f) {
+      osdmap.crush->dump_tree(nullptr, f.get(), osdmap.get_pool_names());
+      f->flush(rdata);
+    } else {
+      ostringstream ss;
+      osdmap.crush->dump_tree(&ss, nullptr, osdmap.get_pool_names());
+      rdata.append(ss.str());
+    }
   } else if (prefix == "osd crush class ls") {
     boost::scoped_ptr<Formatter> f(Formatter::create(format, "json-pretty", "json-pretty"));
     f->open_array_section("crush_classes");

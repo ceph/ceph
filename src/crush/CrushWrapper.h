@@ -23,7 +23,7 @@ extern "C" {
 #include "include/assert.h"
 #include "include/err.h"
 #include "include/encoding.h"
-
+#include "include/mempool.h"
 
 #include "common/Mutex.h"
 
@@ -31,6 +31,10 @@ extern "C" {
 
 namespace ceph {
   class Formatter;
+}
+
+namespace CrushTreeDumper {
+  typedef mempool::osdmap::map<int64_t,string> name_map_t;
 }
 
 WRITE_RAW_ENCODER(crush_rule_mask)   // it's all u8's
@@ -1089,7 +1093,6 @@ public:
 
 
   /** buckets **/
-private:
   const crush_bucket *get_bucket(int id) const {
     if (!crush)
       return (crush_bucket *)(-EINVAL);
@@ -1102,6 +1105,7 @@ private:
       return (crush_bucket *)(-ENOENT);
     return ret;
   }
+private:
   crush_bucket *get_bucket(int id) {
     if (!crush)
       return (crush_bucket *)(-EINVAL);
@@ -1452,8 +1456,13 @@ public:
   void dump_tunables(Formatter *f) const;
   void dump_choose_args(Formatter *f) const;
   void list_rules(Formatter *f) const;
-  void dump_tree(ostream *out, Formatter *f) const;
-  void dump_tree(Formatter *f) const;
+  void dump_tree(ostream *out, Formatter *f,
+		 const CrushTreeDumper::name_map_t& ws) const;
+  void dump_tree(ostream *out, Formatter *f) {
+    dump_tree(out, f, CrushTreeDumper::name_map_t());
+  }
+  void dump_tree(Formatter *f,
+		 const CrushTreeDumper::name_map_t& ws) const;
   static void generate_test_instances(list<CrushWrapper*>& o);
 
   int get_osd_pool_default_crush_replicated_ruleset(CephContext *cct);

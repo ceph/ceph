@@ -3052,7 +3052,7 @@ public:
 
   OSDTreePlainDumper(const CrushWrapper *crush, const OSDMap *osdmap_,
 		     unsigned f)
-    : Parent(crush), osdmap(osdmap_), filter(f) { }
+    : Parent(crush, osdmap_->get_pool_names()), osdmap(osdmap_), filter(f) { }
 
   bool should_dump_leaf(int i) const override {
     if (((filter & OSDMap::DUMP_UP) && !osdmap->is_up(i)) ||
@@ -3130,7 +3130,7 @@ public:
 
   OSDTreeFormattingDumper(const CrushWrapper *crush, const OSDMap *osdmap_,
 			  unsigned f)
-    : Parent(crush), osdmap(osdmap_), filter(f) { }
+    : Parent(crush, osdmap_->get_pool_names()), osdmap(osdmap_), filter(f) { }
 
   bool should_dump_leaf(int i) const override {
     if (((filter & OSDMap::DUMP_UP) && !osdmap->is_up(i)) ||
@@ -3942,7 +3942,7 @@ public:
 
   OSDUtilizationDumper(const CrushWrapper *crush, const OSDMap *osdmap_,
 		       const PGStatService *pgs_, bool tree_) :
-    Parent(crush),
+    Parent(crush, osdmap_->get_pool_names()),
     osdmap(osdmap_),
     pgs(pgs_),
     tree(tree_),
@@ -4214,7 +4214,7 @@ protected:
 			 const size_t num_pgs,
 			 Formatter *f) override {
     f->open_object_section("item");
-    CrushTreeDumper::dump_item_fields(crush, qi, f);
+    CrushTreeDumper::dump_item_fields(crush, weight_set_names, qi, f);
     f->dump_float("reweight", reweight);
     f->dump_int("kb", kb);
     f->dump_int("kb_used", kb_used);
