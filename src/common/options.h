@@ -251,7 +251,8 @@ struct Option {
    */
   bool is_safe() const
   {
-    return type == TYPE_INT || type == TYPE_FLOAT;
+    return safe || type == TYPE_BOOL || type == TYPE_INT
+                || type == TYPE_UINT || type == TYPE_FLOAT;
   }
 };
 
