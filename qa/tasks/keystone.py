@@ -112,7 +112,7 @@ def configure_instance(ctx, config):
             ])
 
         # prepare key repository for Fetnet token authenticator
-        safepath.makedirs('/', keyrepo_dir)
+        run_in_keystone_dir(ctx, client, [ 'mkdir', '-p', keyrepo_dir ])
         run_in_keystone_venv(ctx, client, [ 'keystone-manage', 'fernet_setup' ])
 
         # sync database
@@ -133,13 +133,21 @@ def run_keystone(ctx, config):
         client_public_with_cluster = cluster_name + '.' + client_public_with_id
 
         run_cmd = get_keystone_venved_cmd(ctx, 'keystone-wsgi-public',
-            [ '--host', 'localhost', '--port', '5000' ])
+            [   '--host', 'localhost', '--port', '5000',
+                # Let's put the Keystone in background, wait for EOF
+                # and after receiving it, send SIGTERM to the daemon.
+                # This crazy hack is because Keystone, in contrast to
+                # our other daemons, doesn't quit on stdin.close().
+                # Teuthology relies on this behaviour.
+		run.Raw('& { read; kill %1; }')
+            ]
+        )
         ctx.daemons.add_daemon(
             remote, 'keystone', client_public_with_id,
             cluster=cluster_name,
             args=run_cmd,
             logger=log.getChild(client),
-            stdin=None,
+            stdin=run.PIPE,
             cwd=get_keystone_dir(ctx),
             wait=False,
             check_status=False,
@@ -149,20 +157,23 @@ def run_keystone(ctx, config):
         client_admin_with_id = 'keystone.admin' + '.' + client_id
 
         run_cmd = get_keystone_venved_cmd(ctx, 'keystone-wsgi-admin',
-            [ '--host', 'localhost', '--port', '35357' ])
+            [   '--host', 'localhost', '--port', '35357',
+                run.Raw('& { read; kill %1; }')
+            ]
+        )
         ctx.daemons.add_daemon(
             remote, 'keystone', client_admin_with_id,
             cluster=cluster_name,
             args=run_cmd,
             logger=log.getChild(client),
-            stdin=None,
+            stdin=run.PIPE,
             cwd=get_keystone_dir(ctx),
             wait=False,
             check_status=False,
         )
 
         # sleep driven synchronization
-        run_in_keystone_venv(ctx, client, [ 'sleep', '3' ])
+        run_in_keystone_venv(ctx, client, [ 'sleep', '15' ])
     try:
         yield
     finally:
