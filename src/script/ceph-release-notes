@@ -37,9 +37,9 @@ from git import Repo
 
 fixes_re = re.compile(r"Fixes\:? #(\d+)")
 # labels is the list of relevant labels defined for github.com/ceph/ceph
-labels = ['bluestore', 'build/ops', 'cephfs', 'common', 'core', 'mgr',
+labels = set(['bluestore', 'build/ops', 'cephfs', 'common', 'core', 'mgr',
           'mon', 'performance', 'pybind', 'rdma', 'rgw', 'rbd', 'tests',
-          'tools']
+          'tools'])
 merge_re = re.compile("Merge pull request #(\d+).*")
 # prefixes is the list of commit description prefixes we recognize
 prefixes = ['bluestore', 'build/ops', 'cephfs', 'cephx', 'cli', 'cmake',
@@ -104,9 +104,9 @@ def split_component(title, gh, number):
         issue_labels = {it['name'] for it in issue['labels']}
         if 'documentation' in issue_labels:
             return 'doc: ' + title
-        item = labels.intersection(issue_labels)
+        item = (labels.union(set(prefixes))).intersection(issue_labels)
         if item:
-            return ",".join(item) + ': ' + title
+            return ",".join(sorted(item)) + ': ' + title
         else:
             return 'UNKNOWN: ' + title
 
@@ -132,13 +132,15 @@ def make_release_notes(gh, repo, ref, plaintext, verbose, strict, use_tags):
             message_lines = commit.message.split('\n')
             if not strict and len(message_lines) > 1:
                 lines = []
+                duplicates_pr_title = False
                 for line in message_lines[1:]:
                     if 'Reviewed-by' in line:
                         continue
                     line = line.strip()
                     if line:
                         lines.append(line)
-                duplicates_pr_title = lines[0] == pr['title'].strip()
+                        duplicates_pr_title = lines[0] == pr['title'].strip()
+
                 if duplicates_pr_title:
                     lines.pop(0)
                 if len(lines) == 0:
