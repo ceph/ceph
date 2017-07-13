@@ -758,7 +758,7 @@ map<pg_shard_t, ScrubMap *>::const_iterator
   inconsistent_obj_wrapper &object_error)
 {
   eversion_t auth_version;
-  bufferlist auth_bl;
+  bufferlist first_bl;
 
   // Create list of shards with primary last so it will be auth copy all
   // other things being equal.
@@ -832,11 +832,11 @@ map<pg_shard_t, ScrubMap *>::const_iterator
     // This is automatically corrected in PG::_repair_oinfo_oid()
     assert(oi.soid == obj);
 
-    if (auth_version != eversion_t()) {
-      if (!object_error.has_object_info_inconsistency() && !(bl == auth_bl)) {
-	object_error.set_object_info_inconsistency();
-	error_string += " object_info_inconsistency";
-      }
+    if (first_bl.length() == 0) {
+      first_bl.append(bl);
+    } else if (!object_error.has_object_info_inconsistency() && !bl.contents_equal(first_bl)) {
+      object_error.set_object_info_inconsistency();
+      error_string += " object_info_inconsistency";
     }
 
     // Don't use this particular shard because it won't be able to repair data
@@ -866,8 +866,6 @@ map<pg_shard_t, ScrubMap *>::const_iterator
       auth = j;
       *auth_oi = oi;
       auth_version = oi.version;
-      auth_bl.clear();
-      auth_bl.append(bl);
     }
 
 out:
