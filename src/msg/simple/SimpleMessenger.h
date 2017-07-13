@@ -93,6 +93,7 @@ public:
    * @{
    */
   void set_addr_unknowns(const entity_addr_t& addr) override;
+  void set_addr(const entity_addr_t &addr) override;
 
   int get_dispatch_queue_len() override {
     return dispatch_queue.get_queue_len();
