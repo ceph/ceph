@@ -1235,6 +1235,9 @@ public:
           drain_all();
           return set_cr_error(retcode);
         }
+        if (entries.size() > 0) {
+          tn->set_flag(RGW_SNS_FLAG_ACTIVE); /* actually have entries to sync */
+        }
         tn->log(20, SSTR("retrieved " << entries.size() << " entries to sync"));
         iter = entries.begin();
         for (; iter != entries.end(); ++iter) {
@@ -1254,6 +1257,8 @@ public:
           sync_marker.marker = iter->first;
         }
       } while ((int)entries.size() == max_entries);
+
+      tn->unset_flag(RGW_SNS_FLAG_ACTIVE); /* actually have entries to sync */
 
       lease_cr->go_down();
       drain_all();
@@ -1305,6 +1310,9 @@ public:
         current_modified.swap(modified_shards);
         inc_lock.Unlock();
 
+        if (current_modified.size() > 0) {
+          tn->set_flag(RGW_SNS_FLAG_ACTIVE); /* actually have entries to sync */
+        }
         /* process out of band updates */
         for (modified_iter = current_modified.begin(); modified_iter != current_modified.end(); ++modified_iter) {
           yield {
@@ -1361,10 +1369,16 @@ public:
             drain_all();
             return set_cr_error(retcode);
           }
+
           if ((remote_trimmed == RemoteMightTrimmed) && sync_marker.marker.empty() && log_entries.empty())
             remote_trimmed = RemoteTrimmed;
           else
             remote_trimmed = RemoteNotTrimmed;
+
+          if (log_entries.size() > 0) {
+            tn->set_flag(RGW_SNS_FLAG_ACTIVE); /* actually have entries to sync */
+          }
+
           for (log_iter = log_entries.begin(); log_iter != log_entries.end(); ++log_iter) {
             tn->log(20, SSTR("shard_id=" << shard_id << " log_entry: " << log_iter->log_id << ":" << log_iter->log_timestamp << ":" << log_iter->entry.key));
             if (!marker_tracker->index_key_to_marker(log_iter->entry.key, log_iter->log_id)) {
@@ -1404,6 +1418,7 @@ public:
 	}
 	tn->log(20, SSTR("shard_id=" << shard_id << " datalog_marker=" << datalog_marker << " sync_marker.marker=" << sync_marker.marker));
 	if (datalog_marker == sync_marker.marker || remote_trimmed == RemoteTrimmed) {
+          tn->unset_flag(RGW_SNS_FLAG_ACTIVE);
 #define INCREMENTAL_INTERVAL 20
 	  yield wait(utime_t(INCREMENTAL_INTERVAL, 0));
 	}
@@ -2300,7 +2315,6 @@ public:
     stringstream ss;
     ss << bucket_shard_str{bs} << "/" << key << "[" << versioned_epoch << "]";
     set_description() << "bucket sync single entry (source_zone=" << sync_env->source_zone << ") b=" << ss.str() << " log_entry=" << entry_marker << " op=" << (int)op << " op_state=" << (int)op_state;
-    ldout(sync_env->cct, 20) << "bucket sync single entry (source_zone=" << sync_env->source_zone << ") b=" << ss.str() << " log_entry=" << entry_marker << " op=" << (int)op << " op_state=" << (int)op_state << dendl;
     set_status("init");
 
     logger.init(sync_env, "Object", ss.str());
@@ -2310,6 +2324,7 @@ public:
                                                               "entry",
                                                               SSTR(key)));
 
+    tn->log(20, SSTR("bucket sync single entry (source_zone=" << sync_env->source_zone << ") b=" << ss.str() << " log_entry=" << entry_marker << " op=" << (int)op << " op_state=" << (int)op_state));
     error_injection = (sync_env->cct->_conf->rgw_sync_data_inject_err_probability > 0);
 
     data_sync_module = sync_env->sync_module->get_data_handler();
@@ -2324,6 +2339,7 @@ public:
       if (op_state != CLS_RGW_STATE_COMPLETE) {
         goto done;
       }
+      tn->set_flag(RGW_SNS_FLAG_ACTIVE);
       do {
         yield {
           marker_tracker->reset_need_retry(key);
@@ -2365,11 +2381,14 @@ public:
         }
       } while (marker_tracker->need_retry(key));
       {
+        tn->unset_flag(RGW_SNS_FLAG_ACTIVE);
         stringstream ss;
         if (retcode >= 0) {
           ss << "done";
+          tn->log(10, "success");
         } else {
           ss << "done, retcode=" << retcode;
+          tn->log(10, SSTR("failed, retcode=" << retcode << " (" << cpp_strerror(-retcode) << ")"));
         }
         logger.log(ss.str());
       }
@@ -2470,6 +2489,9 @@ int RGWBucketShardFullSyncCR::operate()
         drain_all();
         return set_cr_error(retcode);
       }
+      if (list_result.entries.size() > 0) {
+        tn->set_flag(RGW_SNS_FLAG_ACTIVE); /* actually have entries to sync */
+      }
       entries_iter = list_result.entries.begin();
       for (; entries_iter != list_result.entries.end(); ++entries_iter) {
         if (!lease_cr->is_locked()) {
@@ -2521,6 +2543,7 @@ int RGWBucketShardFullSyncCR::operate()
         }
       }
     }
+    tn->unset_flag(RGW_SNS_FLAG_ACTIVE);
     if (!lease_cr->is_locked()) {
       return set_cr_error(-ECANCELED);
     }
@@ -2721,6 +2744,7 @@ int RGWBucketShardIncrementalSyncCR::operate()
           /* not updating high marker though */
           continue;
         }
+        tn->set_flag(RGW_SNS_FLAG_ACTIVE);
         tn->log(20, SSTR("syncing object: "
             << bucket_shard_str{bs} << "/" << key));
         updated_status = false;
@@ -2809,6 +2833,7 @@ int RGWBucketShardIncrementalSyncCR::operate()
       }
     }
 
+    tn->unset_flag(RGW_SNS_FLAG_ACTIVE);
     yield call(marker_tracker.flush());
     if (retcode < 0) {
       tn->log(0, SSTR("ERROR: marker_tracker.flush() returned retcode=" << retcode));
