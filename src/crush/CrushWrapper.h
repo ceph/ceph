@@ -117,6 +117,9 @@ public:
   /// true if any ruleset has more than 1 rule
   bool has_multirule_rulesets() const;
 
+  /// true if any buckets that aren't straw2
+  bool has_non_straw2_buckets() const;
+
   // tunables
   void set_tunables_argonaut() {
     crush->choose_local_tries = 2;
