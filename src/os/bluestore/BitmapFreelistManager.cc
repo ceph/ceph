@@ -183,6 +183,7 @@ void BitmapFreelistManager::enumerate_reset()
   enumerate_offset = 0;
   enumerate_bl_pos = 0;
   enumerate_bl.clear();
+  enumerate_p.reset();
 }
 
 int get_next_clear_bit(bufferlist& bl, int start)
