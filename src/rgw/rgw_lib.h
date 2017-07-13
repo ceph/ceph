@@ -26,7 +26,7 @@ namespace rgw {
     RGWFrontendConfig* fec;
     RGWLibFrontend* fe;
     OpsLogSocket* olog;
-    rgw::LDAPHelper* ldh;
+    rgw::LDAPHelper* ldh{nullptr};
     RGWREST rest; // XXX needed for RGWProcessEnv
     RGWRados* store;
     boost::intrusive_ptr<CephContext> cct;

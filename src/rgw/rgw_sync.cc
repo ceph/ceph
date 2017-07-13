@@ -414,7 +414,7 @@ class RGWReadMDLogEntriesCR : public RGWSimpleCoroutine {
   list<cls_log_entry> *entries;
   bool *truncated;
 
-  RGWAsyncReadMDLogEntries *req;
+  RGWAsyncReadMDLogEntries *req{nullptr};
 
 public:
   RGWReadMDLogEntriesCR(RGWMetaSyncEnv *_sync_env, RGWMetadataLog* mdlog,

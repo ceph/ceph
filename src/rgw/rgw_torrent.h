@@ -96,7 +96,7 @@ private:
 
   string  announce;    // tracker
   string origin; // origin
-  time_t create_date;    // time of the file created
+  time_t create_date{0};    // time of the file created
   string comment;  // comment
   string create_by;    // app name and version
   string encoding;    // if encode use gbk rather than gtf-8 use this field
@@ -104,8 +104,8 @@ private:
   bool is_torrent;  // flag
   bufferlist bl;  // bufflist ready to send
 
-  struct req_state *s;
-  RGWRados *store;
+  struct req_state *s{nullptr};
+  RGWRados *store{nullptr};
   SHA1 h;
 
   TorrentBencode dencode;
