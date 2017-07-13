@@ -5123,6 +5123,37 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
       rs << "\n";
       rdata.append(rs.str());
     }
+  } else if (prefix == "osd crush weight-set ls") {
+    boost::scoped_ptr<Formatter> f(Formatter::create(format));
+    if (f) {
+      f->open_array_section("weight_sets");
+      if (osdmap.crush->have_choose_args(CrushWrapper::DEFAULT_CHOOSE_ARGS)) {
+	f->dump_string("pool", "(compat)");
+      }
+      for (auto& i : osdmap.crush->choose_args) {
+	if (i.first >= 0) {
+	  f->dump_string("pool", osdmap.get_pool_name(i.first));
+	}
+      }
+      f->close_section();
+      f->flush(rdata);
+    } else {
+      ostringstream rs;
+      if (osdmap.crush->have_choose_args(CrushWrapper::DEFAULT_CHOOSE_ARGS)) {
+	rs << "(compat)\n";
+      }
+      for (auto& i : osdmap.crush->choose_args) {
+	if (i.first >= 0) {
+	  rs << osdmap.get_pool_name(i.first) << "\n";
+	}
+      }
+      rdata.append(rs.str());
+    }
+  } else if (prefix == "osd crush weight-set dump") {
+    boost::scoped_ptr<Formatter> f(Formatter::create(format, "json-pretty",
+						     "json-pretty"));
+    osdmap.crush->dump_choose_args(f.get());
+    f->flush(rdata);
   } else if (prefix == "osd erasure-code-profile get") {
     string name;
     cmd_getval(g_ceph_context, cmdmap, "name", name);
@@ -7595,7 +7626,121 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     newcrush.encode(pending_inc.crush, mon->get_quorum_con_features());
     ss << "rename class '" << srcname << "' to '" << dstname << "'";
     goto update;
-    
+
+  } else if (prefix == "osd crush weight-set create" ||
+	     prefix == "osd crush weight-set create-compat") {
+    CrushWrapper newcrush;
+    _get_pending_crush(newcrush);
+    int64_t pool;
+    int positions;
+    if (newcrush.has_non_straw2_buckets()) {
+      ss << "crush map contains one or more bucket(s) that are not straw2";
+      err = -EPERM;
+      goto reply;
+    }
+    if (prefix == "osd crush weight-set create") {
+      if (osdmap.require_min_compat_client > 0 &&
+	  osdmap.require_min_compat_client < CEPH_RELEASE_LUMINOUS) {
+	ss << "require_min_compat_client "
+	   << ceph_release_name(osdmap.require_min_compat_client)
+	   << " < luminous, which is required for per-pool weight-sets";
+	err = -EPERM;
+	goto reply;
+      }
+      string poolname, mode;
+      cmd_getval(g_ceph_context, cmdmap, "pool", poolname);
+      pool = osdmap.lookup_pg_pool_name(poolname.c_str());
+      if (pool < 0) {
+	ss << "pool '" << poolname << "' not found";
+	err = -ENOENT;
+	goto reply;
+      }
+      cmd_getval(g_ceph_context, cmdmap, "mode", mode);
+      if (mode != "flat" && mode != "positional") {
+	ss << "unrecognized weight-set mode '" << mode << "'";
+	err = -EINVAL;
+	goto reply;
+      }
+      positions = mode == "flat" ? 1 : osdmap.get_pg_pool(pool)->get_size();
+    } else {
+      pool = CrushWrapper::DEFAULT_CHOOSE_ARGS;
+      positions = 1;
+    }
+    newcrush.create_choose_args(pool, positions);
+    pending_inc.crush.clear();
+    newcrush.encode(pending_inc.crush, mon->get_quorum_con_features());
+    goto update;
+
+  } else if (prefix == "osd crush weight-set rm" ||
+	     prefix == "osd crush weight-set rm-compat") {
+    CrushWrapper newcrush;
+    _get_pending_crush(newcrush);
+    int64_t pool;
+    if (prefix == "osd crush weight-set rm") {
+      string poolname;
+      cmd_getval(g_ceph_context, cmdmap, "pool", poolname);
+      pool = osdmap.lookup_pg_pool_name(poolname.c_str());
+      if (pool < 0) {
+	ss << "pool '" << poolname << "' not found";
+	err = -ENOENT;
+	goto reply;
+      }
+    } else {
+      pool = CrushWrapper::DEFAULT_CHOOSE_ARGS;
+    }
+    newcrush.rm_choose_args(pool);
+    pending_inc.crush.clear();
+    newcrush.encode(pending_inc.crush, mon->get_quorum_con_features());
+    goto update;
+
+  } else if (prefix == "osd crush weight-set reweight" ||
+	     prefix == "osd crush weight-set reweight-compat") {
+    string poolname, item;
+    vector<double> weight;
+    cmd_getval(g_ceph_context, cmdmap, "pool", poolname);
+    cmd_getval(g_ceph_context, cmdmap, "item", item);
+    cmd_getval(g_ceph_context, cmdmap, "weight", weight);
+    CrushWrapper newcrush;
+    _get_pending_crush(newcrush);
+    int64_t pool;
+    if (prefix == "osd crush weight-set reweight") {
+      pool = osdmap.lookup_pg_pool_name(poolname.c_str());
+      if (pool < 0) {
+	ss << "pool '" << poolname << "' not found";
+	err = -ENOENT;
+	goto reply;
+      }
+      if (!newcrush.have_choose_args(pool)) {
+	ss << "no weight-set for pool '" << poolname << "'";
+	err = -ENOENT;
+	goto reply;
+      }
+    } else {
+      pool = CrushWrapper::DEFAULT_CHOOSE_ARGS;
+      if (!newcrush.have_choose_args(pool)) {
+	ss << "no backward-compatible weight-set";
+	err = -ENOENT;
+	goto reply;
+      }
+    }
+    if (!newcrush.name_exists(item)) {
+      ss << "item '" << item << "' does not exist";
+      err = -ENOENT;
+      goto reply;
+    }
+    err = newcrush.choose_args_adjust_item_weightf(
+      g_ceph_context,
+      newcrush.choose_args_get(pool),
+      newcrush.get_item_id(item),
+      weight,
+      &ss);
+    if (err < 0) {
+      goto reply;
+    }
+    err = 0;
+    pending_inc.crush.clear();
+    newcrush.encode(pending_inc.crush, mon->get_quorum_con_features());
+    goto update;
   } else if (osdid_present &&
 	     (prefix == "osd crush set" || prefix == "osd crush add")) {
     // <OsdName> is 'osd.<id>' or '<id>', passed as int64_t id
