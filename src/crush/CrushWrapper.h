@@ -1270,7 +1270,8 @@ public:
      * the original choose_total_tries value was off by one (it
      * counted "retries" and not "tries").  add one to alloc.
      */
-    crush->choose_tries = (__u32 *)malloc(sizeof(*crush->choose_tries) * (crush->choose_total_tries + 1));
+    crush->choose_tries = (__u32 *)calloc(sizeof(*crush->choose_tries),
+					  (crush->choose_total_tries + 1));
     memset(crush->choose_tries, 0,
 	   sizeof(*crush->choose_tries) * (crush->choose_total_tries + 1));
   }
@@ -1378,7 +1379,47 @@ public:
     }
     free(arg_map.args);
   }
-  
+
+  void create_choose_args(int id, int positions) {
+    if (choose_args.count(id))
+      return;
+    auto &cmap = choose_args[id];
+    cmap.args = (crush_choose_arg*)calloc(sizeof(crush_choose_arg),
+					  crush->max_buckets);
+    cmap.size = crush->max_buckets;
+    for (int bidx=0; bidx < crush->max_buckets; ++bidx) {
+      crush_bucket *b = crush->buckets[bidx];
+      auto &carg = cmap.args[bidx];
+      carg.ids = NULL;
+      carg.ids_size = 0;
+      if (b && b->alg == CRUSH_BUCKET_STRAW2) {
+	crush_bucket_straw2 *sb = (crush_bucket_straw2*)b;
+	carg.weight_set_size = positions;
+	carg.weight_set = (crush_weight_set*)calloc(sizeof(crush_weight_set),
+						    carg.weight_set_size);
+	// initialize with canonical weights
+	for (int pos = 0; pos < positions; ++pos) {
+	  carg.weight_set[pos].size = b->size;
+	  carg.weight_set[pos].weights = (__u32*)calloc(4, b->size);
+	  for (unsigned i = 0; i < b->size; ++i) {
+	    carg.weight_set[pos].weights[i] = sb->item_weights[i];
+	  }
+	}
+      } else {
+	carg.weight_set = NULL;
+	carg.weight_set_size = 0;
+      }
+    }
+  }
+
+  void rm_choose_args(int id) {
+    auto p = choose_args.find(id);
+    if (p != choose_args.end()) {
+      destroy_choose_args(p->second);
+      choose_args.erase(p);
+    }
+  }
+
   void choose_args_clear() {
     for (auto w : choose_args)
       destroy_choose_args(w.second);
