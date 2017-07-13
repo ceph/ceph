@@ -4911,10 +4911,12 @@ const std::vector<Option> ceph_options = {
 
   Option("rgw_nfs_namespace_expire_secs", Option::TYPE_INT, Option::LEVEL_ADVANCED)
   .set_default(300)
+  .set_min(1)
   .set_description(""),
 
   Option("rgw_nfs_max_gc", Option::TYPE_INT, Option::LEVEL_ADVANCED)
   .set_default(300)
+  .set_min(1)
   .set_description(""),
 
   Option("rgw_nfs_write_completion_interval_s", Option::TYPE_INT, Option::LEVEL_ADVANCED)
@@ -4995,6 +4997,7 @@ const std::vector<Option> ceph_options = {
 
   Option("rgw_usage_max_user_shards", Option::TYPE_INT, Option::LEVEL_ADVANCED)
   .set_default(1)
+  .set_min(1)
   .set_description(""),
 
   Option("rgw_enable_ops_log", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
