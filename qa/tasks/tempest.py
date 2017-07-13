@@ -1,9 +1,6 @@
 """
 Deploy and configure Tempest for Teuthology
 """
-from cStringIO import StringIO
-from configobj import ConfigObj
-import base64
 import contextlib
 import logging
 import os
@@ -225,7 +222,11 @@ def task(ctx, config):
     """
     assert config is None or isinstance(config, list) \
         or isinstance(config, dict), \
-        "task tempest only supports a list or dictionary for configuration"
+        'task tempest only supports a list or dictionary for configuration'
+
+    if not ctx.tox:
+        raise ConfigError('tempest must run after the tox task')
+
     all_clients = ['client.{id}'.format(id=id_)
                    for id_ in teuthology.all_roles_of_type(ctx.cluster, 'client')]
     if config is None:

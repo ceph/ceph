@@ -74,7 +74,7 @@ def get_keystone_venved_cmd(ctx, cmd, args):
     return [ kbindir + 'python', kbindir + cmd ] + args
 
 def get_toxvenv_dir(ctx):
-    return '{tdir}/tox-venv'.format(tdir=teuthology.get_testdir(ctx))
+    return ctx.tox.venv_path
 
 @contextlib.contextmanager
 def setup_venv(ctx, config):
@@ -84,29 +84,16 @@ def setup_venv(ctx, config):
     assert isinstance(config, dict)
     log.info('Setting up virtualenv for keystone...')
     for (client, _) in config.items():
-        # yup, it's funny be we have to deploy tox first. The packages
-        # available on Sepia's Ubuntu machines is outdated.
-        tvdir = get_toxvenv_dir(ctx)
-        ctx.cluster.only(client).run(args=[ 'virtualenv', tvdir ])
-        ctx.cluster.only(client).run(args=
-            [   'source', '{tvdir}/bin/activate'.format(tvdir=tvdir),
-                run.Raw('&&'),
-                'pip', 'install', 'tox'
-            ])
-
         run_in_keystone_dir(ctx, client,
-            [   'source', '{tvdir}/bin/activate'.format(tvdir=tvdir),
+            [   'source',
+		'{tvdir}/bin/activate'.format(tvdir=get_toxvenv_dir(ctx)),
                 run.Raw('&&'),
                 'tox', '-e', 'venv', '--notest'
             ])
-        ctx.tox = argparse.Namespace()
-        ctx.tox.venv_path = get_toxvenv_dir(ctx)
     try:
         yield
     finally:
-        for (client, _) in config.items():
-            ctx.cluster.only(client).run(
-                args=[ 'rm', '-rf', get_toxvenv_dir(ctx) ])
+	pass
 
 @contextlib.contextmanager
 def configure_instance(ctx, config):
@@ -278,10 +265,10 @@ def task(ctx, config):
 
     Example of configuration:
 
-      tasks:
-      - local_cluster:
-          cluster_path: /home/rzarzynski/ceph-1/build
-      - local_rgw:
+      - install:
+          flavor: notcmalloc
+      - ceph:
+      - tox: [ client.0 ]
       - keystone:
           client.0:
             force-branch: master
@@ -313,6 +300,10 @@ def task(ctx, config):
     assert config is None or isinstance(config, list) \
         or isinstance(config, dict), \
         "task keystone only supports a list or dictionary for configuration"
+
+    if not ctx.tox:
+        raise ConfigError('keystone must run after the tox task')
+
     all_clients = ['client.{id}'.format(id=id_)
                    for id_ in teuthology.all_roles_of_type(ctx.cluster, 'client')]
     if config is None:
