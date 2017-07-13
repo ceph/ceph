@@ -71,6 +71,18 @@ bool CrushWrapper::has_multirule_rulesets() const
   return false;
 }
 
+bool CrushWrapper::has_non_straw2_buckets() const
+{
+  for (int i=0; i<crush->max_buckets; ++i) {
+    crush_bucket *b = crush->buckets[i];
+    if (!b)
+      continue;
+    if (b->alg != CRUSH_BUCKET_STRAW2)
+      return true;
+  }
+  return false;
+}
+
 bool CrushWrapper::has_v2_rules() const
 {
   for (unsigned i=0; i<crush->max_rules; i++) {
