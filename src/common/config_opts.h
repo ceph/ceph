@@ -690,6 +690,7 @@ OPTION(osd_crush_update_weight_set, OPT_BOOL, true) // update weight set while u
 OPTION(osd_crush_chooseleaf_type, OPT_INT, 1) // 1 = host
 OPTION(osd_pool_use_gmt_hitset, OPT_BOOL, true) // try to use gmt for hitset archive names if all osds in cluster support it.
 OPTION(osd_crush_update_on_start, OPT_BOOL, true)
+OPTION(osd_class_update_on_start, OPT_BOOL, true) // automatically set device class on start
 OPTION(osd_crush_initial_weight, OPT_DOUBLE, -1) // if >=0, the initial weight is for newly added osds.
 OPTION(osd_pool_default_crush_rule, OPT_INT, -1)
 OPTION(osd_pool_erasure_code_stripe_unit, OPT_U32, 4096) // in bytes

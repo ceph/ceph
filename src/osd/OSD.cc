@@ -3436,17 +3436,32 @@ int OSD::update_crush_location()
 
 int OSD::update_crush_device_class()
 {
+  if (!cct->_conf->osd_class_update_on_start) {
+    dout(10) << __func__ << " osd_class_update_on_start = false" << dendl;
+    return 0;
+  }
+
   string device_class;
   int r = store->read_meta("crush_device_class", &device_class);
-  if (r < 0)
+  if (r < 0 || device_class.empty()) {
+    device_class = store->get_default_device_class();
+  }
+
+  if (device_class.empty()) {
     return 0;
+  }
 
   string cmd =
     string("{\"prefix\": \"osd crush set-device-class\", ") +
-    string("\"id\": ") + stringify(whoami) + string(", ") +
-    string("\"class\": \"") + device_class + string("\"}");
+    string("\"class\": \"") + device_class + string("\", ") +
+    string("\"ids\": [\"") + stringify(whoami) + string("\"]}");
 
-  return mon_cmd_maybe_osd_create(cmd);
+  r = mon_cmd_maybe_osd_create(cmd);
+  if (r == -EPERM) {
+    r = 0;
+  }
+
+  return r;
 }
 
 void OSD::write_superblock(ObjectStore::Transaction& t)

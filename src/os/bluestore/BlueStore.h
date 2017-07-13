@@ -2112,6 +2112,17 @@ public:
 
   bool is_rotational() override;
 
+  string get_default_device_class() override {
+    string device_class;
+    map<string, string> metadata;
+    collect_metadata(&metadata);
+    auto it = metadata.find("bluestore_bdev_type");
+    if (it != metadata.end()) {
+      device_class = it->second;
+    }
+    return device_class;
+  }
+
   static int get_block_device_fsid(CephContext* cct, const string& path,
 				   uuid_d *fsid);
 
