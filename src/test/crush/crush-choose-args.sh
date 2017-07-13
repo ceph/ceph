@@ -28,6 +28,12 @@ function run() {
     CEPH_ARGS+="--mon-host=$CEPH_MON "
     CEPH_ARGS+="--crush-location=root=default,host=HOST "
     CEPH_ARGS+="--osd-crush-initial-weight=3 "
+    #
+    # Disable device auto class feature for now.
+    # The device class is non-deterministic and will
+    # crash the crushmap comparison below.
+    #
+    CEPH_ARGS+="--osd-class-update-on-start=false "
 
     local funcs=${@:-$(set | sed -n -e 's/^\(TEST_[0-9a-z_]*\) .*/\1/p')}
     for func in $funcs ; do

@@ -23,8 +23,8 @@ ceph osd crush rule create-simple bar default host
 ceph osd require-osd-release luminous
 ceph osd crush class create ssd
 ceph osd crush class create hdd
-ceph osd crush set-device-class osd.0 ssd
-ceph osd crush set-device-class osd.1 hdd
+ceph osd crush set-device-class ssd osd.0
+ceph osd crush set-device-class hdd osd.1
 ceph osd crush rule create-replicated foo-ssd default host ssd
 ceph osd crush rule create-replicated foo-hdd default host hdd
 

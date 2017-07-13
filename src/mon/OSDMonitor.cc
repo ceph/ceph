@@ -4945,6 +4945,17 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
       f->dump_string("class", i.second);
     f->close_section();
     f->flush(rdata);
+  } else if (prefix == "osd crush class ls-osd") {
+    string name;
+    cmd_getval(g_ceph_context, cmdmap, "class", name);
+    boost::scoped_ptr<Formatter> f(Formatter::create(format, "json-pretty", "json-pretty"));
+    set<int> osds;
+    osdmap.crush->get_devices_by_class(name, &osds);
+    f->open_array_section("osds");
+    for (auto& osd : osds)
+      f->dump_int("osd", osd);
+    f->close_section();
+    f->flush(rdata);
   } else if (prefix == "osd erasure-code-profile ls") {
     const auto &profiles = osdmap.get_erasure_code_profiles();
     if (f)
@@ -7018,13 +7029,8 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
   } else if (prefix == "osd crush set-device-class") {
     if (osdmap.require_osd_release < CEPH_RELEASE_LUMINOUS) {
       ss << "you must complete the upgrade and 'ceph osd require-osd-release "
-	 << "luminous' before using crush device classes";
+         << "luminous' before using crush device classes";
       err = -EPERM;
-      goto reply;
-    }
-    if (!osdmap.exists(osdid)) {
-      err = -ENOENT;
-      ss << name << " does not exist.  create it before updating the crush map";
       goto reply;
     }
 
@@ -7034,37 +7040,77 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       goto reply;
     }
 
+    bool stop = false;
+    vector<string> idvec;
+    cmd_getval(g_ceph_context, cmdmap, "ids", idvec);
     CrushWrapper newcrush;
     _get_pending_crush(newcrush);
+    set<int> updated;
+    for (unsigned j = 0; j < idvec.size() && !stop; j++) {
+      set<int> osds;
+      // wildcard?
+      if (j == 0 &&
+          (idvec[0] == "any" || idvec[0] == "all" || idvec[0] == "*")) {
+        osdmap.get_all_osds(osds);
+        stop = true;
+      } else {
+        // try traditional single osd way
+        long osd = parse_osd_id(idvec[j].c_str(), &ss);
+        if (osd < 0) {
+          // ss has reason for failure
+          ss << ", unable to parse osd id:\"" << idvec[j] << "\". ";
+          err = -EINVAL;
+          continue;
+        }
+        osds.insert(osd);
+      }
 
-    string action;
-    if (newcrush.item_exists(osdid)) {
-      action = "updating";
-    } else {
-      action = "creating";
-      newcrush.set_item_name(osdid, name);
+      for (auto &osd : osds) {
+        if (!osdmap.exists(osd)) {
+          ss << "osd." << osd << " does not exist. ";
+          continue;
+        }
+
+        ostringstream oss;
+        oss << "osd." << osd;
+        string name = oss.str();
+
+        string action;
+        if (newcrush.item_exists(osd)) {
+          action = "updating";
+        } else {
+          action = "creating";
+          newcrush.set_item_name(osd, name);
+        }
+
+        dout(5) << action << " crush item id " << osd << " name '" << name
+                << "' device_class '" << device_class << "'"
+                << dendl;
+        err = newcrush.update_device_class(osd, device_class, name, &ss);
+        if (err < 0) {
+          goto reply;
+        }
+        if (err == 0 && !_have_pending_crush()) {
+          if (!stop) {
+            // for single osd only, wildcard makes too much noise
+            ss << "set-device-class item id " << osd << " name '" << name
+               << "' device_class '" << device_class << "': no change";
+          }
+        } else {
+          updated.insert(osd);
+        }
+      }
     }
 
-    dout(5) << action << " crush item id " << osdid << " name '"
-	    << name << "' device_class " << device_class << dendl;
-    err = newcrush.update_device_class(osdid, device_class, name, &ss);
-    if (err < 0)
-      goto reply;
-
-    if (err == 0 && !_have_pending_crush()) {
-      ss << "set-device-class item id " << osdid << " name '" << name << "' device_class "
-        << device_class << " : no change";
-      goto reply;
+    if (!updated.empty()) {
+      pending_inc.crush.clear();
+      newcrush.encode(pending_inc.crush, mon->get_quorum_con_features());
+      ss << "set osd(s) " << updated << " to class '" << device_class << "'";
+      getline(ss, rs);
+      wait_for_finished_proposal(op,
+        new Monitor::C_Command(mon,op, 0, rs, get_last_committed() + 1));
+      return true;
     }
-
-    pending_inc.crush.clear();
-    newcrush.encode(pending_inc.crush, mon->get_quorum_con_features());
-    ss << "set-device-class item id " << osdid << " name '" << name << "' device_class "
-       << device_class;
-    getline(ss, rs);
-    wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, 0, rs,
-						      get_last_committed() + 1));
-    return true;
 
   } else if (prefix == "osd crush add-bucket") {
     // os crush add-bucket <name> <type>
