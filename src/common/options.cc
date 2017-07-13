@@ -33,6 +33,55 @@ void Option::dump_value(const char *field_name,
   }
 }
 
+int Option::pre_validate(std::string *new_value, std::string *err) const
+{
+  if (validator) {
+    return validator(new_value, err);
+  } else {
+    return 0;
+  }
+}
+
+int Option::validate(const Option::value_t &new_value, std::string *err) const
+{
+  // Generic validation: min
+  if (!boost::get<boost::blank>(&(min))) {
+    if (new_value < min) {
+      std::ostringstream oss;
+      oss << "Value '" << new_value << "' is below minimum " << min;
+      *err = oss.str();
+      return -EINVAL;
+    }
+  }
+
+  // Generic validation: max
+  if (!boost::get<boost::blank>(&(max))) {
+    if (new_value > max) {
+      std::ostringstream oss;
+      oss << "Value '" << new_value << "' exceeds maximum " << max;
+      *err = oss.str();
+      return -EINVAL;
+    }
+  }
+
+  // Generic validation: enum
+  if (!enum_allowed.empty() && type == Option::TYPE_STR) {
+    auto found = std::find(enum_allowed.begin(), enum_allowed.end(),
+                           boost::get<std::string>(new_value));
+    if (found == enum_allowed.end()) {
+      std::ostringstream oss;
+      oss << "'" << new_value << "' is not one of the permitted "
+                 "values: " << joinify(enum_allowed.begin(),
+                                       enum_allowed.end(),
+                                       std::string(", "));
+      *err = oss.str();
+      return -EINVAL;
+    }
+  }
+
+  return 0;
+}
+
 void Option::dump(Formatter *f) const
 {
   f->open_object_section("option");

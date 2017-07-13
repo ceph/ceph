@@ -996,12 +996,9 @@ int md_config_t::set_val_impl(const std::string &raw_val, const Option &opt,
 
   std::string val = raw_val;
 
-  // Special validator callback?
-  if (opt.validator) {
-    int r = opt.validator(&val, error_message);
-    if (r < 0) {
-      return r;
-    }
+  int r = opt.pre_validate(&val, error_message);
+  if (r != 0) {
+    return r;
   }
 
   Option::value_t new_value;
@@ -1054,40 +1051,11 @@ int md_config_t::set_val_impl(const std::string &raw_val, const Option &opt,
     ceph_abort();
   }
 
-  // Generic validation: min
-  if (!boost::get<boost::blank>(&(opt.min))) {
-    if (new_value < opt.min) {
-      std::ostringstream oss;
-      oss << "Value '" << new_value << "' is below minimum " << opt.min;
-      *error_message = oss.str();
-      return -EINVAL;
-    }
+  r = opt.validate(new_value, error_message);
+  if (r != 0) {
+    return r;
   }
 
-  // Generic validation: max
-  if (!boost::get<boost::blank>(&(opt.max))) {
-    if (new_value > opt.max) {
-      std::ostringstream oss;
-      oss << "Value '" << new_value << "' exceeds maximum " << opt.max;
-      *error_message = oss.str();
-      return -EINVAL;
-    }
-  }
-
-  // Generic validation: enum
-  if (!opt.enum_allowed.empty() && opt.type == Option::TYPE_STR) {
-    auto found = std::find(opt.enum_allowed.begin(), opt.enum_allowed.end(),
-                           boost::get<std::string>(new_value));
-    if (found == opt.enum_allowed.end()) {
-      std::ostringstream oss;
-      oss << "'" << new_value << "' is not one of the permitted "
-                 "values: " << joinify(opt.enum_allowed.begin(),
-                                       opt.enum_allowed.end(),
-                                       std::string(", "));
-      *error_message = oss.str();
-      return -EINVAL;
-    }
-  }
 
   // Apply the value to its entry in the `values` map
   values[opt.name] = new_value;

@@ -132,6 +132,12 @@ struct Option {
 
   void dump_value(const char *field_name, const value_t &v, Formatter *f) const;
 
+  // Validate and potentially modify incoming string value
+  int pre_validate(std::string *new_value, std::string *err) const;
+
+  // Validate properly typed value against bounds
+  int validate(const Option::value_t &new_value, std::string *err) const;
+
   // const char * must be explicit to avoid it being treated as an int
   Option& set_value(value_t& v, const char *new_value) {
     v = std::string(new_value);
@@ -216,6 +222,12 @@ struct Option {
   Option& set_min_max(const T& mi, const T& ma) {
     set_value(min, mi);
     set_value(max, ma);
+    return *this;
+  }
+
+  Option& set_enum_allowed(const std::list<std::string> allowed)
+  {
+    enum_allowed = allowed;
     return *this;
   }
 
