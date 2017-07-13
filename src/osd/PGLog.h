@@ -705,6 +705,10 @@ public:
 			const pg_log_t &olog,
 			pg_missing_t& omissing, pg_shard_t from) const;
 
+  void rebuild_missing_set_with_deletes(ObjectStore *store,
+					coll_t pg_coll,
+					const pg_info_t &info);
+
 protected:
   static void split_by_object(
     mempool::osd_pglog::list<pg_log_entry_t> &entries,
