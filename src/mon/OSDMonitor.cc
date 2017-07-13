@@ -4468,6 +4468,7 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
       CACHE_TARGET_DIRTY_RATIO, CACHE_TARGET_DIRTY_HIGH_RATIO,
       CACHE_MIN_FLUSH_AGE, CACHE_MIN_EVICT_AGE,
       MIN_READ_RECENCY_FOR_PROMOTE,
+      MIN_WRITE_RECENCY_FOR_PROMOTE,
       HIT_SET_GRADE_DECAY_RATE, HIT_SET_SEARCH_LAST_N
     };
     const choices_set_t ONLY_ERASURE_CHOICES = {
@@ -4518,9 +4519,18 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
       for(choices_set_t::const_iterator it = selected_choices.begin();
 	  it != selected_choices.end(); ++it) {
 	choices_map_t::const_iterator i;
-	f->open_object_section("pool");
-	f->dump_string("pool", poolstr);
-	f->dump_int("pool_id", pool);
+        for (i = ALL_CHOICES.begin(); i != ALL_CHOICES.end(); ++i) {
+          if (i->second == *it) {
+            break;
+          }
+        }
+        assert(i != ALL_CHOICES.end());
+        bool pool_opt = pool_opts_t::is_opt_name(i->first);
+        if (!pool_opt) {
+          f->open_object_section("pool");
+          f->dump_string("pool", poolstr);
+          f->dump_int("pool_id", pool);
+        }
 	switch(*it) {
 	  case PG_NUM:
 	    f->dump_int("pg_num", p->get_pg_num());
@@ -4556,11 +4566,6 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
 	  case WRITE_FADVISE_DONTNEED:
 	  case NOSCRUB:
 	  case NODEEP_SCRUB:
-	    for (i = ALL_CHOICES.begin(); i != ALL_CHOICES.end(); ++i) {
-	      if (i->second == *it)
-		break;
-	    }
-	    assert(i != ALL_CHOICES.end());
 	    f->dump_string(i->first.c_str(),
 			   p->has_flag(pg_pool_t::get_flag_by_name(i->first)) ?
 			   "true" : "false");
@@ -4659,23 +4664,27 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
 	  case CSUM_TYPE:
 	  case CSUM_MAX_BLOCK:
 	  case CSUM_MIN_BLOCK:
-	    for (i = ALL_CHOICES.begin(); i != ALL_CHOICES.end(); ++i) {
-	      if (i->second == *it)
-		break;
-	    }
-	    assert(i != ALL_CHOICES.end());
-            if(*it == CSUM_TYPE) {
-              int val;
-              p->opts.get(pool_opts_t::CSUM_TYPE, &val);
-              f->dump_string(i->first.c_str(), Checksummer::get_csum_type_string(val));
-            }
-	    else {
-              p->opts.dump(i->first, f.get());
+            pool_opts_t::key_t key = pool_opts_t::get_opt_desc(i->first).key;
+            if (p->opts.is_set(key)) {
+              f->open_object_section("pool");
+              f->dump_string("pool", poolstr);
+              f->dump_int("pool_id", pool);
+              if(*it == CSUM_TYPE) {
+                int val;
+                p->opts.get(pool_opts_t::CSUM_TYPE, &val);
+                f->dump_string(i->first.c_str(), Checksummer::get_csum_type_string(val));
+              } else {
+                p->opts.dump(i->first, f.get());
+              }
+              f->close_section();
+              f->flush(rdata);
             }
             break;
 	}
-	f->close_section();
-	f->flush(rdata);
+        if (!pool_opt) {
+	  f->close_section();
+	  f->flush(rdata);
+        }
       }
 
     } else /* !f */ {
