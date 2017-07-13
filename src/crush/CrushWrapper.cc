@@ -1990,9 +1990,12 @@ void CrushWrapper::decode(bufferlist::iterator& blp)
 	      ::decode(weight_set->weights[l], blp);
 	  }
 	  ::decode(arg->ids_size, blp);
-	  arg->ids = (__s32 *)calloc(arg->ids_size, sizeof(__s32));
-	  for (__u32 k = 0; k < arg->ids_size; k++)
-	    ::decode(arg->ids[k], blp);
+	  if (arg->ids_size) {
+	    assert(arg->ids_size == crush->buckets[bucket_index]->size);
+	    arg->ids = (__s32 *)calloc(arg->ids_size, sizeof(__s32));
+	    for (__u32 k = 0; k < arg->ids_size; k++)
+	      ::decode(arg->ids[k], blp);
+	  }
 	}
 	choose_args[choose_args_index] = arg_map;
       }
