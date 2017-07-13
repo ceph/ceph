@@ -400,6 +400,9 @@ OPTION(paxos_stash_full_interval, OPT_INT, 25)   // how often (in commits) to st
 OPTION(paxos_max_join_drift, OPT_INT, 10) // max paxos iterations before we must first sync the monitor stores
 OPTION(paxos_propose_interval, OPT_DOUBLE, 1.0)  // gather updates for this long before proposing a map update
 OPTION(paxos_min_wait, OPT_DOUBLE, 0.05)  // min time to gather updates for after period of inactivity
+OPTION(paxos_upthru_merge_bound, OPT_INT, 1) // number of upthru request to merge before propose new osdmap 
+OPTION(paxos_ptemp_merge_bound, OPT_INT, 1)  // number of primary temp request to merge before propose new osdmap
+OPTION(paxos_nstate_bound, OPT_INT, 2) // number of new osd state allowed for fast osdmap updates proposal 
 OPTION(paxos_min, OPT_INT, 500)       // minimum number of paxos states to keep around
 OPTION(paxos_trim_min, OPT_INT, 250)  // number of extra proposals tolerated before trimming
 OPTION(paxos_trim_max, OPT_INT, 500) // max number of extra proposals to trim at a time
