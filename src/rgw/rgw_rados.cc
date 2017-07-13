@@ -8797,7 +8797,6 @@ int RGWRados::Object::Delete::delete_obj()
     need_invalidate = true;
     r = 0;
   }
-  bool removed = (r >= 0);
 
   int64_t poolid = ref.ioctx.get_id();
   if (r >= 0) {
@@ -8807,18 +8806,17 @@ int RGWRados::Object::Delete::delete_obj()
       obj_tombstone_cache->add(obj, entry);
     }
     r = index_op.complete_del(poolid, ref.ioctx.get_last_version(), state->mtime, params.remove_objs);
-  } else {
-    int ret = index_op.cancel();
-    if (ret < 0) {
-      ldout(store->ctx(), 0) << "ERROR: index_op.cancel() returned ret=" << ret << dendl;
-    }
-  }
-  if (removed) {
+    
     int ret = target->complete_atomic_modification();
     if (ret < 0) {
       ldout(store->ctx(), 0) << "ERROR: complete_atomic_modification returned ret=" << ret << dendl;
     }
     /* other than that, no need to propagate error */
+  } else {
+    int ret = index_op.cancel();
+    if (ret < 0) {
+      ldout(store->ctx(), 0) << "ERROR: index_op.cancel() returned ret=" << ret << dendl;
+    }
   }
 
   if (need_invalidate) {
