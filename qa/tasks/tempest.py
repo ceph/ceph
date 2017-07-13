@@ -90,6 +90,8 @@ def download(ctx, config):
                 args=[ 'rm', '-rf', get_tempest_dir(ctx) ],
             )
 
+def get_toxvenv_dir(ctx):
+    return ctx.tox.venv_path
 
 @contextlib.contextmanager
 def setup_venv(ctx, config):
@@ -99,7 +101,10 @@ def setup_venv(ctx, config):
     assert isinstance(config, dict)
     log.info('Setting up virtualenv for Tempest')
     for (client, _) in config.items():
-        run_in_tempest_dir(ctx, client, [ 'tox', '-e', 'venv', '--notest' ])
+        run_in_tempest_dir(ctx, client,
+            [   '{tvdir}/bin/tox'.format(tvdir=get_toxvenv_dir(ctx)),
+                '-e', 'venv', '--notest'
+            ])
     yield
 
 def setup_logging(ctx, cpar):
@@ -128,15 +133,19 @@ def configure_instance(ctx, config):
 
         # prepare the config file
         tetcdir = '{tdir}/rgw/etc'.format(tdir=get_tempest_dir(ctx))
+        (remote,) = ctx.cluster.only(client).remotes.keys()
+        local_conf = remote.get_file(tetcdir + '/tempest.conf.sample')
 
         cpar = ConfigParser.ConfigParser()
-        cpar.read(tetcdir + '/tempest.conf.sample')
+        cpar.read(local_conf)
         setup_logging(ctx, cpar)
         to_config(cconfig, 'auth', cpar)
         to_config(cconfig, 'identity', cpar)
         to_config(cconfig, 'object-storage', cpar)
         to_config(cconfig, 'object-storage-feature-enabled', cpar)
-        cpar.write(file(tetcdir + '/tempest.conf', 'w+'))
+        cpar.write(file(local_conf, 'w+'))
+
+        remote.put_file(local_conf, tetcdir + '/tempest.conf')
     yield
 
 @contextlib.contextmanager
@@ -160,10 +169,7 @@ def run_tempest(ctx, config):
                     '(?!.*test_delete_non_empty_container.*)' +
                     '(?!.*test_container_synchronization.*)' +
                     '(?!.*test_get_object_after_expiration_time.*)'
-            ],
-            stdout=sys.stdout,
-            stderr=sys.stderr,
-            )
+            ])
     try:
         yield
     finally:
