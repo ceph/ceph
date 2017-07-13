@@ -32,7 +32,7 @@ def mkdir_p(path, chown=True):
             pass
         else:
             raise
-    else:
+    if chown:
         uid, gid = get_ceph_user_ids()
         os.chown(path, uid, gid)
 
