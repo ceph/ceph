@@ -6767,7 +6767,6 @@ int OSDMonitor::prepare_command_osd_destroy(
   if (err < 0) {
     if (err == -ENOENT) {
       idempotent_auth = true;
-      err = 0;
     } else {
       return err;
     }
