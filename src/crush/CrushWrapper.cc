@@ -1972,7 +1972,8 @@ void CrushWrapper::decode(bufferlist::iterator& blp)
 	::decode(choose_args_index, blp);
 	crush_choose_arg_map arg_map;
 	arg_map.size = crush->max_buckets;
-	arg_map.args = (crush_choose_arg*)calloc(arg_map.size, sizeof(crush_choose_arg));
+	arg_map.args = (crush_choose_arg*)calloc(
+	  arg_map.size, sizeof(crush_choose_arg));
 	__u32 size;
 	::decode(size, blp);
 	for (__u32 j = 0; j < size; j++) {
@@ -1981,11 +1982,13 @@ void CrushWrapper::decode(bufferlist::iterator& blp)
 	  assert(bucket_index < arg_map.size);
 	  crush_choose_arg *arg = &arg_map.args[bucket_index];
 	  ::decode(arg->weight_set_size, blp);
-	  arg->weight_set = (crush_weight_set*)calloc(arg->weight_set_size, sizeof(crush_weight_set));
+	  arg->weight_set = (crush_weight_set*)calloc(
+	    arg->weight_set_size, sizeof(crush_weight_set));
 	  for (__u32 k = 0; k < arg->weight_set_size; k++) {
 	    crush_weight_set *weight_set = &arg->weight_set[k];
 	    ::decode(weight_set->size, blp);
-	    weight_set->weights = (__u32*)calloc(weight_set->size, sizeof(__u32));
+	    weight_set->weights = (__u32*)calloc(
+	      weight_set->size, sizeof(__u32));
 	    for (__u32 l = 0; l < weight_set->size; l++)
 	      ::decode(weight_set->weights[l], blp);
 	  }
