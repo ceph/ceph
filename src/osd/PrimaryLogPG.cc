@@ -10592,8 +10592,15 @@ void PrimaryLogPG::mark_all_unfound_lost(
     std::move(manager),
     boost::optional<std::function<void(void)> >(
       [this, oids, con, num_unfound, tid]() {
-	  for (auto oid: oids)
+	if (perform_deletes_during_peering()) {
+	  for (auto oid : oids) {
+	    // clear old locations - merge_new_log_entries will have
+	    // handled rebuilding missing_loc for each of these
+	    // objects if we have the RECOVERY_DELETES flag
 	    missing_loc.recovered(oid);
+	  }
+	}
+
 	for (auto& p : waiting_for_unreadable_object) {
 	  release_backoffs(p.first);
 	}
