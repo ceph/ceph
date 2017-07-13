@@ -102,8 +102,7 @@ private:
   MDSHealth health;
 
   // Ticker
-  class C_MDS_BeaconSender;
-  C_MDS_BeaconSender *sender;
+  Context *sender = nullptr;
 
   version_t awaiting_seq;
   Cond waiting_cond;

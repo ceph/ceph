@@ -161,8 +161,9 @@ void ImageCopyRequest<I>::send_object_copies() {
   {
     Mutex::Locker timer_locker(*m_timer_lock);
     if (m_update_sync_ctx) {
-      m_timer->add_event_after(m_update_sync_point_interval,
-                               m_update_sync_ctx);
+      m_update_sync_ctx = m_timer->add_event_after(
+        m_update_sync_point_interval,
+	m_update_sync_ctx);
     }
   }
 

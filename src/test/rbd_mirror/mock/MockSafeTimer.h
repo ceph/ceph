@@ -9,7 +9,7 @@
 struct Context;
 
 struct MockSafeTimer {
-  MOCK_METHOD2(add_event_after, void(double, Context*));
+  MOCK_METHOD2(add_event_after, Context*(double, Context*));
   MOCK_METHOD1(cancel_event, bool(Context *));
 };
 

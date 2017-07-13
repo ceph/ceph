@@ -87,8 +87,7 @@ class MDSDaemon : public Dispatcher, public md_config_obs_t {
 				  const std::set <std::string> &changed) override;
  protected:
   // tick and other timer fun
-  class C_MDS_Tick;
-  C_MDS_Tick *tick_event;
+  Context *tick_event = nullptr;
   void     reset_tick();
 
   void wait_for_omap_osds();
