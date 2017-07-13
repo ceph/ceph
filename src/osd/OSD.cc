@@ -2314,6 +2314,16 @@ int OSD::get_num_op_threads()
     return get_num_op_shards() * cct->_conf->osd_op_num_threads_per_shard_ssd;
 }
 
+float OSD::get_osd_recovery_sleep()
+{
+  if (cct->_conf->osd_recovery_sleep)
+    return cct->_conf->osd_recovery_sleep;
+  if (store_is_rotational)
+    return cct->_conf->osd_recovery_sleep_hdd;
+  else
+    return cct->_conf->osd_recovery_sleep_ssd;
+}
+
 int OSD::init()
 {
   CompatSet initial, diff;
@@ -9060,7 +9070,8 @@ void OSD::do_recovery(
    * recovery_requeue_callback event, which re-queues the recovery op using
    * queue_recovery_after_sleep.
    */
-  if (cct->_conf->osd_recovery_sleep > 0 && service.recovery_needs_sleep) {
+  float recovery_sleep = get_osd_recovery_sleep();
+  if (recovery_sleep > 0 && service.recovery_needs_sleep) {
     PGRef pgref(pg);
     auto recovery_requeue_callback = new FunctionContext([this, pgref, queued, reserved_pushes](int r) {
       dout(20) << "do_recovery wake up at "
@@ -9077,7 +9088,7 @@ void OSD::do_recovery(
     if (service.recovery_schedule_time < ceph_clock_now()) {
       service.recovery_schedule_time = ceph_clock_now();
     }
-    service.recovery_schedule_time += cct->_conf->osd_recovery_sleep;
+    service.recovery_schedule_time += recovery_sleep;
     service.recovery_sleep_timer.add_event_at(service.recovery_schedule_time,
 	                                      recovery_requeue_callback);
     dout(20) << "Recovery event scheduled at "
