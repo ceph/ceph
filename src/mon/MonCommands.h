@@ -596,7 +596,7 @@ COMMAND("osd crush set-tunable "				    \
 COMMAND("osd crush get-tunable "			      \
 	"name=tunable,type=CephChoices,strings=straw_calc_version",
 	"get crush tunable <tunable>",
-	"osd", "rw", "cli,rest")
+	"osd", "r", "cli,rest")
 COMMAND("osd crush show-tunables", \
 	"show current crush tunables", "osd", "r", "cli,rest")
 COMMAND("osd crush rule create-simple " \
