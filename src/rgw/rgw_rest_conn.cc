@@ -114,8 +114,14 @@ int RGWRESTConn::put_obj_init(const rgw_user& uid, rgw_obj& obj, uint64_t obj_si
 
   param_vec_t params;
   populate_params(params, &uid, self_zone_group);
-  *req = new RGWRESTStreamWriteRequest(cct, url, NULL, &params);
-  return (*req)->put_obj_init(key, obj, obj_size, attrs);
+  RGWRESTStreamWriteRequest *wr = new RGWRESTStreamWriteRequest(cct, url, NULL, &params);
+  ret = wr->put_obj_init(key, obj, obj_size, attrs);
+  if (ret < 0) {
+    delete wr;
+    return ret;
+  }
+  *req = wr;
+  return 0;
 }
 
 int RGWRESTConn::complete_request(RGWRESTStreamWriteRequest *req, string& etag, real_time *mtime)
