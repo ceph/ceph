@@ -651,6 +651,37 @@ COMMAND("osd crush class ls-osd " \
         "name=class,type=CephString,goodchars=[A-Za-z0-9-_]", \
         "list all osds belonging to the specific <class>", \
         "osd", "r", "cli,rest")
+COMMAND("osd crush weight-set ls",
+	"list crush weight sets",
+	"osd", "r", "cli,rest")
+COMMAND("osd crush weight-set dump",
+	"dump crush weight sets",
+	"osd", "r", "cli,rest")
+COMMAND("osd crush weight-set create-compat",
+	"create a default backward-compatible weight-set",
+	"osd", "rw", "cli,rest")
+COMMAND("osd crush weight-set create "		\
+        "name=pool,type=CephPoolname "\
+        "name=mode,type=CephChoices,strings=flat|positional",
+	"create a weight-set for a given pool",
+	"osd", "rw", "cli,rest")
+COMMAND("osd crush weight-set rm name=pool,type=CephPoolname",
+	"remove the weight-set for a given pool",
+	"osd", "rw", "cli,rest")
+COMMAND("osd crush weight-set rm-compat",
+	"remove the backward-compatible weight-set",
+	"osd", "rw", "cli,rest")
+COMMAND("osd crush weight-set reweight "		\
+        "name=pool,type=CephPoolname "			\
+	"name=item,type=CephString "			\
+        "name=weight,type=CephFloat,range=0.0,n=N",
+	"set weight for an item (bucket or osd) in a pool's weight-set",
+	"osd", "rw", "cli,rest")
+COMMAND("osd crush weight-set reweight-compat "		\
+	"name=item,type=CephString "			\
+        "name=weight,type=CephFloat,range=0.0,n=N",
+	"set weight for an item (bucket or osd) in the backward-compatible weight-set",
+	"osd", "rw", "cli,rest")
 COMMAND("osd setmaxosd " \
 	"name=newmax,type=CephInt,range=0", \
 	"set new maximum osd value", "osd", "rw", "cli,rest")

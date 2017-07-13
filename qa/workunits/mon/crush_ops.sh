@@ -125,4 +125,31 @@ ceph osd crush rm osd.$o5
 ceph osd rm osd.$o4
 ceph osd rm osd.$o5
 
+# weight sets
+ceph osd crush weight-set dump
+ceph osd crush weight-set ls
+expect_false ceph osd crush weight-set reweight fooset osd.0 .9
+ceph osd pool create fooset 8
+ceph osd pool create barset 8
+ceph osd pool set barset size 3
+expect_false ceph osd crush weight-set reweight fooset osd.0 .9
+ceph osd crush weight-set create fooset flat
+ceph osd crush weight-set create barset positional
+ceph osd crush weight-set ls | grep fooset
+ceph osd crush weight-set ls | grep barset
+ceph osd crush weight-set dump
+ceph osd crush weight-set reweight fooset osd.0 .9
+expect_false ceph osd crush weight-set reweight fooset osd.0 .9 .9
+expect_false ceph osd crush weight-set reweight barset osd.0 .9
+ceph osd crush weight-set reweight barset osd.0 .9 .9 .9
+ceph osd crush weight-set ls | grep -c fooset | grep -q 1
+ceph osd crush weight-set rm fooset
+ceph osd crush weight-set ls | grep -c fooset | grep -q 0
+ceph osd crush weight-set ls | grep barset
+ceph osd crush weight-set rm barset
+ceph osd crush weight-set ls | grep -c barset | grep -q 0
+ceph osd crush weight-set create-compat
+ceph osd crush weight-set ls | grep '(compat)'
+ceph osd crush weight-set rm-compat
+
 echo OK
