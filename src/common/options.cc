@@ -2345,6 +2345,10 @@ const std::vector<Option> ceph_options = {
   .set_default(true)
   .set_description(""),
 
+  Option("osd_class_update_on_start", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+  .set_default(true)
+  .set_description(""),
+
   Option("osd_crush_initial_weight", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
   .set_default(-1)
   .set_description(""),
