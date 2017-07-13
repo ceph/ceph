@@ -98,10 +98,12 @@ void ClusterState::ingest_pgstats(MPGStats *stats)
     }
     // In case we already heard about more recent stats from this PG
     // from another OSD
-    if (pg_map.pg_stat[pgid].get_version_pair() > pg_stats.get_version_pair()) {
+    const auto q = pg_map.pg_stat.find(pgid);
+    if (q != pg_map.pg_stat.end() &&
+	q->second.get_version_pair() > pg_stats.get_version_pair()) {
       dout(15) << " had " << pgid << " from "
-	       << pg_map.pg_stat[pgid].reported_epoch << ":"
-               << pg_map.pg_stat[pgid].reported_seq << dendl;
+	       << q->second.reported_epoch << ":"
+               << q->second.reported_seq << dendl;
       continue;
     }
 
