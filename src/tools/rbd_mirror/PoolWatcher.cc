@@ -362,10 +362,11 @@ void PoolWatcher<I>::schedule_refresh_images(double interval) {
   }
 
   m_image_ids_invalid = true;
-  m_timer_ctx = new FunctionContext([this](int r) {
-      process_refresh_images();
-    });
-  m_threads->timer->add_event_after(interval, m_timer_ctx);
+  m_timer_ctx = m_threads->timer->add_event_after(
+    interval,
+    new FunctionContext([this](int r) {
+	process_refresh_images();
+      }));
 }
 
 template <typename I>

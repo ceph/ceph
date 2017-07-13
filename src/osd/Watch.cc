@@ -124,9 +124,9 @@ void Notify::register_cb()
   {
     osd->watch_lock.Lock();
     cb = new NotifyTimeoutCB(self.lock());
-    osd->watch_timer.add_event_after(
-      timeout,
-      cb);
+    if (!osd->watch_timer.add_event_after(timeout, cb)) {
+      cb = nullptr;
+    }
     osd->watch_lock.Unlock();
   }
 }
@@ -333,9 +333,9 @@ void Watch::register_cb()
     dout(15) << "registering callback, timeout: " << timeout << dendl;
   }
   cb = new HandleWatchTimeout(self.lock());
-  osd->watch_timer.add_event_after(
-    timeout,
-    cb);
+  if (!osd->watch_timer.add_event_after(timeout, cb)) {
+    cb = nullptr;
+  }
 }
 
 void Watch::unregister_cb()
