@@ -27,6 +27,11 @@ extern std::string exec(const char* cmd); // defined in test_hostname.cc
 
 class test_md_config_t : public md_config_t, public ::testing::Test {
 public:
+
+  test_md_config_t()
+    : md_config_t(true), Test()
+  {}
+
   void test_expand_meta() {
     Mutex::Locker l(lock);
     // successfull meta expansion $run_dir and ${run_dir}
@@ -34,6 +39,7 @@ public:
       ostringstream oss;
       std::string before = " BEFORE ";
       std::string after = " AFTER ";
+
       std::string val(before + "$run_dir${run_dir}" + after);
       EXPECT_TRUE(expand_meta(val, &oss));
       EXPECT_EQ(before + "/var/run/ceph/var/run/ceph" + after, val);
@@ -112,31 +118,32 @@ public:
   void test_expand_all_meta() {
     Mutex::Locker l(lock);
     int before_count = 0, data_dir = 0;
-    for (auto& opt: *config_options) {
-      std::string *str;
-      opt.conf_ptr(str, this);
-      if (str) {
-        if (str->find("$") != string::npos)
+    for (const auto &i : schema) {
+      const Option &opt = i.second;
+      if (opt.type == Option::TYPE_STR) {
+        const auto &str = boost::get<std::string>(opt.value);
+        if (str.find("$") != string::npos)
           before_count++;
-        if (str->find("$data_dir") != string::npos)
+        if (str.find("$data_dir") != string::npos)
           data_dir++;
       }
     }
+
     // if there are no meta variables in the default configuration,
     // something must be done to check the expected side effect
     // of expand_all_meta
     ASSERT_LT(0, before_count);
     expand_all_meta();
     int after_count = 0;
-    for (auto& opt: *config_options) {
-      std::string *str;
-      opt.conf_ptr(str, this);
-      if (str) {
+    for (auto& i : values) {
+      const auto &opt = schema.at(i.first);
+      if (opt.type == Option::TYPE_STR) {
+        const std::string &str = boost::get<std::string>(i.second);
         size_t pos = 0;
-        while ((pos = str->find("$", pos)) != string::npos) {
-          if (str->substr(pos, 8) != "$channel") {
+        while ((pos = str.find("$", pos)) != string::npos) {
+          if (str.substr(pos, 8) != "$channel") {
             std::cout << "unexpected meta-variable found at pos " << pos
-                      << " of '" << *str << "'" << std::endl;
+                      << " of '" << str << "'" << std::endl;
             after_count++;
           }
           pos++;
