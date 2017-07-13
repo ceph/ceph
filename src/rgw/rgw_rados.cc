@@ -5034,12 +5034,12 @@ static void usage_log_hash(CephContext *cct, const string& name, string& hash, u
   uint32_t val = index;
 
   if (!name.empty()) {
-    int max_user_shards = max(cct->_conf->rgw_usage_max_user_shards, int64_t(1));
+    int max_user_shards = cct->_conf->rgw_usage_max_user_shards;
     val %= max_user_shards;
     val += ceph_str_hash_linux(name.c_str(), name.size());
   }
   char buf[17];
-  int max_shards = max(cct->_conf->rgw_usage_max_shards, int64_t(1));
+  int max_shards = cct->_conf->rgw_usage_max_shards;
   snprintf(buf, sizeof(buf), RGW_USAGE_OBJ_PREFIX "%u", (unsigned)(val % max_shards));
   hash = buf;
 }
