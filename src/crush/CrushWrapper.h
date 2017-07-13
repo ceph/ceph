@@ -1322,6 +1322,10 @@ public:
     return result;
   }
 
+  bool have_choose_args(uint64_t choose_args_index) const {
+    return choose_args.count(choose_args_index);
+  }
+
   crush_choose_arg_map choose_args_get(uint64_t choose_args_index) const {
     auto i = choose_args.find(choose_args_index);
     if (i == choose_args.end()) {
