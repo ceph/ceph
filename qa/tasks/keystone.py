@@ -73,6 +73,9 @@ def get_keystone_venved_cmd(ctx, cmd, args):
     kbindir = get_keystone_dir(ctx) + '/.tox/venv/bin/'
     return [ kbindir + 'python', kbindir + cmd ] + args
 
+def get_toxvenv_dir(ctx):
+    return '{tdir}/tox-venv'.format(tdir=teuthology.get_testdir(ctx))
+
 @contextlib.contextmanager
 def setup_venv(ctx, config):
     """
@@ -81,8 +84,29 @@ def setup_venv(ctx, config):
     assert isinstance(config, dict)
     log.info('Setting up virtualenv for keystone...')
     for (client, _) in config.items():
-        run_in_keystone_dir(ctx, client, [ 'tox', '-e', 'venv', '--notest' ])
-    yield
+        # yup, it's funny be we have to deploy tox first. The packages
+        # available on Sepia's Ubuntu machines is outdated.
+        tvdir = get_toxvenv_dir(ctx)
+        ctx.cluster.only(client).run(args=[ 'virtualenv', tvdir ])
+        ctx.cluster.only(client).run(args=
+            [   'source', '{tvdir}/bin/activate'.format(tvdir=tvdir),
+                run.Raw('&&'),
+                'pip', 'install', 'tox'
+            ])
+
+        run_in_keystone_dir(ctx, client,
+            [   'source', '{tvdir}/bin/activate'.format(tvdir=tvdir),
+                run.Raw('&&'),
+                'tox', '-e', 'venv', '--notest'
+            ])
+        ctx.tox = argparse.Namespace()
+        ctx.tox.venv_path = get_toxvenv_dir(ctx)
+    try:
+        yield
+    finally:
+        for (client, _) in config.items():
+            ctx.cluster.only(client).run(
+                args=[ 'rm', '-rf', get_toxvenv_dir(ctx) ])
 
 @contextlib.contextmanager
 def configure_instance(ctx, config):
