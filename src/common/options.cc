@@ -105,14 +105,12 @@ const std::vector<Option> ceph_options = {
   .add_service("osd")
   .add_tag("network"),
 
-  Option("public_network", Option::TYPE_ADDR, Option::LEVEL_ADVANCED)
-  .set_default("")
+  Option("public_network", Option::TYPE_STR, Option::LEVEL_ADVANCED)
   .add_service("mon mds osd mgr")
   .add_tag("network")
   .set_description(""),
 
   Option("cluster_network", Option::TYPE_STR, Option::LEVEL_ADVANCED)
-  .set_default("")
   .add_service("osd")
   .add_tag("network")
   .set_description(""),
