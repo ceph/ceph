@@ -950,7 +950,9 @@ int CrushWrapper::insert_item(
   return -EINVAL;
 }
 
-int CrushWrapper::move_bucket(CephContext *cct, int id, const map<string,string>& loc)
+
+int CrushWrapper::move_bucket(
+  CephContext *cct, int id, const map<string,string>& loc)
 {
   // sorry this only works for buckets
   if (id >= 0)
@@ -967,6 +969,54 @@ int CrushWrapper::move_bucket(CephContext *cct, int id, const map<string,string>
 
   // insert the bucket back into the hierarchy
   return insert_item(cct, id, bucket_weight / (float)0x10000, id_name, loc);
+}
+
+int CrushWrapper::detach_bucket(CephContext *cct, int item)
+{
+  if (!crush)
+    return (-EINVAL);
+
+  if (item >= 0)
+    return (-EINVAL);
+
+  // check that the bucket that we want to detach exists
+  assert(bucket_exists(item));
+
+  // get the bucket's weight
+  crush_bucket *b = get_bucket(item);
+  unsigned bucket_weight = b->weight;
+
+  // get where the bucket is located
+  pair<string, string> bucket_location = get_immediate_parent(item);
+
+  // get the id of the parent bucket
+  int parent_id = get_item_id(bucket_location.second);
+
+  // get the parent bucket
+  crush_bucket *parent_bucket = get_bucket(parent_id);
+
+  if (!IS_ERR(parent_bucket)) {
+    // zero out the bucket weight
+    bucket_adjust_item_weight(cct, parent_bucket, item, 0);
+    adjust_item_weight(cct, parent_bucket->id, parent_bucket->weight);
+
+    // remove the bucket from the parent
+    bucket_remove_item(parent_bucket, item);
+  } else if (PTR_ERR(parent_bucket) != -ENOENT) {
+    return PTR_ERR(parent_bucket);
+  }
+
+  // check that we're happy
+  int test_weight = 0;
+  map<string,string> test_location;
+  test_location[ bucket_location.first ] = (bucket_location.second);
+
+  bool successful_detach = !(check_item_loc(cct, item, test_location,
+					    &test_weight));
+  assert(successful_detach);
+  assert(test_weight == 0);
+
+  return bucket_weight;
 }
 
 int CrushWrapper::swap_bucket(CephContext *cct, int src, int dst)
