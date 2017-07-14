@@ -222,12 +222,13 @@ void Mgr::init()
   load_config();
 
   // Wait for MgrDigest...
-  while(!digest_received) {
+  dout(4) << "waiting for MgrDigest..." << dendl;
+  while (!digest_received) {
     digest_cond.Wait(lock);
   }
 
   // assume finisher already initialized in background_init
-
+  dout(4) << "starting PyModules..." << dendl;
   py_modules.init();
   py_modules.start();
 
