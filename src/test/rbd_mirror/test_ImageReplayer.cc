@@ -113,11 +113,12 @@ public:
 				false, features, &order, 0, 0));
     m_remote_image_id = get_image_id(m_remote_ioctx, m_image_name);
 
-    m_threads = new rbd::mirror::Threads<>(reinterpret_cast<CephContext*>(
-      m_local_ioctx.cct()));
+    m_threads.reset(new rbd::mirror::Threads<>(reinterpret_cast<CephContext*>(
+      m_local_ioctx.cct())));
 
     m_service_daemon.reset(new rbd::mirror::ServiceDaemon<>(g_ceph_context,
-                                                            m_local_cluster));
+                                                            m_local_cluster,
+                                                            m_threads.get()));
     m_image_deleter.reset(new rbd::mirror::ImageDeleter<>(
       m_threads->work_queue, m_threads->timer, &m_threads->timer_lock,
       m_service_daemon.get()));
@@ -134,7 +135,6 @@ public:
 
     delete m_replayer;
     delete m_instance_watcher;
-    delete m_threads;
 
     EXPECT_EQ(0, m_remote_cluster.pool_delete(m_remote_pool_name.c_str()));
     EXPECT_EQ(0, m_local_cluster->pool_delete(m_local_pool_name.c_str()));
@@ -143,7 +143,7 @@ public:
   template <typename ImageReplayerT = rbd::mirror::ImageReplayer<> >
   void create_replayer() {
     m_replayer = new ImageReplayerT(
-        m_threads, m_image_deleter.get(), m_instance_watcher,
+        m_threads.get(), m_image_deleter.get(), m_instance_watcher,
         rbd::mirror::RadosRef(new librados::Rados(m_local_ioctx)),
         m_local_mirror_uuid, m_local_ioctx.get_id(), "global image id");
     m_replayer->add_remote_image(m_remote_mirror_uuid, m_remote_image_id,
@@ -369,10 +369,10 @@ public:
 
   static int _image_number;
 
-  rbd::mirror::Threads<> *m_threads = nullptr;
-  unique_ptr<rbd::mirror::ServiceDaemon<>> m_service_daemon;
-  std::unique_ptr<rbd::mirror::ImageDeleter<>> m_image_deleter;
   std::shared_ptr<librados::Rados> m_local_cluster;
+  std::unique_ptr<rbd::mirror::Threads<>> m_threads;
+  std::unique_ptr<rbd::mirror::ServiceDaemon<>> m_service_daemon;
+  std::unique_ptr<rbd::mirror::ImageDeleter<>> m_image_deleter;
   librados::Rados m_remote_cluster;
   rbd::mirror::InstanceWatcher<> *m_instance_watcher;
   std::string m_local_mirror_uuid = "local mirror uuid";

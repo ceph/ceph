@@ -9,8 +9,8 @@
 #include "common/errno.h"
 #include "librbd/ImageCtx.h"
 #include "Mirror.h"
+#include "ServiceDaemon.h"
 #include "Threads.h"
-#include "ImageSync.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rbd_mirror
@@ -202,11 +202,11 @@ Mirror::Mirror(CephContext *cct, const std::vector<const char*> &args) :
   m_args(args),
   m_lock("rbd::mirror::Mirror"),
   m_local(new librados::Rados()),
-  m_service_daemon(m_cct, m_local),
   m_asok_hook(new MirrorAdminSocketHook(cct, this))
 {
   cct->lookup_or_create_singleton_object<Threads<librbd::ImageCtx> >(
     m_threads, "rbd_mirror::threads");
+  m_service_daemon.reset(new ServiceDaemon<>(m_cct, m_local, m_threads));
 }
 
 Mirror::~Mirror()
@@ -237,19 +237,19 @@ int Mirror::init()
     return r;
   }
 
-  r = m_service_daemon.init();
+  r = m_service_daemon->init();
   if (r < 0) {
     derr << "error registering service daemon: " << cpp_strerror(r) << dendl;
     return r;
   }
 
   m_local_cluster_watcher.reset(new ClusterWatcher(m_local, m_lock,
-                                                   &m_service_daemon));
+                                                   m_service_daemon.get()));
 
   m_image_deleter.reset(new ImageDeleter<>(m_threads->work_queue,
                                            m_threads->timer,
                                            &m_threads->timer_lock,
-                                           &m_service_daemon));
+                                           m_service_daemon.get()));
   return r;
 }
 
@@ -419,7 +419,7 @@ void Mirror::update_pool_replayers(const PoolPeers &pool_peers)
       } else {
         dout(20) << "starting pool replayer for " << peer << dendl;
         unique_ptr<PoolReplayer> pool_replayer(new PoolReplayer(
-	  m_threads, &m_service_daemon, m_image_deleter.get(), kv.first,
+	  m_threads, m_service_daemon.get(), m_image_deleter.get(), kv.first,
           peer, m_args));
 
         // TODO: make async
