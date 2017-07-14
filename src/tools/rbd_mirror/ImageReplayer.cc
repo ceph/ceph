@@ -327,6 +327,19 @@ ImageReplayer<I>::~ImageReplayer()
 }
 
 template <typename I>
+image_replayer::HealthState ImageReplayer<I>::get_health_state() const {
+  Mutex::Locker locker(m_lock);
+
+  if (!m_mirror_image_status_state) {
+    return image_replayer::HEALTH_STATE_OK;
+  } else if (*m_mirror_image_status_state ==
+      cls::rbd::MIRROR_IMAGE_STATUS_STATE_SYNCING) {
+    return image_replayer::HEALTH_STATE_WARNING;
+  }
+  return image_replayer::HEALTH_STATE_ERROR;
+}
+
+template <typename I>
 void ImageReplayer<I>::add_remote_image(const std::string &mirror_uuid,
                                         const std::string &image_id,
                                         librados::IoCtx &io_ctx) {
@@ -1302,15 +1315,30 @@ void ImageReplayer<I>::send_mirror_status_update(const OptionalState &opt_state)
   State state;
   std::string state_desc;
   int last_r;
-  bool bootstrapping;
   bool stopping_replay;
+
+  OptionalMirrorImageStatusState mirror_image_status_state{
+    boost::make_optional(false, cls::rbd::MirrorImageStatusState{})};
+  image_replayer::BootstrapRequest<I>* bootstrap_request = nullptr;
   {
     Mutex::Locker locker(m_lock);
     state = m_state;
     state_desc = m_state_desc;
+    mirror_image_status_state = m_mirror_image_status_state;
     last_r = m_last_r;
-    bootstrapping = (m_bootstrap_request != nullptr);
     stopping_replay = (m_local_image_ctx != nullptr);
+
+    if (m_bootstrap_request != nullptr) {
+      bootstrap_request = m_bootstrap_request;
+      bootstrap_request->get();
+    }
+  }
+
+  bool syncing = false;
+  if (bootstrap_request != nullptr) {
+    syncing = bootstrap_request->is_syncing();
+    bootstrap_request->put();
+    bootstrap_request = nullptr;
   }
 
   if (opt_state) {
@@ -1321,9 +1349,10 @@ void ImageReplayer<I>::send_mirror_status_update(const OptionalState &opt_state)
   status.up = true;
   switch (state) {
   case STATE_STARTING:
-    if (bootstrapping) {
+    if (syncing) {
       status.state = cls::rbd::MIRROR_IMAGE_STATUS_STATE_SYNCING;
       status.description = state_desc.empty() ? "syncing" : state_desc;
+      mirror_image_status_state = status.state;
     } else {
       status.state = cls::rbd::MIRROR_IMAGE_STATUS_STATE_STARTING_REPLAY;
       status.description = "starting replay";
@@ -1351,6 +1380,7 @@ void ImageReplayer<I>::send_mirror_status_update(const OptionalState &opt_state)
         return;
       }
       status.description = "replaying, " + desc;
+      mirror_image_status_state = boost::none;
     }
     break;
   case STATE_STOPPING:
@@ -1364,13 +1394,26 @@ void ImageReplayer<I>::send_mirror_status_update(const OptionalState &opt_state)
     if (last_r < 0) {
       status.state = cls::rbd::MIRROR_IMAGE_STATUS_STATE_ERROR;
       status.description = state_desc;
+      mirror_image_status_state = status.state;
     } else {
       status.state = cls::rbd::MIRROR_IMAGE_STATUS_STATE_STOPPED;
       status.description = state_desc.empty() ? "stopped" : state_desc;
+      mirror_image_status_state = boost::none;
     }
     break;
   default:
     assert(!"invalid state");
+  }
+
+  {
+    Mutex::Locker locker(m_lock);
+    m_mirror_image_status_state = mirror_image_status_state;
+  }
+
+  // prevent the status from ping-ponging when failed replays are restarted
+  if (mirror_image_status_state &&
+      *mirror_image_status_state == cls::rbd::MIRROR_IMAGE_STATUS_STATE_ERROR) {
+    status.state = *mirror_image_status_state;
   }
 
   dout(20) << "status=" << status << dendl;
