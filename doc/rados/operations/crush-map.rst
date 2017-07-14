@@ -27,27 +27,12 @@ possibility of concurrent failures, it may be desirable to ensure that data
 replicas are on devices using different shelves, racks, power supplies,
 controllers, and/or physical locations.
 
-When you create a configuration file and deploy Ceph with ``ceph-deploy``, Ceph
-generates a default CRUSH map for your configuration. The default CRUSH map is
-fine for your Ceph sandbox environment. However, when you deploy a large-scale
-data cluster, you should give significant consideration to developing a custom
-CRUSH map, because it will help you manage your Ceph cluster, improve
-performance and ensure data safety. 
-
-For example, if an OSD goes down, a CRUSH map can help you to locate
-the physical data center, room, row and rack of the host with the failed OSD in
-the event you need to use onsite support or replace hardware. 
-
-Similarly, CRUSH may help you identify faults more quickly. For example, if all
-OSDs in a particular rack go down simultaneously, the fault may lie with a
-network switch or power to the rack rather than the OSDs themselves.
-
-A custom CRUSH map can also help you identify the physical locations where
-Ceph stores redundant copies of data when the placement group(s) associated
-with a failed host are in a degraded state.
-
-.. note:: Lines of code in example boxes may extend past the edge of the box. 
-   Please scroll when reading or copying longer examples.
+When you deploy OSDs they are automatically placed within the CRUSH map under a
+``host`` node named with the hostname for the host they are running on.  This,
+combined with the default CRUSH failure domain, ensures that replicas or erasure
+code shards are separated across hosts and a single host failure will not
+affect availability.  For larger clusters, however, administrators should carefully consider their choice of failure domain.  Separating replicas across racks,
+for example, is common for mid- to large-sized clusters.
 
 
 CRUSH Location
