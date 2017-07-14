@@ -78,6 +78,9 @@ public:
   void set_ss_attr_corrupted() {
     errors |= err_t::SS_ATTR_CORRUPTED;
   }
+  void set_obj_size_oi_mismatch() {
+    errors |= err_t::OBJ_SIZE_OI_MISMATCH;
+  }
   void encode(bufferlist& bl) const;
   void decode(bufferlist::iterator& bp);
 };

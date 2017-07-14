@@ -711,6 +711,9 @@ bool PGBackend::be_compare_scrub_objects(
   for (map<string,bufferptr>::const_iterator i = auth.attrs.begin();
        i != auth.attrs.end();
        ++i) {
+    // We check system keys seperately
+    if (i->first == OI_ATTR || i->first == SS_ATTR)
+      continue;
     if (!candidate.attrs.count(i->first)) {
       if (error != CLEAN)
         errorstream << ", ";
@@ -728,6 +731,9 @@ bool PGBackend::be_compare_scrub_objects(
   for (map<string,bufferptr>::const_iterator i = candidate.attrs.begin();
        i != candidate.attrs.end();
        ++i) {
+    // We check system keys seperately
+    if (i->first == OI_ATTR || i->first == SS_ATTR)
+      continue;
     if (!auth.attrs.count(i->first)) {
       if (error != CLEAN)
         errorstream << ", ";
@@ -839,10 +845,12 @@ map<pg_shard_t, ScrubMap *>::const_iterator
       error_string += " object_info_inconsistency";
     }
 
-    // Don't use this particular shard because it won't be able to repair data
-    // XXX: For now we can't pick one shard for repair and another's object info
-    if (i->second.read_error || i->second.ec_hash_mismatch || i->second.ec_size_mismatch)
+    if (i->second.size != be_get_ondisk_size(oi.size)) {
+      dout(5) << __func__ << " size " << i->second.size << " oi size " << oi.size << dendl;
+      shard_info.set_obj_size_oi_mismatch();
+      error_string += " obj_size_oi_mismatch";
       goto out;
+    }
 
     // We don't set errors here for snapset, but we won't pick an auth copy if the
     // snapset is missing or won't decode.
@@ -860,6 +868,11 @@ map<pg_shard_t, ScrubMap *>::const_iterator
 	goto out;
       }
     }
+
+    // Don't use this particular shard because it won't be able to repair data
+    // XXX: For now we can't pick one shard for repair and another's object info
+    if (i->second.read_error || i->second.ec_hash_mismatch || i->second.ec_size_mismatch)
+      goto out;
 
     if (auth_version == eversion_t() || oi.version > auth_version ||
         (oi.version == auth_version && dcount(oi) > dcount(*auth_oi))) {
