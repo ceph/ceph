@@ -1142,7 +1142,8 @@ int CrushWrapper::adjust_item_weight(CephContext *cct, int id, int weight)
     for (unsigned i = 0; i < b->size; i++) {
       if (b->items[i] == id) {
 	int diff = bucket_adjust_item_weight(cct, b, id, weight);
-	ldout(cct, 5) << "adjust_item_weight " << id << " diff " << diff << " in bucket " << bidx << dendl;
+	ldout(cct, 5) << "adjust_item_weight " << id << " diff " << diff
+		      << " in bucket " << bidx << dendl;
 	adjust_item_weight(cct, -1 - bidx, b->weight);
 	changed++;
       }
@@ -1155,10 +1156,11 @@ int CrushWrapper::adjust_item_weight(CephContext *cct, int id, int weight)
 
 int CrushWrapper::adjust_item_weight_in_loc(CephContext *cct, int id, int weight, const map<string,string>& loc)
 {
-  ldout(cct, 5) << "adjust_item_weight_in_loc " << id << " weight " << weight << " in " << loc << dendl;
+  ldout(cct, 5) << "adjust_item_weight_in_loc " << id << " weight " << weight
+		<< " in " << loc << dendl;
   int changed = 0;
 
-  for (map<string,string>::const_iterator l = loc.begin(); l != loc.end(); ++l) {
+  for (auto l = loc.begin(); l != loc.end(); ++l) {
     int bid = get_item_id(l->second);
     if (!bucket_exists(bid))
       continue;
@@ -1166,7 +1168,8 @@ int CrushWrapper::adjust_item_weight_in_loc(CephContext *cct, int id, int weight
     for (unsigned int i = 0; i < b->size; i++) {
       if (b->items[i] == id) {
 	int diff = bucket_adjust_item_weight(cct, b, id, weight);
-	ldout(cct, 5) << "adjust_item_weight_in_loc " << id << " diff " << diff << " in bucket " << bid << dendl;
+	ldout(cct, 5) << "adjust_item_weight_in_loc " << id << " diff " << diff
+		      << " in bucket " << bid << dendl;
 	adjust_item_weight(cct, bid, b->weight);
 	changed++;
       }
