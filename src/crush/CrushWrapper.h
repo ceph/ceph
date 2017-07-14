@@ -1203,7 +1203,7 @@ public:
 
   int update_device_class(int id, const string& class_name, const string& name, ostream *ss);
   int device_class_clone(int original, int device_class, int *clone);
-  bool class_is_in_use(int class_id);
+  bool class_is_in_use(int class_id, ostream *ss = nullptr);
   int populate_classes();
   int rebuild_roots_with_classes();
   /* remove unused roots generated for class devices */
