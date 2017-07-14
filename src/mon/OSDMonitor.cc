@@ -5023,16 +5023,16 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
     r = 0;
   } else if (prefix == "osd crush rule list" ||
 	     prefix == "osd crush rule ls") {
-    string format;
-    cmd_getval(g_ceph_context, cmdmap, "format", format);
-    boost::scoped_ptr<Formatter> f(Formatter::create(format, "json-pretty", "json-pretty"));
-    f->open_array_section("rules");
-    osdmap.crush->list_rules(f.get());
-    f->close_section();
-    ostringstream rs;
-    f->flush(rs);
-    rs << "\n";
-    rdata.append(rs.str());
+    if (f) {
+      f->open_array_section("rules");
+      osdmap.crush->list_rules(f.get());
+      f->close_section();
+      f->flush(rdata);
+    } else {
+      ostringstream ss;
+      osdmap.crush->list_rules(&ss);
+      rdata.append(ss.str());
+    }
   } else if (prefix == "osd crush rule dump") {
     string name;
     cmd_getval(g_ceph_context, cmdmap, "name", name);
