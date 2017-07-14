@@ -1452,6 +1452,16 @@ public:
     return choose_args_adjust_item_weight(cct, cmap, id, weight, ss);
   }
 
+  int get_choose_args_positions(crush_choose_arg_map cmap) {
+    // infer positions from other buckets
+    for (unsigned j = 0; j < cmap.size; ++j) {
+      if (cmap.args[j].weight_set_size) {
+	return cmap.args[j].weight_set_size;
+      }
+    }
+    return 1;
+  }
+
   template<typename WeightVector>
   void do_rule(int rule, int x, vector<int>& out, int maxout,
 	       const WeightVector& weight,
