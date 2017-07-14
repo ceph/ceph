@@ -168,21 +168,20 @@ static int cls_statelog_list(cls_method_context_t hctx, bufferlist *in, bufferli
   if (!max_entries || max_entries > MAX_ENTRIES)
     max_entries = MAX_ENTRIES;
 
-  int rc = cls_cxx_map_get_vals(hctx, from_index, match_prefix, max_entries + 1, &keys);
+  cls_statelog_list_ret ret;
+
+  int rc = cls_cxx_map_get_vals(hctx, from_index, match_prefix, max_entries, &keys, &ret.truncated);
   if (rc < 0)
     return rc;
 
   CLS_LOG(20, "from_index=%s match_prefix=%s", from_index.c_str(), match_prefix.c_str());
-  cls_statelog_list_ret ret;
 
   list<cls_statelog_entry>& entries = ret.entries;
   map<string, bufferlist>::iterator iter = keys.begin();
 
-  bool done = false;
   string marker;
 
-  size_t i;
-  for (i = 0; i < max_entries && iter != keys.end(); ++i, ++iter) {
+  for (; iter != keys.end(); ++iter) {
     const string& index = iter->first;
     marker = index;
 
@@ -197,12 +196,9 @@ static int cls_statelog_list(cls_method_context_t hctx, bufferlist *in, bufferli
     }
   }
 
-  if (iter == keys.end())
-    done = true;
-  else
+  if (ret.truncated) {
     ret.marker = marker;
-
-  ret.truncated = !done;
+  }
 
   ::encode(ret, *out);
 
