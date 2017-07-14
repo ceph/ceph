@@ -1938,7 +1938,6 @@ struct rgw_obj {
   rgw_obj_key key;
 
   bool in_extra_data{false}; /* in-memory only member, does not serialize */
-  bool head_obj{true}; /* in-memory only member, does not serialize */
 
   // Represents the hash index source for this object once it is set (non-empty)
   std::string index_hash_source;
@@ -1985,14 +1984,6 @@ struct rgw_obj {
 
   bool is_in_extra_data() const {
     return in_extra_data;
-  }
-
-  void set_head_obj(bool val) {
-    head_obj = val;
-  }
-
-  bool is_head_obj() const {
-    return head_obj;
   }
 
   void encode(bufferlist& bl) const {
@@ -2063,16 +2054,11 @@ struct rgw_obj {
   }
 
   const rgw_pool& get_explicit_data_pool() {
-    if (!in_extra_data) {
-      if (head_obj)
-        return bucket.explicit_placement.data_pool;
-      else
-        return bucket.explicit_placement.data_tail_pool.empty() ?
-          bucket.explicit_placement.data_pool : bucket.explicit_placement.data_tail_pool;
-    } else {
-        return bucket.explicit_placement.data_extra_pool.empty() ?
-          bucket.explicit_placement.data_pool : bucket.explicit_placement.data_extra_pool;
-    }
+    if (!in_extra_data || bucket.explicit_placement.data_extra_pool.empty()) {
+      return bucket.explicit_placement.data_pool;
+    }  
+
+    return bucket.explicit_placement.data_extra_pool;
   }
 };
 WRITE_CLASS_ENCODER(rgw_obj)

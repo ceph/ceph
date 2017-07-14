@@ -205,9 +205,9 @@ void RGWObjManifest::get_implicit_location(uint64_t cur_part_id, uint64_t cur_st
   // Always overwrite instance with tail_instance
   // to get the right shadow object location
   loc.key.set_instance(tail_instance);
-  loc.set_head_obj(false);
   location->set_placement_rule(tail_placement.placement_rule);
   *location = loc;
+  location->set_head_obj(false);
 }
 
 

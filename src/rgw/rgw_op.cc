@@ -2963,7 +2963,6 @@ int RGWPutObjProcessor_Multipart::prepare(RGWRados *store, string *oid_rand)
   cur_obj = manifest_gen.get_cur_obj(store);
   rgw_raw_obj_to_obj(bucket, cur_obj, &head_obj);
   head_obj.index_hash_source = obj_str;
-  head_obj.set_head_obj(false);
 
   r = prepare_init(store, NULL);
   if (r < 0) {
@@ -2992,6 +2991,8 @@ int RGWPutObjProcessor_Multipart::do_complete(size_t accounted_size,
   head_obj_op.meta.owner = s->owner.get_id();
   head_obj_op.meta.delete_at = delete_at;
   head_obj_op.meta.zones_trace = zones_trace;
+
+  op_target.set_in_tail(true);
 
   int r = head_obj_op.write_meta(obj_len, accounted_size, attrs);
   if (r < 0)
