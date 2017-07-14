@@ -326,7 +326,8 @@ void MgrMonitor::check_sub(Subscription *sub)
 {
   if (sub->type == "mgrmap") {
     if (sub->next <= map.get_epoch()) {
-      dout(20) << "Sending map to subscriber " << sub->session->con << dendl;
+      dout(20) << "Sending map to subscriber " << sub->session->con
+	       << " " << sub->session->con->get_peer_addr() << dendl;
       sub->session->con->send_message(new MMgrMap(map));
       if (sub->onetime) {
         mon->session_map.remove_sub(sub);
@@ -353,12 +354,15 @@ void MgrMonitor::send_digests()
   if (!is_active()) {
     return;
   }
+  dout(10) << __func__ << dendl;
 
   const std::string type = "mgrdigest";
   if (mon->session_map.subs.count(type) == 0)
     return;
 
   for (auto sub : *(mon->session_map.subs[type])) {
+    dout(10) << __func__ << " sending digest to subscriber " << sub->session->con
+	     << " " << sub->session->con->get_peer_addr() << dendl;
     MMgrDigest *mdigest = new MMgrDigest;
 
     JSONFormatter f;
