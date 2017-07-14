@@ -999,6 +999,11 @@ int CrushWrapper::detach_bucket(CephContext *cct, int item)
     // zero out the bucket weight
     bucket_adjust_item_weight(cct, parent_bucket, item, 0);
     adjust_item_weight(cct, parent_bucket->id, parent_bucket->weight);
+    for (auto& p : choose_args) {
+      // weight down each weight-set to 0 before we remove the item
+      vector<int> weightv(get_choose_args_positions(p.second), 0);
+      choose_args_adjust_item_weight(cct, p.second, item, weightv, nullptr);
+    }
 
     // remove the bucket from the parent
     bucket_remove_item(parent_bucket, item);
