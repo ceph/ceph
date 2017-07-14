@@ -38,11 +38,12 @@ for example, is common for mid- to large-sized clusters.
 CRUSH Location
 ==============
 
-The location of an OSD in terms of the CRUSH map's hierarchy is referred to
-as a 'crush location'.  This location specifier takes the form of a list of
-key and value pairs describing a position.  For example, if an OSD is in a
-particular row, rack, chassis and host, and is part of the 'default' CRUSH 
-tree, its crush location could be described as::
+The location of an OSD in terms of the CRUSH map's hierarchy is
+referred to as a ``crush location``.  This location specifier takes the
+form of a list of key and value pairs describing a position.  For
+example, if an OSD is in a particular row, rack, chassis and host, and
+is part of the 'default' CRUSH tree (this is the case for the vast
+majority of clusters), its crush location could be described as::
 
   root=default row=a rack=a2 chassis=a2a host=a2a1
 
@@ -57,38 +58,33 @@ Note:
    automatically sets a ``ceph-osd`` daemon's location to be
    ``root=default host=HOSTNAME`` (based on the output from ``hostname -s``).
 
-ceph-crush-location hook
-------------------------
-
-By default, the ``ceph-crush-location`` utility will generate a CRUSH
-location string for a given daemon.  The location is based on, in order of
-preference:
-
-#. A ``TYPE crush location`` option in ceph.conf.  For example, this
-   is ``osd crush location`` for OSD daemons.
-#. A ``crush location`` option in ceph.conf.
-#. A default of ``root=default host=HOSTNAME`` where the hostname is
-   generated with the ``hostname -s`` command.
-
-In a typical deployment scenario, provisioning software (or the system
-administrator) can simply set the 'crush location' field in a host's
-ceph.conf to describe that machine's location within the datacenter or
-cluster.  This will provide location awareness to both Ceph daemons
-and clients alike.
-
-It is possible to manage the CRUSH map entirely manually by toggling
-the hook off in the configuration::
+The crush location for an OSD is normally expressed via the ``crush location``
+config option being set in the ``ceph.conf`` file.  Each time the OSD starts,
+it verifies it is in the correct location in the CRUSH map and, if it isn't,
+it moved itself.  To disable this automatic CRUSH map management, add the
+following to your configuration file in the ``[osd]`` section::
 
   osd crush update on start = false
+
 
 Custom location hooks
 ---------------------
 
-A customized location hook can be used in place of the generic hook for OSD
-daemon placement in the hierarchy.  (On startup, each OSD ensures its position is
-correct.)::
+A customized location hook can be used to generate a more complete
+crush location on startup. The sample ``ceph-crush-location`` utility
+will generate a CRUSH location string for a given daemon.  The
+location is based on, in order of preference:
 
-  osd crush location hook = /path/to/script
+#. A ``crush location`` option in ceph.conf.
+#. A default of ``root=default host=HOSTNAME`` where the hostname is
+   generated with the ``hostname -s`` command.
+
+This isn't useful by itself, as the OSD itself has the exact same
+behavior.  However, the script can be modified to provide additional
+location fields (for example, the rack or datacenter), and then the
+hook enabled via the config option::
+
+  crush location hook = /path/to/customized-ceph-crush-location
 
 This hook is passed several arguments (below) and should output a single line
 to stdout with the CRUSH location description.::
