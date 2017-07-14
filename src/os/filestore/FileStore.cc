@@ -820,7 +820,7 @@ int FileStore::mkfs()
   basedir_fd = ::open(basedir.c_str(), O_RDONLY);
   if (basedir_fd < 0) {
     ret = -errno;
-    derr << "mkfs failed to open base dir " << basedir << ": " << cpp_strerror(ret) << dendl;
+    derr << __FUNC__ << ": failed to open base dir " << basedir << ": " << cpp_strerror(ret) << dendl;
     return ret;
   }
 
@@ -829,7 +829,7 @@ int FileStore::mkfs()
   fsid_fd = ::open(fsid_fn, O_RDWR|O_CREAT, 0644);
   if (fsid_fd < 0) {
     ret = -errno;
-    derr << "mkfs: failed to open " << fsid_fn << ": " << cpp_strerror(ret) << dendl;
+    derr << __FUNC__ << ": failed to open " << fsid_fn << ": " << cpp_strerror(ret) << dendl;
     goto close_basedir_fd;
   }
 
@@ -841,9 +841,9 @@ int FileStore::mkfs()
   if (read_fsid(fsid_fd, &old_fsid) < 0 || old_fsid.is_zero()) {
     if (fsid.is_zero()) {
       fsid.generate_random();
-      dout(1) << "mkfs generated fsid " << fsid << dendl;
+      dout(1) << __FUNC__ << ": generated fsid " << fsid << dendl;
     } else {
-      dout(1) << "mkfs using provided fsid " << fsid << dendl;
+      dout(1) << __FUNC__ << ": using provided fsid " << fsid << dendl;
     }
 
     fsid.print(fsid_str);
@@ -867,7 +867,7 @@ int FileStore::mkfs()
 	   << cpp_strerror(ret) << dendl;
       goto close_fsid_fd;
     }
-    dout(10) << "mkfs fsid is " << fsid << dendl;
+    dout(10) << __FUNC__ << ": fsid is " << fsid << dendl;
   } else {
     if (!fsid.is_zero() && fsid != old_fsid) {
       derr << __FUNC__ << ": on-disk fsid " << old_fsid << " != provided " << fsid << dendl;
@@ -907,7 +907,7 @@ int FileStore::mkfs()
 #if defined(__linux__)
   if (basefs.f_type == BTRFS_SUPER_MAGIC &&
       !g_ceph_context->check_experimental_feature_enabled("btrfs")) {
-    derr <<__FUNC__ << ": deprecated btrfs support is not enabled" << dendl;
+    derr << __FUNC__ << ": deprecated btrfs support is not enabled" << dendl;
     goto close_fsid_fd;
   }
 #endif

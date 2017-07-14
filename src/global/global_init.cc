@@ -114,7 +114,7 @@ void global_pre_init(std::vector < const char * > *alt_def_args,
         dout_emergency(oss.str());
         _exit(1);
       } else {
-        derr <<"did not load config file, using default settings." << dendl;
+        derr << "did not load config file, using default settings." << dendl;
       }
     }
   }
