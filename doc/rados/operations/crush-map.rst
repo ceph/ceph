@@ -247,6 +247,11 @@ the hierarchy is visible as a separate column (labeled either
 
   ceph osd crush tree
 
+When both *compat* and *per-pool* weight sets are in use, data
+placement for a particular pool will use its own per-pool weight set
+if present.  If not, it will use the compat weight set if present.  If
+neither are present, it will use the normal CRUSH weights.
+
 Although weight sets can be set up and manipulated by hand, it is
 recommended that the *balancer* module be enabled to do so
 automatically.
@@ -443,6 +448,67 @@ The following example removes the ``rack12`` bucket from the hierarchy::
 
   ceph osd crush remove rack12
 
+Creating a compat weight set
+----------------------------
+
+.. note: This step is normally done automatically by the ``balancer``
+   module when enabled.
+
+To create a *compat* weight set::
+
+  ceph osd crush weight-set create-compat
+
+Weights for the compat weight set can be adjusted with::
+
+  ceph osd crush weight-set reweight-compat {name} {weight}
+
+The compat weight set can be destroyed with::
+
+  ceph osd crush weight-set rm-compat
+
+Creating per-pool weight sets
+-----------------------------
+
+To create a weight set for a specific pool,::
+
+  ceph osd crush weight-set create {pool-name} {mode}
+
+.. note:: Per-pool weight sets require that all servers and daemons
+          run Luminous v12.2.z or later.
+
+Where:
+
+``pool-name``
+
+:Description: The name of a RADOS pool
+:Type: String
+:Required: Yes
+:Example: ``rbd``
+
+``mode``
+
+:Description: Either ``flat`` or ``positional``.  A *flat* weight set
+	      has a single weight for each device or bucket.  A
+	      *positional* weight set has a potentially different
+	      weight for each position in the resulting placement
+	      mapping.  For example, if a pool has a replica count of
+	      3, then a positional weight set will have three weights
+	      for each device and bucket.
+:Type: String
+:Required: Yes
+:Example: ``flat``
+
+To adjust the weight of an item in a weight set::
+
+  ceph osd crush weight-set reweight {pool-name} {item-name} {weight [...]}
+
+To list existing weight sets,::
+
+  ceph osd crush weight-set ls
+
+To remove a weight set,::
+
+  ceph osd crush weight-set rm {pool-name}
 
 
 Tunables
