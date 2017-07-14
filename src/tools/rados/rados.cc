@@ -1338,6 +1338,8 @@ static void dump_errors(const err_t &err, Formatter &f, const char *name)
     f.dump_string("error", "oi_attr_missing");
   if (err.has_oi_attr_corrupted())
     f.dump_string("error", "oi_attr_corrupted");
+  if (err.has_obj_size_oi_mismatch())
+    f.dump_string("error", "obj_size_oi_mismatch");
   f.close_section();
 }
 
@@ -1369,7 +1371,11 @@ static void dump_shard(const shard_info_t& shard,
     ::decode(oi, bliter);  // Can't be corrupted
     f.dump_stream("object_info") << oi;
   }
-  if (inc.has_attr_name_mismatch() || inc.has_attr_value_mismatch()) {
+  if (inc.has_attr_name_mismatch() || inc.has_attr_value_mismatch()
+     || inc.union_shards.has_oi_attr_missing()
+     || inc.union_shards.has_oi_attr_corrupted()
+     || inc.union_shards.has_ss_attr_missing()
+     || inc.union_shards.has_ss_attr_corrupted()) {
     f.open_array_section("attrs");
     for (auto kv : shard.attrs) {
       f.open_object_section("attr");
