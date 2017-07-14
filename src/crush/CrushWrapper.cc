@@ -1070,7 +1070,8 @@ int CrushWrapper::swap_bucket(CephContext *cct, int src, int dst)
   return 0;
 }
 
-int CrushWrapper::link_bucket(CephContext *cct, int id, const map<string,string>& loc)
+int CrushWrapper::link_bucket(
+  CephContext *cct, int id, const map<string,string>& loc)
 {
   // sorry this only works for buckets
   if (id >= 0)
