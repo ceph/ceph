@@ -167,7 +167,7 @@ class Prepare(object):
 
         """)
         parser = argparse.ArgumentParser(
-            prog='ceph-volume lvm activate',
+            prog='ceph-volume lvm prepare',
             formatter_class=argparse.RawDescriptionHelpFormatter,
             description=sub_command_help,
         )
@@ -206,7 +206,8 @@ class Prepare(object):
             '--osd-fsid',
             help='Reuse an existing OSD fsid',
         )
+        if len(self.argv) == 0:
+            print sub_command_help
+            return
         args = parser.parse_args(self.argv)
-        if len(self.argv) <= 1:
-            return parser.print_help()
         self.prepare(args)
