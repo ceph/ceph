@@ -212,6 +212,7 @@ using ceph::crypto::MD5;
 #define ERR_INVALID_LOCATION_CONSTRAINT 2208
 #define ERR_TAG_CONFLICT         2209
 #define ERR_INVALID_TAG          2210
+#define ERR_ZERO_IN_URL          2211
 
 #define ERR_BUSY_RESHARDING      2300
 
