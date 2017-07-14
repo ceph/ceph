@@ -1052,8 +1052,9 @@ int CrushWrapper::create_or_move_item(CephContext *cct, int item, float weight, 
   return ret;
 }
 
-int CrushWrapper::update_item(CephContext *cct, int item, float weight, string name,
-			      const map<string,string>& loc)  // typename -> bucketname
+int CrushWrapper::update_item(
+  CephContext *cct, int item, float weight, string name,
+  const map<string,string>& loc)  // typename -> bucketname
 {
   ldout(cct, 5) << "update_item item " << item << " weight " << weight
 		<< " name " << name << " loc " << loc << dendl;
@@ -1077,12 +1078,14 @@ int CrushWrapper::update_item(CephContext *cct, int item, float weight, string n
     ldout(cct, 5) << "update_item " << item << " already at " << loc << dendl;
     if (old_iweight != iweight) {
       ldout(cct, 5) << "update_item " << item << " adjusting weight "
-		    << ((float)old_iweight/(float)0x10000) << " -> " << weight << dendl;
+		    << ((float)old_iweight/(float)0x10000) << " -> " << weight
+		    << dendl;
       adjust_item_weight_in_loc(cct, item, iweight, loc);
       ret = 1;
     }
     if (get_item_name(item) != name) {
-      ldout(cct, 5) << "update_item setting " << item << " name to " << name << dendl;
+      ldout(cct, 5) << "update_item setting " << item << " name to " << name
+		    << dendl;
       set_item_name(item, name);
       ret = 1;
     }
