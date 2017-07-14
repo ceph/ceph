@@ -456,8 +456,9 @@ static int clslua_map_get_vals(lua_State *L)
   int max_to_get = luaL_checkinteger(L, 3);
 
   map<string, bufferlist> kvpairs;
+  bool more;
   int ret = cls_cxx_map_get_vals(hctx, start_after, filter_prefix,
-      max_to_get, &kvpairs);
+      max_to_get, &kvpairs, &more);
   if (ret < 0)
     return clslua_opresult(L, 0, ret, 0);
 
