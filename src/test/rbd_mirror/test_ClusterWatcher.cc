@@ -35,10 +35,6 @@ public:
   {
     m_cluster = std::make_shared<librados::Rados>();
     EXPECT_EQ("", connect_cluster_pp(*m_cluster));
-    m_service_daemon.reset(new rbd::mirror::ServiceDaemon<>(g_ceph_context,
-                                                            m_cluster));
-    m_cluster_watcher.reset(new ClusterWatcher(m_cluster, m_lock,
-                                               m_service_daemon.get()));
   }
 
   ~TestClusterWatcher() override {
@@ -46,6 +42,21 @@ public:
     for (auto& pool : m_pools) {
       EXPECT_EQ(0, m_cluster->pool_delete(pool.c_str()));
     }
+  }
+
+  void SetUp() override {
+    TestFixture::SetUp();
+    m_service_daemon.reset(new rbd::mirror::ServiceDaemon<>(g_ceph_context,
+                                                            m_cluster,
+                                                            m_threads));
+    m_cluster_watcher.reset(new ClusterWatcher(m_cluster, m_lock,
+                                               m_service_daemon.get()));
+  }
+
+  void TearDown() override {
+    m_service_daemon.reset();
+    m_cluster_watcher.reset();
+    TestFixture::TearDown();
   }
 
   void create_pool(bool enable_mirroring, const peer_t &peer,

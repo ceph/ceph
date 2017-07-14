@@ -11,7 +11,6 @@
 #include "PoolReplayer.h"
 #include "ImageDeleter.h"
 #include "types.h"
-#include "ServiceDaemon.h"
 
 #include <set>
 #include <map>
@@ -23,6 +22,7 @@ namespace librbd { struct ImageCtx; }
 namespace rbd {
 namespace mirror {
 
+template <typename> struct ServiceDaemon;
 template <typename> struct Threads;
 class MirrorAdminSocketHook;
 
@@ -62,7 +62,7 @@ private:
   Mutex m_lock;
   Cond m_cond;
   RadosRef m_local;
-  ServiceDaemon<librbd::ImageCtx> m_service_daemon;
+  std::unique_ptr<ServiceDaemon<librbd::ImageCtx>> m_service_daemon;
 
   // monitor local cluster for config changes in peers
   std::unique_ptr<ClusterWatcher> m_local_cluster_watcher;

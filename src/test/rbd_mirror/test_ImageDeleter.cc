@@ -63,7 +63,7 @@ public:
   void SetUp() override {
     TestFixture::SetUp();
     m_service_daemon.reset(new rbd::mirror::ServiceDaemon<>(g_ceph_context,
-                                                            _rados));
+                                                            _rados, m_threads));
 
     librbd::api::Mirror<>::mode_set(m_local_io_ctx, RBD_MIRROR_MODE_IMAGE);
 
@@ -89,8 +89,10 @@ public:
 
   void TearDown() override {
     remove_image();
-    TestFixture::TearDown();
     delete m_deleter;
+    m_service_daemon.reset();
+
+    TestFixture::TearDown();
   }
 
   void remove_image(bool force=false) {
