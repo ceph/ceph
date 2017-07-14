@@ -112,12 +112,32 @@ md_config_t::md_config_t(bool is_daemon)
 
   // Load default values from the schema
   for (const auto &i : schema) {
-    bool has_daemon_default = !boost::get<boost::blank>(&i.second.daemon_value);
+    const Option &opt = i.second;
+    bool has_daemon_default = !boost::get<boost::blank>(&opt.daemon_value);
+    Option::value_t default_val;
     if (is_daemon && has_daemon_default) {
-      values[i.first] = i.second.daemon_value;
+      default_val = opt.daemon_value;
     } else {
-      values[i.first] = i.second.value;
+      default_val = opt.value;
     }
+
+    if (opt.type == Option::TYPE_STR) {
+      // We call pre_validate as a sanity check, but also to get any
+      // side effect (value modification) from the validator.
+      std::string *def_str = boost::get<std::string>(&default_val);
+      std::string err;
+      if (opt.pre_validate(def_str, &err) != 0) {
+        std::cerr << "Default value " << opt.name << "=" << *def_str << " is "
+                     "invalid: " << err << std::endl;
+
+        // This is the compiled-in default that is failing its own option's
+        // validation, so this is super-invalid and should never make it
+        // past a pull request: crash out.
+        assert(false);
+      }
+    }
+
+    values[i.first] = default_val;
   }
 
   // Copy out values (defaults) into any legacy (C struct member) fields
