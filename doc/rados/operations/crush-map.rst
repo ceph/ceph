@@ -95,8 +95,17 @@ where the cluster name is typically 'ceph', the id is the daemon
 identifier (the OSD number), and the daemon type is typically ``osd``.
 
 
-Editing a CRUSH Map
-===================
+Manually editing a CRUSH Map
+============================
+
+.. note:: Manually editing the CRUSH map is considered an advanced
+	  administrator operation.  All CRUSH changes that are
+	  necessary for the overwhelming majority of installations are
+	  possible via the standard ceph CLI and do not require manual
+	  CRUSH map edits.  If you have identified a use case where
+	  manual edits *are* necessary, consider contacting the Ceph
+	  developers so that future versions of Ceph can make this
+	  unnecessary.
 
 To edit an existing CRUSH map:
 
