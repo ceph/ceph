@@ -1936,7 +1936,6 @@ void CInode::finish_scatter_update(ScatterLock *lock, CDir *dir,
 
       inode_t *pi = get_projected_inode();
       fnode_t *pf = dir->project_fnode();
-      pf->version = dir->pre_dirty();
 
       const char *ename = 0;
       switch (lock->get_type()) {
@@ -1949,11 +1948,19 @@ void CInode::finish_scatter_update(ScatterLock *lock, CDir *dir,
 	pf->rstat.version = pi->rstat.version;
 	pf->accounted_rstat = pf->rstat;
 	ename = "lock inest accounted scatter stat update";
+
+	if (!is_auth() && lock->get_state() == LOCK_MIX) {
+	  dout(10) << "finish_scatter_update try to assimilate dirty rstat on " 
+	    << *dir << dendl; 
+	  dir->assimilate_dirty_rstat_inodes();
+       }
+
 	break;
       default:
 	ceph_abort();
       }
 	
+      pf->version = dir->pre_dirty();
       mut->add_projected_fnode(dir);
 
       EUpdate *le = new EUpdate(mdlog, ename);
@@ -1963,6 +1970,22 @@ void CInode::finish_scatter_update(ScatterLock *lock, CDir *dir,
       
       assert(!dir->is_frozen());
       mut->auth_pin(dir);
+
+      if (lock->get_type() == CEPH_LOCK_INEST && 
+	  !is_auth() && lock->get_state() == LOCK_MIX) {
+        dout(10) << "finish_scatter_update finish assimilating dirty rstat on " 
+          << *dir << dendl; 
+        dir->assimilate_dirty_rstat_inodes_finish(mut, &le->metablob);
+
+        if (!(pf->rstat == pf->accounted_rstat)) {
+          if (mut->wrlocks.count(&nestlock) == 0) {
+            mdcache->mds->locker->wrlock_force(&nestlock, mut);
+          }
+
+          mdcache->mds->locker->mark_updated_scatterlock(&nestlock);
+          mut->ls->dirty_dirfrag_nest.push_back(&item_dirty_dirfrag_nest);
+        }
+      }
       
       mdlog->submit_entry(le, new C_Inode_FragUpdate(this, dir, mut));
     } else {
@@ -1976,6 +1999,7 @@ void CInode::_finish_frag_update(CDir *dir, MutationRef& mut)
 {
   dout(10) << "_finish_frag_update on " << *dir << dendl;
   mut->apply();
+  mdcache->mds->locker->drop_locks(mut.get());
   mut->cleanup();
 }
 
