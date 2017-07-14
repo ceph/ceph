@@ -23,6 +23,7 @@
 #include "osdc/Objecter.h"
 #include "client/Client.h"
 #include "common/LogClient.h"
+#include "mon/MgrMap.h"
 
 #include "DaemonState.h"
 #include "ClusterState.h"
