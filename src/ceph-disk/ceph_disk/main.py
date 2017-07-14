@@ -671,9 +671,7 @@ def stmode_is_diskdevice(dmode):
     else:
         # FreeBSD does not have block devices
         # All disks are character devices
-        if FREEBSD and stat.S_ISCHR(dmode):
-            return True
-    return False
+        return FREEBSD and stat.S_ISCHR(dmode)
 
 
 def dev_is_diskdevice(dev):
@@ -803,7 +801,7 @@ def get_partition_base(dev):
     Get the base device for a partition
     """
     dev = os.path.realpath(dev)
-    if ldev_is_diskdevice(dev):
+    if not ldev_is_diskdevice(dev):
         raise Error('not a block device', dev)
 
     name = get_dev_name(dev)
@@ -845,7 +843,7 @@ def is_partition(dev):
 
     dev = os.path.realpath(dev)
     st = os.lstat(dev)
-    if not stmode_is_diskdevice(st.mode):
+    if not stmode_is_diskdevice(st.st_mode):
         raise Error('not a block device', dev)
 
     name = get_dev_name(dev)
