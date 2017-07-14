@@ -518,6 +518,12 @@ int CrushWrapper::_remove_item_under(
       ldout(cct, 5) << "_remove_item_under removing item " << item
 		    << " from bucket " << b->id << dendl;
       bucket_remove_item(b, item);
+      for (auto& p : choose_args) {
+	// weight down each weight-set to 0 before we remove the item
+	vector<int> weightv(get_choose_args_positions(p.second), 0);
+	_choose_args_adjust_item_weight_in_bucket(
+	  cct, p.second, b->id, item, weightv, nullptr);
+      }
       adjust_item_weight(cct, b->id, b->weight);
       ret = 0;
     } else if (id < 0) {
