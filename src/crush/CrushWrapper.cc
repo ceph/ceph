@@ -438,6 +438,11 @@ int CrushWrapper::remove_item(CephContext *cct, int item, bool unlink_only)
       if (id == item) {
 	ldout(cct, 5) << "remove_item removing item " << item
 		      << " from bucket " << b->id << dendl;
+	for (auto& p : choose_args) {
+	  // weight down each weight-set to 0 before we remove the item
+	  vector<int> weightv(get_choose_args_positions(p.second), 0);
+	  choose_args_adjust_item_weight(cct, p.second, item, weightv, nullptr);
+	}
 	bucket_remove_item(b, item);
 	adjust_item_weight(cct, b->id, b->weight);
 	ret = 0;
