@@ -558,20 +558,25 @@ version_t PGMonitor::get_trim_to()
 
 bool PGMonitor::preprocess_query(MonOpRequestRef op)
 {
-  if (mon->osdmon()->osdmap.require_osd_release >= CEPH_RELEASE_LUMINOUS) {
-    return false;
-  }
-
   op->mark_pgmon_event(__func__);
   PaxosServiceMessage *m = static_cast<PaxosServiceMessage*>(op->get_req());
-  dout(10) << "preprocess_query " << *m << " from " << m->get_orig_source_inst() << dendl;
+  dout(10) << "preprocess_query " << *m
+	   << " from " << m->get_orig_source_inst() << dendl;
   switch (m->get_type()) {
   case MSG_PGSTATS:
+    if (mon->osdmon()->osdmap.require_osd_release >= CEPH_RELEASE_LUMINOUS) {
+      return true;
+    }
     return preprocess_pg_stats(op);
 
   case MSG_MON_COMMAND:
+    if (mon->osdmon()->osdmap.require_osd_release >= CEPH_RELEASE_LUMINOUS) {
+      bufferlist rdata;
+      mon->reply_command(op, -EOPNOTSUPP, "this command is obsolete", rdata,
+			 get_last_committed());
+      return true;
+    }
     return preprocess_command(op);
-
 
   default:
     ceph_abort();
