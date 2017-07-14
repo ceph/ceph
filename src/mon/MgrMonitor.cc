@@ -220,6 +220,8 @@ bool MgrMonitor::prepare_beacon(MonOpRequestRef op)
       && m->get_gid() != pending_map.active_gid)
   {
     dout(4) << "Active daemon restart (mgr." << m->get_name() << ")" << dendl;
+    mon->clog->info() << "Active manager daemon " << m->get_name()
+                      << " restarted";
     drop_active();
   }
 
@@ -228,6 +230,8 @@ bool MgrMonitor::prepare_beacon(MonOpRequestRef op)
     const StandbyInfo &s = i.second;
     if (s.name == m->get_name() && s.gid != m->get_gid()) {
       dout(4) << "Standby daemon restart (mgr." << m->get_name() << ")" << dendl;
+      mon->clog->debug() << "Standby manager daemon " << m->get_name()
+                         << " restarted";
       drop_standby(i.first);
       break;
     }
@@ -249,6 +253,8 @@ bool MgrMonitor::prepare_beacon(MonOpRequestRef op)
 
     if (pending_map.get_available() != m->get_available()) {
       dout(4) << "available " << m->get_gid() << dendl;
+      mon->clog->info() << "Manager daemon " << pending_map.active_name
+                        << " is now available";
       pending_map.available = m->get_available();
       updated = true;
     }
@@ -271,6 +277,9 @@ bool MgrMonitor::prepare_beacon(MonOpRequestRef op)
     pending_map.active_name = m->get_name();
     pending_map.available_modules = m->get_available_modules();
 
+    mon->clog->info() << "Activating manager daemon "
+                      << pending_map.active_name;
+
     updated = true;
   } else {
     if (pending_map.standbys.count(m->get_gid()) > 0) {
@@ -287,8 +296,8 @@ bool MgrMonitor::prepare_beacon(MonOpRequestRef op)
       }
     } else {
       dout(10) << "new standby " << m->get_gid() << dendl;
-      pending_map.standbys[m->get_gid()] = {m->get_gid(), m->get_name(),
-					    m->get_available_modules()};
+      mon->clog->debug() << "Standby manager daemon " << m->get_name()
+                         << " started";
       updated = true;
     }
   }
@@ -457,18 +466,25 @@ void MgrMonitor::tick()
 
   if (pending_map.active_gid != 0
       && last_beacon.at(pending_map.active_gid) < cutoff) {
-
+    const std::string old_active_name = pending_map.active_name;
     drop_active();
     propose = true;
     dout(4) << "Dropping active" << pending_map.active_gid << dendl;
     if (promote_standby()) {
       dout(4) << "Promoted standby " << pending_map.active_gid << dendl;
+      mon->clog->info() << "Manager daemon " << old_active_name
+                        << " is unresponsive, replacing it with standby"
+                        << " daemon " << pending_map.active_name;
     } else {
       dout(4) << "Active is laggy but have no standbys to replace it" << dendl;
+      mon->clog->warn() << "Manager daemon " << old_active_name
+                        << " is unresponsive.  No standby daemons available.";
     }
   } else if (pending_map.active_gid == 0) {
     if (promote_standby()) {
       dout(4) << "Promoted standby " << pending_map.active_gid << dendl;
+      mon->clog->info() << "Activating manager daemon "
+                        << pending_map.active_name;
       propose = true;
     }
   }
@@ -520,6 +536,10 @@ void MgrMonitor::drop_active()
   pending_map.active_gid = 0;
   pending_map.available = false;
   pending_map.active_addr = entity_addr_t();
+
+  // So that when new active mgr subscribes to mgrdigest, it will
+  // get an immediate response instead of waiting for next timer
+  cancel_timer();
 }
 
 void MgrMonitor::drop_standby(uint64_t gid)
