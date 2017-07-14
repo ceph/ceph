@@ -770,6 +770,38 @@ static boost::optional<Principal> parse_principal(CephContext* cct, TokenID t,
 	return Principal::tenant(std::move(s));
       }
     }
+
+    if (a->resource == "root") {
+      return Principal::tenant(std::move(a->account));
+    }
+
+    const boost::string_view input{a->resource};
+
+    const auto first = input.find_first_of('/');
+    if (first == input.npos) {
+      return boost::none;
+    }
+    const auto last = input.find_last_of('/');
+    ceph_assert(last != input.npos);
+
+    const auto principal_type = input.substr(0, first);
+    const auto entity_name = input.substr(last + 1);
+
+    if (principal_type == "user") {
+	return Principal::user(std::move(a->account),
+			       entity_name.to_string());
+      }
+
+    if (principal_type == "role") {
+	return Principal::role(std::move(a->account),
+			       entity_name.to_string());
+      }
+
+    if (principal_type == "group") {
+	return Principal::group(std::move(a->account),
+			       entity_name.to_string());
+      }
+    }
   ldout(cct, 0) << "Supplied principal is discarded: " << s << dendl;
   return boost::none;
 }
