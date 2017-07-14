@@ -69,7 +69,7 @@ int RDMAServerSocketImpl::listen(entity_addr_t &sa, const SocketOptions &opt)
 err:
   ::close(server_setup_socket);
   server_setup_socket = -1;
-  return -errno;
+  return rc;
 }
 
 int RDMAServerSocketImpl::accept(ConnectedSocket *sock, const SocketOptions &opt, entity_addr_t *out, Worker *w)
