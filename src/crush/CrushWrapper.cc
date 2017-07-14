@@ -405,14 +405,16 @@ int CrushWrapper::remove_root(int item, bool unused)
 
 int CrushWrapper::remove_item(CephContext *cct, int item, bool unlink_only)
 {
-  ldout(cct, 5) << "remove_item " << item << (unlink_only ? " unlink_only":"") << dendl;
+  ldout(cct, 5) << "remove_item " << item
+		<< (unlink_only ? " unlink_only":"") << dendl;
 
   int ret = -ENOENT;
 
   if (item < 0 && !unlink_only) {
     crush_bucket *t = get_bucket(item);
     if (IS_ERR(t)) {
-      ldout(cct, 1) << "remove_item bucket " << item << " does not exist" << dendl;
+      ldout(cct, 1) << "remove_item bucket " << item << " does not exist"
+		    << dendl;
       return -ENOENT;
     }
 
@@ -1678,7 +1680,8 @@ int CrushWrapper::bucket_remove_item(crush_bucket *bucket, int item)
       assert(weight_set->size - 1 == new_size);
       for (__u32 k = position; k < new_size; k++)
 	weight_set->weights[k] = weight_set->weights[k+1];
-      weight_set->weights = (__u32*)realloc(weight_set->weights, new_size * sizeof(__u32));
+      weight_set->weights = (__u32*)realloc(weight_set->weights,
+					    new_size * sizeof(__u32));
       weight_set->size = new_size;
     }
     if (arg->ids_size) {
