@@ -83,15 +83,20 @@ int RGWPeriodPuller::pull(const std::string& period_id, RGWPeriod& period)
       lderr(store->ctx()) << "failed to store period " << period_id << dendl;
       return r;
     }
-    // XXX: if this is a newer epoch, we should overwrite the existing
-    // latest_epoch. but there's no way to do that atomically
-    bool exclusive = true;
-    r = period.set_latest_epoch(period.get_epoch(), exclusive);
+    // update latest epoch
+    r = period.update_latest_epoch(period.get_epoch());
     if (r == -EEXIST) {
-      r = 0;
-    } else if (r < 0) {
+      // already have this epoch (or a more recent one)
+      return 0;
+    }
+    if (r < 0) {
       lderr(store->ctx()) << "failed to update latest_epoch for period "
           << period_id << dendl;
+      return r;
+    }
+    // reflect period objects if this is the latest version
+    r = period.reflect();
+    if (r < 0) {
       return r;
     }
     ldout(store->ctx(), 14) << "period " << period_id
