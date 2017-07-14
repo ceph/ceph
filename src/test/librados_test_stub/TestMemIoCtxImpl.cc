@@ -167,11 +167,12 @@ int TestMemIoCtxImpl::list_snaps(const std::string& oid, snap_set_t *out_snaps) 
 
 }
 
-int TestMemIoCtxImpl::omap_get_vals(const std::string& oid,
+int TestMemIoCtxImpl::omap_get_vals2(const std::string& oid,
                                     const std::string& start_after,
                                     const std::string &filter_prefix,
                                     uint64_t max_return,
-                                    std::map<std::string, bufferlist> *out_vals) {
+                                    std::map<std::string, bufferlist> *out_vals,
+                                    bool *pmore) {
   if (out_vals == NULL) {
     return -EINVAL;
   } else if (m_client->is_blacklisted()) {
@@ -209,7 +210,18 @@ int TestMemIoCtxImpl::omap_get_vals(const std::string& oid,
     }
     ++it;
   }
+  if (pmore) {
+    *pmore = (it != omap.end());
+  }
   return 0;
+}
+
+int TestMemIoCtxImpl::omap_get_vals(const std::string& oid,
+                                    const std::string& start_after,
+                                    const std::string &filter_prefix,
+                                    uint64_t max_return,
+                                    std::map<std::string, bufferlist> *out_vals) {
+  return omap_get_vals2(oid, start_after, filter_prefix, max_return, out_vals, nullptr);
 }
 
 int TestMemIoCtxImpl::omap_rm_keys(const std::string& oid,

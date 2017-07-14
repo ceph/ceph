@@ -35,6 +35,12 @@ public:
                     const std::string &filter_prefix,
                     uint64_t max_return,
                     std::map<std::string, bufferlist> *out_vals) override;
+  int omap_get_vals2(const std::string& oid,
+                    const std::string& start_after,
+                    const std::string &filter_prefix,
+                    uint64_t max_return,
+                    std::map<std::string, bufferlist> *out_vals,
+                    bool *pmore) override;
   int omap_rm_keys(const std::string& oid,
                    const std::set<std::string>& keys) override;
   int omap_set(const std::string& oid, const std::map<std::string,

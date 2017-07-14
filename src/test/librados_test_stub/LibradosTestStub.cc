@@ -1157,27 +1157,22 @@ int cls_cxx_getxattrs(cls_method_context_t hctx, std::map<string, bufferlist> *a
 }
 
 int cls_cxx_map_get_keys(cls_method_context_t hctx, const string &start_obj,
-                         uint64_t max_to_get, std::set<string> *keys) {
+                         uint64_t max_to_get, std::set<string> *keys, bool *more) {
   librados::TestClassHandler::MethodContext *ctx =
     reinterpret_cast<librados::TestClassHandler::MethodContext*>(hctx);
 
   keys->clear();
   std::map<string, bufferlist> vals;
-  std::string last_key = start_obj;
-  do {
-    vals.clear();
-    int r = ctx->io_ctx_impl->omap_get_vals(ctx->oid, last_key, "", 1024,
-                                            &vals);
-    if (r < 0) {
-      return r;
-    }
+  int r = ctx->io_ctx_impl->omap_get_vals2(ctx->oid, start_obj, "", max_to_get,
+                                           &vals, more);
+  if (r < 0) {
+    return r;
+  }
 
-    for (std::map<string, bufferlist>::iterator it = vals.begin();
-        it != vals.end(); ++it) {
-      last_key = it->first;
-      keys->insert(last_key);
-    }
-  } while (!vals.empty());
+  for (std::map<string, bufferlist>::iterator it = vals.begin();
+       it != vals.end(); ++it) {
+    keys->insert(it->first);
+  }
   return keys->size();
 }
 
@@ -1203,11 +1198,11 @@ int cls_cxx_map_get_val(cls_method_context_t hctx, const string &key,
 
 int cls_cxx_map_get_vals(cls_method_context_t hctx, const string &start_obj,
                          const string &filter_prefix, uint64_t max_to_get,
-                         std::map<string, bufferlist> *vals) {
+                         std::map<string, bufferlist> *vals, bool *more) {
   librados::TestClassHandler::MethodContext *ctx =
     reinterpret_cast<librados::TestClassHandler::MethodContext*>(hctx);
-  int r = ctx->io_ctx_impl->omap_get_vals(ctx->oid, start_obj, filter_prefix,
-					  max_to_get, vals);
+  int r = ctx->io_ctx_impl->omap_get_vals2(ctx->oid, start_obj, filter_prefix,
+					  max_to_get, vals, more);
   if (r < 0) {
     return r;
   }
