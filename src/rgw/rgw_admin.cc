@@ -3521,7 +3521,6 @@ int main(int argc, const char **argv)
 	}
 	string default_zonegroup;
 	ret = zonegroup.read_default_id(default_zonegroup);
-	cout << "read_default_id : " << ret << std::endl;
 	if (ret < 0 && ret != -ENOENT) {
 	  cerr << "could not determine default zonegroup: " << cpp_strerror(-ret) << std::endl;
 	}
