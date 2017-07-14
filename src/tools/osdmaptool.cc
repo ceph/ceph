@@ -18,6 +18,7 @@
 #include "common/ceph_argparse.h"
 #include "common/errno.h"
 #include "common/safe_io.h"
+#include "mon/health_check.h"
 
 #include "global/global_init.h"
 #include "osd/OSDMap.h"
@@ -32,6 +33,7 @@ void usage()
   cout << "   --test-map-pgs [--pool <poolid>] [--pg_num <pg_num>] map all pgs" << std::endl;
   cout << "   --test-map-pgs-dump [--pool <poolid>] map all pgs" << std::endl;
   cout << "   --test-map-pgs-dump-all [--pool <poolid>] map all pgs to osds" << std::endl;
+  cout << "   --health                dump health checks" << std::endl;
   cout << "   --mark-up-in            mark osds up and in (but do not persist)" << std::endl;
   cout << "   --with-default-pool     include default pool when creating map" << std::endl;
   cout << "   --clear-temp            clear pg_temp and primary_temp" << std::endl;
@@ -121,6 +123,7 @@ int main(int argc, const char **argv)
   bool upmap_cleanup = false;
   bool upmap = false;
   bool upmap_save = false;
+  bool health = false;
   std::string upmap_file = "-";
   int upmap_max = 100;
   float upmap_deviation = .01;
@@ -164,6 +167,8 @@ int main(int argc, const char **argv)
 	exit(EXIT_FAILURE);
       }
       createsimple = true;
+    } else if (ceph_argparse_flag(args, i, "--health", (char*)NULL)) {
+      health = true;
     } else if (ceph_argparse_flag(args, i, "--with-default-pool", (char*)NULL)) {
       createpool = true;
     } else if (ceph_argparse_flag(args, i, "--create-from-conf", (char*)NULL)) {
@@ -608,7 +613,7 @@ int main(int argc, const char **argv)
     }
   }
 
-  if (!print && !tree && !modified &&
+  if (!print && !health && !tree && !modified &&
       export_crush.empty() && import_crush.empty() && 
       test_map_pg.empty() && test_map_object.empty() &&
       !test_map_pgs && !test_map_pgs_dump && !test_map_pgs_dump_all &&
@@ -620,6 +625,13 @@ int main(int argc, const char **argv)
   if (modified)
     osdmap.inc_epoch();
 
+  if (health) {
+    health_check_map_t checks;
+    osdmap.check_health(&checks);
+    JSONFormatter jf(true);
+    jf.dump_object("checks", checks);
+    jf.flush(cout);
+  }
   if (print) {
     if (print_formatter) {
       print_formatter->open_object_section("osdmap");

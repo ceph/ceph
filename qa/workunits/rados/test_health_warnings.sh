@@ -53,8 +53,25 @@ test_mark_all_but_last_osds_down() {
   wait_for_healthy
 }
 
+test_mark_two_osds_same_host_down_with_classes() {
+    ceph osd set noup
+    ceph osd crush class create ssd
+    ceph osd crush class create hdd
+    ceph osd crush set-device-class ssd osd.0 osd.2 osd.4 osd.6 osd.8
+    ceph osd crush set-device-class hdd osd.1 osd.3 osd.5 osd.7 osd.9
+    ceph osd down osd.0 osd.1
+    ceph health detail
+    ceph health | grep "1 host"
+    ceph health | grep "2 osds"
+    ceph health detail | grep "osd.0"
+    ceph health detail | grep "osd.1"
+    ceph osd unset noup
+    wait_for_healthy
+}
+
 test_mark_two_osds_same_host_down
 test_mark_two_osds_same_rack_down
 test_mark_all_but_last_osds_down
+test_mark_two_osds_same_host_down_with_classes
 
 exit 0
