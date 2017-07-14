@@ -429,7 +429,8 @@ static int clslua_map_get_keys(lua_State *L)
   int max_to_get = luaL_checkinteger(L, 2);
 
   std::set<string> keys;
-  int ret = cls_cxx_map_get_keys(hctx, start_after, max_to_get, &keys);
+  bool more;
+  int ret = cls_cxx_map_get_keys(hctx, start_after, max_to_get, &keys, &more);
   if (ret < 0)
     return clslua_opresult(L, 0, ret, 0);
 
