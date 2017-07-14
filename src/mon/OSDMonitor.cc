@@ -5597,18 +5597,20 @@ int OSDMonitor::prepare_new_pool(string& name, uint64_t auid,
     dout(10) << " prepare_pool_crush_rule returns " << r << dendl;
     return r;
   }
-  CrushWrapper newcrush;
-  _get_pending_crush(newcrush);
-  ostringstream err;
-  CrushTester tester(newcrush, err);
-  tester.set_max_x(50);
-  tester.set_rule(crush_rule);
-  r = tester.test_with_fork(g_conf->mon_lease);
-  if (r < 0) {
-    dout(10) << " tester.test_with_fork returns " << r
-	     << ": " << err.str() << dendl;
-    *ss << "crush test failed with " << r << ": " << err.str();
-    return r;
+  if (g_conf->mon_osd_crush_smoke_test) {
+    CrushWrapper newcrush;
+    _get_pending_crush(newcrush);
+    ostringstream err;
+    CrushTester tester(newcrush, err);
+    tester.set_max_x(50);
+    tester.set_rule(crush_rule);
+    r = tester.test_with_fork(g_conf->mon_lease);
+    if (r < 0) {
+      dout(10) << " tester.test_with_fork returns " << r
+	       << ": " << err.str() << dendl;
+      *ss << "crush test failed with " << r << ": " << err.str();
+      return r;
+    }
   }
   unsigned size, min_size;
   r = prepare_pool_size(pool_type, erasure_code_profile, &size, &min_size, ss);
@@ -7005,21 +7007,23 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       }
     }
 
-    // sanity check: test some inputs to make sure this map isn't totally broken
-    dout(10) << " testing map" << dendl;
-    stringstream ess;
-    CrushTester tester(crush, ess);
-    tester.set_max_x(50);
-    int r = tester.test_with_fork(g_conf->mon_lease);
-    if (r < 0) {
-      dout(10) << " tester.test_with_fork returns " << r
-	       << ": " << ess.str() << dendl;
-      ss << "crush smoke test failed with " << r << ": " << ess.str();
-      err = r;
-      goto reply;
+    if (g_conf->mon_osd_crush_smoke_test) {
+      // sanity check: test some inputs to make sure this map isn't
+      // totally broken
+      dout(10) << " testing map" << dendl;
+      stringstream ess;
+      CrushTester tester(crush, ess);
+      tester.set_max_x(50);
+      int r = tester.test_with_fork(g_conf->mon_lease);
+      if (r < 0) {
+	dout(10) << " tester.test_with_fork returns " << r
+		 << ": " << ess.str() << dendl;
+	ss << "crush smoke test failed with " << r << ": " << ess.str();
+	err = r;
+	goto reply;
+      }
+      dout(10) << " crush test result " << ess.str() << dendl;
     }
-
-    dout(10) << " result " << ess.str() << dendl;
 
     pending_inc.crush = data;
     ss << osdmap.get_crush_version() + 1;

@@ -395,6 +395,7 @@ OPTION(mon_keyvaluedb, OPT_STR, "rocksdb")   // type of keyvaluedb backend
 // UNSAFE -- TESTING ONLY! Allows addition of a cache tier with preexisting snaps
 OPTION(mon_debug_unsafe_allow_tier_with_nonempty_snaps, OPT_BOOL, false)
 OPTION(mon_osd_blacklist_default_expire, OPT_DOUBLE, 60*60) // default one hour
+OPTION(mon_osd_crush_smoke_test, OPT_BOOL, true)
 
 OPTION(paxos_stash_full_interval, OPT_INT, 25)   // how often (in commits) to stash a full copy of the PaxosService state
 OPTION(paxos_max_join_drift, OPT_INT, 10) // max paxos iterations before we must first sync the monitor stores
