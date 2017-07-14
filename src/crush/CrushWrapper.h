@@ -51,6 +51,13 @@ inline static void decode(crush_rule_step &s, bufferlist::iterator &p)
 using namespace std;
 class CrushWrapper {
 public:
+  // magic value used by OSDMap for a "default" fallback choose_args, used if
+  // the choose_arg_map passed to do_rule does not exist.  if this also
+  // doesn't exist, fall back to canonical weights.
+  enum {
+    DEFAULT_CHOOSE_ARGS = -1
+  };
+
   std::map<int32_t, string> type_map; /* bucket/device type names */
   std::map<int32_t, string> name_map; /* bucket/device names */
   std::map<int32_t, string> rule_name_map;
@@ -58,7 +65,7 @@ public:
   std::map<int32_t, string> class_name; /* class id -> class name */
   std::map<string, int32_t> class_rname; /* class name -> class id */
   std::map<int32_t, map<int32_t, int32_t> > class_bucket; /* bucket[id][class] == id */
-  std::map<uint64_t, crush_choose_arg_map> choose_args;
+  std::map<int64_t, crush_choose_arg_map> choose_args;
 
 private:
   struct crush_map *crush;
@@ -1326,6 +1333,21 @@ public:
     return choose_args.count(choose_args_index);
   }
 
+  crush_choose_arg_map choose_args_get_with_fallback(
+    uint64_t choose_args_index) const {
+    auto i = choose_args.find(choose_args_index);
+    if (i == choose_args.end()) {
+      i = choose_args.find(DEFAULT_CHOOSE_ARGS);
+    }
+    if (i == choose_args.end()) {
+      crush_choose_arg_map arg_map;
+      arg_map.args = NULL;
+      arg_map.size = 0;
+      return arg_map;
+    } else {
+      return i->second;
+    }
+  }
   crush_choose_arg_map choose_args_get(uint64_t choose_args_index) const {
     auto i = choose_args.find(choose_args_index);
     if (i == choose_args.end()) {
@@ -1366,7 +1388,8 @@ public:
     int rawout[maxout];
     char work[crush_work_size(crush, maxout)];
     crush_init_workspace(crush, work);
-    crush_choose_arg_map arg_map = choose_args_get(choose_args_index);
+    crush_choose_arg_map arg_map = choose_args_get_with_fallback(
+      choose_args_index);
     int numrep = crush_do_rule(crush, rule, x, rawout, maxout, &weight[0],
 			       weight.size(), work, arg_map.args);
     if (numrep < 0)

@@ -187,6 +187,8 @@ bool CrushWrapper::has_incompat_choose_args() const
     return false;
   if (choose_args.size() > 1)
     return true;
+  if (choose_args.begin()->first != DEFAULT_CHOOSE_ARGS)
+    return true;
   crush_choose_arg_map arg_map = choose_args.begin()->second;
   for (__u32 i = 0; i < arg_map.size; i++) {
     crush_choose_arg *arg = &arg_map.args[i];
@@ -1843,6 +1845,7 @@ void CrushWrapper::encode(bufferlist& bl, uint64_t features) const
     ::encode(class_name, bl);
     ::encode(class_bucket, bl);
 
+    // choose args
     __u32 size = (__u32)choose_args.size();
     ::encode(size, bl);
     for (auto c : choose_args) {
