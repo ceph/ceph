@@ -80,20 +80,21 @@ class CephDisk:
             stderr=subprocess.STDOUT,
             shell=True,
             bufsize=1)
-        lines = []
-        with proc.stdout:
-            for line in iter(proc.stdout.readline, b''):
-                line = line.decode('utf-8')
-                if 'dangerous and experimental' in line:
-                    LOG.debug('SKIP dangerous and experimental')
-                    continue
-                lines.append(line)
-                LOG.debug(line.strip().encode('ascii', 'ignore'))
-        if proc.wait() != 0:
+        output, _ = proc.communicate()
+        if proc.poll():
+            LOG.warning(output.decode('utf-8'))
             raise subprocess.CalledProcessError(
                 returncode=proc.returncode,
-                cmd=command
+                cmd=command,
+                output=output,
             )
+        lines = []
+        for line in output.decode('utf-8').split('\n'):
+            if 'dangerous and experimental' in line:
+                LOG.debug('SKIP dangerous and experimental')
+                continue
+            lines.append(line)
+            LOG.debug(line.strip().encode('ascii', 'ignore'))
         return "".join(lines)
 
     def unused_disks(self, pattern='[vs]d.'):
