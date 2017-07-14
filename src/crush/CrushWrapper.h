@@ -1234,17 +1234,7 @@ public:
 
   /* modifiers */
   int add_bucket(int bucketno, int alg, int hash, int type, int size,
-		 int *items, int *weights, int *idout) {
-    if (alg == 0) {
-      alg = get_default_bucket_alg();
-      if (alg == 0)
-	return -EINVAL;
-    }
-    crush_bucket *b = crush_make_bucket(crush, alg, hash, type, size, items, weights);
-    assert(b);
-    return crush_add_bucket(crush, bucketno, b, idout);
-  }
-
+		 int *items, int *weights, int *idout);
   int bucket_add_item(crush_bucket *bucket, int item, int weight);
   int bucket_remove_item(struct crush_bucket *bucket, int item);
   int bucket_adjust_item_weight(CephContext *cct, struct crush_bucket *bucket, int item, int weight);

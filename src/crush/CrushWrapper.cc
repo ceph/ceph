@@ -1585,6 +1585,53 @@ int CrushWrapper::bucket_adjust_item_weight(CephContext *cct, crush_bucket *buck
   return crush_bucket_adjust_item_weight(crush, bucket, item, weight);
 }
 
+int CrushWrapper::add_bucket(
+  int bucketno, int alg, int hash, int type, int size,
+  int *items, int *weights, int *idout)
+{
+  if (alg == 0) {
+    alg = get_default_bucket_alg();
+    if (alg == 0)
+      return -EINVAL;
+  }
+  crush_bucket *b = crush_make_bucket(crush, alg, hash, type, size, items,
+				      weights);
+  assert(b);
+  int r = crush_add_bucket(crush, bucketno, b, idout);
+  for (auto& p : choose_args) {
+    crush_choose_arg_map& cmap = p.second;
+    if (cmap.args) {
+      if ((int)cmap.size <= *idout) {
+	cmap.args = (crush_choose_arg*)realloc(
+	  cmap.args,
+	  sizeof(crush_choose_arg) * (*idout + 1));
+	memset(&cmap.args[cmap.size], 0,
+	       sizeof(crush_choose_arg) * (*idout + 1 - cmap.size));
+	cmap.size = *idout + 1;
+      }
+    } else {
+      cmap.args = (crush_choose_arg*)calloc(sizeof(crush_choose_arg),
+					    *idout + 1);
+      cmap.size = *idout + 1;
+    }
+    if (size > 0) {
+      int positions = get_choose_args_positions(cmap);
+      crush_choose_arg& carg = cmap.args[*idout];
+      carg.weight_set = (crush_weight_set*)calloc(sizeof(crush_weight_set),
+						  size);
+      carg.weight_set_size = positions;
+      for (int ppos = 0; ppos < positions; ++ppos) {
+	carg.weight_set[ppos].weights = (__u32*)calloc(sizeof(__u32), size);
+	carg.weight_set[ppos].size = size;
+	for (int bpos = 0; bpos < size; ++bpos) {
+	  carg.weight_set[ppos].weights[bpos] = weights[bpos];
+	}
+      }
+    }
+  }
+  return r;
+}
+
 int CrushWrapper::bucket_add_item(crush_bucket *bucket, int item, int weight)
 {
   __u32 new_size = bucket->size + 1;
