@@ -4,6 +4,7 @@
 #include <boost/algorithm/string.hpp>
 
 #include "PGMap.h"
+#include <cmath>
 
 #define dout_subsys ceph_subsys_mon
 #include "common/debug.h"
@@ -4526,6 +4527,11 @@ int reweight::by_utilization(
     oss << "overload_utilization " << overload_util << "\n";
   }
   int num_changed = 0;
+  unsigned int sum_weights = 0;
+
+  // a measure of how uneven the data distribution is
+  // and hence how urgently reweighting is needed.
+  double reweight_urgency = 0.0;
 
   // precompute util for each OSD
   std::vector<std::pair<int, float> > util_by_osd;
@@ -4550,7 +4556,40 @@ int reweight::by_utilization(
       osd_util.second = (double)p.second.kb_used / (double)p.second.kb;
     }
     util_by_osd.push_back(osd_util);
+
+    // Overweighted devices and their weights are factors to
+    // calculate reweight_urgency. One 10% underfilled device
+    // with 5 2% overfilled devices, is arguably a better
+    // situation than one 10% overfilled with 5 2% underfilled devices
+
+    if ( osd_util.second >= average_util){
+      unsigned weight = osdmap.get_weight(p.first);
+      sum_weights += weight;
+
+      /*
+       Have a function F(x), where x = (osd_util.second -
+       average_util) / average_util, which is bounded between 0 and 1, so
+       that ultimately reweight_urgency will also be bounded. A larger value
+       of x, should imply more urgency to reweight. Also, the difference
+       between F(x) when x is large, should be minimal. The value of F(x)
+       should get close to 1 (highest urgency to reweight) with steeply.
+       Could have used F(x) = (1 - e^(-x)). But that had slower
+       convergence to 1, compared to the function currently in use.
+      */
+
+      // cdf of normal distribution:https://stackoverflow.com/a/18786808
+      reweight_urgency +=
+	weight * (erfc(-((osd_util.second - average_util)/average_util) * M_SQRT1_2)-1);
+    }
   }
+
+  reweight_urgency /= (sum_weights > 0 ? sum_weights : 1);
+  reweight_urgency *= 100;
+
+  if (f)
+    f->dump_float("reweight_urgency (0-100): ", reweight_urgency);
+  else
+    oss << "reweight_urgency (0-100): " << reweight_urgency << "\n";
 
   // sort by absolute deviation from the mean utilization,
   // in descending order.
@@ -4569,8 +4608,8 @@ int reweight::by_utilization(
       // skip if OSD is currently out
       continue;
     }
-    float util = p.second;
 
+    float util = p.second;
     if (util >= overload_util) {
       // Assign a lower weight to overloaded OSDs. The current weight
       // is a factor to take into account the original weights,

@@ -819,12 +819,17 @@ bool DaemonServer::handle_command(MCommand *m)
   } else if (prefix == "osd reweight-by-pg" ||
 	     prefix == "osd reweight-by-utilization" ||
 	     prefix == "osd test-reweight-by-pg" ||
-	     prefix == "osd test-reweight-by-utilization") {
+	     prefix == "osd test-reweight-by-utilization" ||
+	     prefix == "osd analyze-reweight-by-pg" ||
+	     prefix == "osd analyze-reweight-by-utilization") {
     bool by_pg =
       prefix == "osd reweight-by-pg" || prefix == "osd test-reweight-by-pg";
     bool dry_run =
       prefix == "osd test-reweight-by-pg" ||
       prefix == "osd test-reweight-by-utilization";
+    bool analyze =
+      prefix == "osd analyze-reweight-by-pg" ||
+      prefix == "osd analyze-reweight-by-utilization";
     int64_t oload;
     cmd_getval(g_ceph_context, cmdctx->cmdmap, "oload", oload, int64_t(120));
     set<int64_t> pools;
@@ -891,7 +896,11 @@ bool DaemonServer::handle_command(MCommand *m)
       ss << "no change";
       cmdctx->reply(r, ss);
       return true;
-    } else {
+    } else if(analyze){
+      ss << "Analysis (no change):";
+      cmdctx->reply(r, ss);
+      return true;
+    }else {
       json_spirit::Object json_object;
       for (const auto& osd_weight : new_weights) {
 	json_spirit::Config::add(json_object,
