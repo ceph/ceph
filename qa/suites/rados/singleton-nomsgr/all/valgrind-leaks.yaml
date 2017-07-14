@@ -16,6 +16,8 @@ overrides:
         debug deliberately leak memory: true
         osd max object name len: 460
         osd max object namespace len: 64
+      mon:
+        mon osd crush smoke test: false
     valgrind:
       mon: [--tool=memcheck, --leak-check=full, --show-reachable=yes]
       osd: [--tool=memcheck]
