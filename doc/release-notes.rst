@@ -214,7 +214,7 @@ Major Changes from Kraken
       fails if clients older than the specified release are currently
       connected to the cluster.
     - ``ceph config-key dump`` dumps config-key entries and their
-      contents.  (The exist ``ceph config-key ls`` only dumps the key
+      contents.  (The existing ``ceph config-key list`` only dumps the key
       names, not the values.)
     - ``ceph osd set-{full,nearfull,backfillfull}-ratio`` sets the
       cluster-wide ratio for various full thresholds (when the cluster
