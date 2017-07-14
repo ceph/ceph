@@ -58,8 +58,8 @@ choose_args 0 {
   {
     bucket_id -1
     weight_set [
-      [ 6.000 ]
-      [ 7.000 ]
+      [ 2.000 ]
+      [ 1.000 ]
     ]
     ids [ -10 ]
   }
@@ -67,7 +67,7 @@ choose_args 0 {
     bucket_id -2
     weight_set [
       [ 2.000 0.000 ]
-      [ 2.000 0.000 ]
+      [ 1.000 0.000 ]
     ]
     ids [ -20 1 ]
   }
