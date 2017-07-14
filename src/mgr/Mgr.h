@@ -29,6 +29,7 @@
 #include "auth/Auth.h"
 #include "common/Finisher.h"
 #include "common/Timer.h"
+#include "mon/MgrMap.h"
 
 #include "DaemonServer.h"
 #include "PyModules.h"

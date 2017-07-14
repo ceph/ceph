@@ -599,7 +599,9 @@ bool Mgr::got_mgr_map(const MgrMap& m)
 	 << dendl;
     return true;
   }
+
   cluster_state.set_mgr_map(m);
+
   return false;
 }
 

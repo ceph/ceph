@@ -121,18 +121,18 @@
                                         },
                                     ]
                                 },
-                                options:{
-                                    legend: {
-                                        position: 'right',
-                                        display: top_chart
-                                    }
-                                },
                                 options: {
+                                    legend: {
+                                        position: 'top',
+                                        display: top_chart,
+                                        labels:{fontColor: "#ddd"}
+                                    },
                                     scales: {
                                         xAxes: [{
                                             position: 'top',
                                             type: 'time',
                                             display: top_chart,
+                                            ticks: {fontColor:"#ddd"},
                                             time: {
                                                 displayFormats: {
                                                     quarter: 'MMM YYYY'
@@ -143,11 +143,13 @@
                                             id: 'LHS',
                                             type: 'linear',
                                             position: 'left',
+                                            ticks: {fontColor:"#ddd"},
                                             min: 0
                                         }, {
                                             id: 'RHS',
                                             type: 'linear',
                                             position: 'right',
+                                            ticks: {fontColor:"#ddd"},
                                             min: 0
                                         }]
                                     }
@@ -281,7 +283,7 @@
         </div>
     </div>
 
-    <div id="mds_charts">
+    <div id="mds_charts" style="color: #ddd;">
     </div>
 
 </section>

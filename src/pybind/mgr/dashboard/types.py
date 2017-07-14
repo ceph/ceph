@@ -179,6 +179,13 @@ class OsdMap(DataWrapper):
 class FsMap(DataWrapper):
     str = 'fs_map'
 
+    def get_filesystem(self, fscid):
+        for fs in self.data['filesystems']:
+            if fs['id'] == fscid:
+                return fs
+
+        raise NotFound("filesystem", fscid)
+
 
 class MonMap(DataWrapper):
     str = 'mon_map'
