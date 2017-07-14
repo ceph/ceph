@@ -8,9 +8,44 @@ from teuthology import misc as teuthology
 from teuthology import contextutil
 from teuthology.orchestra import run
 from teuthology.orchestra.connection import split_user
+from teuthology.packaging import install_package
+from teuthology.packaging import remove_package
 
 log = logging.getLogger(__name__)
 
+
+@contextlib.contextmanager
+def install_packages(ctx, config):
+    """
+    Download the packaged dependencies of Keystone.
+    Remove install packages upon exit.
+
+    The context passed in should be identical to the context
+    passed in to the main task.
+    """
+    assert isinstance(config, dict)
+    log.info('Installing packages for Keystone...')
+
+    deps = [
+        'libffi-dev',
+        'libssl-dev',
+        'libldap2-dev',
+        'libsasl2-dev',
+        'python-openstackclient'
+    ]
+    for (client, _) in config.items():
+        (remote,) = ctx.cluster.only(client).remotes.iterkeys()
+        for pkgname in deps:
+            install_package(pkgname, remote)
+    try:
+        yield
+    finally:
+        log.info('Removing packaged dependencies of Keystone...')
+
+        for (client, _) in config.items():
+            (remote,) = ctx.cluster.only(client).remotes.iterkeys()
+            for pkgname in deps:
+                remove_package(pkgname, remote)
 
 @contextlib.contextmanager
 def download(ctx, config):
@@ -314,6 +349,7 @@ def task(ctx, config):
     log.debug('Keystone config is %s', config)
 
     with contextutil.nested(
+        lambda: install_packages(ctx=ctx, config=config),
         lambda: download(ctx=ctx, config=config),
         lambda: setup_venv(ctx=ctx, config=config),
         lambda: configure_instance(ctx=ctx, config=config),
