@@ -827,8 +827,9 @@ int CrushWrapper::get_leaves(const string &name, set<int> *leaves)
   return 0;
 }
 
-int CrushWrapper::insert_item(CephContext *cct, int item, float weight, string name,
-			      const map<string,string>& loc)  // typename -> bucketname
+int CrushWrapper::insert_item(
+  CephContext *cct, int item, float weight, string name,
+  const map<string,string>& loc)  // typename -> bucketname
 {
   ldout(cct, 5) << "insert_item item " << item << " weight " << weight
 		<< " name " << name << " loc " << loc << dendl;
@@ -856,9 +857,10 @@ int CrushWrapper::insert_item(CephContext *cct, int item, float weight, string n
 
   int cur = item;
 
-  // create locations if locations don't exist and add child in location with 0 weight
-  // the more detail in the insert_item method declaration in CrushWrapper.h
-  for (map<int,string>::iterator p = type_map.begin(); p != type_map.end(); ++p) {
+  // create locations if locations don't exist and add child in
+  // location with 0 weight the more detail in the insert_item method
+  // declaration in CrushWrapper.h
+  for (auto p = type_map.begin(); p != type_map.end(); ++p) {
     // ignore device type
     if (p->first == 0)
       continue;
@@ -866,7 +868,8 @@ int CrushWrapper::insert_item(CephContext *cct, int item, float weight, string n
     // skip types that are unspecified
     map<string,string>::const_iterator q = loc.find(p->second);
     if (q == loc.end()) {
-      ldout(cct, 2) << "warning: did not specify location for '" << p->second << "' level (levels are "
+      ldout(cct, 2) << "warning: did not specify location for '"
+		    << p->second << "' level (levels are "
 		    << type_map << ")" << dendl;
       continue;
     }
@@ -877,7 +880,8 @@ int CrushWrapper::insert_item(CephContext *cct, int item, float weight, string n
       int r = add_bucket(0, 0,
 			 CRUSH_HASH_DEFAULT, p->first, 1, &cur, &empty, &newid);
       if (r < 0) {
-        ldout(cct, 1) << "add_bucket failure error: " << cpp_strerror(r) << dendl;
+        ldout(cct, 1) << "add_bucket failure error: " << cpp_strerror(r)
+		      << dendl;
         return r;
       }
       set_item_name(newid, q->second);
@@ -895,7 +899,8 @@ int CrushWrapper::insert_item(CephContext *cct, int item, float weight, string n
 
     // check that we aren't creating a cycle.
     if (subtree_contains(id, cur)) {
-      ldout(cct, 1) << "insert_item item " << cur << " already exists beneath " << id << dendl;
+      ldout(cct, 1) << "insert_item item " << cur << " already exists beneath "
+		    << id << dendl;
       return -EINVAL;
     }
 
@@ -924,15 +929,17 @@ int CrushWrapper::insert_item(CephContext *cct, int item, float weight, string n
   }
 
   // adjust the item's weight in location
-  if(adjust_item_weightf_in_loc(cct, item, weight, loc) > 0) {
+  if (adjust_item_weightf_in_loc(cct, item, weight, loc) > 0) {
     if (item >= crush->max_devices) {
       crush->max_devices = item + 1;
-      ldout(cct, 5) << "insert_item max_devices now " << crush->max_devices << dendl;
+      ldout(cct, 5) << "insert_item max_devices now " << crush->max_devices
+		    << dendl;
     }
     return 0;
   }
 
-  ldout(cct, 1) << "error: didn't find anywhere to add item " << item << " in " << loc << dendl;
+  ldout(cct, 1) << "error: didn't find anywhere to add item " << item
+		<< " in " << loc << dendl;
   return -EINVAL;
 }
 
