@@ -329,6 +329,11 @@ def build_ceph_cluster(ctx, config):
                 if estatus != 0:
                     raise RuntimeError("ceph-deploy: Failed to zap osds")
             osd_create_cmd = './ceph-deploy osd create '
+            # first check for filestore, default is bluestore with ceph-deploy
+            if config.get('filestore') is not None:
+                osd_create_cmd += '--filestore '
+            else:
+                osd_create_cmd += '--bluestore '
             if config.get('dmcrypt') is not None:
                 osd_create_cmd += '--dmcrypt '
             osd_create_cmd += ":".join(d)
@@ -689,6 +694,10 @@ def task(ctx, config):
              mon_initial_members: 1
              only_mon: true
              keep_running: true
+             # either choose bluestore or filestore, default is bluestore
+             bluestore: True
+             # or
+             filestore: True
 
         tasks:
         - install:
