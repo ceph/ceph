@@ -4683,6 +4683,23 @@ Notable Changes
 * test: ceph_test_rados_api_tmap_migrate: remove test for tmap_upgrade (`pr#10234 <http://github.com/ceph/ceph/pull/10234>`_, Kefu Chai)
 
 
+v10.2.9 Jewel
+=============
+
+This point release fixes a regression introduced in v10.2.8.
+
+We recommend that all Jewel users upgrade.
+
+For more detailed information, see :download:`the complete changelog <changelog/v10.2.9.txt>`.
+
+
+Notable Changes
+---------------
+
+* cephfs: Damaged MDS with 10.2.8 (`issue#20599 <http://tracker.ceph.com/issues/20599>`_, `pr#16282 <https://github.com/ceph/ceph/pull/16282>`_, Nathan Cutler)
+
+
+
 v10.2.8 Jewel
 =============
 
