@@ -288,8 +288,14 @@ void MgrStandby::handle_mgr_map(MMgrMap* mmap)
       dout(1) << "Activating!" << dendl;
       active_mgr.reset(new Mgr(&monc, map, client_messenger.get(), &objecter,
 			       &client, clog, audit_clog));
-      active_mgr->background_init();
-      dout(1) << "I am now active" << dendl;
+      active_mgr->background_init(new FunctionContext(
+            [this](int r){
+              // Advertise our active-ness ASAP instead of waiting for
+              // next tick.
+              Mutex::Locker l(lock);
+              send_beacon();
+            }));
+      dout(1) << "I am now activating" << dendl;
     } else {
       dout(10) << "I was already active" << dendl;
       bool need_respawn = active_mgr->got_mgr_map(map);
