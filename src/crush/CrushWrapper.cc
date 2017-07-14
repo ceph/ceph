@@ -496,7 +496,8 @@ bool CrushWrapper::_bucket_is_in_use(int item)
   return false;
 }
 
-int CrushWrapper::_remove_item_under(CephContext *cct, int item, int ancestor, bool unlink_only)
+int CrushWrapper::_remove_item_under(
+  CephContext *cct, int item, int ancestor, bool unlink_only)
 {
   ldout(cct, 5) << "_remove_item_under " << item << " under " << ancestor
 		<< (unlink_only ? " unlink_only":"") << dendl;
@@ -514,7 +515,8 @@ int CrushWrapper::_remove_item_under(CephContext *cct, int item, int ancestor, b
   for (unsigned i=0; i<b->size; ++i) {
     int id = b->items[i];
     if (id == item) {
-      ldout(cct, 5) << "_remove_item_under removing item " << item << " from bucket " << b->id << dendl;
+      ldout(cct, 5) << "_remove_item_under removing item " << item
+		    << " from bucket " << b->id << dendl;
       bucket_remove_item(b, item);
       adjust_item_weight(cct, b->id, b->weight);
       ret = 0;
@@ -527,7 +529,8 @@ int CrushWrapper::_remove_item_under(CephContext *cct, int item, int ancestor, b
   return ret;
 }
 
-int CrushWrapper::remove_item_under(CephContext *cct, int item, int ancestor, bool unlink_only)
+int CrushWrapper::remove_item_under(
+  CephContext *cct, int item, int ancestor, bool unlink_only)
 {
   ldout(cct, 5) << "remove_item_under " << item << " under " << ancestor
 		<< (unlink_only ? " unlink_only":"") << dendl;
