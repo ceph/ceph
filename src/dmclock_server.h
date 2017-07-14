@@ -50,8 +50,6 @@
 #include "profile.h"
 #endif
 
-#include "gtest/gtest_prod.h"
-
 
 namespace crimson {
 
@@ -235,7 +233,8 @@ namespace crimson {
     // branching factor
     template<typename C, typename R, uint B>
     class PriorityQueueBase {
-      FRIEND_TEST(dmclock_server, client_idle_erase);
+      // we don't want to include gtest.h just for FRIEND_TEST
+      friend class dmclock_server_client_idle_erase_Test;
 
     public:
 

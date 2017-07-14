@@ -6,8 +6,11 @@ set(CMAKE_CXX_FLAGS
   "${CMAKE_CXX_FLAGS} -std=c++11 -Wno-write-strings -Wall -pthread")
 
 if (NOT(TARGET gtest AND TARGET gtest_main))
-  if(NOT(GTEST_FOUND))
-    find_package(GTest REQUIRED)
+  if (NOT GTEST_FOUND)
+    find_package(GTest QUIET)
+    if (NOT GTEST_FOUND)
+      include(BuildGTest)
+    endif()
   endif()
 endif()
 
