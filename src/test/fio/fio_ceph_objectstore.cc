@@ -17,6 +17,7 @@
 #include "common/errno.h"
 #include "include/intarith.h"
 #include "include/stringify.h"
+#include "common/perf_counters.h"
 
 #include <fio.h>
 #include <optgroup.h>
@@ -86,7 +87,7 @@ struct Engine {
     if (!ref_count) {
       ostringstream ostr;
       Formatter* f = Formatter::create("json-pretty", "json-pretty", "json-pretty");
-      os->dump_perf_counters(f);
+      cct->get_perfcounters_collection()->dump_formatted(f, false);
       ostr << "FIO plugin ";
       f->flush(ostr);
       if (g_conf->rocksdb_perf) {
