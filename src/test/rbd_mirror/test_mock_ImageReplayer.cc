@@ -152,6 +152,10 @@ struct BootstrapRequest<librbd::MockTestImageCtx> {
   void get() {
   }
 
+  inline bool is_syncing() const {
+    return false;
+  }
+
   MOCK_METHOD0(send, void());
   MOCK_METHOD0(cancel, void());
 };
@@ -500,6 +504,8 @@ TEST_F(TestMockImageReplayer, StartStop) {
   C_SaferCond start_ctx;
   m_image_replayer->start(&start_ctx);
   ASSERT_EQ(0, start_ctx.wait());
+  ASSERT_EQ(image_replayer::HEALTH_STATE_OK,
+            m_image_replayer->get_health_state());
 
   // STOP
 
@@ -517,6 +523,8 @@ TEST_F(TestMockImageReplayer, StartStop) {
   C_SaferCond stop_ctx;
   m_image_replayer->stop(&stop_ctx);
   ASSERT_EQ(0, stop_ctx.wait());
+  ASSERT_EQ(image_replayer::HEALTH_STATE_OK,
+            m_image_replayer->get_health_state());
 }
 
 TEST_F(TestMockImageReplayer, LocalImagePrimary) {
@@ -663,6 +671,8 @@ TEST_F(TestMockImageReplayer, StartExternalReplayError) {
   C_SaferCond start_ctx;
   m_image_replayer->start(&start_ctx);
   ASSERT_EQ(-EINVAL, start_ctx.wait());
+  ASSERT_EQ(image_replayer::HEALTH_STATE_ERROR,
+            m_image_replayer->get_health_state());
 }
 
 TEST_F(TestMockImageReplayer, StopError) {
