@@ -198,6 +198,7 @@
      --endpoints=<list>        zone endpoints
      --index-pool=<pool>       placement target index pool
      --data-pool=<pool>        placement target data pool
+     --data-tail-pool=<pool>   placement target data tail pool
      --data-extra-pool=<pool>  placement target data extra (non-ec) pool
      --placement-index-type=<type>
                                placement target index type (normal, indexless, or #id)
