@@ -196,13 +196,13 @@ const std::vector<Option> ceph_options = {
   .add_see_also("lockdep"),
 
   Option("run_dir", Option::TYPE_STR, Option::LEVEL_ADVANCED)
-  .set_daemon_default("/var/run/ceph")
+  .set_default("/var/run/ceph")
   .set_description("path for the 'run' directory for storing pid and socket files")
   .add_service("common")
   .add_see_also("admin_socket"),
 
   Option("admin_socket", Option::TYPE_STR, Option::LEVEL_ADVANCED)
-  .set_daemon_default("$run_dir/$cluster-$name.asok")
+  .set_default("$run_dir/$cluster-$name.asok")
   .set_description("path for the runtime control socket file, used by the 'ceph daemon' command")
   .add_service("common"),
 
@@ -218,7 +218,6 @@ const std::vector<Option> ceph_options = {
   // daemon
   Option("daemonize", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
   .set_default(false)
-  .set_daemon_default(true)
   .set_description("whether to daemonize (background) after startup")
   .add_service("mon mgr osd mds")
   .add_tag("service")
@@ -279,7 +278,7 @@ const std::vector<Option> ceph_options = {
 
   // logging
   Option("log_file", Option::TYPE_STR, Option::LEVEL_BASIC)
-  .set_daemon_default("/var/log/ceph/$cluster-$name.log")
+  .set_default("/var/log/ceph/$cluster-$name.log")
   .set_description("path to log file")
   .add_see_also("log_to_stderr")
   .add_see_also("err_to_stderr")
@@ -292,18 +291,15 @@ const std::vector<Option> ceph_options = {
   .add_see_also("log_max_recent"),
 
   Option("log_max_recent", Option::TYPE_INT, Option::LEVEL_ADVANCED)
-  .set_daemon_default(10000)
-  .set_default(500)
+  .set_default(10000)
   .set_description("recent log entries to keep in memory to dump in the event of a crash")
   .set_long_description("The purpose of this option is to log at a higher debug level only to the in-memory buffer, and write out the detailed log messages only if there is a crash.  Only log entries below the lower log level will be written unconditionally to the log.  For example, debug_osd=1/5 will write everything <= 1 to the log unconditionally but keep entries at levels 2-5 in memory.  If there is a seg fault or assertion failure, all entries will be dumped to the log."),
 
   Option("log_to_stderr", Option::TYPE_BOOL, Option::LEVEL_BASIC)
-  .set_daemon_default(false)
   .set_default(true)
   .set_description("send log lines to stderr"),
 
   Option("err_to_stderr", Option::TYPE_BOOL, Option::LEVEL_BASIC)
-  .set_daemon_default(true)
   .set_default(false)
   .set_description("send critical error log lines to stderr"),
 
@@ -316,7 +312,6 @@ const std::vector<Option> ceph_options = {
   .set_description("send critical error log lines to syslog facility"),
 
   Option("log_flush_on_exit", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
-  .set_daemon_default(true)
   .set_default(false)
   .set_description("set a process exit handler to ensure the log is flushed on exit"),
 
