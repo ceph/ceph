@@ -1640,7 +1640,8 @@ int CrushWrapper::bucket_add_item(crush_bucket *bucket, int item, int weight)
     crush_choose_arg *arg = &arg_map.args[-1-bucket->id];
     for (__u32 j = 0; j < arg->weight_set_size; j++) {
       crush_weight_set *weight_set = &arg->weight_set[j];
-      weight_set->weights = (__u32*)realloc(weight_set->weights, new_size * sizeof(__u32));
+      weight_set->weights = (__u32*)realloc(weight_set->weights,
+					    new_size * sizeof(__u32));
       assert(weight_set->size + 1 == new_size);
       weight_set->weights[weight_set->size] = weight;
       weight_set->size = new_size;
