@@ -4,7 +4,6 @@
 #include "librbd/cache/file/StupidPolicy.h"
 #include "common/dout.h"
 #include "librbd/ImageCtx.h"
-#include "librbd/cache/BlockGuard.h"
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
@@ -16,15 +15,19 @@ namespace cache {
 namespace file {
 
 template <typename I>
-StupidPolicy<I>::StupidPolicy(I &image_ctx, BlockGuard &block_guard)
-  : m_image_ctx(image_ctx), m_block_guard(block_guard),
+StupidPolicy<I>::StupidPolicy(I &image_ctx)
+  : m_image_ctx(image_ctx),
     m_lock("librbd::cache::file::StupidPolicy::m_lock") {
 
+  set_block_count(offset_to_block(image_ctx.size));
   // TODO support resizing of entries based on number of provisioned blocks
-  m_entries.resize(262144); // 1GB of storage
+  m_entries.resize(offset_to_block(image_ctx.ssd_cache_size < m_image_ctx.size?image_ctx.ssd_cache_size:m_image_ctx.size)); // 1GB of storage
+  uint64_t block_id = 0;
   for (auto &entry : m_entries) {
+    entry.on_disk_id = block_id++;
     m_free_lru.insert_tail(&entry);
   }
+  m_block_map = new BlockMap(m_block_count);
 }
 
 template <typename I>
@@ -35,159 +38,185 @@ void StupidPolicy<I>::set_block_count(uint64_t block_count) {
   // TODO ensure all entries are in-bound
   Mutex::Locker locker(m_lock);
   m_block_count = block_count;
-
 }
 
 template <typename I>
 int StupidPolicy<I>::invalidate(uint64_t block) {
   CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 20) << "block=" << block << dendl;
+  ldout(cct, 1) << "block=" << block << dendl;
 
   // TODO handle case where block is in prison (shouldn't be possible
   // if core properly registered blocks)
 
   Mutex::Locker locker(m_lock);
-  auto entry_it = m_block_to_entries.find(block);
-  if (entry_it == m_block_to_entries.end()) {
-    return 0;
+  Block* block_info = m_block_map->find_block(block);
+  assert(block_info != nullptr);
+  Entry *entry = block_info->entry;
+  block_info->status = NOT_IN_CACHE;
+
+  if (entry != nullptr) {
+    m_clean_lru.remove(entry);
+    m_free_lru.insert_tail(entry);
   }
 
-  Entry *entry = entry_it->second;
-  m_block_to_entries.erase(entry_it);
-
-  LRUList *lru;
-  if (entry->dirty) {
-    lru = &m_dirty_lru;
-  } else {
-    lru = &m_clean_lru;
-  }
-  lru->remove(entry);
-
-  m_free_lru.insert_tail(entry);
   return 0;
 }
 
 template <typename I>
-bool StupidPolicy<I>::contains_dirty() const {
-  Mutex::Locker locker(m_lock);
-  return m_dirty_lru.get_tail() != nullptr;
-}
-
-template <typename I>
-bool StupidPolicy<I>::is_dirty(uint64_t block) const {
-  Mutex::Locker locker(m_lock);
-  auto entry_it = m_block_to_entries.find(block);
-  assert(entry_it != m_block_to_entries.end());
-
-  bool dirty = entry_it->second->dirty;
-
-  CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 20) << "block=" << block << ", "
-                 << "dirty=" << dirty << dendl;
-  return dirty;
-}
-
-template <typename I>
-void StupidPolicy<I>::set_dirty(uint64_t block) {
-  CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 20) << "block=" << block << dendl;
-
-  Mutex::Locker locker(m_lock);
-  auto entry_it = m_block_to_entries.find(block);
-  assert(entry_it != m_block_to_entries.end());
-
-  Entry *entry = entry_it->second;
-  if (entry->dirty) {
-    return;
-  }
-
-  entry->dirty = true;
-  m_clean_lru.remove(entry);
-  m_dirty_lru.insert_head(entry);
-}
-
-template <typename I>
-void StupidPolicy<I>::clear_dirty(uint64_t block) {
-  CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 20) << "block=" << block << dendl;
-
-  Mutex::Locker locker(m_lock);
-  auto entry_it = m_block_to_entries.find(block);
-  assert(entry_it != m_block_to_entries.end());
-
-  Entry *entry = entry_it->second;
-  if (!entry->dirty) {
-    return;
-  }
-
-  entry->dirty = false;
-  m_dirty_lru.remove(entry);
-  m_clean_lru.insert_head(entry);
-}
-
-template <typename I>
 int StupidPolicy<I>::map(IOType io_type, uint64_t block, bool partial_block,
-                         PolicyMapResult *policy_map_result,
-                         uint64_t *replace_cache_block) {
+                         PolicyMapResult *policy_map_result) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << "block=" << block << dendl;
 
   Mutex::Locker locker(m_lock);
   if (block >= m_block_count) {
-    lderr(cct) << "block outside of valid range" << dendl;
+    ldout(cct, 1) << "block outside of valid range" << dendl;
     *policy_map_result = POLICY_MAP_RESULT_MISS;
     // TODO return error once resize handling is in-place
     return 0;
   }
 
   Entry *entry;
-  auto entry_it = m_block_to_entries.find(block);
-  if (entry_it != m_block_to_entries.end()) {
+  Block* block_info = m_block_map->find_block(block);
+  assert (block_info != nullptr);
+  {
     // cache hit -- move entry to the front of the queue
-    ldout(cct, 20) << "cache hit" << dendl;
-    *policy_map_result = POLICY_MAP_RESULT_HIT;
-
-    entry = entry_it->second;
-    LRUList *lru;
-    if (entry->dirty) {
-      lru = &m_dirty_lru;
-    } else {
-      lru = &m_clean_lru;
+    entry = block_info->entry;
+    
+    if (io_type == IO_TYPE_WRITE) {
+      ldout(cct, 1) << "io_type == write, block: " << block << dendl;
+      switch(block_info->status) {
+        case LOCATE_IN_CACHE:
+          *policy_map_result = POLICY_MAP_RESULT_HIT;
+          m_clean_lru.remove(entry);
+          m_free_lru.insert_tail(entry);
+          block_info->status = NOT_IN_CACHE;
+          break;
+        case LOCATE_IN_BASE_CACHE:
+          *policy_map_result = POLICY_MAP_RESULT_HIT_IN_BASE;
+          block_info->status = NOT_IN_CACHE;
+          break;
+        case NOT_IN_CACHE:
+        default:
+          *policy_map_result = POLICY_MAP_RESULT_MISS;
+          block_info->status = NOT_IN_CACHE; 
+          break;
+      }
+      return 0;
     }
-
-    lru->remove(entry);
-    lru->insert_head(entry);
-    return 0;
+    switch(block_info->status) {
+      case LOCATE_IN_CACHE:
+        entry = block_info->entry;
+        assert(entry != nullptr);
+        *policy_map_result = POLICY_MAP_RESULT_HIT;
+        m_clean_lru.remove(entry);
+        m_clean_lru.insert_head(entry);
+        ldout(cct, 1) << "cache hit, block: " << block << dendl;
+        break;
+      case LOCATE_IN_BASE_CACHE:
+        *policy_map_result = POLICY_MAP_RESULT_HIT_IN_BASE;
+        ldout(cct, 1) << "cache hit in base, block: " << block << dendl;
+        break;
+      case NOT_IN_CACHE:
+      default:
+        entry = reinterpret_cast<Entry*>(m_free_lru.get_head());
+        if (entry != nullptr) {
+          ldout(cct, 1) << "cache miss -- new entry, block: " << block << dendl;
+          *policy_map_result = POLICY_MAP_RESULT_NEW;
+          m_free_lru.remove(entry);
+          m_clean_lru.insert_head(entry);
+          block_info->entry = entry;
+          block_info->status = LOCATE_IN_CACHE;
+        } else {
+          ldout(cct, 1) << "cache miss, no free slot in cache. block: " << block << dendl;
+          *policy_map_result = POLICY_MAP_RESULT_MISS;
+        }
+        break;
+    }
   }
-
-  if (io_type == IO_TYPE_WRITE) {
-    *policy_map_result = POLICY_MAP_RESULT_MISS;
-    return 0;
-  }
-
-  // cache miss
-  entry = reinterpret_cast<Entry*>(m_free_lru.get_head());
-  if (entry != nullptr) {
-    // entries are available -- allocate a slot
-    ldout(cct, 20) << "cache miss -- new entry" << dendl;
-    *policy_map_result = POLICY_MAP_RESULT_NEW;
-    m_free_lru.remove(entry);
-
-    entry->block = block;
-    m_block_to_entries[block] = entry;
-    m_clean_lru.insert_head(entry);
-    return 0;
-  }
-
-  // no clean entries to evict -- treat this as a miss
-  *policy_map_result = POLICY_MAP_RESULT_MISS;
   return 0;
+}
+
+template <typename I>
+uint64_t StupidPolicy<I>::block_to_offset(uint64_t block) {
+  CephContext *cct = m_image_ctx.cct;
+  Mutex::Locker locker(m_lock);
+  Block* block_info = m_block_map->find_block(block);
+  switch (block_info->status) {
+    case LOCATE_IN_CACHE:
+      return block_info->entry->on_disk_id * m_block_size;
+    case LOCATE_IN_BASE_CACHE:
+      return block_info->block * m_block_size;
+    case NOT_IN_CACHE:
+      ldout(cct, 1) << "This block is not in cache, block: " << block << dendl;
+      assert(0);
+  }
 }
 
 template <typename I>
 void StupidPolicy<I>::tick() {
   // stupid policy -- do nothing
 }
+
+template <typename I>
+void StupidPolicy<I>::set_to_base_cache(uint64_t block) {
+  Block* block_info = m_block_map->find_block(block);
+  block_info->status = LOCATE_IN_BASE_CACHE;
+}
+
+template <typename I>
+uint32_t StupidPolicy<I>::get_loc(uint64_t block) {
+  Mutex::Locker locker(m_lock);
+  uint32_t ret_data;
+  Block* block_info = m_block_map->find_block(block);
+  assert (block_info != nullptr);
+  switch( block_info->status ) {
+    case LOCATE_IN_BASE_CACHE:
+      ret_data = ( block | (block_info->status << 30) ) ; 
+      return ret_data;
+    case LOCATE_IN_CACHE:
+      assert(block_info->entry->on_disk_id <= MAX_BLOCK_ID);
+      ret_data = ( block_info->entry->on_disk_id | (block_info->status << 30) ); 
+      return ret_data;
+    case NOT_IN_CACHE:
+    default:
+      return (NOT_IN_CACHE << 30);
+  }
+}
+
+template <typename I>
+void StupidPolicy<I>::set_loc(uint32_t *src) {
+  Mutex::Locker locker(m_lock);
+  Entry* entry;
+  uint8_t loc;
+  uint64_t on_disk_id;
+  uint64_t block_id;
+  for(auto block_it = m_block_map->begin(); block_it != m_block_map->end(); block_it++) {
+    block_id = block_it->second->block;
+    loc = src[block_id] >> 30;
+    switch(loc) {
+      case LOCATE_IN_CACHE:
+        on_disk_id = (src[block_id] & MAX_BLOCK_ID);
+        entry = &m_entries[on_disk_id];
+        assert(entry != nullptr);
+        m_free_lru.remove(entry);
+        m_clean_lru.insert_head(entry);
+        block_it->second->entry = entry;
+        block_it->second->status = LOCATE_IN_CACHE;
+        break;
+      case LOCATE_IN_BASE_CACHE:
+        on_disk_id = (src[block_id] & MAX_BLOCK_ID);
+        assert(on_disk_id == block_id);
+        block_it->second->status = LOCATE_IN_BASE_CACHE;
+        break;
+      case NOT_IN_CACHE:
+      default:
+        block_it->second->status = NOT_IN_CACHE;
+        break;
+    }
+  }
+}
+
 
 } // namespace file
 } // namespace cache

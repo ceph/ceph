@@ -9,6 +9,7 @@
 #include "librbd/cache/BlockGuard.h"
 #include "librbd/cache/ImageWriteback.h"
 #include "librbd/cache/file/Policy.h"
+#include "common/WorkQueue.h"
 #include <functional>
 #include <list>
 
@@ -34,7 +35,7 @@ public:
   FileImageCache(ImageCtx &image_ctx);
   ~FileImageCache();
 
-  /// client AIO methods
+  // client AIO methods
   void aio_read(Extents&& image_extents, ceph::bufferlist *bl,
                 int fadvise_flags, Context *on_finish) override;
   void aio_write(Extents&& image_extents, ceph::bufferlist&& bl,
@@ -50,24 +51,31 @@ public:
                              uint64_t *mismatch_offset,int fadvise_flags,
                              Context *on_finish) override;
 
-  /// internal state methods
+  // internal state methods
   void init(Context *on_finish) override;
+  void remove(Context *on_finish) override;
   void shut_down(Context *on_finish) override;
 
   void invalidate(Context *on_finish) override;
   void flush(Context *on_finish) override;
+  void load_snap_as_base(Context *on_finish);
+  void load_meta_to_policy();
+  void set_parent();
+
+  ImageWriteback<ImageCtxT> m_image_writeback;
+  ImageWriteback<ImageCtxT> m_parent_snap_image_writeback;
+  file::Policy *m_policy = nullptr;
+  file::MetaStore<ImageCtx> *m_meta_store = nullptr;
+  file::ImageStore<ImageCtx> *m_image_store = nullptr;
+  file::ImageStore<ImageCtx> *m_parent_image_store = nullptr;
+  ContextWQ* pcache_op_work_queue;
 
 private:
   typedef std::function<void(uint64_t)> ReleaseBlock;
   typedef std::list<Context *> Contexts;
 
   ImageCtxT &m_image_ctx;
-  ImageWriteback<ImageCtxT> m_image_writeback;
   BlockGuard m_block_guard;
-
-  file::Policy *m_policy = nullptr;
-  file::MetaStore<ImageCtx> *m_meta_store = nullptr;
-  file::ImageStore<ImageCtx> *m_image_store = nullptr;
 
   util::AsyncOpTracker m_async_op_tracker;
 
@@ -80,6 +88,7 @@ private:
                   BlockGuard::C_BlockRequest *block_request);
   void map_block(BlockGuard::BlockIO &&block_io);
   void invalidate(Extents&& image_extents, Context *on_finish);
+  bool if_cloned_volume;
 
 };
 

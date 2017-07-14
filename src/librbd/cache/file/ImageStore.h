@@ -7,7 +7,6 @@
 #include "include/buffer_fwd.h"
 #include "include/int_types.h"
 #include "os/CacheStore/SyncFile.h"
-#include "librbd/cache/file/MetaStore.cc"
 #include <vector>
 
 struct Context;
@@ -26,21 +25,23 @@ class ImageStore {
 public:
   typedef std::vector<std::pair<uint32_t, uint32_t> > BlockExtents;
 
-  ImageStore(ImageCtxT &image_ctx, MetaStore<ImageCtxT> &metastore);
+  ImageStore(ImageCtxT &image_ctx, uint64_t image_size, std::string volumd_name);
 
   void init(Context *on_finish);
+  void remove(Context *on_finish);
   void shut_down(Context *on_finish);
   void reset(Context *on_finish);
 
-  void read_block(uint64_t cache_block, BlockExtents &&block_extents,
+  void read_block(uint64_t offset, BlockExtents &&block_extents,
                   ceph::bufferlist *bl, Context *on_finish);
-  void write_block(uint64_t cache_block, BlockExtents &&block_extents,
+  void write_block(uint64_t offset, BlockExtents &&block_extents,
                    ceph::bufferlist &&bl, Context *on_finish);
   void discard_block(uint64_t cache_block, Context *on_finish);
+  bool check_exists();
 
 private:
   ImageCtxT &m_image_ctx;
-  MetaStore<ImageCtxT> &m_metastore;
+  uint64_t m_image_size;
   os::CacheStore::SyncFile m_cache_file;
 
 };

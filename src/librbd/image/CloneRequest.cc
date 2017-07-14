@@ -12,6 +12,8 @@
 #include "librbd/image/RemoveRequest.h"
 #include "librbd/image/RefreshRequest.h"
 #include "librbd/mirror/EnableRequest.h"
+#include "librbd/ImageCtx.h"
+#include "librbd/cache/FileImageCache.h"
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
@@ -258,7 +260,6 @@ void CloneRequest<I>::handle_set_parent(int r) {
     send_close();
     return;
   }
-
   send_add_child();
 }
 
@@ -311,6 +312,10 @@ void CloneRequest<I>::handle_refresh(int r) {
     m_p_imctx->snap_lock.get_read();
     r = m_p_imctx->is_snap_protected(m_p_imctx->snap_id, &snap_protected);
     m_p_imctx->snap_lock.put_read();
+  }
+
+  if (m_imctx->image_cache && m_imctx->parent) {
+    m_imctx->image_cache->set_parent();
   }
 
   if (r < 0 || !snap_protected) {

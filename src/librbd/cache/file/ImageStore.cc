@@ -17,10 +17,12 @@ namespace cache {
 namespace file {
 
 template <typename I>
-ImageStore<I>::ImageStore(I &image_ctx, MetaStore<I> &metastore)
-  : m_image_ctx(image_ctx), m_metastore(metastore),
+ImageStore<I>::ImageStore(I &image_ctx, uint64_t image_size, std::string volume_name)
+  : m_image_ctx(image_ctx), m_image_size(image_size),
     m_cache_file(image_ctx.cct, *image_ctx.op_work_queue,
-                 image_ctx.id + ".image_cache") {
+                 volume_name + ".image_cache") {
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 20) << "volume_name: " << volume_name << dendl;
 }
 
 template <typename I>
@@ -42,6 +44,14 @@ void ImageStore<I>::init(Context *on_finish) {
 }
 
 template <typename I>
+void ImageStore<I>::remove(Context *on_finish) {
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 20) << dendl;
+
+  m_cache_file.remove(on_finish);
+}
+
+template <typename I>
 void ImageStore<I>::shut_down(Context *on_finish) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << dendl;
@@ -53,34 +63,34 @@ void ImageStore<I>::shut_down(Context *on_finish) {
 template <typename I>
 void ImageStore<I>::reset(Context *on_finish) {
   CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 20) << dendl;
+  ldout(cct, 20) << "Cache_Size: " << m_image_size << dendl;
 
   // TODO
-  m_cache_file.truncate(m_image_ctx.size, false, on_finish);
+  m_cache_file.truncate(m_image_size, false, on_finish);
 }
 
 template <typename I>
-void ImageStore<I>::read_block(uint64_t cache_block,
+void ImageStore<I>::read_block(uint64_t offset,
                                BlockExtents &&block_extents,
                                bufferlist *bl, Context *on_finish) {
   CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 20) << "block=" << cache_block << ", "
-                 << "extents=" << block_extents << dendl;
+  /*ldout(cct, 20) << "block=" << cache_block << ", "
+                 << "extents=" << block_extents << dendl;*/
 
   // TODO add gather support
   assert(block_extents.size() == 1);
   auto &extent = block_extents.front();
-  m_cache_file.read(m_metastore.block_to_offset(cache_block) + extent.first,
+  m_cache_file.read(offset + extent.first,
                     extent.second, bl, on_finish);
 }
 
 template <typename I>
-void ImageStore<I>::write_block(uint64_t cache_block,
+void ImageStore<I>::write_block(uint64_t offset,
                                 BlockExtents &&block_extents,
                                 bufferlist &&bl, Context *on_finish) {
   CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 20) << "block=" << cache_block << ", "
-                 << "extents=" << block_extents << dendl;
+  /*ldout(cct, 20) << "block=" << cache_block << ", "
+                 << "extents=" << block_extents << dendl;*/
 
   // TODO add scatter support
   C_Gather *ctx = new C_Gather(cct, on_finish);
@@ -90,7 +100,7 @@ void ImageStore<I>::write_block(uint64_t cache_block,
     sub_bl.substr_of(bl, buffer_offset, extent.second);
     buffer_offset += extent.second;
 
-    m_cache_file.write(m_metastore.block_to_offset(cache_block) + extent.first,
+    m_cache_file.write(offset + extent.first,
                        std::move(sub_bl), false, ctx->new_sub());
 
   }
@@ -104,6 +114,11 @@ void ImageStore<I>::discard_block(uint64_t cache_block, Context *on_finish) {
 
   // TODO
   on_finish->complete(0);
+}
+
+template <typename I>
+bool ImageStore<I>::check_exists() {
+    return m_cache_file.try_open();
 }
 
 } // namespace file

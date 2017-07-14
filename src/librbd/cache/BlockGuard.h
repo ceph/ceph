@@ -8,6 +8,7 @@
 #include "include/Context.h"
 #include "common/Mutex.h"
 #include "librbd/cache/Types.h"
+#include "librbd/cache/Block.h"
 #include <boost/intrusive/list.hpp>
 #include <boost/intrusive/unordered_set.hpp>
 #include <boost/variant.hpp>
@@ -63,50 +64,40 @@ public:
   struct C_BlockIORequest : public Context {
     CephContext *cct;
     C_BlockIORequest *next_block_request;
+    uint16_t inflight_requests_count;
   
     C_BlockIORequest(CephContext *cct, C_BlockIORequest *next_block_request)
       : cct(cct), next_block_request(next_block_request) {
     }
   
     virtual void finish(int r) override {
-      //ldout(cct, 20) << "(" << get_name() << "): r=" << r << dendl;
-  
-      if (r < 0) {
-        // abort the chain of requests upon failure
-        next_block_request->complete(r);
-      } else {
-        // execute next request in chain
-        next_block_request->send();
+      if (next_block_request) {
+        if (r < 0) {
+          // abort the chain of requests upon failure
+          next_block_request->complete(r);
+        } else {
+          // execute next request in chain
+          next_block_request->send();
+        }
       }
     }
   
+    virtual void complete(int r) {
+      finish(r);
+      delete this;
+    }
     virtual void send() = 0;
     virtual const char *get_name() const = 0;
+    virtual void* get_buffer_ptr(){ return nullptr; }
   };
 
-  struct Block {
-    Block( uint64_t block )
-     : /*lock("librbd::cache::BlockGuard::Block::lock"),*/
-       block(block), status(0), tail_block_io_request(nullptr),
-       in_process(false) {
-    }
-    //Mutex lock;
-    std::mutex lock;
-    uint64_t block;
-    uint8_t status; //0x00 non-exist, 0x01 clean, 0x02 dirty
-    C_BlockIORequest *tail_block_io_request; ///< used to track ios on this block
-    bool in_process;        ///< true if this block has been in processing by thread
-  };
 
-  typedef std::unordered_map<uint64_t, Block*> BlockToBlocksMap;
   struct BlockIO {
     // TODO intrusive_list
     Block *block_info;
-    uint64_t block;
-    uint64_t tid;
     BlockIOExtents extents;
-    IOType io_type : 2;     ///< IO type for deferred IO request
-    bool partial_block : 1; ///< true if not full block request
+    IOType io_type : 2;     // IO type for deferred IO request
+    bool partial_block : 1; // true if not full block request
 
     C_BlockRequest *block_request;
   };
@@ -120,10 +111,9 @@ public:
   void create_block_ios(IOType io_type, const ImageExtents &image_extents,
                         BlockIOs *block_ios, C_BlockRequest *block_request);
 
-  // detain future IO against a specified block
-  //int detain(uint64_t block, BlockIO *block_io){return 0;}
-  // release detained IO against a specified block
-  //int release(uint64_t block, BlockIOs *block_ios){return 0;}
+  inline void set_block_map(void* block_map) {
+    m_block_map = (BlockMap*)block_map;
+  }
   inline friend std::ostream &operator<<(std::ostream &os,
                                          const BlockIOExtent& rhs) {
     os << "buffer_offset=" << rhs.buffer_offset << ", "
@@ -133,7 +123,7 @@ public:
   }
   inline friend std::ostream &operator<<(std::ostream &os,
                                          const BlockIO& rhs) {
-    os << "block=" << rhs.block << ", "
+    os << "block=" << rhs.block_info->block << ", "
        << "io_type=" << rhs.io_type << ", "
        << "[";
     std::string delim;
@@ -149,12 +139,10 @@ private:
   CephContext *m_cct;
   uint32_t m_max_blocks;
   uint32_t m_block_size;
+  BlockMap* m_block_map;
 
   Mutex m_lock;
 
-  //chendi: add an universal map to pre-allocate in memory data for each block
-  BlockToBlocksMap m_Block_map;
-  
 };
 
 } // namespace cache

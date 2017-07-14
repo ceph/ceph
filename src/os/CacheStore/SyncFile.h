@@ -5,6 +5,7 @@
 #define CEPH_LIBOS_CACHE_STORE_SYNC_FILE
 
 #include "include/buffer_fwd.h"
+#include <sys/mman.h>
 #include <string>
 
 struct Context;
@@ -28,7 +29,9 @@ public:
   // TODO use scatter/gather API
 
   void open(Context *on_finish);
+  bool try_open();
   void close(Context *on_finish);
+  void remove(Context *on_finish);
 
   void read(uint64_t offset, uint64_t length, ceph::bufferlist *bl,
             Context *on_finish);
@@ -41,6 +44,8 @@ public:
   void fsync(Context *on_finish);
   void fdatasync(Context *on_finish);
   uint64_t filesize();
+  int load(void** dest, uint64_t filesize);
+  int remove();
 
 private:
   CephContext *cct;

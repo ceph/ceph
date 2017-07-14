@@ -19,11 +19,6 @@ BlockGuard::BlockGuard(CephContext *cct, uint64_t cache_size,
   : m_cct(cct), m_max_blocks(cache_size%block_size?cache_size/block_size+1:cache_size/block_size),
     m_block_size(block_size),
     m_lock("librbd::cache::BlockGuard::m_lock"){
-  for(auto block = 0; block < m_max_blocks; block++) {
-    //chendi: initiate universal BlockIOMap
-    Block* block_info = new Block(block);
-    m_Block_map.insert(std::make_pair(block, block_info));
-  }
 }
 
 void BlockGuard::create_block_ios(IOType io_type,
@@ -31,10 +26,9 @@ void BlockGuard::create_block_ios(IOType io_type,
                                   BlockIOs *block_ios,
                                   C_BlockRequest *block_request) {
   typedef std::unordered_map<uint64_t, BlockIO> BlockToBlockIOs;
-  //ldout(m_cct, 20) << "image_extents=" << image_extents << dendl;
 
   BlockToBlockIOs block_to_block_ios;
-  BlockToBlocksMap::iterator block_it;
+  Block *block_info;
   uint64_t buffer_offset = 0;
   for (auto &extent : image_extents) {
     uint64_t image_offset = extent.first;
@@ -47,11 +41,10 @@ void BlockGuard::create_block_ios(IOType io_type,
       uint32_t block_length = block_end_offset - block_offset;
 
       // TODO block extent merging(?)
-      // chendi: find block_io from map
-      block_it = m_Block_map.find(block);
-      assert(block_it != m_Block_map.end());
+      block_info = m_block_map->find_block(block);
+      assert(block_info != nullptr);
       auto &block_io = block_to_block_ios[block];
-      block_io.block_info = block_it->second;
+      block_io.block_info = block_info;
       
       block_io.extents.emplace_back(buffer_offset, block_offset, block_length);
 
@@ -68,9 +61,7 @@ void BlockGuard::create_block_ios(IOType io_type,
       pair.second.extents.size() != 1 ||
       pair.second.extents.front().block_offset != 0 ||
       pair.second.extents.front().block_length != m_block_size);
-    pair.second.block = pair.first;
     pair.second.block_request = block_request;
-    pair.second.tid = 0;
 
     ldout(m_cct, 20) << "block_io=[" << pair.second << "]" << dendl;
     block_ios->emplace_back(std::move(pair.second));

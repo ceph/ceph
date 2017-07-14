@@ -23,16 +23,6 @@ namespace file {
  * Persistent on-disk cache structures
  */
 
-namespace stupid_policy {
-
-struct Entry {
-  bool dirty;
-  bool allocated;
-  uint64_t block;
-};
-
-} // namespace stupid_policy
-
 namespace meta_store {
 
 struct Header {
@@ -55,9 +45,9 @@ struct Event {
   static const size_t ENCODED_SIZE = 64;
   static const size_t ENCODED_FIELDS_OFFSET = 26;
 
-  uint64_t tid;   /// TODO can this be eliminated safely?
+  uint64_t tid;   // TODO can this be eliminated safely?
   uint64_t block;
-  uint32_t crc;   /// TODO
+  uint32_t crc;   // TODO
 
   struct {
     IOType io_type : 2;

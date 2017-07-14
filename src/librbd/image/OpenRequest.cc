@@ -472,6 +472,12 @@ Context *OpenRequest<I>::handle_register_watch(int *result) {
                << dendl;
     send_close_image(*result);
     return nullptr;
+  } else {
+    if (m_image_ctx->snap_name.empty()) {
+      return send_init_image_cache(result);
+    } else {
+      return send_set_snap(result);
+    }
   }
 
   return send_set_snap(result);
@@ -479,10 +485,6 @@ Context *OpenRequest<I>::handle_register_watch(int *result) {
 
 template <typename I>
 Context *OpenRequest<I>::send_set_snap(int *result) {
-  if (m_image_ctx->snap_name.empty()) {
-    return send_init_image_cache(result);
-  }
-
   CephContext *cct = m_image_ctx->cct;
   ldout(cct, 10) << this << " " << __func__ << dendl;
 
@@ -507,7 +509,7 @@ Context *OpenRequest<I>::handle_set_snap(int *result) {
   }
 
   // TODO SetSnapRequest should handle (re)-initializing image cache
-  return m_on_finish;
+  return send_init_image_cache(result);
 }
 
 template <typename I>
@@ -521,7 +523,6 @@ Context *OpenRequest<I>::send_init_image_cache(int *result) {
   CephContext *cct = m_image_ctx->cct;
   ldout(cct, 10) << this << " " << __func__ << dendl;
 
-  // TODO: hard-coded FileImageCache for prototype
   m_image_ctx->image_cache = new cache::FileImageCache<ImageCtx>(*m_image_ctx);
   Context *ctx = create_context_callback<
     OpenRequest<I>, &OpenRequest<I>::handle_init_image_cache>(this);
@@ -540,7 +541,6 @@ Context *OpenRequest<I>::handle_init_image_cache(int *result) {
     send_close_image(*result);
     return nullptr;
   }
-
   return m_on_finish;
 }
 
