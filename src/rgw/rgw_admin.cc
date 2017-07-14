@@ -3398,6 +3398,15 @@ int main(int argc, const char **argv)
 	  cerr << "unable to initialize zone: " << cpp_strerror(-ret) << std::endl;
 	  return -ret;
 	}
+        if (zone.realm_id != zonegroup.realm_id) {
+          zone.realm_id = zonegroup.realm_id;
+          ret = zone.update();
+          if (ret < 0) {
+            cerr << "failed to save zone info: " << cpp_strerror(-ret) << std::endl;
+            return -ret;
+          }
+        }
+
         string *ptier_type = (tier_type_specified ? &tier_type : nullptr);
         zone.tier_config = tier_config_add;
 
