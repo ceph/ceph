@@ -2569,6 +2569,15 @@ void CrushWrapper::list_rules(Formatter *f) const
   }
 }
 
+void CrushWrapper::list_rules(ostream *ss) const
+{
+  for (int rule = 0; rule < get_max_rules(); rule++) {
+    if (!rule_exists(rule))
+      continue;
+    *ss << get_rule_name(rule) << "\n";
+  }
+}
+
 class CrushTreePlainDumper : public CrushTreeDumper::Dumper<TextTable> {
 public:
   typedef CrushTreeDumper::Dumper<TextTable> Parent;
