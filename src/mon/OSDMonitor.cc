@@ -7610,9 +7610,10 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 
     int class_id = newcrush.get_class_id(device_class);
 
-    if (newcrush.class_is_in_use(class_id)) {
+    stringstream ts;
+    if (newcrush.class_is_in_use(class_id, &ts)) {
       err = -EBUSY;
-      ss << "class '" << device_class << "' is in use";
+      ss << "class '" << device_class << "' " << ts.str();
       goto reply;
     }
 
@@ -7664,9 +7665,10 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 
     int class_id = newcrush.get_class_id(srcname);
 
-    if (newcrush.class_is_in_use(class_id)) {
+    stringstream ts;
+    if (newcrush.class_is_in_use(class_id, &ts)) {
       err = -EBUSY;
-      ss << "class '" << srcname << "' is in use";
+      ss << "class '" << srcname << "' " << ts.str();
       goto reply;
     }
 
