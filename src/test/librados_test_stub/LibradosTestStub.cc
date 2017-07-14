@@ -994,6 +994,18 @@ int Rados::mon_command(std::string cmd, const bufferlist& inbl,
   return impl->mon_command(cmds, inbl, outbl, outs);
 }
 
+int Rados::service_daemon_register(const std::string& service,
+                                   const std::string& name,
+                                   const std::map<std::string,std::string>& metadata) {
+  TestRadosClient *impl = reinterpret_cast<TestRadosClient*>(client);
+  return impl->service_daemon_register(service, name, metadata);
+}
+
+int Rados::service_daemon_update_status(const std::map<std::string,std::string>& status) {
+  TestRadosClient *impl = reinterpret_cast<TestRadosClient*>(client);
+  return impl->service_daemon_update_status(status);
+}
+
 int Rados::pool_create(const char *name) {
   TestRadosClient *impl = reinterpret_cast<TestRadosClient*>(client);
   return impl->pool_create(name);
