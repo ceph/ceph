@@ -208,6 +208,16 @@ ARN::ARN(const rgw_bucket& b, const string& o)
   resource.append(o);
 }
 
+ARN::ARN(const RGWGroup& g)
+  : partition(Partition::aws),
+    service(Service::iam),
+    region(),
+    account(g.get_tenant()),
+    resource("group"){
+  resource.append(g.get_path());
+  resource.append(g.get_name());
+}
+
 boost::optional<ARN> ARN::parse(const string& s, bool wildcards) {
   static const regex rx_wild("arn:([^:]*):([^:]*):([^:]*):([^:]*):([^:]*)",
 			     std::regex_constants::ECMAScript |
@@ -234,6 +244,8 @@ boost::optional<ARN> ARN::parse(const string& s, bool wildcards) {
 
 string ARN::to_string() const {
   string s;
+
+  s.append("arn:");
 
   if (partition == Partition::aws) {
     s.append("aws:");
@@ -738,44 +750,7 @@ static boost::optional<Principal> parse_principal(CephContext* cct, TokenID t,
 	return Principal::tenant(std::move(a->account));
       }
 
-      static const char rx_str[] = "([^/]*)/(.*)";
-      static const regex rx(rx_str, sizeof(rx_str) - 1,
-			    std::regex_constants::ECMAScript |
-			    std::regex_constants::optimize);
-      smatch match;
-      if (regex_match(a->resource, match, rx) && match.size() == 3) {
-	if (match[1] == "user") {
-	  return Principal::user(std::move(a->account),
-				 match[2]);
-	}
-
-	if (match[1] == "role") {
-	  return Principal::role(std::move(a->account),
-				 match[2]);
-	}
-
-  if (match[1] == "group") {
-	return Principal::group(std::move(a->account),
-			       match[2]);
-      }
-      }
-    } else {
-      if (std::none_of(s.begin(), s.end(),
-		       [](const char& c) {
-			 return (c == ':') || (c == '/');
-		       })) {
-	// Since tenants are simply prefixes, there's no really good
-	// way to see if one exists or not. So we return the thing and
-	// let them try to match against it.
-	return Principal::tenant(std::move(s));
-      }
-    }
-
-    if (a->resource == "root") {
-      return Principal::tenant(std::move(a->account));
-    }
-
-    const boost::string_view input{a->resource};
+      const boost::string_view input{a->resource};
 
     const auto first = input.find_first_of('/');
     if (first == input.npos) {
@@ -800,8 +775,21 @@ static boost::optional<Principal> parse_principal(CephContext* cct, TokenID t,
     if (principal_type == "group") {
 	return Principal::group(std::move(a->account),
 			       entity_name.to_string());
+
+      }
+    } else {
+      if (std::none_of(s.begin(), s.end(),
+		       [](const char& c) {
+			 return (c == ':') || (c == '/');
+		       })) {
+	// Since tenants are simply prefixes, there's no really good
+	// way to see if one exists or not. So we return the thing and
+	// let them try to match against it.
+	return Principal::tenant(std::move(s));
       }
     }
+  }
+
   ldout(cct, 0) << "Supplied principal is discarded: " << s << dendl;
   return boost::none;
 }

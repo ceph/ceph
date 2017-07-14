@@ -60,19 +60,19 @@ extern void rgw_get_anon_user(RGWUserInfo& info);
 /**
  * Add group name to user info
  */
-extern bool rgw_add_group_to_user(RGWUserInfo& info, string& group_name);
+extern bool rgw_add_group_to_user(RGWUserInfo& info, const string& group_name);
 
 /**
  * Remove group name from user info
  */
-extern bool rgw_remove_group_from_user(RGWUserInfo& info, string& group_name);
+extern bool rgw_remove_group_from_user(RGWUserInfo& info, const string& group_name);
 
 /**
  * Replace group name with new name in user info
  */
 extern bool rgw_update_group_in_user(RGWUserInfo& info,
-                              string& group_name,
-                              string& new_group_name);
+                              const string& group_name,
+                              const string& new_group_name);
 
 /**
  * Save the given user information to storage.

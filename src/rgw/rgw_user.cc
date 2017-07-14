@@ -132,11 +132,11 @@ int rgw_user_get_all_buckets_stats(RGWRados *store, const rgw_user& user_id, map
 /**
  * Add group name to user info
  */
-bool rgw_add_group_to_user(RGWUserInfo& info, string& group_name)
+bool rgw_add_group_to_user(RGWUserInfo& info, const string& group_name)
 {
   if (std::find(info.groups.begin(), info.groups.end(), group_name)
           == info.groups.end()) {
-    info.groups.push_back(std::move(group_name));
+    info.groups.push_back(group_name);
     return true;
   }
   return false;
@@ -145,7 +145,7 @@ bool rgw_add_group_to_user(RGWUserInfo& info, string& group_name)
 /**
  * Remove group name from user info
  */
-bool rgw_remove_group_from_user(RGWUserInfo& info, string& group_name)
+bool rgw_remove_group_from_user(RGWUserInfo& info, const string& group_name)
 {
   const auto& it = std::find(info.groups.begin(), info.groups.end(), group_name);
   if (it != info.groups.end()) {
@@ -159,12 +159,12 @@ bool rgw_remove_group_from_user(RGWUserInfo& info, string& group_name)
  * Replace group name with new name in user info
  */
 bool rgw_update_group_in_user(RGWUserInfo& info,
-                              string& group_name,
-                              string& new_group_name)
+                              const string& group_name,
+                              const string& new_group_name)
 {
   const auto &it = std::find(info.groups.begin(), info.groups.end(), group_name);
   if (it != info.groups.end()) {
-    info.groups.at(it - info.groups.begin()) = std::move(new_group_name);
+    *it = new_group_name;
     return true;
   }
   return false;

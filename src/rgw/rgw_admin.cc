@@ -5182,8 +5182,7 @@ int main(int argc, const char **argv)
         ret = rgw_get_user_info_by_uid(store, user, info);
         if (ret == 0) {
           updated_info = info;
-          string new_group = new_group_name;
-          if (rgw_update_group_in_user(updated_info, group_name, new_group)) {
+          if (rgw_update_group_in_user(updated_info, group_name, new_group_name)) {
             ret = rgw_store_user_info(store, updated_info, &info, NULL,
                                       real_time(), false);
             if (ret < 0) {

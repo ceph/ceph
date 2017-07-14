@@ -28,6 +28,7 @@
 #include "rgw_basic_types.h"
 #include "rgw_iam_policy_keywords.h"
 #include "rgw_string.h"
+#include "rgw_group.h"
 
 class RGWRados;
 namespace rgw {
@@ -215,7 +216,7 @@ struct ARN {
   ARN(const rgw_obj& o);
   ARN(const rgw_bucket& b);
   ARN(const rgw_bucket& b, const std::string& o);
-
+  ARN(const RGWGroup& g);
   static boost::optional<ARN> parse(const std::string& s,
 				    bool wildcard = false);
   std::string to_string() const;

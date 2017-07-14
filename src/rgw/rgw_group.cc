@@ -2,7 +2,8 @@
 #include <ctime>
 #include <algorithm>
 
-#include <boost/regex.hpp>
+#include <regex>
+#include <boost/format.hpp>
 
 #include "common/errno.h"
 #include "common/Formatter.h"
@@ -16,6 +17,7 @@
 #include "rgw_common.h"
 #include "rgw_tools.h"
 #include "rgw_group.h"
+#include "rgw_iam_policy_keywords.h"
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -24,7 +26,6 @@ using namespace std;
 const string RGWGroup::group_name_oid_prefix = "group_names.";
 const string RGWGroup::group_oid_prefix = "group.";
 const string RGWGroup::group_path_oid_prefix = "group_paths.";
-const string RGWGroup::group_arn_prefix = "arn:aws:iam::";
 
 int RGWGroup::store_info(bool exclusive)
 {
@@ -33,7 +34,7 @@ int RGWGroup::store_info(bool exclusive)
   bufferlist bl;
   ::encode(*this, bl);
   return rgw_put_system_obj(store, store->get_zone_params().groups_pool, oid,
-                bl.c_str(), bl.length(), exclusive, NULL, real_time(), NULL);
+                bl, exclusive, NULL, real_time(), NULL);
 }
 
 int RGWGroup::store_name(bool exclusive)
@@ -46,15 +47,16 @@ int RGWGroup::store_name(bool exclusive)
   bufferlist bl;
   ::encode(nameToId, bl);
   return rgw_put_system_obj(store, store->get_zone_params().groups_pool, oid,
-              bl.c_str(), bl.length(), exclusive, NULL, real_time(), NULL);
+              bl, exclusive, NULL, real_time(), NULL);
 }
 
 int RGWGroup::store_path(bool exclusive)
 {
   string oid = tenant + get_path_oid_prefix() + path + get_info_oid_prefix() + id;
 
+  bufferlist bl;
   return rgw_put_system_obj(store, store->get_zone_params().groups_pool, oid,
-              NULL, 0, exclusive, NULL, real_time(), NULL);
+              bl, exclusive, NULL, real_time(), NULL);
 }
 
 int RGWGroup::create(bool exclusive)
@@ -84,21 +86,23 @@ int RGWGroup::create(bool exclusive)
   new_uuid.print(uuid_str);
   id = uuid_str;
 
-  //arn
-  arn = group_arn_prefix + tenant + ":group" + path + name;
-
   // Creation time
   real_clock::time_point t = real_clock::now();
 
   struct timeval tv;
   real_clock::to_timeval(t, tv);
 
-  char buf[30];
   struct tm result;
   gmtime_r(&tv.tv_sec, &result);
-  strftime(buf,30,"%Y-%m-%dT%H:%M:%S", &result);
-  sprintf(buf + strlen(buf),".%dZ",(int)tv.tv_usec/1000);
-  creation_date.assign(buf, strlen(buf));
+  int usec = (int)tv.tv_usec/1000;
+  creation_date = boost::str(boost::format("%s-%s-%sT%s:%s:%s.%sZ")
+                                         % (result.tm_year + 1900)
+                                         % (result.tm_mon + 1)
+                                         % result.tm_mday
+                                         % result.tm_hour
+                                         % result.tm_min
+                                         % result.tm_sec
+                                         % usec);
 
   auto& pool = store->get_zone_params().groups_pool;
   ret = store_info(exclusive);
@@ -262,7 +266,6 @@ int RGWGroup::update_name(const string& new_name)
   // Create new name secondary index
   this->name = name;
   this->tenant = tenant;
-  this->arn = group_arn_prefix + tenant + ":group" + path + name;
   ret = store_name(true);
   if (ret < 0) {
     ldout(cct, 0) << "ERROR:  storing name in pool: " << pool.name << ": "
@@ -270,7 +273,6 @@ int RGWGroup::update_name(const string& new_name)
     // Revert back
     this->name = old_name;
     this->tenant = old_tenant;
-    this->arn = group_arn_prefix + this->tenant + ":group" + path + this->name;
     ret = store_name(true);
     if (ret < 0) {
       return ret;
@@ -302,14 +304,12 @@ int RGWGroup::update_path(const string& new_path)
 
   // Create new path secondary index
   this->path = new_path;
-  this->arn = group_arn_prefix + this->tenant + ":group" + new_path + this->name;
   ret = store_path(true);
   if (ret < 0) {
     ldout(cct, 0) << "ERROR:  storing path in pool: " << pool.name << ": "
                   << new_path << ": " << cpp_strerror(-ret) << dendl;
     //Revert back
     this->path = old_path;
-    this->arn = group_arn_prefix + this->tenant + ":group" + old_path + this->name;
     ret = store_path(true);
     if (ret < 0 ){
       return ret;
@@ -332,7 +332,10 @@ void RGWGroup::dump(Formatter *f) const
   encode_json("id", id , f);
   encode_json("name", name , f);
   encode_json("path", path, f);
-  encode_json("arn", arn, f);
+
+  rgw::IAM::ARN arn = rgw::IAM::ARN(*this);
+  encode_json("arn", arn.to_string(), f);
+
   encode_json("create_date", creation_date, f);
   encode_json("users", users, f);
 }
@@ -342,7 +345,6 @@ void RGWGroup::decode_json(JSONObj *obj)
   JSONDecoder::decode_json("id", id, obj);
   JSONDecoder::decode_json("name", name, obj);
   JSONDecoder::decode_json("path", path, obj);
-  JSONDecoder::decode_json("arn", arn, obj);
   JSONDecoder::decode_json("create_date", creation_date, obj);
   JSONDecoder::decode_json("users", users, obj);
 }
@@ -432,8 +434,8 @@ bool RGWGroup::validate_name(const string& name)
     return false;
   }
 
-  boost::regex regex_name("[A-Za-z0-9:=,.@-]+");
-  if (! boost::regex_match(name, regex_name)) {
+  std::regex regex_name("[A-Za-z0-9:=,.@-]+");
+  if (! std::regex_match(name, regex_name)) {
     ldout(cct, 0) << "ERROR: Invalid chars in name " << dendl;
     return false;
   }
@@ -448,8 +450,8 @@ bool RGWGroup::validate_path(const string& path)
     return false;
   }
 
-  boost::regex regex_path("(/[!-~]+/)|(/)");
-  if (! boost::regex_match(path,regex_path)) {
+  std::regex regex_path("(/[!-~]+/)|(/)");
+  if (! std::regex_match(path,regex_path)) {
     ldout(cct, 0) << "ERROR: Invalid chars in path " << dendl;
     return false;
   }
@@ -479,17 +481,17 @@ void RGWGroup::extract_name_tenant(const string& str, string& tenant, string& na
   }
 }
 
-bool RGWGroup::add_user(string& user)
+bool RGWGroup::add_user(const string& user)
 {
   const auto& it = std::find(this->users.begin(), this->users.end(), user);
   if (it == this->users.end()) {
-    this->users.push_back(std::move(user));
+    this->users.push_back(user);
     return true;
   }
   return false;
 }
 
-bool RGWGroup::remove_user(string& user)
+bool RGWGroup::remove_user(const string& user)
 {
   const auto& it = std::find(this->users.begin(), this->users.end(), user);
   if (it != this->users.end()) {

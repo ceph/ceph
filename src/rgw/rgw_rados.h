@@ -1293,7 +1293,7 @@ struct RGWZoneParams : RGWSystemMetaObj {
     if (struct_v >= 11) {
       decode(groups_pool, bl);
     } else {
-      groups_pool = name + ".rgw.groups";
+      groups_pool = name + ".rgw.meta:groups";
     }
     DECODE_FINISH(bl);
   }

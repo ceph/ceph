@@ -70,7 +70,8 @@ transform_old_authinfo(const req_state* const s)
 		   (p.get_id() == id.id)) {
 	  return true;
 	} else if (p.is_group()) {
-    if (std::find(user_info->groups.begin(), user_info->groups.end(), p.get_group()) != user_info->groups.end()) {
+    if (std::find(user_info->groups.begin(), user_info->groups.end(),
+                  p.get_group()) != user_info->groups.end()) {
       return true;
     }
   }
