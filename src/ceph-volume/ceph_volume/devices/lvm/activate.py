@@ -98,7 +98,8 @@ class Activate(object):
             action='store_true', default=True,
             help='filestore objectstore (current default)',
         )
-        args = parser.parse_args(self.argv[1:])
-        if len(self.argv) <= 1:
-            return parser.print_help()
+        if len(self.argv) == 0:
+            print sub_command_help
+            return
+        args = parser.parse_args(self.argv)
         self.activate(args)
