@@ -33,10 +33,7 @@ class _TrimIndentFile(object):
 def load(abspath=None):
     parser = Conf()
     try:
-        if abspath and os.path.exists(abspath):
-            parser.read(abspath)
-        else:
-            raise exceptions.ConfigurationError(abspath=abspath)
+        parser.read_path(abspath)
         return parser
     except configparser.ParsingError as error:
         terminal.error('Unable to read configuration file: %s' % abspath)
@@ -50,12 +47,26 @@ class Conf(configparser.SafeConfigParser):
     configuration.
     """
 
+    def read_path(self, path):
+        self.path = path
+        return self.read(path)
+
+    def is_valid(self):
+        if not os.path.exists(self.path):
+            raise exceptions.ConfigurationError(abspath=self.path)
+
+        try:
+            self.get('global', 'fsid')
+        except (configparser.NoSectionError, configparser.NoOptionError):
+            raise exceptions.ConfigurationKeyError('global', 'fsid')
+
     def get_safe(self, section, key, default=None):
         """
         Attempt to get a configuration value from a certain section
         in a ``cfg`` object but returning None if not found. Avoids the need
         to be doing try/except {ConfigParser Exceptions} every time.
         """
+        self.is_valid()
         try:
             return self.get(section, key)
         except (configparser.NoSectionError, configparser.NoOptionError):
@@ -71,6 +82,7 @@ class Conf(configparser.SafeConfigParser):
         Optionally split on other characters besides ',' and return a fallback
         value if no items are found.
         """
+        self.is_valid()
         value = self.get_safe(section, key, [])
         if value == []:
             if default is not None:
