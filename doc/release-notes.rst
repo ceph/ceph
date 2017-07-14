@@ -337,7 +337,7 @@ Upgrade from Jewel or Kraken
 #. Add or restart ``ceph-mgr`` daemons.  If you are upgrading from
    kraken, upgrade packages and restart ceph-mgr daemons with::
 
-     # systemctl ceph-mgr.target
+     # systemctl restart ceph-mgr.target
 
    If you are upgrading from kraken, you may already have ceph-mgr
    daemons deployed.  If not, or if you are upgrading from jewel, you
@@ -359,7 +359,7 @@ Upgrade from Jewel or Kraken
 #. Upgrade all OSDs by installing the new packages and restarting the
    ceph-osd daemons on all hosts.::
 
-     # systemctl ceph-osd.target
+     # systemctl restart ceph-osd.target
 
    You can monitor the progress of the OSD upgrades with the new
    ``ceph osd versions`` command.::
