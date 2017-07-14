@@ -1028,8 +1028,9 @@ int CrushWrapper::link_bucket(CephContext *cct, int id, const map<string,string>
   return insert_item(cct, id, bucket_weight / (float)0x10000, id_name, loc);
 }
 
-int CrushWrapper::create_or_move_item(CephContext *cct, int item, float weight, string name,
-				      const map<string,string>& loc)  // typename -> bucketname
+int CrushWrapper::create_or_move_item(
+  CephContext *cct, int item, float weight, string name,
+  const map<string,string>& loc)  // typename -> bucketname
 {
   int ret = 0;
   int old_iweight;
@@ -1038,14 +1039,17 @@ int CrushWrapper::create_or_move_item(CephContext *cct, int item, float weight, 
     return -EINVAL;
 
   if (check_item_loc(cct, item, loc, &old_iweight)) {
-    ldout(cct, 5) << "create_or_move_item " << item << " already at " << loc << dendl;
+    ldout(cct, 5) << "create_or_move_item " << item << " already at " << loc
+		  << dendl;
   } else {
     if (_search_item_exists(item)) {
       weight = get_item_weightf(item);
-      ldout(cct, 10) << "create_or_move_item " << item << " exists with weight " << weight << dendl;
+      ldout(cct, 10) << "create_or_move_item " << item
+		     << " exists with weight " << weight << dendl;
       remove_item(cct, item, true);
     }
-    ldout(cct, 5) << "create_or_move_item adding " << item << " weight " << weight
+    ldout(cct, 5) << "create_or_move_item adding " << item
+		  << " weight " << weight
 		  << " at " << loc << dendl;
     ret = insert_item(cct, item, weight, name, loc);
     if (ret == 0)
