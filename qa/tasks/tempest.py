@@ -3,17 +3,11 @@ Deploy and configure Tempest for Teuthology
 """
 import contextlib
 import logging
-import os
-import random
-import string
-import sys
 
 from teuthology import misc as teuthology
 from teuthology import contextutil
-from teuthology import safepath
 from teuthology.config import config as teuth_config
 from teuthology.orchestra import run
-from teuthology.orchestra.connection import split_user
 
 log = logging.getLogger(__name__)
 
@@ -150,7 +144,9 @@ def run_tempest(ctx, config):
     assert isinstance(config, dict)
     log.info('Configuring Tempest')
 
-    for (client, _) in config.items():
+    for (client, cconf) in config.items():
+        blacklist = cconf.get('blacklist', [])
+        assert isinstance(blacklist, list)
         run_in_tempest_venv(ctx, client,
             [
                 'tempest',
@@ -161,11 +157,8 @@ def run_tempest(ctx, config):
                 'rgw',
                 '--regex',
                     '(tempest.api.object_storage)' +
-                    '(?!.*test_list_containers_reverse_order.*)' +
-                    '(?!.*test_list_container_contents_with_end_marker.*)' +
-                    '(?!.*test_delete_non_empty_container.*)' +
-                    '(?!.*test_container_synchronization.*)' +
-                    '(?!.*test_get_object_after_expiration_time.*)'
+                    ''.join([ '(?!{blackitem})'.format(blackitem=blackitem)
+                        for blackitem in blacklist])
             ])
     try:
         yield
@@ -219,6 +212,15 @@ def task(ctx, config):
             object-storage-feature-enabled:
               container_sync: false
               discoverability: false
+            blacklist:
+              # please strip half of these items after merging PRs #15369
+              # and #12704
+              - .*test_list_containers_reverse_order.*
+              - .*test_list_container_contents_with_end_marker.*
+              - .*test_delete_non_empty_container.*
+              - .*test_container_synchronization.*
+              - .*test_get_object_after_expiration_time.*
+              - .*test_create_object_with_transfer_encoding.*
     """
     assert config is None or isinstance(config, list) \
         or isinstance(config, dict), \
