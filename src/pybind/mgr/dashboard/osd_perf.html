@@ -7,8 +7,6 @@
             // Pre-populated initial data at page load
             var content_data = {{ content_data }};
 
-
-
             var hexdigits = function(v) {
                 var i = Math.floor(v * 255);
                 if (Math.floor(i) < 0x10) {
@@ -98,7 +96,7 @@
             post_load();
 
             var refresh = function() {
-                $.get("/osd_perf_data/" + content_data.osd.osd  + "/", function(data) {
+                $.get("/osd/perf_data/" + content_data.osd.osd  + "/", function(data) {
                     _.extend(content_data.osd_histogram, data.osd_histogram);
                     _.extend(content_data.osd, data.osd);
                     _.extend(content_data.osd_metadata, data.osd_metadata);
