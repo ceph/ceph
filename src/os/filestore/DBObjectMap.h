@@ -230,6 +230,11 @@ public:
   /// Ensure that all previous operations are durable
   int sync(const ghobject_t *oid=0, const SequencerPosition *spos=0) override;
 
+  void compact() override {
+    assert(db);
+    db->compact();
+  }
+
   /// Util, get all objects, there must be no other concurrent access
   int list_objects(vector<ghobject_t> *objs ///< [out] objects
     );

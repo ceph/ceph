@@ -2332,6 +2332,12 @@ function test_osd_tell_help_command()
   expect_false ceph tell osd.100 help
 }
 
+function test_osd_compact()
+{
+  ceph tell osd.1 compact
+  ceph daemon osd.1 compact
+}
+
 function test_mds_tell_help_command()
 {
   local FS_NAME=cephfs
@@ -2411,6 +2417,7 @@ OSD_TESTS+=" osd_negative_filestore_merge_threshold"
 OSD_TESTS+=" tiering_agent"
 OSD_TESTS+=" admin_heap_profiler"
 OSD_TESTS+=" osd_tell_help_command"
+OSD_TESTS+=" osd_compact"
 
 MDS_TESTS+=" mds_tell"
 MDS_TESTS+=" mon_mds"
