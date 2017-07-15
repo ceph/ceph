@@ -1327,14 +1327,19 @@ pair<string,string> CrushWrapper::get_immediate_parent(int id, int *_ret)
   return pair<string, string>();
 }
 
-int CrushWrapper::get_immediate_parent_id(int id, int *parent) const
+int CrushWrapper::get_immediate_parent_id(int id,
+                                          int *parent,
+                                          parent_type_t choice) const
 {
   for (int bidx = 0; bidx < crush->max_buckets; bidx++) {
     crush_bucket *b = crush->buckets[bidx];
     if (b == 0)
       continue;
-    if (is_shadow_item(b->id))
+    if (choice == PARENT_NONSHADOW && is_shadow_item(b->id)) {
       continue;
+    } else if (choice == PARENT_SHADOW && !is_shadow_item(b->id)) {
+      continue;
+    }
     for (unsigned i = 0; i < b->size; i++) {
       if (b->items[i] == id) {
 	*parent = b->id;
@@ -1810,6 +1815,43 @@ int CrushWrapper::update_device_class(int id,
   if (r < 0)
     return r;
   return 1;
+}
+
+int CrushWrapper::remove_device_class(CephContext *cct, int id, ostream *ss)
+{
+  assert(ss);
+  const char *name = get_item_name(id);
+  if (!name) {
+    *ss << "osd." << id << " does not have a name";
+    return -ENOENT;
+  }
+
+  const char *class_name = get_item_class(id);
+  if (!class_name) {
+    *ss << "osd." << id << " has not been bound to a specific class yet";
+    return 0;
+  }
+  class_remove_item(id);
+
+  // note that there is no need to remove ourselves from shadow parent
+  // and reweight because we are going to destroy all shadow trees
+  // rebuild them all (if necessary) later.
+
+  // see if there is any osds that still reference this class
+  set<int> devices;
+  get_devices_by_class(class_name, &devices);
+  if (devices.empty()) {
+    // class has no more devices
+    remove_class_name(class_name);
+  }
+
+  int r = rebuild_roots_with_classes();
+  if (r < 0) {
+    *ss << "unable to rebuild roots with class '" << class_name << "' "
+        << "of osd." << id << ": " << cpp_strerror(r);
+    return r;
+  }
+  return 0;
 }
 
 int CrushWrapper::device_class_clone(int original_id, int device_class, int *clone)

@@ -676,7 +676,16 @@ public:
    * FIXME: ambiguous for items that occur multiple times in the map
    */
   pair<string,string> get_immediate_parent(int id, int *ret = NULL);
-  int get_immediate_parent_id(int id, int *parent) const;
+
+  typedef enum {
+    PARENT_NONSHADOW,
+    PARENT_SHADOW,
+    PARENT_ALL,
+  } parent_type_t;
+
+  int get_immediate_parent_id(int id,
+                              int *parent,
+                              parent_type_t choice = PARENT_NONSHADOW) const;
 
   /**
    * return ancestor of the given type, or 0 if none
@@ -1221,6 +1230,7 @@ public:
   }
 
   int update_device_class(int id, const string& class_name, const string& name, ostream *ss);
+  int remove_device_class(CephContext *cct, int id, ostream *ss);
   int device_class_clone(int original, int device_class, int *clone);
   bool class_is_in_use(int class_id, ostream *ss = nullptr);
   int populate_classes();
