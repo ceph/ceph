@@ -39,7 +39,7 @@ Synopsis
 
 | **ceph** **mon_status**
 
-| **ceph** **osd** [ *blacklist* \| *blocked-by* \| *create* \| *new* \| *deep-scrub* \| *df* \| *down* \| *dump* \| *erasure-code-profile* \| *find* \| *getcrushmap* \| *getmap* \| *getmaxosd* \| *in* \| *lspools* \| *map* \| *metadata* \| *out* \| *pause* \| *perf* \| *pg-temp* \| *primary-affinity* \| *primary-temp* \| *repair* \| *reweight* \| *reweight-by-pg* \| *rm* \| *destroy* \| *purge* \| *scrub* \| *set* \| *setcrushmap* \| *setmaxosd*  \| *stat* \| *tree* \| *unpause* \| *unset* ] ...
+| **ceph** **osd** [ *blacklist* \| *blocked-by* \| *create* \| *new* \| *deep-scrub* \| *df* \| *down* \| *dump* \| *erasure-code-profile* \| *find* \| *getcrushmap* \| *getmap* \| *getmaxosd* \| *in* \| *lspools* \| *map* \| *metadata* \| *out* \| *pause* \| *perf* \| *pg-temp* \| *force-create-pg* \| *primary-affinity* \| *primary-temp* \| *repair* \| *reweight* \| *reweight-by-pg* \| *rm* \| *destroy* \| *purge* \| *scrub* \| *set* \| *setcrushmap* \| *setmaxosd*  \| *stat* \| *tree* \| *unpause* \| *unset* ] ...
 
 | **ceph** **osd** **crush** [ *add* \| *add-bucket* \| *create-or-move* \| *dump* \| *get-tunable* \| *link* \| *move* \| *remove* \| *rename-bucket* \| *reweight* \| *reweight-all* \| *reweight-subtree* \| *rm* \| *rule* \| *set* \| *set-tunable* \| *show-tunables* \| *tunables* \| *unlink* ] ...
 
@@ -826,6 +826,13 @@ Usage::
 
 	ceph osd pg-temp <pgid> {<id> [<id>...]}
 
+Subcommand ``force-create-pg`` forces creation of pg <pgid>.
+
+Usage::
+
+	ceph osd force-create-pg <pgid>
+
+
 Subcommand ``pool`` is used for managing data pools. It uses some additional
 subcommands.
 
@@ -1129,12 +1136,6 @@ Usage::
 
 	ceph pg dump_stuck {inactive|unclean|stale|undersized|degraded [inactive|unclean|stale|undersized|degraded...]}
 	{<int>}
-
-Subcommand ``force_create_pg`` forces creation of pg <pgid>.
-
-Usage::
-
-	ceph pg force_create_pg <pgid>
 
 Subcommand ``getmap`` gets binary pg map to -o/stdout.
 
