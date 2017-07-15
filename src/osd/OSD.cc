@@ -42,6 +42,7 @@
 
 #include "common/errno.h"
 #include "common/ceph_argparse.h"
+#include "common/ceph_time.h"
 #include "common/version.h"
 #include "common/io_priority.h"
 
@@ -158,6 +159,7 @@
 #define dout_subsys ceph_subsys_osd
 #undef dout_prefix
 #define dout_prefix _prefix(_dout, whoami, get_osdmap_epoch())
+
 
 const double OSD::OSD_TICK_INTERVAL = 1.0;
 
@@ -2212,6 +2214,18 @@ bool OSD::asok_command(string admin_command, cmdmap_t& cmdmap, string format,
       pg->unlock();
     }
     f->close_section();
+  } else if (admin_command == "compact") {
+    dout(1) << "triggering manual compaction" << dendl;
+    auto start = ceph::coarse_mono_clock::now();
+    store->compact();
+    auto end = ceph::coarse_mono_clock::now();
+    auto time_span = chrono::duration_cast<chrono::duration<double>>(end - start);
+    dout(1) << "finished manual compaction in " 
+            << time_span.count()
+            << " seconds" << dendl;
+    f->open_object_section("compact_result");
+    f->dump_float("elapsed_time", time_span.count());
+    f->close_section();
   } else {
     assert(0 == "broken asok registration");
   }
@@ -2749,6 +2763,12 @@ void OSD::final_init()
 				     "show recent state history");
   assert(r == 0);
 
+  r = admin_socket->register_command("compact", "compact",
+				     asok_hook,
+				     "Commpact object store's omap."
+                                     " WARNING: Compaction probably slows your requests");
+  assert(r == 0);
+
   test_ops_hook = new TestOpsSocketHook(&(this->service), this->store);
   // Note: pools are CephString instead of CephPoolname because
   // these commands traditionally support both pool names and numbers
@@ -3214,12 +3234,15 @@ int OSD::shutdown()
   cct->get_admin_socket()->unregister_command("dump_watchers");
   cct->get_admin_socket()->unregister_command("dump_reservations");
   cct->get_admin_socket()->unregister_command("get_latest_osdmap");
+  cct->get_admin_socket()->unregister_command("heap");
   cct->get_admin_socket()->unregister_command("set_heap_property");
   cct->get_admin_socket()->unregister_command("get_heap_property");
   cct->get_admin_socket()->unregister_command("dump_objectstore_kv_stats");
+  cct->get_admin_socket()->unregister_command("dump_scrubs");
   cct->get_admin_socket()->unregister_command("calc_objectstore_db_histogram");
   cct->get_admin_socket()->unregister_command("flush_store_cache");
   cct->get_admin_socket()->unregister_command("dump_pgstate_history");
+  cct->get_admin_socket()->unregister_command("compact");
   delete asok_hook;
   asok_hook = NULL;
 
@@ -3231,6 +3254,8 @@ int OSD::shutdown()
   cct->get_admin_socket()->unregister_command("injectdataerr");
   cct->get_admin_socket()->unregister_command("injectmdataerr");
   cct->get_admin_socket()->unregister_command("set_recovery_delay");
+  cct->get_admin_socket()->unregister_command("trigger_scrub");
+  cct->get_admin_socket()->unregister_command("injectfull");
   delete test_ops_hook;
   test_ops_hook = NULL;
 
@@ -6211,6 +6236,10 @@ COMMAND("dump_pg_recovery_stats", "dump pg recovery statistics",
 	"osd", "r", "cli,rest")
 COMMAND("reset_pg_recovery_stats", "reset pg recovery statistics",
 	"osd", "rw", "cli,rest")
+COMMAND("compact",
+        "compact object store's omap. "
+        "WARNING: Compaction probably slows your requests",
+        "osd", "rw", "cli,rest")
 };
 
 void OSD::do_command(Connection *con, ceph_tid_t tid, vector<string>& cmd, bufferlist& data)
@@ -6623,6 +6652,18 @@ void OSD::do_command(Connection *con, ceph_tid_t tid, vector<string>& cmd, buffe
           f.get(), false, logger, counter);
       f->flush(ds);
     }
+  }
+
+  else if (prefix == "compact") {
+    dout(1) << "triggering manual compaction" << dendl;
+    auto start = ceph::coarse_mono_clock::now();
+    store->compact();
+    auto end = ceph::coarse_mono_clock::now();
+    auto time_span = chrono::duration_cast<chrono::duration<double>>(end - start);
+    dout(1) << "finished manual compaction in "
+            << time_span.count()
+            << " seconds" << dendl;
+    ss << "compacted omap in " << time_span.count() << " seconds";
   }
 
   else {

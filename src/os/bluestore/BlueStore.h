@@ -2388,6 +2388,11 @@ public:
     RWLock::WLocker l(debug_read_error_lock);
     debug_mdata_error_objects.insert(o);
   }
+  void compact() override {
+    assert(db);
+    db->compact();
+  }
+  
 private:
   bool _debug_data_eio(const ghobject_t& o) {
     if (!cct->_conf->bluestore_debug_inject_read_err) {
