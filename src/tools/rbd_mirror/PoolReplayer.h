@@ -15,6 +15,7 @@
 #include "PoolWatcher.h"
 #include "ImageDeleter.h"
 #include "types.h"
+#include "tools/rbd_mirror/service_daemon/Types.h"
 
 #include <set>
 #include <map>
@@ -137,6 +138,8 @@ private:
   AdminSocketHook *m_asok_hook = nullptr;
 
   std::map<std::string, ImageIds> m_initial_mirror_image_ids;
+
+  service_daemon::CalloutId m_callout_id = service_daemon::CALLOUT_ID_NONE;
 
   class PoolReplayerThread : public Thread {
     PoolReplayer *m_pool_replayer;
