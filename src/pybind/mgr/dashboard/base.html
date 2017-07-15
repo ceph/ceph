@@ -20,6 +20,7 @@
           href="/static/AdminLTE-2.3.7/dist/css/skins/skin-blue.min.css">
 
     <script src="/static/AdminLTE-2.3.7/plugins/jQuery/jquery-2.2.3.min.js"></script>
+    <script src="/static/AdminLTE-2.3.7/plugins/sparkline/jquery.sparkline.min.js"></script>
 
     <script src="/static/rivets.bundled.min.js"></script>
     <script src="/static/underscore-min.js"></script>
@@ -259,9 +260,20 @@
             <i class="fa fa-heartbeat" rv-style="health_status | health_color"></i>
             <span>Cluster health</span></a>
         </li>
-        <li><a href="/servers">
-            <i class="fa fa-server"></i>
-            <span>Servers</span></a>
+        <li class="treeview active">
+          <a href="#"><i class="fa fa-server"></i> <span>Cluster</span>
+            <span class="pull-right-container">
+              <i class="fa fa-angle-left pull-right"></i>
+            </span>
+          </a>
+          <ul class="treeview-menu menu-open">
+            <li>
+                <a href="/servers">Servers</a>
+            </li>
+            <li>
+                <a href="/osd">OSDs</a>
+            </li>
+          </ul>
         </li>
         <li class="treeview active">
           <a href="#"><i class="fa fa-hdd-o"></i> <span>Block</span>
