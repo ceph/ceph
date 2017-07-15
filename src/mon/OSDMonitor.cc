@@ -10438,6 +10438,32 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 	new Monitor::C_Command(mon, op, 0, rs, rdata, get_last_committed() + 1));
       return true;
     }
+  } else if (prefix == "osd force-create-pg") {
+    pg_t pgid;
+    string pgidstr;
+    cmd_getval(g_ceph_context, cmdmap, "pgid", pgidstr);
+    if (!pgid.parse(pgidstr.c_str())) {
+      ss << "invalid pgid '" << pgidstr << "'";
+      err = -EINVAL;
+      goto reply;
+    }
+    bool creating_now;
+    {
+      std::lock_guard<std::mutex> l(creating_pgs_lock);
+      auto emplaced = creating_pgs.pgs.emplace(pgid,
+					       make_pair(osdmap.get_epoch(),
+							 ceph_clock_now()));
+      creating_now = emplaced.second;
+    }
+    if (creating_now) {
+      ss << "pg " << pgidstr << " now creating, ok";
+      err = 0;
+      goto update;
+    } else {
+      ss << "pg " << pgid << " already creating";
+      err = 0;
+      goto reply;
+    }
   } else {
     err = -EINVAL;
   }
