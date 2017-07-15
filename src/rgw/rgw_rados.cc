@@ -4904,8 +4904,14 @@ struct log_list_state {
 
 int RGWRados::log_list_init(const string& filter, RGWAccessHandle *handle, const bool filter_by_date)
 {
+  return log_list_init(filter, handle, get_zone_params().log_pool, filter_by_date);
+}
+
+int RGWRados::log_list_init(const string& filter, RGWAccessHandle *handle, rgw_pool& pool,
+                            const bool filter_by_date)
+{
   log_list_state *state = new log_list_state;
-  int r = rgw_init_ioctx(get_rados_handle(), get_zone_params().log_pool, state->io_ctx);
+  int r = rgw_init_ioctx(get_rados_handle(), pool, state->io_ctx);
   if (r < 0) {
     delete state;
     return r;
@@ -4945,8 +4951,13 @@ int RGWRados::log_list_next(RGWAccessHandle handle, string *name)
 
 int RGWRados::log_remove(const string& name)
 {
+  return log_remove(name, get_zone_params().log_pool);
+}
+
+int RGWRados::log_remove(const string& name, rgw_pool& pool)
+{
   librados::IoCtx io_ctx;
-  int r = rgw_init_ioctx(get_rados_handle(), get_zone_params().log_pool, io_ctx);
+  int r = rgw_init_ioctx(get_rados_handle(), pool, io_ctx);
   if (r < 0)
     return r;
   return io_ctx.remove(name);
@@ -4964,8 +4975,13 @@ struct log_show_state {
 
 int RGWRados::log_show_init(const string& name, RGWAccessHandle *handle)
 {
+  return log_show_init(name, handle, get_zone_params().log_pool);
+}
+
+int RGWRados::log_show_init(const string& name, RGWAccessHandle *handle, rgw_pool& pool)
+{
   log_show_state *state = new log_show_state;
-  int r = rgw_init_ioctx(get_rados_handle(), get_zone_params().log_pool, state->io_ctx);
+  int r = rgw_init_ioctx(get_rados_handle(), pool, state->io_ctx);
   if (r < 0) {
     delete state;
     return r;
