@@ -20,6 +20,7 @@
 #include "InstanceReplayer.h"
 #include "InstanceWatcher.h"
 #include "LeaderWatcher.h"
+#include "ServiceDaemon.h"
 #include "Threads.h"
 
 #define dout_context g_ceph_context
@@ -41,6 +42,10 @@ namespace rbd {
 namespace mirror {
 
 namespace {
+
+const std::string SERVICE_DAEMON_LEADER_KEY("leader");
+const std::string SERVICE_DAEMON_LOCAL_COUNT_KEY("image_local_count");
+const std::string SERVICE_DAEMON_REMOTE_COUNT_KEY("image_remote_count");
 
 class PoolReplayerAdminSocketCommand {
 public:
@@ -257,6 +262,9 @@ void PoolReplayer::init()
                      g_ceph_context->_conf->name.to_str(),
                      "local cluster", &m_local_rados);
   if (r < 0) {
+    m_callout_id = m_service_daemon->add_or_update_callout(
+      m_local_pool_id, m_callout_id, service_daemon::CALLOUT_LEVEL_ERROR,
+      "unable to connect to local cluster");
     return;
   }
 
@@ -264,6 +272,9 @@ void PoolReplayer::init()
                  std::string("remote peer ") + stringify(m_peer),
                  &m_remote_rados);
   if (r < 0) {
+    m_callout_id = m_service_daemon->add_or_update_callout(
+      m_local_pool_id, m_callout_id, service_daemon::CALLOUT_LEVEL_ERROR,
+      "unable to connect to remote cluster");
     return;
   }
 
@@ -280,6 +291,9 @@ void PoolReplayer::init()
   if (r < 0) {
     derr << "failed to retrieve local mirror uuid from pool "
          << m_local_io_ctx.get_pool_name() << ": " << cpp_strerror(r) << dendl;
+    m_callout_id = m_service_daemon->add_or_update_callout(
+      m_local_pool_id, m_callout_id, service_daemon::CALLOUT_LEVEL_ERROR,
+      "unable to query local mirror uuid");
     return;
   }
 
@@ -288,6 +302,9 @@ void PoolReplayer::init()
   if (r < 0) {
     derr << "error accessing remote pool " << m_local_io_ctx.get_pool_name()
          << ": " << cpp_strerror(r) << dendl;
+    m_callout_id = m_service_daemon->add_or_update_callout(
+      m_local_pool_id, m_callout_id, service_daemon::CALLOUT_LEVEL_WARNING,
+      "unable to access remote pool");
     return;
   }
 
@@ -304,6 +321,9 @@ void PoolReplayer::init()
   r = m_instance_watcher->init();
   if (r < 0) {
     derr << "error initializing instance watcher: " << cpp_strerror(r) << dendl;
+    m_callout_id = m_service_daemon->add_or_update_callout(
+      m_local_pool_id, m_callout_id, service_daemon::CALLOUT_LEVEL_ERROR,
+      "unable to initialize instance messenger object");
     return;
   }
 
@@ -312,7 +332,15 @@ void PoolReplayer::init()
   r = m_leader_watcher->init();
   if (r < 0) {
     derr << "error initializing leader watcher: " << cpp_strerror(r) << dendl;
+    m_callout_id = m_service_daemon->add_or_update_callout(
+      m_local_pool_id, m_callout_id, service_daemon::CALLOUT_LEVEL_ERROR,
+      "unable to initialize leader messenger object");
     return;
+  }
+
+  if (m_callout_id != service_daemon::CALLOUT_ID_NONE) {
+    m_service_daemon->remove_callout(m_local_pool_id, m_callout_id);
+    m_callout_id = service_daemon::CALLOUT_ID_NONE;
   }
 
   m_pool_replayer_thread.create("pool replayer");
@@ -578,6 +606,15 @@ void PoolReplayer::handle_update(const std::string &mirror_uuid,
     return;
   }
 
+  m_service_daemon->add_or_update_attribute(
+    m_local_pool_id, SERVICE_DAEMON_LOCAL_COUNT_KEY,
+    m_local_pool_watcher->get_image_count());
+  if (m_remote_pool_watcher) {
+    m_service_daemon->add_or_update_attribute(
+      m_local_pool_id, SERVICE_DAEMON_REMOTE_COUNT_KEY,
+      m_remote_pool_watcher->get_image_count());
+  }
+
   if (m_initial_mirror_image_ids.find(mirror_uuid) ==
         m_initial_mirror_image_ids.end() &&
       m_initial_mirror_image_ids.size() < 2) {
@@ -636,6 +673,8 @@ void PoolReplayer::handle_update(const std::string &mirror_uuid,
 void PoolReplayer::handle_post_acquire_leader(Context *on_finish) {
   dout(20) << dendl;
 
+  m_service_daemon->add_or_update_attribute(m_local_pool_id,
+                                            SERVICE_DAEMON_LEADER_KEY, true);
   m_instance_watcher->handle_acquire_leader();
   init_local_pool_watcher(on_finish);
 }
@@ -643,6 +682,7 @@ void PoolReplayer::handle_post_acquire_leader(Context *on_finish) {
 void PoolReplayer::handle_pre_release_leader(Context *on_finish) {
   dout(20) << dendl;
 
+  m_service_daemon->remove_attribute(m_local_pool_id, SERVICE_DAEMON_LEADER_KEY);
   m_instance_watcher->handle_release_leader();
   shut_down_pool_watchers(on_finish);
 }

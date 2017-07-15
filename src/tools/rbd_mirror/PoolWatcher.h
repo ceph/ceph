@@ -52,6 +52,11 @@ public:
   void init(Context *on_finish = nullptr);
   void shut_down(Context *on_finish);
 
+  inline size_t get_image_count() const {
+    Mutex::Locker locker(m_lock);
+    return m_image_ids.size();
+  }
+
 private:
   /**
    * @verbatim
