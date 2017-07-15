@@ -7,6 +7,7 @@
 #include "cls/rbd/cls_rbd_client.h"
 #include "librbd/internal.h"
 #include "librbd/api/Mirror.h"
+#include "tools/rbd_mirror/ServiceDaemon.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rbd_mirror
@@ -63,9 +64,10 @@ void ClusterWatcher::read_pool_peers(PoolPeers *pool_peers,
     return;
   }
 
-  for (auto kv : pools) {
+  std::set<int64_t> service_pool_ids;
+  for (auto& kv : pools) {
     int64_t pool_id = kv.first;
-    string pool_name = kv.second;
+    auto& pool_name = kv.second;
     int64_t base_tier;
     r = m_cluster->pool_get_base_tier(pool_id, &base_tier);
     if (r == -ENOENT) {
@@ -92,16 +94,29 @@ void ClusterWatcher::read_pool_peers(PoolPeers *pool_peers,
 
     cls::rbd::MirrorMode mirror_mode_internal;
     r = librbd::cls_client::mirror_mode_get(&ioctx, &mirror_mode_internal);
+    if (r == 0 && mirror_mode_internal == cls::rbd::MIRROR_MODE_DISABLED) {
+      dout(10) << "mirroring is disabled for pool " << pool_name << dendl;
+      continue;
+    }
+
+    service_pool_ids.insert(pool_id);
+    if (m_service_pools.find(pool_id) == m_service_pools.end()) {
+      m_service_pools[pool_id] = {};
+      m_service_daemon->add_pool(pool_id, pool_name);
+    }
+
     if (r == -EPERM) {
       dout(10) << "access denied querying pool " << pool_name << dendl;
+      m_service_pools[pool_id] = m_service_daemon->add_or_update_callout(
+        pool_id, m_service_pools[pool_id],
+        service_daemon::CALLOUT_LEVEL_WARNING, "access denied");
       continue;
     } else if (r < 0) {
       derr << "could not tell whether mirroring was enabled for " << pool_name
 	   << " : " << cpp_strerror(r) << dendl;
-      continue;
-    }
-    if (mirror_mode_internal == cls::rbd::MIRROR_MODE_DISABLED) {
-      dout(10) << "mirroring is disabled for pool " << pool_name << dendl;
+      m_service_pools[pool_id] = m_service_daemon->add_or_update_callout(
+        pool_id, m_service_pools[pool_id],
+        service_daemon::CALLOUT_LEVEL_WARNING, "mirroring mode query failed");
       continue;
     }
 
@@ -110,11 +125,27 @@ void ClusterWatcher::read_pool_peers(PoolPeers *pool_peers,
     if (r < 0) {
       derr << "error reading mirroring config for pool " << pool_name
 	   << cpp_strerror(r) << dendl;
+      m_service_pools[pool_id] = m_service_daemon->add_or_update_callout(
+        pool_id, m_service_pools[pool_id],
+        service_daemon::CALLOUT_LEVEL_ERROR, "mirroring peer list failed");
       continue;
+    }
+
+    if (m_service_pools[pool_id] != service_daemon::CALLOUT_ID_NONE) {
+      m_service_daemon->remove_callout(pool_id, m_service_pools[pool_id]);
+      m_service_pools[pool_id] = service_daemon::CALLOUT_ID_NONE;
     }
 
     pool_peers->insert({pool_id, Peers{configs.begin(), configs.end()}});
     pool_names->insert(pool_name);
+  }
+
+  for (auto it = m_service_pools.begin(); it != m_service_pools.end(); ) {
+    auto current_it(it++);
+    if (service_pool_ids.find(current_it->first) == service_pool_ids.end()) {
+      m_service_daemon->remove_pool(current_it->first);
+      m_service_pools.erase(current_it->first);
+    }
   }
 }
 
