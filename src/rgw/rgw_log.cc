@@ -361,7 +361,8 @@ int rgw_log_op(RGWRados *store, RGWREST* const rest, struct req_state *s,
       status.decode(iter);
     } catch (const buffer::error& e) {
       ldout(s->cct, 20) << __func__ <<  " decode bucket logging status failed" << dendl;
-      return 0;
+      if (!s->enable_ops_log)
+        return 0;
     }
   }
 
@@ -458,40 +459,59 @@ int rgw_log_op(RGWRados *store, RGWREST* const rest, struct req_state *s,
   else
     localtime_r(&t, &bdt);
 
-  std::string oid;
+  int bl_ret = 0;
+
   if (status.is_enabled()) {
     std::string rgw_log_obj_name = "%Y-%m-%d-%H-%M-%S-%i-%n-%u";
-    oid = render_log_object_name(rgw_log_obj_name, &bdt,
-                                 s->bucket.bucket_id, entry.bucket);
-  } else {
-    oid = render_log_object_name(s->cct->_conf->rgw_log_object_name, &bdt,
-                                 s->bucket.bucket_id, entry.bucket);
-  }
-  ldout(s->cct, 15) << "rgw_log_op get ops log obj oid: " << oid << dendl;
+    std::string bl_oid = render_log_object_name(rgw_log_obj_name, &bdt,
+                                                s->bucket.bucket_id, entry.bucket);
 
-  rados::cls::lock::Lock l(oid);
-  // the default rgw_usage_log_tick_interval is 30 secs, so for keep
-  // consistent with usage log, we set the default value of
-  // rgw_bl_ops_log_lock_duration to 30 secs.
-  utime_t time(s->cct->_conf->rgw_bl_ops_log_lock_duration, 0);
-  l.set_duration(time);
-  librados::IoCtx *ctx = store->get_log_pool_ctx();
+    ldout(s->cct, 15) << "rgw_log_op get bl ops log obj bl_oid: " << bl_oid << dendl;
+
+    rgw_raw_obj obj(store->get_zone_params().bl_pool, bl_oid);
+
+    rados::cls::lock::Lock l(bl_oid);
+    // the default rgw_usage_log_tick_interval is 30 secs, so for keep
+    // consistent with usage log, we set the default value of
+    // rgw_bl_ops_log_lock_duration to 30 secs.
+    utime_t time(s->cct->_conf->rgw_bl_ops_log_lock_duration, 0);
+    l.set_duration(time);
+    librados::IoCtx *ctx = store->get_bl_pool_ctx();
+    bl_ret = l.lock_exclusive(ctx, bl_oid);
+    if (bl_ret < 0 && bl_ret != -EEXIST) {
+      ldout(s->cct, 0) << "rgw_log_op failed to acquire lock " << bl_oid
+                         << " bl_ret: " << bl_ret << dendl;
+      goto bl_done;
+    }
+
+    ldout(s->cct, 10) << "rgw_log_op acquire lock name = " << bl_oid << dendl;
+
+    bl_ret = store->append_async(obj, bl.length(), bl);
+    if (bl_ret == -ENOENT) {
+      bl_ret = store->create_pool(store->get_zone_params().bl_pool);
+      if (bl_ret < 0)
+        goto bl_done;
+      // retry
+      bl_ret = store->append_async(obj, bl.length(), bl);
+    }
+
+bl_done:
+    if (bl_ret < 0) {
+      ldout(s->cct, 0) << "ERROR: failed to bl ops log entry, bl_ret = "
+                       << bl_ret << dendl;
+      l.unlock(ctx, bl_oid);
+    }
+  }
 
   int ret = 0;
 
-  if (s->cct->_conf->rgw_ops_log_rados) {
+  if (s->enable_ops_log && s->cct->_conf->rgw_ops_log_rados) {
+    std::string oid = render_log_object_name(s->cct->_conf->rgw_log_object_name, &bdt,
+                                             s->bucket.bucket_id, entry.bucket);
+
+    ldout(s->cct, 15) << "rgw_log_op get ops log obj oid: " << oid << dendl;
+
     rgw_raw_obj obj(store->get_zone_params().log_pool, oid);
-
-    if (status.is_enabled()) {
-      ret = l.lock_exclusive(ctx, oid);
-      if (ret < 0 && ret != -EEXIST) {
-        ldout(s->cct, 0) << "rgw_log_op failed to acquire lock " << oid
-                         << " ret: " << ret << dendl;
-        goto done;
-      }
-
-      ldout(s->cct, 10) << "rgw_log_op acquire lock name = " << oid << dendl;
-    }
 
     ret = store->append_async(obj, bl.length(), bl);
     if (ret == -ENOENT) {
@@ -507,13 +527,10 @@ int rgw_log_op(RGWRados *store, RGWREST* const rest, struct req_state *s,
     olog->log(entry);
   }
 done:
-  if (ret < 0) {
-    ldout(s->cct, 0) << "ERROR: failed to log entry" << dendl;
-    if (status.is_enabled()) {
-      l.unlock(ctx, oid);
-    }
-  }
+  if (ret < 0)
+    ldout(s->cct, 0) << "ERROR: failed to log entry, ret = "
+                     << ret << dendl;
 
-  return ret;
+  return (ret || bl_ret);
 }
 

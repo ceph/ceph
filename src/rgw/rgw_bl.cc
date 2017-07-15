@@ -201,7 +201,7 @@ static string render_target_key(CephContext *cct, const string prefix)
 int RGWBL::bucket_bl_fetch(const string opslog_obj, bufferlist *buffer)
 {
   RGWAccessHandle sh;
-  int r = store->log_show_init(opslog_obj, &sh);
+  int r = store->log_show_init(opslog_obj, &sh, store->get_zone_params().bl_pool);
   if (r < 0) {
     ldout(cct, 0) << "RGWBL::bucket_bl_fetch"
                   << " log_show_init() failed, obj=" << opslog_obj
@@ -329,7 +329,7 @@ int RGWBL::bucket_bl_upload(bufferlist* opslog_buffer, rgw_obj obj,
 
 int RGWBL::bucket_bl_remove(const string obj_name)
 {
-  int r = store->log_remove(obj_name);
+  int r = store->log_remove(obj_name, store->get_zone_params().bl_pool);
   if (r < 0) {
     ldout(cct, 0) << "RGWBL::bucket_bl_remove" 
                   << " log_remove() failed uploaded ret="
@@ -346,7 +346,7 @@ int RGWBL::bucket_bl_deliver(string opslog_obj, const rgw_bucket target_bucket,
   ldout(cct, 20) << __func__ << " fetch phrase:" << dendl;
 
   RGWAccessHandle sh;
-  int ret = store->log_show_init(opslog_obj, &sh);
+  int ret = store->log_show_init(opslog_obj, &sh, store->get_zone_params().bl_pool);
   if (ret < 0) {
     ldout(cct, 0) << "RGWBL::bucket_bl_deliver"
                   << " log_show_init() failed, obj=" << opslog_obj
@@ -360,7 +360,7 @@ int RGWBL::bucket_bl_deliver(string opslog_obj, const rgw_bucket target_bucket,
   std::vector<std::string> uploaded_obj_keys;
 
   rados::cls::lock::Lock l(opslog_obj);
-  librados::IoCtx *ctx = store->get_log_pool_ctx();
+  librados::IoCtx *ctx = store->get_bl_pool_ctx();
 
   ret = l.lock_exclusive(ctx, opslog_obj);
   if (ret < 0) {
@@ -528,7 +528,7 @@ int RGWBL::bucket_bl_process(string& shard_id)
   filter += "-";
   filter += sbucket_name;
   RGWAccessHandle lh;
-  ret = store->log_list_init(filter, &lh);
+  ret = store->log_list_init(filter, &lh, store->get_zone_params().bl_pool);
   if (ret == -ENOENT) {
     // no opslog object
     return 0;
