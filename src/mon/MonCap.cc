@@ -196,19 +196,10 @@ void MonCapGrant::expand_profile_mon(const EntityName& name) const
   }
   if (profile == "bootstrap-osd") {
     string prefix = "dm-crypt/osd";
-    profile_grants.push_back(MonCapGrant("config-key put", "key", StringConstraint("", prefix)));
     profile_grants.push_back(MonCapGrant("mon", MON_CAP_R));  // read monmap
     profile_grants.push_back(MonCapGrant("osd", MON_CAP_R));  // read osdmap
     profile_grants.push_back(MonCapGrant("mon getmap"));
-    profile_grants.push_back(MonCapGrant("osd create"));
-    profile_grants.push_back(MonCapGrant("auth get-or-create"));
-    profile_grants.back().command_args["entity"] = StringConstraint("", "client.");
-    prefix = "allow command \"config-key get\" with key=\"dm-crypt/osd/";
-    profile_grants.back().command_args["caps_mon"] = StringConstraint("", prefix);
-    profile_grants.push_back(MonCapGrant("auth add"));
-    profile_grants.back().command_args["entity"] = StringConstraint("", "osd.");
-    profile_grants.back().command_args["caps_mon"] = StringConstraint("allow profile osd", "");
-    profile_grants.back().command_args["caps_osd"] = StringConstraint("allow *", "");
+    profile_grants.push_back(MonCapGrant("osd new"));
   }
   if (profile == "bootstrap-mds") {
     profile_grants.push_back(MonCapGrant("mon", MON_CAP_R));  // read monmap
