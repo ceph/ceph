@@ -1937,19 +1937,20 @@ void ETableServer::replay(MDSRank *mds)
 
   switch (op) {
   case TABLESERVER_OP_PREPARE:
+    server->_note_prepare(bymds, reqid, true);
     server->_prepare(mutation, reqid, bymds);
-    server->_note_prepare(bymds, reqid);
     break;
   case TABLESERVER_OP_COMMIT:
     server->_commit(tid);
-    server->_note_commit(tid);
+    server->_note_commit(tid, true);
     break;
   case TABLESERVER_OP_ROLLBACK:
     server->_rollback(tid);
-    server->_note_rollback(tid);
+    server->_note_rollback(tid, true);
     break;
   case TABLESERVER_OP_SERVER_UPDATE:
     server->_server_update(mutation);
+    server->_note_server_update(mutation, true);
     break;
   default:
     mds->clog->error() << "invalid tableserver op in ETableServer";
