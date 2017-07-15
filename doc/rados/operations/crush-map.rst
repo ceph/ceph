@@ -510,6 +510,116 @@ To remove a weight set,::
 
   ceph osd crush weight-set rm {pool-name}
 
+Creating a rule for a replicated pool
+-------------------------------------
+
+For a replicated pool, the primary decision when creating the CRUSH
+rule is what the failure domain is going to be.  For example, if a
+failure domain of ``host`` is selected, then CRUSH will ensure that
+each replica of the data is stored on a different host.  If ``rack``
+is selected, then each replica will be stored in a different rack.
+What failure domain you choose primarily depends on the size of your
+cluster and how your hierarchy is structured.
+
+Normally, the entire cluster hierarchy is nested beneath a root node
+named ``default``.  If you have customized your hierarchy, you may
+want to create a rule nested at some other node in the hierarchy.  It
+doesn't matter what type is associated with that node (it doesn't have
+to be a ``root`` node).
+
+It is also possible to create a rule that restricts data placement to
+a specific *class* of device.  By default, Ceph OSDs automatically
+classify themselves as either ``hdd`` or ``ssd``, depending on the
+underlying type of device being used.  These classes can also be
+customized.
+
+To create a replicated rule,::
+
+  ceph osd crush rule create-replicated {name} {root} {failure-domain-type} [{class}]
+
+Where:
+
+``name``
+
+:Description: The name of the rule
+:Type: String
+:Required: Yes
+:Example: ``rbd-rule``
+
+``root``
+
+:Description: The name of the node under which data should be placed.
+:Type: String
+:Required: Yes
+:Example: ``default``
+
+``failure-domain-type``
+
+:Description: The type of CRUSH nodes across which we should separate replicas.
+:Type: String
+:Required: Yes
+:Example: ``rack``
+
+``class``
+
+:Description: The device class data should be placed on.
+:Type: String
+:Required: No
+:Example: ``ssd``
+
+Creating a rule for an erasure coded pool
+-----------------------------------------
+
+For an erasure-coded pool, the same basic decisions need to be made as
+with a replicated pool: what is the failure domain, what node in the
+hierarchy will data be placed under (usually ``default``), and will
+placement be restricted to a specific device class.  Erasure code
+pools are created a bit differently, however, because they need to be
+constructed carefully based on the erasure code being used.  For this reason,
+you must include this information in the *erasure code profile*.  A CRUSH
+rule will then be created from that either explicitly or automatically when
+the profile is used to create a pool.
+
+The erasure code profiles can be listed with::
+
+  ceph osd erasure-code-profile ls
+
+An existing profile can be viewed with::
+
+  ceph osd erasure-code-profile get {profile-name}
+
+Normally profiles should never be modified; instead, a new profile
+should be created and used when creating a new pool or creating a new
+rule for an existing pool.
+
+An erasure code profile consists of a set of key=value pairs.  Most of
+these control the behavior of the erasure code that is encoding data
+in the pool.  Those that begin with ``crush-``, however, affect the
+CRUSH rule that is created.
+
+The erasure code profile properties of interest are:
+
+ * **crush-root**: the name of the CRUSH node to place data under [default: ``default``].
+ * **crush-failure-domain**: the CRUSH type to separate erasure-coded shards across [default: ``host``].
+ * **crush-device-class**: the device class to place data on [default: none, meaning all devices are used].
+ * **k** and **m** (and, for the ``lrc`` plugin, **l**): these determine the number of erasure code shards, affecting the resulting CRUSH rule.
+
+Once a profile is defined, you can create a CRUSH rule with::
+
+  ceph osd crush rule create-erasure {name} {profile-name}
+
+.. note: When creating a new pool, it is not actually necessary to
+   explicitly create the rule.  If the erasure code profile alone is
+   specified and the rule argument is left off then Ceph will create
+   the CRUSH rule automatically.
+
+Deleting rules
+--------------
+
+Rules that are not in use by pools can be deleted with::
+
+  ceph osd crush rule rm {rule-name}
+
 
 Tunables
 ========
