@@ -50,8 +50,11 @@ public:
 
   bool is_blacklisted() const;
   bool is_leader() const;
+  bool is_running() const;
 
-  int init();
+  void init();
+  void shut_down();
+
   void run();
 
   void print_status(Formatter *f, stringstream *ss);
@@ -106,21 +109,21 @@ private:
   Threads<librbd::ImageCtx> *m_threads;
   ServiceDaemon<librbd::ImageCtx>* m_service_daemon;
   ImageDeleter<>* m_image_deleter;
+  int64_t m_local_pool_id = -1;
+  peer_t m_peer;
+  std::vector<const char*> m_args;
+
   mutable Mutex m_lock;
   Cond m_cond;
   std::atomic<bool> m_stopping = { false };
   bool m_manual_stop = false;
   bool m_blacklisted = false;
 
-  peer_t m_peer;
-  std::vector<const char*> m_args;
   RadosRef m_local_rados;
   RadosRef m_remote_rados;
 
   librados::IoCtx m_local_io_ctx;
   librados::IoCtx m_remote_io_ctx;
-
-  int64_t m_local_pool_id = -1;
 
   PoolWatcherListener m_local_pool_watcher_listener;
   std::unique_ptr<PoolWatcher<> > m_local_pool_watcher;
@@ -131,7 +134,7 @@ private:
   std::unique_ptr<InstanceReplayer<librbd::ImageCtx>> m_instance_replayer;
 
   std::string m_asok_hook_name;
-  AdminSocketHook *m_asok_hook;
+  AdminSocketHook *m_asok_hook = nullptr;
 
   std::map<std::string, ImageIds> m_initial_mirror_image_ids;
 
