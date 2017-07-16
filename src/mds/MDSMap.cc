@@ -408,26 +408,6 @@ void MDSMap::get_health(list<pair<health_status_t,string> >& summary,
 
 void MDSMap::get_health_checks(health_check_map_t *checks) const
 {
-  // FS_WITH_FAILED_MDS
-  // MDS_FAILED
-  if (!failed.empty()) {
-    health_check_t& fscheck = checks->add(
-      "FS_WITH_FAILED_MDS", HEALTH_WARN,
-      "%num% filesystem%plurals% %isorare% have a failed mds daemon");
-    ostringstream ss;
-    ss << "fs " << fs_name << " has " << failed.size() << " failed mds"
-       << (failed.size() > 1 ? "s" : "");
-    fscheck.detail.push_back(ss.str());
-
-    health_check_t& check = checks->add("MDS_FAILED", HEALTH_ERR,
-					 "%num% mds daemon%plurals% down");
-    for (auto p : failed) {
-      std::ostringstream oss;
-      oss << "fs " << fs_name << " mds." << p << " has failed";
-      check.detail.push_back(oss.str());
-    }
-  }
-
   // MDS_DAMAGED
   if (!damaged.empty()) {
     health_check_t& check = checks->add("MDS_DAMAGED", HEALTH_ERR,
@@ -440,7 +420,6 @@ void MDSMap::get_health_checks(health_check_map_t *checks) const
   }
 
   // FS_DEGRADED
-  // MDS_DEGRADED
   if (is_degraded()) {
     health_check_t& fscheck = checks->add(
       "FS_DEGRADED", HEALTH_WARN,
@@ -468,12 +447,6 @@ void MDSMap::get_health_checks(health_check_map_t *checks) const
 	ss << " is reconnecting to clients";
       if (ss.str().length())
 	detail.push_back(ss.str());
-    }
-    if (!detail.empty()) {
-      health_check_t& check = checks->add(
-	"MDS_DEGRADED", HEALTH_WARN,
-	"%num% mds daemon%plurals% %isorare% degraded");
-      check.detail.insert(check.detail.end(), detail.begin(), detail.end());
     }
   }
 }

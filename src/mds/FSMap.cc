@@ -341,7 +341,34 @@ void FSMap::get_health_checks(health_check_map_t *checks) const
   for (const auto &i : filesystems) {
     const auto &fs = i.second;
     health_check_map_t fschecks;
+
     fs->mds_map.get_health_checks(&fschecks);
+
+    // Some of the failed ranks might be transient (i.e. there are standbys
+    // ready to replace them).  We will report only on "stuck" failed, i.e.
+    // ranks which are failed and have no standby replacement available.
+    std::set<mds_rank_t> stuck_failed;
+
+    for (const auto &rank : fs->mds_map.failed) {
+      const mds_gid_t replacement = find_replacement_for(
+          {fs->fscid, rank}, {}, g_conf->mon_force_standby_active);
+      if (replacement == MDS_GID_NONE) {
+        stuck_failed.insert(rank);
+      }
+    }
+
+    // FS_WITH_FAILED_MDS
+    // MDS_FAILED
+    if (!stuck_failed.empty()) {
+      health_check_t& fscheck = checks->add(
+        "FS_WITH_FAILED_MDS", HEALTH_WARN,
+        "%num% filesystem%plurals% %isorare% have a failed mds daemon");
+      ostringstream ss;
+      ss << "fs " << fs->mds_map.fs_name << " has " << stuck_failed.size()
+         << " failed mds" << (stuck_failed.size() > 1 ? "s" : "");
+      fscheck.detail.push_back(ss.str());
+    }
+
     checks->merge(fschecks);
     standby_count_wanted = std::max(
       standby_count_wanted,
