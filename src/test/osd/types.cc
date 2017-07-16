@@ -874,9 +874,36 @@ TEST(pg_missing_t, add_next_event)
     EXPECT_TRUE(e.is_delete());
     missing.add_next_event(e);
     EXPECT_TRUE(missing.is_missing(oid));
+    EXPECT_TRUE(missing.get_items().at(oid).is_delete());
     EXPECT_EQ(prior_version, missing.get_items().at(oid).have);
     EXPECT_EQ(version, missing.get_items().at(oid).need);
+    EXPECT_EQ(oid, missing.get_rmissing().at(e.version.version));
+    EXPECT_EQ(1U, missing.num_missing());
+    EXPECT_EQ(1U, missing.get_rmissing().size());
+  }
+
+  // adding a LOST_DELETE after an existing event
+  {
+    pg_missing_t missing;
+    pg_log_entry_t e = sample_e;
+
+    e.op = pg_log_entry_t::MODIFY;
+    EXPECT_TRUE(e.is_update());
+    EXPECT_TRUE(e.object_is_indexed());
+    EXPECT_TRUE(e.reqid_is_indexed());
+    EXPECT_FALSE(missing.is_missing(oid));
+    missing.add_next_event(e);
+    EXPECT_TRUE(missing.is_missing(oid));
+    EXPECT_FALSE(missing.get_items().at(oid).is_delete());
+
+    e.op = pg_log_entry_t::LOST_DELETE;
+    e.version.version++;
+    EXPECT_TRUE(e.is_delete());
+    missing.add_next_event(e);
+    EXPECT_TRUE(missing.is_missing(oid));
     EXPECT_TRUE(missing.get_items().at(oid).is_delete());
+    EXPECT_EQ(prior_version, missing.get_items().at(oid).have);
+    EXPECT_EQ(e.version, missing.get_items().at(oid).need);
     EXPECT_EQ(oid, missing.get_rmissing().at(e.version.version));
     EXPECT_EQ(1U, missing.num_missing());
     EXPECT_EQ(1U, missing.get_rmissing().size());

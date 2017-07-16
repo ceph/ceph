@@ -70,6 +70,16 @@ public:
     e.prior_version = pv;
     return e;
   }
+  static pg_log_entry_t mk_ple_ldt(
+    const hobject_t &hoid, eversion_t v, eversion_t pv) {
+    pg_log_entry_t e;
+    e.mark_unrollbackable();
+    e.op = pg_log_entry_t::LOST_DELETE;
+    e.soid = hoid;
+    e.version = v;
+    e.prior_version = pv;
+    return e;
+  }
   static pg_log_entry_t mk_ple_mod_rb(
     const hobject_t &hoid, eversion_t v, eversion_t pv) {
     pg_log_entry_t e;
@@ -1955,6 +1965,19 @@ TEST_F(PGLogTest, merge_log_9) {
   t.init.add(mk_obj(1), mk_evt(10, 100), mk_evt(8, 80), false);
   t.toremove.insert(mk_obj(1));
   t.deletes_during_peering = true;
+
+  t.setup();
+  run_test_case(t);
+}
+
+TEST_F(PGLogTest, merge_log_10) {
+  TestCase t;
+  t.base.push_back(mk_ple_mod_rb(mk_obj(1), mk_evt(10, 100), mk_evt(8, 80)));
+
+  t.auth.push_back(mk_ple_ldt(mk_obj(1), mk_evt(11, 101), mk_evt(10, 100)));
+
+  t.init.add(mk_obj(1), mk_evt(10, 100), mk_evt(8, 80), false);
+  t.final.add(mk_obj(1), mk_evt(11, 101), mk_evt(8, 80), true);
 
   t.setup();
   run_test_case(t);
