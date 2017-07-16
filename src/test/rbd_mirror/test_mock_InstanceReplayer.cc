@@ -9,6 +9,7 @@
 #include "tools/rbd_mirror/InstanceReplayer.h"
 #include "tools/rbd_mirror/ServiceDaemon.h"
 #include "tools/rbd_mirror/Threads.h"
+#include "tools/rbd_mirror/image_replayer/Types.h"
 
 namespace librbd {
 
@@ -49,6 +50,9 @@ struct ImageDeleter<librbd::MockTestImageCtx> {
 
 template<>
 struct ServiceDaemon<librbd::MockTestImageCtx> {
+  MOCK_METHOD3(add_or_update_attribute,
+               void(int64_t, const std::string&,
+                    const service_daemon::AttributeValue&));
 };
 
 template<>
@@ -99,6 +103,8 @@ struct ImageReplayer<librbd::MockTestImageCtx> {
   MOCK_METHOD0(is_running, bool());
   MOCK_METHOD0(is_stopped, bool());
   MOCK_METHOD0(is_blacklisted, bool());
+
+  MOCK_CONST_METHOD0(get_health_state, image_replayer::HealthState());
 };
 
 ImageReplayer<librbd::MockTestImageCtx>* ImageReplayer<librbd::MockTestImageCtx>::s_instance = nullptr;

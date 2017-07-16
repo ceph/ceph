@@ -130,7 +130,8 @@ private:
   void handle_wait_for_ops(int r);
 
   void start_image_replayer(ImageReplayer<ImageCtxT> *image_replayer);
-  void start_image_replayers();
+  void queue_start_image_replayers();
+  void start_image_replayers(int r);
 
   void stop_image_replayer(ImageReplayer<ImageCtxT> *image_replayer,
                            Context *on_finish);

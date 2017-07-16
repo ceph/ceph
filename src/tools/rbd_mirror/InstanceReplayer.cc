@@ -8,6 +8,7 @@
 #include "librbd/Utils.h"
 #include "ImageReplayer.h"
 #include "InstanceReplayer.h"
+#include "ServiceDaemon.h"
 #include "Threads.h"
 
 #define dout_context g_ceph_context
@@ -18,6 +19,14 @@
 
 namespace rbd {
 namespace mirror {
+
+namespace {
+
+const std::string SERVICE_DAEMON_ASSIGNED_COUNT_KEY("image_assigned_count");
+const std::string SERVICE_DAEMON_WARNING_COUNT_KEY("image_warning_count");
+const std::string SERVICE_DAEMON_ERROR_COUNT_KEY("image_error_count");
+
+} // anonymous namespace
 
 using librbd::util::create_async_context_callback;
 using librbd::util::create_context_callback;
@@ -345,25 +354,48 @@ void InstanceReplayer<I>::start_image_replayer(
 }
 
 template <typename I>
-void InstanceReplayer<I>::start_image_replayers() {
+void InstanceReplayer<I>::queue_start_image_replayers() {
   dout(20) << dendl;
 
-  Context *ctx = new FunctionContext(
-    [this] (int r) {
-      Mutex::Locker locker(m_lock);
-      m_async_op_tracker.finish_op();
-      if (m_on_shut_down != nullptr) {
-        return;
-      }
-      for (auto &it : m_image_replayers) {
-        start_image_replayer(it.second);
-      }
-    });
-
+  Context *ctx = create_context_callback<
+    InstanceReplayer, &InstanceReplayer<I>::start_image_replayers>(this);
   m_async_op_tracker.start_op();
   m_threads->work_queue->queue(ctx, 0);
 }
 
+template <typename I>
+void InstanceReplayer<I>::start_image_replayers(int r) {
+  dout(20) << dendl;
+
+  Mutex::Locker locker(m_lock);
+  if (m_on_shut_down != nullptr) {
+    return;
+  }
+
+  size_t image_count = 0;
+  size_t warning_count = 0;
+  size_t error_count = 0;
+  for (auto &it : m_image_replayers) {
+    ++image_count;
+    auto health_state = it.second->get_health_state();
+    if (health_state == image_replayer::HEALTH_STATE_WARNING) {
+      ++warning_count;
+    } else if (health_state == image_replayer::HEALTH_STATE_ERROR) {
+      ++error_count;
+    }
+
+    start_image_replayer(it.second);
+  }
+
+  m_service_daemon->add_or_update_attribute(
+    m_local_pool_id, SERVICE_DAEMON_ASSIGNED_COUNT_KEY, image_count);
+  m_service_daemon->add_or_update_attribute(
+    m_local_pool_id, SERVICE_DAEMON_WARNING_COUNT_KEY, warning_count);
+  m_service_daemon->add_or_update_attribute(
+    m_local_pool_id, SERVICE_DAEMON_ERROR_COUNT_KEY, error_count);
+
+  m_async_op_tracker.finish_op();
+}
 
 template <typename I>
 void InstanceReplayer<I>::stop_image_replayer(ImageReplayer<I> *image_replayer,
@@ -483,7 +515,7 @@ void InstanceReplayer<I>::schedule_image_state_check_task() {
       assert(m_threads->timer_lock.is_locked());
       m_image_state_check_task = nullptr;
       schedule_image_state_check_task();
-      start_image_replayers();
+      queue_start_image_replayers();
     });
 
   int after =
