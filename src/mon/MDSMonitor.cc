@@ -668,6 +668,13 @@ bool MDSMonitor::prepare_beacon(MonOpRequestRef op)
           pending_daemon_health_rm.insert(erased_gid);
         }
       }
+
+      auto fscid = pending_fsmap.mds_roles.at(gid);
+      auto fs = pending_fsmap.get_filesystem(fscid);
+      mon->clog->info() << "MDS daemon " << m->get_name() << " finished "
+                        << "deactivating rank " << info.rank << " in filesystem "
+                        << fs->mds_map.fs_name << " (now has "
+                        << fs->mds_map.get_num_in_mds() << " ranks)";
     } else if (state == MDSMap::STATE_DAMAGED) {
       if (!mon->osdmon()->is_writeable()) {
         dout(4) << __func__ << ": DAMAGED from rank " << info.rank
@@ -733,6 +740,14 @@ bool MDSMonitor::prepare_beacon(MonOpRequestRef op)
         info->state = state;
         info->state_seq = seq;
       });
+
+      if (state == MDSMap::STATE_ACTIVE) {
+        auto fscid = pending_fsmap.mds_roles.at(gid);
+        auto fs = pending_fsmap.get_filesystem(fscid);
+        mon->clog->info() << "MDS daemon " << m->get_name() << " is now active in "
+                          << "filesystem " << fs->mds_map.fs_name << " as rank "
+                          << info.rank;
+      }
     }
   }
 
@@ -777,7 +792,7 @@ void MDSMonitor::_updated(MonOpRequestRef op)
   op->mark_mdsmon_event(__func__);
   MMDSBeacon *m = static_cast<MMDSBeacon*>(op->get_req());
   dout(10) << "_updated " << m->get_orig_source() << " " << *m << dendl;
-  mon->clog->info() << m->get_orig_source_inst() << " "
+  mon->clog->debug() << m->get_orig_source_inst() << " "
 	  << ceph_mds_state_name(m->get_state());
 
   if (m->get_state() == MDSMap::STATE_STOPPED) {
@@ -1459,6 +1474,9 @@ int MDSMonitor::filesystem_command(
     if (r < 0 && r == -EAGAIN) {
       mon->osdmon()->wait_for_writeable(op, new C_RetryMessage(this, op));
       return -EAGAIN; // don't propose yet; wait for message to be retried
+    } else if (r == 0) {
+      mon->clog->info() << "MDS daemon " << who << " marked failed by "
+                        << op->get_session()->entity_name;
     }
   } else if (prefix == "mds rm") {
     mds_gid_t gid;
@@ -1971,8 +1989,13 @@ bool MDSMonitor::maybe_expand_cluster(std::shared_ptr<Filesystem> fs)
       break;
     }
 
-    dout(1) << "adding standby " << pending_fsmap.get_info_gid(newgid).addr
+    const auto &new_info = pending_fsmap.get_info_gid(newgid);
+    dout(1) << "assigned standby " << new_info.addr
             << " as mds." << mds << dendl;
+
+    mon->clog->info() << "Assigned MDS " << new_info.name << " to filesystem "
+                      << fs->mds_map.fs_name << " as rank " << mds << " (now "
+                      << "has " << fs->mds_map.get_num_in_mds() << " ranks)";
     pending_fsmap.promote(newgid, fs, mds);
     do_propose = true;
   }
@@ -2079,6 +2102,10 @@ bool MDSMonitor::maybe_promote_standby(std::shared_ptr<Filesystem> fs)
         const MDSMap::mds_info_t si = pending_fsmap.get_info_gid(sgid);
         dout(0) << " taking over failed mds." << f << " with " << sgid
                 << "/" << si.name << " " << si.addr << dendl;
+        mon->clog->info() << "Assigned standby MDS " << si.name
+                          << " to filesystem " << fs->mds_map.fs_name
+                          << " as rank " << f;
+
         pending_fsmap.promote(sgid, fs, f);
 	do_propose = true;
       }
