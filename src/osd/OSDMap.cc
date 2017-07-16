@@ -3491,7 +3491,9 @@ int OSDMap::summarize_mapping_stats(
   OSDMap *newmap,
   const set<int64_t> *pools,
   std::string *out,
-  Formatter *f) const
+  Formatter *f,
+  int *pg_moved,
+  int *pg_total) const
 {
   set<int64_t> ls;
   if (pools) {
@@ -3541,6 +3543,10 @@ int OSDMap::summarize_mapping_stats(
       }
     }
   }
+  if(pg_moved != NULL)
+    *pg_moved = moved_pg;
+  if(pg_total != NULL)
+    *pg_total = total_pg;
 
   unsigned num_up_in = 0;
   for (int osd = 0; osd < get_max_osd(); ++osd) {

@@ -4221,7 +4221,7 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
     }
   } else if (prefix == "osd utilization") {
     string out;
-    osdmap.summarize_mapping_stats(NULL, NULL, &out, f.get());
+    osdmap.summarize_mapping_stats(NULL, NULL, &out, f.get(), nullptr, nullptr);
     if (f)
       f->flush(rdata);
     else

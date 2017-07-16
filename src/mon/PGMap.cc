@@ -4529,11 +4529,11 @@ int reweight::by_utilization(
   int num_changed = 0;
   unsigned int sum_weights = 0;
 
-  // a measure of how uneven the data distribution is
-  // and hence how urgently reweighting is needed.
+  /* a measure of how uneven the data distribution is.
+     and hence how urgently reweighting is needed. */
   double reweight_urgency = 0.0;
 
-  // precompute util for each OSD
+  /* precompute util for each OSD */
   std::vector<std::pair<int, float> > util_by_osd;
   for (const auto& p : pgm.osd_stat) {
     std::pair<int, float> osd_util;
@@ -4541,8 +4541,8 @@ int reweight::by_utilization(
     if (by_pg) {
       if (p.first >= (int)pgs_by_osd.size() ||
         pgs_by_osd[p.first] == 0) {
-        // skip if this OSD does not contain any pg
-        // belonging to the specified pool(s).
+        /* skip if this OSD does not contain any pg
+	   belonging to the specified pool(s). */
         continue;
       }
 
@@ -4557,10 +4557,11 @@ int reweight::by_utilization(
     }
     util_by_osd.push_back(osd_util);
 
-    // Overweighted devices and their weights are factors to
-    // calculate reweight_urgency. One 10% underfilled device
-    // with 5 2% overfilled devices, is arguably a better
-    // situation than one 10% overfilled with 5 2% underfilled devices
+    /* Overweighted devices and their weights are factors to
+       calculate reweight_urgency. One 10% underfilled device
+       with 5 2% overfilled devices, is arguably a better
+       situation than one 10% overfilled with 5 2% underfilled devices
+    */
 
     if ( osd_util.second >= average_util){
       unsigned weight = osdmap.get_weight(p.first);
@@ -4577,7 +4578,7 @@ int reweight::by_utilization(
        convergence to 1, compared to the function currently in use.
       */
 
-      // cdf of normal distribution:https://stackoverflow.com/a/18786808
+      /* cdf of normal distribution:https://en.wikipedia.org/wiki/Error_function#Cumulative_distribution_function */
       reweight_urgency +=
 	weight * (erfc(-((osd_util.second - average_util)/average_util) * M_SQRT1_2)-1);
     }
@@ -4648,9 +4649,6 @@ int reweight::by_utilization(
       }
     }
   }
-  if (f) {
-    f->close_section();
-  }
 
   OSDMap newmap;
   newmap.deepish_copy_from(osdmap);
@@ -4660,11 +4658,18 @@ int reweight::by_utilization(
   newinc.new_weight = *new_weights;
   newmap.apply_incremental(newinc);
 
-  osdmap.summarize_mapping_stats(&newmap, pools, out_str, f);
+  int pg_moved = 0;
+  int pg_total = 0;
+  osdmap.summarize_mapping_stats(&newmap, pools, out_str, f, &pg_moved, &pg_total);
 
+  // Expected data movement = number of PG moved * avg. data/PG
+  double expected_data_movement = (double) pgm.osd_sum.kb_used;
+  expected_data_movement *= (double) pg_moved / (double) pg_total;
   if (f) {
+    f->dump_float("Expected data flow (in KB): ", expected_data_movement);
     f->close_section();
   } else {
+    oss << "Expected data flow (in KB): "<< expected_data_movement << "\n";
     *out_str += "\n";
     *out_str += oss.str();
   }
