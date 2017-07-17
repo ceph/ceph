@@ -139,6 +139,13 @@ function TEST_mon_classes() {
     local dir=$1
 
     run_mon $dir a || return 1
+    run_osd $dir 0 || return 1
+    run_osd $dir 1 || return 1
+    run_osd $dir 2 || return 1
+
+    test "$(get_osds_up rbd SOMETHING)" == "1 2 0" || return 1
+    add_something $dir SOMETHING || return 1
+
     ceph osd crush class create CLASS || return 1
     ceph osd crush class create CLASS || return 1 # idempotent
     ceph osd crush class ls | grep CLASS  || return 1
@@ -148,6 +155,13 @@ function TEST_mon_classes() {
     ceph osd crush class ls | grep CLASS  || return 1
     ceph osd crush class rm CLASS || return 1
     expect_failure $dir ENOENT ceph osd crush class rm CLASS || return 1
+
+    ceph osd crush set-device-class abc osd.2 || return 1
+    ceph osd crush move osd.2 root=foo rack=foo-rack host=foo-host || return 1
+    out=`ceph osd tree |awk '$1 == 2 && $2 == "abc" {print $0}'`
+    if [ "$out" == "" ]; then
+        return 1
+    fi
 }
 
 main crush-classes "$@"
