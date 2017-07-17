@@ -11,6 +11,10 @@ tasks:
 - ceph:
     skip_mgr_daemons: true
     add_osds_to_crush: true
+    log-whitelist:
+      - overall HEALTH_
+      - (FS_
+      - (MDS_
 - print: "**** done ceph"
 - install.upgrade:
     mon.a:
