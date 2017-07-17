@@ -98,6 +98,38 @@ class Connection {
                       std::placeholders::_1)));
   }
 
+  void discard_unread_message() {
+    if (parser->is_done()) {
+      // nothing left to discard, start reading the next message
+      read_header();
+      return;
+    }
+
+    // read the rest of the request into a static buffer. multiple clients could
+    // write at the same time, but this is okay because we never read it back
+    static std::array<char, 1024> discard_buffer;
+
+    auto& body = parser->get().body();
+    body.size = discard_buffer.size();
+    body.data = discard_buffer.data();
+
+    beast::http::async_read_some(socket, buffer, *parser, strand.wrap(
+            std::bind(&Connection::on_discard_unread, Ref{this},
+                      std::placeholders::_1)));
+  }
+
+  void on_discard_unread(boost::system::error_code ec) {
+    if (ec == boost::asio::error::connection_reset) {
+      return;
+    }
+    if (ec) {
+      ldout(ctx(), 5) << "discard_unread_message failed: "
+          << ec.message() << dendl;
+      return;
+    }
+    discard_unread_message();
+  }
+
   void on_write_error(boost::system::error_code ec) {
     if (ec) {
       ldout(ctx(), 5) << "failed to write response: " << ec.message() << dendl;
@@ -137,9 +169,10 @@ class Connection {
     process_request(env.store, env.rest, &req, env.uri_prefix,
                     *env.auth_registry, &client, env.olog);
 
-    if (!real_client.get_conn_close()) {
-      // read next header
-      read_header();
+    if (parser->is_keep_alive()) {
+      // parse any unread bytes from the previous message (in case we replied
+      // before reading the entire body) before reading the next
+      discard_unread_message();
     }
   }
 
