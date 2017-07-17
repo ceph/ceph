@@ -614,6 +614,68 @@ void PGMapDigest::pool_cache_io_rate_summary(Formatter *f, ostream *out,
   cache_io_rate_summary(f, out, p->second.first, ts->second);
 }
 
+static float pool_raw_used_rate(const OSDMap &osd_map, int64_t poolid)
+{
+  const pg_pool_t *pool = osd_map.get_pg_pool(poolid);
+
+  switch (pool->get_type()) {
+  case pg_pool_t::TYPE_REPLICATED:
+    return pool->get_size();
+    break;
+  case pg_pool_t::TYPE_ERASURE:
+  {
+    auto& ecp =
+      osd_map.get_erasure_code_profile(pool->erasure_code_profile);
+    auto pm = ecp.find("m");
+    auto pk = ecp.find("k");
+    if (pm != ecp.end() && pk != ecp.end()) {
+      int k = atoi(pk->second.c_str());
+      int m = atoi(pm->second.c_str());
+      int mk = m + k;
+      assert(mk != 0);
+      assert(k != 0);
+      return (float)mk / k;
+    } else {
+      return 0.0;
+    }
+  }
+  break;
+  default:
+    assert(0 == "unrecognized pool type");
+  }
+}
+
+ceph_statfs PGMapDigest::get_statfs(OSDMap &osdmap,
+				    boost::optional<int64_t> data_pool) const
+{
+  ceph_statfs statfs;
+  bool filter = false;
+  object_stat_sum_t sum;
+
+  if (data_pool) {
+    auto i = pg_pool_sum.find(*data_pool);
+    if (i != pg_pool_sum.end()) {
+      sum = i->second.stats.sum;
+      filter = true;
+    }
+  }
+
+  if (filter) {
+    statfs.kb_used = (sum.num_bytes >> 10);
+    statfs.kb_avail = get_pool_free_space(osdmap, *data_pool) >> 10;
+    statfs.num_objects = sum.num_objects;
+    statfs.kb = statfs.kb_used + statfs.kb_avail;
+  } else {
+    // these are in KB.
+    statfs.kb = osd_sum.kb;
+    statfs.kb_used = osd_sum.kb_used;
+    statfs.kb_avail = osd_sum.kb_avail;
+    statfs.num_objects = pg_sum.stats.sum.num_objects;
+  }
+
+  return statfs;
+}
+
 void PGMapDigest::dump_pool_stats_full(
   const OSDMap &osd_map,
   stringstream *ss,
@@ -668,33 +730,8 @@ void PGMapDigest::dump_pool_stats_full(
     } else {
       avail = avail_by_rule[ruleno];
     }
-    switch (pool->get_type()) {
-    case pg_pool_t::TYPE_REPLICATED:
-      avail /= pool->get_size();
-      raw_used_rate = pool->get_size();
-      break;
-    case pg_pool_t::TYPE_ERASURE:
-    {
-      auto& ecp =
-        osd_map.get_erasure_code_profile(pool->erasure_code_profile);
-      auto pm = ecp.find("m");
-      auto pk = ecp.find("k");
-      if (pm != ecp.end() && pk != ecp.end()) {
-	int k = atoi(pk->second.c_str());
-	int m = atoi(pm->second.c_str());
-	int mk = m + k;
-	assert(mk != 0);
-	avail = avail * k / mk;
-	assert(k != 0);
-	raw_used_rate = (float)mk / k;
-      } else {
-	raw_used_rate = 0.0;
-      }
-    }
-    break;
-    default:
-      assert(0 == "unrecognized pool type");
-    }
+
+    raw_used_rate = ::pool_raw_used_rate(osd_map, pool_id);
 
     if (f) {
       f->open_object_section("pool");
@@ -822,6 +859,21 @@ void PGMapDigest::dump_object_stat_sum(
           << stringify(si_t(sum.num_bytes * raw_used_rate * curr_object_copies_rate));
     }
   }
+}
+
+int64_t PGMapDigest::get_pool_free_space(const OSDMap &osd_map,
+					 int64_t poolid) const
+{
+  const pg_pool_t *pool = osd_map.get_pg_pool(poolid);
+  int ruleno = osd_map.crush->find_rule(pool->get_crush_rule(),
+					pool->get_type(),
+					pool->get_size());
+  int64_t avail;
+  avail = get_rule_avail(ruleno);
+  if (avail < 0)
+    avail = 0;
+
+  return avail / ::pool_raw_used_rate(osd_map, poolid);
 }
 
 int64_t PGMap::get_rule_avail(const OSDMap& osdmap, int ruleno) const
