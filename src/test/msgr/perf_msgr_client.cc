@@ -84,7 +84,7 @@ class MessengerClient {
 
     ClientThread(Messenger *m, int c, ConnectionRef con, int len, int ops, int think_time_us):
         msgr(m), concurrent(c), conn(con), oid("object-name"), oloc(1, 1), msg_len(len), ops(ops),
-        dispatcher(think_time_us, this), lock("MessengerBenchmark::ClientThread::lock") {
+        dispatcher(think_time_us, this), lock("MessengerBenchmark::ClientThread::lock"), inflight(0) {
       m->add_dispatcher_head(&dispatcher);
       bufferptr ptr(msg_len);
       memset(ptr.c_str(), 0, msg_len);
