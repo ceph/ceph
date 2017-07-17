@@ -572,7 +572,7 @@ TEST_F(TestMockImageReplayer, LocalImageDNE) {
 
   C_SaferCond start_ctx;
   m_image_replayer->start(&start_ctx);
-  ASSERT_EQ(0, start_ctx.wait());
+  ASSERT_EQ(-EREMOTEIO, start_ctx.wait());
 }
 
 TEST_F(TestMockImageReplayer, PrepareLocalImageError) {

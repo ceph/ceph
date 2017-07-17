@@ -459,7 +459,7 @@ TEST_F(TestImageReplayer, BootstrapMirrorDisabling)
   create_replayer<>();
   C_SaferCond cond;
   m_replayer->start(&cond);
-  ASSERT_EQ(0, cond.wait());
+  ASSERT_EQ(-EREMOTEIO, cond.wait());
   ASSERT_TRUE(m_replayer->is_stopped());
 }
 
@@ -474,7 +474,7 @@ TEST_F(TestImageReplayer, BootstrapDemoted)
   create_replayer<>();
   C_SaferCond cond;
   m_replayer->start(&cond);
-  ASSERT_EQ(0, cond.wait());
+  ASSERT_EQ(-EREMOTEIO, cond.wait());
   ASSERT_TRUE(m_replayer->is_stopped());
 }
 
