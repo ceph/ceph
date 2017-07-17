@@ -375,6 +375,20 @@ addresses.
 :Default: ``false``
 :Required: No
 
+``public bind addr``
+
+:Description: In some dynamic deployments the Ceph MON daemon might bind
+              to an IP address locally that is different from the ``public addr``
+              advertised to other peers in the network. The environment must ensure
+              that routing rules are set correclty. If ``public bind addr`` is set
+              the Ceph MON daemon will bind to it locally and use ``public addr``
+              in the monmaps to advertise its address to peers. This behavior is limited
+              to the MON daemon.
+
+:Type: IP Address
+:Required: No
+:Default: N/A
+
 
 
 Hosts
