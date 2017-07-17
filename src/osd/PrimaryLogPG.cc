@@ -17,6 +17,7 @@
 
 #include "boost/tuple/tuple.hpp"
 #include "boost/intrusive_ptr.hpp"
+#include "boost/regex.hpp"
 #include "PG.h"
 #include "PrimaryLogPG.h"
 #include "OSD.h"
@@ -737,6 +738,30 @@ void PrimaryLogPG::maybe_force_recovery()
     maybe_kick_recovery(soid);
 }
 
+class PGLSNameFilter : public PGLSFilter {
+  boost::regex regex;
+public:
+  int init(bufferlist::iterator &params) override
+  {
+    try {
+      string reg_exp ;
+      ::decode(reg_exp, params);
+      if (reg_exp.empty()) {
+        return -EINVAL;
+      } else {
+        regex.assign(reg_exp, boost::regex_constants::no_except);
+      }
+    } catch (buffer::error &e) {
+      return -EINVAL;
+    }
+    return 0;
+  }
+  bool filter(const hobject_t &obj, bufferlist& indata,
+              bufferlist& outdata) override {
+    return boost::regex_match(obj.oid.name, regex);    
+  }
+};
+
 class PGLSPlainFilter : public PGLSFilter {
   string val;
 public:
@@ -850,6 +875,8 @@ int PrimaryLogPG::get_pgls_filter(bufferlist::iterator& iter, PGLSFilter **pfilt
     filter = new PGLSParentFilter(cct);
   } else if (type.compare("plain") == 0) {
     filter = new PGLSPlainFilter();
+  } else if (type.compare("name") == 0) {
+    filter = new PGLSNameFilter(); 
   } else {
     std::size_t dot = type.find(".");
     if (dot == std::string::npos || dot == 0 || dot == type.size() - 1) {

@@ -381,6 +381,11 @@ test_ls() {
     then
         die "Created $OBJS objects in default namespace but saw $CHECK"
     fi
+    CHECK=$("$RADOS_TOOL" -p $p ls --regex "obj1.*" 2> /dev/null | wc -l)
+    if [ "$CHECK" -ne 11 ];
+    then
+        die "Created 11 objects with the name matached 'obj1.*' in default namespace but saw $CHECK"
+    fi
     TESTNS=NS${NS}
     CHECK=$("$RADOS_TOOL" -p $p -N $TESTNS ls 2> /dev/null | wc -l)
     if [ "$OBJS" -ne "$CHECK" ];
