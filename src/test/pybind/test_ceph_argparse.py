@@ -1015,9 +1015,6 @@ class TestOSD(TestArgparse):
         self.assert_valid_command(['osd', 'pool', 'delete',
                                    'poolname'])
         assert_equal({}, validate_command(sigdict, ['osd', 'pool', 'delete']))
-        assert_equal({}, validate_command(sigdict, ['osd', 'pool', 'delete',
-                                                    'poolname', 'poolname',
-                                                    'not really']))
         assert_equal({}, validate_command(sigdict,
                                           ['osd', 'pool', 'delete',
                                            'poolname', 'poolname',

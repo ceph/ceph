@@ -48,6 +48,7 @@ if [ x`uname`x = xFreeBSDx ]; then
         ftp/curl \
         misc/e2fsprogs-libuuid \
         misc/getopt \
+        net/socat \
         textproc/expat2 \
         textproc/gsed \
         textproc/libxml2 \

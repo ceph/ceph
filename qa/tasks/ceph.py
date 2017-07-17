@@ -331,6 +331,13 @@ def create_rbd_pool(ctx, config):
     cluster_name = config['cluster']
     first_mon = teuthology.get_first_mon(ctx, config, cluster_name)
     (mon_remote,) = ctx.cluster.only(first_mon).remotes.iterkeys()
+    log.info('Waiting for OSDs to come up')
+    teuthology.wait_until_osds_up(
+        ctx,
+        cluster=ctx.cluster,
+        remote=mon_remote,
+        ceph_cluster=cluster_name,
+    )
     log.info('Creating RBD pool')
     mon_remote.run(
         args=['sudo', 'ceph', '--cluster', cluster_name,
@@ -1621,3 +1628,20 @@ def task(ctx, config):
         finally:
             if config.get('wait-for-scrub', True):
                 osd_scrub_pgs(ctx, config)
+
+            # stop logging health to clog during shutdown, or else we generate
+            # a bunch of scary messages unrelated to our actual run.
+            firstmon = teuthology.get_first_mon(ctx, config, config['cluster'])
+            (mon0_remote,) = ctx.cluster.only(firstmon).remotes.keys()
+            mon0_remote.run(
+                args=[
+                    'sudo',
+                    'ceph',
+                    '--cluster', config['cluster'],
+                    'tell',
+                    'mon.*',
+                    'injectargs',
+                    '--',
+                    '--no-mon-health-to-clog',
+                ]
+            )

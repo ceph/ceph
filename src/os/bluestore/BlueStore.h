@@ -511,7 +511,7 @@ public:
              get_blob().can_split_at(blob_offset);
     }
 
-    bool try_reuse_blob(uint32_t min_alloc_size,
+    bool can_reuse_blob(uint32_t min_alloc_size,
 			uint32_t target_blob_size,
 			uint32_t b_offset,
 			uint32_t *length0);
@@ -524,10 +524,10 @@ public:
 #endif
     }
 
-    const bluestore_blob_t& get_blob() const {
+    inline const bluestore_blob_t& get_blob() const {
       return blob;
     }
-    bluestore_blob_t& dirty_blob() {
+    inline bluestore_blob_t& dirty_blob() {
 #ifdef CACHE_BLOB_BL
       blob_bl.clear();
 #endif
@@ -2082,7 +2082,6 @@ private:
 
   void _apply_padding(uint64_t head_pad,
 		      uint64_t tail_pad,
-		      bufferlist& bl,
 		      bufferlist& padded);
 
   // -- ondisk version ---
@@ -2112,6 +2111,17 @@ public:
   bool allows_journal() override { return false; };
 
   bool is_rotational() override;
+
+  string get_default_device_class() override {
+    string device_class;
+    map<string, string> metadata;
+    collect_metadata(&metadata);
+    auto it = metadata.find("bluestore_bdev_type");
+    if (it != metadata.end()) {
+      device_class = it->second;
+    }
+    return device_class;
+  }
 
   static int get_block_device_fsid(CephContext* cct, const string& path,
 				   uuid_d *fsid);
@@ -2378,6 +2388,11 @@ public:
     RWLock::WLocker l(debug_read_error_lock);
     debug_mdata_error_objects.insert(o);
   }
+  void compact() override {
+    assert(db);
+    db->compact();
+  }
+  
 private:
   bool _debug_data_eio(const ghobject_t& o) {
     if (!cct->_conf->bluestore_debug_inject_read_err) {

@@ -4,6 +4,8 @@ overrides:
       - Scrub error on inode
       - Behind on trimming
       - Metadata damage detected
+      - overall HEALTH_
+      - (MDS_TRIM)
     conf:
       mds:
         mds log max segments: 1

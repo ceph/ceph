@@ -34,6 +34,7 @@
 #include "rgw_lib.h"
 #include "rgw_ldap.h"
 #include "rgw_token.h"
+#include "rgw_compression.h"
 
 
 /* XXX
@@ -740,7 +741,7 @@ namespace rgw {
   class RGWLibFS
   {
     CephContext* cct;
-    struct rgw_fs fs;
+    struct rgw_fs fs{};
     RGWFileHandle root_fh;
     rgw_fh_callback_t invalidate_cb;
     void *invalidate_arg;
@@ -1313,7 +1314,7 @@ public:
     op = this;
   }
 
-  bool only_bucket() override { return false; }
+  bool only_bucket() override { return true; }
 
   int op_init() override {
     // assign store, s, and dialect_handler
@@ -1476,7 +1477,7 @@ public:
     op = this;
   }
 
-  bool only_bucket() override { return false; }
+  bool only_bucket() override { return true; }
 
   int op_init() override {
     // assign store, s, and dialect_handler
@@ -2092,7 +2093,7 @@ public:
     op = this;
   }
 
-  bool only_bucket() override { return false; }
+  bool only_bucket() override { return true; }
 
   int op_init() override {
     // assign store, s, and dialect_handler
@@ -2186,7 +2187,10 @@ public:
   const std::string& bucket_name;
   const std::string& obj_name;
   RGWFileHandle* rgw_fh;
-  RGWPutObjProcessor *processor;
+  RGWPutObjProcessor* processor;
+  RGWPutObjDataProcessor* filter;
+  boost::optional<RGWPutObj_Compress> compressor;
+  CompressorRef plugin;
   buffer::list data;
   uint64_t timer_id;
   MD5 hash;
@@ -2198,8 +2202,8 @@ public:
   RGWWriteRequest(CephContext* _cct, RGWUserInfo *_user, RGWFileHandle* _fh,
 		  const std::string& _bname, const std::string& _oname)
     : RGWLibContinuedReq(_cct, _user), bucket_name(_bname), obj_name(_oname),
-      rgw_fh(_fh), processor(nullptr), real_ofs(0), bytes_written(0),
-      multipart(false), eio(false) {
+      rgw_fh(_fh), processor(nullptr), filter(nullptr), real_ofs(0),
+      bytes_written(0), multipart(false), eio(false) {
 
     int ret = header_init();
     if (ret == 0) {

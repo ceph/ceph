@@ -60,6 +60,10 @@ void MgrMonitor::update_from_paxos(bool *need_bootstrap)
     dout(4) << "active server: " << map.active_addr
 	    << "(" << map.active_gid << ")" << dendl;
 
+    ever_had_active_mgr = get_value("ever_had_active_mgr");
+
+    load_health();
+
     if (map.available) {
       first_seen_inactive = utime_t();
     } else {
@@ -79,6 +83,27 @@ void MgrMonitor::create_pending()
   pending_map.epoch++;
 }
 
+health_status_t MgrMonitor::should_warn_about_mgr_down()
+{
+  utime_t now = ceph_clock_now();
+  // we warn if
+  //   - we've ever had an active mgr, or
+  //   - we have osds AND we've exceeded the grace period
+  // which means a new mon cluster and be HEALTH_OK indefinitely as long as
+  // no OSDs are ever created.
+  if (ever_had_active_mgr ||
+      (mon->osdmon()->osdmap.get_num_osds() > 0 &&
+       now > mon->monmap->created + g_conf->mon_mgr_mkfs_grace)) {
+    health_status_t level = HEALTH_WARN;
+    if (first_seen_inactive != utime_t() &&
+	now - first_seen_inactive > g_conf->mon_mgr_inactive_grace) {
+      level = HEALTH_ERR;
+    }
+    return level;
+  }
+  return HEALTH_OK;
+}
+
 void MgrMonitor::encode_pending(MonitorDBStore::TransactionRef t)
 {
   dout(10) << __func__ << " " << pending_map << dendl;
@@ -86,6 +111,20 @@ void MgrMonitor::encode_pending(MonitorDBStore::TransactionRef t)
   pending_map.encode(bl, mon->get_quorum_con_features());
   put_version(t, pending_map.epoch, bl);
   put_last_committed(t, pending_map.epoch);
+
+  health_check_map_t next;
+  if (pending_map.active_gid == 0) {
+    auto level = should_warn_about_mgr_down();
+    if (level != HEALTH_OK) {
+      next.add("MGR_DOWN", level, "no active mgr");
+    } else {
+      dout(10) << __func__ << " no health warning (never active and new cluster)"
+	       << dendl;
+    }
+  } else {
+    put_value(t, "ever_had_active_mgr", 1);
+  }
+  encode_health(next, t);
 }
 
 bool MgrMonitor::check_caps(MonOpRequestRef op, const uuid_d& fsid)
@@ -181,6 +220,8 @@ bool MgrMonitor::prepare_beacon(MonOpRequestRef op)
       && m->get_gid() != pending_map.active_gid)
   {
     dout(4) << "Active daemon restart (mgr." << m->get_name() << ")" << dendl;
+    mon->clog->info() << "Active manager daemon " << m->get_name()
+                      << " restarted";
     drop_active();
   }
 
@@ -189,6 +230,8 @@ bool MgrMonitor::prepare_beacon(MonOpRequestRef op)
     const StandbyInfo &s = i.second;
     if (s.name == m->get_name() && s.gid != m->get_gid()) {
       dout(4) << "Standby daemon restart (mgr." << m->get_name() << ")" << dendl;
+      mon->clog->debug() << "Standby manager daemon " << m->get_name()
+                         << " restarted";
       drop_standby(i.first);
       break;
     }
@@ -210,6 +253,8 @@ bool MgrMonitor::prepare_beacon(MonOpRequestRef op)
 
     if (pending_map.get_available() != m->get_available()) {
       dout(4) << "available " << m->get_gid() << dendl;
+      mon->clog->info() << "Manager daemon " << pending_map.active_name
+                        << " is now available";
       pending_map.available = m->get_available();
       updated = true;
     }
@@ -232,6 +277,9 @@ bool MgrMonitor::prepare_beacon(MonOpRequestRef op)
     pending_map.active_name = m->get_name();
     pending_map.available_modules = m->get_available_modules();
 
+    mon->clog->info() << "Activating manager daemon "
+                      << pending_map.active_name;
+
     updated = true;
   } else {
     if (pending_map.standbys.count(m->get_gid()) > 0) {
@@ -248,8 +296,8 @@ bool MgrMonitor::prepare_beacon(MonOpRequestRef op)
       }
     } else {
       dout(10) << "new standby " << m->get_gid() << dendl;
-      pending_map.standbys[m->get_gid()] = {m->get_gid(), m->get_name(),
-					    m->get_available_modules()};
+      mon->clog->debug() << "Standby manager daemon " << m->get_name()
+                         << " started";
       updated = true;
     }
   }
@@ -278,7 +326,8 @@ void MgrMonitor::check_sub(Subscription *sub)
 {
   if (sub->type == "mgrmap") {
     if (sub->next <= map.get_epoch()) {
-      dout(20) << "Sending map to subscriber " << sub->session->con << dendl;
+      dout(20) << "Sending map to subscriber " << sub->session->con
+	       << " " << sub->session->con->get_peer_addr() << dendl;
       sub->session->con->send_message(new MMgrMap(map));
       if (sub->onetime) {
         mon->session_map.remove_sub(sub);
@@ -305,17 +354,19 @@ void MgrMonitor::send_digests()
   if (!is_active()) {
     return;
   }
+  dout(10) << __func__ << dendl;
 
   const std::string type = "mgrdigest";
   if (mon->session_map.subs.count(type) == 0)
     return;
 
   for (auto sub : *(mon->session_map.subs[type])) {
+    dout(10) << __func__ << " sending digest to subscriber " << sub->session->con
+	     << " " << sub->session->con->get_peer_addr() << dendl;
     MMgrDigest *mdigest = new MMgrDigest;
 
     JSONFormatter f;
-    std::list<std::string> health_strs;
-    mon->get_health(health_strs, nullptr, &f);
+    mon->get_health_status(true, &f, nullptr, nullptr, nullptr);
     f.flush(mdigest->health_json);
     f.reset();
 
@@ -343,8 +394,9 @@ void MgrMonitor::cancel_timer()
 
 void MgrMonitor::on_active()
 {
-  if (mon->is_leader())
-    mon->clog->info() << "mgrmap e" << map.epoch << ": " << map;
+  if (mon->is_leader()) {
+    mon->clog->debug() << "mgrmap e" << map.epoch << ": " << map;
+  }
 }
 
 void MgrMonitor::get_health(
@@ -363,7 +415,7 @@ void MgrMonitor::get_health(
     return;
   }
 
-  if (!map.available) {
+  if (map.active_gid == 0) {
     auto level = HEALTH_WARN;
     // do not escalate to ERR if they are still upgrading to jewel.
     if (mon->osdmon()->osdmap.require_osd_release >= CEPH_RELEASE_LUMINOUS) {
@@ -418,26 +470,47 @@ void MgrMonitor::tick()
 
   if (pending_map.active_gid != 0
       && last_beacon.at(pending_map.active_gid) < cutoff) {
-
+    const std::string old_active_name = pending_map.active_name;
     drop_active();
     propose = true;
     dout(4) << "Dropping active" << pending_map.active_gid << dendl;
     if (promote_standby()) {
       dout(4) << "Promoted standby " << pending_map.active_gid << dendl;
+      mon->clog->info() << "Manager daemon " << old_active_name
+                        << " is unresponsive, replacing it with standby"
+                        << " daemon " << pending_map.active_name;
     } else {
       dout(4) << "Active is laggy but have no standbys to replace it" << dendl;
+      mon->clog->warn() << "Manager daemon " << old_active_name
+                        << " is unresponsive.  No standby daemons available.";
     }
   } else if (pending_map.active_gid == 0) {
     if (promote_standby()) {
       dout(4) << "Promoted standby " << pending_map.active_gid << dendl;
+      mon->clog->info() << "Activating manager daemon "
+                        << pending_map.active_name;
       propose = true;
     }
+  }
+
+  if (!pending_map.available &&
+      should_warn_about_mgr_down() != HEALTH_OK) {
+    dout(10) << " exceeded mon_mgr_mkfs_grace " << g_conf->mon_mgr_mkfs_grace
+	     << " seconds" << dendl;
+    propose = true;
   }
 
   if (propose) {
     propose_pending();
   }
 }
+
+void MgrMonitor::on_restart()
+{
+  // Clear out the leader-specific state.
+  last_beacon.clear();
+}
+
 
 bool MgrMonitor::promote_standby()
 {
@@ -467,6 +540,10 @@ void MgrMonitor::drop_active()
   pending_map.active_gid = 0;
   pending_map.available = false;
   pending_map.active_addr = entity_addr_t();
+
+  // So that when new active mgr subscribes to mgrdigest, it will
+  // get an immediate response instead of waiting for next timer
+  cancel_timer();
 }
 
 void MgrMonitor::drop_standby(uint64_t gid)

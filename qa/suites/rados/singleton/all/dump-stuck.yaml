@@ -11,5 +11,9 @@ tasks:
 - install:
 - ceph:
     log-whitelist:
-    - wrongly marked me down
+      - wrongly marked me down
+      - overall HEALTH_
+      - (OSDMAP_FLAGS)
+      - (OSD_
+      - (PG_
 - dump_stuck:

@@ -125,11 +125,13 @@
 // note: this should be replaced shortly!
 COMMAND("pg force_create_pg name=pgid,type=CephPgid", \
 	"force creation of pg <pgid>", "pg", "rw", "cli,rest")
-COMMAND("pg set_full_ratio name=ratio,type=CephFloat,range=0.0|1.0", \
-	"set ratio at which pgs are considered full", "pg", "rw", "cli,rest")
-COMMAND("pg set_nearfull_ratio name=ratio,type=CephFloat,range=0.0|1.0", \
-	"set ratio at which pgs are considered nearly full",		\
-	"pg", "rw", "cli,rest")
+COMMAND_WITH_FLAG("pg set_full_ratio name=ratio,type=CephFloat,range=0.0|1.0", \
+		  "set ratio at which pgs are considered full", \
+		  "pg", "rw", "cli,rest", FLAG(DEPRECATED))
+COMMAND_WITH_FLAG("pg set_nearfull_ratio "				\
+		  "name=ratio,type=CephFloat,range=0.0|1.0",		\
+		  "set ratio at which pgs are considered nearly full",	\
+		  "pg", "rw", "cli,rest", FLAG(DEPRECATED))
 
 COMMAND("pg map name=pgid,type=CephPgid", "show mapping of pg to osds", \
 	"pg", "r", "cli,rest")
@@ -210,6 +212,7 @@ COMMAND_WITH_FLAG("injectargs " \
 COMMAND("status", "show cluster status", "mon", "r", "cli,rest")
 COMMAND("health name=detail,type=CephChoices,strings=detail,req=false", \
 	"show cluster health", "mon", "r", "cli,rest")
+COMMAND("time-sync-status", "show time sync status", "mon", "r", "cli,rest")
 COMMAND("df name=detail,type=CephChoices,strings=detail,req=false", \
 	"show cluster free space stats", "mon", "r", "cli,rest")
 COMMAND("report name=tags,type=CephString,n=N,req=false", \
@@ -527,9 +530,10 @@ COMMAND("osd crush add " \
 	"add or update crushmap position and weight for <name> with <weight> and location <args>", \
 	"osd", "rw", "cli,rest")
 COMMAND("osd crush set-device-class " \
-	"name=id,type=CephOsdName " \
-	"name=class,type=CephString ", \
-	"set the <class> of the device <name>", \
+        "name=class,type=CephString " \
+	"name=ids,type=CephString,n=N", \
+	"set the <class> of the osd(s) <id> [<id>...]," \
+        "or use <all|any|*> to set all.", \
 	"osd", "rw", "cli,rest")
 COMMAND("osd crush create-or-move " \
 	"name=id,type=CephOsdName " \
@@ -636,6 +640,10 @@ COMMAND("osd crush class rename " \
 COMMAND("osd crush class ls", \
 	"list all crush device classes", \
 	"osd", "r", "cli,rest")
+COMMAND("osd crush class ls-osd " \
+        "name=class,type=CephString,goodchars=[A-Za-z0-9-_]", \
+        "list all osds belonging to the specific <class>", \
+        "osd", "r", "cli,rest")
 COMMAND("osd setmaxosd " \
 	"name=newmax,type=CephInt,range=0", \
 	"set new maximum osd value", "osd", "rw", "cli,rest")
@@ -850,7 +858,7 @@ COMMAND("osd pool create " \
 COMMAND("osd pool delete " \
 	"name=pool,type=CephPoolname " \
 	"name=pool2,type=CephPoolname,req=false " \
-	"name=sure,type=CephChoices,strings=--yes-i-really-really-mean-it,req=false", \
+	"name=sure,type=CephString,req=false", \
 	"delete pool", \
 	"osd", "rw", "cli,rest")
 COMMAND("osd pool rm " \

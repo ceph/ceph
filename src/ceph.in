@@ -295,6 +295,11 @@ def parse_cmdargs(args=None, target=''):
     parser.add_argument('--watch-error', action='store_true',
                         help='watch error events')
 
+    parser.add_argument('--watch-channel', dest="watch_channel",
+                        help="which log channel to follow " \
+                        "when using -w/--watch.  One of ['cluster', 'audit', '*'",
+                        default='cluster')
+
     parser.add_argument('--version', '-v', action="store_true", help="display version")
     parser.add_argument('--verbose', action="store_true", help="make verbose")
     parser.add_argument('--concise', dest='verbose', action="store_false",
@@ -896,7 +901,10 @@ def main():
     try:
         if childargs and childargs[0] == 'ping' and not parsed_args.help:
             return ping_monitor(cluster_handle, childargs[1], timeout)
-        run_in_thread(cluster_handle.connect, timeout=timeout)
+        result = run_in_thread(cluster_handle.connect, timeout=timeout)
+        if type(result) is tuple and result[0] == -errno.EINTR:
+            print('Cluster connection interrupted or timed out', file=sys.stderr)
+            return 1
     except KeyboardInterrupt:
         print('Cluster connection aborted', file=sys.stderr)
         return 1
@@ -930,14 +938,16 @@ def main():
         if k.startswith('watch') and v:
             if k == 'watch':
                 level = 'info'
-            else:
+            elif k != "watch_channel":
                 level = k.replace('watch_', '')
     if level:
-
         # an awfully simple callback
-        def watch_cb(arg, line, who, stamp_sec, stamp_nsec, seq, level, msg):
-            print(line)
-            sys.stdout.flush()
+        def watch_cb(arg, line, channel, name, who, stamp_sec, stamp_nsec, seq, level, msg):
+            # Filter on channel
+            if (channel == parsed_args.watch_channel or \
+                           parsed_args.watch_channel == "*"):
+                print(line)
+                sys.stdout.flush()
 
         # first do a ceph status
         ret, outbuf, outs = json_command(cluster_handle, prefix='status')
@@ -948,7 +958,7 @@ def main():
 
         # this instance keeps the watch connection alive, but is
         # otherwise unused
-        run_in_thread(cluster_handle.monitor_log, level, watch_cb, 0)
+        run_in_thread(cluster_handle.monitor_log2, level, watch_cb, 0)
 
         # loop forever letting watch_cb print lines
         try:

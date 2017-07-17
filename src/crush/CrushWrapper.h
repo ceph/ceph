@@ -442,24 +442,24 @@ public:
     return class_rname.count(name);
   }
   const char *get_class_name(int i) const {
-    std::map<int,string>::const_iterator p = class_name.find(i);
+    auto p = class_name.find(i);
     if (p != class_name.end())
       return p->second.c_str();
     return 0;
   }
   int get_class_id(const string& name) const {
-    std::map<string,int>::const_iterator p = class_rname.find(name);
+    auto p = class_rname.find(name);
     if (p != class_rname.end())
       return p->second;
     else
       return -EINVAL;
   }
   int remove_class_name(const string& name) {
-    std::map<string,int>::const_iterator p = class_rname.find(name);
+    auto p = class_rname.find(name);
     if (p == class_rname.end())
       return -ENOENT;
     int class_id = p->second;
-    std::map<int,string>::const_iterator q = class_name.find(class_id);
+    auto q = class_name.find(class_id);
     if (q == class_name.end())
       return -ENOENT;
     class_rname.erase(name);
@@ -482,10 +482,12 @@ public:
     return 0;
   }
 
+  int32_t _alloc_class_id() const;
+
   int get_or_create_class_id(const string& name) {
     int c = get_class_id(name);
     if (c < 0) {
-      int i = class_name.size();
+      int i = _alloc_class_id();
       class_name[i] = name;
       class_rname[name] = i;
       return i;
@@ -510,7 +512,26 @@ public:
     class_map[i] = c;
     return c;
   }
-
+  void get_devices_by_class(const string &name, set<int> *devices) const {
+    assert(devices);
+    devices->clear();
+    if (!class_exists(name)) {
+      return;
+    }
+    auto cid = get_class_id(name);
+    for (auto& p : class_map) {
+      if (p.first >= 0 && p.second == cid) {
+        devices->insert(p.first);
+      }
+    }
+  }
+  void class_remove_item(int i) {
+    auto it = class_map.find(i);
+    if (it == class_map.end()) {
+      return;
+    }
+    class_map.erase(it);
+  }
   int can_rename_item(const string& srcname,
 		      const string& dstname,
 		      ostream *ss) const;
@@ -857,18 +878,37 @@ public:
     return (float)get_item_weight_in_loc(id, loc) / (float)0x10000;
   }
 
+  int validate_weightf(float weight) {
+    uint64_t iweight = weight * 0x10000;
+    if (iweight > std::numeric_limits<int>::max()) {
+      return -EOVERFLOW;
+    }
+    return 0;
+  }
   int adjust_item_weight(CephContext *cct, int id, int weight);
   int adjust_item_weightf(CephContext *cct, int id, float weight) {
+    int r = validate_weightf(weight);
+    if (r < 0) {
+      return r;
+    }
     return adjust_item_weight(cct, id, (int)(weight * (float)0x10000));
   }
   int adjust_item_weight_in_loc(CephContext *cct, int id, int weight, const map<string,string>& loc);
   int adjust_item_weightf_in_loc(CephContext *cct, int id, float weight, const map<string,string>& loc) {
+    int r = validate_weightf(weight);
+    if (r < 0) {
+      return r;
+    }
     return adjust_item_weight_in_loc(cct, id, (int)(weight * (float)0x10000), loc);
   }
   void reweight(CephContext *cct);
 
   int adjust_subtree_weight(CephContext *cct, int id, int weight);
   int adjust_subtree_weightf(CephContext *cct, int id, float weight) {
+    int r = validate_weightf(weight);
+    if (r < 0) {
+      return r;
+    }
     return adjust_subtree_weight(cct, id, (int)(weight * (float)0x10000));
   }
 

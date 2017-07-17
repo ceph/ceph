@@ -16,6 +16,7 @@
 OPTION(host, OPT_STR, "") // "" means that ceph will use short hostname
 OPTION(fsid, OPT_UUID, uuid_d())
 OPTION(public_addr, OPT_ADDR, entity_addr_t())
+OPTION(public_bind_addr, OPT_ADDR, entity_addr_t())
 OPTION(cluster_addr, OPT_ADDR, entity_addr_t())
 OPTION(public_network, OPT_STR, "")
 OPTION(cluster_network, OPT_STR, "")
@@ -308,8 +309,7 @@ OPTION(mon_clock_drift_allowed, OPT_FLOAT, .050) // allowed clock drift between 
 OPTION(mon_clock_drift_warn_backoff, OPT_FLOAT, 5) // exponential backoff for clock drift warnings
 OPTION(mon_timecheck_interval, OPT_FLOAT, 300.0) // on leader, timecheck (clock drift check) interval (seconds)
 OPTION(mon_timecheck_skew_interval, OPT_FLOAT, 30.0) // on leader, timecheck (clock drift check) interval when in presence of a skew (seconds)
-OPTION(mon_pg_stuck_threshold, OPT_INT, 300) // number of seconds after which pgs can be considered inactive, unclean, or stale (see doc/control.rst under dump_stuck for more info)
-OPTION(mon_health_max_detail, OPT_INT, 50) // max detailed pgs to report in health detail
+OPTION(mon_pg_stuck_threshold, OPT_INT, 60) // number of seconds after which pgs can be considered stuck inactive, unclean, etc (see doc/control.rst under dump_stuck for more info)
 OPTION(mon_pg_min_inactive, OPT_U64, 1) // the number of PGs which have to be inactive longer than 'mon_pg_stuck_threshold' before health goes into ERR. 0 means disabled, never go into ERR.
 OPTION(mon_pg_warn_min_per_osd, OPT_INT, 30)  // min # pgs per (in) osd before we warn the admin
 OPTION(mon_pg_warn_max_per_osd, OPT_INT, 300)  // max # pgs per (in) osd before we warn the admin
@@ -352,6 +352,8 @@ OPTION(mon_health_data_update_interval, OPT_FLOAT, 60.0)
 OPTION(mon_health_to_clog, OPT_BOOL, true)
 OPTION(mon_health_to_clog_interval, OPT_INT, 3600)
 OPTION(mon_health_to_clog_tick_interval, OPT_DOUBLE, 60.0)
+OPTION(mon_health_preluminous_compat, OPT_BOOL, false)
+OPTION(mon_health_max_detail, OPT_INT, 50) // max detailed pgs to report in health detail
 OPTION(mon_data_avail_crit, OPT_INT, 5)
 OPTION(mon_data_avail_warn, OPT_INT, 30)
 OPTION(mon_data_size_warn, OPT_U64, 15*1024*1024*1024) // issue a warning when the monitor's data store goes over 15GB (in bytes)
@@ -689,6 +691,7 @@ OPTION(osd_crush_update_weight_set, OPT_BOOL, true) // update weight set while u
 OPTION(osd_crush_chooseleaf_type, OPT_INT, 1) // 1 = host
 OPTION(osd_pool_use_gmt_hitset, OPT_BOOL, true) // try to use gmt for hitset archive names if all osds in cluster support it.
 OPTION(osd_crush_update_on_start, OPT_BOOL, true)
+OPTION(osd_class_update_on_start, OPT_BOOL, true) // automatically set device class on start
 OPTION(osd_crush_initial_weight, OPT_DOUBLE, -1) // if >=0, the initial weight is for newly added osds.
 OPTION(osd_pool_default_crush_rule, OPT_INT, -1)
 OPTION(osd_pool_erasure_code_stripe_unit, OPT_U32, 4096) // in bytes
@@ -1754,6 +1757,7 @@ OPTION(mgr_service_beacon_grace, OPT_DOUBLE, 60.0)
 OPTION(mon_mgr_digest_period, OPT_INT, 5)  // How frequently to send digests
 OPTION(mon_mgr_beacon_grace, OPT_INT, 30)  // How long to wait to failover
 OPTION(mon_mgr_inactive_grace, OPT_INT, 60) // How long before health WARN -> ERR
+OPTION(mon_mgr_mkfs_grace, OPT_INT, 60) // How long before we complain about MGR_DOWN
 OPTION(rgw_crypt_require_ssl, OPT_BOOL, true) // requests including encryption key headers must be sent over ssl
 OPTION(rgw_crypt_default_encryption_key, OPT_STR, "") // base64 encoded key for encryption of rgw objects
 OPTION(rgw_crypt_s3_kms_encryption_keys, OPT_STR, "") // extra keys that may be used for aws:kms
@@ -1784,6 +1788,8 @@ OPTION(internal_safe_to_start_threads, OPT_BOOL, false)
 OPTION(debug_deliberately_leak_memory, OPT_BOOL, false)
 
 OPTION(rgw_swift_custom_header, OPT_STR, "") // option to enable swift custom headers
+
+OPTION(rgw_swift_need_stats, OPT_BOOL, true) // option to enable stats on bucket listing for swift
 
 /* resharding tunables */
 OPTION(rgw_reshard_num_logs, OPT_INT, 16)

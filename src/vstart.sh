@@ -108,6 +108,7 @@ cache=""
 memstore=0
 bluestore=0
 rgw_frontend="civetweb"
+rgw_compression=""
 lockdep=${LOCKDEP:-1}
 
 filestore_path=
@@ -148,6 +149,7 @@ usage=$usage"\t--rgw_num specify ceph rgw count\n"
 usage=$usage"\t--mgr_num specify ceph mgr count\n"
 usage=$usage"\t--rgw_port specify ceph rgw http listen port\n"
 usage=$usage"\t--rgw_frontend specify the rgw frontend configuration\n"
+usage=$usage"\t--rgw_compression specify the rgw compression plugin\n"
 usage=$usage"\t-b, --bluestore use bluestore as the osd objectstore backend\n"
 usage=$usage"\t--memstore use memstore as the osd objectstore backend\n"
 usage=$usage"\t--cache <pool>: enable cache tiering on pool\n"
@@ -255,6 +257,10 @@ case $1 in
             ;;
     --rgw_frontend )
             rgw_frontend=$2
+            shift
+            ;;
+    --rgw_compression )
+            rgw_compression=$2
             shift
             ;;
     --filestore_path )
@@ -447,6 +453,8 @@ EOF
         log file = $CEPH_OUT_DIR/\$name.\$pid.log
         admin socket = $CEPH_OUT_DIR/\$name.\$pid.asok
 
+[client.rgw]
+
 [mds]
 $DAEMONOPTS
 $CMDSDEBUG
@@ -545,6 +553,12 @@ start_mon() {
 			--cap mgr 'allow *' \
 			"$keyring_fn"
 
+		prun $SUDO "$CEPH_BIN/ceph-authtool" --gen-key --name=client.rgw \
+		    --cap mon 'allow rw' \
+		    --cap osd 'allow rwx' \
+		    --cap mgr 'allow rw' \
+		    "$keyring_fn"
+
 		# build a fresh fs monmap, mon fs
 		local str=""
 		local count=0
@@ -632,12 +646,10 @@ start_mgr() {
         host = $HOSTNAME
 EOF
 
-	ceph_adm config-key put mgr/dashboard/$name/server_addr $IP
 	ceph_adm config-key put mgr/dashboard/$name/server_port $MGR_PORT
 	DASH_URLS+="http://$IP:$MGR_PORT/"
 	MGR_PORT=$(($MGR_PORT + 1000))
 
-	ceph_adm config-key put mgr/restful/$name/server_addr $IP
 	ceph_adm config-key put mgr/restful/$name/server_port $MGR_PORT
 
 	RESTFUL_URLS+="https://$IP:$MGR_PORT"
@@ -918,7 +930,7 @@ EOF
 }
 do_hitsets $hitset
 
-do_rgw()
+do_rgw_create_users()
 {
     # Create S3 user
     local akey='0555b35654ad1656d804'
@@ -963,9 +975,18 @@ do_rgw()
     echo "  user      : tester"
     echo "  password  : testing"
     echo ""
+}
 
+do_rgw()
+{
+    if [ "$new" -eq 1 ]; then
+	do_rgw_create_users
+        if [ -n "$rgw_compression" ]; then
+            echo "setting compression type=$rgw_compression"
+            $CEPH_BIN/radosgw-admin zone placement modify -c $conf_fn --rgw-zone=default --placement-id=default-placement --compression=$rgw_compression > /dev/null
+        fi
+    fi
     # Start server
-    echo start rgw on http://localhost:$CEPH_RGW_PORT
     RGWDEBUG=""
     if [ "$debug" -ne 0 ]; then
         RGWDEBUG="--debug-rgw=20"
@@ -976,8 +997,8 @@ do_rgw()
     n=$(($CEPH_NUM_RGW - 1))
     i=0
     for rgw in j k l m n o p q r s t u v; do
-	ceph_adm auth get-or-create client.rgw.$rgw mon 'allow rw' osd 'allow rwx' mgr 'allow rw' -o $CEPH_DEV_DIR/rgw.$rgw.keyring
-	run 'rgw' $RGWSUDO $CEPH_BIN/radosgw -c $conf_fn --log-file=${CEPH_OUT_DIR}/rgw.$rgw.log ${RGWDEBUG} --debug-ms=1 -n client.rgw.$rgw -k $CEPH_DEV_DIR/rgw.$rgw.keyring
+	echo start rgw on http://localhost:$((CEPH_RGW_PORT + i))
+	run 'rgw' $RGWSUDO $CEPH_BIN/radosgw -c $conf_fn --log-file=${CEPH_OUT_DIR}/rgw.$rgw.log ${RGWDEBUG} --debug-ms=1 -n client.rgw "--rgw_frontends=${rgw_frontend} port=$((CEPH_RGW_PORT + i))"
 	i=$(($i + 1))
         [ $i -eq $CEPH_NUM_RGW ] && break
     done

@@ -29,6 +29,7 @@
 #include "auth/Auth.h"
 #include "common/Finisher.h"
 #include "common/Timer.h"
+#include "mon/MgrMap.h"
 
 #include "DaemonServer.h"
 #include "PyModules.h"
@@ -56,7 +57,10 @@ protected:
   SafeTimer timer;
   Finisher finisher;
 
+  // Track receipt of initial data during startup
   Cond fs_map_cond;
+  bool digest_received;
+  Cond digest_cond;
 
   PyModules py_modules;
   DaemonStateIndex daemon_state;
@@ -92,7 +96,7 @@ public:
 
   void tick();
 
-  void background_init();
+  void background_init(Context *completion);
   void shutdown();
 };
 

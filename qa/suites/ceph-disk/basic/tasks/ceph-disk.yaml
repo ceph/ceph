@@ -17,6 +17,9 @@ tasks:
 - ceph:
     fs: xfs # this implicitly means /dev/vd? are used instead of directories
     wait-for-scrub: false
+    log-whitelist:
+      - (OSD_
+      - (PG_
     conf:
        global:
            mon pg warn min per osd: 2

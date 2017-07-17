@@ -2806,6 +2806,27 @@ void RGWDeleteBucket::execute()
     }
   }
 
+  string prefix, delimiter;
+
+  if (s->prot_flags & RGW_REST_SWIFT) {
+    string path_args;
+    path_args = s->info.args.get("path");
+    if (!path_args.empty()) {
+      if (!delimiter.empty() || !prefix.empty()) {
+        op_ret = -EINVAL;
+        return;
+      }
+      prefix = path_args;
+      delimiter="/";
+    }
+  }
+
+  op_ret = abort_bucket_multiparts(store, s->cct, s->bucket_info, prefix, delimiter);
+
+  if (op_ret < 0) {
+    return;
+  }
+
   op_ret = store->delete_bucket(s->bucket_info, ot, false);
 
   if (op_ret == -ECANCELED) {
@@ -3550,6 +3571,7 @@ void RGWPostObj::execute()
   RGWPutObjDataProcessor *filter = nullptr;
   boost::optional<RGWPutObj_Compress> compressor;
   CompressorRef plugin;
+  char supplied_md5[CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 1];
 
   /* Read in the data from the POST form. */
   op_ret = get_params();
@@ -3600,6 +3622,21 @@ void RGWPostObj::execute()
     op_ret = store->check_bucket_shards(s->bucket_info, s->bucket, bucket_quota);
     if (op_ret < 0) {
       return;
+    }
+
+    if (supplied_md5_b64) {
+      char supplied_md5_bin[CEPH_CRYPTO_MD5_DIGESTSIZE + 1];
+      ldout(s->cct, 15) << "supplied_md5_b64=" << supplied_md5_b64 << dendl;
+      op_ret = ceph_unarmor(supplied_md5_bin, &supplied_md5_bin[CEPH_CRYPTO_MD5_DIGESTSIZE + 1],
+                            supplied_md5_b64, supplied_md5_b64 + strlen(supplied_md5_b64));
+      ldout(s->cct, 15) << "ceph_armor ret=" << op_ret << dendl;
+      if (op_ret != CEPH_CRYPTO_MD5_DIGESTSIZE) {
+        op_ret = -ERR_INVALID_DIGEST;
+        return;
+      }
+
+      buf_to_hex((const unsigned char *)supplied_md5_bin, CEPH_CRYPTO_MD5_DIGESTSIZE, supplied_md5);
+      ldout(s->cct, 15) << "supplied_md5=" << supplied_md5 << dendl;
     }
 
     RGWPutObjProcessor_Atomic processor(*static_cast<RGWObjectCtx *>(s->obj_ctx),
@@ -3675,6 +3712,11 @@ void RGWPostObj::execute()
     }
 
     s->obj_size = ofs;
+
+    if (supplied_md5_b64 && strcmp(calc_md5, supplied_md5)) {
+      op_ret = -ERR_BAD_DIGEST;
+      return;
+    }
 
     op_ret = store->check_quota(s->bucket_owner.get_id(), s->bucket,
                                 user_quota, bucket_quota, s->obj_size);
@@ -5453,17 +5495,12 @@ void RGWListBucketMultiparts::execute()
   }
   marker_meta = marker.get_meta();
 
-  RGWRados::Bucket target(store, s->bucket_info);
-  RGWRados::Bucket::List list_op(&target);
+  op_ret = list_bucket_multiparts(store, s->bucket_info, prefix, marker_meta, delimiter,
+                                  max_uploads, &objs, &common_prefixes, &is_truncated);
+  if (op_ret < 0) {
+    return;
+  }
 
-  list_op.params.prefix = prefix;
-  list_op.params.delim = delimiter;
-  list_op.params.marker = marker_meta;
-  list_op.params.ns = mp_ns;
-  list_op.params.filter = &mp_filter;
-
-  op_ret = list_op.list_objects(max_uploads, &objs, &common_prefixes,
-				&is_truncated);
   if (!objs.empty()) {
     vector<rgw_bucket_dir_entry>::iterator iter;
     RGWMultipartUploadEntry entry;

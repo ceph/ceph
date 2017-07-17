@@ -54,7 +54,7 @@ int RGWListBuckets_ObjStore_SWIFT::get_params()
     limit = (uint64_t)l;
   }
 
-  if (need_stats) {
+  if (s->cct->_conf->rgw_swift_need_stats) {
     bool stats, exists;
     int r = s->info.args.get_bool("stats", &stats, &exists);
 
@@ -65,6 +65,8 @@ int RGWListBuckets_ObjStore_SWIFT::get_params()
     if (exists) {
       need_stats = stats;
     }
+  } else {
+    need_stats = false;
   }
 
   return 0;
@@ -1602,7 +1604,7 @@ const vector<pair<string, RGWInfo_ObjStore_SWIFT::info>> RGWInfo_ObjStore_SWIFT:
     {"slo", {false, RGWInfo_ObjStore_SWIFT::list_slo_data}},
     {"account_quotas", {false, nullptr}},
     {"staticweb", {false, nullptr}},
-    {"tempauth", {false, nullptr}},
+    {"tempauth", {false, RGWInfo_ObjStore_SWIFT::list_tempauth_data}},
 };
 
 void RGWInfo_ObjStore_SWIFT::execute()
@@ -1677,6 +1679,14 @@ void RGWInfo_ObjStore_SWIFT::list_swift_data(Formatter& formatter,
   formatter.close_section();
 }
 
+void RGWInfo_ObjStore_SWIFT::list_tempauth_data(Formatter& formatter,
+                                                 const md_config_t& config,
+                                                 RGWRados& store)
+{
+  formatter.open_object_section("tempauth");
+  formatter.dump_bool("account_acls", true);
+  formatter.close_section();
+}
 void RGWInfo_ObjStore_SWIFT::list_tempurl_data(Formatter& formatter,
                                                 const md_config_t& config,
                                                 RGWRados& store)

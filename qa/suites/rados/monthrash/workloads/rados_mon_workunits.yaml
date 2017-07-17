@@ -2,6 +2,9 @@ overrides:
   ceph:
     log-whitelist:
     - wrongly marked me down
+    - overall HEALTH_
+    - (PG_
+    - (MON_DOWN)
 tasks:
 - workunit:
     clients:

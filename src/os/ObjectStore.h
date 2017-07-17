@@ -1575,6 +1575,10 @@ public:
     return true;
   }
 
+  virtual string get_default_device_class() {
+    return is_rotational() ? "hdd" : "ssd";
+  }
+
   virtual bool can_sort_nibblewise() {
     return false;   // assume a backend cannot, unless it says otherwise
   }
@@ -2020,6 +2024,8 @@ public:
   // DEBUG
   virtual void inject_data_error(const ghobject_t &oid) {}
   virtual void inject_mdata_error(const ghobject_t &oid) {}
+
+  virtual void compact() {}
 };
 WRITE_CLASS_ENCODER(ObjectStore::Transaction)
 WRITE_CLASS_ENCODER(ObjectStore::Transaction::TransactionData)

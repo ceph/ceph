@@ -50,6 +50,7 @@ Mgr::Mgr(MonClient *monc_, const MgrMap& mgrmap,
   lock("Mgr::lock"),
   timer(g_ceph_context, lock),
   finisher(g_ceph_context, "Mgr", "mgr-fin"),
+  digest_received(false),
   py_modules(daemon_state, cluster_state, *monc, clog_, *objecter, *client,
              finisher),
   cluster_state(monc, nullptr, mgrmap),
@@ -147,7 +148,7 @@ public:
 };
 
 
-void Mgr::background_init()
+void Mgr::background_init(Context *completion)
 {
   Mutex::Locker l(lock);
   assert(!initializing);
@@ -156,8 +157,9 @@ void Mgr::background_init()
 
   finisher.start();
 
-  finisher.queue(new FunctionContext([this](int r){
+  finisher.queue(new FunctionContext([this, completion](int r){
     init();
+    completion->complete(0);
   }));
 }
 
@@ -219,11 +221,14 @@ void Mgr::init()
   // all sets will come via mgr)
   load_config();
 
-  // Wait for MgrDigest...?
-  // TODO
+  // Wait for MgrDigest...
+  dout(4) << "waiting for MgrDigest..." << dendl;
+  while (!digest_received) {
+    digest_cond.Wait(lock);
+  }
 
   // assume finisher already initialized in background_init
-
+  dout(4) << "starting PyModules..." << dendl;
   py_modules.init();
   py_modules.start();
 
@@ -595,7 +600,9 @@ bool Mgr::got_mgr_map(const MgrMap& m)
 	 << dendl;
     return true;
   }
+
   cluster_state.set_mgr_map(m);
+
   return false;
 }
 
@@ -613,10 +620,15 @@ void Mgr::handle_mgr_digest(MMgrDigest* m)
   dout(10) << "done." << dendl;
 
   m->put();
+
+  if (!digest_received) {
+    digest_received = true;
+    digest_cond.Signal();
+  }
 }
 
 void Mgr::tick()
 {
-  dout(0) << dendl;
+  dout(10) << dendl;
   server.send_report();
 }

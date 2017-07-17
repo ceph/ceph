@@ -212,6 +212,7 @@ using ceph::crypto::MD5;
 #define ERR_INVALID_LOCATION_CONSTRAINT 2208
 #define ERR_TAG_CONFLICT         2209
 #define ERR_INVALID_TAG          2210
+#define ERR_ZERO_IN_URL          2211
 
 #define ERR_BUSY_RESHARDING      2300
 
@@ -1722,9 +1723,9 @@ class RGWRequest;
 struct req_state {
   CephContext *cct;
   rgw::io::BasicClient *cio;
-  RGWRequest *req; /// XXX: re-remove??
+  RGWRequest *req{nullptr}; /// XXX: re-remove??
   http_op op;
-  RGWOpType op_type;
+  RGWOpType op_type{};
   bool content_started;
   int format;
   ceph::Formatter *formatter;

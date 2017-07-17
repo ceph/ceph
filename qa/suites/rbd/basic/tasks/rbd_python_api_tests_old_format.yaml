@@ -1,3 +1,7 @@
+overrides:
+  ceph:
+    log-whitelist:
+      - (REQUEST_SLOW)
 tasks:
 - workunit:
     clients:

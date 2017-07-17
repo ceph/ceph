@@ -15,6 +15,8 @@
  *
  */
 
+#include <boost/algorithm/string.hpp>
+
 #include "OSDMap.h"
 #include <algorithm>
 #include "common/config.h"
@@ -24,6 +26,7 @@
 #include "include/str_map.h"
 
 #include "common/code_environment.h"
+#include "mon/health_check.h"
 
 #include "crush/CrushTreeDumper.h"
 #include "common/Clock.h"
@@ -294,8 +297,14 @@ bool OSDMap::containing_subtree_is_down(CephContext *cct, int id, int subtree_ty
   }
 }
 
-bool OSDMap::subtree_type_is_down(CephContext *cct, int id, int subtree_type, set<int> *down_in_osds, set<int> *up_in_osds,
-                                           set<int> *subtree_up, unordered_map<int, set<int> > *subtree_type_down) const
+bool OSDMap::subtree_type_is_down(
+  CephContext *cct,
+  int id,
+  int subtree_type,
+  set<int> *down_in_osds,
+  set<int> *up_in_osds,
+  set<int> *subtree_up,
+  unordered_map<int, set<int> > *subtree_type_down) const
 {
   if (id >= 0) {
     bool is_down_ret = is_down(id);
@@ -317,7 +326,9 @@ bool OSDMap::subtree_type_is_down(CephContext *cct, int id, int subtree_type, se
   list<int> children;
   crush->get_children(id, &children);
   for (const auto &child : children) {
-    if (!subtree_type_is_down(cct, child, crush->get_bucket_type(child), down_in_osds, up_in_osds, subtree_up, subtree_type_down)) {
+    if (!subtree_type_is_down(
+	  cct, child, crush->get_bucket_type(child),
+	  down_in_osds, up_in_osds, subtree_up, subtree_type_down)) {
       subtree_up->insert(id);
       return false;
     }
@@ -1920,7 +1931,7 @@ void OSDMap::_apply_upmap(const pg_pool_t& pi, pg_t raw_pg, vector<int> *raw) co
       }
     }
     *raw = vector<int>(p->second.begin(), p->second.end());
-    return;
+    // continue to check and apply pg_upmap_items if any
   }
 
   auto q = pg_upmap_items.find(pg);
@@ -3794,6 +3805,10 @@ int OSDMap::calc_pg_upmaps(
 		     << " pgs " << pgs << dendl;
     }
 
+    if (osd_weight_total == 0) {
+      lderr(cct) << __func__ << " abort due to osd_weight_total == 0" << dendl;
+      break;
+    }
     float pgs_per_weight = total_pgs / osd_weight_total;
     ldout(cct, 10) << " osd_weight_total " << osd_weight_total << dendl;
     ldout(cct, 10) << " pgs_per_weight " << pgs_per_weight << dendl;
@@ -3843,6 +3858,7 @@ int OSDMap::calc_pg_upmaps(
       int osd = p->second;
       float deviation = p->first;
       float target = osd_weight[osd] * pgs_per_weight;
+      assert(target > 0);
       if (deviation/target < max_deviation_ratio) {
 	ldout(cct, 10) << " osd." << osd
 		       << " target " << target
@@ -4254,5 +4270,360 @@ void print_osd_utilization(const OSDMap& osdmap,
     TextTable tbl;
     d.dump(&tbl);
     out << tbl << d.summary() << "\n";
+  }
+}
+
+void OSDMap::check_health(health_check_map_t *checks) const
+{
+  int num_osds = get_num_osds();
+
+  // OSD_DOWN
+  // OSD_$subtree_DOWN
+  // OSD_ORPHAN
+  if (num_osds >= 0) {
+    int num_in_osds = 0;
+    int num_down_in_osds = 0;
+    set<int> osds;
+    set<int> down_in_osds;
+    set<int> up_in_osds;
+    set<int> subtree_up;
+    unordered_map<int, set<int> > subtree_type_down;
+    unordered_map<int, int> num_osds_subtree;
+    int max_type = crush->get_max_type_id();
+
+    for (int i = 0; i < get_max_osd(); i++) {
+      if (!exists(i)) {
+        if (crush->item_exists(i)) {
+          osds.insert(i);
+        }
+	continue;
+      }
+      if (is_out(i))
+        continue;
+      ++num_in_osds;
+      if (down_in_osds.count(i) || up_in_osds.count(i))
+	continue;
+      if (!is_up(i)) {
+	down_in_osds.insert(i);
+	int parent_id = 0;
+	int current = i;
+	for (int type = 0; type <= max_type; type++) {
+	  if (!crush->get_type_name(type))
+	    continue;
+	  int r = crush->get_immediate_parent_id(current, &parent_id);
+	  if (r == -ENOENT)
+	    break;
+	  // break early if this parent is already marked as up
+	  if (subtree_up.count(parent_id))
+	    break;
+	  type = crush->get_bucket_type(parent_id);
+	  if (!subtree_type_is_down(
+		g_ceph_context, parent_id, type,
+		&down_in_osds, &up_in_osds, &subtree_up, &subtree_type_down))
+	    break;
+	  current = parent_id;
+	}
+      }
+    }
+
+    // calculate the number of down osds in each down subtree and
+    // store it in num_osds_subtree
+    for (int type = 1; type <= max_type; type++) {
+      if (!crush->get_type_name(type))
+	continue;
+      for (auto j = subtree_type_down[type].begin();
+	   j != subtree_type_down[type].end();
+	   ++j) {
+	list<int> children;
+	int num = 0;
+	int num_children = crush->get_children(*j, &children);
+	if (num_children == 0)
+	  continue;
+	for (auto l = children.begin(); l != children.end(); ++l) {
+	  if (*l >= 0) {
+	    ++num;
+	  } else if (num_osds_subtree[*l] > 0) {
+	    num = num + num_osds_subtree[*l];
+	  }
+	}
+	num_osds_subtree[*j] = num;
+      }
+    }
+    num_down_in_osds = down_in_osds.size();
+    assert(num_down_in_osds <= num_in_osds);
+    if (num_down_in_osds > 0) {
+      // summary of down subtree types and osds
+      for (int type = max_type; type > 0; type--) {
+	if (!crush->get_type_name(type))
+	  continue;
+	if (subtree_type_down[type].size() > 0) {
+	  ostringstream ss;
+	  ss << subtree_type_down[type].size() << " "
+	     << crush->get_type_name(type);
+	  if (subtree_type_down[type].size() > 1) {
+	    ss << "s";
+	  }
+	  int sum_down_osds = 0;
+	  for (auto j = subtree_type_down[type].begin();
+	       j != subtree_type_down[type].end();
+	       ++j) {
+	    sum_down_osds = sum_down_osds + num_osds_subtree[*j];
+	  }
+          ss << " (" << sum_down_osds << " osds) down";
+	  string err = string("OSD_") +
+	    string(crush->get_type_name(type)) + "_DOWN";
+	  boost::to_upper(err);
+	  auto& d = checks->add(err, HEALTH_WARN, ss.str());
+	  for (auto j = subtree_type_down[type].rbegin();
+	       j != subtree_type_down[type].rend();
+	       ++j) {
+	    ostringstream ss;
+	    ss << crush->get_type_name(type);
+	    ss << " ";
+	    ss << crush->get_item_name(*j);
+	    // at the top level, do not print location
+	    if (type != max_type) {
+              ss << " (";
+              ss << crush->get_full_location_ordered_string(*j);
+              ss << ")";
+	    }
+	    int num = num_osds_subtree[*j];
+	    ss << " (" << num << " osds)";
+	    ss << " is down";
+	    d.detail.push_back(ss.str());
+	  }
+	}
+      }
+      ostringstream ss;
+      ss << down_in_osds.size() << " osds down";
+      auto& d = checks->add("OSD_DOWN", HEALTH_WARN, ss.str());
+      for (auto it = down_in_osds.begin(); it != down_in_osds.end(); ++it) {
+	ostringstream ss;
+	ss << "osd." << *it << " (";
+	ss << crush->get_full_location_ordered_string(*it);
+	ss << ") is down";
+	d.detail.push_back(ss.str());
+      }
+    }
+
+    if (!osds.empty()) {
+      ostringstream ss;
+      ss << osds.size() << " osds exist in the crush map but not in the osdmap";
+      auto& d = checks->add("OSD_ORPHAN", HEALTH_WARN, ss.str());
+      for (auto osd : osds) {
+	ostringstream ss;
+	ss << "osd." << osd << " exists in crush map but not in osdmap";
+	d.detail.push_back(ss.str());
+      }
+    }
+  }
+
+  // OSD_OUT_OF_ORDER_FULL
+  {
+    // An osd could configure failsafe ratio, to something different
+    // but for now assume it is the same here.
+    float fsr = g_conf->osd_failsafe_full_ratio;
+    if (fsr > 1.0) fsr /= 100;
+    float fr = get_full_ratio();
+    float br = get_backfillfull_ratio();
+    float nr = get_nearfull_ratio();
+
+    list<string> detail;
+    // These checks correspond to how OSDService::check_full_status() in an OSD
+    // handles the improper setting of these values.
+    if (br < nr) {
+      ostringstream ss;
+      ss << "backfillfull_ratio (" << br
+	 << ") < nearfull_ratio (" << nr << "), increased";
+      detail.push_back(ss.str());
+      br = nr;
+    }
+    if (fr < br) {
+      ostringstream ss;
+      ss << "full_ratio (" << fr << ") < backfillfull_ratio (" << br
+	 << "), increased";
+      detail.push_back(ss.str());
+      fr = br;
+    }
+    if (fsr < fr) {
+      ostringstream ss;
+      ss << "osd_failsafe_full_ratio (" << fsr << ") < full_ratio (" << fr
+	 << "), increased";
+      detail.push_back(ss.str());
+    }
+    if (!detail.empty()) {
+      auto& d = checks->add("OSD_OUT_OF_ORDER_FULL", HEALTH_ERR,
+			 "full ratio(s) out of order");
+      d.detail.swap(detail);
+    }
+  }
+
+  // OSD_FULL
+  // OSD_NEARFULL
+  // OSD_BACKFILLFULL
+  // OSD_FAILSAFE_FULL
+  {
+    set<int> full, backfillfull, nearfull;
+    get_full_osd_counts(&full, &backfillfull, &nearfull);
+    if (full.size()) {
+      ostringstream ss;
+      ss << full.size() << " full osd(s)";
+      auto& d = checks->add("OSD_FULL", HEALTH_ERR, ss.str());
+      for (auto& i: full) {
+	ostringstream ss;
+	ss << "osd." << i << " is full";
+	d.detail.push_back(ss.str());
+      }
+    }
+    if (backfillfull.size()) {
+      ostringstream ss;
+      ss << backfillfull.size() << " backfillfull osd(s)";
+      auto& d = checks->add("OSD_BACKFILLFULL", HEALTH_WARN, ss.str());
+      for (auto& i: backfillfull) {
+	ostringstream ss;
+	ss << "osd." << i << " is backfill full";
+	d.detail.push_back(ss.str());
+      }
+    }
+    if (nearfull.size()) {
+      ostringstream ss;
+      ss << nearfull.size() << " nearfull osd(s)";
+      auto& d = checks->add("OSD_NEARFULL", HEALTH_WARN, ss.str());
+      for (auto& i: nearfull) {
+	ostringstream ss;
+	ss << "osd." << i << " is near full";
+	d.detail.push_back(ss.str());
+      }
+    }
+  }
+
+  // OSDMAP_FLAGS
+  {
+    // warn about flags
+    uint64_t warn_flags =
+      CEPH_OSDMAP_FULL |
+      CEPH_OSDMAP_PAUSERD |
+      CEPH_OSDMAP_PAUSEWR |
+      CEPH_OSDMAP_PAUSEREC |
+      CEPH_OSDMAP_NOUP |
+      CEPH_OSDMAP_NODOWN |
+      CEPH_OSDMAP_NOIN |
+      CEPH_OSDMAP_NOOUT |
+      CEPH_OSDMAP_NOBACKFILL |
+      CEPH_OSDMAP_NORECOVER |
+      CEPH_OSDMAP_NOSCRUB |
+      CEPH_OSDMAP_NODEEP_SCRUB |
+      CEPH_OSDMAP_NOTIERAGENT |
+      CEPH_OSDMAP_NOREBALANCE;
+    if (test_flag(warn_flags)) {
+      ostringstream ss;
+      ss << get_flag_string(get_flags() & warn_flags)
+	 << " flag(s) set";
+      checks->add("OSDMAP_FLAGS", HEALTH_WARN, ss.str());
+    }
+  }
+
+  // OSD_FLAGS
+  {
+    list<string> detail;
+    const unsigned flags =
+      CEPH_OSD_NOUP |
+      CEPH_OSD_NOIN |
+      CEPH_OSD_NODOWN |
+      CEPH_OSD_NOOUT;
+    for (int i = 0; i < max_osd; ++i) {
+      if (osd_state[i] & flags) {
+	ostringstream ss;
+	set<string> states;
+	OSDMap::calc_state_set(osd_state[i] & flags, states);
+	ss << "osd." << i << " has flags " << states;
+	detail.push_back(ss.str());
+      }
+    }
+    if (!detail.empty()) {
+      ostringstream ss;
+      ss << detail.size() << " osd(s) have {NOUP,NODOWN,NOIN,NOOUT} flags set";
+      auto& d = checks->add("OSD_FLAGS", HEALTH_WARN, ss.str());
+      d.detail.swap(detail);
+    }
+  }
+
+  // OLD_CRUSH_TUNABLES
+  if (g_conf->mon_warn_on_legacy_crush_tunables) {
+    string min = crush->get_min_required_version();
+    if (min < g_conf->mon_crush_min_required_version) {
+      ostringstream ss;
+      ss << "crush map has legacy tunables (require " << min
+	 << ", min is " << g_conf->mon_crush_min_required_version << ")";
+      auto& d = checks->add("OLD_CRUSH_TUNABLES", HEALTH_WARN, ss.str());
+      d.detail.push_back("see http://docs.ceph.com/docs/master/rados/operations/crush-map/#tunables");
+    }
+  }
+
+  // OLD_CRUSH_STRAW_CALC_VERSION
+  if (g_conf->mon_warn_on_crush_straw_calc_version_zero) {
+    if (crush->get_straw_calc_version() == 0) {
+      ostringstream ss;
+      ss << "crush map has straw_calc_version=0";
+      auto& d = checks->add("OLD_CRUSH_STRAW_CALC_VERSION", HEALTH_WARN, ss.str());
+      d.detail.push_back(
+	"see http://docs.ceph.com/docs/master/rados/operations/crush-map/#tunables");
+    }
+  }
+
+  // CACHE_POOL_NO_HIT_SET
+  if (g_conf->mon_warn_on_cache_pools_without_hit_sets) {
+    list<string> detail;
+    for (map<int64_t, pg_pool_t>::const_iterator p = pools.begin();
+	 p != pools.end();
+	 ++p) {
+      const pg_pool_t& info = p->second;
+      if (info.cache_mode_requires_hit_set() &&
+	  info.hit_set_params.get_type() == HitSet::TYPE_NONE) {
+	ostringstream ss;
+	ss << "pool '" << get_pool_name(p->first)
+	   << "' with cache_mode " << info.get_cache_mode_name()
+	   << " needs hit_set_type to be set but it is not";
+	detail.push_back(ss.str());
+      }
+    }
+    if (!detail.empty()) {
+      ostringstream ss;
+      ss << detail.size() << " cache pools are missing hit_sets";
+      auto& d = checks->add("CACHE_POOL_NO_HIT_SET", HEALTH_WARN, ss.str());
+      d.detail.swap(detail);
+    }
+  }
+
+  // OSD_NO_SORTBITWISE
+  if (!test_flag(CEPH_OSDMAP_SORTBITWISE) &&
+      (get_up_osd_features() &
+       CEPH_FEATURE_OSD_BITWISE_HOBJ_SORT)) {
+    ostringstream ss;
+    ss << "no legacy OSD present but 'sortbitwise' flag is not set";
+    checks->add("OSD_NO_SORTBITWISE", HEALTH_WARN, ss.str());
+  }
+
+  // OSD_UPGRADE_FINISHED
+  // none of these (yet) since we don't run until luminous upgrade is done.
+
+  // POOL_FULL
+  {
+    list<string> detail;
+    for (auto it : get_pools()) {
+      const pg_pool_t &pool = it.second;
+      if (pool.has_flag(pg_pool_t::FLAG_FULL)) {
+	const string& pool_name = get_pool_name(it.first);
+	stringstream ss;
+	ss << "pool '" << pool_name << "' is full";
+	detail.push_back(ss.str());
+      }
+    }
+    if (!detail.empty()) {
+      ostringstream ss;
+      ss << detail.size() << " pool(s) full";
+      auto& d = checks->add("POOL_FULL", HEALTH_WARN, ss.str());
+      d.detail.swap(detail);
+    }
   }
 }

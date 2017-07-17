@@ -65,12 +65,15 @@ protected:
     void stop();
   };
 
-  OEWorker *worker;
+  OEWorker *worker{nullptr};
   std::atomic<bool> down_flag = { false };
 
 public:
   explicit RGWObjectExpirer(RGWRados *_store)
-    : store(_store) {
+    : store(_store), worker(NULL) {
+  }
+  ~RGWObjectExpirer() {
+    stop_processor();
   }
 
   int garbage_single_object(objexp_hint_entry& hint);

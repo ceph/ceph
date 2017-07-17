@@ -20,6 +20,7 @@
 #include "rgw_bucket.h"
 #include "rgw_user.h"
 #include "rgw_string.h"
+#include "rgw_multi.h"
 
 #include "include/rados/librados.hpp"
 // until everything is moved from rgw_common
@@ -530,32 +531,39 @@ int rgw_remove_bucket(RGWRados *store, rgw_bucket& bucket, bool delete_children)
   if (ret < 0)
     return ret;
 
-
   RGWRados::Bucket target(store, info);
   RGWRados::Bucket::List list_op(&target);
+  CephContext *cct = store->ctx();
+  int max = 1000;
 
   list_op.params.list_versions = true;
 
-  if (delete_children) {
-    int max = 1000;
+  do {
+    objs.clear();
 
-    do {
-      objs.clear();
+    ret = list_op.list_objects(max, &objs, &common_prefixes, NULL);
+    if (ret < 0)
+      return ret;
 
-      ret = list_op.list_objects(max, &objs, &common_prefixes, NULL);
+    if (!objs.empty() && !delete_children) {
+      lderr(store->ctx()) << "ERROR: could not remove non-empty bucket " << bucket.name << dendl;
+      return -ENOTEMPTY;
+    }
+
+    for (const auto& obj : objs) {
+      rgw_obj_key key(obj.key);
+      ret = rgw_remove_object(store, info, bucket, key);
       if (ret < 0)
         return ret;
+    }
 
-      std::vector<rgw_bucket_dir_entry>::iterator it = objs.begin();
-      for (; it != objs.end(); ++it) {
-        rgw_obj_key key(it->key);
-        ret = rgw_remove_object(store, info, bucket, key);
-        if (ret < 0)
-          return ret;
-      }
+  } while (!objs.empty());
 
-    } while (!objs.empty());
+  string prefix, delimiter;
 
+  ret = abort_bucket_multiparts(store, cct, info, prefix, delimiter);
+  if (ret < 0) {
+    return ret;
   }
 
   ret = rgw_bucket_sync_user_stats(store, bucket.tenant, info);
@@ -611,6 +619,7 @@ int rgw_remove_bucket_bypass_gc(RGWRados *store, rgw_bucket& bucket,
   map<string, bool> common_prefixes;
   RGWBucketInfo info;
   RGWObjectCtx obj_ctx(store);
+  CephContext *cct = store->ctx();
 
   string bucket_ver, master_ver;
 
@@ -622,6 +631,12 @@ int rgw_remove_bucket_bypass_gc(RGWRados *store, rgw_bucket& bucket,
   if (ret < 0)
     return ret;
 
+  string prefix, delimiter;
+
+  ret = abort_bucket_multiparts(store, cct, info, prefix, delimiter);
+  if (ret < 0) {
+    return ret;
+  }
 
   RGWRados::Bucket target(store, info);
   RGWRados::Bucket::List list_op(&target);
@@ -868,8 +883,9 @@ int RGWBucket::link(RGWBucketAdminOpState& op_state, std::string *err_msg)
     policy.encode(aclbl);
 
     r = store->system_obj_set_attr(NULL, obj, RGW_ATTR_ACL, aclbl, &objv_tracker);
-    if (r < 0)
+    if (r < 0) {
       return r;
+    }
 
     RGWAccessControlPolicy policy_instance;
     policy_instance.create_default(user_info.user_id, display_name);
@@ -879,10 +895,14 @@ int RGWBucket::link(RGWBucketAdminOpState& op_state, std::string *err_msg)
     string oid_bucket_instance = RGW_BUCKET_INSTANCE_MD_PREFIX + key;
     rgw_raw_obj obj_bucket_instance(root_pool, oid_bucket_instance);
     r = store->system_obj_set_attr(NULL, obj_bucket_instance, RGW_ATTR_ACL, aclbl, &objv_tracker);
+    if (r < 0) {
+      return r;
+    }
 
     r = rgw_link_bucket(store, user_info.user_id, bucket_info.bucket, real_time());
-    if (r < 0)
+    if (r < 0) {
       return r;
+    }
   }
 
   return 0;
@@ -994,7 +1014,6 @@ int RGWBucket::check_bad_index_multipart(RGWBucketAdminOpState& op_state,
 
   map<string, bool> common_prefixes;
 
-  string ns = "multipart";
   bool is_truncated;
   map<string, bool> meta_objs;
   map<rgw_obj_index_key, string> all_objs;
@@ -1011,7 +1030,7 @@ int RGWBucket::check_bad_index_multipart(RGWBucketAdminOpState& op_state,
   RGWRados::Bucket::List list_op(&target);
 
   list_op.params.list_versions = true;
-  list_op.params.ns = ns;
+  list_op.params.ns = RGW_OBJ_NS_MULTIPART;
 
   do {
     vector<rgw_bucket_dir_entry> result;

@@ -706,6 +706,8 @@ function test_mon_misc()
   ceph health --format json-pretty
   ceph health detail --format xml-pretty
 
+  ceph time-sync-status
+
   ceph node ls
   for t in mon osd mds ; do
       ceph node ls $t
@@ -1437,21 +1439,21 @@ function test_mon_osd()
   ceph osd find 0
 
   ceph osd add-nodown 0 1
-  ceph health detail | grep 'nodown osd(s).*0.*1'
+  ceph health detail | grep 'NODOWN'
   ceph osd rm-nodown 0 1
-  ! ceph health detail | grep 'nodown osd(s).*0.*1'
+  ! ceph health detail | grep 'NODOWN'
 
   ceph osd out 0 # so we can mark it as noin later
   ceph osd add-noin 0
-  ceph health detail | grep 'noin osd(s).*0'
+  ceph health detail | grep 'NOIN'
   ceph osd rm-noin 0
-  ! ceph health detail | grep 'noin osd(s).*0'
+  ! ceph health detail | grep 'NOIN'
   ceph osd in 0
 
   ceph osd add-noout 0
-  ceph health detail | grep 'noout osd(s).*0'
+  ceph health detail | grep 'NOOUT'
   ceph osd rm-noout 0
-  ! ceph health detail | grep 'noout osds(s).*0'
+  ! ceph health detail | grep 'NOOUT'
 
   # test osd id parse
   expect_false ceph osd add-noup 797er
@@ -1470,12 +1472,12 @@ function test_mon_osd()
     ceph osd add-nodown $osd
     ceph osd add-noout $osd
   done
-  ceph -s | grep 'nodown osd(s)'
-  ceph -s | grep 'noout osd(s)'
+  ceph -s | grep 'NODOWN'
+  ceph -s | grep 'NOOUT'
   ceph osd rm-nodown any
   ceph osd rm-noout all
-  ! ceph -s | grep 'nodown osd(s)'
-  ! ceph -s | grep 'noout osd(s)'
+  ! ceph -s | grep 'NODOWN'
+  ! ceph -s | grep 'NOOUT'
 
   # make sure mark out preserves weight
   ceph osd reweight osd.0 .5
@@ -1777,29 +1779,38 @@ function test_mon_pg()
 
   # Check health status
   ceph osd set-nearfull-ratio .913
-  ceph health | grep 'HEALTH_ERR.*Full ratio(s) out of order'
-  ceph health detail | grep 'backfillfull_ratio (0.912) < nearfull_ratio (0.913), increased'
+  ceph health -f json | grep OSD_OUT_OF_ORDER_FULL
+  ceph health detail | grep OSD_OUT_OF_ORDER_FULL
   ceph osd set-nearfull-ratio .892
   ceph osd set-backfillfull-ratio .963
-  ceph health detail | grep 'full_ratio (0.962) < backfillfull_ratio (0.963), increased'
+  ceph health -f json | grep OSD_OUT_OF_ORDER_FULL
+  ceph health detail | grep OSD_OUT_OF_ORDER_FULL
   ceph osd set-backfillfull-ratio .912
 
   # Check injected full results
   $SUDO ceph --admin-daemon $(get_admin_socket osd.0) injectfull nearfull
-  wait_for_health "HEALTH_WARN.*1 nearfull osd(s)"
+  wait_for_health "OSD_NEARFULL"
+  ceph health detail | grep "osd.0 is near full"
+  $SUDO ceph --admin-daemon $(get_admin_socket osd.0) injectfull none
+  wait_for_health_ok
+
   $SUDO ceph --admin-daemon $(get_admin_socket osd.1) injectfull backfillfull
-  wait_for_health "HEALTH_WARN.*1 backfillfull osd(s)"
+  wait_for_health "OSD_BACKFILLFULL"
+  ceph health detail | grep "osd.1 is backfill full"
+  $SUDO ceph --admin-daemon $(get_admin_socket osd.1) injectfull none
+  wait_for_health_ok
+
   $SUDO ceph --admin-daemon $(get_admin_socket osd.2) injectfull failsafe
   # failsafe and full are the same as far as the monitor is concerned
-  wait_for_health "HEALTH_ERR.*1 full osd(s)"
-  $SUDO ceph --admin-daemon $(get_admin_socket osd.0) injectfull full
-  wait_for_health "HEALTH_ERR.*2 full osd(s)"
-  ceph health detail | grep "osd.0 is full"
+  wait_for_health "OSD_FULL"
   ceph health detail | grep "osd.2 is full"
-  ceph health detail | grep "osd.1 is backfill full"
-  $SUDO ceph --admin-daemon $(get_admin_socket osd.0) injectfull none
-  $SUDO ceph --admin-daemon $(get_admin_socket osd.1) injectfull none
   $SUDO ceph --admin-daemon $(get_admin_socket osd.2) injectfull none
+  wait_for_health_ok
+
+  $SUDO ceph --admin-daemon $(get_admin_socket osd.0) injectfull full
+  wait_for_health "OSD_FULL"
+  ceph health detail | grep "osd.0 is full"
+  $SUDO ceph --admin-daemon $(get_admin_socket osd.0) injectfull none
   wait_for_health_ok
 
   ceph pg stat | grep 'pgs:'
@@ -1831,8 +1842,10 @@ function test_mon_pg()
   expect_false ceph osd primary-affinity osd.9999 .5
   ceph osd primary-affinity osd.0 1
 
-  ceph osd pg-temp 1.0 0 1 2
-  ceph osd pg-temp 1.0 osd.1 osd.0 osd.2
+  ceph osd pool set rbd size 2
+  ceph osd pg-temp 1.0 0 1
+  ceph osd pg-temp 1.0 osd.1 osd.0
+  expect_false ceph osd pg-temp 1.0 0 1 2
   expect_false ceph osd pg-temp asdf qwer
   expect_false ceph osd pg-temp 1.0 asdf
   expect_false ceph osd pg-temp 1.0
@@ -2319,6 +2332,12 @@ function test_osd_tell_help_command()
   expect_false ceph tell osd.100 help
 }
 
+function test_osd_compact()
+{
+  ceph tell osd.1 compact
+  ceph daemon osd.1 compact
+}
+
 function test_mds_tell_help_command()
 {
   local FS_NAME=cephfs
@@ -2398,6 +2417,7 @@ OSD_TESTS+=" osd_negative_filestore_merge_threshold"
 OSD_TESTS+=" tiering_agent"
 OSD_TESTS+=" admin_heap_profiler"
 OSD_TESTS+=" osd_tell_help_command"
+OSD_TESTS+=" osd_compact"
 
 MDS_TESTS+=" mds_tell"
 MDS_TESTS+=" mon_mds"
