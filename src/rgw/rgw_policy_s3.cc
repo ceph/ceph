@@ -292,7 +292,7 @@ int RGWPolicy::from_json(bufferlist& bl, string& err_msg)
         return r;
     } else if (!citer.end()) {
       JSONObj *c = *citer;
-      dout(0) << "adding simple_check: " << c->get_name() << " : " << c->get_data() << dendl;
+      dout(20) << "adding simple_check: " << c->get_name() << " : " << c->get_data() << dendl;
 
       add_simple_check(c->get_name(), c->get_data());
     } else {
