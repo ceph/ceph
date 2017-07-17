@@ -197,7 +197,7 @@ void PaxosService::propose_pending()
   }
 
   /**
-   * @note What we contirbute to the pending Paxos transaction is
+   * @note What we contribute to the pending Paxos transaction is
    *	   obtained by calling a function that must be implemented by
    *	   the class implementing us.  I.e., the function
    *	   encode_pending will be the one responsible to encode
