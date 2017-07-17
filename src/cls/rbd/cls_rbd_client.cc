@@ -2046,9 +2046,12 @@ namespace librbd {
       return ioctx->operate(RBD_TRASH, &op);
     }
 
-    void trash_list_start(librados::ObjectReadOperation *op)
+    void trash_list_start(librados::ObjectReadOperation *op,
+                          const std::string &start, uint64_t max_return)
     {
       bufferlist bl;
+      ::encode(start, bl);
+      ::encode(max_return, bl);
       op->exec("rbd", "trash_list", bl);
     }
 
@@ -2067,10 +2070,11 @@ namespace librbd {
     }
 
     int trash_list(librados::IoCtx *ioctx,
+                   const std::string &start, uint64_t max_return,
                    map<string, cls::rbd::TrashImageSpec> *entries)
     {
       librados::ObjectReadOperation op;
-      trash_list_start(&op);
+      trash_list_start(&op, start, max_return);
 
       bufferlist out_bl;
       int r = ioctx->operate(RBD_TRASH, &op, &out_bl);
