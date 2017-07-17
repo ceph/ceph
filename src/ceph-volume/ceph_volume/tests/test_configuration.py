@@ -1,8 +1,8 @@
 import os
 try:
     from cStringIO import StringIO
-except ImportError:
-    from io import StringIO
+except ImportError: # pragma: no cover
+    from io import StringIO # pragma: no cover
 from textwrap import dedent
 import pytest
 from ceph_volume import configuration, exceptions
