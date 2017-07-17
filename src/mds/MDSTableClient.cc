@@ -187,6 +187,8 @@ void MDSTableClient::commit(version_t tid, LogSegment *ls)
   pending_commit[tid] = ls;
   ls->pending_commit_tids[table].insert(tid);
 
+  notify_commit(tid);
+
   assert(g_conf->mds_kill_mdstable_at != 4);
 
   if (server_ready) {
@@ -206,6 +208,8 @@ void MDSTableClient::got_journaled_agree(version_t tid, LogSegment *ls)
   dout(10) << "got_journaled_agree " << tid << dendl;
   ls->pending_commit_tids[table].insert(tid);
   pending_commit[tid] = ls;
+
+  notify_commit(tid);
 }
 
 void MDSTableClient::got_journaled_ack(version_t tid)
