@@ -13,8 +13,10 @@ class Daemons(RemoteViewCache):
                 if service['type'] == 'rbd-mirror':
                     metadata = self._module.get_metadata('rbd-mirror',
                                                          service['id'])
+                    status = self._module.get_daemon_status('rbd-mirror',
+                                                            service['id'])
                     try:
-                        status = JSON.parse(metadata['json'])
+                        status = json.loads(status['json'])
                     except:
                         status = {}
                     daemons.append({
@@ -53,11 +55,16 @@ class PoolDatum(RemoteViewCache):
         data['mirror_mode'] = mirror_mode
 
         mirror_state = {
-            rbd.MIRROR_IMAGE_STATUS_STATE_UNKNOWN: {
+            'down': {
                 'health': 'issue',
                 'state_color': 'warning',
                 'state': 'Unknown',
                 'description': None
+            },
+            rbd.MIRROR_IMAGE_STATUS_STATE_UNKNOWN: {
+                'health': 'issue',
+                'state_color': 'warning',
+                'state': 'Unknown'
             },
             rbd.MIRROR_IMAGE_STATUS_STATE_ERROR: {
                 'health': 'issue',
@@ -95,7 +102,7 @@ class PoolDatum(RemoteViewCache):
                 dict({
                     'name': image['name'],
                     'description': image['description']
-                }, **mirror_state[rbd.MIRROR_IMAGE_STATUS_STATE_UNKNOWN if not image['up'] else image['state']])
+                }, **mirror_state['down' if not image['up'] else image['state']])
                 for image in mirror_image_status
             ], key=lambda k: k['name'])
         except:
@@ -130,17 +137,45 @@ class ContentData(RemoteViewCache):
             log.warning("Failed to get rbd-mirror daemons list")
             daemons = []
 
-        daemons = sorted([
-            {
+        daemon_data = sorted([
+            dict({
                 'id': daemon['service']['id'],
                 'instance_id': daemon['metadata']['instance_id'],
                 'version': daemon['metadata']['ceph_version'],
-                'server_hostname': daemon['server']['hostname'],
-                'health_color': 'warning',
-                'health': 'Warning'
-            }
+                'server_hostname': daemon['server']['hostname']
+            }, **self.get_daemon_health(daemon))
             for daemon in daemons
         ], key=lambda k: k['id'])
+
+        pool_stats = {}
+        for daemon in daemons:
+            for pool_id, pool_data in daemon['status'].items():
+                stats = pool_stats.get(pool_data['name'], None)
+                if stats is None:
+                    stats = {}
+                    pool_stats[pool_data['name']]  = stats
+
+                if pool_data.get('leader', False):
+                    stats['leader_id'] = daemon['metadata']['instance_id']
+                    stats['image_local_count'] = pool_data.get('image_local_count', 0)
+                    stats['image_remote_count'] = pool_data.get('image_remote_count', 0)
+
+                if (stats.get('health_color', '') != 'error' and
+                    pool_data.get('image_error_count', 0) > 0):
+                    stats['health_color'] = 'error'
+                    stats['health'] = 'Error'
+                elif (stats.get('health_color', '') != 'error' and
+                      pool_data.get('image_warning_count', 0) > 0):
+                    stats['health_color'] = 'warning'
+                    stats['health'] = 'Warning'
+                elif stats.get('health', None) is None:
+                    stats['health_color'] = 'success'
+                    stats['health'] = 'OK'
+
+        for name, stats in pool_stats.items():
+            if stats.get('leader_id', None) is None:
+                stats['health_color'] = 'warning'
+                stats['health'] = 'Warning'
 
         pools = []
         image_error = []
@@ -178,21 +213,46 @@ class ContentData(RemoteViewCache):
                     })
                     image_error.append(image)
 
-            pools.append({
+            pools.append(dict({
                 'name': pool_name,
                 'mirror_mode': pool['mirror_mode'],
                 'health_color': 'error',
                 'health': 'Error'
-            })
+            }, **pool_stats.get(pool_name, {})))
 
 
         return {
-            'daemons': daemons,
+            'daemons': daemon_data,
             'pools' : pools,
             'image_error': image_error,
             'image_syncing': image_syncing,
             'image_ready': image_ready
         }
+
+    def get_daemon_health(self, daemon):
+        health = {
+            'health_color': 'info',
+            'health' : 'Unknown'
+        }
+        for pool_id, pool_data in daemon['status'].items():
+            if (health['health'] != 'error' and
+                [k for k,v in pool_data.get('callouts', {}).items() if v['level'] == 'error']):
+                health = {
+                    'health_color': 'error',
+                    'health': 'Error'
+                }
+            elif (health['health'] != 'error' and
+                  [k for k,v in pool_data.get('callouts', {}).items() if v['level'] == 'warning']):
+                health = {
+                    'health_color': 'warning',
+                    'health': 'Warning'
+                }
+            elif health['health_color'] == 'info':
+                health = {
+                    'health_color': 'success',
+                    'health': 'OK'
+                }
+        return health
 
     def get_pool_datum(self, pool_name):
         pool_datum = self.pool_data.get(pool_name, None)
