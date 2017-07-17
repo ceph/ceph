@@ -1,10 +1,11 @@
+from __future__ import print_function
 import argparse
 import os
 from textwrap import dedent
 from ceph_volume import process
 from ceph_volume.util import activate as activate_utils
 from ceph_volume.systemd import systemctl
-import api
+from . import api
 
 
 def activate_filestore(lvs):
@@ -54,9 +55,9 @@ class Activate(object):
     def activate(self, args):
         lvs = api.Volumes()
         # filter them down for the OSD ID and FSID we need to activate
-        lvs.filter(lv_tags={'ceph.osd_id': args.id, 'ceph.osd_fsid': args.fsid})
+        lvs.filter(lv_tags={'ceph.osd_id': args.osd_id, 'ceph.osd_fsid': args.osd_fsid})
         if not lvs:
-            raise RuntimeError('could not find osd.%s with fsid %s' % (args.id, args.fsid))
+            raise RuntimeError('could not find osd.%s with fsid %s' % (args.osd_id, args.osd_fsid))
         activate_filestore(lvs)
 
     def main(self):
@@ -77,13 +78,13 @@ class Activate(object):
         )
 
         parser.add_argument(
-            'id',
+            'osd_id',
             metavar='ID',
             nargs='?',
             help='The ID of the OSD, usually an integer, like 0'
         )
         parser.add_argument(
-            'fsid',
+            'osd_fsid',
             metavar='FSID',
             nargs='?',
             help='The FSID of the OSD, similar to a SHA1'
@@ -99,7 +100,7 @@ class Activate(object):
             help='filestore objectstore (current default)',
         )
         if len(self.argv) == 0:
-            print sub_command_help
+            print(sub_command_help)
             return
         args = parser.parse_args(self.argv)
         self.activate(args)

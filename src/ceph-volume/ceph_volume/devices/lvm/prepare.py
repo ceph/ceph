@@ -1,10 +1,11 @@
-import argparse
+from __future__ import print_function
 import os
 from textwrap import dedent
 from ceph_volume.util import prepare as prepare_utils
 from ceph_volume.util import system
 from ceph_volume import conf
 from . import api
+from .common import prepare_parser
 
 
 def canonical_device_path(device):
@@ -166,48 +167,12 @@ class Prepare(object):
               ceph-volume lvm prepare --data {volume group}
 
         """)
-        parser = argparse.ArgumentParser(
+        parser = prepare_parser(
             prog='ceph-volume lvm prepare',
-            formatter_class=argparse.RawDescriptionHelpFormatter,
             description=sub_command_help,
         )
-        required_args = parser.add_argument_group('required arguments')
-        parser.add_argument(
-            '--journal',
-            help='A logical group name, path to a logical volume, or path to a device',
-        )
-        required_args.add_argument(
-            '--data',
-            required=True,
-            help='A logical group name or a path to a logical volume',
-        )
-        parser.add_argument(
-            '--journal-size',
-            default=5,
-            metavar='GB',
-            type=int,
-            help='Size (in GB) A logical group name or a path to a logical volume',
-        )
-        parser.add_argument(
-            '--bluestore',
-            action='store_true', default=False,
-            help='Use the bluestore objectstore (not currently supported)',
-        )
-        parser.add_argument(
-            '--filestore',
-            action='store_true', default=True,
-            help='Use the filestore objectstore (currently the only supported object store)',
-        )
-        parser.add_argument(
-            '--osd-id',
-            help='Reuse an existing OSD id',
-        )
-        parser.add_argument(
-            '--osd-fsid',
-            help='Reuse an existing OSD fsid',
-        )
         if len(self.argv) == 0:
-            print sub_command_help
+            print(sub_command_help)
             return
         args = parser.parse_args(self.argv)
         self.prepare(args)
