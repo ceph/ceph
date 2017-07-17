@@ -1,3 +1,4 @@
+from __future__ import print_function
 import argparse
 import os
 import pkg_resources
@@ -108,7 +109,7 @@ Ceph Conf: {ceph_path}
         # no flags where passed in, return the help menu instead of waiting for
         # argparse which will end up complaning that there are no args
         if len(argv) <= 1:
-            print self.help(warning=True)
+            print(self.help(warning=True))
             return
         parser = argparse.ArgumentParser(
             prog='ceph-volume',
