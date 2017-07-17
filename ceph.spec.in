@@ -112,6 +112,7 @@ BuildRequires:	python-CherryPy
 BuildRequires:	python-Werkzeug
 %endif
 BuildRequires:	python-pecan
+BuildRequires:	socat
 %endif
 BuildRequires:	bc
 BuildRequires:	gperf
@@ -140,7 +141,6 @@ BuildRequires:	python-devel
 BuildRequires:	python-nose
 BuildRequires:	python-requests
 BuildRequires:	python-virtualenv
-BuildRequires:	socat
 BuildRequires:	snappy-devel
 BuildRequires:	udev
 BuildRequires:	util-linux
