@@ -1325,7 +1325,8 @@ int32_t CrushWrapper::_alloc_class_id() const {
     return class_id;
   }
   // wrapped, pick a random start and do exhaustive search
-  uint32_t upperlimit = numeric_limits<int32_t>::max() + 1;
+  uint32_t upperlimit = numeric_limits<int32_t>::max();
+  upperlimit++;
   class_id = rand() % upperlimit;
   const auto start = class_id;
   do {
