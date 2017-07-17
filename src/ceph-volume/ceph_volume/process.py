@@ -124,8 +124,14 @@ def call(command, **kw):
     )
 
     returncode = process.wait()
-    stdout = process.stdout.read().splitlines()
-    stderr = process.stderr.read().splitlines()
+    stdout_stream = process.stdout.read()
+    stderr_stream = process.stderr.read()
+    if not isinstance(stdout_stream, str):
+        stdout_stream = stdout_stream.decode('utf-8')
+    if not isinstance(stderr_stream, str):
+        stderr_stream = stderr_stream.decode('utf-8')
+    stdout = stdout_stream.splitlines()
+    stderr = stderr_stream.splitlines()
 
     # the following can get a messed up order in the log if the system call
     # returns output with both stderr and stdout intermingled. This separates
