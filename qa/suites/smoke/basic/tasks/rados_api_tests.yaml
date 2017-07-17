@@ -4,7 +4,7 @@ tasks:
     fs: ext4
     log-whitelist:
     - reached quota
-    - wrongly marked me down
+    - but it is still running
     - objects unfound and apparently lost
 - thrashosds:
     chance_pgnum_grow: 2
