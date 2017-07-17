@@ -23,6 +23,7 @@ set_target_properties(ceph_test_mon_msg PROPERTIES COMPILE_FLAGS
 #scripts
 add_ceph_test(misc.sh ${CMAKE_CURRENT_SOURCE_DIR}/misc.sh)
 add_ceph_test(mkfs.sh ${CMAKE_CURRENT_SOURCE_DIR}/mkfs.sh)
+add_ceph_test(mon-bind.sh ${CMAKE_CURRENT_SOURCE_DIR}/mon-bind.sh)
 add_ceph_test(mon-created-time.sh ${CMAKE_CURRENT_SOURCE_DIR}/mon-created-time.sh)
 add_ceph_test(mon-handle-forward.sh ${CMAKE_CURRENT_SOURCE_DIR}/mon-handle-forward.sh)
 add_ceph_test(mon-ping.sh ${CMAKE_CURRENT_SOURCE_DIR}/mon-ping.sh)

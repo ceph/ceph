@@ -100,6 +100,8 @@ public:
   /* Messenger interface */
   virtual void set_addr_unknowns(const entity_addr_t &addr) override
     { } /* XXX applicable? */
+  virtual void set_addr(const entity_addr_t &addr) override
+    { } /* XXX applicable? */
 
   virtual int get_dispatch_queue_len()
     { return 0; } /* XXX bogus? */

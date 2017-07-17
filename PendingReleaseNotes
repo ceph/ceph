@@ -2,6 +2,9 @@
 ------
 * The "journaler allow split entries" config setting has been removed.
 * The 'apply' mode of cephfs-journal-tool has been removed
+* Added new configuration "public bind addr" to support dynamic environments
+  like Kubernetes. When set the Ceph MON daemon could bind locally to an IP
+  address and advertise a different IP address "public addr" on the network.
 
 12.0.0
 ------

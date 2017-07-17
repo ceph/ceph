@@ -159,6 +159,14 @@ void SimpleMessenger::set_addr_unknowns(const entity_addr_t &addr)
   }
 }
 
+void SimpleMessenger::set_addr(const entity_addr_t &addr)
+{
+  entity_addr_t t = addr;
+  t.set_nonce(nonce);
+  set_myaddr(t);
+  init_local_connection();
+}
+
 int SimpleMessenger::get_proto_version(int peer_type, bool connect)
 {
   int my_type = my_inst.name.type();
