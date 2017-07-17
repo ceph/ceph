@@ -151,13 +151,15 @@
                                 <th>Pool</th>
                                 <th>Image</th>
                                 <th>Issue</th>
+                                <th>State</th>
                             </tr>
                             </thead>
                             <tbody>
                                 <tr rv-each-image="image_error">
-                                    <td>{image.pool}</td>
+                                    <td>{image.pool_name}</td>
                                     <td>{image.name}</td>
                                     <td>{image.description}</td>
+                                    <td><span rv-class="image.state_color | mirror_health_color">{image.state}</span></td>
                                 </tr>
                             </tbody>
                         </table>
@@ -169,11 +171,12 @@
                                 <th>Pool</th>
                                 <th>Image</th>
                                 <th>Progress</th>
+                                <th>State</th>
                             </tr>
                             </thead>
                             <tbody>
                                 <tr rv-each-image="image_syncing">
-                                    <td>{image.pool}</td>
+                                    <td>{image.pool_name}</td>
                                     <td>{image.name}</td>
                                     <td>
                                         <div class="progress" style="width: 100px; height: 18px;">
@@ -182,6 +185,7 @@
                                             </div>
                                         </div>
                                     </td>
+                                    <td><span class="label label-info">Syncing</span></td>
                                 </tr>
                             </tbody>
                         </table>
@@ -192,13 +196,15 @@
                             <tr>
                                 <th>Pool</th>
                                 <th>Image</th>
+                                <th>Description</th>
                                 <th>State</th>
                             </tr>
                             </thead>
                             <tbody>
                                 <tr rv-each-image="image_ready">
-                                    <td>{image.pool}</td>
+                                    <td>{image.pool_name}</td>
                                     <td>{image.name}</td>
+                                    <td>{image.description}</td>
                                     <td><span rv-class="image.state_color | mirror_health_color">{image.state}</span></td>
                                 </tr>
                             </tbody>

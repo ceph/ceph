@@ -1,5 +1,6 @@
 
 import json
+import re
 import rados
 import rbd
 from remote_view_cache import RemoteViewCache
@@ -38,8 +39,8 @@ class PoolDatum(RemoteViewCache):
             self.log.exception("Failed to open pool " + pool_name)
             return None
 
+        rbdctx = rbd.RBD()
         try:
-            rbdctx = rbd.RBD()
             mirror_mode = rbdctx.mirror_mode_get(ioctx)
         except:
             self.log.exception("Failed to query mirror mode " + pool_name)
@@ -50,6 +51,56 @@ class PoolDatum(RemoteViewCache):
         else:
             mirror_mode = None
         data['mirror_mode'] = mirror_mode
+
+        mirror_state = {
+            rbd.MIRROR_IMAGE_STATUS_STATE_UNKNOWN: {
+                'health': 'issue',
+                'state_color': 'warning',
+                'state': 'Unknown',
+                'description': None
+            },
+            rbd.MIRROR_IMAGE_STATUS_STATE_ERROR: {
+                'health': 'issue',
+                'state_color': 'error',
+                'state': 'Error'
+            },
+            rbd.MIRROR_IMAGE_STATUS_STATE_SYNCING: {
+                'health': 'syncing'
+            },
+            rbd.MIRROR_IMAGE_STATUS_STATE_STARTING_REPLAY: {
+                'health': 'ok',
+                'state_color': 'success',
+                'state': 'Starting'
+            },
+            rbd.MIRROR_IMAGE_STATUS_STATE_REPLAYING: {
+                'health': 'ok',
+                'state_color': 'success',
+                'state': 'Replaying'
+            },
+            rbd.MIRROR_IMAGE_STATUS_STATE_STOPPING_REPLAY: {
+                'health': 'ok',
+                'state_color': 'success',
+                'state': 'Stopping'
+            },
+            rbd.MIRROR_IMAGE_STATUS_STATE_STOPPED: {
+                'health': 'ok',
+                'state_color': 'info',
+                'state': 'Primary'
+            }
+        }
+
+        try:
+            mirror_image_status = rbdctx.mirror_image_status_list(ioctx)
+            data['mirror_images'] = sorted([
+                dict({
+                    'name': image['name'],
+                    'description': image['description']
+                }, **mirror_state[rbd.MIRROR_IMAGE_STATUS_STATE_UNKNOWN if not image['up'] else image['state']])
+                for image in mirror_image_status
+            ], key=lambda k: k['name'])
+        except:
+            self.log.exception("Failed to list mirror image status " + self.pool_name)
+            return None
 
         return data
 
@@ -91,44 +142,66 @@ class ContentData(RemoteViewCache):
             for daemon in daemons
         ], key=lambda k: k['id'])
 
+        pools = []
+        image_error = []
+        image_syncing = []
+        image_ready = []
+        for pool_name in pool_names:
+            pool = self.get_pool_datum(pool_name)
+            if pool is None:
+                continue
 
-        pools = sorted([
-            {
+            for mirror_image in pool['mirror_images']:
+                image = {
+                    'pool_name': pool_name,
+                    'name': mirror_image['name']
+                }
+
+                if mirror_image['health'] == 'ok':
+                    image.update({
+                        'state_color': mirror_image['state_color'],
+                        'state': mirror_image['state'],
+                        'description': mirror_image['description']
+                    })
+                    image_ready.append(image)
+                elif mirror_image['health'] == 'syncing':
+                    p = re.compile("bootstrapping, IMAGE_COPY/COPY_OBJECT (.*)%")
+                    image.update({
+                        'progress': (p.findall(mirror_image['description']) or [0])[0]
+                    })
+                    image_syncing.append(image)
+                else:
+                    image.update({
+                        'state_color': mirror_image['state_color'],
+                        'state': mirror_image['state'],
+                        'description': mirror_image['description']
+                    })
+                    image_error.append(image)
+
+            pools.append({
                 'name': pool_name,
-                'mirror_mode': self.get_pool_mirror_mode(pool_name),
+                'mirror_mode': pool['mirror_mode'],
                 'health_color': 'error',
                 'health': 'Error'
-            }
-            for pool_name in pool_names
-        ], key=lambda k: k['name'])
+            })
+
 
         return {
             'daemons': daemons,
             'pools' : pools,
-            'image_error': [
-                {'pool': 'images', 'name': 'foo', 'description': "couldn't blah"},
-                {'pool': 'images', 'name': 'goo', 'description': "failed XYZ"}
-            ],
-            'image_syncing': [
-                {'pool': 'images', 'name': 'foo', 'progress': 93},
-                {'pool': 'images', 'name': 'goo', 'progress': 0}
-            ],
-            'image_ready': [
-                {'pool': 'images', 'name': 'foo', 'state_color': 'info', 'state': 'Primary'},
-                {'pool': 'images', 'name': 'goo', 'state_color': 'success', 'state': 'Mirroring'}
-            ]
+            'image_error': image_error,
+            'image_syncing': image_syncing,
+            'image_ready': image_ready
         }
 
-    def get_pool_mirror_mode(self, pool_name):
+    def get_pool_datum(self, pool_name):
         pool_datum = self.pool_data.get(pool_name, None)
         if pool_datum is None:
             pool_datum = PoolDatum(self._module, pool_name)
             self.pool_data[pool_name] = pool_datum
 
         status, value = pool_datum.get()
-        if value is None:
-            return None
-        return value.get('mirror_mode', None)
+        return value
 
 class Controller:
     def __init__(self, module_inst):
