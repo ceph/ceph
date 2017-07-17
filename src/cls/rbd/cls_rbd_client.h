@@ -418,10 +418,12 @@ namespace librbd {
     void trash_remove(librados::ObjectWriteOperation *op,
                       const std::string &id);
     int trash_remove(librados::IoCtx *ioctx, const std::string &id);
-    void trash_list_start(librados::ObjectReadOperation *op);
+    void trash_list_start(librados::ObjectReadOperation *op,
+                          const std::string &start, uint64_t max_return);
     int trash_list_finish(bufferlist::iterator *it,
                           map<string, cls::rbd::TrashImageSpec> *entries);
     int trash_list(librados::IoCtx *ioctx,
+                   const std::string &start, uint64_t max_return,
                    map<string, cls::rbd::TrashImageSpec> *entries);
     void trash_get_start(librados::ObjectReadOperation *op,
                          const std::string &id);
