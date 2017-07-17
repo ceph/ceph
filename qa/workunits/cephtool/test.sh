@@ -1846,6 +1846,12 @@ function test_mon_cephdf_commands()
   expect_false test $cal_raw_used_size != $raw_used_size
 }
 
+function test_mon_stdin_stdout()
+{
+  echo foo | ceph config-key put test_key -i -
+  ceph config-key get test_key -o - | grep -c foo | grep -q 1
+}
+
 #
 # New tests should be added to the TESTS array below
 #
@@ -1884,6 +1890,8 @@ MON_TESTS+=" mon_crushmap_validation"
 MON_TESTS+=" mon_ping"
 MON_TESTS+=" mon_deprecated_commands"
 MON_TESTS+=" mon_caps"
+MON_TESTS+=" mon_stdin_stdout"
+
 OSD_TESTS+=" osd_bench"
 OSD_TESTS+=" osd_negative_filestore_merge_threshold"
 OSD_TESTS+=" tiering_agent"

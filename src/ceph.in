@@ -202,9 +202,9 @@ def parse_cmdargs(args=None, target=''):
     parser.add_argument('-c', '--conf', dest='cephconf',
                         help='ceph configuration file')
     parser.add_argument('-i', '--in-file', dest='input_file',
-                        help='input file')
+                        help='input file, or "-" for stdin')
     parser.add_argument('-o', '--out-file', dest='output_file',
-                        help='output file')
+                        help='output file, or "-" for stdout')
 
     parser.add_argument('--id', '--user', dest='client_id',
                         help='client id for authentication')
@@ -785,8 +785,11 @@ def main():
     inbuf = ''
     if parsed_args.input_file:
         try:
-            with open(parsed_args.input_file, 'r') as f:
-                inbuf = f.read()
+            if parsed_args.input_file == '-':
+                inbuf = sys.stdin.read()
+            else:
+                with open(parsed_args.input_file, 'rb') as f:
+                    inbuf = f.read()
         except Exception as e:
             print('Can\'t open input file {0}: {1}'.format(parsed_args.input_file, e), file=sys.stderr)
             return 1
@@ -794,7 +797,10 @@ def main():
     # prepare output file, if any
     if parsed_args.output_file:
         try:
-            outf = open(parsed_args.output_file, 'w')
+            if parsed_args.output_file == '-':
+                outf = sys.stdout
+            else:
+                outf = open(parsed_args.output_file, 'wb')
         except Exception as e:
             print('Can\'t open output file {0}: {1}'.format(parsed_args.output_file, e), file=sys.stderr)
             return 1
@@ -936,7 +942,7 @@ def main():
 
         sys.stdout.flush()
 
-    if (parsed_args.output_file):
+    if parsed_args.output_file and parsed_args.output_file != '-':
         outf.close()
 
     if final_ret:
