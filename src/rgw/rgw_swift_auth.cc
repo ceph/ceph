@@ -3,7 +3,7 @@
 
 #include <array>
 
-#include <boost/utility/string_ref.hpp>
+#include <boost/utility/string_view.hpp>
 #include <boost/container/static_vector.hpp>
 
 #include "rgw_swift_auth.h"
@@ -160,8 +160,8 @@ public:
   SignatureHelper() = default;
 
   const char* calc(const std::string& key,
-                   const boost::string_ref& method,
-                   const boost::string_ref& path,
+                   const boost::string_view& method,
+                   const boost::string_view& path,
                    const std::string& expires) {
 
     using ceph::crypto::HMACSHA1;
@@ -228,14 +228,14 @@ TempURLEngine::authenticate(const req_state* const s) const
 
   /* XXX can we search this ONCE? */
   const size_t pos = g_conf->rgw_swift_url_prefix.find_last_not_of('/') + 1;
-  boost::string_ref ref_uri = s->decoded_uri;
-  const std::array<boost::string_ref, 2> allowed_paths = {
+  const boost::string_view ref_uri = s->decoded_uri;
+  const std::array<boost::string_view, 2> allowed_paths = {
     ref_uri,
     ref_uri.substr(pos + 1)
   };
 
   /* Account owner calculates the signature also against a HTTP method. */
-  boost::container::static_vector<boost::string_ref, 3> allowed_methods;
+  boost::container::static_vector<boost::string_view, 3> allowed_methods;
   if (strcmp("HEAD", s->info.method) == 0) {
     /* HEAD requests are specially handled. */
     /* TODO: after getting a newer boost (with static_vector supporting
