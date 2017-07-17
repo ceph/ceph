@@ -5012,6 +5012,12 @@ void OSD::tick()
 
   if (is_waiting_for_healthy()) {
     start_boot();
+  } else if (is_preboot() &&
+	     waiting_for_luminous_mons &&
+	     monc->monmap.get_required_features().contains_all(
+	       ceph::features::mon::FEATURE_LUMINOUS)) {
+    // mon upgrade finished!
+    start_boot();
   }
 
   do_waiters();
@@ -5624,6 +5630,7 @@ void OSD::start_boot()
   }
   dout(1) << __func__ << dendl;
   set_state(STATE_PREBOOT);
+  waiting_for_luminous_mons = false;
   dout(10) << "start_boot - have maps " << superblock.oldest_map
 	   << ".." << superblock.newest_map << dendl;
   C_OSD_GetVersion *c = new C_OSD_GetVersion(this);
@@ -5662,6 +5669,7 @@ void OSD::_preboot(epoch_t oldest, epoch_t newest)
 	       ceph::features::mon::FEATURE_LUMINOUS)) {
     derr << "monmap REQUIRE_LUMINOUS is NOT set; must upgrade all monitors to "
 	 << "Luminous or later before Luminous OSDs will boot" << dendl;
+    waiting_for_luminous_mons = true;
   } else if (service.need_fullness_update()) {
     derr << "osdmap fullness state needs update" << dendl;
     send_full_update();
