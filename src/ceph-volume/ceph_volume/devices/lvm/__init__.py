@@ -1,1 +1,1 @@
-from main import LVM
+from .main import LVM # noqa
