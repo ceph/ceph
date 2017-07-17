@@ -203,3 +203,7 @@
 * Certain extra fields in the 'ceph health' structured output that
   used to appear if the mons were low on disk space (which duplicated
   the information in the normal health warning messages) are now gone.
+
+* The "ceph -w" output no longer contains audit log entries by default.
+  Add a "--watch-channel=audit" or "--watch-channel=*" to see them.
+
