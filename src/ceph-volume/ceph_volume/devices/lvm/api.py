@@ -75,7 +75,7 @@ def get_api_vgs():
             'sudo', 'vgs', '--reportformat=json'
         ]
     )
-    report = json.loads(b''.join(stdout).decode('utf-8'))
+    report = json.loads(''.join(stdout))
     for report_item in report.get('report', []):
         # is it possible to get more than one item in "report" ?
         return report_item['vg']
@@ -113,7 +113,7 @@ def get_api_lvs():
     """
     stdout, stderr, returncode = process.call(
         ['sudo', 'lvs', '-o', 'lv_tags,lv_path,lv_name,vg_name', '--reportformat=json'])
-    report = json.loads(b''.join(stdout).decode('utf-8'))
+    report = json.loads(''.join(stdout))
     for report_item in report.get('report', []):
         # is it possible to get more than one item in "report" ?
         return report_item['lv']
@@ -301,10 +301,7 @@ class VolumeGroups(list):
             # this is probably never going to happen, but it is here to keep
             # the API code consistent
             raise MultipleVGsError(vg_name)
-        try:
-            return vgs[0]
-        except IndexError:
-            return None
+        return vgs[0]
 
 
 class Volumes(list):
@@ -408,10 +405,7 @@ class Volumes(list):
             return None
         if len(lvs) > 1:
             raise MultipleLVsError(lv_name, lv_path)
-        try:
-            return lvs[0]
-        except IndexError:
-            return None
+        return lvs[0]
 
 
 class VolumeGroup(object):
@@ -423,6 +417,7 @@ class VolumeGroup(object):
         for k, v in kw.items():
             setattr(self, k, v)
         self.name = kw['vg_name']
+        self.tags = parse_tags(kw.get('vg_tags', ''))
 
     def __str__(self):
         return '<%s>' % self.name
