@@ -134,7 +134,7 @@ def syslog(ctx, config):
                     run.Raw('|'),
                     'grep', '-v', 'container-storage-setup: INFO: Volume group backing root filesystem could not be determined',  # noqa
                     run.Raw('|'),
-                    'egrep', '-v', '\\bsalt-master\\b|\\bsalt-minion\\b',
+                    'egrep', '-v', '\\bsalt-master\\b|\\bsalt-minion\\b|\\bsalt-api\\b',
                     run.Raw('|'),
                     'grep', '-v', 'ceph-crash',
                     run.Raw('|'),
