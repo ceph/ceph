@@ -8,8 +8,6 @@ tasks:
       - (MGR_DOWN)
 - exec:
     mon.a:
-      - ceph config-key put mgr/restful/x/server_addr 127.0.0.1
-      - ceph config-key put mgr/restful/x/server_port 9999
       - ceph tell mgr.x restful create-key admin
       - ceph tell mgr.x restful create-self-signed-cert
 - ceph.restart: [mgr.x]
