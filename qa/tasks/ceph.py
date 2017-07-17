@@ -1130,7 +1130,7 @@ def run_daemon(ctx, config, type_):
                     sudo=True,
                 ).strip()
                 osd_uuids[id_] = osd_uuid
-    for osd_id in range(int(osd_uuids)):
+    for osd_id in range(len(osd_uuids)):
         id_ = str(osd_id)
         osd_uuid = osd_uuids.get(id_)
         try:
