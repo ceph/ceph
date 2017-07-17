@@ -921,6 +921,13 @@ void Server::handle_client_reconnect(MClientReconnect *m)
     return;
   }
 
+  // opening snaprealm past parents needs to use snaptable
+  if (!mds->snapclient->is_synced()) {
+    dout(10) << " snaptable isn't synced, waiting" << dendl;
+    mds->snapclient->wait_for_sync(new C_MDS_RetryMessage(mds, m));
+    return;
+  }
+
   // notify client of success with an OPEN
   m->get_connection()->send_message(new MClientSession(CEPH_SESSION_OPEN));
   session->last_cap_renew = ceph_clock_now();
@@ -999,7 +1006,15 @@ void Server::reconnect_gather_finish()
 {
   dout(7) << "reconnect_gather_finish.  failed on " << failed_reconnects << " clients" << dendl;
   assert(reconnect_done);
-  reconnect_done->complete(0);
+
+  if (!mds->snapclient->is_synced()) {
+    // make sure snaptable cache is populated. snaprealms will be
+    // extensively used in rejoin stage.
+    dout(7) << " snaptable cache isn't synced, delaying state transition" << dendl;
+    mds->snapclient->wait_for_sync(reconnect_done);
+  } else {
+    reconnect_done->complete(0);
+  }
   reconnect_done = NULL;
 }
 
@@ -8489,6 +8504,12 @@ void Server::handle_client_mksnap(MDRequestRef& mdr)
   ::decode(snapid, p);
   dout(10) << " stid " << stid << " snapid " << snapid << dendl;
 
+  // FIXME: notify all other mds the change
+  if (stid > mds->snapclient->get_cached_version()) {
+    mds->snapclient->refresh(stid, new C_MDS_RetryRequest(mdcache, mdr));
+    return;
+  }
+
   // journal
   SnapInfo info;
   info.ino = diri->ino();
@@ -8622,6 +8643,12 @@ void Server::handle_client_rmsnap(MDRequestRef& mdr)
   snapid_t seq;
   ::decode(seq, p);  
   dout(10) << " stid is " << stid << ", seq is " << seq << dendl;
+
+  // FIXME: notify all other mds the change
+  if (stid > mds->snapclient->get_cached_version()) {
+    mds->snapclient->refresh(stid, new C_MDS_RetryRequest(mdcache, mdr));
+    return;
+  }
 
   // journal
   inode_t *pi = diri->project_inode();
@@ -8765,6 +8792,12 @@ void Server::handle_client_renamesnap(MDRequestRef& mdr)
   snapid_t seq;
   ::decode(seq, p);
   dout(10) << " stid is " << stid << ", seq is " << seq << dendl;
+
+  // FIXME: notify all other mds the change
+  if (stid > mds->snapclient->get_cached_version()) {
+    mds->snapclient->refresh(stid, new C_MDS_RetryRequest(mdcache, mdr));
+    return;
+  }
 
   // journal
   inode_t *pi = diri->project_inode();
