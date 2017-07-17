@@ -333,7 +333,9 @@ image_replayer::HealthState ImageReplayer<I>::get_health_state() const {
   if (!m_mirror_image_status_state) {
     return image_replayer::HEALTH_STATE_OK;
   } else if (*m_mirror_image_status_state ==
-      cls::rbd::MIRROR_IMAGE_STATUS_STATE_SYNCING) {
+               cls::rbd::MIRROR_IMAGE_STATUS_STATE_SYNCING ||
+             *m_mirror_image_status_state ==
+               cls::rbd::MIRROR_IMAGE_STATUS_STATE_UNKNOWN) {
     return image_replayer::HEALTH_STATE_WARNING;
   }
   return image_replayer::HEALTH_STATE_ERROR;
@@ -458,7 +460,7 @@ void ImageReplayer<I>::bootstrap() {
   dout(20) << dendl;
 
   if (m_remote_images.empty()) {
-    on_start_fail(0, "waiting for primary remote image");
+    on_start_fail(-EREMOTEIO, "waiting for primary remote image");
     return;
   }
 
@@ -513,8 +515,8 @@ void ImageReplayer<I>::handle_bootstrap(int r) {
 
   if (r == -EREMOTEIO) {
     m_local_image_tag_owner = "";
-    dout(5) << "remote image is non-primary or local image is primary" << dendl;
-    on_start_fail(0, "remote image is non-primary or local image is primary");
+    dout(5) << "remote image is non-primary" << dendl;
+    on_start_fail(-EREMOTEIO, "remote image is non-primary");
     return;
   } else if (r == -EEXIST) {
     m_local_image_tag_owner = "";
@@ -695,7 +697,7 @@ void ImageReplayer<I>::on_start_fail(int r, const std::string &desc)
         Mutex::Locker locker(m_lock);
         assert(m_state == STATE_STARTING);
         m_state = STATE_STOPPING;
-        if (r < 0 && r != -ECANCELED) {
+        if (r < 0 && r != -ECANCELED && r != -EREMOTEIO) {
           derr << "start failed: " << cpp_strerror(r) << dendl;
         } else {
           dout(20) << "start canceled" << dendl;
@@ -1391,7 +1393,11 @@ void ImageReplayer<I>::send_mirror_status_update(const OptionalState &opt_state)
     }
     // FALLTHROUGH
   case STATE_STOPPED:
-    if (last_r < 0) {
+    if (last_r == -EREMOTEIO) {
+      status.state = cls::rbd::MIRROR_IMAGE_STATUS_STATE_UNKNOWN;
+      status.description = state_desc;
+      mirror_image_status_state = status.state;
+    } else if (last_r < 0) {
       status.state = cls::rbd::MIRROR_IMAGE_STATUS_STATE_ERROR;
       status.description = state_desc;
       mirror_image_status_state = status.state;
