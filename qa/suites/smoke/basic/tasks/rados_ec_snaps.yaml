@@ -3,7 +3,7 @@ tasks:
 - ceph:
     fs: xfs
     log-whitelist:
-    - wrongly marked me down
+    - but it is still running
     - objects unfound and apparently lost
 - thrashosds:
     chance_pgnum_grow: 3

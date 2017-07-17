@@ -2,7 +2,7 @@ overrides:
   ceph:
     log-whitelist:
     - reached quota
-    - wrongly marked me down
+    - but it is still running
     - overall HEALTH_
     - (POOL_FULL)
     - (SMALLER_PGP_NUM)

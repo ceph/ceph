@@ -5,7 +5,7 @@ meta:
 overrides:
   ceph:
     log-whitelist:
-    - wrongly marked me down
+    - but it is still running
     - objects unfound and apparently lost
     - log bound mismatch
 tasks:

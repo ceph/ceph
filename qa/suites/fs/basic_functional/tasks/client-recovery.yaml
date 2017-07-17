@@ -5,7 +5,7 @@ overrides:
   ceph:
     log-whitelist:
       - evicting unresponsive client
-      - wrongly marked me down
+      - but it is still running
       - slow request
 
 tasks:
