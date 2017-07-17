@@ -7310,7 +7310,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 
     if (!osdmap.exists(osdid)) {
       err = -ENOENT;
-      ss << name << " does not exist.  create it before updating the crush map";
+      ss << name << " does not exist. Create it before updating the crush map";
       goto reply;
     }
 
