@@ -139,7 +139,7 @@ rocksdb::Logger *create_rocksdb_ceph_logger()
   return new CephRocksdbLogger(g_ceph_context);
 }
 
-int string2bool(string val, bool &b_val)
+static int string2bool(const string &val, bool &b_val)
 {
   if (strcasecmp(val.c_str(), "false") == 0) {
     b_val = false;
@@ -157,7 +157,7 @@ int string2bool(string val, bool &b_val)
   }
 }
   
-int RocksDBStore::tryInterpret(const string key, const string val, rocksdb::Options &opt)
+int RocksDBStore::tryInterpret(const string &key, const string &val, rocksdb::Options &opt)
 {
   if (key == "compaction_threads") {
     std::string err;
@@ -188,7 +188,7 @@ int RocksDBStore::tryInterpret(const string key, const string val, rocksdb::Opti
   return 0;
 }
 
-int RocksDBStore::ParseOptionsFromString(const string opt_str, rocksdb::Options &opt)
+int RocksDBStore::ParseOptionsFromString(const string &opt_str, rocksdb::Options &opt)
 {
   map<string, string> str_map;
   int r = get_str_map(opt_str, &str_map, ",\n;");
