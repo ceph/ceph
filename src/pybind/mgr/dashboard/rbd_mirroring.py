@@ -206,9 +206,24 @@ class Toplevel(RemoteViewCache):
         status, data = self.daemons_and_pools.get()
         if data is None:
             log.warning("Failed to get rbd-mirror daemons and pools")
-            daemons = []
+            daemons = {}
+        daemons = data.get('daemons', [])
+        pools = data.get('pools', {})
 
-        return {'warnings': 2, 'errors': 1}
+        warnings = 0
+        errors = 0
+        for daemon in daemons:
+            if daemon['health_color'] == 'error':
+                errors += 1
+            elif daemon['health_color'] == 'warning':
+                warnings += 1
+        for pool_name, pool in pools.items():
+            if pool['health_color'] == 'error':
+                errors += 1
+            elif pool['health_color'] == 'warning':
+                warnings += 1
+        return {'warnings': warnings, 'errors': errors}
+
 
 class ContentData(RemoteViewCache):
     def __init__(self, module_inst, daemons_and_pools, pool_data):
