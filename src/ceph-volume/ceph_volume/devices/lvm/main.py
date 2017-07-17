@@ -1,8 +1,8 @@
 import argparse
 from textwrap import dedent
 from ceph_volume import terminal
-import activate
-import prepare
+from . import activate
+from . import prepare
 
 
 class LVM(object):
