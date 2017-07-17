@@ -770,7 +770,7 @@ int CrushCompiler::parse_rule(iter_t const& i)
     start = 3;
   }
 
-  int ruleset = int_node(i->children[start]);
+  int ruleno = int_node(i->children[start]);
 
   string tname = string_node(i->children[start+2]);
   int type;
@@ -786,8 +786,17 @@ int CrushCompiler::parse_rule(iter_t const& i)
   
   int steps = i->children.size() - start - 8;
   //err << "num steps " << steps << std::endl;
-  
-  int ruleno = crush.add_rule(steps, ruleset, type, minsize, maxsize, -1);
+
+  if (crush.rule_exists(ruleno)) {
+    err << "rule " << ruleno << " already exists" << std::endl;
+    return -1;
+  }
+  int r = crush.add_rule(ruleno, steps, type, minsize, maxsize);
+  if (r != ruleno) {
+    err << "unable to add rule id " << ruleno << " for rule '" << rname
+	<< "'" << std::endl;
+    return -1;
+  }
   if (rname.length()) {
     crush.set_rule_name(ruleno, rname.c_str());
     rule_id[rname] = ruleno;
