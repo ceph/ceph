@@ -29,6 +29,7 @@ set(mds_srcs
   SimpleLock.cc
   SnapRealm.cc
   SnapServer.cc
+  SnapClient.cc
   snap.cc
   SessionMap.cc
   MDSContext.cc

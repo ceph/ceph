@@ -58,6 +58,7 @@ void SnapServer::reset_state()
     if (first_free > last_snap)
       last_snap = first_free;
   }
+  version++;
 }
 
 
@@ -247,10 +248,36 @@ void SnapServer::_server_update(bufferlist& bl)
 
 void SnapServer::handle_query(MMDSTableRequest *req)
 {
+  char op;
+  bufferlist::iterator p = req->bl.begin();
+  decode(op, p);
+
+  MMDSTableRequest *reply = new MMDSTableRequest(table, TABLESERVER_OP_QUERY_REPLY, req->reqid, version);
+
+  switch (op) {
+    case 'F': // full
+      version_t have_version;
+      decode(have_version, p);
+      assert(have_version <= version);
+      if (have_version == version) {
+	char type = 'U';
+	encode(type, reply->bl);
+      } else {
+	char type = 'F';
+	encode(type, reply->bl);
+	encode(snaps, reply->bl);
+	encode(pending_update, reply->bl);
+	encode(pending_destroy, reply->bl);
+      }
+      // FIXME: implement incremental change
+      break;
+    default:
+      ceph_abort();
+  };
+
+  mds->send_message(reply, req->get_connection());
   req->put();
 }
-
-
 
 void SnapServer::check_osd_map(bool force)
 {

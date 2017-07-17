@@ -114,6 +114,7 @@ void MDSTable::save_2(int r, version_t v)
 void MDSTable::reset()
 {
   reset_state();
+  projected_version = version;
   state = STATE_ACTIVE;
 }
 
