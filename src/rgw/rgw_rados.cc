@@ -7817,7 +7817,6 @@ int RGWRados::copy_obj_to_remote_dest(RGWObjState *astate,
 
   int ret = rest_master_conn->put_obj_init(user_id, dest_obj, astate->size, src_attrs, &out_stream_req);
   if (ret < 0) {
-    delete out_stream_req;
     return ret;
   }
 
