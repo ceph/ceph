@@ -7615,40 +7615,6 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       goto reply;
     else
       goto update;
-  } else if (prefix == "osd crush class create") {
-    string device_class;
-    if (!cmd_getval(g_ceph_context, cmdmap, "class", device_class)) {
-      err = -EINVAL; // no value!
-      goto reply;
-    }
-    if (osdmap.require_osd_release < CEPH_RELEASE_LUMINOUS) {
-      ss << "you must complete the upgrade and 'ceph osd require-osd-release "
-	 << "luminous' before using crush device classes";
-      err = -EPERM;
-      goto reply;
-    }
-    if (!_have_pending_crush() &&
-	_get_stable_crush().class_exists(device_class)) {
-      ss << "class '" << device_class << "' already exists";
-      goto reply;
-    }
-
-    CrushWrapper newcrush;
-    _get_pending_crush(newcrush);
-
-    if (newcrush.class_exists(name)) {
-      ss << "class '" << device_class << "' already exists";
-      goto update;
-    }
-
-    int class_id = newcrush.get_or_create_class_id(device_class);
-
-    pending_inc.crush.clear();
-    newcrush.encode(pending_inc.crush, mon->get_quorum_con_features());
-    ss << "created class " << device_class << " with id " << class_id
-       << " to crush map";
-    goto update;
-    
   } else if (prefix == "osd crush class rm") {
     string device_class;
     if (!cmd_getval(g_ceph_context, cmdmap, "class", device_class)) {
