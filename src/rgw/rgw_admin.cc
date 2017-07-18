@@ -209,7 +209,7 @@ void _usage()
   cout << "   --access=<access>         Set access permissions for sub-user, should be one\n";
   cout << "                             of read, write, readwrite, full\n";
   cout << "   --display-name=<name>\n";
-  cout << "   --max_buckets             max number of buckets for a user\n";
+  cout << "   --max-buckets             max number of buckets for a user\n";
   cout << "   --admin                   set the admin flag on the user\n";
   cout << "   --system                  set the system flag on the user\n";
   cout << "   --bucket=<bucket>\n";
@@ -252,7 +252,7 @@ void _usage()
   cout << "   --tags-add=<list>         list of tags to add for zonegroup placement modify command\n";
   cout << "   --tags-rm=<list>          list of tags to remove for zonegroup placement modify command\n";
   cout << "   --endpoints=<list>        zone endpoints\n";
-  cout << "   --index_pool=<pool>       placement target index pool\n";
+  cout << "   --index-pool=<pool>       placement target index pool\n";
   cout << "   --data-pool=<pool>        placement target data pool\n";
   cout << "   --data-extra-pool=<pool>  placement target data extra (non-ec) pool\n";
   cout << "   --placement-index-type=<type>\n";
