@@ -151,7 +151,7 @@ class MDSThrasher(Greenlet):
     thrash_in_replay: [default: 0.0] likelihood that the MDS will be thrashed
       during replay.  Value should be between 0.0 and 1.0.
 
-    thrash_max_mds: [default: 0.0] likelihood that the max_mds of the mds
+    thrash_max_mds: [default: 0.05] likelihood that the max_mds of the mds
       cluster will be modified to a value [1, current) or (current, starting
       max_mds]. When reduced, randomly selected MDSs other than rank 0 will be
       deactivated to reach the new max_mds.  Value should be between 0.0 and 1.0.
@@ -216,7 +216,7 @@ class MDSThrasher(Greenlet):
         self.stopping = Event()
 
         self.randomize = bool(self.config.get('randomize', True))
-        self.thrash_max_mds = float(self.config.get('thrash_max_mds', 0.0))
+        self.thrash_max_mds = float(self.config.get('thrash_max_mds', 0.05))
         self.max_thrash = int(self.config.get('max_thrash', 1))
         self.max_thrash_delay = float(self.config.get('thrash_delay', 120.0))
         self.thrash_in_replay = float(self.config.get('thrash_in_replay', False))
