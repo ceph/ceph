@@ -12317,7 +12317,7 @@ void MDCache::register_perfcounters()
 
     /* Stray/purge statistics */
     pcb.add_u64(l_mdc_num_strays, "num_strays",
-        "Stray dentries", "stry");
+        "Stray dentries", "stry", PerfCountersBuilder::PRIO_INTERESTING);
     pcb.add_u64(l_mdc_num_strays_delayed, "num_strays_delayed", "Stray dentries delayed");
     pcb.add_u64(l_mdc_num_strays_enqueuing, "num_strays_enqueuing", "Stray dentries enqueuing for purge");
 
@@ -12331,11 +12331,11 @@ void MDCache::register_perfcounters()
     /* Recovery queue statistics */
     pcb.add_u64(l_mdc_num_recovering_processing, "num_recovering_processing", "Files currently being recovered");
     pcb.add_u64(l_mdc_num_recovering_enqueued, "num_recovering_enqueued",
-        "Files waiting for recovery", "recy");
+        "Files waiting for recovery", "recy", PerfCountersBuilder::PRIO_INTERESTING);
     pcb.add_u64(l_mdc_num_recovering_prioritized, "num_recovering_prioritized", "Files waiting for recovery with elevated priority");
     pcb.add_u64_counter(l_mdc_recovery_started, "recovery_started", "File recoveries started");
     pcb.add_u64_counter(l_mdc_recovery_completed, "recovery_completed",
-        "File recoveries completed", "recd");
+        "File recoveries completed", "recd", PerfCountersBuilder::PRIO_INTERESTING);
 
     logger.reset(pcb.create_perf_counters());
     g_ceph_context->get_perfcounters_collection()->add(logger.get());
