@@ -702,22 +702,36 @@ def get_partition_dev(dev, pnum):
        sda 1 -> sda1
        cciss/c0d1 1 -> cciss!c0d1p1
     """
-    partname = None
-    if is_mpath(dev):
-        partname = get_partition_mpath(dev, pnum)
-    else:
-        name = get_dev_name(os.path.realpath(dev))
-        for f in os.listdir(os.path.join('/sys/block', name)):
-            if f.startswith(name) and f.endswith(str(pnum)):
-                # we want the shortest name that starts with the base name
-                # and ends with the partition number
-                if not partname or len(f) < len(partname):
-                    partname = f
-    if partname:
-        return get_dev_path(partname)
-    else:
-        raise Error('partition %d for %s does not appear to exist' %
-                    (pnum, dev))
+    max_retry = 10
+    for retry in range(0, max_retry + 1):
+        partname = None
+        error_msg = ""
+        if is_mpath(dev):
+            partname = get_partition_mpath(dev, pnum)
+        else:
+            name = get_dev_name(os.path.realpath(dev))
+            sys_entry = os.path.join('/sys/block', name)
+            error_msg = " in %s" % sys_entry
+            for f in os.listdir(sys_entry):
+                if f.startswith(name) and f.endswith(str(pnum)):
+                    # we want the shortest name that starts with the base name
+                    # and ends with the partition number
+                    if not partname or len(f) < len(partname):
+                        partname = f
+        if partname:
+            if retry:
+                LOG.info('Found partition %d for %s after %d tries' %
+                         (pnum, dev, retry))
+            return get_dev_path(partname)
+        else:
+            if retry < max_retry:
+                LOG.info('Try %d/%d : partition %d for %s does not exist%s' %
+                         (retry + 1, max_retry, pnum, dev, error_msg))
+                time.sleep(.2)
+                continue
+            else:
+                raise Error('partition %d for %s does not appear to exist%s' %
+                            (pnum, dev, error_msg))
 
 
 def list_all_partitions():
