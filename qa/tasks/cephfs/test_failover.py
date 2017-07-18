@@ -32,7 +32,7 @@ class TestFailover(CephFSTestCase):
         # Kill the rank 0 daemon's physical process
         self.fs.mds_stop(original_active)
 
-        grace = int(self.fs.get_config("mds_beacon_grace", service_type="mon"))
+        grace = float(self.fs.get_config("mds_beacon_grace", service_type="mon"))
 
         # Wait until the monitor promotes his replacement
         def promoted():
@@ -65,7 +65,7 @@ class TestFailover(CephFSTestCase):
         if not require_active:
             raise case.SkipTest("fuse_require_active_mds is not set")
 
-        grace = int(self.fs.get_config("mds_beacon_grace", service_type="mon"))
+        grace = float(self.fs.get_config("mds_beacon_grace", service_type="mon"))
 
         # Check it's not laggy to begin with
         (original_active, ) = self.fs.get_active_names()
@@ -102,7 +102,7 @@ class TestFailover(CephFSTestCase):
         # Need all my standbys up as well as the active daemons
         self.wait_for_daemon_start()
 
-        grace = int(self.fs.get_config("mds_beacon_grace", service_type="mon"))
+        grace = float(self.fs.get_config("mds_beacon_grace", service_type="mon"))
 
         standbys = self.mds_cluster.get_standby_daemons()
         self.assertGreaterEqual(len(standbys), 1)
