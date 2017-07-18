@@ -51,7 +51,7 @@
   
   # rules
   rule data {
-  \truleset 0 (esc)
+  \tid 0 (esc)
   \ttype replicated (esc)
   \tmin_size 1 (esc)
   \tmax_size 10 (esc)
@@ -60,7 +60,7 @@
   \tstep emit (esc)
   }
   rule foo {
-  \truleset 1 (esc)
+  \tid 1 (esc)
   \ttype replicated (esc)
   \tmin_size 1 (esc)
   \tmax_size 10 (esc)
@@ -133,7 +133,7 @@
   
   # rules
   rule data {
-  \truleset 0 (esc)
+  \tid 0 (esc)
   \ttype replicated (esc)
   \tmin_size 1 (esc)
   \tmax_size 10 (esc)
@@ -142,7 +142,7 @@
   \tstep emit (esc)
   }
   rule foo-ssd {
-  \truleset 1 (esc)
+  \tid 1 (esc)
   \ttype replicated (esc)
   \tmin_size 1 (esc)
   \tmax_size 10 (esc)

@@ -350,7 +350,10 @@ int CrushCompiler::decompile(ostream &out)
     if (crush.get_rule_name(i))
       print_rule_name(out, i, crush);
     out << " {\n";
-    out << "\truleset " << crush.get_rule_mask_ruleset(i) << "\n";
+    out << "\tid " << i << "\n";
+    if (i != crush.get_rule_mask_ruleset(i)) {
+      out << "\t# WARNING: ruleset " << crush.get_rule_mask_ruleset(i) << " != id " << i << "; this will not recompile to the same map\n";
+    }
 
     switch (crush.get_rule_mask_type(i)) {
     case CEPH_PG_TYPE_REPLICATED:
