@@ -1,6 +1,15 @@
 >= 12.1.2
 ---------
-
+* The "journaler allow split entries" config setting has been removed.
+* The 'apply' mode of cephfs-journal-tool has been removed
+* Added new configuration "public bind addr" to support dynamic environments
+  like Kubernetes. When set the Ceph MON daemon could bind locally to an IP
+  address and advertise a different IP address "public addr" on the network.
+* RGW: bucket index resharding now uses the reshard namespace in upgrade scenarios as well
+  this is a changed behaviour from RC1 where a new pool for reshard was created
+* When running 'df' on a CephFS filesystem comprising exactly one data pool,
+  the result now reflects the file storage space used and available in that
+  data pool (fuse client only).
 * Added new commands "pg force-recovery" and "pg-force-backfill". Use them
   to boost recovery or backfill priority of specified pgs, so they're
   recovered/backfilled before any other. Note that these commands don't
