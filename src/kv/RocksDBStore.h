@@ -108,8 +108,8 @@ public:
   bool enable_rmrange;
   void compact() override;
 
-  int tryInterpret(const string key, const string val, rocksdb::Options &opt);
-  int ParseOptionsFromString(const string opt_str, rocksdb::Options &opt);
+  int tryInterpret(const string& key, const string& val, rocksdb::Options &opt);
+  int ParseOptionsFromString(const string& opt_str, rocksdb::Options &opt);
   static int _test_init(const string& dir);
   int init(string options_str) override;
   /// compact rocksdb for all keys with a given prefix
