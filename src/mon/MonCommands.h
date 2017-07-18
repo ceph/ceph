@@ -641,10 +641,6 @@ COMMAND("osd crush tree "
         "name=shadow,type=CephChoices,strings=--show-shadow,req=false", \
 	"dump crush buckets and items in a tree view",
 	"osd", "r", "cli,rest")
-COMMAND("osd crush class create " \
-	"name=class,type=CephString,goodchars=[A-Za-z0-9-_]", \
-	"create crush device class <class>", \
-	"osd", "rw", "cli,rest")
 COMMAND("osd crush class rm " \
 	"name=class,type=CephString,goodchars=[A-Za-z0-9-_]", \
 	"remove crush device class <class>", \
