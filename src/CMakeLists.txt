@@ -691,7 +691,8 @@ if (WITH_MGR)
       mgr/PyState.cc
       mgr/MgrPyModule.cc
       mgr/MgrStandby.cc
-      mgr/Mgr.cc)
+      mgr/Mgr.cc
+      mgr/mgr_commands.cc)
   add_executable(ceph-mgr ${mgr_srcs}
                  $<TARGET_OBJECTS:heap_profiler_objs>)
   target_include_directories(ceph-mgr PRIVATE "${PYTHON_INCLUDE_DIRS}")
