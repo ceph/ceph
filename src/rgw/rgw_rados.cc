@@ -5865,7 +5865,7 @@ int RGWRados::select_new_bucket_location(RGWUserInfo& user_info, const string& z
                                          string *pselected_rule_name, RGWZonePlacementInfo *rule_info)
 
 {
-  /* first check that rule exists within the specific zonegroup */
+  /* first check that zonegroup exists within current period. */
   RGWZoneGroup zonegroup;
   int ret = get_zonegroup(zonegroup_id, zonegroup);
   if (ret < 0) {
@@ -5873,37 +5873,48 @@ int RGWRados::select_new_bucket_location(RGWUserInfo& user_info, const string& z
     return ret;
   }
 
-  /* now check that tag exists within zonegroup */
   /* find placement rule. Hierarchy: request rule > user default rule > zonegroup default rule */
-  string rule = request_rule;
-  if (rule.empty()) {
-    rule = user_info.default_placement;
-    if (rule.empty())
-      rule = zonegroup.default_placement;
-  }
+  std::map<std::string, RGWZoneGroupPlacementTarget>::const_iterator titer;
 
-  if (rule.empty()) {
-    ldout(cct, 0) << "misconfiguration, should not have an empty placement rule name" << dendl;
-    return -EIO;
-  }
-
-  map<string, RGWZoneGroupPlacementTarget>::iterator titer = zonegroup.placement_targets.find(rule);
-  if (titer == zonegroup.placement_targets.end()) {
-    ldout(cct, 0) << "could not find placement rule " << rule << " within zonegroup " << dendl;
-    return -EINVAL;
+  if (!request_rule.empty()) {
+    titer = zonegroup.placement_targets.find(request_rule);
+    if (titer == zonegroup.placement_targets.end()) {
+      ldout(cct, 0) << "could not find requested placement id " << request_rule 
+                    << " within zonegroup " << dendl;
+      return -ERR_INVALID_LOCATION_CONSTRAINT;
+    }
+  } else if (!user_info.default_placement.empty()) {
+    titer = zonegroup.placement_targets.find(user_info.default_placement);
+    if (titer == zonegroup.placement_targets.end()) {
+      ldout(cct, 0) << "could not find user default placement id " << user_info.default_placement
+                    << " within zonegroup " << dendl;
+      return -ERR_INVALID_LOCATION_CONSTRAINT;
+    }
+  } else {
+    if (zonegroup.default_placement.empty()) { // zonegroup default rule as fallback, it should not be empty.
+      ldout(cct, 0) << "misconfiguration, zonegroup default placement id should not be empty." << dendl;
+      return -ERR_ZONEGROUP_DEFAULT_PLACEMENT_MISCONFIGURATION;
+    } else {
+      titer = zonegroup.placement_targets.find(zonegroup.default_placement);
+      if (titer == zonegroup.placement_targets.end()) {
+        ldout(cct, 0) << "could not find zonegroup default placement id " << zonegroup.default_placement
+                      << " within zonegroup " << dendl;
+        return -ERR_INVALID_LOCATION_CONSTRAINT;
+      }
+    }
   }
 
   /* now check tag for the rule, whether user is permitted to use rule */
-  RGWZoneGroupPlacementTarget& target_rule = titer->second;
+  const auto& target_rule = titer->second;
   if (!target_rule.user_permitted(user_info.placement_tags)) {
-    ldout(cct, 0) << "user not permitted to use placement rule" << dendl;
+    ldout(cct, 0) << "user not permitted to use placement rule " << titer->first  << dendl;
     return -EPERM;
   }
 
   if (pselected_rule_name)
-    *pselected_rule_name = rule;
+    *pselected_rule_name = titer->first;
 
-  return select_bucket_location_by_rule(rule, rule_info);
+  return select_bucket_location_by_rule(titer->first, rule_info);
 }
 
 int RGWRados::select_bucket_location_by_rule(const string& location_rule, RGWZonePlacementInfo *rule_info)
