@@ -24,6 +24,7 @@
 #include "common/signal.h"
 #include "common/ceph_argparse.h"
 #include "common/errno.h"
+#include "common/version.h"
 
 #include "msg/Messenger.h"
 #include "mon/MonClient.h"
@@ -674,6 +675,7 @@ COMMAND("damage ls",
 	"List detected metadata damage", "mds", "r", "cli,rest")
 COMMAND("damage rm name=damage_id,type=CephInt",
 	"Remove a damage table entry", "mds", "rw", "cli,rest")
+COMMAND("version", "report version of MDS", "mds", "r", "cli,rest")
 COMMAND("heap " \
 	"name=heapcmd,type=CephChoices,strings=dump|start_profiler|stop_profiler|release|stats", \
 	"show heap usage info (available only if compiled with tcmalloc)", \
@@ -727,6 +729,8 @@ int MDSDaemon::_handle_command(
   std::stringstream ds;
   std::stringstream ss;
   std::string prefix;
+  std::string format;
+  boost::scoped_ptr<Formatter> f;
   cmd_getval(cct, cmdmap, "prefix", prefix);
 
   int r = 0;
@@ -748,6 +752,20 @@ int MDSDaemon::_handle_command(
 
     f->flush(ds);
     delete f;
+    goto out; 
+  }
+  
+  cmd_getval(cct, cmdmap, "format", format);
+  f.reset(Formatter::create(format));
+  if (prefix == "version") {
+    if (f) {
+      f->open_object_section("version");
+      f->dump_string("version", pretty_version_to_str());
+      f->close_section();
+      f->flush(ds);
+    } else {
+      ds << pretty_version_to_str();
+    }
   } else if (prefix == "injectargs") {
     vector<string> argsvec;
     cmd_getval(cct, cmdmap, "injected_args", argsvec);
