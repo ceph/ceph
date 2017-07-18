@@ -224,7 +224,7 @@ void InstanceReplayer<I>::release_image(const std::string &global_image_id,
       [this, image_replayer, on_finish] (int r) {
         auto global_image_id = image_replayer->get_global_image_id();
         m_image_deleter->schedule_image_delete(
-          m_local_rados, m_local_pool_id, global_image_id);
+          m_local_rados, m_local_pool_id, global_image_id, false);
         on_finish->complete(0);
       });
   }
