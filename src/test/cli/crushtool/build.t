@@ -52,7 +52,7 @@
   
   # rules
   rule replicated_rule {
-  \truleset 0 (esc)
+  \tid 0 (esc)
   \ttype replicated (esc)
   \tmin_size 1 (esc)
   \tmax_size 10 (esc)
