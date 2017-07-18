@@ -2624,7 +2624,8 @@ void RGWPutBL::execute()
   string oid; 
   get_bl_oid(s, oid);
   pair<string, int> entry(shard_id, bl_uninitial);
-  int max_lock_secs = s->cct->_conf->rgw_bl_lock_max_time;
+  int max_lock_secs = s->cct->_conf->rgw_bl_deliver_interval > 0 ? \
+                      s->cct->_conf->rgw_bl_deliver_interval : BL_DELIVER_INTERVAL;
   rados::cls::lock::Lock l(bl_index_lock_name); 
   utime_t time(max_lock_secs, 0);
   l.set_duration(time);

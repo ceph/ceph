@@ -56,9 +56,11 @@ std::map<const string, const uint32_t> rgw_perm_map = boost::assign::map_list_of
       ("FULL_CONTROL", RGW_PERM_FULL_CONTROL);
 
 void *RGWBL::BLWorker::entry() {
+  utime_t end = ceph_clock_now();
   do {
     utime_t start = ceph_clock_now();
-    if (should_work(start)) {
+    if (should_work(start) &&
+        (start.sec() - end.sec() >= bl->deliver_interval)) {
       dout(5) << "bucket logging deliver: start" << dendl;
       int r = bl->process();
       if (r < 0) {
@@ -69,7 +71,7 @@ void *RGWBL::BLWorker::entry() {
     if (bl->going_down())
       break;
 
-    utime_t end = ceph_clock_now();
+    end = ceph_clock_now();
     int secs = schedule_next_start_time(end);
     time_t next_time = end + secs;
     char buf[30];
@@ -105,31 +107,10 @@ void RGWBL::initialize(CephContext *_cct, RGWRados *_store) {
   char cookie_buf[BL_COOKIE_LEN + 1];
   gen_rand_alphanumeric(cct, cookie_buf, sizeof(cookie_buf) - 1);
   cookie = cookie_buf;
-}
 
-bool RGWBL::if_already_run_today(time_t& start_date)
-{
-  struct tm bdt;
-  time_t begin_of_day;
-  utime_t now = ceph_clock_now();
-  localtime_r(&start_date, &bdt);
-
-  bdt.tm_hour = 0;
-  bdt.tm_min = 0;
-  bdt.tm_sec = 0;
-  begin_of_day = mktime(&bdt);
-
-  if (cct->_conf->rgw_bl_debug_interval > 0) {
-    if ((now - begin_of_day) < cct->_conf->rgw_bl_debug_interval)
-      return true;
-    else
-      return false;
-  }
-
-  if (now - begin_of_day < 24*60*60)
-    return true;
-  else
-    return false;
+  deliver_interval = cct->_conf->rgw_bl_deliver_interval;
+  if (deliver_interval < 0)
+    deliver_interval = BL_DELIVER_INTERVAL;
 }
 
 void RGWBL::finalize()
@@ -746,7 +727,7 @@ int RGWBL::bucket_bl_process(string& shard_id)
 int RGWBL::bucket_bl_post(int index, int max_lock_sec,
                           pair<string, int>& entry, int& result)
 {
-  utime_t lock_duration(cct->_conf->rgw_bl_lock_max_time, 0);
+  utime_t lock_duration(deliver_interval, 0);
 
   rados::cls::lock::Lock l(bl_index_lock_name);
   l.set_cookie(cookie);
@@ -820,7 +801,7 @@ int RGWBL::list_bl_progress(const string& marker, uint32_t max_entries,
 
 int RGWBL::process()
 {
-  int max_secs = cct->_conf->rgw_bl_lock_max_time;
+  int max_secs = deliver_interval;
 
   unsigned start;
   int ret = get_random_bytes((char *)&start, sizeof(start));
@@ -840,6 +821,9 @@ int RGWBL::process()
 
 int RGWBL::process(int index, int max_lock_secs)
 {
+#define RETRY_TO_LOCK_MAX_TIMES 3
+  int retry_to_lock_times = RETRY_TO_LOCK_MAX_TIMES;
+  bool is_prepared = false;
   rados::cls::lock::Lock l(bl_index_lock_name);
   do {
     utime_t now = ceph_clock_now();
@@ -851,13 +835,23 @@ int RGWBL::process(int index, int max_lock_secs)
     l.set_duration(time);
 
     int ret = l.lock_exclusive(&store->bl_pool_ctx, obj_names[index]);
+
     if (ret == -EBUSY) { /* already locked by another bl processor */
+      if (retry_to_lock_times == 0) {
+        dout(0) << "RGWBL::process() is processing,"
+                << " you can execute \"radosgw-admin bl process\" manually"
+                << " a few minutes later!" << dendl;
+        return -EAGAIN;
+      }
+
       dout(0) << "RGWBL::process() failed to acquire lock on,"
               << " sleep 5, try again"
               << "obj " << obj_names[index] << dendl;
       sleep(5);
+      retry_to_lock_times --;
       continue;
     }
+
     if (ret < 0)
       return 0;
 
@@ -870,7 +864,7 @@ int RGWBL::process(int index, int max_lock_secs)
       goto exit;
     }
 
-    if(!if_already_run_today(head.start_date)) {
+    if (!is_prepared) {
       head.start_date = now;
       head.marker.clear();
       ret = bucket_bl_prepare(index);
@@ -879,6 +873,7 @@ int RGWBL::process(int index, int max_lock_secs)
                 << obj_names[index] << ret << dendl;
         goto exit;
       }
+      is_prepared = true;
     }
 
     ret = cls_rgw_bl_get_next_entry(store->bl_pool_ctx, obj_names[index],
@@ -961,41 +956,19 @@ bool RGWBL::BLWorker::should_work(utime_t& now)
   struct tm bdt;
   time_t tt = now.sec();
   localtime_r(&tt, &bdt);
-  if (cct->_conf->rgw_bl_debug_interval > 0) {
-    /* we're debugging, so say we can run */
+
+  if ((bdt.tm_hour*60 + bdt.tm_min >= start_hour*60 + start_minute) &&
+      (bdt.tm_hour*60 + bdt.tm_min <= end_hour*60 + end_minute)) {
     return true;
   } else {
-    if ((bdt.tm_hour*60 + bdt.tm_min >= start_hour*60 + start_minute) &&
-        (bdt.tm_hour*60 + bdt.tm_min <= end_hour*60 + end_minute)) {
-      return true;
-    } else {
-      return false;
-    }
+    return false;
   }
-
 }
 
 int RGWBL::BLWorker::schedule_next_start_time(utime_t& now)
 {
-  if (cct->_conf->rgw_bl_debug_interval > 0) {
-       int secs = cct->_conf->rgw_bl_debug_interval;
-       return (secs);
-  }
-
-  int start_hour;
-  int start_minute;
-  int end_hour;
-  int end_minute;
-  string worktime = cct->_conf->rgw_bl_work_time;
-  sscanf(worktime.c_str(),"%d:%d-%d:%d",&start_hour, &start_minute, &end_hour, &end_minute);
-  struct tm bdt;
-  time_t tt = now.sec();
-  time_t nt;
-  localtime_r(&tt, &bdt);
-  bdt.tm_hour = start_hour;
-  bdt.tm_min = start_minute;
-  bdt.tm_sec = 0;
-  nt = mktime(&bdt);
-
-  return (nt+24*60*60 - tt);
+  if (bl->deliver_interval > 0)
+    return (bl->deliver_interval);
+  else
+    return BL_DELIVER_INTERVAL;
 }
