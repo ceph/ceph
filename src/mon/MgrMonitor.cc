@@ -298,6 +298,8 @@ bool MgrMonitor::prepare_beacon(MonOpRequestRef op)
       dout(10) << "new standby " << m->get_gid() << dendl;
       mon->clog->debug() << "Standby manager daemon " << m->get_name()
                          << " started";
+      pending_map.standbys[m->get_gid()] = {m->get_gid(), m->get_name(),
+					    m->get_available_modules()};
       updated = true;
     }
   }
