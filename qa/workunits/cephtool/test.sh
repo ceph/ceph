@@ -2326,6 +2326,12 @@ function test_mon_tell_help_command()
   expect_false ceph tell mon.zzz help
 }
 
+function test_mon_stdin_stdout()
+{
+  echo foo | ceph config-key put test_key -i -
+  ceph config-key get test_key -o - | grep -c foo | grep -q 1
+}
+
 function test_osd_tell_help_command()
 {
   ceph tell osd.1 help
@@ -2411,6 +2417,7 @@ MON_TESTS+=" mon_deprecated_commands"
 MON_TESTS+=" mon_caps"
 MON_TESTS+=" mon_cephdf_commands"
 MON_TESTS+=" mon_tell_help_command"
+MON_TESTS+=" mon_stdin_stdout"
 
 OSD_TESTS+=" osd_bench"
 OSD_TESTS+=" osd_negative_filestore_merge_threshold"
