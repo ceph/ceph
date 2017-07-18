@@ -283,6 +283,7 @@ TEST_F(LibRadosWatchNotify, Watch2Delete) {
   ASSERT_EQ(-ENOTCONN, notify_err);
   ASSERT_EQ(-ENOTCONN, rados_watch_check(ioctx, handle));
   rados_unwatch2(ioctx, handle);
+  rados_watch_flush(cluster);
 }
 
 TEST_F(LibRadosWatchNotify, AioWatchDelete) {
@@ -364,6 +365,7 @@ TEST_F(LibRadosWatchNotify, WatchNotify2) {
   ASSERT_EQ(0u, reply_buf_len);
 
   rados_unwatch2(ioctx, handle);
+  rados_watch_flush(cluster);
 }
 
 TEST_F(LibRadosWatchNotify, AioWatchNotify2) {
@@ -471,6 +473,7 @@ TEST_F(LibRadosWatchNotify, AioNotify) {
   ASSERT_EQ(0u, reply_buf_len);
 
   rados_unwatch2(ioctx, handle);
+  rados_watch_flush(cluster);
 }
 
 TEST_P(LibRadosWatchNotifyPP, WatchNotify2) {
@@ -585,6 +588,7 @@ TEST_P(LibRadosWatchNotifyPP, AioNotify) {
   ASSERT_EQ(0u, missed_map.size());
   ASSERT_GT(ioctx.watch_check(handle), 0);
   ioctx.unwatch2(handle);
+  cluster.watch_flush();
 }
 
 // --
@@ -632,6 +636,7 @@ TEST_F(LibRadosWatchNotify, WatchNotify2Multi) {
   rados_buffer_free(reply_buf);
   rados_unwatch2(ioctx, handle1);
   rados_unwatch2(ioctx, handle2);
+  rados_watch_flush(cluster);
 }
 
 // --
@@ -748,7 +753,9 @@ TEST_P(LibRadosWatchNotifyPP, WatchNotify3) {
     ASSERT_EQ(it->timeout_seconds, timeout);
   }
   bufferlist bl2, bl_reply;
+  std::cout << "notify2" << std::endl;
   ASSERT_EQ(0, ioctx.notify2(notify_oid, bl2, 300000, &bl_reply));
+  std::cout << "notify2 done" << std::endl;
   bufferlist::iterator p = bl_reply.begin();
   std::map<std::pair<uint64_t,uint64_t>,bufferlist> reply_map;
   std::set<std::pair<uint64_t,uint64_t> > missed_map;
@@ -760,8 +767,14 @@ TEST_P(LibRadosWatchNotifyPP, WatchNotify3) {
   ASSERT_EQ(5u, reply_map.begin()->second.length());
   ASSERT_EQ(0, strncmp("reply", reply_map.begin()->second.c_str(), 5));
   ASSERT_EQ(0u, missed_map.size());
+  std::cout << "watch_check" << std::endl;
   ASSERT_GT(ioctx.watch_check(handle), 0);
+  std::cout << "unwatch2" << std::endl;
   ioctx.unwatch2(handle);
+
+  std::cout << " flushing" << std::endl;
+  cluster.watch_flush();
+  std::cout << "done" << std::endl;
 }
 
 TEST_F(LibRadosWatchNotify, Watch3Timeout) {
@@ -831,6 +844,8 @@ TEST_F(LibRadosWatchNotify, Watch3Timeout) {
 
   // re-watch
   rados_unwatch2(ioctx, handle);
+  rados_watch_flush(cluster);
+
   handle = 0;
   ASSERT_EQ(0,
 	    rados_watch2(ioctx, notify_oid, &handle,
@@ -861,6 +876,7 @@ TEST_F(LibRadosWatchNotify, Watch3Timeout) {
 
   rados_buffer_free(reply_buf);
   rados_unwatch2(ioctx, handle);
+  rados_watch_flush(cluster);
 }
 
 TEST_F(LibRadosWatchNotify, AioWatchDelete2) {
