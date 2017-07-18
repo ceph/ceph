@@ -2280,10 +2280,10 @@ int OSD::enable_disable_fuse(bool stop)
     delete fuse_store;
     fuse_store = NULL;
     r = ::rmdir(mntpath.c_str());
-    if (r < 0)
-      r = -errno;
     if (r < 0) {
-      derr << __func__ << " failed to rmdir " << mntpath << dendl;
+      r = -errno;
+      derr << __func__ << " failed to rmdir " << mntpath << ": "
+           << cpp_strerror(r) << dendl;
       return r;
     }
     return 0;
