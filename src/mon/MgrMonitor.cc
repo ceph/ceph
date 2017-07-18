@@ -20,6 +20,7 @@
 #include "PGStatService.h"
 #include "include/stringify.h"
 #include "mgr/MgrContext.h"
+#include "mgr/mgr_commands.h"
 #include "OSDMonitor.h"
 
 #include "MgrMonitor.h"
@@ -45,7 +46,10 @@ void MgrMonitor::create_initial()
   for (auto& m : tok) {
     pending_map.modules.insert(m);
   }
-  dout(10) << __func__ << " initial modules " << pending_map.modules << dendl;
+  pending_command_descs = mgr_commands;
+  dout(10) << __func__ << " initial modules " << pending_map.modules
+	   << ", " << pending_command_descs.size() << " commands"
+	   << dendl;
 }
 
 void MgrMonitor::update_from_paxos(bool *need_bootstrap)
@@ -79,10 +83,11 @@ void MgrMonitor::update_from_paxos(bool *need_bootstrap)
 
     check_subs();
 
-    if (map.get_available()
-        && (!old_available || old_gid != map.get_active_gid()))
-    {
-      dout(4) << "daemon transitioned to available, loading commands" << dendl;
+    if (version == 1
+	|| (map.get_available()
+	    && (!old_available || old_gid != map.get_active_gid()))) {
+      dout(4) << "mkfs or daemon transitioned to available, loading commands"
+	      << dendl;
       bufferlist loaded_commands;
       int r = mon->store->get(command_descs_prefix, "", loaded_commands);
       if (r < 0) {
