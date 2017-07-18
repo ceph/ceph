@@ -13,12 +13,15 @@
 
 #pragma once
 
+#include <string>
+#include "include/encoding.h"
+
 struct MonCommand {
-  string cmdstring;
-  string helpstring;
-  string module;
-  string req_perms;
-  string availability;
+  std::string cmdstring;
+  std::string helpstring;
+  std::string module;
+  std::string req_perms;
+  std::string availability;
   uint64_t flags;
 
   // MonCommand flags
@@ -118,7 +121,7 @@ struct MonCommand {
   }
 
   bool requires_perm(char p) const {
-    return (req_perms.find(p) != string::npos); 
+    return (req_perms.find(p) != std::string::npos);
   }
 };
 WRITE_CLASS_ENCODER(MonCommand)
