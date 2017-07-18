@@ -96,7 +96,23 @@ static int do_metadata_set(librbd::Image& image, const char *key,
 
 static int do_metadata_remove(librbd::Image& image, const char *key)
 {
-  int r = image.metadata_remove(key);
+  std::map<std::string, bufferlist> pairs;
+  int r;
+  r = image.metadata_list("", 0, &pairs);
+  if (r < 0) {
+      std::cerr << "failed to search existing keys" << cpp_strerror(r) << std::endl;
+      return r;
+  }
+  std::map<std::string, bufferlist >::iterator it=pairs.begin();
+  for(;it != pairs.end();++it){
+      if(strcmp(it->first.c_str(),key)==0)
+          break;
+  }
+  if(it==pairs.end()){
+      std::cerr << "no existing metadata key name " << key << std::endl;
+      return -ENOENT;
+  }
+  r = image.metadata_remove(key);
   if (r < 0) {
     std::cerr << "failed to remove metadata " << key << " of image : "
               << cpp_strerror(r) << std::endl;

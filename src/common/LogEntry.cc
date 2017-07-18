@@ -51,9 +51,9 @@ clog_type LogEntry::str_to_level(std::string const &str)
     return CLOG_INFO;
   } else if (level_str == "sec") {
     return CLOG_SEC;
-  } else if (level_str == "warn" | level_str == "warning") {
+  } else if (level_str == "warn" || level_str == "warning") {
     return CLOG_WARN;
-  } else if (level_str == "error" | level_str == "err") {
+  } else if (level_str == "error" || level_str == "err") {
     return CLOG_ERROR;
   } else {
     return CLOG_UNKNOWN;
