@@ -615,6 +615,8 @@ void PoolReplayer::handle_update(const std::string &mirror_uuid,
       m_remote_pool_watcher->get_image_count());
   }
 
+  std::string removed_remote_peer_id;
+  ImageIds removed_remote_image_ids;
   if (m_initial_mirror_image_ids.find(mirror_uuid) ==
         m_initial_mirror_image_ids.end() &&
       m_initial_mirror_image_ids.size() < 2) {
@@ -627,9 +629,10 @@ void PoolReplayer::handle_update(const std::string &mirror_uuid,
       // removal notifications for the remote pool
       auto &local_image_ids = m_initial_mirror_image_ids.begin()->second;
       auto &remote_image_ids = m_initial_mirror_image_ids.rbegin()->second;
+      removed_remote_peer_id = m_initial_mirror_image_ids.rbegin()->first;
       for (auto &local_image_id : local_image_ids) {
         if (remote_image_ids.find(local_image_id) == remote_image_ids.end()) {
-          removed_image_ids.emplace(local_image_id.global_id, "");
+          removed_remote_image_ids.emplace(local_image_id.global_id, "");
         }
       }
       local_image_ids.clear();
@@ -664,6 +667,16 @@ void PoolReplayer::handle_update(const std::string &mirror_uuid,
     std::string &instance_id = m_instance_watcher->get_instance_id();
     m_instance_watcher->notify_image_release(instance_id, image_id.global_id,
                                              mirror_uuid, image_id.id, true,
+                                             gather_ctx->new_sub());
+  }
+
+  // derived removal events for remote after initial image listing
+  for (auto& image_id : removed_remote_image_ids) {
+    // for now always send to myself (the leader)
+    std::string &instance_id = m_instance_watcher->get_instance_id();
+    m_instance_watcher->notify_image_release(instance_id, image_id.global_id,
+                                             removed_remote_peer_id,
+                                             image_id.id, true,
                                              gather_ctx->new_sub());
   }
 
