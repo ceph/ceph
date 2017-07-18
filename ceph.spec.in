@@ -838,10 +838,10 @@ cmake .. \
 %endif
 %if %{with lttng}
     -DWITH_LTTNG=ON \
-    -DWTIH_BABELTRACE=ON \
+    -DWITH_BABELTRACE=ON \
 %else
     -DWITH_LTTNG=OFF \
-    -DWTIH_BABELTRACE=OFF \
+    -DWITH_BABELTRACE=OFF \
 %endif
     $CEPH_EXTRA_CMAKE_ARGS \
 %if 0%{with ocf}
