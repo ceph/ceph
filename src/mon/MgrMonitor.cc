@@ -494,6 +494,7 @@ void MgrMonitor::tick()
   }
 
   if (!pending_map.available &&
+      !ever_had_active_mgr &&
       should_warn_about_mgr_down() != HEALTH_OK) {
     dout(10) << " exceeded mon_mgr_mkfs_grace " << g_conf->mon_mgr_mkfs_grace
 	     << " seconds" << dendl;
