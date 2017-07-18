@@ -85,6 +85,7 @@ static string *notify_oids = NULL;
 static string shadow_ns = "shadow";
 static string dir_oid_prefix = ".dir.";
 static string default_storage_pool_suffix = "rgw.buckets.data";
+static std::string default_tail_storage_pool_suffix = "rgw.buckets.tail";
 static string default_bucket_index_pool_suffix = "rgw.buckets.index";
 static string default_storage_extra_pool_suffix = "rgw.buckets.non-ec";
 static string avail_pools = ".pools.avail";
@@ -1643,6 +1644,7 @@ int get_zones_pool_set(CephContext* cct,
       for(auto& iter : zone.placement_pools) {
 	pool_names.insert(iter.second.index_pool);
 	pool_names.insert(iter.second.data_pool);
+	pool_names.insert(iter.second.tail_data_pool);
 	pool_names.insert(iter.second.data_extra_pool);
       }
     }
@@ -1735,6 +1737,7 @@ int RGWZoneParams::create(bool exclusive)
     RGWZonePlacementInfo default_placement;
     default_placement.index_pool = name + "." + default_bucket_index_pool_suffix;
     default_placement.data_pool =  name + "." + default_storage_pool_suffix;
+    default_placement.tail_data_pool = name + "." + default_tail_storage_pool_suffix;
     default_placement.data_extra_pool = name + "." + default_storage_extra_pool_suffix;
     placement_pools["default-placement"] = default_placement;
   }

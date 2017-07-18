@@ -1105,21 +1105,23 @@ struct RGWZonePlacementInfo {
   rgw_pool data_extra_pool; /* if not set we should use data_pool */
   RGWBucketIndexType index_type;
   std::string compression_type;
+  rgw_pool tail_data_pool;
 
   RGWZonePlacementInfo() : index_type(RGWBIType_Normal) {}
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(6, 1, bl);
+    ENCODE_START(7, 1, bl);
     ::encode(index_pool.to_str(), bl);
     ::encode(data_pool.to_str(), bl);
     ::encode(data_extra_pool.to_str(), bl);
     ::encode((uint32_t)index_type, bl);
     ::encode(compression_type, bl);
+    ::encode(tail_data_pool.to_str(), bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::iterator& bl) {
-    DECODE_START(6, bl);
+    DECODE_START(7, bl);
     string index_pool_str;
     string data_pool_str;
     ::decode(index_pool_str, bl);
@@ -1138,6 +1140,12 @@ struct RGWZonePlacementInfo {
     }
     if (struct_v >= 6) {
       ::decode(compression_type, bl);
+    }
+
+    if (struct_v >= 7) {
+      string tail_data_pool_str;
+      ::decode(tail_data_pool_str, bl);
+      tail_data_pool = rgw_pool(tail_data_pool_str);
     }
     DECODE_FINISH(bl);
   }

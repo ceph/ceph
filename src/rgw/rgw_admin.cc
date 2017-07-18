@@ -254,6 +254,7 @@ void _usage()
   cout << "   --endpoints=<list>        zone endpoints\n";
   cout << "   --index-pool=<pool>       placement target index pool\n";
   cout << "   --data-pool=<pool>        placement target data pool\n";
+  cout << "   --tail-data-pool=<pool>   placement target tail data pool\n";
   cout << "   --data-extra-pool=<pool>  placement target data extra (non-ec) pool\n";
   cout << "   --placement-index-type=<type>\n";
   cout << "                             placement target index type (normal, indexless, or #id)\n";
@@ -2406,6 +2407,7 @@ int main(int argc, const char **argv)
 
   boost::optional<string> index_pool;
   boost::optional<string> data_pool;
+  boost::optional<string> tail_data_pool;
   boost::optional<string> data_extra_pool;
   RGWBucketIndexType placement_index_type = RGWBIType_Normal;
   bool index_type_specified = false;
@@ -2707,6 +2709,8 @@ int main(int argc, const char **argv)
       index_pool = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--data-pool", (char*)NULL)) {
       data_pool = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--tail-data-pool", (char*)NULL)) {
+      tail_data_pool = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--data-extra-pool", (char*)NULL)) {
       data_extra_pool = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--placement-index-type", (char*)NULL)) {
@@ -4206,6 +4210,13 @@ int main(int argc, const char **argv)
 
           info.index_pool = *index_pool;
           info.data_pool = *data_pool;
+
+          if (tail_data_pool) {
+            info.tail_data_pool = *tail_data_pool;
+          } else {
+            info.tail_data_pool = *data_pool;
+          }
+
           if (data_extra_pool) {
             info.data_extra_pool = *data_extra_pool;
           }
@@ -4228,6 +4239,9 @@ int main(int argc, const char **argv)
           }
           if (data_pool && !data_pool->empty()) {
             info.data_pool = *data_pool;
+          }
+          if (tail_data_pool && !tail_data_pool->empty()) {
+            info.tail_data_pool = *tail_data_pool;
           }
           if (data_extra_pool) {
             info.data_extra_pool = *data_extra_pool;
