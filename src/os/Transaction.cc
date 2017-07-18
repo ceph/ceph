@@ -294,10 +294,6 @@ void ObjectStore::Transaction::dump(ceph::Formatter *f)
       }
       break;
 
-    case Transaction::OP_STARTSYNC:
-      f->dump_string("op_name", "startsync");
-      break;
-
     case Transaction::OP_COLL_RENAME:
       {
 	f->dump_string("op_name", "collection_rename");
