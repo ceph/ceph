@@ -2582,9 +2582,11 @@ int OSD::init()
 
   r = monc->authenticate();
   if (r < 0) {
+    derr << __func__ << " authentication failed: " << cpp_strerror(r)
+         << dendl;
     osd_lock.Lock(); // locker is going to unlock this on function exit
     if (is_stopping())
-      r =  0;
+      r = 0;
     goto monout;
   }
 
@@ -2592,9 +2594,10 @@ int OSD::init()
     derr << "unable to obtain rotating service keys; retrying" << dendl;
     ++rotating_auth_attempts;
     if (rotating_auth_attempts > g_conf->max_rotating_auth_attempts) {
+        derr << __func__ << " wait_auth_rotating timed out" << dendl;
         osd_lock.Lock(); // make locker happy
         if (!is_stopping()) {
-            r = - ETIMEDOUT;
+            r = -ETIMEDOUT;
         }
         goto monout;
     }
@@ -2602,12 +2605,16 @@ int OSD::init()
 
   r = update_crush_device_class();
   if (r < 0) {
+    derr << __func__ <<" unable to update_crush_device_class: "
+         << cpp_strerror(r) << dendl;
     osd_lock.Lock();
     goto monout;
   }
 
   r = update_crush_location();
   if (r < 0) {
+    derr << __func__ <<" unable to update_crush_location: "
+         << cpp_strerror(r) << dendl;
     osd_lock.Lock();
     goto monout;
   }
@@ -2643,8 +2650,7 @@ int OSD::init()
 
   return 0;
 monout:
-  mgrc.shutdown();
-  monc->shutdown();
+  exit(1);
 
 out:
   enable_disable_fuse(true);
@@ -5808,7 +5814,10 @@ void OSD::_collect_metadata(map<string,string> *pm)
 {
   // config info
   (*pm)["osd_data"] = dev_path;
-  (*pm)["osd_journal"] = journal_path;
+  if (store->get_type() == "filestore") {
+    // not applicable for bluestore
+    (*pm)["osd_journal"] = journal_path;
+  }
   (*pm)["front_addr"] = stringify(client_messenger->get_myaddr());
   (*pm)["back_addr"] = stringify(cluster_messenger->get_myaddr());
   (*pm)["hb_front_addr"] = stringify(hb_front_server_messenger->get_myaddr());
