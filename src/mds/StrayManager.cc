@@ -314,27 +314,13 @@ class C_OpenSnapParents : public StrayManagerContext {
 
 void StrayManager::_enqueue(CDentry *dn, bool trunc)
 {
+  assert(started);
+
   CInode *in = dn->get_linkage()->get_inode();
   if (in->snaprealm &&
       !in->snaprealm->have_past_parents_open() &&
       !in->snaprealm->open_parents(new C_OpenSnapParents(this, dn, trunc))) {
     // this can happen if the dentry had been trimmed from cache.
-    return;
-  }
-
-  if (!started) {
-    // If the MDS is not yet active, defer executing this purge
-    // in order to avoid the mdlog writes we do on purge completion.
-    mds->wait_for_active(
-        new MDSInternalContextWrapper(mds,
-          new FunctionContext([this, dn, trunc](int r){
-            // It is safe to hold on to this CDentry* pointer
-            // because the dentry is pinned with PIN_PURGING
-           _enqueue(dn, trunc); 
-            })
-        )
-      );
-
     return;
   }
 
@@ -348,6 +334,9 @@ void StrayManager::_enqueue(CDentry *dn, bool trunc)
 
 void StrayManager::advance_delayed()
 {
+  if (!started)
+    return;
+
   for (elist<CDentry*>::iterator p = delayed_eval_stray.begin(); !p.end(); ) {
     CDentry *dn = *p;
     ++p;
@@ -434,6 +423,9 @@ bool StrayManager::_eval_stray(CDentry *dn, bool delay)
   if (!dn->is_auth()) {
     return false;
   }
+
+  if (!started)
+    delay = true;
 
   if (dn->item_stray.is_on_list()) {
     if (delay)
@@ -545,6 +537,7 @@ void StrayManager::activate()
 {
   dout(10) << __func__ << dendl;
   started = true;
+  purge_queue.activate();
 }
 
 bool StrayManager::eval_stray(CDentry *dn, bool delay)

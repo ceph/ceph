@@ -133,6 +133,7 @@ protected:
 
 public:
   void init();
+  void activate();
   void shutdown();
 
   void create_logger();

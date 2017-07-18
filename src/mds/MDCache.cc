@@ -6083,6 +6083,20 @@ void MDCache::rejoin_send_acks()
   rejoin_imported_caps.clear();
 }
 
+class C_MDC_ReIssueCaps : public MDCacheContext {
+  CInode *in;
+public:
+  C_MDC_ReIssueCaps(MDCache *mdc, CInode *i) :
+    MDCacheContext(mdc), in(i)
+  {
+    in->get(CInode::PIN_PTRWAITER);
+  }
+  void finish(int r) override {
+    if (!mdcache->mds->locker->eval(in, CEPH_CAP_LOCKS))
+      mdcache->mds->locker->issue_caps(in);
+    in->put(CInode::PIN_PTRWAITER);
+  }
+};
 
 void MDCache::reissue_all_caps()
 {
@@ -6093,6 +6107,11 @@ void MDCache::reissue_all_caps()
        ++p) {
     CInode *in = p->second;
     if (in->is_head() && in->is_any_caps()) {
+      // called by MDSRank::active_start(). There shouldn't be any frozen subtree.
+      if (in->is_frozen_inode()) {
+	in->add_waiter(CInode::WAIT_UNFREEZE, new C_MDC_ReIssueCaps(this, in));
+	continue;
+      }
       if (!mds->locker->eval(in, CEPH_CAP_LOCKS))
 	mds->locker->issue_caps(in);
     }
@@ -7611,6 +7630,11 @@ bool MDCache::shutdown_pass()
   assert(!migrator->is_exporting());
   assert(!migrator->is_importing());
 
+  if ((myin && myin->is_auth_pinned()) ||
+      (mydir && mydir->is_auth_pinned())) {
+    dout(7) << "still have auth pinned objects" << dendl;
+    return false;
+  }
 
   // flush what we can from the log
   mds->mdlog->trim(0);

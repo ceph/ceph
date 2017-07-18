@@ -117,6 +117,21 @@ void PurgeQueue::init()
   timer.init();
 }
 
+void PurgeQueue::activate()
+{
+  Mutex::Locker l(lock);
+  if (journaler.get_read_pos() == journaler.get_write_pos())
+    return;
+
+  if (in_flight.empty()) {
+    dout(4) << "start work (by drain)" << dendl;
+    finisher.queue(new FunctionContext([this](int r) {
+	  Mutex::Locker l(lock);
+	  _consume();
+	  }));
+  }
+}
+
 void PurgeQueue::shutdown()
 {
   Mutex::Locker l(lock);
