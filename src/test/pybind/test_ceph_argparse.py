@@ -180,9 +180,6 @@ class TestPG(TestArgparse):
         assert_equal({}, validate_command(sigdict, ['pg', 'debug',
                                                     'invalid']))
 
-    def test_force_create_pg(self):
-        self.one_pgid('force_create_pg')
-
 
 class TestAuth(TestArgparse):
 
