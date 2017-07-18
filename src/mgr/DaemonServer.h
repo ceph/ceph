@@ -95,8 +95,6 @@ private:
   void maybe_ready(int32_t osd_id);
 
 public:
-  static const std::vector<MonCommand> mgr_commands;
-
   int init(uint64_t gid, entity_addr_t client_addr);
   void shutdown();
 

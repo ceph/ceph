@@ -17,6 +17,7 @@
 #include "auth/RotatingKeyRing.h"
 #include "json_spirit/json_spirit_writer.h"
 
+#include "mgr/mgr_commands.h"
 #include "mon/MonCommand.h"
 
 #include "messages/MMgrOpen.h"
@@ -33,16 +34,6 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "mgr.server " << __func__ << " "
 
-
-/* The set of statically defined (C++-handled) commands.  This
- * does not include the Python-defined commands, which are loaded
- * in PyModules */
-const std::vector<MonCommand> DaemonServer::mgr_commands = {
-#define COMMAND(parsesig, helptext, module, perm, availability) \
-  {parsesig, helptext, module, perm, availability, 0},
-#include "MgrCommands.h"
-#undef COMMAND
-};
 
 
 DaemonServer::DaemonServer(MonClient *monc_,
