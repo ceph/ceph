@@ -5016,6 +5016,11 @@ int trash_remove(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
  * Returns the list of trash spec entries registered in the rbd_trash
  * object.
  *
+ * Input:
+ * @param start_after which name to begin listing after
+ *        (use the empty string to start at the beginning)
+ * @param max_return the maximum number of names to list
+ *
  * Output:
  * @param data the map between image id and trash spec info
  *
@@ -5023,18 +5028,30 @@ int trash_remove(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
  */
 int trash_list(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
+  string start_after;
+  uint64_t max_return;
+
+  try {
+    bufferlist::iterator iter = in->begin();
+    ::decode(start_after, iter);
+    ::decode(max_return, iter);
+  } catch (const buffer::error &err) {
+    return -EINVAL;
+  }
+
   map<string, cls::rbd::TrashImageSpec> data;
-  string last_read = trash::image_key("");
-  int max_read = RBD_MAX_KEYS_READ;
+  string last_read = trash::image_key(start_after);
 
   CLS_LOG(20, "trash_get_images");
-
-  do {
+  while (data.size() < max_return) {
     map<string, bufferlist> raw_data;
+    int max_read = std::min<int32_t>(RBD_MAX_KEYS_READ,
+                                     max_return - data.size());
     int r = cls_cxx_map_get_vals(hctx, last_read, trash::IMAGE_KEY_PREFIX,
                                  max_read, &raw_data);
     if (r < 0) {
-      CLS_ERR("failed to read the vals off of disk: %s", cpp_strerror(r).c_str());
+      CLS_ERR("failed to read the vals off of disk: %s",
+              cpp_strerror(r).c_str());
       return r;
     }
     if (raw_data.empty()) {
@@ -5051,10 +5068,9 @@ int trash_list(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
     }
 
     last_read = raw_data.rbegin()->first;
-  } while (max_read);
+  }
 
   ::encode(data, *out);
-
   return 0;
 }
 
