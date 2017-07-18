@@ -1797,3 +1797,5 @@ OPTION(rgw_reshard_bucket_lock_duration, OPT_INT, 120) // duration of lock on bu
 OPTION(rgw_dynamic_resharding, OPT_BOOL, true)
 OPTION(rgw_max_objs_per_shard, OPT_INT, 100000)
 OPTION(rgw_reshard_thread_interval, OPT_U32, 60 * 10) // maximum time between rounds of reshard thread processing
+
+OPTION(rgw_acl_grants_max_num, OPT_INT, 100) // According to AWS S3(http://docs.aws.amazon.com/AmazonS3/latest/dev/acl-overview.html), An ACL can have up to 100 grants.
