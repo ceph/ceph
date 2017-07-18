@@ -4619,6 +4619,27 @@ void RGWPutACLs::execute()
     return;
   }
 
+  const RGWAccessControlList& req_acl = policy->get_acl();
+  const multimap<string, ACLGrant>& req_grant_map = req_acl.get_grant_map();
+#define ACL_GRANTS_MAX_NUM      100
+  int max_num = s->cct->_conf->rgw_acl_grants_max_num;
+  if (max_num < 0) {
+    max_num = ACL_GRANTS_MAX_NUM;
+  }
+
+  int grants_num = req_grant_map.size();
+  if (grants_num > max_num) {
+    ldout(s->cct, 4) << "An acl can have up to "
+                     << max_num
+                     << " grants, request acl grants num: "
+                     << grants_num << dendl;
+    op_ret = -ERR_MALFORMED_ACL_ERROR;
+    s->err.message = "The request is rejected, because the acl grants number you requested is larger than the maximum "
+                     + std::to_string(max_num)
+                     + " grants allowed in an acl.";
+    return;
+  }
+
   // forward bucket acl requests to meta master zone
   if (s->object.empty() && !store->is_meta_master()) {
     bufferlist in_data;
