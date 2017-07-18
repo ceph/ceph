@@ -7680,11 +7680,24 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       goto reply;
     }
 
-    err = newcrush.remove_class_name(device_class);
-    if (err < 0) {
-      ss << "class '" << device_class << "' cannot be removed '"
-	 << cpp_strerror(err) << "'";
-      goto reply;
+    set<int> osds;
+    newcrush.get_devices_by_class(device_class, &osds);
+    for (auto& p: osds) {
+      err = newcrush.remove_device_class(g_ceph_context, p, &ss);
+      if (err < 0) {
+        // ss has reason for failure
+        goto reply;
+      }
+    }
+
+    if (osds.empty()) {
+      // empty class, remove directly
+      err = newcrush.remove_class_name(device_class);
+      if (err < 0) {
+        ss << "class '" << device_class << "' cannot be removed '"
+           << cpp_strerror(err) << "'";
+        goto reply;
+      }
     }
 
     pending_inc.crush.clear();

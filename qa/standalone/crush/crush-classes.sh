@@ -193,6 +193,18 @@ function TEST_mon_classes() {
     ceph osd crush dump | grep -q '~asdf' && return 1
     ceph osd crush tree --show-shadow | grep -q '~asdf' && return 1
 
+    # test 'class rm' automatically recycles shadow trees
+    ceph osd crush set-device-class asdf 0 1 2 || return 1
+    ceph osd tree | grep -q 'asdf' || return 1
+    ceph osd crush dump | grep -q '~asdf' || return 1
+    ceph osd crush tree --show-shadow | grep -q '~asdf' || return 1
+    ceph osd crush class ls | grep -q 'asdf' || return 1
+    ceph osd crush class rm asdf || return 1
+    ceph osd tree | grep -q 'asdf' && return 1
+    ceph osd crush dump | grep -q '~asdf' && return 1
+    ceph osd crush tree --show-shadow | grep -q '~asdf' && return 1
+    ceph osd crush class ls | grep -q 'asdf' && return 1
+
     ceph osd crush set-device-class abc osd.2 || return 1
     ceph osd crush move osd.2 root=foo rack=foo-rack host=foo-host || return 1
     out=`ceph osd tree |awk '$1 == 2 && $2 == "abc" {print $0}'`
