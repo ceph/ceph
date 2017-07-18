@@ -1332,10 +1332,13 @@ bool Locker::rdlock_start(SimpleLock *lock, MDRequestRef& mut, bool as_anon)
       // okay, we actually need to kick the head's lock to get ourselves synced up.
       CInode *head = mdcache->get_inode(in->ino());
       assert(head);
-      SimpleLock *hlock = head->get_lock(lock->get_type());
+      SimpleLock *hlock = head->get_lock(CEPH_LOCK_IFILE);
+      if (hlock->get_state() == LOCK_SYNC)
+	hlock = head->get_lock(lock->get_type());
+
       if (hlock->get_state() != LOCK_SYNC) {
 	dout(10) << "rdlock_start trying head inode " << *head << dendl;
-	if (!rdlock_start(head->get_lock(lock->get_type()), mut, true)) // ** as_anon, no rdlock on EXCL **
+	if (!rdlock_start(hlock, mut, true)) // ** as_anon, no rdlock on EXCL **
 	  return false;
 	// oh, check our lock again then
       }
@@ -2532,11 +2535,11 @@ void Locker::adjust_cap_wanted(Capability *cap, int wanted, int issue_seq)
 
 
 
-void Locker::_do_null_snapflush(CInode *head_in, client_t client)
+void Locker::_do_null_snapflush(CInode *head_in, client_t client, snapid_t last)
 {
   dout(10) << "_do_null_snapflush client." << client << " on " << *head_in << dendl;
-  compact_map<snapid_t, set<client_t> >::iterator p = head_in->client_need_snapflush.begin();
-  while (p != head_in->client_need_snapflush.end()) {
+  for (auto p = head_in->client_need_snapflush.begin();
+       p != head_in->client_need_snapflush.end() && p->first < last; ) {
     snapid_t snapid = p->first;
     set<client_t>& clients = p->second;
     ++p;  // be careful, q loop below depends on this
@@ -2762,6 +2765,8 @@ void Locker::handle_client_caps(MClientCaps *m)
       // this cap now follows a later snap (i.e. the one initiating this flush, or later)
       if (in == head_in)
 	cap->client_follows = snap < CEPH_NOSNAP ? snap : realm->get_newest_seq();
+      else if (head_in->client_need_snapflush.begin()->first < snap)
+	_do_null_snapflush(head_in, client, snap);
    
       _do_snap_update(in, snap, m->get_dirty(), follows, client, m, ack);
 
