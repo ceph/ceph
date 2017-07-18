@@ -765,8 +765,7 @@ int MDSDaemon::_handle_command(
     // We will send response before executing
     ss << "Exiting...";
     *run_later = new SuicideLater(this);
-  }
-  else if (prefix == "respawn") {
+  } else if (prefix == "respawn") {
     // We will send response before executing
     ss << "Respawning...";
     *run_later = new RespawnLater(this);
