@@ -221,9 +221,23 @@ public:
     uint64_t rounded_kb_added = rgw_rounded_objsize_kb(added_bytes);
     uint64_t rounded_kb_removed = rgw_rounded_objsize_kb(removed_bytes);
 
-    entry->stats.num_kb_rounded += (rounded_kb_added - rounded_kb_removed);
-    entry->stats.num_kb += (added_bytes - removed_bytes) / 1024;
-    entry->stats.num_objects += objs_delta;
+    if ((entry->stats.num_kb_rounded + rounded_kb_added - rounded_kb_removed) >= 0) {
+      entry->stats.num_kb_rounded += (rounded_kb_added - rounded_kb_removed);
+    } else {
+      entry->stats.num_kb_rounded = 0;
+    }
+    
+    if ((entry->stats.num_kb + ((added_bytes - removed_bytes) / 1024)) >= 0) {
+      entry->stats.num_kb += (added_bytes - removed_bytes) / 1024;
+    } else {
+      entry->stats.num_kb = 0;
+    }
+    
+    if ((entry->stats.num_objects + objs_delta) >= 0) {
+      entry->stats.num_objects += objs_delta;
+    } else {
+      entry->stats.num_objects = 0;
+    }
 
     return true;
   }
