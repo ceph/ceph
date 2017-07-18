@@ -7,6 +7,7 @@ overrides:
       - error reading table object
       - error reading sessionmap
       - unmatched fragstat
+      - unmatched rstat
       - was unreadable, recreating it now
       - Scrub error on inode
       - Metadata damage detected
