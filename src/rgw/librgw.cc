@@ -22,6 +22,7 @@
 #include "rgw_acl.h"
 
 #include "include/str_list.h"
+#include "include/stringify.h"
 #include "global/global_init.h"
 #include "common/config.h"
 #include "common/errno.h"
@@ -534,8 +535,14 @@ namespace rgw {
     int port = 80;
     RGWProcessEnv env = { store, &rest, olog, port };
 
+    string fe_count{"0"};
     fec = new RGWFrontendConfig("rgwlib");
     fe = new RGWLibFrontend(env, fec);
+
+    map<string, string> service_map_meta;
+    service_map_meta["pid"] = stringify(getpid());
+    service_map_meta["frontend_type#" + fe_count] = "rgw-nfs";
+    service_map_meta["frontend_config#" + fe_count] = fec->get_config();
 
     fe->init();
     if (r < 0) {
@@ -544,6 +551,12 @@ namespace rgw {
     }
 
     fe->run();
+
+    r = store->register_to_service_map("rgw-nfs", service_map_meta);
+    if (r < 0) {
+      derr << "ERROR: failed to register to service map: " << cpp_strerror(-r) << dendl;
+      /* ignore error */
+    }
 
     return 0;
   } /* RGWLib::init() */

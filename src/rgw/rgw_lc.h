@@ -12,6 +12,7 @@
 #include "include/rados/librados.hpp"
 #include "common/Mutex.h"
 #include "common/Cond.h"
+#include "common/iso_8601.h"
 #include "common/Thread.h"
 #include "rgw_common.h"
 #include "rgw_rados.h"
@@ -38,29 +39,54 @@ class LCExpiration
 {
 protected:
   string days;
+  //At present only current object has expiration date
+  string date;
 public:
   LCExpiration() {}
   ~LCExpiration() {}
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(2, 2, bl);
+    ENCODE_START(3, 2, bl);
     ::encode(days, bl);
+    ::encode(date, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator& bl) {
-    DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, bl);
+    DECODE_START_LEGACY_COMPAT_LEN(3, 2, 2, bl);
     ::decode(days, bl);
+    if (struct_v >= 3) {
+      ::decode(date, bl);
+    }
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
 //  static void generate_test_instances(list<ACLOwner*>& o);
   void set_days(const string& _days) { days = _days; }
-  string get_days_str() const{
+  string get_days_str() const {
     return days;
   }
-  int get_days() {return atoi(days.c_str()); }
-  bool empty() const{
-    return days.empty();
+  int get_days() const {return atoi(days.c_str()); }
+  bool has_days() const {
+    return !days.empty();
+  }
+  void set_date(const string& _date) { date = _date; }
+  string get_date() const {
+    return date;
+  }
+  bool has_date() const {
+    return !date.empty();
+  }
+  bool empty() const {
+    return days.empty() && date.empty();
+  }
+  bool valid() const {
+    if (!days.empty() && !date.empty()) {
+      return false;
+    } else if (!days.empty() && get_days() <= 0) {
+      return false;
+    }
+    //We've checked date in xml parsing
+    return true;
   }
 };
 WRITE_CLASS_ENCODER(LCExpiration)
@@ -138,7 +164,7 @@ public:
     dm_expiration = _dm_expiration;
   }
 
-  bool validate();
+  bool valid();
   
   void encode(bufferlist& bl) const {
      ENCODE_START(4, 1, bl);
@@ -179,6 +205,7 @@ struct lc_op
   int expiration;
   int noncur_expiration;
   int mp_expiration;
+  boost::optional<ceph::real_time> expiration_date;
 
   lc_op() : status(false), dm_expiration(false), expiration(0), noncur_expiration(0), mp_expiration(0) {}
   
@@ -191,6 +218,7 @@ protected:
   map<string, lc_op> prefix_map;
   multimap<string, LCRule> rule_map;
   bool _add_rule(LCRule *rule);
+  bool has_same_action(const lc_op& first, const lc_op& second);
 public:
   RGWLifecycleConfiguration(CephContext *_cct) : cct(_cct) {}
   RGWLifecycleConfiguration() : cct(NULL) {}
@@ -225,7 +253,7 @@ public:
 
   int check_and_add_rule(LCRule* rule);
 
-  bool validate();
+  bool valid();
 
   multimap<string, LCRule>& get_rule_map() { return rule_map; }
   map<string, lc_op>& get_prefix_map() { return prefix_map; }
