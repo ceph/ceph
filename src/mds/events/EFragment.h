@@ -29,10 +29,10 @@ WRITE_CLASS_ENCODER(dirfrag_rollback)
 class EFragment : public LogEvent {
 public:
   EMetaBlob metablob;
-  __u8 op;
+  __u8 op{0};
   inodeno_t ino;
   frag_t basefrag;
-  __s32 bits;         // positive for split (from basefrag), negative for merge (to basefrag)
+  __s32 bits{0};         // positive for split (from basefrag), negative for merge (to basefrag)
   list<frag_t> orig_frags;
   bufferlist rollback;
 

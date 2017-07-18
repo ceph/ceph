@@ -24,10 +24,10 @@ class ESession : public LogEvent {
  protected:
   entity_inst_t client_inst;
   bool open;    // open or close
-  version_t cmapv;  // client map version
+  version_t cmapv{0};  // client map version
 
   interval_set<inodeno_t> inos;
-  version_t inotablev;
+  version_t inotablev{0};
 
   // Client metadata stored during open
   std::map<std::string, std::string> client_metadata;
