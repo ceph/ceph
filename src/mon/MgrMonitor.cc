@@ -150,6 +150,9 @@ void MgrMonitor::encode_pending(MonitorDBStore::TransactionRef t)
   if (pending_command_descs.size()) {
     dout(4) << __func__ << " encoding " << pending_command_descs.size()
             << " command_descs" << dendl;
+    for (auto& p : pending_command_descs) {
+      p.set_flag(MonCommand::FLAG_MGR);
+    }
     bufferlist bl;
     ::encode(pending_command_descs, bl);
     t->put(command_descs_prefix, "", bl);
