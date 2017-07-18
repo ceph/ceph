@@ -8980,7 +8980,7 @@ void PrimaryLogPG::op_applied(const eversion_t &applied_version)
   last_update_applied = applied_version;
   if (is_primary()) {
     if (scrubber.active) {
-      if (last_update_applied == scrubber.subset_last_update) {
+      if (last_update_applied >= scrubber.subset_last_update) {
         if (ops_blocked_by_scrub()) {
           requeue_scrub(true);
         } else {
@@ -8993,7 +8993,7 @@ void PrimaryLogPG::op_applied(const eversion_t &applied_version)
     }
   } else {
     if (scrubber.active_rep_scrub) {
-      if (last_update_applied == static_cast<const MOSDRepScrub*>(
+      if (last_update_applied >= static_cast<const MOSDRepScrub*>(
 	    scrubber.active_rep_scrub->get_req())->scrub_to) {
 	osd->enqueue_back(
 	  info.pgid,
