@@ -1,7 +1,7 @@
 #!/bin/bash
 #
 # Copyright (C) 2014 Cloudwatt <libre.licensing@cloudwatt.com>
-# Copyright (C) 2014, 2015, 2016 Red Hat <contact@redhat.com>
+# Copyright (C) 2014, 2015, 2016, 2017 Red Hat <contact@redhat.com>
 #
 # Author: Loic Dachary <loic@dachary.org>
 #
@@ -37,7 +37,7 @@ export LD_LIBRARY_PATH=$CEPH_LIB
 CEPH_DISK_ARGS=
 CEPH_DISK_ARGS+=" --verbose"
 CEPH_DISK_ARGS+=" --prepend-to-path="
-TIMEOUT=360
+: ${CEPH_DISK_TIMEOUT:=360}
 if [ `uname` != FreeBSD ]; then
     PROCDIR=""
 else
@@ -45,11 +45,16 @@ else
 fi
 
 cat=$(which cat)
-timeout=$(which timeout)
 diff=$(which diff)
 mkdir=$(which mkdir)
 rm=$(which rm)
 uuidgen=$(which uuidgen)
+if [ `uname` = FreeBSD ]; then
+    # for unknown reasons FreeBSD timeout does not return sometimes
+    timeout=""
+else
+    timeout="$(which timeout) $CEPH_DISK_TIMEOUT"
+fi
 
 function setup() {
     local dir=$1
@@ -189,7 +194,7 @@ function test_mark_init() {
     else
         expected=systemd
     fi
-    $timeout $TIMEOUT ${CEPH_DISK} $CEPH_DISK_ARGS \
+    $timeout ${CEPH_DISK} $CEPH_DISK_ARGS \
         --verbose \
         activate \
         --mark-init=$expected \
@@ -242,61 +247,102 @@ function test_activate_dir_magic() {
     grep --quiet $uuid $osd_data/ceph_fsid || return 1
 }
 
+function read_write() {
+    local dir=$1
+    local file=${2:-$(uuidgen)}
+    local pool=rbd
+
+    echo FOO > $dir/$file
+    $timeout rados --pool $pool put $file $dir/$file || return 1
+    $timeout rados --pool $pool get $file $dir/$file.copy || return 1
+    $diff $dir/$file $dir/$file.copy || return 1
+}
+
 function test_pool_read_write() {
-    local osd_uuid=$1
-    local TEST_POOL=rbd
+    local dir=$1
+    local pool=rbd
 
-    $timeout $TIMEOUT ceph osd pool set $TEST_POOL size 1 || return 1
-
-    local id=$(ceph osd create $osd_uuid)
-    local weight=1
-    ceph osd crush add osd.$id $weight root=default host=localhost || return 1
-    echo FOO > $dir/BAR
-    $timeout $TIMEOUT rados --pool $TEST_POOL put BAR $dir/BAR || return 1
-    $timeout $TIMEOUT rados --pool $TEST_POOL get BAR $dir/BAR.copy || return 1
-    $diff $dir/BAR $dir/BAR.copy || return 1
+    $timeout ceph osd pool set $pool size 1 || return 1
+    read_write $dir || return 1
 }
 
 function test_activate() {
-    local to_prepare=$1
-    local to_activate=$2
-    local osd_uuid=$($uuidgen)
-    local timeoutcmd
+    local dir=$1
+    shift
+    local osd_data=$1
+    shift
 
-    if [ `uname` = FreeBSD ]; then
-        # for unknown reasons FreeBSD timeout does not return here
-        # So we run without timeout
-        timeoutcmd=""
-    else 
-	timeoutcmd="${timeout} $TIMEOUT"
-    fi
+    mkdir -p $osd_data
 
     ${CEPH_DISK} $CEPH_DISK_ARGS \
-        prepare --filestore --osd-uuid $osd_uuid $to_prepare || return 1
+        prepare --filestore "$@" $osd_data || return 1
 
-    $timeoutcmd ${CEPH_DISK} $CEPH_DISK_ARGS \
+    $timeout ${CEPH_DISK} $CEPH_DISK_ARGS \
         activate \
         --mark-init=none \
-        $to_activate || return 1
+        $osd_data || return 1
 
-    test_pool_read_write $osd_uuid || return 1
+    test_pool_read_write $dir || return 1
+}
+
+function test_reuse_osd_id() {
+    local dir=$1
+
+    run_mon $dir a || return 1
+    run_mgr $dir x || return 1
+
+    test_activate $dir $dir/dir1 --osd-uuid $(uuidgen) || return 1
+
+    #
+    # add a new OSD with a given OSD id (13)
+    #
+    local osd_uuid=$($uuidgen)
+    local osd_id=13
+    test_activate $dir $dir/dir2 --osd-id $osd_id --osd-uuid $osd_uuid || return 1
+    test $osd_id = $(ceph osd new $osd_uuid) || return 1
+
+    #
+    # make sure the OSD is in use by the PGs
+    #
+    wait_osd_id_used_by_pgs $osd_id 6 || return 1
+    read_write $dir SOMETHING || return 1
+
+    #
+    # set the OSD out and verify it is no longer used by the PGs
+    #
+    ceph osd out osd.$osd_id || return 1
+    wait_osd_id_used_by_pgs $osd_id 0 || return 1
+
+    #
+    # kill the OSD and destroy it (do not purge, retain its place in the crushmap)
+    #
+    kill_daemons $dir TERM osd.$osd_id || return 1
+    ceph osd destroy osd.$osd_id --yes-i-really-mean-it || return 1
+
+    #
+    # add a new OSD with the same id as the destroyed OSD
+    #
+    osd_uuid=$($uuidgen)
+    test_activate $dir $dir/dir3 --osd-id $osd_id --osd-uuid $osd_uuid || return 1
+    test $osd_id = $(ceph osd new $osd_uuid) || return 1
 }
 
 function test_activate_dir() {
     local dir=$1
     shift
 
-    run_mon $dir a
+    run_mon $dir a || return 1
+    run_mgr $dir x || return 1
     $@
 
-    local osd_data=$dir/dir
-    $mkdir -p $osd_data
-    test_activate $osd_data $osd_data || return 1
+    test_activate $dir $dir/dir || return 1
 }
 
 function test_activate_dir_bluestore() {
     local dir=$1
-    run_mon $dir a
+
+    run_mon $dir a || return 1
+    run_mgr $dir x || return 1
 
     local osd_data=$dir/dir
     $mkdir -p $osd_data
@@ -309,11 +355,12 @@ function test_activate_dir_bluestore() {
         prepare --bluestore --block-file --osd-uuid $osd_uuid $to_prepare || return 1
 
     CEPH_ARGS=" --osd-objectstore=bluestore --bluestore-fsck-on-mount=true --bluestore-block-db-size=67108864 --bluestore-block-wal-size=134217728 --bluestore-block-size=10737418240 $CEPH_ARGS" \
-      $timeout $TIMEOUT ${CEPH_DISK} $CEPH_DISK_ARGS \
+      $timeout ${CEPH_DISK} $CEPH_DISK_ARGS \
         activate \
         --mark-init=none \
         $to_activate || return 1
-    test_pool_read_write $osd_uuid || return 1
+
+    test_pool_read_write $dir || return 1
 }
 
 function test_find_cluster_by_uuid() {
@@ -444,6 +491,7 @@ function run() {
       default_actions+="test_activate_dir_bluestore "
     default_actions+="test_ceph_osd_mkfs "
     default_actions+="test_crush_device_class "
+    default_actions+="test_reuse_osd_id "
     local actions=${@:-$default_actions}
     for action in $actions  ; do
         setup $dir || return 1

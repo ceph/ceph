@@ -409,9 +409,11 @@ prepare_conf() {
         osd crush chooseleaf type = 0
         osd pool default min size = 1
         osd failsafe full ratio = .99
+        mon osd nearfull ratio = .99
+        mon osd backfillfull ratio = .99
         mon osd reporter subtree level = osd
         mon osd full ratio = .99
-        mon data avail warn = 10
+        mon data avail warn = 2
         mon data avail crit = 1
         erasure code dir = $EC_PATH
         plugin dir = $CEPH_LIB
