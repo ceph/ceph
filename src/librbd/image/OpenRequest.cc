@@ -226,10 +226,10 @@ Context *OpenRequest<I>::handle_v2_get_name_from_trash(int *result) {
   if (*result < 0) {
     if (*result == -EOPNOTSUPP) {
       *result = -ENOENT;
-    } else if (*result == -ENOENT) {
-      lderr(cct) << "image id " << m_image_ctx->id << " does not exist in rbd "
-                 << "trash, failed to retrieve image name: "
-                 << cpp_strerror(*result) << dendl;
+    }
+    if (*result == -ENOENT) {
+      ldout(cct, 5) << "failed to retrieve name for image id "
+                    << m_image_ctx->id << dendl;
     } else {
       lderr(cct) << "failed to retreive name from trash: "
                  << cpp_strerror(*result) << dendl;
