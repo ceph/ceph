@@ -31,8 +31,16 @@ void TestFixture::SetUpTestCase() {
   _local_pool_name = get_temp_pool_name("test-rbd-mirror-");
   ASSERT_EQ(0, _rados->pool_create(_local_pool_name.c_str()));
 
+  librados::IoCtx local_ioctx;
+  ASSERT_EQ(0, _rados->ioctx_create(_local_pool_name.c_str(), local_ioctx));
+  local_ioctx.application_enable("rbd", true);
+
   _remote_pool_name = get_temp_pool_name("test-rbd-mirror-");
   ASSERT_EQ(0, _rados->pool_create(_remote_pool_name.c_str()));
+
+  librados::IoCtx remote_ioctx;
+  ASSERT_EQ(0, _rados->ioctx_create(_remote_pool_name.c_str(), remote_ioctx));
+  remote_ioctx.application_enable("rbd", true);
 
   ASSERT_EQ(0, create_image_data_pool(_data_pool));
   if (!_data_pool.empty()) {

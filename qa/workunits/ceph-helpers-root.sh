@@ -76,6 +76,7 @@ function pool_read_write() {
     ceph osd pool create $test_pool 4 || return 1
     ceph osd pool set $test_pool size $size || return 1
     ceph osd pool set $test_pool min_size $size || return 1
+    ceph osd pool application enable $test_pool rados
 
     echo FOO > $dir/BAR
     timeout $timeout rados --pool $test_pool put BAR $dir/BAR || return 1

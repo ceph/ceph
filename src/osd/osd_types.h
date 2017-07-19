@@ -1099,6 +1099,10 @@ WRITE_CLASS_ENCODER(pool_opts_t)
  * pg_pool
  */
 struct pg_pool_t {
+  static const char *APPLICATION_NAME_CEPHFS;
+  static const char *APPLICATION_NAME_RBD;
+  static const char *APPLICATION_NAME_RGW;
+
   enum {
     TYPE_REPLICATED = 1,     // replication
     //TYPE_RAID4 = 2,   // raid4 (never implemented)
@@ -1347,6 +1351,9 @@ public:
   bool fast_read;            ///< whether turn on fast read on the pool or not
 
   pool_opts_t opts; ///< options
+
+  /// application -> key/value metadata
+  map<string, std::map<string, string>> application_metadata;
 
 private:
   vector<uint32_t> grade_table;

@@ -109,5 +109,12 @@ int create_image_data_pool(librados::Rados &rados, std::string &data_pool, bool 
     return 0;
   }
 
+  librados::IoCtx ioctx;
+  r = rados.ioctx_create(pool.c_str(), ioctx);
+  if (r < 0) {
+    return r;
+  }
+  ioctx.application_enable("rbd", true);
+
   return r;
 }

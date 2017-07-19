@@ -27,6 +27,7 @@
 #include "IoCtxImpl.h"
 
 struct AuthAuthorizer;
+struct Context;
 class CephContext;
 struct Connection;
 struct md_config_t;
@@ -135,6 +136,8 @@ public:
 
   int mon_command(const vector<string>& cmd, const bufferlist &inbl,
 	          bufferlist *outbl, string *outs);
+  void mon_command_async(const vector<string>& cmd, const bufferlist &inbl,
+                         bufferlist *outbl, string *outs, Context *on_finish);
   int mon_command(int rank,
 		  const vector<string>& cmd, const bufferlist &inbl,
 	          bufferlist *outbl, string *outs);
@@ -162,6 +165,8 @@ public:
     const std::map<std::string,std::string>& metadata); ///< static metadata about daemon
   int service_daemon_update_status(
     const std::map<std::string,std::string>& status);
+
+  mon_feature_t get_required_monitor_features() const;
 };
 
 #endif

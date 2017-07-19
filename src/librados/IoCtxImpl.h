@@ -282,6 +282,21 @@ struct librados::IoCtxImpl {
   int cache_pin(const object_t& oid);
   int cache_unpin(const object_t& oid);
 
+  int application_enable(const std::string& app_name, bool force);
+  void application_enable_async(const std::string& app_name, bool force,
+                                PoolAsyncCompletionImpl *c);
+  int application_list(std::set<std::string> *app_names);
+  int application_metadata_get(const std::string& app_name,
+                               const std::string &key,
+                               std::string* value);
+  int application_metadata_set(const std::string& app_name,
+                               const std::string &key,
+                               const std::string& value);
+  int application_metadata_remove(const std::string& app_name,
+                                  const std::string &key);
+  int application_metadata_list(const std::string& app_name,
+                                std::map<std::string, std::string> *values);
+
 };
 
 #endif

@@ -26,6 +26,7 @@ tasks:
 - exec:
     client.0:
       - sudo ceph osd pool create foo 64
+      - sudo ceph osd pool application enable foo rados
       - rados -p foo bench 60 write -b 1024 --no-cleanup
       - sudo ceph osd pool set foo size 3
       - sudo ceph osd out 0 1

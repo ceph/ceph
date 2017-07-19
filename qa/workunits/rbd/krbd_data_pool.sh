@@ -99,11 +99,15 @@ function get_num_clones() {
 }
 
 ceph osd pool create repdata 24 24
+rbd pool init repdata
 ceph osd erasure-code-profile set teuthologyprofile crush-failure-domain=osd m=1 k=2
 ceph osd pool create ecdata 24 24 erasure teuthologyprofile
+rbd pool init ecdata
 ceph osd pool set ecdata allow_ec_overwrites true
 ceph osd pool create rbdnonzero 24 24
+rbd pool init rbdnonzero
 ceph osd pool create clonesonly 24 24
+rbd pool init clonesonly
 
 for pool in rbd rbdnonzero; do
     rbd create --size 200 --image-format 1 $pool/img0

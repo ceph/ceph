@@ -205,6 +205,7 @@ TEST(LibRadosAio, PoolQuotaPP) {
   ASSERT_EQ(0, test_data.m_cluster.pool_create(p.c_str()));
   IoCtx ioctx;
   ASSERT_EQ(0, test_data.m_cluster.ioctx_create(p.c_str(), ioctx));
+  ioctx.application_enable("rados", true);
 
   bufferlist inbl;
   ASSERT_EQ(0, test_data.m_cluster.mon_command(
