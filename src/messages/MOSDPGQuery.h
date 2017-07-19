@@ -63,7 +63,9 @@ public:
   }
 
   void encode_payload(uint64_t features) override {
-    if (!HAVE_FEATURE(features, SERVER_LUMINOUS)) {
+    if (HAVE_FEATURE(features, SERVER_LUMINOUS)) {
+      header.version = HEAD_VERSION;
+    } else {
       // for kraken/jewel only
       header.version = 3;
       ::encode(epoch, payload);

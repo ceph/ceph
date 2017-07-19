@@ -82,6 +82,7 @@ public:
     ::encode(missing, payload);
     ::encode(query_epoch, payload);
     if (HAVE_FEATURE(features, SERVER_LUMINOUS)) {
+      header.version = HEAD_VERSION;
       ::encode(past_intervals, payload);
     } else {
       header.version = 4;
