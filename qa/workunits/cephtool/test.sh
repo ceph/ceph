@@ -1942,12 +1942,12 @@ function test_mon_osd_pool_set()
   ceph osd pool set $TEST_POOL_GETSET pgp_num 10
 
   old_pgs=$(ceph osd pool get $TEST_POOL_GETSET pg_num | sed -e 's/pg_num: //')
-  new_pgs=$(($old_pgs+$(ceph osd stat | grep osdmap | awk '{print $3}')*32))
+  new_pgs=$(($old_pgs+$(ceph osd stat | grep osdmap | awk '{print $3})*32))
   ceph osd pool set $TEST_POOL_GETSET pg_num $new_pgs
   ceph osd pool set $TEST_POOL_GETSET pgp_num $new_pgs
   wait_for_clean
   old_pgs=$(ceph osd pool get $TEST_POOL_GETSET pg_num | sed -e 's/pg_num: //')
-  new_pgs=$(($old_pgs+$(ceph osd stat | grep osdmap | awk '{print $3}')*32+1))
+  new_pgs=$(($old_pgs+$(ceph osd stat | grep osdmap | awk '{print $3})*32+1))
   expect_false ceph osd pool set $TEST_POOL_GETSET pg_num $new_pgs
 
   ceph osd pool set $TEST_POOL_GETSET nosizechange 1
