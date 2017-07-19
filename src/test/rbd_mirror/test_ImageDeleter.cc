@@ -17,7 +17,6 @@
 #include "cls/rbd/cls_rbd_types.h"
 #include "cls/rbd/cls_rbd_client.h"
 #include "tools/rbd_mirror/ImageDeleter.h"
-#include "tools/rbd_mirror/ImageReplayer.h"
 #include "tools/rbd_mirror/ServiceDaemon.h"
 #include "tools/rbd_mirror/Threads.h"
 #include "librbd/ImageCtx.h"
