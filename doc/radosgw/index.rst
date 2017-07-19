@@ -55,6 +55,7 @@ you may write data with one API and retrieve it with the other.
    Server-Side Encryption <encryption>
    Bucket Policy <bucketpolicy>
    Dynamic bucket index resharding <dynamicresharding>
+   Group <group>
    Data Layout in RADOS <layout>
    troubleshooting
    Manpage radosgw <../../man/8/radosgw>
