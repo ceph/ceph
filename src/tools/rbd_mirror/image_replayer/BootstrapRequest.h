@@ -171,7 +171,6 @@ private:
   uint64_t m_remote_tag_class = 0;
   ImageCtxT *m_remote_image_ctx = nullptr;
   bool m_primary = false;
-  bool m_created_local_image = false;
   int m_ret_val = 0;
 
   bufferlist m_out_bl;
