@@ -126,6 +126,8 @@ ceph osd rm osd.$o4
 ceph osd rm osd.$o5
 
 # weight sets
+# make sure we require luminous before testing weight-sets
+ceph osd set-require-min-compat-client luminous
 ceph osd crush weight-set dump
 ceph osd crush weight-set ls
 expect_false ceph osd crush weight-set reweight fooset osd.0 .9
