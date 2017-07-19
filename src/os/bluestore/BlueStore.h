@@ -634,7 +634,7 @@ public:
 
   /// a logical extent, pointing to (some portion of) a blob
   typedef boost::intrusive::set_base_hook<boost::intrusive::optimize_size<true> > ExtentBase; //making an alias to avoid build warnings
-  struct Extent : public ExtentBase {
+  struct bluestore_lextent_t : public ExtentBase {
     MEMPOOL_CLASS_HELPERS();
 
     uint32_t logical_offset = 0;      ///< logical offset
@@ -643,17 +643,17 @@ public:
     BlobRef  blob;                    ///< the blob with our data
 
     /// ctor for lookup only
-    explicit Extent(uint32_t lo) : ExtentBase(), logical_offset(lo) { }
+    explicit bluestore_lextent_t(uint32_t lo) : ExtentBase(), logical_offset(lo) { }
     /// ctor for delayed initialization (see decode_some())
-    explicit Extent() : ExtentBase() {
+    explicit bluestore_lextent_t() : ExtentBase() {
     }
     /// ctor for general usage
-    Extent(uint32_t lo, uint32_t o, uint32_t l, BlobRef& b)
+    bluestore_lextent_t(uint32_t lo, uint32_t o, uint32_t l, BlobRef& b)
       : ExtentBase(),
         logical_offset(lo), blob_offset(o), length(l) {
       assign_blob(b);
     }
-    ~Extent() {
+    ~bluestore_lextent_t() {
       if (blob) {
 	blob->shared_blob->get_cache()->rm_extent();
       }
@@ -666,13 +666,13 @@ public:
     }
 
     // comparators for intrusive_set
-    friend bool operator<(const Extent &a, const Extent &b) {
+    friend bool operator<(const bluestore_lextent_t &a, const bluestore_lextent_t &b) {
       return a.logical_offset < b.logical_offset;
     }
-    friend bool operator>(const Extent &a, const Extent &b) {
+    friend bool operator>(const bluestore_lextent_t &a, const bluestore_lextent_t &b) {
       return a.logical_offset > b.logical_offset;
     }
-    friend bool operator==(const Extent &a, const Extent &b) {
+    friend bool operator==(const bluestore_lextent_t &a, const bluestore_lextent_t &b) {
       return a.logical_offset == b.logical_offset;
     }
 
@@ -694,14 +694,14 @@ public:
       return blob_start() < o || blob_end() > o + l;
     }
   };
-  typedef boost::intrusive::set<Extent> extent_map_t;
+  typedef boost::intrusive::set<bluestore_lextent_t> extent_map_t;
 
 
-  friend ostream& operator<<(ostream& out, const Extent& e);
+  friend ostream& operator<<(ostream& out, const bluestore_lextent_t& e);
 
   struct OldExtent {
     boost::intrusive::list_member_hook<> old_extent_item;
-    Extent e;
+    bluestore_lextent_t e;
     PExtentVector r;
     bool blob_empty; // flag to track the last removed extent that makes blob
                      // empty - required to update compression stat properly
@@ -758,7 +758,7 @@ public:
     }
 
     struct DeleteDisposer {
-      void operator()(Extent *e) { delete e; }
+      void operator()(bluestore_lextent_t *e) { delete e; }
     };
 
     ExtentMap(Onode *o);
@@ -850,12 +850,12 @@ public:
     extent_map_t::iterator seek_lextent(uint64_t offset);
     extent_map_t::const_iterator seek_lextent(uint64_t offset) const;
 
-    /// add a new Extent
+    /// add a new lextent
     void add(uint32_t lo, uint32_t o, uint32_t l, BlobRef& b) {
-      extent_map.insert(*new Extent(lo, o, l, b));
+      extent_map.insert(*new bluestore_lextent_t(lo, o, l, b));
     }
 
-    /// remove (and delete) an Extent
+    /// remove (and delete) an bluestore_lextent_t
     void rm(extent_map_t::iterator p) {
       extent_map.erase_and_dispose(p, DeleteDisposer());
     }
@@ -872,7 +872,7 @@ public:
 
     /// put new lextent into lextent_map overwriting existing ones if
     /// any and update references accordingly
-    Extent *set_lextent(CollectionRef &c,
+    bluestore_lextent_t *set_lextent(CollectionRef &c,
 			uint64_t logical_offset,
 			uint64_t offset, uint64_t length,
                         BlobRef b,

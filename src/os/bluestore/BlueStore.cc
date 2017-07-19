@@ -45,7 +45,7 @@ MEMPOOL_DEFINE_OBJECT_FACTORY(BlueStore::Onode, bluestore_onode,
 // bluestore_cache_other
 MEMPOOL_DEFINE_OBJECT_FACTORY(BlueStore::Buffer, bluestore_buffer,
 			      bluestore_cache_other);
-MEMPOOL_DEFINE_OBJECT_FACTORY(BlueStore::Extent, bluestore_extent,
+MEMPOOL_DEFINE_OBJECT_FACTORY(BlueStore::bluestore_lextent_t, bluestore_extent,
 			      bluestore_cache_other);
 MEMPOOL_DEFINE_OBJECT_FACTORY(BlueStore::Blob, bluestore_blob,
 			      bluestore_cache_other);
@@ -1930,9 +1930,8 @@ void BlueStore::Blob::decode(
 }
 #endif
 
-// Extent
-
-ostream& operator<<(ostream& out, const BlueStore::Extent& e)
+// bluestore_lextent_t
+ostream& operator<<(ostream& out, const BlueStore::bluestore_lextent_t& e)
 {
   return out << std::hex << "0x" << e.logical_offset << "~" << e.length
 	     << ": 0x" << e.blob_offset << "~" << e.length << std::dec
@@ -2172,7 +2171,7 @@ void BlueStore::ExtentMap::reshard(
   unsigned offset = needs_reshard_begin;
   vector<bluestore_onode_t::shard_info> new_shard_info;
   unsigned max_blob_end = 0;
-  Extent dummy(needs_reshard_begin);
+  bluestore_lextent_t dummy(needs_reshard_begin);
   for (auto e = extent_map.lower_bound(dummy);
        e != extent_map.end();
        ++e) {
@@ -2287,7 +2286,7 @@ void BlueStore::ExtentMap::reshard(
     } else {
       shard_end = sp->offset;
     }
-    Extent dummy(needs_reshard_begin);
+    bluestore_lextent_t dummy(needs_reshard_begin);
     for (auto e = extent_map.lower_bound(dummy); e != extent_map.end(); ++e) {
       if (e->logical_offset >= needs_reshard_end) {
 	break;
@@ -2366,7 +2365,7 @@ bool BlueStore::ExtentMap::encode_some(
   unsigned *pn)
 {
   auto cct = onode->c->store->cct; //used by dout
-  Extent dummy(offset);
+  bluestore_lextent_t dummy(offset);
   auto start = extent_map.lower_bound(dummy);
   uint32_t end = offset + length;
 
@@ -2495,7 +2494,7 @@ unsigned BlueStore::ExtentMap::decode_some(bufferlist& bl)
   unsigned n = 0;
 
   while (!p.end()) {
-    Extent *le = new Extent();
+    bluestore_lextent_t *le = new bluestore_lextent_t();
     uint64_t blobid;
     denc_varint(blobid, p);
     if ((blobid & BLOBID_FLAG_CONTIGUOUS) == 0) {
@@ -2701,14 +2700,14 @@ void BlueStore::ExtentMap::dirty_range(
 BlueStore::extent_map_t::iterator BlueStore::ExtentMap::find(
   uint64_t offset)
 {
-  Extent dummy(offset);
+  bluestore_lextent_t dummy(offset);
   return extent_map.find(dummy);
 }
 
 BlueStore::extent_map_t::iterator BlueStore::ExtentMap::seek_lextent(
   uint64_t offset)
 {
-  Extent dummy(offset);
+  bluestore_lextent_t dummy(offset);
   auto fp = extent_map.lower_bound(dummy);
   if (fp != extent_map.begin()) {
     --fp;
@@ -2722,7 +2721,7 @@ BlueStore::extent_map_t::iterator BlueStore::ExtentMap::seek_lextent(
 BlueStore::extent_map_t::const_iterator BlueStore::ExtentMap::seek_lextent(
   uint64_t offset) const
 {
-  Extent dummy(offset);
+  bluestore_lextent_t dummy(offset);
   auto fp = extent_map.lower_bound(dummy);
   if (fp != extent_map.begin()) {
     --fp;
@@ -2863,7 +2862,7 @@ void BlueStore::ExtentMap::punch_hole(
   }
 }
 
-BlueStore::Extent *BlueStore::ExtentMap::set_lextent(
+BlueStore::bluestore_lextent_t *BlueStore::ExtentMap::set_lextent(
   CollectionRef &c,
   uint64_t logical_offset,
   uint64_t blob_offset, uint64_t length, BlobRef b,
@@ -2881,7 +2880,7 @@ BlueStore::Extent *BlueStore::ExtentMap::set_lextent(
     punch_hole(c, logical_offset, length, old_extents);
   }
 
-  Extent *le = new Extent(logical_offset, blob_offset, length, b);
+  bluestore_lextent_t *le = new bluestore_lextent_t(logical_offset, blob_offset, length, b);
   extent_map.insert(*le);
   if (spans_shard(logical_offset, length)) {
     request_reshard(logical_offset, logical_offset + length);
@@ -2912,7 +2911,7 @@ BlueStore::BlobRef BlueStore::ExtentMap::split_blob(
     if (ep->logical_offset < pos) {
       // split extent
       size_t left = pos - ep->logical_offset;
-      Extent *ne = new Extent(pos, 0, ep->length - left, rb);
+      bluestore_lextent_t *ne = new bluestore_lextent_t(pos, 0, ep->length - left, rb);
       extent_map.insert(*ne);
       ep->length = left;
       dout(30) << __func__ << "  split " << *ep << dendl;
@@ -6684,7 +6683,7 @@ int BlueStore::_fiemap(
     dout(20) << __func__ << " 0x" << std::hex << offset << "~" << length
 	     << " size 0x" << o->onode.size << std::dec << dendl;
 
-    boost::intrusive::set<Extent>::iterator ep, eend;
+    boost::intrusive::set<bluestore_lextent_t>::iterator ep, eend;
     if (offset >= o->onode.size)
       goto out;
 
@@ -9456,7 +9455,7 @@ void BlueStore::_do_write_small(
 	  }
 	  b->dirty_blob().calc_csum(b_off, bl);
 	  dout(20) << __func__ << "  lex old " << *ep << dendl;
-	  Extent *le = o->extent_map.set_lextent(c, offset, b_off + head_pad, length,
+	  bluestore_lextent_t *le = o->extent_map.set_lextent(c, offset, b_off + head_pad, length,
 						 b,
 						 &wctx->old_extents);
 	  b->dirty_blob().mark_used(le->blob_offset, le->length);
@@ -9535,7 +9534,7 @@ void BlueStore::_do_write_small(
 	  dout(20) << __func__ << "  deferred write 0x" << std::hex << b_off << "~"
 		   << b_len << std::dec << " of mutable " << *b
 		   << " at " << op->extents << dendl;
-	  Extent *le = o->extent_map.set_lextent(c, offset, offset - bstart, length,
+	  bluestore_lextent_t *le = o->extent_map.set_lextent(c, offset, offset - bstart, length,
 						 b, &wctx->old_extents);
 	  b->dirty_blob().mark_used(le->blob_offset, le->length);
 	  txc->statfs_delta.stored() += le->length;
@@ -9931,7 +9930,7 @@ int BlueStore::_do_alloc_write(
       }
     }
 
-    Extent *le = o->extent_map.set_lextent(coll, wi.logical_offset,
+    bluestore_lextent_t *le = o->extent_map.set_lextent(coll, wi.logical_offset,
                                            b_off + (wi.b_off0 - wi.b_off),
                                            wi.length0,
                                            wi.b,
@@ -10966,7 +10965,7 @@ int BlueStore::_do_clone_range(
     } else {
       skip_back = 0;
     }
-    Extent *ne = new Extent(e.logical_offset + skip_front + dstoff - srcoff,
+    bluestore_lextent_t *ne = new bluestore_lextent_t(e.logical_offset + skip_front + dstoff - srcoff,
 			    e.blob_offset + skip_front,
 			    e.length - skip_front - skip_back, cb);
     newo->extent_map.extent_map.insert(*ne);
