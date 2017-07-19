@@ -51,9 +51,13 @@ def start_rgw(ctx, config, clients):
         log.info("Using %s as radosgw frontend", ctx.rgw.frontend)
 
         host, port = ctx.rgw.role_endpoints[client]
+        frontends = \
+            '{frontend} port={port}'.format(frontend=ctx.rgw.frontend,
+                                            port=port)
+        if ctx.rgw.frontend_prefix:
+            frontends += ' prefix={pfx}'.format(pfx=ctx.rgw.frontend_prefix)
         rgw_cmd.extend([
-            '--rgw-frontends',
-            '{frontend} port={port}'.format(frontend=ctx.rgw.frontend, port=port),
+            '--rgw-frontends', frontends,
             '-n', client_with_id,
             '--cluster', cluster_name,
             '-k', '/etc/ceph/{client_with_cluster}.keyring'.format(client_with_cluster=client_with_cluster),
@@ -220,6 +224,7 @@ def task(ctx, config):
     ctx.rgw.erasure_code_profile = config.pop('erasure_code_profile', {})
     ctx.rgw.cache_pools = bool(config.pop('cache-pools', False))
     ctx.rgw.frontend = config.pop('frontend', 'civetweb')
+    ctx.rgw.frontend_prefix = config.pop('frontend_prefix', None)
     ctx.rgw.compression_type = config.pop('compression type', None)
     ctx.rgw.config = config
 
