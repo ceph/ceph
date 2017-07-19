@@ -3185,7 +3185,7 @@ int RGWHandler_REST_S3::postauth_init()
            << " s->bucket=" << rgw_make_bucket_entry_name(s->bucket_tenant, s->bucket_name) << dendl;
 
   int ret;
-  ret = validate_tenant_name(s->bucket_tenant);
+  ret = rgw_validate_tenant_name(s->bucket_tenant);
   if (ret)
     return ret;
   if (!s->bucket_name.empty()) {
@@ -3200,7 +3200,7 @@ int RGWHandler_REST_S3::postauth_init()
   if (!t->src_bucket.empty()) {
     rgw_parse_url_bucket(t->src_bucket, s->user->user_id.tenant,
 			s->src_tenant_name, s->src_bucket_name);
-    ret = validate_tenant_name(s->src_tenant_name);
+    ret = rgw_validate_tenant_name(s->src_tenant_name);
     if (ret)
       return ret;
     ret = valid_s3_bucket_name(s->src_bucket_name, relaxed_names);
@@ -3216,8 +3216,8 @@ int RGWHandler_REST_S3::init(RGWRados *store, struct req_state *s,
   int ret;
 
   s->dialect = "s3";
-  
-  ret = validate_tenant_name(s->bucket_tenant);
+
+  ret = rgw_validate_tenant_name(s->bucket_tenant);
   if (ret)
     return ret;
   bool relaxed_names = s->cct->_conf->rgw_relaxed_s3_bucket_names;
