@@ -525,7 +525,8 @@ void ImageReplayer<I>::bootstrap() {
     &m_local_image_ctx, m_local_image_id, m_remote_image.image_id,
     m_global_image_id, m_threads->work_queue, m_threads->timer,
     &m_threads->timer_lock, m_local_mirror_uuid, m_remote_image.mirror_uuid,
-    m_remote_journaler, &m_client_meta, ctx, &m_do_resync, &m_progress_cxt);
+    m_remote_journaler, &m_client_meta, ctx, &m_resync_requested,
+    &m_progress_cxt);
 
   {
     Mutex::Locker locker(m_lock);
@@ -565,6 +566,9 @@ void ImageReplayer<I>::handle_bootstrap(int r) {
     return;
   } else if (on_start_interrupted()) {
     return;
+  } else if (m_resync_requested) {
+    on_start_fail(0, "resync requested");
+    return;
   }
 
   assert(m_local_journal == nullptr);
@@ -583,22 +587,6 @@ void ImageReplayer<I>::handle_bootstrap(int r) {
 
   {
     Mutex::Locker locker(m_lock);
-
-    if (m_do_resync) {
-      Context *on_finish = m_on_start_finish;
-      m_stopping_for_resync = true;
-      FunctionContext *ctx = new FunctionContext([this, on_finish](int r) {
-	  if (r < 0) {
-	    if (on_finish) {
-	      on_finish->complete(r);
-	    }
-	    return;
-	  }
-          resync_image(on_finish);
-        });
-      m_on_start_finish = ctx;
-    }
-
     std::string name = m_local_ioctx.get_pool_name() + "/" +
                        m_local_image_ctx->name;
     if (m_name != name) {
@@ -652,13 +640,18 @@ void ImageReplayer<I>::handle_init_remote_journaler(int r) {
     return;
   }
 
-  if (client.state != cls::journal::CLIENT_STATE_CONNECTED) {
+  derr << "image_id=" << m_local_image_id << ", "
+       << "m_client_meta.image_id=" << m_client_meta.image_id << ", "
+       << "client.state=" << client.state << dendl;
+  if (m_client_meta.image_id == m_local_image_id &&
+      client.state != cls::journal::CLIENT_STATE_CONNECTED) {
     dout(5) << "client flagged disconnected, stopping image replay" << dendl;
     if (m_local_image_ctx->mirroring_resync_after_disconnect) {
-      Mutex::Locker locker(m_lock);
-      m_stopping_for_resync = true;
+      m_resync_requested = true;
+      on_start_fail(-ENOTCONN, "disconnected: automatic resync");
+    } else {
+      on_start_fail(-ENOTCONN, "disconnected");
     }
-    on_start_fail(-ENOTCONN, "disconnected");
     return;
   }
 
@@ -1582,11 +1575,6 @@ void ImageReplayer<I>::shut_down(int r) {
 	m_remote_journaler->remove_listener(&m_remote_listener);
         m_remote_journaler->shut_down(ctx);
       });
-    if (m_stopping_for_resync) {
-      ctx = new FunctionContext([this, ctx](int r) {
-          m_remote_journaler->unregister_client(ctx);
-        });
-    }
   }
 
   // stop the replay of remote journal events
@@ -1674,12 +1662,12 @@ void ImageReplayer<I>::handle_shut_down(int r) {
       return;
     }
 
-    if (m_stopping_for_resync) {
+    if (m_resync_requested) {
       m_image_deleter->schedule_image_delete(m_local,
                                              m_local_pool_id,
                                              m_global_image_id,
                                              true);
-      m_stopping_for_resync = false;
+      m_resync_requested = false;
     }
   }
 
@@ -1759,11 +1747,7 @@ template <typename I>
 void ImageReplayer<I>::resync_image(Context *on_finish) {
   dout(20) << dendl;
 
-  {
-    Mutex::Locker l(m_lock);
-    m_stopping_for_resync = true;
-  }
-
+  m_resync_requested = true;
   stop(on_finish);
 }
 
