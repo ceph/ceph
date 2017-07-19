@@ -220,7 +220,7 @@ def test_all():
       'auth':[
         {
           'pre':'',
-          'cmd':('auth list', '', 'r'),
+          'cmd':('auth ls', '', 'r'),
           'post':''
           },
         {

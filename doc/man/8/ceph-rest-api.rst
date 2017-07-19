@@ -47,7 +47,7 @@ Options
     specifies the client 'name', which is used to find the
     client-specific configuration options in the config file, and
     also is the name used for authentication when connecting
-    to the cluster (the entity name appearing in ceph auth list output,
+    to the cluster (the entity name appearing in 'ceph auth ls' output,
     for example).  The default is 'client.restapi'. 
 
 .. option:: -i/--id id

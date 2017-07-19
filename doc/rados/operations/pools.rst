@@ -198,7 +198,7 @@ ruleset from the cluster.
 If you created users with permissions strictly for a pool that no longer
 exists, you should consider deleting those users too::
 
-	ceph auth list | grep -C 5 {pool-name}
+	ceph auth ls | grep -C 5 {pool-name}
 	ceph auth del {user}
 
 

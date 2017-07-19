@@ -217,6 +217,7 @@ Major Changes from Kraken
       contents.  (The existing ``ceph config-key list`` only dumps the key
       names, not the values.)
     - ``ceph config-key list`` is deprecated in favor of ``ceph config-key ls``.
+    - ``ceph auth list`` is deprecated in favor of ``ceph auth ls``.
     - ``ceph osd set-{full,nearfull,backfillfull}-ratio`` sets the
       cluster-wide ratio for various full thresholds (when the cluster
       refuses IO, when the cluster warns about being close to full,
