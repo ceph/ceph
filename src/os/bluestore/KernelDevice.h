@@ -18,9 +18,9 @@
 #include <atomic>
 
 #include "os/fs/FS.h"
-#include "os/fs/aio.h"
 #include "include/interval_set.h"
 
+#include "aio.h"
 #include "BlockDevice.h"
 
 class KernelDevice : public BlockDevice {
