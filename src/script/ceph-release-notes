@@ -36,6 +36,7 @@ from git import Repo
 
 
 fixes_re = re.compile(r"Fixes\:? #(\d+)")
+reviewed_by_re = re.compile(r"Rev(.*)By", re.IGNORECASE)
 # labels is the list of relevant labels defined for github.com/ceph/ceph
 labels = ['bluestore', 'build/ops', 'cephfs', 'common', 'core', 'mgr',
           'mon', 'performance', 'pybind', 'rdma', 'rgw', 'rbd', 'tests',
@@ -117,7 +118,7 @@ def _title_message(commit, pr, strict):
         return (title, None)
     lines = []
     for line in message_lines[1:]:
-        if 'Reviewed-by' in line:
+        if reviewed_by_re.match(line):
             continue
         line = line.strip()
         if line:
