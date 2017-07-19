@@ -149,6 +149,11 @@ const std::vector<Option> ceph_options = {
   .set_description("public-facing address to bind to")
   .add_service("mon mds osd mgr"),
 
+  Option("public_bind_addr", Option::TYPE_ADDR, Option::LEVEL_ADVANCED)
+  .set_default(entity_addr_t())
+  .add_service("mon")
+  .set_description(""),
+
   Option("cluster_addr", Option::TYPE_ADDR, Option::LEVEL_BASIC)
   .set_description("cluster-facing address to bind to")
   .add_service("osd")
@@ -1374,6 +1379,10 @@ const std::vector<Option> ceph_options = {
 
   Option("mon_osd_blacklist_default_expire", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
   .set_default(60*60)
+  .set_description(""),
+
+  Option("mon_osd_crush_smoke_test", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+  .set_default(true)
   .set_description(""),
 
   Option("paxos_stash_full_interval", Option::TYPE_INT, Option::LEVEL_ADVANCED)
@@ -4578,6 +4587,10 @@ const std::vector<Option> ceph_options = {
 
   Option("nss_db_path", Option::TYPE_STR, Option::LEVEL_ADVANCED)
   .set_default("")
+  .set_description(""),
+
+  Option("rgw_acl_grants_max_num", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+  .set_default(100)
   .set_description(""),
 
   Option("rgw_max_chunk_size", Option::TYPE_INT, Option::LEVEL_ADVANCED)
