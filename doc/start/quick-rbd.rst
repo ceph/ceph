@@ -87,7 +87,6 @@ Configure a Block Device
 
 See `block devices`_ for additional details.
 
-.. _Create a Pool: ../../rados/operations/pools#createpool
 .. _Storage Cluster Quick Start: ../quick-ceph-deploy
 .. _create a pool: ../../rados/operations/pools/#create-a-pool
 .. _block devices: ../../rbd/rbd
