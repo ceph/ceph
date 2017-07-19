@@ -961,7 +961,9 @@ COMMAND("config-key rm " \
 COMMAND("config-key exists " \
 	"name=key,type=CephString", \
 	"check for <key>'s existence", "config-key", "r", "cli,rest")
-COMMAND("config-key list ", "list keys", "config-key", "r", "cli,rest")
+COMMAND_WITH_FLAG("config-key list ", "list keys", "config-key", "r", "cli,rest",
+		  FLAG(DEPRECATED))
+COMMAND("config-key ls ", "list keys", "config-key", "r", "cli,rest")
 COMMAND("config-key dump", "dump keys and values", "config-key", "r", "cli,rest")
 
 

@@ -199,7 +199,7 @@ Subcommand ``list`` lists configuration keys.
 
 Usage::
 
-	ceph config-key list
+	ceph config-key ls
 
 Subcommand ``dump`` dumps configuration keys and values.
 
