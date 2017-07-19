@@ -123,7 +123,8 @@ void HealthMonitor::encode_pending(MonitorDBStore::TransactionRef t)
   for (auto &p : pending_health.checks) {
     p.second.summary = boost::regex_replace(
       p.second.summary,
-      boost::regex("%num%"), stringify(names[p.first].size()));
+      boost::regex("%hasorhave%"),
+      names[p.first].size() > 1 ? "have" : "has");
     p.second.summary = boost::regex_replace(
       p.second.summary,
       boost::regex("%names%"), stringify(names[p.first]));
@@ -252,20 +253,6 @@ bool HealthMonitor::check_member_health()
     d.detail.push_back(ss2.str());
   }
 
-  auto p = quorum_checks.find(mon->rank);
-  if (p == quorum_checks.end() ||
-      p->second != next) {
-    if (mon->is_leader()) {
-      // prepare to propose
-      quorum_checks[mon->rank] = next;
-      changed = true;
-    } else {
-      // tell the leader
-      mon->messenger->send_message(new MMonHealthChecks(next),
-				   mon->monmap->get_inst(mon->get_leader()));
-    }
-  }
-
   // OSD_NO_DOWN_OUT_INTERVAL
   {
     // Warn if 'mon_osd_down_out_interval' is set to zero.
@@ -283,10 +270,24 @@ bool HealthMonitor::check_member_health()
     if (g_conf->mon_warn_on_osd_down_out_interval_zero &&
         g_conf->mon_osd_down_out_interval == 0) {
       ostringstream ss, ds;
-      ss << "mon%plurals% %names %hasorhave% mon_osd_down_out_interval set to 0";
+      ss << "mon%plurals% %names% %hasorhave% mon_osd_down_out_interval set to 0";
       auto& d = next.add("OSD_NO_DOWN_OUT_INTERVAL", HEALTH_WARN, ss.str());
       ds << "mon." << mon->name << " has mon_osd_down_out_interval set to 0";
       d.detail.push_back(ds.str());
+    }
+  }
+
+  auto p = quorum_checks.find(mon->rank);
+  if (p == quorum_checks.end() ||
+      p->second != next) {
+    if (mon->is_leader()) {
+      // prepare to propose
+      quorum_checks[mon->rank] = next;
+      changed = true;
+    } else {
+      // tell the leader
+      mon->messenger->send_message(new MMonHealthChecks(next),
+				   mon->monmap->get_inst(mon->get_leader()));
     }
   }
 
