@@ -5743,10 +5743,6 @@ void RGWRados::create_bucket_id(string *bucket_id)
   *bucket_id = buf;
 }
 
-/**
- * create a bucket with name bucket and the given list of attrs
- * returns 0 on success, -ERR# otherwise.
- */
 int RGWRados::create_bucket(RGWUserInfo& owner, rgw_bucket& bucket,
                             const string& zonegroup_id,
                             const string& placement_rule,
