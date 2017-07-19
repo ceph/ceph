@@ -237,6 +237,7 @@ void BootstrapRequest<I>::handle_register_client(int r) {
     return;
   }
 
+  m_client = {};
   *m_client_meta = librbd::journal::MirrorPeerClientMeta(m_local_image_id);
   is_primary();
 }
@@ -276,7 +277,7 @@ void BootstrapRequest<I>::handle_is_primary(int r) {
   }
 
   if (m_local_image_id.empty()) {
-    create_local_image();
+    update_client_image();
     return;
   }
 
@@ -389,7 +390,7 @@ void BootstrapRequest<I>::handle_open_local_image(int r) {
     return;
   }
 
-  update_client_image();
+  get_remote_tags();
 }
 
 template <typename I>
@@ -420,50 +421,12 @@ void BootstrapRequest<I>::handle_unregister_client(int r) {
 }
 
 template <typename I>
-void BootstrapRequest<I>::create_local_image() {
-  dout(20) << dendl;
-
-  m_local_image_id = "";
-  update_progress("CREATE_LOCAL_IMAGE");
-
-  m_remote_image_ctx->snap_lock.get_read();
-  std::string image_name = m_remote_image_ctx->name;
-  m_remote_image_ctx->snap_lock.put_read();
-
-  Context *ctx = create_context_callback<
-    BootstrapRequest<I>, &BootstrapRequest<I>::handle_create_local_image>(
-      this);
-  CreateImageRequest<I> *request = CreateImageRequest<I>::create(
-    m_local_io_ctx, m_work_queue, m_global_image_id, m_remote_mirror_uuid,
-    image_name, m_remote_image_ctx, &m_local_image_id, ctx);
-  request->send();
-}
-
-template <typename I>
-void BootstrapRequest<I>::handle_create_local_image(int r) {
-  dout(20) << ": r=" << r << dendl;
-
-  if (r < 0) {
-    derr << ": failed to create local image: " << cpp_strerror(r) << dendl;
-    m_ret_val = r;
-    close_remote_image();
-    return;
-  }
-
-  open_local_image();
-}
-
-template <typename I>
 void BootstrapRequest<I>::update_client_image() {
-  if (m_client_meta->image_id == (*m_local_image_ctx)->id) {
-    // already registered local image with remote journal
-    get_remote_tags();
-    return;
-  }
-  m_local_image_id = (*m_local_image_ctx)->id;
-
   dout(20) << dendl;
   update_progress("UPDATE_CLIENT_IMAGE");
+
+  assert(m_local_image_id.empty());
+  m_local_image_id = librbd::util::generate_image_id<I>(m_local_io_ctx);
 
   librbd::journal::MirrorPeerClientMeta client_meta{m_local_image_id};
   client_meta.state = librbd::journal::MIRROR_PEER_STATE_SYNCING;
@@ -498,7 +461,39 @@ void BootstrapRequest<I>::handle_update_client_image(int r) {
 
   *m_client_meta = {m_local_image_id};
   m_client_meta->state = librbd::journal::MIRROR_PEER_STATE_SYNCING;
-  get_remote_tags();
+  create_local_image();
+}
+
+template <typename I>
+void BootstrapRequest<I>::create_local_image() {
+  dout(20) << dendl;
+  update_progress("CREATE_LOCAL_IMAGE");
+
+  m_remote_image_ctx->snap_lock.get_read();
+  std::string image_name = m_remote_image_ctx->name;
+  m_remote_image_ctx->snap_lock.put_read();
+
+  Context *ctx = create_context_callback<
+    BootstrapRequest<I>, &BootstrapRequest<I>::handle_create_local_image>(
+      this);
+  CreateImageRequest<I> *request = CreateImageRequest<I>::create(
+    m_local_io_ctx, m_work_queue, m_global_image_id, m_remote_mirror_uuid,
+    image_name, m_local_image_id, m_remote_image_ctx, ctx);
+  request->send();
+}
+
+template <typename I>
+void BootstrapRequest<I>::handle_create_local_image(int r) {
+  dout(20) << ": r=" << r << dendl;
+
+  if (r < 0) {
+    derr << ": failed to create local image: " << cpp_strerror(r) << dendl;
+    m_ret_val = r;
+    close_remote_image();
+    return;
+  }
+
+  open_local_image();
 }
 
 template <typename I>
