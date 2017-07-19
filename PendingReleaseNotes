@@ -223,3 +223,10 @@
   self-update like "ceph -w" did, they do have the ability to return formatted
   output by providing a "--format=<format>" option.
 
+* Pools are now expected to be associated with the application using them.
+  Upon completing the upgrade to Luminous, the cluster will attempt to associate
+  existing pools to known applications (i.e. CephFS, RBD, and RGW). In-use pools
+  that are not associated to an application will generate a health warning. Any
+  unassociated pools can be manually associated using the new
+  "ceph osd pool application enable" command. For more details see
+  "Associate Pool to Application" in the documentation.
