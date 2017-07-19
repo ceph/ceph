@@ -236,7 +236,7 @@ bool HealthMonitor::check_member_health()
   } else if (stats.fs_stats.avail_percent <= g_conf->mon_data_avail_warn) {
     stringstream ss, ss2;
     ss << "mon%plurals% %names% %isorare% low on available space";
-    auto& d = next.add("MON_DISK_LOW", HEALTH_ERR, ss.str());
+    auto& d = next.add("MON_DISK_LOW", HEALTH_WARN, ss.str());
     ss2 << "mon." << mon->name << " has " << stats.fs_stats.avail_percent
 	<< "% avail";
     d.detail.push_back(ss2.str());
