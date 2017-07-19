@@ -309,7 +309,7 @@ private:
   int m_last_r = 0;
 
   BootstrapProgressContext m_progress_cxt;
-  bool m_do_resync{false};
+  bool m_resync_requested = false;
   image_replayer::EventPreprocessor<ImageCtxT> *m_event_preprocessor = nullptr;
   image_replayer::ReplayStatusFormatter<ImageCtxT> *m_replay_status_formatter =
     nullptr;
@@ -322,7 +322,6 @@ private:
   Journaler* m_remote_journaler = nullptr;
   ::journal::ReplayHandler *m_replay_handler = nullptr;
   librbd::journal::Listener *m_journal_listener;
-  bool m_stopping_for_resync = false;
 
   Context *m_on_start_finish = nullptr;
   Context *m_on_stop_finish = nullptr;

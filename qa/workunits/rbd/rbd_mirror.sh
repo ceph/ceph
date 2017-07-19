@@ -286,6 +286,7 @@ wait_for_image_replay_started ${CLUSTER1} ${POOL} ${image}
 testlog "TEST: simple image resync"
 request_resync_image ${CLUSTER1} ${POOL} ${image} image_id
 wait_for_image_present ${CLUSTER1} ${POOL} ${image} 'deleted' ${image_id}
+wait_for_image_present ${CLUSTER1} ${POOL} ${image} 'present'
 wait_for_image_replay_started ${CLUSTER1} ${POOL} ${image}
 wait_for_status_in_pool_dir ${CLUSTER1} ${POOL} ${image} 'up+replaying' 'master_position'
 compare_images ${POOL} ${image}
@@ -297,6 +298,7 @@ request_resync_image ${CLUSTER1} ${POOL} ${image} image_id
 admin_daemon ${CLUSTER1} rbd mirror start ${POOL}/${image}
 wait_for_image_present ${CLUSTER1} ${POOL} ${image} 'deleted' ${image_id}
 admin_daemon ${CLUSTER1} rbd mirror start ${POOL}/${image}
+wait_for_image_present ${CLUSTER1} ${POOL} ${image} 'present'
 wait_for_image_replay_started ${CLUSTER1} ${POOL} ${image}
 wait_for_status_in_pool_dir ${CLUSTER1} ${POOL} ${image} 'up+replaying' 'master_position'
 compare_images ${POOL} ${image}
@@ -306,6 +308,7 @@ stop_mirror ${CLUSTER1}
 request_resync_image ${CLUSTER1} ${POOL} ${image} image_id
 start_mirror ${CLUSTER1}
 wait_for_image_present ${CLUSTER1} ${POOL} ${image} 'deleted' ${image_id}
+wait_for_image_present ${CLUSTER1} ${POOL} ${image} 'present'
 wait_for_image_replay_started ${CLUSTER1} ${POOL} ${image}
 wait_for_status_in_pool_dir ${CLUSTER1} ${POOL} ${image} 'up+replaying' 'master_position'
 compare_images ${POOL} ${image}
@@ -327,6 +330,7 @@ wait_for_status_in_pool_dir ${CLUSTER1} ${POOL} ${image} 'up+error' 'disconnecte
 testlog " - replay started after resync requested"
 request_resync_image ${CLUSTER1} ${POOL} ${image} image_id
 wait_for_image_present ${CLUSTER1} ${POOL} ${image} 'deleted' ${image_id}
+wait_for_image_present ${CLUSTER1} ${POOL} ${image} 'present'
 wait_for_image_replay_started ${CLUSTER1} ${POOL} ${image}
 wait_for_replay_complete ${CLUSTER1} ${CLUSTER2} ${POOL} ${image}
 test -n "$(get_mirror_position ${CLUSTER2} ${POOL} ${image})"
@@ -352,6 +356,7 @@ wait_for_status_in_pool_dir ${CLUSTER1} ${POOL} ${image} 'up+error' 'disconnecte
 testlog " - replay started after resync requested"
 request_resync_image ${CLUSTER1} ${POOL} ${image} image_id
 wait_for_image_present ${CLUSTER1} ${POOL} ${image} 'deleted' ${image_id}
+wait_for_image_present ${CLUSTER1} ${POOL} ${image} 'present'
 wait_for_image_replay_started ${CLUSTER1} ${POOL} ${image}
 wait_for_replay_complete ${CLUSTER1} ${CLUSTER2} ${POOL} ${image}
 test -n "$(get_mirror_position ${CLUSTER2} ${POOL} ${image})"
@@ -361,8 +366,10 @@ testlog " - rbd_mirroring_resync_after_disconnect config option"
 set_image_meta ${CLUSTER2} ${POOL} ${image} \
 	       conf_rbd_mirroring_resync_after_disconnect true
 wait_for_replay_complete ${CLUSTER1} ${CLUSTER2} ${POOL} ${image}
+image_id=$(get_image_id ${CLUSTER1} ${pool} ${image})
 disconnect_image ${CLUSTER2} ${POOL} ${image}
-wait_for_image_present ${CLUSTER1} ${POOL} ${image} 'deleted'
+wait_for_image_present ${CLUSTER1} ${POOL} ${image} 'deleted' ${image_id}
+wait_for_image_present ${CLUSTER1} ${POOL} ${image} 'present'
 wait_for_image_replay_started ${CLUSTER1} ${POOL} ${image}
 wait_for_replay_complete ${CLUSTER1} ${CLUSTER2} ${POOL} ${image}
 test -n "$(get_mirror_position ${CLUSTER2} ${POOL} ${image})"
