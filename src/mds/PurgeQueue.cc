@@ -100,7 +100,8 @@ void PurgeQueue::create_logger()
           "purge_queue", l_pq_first, l_pq_last);
   pcb.add_u64(l_pq_executing_ops, "pq_executing_ops", "Purge queue ops in flight");
   pcb.add_u64(l_pq_executing, "pq_executing", "Purge queue tasks in flight");
-  pcb.add_u64_counter(l_pq_executed, "pq_executed", "Purge queue tasks executed", "purg");
+  pcb.add_u64_counter(l_pq_executed, "pq_executed", "Purge queue tasks executed", "purg",
+      PerfCountersBuilder::PRIO_INTERESTING);
 
   logger.reset(pcb.create_perf_counters());
   g_ceph_context->get_perfcounters_collection()->add(logger.get());
@@ -114,6 +115,21 @@ void PurgeQueue::init()
 
   finisher.start();
   timer.init();
+}
+
+void PurgeQueue::activate()
+{
+  Mutex::Locker l(lock);
+  if (journaler.get_read_pos() == journaler.get_write_pos())
+    return;
+
+  if (in_flight.empty()) {
+    dout(4) << "start work (by drain)" << dendl;
+    finisher.queue(new FunctionContext([this](int r) {
+	  Mutex::Locker l(lock);
+	  _consume();
+	  }));
+  }
 }
 
 void PurgeQueue::shutdown()

@@ -6083,6 +6083,20 @@ void MDCache::rejoin_send_acks()
   rejoin_imported_caps.clear();
 }
 
+class C_MDC_ReIssueCaps : public MDCacheContext {
+  CInode *in;
+public:
+  C_MDC_ReIssueCaps(MDCache *mdc, CInode *i) :
+    MDCacheContext(mdc), in(i)
+  {
+    in->get(CInode::PIN_PTRWAITER);
+  }
+  void finish(int r) override {
+    if (!mdcache->mds->locker->eval(in, CEPH_CAP_LOCKS))
+      mdcache->mds->locker->issue_caps(in);
+    in->put(CInode::PIN_PTRWAITER);
+  }
+};
 
 void MDCache::reissue_all_caps()
 {
@@ -6093,6 +6107,11 @@ void MDCache::reissue_all_caps()
        ++p) {
     CInode *in = p->second;
     if (in->is_head() && in->is_any_caps()) {
+      // called by MDSRank::active_start(). There shouldn't be any frozen subtree.
+      if (in->is_frozen_inode()) {
+	in->add_waiter(CInode::WAIT_UNFREEZE, new C_MDC_ReIssueCaps(this, in));
+	continue;
+      }
       if (!mds->locker->eval(in, CEPH_CAP_LOCKS))
 	mds->locker->issue_caps(in);
     }
@@ -7611,6 +7630,11 @@ bool MDCache::shutdown_pass()
   assert(!migrator->is_exporting());
   assert(!migrator->is_importing());
 
+  if ((myin && myin->is_auth_pinned()) ||
+      (mydir && mydir->is_auth_pinned())) {
+    dout(7) << "still have auth pinned objects" << dendl;
+    return false;
+  }
 
   // flush what we can from the log
   mds->mdlog->trim(0);
@@ -12317,7 +12341,7 @@ void MDCache::register_perfcounters()
 
     /* Stray/purge statistics */
     pcb.add_u64(l_mdc_num_strays, "num_strays",
-        "Stray dentries", "stry");
+        "Stray dentries", "stry", PerfCountersBuilder::PRIO_INTERESTING);
     pcb.add_u64(l_mdc_num_strays_delayed, "num_strays_delayed", "Stray dentries delayed");
     pcb.add_u64(l_mdc_num_strays_enqueuing, "num_strays_enqueuing", "Stray dentries enqueuing for purge");
 
@@ -12331,11 +12355,11 @@ void MDCache::register_perfcounters()
     /* Recovery queue statistics */
     pcb.add_u64(l_mdc_num_recovering_processing, "num_recovering_processing", "Files currently being recovered");
     pcb.add_u64(l_mdc_num_recovering_enqueued, "num_recovering_enqueued",
-        "Files waiting for recovery", "recy");
+        "Files waiting for recovery", "recy", PerfCountersBuilder::PRIO_INTERESTING);
     pcb.add_u64(l_mdc_num_recovering_prioritized, "num_recovering_prioritized", "Files waiting for recovery with elevated priority");
     pcb.add_u64_counter(l_mdc_recovery_started, "recovery_started", "File recoveries started");
     pcb.add_u64_counter(l_mdc_recovery_completed, "recovery_completed",
-        "File recoveries completed", "recd");
+        "File recoveries completed", "recd", PerfCountersBuilder::PRIO_INTERESTING);
 
     logger.reset(pcb.create_perf_counters());
     g_ceph_context->get_perfcounters_collection()->add(logger.get());

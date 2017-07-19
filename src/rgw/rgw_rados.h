@@ -134,6 +134,7 @@ public:
   rgw_obj_select(const rgw_obj& _obj) : obj(_obj), is_raw(false) {}
   rgw_obj_select(const rgw_raw_obj& _raw_obj) : raw_obj(_raw_obj), is_raw(true) {}
   rgw_obj_select(const rgw_obj_select& rhs) {
+    placement_rule = rhs.placement_rule;
     is_raw = rhs.is_raw;
     if (is_raw) {
       raw_obj = rhs.raw_obj;
@@ -1273,19 +1274,6 @@ struct RGWZoneParams : RGWSystemMetaObj {
   void dump(Formatter *f) const;
   void decode_json(JSONObj *obj);
   static void generate_test_instances(list<RGWZoneParams*>& o);
-
-  bool find_placement(const rgw_data_placement_target& placement, string *placement_id) {
-    for (const auto& pp : placement_pools) {
-      const RGWZonePlacementInfo& info = pp.second;
-      if (info.index_pool == placement.index_pool.to_str() &&
-          info.data_pool == placement.data_pool.to_str() &&
-          info.data_extra_pool == placement.data_extra_pool.to_str()) {
-        *placement_id = pp.first;
-        return true;
-      }
-    }
-    return false;
-  }
 
   bool get_placement(const string& placement_id, RGWZonePlacementInfo *placement) const {
     auto iter = placement_pools.find(placement_id);
@@ -2595,10 +2583,6 @@ public:
 
   int create_pool(const rgw_pool& pool);
 
-  /**
-   * create a bucket with name bucket and the given list of attrs
-   * returns 0 on success, -ERR# otherwise.
-   */
   int init_bucket_index(RGWBucketInfo& bucket_info, int num_shards);
   int select_bucket_placement(RGWUserInfo& user_info, const string& zonegroup_id, const string& rule,
                               string *pselected_rule_name, RGWZonePlacementInfo *rule_info);

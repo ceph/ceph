@@ -4579,8 +4579,17 @@ void RGWPutACLs::execute()
   owner = existing_policy->get_owner();
 
   op_ret = get_params();
-  if (op_ret < 0)
+  if (op_ret < 0) {
+    if (op_ret == -ERANGE) {
+      ldout(s->cct, 4) << "The size of request xml data is larger than the max limitation, data size = "
+                       << s->length << dendl;
+      op_ret = -ERR_MALFORMED_XML;
+      s->err.message = "The XML you provided was larger than the maximum " +
+                       std::to_string(s->cct->_conf->rgw_max_put_param_size) +
+                       " bytes allowed.";
+    }
     return;
+  }
 
   ldout(s->cct, 15) << "read len=" << len << " data=" << (data ? data : "") << dendl;
 
@@ -4607,6 +4616,27 @@ void RGWPutACLs::execute()
   policy = static_cast<RGWAccessControlPolicy_S3 *>(parser.find_first("AccessControlPolicy"));
   if (!policy) {
     op_ret = -EINVAL;
+    return;
+  }
+
+  const RGWAccessControlList& req_acl = policy->get_acl();
+  const multimap<string, ACLGrant>& req_grant_map = req_acl.get_grant_map();
+#define ACL_GRANTS_MAX_NUM      100
+  int max_num = s->cct->_conf->rgw_acl_grants_max_num;
+  if (max_num < 0) {
+    max_num = ACL_GRANTS_MAX_NUM;
+  }
+
+  int grants_num = req_grant_map.size();
+  if (grants_num > max_num) {
+    ldout(s->cct, 4) << "An acl can have up to "
+                     << max_num
+                     << " grants, request acl grants num: "
+                     << grants_num << dendl;
+    op_ret = -ERR_MALFORMED_ACL_ERROR;
+    s->err.message = "The request is rejected, because the acl grants number you requested is larger than the maximum "
+                     + std::to_string(max_num)
+                     + " grants allowed in an acl.";
     return;
   }
 

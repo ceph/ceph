@@ -298,6 +298,8 @@ bool MgrMonitor::prepare_beacon(MonOpRequestRef op)
       dout(10) << "new standby " << m->get_gid() << dendl;
       mon->clog->debug() << "Standby manager daemon " << m->get_name()
                          << " started";
+      pending_map.standbys[m->get_gid()] = {m->get_gid(), m->get_name(),
+					    m->get_available_modules()};
       updated = true;
     }
   }
@@ -494,6 +496,7 @@ void MgrMonitor::tick()
   }
 
   if (!pending_map.available &&
+      !ever_had_active_mgr &&
       should_warn_about_mgr_down() != HEALTH_OK) {
     dout(10) << " exceeded mon_mgr_mkfs_grace " << g_conf->mon_mgr_mkfs_grace
 	     << " seconds" << dendl;

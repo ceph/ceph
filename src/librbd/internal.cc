@@ -1465,25 +1465,36 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
     CephContext *cct((CephContext *)io_ctx.cct());
     ldout(cct, 20) << "trash_list " << &io_ctx << dendl;
 
-    map<string, cls::rbd::TrashImageSpec> trash_entries;
-    int r = cls_client::trash_list(&io_ctx,  &trash_entries);
-    if (r < 0) {
-      if (r != -ENOENT) {
-        lderr(cct) << "error listing rbd_trash entries: " << cpp_strerror(r)
+    bool more_entries;
+    uint32_t max_read = 1024;
+    std::string last_read = "";
+    do {
+      map<string, cls::rbd::TrashImageSpec> trash_entries;
+      int r = cls_client::trash_list(&io_ctx, last_read, max_read,
+                                     &trash_entries);
+      if (r < 0 && r != -ENOENT) {
+        lderr(cct) << "error listing rbd trash entries: " << cpp_strerror(r)
                    << dendl;
-      } else {
-        r = 0;
+        return r;
+      } else if (r == -ENOENT) {
+        break;
       }
-      return r;
-    }
 
-    for (const auto &entry : trash_entries) {
-      rbd_trash_image_source_t source =
-          static_cast<rbd_trash_image_source_t>(entry.second.source);
-      entries.push_back({entry.first, entry.second.name, source,
-                         entry.second.deletion_time.sec(),
-                         entry.second.deferment_end_time.sec()});
-    }
+      if (trash_entries.empty()) {
+        break;
+      }
+
+      for (const auto &entry : trash_entries) {
+        rbd_trash_image_source_t source =
+            static_cast<rbd_trash_image_source_t>(entry.second.source);
+        entries.push_back({entry.first, entry.second.name, source,
+                           entry.second.deletion_time.sec(),
+                           entry.second.deferment_end_time.sec()});
+      }
+      last_read = trash_entries.rbegin()->first;
+      more_entries = (trash_entries.size() >= max_read);
+    } while (more_entries);
+
     return 0;
   }
 

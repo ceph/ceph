@@ -600,11 +600,9 @@ function destroy_osd() {
     local dir=$1
     local id=$2
 
-    kill_daemons $dir TERM osd.$id || return 1
     ceph osd out osd.$id || return 1
-    ceph auth del osd.$id || return 1
-    ceph osd crush remove osd.$id || return 1
-    ceph osd rm $id || return 1
+    kill_daemons $dir TERM osd.$id || return 1
+    ceph osd purge osd.$id --yes-i-really-mean-it || return 1
     teardown $dir/$id || return 1
     rm -fr $dir/$id
 }
@@ -1144,6 +1142,76 @@ function test_get_num_pgs() {
     wait_for_clean || return 1
     local num_pgs=$(get_num_pgs)
     test "$num_pgs" -gt 0 || return 1
+    teardown $dir || return 1
+}
+
+#######################################################################
+
+##
+# Return the OSD ids in use by at least one PG in the cluster (either
+# in the up or the acting set), according to ceph pg dump pgs. Every
+# OSD id shows as many times as they are used in up and acting sets.
+# If an OSD id is in both the up and acting set of a given PG, it will
+# show twice.
+#
+# @param STDOUT a sorted list of OSD ids
+# @return 0 on success, 1 on error
+#
+function get_osd_id_used_by_pgs() {
+    ceph --format json pg dump pgs 2>/dev/null | jq '.[] | .up[], .acting[]' | sort
+}
+
+function test_get_osd_id_used_by_pgs() {
+    local dir=$1
+
+    setup $dir || return 1
+    run_mon $dir a --osd_pool_default_size=1 || return 1
+    run_mgr $dir x || return 1
+    run_osd $dir 0 || return 1
+    wait_for_clean || return 1
+    local osd_ids=$(get_osd_id_used_by_pgs | uniq)
+    test "$osd_ids" = "0" || return 1
+    teardown $dir || return 1
+}
+
+#######################################################################
+
+##
+# Wait until the OSD **id** shows **count** times in the
+# PGs (see get_osd_id_used_by_pgs for more information about
+# how OSD ids are counted).
+#
+# @param id the OSD id
+# @param count the number of time it must show in the PGs
+# @return 0 on success, 1 on error
+#
+function wait_osd_id_used_by_pgs() {
+    local id=$1
+    local count=$2
+
+    status=1
+    for ((i=0; i < $TIMEOUT / 5; i++)); do
+        echo $i
+        if ! test $(get_osd_id_used_by_pgs | grep -c $id) = $count ; then
+            sleep 5
+        else
+            status=0
+            break
+        fi
+    done
+    return $status
+}
+
+function test_wait_osd_id_used_by_pgs() {
+    local dir=$1
+
+    setup $dir || return 1
+    run_mon $dir a --osd_pool_default_size=1 || return 1
+    run_mgr $dir x || return 1
+    run_osd $dir 0 || return 1
+    wait_for_clean || return 1
+    wait_osd_id_used_by_pgs 0 8 || return 1
+    ! TIMEOUT=1 wait_osd_id_used_by_pgs 123 5 || return 1
     teardown $dir || return 1
 }
 

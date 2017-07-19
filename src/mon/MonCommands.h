@@ -204,7 +204,7 @@ COMMAND("log last "
         "name=level,type=CephChoices,strings=debug|info|sec|warn|error,req=false "
         "name=channel,type=CephChoices,strings=*|cluster|audit,req=false", \
 	"print last few lines of the cluster log", \
-	"mon", "rw", "cli,rest")
+	"mon", "r", "cli,rest")
 COMMAND_WITH_FLAG("injectargs " \
 	     "name=injected_args,type=CephString,n=N",			\
 	     "inject config arguments into monitor", "mon", "rw", "cli,rest",
@@ -596,7 +596,7 @@ COMMAND("osd crush set-tunable "				    \
 COMMAND("osd crush get-tunable "			      \
 	"name=tunable,type=CephChoices,strings=straw_calc_version",
 	"get crush tunable <tunable>",
-	"osd", "rw", "cli,rest")
+	"osd", "r", "cli,rest")
 COMMAND("osd crush show-tunables", \
 	"show current crush tunables", "osd", "r", "cli,rest")
 COMMAND("osd crush rule create-simple " \
@@ -766,6 +766,10 @@ COMMAND("osd reweightn " \
 	"name=weights,type=CephString",
 	"reweight osds with {<id>: <weight>,...})",
 	"osd", "rw", "cli,rest")
+COMMAND("osd force-create-pg " \
+	"name=pgid,type=CephPgid ",
+	"force creation of pg <pgid>",
+        "osd", "rw", "cli,rest")
 COMMAND("osd pg-temp " \
 	"name=pgid,type=CephPgid " \
 	"name=id,type=CephOsdName,n=N,req=false", \
