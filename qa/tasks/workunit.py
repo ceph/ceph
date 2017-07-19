@@ -1,6 +1,8 @@
 """
 Workunit task -- Run ceph on sets of specific clients
 """
+import argparse
+import copy
 import logging
 import pipes
 import os
@@ -14,6 +16,7 @@ from teuthology.config import config as teuth_config
 from teuthology.orchestra.run import CommandFailedError
 from teuthology.parallel import parallel
 from teuthology.orchestra import run
+from ceph_manager import write_conf
 
 log = logging.getLogger(__name__)
 
@@ -169,6 +172,30 @@ def task(ctx, config):
         created_mnt_dir = _make_scratch_dir(ctx, role, config.get('subdir'))
         created_mountpoint[role] = created_mnt_dir
 
+    # write a ceph.conf to each client
+    # check if there's a 'ceph' task that's already created one
+    if not getattr(ctx, 'ceph', None):
+        # nope, create it here
+        remotes_and_roles = ctx.cluster.remotes.items()
+        roles = [role_list for (remote, role_list) in remotes_and_roles]
+        ips = [host for (host, port) in
+               (remote.ssh.get_transport().getpeername()
+               for (remote, role_list) in remotes_and_roles)]
+        conf = misc.skeleton_config(ctx, roles, ips, cluster='ceph')
+        ctx.ceph = {}
+
+    # for either pre-existing or just-created ctx.ceph:
+    if 'ceph' not in ctx.ceph:
+        ctx.ceph['ceph'] = argparse.Namespace()
+        ctx.ceph['ceph'].conf = conf
+
+    conf_to_restore = copy.deepcopy(ctx.ceph['ceph'].conf)
+    # merge in any local-task-supplied config
+    if 'conf' in config:
+        ctx.ceph['ceph'].conf.merge(config['conf'])
+
+    write_conf(ctx)
+
     # Execute any non-all workunits
     with parallel() as p:
         for role, tests in clients.iteritems():
@@ -185,6 +212,9 @@ def task(ctx, config):
         all_tasks = clients["all"]
         _spawn_on_all_clients(ctx, refspec, all_tasks, config.get('env'),
                               config.get('subdir'), timeout=timeout)
+
+    ctx.ceph['ceph'].conf = conf_to_restore
+    write_conf(ctx)
 
 
 def _client_mountpoint(ctx, cluster, id_):
