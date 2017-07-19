@@ -26,6 +26,7 @@
 #include "tools/rbd_mirror/image_replayer/CloseImageRequest.h"
 #include "tools/rbd_mirror/image_replayer/EventPreprocessor.h"
 #include "tools/rbd_mirror/image_replayer/PrepareLocalImageRequest.h"
+#include "tools/rbd_mirror/image_replayer/PrepareRemoteImageRequest.h"
 #include "tools/rbd_mirror/image_replayer/ReplayStatusFormatter.h"
 
 #define dout_context g_ceph_context
@@ -452,13 +453,12 @@ void ImageReplayer<I>::handle_prepare_local_image(int r) {
   }
 
   // local image doesn't exist or is non-primary
-  bootstrap();
+  prepare_remote_image();
 }
 
 template <typename I>
-void ImageReplayer<I>::bootstrap() {
+void ImageReplayer<I>::prepare_remote_image() {
   dout(20) << dendl;
-
   if (m_remote_images.empty()) {
     on_start_fail(-EREMOTEIO, "waiting for primary remote image");
     return;
@@ -466,6 +466,44 @@ void ImageReplayer<I>::bootstrap() {
 
   // TODO bootstrap will need to support multiple remote images
   m_remote_image = *m_remote_images.begin();
+
+  Context *ctx = create_context_callback<
+    ImageReplayer, &ImageReplayer<I>::handle_prepare_remote_image>(this);
+  auto req = PrepareRemoteImageRequest<I>::create(
+    m_remote_image.io_ctx, m_global_image_id, &m_remote_image.mirror_uuid,
+    &m_remote_image.image_id, ctx);
+  req->send();
+}
+
+template <typename I>
+void ImageReplayer<I>::handle_prepare_remote_image(int r) {
+  dout(20) << "r=" << r << dendl;
+
+  if (r == -ENOENT) {
+    dout(20) << "remote image does not exist" << dendl;
+
+    if (!m_local_image_id.empty() &&
+        m_local_image_tag_owner == m_remote_image.mirror_uuid) {
+      // local image exists and is non-primary and linked to the missing
+      // remote image
+
+      // TODO schedule image deletion
+      on_start_fail(0, "remote image no longer exists");
+    } else {
+      on_start_fail(-ENOENT, "remote image does not exist");
+    }
+    return;
+  } else if (r < 0) {
+    on_start_fail(r, "error retrieving remote image id");
+    return;
+  }
+
+  bootstrap();
+}
+
+template <typename I>
+void ImageReplayer<I>::bootstrap() {
+  dout(20) << dendl;
 
   CephContext *cct = static_cast<CephContext *>(m_local->cct());
   journal::Settings settings;

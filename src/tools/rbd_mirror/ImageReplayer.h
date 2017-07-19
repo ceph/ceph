@@ -138,6 +138,9 @@ protected:
    * PREPARE_LOCAL_IMAGE  * * * * * * * * * * * * * * * * * *
    *    |                                                   *
    *    v                                           (error) *
+   * PREPARE_REMOTE_IMAGE * * * * * * * * * * * * * * * * * *
+   *    |                                                   *
+   *    v                                           (error) *
    * BOOTSTRAP_IMAGE  * * * * * * * * * * * * * * * * * * * *
    *    |                                                   *
    *    v                                           (error) *
@@ -396,6 +399,9 @@ private:
 
   void prepare_local_image();
   void handle_prepare_local_image(int r);
+
+  void prepare_remote_image();
+  void handle_prepare_remote_image(int r);
 
   void bootstrap();
   void handle_bootstrap(int r);

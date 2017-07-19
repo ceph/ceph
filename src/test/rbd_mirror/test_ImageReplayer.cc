@@ -115,6 +115,7 @@ public:
     EXPECT_EQ(0, librbd::create(m_remote_ioctx, m_image_name.c_str(), 1 << 22,
 				false, features, &order, 0, 0));
     m_remote_image_id = get_image_id(m_remote_ioctx, m_image_name);
+    m_global_image_id = get_global_image_id(m_remote_ioctx, m_remote_image_id);
 
     m_threads.reset(new rbd::mirror::Threads<>(reinterpret_cast<CephContext*>(
       m_local_ioctx.cct())));
@@ -148,7 +149,7 @@ public:
     m_replayer = new ImageReplayerT(
         m_threads.get(), m_image_deleter.get(), m_instance_watcher,
         rbd::mirror::RadosRef(new librados::Rados(m_local_ioctx)),
-        m_local_mirror_uuid, m_local_ioctx.get_id(), "global image id");
+        m_local_mirror_uuid, m_local_ioctx.get_id(), m_global_image_id);
     m_replayer->add_remote_image(m_remote_mirror_uuid, m_remote_image_id,
                                  m_remote_ioctx);
   }
@@ -203,6 +204,14 @@ public:
     std::string id;
     EXPECT_EQ(0, librbd::cls_client::get_id(&ioctx, obj, &id));
     return id;
+  }
+
+  std::string get_global_image_id(librados::IoCtx& io_ctx,
+                                  const std::string& image_id) {
+    cls::rbd::MirrorImage mirror_image;
+    EXPECT_EQ(0, librbd::cls_client::mirror_image_get(&io_ctx, image_id,
+                                                      &mirror_image));
+    return mirror_image.global_image_id;
   }
 
   void open_image(librados::IoCtx &ioctx, const std::string &image_name,
@@ -385,6 +394,7 @@ public:
   std::string m_image_name;
   int64_t m_remote_pool_id;
   std::string m_remote_image_id;
+  std::string m_global_image_id;
   rbd::mirror::ImageReplayer<> *m_replayer;
   C_WatchCtx *m_watch_ctx;
   uint64_t m_watch_handle;
@@ -412,14 +422,7 @@ TEST_F(TestImageReplayer, BootstrapErrorLocalImageExists)
 
 TEST_F(TestImageReplayer, BootstrapErrorNoJournal)
 {
-  // disable remote image journaling
-  librbd::ImageCtx *ictx;
-  open_remote_image(&ictx);
-  uint64_t features;
-  ASSERT_EQ(0, librbd::get_features(ictx, &features));
-  ASSERT_EQ(0, ictx->operations->update_features(RBD_FEATURE_JOURNALING,
-                                                 false));
-  close_image(ictx);
+  ASSERT_EQ(0, librbd::Journal<>::remove(m_remote_ioctx, m_remote_image_id));
 
   create_replayer<>();
   C_SaferCond cond;
@@ -522,7 +525,7 @@ TEST_F(TestImageReplayer, ErrorNoJournal)
 
   C_SaferCond cond;
   m_replayer->start(&cond);
-  ASSERT_EQ(-ENOENT, cond.wait());
+  ASSERT_EQ(0, cond.wait());
 }
 
 TEST_F(TestImageReplayer, StartStop)
