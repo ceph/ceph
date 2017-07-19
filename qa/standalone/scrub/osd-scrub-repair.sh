@@ -481,7 +481,7 @@ function TEST_list_missing_erasure_coded_overwrites() {
 function TEST_corrupt_scrub_replicated() {
     local dir=$1
     local poolname=csr_pool
-    local total_objs=15
+    local total_objs=16
 
     setup $dir || return 1
     run_mon $dir a --osd_pool_default_size=2 || return 1
@@ -597,6 +597,12 @@ function TEST_corrupt_scrub_replicated() {
 
         15)
             objectstore_tool $dir $osd $objname rm-attr _ || return 1
+            ;;
+
+        16)
+            objectstore_tool $dir 0 $objname rm-attr snapset || return 1
+            echo -n bad-val > $dir/bad-val
+            objectstore_tool $dir 1 $objname set-attr snapset $dir/bad-val || return 1
 
         esac
     done
@@ -816,6 +822,57 @@ function TEST_corrupt_scrub_replicated() {
       }
     },
     {
+      "errors": [],
+      "object": {
+      "locator": "",
+      "name": "ROBJ16",
+      "nspace": "",
+      "snap": "head",
+      "version": 0
+       },
+        "shards": [
+      {
+        "attrs": [
+          {
+            "Base64": true,
+            "name": "_",
+            "value": ""
+          }
+        ],
+        "errors": [
+          "ss_attr_missing"
+        ],
+        "osd": 0,
+        "primary": false,
+        "size": 7
+      },
+      {
+        "attrs": [
+          {
+            "Base64": true,
+            "name": "_",
+            "value": ""
+          },
+          {
+            "Base64": false,
+            "name": "snapset",
+            "value": "bad-val"
+          }
+        ],
+        "errors": [
+          "ss_attr_corrupted"
+        ],
+        "osd": 1,
+        "primary": true,
+        "size": 7
+      }
+      ],
+      "union_shard_errors": [
+        "ss_attr_missing",
+        "ss_attr_corrupted"
+      ]
+    },
+    {
       "shards": [
         {
           "size": 7,
@@ -903,14 +960,14 @@ function TEST_corrupt_scrub_replicated() {
           "primary": true
         }
       ],
-      "selected_object_info": "3:86586531:::ROBJ8:head(82'62 client.4351.0:1 dirty|omap|data_digest|omap_digest s 7 uv 62 dd 2ddbf8f5 od d6be81dc alloc_hint [0 0 0])",
+      "selected_object_info": "3:86586531:::ROBJ8:head(82'62 client.4351.0:1 dirty|omap|data_digest|omap_digest s 7 uv 66 dd 2ddbf8f5 od d6be81dc alloc_hint [0 0 0])",
       "union_shard_errors": [],
       "errors": [
         "attr_value_mismatch",
         "attr_name_mismatch"
       ],
       "object": {
-        "version": 62,
+        "version": 66,
         "snap": "head",
         "locator": "",
         "nspace": "",
@@ -920,7 +977,7 @@ function TEST_corrupt_scrub_replicated() {
     {
       "shards": [
         {
-          "object_info": "3:ffdb2004:::ROBJ9:head(102'63 client.4433.0:1 dirty|omap|data_digest|omap_digest s 1 uv 63 dd 2b63260d od 2eecc539 alloc_hint [0 0 0])",
+          "object_info": "3:ffdb2004:::ROBJ9:head(102'63 client.4433.0:1 dirty|omap|data_digest|omap_digest s 1 uv 67 dd 2b63260d od 2eecc539 alloc_hint [0 0 0])",
           "size": 1,
           "errors": [],
           "osd": 0,
@@ -936,7 +993,7 @@ function TEST_corrupt_scrub_replicated() {
           "primary": true
         }
       ],
-      "selected_object_info": "3:ffdb2004:::ROBJ9:head(102'63 client.4433.0:1 dirty|omap|data_digest|omap_digest s 1 uv 63 dd 2b63260d od 2eecc539 alloc_hint [0 0 0])",
+      "selected_object_info": "3:ffdb2004:::ROBJ9:head(102'63 client.4433.0:1 dirty|omap|data_digest|omap_digest s 1 uv 67 dd 2b63260d od 2eecc539 alloc_hint [0 0 0])",
       "union_shard_errors": [
          "obj_size_oi_mismatch"
       ],
@@ -944,7 +1001,7 @@ function TEST_corrupt_scrub_replicated() {
         "object_info_inconsistency"
       ],
       "object": {
-        "version": 63,
+        "version": 67,
         "snap": "head",
         "locator": "",
         "nspace": "",
@@ -1282,6 +1339,61 @@ EOF
       }
     },
     {
+      "errors": [],
+      "object": {
+      "locator": "",
+      "name": "ROBJ16",
+      "nspace": "",
+      "snap": "head",
+      "version": 0
+       },
+        "shards": [
+      {
+        "attrs": [
+          {
+            "Base64": true,
+            "name": "_",
+            "value": ""
+          }
+        ],
+        "data_digest": "0x2ddbf8f5",
+        "errors": [
+          "ss_attr_missing"
+        ],
+        "omap_digest": "0x8b699207",
+        "osd": 0,
+        "primary": false,
+        "size": 7
+      },
+      {
+        "attrs": [
+          {
+            "Base64": true,
+            "name": "_",
+            "value": ""
+          },
+          {
+            "Base64": false,
+            "name": "snapset",
+            "value": "bad-val"
+          }
+        ],
+        "data_digest": "0x2ddbf8f5",
+        "errors": [
+          "ss_attr_corrupted"
+        ],
+        "omap_digest": "0x8b699207",
+        "osd": 1,
+        "primary": true,
+        "size": 7
+      }
+      ],
+      "union_shard_errors": [
+        "ss_attr_missing",
+        "ss_attr_corrupted"
+      ]
+    },
+    {
       "shards": [
         {
           "data_digest": "0x578a4830",
@@ -1555,14 +1667,14 @@ EOF
           "primary": true
         }
       ],
-      "selected_object_info": "3:86586531:::ROBJ8:head(82'62 client.4351.0:1 dirty|omap|data_digest|omap_digest s 7 uv 62 dd 2ddbf8f5 od d6be81dc alloc_hint [0 0 0])",
+      "selected_object_info": "3:86586531:::ROBJ8:head(82'62 client.4351.0:1 dirty|omap|data_digest|omap_digest s 7 uv 66 dd 2ddbf8f5 od d6be81dc alloc_hint [0 0 0])",
       "union_shard_errors": [],
       "errors": [
         "attr_value_mismatch",
         "attr_name_mismatch"
       ],
       "object": {
-        "version": 62,
+        "version": 66,
         "snap": "head",
         "locator": "",
         "nspace": "",
@@ -1583,7 +1695,7 @@ EOF
           "primary": false
         },
         {
-          "object_info": "3:ffdb2004:::ROBJ9:head(122'64 client.4532.0:1 dirty|omap|data_digest|omap_digest s 3 uv 64 dd 1f26fb26 od 2eecc539 alloc_hint [0 0 0])",
+          "object_info": "3:ffdb2004:::ROBJ9:head(122'64 client.4532.0:1 dirty|omap|data_digest|omap_digest s 3 uv 68 dd 1f26fb26 od 2eecc539 alloc_hint [0 0 0])",
           "data_digest": "0x1f26fb26",
           "omap_digest": "0x2eecc539",
           "size": 3,
@@ -1592,7 +1704,7 @@ EOF
           "primary": true
         }
       ],
-      "selected_object_info": "3:ffdb2004:::ROBJ9:head(122'64 client.4532.0:1 dirty|omap|data_digest|omap_digest s 3 uv 64 dd 1f26fb26 od 2eecc539 alloc_hint [0 0 0])",
+      "selected_object_info": "3:ffdb2004:::ROBJ9:head(122'64 client.4532.0:1 dirty|omap|data_digest|omap_digest s 3 uv 68 dd 1f26fb26 od 2eecc539 alloc_hint [0 0 0])",
       "union_shard_errors": [
         "obj_size_oi_mismatch"
       ],
@@ -1600,7 +1712,7 @@ EOF
         "object_info_inconsistency"
       ],
       "object": {
-        "version": 64,
+        "version": 68,
         "snap": "head",
         "locator": "",
         "nspace": "",
