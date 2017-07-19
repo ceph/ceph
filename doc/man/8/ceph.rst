@@ -969,7 +969,8 @@ Usage::
 	ceph osd reweight-by-utilization {<int[100-]>}
 	{--no-increasing}
 
-Subcommand ``rm`` removes osd(s) <id> [<id>...] in the cluster.
+Subcommand ``rm`` removes osd(s) <id> [<id>...] from the OSD map.
+
 
 Usage::
 
