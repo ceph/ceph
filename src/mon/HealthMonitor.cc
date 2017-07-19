@@ -120,7 +120,7 @@ void HealthMonitor::encode_pending(MonitorDBStore::TransactionRef t)
     }
     pending_health.merge(p.second);
   }
-  for (auto p : pending_health.checks) {
+  for (auto &p : pending_health.checks) {
     p.second.summary = boost::regex_replace(
       p.second.summary,
       boost::regex("%num%"), stringify(names[p.first].size()));
