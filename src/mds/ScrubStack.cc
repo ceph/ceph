@@ -369,10 +369,16 @@ void ScrubStack::_validate_inode_done(CInode *in, int r,
   LogChannelRef clog = mdcache->mds->clog;
   const ScrubHeaderRefConst header = in->scrub_info()->header;
 
+  std::string path;
+  if (!result.passed_validation) {
+    // Build path string for use in messages
+    in->make_path_string(path, true);
+  }
+
   if (result.backtrace.checked && !result.backtrace.passed) {
     // Record backtrace fails as remote linkage damage, as
     // we may not be able to resolve hard links to this inode
-    mdcache->mds->damage_table.notify_remote_damaged(in->inode.ino);
+    mdcache->mds->damage_table.notify_remote_damaged(in->inode.ino, path);
   } else if (result.inode.checked && !result.inode.passed) {
     // Record damaged inode structures as damaged dentries as
     // that is where they are stored
@@ -380,14 +386,12 @@ void ScrubStack::_validate_inode_done(CInode *in, int r,
     if (parent) {
       auto dir = parent->get_dir();
       mdcache->mds->damage_table.notify_dentry(
-          dir->inode->ino(), dir->frag, parent->last, parent->name);
+          dir->inode->ino(), dir->frag, parent->last, parent->name, path);
     }
   }
 
   // Inform the cluster log if we found an error
   if (!result.passed_validation) {
-    std::string path;
-    in->make_path_string(path, true);
     clog->warn() << "Scrub error on inode " << *in
                  << " (" << path << ") see " << g_conf->name
                  << " log for details";
