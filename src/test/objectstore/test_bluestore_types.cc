@@ -19,7 +19,7 @@
 TEST(bluestore, sizeof) {
 #define P(t) cout << STRINGIFY(t) << "\t" << sizeof(t) << std::endl
   P(BlueStore::Onode);
-  P(BlueStore::Extent);
+  P(BlueStore::bluestore_lextent_t);
   P(BlueStore::Blob);
   P(BlueStore::SharedBlob);
   P(BlueStore::ExtentMap);
@@ -1043,7 +1043,7 @@ TEST(ExtentMap, seek_lextent)
   ASSERT_EQ(em.extent_map.end(), em.seek_lextent(0));
   ASSERT_EQ(em.extent_map.end(), em.seek_lextent(100));
 
-  em.extent_map.insert(*new BlueStore::Extent(100, 0, 100, br));
+  em.extent_map.insert(*new BlueStore::bluestore_lextent_t(100, 0, 100, br));
   auto a = em.find(100);
   ASSERT_EQ(a, em.seek_lextent(0));
   ASSERT_EQ(a, em.seek_lextent(99));
@@ -1052,7 +1052,7 @@ TEST(ExtentMap, seek_lextent)
   ASSERT_EQ(a, em.seek_lextent(199));
   ASSERT_EQ(em.extent_map.end(), em.seek_lextent(200));
 
-  em.extent_map.insert(*new BlueStore::Extent(200, 0, 100, br));
+  em.extent_map.insert(*new BlueStore::bluestore_lextent_t(200, 0, 100, br));
   auto b = em.find(200);
   ASSERT_EQ(a, em.seek_lextent(0));
   ASSERT_EQ(a, em.seek_lextent(99));
@@ -1063,7 +1063,7 @@ TEST(ExtentMap, seek_lextent)
   ASSERT_EQ(b, em.seek_lextent(299));
   ASSERT_EQ(em.extent_map.end(), em.seek_lextent(300));
 
-  em.extent_map.insert(*new BlueStore::Extent(400, 0, 100, br));
+  em.extent_map.insert(*new BlueStore::bluestore_lextent_t(400, 0, 100, br));
   auto d = em.find(400);
   ASSERT_EQ(a, em.seek_lextent(0));
   ASSERT_EQ(a, em.seek_lextent(99));
@@ -1093,7 +1093,7 @@ TEST(ExtentMap, has_any_lextents)
   ASSERT_FALSE(em.has_any_lextents(0, 1000));
   ASSERT_FALSE(em.has_any_lextents(1000, 1000));
 
-  em.extent_map.insert(*new BlueStore::Extent(100, 0, 100, b));
+  em.extent_map.insert(*new BlueStore::bluestore_lextent_t(100, 0, 100, b));
   ASSERT_FALSE(em.has_any_lextents(0, 50));
   ASSERT_FALSE(em.has_any_lextents(0, 100));
   ASSERT_FALSE(em.has_any_lextents(50, 50));
@@ -1105,7 +1105,7 @@ TEST(ExtentMap, has_any_lextents)
   ASSERT_TRUE(em.has_any_lextents(199, 2));
   ASSERT_FALSE(em.has_any_lextents(200, 2));
 
-  em.extent_map.insert(*new BlueStore::Extent(200, 0, 100, b));
+  em.extent_map.insert(*new BlueStore::bluestore_lextent_t(200, 0, 100, b));
   ASSERT_TRUE(em.has_any_lextents(199, 1));
   ASSERT_TRUE(em.has_any_lextents(199, 2));
   ASSERT_TRUE(em.has_any_lextents(200, 2));
@@ -1113,7 +1113,7 @@ TEST(ExtentMap, has_any_lextents)
   ASSERT_TRUE(em.has_any_lextents(299, 1));
   ASSERT_FALSE(em.has_any_lextents(300, 1));
 
-  em.extent_map.insert(*new BlueStore::Extent(400, 0, 100, b));
+  em.extent_map.insert(*new BlueStore::bluestore_lextent_t(400, 0, 100, b));
   ASSERT_TRUE(em.has_any_lextents(0, 10000));
   ASSERT_TRUE(em.has_any_lextents(199, 1));
   ASSERT_FALSE(em.has_any_lextents(300, 1));
@@ -1140,31 +1140,31 @@ TEST(ExtentMap, compress_extent_map)
   b2->shared_blob = new BlueStore::SharedBlob(coll.get());
   b3->shared_blob = new BlueStore::SharedBlob(coll.get());
 
-  em.extent_map.insert(*new BlueStore::Extent(0, 0, 100, b1));
-  em.extent_map.insert(*new BlueStore::Extent(100, 0, 100, b2));
+  em.extent_map.insert(*new BlueStore::bluestore_lextent_t(0, 0, 100, b1));
+  em.extent_map.insert(*new BlueStore::bluestore_lextent_t(100, 0, 100, b2));
   ASSERT_EQ(0, em.compress_extent_map(0, 10000));
   ASSERT_EQ(2u, em.extent_map.size());
 
-  em.extent_map.insert(*new BlueStore::Extent(200, 100, 100, b2));
-  em.extent_map.insert(*new BlueStore::Extent(300, 200, 100, b2));
+  em.extent_map.insert(*new BlueStore::bluestore_lextent_t(200, 100, 100, b2));
+  em.extent_map.insert(*new BlueStore::bluestore_lextent_t(300, 200, 100, b2));
   ASSERT_EQ(0, em.compress_extent_map(0, 0));
   ASSERT_EQ(0, em.compress_extent_map(100000, 1000));
   ASSERT_EQ(2, em.compress_extent_map(0, 100000));
   ASSERT_EQ(2u, em.extent_map.size());
 
   em.extent_map.erase(em.find(100));
-  em.extent_map.insert(*new BlueStore::Extent(100, 0, 100, b2));
-  em.extent_map.insert(*new BlueStore::Extent(200, 100, 100, b3));
-  em.extent_map.insert(*new BlueStore::Extent(300, 200, 100, b2));
+  em.extent_map.insert(*new BlueStore::bluestore_lextent_t(100, 0, 100, b2));
+  em.extent_map.insert(*new BlueStore::bluestore_lextent_t(200, 100, 100, b3));
+  em.extent_map.insert(*new BlueStore::bluestore_lextent_t(300, 200, 100, b2));
   ASSERT_EQ(0, em.compress_extent_map(0, 1));
   ASSERT_EQ(0, em.compress_extent_map(0, 100000));
   ASSERT_EQ(4u, em.extent_map.size());
 
-  em.extent_map.insert(*new BlueStore::Extent(400, 300, 100, b2));
-  em.extent_map.insert(*new BlueStore::Extent(500, 500, 100, b2));
-  em.extent_map.insert(*new BlueStore::Extent(600, 600, 100, b2));
-  em.extent_map.insert(*new BlueStore::Extent(700, 0, 100, b1));
-  em.extent_map.insert(*new BlueStore::Extent(800, 0, 100, b3));
+  em.extent_map.insert(*new BlueStore::bluestore_lextent_t(400, 300, 100, b2));
+  em.extent_map.insert(*new BlueStore::bluestore_lextent_t(500, 500, 100, b2));
+  em.extent_map.insert(*new BlueStore::bluestore_lextent_t(600, 600, 100, b2));
+  em.extent_map.insert(*new BlueStore::bluestore_lextent_t(700, 0, 100, b1));
+  em.extent_map.insert(*new BlueStore::bluestore_lextent_t(800, 0, 100, b3));
   ASSERT_EQ(0, em.compress_extent_map(0, 99));
   ASSERT_EQ(0, em.compress_extent_map(800, 1000));
   ASSERT_EQ(2, em.compress_extent_map(100, 500));
@@ -1172,9 +1172,9 @@ TEST(ExtentMap, compress_extent_map)
   em.extent_map.erase(em.find(300));
   em.extent_map.erase(em.find(500));  
   em.extent_map.erase(em.find(700));
-  em.extent_map.insert(*new BlueStore::Extent(400, 300, 100, b2));
-  em.extent_map.insert(*new BlueStore::Extent(500, 400, 100, b2));
-  em.extent_map.insert(*new BlueStore::Extent(700, 500, 100, b2));
+  em.extent_map.insert(*new BlueStore::bluestore_lextent_t(400, 300, 100, b2));
+  em.extent_map.insert(*new BlueStore::bluestore_lextent_t(500, 400, 100, b2));
+  em.extent_map.insert(*new BlueStore::bluestore_lextent_t(700, 500, 100, b2));
   ASSERT_EQ(1, em.compress_extent_map(0, 1000));
   ASSERT_EQ(6u, em.extent_map.size());
 }
@@ -1227,13 +1227,13 @@ TEST(GarbageCollector, BasicTest)
     b2->dirty_blob().allocated_test(bluestore_pextent_t(1, 0x1000));
     b3->dirty_blob().allocated_test(bluestore_pextent_t(2, 0x1000));
     b4->dirty_blob().allocated_test(bluestore_pextent_t(3, 0x1000));
-    em.extent_map.insert(*new BlueStore::Extent(100, 100, 10, b1));
+    em.extent_map.insert(*new BlueStore::bluestore_lextent_t(100, 100, 10, b1));
     b1->get_ref(coll.get(), 100, 10);
-    em.extent_map.insert(*new BlueStore::Extent(200, 200, 10, b2));
+    em.extent_map.insert(*new BlueStore::bluestore_lextent_t(200, 200, 10, b2));
     b2->get_ref(coll.get(), 200, 10);
-    em.extent_map.insert(*new BlueStore::Extent(300, 300, 100, b4));
+    em.extent_map.insert(*new BlueStore::bluestore_lextent_t(300, 300, 100, b4));
     b4->get_ref(coll.get(), 300, 100);
-    em.extent_map.insert(*new BlueStore::Extent(4096, 0, 10, b3));
+    em.extent_map.insert(*new BlueStore::bluestore_lextent_t(4096, 0, 10, b3));
     b3->get_ref(coll.get(), 0, 10);
 
     old_extents.push_back(*new BlueStore::OldExtent(300, 300, 10, b1)); 
@@ -1289,18 +1289,18 @@ TEST(GarbageCollector, BasicTest)
     b3->dirty_blob().allocated_test(bluestore_pextent_t(2, 0x20000));
     b4->dirty_blob().allocated_test(bluestore_pextent_t(3, 0x10000));
 
-    em.extent_map.insert(*new BlueStore::Extent(0, 0, 0x8000, b1));
+    em.extent_map.insert(*new BlueStore::bluestore_lextent_t(0, 0, 0x8000, b1));
     b1->get_ref(coll.get(), 0, 0x8000);
     em.extent_map.insert(
-      *new BlueStore::Extent(0x8000, 0x8000, 0x8000, b2)); // new extent
+      *new BlueStore::bluestore_lextent_t(0x8000, 0x8000, 0x8000, b2)); // new extent
     b2->get_ref(coll.get(), 0x8000, 0x8000);
     em.extent_map.insert(
-      *new BlueStore::Extent(0x10000, 0, 0x20000, b3)); // new extent
+      *new BlueStore::bluestore_lextent_t(0x10000, 0, 0x20000, b3)); // new extent
     b3->get_ref(coll.get(), 0, 0x20000);
     em.extent_map.insert(
-      *new BlueStore::Extent(0x30000, 0, 0xf000, b4)); // new extent
+      *new BlueStore::bluestore_lextent_t(0x30000, 0, 0xf000, b4)); // new extent
     b4->get_ref(coll.get(), 0, 0xf000);
-    em.extent_map.insert(*new BlueStore::Extent(0x3f000, 0x3f000, 0x1000, b1));
+    em.extent_map.insert(*new BlueStore::bluestore_lextent_t(0x3f000, 0x3f000, 0x1000, b1));
     b1->get_ref(coll.get(), 0x3f000, 0x1000);
 
     old_extents.push_back(*new BlueStore::OldExtent(0x8000, 0x8000, 0x8000, b1)); 
@@ -1346,10 +1346,10 @@ TEST(GarbageCollector, BasicTest)
     b2->dirty_blob().set_compressed(0x4000, 0x2000);
     b2->dirty_blob().allocated_test(bluestore_pextent_t(0, 0x2000));
 
-    em.extent_map.insert(*new BlueStore::Extent(0, 0, 0x3000, b1));
+    em.extent_map.insert(*new BlueStore::bluestore_lextent_t(0, 0, 0x3000, b1));
     b1->get_ref(coll.get(), 0, 0x3000);
     em.extent_map.insert(
-      *new BlueStore::Extent(0x3000, 0, 0x4000, b2)); // new extent
+      *new BlueStore::bluestore_lextent_t(0x3000, 0, 0x4000, b2)); // new extent
     b2->get_ref(coll.get(), 0, 0x4000);
 
     old_extents.push_back(*new BlueStore::OldExtent(0x3000, 0x3000, 0x1000, b1)); 
@@ -1409,18 +1409,18 @@ TEST(GarbageCollector, BasicTest)
     b3->dirty_blob().allocated_test(bluestore_pextent_t(2, 0x20000));
     b4->dirty_blob().allocated_test(bluestore_pextent_t(3, 0x1000));
 
-    em.extent_map.insert(*new BlueStore::Extent(0, 0, 0x8000, b0));
+    em.extent_map.insert(*new BlueStore::bluestore_lextent_t(0, 0, 0x8000, b0));
     b0->get_ref(coll.get(), 0, 0x8000);
     em.extent_map.insert(
-      *new BlueStore::Extent(0x8000, 0x8000, 0x8000, b2)); // new extent
+      *new BlueStore::bluestore_lextent_t(0x8000, 0x8000, 0x8000, b2)); // new extent
     b2->get_ref(coll.get(), 0x8000, 0x8000);
     em.extent_map.insert(
-      *new BlueStore::Extent(0x10000, 0, 0x20000, b3)); // new extent
+      *new BlueStore::bluestore_lextent_t(0x10000, 0, 0x20000, b3)); // new extent
     b3->get_ref(coll.get(), 0, 0x20000);
     em.extent_map.insert(
-      *new BlueStore::Extent(0x30000, 0, 0xf000, b4)); // new extent
+      *new BlueStore::bluestore_lextent_t(0x30000, 0, 0xf000, b4)); // new extent
     b4->get_ref(coll.get(), 0, 0xf000);
-    em.extent_map.insert(*new BlueStore::Extent(0x3f000, 0x1f000, 0x1000, b1));
+    em.extent_map.insert(*new BlueStore::bluestore_lextent_t(0x3f000, 0x1f000, 0x1000, b1));
     b1->get_ref(coll.get(), 0x1f000, 0x1000);
 
     old_extents.push_back(*new BlueStore::OldExtent(0x8000, 0x8000, 0x8000, b0)); 
