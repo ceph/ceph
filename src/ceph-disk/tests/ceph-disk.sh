@@ -382,33 +382,6 @@ function test_keyring_path() {
     grep --quiet "keyring $dir/bootstrap-osd/ceph.keyring" $dir/test_keyring || return 1
 }
 
-# http://tracker.ceph.com/issues/13522
-function ceph_osd_fail_once_fixture() {
-    local dir=$1
-    local command=ceph-osd
-    local fpath=`readlink -f $(which $command)`
-    [ "$fpath" = `readlink -f $CEPH_BIN/$command` ] || [ "$fpath" = `readlink -f $(pwd)/$command` ] || return 1
-
-    cat > $dir/$command <<EOF
-#!/bin/bash
-if echo "\$@" | grep -e --mkfs && ! test -f $dir/used-$command ; then
-   touch $dir/used-$command
-   # sleep longer than the first CEPH_OSD_MKFS_DELAYS value (5) below
-   sleep 600
-else
-   exec $CEPH_BIN/$command "\$@"
-fi
-EOF
-    chmod +x $dir/$command
-}
-
-function test_ceph_osd_mkfs() {
-    local dir=$1
-    ceph_osd_fail_once_fixture $dir || return 1
-    CEPH_OSD_MKFS_DELAYS='5 300 300' use_path $dir test_activate_dir || return 1
-    [ -f $dir/used-ceph-osd ] || return 1
-}
-
 function test_crush_device_class() {
     local dir=$1
     shift
@@ -489,7 +462,6 @@ function run() {
     default_actions+="test_zap "
     [ `uname` != FreeBSD ] && \
       default_actions+="test_activate_dir_bluestore "
-    default_actions+="test_ceph_osd_mkfs "
     default_actions+="test_crush_device_class "
     default_actions+="test_reuse_osd_id "
     local actions=${@:-$default_actions}
