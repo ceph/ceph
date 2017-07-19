@@ -947,7 +947,7 @@ TEST_F(TestImageReplayer, Disconnect)
   close_image(ictx);
   C_SaferCond cond2;
   m_replayer->start(&cond2);
-  ASSERT_EQ(-ENOTCONN, cond2.wait());
+  ASSERT_EQ(0, cond2.wait());
   C_SaferCond delete_cond;
   m_image_deleter->wait_for_scheduled_deletion(
     m_local_ioctx.get_id(), m_replayer->get_global_image_id(), &delete_cond);
