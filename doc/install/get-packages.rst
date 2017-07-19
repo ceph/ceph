@@ -311,6 +311,7 @@ You may add a Ceph entry to the ``/etc/yum.repos.d`` directory. Create a
 ``ceph-apache.repo`` file. In the example below, replace ``{distro}`` with your
 Linux distribution (e.g., ``el7``).  You may view http://gitbuilder.ceph.com
 directory to see which distributions Ceph supports.
+
 ::
 
 
