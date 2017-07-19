@@ -102,7 +102,10 @@ public:
     ::encode(map_epoch, payload);
     
     // with luminous, we drop peer_as_of_epoch and peer_stat
-    if (!HAVE_FEATURE(features, SERVER_LUMINOUS)) { 
+    if (HAVE_FEATURE(features, SERVER_LUMINOUS)) {
+      header.version = HEAD_VERSION;
+      ::encode(op, payload);
+    } else {
       epoch_t dummy_epoch = {};
       osd_peer_stat_t dummy_stat = {};
       header.version = 3;
@@ -110,8 +113,6 @@ public:
       ::encode(dummy_epoch, payload);
       ::encode(op, payload);   
       ::encode(dummy_stat, payload);
-    } else {
-      ::encode(op, payload);
     }
     ::encode(stamp, payload);
     size_t s = 0;

@@ -46,7 +46,9 @@ public:
   const char *get_type_name() const override { return "PGrm"; }
 
   void encode_payload(uint64_t features) override {
-    if (!HAVE_FEATURE(features, SERVER_LUMINOUS)) {
+    if (HAVE_FEATURE(features, SERVER_LUMINOUS)) {
+      header.version = HEAD_VERSION;
+    } else {
       // for jewel+kraken
       header.version = 2;
       ::encode(epoch, payload);

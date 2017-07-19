@@ -86,6 +86,7 @@ public:
   void encode_payload(uint64_t features) override {
     ::encode(map_epoch, payload);
     if (HAVE_FEATURE(features, SERVER_LUMINOUS)) {
+      header.version = HEAD_VERSION;
       ::encode(min_epoch, payload);
       encode_trace(payload, features);
     } else {
