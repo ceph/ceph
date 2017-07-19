@@ -690,9 +690,9 @@ perform well in a degraded state.
 
 ``osd recovery sleep``
 
-:Description: Time to sleep before next recovery. Increasing this value will
-              slow down recovery operation while client operations will be
-              less impacted.
+:Description: Time in seconds to sleep before next recovery or backfill op.
+              Increasing this value will slow down recovery operation while
+              client operations will be less impacted.
 
 :Type: Float
 :Default: ``0``
@@ -700,7 +700,8 @@ perform well in a degraded state.
 
 ``osd recovery sleep hdd``
 
-:Description: Time to sleep before next recovery for HDDs.
+:Description: Time in seconds to sleep before next recovery or backfill op
+              for HDDs.
 
 :Type: Float
 :Default: ``0.1``
@@ -708,7 +709,8 @@ perform well in a degraded state.
 
 ``osd recovery sleep ssd``
 
-:Description: Time to sleep before next recovery for SSDs.
+:Description: Time in seconds to sleep before next recovery or backfill op
+              for SSDs.
 
 :Type: Float
 :Default: ``0``
