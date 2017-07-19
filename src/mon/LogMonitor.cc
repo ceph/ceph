@@ -428,14 +428,15 @@ bool LogMonitor::preprocess_command(MonOpRequestRef op)
       return entry.prio >= level && (entry.channel == channel || channel == "*");
     };
 
-    auto p = summary.tail.end();
-    while (num > 0 && p != summary.tail.begin()) {
-      if (match(*p)) {
+    auto rp = summary.tail.rbegin();
+    while (num > 0 && rp != summary.tail.rend()) {
+      if (match(*rp)) {
         num--;
       }
-      --p;
+      ++rp;
     }
     ostringstream ss;
+    auto p = summary.tail.begin();
     for ( ; p != summary.tail.end(); ++p) {
       if (!match(*p)) {
         continue;
