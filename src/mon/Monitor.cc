@@ -2810,11 +2810,13 @@ void Monitor::_generate_command_map(map<string,cmd_vartype>& cmdmap,
   }
 }
 
-const MonCommand *Monitor::_get_moncommand(const string &cmd_prefix,
-                                           MonCommand *cmds, int cmds_size)
+const MonCommand *Monitor::_get_moncommand(
+  const string &cmd_prefix,
+  const MonCommand *cmds,
+  int cmds_size)
 {
-  MonCommand *this_cmd = NULL;
-  for (MonCommand *cp = cmds;
+  const MonCommand *this_cmd = NULL;
+  for (const MonCommand *cp = cmds;
        cp < &cmds[cmds_size]; cp++) {
     if (cp->cmdstring.compare(0, cmd_prefix.size(), cmd_prefix) == 0) {
       this_cmd = cp;
