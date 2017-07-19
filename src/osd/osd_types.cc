@@ -3423,6 +3423,8 @@ bool PastIntervals::is_new_interval(
   unsigned new_pg_num,
   bool old_sort_bitwise,
   bool new_sort_bitwise,
+  bool old_recovery_deletes,
+  bool new_recovery_deletes,
   pg_t pgid) {
   return old_acting_primary != new_acting_primary ||
     new_acting != old_acting ||
@@ -3431,7 +3433,8 @@ bool PastIntervals::is_new_interval(
     old_min_size != new_min_size ||
     old_size != new_size ||
     pgid.is_split(old_pg_num, new_pg_num, 0) ||
-    old_sort_bitwise != new_sort_bitwise;
+    old_sort_bitwise != new_sort_bitwise ||
+    old_recovery_deletes != new_recovery_deletes;
 }
 
 bool PastIntervals::is_new_interval(
@@ -3463,6 +3466,8 @@ bool PastIntervals::is_new_interval(
 		    osdmap->get_pg_num(pgid.pool()),
 		    lastmap->test_flag(CEPH_OSDMAP_SORTBITWISE),
 		    osdmap->test_flag(CEPH_OSDMAP_SORTBITWISE),
+		    lastmap->test_flag(CEPH_OSDMAP_RECOVERY_DELETES),
+		    osdmap->test_flag(CEPH_OSDMAP_RECOVERY_DELETES),
 		    pgid);
 }
 
@@ -4284,6 +4289,7 @@ ostream& operator<<(ostream& out, const pg_missing_item& i)
   out << i.need;
   if (i.have != eversion_t())
     out << "(" << i.have << ")";
+  out << " flags = " << i.flag_str();
   return out;
 }
 

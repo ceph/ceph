@@ -64,9 +64,10 @@ target_link_libraries(unittest_osdscrub osd os global ${CMAKE_DL_LIBS} mon ${BLK
 add_executable(unittest_pglog
   TestPGLog.cc
   $<TARGET_OBJECTS:unit-main>
+  $<TARGET_OBJECTS:store_test_fixture>
   )
 add_ceph_unittest(unittest_pglog ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_pglog)
-target_link_libraries(unittest_pglog osd global ${CMAKE_DL_LIBS} ${BLKID_LIBRARIES})
+target_link_libraries(unittest_pglog osd os global ${CMAKE_DL_LIBS} ${BLKID_LIBRARIES})
 
 # unittest_hitset
 add_executable(unittest_hitset

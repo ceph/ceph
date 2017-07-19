@@ -480,8 +480,10 @@ int write_pg(ObjectStore::Transaction &t, epoch_t epoch, pg_info_t &info,
       t, &km, log, coll, info.pgid.make_pgmeta_oid(), divergent, true);
   } else {
     pg_missing_tracker_t tmissing(missing);
+    bool rebuilt_missing_set_with_deletes = false;
     PGLog::write_log_and_missing(
-      t, &km, log, coll, info.pgid.make_pgmeta_oid(), tmissing, true);
+      t, &km, log, coll, info.pgid.make_pgmeta_oid(), tmissing, true,
+      &rebuilt_missing_set_with_deletes);
   }
   t.omap_setkeys(coll, info.pgid.make_pgmeta_oid(), km);
   return 0;
