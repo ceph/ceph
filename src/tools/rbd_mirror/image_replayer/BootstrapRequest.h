@@ -108,6 +108,9 @@ private:
    * IS_PRIMARY * * * * * * * * * * * * * * * * * * * * *   *   |
    *    |                                               *   *   |
    *    | (remote image primary, no local image id)     *   *   |
+   *    \----> UPDATE_CLIENT_IMAGE  * * * * * * * * * * *   *   |
+   *    |         |                                     *   *   |
+   *    |         v                                     *   *   |
    *    \----> CREATE_LOCAL_IMAGE * * * * * * * * * * * *   *   |
    *    |         |                                     *   *   |
    *    |         v                                     *   *   |
@@ -120,9 +123,6 @@ private:
    *    |         |             \-----------------------*---*---/
    *    |         |                                     *   *
    *    |         v (skip if not needed)                *   *
-   *    |      UPDATE_CLIENT_IMAGE  * * * * *           *   *
-   *    |         |                         *           *   *
-   *    |         v (skip if not needed)    *           *   *
    *    |      GET_REMOTE_TAGS  * * * * * * *           *   *
    *    |         |                         *           *   *
    *    |         v (skip if not needed)    v           *   *
