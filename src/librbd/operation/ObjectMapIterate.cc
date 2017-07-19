@@ -47,6 +47,8 @@ public:
     if (should_complete(r)) {
       ldout(image_ctx.cct, 20) << m_oid << " C_VerifyObjectCallback completed "
 			       << dendl;
+      m_io_ctx.close();
+
       this->finish(r);
       delete this;
     }
