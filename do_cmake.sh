@@ -8,7 +8,7 @@ fi
 ARGS=""
 if which ccache ; then
     echo "enabling ccache"
-    ARGS+="-DWITH_CCACHE=ON"
+    ARGS="$ARGS -DWITH_CCACHE=ON"
 fi
 
 mkdir build
