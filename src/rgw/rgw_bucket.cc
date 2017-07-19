@@ -1359,7 +1359,12 @@ int RGWBucketAdminOp::remove_bucket(RGWRados *store, RGWBucketAdminOpState& op_s
   if (ret < 0)
     return ret;
 
-  return bucket.remove(op_state, bypass_gc, keep_index_consistent);
+  std::string err_msg;
+  ret = bucket.remove(op_state, bypass_gc, keep_index_consistent, &err_msg);
+  if (!err_msg.empty()) {
+    lderr(store->ctx()) << "ERROR: " << err_msg << dendl;
+  }
+  return ret;
 }
 
 int RGWBucketAdminOp::remove_object(RGWRados *store, RGWBucketAdminOpState& op_state)
