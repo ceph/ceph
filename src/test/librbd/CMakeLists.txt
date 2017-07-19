@@ -109,12 +109,11 @@ add_executable(ceph_test_librbd_api
   test_support.cc
   test_librbd.cc
   test_main.cc
+  $<TARGET_OBJECTS:libradostest_obj>
   $<TARGET_OBJECTS:common_texttable_obj>)
 target_link_libraries(ceph_test_librbd_api
   librbd
   librados
-  common
-  radostest
   ${UNITTEST_LIBS})
 set_target_properties(ceph_test_librbd_api PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS})

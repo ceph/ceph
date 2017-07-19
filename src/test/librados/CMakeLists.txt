@@ -1,8 +1,12 @@
-# radostest 
-set(libradostest_srcs 
-  test.cc 
+# radostest
+add_library(libradostest_obj OBJECT test.cc)
+set_target_properties(libradostest_obj PROPERTIES COMPILE_FLAGS ${UNITTEST_CXX_FLAGS})
+set(libradostest_srcs
+  test_common.cc
   TestCase.cc)
-add_library(radostest STATIC ${libradostest_srcs})
+add_library(radostest STATIC
+  ${libradostest_srcs}
+  $<TARGET_OBJECTS:libradostest_obj>)
 target_link_libraries(radostest common json_spirit ${EXTRALIBS})
 set_target_properties(radostest PROPERTIES COMPILE_FLAGS ${UNITTEST_CXX_FLAGS})
 
