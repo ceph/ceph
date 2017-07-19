@@ -65,7 +65,7 @@ For CentOS 7, perform the following steps:
 
 #. Add the Ceph repository to your yum configuration file at ``/etc/yum.repos.d/ceph.repo`` with the following command::
 
-     cat >/etc/yum.repos.d/ceph.repro
+     cat >/etc/yum.repos.d/ceph.repo
      [ceph-noarch]
      name=Ceph noarch packages
      baseurl=https://download.ceph.com/rpm/el7/noarch
