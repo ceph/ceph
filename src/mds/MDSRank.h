@@ -461,6 +461,8 @@ class MDSRank {
     void active_start();
     void stopping_start();
     void stopping_done();
+
+    void validate_sessions();
     // <<<
     
     // >>>
