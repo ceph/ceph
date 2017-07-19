@@ -23,7 +23,39 @@ add_ceph_test(osd-config.sh ${CMAKE_CURRENT_SOURCE_DIR}/osd-config.sh)
 add_ceph_test(osd-markdown.sh ${CMAKE_CURRENT_SOURCE_DIR}/osd-markdown.sh) 
 add_ceph_test(osd-reactivate.sh ${CMAKE_CURRENT_SOURCE_DIR}/osd-reactivate.sh) 
 add_ceph_test(osd-reuse-id.sh ${CMAKE_CURRENT_SOURCE_DIR}/osd-reuse-id.sh)
-add_ceph_test(osd-scrub-repair.sh ${CMAKE_CURRENT_SOURCE_DIR}/osd-scrub-repair.sh) 
+
+add_ceph_test(osd-scrub-repair.sh-auto-repair
+    ${CMAKE_CURRENT_SOURCE_DIR}/osd-scrub-repair.sh
+    TEST_auto_repair_erasure_coded_appends
+    TEST_auto_repair_erasure_coded_overwrites)
+add_ceph_test(osd-scrub-repair.sh-corrupt-scrub
+    ${CMAKE_CURRENT_SOURCE_DIR}/osd-scrub-repair.sh
+    TEST_corrupt_scrub_erasure_appends
+    TEST_corrupt_scrub_erasure_overwrites
+    TEST_corrupt_scrub_replicated)
+add_ceph_test(osd-scrub-repair.sh-jerasure
+    ${CMAKE_CURRENT_SOURCE_DIR}/osd-scrub-repair.sh
+    TEST_corrupt_and_repair_jerasure_appends
+    TEST_corrupt_and_repair_jerasure_overwrites)
+add_ceph_test(osd-scrub-repair.sh-list-missing
+    ${CMAKE_CURRENT_SOURCE_DIR}/osd-scrub-repair.sh
+    TEST_list_missing_erasure_coded_appends
+    TEST_list_missing_erasure_coded_overwrites)
+add_ceph_test(osd-scrub-repair.sh-lrc
+    ${CMAKE_CURRENT_SOURCE_DIR}/osd-scrub-repair.sh
+    TEST_corrupt_and_repair_lrc_appends
+    TEST_corrupt_and_repair_lrc_overwrites)
+add_ceph_test(osd-scrub-repair.sh-periodic-scrub
+    ${CMAKE_CURRENT_SOURCE_DIR}/osd-scrub-repair.sh
+    TEST_periodic_scrub_replicated)
+add_ceph_test(osd-scrub-repair.sh-replicated
+    ${CMAKE_CURRENT_SOURCE_DIR}/osd-scrub-repair.sh
+    TEST_corrupt_and_repair_replicated)
+add_ceph_test(osd-scrub-repair.sh-unfound-erasure
+    ${CMAKE_CURRENT_SOURCE_DIR}/osd-scrub-repair.sh
+    TEST_unfound_erasure_coded_appends
+    TEST_unfound_erasure_coded_overwrites)
+
 add_ceph_test(osd-scrub-snaps.sh ${CMAKE_CURRENT_SOURCE_DIR}/osd-scrub-snaps.sh)
 add_ceph_test(osd-copy-from.sh ${CMAKE_CURRENT_SOURCE_DIR}/osd-copy-from.sh)
 add_ceph_test(osd-fast-mark-down.sh ${CMAKE_CURRENT_SOURCE_DIR}/osd-fast-mark-down.sh)
