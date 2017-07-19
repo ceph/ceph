@@ -1463,6 +1463,8 @@ void AuthMonitor::upgrade_format()
       assert(r);
       ::encode("allow profile bootstrap-mgr", auth_inc.auth.caps["mon"]);
       auth_inc.op = KeyServerData::AUTH_INC_ADD;
+      // generate key
+      auth_inc.auth.key.create(g_ceph_context, CEPH_CRYPTO_AES);
       push_cephx_inc(auth_inc);
     }
     changed = true;
