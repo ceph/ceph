@@ -776,7 +776,7 @@ void abort_early(struct req_state *s, RGWOp *op, int err_no,
       if (!s->redirect.empty()) {
         dest_uri = s->redirect;
       } else if (!s->zonegroup_endpoint.empty()) {
-        string dest_uri = s->zonegroup_endpoint;
+        dest_uri = s->zonegroup_endpoint;
         /*
          * reqest_uri is always start with slash, so we need to remove
          * the unnecessary slash at the end of dest_uri.
@@ -1254,55 +1254,19 @@ int RGWPostObj_ObjStore::verify_params()
 
 int RGWPutACLs_ObjStore::get_params()
 {
-  size_t cl = 0;
-  if (s->length)
-    cl = atoll(s->length);
-  if (cl) {
-    data = (char *)malloc(cl + 1);
-    if (!data) {
-       op_ret = -ENOMEM;
-       return op_ret;
-    }
-    const auto read_len = recv_body(s, data, cl);
-    if (read_len < 0) {
-      return read_len;
-    } else {
-      len = read_len;
-    }
-    data[len] = '\0';
-  } else {
-    len = 0;
-  }
-
+  const auto max_size = s->cct->_conf->rgw_max_put_param_size;
+  op_ret = rgw_rest_read_all_input(s, &data, &len, max_size, false);
   return op_ret;
 }
 
 int RGWPutLC_ObjStore::get_params()
 {
-  size_t cl = 0;
-  if (s->length)
-    cl = atoll(s->length);
-  if (cl) {
-    data = (char *)malloc(cl + 1);
-    if (!data) {
-       op_ret = -ENOMEM;
-       return op_ret;
-    }
-    const auto read_len = recv_body(s, data, cl);
-    if (read_len < 0) {
-      return read_len;
-    } else {
-      len = read_len;
-    }
-    data[len] = '\0';
-  } else {
-    len = 0;
-  }
-
+  const auto max_size = s->cct->_conf->rgw_max_put_param_size;
+  op_ret = rgw_rest_read_all_input(s, &data, &len, max_size, false);
   return op_ret;
 }
 
-static int read_all_chunked_input(req_state *s, char **pdata, int *plen, int max_read)
+static int read_all_chunked_input(req_state *s, char **pdata, int *plen, const uint64_t max_read)
 {
 #define READ_CHUNK 4096
 #define MAX_READ_CHUNK (128 * 1024)
@@ -1326,7 +1290,7 @@ static int read_all_chunked_input(req_state *s, char **pdata, int *plen, int max
       if (need_to_read < MAX_READ_CHUNK)
 	need_to_read *= 2;
 
-      if (total > max_read) {
+      if ((unsigned)total > max_read) {
 	free(data);
 	return -ERANGE;
       }
@@ -1352,7 +1316,7 @@ static int read_all_chunked_input(req_state *s, char **pdata, int *plen, int max
 }
 
 int rgw_rest_read_all_input(struct req_state *s, char **pdata, int *plen,
-			    int max_len)
+			    const uint64_t max_len, const bool allow_chunked)
 {
   size_t cl = 0;
   int len = 0;
@@ -1360,6 +1324,9 @@ int rgw_rest_read_all_input(struct req_state *s, char **pdata, int *plen,
 
   if (s->length)
     cl = atoll(s->length);
+  else if (!allow_chunked)
+    return -ERR_LENGTH_REQUIRED;
+
   if (cl) {
     if (cl > (size_t)max_len) {
       return -ERANGE;
@@ -1374,7 +1341,7 @@ int rgw_rest_read_all_input(struct req_state *s, char **pdata, int *plen,
       return len;
     }
     data[len] = '\0';
-  } else if (!s->length) {
+  } else if (allow_chunked && !s->length) {
     const char *encoding = s->info.env->get("HTTP_TRANSFER_ENCODING");
     if (!encoding || strcmp(encoding, "chunked") != 0)
       return -ERR_LENGTH_REQUIRED;
@@ -1462,28 +1429,8 @@ int RGWDeleteMultiObj_ObjStore::get_params()
   // everything is probably fine, set the bucket
   bucket = s->bucket;
 
-  size_t cl = 0;
-
-  if (s->length)
-    cl = atoll(s->length);
-  if (cl) {
-    data = (char *)malloc(cl + 1);
-    if (!data) {
-      op_ret = -ENOMEM;
-      return op_ret;
-    }
-    const auto read_len = recv_body(s, data, cl);
-    if (read_len < 0) {
-      op_ret = read_len;
-      return op_ret;
-    } else {
-      len = read_len;
-    }
-    data[len] = '\0';
-  } else {
-    return -EINVAL;
-  }
-
+  const auto max_size = s->cct->_conf->rgw_max_put_param_size;
+  op_ret = rgw_rest_read_all_input(s, &data, &len, max_size, false);
   return op_ret;
 }
 

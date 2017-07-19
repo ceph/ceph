@@ -738,12 +738,10 @@ public:
 
 int RGWSetBucketVersioning_ObjStore_S3::get_params()
 {
-#define GET_BUCKET_VERSIONING_BUF_MAX (128 * 1024)
-
   char *data = nullptr;
   int len = 0;
   int r =
-    rgw_rest_read_all_input(s, &data, &len, GET_BUCKET_VERSIONING_BUF_MAX);
+    rgw_rest_read_all_input(s, &data, &len, s->cct->_conf->rgw_max_put_param_size, false);
   if (r < 0) {
     return r;
   }
@@ -791,11 +789,11 @@ void RGWSetBucketVersioning_ObjStore_S3::send_response()
 
 int RGWSetBucketWebsite_ObjStore_S3::get_params()
 {
-  static constexpr uint32_t GET_BUCKET_WEBSITE_BUF_MAX = (128 * 1024);
-
   char *data = nullptr;
   int len = 0;
-  int r = rgw_rest_read_all_input(s, &data, &len, GET_BUCKET_WEBSITE_BUF_MAX);
+  const auto max_size = s->cct->_conf->rgw_max_put_param_size;
+  int r = rgw_rest_read_all_input(s, &data, &len, max_size, false);
+
   if (r < 0) {
     return r;
   }
@@ -964,8 +962,10 @@ int RGWCreateBucket_ObjStore_S3::get_params()
 
   int len = 0;
   char *data = nullptr;
-#define CREATE_BUCKET_MAX_REQ_LEN (512 * 1024) /* this is way more than enough */
-  op_ret = rgw_rest_read_all_input(s, &data, &len, CREATE_BUCKET_MAX_REQ_LEN);
+
+  const auto max_size = s->cct->_conf->rgw_max_put_param_size;
+  op_ret = rgw_rest_read_all_input(s, &data, &len, max_size, false);
+
   if ((op_ret < 0) && (op_ret != -ERR_LENGTH_REQUIRED))
     return op_ret;
 
@@ -2433,53 +2433,38 @@ void RGWGetCORS_ObjStore_S3::send_response()
 int RGWPutCORS_ObjStore_S3::get_params()
 {
   int r;
-  char *data = NULL;
+  char *data = nullptr;
   int len = 0;
-  size_t cl = 0;
   RGWCORSXMLParser_S3 parser(s->cct);
   RGWCORSConfiguration_S3 *cors_config;
 
-  if (s->length)
-    cl = atoll(s->length);
-  if (cl) {
-    data = (char *)malloc(cl + 1);
-    if (!data) {
-       r = -ENOMEM;
-       goto done_err;
-    }
-    len = recv_body(s, data, cl);
-    if (len < 0) {
-      r = len;
-      goto done_err;
-    }
-    data[len] = '\0';
-  } else {
-    len = 0;
+  const auto max_size = s->cct->_conf->rgw_max_put_param_size;
+  r = rgw_rest_read_all_input(s, &data, &len, max_size, false);
+  if (r < 0) {
+    return r;
   }
 
+  auto data_deleter = std::unique_ptr<char, decltype(free)*>{data, free};
+
   if (s->aws4_auth_needs_complete) {
-    int ret_auth = do_aws4_auth_completion();
-    if (ret_auth < 0) {
-      r = ret_auth;
-      goto done_err;
+    r = do_aws4_auth_completion();
+    if (r < 0) {
+      return r;
     }
   }
 
   if (!parser.init()) {
-    r = -EINVAL;
-    goto done_err;
+    return -EINVAL;
   }
 
   if (!data || !parser.parse(data, len, 1)) {
-    r = -EINVAL;
-    goto done_err;
+    return -EINVAL;
   }
   cors_config =
     static_cast<RGWCORSConfiguration_S3 *>(parser.find_first(
 					     "CORSConfiguration"));
   if (!cors_config) {
-    r = -EINVAL;
-    goto done_err;
+    return -EINVAL;
   }
 
   if (s->cct->_conf->subsys.should_gather(ceph_subsys_rgw, 15)) {
@@ -2490,11 +2475,7 @@ int RGWPutCORS_ObjStore_S3::get_params()
 
   cors_config->encode(cors_bl);
 
-  free(data);
   return 0;
-done_err:
-  free(data);
-  return r;
 }
 
 void RGWPutCORS_ObjStore_S3::send_response()
@@ -2588,10 +2569,11 @@ public:
 
 int RGWSetRequestPayment_ObjStore_S3::get_params()
 {
-#define GET_REQUEST_PAYMENT_BUF_MAX (128 * 1024)
   char *data;
   int len = 0;
-  int r = rgw_rest_read_all_input(s, &data, &len, GET_REQUEST_PAYMENT_BUF_MAX);
+  const auto max_size = s->cct->_conf->rgw_max_put_param_size;
+  int r = rgw_rest_read_all_input(s, &data, &len, max_size, false);
+
   if (r < 0) {
     return r;
   }

@@ -1361,6 +1361,7 @@ OPTION(rgw_max_chunk_size, OPT_INT, 4 * 1024 * 1024)
 OPTION(rgw_put_obj_min_window_size, OPT_INT, 16 * 1024 * 1024)
 OPTION(rgw_put_obj_max_window_size, OPT_INT, 64 * 1024 * 1024)
 OPTION(rgw_max_put_size, OPT_U64, 5ULL*1024*1024*1024)
+OPTION(rgw_max_put_param_size, OPT_U64, 1 * 1024 * 1024) // max input size for PUT requests accepting json/xml params
 
 /**
  * override max bucket index shards in zone configuration (if not zero)
