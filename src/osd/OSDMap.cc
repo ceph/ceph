@@ -1795,6 +1795,7 @@ int OSDMap::apply_incremental(const Incremental &inc)
     require_osd_release = inc.new_require_osd_release;
     if (require_osd_release >= CEPH_RELEASE_LUMINOUS) {
       flags &= ~(CEPH_OSDMAP_LEGACY_REQUIRE_FLAGS);
+      flags |= CEPH_OSDMAP_RECOVERY_DELETES;
     }
   }
 
@@ -2336,7 +2337,7 @@ void OSDMap::encode(bufferlist& bl, uint64_t features) const
     if (v < 4) {
       decltype(flags) f = flags;
       if (require_osd_release >= CEPH_RELEASE_LUMINOUS)
-	f |= CEPH_OSDMAP_REQUIRE_LUMINOUS;
+	f |= CEPH_OSDMAP_REQUIRE_LUMINOUS | CEPH_OSDMAP_RECOVERY_DELETES;
       else if (require_osd_release == CEPH_RELEASE_KRAKEN)
 	f |= CEPH_OSDMAP_REQUIRE_KRAKEN;
       else if (require_osd_release == CEPH_RELEASE_JEWEL)
@@ -2689,12 +2690,14 @@ void OSDMap::decode(bufferlist::iterator& bl)
       ::decode(require_osd_release, bl);
       if (require_osd_release >= CEPH_RELEASE_LUMINOUS) {
 	flags &= ~(CEPH_OSDMAP_LEGACY_REQUIRE_FLAGS);
+	flags |= CEPH_OSDMAP_RECOVERY_DELETES;
       }
     } else {
       if (flags & CEPH_OSDMAP_REQUIRE_LUMINOUS) {
 	// only for compat with post-kraken pre-luminous test clusters
 	require_osd_release = CEPH_RELEASE_LUMINOUS;
 	flags &= ~(CEPH_OSDMAP_LEGACY_REQUIRE_FLAGS);
+	flags |= CEPH_OSDMAP_RECOVERY_DELETES;
       } else if (flags & CEPH_OSDMAP_REQUIRE_KRAKEN) {
 	require_osd_release = CEPH_RELEASE_KRAKEN;
       } else if (flags & CEPH_OSDMAP_REQUIRE_JEWEL) {
@@ -2940,6 +2943,8 @@ string OSDMap::get_flag_string(unsigned f)
     s += ",require_kraken_osds";
   if (f & CEPH_OSDMAP_REQUIRE_LUMINOUS)
     s += ",require_luminous_osds";
+  if (f & CEPH_OSDMAP_RECOVERY_DELETES)
+    s += ",recovery_deletes";
   if (s.length())
     s.erase(0, 1);
   return s;

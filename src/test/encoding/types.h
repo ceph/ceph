@@ -73,7 +73,7 @@ TYPE(pg_info_t)
 TYPE_FEATUREFUL(pg_query_t)
 TYPE(pg_log_entry_t)
 TYPE(pg_log_t)
-TYPE(pg_missing_item)
+TYPE_FEATUREFUL(pg_missing_item)
 TYPE(pg_missing_t)
 TYPE(pg_ls_response_t)
 TYPE(pg_nls_response_t)
@@ -593,6 +593,10 @@ MESSAGE(MOSDPGNotify)
 MESSAGE(MOSDPGQuery)
 #include "messages/MOSDPGRemove.h"
 MESSAGE(MOSDPGRemove)
+#include "messages/MOSDPGRecoveryDelete.h"
+MESSAGE(MOSDPGRecoveryDelete)
+#include "messages/MOSDPGRecoveryDeleteReply.h"
+MESSAGE(MOSDPGRecoveryDeleteReply)
 #include "messages/MOSDPGScan.h"
 MESSAGE(MOSDPGScan)
 #include "messages/MOSDPGTemp.h"

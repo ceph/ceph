@@ -497,6 +497,7 @@ protected:
   /// Log is clean on [dirty_to, dirty_from)
   bool touched_log;
   bool clear_divergent_priors;
+  bool rebuilt_missing_with_deletes = false;
 
   void mark_dirty_to(eversion_t to) {
     if (to > dirty_to)
@@ -517,7 +518,8 @@ public:
       (dirty_from != eversion_t::max()) ||
       (writeout_from != eversion_t::max()) ||
       !(trimmed.empty()) ||
-      !missing.is_clean();
+      !missing.is_clean() ||
+      rebuilt_missing_with_deletes;
   }
   void mark_log_for_rewrite() {
     mark_dirty_to(eversion_t::max());
@@ -576,12 +578,8 @@ public:
     missing.revise_have(oid, have);
   }
 
-  void revise_need(hobject_t oid, eversion_t need) {
-    missing.revise_need(oid, need);
-  }
-
   void missing_add(const hobject_t& oid, eversion_t need, eversion_t have) {
-    missing.add(oid, need, have);
+    missing.add(oid, need, have, false);
   }
 
   //////////////////// get or set log ////////////////////
@@ -679,27 +677,37 @@ public:
     assert(log.get_can_rollback_to() >= v);
   }
 
-  void activate_not_complete(pg_info_t &info) {
+  void reset_complete_to(pg_info_t *info) {
     log.complete_to = log.log.begin();
-    while (log.complete_to->version <
+    while (!missing.get_items().empty() && log.complete_to->version <
 	   missing.get_items().at(
 	     missing.get_rmissing().begin()->second
 	     ).need)
       ++log.complete_to;
     assert(log.complete_to != log.log.end());
     if (log.complete_to == log.log.begin()) {
-      info.last_complete = eversion_t();
+      if (info)
+	info->last_complete = eversion_t();
     } else {
       --log.complete_to;
-      info.last_complete = log.complete_to->version;
+      if (info)
+	info->last_complete = log.complete_to->version;
       ++log.complete_to;
     }
+  }
+
+  void activate_not_complete(pg_info_t &info) {
+    reset_complete_to(&info);
     log.last_requested = 0;
   }
 
   void proc_replica_log(pg_info_t &oinfo,
 			const pg_log_t &olog,
 			pg_missing_t& omissing, pg_shard_t from) const;
+
+  void rebuild_missing_set_with_deletes(ObjectStore *store,
+					coll_t pg_coll,
+					const pg_info_t &info);
 
 protected:
   static void split_by_object(
@@ -803,7 +811,8 @@ protected:
       assert(objiter->second->version > last_divergent_update);
 
       // ensure missing has been updated appropriately
-      if (objiter->second->is_update()) {
+      if (objiter->second->is_update() ||
+	  (missing.may_include_deletes && objiter->second->is_delete())) {
 	assert(missing.is_missing(hoid) &&
 	       missing.get_items().at(hoid).need == objiter->second->version);
       } else {
@@ -857,7 +866,7 @@ protected:
 	ldpp_dout(dpp, 10) << __func__ << ": hoid " << hoid
 			   << " missing.have is " << missing.get_items().at(hoid).have
 			   << ", adjusting" << dendl;
-	missing.revise_need(hoid, prior_version);
+	missing.revise_need(hoid, prior_version, false);
 	if (prior_version <= info.log_tail) {
 	  ldpp_dout(dpp, 10) << __func__ << ": hoid " << hoid
 			     << " prior_version " << prior_version
@@ -915,7 +924,7 @@ protected:
 	  rollbacker->trim(i);
 	}
       }
-      missing.add(hoid, prior_version, eversion_t());
+      missing.add(hoid, prior_version, eversion_t(), false);
       if (prior_version <= info.log_tail) {
 	ldpp_dout(dpp, 10) << __func__ << ": hoid " << hoid
 			   << " prior_version " << prior_version
@@ -1011,13 +1020,21 @@ public:
       }
       if (p->soid <= last_backfill &&
 	  !p->is_error()) {
-	missing.add_next_event(*p);
-	if (rollbacker) {
-	  // hack to match PG::mark_all_unfound_lost
-	  if (maintain_rollback && p->is_lost_delete() && p->can_rollback()) {
-	    rollbacker->try_stash(p->soid, p->version.version);
-	  } else if (p->is_delete()) {
-	    rollbacker->remove(p->soid);
+	if (missing.may_include_deletes) {
+	  missing.add_next_event(*p);
+	} else {
+	  if (p->is_delete()) {
+	    missing.rm(p->soid, p->version);
+	  } else {
+	    missing.add_next_event(*p);
+	  }
+	  if (rollbacker) {
+	    // hack to match PG::mark_all_unfound_lost
+	    if (maintain_rollback && p->is_lost_delete() && p->can_rollback()) {
+	      rollbacker->try_stash(p->soid, p->version.version);
+	    } else if (p->is_delete()) {
+	      rollbacker->remove(p->soid);
+	    }
 	  }
 	}
       }
@@ -1040,6 +1057,17 @@ public:
       this);
     if (!entries.empty()) {
       mark_writeout_from(entries.begin()->version);
+      if (entries.begin()->is_lost_delete()) {
+	// hack: since lost deletes queue recovery directly, and don't
+	// go through activate_not_complete() again, our complete_to
+	// iterator may still point at log.end(). Reset it to point
+	// before these new lost_delete entries.  This only occurs
+	// when lost+delete entries are initially added, which is
+	// always in a list of solely lost_delete entries, so it is
+	// sufficient to check whether the first entry is a
+	// lost_delete
+	reset_complete_to(nullptr);
+      }
     }
     return invalidate_stats;
   }
@@ -1065,7 +1093,8 @@ public:
     const coll_t& coll,
     const ghobject_t &log_oid,
     const pg_missing_tracker_t &missing,
-    bool require_rollback);
+    bool require_rollback,
+    bool *rebuilt_missing_set_with_deletes);
 
   static void _write_log_and_missing_wo_missing(
     ObjectStore::Transaction& t,
@@ -1096,6 +1125,7 @@ public:
     bool touch_log,
     bool require_rollback,
     bool clear_divergent_priors,
+    bool *rebuilt_missing_with_deletes,
     set<string> *log_keys_debug
     );
 
@@ -1144,6 +1174,7 @@ public:
     ObjectMap::ObjectMapIterator p = store->get_omap_iterator(log_coll, log_oid);
     map<eversion_t, hobject_t> divergent_priors;
     bool has_divergent_priors = false;
+    missing.may_include_deletes = false;
     list<pg_log_entry_t> entries;
     if (p) {
       for (p->seek_to_first(); p->valid() ; p->next(false)) {
@@ -1162,10 +1193,17 @@ public:
 	  ::decode(on_disk_can_rollback_to, bp);
 	} else if (p->key() == "rollback_info_trimmed_to") {
 	  ::decode(on_disk_rollback_info_trimmed_to, bp);
+	} else if (p->key() == "may_include_deletes_in_missing") {
+	  missing.may_include_deletes = true;
 	} else if (p->key().substr(0, 7) == string("missing")) {
-	  pair<hobject_t, pg_missing_item> p;
-	  ::decode(p, bp);
-	  missing.add(p.first, p.second.need, p.second.have);
+	  hobject_t oid;
+	  pg_missing_item item;
+	  ::decode(oid, bp);
+	  ::decode(item, bp);
+	  if (item.is_delete()) {
+	    assert(missing.may_include_deletes);
+	  }
+	  missing.add(oid, item.need, item.have, item.is_delete());
 	} else {
 	  pg_log_entry_t e;
 	  e.decode_with_checksum(bp);
@@ -1209,7 +1247,8 @@ public:
 	  if (did.count(i->soid)) continue;
 	  did.insert(i->soid);
 
-	  if (i->is_delete()) continue;
+	  if (!missing.may_include_deletes && i->is_delete())
+	    continue;
 
 	  bufferlist bv;
 	  int r = store->getattr(
@@ -1226,22 +1265,30 @@ public:
 		auto miter = missing.get_items().find(i->soid);
 		assert(miter != missing.get_items().end());
 		assert(miter->second.need == i->version);
-		assert(miter->second.have == oi.version);
+		// the 'have' version is reset if an object is deleted,
+		// then created again
+		assert(miter->second.have == oi.version || miter->second.have == eversion_t());
 		checked.insert(i->soid);
 	      } else {
-		missing.add(i->soid, i->version, oi.version);
+		missing.add(i->soid, i->version, oi.version, i->is_delete());
 	      }
 	    }
 	  } else {
 	    ldpp_dout(dpp, 15) << "read_log_and_missing  missing " << *i << dendl;
 	    if (debug_verify_stored_missing) {
 	      auto miter = missing.get_items().find(i->soid);
-	      assert(miter != missing.get_items().end());
-	      assert(miter->second.need == i->version);
-	      assert(miter->second.have == eversion_t());
+	      if (i->is_delete()) {
+		assert(miter == missing.get_items().end() ||
+		       (miter->second.need == i->version &&
+			miter->second.have == eversion_t()));
+	      } else {
+		assert(miter != missing.get_items().end());
+		assert(miter->second.need == i->version);
+		assert(miter->second.have == eversion_t());
+	      }
 	      checked.insert(i->soid);
 	    } else {
-	      missing.add(i->soid, i->version, eversion_t());
+	      missing.add(i->soid, i->version, eversion_t(), i->is_delete());
 	    }
 	  }
 	}
@@ -1252,7 +1299,8 @@ public:
 	    if (i.second.need > log.tail ||
 	      i.first > info.last_backfill) {
 	      ldpp_dout(dpp, -1) << __func__ << ": invalid missing set entry found "
-				 << i.first
+				 << i.first << " " << i.second << " log tail = "
+				 << log.tail << " last_backfill = " << info.last_backfill
 				 << dendl;
 	      assert(0 == "invalid missing set entry found");
 	    }
@@ -1266,7 +1314,7 @@ public:
 	      object_info_t oi(bv);
 	      assert(oi.version == i.second.have);
 	    } else {
-	      assert(eversion_t() == i.second.have);
+	      assert(i.second.is_delete() || eversion_t() == i.second.have);
 	    }
 	  }
 	} else {
@@ -1315,7 +1363,7 @@ public:
 	      }
 	    } else {
 	      ldpp_dout(dpp, 15) << "read_log_and_missing  missing " << *i << dendl;
-	      missing.add(i->second, i->first, eversion_t());
+	      missing.add(i->second, i->first, eversion_t(), false);
 	    }
 	  }
 	}
