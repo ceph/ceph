@@ -65,7 +65,26 @@ def start_rgw(ctx, config, clients):
             '/var/log/ceph/rgw.{client_with_cluster}.log'.format(client_with_cluster=client_with_cluster),
             '--rgw_ops_log_socket_path',
             '{tdir}/rgw.opslog.{client_with_cluster}.sock'.format(tdir=testdir,
-                                                     client_with_cluster=client_with_cluster),
+                                                     client_with_cluster=client_with_cluster)
+	    ])
+
+        keystone_role = client_config.get('use-keystone-role', None)
+        if keystone_role is not None:
+            if not ctx.keystone:
+                raise ConfigError('rgw must run after the keystone task')
+            url = 'http://{host}:{port}/v1/KEY_$(tenant_id)s'.format(host=host,
+                                                                     port=port)
+            ctx.keystone.create_endpoint(ctx, keystone_role, 'swift', url)
+
+            keystone_host, keystone_port = \
+                ctx.keystone.public_endpoints[keystone_role]
+            rgw_cmd.extend([
+                '--rgw_keystone_url',
+                'http://{khost}:{kport}'.format(khost=keystone_host,
+                                                kport=keystone_port),
+                ])
+
+        rgw_cmd.extend([
             '--foreground',
             run.Raw('|'),
             'sudo',

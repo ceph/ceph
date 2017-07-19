@@ -1,6 +1,7 @@
 """
 Deploy and configure Keystone for Teuthology
 """
+import argparse
 import contextlib
 import logging
 
@@ -178,8 +179,9 @@ def run_keystone(ctx, config):
         client_public_with_id = 'keystone.public' + '.' + client_id
         client_public_with_cluster = cluster_name + '.' + client_public_with_id
 
+        public_host, public_port = ctx.keystone.public_endpoints[client]
         run_cmd = get_keystone_venved_cmd(ctx, 'keystone-wsgi-public',
-            [   '--host', 'localhost', '--port', '5000',
+            [   '--host', public_host, '--port', str(public_port),
                 # Let's put the Keystone in background, wait for EOF
                 # and after receiving it, send SIGTERM to the daemon.
                 # This crazy hack is because Keystone, in contrast to
@@ -202,8 +204,9 @@ def run_keystone(ctx, config):
         # start the admin endpoint
         client_admin_with_id = 'keystone.admin' + '.' + client_id
 
+        admin_host, admin_port = ctx.keystone.admin_endpoints[client]
         run_cmd = get_keystone_venved_cmd(ctx, 'keystone-wsgi-admin',
-            [   '--host', 'localhost', '--port', '35357',
+            [   '--host', admin_host, '--port', str(admin_port),
                 run.Raw('& { read; kill %1; }')
             ]
         )
@@ -252,9 +255,12 @@ def dict_to_args(special, items):
 
 def run_section_cmds(ctx, cclient, section_cmd, special,
                      section_config_list):
+    admin_host, admin_port = ctx.keystone.admin_endpoints[cclient]
+
     auth_section = [
         ( 'os-token', 'ADMIN' ),
-        ( 'os-url', 'http://127.0.0.1:35357/v2.0' ),
+        ( 'os-url', 'http://{host}:{port}/v2.0'.format(host=admin_host,
+                                                       port=admin_port) ),
     ]
 
     for section_item in section_config_list:
@@ -262,36 +268,58 @@ def run_section_cmds(ctx, cclient, section_cmd, special,
             [ 'openstack' ] + section_cmd.split() +
             dict_to_args(special, auth_section + section_item.items()))
 
+def create_endpoint(ctx, cclient, service, url):
+    endpoint_section = {
+        'service': service,
+        'publicurl': url,
+    }
+    return run_section_cmds(ctx, cclient, 'endpoint create', 'service',
+                            [ endpoint_section ])
+
 @contextlib.contextmanager
-def create_users(ctx, config):
-    """
-    Create a main and an alternate s3 user.
-    """
+def fill_keystone(ctx, config):
     assert isinstance(config, dict)
 
-    (cclient, cconfig) = config.items()[0]
+    for (cclient, cconfig) in config.items():
+        # configure tenants/projects
+        run_section_cmds(ctx, cclient, 'project create', 'name',
+                         cconfig['tenants'])
+        run_section_cmds(ctx, cclient, 'user create', 'name',
+                         cconfig['users'])
+        run_section_cmds(ctx, cclient, 'role create', 'name',
+                         cconfig['roles'])
+        run_section_cmds(ctx, cclient, 'role add', 'name',
+                         cconfig['role-mappings'])
+        run_section_cmds(ctx, cclient, 'service create', 'name',
+                         cconfig['services'])
 
-    # configure tenants/projects
-    run_section_cmds(ctx, cclient, 'project create', 'name',
-                     cconfig['tenants'])
-    run_section_cmds(ctx, cclient, 'user create', 'name',
-                     cconfig['users'])
-    run_section_cmds(ctx, cclient, 'role create', 'name',
-                     cconfig['roles'])
-    run_section_cmds(ctx, cclient, 'role add', 'name',
-                     cconfig['role-mappings'])
-    run_section_cmds(ctx, cclient, 'service create', 'name',
-                     cconfig['services'])
-    run_section_cmds(ctx, cclient, 'endpoint create', 'service',
-                     cconfig['endpoints'])
+        public_host, public_port = ctx.keystone.public_endpoints[cclient]
+        url = 'http://{host}:{port}/v2.0'.format(host=public_host,
+                                                 port=public_port)
+        create_endpoint(ctx, cclient, 'keystone', url)
+        # for the deferred endpoint creation; currently it's used in rgw.py
+        ctx.keystone.create_endpoint = create_endpoint
 
-    # sleep driven synchronization -- just in case
-    run_in_keystone_venv(ctx, cclient, [ 'sleep', '3' ])
+        # sleep driven synchronization -- just in case
+        run_in_keystone_venv(ctx, cclient, [ 'sleep', '3' ])
     try:
         yield
     finally:
         pass
 
+def assign_ports(ctx, config, initial_port):
+    """
+    Assign port numbers starting from @initial_port
+    """
+    port = initial_port
+    role_endpoints = {}
+    for remote, roles_for_host in ctx.cluster.remotes.iteritems():
+        for role in roles_for_host:
+            if role in config:
+                role_endpoints[role] = (remote.name.split('@')[1], port)
+                port += 1
+
+    return role_endpoints
 
 @contextlib.contextmanager
 def task(ctx, config):
@@ -326,11 +354,6 @@ def task(ctx, config):
               - name: swift
                 type: object-store
                 description: Swift Service
-              endpoints:
-                - service: keystone
-                  publicurl: http://127.0.0.1:$(public_port)s/v2.0
-                - service: swift
-                  publicurl: http://127.0.0.1:8000/v1/KEY_$(tenant_id)s
     """
     assert config is None or isinstance(config, list) \
         or isinstance(config, dict), \
@@ -348,12 +371,16 @@ def task(ctx, config):
 
     log.debug('Keystone config is %s', config)
 
+    ctx.keystone = argparse.Namespace()
+    ctx.keystone.public_endpoints = assign_ports(ctx, config, 5000)
+    ctx.keystone.admin_endpoints = assign_ports(ctx, config, 35357)
+
     with contextutil.nested(
         lambda: install_packages(ctx=ctx, config=config),
         lambda: download(ctx=ctx, config=config),
         lambda: setup_venv(ctx=ctx, config=config),
         lambda: configure_instance(ctx=ctx, config=config),
         lambda: run_keystone(ctx=ctx, config=config),
-        lambda: create_users(ctx=ctx, config=config),
+        lambda: fill_keystone(ctx=ctx, config=config),
         ):
         yield

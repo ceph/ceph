@@ -45,31 +45,17 @@ def download(ctx, config):
     """
     assert isinstance(config, dict)
     log.info('Downloading Tempest...')
-    s3_branches = [ 'giant', 'firefly', 'firefly-original', 'hammer' ]
     for (client, cconf) in config.items():
-        branch = cconf.get('force-branch', None)
-        if not branch:
-            ceph_branch = ctx.config.get('branch')
-            suite_branch = ctx.config.get('suite_branch', ceph_branch)
-            if suite_branch in s3_branches:
-                branch = cconf.get('branch', suite_branch)
-	    else:
-                branch = cconf.get('branch', 'ceph-' + suite_branch)
-        if not branch:
-            raise ValueError(
-                "Could not determine what branch to use for Tempest!")
-        else:
-            log.info("Using branch '%s' for Tempest", branch)
-
-        sha1 = cconf.get('sha1')
         ctx.cluster.only(client).run(
             args=[
                 'git', 'clone',
-                '-b', branch,
+                '-b', cconf.get('force-branch', 'master'),
                 'https://github.com/openstack/tempest.git',
                 get_tempest_dir(ctx)
-                ],
-            )
+            ],
+        )
+
+        sha1 = cconf.get('sha1')
         if sha1 is not None:
             run_in_tempest_dir(ctx, client, [ 'git', 'reset', '--hard', sha1 ])
     try:
@@ -102,8 +88,10 @@ def setup_logging(ctx, cpar):
     cpar.set('DEFAULT', 'log_dir', teuthology.get_archive_dir(ctx))
     cpar.set('DEFAULT', 'log_file', 'tempest.log')
 
-def to_config(config, section, cpar):
+def to_config(config, params, section, cpar):
     for (k, v) in config[section].items():
+        if (isinstance(v, str)):
+            v = v.format(**params)
         cpar.set(section, k, v)
 
 @contextlib.contextmanager
@@ -127,13 +115,24 @@ def configure_instance(ctx, config):
         (remote,) = ctx.cluster.only(client).remotes.keys()
         local_conf = remote.get_file(tetcdir + '/tempest.conf.sample')
 
+        # fill the params dictionary which allows to use templatized configs
+        keystone_role = cconfig.get('use-keystone-role', None)
+        if keystone_role is None \
+            or keystone_role not in ctx.keystone.public_endpoints:
+            raise ConfigError('the use-keystone-role is misconfigured')
+        public_host, public_port = ctx.keystone.public_endpoints[keystone_role]
+        params = {
+            'keystone_public_host': public_host,
+            'keystone_public_port': str(public_port),
+        }
+
         cpar = ConfigParser.ConfigParser()
         cpar.read(local_conf)
         setup_logging(ctx, cpar)
-        to_config(cconfig, 'auth', cpar)
-        to_config(cconfig, 'identity', cpar)
-        to_config(cconfig, 'object-storage', cpar)
-        to_config(cconfig, 'object-storage-feature-enabled', cpar)
+        to_config(cconfig, params, 'auth', cpar)
+        to_config(cconfig, params, 'identity', cpar)
+        to_config(cconfig, params, 'object-storage', cpar)
+        to_config(cconfig, params, 'object-storage-feature-enabled', cpar)
         cpar.write(file(local_conf, 'w+'))
 
         remote.put_file(local_conf, tetcdir + '/tempest.conf')
@@ -177,7 +176,6 @@ def task(ctx, config):
         ceph:
           conf:
             client:
-              rgw keystone url: http://localhost:35357
               rgw keystone admin token: ADMIN
               rgw keystone accepted roles: admin,Member
               rgw keystone implicit tenants: true
@@ -195,17 +193,20 @@ def task(ctx, config):
           # accompanying stuff, the whole Swift API must be put in root
           # of the whole URL  hierarchy (read: frontend_prefix == /swift).
           frontend_prefix: /swift
+          client.0:
+            use-keystone-role: client.0
       - tempest:
           client.0:
             force-branch: master
+            use-keystone-role: client.0
             auth:
               admin_username: admin
               admin_project_name: admin
               admin_password: ADMIN
               admin_domain_name: Default
             identity:
-              uri: http://127.0.0.1:5000/v2.0/
-              uri_v3: http://127.0.0.1:5000/v3/
+              uri: http://{keystone_public_host}:{keystone_public_port}/v2.0/
+              uri_v3: http://{keystone_public_host}:{keystone_public_port}/v3/
               admin_role: admin
             object-storage:
               reseller_admin_role: admin
@@ -228,6 +229,8 @@ def task(ctx, config):
 
     if not ctx.tox:
         raise ConfigError('tempest must run after the tox task')
+    if not ctx.keystone:
+        raise ConfigError('tempest must run after the keystone task')
 
     all_clients = ['client.{id}'.format(id=id_)
                    for id_ in teuthology.all_roles_of_type(ctx.cluster, 'client')]
