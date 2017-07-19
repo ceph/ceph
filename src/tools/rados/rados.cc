@@ -1340,6 +1340,10 @@ static void dump_errors(const err_t &err, Formatter &f, const char *name)
     f.dump_string("error", "oi_attr_corrupted");
   if (err.has_obj_size_oi_mismatch())
     f.dump_string("error", "obj_size_oi_mismatch");
+  if (err.has_ss_attr_missing())
+    f.dump_string("error", "ss_attr_missing");
+  if (err.has_ss_attr_corrupted())
+    f.dump_string("error", "ss_attr_corrupted");
   f.close_section();
 }
 

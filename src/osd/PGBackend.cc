@@ -852,11 +852,12 @@ map<pg_shard_t, ScrubMap *>::const_iterator
       goto out;
     }
 
-    // We don't set errors here for snapset, but we won't pick an auth copy if the
-    // snapset is missing or won't decode.
+    // We won't pick an auth copy if the snapset is missing or won't decode.
     if (obj.is_head() || obj.is_snapdir()) {
       k = i->second.attrs.find(SS_ATTR);
       if (k == i->second.attrs.end()) {
+	shard_info.set_ss_attr_missing();
+	error_string += " ss_attr_missing";
 	goto out;
       }
       ss_bl.push_back(k->second);
@@ -865,6 +866,8 @@ map<pg_shard_t, ScrubMap *>::const_iterator
 	::decode(ss, bliter);
       } catch (...) {
 	// invalid snapset, probably corrupt
+	shard_info.set_ss_attr_corrupted();
+	error_string += " ss_attr_corrupted";
 	goto out;
       }
     }
