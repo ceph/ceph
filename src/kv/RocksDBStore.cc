@@ -222,6 +222,29 @@ int RocksDBStore::do_open(ostream &out, bool create_if_missing)
   rocksdb::BlockBasedTableOptions bbt_opts;
   bbt_opts.block_size = g_conf->rocksdb_block_size;
   bbt_opts.block_cache = cache;
+
+  uint64_t bloom_bits = g_conf->rocksdb_bloom_bits_per_key;
+  if (bloom_bits > 0) {
+    dout(10) << __func__ << " set bloom filter bits per key to "
+	     << bloom_bits << dendl;
+    bbt_opts.filter_policy.reset(rocksdb::NewBloomFilterPolicy(bloom_bits));
+  }
+  if (g_conf->rocksdb_index_type == "binary_search")
+    bbt_opts.index_type = rocksdb::BlockBasedTableOptions::IndexType::kBinarySearch;
+  if (g_conf->rocksdb_index_type == "hash_search")
+    bbt_opts.index_type = rocksdb::BlockBasedTableOptions::IndexType::kHashSearch;
+  if (g_conf->rocksdb_index_type == "two_level")
+    bbt_opts.index_type = rocksdb::BlockBasedTableOptions::IndexType::kTwoLevelIndexSearch;
+  bbt_opts.cache_index_and_filter_blocks = 
+      g_conf->rocksdb_cache_index_and_filter_blocks;
+  bbt_opts.cache_index_and_filter_blocks_with_high_priority = 
+      g_conf->rocksdb_cache_index_and_filter_blocks_with_high_priority;
+  bbt_opts.partition_filters = g_conf->rocksdb_partition_filters;
+  if (g_conf->rocksdb_metadata_block_size > 0)
+    bbt_opts.metadata_block_size = g_conf->rocksdb_metadata_block_size;
+  bbt_opts.pin_l0_filter_and_index_blocks_in_cache = 
+      g_conf->rocksdb_pin_l0_filter_and_index_blocks_in_cache;
+
   opt.table_factory.reset(rocksdb::NewBlockBasedTableFactory(bbt_opts));
   dout(10) << __func__ << " set block size to " << g_conf->rocksdb_block_size
            << " cache size to " << g_conf->rocksdb_cache_size << dendl;
