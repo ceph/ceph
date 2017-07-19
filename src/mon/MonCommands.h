@@ -154,7 +154,9 @@ COMMAND("auth print-key name=entity,type=CephString", "display requested key", \
 	"auth", "rx", "cli,rest")
 COMMAND("auth print_key name=entity,type=CephString", "display requested key", \
 	"auth", "rx", "cli,rest")
-COMMAND("auth list", "list authentication state", "auth", "rx", "cli,rest")
+COMMAND_WITH_FLAG("auth list", "list authentication state", "auth", "rx", "cli,rest",
+		  FLAG(DEPRECATED))
+COMMAND("auth ls", "list authentication state", "auth", "rx", "cli,rest")
 COMMAND("auth import", "auth import: read keyring file from -i <file>", \
 	"auth", "rwx", "cli,rest")
 COMMAND("auth add " \

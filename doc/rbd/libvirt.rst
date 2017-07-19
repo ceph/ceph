@@ -75,7 +75,7 @@ To configure Ceph for use with ``libvirt``, perform the following steps:
 	
    Verify the name exists. :: 
    
-	ceph auth list
+	ceph auth ls
 
    **NOTE**: ``libvirt`` will access Ceph using the ID ``libvirt``, 
    not the Ceph name ``client.libvirt``. See `User Management - User`_ and 
