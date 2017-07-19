@@ -514,7 +514,13 @@ void MDSMap::mds_info_t::decode(bufferlist::iterator& bl)
   DECODE_FINISH(bl);
 }
 
-
+std::string MDSMap::mds_info_t::human_name() const
+{
+  // Like "daemon mds.myhost restarted", "Activating daemon mds.myhost"
+  std::ostringstream out;
+  out << "daemon mds." << name;
+  return out.str();
+}
 
 void MDSMap::encode(bufferlist& bl, uint64_t features) const
 {
