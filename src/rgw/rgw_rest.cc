@@ -1193,6 +1193,7 @@ int RGWPutObj_ObjStore::get_data(bufferlist& bl)
 
   int len = 0;
   if (cl) {
+    ACCOUNTING_IO(s)->set_account(true);
     bufferptr bp(cl);
 
     const auto read_len  = recv_body(s, bp.c_str(), cl);
@@ -1223,7 +1224,7 @@ int RGWPutObj_ObjStore::get_data(bufferlist& bl)
         bl.rebuild();
       }
     }
-
+    ACCOUNTING_IO(s)->set_account(false);
   }
 
   if ((uint64_t)ofs + len > s->cct->_conf->rgw_max_put_size) {
