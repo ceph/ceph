@@ -118,7 +118,7 @@ public:
         DaemonStatePtr state;
         if (daemon_state.exists(key)) {
           state = daemon_state.get(key);
-          // TODO lock state
+	  Mutex::Locker l(state->lock);
           daemon_meta.erase("name");
           daemon_meta.erase("hostname");
           state->metadata.clear();
@@ -415,6 +415,7 @@ void Mgr::handle_osd_map()
 
       if (daemon_state.exists(k)) {
         auto metadata = daemon_state.get(k);
+	Mutex::Locker l(metadata->lock);
         auto addr_iter = metadata->metadata.find("front_addr");
         if (addr_iter != metadata->metadata.end()) {
           const std::string &metadata_addr = addr_iter->second;
@@ -552,6 +553,7 @@ void Mgr::handle_fs_map(MFSMap* m)
     bool update = false;
     if (daemon_state.exists(k)) {
       auto metadata = daemon_state.get(k);
+      Mutex::Locker l(metadata->lock);
       if (metadata->metadata.empty() ||
 	  metadata->metadata.count("addr") == 0) {
         update = true;

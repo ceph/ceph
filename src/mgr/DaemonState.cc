@@ -62,7 +62,8 @@ DaemonStateCollection DaemonStateIndex::get_by_service(
   return result;
 }
 
-DaemonStateCollection DaemonStateIndex::get_by_server(const std::string &hostname) const
+DaemonStateCollection DaemonStateIndex::get_by_server(
+  const std::string &hostname) const
 {
   Mutex::Locker l(lock);
 

@@ -57,6 +57,7 @@ void PyModules::dump_server(const std::string &hostname,
   std::string ceph_version;
 
   for (const auto &i : dmc) {
+    Mutex::Locker l(i.second->lock);
     const auto &key = i.first;
     const std::string &str_type = key.first;
     const std::string &svc_name = key.second;
@@ -122,6 +123,7 @@ PyObject *PyModules::get_metadata_python(
   const std::string &svc_id)
 {
   auto metadata = daemon_state.get(DaemonKey(svc_name, svc_id));
+  Mutex::Locker l(metadata->lock);
   PyFormatter f;
   f.dump_string("hostname", metadata->hostname);
   for (const auto &i : metadata->metadata) {
@@ -137,6 +139,7 @@ PyObject *PyModules::get_daemon_status_python(
   const std::string &svc_id)
 {
   auto metadata = daemon_state.get(DaemonKey(svc_name, svc_id));
+  Mutex::Locker l(metadata->lock);
   PyFormatter f;
   for (const auto &i : metadata->service_status) {
     f.dump_string(i.first.c_str(), i.second);
@@ -199,6 +202,7 @@ PyObject *PyModules::get_python(const std::string &what)
     PyFormatter f;
     auto dmc = daemon_state.get_by_service("osd");
     for (const auto &i : dmc) {
+      Mutex::Locker l(i.second->lock);
       f.open_object_section(i.first.second.c_str());
       f.dump_string("hostname", i.second->hostname);
       for (const auto &j : i.second->metadata) {
@@ -669,8 +673,7 @@ PyObject* PyModules::get_counter_python(
 
   auto metadata = daemon_state.get(DaemonKey(svc_name, svc_id));
 
-  // FIXME: this is unsafe, I need to either be inside DaemonStateIndex's
-  // lock or put a lock on individual DaemonStates
+  Mutex::Locker l2(metadata->lock);
   if (metadata) {
     if (metadata->perf_counters.instances.count(path)) {
       auto counter_instance = metadata->perf_counters.instances.at(path);
@@ -731,6 +734,7 @@ PyObject* PyModules::get_perf_schema_python(
       std::ostringstream daemon_name;
       auto key = statepair.first;
       auto state = statepair.second;
+      Mutex::Locker l(state->lock);
       daemon_name << key.first << "." << key.second;
       f.open_object_section(daemon_name.str().c_str());
 
