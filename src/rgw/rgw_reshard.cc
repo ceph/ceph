@@ -639,14 +639,20 @@ int RGWReshard::list(int logshard_num, string& marker, uint32_t max, std::list<c
   get_logshard_oid(logshard_num, &logshard_oid);
 
   int ret = cls_rgw_reshard_list(store->reshard_pool_ctx, logshard_oid, marker, max, entries, is_truncated);
-  if (ret < 0 && ret != -ENOENT) {
+
+  if (ret < 0) {
+    if (ret == -ENOENT) {
+      *is_truncated = false;
+      ret = 0;
+    }
     lderr(store->ctx()) << "ERROR: failed to list reshard log entries, oid=" << logshard_oid << dendl;
-    return ret;
+    if (ret == -EACCES) {
+      lderr(store->ctx()) << "access denied to pool " << store->get_zone_params().reshard_pool
+                          << ". Fix the pool access permissions of your client" << dendl;
+    }
   }
-  if (ret == -ENOENT) {
-    *is_truncated = false;
-  }
-  return 0;
+
+  return ret;
 }
 
 int RGWReshard::get(cls_rgw_reshard_entry& entry)

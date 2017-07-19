@@ -1267,7 +1267,7 @@ struct RGWZoneParams : RGWSystemMetaObj {
     if (struct_v >= 10) {
       ::decode(reshard_pool, bl);
     } else {
-      reshard_pool = name + ".rgw.reshard";
+      reshard_pool = log_pool.name + ":reshard";
     }
     DECODE_FINISH(bl);
   }

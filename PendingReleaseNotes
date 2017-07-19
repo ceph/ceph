@@ -5,6 +5,8 @@
 * Added new configuration "public bind addr" to support dynamic environments
   like Kubernetes. When set the Ceph MON daemon could bind locally to an IP
   address and advertise a different IP address "public addr" on the network.
+* RGW: bucket index resharding now uses the reshard namespace in upgrade scenarios as well
+  this is a changed behaviour from RC1 where a new pool for reshard was created
 
 12.0.0
 ------
