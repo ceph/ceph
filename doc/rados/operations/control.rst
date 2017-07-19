@@ -44,14 +44,57 @@ or not it is in the quorum. ::
 Authentication Subsystem
 ========================
 
-To add a keyring for an OSD, execute the following::
+To add auth info for ``entity`` from input file, or random key if no input is given, and/or any caps specified, execute the following::
 
-	ceph auth add {osd} {--in-file|-i} {path-to-osd-keyring}
+        ceph auth add <entity> {<caps> [<caps>...]}
+
+To update caps for ``entity`` from caps specified, execute the following::
+
+        ceph auth caps <entity> <caps> [<caps>...]
+
+To delete all caps for ``entity``, execute the following::
+
+        ceph auth del <entity>
 
 To list the cluster's keys and their capabilities, execute the following::
 
-	ceph auth list
+        ceph auth list
 
+To write keyring for ``entity``, or master keyring if none given, execute the following::
+
+        ceph auth export {<entity>}
+
+To write keyring file with requested key, execute the following::
+
+        ceph auth get <entity>
+
+To display requested key, execute the following::
+
+        ceph auth get-key <entity>
+
+To get or add auth info for ``entity`` from input file, or random key if no input is given, and/or any caps specified, execute the following::
+
+        ceph auth get-or-create <entity> {<caps> [<caps>...]}
+
+To get or add key for ``entity`` from system/caps pairs specified, execute the following::
+
+        ceph auth get-or-create-key <entity> {<caps> [<caps>...]}
+
+To import auth info from keyring file, execute the following::
+
+        ceph auth import {--in-file|-i} {path-to-keyring}
+
+To list the cluster's auth info, execute the following::
+
+        ceph auth list
+
+To display key info fo ``entity``, execute the following::
+
+        ceph auth print-key <entity>
+
+To remove all caps for ``entity``, execute the following::
+
+        ceph auth print-key <entity>
 
 Placement Group Subsystem
 =========================
