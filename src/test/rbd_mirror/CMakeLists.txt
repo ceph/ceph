@@ -26,6 +26,7 @@ add_executable(unittest_rbd_mirror
   image_replayer/test_mock_BootstrapRequest.cc
   image_replayer/test_mock_CreateImageRequest.cc
   image_replayer/test_mock_EventPreprocessor.cc
+  image_replayer/test_mock_GetMirrorImageIdRequest.cc
   image_replayer/test_mock_PrepareLocalImageRequest.cc
   image_sync/test_mock_ImageCopyRequest.cc
   image_sync/test_mock_ObjectCopyRequest.cc
