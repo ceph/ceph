@@ -230,3 +230,8 @@
   unassociated pools can be manually associated using the new
   "ceph osd pool application enable" command. For more details see
   "Associate Pool to Application" in the documentation.
+
+* ceph-mgr now has a Zabbix plugin. Using zabbix_sender it sends trapper
+  events to a Zabbix server containing high-level information of the Ceph
+  cluster. This makes it easy to monitor a Ceph cluster's status and send
+  out notifications in case of a malfunction.
