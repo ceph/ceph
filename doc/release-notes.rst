@@ -67,7 +67,7 @@ Major Changes from Kraken
   * There is now a *backoff* mechanism that prevents OSDs from being
     overloaded by requests to objects or PGs that are not currently able to
     process IO.
-  * There is a *simplified OSD replacement process* that is more robust.  FIXME DOCS
+  * There is a `simplified OSD replacement process`_ that is more robust.
   * You can query the supported features and (apparent) releases of
     all connected daemons and clients with ``ceph features``. FIXME DOCS
   * You can configure the oldest Ceph client version you wish to allow to
@@ -238,6 +238,7 @@ Major Changes from Kraken
     - ``ceph tell <daemon> help`` will now return a usage summary.
 
 .. _Read more about EC overwrites: ../rados/operations/erasure-code/#erasure-coding-with-overwrites
+.. _simplified OSD replacement process: ../rados/operations/add-or-rm-osds/#replacing-an-osd
 
 Major Changes from Jewel
 ------------------------
