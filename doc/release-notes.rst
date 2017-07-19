@@ -216,6 +216,7 @@ Major Changes from Kraken
     - ``ceph config-key dump`` dumps config-key entries and their
       contents.  (The existing ``ceph config-key list`` only dumps the key
       names, not the values.)
+    - ``ceph config-key list`` is deprecated in favor of ``ceph config-key ls``.
     - ``ceph osd set-{full,nearfull,backfillfull}-ratio`` sets the
       cluster-wide ratio for various full thresholds (when the cluster
       refuses IO, when the cluster warns about being close to full,

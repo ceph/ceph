@@ -241,7 +241,8 @@ bool ConfigKeyService::service_dispatch(MonOpRequestRef op)
       ret = -ENOENT;
     }
 
-  } else if (prefix == "config-key list") {
+  } else if (prefix == "config-key list" ||
+	     prefix == "config-key ls") {
     stringstream tmp_ss;
     store_list(tmp_ss);
     rdata.append(tmp_ss);
