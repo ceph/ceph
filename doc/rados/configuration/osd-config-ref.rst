@@ -695,7 +695,23 @@ perform well in a degraded state.
               less impacted.
 
 :Type: Float
-:Default: ``0.01``
+:Default: ``0``
+
+
+``osd recovery sleep hdd``
+
+:Description: Time to sleep before next recovery for HDDs.
+
+:Type: Float
+:Default: ``0.1``
+
+
+``osd recovery sleep ssd``
+
+:Description: Time to sleep before next recovery for SSDs.
+
+:Type: Float
+:Default: ``0``
 
 Tiering
 =======
