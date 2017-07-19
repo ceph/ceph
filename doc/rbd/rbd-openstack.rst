@@ -90,6 +90,14 @@ See `Create a Pool`_ for detail on specifying the number of placement groups for
 your pools, and `Placement Groups`_ for details on the number of placement
 groups you should set for your pools.
 
+Newly created pools must initialized prior to use. Use the ``rbd`` tool
+to initialize the pools::
+
+        rbd pool init volumes
+        rbd pool init images
+        rbd pool init backups
+        rbd pool init vms
+
 .. _Create a Pool: ../../rados/operations/pools#createpool
 .. _Placement Groups: ../../rados/operations/placement-groups
 

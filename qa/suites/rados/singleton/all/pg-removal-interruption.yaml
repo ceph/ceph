@@ -22,6 +22,7 @@ tasks:
 - exec:
     client.0:
       - sudo ceph osd pool create foo 128 128
+      - sudo ceph osd pool application enable foo rados
       - sleep 5
       - sudo ceph tell osd.0 injectargs -- --osd-inject-failure-on-pg-removal
       - sudo ceph osd pool delete foo foo --yes-i-really-really-mean-it

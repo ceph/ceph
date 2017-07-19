@@ -1284,9 +1284,18 @@ bool MDSMonitor::prepare_command(MonOpRequestRef op)
     return true;
   }
 
+  bool batched_propose = false;
   for (auto h : handlers) {
     if (h->can_handle(prefix)) {
+      batched_propose = h->batched_propose();
+      if (batched_propose) {
+        paxos->plug();
+      }
       r = h->handle(mon, pending_fsmap, op, cmdmap, ss);
+      if (batched_propose) {
+        paxos->unplug();
+      }
+
       if (r == -EAGAIN) {
         // message has been enqueued for retry; return.
         dout(4) << __func__ << " enqueue for retry by prepare_command" << dendl;
@@ -1340,6 +1349,9 @@ out:
     // success.. delay reply
     wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, r, rs,
 					      get_last_committed() + 1));
+    if (batched_propose) {
+      force_immediate_propose();
+    }
     return true;
   } else {
     // reply immediately
@@ -2271,7 +2283,7 @@ bool MDSMonitor::try_standby_replay(
 MDSMonitor::MDSMonitor(Monitor *mn, Paxos *p, string service_name)
   : PaxosService(mn, p, service_name)
 {
-  handlers = FileSystemCommandHandler::load();
+  handlers = FileSystemCommandHandler::load(p);
 }
 
 void MDSMonitor::on_restart()

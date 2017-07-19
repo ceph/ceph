@@ -419,6 +419,7 @@ function run_mon() {
         ceph osd pool delete rbd rbd --yes-i-really-really-mean-it || return 1
         ceph osd pool create rbd $PG_NUM || return 1
         ceph osd set-backfillfull-ratio .99
+	rbd pool init rbd
     fi
 }
 

@@ -51,10 +51,13 @@ public:
 
     int64_t pool_id = m_cluster->pool_lookup(pool_name.c_str());
     ASSERT_GE(pool_id, 0);
+
+    librados::IoCtx ioctx;
+    ASSERT_EQ(0, m_cluster->ioctx_create2(pool_id, ioctx));
+    ioctx.application_enable("rbd", true);
+
     m_pools.insert(pool_name);
     if (enable_mirroring) {
-      librados::IoCtx ioctx;
-      ASSERT_EQ(0, m_cluster->ioctx_create2(pool_id, ioctx));
       ASSERT_EQ(0, librbd::api::Mirror<>::mode_set(ioctx,
                                                    RBD_MIRROR_MODE_POOL));
 

@@ -3309,6 +3309,8 @@ int OSDMap::build_simple_optioned(CephContext *cct, epoch_t e, uuid_d &fsid,
       pools[pool].set_pg_num(poolbase << pg_bits);
       pools[pool].set_pgp_num(poolbase << pgp_bits);
       pools[pool].last_change = epoch;
+      pools[pool].application_metadata.insert(
+        {pg_pool_t::APPLICATION_NAME_RBD, {}});
       pool_name[pool] = plname;
       name_pool[plname] = pool;
     }

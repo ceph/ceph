@@ -78,8 +78,18 @@
 
 #include "json_spirit/json_spirit_reader.h"
 
+#include <boost/algorithm/string/predicate.hpp>
+
 #define dout_subsys ceph_subsys_mon
 #define OSD_PG_CREATING_PREFIX "osd_pg_creating"
+
+namespace {
+
+const uint32_t MAX_POOL_APPLICATIONS = 4;
+const uint32_t MAX_POOL_APPLICATION_KEYS = 64;
+const uint32_t MAX_POOL_APPLICATION_LENGTH = 128;
+
+} // anonymous namespace
 
 void LastEpochClean::Lec::report(ps_t ps, epoch_t last_epoch_clean)
 {
@@ -999,6 +1009,74 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
 	    pending_inc.new_erasure_code_profiles[p.first] = newprofile;
 	  }
 	}
+
+        // auto-enable pool applications upon upgrade
+        // NOTE: this can be removed post-Luminous assuming upgrades need to
+        // proceed through Luminous
+        for (auto &pool_pair : tmp.pools) {
+          int64_t pool_id = pool_pair.first;
+          pg_pool_t pg_pool = pool_pair.second;
+          if (pg_pool.is_tier()) {
+            continue;
+          }
+
+          std::string pool_name = tmp.get_pool_name(pool_id);
+          uint32_t match_count = 0;
+
+          // CephFS
+          FSMap const &pending_fsmap = mon->mdsmon()->get_pending();
+          if (pending_fsmap.pool_in_use(pool_id)) {
+            dout(10) << __func__ << " auto-enabling CephFS on pool '"
+                     << pool_name << "'" << dendl;
+            pg_pool.application_metadata.insert(
+              {pg_pool_t::APPLICATION_NAME_CEPHFS, {}});
+            ++match_count;
+          }
+
+          // RBD heuristics (default OpenStack pool names from docs and
+          // ceph-ansible)
+          if (boost::algorithm::contains(pool_name, "rbd") ||
+              pool_name == "images" || pool_name == "volumes" ||
+              pool_name == "backups" || pool_name == "vms") {
+            dout(10) << __func__ << " auto-enabling RBD on pool '"
+                     << pool_name << "'" << dendl;
+            pg_pool.application_metadata.insert(
+              {pg_pool_t::APPLICATION_NAME_RBD, {}});
+            ++match_count;
+          }
+
+          // RGW heuristics
+          if (boost::algorithm::contains(pool_name, ".rgw") ||
+              boost::algorithm::contains(pool_name, ".log") ||
+              boost::algorithm::contains(pool_name, ".intent-log") ||
+              boost::algorithm::contains(pool_name, ".usage") ||
+              boost::algorithm::contains(pool_name, ".users")) {
+            dout(10) << __func__ << " auto-enabling RGW on pool '"
+                     << pool_name << "'" << dendl;
+            pg_pool.application_metadata.insert(
+              {pg_pool_t::APPLICATION_NAME_RGW, {}});
+            ++match_count;
+          }
+
+          // OpenStack gnocchi (from ceph-ansible)
+          if (pool_name == "metrics" && match_count == 0) {
+            dout(10) << __func__ << " auto-enabling OpenStack Gnocchi on pool '"
+                     << pool_name << "'" << dendl;
+            pg_pool.application_metadata.insert({"openstack_gnocchi", {}});
+            ++match_count;
+          }
+
+          if (match_count == 1) {
+            pg_pool.last_change = pending_inc.epoch;
+            pending_inc.new_pools[pool_id] = pg_pool;
+          } else if (match_count > 1) {
+            auto pstat = mon->pgservice->get_pool_stat(pool_id);
+            if (pstat != nullptr && pstat->stats.sum.num_objects > 0) {
+              mon->clog->info() << "unable to auto-enable application for pool "
+                                << "'" << pool_name << "'";
+            }
+          }
+        }
       }
     }
   }
@@ -3041,6 +3119,27 @@ void OSDMonitor::check_pg_creates_sub(Subscription *sub)
   }
 }
 
+void OSDMonitor::do_application_enable(int64_t pool_id,
+                                       const std::string &app_name)
+{
+  assert(paxos->is_plugged());
+
+  dout(20) << __func__ << ": pool_id=" << pool_id << ", app_name=" << app_name
+           << dendl;
+
+  auto pp = osdmap.get_pg_pool(pool_id);
+  assert(pp != nullptr);
+
+  pg_pool_t p = *pp;
+  if (pending_inc.new_pools.count(pool_id)) {
+    p = pending_inc.new_pools[pool_id];
+  }
+
+  p.application_metadata.insert({app_name, {}});
+  p.last_change = pending_inc.epoch;
+  pending_inc.new_pools[pool_id] = p;
+}
+
 unsigned OSDMonitor::scan_for_creating_pgs(
   const mempool::osdmap::map<int64_t,pg_pool_t>& pools,
   const mempool::osdmap::set<int64_t>& removed_pools,
@@ -3799,6 +3898,31 @@ void OSDMonitor::get_health(list<pair<health_status_t,string> >& summary,
 	summary.push_back(make_pair(HEALTH_WARN, ss.str()));
 	if (detail)
 	  detail->push_back(make_pair(HEALTH_WARN, ss.str()));
+      }
+
+      const string& pool_name = osdmap.get_pool_name(it.first);
+      const pool_stat_t *pstat = mon->pgservice->get_pool_stat(it.first);
+      if (pstat == nullptr) {
+        continue;
+      }
+      const object_stat_sum_t& sum = pstat->stats.sum;
+
+      // application metadata is not encoded until luminous is minimum
+      // required release
+      if (osdmap.require_osd_release >= CEPH_RELEASE_LUMINOUS &&
+          sum.num_objects > 0 && pool.application_metadata.empty() &&
+          !pool.is_tier() && !g_conf->mon_debug_no_require_luminous) {
+        stringstream ss;
+        ss << "application not enabled on pool '" << pool_name << "'";
+
+        summary.push_back({HEALTH_WARN, ss.str()});
+        if (detail) {
+          ss << "; "
+             << "use 'ceph osd pool application enable <pool-name> "
+             << "<app-name>', where <app-name> is 'cephfs', 'rbd', 'rgw', "
+             << "or freeform for custom applications.";
+          detail->push_back({HEALTH_WARN, ss.str()});
+        }
       }
     }
   }
@@ -6216,6 +6340,146 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
   } else {
     ss << "unset pool " << pool << " " << var;
   }
+  p.last_change = pending_inc.epoch;
+  pending_inc.new_pools[pool] = p;
+  return 0;
+}
+
+int OSDMonitor::prepare_command_pool_application(const string &prefix,
+                                                 map<string,cmd_vartype> &cmdmap,
+                                                 stringstream& ss)
+{
+  string pool_name;
+  cmd_getval(g_ceph_context, cmdmap, "pool", pool_name);
+  int64_t pool = osdmap.lookup_pg_pool_name(pool_name.c_str());
+  if (pool < 0) {
+    ss << "unrecognized pool '" << pool_name << "'";
+    return -ENOENT;
+  }
+
+  pg_pool_t p = *osdmap.get_pg_pool(pool);
+  if (pending_inc.new_pools.count(pool)) {
+    p = pending_inc.new_pools[pool];
+  }
+
+  string app;
+  cmd_getval(g_ceph_context, cmdmap, "app", app);
+  bool app_exists = (p.application_metadata.count(app) > 0);
+
+  if (boost::algorithm::ends_with(prefix, "enable")) {
+    if (app.empty()) {
+      ss << "application name must be provided";
+      return -EINVAL;
+    }
+
+    if (p.is_tier()) {
+      ss << "application must be enabled on base tier";
+      return -EINVAL;
+    }
+
+    string force;
+    cmd_getval(g_ceph_context, cmdmap, "force", force);
+
+    if (!app_exists && !p.application_metadata.empty() &&
+        force != "--yes-i-really-mean-it") {
+      ss << "Are you SURE? Pool '" << pool_name << "' already has an enabled "
+         << "application; pass --yes-i-really-mean-it to proceed anyway";
+      return -EPERM;
+    }
+
+    if (!app_exists && p.application_metadata.size() >= MAX_POOL_APPLICATIONS) {
+      ss << "too many enabled applications on pool '" << pool_name << "'; "
+         << "max " << MAX_POOL_APPLICATIONS;
+      return -EINVAL;
+    }
+
+    if (app.length() > MAX_POOL_APPLICATION_LENGTH) {
+      ss << "application name '" << app << "' too long; max length "
+         << MAX_POOL_APPLICATION_LENGTH;
+      return -EINVAL;
+    }
+
+    if (!app_exists) {
+      p.application_metadata[app] = {};
+    }
+    ss << "enabled application '" << app << "' on pool '" << pool_name << "'";
+
+  } else if (boost::algorithm::ends_with(prefix, "disable")) {
+    string force;
+    cmd_getval(g_ceph_context, cmdmap, "force", force);
+
+    if (force != "--yes-i-really-mean-it") {
+      ss << "Are you SURE? Disabling an application within a pool might result "
+         << "in loss of application functionality; pass "
+         << "--yes-i-really-mean-it to proceed anyway";
+      return -EPERM;
+    }
+
+    p.application_metadata.erase(app);
+    ss << "disable application '" << app << "' on pool '" << pool_name << "'";
+
+  } else if (boost::algorithm::ends_with(prefix, "set")) {
+    if (p.is_tier()) {
+      ss << "application metadata must be set on base tier";
+      return -EINVAL;
+    }
+
+    if (!app_exists) {
+      ss << "application '" << app << "' is not enabled on pool '" << pool_name
+         << "'";
+      return -ENOENT;
+    }
+
+    string key;
+    cmd_getval(g_ceph_context, cmdmap, "key", key);
+
+    if (key.empty()) {
+      ss << "key must be provided";
+      return -EINVAL;
+    }
+
+    auto &app_keys = p.application_metadata[app];
+    if (app_keys.count(key) == 0 &&
+        app_keys.size() >= MAX_POOL_APPLICATION_KEYS) {
+      ss << "too many keys set for application '" << app << "' on pool '"
+         << pool_name << "'; max " << MAX_POOL_APPLICATION_KEYS;
+      return -EINVAL;
+    }
+
+    if (key.length() > MAX_POOL_APPLICATION_LENGTH) {
+      ss << "key '" << app << "' too long; max length "
+         << MAX_POOL_APPLICATION_LENGTH;
+      return -EINVAL;
+    }
+
+    string value;
+    cmd_getval(g_ceph_context, cmdmap, "value", value);
+    if (value.length() > MAX_POOL_APPLICATION_LENGTH) {
+      ss << "value '" << value << "' too long; max length "
+         << MAX_POOL_APPLICATION_LENGTH;
+      return -EINVAL;
+    }
+
+    p.application_metadata[app][key] = value;
+    ss << "set application '" << app << "' key '" << key << "' to '"
+       << value << "' on pool '" << pool_name << "'";
+  } else if (boost::algorithm::ends_with(prefix, "rm")) {
+    if (!app_exists) {
+      ss << "application '" << app << "' is not enabled on pool '" << pool_name
+         << "'";
+      return -ENOENT;
+    }
+
+    string key;
+    cmd_getval(g_ceph_context, cmdmap, "key", key);
+
+    p.application_metadata[app].erase(key);
+    ss << "removed application '" << app << "' key '" << key << "' on pool '"
+       << pool_name << "'";
+  } else {
+    assert(false);
+  }
+
   p.last_change = pending_inc.epoch;
   pending_inc.new_pools[pool] = p;
   return 0;
@@ -10388,7 +10652,20 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, 0, rs,
 					      get_last_committed() + 1));
     return true;
+  } else if (prefix == "osd pool application enable" ||
+             prefix == "osd pool application disable" ||
+             prefix == "osd pool application set" ||
+             prefix == "osd pool application rm") {
+    err = prepare_command_pool_application(prefix, cmdmap, ss);
+    if (err == -EAGAIN)
+      goto wait;
+    if (err < 0)
+      goto reply;
 
+    getline(ss, rs);
+    wait_for_finished_proposal(
+      op, new Monitor::C_Command(mon, op, 0, rs, get_last_committed() + 1));
+    return true;
   } else if (prefix == "osd reweight-by-pg" ||
 	     prefix == "osd reweight-by-utilization" ||
 	     prefix == "osd test-reweight-by-pg" ||

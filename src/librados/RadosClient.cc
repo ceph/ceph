@@ -809,21 +809,20 @@ int librados::RadosClient::mon_command(const vector<string>& cmd,
 				       const bufferlist &inbl,
 				       bufferlist *outbl, string *outs)
 {
-  Mutex mylock("RadosClient::mon_command::mylock");
-  Cond cond;
-  bool done;
-  int rval;
-  lock.Lock();
-  monclient.start_mon_command(cmd, inbl, outbl, outs,
-			       new C_SafeCond(&mylock, &cond, &done, &rval));
-  lock.Unlock();
-  mylock.Lock();
-  while (!done)
-    cond.Wait(mylock);
-  mylock.Unlock();
-  return rval;
+  C_SaferCond ctx;
+  mon_command_async(cmd, inbl, outbl, outs, &ctx);
+  return ctx.wait();
 }
 
+void librados::RadosClient::mon_command_async(const vector<string>& cmd,
+                                              const bufferlist &inbl,
+                                              bufferlist *outbl, string *outs,
+                                              Context *on_finish)
+{
+  lock.Lock();
+  monclient.start_mon_command(cmd, inbl, outbl, outs, on_finish);
+  lock.Unlock();
+}
 
 int librados::RadosClient::mgr_command(const vector<string>& cmd,
 				       const bufferlist &inbl,
@@ -1068,4 +1067,9 @@ int librados::RadosClient::service_daemon_update_status(
     return -ENOTCONN;
   }
   return mgrclient.service_daemon_update_status(status);
+}
+
+mon_feature_t librados::RadosClient::get_required_monitor_features() const
+{
+  return monclient.monmap.get_required_features();
 }
