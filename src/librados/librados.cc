@@ -2635,7 +2635,7 @@ namespace {
     };
     bufferlist inbl, outbl;
     string outstring;
-    int ret = client.mon_command(cmd, inbl, &outbl, &outstring);
+    int ret = client.mgr_command(cmd, inbl, &outbl, &outstring);
     if (ret) {
       return ret;
     }
