@@ -2436,7 +2436,7 @@ class RGWBucketShardIncrementalSyncCR : public RGWCoroutine {
   boost::intrusive_ptr<RGWContinuousLeaseCR> lease_cr;
   list<rgw_bi_log_entry> list_result;
   list<rgw_bi_log_entry>::iterator entries_iter;
-  map<string, pair<real_time, RGWModifyOp> > squash_map;
+  map<pair<string, string>, pair<real_time, RGWModifyOp> > squash_map;
   rgw_bucket_shard_inc_sync_marker& inc_marker;
   rgw_obj_key key;
   rgw_bi_log_entry *entry{nullptr};
@@ -2496,11 +2496,8 @@ int RGWBucketShardIncrementalSyncCR::operate()
         if (e.state != CLS_RGW_STATE_COMPLETE) {
           continue;
         }
-        auto& squash_entry = squash_map[e.object];
-        if (squash_entry.first == e.timestamp &&
-            e.op == CLS_RGW_OP_DEL) {
-          squash_entry.second = e.op;
-        } else if (squash_entry.first < e.timestamp) {
+        auto& squash_entry = squash_map[make_pair(e.object, e.instance)];
+        if (squash_entry.first <= e.timestamp) {
           squash_entry = make_pair<>(e.timestamp, e.op);
         }
       }
@@ -2553,7 +2550,7 @@ int RGWBucketShardIncrementalSyncCR::operate()
           marker_tracker.try_update_high_marker(cur_id, 0, entry->timestamp);
           continue;
         }
-        if (make_pair<>(entry->timestamp, entry->op) != squash_map[entry->object]) {
+        if (make_pair<>(entry->timestamp, entry->op) != squash_map[make_pair(entry->object, entry->instance)]) {
           set_status() << "squashed operation, skipping";
           ldout(sync_env->cct, 20) << "[inc sync] skipping object: "
               << bucket_shard_str{bs} << "/" << key << ": squashed operation" << dendl;
