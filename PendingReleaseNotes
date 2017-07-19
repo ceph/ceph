@@ -210,3 +210,14 @@
 * The "ceph -w" output no longer contains audit log entries by default.
   Add a "--watch-channel=audit" or "--watch-channel=*" to see them.
 
+12.1.2
+------
+
+* New "ceph -w" behavior - the "ceph -w" output no longer contains I/O rates,
+  available space, pg info, etc. because these are no longer logged to the
+  central log (which is what "ceph -w" shows). The same information can be
+  obtained by running "ceph pg stat"; alternatively, I/O rates per pool can
+  be determined using "ceph osd pool stats". Although these commands do not
+  self-update like "ceph -w" did, they do have the ability to return formatted
+  output by providing a "--format=<format>" option.
+
