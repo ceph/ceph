@@ -193,6 +193,12 @@ def task(ctx, config):
       # typically, the task should be preceded with install, ceph, tox,
       # keystone and rgw. Tox and Keystone are specific requirements
       # of tempest.py.
+      - rgw:
+          # it's important to match the prefix with the endpoint's URL
+          # in Keystone. Additionally, if we want to test /info and its
+          # accompanying stuff, the whole Swift API must be put in root
+          # of the whole URL  hierarchy (read: frontend_prefix == /swift).
+          frontend_prefix: /swift
       - tempest:
           client.0:
             force-branch: master
