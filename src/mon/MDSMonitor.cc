@@ -565,7 +565,9 @@ bool MDSMonitor::prepare_beacon(MonOpRequestRef op)
           mon->osdmon()->wait_for_writeable(op, new C_RetryMessage(this, op));
           return false;
         }
-        mon->clog->info() << "MDS daemon '" << m->get_name() << "' restarted";
+        const MDSMap::mds_info_t &existing_info =
+          pending_fsmap.get_info_gid(existing);
+        mon->clog->info() << existing_info.human_name() << " restarted";
 	fail_mds_gid(existing);
         failed_mds = true;
       }
@@ -671,7 +673,7 @@ bool MDSMonitor::prepare_beacon(MonOpRequestRef op)
 
       auto fscid = pending_fsmap.mds_roles.at(gid);
       auto fs = pending_fsmap.get_filesystem(fscid);
-      mon->clog->info() << "MDS daemon " << m->get_name() << " finished "
+      mon->clog->info() << info.human_name() << " finished "
                         << "deactivating rank " << info.rank << " in filesystem "
                         << fs->mds_map.fs_name << " (now has "
                         << fs->mds_map.get_num_in_mds() << " ranks)";
@@ -744,7 +746,7 @@ bool MDSMonitor::prepare_beacon(MonOpRequestRef op)
       if (state == MDSMap::STATE_ACTIVE) {
         auto fscid = pending_fsmap.mds_roles.at(gid);
         auto fs = pending_fsmap.get_filesystem(fscid);
-        mon->clog->info() << "MDS daemon " << m->get_name() << " is now active in "
+        mon->clog->info() << info.human_name() << " is now active in "
                           << "filesystem " << fs->mds_map.fs_name << " as rank "
                           << info.rank;
       }
@@ -1258,8 +1260,11 @@ mds_gid_t MDSMonitor::gid_from_arg(const std::string& arg, std::ostream &ss)
   return MDS_GID_NONE;
 }
 
-int MDSMonitor::fail_mds(std::ostream &ss, const std::string &arg)
+int MDSMonitor::fail_mds(std::ostream &ss, const std::string &arg,
+    MDSMap::mds_info_t *failed_info)
 {
+  assert(failed_info != nullptr);
+
   mds_gid_t gid = gid_from_arg(arg, ss);
   if (gid == MDS_GID_NONE) {
     return 0;
@@ -1267,6 +1272,11 @@ int MDSMonitor::fail_mds(std::ostream &ss, const std::string &arg)
   if (!mon->osdmon()->is_writeable()) {
     return -EAGAIN;
   }
+
+  // Take a copy of the info before removing the MDS from the map,
+  // so that the caller knows which mds (if any) they ended up removing.
+  *failed_info = pending_fsmap.get_info_gid(gid);
+
   fail_mds_gid(gid);
   ss << "failed mds gid " << gid;
   assert(mon->osdmon()->is_writeable());
@@ -1470,13 +1480,18 @@ int MDSMonitor::filesystem_command(
   } else if (prefix == "mds fail") {
     string who;
     cmd_getval(g_ceph_context, cmdmap, "who", who);
-    r = fail_mds(ss, who);
+
+    MDSMap::mds_info_t failed_info;
+    r = fail_mds(ss, who, &failed_info);
     if (r < 0 && r == -EAGAIN) {
       mon->osdmon()->wait_for_writeable(op, new C_RetryMessage(this, op));
       return -EAGAIN; // don't propose yet; wait for message to be retried
     } else if (r == 0) {
-      mon->clog->info() << "MDS daemon " << who << " marked failed by "
-                        << op->get_session()->entity_name;
+      // Only log if we really did something (not when was already gone)
+      if (failed_info.global_id != MDS_GID_NONE) {
+        mon->clog->info() << failed_info.human_name() << " marked failed by "
+                          << op->get_session()->entity_name;
+      }
     }
   } else if (prefix == "mds rm") {
     mds_gid_t gid;
@@ -1993,9 +2008,10 @@ bool MDSMonitor::maybe_expand_cluster(std::shared_ptr<Filesystem> fs)
     dout(1) << "assigned standby " << new_info.addr
             << " as mds." << mds << dendl;
 
-    mon->clog->info() << "Assigned MDS " << new_info.name << " to filesystem "
-                      << fs->mds_map.fs_name << " as rank " << mds << " (now "
-                      << "has " << fs->mds_map.get_num_in_mds() << " ranks)";
+    mon->clog->info() << new_info.human_name() << " assigned to "
+                         "filesystem " << fs->mds_map.fs_name << " as rank "
+                      << mds << " (now has " << fs->mds_map.get_num_in_mds()
+                      << " ranks)";
     pending_fsmap.promote(newgid, fs, mds);
     do_propose = true;
   }
@@ -2046,10 +2062,10 @@ void MDSMonitor::maybe_replace_gid(mds_gid_t gid, const MDSMap::mds_info_t& info
       << " " << ceph_mds_state_name(info.state)
       << " with " << sgid << "/" << si.name << " " << si.addr << dendl;
 
-    mon->clog->warn() << "MDS daemon '" << info.name << "'"
+    mon->clog->warn() << info.human_name() 
                       << " is not responding, replacing it "
                       << "as rank " << info.rank
-                      << " with standby '" << si.name << "'";
+                      << " with standby " << si.human_name();
 
     // Remember what NS the old one was in
     const fs_cluster_id_t fscid = pending_fsmap.mds_roles.at(gid);
@@ -2067,9 +2083,8 @@ void MDSMonitor::maybe_replace_gid(mds_gid_t gid, const MDSMap::mds_info_t& info
     dout(10) << " failing and removing " << gid << " " << info.addr << " mds." << info.rank 
       << "." << info.inc << " " << ceph_mds_state_name(info.state)
       << dendl;
-    mon->clog->info() << "MDS standby '"  << info.name
-                      << "' is not responding, removing it from the set of "
-                      << "standbys";
+    mon->clog->info() << "Standby " << info.human_name() << " is not "
+                         "responding, dropping it";
     fail_mds_gid(gid);
     *mds_propose = true;
   } else if (!info.laggy()) {
@@ -2102,8 +2117,8 @@ bool MDSMonitor::maybe_promote_standby(std::shared_ptr<Filesystem> fs)
         const MDSMap::mds_info_t si = pending_fsmap.get_info_gid(sgid);
         dout(0) << " taking over failed mds." << f << " with " << sgid
                 << "/" << si.name << " " << si.addr << dendl;
-        mon->clog->info() << "Assigned standby MDS " << si.name
-                          << " to filesystem " << fs->mds_map.fs_name
+        mon->clog->info() << "Standby " << si.human_name()
+                          << " assigned to filesystem " << fs->mds_map.fs_name
                           << " as rank " << f;
 
         pending_fsmap.promote(sgid, fs, f);
