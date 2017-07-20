@@ -233,6 +233,17 @@ void InstanceReplayer<I>::release_image(const std::string &global_image_id,
 }
 
 template <typename I>
+void InstanceReplayer<I>::remove_peer_image(const std::string &global_image_id,
+                                            const std::string &peer_mirror_uuid,
+                                            Context *on_finish) {
+  dout(20) << "global_image_id=" << global_image_id << ", "
+           << "peer_mirror_uuid=" << peer_mirror_uuid << dendl;
+
+  // TODO
+  m_threads->work_queue->queue(on_finish, 0);
+}
+
+template <typename I>
 void InstanceReplayer<I>::print_status(Formatter *f, stringstream *ss) {
   dout(20) << dendl;
 
