@@ -68,6 +68,7 @@ class TestPackaging(object):
             '-E',
             'apt-get',
             '-y',
+            '--force-yes',
             'install',
             'apache2'
         ]

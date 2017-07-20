@@ -74,6 +74,7 @@ def install_package(package, remote):
                   '-E',
                   'apt-get',
                   '-y',
+                  '--force-yes',
                   'install',
                   '{package}'.format(package=package)]
     elif flavor == 'rpm':
