@@ -36,7 +36,7 @@ def task(ctx, config):
         ctx.cluster.only(client).run(args=
             [   'source', '{tvdir}/bin/activate'.format(tvdir=tvdir),
                 run.Raw('&&'),
-                'pip', 'install', 'tox'
+                'pip', 'install', 'tox==2.3.1'
             ])
 
     # export the path Keystone and Tempest

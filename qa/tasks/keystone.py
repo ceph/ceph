@@ -27,17 +27,14 @@ def install_packages(ctx, config):
     assert isinstance(config, dict)
     log.info('Installing packages for Keystone...')
 
-    deps = [
-        'libffi-dev',
-        'libssl-dev',
-        'libldap2-dev',
-        'libsasl2-dev',
-        'python-openstackclient'
-    ]
+    deps = {
+	'deb': [ 'libffi-dev', 'libssl-dev', 'libldap2-dev', 'libsasl2-dev' ],
+	'rpm': [ 'libffi-devel', 'openssl-devel' ],
+    }
     for (client, _) in config.items():
         (remote,) = ctx.cluster.only(client).remotes.iterkeys()
-        for pkgname in deps:
-            install_package(pkgname, remote)
+        for dep in deps[remote.os.package_type]:
+            install_package(dep, remote)
     try:
         yield
     finally:
@@ -45,8 +42,8 @@ def install_packages(ctx, config):
 
         for (client, _) in config.items():
             (remote,) = ctx.cluster.only(client).remotes.iterkeys()
-            for pkgname in deps:
-                remove_package(pkgname, remote)
+            for dep in deps[remote.os.package_type]:
+                remove_package(dep, remote)
 
 @contextlib.contextmanager
 def download(ctx, config):
@@ -126,6 +123,9 @@ def setup_venv(ctx, config):
                 run.Raw('&&'),
                 'tox', '-e', 'venv', '--notest'
             ])
+
+        run_in_keystone_venv(ctx, client,
+            [   'pip', 'install', 'python-openstackclient' ])
     try:
         yield
     finally:
