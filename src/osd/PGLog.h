@@ -526,6 +526,9 @@ public:
     mark_dirty_from(eversion_t());
     touched_log = false;
   }
+  bool get_rebuilt_missing_with_deletes() const {
+    return rebuilt_missing_with_deletes;
+  }
 protected:
 
   /// DEBUG
@@ -652,6 +655,8 @@ public:
     missing.split_into(child_pgid, split_bits, &(opg_log->missing));
     opg_log->mark_dirty_to(eversion_t::max());
     mark_dirty_to(eversion_t::max());
+    if (missing.may_include_deletes)
+      opg_log->rebuilt_missing_with_deletes = true;
   }
 
   void recover_got(hobject_t oid, eversion_t v, pg_info_t &info) {
