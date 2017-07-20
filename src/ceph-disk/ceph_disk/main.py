@@ -4097,7 +4097,7 @@ def get_space_osd_uuid(name, path):
     if not os.path.exists(path):
         raise Error('%s does not exist' % path)
 
-    if path_is_diskdevice(path):
+    if not path_is_diskdevice(path):
         raise Error('%s is not a block device' % path)
 
     if (is_partition(path) and
@@ -4701,7 +4701,7 @@ def set_suppress(path):
     disk = os.path.realpath(path)
     if not os.path.exists(disk):
         raise Error('does not exist', path)
-    if ldev_is_diskdevice(path):
+    if not ldev_is_diskdevice(path):
         raise Error('not a block device', path)
     base = get_dev_name(disk)
 
