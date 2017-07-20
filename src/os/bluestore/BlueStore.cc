@@ -10067,7 +10067,6 @@ int BlueStore::_do_write(
 
   o->extent_map.compress_extent_map(dirty_start, dirty_end - dirty_start);
   o->extent_map.dirty_range(dirty_start, dirty_end - dirty_start);
-  r = 0;
 
  out:
   return r;
