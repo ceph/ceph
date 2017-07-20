@@ -549,6 +549,7 @@ function test_auth()
   ceph auth add client.xx -i client.xx.keyring
   rm -f client.xx.keyring
   ceph auth list | grep client.xx
+  ceph auth ls | grep client.xx
   ceph auth get client.xx | grep caps | grep mon
   ceph auth get client.xx | grep caps | grep osd
   ceph auth get-key client.xx
@@ -587,9 +588,9 @@ function test_auth()
   check_response "auid = $auid"
   ceph --format json-pretty auth get client.TEST > $TMPFILE
   check_response '"auid": '$auid
-  ceph auth list > $TMPFILE
+  ceph auth ls > $TMPFILE
   check_response "auid: $auid"
-  ceph --format json-pretty auth list > $TMPFILE
+  ceph --format json-pretty auth ls > $TMPFILE
   check_response '"auid": '$auid
   ceph auth del client.TEST
 }
@@ -615,7 +616,7 @@ function test_auth_profiles()
   check_response "EACCES: access denied"
   ceph -n client.xx-profile-ro -k client.xx.keyring osd set noout >& $TMPFILE || true
   check_response "EACCES: access denied"
-  ceph -n client.xx-profile-ro -k client.xx.keyring auth list >& $TMPFILE || true
+  ceph -n client.xx-profile-ro -k client.xx.keyring auth ls >& $TMPFILE || true
   check_response "EACCES: access denied"
 
   # read-write is allowed for all read-write commands (except auth)
@@ -628,11 +629,11 @@ function test_auth_profiles()
   ceph -n client.xx-profile-rw -k client.xx.keyring osd set noout
   ceph -n client.xx-profile-rw -k client.xx.keyring osd unset noout
   # read-write gets access denied for auth commands
-  ceph -n client.xx-profile-rw -k client.xx.keyring auth list >& $TMPFILE || true
+  ceph -n client.xx-profile-rw -k client.xx.keyring auth ls >& $TMPFILE || true
   check_response "EACCES: access denied"
 
   # role-definer is allowed RWX 'auth' commands and read-only 'mon' commands
-  ceph -n client.xx-profile-rd -k client.xx.keyring auth list
+  ceph -n client.xx-profile-rd -k client.xx.keyring auth ls
   ceph -n client.xx-profile-rd -k client.xx.keyring auth export
   ceph -n client.xx-profile-rd -k client.xx.keyring auth add client.xx-profile-foo
   ceph -n client.xx-profile-rd -k client.xx.keyring status
@@ -807,7 +808,7 @@ function remove_all_fs()
 # in the cluster at all
 function mds_exists()
 {
-    ceph auth list | grep "^mds"
+    ceph auth ls | grep "^mds"
 }
 
 # some of the commands are just not idempotent.

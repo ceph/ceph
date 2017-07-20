@@ -332,7 +332,7 @@ void Mgr::load_config()
 
   dout(10) << "listing keys" << dendl;
   JSONCommand cmd;
-  cmd.run(monc, "{\"prefix\": \"config-key list\"}");
+  cmd.run(monc, "{\"prefix\": \"config-key ls\"}");
   lock.Unlock();
   cmd.wait();
   lock.Lock();

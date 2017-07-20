@@ -30,7 +30,7 @@ It creates following auth entities (or users)
 
 To list all users in the cluster::
 
-    ceph auth list
+    ceph auth ls
 
 
 Options

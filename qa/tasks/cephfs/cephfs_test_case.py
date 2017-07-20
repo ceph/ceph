@@ -184,10 +184,10 @@ class CephFSTestCase(CephTestCase):
 
     def auth_list(self):
         """
-        Convenience wrapper on "ceph auth list"
+        Convenience wrapper on "ceph auth ls"
         """
         return json.loads(self.mds_cluster.mon_manager.raw_cluster_cmd(
-            "auth", "list", "--format=json-pretty"
+            "auth", "ls", "--format=json-pretty"
         ))['auth_dump']
 
     def assert_session_count(self, expected, ls_data=None, mds_id=None):

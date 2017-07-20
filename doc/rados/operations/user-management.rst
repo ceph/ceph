@@ -251,10 +251,10 @@ List Users
 
 To list the users in your cluster, execute the following::
 
-	ceph auth list
+	ceph auth ls
 
 Ceph will list out all users in your cluster. For example, in a two-node
-exemplary cluster, ``ceph auth list`` will output something that looks like
+exemplary cluster, ``ceph auth ls`` will output something that looks like
 this::
 
 	installed auth entries:
@@ -286,7 +286,7 @@ user of type ``osd`` and its ID is ``0``, ``client.admin`` is a user of type
 Note also that each entry has a ``key: <value>`` entry, and one or more
 ``caps:`` entries.
 
-You may use the ``-o {filename}`` option with ``ceph auth list`` to 
+You may use the ``-o {filename}`` option with ``ceph auth ls`` to 
 save the output to a file.
 
 
