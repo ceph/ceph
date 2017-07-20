@@ -1984,11 +1984,6 @@ function test_mon_osd_pool_set()
   expect_false ceph osd pool set $TEST_POOL_GETSET hashpspool 1
   ceph osd pool set $TEST_POOL_GETSET hashpspool 1 --yes-i-really-mean-it
 
-  ceph osd pool set $TEST_POOL_GETSET nodelete 1
-  expect_false ceph osd pool delete $TEST_POOL_GETSET $TEST_POOL_GETSET --yes-i-really-really-mean-it
-  ceph osd pool set $TEST_POOL_GETSET nodelete 0
-  ceph osd pool delete $TEST_POOL_GETSET $TEST_POOL_GETSET --yes-i-really-really-mean-it
-
   ceph osd pool get rbd crush_rule | grep 'crush_rule: '
 
   ceph osd pool get $TEST_POOL_GETSET compression_mode | expect_false grep '.'
@@ -2024,6 +2019,12 @@ function test_mon_osd_pool_set()
       ceph osd pool set $TEST_POOL_GETSET $size 0
       ceph osd pool get $TEST_POOL_GETSET $size | expect_false grep '.'
   done
+
+  ceph osd pool set $TEST_POOL_GETSET nodelete 1
+  expect_false ceph osd pool delete $TEST_POOL_GETSET $TEST_POOL_GETSET --yes-i-really-really-mean-it
+  ceph osd pool set $TEST_POOL_GETSET nodelete 0
+  ceph osd pool delete $TEST_POOL_GETSET $TEST_POOL_GETSET --yes-i-really-really-mean-it
+
 }
 
 function test_mon_osd_tiered_pool_set()
