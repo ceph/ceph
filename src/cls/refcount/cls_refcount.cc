@@ -16,18 +16,23 @@ CLS_NAME(refcount)
 
 struct obj_refcount {
   map<string, bool> refs;
+  set<string> retired_refs;
 
   obj_refcount() {}
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(1, 1, bl);
+    ENCODE_START(2, 1, bl);
     ::encode(refs, bl);
+    ::encode(retired_refs, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::iterator& bl) {
-    DECODE_START(1, bl);
+    DECODE_START(2, bl);
     ::decode(refs, bl);
+    if (struct_v >= 2) {
+      ::decode(retired_refs, bl);
+    }
     DECODE_FINISH(bl);
   }
 };
@@ -60,12 +65,9 @@ static int read_refcount(cls_method_context_t hctx, bool implicit_ref, obj_refco
   return 0;
 }
 
-static int set_refcount(cls_method_context_t hctx, map<string, bool>& refs)
+static int set_refcount(cls_method_context_t hctx, const struct obj_refcount& objr)
 {
   bufferlist bl;
-  struct obj_refcount objr;
-
-  objr.refs = refs;
 
   ::encode(objr, bl);
 
@@ -97,7 +99,7 @@ static int cls_rc_refcount_get(cls_method_context_t hctx, bufferlist *in, buffer
 
   objr.refs[op.tag] = true;
 
-  ret = set_refcount(hctx, objr.refs);
+  ret = set_refcount(hctx, objr);
   if (ret < 0)
     return ret;
 
@@ -139,16 +141,18 @@ static int cls_rc_refcount_put(cls_method_context_t hctx, bufferlist *in, buffer
     }
   }
 
-  if (!found)
+  if (!found ||
+      objr.retired_refs.find(op.tag) != objr.retired_refs.end())
     return 0;
 
+  objr.retired_refs.insert(op.tag);
   objr.refs.erase(iter);
 
   if (objr.refs.empty()) {
     return cls_cxx_remove(hctx);
   }
 
-  ret = set_refcount(hctx, objr.refs);
+  ret = set_refcount(hctx, objr);
   if (ret < 0)
     return ret;
 
@@ -177,7 +181,7 @@ static int cls_rc_refcount_set(cls_method_context_t hctx, bufferlist *in, buffer
     objr.refs[*iter] = true;
   }
 
-  int ret = set_refcount(hctx, objr.refs);
+  int ret = set_refcount(hctx, objr);
   if (ret < 0)
     return ret;
 
