@@ -388,7 +388,7 @@ namespace cohort {
 	  v = lat.p->cache[slot];
 	  if (v) {
 	    if (CEQ()(*v, k)) {
-	      if (flags & (FLAG_LOCK|FLAG_UNLOCK))
+	      if ((flags & FLAG_LOCK) && (flags & FLAG_UNLOCK))
 		lat.lock->unlock();
 	      return v;
 	    }
@@ -406,7 +406,7 @@ namespace cohort {
 	    lat.p->cache[slot] = v;
 	  }
 	}
-	if (flags & (FLAG_LOCK|FLAG_UNLOCK))
+	if ((flags & FLAG_LOCK) && (flags & FLAG_UNLOCK))
 	  lat.lock->unlock();
 	return v;
       } /* find_latch */
