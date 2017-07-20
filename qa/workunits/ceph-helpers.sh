@@ -1826,7 +1826,19 @@ function run_tests() {
     export PATH=${CEPH_BUILD_VIRTUALENV}/ceph-disk-virtualenv/bin:${CEPH_BUILD_VIRTUALENV}/ceph-detect-init-virtualenv/bin:.:$PATH # make sure program from sources are preferred
     #export PATH=$CEPH_ROOT/src/ceph-disk/virtualenv/bin:$CEPH_ROOT/src/ceph-detect-init/virtualenv/bin:.:$PATH # make sure program from sources are preferred
 
-    export CEPH_MON="127.0.0.1:7109" # git grep '\<7109\>' : there must be only one
+    # Grab a random port from 7109 - 7200 that is not in use
+    # This should maybe be reworked
+    for port in `seq 7109 7200 | shuf` ; do
+        if ! $(nc -z localhost "$port" > /dev/null); then
+            export CEPH_MON="127.0.0.1:${port}"
+            break
+        fi
+    done
+    if [ -z "$CEPH_MON" ]; then
+        echo "Failed to find open port to run mon on"
+        return 1
+    fi
+
     export CEPH_ARGS
     CEPH_ARGS+="--fsid=$(uuidgen) --auth-supported=none "
     CEPH_ARGS+="--mon-host=$CEPH_MON "
@@ -1836,7 +1848,7 @@ function run_tests() {
     local dir=td/ceph-helpers
 
     for func in $funcs ; do
-        $func $dir || return 1
+        $func "${dir}-${func}" || return 1
     done
 }
 
