@@ -321,6 +321,11 @@ generated key is added to the keyring without replacing an existing key pair.
 If ``access-key`` is specified and refers to an existing key owned by the user
 then it will be modified.
 
+.. versionadded:: Luminous
+
+A ``tenant`` may either be specified as a part of uid or as an additional
+request param.
+
 :caps: users=write
 
 Syntax
@@ -407,6 +412,14 @@ A tenant name may also specified as a part of ``uid``, by following the syntax `
 :Description: Specify whether the user should be suspended.
 :Type: Boolean
 :Example: False [False]
+:Required: No
+
+.. versionadded:: Jewel
+``tenant``
+
+:Description: the Tenant under which a user is a part of.
+:Type: string
+:Example: tenant1
 :Required: No
 
 Response Entities
