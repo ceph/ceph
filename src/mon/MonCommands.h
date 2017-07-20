@@ -279,6 +279,10 @@ COMMAND("mon count-metadata name=property,type=CephString",
 COMMAND("mon versions",
 	"check running versions of monitors",
 	"mon", "r", "cli,rest")
+COMMAND("versions",
+	"check running versions of ceph daemons",
+	"mon", "r", "cli,rest")
+
 
 
 /*
