@@ -14,9 +14,9 @@ function get_admin_socket()
 {
   local client=$1
 
-  if test -n "$CEPH_OUT_DIR";
+  if test -n "$CEPH_ASOK_DIR";
   then
-    echo $CEPH_OUT_DIR/$client.asok
+    echo $(get_asok_dir)/$client.asok
   else
     local cluster=$(echo $CEPH_ARGS | sed  -r 's/.*--cluster[[:blank:]]*([[:alnum:]]*).*/\1/')
     echo "/var/run/ceph/$cluster-$client.asok"

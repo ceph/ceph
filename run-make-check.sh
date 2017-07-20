@@ -71,7 +71,10 @@ function run() {
     $DRY_RUN ./do_cmake.sh $@ || return 1
     $DRY_RUN cd build
     $DRY_RUN make $BUILD_MAKEOPTS tests || return 1
-    $DRY_RUN ctest $CHECK_MAKEOPTS --output-on-failure || return 1
+    if ! $DRY_RUN ctest $CHECK_MAKEOPTS --output-on-failure; then
+        rm -f ${TMPDIR:-/tmp}/ceph-asok.*
+        return 1
+    fi
 }
 
 function main() {
