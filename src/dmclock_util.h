@@ -33,13 +33,13 @@ namespace crimson {
 #if defined(__linux__)
       struct timespec now;
       auto result = clock_gettime(CLOCK_REALTIME, &now);
-      (void) result;
+      (void) result; // reference result in case assert is compiled out
       assert(0 == result);
       return now.tv_sec + (now.tv_nsec / 1.0e9);
 #else
       struct timeval now;
       auto result = gettimeofday(&now, NULL);
-      (void) result;
+      (void) result; // reference result in case assert is compiled out
       assert(0 == result);
       return now.tv_sec + (now.tv_usec / 1.0e6);
 #endif
