@@ -1485,13 +1485,6 @@ void MDSRank::recovery_done(int oldstate)
   dout(1) << "recovery_done -- successful recovery!" << dendl;
   assert(is_clientreplay() || is_active());
 
-  // kick snaptable (resent AGREEs)
-  if (mdsmap->get_tableserver() == whoami) {
-    set<mds_rank_t> active;
-    mdsmap->get_mds_set_lower_bound(active, MDSMap::STATE_CLIENTREPLAY);
-    snapserver->finish_recovery(active);
-  }
-
   if (oldstate == MDSMap::STATE_CREATING)
     return;
 
@@ -1686,6 +1679,26 @@ void MDSRankDispatcher::handle_mds_map(
   // is someone else newly resolving?
   if (is_resolve() || is_reconnect() || is_rejoin() ||
       is_clientreplay() || is_active() || is_stopping()) {
+
+    // recover snaptable
+    if (mdsmap->get_tableserver() == whoami) {
+      if (oldstate < MDSMap::STATE_RESOLVE) {
+	set<mds_rank_t> s;
+	mdsmap->get_mds_set_lower_bound(s, MDSMap::STATE_RESOLVE);
+	snapserver->finish_recovery(s);
+      } else {
+	set<mds_rank_t> old_set, new_set;
+	oldmap->get_mds_set_lower_bound(old_set, MDSMap::STATE_RESOLVE);
+	mdsmap->get_mds_set_lower_bound(new_set, MDSMap::STATE_RESOLVE);
+	for (auto p : new_set) {
+	  if (p != whoami &&            // not me
+	      old_set.count(p) == 0) {  // newly so?
+	    snapserver->handle_mds_recovery(p);
+	  }
+	}
+      }
+    }
+
     if (!oldmap->is_resolving() && mdsmap->is_resolving()) {
       set<mds_rank_t> resolve;
       mdsmap->get_mds_set(resolve, MDSMap::STATE_RESOLVE);
@@ -1829,10 +1842,6 @@ void MDSRank::handle_mds_recovery(mds_rank_t who)
   dout(5) << "handle_mds_recovery mds." << who << dendl;
 
   mdcache->handle_mds_recovery(who);
-
-  if (mdsmap->get_tableserver() == whoami) {
-    snapserver->handle_mds_recovery(who);
-  }
 
   queue_waiters(waiting_for_active_peer[who]);
   waiting_for_active_peer.erase(who);
