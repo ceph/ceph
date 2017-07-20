@@ -55,14 +55,8 @@ public:
   void add_peer(std::string peer_uuid, librados::IoCtx io_ctx);
 
   void acquire_image(InstanceWatcher<ImageCtxT> *instance_watcher,
-                     const std::string &global_image_id,
-                     const std::string &peer_mirror_uuid,
-                     const std::string &peer_image_id,
-                     Context *on_finish);
-  void release_image(const std::string &global_image_id,
-                     const std::string &peer_mirror_uuid,
-                     const std::string &peer_image_id,
-                     bool schedule_delete, Context *on_finish);
+                     const std::string &global_image_id, Context *on_finish);
+  void release_image(const std::string &global_image_id, Context *on_finish);
   void remove_peer_image(const std::string &global_image_id,
                          const std::string &peer_mirror_uuid,
                          Context *on_finish);

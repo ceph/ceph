@@ -76,11 +76,9 @@ struct Threads<librbd::MockTestImageCtx> {
 
 template <>
 struct InstanceReplayer<librbd::MockTestImageCtx> {
-  MOCK_METHOD5(acquire_image, void(InstanceWatcher<librbd::MockTestImageCtx> *,
-                                   const std::string &, const std::string &,
+  MOCK_METHOD3(acquire_image, void(InstanceWatcher<librbd::MockTestImageCtx> *,
                                    const std::string &, Context *));
-  MOCK_METHOD5(release_image, void(const std::string &, const std::string &,
-                                   const std::string &, bool, Context *));
+  MOCK_METHOD2(release_image, void(const std::string &, Context *));
   MOCK_METHOD3(remove_peer_image, void(const std::string&, const std::string&,
                                        Context *));
 };
@@ -367,38 +365,32 @@ TEST_F(TestMockInstanceWatcher, ImageAcquireRelease) {
 
   // Acquire Image on the the same instance
   EXPECT_CALL(mock_instance_replayer1, acquire_image(instance_watcher1, "gid",
-                                                     "uuid", "id", _))
-      .WillOnce(WithArg<4>(CompleteContext(0)));
+                                                     _))
+      .WillOnce(WithArg<2>(CompleteContext(0)));
   C_SaferCond on_acquire1;
-  instance_watcher1->notify_image_acquire(instance_id1, "gid", "uuid", "id",
-                                          &on_acquire1);
+  instance_watcher1->notify_image_acquire(instance_id1, "gid", &on_acquire1);
   ASSERT_EQ(0, on_acquire1.wait());
 
   // Acquire Image on the other instance
   EXPECT_CALL(mock_instance_replayer2, acquire_image(instance_watcher2, "gid",
-                                                     "uuid", "id", _))
-      .WillOnce(WithArg<4>(CompleteContext(0)));
+                                                     _))
+      .WillOnce(WithArg<2>(CompleteContext(0)));
   C_SaferCond on_acquire2;
-  instance_watcher1->notify_image_acquire(instance_id2, "gid", "uuid", "id",
-                                          &on_acquire2);
+  instance_watcher1->notify_image_acquire(instance_id2, "gid", &on_acquire2);
   ASSERT_EQ(0, on_acquire2.wait());
 
   // Release Image on the the same instance
-  EXPECT_CALL(mock_instance_replayer1, release_image("gid", "uuid", "id", true,
-                                                     _))
-      .WillOnce(WithArg<4>(CompleteContext(0)));
+  EXPECT_CALL(mock_instance_replayer1, release_image("gid", _))
+      .WillOnce(WithArg<1>(CompleteContext(0)));
   C_SaferCond on_release1;
-  instance_watcher1->notify_image_release(instance_id1, "gid", "uuid", "id",
-                                          true, &on_release1);
+  instance_watcher1->notify_image_release(instance_id1, "gid", &on_release1);
   ASSERT_EQ(0, on_release1.wait());
 
   // Release Image on the other instance
-  EXPECT_CALL(mock_instance_replayer2, release_image("gid", "uuid", "id", true,
-                                                     _))
-      .WillOnce(WithArg<4>(CompleteContext(0)));
+  EXPECT_CALL(mock_instance_replayer2, release_image("gid", _))
+      .WillOnce(WithArg<1>(CompleteContext(0)));
   C_SaferCond on_release2;
-  instance_watcher1->notify_image_release(instance_id2, "gid", "uuid", "id",
-                                          true, &on_release2);
+  instance_watcher1->notify_image_release(instance_id2, "gid", &on_release2);
   ASSERT_EQ(0, on_release2.wait());
 
   // Shutdown instance watcher 1
@@ -521,8 +513,7 @@ TEST_F(TestMockInstanceWatcher, ImageAcquireReleaseCancel) {
                   }));
 
   C_SaferCond on_acquire;
-  instance_watcher->notify_image_acquire("other", "gid", "uuid", "id",
-                                         &on_acquire);
+  instance_watcher->notify_image_acquire("other", "gid", &on_acquire);
   ASSERT_EQ(-ECANCELED, on_acquire.wait());
 
   // Send Release Image and cancel
@@ -543,8 +534,7 @@ TEST_F(TestMockInstanceWatcher, ImageAcquireReleaseCancel) {
                   }));
 
   C_SaferCond on_release;
-  instance_watcher->notify_image_release("other", "gid", "uuid", "id",
-                                         true, &on_release);
+  instance_watcher->notify_image_release("other", "gid", &on_release);
   ASSERT_EQ(-ECANCELED, on_release.wait());
 
   // Shutdown

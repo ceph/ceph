@@ -65,14 +65,10 @@ public:
 
   void notify_image_acquire(const std::string &instance_id,
                             const std::string &global_image_id,
-                            const std::string &peer_mirror_uuid,
-                            const std::string &peer_image_id,
                             Context *on_notify_ack);
   void notify_image_release(const std::string &instance_id,
                             const std::string &global_image_id,
-                            const std::string &peer_mirror_uuid,
-                            const std::string &peer_image_id,
-			    bool schedule_delete, Context *on_notify_ack);
+			    Context *on_notify_ack);
   void notify_peer_image_removed(const std::string &instance_id,
                                  const std::string &global_image_id,
                                  const std::string &peer_mirror_uuid,
@@ -229,13 +225,9 @@ private:
                      uint64_t notifier_id, bufferlist &bl) override;
 
   void handle_image_acquire(const std::string &global_image_id,
-                            const std::string &peer_mirror_uuid,
-                            const std::string &peer_image_id,
                             Context *on_finish);
   void handle_image_release(const std::string &global_image_id,
-                            const std::string &peer_mirror_uuid,
-                            const std::string &peer_image_id,
-                            bool schedule_delete, Context *on_finish);
+                            Context *on_finish);
   void handle_peer_image_removed(const std::string &global_image_id,
                                  const std::string &peer_mirror_uuid,
                                  Context *on_finish);
