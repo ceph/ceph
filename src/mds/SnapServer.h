@@ -34,12 +34,6 @@ protected:
 
   version_t last_checked_osdmap;
 
-public:
-  SnapServer(MDSRank *m, MonClient *monc)
-    : MDSTableServer(m, TABLE_SNAP), mon_client(monc), last_checked_osdmap(0)
-  {}
-    
-  void reset_state() override;
   void encode_server_state(bufferlist& bl) const override {
     ENCODE_START(3, 3, bl);
     encode(last_snap, bl);
@@ -68,26 +62,33 @@ public:
     DECODE_FINISH(bl);
   }
 
-  // To permit enc/decoding in isolation in dencoder
-  SnapServer() : MDSTableServer(NULL, TABLE_SNAP), last_checked_osdmap(0) {}
-  void encode(bufferlist& bl) const {
-    encode_server_state(bl);
-  }
-  void decode(bufferlist::iterator& bl) {
-    decode_server_state(bl);
-  }
-  void dump(Formatter *f) const;
-  static void generate_test_instances(list<SnapServer*>& ls);
-
   // server bits
   void _prepare(bufferlist &bl, uint64_t reqid, mds_rank_t bymds) override;
   void _get_reply_buffer(version_t tid, bufferlist *pbl) const override;
   void _commit(version_t tid, MMDSTableRequest *req=NULL) override;
   void _rollback(version_t tid) override;
   void _server_update(bufferlist& bl) override;
+  bool _notify_prep(version_t tid) override;
   void handle_query(MMDSTableRequest *m) override;
 
+public:
+  SnapServer(MDSRank *m, MonClient *monc)
+    : MDSTableServer(m, TABLE_SNAP), mon_client(monc), last_checked_osdmap(0) {}
+  SnapServer() : MDSTableServer(NULL, TABLE_SNAP), last_checked_osdmap(0) {}
+
+  void reset_state() override;
+
   void check_osd_map(bool force);
+
+  void encode(bufferlist& bl) const {
+    encode_server_state(bl);
+  }
+  void decode(bufferlist::iterator& bl) {
+    decode_server_state(bl);
+  }
+
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<SnapServer*>& ls);
 };
 WRITE_CLASS_ENCODER(SnapServer)
 

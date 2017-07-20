@@ -246,8 +246,29 @@ void SnapServer::_server_update(bufferlist& bl)
   }
 }
 
+bool SnapServer::_notify_prep(version_t tid)
+{
+  using ceph::encode;
+  bufferlist bl;
+  char type = 'F';
+  encode(type, bl);
+  encode(snaps, bl);
+  encode(pending_update, bl);
+  encode(pending_destroy, bl);
+  assert(version == tid);
+
+  for (auto p : active_clients) {
+    MMDSTableRequest *m = new MMDSTableRequest(table, TABLESERVER_OP_NOTIFY_PREP, 0, version);
+    m->bl = bl;
+    mds->send_message_mds(m, p);
+  }
+  return true;
+}
+
 void SnapServer::handle_query(MMDSTableRequest *req)
 {
+  using ceph::encode;
+  using ceph::decode;
   char op;
   bufferlist::iterator p = req->bl.begin();
   decode(op, p);

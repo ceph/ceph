@@ -1800,8 +1800,11 @@ void MDSRankDispatcher::handle_mds_map(
     oldmap->get_stopped_mds_set(oldstopped);
     mdsmap->get_stopped_mds_set(stopped);
     for (set<mds_rank_t>::iterator p = stopped.begin(); p != stopped.end(); ++p)
-      if (oldstopped.count(*p) == 0)      // newly so?
+      if (oldstopped.count(*p) == 0) {     // newly so?
 	mdcache->migrator->handle_mds_failure_or_stop(*p);
+	if (mdsmap->get_tableserver() == whoami)
+	  snapserver->handle_mds_failure_or_stop(*p);
+      }
   }
 
   {
@@ -1865,6 +1868,9 @@ void MDSRank::handle_mds_failure(mds_rank_t who)
   dout(5) << "handle_mds_failure mds." << who << dendl;
 
   mdcache->handle_mds_failure(who);
+
+  if (mdsmap->get_tableserver() == whoami)
+    snapserver->handle_mds_failure_or_stop(who);
 
   snapclient->handle_mds_failure(who);
 }
