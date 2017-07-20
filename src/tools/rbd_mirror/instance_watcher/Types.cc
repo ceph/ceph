@@ -73,37 +73,16 @@ void PayloadBase::dump(Formatter *f) const {
 void ImagePayloadBase::encode(bufferlist &bl) const {
   PayloadBase::encode(bl);
   ::encode(global_image_id, bl);
-  ::encode(peer_mirror_uuid, bl);
-  ::encode(peer_image_id, bl);
 }
 
 void ImagePayloadBase::decode(__u8 version, bufferlist::iterator &iter) {
   PayloadBase::decode(version, iter);
   ::decode(global_image_id, iter);
-  ::decode(peer_mirror_uuid, iter);
-  ::decode(peer_image_id, iter);
 }
 
 void ImagePayloadBase::dump(Formatter *f) const {
   PayloadBase::dump(f);
   f->dump_string("global_image_id", global_image_id);
-  f->dump_string("peer_mirror_uuid", peer_mirror_uuid);
-  f->dump_string("peer_image_id", peer_image_id);
-}
-
-void ImageReleasePayload::encode(bufferlist &bl) const {
-  ImagePayloadBase::encode(bl);
-  ::encode(schedule_delete, bl);
-}
-
-void ImageReleasePayload::decode(__u8 version, bufferlist::iterator &iter) {
-  ImagePayloadBase::decode(version, iter);
-  ::decode(schedule_delete, iter);
-}
-
-void ImageReleasePayload::dump(Formatter *f) const {
-  ImagePayloadBase::dump(f);
-  f->dump_bool("schedule_delete", schedule_delete);
 }
 
 void PeerImageRemovedPayload::encode(bufferlist &bl) const {
@@ -193,11 +172,10 @@ void NotifyMessage::dump(Formatter *f) const {
 
 void NotifyMessage::generate_test_instances(std::list<NotifyMessage *> &o) {
   o.push_back(new NotifyMessage(ImageAcquirePayload()));
-  o.push_back(new NotifyMessage(ImageAcquirePayload(1, "gid", "uuid", "id")));
+  o.push_back(new NotifyMessage(ImageAcquirePayload(1, "gid")));
 
   o.push_back(new NotifyMessage(ImageReleasePayload()));
-  o.push_back(new NotifyMessage(ImageReleasePayload(1, "gid", "uuid", "id",
-                                                    true)));
+  o.push_back(new NotifyMessage(ImageReleasePayload(1, "gid")));
 
   o.push_back(new NotifyMessage(PeerImageRemovedPayload()));
   o.push_back(new NotifyMessage(PeerImageRemovedPayload(1, "gid", "uuid")));

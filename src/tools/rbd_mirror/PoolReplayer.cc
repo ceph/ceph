@@ -632,7 +632,6 @@ void PoolReplayer::handle_update(const std::string &mirror_uuid,
     // for now always send to myself (the leader)
     std::string &instance_id = m_instance_watcher->get_instance_id();
     m_instance_watcher->notify_image_acquire(instance_id, image_id.global_id,
-                                             mirror_uuid, image_id.id,
                                              gather_ctx->new_sub());
   }
 

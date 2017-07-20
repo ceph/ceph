@@ -132,11 +132,8 @@ void InstanceReplayer<I>::release_all(Context *on_finish) {
 template <typename I>
 void InstanceReplayer<I>::acquire_image(InstanceWatcher<I> *instance_watcher,
                                         const std::string &global_image_id,
-                                        const std::string &peer_mirror_uuid,
-                                        const std::string &peer_image_id,
                                         Context *on_finish) {
-  dout(20) << "global_image_id=" << global_image_id << ", peer_mirror_uuid="
-           << peer_mirror_uuid << ", peer_image_id=" << peer_image_id << dendl;
+  dout(20) << "global_image_id=" << global_image_id << dendl;
 
   Mutex::Locker locker(m_lock);
 
@@ -166,15 +163,10 @@ void InstanceReplayer<I>::acquire_image(InstanceWatcher<I> *instance_watcher,
 
 template <typename I>
 void InstanceReplayer<I>::release_image(const std::string &global_image_id,
-                                        const std::string &peer_mirror_uuid,
-                                        const std::string &peer_image_id,
-                                        bool schedule_delete,
                                         Context *on_finish) {
-  dout(20) << "global_image_id=" << global_image_id << ", peer_mirror_uuid="
-           << peer_mirror_uuid << ", peer_image_id=" << peer_image_id << dendl;
+  dout(20) << "global_image_id=" << global_image_id << dendl;
 
   Mutex::Locker locker(m_lock);
-
   assert(m_on_shut_down == nullptr);
 
   auto it = m_image_replayers.find(global_image_id);
