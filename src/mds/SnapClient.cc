@@ -85,7 +85,7 @@ void SnapClient::handle_query_result(MMDSTableRequest *m)
     }
   }
 
-  if (m->reqid >= sync_reqid)
+  if (m->op == TABLESERVER_OP_QUERY_REPLY && m->reqid >= sync_reqid)
     synced = true;
 
   if (synced && !waiting_for_version.empty()) {
@@ -100,6 +100,14 @@ void SnapClient::handle_query_result(MMDSTableRequest *m)
     if (!finished.empty())
       mds->queue_waiters(finished);
   }
+}
+
+void SnapClient::handle_notify_prep(MMDSTableRequest *m)
+{
+  dout(10) << __func__ << " " << *m << dendl;
+  handle_query_result(m);
+  MMDSTableRequest *ack = new MMDSTableRequest(table, TABLESERVER_OP_NOTIFY_ACK, 0, m->get_tid());
+  mds->send_message(ack, m->get_connection());
 }
 
 void SnapClient::notify_commit(version_t tid)
