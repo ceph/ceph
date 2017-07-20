@@ -311,7 +311,14 @@ void PG::proc_master_log(
   // See doc/dev/osd_internals/last_epoch_started
   if (oinfo.last_epoch_started > info.last_epoch_started)
     info.last_epoch_started = oinfo.last_epoch_started;
-  info.history.merge(oinfo.history);
+  if (info.history.merge(oinfo.history)) {
+    if (info.history.last_epoch_clean >= info.history.same_interval_since) {
+      dout(20) << __func__ << "clearing past_intervals" << dendl;
+      past_intervals.clear();
+      dirty_big_info = true;
+    }
+  }
+
   assert(cct->_conf->osd_find_best_info_ignore_history_les ||
 	 info.last_epoch_started >= info.history.last_epoch_started);
 
@@ -362,8 +369,15 @@ bool PG::proc_replica_info(
   might_have_unfound.insert(from);
   
   unreg_next_scrub();
-  if (info.history.merge(oinfo.history))
+  if (info.history.merge(oinfo.history)) {
     dirty_info = true;
+    if (info.history.last_epoch_clean >= info.history.same_interval_since) {
+      dout(20) << __func__ << "clearing past_intervals" << dendl;
+      past_intervals.clear();
+      dirty_big_info = true;
+    }
+  }
+
   reg_next_scrub();
   
   // stray?
@@ -1028,6 +1042,20 @@ map<pg_shard_t, pg_info_t>::const_iterator PG::find_best_info(
 	       << " because it is current primary" << dendl;
       best = p;
       continue;
+    }
+  }
+  if (best == infos.end())
+    return infos.end();
+
+  if ((infos.size() == pool.info.min_size) &&
+      (pool.info.min_size <= pool.info.size/2) &&
+      (best->first == pg_whoami) &&
+      (!cct->_conf->osd_find_best_info_ignore_mapgap))
+  {
+    if ((!past_intervals.empty()) &&
+        (past_intervals.begin()->second.first <= osd->get_superblock().oldest_map)) {
+      dout(5) << "filter osd who has osdmap gap" << dendl;
+      return infos.end();
     }
   }
   return best;
@@ -4518,7 +4546,16 @@ void PG::share_pg_log()
 void PG::update_history_from_master(pg_history_t new_history)
 {
   unreg_next_scrub();
-  info.history.merge(new_history);
+  if (info.history.merge(new_history)) {
+    dout(20) << __func__ << "advanced history from " << new_history << dendl;
+    dirty_info = true;
+    if (info.history.last_epoch_clean >= info.history.same_interval_since) {
+      dout(20) << __func__ << "clearing past_intervals" << dendl;
+      past_intervals.clear();
+      dirty_big_info = true;
+    }
+  }
+
   reg_next_scrub();
 }
 
@@ -4833,7 +4870,12 @@ void PG::start_peering_interval(
     dout(10) << __func__ << ": check_new_interval output: "
 	     << debug.str() << dendl;
     if (new_interval) {
-      dout(10) << " noting past " << past_intervals.rbegin()->second << dendl;
+      if ((osdmap->get_epoch() == osd->get_superblock().oldest_map) && (info.history.last_epoch_clean < osdmap->get_epoch())) {
+        dout(5) << "map gap, cleaning past_intervals and faking" << dendl;
+        past_intervals.clear();
+      } else {
+        dout(10) << " noting past " << past_intervals.rbegin()->second << dendl;
+      }
       dirty_info = true;
       dirty_big_info = true;
       info.history.same_interval_since = osdmap->get_epoch();
