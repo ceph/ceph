@@ -42,17 +42,12 @@ struct PayloadBase {
 
 struct ImagePayloadBase : public PayloadBase {
   std::string global_image_id;
-  std::string peer_mirror_uuid;
-  std::string peer_image_id;
 
   ImagePayloadBase() : PayloadBase() {
   }
 
-  ImagePayloadBase(uint64_t request_id, const std::string &global_image_id,
-                   const std::string &peer_mirror_uuid,
-                   const std::string &peer_image_id)
-    : PayloadBase(request_id), global_image_id(global_image_id),
-      peer_mirror_uuid(peer_mirror_uuid), peer_image_id(peer_image_id) {
+  ImagePayloadBase(uint64_t request_id, const std::string &global_image_id)
+    : PayloadBase(request_id), global_image_id(global_image_id) {
   }
 
   void encode(bufferlist &bl) const;
@@ -63,36 +58,21 @@ struct ImagePayloadBase : public PayloadBase {
 struct ImageAcquirePayload : public ImagePayloadBase {
   static const NotifyOp NOTIFY_OP = NOTIFY_OP_IMAGE_ACQUIRE;
 
-  ImageAcquirePayload() : ImagePayloadBase() {
+  ImageAcquirePayload() {
   }
-
-  ImageAcquirePayload(uint64_t request_id, const std::string &global_image_id,
-                      const std::string &peer_mirror_uuid,
-                      const std::string &peer_image_id)
-    : ImagePayloadBase(request_id, global_image_id, peer_mirror_uuid,
-                       peer_image_id) {
+  ImageAcquirePayload(uint64_t request_id, const std::string &global_image_id)
+    : ImagePayloadBase(request_id, global_image_id) {
   }
 };
 
 struct ImageReleasePayload : public ImagePayloadBase {
   static const NotifyOp NOTIFY_OP = NOTIFY_OP_IMAGE_RELEASE;
 
-  bool schedule_delete;
-
-  ImageReleasePayload() : ImagePayloadBase(), schedule_delete(false) {
+  ImageReleasePayload() {
   }
-
-  ImageReleasePayload(uint64_t request_id, const std::string &global_image_id,
-                      const std::string &peer_mirror_uuid,
-                      const std::string &peer_image_id, bool schedule_delete)
-    : ImagePayloadBase(request_id, global_image_id, peer_mirror_uuid,
-                       peer_image_id),
-      schedule_delete(schedule_delete) {
+  ImageReleasePayload(uint64_t request_id, const std::string &global_image_id)
+    : ImagePayloadBase(request_id, global_image_id) {
   }
-
-  void encode(bufferlist &bl) const;
-  void decode(__u8 version, bufferlist::iterator &iter);
-  void dump(Formatter *f) const;
 };
 
 struct PeerImageRemovedPayload : public PayloadBase {

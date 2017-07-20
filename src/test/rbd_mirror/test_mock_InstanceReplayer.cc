@@ -186,7 +186,6 @@ TEST_F(TestMockInstanceReplayer, AcquireReleaseImage) {
   EXPECT_CALL(mock_image_replayer, start(nullptr, false));
 
   instance_replayer.acquire_image(&mock_instance_watcher, global_image_id,
-                                  "remote_mirror_uuid", "remote_image_id",
                                   &on_acquire);
   ASSERT_EQ(0, on_acquire.wait());
 
@@ -208,8 +207,7 @@ TEST_F(TestMockInstanceReplayer, AcquireReleaseImage) {
     .WillOnce(Return(true));
   EXPECT_CALL(mock_image_replayer, destroy());
 
-  instance_replayer.release_image("global_image_id", "remote_mirror_uuid",
-                                  "remote_image_id", false, &on_release);
+  instance_replayer.release_image("global_image_id", &on_release);
   ASSERT_EQ(0, on_release.wait());
 
   instance_replayer.shut_down();
