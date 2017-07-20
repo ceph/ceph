@@ -95,6 +95,29 @@ public:
     return true;
   }
 
+  bool have_name(const string& name) const {
+    if (active_name == name) {
+      return true;
+    }
+    for (auto& p : standbys) {
+      if (p.second.name == name) {
+	return true;
+      }
+    }
+    return false;
+  }
+
+  std::set<std::string> get_all_names() const {
+    std::set<std::string> ls;
+    if (active_name.size()) {
+      ls.insert(active_name);
+    }
+    for (auto& p : standbys) {
+      ls.insert(p.second.name);
+    }
+    return ls;
+  }
+
   void encode(bufferlist& bl, uint64_t features) const
   {
     ENCODE_START(2, 1, bl);
