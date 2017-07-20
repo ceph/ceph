@@ -22,9 +22,17 @@ class MMDSTableRequest;
 class MDSTableServer : public MDSTable {
 protected:
   int table;
+  set<mds_rank_t> active_clients;
 private:
   map<version_t,mds_table_pending_t> pending_for_mds;  // ** child should encode this! **
   set<version_t> committing_tids;
+
+  struct reply_info_t {
+    set<mds_rank_t> notify_gather;
+    MMDSTableRequest *reply;
+    mds_rank_t mds;
+  };
+  map<version_t, reply_info_t> pending_replies;
 
   void handle_prepare(MMDSTableRequest *m);
   void _prepare_logged(MMDSTableRequest *m, version_t tid);
@@ -41,12 +49,15 @@ private:
   void _server_update_logged(bufferlist& bl);
   friend class C_ServerUpdate;
 
+  void handle_notify_ack(MMDSTableRequest *m);
+
 public:
   virtual void handle_query(MMDSTableRequest *m) = 0;
   virtual void _prepare(bufferlist &bl, uint64_t reqid, mds_rank_t bymds) = 0;
   virtual void _commit(version_t tid, MMDSTableRequest *req=NULL) = 0;
   virtual void _rollback(version_t tid) = 0;
   virtual void _server_update(bufferlist& bl) { ceph_abort(); }
+  virtual bool _notify_prep(version_t tid) { return false; };
 
   void _note_prepare(mds_rank_t mds, uint64_t reqid, bool replay=false) {
     version++;
@@ -95,6 +106,7 @@ public:
   // recovery
   void finish_recovery(set<mds_rank_t>& active);
   void handle_mds_recovery(mds_rank_t who);
+  void handle_mds_failure(mds_rank_t who);
 };
 
 #endif

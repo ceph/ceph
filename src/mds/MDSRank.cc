@@ -1828,6 +1828,9 @@ void MDSRank::handle_mds_failure(mds_rank_t who)
 
   mdcache->handle_mds_failure(who);
 
+  if (mdsmap->get_tableserver() == whoami)
+    snapserver->handle_mds_failure(who);
+
   snapclient->handle_mds_failure(who);
 }
 

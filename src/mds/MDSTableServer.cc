@@ -34,6 +34,7 @@ void MDSTableServer::handle_request(MMDSTableRequest *req)
   case TABLESERVER_OP_PREPARE: return handle_prepare(req);
   case TABLESERVER_OP_COMMIT: return handle_commit(req);
   case TABLESERVER_OP_ROLLBACK: return handle_rollback(req);
+  case TABLESERVER_OP_NOTIFY_ACK: return handle_notify_ack(req);
   default: assert(0 == "unrecognized mds_table_server request op");
   }
 }
@@ -83,8 +84,37 @@ void MDSTableServer::_prepare_logged(MMDSTableRequest *req, version_t tid)
 
   MMDSTableRequest *reply = new MMDSTableRequest(table, TABLESERVER_OP_AGREE, req->reqid, tid);
   reply->bl = req->bl;
-  mds->send_message_mds(reply, from);
+
+  if (_notify_prep(tid)) {
+    auto& p = pending_replies[tid];
+    p.notify_gather = active_clients;
+    p.reply = reply;
+    p.mds = from;
+  } else {
+    mds->send_message_mds(reply, from);
+  }
   req->put();
+}
+
+void MDSTableServer::handle_notify_ack(MMDSTableRequest *m)
+{
+  dout(7) << __func__ << " " << *m << dendl;
+  mds_rank_t from = mds_rank_t(m->get_source().num());
+  version_t tid = m->get_tid();
+
+  auto p = pending_replies.find(tid);
+  if (p != pending_replies.end()) {
+    if (p->second.notify_gather.erase(from)) {
+      if (p->second.notify_gather.empty()) {
+	mds->send_message_mds(p->second.reply, p->second.mds);
+	pending_replies.erase(p);
+      }
+    } else {
+      dout(0) << "got unexpected notify ack for tid " <<  tid << " from mds." << from << dendl;
+    }
+  } else {
+  }
+  m->put();
 }
 
 class C_Commit : public MDSLogContextBase {
@@ -248,19 +278,52 @@ void MDSTableServer::handle_mds_recovery(mds_rank_t who)
 {
   dout(7) << "handle_mds_recovery mds." << who << dendl;
 
+
   uint64_t next_reqid = 0;
   // resend agrees for recovered mds
-  for (map<version_t,mds_table_pending_t>::iterator p = pending_for_mds.begin();
-       p != pending_for_mds.end();
-       ++p) {
+  for (auto p = pending_for_mds.begin(); p != pending_for_mds.end(); ++p) {
     if (p->second.mds != who)
       continue;
+    assert(!pending_replies.count(p->second.tid));
+
     if (p->second.reqid >= next_reqid)
       next_reqid = p->second.reqid + 1;
+
     MMDSTableRequest *reply = new MMDSTableRequest(table, TABLESERVER_OP_AGREE, p->second.reqid, p->second.tid);
     mds->send_message_mds(reply, who);
   }
 
   MMDSTableRequest *reply = new MMDSTableRequest(table, TABLESERVER_OP_SERVER_READY, next_reqid);
   mds->send_message_mds(reply, who);
+
+  active_clients.insert(who);
+}
+
+void MDSTableServer::handle_mds_failure(mds_rank_t who)
+{
+  dout(7) << __func__ << " mds." << who << dendl;
+
+  active_clients.erase(who);
+
+  list<MMDSTableRequest*> rollback;
+  for (auto p = pending_replies.begin(); p != pending_replies.end(); ++p) {
+    auto q = p++;
+    if (q->second.mds == who) {
+      // haven't sent reply yet.
+      rollback.push_back(q->second.reply);
+      pending_replies.erase(q);
+    } else if (q->second.notify_gather.erase(who)) {
+      // the failed mds will reload snaptable when it recovers.
+      // so we can remove it from the gather set.
+      if (q->second.notify_gather.empty()) {
+	mds->send_message_mds(q->second.reply, q->second.mds);
+	pending_replies.erase(q);
+      }
+    }
+  }
+
+  for (auto p : rollback) {
+    p->op = TABLESERVER_OP_ROLLBACK;
+    handle_rollback(p);
+  }
 }

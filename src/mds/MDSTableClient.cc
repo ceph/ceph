@@ -60,6 +60,10 @@ void MDSTableClient::handle_request(class MMDSTableRequest *m)
   case TABLESERVER_OP_QUERY_REPLY:
     handle_query_result(m);
     break;
+
+  case TABLESERVER_OP_NOTIFY_PREP:
+    handle_notify_prep(m);
+    break;
     
   case TABLESERVER_OP_AGREE:
     if (pending_prepare.count(reqid)) {

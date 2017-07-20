@@ -85,6 +85,7 @@ public:
   // child must implement
   virtual void resend_queries() = 0;
   virtual void handle_query_result(MMDSTableRequest *m) = 0;
+  virtual void handle_notify_prep(MMDSTableRequest *m) = 0;
   virtual void notify_commit(version_t tid) = 0;
 
   // and friendly front-end for _prepare.
