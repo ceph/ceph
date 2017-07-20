@@ -58,7 +58,9 @@ public:
   }
 
   void encode_payload(uint64_t features) override {
-    if (!HAVE_FEATURE(features, SERVER_LUMINOUS)) {
+    if (HAVE_FEATURE(features, SERVER_LUMINOUS)) {
+      header.version = HEAD_VERSION;
+    } else {
       header.version = 4;
 
       // for kraken+jewel only
