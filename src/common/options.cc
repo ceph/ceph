@@ -279,7 +279,8 @@ const std::vector<Option> ceph_options = {
   Option("erasure_code_dir", Option::TYPE_STR, Option::LEVEL_ADVANCED)
   .set_default(CEPH_PKGLIBDIR"/erasure-code")
   .set_description("directory where erasure-code plugins can be found")
-  .add_service("mon osd"),
+  .add_service("mon osd")
+  .set_safe(),
 
   // logging
   Option("log_file", Option::TYPE_STR, Option::LEVEL_BASIC)
