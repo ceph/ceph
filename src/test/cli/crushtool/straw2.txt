@@ -31,7 +31,7 @@ default default {
 
 # rules
 rule replicated_ruleset {
-	ruleset 0
+	id 0
 	type replicated
 	min_size 1
 	max_size 10
