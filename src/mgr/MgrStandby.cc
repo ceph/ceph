@@ -161,12 +161,16 @@ void MgrStandby::send_beacon()
   dout(10) << "sending beacon as gid " << monc.get_global_id()
 	   << " modules " << modules << dendl;
 
+  map<string,string> metadata;
+  collect_sys_info(&metadata, g_ceph_context);
+
   MMgrBeacon *m = new MMgrBeacon(monc.get_fsid(),
 				 monc.get_global_id(),
                                  g_conf->name.get_id(),
                                  addr,
                                  available,
-				 modules);
+				 modules,
+				 metadata);
 
   if (available && !available_in_map) {
     // We are informing the mon that we are done initializing: inform
