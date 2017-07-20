@@ -51,6 +51,19 @@ struct ServiceMap {
 	 << " active";
       return ss.str();
     }
+
+    void count_metadata(const string& field,
+			std::map<std::string,int> *out) const {
+      for (auto& p : daemons) {
+	auto q = p.second.metadata.find(field);
+	if (q == p.second.metadata.end()) {
+	  (*out)["unknown"]++;
+	} else {
+	  (*out)[q->second]++;
+	}
+      }
+    }
+
   };
 
   epoch_t epoch = 0;
