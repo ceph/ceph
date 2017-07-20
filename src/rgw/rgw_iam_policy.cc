@@ -912,7 +912,7 @@ bool Condition::eval(const Environment& env) const {
   }
 
   if (i == env.end()) {
-    return false;
+    return ifexists;
   }
   const auto& s = i->second;
 
