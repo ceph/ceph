@@ -19,10 +19,11 @@ namespace mirror {
 namespace instance_watcher {
 
 enum NotifyOp {
-  NOTIFY_OP_IMAGE_ACQUIRE  = 0,
-  NOTIFY_OP_IMAGE_RELEASE  = 1,
-  NOTIFY_OP_SYNC_REQUEST   = 2,
-  NOTIFY_OP_SYNC_START     = 3,
+  NOTIFY_OP_IMAGE_ACQUIRE      = 0,
+  NOTIFY_OP_IMAGE_RELEASE      = 1,
+  NOTIFY_OP_PEER_IMAGE_REMOVED = 2,
+  NOTIFY_OP_SYNC_REQUEST       = 3,
+  NOTIFY_OP_SYNC_START         = 4
 };
 
 struct PayloadBase {
@@ -94,6 +95,26 @@ struct ImageReleasePayload : public ImagePayloadBase {
   void dump(Formatter *f) const;
 };
 
+struct PeerImageRemovedPayload : public PayloadBase {
+  static const NotifyOp NOTIFY_OP = NOTIFY_OP_PEER_IMAGE_REMOVED;
+
+  std::string global_image_id;
+  std::string peer_mirror_uuid;
+
+  PeerImageRemovedPayload() {
+  }
+  PeerImageRemovedPayload(uint64_t request_id,
+                          const std::string& global_image_id,
+                          const std::string& peer_mirror_uuid)
+    : PayloadBase(request_id),
+      global_image_id(global_image_id), peer_mirror_uuid(peer_mirror_uuid) {
+  }
+
+  void encode(bufferlist &bl) const;
+  void decode(__u8 version, bufferlist::iterator &iter);
+  void dump(Formatter *f) const;
+};
+
 struct SyncPayloadBase : public PayloadBase {
   std::string sync_id;
 
@@ -144,6 +165,7 @@ struct UnknownPayload {
 
 typedef boost::variant<ImageAcquirePayload,
                        ImageReleasePayload,
+                       PeerImageRemovedPayload,
                        SyncRequestPayload,
                        SyncStartPayload,
                        UnknownPayload> Payload;
