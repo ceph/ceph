@@ -1226,21 +1226,26 @@ int OSDMonitor::load_metadata(int osd, map<string, string>& m, ostream *err)
   return 0;
 }
 
-void OSDMonitor::count_metadata(const string& field, Formatter *f)
+void OSDMonitor::count_metadata(const string& field, map<string,int> *out)
 {
-  map<string,int> by_val;
   for (int osd = 0; osd < osdmap.get_max_osd(); ++osd) {
     if (osdmap.is_up(osd)) {
       map<string,string> meta;
       load_metadata(osd, meta, nullptr);
       auto p = meta.find(field);
       if (p == meta.end()) {
-	by_val["unknown"]++;
+	(*out)["unknown"]++;
       } else {
-	by_val[p->second]++;
+	(*out)[p->second]++;
       }
     }
   }
+}
+
+void OSDMonitor::count_metadata(const string& field, Formatter *f)
+{
+  map<string,int> by_val;
+  count_metadata(field, &by_val);
   f->open_object_section(field.c_str());
   for (auto& p : by_val) {
     f->dump_int(p.first.c_str(), p.second);

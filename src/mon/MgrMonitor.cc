@@ -897,20 +897,25 @@ int MgrMonitor::load_metadata(const string& name, std::map<string, string>& m,
   return 0;
 }
 
-void MgrMonitor::count_metadata(const string& field, Formatter *f)
+void MgrMonitor::count_metadata(const string& field, std::map<string,int> *out)
 {
-  std::map<string,int> by_val;
   std::set<string> ls = map.get_all_names();
   for (auto& name : ls) {
     std::map<string,string> meta;
     load_metadata(name, meta, nullptr);
     auto p = meta.find(field);
     if (p == meta.end()) {
-      by_val["unknown"]++;
+      (*out)["unknown"]++;
     } else {
-      by_val[p->second]++;
+      (*out)[p->second]++;
     }
   }
+}
+
+void MgrMonitor::count_metadata(const string& field, Formatter *f)
+{
+  std::map<string,int> by_val;
+  count_metadata(field, &by_val);
   f->open_object_section(field.c_str());
   for (auto& p : by_val) {
     f->dump_int(p.first.c_str(), p.second);
