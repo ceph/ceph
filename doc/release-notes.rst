@@ -71,7 +71,7 @@ Major Changes from Kraken
     process IO.
   * There is a `simplified OSD replacement process`_ that is more robust.
   * You can query the supported features and (apparent) releases of
-    all connected daemons and clients with ``ceph features``. FIXME DOCS
+    all connected daemons and clients with ``ceph features``.
   * You can configure the oldest Ceph client version you wish to allow to
     connect to the cluster via ``ceph osd set-require-min-compat-client`` and
     Ceph will prevent you from enabling features that will break compatibility

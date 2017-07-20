@@ -248,6 +248,15 @@ Usage::
 	ceph df {detail}
 
 
+features
+--------
+
+Show the releases and supported features of all connected daemons and clients, along with the numbers of them in each bucket grouped by the corresponding features/releases.
+
+Usage::
+
+    ceph features
+
 fs
 --
 
