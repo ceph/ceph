@@ -107,6 +107,7 @@ public:
 		    ostream *err);
   int dump_metadata(const string& name, Formatter *f, ostream *err);
   void count_metadata(const string& field, Formatter *f);
+  void count_metadata(const string& field, std::map<string,int> *out);
 
   friend class C_Updated;
 };

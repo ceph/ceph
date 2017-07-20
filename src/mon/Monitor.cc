@@ -5011,17 +5011,22 @@ int Monitor::get_mon_metadata(int mon, Formatter *f, ostream& err)
   return 0;
 }
 
-void Monitor::count_metadata(const string& field, Formatter *f)
+void Monitor::count_metadata(const string& field, map<string,int> *out)
 {
-  map<string,int> by_val;
   for (auto& p : mon_metadata) {
     auto q = p.second.find(field);
     if (q == p.second.end()) {
-      by_val["unknown"]++;
+      (*out)["unknown"]++;
     } else {
-      by_val[q->second]++;
+      (*out)[q->second]++;
     }
   }
+}
+
+void Monitor::count_metadata(const string& field, Formatter *f)
+{
+  map<string,int> by_val;
+  count_metadata(field, &by_val);
   f->open_object_section(field.c_str());
   for (auto& p : by_val) {
     f->dump_int(p.first.c_str(), p.second);
