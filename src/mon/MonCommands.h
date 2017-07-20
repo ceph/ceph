@@ -494,7 +494,8 @@ COMMAND("osd lspools " \
 COMMAND("osd blacklist ls", "show blacklisted clients", "osd", "r", "cli,rest")
 COMMAND("osd blacklist clear", "clear all blacklisted clients", "osd", "rw",
         "cli,rest")
-COMMAND("osd crush rule list", "list crush rules", "osd", "r", "cli,rest")
+COMMAND_WITH_FLAG("osd crush rule list", "list crush rules", "osd", "r", "cli,rest",
+		  FLAG(DEPRECATED))
 COMMAND("osd crush rule ls", "list crush rules", "osd", "r", "cli,rest")
 COMMAND("osd crush rule dump " \
 	"name=name,type=CephString,goodchars=[A-Za-z0-9-_.],req=false", \
