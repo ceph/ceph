@@ -342,6 +342,7 @@ Request Parameters
 :Type: String
 :Example: ``foo_user``
 :Required: Yes
+A tenant name may also specified as a part of ``uid``, by following the syntax ``tenant$user``, refer to `Multitenancy`_ for more details.
 
 ``display-name``
 
@@ -417,6 +418,11 @@ If successful, the response contains the user information.
 
 :Description: A container for the user data information.
 :Type: Container
+
+``tenant``
+:Description: The tenant which user is a part of
+:Type: String
+:Parent: ``user``
 
 ``user_id``
 
@@ -1924,3 +1930,4 @@ Standard Error Responses
 
 .. _Admin Guide: ../admin
 .. _Quota Management: ../admin#quota-management
+.. _Multitenancy: ./multitenancy
