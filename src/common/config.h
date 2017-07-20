@@ -144,7 +144,8 @@ public:
 
   // Set a configuration value, or crash
   // Metavariables will be expanded.
-  void set_val_or_die(const std::string &key, const char *val);
+  void set_val_or_die(const std::string &key, const std::string &val,
+                      bool meta=true);
 
   // Set a configuration value.
   // Metavariables will be expanded.

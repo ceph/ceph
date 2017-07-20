@@ -765,9 +765,15 @@ int md_config_t::injectargs(const std::string& s, std::ostream *oss)
   return ret;
 }
 
-void md_config_t::set_val_or_die(const std::string &key, const char *val)
+void md_config_t::set_val_or_die(const std::string &key,
+                                 const std::string &val,
+                                 bool meta)
 {
-  int ret = set_val(key, val);
+  std::stringstream err;
+  int ret = set_val(key, val, meta, &err);
+  if (ret != 0) {
+    std::cerr << "set_val_or_die(" << key << "): " << err.str();
+  }
   assert(ret == 0);
 }
 
