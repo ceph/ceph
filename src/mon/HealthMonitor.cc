@@ -367,8 +367,7 @@ bool HealthMonitor::check_leader_health()
 	if (!warns.empty())
 	  ss << ",";
       }
-      auto& d = next.add("MON_CLOCK_SKEW", HEALTH_WARN,
-			 "monitor clock skew detected");
+      auto& d = next.add("MON_CLOCK_SKEW", HEALTH_WARN, ss.str());
       d.detail.swap(details);
     }
   }
