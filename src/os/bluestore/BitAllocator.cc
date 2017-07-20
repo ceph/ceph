@@ -568,7 +568,7 @@ int64_t BitMapArea::get_level_factor(CephContext* cct, int level)
   alloc_assert(level > 0);
 
   int64_t zone_size = get_zone_size(cct);
-  if (level == 1) {
+  if(level == VAL1){
     return zone_size;
   }
 
@@ -637,7 +637,7 @@ void BitMapAreaIN::init(CephContext* const cct,
   }
 
   int last_level = BitMapArea::get_level(cct, total_blocks);
-  if (last_level == 1) {
+  if (last_level == VAL1) {
     children.push_back(new BitMapAreaLeaf(cct, total_blocks, i, def));
   } else {
     children.push_back(new BitMapAreaIN(cct, total_blocks, i, def));
@@ -951,7 +951,7 @@ void BitMapAreaLeaf::init(CephContext* const cct,
   alloc_assert(!(total_blocks % BmapEntry::size()));
 
   init_common(cct, total_blocks, area_idx, def);
-  alloc_assert(m_level == 1);
+  alloc_assert(m_level == VAL1);
   int zone_size_block = get_zone_size(cct);
   alloc_assert(zone_size_block > 0);
   num_child = (total_blocks + zone_size_block - 1) / zone_size_block;

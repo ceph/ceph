@@ -11,7 +11,7 @@
  * Foundation.  See file COPYING.
  *
  */
-
+#include "common/debug.h"
 #include "bluestore_types.h"
 #include "common/Formatter.h"
 #include "common/Checksummer.h"
@@ -476,7 +476,7 @@ void bluestore_blob_use_tracker_t::split(
   }
   if (new_num_au == 0) {
     clear();
-  } else if (new_num_au == 1) {
+  } else if (new_num_au == VAL1) {
     uint32_t tmp = bytes_per_au[0];
     uint32_t _au_size = au_size;
     clear();

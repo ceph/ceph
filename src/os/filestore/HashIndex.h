@@ -95,7 +95,7 @@ private:
     {
       __u8 v;
       ::decode(v, bl);
-      assert(v == 1);
+      assert(v == VAL1);
       ::decode(objs, bl);
       ::decode(subdirs, bl);
       ::decode(hash_level, bl);
@@ -148,7 +148,7 @@ private:
     void decode(bufferlist::iterator &bl) {
       __u8 v;
       ::decode(v, bl);
-      assert(v == 1);
+      assert(v == VAL1);
       ::decode(op, bl);
       ::decode(path, bl);
     }

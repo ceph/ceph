@@ -476,7 +476,7 @@ int FileStore::lfn_unlink(const coll_t& cid, const ghobject_t& o,
     }
 
     if (!force_clear_omap) {
-      if (hardlink == 0 || hardlink == 1) {
+      if (hardlink == 0 || hardlink == VAL1) {
 	  force_clear_omap = true;
       }
     }
@@ -1348,7 +1348,7 @@ int FileStore::upgrade()
   }
   if (r < 0)
     return r;
-  if (r == 1)
+  if (r == VAL1)
     return 0;
 
   if (version < 3) {
@@ -1511,11 +1511,11 @@ int FileStore::mount()
     long long unsigned c, prev = 0;
     char clustersnap[NAME_MAX];
     for (list<string>::iterator it = ls.begin(); it != ls.end(); ++it) {
-      if (sscanf(it->c_str(), COMMIT_SNAP_ITEM, &c) == 1) {
+      if (sscanf(it->c_str(), COMMIT_SNAP_ITEM, &c) == VAL1) {
 	assert(c > prev);
 	prev = c;
 	snaps.push_back(c);
-      } else if (sscanf(it->c_str(), CLUSTER_SNAP_ITEM, clustersnap) == 1)
+      } else if (sscanf(it->c_str(), CLUSTER_SNAP_ITEM, clustersnap) == VAL1)
 	cluster_snaps.insert(*it);
     }
   }

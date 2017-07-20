@@ -542,7 +542,7 @@ int KStore::OnodeHashLRU::trim(int max)
       lru.erase(p--);
     } else {
       lru.erase(p);
-      assert(num == 1);
+      assert(num == VAL1);
     }
     o->get();  // paranoia
     onode_map.erase(o->oid);

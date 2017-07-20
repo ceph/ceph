@@ -75,7 +75,7 @@ string reverse_hexdigit_bits_string(string s)
 /// compare hex digit (as length 1 string) bitwise
 bool cmp_hexdigit_bitwise(const string& l, const string& r)
 {
-  assert(l.length() == 1 && r.length() == 1);
+  assert(l.length() == VAL1 && r.length() == VAL1);
   int lv = hex_to_int(l[0]);
   int rv = hex_to_int(r[0]);
   assert(lv < 16);

@@ -62,7 +62,7 @@ public:
   void aio_wait();
 
   void try_aio_wake() {
-    if (num_running == 1) {
+    if (num_running == VAL1) {
 
       // we might have some pending IOs submitted after the check
       // as there is no lock protection for aio_submit.
