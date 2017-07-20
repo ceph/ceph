@@ -1005,9 +1005,10 @@ public:
   int get_rule_weight_osd_map(unsigned ruleno, map<int,float> *pmap);
 
   /* modifiers */
-  int add_rule(int len, int ruleset, int type, int minsize, int maxsize, int ruleno) {
+
+  int add_rule(int ruleno, int len, int type, int minsize, int maxsize) {
     if (!crush) return -ENOENT;
-    crush_rule *n = crush_make_rule(len, ruleset, type, minsize, maxsize);
+    crush_rule *n = crush_make_rule(len, ruleno, type, minsize, maxsize);
     assert(n);
     ruleno = crush_add_rule(crush, n, ruleno);
     return ruleno;

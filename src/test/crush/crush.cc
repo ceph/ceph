@@ -52,9 +52,7 @@ std::unique_ptr<CrushWrapper> build_indep_map(CephContext *cct, int num_rack,
   }
   int ret;
   int ruleno = 0;
-  int rule = 0;
-  ruleno = rule;
-  ret = c->add_rule(4, rule, 123, 1, 20, ruleno);
+  ret = c->add_rule(ruleno, 4, 123, 1, 20);
   assert(ret == ruleno);
   ret = c->set_rule_step(ruleno, 0, CRUSH_RULE_SET_CHOOSELEAF_TRIES, 10, 0);
   assert(ret == 0);
