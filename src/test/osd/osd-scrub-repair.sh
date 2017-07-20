@@ -494,9 +494,9 @@ function TEST_corrupt_scrub_replicated() {
     local pg=$(get_pg $poolname ROBJ0)
 
     # Compute an old omap digest and save oi
-    CEPH_ARGS='' ceph daemon $dir//ceph-osd.0.asok \
+    CEPH_ARGS='' ceph daemon $(get_asok_path osd.0) \
         config set osd_deep_scrub_update_digest_min_age 0
-    CEPH_ARGS='' ceph daemon $dir//ceph-osd.1.asok \
+    CEPH_ARGS='' ceph daemon $(get_asok_path osd.1) \
         config set osd_deep_scrub_update_digest_min_age 0
     pg_deep_scrub $pg
 
@@ -593,13 +593,13 @@ function TEST_corrupt_scrub_replicated() {
 
     set_config osd 0 filestore_debug_inject_read_err true || return 1
     set_config osd 1 filestore_debug_inject_read_err true || return 1
-    CEPH_ARGS='' ceph --admin-daemon $dir/ceph-osd.1.asok \
+    CEPH_ARGS='' ceph --admin-daemon $(get_asok_path osd.1) \
              injectdataerr $poolname ROBJ11 || return 1
-    CEPH_ARGS='' ceph --admin-daemon $dir/ceph-osd.0.asok \
+    CEPH_ARGS='' ceph --admin-daemon $(get_asok_path osd.0) \
              injectmdataerr $poolname ROBJ12 || return 1
-    CEPH_ARGS='' ceph --admin-daemon $dir/ceph-osd.0.asok \
+    CEPH_ARGS='' ceph --admin-daemon $(get_asok_path osd.0) \
              injectmdataerr $poolname ROBJ13 || return 1
-    CEPH_ARGS='' ceph --admin-daemon $dir/ceph-osd.1.asok \
+    CEPH_ARGS='' ceph --admin-daemon $(get_asok_path osd.1) \
              injectdataerr $poolname ROBJ13 || return 1
 
     pg_scrub $pg
@@ -965,13 +965,13 @@ EOF
 
     set_config osd 0 filestore_debug_inject_read_err true || return 1
     set_config osd 1 filestore_debug_inject_read_err true || return 1
-    CEPH_ARGS='' ceph --admin-daemon $dir/ceph-osd.1.asok \
+    CEPH_ARGS='' ceph --admin-daemon $(get_asok_path osd.1) \
              injectdataerr $poolname ROBJ11 || return 1
-    CEPH_ARGS='' ceph --admin-daemon $dir/ceph-osd.0.asok \
+    CEPH_ARGS='' ceph --admin-daemon $(get_asok_path osd.0) \
              injectmdataerr $poolname ROBJ12 || return 1
-    CEPH_ARGS='' ceph --admin-daemon $dir/ceph-osd.0.asok \
+    CEPH_ARGS='' ceph --admin-daemon $(get_asok_path osd.0) \
              injectmdataerr $poolname ROBJ13 || return 1
-    CEPH_ARGS='' ceph --admin-daemon $dir/ceph-osd.1.asok \
+    CEPH_ARGS='' ceph --admin-daemon $(get_asok_path osd.1) \
              injectdataerr $poolname ROBJ13 || return 1
     pg_deep_scrub $pg
 
@@ -2564,7 +2564,7 @@ function TEST_periodic_scrub_replicated() {
 
     local last_scrub=$(get_last_scrub_stamp $pg)
     # Fake a schedule scrub
-    CEPH_ARGS='' ceph --admin-daemon $dir/ceph-osd.${primary}.asok \
+    CEPH_ARGS='' ceph --admin-daemon $(get_asok_path osd.${primary}) \
              trigger_scrub $pg || return 1
     # Wait for schedule regular scrub
     wait_for_scrub $pg "$last_scrub"
@@ -2582,7 +2582,7 @@ function TEST_periodic_scrub_replicated() {
 
     # Fake a schedule scrub
     local last_scrub=$(get_last_scrub_stamp $pg)
-    CEPH_ARGS='' ceph --admin-daemon $dir/ceph-osd.${primary}.asok \
+    CEPH_ARGS='' ceph --admin-daemon $(get_asok_path osd.${primary}) \
              trigger_scrub $pg || return 1
     # Wait for schedule regular scrub
     # to notice scrub and skip it
