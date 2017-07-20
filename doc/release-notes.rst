@@ -158,10 +158,12 @@ Major Changes from Kraken
   * *CLI changes*:
 
     - The ``ceph -s`` or ``ceph status`` command has a fresh look.
-    - ``ceph {osd,mds,mon} versions`` summarizes versions of running daemons.
-    - ``ceph {osd,mds,mon} count-metadata <property>`` similarly
+    - ``ceph mgr metadata`` will dump metadata associated with each mgr
+      daemon.
+    - ``ceph {osd,mds,mon,mgr} versions`` summarizes versions of running daemons.
+    - ``ceph {osd,mds,mon,mgr} count-metadata <property>`` similarly
       tabulates any other daemon metadata visible via the ``ceph
-      {osd,mds,mon} metadata`` commands.
+      {osd,mds,mon,mgr} metadata`` commands.
     - ``ceph features`` summarizes features and releases of connected
       clients and daemons.
     - ``ceph osd require-osd-release <release>`` replaces the old

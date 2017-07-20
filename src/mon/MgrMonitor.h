@@ -103,6 +103,11 @@ public:
     return command_descs;
   }
 
+  int load_metadata(const string& name, std::map<string, string>& m,
+		    ostream *err);
+  int dump_metadata(const string& name, Formatter *f, ostream *err);
+  void count_metadata(const string& field, Formatter *f);
+
   friend class C_Updated;
 };
 
