@@ -749,6 +749,12 @@ function test_mon_misc()
   ceph mon count-metadata ceph_version
   ceph mon versions
 
+  ceph mgr metadata
+  ceph mgr versions
+  ceph mgr count-metadata ceph_version
+
+  ceph versions
+
   ceph node ls
 }
 
