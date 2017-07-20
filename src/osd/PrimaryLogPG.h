@@ -1762,6 +1762,7 @@ public:
   void on_role_change() override;
   void on_pool_change() override;
   void _on_new_interval() override;
+  void clear_async_reads();
   void on_change(ObjectStore::Transaction *t) override;
   void on_activate() override;
   void on_flushed() override;
