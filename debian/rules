@@ -96,10 +96,12 @@ override_dh_installinit:
 	install -m0644 systemd/ceph-mon@.service debian/ceph-mon/lib/systemd/system
 	install -m0644 systemd/ceph-osd@.service debian/ceph-osd/lib/systemd/system
 	install -m0644 systemd/ceph-disk@.service debian/ceph-osd/lib/systemd/system
+	install -m0644 systemd/ceph-volume@.service debian/ceph-osd/lib/systemd/system
 	install -m0644 systemd/rbdmap.service debian/ceph-common/lib/systemd/system
 	sed -i s./etc/sysconfig/./etc/default/.g debian/ceph-mon/lib/systemd/system/ceph-mon@.service
 	sed -i s./etc/sysconfig/./etc/default/.g debian/ceph-osd/lib/systemd/system/ceph-osd@.service
 	sed -i s./etc/sysconfig/./etc/default/.g debian/ceph-osd/lib/systemd/system/ceph-disk@.service
+	sed -i s./etc/sysconfig/./etc/default/.g debian/ceph-osd/lib/systemd/system/ceph-volume@.service
 	install -m0644 systemd/ceph-mon.target debian/ceph-mon/lib/systemd/system
 	install -m0644 systemd/ceph-osd.target debian/ceph-osd/lib/systemd/system
 
