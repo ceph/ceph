@@ -757,8 +757,6 @@ int CrushCompiler::parse_bucket(iter_t const& i)
 
 int CrushCompiler::parse_rule(iter_t const& i)
 {
-  crush.populate_classes();
-
   int start;  // rule name is optional!
  
   string rname = string_node(i->children[1]);
@@ -1063,7 +1061,7 @@ void CrushCompiler::find_used_bucket_ids(iter_t const& i)
 int CrushCompiler::parse_crush(iter_t const& i) 
 { 
   find_used_bucket_ids(i);
-
+  bool saw_rule = false;
   for (iter_t p = i->children.begin(); p != i->children.end(); p++) {
     int r = 0;
     switch (p->value.id().to_long()) {
@@ -1076,10 +1074,18 @@ int CrushCompiler::parse_crush(iter_t const& i)
     case crush_grammar::_bucket_type: 
       r = parse_bucket_type(p);
       break;
-    case crush_grammar::_bucket: 
+    case crush_grammar::_bucket:
+      if (saw_rule) {
+	err << "buckets must be defined before rules" << std::endl;
+	return -1;
+      }
       r = parse_bucket(p);
       break;
-    case crush_grammar::_crushrule: 
+    case crush_grammar::_crushrule:
+      if (!saw_rule) {
+	saw_rule = true;
+	crush.populate_classes();
+      }
       r = parse_rule(p);
       break;
     case crush_grammar::_choose_args:
