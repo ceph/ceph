@@ -71,11 +71,11 @@ Major Changes from Kraken
     process IO.
   * There is a `simplified OSD replacement process`_ that is more robust.
   * You can query the supported features and (apparent) releases of
-    all connected daemons and clients with ``ceph features``.
+    all connected daemons and clients with `ceph features </man/8/ceph#features>`_.
   * You can configure the oldest Ceph client version you wish to allow to
     connect to the cluster via ``ceph osd set-require-min-compat-client`` and
     Ceph will prevent you from enabling features that will break compatibility
-    with those clients.  FIXME DOCS
+    with those clients.
   * Several `sleep` settings, include ``osd_recovery_sleep``,
     ``osd_snap_trim_sleep``, and ``osd_scrub_sleep`` have been
     reimplemented to work efficiently.  (These are used in some cases
