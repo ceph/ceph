@@ -61,6 +61,13 @@ public:
     mds(m), table(tab), last_reqid(~0ULL), server_ready(false) {}
   virtual ~MDSTableClient() {}
 
+  set<version_t> get_pending_commits() const {
+    set<version_t> tids;
+    for (auto p : pending_commit)
+      tids.insert(p.first);
+    return tids;
+  }
+
   void handle_request(MMDSTableRequest *m);
 
   void _prepare(bufferlist& mutation, version_t *ptid, bufferlist *pbl, MDSInternalContextBase *onfinish);

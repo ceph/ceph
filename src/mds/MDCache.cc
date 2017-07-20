@@ -2862,6 +2862,7 @@ void MDCache::send_subtree_resolves()
        p != resolves.end();
        ++p) {
     MMDSResolve* m = p->second;
+    m->add_table_commits(TABLE_SNAP, mds->snapclient->get_pending_commits());
     m->subtrees = my_subtrees;
     m->ambiguous_imports = my_ambig_imports;
     dout(10) << "sending subtee resolve to mds." << p->first << dendl;
@@ -3290,6 +3291,16 @@ void MDCache::handle_resolve(MMDSResolve *m)
     dout(10) << "noting ambiguous import on " << pi->first << " bounds " << pi->second << dendl;
     other_ambiguous_imports[from][pi->first].swap( pi->second );
   }
+
+  // learn other mds' pendina snaptable commits. later when resolve finishes, we will reload
+  // snaptable cache from snapserver. By this way, snaptable cache get synced among all mds
+  for (auto p : m->table_clients) {
+    dout(10) << " noting " << get_mdstable_name(p.type)
+	     << " pending_commits " << p.pending_commits << dendl;
+    MDSTableClient *client = mds->get_table_client(p.type);
+    for (auto q : p.pending_commits)
+      client->notify_commit(q);
+  }
   
   // did i get them all?
   resolve_gather.erase(from);
@@ -3337,7 +3348,15 @@ void MDCache::maybe_resolve_finish()
     recalc_auth_bits(false);
     resolve_done.release()->complete(0);
   } else {
-    maybe_send_pending_rejoins();
+    // I am survivor.
+    // reload snaptable cache after learning pending commits from all recovering mds.
+    mds->snapclient->sync(
+	new MDSInternalContextWrapper(mds,
+	  new FunctionContext([this](int r){
+	    maybe_send_pending_rejoins();
+	    })
+	  )
+	);
   }
 }
 
@@ -3952,6 +3971,11 @@ void MDCache::rejoin_send_rejoins()
   if (!resolve_gather.empty()) {
     dout(7) << "rejoin_send_rejoins still waiting for resolves ("
 	    << resolve_gather << ")" << dendl;
+    rejoins_pending = true;
+    return;
+  }
+  if (!mds->snapclient->is_synced()) {
+    dout(7) << "rejoin_send_rejoins still syncing snaptable cache, delaying" << dendl;
     rejoins_pending = true;
     return;
   }
