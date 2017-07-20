@@ -1,3 +1,5 @@
+#pragma once
+
 #ifdef HAVE_SYS_PRCTL_H
 #include <iostream>
 #include <sys/prctl.h>
@@ -34,6 +36,12 @@ struct PrCtl {
     set_dumpable(saved_state);
   }
 };
+
 #else
-struct PrCtl {};
+
+struct PrCtl {
+  // to silence the Wunused-variable warning
+  PrCtl() {}
+};
+
 #endif
