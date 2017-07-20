@@ -31,7 +31,7 @@ TEST(JsonFormatter, Simple1) {
   fmt.dump_int("c", 3);
   fmt.close_section();
   fmt.flush(oss);
-  ASSERT_EQ(oss.str(), "{\"a\":1,\"b\":2,\"c\":3}");
+  ASSERT_EQ(oss.str(), "{\"a\":1,\"b\":2,\"c\":3}\n");
 }
 
 TEST(JsonFormatter, Simple2) {
@@ -48,7 +48,7 @@ TEST(JsonFormatter, Simple2) {
   fmt.flush(oss);
   ASSERT_EQ(oss.str(), "{\"bar\":{\"int\":263882790666240,\
 \"unsigned\":9223372036854775809,\"float\":1.234000},\
-\"string\":\"str\"}");
+\"string\":\"str\"}\n");
 }
 
 TEST(JsonFormatter, Empty) {
@@ -67,7 +67,7 @@ TEST(XmlFormatter, Simple1) {
   fmt.dump_int("c", 3);
   fmt.close_section();
   fmt.flush(oss);
-  ASSERT_EQ(oss.str(), "<foo><a>1</a><b>2</b><c>3</c></foo>");
+  ASSERT_EQ(oss.str(), "<foo><a>1</a><b>2</b><c>3</c></foo>\n");
 }
 
 TEST(XmlFormatter, Simple2) {
@@ -87,7 +87,7 @@ TEST(XmlFormatter, Simple2) {
 <unsigned>9223372036854775809</unsigned>\
 <float>1.234</float>\
 </bar><string>str</string>\
-</foo>");
+</foo>\n");
 }
 
 TEST(XmlFormatter, Empty) {
@@ -113,7 +113,7 @@ TEST(XmlFormatter, DumpStream2) {
   fmt.dump_stream("blah") << "hithere";
   fmt.close_section();
   fmt.flush(oss);
-  ASSERT_EQ(oss.str(), "<foo><blah>hithere</blah></foo>");
+  ASSERT_EQ(oss.str(), "<foo><blah>hithere</blah></foo>\n");
 }
 
 TEST(XmlFormatter, DumpStream3) {
@@ -125,7 +125,7 @@ TEST(XmlFormatter, DumpStream3) {
   fmt.dump_float("pi", 3.14);
   fmt.close_section();
   fmt.flush(oss);
-  ASSERT_EQ(oss.str(), "<foo><blah>hithere</blah><pi>3.14</pi></foo>");
+  ASSERT_EQ(oss.str(), "<foo><blah>hithere</blah><pi>3.14</pi></foo>\n");
 }
 
 TEST(XmlFormatter, DTD) {
@@ -139,7 +139,7 @@ TEST(XmlFormatter, DTD) {
   fmt.close_section();
   fmt.flush(oss);
   ASSERT_EQ(oss.str(), "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
-    "<foo><blah>hithere</blah><pi>3.14</pi></foo>");
+    "<foo><blah>hithere</blah><pi>3.14</pi></foo>\n");
 }
 
 TEST(XmlFormatter, Clear) {
@@ -153,7 +153,7 @@ TEST(XmlFormatter, Clear) {
   fmt.close_section();
   fmt.flush(oss);
   ASSERT_EQ(oss.str(), "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
-    "<foo><blah>hithere</blah><pi>3.14</pi></foo>");
+    "<foo><blah>hithere</blah><pi>3.14</pi></foo>\n");
 
   ostringstream oss2;
   fmt.flush(oss2);
@@ -178,7 +178,7 @@ TEST(XmlFormatter, NamespaceTest) {
   fmt.flush(oss);
   ASSERT_EQ(oss.str(), "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
     "<foo xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\">"
-    "<blah>hithere</blah><pi>3.14</pi></foo>");
+    "<blah>hithere</blah><pi>3.14</pi></foo>\n");
 }
 
 TEST(XmlFormatter, DumpFormatNameSpaceTest) {
@@ -209,7 +209,7 @@ TEST(HtmlFormatter, Simple1) {
   fmt.dump_int("c", 3);
   fmt.close_section();
   fmt.flush(oss);
-  ASSERT_EQ(oss.str(), "<foo><li>a: 1</li><li>b: 2</li><li>c: 3</li></foo>");
+  ASSERT_EQ(oss.str(), "<foo><li>a: 1</li><li>b: 2</li><li>c: 3</li></foo>\n");
 }
 
 TEST(HtmlFormatter, Simple2) {
@@ -229,7 +229,7 @@ TEST(HtmlFormatter, Simple2) {
 <li>unsigned: 9223372036854775809</li>\
 <li>float: 1.234</li>\
 </bar><li>string: str</li>\
-</foo>");
+</foo>\n");
 }
 
 TEST(HtmlFormatter, Empty) {
@@ -255,7 +255,7 @@ TEST(HtmlFormatter, DumpStream2) {
   fmt.dump_stream("blah") << "hithere";
   fmt.close_section();
   fmt.flush(oss);
-  ASSERT_EQ(oss.str(), "<foo><li>blah: hithere</li></foo>");
+  ASSERT_EQ(oss.str(), "<foo><li>blah: hithere</li></foo>\n");
 }
 
 TEST(HtmlFormatter, DumpStream3) {
@@ -267,7 +267,7 @@ TEST(HtmlFormatter, DumpStream3) {
   fmt.dump_float("pi", 3.14);
   fmt.close_section();
   fmt.flush(oss);
-  ASSERT_EQ(oss.str(), "<foo><li>blah: hithere</li><li>pi: 3.14</li></foo>");
+  ASSERT_EQ(oss.str(), "<foo><li>blah: hithere</li><li>pi: 3.14</li></foo>\n");
 }
 
 TEST(HtmlFormatter, DTD) {
@@ -281,7 +281,7 @@ TEST(HtmlFormatter, DTD) {
   fmt.close_section();
   fmt.flush(oss);
   ASSERT_EQ(oss.str(), "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
-    "<foo><li>blah: hithere</li><li>pi: 3.14</li></foo>");
+    "<foo><li>blah: hithere</li><li>pi: 3.14</li></foo>\n");
 }
 
 TEST(HtmlFormatter, Clear) {
@@ -295,7 +295,7 @@ TEST(HtmlFormatter, Clear) {
   fmt.close_section();
   fmt.flush(oss);
   ASSERT_EQ(oss.str(), "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
-    "<foo><li>blah: hithere</li><li>pi: 3.14</li></foo>");
+    "<foo><li>blah: hithere</li><li>pi: 3.14</li></foo>\n");
 
   ostringstream oss2;
   fmt.flush(oss2);
@@ -320,7 +320,7 @@ TEST(HtmlFormatter, NamespaceTest) {
   fmt.flush(oss);
   ASSERT_EQ(oss.str(), "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
     "<foo xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\">"
-    "<li>blah: hithere</li><li>pi: 3.14</li></foo>");
+    "<li>blah: hithere</li><li>pi: 3.14</li></foo>\n");
 }
 
 TEST(HtmlFormatter, DumpFormatNameSpaceTest) {

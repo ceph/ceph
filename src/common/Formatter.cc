@@ -237,7 +237,7 @@ void JSONFormatter::close_section()
   }
   m_ss << (entry.is_array ? ']' : '}');
   m_stack.pop_back();
-  if (m_pretty && m_stack.empty())
+  if (m_stack.empty())
     m_ss << "\n";
 }
 
@@ -399,7 +399,7 @@ void XMLFormatter::close_section()
   m_sections.pop_back();
   print_spaces();
   m_ss << "</" << section << ">";
-  if (m_pretty)
+  if (m_sections.empty())
     m_ss << "\n";
 }
 
