@@ -1,6 +1,6 @@
-#!/bin/bash -x
+#!/usr/bin/env bash
 
-set -e
+set -ex
 
 ceph mds set allow_new_snaps true --yes-i-really-mean-it
 

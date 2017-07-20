@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # vim: ts=8 sw=2 smarttab
 #
 # run_seed_to.sh - Run ceph_test_filestore_idempotent_sequence up until an 

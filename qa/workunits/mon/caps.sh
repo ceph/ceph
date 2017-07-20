@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 tmp=/tmp/cephtest-mon-caps-madness
 

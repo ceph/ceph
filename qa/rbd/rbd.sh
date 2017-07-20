@@ -1,4 +1,5 @@
-#!/bin/bash -x
+#!/usr/bin/env bash
+set -x
 
 basedir=`echo $0 | sed 's/[^/]*$//g'`.
 . $basedir/common.sh

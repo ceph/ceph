@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 [ -z $ITERATIONS ] && ITERATIONS=10
 

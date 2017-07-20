@@ -1,4 +1,4 @@
-#!/bin/bash -e
+#!/usr/bin/env bash
 
 # Copyright (C) 2013 Inktank Storage, Inc.
 #
@@ -47,7 +47,7 @@
 
 ################################################################
 
-set -x
+set -ex
 
 # Default flag values; RBD_CONCURRENT_ITER names are intended
 # to be used in yaml scripts to pass in alternate values, e.g.:

@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 # This documents the state of things as of 4.12-rc4.
 #

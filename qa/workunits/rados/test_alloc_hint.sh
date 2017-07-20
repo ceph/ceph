@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 set -ex
 shopt -s nullglob # fns glob expansion in expect_alloc_hint_eq()

@@ -28,7 +28,7 @@ Other improvements:
 	easy creation of OSDs.
   -	RBD is actually buildable and can be used to manage RADOS BLOCK 
 	DEVICEs.
-  -	Most of the awkward dependencies on Linux-isms are deleted only 
+  -	Most of the awkward dependencies on Linux-isms are deleted only
 	/bin/bash is there to stay.
 
 Getting the FreeBSD work on Ceph:

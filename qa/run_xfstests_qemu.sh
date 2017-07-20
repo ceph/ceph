@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 #
 # TODO switch to run_xfstests.sh (see run_xfstests_krbd.sh)
 

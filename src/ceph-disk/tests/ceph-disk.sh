@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 #
 # Copyright (C) 2014 Cloudwatt <libre.licensing@cloudwatt.com>
 # Copyright (C) 2014, 2015, 2016, 2017 Red Hat <contact@redhat.com>
@@ -91,7 +91,7 @@ function command_fixture() {
     [ "$fpath" = `readlink -f $CEPH_BIN/$command` ] || [ "$fpath" = `readlink -f $(pwd)/$command` ] || return 1
 
     cat > $dir/$command <<EOF
-#!/bin/bash
+#!/usr/bin/env bash
 touch $dir/used-$command
 exec $CEPH_BIN/$command "\$@"
 EOF

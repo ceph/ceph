@@ -1,12 +1,11 @@
-#!/bin/bash -e
+#!/usr/bin/env bash
+set -e
 
 source $(dirname $0)/../detect-build-env-vars.sh
 
 [ -z "$CEPH_ROOT" ] && CEPH_ROOT=..
 
 dir=$CEPH_ROOT/ceph-object-corpus
-
-set -e
 
 failed=0
 numtests=0

@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 config_dir="configs"
 repeat=2 #5
 
