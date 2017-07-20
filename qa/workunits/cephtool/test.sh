@@ -163,6 +163,9 @@ function ceph_watch_start()
 
     if [ -n "$1" ]; then
 	whatch_opt=--watch-$1
+	if [ -n "$2" ]; then
+	    whatch_opt+=" --watch-channel $2"
+	fi
     fi
 
     CEPH_WATCH_FILE=${TEMP_DIR}/CEPH_WATCH_$$
@@ -2269,11 +2272,11 @@ function test_mon_tell()
 
   sleep 1
 
-  ceph_watch_start debug
+  ceph_watch_start debug audit
   ceph tell mon.a version
   ceph_watch_wait 'mon.a \[DBG\] from.*cmd=\[{"prefix": "version"}\]: dispatch'
 
-  ceph_watch_start debug
+  ceph_watch_start debug audit
   ceph tell mon.b version
   ceph_watch_wait 'mon.b \[DBG\] from.*cmd=\[{"prefix": "version"}\]: dispatch'
 }
