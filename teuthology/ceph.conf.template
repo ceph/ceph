@@ -30,6 +30,8 @@
 
 	mon allow pool delete = true
 
+	mon cluster log file level = debug
+
 [osd]
         osd journal size = 100
 
