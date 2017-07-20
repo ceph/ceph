@@ -625,12 +625,6 @@ Usage::
 
 	ceph osd crush rule dump {<name>}
 
-Subcommand ``list`` lists crush rules.
-
-Usage::
-
-	ceph osd crush rule list
-
 Subcommand ``ls`` lists crush rules.
 
 Usage::
