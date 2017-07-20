@@ -3512,6 +3512,7 @@ public:
   int complete_sync_user_stats(const rgw_user& user_id);
   int cls_user_add_bucket(rgw_raw_obj& obj, list<cls_user_bucket_entry>& entries);
   int cls_user_remove_bucket(rgw_raw_obj& obj, const cls_user_bucket& bucket);
+  int cls_user_get_bucket_stats(const rgw_bucket& bucket, cls_user_bucket_entry& entry);
 
   int check_quota(const rgw_user& bucket_owner, rgw_bucket& bucket,
                   RGWQuotaInfo& user_quota, RGWQuotaInfo& bucket_quota, uint64_t obj_size);
