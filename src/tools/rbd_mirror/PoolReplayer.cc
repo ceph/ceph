@@ -673,6 +673,12 @@ void PoolReplayer::handle_update(const std::string &mirror_uuid,
     m_instance_watcher->notify_image_release(instance_id, image_id.global_id,
                                              mirror_uuid, image_id.id, true,
                                              gather_ctx->new_sub());
+    if (!mirror_uuid.empty()) {
+      m_instance_watcher->notify_peer_image_removed(instance_id,
+                                                    image_id.global_id,
+                                                    mirror_uuid,
+                                                    gather_ctx->new_sub());
+    }
   }
 
   // derived removal events for remote after initial image listing
