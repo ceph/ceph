@@ -33,6 +33,7 @@ tasks:
       use-keystone-role: client.0
 - tempest:
     client.0:
+      sha1: d3fa46495a78160989120ba39793f7ba2e22d81c
       force-branch: master
       use-keystone-role: client.0
       auth:
