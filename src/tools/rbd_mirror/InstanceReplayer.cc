@@ -99,22 +99,13 @@ void InstanceReplayer<I>::shut_down(Context *on_finish) {
 }
 
 template <typename I>
-void InstanceReplayer<I>::add_peer(std::string mirror_uuid,
+void InstanceReplayer<I>::add_peer(std::string peer_uuid,
                                    librados::IoCtx io_ctx) {
-  dout(20) << mirror_uuid << dendl;
+  dout(20) << peer_uuid << dendl;
 
   Mutex::Locker locker(m_lock);
-  auto result = m_peers.insert(Peer(mirror_uuid, io_ctx)).second;
+  auto result = m_peers.insert(Peer(peer_uuid, io_ctx)).second;
   assert(result);
-}
-
-template <typename I>
-void InstanceReplayer<I>::remove_peer(std::string mirror_uuid) {
-  dout(20) << mirror_uuid << dendl;
-
-  Mutex::Locker locker(m_lock);
-  auto result = m_peers.erase(Peer(mirror_uuid));
-  assert(result > 0);
 }
 
 template <typename I>
@@ -152,7 +143,6 @@ void InstanceReplayer<I>::acquire_image(InstanceWatcher<I> *instance_watcher,
   assert(m_on_shut_down == nullptr);
 
   auto it = m_image_replayers.find(global_image_id);
-
   if (it == m_image_replayers.end()) {
     auto image_replayer = ImageReplayer<I>::create(
         m_threads, m_image_deleter, instance_watcher, m_local_rados,
@@ -163,18 +153,14 @@ void InstanceReplayer<I>::acquire_image(InstanceWatcher<I> *instance_watcher,
 
     it = m_image_replayers.insert(std::make_pair(global_image_id,
                                                  image_replayer)).first;
+
+    // TODO only a single peer is currently supported
+    assert(m_peers.size() == 1);
+    auto peer = *m_peers.begin();
+    image_replayer->add_peer(peer.peer_uuid, peer.io_ctx);
   }
 
-  auto image_replayer = it->second;
-  if (!peer_mirror_uuid.empty()) {
-    auto iter = m_peers.find(Peer(peer_mirror_uuid));
-    assert(iter != m_peers.end());
-    auto io_ctx = iter->io_ctx;
-
-    image_replayer->add_remote_image(peer_mirror_uuid, peer_image_id, io_ctx);
-  }
-  start_image_replayer(image_replayer);
-
+  start_image_replayer(it->second);
   m_threads->work_queue->queue(on_finish, 0);
 }
 
@@ -192,7 +178,6 @@ void InstanceReplayer<I>::release_image(const std::string &global_image_id,
   assert(m_on_shut_down == nullptr);
 
   auto it = m_image_replayers.find(global_image_id);
-
   if (it == m_image_replayers.end()) {
     dout(20) << global_image_id << ": not found" << dendl;
     m_threads->work_queue->queue(on_finish, 0);
@@ -200,17 +185,6 @@ void InstanceReplayer<I>::release_image(const std::string &global_image_id,
   }
 
   auto image_replayer = it->second;
-  if (!peer_mirror_uuid.empty()) {
-    image_replayer->remove_remote_image(peer_mirror_uuid, peer_image_id,
-					schedule_delete);
-  }
-
-  if (!image_replayer->remote_images_empty()) {
-    dout(20) << global_image_id << ": still has peer images" << dendl;
-    m_threads->work_queue->queue(on_finish, 0);
-    return;
-  }
-
   m_image_replayers.erase(it);
 
   on_finish = new FunctionContext(
@@ -218,17 +192,6 @@ void InstanceReplayer<I>::release_image(const std::string &global_image_id,
       image_replayer->destroy();
       on_finish->complete(0);
     });
-
-  if (schedule_delete) {
-    on_finish = new FunctionContext(
-      [this, image_replayer, on_finish] (int r) {
-        auto global_image_id = image_replayer->get_global_image_id();
-        m_image_deleter->schedule_image_delete(
-          m_local_rados, m_local_pool_id, global_image_id, false);
-        on_finish->complete(0);
-      });
-  }
-
   stop_image_replayer(image_replayer, on_finish);
 }
 

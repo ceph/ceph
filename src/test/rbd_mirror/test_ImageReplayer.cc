@@ -150,8 +150,7 @@ public:
         m_threads.get(), m_image_deleter.get(), m_instance_watcher,
         rbd::mirror::RadosRef(new librados::Rados(m_local_ioctx)),
         m_local_mirror_uuid, m_local_ioctx.get_id(), m_global_image_id);
-    m_replayer->add_remote_image(m_remote_mirror_uuid, m_remote_image_id,
-                                 m_remote_ioctx);
+    m_replayer->add_peer("peer uuid", m_remote_ioctx);
   }
 
   void start()
