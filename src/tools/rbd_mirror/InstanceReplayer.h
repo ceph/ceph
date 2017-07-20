@@ -52,8 +52,7 @@ public:
   void init(Context *on_finish);
   void shut_down(Context *on_finish);
 
-  void add_peer(std::string mirror_uuid, librados::IoCtx io_ctx);
-  void remove_peer(std::string mirror_uuid);
+  void add_peer(std::string peer_uuid, librados::IoCtx io_ctx);
 
   void acquire_image(InstanceWatcher<ImageCtxT> *instance_watcher,
                      const std::string &global_image_id,
@@ -90,30 +89,6 @@ private:
    *
    * @endverbatim
    */
-
-  struct Peer {
-    std::string mirror_uuid;
-    librados::IoCtx io_ctx;
-
-    Peer() {
-    }
-
-    Peer(const std::string &mirror_uuid) : mirror_uuid(mirror_uuid) {
-    }
-
-    Peer(const std::string &mirror_uuid, librados::IoCtx &io_ctx)
-      : mirror_uuid(mirror_uuid), io_ctx(io_ctx) {
-    }
-
-    inline bool operator<(const Peer &rhs) const {
-      return mirror_uuid < rhs.mirror_uuid;
-    }
-    inline bool operator==(const Peer &rhs) const {
-      return mirror_uuid == rhs.mirror_uuid;
-    }
-  };
-
-  typedef std::set<Peer> Peers;
 
   Threads<ImageCtxT> *m_threads;
   ServiceDaemon<ImageCtxT>* m_service_daemon;

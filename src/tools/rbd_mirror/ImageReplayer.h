@@ -97,13 +97,7 @@ public:
 
   image_replayer::HealthState get_health_state() const;
 
-  void add_remote_image(const std::string &remote_mirror_uuid,
-                        const std::string &remote_image_id,
-                        librados::IoCtx &remote_io_ctx);
-  void remove_remote_image(const std::string &remote_mirror_uuid,
-                           const std::string &remote_image_id,
-			   bool schedule_delete);
-  bool remote_images_empty() const;
+  void add_peer(const std::string &peer_uuid, librados::IoCtx &remote_io_ctx);
 
   inline int64_t get_local_pool_id() const {
     return m_local_pool_id;
@@ -227,29 +221,9 @@ private:
 
     RemoteImage() {
     }
-    RemoteImage(const std::string &mirror_uuid,
-                const std::string &image_id)
-      : mirror_uuid(mirror_uuid), image_id(image_id) {
-    }
-    RemoteImage(const std::string &mirror_uuid,
-                const std::string &image_id,
-                librados::IoCtx &io_ctx)
-      : mirror_uuid(mirror_uuid), image_id(image_id), io_ctx(io_ctx) {
-    }
-
-    inline bool operator<(const RemoteImage &rhs) const {
-      if (mirror_uuid != rhs.mirror_uuid) {
-        return mirror_uuid < rhs.mirror_uuid;
-      } else {
-        return image_id < rhs.image_id;
-      }
-    }
-    inline bool operator==(const RemoteImage &rhs) const {
-      return (mirror_uuid == rhs.mirror_uuid && image_id == rhs.image_id);
+    RemoteImage(const Peer& peer) : io_ctx(peer.io_ctx) {
     }
   };
-
-  typedef std::set<RemoteImage> RemoteImages;
 
   typedef typename librbd::journal::TypeTraits<ImageCtxT>::Journaler Journaler;
   typedef boost::optional<State> OptionalState;
@@ -292,7 +266,7 @@ private:
   ImageDeleter<ImageCtxT>* m_image_deleter;
   InstanceWatcher<ImageCtxT> *m_instance_watcher;
 
-  RemoteImages m_remote_images;
+  Peers m_peers;
   RemoteImage m_remote_image;
 
   RadosRef m_local;
