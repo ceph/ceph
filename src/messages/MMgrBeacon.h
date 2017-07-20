@@ -23,7 +23,7 @@
 
 class MMgrBeacon : public PaxosServiceMessage {
 
-  static const int HEAD_VERSION = 4;
+  static const int HEAD_VERSION = 5;
   static const int COMPAT_VERSION = 1;
 
 protected:
@@ -33,6 +33,7 @@ protected:
   std::string name;
   uuid_d fsid;
   std::set<std::string> available_modules;
+  map<string,string> metadata; ///< misc metadata about this osd
 
   // Only populated during activation
   std::vector<MonCommand> command_descs;
@@ -46,10 +47,11 @@ public:
 
   MMgrBeacon(const uuid_d& fsid_, uint64_t gid_, const std::string &name_,
              entity_addr_t server_addr_, bool available_,
-	     const std::set<std::string>& module_list)
+	     const std::set<std::string>& module_list,
+	     const map<string,string>& metadata)
     : PaxosServiceMessage(MSG_MGR_BEACON, 0, HEAD_VERSION, COMPAT_VERSION),
       gid(gid_), server_addr(server_addr_), available(available_), name(name_),
-      fsid(fsid_), available_modules(module_list)
+      fsid(fsid_), available_modules(module_list), metadata(metadata)
   {
   }
 
@@ -59,6 +61,9 @@ public:
   const std::string& get_name() const { return name; }
   const uuid_d& get_fsid() const { return fsid; }
   std::set<std::string>& get_available_modules() { return available_modules; }
+  const std::map<std::string,std::string>& get_metadata() const {
+    return metadata;
+  }
 
   void set_command_descs(const std::vector<MonCommand> &cmds)
   {
@@ -92,6 +97,7 @@ public:
     ::encode(fsid, payload);
     ::encode(available_modules, payload);
     ::encode(command_descs, payload);
+    ::encode(metadata, payload);
   }
   void decode_payload() override {
     bufferlist::iterator p = payload.begin();
@@ -108,6 +114,9 @@ public:
     }
     if (header.version >= 4) {
       ::decode(command_descs, p);
+    }
+    if (header.version >= 5) {
+      ::decode(metadata, p);
     }
   }
 };

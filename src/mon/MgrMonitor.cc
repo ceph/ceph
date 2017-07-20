@@ -25,6 +25,8 @@
 
 #include "MgrMonitor.h"
 
+#define MGR_METADATA_PREFIX "mgr_metadata"
+
 #define dout_subsys ceph_subsys_mon
 #undef dout_prefix
 #define dout_prefix _prefix(_dout, mon, map)
@@ -34,7 +36,6 @@ static ostream& _prefix(std::ostream *_dout, Monitor *mon,
 		<< "(" << mon->get_state_name()
 		<< ").mgr e" << mgrmap.get_epoch() << " ";
 }
-
 
 // Prefix for mon store of active mgr's command descriptions
 const static std::string command_descs_prefix = "mgr_command_descs";
@@ -137,6 +138,17 @@ void MgrMonitor::encode_pending(MonitorDBStore::TransactionRef t)
   pending_map.encode(bl, mon->get_quorum_con_features());
   put_version(t, pending_map.epoch, bl);
   put_last_committed(t, pending_map.epoch);
+
+  for (auto& p : pending_metadata) {
+    dout(10) << __func__ << " set metadata for " << p.first << dendl;
+    t->put(MGR_METADATA_PREFIX, p.first, p.second);
+  }
+  for (auto& name : pending_metadata_rm) {
+    dout(10) << __func__ << " rm metadata for " << name << dendl;
+    t->erase(MGR_METADATA_PREFIX, name);
+  }
+  pending_metadata.clear();
+  pending_metadata_rm.clear();
 
   health_check_map_t next;
   if (pending_map.active_gid == 0) {
@@ -329,6 +341,8 @@ bool MgrMonitor::prepare_beacon(MonOpRequestRef op)
     pending_map.active_gid = m->get_gid();
     pending_map.active_name = m->get_name();
     pending_map.available_modules = m->get_available_modules();
+    ::encode(m->get_metadata(), pending_metadata[m->get_name()]);
+    pending_metadata_rm.erase(m->get_name());
 
     mon->clog->info() << "Activating manager daemon "
                       << pending_map.active_name;
@@ -353,6 +367,8 @@ bool MgrMonitor::prepare_beacon(MonOpRequestRef op)
                          << " started";
       pending_map.standbys[m->get_gid()] = {m->get_gid(), m->get_name(),
 					    m->get_available_modules()};
+      ::encode(m->get_metadata(), pending_metadata[m->get_name()]);
+      pending_metadata_rm.erase(m->get_name());
       updated = true;
     }
   }
@@ -592,6 +608,8 @@ void MgrMonitor::drop_active()
     last_beacon.erase(pending_map.active_gid);
   }
 
+  pending_metadata_rm.insert(pending_map.active_name);
+  pending_metadata.erase(pending_map.active_name);
   pending_map.active_name = "";
   pending_map.active_gid = 0;
   pending_map.available = false;
@@ -604,11 +622,12 @@ void MgrMonitor::drop_active()
 
 void MgrMonitor::drop_standby(uint64_t gid)
 {
+  pending_metadata_rm.insert(pending_map.standbys[gid].name);
+  pending_metadata.erase(pending_map.standbys[gid].name);
   pending_map.standbys.erase(gid);
   if (last_beacon.count(gid) > 0) {
     last_beacon.erase(gid);
   }
-
 }
 
 bool MgrMonitor::preprocess_command(MonOpRequestRef op)

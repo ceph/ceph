@@ -14,6 +14,9 @@
 #ifndef CEPH_MGRMONITOR_H
 #define CEPH_MGRMONITOR_H
 
+#include <map>
+#include <set>
+
 #include "include/Context.h"
 #include "MgrMap.h"
 #include "PaxosService.h"
@@ -24,6 +27,9 @@ class MgrMonitor: public PaxosService
   MgrMap map;
   MgrMap pending_map;
   bool ever_had_active_mgr = false;
+
+  std::map<std::string, bufferlist> pending_metadata;
+  std::set<std::string>             pending_metadata_rm;
 
   utime_t first_seen_inactive;
 
