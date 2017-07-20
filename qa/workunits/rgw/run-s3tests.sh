@@ -1,4 +1,5 @@
-#!/bin/bash -ex
+#!/usr/bin/env bash
+set -ex
 
 # run s3-tests from current directory. assume working
 # ceph environment (radosgw-admin in path) and rgw on localhost:8000

@@ -1,6 +1,6 @@
-#!/bin/bash -ex
+#!/usr/bin/env bash
 
-set -u
+set -uex
 
 # number of osds = 10
 crushtool -o crushmap --build --num_osds 10 host straw 2 rack straw 2 row straw 2 root straw 0

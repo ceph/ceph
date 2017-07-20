@@ -1,4 +1,5 @@
-#!/bin/bash -x
+#!/usr/bin/env bash
+set -x
 
 #
 # Creates some unfound objects and then tests finding them.

@@ -1,6 +1,7 @@
-#!/bin/bash -x
+#!/usr/bin/env bash
 # -*- mode:shell-script; tab-width:8; sh-basic-offset:2; indent-tabs-mode:t -*-
 # vim: ts=8 sw=8 ft=bash smarttab
+set -x
 
 source $(dirname $0)/../../standalone/ceph-helpers.sh
 

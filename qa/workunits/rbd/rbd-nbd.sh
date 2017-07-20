@@ -1,4 +1,5 @@
-#!/bin/bash -ex
+#!/usr/bin/env bash
+set -ex
 
 . $(dirname $0)/../ceph-helpers.sh
 

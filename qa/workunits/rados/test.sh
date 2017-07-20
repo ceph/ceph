@@ -1,4 +1,5 @@
-#!/bin/bash -ex
+#!/usr/bin/env bash
+set -ex
 
 parallel=1
 [ "$1" = "--serial" ] && parallel=0

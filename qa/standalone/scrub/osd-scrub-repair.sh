@@ -1,4 +1,4 @@
-#!/bin/bash -x
+#!/usr/bin/env bash
 #
 # Copyright (C) 2014 Red Hat <contact@redhat.com>
 #
@@ -14,6 +14,7 @@
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU Library Public License for more details.
 #
+set -x
 source $CEPH_ROOT/qa/standalone/ceph-helpers.sh
 
 if [ `uname` = FreeBSD ]; then

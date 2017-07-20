@@ -1,4 +1,5 @@
-#!/bin/bash -ex
+#!/usr/bin/env bash
+set -ex
 
 IMAGE_FEATURES="layering,exclusive-lock,object-map,fast-diff"
 

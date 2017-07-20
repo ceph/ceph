@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 #
 # Copyright (C) 2015 SUSE LINUX GmbH
 # Copyright (C) 2016 <contact@redhat.com>

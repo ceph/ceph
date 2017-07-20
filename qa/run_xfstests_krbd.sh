@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 #
 # This is a wrapper around run_xfstests.sh to provide an expunge file
 # suitable for krbd xfstests runs.
