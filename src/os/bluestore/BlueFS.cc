@@ -1378,6 +1378,8 @@ int BlueFS::_flush_and_sync_log(std::unique_lock<std::mutex>& l,
   dout(10) << __func__ << " " << log_t << dendl;
   assert(!log_t.empty());
 
+  uint16_t _try_num = 3;
+again:
   // allocate some more space (before we run out)?
   int64_t runway = log_writer->file->fnode.get_allocated() -
     log_writer->get_effective_write_pos();
@@ -1391,7 +1393,15 @@ int BlueFS::_flush_and_sync_log(std::unique_lock<std::mutex>& l,
     int r = _allocate(log_writer->file->fnode.prefer_bdev,
 		      cct->_conf->bluefs_max_log_runway,
 		      &log_writer->file->fnode.extents);
+    if ((r == -ENOSPC) && _should_compact_log() && _try_num) {
+      // log_writer->file->fnode.extents may hint the end of the dev...
+      _compact_log_sync(); 
+      --_try_num;
+      goto again;
+    } 
+
     assert(r == 0);
+
     log_writer->file->fnode.recalc_allocated();
     log_t.op_file_update(log_writer->file->fnode);
   }
@@ -1847,7 +1857,7 @@ int BlueFS::_allocate(uint8_t id, uint64_t len,
 	 << " min_alloc_size 0x" << min_alloc_size 
          << " hint 0x" <<  hint << std::dec << dendl;
     alloc[id]->dump();
-    assert(0 == "allocate failed... wtf");
+    //assert(0 == "allocate failed... wtf");
     return -ENOSPC;
   }
 
