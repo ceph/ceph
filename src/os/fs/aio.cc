@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "aio.h"
+#include "common/debug.h"
 
 #if defined(HAVE_LIBAIO)
 
@@ -23,7 +24,7 @@ int aio_queue_t::submit(aio_t &aio, int *retries)
 	continue;
       }
     }
-    assert(r == 1);
+    assert(r == VAL1);
     break;
   }
   return r;

@@ -134,7 +134,7 @@ static int parse_fn(CephContext* cct, const char *path, coll_t *cid,
   if (!cid->parse(v.front())) {
     return -ENOENT;
   }
-  if (v.size() == 1)
+  if (v.size() == VAL1)
     return FN_COLLECTION;
   v.pop_front();
 
