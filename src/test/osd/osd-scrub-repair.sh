@@ -40,13 +40,19 @@ sedfilter='s/\([ ]*\"\(selected_\)*object_info\":.*head[(]\)[^[:space:]]* [^[:sp
 function run() {
     local dir=$1
     shift
+    local num=$1
+    shift
+    local funcs=${@:-$(set | sed -n -e 's/^\(TEST_[0-9a-z_]*\) .*/\1/p')}
 
-    export CEPH_MON="127.0.0.1:7107" # git grep '\<7107\>' : there must be only one
+    # git grep '\<7900\>' : there must be only one 7900 to 7916 (8 sub-tests)
+    # I think each instance uses 2 consecutive ports
+    local port=$(expr 7900 + 2  \* ${num})
+    export CEPH_MON="127.0.0.1:${port}"
+
     export CEPH_ARGS
     CEPH_ARGS+="--fsid=$(uuidgen) --auth-supported=none "
     CEPH_ARGS+="--mon-host=$CEPH_MON "
 
-    local funcs=${@:-$(set | sed -n -e 's/^\(TEST_[0-9a-z_]*\) .*/\1/p')}
     for func in $funcs ; do
         $func $dir || return 1
     done
@@ -2610,9 +2616,13 @@ function TEST_periodic_scrub_replicated() {
     rados list-inconsistent-obj $pg | jq '.' | grep -qv $objname || return 1
 }
 
-
-main osd-scrub-repair "$@"
-
+if [ -z "$*" ] ; then
+    main osd-scrub-repair-0 0
+else
+    num=$1
+    shift
+    main osd-scrub-repair-$num $num "$@"
+fi
 # Local Variables:
 # compile-command: "cd ../.. ; make -j4 && \
 #    test/osd/osd-scrub-repair.sh # TEST_corrupt_and_repair_replicated"
