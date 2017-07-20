@@ -1250,7 +1250,7 @@ const std::vector<Option> ceph_options = {
   .set_description(""),
 
   Option("mon_data_size_warn", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
-  .set_default(15*1024*1024*1024)
+  .set_default(15ull*1024*1024*1024)
   .set_description(""),
 
   Option("mon_warn_not_scrubbed", Option::TYPE_INT, Option::LEVEL_ADVANCED)
@@ -3539,7 +3539,7 @@ const std::vector<Option> ceph_options = {
   .set_description(""),
 
   Option("bluestore_block_size", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
-  .set_default(10 * 1024*1024*1024)
+  .set_default(10ull * 1024*1024*1024)
   .set_description(""),
 
   Option("bluestore_block_create", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
@@ -3715,11 +3715,11 @@ const std::vector<Option> ceph_options = {
   .set_description(""),
 
   Option("bluestore_cache_size_hdd", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
-  .set_default(1*1024*1024*1024)
+  .set_default(1ull*1024*1024*1024)
   .set_description(""),
 
   Option("bluestore_cache_size_ssd", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
-  .set_default(3*1024*1024*1024)
+  .set_default(3ull*1024*1024*1024)
   .set_description(""),
 
   Option("bluestore_cache_meta_ratio", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
