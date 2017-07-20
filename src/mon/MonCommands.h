@@ -154,7 +154,9 @@ COMMAND("auth print-key name=entity,type=CephString", "display requested key", \
 	"auth", "rx", "cli,rest")
 COMMAND("auth print_key name=entity,type=CephString", "display requested key", \
 	"auth", "rx", "cli,rest")
-COMMAND("auth list", "list authentication state", "auth", "rx", "cli,rest")
+COMMAND_WITH_FLAG("auth list", "list authentication state", "auth", "rx", "cli,rest",
+		  FLAG(DEPRECATED))
+COMMAND("auth ls", "list authentication state", "auth", "rx", "cli,rest")
 COMMAND("auth import", "auth import: read keyring file from -i <file>", \
 	"auth", "rwx", "cli,rest")
 COMMAND("auth add " \
@@ -492,7 +494,8 @@ COMMAND("osd lspools " \
 COMMAND("osd blacklist ls", "show blacklisted clients", "osd", "r", "cli,rest")
 COMMAND("osd blacklist clear", "clear all blacklisted clients", "osd", "rw",
         "cli,rest")
-COMMAND("osd crush rule list", "list crush rules", "osd", "r", "cli,rest")
+COMMAND_WITH_FLAG("osd crush rule list", "list crush rules", "osd", "r", "cli,rest",
+		  FLAG(DEPRECATED))
 COMMAND("osd crush rule ls", "list crush rules", "osd", "r", "cli,rest")
 COMMAND("osd crush rule dump " \
 	"name=name,type=CephString,goodchars=[A-Za-z0-9-_.],req=false", \
@@ -986,7 +989,9 @@ COMMAND("config-key rm " \
 COMMAND("config-key exists " \
 	"name=key,type=CephString", \
 	"check for <key>'s existence", "config-key", "r", "cli,rest")
-COMMAND("config-key list ", "list keys", "config-key", "r", "cli,rest")
+COMMAND_WITH_FLAG("config-key list ", "list keys", "config-key", "r", "cli,rest",
+		  FLAG(DEPRECATED))
+COMMAND("config-key ls ", "list keys", "config-key", "r", "cli,rest")
 COMMAND("config-key dump", "dump keys and values", "config-key", "r", "cli,rest")
 
 

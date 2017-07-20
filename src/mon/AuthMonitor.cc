@@ -620,7 +620,8 @@ bool AuthMonitor::preprocess_command(MonOpRequestRef op)
       auth.key.encode_plaintext(rdata);
     }
     r = 0;
-  } else if (prefix == "auth list") {
+  } else if (prefix == "auth list" ||
+	     prefix == "auth ls") {
     if (f) {
       mon->key_server.encode_formatted("auth", f.get(), rdata);
     } else {
