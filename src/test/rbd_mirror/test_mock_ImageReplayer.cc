@@ -493,8 +493,7 @@ public:
       m_threads, &mock_image_deleter, &m_instance_watcher,
       rbd::mirror::RadosRef(new librados::Rados(m_local_io_ctx)),
       "local_mirror_uuid", m_local_io_ctx.get_id(), "global image id");
-    m_image_replayer->add_remote_image(
-      "remote_mirror_uuid", m_remote_image_ctx->id, m_remote_io_ctx);
+    m_image_replayer->add_peer("peer_uuid", m_remote_io_ctx);
   }
 
   librbd::ImageCtx *m_remote_image_ctx;

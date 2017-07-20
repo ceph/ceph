@@ -343,30 +343,13 @@ image_replayer::HealthState ImageReplayer<I>::get_health_state() const {
 }
 
 template <typename I>
-void ImageReplayer<I>::add_remote_image(const std::string &mirror_uuid,
-                                        const std::string &image_id,
-                                        librados::IoCtx &io_ctx) {
+void ImageReplayer<I>::add_peer(const std::string &peer_uuid,
+                                librados::IoCtx &io_ctx) {
   Mutex::Locker locker(m_lock);
-
-  RemoteImage remote_image(mirror_uuid, image_id, io_ctx);
-  auto it = m_remote_images.find(remote_image);
-  if (it == m_remote_images.end()) {
-    m_remote_images.insert(remote_image);
+  auto it = m_peers.find({peer_uuid});
+  if (it == m_peers.end()) {
+    m_peers.insert({peer_uuid, io_ctx});
   }
-}
-
-template <typename I>
-void ImageReplayer<I>::remove_remote_image(const std::string &mirror_uuid,
-                                           const std::string &image_id,
-					   bool schedule_delete) {
-  Mutex::Locker locker(m_lock);
-  m_remote_images.erase({mirror_uuid, image_id});
-}
-
-template <typename I>
-bool ImageReplayer<I>::remote_images_empty() const {
-  Mutex::Locker locker(m_lock);
-  return m_remote_images.empty();
 }
 
 template <typename I>
@@ -459,13 +442,13 @@ void ImageReplayer<I>::handle_prepare_local_image(int r) {
 template <typename I>
 void ImageReplayer<I>::prepare_remote_image() {
   dout(20) << dendl;
-  if (m_remote_images.empty()) {
+  if (m_peers.empty()) {
     on_start_fail(-EREMOTEIO, "waiting for primary remote image");
     return;
   }
 
   // TODO bootstrap will need to support multiple remote images
-  m_remote_image = *m_remote_images.begin();
+  m_remote_image = {*m_peers.begin()};
 
   Context *ctx = create_context_callback<
     ImageReplayer, &ImageReplayer<I>::handle_prepare_remote_image>(this);

@@ -91,13 +91,7 @@ struct ImageReplayer<librbd::MockTestImageCtx> {
   MOCK_METHOD0(restart, void());
   MOCK_METHOD0(flush, void());
   MOCK_METHOD2(print_status, void(Formatter *, stringstream *));
-  MOCK_METHOD3(add_remote_image, void(const std::string &,
-                                      const std::string &,
-                                      librados::IoCtx &));
-  MOCK_METHOD3(remove_remote_image, void(const std::string &,
-                                         const std::string &,
-                                         bool));
-  MOCK_METHOD0(remote_images_empty, bool());
+  MOCK_METHOD2(add_peer, void(const std::string &, librados::IoCtx &));
   MOCK_METHOD0(get_global_image_id, const std::string &());
   MOCK_METHOD0(get_local_image_id, const std::string &());
   MOCK_METHOD0(is_running, bool());
@@ -180,14 +174,13 @@ TEST_F(TestMockInstanceReplayer, AcquireReleaseImage) {
   InSequence seq;
 
   instance_replayer.init();
-  instance_replayer.add_peer("remote_mirror_uuid", m_remote_io_ctx);
+  instance_replayer.add_peer("peer_uuid", m_remote_io_ctx);
 
   // Acquire
 
   C_SaferCond on_acquire;
 
-  EXPECT_CALL(mock_image_replayer, add_remote_image("remote_mirror_uuid",
-                                                    "remote_image_id", _));
+  EXPECT_CALL(mock_image_replayer, add_peer("peer_uuid", _));
   EXPECT_CALL(mock_image_replayer, is_stopped())
     .WillOnce(Return(true));
   EXPECT_CALL(mock_image_replayer, start(nullptr, false));
@@ -201,11 +194,6 @@ TEST_F(TestMockInstanceReplayer, AcquireReleaseImage) {
 
   C_SaferCond on_release;
 
-  EXPECT_CALL(mock_image_replayer,
-              remove_remote_image("remote_mirror_uuid", "remote_image_id",
-                                  false));
-  EXPECT_CALL(mock_image_replayer, remote_images_empty())
-    .WillOnce(Return(true));
   EXPECT_CALL(mock_image_replayer, is_stopped())
     .WillOnce(Return(false));
   EXPECT_CALL(mock_image_replayer, is_running())
