@@ -934,6 +934,7 @@ rm -rf %{buildroot}
 %{_sbindir}/ceph-create-keys
 %{_sbindir}/ceph-disk
 %{_sbindir}/ceph-volume
+%{_sbindir}/ceph-volume-systemd
 %{_sbindir}/rcceph
 %dir %{_libexecdir}/ceph
 %{_libexecdir}/ceph/ceph_common.sh
