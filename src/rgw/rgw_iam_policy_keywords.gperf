@@ -1,6 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 %language=C++
+%compare-strncmp
 %define class-name keyword_hash
 %define lookup-function-name lookup
 %struct-type
