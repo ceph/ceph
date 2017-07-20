@@ -3211,7 +3211,7 @@ void PGMap::get_health_checks(
     }
     if (!deep_detail.empty()) {
       ostringstream ss;
-      ss << deep_detail.size() << " pgs not deep-scrubbed for " << age;
+      ss << deep_detail.size() << " pgs not deep-scrubbed for " << deep_age;
       auto& d = checks->add("PG_NOT_DEEP_SCRUBBED", HEALTH_WARN, ss.str());
       d.detail.swap(deep_detail);
     }
