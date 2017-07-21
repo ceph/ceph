@@ -3,3 +3,5 @@ overrides:
     conf:
       global:
         ms inject socket failures: 500
+      mgr:
+        debug monc: 10
