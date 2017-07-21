@@ -2136,15 +2136,17 @@ void CrushWrapper::decode(bufferlist::iterator& blp)
 	  assert(bucket_index < arg_map.size);
 	  crush_choose_arg *arg = &arg_map.args[bucket_index];
 	  ::decode(arg->weight_set_size, blp);
-	  arg->weight_set = (crush_weight_set*)calloc(
-	    arg->weight_set_size, sizeof(crush_weight_set));
-	  for (__u32 k = 0; k < arg->weight_set_size; k++) {
-	    crush_weight_set *weight_set = &arg->weight_set[k];
-	    ::decode(weight_set->size, blp);
-	    weight_set->weights = (__u32*)calloc(
-	      weight_set->size, sizeof(__u32));
-	    for (__u32 l = 0; l < weight_set->size; l++)
-	      ::decode(weight_set->weights[l], blp);
+	  if (arg->weight_set_size) {
+	    arg->weight_set = (crush_weight_set*)calloc(
+	      arg->weight_set_size, sizeof(crush_weight_set));
+	    for (__u32 k = 0; k < arg->weight_set_size; k++) {
+	      crush_weight_set *weight_set = &arg->weight_set[k];
+	      ::decode(weight_set->size, blp);
+	      weight_set->weights = (__u32*)calloc(
+		weight_set->size, sizeof(__u32));
+	      for (__u32 l = 0; l < weight_set->size; l++)
+		::decode(weight_set->weights[l], blp);
+	    }
 	  }
 	  ::decode(arg->ids_size, blp);
 	  if (arg->ids_size) {
