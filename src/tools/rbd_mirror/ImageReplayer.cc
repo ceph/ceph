@@ -382,6 +382,7 @@ void ImageReplayer<I>::start(Context *on_finish, bool manual)
       m_last_r = 0;
       m_state_desc.clear();
       m_manual_stop = false;
+      m_delete_requested = false;
 
       if (on_finish != nullptr) {
         assert(m_on_start_finish == nullptr);
@@ -438,6 +439,7 @@ template <typename I>
 void ImageReplayer<I>::prepare_local_image() {
   dout(20) << dendl;
 
+  m_local_image_id = "";
   Context *ctx = create_context_callback<
     ImageReplayer, &ImageReplayer<I>::handle_prepare_local_image>(this);
   auto req = PrepareLocalImageRequest<I>::create(
@@ -468,12 +470,9 @@ void ImageReplayer<I>::handle_prepare_local_image(int r) {
 template <typename I>
 void ImageReplayer<I>::prepare_remote_image() {
   dout(20) << dendl;
-  if (m_peers.empty()) {
-    on_start_fail(-EREMOTEIO, "waiting for primary remote image");
-    return;
-  }
 
-  // TODO bootstrap will need to support multiple remote images
+  // TODO need to support multiple remote images
+  assert(!m_peers.empty());
   m_remote_image = {*m_peers.begin()};
 
   Context *ctx = create_context_callback<
@@ -491,12 +490,13 @@ void ImageReplayer<I>::handle_prepare_remote_image(int r) {
   if (r == -ENOENT) {
     dout(20) << "remote image does not exist" << dendl;
 
+    // TODO need to support multiple remote images
     if (!m_local_image_id.empty() &&
         m_local_image_tag_owner == m_remote_image.mirror_uuid) {
       // local image exists and is non-primary and linked to the missing
       // remote image
 
-      // TODO schedule image deletion
+      m_delete_requested = true;
       on_start_fail(0, "remote image no longer exists");
     } else {
       on_start_fail(-ENOENT, "remote image does not exist");
@@ -1672,12 +1672,22 @@ void ImageReplayer<I>::handle_shut_down(int r) {
       return;
     }
 
-    if (m_resync_requested) {
+    bool delete_requested = false;
+    if (m_delete_requested && !m_local_image_id.empty()) {
+      assert(m_remote_image.image_id.empty());
+      dout(0) << "remote image no longer exists: scheduling deletion" << dendl;
+      delete_requested = true;
+    }
+    if (delete_requested || m_resync_requested) {
       m_image_deleter->schedule_image_delete(m_local,
                                              m_local_pool_id,
                                              m_global_image_id,
-                                             true);
+                                             m_resync_requested);
       m_resync_requested = false;
+    } else if (m_last_r == -ENOENT &&
+               m_local_image_id.empty() && m_remote_image.image_id.empty()) {
+      dout(0) << "mirror image no longer exists" << dendl;
+      m_finished = true;
     }
   }
 

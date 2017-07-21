@@ -157,7 +157,11 @@ void InstanceReplayer<I>::acquire_image(InstanceWatcher<I> *instance_watcher,
     image_replayer->add_peer(peer.peer_uuid, peer.io_ctx);
   }
 
-  start_image_replayer(it->second);
+  auto& image_replayer = it->second;
+  // TODO temporary until policy integrated
+  image_replayer->set_finished(false);
+
+  start_image_replayer(image_replayer);
   m_threads->work_queue->queue(on_finish, 0);
 }
 
@@ -194,7 +198,18 @@ void InstanceReplayer<I>::remove_peer_image(const std::string &global_image_id,
   dout(20) << "global_image_id=" << global_image_id << ", "
            << "peer_mirror_uuid=" << peer_mirror_uuid << dendl;
 
-  // TODO
+  Mutex::Locker locker(m_lock);
+  assert(m_on_shut_down == nullptr);
+
+  auto it = m_image_replayers.find(global_image_id);
+  if (it != m_image_replayers.end()) {
+    // TODO only a single peer is currently supported, therefore
+    // we can just interrupt the current image replayer and
+    // it will eventually detect that the peer image is missing and
+    // determine if a delete propagation is required.
+    auto image_replayer = it->second;
+    image_replayer->restart();
+  }
   m_threads->work_queue->queue(on_finish, 0);
 }
 
@@ -287,6 +302,13 @@ void InstanceReplayer<I>::start_image_replayer(
   } else if (image_replayer->is_blacklisted()) {
     derr << "blacklisted detected during image replay" << dendl;
     return;
+  } else if (image_replayer->is_finished()) {
+    // TODO temporary until policy integrated
+    dout(5) << "removing image replayer for global_image_id="
+            << global_image_id << dendl;
+    m_image_replayers.erase(image_replayer->get_global_image_id());
+    image_replayer->destroy();
+    return;
   }
 
   image_replayer->start(nullptr, false);
@@ -314,16 +336,20 @@ void InstanceReplayer<I>::start_image_replayers(int r) {
   size_t image_count = 0;
   size_t warning_count = 0;
   size_t error_count = 0;
-  for (auto &it : m_image_replayers) {
+  for (auto it = m_image_replayers.begin();
+       it != m_image_replayers.end();) {
+    auto current_it(it);
+    ++it;
+
     ++image_count;
-    auto health_state = it.second->get_health_state();
+    auto health_state = current_it->second->get_health_state();
     if (health_state == image_replayer::HEALTH_STATE_WARNING) {
       ++warning_count;
     } else if (health_state == image_replayer::HEALTH_STATE_ERROR) {
       ++error_count;
     }
 
-    start_image_replayer(it.second);
+    start_image_replayer(current_it->second);
   }
 
   m_service_daemon->add_or_update_attribute(
