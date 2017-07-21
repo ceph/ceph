@@ -785,6 +785,10 @@ public:
 
     void update_location();
 
+    void set_using_tail_data_pool(bool using_tail_data_pool) {
+      location.using_tail_data_pool = using_tail_data_pool;
+    };
+
     friend class RGWObjManifest;
   };
 

@@ -9127,7 +9127,8 @@ int RGWRados::get_obj_state_impl(RGWObjectCtx *rctx, const RGWBucketInfo& bucket
   bool need_follow_olh = follow_olh && obj.key.instance.empty();
 
   RGWObjState *s = rctx->obj.get_state(obj);
-  ldout(cct, 20) << "get_obj_state: rctx=" << (void *)rctx << " obj=" << obj << " state=" << (void *)s << " s->prefetch_data=" << s->prefetch_data << dendl;
+  ldout(cct, 20) << "get_obj_state: rctx=" << (void *)rctx << " obj=" << obj
+	         << " state=" << (void *)s << " s->prefetch_data=" << s->prefetch_data << dendl;
   *state = s;
   if (s->has_attrs) {
     if (s->is_olh && need_follow_olh) {
@@ -10105,7 +10106,6 @@ int RGWRados::Object::Read::read(int64_t ofs, int64_t end, bufferlist& bl)
   if (astate->has_manifest && astate->manifest.has_tail()) {
     /* now get the relevant object part */
     RGWObjManifest::obj_iterator iter = astate->manifest.obj_find(ofs);
-
     uint64_t stripe_ofs = iter.get_stripe_ofs();
     read_obj = iter.get_location().get_raw_obj(store);
     len = min(len, iter.get_stripe_size() - (ofs - stripe_ofs));
@@ -10154,7 +10154,6 @@ int RGWRados::Object::Read::read(int64_t ofs, int64_t end, bufferlist& bl)
       }
     }
   }
-
   ldout(cct, 20) << "rados->read obj-ofs=" << ofs << " read_ofs=" << read_ofs << " read_len=" << read_len << dendl;
   op.read(read_ofs, read_len, pbl, NULL);
 
@@ -10273,6 +10272,7 @@ struct get_obj_data : public RefCountedObject {
   RGWRados *rados;
   RGWObjectCtx *ctx;
   IoCtx io_ctx;
+  IoCtx tail_io_ctx;
   map<off_t, get_obj_io> io_map;
   map<off_t, librados::AioCompletion *> completion_map;
   uint64_t total_read;
@@ -10580,10 +10580,16 @@ int RGWRados::get_obj_iterate_cb(RGWObjectCtx *ctx, RGWObjState *astate,
    */
   d->add_io(obj_ofs, len, &pbl, &c);
 
-  ldout(cct, 20) << "rados->get_obj_iterate_cb oid=" << read_obj.oid << " obj-ofs=" << obj_ofs << " read_ofs=" << read_ofs << " len=" << len << dendl;
+  ldout(cct, 20) << "rados->get_obj_iterate_cb oid=" << read_obj.oid
+	  << " pool=" << read_obj.pool
+	  << " obj-ofs=" << obj_ofs << " read_ofs=" << read_ofs << " len=" << len << dendl;
   op.read(read_ofs, len, pbl, NULL);
 
-  librados::IoCtx io_ctx(d->io_ctx);
+  librados::IoCtx io_ctx;
+  if (is_head_obj) 
+    io_ctx = d->io_ctx;
+  else 
+    io_ctx = d->tail_io_ctx; 
   io_ctx.locator_set_key(read_obj.loc);
 
   r = io_ctx.aio_operate(read_obj.oid, c, &op, NULL);
@@ -10614,11 +10620,14 @@ int RGWRados::Object::Read::iterate(int64_t ofs, int64_t end, RGWGetDataCB *cb)
 
   struct get_obj_data *data = new get_obj_data(cct);
   bool done = false;
+  rgw_pool tail_pool;
 
   RGWObjectCtx& obj_ctx = source->get_ctx();
 
   data->rados = store;
   data->io_ctx.dup(state.io_ctx);
+  store->get_obj_data_pool(source->get_bucket_info().placement_rule, state.obj, &tail_pool, true);
+  store->open_pool_ctx(tail_pool, data->tail_io_ctx);
   data->client_cb = cb;
 
   int r = store->iterate_obj(obj_ctx, source->get_bucket_info(), state.obj, ofs, end, cct->_conf->rgw_get_obj_max_req_size, _get_obj_iterate_cb, (void *)data);
@@ -10665,6 +10674,9 @@ int RGWRados::iterate_obj(RGWObjectCtx& obj_ctx,
 
   obj_to_raw(bucket_info.placement_rule, obj, &head_obj);
 
+  ldout(cct, 20) << __func__ << " head_obj=" << head_obj
+	       << " pool=" << head_obj.pool << dendl;
+
   int r = get_obj_state(&obj_ctx, bucket_info, obj, &astate, false);
   if (r < 0) {
     return r;
@@ -10686,7 +10698,11 @@ int RGWRados::iterate_obj(RGWObjectCtx& obj_ctx,
       off_t next_stripe_ofs = stripe_ofs + iter.get_stripe_size();
 
       while (ofs < next_stripe_ofs && ofs <= end) {
+        if (astate->manifest.using_tail_data_pool &&
+           (iter.get_ofs() > astate->manifest.get_head_size()))
+          iter.set_using_tail_data_pool(true);
         read_obj = iter.get_location().get_raw_obj(this);
+        ldout(cct, 20) << "read_obj obj=" << read_obj << " pool=" << read_obj.pool << dendl;
         uint64_t read_len = min(len, iter.get_stripe_size() - (ofs - stripe_ofs));
         read_ofs = iter.location_ofs() + (ofs - stripe_ofs);
 
