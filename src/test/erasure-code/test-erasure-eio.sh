@@ -34,7 +34,7 @@ function run() {
         run_mon $dir a || return 1
 	run_mgr $dir x || return 1
         # check that erasure code plugins are preloaded
-        CEPH_ARGS='' ceph --admin-daemon $dir/ceph-mon.a.asok log flush || return 1
+        CEPH_ARGS='' ceph --admin-daemon $(get_asok_path mon.a) log flush || return 1
         grep 'load: jerasure.*lrc' $dir/mon.a.log || return 1
         $func $dir || return 1
         teardown $dir || return 1
@@ -48,7 +48,7 @@ function setup_osds() {
     wait_for_clean || return 1
 
     # check that erasure code plugins are preloaded
-    CEPH_ARGS='' ceph --admin-daemon $dir/ceph-osd.0.asok log flush || return 1
+    CEPH_ARGS='' ceph --admin-daemon $(get_asok_path osd.0) log flush || return 1
     grep 'load: jerasure.*lrc' $dir/osd.0.log || return 1
 }
 
@@ -153,7 +153,7 @@ function inject_eio() {
     local -a initial_osds=($(get_osds $poolname $objname))
     local osd_id=${initial_osds[$shard_id]}
     set_config osd $osd_id filestore_debug_inject_read_err true || return 1
-    CEPH_ARGS='' ceph --admin-daemon $dir/ceph-osd.$osd_id.asok \
+    CEPH_ARGS='' ceph --admin-daemon $(get_asok_path osd.$osd_id) \
              injectdataerr $poolname $objname $shard_id || return 1
 }
 

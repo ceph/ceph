@@ -781,7 +781,8 @@ def main():
             i = sys.argv.index("injectargs")
             sys.argv = sys.argv[:i] + ceph_args.split() + sys.argv[i:]
         else:
-            sys.argv.extend(ceph_args.split())
+            sys.argv.extend([arg for arg in ceph_args.split()
+                             if '--admin-socket' not in arg])
     parser, parsed_args, childargs = parse_cmdargs()
 
     if parsed_args.version:
