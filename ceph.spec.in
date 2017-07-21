@@ -678,6 +678,7 @@ Group:		System/Benchmark
 Requires:	ceph-common
 Requires:	xmlstarlet
 Requires:	jq
+Requires:	socat
 %description -n ceph-test
 This package contains Ceph benchmarks and test tools.
 %endif
