@@ -3178,13 +3178,12 @@ int Client::get_caps(Inode *in, int need, int want, int *phave, loff_t endoff)
 
     if (!waitfor_caps && !waitfor_commit) {
       if ((have & need) == need) {
-	int butnot = want & ~(have & need);
 	int revoking = implemented & ~have;
 	ldout(cct, 10) << "get_caps " << *in << " have " << ccap_string(have)
 		 << " need " << ccap_string(need) << " want " << ccap_string(want)
-		 << " but not " << ccap_string(butnot) << " revoking " << ccap_string(revoking)
+		 << " revoking " << ccap_string(revoking)
 		 << dendl;
-	if ((revoking & butnot) == 0) {
+	if ((revoking & want) == 0) {
 	  *phave = need | (have & want);
 	  in->get_cap_ref(need);
 	  return 0;
