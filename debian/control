@@ -708,6 +708,7 @@ Architecture: linux-any
 Depends: ceph-common,
          curl,
          jq,
+	 socat,
          xmlstarlet,
          ${misc:Depends},
          ${shlibs:Depends},
