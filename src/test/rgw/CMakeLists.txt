@@ -108,11 +108,9 @@ target_link_libraries(unittest_rgw_crypto
 set_target_properties(unittest_rgw_crypto PROPERTIES COMPILE_FLAGS$ {UNITTEST_CXX_FLAGS})
 
 # ceph_test_rgw_iam_policy
-set(test_rgw_iam_policy_srcs test_rgw_iam_policy.cc)
-add_executable(ceph_test_rgw_iam_policy
-  ${test_rgw_iam_policy_srcs}
-  )
-target_link_libraries(ceph_test_rgw_iam_policy
+add_executable(unittest_rgw_iam_policy test_rgw_iam_policy.cc)
+add_ceph_unittest(unittest_rgw_iam_policy ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_rgw_iam_policy)
+target_link_libraries(unittest_rgw_iam_policy
   rgw_a
   cls_rgw_client
   cls_lock_client
@@ -130,7 +128,7 @@ target_link_libraries(ceph_test_rgw_iam_policy
   ${UNITTEST_LIBS}
   ${CRYPTO_LIBS}
   )
-set_target_properties(ceph_test_rgw_iam_policy PROPERTIES COMPILE_FLAGS ${UNITTEST_CXX_FLAGS})
+set_target_properties(unittest_rgw_iam_policy PROPERTIES COMPILE_FLAGS ${UNITTEST_CXX_FLAGS})
 
 # unitttest_rgw_string
 add_executable(unittest_rgw_string test_rgw_string.cc)
