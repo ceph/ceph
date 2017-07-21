@@ -35,7 +35,7 @@ struct MForward : public Message {
   string msg_desc;  // for operator<< only
   
   static const int HEAD_VERSION = 3;
-  static const int COMPAT_VERSION = 1;
+  static const int COMPAT_VERSION = 3;
 
   MForward() : Message(MSG_FORWARD, HEAD_VERSION, COMPAT_VERSION),
                tid(0), con_features(0), msg(NULL) {}
@@ -59,7 +59,7 @@ struct MForward : public Message {
     msg = (PaxosServiceMessage*)m->get();
   }
 private:
-  ~MForward() {
+  ~MForward() override {
     if (msg) {
       // message was unclaimed
       msg->put();
@@ -68,7 +68,7 @@ private:
   }
 
 public:
-  void encode_payload(uint64_t features) {
+  void encode_payload(uint64_t features) override {
     ::encode(tid, payload);
     ::encode(client, payload, features);
     ::encode(client_caps, payload, features);
@@ -85,26 +85,14 @@ public:
     ::encode(entity_name, payload);
   }
 
-  void decode_payload() {
+  void decode_payload() override {
     bufferlist::iterator p = payload.begin();
     ::decode(tid, p);
     ::decode(client, p);
     ::decode(client_caps, p);
     msg = (PaxosServiceMessage *)decode_message(NULL, 0, p);
-    if (header.version >= 2) {
-      ::decode(con_features, p);
-    } else {
-      con_features = 0;
-    }
-    if (header.version >= 3) {
-      ::decode(entity_name, p);
-    } else {
-      // we are able to know the entity type, obtaining it from the
-      // entity_name_t on 'client', but we have no idea about the
-      // entity name, so we'll just use a friendly '?' instead.
-      entity_name.set(client.name.type(), "?");
-    }
-
+    ::decode(con_features, p);
+    ::decode(entity_name, p);
   }
 
   PaxosServiceMessage *claim_message() {
@@ -116,8 +104,8 @@ public:
     return m;
   }
 
-  const char *get_type_name() const { return "forward"; }
-  void print(ostream& o) const {
+  const char *get_type_name() const override { return "forward"; }
+  void print(ostream& o) const override {
     o << "forward(";
     if (msg) {
       o << *msg;

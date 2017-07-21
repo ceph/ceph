@@ -20,7 +20,7 @@
 class MOSDPGScan : public MOSDFastDispatchOp {
 
   static const int HEAD_VERSION = 2;
-  static const int COMPAT_VERSION = 1;
+  static const int COMPAT_VERSION = 2;
 
 public:
   enum {
@@ -44,11 +44,14 @@ public:
   epoch_t get_map_epoch() const override {
     return map_epoch;
   }
+  epoch_t get_min_epoch() const override {
+    return query_epoch;
+  }
   spg_t get_spg() const override {
     return pgid;
   }
 
-  virtual void decode_payload() {
+  void decode_payload() override {
     bufferlist::iterator p = payload.begin();
     ::decode(op, p);
     ::decode(map_epoch, p);
@@ -63,18 +66,11 @@ public:
     if (!end.is_max() && end.pool == -1)
       end.pool = pgid.pool();
 
-    if (header.version >= 2) {
-      ::decode(from, p);
-      ::decode(pgid.shard, p);
-    } else {
-      from = pg_shard_t(
-	get_source().num(),
-	shard_id_t::NO_SHARD);
-      pgid.shard = shard_id_t::NO_SHARD;
-    }
+    ::decode(from, p);
+    ::decode(pgid.shard, p);
   }
 
-  virtual void encode_payload(uint64_t features) {
+  void encode_payload(uint64_t features) override {
     ::encode(op, payload);
     ::encode(map_epoch, payload);
     ::encode(query_epoch, payload);
@@ -97,11 +93,11 @@ public:
       begin(be), end(en) {
   }
 private:
-  ~MOSDPGScan() {}
+  ~MOSDPGScan() override {}
 
 public:
-  const char *get_type_name() const { return "pg_scan"; }
-  void print(ostream& out) const {
+  const char *get_type_name() const override { return "pg_scan"; }
+  void print(ostream& out) const override {
     out << "pg_scan(" << get_op_name(op)
 	<< " " << pgid
 	<< " " << begin << "-" << end

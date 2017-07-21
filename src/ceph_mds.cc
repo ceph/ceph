@@ -15,12 +15,14 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
+#include <pthread.h>
 
 #include <iostream>
 #include <string>
 using namespace std;
 
 #include "include/ceph_features.h"
+#include "include/compat.h"
 
 #include "common/config.h"
 #include "common/strtol.h"
@@ -51,7 +53,7 @@ using namespace std;
 
 static void usage()
 {
-  cout << "usage: ceph-mds -i name [flags] [[--hot-standby][rank]]\n"
+  cout << "usage: ceph-mds -i <ID> [flags] [[--hot-standby][rank]]\n"
        << "  -m monitorip:port\n"
        << "        connect to monitor at given address\n"
        << "  --debug_mds n\n"
@@ -92,6 +94,8 @@ extern "C" int cephd_mds(int argc, const char **argv)
 int main(int argc, const char **argv)
 #endif
 {
+  ceph_pthread_setname(pthread_self(), "ceph-mds");
+
   vector<const char*> args;
   argv_to_vec(argc, argv, args);
   env_to_vec(args);
@@ -143,7 +147,7 @@ int main(int argc, const char **argv)
   uint64_t nonce = 0;
   get_random_bytes((char*)&nonce, sizeof(nonce));
 
-  std::string public_msgr_type = g_conf->ms_public_type.empty() ? g_conf->ms_type : g_conf->ms_public_type;
+  std::string public_msgr_type = g_conf->ms_public_type.empty() ? g_conf->get_val<std::string>("ms_type") : g_conf->ms_public_type;
   Messenger *msgr = Messenger::create(g_ceph_context, public_msgr_type,
 				      entity_name_t::MDS(-1), "mds",
 				      nonce, Messenger::HAS_MANY_CONNECTIONS);
@@ -153,28 +157,17 @@ int main(int argc, const char **argv)
 
   cout << "starting " << g_conf->name << " at " << msgr->get_myaddr()
        << std::endl;
-  uint64_t supported =
-    CEPH_FEATURE_UID |
-    CEPH_FEATURE_NOSRCADDR |
-    CEPH_FEATURE_DIRLAYOUTHASH |
-    CEPH_FEATURE_MDS_INLINE_DATA |
-    CEPH_FEATURE_PGID64 |
-    CEPH_FEATURE_MSG_AUTH |
-    CEPH_FEATURE_EXPORT_PEER |
-    CEPH_FEATURE_MDS_QUOTA;
   uint64_t required =
     CEPH_FEATURE_OSDREPLYMUX;
 
-  msgr->set_default_policy(Messenger::Policy::lossy_client(supported, required));
+  msgr->set_default_policy(Messenger::Policy::lossy_client(required));
   msgr->set_policy(entity_name_t::TYPE_MON,
-                   Messenger::Policy::lossy_client(supported,
-                                                   CEPH_FEATURE_UID |
+                   Messenger::Policy::lossy_client(CEPH_FEATURE_UID |
                                                    CEPH_FEATURE_PGID64));
   msgr->set_policy(entity_name_t::TYPE_MDS,
-                   Messenger::Policy::lossless_peer(supported,
-                                                    CEPH_FEATURE_UID));
+                   Messenger::Policy::lossless_peer(CEPH_FEATURE_UID));
   msgr->set_policy(entity_name_t::TYPE_CLIENT,
-                   Messenger::Policy::stateful_server(supported, 0));
+                   Messenger::Policy::stateful_server(0));
 
   int r = msgr->bind(g_conf->public_addr);
   if (r < 0)

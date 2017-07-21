@@ -21,15 +21,17 @@ def task(ctx, config):
         time: <seconds to run>
         pool: <pool to use>
         size: write size to use
+        objectsize: object size to use
         unique_pool: use a unique pool, defaults to False
         ec_pool: create an ec pool, defaults to False
-        create_pool: create pool, defaults to False
+        create_pool: create pool, defaults to True
         erasure_code_profile:
           name: teuthologyprofile
           k: 2
           m: 1
-          ruleset-failure-domain: osd
+          crush-failure-domain: osd
         cleanup: false (defaults to true)
+        type: <write|seq|rand> (defaults to write)
     example:
 
     tasks:
@@ -46,6 +48,7 @@ def task(ctx, config):
 
     testdir = teuthology.get_testdir(ctx)
     manager = ctx.managers['ceph']
+    runtype = config.get('type', 'write')
 
     create_pool = config.get('create_pool', True)
     for role in config.get('clients', ['client.0']):
@@ -73,6 +76,34 @@ def task(ctx, config):
             else:
                 pool = manager.create_pool_with_unique_name(erasure_code_profile_name=profile_name)
 
+        osize = config.get('objectsize', 0)
+        if osize is 0:
+            objectsize = []
+        else:
+            objectsize = ['-o', str(osize)]
+        size = ['-b', str(config.get('size', 4<<20))]
+        # If doing a reading run then populate data
+        if runtype != "write":
+            proc = remote.run(
+                args=[
+                    "/bin/sh", "-c",
+                    " ".join(['adjust-ulimits',
+                              'ceph-coverage',
+                              '{tdir}/archive/coverage',
+                              'rados',
+                              '--no-log-to-stderr',
+                              '--name', role]
+                              + size + objectsize +
+                              ['-p' , pool,
+                          'bench', str(60), "write", "--no-cleanup"
+                          ]).format(tdir=testdir),
+                ],
+            logger=log.getChild('radosbench.{id}'.format(id=id_)),
+            wait=True
+            )
+            size = []
+            objectsize = []
+
         proc = remote.run(
             args=[
                 "/bin/sh", "-c",
@@ -81,10 +112,10 @@ def task(ctx, config):
                           '{tdir}/archive/coverage',
                           'rados',
 			  '--no-log-to-stderr',
-                          '--name', role,
-                          '-b', str(config.get('size', 4<<20)),
-                          '-p' , pool,
-                          'bench', str(config.get('time', 360)), 'write',
+                          '--name', role]
+                          + size + objectsize +
+                          ['-p' , pool,
+                          'bench', str(config.get('time', 360)), runtype,
                           ] + cleanup).format(tdir=testdir),
                 ],
             logger=log.getChild('radosbench.{id}'.format(id=id_)),
@@ -96,7 +127,7 @@ def task(ctx, config):
     try:
         yield
     finally:
-        timeout = config.get('time', 360) * 5 + 180
+        timeout = config.get('time', 360) * 30 + 300
         log.info('joining radosbench (timing out after %ss)', timeout)
         run.wait(radosbench.itervalues(), timeout=timeout)
 

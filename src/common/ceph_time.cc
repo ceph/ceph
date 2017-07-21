@@ -13,7 +13,6 @@
  */
 
 // For ceph_timespec
-#include "include/types.h"
 #include "ceph_time.h"
 #include "config.h"
 

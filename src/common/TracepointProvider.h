@@ -4,14 +4,9 @@
 #ifndef CEPH_TRACEPOINT_PROVIDER_H
 #define CEPH_TRACEPOINT_PROVIDER_H
 
-#include "include/int_types.h"
-#include "common/ceph_context.h"
 #include "common/config_obs.h"
 #include "common/Mutex.h"
 #include <dlfcn.h>
-#include <set>
-#include <string>
-#include <boost/noncopyable.hpp>
 
 struct md_config_t;
 
@@ -52,7 +47,7 @@ public:
 
   TracepointProvider(CephContext *cct, const char *library,
                      const char *config_key);
-  virtual ~TracepointProvider();
+  ~TracepointProvider() override;
 
   template <const Traits &traits>
   static void initialize(CephContext *cct) {
@@ -63,11 +58,11 @@ public:
   }
 
 protected:
-  virtual const char** get_tracked_conf_keys() const {
+  const char** get_tracked_conf_keys() const override {
     return m_config_keys;
   }
-  virtual void handle_conf_change(const struct md_config_t *conf,
-                                  const std::set <std::string> &changed);
+  void handle_conf_change(const struct md_config_t *conf,
+                                  const std::set <std::string> &changed) override;
 
 private:
   CephContext *m_cct;

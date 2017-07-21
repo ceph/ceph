@@ -16,12 +16,8 @@
  */
 
 #include "common/EventTrace.h"
-#include "common/dout.h"
 #include "common/TracepointProvider.h"
-#include "messages/MOSDOp.h"
 #include "messages/MOSDOpReply.h"
-#include <iostream>
-#include <string>
 
 #ifdef WITH_LTTNG
 #define TRACEPOINT_DEFINE
@@ -47,7 +43,7 @@ void EventTrace::init_tp(CephContext *_ctx)
   }
 }
 
-void EventTrace::set_message_attrs(Message *m, string& oid, string& context, bool incl_oid)
+void EventTrace::set_message_attrs(const Message *m, string& oid, string& context, bool incl_oid)
 {
   // arg1 = oid, arg2 = message type, arg3 = source!source_addr!tid!sequence
   if (m && (m->get_type() == CEPH_MSG_OSD_OP || m->get_type() == CEPH_MSG_OSD_OPREPLY)) {
@@ -105,7 +101,7 @@ void EventTrace::trace_oid_event(const char *oid, const char *event, const char 
   tracepoint(eventtrace, oid_event, oid, event, context, file, func, line);
 }
 
-void EventTrace::trace_oid_event(Message *m, const char *event, const char *file,
+void EventTrace::trace_oid_event(const Message *m, const char *event, const char *file,
   const char *func, int line, bool incl_oid)
 {
   string oid, context;
@@ -122,7 +118,7 @@ void EventTrace::trace_oid_elapsed(const char *oid, const char *event, const cha
   tracepoint(eventtrace, oid_elapsed, oid, event, context, elapsed, file, func, line);
 }
 
-void EventTrace::trace_oid_elapsed(Message *m, const char *event, double elapsed, 
+void EventTrace::trace_oid_elapsed(const Message *m, const char *event, double elapsed,
   const char *file, const char *func, int line, bool incl_oid)
 {
   string oid, context;

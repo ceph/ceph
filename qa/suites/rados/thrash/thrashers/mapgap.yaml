@@ -1,5 +1,9 @@
 overrides:
   ceph:
+    log-whitelist:
+    - wrongly marked me down
+    - objects unfound and apparently lost
+    - osd_map_cache_size
     conf:
       mon:
         mon min osdmap epochs: 2
@@ -10,12 +14,6 @@ overrides:
         osd scrub during recovery: false
         osd max backfills: 6
 tasks:
-- install:
-- ceph:
-    log-whitelist:
-    - wrongly marked me down
-    - objects unfound and apparently lost
-    - osd_map_cache_size
 - thrashosds:
     timeout: 1800
     chance_pgnum_grow: 0.25

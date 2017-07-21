@@ -1,3 +1,5 @@
+:orphan:
+
 =================================
 Proposed Next Steps for ECBackend
 =================================
@@ -232,17 +234,16 @@ new object_info and log_entry.
 A truly terrifying option would be to eliminate version and
 prior_version entirely from the object_info_t.  There are a few
 specific purposes it serves:
-(1) On OSD startup, we prime the missing set by scanning backwards
-		from last_update to last_complete comparing the stored object's
-		object_info_t to the version of most recent log entry.
-(2) During backfill, we compare versions between primary and target
-		to avoid some pushes.
 
-We use it elsewhere as well
-(3) While pushing and pulling objects, we verify the version.
-(4) We return it on reads and writes and allow the librados user to
-		assert it atomically on writesto allow the user to deal with write
-		races (used extensively by rbd).
+#. On OSD startup, we prime the missing set by scanning backwards
+   from last_update to last_complete comparing the stored object's
+   object_info_t to the version of most recent log entry.
+#. During backfill, we compare versions between primary and target
+   to avoid some pushes. We use it elsewhere as well
+#. While pushing and pulling objects, we verify the version.
+#. We return it on reads and writes and allow the librados user to
+   assert it atomically on writesto allow the user to deal with write
+   races (used extensively by rbd).
 
 Case (3) isn't actually essential, just convenient.  Oh well.  (4)
 is more annoying. Writes are easy since we know the version.  Reads

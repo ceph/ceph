@@ -17,9 +17,6 @@
 
 #include "Cond.h"
 #include "Mutex.h"
-#include "RWLock.h"
-
-#include <map>
 
 class CephContext;
 class Context;
@@ -73,8 +70,8 @@ public:
 
   /* Schedule an event in the future
    * Call with the event_lock LOCKED */
-  void add_event_after(double seconds, Context *callback);
-  void add_event_at(utime_t when, Context *callback);
+  bool add_event_after(double seconds, Context *callback);
+  bool add_event_at(utime_t when, Context *callback);
 
   /* Cancel an event.
    * Call with the event_lock LOCKED

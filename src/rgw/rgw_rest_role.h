@@ -1,3 +1,5 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab
 #ifndef CEPH_RGW_REST_ROLE_H
 #define CEPH_RGW_REST_ROLE_H
 
@@ -11,21 +13,21 @@ protected:
   string path_prefix;
 
 public:
-  virtual void send_response() override;
+  void send_response() override;
 };
 
 class RGWRoleRead : public RGWRestRole {
 public:
   RGWRoleRead() = default;
-  virtual int verify_permission() override;
-  virtual uint32_t op_mask() override { return RGW_OP_TYPE_READ; }
+  int verify_permission() override;
+  uint32_t op_mask() override { return RGW_OP_TYPE_READ; }
 };
 
 class RGWRoleWrite : public RGWRestRole {
 public:
   RGWRoleWrite() = default;
-  virtual int verify_permission() override;
-  virtual uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
+  int verify_permission() override;
+  uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
 };
 
 class RGWCreateRole : public RGWRoleWrite {

@@ -84,7 +84,7 @@ int rgw_process_authenticated(RGWHandler_REST * const handler,
   if (ret < 0) {
     if (s->system_request) {
       dout(2) << "overriding permissions due to system operation" << dendl;
-    } else if (s->auth_identity->is_admin_of(s->user->user_id)) {
+    } else if (s->auth.identity->is_admin_of(s->user->user_id)) {
       dout(2) << "overriding permissions due to admin operation" << dendl;
     } else {
       return ret;
@@ -113,6 +113,7 @@ int process_request(RGWRados* const store,
                     RGWREST* const rest,
                     RGWRequest* const req,
                     const std::string& frontend_prefix,
+                    const rgw_auth_registry_t& auth_registry,
                     RGWRestfulIO* const client_io,
                     OpsLogSocket* const olog)
 {
@@ -146,7 +147,9 @@ int process_request(RGWRados* const store,
   int init_error = 0;
   bool should_log = false;
   RGWRESTMgr *mgr;
-  RGWHandler_REST *handler = rest->get_handler(store, s, frontend_prefix,
+  RGWHandler_REST *handler = rest->get_handler(store, s,
+                                               auth_registry,
+                                               frontend_prefix,
                                                client_io, &mgr, &init_error);
   if (init_error != 0) {
     abort_early(s, NULL, init_error, NULL);
@@ -168,8 +171,8 @@ int process_request(RGWRados* const store,
 
   s->op_type = op->get_type();
 
-  req->log(s, "authorizing");
-  ret = handler->authorize();
+  req->log(s, "verifying requester");
+  ret = op->verify_requester(auth_registry);
   if (ret < 0) {
     dout(10) << "failed to authorize request" << dendl;
     abort_early(s, NULL, ret, handler);
@@ -178,8 +181,8 @@ int process_request(RGWRados* const store,
 
   /* FIXME: remove this after switching all handlers to the new authentication
    * infrastructure. */
-  if (nullptr == s->auth_identity) {
-    s->auth_identity = rgw_auth_transform_old_authinfo(s);
+  if (nullptr == s->auth.identity) {
+    s->auth.identity = rgw::auth::transform_old_authinfo(s);
   }
 
   req->log(s, "normalizing buckets and tenants");

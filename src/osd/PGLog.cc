@@ -130,8 +130,9 @@ void PGLog::trim(
 }
 
 void PGLog::proc_replica_log(
-  ObjectStore::Transaction& t,
-  pg_info_t &oinfo, const pg_log_t &olog, pg_missing_t& omissing,
+  pg_info_t &oinfo,
+  const pg_log_t &olog,
+  pg_missing_t& omissing,
   pg_shard_t from) const
 {
   dout(10) << "proc_replica_log for osd." << from << ": "
@@ -237,10 +238,9 @@ void PGLog::proc_replica_log(
  * This rewinds entries off the head of our log that are divergent.
  * This is used by replicas during activation.
  *
- * @param t transaction
  * @param newhead new head to rewind to
  */
-void PGLog::rewind_divergent_log(ObjectStore::Transaction& t, eversion_t newhead,
+void PGLog::rewind_divergent_log(eversion_t newhead,
 				 pg_info_t &info, LogEntryHandler *rollbacker,
 				 bool &dirty_info, bool &dirty_big_info)
 {
@@ -272,8 +272,7 @@ void PGLog::rewind_divergent_log(ObjectStore::Transaction& t, eversion_t newhead
   dirty_big_info = true;
 }
 
-void PGLog::merge_log(ObjectStore::Transaction& t,
-                      pg_info_t &oinfo, pg_log_t &olog, pg_shard_t fromosd,
+void PGLog::merge_log(pg_info_t &oinfo, pg_log_t &olog, pg_shard_t fromosd,
                       pg_info_t &info, LogEntryHandler *rollbacker,
                       bool &dirty_info, bool &dirty_big_info)
 {
@@ -335,7 +334,7 @@ void PGLog::merge_log(ObjectStore::Transaction& t,
 
   // do we have divergent entries to throw out?
   if (olog.head < log.head) {
-    rewind_divergent_log(t, olog.head, info, rollbacker, dirty_info, dirty_big_info);
+    rewind_divergent_log(olog.head, info, rollbacker, dirty_info, dirty_big_info);
     changed = true;
   }
 
@@ -369,7 +368,7 @@ void PGLog::merge_log(ObjectStore::Transaction& t,
     }
     log.roll_forward_to(log.head, rollbacker);
 
-    mempool::osd::list<pg_log_entry_t> new_entries;
+    mempool::osd_pglog::list<pg_log_entry_t> new_entries;
     new_entries.splice(new_entries.end(), olog.log, from, to);
     append_log_entries_update_missing(
       info.last_backfill,
@@ -459,6 +458,7 @@ void PGLog::write_log_and_missing(
       !touched_log,
       require_rollback,
       clear_divergent_priors,
+      &rebuilt_missing_with_deletes,
       (pg_log_debug ? &log_keys_debug : 0));
     undirty();
   } else {
@@ -488,7 +488,8 @@ void PGLog::write_log_and_missing(
     const coll_t& coll,
     const ghobject_t &log_oid,
     const pg_missing_tracker_t &missing,
-    bool require_rollback)
+    bool require_rollback,
+    bool *rebuilt_missing_with_deletes)
 {
   _write_log_and_missing(
     t, km, log, coll, log_oid,
@@ -497,7 +498,7 @@ void PGLog::write_log_and_missing(
     eversion_t(),
     set<eversion_t>(),
     missing,
-    true, require_rollback, false, 0);
+    true, require_rollback, false, rebuilt_missing_with_deletes, 0);
 }
 
 void PGLog::_write_log_and_missing_wo_missing(
@@ -603,6 +604,7 @@ void PGLog::_write_log_and_missing(
   bool touch_log,
   bool require_rollback,
   bool clear_divergent_priors,
+  bool *rebuilt_missing_with_deletes, // in/out param
   set<string> *log_keys_debug
   ) {
   set<string> to_remove;
@@ -665,6 +667,12 @@ void PGLog::_write_log_and_missing(
     //dout(10) << "write_log_and_missing: writing divergent_priors" << dendl;
     to_remove.insert("divergent_priors");
   }
+  // since we encode individual missing items instead of a whole
+  // missing set, we need another key to store this bit of state
+  if (*rebuilt_missing_with_deletes) {
+    (*km)["may_include_deletes_in_missing"] = bufferlist();
+    *rebuilt_missing_with_deletes = false;
+  }
   missing.get_changed(
     [&](const hobject_t &obj) {
       string key = string("missing/") + obj.to_str();
@@ -672,7 +680,8 @@ void PGLog::_write_log_and_missing(
       if (!missing.is_missing(obj, &item)) {
 	to_remove.insert(key);
       } else {
-	::encode(make_pair(obj, item), (*km)[key]);
+	uint64_t features = missing.may_include_deletes ? CEPH_FEATURE_OSD_RECOVERY_DELETES : 0;
+	::encode(make_pair(obj, item), (*km)[key], features);
       }
     });
   if (require_rollback) {
@@ -686,4 +695,61 @@ void PGLog::_write_log_and_missing(
 
   if (!to_remove.empty())
     t.omap_rmkeys(coll, log_oid, to_remove);
+}
+
+void PGLog::rebuild_missing_set_with_deletes(ObjectStore *store,
+					     coll_t pg_coll,
+					     const pg_info_t &info)
+{
+  // save entries not generated from the current log (e.g. added due
+  // to repair, EIO handling, or divergent_priors).
+  map<hobject_t, pg_missing_item> extra_missing;
+  for (const auto& p : missing.get_items()) {
+    if (!log.logged_object(p.first)) {
+      dout(20) << __func__ << " extra missing entry: " << p.first
+	       << " " << p.second << dendl;
+      extra_missing[p.first] = p.second;
+    }
+  }
+  missing.clear();
+  missing.may_include_deletes = true;
+
+  // go through the log and add items that are not present or older
+  // versions on disk, just as if we were reading the log + metadata
+  // off disk originally
+  set<hobject_t> did;
+  for (list<pg_log_entry_t>::reverse_iterator i = log.log.rbegin();
+       i != log.log.rend();
+       ++i) {
+    if (i->version <= info.last_complete)
+      break;
+    if (i->soid > info.last_backfill ||
+	i->is_error() ||
+	did.find(i->soid) != did.end())
+      continue;
+    did.insert(i->soid);
+
+    bufferlist bv;
+    int r = store->getattr(
+	pg_coll,
+	ghobject_t(i->soid, ghobject_t::NO_GEN, info.pgid.shard),
+	OI_ATTR,
+	bv);
+    dout(20) << __func__ << " check for log entry: " << *i << " = " << r << dendl;
+
+    if (r >= 0) {
+      object_info_t oi(bv);
+      dout(20) << __func__ << " store version = " << oi.version << dendl;
+      if (oi.version < i->version) {
+	missing.add(i->soid, i->version, oi.version, i->is_delete());
+      }
+    } else {
+      missing.add(i->soid, i->version, eversion_t(), i->is_delete());
+    }
+  }
+
+  for (const auto& p : extra_missing) {
+    missing.add(p.first, p.second.need, p.second.have, p.second.is_delete());
+  }
+  rebuilt_missing_with_deletes = true;
 }

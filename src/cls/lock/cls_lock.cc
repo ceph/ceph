@@ -8,14 +8,8 @@
  *
  */
 
-#include <algorithm>
-#include <cstring>
-#include <cstdlib>
 #include <errno.h>
-#include <iostream>
 #include <map>
-#include <sstream>
-#include <vector>
 
 #include "include/types.h"
 #include "include/utime.h"
@@ -39,34 +33,6 @@ CLS_VER(1,0)
 CLS_NAME(lock)
 
 #define LOCK_PREFIX    "lock."
-
-typedef struct lock_info_s {
-  map<locker_id_t, locker_info_t> lockers; // map of lockers
-  ClsLockType lock_type;                              // lock type (exclusive / shared)
-  string tag;                                         // tag: operations on lock can only succeed with this tag
-                                                      //      as long as set of non expired lockers
-                                                      //      is bigger than 0.
-
-  void encode(bufferlist &bl, uint64_t features) const {
-    ENCODE_START(1, 1, bl);
-    ::encode(lockers, bl, features);
-    uint8_t t = (uint8_t)lock_type;
-    ::encode(t, bl);
-    ::encode(tag, bl);
-    ENCODE_FINISH(bl);
-  }
-  void decode(bufferlist::iterator &bl) {
-    DECODE_START_LEGACY_COMPAT_LEN(1, 1, 1, bl);
-    ::decode(lockers, bl);
-    uint8_t t;
-    ::decode(t, bl);
-    lock_type = (ClsLockType)t; 
-    ::decode(tag, bl);
-    DECODE_FINISH(bl);
-  }
-  lock_info_s() : lock_type(LOCK_NONE) {}
-} lock_info_t;
-WRITE_CLASS_ENCODER_FEATURES(lock_info_t)
 
 static int read_lock(cls_method_context_t hctx, const string& name, lock_info_t *lock)
 {

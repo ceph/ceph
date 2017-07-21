@@ -4,11 +4,6 @@
 #ifndef CEPH_RBD_MIRROR_IMAGE_REPLAYER_H
 #define CEPH_RBD_MIRROR_IMAGE_REPLAYER_H
 
-#include <map>
-#include <string>
-#include <vector>
-
-#include "include/atomic.h"
 #include "common/AsyncOpTracker.h"
 #include "common/Mutex.h"
 #include "common/WorkQueue.h"
@@ -23,9 +18,15 @@
 #include "ImageDeleter.h"
 #include "ProgressContext.h"
 #include "types.h"
-#include <set>
+
 #include <boost/noncopyable.hpp>
 #include <boost/optional.hpp>
+
+#include <set>
+#include <map>
+#include <atomic>
+#include <string>
+#include <vector>
 
 class AdminSocketHook;
 
@@ -46,7 +47,8 @@ namespace journal { template <typename> class Replay; }
 namespace rbd {
 namespace mirror {
 
-struct Threads;
+template <typename> struct InstanceWatcher;
+template <typename> struct Threads;
 
 namespace image_replayer { template <typename> class BootstrapRequest; }
 namespace image_replayer { template <typename> class EventPreprocessor; }
@@ -69,8 +71,23 @@ public:
     STATE_STOPPED,
   };
 
-  ImageReplayer(Threads *threads, std::shared_ptr<ImageDeleter> image_deleter,
-                ImageSyncThrottlerRef<ImageCtxT> image_sync_throttler,
+  static ImageReplayer *create(
+    Threads<librbd::ImageCtx> *threads,
+    std::shared_ptr<ImageDeleter> image_deleter,
+    InstanceWatcher<ImageCtxT> *instance_watcher,
+    RadosRef local, const std::string &local_mirror_uuid, int64_t local_pool_id,
+    const std::string &global_image_id) {
+    return new ImageReplayer(threads, image_deleter, instance_watcher,
+                             local, local_mirror_uuid, local_pool_id,
+                             global_image_id);
+  }
+  void destroy() {
+    delete this;
+  }
+
+  ImageReplayer(Threads<librbd::ImageCtx> *threads,
+                std::shared_ptr<ImageDeleter> image_deleter,
+                InstanceWatcher<ImageCtxT> *instance_watcher,
                 RadosRef local, const std::string &local_mirror_uuid,
                 int64_t local_pool_id, const std::string &global_image_id);
   virtual ~ImageReplayer();
@@ -94,7 +111,8 @@ public:
                         const std::string &remote_image_id,
                         librados::IoCtx &remote_io_ctx);
   void remove_remote_image(const std::string &remote_mirror_uuid,
-                           const std::string &remote_image_id);
+                           const std::string &remote_image_id,
+			   bool schedule_delete);
   bool remote_images_empty() const;
 
   inline int64_t get_local_pool_id() const {
@@ -102,14 +120,6 @@ public:
   }
   inline const std::string& get_global_image_id() const {
     return m_global_image_id;
-  }
-  inline std::string get_local_image_id() {
-    Mutex::Locker locker(m_lock);
-    return m_local_image_id;
-  }
-  inline std::string get_local_image_name() {
-    Mutex::Locker locker(m_lock);
-    return m_local_image_name;
   }
 
   void start(Context *on_finish = nullptr, bool manual = false);
@@ -133,6 +143,9 @@ protected:
    *    |                                                   ^
    *    v                                                   *
    * <starting>                                             *
+   *    |                                                   *
+   *    v                                           (error) *
+   * PREPARE_LOCAL_IMAGE  * * * * * * * * * * * * * * * * * *
    *    |                                                   *
    *    v                                           (error) *
    * BOOTSTRAP_IMAGE  * * * * * * * * * * * * * * * * * * * *
@@ -269,9 +282,9 @@ private:
     ImageReplayer<ImageCtxT> *replayer;
   };
 
-  Threads *m_threads;
+  Threads<librbd::ImageCtx> *m_threads;
   std::shared_ptr<ImageDeleter> m_image_deleter;
-  ImageSyncThrottlerRef<ImageCtxT> m_image_sync_throttler;
+  InstanceWatcher<ImageCtxT> *m_instance_watcher;
 
   RemoteImages m_remote_images;
   RemoteImage m_remote_image;
@@ -281,19 +294,19 @@ private:
   int64_t m_local_pool_id;
   std::string m_local_image_id;
   std::string m_global_image_id;
-  std::string m_local_image_name;
   std::string m_name;
   mutable Mutex m_lock;
   State m_state = STATE_STOPPED;
   int m_last_r = 0;
   std::string m_state_desc;
   BootstrapProgressContext m_progress_cxt;
-  bool m_do_resync;
+  bool m_do_resync{false};
   image_replayer::EventPreprocessor<ImageCtxT> *m_event_preprocessor = nullptr;
   image_replayer::ReplayStatusFormatter<ImageCtxT> *m_replay_status_formatter =
     nullptr;
   librados::IoCtx m_local_ioctx;
   ImageCtxT *m_local_image_ctx = nullptr;
+  std::string m_local_image_tag_owner;
 
   decltype(ImageCtxT::journal) m_local_journal = nullptr;
   librbd::journal::Replay<ImageCtxT> *m_local_replay = nullptr;
@@ -377,6 +390,9 @@ private:
   void shut_down(int r);
   void handle_shut_down(int r);
   void handle_remote_journal_metadata_updated();
+
+  void prepare_local_image();
+  void handle_prepare_local_image(int r);
 
   void bootstrap();
   void handle_bootstrap(int r);

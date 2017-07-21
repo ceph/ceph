@@ -8,13 +8,11 @@ overrides:
         osd scrub min interval: 60
         osd scrub max interval: 120
         osd max backfills: 5
-tasks:
-- install:
-- ceph:
     log-whitelist:
     - wrongly marked me down
     - objects unfound and apparently lost
     - osd_map_cache_size
+tasks:
 - thrashosds:
     timeout: 1800
     chance_pgnum_grow: 1

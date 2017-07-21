@@ -200,6 +200,22 @@ TEST_P(AllocTest, test_alloc_failure)
   }
 }
 
+TEST_P(AllocTest, test_alloc_big)
+{
+  int64_t block_size = 4096;
+  int64_t blocks = 104857600;
+  int64_t mas = 4096;
+  init_alloc(blocks*block_size, block_size);
+  alloc->init_add_free(2*block_size, (blocks-2)*block_size);
+  for (int64_t big = mas; big < 1048576*128; big*=2) {
+    cout << big << std::endl;
+    EXPECT_EQ(alloc->reserve(big), 0);
+    AllocExtentVector extents;
+    EXPECT_EQ(big,
+	      alloc->allocate(big, mas, 0, &extents));
+  }
+}
+
 TEST_P(AllocTest, test_alloc_hint_bmap)
 {
   if (GetParam() == std::string("stupid")) {
@@ -243,6 +259,18 @@ TEST_P(AllocTest, test_alloc_hint_bmap)
   ASSERT_EQ(zone_size, allocated);
   EXPECT_EQ(zone_size, (int)extents.size());
   EXPECT_EQ(extents[0].offset, (uint64_t) 0);
+  /*
+   * Verify out-of-bound hint
+   */
+  extents.clear();
+  allocated = alloc->allocate(1, 1, 1, blocks, &extents);
+  ASSERT_EQ(1, allocated);
+  EXPECT_EQ(1, (int)extents.size());
+
+  extents.clear();
+  allocated = alloc->allocate(1, 1, 1, blocks * 3 + 1 , &extents);
+  ASSERT_EQ(1, allocated);
+  EXPECT_EQ(1, (int)extents.size());
 }
 
 

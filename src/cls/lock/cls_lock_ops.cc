@@ -12,11 +12,9 @@
  * 
  */
 
-#include "include/types.h"
 #include "msg/msg_types.h"
 #include "common/Formatter.h"
 
-#include "cls/lock/cls_lock_types.h"
 #include "cls/lock/cls_lock_ops.h"
 
 using namespace rados::cls::lock;

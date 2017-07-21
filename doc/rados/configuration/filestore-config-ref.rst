@@ -192,7 +192,7 @@ The following settings provide limits on the size of filestore queue.
 :Description: Defines the maximum number of in progress operations the file store accepts before blocking on queuing new operations. 
 :Type: Integer
 :Required: No. Minimal impact on performance.
-:Default: ``500``
+:Default: ``50``
 
 
 ``filestore queue max bytes``
@@ -203,20 +203,6 @@ The following settings provide limits on the size of filestore queue.
 :Default: ``100 << 20``
 
 
-``filestore queue committing max ops``
-
-:Description: The maximum number of operations the filestore can commit. 
-:Type: Integer
-:Required: No
-:Default: ``500``
-
-
-``filestore queue committing max bytes``
-
-:Description: The maximum number of bytes the filestore can commit.
-:Type: Integer
-:Required: No
-:Default: ``100 << 20``
 
 
 .. index:: filestore; timeouts
@@ -316,13 +302,26 @@ Misc
 
 ``filestore split multiple``
 
-:Description:  ``filestore_split_multiple * abs(filestore_merge_threshold) * 16`` 
+:Description:  ``(filestore_split_multiple * abs(filestore_merge_threshold) + (rand() % filestore_split_rand_factor)) * 16``
                is the maximum number of files in a subdirectory before 
                splitting into child directories.
 
 :Type: Integer
 :Required: No
 :Default: ``2``
+
+
+``filestore split rand factor``
+
+:Description:  A random factor added to the split threshold to avoid
+               too many filestore splits occurring at once. See
+               ``filestore split multiple`` for details.
+               This can only be changed for an existing osd offline,
+               via ceph-objectstore-tool's apply-layout-settings command.
+
+:Type: Unsigned 32-bit Integer
+:Required: No
+:Default: ``20``
 
 
 ``filestore update to``

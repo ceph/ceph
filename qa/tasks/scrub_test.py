@@ -375,8 +375,7 @@ def task(ctx, config):
     for i in range(num_osds):
         manager.raw_cluster_cmd('tell', 'osd.%d' % i, 'injectargs',
                                 '--', '--osd-objectstore-fuse')
-    for i in range(num_osds):
-        manager.raw_cluster_cmd('tell', 'osd.%d' % i, 'flush_pg_stats')
+    manager.flush_pg_stats(range(num_osds))
     manager.wait_for_clean()
 
     # write some data

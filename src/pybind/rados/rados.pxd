@@ -16,6 +16,7 @@ cdef class Rados(object):
         rados_t cluster
         public object state
         public object monitor_callback
+        public object monitor_callback2
         public object parsed_args
         public object conf_defaults
         public object conffile

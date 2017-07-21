@@ -17,6 +17,7 @@
 #include "Monitor.h"
 #include "messages/MMonPaxos.h"
 
+#include "mon/mon_types.h"
 #include "common/config.h"
 #include "include/assert.h"
 #include "include/stringify.h"
@@ -36,61 +37,6 @@ static ostream& _prefix(std::ostream *_dout, Monitor *mon, const string& name,
 		<< " c " << first_committed << ".." << last_committed
 		<< ") ";
 }
-
-class Paxos::C_CollectTimeout : public Context {
-  Paxos *paxos;
-public:
-  explicit C_CollectTimeout(Paxos *p) : paxos(p) {}
-  void finish(int r) override {
-    if (r == -ECANCELED)
-      return;
-    paxos->collect_timeout();
-  }
-};
-
-class Paxos::C_AcceptTimeout : public Context {
-  Paxos *paxos;
-public:
-  explicit C_AcceptTimeout(Paxos *p) : paxos(p) {}
-  void finish(int r) override {
-    if (r == -ECANCELED)
-      return;
-    paxos->accept_timeout();
-  }
-};
-
-class Paxos::C_LeaseAckTimeout : public Context {
-  Paxos *paxos;
-public:
-  explicit C_LeaseAckTimeout(Paxos *p) : paxos(p) {}
-  void finish(int r) override {
-    if (r == -ECANCELED)
-      return;
-    paxos->lease_ack_timeout();
-  }
-};
-
-class Paxos::C_LeaseTimeout : public Context {
-  Paxos *paxos;
-public:
-  explicit C_LeaseTimeout(Paxos *p) : paxos(p) {}
-  void finish(int r) override {
-    if (r == -ECANCELED)
-      return;
-    paxos->lease_timeout();
-  }
-};
-
-class Paxos::C_LeaseRenew : public Context {
-  Paxos *paxos;
-public:
-  explicit C_LeaseRenew(Paxos *p) : paxos(p) {}
-  void finish(int r) override {
-    if (r == -ECANCELED)
-      return;
-    paxos->lease_renew_timeout();
-  }
-};
 
 class Paxos::C_Trimmed : public Context {
   Paxos *paxos;
@@ -249,7 +195,11 @@ void Paxos::collect(version_t oldpn)
   }
 
   // set timeout event
-  collect_timeout_event = new C_CollectTimeout(this);
+  collect_timeout_event = new C_MonContext(mon, [this](int r) {
+	if (r == -ECANCELED)
+	  return;
+	collect_timeout();
+    });
   mon->timer.add_event_after(g_conf->mon_accept_timeout_factor *
 			     g_conf->mon_lease,
 			     collect_timeout_event);
@@ -737,7 +687,11 @@ void Paxos::begin(bufferlist& v)
   }
 
   // set timeout event
-  accept_timeout_event = new C_AcceptTimeout(this);
+  accept_timeout_event = new C_MonContext(mon, [this](int r) {
+      if (r == -ECANCELED)
+	return;
+      accept_timeout();
+    });
   mon->timer.add_event_after(g_conf->mon_accept_timeout_factor *
 			     g_conf->mon_lease,
 			     accept_timeout_event);
@@ -1023,14 +977,22 @@ void Paxos::extend_lease()
   // set timeout event.
   //  if old timeout is still in place, leave it.
   if (!lease_ack_timeout_event) {
-    lease_ack_timeout_event = new C_LeaseAckTimeout(this);
+    lease_ack_timeout_event = new C_MonContext(mon, [this](int r) {
+	if (r == -ECANCELED)
+	  return;
+	lease_ack_timeout();
+      });
     mon->timer.add_event_after(g_conf->mon_lease_ack_timeout_factor *
 			       g_conf->mon_lease,
 			       lease_ack_timeout_event);
   }
 
   // set renew event
-  lease_renew_event = new C_LeaseRenew(this);
+  lease_renew_event = new C_MonContext(mon, [this](int r) {
+      if (r == -ECANCELED)
+	return;
+      lease_renew_timeout();
+    });
   utime_t at = lease_expire;
   at -= g_conf->mon_lease;
   at += g_conf->mon_lease_renew_interval_factor * g_conf->mon_lease;
@@ -1152,6 +1114,7 @@ void Paxos::handle_lease(MonOpRequestRef op)
   ack->last_committed = last_committed;
   ack->first_committed = first_committed;
   ack->lease_timestamp = ceph_clock_now();
+  ::encode(mon->session_map.feature_map, ack->feature_map);
   lease->get_connection()->send_message(ack);
 
   // (re)set timeout event.
@@ -1170,28 +1133,32 @@ void Paxos::handle_lease_ack(MonOpRequestRef op)
   int from = ack->get_source().num();
 
   if (!lease_ack_timeout_event) {
-    dout(10) << "handle_lease_ack from " << ack->get_source() 
+    dout(10) << "handle_lease_ack from " << ack->get_source()
 	     << " -- stray (probably since revoked)" << dendl;
-  }
-  else if (acked_lease.count(from) == 0) {
+
+  } else if (acked_lease.count(from) == 0) {
     acked_lease.insert(from);
-    
+    if (ack->feature_map.length()) {
+      auto p = ack->feature_map.begin();
+      FeatureMap& t = mon->quorum_feature_map[from];
+      ::decode(t, p);
+    }
     if (acked_lease == mon->get_quorum()) {
       // yay!
-      dout(10) << "handle_lease_ack from " << ack->get_source() 
+      dout(10) << "handle_lease_ack from " << ack->get_source()
 	       << " -- got everyone" << dendl;
       mon->timer.cancel_event(lease_ack_timeout_event);
       lease_ack_timeout_event = 0;
 
 
     } else {
-      dout(10) << "handle_lease_ack from " << ack->get_source() 
+      dout(10) << "handle_lease_ack from " << ack->get_source()
 	       << " -- still need "
 	       << mon->get_quorum().size() - acked_lease.size()
 	       << " more" << dendl;
     }
   } else {
-    dout(10) << "handle_lease_ack from " << ack->get_source() 
+    dout(10) << "handle_lease_ack from " << ack->get_source()
 	     << " dup (lagging!), ignoring" << dendl;
   }
 
@@ -1213,7 +1180,11 @@ void Paxos::reset_lease_timeout()
   dout(20) << "reset_lease_timeout - setting timeout event" << dendl;
   if (lease_timeout_event)
     mon->timer.cancel_event(lease_timeout_event);
-  lease_timeout_event = new C_LeaseTimeout(this);
+  lease_timeout_event = new C_MonContext(mon, [this](int r) {
+      if (r == -ECANCELED)
+	return;
+      lease_timeout();
+    });
   mon->timer.add_event_after(g_conf->mon_lease_ack_timeout_factor *
 			     g_conf->mon_lease,
 			     lease_timeout_event);
@@ -1574,7 +1545,10 @@ MonitorDBStore::TransactionRef Paxos::get_pending_transaction()
 
 bool Paxos::trigger_propose()
 {
-  if (is_active()) {
+  if (plugged) {
+    dout(10) << __func__ << " plugged, not proposing now" << dendl;
+    return false;
+  } else if (is_active()) {
     dout(10) << __func__ << " active, proposing now" << dendl;
     propose_pending();
     return true;

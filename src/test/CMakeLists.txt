@@ -12,6 +12,7 @@ add_subdirectory(cls_hello)
 add_subdirectory(cls_lock)
 add_subdirectory(cls_log)
 add_subdirectory(cls_numops)
+add_subdirectory(cls_sdk)
 if(WITH_RBD)
   add_subdirectory(cls_rbd)
 endif(WITH_RBD)
@@ -24,6 +25,7 @@ add_subdirectory(cls_lua)
 add_subdirectory(common)
 add_subdirectory(compressor)
 add_subdirectory(crush)
+add_subdirectory(direct_messenger)
 add_subdirectory(encoding)
 add_subdirectory(erasure-code)
 add_subdirectory(filestore)
@@ -42,6 +44,7 @@ endif(WITH_RBD)
 add_subdirectory(messenger)
 add_subdirectory(mds)
 add_subdirectory(mon)
+add_subdirectory(mgr)
 add_subdirectory(msgr)
 add_subdirectory(ObjectMap)
 add_subdirectory(objectstore)
@@ -144,7 +147,7 @@ add_executable(ceph_omapbench
   )
 target_link_libraries(ceph_omapbench
   librados
-  ${Boost_PROGRAM_OPTIONS_LIBRARY}
+  Boost::program_options
   global
   ${BLKID_LIBRARIES}
   ${CMAKE_DL_LIBS}
@@ -198,7 +201,7 @@ if(${WITH_RADOSGW})
     cls_rgw_client
     cls_user_client
     cls_lock_client
-    ${Boost_REGEX_LIBRARY}
+    Boost::regex
     ${BLKID_LIBRARIES}
     ${CURL_LIBRARIES}
     ${EXPAT_LIBRARIES}
@@ -228,7 +231,7 @@ if(${WITH_RADOSGW})
     cls_rgw_client
     cls_user_client
     cls_lock_client
-    ${Boost_REGEX_LIBRARY}
+    Boost::regex
     ${BLKID_LIBRARIES}
     ${CURL_LIBRARIES}
     ${EXPAT_LIBRARIES}
@@ -274,7 +277,9 @@ add_executable(ceph_test_librgw_file
   )
 set_target_properties(ceph_test_librgw_file PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS})
+if(WITH_RADOSGW_FCGI_FRONTEND)
 target_include_directories(ceph_test_librgw_file PRIVATE ${FCGI_INCLUDE_DIR})
+endif(WITH_RADOSGW_FCGI_FRONTEND)
 target_link_libraries(ceph_test_librgw_file
   rgw
   librados
@@ -317,7 +322,9 @@ add_executable(ceph_test_librgw_file_nfsns
   )
 set_target_properties(ceph_test_librgw_file_nfsns PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS})
+if(WITH_RADOSGW_FCGI_FRONTEND)
 target_include_directories(ceph_test_librgw_file_nfsns PRIVATE ${FCGI_INCLUDE_DIR})
+endif(WITH_RADOSGW_FCGI_FRONTEND)
 target_link_libraries(ceph_test_librgw_file_nfsns
   rgw
   librados
@@ -497,11 +504,27 @@ if(HAVE_BLKID)
     )
 endif(HAVE_BLKID)
 
+# ceph_test_admin_socket_output
+
+add_executable(ceph_test_admin_socket_output
+  test_admin_socket_output.cc
+  admin_socket_output.cc
+  admin_socket_output_tests.cc
+  )
+target_link_libraries(ceph_test_admin_socket_output
+  ceph-common
+  ${Boost_FILESYSTEM_LIBRARY}
+  )
+install(TARGETS
+  ceph_test_admin_socket_output
+  DESTINATION ${CMAKE_INSTALL_BINDIR})
+
 #make check starts here
 
 #following dependencies are run inside make check unit tests
 add_dependencies(tests
   ceph-mon
+  ceph-mgr
   ceph
   ceph-authtool
   get_command_descriptions
@@ -719,6 +742,13 @@ add_executable(unittest_mempool
   )
 add_ceph_unittest(unittest_mempool ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_mempool)
 target_link_libraries(unittest_mempool global)
+
+# unittest_features
+add_executable(unittest_features
+  test_features.cc
+  )
+add_ceph_unittest(unittest_features ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_features)
+target_link_libraries(unittest_features global)
 
 # unittest_crypto
 add_executable(unittest_crypto

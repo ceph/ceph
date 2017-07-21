@@ -522,7 +522,7 @@ Options
 
 .. option:: --fs-type
 
-	Filesystem to use to format disk ``(xfs, btrfs or ext4)``.
+	Filesystem to use to format disk ``(xfs, btrfs or ext4)``.  Note that support for btrfs and ext4 is no longer tested or recommended; please use xfs.
 
 .. option:: --fsid
 

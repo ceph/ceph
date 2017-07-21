@@ -4,9 +4,11 @@
 #include "common/Readahead.h"
 #include "include/types.h"
 #include "InodeRef.h"
+#include "UserPerm.h"
 
 class Cond;
 class ceph_lock_state_t;
+class Inode;
 
 // file handle for any open file state
 
@@ -28,9 +30,22 @@ struct Fh {
   // file lock
   ceph_lock_state_t *fcntl_locks;
   ceph_lock_state_t *flock_locks;
+
+  // IO error encountered by any writeback on this Inode while
+  // this Fh existed (i.e. an fsync on another Fh will still show
+  // up as an async_err here because it could have been the same
+  // bytes we wrote via this Fh).
+  int async_err = {0};
+
+  int take_async_err()
+  {
+      int e = async_err;
+      async_err = 0;
+      return e;
+  }
   
-  Fh() : _ref(1), pos(0), mds(0), mode(0), flags(0), pos_locked(false),
-    actor_perms(), readahead(), fcntl_locks(NULL), flock_locks(NULL) {}
+  Fh(Inode *in);
+  ~Fh();
   void get() { ++_ref; }
   int put() { return --_ref; }
 };

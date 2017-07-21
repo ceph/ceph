@@ -6,6 +6,7 @@
 #include "bluestore_types.h"
 #include "include/utime.h"
 #include "include/encoding.h"
+#include "include/denc.h"
 
 class bluefs_extent_t : public AllocExtent{
 public:
@@ -14,14 +15,20 @@ public:
   bluefs_extent_t(uint8_t b = 0, uint64_t o = 0, uint32_t l = 0)
     : AllocExtent(o, l), bdev(b) {}
 
-  void encode(bufferlist&) const;
-  void decode(bufferlist::iterator&);
+  DENC(bluefs_extent_t, v, p) {
+    DENC_START(1, 1, p);
+    denc_lba(v.offset, p);
+    denc_varint_lowz(v.length, p);
+    denc(v.bdev, p);
+    DENC_FINISH(p);
+  }
+
   void dump(Formatter *f) const;
   static void generate_test_instances(list<bluefs_extent_t*>&);
 };
-WRITE_CLASS_ENCODER(bluefs_extent_t)
+WRITE_CLASS_DENC(bluefs_extent_t)
 
-ostream& operator<<(ostream& out, bluefs_extent_t e);
+ostream& operator<<(ostream& out, const bluefs_extent_t& e);
 
 
 struct bluefs_fnode_t {
@@ -30,25 +37,37 @@ struct bluefs_fnode_t {
   utime_t mtime;
   uint8_t prefer_bdev;
   mempool::bluefs::vector<bluefs_extent_t> extents;
+  uint64_t allocated;
 
-  bluefs_fnode_t() : ino(0), size(0), prefer_bdev(0) {}
+  bluefs_fnode_t() : ino(0), size(0), prefer_bdev(0), allocated(0) {}
 
   uint64_t get_allocated() const {
-    uint64_t r = 0;
+    return allocated;
+  }
+
+  void recalc_allocated() {
+    allocated = 0;
     for (auto& p : extents)
-      r += p.length;
-    return r;
+      allocated += p.length;
+  }
+
+  DENC(bluefs_fnode_t, v, p) {
+    DENC_START(1, 1, p);
+    denc_varint(v.ino, p);
+    denc_varint(v.size, p);
+    denc(v.mtime, p);
+    denc(v.prefer_bdev, p);
+    denc(v.extents, p);
+    DENC_FINISH(p);
   }
 
   mempool::bluefs::vector<bluefs_extent_t>::iterator seek(
     uint64_t off, uint64_t *x_off);
 
-  void encode(bufferlist& bl) const;
-  void decode(bufferlist::iterator& p);
   void dump(Formatter *f) const;
   static void generate_test_instances(list<bluefs_fnode_t*>& ls);
 };
-WRITE_CLASS_ENCODER(bluefs_fnode_t)
+WRITE_CLASS_DENC(bluefs_fnode_t)
 
 ostream& operator<<(ostream& out, const bluefs_fnode_t& file);
 

@@ -21,7 +21,7 @@ namespace managed_lock {
 
 using util::detail::C_AsyncCallback;
 using util::create_context_callback;
-using util::create_rados_safe_callback;
+using util::create_rados_callback;
 
 template <typename I>
 ReleaseRequest<I>* ReleaseRequest<I>::create(librados::IoCtx& ioctx,
@@ -55,14 +55,15 @@ void ReleaseRequest<I>::send() {
 template <typename I>
 void ReleaseRequest<I>::send_unlock() {
   CephContext *cct = reinterpret_cast<CephContext *>(m_ioctx.cct());
-  ldout(cct, 10) << "cookie=" << m_cookie << dendl;
+  ldout(cct, 10) << "entity=client." << m_ioctx.get_instance_id() << ", "
+                 << "cookie=" << m_cookie << dendl;
 
   librados::ObjectWriteOperation op;
   rados::cls::lock::unlock(&op, RBD_LOCK_NAME, m_cookie);
 
   using klass = ReleaseRequest;
   librados::AioCompletion *rados_completion =
-    create_rados_safe_callback<klass, &klass::handle_unlock>(this);
+    create_rados_callback<klass, &klass::handle_unlock>(this);
   int r = m_ioctx.aio_operate(m_oid, rados_completion, &op);
   assert(r == 0);
   rados_completion->release();

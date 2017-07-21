@@ -28,14 +28,15 @@ set(rbd_srcs
   action/MirrorImage.cc
   action/Nbd.cc
   action/ObjectMap.cc
+  action/Pool.cc
   action/Remove.cc
   action/Rename.cc
   action/Resize.cc
   action/Snap.cc
   action/Status.cc
+  action/Trash.cc
   action/Watch.cc)
 add_executable(rbd ${rbd_srcs}
-  $<TARGET_OBJECTS:common_util_obj>
   $<TARGET_OBJECTS:common_texttable_obj>)
 set_target_properties(rbd PROPERTIES OUTPUT_NAME rbd)
 target_link_libraries(rbd librbd librados

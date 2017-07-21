@@ -52,9 +52,6 @@ using namespace libradosstriper;
 #include "PoolDump.h"
 #include "RadosImport.h"
 
-int rados_tool_sync(const std::map < std::string, std::string > &opts,
-                             std::vector<const char*> &args);
-
 using namespace librados;
 
 // two steps seem to be necessary to do this right
@@ -86,7 +83,7 @@ void usage(ostream& out)
 "OBJECT COMMANDS\n"
 "   get <obj-name> [outfile]         fetch object\n"
 "   put <obj-name> [infile] [--offset offset]\n"
-"                                    write object write object start offset(default:0)\n"
+"                                    write object with start offset (default:0)\n"
 "   append <obj-name> [infile]       append object\n"
 "   truncate <obj-name> length       truncate object\n"
 "   create <obj-name>                create object\n"
@@ -493,7 +490,7 @@ class RadosWatchCtx : public librados::WatchCtx2 {
   string name;
 public:
   RadosWatchCtx(IoCtx& io, const char *imgname) : ioctx(io), name(imgname) {}
-  ~RadosWatchCtx() {}
+  ~RadosWatchCtx() override {}
   void handle_notify(uint64_t notify_id,
 		     uint64_t cookie,
 		     uint64_t notifier_id,
@@ -999,7 +996,7 @@ protected:
 public:
   RadosBencher(CephContext *cct_, librados::Rados& _r, librados::IoCtx& _i)
     : ObjBencher(cct_), completions(NULL), rados(_r), io_ctx(_i), iterator_valid(false), write_destination(OP_WRITE_DEST_OBJ) {}
-  ~RadosBencher() { }
+  ~RadosBencher() override { }
 
   void set_write_destination(OpWriteDest dest) {
     write_destination = dest;
@@ -1864,9 +1861,8 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
 
   // open rados
   ret = rados.init_with_context(g_ceph_context);
-  if (ret) {
+  if (ret < 0) {
      cerr << "couldn't initialize rados: " << cpp_strerror(ret) << std::endl;
-     ret = -1;
      goto out;
   }
 
@@ -2034,7 +2030,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
       tab.define_column("COPIES", TextTable::LEFT, TextTable::RIGHT);
       tab.define_column("MISSING_ON_PRIMARY", TextTable::LEFT, TextTable::RIGHT);
       tab.define_column("UNFOUND", TextTable::LEFT, TextTable::RIGHT);
-      tab.define_column("DEGRAED", TextTable::LEFT, TextTable::RIGHT);
+      tab.define_column("DEGRADED", TextTable::LEFT, TextTable::RIGHT);
       tab.define_column("RD_OPS", TextTable::LEFT, TextTable::RIGHT);
       tab.define_column("RD", TextTable::LEFT, TextTable::RIGHT);
       tab.define_column("WR_OPS", TextTable::LEFT, TextTable::RIGHT);
@@ -2067,21 +2063,22 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
         int64_t pool_id = rados.pool_lookup(pool_name);
         formatter->dump_string("name", pool_name);
         if (pool_id >= 0)
-          formatter->dump_format("id", "%lld", pool_id);
+          formatter->dump_int("id", pool_id);
         else
-          cerr << "ERROR: lookup_pg_pool_name for name=" << pool_name << " returned " << pool_id << std::endl;
-	formatter->dump_format("size_bytes", "%lld", s.num_bytes);
-	formatter->dump_format("size_kb", "%lld", s.num_kb);
-	formatter->dump_format("num_objects", "%lld", s.num_objects);
-	formatter->dump_format("num_object_clones", "%lld", s.num_object_clones);
-	formatter->dump_format("num_object_copies", "%lld", s.num_object_copies);
-	formatter->dump_format("num_objects_missing_on_primary", "%lld", s.num_objects_missing_on_primary);
-	formatter->dump_format("num_objects_unfound", "%lld", s.num_objects_unfound);
-	formatter->dump_format("num_objects_degraded", "%lld", s.num_objects_degraded);
-	formatter->dump_format("read_ops", "%lld", s.num_rd);
-	formatter->dump_format("read_bytes", "%lld", s.num_rd_kb * 1024ull);
-	formatter->dump_format("write_ops", "%lld", s.num_wr);
-	formatter->dump_format("write_bytes", "%lld", s.num_wr_kb * 1024ull);
+          cerr << "ERROR: lookup_pg_pool_name for name=" << pool_name
+	       << " returned " << pool_id << std::endl;
+	formatter->dump_int("size_bytes",s.num_bytes);
+	formatter->dump_int("size_kb", s.num_kb);
+	formatter->dump_int("num_objects", s.num_objects);
+	formatter->dump_int("num_object_clones", s.num_object_clones);
+	formatter->dump_int("num_object_copies", s.num_object_copies);
+	formatter->dump_int("num_objects_missing_on_primary", s.num_objects_missing_on_primary);
+	formatter->dump_int("num_objects_unfound", s.num_objects_unfound);
+	formatter->dump_int("num_objects_degraded", s.num_objects_degraded);
+	formatter->dump_int("read_ops", s.num_rd);
+	formatter->dump_int("read_bytes", s.num_rd_kb * 1024ull);
+	formatter->dump_int("write_ops", s.num_wr);
+	formatter->dump_int("write_bytes", s.num_wr_kb * 1024ull);
 	formatter->close_section();
       }
     }
@@ -2109,10 +2106,10 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
            << std::endl;
     } else {
       formatter->close_section();
-      formatter->dump_format("total_objects", "%lld", (long long unsigned)tstats.num_objects);
-      formatter->dump_format("total_used", "%lld", (long long unsigned)tstats.kb_used);
-      formatter->dump_format("total_avail", "%lld", (long long unsigned)tstats.kb_avail);
-      formatter->dump_format("total_space", "%lld", (long long unsigned)tstats.kb);
+      formatter->dump_int("total_objects", tstats.num_objects);
+      formatter->dump_int("total_used", tstats.kb_used);
+      formatter->dump_int("total_avail", tstats.kb_avail);
+      formatter->dump_int("total_space", tstats.kb);
       formatter->close_section();
       formatter->flush(cout);
     }
@@ -2835,6 +2832,8 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
       cout << "successfully deleted pool " << nargs[1] << std::endl;
     } else { //error
       cerr << "pool " << nargs[1] << " could not be removed" << std::endl;
+      cerr << "Check your monitor configuration - `mon allow pool delete` is set to false by default,"
+     << " change it to true to allow deletion of pools" << std::endl;
     }
   }
   else if (strcmp(nargs[0], "purge") == 0) {
@@ -2855,12 +2854,15 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
       goto out;
     }
     io_ctx.set_namespace(all_nspaces);
+    io_ctx.set_osdmap_full_try();
     RadosBencher bencher(g_ceph_context, rados, io_ctx);
     ret = bencher.clean_up_slow("", concurrent_ios);
     if (ret >= 0) {
       cout << "successfully purged pool " << nargs[1] << std::endl;
     } else { //error
       cerr << "pool " << nargs[1] << " could not be purged" << std::endl;
+      cerr << "Check your monitor configuration - `mon allow pool delete` is set to false by default,"
+     << " change it to true to allow deletion of pools" << std::endl;
     }
   }
   else if (strcmp(nargs[0], "lssnap") == 0) {
@@ -2958,7 +2960,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
       usage_exit();
     if (operation != OP_WRITE) {
       if (block_size_specified) {
-        cerr << "-b|--block_size option can be used only with `write' bench test"
+        cerr << "-b|--block_size option can be used only with 'write' bench test"
              << std::endl;
         ret = -EINVAL;
         goto out;
@@ -2976,7 +2978,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
     }
 
     if (!formatter && output) {
-      cerr << "-o|--output option can be used only with '--format' option"
+      cerr << "-o|--output option can only be used with '--format' option"
            << std::endl;
       ret = -EINVAL;
       goto out;
@@ -3003,7 +3005,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
 			    concurrent_ios, op_size, object_size,
 			    max_objects, cleanup, hints, run_name, no_verify);
     if (ret != 0)
-      cerr << "error during benchmark: " << ret << std::endl;
+      cerr << "error during benchmark: " << cpp_strerror(ret) << std::endl;
     if (formatter && output)
       delete outstream;
   }
@@ -3015,7 +3017,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
     RadosBencher bencher(g_ceph_context, rados, io_ctx);
     ret = bencher.clean_up(prefix, concurrent_ios, run_name);
     if (ret != 0)
-      cerr << "error during cleanup: " << ret << std::endl;
+      cerr << "error during cleanup: " << cpp_strerror(ret) << std::endl;
   }
   else if (strcmp(nargs[0], "watch") == 0) {
     if (!pool_name || nargs.size() < 2)
@@ -3025,7 +3027,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
     uint64_t cookie;
     ret = io_ctx.watch2(oid, &cookie, &ctx);
     if (ret != 0)
-      cerr << "error calling watch: " << ret << std::endl;
+      cerr << "error calling watch: " << cpp_strerror(ret) << std::endl;
     else {
       cout << "press enter to exit..." << std::endl;
       getchar();
@@ -3042,7 +3044,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
     ::encode(msg, bl);
     ret = io_ctx.notify2(oid, bl, 10000, &replybl);
     if (ret != 0)
-      cerr << "error calling notify: " << ret << std::endl;
+      cerr << "error calling notify: " << cpp_strerror(ret) << std::endl;
     if (replybl.length()) {
       map<pair<uint64_t,uint64_t>,bufferlist> rm;
       set<pair<uint64_t,uint64_t> > missed;
@@ -3418,6 +3420,42 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
     if (ret < 0) {
       cerr << "error from cache-try-flush-evict-all: "
 	   << cpp_strerror(ret) << std::endl;
+      goto out;
+    }
+  } else if (strcmp(nargs[0], "set-redirect") == 0) {
+    if (!pool_name)
+      usage_exit();
+
+    const char *target = target_pool_name;
+    if (!target)
+      target = pool_name;
+
+    const char *target_obj;
+    if (nargs.size() < 3) {
+      if (strcmp(target, pool_name) == 0) {
+        cerr << "cannot copy object into itself" << std::endl;
+	ret = -1;
+	goto out;
+      }
+      target_obj = nargs[1];
+    } else {
+      target_obj = nargs[2];
+    }
+
+    IoCtx target_ctx;
+    ret = rados.ioctx_create(target, target_ctx);
+    if (target_oloc.size()) {
+      target_ctx.locator_set_key(target_oloc);
+    }
+    if (target_nspace.size()) {
+      target_ctx.set_namespace(target_nspace);
+    }
+
+    ObjectWriteOperation op;
+    op.set_redirect(target_obj, target_ctx, 0);
+    ret = io_ctx.operate(nargs[1], &op);
+    if (ret < 0) {
+      cerr << "error set-redirect " << pool_name << "/" << nargs[1] << " => " << target << "/" << target_obj << ": " << cpp_strerror(ret) << std::endl;
       goto out;
     }
   } else if (strcmp(nargs[0], "export") == 0) {

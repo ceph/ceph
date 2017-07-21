@@ -178,4 +178,6 @@ void Request<I>::handle_op_event_safe(int r) {
 } // namespace operation
 } // namespace librbd
 
+#ifndef TEST_F
 template class librbd::operation::Request<librbd::ImageCtx>;
+#endif

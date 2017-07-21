@@ -102,6 +102,93 @@ void PromoteRequest<I>::handle_allocate_tag(int r) {
   if (r < 0) {
     m_ret_val = r;
     lderr(cct) << "failed to allocate tag: " << cpp_strerror(r) << dendl;
+    shut_down();
+    return;
+  }
+
+  m_tag_tid = m_tag.tid;
+  append_event();
+}
+
+template <typename I>
+void PromoteRequest<I>::append_event() {
+  CephContext *cct = m_image_ctx->cct;
+  ldout(cct, 20) << dendl;
+
+  EventEntry event_entry{DemotePromoteEvent{}, {}};
+  bufferlist event_entry_bl;
+  ::encode(event_entry, event_entry_bl);
+
+  m_journaler->start_append(0, 0, 0);
+  m_future = m_journaler->append(m_tag_tid, event_entry_bl);
+
+  auto ctx = create_context_callback<
+    PromoteRequest<I>, &PromoteRequest<I>::handle_append_event>(this);
+  m_future.flush(ctx);
+}
+
+template <typename I>
+void PromoteRequest<I>::handle_append_event(int r) {
+  CephContext *cct = m_image_ctx->cct;
+  ldout(cct, 20) << "r=" << r << dendl;
+
+  if (r < 0) {
+    m_ret_val = r;
+    lderr(cct) << "failed to append promotion journal event: "
+               << cpp_strerror(r) << dendl;
+    stop_append();
+    return;
+  }
+
+  commit_event();
+}
+
+template <typename I>
+void PromoteRequest<I>::commit_event() {
+  CephContext *cct = m_image_ctx->cct;
+  ldout(cct, 20) << dendl;
+
+  m_journaler->committed(m_future);
+
+  auto ctx = create_context_callback<
+    PromoteRequest<I>, &PromoteRequest<I>::handle_commit_event>(this);
+  m_journaler->flush_commit_position(ctx);
+}
+
+template <typename I>
+void PromoteRequest<I>::handle_commit_event(int r) {
+  CephContext *cct = m_image_ctx->cct;
+  ldout(cct, 20) << "r=" << r << dendl;
+
+  if (r < 0) {
+    m_ret_val = r;
+    lderr(cct) << "failed to flush promote commit position: "
+               << cpp_strerror(r) << dendl;
+  }
+
+  stop_append();
+}
+
+template <typename I>
+void PromoteRequest<I>::stop_append() {
+  CephContext *cct = m_image_ctx->cct;
+  ldout(cct, 20) << dendl;
+
+  auto ctx = create_context_callback<
+    PromoteRequest<I>, &PromoteRequest<I>::handle_stop_append>(this);
+  m_journaler->stop_append(ctx);
+}
+
+template <typename I>
+void PromoteRequest<I>::handle_stop_append(int r) {
+  CephContext *cct = m_image_ctx->cct;
+  ldout(cct, 20) << "r=" << r << dendl;
+
+  if (r < 0) {
+    if (m_ret_val == 0) {
+      m_ret_val = r;
+    }
+    lderr(cct) << "failed to stop journal append: " << cpp_strerror(r) << dendl;
   }
 
   shut_down();

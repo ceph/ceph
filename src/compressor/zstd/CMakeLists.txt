@@ -6,8 +6,10 @@ set(ZSTD_C_FLAGS -fPIC -Wno-unused-variable -O3)
 include(ExternalProject)
 ExternalProject_Add(zstd_ext
   SOURCE_DIR ${CMAKE_SOURCE_DIR}/src/zstd/build/cmake
-  CMAKE_ARGS -DCMAKE_C_COMPILER=${CMAKE_C_COMPILER}
+  CMAKE_ARGS -DCMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER}
+             -DCMAKE_C_COMPILER=${CMAKE_C_COMPILER}
              -DCMAKE_C_FLAGS=${ZSTD_C_FLAGS}
+             -DCMAKE_AR=${CMAKE_AR}
   BINARY_DIR ${CMAKE_CURRENT_BINARY_DIR}/libzstd
   BUILD_COMMAND $(MAKE) libzstd_static
   INSTALL_COMMAND "true")

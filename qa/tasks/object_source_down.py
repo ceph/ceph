@@ -76,8 +76,7 @@ def task(ctx, config):
     manager.mark_in_osd(0)
     manager.wait_till_active()
 
-    manager.raw_cluster_cmd('tell', 'osd.2', 'flush_pg_stats')
-    manager.raw_cluster_cmd('tell', 'osd.0', 'flush_pg_stats')
+    manager.flush_pg_stats([2, 0])
 
     manager.mark_out_osd(2)
     manager.wait_till_active()
@@ -86,8 +85,7 @@ def task(ctx, config):
     manager.mark_in_osd(1)
     manager.wait_till_active()
 
-    manager.raw_cluster_cmd('tell', 'osd.1', 'flush_pg_stats')
-    manager.raw_cluster_cmd('tell', 'osd.0', 'flush_pg_stats')
+    manager.flush_pg_stats([0, 1])
     log.info("Getting unfound objects")
     unfound = manager.get_num_unfound_objects()
     assert not unfound
@@ -97,8 +95,7 @@ def task(ctx, config):
     manager.kill_osd(3)
     manager.mark_down_osd(3)
 
-    manager.raw_cluster_cmd('tell', 'osd.1', 'flush_pg_stats')
-    manager.raw_cluster_cmd('tell', 'osd.0', 'flush_pg_stats')
+    manager.flush_pg_stats([0, 1])
     log.info("Getting unfound objects")
     unfound = manager.get_num_unfound_objects()
     assert unfound

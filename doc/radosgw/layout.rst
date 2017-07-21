@@ -82,12 +82,14 @@ The user ID in RGW is a string, typically the actual user name from the user
 credentials and not a hashed or mapped identifier.
 
 When accessing a user's data, the user record is loaded from an object
-"<user_id>" in pool ".users.uid".
+"<user_id>" in pool "default.rgw.meta" with namespace "users.uid".
 
-Bucket names are represented directly in the pool ".rgw". Bucket record is
+Bucket names are represented in the pool "default.rgw.meta" with namespace
+"root". Bucket record is
 loaded in order to obtain so-called marker, which serves as a bucket ID.
 
-The object is located in pool ".rgw.buckets". Object name is "<marker>_<key>",
+The object is located in pool "default.rgw.buckets.data".
+Object name is "<marker>_<key>",
 for example "default.7593.4_image.png", where the marker is "default.7593.4"
 and the key is "image.png". Since these concatenated names are not parsed,
 only passed down to RADOS, the choice of the separator is not important and
@@ -110,7 +112,8 @@ Bucket and Object Listing
 -------------------------
 
 Buckets that belong to a given user are listed in an omap of an object named
-"<user_id>.buckets" (for example, "foo.buckets") in pool ".users.uid".
+"<user_id>.buckets" (for example, "foo.buckets") in pool "default.rgw.meta"
+with namespace "users.uid".
 These objects are accessed when listing buckets, when updating bucket
 contents, and updating and retrieving bucket statistics (e.g. for quota).
 
@@ -121,7 +124,7 @@ These listings are kept consistent with buckets in pool ".rgw".
 
 Objects that belong to a given bucket are listed in a bucket index,
 as discussed in sub-section 'Bucket Index' above. The default naming
-for index objects is ".dir.<marker>" in pool ".rgw.buckets.index".
+for index objects is ".dir.<marker>" in pool "default.rgw.buckets.index".
 
 Footnotes
 ---------
@@ -136,64 +139,66 @@ In Hammer, one LevelDB is used to store omap in each OSD.
 exist and the 'bucket' metadata contained its information. It is possible
 to encounter such buckets in old installations.
 
-[3] In Infernalis, a pending commit exists that removes the need of prefixing
-all the rgw system pools with a period, and also renames all of these pools.
-See Github pull request #4944 "rgw noperiod".
+[3] The pool names have been changed starting with the Infernalis release.
+If you are looking at an older setup, some details may be different. In
+particular there was a different pool for each of the namespaces that are
+now being used inside the default.root.meta pool.
 
-Appendix: Compendum
--------------------
+Appendix: Compendium
+--------------------
 
 Known pools:
 
 .rgw.root
   Unspecified region, zone, and global information records, one per object.
 
-.rgw.control
+<zone>.rgw.control
   notify.<N>
 
-.rgw
-  <bucket>
-  .bucket.meta.<bucket>:<marker>   # see put_bucket_instance_info()
+<zone>.rgw.meta
+  Multiple namespaces with different kinds of metadata:
 
-  The tenant is used to disambiguate buckets, but not bucket instances.
-  Example:
+  namespace: root
+    <bucket>
+    .bucket.meta.<bucket>:<marker>   # see put_bucket_instance_info()
 
-  .bucket.meta.prodtx:test%25star:default.84099.6
-  .bucket.meta.testcont:default.4126.1
-  .bucket.meta.prodtx:testcont:default.84099.4
-  prodtx/testcont
-  prodtx/test%25star
-  testcont
+    The tenant is used to disambiguate buckets, but not bucket instances.
+    Example::
 
-.rgw.gc
-  gc.<N>
+      .bucket.meta.prodtx:test%25star:default.84099.6
+      .bucket.meta.testcont:default.4126.1
+      .bucket.meta.prodtx:testcont:default.84099.4
+      prodtx/testcont
+      prodtx/test%25star
+      testcont
 
-.users.uid
-  Contains _both_ per-user information (RGWUserInfo) in "<user>" objects
-  and per-user lists of buckets in omaps of "<user>.buckets" objects.
-  The "<user>" may contain the tenant if non-empty, for example:
+  namespace: users.uid
+    Contains _both_ per-user information (RGWUserInfo) in "<user>" objects
+    and per-user lists of buckets in omaps of "<user>.buckets" objects.
+    The "<user>" may contain the tenant if non-empty, for example::
 
-  prodtx$prodt
-  test2.buckets
-  prodtx$prodt.buckets
-  test2
+      prodtx$prodt
+      test2.buckets
+      prodtx$prodt.buckets
+      test2
 
-.users.email
-  Unimportant
+  namespace: users.email
+    Unimportant
 
-.users
-  47UA98JSTJZ9YAN3OS3O
-  It's unclear why user ID is not used to name objects in this pool.
+  namespace: users.keys
+    47UA98JSTJZ9YAN3OS3O
 
-.users.swift
-  test:tester
+    This allows radosgw to look up users by their access keys during authentication.
 
-.rgw.buckets.index
+  namespace: users.swift
+    test:tester
+
+<zone>.rgw.buckets.index
   Objects are named ".dir.<marker>", each contains a bucket index.
   If the index is sharded, each shard appends the shard index after
   the marker.
 
-.rgw.buckets
+<zone>.rgw.buckets.data
   default.7593.4__shadow_.488urDFerTYXavx4yAd-Op8mxehnvTI_1
   <marker>_<key>
 

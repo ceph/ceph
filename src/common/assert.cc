@@ -12,18 +12,7 @@
  *
  */
 
-#include "BackTrace.h"
-#include "common/ceph_context.h"
-#include "common/config.h"
 #include "common/debug.h"
-#include "common/Clock.h"
-#include "include/assert.h"
-
-#include <errno.h>
-#include <iostream>
-#include <pthread.h>
-#include <sstream>
-#include <time.h>
 
 namespace ceph {
   static CephContext *g_assert_context = NULL;

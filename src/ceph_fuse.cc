@@ -108,35 +108,39 @@ int main(int argc, const char **argv, const char *envp[]) {
   g_ceph_context->_conf->apply_changes(NULL);
 
   // check for 32-bit arch
-  if (sizeof(long) == 4) {
+#ifndef __LP64__
     cerr << std::endl;
     cerr << "WARNING: Ceph inode numbers are 64 bits wide, and FUSE on 32-bit kernels does" << std::endl;
     cerr << "         not cope well with that situation.  Expect to crash shortly." << std::endl;
     cerr << std::endl;
-  }
+#endif
 
-  global_init_prefork(g_ceph_context);
   Preforker forker;
   if (g_conf->daemonize) {
+    global_init_prefork(g_ceph_context);
+    int r;
     string err;
-    if (forker.prefork(err)) {
-      cerr << "ceph-fuse[" << err << std::endl;
-      return 1;
+    r = forker.prefork(err);
+    if (r < 0 || forker.is_parent()) {
+      // Start log if current process is about to exit. Otherwise, we hit an assert
+      // in the Ceph context destructor.
+      g_ceph_context->_log->start();
+    }
+    if (r < 0) {
+      cerr << "ceph-fuse " << err << std::endl;
+      return r;
+    }
+    if (forker.is_parent()) {
+      r = forker.parent_wait(err);
+      if (r < 0) {
+	cerr << "ceph-fuse " << err << std::endl;
+      }
+      return r;
     }
     global_init_postfork_start(cct.get());
   }
 
-
-  if (forker.is_parent()) {
-    string err;
-    int r = forker.parent_wait(err);
-    if (r) {
-      cerr << "ceph-fuse" << err << std::endl;
-    }
-    return r;
-  }
-
-  if (forker.is_child()) {
+  {
     common_init_finish(g_ceph_context);
 
     //cout << "child, mounting" << std::endl;
@@ -149,7 +153,7 @@ int main(int argc, const char **argv, const char *envp[]) {
 	cfuse = cf;
 	client = cl;
       }
-      ~RemountTest() {}
+      ~RemountTest() override {}
       void *entry() override {
 #if defined(__linux__)
 	int ver = get_linux_version();
@@ -190,7 +194,7 @@ int main(int argc, const char **argv, const char *envp[]) {
 
     // get monmap
     Messenger *messenger = NULL;
-    Client *client;
+    StandaloneClient *client;
     CephFuse *cfuse;
     UserPerm perms;
     int tester_r = 0;
@@ -205,11 +209,11 @@ int main(int argc, const char **argv, const char *envp[]) {
 
     // start up network
     messenger = Messenger::create_client_messenger(g_ceph_context, "client");
-    messenger->set_default_policy(Messenger::Policy::lossy_client(0, 0));
+    messenger->set_default_policy(Messenger::Policy::lossy_client(0));
     messenger->set_policy(entity_name_t::TYPE_MDS,
-			  Messenger::Policy::lossless_client(0, 0));
+			  Messenger::Policy::lossless_client(0));
 
-    client = new Client(messenger, mc);
+    client = new StandaloneClient(messenger, mc);
     if (filer_flags) {
       client->set_filer_flags(filer_flags);
     }

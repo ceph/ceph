@@ -35,6 +35,34 @@ enum {
   l_mdss_handle_slave_request,
   l_mdss_handle_client_session,
   l_mdss_dispatch_client_request,
+  l_mdss_req_lookuphash,
+  l_mdss_req_lookupino,
+  l_mdss_req_lookupparent,
+  l_mdss_req_lookupname,
+  l_mdss_req_lookup,
+  l_mdss_req_lookupsnap,
+  l_mdss_req_getattr,
+  l_mdss_req_setattr,
+  l_mdss_req_setlayout,
+  l_mdss_req_setdirlayout,
+  l_mdss_req_setxattr,
+  l_mdss_req_rmxattr,
+  l_mdss_req_readdir,
+  l_mdss_req_setfilelock,
+  l_mdss_req_getfilelock,
+  l_mdss_req_create,
+  l_mdss_req_open,
+  l_mdss_req_mknod,
+  l_mdss_req_link,
+  l_mdss_req_unlink,
+  l_mdss_req_rmdir,
+  l_mdss_req_rename,
+  l_mdss_req_mkdir,
+  l_mdss_req_symlink,
+  l_mdss_req_lssnap,
+  l_mdss_req_mksnap,
+  l_mdss_req_rmsnap,
+  l_mdss_req_renamesnap,
   l_mdss_dispatch_slave_request,
   l_mdss_last,
 };
@@ -52,6 +80,8 @@ private:
   // State for while in reconnect
   MDSInternalContext *reconnect_done;
   int failed_reconnects;
+  bool reconnect_evicting;  // true if I am waiting for evictions to complete
+                            // before proceeding to reconnect_gather_finish
 
   friend class MDSContinuation;
   friend class ServerContext;
@@ -94,6 +124,7 @@ public:
   void terminate_sessions();
   void find_idle_sessions();
   void kill_session(Session *session, Context *on_safe);
+  size_t apply_blacklist(const std::set<entity_addr_t> &blacklist);
   void journal_close_session(Session *session, int state, Context *on_safe);
   void reconnect_clients(MDSInternalContext *reconnect_done_);
   void handle_client_reconnect(class MClientReconnect *m);
@@ -232,7 +263,7 @@ public:
   bool _rmdir_prepare_witness(MDRequestRef& mdr, mds_rank_t who, vector<CDentry*>& trace, CDentry *straydn);
   void handle_slave_rmdir_prep(MDRequestRef& mdr);
   void _logged_slave_rmdir(MDRequestRef& mdr, CDentry *srcdn, CDentry *straydn);
-  void _commit_slave_rmdir(MDRequestRef& mdr, int r);
+  void _commit_slave_rmdir(MDRequestRef& mdr, int r, CDentry *straydn);
   void handle_slave_rmdir_prep_ack(MDRequestRef& mdr, MMDSSlaveRequest *ack);
   void do_rmdir_rollback(bufferlist &rbl, mds_rank_t master, MDRequestRef& mdr);
   void _rmdir_rollback_finish(MDRequestRef& mdr, metareqid_t reqid, CDentry *dn, CDentry *straydn);

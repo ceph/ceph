@@ -48,7 +48,7 @@ class JSONCommand : public Command
 public:
   json_spirit::mValue json_result;
 
-  void wait()
+  void wait() override
   {
     Command::wait();
 

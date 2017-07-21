@@ -1,8 +1,13 @@
-tasks:
-- install:
-- ceph:
+overrides:
+  ceph:
     log-whitelist:
     - wrongly marked me down
+    - overall HEALTH_
+    - (OSDMAP_FLAGS)
+    - (PG_
+    - (OSD_
+    - (OBJECT_
+tasks:
 - workunit:
     clients:
       client.0:

@@ -4,6 +4,7 @@
 #ifndef CEPH_LIBRBD_OPERATION_DISABLE_FEATURES_REQUEST_H
 #define CEPH_LIBRBD_OPERATION_DISABLE_FEATURES_REQUEST_H
 
+#include "librbd/ImageCtx.h"
 #include "librbd/operation/Request.h"
 #include "cls/rbd/cls_rbd_client.h"
 
@@ -20,13 +21,13 @@ class DisableFeaturesRequest : public Request<ImageCtxT> {
 public:
   static DisableFeaturesRequest *create(ImageCtxT &image_ctx, Context *on_finish,
                                         uint64_t journal_op_tid,
-                                        uint64_t features) {
+                                        uint64_t features, bool force) {
     return new DisableFeaturesRequest(image_ctx, on_finish, journal_op_tid,
-                                      features);
+                                      features, force);
   }
 
   DisableFeaturesRequest(ImageCtxT &image_ctx, Context *on_finish,
-                         uint64_t journal_op_tid, uint64_t features);
+                         uint64_t journal_op_tid, uint64_t features, bool force);
 
 protected:
   void send_op() override;
@@ -102,6 +103,7 @@ private:
    */
 
   uint64_t m_features;
+  bool m_force;
 
   bool m_acquired_lock = false;
   bool m_writes_blocked = false;
@@ -112,6 +114,7 @@ private:
   uint64_t m_disable_flags = 0;
   uint64_t m_features_mask = 0;
 
+  decltype(ImageCtxT::journal) m_journal = nullptr;
   cls::rbd::MirrorMode m_mirror_mode = cls::rbd::MIRROR_MODE_DISABLED;
   bufferlist m_out_bl;
 

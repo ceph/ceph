@@ -24,11 +24,11 @@
 
 class MOSDRepOp : public MOSDFastDispatchOp {
 
-  static const int HEAD_VERSION = 1;
+  static const int HEAD_VERSION = 2;
   static const int COMPAT_VERSION = 1;
 
 public:
-  epoch_t map_epoch;
+  epoch_t map_epoch, min_epoch;
 
   // metadata from original request
   osd_reqid_t reqid;
@@ -66,18 +66,27 @@ public:
   epoch_t get_map_epoch() const override {
     return map_epoch;
   }
+  epoch_t get_min_epoch() const override {
+    return min_epoch;
+  }
   spg_t get_spg() const override {
     return pgid;
   }
 
-  int get_cost() const {
+  int get_cost() const override {
     return data.length();
   }
 
-  virtual void decode_payload() {
+  void decode_payload() override {
     p = payload.begin();
     // splitted to partial and final
     ::decode(map_epoch, p);
+    if (header.version >= 2) {
+      ::decode(min_epoch, p);
+      decode_trace(p);
+    } else {
+      min_epoch = map_epoch;
+    }
     ::decode(reqid, p);
     ::decode(pgid, p);
   }
@@ -103,8 +112,15 @@ public:
     final_decode_needed = false;
   }
 
-  virtual void encode_payload(uint64_t features) {
+  void encode_payload(uint64_t features) override {
     ::encode(map_epoch, payload);
+    if (HAVE_FEATURE(features, SERVER_LUMINOUS)) {
+      header.version = HEAD_VERSION;
+      ::encode(min_epoch, payload);
+      encode_trace(payload, features);
+    } else {
+      header.version = 1;
+    }
     ::encode(reqid, payload);
     ::encode(pgid, payload);
     ::encode(poid, payload);
@@ -127,9 +143,10 @@ public:
       final_decode_needed(true), acks_wanted (0) {}
   MOSDRepOp(osd_reqid_t r, pg_shard_t from,
 	    spg_t p, const hobject_t& po, int aw,
-	    epoch_t mape, ceph_tid_t rtid, eversion_t v)
+	    epoch_t mape, epoch_t min_epoch, ceph_tid_t rtid, eversion_t v)
     : MOSDFastDispatchOp(MSG_OSD_REPOP, HEAD_VERSION, COMPAT_VERSION),
       map_epoch(mape),
+      min_epoch(min_epoch),
       reqid(r),
       pgid(p),
       final_decode_needed(false),
@@ -140,15 +157,15 @@ public:
     set_tid(rtid);
   }
 private:
-  ~MOSDRepOp() {}
+  ~MOSDRepOp() override {}
 
 public:
-  const char *get_type_name() const { return "osd_repop"; }
-  void print(ostream& out) const {
+  const char *get_type_name() const override { return "osd_repop"; }
+  void print(ostream& out) const override {
     out << "osd_repop(" << reqid
-          << " " << pgid;
+	<< " " << pgid << " e" << map_epoch << "/" << min_epoch;
     if (!final_decode_needed) {
-        out << " " << poid << " v " << version;
+      out << " " << poid << " v " << version;
       if (updated_hit_set_history)
         out << ", has_updated_hit_set_history";
     }

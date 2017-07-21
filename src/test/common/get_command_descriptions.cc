@@ -63,7 +63,19 @@ static void all()
 #define COMMAND_WITH_FLAG(parsesig, helptext, modulename, req_perms, avail, flags) \
     {parsesig, helptext, modulename, req_perms, avail, flags},
 #include <mon/MonCommands.h>
-  };
+#undef COMMAND
+#undef COMMAND_WITH_FLAG
+
+  // FIXME: slurp up the Mgr commands too
+
+#define COMMAND(parsesig, helptext, modulename, req_perms, avail)	\
+  {parsesig, helptext, modulename, req_perms, avail, FLAG(MGR)},
+#define COMMAND_WITH_FLAG(parsesig, helptext, modulename, req_perms, avail, flags) \
+  {parsesig, helptext, modulename, req_perms, avail, flags | FLAG(MGR)},
+#include <mgr/MgrCommands.h>
+ #undef COMMAND
+#undef COMMAND_WITH_FLAG
+ };
 
   json_print(mon_commands, ARRAY_SIZE(mon_commands));
 }

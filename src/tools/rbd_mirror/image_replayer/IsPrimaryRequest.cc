@@ -21,7 +21,7 @@ namespace mirror {
 namespace image_replayer {
 
 using librbd::util::create_context_callback;
-using librbd::util::create_rados_ack_callback;
+using librbd::util::create_rados_callback;
 
 template <typename I>
 IsPrimaryRequest<I>::IsPrimaryRequest(I *image_ctx, bool *primary,
@@ -41,7 +41,7 @@ void IsPrimaryRequest<I>::send_get_mirror_state() {
   librados::ObjectReadOperation op;
   librbd::cls_client::mirror_image_get_start(&op, m_image_ctx->id);
 
-  librados::AioCompletion *aio_comp = create_rados_ack_callback<
+  librados::AioCompletion *aio_comp = create_rados_callback<
     IsPrimaryRequest<I>, &IsPrimaryRequest<I>::handle_get_mirror_state>(this);
   int r = m_image_ctx->md_ctx.aio_operate(RBD_MIRRORING, aio_comp, &op,
                                           &m_out_bl);

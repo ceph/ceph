@@ -4,7 +4,6 @@
 #ifndef CEPH_CLS_STATELOG_OPS_H
 #define CEPH_CLS_STATELOG_OPS_H
 
-#include "include/types.h"
 #include "cls_statelog_types.h"
 
 struct cls_statelog_add_op {

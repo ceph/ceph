@@ -51,7 +51,7 @@ public:
     }
     cout << "[plugin " << plugin << " (" << GetParam() << ")]" << std::endl;
   }
-  ~CompressorTest() {
+  ~CompressorTest() override {
     g_conf->set_val("compressor_zlib_isal", old_zlib_isal ? "true" : "false");
     g_ceph_context->_conf->apply_changes(NULL);
   }
@@ -322,16 +322,27 @@ INSTANTIATE_TEST_CASE_P(
   Compressor,
   CompressorTest,
   ::testing::Values(
+#ifdef HAVE_LZ4
+    "lz4",
+#endif
+#ifdef __x86_64__
     "zlib/isal",
+#endif
     "zlib/noisal",
     "snappy",
     "zstd"));
+
+#ifdef __x86_64__
 
 TEST(ZlibCompressor, zlib_isal_compatibility)
 {
   g_conf->set_val("compressor_zlib_isal", "true");
   g_ceph_context->_conf->apply_changes(NULL);
   CompressorRef isal = Compressor::create(g_ceph_context, "zlib");
+  if (!isal) {
+    // skip the test if the plugin is not ready
+    return;
+  }
   g_conf->set_val("compressor_zlib_isal", "false");
   g_ceph_context->_conf->apply_changes(NULL);
   CompressorRef zlib = Compressor::create(g_ceph_context, "zlib");
@@ -363,6 +374,7 @@ TEST(ZlibCompressor, zlib_isal_compatibility)
   exp.append(test);
   EXPECT_TRUE(exp.contents_equal(after));
 }
+#endif
 
 TEST(CompressionPlugin, all)
 {
@@ -386,11 +398,17 @@ TEST(CompressionPlugin, all)
   }
 }
 
+#ifdef __x86_64__
+
 TEST(ZlibCompressor, isal_compress_zlib_decompress_random)
 {
   g_conf->set_val("compressor_zlib_isal", "true");
   g_ceph_context->_conf->apply_changes(NULL);
   CompressorRef isal = Compressor::create(g_ceph_context, "zlib");
+  if (!isal) {
+    // skip the test if the plugin is not ready
+    return;
+  }
   g_conf->set_val("compressor_zlib_isal", "false");
   g_ceph_context->_conf->apply_changes(NULL);
   CompressorRef zlib = Compressor::create(g_ceph_context, "zlib");
@@ -423,6 +441,10 @@ TEST(ZlibCompressor, isal_compress_zlib_decompress_walk)
   g_conf->set_val("compressor_zlib_isal", "true");
   g_ceph_context->_conf->apply_changes(NULL);
   CompressorRef isal = Compressor::create(g_ceph_context, "zlib");
+  if (!isal) {
+    // skip the test if the plugin is not ready
+    return;
+  }
   g_conf->set_val("compressor_zlib_isal", "false");
   g_ceph_context->_conf->apply_changes(NULL);
   CompressorRef zlib = Compressor::create(g_ceph_context, "zlib");
@@ -452,3 +474,5 @@ TEST(ZlibCompressor, isal_compress_zlib_decompress_walk)
     EXPECT_TRUE(exp.contents_equal(after));
   }
 }
+
+#endif	// __x86_64__

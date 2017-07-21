@@ -14,7 +14,7 @@
 namespace librbd {
 
 using util::create_context_callback;
-using util::create_rados_safe_callback;
+using util::create_rados_callback;
 
 namespace watcher {
 
@@ -40,7 +40,7 @@ void RewatchRequest::unwatch() {
   CephContext *cct = reinterpret_cast<CephContext *>(m_ioctx.cct());
   ldout(cct, 10) << dendl;
 
-  librados::AioCompletion *aio_comp = create_rados_safe_callback<
+  librados::AioCompletion *aio_comp = create_rados_callback<
                         RewatchRequest, &RewatchRequest::handle_unwatch>(this);
   int r = m_ioctx.aio_unwatch(*m_watch_handle, aio_comp);
   assert(r == 0);
@@ -67,7 +67,7 @@ void RewatchRequest::rewatch() {
   CephContext *cct = reinterpret_cast<CephContext *>(m_ioctx.cct());
   ldout(cct, 10) << dendl;
 
-  librados::AioCompletion *aio_comp = create_rados_safe_callback<
+  librados::AioCompletion *aio_comp = create_rados_callback<
                         RewatchRequest, &RewatchRequest::handle_rewatch>(this);
   int r = m_ioctx.aio_watch(m_oid, aio_comp, &m_rewatch_handle, m_watch_ctx);
   assert(r == 0);

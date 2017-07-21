@@ -1,0 +1,17 @@
+roles:
+- [mon.a, mgr.x, osd.0, osd.1, osd.2, mds.a, client.a]
+tasks:
+- install:
+- ceph:
+    log-whitelist:
+      - overall HEALTH_
+      - (MGR_DOWN)
+- exec:
+    mon.a:
+      - ceph tell mgr.x restful create-key admin
+      - ceph tell mgr.x restful create-self-signed-cert
+- ceph.restart: [mgr.x]
+- workunit:
+    clients:
+      client.a:
+        - rest/test-restful.sh

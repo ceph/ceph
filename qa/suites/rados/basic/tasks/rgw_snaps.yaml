@@ -7,11 +7,8 @@ overrides:
       osd:
         osd_max_omap_entries_per_request: 10
 tasks:
-- install:
-- ceph:
 - rgw:
-    default_idle_timeout: 3600
-    client.0: null
+    client.0:
 - thrash_pool_snaps:
     pools:
     - .rgw.buckets

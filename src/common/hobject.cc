@@ -1,7 +1,6 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
-#include "include/types.h"
 #include "hobject.h"
 #include "common/Formatter.h"
 
@@ -75,7 +74,7 @@ string hobject_t::to_str() const
 
   char snap_with_hash[1000];
   char *t = snap_with_hash;
-  char *end = t + sizeof(snap_with_hash);
+  const char *end = t + sizeof(snap_with_hash);
 
   uint64_t poolid(pool);
   t += snprintf(t, end - t, "%.*llX", 16, (long long unsigned)poolid);
@@ -90,7 +89,7 @@ string hobject_t::to_str() const
   else
     t += snprintf(t, end - t, ".%llx", (long long unsigned)snap);
 
-  out += string(snap_with_hash);
+  out.append(snap_with_hash, t);
 
   out.push_back('.');
   append_escaped(oid.name, &out);

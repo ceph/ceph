@@ -110,10 +110,18 @@ struct ceph_eversion {
  */
 
 /* status bits */
-#define CEPH_OSD_EXISTS  (1<<0)
-#define CEPH_OSD_UP      (1<<1)
-#define CEPH_OSD_AUTOOUT (1<<2)  /* osd was automatically marked out */
-#define CEPH_OSD_NEW     (1<<3)  /* osd is new, never marked in */
+#define CEPH_OSD_EXISTS       (1<<0)
+#define CEPH_OSD_UP           (1<<1)
+#define CEPH_OSD_AUTOOUT      (1<<2)  /* osd was automatically marked out */
+#define CEPH_OSD_NEW          (1<<3)  /* osd is new, never marked in */
+#define CEPH_OSD_FULL         (1<<4)  /* osd is at or above full threshold */
+#define CEPH_OSD_NEARFULL     (1<<5)  /* osd is at or above nearfull threshold */
+#define CEPH_OSD_BACKFILLFULL (1<<6)  /* osd is at or above backfillfull threshold */
+#define CEPH_OSD_DESTROYED    (1<<7)  /* osd has been destroyed */
+#define CEPH_OSD_NOUP         (1<<8)  /* osd can not be marked up */
+#define CEPH_OSD_NODOWN       (1<<9)  /* osd can not be marked down */
+#define CEPH_OSD_NOIN         (1<<10) /* osd can not be marked in */
+#define CEPH_OSD_NOOUT        (1<<11) /* osd can not be marked out */
 
 extern const char *ceph_osd_state_name(int s);
 
@@ -128,25 +136,59 @@ extern const char *ceph_osd_state_name(int s);
 /*
  * osd map flag bits
  */
-#define CEPH_OSDMAP_NEARFULL (1<<0)  /* sync writes (near ENOSPC) */
-#define CEPH_OSDMAP_FULL     (1<<1)  /* no data writes (ENOSPC) */
-#define CEPH_OSDMAP_PAUSERD  (1<<2)  /* pause all reads */
-#define CEPH_OSDMAP_PAUSEWR  (1<<3)  /* pause all writes */
-#define CEPH_OSDMAP_PAUSEREC (1<<4)  /* pause recovery */
-#define CEPH_OSDMAP_NOUP     (1<<5)  /* block osd boot */
-#define CEPH_OSDMAP_NODOWN   (1<<6)  /* block osd mark-down/failure */
-#define CEPH_OSDMAP_NOOUT    (1<<7)  /* block osd auto mark-out */
-#define CEPH_OSDMAP_NOIN     (1<<8)  /* block osd auto mark-in */
-#define CEPH_OSDMAP_NOBACKFILL (1<<9) /* block osd backfill */
-#define CEPH_OSDMAP_NORECOVER (1<<10) /* block osd recovery and backfill */
-#define CEPH_OSDMAP_NOSCRUB  (1<<11) /* block periodic scrub */
-#define CEPH_OSDMAP_NODEEP_SCRUB (1<<12) /* block periodic deep-scrub */
-#define CEPH_OSDMAP_NOTIERAGENT (1<<13) /* disable tiering agent */
-#define CEPH_OSDMAP_NOREBALANCE (1<<14) /* block osd backfill unless pg is degraded */
-#define CEPH_OSDMAP_SORTBITWISE (1<<15) /* use bitwise hobject_t sort */
-#define CEPH_OSDMAP_REQUIRE_JEWEL (1<<16) /* require jewel for booting osds */
-#define CEPH_OSDMAP_REQUIRE_KRAKEN (1<<17) /* require kraken for booting osds */
+#define CEPH_OSDMAP_NEARFULL         (1<<0)  /* sync writes (near ENOSPC) */
+#define CEPH_OSDMAP_FULL             (1<<1)  /* no data writes (ENOSPC) */
+#define CEPH_OSDMAP_PAUSERD          (1<<2)  /* pause all reads */
+#define CEPH_OSDMAP_PAUSEWR          (1<<3)  /* pause all writes */
+#define CEPH_OSDMAP_PAUSEREC         (1<<4)  /* pause recovery */
+#define CEPH_OSDMAP_NOUP             (1<<5)  /* block osd boot */
+#define CEPH_OSDMAP_NODOWN           (1<<6)  /* block osd mark-down/failure */
+#define CEPH_OSDMAP_NOOUT            (1<<7)  /* block osd auto mark-out */
+#define CEPH_OSDMAP_NOIN             (1<<8)  /* block osd auto mark-in */
+#define CEPH_OSDMAP_NOBACKFILL       (1<<9)  /* block osd backfill */
+#define CEPH_OSDMAP_NORECOVER        (1<<10) /* block osd recovery and backfill */
+#define CEPH_OSDMAP_NOSCRUB          (1<<11) /* block periodic scrub */
+#define CEPH_OSDMAP_NODEEP_SCRUB     (1<<12) /* block periodic deep-scrub */
+#define CEPH_OSDMAP_NOTIERAGENT      (1<<13) /* disable tiering agent */
+#define CEPH_OSDMAP_NOREBALANCE      (1<<14) /* block osd backfill unless pg is degraded */
+#define CEPH_OSDMAP_SORTBITWISE      (1<<15) /* use bitwise hobject_t sort */
+#define CEPH_OSDMAP_REQUIRE_JEWEL    (1<<16) /* require jewel for booting osds */
+#define CEPH_OSDMAP_REQUIRE_KRAKEN   (1<<17) /* require kraken for booting osds */
 #define CEPH_OSDMAP_REQUIRE_LUMINOUS (1<<18) /* require l for booting osds */
+#define CEPH_OSDMAP_RECOVERY_DELETES (1<<19) /* deletes performed during recovery instead of peering */
+
+/* these are hidden in 'ceph status' view */
+#define CEPH_OSDMAP_SEMIHIDDEN_FLAGS (CEPH_OSDMAP_REQUIRE_JEWEL|	\
+				      CEPH_OSDMAP_REQUIRE_KRAKEN |	\
+				      CEPH_OSDMAP_REQUIRE_LUMINOUS |	\
+				      CEPH_OSDMAP_RECOVERY_DELETES |	\
+				      CEPH_OSDMAP_SORTBITWISE)
+#define CEPH_OSDMAP_LEGACY_REQUIRE_FLAGS (CEPH_OSDMAP_REQUIRE_JEWEL |	\
+					  CEPH_OSDMAP_REQUIRE_KRAKEN |	\
+					  CEPH_OSDMAP_REQUIRE_LUMINOUS)
+
+/*
+ * major ceph release numbers
+ */
+#define CEPH_RELEASE_ARGONAUT    1
+#define CEPH_RELEASE_BOBTAIL     2
+#define CEPH_RELEASE_CUTTLEFISH  3
+#define CEPH_RELEASE_DUMPLING    4
+#define CEPH_RELEASE_EMPEROR     5
+#define CEPH_RELEASE_FIREFLY     6
+#define CEPH_RELEASE_GIANT       7
+#define CEPH_RELEASE_HAMMER      8
+#define CEPH_RELEASE_INFERNALIS  9
+#define CEPH_RELEASE_JEWEL      10
+#define CEPH_RELEASE_KRAKEN     11
+#define CEPH_RELEASE_LUMINOUS   12
+#define CEPH_RELEASE_MIMIC      13
+#define CEPH_RELEASE_MAX        14  /* highest + 1 */
+
+extern const char *ceph_release_name(int r);
+extern int ceph_release_from_name(const char *s);
+extern uint64_t ceph_release_features(int r);
+extern int ceph_release_from_features(uint64_t features);
 
 /*
  * The error code to return when an OSD can't handle a write
@@ -187,6 +229,7 @@ extern const char *ceph_osd_state_name(int s);
 	f(READ,		__CEPH_OSD_OP(RD, DATA, 1),	"read")		    \
 	f(STAT,		__CEPH_OSD_OP(RD, DATA, 2),	"stat")		    \
 	f(MAPEXT,	__CEPH_OSD_OP(RD, DATA, 3),	"mapext")	    \
+	f(CHECKSUM,	__CEPH_OSD_OP(RD, DATA, 31),	"checksum")	    \
 									    \
 	/* fancy read */						    \
 	f(MASKTRUNC,	__CEPH_OSD_OP(RD, DATA, 4),	"masktrunc")	    \
@@ -240,7 +283,7 @@ extern const char *ceph_osd_state_name(int s);
 									    \
 	/* tiering */							    \
 	f(COPY_FROM,	__CEPH_OSD_OP(WR, DATA, 26),	"copy-from")	    \
-	f(COPY_GET_CLASSIC, __CEPH_OSD_OP(RD, DATA, 27), "copy-get-classic") \
+	/* was copy-get-classic */					\
 	f(UNDIRTY,	__CEPH_OSD_OP(WR, DATA, 28),	"undirty")	    \
 	f(ISDIRTY,	__CEPH_OSD_OP(RD, DATA, 29),	"isdirty")	    \
 	f(COPY_GET,	__CEPH_OSD_OP(RD, DATA, 30),	"copy-get")	    \
@@ -260,6 +303,10 @@ extern const char *ceph_osd_state_name(int s);
 									    \
 	/* ESX/SCSI */							    \
 	f(WRITESAME,	__CEPH_OSD_OP(WR, DATA, 38),	"write-same")	    \
+	f(CMPEXT,	__CEPH_OSD_OP(RD, DATA, 32),	"cmpext")	    \
+									    \
+	/* Extensible */						    \
+	f(SET_REDIRECT,	__CEPH_OSD_OP(WR, DATA, 39),	"set-redirect")	    \
 									    \
 	/** attrs **/							    \
 	/* read */							    \
@@ -351,6 +398,7 @@ static inline int ceph_osd_op_uses_extent(int op)
 	case CEPH_OSD_OP_ZERO:
 	case CEPH_OSD_OP_APPEND:
 	case CEPH_OSD_OP_TRIMTRUNC:
+	case CEPH_OSD_OP_CMPEXT:
 		return true;
 	default:
 		return false;
@@ -402,6 +450,7 @@ enum {
 	CEPH_OSD_FLAG_KNOWN_REDIR = 0x400000,  /* redirect bit is authoritative */
 	CEPH_OSD_FLAG_FULL_TRY =    0x800000,  /* try op despite full flag */
 	CEPH_OSD_FLAG_FULL_FORCE = 0x1000000,  /* force op despite full flag */
+	CEPH_OSD_FLAG_IGNORE_REDIRECT = 0x2000000,  /* ignore redirection */
 };
 
 enum {
@@ -453,6 +502,12 @@ enum {
 	CEPH_OSD_WATCH_OP_WATCH = 3,
 	CEPH_OSD_WATCH_OP_RECONNECT = 5,
 	CEPH_OSD_WATCH_OP_PING = 7,
+};
+
+enum {
+	CEPH_OSD_CHECKSUM_OP_TYPE_XXHASH32 = 0,
+	CEPH_OSD_CHECKSUM_OP_TYPE_XXHASH64 = 1,
+	CEPH_OSD_CHECKSUM_OP_TYPE_CRC32C   = 2
 };
 
 const char *ceph_osd_watch_op_name(int o);
@@ -559,6 +614,12 @@ struct ceph_osd_op {
 			__le64 length;
 			__le64 data_length;
 		} __attribute__ ((packed)) writesame;
+		struct {
+			__le64 offset;
+			__le64 length;
+			__le32 chunk_size;
+			__u8 type;              /* CEPH_OSD_CHECKSUM_OP_TYPE_* */
+		} __attribute__ ((packed)) checksum;
 	};
 	__le32 payload_len;
 } __attribute__ ((packed));

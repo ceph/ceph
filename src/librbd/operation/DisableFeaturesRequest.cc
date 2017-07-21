@@ -25,14 +25,16 @@ namespace operation {
 
 using util::create_async_context_callback;
 using util::create_context_callback;
-using util::create_rados_ack_callback;
+using util::create_rados_callback;
 
 template <typename I>
 DisableFeaturesRequest<I>::DisableFeaturesRequest(I &image_ctx,
                                                   Context *on_finish,
                                                   uint64_t journal_op_tid,
-                                                  uint64_t features)
-  : Request<I>(image_ctx, on_finish, journal_op_tid), m_features(features) {
+                                                  uint64_t features,
+                                                  bool force)
+  : Request<I>(image_ctx, on_finish, journal_op_tid), m_features(features),
+    m_force(force) {
 }
 
 template <typename I>
@@ -226,7 +228,7 @@ void DisableFeaturesRequest<I>::send_get_mirror_mode() {
 
   using klass = DisableFeaturesRequest<I>;
   librados::AioCompletion *comp =
-    create_rados_ack_callback<klass, &klass::handle_get_mirror_mode>(this);
+    create_rados_callback<klass, &klass::handle_get_mirror_mode>(this);
   m_out_bl.clear();
   int r = image_ctx.md_ctx.aio_operate(RBD_MIRRORING, comp, &op, &m_out_bl);
   assert(r == 0);
@@ -274,7 +276,7 @@ void DisableFeaturesRequest<I>::send_get_mirror_image() {
 
   using klass = DisableFeaturesRequest<I>;
   librados::AioCompletion *comp =
-    create_rados_ack_callback<klass, &klass::handle_get_mirror_image>(this);
+    create_rados_callback<klass, &klass::handle_get_mirror_image>(this);
   m_out_bl.clear();
   int r = image_ctx.md_ctx.aio_operate(RBD_MIRRORING, comp, &op, &m_out_bl);
   assert(r == 0);
@@ -300,7 +302,7 @@ Context *DisableFeaturesRequest<I>::handle_get_mirror_image(int *result) {
     return handle_finish(*result);
   }
 
-  if (mirror_image.state == cls::rbd::MIRROR_IMAGE_STATE_ENABLED) {
+  if ((mirror_image.state == cls::rbd::MIRROR_IMAGE_STATE_ENABLED) && !m_force) {
     lderr(cct) << "cannot disable journaling: image mirroring "
                << "enabled and mirror pool mode set to image"
                << dendl;
@@ -324,7 +326,7 @@ void DisableFeaturesRequest<I>::send_disable_mirror_image() {
     &DisableFeaturesRequest<I>::handle_disable_mirror_image>(this);
 
   mirror::DisableRequest<I> *req =
-    mirror::DisableRequest<I>::create(&image_ctx, false, true, ctx);
+    mirror::DisableRequest<I>::create(&image_ctx, m_force, true, ctx);
   req->send();
 }
 
@@ -352,14 +354,14 @@ void DisableFeaturesRequest<I>::send_close_journal() {
   {
     RWLock::WLocker locker(image_ctx.owner_lock);
     if (image_ctx.journal != nullptr) {
-
       ldout(cct, 20) << this << " " << __func__ << dendl;
 
+      std::swap(m_journal, image_ctx.journal);
       Context *ctx = create_context_callback<
 	DisableFeaturesRequest<I>,
 	&DisableFeaturesRequest<I>::handle_close_journal>(this);
 
-      image_ctx.journal->close(ctx);
+      m_journal->close(ctx);
       return;
     }
   }
@@ -376,8 +378,11 @@ Context *DisableFeaturesRequest<I>::handle_close_journal(int *result) {
   if (*result < 0) {
     lderr(cct) << "failed to close image journal: " << cpp_strerror(*result)
                << dendl;
-    return handle_finish(*result);
   }
+
+  assert(m_journal != nullptr);
+  delete m_journal;
+  m_journal = nullptr;
 
   send_remove_journal();
   return nullptr;
@@ -494,7 +499,7 @@ void DisableFeaturesRequest<I>::send_set_features() {
 
   using klass = DisableFeaturesRequest<I>;
   librados::AioCompletion *comp =
-    create_rados_ack_callback<klass, &klass::handle_set_features>(this);
+    create_rados_callback<klass, &klass::handle_set_features>(this);
   int r = image_ctx.md_ctx.aio_operate(image_ctx.header_oid, comp, &op);
   assert(r == 0);
   comp->release();

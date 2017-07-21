@@ -24,6 +24,12 @@
 
 #include "mgr/MgrStandby.h"
 
+static void usage()
+{
+  cout << "usage: ceph-mgr -i <ID> [flags]\n"
+       << std::endl;
+  generic_server_usage();
+}
 
 /**
  * A short main() which just instantiates a MgrStandby and
@@ -41,18 +47,16 @@ int main(int argc, const char **argv)
   // For consumption by KeyRing::from_ceph_context in MonClient
   g_conf->set_val("keyring", "$mgr_data/keyring", false);
 
-  MgrStandby mgr;
-
   // Handle --help
   if ((args.size() == 1 && (std::string(args[0]) == "--help" || std::string(args[0]) == "-h"))) {
-    mgr.usage();
-    return 0;
+    usage();
   }
 
   global_init_daemonize(g_ceph_context);
   global_init_chdir(g_ceph_context);
   common_init_finish(g_ceph_context);
 
+  MgrStandby mgr(argc, argv);
   int rc = mgr.init();
   if (rc != 0) {
       std::cerr << "Error in initialization: " << cpp_strerror(rc) << std::endl;

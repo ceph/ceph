@@ -37,7 +37,7 @@ struct MMonSubscribe : public Message {
   
   MMonSubscribe() : Message(CEPH_MSG_MON_SUBSCRIBE, HEAD_VERSION) { }
 private:
-  ~MMonSubscribe() {}
+  ~MMonSubscribe() override {}
 
 public:  
   void sub_want(const char *w, version_t start, unsigned flags) {
@@ -45,12 +45,12 @@ public:
     what[w].flags = flags;
   }
 
-  const char *get_type_name() const { return "mon_subscribe"; }
-  void print(ostream& o) const {
+  const char *get_type_name() const override { return "mon_subscribe"; }
+  void print(ostream& o) const override {
     o << "mon_subscribe(" << what << ")";
   }
 
-  void decode_payload() {
+  void decode_payload() override {
     bufferlist::iterator p = payload.begin();
     if (header.version < 2) {
       map<string, ceph_mon_subscribe_item_old> oldwhat;
@@ -71,7 +71,7 @@ public:
       ::decode(what, p);
     }
   }
-  void encode_payload(uint64_t features) {
+  void encode_payload(uint64_t features) override {
     if (features & CEPH_FEATURE_SUBSCRIBE2) {
       ::encode(what, payload);
       header.version = HEAD_VERSION;

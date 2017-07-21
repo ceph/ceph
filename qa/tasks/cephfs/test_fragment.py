@@ -38,9 +38,7 @@ class TestFragmentation(CephFSTestCase):
         for k, v in kwargs.items():
             self.ceph_cluster.set_ceph_conf("mds", k, v.__str__())
 
-        self.fs.mon_manager.raw_cluster_cmd("fs", "set", self.fs.name,
-                                            "allow_dirfrags", "true",
-                                            "--yes-i-really-mean-it")
+        self.fs.set_allow_dirfrags(True)
 
         self.mds_cluster.mds_fail_restart()
         self.fs.wait_for_daemons()
@@ -101,7 +99,7 @@ class TestFragmentation(CephFSTestCase):
             mds_bal_split_size=split_size,
             mds_bal_merge_size=merge_size,
             mds_bal_split_bits=3,
-            mds_bal_fragment_size_max=(split_size * 1.5 + 2)
+            mds_bal_fragment_size_max=int(split_size * 1.5 + 2)
         )
 
         # We test this only at a single split level.  If a client was sending

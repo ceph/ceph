@@ -317,14 +317,14 @@ class LocalDaemon(object):
         Return PID as an integer or None if not found
         """
         ps_txt = self.controller.run(
-            args=["ps", "-xwwu"+str(os.getuid())]
+            args=["ps", "ww", "-u"+str(os.getuid())]
         ).stdout.getvalue().strip()
         lines = ps_txt.split("\n")[1:]
 
         for line in lines:
             if line.find("ceph-{0} -i {1}".format(self.daemon_type, self.daemon_id)) != -1:
                 log.info("Found ps line for daemon: {0}".format(line))
-                return int(line.split()[1])
+                return int(line.split()[0])
         log.info("No match for {0} {1}: {2}".format(
             self.daemon_type, self.daemon_id, ps_txt
             ))
@@ -603,6 +603,10 @@ class LocalCephCluster(CephCluster):
         self.mon_manager = LocalCephManager()
         self._conf = defaultdict(dict)
 
+    @property
+    def admin_remote(self):
+        return LocalRemote()
+
     def get_config(self, key, service_type=None):
         if service_type is None:
             service_type = 'mon'
@@ -668,9 +672,6 @@ class LocalMDSCluster(LocalCephCluster, MDSCluster):
         super(LocalMDSCluster, self).__init__(ctx)
 
         self.mds_ids = ctx.daemons.daemons['mds'].keys()
-        if not self.mds_ids:
-            raise RuntimeError("No MDSs found in ceph.conf!")
-
         self.mds_daemons = dict([(id_, LocalDaemon("mds", id_)) for id_ in self.mds_ids])
 
     def clear_firewall(self):
@@ -686,17 +687,10 @@ class LocalMgrCluster(LocalCephCluster, MgrCluster):
         super(LocalMgrCluster, self).__init__(ctx)
 
         self.mgr_ids = ctx.daemons.daemons['mgr'].keys()
-        if not self.mgr_ids:
-            raise RuntimeError("No manager daemonss found in ceph.conf!")
-
         self.mgr_daemons = dict([(id_, LocalDaemon("mgr", id_)) for id_ in self.mgr_ids])
 
 
 class LocalFilesystem(Filesystem, LocalMDSCluster):
-    @property
-    def admin_remote(self):
-        return LocalRemote()
-
     def __init__(self, ctx, fscid=None, create=None):
         # Deliberately skip calling parent constructor
         self._ctx = ctx
@@ -811,14 +805,17 @@ def scan_tests(modules):
 
     max_required_mds = 0
     max_required_clients = 0
+    max_required_mgr = 0
 
     for suite, case in enumerate_methods(overall_suite):
         max_required_mds = max(max_required_mds,
                                getattr(case, "MDSS_REQUIRED", 0))
         max_required_clients = max(max_required_clients,
                                getattr(case, "CLIENTS_REQUIRED", 0))
+        max_required_mgr = max(max_required_mgr,
+                               getattr(case, "MGRS_REQUIRED", 0))
 
-    return max_required_mds, max_required_clients
+    return max_required_mds, max_required_clients, max_required_mgr
 
 
 class LocalCluster(object):
@@ -880,7 +877,7 @@ def exec_test():
         log.error("Some ceph binaries missing, please build them: {0}".format(" ".join(missing_binaries)))
         sys.exit(-1)
 
-    max_required_mds, max_required_clients = scan_tests(modules)
+    max_required_mds, max_required_clients, max_required_mgr = scan_tests(modules)
 
     remote = LocalRemote()
 
@@ -906,7 +903,7 @@ def exec_test():
         vstart_env["FS"] = "0"
         vstart_env["MDS"] = max_required_mds.__str__()
         vstart_env["OSD"] = "1"
-        vstart_env["MGR"] = "1"
+        vstart_env["MGR"] = max(max_required_mgr, 1).__str__()
 
         remote.run([os.path.join(SRC_PREFIX, "vstart.sh"), "-n", "-d", "--nolockdep"],
                    env=vstart_env)

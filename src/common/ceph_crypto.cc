@@ -12,22 +12,15 @@
  *
  */
 
-#include "include/int_types.h"
 #include "common/config.h"
-#include "common/ceph_context.h"
 #include "ceph_crypto.h"
-#include "auth/Crypto.h"
-
-#include <pthread.h>
-#include <stdlib.h>
-
 
 #ifdef USE_CRYPTOPP
 void ceph::crypto::init(CephContext *cct)
 {
 }
 
-void ceph::crypto::shutdown()
+void ceph::crypto::shutdown(bool)
 {
 }
 
@@ -44,6 +37,7 @@ ceph::crypto::HMACSHA256::~HMACSHA256()
 
 // for SECMOD_RestartModules()
 #include <secmod.h>
+#include <nspr.h>
 
 static pthread_mutex_t crypto_init_mutex = PTHREAD_MUTEX_INITIALIZER;
 static uint32_t crypto_refs = 0;
@@ -66,7 +60,7 @@ void ceph::crypto::init(CephContext *cct)
     memset(&init_params, 0, sizeof(init_params));
     init_params.length = sizeof(init_params);
 
-    uint32_t flags = NSS_INIT_READONLY;
+    uint32_t flags = (NSS_INIT_READONLY | NSS_INIT_PK11RELOAD);
     if (cct->_conf->nss_db_path.empty()) {
       flags |= (NSS_INIT_NOCERTDB | NSS_INIT_NOMODDB);
     }
@@ -77,12 +71,15 @@ void ceph::crypto::init(CephContext *cct)
   assert(crypto_context != NULL);
 }
 
-void ceph::crypto::shutdown()
+void ceph::crypto::shutdown(bool shared)
 {
   pthread_mutex_lock(&crypto_init_mutex);
   assert(crypto_refs > 0);
   if (--crypto_refs == 0) {
     NSS_ShutdownContext(crypto_context);
+    if (!shared) {
+      PR_Cleanup();
+    }
     crypto_context = NULL;
     crypto_init_pid = 0;
   }

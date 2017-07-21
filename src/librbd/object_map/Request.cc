@@ -48,7 +48,9 @@ bool Request::should_complete(int r) {
 }
 
 bool Request::invalidate() {
-  if (m_image_ctx.test_flags(RBD_FLAG_OBJECT_MAP_INVALID)) {
+  bool flags_set;
+  int r = m_image_ctx.test_flags(RBD_FLAG_OBJECT_MAP_INVALID, &flags_set);
+  if (r == 0 && flags_set) {
     return true;
   }
 

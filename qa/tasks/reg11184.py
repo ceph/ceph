@@ -40,9 +40,8 @@ def task(ctx, config):
 
     while len(manager.get_osd_status()['up']) < 3:
         time.sleep(10)
-    manager.raw_cluster_cmd('tell', 'osd.0', 'flush_pg_stats')
-    manager.raw_cluster_cmd('tell', 'osd.1', 'flush_pg_stats')
-    manager.raw_cluster_cmd('tell', 'osd.2', 'flush_pg_stats')
+    osds = [0, 1, 2]
+    manager.flush_pg_stats(osds)
     manager.raw_cluster_cmd('osd', 'set', 'noout')
     manager.raw_cluster_cmd('osd', 'set', 'noin')
     manager.raw_cluster_cmd('osd', 'set', 'nodown')
@@ -56,8 +55,13 @@ def task(ctx, config):
     # create 1 pg pool
     log.info('creating foo')
     manager.raw_cluster_cmd('osd', 'pool', 'create', 'foo', '1')
+    manager.raw_cluster_cmd(
+        'osd', 'pool', 'application', 'enable',
+        'foo', 'rados', run.Raw('||'), 'true')
 
-    osds = [0, 1, 2]
+    # Remove extra pool to simlify log output
+    manager.raw_cluster_cmd('osd', 'pool', 'delete', 'rbd', 'rbd', '--yes-i-really-really-mean-it')
+
     for i in osds:
         manager.set_config(i, osd_min_pg_log_entries=10)
         manager.set_config(i, osd_max_pg_log_entries=10)
@@ -155,6 +159,8 @@ def task(ctx, config):
     manager.raw_cluster_cmd('osd', 'pool', 'set', 'foo', 'pg_num', '2')
     time.sleep(5)
 
+    manager.raw_cluster_cmd('pg','dump')
+
     # Export a pg
     (exp_remote,) = ctx.\
         cluster.only('osd.{o}'.format(o=divergent)).remotes.iterkeys()
@@ -167,27 +173,34 @@ def task(ctx, config):
               format(fpath=FSPATH, jpath=JPATH))
     pid = os.getpid()
     expfile = os.path.join(testdir, "exp.{pid}.out".format(pid=pid))
-    cmd = ((prefix + "--op export --pgid 1.0 --file {file}").
+    cmd = ((prefix + "--op export --pgid 2.0 --file {file}").
            format(id=divergent, file=expfile))
     proc = exp_remote.run(args=cmd, wait=True,
                           check_status=False, stdout=StringIO())
     assert proc.exitstatus == 0
 
     # Remove the same pg that was exported
-    cmd = ((prefix + "--op remove --pgid 1.0").
-           format(id=divergent, file=expfile))
+    cmd = ((prefix + "--op remove --pgid 2.0").
+           format(id=divergent))
     proc = exp_remote.run(args=cmd, wait=True,
                           check_status=False, stdout=StringIO())
     assert proc.exitstatus == 0
 
     # Kill one of non-divergent OSDs
-    log.info('killing osd.%d' % non_divergent[1])
-    manager.kill_osd(non_divergent[1])
-    manager.mark_down_osd(non_divergent[1])
-    # manager.mark_out_osd(non_divergent[1])
+    log.info('killing osd.%d' % non_divergent[0])
+    manager.kill_osd(non_divergent[0])
+    manager.mark_down_osd(non_divergent[0])
+    # manager.mark_out_osd(non_divergent[0])
+
+    # An empty collection for pg 2.0 needs to be cleaned up
+    cmd = ((prefix + "--op remove --pgid 2.0").
+           format(id=non_divergent[0]))
+    proc = exp_remote.run(args=cmd, wait=True,
+                          check_status=False, stdout=StringIO())
+    assert proc.exitstatus == 0
 
     cmd = ((prefix + "--op import --file {file}").
-           format(id=non_divergent[1], file=expfile))
+           format(id=non_divergent[0], file=expfile))
     proc = exp_remote.run(args=cmd, wait=True,
                           check_status=False, stdout=StringIO())
     assert proc.exitstatus == 0
@@ -196,8 +209,8 @@ def task(ctx, config):
     log.info("revive divergent %d", divergent)
     manager.revive_osd(divergent)
     manager.mark_in_osd(divergent)
-    log.info("revive %d", non_divergent[1])
-    manager.revive_osd(non_divergent[1])
+    log.info("revive %d", non_divergent[0])
+    manager.revive_osd(non_divergent[0])
 
     while len(manager.get_osd_status()['up']) < 3:
         time.sleep(10)

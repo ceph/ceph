@@ -159,6 +159,14 @@ void SimpleMessenger::set_addr_unknowns(const entity_addr_t &addr)
   }
 }
 
+void SimpleMessenger::set_addr(const entity_addr_t &addr)
+{
+  entity_addr_t t = addr;
+  t.set_nonce(nonce);
+  set_myaddr(t);
+  init_local_connection();
+}
+
 int SimpleMessenger::get_proto_version(int peer_type, bool connect)
 {
   int my_type = my_inst.name.type();
@@ -309,6 +317,8 @@ int SimpleMessenger::rebind(const set<int>& avoid_ports)
 
 int SimpleMessenger::client_bind(const entity_addr_t &bind_addr)
 {
+  if (!cct->_conf->ms_bind_before_connect)
+    return 0;
   Mutex::Locker l(lock);
   if (did_bind) {
     assert(my_inst.addr == bind_addr);
@@ -443,6 +453,7 @@ void SimpleMessenger::submit_message(Message *m, PipeConnection *con,
 				     const entity_addr_t& dest_addr, int dest_type,
 				     bool already_locked)
 {
+  m->trace.event("simple submitting message");
   if (cct->_conf->ms_dump_on_send) {
     m->encode(-1, true);
     ldout(cct, 0) << "submit_message " << *m << "\n";

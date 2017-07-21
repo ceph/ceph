@@ -13,7 +13,6 @@
 #include <vector>
 #include <map>
 #include <string>
-#include <cassert>
 #include <sstream>
 #include <stdexcept>
 #include <boost/config.hpp> 

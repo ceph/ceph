@@ -1,8 +1,9 @@
-os_type: centos   # xenial valgrind buggy, see http://tracker.ceph.com/issues/18126
+# see http://tracker.ceph.com/issues/20360 and http://tracker.ceph.com/issues/18126
+os_type: centos
+
 tasks:
 - install:
     flavor: notcmalloc
-    debuginfo: true
 - ceph:
 - rgw:
     client.0:

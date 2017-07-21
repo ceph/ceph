@@ -1,5 +1,6 @@
 overrides:
   ceph:
+    wait-for-scrub: false
     conf:
       client:
         debug rgw: 20

@@ -2,11 +2,11 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "cls/journal/cls_journal_client.h"
+#include "include/rados/librados.hpp"
 #include "include/buffer.h"
 #include "include/Context.h"
 #include "common/Cond.h"
 #include <errno.h>
-#include <map>
 
 namespace cls {
 namespace journal {

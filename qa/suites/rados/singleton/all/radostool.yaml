@@ -1,5 +1,6 @@
 roles:
 - - mon.a
+  - mgr.x
   - osd.0
   - osd.1
   - osd.2
@@ -16,6 +17,8 @@ tasks:
     - had wrong client addr
     - had wrong cluster addr
     - reached quota
+    - overall HEALTH_
+    - (POOL_FULL)
 - workunit:
     clients:
       all:

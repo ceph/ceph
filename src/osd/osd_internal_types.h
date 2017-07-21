@@ -14,6 +14,17 @@
   * replicas ack.
   */
 
+struct SnapSetContext {
+  hobject_t oid;
+  SnapSet snapset;
+  int ref;
+  bool registered : 1;
+  bool exists : 1;
+
+  explicit SnapSetContext(const hobject_t& o) :
+    oid(o), ref(0), registered(false), exists(true) { }
+};
+
 struct ObjectContext;
 
 struct ObjectState {
@@ -254,35 +265,6 @@ public:
     rwstate.put_read(ls);
     rwstate.recovery_read_marker = false;
   }
-  void put_read(list<OpRequestRef> *to_wake) {
-    rwstate.put_read(to_wake);
-  }
-  void put_excl(list<OpRequestRef> *to_wake,
-		 bool *requeue_recovery,
-		 bool *requeue_snaptrimmer) {
-    rwstate.put_excl(to_wake);
-    if (rwstate.empty() && rwstate.recovery_read_marker) {
-      rwstate.recovery_read_marker = false;
-      *requeue_recovery = true;
-    }
-    if (rwstate.empty() && rwstate.snaptrimmer_write_marker) {
-      rwstate.snaptrimmer_write_marker = false;
-      *requeue_snaptrimmer = true;
-    }
-  }
-  void put_write(list<OpRequestRef> *to_wake,
-		 bool *requeue_recovery,
-		 bool *requeue_snaptrimmer) {
-    rwstate.put_write(to_wake);
-    if (rwstate.empty() && rwstate.recovery_read_marker) {
-      rwstate.recovery_read_marker = false;
-      *requeue_recovery = true;
-    }
-    if (rwstate.empty() && rwstate.snaptrimmer_write_marker) {
-      rwstate.snaptrimmer_write_marker = false;
-      *requeue_snaptrimmer = true;
-    }
-  }
   void put_lock_type(
     ObjectContext::RWState::State type,
     list<OpRequestRef> *to_wake,
@@ -290,13 +272,24 @@ public:
     bool *requeue_snaptrimmer) {
     switch (type) {
     case ObjectContext::RWState::RWWRITE:
-      return put_write(to_wake, requeue_recovery, requeue_snaptrimmer);
+      rwstate.put_write(to_wake);
+      break;
     case ObjectContext::RWState::RWREAD:
-      return put_read(to_wake);
+      rwstate.put_read(to_wake);
+      break;
     case ObjectContext::RWState::RWEXCL:
-      return put_excl(to_wake, requeue_recovery, requeue_snaptrimmer);
+      rwstate.put_excl(to_wake);
+      break;
     default:
       assert(0 == "invalid lock type");
+    }
+    if (rwstate.empty() && rwstate.recovery_read_marker) {
+      rwstate.recovery_read_marker = false;
+      *requeue_recovery = true;
+    }
+    if (rwstate.empty() && rwstate.snaptrimmer_write_marker) {
+      rwstate.snaptrimmer_write_marker = false;
+      *requeue_snaptrimmer = true;
     }
   }
   bool is_request_pending() {

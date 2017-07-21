@@ -15,10 +15,9 @@
 #ifndef CEPH_LOGENTRY_H
 #define CEPH_LOGENTRY_H
 
-#include "include/types.h"
 #include "include/utime.h"
-#include "include/encoding.h"
 #include "msg/msg_types.h" // for entity_inst_t
+#include "common/entity_name.h"
 
 namespace ceph {
   class Formatter;
@@ -55,26 +54,51 @@ string clog_type_to_string(clog_type t);
 
 
 struct LogEntryKey {
+private:
+  uint64_t _hash = 0;
+
+  void _calc_hash() {
+    hash<entity_inst_t> h;
+    _hash = seq + h(who);
+  }
+
   entity_inst_t who;
   utime_t stamp;
-  uint64_t seq;
+  uint64_t seq = 0;
 
-  LogEntryKey() : seq(0) {}
-  LogEntryKey(const entity_inst_t& w, utime_t t, uint64_t s) : who(w), stamp(t), seq(s) {}
+public:
+  LogEntryKey() {}
+  LogEntryKey(const entity_inst_t& w, utime_t t, uint64_t s)
+    : who(w), stamp(t), seq(s) {
+    _calc_hash();
+  }
+
+  uint64_t get_hash() const {
+    return _hash;
+  }
 
   void encode(bufferlist& bl, uint64_t features) const;
   void decode(bufferlist::iterator& bl);
   void dump(Formatter *f) const;
   static void generate_test_instances(list<LogEntryKey*>& o);
+
+  friend bool operator==(const LogEntryKey& l, const LogEntryKey& r) {
+    return l.who == r.who && l.stamp == r.stamp && l.seq == r.seq;
+  }
 };
 WRITE_CLASS_ENCODER_FEATURES(LogEntryKey)
 
-static inline bool operator==(const LogEntryKey& l, const LogEntryKey& r) {
-  return l.who == r.who && l.stamp == r.stamp && l.seq == r.seq;
-}
+namespace std {
+  template<> struct hash<LogEntryKey> {
+    size_t operator()(const LogEntryKey& r) const {
+      return r.get_hash();
+    }
+  };
+} // namespace std
 
 struct LogEntry {
   entity_inst_t who;
+  EntityName name;
   utime_t stamp;
   uint64_t seq;
   clog_type prio;
@@ -91,27 +115,29 @@ struct LogEntry {
   void decode(bufferlist::iterator& bl);
   void dump(Formatter *f) const;
   static void generate_test_instances(list<LogEntry*>& o);
+  static clog_type str_to_level(std::string const &str);
 };
 WRITE_CLASS_ENCODER_FEATURES(LogEntry)
 
 struct LogSummary {
   version_t version;
   list<LogEntry> tail;
+  ceph::unordered_set<LogEntryKey> keys;
 
   LogSummary() : version(0) {}
 
   void add(const LogEntry& e) {
     tail.push_back(e);
-    while (tail.size() > 50)
+    keys.insert(tail.back().key());
+  }
+  void prune(size_t max) {
+    while (tail.size() > max) {
+      keys.erase(tail.front().key());
       tail.pop_front();
+    }
   }
   bool contains(const LogEntryKey& k) const {
-    for (list<LogEntry>::const_iterator p = tail.begin();
-	 p != tail.end();
-	 ++p)
-      if (p->key() == k)
-	return true;
-    return false;
+    return keys.count(k);
   }
 
   void encode(bufferlist& bl, uint64_t features) const;
@@ -121,7 +147,7 @@ struct LogSummary {
 };
 WRITE_CLASS_ENCODER_FEATURES(LogSummary)
 
-inline ostream& operator<<(ostream& out, clog_type t)
+inline ostream& operator<<(ostream& out, const clog_type t)
 {
   switch (t) {
   case CLOG_DEBUG:
@@ -141,7 +167,8 @@ inline ostream& operator<<(ostream& out, clog_type t)
 
 inline ostream& operator<<(ostream& out, const LogEntry& e)
 {
-  return out << e.stamp << " " << e.who << " " << e.seq << " : "
+  return out << e.stamp << " " << e.name << " " << e.who
+	     << " " << e.seq << " : "
              << e.channel << " " << e.prio << " " << e.msg;
 }
 

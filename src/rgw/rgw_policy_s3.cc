@@ -6,7 +6,7 @@
 #include "common/ceph_json.h"
 #include "rgw_policy_s3.h"
 #include "rgw_common.h"
-
+#include "rgw_crypt_sanitize.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
@@ -30,8 +30,11 @@ public:
      string first, second;
      env->get_value(v1, first, checked_vars);
      env->get_value(v2, second, checked_vars);
-
-     dout(1) << "policy condition check " << v1 << " [" << first << "] " << v2 << " [" << second << "]" << dendl;
+     dout(1) << "policy condition check " << v1 << " ["
+         << rgw::crypt_sanitize::s3_policy{v1, first}
+         << "] " << v2 << " ["
+         << rgw::crypt_sanitize::s3_policy{v2, second}
+         << "]" << dendl;
      bool ret = check(first, second, err_msg);
      if (!ret) {
        err_msg.append(": ");
@@ -130,7 +133,7 @@ int RGWPolicy::set_expires(const string& e)
   if (!parse_iso8601(e.c_str(), &t))
       return -EINVAL;
 
-  expires = timegm(&t);
+  expires = internal_timegm(&t);
 
   return 0;
 }
@@ -289,7 +292,7 @@ int RGWPolicy::from_json(bufferlist& bl, string& err_msg)
         return r;
     } else if (!citer.end()) {
       JSONObj *c = *citer;
-      dout(0) << "adding simple_check: " << c->get_name() << " : " << c->get_data() << dendl;
+      dout(20) << "adding simple_check: " << c->get_name() << " : " << c->get_data() << dendl;
 
       add_simple_check(c->get_name(), c->get_data());
     } else {

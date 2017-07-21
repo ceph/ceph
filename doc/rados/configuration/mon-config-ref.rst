@@ -106,6 +106,11 @@ A consensus requires a majority of monitors running to establish a quorum for
 consensus about the cluster map (e.g., 1; 2 out of 3; 3 out of 5; 4 out of 6;
 etc.).
 
+``mon force quorum join``
+
+:Description: Force monitor to join quorum even if it has been previously removed from the map
+:Type: Boolean
+:Default: ``False``
 
 .. index:: Ceph Monitor; consistency
 
@@ -314,6 +319,126 @@ by setting it in the ``[mon]`` section of the configuration file.
 :Default: ``/var/lib/ceph/mon/$cluster-$id``
 
 
+``mon data size warn``
+
+:Description: Issue a ``HEALTH_WARN`` in cluster log when the monitor's data
+              store goes over 15GB.
+:Type: Integer
+:Default: 15*1024*1024*1024*
+
+
+``mon data avail warn``
+
+:Description: Issue a ``HEALTH_WARN`` in cluster log when the available disk
+              space of monitor's data store is lower or equal to this
+              percentage.
+:Type: Integer
+:Default: 30
+
+
+``mon data avail crit``
+
+:Description: Issue a ``HEALTH_ERR`` in cluster log when the available disk
+              space of monitor's data store is lower or equal to this
+              percentage.
+:Type: Integer
+:Default: 5
+
+
+``mon warn on cache pools without hit sets``
+
+:Description: Issue a ``HEALTH_WARN`` in cluster log if a cache pool does not
+              have the hitset type set set.
+              See `hit set type <../operations/pools#hit-set-type>`_ for more
+              details.
+:Type: Boolean
+:Default: True
+
+
+``mon warn on crush straw calc version zero``
+
+:Description: Issue a ``HEALTH_WARN`` in cluster log if the CRUSH's
+              ``straw_calc_version`` is zero. See
+              `CRUSH map tunables <../operations/crush-map#tunables>`_ for
+              details.
+:Type: Boolean
+:Default: True
+
+
+``mon warn on legacy crush tunables``
+
+:Description: Issue a ``HEALTH_WARN`` in cluster log if
+              CRUSH tunables are too old (older than ``mon_min_crush_required_version``)
+:Type: Boolean
+:Default: True
+
+
+``mon crush min required version``
+
+:Description: The minimum tunable profile version required by the cluster.
+              See
+              `CRUSH map tunables <../operations/crush-map#tunables>`_ for
+              details.
+:Type: String
+:Default: ``firefly``
+
+
+``mon warn on osd down out interval zero``
+
+:Description: Issue a ``HEALTH_WARN`` in cluster log if
+              ``mon osd down out interval`` is zero. Having this option set to
+              zero on the leader acts much like the ``noout`` flag. It's hard
+              to figure out what's going wrong with clusters witout the
+              ``noout`` flag set but acting like that just the same, so we
+              report a warning in this case.
+:Type: Boolean
+:Default: True
+
+
+``mon cache target full warn ratio``
+
+:Description: Position between pool's ``cache_target_full`` and
+              ``target_max_object`` where we start warning
+:Type: Float
+:Default: ``0.66``
+
+
+``mon health data update interval``
+
+:Description: How often (in seconds) the monitor in quorum shares its health
+              status with its peers. (negative number disables it)
+:Type: Float
+:Default: ``60``
+
+
+``mon health to clog``
+
+:Description: Enable sending health summary to cluster log periodically.
+:Type: Boolean
+:Default: True
+
+
+``mon health to clog tick interval``
+
+:Description: How often (in seconds) the monitor send health summary to cluster
+              log (a non-positive number disables it). If current health summary
+              is empty or identical to the last time, monitor will not send it
+              to cluster log.
+:Type: Integer
+:Default: 3600
+
+
+``mon health to clog interval``
+
+:Description: How often (in seconds) the monitor send health summary to cluster
+              log (a non-positive number disables it). Monitor will always
+              send the summary to cluster log no matter if the summary changes
+              or not.
+:Type: Integer
+:Default: 60
+
+
+
 .. index:: Ceph Storage Cluster; capacity planning, Ceph Monitor; capacity planning
 
 Storage Capacity
@@ -400,6 +525,7 @@ a reasonable number for a near full ratio.
 	[global]
 		
 		mon osd full ratio = .80
+		mon osd backfillfull ratio = .75
 		mon osd nearfull ratio = .70
 
 
@@ -410,6 +536,15 @@ a reasonable number for a near full ratio.
 
 :Type: Float
 :Default: ``.95``
+
+
+``mon osd backfillfull ratio``
+
+:Description: The percentage of disk space used before an OSD is
+              considered too ``full`` to backfill.
+
+:Type: Float
+:Default: ``.90``
 
 
 ``mon osd nearfull ratio`` 
@@ -536,7 +671,9 @@ Trimming requires that the placement groups are ``active + clean``.
 
 ``mon sync timeout``
 
-:Description: 
+:Description: Number of seconds the monitor will wait for the next update
+              message from its sync provider before it gives up and bootstrap
+              again.
 :Type: Double
 :Default: ``30.0``
 
@@ -550,37 +687,121 @@ Trimming requires that the placement groups are ``active + clean``.
 
 ``mon sync max payload size``
 
-:Description: The maximum size for a sync payload.
+:Description: The maximum size for a sync payload (in bytes).
 :Type: 32-bit Integer
 :Default: ``1045676``
 
 
-``mon accept timeout`` 
+``paxos max join drift``
 
-:Description: Number of seconds the Leader will wait for the Requester(s) to 
-              accept a Paxos update. It is also used during the Paxos recovery 
-              phase for similar purposes.
+:Description: The maximum Paxos iterations before we must first sync the
+              monitor data stores. When a monitor finds that its peer is too
+              far ahead of it, it will first sync with data stores before moving
+              on.
+:Type: Integer
+:Default: ``10``
 
-:Type: Float
-:Default: ``10.0`` 
+``paxos stash full interval``
 
+:Description: How often (in commits) to stash a full copy of the PaxosService state.
+              Current this setting only affects ``mds``, ``mon``, ``auth`` and ``mgr``
+              PaxosServices.
+:Type: Integer
+:Default: 25
 
 ``paxos propose interval``
 
 :Description: Gather updates for this time interval before proposing 
-              a map update. 
-
+              a map update.
 :Type: Double
 :Default: ``1.0``
+
+
+``paxos min``
+
+:Description: The minimum number of paxos states to keep around
+:Type: Integer
+:Default: 500
 
 
 ``paxos min wait``
 
 :Description: The minimum amount of time to gather updates after a period of 
               inactivity.
-
 :Type: Double
 :Default: ``0.05``
+
+
+``paxos trim min``
+
+:Description: Number of extra proposals tolerated before trimming
+:Type: Integer
+:Default: 250
+
+
+``paxos trim max``
+
+:Description: The maximum number of extra proposals to trim at a time
+:Type: Integer
+:Default: 500
+
+
+``paxos service trim min``
+
+:Description: The minimum amount of versions to trigger a trim (0 disables it)
+:Type: Integer
+:Default: 250
+
+
+``paxos service trim max``
+
+:Description: The maximum amount of versions to trim during a single proposal (0 disables it)
+:Type: Integer
+:Default: 500
+
+
+``mon max log epochs``
+
+:Description: The maximum amount of log epochs to trim during a single proposal
+:Type: Integer
+:Default: 500
+
+
+``mon max pgmap epochs``
+
+:Description: The maximum amount of pgmap epochs to trim during a single proposal
+:Type: Integer
+:Default: 500
+
+
+``mon mds force trim to``
+
+:Description: Force monitor to trim mdsmaps to this point (0 disables it.
+              dangerous, use with care)
+:Type: Integer
+:Default: 0
+
+
+``mon osd force trim to``
+
+:Description: Force monitor to trim osdmaps to this point, even if there is
+              PGs not clean at the specified epoch (0 disables it. dangerous,
+              use with care)
+:Type: Integer
+:Default: 0
+
+``mon osd cache size``
+
+:Description: The size of osdmaps cache, not to rely on underlying store's cache
+:Type: Integer
+:Default: 10
+
+
+``mon election timeout``
+
+:Description: On election proposer, maximum waiting time for all ACKs in seconds.
+:Type: Float
+:Default: ``5``
 
 
 ``mon lease`` 
@@ -590,22 +811,30 @@ Trimming requires that the placement groups are ``active + clean``.
 :Default: ``5``
 
 
-``mon lease renew interval`` 
+``mon lease renew interval factor``
 
-:Description: The interval (in seconds) for the Leader to renew the other 
-              monitor's leases.
-              
+:Description: ``mon lease`` \* ``mon lease renew interval factor`` will be the
+              interval for the Leader to renew the other monitor's leases. The
+              factor should be less than ``1.0``.
 :Type: Float
-:Default: ``3``
+:Default: ``0.6``
 
 
-``mon lease ack timeout`` 
+``mon lease ack timeout factor``
 
-:Description: The number of seconds the Leader will wait for the Providers to 
-              acknowledge the lease extension.
-              
+:Description: The Leader will wait ``mon lease`` \* ``mon lease ack timeout factor``
+              for the Providers to acknowledge the lease extension.
 :Type: Float
-:Default: ``10.0``
+:Default: ``2.0``
+
+
+``mon accept timeout factor``
+
+:Description: The Leader will wait ``mon lease`` \* ``mon accept timeout factor``
+              for the Requester(s) to accept a Paxos update. It is also used
+              during the Paxos recovery phase for similar purposes.
+:Type: Float
+:Default: ``2.0``
 
 
 ``mon min osdmap epochs`` 
@@ -630,42 +859,6 @@ Trimming requires that the placement groups are ``active + clean``.
 
 
 
-
-Slurp
------
-
-In Ceph version 0.58 and earlier, when a Paxos service drifts beyond a given
-number of versions, Ceph triggers the `slurp` mechanism, which establishes a
-connection with the quorum Leader and obtains every single version the Leader
-has for every service that has drifted. In Ceph versions 0.59 and later, slurp
-will not work, because there is a single Paxos instance for all services.
-
-.. deprecated:: 0.58
-
-``paxos max join drift``
-
-:Description: The maximum Paxos iterations before we must first sync the
-              monitor data stores.
-:Type: Integer
-:Default: ``10`` 
-
-
-``mon slurp timeout`` 
-
-:Description: The number of seconds the monitor has to recover using slurp 
-              before the process is aborted and the monitor bootstraps.
-
-:Type: Double
-:Default: ``10.0``
-
-
-``mon slurp bytes``
-
-:Description: Limits the slurp messages to the specified number of bytes.
-:Type: 32-bit Integer
-:Default: ``256 * 1024``
-
-
 .. index:: Ceph Monitor; clock
 
 Clock
@@ -678,7 +871,7 @@ are not synchronized, it can lead to a number of anomalies. For example:
 - Daemons ignoring received messages (e.g., timestamps outdated)
 - Timeouts triggered too soon/late when a message wasn't received in time.
 
-See `Monitor Store Synchronization`_ and `Slurp`_ for details.
+See `Monitor Store Synchronization`_ for details.
 
 
 .. tip:: You SHOULD install NTP on your Ceph monitor hosts to 
@@ -729,11 +922,18 @@ acceptable values.
 ``mon timecheck interval``
 
 :Description: The time check interval (clock drift check) in seconds 
-              for the leader.
+              for the Leader.
 
 :Type: Float
 :Default: ``300.0``
 
+
+``mon timecheck skew interval``
+
+:Description: The time check interval (clock drift check) in seconds when in
+              presence of a skew in seconds for the Leader.
+:Type: Float
+:Default: ``30.0``
 
 
 Client
@@ -825,12 +1025,6 @@ Miscellaneous
 :Type: 32-bit Integer
 :Default: ``100``
 
-``mon sync fs threshold`` 
-
-:Description: Synchronize with the filesystem when writing the specified number of objects. Set it to ``0`` to disable it.
-:Type: 32-bit Integer
-:Default: ``5`` 
-
 ``mon subscribe interval`` 
 
 :Description: The refresh interval (in seconds) for subscriptions. The 
@@ -885,6 +1079,129 @@ Miscellaneous
               PGMap when an out OSD comes back into the cluster.
 :Type: Float
 :Default: ``0.5``
+
+
+``mon osd prime pg temp max time estimate``
+
+:Description: Maximum estimate of time spent on each PG before we prime all PGs
+              in parallel.
+:Type: Float
+:Default: ``0.25``
+
+
+``mon osd allow primary affinity``
+
+:Description: allow ``primary_affinity`` to be set in the osdmap.
+:Type: Boolean
+:Default: False
+
+
+``mon osd pool ec fast read``
+
+:Description: Whether turn on fast read on the pool or not. It will be used as
+              the default setting of newly created erasure pools if ``fast_read``
+              is not specified at create time.
+:Type: Boolean
+:Default: False
+
+
+``mon mds skip sanity``
+
+:Description: Skip safety assertions on FSMap (in case of bugs where we want to
+              continue anyway). Monitor terminates if the FSMap sanity check
+              fails, but we can disable it by enabling this option.
+:Type: Boolean
+:Default: False
+
+
+``mon max mdsmap epochs``
+
+:Description: The maximum amount of mdsmap epochs to trim during a single proposal.
+:Type: Integer
+:Default: 500
+
+
+``mon config key max entry size``
+
+:Description: The maximum size of config-key entry (in bytes)
+:Type: Integer
+:Default: 4096
+
+
+``mon scrub interval``
+
+:Description: How often (in seconds) the monitor scrub its store by comparing
+              the stored checksums with the computed ones of all the stored
+              keys.
+:Type: Integer
+:Default: 3600*24
+
+
+``mon scrub max keys``
+
+:Description: The maximum number of keys to scrub each time.
+:Type: Integer
+:Default: 100
+
+
+``mon compact on start``
+
+:Description: Compact the database used as Ceph Monitor store on
+              ``ceph-mon`` start. A manual compaction helps to shrink the
+              monitor database and improve the performance of it if the regular
+              compaction fails to work.
+:Type: Boolean
+:Default: False
+
+
+``mon compact on bootstrap``
+
+:Description: Compact the database used as Ceph Monitor store on
+              on bootstrap. Monitor starts probing each other for creating
+              a quorum after bootstrap. If it times out before joining the
+              quorum, it will start over and bootstrap itself again.
+:Type: Boolean
+:Default: False
+
+
+``mon compact on trim``
+
+:Description: Compact a certain prefix (including paxos) when we trim its old states.
+:Type: Boolean
+:Default: True
+
+
+``mon cpu threads``
+
+:Description: Number of threads for performing CPU intensive work on monitor.
+:Type: Boolean
+:Default: True
+
+
+``mon osd mapping pgs per chunk``
+
+:Description: We calculate the mapping from placement group to OSDs in chunks.
+              This option specifies the number of placement groups per chunk.
+:Type: Integer
+:Default: 4096
+
+
+``mon osd max split count``
+
+:Description: Largest number of PGs per "involved" OSD to let split create.
+              When we increase the ``pg_num`` of a pool, the placement groups
+              will be splitted on all OSDs serving that pool. We want to avoid
+              extreme multipliers on PG splits.
+:Type: Integer
+:Default: 300
+
+
+``mon session timeout``
+
+:Description: Monitor will terminate inactive sessions stay idle over this
+              time limit.
+:Type: Integer
+:Default: 300
 
 
 

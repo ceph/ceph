@@ -1,5 +1,6 @@
 roles:
-- - mon.0
+- - mon.a
+  - mgr.x
   - osd.0
   - osd.1
   - osd.2
@@ -11,6 +12,12 @@ openstack:
 
 overrides:
   ceph:
+    log-whitelist:
+      - overall HEALTH_
+      - (OSDMAP_FLAGS)
+      - (OSD_
+      - (PG_
+      - (OBJECT_DEGRADED)
     conf:
       osd:
         debug osd: 5

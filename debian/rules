@@ -11,11 +11,22 @@ extraopts += -DWITH_CEPHFS_JAVA=ON
 extraopts += -DCMAKE_INSTALL_LIBDIR=/usr/lib
 extraopts += -DCMAKE_INSTALL_LIBEXECDIR=/usr/lib
 extraopts += -DCMAKE_INSTALL_SYSCONFDIR=/etc
+ifneq (,$(filter parallel=%,$(DEB_BUILD_OPTIONS)))
+  NUMJOBS = $(patsubst parallel=%,%,$(filter parallel=%,$(DEB_BUILD_OPTIONS)))
+  extraopts += -DBOOST_J=$(NUMJOBS)
+endif
 
 ifeq ($(DEB_HOST_ARCH), armel)
   # armel supports ARMv4t or above instructions sets.
   # libatomic-ops is only usable with Ceph for ARMv6 or above.
   extraopts += -DWITH_ATOMIC_OPS=OFF
+endif
+
+ifneq (,$(filter $(DEB_HOST_ARCH), arm armel armhf arm64 i386 amd64 mips mipsel powerpc ppc64))
+  # beast depends on libboost_context which only support the archs above
+  extraopts += -DWITH_RADOSGW_BEAST_FRONTEND=ON
+else
+  extraopts += -DWITH_RADOSGW_BEAST_FRONTEND=OFF
 endif
 
 %:
@@ -28,7 +39,6 @@ override_dh_auto_configure:
 override_dh_auto_build:
 	dh_auto_build --buildsystem=cmake
 	cp src/init-radosgw debian/radosgw.init
-	cp src/logrotate.conf debian/ceph.logrotate
 
 override_dh_auto_clean:
 	dh_auto_clean --buildsystem=cmake
@@ -49,7 +59,8 @@ override_dh_installdocs:
 	dh_installdocs -a --all ChangeLog
 
 override_dh_installlogrotate:
-	dh_installlogrotate -pceph-base --name ceph
+	cp src/logrotate.conf debian/ceph-common.logrotate
+	dh_installlogrotate -pceph-common
 
 override_dh_installinit:
 	# dh_installinit is only set up to handle one upstart script
@@ -120,8 +131,15 @@ override_dh_installinit:
 	dh_installinit -p ceph-base --name ceph --no-start
 	dh_installinit -p radosgw --no-start
 
-override_dh_systemd_start:
+	# NOTE: execute systemd helpers so they pickup dh_install'ed units and targets
+	dh_systemd_enable
 	dh_systemd_start --no-restart-on-upgrade
+
+override_dh_systemd_enable:
+	# systemd enable done as part of dh_installinit
+
+override_dh_systemd_start:
+	# systemd start done as part of dh_installinit
 
 override_dh_strip:
 	dh_strip -pceph-mds --dbg-package=ceph-mds-dbg

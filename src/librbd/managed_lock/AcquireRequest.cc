@@ -26,8 +26,7 @@ namespace librbd {
 
 using librbd::util::detail::C_AsyncCallback;
 using librbd::util::create_context_callback;
-using librbd::util::create_rados_safe_callback;
-using librbd::util::create_rados_ack_callback;
+using librbd::util::create_rados_callback;
 
 namespace managed_lock {
 
@@ -104,7 +103,8 @@ void AcquireRequest<I>::handle_get_locker(int r) {
 
 template <typename I>
 void AcquireRequest<I>::send_lock() {
-  ldout(m_cct, 10) << "cookie=" << m_cookie << dendl;
+  ldout(m_cct, 10) << "entity=client." << m_ioctx.get_instance_id() << ", "
+                   << "cookie=" << m_cookie << dendl;
 
   librados::ObjectWriteOperation op;
   rados::cls::lock::lock(&op, RBD_LOCK_NAME,
@@ -113,7 +113,7 @@ void AcquireRequest<I>::send_lock() {
 
   using klass = AcquireRequest;
   librados::AioCompletion *rados_completion =
-    create_rados_safe_callback<klass, &klass::handle_lock>(this);
+    create_rados_callback<klass, &klass::handle_lock>(this);
   int r = m_ioctx.aio_operate(m_oid, rados_completion, &op);
   assert(r == 0);
   rados_completion->release();
@@ -146,8 +146,8 @@ void AcquireRequest<I>::send_break_lock() {
   Context *ctx = create_context_callback<
     AcquireRequest<I>, &AcquireRequest<I>::handle_break_lock>(this);
   auto req = BreakRequest<I>::create(
-    m_ioctx, m_work_queue, m_oid, m_locker, m_blacklist_on_break_lock,
-    m_blacklist_expire_seconds, false, ctx);
+    m_ioctx, m_work_queue, m_oid, m_locker, m_exclusive,
+    m_blacklist_on_break_lock, m_blacklist_expire_seconds, false, ctx);
   req->send();
 }
 
@@ -165,7 +165,8 @@ void AcquireRequest<I>::handle_break_lock(int r) {
     return;
   }
 
-  send_get_locker();
+  m_locker = {};
+  send_lock();
 }
 
 template <typename I>

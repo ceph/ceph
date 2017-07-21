@@ -1,5 +1,6 @@
 roles:
-- - mon.0
+- - mon.a
+  - mgr.x
   - osd.0
   - osd.1
   - osd.2
@@ -14,7 +15,13 @@ overrides:
     conf:
       osd:
         debug osd: 5
-
+    log-whitelist:
+      - overall HEALTH_
+      - (OSDMAP_FLAGS)
+      - (OSD_
+      - (PG_
+      - (SMALLER_PGP_NUM)
+      - (OBJECT_
 tasks:
 - install:
 - ceph:

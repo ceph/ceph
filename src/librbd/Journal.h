@@ -5,7 +5,6 @@
 #define CEPH_LIBRBD_JOURNAL_H
 
 #include "include/int_types.h"
-#include "include/atomic.h"
 #include "include/Context.h"
 #include "include/interval_set.h"
 #include "common/Cond.h"
@@ -19,9 +18,11 @@
 #include "librbd/Utils.h"
 #include "librbd/journal/Types.h"
 #include "librbd/journal/TypeTraits.h"
+
 #include <algorithm>
 #include <list>
 #include <string>
+#include <atomic>
 #include <unordered_map>
 
 class SafeTimer;
@@ -102,19 +103,17 @@ public:
   static int remove(librados::IoCtx &io_ctx, const std::string &image_id);
   static int reset(librados::IoCtx &io_ctx, const std::string &image_id);
 
-  static int is_tag_owner(ImageCtxT *image_ctx, bool *is_tag_owner);
-  static int is_tag_owner(librados::IoCtx& io_ctx, std::string& image_id,
-                          bool *is_tag_owner);
   static void is_tag_owner(ImageCtxT *image_ctx, bool *is_tag_owner,
                            Context *on_finish);
   static void is_tag_owner(librados::IoCtx& io_ctx, std::string& image_id,
                            bool *is_tag_owner, ContextWQ *op_work_queue,
                            Context *on_finish);
-  static int get_tag_owner(ImageCtxT *image_ctx, std::string *mirror_uuid);
-  static int get_tag_owner(librados::IoCtx& io_ctx, std::string& image_id,
-                           std::string *mirror_uuid);
+  static void get_tag_owner(librados::IoCtx& io_ctx, std::string& image_id,
+                            std::string *mirror_uuid,
+                            ContextWQ *op_work_queue, Context *on_finish);
   static int request_resync(ImageCtxT *image_ctx);
-  static int promote(ImageCtxT *image_ctx);
+  static void promote(ImageCtxT *image_ctx, Context *on_finish);
+  static void demote(ImageCtxT *image_ctx, Context *on_finish);
 
   bool is_journal_ready() const;
   bool is_journal_replaying() const;
@@ -128,7 +127,6 @@ public:
   bool is_tag_owner() const;
   uint64_t get_tag_tid() const;
   journal::TagData get_tag_data() const;
-  int demote();
 
   void allocate_local_tag(Context *on_finish);
   void allocate_tag(const std::string &mirror_uuid,
@@ -158,7 +156,7 @@ public:
   void wait_event(uint64_t tid, Context *on_safe);
 
   uint64_t allocate_op_tid() {
-    uint64_t op_tid = m_op_tid.inc();
+    uint64_t op_tid = ++m_op_tid;
     assert(op_tid != 0);
     return op_tid;
   }
@@ -300,7 +298,7 @@ private:
   uint64_t m_event_tid;
   Events m_events;
 
-  atomic_t m_op_tid;
+  std::atomic<uint64_t> m_op_tid = { 0 };
   TidToFutures m_op_futures;
 
   bool m_processing_entry = false;

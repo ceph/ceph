@@ -1,0 +1,4 @@
+# unittest_direct_messenger
+add_executable(unittest_direct_messenger test_direct_messenger.cc DirectMessenger.cc)
+add_ceph_unittest(unittest_direct_messenger ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_direct_messenger)
+target_link_libraries(unittest_direct_messenger global)

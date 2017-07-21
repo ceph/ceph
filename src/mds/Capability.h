@@ -16,6 +16,7 @@
 #ifndef CEPH_CAPABILITY_H
 #define CEPH_CAPABILITY_H
 
+#include "include/counter.h"
 #include "include/buffer_fwd.h"
 #include "include/xlist.h"
 
@@ -63,7 +64,7 @@ namespace ceph {
   class Formatter;
 }
 
-class Capability {
+class Capability : public Counter<Capability> {
 public:
   struct Export {
     int64_t cap_id;
@@ -107,6 +108,7 @@ public:
 
   const static unsigned STATE_STALE		= (1<<0);
   const static unsigned STATE_NEW		= (1<<1);
+  const static unsigned STATE_IMPORTING		= (1<<2);
 
 
   Capability(CInode *i = NULL, uint64_t id = 0, client_t c = 0) :
@@ -123,25 +125,9 @@ public:
     last_issue(0),
     mseq(0),
     suppress(0), state(0) {
-    g_num_cap++;
-    g_num_capa++;
   }
   Capability(const Capability& other);  // no copying
-  ~Capability() {
-    g_num_cap--;
-    g_num_caps++;
-  }
 
-
-  static void *operator new(size_t num_bytes) {
-    void *n = pool.malloc();
-    if (!n)
-      throw std::bad_alloc();
-    return n;
-  }
-  void operator delete(void *p) {
-    pool.free(p);
-  }
   const Capability& operator=(const Capability& other);  // no copying
 
   int pending() { return _pending; }
@@ -253,6 +239,9 @@ public:
   bool is_new() { return state & STATE_NEW; }
   void mark_new() { state |= STATE_NEW; }
   void clear_new() { state &= ~STATE_NEW; }
+  bool is_importing() { return state & STATE_IMPORTING; }
+  void mark_importing() { state |= STATE_IMPORTING; }
+  void clear_importing() { state &= ~STATE_IMPORTING; }
 
   CInode *get_inode() { return inode; }
   client_t get_client() const { return client; }
@@ -337,7 +326,6 @@ public:
   xlist<Capability*>::item item_client_revoking_caps;
 
 private:
-  static boost::pool<> pool;
   CInode *inode;
   client_t client;
 

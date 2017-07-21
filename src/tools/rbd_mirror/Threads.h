@@ -11,9 +11,12 @@ class ContextWQ;
 class SafeTimer;
 class ThreadPool;
 
+namespace librbd { struct ImageCtx; }
+
 namespace rbd {
 namespace mirror {
 
+template <typename ImageCtxT = librbd::ImageCtx>
 struct Threads {
   ThreadPool *thread_pool = nullptr;
   ContextWQ *work_queue = nullptr;
@@ -30,5 +33,7 @@ struct Threads {
 
 } // namespace mirror
 } // namespace rbd
+
+extern template class rbd::mirror::Threads<librbd::ImageCtx>;
 
 #endif // CEPH_RBD_MIRROR_THREADS_H

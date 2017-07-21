@@ -2,7 +2,8 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "common/SloppyCRCMap.h"
-#include "common/Formatter.h"
+
+using namespace std;
 
 void SloppyCRCMap::write(uint64_t offset, uint64_t len, const bufferlist& bl,
 			 std::ostream *out)

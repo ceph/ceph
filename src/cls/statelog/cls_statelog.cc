@@ -1,20 +1,12 @@
 // -*- mode:C; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
-#include <iostream>
-
-#include <string.h>
-#include <stdlib.h>
 #include <errno.h>
 
-#include "include/types.h"
-#include "include/utime.h"
 #include "objclass/objclass.h"
 
-#include "cls_statelog_types.h"
 #include "cls_statelog_ops.h"
 
-#include "global/global_context.h"
 
 CLS_VER(1,0)
 CLS_NAME(statelog)
@@ -273,19 +265,10 @@ static int cls_statelog_check_state(cls_method_context_t hctx, bufferlist *in, b
     return -EINVAL;
   }
 
-  string obj_index;
-  get_index_by_object(op.object, op.op_id, obj_index);
-
-  bufferlist bl;
-  int rc = cls_cxx_map_get_val(hctx, obj_index, &bl);
-  if (rc < 0) {
-    CLS_LOG(0, "could not find entry %s", obj_index.c_str());
-    return rc;
-  }
 
   cls_statelog_entry entry;
 
-  rc = get_existing_entry(hctx, op.client_id, op.op_id, op.object, entry);
+  int rc = get_existing_entry(hctx, op.client_id, op.op_id, op.object, entry);
   if (rc < 0)
     return rc;
 

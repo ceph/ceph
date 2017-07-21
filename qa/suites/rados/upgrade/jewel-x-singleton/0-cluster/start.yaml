@@ -13,6 +13,8 @@ roles:
 - - mon.a
   - mon.b
   - mon.c
+  - mgr.x
+  - mgr.y
   - mds.a
   - osd.0
   - osd.1

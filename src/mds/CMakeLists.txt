@@ -11,6 +11,7 @@ set(mds_srcs
   MDCache.cc
   RecoveryQueue.cc
   StrayManager.cc
+  PurgeQueue.cc
   Locker.cc
   Migrator.cc
   MDBalancer.cc
@@ -38,6 +39,5 @@ set(mds_srcs
   ${CMAKE_SOURCE_DIR}/src/common/TrackedOp.cc
   ${CMAKE_SOURCE_DIR}/src/osdc/Journaler.cc)
 add_library(mds STATIC ${mds_srcs}
-  $<TARGET_OBJECTS:heap_profiler_objs>
-  $<TARGET_OBJECTS:common_util_obj>)
+  $<TARGET_OBJECTS:heap_profiler_objs>)
 target_link_libraries(mds ${ALLOC_LIBS} osdc liblua)

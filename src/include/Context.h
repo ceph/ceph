@@ -80,7 +80,7 @@ class ContainerContext : public Context {
   T obj;
 public:
   ContainerContext(T &obj) : obj(obj) {}
-  void finish(int r) {}
+  void finish(int r) override {}
 };
 template <typename T>
 ContainerContext<T> *make_container_context(T &&t) {
@@ -92,7 +92,7 @@ struct Wrapper : public Context {
   Context *to_run;
   T val;
   Wrapper(Context *to_run, T val) : to_run(to_run), val(val) {}
-  void finish(int r) {
+  void finish(int r) override {
     if (to_run)
       to_run->complete(r);
   }
@@ -111,7 +111,7 @@ template <typename T>
 struct LambdaContext : public Context {
   T t;
   LambdaContext(T &&t) : t(std::forward<T>(t)) {}
-  void finish(int) {
+  void finish(int) override {
     t();
   }
 };
@@ -124,7 +124,7 @@ template <typename F, typename T>
 struct LambdaGenContext : GenContext<T> {
   F f;
   LambdaGenContext(F &&f) : f(std::forward<F>(f)) {}
-  void finish(T t) {
+  void finish(T t) override {
     f(std::forward<T>(t));
   }
 };
@@ -180,7 +180,7 @@ inline void finish_contexts(CephContext *cct, std::vector<Context*>& finished,
 
 class C_NoopContext : public Context {
 public:
-  void finish(int r) { }
+  void finish(int r) override { }
 };
 
 
@@ -188,10 +188,10 @@ struct C_Lock : public Context {
   Mutex *lock;
   Context *fin;
   C_Lock(Mutex *l, Context *c) : lock(l), fin(c) {}
-  ~C_Lock() {
+  ~C_Lock() override {
     delete fin;
   }
-  void finish(int r) {
+  void finish(int r) override {
     if (fin) {
       lock->Lock();
       fin->complete(r);
@@ -217,19 +217,23 @@ public:
     : cct(cct_)
   {
   }
-
+  ~C_ContextsBase() override {
+    for (auto c : contexts) {
+      delete c;
+    }
+  }
   void add(ContextType* c) {
     contexts.push_back(c);
   }
   void take(std::list<ContextType*>& ls) {
     contexts.splice(contexts.end(), ls);
   }
-  void complete(int r) {
+  void complete(int r) override {
     // Neuter any ContextInstanceType custom complete(), because although
     // I want to look like it, I don't actually want to run its code.
     Context::complete(r);
   }
-  void finish(int r) {
+  void finish(int r) override {
     finish_contexts(cct, contexts, r);
   }
   bool empty() { return contexts.empty(); }
@@ -307,18 +311,18 @@ private:
     C_GatherBase *gather;
   public:
     C_GatherSub(C_GatherBase *g) : gather(g) {}
-    void complete(int r) {
+    void complete(int r) override {
       // Cancel any customized complete() functionality
       // from the Context subclass we're templated for,
       // we only want to hit that in onfinish, not at each
       // sub finish.  e.g. MDSInternalContext.
       Context::complete(r);
     }
-    void finish(int r) {
+    void finish(int r) override {
       gather->sub_finish(this, r);
       gather = 0;
     }
-    ~C_GatherSub() {
+    ~C_GatherSub() override {
       if (gather)
 	gather->sub_finish(this, 0);
     }
@@ -333,7 +337,7 @@ public:
   {
     mydout(cct,10) << "C_GatherBase " << this << ".new" << dendl;
   }
-  ~C_GatherBase() {
+  ~C_GatherBase() override {
     mydout(cct,10) << "C_GatherBase " << this << ".delete" << dendl;
   }
   void set_finisher(ContextType *onfinish_) {
@@ -364,7 +368,7 @@ public:
     mydout(cct,10) << "C_GatherBase " << this << ".new_sub is " << sub_created_count << " " << s << dendl;
     return s;
   }
-  void finish(int r) {
+  void finish(int r) override {
     ceph_abort();    // nobody should ever call me.
   }
 
@@ -485,7 +489,7 @@ public:
   {
   }
 
-  virtual void finish(int r) {
+  void finish(int r) override {
     m_callback(r);
   }
 private:

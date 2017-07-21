@@ -1,2 +1,7 @@
 tasks:
 - mds_thrash:
+
+overrides:
+  ceph:
+    log-whitelist:
+      - not responding, replacing

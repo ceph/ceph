@@ -278,7 +278,7 @@ public:
     : AuthAuthorizer(CEPH_AUTH_CEPHX), cct(cct_), nonce(0) {}
 
   bool build_authorizer();
-  bool verify_reply(bufferlist::iterator& reply);
+  bool verify_reply(bufferlist::iterator& reply) override;
 };
 
 
@@ -421,7 +421,7 @@ extern bool cephx_verify_authorizer(CephContext *cct, KeyStore *keys,
 /*
  * encode+encrypt macros
  */
-#define AUTH_ENC_MAGIC 0xff009cad8826aa55ull
+static constexpr uint64_t AUTH_ENC_MAGIC = 0xff009cad8826aa55ull;
 
 template <typename T>
 void decode_decrypt_enc_bl(CephContext *cct, T& t, CryptoKey key, bufferlist& bl_enc, 

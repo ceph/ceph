@@ -1,6 +1,5 @@
 #include "include/buffer.h"
 #include "include/encoding.h"
-#include "include/small_encoding.h"
 
 #include "gtest/gtest.h"
 
@@ -30,6 +29,40 @@ TEST(EncodingRoundTrip, StringEmpty) {
 TEST(EncodingRoundTrip, StringNewline) {
   string my_str("foo bar baz\n");
   test_encode_and_decode < std::string >(my_str);
+}
+
+template <typename Size, typename T>
+static void test_encode_and_nohead_nohead(Size len, const T& src)
+{
+  bufferlist bl(1000000);
+  encode(len, bl);
+  encode_nohead(src, bl);
+  T dst;
+  bufferlist::iterator i(bl.begin());
+  decode(len, i);
+  decode_nohead(len, dst, i);
+  ASSERT_EQ(src, dst) << "Encoding roundtrip changed the string: orig=" << src << ", but new=" << dst;
+}
+
+TEST(EncodingRoundTrip, StringNoHead) {
+  const string str("The quick brown fox jumps over the lazy dog");
+  auto size = str.size();
+  test_encode_and_nohead_nohead(static_cast<int>(size), str);
+  test_encode_and_nohead_nohead(static_cast<unsigned>(size), str);
+  test_encode_and_nohead_nohead(static_cast<uint32_t>(size), str);
+  test_encode_and_nohead_nohead(static_cast<__u32>(size), str);
+  test_encode_and_nohead_nohead(static_cast<size_t>(size), str);
+}
+
+TEST(EncodingRoundTrip, BufferListNoHead) {
+  bufferlist bl;
+  bl.append("is this a dagger which i see before me?");
+  auto size = bl.length();
+  test_encode_and_nohead_nohead(static_cast<int>(size), bl);
+  test_encode_and_nohead_nohead(static_cast<unsigned>(size), bl);
+  test_encode_and_nohead_nohead(static_cast<uint32_t>(size), bl);
+  test_encode_and_nohead_nohead(static_cast<__u32>(size), bl);
+  test_encode_and_nohead_nohead(static_cast<size_t>(size), bl);
 }
 
 typedef std::multimap < int, std::string > multimap_t;
@@ -258,18 +291,15 @@ TEST(EncodingRoundTrip, Integers) {
 }
 
 const char* expected_what[] = {
-  "buffer::malformed_input: void lame_decoder(int) unknown encoding version > 100",
-  "buffer::malformed_input: void lame_decoder(int) no longer understand old encoding version < 100",
+  "buffer::malformed_input: void lame_decoder(int) no longer understand old encoding version 100 < 200",
   "buffer::malformed_input: void lame_decoder(int) decode past end of struct encoding",
 };
 
 void lame_decoder(int which) {
   switch (which) {
   case 0:
-    throw buffer::malformed_input(DECODE_ERR_VERSION(__PRETTY_FUNCTION__, 100));
+    throw buffer::malformed_input(DECODE_ERR_OLDVERSION(__PRETTY_FUNCTION__, 100, 200));
   case 1:
-    throw buffer::malformed_input(DECODE_ERR_OLDVERSION(__PRETTY_FUNCTION__, 100));
-  case 2:
     throw buffer::malformed_input(DECODE_ERR_PAST(__PRETTY_FUNCTION__));
   }
 }
@@ -316,39 +346,48 @@ TEST(small_encoding, varint) {
   for (unsigned i=0; v[i][1]; ++i) {
     {
       bufferlist bl;
-      small_encode_varint(v[i][0], bl);
+      {
+         auto app = bl.get_contiguous_appender(16, true);
+         denc_varint(v[i][0], app);
+      }
       cout << std::hex << v[i][0] << "\t" << v[i][1] << "\t";
       bl.hexdump(cout, false);
       cout << std::endl;
       ASSERT_EQ(bl.length(), v[i][1]);
       uint32_t u;
-      auto p = bl.begin();
-      small_decode_varint(u, p);
+      auto p = bl.begin().get_current_ptr().begin();
+      denc_varint(u, p);
       ASSERT_EQ(v[i][0], u);
     }
     {
       bufferlist bl;
-      small_encode_signed_varint(v[i][0], bl);
+      {
+         auto app = bl.get_contiguous_appender(16, true);
+         denc_signed_varint(v[i][0], app);
+      }
       cout << std::hex << v[i][0] << "\t" << v[i][2] << "\t";
       bl.hexdump(cout, false);
       cout << std::endl;
       ASSERT_EQ(bl.length(), v[i][2]);
       int32_t u;
-      auto p = bl.begin();
-      small_decode_signed_varint(u, p);
+      auto p = bl.begin().get_current_ptr().begin();
+      denc_signed_varint(u, p);
       ASSERT_EQ((int32_t)v[i][0], u);
     }
     {
       bufferlist bl;
       int64_t x = -(int64_t)v[i][0];
-      small_encode_signed_varint(x, bl);
+      {
+         auto app = bl.get_contiguous_appender(16, true);
+         denc_signed_varint(x, app);
+      }
       cout << std::dec << x << std::hex << "\t" << v[i][3] << "\t";
       bl.hexdump(cout, false);
       cout << std::endl;
       ASSERT_EQ(bl.length(), v[i][3]);
       int64_t u;
-      auto p = bl.begin();
-      small_decode_signed_varint(u, p);
+      auto p = bl.begin().get_current_ptr().begin();
+      denc_signed_varint(u, p);
       ASSERT_EQ(x, u);
     }
   }
@@ -385,40 +424,49 @@ TEST(small_encoding, varint_lowz) {
   for (unsigned i=0; v[i][1]; ++i) {
     {
       bufferlist bl;
-      small_encode_varint_lowz(v[i][0], bl);
+      {
+         auto app = bl.get_contiguous_appender(16, true);
+         denc_varint_lowz(v[i][0], app);
+      }
       cout << std::hex << v[i][0] << "\t" << v[i][1] << "\t";
       bl.hexdump(cout, false);
       cout << std::endl;
       ASSERT_EQ(bl.length(), v[i][1]);
       uint32_t u;
-      auto p = bl.begin();
-      small_decode_varint_lowz(u, p);
+      auto p = bl.begin().get_current_ptr().begin();
+      denc_varint_lowz(u, p);
       ASSERT_EQ(v[i][0], u);
     }
     {
       bufferlist bl;
       int64_t x = v[i][0];
-      small_encode_signed_varint_lowz(x, bl);
+      {
+         auto app = bl.get_contiguous_appender(16, true);
+         denc_signed_varint_lowz(x, app);
+      }
       cout << std::hex << x << "\t" << v[i][1] << "\t";
       bl.hexdump(cout, false);
       cout << std::endl;
       ASSERT_EQ(bl.length(), v[i][2]);
       int64_t u;
-      auto p = bl.begin();
-      small_decode_signed_varint_lowz(u, p);
+      auto p = bl.begin().get_current_ptr().begin();
+      denc_signed_varint_lowz(u, p);
       ASSERT_EQ(x, u);
     }
     {
       bufferlist bl;
       int64_t x = -(int64_t)v[i][0];
-      small_encode_signed_varint_lowz(x, bl);
+      {
+         auto app = bl.get_contiguous_appender(16, true);
+         denc_signed_varint_lowz(x, app);
+      }
       cout << std::dec << x << "\t" << v[i][1] << "\t";
       bl.hexdump(cout, false);
       cout << std::endl;
       ASSERT_EQ(bl.length(), v[i][3]);
       int64_t u;
-      auto p = bl.begin();
-      small_decode_signed_varint_lowz(u, p);
+      auto p = bl.begin().get_current_ptr().begin();
+      denc_signed_varint_lowz(u, p);
       ASSERT_EQ(x, u);
     }    
   }
@@ -447,14 +495,17 @@ TEST(small_encoding, lba) {
   };
   for (unsigned i=0; v[i][1]; ++i) {
     bufferlist bl;
-    small_encode_lba(v[i][0], bl);
+    {
+       auto app = bl.get_contiguous_appender(16, true);
+       denc_lba(v[i][0], app);
+    }
     cout << std::hex << v[i][0] << "\t" << v[i][1] << "\t";
     bl.hexdump(cout, false);
     cout << std::endl;
     ASSERT_EQ(bl.length(), v[i][1]);
     uint64_t u;
-    auto p = bl.begin();
-    small_decode_lba(u, p);
+    auto p = bl.begin().get_current_ptr().begin();
+    denc_lba(u, p);
     ASSERT_EQ(v[i][0], u);
   }
 

@@ -82,9 +82,9 @@ int Dumper::dump(const char *dump_file)
   auto fs =  fsmap->get_filesystem(role.fscid);
   assert(fs != nullptr);
 
-  Journaler journaler(ino, fs->mds_map.get_metadata_pool(),
+  Journaler journaler("dumper", ino, fs->mds_map.get_metadata_pool(),
                       CEPH_FS_ONDISK_MAGIC, objecter, 0, 0,
-                      &timer, &finisher);
+                      &finisher);
   r = recover_journal(&journaler);
   if (r) {
     return r;

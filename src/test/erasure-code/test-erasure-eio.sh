@@ -32,6 +32,7 @@ function run() {
     for func in $funcs ; do
         setup $dir || return 1
         run_mon $dir a || return 1
+	run_mgr $dir x || return 1
         # check that erasure code plugins are preloaded
         CEPH_ARGS='' ceph --admin-daemon $dir/ceph-mon.a.asok log flush || return 1
         grep 'load: jerasure.*lrc' $dir/mon.a.log || return 1
@@ -57,7 +58,7 @@ function create_erasure_coded_pool() {
     ceph osd erasure-code-profile set myprofile \
         plugin=jerasure \
         k=2 m=1 \
-        ruleset-failure-domain=osd || return 1
+        crush-failure-domain=osd || return 1
     ceph osd pool create $poolname 1 1 erasure myprofile \
         || return 1
     wait_for_clean || return 1

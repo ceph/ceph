@@ -13,13 +13,21 @@ namespace io {
 
 typedef enum {
   AIO_TYPE_NONE = 0,
+  AIO_TYPE_GENERIC,
   AIO_TYPE_OPEN,
   AIO_TYPE_CLOSE,
   AIO_TYPE_READ,
   AIO_TYPE_WRITE,
   AIO_TYPE_DISCARD,
   AIO_TYPE_FLUSH,
+  AIO_TYPE_WRITESAME,
 } aio_type_t;
+
+enum Direction {
+  DIRECTION_READ,
+  DIRECTION_WRITE,
+  DIRECTION_BOTH
+};
 
 typedef std::vector<std::pair<uint64_t, uint64_t> > Extents;
 typedef std::map<uint64_t, uint64_t> ExtentMap;

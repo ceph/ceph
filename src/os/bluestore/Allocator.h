@@ -43,7 +43,7 @@ public:
     return allocate(want_size, alloc_unit, want_size, hint, extents);
   }
 
-  virtual int release(
+  virtual void release(
     uint64_t offset, uint64_t length) = 0;
 
   virtual void dump() = 0;

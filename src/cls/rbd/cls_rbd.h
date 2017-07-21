@@ -5,8 +5,8 @@
 
 #include "include/types.h"
 #include "include/buffer_fwd.h"
+#include "include/rbd_types.h"
 #include "common/Formatter.h"
-#include "librbd/parent_types.h"
 #include "cls/rbd/cls_rbd_types.h"
 
 /// information about our parent image, if any
@@ -66,7 +66,8 @@ struct cls_rbd_snap {
   cls_rbd_parent parent;
   uint64_t flags;
   utime_t timestamp;
-  cls::rbd::SnapshotNamespaceOnDisk snapshot_namespace;
+  cls::rbd::SnapshotNamespaceOnDisk snapshot_namespace = {
+    cls::rbd::UserSnapshotNamespace{}};
 
   /// true if we have a parent
   bool has_parent() const {
@@ -107,8 +108,6 @@ struct cls_rbd_snap {
     }
     if (struct_v >= 5) {
       ::decode(snapshot_namespace, p);
-    } else {
-      snapshot_namespace = cls::rbd::SnapshotNamespaceOnDisk(cls::rbd::UserSnapshotNamespace());
     }
     if (struct_v >= 6) {
       ::decode(timestamp, p);

@@ -37,11 +37,11 @@ class MExportDirNotify : public Message {
     set_tid(tid);
   }
 private:
-  ~MExportDirNotify() {}
+  ~MExportDirNotify() override {}
 
 public:
-  const char *get_type_name() const { return "ExNot"; }
-  void print(ostream& o) const {
+  const char *get_type_name() const override { return "ExNot"; }
+  void print(ostream& o) const override {
     o << "export_notify(" << base;
     o << " " << old_auth << " -> " << new_auth;
     if (ack) 
@@ -59,14 +59,14 @@ public:
       bounds.push_back(*i);
   }
 
-  void encode_payload(uint64_t features) {
+  void encode_payload(uint64_t features) override {
     ::encode(base, payload);
     ::encode(ack, payload);
     ::encode(old_auth, payload);
     ::encode(new_auth, payload);
     ::encode(bounds, payload);
   }
-  void decode_payload() {
+  void decode_payload() override {
     bufferlist::iterator p = payload.begin();
     ::decode(base, p);
     ::decode(ack, p);

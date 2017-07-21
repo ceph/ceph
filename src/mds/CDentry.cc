@@ -36,8 +36,6 @@ ostream& CDentry::print_db_line_prefix(ostream& out)
   return out << ceph_clock_now() << " mds." << dir->cache->mds->get_nodeid() << ".cache.den(" << dir->ino() << " " << name << ") ";
 }
 
-boost::pool<> CDentry::pool(sizeof(CDentry));
-
 LockType CDentry::lock_type(CEPH_LOCK_DN);
 LockType CDentry::versionlock_type(CEPH_LOCK_DVERSION);
 
@@ -90,7 +88,9 @@ ostream& operator<<(ostream& out, const CDentry& dn)
 
   out << " inode=" << dn.get_linkage()->get_inode();
 
-  if (dn.is_new()) out << " state=new";
+  out << " state=" << dn.get_state();
+  if (dn.is_new()) out << "|new";
+  if (dn.state_test(CDentry::STATE_BOTTOMLRU)) out << "|bottomlru";
 
   if (dn.get_num_ref()) {
     out << " |";
@@ -249,6 +249,18 @@ void CDentry::unlink_remote(CDentry::linkage_t *dnl)
   dnl->inode = 0;
 }
 
+void CDentry::push_projected_linkage()
+{
+  _project_linkage();
+
+  if (is_auth()) {
+    CInode *diri = dir->inode;
+    if (diri->is_stray())
+      diri->mdcache->notify_stray_removed();
+  }
+}
+
+
 void CDentry::push_projected_linkage(CInode *inode)
 {
   // dirty rstat tracking is in the projected plane
@@ -261,6 +273,12 @@ void CDentry::push_projected_linkage(CInode *inode)
 
   if (dirty_rstat)
     inode->mark_dirty_rstat();
+
+  if (is_auth()) {
+    CInode *diri = dir->inode;
+    if (diri->is_stray())
+      diri->mdcache->notify_stray_created();
+  }
 }
 
 CDentry::linkage_t *CDentry::pop_projected_linkage()

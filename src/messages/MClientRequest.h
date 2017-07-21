@@ -78,7 +78,7 @@ public:
   filepath path, path2;
   vector<uint64_t> gid_list;
 
-
+  bool queued_for_replay = false;
 
  public:
   // cons
@@ -90,7 +90,7 @@ public:
     head.op = op;
   }
 private:
-  ~MClientRequest() {}
+  ~MClientRequest() override {}
 
 public:
   void set_mdsmap_epoch(epoch_t e) { head.mdsmap_epoch = e; }
@@ -167,7 +167,10 @@ public:
 
   int get_dentry_wanted() { return get_flags() & CEPH_MDS_FLAG_WANT_DENTRY; }
 
-  void decode_payload() {
+  void mark_queued_for_replay() { queued_for_replay = true; }
+  bool is_queued_for_replay() { return queued_for_replay; }
+
+  void decode_payload() override {
     bufferlist::iterator p = payload.begin();
 
     if (header.version >= 4) {
@@ -199,7 +202,7 @@ public:
       ::decode(gid_list, p);
   }
 
-  void encode_payload(uint64_t features) {
+  void encode_payload(uint64_t features) override {
     head.num_releases = releases.size();
     head.version = CEPH_MDS_REQUEST_HEAD_VERSION;
 
@@ -219,8 +222,8 @@ public:
     ::encode(gid_list, payload);
   }
 
-  const char *get_type_name() const { return "creq"; }
-  void print(ostream& out) const {
+  const char *get_type_name() const override { return "creq"; }
+  void print(ostream& out) const override {
     out << "client_request(" << get_orig_source() 
 	<< ":" << get_tid() 
 	<< " " << ceph_mds_op_name(get_op());
@@ -260,6 +263,8 @@ public:
       out << " RETRY=" << (int)head.num_retry;
     if (get_flags() & CEPH_MDS_FLAG_REPLAY)
       out << " REPLAY";
+    if (queued_for_replay)
+      out << " QUEUED_FOR_REPLAY";
     out << " caller_uid=" << head.caller_uid
 	<< ", caller_gid=" << head.caller_gid
 	<< '{';

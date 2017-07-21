@@ -24,12 +24,13 @@
 #include <stdint.h>
 #include <arpa/inet.h>
 #include "include/Context.h"
-#include "include/atomic.h"
 #include "common/Mutex.h"
 #include "common/Cond.h"
 #include "global/global_init.h"
 #include "common/ceph_argparse.h"
 #include "msg/async/Event.h"
+
+#include <atomic>
 
 // We use epoll, kqueue, evport, select in descending order by performance.
 #if defined(__linux__)
@@ -148,10 +149,12 @@ void* echoclient(void *arg)
   sa.sin_port = htons(port);
   char addr[] = "127.0.0.1";
   int r = inet_pton(AF_INET, addr, &sa.sin_addr);
+  assert(r == 1);
 
   int connect_sd = ::socket(AF_INET, SOCK_STREAM, 0);
   if (connect_sd >= 0) {
     r = connect(connect_sd, (struct sockaddr*)&sa, sizeof(sa));
+    assert(r == 0);
     int t = 0;
   
     do {
@@ -224,21 +227,22 @@ TEST_P(EventDriverTest, NetworkSocketTest) {
     tv.tv_sec = 5;
     tv.tv_usec = 0;
     r = driver->event_wait(fired_events, &tv);
-    ASSERT_EQ(r, 1);
-    ASSERT_EQ(fired_events[0].mask, EVENT_READABLE);
+    ASSERT_EQ(1, r);
+    ASSERT_EQ(EVENT_READABLE, fired_events[0].mask);
 
     fired_events.clear();
     char data[100];
     r = ::read(client_sd, data, sizeof(data));
     if (r == 0)
       break;
-    ASSERT_TRUE(r > 0);
+    ASSERT_GT(r, 0);
     r = driver->add_event(client_sd, EVENT_READABLE, EVENT_WRITABLE);
+    ASSERT_EQ(0, r);
     r = driver->event_wait(fired_events, &tv);
-    ASSERT_EQ(r, 1);
+    ASSERT_EQ(1, r);
     ASSERT_EQ(fired_events[0].mask, EVENT_WRITABLE);
     r = write(client_sd, data, strlen(data));
-    ASSERT_EQ(r, (int)strlen(data));
+    ASSERT_EQ((int)strlen(data), r);
     driver->del_event(client_sd, EVENT_READABLE|EVENT_WRITABLE,
                       EVENT_WRITABLE);
   } while (1);
@@ -292,15 +296,15 @@ class Worker : public Thread {
 };
 
 class CountEvent: public EventCallback {
-  atomic_t *count;
+  std::atomic<unsigned> *count;
   Mutex *lock;
   Cond *cond;
 
  public:
-  CountEvent(atomic_t *atomic, Mutex *l, Cond *c): count(atomic), lock(l), cond(c) {}
+  CountEvent(std::atomic<unsigned> *atomic, Mutex *l, Cond *c): count(atomic), lock(l), cond(c) {}
   void do_request(int id) override {
     lock->Lock();
-    count->dec();
+    (*count)--;
     cond->Signal();
     lock->Unlock();
   }
@@ -308,18 +312,18 @@ class CountEvent: public EventCallback {
 
 TEST(EventCenterTest, DispatchTest) {
   Worker worker1(g_ceph_context, 1), worker2(g_ceph_context, 2);
-  atomic_t count(0);
+  std::atomic<unsigned> count = { 0 };
   Mutex lock("DispatchTest::lock");
   Cond cond;
   worker1.create("worker_1");
   worker2.create("worker_2");
   for (int i = 0; i < 10000; ++i) {
-    count.inc();
+    count++;
     worker1.center.dispatch_event_external(EventCallbackRef(new CountEvent(&count, &lock, &cond)));
-    count.inc();
+    count++;
     worker2.center.dispatch_event_external(EventCallbackRef(new CountEvent(&count, &lock, &cond)));
     Mutex::Locker l(lock);
-    while (count.read())
+    while (count)
       cond.Wait(lock);
   }
   worker1.stop();

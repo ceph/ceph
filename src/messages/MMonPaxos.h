@@ -22,7 +22,7 @@
 
 class MMonPaxos : public Message {
 
-  static const int HEAD_VERSION = 3;
+  static const int HEAD_VERSION = 4;
   static const int COMPAT_VERSION = 3;
 
  public:
@@ -63,6 +63,8 @@ class MMonPaxos : public Message {
 
   map<version_t,bufferlist> values;
 
+  bufferlist feature_map;
+
   MMonPaxos() : Message(MSG_MON_PAXOS, HEAD_VERSION, COMPAT_VERSION) { }
   MMonPaxos(epoch_t e, int o, utime_t now) : 
     Message(MSG_MON_PAXOS, HEAD_VERSION, COMPAT_VERSION),
@@ -74,12 +76,12 @@ class MMonPaxos : public Message {
   }
 
 private:
-  ~MMonPaxos() {}
+  ~MMonPaxos() override {}
 
 public:  
-  const char *get_type_name() const { return "paxos"; }
+  const char *get_type_name() const override { return "paxos"; }
   
-  void print(ostream& out) const {
+  void print(ostream& out) const override {
     out << "paxos(" << get_opname(op) 
 	<< " lc " << last_committed
 	<< " fc " << first_committed
@@ -89,7 +91,7 @@ public:
     out <<  ")";
   }
 
-  void encode_payload(uint64_t features) {
+  void encode_payload(uint64_t features) override {
     header.version = HEAD_VERSION;
     ::encode(epoch, payload);
     ::encode(op, payload);
@@ -103,8 +105,9 @@ public:
     ::encode(latest_version, payload);
     ::encode(latest_value, payload);
     ::encode(values, payload);
+    ::encode(feature_map, payload);
   }
-  void decode_payload() {
+  void decode_payload() override {
     bufferlist::iterator p = payload.begin();
     ::decode(epoch, p);
     ::decode(op, p);
@@ -114,11 +117,13 @@ public:
     ::decode(pn, p);   
     ::decode(uncommitted_pn, p);
     ::decode(lease_timestamp, p);
-    if (header.version >= 1)
-      ::decode(sent_timestamp, p);
+    ::decode(sent_timestamp, p);
     ::decode(latest_version, p);
     ::decode(latest_value, p);
     ::decode(values, p);
+    if (header.version >= 4) {
+      ::decode(feature_map, p);
+    }
   }
 };
 

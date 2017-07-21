@@ -70,8 +70,8 @@ namespace librbd {
   class C_OrderedWrite : public Context {
   public:
     C_OrderedWrite(CephContext *cct, LibrbdWriteback::write_result_d *result,
-		   LibrbdWriteback *wb)
-      : m_cct(cct), m_result(result), m_wb_handler(wb) {}
+		   const ZTracer::Trace &trace, LibrbdWriteback *wb)
+      : m_cct(cct), m_result(result), m_trace(trace), m_wb_handler(wb) {}
     ~C_OrderedWrite() override {}
     void finish(int r) override {
       ldout(m_cct, 20) << "C_OrderedWrite completing " << m_result << dendl;
@@ -83,10 +83,12 @@ namespace librbd {
 	m_wb_handler->complete_writes(m_result->oid);
       }
       ldout(m_cct, 20) << "C_OrderedWrite finished " << m_result << dendl;
+      m_trace.event("finish");
     }
   private:
     CephContext *m_cct;
     LibrbdWriteback::write_result_d *m_result;
+    ZTracer::Trace m_trace;
     LibrbdWriteback *m_wb_handler;
   };
 
@@ -99,17 +101,19 @@ namespace librbd {
     uint64_t off;
     bufferlist bl;
     SnapContext snapc;
-    Context *req_comp;
     uint64_t journal_tid;
-    bool request_sent;
+    ZTracer::Trace trace;
+    Context *req_comp;
+    bool request_sent = false;
 
     C_WriteJournalCommit(ImageCtx *_image_ctx, const std::string &_oid,
                          uint64_t _object_no, uint64_t _off,
                          const bufferlist &_bl, const SnapContext& _snapc,
-                         Context *_req_comp, uint64_t _journal_tid)
+                         uint64_t _journal_tid,
+			 const ZTracer::Trace &trace, Context *_req_comp)
       : image_ctx(_image_ctx), oid(_oid), object_no(_object_no), off(_off),
-        bl(_bl), snapc(_snapc), req_comp(_req_comp), journal_tid(_journal_tid),
-        request_sent(false) {
+        bl(_bl), snapc(_snapc), journal_tid(_journal_tid),
+        trace(trace), req_comp(_req_comp) {
       CephContext *cct = image_ctx->cct;
       ldout(cct, 20) << this << " C_WriteJournalCommit: "
                      << "delaying write until journal tid "
@@ -162,7 +166,7 @@ namespace librbd {
 
       request_sent = true;
       auto req = new io::ObjectWriteRequest(image_ctx, oid, object_no, off,
-                                            bl, snapc, this, 0);
+                                            bl, snapc, 0, trace, this);
       req->send();
     }
   };
@@ -196,7 +200,9 @@ namespace librbd {
 			     const object_locator_t& oloc,
 			     uint64_t off, uint64_t len, snapid_t snapid,
 			     bufferlist *pbl, uint64_t trunc_size,
-			     __u32 trunc_seq, int op_flags, Context *onfinish)
+			     __u32 trunc_seq, int op_flags,
+                             const ZTracer::Trace &parent_trace,
+                             Context *onfinish)
   {
     // on completion, take the mutex and then call onfinish.
     Context *req = new C_ReadRequest(m_ictx->cct, onfinish, &m_lock);
@@ -216,9 +222,10 @@ namespace librbd {
     int flags = m_ictx->get_read_flags(snapid);
 
     librados::AioCompletion *rados_completion =
-      util::create_rados_ack_callback(req);
-    int r = m_ictx->data_ctx.aio_operate(oid.name, rados_completion, &op,
-					 flags, NULL);
+      util::create_rados_callback(req);
+    int r = m_ictx->data_ctx.aio_operate(
+      oid.name, rados_completion, &op, flags, nullptr,
+      (parent_trace.valid() ? parent_trace.get_info() : nullptr));
     rados_completion->release();
     assert(r >= 0);
   }
@@ -254,25 +261,34 @@ namespace librbd {
 				    const bufferlist &bl,
 				    ceph::real_time mtime, uint64_t trunc_size,
 				    __u32 trunc_seq, ceph_tid_t journal_tid,
+                                    const ZTracer::Trace &parent_trace,
 				    Context *oncommit)
   {
+    ZTracer::Trace trace;
+    if (parent_trace.valid()) {
+      trace.init("", &m_ictx->trace_endpoint, &parent_trace);
+      trace.copy_name("writeback " + oid.name);
+      trace.event("start");
+    }
+
     uint64_t object_no = oid_to_object_no(oid.name, m_ictx->object_prefix);
 
     write_result_d *result = new write_result_d(oid.name, oncommit);
     m_writes[oid.name].push(result);
     ldout(m_ictx->cct, 20) << "write will wait for result " << result << dendl;
-    C_OrderedWrite *req_comp = new C_OrderedWrite(m_ictx->cct, result, this);
+    C_OrderedWrite *req_comp = new C_OrderedWrite(m_ictx->cct, result, trace,
+                                                  this);
 
     // all IO operations are flushed prior to closing the journal
     assert(journal_tid == 0 || m_ictx->journal != NULL);
     if (journal_tid != 0) {
       m_ictx->journal->flush_event(
-        journal_tid, new C_WriteJournalCommit(m_ictx, oid.name, object_no, off,
-                                              bl, snapc, req_comp,
-					      journal_tid));
+        journal_tid, new C_WriteJournalCommit(
+	  m_ictx, oid.name, object_no, off, bl, snapc, journal_tid, trace,
+          req_comp));
     } else {
-      auto req = new io::ObjectWriteRequest(m_ictx, oid.name, object_no,
-					    off, bl, snapc, req_comp, 0);
+      auto req = new io::ObjectWriteRequest(
+	m_ictx, oid.name, object_no, off, bl, snapc, 0, trace, req_comp);
       req->send();
     }
     return ++m_tid;

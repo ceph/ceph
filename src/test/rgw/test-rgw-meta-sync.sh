@@ -5,10 +5,10 @@
 set -e
 
 function get_metadata_sync_status {
-  id=$1
+  cid=$1
   realm=$2
 
-  meta_sync_status_json=`$(rgw_admin $id) --rgw-realm=$realm metadata sync status`
+  meta_sync_status_json=`$(rgw_admin $cid) --rgw-realm=$realm metadata sync status`
 
   global_sync_status=$(json_extract sync_status.info.status $meta_sync_status_json)
   num_shards=$(json_extract sync_status.info.num_shards $meta_sync_status_json)
@@ -26,10 +26,10 @@ function get_metadata_sync_status {
 }
 
 function get_metadata_log_status {
-  master_id=$1
+  cid=$1
   realm=$2
 
-  master_mdlog_status_json=`$(rgw_admin $master_id) --rgw_realm=$realm  mdlog status`
+  master_mdlog_status_json=`$(rgw_admin $cid) --rgw-realm=$realm mdlog status`
   master_meta_status=$(json_extract "" $master_mdlog_status_json)
 
   eval master_status=$(project_python_array_field marker $master_meta_status)
@@ -37,14 +37,14 @@ function get_metadata_log_status {
 
 function wait_for_meta_sync {
   master_id=$1
-  id=$2
+  cid=$2
   realm=$3
 
   get_metadata_log_status $master_id $realm
   echo "master_status=${master_status[*]}"
 
   while true; do
-    get_metadata_sync_status $id $realm
+    get_metadata_sync_status $cid $realm
 
     echo "secondary_status=${secondary_status[*]}"
 

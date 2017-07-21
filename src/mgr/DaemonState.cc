@@ -30,28 +30,31 @@ void DaemonStateIndex::insert(DaemonStatePtr dm)
   all[dm->key] = dm;
 }
 
-void DaemonStateIndex::_erase(DaemonKey dmk)
+void DaemonStateIndex::_erase(const DaemonKey& dmk)
 {
   assert(lock.is_locked_by_me());
 
-  const auto dm = all.at(dmk);
+  const auto to_erase = all.find(dmk);
+  assert(to_erase != all.end());
+  const auto dm = to_erase->second;
   auto &server_collection = by_server[dm->hostname];
   server_collection.erase(dm->key);
   if (server_collection.empty()) {
     by_server.erase(dm->hostname);
   }
 
-  all.erase(dmk);
+  all.erase(to_erase);
 }
 
-DaemonStateCollection DaemonStateIndex::get_by_type(uint8_t type) const
+DaemonStateCollection DaemonStateIndex::get_by_service(
+  const std::string& svc) const
 {
   Mutex::Locker l(lock);
 
   DaemonStateCollection result;
 
   for (const auto &i : all) {
-    if (i.first.first == type) {
+    if (i.first.first == svc) {
       result[i.first] = i.second;
     }
   }
@@ -84,38 +87,44 @@ DaemonStatePtr DaemonStateIndex::get(const DaemonKey &key)
   return all.at(key);
 }
 
-void DaemonStateIndex::cull(entity_type_t daemon_type,
-                               std::set<std::string> names_exist)
+void DaemonStateIndex::cull(const std::string& svc_name,
+			    const std::set<std::string>& names_exist)
 {
+  std::vector<string> victims;
+
   Mutex::Locker l(lock);
-
-  std::set<DaemonKey> victims;
-
-  for (const auto &i : all) {
-    if (i.first.first != daemon_type) {
-      continue;
-    }
-
-    if (names_exist.count(i.first.second) == 0) {
-      victims.insert(i.first);
+  auto begin = all.lower_bound({svc_name, ""});
+  auto end = all.end();
+  for (auto &i = begin; i != end; ++i) {
+    const auto& daemon_key = i->first;
+    if (daemon_key.first != svc_name)
+      break;
+    if (names_exist.count(daemon_key.second) == 0) {
+      victims.push_back(daemon_key.second);
     }
   }
 
-  for (const auto &i : victims) {
+  for (auto &i : victims) {
     dout(4) << "Removing data for " << i << dendl;
-    _erase(i);
+    _erase({svc_name, i});
   }
 }
 
 void DaemonPerfCounters::update(MMgrReport *report)
 {
   dout(20) << "loading " << report->declare_types.size() << " new types, "
+	   << report->undeclare_types.size() << " old types, had "
+	   << types.size() << " types, got "
            << report->packed.length() << " bytes of data" << dendl;
 
   // Load any newly declared types
   for (const auto &t : report->declare_types) {
     types.insert(std::make_pair(t.path, t));
     declared_types.insert(t.path);
+  }
+  // Remove any old types
+  for (const auto &t : report->undeclare_types) {
+    declared_types.erase(t);
   }
 
   const auto now = ceph_clock_now();

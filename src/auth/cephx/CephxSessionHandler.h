@@ -26,24 +26,24 @@ public:
   CephxSessionHandler(CephContext *cct_, CryptoKey session_key, uint64_t features)
     : AuthSessionHandler(cct_, CEPH_AUTH_CEPHX, session_key),
       features(features) {}
-  ~CephxSessionHandler() {}
+  ~CephxSessionHandler() override {}
   
-  bool no_security() {
+  bool no_security() override {
     return false;
   }
 
   int _calc_signature(Message *m, uint64_t *psig);
 
-  int sign_message(Message *m);
-  int check_message_signature(Message *m) ;
+  int sign_message(Message *m) override;
+  int check_message_signature(Message *m) override ;
 
   // Cephx does not currently encrypt messages, so just return 0 if called.  PLR
 
-  int encrypt_message(Message *m) {
+  int encrypt_message(Message *m) override {
     return 0;
   }
 
-  int decrypt_message(Message *m) {
+  int decrypt_message(Message *m) override {
     return 0;
   }
 

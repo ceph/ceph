@@ -26,17 +26,11 @@
 #ifndef SSTRING_HH_
 #define SSTRING_HH_
 
-#include <stdint.h>
-#include <algorithm>
-#include <string>
-#include <cstring>
-#include <stdexcept>
-#include <initializer_list>
-#include <iostream>
-#include <functional>
-#include <cstdio>
 #include <type_traits>
-#include <boost/utility/string_ref.hpp>
+#include <boost/utility/string_view.hpp>
+
+#include "include/buffer.h"
+#include "include/denc.h"
 
 template <typename char_type, typename Size, Size max_size>
 class basic_sstring;
@@ -533,8 +527,8 @@ public:
     const char_type& operator[](size_type pos) const {
         return str()[pos];
     }
-    operator boost::basic_string_ref<char_type, traits_type>() const {
-		return boost::basic_string_ref<char_type, traits_type>(str(), size());
+    operator boost::basic_string_view<char_type, traits_type>() const {
+		return boost::basic_string_view<char_type, traits_type>(str(), size());
     }
     template <typename string_type, typename T>
     friend inline string_type to_sstring(T value);
@@ -617,7 +611,7 @@ template <typename char_type, typename size_type, size_type max_size>
 struct hash<basic_sstring<char_type, size_type, max_size>> {
     size_t operator()(const basic_sstring<char_type, size_type, max_size>& s) const {
 		using traits_type = std::char_traits<char_type>;
-		return std::hash<boost::basic_string_ref<char_type,traits_type>>()(s);
+		return std::hash<boost::basic_string_view<char_type,traits_type>>()(s);
     }
 };
 
@@ -646,6 +640,60 @@ template <typename string_type, typename T>
 inline string_type to_sstring(T value) {
     return sstring::to_sstring<string_type>(value);
 }
+
+
+// encode/decode
+template <typename Char, typename Size, Size Max>
+struct denc_traits<basic_sstring<Char, Size, Max>> {
+private:
+  using value_type = basic_sstring<Char, Size, Max>;
+public:
+  static constexpr bool supported = true;
+  static constexpr bool featured = false;
+  static constexpr bool bounded = false;
+
+  static void bound_encode(const value_type& s, size_t& p, uint64_t f=0) {
+    p += sizeof(Size) + s.size();
+  }
+
+  static void encode_nohead(const value_type& s,
+                            buffer::list::contiguous_appender& p)
+  {
+    auto len = s.size();
+    if (len) {
+      p.append(reinterpret_cast<const char*>(s.c_str()), len);
+    }
+  }
+
+  static void decode_nohead(size_t len, value_type& s,
+                            buffer::ptr::iterator& p)
+  {
+    s.reset();
+    if (len) {
+      s.append(reinterpret_cast<const Char*>(p.get_pos_add(len)), len);
+    }
+  }
+
+  static void encode(const value_type& s,
+                     buffer::list::contiguous_appender& p,
+                     uint64_t f=0)
+  {
+    Size len = (Size)(s.size());
+    ::denc(len, p);
+    if (len) {
+      p.append(reinterpret_cast<const char*>(s.c_str()), len);
+    }
+  }
+
+  static void decode(value_type& s,
+                     buffer::ptr::iterator& p,
+                     uint64_t f=0)
+  {
+    Size len;
+    ::denc(len, p);
+    decode_nohead(len, s, p);
+  }
+};
 
 #if 0 /* XXX conflicts w/Ceph types.h */
 template <typename T>

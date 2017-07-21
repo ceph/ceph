@@ -37,11 +37,12 @@ enum EventType {
   EVENT_TYPE_RENAME          = 10,
   EVENT_TYPE_RESIZE          = 11,
   EVENT_TYPE_FLATTEN         = 12,
-  EVENT_TYPE_DEMOTE          = 13,
+  EVENT_TYPE_DEMOTE_PROMOTE  = 13,
   EVENT_TYPE_SNAP_LIMIT      = 14,
   EVENT_TYPE_UPDATE_FEATURES = 15,
   EVENT_TYPE_METADATA_SET    = 16,
   EVENT_TYPE_METADATA_REMOVE = 17,
+  EVENT_TYPE_AIO_WRITESAME   = 18,
 };
 
 struct AioDiscardEvent {
@@ -49,11 +50,12 @@ struct AioDiscardEvent {
 
   uint64_t offset;
   uint64_t length;
+  bool skip_partial_discard;
 
-  AioDiscardEvent() : offset(0), length(0) {
+  AioDiscardEvent() : offset(0), length(0), skip_partial_discard(false) {
   }
-  AioDiscardEvent(uint64_t _offset, uint64_t _length)
-    : offset(_offset), length(_length) {
+  AioDiscardEvent(uint64_t _offset, uint64_t _length, bool _skip_partial_discard)
+    : offset(_offset), length(_length), skip_partial_discard(_skip_partial_discard) {
   }
 
   void encode(bufferlist& bl) const;
@@ -73,6 +75,25 @@ struct AioWriteEvent {
   AioWriteEvent() : offset(0), length(0) {
   }
   AioWriteEvent(uint64_t _offset, uint64_t _length, const bufferlist &_data)
+    : offset(_offset), length(_length), data(_data) {
+  }
+
+  void encode(bufferlist& bl) const;
+  void decode(__u8 version, bufferlist::iterator& it);
+  void dump(Formatter *f) const;
+};
+
+struct AioWriteSameEvent {
+  static const EventType TYPE = EVENT_TYPE_AIO_WRITESAME;
+
+  uint64_t offset;
+  uint64_t length;
+  bufferlist data;
+
+  AioWriteSameEvent() : offset(0), length(0) {
+  }
+  AioWriteSameEvent(uint64_t _offset, uint64_t _length,
+                    const bufferlist &_data)
     : offset(_offset), length(_length), data(_data) {
   }
 
@@ -119,13 +140,17 @@ struct OpFinishEvent : public OpEventBase {
 };
 
 struct SnapEventBase : public OpEventBase {
+  cls::rbd::SnapshotNamespace snap_namespace;
   std::string snap_name;
 
 protected:
   SnapEventBase() {
   }
-  SnapEventBase(uint64_t op_tid, const std::string &_snap_name)
-    : OpEventBase(op_tid), snap_name(_snap_name) {
+  SnapEventBase(uint64_t op_tid, const cls::rbd::SnapshotNamespace& _snap_namespace,
+		const std::string &_snap_name)
+    : OpEventBase(op_tid),
+      snap_namespace(_snap_namespace),
+      snap_name(_snap_name) {
   }
 
   void encode(bufferlist& bl) const;
@@ -135,12 +160,12 @@ protected:
 
 struct SnapCreateEvent : public SnapEventBase {
   static const EventType TYPE = EVENT_TYPE_SNAP_CREATE;
-  cls::rbd::SnapshotNamespace snap_namespace;
 
   SnapCreateEvent() {
   }
-  SnapCreateEvent(uint64_t op_tid, const std::string &snap_name, const cls::rbd::SnapshotNamespace &_snap_namespace)
-    : SnapEventBase(op_tid, snap_name), snap_namespace(_snap_namespace) {
+  SnapCreateEvent(uint64_t op_tid, const cls::rbd::SnapshotNamespace& snap_namespace,
+		  const std::string &snap_name)
+    : SnapEventBase(op_tid, snap_namespace, snap_name) {
   }
 
   void encode(bufferlist& bl) const;
@@ -153,8 +178,9 @@ struct SnapRemoveEvent : public SnapEventBase {
 
   SnapRemoveEvent() {
   }
-  SnapRemoveEvent(uint64_t op_tid, const std::string &snap_name)
-    : SnapEventBase(op_tid, snap_name) {
+  SnapRemoveEvent(uint64_t op_tid, const cls::rbd::SnapshotNamespace& snap_namespace,
+		  const std::string &snap_name)
+    : SnapEventBase(op_tid, snap_namespace, snap_name) {
   }
 
   using SnapEventBase::encode;
@@ -162,19 +188,22 @@ struct SnapRemoveEvent : public SnapEventBase {
   using SnapEventBase::dump;
 };
 
-struct SnapRenameEvent : public SnapEventBase {
+struct SnapRenameEvent : public OpEventBase{
   static const EventType TYPE = EVENT_TYPE_SNAP_RENAME;
 
   uint64_t snap_id;
   std::string src_snap_name;
+  std::string dst_snap_name;
 
   SnapRenameEvent() : snap_id(CEPH_NOSNAP) {
   }
   SnapRenameEvent(uint64_t op_tid, uint64_t src_snap_id,
                   const std::string &src_snap_name,
                   const std::string &dest_snap_name)
-    : SnapEventBase(op_tid, dest_snap_name), snap_id(src_snap_id),
-      src_snap_name(src_snap_name) {
+    : OpEventBase(op_tid),
+      snap_id(src_snap_id),
+      src_snap_name(src_snap_name),
+      dst_snap_name(dest_snap_name) {
   }
 
   void encode(bufferlist& bl) const;
@@ -187,8 +216,9 @@ struct SnapProtectEvent : public SnapEventBase {
 
   SnapProtectEvent() {
   }
-  SnapProtectEvent(uint64_t op_tid, const std::string &snap_name)
-    : SnapEventBase(op_tid, snap_name) {
+  SnapProtectEvent(uint64_t op_tid, const cls::rbd::SnapshotNamespace& snap_namespace,
+		   const std::string &snap_name)
+    : SnapEventBase(op_tid, snap_namespace, snap_name) {
   }
 
   using SnapEventBase::encode;
@@ -201,8 +231,9 @@ struct SnapUnprotectEvent : public SnapEventBase {
 
   SnapUnprotectEvent() {
   }
-  SnapUnprotectEvent(uint64_t op_tid, const std::string &snap_name)
-    : SnapEventBase(op_tid, snap_name) {
+  SnapUnprotectEvent(uint64_t op_tid, const cls::rbd::SnapshotNamespace &snap_namespace,
+		     const std::string &snap_name)
+    : SnapEventBase(op_tid, snap_namespace, snap_name) {
   }
 
   using SnapEventBase::encode;
@@ -230,8 +261,9 @@ struct SnapRollbackEvent : public SnapEventBase {
 
   SnapRollbackEvent() {
   }
-  SnapRollbackEvent(uint64_t op_tid, const std::string &snap_name)
-    : SnapEventBase(op_tid, snap_name) {
+  SnapRollbackEvent(uint64_t op_tid, const cls::rbd::SnapshotNamespace& snap_namespace,
+		    const std::string &snap_name)
+    : SnapEventBase(op_tid, snap_namespace, snap_name) {
   }
 
   using SnapEventBase::encode;
@@ -284,8 +316,9 @@ struct FlattenEvent : public OpEventBase {
   using OpEventBase::dump;
 };
 
-struct DemoteEvent {
-  static const EventType TYPE = static_cast<EventType>(EVENT_TYPE_DEMOTE);
+struct DemotePromoteEvent {
+  static const EventType TYPE = static_cast<EventType>(
+    EVENT_TYPE_DEMOTE_PROMOTE);
 
   void encode(bufferlist& bl) const;
   void decode(__u8 version, bufferlist::iterator& it);
@@ -363,11 +396,12 @@ typedef boost::variant<AioDiscardEvent,
                        RenameEvent,
                        ResizeEvent,
                        FlattenEvent,
-                       DemoteEvent,
+                       DemotePromoteEvent,
 		       SnapLimitEvent,
                        UpdateFeaturesEvent,
                        MetadataSetEvent,
                        MetadataRemoveEvent,
+                       AioWriteSameEvent,
                        UnknownEvent> Event;
 
 struct EventEntry {
@@ -427,27 +461,31 @@ struct ImageClientMeta {
 struct MirrorPeerSyncPoint {
   typedef boost::optional<uint64_t> ObjectNumber;
 
+  cls::rbd::SnapshotNamespace snap_namespace;
   std::string snap_name;
   std::string from_snap_name;
   ObjectNumber object_number;
 
-  MirrorPeerSyncPoint() : MirrorPeerSyncPoint("", "", boost::none) {
+  MirrorPeerSyncPoint() : MirrorPeerSyncPoint({}, "", "", boost::none) {
   }
-  MirrorPeerSyncPoint(const std::string &snap_name,
+  MirrorPeerSyncPoint(const cls::rbd::SnapshotNamespace& snap_namespace,
+		      const std::string &snap_name,
                       const ObjectNumber &object_number)
-    : MirrorPeerSyncPoint(snap_name, "", object_number) {
+    : MirrorPeerSyncPoint(snap_namespace, snap_name, "", object_number) {
   }
-  MirrorPeerSyncPoint(const std::string &snap_name,
+  MirrorPeerSyncPoint(const cls::rbd::SnapshotNamespace& snap_namespace,
+		      const std::string &snap_name,
                       const std::string &from_snap_name,
                       const ObjectNumber &object_number)
-    : snap_name(snap_name), from_snap_name(from_snap_name),
-      object_number(object_number) {
+    : snap_namespace(snap_namespace), snap_name(snap_name),
+    from_snap_name(from_snap_name), object_number(object_number) {
   }
 
   inline bool operator==(const MirrorPeerSyncPoint &sync) const {
     return (snap_name == sync.snap_name &&
             from_snap_name == sync.from_snap_name &&
-            object_number == sync.object_number);
+            object_number == sync.object_number &&
+	    snap_namespace == sync.snap_namespace);
   }
 
   void encode(bufferlist& bl) const;

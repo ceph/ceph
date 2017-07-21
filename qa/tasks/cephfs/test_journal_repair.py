@@ -160,9 +160,7 @@ class TestJournalRepair(CephFSTestCase):
         """
 
         # Set max_mds to 2
-        self.fs.mon_manager.raw_cluster_cmd_result('mds', 'set', "allow_multimds",
-                                                   "true", "--yes-i-really-mean-it")
-        self.fs.mon_manager.raw_cluster_cmd_result('mds', 'set', "max_mds", "2")
+        self.fs.set_max_mds(2)
 
         # See that we have two active MDSs
         self.wait_until_equal(lambda: len(self.fs.get_active_names()), 2, 30,
@@ -174,26 +172,33 @@ class TestJournalRepair(CephFSTestCase):
             self.mds_cluster.mds_stop(unneeded_mds)
             self.mds_cluster.mds_fail(unneeded_mds)
 
-        # Do a bunch of I/O such that at least some will hit the second MDS: create
-        # lots of directories so that the balancer should find it easy to make a decision
-        # to allocate some of them to the second mds.
-        spammers = []
-        for n in range(0, 16):
-            dir_name = "spam_{0}".format(n)
-            spammers.append(self.mount_a.spam_dir_background(dir_name))
+        # Create a dir on each rank
+        self.mount_a.run_shell(["mkdir", "alpha"])
+        self.mount_a.run_shell(["mkdir", "bravo"])
+        self.mount_a.setfattr("alpha/", "ceph.dir.pin", "0")
+        self.mount_a.setfattr("bravo/", "ceph.dir.pin", "1")
 
         def subtrees_assigned():
             got_subtrees = self.fs.mds_asok(["get", "subtrees"], mds_id=active_mds_names[0])
-            rank_1_count = len([s for s in got_subtrees if s['auth_first'] == 1])
 
-            # Greater than 1, because there is typically 1 for ~mds1, and once it
-            # has been assigned something in addition to that it means it has been
-            # assigned a "real" subtree.
-            return rank_1_count > 1
+            for s in got_subtrees:
+                if s['dir']['path'] == '/bravo':
+                    if s['auth_first'] == 1:
+                        return True
+                    else:
+                        # Should not happen
+                        raise RuntimeError("/bravo is subtree but not rank 1!")
 
-        # We are waiting for the MDS to respond to hot directories, which
-        # is not guaranteed to happen at a particular time, so a lengthy timeout here.
-        self.wait_until_true(subtrees_assigned, 600)
+            return False
+
+        # Ensure the pinning has taken effect and the /bravo dir is now
+        # migrated to rank 1.
+        self.wait_until_true(subtrees_assigned, 30)
+
+        # Do some IO (this should be split across ranks according to
+        # the rank-pinned dirs)
+        self.mount_a.create_n_files("alpha/file", 1000)
+        self.mount_a.create_n_files("bravo/file", 1000)
 
         # Flush the journals so that we have some backing store data
         # belonging to one MDS, and some to the other MDS.
@@ -229,16 +234,6 @@ class TestJournalRepair(CephFSTestCase):
             # The ConnectionLostError case is for kernel client, where
             # killing the mount also means killing the node.
             pass
-
-        log.info("Terminating spammer processes...")
-        for spammer_proc in spammers:
-            spammer_proc.stdin.close()
-            try:
-                spammer_proc.wait()
-            except (CommandFailedError, ConnectionLostError):
-                # The ConnectionLostError case is for kernel client, where
-                # killing the mount also means killing the node.
-                pass
 
         # See that the second MDS will crash when it starts and tries to
         # acquire rank 1

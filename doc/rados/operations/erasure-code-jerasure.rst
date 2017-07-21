@@ -6,7 +6,7 @@ The *jerasure* plugin is the most generic and flexible plugin, it is
 also the default for Ceph erasure coded pools. 
 
 The *jerasure* plugin encapsulates the `Jerasure
-<https://bitbucket.org/jimplank/jerasure/>`_ library. It is
+<http://jerasure.org>`_ library. It is
 recommended to read the *jerasure* documentation to get a better
 understanding of the parameters.
 
@@ -20,8 +20,9 @@ To create a new *jerasure* erasure code profile::
              k={data-chunks} \
              m={coding-chunks} \
              technique={reed_sol_van|reed_sol_r6_op|cauchy_orig|cauchy_good|liberation|blaum_roth|liber8tion} \
-             [ruleset-root={root}] \
-             [ruleset-failure-domain={bucket-type}] \
+             [crush-root={root}] \
+             [crush-failure-domain={bucket-type}] \
+             [crush-device-class={device-class}] \
              [directory={directory}] \
              [--force]
 
@@ -70,7 +71,7 @@ Where:
 :Required: No.
 :Default: 2048
 
-``ruleset-root={root}``
+``crush-root={root}``
 
 :Description: The name of the crush bucket used for the first step of
               the ruleset. For intance **step take default**.
@@ -79,7 +80,7 @@ Where:
 :Required: No.
 :Default: default
 
-``ruleset-failure-domain={bucket-type}``
+``crush-failure-domain={bucket-type}``
 
 :Description: Ensure that no two chunks are in a bucket with the same
               failure domain. For instance, if the failure domain is
@@ -91,7 +92,17 @@ Where:
 :Required: No.
 :Default: host
 
-``directory={directory}``
+``crush-device-class={device-class}``
+
+:Description: Restrict placement to devices of a specific class (e.g.,
+              ``ssd`` or ``hdd``), using the crush device class names
+              in the CRUSH map.
+
+:Type: String
+:Required: No.
+:Default:
+
+ ``directory={directory}``
 
 :Description: Set the **directory** name from which the erasure code
               plugin is loaded.

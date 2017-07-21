@@ -1,5 +1,6 @@
 roles:
 - - mon.a
+  - mgr.x
   - osd.0
   - osd.1
   - osd.2
@@ -10,6 +11,11 @@ roles:
 tasks:
 - install:
 - ceph:
+    log-whitelist:
+      - overall HEALTH_
+      - (PG_
+      - (OSD_
+      - (OBJECT_
     conf:
       osd:
         osd debug reject backfill probability: .3
@@ -20,6 +26,7 @@ tasks:
 - exec:
     client.0:
       - sudo ceph osd pool create foo 64
+      - sudo ceph osd pool application enable foo rados
       - rados -p foo bench 60 write -b 1024 --no-cleanup
       - sudo ceph osd pool set foo size 3
       - sudo ceph osd out 0 1
@@ -30,3 +37,6 @@ tasks:
       - sudo ceph osd in 0 1
 - sleep:
     duration: 60
+- exec:
+    client.0:
+      - sudo ceph osd pool set foo size 2

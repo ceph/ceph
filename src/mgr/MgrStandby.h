@@ -18,48 +18,64 @@
 #include "auth/Auth.h"
 #include "common/Finisher.h"
 #include "common/Timer.h"
+#include "common/LogClient.h"
 
-#include "DaemonServer.h"
-#include "PyModules.h"
+#include "client/Client.h"
+#include "mon/MonClient.h"
+#include "osdc/Objecter.h"
 
-#include "DaemonState.h"
-#include "ClusterState.h"
 
 class MMgrMap;
 class Mgr;
 
-class MgrStandby : public Dispatcher {
+class MgrStandby : public Dispatcher,
+		   public md_config_obs_t {
+public:
+  // config observer bits
+  const char** get_tracked_conf_keys() const override;
+  void handle_conf_change(const struct md_config_t *conf,
+                         const std::set <std::string> &changed) override;
+
 protected:
-  MonClient *monc;
-  Objecter *objecter;
-  Messenger *client_messenger;
+  MonClient monc;
+  std::unique_ptr<Messenger> client_messenger;
+  Objecter objecter;
+  Client client;
+
+  LogClient log_client;
+  LogChannelRef clog, audit_clog;
 
   Mutex lock;
   SafeTimer timer;
 
-  Mgr *active_mgr;
+  std::shared_ptr<Mgr> active_mgr;
+
+  int orig_argc;
+  const char **orig_argv;
 
   std::string state_str();
 
   void handle_mgr_map(MMgrMap *m);
+  void _update_log_config();
+  void send_beacon();
 
 public:
-  MgrStandby();
-  ~MgrStandby();
+  MgrStandby(int argc, const char **argv);
+  ~MgrStandby() override;
 
-  bool ms_dispatch(Message *m);
-  bool ms_handle_reset(Connection *con) { return false; }
-  void ms_handle_remote_reset(Connection *con) {}
+  bool ms_dispatch(Message *m) override;
+  bool ms_handle_reset(Connection *con) override { return false; }
+  void ms_handle_remote_reset(Connection *con) override {}
   bool ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer,
-                         bool force_new);
-  bool ms_handle_refused(Connection *con);
+                         bool force_new) override;
+  bool ms_handle_refused(Connection *con) override;
 
   int init();
   void shutdown();
-  void usage() {}
+  void respawn();
   int main(vector<const char *> args);
   void handle_signal(int signum);
-  void send_beacon();
+  void tick();
 };
 
 #endif

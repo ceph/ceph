@@ -19,10 +19,14 @@
 #include "Mgr.h"
 
 #include "mon/MonClient.h"
+#include "common/errno.h"
+#include "common/version.h"
 
 #include "PyState.h"
+#include "Gil.h"
 
 #define dout_context g_ceph_context
+#define dout_subsys ceph_subsys_mgr
 
 PyModules *global_handle = NULL;
 
@@ -31,47 +35,48 @@ class MonCommandCompletion : public Context
 {
   PyObject *python_completion;
   const std::string tag;
+  PyThreadState *pThreadState;
 
 public:
   std::string outs;
   bufferlist outbl;
 
-  MonCommandCompletion(PyObject* ev, const std::string &tag_)
-    : python_completion(ev), tag(tag_)
+  MonCommandCompletion(PyObject* ev, const std::string &tag_, PyThreadState *ts_)
+    : python_completion(ev), tag(tag_), pThreadState(ts_)
   {
     assert(python_completion != nullptr);
     Py_INCREF(python_completion);
   }
 
-  ~MonCommandCompletion()
+  ~MonCommandCompletion() override
   {
     Py_DECREF(python_completion);
   }
 
   void finish(int r) override
   {
-    PyGILState_STATE gstate;
-    gstate = PyGILState_Ensure();
+    dout(10) << "MonCommandCompletion::finish()" << dendl;
+    {
+      // Scoped so the Gil is released before calling notify_all()
+      Gil gil(pThreadState);
 
-    auto set_fn = PyObject_GetAttrString(python_completion, "complete");
-    assert(set_fn != nullptr);
+      auto set_fn = PyObject_GetAttrString(python_completion, "complete");
+      assert(set_fn != nullptr);
 
-    auto pyR = PyInt_FromLong(r);
-    auto pyOutBl = PyString_FromString(outbl.to_str().c_str());
-    auto pyOutS = PyString_FromString(outs.c_str());
-    auto args = PyTuple_Pack(3, pyR, pyOutBl, pyOutS);
-    Py_DECREF(pyR);
-    Py_DECREF(pyOutBl);
-    Py_DECREF(pyOutS);
+      auto pyR = PyInt_FromLong(r);
+      auto pyOutBl = PyString_FromString(outbl.to_str().c_str());
+      auto pyOutS = PyString_FromString(outs.c_str());
+      auto args = PyTuple_Pack(3, pyR, pyOutBl, pyOutS);
+      Py_DECREF(pyR);
+      Py_DECREF(pyOutBl);
+      Py_DECREF(pyOutS);
 
-    auto rtn = PyObject_CallObject(set_fn, args);
-    if (rtn != nullptr) {
-      Py_DECREF(rtn);
+      auto rtn = PyObject_CallObject(set_fn, args);
+      if (rtn != nullptr) {
+	Py_DECREF(rtn);
+      }
+      Py_DECREF(args);
     }
-    Py_DECREF(args);
-
-    PyGILState_Release(gstate);
-
     global_handle->notify_all("command", tag);
   }
 };
@@ -81,11 +86,18 @@ static PyObject*
 ceph_send_command(PyObject *self, PyObject *args)
 {
   char *handle = nullptr;
+
+  // Like mon, osd, mds
+  char *type = nullptr;
+
+  // Like "23" for an OSD or "myid" for an MDS
+  char *name = nullptr;
+
   char *cmd_json = nullptr;
   char *tag = nullptr;
   PyObject *completion = nullptr;
-  if (!PyArg_ParseTuple(args, "sOss:ceph_send_command",
-        &handle, &completion, &cmd_json, &tag)) {
+  if (!PyArg_ParseTuple(args, "sOssss:ceph_send_command",
+        &handle, &completion, &type, &name, &cmd_json, &tag)) {
     return nullptr;
   }
 
@@ -97,14 +109,75 @@ ceph_send_command(PyObject *self, PyObject *args)
   }
   Py_DECREF(set_fn);
 
-  auto c = new MonCommandCompletion(completion, tag);
-  auto r = global_handle->get_monc().start_mon_command(
-      {cmd_json},
-      {},
-      &c->outbl,
-      &c->outs,
-      c);
-  assert(r == 0);  // start_mon_command is forbidden to fail
+  auto c = new MonCommandCompletion(completion, tag, PyThreadState_Get());
+  if (std::string(type) == "mon") {
+    global_handle->get_monc().start_mon_command(
+        {cmd_json},
+        {},
+        &c->outbl,
+        &c->outs,
+        c);
+  } else if (std::string(type) == "osd") {
+    std::string err;
+    uint64_t osd_id = strict_strtoll(name, 10, &err);
+    if (!err.empty()) {
+      delete c;
+      string msg("invalid osd_id: ");
+      msg.append("\"").append(name).append("\"");
+      PyErr_SetString(PyExc_ValueError, msg.c_str());
+      return nullptr;
+    }
+
+    ceph_tid_t tid;
+    global_handle->get_objecter().osd_command(
+        osd_id,
+        {cmd_json},
+        {},
+        &tid,
+        &c->outbl,
+        &c->outs,
+        c);
+  } else if (std::string(type) == "mds") {
+    int r = global_handle->get_client().mds_command(
+        name,
+        {cmd_json},
+        {},
+        &c->outbl,
+        &c->outs,
+        c);
+    if (r != 0) {
+      string msg("failed to send command to mds: ");
+      msg.append(cpp_strerror(r));
+      PyErr_SetString(PyExc_RuntimeError, msg.c_str());
+      return nullptr;
+    }
+  } else if (std::string(type) == "pg") {
+    pg_t pgid;
+    if (!pgid.parse(name)) {
+      delete c;
+      string msg("invalid pgid: ");
+      msg.append("\"").append(name).append("\"");
+      PyErr_SetString(PyExc_ValueError, msg.c_str());
+      return nullptr;
+    }
+
+    ceph_tid_t tid;
+    global_handle->get_objecter().pg_command(
+        pgid,
+        {cmd_json},
+        {},
+        &tid,
+        &c->outbl,
+        &c->outs,
+        c);
+    return nullptr;
+  } else {
+    delete c;
+    string msg("unknown service type: ");
+    msg.append(type);
+    PyErr_SetString(PyExc_ValueError, msg.c_str());
+    return nullptr;
+  }
 
   Py_RETURN_NONE;
 }
@@ -140,6 +213,12 @@ ceph_get_server(PyObject *self, PyObject *args)
 }
 
 static PyObject*
+ceph_get_mgr_id(PyObject *self, PyObject *args)
+{
+  return PyString_FromString(g_conf->name.get_id().c_str());
+}
+
+static PyObject*
 ceph_config_get(PyObject *self, PyObject *args)
 {
   char *handle = nullptr;
@@ -152,12 +231,25 @@ ceph_config_get(PyObject *self, PyObject *args)
   std::string value;
   bool found = global_handle->get_config(handle, what, &value);
   if (found) {
-    derr << "Found" << dendl;
+    dout(10) << "ceph_config_get " << what << " found: " << value.c_str() << dendl;
     return PyString_FromString(value.c_str());
   } else {
-    derr << "Not found" << dendl;
+    derr << "ceph_config_get " << what << " not found " << dendl;
     Py_RETURN_NONE;
   }
+}
+
+static PyObject*
+ceph_config_get_prefix(PyObject *self, PyObject *args)
+{
+  char *handle = nullptr;
+  char *prefix = nullptr;
+  if (!PyArg_ParseTuple(args, "ss:ceph_config_get", &handle, &prefix)) {
+    derr << "Invalid args!" << dendl;
+    return nullptr;
+  }
+
+  return global_handle->get_config_prefix(handle, prefix);
 }
 
 static PyObject*
@@ -175,37 +267,29 @@ ceph_config_set(PyObject *self, PyObject *args)
   Py_RETURN_NONE;
 }
 
-static entity_type_t svc_type_from_str(const std::string &type_str)
-{
-  if (type_str == std::string("mds")) {
-    return CEPH_ENTITY_TYPE_MDS;
-  } else if (type_str == std::string("osd")) {
-    return CEPH_ENTITY_TYPE_OSD;
-  } else if (type_str == std::string("mon")) {
-    return CEPH_ENTITY_TYPE_MON;
-  } else {
-    return CEPH_ENTITY_TYPE_ANY;
-  }
-}
-
 static PyObject*
 get_metadata(PyObject *self, PyObject *args)
 {
   char *handle = nullptr;
-  char *type_str = NULL;
+  char *svc_name = NULL;
   char *svc_id = NULL;
-  if (!PyArg_ParseTuple(args, "sss:get_metadata", &handle, &type_str, &svc_id)) {
+  if (!PyArg_ParseTuple(args, "sss:get_metadata", &handle, &svc_name, &svc_id)) {
     return nullptr;
   }
+  return global_handle->get_metadata_python(handle, svc_name, svc_id);
+}
 
-  entity_type_t svc_type = svc_type_from_str(type_str);
-  if (svc_type == CEPH_ENTITY_TYPE_ANY) {
-    // FIXME: form a proper exception
+static PyObject*
+get_daemon_status(PyObject *self, PyObject *args)
+{
+  char *handle = nullptr;
+  char *svc_name = NULL;
+  char *svc_id = NULL;
+  if (!PyArg_ParseTuple(args, "sss:get_daemon_status", &handle, &svc_name,
+			&svc_id)) {
     return nullptr;
   }
-
-
-  return global_handle->get_metadata_python(handle, svc_type, svc_id);
+  return global_handle->get_daemon_status_python(handle, svc_name, svc_id);
 }
 
 static PyObject*
@@ -223,26 +307,31 @@ ceph_log(PyObject *self, PyObject *args)
   Py_RETURN_NONE;
 }
 
+static PyObject *
+ceph_get_version(PyObject *self, PyObject *args)
+{
+  return PyString_FromString(pretty_version_to_str().c_str());
+}
+
+static PyObject *
+ceph_get_context(PyObject *self, PyObject *args)
+{
+  return global_handle->get_context();
+}
+
 static PyObject*
 get_counter(PyObject *self, PyObject *args)
 {
   char *handle = nullptr;
-  char *type_str = nullptr;
+  char *svc_name = nullptr;
   char *svc_id = nullptr;
   char *counter_path = nullptr;
-  if (!PyArg_ParseTuple(args, "ssss:get_counter", &handle, &type_str,
+  if (!PyArg_ParseTuple(args, "ssss:get_counter", &handle, &svc_name,
                                                   &svc_id, &counter_path)) {
     return nullptr;
   }
-
-  entity_type_t svc_type = svc_type_from_str(type_str);
-  if (svc_type == CEPH_ENTITY_TYPE_ANY) {
-    // FIXME: form a proper exception
-    return nullptr;
-  }
-
   return global_handle->get_counter_python(
-      handle, svc_type, svc_id, counter_path);
+      handle, svc_name, svc_id, counter_path);
 }
 
 PyMethodDef CephStateMethods[] = {
@@ -252,16 +341,26 @@ PyMethodDef CephStateMethods[] = {
      "Get a server object"},
     {"get_metadata", get_metadata, METH_VARARGS,
      "Get a service's metadata"},
+    {"get_daemon_status", get_daemon_status, METH_VARARGS,
+     "Get a service's status"},
     {"send_command", ceph_send_command, METH_VARARGS,
      "Send a mon command"},
+    {"get_mgr_id", ceph_get_mgr_id, METH_NOARGS,
+     "Get the mgr id"},
     {"get_config", ceph_config_get, METH_VARARGS,
      "Get a configuration value"},
+    {"get_config_prefix", ceph_config_get_prefix, METH_VARARGS,
+     "Get all configuration values with a given prefix"},
     {"set_config", ceph_config_set, METH_VARARGS,
      "Set a configuration value"},
     {"get_counter", get_counter, METH_VARARGS,
       "Get a performance counter"},
     {"log", ceph_log, METH_VARARGS,
      "Emit a (local) log message"},
+    {"get_version", ceph_get_version, METH_VARARGS,
+     "Get the ceph version of this process"},
+    {"get_context", ceph_get_context, METH_NOARGS,
+      "Get a CephContext* in a python capsule"},
     {NULL, NULL, 0, NULL}
 };
 

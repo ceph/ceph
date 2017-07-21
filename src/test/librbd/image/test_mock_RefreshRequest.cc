@@ -37,14 +37,14 @@ template <>
 struct RefreshParentRequest<MockRefreshImageCtx> {
   static RefreshParentRequest* s_instance;
   static RefreshParentRequest* create(MockRefreshImageCtx &mock_image_ctx,
-                                      const parent_info& parent_md,
+                                      const ParentInfo& parent_md,
                                       Context *on_finish) {
     assert(s_instance != nullptr);
     s_instance->on_finish = on_finish;
     return s_instance;
   }
   static bool is_refresh_required(MockRefreshImageCtx &mock_image_ctx,
-                                  const parent_info& parent_md) {
+                                  const ParentInfo& parent_md) {
     assert(s_instance != nullptr);
     return s_instance->is_refresh_required();
   }
@@ -97,12 +97,10 @@ public:
   typedef RefreshRequest<MockRefreshImageCtx> MockRefreshRequest;
   typedef RefreshParentRequest<MockRefreshImageCtx> MockRefreshParentRequest;
 
-  void expect_set_require_lock_on_read(MockRefreshImageCtx &mock_image_ctx) {
-    EXPECT_CALL(*mock_image_ctx.io_work_queue, set_require_lock_on_read());
-  }
-
-  void expect_clear_require_lock_on_read(MockRefreshImageCtx &mock_image_ctx) {
-    EXPECT_CALL(*mock_image_ctx.io_work_queue, clear_require_lock_on_read());
+  void expect_set_require_lock(MockRefreshImageCtx &mock_image_ctx,
+                               librbd::io::Direction direction, bool enabled) {
+    EXPECT_CALL(*mock_image_ctx.io_work_queue, set_require_lock(direction,
+                                                                enabled));
   }
 
   void expect_v1_read_header(MockRefreshImageCtx &mock_image_ctx, int r) {
@@ -220,7 +218,7 @@ public:
 
   void expect_add_snap(MockRefreshImageCtx &mock_image_ctx,
                        const std::string &snap_name, uint64_t snap_id) {
-    EXPECT_CALL(mock_image_ctx, add_snap(snap_name, _, snap_id, _, _, _, _, _));
+    EXPECT_CALL(mock_image_ctx, add_snap(_, snap_name, snap_id, _, _, _, _, _));
   }
 
   void expect_init_exclusive_lock(MockRefreshImageCtx &mock_image_ctx,
@@ -320,8 +318,10 @@ public:
   }
 
   void expect_get_snap_id(MockRefreshImageCtx &mock_image_ctx,
-                          const std::string &snap_name, uint64_t snap_id) {
-    EXPECT_CALL(mock_image_ctx, get_snap_id(snap_name)).WillOnce(Return(snap_id));
+                          const std::string &snap_name,
+			  uint64_t snap_id) {
+    EXPECT_CALL(mock_image_ctx,
+		get_snap_id(_, snap_name)).WillOnce(Return(snap_id));
   }
 
   void expect_block_writes(MockImageCtx &mock_image_ctx, int r) {
@@ -452,7 +452,7 @@ TEST_F(TestMockImageRefreshRequest, SuccessSetSnapshotV2) {
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
   ASSERT_EQ(0, snap_create(*ictx, "snap"));
-  ASSERT_EQ(0, librbd::snap_set(ictx, "snap"));
+  ASSERT_EQ(0, librbd::snap_set(ictx, cls::rbd::UserSnapshotNamespace(), "snap"));
 
   MockRefreshImageCtx mock_image_ctx(*ictx);
   MockRefreshParentRequest mock_refresh_parent_request;
@@ -499,7 +499,7 @@ TEST_F(TestMockImageRefreshRequest, SuccessChild) {
 
     librbd::NoOpProgressContext no_op;
     ASSERT_EQ(0, librbd::remove(m_ioctx, clone_name, "", no_op));
-    ASSERT_EQ(0, ictx->operations->snap_unprotect("snap"));
+    ASSERT_EQ(0, ictx->operations->snap_unprotect(cls::rbd::UserSnapshotNamespace(), "snap"));
   };
 
   int order = ictx->order;
@@ -550,7 +550,7 @@ TEST_F(TestMockImageRefreshRequest, SuccessChildDontOpenParent) {
 
     librbd::NoOpProgressContext no_op;
     ASSERT_EQ(0, librbd::remove(m_ioctx, clone_name, "", no_op));
-    ASSERT_EQ(0, ictx->operations->snap_unprotect("snap"));
+    ASSERT_EQ(0, ictx->operations->snap_unprotect(cls::rbd::UserSnapshotNamespace(), "snap"));
   };
 
   int order = ictx->order;
@@ -814,7 +814,7 @@ TEST_F(TestMockImageRefreshRequest, EnableJournalWithoutExclusiveLock) {
   expect_get_flags(mock_image_ctx, 0);
   expect_get_group(mock_image_ctx, 0);
   expect_refresh_parent_is_required(mock_refresh_parent_request, false);
-  expect_set_require_lock_on_read(mock_image_ctx);
+  expect_set_require_lock(mock_image_ctx, librbd::io::DIRECTION_BOTH, true);
 
   C_SaferCond ctx;
   MockRefreshRequest *req = new MockRefreshRequest(mock_image_ctx, false, false, &ctx);
@@ -858,7 +858,9 @@ TEST_F(TestMockImageRefreshRequest, DisableJournal) {
   expect_get_group(mock_image_ctx, 0);
   expect_refresh_parent_is_required(mock_refresh_parent_request, false);
   expect_block_writes(mock_image_ctx, 0);
-  expect_clear_require_lock_on_read(mock_image_ctx);
+  if (!mock_image_ctx.clone_copy_on_read) {
+    expect_set_require_lock(mock_image_ctx, librbd::io::DIRECTION_READ, false);
+  }
   expect_close_journal(mock_image_ctx, *mock_journal, 0);
   expect_unblock_writes(mock_image_ctx);
 

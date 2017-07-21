@@ -113,7 +113,8 @@ private:
   Context *handle_get_clients(int *result);
 
   void send_remove_snap(const std::string &client_id,
-                        const std::string &snap_name);
+                        const cls::rbd::SnapshotNamespace &snap_namespace,
+			const std::string &snap_name);
   Context *handle_remove_snap(int *result, const std::string &client_id);
 
   void send_unregister_client(const std::string &client_id);

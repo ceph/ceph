@@ -21,7 +21,7 @@ struct C_HandleComplete : public Context {
     : replay_handler(_replay_handler) {
     replay_handler->get();
   }
-  ~C_HandleComplete() {
+  ~C_HandleComplete() override {
     replay_handler->put();
   }
   void finish(int r) override {
@@ -36,7 +36,7 @@ struct C_HandleEntriesAvailable : public Context {
       : replay_handler(_replay_handler) {
     replay_handler->get();
   }
-  ~C_HandleEntriesAvailable() {
+  ~C_HandleEntriesAvailable() override {
     replay_handler->put();
   }
   void finish(int r) override {

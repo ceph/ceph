@@ -11,6 +11,20 @@ using namespace librados;
 std::string RadosTestNS::pool_name;
 rados_t RadosTestNS::s_cluster = NULL;
 
+namespace {
+
+void init_rand() {
+  static bool seeded = false;
+  if (!seeded) {
+    seeded = true;
+    int seed = getpid();
+    std::cout << "seed " << seed << std::endl;
+    srand(seed);
+  }
+}
+
+} // anonymous namespace
+
 void RadosTestNS::SetUpTestCase()
 {
   pool_name = get_temp_pool_name();
@@ -33,7 +47,8 @@ void RadosTestNS::SetUp()
 
 void RadosTestNS::TearDown()
 {
-  cleanup_all_objects(ioctx);
+  if (cleanup)
+    cleanup_all_objects(ioctx);
   rados_ioctx_destroy(ioctx);
 }
 
@@ -83,7 +98,8 @@ void RadosTestPPNS::SetUp()
 
 void RadosTestPPNS::TearDown()
 {
-  cleanup_all_objects(ioctx);
+  if (cleanup)
+    cleanup_all_objects(ioctx);
   ioctx.close();
 }
 
@@ -165,7 +181,8 @@ void RadosTestParamPPNS::SetUp()
 
 void RadosTestParamPPNS::TearDown()
 {
-  cleanup_all_objects(ioctx);
+  if (cleanup)
+    cleanup_all_objects(ioctx);
   ioctx.close();
 }
 
@@ -209,7 +226,8 @@ void RadosTestECNS::SetUp()
 
 void RadosTestECNS::TearDown()
 {
-  cleanup_all_objects(ioctx);
+  if (cleanup)
+    cleanup_all_objects(ioctx);
   rados_ioctx_destroy(ioctx);
 }
 
@@ -239,7 +257,8 @@ void RadosTestECPPNS::SetUp()
 
 void RadosTestECPPNS::TearDown()
 {
-  cleanup_all_objects(ioctx);
+  if (cleanup)
+    cleanup_all_objects(ioctx);
   ioctx.close();
 }
 
@@ -270,8 +289,10 @@ void RadosTest::SetUp()
 
 void RadosTest::TearDown()
 {
-  cleanup_default_namespace(ioctx);
-  cleanup_namespace(ioctx, nspace);
+  if (cleanup) {
+    cleanup_default_namespace(ioctx);
+    cleanup_namespace(ioctx, nspace);
+  }
   rados_ioctx_destroy(ioctx);
 }
 
@@ -306,6 +327,8 @@ Rados RadosTestPP::s_cluster;
 
 void RadosTestPP::SetUpTestCase()
 {
+  init_rand();
+
   pool_name = get_temp_pool_name();
   ASSERT_EQ("", create_one_pool_pp(pool_name, s_cluster));
 }
@@ -327,8 +350,10 @@ void RadosTestPP::SetUp()
 
 void RadosTestPP::TearDown()
 {
-  cleanup_default_namespace(ioctx);
-  cleanup_namespace(ioctx, nspace);
+  if (cleanup) {
+    cleanup_default_namespace(ioctx);
+    cleanup_namespace(ioctx, nspace);
+  }
   ioctx.close();
 }
 
@@ -343,19 +368,38 @@ void RadosTestPP::cleanup_namespace(librados::IoCtx ioctx, std::string ns)
 {
   ioctx.snap_set_read(librados::SNAP_HEAD);
   ioctx.set_namespace(ns);
-  for (NObjectIterator it = ioctx.nobjects_begin();
-       it != ioctx.nobjects_end(); ++it) {
-    ioctx.locator_set_key(it->get_locator());
-    ObjectWriteOperation op;
-    op.remove();
-
-    librados::AioCompletion *completion = s_cluster.aio_create_completion();
-    auto sg = make_scope_guard([&] { completion->release(); });
-
-    ASSERT_EQ(0, ioctx.aio_operate(it->get_oid(), completion, &op,
-				   librados::OPERATION_IGNORE_CACHE));
-    completion->wait_for_safe();
-    ASSERT_EQ(0, completion->get_return_value());
+  int tries = 600;
+  while (--tries) {
+    int got_enoent = 0;
+    for (NObjectIterator it = ioctx.nobjects_begin();
+	 it != ioctx.nobjects_end(); ++it) {
+      ioctx.locator_set_key(it->get_locator());
+      ObjectWriteOperation op;
+      op.remove();
+      librados::AioCompletion *completion = s_cluster.aio_create_completion();
+      auto sg = make_scope_guard([&] { completion->release(); });
+      ASSERT_EQ(0, ioctx.aio_operate(it->get_oid(), completion, &op,
+				     librados::OPERATION_IGNORE_CACHE));
+      completion->wait_for_safe();
+      if (completion->get_return_value() == -ENOENT) {
+	++got_enoent;
+	std::cout << " got ENOENT removing " << it->get_oid() << std::endl;
+      } else {
+	ASSERT_EQ(0, completion->get_return_value());
+      }
+    }
+    if (!got_enoent) {
+      break;
+    }
+    std::cout << " got ENOENT on " << got_enoent
+	      << " objects, waiting a bit for snap"
+	      << " trimming before retrying " << tries << " more times..."
+	      << std::endl;
+    sleep(1);
+  }
+  if (tries == 0) {
+    std::cout << "failed to clean up" << std::endl;
+    ASSERT_TRUE(false);
   }
 }
 
@@ -426,8 +470,10 @@ void RadosTestParamPP::SetUp()
 
 void RadosTestParamPP::TearDown()
 {
-  cleanup_default_namespace(ioctx);
-  cleanup_namespace(ioctx, nspace);
+  if (cleanup) {
+    cleanup_default_namespace(ioctx);
+    cleanup_namespace(ioctx, nspace);
+  }
   ioctx.close();
 }
 
@@ -478,8 +524,10 @@ void RadosTestEC::SetUp()
 
 void RadosTestEC::TearDown()
 {
-  cleanup_default_namespace(ioctx);
-  cleanup_namespace(ioctx, nspace);
+  if (cleanup) {
+    cleanup_default_namespace(ioctx);
+    cleanup_namespace(ioctx, nspace);
+  }
   rados_ioctx_destroy(ioctx);
 }
 
@@ -511,8 +559,10 @@ void RadosTestECPP::SetUp()
 
 void RadosTestECPP::TearDown()
 {
-  cleanup_default_namespace(ioctx);
-  cleanup_namespace(ioctx, nspace);
+  if (cleanup) {
+    cleanup_default_namespace(ioctx);
+    cleanup_namespace(ioctx, nspace);
+  }
   ioctx.close();
 }
 

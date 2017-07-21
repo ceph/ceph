@@ -9,6 +9,8 @@
 #include <string>
 #include <include/types.h>
 
+#include <boost/optional.hpp>
+
 #include "rgw_acl.h"
 
 class RGWAccessControlPolicy_SWIFT : public RGWAccessControlPolicy
@@ -21,13 +23,15 @@ public:
   explicit RGWAccessControlPolicy_SWIFT(CephContext* const cct)
     : RGWAccessControlPolicy(cct) {
   }
-  ~RGWAccessControlPolicy_SWIFT() = default;
+  ~RGWAccessControlPolicy_SWIFT() override = default;
 
   int create(RGWRados *store,
              const rgw_user& id,
              const std::string& name,
              const std::string& read_list,
-             const std::string& write_list);
+             const std::string& write_list,
+             uint32_t& rw_mask);
+  void filter_merge(uint32_t mask, RGWAccessControlPolicy_SWIFT *policy);
   void to_str(std::string& read, std::string& write);
 };
 
@@ -37,7 +41,7 @@ public:
   RGWAccessControlPolicy_SWIFTAcct(CephContext * const cct)
     : RGWAccessControlPolicy(cct) {
   }
-  ~RGWAccessControlPolicy_SWIFTAcct() {}
+  ~RGWAccessControlPolicy_SWIFTAcct() override {}
 
   void add_grants(RGWRados *store,
                   const std::vector<std::string>& uids,
@@ -46,6 +50,6 @@ public:
               const rgw_user& id,
               const std::string& name,
               const std::string& acl_str);
-  void to_str(std::string& acl) const;
+  boost::optional<std::string> to_str() const;
 };
 #endif

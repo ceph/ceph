@@ -30,7 +30,7 @@ void ImageWriteback<I>::aio_read(Extents &&image_extents, bufferlist *bl,
   auto aio_comp = io::AioCompletion::create_and_start(on_finish, &m_image_ctx,
                                                       io::AIO_TYPE_READ);
   io::ImageReadRequest<I> req(m_image_ctx, aio_comp, std::move(image_extents),
-                              io::ReadResult{bl}, fadvise_flags);
+                              io::ReadResult{bl}, fadvise_flags, {});
   req.set_bypass_image_cache();
   req.send();
 }
@@ -46,14 +46,15 @@ void ImageWriteback<I>::aio_write(Extents &&image_extents,
   auto aio_comp = io::AioCompletion::create_and_start(on_finish, &m_image_ctx,
                                                       io::AIO_TYPE_WRITE);
   io::ImageWriteRequest<I> req(m_image_ctx, aio_comp, std::move(image_extents),
-                               std::move(bl), fadvise_flags);
+                               std::move(bl), fadvise_flags, {});
   req.set_bypass_image_cache();
   req.send();
 }
 
 template <typename I>
 void ImageWriteback<I>::aio_discard(uint64_t offset, uint64_t length,
-                                    Context *on_finish) {
+                                    bool skip_partial_discard,
+				    Context *on_finish) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << "offset=" << offset << ", "
                  << "length=" << length << ", "
@@ -61,7 +62,8 @@ void ImageWriteback<I>::aio_discard(uint64_t offset, uint64_t length,
 
   auto aio_comp = io::AioCompletion::create_and_start(on_finish, &m_image_ctx,
                                                       io::AIO_TYPE_DISCARD);
-  io::ImageDiscardRequest<I> req(m_image_ctx, aio_comp, offset, length);
+  io::ImageDiscardRequest<I> req(m_image_ctx, aio_comp, offset, length,
+                                 skip_partial_discard, {});
   req.set_bypass_image_cache();
   req.send();
 }
@@ -73,7 +75,25 @@ void ImageWriteback<I>::aio_flush(Context *on_finish) {
 
   auto aio_comp = io::AioCompletion::create_and_start(on_finish, &m_image_ctx,
                                                       io::AIO_TYPE_FLUSH);
-  io::ImageFlushRequest<I> req(m_image_ctx, aio_comp);
+  io::ImageFlushRequest<I> req(m_image_ctx, aio_comp, {});
+  req.set_bypass_image_cache();
+  req.send();
+}
+
+template <typename I>
+void ImageWriteback<I>::aio_writesame(uint64_t offset, uint64_t length,
+                                      ceph::bufferlist&& bl,
+                                      int fadvise_flags, Context *on_finish) {
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 20) << "offset=" << offset << ", "
+                 << "length=" << length << ", "
+                 << "data_len=" << bl.length() << ", "
+                 << "on_finish=" << on_finish << dendl;
+
+  auto aio_comp = io::AioCompletion::create_and_start(on_finish, &m_image_ctx,
+                                                      io::AIO_TYPE_WRITESAME);
+  io::ImageWriteSameRequest<I> req(m_image_ctx, aio_comp, offset, length,
+                                   std::move(bl), fadvise_flags, {});
   req.set_bypass_image_cache();
   req.send();
 }

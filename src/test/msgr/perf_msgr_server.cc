@@ -22,7 +22,6 @@
 
 using namespace std;
 
-#include "include/atomic.h"
 #include "common/ceph_argparse.h"
 #include "common/debug.h"
 #include "global/global_init.h"
@@ -75,11 +74,11 @@ class ServerDispatcher : public Dispatcher {
     op_wq(30, 30, &op_tp) {
     op_tp.start();
   }
-  ~ServerDispatcher() {
+  ~ServerDispatcher() override {
     op_tp.stop();
   }
   bool ms_can_fast_dispatch_any() const override { return true; }
-  bool ms_can_fast_dispatch(Message *m) const override {
+  bool ms_can_fast_dispatch(const Message *m) const override {
     switch (m->get_type()) {
     case CEPH_MSG_OSD_OP:
       return true;
@@ -117,7 +116,7 @@ class MessengerServer {
   MessengerServer(string t, string addr, int threads, int delay):
       msgr(NULL), type(t), bindaddr(addr), dispatcher(threads, delay) {
     msgr = Messenger::create(g_ceph_context, type, entity_name_t::OSD(0), "server", 0, 0);
-    msgr->set_default_policy(Messenger::Policy::stateless_server(0, 0));
+    msgr->set_default_policy(Messenger::Policy::stateless_server(0));
   }
   ~MessengerServer() {
     msgr->shutdown();
@@ -157,7 +156,7 @@ int main(int argc, char **argv)
 
   int worker_threads = atoi(args[1]);
   int think_time = atoi(args[2]);
-  std::string public_msgr_type = g_ceph_context->_conf->ms_public_type.empty() ? g_ceph_context->_conf->ms_type : g_ceph_context->_conf->ms_public_type;
+  std::string public_msgr_type = g_ceph_context->_conf->ms_public_type.empty() ? g_ceph_context->_conf->get_val<std::string>("ms_type") : g_ceph_context->_conf->ms_public_type;
 
   cerr << " This tool won't handle connection error alike things, " << std::endl;
   cerr << "please ensure the proper network environment to test." << std::endl;

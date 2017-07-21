@@ -2,42 +2,57 @@
  Intro to Ceph
 ===============
 
-Whether you want to provide :term:`Ceph Object Storage` and/or :term:`Ceph Block
-Device` services to :term:`Cloud Platforms`, deploy a :term:`Ceph Filesystem` or
-use Ceph for another purpose, all :term:`Ceph Storage Cluster` deployments begin
-with setting up each :term:`Ceph Node`, your network and the Ceph Storage
-Cluster. A Ceph Storage Cluster requires at least one Ceph Monitor and at least
-two Ceph OSD Daemons. The Ceph Metadata Server is essential when running Ceph
-Filesystem clients.
+Whether you want to provide :term:`Ceph Object Storage` and/or
+:term:`Ceph Block Device` services to :term:`Cloud Platforms`, deploy
+a :term:`Ceph Filesystem` or use Ceph for another purpose, all
+:term:`Ceph Storage Cluster` deployments begin with setting up each
+:term:`Ceph Node`, your network, and the Ceph Storage Cluster. A Ceph
+Storage Cluster requires at least one Ceph Monitor, Ceph Manager, and
+Ceph OSD (Object Storage Daemon). The Ceph Metadata Server is also
+required when running Ceph Filesystem clients.
 
-.. ditaa::  +---------------+ +---------------+ +---------------+
-            |      OSDs     | |    Monitor    | |      MDS      |
-            +---------------+ +---------------+ +---------------+
+.. ditaa::  +---------------+ +------------+ +------------+ +---------------+
+            |      OSDs     | | Monitors   | |  Managers  | |      MDSs     |
+            +---------------+ +------------+ +------------+ +---------------+
 
-- **Ceph OSDs**: A :term:`Ceph OSD Daemon` (Ceph OSD) stores data, handles data
-  replication, recovery, backfilling, rebalancing, and provides some monitoring
-  information to Ceph Monitors by checking other Ceph OSD Daemons for a 
-  heartbeat. A Ceph Storage Cluster requires at least two Ceph OSD Daemons to 
-  achieve an ``active + clean`` state when the cluster makes two copies of your
-  data (Ceph makes 3 copies by default, but you can adjust it).
-  
-- **Monitors**: A :term:`Ceph Monitor` maintains maps of the cluster state, 
-  including the monitor map, the OSD map, the Placement Group (PG) map, and the
-  CRUSH map. Ceph maintains a history (called an "epoch") of each state change 
-  in the Ceph Monitors, Ceph OSD Daemons, and PGs.
+- **Monitors**: A :term:`Ceph Monitor` (``ceph-mon``) maintains maps
+  of the cluster state, including the monitor map, manager map, the
+  OSD map, and the CRUSH map.  These maps are critical cluster state
+  required for Ceph daemons to coordinate with each other.  Monitors
+  are also responsible for managing authentication between daemons and
+  clients.  At least three monitors are normally required for
+  redundancy and high availability.
 
-- **MDSs**: A :term:`Ceph Metadata Server` (MDS) stores metadata on behalf of 
-  the :term:`Ceph Filesystem` (i.e., Ceph Block Devices and Ceph Object Storage
-  do not use MDS). Ceph Metadata Servers make it feasible for POSIX file system 
-  users to execute basic commands like ``ls``, ``find``, etc. without placing 
-  an enormous burden on the Ceph Storage Cluster.
+- **Managers**: A :term:`Ceph Manager` daemon (``ceph-mgr``) is
+  responsible for keeping track of runtime metrics and the current
+  state of the Ceph cluster, including storage utilization, current
+  performance metrics, and system load.  The Ceph Manager daemons also
+  host python-based plugins to manage and expose Ceph cluster
+  information, including a web-based `dashboard`_ and `REST API`_.  At
+  least two managers are normally required for high availability.
 
-Ceph stores a client's data as objects within storage pools. Using the CRUSH 
-algorithm, Ceph calculates which placement group should contain the object, 
-and further calculates which Ceph OSD Daemon should store the placement group.
-The CRUSH algorithm enables the Ceph Storage Cluster to scale, rebalance, and
-recover dynamically.
+- **Ceph OSDs**: A :term:`Ceph OSD` (object storage daemon,
+  ``ceph-osd``) stores data, handles data replication, recovery,
+  rebalancing, and provides some monitoring information to Ceph
+  Monitors and Managers by checking other Ceph OSD Daemons for a
+  heartbeat. At least 3 Ceph OSDs are normally required for redundancy
+  and high availability.
 
+- **MDSs**: A :term:`Ceph Metadata Server` (MDS, ``ceph-mds``) stores
+  metadata on behalf of the :term:`Ceph Filesystem` (i.e., Ceph Block
+  Devices and Ceph Object Storage do not use MDS). Ceph Metadata
+  Servers allow POSIX file system users to execute basic commands (like
+  ``ls``, ``find``, etc.) without placing an enormous burden on the
+  Ceph Storage Cluster.
+
+Ceph stores data as objects within logical storage pools. Using the
+:term:`CRUSH` algorithm, Ceph calculates which placement group should
+contain the object, and further calculates which Ceph OSD Daemon
+should store the placement group.  The CRUSH algorithm enables the
+Ceph Storage Cluster to scale, rebalance, and recover dynamically.
+
+.. _dashboard: ../../mgr/dashboard
+.. _REST API: ../../mgr/restful
 
 .. raw:: html
 

@@ -1,4 +1,6 @@
-os_type: centos   # xenial valgrind buggy, see http://tracker.ceph.com/issues/18126
+# see http://tracker.ceph.com/issues/20360 and http://tracker.ceph.com/issues/18126
+os_type: centos
+
 overrides:
   install:
     ceph:
@@ -8,4 +10,4 @@ overrides:
     valgrind: ["--tool=memcheck"]
   workunit:
     env:
-      VALGRIND: "memcheck"
+      VALGRIND: "--tool=memcheck --leak-check=full"

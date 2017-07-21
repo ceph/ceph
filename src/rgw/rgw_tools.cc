@@ -18,19 +18,19 @@
 
 static std::map<std::string, std::string>* ext_mime_map;
 
-int rgw_put_system_obj(RGWRados *rgwstore, rgw_bucket& bucket, const string& oid, const char *data, size_t size, bool exclusive,
+int rgw_put_system_obj(RGWRados *rgwstore, const rgw_pool& pool, const string& oid, const char *data, size_t size, bool exclusive,
                        RGWObjVersionTracker *objv_tracker, real_time set_mtime, map<string, bufferlist> *pattrs)
 {
   map<string,bufferlist> no_attrs;
   if (!pattrs)
     pattrs = &no_attrs;
 
-  rgw_obj obj(bucket, oid);
+  rgw_raw_obj obj(pool, oid);
 
   int ret = rgwstore->put_system_obj(NULL, obj, data, size, exclusive, NULL, *pattrs, objv_tracker, set_mtime);
 
   if (ret == -ENOENT) {
-    ret = rgwstore->create_pool(bucket);
+    ret = rgwstore->create_pool(pool);
     if (ret >= 0)
       ret = rgwstore->put_system_obj(NULL, obj, data, size, exclusive, NULL, *pattrs, objv_tracker, set_mtime);
   }
@@ -38,14 +38,18 @@ int rgw_put_system_obj(RGWRados *rgwstore, rgw_bucket& bucket, const string& oid
   return ret;
 }
 
-int rgw_get_system_obj(RGWRados *rgwstore, RGWObjectCtx& obj_ctx, rgw_bucket& bucket, const string& key, bufferlist& bl,
+int rgw_get_system_obj(RGWRados *rgwstore, RGWObjectCtx& obj_ctx, const rgw_pool& pool, const string& key, bufferlist& bl,
                        RGWObjVersionTracker *objv_tracker, real_time *pmtime, map<string, bufferlist> *pattrs,
                        rgw_cache_entry_info *cache_info)
 {
-  struct rgw_err err;
   bufferlist::iterator iter;
   int request_len = READ_CHUNK_LEN;
-  rgw_obj obj(bucket, key);
+  rgw_raw_obj obj(pool, key);
+
+  obj_version original_readv;
+  if (objv_tracker && !objv_tracker->read_version.empty()) {
+    original_readv = objv_tracker->read_version;
+  }
 
   do {
     RGWRados::SystemObject source(rgwstore, obj_ctx, obj);
@@ -53,7 +57,6 @@ int rgw_get_system_obj(RGWRados *rgwstore, RGWObjectCtx& obj_ctx, rgw_bucket& bu
 
     rop.stat_params.attrs = pattrs;
     rop.stat_params.lastmod = pmtime;
-    rop.stat_params.perr = &err;
 
     int ret = rop.stat(objv_tracker);
     if (ret < 0)
@@ -64,6 +67,14 @@ int rgw_get_system_obj(RGWRados *rgwstore, RGWObjectCtx& obj_ctx, rgw_bucket& bu
     ret = rop.read(0, request_len - 1, bl, objv_tracker);
     if (ret == -ECANCELED) {
       /* raced, restart */
+      if (!original_readv.empty()) {
+        /* we were asked to read a specific obj_version, failed */
+        return ret;
+      }
+      if (objv_tracker) {
+        objv_tracker->read_version.clear();
+      }
+      source.invalidate_state();
       continue;
     }
     if (ret < 0)
@@ -78,10 +89,10 @@ int rgw_get_system_obj(RGWRados *rgwstore, RGWObjectCtx& obj_ctx, rgw_bucket& bu
   return 0;
 }
 
-int rgw_delete_system_obj(RGWRados *rgwstore, rgw_bucket& bucket, const string& oid,
+int rgw_delete_system_obj(RGWRados *rgwstore, const rgw_pool& pool, const string& oid,
                           RGWObjVersionTracker *objv_tracker)
 {
-  rgw_obj obj(bucket, oid);
+  rgw_raw_obj obj(pool, oid);
   return rgwstore->delete_system_obj(obj, objv_tracker);
 }
 

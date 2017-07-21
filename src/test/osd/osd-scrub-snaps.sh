@@ -40,6 +40,7 @@ function TEST_scrub_snaps() {
 
     setup $dir || return 1
     run_mon $dir a --osd_pool_default_size=1 || return 1
+    run_mgr $dir x || return 1
     run_osd $dir 0 || return 1
 
     wait_for_clean || return 1
@@ -308,6 +309,20 @@ function TEST_scrub_snaps() {
       "name": "obj15"
     },
     {
+      "extra clones": [
+        7,
+        4
+      ],
+      "errors": [
+        "ss_attr_missing",
+        "extra_clones"
+      ],
+      "snap": "head",
+      "locator": "",
+      "nspace": "",
+      "name": "obj2"
+    },
+    {
       "errors": [
         "size_mismatch"
       ],
@@ -315,6 +330,18 @@ function TEST_scrub_snaps() {
       "locator": "",
       "nspace": "",
       "name": "obj3"
+    },
+    {
+      "missing": [
+        7
+      ],
+      "errors": [
+        "clone_missing"
+      ],
+      "snap": "head",
+      "locator": "",
+      "nspace": "",
+      "name": "obj4"
     },
     {
       "missing": [
@@ -366,32 +393,6 @@ function TEST_scrub_snaps() {
       "locator": "",
       "nspace": "",
       "name": "obj8"
-    },
-    {
-      "extra clones": [
-        7,
-        4
-      ],
-      "errors": [
-        "ss_attr_missing",
-        "extra_clones"
-      ],
-      "snap": "snapdir",
-      "locator": "",
-      "nspace": "",
-      "name": "obj2"
-    },
-    {
-      "missing": [
-        7
-      ],
-      "errors": [
-        "clone_missing"
-      ],
-      "snap": "snapdir",
-      "locator": "",
-      "nspace": "",
-      "name": "obj4"
     }
   ],
   "epoch": 20
@@ -399,7 +400,7 @@ function TEST_scrub_snaps() {
 EOF
 
     jq "$jqfilter" $dir/json | python -c "$sortkeys" > $dir/csjson
-    diff -y $dir/checkcsjson $dir/csjson || return 1
+    diff ${DIFFCOLOPTS} $dir/checkcsjson $dir/csjson || return 1
 
     if which jsonschema > /dev/null;
     then
@@ -438,17 +439,18 @@ EOF
     err_strings[10]="log_channel[(]cluster[)] log [[]ERR[]] : scrub [0-9]*[.]0 .*:::obj7:1 is an unexpected clone"
     err_strings[11]="log_channel[(]cluster[)] log [[]ERR[]] : scrub [0-9]*[.]0 .*:::obj3:head on disk size [(]3840[)] does not match object info size [(]768[)] adjusted for ondisk to [(]768[)]"
     err_strings[12]="log_channel[(]cluster[)] log [[]ERR[]] : scrub [0-9]*[.]0 .*:::obj6:1 is an unexpected clone"
-    err_strings[13]="log_channel[(]cluster[)] log [[]ERR[]] : scrub [0-9]*[.]0 .*:::obj2:snapdir no 'snapset' attr"
+    err_strings[13]="log_channel[(]cluster[)] log [[]ERR[]] : scrub [0-9]*[.]0 .*:::obj2:head no 'snapset' attr"
     err_strings[14]="log_channel[(]cluster[)] log [[]ERR[]] : scrub [0-9]*[.]0 .*:::obj2:7 clone ignored due to missing snapset"
     err_strings[15]="log_channel[(]cluster[)] log [[]ERR[]] : scrub [0-9]*[.]0 .*:::obj2:4 clone ignored due to missing snapset"
-    err_strings[16]="log_channel[(]cluster[)] log [[]ERR[]] : scrub [0-9]*[.]0 .*:::obj4:snapdir expected clone .*:::obj4:7"
-    err_strings[17]="log_channel[(]cluster[)] log [[]INF[]] : scrub [0-9]*[.]0 .*:::obj4:snapdir 1 missing clone[(]s[)]"
+    err_strings[16]="log_channel[(]cluster[)] log [[]ERR[]] : scrub [0-9]*[.]0 .*:::obj4:head expected clone .*:::obj4:7"
+    err_strings[17]="log_channel[(]cluster[)] log [[]INF[]] : scrub [0-9]*[.]0 .*:::obj4:head 1 missing clone[(]s[)]"
     err_strings[18]="log_channel[(]cluster[)] log [[]ERR[]] : scrub [0-9]*[.]0 .*:::obj1:1 is an unexpected clone"
     err_strings[19]="log_channel[(]cluster[)] log [[]ERR[]] : scrub [0-9]*[.]0 .*:::obj9:1 is missing in clone_size"
     err_strings[20]="log_channel[(]cluster[)] log [[]ERR[]] : scrub [0-9]*[.]0 .*:::obj11:1 is an unexpected clone"
     err_strings[21]="log_channel[(]cluster[)] log [[]ERR[]] : scrub [0-9]*[.]0 .*:::obj14:1 size 1032 != clone_size 1033"
-    err_strings[22]="log_channel[(]cluster[)] log [[]ERR[]] : [0-9]*[.]0 scrub 22 errors"
+    err_strings[22]="log_channel[(]cluster[)] log [[]ERR[]] : [0-9]*[.]0 scrub 23 errors"
     err_strings[23]="log_channel[(]cluster[)] log [[]ERR[]] : scrub [0-9]*[.]0 .*:::obj15:head can't decode 'snapset' attr buffer"
+    err_strings[24]="log_channel[(]cluster[)] log [[]ERR[]] : scrub [0-9]*[.]0 .*:::obj12:1 has no oi or legacy_snaps; cannot convert 1=[[]1[]]:[[]1[]].stray_clone_snaps=[{]1=[[]1[]][}]"
 
     for i in `seq 0 ${#err_strings[@]}`
     do

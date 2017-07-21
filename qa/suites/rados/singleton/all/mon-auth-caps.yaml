@@ -1,0 +1,14 @@
+roles:
+- - mon.a
+  - mgr.x
+  - osd.0
+  - osd.1
+  - osd.2
+  - client.0
+tasks:
+- install:
+- ceph:
+- workunit:
+    clients:
+      all:
+        - mon/auth_caps.sh

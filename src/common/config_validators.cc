@@ -3,12 +3,30 @@
 
 #include "common/config_validators.h"
 #include "include/stringify.h"
-#include "include/rbd/features.h"
-#include <map>
-#include <sstream>
-#include <vector>
+
 #include <boost/algorithm/string.hpp>
 #include <boost/lexical_cast.hpp>
+#include <boost/regex.hpp>
+
+int validate(md_config_t::option_rbd_default_pool_t *,
+             std::string *value, std::string *error_message) {
+  boost::regex pattern("^[^@/]+$");
+  if (!boost::regex_match (*value, pattern)) {
+    *value = "rbd";
+    *error_message = "invalid RBD default pool, resetting to 'rbd'";
+  }
+  return 0;
+}
+
+int validate(md_config_t::option_rbd_default_data_pool_t *,
+             std::string *value, std::string *error_message) {
+  boost::regex pattern("^[^@/]*$");
+  if (!boost::regex_match (*value, pattern)) {
+    *value = "";
+    *error_message = "ignoring invalid RBD data pool";
+  }
+  return 0;
+}
 
 int validate(md_config_t::option_rbd_default_features_t *,
              std::string *value, std::string *error_message) {

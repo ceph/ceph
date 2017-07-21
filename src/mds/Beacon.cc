@@ -483,10 +483,10 @@ void Beacon::notify_health(MDSRank const *mds)
   }
 
   // Report if we have significantly exceeded our cache size limit
-  if (mds->mdcache->get_num_inodes() >
+  if (mds->mdcache->get_cache_size() >
         g_conf->mds_cache_size * g_conf->mds_health_cache_threshold) {
     std::ostringstream oss;
-    oss << "Too many inodes in cache (" << mds->mdcache->get_num_inodes()
+    oss << "Too many inodes in cache (" << mds->mdcache->get_cache_size()
         << "/" << g_conf->mds_cache_size << "), "
         << mds->mdcache->num_inodes_with_caps << " inodes in use by clients, "
         << mds->mdcache->get_num_strays() << " stray files";

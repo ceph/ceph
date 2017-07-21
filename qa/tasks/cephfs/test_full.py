@@ -30,9 +30,6 @@ class FullnessTestCase(CephFSTestCase):
     def setUp(self):
         CephFSTestCase.setUp(self)
 
-        if not isinstance(self.mount_a, FuseMount):
-            self.skipTest("FUSE needed: ENOSPC handling in kclient is tracker #17204")
-
         # These tests just use a single active MDS throughout, so remember its ID
         # for use in mds_asok calls
         self.active_mds_id = self.fs.get_active_names()[0]
@@ -236,7 +233,8 @@ class FullnessTestCase(CephFSTestCase):
         self.mount_a.run_python(template.format(
             fill_mb=self.fill_mb,
             file_path=file_path,
-            full_wait=full_wait
+            full_wait=full_wait,
+            is_fuse=isinstance(self.mount_a, FuseMount)
         ))
 
     def test_full_fclose(self):
@@ -285,13 +283,17 @@ class FullnessTestCase(CephFSTestCase):
             # Wait long enough for a background flush that should fail
             time.sleep(30)
 
-            # ...and check that the failed background flush is reflected in fclose
-            try:
-                os.close(f)
-            except OSError:
-                print "close() returned an error as expected"
+            if {is_fuse}:
+                # ...and check that the failed background flush is reflected in fclose
+                try:
+                    os.close(f)
+                except OSError:
+                    print "close() returned an error as expected"
+                else:
+                    raise RuntimeError("close() failed to raise error")
             else:
-                raise RuntimeError("close() failed to raise error")
+                # The kernel cephfs client does not raise errors on fclose
+                os.close(f)
 
             os.unlink("{file_path}")
             """)
@@ -353,13 +355,12 @@ class FullnessTestCase(CephFSTestCase):
             if not full:
                 raise RuntimeError("Failed to reach fullness after writing %d bytes" % bytes)
 
-            # The error sticks to the inode until we dispose of it
-            try:
-                os.close(f)
-            except OSError:
-                print "Saw error from close() as expected"
-            else:
-                raise RuntimeError("Did not see expected error from close()")
+            # close() should not raise an error because we already caught it in
+            # fsync.  There shouldn't have been any more writeback errors
+            # since then because all IOs got cancelled on the full flag.
+            print "calling close"
+            os.close(f)
+            print "close() did not raise error"
 
             os.unlink("{file_path}")
             """)
@@ -404,8 +405,7 @@ class TestClusterFull(FullnessTestCase):
             # `max_avail` attribute of pools that sometimes occurs in between
             # tests (reason as yet unclear, but this dodges the issue)
             TestClusterFull.pool_capacity = self.fs.get_pool_df(self._data_pool_name())['max_avail']
-            mon_osd_full_ratio = float(self.fs.get_config("mon_osd_full_ratio"))
-            TestClusterFull.fill_mb = int(1.05 * mon_osd_full_ratio * (self.pool_capacity / (1024.0 * 1024.0)))
+            TestClusterFull.fill_mb = int(1.05 * (self.pool_capacity / (1024.0 * 1024.0)))
 
     def is_full(self):
         return self.fs.is_full()

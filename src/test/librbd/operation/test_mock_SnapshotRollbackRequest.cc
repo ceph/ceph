@@ -70,10 +70,6 @@ struct AsyncRequest<MockOperationImageCtx> : public AsyncRequest<MockImageCtx> {
 #include "librbd/operation/Request.cc"
 #include "librbd/operation/SnapshotRollbackRequest.cc"
 
-template class librbd::AsyncRequest<librbd::MockImageCtx>;
-template class librbd::AsyncObjectThrottle<librbd::MockImageCtx>;
-template class librbd::operation::Request<librbd::MockImageCtx>;
-
 namespace librbd {
 namespace operation {
 
@@ -176,7 +172,8 @@ public:
     C_SaferCond cond_ctx;
     librbd::NoOpProgressContext prog_ctx;
     MockSnapshotRollbackRequest *req = new MockSnapshotRollbackRequest(
-      mock_image_ctx, &cond_ctx, snap_name, snap_id, snap_size, prog_ctx);
+	mock_image_ctx, &cond_ctx, cls::rbd::UserSnapshotNamespace(), snap_name,
+	snap_id, snap_size, prog_ctx);
     {
       RWLock::RLocker owner_locker(mock_image_ctx.owner_lock);
       req->send();
@@ -305,6 +302,7 @@ TEST_F(TestMockOperationSnapshotRollbackRequest, RollbackObjectsError) {
 TEST_F(TestMockOperationSnapshotRollbackRequest, InvalidateCacheError) {
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
+  REQUIRE(ictx->cache);
 
   MockOperationImageCtx mock_image_ctx(*ictx);
   MockExclusiveLock mock_exclusive_lock;

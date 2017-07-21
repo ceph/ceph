@@ -3,11 +3,13 @@
 #include "gtest/gtest.h"
 
 #include "mds/mdstypes.h"
+#include "include/err.h"
 #include "include/buffer.h"
 #include "include/rbd_types.h"
 #include "include/rados/librados.h"
 #include "include/rados/librados.hpp"
 #include "include/stringify.h"
+#include "common/Checksummer.h"
 #include "global/global_context.h"
 #include "test/librados/test.h"
 #include "test/librados/TestCase.h"
@@ -17,7 +19,7 @@
 #include <map>
 #include <sstream>
 #include <string>
-
+#include <boost/regex.hpp>
 
 using namespace librados;
 using std::map;
@@ -66,8 +68,19 @@ TEST(LibRadosMiscConnectFailure, ConnectFailure) {
   ASSERT_EQ(-ENOTCONN, rados_monitor_log(cluster, "error",
                                          test_rados_log_cb, NULL));
 
-  ASSERT_NE(0, rados_connect(cluster));
-  ASSERT_NE(0, rados_connect(cluster));
+  // try this a few times; sometimes we don't schedule fast enough for the
+  // cond to time out
+  int r;
+  for (unsigned i=0; i<16; ++i) {
+    cout << i << std::endl;
+    r = rados_connect(cluster);
+    if (r < 0)
+      break;  // yay, we timed out
+    // try again
+    rados_shutdown(cluster);
+    ASSERT_EQ(0, rados_create(&cluster, NULL));
+  }
+  ASSERT_NE(0, r);
 
   rados_shutdown(cluster);
 }
@@ -106,7 +119,11 @@ TEST(LibRadosMiscPool, PoolCreationRace) {
   rados_pool_create(cluster_a, pool2name);
 
   list<rados_completion_t> cls;
-  while (true) {
+  // this should normally trigger pretty easily, but we need to bound
+  // the requests because if we get too many we'll get stuck by always
+  // sending enough messages that we hit the socket failure injection.
+  int max = 512;
+  while (max--) {
     char buf[100];
     rados_completion_t c;
     rados_aio_create_completion(0, 0, 0, &c);
@@ -117,6 +134,11 @@ TEST(LibRadosMiscPool, PoolCreationRace) {
       break;
     }
   }
+  while (!rados_aio_is_complete(cls.front())) {
+    cout << "waiting 1 sec" << std::endl;
+    sleep(1);
+  }
+
   cout << " started " << cls.size() << " aios" << std::endl;
   for (auto c : cls) {
     cout << "waiting " << (void*)c << std::endl;
@@ -827,13 +849,21 @@ class LibRadosTwoPoolsECPP : public RadosTestECPP
 {
 public:
   LibRadosTwoPoolsECPP() {};
-  ~LibRadosTwoPoolsECPP() {};
+  ~LibRadosTwoPoolsECPP() override {};
 protected:
   static void SetUpTestCase() {
     pool_name = get_temp_pool_name();
     ASSERT_EQ("", create_one_ec_pool_pp(pool_name, s_cluster));
     src_pool_name = get_temp_pool_name();
     ASSERT_EQ(0, s_cluster.pool_create(src_pool_name.c_str()));
+
+    librados::IoCtx ioctx;
+    ASSERT_EQ(0, s_cluster.ioctx_create(pool_name.c_str(), ioctx));
+    ioctx.application_enable("rados", true);
+
+    librados::IoCtx src_ioctx;
+    ASSERT_EQ(0, s_cluster.ioctx_create(src_pool_name.c_str(), src_ioctx));
+    src_ioctx.application_enable("rados", true);
   }
   static void TearDownTestCase() {
     ASSERT_EQ(0, s_cluster.pool_delete(src_pool_name.c_str()));
@@ -1050,4 +1080,279 @@ TEST_F(LibRadosMisc, WriteSame) {
 	    rados_writesame(ioctx, "ws", buf, 0, sizeof(buf), 0));
   /* write_len = data_len, i.e. same as rados_write() */
   ASSERT_EQ(0, rados_writesame(ioctx, "ws", buf, sizeof(buf), sizeof(buf), 0));
+}
+
+template <typename T>
+class LibRadosChecksum : public LibRadosMiscPP {
+public:
+  typedef typename T::alg_t alg_t;
+  typedef typename T::value_t value_t;
+  typedef typename alg_t::init_value_t init_value_t;
+
+  static const rados_checksum_type_t type = T::type;
+
+  bufferlist content_bl;
+
+  using LibRadosMiscPP::SetUpTestCase;
+  using LibRadosMiscPP::TearDownTestCase;
+
+  void SetUp() override {
+    LibRadosMiscPP::SetUp();
+
+    std::string content(4096, '\0');
+    for (size_t i = 0; i < content.length(); ++i) {
+      content[i] = static_cast<char>(rand() % (126 - 33) + 33);
+    }
+    content_bl.append(content);
+    ASSERT_EQ(0, ioctx.write("foo", content_bl, content_bl.length(), 0));
+  }
+};
+
+template <rados_checksum_type_t _type, typename AlgT, typename ValueT>
+class LibRadosChecksumParams {
+public:
+  typedef AlgT alg_t;
+  typedef ValueT value_t;
+  static const rados_checksum_type_t type = _type;
+};
+
+typedef ::testing::Types<
+    LibRadosChecksumParams<LIBRADOS_CHECKSUM_TYPE_XXHASH32,
+			   Checksummer::xxhash32, uint32_t>,
+    LibRadosChecksumParams<LIBRADOS_CHECKSUM_TYPE_XXHASH64,
+			   Checksummer::xxhash64, uint64_t>,
+    LibRadosChecksumParams<LIBRADOS_CHECKSUM_TYPE_CRC32C,
+			   Checksummer::crc32c, uint32_t>
+  > LibRadosChecksumTypes;
+
+TYPED_TEST_CASE(LibRadosChecksum, LibRadosChecksumTypes);
+
+TYPED_TEST(LibRadosChecksum, Subset) {
+  uint32_t chunk_size = 1024;
+  uint32_t csum_count = this->content_bl.length() / chunk_size;
+
+  typename TestFixture::init_value_t init_value = -1;
+  bufferlist init_value_bl;
+  ::encode(init_value, init_value_bl);
+
+  std::vector<bufferlist> checksum_bls(csum_count);
+  std::vector<int> checksum_rvals(csum_count);
+
+  // individual checksum ops for each chunk
+  ObjectReadOperation op;
+  for (uint32_t i = 0; i < csum_count; ++i) {
+    op.checksum(TestFixture::type, init_value_bl, i * chunk_size, chunk_size,
+		0, &checksum_bls[i], &checksum_rvals[i]);
+  }
+  ASSERT_EQ(0, this->ioctx.operate("foo", &op, NULL));
+
+  for (uint32_t i = 0; i < csum_count; ++i) {
+    ASSERT_EQ(0, checksum_rvals[i]);
+
+    auto bl_it = checksum_bls[i].begin();
+    uint32_t count;
+    ::decode(count, bl_it);
+    ASSERT_EQ(1U, count);
+
+    typename TestFixture::value_t value;
+    ::decode(value, bl_it);
+
+    bufferlist content_sub_bl;
+    content_sub_bl.substr_of(this->content_bl, i * chunk_size, chunk_size);
+
+    typename TestFixture::value_t expected_value;
+    bufferptr expected_value_bp = buffer::create_static(
+      sizeof(expected_value), reinterpret_cast<char*>(&expected_value));
+    Checksummer::template calculate<typename TestFixture::alg_t>(
+      init_value, chunk_size, 0, chunk_size, content_sub_bl,
+      &expected_value_bp);
+    ASSERT_EQ(expected_value, value);
+  }
+}
+
+TYPED_TEST(LibRadosChecksum, Chunked) {
+  uint32_t chunk_size = 1024;
+  uint32_t csum_count = this->content_bl.length() / chunk_size;
+
+  typename TestFixture::init_value_t init_value = -1;
+  bufferlist init_value_bl;
+  ::encode(init_value, init_value_bl);
+
+  bufferlist checksum_bl;
+  int checksum_rval;
+
+  // single op with chunked checksum results
+  ObjectReadOperation op;
+  op.checksum(TestFixture::type, init_value_bl, 0, this->content_bl.length(),
+	      chunk_size, &checksum_bl, &checksum_rval);
+  ASSERT_EQ(0, this->ioctx.operate("foo", &op, NULL));
+  ASSERT_EQ(0, checksum_rval);
+
+  auto bl_it = checksum_bl.begin();
+  uint32_t count;
+  ::decode(count, bl_it);
+  ASSERT_EQ(csum_count, count);
+
+  std::vector<typename TestFixture::value_t> expected_values(csum_count);
+  bufferptr expected_values_bp = buffer::create_static(
+    csum_count * sizeof(typename TestFixture::value_t),
+    reinterpret_cast<char*>(&expected_values[0]));
+
+  Checksummer::template calculate<typename TestFixture::alg_t>(
+    init_value, chunk_size, 0, this->content_bl.length(), this->content_bl,
+    &expected_values_bp);
+
+  for (uint32_t i = 0; i < csum_count; ++i) {
+    typename TestFixture::value_t value;
+    ::decode(value, bl_it);
+    ASSERT_EQ(expected_values[i], value);
+  }
+}
+
+TEST_F(LibRadosMiscPP, CmpExtPP) {
+  bufferlist cmp_bl, bad_cmp_bl, write_bl;
+  char stored_str[] = "1234567891";
+  char mismatch_str[] = "1234577777";
+
+  write_bl.append(stored_str);
+  ioctx.write("cmpextpp", write_bl, write_bl.length(), 0);
+  cmp_bl.append(stored_str);
+  ASSERT_EQ(0, ioctx.cmpext("cmpextpp", 0, cmp_bl));
+
+  bad_cmp_bl.append(mismatch_str);
+  ASSERT_EQ(-MAX_ERRNO - 5, ioctx.cmpext("cmpextpp", 0, bad_cmp_bl));
+}
+
+TEST_F(LibRadosMisc, CmpExt) {
+  bufferlist cmp_bl, bad_cmp_bl, write_bl;
+  char stored_str[] = "1234567891";
+  char mismatch_str[] = "1234577777";
+
+  ASSERT_EQ(0,
+	    rados_write(ioctx, "cmpextpp", stored_str, sizeof(stored_str), 0));
+
+  ASSERT_EQ(0,
+	    rados_cmpext(ioctx, "cmpextpp", stored_str, sizeof(stored_str), 0));
+
+  ASSERT_EQ(-MAX_ERRNO - 5,
+	    rados_cmpext(ioctx, "cmpextpp", mismatch_str, sizeof(mismatch_str), 0));
+}
+
+TEST_F(LibRadosMisc, Applications) {
+  const char *cmd[] = {"{\"prefix\":\"osd dump\"}", nullptr};
+  char *buf, *st;
+  size_t buflen, stlen;
+  ASSERT_EQ(0, rados_mon_command(cluster, (const char **)cmd, 1, "", 0, &buf,
+                                 &buflen, &st, &stlen));
+  ASSERT_LT(0u, buflen);
+  string result(buf);
+  rados_buffer_free(buf);
+  rados_buffer_free(st);
+  if (!boost::regex_search(result, boost::regex("require_osd_release [l-z]"))) {
+    std::cout << "SKIPPING";
+    return;
+  }
+
+  char apps[128];
+  size_t app_len;
+
+  app_len = sizeof(apps);
+  ASSERT_EQ(0, rados_application_list(ioctx, apps, &app_len));
+  ASSERT_EQ(6U, app_len);
+  ASSERT_EQ(0, memcmp("rados\0", apps, app_len));
+
+  ASSERT_EQ(0, rados_application_enable(ioctx, "app1", 1));
+  ASSERT_EQ(-EPERM, rados_application_enable(ioctx, "app2", 0));
+  ASSERT_EQ(0, rados_application_enable(ioctx, "app2", 1));
+
+  ASSERT_EQ(-ERANGE, rados_application_list(ioctx, apps, &app_len));
+  ASSERT_EQ(16U, app_len);
+  ASSERT_EQ(0, rados_application_list(ioctx, apps, &app_len));
+  ASSERT_EQ(16U, app_len);
+  ASSERT_EQ(0, memcmp("app1\0app2\0rados\0", apps, app_len));
+
+  char keys[128];
+  char vals[128];
+  size_t key_len;
+  size_t val_len;
+
+  key_len = sizeof(keys);
+  val_len = sizeof(vals);
+  ASSERT_EQ(-ENOENT, rados_application_metadata_list(ioctx, "dne", keys,
+                                                     &key_len, vals, &val_len));
+  ASSERT_EQ(0, rados_application_metadata_list(ioctx, "app1", keys, &key_len,
+                                               vals, &val_len));
+  ASSERT_EQ(0U, key_len);
+  ASSERT_EQ(0U, val_len);
+
+  ASSERT_EQ(-ENOENT, rados_application_metadata_set(ioctx, "dne", "key",
+                                                    "value"));
+  ASSERT_EQ(0, rados_application_metadata_set(ioctx, "app1", "key1", "value1"));
+  ASSERT_EQ(0, rados_application_metadata_set(ioctx, "app1", "key2", "value2"));
+
+  ASSERT_EQ(-ERANGE, rados_application_metadata_list(ioctx, "app1", keys,
+                                                     &key_len, vals, &val_len));
+  ASSERT_EQ(10U, key_len);
+  ASSERT_EQ(14U, val_len);
+  ASSERT_EQ(0, rados_application_metadata_list(ioctx, "app1", keys, &key_len,
+                                               vals, &val_len));
+  ASSERT_EQ(10U, key_len);
+  ASSERT_EQ(14U, val_len);
+  ASSERT_EQ(0, memcmp("key1\0key2\0", keys, key_len));
+  ASSERT_EQ(0, memcmp("value1\0value2\0", vals, val_len));
+
+  ASSERT_EQ(0, rados_application_metadata_remove(ioctx, "app1", "key1"));
+  ASSERT_EQ(0, rados_application_metadata_list(ioctx, "app1", keys, &key_len,
+                                               vals, &val_len));
+  ASSERT_EQ(5U, key_len);
+  ASSERT_EQ(7U, val_len);
+  ASSERT_EQ(0, memcmp("key2\0", keys, key_len));
+  ASSERT_EQ(0, memcmp("value2\0", vals, val_len));
+}
+
+TEST_F(LibRadosMiscPP, Applications) {
+  bufferlist inbl, outbl;
+  string outs;
+  ASSERT_EQ(0, cluster.mon_command("{\"prefix\": \"osd dump\"}",
+				   inbl, &outbl, &outs));
+  ASSERT_LT(0u, outbl.length());
+  ASSERT_LE(0u, outs.length());
+  if (!boost::regex_search(outbl.to_str(),
+                           boost::regex("require_osd_release [l-z]"))) {
+    std::cout << "SKIPPING";
+    return;
+  }
+
+  std::set<std::string> expected_apps = {"rados"};
+  std::set<std::string> apps;
+  ASSERT_EQ(0, ioctx.application_list(&apps));
+  ASSERT_EQ(expected_apps, apps);
+
+  ASSERT_EQ(0, ioctx.application_enable("app1", true));
+  ASSERT_EQ(-EPERM, ioctx.application_enable("app2", false));
+  ASSERT_EQ(0, ioctx.application_enable("app2", true));
+
+  expected_apps = {"app1", "app2", "rados"};
+  ASSERT_EQ(0, ioctx.application_list(&apps));
+  ASSERT_EQ(expected_apps, apps);
+
+  std::map<std::string, std::string> expected_meta;
+  std::map<std::string, std::string> meta;
+  ASSERT_EQ(-ENOENT, ioctx.application_metadata_list("dne", &meta));
+  ASSERT_EQ(0, ioctx.application_metadata_list("app1", &meta));
+  ASSERT_EQ(expected_meta, meta);
+
+  ASSERT_EQ(-ENOENT, ioctx.application_metadata_set("dne", "key1", "value1"));
+  ASSERT_EQ(0, ioctx.application_metadata_set("app1", "key1", "value1"));
+  ASSERT_EQ(0, ioctx.application_metadata_set("app1", "key2", "value2"));
+
+  expected_meta = {{"key1", "value1"}, {"key2", "value2"}};
+  ASSERT_EQ(0, ioctx.application_metadata_list("app1", &meta));
+  ASSERT_EQ(expected_meta, meta);
+
+  ASSERT_EQ(0, ioctx.application_metadata_remove("app1", "key1"));
+
+  expected_meta = {{"key2", "value2"}};
+  ASSERT_EQ(0, ioctx.application_metadata_list("app1", &meta));
+  ASSERT_EQ(expected_meta, meta);
 }

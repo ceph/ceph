@@ -693,6 +693,11 @@ void RGWOp_Quota_Info::execute()
   if (http_ret < 0)
     return;
 
+  if (!op_state.has_existing_user()) {
+    http_ret = -ERR_NO_SUCH_USER;
+    return;
+  }
+
   RGWUserInfo info;
   string err_msg;
   http_ret = user.info(info, &err_msg);
@@ -822,6 +827,11 @@ void RGWOp_Quota_Set::execute()
   http_ret = user.init(store, op_state);
   if (http_ret < 0) {
     ldout(store->ctx(), 20) << "failed initializing user info: " << http_ret << dendl;
+    return;
+  }
+
+  if (!op_state.has_existing_user()) {
+    http_ret = -ERR_NO_SUCH_USER;
     return;
   }
 

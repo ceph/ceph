@@ -9,7 +9,7 @@
 #include "common/debug.h"
 #include "include/compat.h"
 
-#include <common/SubProcess.h>
+#include "common/SubProcess.h"
 
 #include <vector>
 

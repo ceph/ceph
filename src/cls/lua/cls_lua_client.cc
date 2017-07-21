@@ -1,10 +1,7 @@
-#include <errno.h>
 #include <string>
 #include <vector>
 #include "include/encoding.h"
-#include "include/rados.h"
-#include "include/rados/librados.h"
-#include "include/types.h"
+#include "include/rados/librados.hpp"  // for IoCtx
 #include "cls_lua_client.h"
 #include "cls_lua_ops.h"
 

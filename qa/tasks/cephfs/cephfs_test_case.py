@@ -88,31 +88,21 @@ class CephFSTestCase(CephTestCase):
                 # here for hours waiting for the test to fill up a 1TB drive!
                 raise case.SkipTest("Require `memstore` OSD backend to simulate full drives")
 
-        # Unmount all surplus clients
-        for i in range(self.CLIENTS_REQUIRED, len(self.mounts)):
-            mount = self.mounts[i]
-            log.info("Unmounting unneeded client {0}".format(mount.client_id))
-            mount.umount_wait()
-
         # Create friendly mount_a, mount_b attrs
         for i in range(0, self.CLIENTS_REQUIRED):
             setattr(self, "mount_{0}".format(chr(ord('a') + i)), self.mounts[i])
 
         self.mds_cluster.clear_firewall()
 
-        # Unmount in order to start each test on a fresh mount, such
-        # that test_barrier can have a firm expectation of what OSD
-        # epoch the clients start with.
-        if self.mount_a.is_mounted():
-            self.mount_a.umount_wait()
-
-        if self.mount_b:
-            if self.mount_b.is_mounted():
-                self.mount_b.umount_wait()
+        # Unmount all clients, we are about to blow away the filesystem
+        for mount in self.mounts:
+            if mount.is_mounted():
+                mount.umount_wait(force=True)
 
         # To avoid any issues with e.g. unlink bugs, we destroy and recreate
         # the filesystem rather than just doing a rm -rf of files
         self.mds_cluster.mds_stop()
+        self.mds_cluster.mds_fail()
         self.mds_cluster.delete_all_filesystems()
         self.fs = None # is now invalid!
 
@@ -161,18 +151,15 @@ class CephFSTestCase(CephTestCase):
 
             # wait for mds restart to complete...
             self.fs.wait_for_daemons()
-            if not self.mount_a.is_mounted():
-                self.mount_a.mount()
-                self.mount_a.wait_until_mounted()
 
-            if self.mount_b:
-                if not self.mount_b.is_mounted():
-                    self.mount_b.mount()
-                    self.mount_b.wait_until_mounted()
+            # Mount the requested number of clients
+            for i in range(0, self.CLIENTS_REQUIRED):
+                self.mounts[i].mount()
+                self.mounts[i].wait_until_mounted()
 
         # Load an config settings of interest
         for setting in self.LOAD_SETTINGS:
-            setattr(self, setting, int(self.fs.mds_asok(
+            setattr(self, setting, float(self.fs.mds_asok(
                 ['config', 'get', setting], self.mds_cluster.mds_ids[0]
             )[setting]))
 
@@ -197,18 +184,20 @@ class CephFSTestCase(CephTestCase):
 
     def auth_list(self):
         """
-        Convenience wrapper on "ceph auth list"
+        Convenience wrapper on "ceph auth ls"
         """
         return json.loads(self.mds_cluster.mon_manager.raw_cluster_cmd(
-            "auth", "list", "--format=json-pretty"
+            "auth", "ls", "--format=json-pretty"
         ))['auth_dump']
 
     def assert_session_count(self, expected, ls_data=None, mds_id=None):
         if ls_data is None:
             ls_data = self.fs.mds_asok(['session', 'ls'], mds_id=mds_id)
 
-        self.assertEqual(expected, len(ls_data), "Expected {0} sessions, found {1}".format(
-            expected, len(ls_data)
+        alive_count = len([s for s in ls_data if s['state'] != 'killing'])
+
+        self.assertEqual(expected, alive_count, "Expected {0} sessions, found {1}".format(
+            expected, alive_count
         ))
 
     def assert_session_state(self, client_id,  expected_state):

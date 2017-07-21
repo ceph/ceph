@@ -160,7 +160,7 @@ void install_standard_sighandlers(void)
 string get_name_by_pid(pid_t pid)
 {
   char proc_pid_path[PATH_MAX] = {0};
-  snprintf(proc_pid_path, PATH_MAX, "/proc/%d/cmdline", pid);
+  snprintf(proc_pid_path, PATH_MAX, PROCPREFIX "/proc/%d/cmdline", pid);
   int fd = open(proc_pid_path, O_RDONLY);
 
   if (fd < 0) {
@@ -240,7 +240,7 @@ struct SignalHandler : public Thread {
     create("signal_handler");
   }
 
-  ~SignalHandler() {
+  ~SignalHandler() override {
     shutdown();
   }
 

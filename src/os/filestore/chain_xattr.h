@@ -5,13 +5,11 @@
 #define __CEPH_OSD_CHAIN_XATTR_H
 
 #include "include/compat.h"
+#include <errno.h>
+#include <stdio.h>
 #include "common/xattr.h"
 #include "include/assert.h"
-#include "include/buffer.h"
-#include <string.h>
-#include <stdio.h>
-
-#include <errno.h>
+#include "include/buffer_fwd.h"
 
 #if defined(__linux__)
 #include <linux/limits.h>

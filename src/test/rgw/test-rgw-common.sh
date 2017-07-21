@@ -59,29 +59,30 @@ root_path=`(cd $script_dir/../..; pwd)`
 mstart=$root_path/mstart.sh
 mstop=$root_path/mstop.sh
 mrun=$root_path/mrun
+mrgw=$root_path/mrgw.sh
 
 function start_ceph_cluster {
   [ $# -ne 1 ] && echo "start_ceph_cluster() needs 1 param" && exit 1
 
-  echo "$mstart c$1"
+  echo "$mstart $1"
 }
 
 function rgw_admin {
   [ $# -lt 1 ] && echo "rgw_admin() needs 1 param" && exit 1
 
-  echo "$mrun c$1 radosgw-admin"
+  echo "$mrun $1 radosgw-admin"
 }
 
 function rgw {
   [ $# -ne 2 ] && echo "rgw() needs 2 params" && exit 1
 
-  echo "$root_path/mrgw.sh c$1 $2 $rgw_flags"
+  echo "$mrgw $1 $2 $rgw_flags"
 }
 
 function init_first_zone {
   [ $# -ne 7 ] && echo "init_first_zone() needs 7 params" && exit 1
 
-  id=$1
+  cid=$1
   realm=$2
   zg=$3
   zone=$4
@@ -91,37 +92,65 @@ function init_first_zone {
   secret=$7
 
 # initialize realm
-  x $(rgw_admin $id) realm create --rgw-realm=$realm
+  x $(rgw_admin $cid) realm create --rgw-realm=$realm
 
 # create zonegroup, zone
-  x $(rgw_admin $id) zonegroup create --rgw-zonegroup=$zg --master --default
-  x $(rgw_admin $id) zone create --rgw-zonegroup=$zg --rgw-zone=$zone --access-key=${access_key} --secret=${secret} --endpoints=$endpoints --default
-  x $(rgw_admin $id) user create --uid=zone.user --display-name="Zone User" --access-key=${access_key} --secret=${secret} --system
+  x $(rgw_admin $cid) zonegroup create --rgw-zonegroup=$zg --master --default
+  x $(rgw_admin $cid) zone create --rgw-zonegroup=$zg --rgw-zone=$zone --access-key=${access_key} --secret=${secret} --endpoints=$endpoints --default
+  x $(rgw_admin $cid) user create --uid=zone.user --display-name="Zone User" --access-key=${access_key} --secret=${secret} --system
 
-  x $(rgw_admin $id) period update --commit
+  x $(rgw_admin $cid) period update --commit
 }
 
 function init_zone_in_existing_zg {
   [ $# -ne 8 ] && echo "init_zone_in_existing_zg() needs 8 params" && exit 1
 
-  id=$1
+  cid=$1
   realm=$2
   zg=$3
   zone=$4
-  zone1_port=$5
+  master_zg_zone1_port=$5
   endpoints=$6
 
   access_key=$7
   secret=$8
 
-  x $(rgw_admin $id) realm pull --url=http://localhost:$zone1_port --access-key=${access_key} --secret=${secret} --default
-  x $(rgw_admin $id) zonegroup default --rgw-zonegroup=$zg
-  x $(rgw_admin $id) zone create --rgw-zonegroup=$zg --rgw-zone=$zone --access-key=${access_key} --secret=${secret} --endpoints=$endpoints
-  x $(rgw_admin $id) period update --commit
+  x $(rgw_admin $cid) realm pull --url=http://localhost:$master_zg_zone1_port --access-key=${access_key} --secret=${secret} --default
+  x $(rgw_admin $cid) zonegroup default --rgw-zonegroup=$zg
+  x $(rgw_admin $cid) zone create --rgw-zonegroup=$zg --rgw-zone=$zone --access-key=${access_key} --secret=${secret} --endpoints=$endpoints
+  x $(rgw_admin $cid) period update --commit --url=http://localhost:$master_zg_zone1_port --access-key=${access_key} --secret=${secret}
+}
+
+function init_first_zone_in_slave_zg {
+  [ $# -ne 8 ] && echo "init_first_zone_in_slave_zg() needs 8 params" && exit 1
+
+  cid=$1
+  realm=$2
+  zg=$3
+  zone=$4
+  master_zg_zone1_port=$5
+  endpoints=$6
+
+  access_key=$7
+  secret=$8
+
+# create zonegroup, zone
+  x $(rgw_admin $cid) realm pull --url=http://localhost:$master_zg_zone1_port --access-key=${access_key} --secret=${secret}
+  x $(rgw_admin $cid) realm default --rgw-realm=$realm
+  x $(rgw_admin $cid) zonegroup create --rgw-realm=$realm --rgw-zonegroup=$zg --endpoints=$endpoints --default
+  x $(rgw_admin $cid) zonegroup default --rgw-zonegroup=$zg
+
+  x $(rgw_admin $cid) zone create --rgw-zonegroup=$zg --rgw-zone=$zone --access-key=${access_key} --secret=${secret} --endpoints=$endpoints
+  x $(rgw_admin $cid) zone default --rgw-zone=$zone
+  x $(rgw_admin $cid) zonegroup add --rgw-zonegroup=$zg --rgw-zone=$zone
+
+  x $(rgw_admin $cid) user create --uid=zone.user --display-name="Zone User" --access-key=${access_key} --secret=${secret} --system
+  x $(rgw_admin $cid) period update --commit --url=localhost:$master_zg_zone1_port --access-key=${access_key} --secret=${secret}
+
 }
 
 function call_rgw_admin {
-  c=$1
-  shift
-  x $(rgw_admin $c) "$@"
+  cid=$1
+  shift 1
+  x $(rgw_admin $cid) "$@"
 }

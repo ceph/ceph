@@ -1,9 +1,8 @@
 
-Last updated: 2016-11-21
+Last updated: 2017-04-08
 
 The FreeBSD build will build most of the tools in Ceph.
-Note that the (kernel) RBD dependant items will not work since FreeBSD does not 
-have RBD (yet)
+Note that the (kernel) RBD dependant items will not work
 
 I started looking into Ceph, because the HAST solution with CARP and 
 ggate did not really do what I was looking for. But I'm aiming for 
@@ -11,23 +10,59 @@ running a Ceph storage cluster on storage nodes that are running ZFS.
 In the end the cluster would be running bhyve on RBD disk that are stored in 
 Ceph.
 
+The FreeBSD build will build most of the tools in Ceph.
+	
 Progress from last report:
 ==========================
 
 Most important change:
- -	All test run to completion for the current selection of 
-	tools. This is only the case for "My Fork" repository. Some of the 
-	commits need to be pulled into the HEAD
- -	As of now Cmake is the only way of building Ceph
-    - And testing would be best done thru ctest.
- -	Reworked threading/polling code for the simple socket code.
-	Now uses a selfpipe, instead of using an odd shutdown() signaling 
-	Linux feature.
- -	Modified the EventKqueue code to work around the "feature" that 
-	starting threads destroys the the kqueue handles. 
- -  ceph-disk should now be able to support FileStore on a ZFS disk.
-	The main reason that it needs to be ZFS is for xattribute: Size and number.
+  -	A port is submitted: net/ceph-devel.
+
+Other improvements:
+
+	* A new ceph-devel update will be submitted in April
+
+  -	Ceph-Fuse works, allowing to mount a CephFS on a FreeBSD system and do
+	some work on it. 
+  -	Ceph-disk prepare and activate work for FileStore on ZFS, allowing 
+	easy creation of OSDs.
+  -	RBD is actually buildable and can be used to manage RADOS BLOCK 
+	DEVICEs.
+  -	Most of the awkward dependencies on Linux-isms are deleted only 
+	/bin/bash is there to stay.
+
+Getting the FreeBSD work on Ceph:
+=================================
+
+	pkg install net/ceph-devel
+
+Or:
+	cd "place to work on this"
+	git clone https://github.com/wjwithagen/ceph.git
+	cd ceph
+	git checkout wip.FreeBSD
+
+Building Ceph
+=============
+  - 	Go and start building
+	  ./do_freebsd.sh
 	
+Parts not (yet) included:
+=========================
+
+ - KRBD
+	 Kernel Rados Block Devices is implemented in the Linux kernel
+	 And perhaps ggated could be used as a template since it does some of 
+	 the same, other than just between 2 disks. And it has a userspace 
+	 counterpart.
+ - BlueStore.
+	 FreeBSD and Linux have different AIO API, and that needs to be made 
+	 compatible Next to that is there discussion in FreeBSD about 
+	 aio_cancel not working for all devicetypes
+ - CephFS as native filesystem
+	 (Ceph-fuse does work.)
+	 Cython tries to access an internal field in dirent which does not 
+	 compile
 Build Prerequisites
 ===================
 
@@ -45,13 +80,6 @@ The following setup will get things running for FreeBSD:
  -	Install bash and link it in /bin
 	sudo pkg install bash
 	sudo ln -s /usr/local/bin/bash /bin/bash
- -	Need to add one compatability line to 
-	/usr/include/errno.h
-	#define    ENODATA         87              /* Attribute not found */
-	(Otherwise some cython compiles will fail.)
- -  getopt is used by several testscripts but it requires more than what 
-	the native getopt(1) delivers. So best is to install getopt from ports
-	and remove/replace the getopt in /usr/bin.
 
 Getting the FreeBSD work on Ceph:
 =================================
@@ -59,7 +87,7 @@ Getting the FreeBSD work on Ceph:
  - 	cd "place to work on this"
 	git clone https://github.com/wjwithagen/ceph.git
 	cd ceph
-	git checkout wip-wjw-freebsd-cmake
+	git checkout wip.FreeBSD.201702
 
 Building Ceph
 =============
@@ -69,8 +97,8 @@ Building Ceph
 Parts not (yet) included:
 =========================
 
- -	RBD
-	Rados Block Devices is implemented in the Linux kernel
+ -	KRBD
+	Kernel Rados Block Devices is implemented in the Linux kernel
 	It seems that there used to be a userspace implementation first.
 	And perhaps ggated could be used as a template since it does some of 
 	the same, other than just between 2 disks. And it has a userspace 
@@ -89,8 +117,8 @@ from the testset
 Tests not (yet) include:
 =======================
 
- -  None, although some test can fail if running tests in parallel and there is
-    not enough swap. Then tests will start to fail in strange ways.
+ -  	None, although some test can fail if running tests in parallel and there is
+    	not enough swap. Then tests will start to fail in strange ways.
  
 Task to do:
 ===========
@@ -119,5 +147,16 @@ Task to do:
 	attention:
 	in: ./src/common/Thread.cc
 
- -	Integrate the FreeBSD /etc/rc.d init scripts in the Ceph stack. Both 
+ -	Improve the FreeBSD /etc/rc.d initscripts in the Ceph stack. Both 
 	for testing, but mainly for running Ceph on production machines.
+	Work on ceph-disk and ceph-deploy to make it more FreeBSD and ZFS 
+	compatible. 
+
+ -	Build test-cluster and start running some of the teuthology integration 
+	tests on these.
+	Teuthology want to build its own libvirt and that does not quite work
+	with all the packages FreeBSD already has in place. Lots of minute 
+	details to figure out
+
+ -	Design a vitual disk implementation that can be used with behyve and 
+	attached to an RBD image. 

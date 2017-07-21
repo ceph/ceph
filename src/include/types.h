@@ -90,6 +90,29 @@ typedef off_t loff_t;
 
 // -- io helpers --
 
+// Forward declare all the I/O helpers so strict ADL can find them in
+// the case of containers of containers. I'm tempted to abstract this
+// stuff using template templates like I did for denc.
+
+template<class A, class B>
+inline ostream& operator<<(ostream&out, const pair<A,B>& v);
+template<class A, class Alloc>
+inline ostream& operator<<(ostream& out, const vector<A,Alloc>& v);
+template<class A, class Comp, class Alloc>
+inline ostream& operator<<(ostream& out, const deque<A,Alloc>& v);
+template<class A, class B, class C>
+inline ostream& operator<<(ostream&out, const boost::tuple<A, B, C> &t);
+template<class A, class Alloc>
+inline ostream& operator<<(ostream& out, const list<A,Alloc>& ilist);
+template<class A, class Comp, class Alloc>
+inline ostream& operator<<(ostream& out, const set<A, Comp, Alloc>& iset);
+template<class A, class Comp, class Alloc>
+inline ostream& operator<<(ostream& out, const multiset<A,Comp,Alloc>& iset);
+template<class A, class B, class Comp, class Alloc>
+inline ostream& operator<<(ostream& out, const map<A,B,Comp,Alloc>& m);
+template<class A, class B, class Comp, class Alloc>
+inline ostream& operator<<(ostream& out, const multimap<A,B,Comp,Alloc>& m);
+
 template<class A, class B>
 inline ostream& operator<<(ostream& out, const pair<A,B>& v) {
   return out << v.first << "," << v.second;
@@ -388,29 +411,6 @@ inline ostream& operator<<(ostream& out, const ceph_mon_subscribe_item& i)
 	     << ((i.flags & CEPH_SUBSCRIBE_ONETIME) ? "" : "+");
 }
 
-enum health_status_t {
-  HEALTH_ERR = 0,
-  HEALTH_WARN = 1,
-  HEALTH_OK = 2,
-};
-
-#ifdef __cplusplus
-inline ostream& operator<<(ostream &oss, health_status_t status) {
-  switch (status) {
-    case HEALTH_ERR:
-      oss << "HEALTH_ERR";
-      break;
-    case HEALTH_WARN:
-      oss << "HEALTH_WARN";
-      break;
-    case HEALTH_OK:
-      oss << "HEALTH_OK";
-      break;
-  }
-  return oss;
-}
-#endif
-
 struct weightf_t {
   float v;
   // cppcheck-suppress noExplicitConstructor
@@ -451,10 +451,12 @@ WRITE_EQ_OPERATORS_1(shard_id_t, id)
 WRITE_CMP_OPERATORS_1(shard_id_t, id)
 ostream &operator<<(ostream &lhs, const shard_id_t &rhs);
 
-#if defined(__sun) || defined(_AIX) || defined(DARWIN)
-__s32  ceph_to_host_errno(__s32 e);
+#if defined(__sun) || defined(_AIX) || defined(DARWIN) || defined(__FreeBSD__)
+__s32  ceph_to_hostos_errno(__s32 e);
+__s32  hostos_to_ceph_errno(__s32 e);
 #else
-#define  ceph_to_host_errno(e) (e)
+#define  ceph_to_hostos_errno(e) (e)
+#define  hostos_to_ceph_errno(e) (e)
 #endif
 
 struct errorcode32_t {
@@ -464,17 +466,21 @@ struct errorcode32_t {
   // cppcheck-suppress noExplicitConstructor
   errorcode32_t(int32_t i) : code(i) {}
 
-  operator int() const { return code; }
-  int operator==(int i) {
-    return code==i;
-  }
+  operator int() const  { return code; }
+  int* operator&()      { return &code; }
+  int operator==(int i) { return code == i; }
+  int operator>(int i)  { return code > i; }
+  int operator>=(int i) { return code >= i; }
+  int operator<(int i)  { return code < i; }
+  int operator<=(int i) { return code <= i; }
 
   void encode(bufferlist &bl) const {
-    ::encode(code, bl);
+    __s32 newcode = hostos_to_ceph_errno(code);
+    ::encode(newcode, bl);
   }
   void decode(bufferlist::iterator &bl) {
     ::decode(code, bl);
-    code = ceph_to_host_errno(code);
+    code = ceph_to_hostos_errno(code);
   }
 };
 WRITE_CLASS_ENCODER(errorcode32_t)

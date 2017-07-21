@@ -134,7 +134,14 @@ public:
    */
   struct Sequencer_impl : public RefCountedObject {
     CephContext* cct;
+
+    // block until any previous transactions are visible.  specifically,
+    // collection_list and collection_empty need to reflect prior operations.
     virtual void flush() = 0;
+
+    // called when we are done with the impl.  the impl may have a different
+    // (longer) lifecycle than the Sequencer.
+    virtual void discard() {}
 
     /**
      * Async flush_commit
@@ -152,7 +159,7 @@ public:
       ) = 0; ///< @return true if idle, false otherwise
 
     Sequencer_impl(CephContext* cct) : RefCountedObject(NULL, 0), cct(cct)  {}
-    virtual ~Sequencer_impl() {}
+    ~Sequencer_impl() override {}
   };
   typedef boost::intrusive_ptr<Sequencer_impl> Sequencer_implRef;
 
@@ -165,8 +172,11 @@ public:
     Sequencer_implRef p;
 
     explicit Sequencer(string n)
-      : name(n), shard_hint(spg_t()), p(NULL) {}
+      : name(n), shard_hint(spg_t()), p(NULL) {
+    }
     ~Sequencer() {
+      if (p)
+	p->discard();  // tell impl we are done with it
     }
 
     /// return a unique string identifier for this sequencer
@@ -393,6 +403,8 @@ public:
       OP_COLL_HINT = 40, // cid, type, bl
 
       OP_TRY_RENAME = 41,   // oldcid, oldoid, newoid
+
+      OP_COLL_SET_BITS = 42, // cid, bits
     };
 
     // Transaction hint type
@@ -419,7 +431,8 @@ public:
       };
       __le64 expected_object_size;      //OP_SETALLOCHINT
       __le64 expected_write_size;       //OP_SETALLOCHINT
-      __le32 split_bits;                //OP_SPLIT_COLLECTION2
+      __le32 split_bits;                //OP_SPLIT_COLLECTION2,OP_COLL_SET_BITS,
+                                        //OP_MKCOLL
       __le32 split_rem;                 //OP_SPLIT_COLLECTION2
     } __attribute__ ((packed)) ;
 
@@ -667,6 +680,7 @@ public:
       case OP_COLL_RMATTR:
       case OP_COLL_SETATTRS:
       case OP_COLL_HINT:
+      case OP_COLL_SET_BITS:
         assert(op->cid < cm.size());
         op->cid = cm[op->cid];
         break;
@@ -1114,7 +1128,7 @@ public:
       data.ops++;
     }
     /// Set multiple xattrs of an object
-    void setattrs(const coll_t& cid, const ghobject_t& oid, map<string,bufferptr>& attrset) {
+    void setattrs(const coll_t& cid, const ghobject_t& oid, const map<string,bufferptr>& attrset) {
       Op* _op = _get_next_op();
       _op->op = OP_SETATTRS;
       _op->cid = _get_coll_id(cid);
@@ -1123,7 +1137,7 @@ public:
       data.ops++;
     }
     /// Set multiple xattrs of an object
-    void setattrs(const coll_t& cid, const ghobject_t& oid, map<string,bufferlist>& attrset) {
+    void setattrs(const coll_t& cid, const ghobject_t& oid, const map<string,bufferlist>& attrset) {
       Op* _op = _get_next_op();
       _op->op = OP_SETATTRS;
       _op->cid = _get_coll_id(cid);
@@ -1382,6 +1396,16 @@ public:
       data.ops++;
     }
 
+    void collection_set_bits(
+      coll_t cid,
+      int bits) {
+      Op* _op = _get_next_op();
+      _op->op = OP_COLL_SET_BITS;
+      _op->cid = _get_coll_id(cid);
+      _op->split_bits = bits;
+      data.ops++;
+    }
+
     /// Set allocation hint for an object
     /// make 0 values(expected_object_size, expected_write_size) noops for all implementations
     void set_alloc_hint(
@@ -1537,6 +1561,24 @@ public:
   virtual bool wants_journal() = 0;  //< prefers a journal
   virtual bool allows_journal() = 0; //< allows a journal
 
+  /**
+   * is_rotational
+   *
+   * Check whether store is backed by a rotational (HDD) or non-rotational
+   * (SSD) device.
+   *
+   * This must be usable *before* the store is mounted.
+   *
+   * @return true for HDD, false for SSD
+   */
+  virtual bool is_rotational() {
+    return true;
+  }
+
+  virtual string get_default_device_class() {
+    return is_rotational() ? "hdd" : "ssd";
+  }
+
   virtual bool can_sort_nibblewise() {
     return false;   // assume a backend cannot, unless it says otherwise
   }
@@ -1664,17 +1706,15 @@ public:
     uint64_t offset,
     size_t len,
     bufferlist& bl,
-    uint32_t op_flags = 0,
-    bool allow_eio = false) = 0;
+    uint32_t op_flags = 0) = 0;
    virtual int read(
      CollectionHandle &c,
      const ghobject_t& oid,
      uint64_t offset,
      size_t len,
      bufferlist& bl,
-     uint32_t op_flags = 0,
-     bool allow_eio = false) {
-     return read(c->get_cid(), oid, offset, len, bl, op_flags, allow_eio);
+     uint32_t op_flags = 0) {
+     return read(c->get_cid(), oid, offset, len, bl, op_flags);
    }
 
   /**
@@ -1693,12 +1733,19 @@ public:
    * @param bl output bufferlist for extent map information.
    * @returns 0 on success, negative error code on failure.
    */
-  virtual int fiemap(const coll_t& cid, const ghobject_t& oid,
-		     uint64_t offset, size_t len, bufferlist& bl) = 0;
-  virtual int fiemap(CollectionHandle& c, const ghobject_t& oid,
-		     uint64_t offset, size_t len, bufferlist& bl) {
-    return fiemap(c->get_cid(), oid, offset, len, bl);
-  }
+   virtual int fiemap(const coll_t& cid, const ghobject_t& oid,
+ 		     uint64_t offset, size_t len, bufferlist& bl) = 0;
+   virtual int fiemap(const coll_t& cid, const ghobject_t& oid,
+ 		     uint64_t offset, size_t len,
+ 		     map<uint64_t, uint64_t>& destmap) = 0;
+   virtual int fiemap(CollectionHandle& c, const ghobject_t& oid,
+ 		     uint64_t offset, size_t len, bufferlist& bl) {
+     return fiemap(c->get_cid(), oid, offset, len, bl);
+   }
+   virtual int fiemap(CollectionHandle& c, const ghobject_t& oid,
+ 		     uint64_t offset, size_t len, map<uint64_t, uint64_t>& destmap) {
+     return fiemap(c->get_cid(), oid, offset, len, destmap);
+   }
 
   /**
    * getattr -- get an xattr of an object
@@ -1826,12 +1873,11 @@ public:
    * return the number of significant bits of the coll_t::pgid.
    *
    * This should return what the last create_collection or split_collection
-   * set.  A lazy backend can choose not to store and report this (e.g.,
-   * FileStore).
+   * set.  A legacy backend may return -EAGAIN if the value is unavailable
+   * (because we upgraded from an older version, e.g., FileStore).
    */
-  virtual int collection_bits(const coll_t& c) {
-    return -EOPNOTSUPP;
-  }
+  virtual int collection_bits(const coll_t& c) = 0;
+
 
   /**
    * list contents of a collection that fall in the range [start, end) and no more than a specified many result
@@ -1978,6 +2024,8 @@ public:
   // DEBUG
   virtual void inject_data_error(const ghobject_t &oid) {}
   virtual void inject_mdata_error(const ghobject_t &oid) {}
+
+  virtual void compact() {}
 };
 WRITE_CLASS_ENCODER(ObjectStore::Transaction)
 WRITE_CLASS_ENCODER(ObjectStore::Transaction::TransactionData)

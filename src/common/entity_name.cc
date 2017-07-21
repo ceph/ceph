@@ -13,11 +13,8 @@
  */
 
 #include "common/entity_name.h"
-#include "include/msgr.h"
 
-#include <errno.h>
 #include <sstream>
-#include <string>
 
 using std::string;
 
@@ -76,9 +73,13 @@ set(uint32_t type_, const std::string &id_)
   type = type_;
   id = id_;
 
-  std::ostringstream oss;
-  oss << ceph_entity_type_name(type_) << "." << id_;
-  type_id = oss.str();
+  if (type) {
+    std::ostringstream oss;
+    oss << ceph_entity_type_name(type_) << "." << id_;
+    type_id = oss.str();
+  } else {
+    type_id.clear();
+  }
 }
 
 int EntityName::

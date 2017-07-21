@@ -22,6 +22,7 @@
 class MOSDFailure : public PaxosServiceMessage {
 
   static const int HEAD_VERSION = 3;
+  static const int COMPAT_VERSION = 3;
 
  public:
   enum {
@@ -38,18 +39,18 @@ class MOSDFailure : public PaxosServiceMessage {
 
   MOSDFailure() : PaxosServiceMessage(MSG_OSD_FAILURE, 0, HEAD_VERSION) { }
   MOSDFailure(const uuid_d &fs, const entity_inst_t& f, int duration, epoch_t e)
-    : PaxosServiceMessage(MSG_OSD_FAILURE, e, HEAD_VERSION),
+    : PaxosServiceMessage(MSG_OSD_FAILURE, e, HEAD_VERSION, COMPAT_VERSION),
       fsid(fs), target_osd(f),
       flags(FLAG_FAILED),
       epoch(e), failed_for(duration) { }
   MOSDFailure(const uuid_d &fs, const entity_inst_t& f, int duration, 
               epoch_t e, __u8 extra_flags)
-    : PaxosServiceMessage(MSG_OSD_FAILURE, e, HEAD_VERSION),
+    : PaxosServiceMessage(MSG_OSD_FAILURE, e, HEAD_VERSION, COMPAT_VERSION),
       fsid(fs), target_osd(f),
       flags(extra_flags),
       epoch(e), failed_for(duration) { }
 private:
-  ~MOSDFailure() {}
+  ~MOSDFailure() override {}
 
 public: 
   entity_inst_t get_target() { return target_osd; }
@@ -59,25 +60,19 @@ public:
   bool is_immediate() const { 
     return flags & FLAG_IMMEDIATE; 
   }
-  epoch_t get_epoch() { return epoch; }
+  epoch_t get_epoch() const { return epoch; }
 
-  void decode_payload() {
+  void decode_payload() override {
     bufferlist::iterator p = payload.begin();
     paxos_decode(p);
     ::decode(fsid, p);
     ::decode(target_osd, p);
     ::decode(epoch, p);
-    if (header.version >= 2)
-      ::decode(flags, p);
-    else
-      flags = FLAG_FAILED;
-    if (header.version >= 3)
-      ::decode(failed_for, p);
-    else
-      failed_for = 0;
+    ::decode(flags, p);
+    ::decode(failed_for, p);
   }
 
-  void encode_payload(uint64_t features) {
+  void encode_payload(uint64_t features) override {
     paxos_encode();
     ::encode(fsid, payload);
     ::encode(target_osd, payload, features);
@@ -86,8 +81,8 @@ public:
     ::encode(failed_for, payload);
   }
 
-  const char *get_type_name() const { return "osd_failure"; }
-  void print(ostream& out) const {
+  const char *get_type_name() const override { return "osd_failure"; }
+  void print(ostream& out) const override {
     out << "osd_failure("
 	<< (if_osd_failed() ? "failed " : "recovered ")
 	<< (is_immediate() ? "immediate " : "timeout ")

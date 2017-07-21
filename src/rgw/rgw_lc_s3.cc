@@ -15,20 +15,45 @@ using namespace std;
 
 bool LCExpiration_S3::xml_end(const char * el) {
   LCDays_S3 *lc_days = static_cast<LCDays_S3 *>(find_first("Days"));
+  LCDeleteMarker_S3 *lc_dm = static_cast<LCDeleteMarker_S3 *>(find_first("ExpiredObjectDeleteMarker"));
+  LCDate_S3 *lc_date = static_cast<LCDate_S3 *>(find_first("Date"));
 
-  // ID is mandatory
-  if (!lc_days)
+  if ((!lc_days && !lc_dm && !lc_date) || (lc_days && lc_dm) 
+      || (lc_days && lc_date) || (lc_dm && lc_date)) {
     return false;
-  days = lc_days->get_data();
+  }
+  if (lc_days) {
+    days = lc_days->get_data();
+  } else if (lc_dm) {
+    dm_expiration = lc_dm->get_data().compare("true") == 0;
+    if (!dm_expiration) {
+      return false;
+    }
+  } else {
+    date = lc_date->get_data();
+    //We need return xml error according to S3
+    if (boost::none == ceph::from_iso_8601(date)) {
+      return false;
+    }
+  }
   return true;
 }
 
 bool LCNoncurExpiration_S3::xml_end(const char *el) {
-  LCNoncurDays_S3 *lc_noncur_days = static_cast<LCNoncurDays_S3 *>(find_first("NoncurrentDays"));
+  LCDays_S3 *lc_noncur_days = static_cast<LCDays_S3 *>(find_first("NoncurrentDays"));
   if (!lc_noncur_days) {
     return false;
   }
   days = lc_noncur_days->get_data();
+  return true;
+}
+
+bool LCMPExpiration_S3::xml_end(const char *el) {
+  LCDays_S3 *lc_mp_days = static_cast<LCDays_S3 *>(find_first("DaysAfterInitiation"));
+  if (!lc_mp_days) {
+    return false;
+  }
+  days = lc_mp_days->get_data();
   return true;
 }
 
@@ -48,10 +73,12 @@ bool LCRule_S3::xml_end(const char *el) {
   LCStatus_S3 *lc_status;
   LCExpiration_S3 *lc_expiration;
   LCNoncurExpiration_S3 *lc_noncur_expiration;
+  LCMPExpiration_S3 *lc_mp_expiration;
 
   id.clear();
   prefix.clear();
   status.clear();
+  dm_expiration = false;
 
   lc_id = static_cast<LCID_S3 *>(find_first("ID"));
   if (!lc_id)
@@ -72,14 +99,24 @@ bool LCRule_S3::xml_end(const char *el) {
 
   lc_expiration = static_cast<LCExpiration_S3 *>(find_first("Expiration"));
   lc_noncur_expiration = static_cast<LCNoncurExpiration_S3 *>(find_first("NoncurrentVersionExpiration"));
-  if (!lc_expiration && !lc_noncur_expiration) {
+  lc_mp_expiration = static_cast<LCMPExpiration_S3 *>(find_first("AbortIncompleteMultipartUpload"));
+  if (!lc_expiration && !lc_noncur_expiration && !lc_mp_expiration) {
     return false;
   } else {
     if (lc_expiration) {
-      expiration = *lc_expiration;
+      if (lc_expiration->has_days()) {
+        expiration.set_days(lc_expiration->get_days_str());
+      } else if (lc_expiration->has_date()) {
+        expiration.set_date(lc_expiration->get_date());
+      } else {
+        dm_expiration = lc_expiration->get_dm_expiration();
+      }
     }
     if (lc_noncur_expiration) {
       noncur_expiration = *lc_noncur_expiration;
+    }
+    if (lc_mp_expiration) {
+      mp_expiration = *lc_mp_expiration;
     }
   }
 
@@ -91,13 +128,17 @@ void LCRule_S3::to_xml(CephContext *cct, ostream& out) {
   out << "<ID>" << id << "</ID>";
   out << "<Prefix>" << prefix << "</Prefix>";
   out << "<Status>" << status << "</Status>";
-  if (!expiration.empty()) {
-    LCExpiration_S3& expir = static_cast<LCExpiration_S3&>(expiration);
+  if (!expiration.empty() || dm_expiration) {
+    LCExpiration_S3 expir(expiration.get_days_str(), expiration.get_date(), dm_expiration);
     expir.to_xml(out);
   }
   if (!noncur_expiration.empty()) {
     LCNoncurExpiration_S3& noncur_expir = static_cast<LCNoncurExpiration_S3&>(noncur_expiration);
     noncur_expir.to_xml(out);
+  }
+  if (!mp_expiration.empty()) {
+    LCMPExpiration_S3& mp_expir = static_cast<LCMPExpiration_S3&>(mp_expiration);
+    mp_expir.to_xml(out);
   }
   out << "</Rule>";
 }
@@ -112,7 +153,7 @@ int RGWLifecycleConfiguration_S3::rebuild(RGWRados *store, RGWLifecycleConfigura
     if (ret < 0)
       return ret;
   }
-  if (!dest.validate()) {
+  if (!dest.valid()) {
     ret = -ERR_INVALID_REQUEST;
   }
   return ret;
@@ -147,10 +188,18 @@ XMLObj *RGWLCXMLParser_S3::alloc_obj(const char *el)
     obj = new LCExpiration_S3();
   } else if (strcmp(el, "Days") == 0) {
     obj = new LCDays_S3();
+  } else if (strcmp(el, "Date") == 0) {
+    obj = new LCDate_S3();
+  } else if (strcmp(el, "ExpiredObjectDeleteMarker") == 0) {
+    obj = new LCDeleteMarker_S3();
   } else if (strcmp(el, "NoncurrentVersionExpiration") == 0) {
     obj = new LCNoncurExpiration_S3();
   } else if (strcmp(el, "NoncurrentDays") == 0) {
-    obj = new LCNoncurDays_S3();
+    obj = new LCDays_S3();
+  } else if (strcmp(el, "AbortIncompleteMultipartUpload") == 0) {
+    obj = new LCMPExpiration_S3();
+  } else if (strcmp(el, "DaysAfterInitiation") == 0) {
+    obj = new LCDays_S3();
   }
   return obj;
 }

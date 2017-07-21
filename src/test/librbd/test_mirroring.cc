@@ -270,7 +270,7 @@ public:
     ASSERT_EQ(0, get_image_id(image, &image_id));
 
     librbd::journal::MirrorPeerClientMeta peer_client_meta(
-      "remote-image-id", {{"sync-point-snap", boost::none}}, {});
+      "remote-image-id", {{{}, "sync-point-snap", boost::none}}, {});
     librbd::journal::ClientData client_data(peer_client_meta);
 
     journal::Journaler journaler(io_ctx, image_id, "peer-client", {});
@@ -680,4 +680,164 @@ TEST_F(TestMirroring, RemoveBootstrapped)
   ASSERT_EQ(0, m_ioctx.unwatch2(handle));
   ASSERT_TRUE(watcher.m_notified);
   ASSERT_EQ(0, image.close());
+}
+
+TEST_F(TestMirroring, AioPromoteDemote) {
+  std::list<std::string> image_names;
+  for (size_t idx = 0; idx < 10; ++idx) {
+    image_names.push_back(get_temp_image_name());
+  }
+
+  ASSERT_EQ(0, m_rbd.mirror_mode_set(m_ioctx, RBD_MIRROR_MODE_IMAGE));
+
+  // create mirror images
+  int order = 20;
+  std::list<librbd::Image> images;
+  for (auto &image_name : image_names) {
+    ASSERT_EQ(0, m_rbd.create2(m_ioctx, image_name.c_str(), 2048,
+                               RBD_FEATURE_EXCLUSIVE_LOCK |
+                                 RBD_FEATURE_JOURNALING,
+                               &order));
+
+    images.emplace_back();
+    ASSERT_EQ(0, m_rbd.open(m_ioctx, images.back(), image_name.c_str()));
+    ASSERT_EQ(0, images.back().mirror_image_enable());
+  }
+
+  // demote all images
+  std::list<librbd::RBD::AioCompletion *> aio_comps;
+  for (auto &image : images) {
+    aio_comps.push_back(new librbd::RBD::AioCompletion(nullptr, nullptr));
+    ASSERT_EQ(0, image.aio_mirror_image_demote(aio_comps.back()));
+  }
+  for (auto aio_comp : aio_comps) {
+    ASSERT_EQ(0, aio_comp->wait_for_complete());
+    ASSERT_EQ(1, aio_comp->is_complete());
+    ASSERT_EQ(0, aio_comp->get_return_value());
+    aio_comp->release();
+  }
+  aio_comps.clear();
+
+  // verify demotions
+  for (auto &image : images) {
+    librbd::mirror_image_info_t mirror_image;
+    ASSERT_EQ(0, image.mirror_image_get_info(&mirror_image,
+                                             sizeof(mirror_image)));
+    ASSERT_FALSE(mirror_image.primary);
+  }
+
+  // promote all images
+  for (auto &image : images) {
+    aio_comps.push_back(new librbd::RBD::AioCompletion(nullptr, nullptr));
+    ASSERT_EQ(0, image.aio_mirror_image_promote(false, aio_comps.back()));
+  }
+  for (auto aio_comp : aio_comps) {
+    ASSERT_EQ(0, aio_comp->wait_for_complete());
+    ASSERT_EQ(1, aio_comp->is_complete());
+    ASSERT_EQ(0, aio_comp->get_return_value());
+    aio_comp->release();
+  }
+
+  // verify promotions
+  for (auto &image : images) {
+    librbd::mirror_image_info_t mirror_image;
+    ASSERT_EQ(0, image.mirror_image_get_info(&mirror_image,
+                                             sizeof(mirror_image)));
+    ASSERT_TRUE(mirror_image.primary);
+  }
+}
+
+TEST_F(TestMirroring, AioGetInfo) {
+  std::list<std::string> image_names;
+  for (size_t idx = 0; idx < 10; ++idx) {
+    image_names.push_back(get_temp_image_name());
+  }
+
+  ASSERT_EQ(0, m_rbd.mirror_mode_set(m_ioctx, RBD_MIRROR_MODE_POOL));
+
+  // create mirror images
+  int order = 20;
+  std::list<librbd::Image> images;
+  for (auto &image_name : image_names) {
+    ASSERT_EQ(0, m_rbd.create2(m_ioctx, image_name.c_str(), 2048,
+                               RBD_FEATURE_EXCLUSIVE_LOCK |
+                                 RBD_FEATURE_JOURNALING,
+                               &order));
+
+    images.emplace_back();
+    ASSERT_EQ(0, m_rbd.open(m_ioctx, images.back(), image_name.c_str()));
+  }
+
+  std::list<librbd::RBD::AioCompletion *> aio_comps;
+  std::list<librbd::mirror_image_info_t> infos;
+  for (auto &image : images) {
+    aio_comps.push_back(new librbd::RBD::AioCompletion(nullptr, nullptr));
+    infos.emplace_back();
+    ASSERT_EQ(0, image.aio_mirror_image_get_info(&infos.back(),
+                                                 sizeof(infos.back()),
+                                                 aio_comps.back()));
+  }
+  for (auto aio_comp : aio_comps) {
+    ASSERT_EQ(0, aio_comp->wait_for_complete());
+    ASSERT_EQ(1, aio_comp->is_complete());
+    ASSERT_EQ(0, aio_comp->get_return_value());
+    aio_comp->release();
+  }
+  aio_comps.clear();
+
+  for (auto &info : infos) {
+    ASSERT_NE("", info.global_id);
+    ASSERT_EQ(RBD_MIRROR_IMAGE_ENABLED, info.state);
+    ASSERT_TRUE(info.primary);
+  }
+}
+
+TEST_F(TestMirroring, AioGetStatus) {
+  std::list<std::string> image_names;
+  for (size_t idx = 0; idx < 10; ++idx) {
+    image_names.push_back(get_temp_image_name());
+  }
+
+  ASSERT_EQ(0, m_rbd.mirror_mode_set(m_ioctx, RBD_MIRROR_MODE_POOL));
+
+  // create mirror images
+  int order = 20;
+  std::list<librbd::Image> images;
+  for (auto &image_name : image_names) {
+    ASSERT_EQ(0, m_rbd.create2(m_ioctx, image_name.c_str(), 2048,
+                               RBD_FEATURE_EXCLUSIVE_LOCK |
+                                 RBD_FEATURE_JOURNALING,
+                               &order));
+
+    images.emplace_back();
+    ASSERT_EQ(0, m_rbd.open(m_ioctx, images.back(), image_name.c_str()));
+  }
+
+  std::list<librbd::RBD::AioCompletion *> aio_comps;
+  std::list<librbd::mirror_image_status_t> statuses;
+  for (auto &image : images) {
+    aio_comps.push_back(new librbd::RBD::AioCompletion(nullptr, nullptr));
+    statuses.emplace_back();
+    ASSERT_EQ(0, image.aio_mirror_image_get_status(&statuses.back(),
+                                                   sizeof(statuses.back()),
+                                                   aio_comps.back()));
+  }
+  for (auto aio_comp : aio_comps) {
+    ASSERT_EQ(0, aio_comp->wait_for_complete());
+    ASSERT_EQ(1, aio_comp->is_complete());
+    ASSERT_EQ(0, aio_comp->get_return_value());
+    aio_comp->release();
+  }
+  aio_comps.clear();
+
+  for (auto &status : statuses) {
+    ASSERT_NE("", status.name);
+    ASSERT_NE("", status.info.global_id);
+    ASSERT_EQ(RBD_MIRROR_IMAGE_ENABLED, status.info.state);
+    ASSERT_TRUE(status.info.primary);
+    ASSERT_EQ(MIRROR_IMAGE_STATUS_STATE_UNKNOWN, status.state);
+    ASSERT_EQ("status not found", status.description);
+    ASSERT_FALSE(status.up);
+    ASSERT_EQ(0, status.last_update);
+  }
 }

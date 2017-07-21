@@ -1,6 +1,5 @@
-tasks:
-- install:
-- ceph:
+overrides:
+  ceph:
     log-whitelist:
     - wrongly marked me down
     - objects unfound and apparently lost
@@ -10,6 +9,8 @@ tasks:
         osd scrub max interval: 120
         filestore odsync write: true
         osd max backfills: 2
+        osd snap trim sleep: .5
+tasks:
 - thrashosds:
     timeout: 1200
     chance_pgnum_grow: 2

@@ -81,7 +81,7 @@ public:
 class CryptoNone : public CryptoHandler {
 public:
   CryptoNone() { }
-  ~CryptoNone() {}
+  ~CryptoNone() override {}
   int get_type() const override {
     return CEPH_CRYPTO_NONE;
   }
@@ -103,7 +103,7 @@ public:
 class CryptoAES : public CryptoHandler {
 public:
   CryptoAES() { }
-  ~CryptoAES() {}
+  ~CryptoAES() override {}
   int get_type() const override {
     return CEPH_CRYPTO_AES;
   }
@@ -267,7 +267,7 @@ public:
       slot(NULL),
       key(NULL),
       param(NULL) {}
-  ~CryptoAESKeyHandler() {
+  ~CryptoAESKeyHandler() override {
     SECITEM_FreeItem(param, PR_TRUE);
     if (key)
       PK11_FreeSymKey(key);

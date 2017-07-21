@@ -212,7 +212,7 @@ int main(int argc, char **argv) {
 
   const char* env = getenv("CEPH_LIB");
   string directory(env ? env : ".libs");
-  g_conf->set_val("plugin_dir", directory, false, false);
+  g_conf->set_val("plugin_dir", directory, false);
 
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();

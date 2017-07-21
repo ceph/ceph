@@ -16,15 +16,7 @@
 #ifndef CEPH_COND_H
 #define CEPH_COND_H
 
-#include <time.h>
-#include <pthread.h>
-
 #include "include/Context.h"
-
-#include "common/ceph_time.h"
-#include "common/Mutex.h"
-#include "common/Clock.h"
-
 
 class Cond {
   // my bits
@@ -139,7 +131,7 @@ public:
   C_Cond(Cond *c, bool *d, int *r) : cond(c), done(d), rval(r) {
     *done = false;
   }
-  void finish(int r) {
+  void finish(int r) override {
     *done = true;
     *rval = r;
     cond->Signal();
@@ -162,7 +154,7 @@ public:
   C_SafeCond(Mutex *l, Cond *c, bool *d, int *r=0) : lock(l), cond(c), done(d), rval(r) {
     *done = false;
   }
-  void finish(int r) {
+  void finish(int r) override {
     lock->Lock();
     if (rval)
       *rval = r;
@@ -185,10 +177,10 @@ class C_SaferCond : public Context {
   int rval;      ///< return value
 public:
   C_SaferCond() : lock("C_SaferCond"), done(false), rval(0) {}
-  void finish(int r) { complete(r); }
+  void finish(int r) override { complete(r); }
 
   /// We overload complete in order to not delete the context
-  void complete(int r) {
+  void complete(int r) override {
     Mutex::Locker l(lock);
     done = true;
     rval = r;

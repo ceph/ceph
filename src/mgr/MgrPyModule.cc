@@ -11,6 +11,8 @@
  * Foundation.  See file COPYING.
  */
 
+#include "PyState.h"
+#include "Gil.h"
 
 #include "PyFormatter.h"
 
@@ -18,40 +20,159 @@
 
 #include "MgrPyModule.h"
 
+//XXX courtesy of http://stackoverflow.com/questions/1418015/how-to-get-python-exception-text
+#include <boost/python.hpp>
+#include "include/assert.h"  // boost clobbers this
+
+// decode a Python exception into a string
+std::string handle_pyerror()
+{
+    using namespace boost::python;
+    using namespace boost;
+
+    PyObject *exc, *val, *tb;
+    object formatted_list, formatted;
+    PyErr_Fetch(&exc, &val, &tb);
+    handle<> hexc(exc), hval(allow_null(val)), htb(allow_null(tb));
+    object traceback(import("traceback"));
+    if (!tb) {
+        object format_exception_only(traceback.attr("format_exception_only"));
+        formatted_list = format_exception_only(hexc, hval);
+    } else {
+        object format_exception(traceback.attr("format_exception"));
+        formatted_list = format_exception(hexc,hval, htb);
+    }
+    formatted = str("").join(formatted_list);
+    return extract<std::string>(formatted);
+}
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_mgr
+
+#undef dout_prefix
+#define dout_prefix *_dout << "mgr[py] "
+
+namespace {
+  PyObject* log_write(PyObject*, PyObject* args) {
+    char* m = nullptr;
+    if (PyArg_ParseTuple(args, "s", &m)) {
+      auto len = strlen(m);
+      if (len && m[len-1] == '\n') {
+	m[len-1] = '\0';
+      }
+      dout(4) << m << dendl;
+    }
+    Py_RETURN_NONE;
+  }
+
+  PyObject* log_flush(PyObject*, PyObject*){
+    Py_RETURN_NONE;
+  }
+
+  static PyMethodDef log_methods[] = {
+    {"write", log_write, METH_VARARGS, "write stdout and stderr"},
+    {"flush", log_flush, METH_VARARGS, "flush"},
+    {nullptr, nullptr, 0, nullptr}
+  };
+}
+
 #undef dout_prefix
 #define dout_prefix *_dout << "mgr " << __func__ << " "
 
-MgrPyModule::MgrPyModule(const std::string &module_name_)
-  : module_name(module_name_), pModule(nullptr), pClass(nullptr),
-    pClassInstance(nullptr)
-{}
+MgrPyModule::MgrPyModule(const std::string &module_name_, const std::string &sys_path, PyThreadState *main_ts_)
+  : module_name(module_name_),
+    pClassInstance(nullptr),
+    pMainThreadState(main_ts_)
+{
+  assert(pMainThreadState != nullptr);
+
+  Gil gil(pMainThreadState);
+
+  pMyThreadState = Py_NewInterpreter();
+  if (pMyThreadState == nullptr) {
+    derr << "Failed to create python sub-interpreter for '" << module_name << '"' << dendl;
+  } else {
+    // Some python modules do not cope with an unpopulated argv, so lets
+    // fake one.  This step also picks up site-packages into sys.path.
+    const char *argv[] = {"ceph-mgr"};
+    PySys_SetArgv(1, (char**)argv);
+
+    if (g_conf->daemonize) {
+      auto py_logger = Py_InitModule("ceph_logger", log_methods);
+#if PY_MAJOR_VERSION >= 3
+      PySys_SetObject("stderr", py_logger);
+      PySys_SetObject("stdout", py_logger);
+#else
+      PySys_SetObject(const_cast<char*>("stderr"), py_logger);
+      PySys_SetObject(const_cast<char*>("stdout"), py_logger);
+#endif
+    }
+    // Populate python namespace with callable hooks
+    Py_InitModule("ceph_state", CephStateMethods);
+
+    PySys_SetPath(const_cast<char*>(sys_path.c_str()));
+  }
+}
 
 MgrPyModule::~MgrPyModule()
 {
-  Py_XDECREF(pModule);
-  Py_XDECREF(pClass);
-  Py_XDECREF(pClassInstance);
+  if (pMyThreadState != nullptr) {
+    Gil gil(pMyThreadState);
+
+    Py_XDECREF(pClassInstance);
+
+    //
+    // Ideally, now, we'd be able to do this:
+    //
+    //    Py_EndInterpreter(pMyThreadState);
+    //    PyThreadState_Swap(pMainThreadState);
+    //
+    // Unfortunately, if the module has any other *python* threads active
+    // at this point, Py_EndInterpreter() will abort with:
+    //
+    //    Fatal Python error: Py_EndInterpreter: not the last thread
+    //
+    // This can happen when using CherryPy in a module, becuase CherryPy
+    // runs an extra thread as a timeout monitor, which spends most of its
+    // life inside a time.sleep(60).  Unless you are very, very lucky with
+    // the timing calling this destructor, that thread will still be stuck
+    // in a sleep, and Py_EndInterpreter() will abort.
+    //
+    // This could of course also happen with a poorly written module which
+    // made no attempt to clean up any additional threads it created.
+    //
+    // The safest thing to do is just not call Py_EndInterpreter(), and
+    // let Py_Finalize() kill everything after all modules are shut down.
+    //
+  }
 }
 
 int MgrPyModule::load()
 {
+  if (pMyThreadState == nullptr) {
+    derr << "No python sub-interpreter exists for module '" << module_name << "'" << dendl;
+    return -EINVAL;
+  }
+
+  Gil gil(pMyThreadState);
+
   // Load the module
   PyObject *pName = PyString_FromString(module_name.c_str());
-  pModule = PyImport_Import(pName);
+  auto pModule = PyImport_Import(pName);
   Py_DECREF(pName);
   if (pModule == nullptr) {
     derr << "Module not found: '" << module_name << "'" << dendl;
+    derr << handle_pyerror() << dendl;
     return -ENOENT;
   }
 
   // Find the class
   // TODO: let them call it what they want instead of just 'Module'
-  pClass = PyObject_GetAttrString(pModule, (const char*)"Module");
+  auto pClass = PyObject_GetAttrString(pModule, (const char*)"Module");
+  Py_DECREF(pModule);
   if (pClass == nullptr) {
     derr << "Class not found in module '" << module_name << "'" << dendl;
+    derr << handle_pyerror() << dendl;
     return -EINVAL;
   }
 
@@ -61,13 +182,16 @@ int MgrPyModule::load()
   auto pyHandle = PyString_FromString(module_name.c_str());
   auto pArgs = PyTuple_Pack(1, pyHandle);
   pClassInstance = PyObject_CallObject(pClass, pArgs);
+  Py_DECREF(pClass);
+  Py_DECREF(pyHandle);
+  Py_DECREF(pArgs);
   if (pClassInstance == nullptr) {
     derr << "Failed to construct class in '" << module_name << "'" << dendl;
+    derr << handle_pyerror() << dendl;
     return -EINVAL;
   } else {
     dout(1) << "Constructed class from module: " << module_name << dendl;
   }
-  Py_DECREF(pArgs);
 
   return load_commands();
 }
@@ -76,22 +200,23 @@ int MgrPyModule::serve()
 {
   assert(pClassInstance != nullptr);
 
-  PyGILState_STATE gstate;
-  gstate = PyGILState_Ensure();
+  // This method is called from a separate OS thread (i.e. a thread not
+  // created by Python), so tell Gil to wrap this in a new thread state.
+  Gil gil(pMyThreadState, true);
 
   auto pValue = PyObject_CallMethod(pClassInstance,
       const_cast<char*>("serve"), nullptr);
 
+  int r = 0;
   if (pValue != NULL) {
     Py_DECREF(pValue);
   } else {
-    PyErr_Print();
+    derr << module_name << ".serve:" << dendl;
+    derr << handle_pyerror() << dendl;
     return -EINVAL;
   }
 
-  PyGILState_Release(gstate);
-
-  return 0;
+  return r;
 }
 
 // FIXME: DRY wrt serve
@@ -99,8 +224,7 @@ void MgrPyModule::shutdown()
 {
   assert(pClassInstance != nullptr);
 
-  PyGILState_STATE gstate;
-  gstate = PyGILState_Ensure();
+  Gil gil(pMyThreadState);
 
   auto pValue = PyObject_CallMethod(pClassInstance,
       const_cast<char*>("shutdown"), nullptr);
@@ -108,19 +232,16 @@ void MgrPyModule::shutdown()
   if (pValue != NULL) {
     Py_DECREF(pValue);
   } else {
-    PyErr_Print();
     derr << "Failed to invoke shutdown() on " << module_name << dendl;
+    derr << handle_pyerror() << dendl;
   }
-
-  PyGILState_Release(gstate);
 }
 
 void MgrPyModule::notify(const std::string &notify_type, const std::string &notify_id)
 {
   assert(pClassInstance != nullptr);
 
-  PyGILState_STATE gstate;
-  gstate = PyGILState_Ensure();
+  Gil gil(pMyThreadState);
 
   // Execute
   auto pValue = PyObject_CallMethod(pClassInstance,
@@ -130,21 +251,47 @@ void MgrPyModule::notify(const std::string &notify_type, const std::string &noti
   if (pValue != NULL) {
     Py_DECREF(pValue);
   } else {
-    PyErr_Print();
+    derr << module_name << ".notify:" << dendl;
+    derr << handle_pyerror() << dendl;
     // FIXME: callers can't be expected to handle a python module
     // that has spontaneously broken, but Mgr() should provide
     // a hook to unload misbehaving modules when they have an
     // error somewhere like this
   }
+}
 
-  PyGILState_Release(gstate);
+void MgrPyModule::notify_clog(const LogEntry &log_entry)
+{
+  assert(pClassInstance != nullptr);
+
+  Gil gil(pMyThreadState);
+
+  // Construct python-ized LogEntry
+  PyFormatter f;
+  log_entry.dump(&f);
+  auto py_log_entry = f.get();
+
+  // Execute
+  auto pValue = PyObject_CallMethod(pClassInstance,
+       const_cast<char*>("notify"), const_cast<char*>("(sN)"),
+       "clog", py_log_entry);
+
+  if (pValue != NULL) {
+    Py_DECREF(pValue);
+  } else {
+    derr << module_name << ".notify_clog:" << dendl;
+    derr << handle_pyerror() << dendl;
+    // FIXME: callers can't be expected to handle a python module
+    // that has spontaneously broken, but Mgr() should provide
+    // a hook to unload misbehaving modules when they have an
+    // error somewhere like this
+  }
 }
 
 int MgrPyModule::load_commands()
 {
-  PyGILState_STATE gstate;
-  gstate = PyGILState_Ensure();
-
+  // Don't need a Gil here -- this is called from MgrPyModule::load(),
+  // which already has one.
   PyObject *command_list = PyObject_GetAttrString(pClassInstance, "COMMANDS");
   assert(command_list != nullptr);
   const size_t list_size = PyList_Size(command_list);
@@ -174,8 +321,6 @@ int MgrPyModule::load_commands()
   }
   Py_DECREF(command_list);
 
-  PyGILState_Release(gstate);
-
   dout(10) << "loaded " << commands.size() << " commands" << dendl;
 
   return 0;
@@ -183,14 +328,13 @@ int MgrPyModule::load_commands()
 
 int MgrPyModule::handle_command(
   const cmdmap_t &cmdmap,
-  std::stringstream *ss,
-  std::stringstream *ds)
+  std::stringstream *ds,
+  std::stringstream *ss)
 {
   assert(ss != nullptr);
   assert(ds != nullptr);
 
-  PyGILState_STATE gstate;
-  gstate = PyGILState_Ensure();
+  Gil gil(pMyThreadState);
 
   PyFormatter f;
   cmdmap_dump(cmdmap, &f);
@@ -213,11 +357,10 @@ int MgrPyModule::handle_command(
 
     Py_DECREF(pResult);
   } else {
-    PyErr_Print();
+    *ds << "";
+    *ss << handle_pyerror();
     r = -EINVAL;
   }
-
-  PyGILState_Release(gstate);
 
   return r;
 }

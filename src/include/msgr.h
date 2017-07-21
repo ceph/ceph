@@ -5,6 +5,8 @@
 #include <sys/socket.h> // for struct sockaddr_storage
 #endif
 
+#include "include/int_types.h"
+
 /*
  * Data types for message passing layer used by Ceph.
  */

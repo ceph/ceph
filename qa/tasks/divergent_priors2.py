@@ -35,9 +35,7 @@ def task(ctx, config):
 
     while len(manager.get_osd_status()['up']) < 3:
         time.sleep(10)
-    manager.raw_cluster_cmd('tell', 'osd.0', 'flush_pg_stats')
-    manager.raw_cluster_cmd('tell', 'osd.1', 'flush_pg_stats')
-    manager.raw_cluster_cmd('tell', 'osd.2', 'flush_pg_stats')
+    manager.flush_pg_stats([0, 1, 2])
     manager.raw_cluster_cmd('osd', 'set', 'noout')
     manager.raw_cluster_cmd('osd', 'set', 'noin')
     manager.raw_cluster_cmd('osd', 'set', 'nodown')
@@ -158,13 +156,13 @@ def task(ctx, config):
               format(fpath=FSPATH, jpath=JPATH))
     pid = os.getpid()
     expfile = os.path.join(testdir, "exp.{pid}.out".format(pid=pid))
-    cmd = ((prefix + "--op export --pgid 1.0 --file {file}").
+    cmd = ((prefix + "--op export --pgid 2.0 --file {file}").
            format(id=divergent, file=expfile))
     proc = exp_remote.run(args=cmd, wait=True,
                           check_status=False, stdout=StringIO())
     assert proc.exitstatus == 0
 
-    cmd = ((prefix + "--op remove --pgid 1.0").
+    cmd = ((prefix + "--op remove --pgid 2.0").
            format(id=divergent, file=expfile))
     proc = exp_remote.run(args=cmd, wait=True,
                           check_status=False, stdout=StringIO())

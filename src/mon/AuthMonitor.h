@@ -103,13 +103,19 @@ public:
     }
   };
 
+  struct auth_entity_t {
+    EntityName name;
+    EntityAuth auth;
+  };
+
+
 private:
   vector<Incremental> pending_auth;
   version_t last_rotating_ver;
   uint64_t max_global_id;
   uint64_t last_allocated_id;
 
-  void upgrade_format();
+  void upgrade_format() override;
 
   void export_keyring(KeyRing& keyring);
   int import_keyring(KeyRing& keyring);
@@ -136,21 +142,21 @@ private:
     return true;
   }
 
-  void on_active();
-  bool should_propose(double& delay);
-  void create_initial();
-  void update_from_paxos(bool *need_bootstrap);
-  void create_pending();  // prepare a new pending
+  void on_active() override;
+  bool should_propose(double& delay) override;
+  void create_initial() override;
+  void update_from_paxos(bool *need_bootstrap) override;
+  void create_pending() override;  // prepare a new pending
   bool prepare_global_id(MonOpRequestRef op);
   void increase_max_global_id();
   uint64_t assign_global_id(MonOpRequestRef op, bool should_increase_max);
   // propose pending update to peers
-  void encode_pending(MonitorDBStore::TransactionRef t);
-  virtual void encode_full(MonitorDBStore::TransactionRef t);
-  version_t get_trim_to();
+  void encode_pending(MonitorDBStore::TransactionRef t) override;
+  void encode_full(MonitorDBStore::TransactionRef t) override;
+  version_t get_trim_to() override;
 
-  bool preprocess_query(MonOpRequestRef op);  // true if processed.
-  bool prepare_update(MonOpRequestRef op);
+  bool preprocess_query(MonOpRequestRef op) override;  // true if processed.
+  bool prepare_update(MonOpRequestRef op) override;
 
   bool prep_auth(MonOpRequestRef op, bool paxos_writable);
 
@@ -158,6 +164,23 @@ private:
   bool prepare_command(MonOpRequestRef op);
 
   bool check_rotate();
+
+  bool entity_is_pending(EntityName& entity);
+  int exists_and_matches_entity(
+      const auth_entity_t& entity,
+      bool has_secret,
+      stringstream& ss);
+  int exists_and_matches_entity(
+      const EntityName& name,
+      const EntityAuth& auth,
+      const map<string,bufferlist>& caps,
+      bool has_secret,
+      stringstream& ss);
+  int remove_entity(const EntityName &entity);
+  int add_entity(
+      const EntityName& name,
+      const EntityAuth& auth);
+
  public:
   AuthMonitor(Monitor *mn, Paxos *p, const string& service_name)
     : PaxosService(mn, p, service_name),
@@ -167,10 +190,45 @@ private:
   {}
 
   void pre_auth(MAuth *m);
-  
-  void tick();  // check state, take actions
+
+  void tick() override;  // check state, take actions
+
+  int validate_osd_destroy(
+      int32_t id,
+      const uuid_d& uuid,
+      EntityName& cephx_entity,
+      EntityName& lockbox_entity,
+      stringstream& ss);
+  int do_osd_destroy(
+      const EntityName& cephx_entity,
+      const EntityName& lockbox_entity);
+
+  int do_osd_new(
+      const auth_entity_t& cephx_entity,
+      const auth_entity_t& lockbox_entity,
+      bool has_lockbox);
+  int validate_osd_new(
+      int32_t id,
+      const uuid_d& uuid,
+      const string& cephx_secret,
+      const string& lockbox_secret,
+      auth_entity_t& cephx_entity,
+      auth_entity_t& lockbox_entity,
+      stringstream& ss);
 
   void dump_info(Formatter *f);
+
+  bool is_valid_cephx_key(const string& k) {
+    if (k.empty())
+      return false;
+
+    EntityAuth ea;
+    try {
+      ea.key.decode_base64(k);
+      return true;
+    } catch (buffer::error& e) { /* fallthrough */ }
+    return false;
+  }
 };
 
 

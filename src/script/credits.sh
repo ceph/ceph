@@ -1,4 +1,4 @@
-#!/bin/sh -x
+#!/bin/sh
 
 range="$1"
 TMP=/tmp/credits

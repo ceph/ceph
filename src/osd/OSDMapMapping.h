@@ -269,10 +269,10 @@ private:
       : Job(osdmap), mapping(m) {
       mapping->_start(*osdmap);
     }
-    void process(int64_t pool, unsigned ps_begin, unsigned ps_end) {
+    void process(int64_t pool, unsigned ps_begin, unsigned ps_end) override {
       mapping->_update_range(*osdmap, pool, ps_begin, ps_end);
     }
-    void complete() {
+    void complete() override {
       mapping->_finish(*osdmap);
     }
   };
@@ -285,6 +285,7 @@ public:
 	   int *acting_primary) const {
     auto p = pools.find(pgid.pool());
     assert(p != pools.end());
+    assert(pgid.ps() < p->second.pg_num);
     p->second.get(pgid.ps(), up, up_primary, acting, acting_primary);
   }
 

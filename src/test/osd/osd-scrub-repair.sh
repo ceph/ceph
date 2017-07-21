@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/bash -x
 #
 # Copyright (C) 2014 Red Hat <contact@redhat.com>
 #
@@ -17,15 +17,21 @@
 source $(dirname $0)/../detect-build-env-vars.sh
 source $CEPH_ROOT/qa/workunits/ceph-helpers.sh
 
+if [ `uname` = FreeBSD ]; then
+    # erasure coding overwrites are only tested on Bluestore 
+    # erasure coding on filestore is unsafe
+    # http://docs.ceph.com/docs/master/rados/operations/erasure-code/#erasure-coding-with-overwrites
+    use_ec_overwrite=false
+else
+    use_ec_overwrite=true
+fi
+
 # Test development and debugging
 # Set to "yes" in order to ignore diff errors and save results to update test
 getjson="no"
 
-termwidth=$(stty -a | head -1 | sed -e 's/.*columns \([0-9]*\).*/\1/')
-if test -n "$termwidth" -a "$termwidth" != "0"; then termwidth="-W ${termwidth}"; fi
-
 # Ignore the epoch and filter out the attr '_' value because it has date information and won't match
-jqfilter='.inconsistents | (.[].shards[].attrs[] | select(.name == "_") | .value) |= "----Stripped-by-test----"'
+jqfilter='.inconsistents | (.[].shards[].attrs[]? | select(.name == "_") | .value) |= "----Stripped-by-test----"'
 sortkeys='import json; import sys ; JSON=sys.stdin.read() ; ud = json.loads(JSON) ; print json.dumps(ud, sort_keys=True, indent=2)'
 
 # Remove items are not consistent across runs, the pg interval and client
@@ -75,6 +81,7 @@ function TEST_corrupt_and_repair_replicated() {
 
     setup $dir || return 1
     run_mon $dir a --osd_pool_default_size=2 || return 1
+    run_mgr $dir x || return 1
     run_osd $dir 0 || return 1
     run_osd $dir 1 || return 1
     wait_for_clean || return 1
@@ -153,11 +160,6 @@ function corrupt_and_repair_one() {
 function corrupt_and_repair_erasure_coded() {
     local dir=$1
     local poolname=$2
-    local profile=$3
-
-    ceph osd pool create $poolname 1 1 erasure $profile \
-        || return 1
-    wait_for_clean || return 1
 
     add_something $dir $poolname || return 1
 
@@ -175,28 +177,47 @@ function corrupt_and_repair_erasure_coded() {
 
 }
 
-function TEST_auto_repair_erasure_coded() {
+function create_ec_pool() {
+    local pool_name=$1
+    local allow_overwrites=$2
+
+    ceph osd erasure-code-profile set myprofile crush-failure-domain=osd $3 $4 $5 $6 $7 || return 1
+
+    ceph osd pool create "$poolname" 1 1 erasure myprofile || return 1
+
+    if [ "$allow_overwrites" = "true" ]; then
+        ceph osd pool set "$poolname" allow_ec_overwrites true || return 1
+    fi
+
+    wait_for_clean || return 1
+    return 0
+}
+
+function auto_repair_erasure_coded() {
     local dir=$1
+    local allow_overwrites=$2
     local poolname=ecpool
 
     # Launch a cluster with 5 seconds scrub interval
     setup $dir || return 1
     run_mon $dir a || return 1
+    run_mgr $dir x || return 1
     local ceph_osd_args="--osd-scrub-auto-repair=true \
             --osd-deep-scrub-interval=5 \
             --osd-scrub-max-interval=5 \
             --osd-scrub-min-interval=5 \
             --osd-scrub-interval-randomize-ratio=0"
     for id in $(seq 0 2) ; do
-        run_osd $dir $id $ceph_osd_args
+	if [ "$allow_overwrites" = "true" ]; then
+            run_osd_bluestore $dir $id $ceph_osd_args || return 1
+	else
+            run_osd $dir $id $ceph_osd_args || return 1
+	fi
     done
     wait_for_clean || return 1
 
     # Create an EC pool
-    ceph osd erasure-code-profile set myprofile \
-        k=2 m=1 ruleset-failure-domain=osd || return 1
-    ceph osd pool create $poolname 8 8 erasure myprofile || return 1
-    wait_for_clean || return 1
+    create_ec_pool $poolname $allow_overwrites k=2 m=1 || return 1
 
     # Put an object
     local payload=ABCDEF
@@ -220,66 +241,101 @@ function TEST_auto_repair_erasure_coded() {
     teardown $dir || return 1
 }
 
-function TEST_corrupt_and_repair_jerasure() {
+function TEST_auto_repair_erasure_coded_appends() {
+    auto_repair_erasure_coded $1 false
+}
+
+function TEST_auto_repair_erasure_coded_overwrites() {
+    if [ "$use_ec_overwrite" = "true" ]; then
+        auto_repair_erasure_coded $1 true
+    fi
+}
+
+function corrupt_and_repair_jerasure() {
     local dir=$1
+    local allow_overwrites=$2
     local poolname=ecpool
-    local profile=myprofile
 
     setup $dir || return 1
     run_mon $dir a || return 1
+    run_mgr $dir x || return 1
     for id in $(seq 0 3) ; do
-        run_osd $dir $id || return 1
+	if [ "$allow_overwrites" = "true" ]; then
+            run_osd_bluestore $dir $id || return 1
+	else
+            run_osd $dir $id || return 1
+	fi
     done
     wait_for_clean || return 1
 
-    ceph osd erasure-code-profile set $profile \
-        k=2 m=2 ruleset-failure-domain=osd || return 1
-
-    corrupt_and_repair_erasure_coded $dir $poolname $profile || return 1
+    create_ec_pool $poolname $allow_overwrites k=2 m=2 || return 1
+    corrupt_and_repair_erasure_coded $dir $poolname || return 1
 
     teardown $dir || return 1
 }
 
-function TEST_corrupt_and_repair_lrc() {
+function TEST_corrupt_and_repair_jerasure_appends() {
+    corrupt_and_repair_jerasure $1
+}
+
+function TEST_corrupt_and_repair_jerasure_overwrites() {
+    if [ "$use_ec_overwrite" = "true" ]; then
+        corrupt_and_repair_jerasure $1 true
+    fi
+}
+
+function corrupt_and_repair_lrc() {
     local dir=$1
+    local allow_overwrites=$2
     local poolname=ecpool
-    local profile=myprofile
 
     setup $dir || return 1
     run_mon $dir a || return 1
+    run_mgr $dir x || return 1
     for id in $(seq 0 9) ; do
-        run_osd $dir $id || return 1
+	if [ "$allow_overwrites" = "true" ]; then
+            run_osd_bluestore $dir $id || return 1
+	else
+            run_osd $dir $id || return 1
+	fi
     done
     wait_for_clean || return 1
 
-    ceph osd erasure-code-profile set $profile \
-        pluing=lrc \
-        k=4 m=2 l=3 \
-        ruleset-failure-domain=osd || return 1
-
-    corrupt_and_repair_erasure_coded $dir $poolname $profile || return 1
+    create_ec_pool $poolname $allow_overwrites k=4 m=2 l=3 plugin=lrc || return 1
+    corrupt_and_repair_erasure_coded $dir $poolname || return 1
 
     teardown $dir || return 1
 }
 
-function TEST_unfound_erasure_coded() {
+function TEST_corrupt_and_repair_lrc_appends() {
+    corrupt_and_repair_jerasure $1
+}
+
+function TEST_corrupt_and_repair_lrc_overwrites() {
+    if [ "$use_ec_overwrite" = "true" ]; then
+        corrupt_and_repair_jerasure $1 true
+    fi
+}
+
+function unfound_erasure_coded() {
     local dir=$1
+    local allow_overwrites=$2
     local poolname=ecpool
     local payload=ABCDEF
 
     setup $dir || return 1
     run_mon $dir a || return 1
-    run_osd $dir 0 || return 1
-    run_osd $dir 1 || return 1
-    run_osd $dir 2 || return 1
-    run_osd $dir 3 || return 1
+    run_mgr $dir x || return 1
+    for id in $(seq 0 3) ; do
+	if [ "$allow_overwrites" = "true" ]; then
+            run_osd_bluestore $dir $id || return 1
+	else
+            run_osd $dir $id || return 1
+	fi
+    done
     wait_for_clean || return 1
 
-    ceph osd erasure-code-profile set myprofile \
-      k=2 m=2 ruleset-failure-domain=osd || return 1
-    ceph osd pool create $poolname 1 1 erasure myprofile \
-      || return 1
-    wait_for_clean || return 1
+    create_ec_pool $poolname $allow_overwrites k=2 m=2 || return 1
 
     add_something $dir $poolname || return 1
 
@@ -308,32 +364,48 @@ function TEST_unfound_erasure_coded() {
     #
     # 3) check pg state
     #
+    # it may take a bit to appear due to mon/mgr asynchrony
+    for f in `seq 1 60`; do
+	ceph -s | grep "1/1 unfound" && break
+	sleep 1
+    done
     ceph -s|grep "4 osds: 4 up, 4 in" || return 1
     ceph -s|grep "1/1 unfound" || return 1
 
     teardown $dir || return 1
 }
 
+function TEST_unfound_erasure_coded_appends() {
+    unfound_erasure_coded $1
+}
+
+function TEST_unfound_erasure_coded_overwrites() {
+    if [ "$use_ec_overwrite" = "true" ]; then
+        unfound_erasure_coded $1 true
+    fi
+}
+
 #
 # list_missing for EC pool
 #
-function TEST_list_missing_erasure_coded() {
+function list_missing_erasure_coded() {
     local dir=$1
+    local allow_overwrites=$2
     local poolname=ecpool
-    local profile=myprofile
 
     setup $dir || return 1
     run_mon $dir a || return 1
+    run_mgr $dir x || return 1
     for id in $(seq 0 2) ; do
-        run_osd $dir $id || return 1
+	if [ "$allow_overwrites" = "true" ]; then
+            run_osd_bluestore $dir $id || return 1
+	else
+            run_osd $dir $id || return 1
+	fi
     done
     wait_for_clean || return 1
 
-    ceph osd erasure-code-profile set $profile \
-        k=2 m=1 ruleset-failure-domain=osd || return 1
-    ceph osd pool create $poolname 1 1 erasure $profile \
-        || return 1
-    wait_for_clean || return 1
+    create_ec_pool $poolname $allow_overwrites k=2 m=1 || return 1
 
     # Put an object and remove the two shards (including primary)
     add_something $dir $poolname MOBJ0 || return 1
@@ -349,17 +421,17 @@ function TEST_list_missing_erasure_coded() {
     done
 
     id=${osds0[0]}
-    ceph-objectstore-tool --data-path $dir/$id --journal-path $dir/$id/journal \
+    ceph-objectstore-tool --data-path $dir/$id \
         MOBJ0 remove || return 1
     id=${osds0[1]}
-    ceph-objectstore-tool --data-path $dir/$id --journal-path $dir/$id/journal \
+    ceph-objectstore-tool --data-path $dir/$id \
         MOBJ0 remove || return 1
 
     id=${osds1[1]}
-    ceph-objectstore-tool --data-path $dir/$id --journal-path $dir/$id/journal \
+    ceph-objectstore-tool --data-path $dir/$id \
         MOBJ1 remove || return 1
     id=${osds1[2]}
-    ceph-objectstore-tool --data-path $dir/$id --journal-path $dir/$id/journal \
+    ceph-objectstore-tool --data-path $dir/$id \
         MOBJ1 remove || return 1
 
     for id in $(seq 0 2) ; do
@@ -383,6 +455,16 @@ function TEST_list_missing_erasure_coded() {
     teardown $dir || return 1
 }
 
+function TEST_list_missing_erasure_coded_appends() {
+    list_missing_erasure_coded $1 false
+}
+
+function TEST_list_missing_erasure_coded_overwrites() {
+    if [ "$use_ec_overwrite" = "true" ]; then
+        list_missing_erasure_coded $1 true
+    fi
+}
+
 #
 # Corrupt one copy of a replicated pool
 #
@@ -393,6 +475,7 @@ function TEST_corrupt_scrub_replicated() {
 
     setup $dir || return 1
     run_mon $dir a --osd_pool_default_size=2 || return 1
+    run_mgr $dir x || return 1
     run_osd $dir 0 || return 1
     run_osd $dir 1 || return 1
     wait_for_clean || return 1
@@ -406,6 +489,19 @@ function TEST_corrupt_scrub_replicated() {
 
         rados --pool $poolname setomapheader $objname hdr-$objname || return 1
         rados --pool $poolname setomapval $objname key-$objname val-$objname || return 1
+    done
+
+    local pg=$(get_pg $poolname ROBJ0)
+
+    # Compute an old omap digest and save oi
+    CEPH_ARGS='' ceph daemon $dir//ceph-osd.0.asok \
+        config set osd_deep_scrub_update_digest_min_age 0
+    CEPH_ARGS='' ceph daemon $dir//ceph-osd.1.asok \
+        config set osd_deep_scrub_update_digest_min_age 0
+    pg_deep_scrub $pg
+
+    for i in $(seq 1 $total_objs) ; do
+        objname=ROBJ${i}
 
         # Alternate corruption between osd.0 and osd.1
         local osd=$(expr $i % 2)
@@ -536,7 +632,7 @@ function TEST_corrupt_scrub_replicated() {
           "osd": 1
         }
       ],
-      "selected_object_info": "2:ce3f1d6a:::ROBJ1:head(15'3 client.4169.0:1 dirty|omap|data_digest s 7 uv 3 dd 2ddbf8f5 alloc_hint [0 0 0])",
+      "selected_object_info": "3:ce3f1d6a:::ROBJ1:head(47'54 osd.0.0:53 dirty|omap|data_digest|omap_digest s 7 uv 3 dd 2ddbf8f5 od f5fba2c6 alloc_hint [0 0 0])",
       "union_shard_errors": [
         "size_mismatch_oi"
       ],
@@ -565,13 +661,13 @@ function TEST_corrupt_scrub_replicated() {
           "osd": 1
         }
       ],
-      "selected_object_info": "2:bc819597:::ROBJ12:head(110'39 client.4732.0:1 dirty|omap|data_digest s 7 uv 39 dd 2ddbf8f5 alloc_hint [0 0 0])",
+      "selected_object_info": "3:bc819597:::ROBJ12:head(47'52 osd.0.0:51 dirty|omap|data_digest|omap_digest s 7 uv 36 dd 2ddbf8f5 od 67f306a alloc_hint [0 0 0])",
       "union_shard_errors": [
         "stat_error"
       ],
       "errors": [],
       "object": {
-        "version": 39,
+        "version": 36,
         "snap": "head",
         "locator": "",
         "nspace": "",
@@ -592,13 +688,13 @@ function TEST_corrupt_scrub_replicated() {
           "osd": 1
         }
       ],
-      "selected_object_info": "2:d60617f9:::ROBJ13:head(112'42 client.4737.0:1 dirty|omap|data_digest s 7 uv 42 dd 2ddbf8f5 alloc_hint [0 0 0])",
+      "selected_object_info": "3:d60617f9:::ROBJ13:head(47'55 osd.0.0:54 dirty|omap|data_digest|omap_digest s 7 uv 39 dd 2ddbf8f5 od 6441854d alloc_hint [0 0 0])",
       "union_shard_errors": [
         "stat_error"
       ],
       "errors": [],
       "object": {
-        "version": 42,
+        "version": 39,
         "snap": "head",
         "locator": "",
         "nspace": "",
@@ -646,7 +742,7 @@ function TEST_corrupt_scrub_replicated() {
             },
             {
               "Base64": true,
-              "value": "AgIZAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAA==",
+              "value": "AwIdAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
               "name": "snapset"
             }
           ],
@@ -658,7 +754,7 @@ function TEST_corrupt_scrub_replicated() {
           "attrs": [
             {
               "Base64": true,
-              "value": "AgIZAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAA==",
+              "value": "AwIdAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
               "name": "snapset"
             }
           ],
@@ -669,7 +765,7 @@ function TEST_corrupt_scrub_replicated() {
           "osd": 1
         }
       ],
-      "selected_object_info": "2:30259878:::ROBJ15:head(127'48 client.4820.0:1 dirty|omap|data_digest s 7 uv 48 dd 2ddbf8f5 alloc_hint [0 0 0])",
+      "selected_object_info": "3:30259878:::ROBJ15:head(47'46 osd.0.0:45 dirty|omap|data_digest|omap_digest s 7 uv 45 dd 2ddbf8f5 od 2d2a4d6e alloc_hint [0 0 0])",
       "union_shard_errors": [
         "oi_attr_missing"
       ],
@@ -677,7 +773,7 @@ function TEST_corrupt_scrub_replicated() {
         "attr_name_mismatch"
       ],
       "object": {
-        "version": 48,
+        "version": 45,
         "snap": "head",
         "locator": "",
         "nspace": "",
@@ -698,7 +794,7 @@ function TEST_corrupt_scrub_replicated() {
           "osd": 1
         }
       ],
-      "selected_object_info": "2:f2a5b2a4:::ROBJ3:head(29'9 client.4251.0:1 dirty|omap|data_digest s 7 uv 9 dd 2ddbf8f5 alloc_hint [0 0 0])",
+      "selected_object_info": "3:f2a5b2a4:::ROBJ3:head(47'57 osd.0.0:56 dirty|omap|data_digest|omap_digest s 7 uv 9 dd 2ddbf8f5 od b35dfd alloc_hint [0 0 0])",
       "union_shard_errors": [
         "missing"
       ],
@@ -732,7 +828,7 @@ function TEST_corrupt_scrub_replicated() {
             },
             {
               "Base64": true,
-              "value": "AgIZAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAA==",
+              "value": "AwIdAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
               "name": "snapset"
             }
           ],
@@ -759,7 +855,7 @@ function TEST_corrupt_scrub_replicated() {
             },
             {
               "Base64": true,
-              "value": "AgIZAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAA==",
+              "value": "AwIdAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
               "name": "snapset"
             }
           ],
@@ -768,14 +864,14 @@ function TEST_corrupt_scrub_replicated() {
           "osd": 1
         }
       ],
-      "selected_object_info": "2:86586531:::ROBJ8:head(70'26 client.4495.0:1 dirty|omap|data_digest s 7 uv 26 dd 2ddbf8f5 alloc_hint [0 0 0])",
+      "selected_object_info": "3:86586531:::ROBJ8:head(82'62 client.4351.0:1 dirty|omap|data_digest|omap_digest s 7 uv 62 dd 2ddbf8f5 od d6be81dc alloc_hint [0 0 0])",
       "union_shard_errors": [],
       "errors": [
         "attr_value_mismatch",
         "attr_name_mismatch"
       ],
       "object": {
-        "version": 26,
+        "version": 62,
         "snap": "head",
         "locator": "",
         "nspace": "",
@@ -793,11 +889,11 @@ function TEST_corrupt_scrub_replicated() {
             },
             {
               "Base64": true,
-              "value": "AgIZAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAA==",
+              "value": "AwIdAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
               "name": "snapset"
             }
           ],
-          "object_info": "2:ffdb2004:::ROBJ9:head(94'30 client.4649.0:1 dirty|omap|data_digest s 1 uv 30 dd 2b63260d alloc_hint [0 0 0])",
+          "object_info": "3:ffdb2004:::ROBJ9:head(102'63 client.4433.0:1 dirty|omap|data_digest|omap_digest s 1 uv 63 dd 2b63260d od 2eecc539 alloc_hint [0 0 0])",
           "size": 1,
           "errors": [],
           "osd": 0
@@ -811,24 +907,24 @@ function TEST_corrupt_scrub_replicated() {
             },
             {
               "Base64": true,
-              "value": "AgIZAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAA==",
+              "value": "AwIdAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
               "name": "snapset"
             }
           ],
-          "object_info": "2:ffdb2004:::ROBJ9:head(89'29 client.4612.0:1 dirty|omap|data_digest s 7 uv 29 dd 2ddbf8f5 alloc_hint [0 0 0])",
+          "object_info": "3:ffdb2004:::ROBJ9:head(47'60 osd.0.0:59 dirty|omap|data_digest|omap_digest s 7 uv 27 dd 2ddbf8f5 od 2eecc539 alloc_hint [0 0 0])",
           "size": 1,
           "errors": [],
           "osd": 1
         }
       ],
-      "selected_object_info": "2:ffdb2004:::ROBJ9:head(94'30 client.4649.0:1 dirty|omap|data_digest s 1 uv 30 dd 2b63260d alloc_hint [0 0 0])",
+      "selected_object_info": "3:ffdb2004:::ROBJ9:head(102'63 client.4433.0:1 dirty|omap|data_digest|omap_digest s 1 uv 63 dd 2b63260d od 2eecc539 alloc_hint [0 0 0])",
       "union_shard_errors": [],
       "errors": [
         "object_info_inconsistency",
         "attr_value_mismatch"
       ],
       "object": {
-        "version": 30,
+        "version": 63,
         "snap": "head",
         "locator": "",
         "nspace": "",
@@ -841,7 +937,7 @@ function TEST_corrupt_scrub_replicated() {
 EOF
 
     jq "$jqfilter" $dir/json | python -c "$sortkeys" | sed -e "$sedfilter" > $dir/csjson
-    diff -y $termwidth $dir/checkcsjson $dir/csjson || test $getjson = "yes" || return 1
+    diff ${DIFFCOLOPTS} $dir/checkcsjson $dir/csjson || test $getjson = "yes" || return 1
     if test $getjson = "yes"
     then
         jq '.' $dir/json > save1.json
@@ -851,13 +947,6 @@ EOF
     then
       jsonschema -i $dir/json $CEPH_ROOT/doc/rados/command/list-inconsistent-obj.json || return 1
     fi
-
-    # Compute an old omap digest and save oi
-    CEPH_ARGS='' ceph daemon $dir//ceph-osd.0.asok \
-        config set osd_deep_scrub_update_digest_min_age 0
-    CEPH_ARGS='' ceph daemon $dir//ceph-osd.1.asok \
-        config set osd_deep_scrub_update_digest_min_age 0
-    pg_deep_scrub $pg
 
     objname=ROBJ9
     # Change data and size again because digest was recomputed
@@ -919,7 +1008,7 @@ EOF
           "osd": 1
         }
       ],
-      "selected_object_info": "2:ce3f1d6a:::ROBJ1:head(15'3 client.4171.0:1 dirty|omap|data_digest s 7 uv 3 dd 2ddbf8f5 alloc_hint [0 0 0])",
+      "selected_object_info": "3:ce3f1d6a:::ROBJ1:head(47'54 osd.0.0:53 dirty|omap|data_digest|omap_digest s 7 uv 3 dd 2ddbf8f5 od f5fba2c6 alloc_hint [0 0 0])",
       "union_shard_errors": [
         "data_digest_mismatch_oi",
         "size_mismatch_oi"
@@ -957,13 +1046,13 @@ EOF
           "osd": 1
         }
       ],
-      "selected_object_info": "2:b1f19cbd:::ROBJ10:head(136'51 osd.0.0:8 dirty|omap|data_digest|omap_digest s 7 uv 33 dd 2ddbf8f5 od c2025a24 alloc_hint [0 0 0])",
+      "selected_object_info": "3:b1f19cbd:::ROBJ10:head(47'51 osd.0.0:50 dirty|omap|data_digest|omap_digest s 7 uv 30 dd 2ddbf8f5 od c2025a24 alloc_hint [0 0 0])",
       "union_shard_errors": [
         "omap_digest_mismatch_oi"
       ],
       "errors": [],
       "object": {
-        "version": 33,
+        "version": 30,
         "snap": "head",
         "locator": "",
         "nspace": "",
@@ -987,13 +1076,13 @@ EOF
           "osd": 1
         }
       ],
-      "selected_object_info": "2:87abbf36:::ROBJ11:head(105'36 client.4699.0:1 dirty|omap|data_digest s 7 uv 36 dd 2ddbf8f5 alloc_hint [0 0 0])",
+      "selected_object_info": "3:87abbf36:::ROBJ11:head(47'48 osd.0.0:47 dirty|omap|data_digest|omap_digest s 7 uv 33 dd 2ddbf8f5 od a03cef03 alloc_hint [0 0 0])",
       "union_shard_errors": [
         "read_error"
       ],
       "errors": [],
       "object": {
-        "version": 36,
+        "version": 33,
         "snap": "head",
         "locator": "",
         "nspace": "",
@@ -1016,13 +1105,13 @@ EOF
           "osd": 1
         }
       ],
-      "selected_object_info": "2:bc819597:::ROBJ12:head(107'39 client.4704.0:1 dirty|omap|data_digest s 7 uv 39 dd 2ddbf8f5 alloc_hint [0 0 0])",
+      "selected_object_info": "3:bc819597:::ROBJ12:head(47'52 osd.0.0:51 dirty|omap|data_digest|omap_digest s 7 uv 36 dd 2ddbf8f5 od 67f306a alloc_hint [0 0 0])",
       "union_shard_errors": [
         "stat_error"
       ],
       "errors": [],
       "object": {
-        "version": 39,
+        "version": 36,
         "snap": "head",
         "locator": "",
         "nspace": "",
@@ -1103,7 +1192,7 @@ EOF
             },
             {
               "Base64": true,
-              "value": "AgIZAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAA==",
+              "value": "AwIdAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
               "name": "snapset"
             }
           ],
@@ -1117,7 +1206,7 @@ EOF
           "attrs": [
             {
               "Base64": true,
-              "value": "AgIZAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAA==",
+              "value": "AwIdAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
               "name": "snapset"
             }
           ],
@@ -1130,7 +1219,7 @@ EOF
           "osd": 1
         }
       ],
-      "selected_object_info": "2:30259878:::ROBJ15:head(124'48 client.4792.0:1 dirty|omap|data_digest s 7 uv 48 dd 2ddbf8f5 alloc_hint [0 0 0])",
+      "selected_object_info": "3:30259878:::ROBJ15:head(47'46 osd.0.0:45 dirty|omap|data_digest|omap_digest s 7 uv 45 dd 2ddbf8f5 od 2d2a4d6e alloc_hint [0 0 0])",
       "union_shard_errors": [
         "oi_attr_missing"
       ],
@@ -1138,7 +1227,7 @@ EOF
         "attr_name_mismatch"
       ],
       "object": {
-        "version": 48,
+        "version": 45,
         "snap": "head",
         "locator": "",
         "nspace": "",
@@ -1164,7 +1253,7 @@ EOF
           "osd": 1
         }
       ],
-      "selected_object_info": "2:e97ce31e:::ROBJ2:head(22'6 client.4214.0:1 dirty|omap|data_digest s 7 uv 6 dd 2ddbf8f5 alloc_hint [0 0 0])",
+      "selected_object_info": "3:e97ce31e:::ROBJ2:head(47'56 osd.0.0:55 dirty|omap|data_digest|omap_digest s 7 uv 6 dd 2ddbf8f5 od f8e11918 alloc_hint [0 0 0])",
       "union_shard_errors": [
         "data_digest_mismatch_oi"
       ],
@@ -1195,7 +1284,7 @@ EOF
           "osd": 1
         }
       ],
-      "selected_object_info": "2:f2a5b2a4:::ROBJ3:head(29'9 client.4255.0:1 dirty|omap|data_digest s 7 uv 9 dd 2ddbf8f5 alloc_hint [0 0 0])",
+      "selected_object_info": "3:f2a5b2a4:::ROBJ3:head(47'57 osd.0.0:56 dirty|omap|data_digest|omap_digest s 7 uv 9 dd 2ddbf8f5 od b35dfd alloc_hint [0 0 0])",
       "union_shard_errors": [
         "missing"
       ],
@@ -1214,20 +1303,20 @@ EOF
           "data_digest": "0x2ddbf8f5",
           "omap_digest": "0xd7178dfe",
           "size": 7,
-          "errors": [],
+          "errors": [
+            "omap_digest_mismatch_oi"
+          ],
           "osd": 0
         },
         {
           "data_digest": "0x2ddbf8f5",
           "omap_digest": "0xe2d46ea4",
           "size": 7,
-          "errors": [
-            "omap_digest_mismatch_oi"
-          ],
+          "errors": [],
           "osd": 1
         }
       ],
-      "selected_object_info": "2:f4981d31:::ROBJ4:head(136'52 osd.0.0:9 dirty|omap|data_digest|omap_digest s 7 uv 12 dd 2ddbf8f5 od d7178dfe alloc_hint [0 0 0])",
+      "selected_object_info": "3:f4981d31:::ROBJ4:head(47'58 osd.0.0:57 dirty|omap|data_digest|omap_digest s 7 uv 12 dd 2ddbf8f5 od e2d46ea4 alloc_hint [0 0 0])",
       "union_shard_errors": [
         "omap_digest_mismatch_oi"
       ],
@@ -1261,7 +1350,7 @@ EOF
           "osd": 1
         }
       ],
-      "selected_object_info": "2:f4bfd4d1:::ROBJ5:head(136'53 osd.0.0:10 dirty|omap|data_digest|omap_digest s 7 uv 15 dd 2ddbf8f5 od 1a862a41 alloc_hint [0 0 0])",
+      "selected_object_info": "3:f4bfd4d1:::ROBJ5:head(47'59 osd.0.0:58 dirty|omap|data_digest|omap_digest s 7 uv 15 dd 2ddbf8f5 od 1a862a41 alloc_hint [0 0 0])",
       "union_shard_errors": [
         "omap_digest_mismatch_oi"
       ],
@@ -1282,20 +1371,20 @@ EOF
           "data_digest": "0x2ddbf8f5",
           "omap_digest": "0x689ee887",
           "size": 7,
-          "errors": [],
+          "errors": [
+            "omap_digest_mismatch_oi"
+          ],
           "osd": 0
         },
         {
           "data_digest": "0x2ddbf8f5",
           "omap_digest": "0x179c919f",
           "size": 7,
-          "errors": [
-            "omap_digest_mismatch_oi"
-          ],
+          "errors": [],
           "osd": 1
         }
       ],
-      "selected_object_info": "2:a53c12e8:::ROBJ6:head(136'50 osd.0.0:7 dirty|omap|data_digest|omap_digest s 7 uv 18 dd 2ddbf8f5 od 689ee887 alloc_hint [0 0 0])",
+      "selected_object_info": "3:a53c12e8:::ROBJ6:head(47'50 osd.0.0:49 dirty|omap|data_digest|omap_digest s 7 uv 18 dd 2ddbf8f5 od 179c919f alloc_hint [0 0 0])",
       "union_shard_errors": [
         "omap_digest_mismatch_oi"
       ],
@@ -1329,7 +1418,7 @@ EOF
           "osd": 1
         }
       ],
-      "selected_object_info": "2:8b55fa4b:::ROBJ7:head(123'50 osd.0.0:7 dirty|omap|data_digest|omap_digest s 7 uv 21 dd 2ddbf8f5 od efced57a alloc_hint [0 0 0])",
+      "selected_object_info": "3:8b55fa4b:::ROBJ7:head(47'49 osd.0.0:48 dirty|omap|data_digest|omap_digest s 7 uv 21 dd 2ddbf8f5 od efced57a alloc_hint [0 0 0])",
       "union_shard_errors": [
         "omap_digest_mismatch_oi"
       ],
@@ -1365,7 +1454,7 @@ EOF
             },
             {
               "Base64": true,
-              "value": "AgIZAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAA==",
+              "value": "AwIdAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
               "name": "snapset"
             }
           ],
@@ -1394,7 +1483,7 @@ EOF
             },
             {
               "Base64": true,
-              "value": "AgIZAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAA==",
+              "value": "AwIdAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
               "name": "snapset"
             }
           ],
@@ -1405,14 +1494,14 @@ EOF
           "osd": 1
         }
       ],
-      "selected_object_info": "2:86586531:::ROBJ8:head(136'49 osd.0.0:6 dirty|omap|data_digest|omap_digest s 7 uv 26 dd 2ddbf8f5 od d6be81dc alloc_hint [0 0 0])",
+      "selected_object_info": "3:86586531:::ROBJ8:head(82'62 client.4351.0:1 dirty|omap|data_digest|omap_digest s 7 uv 62 dd 2ddbf8f5 od d6be81dc alloc_hint [0 0 0])",
       "union_shard_errors": [],
       "errors": [
         "attr_value_mismatch",
         "attr_name_mismatch"
       ],
       "object": {
-        "version": 26,
+        "version": 62,
         "snap": "head",
         "locator": "",
         "nspace": "",
@@ -1430,11 +1519,11 @@ EOF
             },
             {
               "Base64": true,
-              "value": "AgIZAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAA==",
+              "value": "AwIdAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
               "name": "snapset"
             }
           ],
-          "object_info": "2:ffdb2004:::ROBJ9:head(90'29 client.4615.0:1 dirty|omap|data_digest s 7 uv 29 dd 2ddbf8f5 alloc_hint [0 0 0])",
+          "object_info": "3:ffdb2004:::ROBJ9:head(47'60 osd.0.0:59 dirty|omap|data_digest|omap_digest s 7 uv 27 dd 2ddbf8f5 od 2eecc539 alloc_hint [0 0 0])",
           "data_digest": "0x1f26fb26",
           "omap_digest": "0x2eecc539",
           "size": 3,
@@ -1450,11 +1539,11 @@ EOF
             },
             {
               "Base64": true,
-              "value": "AgIZAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAA==",
+              "value": "AwIdAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
               "name": "snapset"
             }
           ],
-          "object_info": "2:ffdb2004:::ROBJ9:head(123'56 client.4891.0:1 dirty|omap|data_digest|omap_digest s 3 uv 56 dd 1f26fb26 od 2eecc539 alloc_hint [0 0 0])",
+          "object_info": "3:ffdb2004:::ROBJ9:head(122'64 client.4532.0:1 dirty|omap|data_digest|omap_digest s 3 uv 64 dd 1f26fb26 od 2eecc539 alloc_hint [0 0 0])",
           "data_digest": "0x1f26fb26",
           "omap_digest": "0x2eecc539",
           "size": 3,
@@ -1462,14 +1551,14 @@ EOF
           "osd": 1
         }
       ],
-      "selected_object_info": "2:ffdb2004:::ROBJ9:head(123'56 client.4891.0:1 dirty|omap|data_digest|omap_digest s 3 uv 56 dd 1f26fb26 od 2eecc539 alloc_hint [0 0 0])",
+      "selected_object_info": "3:ffdb2004:::ROBJ9:head(122'64 client.4532.0:1 dirty|omap|data_digest|omap_digest s 3 uv 64 dd 1f26fb26 od 2eecc539 alloc_hint [0 0 0])",
       "union_shard_errors": [],
       "errors": [
         "object_info_inconsistency",
         "attr_value_mismatch"
       ],
       "object": {
-        "version": 56,
+        "version": 64,
         "snap": "head",
         "locator": "",
         "nspace": "",
@@ -1482,7 +1571,7 @@ EOF
 EOF
 
     jq "$jqfilter" $dir/json | python -c "$sortkeys" | sed -e "$sedfilter" > $dir/csjson
-    diff -y $termwidth $dir/checkcsjson $dir/csjson || test $getjson = "yes" || return 1
+    diff ${DIFFCOLOPTS} $dir/checkcsjson $dir/csjson || test $getjson = "yes" || return 1
     if test $getjson = "yes"
     then
         jq '.' $dir/json > save2.json
@@ -1501,24 +1590,25 @@ EOF
 #
 # Test scrub errors for an erasure coded pool
 #
-function TEST_corrupt_scrub_erasure() {
+function corrupt_scrub_erasure() {
     local dir=$1
+    local allow_overwrites=$2
     local poolname=ecpool
-    local profile=myprofile
     local total_objs=5
 
     setup $dir || return 1
     run_mon $dir a || return 1
+    run_mgr $dir x || return 1
     for id in $(seq 0 2) ; do
-        run_osd $dir $id || return 1
+	if [ "$allow_overwrites" = "true" ]; then
+            run_osd_bluestore $dir $id || return 1
+	else
+            run_osd $dir $id || return 1
+	fi
     done
     wait_for_clean || return 1
 
-    ceph osd erasure-code-profile set $profile \
-        k=2 m=1 ruleset-failure-domain=osd || return 1
-    ceph osd pool create $poolname 1 1 erasure $profile \
-        || return 1
-    wait_for_clean || return 1
+    create_ec_pool $poolname $allow_overwrites k=2 m=1 stripe_unit=2K --force || return 1
 
     for i in $(seq 1 $total_objs) ; do
         objname=EOBJ${i}
@@ -1594,20 +1684,20 @@ function TEST_corrupt_scrub_erasure() {
         },
         {
           "size": 9,
+          "shard": 0,
           "errors": [
             "size_mismatch_oi"
           ],
-          "shard": 1,
           "osd": 1
         },
         {
           "size": 2048,
+          "shard": 1,
           "errors": [],
-          "shard": 0,
           "osd": 2
         }
       ],
-      "selected_object_info": "2:9175b684:::EOBJ1:head(21'1 client.4179.0:1 dirty|data_digest|omap_digest s 7 uv 1 dd 2ddbf8f5 od ffffffff alloc_hint [0 0 0])",
+      "selected_object_info": "3:9175b684:::EOBJ1:head(21'1 client.4179.0:1 dirty|data_digest|omap_digest s 7 uv 1 dd 2ddbf8f5 od ffffffff alloc_hint [0 0 0])",
       "union_shard_errors": [
         "size_mismatch_oi"
       ],
@@ -1631,20 +1721,20 @@ function TEST_corrupt_scrub_erasure() {
           "osd": 0
         },
         {
+          "shard": 0,
           "errors": [
             "missing"
           ],
-          "shard": 1,
           "osd": 1
         },
         {
           "size": 2048,
+          "shard": 1,
           "errors": [],
-          "shard": 0,
           "osd": 2
         }
       ],
-      "selected_object_info": "2:b197b25d:::EOBJ3:head(37'3 client.4251.0:1 dirty|data_digest|omap_digest s 7 uv 3 dd 2ddbf8f5 od ffffffff alloc_hint [0 0 0])",
+      "selected_object_info": "3:b197b25d:::EOBJ3:head(37'3 client.4251.0:1 dirty|data_digest|omap_digest s 7 uv 3 dd 2ddbf8f5 od ffffffff alloc_hint [0 0 0])",
       "union_shard_errors": [
         "missing"
       ],
@@ -1683,7 +1773,7 @@ function TEST_corrupt_scrub_erasure() {
             },
             {
               "Base64": true,
-              "value": "AgIZAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAA==",
+              "value": "AwIdAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
               "name": "snapset"
             }
           ],
@@ -1693,6 +1783,10 @@ function TEST_corrupt_scrub_erasure() {
           "osd": 0
         },
         {
+          "osd": 1,
+          "shard": 0,
+          "errors": [],
+          "size": 2048,
           "attrs": [
             {
               "Base64": true,
@@ -1716,16 +1810,16 @@ function TEST_corrupt_scrub_erasure() {
             },
             {
               "Base64": true,
-              "value": "AgIZAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAA==",
+              "value": "AwIdAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
               "name": "snapset"
             }
-          ],
-          "size": 2048,
-          "errors": [],
-          "shard": 1,
-          "osd": 1
+          ]
         },
         {
+          "osd": 2,
+          "shard": 1,
+          "errors": [],
+          "size": 2048,
           "attrs": [
             {
               "Base64": true,
@@ -1749,17 +1843,13 @@ function TEST_corrupt_scrub_erasure() {
             },
             {
               "Base64": true,
-              "value": "AgIZAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAA==",
+              "value": "AwIdAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
               "name": "snapset"
             }
-          ],
-          "size": 2048,
-          "errors": [],
-          "shard": 0,
-          "osd": 2
+          ]
         }
       ],
-      "selected_object_info": "2:5e723e06:::EOBJ4:head(45'6 client.4289.0:1 dirty|data_digest|omap_digest s 7 uv 6 dd 2ddbf8f5 od ffffffff alloc_hint [0 0 0])",
+      "selected_object_info": "3:5e723e06:::EOBJ4:head(45'6 client.4289.0:1 dirty|data_digest|omap_digest s 7 uv 6 dd 2ddbf8f5 od ffffffff alloc_hint [0 0 0])",
       "union_shard_errors": [],
       "errors": [
         "attr_value_mismatch",
@@ -1783,20 +1873,20 @@ function TEST_corrupt_scrub_erasure() {
         },
         {
           "size": 4096,
+          "shard": 0,
           "errors": [
             "size_mismatch_oi"
           ],
-          "shard": 1,
           "osd": 1
         },
         {
           "size": 2048,
+          "shard": 1,
           "errors": [],
-          "shard": 0,
           "osd": 2
         }
       ],
-      "selected_object_info": "2:8549dfb5:::EOBJ5:head(65'7 client.4441.0:1 dirty|data_digest|omap_digest s 7 uv 7 dd 2ddbf8f5 od ffffffff alloc_hint [0 0 0])",
+      "selected_object_info": "3:8549dfb5:::EOBJ5:head(65'7 client.4441.0:1 dirty|data_digest|omap_digest s 7 uv 7 dd 2ddbf8f5 od ffffffff alloc_hint [0 0 0])",
       "union_shard_errors": [
         "size_mismatch_oi"
       ],
@@ -1817,7 +1907,7 @@ function TEST_corrupt_scrub_erasure() {
 EOF
 
     jq "$jqfilter" $dir/json | python -c "$sortkeys" | sed -e "$sedfilter" > $dir/csjson
-    diff -y $termwidth $dir/checkcsjson $dir/csjson || test $getjson = "yes" || return 1
+    diff ${DIFFCOLOPTS} $dir/checkcsjson $dir/csjson || test $getjson = "yes" || return 1
     if test $getjson = "yes"
     then
         jq '.' $dir/json > save3.json
@@ -1840,7 +1930,268 @@ EOF
     # Get epoch for repair-get requests
     epoch=$(jq .epoch $dir/json)
 
-    jq "$jqfilter" << EOF | python -c "$sortkeys" | sed -e "$sedfilter" > $dir/checkcsjson
+    if [ "$allow_overwrites" = "true" ]
+    then
+      jq "$jqfilter" << EOF | python -c "$sortkeys" | sed -e "$sedfilter" > $dir/checkcsjson
+{
+  "inconsistents": [
+    {
+      "shards": [
+        {
+          "data_digest": "0x00000000",
+          "omap_digest": "0xffffffff",
+          "size": 2048,
+          "errors": [],
+          "shard": 2,
+          "osd": 0
+        },
+        {
+          "size": 9,
+          "shard": 0,
+          "errors": [
+            "read_error",
+            "size_mismatch_oi"
+          ],
+          "osd": 1
+        },
+        {
+          "data_digest": "0x00000000",
+          "omap_digest": "0xffffffff",
+          "size": 2048,
+          "shard": 1,
+          "errors": [],
+          "osd": 2
+        }
+      ],
+      "selected_object_info": "3:9175b684:::EOBJ1:head(27'1 client.4155.0:1 dirty|data_digest|omap_digest s 7 uv 1 dd 2ddbf8f5 od ffffffff alloc_hint [0 0 0])",
+      "union_shard_errors": [
+        "read_error",
+        "size_mismatch_oi"
+      ],
+      "errors": [
+        "size_mismatch"
+      ],
+      "object": {
+        "version": 1,
+        "snap": "head",
+        "locator": "",
+        "nspace": "",
+        "name": "EOBJ1"
+      }
+    },
+    {
+      "shards": [
+        {
+          "data_digest": "0x00000000",
+          "omap_digest": "0xffffffff",
+          "size": 2048,
+          "errors": [],
+          "shard": 2,
+          "osd": 0
+        },
+        {
+          "shard": 0,
+          "errors": [
+            "missing"
+          ],
+          "osd": 1
+        },
+        {
+          "data_digest": "0x00000000",
+          "omap_digest": "0xffffffff",
+          "size": 2048,
+          "shard": 1,
+          "errors": [],
+          "osd": 2
+        }
+      ],
+      "selected_object_info": "3:b197b25d:::EOBJ3:head(41'3 client.4199.0:1 dirty|data_digest|omap_digest s 7 uv 3 dd 2ddbf8f5 od ffffffff alloc_hint [0 0 0])",
+      "union_shard_errors": [
+        "missing"
+      ],
+      "errors": [],
+      "object": {
+        "version": 3,
+        "snap": "head",
+        "locator": "",
+        "nspace": "",
+        "name": "EOBJ3"
+      }
+    },
+    {
+      "shards": [
+        {
+          "attrs": [
+            {
+              "Base64": true,
+              "value": "",
+              "name": "_"
+            },
+            {
+              "Base64": false,
+              "value": "bad-val",
+              "name": "_key1-EOBJ4"
+            },
+            {
+              "Base64": false,
+              "value": "val3-EOBJ4",
+              "name": "_key3-EOBJ4"
+            },
+            {
+              "Base64": true,
+              "value": "AQEYAAAAAAgAAAAAAAADAAAAL6fPBLB8dlsvp88E",
+              "name": "hinfo_key"
+            },
+            {
+              "Base64": true,
+              "value": "AwIdAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+              "name": "snapset"
+            }
+          ],
+          "data_digest": "0x00000000",
+          "omap_digest": "0xffffffff",
+          "size": 2048,
+          "errors": [],
+          "shard": 2,
+          "osd": 0
+        },
+        {
+          "attrs": [
+            {
+              "Base64": true,
+              "value": "",
+              "name": "_"
+            },
+            {
+              "Base64": false,
+              "value": "val1-EOBJ4",
+              "name": "_key1-EOBJ4"
+            },
+            {
+              "Base64": false,
+              "value": "val2-EOBJ4",
+              "name": "_key2-EOBJ4"
+            },
+            {
+              "Base64": true,
+              "value": "AQEYAAAAAAgAAAAAAAADAAAAL6fPBLB8dlsvp88E",
+              "name": "hinfo_key"
+            },
+            {
+              "Base64": true,
+              "value": "AwIdAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+              "name": "snapset"
+            }
+          ],
+          "data_digest": "0x00000000",
+          "omap_digest": "0xffffffff",
+          "size": 2048,
+          "errors": [],
+          "shard": 0,
+          "osd": 1
+        },
+        {
+          "attrs": [
+            {
+              "Base64": true,
+              "value": "",
+              "name": "_"
+            },
+            {
+              "Base64": false,
+              "value": "val1-EOBJ4",
+              "name": "_key1-EOBJ4"
+            },
+            {
+              "Base64": false,
+              "value": "val2-EOBJ4",
+              "name": "_key2-EOBJ4"
+            },
+            {
+              "Base64": true,
+              "value": "AQEYAAAAAAgAAAAAAAADAAAAL6fPBLB8dlsvp88E",
+              "name": "hinfo_key"
+            },
+            {
+              "Base64": true,
+              "value": "AwIdAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+              "name": "snapset"
+            }
+          ],
+          "data_digest": "0x00000000",
+          "omap_digest": "0xffffffff",
+          "size": 2048,
+          "errors": [],
+          "shard": 1,
+          "osd": 2
+        }
+      ],
+      "selected_object_info": "3:5e723e06:::EOBJ4:head(48'6 client.4223.0:1 dirty|data_digest|omap_digest s 7 uv 6 dd 2ddbf8f5 od ffffffff alloc_hint [0 0 0])",
+      "union_shard_errors": [],
+      "errors": [
+        "attr_value_mismatch",
+        "attr_name_mismatch"
+      ],
+      "object": {
+        "version": 6,
+        "snap": "head",
+        "locator": "",
+        "nspace": "",
+        "name": "EOBJ4"
+      }
+    },
+    {
+      "shards": [
+        {
+          "data_digest": "0x00000000",
+          "omap_digest": "0xffffffff",
+          "size": 2048,
+          "errors": [],
+          "shard": 2,
+          "osd": 0
+        },
+        {
+          "data_digest": "0x00000000",
+          "omap_digest": "0xffffffff",
+          "size": 4096,
+          "errors": [
+            "size_mismatch_oi"
+          ],
+          "shard": 0,
+          "osd": 1
+        },
+        {
+          "data_digest": "0x00000000",
+          "omap_digest": "0xffffffff",
+          "size": 2048,
+          "errors": [],
+          "shard": 1,
+          "osd": 2
+        }
+      ],
+      "selected_object_info": "3:8549dfb5:::EOBJ5:head(65'7 client.4288.0:1 dirty|data_digest|omap_digest s 7 uv 7 dd 2ddbf8f5 od ffffffff alloc_hint [0 0 0])",
+      "union_shard_errors": [
+        "size_mismatch_oi"
+      ],
+      "errors": [
+        "size_mismatch"
+      ],
+      "object": {
+        "version": 7,
+        "snap": "head",
+        "locator": "",
+        "nspace": "",
+        "name": "EOBJ5"
+      }
+    }
+  ],
+  "epoch": 0
+}
+EOF
+
+    else
+
+      jq "$jqfilter" << EOF | python -c "$sortkeys" | sed -e "$sedfilter" > $dir/checkcsjson
 {
   "inconsistents": [
     {
@@ -1855,23 +2206,23 @@ EOF
         },
         {
           "size": 9,
+          "shard": 0,
           "errors": [
             "read_error",
             "size_mismatch_oi"
           ],
-          "shard": 1,
           "osd": 1
         },
         {
           "data_digest": "0x04cfa72f",
           "omap_digest": "0xffffffff",
           "size": 2048,
+          "shard": 1,
           "errors": [],
-          "shard": 0,
           "osd": 2
         }
       ],
-      "selected_object_info": "2:9175b684:::EOBJ1:head(21'1 client.4179.0:1 dirty|data_digest|omap_digest s 7 uv 1 dd 2ddbf8f5 od ffffffff alloc_hint [0 0 0])",
+      "selected_object_info": "3:9175b684:::EOBJ1:head(21'1 client.4179.0:1 dirty|data_digest|omap_digest s 7 uv 1 dd 2ddbf8f5 od ffffffff alloc_hint [0 0 0])",
       "union_shard_errors": [
         "read_error",
         "size_mismatch_oi"
@@ -1902,7 +2253,7 @@ EOF
           "omap_digest": "0xffffffff",
           "size": 2048,
           "errors": [],
-          "shard": 1,
+          "shard": 0,
           "osd": 1
         },
         {
@@ -1910,11 +2261,11 @@ EOF
           "omap_digest": "0xffffffff",
           "size": 2048,
           "errors": [],
-          "shard": 0,
+          "shard": 1,
           "osd": 2
         }
       ],
-      "selected_object_info": "2:9babd184:::EOBJ2:head(29'2 client.4217.0:1 dirty|data_digest|omap_digest s 7 uv 2 dd 2ddbf8f5 od ffffffff alloc_hint [0 0 0])",
+      "selected_object_info": "3:9babd184:::EOBJ2:head(29'2 client.4217.0:1 dirty|data_digest|omap_digest s 7 uv 2 dd 2ddbf8f5 od ffffffff alloc_hint [0 0 0])",
       "union_shard_errors": [
         "ec_hash_error"
       ],
@@ -1938,22 +2289,22 @@ EOF
           "osd": 0
         },
         {
+          "osd": 1,
+          "shard": 0,
           "errors": [
             "missing"
-          ],
-          "shard": 1,
-          "osd": 1
+          ]
         },
         {
           "data_digest": "0x04cfa72f",
           "omap_digest": "0xffffffff",
           "size": 2048,
+          "shard": 1,
           "errors": [],
-          "shard": 0,
           "osd": 2
         }
       ],
-      "selected_object_info": "2:b197b25d:::EOBJ3:head(37'3 client.4251.0:1 dirty|data_digest|omap_digest s 7 uv 3 dd 2ddbf8f5 od ffffffff alloc_hint [0 0 0])",
+      "selected_object_info": "3:b197b25d:::EOBJ3:head(37'3 client.4251.0:1 dirty|data_digest|omap_digest s 7 uv 3 dd 2ddbf8f5 od ffffffff alloc_hint [0 0 0])",
       "union_shard_errors": [
         "missing"
       ],
@@ -1992,7 +2343,7 @@ EOF
             },
             {
               "Base64": true,
-              "value": "AgIZAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAA==",
+              "value": "AwIdAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
               "name": "snapset"
             }
           ],
@@ -2004,6 +2355,12 @@ EOF
           "osd": 0
         },
         {
+          "osd": 1,
+          "shard": 0,
+          "errors": [],
+          "size": 2048,
+          "omap_digest": "0xffffffff",
+          "data_digest": "0x04cfa72f",
           "attrs": [
             {
               "Base64": true,
@@ -2027,18 +2384,18 @@ EOF
             },
             {
               "Base64": true,
-              "value": "AgIZAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAA==",
+              "value": "AwIdAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
               "name": "snapset"
             }
-          ],
-          "data_digest": "0x04cfa72f",
-          "omap_digest": "0xffffffff",
-          "size": 2048,
-          "errors": [],
-          "shard": 1,
-          "osd": 1
+          ]
         },
         {
+          "osd": 2,
+          "shard": 1,
+          "errors": [],
+          "size": 2048,
+          "omap_digest": "0xffffffff",
+          "data_digest": "0x04cfa72f",
           "attrs": [
             {
               "Base64": true,
@@ -2062,19 +2419,13 @@ EOF
             },
             {
               "Base64": true,
-              "value": "AgIZAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAA==",
+              "value": "AwIdAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
               "name": "snapset"
             }
-          ],
-          "data_digest": "0x04cfa72f",
-          "omap_digest": "0xffffffff",
-          "size": 2048,
-          "errors": [],
-          "shard": 0,
-          "osd": 2
+          ]
         }
       ],
-      "selected_object_info": "2:5e723e06:::EOBJ4:head(45'6 client.4289.0:1 dirty|data_digest|omap_digest s 7 uv 6 dd 2ddbf8f5 od ffffffff alloc_hint [0 0 0])",
+      "selected_object_info": "3:5e723e06:::EOBJ4:head(45'6 client.4289.0:1 dirty|data_digest|omap_digest s 7 uv 6 dd 2ddbf8f5 od ffffffff alloc_hint [0 0 0])",
       "union_shard_errors": [],
       "errors": [
         "attr_value_mismatch",
@@ -2100,23 +2451,23 @@ EOF
         },
         {
           "size": 4096,
+          "shard": 0,
           "errors": [
             "size_mismatch_oi",
             "ec_size_error"
           ],
-          "shard": 1,
           "osd": 1
         },
         {
           "data_digest": "0x04cfa72f",
           "omap_digest": "0xffffffff",
           "size": 2048,
+          "shard": 1,
           "errors": [],
-          "shard": 0,
           "osd": 2
         }
       ],
-      "selected_object_info": "2:8549dfb5:::EOBJ5:head(65'7 client.4441.0:1 dirty|data_digest|omap_digest s 7 uv 7 dd 2ddbf8f5 od ffffffff alloc_hint [0 0 0])",
+      "selected_object_info": "3:8549dfb5:::EOBJ5:head(65'7 client.4441.0:1 dirty|data_digest|omap_digest s 7 uv 7 dd 2ddbf8f5 od ffffffff alloc_hint [0 0 0])",
       "union_shard_errors": [
         "size_mismatch_oi",
         "ec_size_error"
@@ -2137,11 +2488,19 @@ EOF
 }
 EOF
 
+    fi
+
     jq "$jqfilter" $dir/json | python -c "$sortkeys" | sed -e "$sedfilter" > $dir/csjson
-    diff -y $termwidth $dir/checkcsjson $dir/csjson || test $getjson = "yes" || return 1
+    diff ${DIFFCOLOPTS} $dir/checkcsjson $dir/csjson || test $getjson = "yes" || return 1
     if test $getjson = "yes"
     then
-        jq '.' $dir/json > save4.json
+      if [ "$allow_overwrites" = "true" ]
+      then
+        num=4
+      else
+        num=5
+      fi
+      jq '.' $dir/json > save${num}.json
     fi
 
     if which jsonschema > /dev/null;
@@ -2151,6 +2510,16 @@ EOF
 
     rados rmpool $poolname $poolname --yes-i-really-really-mean-it
     teardown $dir || return 1
+}
+
+function TEST_corrupt_scrub_erasure_appends() {
+    corrupt_scrub_erasure $1 false
+}
+
+function TEST_corrupt_scrub_erasure_overwrites() {
+    if [ "$use_ec_overwrite" = "true" ]; then
+        corrupt_scrub_erasure $1 true
+    fi
 }
 
 #
@@ -2163,6 +2532,7 @@ function TEST_periodic_scrub_replicated() {
 
     setup $dir || return 1
     run_mon $dir a --osd_pool_default_size=2 || return 1
+    run_mgr $dir x || return 1
     local ceph_osd_args="--osd-scrub-interval-randomize-ratio=0 --osd-deep-scrub-randomize-ratio=0"
     run_osd $dir 0 $ceph_osd_args || return 1
     run_osd $dir 1 $ceph_osd_args || return 1
@@ -2207,6 +2577,8 @@ function TEST_periodic_scrub_replicated() {
 
     # Can't upgrade with this set
     ceph osd set nodeep-scrub
+    # Let map change propagate to OSDs
+    sleep 2
 
     # Fake a schedule scrub
     local last_scrub=$(get_last_scrub_stamp $pg)

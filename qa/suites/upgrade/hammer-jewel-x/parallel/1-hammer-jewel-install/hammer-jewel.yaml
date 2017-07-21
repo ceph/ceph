@@ -5,6 +5,8 @@ tasks:
 - print: "**** done hammer"
 - ceph:
    fs: xfs
+   skip_mgr_daemons: true
+   add_osds_to_crush: true
 - install.upgrade:
     exclude_packages: ['ceph-mgr','libcephfs2','libcephfs-devel','libcephfs-dev']
     osd.0:

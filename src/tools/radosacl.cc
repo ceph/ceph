@@ -151,7 +151,7 @@ int main(int argc, const char **argv)
 
   ACLID id;
 
-  snprintf(id.id, ID_SIZE + 1, "%.16x", 0x1234);
+  snprintf(id.id, sizeof(id.id), "%.8x", 0x1234);
   cout << "id=" << id.id << std::endl;
 
   r = io_ctx.exec(oid, "acl", "get", bl, bl2);

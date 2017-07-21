@@ -5,7 +5,6 @@
 #define CEPH_JOURNAL_JOURNAL_RECORDER_H
 
 #include "include/int_types.h"
-#include "include/atomic.h"
 #include "include/Context.h"
 #include "include/rados/librados.hpp"
 #include "common/Mutex.h"
@@ -42,7 +41,7 @@ private:
     Listener(JournalRecorder *_journal_recorder)
       : journal_recorder(_journal_recorder) {}
 
-    virtual void handle_update(JournalMetadata *) {
+    void handle_update(JournalMetadata *) override {
       journal_recorder->handle_update();
     }
   };
@@ -54,10 +53,10 @@ private:
       : journal_recorder(_journal_recorder) {
     }
 
-    virtual void closed(ObjectRecorder *object_recorder) {
+    void closed(ObjectRecorder *object_recorder) override {
       journal_recorder->handle_closed(object_recorder);
     }
-    virtual void overflow(ObjectRecorder *object_recorder) {
+    void overflow(ObjectRecorder *object_recorder) override {
       journal_recorder->handle_overflow(object_recorder);
     }
   };
@@ -68,7 +67,7 @@ private:
     C_AdvanceObjectSet(JournalRecorder *_journal_recorder)
       : journal_recorder(_journal_recorder) {
     }
-    virtual void finish(int r) {
+    void finish(int r) override {
       journal_recorder->handle_advance_object_set(r);
     }
   };

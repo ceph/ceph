@@ -2,6 +2,7 @@ roles:
 - - mon.a
   - mon.b
   - mon.c
+  - mgr.x
   - osd.0
   - osd.1
   - osd.2
@@ -14,7 +15,12 @@ tasks:
 - install:
 - ceph:
     log-whitelist:
-    - wrongly marked me down
+      - wrongly marked me down
+      - overall HEALTH_
+      - (OSDMAP_FLAGS)
+      - (OSD_
+      - (PG_
+      - (OBJECT_
     conf:
       osd:
         osd min pg log entries: 5

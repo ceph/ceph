@@ -16,6 +16,8 @@
 #include "common/ceph_json.h"
 #include "common/Formatter.h"
 #include "rgw/rgw_common.h"
+#include "rgw/rgw_rados.h"
+#include "test_rgw_common.h"
 #define GTEST
 #ifdef GTEST
 #include <gtest/gtest.h>
@@ -30,46 +32,37 @@
 #endif
 using namespace std;
 
-static void init_bucket(rgw_bucket *bucket, const char *name)
-{
-  *bucket = rgw_bucket("", name, ".data-pool", ".index-pool", "marker", "bucket-id", NULL);
-}
-
 void check_parsed_correctly(rgw_obj& obj, const string& name, const string& ns, const string& instance)
 {
   /* parse_raw_oid() */
-  string parsed_name, parsed_ns, parsed_instance;
-  ASSERT_EQ(true, rgw_obj::parse_raw_oid(obj.get_object(), &parsed_name, &parsed_instance, &parsed_ns));
+  rgw_obj_key parsed_key;
+  ASSERT_EQ(true, rgw_obj_key::parse_raw_oid(obj.get_oid(), &parsed_key));
 
-  cout << "parsed: " << parsed_name << " ns=" << parsed_ns << " i=" << parsed_instance << std::endl;
+  cout << "parsed: " << parsed_key << std::endl;
 
-  ASSERT_EQ(name, parsed_name);
-  ASSERT_EQ(ns, parsed_ns);
-  ASSERT_EQ(instance, parsed_instance);
+  ASSERT_EQ(name, parsed_key.name);
+  ASSERT_EQ(ns, parsed_key.ns);
+  ASSERT_EQ(instance, parsed_key.instance);
 
   /* translate_raw_obj_to_obj_in_ns() */
-  string tname = obj.get_object();
+  rgw_obj_key tkey = parsed_key;
   string tns = ns + "foo";
-  string tinstance;
-  ASSERT_EQ(0, rgw_obj::translate_raw_obj_to_obj_in_ns(tname, tinstance, tns));
-  ASSERT_EQ(name, tname);
-  ASSERT_EQ(instance, tinstance);
+  ASSERT_EQ(0, rgw_obj_key::oid_to_key_in_ns(obj.get_oid(), &tkey, tns));
 
-  tname = obj.get_object();
+  tkey = rgw_obj_key();
   tns = ns;
-  ASSERT_EQ(true, rgw_obj::translate_raw_obj_to_obj_in_ns(tname, tinstance, tns));
+  ASSERT_EQ(true, rgw_obj_key::oid_to_key_in_ns(obj.get_oid(), &tkey, tns));
 
-  cout << "parsed: " << parsed_name << " ns=" << parsed_ns << " i=" << parsed_instance << std::endl;
+  cout << "parsed: " << tkey << std::endl;
 
-  ASSERT_EQ(name, tname);
-  ASSERT_EQ(instance, tinstance);
+  ASSERT_EQ(obj.key, tkey);
 
   /* strip_namespace_from_object() */
 
-  string strip_name = obj.get_object();
+  string strip_name = obj.get_oid();
   string strip_ns, strip_instance;
 
-  ASSERT_EQ(true, rgw_obj::strip_namespace_from_object(strip_name, strip_ns, strip_instance));
+  ASSERT_EQ(true, rgw_obj_key::strip_namespace_from_name(strip_name, strip_ns, strip_instance));
 
   cout << "stripped: " << strip_name << " ns=" << strip_ns << " i=" << strip_instance << std::endl;
 
@@ -81,7 +74,7 @@ void check_parsed_correctly(rgw_obj& obj, const string& name, const string& ns, 
 void test_obj(const string& name, const string& ns, const string& instance)
 {
   rgw_bucket b;
-  init_bucket(&b, "test");
+  test_rgw_init_bucket(&b, "test");
 
   JSONFormatter *formatter = new JSONFormatter(true);
 
@@ -90,10 +83,10 @@ void test_obj(const string& name, const string& ns, const string& instance)
   rgw_obj obj1(o);
 
   if (!instance.empty()) {
-    obj1.set_instance(instance);
+    obj1.key.instance = instance;
   }
   if (!ns.empty()) {
-    obj1.set_ns(ns);
+    obj1.key.ns = ns;
   }
   
   check_parsed_correctly(obj1, name, ns, instance);
@@ -115,10 +108,10 @@ void test_obj(const string& name, const string& ns, const string& instance)
   encode_json("obj3", obj3, formatter);
 
   if (!instance.empty()) {
-    obj3.set_instance(instance);
+    obj3.key.instance = instance;
   }
   if (!ns.empty()) {
-    obj3.set_ns(ns);
+    obj3.key.ns = ns;
   }
   check_parsed_correctly(obj3, name, ns, instance);
 
@@ -133,8 +126,8 @@ void test_obj(const string& name, const string& ns, const string& instance)
 
 
   /* rgw_obj_key conversion */
-  rgw_obj_key k;
-  obj1.get_index_key(&k);
+  rgw_obj_index_key k;
+  obj1.key.get_index_key(&k);
 
   rgw_obj new_obj(b, k);
 
@@ -157,3 +150,133 @@ TEST(TestRGWObj, no_underscore) {
   test_obj("obj", "ns", "v1");
 }
 
+template <class T>
+void dump(JSONFormatter& f, const string& name, const T& entity)
+{
+  f.open_object_section(name.c_str());
+  ::encode_json(name.c_str(), entity, &f);
+  f.close_section();
+  f.flush(cout);
+}
+
+static void test_obj_to_raw(test_rgw_env& env, const rgw_bucket& b,
+                            const string& name, const string& instance, const string& ns,
+                            const string& placement_id)
+{
+  JSONFormatter f(true);
+  dump(f, "bucket", b);
+  rgw_obj obj = test_rgw_create_obj(b, name, instance, ns);
+  dump(f, "obj", obj);
+
+  rgw_obj_select s(obj);
+  rgw_raw_obj raw_obj = s.get_raw_obj(env.zonegroup, env.zone_params);
+  dump(f, "raw_obj", raw_obj);
+
+  if (!placement_id.empty()) {
+    ASSERT_EQ(raw_obj.pool, env.get_placement(placement_id).data_pool);
+  } else {
+    ASSERT_EQ(raw_obj.pool, b.explicit_placement.data_pool);
+  }
+  ASSERT_EQ(raw_obj.oid, test_rgw_get_obj_oid(obj));
+
+  rgw_obj new_obj;
+  rgw_raw_obj_to_obj(b, raw_obj, &new_obj);
+
+  dump(f, "new_obj", new_obj);
+
+  ASSERT_EQ(obj, new_obj);
+
+}
+
+TEST(TestRGWObj, obj_to_raw) {
+  test_rgw_env env;
+
+  rgw_bucket b;
+  test_rgw_init_bucket(&b, "test");
+
+  rgw_bucket eb;
+  test_rgw_init_explicit_placement_bucket(&eb, "ebtest");
+
+  for (auto name : { "myobj", "_myobj", "_myobj_"}) {
+    for (auto inst : { "", "inst"}) {
+      for (auto ns : { "", "ns"}) {
+        test_obj_to_raw(env, b, name, inst, ns, env.zonegroup.default_placement);
+        test_obj_to_raw(env, eb, name, inst, ns, string());
+      }
+    }
+  }
+}
+
+TEST(TestRGWObj, old_to_raw) {
+  JSONFormatter f(true);
+  test_rgw_env env;
+
+  old_rgw_bucket eb;
+  test_rgw_init_old_bucket(&eb, "ebtest");
+
+  for (auto name : { "myobj", "_myobj", "_myobj_"}) {
+    for (string inst : { "", "inst"}) {
+      for (string ns : { "", "ns"}) {
+        old_rgw_obj old(eb, name);
+        if (!inst.empty()) {
+          old.set_instance(inst);
+        }
+        if (!ns.empty()) {
+          old.set_ns(ns);
+        }
+
+        bufferlist bl;
+
+        ::encode(old, bl);
+
+        rgw_obj new_obj;
+        rgw_raw_obj raw_obj;
+
+        try {
+          bufferlist::iterator iter = bl.begin();
+          ::decode(new_obj, iter);
+
+          iter = bl.begin();
+          ::decode(raw_obj, iter);
+        } catch (buffer::error& err) {
+          ASSERT_TRUE(false);
+        }
+
+        bl.clear();
+
+        rgw_obj new_obj2;
+        rgw_raw_obj raw_obj2;
+
+        ::encode(new_obj, bl);
+
+        dump(f, "raw_obj", raw_obj);
+        dump(f, "new_obj", new_obj);
+        cout << "raw=" << raw_obj << std::endl;
+
+        try {
+          bufferlist::iterator iter = bl.begin();
+          ::decode(new_obj2, iter);
+
+          /*
+            can't decode raw obj here, because we didn't encode an old versioned
+            object
+           */
+
+          bl.clear();
+          ::encode(raw_obj, bl);
+          iter = bl.begin();
+          ::decode(raw_obj2, iter);
+        } catch (buffer::error& err) {
+          ASSERT_TRUE(false);
+        }
+
+        dump(f, "raw_obj2", raw_obj2);
+        dump(f, "new_obj2", new_obj2);
+        cout << "raw2=" << raw_obj2 << std::endl;
+
+        ASSERT_EQ(new_obj, new_obj2);
+        ASSERT_EQ(raw_obj, raw_obj2);
+      }
+    }
+  }
+}

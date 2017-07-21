@@ -1,0 +1,19 @@
+
+overrides:
+  ceph:
+    log-whitelist:
+      - OSD full dropping all updates
+      - OSD near full
+      - failsafe engaged, dropping updates
+      - failsafe disengaged, no longer dropping
+      - is full \(reached quota
+    conf:
+      osd:
+        osd mon report interval max: 5
+        osd objectstore: memstore
+        memstore device bytes: 100000000
+
+tasks:
+  - cephfs_test_runner:
+      modules:
+        - tasks.cephfs.test_full

@@ -30,7 +30,6 @@
 #include "common/errno.h"
 #include "common/strtol.h"
 #include "common/dout.h"
-#include "include/assert.h"
 #include "common/simple_spin.h"
 
 #define dout_subsys ceph_subsys_ms
@@ -278,12 +277,14 @@ int PosixServerSocketImpl::accept(ConnectedSocket *sock, const SocketOptions &op
     ::close(sd);
     return -errno;
   }
+
+  assert(NULL != out); //out should not be NULL in accept connection
+
+  out->set_sockaddr((sockaddr*)&ss);
   handler.set_priority(sd, opt.priority, out->get_family());
 
   std::unique_ptr<PosixConnectedSocketImpl> csi(new PosixConnectedSocketImpl(handler, *out, sd, true));
   *sock = ConnectedSocket(std::move(csi));
-  if (out)
-    out->set_sockaddr((sockaddr*)&ss);
   return 0;
 }
 
@@ -321,7 +322,7 @@ int PosixWorker::listen(entity_addr_t &sa, const SocketOptions &opt,
     return r;
   }
 
-  r = ::listen(listen_sd, 128);
+  r = ::listen(listen_sd, cct->_conf->ms_tcp_listen_backlog);
   if (r < 0) {
     r = -errno;
     lderr(cct) << __func__ << " unable to listen on " << sa << ": " << cpp_strerror(r) << dendl;

@@ -94,7 +94,7 @@ def repair_test_1(manager, corrupter, chooser, scrub_type):
         log.info("scrubbing")
         manager.do_pg_scrub(pool, 0, scrub_type)
 
-        assert manager.pg_inconsistent(pool, 0)
+        manager.with_pg_state(pool, 0, lambda s: 'inconsistent' in s)
 
         # repair
         log.info("repairing")
@@ -104,7 +104,7 @@ def repair_test_1(manager, corrupter, chooser, scrub_type):
         manager.do_pg_scrub(pool, 0, scrub_type)
 
         # verify consistent
-        assert not manager.pg_inconsistent(pool, 0)
+        manager.with_pg_state(pool, 0, lambda s: 'inconsistent' not in s)
         log.info("done")
 
 
@@ -147,13 +147,13 @@ def repair_test_2(ctx, manager, config, chooser):
         log.info("scrubbing")
         manager.do_pg_scrub(pool, 0, 'deep-scrub')
 
-        assert manager.pg_inconsistent(pool, 0)
+        manager.with_pg_state(pool, 0, lambda s: 'inconsistent' in s)
 
         # Regression test for bug #4778, should still
         # be inconsistent after scrub
         manager.do_pg_scrub(pool, 0, 'scrub')
 
-        assert manager.pg_inconsistent(pool, 0)
+        manager.with_pg_state(pool, 0, lambda s: 'inconsistent' in s)
 
         # Additional corruptions including 2 types for file1
         log.info("corrupting more objects")
@@ -166,7 +166,7 @@ def repair_test_2(ctx, manager, config, chooser):
         log.info("scrubbing")
         manager.do_pg_scrub(pool, 0, 'deep-scrub')
 
-        assert manager.pg_inconsistent(pool, 0)
+        manager.with_pg_state(pool, 0, lambda s: 'inconsistent' in s)
 
         # repair
         log.info("repairing")
@@ -176,7 +176,7 @@ def repair_test_2(ctx, manager, config, chooser):
         time.sleep(10)
 
         # verify consistent
-        assert not manager.pg_inconsistent(pool, 0)
+        manager.with_pg_state(pool, 0, lambda s: 'inconsistent' not in s)
 
         # In the future repair might determine state of
         # inconsistency itself, verify with a deep-scrub
@@ -184,7 +184,7 @@ def repair_test_2(ctx, manager, config, chooser):
         manager.do_pg_scrub(pool, 0, 'deep-scrub')
 
         # verify consistent
-        assert not manager.pg_inconsistent(pool, 0)
+        manager.with_pg_state(pool, 0, lambda s: 'inconsistent' not in s)
 
         log.info("done")
 
@@ -230,7 +230,7 @@ def repair_test_erasure_code(manager, corrupter, victim, scrub_type):
         log.info("scrubbing")
         manager.do_pg_scrub(pool, 0, scrub_type)
 
-        assert manager.pg_inconsistent(pool, 0)
+        manager.with_pg_state(pool, 0, lambda s: 'inconsistent' in s)
 
         # repair
         log.info("repairing")
@@ -240,7 +240,7 @@ def repair_test_erasure_code(manager, corrupter, victim, scrub_type):
         manager.do_pg_scrub(pool, 0, scrub_type)
 
         # verify consistent
-        assert not manager.pg_inconsistent(pool, 0)
+        manager.with_pg_state(pool, 0, lambda s: 'inconsistent' not in s)
         log.info("done")
 
 
@@ -303,3 +303,6 @@ def task(ctx, config):
     repair_test_2(ctx, manager, config, choose_replica)
 
     repair_test_erasure_code(manager, hinfoerr, 'primary', "deep-scrub")
+
+    manager.raw_cluster_cmd('osd', 'unset', 'noscrub')
+    manager.raw_cluster_cmd('osd', 'unset', 'nodeep-scrub')

@@ -4,23 +4,25 @@
 #ifndef CEPH_RBD_MIRROR_H
 #define CEPH_RBD_MIRROR_H
 
-#include <map>
-#include <memory>
-#include <set>
-
 #include "common/ceph_context.h"
 #include "common/Mutex.h"
-#include "include/atomic.h"
 #include "include/rados/librados.hpp"
 #include "ClusterWatcher.h"
-#include "Replayer.h"
+#include "PoolReplayer.h"
 #include "ImageDeleter.h"
 #include "types.h"
+
+#include <set>
+#include <map>
+#include <memory>
+#include <atomic>
+
+namespace librbd { struct ImageCtx; }
 
 namespace rbd {
 namespace mirror {
 
-struct Threads;
+template <typename> struct Threads;
 class MirrorAdminSocketHook;
 
 /**
@@ -51,11 +53,11 @@ private:
   typedef ClusterWatcher::PoolPeers PoolPeers;
   typedef std::pair<int64_t, peer_t> PoolPeer;
 
-  void update_replayers(const PoolPeers &pool_peers);
+  void update_pool_replayers(const PoolPeers &pool_peers);
 
   CephContext *m_cct;
   std::vector<const char*> m_args;
-  Threads *m_threads = nullptr;
+  Threads<librbd::ImageCtx> *m_threads = nullptr;
   Mutex m_lock;
   Cond m_cond;
   RadosRef m_local;
@@ -63,9 +65,8 @@ private:
   // monitor local cluster for config changes in peers
   std::unique_ptr<ClusterWatcher> m_local_cluster_watcher;
   std::shared_ptr<ImageDeleter> m_image_deleter;
-  ImageSyncThrottlerRef<> m_image_sync_throttler;
-  std::map<PoolPeer, std::unique_ptr<Replayer> > m_replayers;
-  atomic_t m_stopping;
+  std::map<PoolPeer, std::unique_ptr<PoolReplayer> > m_pool_replayers;
+  std::atomic<bool> m_stopping = { false };
   bool m_manual_stop = false;
   MirrorAdminSocketHook *m_asok_hook;
 };

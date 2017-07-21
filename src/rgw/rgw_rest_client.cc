@@ -11,6 +11,7 @@
 #include "common/armor.h"
 #include "common/strtol.h"
 #include "include/str_list.h"
+#include "rgw_crypt_sanitize.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
@@ -129,8 +130,9 @@ int RGWRESTSimpleRequest::execute(RGWAccessKey& key, const char *method, const c
                             canonical_header);
 
   string digest;
-  int ret = rgw_get_s3_header_digest(canonical_header, key.key, digest);
-  if (ret < 0) {
+  try {
+    digest = rgw::auth::s3::get_v2_signature(cct, key.key, canonical_header);
+  } catch (int ret) {
     return ret;
   }
 
@@ -214,12 +216,9 @@ int RGWRESTSimpleRequest::sign_request(RGWAccessKey& key, RGWEnv& env, req_info&
     return 0;
   }
 
-  map<string, string, ltstr_nocase>& m = env.get_map();
-
   if (cct->_conf->subsys.should_gather(ceph_subsys_rgw, 20)) {
-    map<string, string>::iterator i;
-    for (i = m.begin(); i != m.end(); ++i) {
-      ldout(cct, 20) << "> " << i->first << " -> " << i->second << dendl;
+    for (const auto& i: env.get_map()) {
+      ldout(cct, 20) << "> " << i.first << " -> " << rgw::crypt_sanitize::x_meta_map{i.first, i.second} << dendl;
     }
   }
 
@@ -232,15 +231,16 @@ int RGWRESTSimpleRequest::sign_request(RGWAccessKey& key, RGWEnv& env, req_info&
   ldout(cct, 10) << "generated canonical header: " << canonical_header << dendl;
 
   string digest;
-  int ret = rgw_get_s3_header_digest(canonical_header, key.key, digest);
-  if (ret < 0) {
+  try {
+    digest = rgw::auth::s3::get_v2_signature(cct, key.key, canonical_header);
+  } catch (int ret) {
     return ret;
   }
 
   string auth_hdr = "AWS " + key.id + ":" + digest;
   ldout(cct, 15) << "generated auth header: " << auth_hdr << dendl;
   
-  m["AUTHORIZATION"] = auth_hdr;
+  env.set("AUTHORIZATION", auth_hdr);
 
   return 0;
 }
@@ -263,15 +263,13 @@ int RGWRESTSimpleRequest::forward_request(RGWAccessKey& key, req_info& info, siz
     return ret;
   }
 
-  map<string, string, ltstr_nocase>& m = new_env.get_map();
-  map<string, string>::iterator iter;
-  for (iter = m.begin(); iter != m.end(); ++iter) {
-    headers.push_back(pair<string, string>(iter->first, iter->second));
+  for (const auto& kv: new_env.get_map()) {
+    headers.emplace_back(kv);
   }
 
   map<string, string>& meta_map = new_info.x_meta_map;
-  for (iter = meta_map.begin(); iter != meta_map.end(); ++iter) {
-    headers.push_back(pair<string, string>(iter->first, iter->second));
+  for (const auto& kv: meta_map) {
+    headers.emplace_back(kv);
   }
 
   string params_str;
@@ -413,14 +411,14 @@ static void grants_by_type_add_perm(map<int, string>& grants_by_type, int perm, 
   }
 }
 
-static void add_grants_headers(map<int, string>& grants, map<string, string, ltstr_nocase>& attrs, map<string, string>& meta_map)
+static void add_grants_headers(map<int, string>& grants, RGWEnv& env, map<string, string>& meta_map)
 {
   struct grant_type_to_header *t;
 
   for (t = grants_headers_def; t->header; t++) {
     map<int, string>::iterator iter = grants.find(t->type);
     if (iter != grants.end()) {
-      attrs[t->header] = iter->second;
+      env.set(t->header,iter->second);
       meta_map[t->header] = iter->second;
     }
   }
@@ -428,7 +426,7 @@ static void add_grants_headers(map<int, string>& grants, map<string, string, lts
 
 int RGWRESTStreamWriteRequest::put_obj_init(RGWAccessKey& key, rgw_obj& obj, uint64_t obj_size, map<string, bufferlist>& attrs)
 {
-  string resource = obj.bucket.name + "/" + obj.get_object();
+  string resource = obj.bucket.name + "/" + obj.get_oid();
   string new_url = url;
   if (new_url[new_url.size() - 1] != '/')
     new_url.append("/");
@@ -453,18 +451,15 @@ int RGWRESTStreamWriteRequest::put_obj_init(RGWAccessKey& key, rgw_obj& obj, uin
   new_info.script_uri.append(resource);
   new_info.request_uri = new_info.script_uri;
 
-  map<string, string, ltstr_nocase>& m = new_env.get_map();
-  map<string, bufferlist>::iterator bliter;
-
   /* merge send headers */
-  for (bliter = attrs.begin(); bliter != attrs.end(); ++bliter) {
-    bufferlist& bl = bliter->second;
-    const string& name = bliter->first;
+  for (auto& attr: attrs) {
+    bufferlist& bl = attr.second;
+    const string& name = attr.first;
     string val = bl.c_str();
     if (name.compare(0, sizeof(RGW_ATTR_META_PREFIX) - 1, RGW_ATTR_META_PREFIX) == 0) {
       string header_name = RGW_AMZ_META_PREFIX;
       header_name.append(name.substr(sizeof(RGW_ATTR_META_PREFIX) - 1));
-      m[header_name] = val;
+      new_env.set(header_name, val);
       new_info.x_meta_map[header_name] = val;
     }
   }
@@ -485,16 +480,15 @@ int RGWRESTStreamWriteRequest::put_obj_init(RGWAccessKey& key, rgw_obj& obj, uin
     ACLPermission& perm = grant.get_permission();
     grants_by_type_add_perm(grants_by_type, perm.get_permissions(), grant);
   }
-  add_grants_headers(grants_by_type, m, new_info.x_meta_map);
+  add_grants_headers(grants_by_type, new_env, new_info.x_meta_map);
   ret = sign_request(key, new_env, new_info);
   if (ret < 0) {
     ldout(cct, 0) << "ERROR: failed to sign request" << dendl;
     return ret;
   }
 
-  map<string, string>::iterator iter;
-  for (iter = m.begin(); iter != m.end(); ++iter) {
-    headers.push_back(pair<string, string>(iter->first, iter->second));
+  for (const auto& kv: new_env.get_map()) {
+    headers.emplace_back(kv);
   }
 
   cb = new RGWRESTStreamOutCB(this);
@@ -615,17 +609,18 @@ int RGWRESTStreamWriteRequest::complete(string& etag, real_time *mtime)
   return status;
 }
 
-int RGWRESTStreamRWRequest::get_obj(RGWAccessKey& key, map<string, string>& extra_headers, rgw_obj& obj)
+int RGWRESTStreamRWRequest::send_request(RGWAccessKey& key, map<string, string>& extra_headers, rgw_obj& obj, RGWHTTPManager *mgr)
 {
   string urlsafe_bucket, urlsafe_object;
   url_encode(obj.bucket.get_key(':', 0), urlsafe_bucket);
-  url_encode(obj.get_orig_obj(), urlsafe_object);
+  url_encode(obj.key.name, urlsafe_object);
   string resource = urlsafe_bucket + "/" + urlsafe_object;
 
-  return get_resource(key, extra_headers, resource);
+  return send_request(&key, extra_headers, resource, nullptr, mgr);
 }
 
-int RGWRESTStreamRWRequest::get_resource(RGWAccessKey& key, map<string, string>& extra_headers, const string& resource, RGWHTTPManager *mgr)
+int RGWRESTStreamRWRequest::send_request(RGWAccessKey *key, map<string, string>& extra_headers, const string& resource,
+                                         bufferlist *send_data, RGWHTTPManager *mgr)
 {
   string new_url = url;
   if (new_url[new_url.size() - 1] != '/')
@@ -670,16 +665,22 @@ int RGWRESTStreamRWRequest::get_resource(RGWAccessKey& key, map<string, string>&
 
   new_info.init_meta_info(NULL);
 
-  int ret = sign_request(key, new_env, new_info);
-  if (ret < 0) {
-    ldout(cct, 0) << "ERROR: failed to sign request" << dendl;
-    return ret;
+  if (key) {
+    int ret = sign_request(*key, new_env, new_info);
+    if (ret < 0) {
+      ldout(cct, 0) << "ERROR: failed to sign request" << dendl;
+      return ret;
+    }
   }
 
-  map<string, string, ltstr_nocase>& m = new_env.get_map();
-  map<string, string>::iterator iter;
-  for (iter = m.begin(); iter != m.end(); ++iter) {
-    headers.push_back(pair<string, string>(iter->first, iter->second));
+  for (const auto& kv: new_env.get_map()) {
+    headers.emplace_back(kv);
+  }
+
+  bool send_data_hint = false;
+  if (send_data) {
+    outbl.claim(*send_data);
+    send_data_hint = true;
   }
 
   RGWHTTPManager *pmanager = &http_manager;
@@ -687,7 +688,7 @@ int RGWRESTStreamRWRequest::get_resource(RGWAccessKey& key, map<string, string>&
     pmanager = mgr;
   }
 
-  int r = pmanager->add_request(this, new_info.method, new_url.c_str());
+  int r = pmanager->add_request(this, new_info.method, new_url.c_str(), send_data_hint);
   if (r < 0)
     return r;
 
@@ -700,7 +701,7 @@ int RGWRESTStreamRWRequest::get_resource(RGWAccessKey& key, map<string, string>&
   return 0;
 }
 
-int RGWRESTStreamRWRequest::complete(string& etag, real_time *mtime, uint64_t *psize, map<string, string>& attrs)
+int RGWRESTStreamRWRequest::complete_request(string& etag, real_time *mtime, uint64_t *psize, map<string, string>& attrs)
 {
   set_str_from_headers(out_headers, "ETAG", etag);
   if (status >= 0) {

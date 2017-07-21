@@ -25,10 +25,10 @@
 #define _Static_assert static_assert
 
 
-#include "include/atomic.h"
 #include "include/interval_set.h"
 #include "common/ceph_time.h"
 #include "common/Mutex.h"
+#include "common/Cond.h"
 #include "BlockDevice.h"
 
 enum class IOCommand {
@@ -229,6 +229,7 @@ class NVMEDevice : public BlockDevice {
   int aio_write(uint64_t off, bufferlist& bl,
                 IOContext *ioc,
                 bool buffered) override;
+  int write(uint64_t off, bufferlist& bl, bool buffered) override;
   int flush() override;
   int read_random(uint64_t off, uint64_t len, char *buf, bool buffered) override;
 
@@ -236,6 +237,7 @@ class NVMEDevice : public BlockDevice {
   int invalidate_cache(uint64_t off, uint64_t len) override;
   int open(const string& path) override;
   void close() override;
+  int collect_metadata(string prefix, map<string,string> *pm) const override;
 };
 
 #endif

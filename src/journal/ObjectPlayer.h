@@ -39,7 +39,7 @@ public:
   ObjectPlayer(librados::IoCtx &ioctx, const std::string &object_oid_prefix,
                uint64_t object_num, SafeTimer &timer, Mutex &timer_lock,
                uint8_t order, uint64_t max_fetch_bytes);
-  ~ObjectPlayer();
+  ~ObjectPlayer() override;
 
   inline const std::string &get_oid() const {
     return m_oid;
@@ -88,19 +88,19 @@ private:
     bufferlist read_bl;
     C_Fetch(ObjectPlayer *o, Context *ctx) : object_player(o), on_finish(ctx) {
     }
-    virtual void finish(int r);
+    void finish(int r) override;
   };
   struct C_WatchTask : public Context {
     ObjectPlayerPtr object_player;
     C_WatchTask(ObjectPlayer *o) : object_player(o) {
     }
-    virtual void finish(int r);
+    void finish(int r) override;
   };
   struct C_WatchFetch : public Context {
     ObjectPlayerPtr object_player;
     C_WatchFetch(ObjectPlayer *o) : object_player(o) {
     }
-    virtual void finish(int r);
+    void finish(int r) override;
   };
 
   librados::IoCtx m_ioctx;

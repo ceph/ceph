@@ -38,6 +38,7 @@ struct ObjectRequest<librbd::MockTestImageCtx> : public ObjectRequestHandle {
                                       const std::string &oid,
                                       uint64_t object_no,
                                       const ::SnapContext &snapc,
+                                      const ZTracer::Trace &parent_trace,
                                       Context *completion) {
     assert(s_instance != nullptr);
     s_instance->on_finish = completion;
@@ -49,6 +50,7 @@ struct ObjectRequest<librbd::MockTestImageCtx> : public ObjectRequestHandle {
                                         uint64_t object_no,
                                         uint64_t object_off,
                                         const ::SnapContext &snapc,
+                                        const ZTracer::Trace &parent_trace,
                                         Context *completion) {
     assert(s_instance != nullptr);
     s_instance->on_finish = completion;
@@ -60,8 +62,9 @@ struct ObjectRequest<librbd::MockTestImageCtx> : public ObjectRequestHandle {
                                      uint64_t object_no,
                                      uint64_t object_off,
                                      const ceph::bufferlist &data,
-                                     const ::SnapContext &snapc,
-                                     Context *completion, int op_flags) {
+                                     const ::SnapContext &snapc, int op_flags,
+                                     const ZTracer::Trace &parent_trace,
+                                     Context *completion) {
     assert(s_instance != nullptr);
     s_instance->on_finish = completion;
     return s_instance;
@@ -72,7 +75,23 @@ struct ObjectRequest<librbd::MockTestImageCtx> : public ObjectRequestHandle {
                                     uint64_t object_no, uint64_t object_off,
                                     uint64_t object_len,
                                     const ::SnapContext &snapc,
+                                    const ZTracer::Trace &parent_trace,
                                     Context *completion) {
+    assert(s_instance != nullptr);
+    s_instance->on_finish = completion;
+    return s_instance;
+  }
+
+  static ObjectRequest* create_writesame(librbd::MockTestImageCtx *ictx,
+                                         const std::string &oid,
+                                         uint64_t object_no,
+                                         uint64_t object_off,
+                                         uint64_t object_len,
+                                         const ceph::bufferlist &data,
+                                         const ::SnapContext &snapc,
+                                         int op_flags,
+                                         const ZTracer::Trace &parent_trace,
+                                         Context *completion) {
     assert(s_instance != nullptr);
     s_instance->on_finish = completion;
     return s_instance;
@@ -102,7 +121,9 @@ struct ObjectReadRequest<librbd::MockTestImageCtx> : public ObjectRequest<librbd
                                    uint64_t objectno, uint64_t offset,
                                    uint64_t len, Extents &buffer_extents,
                                    librados::snap_t snap_id, bool sparse,
-                                   Context *completion, int op_flags) {
+                                   int op_flags,
+                                   const ZTracer::Trace &parent_trace,
+                                   Context *completion) {
     assert(s_instance != nullptr);
     s_instance->on_finish = completion;
     return s_instance;
@@ -146,6 +167,7 @@ struct TestMockIoImageRequest : public TestMockFixture {
   typedef ImageWriteRequest<librbd::MockTestImageCtx> MockImageWriteRequest;
   typedef ImageDiscardRequest<librbd::MockTestImageCtx> MockImageDiscardRequest;
   typedef ImageFlushRequest<librbd::MockTestImageCtx> MockImageFlushRequest;
+  typedef ImageWriteSameRequest<librbd::MockTestImageCtx> MockImageWriteSameRequest;
   typedef ObjectRequest<librbd::MockTestImageCtx> MockObjectRequest;
   typedef ObjectReadRequest<librbd::MockTestImageCtx> MockObjectReadRequest;
 
@@ -159,7 +181,7 @@ struct TestMockIoImageRequest : public TestMockFixture {
                              uint64_t offset, uint64_t length,
                              uint64_t journal_tid, int r) {
     EXPECT_CALL(mock_image_ctx, write_to_cache(object, _, length, offset, _, _,
-                journal_tid))
+                journal_tid, _))
       .WillOnce(WithArg<4>(CompleteContext(r, mock_image_ctx.image_ctx->op_work_queue)));
   }
 
@@ -196,8 +218,12 @@ TEST_F(TestMockIoImageRequest, AioWriteJournalAppendDisabled) {
 
   InSequence seq;
   expect_is_journal_appending(mock_journal, false);
-  expect_write_to_cache(mock_image_ctx, ictx->get_object_name(0),
-                        0, 1, 0, 0);
+  if (mock_image_ctx.image_ctx->cache) {
+    expect_write_to_cache(mock_image_ctx, ictx->get_object_name(0),
+                          0, 1, 0, 0);
+  } else {
+    expect_object_request_send(mock_image_ctx, mock_aio_object_request, 0);
+  }
 
   C_SaferCond aio_comp_ctx;
   AioCompletion *aio_comp = AioCompletion::create_and_start(
@@ -206,7 +232,7 @@ TEST_F(TestMockIoImageRequest, AioWriteJournalAppendDisabled) {
   bufferlist bl;
   bl.append("1");
   MockImageWriteRequest mock_aio_image_write(mock_image_ctx, aio_comp,
-                                             {{0, 1}}, std::move(bl), 0);
+                                             {{0, 1}}, std::move(bl), 0, {});
   {
     RWLock::RLocker owner_locker(mock_image_ctx.owner_lock);
     mock_aio_image_write.send();
@@ -227,12 +253,17 @@ TEST_F(TestMockIoImageRequest, AioDiscardJournalAppendDisabled) {
 
   InSequence seq;
   expect_is_journal_appending(mock_journal, false);
-  expect_object_request_send(mock_image_ctx, mock_aio_object_request, 0);
+  if (!ictx->skip_partial_discard) {
+    expect_object_request_send(mock_image_ctx, mock_aio_object_request, 0);
+  }
 
   C_SaferCond aio_comp_ctx;
   AioCompletion *aio_comp = AioCompletion::create_and_start(
     &aio_comp_ctx, ictx, AIO_TYPE_DISCARD);
-  MockImageDiscardRequest mock_aio_image_discard(mock_image_ctx, aio_comp, 0, 1);
+  MockImageDiscardRequest mock_aio_image_discard(mock_image_ctx, aio_comp,
+                                                 0, 1,
+                                                 ictx->skip_partial_discard,
+                                                 {});
   {
     RWLock::RLocker owner_locker(mock_image_ctx.owner_lock);
     mock_aio_image_discard.send();
@@ -258,10 +289,47 @@ TEST_F(TestMockIoImageRequest, AioFlushJournalAppendDisabled) {
   C_SaferCond aio_comp_ctx;
   AioCompletion *aio_comp = AioCompletion::create_and_start(
     &aio_comp_ctx, ictx, AIO_TYPE_FLUSH);
-  MockImageFlushRequest mock_aio_image_flush(mock_image_ctx, aio_comp);
+  MockImageFlushRequest mock_aio_image_flush(mock_image_ctx, aio_comp, {});
   {
     RWLock::RLocker owner_locker(mock_image_ctx.owner_lock);
     mock_aio_image_flush.send();
+  }
+  ASSERT_EQ(0, aio_comp_ctx.wait());
+}
+
+TEST_F(TestMockIoImageRequest, AioWriteSameJournalAppendDisabled) {
+  REQUIRE_FEATURE(RBD_FEATURE_JOURNALING);
+
+  librbd::ImageCtx *ictx;
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+
+  MockObjectRequest mock_aio_object_request;
+  MockTestImageCtx mock_image_ctx(*ictx);
+  MockJournal mock_journal;
+  mock_image_ctx.journal = &mock_journal;
+
+  InSequence seq;
+  expect_is_journal_appending(mock_journal, false);
+  if (mock_image_ctx.image_ctx->cache) {
+    expect_write_to_cache(mock_image_ctx, ictx->get_object_name(0),
+                          0, 1, 0, 0);
+  } else {
+    expect_object_request_send(mock_image_ctx, mock_aio_object_request, 0);
+  }
+
+
+  C_SaferCond aio_comp_ctx;
+  AioCompletion *aio_comp = AioCompletion::create_and_start(
+    &aio_comp_ctx, ictx, AIO_TYPE_WRITESAME);
+
+  bufferlist bl;
+  bl.append("1");
+  MockImageWriteSameRequest mock_aio_image_writesame(mock_image_ctx, aio_comp,
+                                                     0, 1, std::move(bl), 0,
+                                                     {});
+  {
+    RWLock::RLocker owner_locker(mock_image_ctx.owner_lock);
+    mock_aio_image_writesame.send();
   }
   ASSERT_EQ(0, aio_comp_ctx.wait());
 }

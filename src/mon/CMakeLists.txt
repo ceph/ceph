@@ -1,7 +1,3 @@
-set(osd_mon_files
-  Monitor.cc)
-add_library(osd_mon_objs OBJECT ${osd_mon_files})
-
 set(lib_mon_srcs
   ${CMAKE_SOURCE_DIR}/src/auth/cephx/CephxKeyServer.cc
   ${CMAKE_SOURCE_DIR}/src/auth/cephx/CephxServiceHandler.cc
@@ -11,17 +7,22 @@ set(lib_mon_srcs
   PaxosService.cc
   OSDMonitor.cc
   MDSMonitor.cc
+  FSCommands.cc
   MgrMonitor.cc
+  MgrStatMonitor.cc
+  Monitor.cc
   MonmapMonitor.cc
   LogMonitor.cc
   AuthMonitor.cc
   Elector.cc
   HealthMonitor.cc
+  OldHealthMonitor.cc
   DataHealthService.cc
   PGMonitor.cc
   PGMap.cc
   ConfigKeyService.cc)
-add_library(mon STATIC ${lib_mon_srcs} $<TARGET_OBJECTS:mon_common_objs>
-  $<TARGET_OBJECTS:kv_objs> $<TARGET_OBJECTS:osd_mon_objs>
-  $<TARGET_OBJECTS:common_util_obj> $<TARGET_OBJECTS:heap_profiler_objs>)
+add_library(mon STATIC
+  ${lib_mon_srcs}
+  $<TARGET_OBJECTS:kv_objs>
+  $<TARGET_OBJECTS:heap_profiler_objs>)
 target_link_libraries(mon ${ALLOC_LIBS})

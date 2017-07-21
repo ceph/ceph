@@ -19,16 +19,6 @@
 #include "common/signal.h"
 #include "common/io_priority.h"
 
-#include <dirent.h>
-#include <errno.h>
-#include <iostream>
-#include <pthread.h>
-
-#include <signal.h>
-#include <sstream>
-#include <stdlib.h>
-#include <string.h>
-#include <sys/types.h>
 #ifdef HAVE_SCHED
 #include <sched.h>
 #endif

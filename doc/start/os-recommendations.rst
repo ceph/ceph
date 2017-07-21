@@ -13,9 +13,10 @@ Linux Kernel
 
 - **Ceph Kernel Client**
 
-  If you are using the kernel client, the general advice is to *track* "stable"
-  or "longterm maintenance" kernel series provided by either http://kernel.org
-  or your distribution on the kernel client machines.
+  If you are using the kernel client to map RBD block devices or mount
+  CephFS, the general advice is to use a "stable" or "longterm
+  maintenance" kernel series provided by either http://kernel.org or
+  your Linux distribution on any client hosts.
 
   For RBD, if you choose to *track* long-term kernels, we currently recommend
   4.x-based "longterm maintenance" kernel series:
@@ -23,19 +24,12 @@ Linux Kernel
   - 4.9.z
   - 4.4.z
 
-  These are considered pretty old, but if you must:
-
-  - 3.16.z
-  - 3.10.z
-
   For CephFS, see `CephFS best practices`_ for kernel version guidance.
 
-  Older kernel client versions may not support your `CRUSH tunables`_ profile.
+  Older kernel client versions may not support your `CRUSH tunables`_ profile
+  or other newer features of the Ceph cluster, requiring the storage cluster
+  to be configured with those features disabled.
 
-- **B-tree File System (Btrfs)**
-
-  If you use the ``btrfs`` file system with Ceph, we recommend using a
-  recent Linux kernel (3.14 or later).
 
 Platforms
 =========
@@ -45,13 +39,35 @@ platforms.  Generally speaking, there is very little dependence on
 specific distributions aside from the kernel and system initialization
 package (i.e., sysvinit, upstart, systemd).
 
-Infernalis (9.2.z) and Jewel (10.2.z)
--------------------------------------
+Luminous (12.2.z)
+-----------------
+
++----------+----------+--------------------+--------------+---------+------------+
+| Distro   | Release  | Code Name          | Kernel       | Notes   | Testing    |
++==========+==========+====================+==============+=========+============+
+| CentOS   | 7        | N/A                | linux-3.10.0 | 3       | B, I, C    |
++----------+----------+--------------------+--------------+---------+------------+
+| Debian   | 8.0      | Jessie             | linux-3.16.0 | 1, 2    | B, I       |
++----------+----------+--------------------+--------------+---------+------------+
+| Debian   | 9.0      | Stretch            | linux-4.9    | 1, 2    | B, I       |
++----------+----------+--------------------+--------------+---------+------------+
+| Fedora   | 22       | N/A                | linux-3.14.0 |         | B, I       |
++----------+----------+--------------------+--------------+---------+------------+
+| RHEL     | 7        | Maipo              | linux-3.10.0 |         | B, I       |
++----------+----------+--------------------+--------------+---------+------------+
+| Ubuntu   | 14.04    | Trusty Tahr        | linux-3.13.0 |         | B, I, C    |
++----------+----------+--------------------+--------------+---------+------------+
+| Ubuntu   | 16.04    | Xenial Xerus       | linux-4.4.0  | 3       | B, I, C    |
++----------+----------+--------------------+--------------+---------+------------+
+
+
+Jewel (10.2.z)
+--------------
 
 +----------+----------+--------------------+--------------+---------+------------+
 | Distro   | Release  | Code Name          | Kernel       | Notes   | Testing    | 
 +==========+==========+====================+==============+=========+============+
-| CentOS   | 7        | N/A                | linux-3.10.0 |         | B, I, C    |
+| CentOS   | 7        | N/A                | linux-3.10.0 | 3       | B, I, C    |
 +----------+----------+--------------------+--------------+---------+------------+
 | Debian   | 8.0      | Jessie             | linux-3.16.0 | 1, 2    | B, I       |
 +----------+----------+--------------------+--------------+---------+------------+
@@ -62,8 +78,8 @@ Infernalis (9.2.z) and Jewel (10.2.z)
 | Ubuntu   | 14.04    | Trusty Tahr        | linux-3.13.0 |         | B, I, C    |
 +----------+----------+--------------------+--------------+---------+------------+
 
-Hammer (0.94)
--------------
+Hammer (0.94.z)
+---------------
 
 +----------+----------+--------------------+--------------+---------+------------+
 | Distro   | Release  | Code Name          | Kernel       | Notes   | Testing    | 
@@ -79,8 +95,8 @@ Hammer (0.94)
 | Ubuntu   | 14.04    | Trusty Tahr        | linux-3.13.0 |         | B, I, C    |
 +----------+----------+--------------------+--------------+---------+------------+
 
-Firefly (0.80)
---------------
+Firefly (0.80.z)
+----------------
 
 +----------+----------+--------------------+--------------+---------+------------+
 | Distro   | Release  | Code Name          | Kernel       | Notes   | Testing    | 
@@ -108,12 +124,15 @@ Notes
 -----
 
 - **1**: The default kernel has an older version of ``btrfs`` that we do not
-  recommend for ``ceph-osd`` storage nodes.  Upgrade to a recommended
-  kernel or use ``XFS``.
+  recommend for ``ceph-osd`` storage nodes.  We recommend using ``XFS``.
 
 - **2**: The default kernel has an old Ceph client that we do not recommend
   for kernel client (kernel RBD or the Ceph file system).  Upgrade to a
   recommended kernel.
+
+- **3**: The default kernel regularly fails in QA when the ``btrfs``
+  file system is used.  We do not recommend using ``btrfs`` for
+  backing Ceph OSDs.
 
 
 Testing

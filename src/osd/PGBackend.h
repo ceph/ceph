@@ -78,6 +78,7 @@ typedef ceph::shared_ptr<const OSDMap> OSDMapRef;
        const hobject_t &oid,
        const ObjectRecoveryInfo &recovery_info,
        ObjectContextRef obc,
+       bool is_delete,
        ObjectStore::Transaction *t
        ) = 0;
 
@@ -87,7 +88,8 @@ typedef ceph::shared_ptr<const OSDMap> OSDMapRef;
       */
      virtual void on_global_recover(
        const hobject_t &oid,
-       const object_stat_sum_t &stat_diff
+       const object_stat_sum_t &stat_diff,
+       bool is_delete
        ) = 0;
 
      /**
@@ -104,13 +106,25 @@ typedef ceph::shared_ptr<const OSDMap> OSDMapRef;
        const hobject_t oid) = 0;
 
      virtual void failed_push(const list<pg_shard_t> &from, const hobject_t &soid) = 0;
-     
+     virtual void primary_failed(const hobject_t &soid) = 0;
+     virtual bool primary_error(const hobject_t& soid, eversion_t v) = 0;
      virtual void cancel_pull(const hobject_t &soid) = 0;
 
      virtual void apply_stats(
        const hobject_t &soid,
        const object_stat_sum_t &delta_stats) = 0;
 
+     /**
+      * Called when a read on the primary fails when pushing
+      */
+     virtual void on_primary_error(
+       const hobject_t &oid,
+       eversion_t v
+       ) = 0;
+
+     virtual void remove_missing_object(const hobject_t &oid,
+					eversion_t v,
+					Context *on_complete) = 0;
 
      /**
       * Bless a context
@@ -132,6 +146,8 @@ typedef ceph::shared_ptr<const OSDMap> OSDMapRef;
        OpRequestRef op = OpRequestRef()
        ) = 0;
      virtual epoch_t get_epoch() const = 0;
+     virtual epoch_t get_interval_start_epoch() const = 0;
+     virtual epoch_t get_last_peering_reset_epoch() const = 0;
 
      virtual const set<pg_shard_t> &get_actingbackfill_shards() const = 0;
      virtual const set<pg_shard_t> &get_acting_shards() const = 0;
@@ -185,7 +201,7 @@ typedef ceph::shared_ptr<const OSDMap> OSDMapRef;
 
      virtual ObjectContextRef get_obc(
        const hobject_t &hoid,
-       map<string, bufferlist> &attrs) = 0;
+       const map<string, bufferlist> &attrs) = 0;
 
      virtual bool try_lock_for_read(
        const hobject_t &hoid,
@@ -202,7 +218,7 @@ typedef ceph::shared_ptr<const OSDMap> OSDMapRef;
 
      virtual void log_operation(
        const vector<pg_log_entry_t> &logv,
-       boost::optional<pg_hit_set_history_t> &hset_history,
+       const boost::optional<pg_hit_set_history_t> &hset_history,
        const eversion_t &trim_to,
        const eversion_t &roll_forward_to,
        bool transaction_applied,
@@ -243,8 +259,8 @@ typedef ceph::shared_ptr<const OSDMap> OSDMapRef;
 
      virtual uint64_t min_peer_features() const = 0;
 
-     virtual hobject_t get_temp_recovery_object(eversion_t version,
-						snapid_t snap) = 0;
+     virtual hobject_t get_temp_recovery_object(const hobject_t& target,
+						eversion_t version) = 0;
 
      virtual void send_message_osd_cluster(
        int peer, Message *m, epoch_t from_epoch) = 0;
@@ -260,6 +276,10 @@ typedef ceph::shared_ptr<const OSDMap> OSDMapRef;
      virtual ceph_tid_t get_tid() = 0;
 
      virtual LogClientTemp clog_error() = 0;
+
+     virtual bool check_failsafe_full(ostream &ss) = 0;
+
+     virtual bool check_osdmap_full(const set<pg_shard_t> &missing_on) = 0;
 
      virtual ~Listener() {}
    };
@@ -290,6 +310,7 @@ typedef ceph::shared_ptr<const OSDMap> OSDMapRef;
     */
    struct RecoveryHandle {
      bool cache_dont_need;
+     map<pg_shard_t, vector<pair<hobject_t, eversion_t> > > deletes;
 
      RecoveryHandle(): cache_dont_need(false) {}
      virtual ~RecoveryHandle() {}
@@ -303,6 +324,11 @@ typedef ceph::shared_ptr<const OSDMap> OSDMapRef;
      RecoveryHandle *h,     ///< [in] op to finish
      int priority           ///< [in] msg priority
      ) = 0;
+
+   void recover_delete_object(const hobject_t &oid, eversion_t v,
+			      RecoveryHandle *h);
+   void send_recovery_deletes(int prio,
+			      const map<pg_shard_t, vector<pair<hobject_t, eversion_t> > > &deletes);
 
    /**
     * recover_object
@@ -325,7 +351,7 @@ typedef ceph::shared_ptr<const OSDMap> OSDMapRef;
     * @param missing [in] set of info, missing pairs for queried nodes
     * @param overlaps [in] mapping of object to file offset overlaps
     */
-   virtual void recover_object(
+   virtual int recover_object(
      const hobject_t &hoid, ///< [in] object to recover
      eversion_t v,          ///< [in] version to recover
      ObjectContextRef head,  ///< [in] context of the head/snapdir object
@@ -341,9 +367,12 @@ typedef ceph::shared_ptr<const OSDMap> OSDMapRef;
    virtual bool can_handle_while_inactive(OpRequestRef op) = 0;
 
    /// gives PGBackend a crack at an incoming message
-   virtual bool handle_message(
+   bool handle_message(
      OpRequestRef op ///< [in] message received
-     ) = 0; ///< @return true if the message was handled
+     ); ///< @return true if the message was handled
+
+   /// the variant of handle_message that is overridden by child classes
+   virtual bool _handle_message(OpRequestRef op) = 0;
 
    virtual void check_recovery_sources(const OSDMapRef& osdmap) = 0;
 
@@ -434,6 +463,10 @@ typedef ceph::shared_ptr<const OSDMap> OSDMapRef;
      ObjectStore::Transaction *t);
 
  protected:
+
+   void handle_recovery_delete(OpRequestRef op);
+   void handle_recovery_delete_reply(OpRequestRef op);
+
    /// Reapply old attributes
    void rollback_setattrs(
      const hobject_t &hoid,

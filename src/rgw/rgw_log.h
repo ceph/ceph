@@ -3,7 +3,6 @@
 
 #ifndef CEPH_RGW_LOG_H
 #define CEPH_RGW_LOG_H
-
 #include <boost/container/flat_map.hpp>
 #include "rgw_common.h"
 #include "include/utime.h"
@@ -123,11 +122,11 @@ class OpsLogSocket : public OutputDataSocket {
   void formatter_to_bl(bufferlist& bl);
 
 protected:
-  void init_connection(bufferlist& bl);
+  void init_connection(bufferlist& bl) override;
 
 public:
   OpsLogSocket(CephContext *cct, uint64_t _backlog);
-  ~OpsLogSocket();
+  ~OpsLogSocket() override;
 
   void log(struct rgw_log_entry& entry);
 };

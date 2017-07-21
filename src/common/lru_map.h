@@ -1,10 +1,7 @@
 #ifndef CEPH_LRU_MAP_H
 #define CEPH_LRU_MAP_H
 
-#include <list>
-#include <map>
 #include "common/Mutex.h"
-
 
 template <class K, class V>
 class lru_map {

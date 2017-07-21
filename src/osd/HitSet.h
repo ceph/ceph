@@ -347,7 +347,7 @@ public:
       : fpp_micro(o.fpp_micro),
 	target_size(o.target_size),
 	seed(o.seed) {}
-    ~Params() {}
+    ~Params() override {}
 
     double get_fpp() const {
       return (double)fpp_micro / 1000000.0;

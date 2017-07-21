@@ -19,7 +19,8 @@
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
-#define dout_prefix *_dout << "librbd::ManagedLock: " << this << " " <<  __func__
+#define dout_prefix *_dout << "librbd::ManagedLock: " << this << " " \
+                           <<  __func__
 
 namespace librbd {
 
@@ -255,14 +256,51 @@ void ManagedLock<I>::break_lock(const managed_lock::Locker &locker,
     } else {
       on_finish = new C_Tracked(m_async_op_tracker, on_finish);
       auto req = managed_lock::BreakRequest<I>::create(
-        m_ioctx, m_work_queue, m_oid, locker, m_blacklist_on_break_lock,
-        m_blacklist_expire_seconds, force_break_lock, on_finish);
+        m_ioctx, m_work_queue, m_oid, locker, m_mode == EXCLUSIVE,
+        m_blacklist_on_break_lock, m_blacklist_expire_seconds, force_break_lock,
+        on_finish);
       req->send();
       return;
     }
   }
 
   on_finish->complete(r);
+}
+
+template <typename I>
+int ManagedLock<I>::assert_header_locked() {
+  ldout(m_cct, 10) << dendl;
+
+  librados::ObjectReadOperation op;
+  {
+    Mutex::Locker locker(m_lock);
+    rados::cls::lock::assert_locked(&op, RBD_LOCK_NAME,
+                                    (m_mode == EXCLUSIVE ? LOCK_EXCLUSIVE :
+                                                           LOCK_SHARED),
+                                    m_cookie,
+                                    managed_lock::util::get_watcher_lock_tag());
+  }
+
+  int r = m_ioctx.operate(m_oid, &op, nullptr);
+  if (r < 0) {
+    if (r == -EBLACKLISTED) {
+      ldout(m_cct, 5) << "client is not lock owner -- client blacklisted"
+                      << dendl;
+    } else if (r == -ENOENT) {
+      ldout(m_cct, 5) << "client is not lock owner -- no lock detected"
+                      << dendl;
+    } else if (r == -EBUSY) {
+      ldout(m_cct, 5) << "client is not lock owner -- owned by different client"
+                      << dendl;
+    } else {
+      lderr(m_cct) << "failed to verify lock ownership: " << cpp_strerror(r)
+                   << dendl;
+    }
+
+    return r;
+  }
+
+  return 0;
 }
 
 template <typename I>
@@ -289,6 +327,11 @@ void  ManagedLock<I>::pre_release_lock_handler(bool shutting_down,
 template <typename I>
 void  ManagedLock<I>::post_release_lock_handler(bool shutting_down, int r,
                                                 Context *on_finish) {
+  on_finish->complete(r);
+}
+
+template <typename I>
+void ManagedLock<I>::post_reacquire_lock_handler(int r, Context *on_finish) {
   on_finish->complete(r);
 }
 
@@ -528,11 +571,15 @@ void ManagedLock<I>::send_reacquire_lock() {
   ldout(m_cct, 10) << dendl;
   m_state = STATE_REACQUIRING;
 
+  auto ctx = create_context_callback<
+    ManagedLock, &ManagedLock<I>::handle_reacquire_lock>(this);
+  ctx = new FunctionContext([this, ctx](int r) {
+      post_reacquire_lock_handler(r, ctx);
+    });
+
   using managed_lock::ReacquireRequest;
   ReacquireRequest<I>* req = ReacquireRequest<I>::create(m_ioctx, m_oid,
-      m_cookie, m_new_cookie, m_mode == EXCLUSIVE,
-      create_context_callback<
-        ManagedLock, &ManagedLock<I>::handle_reacquire_lock>(this));
+      m_cookie, m_new_cookie, m_mode == EXCLUSIVE, ctx);
   m_work_queue->queue(new C_SendLockRequest<ReacquireRequest<I>>(req));
 }
 
@@ -663,7 +710,6 @@ void ManagedLock<I>::send_shutdown() {
     return;
   }
 
-  ldout(m_cct, 10) << dendl;
   assert(m_state == STATE_LOCKED);
   m_state = STATE_PRE_SHUTTING_DOWN;
 

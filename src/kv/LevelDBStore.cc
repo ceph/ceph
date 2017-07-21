@@ -5,11 +5,17 @@
 #include <set>
 #include <map>
 #include <string>
-#include "include/memory.h"
-#include <errno.h>
+#include <cerrno>
+
 using std::string;
+
+#include "include/memory.h"
+
 #include "common/debug.h"
 #include "common/perf_counters.h"
+
+// re-include our assert to clobber the system one; fix dout:
+#include "include/assert.h"
 
 #define dout_context cct
 #define dout_subsys ceph_subsys_leveldb
@@ -22,7 +28,7 @@ public:
   explicit CephLevelDBLogger(CephContext *c) : cct(c) {
     cct->get();
   }
-  ~CephLevelDBLogger() {
+  ~CephLevelDBLogger() override {
     cct->put();
   }
 
@@ -237,8 +243,20 @@ void LevelDBStore::LevelDBTransactionImpl::rmkeys_by_prefix(const string &prefix
   for (it->seek_to_first();
        it->valid();
        it->next()) {
-    string key = combine_strings(prefix, it->key());
-    bat.Delete(key);
+    bat.Delete(leveldb::Slice(combine_strings(prefix, it->key())));
+  }
+}
+
+void LevelDBStore::LevelDBTransactionImpl::rm_range_keys(const string &prefix, const string &start, const string &end)
+{
+  KeyValueDB::Iterator it = db->get_iterator(prefix);
+  it->lower_bound(start);
+  while (it->valid()) {
+    if (it->key() >= end) {
+      break;
+    }
+    bat.Delete(combine_strings(prefix, it->key()));
+    it->next();
   }
 }
 

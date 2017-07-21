@@ -24,8 +24,19 @@
 class MDSInternalContextBase;
 
 struct SnapRealm {
-  // realm state
+protected:
+  // cache
+  mutable snapid_t cached_seq;           // max seq over self and all past+present parents.
+  mutable snapid_t cached_last_created;  // max last_created over all past+present parents
+  mutable snapid_t cached_last_destroyed;
+  mutable set<snapid_t> cached_snaps;
+  mutable SnapContext cached_snap_context;
+  mutable bufferlist cached_snap_trace;
 
+  void check_cache() const;
+
+public:
+  // realm state
   sr_t srnode;
 
   // in-memory state
@@ -39,14 +50,7 @@ struct SnapRealm {
   map<inodeno_t, pair<SnapRealm*, set<snapid_t> > > open_past_parents;  // these are explicitly pinned.
   unsigned num_open_past_parents;
 
-  // cache
-  snapid_t cached_seq;           // max seq over self and all past+present parents.
-  snapid_t cached_last_created;  // max last_created over all past+present parents
-  snapid_t cached_last_destroyed;
-  set<snapid_t> cached_snaps;
-  SnapContext cached_snap_context;
 
-  bufferlist cached_snap_trace;
 
   elist<CInode*> inodes_with_caps;             // for efficient realm splits
   map<client_t, xlist<Capability*>* > client_caps;   // to identify clients who need snap notifications
@@ -84,18 +88,17 @@ struct SnapRealm {
 
   void build_snap_set(set<snapid_t>& s, 
 		      snapid_t& max_seq, snapid_t& max_last_created, snapid_t& max_last_destroyed,
-		      snapid_t first, snapid_t last);
+		      snapid_t first, snapid_t last) const;
   void get_snap_info(map<snapid_t,SnapInfo*>& infomap, snapid_t first=0, snapid_t last=CEPH_NOSNAP);
 
   const bufferlist& get_snap_trace();
-  void build_snap_trace(bufferlist& snapbl);
+  void build_snap_trace(bufferlist& snapbl) const;
 
   const string& get_snapname(snapid_t snapid, inodeno_t atino);
   snapid_t resolve_snapname(const string &name, inodeno_t atino, snapid_t first=0, snapid_t last=CEPH_NOSNAP);
 
-  void check_cache();
-  const set<snapid_t>& get_snaps();
-  const SnapContext& get_snap_context();
+  const set<snapid_t>& get_snaps() const;
+  const SnapContext& get_snap_context() const;
   void invalidate_cached_snaps() {
     cached_seq = 0;
   }

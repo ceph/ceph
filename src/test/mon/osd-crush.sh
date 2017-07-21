@@ -27,7 +27,7 @@ function run() {
     CEPH_ARGS+="--fsid=$(uuidgen) --auth-supported=none "
     CEPH_ARGS+="--mon-host=$CEPH_MON "
 
-    local funcs=${@:-$(set | sed -n -e 's/^\(TEST_[0-9a-z_]*\) .*/\1/p')}
+    local funcs=${@:-$(set | ${SED} -n -e 's/^\(TEST_[0-9a-z_]*\) .*/\1/p')}
     for func in $funcs ; do
         setup $dir || return 1
         $func $dir || return 1
@@ -40,7 +40,7 @@ function TEST_crush_rule_create_simple() {
 
     run_mon $dir a || return 1
 
-    ceph --format xml osd crush rule dump replicated_ruleset | \
+    ceph --format xml osd crush rule dump replicated_rule | \
         egrep '<op>take</op><item>[^<]+</item><item_name>default</item_name>' | \
         grep '<op>choose_firstn</op><num>0</num><type>osd</type>' || return 1
     local ruleset=ruleset0
@@ -63,11 +63,10 @@ function TEST_crush_rule_dump() {
 
     local ruleset=ruleset1
     ceph osd crush rule create-erasure $ruleset || return 1
-    local expected
-    expected="<rule_name>$ruleset</rule_name>"
-    ceph --format xml osd crush rule dump $ruleset | grep $expected || return 1
-    expected='"rule_name": "'$ruleset'"'
-    ceph osd crush rule dump | grep "$expected" || return 1
+    test $(ceph --format json osd crush rule dump $ruleset | \
+           jq ".rule_name == \"$ruleset\"") == true || return 1
+    test $(ceph --format json osd crush rule dump | \
+           jq "map(select(.rule_name == \"$ruleset\")) | length == 1") == true || return 1
     ! ceph osd crush rule dump non_existent_ruleset || return 1
     ceph osd crush rule rm $ruleset || return 1
 }
@@ -120,15 +119,6 @@ function TEST_crush_rule_create_erasure() {
     ceph osd erasure-code-profile ls | grep default || return 1
     ceph osd crush rule rm $ruleset || return 1
     ! ceph osd crush rule ls | grep $ruleset || return 1
-    #
-    # verify that if the crushmap contains a bugous ruleset,
-    # it will prevent the creation of a pool.
-    #
-    local crushtool_path_old=`ceph-conf --show-config-value crushtool`
-    ceph tell mon.\* injectargs --crushtool "false"
-
-    expect_failure $dir "Error EINVAL" \
-        ceph osd pool create mypool 1 1 erasure || return 1
 }
 
 function check_ruleset_id_match_rule_id() {
@@ -146,9 +136,9 @@ function generate_manipulated_rules() {
     ceph osd getcrushmap -o $dir/original_map
     crushtool -d $dir/original_map -o $dir/decoded_original_map
     #manipulate the rulesets , to make the rule_id != ruleset_id
-    sed -i 's/ruleset 0/ruleset 3/' $dir/decoded_original_map
-    sed -i 's/ruleset 2/ruleset 0/' $dir/decoded_original_map
-    sed -i 's/ruleset 1/ruleset 2/' $dir/decoded_original_map
+    ${SED} -i 's/ruleset 0/ruleset 3/' $dir/decoded_original_map
+    ${SED} -i 's/ruleset 2/ruleset 0/' $dir/decoded_original_map
+    ${SED} -i 's/ruleset 1/ruleset 2/' $dir/decoded_original_map
 
     crushtool -c $dir/decoded_original_map -o $dir/new_map
     ceph osd setcrushmap -i $dir/new_map
@@ -210,8 +200,10 @@ function TEST_crush_rename_bucket() {
     run_mon $dir a || return 1
 
     ceph osd crush add-bucket host1 host
+    ceph osd tree
     ! ceph osd tree | grep host2 || return 1
     ceph osd crush rename-bucket host1 host2 || return 1
+    ceph osd tree
     ceph osd tree | grep host2 || return 1
     ceph osd crush rename-bucket host1 host2 || return 1 # idempotency
     ceph osd crush rename-bucket nonexistent something 2>&1 | grep "Error ENOENT" || return 1
@@ -236,67 +228,6 @@ function TEST_crush_tree() {
 
     ceph osd crush tree --format=xml | \
         $XMLSTARLET val -e -r $CEPH_ROOT/src/test/mon/osd-crush-tree.rng - || return 1
-}
-
-# NB: disable me if i am too time consuming
-function TEST_crush_repair_faulty_crushmap() {
-    local dir=$1
-    fsid=$(uuidgen)
-    MONA=127.0.0.1:7113 # git grep '\<7113\>' : there must be only one
-    MONB=127.0.0.1:7114 # git grep '\<7114\>' : there must be only one
-    MONC=127.0.0.1:7115 # git grep '\<7115\>' : there must be only one
-    CEPH_ARGS_orig=$CEPH_ARGS
-    CEPH_ARGS="--fsid=$fsid --auth-supported=none "
-    CEPH_ARGS+="--mon-initial-members=a,b,c "
-    CEPH_ARGS+="--mon-host=$MONA,$MONB,$MONC "
-    run_mon $dir a --public-addr $MONA || return 1
-    run_mon $dir b --public-addr $MONB || return 1
-    run_mon $dir c --public-addr $MONC || return 1
-
-    local empty_map=$dir/empty_map
-    :> $empty_map.txt
-    crushtool -c $empty_map.txt -o $empty_map.map || return 1
-
-    local crushtool_path_old=`ceph-conf --show-config-value crushtool`
-    ceph tell mon.\* injectargs --crushtool "true"
-    
-    
-    #import empty crushmap should failture.because the default pool rbd use the rule
-    ceph osd setcrushmap -i $empty_map.map  2>&1|grep "Error EINVAL:  the crush rule no"|| return 1
-
-    #remove the default pool rbd
-    ceph osd pool delete rbd rbd --yes-i-really-really-mean-it || return 1
-
-    #now it can be successful to set the empty crush map
-    ceph osd setcrushmap -i $empty_map.map || return 1
-
-    # should be an empty crush map without any buckets
-    success=false
-    for delay in 1 2 4 8 16 32 64 128 256 ; do
-        if ! test $(ceph osd crush dump --format=xml | \
-                           $XMLSTARLET sel -t -m "//buckets/bucket" -v .) ; then
-            success=true
-            break
-        fi
-        sleep $delay
-    done
-    if ! $success ; then
-        ceph osd crush dump --format=xml
-        return 1
-    fi
-    # bring them down, the "ceph" commands will try to hunt for other monitor in
-    # vain, after mon.a is offline
-    kill_daemons $dir || return 1
-    # rewrite the monstore with the good crush map,
-    $CEPH_ROOT/src/tools/ceph-monstore-update-crush.sh --rewrite $dir/a || return 1
-
-    run_mon $dir a --public-addr $MONA || return 1
-    run_mon $dir b --public-addr $MONB || return 1
-    run_mon $dir c --public-addr $MONC || return 1
-    # the buckets are back
-    test $(ceph osd crush dump --format=xml | \
-           $XMLSTARLET sel -t -m "//buckets/bucket" -v .) || return 1
-    CEPH_ARGS=$CEPH_ARGS_orig
 }
 
 main osd-crush "$@"

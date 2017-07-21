@@ -26,6 +26,7 @@
 #include "include/types.h"
 #include "include/buffer.h"
 #include "common/Throttle.h"
+#include "common/zipkin_trace.h"
 #include "msg_types.h"
 
 #include "common/RefCountedObj.h"
@@ -65,11 +66,14 @@
 #define MSG_OSD_FAILURE      72
 #define MSG_OSD_ALIVE        73
 #define MSG_OSD_MARK_ME_DOWN 74
+#define MSG_OSD_FULL         75
 
 #define MSG_OSD_SUBOP        76
 #define MSG_OSD_SUBOPREPLY   77
 
 #define MSG_OSD_PGTEMP       78
+
+#define MSG_OSD_BEACON       79
 
 #define MSG_OSD_PG_NOTIFY      80
 #define MSG_OSD_PG_QUERY       81
@@ -85,11 +89,12 @@
 #define MSG_REMOVE_SNAPS       90
 
 #define MSG_OSD_SCRUB          91
-//#define MSG_OSD_PG_MISSING     92  // obsolete
+#define MSG_OSD_SCRUB_RESERVE  92  // previous PG_MISSING
 #define MSG_OSD_REP_SCRUB      93
 
 #define MSG_OSD_PG_SCAN        94
 #define MSG_OSD_PG_BACKFILL    95
+#define MSG_OSD_PG_BACKFILL_REMOVE 96
 
 #define MSG_COMMAND            97
 #define MSG_COMMAND_REPLY      98
@@ -111,6 +116,10 @@
 #define MSG_OSD_PG_UPDATE_LOG_MISSING  114
 #define MSG_OSD_PG_UPDATE_LOG_MISSING_REPLY  115
 
+#define MSG_OSD_PG_CREATED      116
+#define MSG_OSD_REP_SCRUBMAP    117
+#define MSG_OSD_PG_RECOVERY_DELETE 118
+#define MSG_OSD_PG_RECOVERY_DELETE_REPLY 119
 
 // *** MDS ***
 
@@ -176,6 +185,8 @@
 // Special
 #define MSG_NOP                   0x607
 
+#define MSG_MON_HEALTH_CHECKS     0x608
+
 // *** ceph-mgr <-> OSD/MDS daemons ***
 #define MSG_MGR_OPEN              0x700
 #define MSG_MGR_CONFIGURE         0x701
@@ -189,6 +200,9 @@
 
 // *** ceph-mon(MgrMonitor) -> ceph-mgr
 #define MSG_MGR_DIGEST               0x705
+// *** cephmgr -> ceph-mon
+#define MSG_MON_MGR_REPORT        0x706
+#define MSG_SERVICE_MAP           0x707
 
 // ======================================================
 
@@ -234,6 +248,11 @@ protected:
   bi::list_member_hook<> dispatch_q;
 
 public:
+  // zipkin tracing
+  ZTracer::Trace trace;
+  void encode_trace(bufferlist &bl, uint64_t features) const;
+  void decode_trace(bufferlist::iterator &p, bool create = false);
+
   class CompletionHook : public Context {
   protected:
     Message *m;
@@ -287,10 +306,11 @@ public:
   }
 
 protected:
-  virtual ~Message() {
+  ~Message() override {
     if (byte_throttler)
       byte_throttler->put(payload.length() + middle.length() + data.length());
     release_message_throttle();
+    trace.event("message destructed");
     /* call completion hooks (if any) */
     if (completion_hook)
       completion_hook->complete(0);
@@ -376,6 +396,7 @@ public:
       byte_throttler->take(data.length());
   }
 
+  const bufferlist& get_data() const { return data; }
   bufferlist& get_data() { return data; }
   void claim_data(bufferlist& bl,
 		  unsigned int flags = buffer::list::CLAIM_DEFAULT) {
@@ -464,8 +485,9 @@ typedef boost::intrusive_ptr<Message> MessageRef;
 extern Message *decode_message(CephContext *cct, int crcflags,
 			       ceph_msg_header &header,
 			       ceph_msg_footer& footer, bufferlist& front,
-			       bufferlist& middle, bufferlist& data);
-inline ostream& operator<<(ostream &out, const Message &m) {
+			       bufferlist& middle, bufferlist& data,
+			       Connection* conn);
+inline ostream& operator<<(ostream& out, const Message& m) {
   m.print(out);
   if (m.get_header().version)
     out << " v" << m.get_header().version;

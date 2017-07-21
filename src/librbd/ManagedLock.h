@@ -39,6 +39,9 @@ public:
     return new ManagedLock(ioctx, work_queue, oid, watcher, mode,
                            blacklist_on_break_lock, blacklist_expire_seconds);
   }
+  void destroy() {
+    delete this;
+  }
 
   ManagedLock(librados::IoCtx& ioctx, ContextWQ *work_queue,
               const std::string& oid, Watcher *watcher,
@@ -56,6 +59,8 @@ public:
   void get_locker(managed_lock::Locker *locker, Context *on_finish);
   void break_lock(const managed_lock::Locker &locker, bool force_break_lock,
                   Context *on_finish);
+
+  int assert_header_locked();
 
   bool is_shutdown() const {
     Mutex::Locker l(m_lock);
@@ -129,6 +134,7 @@ protected:
                                         Context *on_finish);
   virtual void post_release_lock_handler(bool shutting_down, int r,
                                           Context *on_finish);
+  virtual void post_reacquire_lock_handler(int r, Context *on_finish);
 
   void execute_next_action();
 

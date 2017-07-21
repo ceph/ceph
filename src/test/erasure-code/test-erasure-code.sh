@@ -30,6 +30,7 @@ function run() {
 
     setup $dir || return 1
     run_mon $dir a || return 1
+    run_mgr $dir x || return 1
     # check that erasure code plugins are preloaded
     CEPH_ARGS='' ceph --admin-daemon $dir/ceph-mon.a.asok log flush || return 1
     grep 'load: jerasure.*lrc' $dir/mon.a.log || return 1
@@ -55,7 +56,7 @@ function create_erasure_coded_pool() {
     local poolname=$1
 
     ceph osd erasure-code-profile set myprofile \
-        ruleset-failure-domain=osd || return 1
+        crush-failure-domain=osd || return 1
     ceph osd pool create $poolname 12 12 erasure myprofile \
         || return 1
     wait_for_clean || return 1
@@ -161,7 +162,7 @@ function TEST_rados_put_get_lrc_advanced() {
     ceph osd erasure-code-profile set $profile \
         plugin=lrc \
         mapping=DD_ \
-        ruleset-steps='[ [ "chooseleaf", "osd", 0 ] ]' \
+        crush-steps='[ [ "chooseleaf", "osd", 0 ] ]' \
         layers='[ [ "DDc", "" ] ]'  || return 1
     ceph osd pool create $poolname 12 12 erasure $profile \
         || return 1
@@ -180,7 +181,7 @@ function TEST_rados_put_get_lrc_kml() {
     ceph osd erasure-code-profile set $profile \
         plugin=lrc \
         k=4 m=2 l=3 \
-        ruleset-failure-domain=osd || return 1
+        crush-failure-domain=osd || return 1
     ceph osd pool create $poolname 12 12 erasure $profile \
         || return 1
 
@@ -200,7 +201,7 @@ function TEST_rados_put_get_isa() {
 
     ceph osd erasure-code-profile set profile-isa \
         plugin=isa \
-        ruleset-failure-domain=osd || return 1
+        crush-failure-domain=osd || return 1
     ceph osd pool create $poolname 1 1 erasure profile-isa \
         || return 1
 
@@ -220,7 +221,7 @@ function TEST_rados_put_get_jerasure() {
     ceph osd erasure-code-profile set $profile \
         plugin=jerasure \
         k=4 m=2 \
-        ruleset-failure-domain=osd || return 1
+        crush-failure-domain=osd || return 1
     ceph osd pool create $poolname 12 12 erasure $profile \
         || return 1
 
@@ -240,7 +241,7 @@ function TEST_rados_put_get_shec() {
     ceph osd erasure-code-profile set $profile \
         plugin=shec \
         k=2 m=1 c=1 \
-        ruleset-failure-domain=osd || return 1
+        crush-failure-domain=osd || return 1
     ceph osd pool create $poolname 12 12 erasure $profile \
         || return 1
 
@@ -258,8 +259,9 @@ function TEST_alignment_constraints() {
     # imposed by the stripe width
     # See http://tracker.ceph.com/issues/8622
     #
-    local stripe_width=$(ceph-conf --show-config-value osd_pool_erasure_code_stripe_width)
-    local block_size=$((stripe_width - 1))
+    local stripe_unit=$(ceph-conf --show-config-value osd_pool_erasure_code_stripe_unit)
+    eval local $(ceph osd erasure-code-profile get myprofile | grep k=)
+    local block_size=$((stripe_unit * k - 1))
     dd if=/dev/zero of=$dir/ORIGINAL bs=$block_size count=2
     rados --block-size=$block_size \
         --pool ecpool put UNALIGNED $dir/ORIGINAL || return 1
@@ -267,9 +269,7 @@ function TEST_alignment_constraints() {
 }
 
 function chunk_size() {
-    local stripe_width=$(ceph-conf --show-config-value osd_pool_erasure_code_stripe_width)
-    eval local $(ceph osd erasure-code-profile get default | grep k=)
-    echo $(($stripe_width / $k))
+    echo $(ceph-conf --show-config-value osd_pool_erasure_code_stripe_unit)
 }
 
 #
@@ -316,7 +316,7 @@ function TEST_chunk_mapping() {
         plugin=lrc \
         layers='[ [ "_DD", "" ] ]' \
         mapping='_DD' \
-        ruleset-steps='[ [ "choose", "osd", 0 ] ]' || return 1
+        crush-steps='[ [ "choose", "osd", 0 ] ]' || return 1
     ceph osd erasure-code-profile get remap-profile
     ceph osd pool create remap-pool 12 12 erasure remap-profile \
         || return 1

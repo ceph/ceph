@@ -23,7 +23,8 @@
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
-#define dout_prefix *_dout << "librbd::io::CopyupRequest: "
+#define dout_prefix *_dout << "librbd::io::CopyupRequest: " << this \
+                           << " " << __func__ << ": "
 
 namespace librbd {
 namespace io {
@@ -34,9 +35,9 @@ class UpdateObjectMap : public C_AsyncObjectThrottle<> {
 public:
   UpdateObjectMap(AsyncObjectThrottle<> &throttle, ImageCtx *image_ctx,
                   uint64_t object_no, const std::vector<uint64_t> *snap_ids,
-                  size_t snap_id_idx)
-    : C_AsyncObjectThrottle(throttle, *image_ctx),
-      m_object_no(object_no), m_snap_ids(*snap_ids), m_snap_id_idx(snap_id_idx)
+                  const ZTracer::Trace &trace, size_t snap_id_idx)
+    : C_AsyncObjectThrottle(throttle, *image_ctx), m_object_no(object_no),
+      m_snap_ids(*snap_ids), m_trace(trace), m_snap_id_idx(snap_id_idx)
   {
   }
 
@@ -48,7 +49,7 @@ public:
       assert(m_image_ctx.exclusive_lock->is_lock_owner());
       assert(m_image_ctx.object_map != nullptr);
       bool sent = m_image_ctx.object_map->aio_update<Context>(
-        CEPH_NOSNAP, m_object_no, OBJECT_EXISTS, {}, this);
+        CEPH_NOSNAP, m_object_no, OBJECT_EXISTS, {}, m_trace, this);
       return (sent ? 0 : 1);
     }
 
@@ -65,7 +66,7 @@ public:
     }
 
     bool sent = m_image_ctx.object_map->aio_update<Context>(
-      snap_id, m_object_no, state, {}, this);
+      snap_id, m_object_no, state, {}, m_trace, this);
     assert(sent);
     return 0;
   }
@@ -73,6 +74,7 @@ public:
 private:
   uint64_t m_object_no;
   const std::vector<uint64_t> &m_snap_ids;
+  const ZTracer::Trace &m_trace;
   size_t m_snap_id_idx;
 };
 
@@ -80,9 +82,12 @@ private:
 
 
 CopyupRequest::CopyupRequest(ImageCtx *ictx, const std::string &oid,
-                             uint64_t objectno, Extents &&image_extents)
+                             uint64_t objectno, Extents &&image_extents,
+			     const ZTracer::Trace &parent_trace)
   : m_ictx(ictx), m_oid(oid), m_object_no(objectno),
-    m_image_extents(image_extents), m_state(STATE_READ_FROM_PARENT)
+    m_image_extents(image_extents),
+    m_trace(util::create_trace(*m_ictx, "copy-up", parent_trace)),
+    m_state(STATE_READ_FROM_PARENT)
 {
   m_async_op.start_op(*m_ictx);
 }
@@ -93,7 +98,7 @@ CopyupRequest::~CopyupRequest() {
 }
 
 void CopyupRequest::append_request(ObjectRequest<> *req) {
-  ldout(m_ictx->cct, 20) << __func__ << " " << this << ": " << req << dendl;
+  ldout(m_ictx->cct, 20) << req << dendl;
   m_pending_requests.push_back(req);
 }
 
@@ -101,8 +106,7 @@ void CopyupRequest::complete_requests(int r) {
   while (!m_pending_requests.empty()) {
     vector<ObjectRequest<> *>::iterator it = m_pending_requests.begin();
     ObjectRequest<> *req = *it;
-    ldout(m_ictx->cct, 20) << __func__ << " completing request " << req
-                           << dendl;
+    ldout(m_ictx->cct, 20) << "completing request " << req << dendl;
     req->complete(r);
     m_pending_requests.erase(it);
   }
@@ -117,8 +121,7 @@ bool CopyupRequest::send_copyup() {
     add_copyup_op = true;
   }
 
-  ldout(m_ictx->cct, 20) << __func__ << " " << this
-                         << ": oid " << m_oid << dendl;
+  ldout(m_ictx->cct, 20) << "oid " << m_oid << dendl;
   m_state = STATE_COPYUP;
 
   m_ictx->snap_lock.get_read();
@@ -128,7 +131,7 @@ bool CopyupRequest::send_copyup() {
   std::vector<librados::snap_t> snaps;
 
   if (!copy_on_read) {
-    m_pending_copyups.inc();
+    m_pending_copyups++;
   }
 
   int r;
@@ -143,17 +146,18 @@ bool CopyupRequest::send_copyup() {
     // all snapshots are detected from the parent for this object.  If
     // this is a CoW request, a second request will be created for the
     // actual modification.
-    m_pending_copyups.inc();
+    m_pending_copyups++;
 
-    ldout(m_ictx->cct, 20) << __func__ << " " << this << " copyup with "
-                           << "empty snapshot context" << dendl;
-    librados::AioCompletion *comp = util::create_rados_safe_callback(this);
+    ldout(m_ictx->cct, 20) << "copyup with empty snapshot context" << dendl;
+    librados::AioCompletion *comp = util::create_rados_callback(this);
 
     librados::Rados rados(m_ictx->data_ctx);
     r = rados.ioctx_create2(m_ictx->data_ctx.get_id(), m_data_ctx);
     assert(r == 0);
 
-    r = m_data_ctx.aio_operate(m_oid, comp, &copyup_op, 0, snaps);
+    r = m_data_ctx.aio_operate(
+      m_oid, comp, &copyup_op, 0, snaps,
+      (m_trace.valid() ? m_trace.get_info() : nullptr));
     assert(r == 0);
     comp->release();
   }
@@ -168,15 +172,17 @@ bool CopyupRequest::send_copyup() {
     // merge all pending write ops into this single RADOS op
     for (size_t i=0; i<m_pending_requests.size(); ++i) {
       ObjectRequest<> *req = m_pending_requests[i];
-      ldout(m_ictx->cct, 20) << __func__ << " add_copyup_ops " << req
-                             << dendl;
-      req->add_copyup_ops(&write_op);
+      ldout(m_ictx->cct, 20) << "add_copyup_ops " << req << dendl;
+      bool set_hints = (i == 0);
+      req->add_copyup_ops(&write_op, set_hints);
     }
     assert(write_op.size() != 0);
 
     snaps.insert(snaps.end(), snapc.snaps.begin(), snapc.snaps.end());
-    librados::AioCompletion *comp = util::create_rados_safe_callback(this);
-    r = m_ictx->data_ctx.aio_operate(m_oid, comp, &write_op);
+    librados::AioCompletion *comp = util::create_rados_callback(this);
+    r = m_ictx->data_ctx.aio_operate(
+      m_oid, comp, &write_op, snapc.seq, snaps,
+      (m_trace.valid() ? m_trace.get_info() : nullptr));
     assert(r == 0);
     comp->release();
   }
@@ -201,13 +207,12 @@ void CopyupRequest::send()
   AioCompletion *comp = AioCompletion::create_and_start(
     this, m_ictx, AIO_TYPE_READ);
 
-  ldout(m_ictx->cct, 20) << __func__ << " " << this
-                         << ": completion " << comp
+  ldout(m_ictx->cct, 20) << "completion " << comp
                          << ", oid " << m_oid
                          << ", extents " << m_image_extents
                          << dendl;
   ImageRequest<>::aio_read(m_ictx->parent, comp, std::move(m_image_extents),
-                           ReadResult{&m_copyup_data}, 0);
+                           ReadResult{&m_copyup_data}, 0, m_trace);
 }
 
 void CopyupRequest::complete(int r)
@@ -221,8 +226,7 @@ void CopyupRequest::complete(int r)
 bool CopyupRequest::should_complete(int r)
 {
   CephContext *cct = m_ictx->cct;
-  ldout(cct, 20) << __func__ << " " << this
-                 << ": oid " << m_oid
+  ldout(cct, 20) << "oid " << m_oid
                  << ", r " << r << dendl;
 
   uint64_t pending_copyups;
@@ -232,7 +236,7 @@ bool CopyupRequest::should_complete(int r)
     remove_from_list();
     if (r >= 0 || r == -ENOENT) {
       if (is_copyup_required()) {
-        ldout(cct, 20) << __func__ << " " << this << " nop, skipping" << dendl;
+        ldout(cct, 20) << "nop, skipping" << dendl;
         return true;
       }
 
@@ -252,7 +256,7 @@ bool CopyupRequest::should_complete(int r)
 
   case STATE_COPYUP:
     // invoked via a finisher in librados, so thread safe
-    pending_copyups = m_pending_copyups.dec();
+    pending_copyups = --m_pending_copyups;
     ldout(cct, 20) << "COPYUP (" << pending_copyups << " pending)"
                    << dendl;
     if (r == -ENOENT) {
@@ -285,7 +289,7 @@ void CopyupRequest::remove_from_list()
 
 bool CopyupRequest::send_object_map_head() {
   CephContext *cct = m_ictx->cct;
-  ldout(cct, 20) << __func__ << " " << this << dendl;
+  ldout(cct, 20) << dendl;
 
   m_state = STATE_OBJECT_MAP_HEAD;
 
@@ -321,7 +325,7 @@ bool CopyupRequest::send_object_map_head() {
         }
 
         current_state = (*m_ictx->object_map)[m_object_no];
-        ldout(cct, 20) << __func__ << " " << req->get_op_type() << " object no "
+        ldout(cct, 20) << req->get_op_type() << " object no "
                        << m_object_no << " current state "
                        << stringify(static_cast<uint32_t>(current_state))
                        << " new state " << stringify(static_cast<uint32_t>(new_state))
@@ -332,7 +336,8 @@ bool CopyupRequest::send_object_map_head() {
 
       if (may_update && (new_state != current_state) &&
           m_ictx->object_map->aio_update<CopyupRequest>(
-            CEPH_NOSNAP, m_object_no, new_state, current_state, this)) {
+            CEPH_NOSNAP, m_object_no, new_state, current_state, m_trace,
+            this)) {
         return false;
       }
     }
@@ -348,14 +353,13 @@ bool CopyupRequest::send_object_map() {
     return send_copyup();
   } else {
     // update object maps for HEAD and all existing snapshots
-    ldout(m_ictx->cct, 20) << __func__ << " " << this
-                           << ": oid " << m_oid << dendl;
+    ldout(m_ictx->cct, 20) << "oid " << m_oid << dendl;
     m_state = STATE_OBJECT_MAP;
 
     RWLock::RLocker owner_locker(m_ictx->owner_lock);
     AsyncObjectThrottle<>::ContextFactory context_factory(
       boost::lambda::bind(boost::lambda::new_ptr<UpdateObjectMap>(),
-      boost::lambda::_1, m_ictx, m_object_no, &m_snap_ids,
+      boost::lambda::_1, m_ictx, m_object_no, &m_snap_ids, m_trace,
       boost::lambda::_2));
     AsyncObjectThrottle<> *throttle = new AsyncObjectThrottle<>(
       NULL, *m_ictx, context_factory, util::create_context_callback(this),

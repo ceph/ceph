@@ -48,7 +48,7 @@ static const int SM_IOV_MAX = (IOV_MAX >= 1024 ? IOV_MAX / 4 : IOV_MAX);
       Pipe *pipe;
     public:
       explicit Reader(Pipe *p) : pipe(p) {}
-      void *entry() { pipe->reader(); return 0; }
+      void *entry() override { pipe->reader(); return 0; }
     } reader_thread;
 
     /**
@@ -59,14 +59,14 @@ static const int SM_IOV_MAX = (IOV_MAX >= 1024 ? IOV_MAX / 4 : IOV_MAX);
       Pipe *pipe;
     public:
       explicit Writer(Pipe *p) : pipe(p) {}
-      void *entry() { pipe->writer(); return 0; }
+      void *entry() override { pipe->writer(); return 0; }
     } writer_thread;
 
     class DelayedDelivery;
     DelayedDelivery *delay_thread;
   public:
     Pipe(SimpleMessenger *r, int st, PipeConnection *con);
-    ~Pipe();
+    ~Pipe() override;
 
     SimpleMessenger *msgr;
     uint64_t conn_id;
@@ -129,7 +129,7 @@ static const int SM_IOV_MAX = (IOV_MAX >= 1024 ? IOV_MAX / 4 : IOV_MAX);
     
     Mutex pipe_lock;
     int state;
-    atomic_t state_closed; // non-zero iff state = STATE_CLOSED
+    std::atomic<bool> state_closed = { false }; // true iff state = STATE_CLOSED
 
     // session_security handles any signatures or encryptions required for this pipe's msgs. PLR
 

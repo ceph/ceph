@@ -27,7 +27,7 @@ extern "C" {
 
 #define LIBRGW_FILE_VER_MAJOR 1
 #define LIBRGW_FILE_VER_MINOR 1
-#define LIBRGW_FILE_VER_EXTRA 1
+#define LIBRGW_FILE_VER_EXTRA 4
 
 #define LIBRGW_FILE_VERSION(maj, min, extra) ((maj << 16) + (min << 8) + extra)
 #define LIBRGW_FILE_VERSION_CODE LIBRGW_FILE_VERSION(LIBRGW_FILE_VER_MAJOR, LIBRGW_FILE_VER_MINOR, LIBRGW_FILE_VER_EXTRA)
@@ -36,7 +36,8 @@ extern "C" {
  * object types
  */
 enum rgw_fh_type {
-  RGW_FS_TYPE_FILE = 0,
+  RGW_FS_TYPE_NIL = 0,
+  RGW_FS_TYPE_FILE,
   RGW_FS_TYPE_DIRECTORY,
 };
 
@@ -91,6 +92,12 @@ void rgwfile_version(int *major, int *minor, int *extra);
 */
 #define RGW_LOOKUP_FLAG_NONE    0x0000
 #define RGW_LOOKUP_FLAG_CREATE  0x0001
+#define RGW_LOOKUP_FLAG_RCB     0x0002 /* readdir callback hint */
+#define RGW_LOOKUP_FLAG_DIR     0x0004
+#define RGW_LOOKUP_FLAG_FILE    0x0008
+
+#define RGW_LOOKUP_TYPE_FLAGS \
+  (RGW_LOOKUP_FLAG_DIR|RGW_LOOKUP_FLAG_FILE)
 
 int rgw_lookup(struct rgw_fs *rgw_fs,
 	      struct rgw_file_handle *parent_fh, const char *path,
@@ -199,7 +206,8 @@ int rgw_unlink(struct rgw_fs *rgw_fs,
 /*
     read  directory content
 */
-typedef bool (*rgw_readdir_cb)(const char *name, void *arg, uint64_t offset);
+typedef bool (*rgw_readdir_cb)(const char *name, void *arg, uint64_t offset,
+			       uint32_t flags);
 
 #define RGW_READDIR_FLAG_NONE      0x0000
 #define RGW_READDIR_FLAG_DOTDOT    0x0001 /* send dot names */
@@ -208,6 +216,14 @@ int rgw_readdir(struct rgw_fs *rgw_fs,
 		struct rgw_file_handle *parent_fh, uint64_t *offset,
 		rgw_readdir_cb rcb, void *cb_arg, bool *eof,
 		uint32_t flags);
+
+/* project offset of dirent name */
+#define RGW_DIRENT_OFFSET_FLAG_NONE 0x0000
+
+int rgw_dirent_offset(struct rgw_fs *rgw_fs,
+		      struct rgw_file_handle *parent_fh,
+		      const char *name, int64_t *offset,
+		      uint32_t flags);
 
 /*
    get unix attributes for object

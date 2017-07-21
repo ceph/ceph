@@ -35,7 +35,7 @@ bool PaxosService::dispatch(MonOpRequestRef op)
   PaxosServiceMessage *m = static_cast<PaxosServiceMessage*>(op->get_req());
   op->mark_event("psvc:dispatch");
 
-  dout(10) << "dispatch " << m << " " << *m
+  dout(10) << __func__ << " " << m << " " << *m
 	   << " from " << m->get_orig_source_inst()
 	   << " con " << m->get_connection() << dendl;
 
@@ -88,44 +88,51 @@ bool PaxosService::dispatch(MonOpRequestRef op)
   }
 
   // update
-  if (prepare_update(op)) {
-    double delay = 0.0;
-    if (should_propose(delay)) {
-      if (delay == 0.0) {
-	propose_pending();
-      } else {
-	// delay a bit
-	if (!proposal_timer) {
-	  /**
-	   * Callback class used to propose the pending value once the proposal_timer
-	   * fires up.
-	   */
-	  class C_Propose : public Context {
-	    PaxosService *ps;
-	  public:
-	    explicit C_Propose(PaxosService *p) : ps(p) { }
-	    void finish(int r) override {
-	      ps->proposal_timer = 0;
-	      if (r >= 0)
-		ps->propose_pending();
-	      else if (r == -ECANCELED || r == -EAGAIN)
-		return;
-	      else
-		assert(0 == "bad return value for C_Propose");
-	    }
-	  };
+  if (!prepare_update(op)) {
+    // no changes made.
+    return true;
+  }
 
-	  proposal_timer = new C_Propose(this);
-	  dout(10) << " setting proposal_timer " << proposal_timer << " with delay of " << delay << dendl;
-	  mon->timer.add_event_after(delay, proposal_timer);
-	} else { 
-	  dout(10) << " proposal_timer already set" << dendl;
-	}
-      }
-    } else {
-      dout(10) << " not proposing" << dendl;
-    }
-  }     
+  if (need_immediate_propose) {
+    dout(10) << __func__ << " forced immediate propose" << dendl;
+    need_immediate_propose = false;
+    propose_pending();
+    return true;
+  }
+
+  double delay = 0.0;
+  if (!should_propose(delay)) {
+    dout(10) << " not proposing" << dendl;
+    return true;
+  }
+
+  if (delay == 0.0) {
+    propose_pending();
+    return true;
+  }
+
+  // delay a bit
+  if (!proposal_timer) {
+    /**
+       * Callback class used to propose the pending value once the proposal_timer
+       * fires up.
+       */
+    proposal_timer = new C_MonContext(mon, [this](int r) {
+        proposal_timer = 0;
+        if (r >= 0) {
+          propose_pending();
+        } else if (r == -ECANCELED || r == -EAGAIN) {
+          return;
+        } else {
+          assert(0 == "bad return value for proposal_timer");
+        }
+    });
+    dout(10) << " setting proposal_timer " << proposal_timer
+             << " with delay of " << delay << dendl;
+    mon->timer.add_event_after(delay, proposal_timer);
+  } else {
+    dout(10) << " proposal_timer already set" << dendl;
+  }
   return true;
 }
 
@@ -161,9 +168,9 @@ void PaxosService::post_refresh()
 bool PaxosService::should_propose(double& delay)
 {
   // simple default policy: quick startup, then some damping.
-  if (get_last_committed() <= 1)
+  if (get_last_committed() <= 1) {
     delay = 0.0;
-  else {
+  } else {
     utime_t now = ceph_clock_now();
     if ((now - paxos->last_commit_time) > g_conf->paxos_propose_interval)
       delay = (double)g_conf->paxos_min_wait;
@@ -177,7 +184,7 @@ bool PaxosService::should_propose(double& delay)
 
 void PaxosService::propose_pending()
 {
-  dout(10) << "propose_pending" << dendl;
+  dout(10) << __func__ << dendl;
   assert(have_pending);
   assert(!proposing);
   assert(mon->is_leader());
@@ -190,7 +197,7 @@ void PaxosService::propose_pending()
   }
 
   /**
-   * @note What we contirbute to the pending Paxos transaction is
+   * @note What we contribute to the pending Paxos transaction is
    *	   obtained by calling a function that must be implemented by
    *	   the class implementing us.  I.e., the function
    *	   encode_pending will be the one responsible to encode
@@ -255,7 +262,7 @@ bool PaxosService::should_stash_full()
 
 void PaxosService::restart()
 {
-  dout(10) << "restart" << dendl;
+  dout(10) << __func__ << dendl;
   if (proposal_timer) {
     dout(10) << " canceling proposal_timer " << proposal_timer << dendl;
     mon->timer.cancel_event(proposal_timer);
@@ -275,7 +282,7 @@ void PaxosService::restart()
 
 void PaxosService::election_finished()
 {
-  dout(10) << "election_finished" << dendl;
+  dout(10) << __func__ << dendl;
 
   finish_contexts(g_ceph_context, waiting_for_finished_proposal, -EAGAIN);
 
@@ -286,11 +293,11 @@ void PaxosService::election_finished()
 void PaxosService::_active()
 {
   if (is_proposing()) {
-    dout(10) << "_acting - proposing" << dendl;
+    dout(10) << __func__ << " - proposing" << dendl;
     return;
   }
   if (!is_active()) {
-    dout(10) << "_active - not active" << dendl;
+    dout(10) << __func__ << " - not active" << dendl;
     /**
      * Callback used to make sure we call the PaxosService::_active function
      * whenever a condition is fulfilled.
@@ -311,11 +318,11 @@ void PaxosService::_active()
     wait_for_active_ctx(new C_Active(this));
     return;
   }
-  dout(10) << "_active" << dendl;
+  dout(10) << __func__ << dendl;
 
   // create pending state?
   if (mon->is_leader()) {
-    dout(7) << "_active creating new pending" << dendl;
+    dout(7) << __func__ << " creating new pending" << dendl;
     if (!have_pending) {
       create_pending();
       have_pending = true;
@@ -424,3 +431,12 @@ void PaxosService::trim(MonitorDBStore::TransactionRef t,
   }
 }
 
+void PaxosService::load_health()
+{
+  bufferlist bl;
+  mon->store->get("health", service_name, bl);
+  if (bl.length()) {
+    auto p = bl.begin();
+    ::decode(health_checks, p);
+  }
+}

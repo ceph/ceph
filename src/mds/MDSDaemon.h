@@ -40,7 +40,7 @@
 #include "Beacon.h"
 
 
-#define CEPH_MDS_PROTOCOL    28 /* cluster internal */
+#define CEPH_MDS_PROTOCOL    30 /* cluster internal */
 
 class MonClient;
 
@@ -91,7 +91,7 @@ class MDSDaemon : public Dispatcher, public md_config_obs_t {
 
  public:
   MDSDaemon(const std::string &n, Messenger *m, MonClient *mc);
-  ~MDSDaemon();
+  ~MDSDaemon() override;
   int orig_argc;
   const char **orig_argv;
 
@@ -109,9 +109,9 @@ class MDSDaemon : public Dispatcher, public md_config_obs_t {
   bool is_clean_shutdown();
 
   // config observer bits
-  virtual const char** get_tracked_conf_keys() const;
-  virtual void handle_conf_change(const struct md_config_t *conf,
-				  const std::set <std::string> &changed);
+  const char** get_tracked_conf_keys() const override;
+  void handle_conf_change(const struct md_config_t *conf,
+				  const std::set <std::string> &changed) override;
  protected:
   // tick and other timer fun
   class C_MDS_Tick;
@@ -121,16 +121,16 @@ class MDSDaemon : public Dispatcher, public md_config_obs_t {
   void wait_for_omap_osds();
 
  private:
-  bool ms_dispatch(Message *m);
-  bool ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer, bool force_new);
+  bool ms_dispatch(Message *m) override;
+  bool ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer, bool force_new) override;
   bool ms_verify_authorizer(Connection *con, int peer_type,
 			       int protocol, bufferlist& authorizer_data, bufferlist& authorizer_reply,
-			       bool& isvalid, CryptoKey& session_key);
-  void ms_handle_accept(Connection *con);
-  void ms_handle_connect(Connection *con);
-  bool ms_handle_reset(Connection *con);
-  void ms_handle_remote_reset(Connection *con);
-  bool ms_handle_refused(Connection *con);
+			       bool& isvalid, CryptoKey& session_key) override;
+  void ms_handle_accept(Connection *con) override;
+  void ms_handle_connect(Connection *con) override;
+  bool ms_handle_reset(Connection *con) override;
+  void ms_handle_remote_reset(Connection *con) override;
+  bool ms_handle_refused(Connection *con) override;
 
  protected:
   // admin socket handling
@@ -170,7 +170,6 @@ protected:
   friend class C_MDS_Send_Command_Reply;
   static void send_command_reply(MCommand *m, MDSRank* mds_rank, int r,
 				 bufferlist outbl, const std::string& outs);
-  int _handle_command_legacy(std::vector<std::string> args);
   int _handle_command(
       const cmdmap_t &cmdmap,
       MCommand *m,
@@ -178,7 +177,6 @@ protected:
       std::string *outs,
       Context **run_later,
       bool *need_reply);
-  void handle_command(class MMonCommand *m);
   void handle_command(class MCommand *m);
   void handle_mds_map(class MMDSMap *m);
   void _handle_mds_map(MDSMap *oldmap);

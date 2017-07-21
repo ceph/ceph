@@ -30,23 +30,23 @@ public:
   MMgrDigest() : 
     Message(MSG_MGR_DIGEST) {}
 
-  const char *get_type_name() const { return "mgrdigest"; }
-  void print(ostream& out) const {
+  const char *get_type_name() const override { return "mgrdigest"; }
+  void print(ostream& out) const override {
     out << get_type_name();
   }
 
-  void decode_payload() {
+  void decode_payload() override {
     bufferlist::iterator p = payload.begin();
     ::decode(mon_status_json, p);
     ::decode(health_json, p);
   }
-  void encode_payload(uint64_t features) {
+  void encode_payload(uint64_t features) override {
     ::encode(mon_status_json, payload);
     ::encode(health_json, payload);
   }
 
 private:
-  ~MMgrDigest() {}
+  ~MMgrDigest() override {}
 
 };
 

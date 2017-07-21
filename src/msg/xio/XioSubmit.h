@@ -40,6 +40,7 @@ public:
   enum submit_type type;
   bi::list_member_hook<> submit_list;
   XioConnection *xcon;
+  ZTracer::Trace trace;
 
   XioSubmit(enum submit_type _type, XioConnection *_xcon) :
     type(_type), xcon(_xcon)

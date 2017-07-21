@@ -42,6 +42,13 @@ add_executable(unittest_prioritized_queue
 add_ceph_unittest(unittest_prioritized_queue ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_prioritized_queue)
 target_link_libraries(unittest_prioritized_queue global ${BLKID_LIBRARIES})
 
+# unittest_mclock_priority_queue
+add_executable(unittest_mclock_priority_queue EXCLUDE_FROM_ALL
+  test_mclock_priority_queue.cc
+  )
+add_ceph_unittest(unittest_mclock_priority_queue ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_mclock_priority_queue)
+target_link_libraries(unittest_mclock_priority_queue global ${BLKID_LIBRARIES} dmclock)
+
 # unittest_str_map
 add_executable(unittest_str_map
   test_str_map.cc
@@ -120,6 +127,7 @@ target_link_libraries(unittest_crc32c global)
 # unittest_config
 add_executable(unittest_config
   test_config.cc
+  test_hostname.cc
   )
 add_ceph_unittest(unittest_config ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_config)
 target_link_libraries(unittest_config global)
@@ -137,6 +145,13 @@ add_executable(unittest_safe_io
   )
 add_ceph_unittest(unittest_safe_io ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_safe_io)
 target_link_libraries(unittest_safe_io global)
+
+# unittest_url_escape
+add_executable(unittest_url_escape
+  test_url_escape.cc
+  )
+add_ceph_unittest(unittest_url_escape ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_url_escape)
+target_link_libraries(unittest_url_escape ceph-common)
 
 # unittest_readahead
 add_executable(unittest_readahead
@@ -201,6 +216,13 @@ add_executable(unittest_mutex_debug
 add_ceph_unittest(unittest_mutex_debug ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_mutex_debug)
 target_link_libraries(unittest_mutex_debug global ${BLKID_LIBRARIES} ${EXTRALIBS})
 
+# unittest_mutex
+add_executable(unittest_mutex
+  test_mutex.cc
+  )
+add_ceph_unittest(unittest_mutex ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_mutex)
+target_link_libraries(unittest_mutex global ${BLKID_LIBRARIES} ${EXTRALIBS})
+
 # unittest_shunique_lock
 add_executable(unittest_shunique_lock
   test_shunique_lock.cc
@@ -238,3 +260,15 @@ set_source_files_properties(test_back_trace.cc PROPERTIES
 target_link_libraries(unittest_back_trace ceph-common)
 add_ceph_unittest(unittest_back_trace
   ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_back_trace)
+
+add_executable(unittest_hostname
+    test_hostname.cc)
+target_link_libraries(unittest_hostname ceph-common)
+add_ceph_unittest(unittest_hostname
+  ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_hostname)
+
+add_executable(unittest_iso_8601
+    test_iso_8601.cc)
+target_link_libraries(unittest_iso_8601 ceph-common)
+add_ceph_unittest(unittest_iso_8601
+  ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_hostname)

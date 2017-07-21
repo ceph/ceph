@@ -5,6 +5,9 @@
 
 #include "common/errno.h"
 #include "os/ObjectStore.h"
+#if defined(HAVE_LIBAIO)
+#include "os/bluestore/BlueStore.h"
+#endif
 #include "store_test_fixture.h"
 
 static void rm_r(const string& path) {
@@ -39,6 +42,13 @@ void StoreTestFixture::SetUp() {
     cerr << __func__ << ": objectstore type " << type << " doesn't exist yet!" << std::endl;
   }
   ASSERT_TRUE(store);
+#if defined(HAVE_LIBAIO)
+  if (type == "bluestore") {
+    BlueStore *s = static_cast<BlueStore*>(store.get());
+    // better test coverage!
+    s->set_cache_shards(5);
+  }
+#endif
   ASSERT_EQ(0, store->mkfs());
   ASSERT_EQ(0, store->mount());
 }

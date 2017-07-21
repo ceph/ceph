@@ -8,6 +8,7 @@ install(FILES rados/librados.h
   memory.h
   page.h
   crc32c.h
+  rados/objclass.h
   DESTINATION include/rados)
 install(FILES
   radosstriper/libradosstriper.h

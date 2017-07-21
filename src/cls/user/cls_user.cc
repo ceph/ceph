@@ -1,17 +1,11 @@
 // -*- mode:C; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
-#include <iostream>
-
-#include <string.h>
-#include <stdlib.h>
 #include <errno.h>
 
-#include "include/types.h"
 #include "include/utime.h"
 #include "objclass/objclass.h"
 
-#include "cls_user_types.h"
 #include "cls_user_ops.h"
 
 CLS_VER(1,0)
@@ -163,7 +157,13 @@ static int cls_user_set_buckets_info(cls_method_context_t hctx, bufferlist *in, 
     CLS_LOG(20, "storing entry for key=%s size=%lld count=%lld",
             key.c_str(), (long long)update_entry.size, (long long)update_entry.count);
 
-    apply_entry_stats(update_entry, &entry);
+    // sync entry stats when not an op.add, as when the case is op.add if its a
+    // new entry we already have copied update_entry earlier, OTOH, for an existing entry
+    // we end up clobbering the existing stats for the bucket
+    if (!op.add){
+      apply_entry_stats(update_entry, &entry);
+    }
+
     entry.user_stats_sync = true;
 
     ret = write_entry(hctx, key, entry);

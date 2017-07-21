@@ -3,8 +3,6 @@
 
 #include <errno.h>
 
-#include "include/types.h"
-#include "cls/user/cls_user_ops.h"
 #include "cls/user/cls_user_client.h"
 #include "include/rados/librados.hpp"
 
@@ -97,7 +95,7 @@ class ClsUserGetHeaderCtx : public ObjectOperationCompletion {
   int *pret;
 public:
   ClsUserGetHeaderCtx(cls_user_header *_h, RGWGetUserHeader_CB *_ctx, int *_pret) : header(_h), ret_ctx(_ctx), pret(_pret) {}
-  ~ClsUserGetHeaderCtx() {
+  ~ClsUserGetHeaderCtx() override {
     if (ret_ctx) {
       ret_ctx->put();
     }

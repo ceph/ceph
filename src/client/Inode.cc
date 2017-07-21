@@ -5,6 +5,7 @@
 #include "Inode.h"
 #include "Dentry.h"
 #include "Dir.h"
+#include "Fh.h"
 #include "MetaSession.h"
 #include "ClientSnapRealm.h"
 
@@ -370,16 +371,16 @@ void Inode::dump(Formatter *f) const
   f->dump_stream("mode") << '0' << std::oct << mode << std::dec;
   f->dump_unsigned("uid", uid);
   f->dump_unsigned("gid", gid);
-  f->dump_unsigned("nlink", nlink);
+  f->dump_int("nlink", nlink);
 
-  f->dump_int("size", size);
-  f->dump_int("max_size", max_size);
-  f->dump_int("truncate_seq", truncate_seq);
-  f->dump_int("truncate_size", truncate_size);
+  f->dump_unsigned("size", size);
+  f->dump_unsigned("max_size", max_size);
+  f->dump_unsigned("truncate_seq", truncate_seq);
+  f->dump_unsigned("truncate_size", truncate_size);
   f->dump_stream("mtime") << mtime;
   f->dump_stream("atime") << atime;
-  f->dump_int("time_warp_seq", time_warp_seq);
-  f->dump_int("change_attr", change_attr);
+  f->dump_unsigned("time_warp_seq", time_warp_seq);
+  f->dump_unsigned("change_attr", change_attr);
 
   f->dump_object("layout", layout);
   if (is_dir()) {
@@ -469,8 +470,8 @@ void Inode::dump(Formatter *f) const
     f->open_array_section("open_by_mode");
     for (map<int,int>::const_iterator p = open_by_mode.begin(); p != open_by_mode.end(); ++p) {
       f->open_object_section("ref");
-      f->dump_unsigned("mode", p->first);
-      f->dump_unsigned("refs", p->second);
+      f->dump_int("mode", p->first);
+      f->dump_int("refs", p->second);
       f->close_section();
     }
     f->close_section();
@@ -546,3 +547,11 @@ void CapSnap::dump(Formatter *f) const
   f->dump_int("dirty_data", (int)dirty_data);
   f->dump_unsigned("flush_tid", flush_tid);
 }
+
+void Inode::set_async_err(int r)
+{
+  for (const auto &fh : fhs) {
+    fh->async_err = r;
+  }
+}
+

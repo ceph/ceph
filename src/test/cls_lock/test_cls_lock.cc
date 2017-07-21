@@ -42,11 +42,13 @@ void lock_info(IoCtx *ioctx, string& oid, string& name, map<locker_id_t, locker_
   cout << "  tag: " << tag << std::endl;
   cout << "  lockers:" << std::endl;
 
-  if (assert_type)
+  if (assert_type) {
     ASSERT_EQ(*assert_type, lock_type);
+  }
 
-  if (assert_tag)
+  if (assert_tag) {
     ASSERT_EQ(*assert_tag, tag);
+  }
 
   map<locker_id_t, locker_info_t>::iterator liter;
   for (liter = lockers.begin(); liter != lockers.end(); ++liter) {

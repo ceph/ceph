@@ -32,18 +32,19 @@ public:
   explicit CompressionPluginZlib(CephContext *cct) : CompressionPlugin(cct)
   {}
 
-  virtual int factory(CompressorRef *cs,
-                      std::ostream *ss)
+  int factory(CompressorRef *cs,
+                      std::ostream *ss) override
   {
-    bool isal;
+    bool isal = false;
+#if defined(__i386__) || defined(__x86_64__)
+    // other arches or lack of support result in isal = false
     if (cct->_conf->compressor_zlib_isal) {
       ceph_arch_probe();
       isal = (ceph_arch_intel_pclmul && ceph_arch_intel_sse41);
-    } else {
-      isal = false;
     }
+#endif
     if (compressor == 0 || has_isal != isal) {
-      compressor = std::make_shared<ZlibCompressor>(isal);
+      compressor = std::make_shared<ZlibCompressor>(cct, isal);
       has_isal = isal;
     }
     *cs = compressor;

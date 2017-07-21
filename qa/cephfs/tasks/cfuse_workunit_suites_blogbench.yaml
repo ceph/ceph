@@ -1,4 +1,8 @@
 tasks:
+- check-counter:
+    counters:
+      mds:
+        - "mds.dir_split"
 - workunit:
     clients:
       all:

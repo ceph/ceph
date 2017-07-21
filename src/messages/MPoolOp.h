@@ -49,11 +49,11 @@ public:
   }
 
 private:
-  ~MPoolOp() {}
+  ~MPoolOp() override {}
 
 public:
-  const char *get_type_name() const { return "poolop"; }
-  void print(ostream& out) const {
+  const char *get_type_name() const override { return "poolop"; }
+  void print(ostream& out) const override {
     out << "pool_op(" << ceph_pool_op_name(op) << " pool " << pool
 	<< " auid " << auid
 	<< " tid " << get_tid()
@@ -61,7 +61,7 @@ public:
 	<< " v" << version << ")";
   }
 
-  void encode_payload(uint64_t features) {
+  void encode_payload(uint64_t features) override {
     paxos_encode();
     ::encode(fsid, payload);
     ::encode(pool, payload);
@@ -73,7 +73,7 @@ public:
     ::encode(pad, payload);  /* for v3->v4 encoding change */
     ::encode(crush_rule, payload);
   }
-  void decode_payload() {
+  void decode_payload() override {
     bufferlist::iterator p = payload.begin();
     paxos_decode(p);
     ::decode(fsid, p);

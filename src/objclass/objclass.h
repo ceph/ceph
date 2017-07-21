@@ -10,6 +10,7 @@
 #include "msg/msg_types.h"
 #include "common/hobject.h"
 #include "common/ceph_time.h"
+#include "include/rados/objclass.h"
 
 struct obj_list_watch_response_t;
 
@@ -22,40 +23,9 @@ struct obj_list_watch_response_t;
 extern "C" {
 #endif
 
-#ifndef BUILDING_FOR_EMBEDDED
-#define CLS_VER(maj,min) \
-int __cls_ver__## maj ## _ ##min = 0; \
-int __cls_ver_maj = maj; \
-int __cls_ver_min = min;
-
-#define CLS_NAME(name) \
-int __cls_name__## name = 0; \
-const char *__cls_name = #name;
-#define CLS_INIT(name) \
-void CEPH_CLS_API __cls_init()
-#else
-#define CLS_VER(maj,min)
-#define CLS_NAME(name)
-#define CLS_INIT(name) \
-void CEPH_CLS_API name##_cls_init()
-#endif
-
-#define CLS_METHOD_RD       0x1 /// method executes read operations
-#define CLS_METHOD_WR       0x2 /// method executes write operations
 #define CLS_METHOD_PUBLIC   0x4 /// unused
-#define CLS_METHOD_PROMOTE  0x8 /// method cannot be proxied to base tier
 
-
-#define CLS_LOG(level, fmt, ...)					\
-  cls_log(level, "<cls> %s:%d: " fmt, __FILE__, __LINE__, ##__VA_ARGS__)
-#define CLS_ERR(fmt, ...) CLS_LOG(0, fmt, ##__VA_ARGS__)
-
-void __cls_init();
-
-typedef void *cls_handle_t;
-typedef void *cls_method_handle_t;
 typedef void *cls_filter_handle_t;
-typedef void *cls_method_context_t;
 typedef int (*cls_method_call_t)(cls_method_context_t ctx,
 				 char *indata, int datalen,
 				 char **outdata, int *outdatalen);
@@ -65,8 +35,6 @@ typedef struct {
 } cls_deps_t;
 
 /* class utils */
-extern int cls_log(int level, const char *format, ...)
-  __attribute__((__format__(printf, 2, 3)));
 extern void *cls_alloc(size_t size);
 extern void cls_free(void *p);
 
@@ -85,7 +53,6 @@ extern int cls_get_request_origin(cls_method_context_t hctx,
                                   entity_inst_t *origin);
 
 /* class registration api */
-extern int cls_register(const char *name, cls_handle_t *handle);
 extern int cls_unregister(cls_handle_t);
 
 extern int cls_register_method(cls_handle_t hclass, const char *method, int flags,
@@ -112,9 +79,6 @@ extern void class_fini(void);
 
 #ifdef __cplusplus
 }
-
-typedef int (*cls_method_cxx_call_t)(cls_method_context_t ctx,
-				     class buffer::list *inbl, class buffer::list *outbl);
 
 class PGLSFilter {
   CephContext* cct;
@@ -150,30 +114,18 @@ public:
 typedef PGLSFilter* (*cls_cxx_filter_factory_t)();
 
 
-extern int cls_register_cxx_method(cls_handle_t hclass, const char *method, int flags,
-				   cls_method_cxx_call_t class_call, cls_method_handle_t *handle);
-
 extern int cls_register_cxx_filter(cls_handle_t hclass,
                                    const std::string &filter_name,
 				   cls_cxx_filter_factory_t fn,
                                    cls_filter_handle_t *handle=NULL);
 
-extern int cls_cxx_create(cls_method_context_t hctx, bool exclusive);
-extern int cls_cxx_remove(cls_method_context_t hctx);
-extern int cls_cxx_stat(cls_method_context_t hctx, uint64_t *size, time_t *mtime);
 extern int cls_cxx_stat2(cls_method_context_t hctx, uint64_t *size, ceph::real_time *mtime);
-extern int cls_cxx_read(cls_method_context_t hctx, int ofs, int len, bufferlist *bl);
 extern int cls_cxx_read2(cls_method_context_t hctx, int ofs, int len,
                          bufferlist *bl, uint32_t op_flags);
-extern int cls_cxx_write(cls_method_context_t hctx, int ofs, int len, bufferlist *bl);
 extern int cls_cxx_write2(cls_method_context_t hctx, int ofs, int len,
                           bufferlist *bl, uint32_t op_flags);
 extern int cls_cxx_write_full(cls_method_context_t hctx, bufferlist *bl);
-extern int cls_cxx_getxattr(cls_method_context_t hctx, const char *name,
-                            bufferlist *outbl);
 extern int cls_cxx_getxattrs(cls_method_context_t hctx, map<string, bufferlist> *attrset);
-extern int cls_cxx_setxattr(cls_method_context_t hctx, const char *name,
-                            bufferlist *inbl);
 extern int cls_cxx_replace(cls_method_context_t hctx, int ofs, int len, bufferlist *bl);
 extern int cls_cxx_snap_revert(cls_method_context_t hctx, snapid_t snapid);
 extern int cls_cxx_map_clear(cls_method_context_t hctx);
@@ -189,10 +141,6 @@ extern int cls_cxx_map_get_vals(cls_method_context_t hctx,
                                 uint64_t max_to_get,
                                 std::map<string, bufferlist> *vals);
 extern int cls_cxx_map_read_header(cls_method_context_t hctx, bufferlist *outbl);
-extern int cls_cxx_map_get_val(cls_method_context_t hctx,
-                               const string &key, bufferlist *outbl);
-extern int cls_cxx_map_set_val(cls_method_context_t hctx,
-                               const string &key, bufferlist *inbl);
 extern int cls_cxx_map_set_vals(cls_method_context_t hctx,
                                 const std::map<string, bufferlist> *map);
 extern int cls_cxx_map_write_header(cls_method_context_t hctx, bufferlist *inbl);

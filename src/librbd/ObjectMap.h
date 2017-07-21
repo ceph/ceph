@@ -13,9 +13,8 @@
 
 class Context;
 class RWLock;
-namespace librados {
-  class IoCtx;
-}
+namespace librados { class IoCtx; }
+namespace ZTracer { struct Trace; }
 
 namespace librbd {
 
@@ -33,7 +32,7 @@ public:
   ObjectMap(ImageCtxT &image_ctx, uint64_t snap_id);
   ~ObjectMap();
 
-  static int remove(librados::IoCtx &io_ctx, const std::string &image_id);
+  static int aio_remove(librados::IoCtx &io_ctx, const std::string &image_id, librados::AioCompletion *c);
   static std::string object_map_name(const std::string &image_id,
 				     uint64_t snap_id);
 
@@ -57,16 +56,17 @@ public:
   template <typename T, void(T::*MF)(int) = &T::complete>
   bool aio_update(uint64_t snap_id, uint64_t start_object_no, uint8_t new_state,
                   const boost::optional<uint8_t> &current_state,
-                  T *callback_object) {
+                  const ZTracer::Trace &parent_trace, T *callback_object) {
     return aio_update<T, MF>(snap_id, start_object_no, start_object_no + 1,
-                             new_state, current_state, callback_object);
+                             new_state, current_state, parent_trace,
+                             callback_object);
   }
 
   template <typename T, void(T::*MF)(int) = &T::complete>
   bool aio_update(uint64_t snap_id, uint64_t start_object_no,
                   uint64_t end_object_no, uint8_t new_state,
                   const boost::optional<uint8_t> &current_state,
-                  T *callback_object) {
+                  const ZTracer::Trace &parent_trace, T *callback_object) {
     assert(start_object_no < end_object_no);
     if (snap_id == CEPH_NOSNAP) {
       uint64_t object_no;
@@ -82,13 +82,13 @@ public:
       }
 
       UpdateOperation update_operation(start_object_no, end_object_no,
-                                       new_state, current_state,
+                                       new_state, current_state, parent_trace,
                                        util::create_context_callback<T, MF>(
                                          callback_object));
       detained_aio_update(std::move(update_operation));
     } else {
       aio_update(snap_id, start_object_no, end_object_no, new_state,
-                 current_state,
+                 current_state, parent_trace,
                  util::create_context_callback<T, MF>(callback_object));
     }
     return true;
@@ -104,15 +104,16 @@ private:
     uint64_t end_object_no;
     uint8_t new_state;
     boost::optional<uint8_t> current_state;
+    ZTracer::Trace parent_trace;
     Context *on_finish;
 
     UpdateOperation(uint64_t start_object_no, uint64_t end_object_no,
                     uint8_t new_state,
                     const boost::optional<uint8_t> &current_state,
-                    Context *on_finish)
+                    const ZTracer::Trace &parent_trace, Context *on_finish)
       : start_object_no(start_object_no), end_object_no(end_object_no),
         new_state(new_state), current_state(current_state),
-        on_finish(on_finish) {
+        parent_trace(parent_trace), on_finish(on_finish) {
     }
   };
 
@@ -131,7 +132,7 @@ private:
   void aio_update(uint64_t snap_id, uint64_t start_object_no,
                   uint64_t end_object_no, uint8_t new_state,
                   const boost::optional<uint8_t> &current_state,
-                  Context *on_finish);
+                  const ZTracer::Trace &parent_trace, Context *on_finish);
   bool update_required(uint64_t object_no, uint8_t new_state);
 
 };

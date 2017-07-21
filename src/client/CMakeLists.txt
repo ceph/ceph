@@ -1,6 +1,7 @@
 set(libclient_srcs
   Client.cc
   Dentry.cc
+  Fh.cc
   Inode.cc
   MetaRequest.cc
   ClientSnapRealm.cc

@@ -10,7 +10,8 @@
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
-#define dout_prefix *_dout << "librbd::io::ReadResult: "
+#define dout_prefix *_dout << "librbd::io::ReadResult: " << this \
+                           << " " << __func__ << ": "
 
 namespace librbd {
 namespace io {
@@ -89,7 +90,7 @@ void ReadResult::C_ReadRequest::finish(int r) {
 
 void ReadResult::C_ImageReadRequest::finish(int r) {
   CephContext *cct = aio_completion->ictx->cct;
-  ldout(cct, 10) << "C_ImageReadRequest::finish() " << this << ": r=" << r
+  ldout(cct, 10) << "C_ImageReadRequest: r=" << r
                  << dendl;
   if (r >= 0) {
     size_t length = 0;
@@ -114,7 +115,7 @@ void ReadResult::C_SparseReadRequestBase::finish(ExtentMap &extent_map,
                                                  bufferlist &bl, int r) {
   aio_completion->lock.Lock();
   CephContext *cct = aio_completion->ictx->cct;
-  ldout(cct, 10) << "C_SparseReadRequest::finish() " << this << " r = " << r
+  ldout(cct, 10) << "C_SparseReadRequestBase: r = " << r
                  << dendl;
 
   if (r >= 0 || r == -ENOENT) { // this was a sparse_read operation

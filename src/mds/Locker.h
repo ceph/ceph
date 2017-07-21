@@ -80,6 +80,7 @@ public:
 		     CInode *auth_pin_freeze=NULL,
 		     bool auth_pin_nonblock=false);
 
+  void notify_freeze_waiter(MDSCacheObject *o);
   void cancel_locking(MutationImpl *mut, set<CInode*> *pneed_issue);
   void drop_locks(MutationImpl *mut, set<CInode*> *pneed_issue=0);
   void set_xlocks_done(MutationImpl *mut, bool skip_dentry=false);
@@ -192,7 +193,7 @@ public:
   void handle_client_caps(class MClientCaps *m);
   void _update_cap_fields(CInode *in, int dirty, MClientCaps *m, inode_t *pi);
   void _do_snap_update(CInode *in, snapid_t snap, int dirty, snapid_t follows, client_t client, MClientCaps *m, MClientCaps *ack);
-  void _do_null_snapflush(CInode *head_in, client_t client);
+  void _do_null_snapflush(CInode *head_in, client_t client, snapid_t last=CEPH_NOSNAP);
   bool _do_cap_update(CInode *in, Capability *cap, int dirty, snapid_t follows, MClientCaps *m,
 		      MClientCaps *ack=0, bool *need_flush=NULL);
   void handle_client_cap_release(class MClientCapRelease *m);
@@ -248,8 +249,10 @@ public:
 protected:
   void handle_inode_file_caps(class MInodeFileCaps *m);
 
-  void file_update_finish(CInode *in, MutationRef& mut, bool share, client_t client, Capability *cap,
-			  MClientCaps *ack);
+  void file_update_finish(CInode *in, MutationRef& mut, bool share_max, bool issue_client_cap,
+			  client_t client, MClientCaps *ack);
+private:
+  uint64_t calc_new_max_size(inode_t *pi, uint64_t size);
 public:
   void calc_new_client_ranges(CInode *in, uint64_t size,
 			      map<client_t, client_writeable_range_t>* new_ranges,

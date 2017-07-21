@@ -42,6 +42,38 @@ creation of multiple filesystems use ``ceph fs flag set enable_multiple true``.
     fs rm_data_pool <filesystem name> <pool name/id>
 
 
+Settings
+--------
+
+::
+
+    fs set <fs name> max_file_size <size in bytes>
+
+CephFS has a configurable maximum file size, and it's 1TB by default.
+You may wish to set this limit higher if you expect to store large files
+in CephFS. It is a 64-bit field.
+
+Setting ``max_file_size`` to 0 does not disable the limit. It would
+simply limit clients to only creating empty files.
+
+
+Maximum file sizes and performance
+----------------------------------
+
+CephFS enforces the maximum file size limit at the point of appending to
+files or setting their size. It does not affect how anything is stored.
+
+When users create a file of an enormous size (without necessarily
+writing any data to it), some operations (such as deletes) cause the MDS
+to have to do a large number of operations to check if any of the RADOS
+objects within the range that could exist (according to the file size)
+really existed.
+
+The ``max_file_size`` setting prevents users from creating files that
+appear to be eg. exabytes in size, causing load on the MDS as it tries
+to enumerate the objects during operations like stats or deletes.
+
+
 Daemons
 -------
 
@@ -49,16 +81,28 @@ These commands act on specific mds daemons or ranks.
 
 ::
 
-    mds fail <gid/name/role
+    mds fail <gid/name/role>
 
-This command deactivates an MDS causing it to flush its entire journal to
-backing RADOS objects and close all open client sessions. Deactivating an MDS
-is primarily intended for bringing down a rank after reducing the number of
-active MDS (max_mds).
+Mark an MDS daemon as failed.  This is equivalent to what the cluster
+would do if an MDS daemon had failed to send a message to the mon
+for ``mds_beacon_grace`` second.  If the daemon was active and a suitable
+standby is available, using ``mds fail`` will force a failover to the standby.
+
+If the MDS daemon was in reality still running, then using ``mds fail``
+will cause the daemon to restart.  If it was active and a standby was
+available, then the "failed" daemon will return as a standby.
 
 ::
 
     mds deactivate <role>
+
+Deactivate an MDS, causing it to flush its entire journal to
+backing RADOS objects and close all open client sessions. Deactivating an MDS
+is primarily intended for bringing down a rank after reducing the number of
+active MDS (max_mds).
+
+Use ``mds deactivate`` in conjunction with adjustments to ``max_mds`` to
+shrink an MDS cluster.  See :doc:`/cephfs/multimds`
 
 ::
 
@@ -73,7 +117,6 @@ active MDS (max_mds).
     mds repaired <role>
 
 
-
 Global settings
 ---------------
 
@@ -85,11 +128,12 @@ Global settings
 
     fs flag set <flag name> <flag val> [<confirmation string>]
 
-    flag name must be one of ['enable_multiple']
+"flag name" must be one of ['enable_multiple']
 
-    some flags require you to confirm your intentions with "--yes-i-really-mean-it"
-    or a similar string they will prompt you with. Consider these actions carefully
-    before proceeding; they are placed on especially dangerous activities.
+Some flags require you to confirm your intentions with "--yes-i-really-mean-it"
+or a similar string they will prompt you with. Consider these actions carefully
+before proceeding; they are placed on especially dangerous activities.
+
 
 Advanced
 --------
@@ -125,6 +169,11 @@ filesystem.
 
 Legacy
 ------
+
+The ``ceph mds set`` command is the deprecated version of ``ceph fs set``,
+from before there was more than one filesystem per cluster. It operates
+on whichever filesystem is marked as the default (see ``ceph fs
+set-default``.)
 
 ::
 

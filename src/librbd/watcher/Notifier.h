@@ -16,6 +16,8 @@ namespace librbd {
 
 namespace watcher {
 
+struct NotifyResponse;
+
 class Notifier {
 public:
   static const uint64_t NOTIFY_TIMEOUT;
@@ -25,25 +27,25 @@ public:
   ~Notifier();
 
   void flush(Context *on_finish);
-  void notify(bufferlist &bl, bufferlist *out_bl, Context *on_finish);
+  void notify(bufferlist &bl, NotifyResponse *response, Context *on_finish);
 
 private:
   typedef std::list<Context*> Contexts;
 
   struct C_AioNotify : public Context {
     Notifier *notifier;
+    NotifyResponse *response;
     Context *on_finish;
+    bufferlist out_bl;
 
-    C_AioNotify(Notifier *notifier, Context *on_finish)
-      : notifier(notifier), on_finish(on_finish) {
-    }
-    void finish(int r) override {
-      notifier->handle_notify(r, on_finish);
-    }
+    C_AioNotify(Notifier *notifier, NotifyResponse *response,
+                Context *on_finish);
+
+    void finish(int r) override;
   };
 
   ContextWQ *m_work_queue;
-  librados::IoCtx m_ioctx;
+  librados::IoCtx &m_ioctx;
   CephContext *m_cct;
   std::string m_oid;
 

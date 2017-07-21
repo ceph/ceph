@@ -37,9 +37,17 @@ static ostream& _prefix(std::ostream *_dout, Monitor *mon) {
 
 void MonmapMonitor::create_initial()
 {
-  dout(10) << "create_initial using current monmap" << dendl;
+  dout(10) << __func__ << " using current monmap" << dendl;
   pending_map = *mon->monmap;
   pending_map.epoch = 1;
+
+  if (g_conf->mon_debug_no_initial_persistent_features) {
+    derr << __func__ << " mon_debug_no_initial_persistent_features=true"
+	 << dendl;
+  } else {
+    // initialize with default persistent features for new clusters
+    pending_map.persistent_features = ceph::features::mon::get_persistent();
+  }
 }
 
 void MonmapMonitor::update_from_paxos(bool *need_bootstrap)
@@ -62,7 +70,7 @@ void MonmapMonitor::update_from_paxos(bool *need_bootstrap)
   assert(ret == 0);
   assert(monmap_bl.length());
 
-  dout(10) << "update_from_paxos got " << version << dendl;
+  dout(10) << __func__ << " got " << version << dendl;
   mon->monmap->decode(monmap_bl);
 
   if (mon->store->exists("mkfs", "monmap")) {
@@ -79,12 +87,12 @@ void MonmapMonitor::create_pending()
   pending_map = *mon->monmap;
   pending_map.epoch++;
   pending_map.last_changed = ceph_clock_now();
-  dout(10) << "create_pending monmap epoch " << pending_map.epoch << dendl;
+  dout(10) << __func__ << " monmap epoch " << pending_map.epoch << dendl;
 }
 
 void MonmapMonitor::encode_pending(MonitorDBStore::TransactionRef t)
 {
-  dout(10) << "encode_pending epoch " << pending_map.epoch << dendl;
+  dout(10) << __func__ << " epoch " << pending_map.epoch << dendl;
 
   assert(mon->monmap->epoch + 1 == pending_map.epoch ||
 	 pending_map.epoch == 1);  // special case mkfs!
@@ -129,6 +137,9 @@ void MonmapMonitor::apply_mon_features(const mon_feature_t& features)
 
   assert(is_writeable());
   assert(features.contains_all(pending_map.persistent_features));
+  // we should never hit this because `features` should be the result
+  // of the quorum's supported features. But if it happens, die.
+  assert(ceph::features::mon::get_supported().contains_all(features));
 
   mon_feature_t new_features =
     (pending_map.persistent_features ^
@@ -137,6 +148,16 @@ void MonmapMonitor::apply_mon_features(const mon_feature_t& features)
   if (new_features.empty()) {
     dout(10) << __func__ << " features match current pending: "
              << features << dendl;
+    return;
+  }
+
+  if (mon->get_quorum().size() < mon->monmap->size()) {
+    dout(1) << __func__ << " new features " << new_features
+      << " contains features that require a full quorum"
+      << " (quorum size is " << mon->get_quorum().size()
+      << ", requires " << mon->monmap->size() << "): "
+      << new_features
+      << " -- do not enable them!" << dendl;
     return;
   }
 
@@ -168,7 +189,7 @@ void MonmapMonitor::on_active()
   }
 
   if (mon->is_leader())
-    mon->clog->info() << "monmap " << *mon->monmap << "\n";
+    mon->clog->info() << "monmap " << *mon->monmap;
 
   apply_mon_features(mon->get_quorum_mon_features());
 }
@@ -224,10 +245,15 @@ bool MonmapMonitor::preprocess_command(MonOpRequestRef op)
     return true;
   }
 
+  string format;
+  cmd_getval(g_ceph_context, cmdmap, "format", format, string("plain"));
+  boost::scoped_ptr<Formatter> f(Formatter::create(format));
+
   if (prefix == "mon stat") {
     mon->monmap->print_summary(ss);
-    ss << ", election epoch " << mon->get_epoch() << ", quorum " << mon->get_quorum()
-       << " " << mon->get_quorum_names();
+    ss << ", election epoch " << mon->get_epoch() << ", leader "
+       << mon->get_leader() << " " << mon->get_leader_name()
+       << ", quorum " << mon->get_quorum() << " " << mon->get_quorum_names();
     rdata.append(ss);
     ss.str("");
     r = 0;
@@ -261,10 +287,7 @@ bool MonmapMonitor::preprocess_command(MonOpRequestRef op)
       r = 0;
       ss << "got monmap epoch " << p->get_epoch();
     } else if (prefix == "mon dump") {
-      string format;
-      cmd_getval(g_ceph_context, cmdmap, "format", format, string("plain"));
       stringstream ds;
-      boost::scoped_ptr<Formatter> f(Formatter::create(format));
       if (f) {
         f->open_object_section("monmap");
         p->dump(f.get());
@@ -286,6 +309,78 @@ bool MonmapMonitor::preprocess_command(MonOpRequestRef op)
     }
     if (p != mon->monmap)
        delete p;
+
+  } else if (prefix == "mon feature ls") {
+   
+    bool list_with_value = false;
+    string with_value;
+    if (cmd_getval(g_ceph_context, cmdmap, "with_value", with_value) &&
+        with_value == "--with-value") {
+      list_with_value = true;
+    }
+
+    MonMap *p = mon->monmap;
+
+    // list features
+    mon_feature_t supported = ceph::features::mon::get_supported();
+    mon_feature_t persistent = ceph::features::mon::get_persistent();
+    mon_feature_t required = p->get_required_features();
+
+    stringstream ds;
+    auto print_feature = [&](mon_feature_t& m_features, const char* m_str) {
+      if (f) {
+        if (list_with_value)
+          m_features.dump_with_value(f.get(), m_str);
+        else
+          m_features.dump(f.get(), m_str);
+      } else {
+        if (list_with_value)
+          m_features.print_with_value(ds);
+        else
+          m_features.print(ds);
+      }
+    };
+
+    if (f) {
+      f->open_object_section("features");
+
+      f->open_object_section("all");
+      print_feature(supported, "supported");
+      print_feature(persistent, "persistent");
+      f->close_section(); // all
+
+      f->open_object_section("monmap");
+      print_feature(p->persistent_features, "persistent");
+      print_feature(p->optional_features, "optional");
+      print_feature(required, "required");
+      f->close_section(); // monmap 
+
+      f->close_section(); // features
+      f->flush(ds);
+
+    } else {
+      ds << "all features" << std::endl
+        << "\tsupported: ";
+      print_feature(supported, nullptr);
+      ds << std::endl
+        << "\tpersistent: ";
+      print_feature(persistent, nullptr);
+      ds << std::endl
+        << std::endl;
+
+      ds << "on current monmap (epoch "
+         << p->get_epoch() << ")" << std::endl
+         << "\tpersistent: ";
+      print_feature(p->persistent_features, nullptr);
+      ds << std::endl
+        // omit optional features in plain-text
+        // makes it easier to read, and they're, currently, empty.
+	 << "\trequired: ";
+      print_feature(required, nullptr);
+      ds << std::endl;
+    }
+    rdata.append(ds);
+    r = 0;
   }
 
 reply:
@@ -303,7 +398,7 @@ reply:
 bool MonmapMonitor::prepare_update(MonOpRequestRef op)
 {
   PaxosServiceMessage *m = static_cast<PaxosServiceMessage*>(op->get_req());
-  dout(7) << "prepare_update " << *m << " from " << m->get_orig_source_inst() << dendl;
+  dout(7) << __func__ << " " << *m << " from " << m->get_orig_source_inst() << dendl;
   
   switch (m->get_type()) {
   case MSG_MON_COMMAND:
@@ -513,6 +608,72 @@ bool MonmapMonitor::prepare_command(MonOpRequestRef op)
     propose = true;
     err = 0;
 
+  } else if (prefix == "mon feature set") {
+
+    /* PLEASE NOTE:
+     *
+     * We currently only support setting/unsetting persistent features.
+     * This is by design, given at the moment we still don't have optional
+     * features, and, as such, there is no point introducing an interface
+     * to manipulate them. This allows us to provide a cleaner, more
+     * intuitive interface to the user, modifying solely persistent
+     * features.
+     *
+     * In the future we should consider adding another interface to handle
+     * optional features/flags; e.g., 'mon feature flag set/unset', or
+     * 'mon flag set/unset'.
+     */
+    string feature_name;
+    if (!cmd_getval(g_ceph_context, cmdmap, "feature_name", feature_name)) {
+      ss << "missing required feature name";
+      err = -EINVAL;
+      goto reply;
+    }
+
+    mon_feature_t feature;
+    feature = ceph::features::mon::get_feature_by_name(feature_name);
+    if (feature == ceph::features::mon::FEATURE_NONE) {
+      ss << "unknown feature '" << feature_name << "'";
+      err = -ENOENT;
+      goto reply;
+    }
+
+    string sure;
+    if (!cmd_getval(g_ceph_context, cmdmap, "sure", sure) ||
+        sure != "--yes-i-really-mean-it") {
+      ss << "please specify '--yes-i-really-mean-it' if you "
+         << "really, **really** want to set feature '"
+         << feature << "' in the monmap.";
+      err = -EPERM;
+      goto reply;
+    }
+
+    if (!mon->get_quorum_mon_features().contains_all(feature)) {
+      ss << "current quorum does not support feature '" << feature
+         << "'; supported features: "
+         << mon->get_quorum_mon_features();
+      err = -EINVAL;
+      goto reply;
+    }
+
+    ss << "setting feature '" << feature << "'";
+
+    err = 0;
+    if (monmap.persistent_features.contains_all(feature)) {
+      dout(10) << __func__ << " feature '" << feature
+               << "' already set on monmap; no-op." << dendl;
+      goto reply;
+    }
+
+    pending_map.persistent_features.set_feature(feature);
+    pending_map.last_changed = ceph_clock_now();
+    propose = true;
+
+    dout(1) << __func__ << ss.str() << "; new features will be: "
+            << "persistent = " << pending_map.persistent_features
+            // output optional nevertheless, for auditing purposes.
+            << ", optional = " << pending_map.optional_features << dendl;
+    
   } else {
     ss << "unknown command " << prefix;
     err = -EINVAL;
@@ -528,7 +689,7 @@ reply:
 bool MonmapMonitor::preprocess_join(MonOpRequestRef op)
 {
   MMonJoin *join = static_cast<MMonJoin*>(op->get_req());
-  dout(10) << "preprocess_join " << join->name << " at " << join->addr << dendl;
+  dout(10) << __func__ << " " << join->name << " at " << join->addr << dendl;
 
   MonSession *session = join->get_session();
   if (!session ||
@@ -564,10 +725,6 @@ bool MonmapMonitor::should_propose(double& delay)
 {
   delay = 0.0;
   return true;
-}
-
-void MonmapMonitor::tick()
-{
 }
 
 void MonmapMonitor::get_health(list<pair<health_status_t, string> >& summary,
@@ -615,12 +772,14 @@ int MonmapMonitor::get_monmap(bufferlist &bl)
 void MonmapMonitor::check_subs()
 {
   const string type = "monmap";
-  auto subs = mon->session_map.subs.find(type);
-  if (subs == mon->session_map.subs.end())
-    return;
-  for (auto sub : *subs->second) {
-    check_sub(sub);
-  }
+  mon->with_session_map([this, &type](const MonSessionMap& session_map) {
+      auto subs = session_map.subs.find(type);
+      if (subs == session_map.subs.end())
+	return;
+      for (auto sub : *subs->second) {
+	check_sub(sub);
+      }
+    });
 }
 
 void MonmapMonitor::check_sub(Subscription *sub)
@@ -631,9 +790,12 @@ void MonmapMonitor::check_sub(Subscription *sub)
 	   << " have " << epoch << dendl;
   if (sub->next <= epoch) {
     mon->send_latest_monmap(sub->session->con.get());
-    if (sub->onetime)
-      mon->session_map.remove_sub(sub);
-    else
+    if (sub->onetime) {
+      mon->with_session_map([this, sub](MonSessionMap& session_map) {
+	  session_map.remove_sub(sub);
+	});
+    } else {
       sub->next = epoch + 1;
+    }
   }
 }

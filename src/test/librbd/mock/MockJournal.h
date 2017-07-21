@@ -9,6 +9,10 @@
 #include "librbd/journal/Types.h"
 #include <list>
 
+struct Context;
+struct ContextWQ;
+namespace librados { class IoCtx; }
+
 namespace librbd {
 
 struct ImageCtx;
@@ -28,6 +32,14 @@ struct MockJournal {
     return get_instance()->is_tag_owner(is_tag_owner);
   }
 
+  static void get_tag_owner(librados::IoCtx &,
+                            const std::string &global_image_id,
+                            std::string *tag_owner, ContextWQ *work_queue,
+                            Context *on_finish) {
+    get_instance()->get_tag_owner(global_image_id, tag_owner,
+                                  work_queue, on_finish);
+  }
+
   MockJournal() {
     s_instance = this;
   }
@@ -37,6 +49,10 @@ struct MockJournal {
   MOCK_CONST_METHOD0(is_journal_appending, bool());
 
   MOCK_METHOD1(wait_for_journal_ready, void(Context *));
+
+  MOCK_METHOD4(get_tag_owner, void(const std::string &,
+                                   std::string *, ContextWQ *,
+                                   Context *));
 
   MOCK_CONST_METHOD0(is_tag_owner, bool());
   MOCK_CONST_METHOD1(is_tag_owner, int(bool *));

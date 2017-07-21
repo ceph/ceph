@@ -59,7 +59,7 @@ class LRUList {
     len = 0;
   }
   
-  uint32_t  get_length() { return len; }
+  uint32_t  get_length() const { return len; }
 
   LRUObject *get_head() {
     return head;
@@ -136,12 +136,12 @@ class LRU {
     lru_max = max;
   }
 
-  uint32_t lru_get_size() { return lru_num; }
-  uint32_t lru_get_top() { return lru_top.get_length(); }
-  uint32_t lru_get_bot() { return lru_bot.get_length(); }
-  uint32_t lru_get_pintail() { return lru_pintail.get_length(); }
-  uint32_t lru_get_max() { return lru_max; }
-  uint32_t lru_get_num_pinned() { return lru_num_pinned; }
+  uint32_t lru_get_size() const { return lru_num; }
+  uint32_t lru_get_top() const { return lru_top.get_length(); }
+  uint32_t lru_get_bot() const{ return lru_bot.get_length(); }
+  uint32_t lru_get_pintail() const { return lru_pintail.get_length(); }
+  uint32_t lru_get_max() const { return lru_max; }
+  uint32_t lru_get_num_pinned() const { return lru_num_pinned; }
 
   void lru_set_max(uint32_t m) { lru_max = m; }
   void lru_set_midpoint(float f) { lru_midpoint = f; }

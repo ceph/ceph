@@ -29,17 +29,23 @@ struct rgw_data_sync_info {
   uint16_t state;
   uint32_t num_shards;
 
+  uint64_t instance_id{0};
+
   void encode(bufferlist& bl) const {
-    ENCODE_START(1, 1, bl);
+    ENCODE_START(2, 1, bl);
     ::encode(state, bl);
     ::encode(num_shards, bl);
+    ::encode(instance_id, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::iterator& bl) {
-     DECODE_START(1, bl);
+     DECODE_START(2, bl);
      ::decode(state, bl);
      ::decode(num_shards, bl);
+     if (struct_v >= 2) {
+       ::decode(instance_id, bl);
+     }
      DECODE_FINISH(bl);
   }
 
@@ -61,6 +67,7 @@ struct rgw_data_sync_info {
     }
     encode_json("status", s, f);
     encode_json("num_shards", num_shards, f);
+    encode_json("instance_id", instance_id, f);
   }
   void decode_json(JSONObj *obj) {
     std::string s;
@@ -73,6 +80,7 @@ struct rgw_data_sync_info {
       state = StateInit;
     }
     JSONDecoder::decode_json("num_shards", num_shards, obj);
+    JSONDecoder::decode_json("instance_id", num_shards, obj);
   }
 
   rgw_data_sync_info() : state((int)StateInit), num_shards(0) {}
@@ -254,7 +262,6 @@ public:
   int read_log_info(rgw_datalog_info *log_info);
   int read_source_log_shards_info(map<int, RGWDataChangesLogInfo> *shards_info);
   int read_source_log_shards_next(map<int, string> shard_markers, map<int, rgw_datalog_shard_data> *result);
-  int get_shard_info(int shard_id);
   int read_sync_status(rgw_data_sync_status *sync_status);
   int init_sync_status(int num_shards);
   int run_sync(int num_shards);
@@ -264,7 +271,7 @@ public:
 
 class RGWDataSyncStatusManager {
   RGWRados *store;
-  librados::IoCtx ioctx;
+  rgw_rados_ref ref;
 
   string source_zone;
   RGWRESTConn *conn;
@@ -275,9 +282,8 @@ class RGWDataSyncStatusManager {
 
   string source_status_oid;
   string source_shard_status_oid_prefix;
-  rgw_obj source_status_obj;
 
-  map<int, rgw_obj> shard_objs;
+  map<int, rgw_raw_obj> shard_objs;
 
   int num_shards;
 
@@ -473,7 +479,6 @@ public:
 
 class RGWBucketSyncStatusManager {
   RGWRados *store;
-  librados::IoCtx ioctx;
 
   RGWCoroutinesManager cr_mgr;
 
@@ -490,10 +495,9 @@ class RGWBucketSyncStatusManager {
 
   string source_status_oid;
   string source_shard_status_oid_prefix;
-  rgw_obj source_status_obj;
 
   map<int, rgw_bucket_shard_sync_info> sync_status;
-  rgw_obj status_obj;
+  rgw_raw_obj status_obj;
 
   int num_shards;
 
@@ -523,7 +527,7 @@ class RGWDefaultSyncModule : public RGWSyncModule {
 public:
   RGWDefaultSyncModule() {}
   bool supports_data_export() override { return true; }
-  int create_instance(CephContext *cct, map<string, string>& config, RGWSyncModuleInstanceRef *instance) override;
+  int create_instance(CephContext *cct, map<string, string, ltstr_nocase>& config, RGWSyncModuleInstanceRef *instance) override;
 };
 
 // DataLogTrimCR factory function

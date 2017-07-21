@@ -20,9 +20,10 @@ using ceph::Formatter;
 
 void mon_info_t::encode(bufferlist& bl, uint64_t features) const
 {
-  ENCODE_START(1, 1, bl);
+  ENCODE_START(2, 1, bl);
   ::encode(name, bl);
   ::encode(public_addr, bl, features);
+  ::encode(priority, bl);
   ENCODE_FINISH(bl);
 }
 
@@ -31,13 +32,17 @@ void mon_info_t::decode(bufferlist::iterator& p)
   DECODE_START(1, p);
   ::decode(name, p);
   ::decode(public_addr, p);
+  if (struct_v >= 2) {
+    ::decode(priority, p);
+  }
   DECODE_FINISH(p);
 }
 
 void mon_info_t::print(ostream& out) const
 {
   out << "mon." << name
-      << " public " << public_addr;
+      << " public " << public_addr
+      << " priority " << priority;
 }
 
 void MonMap::sanitize_mons(map<string,entity_addr_t>& o)
@@ -247,7 +252,7 @@ void MonMap::generate_test_instances(list<MonMap*>& o)
     entity_addr_t local_pub_addr;
     local_pub_addr.parse(local_pub_addr_s, &end_p);
 
-    m->add("filled_pub_addr", local_pub_addr);
+    m->add(mon_info_t("filled_pub_addr", local_pub_addr, 1));
 
     m->add("empty_addr_zero", entity_addr_t());
   }
@@ -510,13 +515,23 @@ int MonMap::build_initial(CephContext *cct, ostream& errout)
     if (addr.get_port() == 0)
       addr.set_port(CEPH_MON_PORT);
 
+    uint16_t priority = 0;
+    if (!conf->get_val_from_conf_file(sections, "mon priority", val, false)) {
+      try {
+        priority = std::stoul(val);
+      } catch (std::logic_error&) {
+        errout << "unable to parse priority for mon." << *m
+               << ": priority='" << val << "'" << std::endl;
+        continue;
+      }
+    }
     // the make sure this mon isn't already in the map
     if (contains(addr))
       remove(get_name(addr));
     if (contains(*m))
       remove(*m);
 
-    add(m->c_str(), addr);
+    add(mon_info_t{*m, addr, priority});
   }
 
   if (size() == 0) {
@@ -530,16 +545,18 @@ int MonMap::build_initial(CephContext *cct, ostream& errout)
       srv_name = srv_name.substr(0, idx);
     }
 
-    map<string, entity_addr_t> addrs;
+    map<string, DNSResolver::Record> records;
     if (DNSResolver::get_instance()->resolve_srv_hosts(cct, srv_name,
-        DNSResolver::SRV_Protocol::TCP, domain, &addrs) != 0) {
+        DNSResolver::SRV_Protocol::TCP, domain, &records) != 0) {
 
       errout << "unable to get monitor info from DNS SRV with service name: " << 
 	   "ceph-mon" << std::endl;
     }
     else {
-      for (const auto& addr : addrs) {
-        add(addr.first, addr.second);
+      for (const auto& record : records) {
+        add(mon_info_t{record.first,
+                       record.second.addr,
+                       record.second.priority});
       }
     }
   }

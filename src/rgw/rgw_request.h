@@ -12,7 +12,10 @@
 #if defined(WITH_RADOSGW_FCGI_FRONTEND)
 #include "rgw_fcgi.h"
 #endif
+
 #include "common/QueueRing.h"
+
+#include <atomic>
 
 struct RGWRequest
 {
@@ -45,7 +48,7 @@ struct RGWFCGXRequest : public RGWRequest {
     qr->dequeue(&fcgx);
   }
 
-  ~RGWFCGXRequest() {
+  ~RGWFCGXRequest() override {
     FCGX_Finish_r(fcgx);
     qr->enqueue(fcgx);
   }
@@ -56,10 +59,10 @@ struct RGWLoadGenRequest : public RGWRequest {
 	string method;
 	string resource;
 	int content_length;
-	atomic_t* fail_flag;
+	std::atomic<bool>* fail_flag = nullptr;
 
 RGWLoadGenRequest(uint64_t req_id, const string& _m, const  string& _r, int _cl,
-		atomic_t *ff)
+		std::atomic<bool> *ff)
 	: RGWRequest(req_id), method(_m), resource(_r), content_length(_cl),
 		fail_flag(ff) {}
 };

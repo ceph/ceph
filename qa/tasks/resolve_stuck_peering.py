@@ -108,3 +108,5 @@ def task(ctx, config):
     while manager.get_num_down():
         assert time.time() - start < timeout, \
             'failed to recover before timeout expired'
+
+    manager.revive_osd(primary)

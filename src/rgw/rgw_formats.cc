@@ -343,7 +343,7 @@ std::string RGWSwiftWebsiteListingFormatter::format_name(
   return item_name.substr(prefix.length());
 }
 
-void RGWSwiftWebsiteListingFormatter::dump_object(const RGWObjEnt& objent)
+void RGWSwiftWebsiteListingFormatter::dump_object(const rgw_bucket_dir_entry& objent)
 {
   const auto name = format_name(objent.key.name);
   ss << boost::format(R"(<tr class="item %s">)")
@@ -351,9 +351,9 @@ void RGWSwiftWebsiteListingFormatter::dump_object(const RGWObjEnt& objent)
      << boost::format(R"(<td class="colname"><a href="%s">%s</a></td>)")
                                 % url_encode(name)
                                 % HTMLHelper::escape(name)
-     << boost::format(R"(<td class="colsize">%lld</td>)") % objent.size
+     << boost::format(R"(<td class="colsize">%lld</td>)") % objent.meta.size
      << boost::format(R"(<td class="coldate">%s</td>)")
-                                % dump_time_to_str(objent.mtime)
+                                % dump_time_to_str(objent.meta.mtime)
      << R"(</tr>)";
 }
 

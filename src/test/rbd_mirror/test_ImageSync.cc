@@ -15,6 +15,7 @@
 #include "librbd/io/ReadResult.h"
 #include "librbd/journal/Types.h"
 #include "tools/rbd_mirror/ImageSync.h"
+#include "tools/rbd_mirror/InstanceWatcher.h"
 #include "tools/rbd_mirror/Threads.h"
 
 void register_test_image_sync() {
@@ -33,7 +34,7 @@ void scribble(librbd::ImageCtx *image_ctx, int num_ops, size_t max_size)
     uint64_t len = 1 + rand() % max_size;
 
     if (rand() % 4 == 0) {
-      ASSERT_EQ((int)len, image_ctx->io_work_queue->discard(off, len));
+      ASSERT_EQ((int)len, image_ctx->io_work_queue->discard(off, len, image_ctx->skip_partial_discard));
     } else {
       bufferlist bl;
       bl.append(std::string(len, '1'));
@@ -55,6 +56,10 @@ public:
     create_and_open(m_local_io_ctx, &m_local_image_ctx);
     create_and_open(m_remote_io_ctx, &m_remote_image_ctx);
 
+    m_instance_watcher = rbd::mirror::InstanceWatcher<>::create(
+        m_local_io_ctx, m_threads->work_queue, nullptr);
+    m_instance_watcher->handle_acquire_leader();
+
     m_remote_journaler = new ::journal::Journaler(
       m_threads->work_queue, m_threads->timer, &m_threads->timer_lock,
       m_remote_io_ctx, m_remote_image_ctx->id, "mirror-uuid", {});
@@ -70,7 +75,11 @@ public:
 
   void TearDown() override {
     TestFixture::TearDown();
+
+    m_instance_watcher->handle_release_leader();
+
     delete m_remote_journaler;
+    delete m_instance_watcher;
   }
 
   void create_and_open(librados::IoCtx &io_ctx, librbd::ImageCtx **image_ctx) {
@@ -91,11 +100,12 @@ public:
     return new ImageSync<>(m_local_image_ctx, m_remote_image_ctx,
                            m_threads->timer, &m_threads->timer_lock,
                            "mirror-uuid", m_remote_journaler, &m_client_meta,
-                           m_threads->work_queue, ctx);
+                           m_threads->work_queue, m_instance_watcher, ctx);
   }
 
   librbd::ImageCtx *m_remote_image_ctx;
   librbd::ImageCtx *m_local_image_ctx;
+  rbd::mirror::InstanceWatcher<> *m_instance_watcher;
   ::journal::Journaler *m_remote_journaler;
   librbd::journal::MirrorPeerClientMeta m_client_meta;
 };
@@ -202,7 +212,7 @@ TEST_F(TestImageSync, Discard) {
   ASSERT_EQ(0, create_snap(m_remote_image_ctx, "snap", nullptr));
 
   ASSERT_EQ((int)len - 2, m_remote_image_ctx->io_work_queue->discard(off + 1,
-                                                                     len - 2));
+                                                                     len - 2, m_remote_image_ctx->skip_partial_discard));
   {
     RWLock::RLocker owner_locker(m_remote_image_ctx->owner_lock);
     ASSERT_EQ(0, m_remote_image_ctx->flush());
@@ -264,7 +274,9 @@ TEST_F(TestImageSync, SnapshotStress) {
     uint64_t remote_size;
     {
       C_SaferCond ctx;
-      m_remote_image_ctx->state->snap_set(snap_name, &ctx);
+      m_remote_image_ctx->state->snap_set(cls::rbd::UserSnapshotNamespace(),
+					  snap_name,
+					  &ctx);
       ASSERT_EQ(0, ctx.wait());
 
       RWLock::RLocker remote_snap_locker(m_remote_image_ctx->snap_lock);
@@ -275,14 +287,19 @@ TEST_F(TestImageSync, SnapshotStress) {
     uint64_t local_size;
     {
       C_SaferCond ctx;
-      m_local_image_ctx->state->snap_set(snap_name, &ctx);
+      m_local_image_ctx->state->snap_set(cls::rbd::UserSnapshotNamespace(),
+					 snap_name,
+					 &ctx);
       ASSERT_EQ(0, ctx.wait());
 
       RWLock::RLocker snap_locker(m_local_image_ctx->snap_lock);
       local_size = m_local_image_ctx->get_image_size(
         m_local_image_ctx->snap_id);
-      ASSERT_FALSE(m_local_image_ctx->test_flags(RBD_FLAG_OBJECT_MAP_INVALID,
-                                                 m_local_image_ctx->snap_lock));
+      bool flags_set;
+      ASSERT_EQ(0, m_local_image_ctx->test_flags(RBD_FLAG_OBJECT_MAP_INVALID,
+                                                 m_local_image_ctx->snap_lock,
+                                                 &flags_set));
+      ASSERT_FALSE(flags_set);
     }
 
     ASSERT_EQ(remote_size, local_size);

@@ -58,7 +58,7 @@ Configuring Ceph
 
 To configure Ceph for use with ``libvirt``, perform the following steps:
 
-#. `Create a pool`_ (or use the default). The following example uses the 
+#. `Create a pool`_. The following example uses the 
    pool name ``libvirt-pool`` with 128 placement groups. ::
 
 	ceph osd pool create libvirt-pool 128 128
@@ -66,6 +66,10 @@ To configure Ceph for use with ``libvirt``, perform the following steps:
    Verify the pool exists. :: 
 
 	ceph osd lspools
+
+#. Use the ``rbd`` tool to initialize the pool for use by RBD::
+
+        rbd pool init <pool-name>
 
 #. `Create a Ceph User`_ (or use ``client.admin`` for version 0.9.7 and 
    earlier). The following example uses the Ceph user name ``client.libvirt`` 
@@ -75,7 +79,7 @@ To configure Ceph for use with ``libvirt``, perform the following steps:
 	
    Verify the name exists. :: 
    
-	ceph auth list
+	ceph auth ls
 
    **NOTE**: ``libvirt`` will access Ceph using the ID ``libvirt``, 
    not the Ceph name ``client.libvirt``. See `User Management - User`_ and 

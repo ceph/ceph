@@ -10,8 +10,8 @@
 #include "include/utime.h"
 #include "include/rbd/librbd.hpp"
 
-#include "librbd/AsyncOperation.h"
 #include "librbd/ImageCtx.h"
+#include "librbd/io/AsyncOperation.h"
 #include "librbd/io/ReadResult.h"
 #include "librbd/io/Types.h"
 
@@ -19,6 +19,7 @@ class CephContext;
 
 namespace librbd {
 namespace io {
+
 
 /**
  * AioCompletion is the overall completion for a single

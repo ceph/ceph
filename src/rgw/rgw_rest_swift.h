@@ -10,23 +10,27 @@
 
 #include "rgw_op.h"
 #include "rgw_rest.h"
+#include "rgw_swift_auth.h"
+#include "rgw_http_errors.h"
+
+#include <boost/utility/string_ref.hpp>
 
 class RGWGetObj_ObjStore_SWIFT : public RGWGetObj_ObjStore {
   int custom_http_ret = 0;
 public:
   RGWGetObj_ObjStore_SWIFT() {}
-  ~RGWGetObj_ObjStore_SWIFT() {}
+  ~RGWGetObj_ObjStore_SWIFT() override {}
 
   int verify_permission() override;
-  int get_params();
-  int send_response_data_error();
-  int send_response_data(bufferlist& bl, off_t ofs, off_t len);
+  int get_params() override;
+  int send_response_data_error() override;
+  int send_response_data(bufferlist& bl, off_t ofs, off_t len) override;
 
   void set_custom_http_response(const int http_ret) {
     custom_http_ret = http_ret;
   }
 
-  bool need_object_expiration() {
+  bool need_object_expiration() override {
     return true;
   }
 };
@@ -40,15 +44,15 @@ class RGWListBuckets_ObjStore_SWIFT : public RGWListBuckets_ObjStore {
   }
 public:
   RGWListBuckets_ObjStore_SWIFT() : need_stats(true) {}
-  ~RGWListBuckets_ObjStore_SWIFT() {}
+  ~RGWListBuckets_ObjStore_SWIFT() override {}
 
-  int get_params();
-  void send_response_begin(bool has_buckets);
-  void send_response_data(RGWUserBuckets& buckets);
-  void send_response_end();
+  int get_params() override;
+  void send_response_begin(bool has_buckets) override;
+  void send_response_data(RGWUserBuckets& buckets) override;
+  void send_response_end() override;
 
-  bool should_get_stats() { return need_stats; }
-  bool supports_account_metadata() { return true; }
+  bool should_get_stats() override { return need_stats; }
+  bool supports_account_metadata() override { return true; }
 };
 
 class RGWListBucket_ObjStore_SWIFT : public RGWListBucket_ObjStore {
@@ -57,11 +61,11 @@ public:
   RGWListBucket_ObjStore_SWIFT() {
     default_max = 10000;
   }
-  ~RGWListBucket_ObjStore_SWIFT() {}
+  ~RGWListBucket_ObjStore_SWIFT() override {}
 
-  int get_params();
-  void send_response();
-  bool need_container_stats() { return true; }
+  int get_params() override;
+  void send_response() override;
+  bool need_container_stats() override { return true; }
 };
 
 class RGWStatAccount_ObjStore_SWIFT : public RGWStatAccount_ObjStore {
@@ -69,18 +73,18 @@ class RGWStatAccount_ObjStore_SWIFT : public RGWStatAccount_ObjStore {
 public:
   RGWStatAccount_ObjStore_SWIFT() {
   }
-  ~RGWStatAccount_ObjStore_SWIFT() {}
+  ~RGWStatAccount_ObjStore_SWIFT() override {}
 
-  void execute();
-  void send_response();
+  void execute() override;
+  void send_response() override;
 };
 
 class RGWStatBucket_ObjStore_SWIFT : public RGWStatBucket_ObjStore {
 public:
   RGWStatBucket_ObjStore_SWIFT() {}
-  ~RGWStatBucket_ObjStore_SWIFT() {}
+  ~RGWStatBucket_ObjStore_SWIFT() override {}
 
-  void send_response();
+  void send_response() override;
 };
 
 class RGWCreateBucket_ObjStore_SWIFT : public RGWCreateBucket_ObjStore {
@@ -88,68 +92,68 @@ protected:
   bool need_metadata_upload() const override { return true; }
 public:
   RGWCreateBucket_ObjStore_SWIFT() {}
-  ~RGWCreateBucket_ObjStore_SWIFT() {}
+  ~RGWCreateBucket_ObjStore_SWIFT() override {}
 
-  int get_params();
-  void send_response();
+  int get_params() override;
+  void send_response() override;
 };
 
 class RGWDeleteBucket_ObjStore_SWIFT : public RGWDeleteBucket_ObjStore {
 public:
   RGWDeleteBucket_ObjStore_SWIFT() {}
-  ~RGWDeleteBucket_ObjStore_SWIFT() {}
+  ~RGWDeleteBucket_ObjStore_SWIFT() override {}
 
-  void send_response();
+  void send_response() override;
 };
 
 class RGWPutObj_ObjStore_SWIFT : public RGWPutObj_ObjStore {
   string lo_etag;
 public:
   RGWPutObj_ObjStore_SWIFT() {}
-  ~RGWPutObj_ObjStore_SWIFT() {}
+  ~RGWPutObj_ObjStore_SWIFT() override {}
 
   int verify_permission() override;
-  int get_params();
-  void send_response();
+  int get_params() override;
+  void send_response() override;
 };
 
 class RGWPutMetadataAccount_ObjStore_SWIFT : public RGWPutMetadataAccount_ObjStore {
 public:
   RGWPutMetadataAccount_ObjStore_SWIFT() {}
-  ~RGWPutMetadataAccount_ObjStore_SWIFT() {}
+  ~RGWPutMetadataAccount_ObjStore_SWIFT() override {}
 
-  int get_params();
-  void send_response();
+  int get_params() override;
+  void send_response() override;
 };
 
 class RGWPutMetadataBucket_ObjStore_SWIFT : public RGWPutMetadataBucket_ObjStore {
 public:
   RGWPutMetadataBucket_ObjStore_SWIFT() {}
-  ~RGWPutMetadataBucket_ObjStore_SWIFT() {}
+  ~RGWPutMetadataBucket_ObjStore_SWIFT() override {}
 
-  int get_params();
-  void send_response();
+  int get_params() override;
+  void send_response() override;
 };
 
 class RGWPutMetadataObject_ObjStore_SWIFT : public RGWPutMetadataObject_ObjStore {
 public:
   RGWPutMetadataObject_ObjStore_SWIFT() {}
-  ~RGWPutMetadataObject_ObjStore_SWIFT() {}
+  ~RGWPutMetadataObject_ObjStore_SWIFT() override {}
 
-  int get_params();
-  void send_response();
-  bool need_object_expiration() { return true; }
+  int get_params() override;
+  void send_response() override;
+  bool need_object_expiration() override { return true; }
 };
 
 class RGWDeleteObj_ObjStore_SWIFT : public RGWDeleteObj_ObjStore {
 public:
   RGWDeleteObj_ObjStore_SWIFT() {}
-  ~RGWDeleteObj_ObjStore_SWIFT() {}
+  ~RGWDeleteObj_ObjStore_SWIFT() override {}
 
   int verify_permission() override;
-  int get_params();
-  bool need_object_expiration() { return true; }
-  void send_response();
+  int get_params() override;
+  bool need_object_expiration() override { return true; }
+  void send_response() override;
 };
 
 class RGWCopyObj_ObjStore_SWIFT : public RGWCopyObj_ObjStore {
@@ -158,46 +162,61 @@ protected:
   void dump_copy_info();
 public:
   RGWCopyObj_ObjStore_SWIFT() : sent_header(false) {}
-  ~RGWCopyObj_ObjStore_SWIFT() {}
+  ~RGWCopyObj_ObjStore_SWIFT() override {}
 
-  int init_dest_policy();
-  int get_params();
-  void send_response();
-  void send_partial_response(off_t ofs);
+  int init_dest_policy() override;
+  int get_params() override;
+  void send_response() override;
+  void send_partial_response(off_t ofs) override;
 };
 
 class RGWGetACLs_ObjStore_SWIFT : public RGWGetACLs_ObjStore {
 public:
   RGWGetACLs_ObjStore_SWIFT() {}
-  ~RGWGetACLs_ObjStore_SWIFT() {}
+  ~RGWGetACLs_ObjStore_SWIFT() override {}
 
-  void send_response() {}
+  void send_response() override {}
 };
 
 class RGWPutACLs_ObjStore_SWIFT : public RGWPutACLs_ObjStore {
 public:
   RGWPutACLs_ObjStore_SWIFT() : RGWPutACLs_ObjStore() {}
-  virtual ~RGWPutACLs_ObjStore_SWIFT() {}
+  ~RGWPutACLs_ObjStore_SWIFT() override {}
 
-  void send_response() {}
+  void send_response() override {}
 };
 
 class RGWOptionsCORS_ObjStore_SWIFT : public RGWOptionsCORS_ObjStore {
 public:
   RGWOptionsCORS_ObjStore_SWIFT() {}
-  ~RGWOptionsCORS_ObjStore_SWIFT() {}
+  ~RGWOptionsCORS_ObjStore_SWIFT() override {}
 
-  void send_response();
+  void send_response() override;
 };
 
 class RGWBulkDelete_ObjStore_SWIFT : public RGWBulkDelete_ObjStore {
 public:
   RGWBulkDelete_ObjStore_SWIFT() {}
-  ~RGWBulkDelete_ObjStore_SWIFT() {}
+  ~RGWBulkDelete_ObjStore_SWIFT() override {}
 
   int get_data(std::list<RGWBulkDelete::acct_path_t>& items,
-               bool * is_truncated);
-  void send_response();
+               bool * is_truncated) override;
+  void send_response() override;
+};
+
+class RGWBulkUploadOp_ObjStore_SWIFT : public RGWBulkUploadOp_ObjStore {
+  size_t conlen;
+  size_t curpos;
+
+public:
+  RGWBulkUploadOp_ObjStore_SWIFT()
+    : conlen(0),
+      curpos(0) {
+  }
+  ~RGWBulkUploadOp_ObjStore_SWIFT() = default;
+
+  std::unique_ptr<StreamGetter> create_stream() override;
+  void send_response() override;
 };
 
 class RGWInfo_ObjStore_SWIFT : public RGWInfo_ObjStore {
@@ -211,15 +230,106 @@ protected:
   static const vector<pair<string, struct info>> swift_info;
 public:
   RGWInfo_ObjStore_SWIFT() {}
-  ~RGWInfo_ObjStore_SWIFT() {}
+  ~RGWInfo_ObjStore_SWIFT() override {}
 
   void execute() override;
   void send_response() override;
   static void list_swift_data(Formatter& formatter, const md_config_t& config, RGWRados& store);
+  static void list_tempauth_data(Formatter& formatter, const md_config_t& config, RGWRados& store);
   static void list_tempurl_data(Formatter& formatter, const md_config_t& config, RGWRados& store);
   static void list_slo_data(Formatter& formatter, const md_config_t& config, RGWRados& store);
   static bool is_expired(const std::string& expires, CephContext* cct);
 };
+
+
+class RGWFormPost : public RGWPostObj_ObjStore {
+  std::string get_current_filename() const override;
+  std::string get_current_content_type() const override;
+  std::size_t get_max_file_size() /*const*/;
+  bool is_next_file_to_upload() override;
+  bool is_integral();
+  bool is_non_expired();
+  void get_owner_info(const req_state* s,
+                      RGWUserInfo& owner_info) const;
+
+  parts_collection_t ctrl_parts;
+  boost::optional<post_form_part> current_data_part;
+  std::string prefix;
+  bool stream_done = false;
+
+  class SignatureHelper;
+public:
+  RGWFormPost() = default;
+  ~RGWFormPost() = default;
+
+  void init(RGWRados* store,
+            req_state* s,
+            RGWHandler* dialect_handler) override;
+
+  int get_params() override;
+  int get_data(ceph::bufferlist& bl, bool& again) override;
+  void send_response() override;
+
+  static bool is_formpost_req(req_state* const s);
+};
+
+class RGWFormPost::SignatureHelper
+{
+private:
+  static constexpr uint32_t output_size =
+    CEPH_CRYPTO_HMACSHA1_DIGESTSIZE * 2 + 1;
+
+  unsigned char dest[CEPH_CRYPTO_HMACSHA1_DIGESTSIZE]; // 20
+  char dest_str[output_size];
+
+public:
+  SignatureHelper() = default;
+
+  const char* calc(const std::string& key,
+                   const boost::string_ref& path_info,
+                   const boost::string_ref& redirect,
+                   const boost::string_ref& max_file_size,
+                   const boost::string_ref& max_file_count,
+                   const boost::string_ref& expires) {
+    using ceph::crypto::HMACSHA1;
+    using UCHARPTR = const unsigned char*;
+
+    HMACSHA1 hmac((UCHARPTR) key.data(), key.size());
+
+    hmac.Update((UCHARPTR) path_info.data(), path_info.size());
+    hmac.Update((UCHARPTR) "\n", 1);
+
+    hmac.Update((UCHARPTR) redirect.data(), redirect.size());
+    hmac.Update((UCHARPTR) "\n", 1);
+
+    hmac.Update((UCHARPTR) max_file_size.data(), max_file_size.size());
+    hmac.Update((UCHARPTR) "\n", 1);
+
+    hmac.Update((UCHARPTR) max_file_count.data(), max_file_count.size());
+    hmac.Update((UCHARPTR) "\n", 1);
+
+    hmac.Update((UCHARPTR) expires.data(), expires.size());
+
+    hmac.Final(dest);
+
+    buf_to_hex((UCHARPTR) dest, sizeof(dest), dest_str);
+
+    return dest_str;
+  }
+
+  const char* get_signature() const {
+    return dest_str;
+  }
+
+  bool is_equal_to(const std::string& rhs) const {
+    /* never allow out-of-range exception */
+    if (rhs.size() < (output_size - 1)) {
+      return false;
+    }
+    return rhs.compare(0 /* pos */,  output_size, dest_str) == 0;
+  }
+
+}; /* RGWFormPost::SignatureHelper */
 
 
 class RGWSwiftWebsiteHandler {
@@ -257,6 +367,8 @@ class RGWHandler_REST_SWIFT : public RGWHandler_REST {
   friend class RGWRESTMgr_SWIFT;
   friend class RGWRESTMgr_SWIFT_Info;
 protected:
+  const rgw::auth::Strategy& auth_strategy;
+
   virtual bool is_acl_op() {
     return false;
   }
@@ -264,16 +376,18 @@ protected:
   static int init_from_header(struct req_state* s,
                               const std::string& frontend_prefix);
 public:
-  RGWHandler_REST_SWIFT() {}
-  virtual ~RGWHandler_REST_SWIFT() {}
+  RGWHandler_REST_SWIFT(const rgw::auth::Strategy& auth_strategy)
+    : auth_strategy(auth_strategy) {
+  }
+  ~RGWHandler_REST_SWIFT() override = default;
 
   static int validate_bucket_name(const string& bucket);
 
-  int init(RGWRados *store, struct req_state *s, rgw::io::BasicClient *cio);
+  int init(RGWRados *store, struct req_state *s, rgw::io::BasicClient *cio) override;
   int authorize() override;
   int postauth_init() override;
 
-  RGWAccessControlPolicy *alloc_policy() { return NULL; /* return new RGWAccessControlPolicy_SWIFT; */ }
+  RGWAccessControlPolicy *alloc_policy() { return nullptr; /* return new RGWAccessControlPolicy_SWIFT; */ }
   void free_policy(RGWAccessControlPolicy *policy) { delete policy; }
 };
 
@@ -281,11 +395,12 @@ class RGWHandler_REST_Service_SWIFT : public RGWHandler_REST_SWIFT {
 protected:
   RGWOp *op_get() override;
   RGWOp *op_head() override;
+  RGWOp *op_put() override;
   RGWOp *op_post() override;
   RGWOp *op_delete() override;
 public:
-  RGWHandler_REST_Service_SWIFT() {}
-  virtual ~RGWHandler_REST_Service_SWIFT() {}
+  using RGWHandler_REST_SWIFT::RGWHandler_REST_SWIFT;
+  ~RGWHandler_REST_Service_SWIFT() override = default;
 };
 
 class RGWHandler_REST_Bucket_SWIFT : public RGWHandler_REST_SWIFT {
@@ -293,7 +408,7 @@ class RGWHandler_REST_Bucket_SWIFT : public RGWHandler_REST_SWIFT {
    * initialization (see the init() method). */
   boost::optional<RGWSwiftWebsiteHandler> website_handler;
 protected:
-  bool is_obj_update_op() {
+  bool is_obj_update_op() override {
     return s->op == OP_POST;
   }
 
@@ -305,8 +420,8 @@ protected:
   RGWOp *op_post() override;
   RGWOp *op_options() override;
 public:
-  RGWHandler_REST_Bucket_SWIFT() {}
-  virtual ~RGWHandler_REST_Bucket_SWIFT() {}
+  using RGWHandler_REST_SWIFT::RGWHandler_REST_SWIFT;
+  ~RGWHandler_REST_Bucket_SWIFT() override = default;
 
   int error_handler(int err_no, std::string *error_content) override {
     return website_handler->error_handler(err_no, error_content);
@@ -329,7 +444,7 @@ class RGWHandler_REST_Obj_SWIFT : public RGWHandler_REST_SWIFT {
    * initialization (see the init() method). */
   boost::optional<RGWSwiftWebsiteHandler> website_handler;
 protected:
-  bool is_obj_update_op() {
+  bool is_obj_update_op() override {
     return s->op == OP_POST;
   }
 
@@ -343,8 +458,8 @@ protected:
   RGWOp *op_options() override;
 
 public:
-  RGWHandler_REST_Obj_SWIFT() {}
-  virtual ~RGWHandler_REST_Obj_SWIFT() {}
+  using RGWHandler_REST_SWIFT::RGWHandler_REST_SWIFT;
+  ~RGWHandler_REST_Obj_SWIFT() override = default;
 
   int error_handler(int err_no, std::string *error_content) override {
     return website_handler->error_handler(err_no, error_content);
@@ -372,9 +487,10 @@ protected:
 
 public:
   RGWRESTMgr_SWIFT() = default;
-  virtual ~RGWRESTMgr_SWIFT() = default;
+  ~RGWRESTMgr_SWIFT() override = default;
 
   RGWHandler_REST *get_handler(struct req_state *s,
+                               const rgw::auth::StrategyRegistry& auth_registry,
                                const std::string& frontend_prefix) override;
 };
 
@@ -383,7 +499,7 @@ class  RGWGetCrossDomainPolicy_ObjStore_SWIFT
   : public RGWGetCrossDomainPolicy_ObjStore {
 public:
   RGWGetCrossDomainPolicy_ObjStore_SWIFT() = default;
-  ~RGWGetCrossDomainPolicy_ObjStore_SWIFT() = default;
+  ~RGWGetCrossDomainPolicy_ObjStore_SWIFT() override = default;
 
   void send_response() override;
 };
@@ -392,7 +508,7 @@ class  RGWGetHealthCheck_ObjStore_SWIFT
   : public RGWGetHealthCheck_ObjStore {
 public:
   RGWGetHealthCheck_ObjStore_SWIFT() = default;
-  ~RGWGetHealthCheck_ObjStore_SWIFT() = default;
+  ~RGWGetHealthCheck_ObjStore_SWIFT() override = default;
 
   void send_response() override;
 };
@@ -400,7 +516,7 @@ public:
 class RGWHandler_SWIFT_CrossDomain : public RGWHandler_REST {
 public:
   RGWHandler_SWIFT_CrossDomain() = default;
-  ~RGWHandler_SWIFT_CrossDomain() = default;
+  ~RGWHandler_SWIFT_CrossDomain() override = default;
 
   RGWOp *op_get() override {
     return new RGWGetCrossDomainPolicy_ObjStore_SWIFT();
@@ -442,9 +558,10 @@ protected:
 
 public:
   RGWRESTMgr_SWIFT_CrossDomain() = default;
-  ~RGWRESTMgr_SWIFT_CrossDomain() = default;
+  ~RGWRESTMgr_SWIFT_CrossDomain() override = default;
 
   RGWHandler_REST* get_handler(struct req_state* const s,
+                               const rgw::auth::StrategyRegistry&,
                                const std::string&) override {
     s->prot_flags |= RGW_REST_SWIFT;
     return new RGWHandler_SWIFT_CrossDomain;
@@ -455,7 +572,7 @@ public:
 class RGWHandler_SWIFT_HealthCheck : public RGWHandler_REST {
 public:
   RGWHandler_SWIFT_HealthCheck() = default;
-  ~RGWHandler_SWIFT_HealthCheck() = default;
+  ~RGWHandler_SWIFT_HealthCheck() override = default;
 
   RGWOp *op_get() override {
     return new RGWGetHealthCheck_ObjStore_SWIFT();
@@ -497,9 +614,10 @@ protected:
 
 public:
   RGWRESTMgr_SWIFT_HealthCheck() = default;
-  ~RGWRESTMgr_SWIFT_HealthCheck() = default;
+  ~RGWRESTMgr_SWIFT_HealthCheck() override = default;
 
   RGWHandler_REST* get_handler(struct req_state* const s,
+                               const rgw::auth::StrategyRegistry&,
                                const std::string&) override {
     s->prot_flags |= RGW_REST_SWIFT;
     return new RGWHandler_SWIFT_HealthCheck;
@@ -509,8 +627,8 @@ public:
 
 class RGWHandler_REST_SWIFT_Info : public RGWHandler_REST_SWIFT {
 public:
-  RGWHandler_REST_SWIFT_Info() = default;
-  ~RGWHandler_REST_SWIFT_Info() = default;
+  using RGWHandler_REST_SWIFT::RGWHandler_REST_SWIFT;
+  ~RGWHandler_REST_SWIFT_Info() override = default;
 
   RGWOp *op_get() override {
     return new RGWInfo_ObjStore_SWIFT();
@@ -542,9 +660,10 @@ public:
 class RGWRESTMgr_SWIFT_Info : public RGWRESTMgr {
 public:
   RGWRESTMgr_SWIFT_Info() = default;
-  virtual ~RGWRESTMgr_SWIFT_Info() = default;
+  ~RGWRESTMgr_SWIFT_Info() override = default;
 
   RGWHandler_REST *get_handler(struct req_state* s,
+                               const rgw::auth::StrategyRegistry& auth_registry,
                                const std::string& frontend_prefix) override;
 };
 

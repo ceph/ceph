@@ -16,6 +16,7 @@ declare -A pids
 for f in \
     api_aio api_io api_list api_lock api_misc \
     api_tier api_pool api_snapshots api_stat api_watch_notify api_cmd \
+    api_service \
     api_c_write_operations \
     api_c_read_operations \
     list_parallel \

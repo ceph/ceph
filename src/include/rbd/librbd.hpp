@@ -93,6 +93,14 @@ namespace librbd {
     virtual int update_progress(uint64_t offset, uint64_t total) = 0;
   };
 
+  typedef struct {
+    std::string id;
+    std::string name;
+    rbd_trash_image_source_t source;
+    time_t deletion_time;
+    time_t deferment_end_time;
+  } trash_image_info_t;
+
 class CEPH_RBD_API RBD
 {
 public:
@@ -116,13 +124,21 @@ public:
 
   int open(IoCtx& io_ctx, Image& image, const char *name);
   int open(IoCtx& io_ctx, Image& image, const char *name, const char *snapname);
+  int open_by_id(IoCtx& io_ctx, Image& image, const char *id);
+  int open_by_id(IoCtx& io_ctx, Image& image, const char *id, const char *snapname);
   int aio_open(IoCtx& io_ctx, Image& image, const char *name,
 	       const char *snapname, RBD::AioCompletion *c);
+  int aio_open_by_id(IoCtx& io_ctx, Image& image, const char *id,
+	             const char *snapname, RBD::AioCompletion *c);
   // see librbd.h
   int open_read_only(IoCtx& io_ctx, Image& image, const char *name,
 		     const char *snapname);
+  int open_by_id_read_only(IoCtx& io_ctx, Image& image, const char *id,
+                           const char *snapname);
   int aio_open_read_only(IoCtx& io_ctx, Image& image, const char *name,
 			 const char *snapname, RBD::AioCompletion *c);
+  int aio_open_by_id_read_only(IoCtx& io_ctx, Image& image, const char *id,
+                               const char *snapname, RBD::AioCompletion *c);
   int list(IoCtx& io_ctx, std::vector<std::string>& names);
   int create(IoCtx& io_ctx, const char *name, uint64_t size, int *order);
   int create2(IoCtx& io_ctx, const char *name, uint64_t size,
@@ -143,6 +159,14 @@ public:
   int remove(IoCtx& io_ctx, const char *name);
   int remove_with_progress(IoCtx& io_ctx, const char *name, ProgressContext& pctx);
   int rename(IoCtx& src_io_ctx, const char *srcname, const char *destname);
+
+  int trash_move(IoCtx &io_ctx, const char *name, uint64_t delay);
+  int trash_get(IoCtx &io_ctx, const char *id, trash_image_info_t *info);
+  int trash_list(IoCtx &io_ctx, std::vector<trash_image_info_t> &entries);
+  int trash_remove(IoCtx &io_ctx, const char *image_id, bool force);
+  int trash_remove_with_progress(IoCtx &io_ctx, const char *image_id,
+                                 bool force, ProgressContext &pctx);
+  int trash_restore(IoCtx &io_ctx, const char *id, const char *name);
 
   // RBD pool mirroring support functions
   int mirror_mode_get(IoCtx& io_ctx, rbd_mirror_mode_t *mirror_mode);
@@ -170,6 +194,8 @@ public:
 		      IoCtx& image_io_ctx, const char *image_name);
   int group_image_remove(IoCtx& io_ctx, const char *group_name,
 			 IoCtx& image_io_ctx, const char *image_name);
+  int group_image_remove_by_id(IoCtx& io_ctx, const char *group_name,
+                               IoCtx& image_io_ctx, const char *image_id);
   int group_image_list(IoCtx& io_ctx, const char *group_name,
 		       std::vector<group_image_status_t> *images);
 
@@ -183,6 +209,7 @@ class CEPH_RBD_API ImageOptions {
 public:
   ImageOptions();
   ImageOptions(rbd_image_options_t opts);
+  ImageOptions(const ImageOptions &imgopts);
   ~ImageOptions();
 
   int set(int optname, const std::string& optval);
@@ -227,7 +254,9 @@ public:
   std::string get_block_name_prefix();
   int64_t get_data_pool_id();
   int parent_info(std::string *parent_poolname, std::string *parent_name,
-		      std::string *parent_snapname);
+		  std::string *parent_snapname);
+  int parent_info2(std::string *parent_poolname, std::string *parent_name,
+                   std::string *parent_id, std::string *parent_snapname);
   int old_format(uint8_t *old);
   int size(uint64_t *size);
   int get_group(group_spec_t *group_spec);
@@ -253,15 +282,22 @@ public:
   int copy(IoCtx& dest_io_ctx, const char *destname);
   int copy2(Image& dest);
   int copy3(IoCtx& dest_io_ctx, const char *destname, ImageOptions& opts);
+  int copy4(IoCtx& dest_io_ctx, const char *destname, ImageOptions& opts,
+	    size_t sparse_size);
   int copy_with_progress(IoCtx& dest_io_ctx, const char *destname,
 			 ProgressContext &prog_ctx);
   int copy_with_progress2(Image& dest, ProgressContext &prog_ctx);
   int copy_with_progress3(IoCtx& dest_io_ctx, const char *destname,
 			  ImageOptions& opts, ProgressContext &prog_ctx);
+  int copy_with_progress4(IoCtx& dest_io_ctx, const char *destname,
+			  ImageOptions& opts, ProgressContext &prog_ctx,
+			  size_t sparse_size);
 
   /* striping */
   uint64_t get_stripe_unit() const;
   uint64_t get_stripe_count() const;
+
+  int get_create_timestamp(struct timespec *timestamp);
 
   int flatten();
   int flatten_with_progress(ProgressContext &prog_ctx);
@@ -339,11 +375,14 @@ public:
   /* @param op_flags see librados.h constants beginning with LIBRADOS_OP_FLAG */
   ssize_t write2(uint64_t ofs, size_t len, ceph::bufferlist& bl, int op_flags);
   int discard(uint64_t ofs, uint64_t len);
+  ssize_t writesame(uint64_t ofs, size_t len, ceph::bufferlist &bl, int op_flags);
 
   int aio_write(uint64_t off, size_t len, ceph::bufferlist& bl, RBD::AioCompletion *c);
   /* @param op_flags see librados.h constants beginning with LIBRADOS_OP_FLAG */
   int aio_write2(uint64_t off, size_t len, ceph::bufferlist& bl,
 		  RBD::AioCompletion *c, int op_flags);
+  int aio_writesame(uint64_t off, size_t len, ceph::bufferlist& bl,
+                    RBD::AioCompletion *c, int op_flags);
   /**
    * read async from image
    *
@@ -405,6 +444,12 @@ public:
                             size_t info_size);
   int mirror_image_get_status(mirror_image_status_t *mirror_image_status,
 			      size_t status_size);
+  int aio_mirror_image_promote(bool force, RBD::AioCompletion *c);
+  int aio_mirror_image_demote(RBD::AioCompletion *c);
+  int aio_mirror_image_get_info(mirror_image_info_t *mirror_image_info,
+                                size_t info_size, RBD::AioCompletion *c);
+  int aio_mirror_image_get_status(mirror_image_status_t *mirror_image_status,
+                                  size_t status_size, RBD::AioCompletion *c);
 
   int update_watch(UpdateWatchCtx *ctx, uint64_t *handle);
   int update_unwatch(uint64_t handle);

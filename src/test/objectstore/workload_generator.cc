@@ -60,7 +60,7 @@ WorkloadGenerator::WorkloadGenerator(vector<const char*> args)
 {
   int err = 0;
 
-  m_nr_runs.set(0);
+  m_nr_runs = 0;
 
   init_args(args);
   dout(0) << "data            = " << g_conf->osd_data << dendl;
@@ -352,7 +352,7 @@ void WorkloadGenerator::do_destroy_collection(ObjectStore::Transaction *t,
 					      coll_entry_t *entry,
 					      C_StatState *stat)
 {  
-  m_nr_runs.set(0);
+  m_nr_runs = 0;
   entry->m_osr.flush();
   vector<ghobject_t> ls;
   m_store->collection_list(entry->m_coll, ghobject_t(), ghobject_t::get_max(),
@@ -431,7 +431,7 @@ void WorkloadGenerator::run()
 
     dout(5) << __func__
         << " m_finished_lock is-locked: " << m_finished_lock.is_locked()
-        << " in-flight: " << m_in_flight.read()
+        << " in-flight: " << m_in_flight.load()
         << dendl;
 
     wait_for_ready();
@@ -502,7 +502,7 @@ queue_tx:
   } while (true);
 
   dout(2) << __func__ << " waiting for "
-	  << m_in_flight.read() << " in-flight transactions" << dendl;
+	  << m_in_flight.load() << " in-flight transactions" << dendl;
 
   wait_for_done();
 

@@ -61,13 +61,13 @@ class TestClientLimits(CephFSTestCase):
 
         # MDS should not be happy about that, as the client is failing to comply
         # with the SESSION_RECALL messages it is being sent
-        mds_recall_state_timeout = int(self.fs.get_config("mds_recall_state_timeout"))
-        self.wait_for_health("failing to respond to cache pressure",
+        mds_recall_state_timeout = float(self.fs.get_config("mds_recall_state_timeout"))
+        self.wait_for_health("MDS_HEALTH_CLIENT_RECALL",
                 mds_recall_state_timeout + 10)
 
         # We can also test that the MDS health warning for oversized
         # cache is functioning as intended.
-        self.wait_for_health("Too many inodes in cache",
+        self.wait_for_health("MDS_CACHE_OVERSIZED",
                 mds_recall_state_timeout + 10)
 
         # When the client closes the files, it should retain only as many caps as allowed
@@ -122,8 +122,8 @@ class TestClientLimits(CephFSTestCase):
 
         # After mds_revoke_cap_timeout, we should see a health warning (extra lag from
         # MDS beacon period)
-        mds_revoke_cap_timeout = int(self.fs.get_config("mds_revoke_cap_timeout"))
-        self.wait_for_health("failing to respond to capability release", mds_revoke_cap_timeout + 10)
+        mds_revoke_cap_timeout = float(self.fs.get_config("mds_revoke_cap_timeout"))
+        self.wait_for_health("MDS_CLIENT_RECALL", mds_revoke_cap_timeout + 10)
 
         # Client B should still be stuck
         self.assertFalse(rproc.finished)
@@ -163,7 +163,7 @@ class TestClientLimits(CephFSTestCase):
         self.mount_a.create_n_files("testdir/file2", 5, True)
 
         # Wait for the health warnings. Assume mds can handle 10 request per second at least
-        self.wait_for_health("failing to advance its oldest client/flush tid", max_requests / 10)
+        self.wait_for_health("MDS_CLIENT_OLDEST_TID", max_requests / 10)
 
     def _test_client_cache_size(self, mount_subdir):
         """

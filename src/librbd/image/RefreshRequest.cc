@@ -22,7 +22,7 @@
 namespace librbd {
 namespace image {
 
-using util::create_rados_ack_callback;
+using util::create_rados_callback;
 using util::create_async_context_callback;
 using util::create_context_callback;
 
@@ -64,7 +64,7 @@ void RefreshRequest<I>::send_v1_read_header() {
   op.read(0, 0, nullptr, nullptr);
 
   using klass = RefreshRequest<I>;
-  librados::AioCompletion *comp = create_rados_ack_callback<
+  librados::AioCompletion *comp = create_rados_callback<
     klass, &klass::handle_v1_read_header>(this);
   m_out_bl.clear();
   int r = m_image_ctx.md_ctx.aio_operate(m_image_ctx.header_oid, comp, &op,
@@ -109,7 +109,7 @@ void RefreshRequest<I>::send_v1_get_snapshots() {
   cls_client::old_snapshot_list_start(&op);
 
   using klass = RefreshRequest<I>;
-  librados::AioCompletion *comp = create_rados_ack_callback<
+  librados::AioCompletion *comp = create_rados_callback<
     klass, &klass::handle_v1_get_snapshots>(this);
   m_out_bl.clear();
   int r = m_image_ctx.md_ctx.aio_operate(m_image_ctx.header_oid, comp, &op,
@@ -161,7 +161,7 @@ void RefreshRequest<I>::send_v1_get_locks() {
   rados::cls::lock::get_lock_info_start(&op, RBD_LOCK_NAME);
 
   using klass = RefreshRequest<I>;
-  librados::AioCompletion *comp = create_rados_ack_callback<
+  librados::AioCompletion *comp = create_rados_callback<
     klass, &klass::handle_v1_get_locks>(this);
   m_out_bl.clear();
   int r = m_image_ctx.md_ctx.aio_operate(m_image_ctx.header_oid, comp, &op,
@@ -236,7 +236,7 @@ void RefreshRequest<I>::send_v2_get_mutable_metadata() {
   cls_client::get_mutable_metadata_start(&op, read_only);
 
   using klass = RefreshRequest<I>;
-  librados::AioCompletion *comp = create_rados_ack_callback<
+  librados::AioCompletion *comp = create_rados_callback<
     klass, &klass::handle_v2_get_mutable_metadata>(this);
   m_out_bl.clear();
   int r = m_image_ctx.md_ctx.aio_operate(m_image_ctx.header_oid, comp, &op,
@@ -298,7 +298,7 @@ void RefreshRequest<I>::send_v2_get_flags() {
   cls_client::get_flags_start(&op, m_snapc.snaps);
 
   using klass = RefreshRequest<I>;
-  librados::AioCompletion *comp = create_rados_ack_callback<
+  librados::AioCompletion *comp = create_rados_callback<
     klass, &klass::handle_v2_get_flags>(this);
   m_out_bl.clear();
   int r = m_image_ctx.md_ctx.aio_operate(m_image_ctx.header_oid, comp, &op,
@@ -352,7 +352,7 @@ void RefreshRequest<I>::send_v2_get_group() {
   cls_client::image_get_group_start(&op);
 
   using klass = RefreshRequest<I>;
-  librados::AioCompletion *comp = create_rados_ack_callback<
+  librados::AioCompletion *comp = create_rados_callback<
     klass, &klass::handle_v2_get_group>(this);
   m_out_bl.clear();
   int r = m_image_ctx.md_ctx.aio_operate(m_image_ctx.header_oid, comp, &op,
@@ -405,7 +405,7 @@ void RefreshRequest<I>::send_v2_get_snapshots() {
   cls_client::snapshot_list_start(&op, m_snapc.snaps);
 
   using klass = RefreshRequest<I>;
-  librados::AioCompletion *comp = create_rados_ack_callback<
+  librados::AioCompletion *comp = create_rados_callback<
     klass, &klass::handle_v2_get_snapshots>(this);
   m_out_bl.clear();
   int r = m_image_ctx.md_ctx.aio_operate(m_image_ctx.header_oid, comp, &op,
@@ -451,7 +451,7 @@ void RefreshRequest<I>::send_v2_get_snap_timestamps() {
   cls_client::snapshot_timestamp_list_start(&op, m_snapc.snaps);
 
   using klass = RefreshRequest<I>;
-  librados::AioCompletion *comp = create_rados_ack_callback<
+  librados::AioCompletion *comp = create_rados_callback<
 		  klass, &klass::handle_v2_get_snap_timestamps>(this);
   m_out_bl.clear();
   int r = m_image_ctx.md_ctx.aio_operate(m_image_ctx.header_oid, comp, &op,
@@ -495,7 +495,7 @@ void RefreshRequest<I>::send_v2_get_snap_namespaces() {
   cls_client::snapshot_namespace_list_start(&op, m_snapc.snaps);
 
   using klass = RefreshRequest<I>;
-  librados::AioCompletion *comp = create_rados_ack_callback<
+  librados::AioCompletion *comp = create_rados_callback<
     klass, &klass::handle_v2_get_snap_namespaces>(this);
   m_out_bl.clear();
   int r = m_image_ctx.md_ctx.aio_operate(m_image_ctx.header_oid, comp, &op,
@@ -541,7 +541,7 @@ void RefreshRequest<I>::send_v2_refresh_parent() {
     RWLock::RLocker snap_locker(m_image_ctx.snap_lock);
     RWLock::RLocker parent_locker(m_image_ctx.parent_lock);
 
-    parent_info parent_md;
+    ParentInfo parent_md;
     int r = get_parent_info(m_image_ctx.snap_id, &parent_md);
     if (!m_skip_open_parent_image && (r < 0 ||
         RefreshParentRequest<I>::is_refresh_required(m_image_ctx, parent_md))) {
@@ -644,7 +644,8 @@ void RefreshRequest<I>::send_v2_open_journal() {
         !journal_disabled_by_policy &&
         m_image_ctx.exclusive_lock != nullptr &&
         m_image_ctx.journal == nullptr) {
-      m_image_ctx.io_work_queue->set_require_lock_on_read();
+      m_image_ctx.io_work_queue->set_require_lock(librbd::io::DIRECTION_BOTH,
+                                                  true);
     }
     send_v2_block_writes();
     return;
@@ -1044,18 +1045,20 @@ void RefreshRequest<I>::apply() {
       uint8_t protection_status = m_image_ctx.old_format ?
         static_cast<uint8_t>(RBD_PROTECTION_STATUS_UNPROTECTED) :
         m_snap_protection[i];
-      parent_info parent;
+      ParentInfo parent;
       if (!m_image_ctx.old_format) {
         parent = m_snap_parents[i];
       }
 
-      m_image_ctx.add_snap(m_snap_names[i], m_snap_namespaces[i], m_snapc.snaps[i].val,
-                           m_snap_sizes[i], parent, protection_status, flags, m_snap_timestamps[i]);
+      m_image_ctx.add_snap(m_snap_namespaces[i], m_snap_names[i],
+			   m_snapc.snaps[i].val, m_snap_sizes[i], parent,
+			   protection_status, flags, m_snap_timestamps[i]);
     }
     m_image_ctx.snapc = m_snapc;
 
     if (m_image_ctx.snap_id != CEPH_NOSNAP &&
-        m_image_ctx.get_snap_id(m_image_ctx.snap_name) != m_image_ctx.snap_id) {
+        m_image_ctx.get_snap_id(m_image_ctx.snap_namespace,
+				m_image_ctx.snap_name) != m_image_ctx.snap_id) {
       lderr(cct) << "tried to read from a snapshot that no longer exists: "
                  << m_image_ctx.snap_name << dendl;
       m_image_ctx.snap_exists = false;
@@ -1082,8 +1085,9 @@ void RefreshRequest<I>::apply() {
       }
       if (!m_image_ctx.test_features(RBD_FEATURE_JOURNALING,
                                      m_image_ctx.snap_lock)) {
-        if (m_image_ctx.journal != nullptr) {
-          m_image_ctx.io_work_queue->clear_require_lock_on_read();
+        if (!m_image_ctx.clone_copy_on_read && m_image_ctx.journal != nullptr) {
+          m_image_ctx.io_work_queue->set_require_lock(io::DIRECTION_READ,
+                                                      false);
         }
         std::swap(m_journal, m_image_ctx.journal);
       } else if (m_journal != nullptr) {
@@ -1100,7 +1104,7 @@ void RefreshRequest<I>::apply() {
 
 template <typename I>
 int RefreshRequest<I>::get_parent_info(uint64_t snap_id,
-                                       parent_info *parent_md) {
+                                       ParentInfo *parent_md) {
   if (snap_id == CEPH_NOSNAP) {
     *parent_md = m_parent_md;
     return 0;

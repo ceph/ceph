@@ -162,8 +162,8 @@ rbd_loc Worker::map_image_name(string image_name, string snap_name) const {
 
 
 Replayer::Replayer(int num_action_trackers)
-  : m_rbd(NULL), m_ioctx(0),  
-    m_pool_name("rbd"), m_latency_multiplier(1.0), 
+  : m_rbd(NULL), m_ioctx(0),
+    m_latency_multiplier(1.0),
     m_readonly(false), m_dump_perf_counters(false),
     m_num_action_trackers(num_action_trackers),
     m_action_trackers(new action_tracker_d[m_num_action_trackers]) {
@@ -192,6 +192,16 @@ void Replayer::run(const std::string& replay_file) {
       cerr << "Failed to connect to cluster: " << cpp_strerror(r) << std::endl;
       goto out;
     }
+
+    if (m_pool_name.empty()) {
+      r = rados.conf_get("rbd_default_pool", m_pool_name);
+      if (r < 0) {
+        cerr << "Failed to retrieve default pool: " << cpp_strerror(r)
+             << std::endl;
+        goto out;
+      }
+    }
+
     m_ioctx = new librados::IoCtx();
     {
       r = rados.ioctx_create(m_pool_name.c_str(), *m_ioctx);

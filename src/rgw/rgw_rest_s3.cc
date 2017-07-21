@@ -10,8 +10,10 @@
 #include "common/utf8.h"
 #include "common/ceph_json.h"
 #include "common/safe_io.h"
+#include "common/backport14.h"
 #include <boost/algorithm/string.hpp>
 #include <boost/algorithm/string/replace.hpp>
+#include <boost/utility/string_view.hpp>
 
 #include "rgw_rest.h"
 #include "rgw_rest_s3.h"
@@ -22,16 +24,24 @@
 #include "rgw_user.h"
 #include "rgw_cors.h"
 #include "rgw_cors_s3.h"
+#include "rgw_tag_s3.h"
 
 #include "rgw_client_io.h"
 
 #include "rgw_keystone.h"
+#include "rgw_auth_keystone.h"
+#include "rgw_auth_registry.h"
+
+#include "rgw_es_query.h"
 
 #include <typeinfo> // for 'typeid'
 
 #include "rgw_ldap.h"
 #include "rgw_token.h"
 #include "rgw_rest_role.h"
+#include "rgw_crypt.h"
+#include "rgw_crypt_sanitize.h"
+
 #include "include/assert.h"
 
 #define dout_context g_ceph_context
@@ -60,14 +70,13 @@ void dump_bucket(struct req_state *s, RGWBucketEnt& obj)
   s->formatter->close_section();
 }
 
-void rgw_get_errno_s3(rgw_http_errors *e , int err_no)
+void rgw_get_errno_s3(rgw_http_error *e , int err_no)
 {
-  const struct rgw_http_errors *r;
-  r = search_err(err_no, RGW_HTTP_ERRORS, ARRAY_LEN(RGW_HTTP_ERRORS));
+  rgw_http_errors::const_iterator r = rgw_http_s3_errors.find(err_no);
 
-  if (r) {
-    e->http_ret = r->http_ret;
-    e->s3_code = r->s3_code;
+  if (r != rgw_http_s3_errors.end()) {
+    e->http_ret = r->second.first;
+    e->s3_code = r->second.second;
   } else {
     e->http_ret = 500;
     e->s3_code = "UnknownError";
@@ -112,6 +121,15 @@ int RGWGetObj_ObjStore_S3Website::send_response_data(bufferlist& bl, off_t bl_of
 int RGWGetObj_ObjStore_S3Website::send_response_data_error()
 {
   return RGWGetObj_ObjStore_S3::send_response_data_error();
+}
+
+int RGWGetObj_ObjStore_S3::get_params()
+{
+  // for multisite sync requests, only read the slo manifest itself, rather than
+  // all of the data from its parts. the parts will sync as separate objects
+  skip_manifest = s->info.args.exists(RGW_SYS_PARAM_PREFIX "sync-manifest");
+
+  return RGWGetObj_ObjStore::get_params();
 }
 
 int RGWGetObj_ObjStore_S3::send_response_data_error()
@@ -159,7 +177,7 @@ int RGWGetObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t bl_ofs,
     dump_errno(s, custom_http_ret);
   } else {
     set_req_state_err(s, (partial_content && !op_ret) ? STATUS_PARTIAL_CONTENT
-          	  : op_ret);
+                  : op_ret);
     dump_errno(s);
   }
 
@@ -216,8 +234,15 @@ int RGWGetObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t bl_ofs,
     }
   }
 
+  for (auto &it : crypt_http_responses)
+    dump_header(s, it.first, it.second);
+
   dump_content_length(s, total_len);
   dump_last_modified(s, lastmod);
+  if (!version_id.empty()) {
+    dump_header(s, "x-amz-version-id", version_id);
+  }
+  
 
   if (! op_ret) {
     if (! lo_etag.empty()) {
@@ -259,11 +284,23 @@ int RGWGetObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t bl_ofs,
         if (!content_type) {
           content_type = iter->second.c_str();
         }
+      } else if (strcmp(name, RGW_ATTR_SLO_UINDICATOR) == 0) {
+        // this attr has an extra length prefix from ::encode() in prior versions
+        dump_header(s, "X-Object-Meta-Static-Large-Object", "True");
       } else if (strncmp(name, RGW_ATTR_META_PREFIX,
 			 sizeof(RGW_ATTR_META_PREFIX)-1) == 0) {
         /* User custom metadata. */
         name += sizeof(RGW_ATTR_PREFIX) - 1;
         dump_header(s, name, iter->second);
+      } else if (iter->first.compare(RGW_ATTR_TAGS) == 0) {
+        RGWObjTags obj_tags;
+        try{
+          bufferlist::iterator it = iter->second.begin();
+          obj_tags.decode(it);
+        } catch (buffer::error &err) {
+          ldout(s->cct,0) << "Error caught buffer::error couldn't decode TagSet " << dendl;
+        }
+        dump_header(s, RGW_AMZ_TAG_COUNT, obj_tags.count());
       }
     }
   }
@@ -296,6 +333,120 @@ send_data:
   }
 
   return 0;
+}
+
+int RGWGetObj_ObjStore_S3::get_decrypt_filter(std::unique_ptr<RGWGetDataCB> *filter, RGWGetDataCB* cb, bufferlist* manifest_bl)
+{
+  int res = 0;
+  std::unique_ptr<BlockCrypt> block_crypt;
+  res = rgw_s3_prepare_decrypt(s, attrs, &block_crypt, crypt_http_responses);
+  if (res == 0) {
+    if (block_crypt != nullptr) {
+      auto f = std::unique_ptr<RGWGetObj_BlockDecrypt>(new RGWGetObj_BlockDecrypt(s->cct, cb, std::move(block_crypt)));
+      //RGWGetObj_BlockDecrypt* f = new RGWGetObj_BlockDecrypt(s->cct, cb, std::move(block_crypt));
+      if (f != nullptr) {
+        if (manifest_bl != nullptr) {
+          res = f->read_manifest(*manifest_bl);
+          if (res == 0) {
+            *filter = std::move(f);
+          }
+        }
+      }
+    }
+  }
+  return res;
+}
+
+void RGWGetObjTags_ObjStore_S3::send_response_data(bufferlist& bl)
+{
+  dump_errno(s);
+  end_header(s, this, "application/xml");
+  dump_start(s);
+
+  s->formatter->open_object_section_in_ns("Tagging", XMLNS_AWS_S3);
+  s->formatter->open_object_section("TagSet");
+  if (has_tags){
+    RGWObjTagSet_S3 tagset;
+    bufferlist::iterator iter = bl.begin();
+    try {
+      tagset.decode(iter);
+    } catch (buffer::error& err) {
+      ldout(s->cct,0) << "ERROR: caught buffer::error, couldn't decode TagSet" << dendl;
+      op_ret= -EIO;
+      return;
+    }
+    tagset.dump_xml(s->formatter);
+  }
+  s->formatter->close_section();
+  s->formatter->close_section();
+  rgw_flush_formatter_and_reset(s, s->formatter);
+}
+
+
+int RGWPutObjTags_ObjStore_S3::get_params()
+{
+  RGWObjTagsXMLParser parser;
+
+  if (!parser.init()){
+    return -EINVAL;
+  }
+
+  char *data=nullptr;
+  int len=0;
+
+  const auto max_size = s->cct->_conf->rgw_max_put_param_size;
+  int r = rgw_rest_read_all_input(s, &data, &len, max_size, false);
+
+  if (r < 0)
+    return r;
+
+  auto data_deleter = std::unique_ptr<char, decltype(free)*>{data, free};
+
+  if (!parser.parse(data, len, 1)) {
+    return -ERR_MALFORMED_XML;
+  }
+
+  RGWObjTagSet_S3 *obj_tags_s3;
+  RGWObjTagging_S3 *tagging;
+
+  tagging = static_cast<RGWObjTagging_S3 *>(parser.find_first("Tagging"));
+  obj_tags_s3 = static_cast<RGWObjTagSet_S3 *>(tagging->find_first("TagSet"));
+  if(!obj_tags_s3){
+    return -ERR_MALFORMED_XML;
+  }
+
+  RGWObjTags obj_tags;
+  r = obj_tags_s3->rebuild(obj_tags);
+  if (r < 0)
+    return r;
+
+  obj_tags.encode(tags_bl);
+  ldout(s->cct, 20) << "Read " << obj_tags.count() << "tags" << dendl;
+
+  return 0;
+}
+
+void RGWPutObjTags_ObjStore_S3::send_response()
+{
+  if (op_ret)
+    set_req_state_err(s, op_ret);
+  dump_errno(s);
+  end_header(s, this, "application/xml");
+  dump_start(s);
+
+}
+
+void RGWDeleteObjTags_ObjStore_S3::send_response()
+{
+  int r = op_ret;
+  if (r == -ENOENT)
+    r = 0;
+  if (!r)
+    r = STATUS_NO_CONTENT;
+
+  set_req_state_err(s, r);
+  dump_errno(s);
+  end_header(s, this);
 }
 
 void RGWListBuckets_ObjStore_S3::send_response_begin(bool has_buckets)
@@ -364,6 +515,15 @@ static void dump_usage_categories_info(Formatter *formatter, const rgw_usage_log
   formatter->close_section(); // Category
 }
 
+static void dump_usage_bucket_info(Formatter *formatter, const std::string& name, const cls_user_bucket_entry& entry)
+{
+  formatter->open_object_section("Entry");
+  formatter->dump_string("Bucket", name);
+  formatter->dump_int("Bytes", entry.size);
+  formatter->dump_int("Bytes_Rounded", entry.size_rounded);
+  formatter->close_section(); // entry
+}
+
 void RGWGetUsage_ObjStore_S3::send_response()
 {
   if (op_ret < 0)
@@ -419,7 +579,7 @@ void RGWGetUsage_ObjStore_S3::send_response()
      }
      formatter->close_section(); // entries
    }
-  
+
    if (show_log_sum) {
      formatter->open_array_section("Summary");
      map<string, rgw_usage_log_entry>::iterator siter;
@@ -435,26 +595,38 @@ void RGWGetUsage_ObjStore_S3::send_response()
        formatter->dump_int("BytesReceived", total_usage.bytes_received);
        formatter->dump_int("Ops", total_usage.ops);
        formatter->dump_int("SuccessfulOps", total_usage.successful_ops);
-       formatter->close_section(); // total 
+       formatter->close_section(); // total
        formatter->close_section(); // user
      }
 
      if (s->cct->_conf->rgw_rest_getusage_op_compat) {
-       formatter->open_object_section("Stats"); 
-     }	
-       
+       formatter->open_object_section("Stats");
+     }
+
      formatter->dump_int("TotalBytes", header.stats.total_bytes);
      formatter->dump_int("TotalBytesRounded", header.stats.total_bytes_rounded);
      formatter->dump_int("TotalEntries", header.stats.total_entries);
-     
-     if (s->cct->_conf->rgw_rest_getusage_op_compat) { 
+
+     if (s->cct->_conf->rgw_rest_getusage_op_compat) {
        formatter->close_section(); //Stats
      }
 
      formatter->close_section(); // summary
    }
-   formatter->close_section(); // usage
-   rgw_flush_formatter_and_reset(s, s->formatter);
+
+  formatter->open_array_section("CapacityUsed");
+  formatter->open_object_section("User");
+  formatter->open_array_section("Buckets");
+  for (const auto& biter : buckets_usage) {
+    const cls_user_bucket_entry& entry = biter.second;
+    dump_usage_bucket_info(formatter, biter.first, entry);
+  }
+  formatter->close_section(); // Buckets
+  formatter->close_section(); // User
+  formatter->close_section(); // CapacityUsed
+
+  formatter->close_section(); // usage
+  rgw_flush_formatter_and_reset(s, s->formatter);
 }
 
 int RGWListBucket_ObjStore_S3::get_params()
@@ -499,8 +671,11 @@ void RGWListBucket_ObjStore_S3::send_versioned_response()
   s->formatter->dump_string("Name", s->bucket_name);
   s->formatter->dump_string("Prefix", prefix);
   s->formatter->dump_string("KeyMarker", marker.name);
-  if (is_truncated && !next_marker.empty())
+  s->formatter->dump_string("VersionIdMarker", marker.instance);
+  if (is_truncated && !next_marker.empty()) {
     s->formatter->dump_string("NextKeyMarker", next_marker.name);
+    s->formatter->dump_string("NextVersionIdMarker", next_marker.instance);
+  }
   s->formatter->dump_int("MaxKeys", max);
   if (!delimiter.empty())
     s->formatter->dump_string("Delimiter", delimiter);
@@ -519,7 +694,7 @@ void RGWListBucket_ObjStore_S3::send_versioned_response()
       s->formatter->open_array_section("Entries");
     }
 
-    vector<RGWObjEnt>::iterator iter;
+    vector<rgw_bucket_dir_entry>::iterator iter;
     for (iter = objs.begin(); iter != objs.end(); ++iter) {
       const char *section_name = (iter->is_delete_marker() ? "DeleteMarker"
 				  : "Version");
@@ -527,14 +702,15 @@ void RGWListBucket_ObjStore_S3::send_versioned_response()
       if (objs_container) {
         s->formatter->dump_bool("IsDeleteMarker", iter->is_delete_marker());
       }
+      rgw_obj_key key(iter->key);
       if (encode_key) {
 	string key_name;
-	url_encode(iter->key.name, key_name);
+	url_encode(key.name, key_name);
 	s->formatter->dump_string("Key", key_name);
       } else {
-	s->formatter->dump_string("Key", iter->key.name);
+	s->formatter->dump_string("Key", key.name);
       }
-      string version_id = iter->key.instance;
+      string version_id = key.instance;
       if (version_id.empty()) {
 	version_id = "null";
       }
@@ -543,18 +719,18 @@ void RGWListBucket_ObjStore_S3::send_versioned_response()
           s->formatter->dump_int("VersionedEpoch", iter->versioned_epoch);
         }
         s->formatter->dump_string("RgwxTag", iter->tag);
-        utime_t ut(iter->mtime);
+        utime_t ut(iter->meta.mtime);
         ut.gmtime_nsec(s->formatter->dump_stream("RgwxMtime"));
       }
       s->formatter->dump_string("VersionId", version_id);
       s->formatter->dump_bool("IsLatest", iter->is_current());
-      dump_time(s, "LastModified", &iter->mtime);
+      dump_time(s, "LastModified", &iter->meta.mtime);
       if (!iter->is_delete_marker()) {
-	s->formatter->dump_format("ETag", "\"%s\"", iter->etag.c_str());
-	s->formatter->dump_int("Size", iter->accounted_size);
+	s->formatter->dump_format("ETag", "\"%s\"", iter->meta.etag.c_str());
+	s->formatter->dump_int("Size", iter->meta.accounted_size);
 	s->formatter->dump_string("StorageClass", "STANDARD");
       }
-      dump_owner(s, iter->owner, iter->owner_display_name);
+      dump_owner(s, iter->meta.owner, iter->meta.owner_display_name);
       s->formatter->close_section();
     }
     if (objs_container) {
@@ -613,21 +789,22 @@ void RGWListBucket_ObjStore_S3::send_response()
   }
 
   if (op_ret >= 0) {
-    vector<RGWObjEnt>::iterator iter;
+    vector<rgw_bucket_dir_entry>::iterator iter;
     for (iter = objs.begin(); iter != objs.end(); ++iter) {
+      rgw_obj_key key(iter->key);
       s->formatter->open_array_section("Contents");
       if (encode_key) {
 	string key_name;
-	url_encode(iter->key.name, key_name);
+	url_encode(key.name, key_name);
 	s->formatter->dump_string("Key", key_name);
       } else {
-	s->formatter->dump_string("Key", iter->key.name);
+	s->formatter->dump_string("Key", key.name);
       }
-      dump_time(s, "LastModified", &iter->mtime);
-      s->formatter->dump_format("ETag", "\"%s\"", iter->etag.c_str());
-      s->formatter->dump_int("Size", iter->accounted_size);
+      dump_time(s, "LastModified", &iter->meta.mtime);
+      s->formatter->dump_format("ETag", "\"%s\"", iter->meta.etag.c_str());
+      s->formatter->dump_int("Size", iter->meta.accounted_size);
       s->formatter->dump_string("StorageClass", "STANDARD");
-      dump_owner(s, iter->owner, iter->owner_display_name);
+      dump_owner(s, iter->meta.owner, iter->meta.owner_display_name);
       if (s->system_request) {
         s->formatter->dump_string("RgwxTag", iter->tag);
       }
@@ -704,7 +881,7 @@ class RGWSetBucketVersioningParser : public RGWXMLParser
 
 public:
   RGWSetBucketVersioningParser() {}
-  ~RGWSetBucketVersioningParser() {}
+  ~RGWSetBucketVersioningParser() override {}
 
   int get_versioning_status(bool *status) {
     XMLObj *config = find_first("VersioningConfiguration");
@@ -731,23 +908,19 @@ public:
 
 int RGWSetBucketVersioning_ObjStore_S3::get_params()
 {
-#define GET_BUCKET_VERSIONING_BUF_MAX (128 * 1024)
-
   char *data = nullptr;
   int len = 0;
   int r =
-    rgw_rest_read_all_input(s, &data, &len, GET_BUCKET_VERSIONING_BUF_MAX);
+    rgw_rest_read_all_input(s, &data, &len, s->cct->_conf->rgw_max_put_param_size, false);
   if (r < 0) {
     return r;
   }
   
   auto data_deleter = std::unique_ptr<char, decltype(free)*>{data, free};
 
-  if (s->aws4_auth_needs_complete) {
-    int ret_auth = do_aws4_auth_completion();
-    if (ret_auth < 0) {
-      return ret_auth;
-    }
+  r = do_aws4_auth_completion();
+  if (r < 0) {
+    return r;
   }
 
   RGWSetBucketVersioningParser parser;
@@ -784,23 +957,24 @@ void RGWSetBucketVersioning_ObjStore_S3::send_response()
 
 int RGWSetBucketWebsite_ObjStore_S3::get_params()
 {
-  static constexpr uint32_t GET_BUCKET_WEBSITE_BUF_MAX = (128 * 1024);
-
   char *data = nullptr;
   int len = 0;
-  int r = rgw_rest_read_all_input(s, &data, &len, GET_BUCKET_WEBSITE_BUF_MAX);
+  const auto max_size = s->cct->_conf->rgw_max_put_param_size;
+  int r = rgw_rest_read_all_input(s, &data, &len, max_size, false);
+
   if (r < 0) {
     return r;
   }
 
   auto data_deleter = std::unique_ptr<char, decltype(free)*>{data, free};
 
-  if (s->aws4_auth_needs_complete) {
-      int ret_auth = do_aws4_auth_completion();
-      if (ret_auth < 0) {
-        return ret_auth;
-      }
+  r = do_aws4_auth_completion();
+  if (r < 0) {
+    return r;
   }
+
+  bufferptr in_ptr(data, len);
+  in_data.append(in_ptr);
 
   RGWXMLDecoder::XMLParser parser;
   if (!parser.init()) {
@@ -900,7 +1074,7 @@ class RGWLocationConstraint : public XMLObj
 {
 public:
   RGWLocationConstraint() {}
-  ~RGWLocationConstraint() {}
+  ~RGWLocationConstraint() override {}
   bool xml_end(const char *el) override {
     if (!el)
       return false;
@@ -917,7 +1091,7 @@ class RGWCreateBucketConfig : public XMLObj
 {
 public:
   RGWCreateBucketConfig() {}
-  ~RGWCreateBucketConfig() {}
+  ~RGWCreateBucketConfig() override {}
 };
 
 class RGWCreateBucketParser : public RGWXMLParser
@@ -928,7 +1102,7 @@ class RGWCreateBucketParser : public RGWXMLParser
 
 public:
   RGWCreateBucketParser() {}
-  ~RGWCreateBucketParser() {}
+  ~RGWCreateBucketParser() override {}
 
   bool get_location_constraint(string& zone_group) {
     XMLObj *config = find_first("CreateBucketConfiguration");
@@ -957,18 +1131,18 @@ int RGWCreateBucket_ObjStore_S3::get_params()
 
   int len = 0;
   char *data = nullptr;
-#define CREATE_BUCKET_MAX_REQ_LEN (512 * 1024) /* this is way more than enough */
-  op_ret = rgw_rest_read_all_input(s, &data, &len, CREATE_BUCKET_MAX_REQ_LEN);
+
+  const auto max_size = s->cct->_conf->rgw_max_put_param_size;
+  op_ret = rgw_rest_read_all_input(s, &data, &len, max_size, false);
+
   if ((op_ret < 0) && (op_ret != -ERR_LENGTH_REQUIRED))
     return op_ret;
 
   auto data_deleter = std::unique_ptr<char, decltype(free)*>{data, free};
 
-  if (s->aws4_auth_needs_complete) {
-    int ret_auth = do_aws4_auth_completion();
-    if (ret_auth < 0) {
-      return ret_auth;
-    }
+  const int auth_ret = do_aws4_auth_completion();
+  if (auth_ret < 0) {
+    return auth_ret;
   }
   
   bufferptr in_ptr(data, len);
@@ -1054,15 +1228,15 @@ void RGWDeleteBucket_ObjStore_S3::send_response()
 
 int RGWPutObj_ObjStore_S3::get_params()
 {
+  if (!s->length)
+    return -ERR_LENGTH_REQUIRED;
+
   RGWObjectCtx& obj_ctx = *static_cast<RGWObjectCtx *>(s->obj_ctx);
   map<string, bufferlist> src_attrs;
   size_t pos;
   int ret;
 
   RGWAccessControlPolicy_S3 s3policy(s->cct);
-  if (!s->length)
-    return -ERR_LENGTH_REQUIRED;
-
   ret = create_s3_policy(s, store, s3policy, s->owner);
   if (ret < 0)
     return ret;
@@ -1077,6 +1251,7 @@ int RGWPutObj_ObjStore_S3::get_params()
   /* handle x-amz-copy-source */
 
   if (copy_source) {
+    if (*copy_source == '/') ++copy_source;
     copy_source_bucket_name = copy_source;
     pos = copy_source_bucket_name.find("/");
     if (pos == std::string::npos) {
@@ -1089,10 +1264,10 @@ int RGWPutObj_ObjStore_S3::get_params()
 #define VERSION_ID_STR "?versionId="
     pos = copy_source_object_name.find(VERSION_ID_STR);
     if (pos == std::string::npos) {
-      url_decode(copy_source_object_name, copy_source_object_name);
+      copy_source_object_name = url_decode(copy_source_object_name);
     } else {
       copy_source_version_id = copy_source_object_name.substr(pos + sizeof(VERSION_ID_STR) - 1);
-      url_decode(copy_source_object_name.substr(0, pos), copy_source_object_name);
+      copy_source_object_name = url_decode(copy_source_object_name.substr(0, pos));
     }
     pos = copy_source_bucket_name.find(":");
     if (pos == std::string::npos) {
@@ -1141,161 +1316,29 @@ int RGWPutObj_ObjStore_S3::get_params()
 
   } /* copy_source */
 
+  /* handle object tagging */
+  auto tag_str = s->info.env->get("HTTP_X_AMZ_TAGGING");
+  if (tag_str){
+    obj_tags = ceph::make_unique<RGWObjTags>();
+    ret = obj_tags->set_from_string(tag_str);
+    if (ret < 0){
+      ldout(s->cct,0) << "setting obj tags failed with " << ret << dendl;
+      if (ret == -ERR_INVALID_TAG){
+        ret = -EINVAL; //s3 returns only -EINVAL for PUT requests
+      }
+
+      return ret;
+    }
+  }
+
   return RGWPutObj_ObjStore::get_params();
-}
-
-int RGWPutObj_ObjStore_S3::validate_aws4_single_chunk(char *chunk_str,
-                                                      char *chunk_data_str,
-                                                      unsigned int chunk_data_size,
-                                                      string chunk_signature)
-{
-
-  /* string to sign */
-
-  string hash_empty_str;
-  rgw_hash_s3_string_sha256("", 0, hash_empty_str);
-
-  string hash_chunk_data;
-  rgw_hash_s3_string_sha256(chunk_data_str, chunk_data_size, hash_chunk_data);
-
-  string string_to_sign = "AWS4-HMAC-SHA256-PAYLOAD\n";
-  string_to_sign.append(s->aws4_auth->date + "\n");
-  string_to_sign.append(s->aws4_auth->credential_scope + "\n");
-  string_to_sign.append(s->aws4_auth->seed_signature + "\n");
-  string_to_sign.append(hash_empty_str + "\n");
-  string_to_sign.append(hash_chunk_data);
-
-  /* new chunk signature */
-
-  char signature_k[CEPH_CRYPTO_HMACSHA256_DIGESTSIZE];
-  calc_hmac_sha256(s->aws4_auth->signing_k, CEPH_CRYPTO_HMACSHA256_DIGESTSIZE,
-      string_to_sign.c_str(), string_to_sign.size(), signature_k);
-
-  char aux[CEPH_CRYPTO_HMACSHA256_DIGESTSIZE * 2 + 1];
-  buf_to_hex((unsigned char *) signature_k, CEPH_CRYPTO_HMACSHA256_DIGESTSIZE, aux);
-
-  string new_chunk_signature = string(aux);
-
-  ldout(s->cct, 20) << "--------------- aws4 chunk validation" << dendl;
-  ldout(s->cct, 20) << "chunk_signature     = " << chunk_signature << dendl;
-  ldout(s->cct, 20) << "new_chunk_signature = " << new_chunk_signature << dendl;
-  ldout(s->cct, 20) << "aws4 chunk signing_key    = " << s->aws4_auth->signing_key << dendl;
-  ldout(s->cct, 20) << "aws4 chunk string_to_sign = " << string_to_sign << dendl;
-
-  /* chunk auth ok? */
-
-  if (new_chunk_signature != chunk_signature) {
-    ldout(s->cct, 20) << "ERROR: AWS4 chunk signature does NOT match (new_chunk_signature != chunk_signature)" << dendl;
-    return -ERR_SIGNATURE_NO_MATCH;
-  }
-
-  /* update seed signature */
-
-  s->aws4_auth->seed_signature = new_chunk_signature;
-
-  return 0;
-}
-
-int RGWPutObj_ObjStore_S3::validate_and_unwrap_available_aws4_chunked_data(bufferlist& bl_in,
-                                                                           bufferlist& bl_out)
-{
-
-  /* string(IntHexBase(chunk-size)) + ";chunk-signature=" + signature + \r\n + chunk-data + \r\n */
-
-  const unsigned int chunk_str_min_len = 1 + 17 + 64 + 2; /* len('0') = 1 */
-
-  char *chunk_str = bl_in.c_str();
-  unsigned int budget = bl_in.length();
-
-  bl_out.clear();
-
-  while (true) {
-
-    /* check available metadata */
-
-    if (budget < chunk_str_min_len) {
-      return -ERR_SIGNATURE_NO_MATCH;
-    }
-
-    unsigned int chunk_offset = 0;
-
-    /* grab chunk size */
-
-    while ((*(chunk_str+chunk_offset) != ';') && (chunk_offset < chunk_str_min_len))
-      chunk_offset++;
-    string str = string(chunk_str, chunk_offset);
-    unsigned int chunk_data_size;
-    stringstream ss;
-    ss << std::hex << str;
-    ss >> chunk_data_size;
-    if (ss.fail()) {
-      return -ERR_SIGNATURE_NO_MATCH;
-    }
-
-    /* grab chunk signature */
-
-    chunk_offset += 17;
-    string chunk_signature = string(chunk_str, chunk_offset, 64);
-
-    /* get chunk data */
-
-    chunk_offset += 64 + 2;
-    char *chunk_data_str = chunk_str + chunk_offset;
-
-    /* handle budget */
-
-    budget -= chunk_offset;
-    if (budget < chunk_data_size) {
-      return -ERR_SIGNATURE_NO_MATCH;
-    } else {
-      budget -= chunk_data_size;
-    }
-
-    /* auth single chunk */
-
-    if (validate_aws4_single_chunk(chunk_str, chunk_data_str, chunk_data_size, chunk_signature) < 0) {
-      ldout(s->cct, 20) << "ERROR AWS4 single chunk validation" << dendl;
-      return -ERR_SIGNATURE_NO_MATCH;
-    }
-
-    /* aggregate single chunk */
-
-    bl_out.append(chunk_data_str, chunk_data_size);
-
-    /* last chunk or no more budget? */
-
-    if ((chunk_data_size == 0) || (budget == 0))
-      break;
-
-    /* next chunk */
-
-    chunk_offset += chunk_data_size;
-    chunk_str += chunk_offset;
-  }
-
-  /* authorization ok */
-
-  return 0;
-
 }
 
 int RGWPutObj_ObjStore_S3::get_data(bufferlist& bl)
 {
-  int ret = RGWPutObj_ObjStore::get_data(bl);
-  if (ret < 0)
-    s->aws4_auth_needs_complete = false;
-
-  int ret_auth;
-
-  if (s->aws4_auth_streaming_mode && ret > 0) {
-    ret_auth = validate_and_unwrap_available_aws4_chunked_data(bl, s->aws4_auth->bl);
-    if (ret_auth < 0) {
-      return ret_auth;
-    }
-  }
-
-  if ((ret == 0) && s->aws4_auth_needs_complete) {
-    ret_auth = do_aws4_auth_completion();
+  const int ret = RGWPutObj_ObjStore::get_data(bl);
+  if (ret == 0) {
+    const int ret_auth = do_aws4_auth_completion();
     if (ret_auth < 0) {
       return ret_auth;
     }
@@ -1330,6 +1373,8 @@ void RGWPutObj_ObjStore_S3::send_response()
       dump_errno(s);
       dump_etag(s, etag);
       dump_content_length(s, 0);
+      for (auto &it : crypt_http_responses)
+        dump_header(s, it.first, it.second);
     } else {
       dump_errno(s);
       end_header(s, this, "application/xml");
@@ -1356,264 +1401,98 @@ void RGWPutObj_ObjStore_S3::send_response()
   end_header(s, this);
 }
 
-/*
- * parses params in the format: 'first; param1=foo; param2=bar'
- */
-static void parse_params(const string& params_str, string& first,
-			 map<string, string>& params)
+static inline int get_obj_attrs(RGWRados *store, struct req_state *s, rgw_obj& obj, map<string, bufferlist>& attrs)
 {
-  size_t pos = params_str.find(';');
-  if (pos == string::npos) {
-    first = rgw_trim_whitespace(params_str);
-    return;
-  }
+  RGWRados::Object op_target(store, s->bucket_info, *static_cast<RGWObjectCtx *>(s->obj_ctx), obj);
+  RGWRados::Object::Read read_op(&op_target);
 
-  first = rgw_trim_whitespace(params_str.substr(0, pos));
+  read_op.params.attrs = &attrs;
 
-  pos++;
-
-  while (pos < params_str.size()) {
-    size_t end = params_str.find(';', pos);
-    if (end == string::npos)
-      end = params_str.size();
-
-    string param = params_str.substr(pos, end - pos);
-
-    size_t eqpos = param.find('=');
-    if (eqpos != string::npos) {
-      params[rgw_trim_whitespace(param.substr(0, eqpos))] =
-        rgw_trim_quotes(param.substr(eqpos + 1));
-    } else {
-      params[rgw_trim_whitespace(param)] = "";
-    }
-
-    pos = end + 1;
-  }
+  return read_op.prepare();
 }
 
-static int parse_part_field(const string& line, string& field_name,
-			    struct post_part_field& field)
-{
-  size_t pos = line.find(':');
-  if (pos == string::npos)
-    return -EINVAL;
-
-  field_name = line.substr(0, pos);
-  if (pos >= line.size() - 1)
-    return 0;
-
-  parse_params(line.substr(pos + 1), field.val, field.params);
-
-  return 0;
-}
-
-bool is_crlf(const char *s)
-{
-  return (*s == '\r' && *(s + 1) == '\n');
-}
-
-/*
- * find the index of the boundary, if exists, or optionally the next end of line
- * also returns how many bytes to skip
- */
-static int index_of(bufferlist& bl, int max_len, const string& str,
-		    bool check_crlf,
-		    bool *reached_boundary, int *skip)
-{
-  *reached_boundary = false;
-  *skip = 0;
-
-  if (str.size() < 2) // we assume boundary is at least 2 chars (makes it easier with crlf checks)
-    return -EINVAL;
-
-  if (bl.length() < str.size())
-    return -1;
-
-  const char *buf = bl.c_str();
-  const char *s = str.c_str();
-
-  if (max_len > (int)bl.length())
-    max_len = bl.length();
-
-  int i;
-  for (i = 0; i < max_len; i++, buf++) {
-    if (check_crlf &&
-	i >= 1 &&
-	is_crlf(buf - 1)) {
-      return i + 1; // skip the crlf
-    }
-    if ((i < max_len - (int)str.size() + 1) &&
-	(buf[0] == s[0] && buf[1] == s[1]) &&
-	(strncmp(buf, s, str.size()) == 0)) {
-      *reached_boundary = true;
-      *skip = str.size();
-
-      /* oh, great, now we need to swallow the preceding crlf
-       * if exists
-       */
-      if ((i >= 2) &&
-	  is_crlf(buf - 2)) {
-	i -= 2;
-	*skip += 2;
-      }
-      return i;
-    }
-  }
-
-  return -1;
-}
-
-int RGWPostObj_ObjStore_S3::read_with_boundary(bufferlist& bl, uint64_t max,
-					       bool check_crlf,
-					       bool *reached_boundary,
-					       bool *done)
-{
-  uint64_t cl = max + 2 + boundary.size();
-
-  if (max > in_data.length()) {
-    uint64_t need_to_read = cl - in_data.length();
-
-    bufferptr bp(need_to_read);
-
-    const auto read_len = recv_body(s, bp.c_str(), need_to_read);
-    in_data.append(bp, 0, read_len);
-  }
-
-  *done = false;
-  int skip;
-  int index = index_of(in_data, cl, boundary, check_crlf, reached_boundary,
-		       &skip);
-  if (index >= 0)
-    max = index;
-
-  if (max > in_data.length())
-    max = in_data.length();
-
-  bl.substr_of(in_data, 0, max);
-
-  bufferlist new_read_data;
-
-  /*
-   * now we need to skip boundary for next time, also skip any crlf, or
-   * check to see if it's the last final boundary (marked with "--" at the end
-   */
-  if (*reached_boundary) {
-    int left = in_data.length() - max;
-    if (left < skip + 2) {
-      int need = skip + 2 - left;
-      bufferptr boundary_bp(need);
-      recv_body(s, boundary_bp.c_str(), need);
-      in_data.append(boundary_bp);
-    }
-    max += skip; // skip boundary for next time
-    if (in_data.length() >= max + 2) {
-      const char *data = in_data.c_str();
-      if (is_crlf(data + max)) {
-	max += 2;
-      } else {
-	if (*(data + max) == '-' &&
-	    *(data + max + 1) == '-') {
-	  *done = true;
-	  max += 2;
-	}
-      }
-    }
-  }
-
-  new_read_data.substr_of(in_data, max, in_data.length() - max);
-  in_data = new_read_data;
-
-  return 0;
-}
-
-int RGWPostObj_ObjStore_S3::read_line(bufferlist& bl, uint64_t max,
-				  bool *reached_boundary, bool *done)
-{
-  return read_with_boundary(bl, max, true, reached_boundary, done);
-}
-
-int RGWPostObj_ObjStore_S3::read_data(bufferlist& bl, uint64_t max,
-				  bool *reached_boundary, bool *done)
-{
-  return read_with_boundary(bl, max, false, reached_boundary, done);
-}
-
-
-int RGWPostObj_ObjStore_S3::read_form_part_header(struct post_form_part *part,
-						  bool *done)
+static inline void set_attr(map<string, bufferlist>& attrs, const char* key, const std::string& value)
 {
   bufferlist bl;
-  bool reached_boundary;
-  uint64_t chunk_size = s->cct->_conf->rgw_max_chunk_size;
-  int r = read_line(bl, chunk_size, &reached_boundary, done);
-  if (r < 0)
-    return r;
+  ::encode(value,bl);
+  attrs.emplace(key, std::move(bl));
+}
 
-  if (*done) {
-    return 0;
-  }
+static inline void set_attr(map<string, bufferlist>& attrs, const char* key, const char* value)
+{
+  bufferlist bl;
+  ::encode(value,bl);
+  attrs.emplace(key, std::move(bl));
+}
 
-  if (reached_boundary) { // skip the first boundary
-    r = read_line(bl, chunk_size, &reached_boundary, done);
-    if (r < 0)
-      return r;
-    if (*done)
-      return 0;
-  }
+int RGWPutObj_ObjStore_S3::get_decrypt_filter(
+    std::unique_ptr<RGWGetDataCB>* filter,
+    RGWGetDataCB* cb,
+    map<string, bufferlist>& attrs,
+    bufferlist* manifest_bl)
+{
+  std::map<std::string, std::string> crypt_http_responses_unused;
 
-  while (true) {
-  /*
-   * iterate through fields
-   */
-    string line = rgw_trim_whitespace(string(bl.c_str(), bl.length()));
-
-    if (line.empty())
-      break;
-
-    struct post_part_field field;
-
-    string field_name;
-    r = parse_part_field(line, field_name, field);
-    if (r < 0)
-      return r;
-
-    part->fields[field_name] = field;
-
-    if (stringcasecmp(field_name, "Content-Disposition") == 0) {
-      part->name = field.params["name"];
+  int res = 0;
+  std::unique_ptr<BlockCrypt> block_crypt;
+  res = rgw_s3_prepare_decrypt(s, attrs, &block_crypt, crypt_http_responses_unused);
+  if (res == 0) {
+    if (block_crypt != nullptr) {
+      auto f = std::unique_ptr<RGWGetObj_BlockDecrypt>(new RGWGetObj_BlockDecrypt(s->cct, cb, std::move(block_crypt)));
+      //RGWGetObj_BlockDecrypt* f = new RGWGetObj_BlockDecrypt(s->cct, cb, std::move(block_crypt));
+      if (f != nullptr) {
+        if (manifest_bl != nullptr) {
+          res = f->read_manifest(*manifest_bl);
+          if (res == 0) {
+            *filter = std::move(f);
+          }
+        }
+      }
     }
-
-    if (reached_boundary)
-      break;
-
-    r = read_line(bl, chunk_size, &reached_boundary, done);
   }
-
-  return 0;
+  return res;
 }
 
-bool RGWPostObj_ObjStore_S3::part_str(const string& name, string *val)
+int RGWPutObj_ObjStore_S3::get_encrypt_filter(
+    std::unique_ptr<RGWPutObjDataProcessor>* filter,
+    RGWPutObjDataProcessor* cb)
 {
-  map<string, struct post_form_part, ltstr_nocase>::iterator iter
-    = parts.find(name);
-  if (iter == parts.end())
-    return false;
+  int res = 0;
+  RGWPutObjProcessor_Multipart* multi_processor=dynamic_cast<RGWPutObjProcessor_Multipart*>(cb);
+  if (multi_processor != nullptr) {
+    RGWMPObj* mp = nullptr;
+    multi_processor->get_mp(&mp);
+    if (mp != nullptr) {
+      map<string, bufferlist> xattrs;
+      string meta_oid;
+      meta_oid = mp->get_meta();
 
-  bufferlist& data = iter->second.data;
-  string str = string(data.c_str(), data.length());
-  *val = rgw_trim_whitespace(str);
-  return true;
-}
-
-bool RGWPostObj_ObjStore_S3::part_bl(const string& name, bufferlist *pbl)
-{
-  map<string, struct post_form_part, ltstr_nocase>::iterator iter =
-    parts.find(name);
-  if (iter == parts.end())
-    return false;
-
-  *pbl = iter->second.data;
-  return true;
+      rgw_obj obj;
+      obj.init_ns(s->bucket, meta_oid, RGW_OBJ_NS_MULTIPART);
+      obj.set_in_extra_data(true);
+      res = get_obj_attrs(store, s, obj, xattrs);
+      if (res == 0) {
+        std::unique_ptr<BlockCrypt> block_crypt;
+        /* We are adding to existing object.
+         * We use crypto mode that configured as if we were decrypting. */
+        res = rgw_s3_prepare_decrypt(s, xattrs, &block_crypt, crypt_http_responses);
+        if (res == 0 && block_crypt != nullptr)
+          *filter = std::unique_ptr<RGWPutObj_BlockEncrypt>(
+              new RGWPutObj_BlockEncrypt(s->cct, cb, std::move(block_crypt)));
+      }
+    }
+    /* it is ok, to not have encryption at all */
+  }
+  else
+  {
+    std::unique_ptr<BlockCrypt> block_crypt;
+    res = rgw_s3_prepare_encrypt(s, attrs, nullptr, &block_crypt, crypt_http_responses);
+    if (res == 0 && block_crypt != nullptr) {
+      *filter = std::unique_ptr<RGWPutObj_BlockEncrypt>(
+          new RGWPutObj_BlockEncrypt(s->cct, cb, std::move(block_crypt)));
+    }
+  }
+  return res;
 }
 
 void RGWPostObj_ObjStore_S3::rebuild_key(string& key)
@@ -1630,74 +1509,47 @@ void RGWPostObj_ObjStore_S3::rebuild_key(string& key)
   key = new_key;
 }
 
+std::string RGWPostObj_ObjStore_S3::get_current_filename() const
+{
+  return s->object.name;
+}
+
+std::string RGWPostObj_ObjStore_S3::get_current_content_type() const
+{
+  return content_type;
+}
+
 int RGWPostObj_ObjStore_S3::get_params()
 {
-  // get the part boundary
-  string req_content_type_str = s->info.env->get("CONTENT_TYPE", "");
-  string req_content_type;
-  map<string, string> params;
-
-  if (s->expect_cont) {
-    /* ok, here it really gets ugly. With POST, the params are embedded in the
-     * request body, so we need to continue before being able to actually look
-     * at them. This diverts from the usual request flow.
-     */
-    dump_continue(s);
-    s->expect_cont = false;
-  }
-
-  parse_params(req_content_type_str, req_content_type, params);
-
-  if (req_content_type.compare("multipart/form-data") != 0) {
-    err_msg = "Request Content-Type is not multipart/form-data";
-    return -EINVAL;
-  }
-
-  if (s->cct->_conf->subsys.should_gather(ceph_subsys_rgw, 20)) {
-    ldout(s->cct, 20) << "request content_type_str="
-		      << req_content_type_str << dendl;
-    ldout(s->cct, 20) << "request content_type params:" << dendl;
-    map<string, string>::iterator iter;
-    for (iter = params.begin(); iter != params.end(); ++iter) {
-      ldout(s->cct, 20) << " " << iter->first << " -> " << iter->second
-			<< dendl;
-    }
+  op_ret = RGWPostObj_ObjStore::get_params();
+  if (op_ret < 0) {
+    return op_ret;
   }
 
   ldout(s->cct, 20) << "adding bucket to policy env: " << s->bucket.name
 		    << dendl;
   env.add_var("bucket", s->bucket.name);
 
-  map<string, string>::iterator iter = params.find("boundary");
-  if (iter == params.end()) {
-    err_msg = "Missing multipart boundary specification";
-    return -EINVAL;
-  }
-
-  // create the boundary
-  boundary = "--";
-  boundary.append(iter->second);
-
   bool done;
   do {
     struct post_form_part part;
-    int r = read_form_part_header(&part, &done);
+    int r = read_form_part_header(&part, done);
     if (r < 0)
       return r;
 
     if (s->cct->_conf->subsys.should_gather(ceph_subsys_rgw, 20)) {
-      map<string, struct post_part_field, ltstr_nocase>::iterator piter;
-      for (piter = part.fields.begin(); piter != part.fields.end(); ++piter) {
-	ldout(s->cct, 20) << "read part header: name=" << part.name
-			  << " content_type=" << part.content_type << dendl;
-	ldout(s->cct, 20) << "name=" << piter->first << dendl;
-	ldout(s->cct, 20) << "val=" << piter->second.val << dendl;
-	ldout(s->cct, 20) << "params:" << dendl;
-	map<string, string>& params = piter->second.params;
-	for (iter = params.begin(); iter != params.end(); ++iter) {
-	  ldout(s->cct, 20) << " " << iter->first << " -> " << iter->second
-			    << dendl;
-	}
+      ldout(s->cct, 20) << "read part header -- part.name="
+                        << part.name << dendl;
+
+      for (const auto& pair : part.fields) {
+        ldout(s->cct, 20) << "field.name=" << pair.first << dendl;
+        ldout(s->cct, 20) << "field.val=" << pair.second.val << dendl;
+        ldout(s->cct, 20) << "field.params:" << dendl;
+
+        for (const auto& param_pair : pair.second.params) {
+          ldout(s->cct, 20) << " " << param_pair.first
+                            << " -> " << param_pair.second << dendl;
+        }
       }
     }
 
@@ -1713,14 +1565,13 @@ int RGWPostObj_ObjStore_S3::get_params()
 	filename = iter->second;
       }
       parts[part.name] = part;
-      data_pending = true;
       break;
     }
 
     bool boundary;
     uint64_t chunk_size = s->cct->_conf->rgw_max_chunk_size;
-    r = read_data(part.data, chunk_size, &boundary, &done);
-    if (!boundary) {
+    r = read_data(part.data, chunk_size, boundary, done);
+    if (r < 0 || !boundary) {
       err_msg = "Couldn't find boundary";
       return -EINVAL;
     }
@@ -1730,7 +1581,7 @@ int RGWPostObj_ObjStore_S3::get_params()
   } while (!done);
 
   string object_str;
-  if (!part_str("key", &object_str)) {
+  if (!part_str(parts, "key", &object_str)) {
     err_msg = "Key not specified";
     return -EINVAL;
   }
@@ -1746,7 +1597,7 @@ int RGWPostObj_ObjStore_S3::get_params()
 
   env.add_var("key", s->object.name);
 
-  part_str("Content-Type", &content_type);
+  part_str(parts, "Content-Type", &content_type);
   env.add_var("Content-Type", content_type);
 
   map<string, struct post_form_part, ltstr_nocase>::iterator piter =
@@ -1789,139 +1640,135 @@ int RGWPostObj_ObjStore_S3::get_params()
   if (r < 0)
     return r;
 
+  r = get_tags();
+  if (r < 0)
+    return r;
+
+
   min_len = post_policy.min_length;
   max_len = post_policy.max_length;
+
+
+
+  return 0;
+}
+
+int RGWPostObj_ObjStore_S3::get_tags()
+{
+  string tags_str;
+  if (part_str(parts, "tagging", &tags_str)) {
+    RGWObjTagsXMLParser parser;
+    if (!parser.init()){
+      ldout(s->cct, 0) << "Couldn't init RGWObjTags XML parser" << dendl;
+      err_msg = "Server couldn't process the request";
+      return -EINVAL; // TODO: This class of errors in rgw code should be a 5XX error
+    }
+    if (!parser.parse(tags_str.c_str(), tags_str.size(), 1)) {
+      ldout(s->cct,0 ) << "Invalid Tagging XML" << dendl;
+      err_msg = "Invalid Tagging XML";
+      return -EINVAL;
+    }
+
+    RGWObjTagSet_S3 *obj_tags_s3;
+    RGWObjTagging_S3 *tagging;
+
+    tagging = static_cast<RGWObjTagging_S3 *>(parser.find_first("Tagging"));
+    obj_tags_s3 = static_cast<RGWObjTagSet_S3 *>(tagging->find_first("TagSet"));
+    if(!obj_tags_s3){
+      return -ERR_MALFORMED_XML;
+    }
+
+    RGWObjTags obj_tags;
+    int r = obj_tags_s3->rebuild(obj_tags);
+    if (r < 0)
+      return r;
+
+    bufferlist tags_bl;
+    obj_tags.encode(tags_bl);
+    ldout(s->cct, 20) << "Read " << obj_tags.count() << "tags" << dendl;
+    attrs[RGW_ATTR_TAGS] = tags_bl;
+  }
+
 
   return 0;
 }
 
 int RGWPostObj_ObjStore_S3::get_policy()
 {
-  bufferlist encoded_policy;
+  if (part_bl(parts, "policy", &s->auth.s3_postobj_creds.encoded_policy)) {
+    bool aws4_auth = false;
 
-  if (part_bl("policy", &encoded_policy)) {
+    /* x-amz-algorithm handling */
+    using rgw::auth::s3::AWS4_HMAC_SHA256_STR;
+    if ((part_str(parts, "x-amz-algorithm", &s->auth.s3_postobj_creds.x_amz_algorithm)) &&
+        (s->auth.s3_postobj_creds.x_amz_algorithm == AWS4_HMAC_SHA256_STR)) {
+      ldout(s->cct, 0) << "Signature verification algorithm AWS v4 (AWS4-HMAC-SHA256)" << dendl;
+      aws4_auth = true;
+    } else {
+      ldout(s->cct, 0) << "Signature verification algorithm AWS v2" << dendl;
+    }
 
     // check that the signature matches the encoded policy
-    string s3_access_key;
-    if (!part_str("AWSAccessKeyId", &s3_access_key)) {
-      ldout(s->cct, 0) << "No S3 access key found!" << dendl;
-      err_msg = "Missing access key";
-      return -EINVAL;
-    }
-    string received_signature_str;
-    if (!part_str("signature", &received_signature_str)) {
-      ldout(s->cct, 0) << "No signature found!" << dendl;
-      err_msg = "Missing signature";
-      return -EINVAL;
-    }
-    RGWUserInfo user_info;
+    if (aws4_auth) {
+      /* AWS4 */
 
-    op_ret = rgw_get_user_info_by_access_key(store, s3_access_key, user_info);
-    if (op_ret < 0) {
-      S3AuthFactory aplfact(store, s->account_name);
-      RGWGetPolicyV2Extractor extr(s3_access_key, received_signature_str);
-      RGWLDAPAuthEngine ldap(s->cct, store, extr, &aplfact);
-        // try external authenticators
-      if (store->ctx()->_conf->rgw_s3_auth_use_keystone &&
-	  store->ctx()->_conf->rgw_keystone_url.empty())
-      {
-	// keystone
-	int external_auth_result = -EINVAL;
-	dout(20) << "s3 keystone: trying keystone auth" << dendl;
-
-	RGW_Auth_S3_Keystone_ValidateToken keystone_validator(store->ctx());
-	external_auth_result =
-	  keystone_validator.validate_s3token(s3_access_key,
-					      string(encoded_policy.c_str(),
-						    encoded_policy.length()),
-					      received_signature_str);
-
-	if (external_auth_result < 0) {
-	  ldout(s->cct, 0) << "User lookup failed!" << dendl;
-	  err_msg = "Bad access key / signature";
-	  return -EACCES;
-	}
-
-	string project_id = keystone_validator.response.get_project_id();
-	rgw_user uid(project_id);
-
-	user_info.user_id = project_id;
-	user_info.display_name = keystone_validator.response.get_project_name();
-
-	/* try to store user if it not already exists */
-	if (rgw_get_user_info_by_uid(store, uid, user_info) < 0) {
-	  int ret = rgw_store_user_info(store, user_info, NULL, NULL, real_time(), true);
-	  if (ret < 0) {
-	    ldout(store->ctx(), 10)
-	      << "NOTICE: failed to store new user's info: ret="
-	      << ret << dendl;
-	  }
-	  s->perm_mask = RGW_PERM_FULL_CONTROL;
-	}
-  } else if (ldap.is_applicable()) {
-    try {
-      auto applier = ldap.authenticate();
-      if (! applier) {
-        return -EACCES;
+      /* x-amz-credential handling */
+      if (!part_str(parts, "x-amz-credential",
+                    &s->auth.s3_postobj_creds.x_amz_credential)) {
+        ldout(s->cct, 0) << "No S3 aws4 credential found!" << dendl;
+        err_msg = "Missing aws4 credential";
+        return -EINVAL;
       }
 
-      try {
-        applier->load_acct_info(*s->user);
-        s->perm_mask = applier->get_perm_mask();
-        applier->modify_request_state(s);
-        s->auth_identity = std::move(applier);
-      } catch (int err) {
-        return -EACCES;
+      /* x-amz-signature handling */
+      if (!part_str(parts, "x-amz-signature",
+                    &s->auth.s3_postobj_creds.signature)) {
+        ldout(s->cct, 0) << "No aws4 signature found!" << dendl;
+        err_msg = "Missing aws4 signature";
+        return -EINVAL;
       }
-    } catch (int err) {
-      return -EACCES;
-    }
-      } else {
-	return -EACCES;
+
+      /* x-amz-date handling */
+      std::string received_date_str;
+      if (!part_str(parts, "x-amz-date", &received_date_str)) {
+        ldout(s->cct, 0) << "No aws4 date found!" << dendl;
+        err_msg = "Missing aws4 date";
+        return -EINVAL;
       }
     } else {
-      map<string, RGWAccessKey> access_keys  = user_info.access_keys;
+      /* AWS2 */
 
-      map<string, RGWAccessKey>::const_iterator iter =
-	access_keys.find(s3_access_key);
-      // We know the key must exist, since the user was returned by
-      // rgw_get_user_info_by_access_key, but it doesn't hurt to check!
-      if (iter == access_keys.end()) {
-	ldout(s->cct, 0) << "Secret key lookup failed!" << dendl;
-	err_msg = "No secret key for matching access key";
-	return -EACCES;
+      // check that the signature matches the encoded policy
+      if (!part_str(parts, "AWSAccessKeyId",
+                    &s->auth.s3_postobj_creds.access_key)) {
+        ldout(s->cct, 0) << "No S3 aws2 access key found!" << dendl;
+        err_msg = "Missing aws2 access key";
+        return -EINVAL;
       }
-      string s3_secret_key = (iter->second).key;
 
-      char expected_signature_char[CEPH_CRYPTO_HMACSHA1_DIGESTSIZE];
-
-      calc_hmac_sha1(s3_secret_key.c_str(), s3_secret_key.size(),
-		     encoded_policy.c_str(), encoded_policy.length(),
-		     expected_signature_char);
-      bufferlist expected_signature_hmac_raw;
-      bufferlist expected_signature_hmac_encoded;
-      expected_signature_hmac_raw.append(expected_signature_char,
-					 CEPH_CRYPTO_HMACSHA1_DIGESTSIZE);
-      expected_signature_hmac_raw.encode_base64(
-	expected_signature_hmac_encoded);
-      expected_signature_hmac_encoded.append((char)0); /* null terminate */
-
-      if (received_signature_str.compare(
-	    expected_signature_hmac_encoded.c_str()) != 0) {
-	ldout(s->cct, 0) << "Signature verification failed!" << dendl;
-	ldout(s->cct, 0) << "received: " << received_signature_str.c_str()
-			 << dendl;
-	ldout(s->cct, 0) << "expected: "
-			 << expected_signature_hmac_encoded.c_str() << dendl;
-	err_msg = "Bad access key / signature";
-	return -EACCES;
+      if (!part_str(parts, "signature", &s->auth.s3_postobj_creds.signature)) {
+        ldout(s->cct, 0) << "No aws2 signature found!" << dendl;
+        err_msg = "Missing aws2 signature";
+        return -EINVAL;
       }
     }
 
-    ldout(s->cct, 0) << "Successful Signature Verification!" << dendl;
-    bufferlist decoded_policy;
+    /* FIXME: this is a makeshift solution. The browser upload authentication will be
+     * handled by an instance of rgw::auth::Completer spawned in Handler's authorize()
+     * method. */
+    const int ret = rgw::auth::Strategy::apply(auth_registry_ptr->get_s3_post(), s);
+    if (ret != 0) {
+      return -EACCES;
+    } else {
+      /* Populate the owner info. */
+      s->owner.set_id(s->user->user_id);
+      s->owner.set_name(s->user->display_name);
+      ldout(s->cct, 20) << "Successful Signature Verification!" << dendl;
+    }
+
+    ceph::bufferlist decoded_policy;
     try {
-      decoded_policy.decode_base64(encoded_policy);
+      decoded_policy.decode_base64(s->auth.s3_postobj_creds.encoded_policy);
     } catch (buffer::error& err) {
       ldout(s->cct, 0) << "failed to decode_base64 policy" << dendl;
       err_msg = "Could not decode policy";
@@ -1929,8 +1776,8 @@ int RGWPostObj_ObjStore_S3::get_policy()
     }
 
     decoded_policy.append('\0'); // NULL terminate
+    ldout(s->cct, 20) << "POST policy: " << decoded_policy.c_str() << dendl;
 
-    ldout(s->cct, 0) << "POST policy: " << decoded_policy.c_str() << dendl;
 
     int r = post_policy.from_json(decoded_policy, err_msg);
     if (r < 0) {
@@ -1941,9 +1788,15 @@ int RGWPostObj_ObjStore_S3::get_policy()
       return -EINVAL;
     }
 
-    post_policy.set_var_checked("AWSAccessKeyId");
+    if (aws4_auth) {
+      /* AWS4 */
+      post_policy.set_var_checked("x-amz-signature");
+    } else {
+      /* AWS2 */
+      post_policy.set_var_checked("AWSAccessKeyId");
+      post_policy.set_var_checked("signature");
+    }
     post_policy.set_var_checked("policy");
-    post_policy.set_var_checked("signature");
 
     r = post_policy.check(&env, err_msg);
     if (r < 0) {
@@ -1954,20 +1807,12 @@ int RGWPostObj_ObjStore_S3::get_policy()
       return r;
     }
 
-    // deep copy
-    *(s->user) = user_info;
-    s->owner.set_id(user_info.user_id);
-    s->owner.set_name(user_info.display_name);
-
-    /* FIXME: remove this after switching S3 to the new authentication
-     * infrastructure. */
-    s->auth_identity = rgw_auth_transform_old_authinfo(s);
   } else {
     ldout(s->cct, 0) << "No attached policy found!" << dendl;
   }
 
   string canned_acl;
-  part_str("acl", &canned_acl);
+  part_str(parts, "acl", &canned_acl);
 
   RGWAccessControlPolicy_S3 s3policy(s->cct);
   ldout(s->cct, 20) << "canned_acl=" << canned_acl << dendl;
@@ -1986,44 +1831,47 @@ int RGWPostObj_ObjStore_S3::complete_get_params()
   bool done;
   do {
     struct post_form_part part;
-    int r = read_form_part_header(&part, &done);
-    if (r < 0)
+    int r = read_form_part_header(&part, done);
+    if (r < 0) {
       return r;
+    }
 
-    bufferlist part_data;
+    ceph::bufferlist part_data;
     bool boundary;
     uint64_t chunk_size = s->cct->_conf->rgw_max_chunk_size;
-    r = read_data(part.data, chunk_size, &boundary, &done);
-    if (!boundary) {
+    r = read_data(part.data, chunk_size, boundary, done);
+    if (r < 0 || !boundary) {
       return -EINVAL;
     }
 
-    parts[part.name] = part;
+    /* Just reading the data but not storing any results of that. */
   } while (!done);
 
   return 0;
 }
 
-int RGWPostObj_ObjStore_S3::get_data(bufferlist& bl)
+int RGWPostObj_ObjStore_S3::get_data(ceph::bufferlist& bl, bool& again)
 {
   bool boundary;
   bool done;
 
-  uint64_t chunk_size = s->cct->_conf->rgw_max_chunk_size;
-  int r = read_data(bl, chunk_size, &boundary, &done);
-  if (r < 0)
+  const uint64_t chunk_size = s->cct->_conf->rgw_max_chunk_size;
+  int r = read_data(bl, chunk_size, boundary, done);
+  if (r < 0) {
     return r;
+  }
 
   if (boundary) {
-    data_pending = false;
-
-    if (!done) {  /* reached end of data, let's drain the rest of the params */
+    if (!done) {
+      /* Reached end of data, let's drain the rest of the params */
       r = complete_get_params();
-      if (r < 0)
-	return r;
+      if (r < 0) {
+       return r;
+      }
     }
   }
 
+  again = !boundary;
   return bl.length();
 }
 
@@ -2032,7 +1880,7 @@ void RGWPostObj_ObjStore_S3::send_response()
   if (op_ret == 0 && parts.count("success_action_redirect")) {
     string redirect;
 
-    part_str("success_action_redirect", &redirect);
+    part_str(parts, "success_action_redirect", &redirect);
 
     string tenant;
     string bucket;
@@ -2082,7 +1930,7 @@ void RGWPostObj_ObjStore_S3::send_response()
     string status_string;
     uint32_t status_int;
 
-    part_str("success_action_status", &status_string);
+    part_str(parts, "success_action_status", &status_string);
 
     int r = stringtoul(status_string, &status_int);
     if (r < 0) {
@@ -2106,6 +1954,8 @@ void RGWPostObj_ObjStore_S3::send_response()
 
 done:
   if (op_ret == STATUS_CREATED) {
+    for (auto &it : crypt_http_responses)
+      dump_header(s, it.first, it.second);
     s->formatter->open_object_section("PostResponse");
     if (g_conf->rgw_dns_name.length())
       s->formatter->dump_format("Location", "%s/%s",
@@ -2130,6 +1980,21 @@ done:
   rgw_flush_formatter_and_reset(s, s->formatter);
 }
 
+int RGWPostObj_ObjStore_S3::get_encrypt_filter(
+    std::unique_ptr<RGWPutObjDataProcessor>* filter, RGWPutObjDataProcessor* cb)
+{
+  int res = 0;
+  std::unique_ptr<BlockCrypt> block_crypt;
+  res = rgw_s3_prepare_encrypt(s, attrs, &parts, &block_crypt, crypt_http_responses);
+  if (res == 0 && block_crypt != nullptr) {
+    *filter = std::unique_ptr<RGWPutObj_BlockEncrypt>(
+        new RGWPutObj_BlockEncrypt(s->cct, cb, std::move(block_crypt)));
+  }
+  else
+    *filter = nullptr;
+  return res;
+}
+
 int RGWDeleteObj_ObjStore_S3::get_params()
 {
   const char *if_unmod = s->info.env->get("HTTP_X_AMZ_DELETE_IF_UNMODIFIED_SINCE");
@@ -2139,9 +2004,7 @@ int RGWDeleteObj_ObjStore_S3::get_params()
   }
 
   if (if_unmod) {
-    string if_unmod_str(if_unmod);
-    string if_unmod_decoded;
-    url_decode(if_unmod_str, if_unmod_decoded);
+    std::string if_unmod_decoded = url_decode(if_unmod);
     uint64_t epoch;
     uint64_t nsec;
     if (utime_t::parse_date(if_unmod_decoded, &epoch, &nsec) < 0) {
@@ -2298,10 +2161,8 @@ void RGWGetACLs_ObjStore_S3::send_response()
 int RGWPutACLs_ObjStore_S3::get_params()
 {
   int ret =  RGWPutACLs_ObjStore::get_params();
-  if (ret < 0)
-    s->aws4_auth_needs_complete = false;
-  if (s->aws4_auth_needs_complete) {
-    int ret_auth = do_aws4_auth_completion();
+  if (ret >= 0) {
+    const int ret_auth = do_aws4_auth_completion();
     if (ret_auth < 0) {
       return ret_auth;
     }
@@ -2372,6 +2233,9 @@ void RGWGetLC_ObjStore_S3::send_response()
   end_header(s, this, "application/xml");
   dump_start(s);
 
+  if (op_ret < 0)
+    return;
+
   config.dump_xml(s->formatter);
   rgw_flush_formatter_and_reset(s, s->formatter);
 }
@@ -2423,53 +2287,42 @@ void RGWGetCORS_ObjStore_S3::send_response()
 int RGWPutCORS_ObjStore_S3::get_params()
 {
   int r;
-  char *data = NULL;
+  char *data = nullptr;
   int len = 0;
-  size_t cl = 0;
   RGWCORSXMLParser_S3 parser(s->cct);
   RGWCORSConfiguration_S3 *cors_config;
 
-  if (s->length)
-    cl = atoll(s->length);
-  if (cl) {
-    data = (char *)malloc(cl + 1);
-    if (!data) {
-       r = -ENOMEM;
-       goto done_err;
-    }
-    len = recv_body(s, data, cl);
-    if (len < 0) {
-      r = len;
-      goto done_err;
-    }
-    data[len] = '\0';
-  } else {
-    len = 0;
+  const auto max_size = s->cct->_conf->rgw_max_put_param_size;
+  r = rgw_rest_read_all_input(s, &data, &len, max_size, false);
+  if (r < 0) {
+    return r;
   }
 
-  if (s->aws4_auth_needs_complete) {
-    int ret_auth = do_aws4_auth_completion();
-    if (ret_auth < 0) {
-      r = ret_auth;
-      goto done_err;
-    }
+  auto data_deleter = std::unique_ptr<char, decltype(free)*>{data, free};
+
+  r = do_aws4_auth_completion();
+  if (r < 0) {
+    return r;
   }
 
   if (!parser.init()) {
-    r = -EINVAL;
-    goto done_err;
+    return -EINVAL;
   }
 
   if (!data || !parser.parse(data, len, 1)) {
-    r = -EINVAL;
-    goto done_err;
+    return -EINVAL;
   }
   cors_config =
     static_cast<RGWCORSConfiguration_S3 *>(parser.find_first(
 					     "CORSConfiguration"));
   if (!cors_config) {
-    r = -EINVAL;
-    goto done_err;
+    return -EINVAL;
+  }
+
+  // forward bucket cors requests to meta master zone
+  if (!store->is_meta_master()) {
+    /* only need to keep this data around if we're not meta master */
+    in_data.append(data, len);
   }
 
   if (s->cct->_conf->subsys.should_gather(ceph_subsys_rgw, 15)) {
@@ -2480,11 +2333,7 @@ int RGWPutCORS_ObjStore_S3::get_params()
 
   cors_config->encode(cors_bl);
 
-  free(data);
   return 0;
-done_err:
-  free(data);
-  return r;
 }
 
 void RGWPutCORS_ObjStore_S3::send_response()
@@ -2551,7 +2400,7 @@ class RGWSetRequestPaymentParser : public RGWXMLParser
 
 public:
   RGWSetRequestPaymentParser() {}
-  ~RGWSetRequestPaymentParser() {}
+  ~RGWSetRequestPaymentParser() override {}
 
   int get_request_payment_payer(bool *requester_pays) {
     XMLObj *config = find_first("RequestPaymentConfiguration");
@@ -2578,10 +2427,11 @@ public:
 
 int RGWSetRequestPayment_ObjStore_S3::get_params()
 {
-#define GET_REQUEST_PAYMENT_BUF_MAX (128 * 1024)
   char *data;
   int len = 0;
-  int r = rgw_rest_read_all_input(s, &data, &len, GET_REQUEST_PAYMENT_BUF_MAX);
+  const auto max_size = s->cct->_conf->rgw_max_put_param_size;
+  int r = rgw_rest_read_all_input(s, &data, &len, max_size, false);
+
   if (r < 0) {
     return r;
   }
@@ -2633,6 +2483,8 @@ void RGWInitMultipart_ObjStore_S3::send_response()
   if (op_ret)
     set_req_state_err(s, op_ret);
   dump_errno(s);
+  for (auto &it : crypt_http_responses)
+     dump_header(s, it.first, it.second);
   end_header(s, this, "application/xml");
   if (op_ret == 0) {
     dump_start(s);
@@ -2647,6 +2499,13 @@ void RGWInitMultipart_ObjStore_S3::send_response()
   }
 }
 
+int RGWInitMultipart_ObjStore_S3::prepare_encryption(map<string, bufferlist>& attrs)
+{
+  int res = 0;
+  res = rgw_s3_prepare_encrypt(s, attrs, nullptr, nullptr, crypt_http_responses);
+  return res;
+}
+
 int RGWCompleteMultipart_ObjStore_S3::get_params()
 {
   int ret = RGWCompleteMultipart_ObjStore::get_params();
@@ -2654,13 +2513,7 @@ int RGWCompleteMultipart_ObjStore_S3::get_params()
     return ret;
   }
 
-  if (s->aws4_auth_needs_complete) {
-    int ret_auth = do_aws4_auth_completion();
-    if (ret_auth < 0) {
-      return ret_auth;
-    }
-  }
-  return 0;
+  return do_aws4_auth_completion();
 }
 
 void RGWCompleteMultipart_ObjStore_S3::send_response()
@@ -2800,7 +2653,7 @@ void RGWListBucketMultiparts_ObjStore_S3::send_response()
       dump_owner(s, s->user->user_id, s->user->display_name, "Initiator");
       dump_owner(s, s->user->user_id, s->user->display_name);
       s->formatter->dump_string("StorageClass", "STANDARD");
-      dump_time(s, "Initiated", &iter->obj.mtime);
+      dump_time(s, "Initiated", &iter->obj.meta.mtime);
       s->formatter->close_section();
     }
     if (!common_prefixes.empty()) {
@@ -2824,13 +2677,7 @@ int RGWDeleteMultiObj_ObjStore_S3::get_params()
     return ret;
   }
 
-  if (s->aws4_auth_needs_complete) {
-    int ret_auth = do_aws4_auth_completion();
-    if (ret_auth < 0) {
-      return ret_auth;
-    }
-  }
-  return 0;
+  return do_aws4_auth_completion();
 }
 
 void RGWDeleteMultiObj_ObjStore_S3::send_status()
@@ -2874,7 +2721,7 @@ void RGWDeleteMultiObj_ObjStore_S3::send_partial_response(rgw_obj_key& key,
       }
       s->formatter->close_section();
     } else if (op_ret < 0) {
-      struct rgw_http_errors r;
+      struct rgw_http_error r;
       int err_no;
 
       s->formatter->open_object_section("Error");
@@ -2899,6 +2746,147 @@ void RGWDeleteMultiObj_ObjStore_S3::end_response()
   s->formatter->close_section();
   rgw_flush_formatter_and_reset(s, s->formatter);
 }
+
+void RGWGetObjLayout_ObjStore_S3::send_response()
+{
+  if (op_ret)
+    set_req_state_err(s, op_ret);
+  dump_errno(s);
+  end_header(s, this, "application/json");
+
+  JSONFormatter f;
+
+  if (op_ret < 0) {
+    return;
+  }
+
+  f.open_object_section("result");
+  ::encode_json("head", head_obj, &f);
+  ::encode_json("manifest", *manifest, &f);
+  f.open_array_section("data_location");
+  for (auto miter = manifest->obj_begin(); miter != manifest->obj_end(); ++miter) {
+    f.open_object_section("obj");
+    rgw_raw_obj raw_loc = miter.get_location().get_raw_obj(store);
+    ::encode_json("ofs", miter.get_ofs(), &f);
+    ::encode_json("loc", raw_loc, &f);
+    ::encode_json("loc_ofs", miter.location_ofs(), &f);
+    ::encode_json("loc_size", miter.get_stripe_size(), &f);
+    f.close_section();
+    rgw_flush_formatter(s, &f);
+  }
+  f.close_section();
+  f.close_section();
+  rgw_flush_formatter(s, &f);
+}
+
+int RGWConfigBucketMetaSearch_ObjStore_S3::get_params()
+{
+  auto iter = s->info.x_meta_map.find("x-amz-meta-search");
+  if (iter == s->info.x_meta_map.end()) {
+    s->err.message = "X-Rgw-Meta-Search header not provided";
+    ldout(s->cct, 5) << s->err.message << dendl;
+    return -EINVAL;
+  }
+
+  list<string> expressions;
+  get_str_list(iter->second, ",", expressions);
+
+  for (auto& expression : expressions) {
+    vector<string> args;
+    get_str_vec(expression, ";", args);
+
+    if (args.empty()) {
+      s->err.message = "invalid empty expression";
+      ldout(s->cct, 5) << s->err.message << dendl;
+      return -EINVAL;
+    }
+    if (args.size() > 2) {
+      s->err.message = string("invalid expression: ") + expression;
+      ldout(s->cct, 5) << s->err.message << dendl;
+      return -EINVAL;
+    }
+
+    string key = boost::algorithm::to_lower_copy(rgw_trim_whitespace(args[0]));
+    string val;
+    if (args.size() > 1) {
+      val = boost::algorithm::to_lower_copy(rgw_trim_whitespace(args[1]));
+    }
+
+    if (!boost::algorithm::starts_with(key, RGW_AMZ_META_PREFIX)) {
+      s->err.message = string("invalid expression, key must start with '" RGW_AMZ_META_PREFIX "' : ") + expression;
+      ldout(s->cct, 5) << s->err.message << dendl;
+      return -EINVAL;
+    }
+
+    key = key.substr(sizeof(RGW_AMZ_META_PREFIX) - 1);
+
+    ESEntityTypeMap::EntityType entity_type;
+
+    if (val.empty() || val == "str" || val == "string") {
+      entity_type = ESEntityTypeMap::ES_ENTITY_STR;
+    } else if (val == "int" || val == "integer") {
+      entity_type = ESEntityTypeMap::ES_ENTITY_INT;
+    } else if (val == "date" || val == "datetime") {
+      entity_type = ESEntityTypeMap::ES_ENTITY_DATE;
+    } else {
+      s->err.message = string("invalid entity type: ") + val;
+      ldout(s->cct, 5) << s->err.message << dendl;
+      return -EINVAL;
+    }
+
+    mdsearch_config[key] = entity_type;
+  }
+
+  return 0;
+}
+
+void RGWConfigBucketMetaSearch_ObjStore_S3::send_response()
+{
+  if (op_ret)
+    set_req_state_err(s, op_ret);
+  dump_errno(s);
+  end_header(s, this);
+}
+
+void RGWGetBucketMetaSearch_ObjStore_S3::send_response()
+{
+  if (op_ret)
+    set_req_state_err(s, op_ret);
+  dump_errno(s);
+  end_header(s, NULL, "application/xml");
+
+  Formatter *f = s->formatter;
+  f->open_array_section("GetBucketMetaSearchResult");
+  for (auto& e : s->bucket_info.mdsearch_config) {
+    f->open_object_section("Entry");
+    string k = string("x-amz-meta-") + e.first;
+    f->dump_string("Key", k.c_str());
+    const char *type;
+    switch (e.second) {
+      case ESEntityTypeMap::ES_ENTITY_INT:
+        type = "int";
+        break;
+      case ESEntityTypeMap::ES_ENTITY_DATE:
+        type = "date";
+        break;
+      default:
+        type = "str";
+    }
+    f->dump_string("Type", type);
+    f->close_section();
+  }
+  f->close_section();
+  rgw_flush_formatter(s, f);
+}
+
+void RGWDelBucketMetaSearch_ObjStore_S3::send_response()
+{
+  if (op_ret)
+    set_req_state_err(s, op_ret);
+  dump_errno(s);
+  end_header(s, this);
+}
+
 
 RGWOp *RGWHandler_REST_Service_S3::op_get()
 {
@@ -2943,10 +2931,11 @@ RGWOp *RGWHandler_REST_Service_S3::op_post()
 RGWOp *RGWHandler_REST_Bucket_S3::get_obj_op(bool get_data)
 {
   // Non-website mode
-  if (get_data)
+  if (get_data) {
     return new RGWListBucket_ObjStore_S3;
-  else
+  } else {
     return new RGWStatBucket_ObjStore_S3;
+  }
 }
 
 RGWOp *RGWHandler_REST_Bucket_S3::op_get()
@@ -2967,6 +2956,10 @@ RGWOp *RGWHandler_REST_Bucket_S3::op_get()
     return new RGWGetBucketWebsite_ObjStore_S3;
   }
 
+  if (s->info.args.exists("mdsearch")) {
+    return new RGWGetBucketMetaSearch_ObjStore_S3;
+  }
+
   if (is_acl_op()) {
     return new RGWGetACLs_ObjStore_S3;
   } else if (is_cors_op()) {
@@ -2977,6 +2970,8 @@ RGWOp *RGWHandler_REST_Bucket_S3::op_get()
     return new RGWListBucketMultiparts_ObjStore_S3;
   } else if(is_lc_op()) {
     return new RGWGetLC_ObjStore_S3;
+  } else if(is_policy_op()) {
+    return new RGWGetBucketPolicy;
   }
   return get_obj_op(true);
 }
@@ -3011,6 +3006,8 @@ RGWOp *RGWHandler_REST_Bucket_S3::op_put()
     return new RGWSetRequestPayment_ObjStore_S3;
   } else if(is_lc_op()) {
     return new RGWPutLC_ObjStore_S3;
+  } else if(is_policy_op()) {
+    return new RGWPutBucketPolicy;
   }
   return new RGWCreateBucket_ObjStore_S3;
 }
@@ -3021,6 +3018,8 @@ RGWOp *RGWHandler_REST_Bucket_S3::op_delete()
     return new RGWDeleteCORS_ObjStore_S3;
   } else if(is_lc_op()) {
     return new RGWDeleteLC_ObjStore_S3;
+  } else if(is_policy_op()) {
+    return new RGWDeleteBucketPolicy;
   }
 
   if (s->info.args.sub_resource_exists("website")) {
@@ -3030,6 +3029,10 @@ RGWOp *RGWHandler_REST_Bucket_S3::op_delete()
     return new RGWDeleteBucketWebsite_ObjStore_S3;
   }
 
+  if (s->info.args.exists("mdsearch")) {
+    return new RGWDelBucketMetaSearch_ObjStore_S3;
+  }
+
   return new RGWDeleteBucket_ObjStore_S3;
 }
 
@@ -3037,6 +3040,10 @@ RGWOp *RGWHandler_REST_Bucket_S3::op_post()
 {
   if (s->info.args.exists("delete")) {
     return new RGWDeleteMultiObj_ObjStore_S3;
+  }
+
+  if (s->info.args.exists("mdsearch")) {
+    return new RGWConfigBucketMetaSearch_ObjStore_S3;
   }
 
   return new RGWPostObj_ObjStore_S3;
@@ -3063,6 +3070,10 @@ RGWOp *RGWHandler_REST_Obj_S3::op_get()
     return new RGWGetACLs_ObjStore_S3;
   } else if (s->info.args.exists("uploadId")) {
     return new RGWListMultipart_ObjStore_S3;
+  } else if (s->info.args.exists("layout")) {
+    return new RGWGetObjLayout_ObjStore_S3;
+  } else if (is_tagging_op()) {
+    return new RGWGetObjTags_ObjStore_S3;
   }
   return get_obj_op(true);
 }
@@ -3081,7 +3092,10 @@ RGWOp *RGWHandler_REST_Obj_S3::op_put()
 {
   if (is_acl_op()) {
     return new RGWPutACLs_ObjStore_S3;
+  } else if (is_tagging_op()) {
+    return new RGWPutObjTags_ObjStore_S3;
   }
+
   if (s->init_state.src_bucket.empty())
     return new RGWPutObj_ObjStore_S3;
   else
@@ -3090,6 +3104,9 @@ RGWOp *RGWHandler_REST_Obj_S3::op_put()
 
 RGWOp *RGWHandler_REST_Obj_S3::op_delete()
 {
+  if (is_tagging_op()) {
+    return new RGWDeleteObjTags_ObjStore_S3;
+  }
   string upload_id = s->info.args.get("uploadId");
 
   if (upload_id.empty())
@@ -3106,7 +3123,7 @@ RGWOp *RGWHandler_REST_Obj_S3::op_post()
   if (s->info.args.exists("uploads"))
     return new RGWInitMultipart_ObjStore_S3;
 
-  return NULL;
+  return new RGWPostObj_ObjStore_S3;
 }
 
 RGWOp *RGWHandler_REST_Obj_S3::op_options()
@@ -3255,99 +3272,52 @@ int RGWHandler_REST_S3::init(RGWRados *store, struct req_state *s,
   return RGWHandler_REST::init(store, s, cio);
 }
 
-/*
- * Try to validate S3 auth against keystone s3token interface
- */
-int RGW_Auth_S3_Keystone_ValidateToken::validate_s3token(
-  const string& auth_id, const string& auth_token, const string& auth_sign) {
-  /* prepare keystone url */
-  string keystone_url = cct->_conf->rgw_keystone_url;
-  if (keystone_url[keystone_url.size() - 1] != '/') {
-    keystone_url.append("/");
-  }
+enum class AwsVersion {
+  UNKOWN,
+  V2,
+  V4
+};
 
-  if (KeystoneService::get_api_version() == KeystoneApiVersion::VER_3) {
-    keystone_url.append("v3/s3tokens");
+enum class AwsRoute {
+  UNKOWN,
+  QUERY_STRING,
+  HEADERS
+};
+
+static inline std::pair<AwsVersion, AwsRoute>
+discover_aws_flavour(const req_info& info)
+{
+  using rgw::auth::s3::AWS4_HMAC_SHA256_STR;
+
+  AwsVersion version = AwsVersion::UNKOWN;
+  AwsRoute route = AwsRoute::UNKOWN;
+
+  const char* http_auth = info.env->get("HTTP_AUTHORIZATION");
+  if (http_auth && http_auth[0]) {
+    /* Authorization in Header */
+    route = AwsRoute::HEADERS;
+
+    if (!strncmp(http_auth, AWS4_HMAC_SHA256_STR,
+                 strlen(AWS4_HMAC_SHA256_STR))) {
+      /* AWS v4 */
+      version = AwsVersion::V4;
+    } else if (!strncmp(http_auth, "AWS ", 4)) {
+      /* AWS v2 */
+      version = AwsVersion::V2;
+    }
   } else {
-    keystone_url.append("v2.0/s3tokens");
-  }
+    route = AwsRoute::QUERY_STRING;
 
-  /* get authentication token for Keystone. */
-  string admin_token_id;
-  int r = KeystoneService::get_keystone_admin_token(cct, admin_token_id);
-  if (r < 0) {
-    ldout(cct, 2) << "s3 keystone: cannot get token for keystone access" << dendl;
-    return r;
-  }
-
-  /* set required headers for keystone request */
-  append_header("X-Auth-Token", admin_token_id);
-  append_header("Content-Type", "application/json");
-
-  /* check if we want to verify keystone's ssl certs */
-  set_verify_ssl(cct->_conf->rgw_keystone_verify_ssl);
-
-  /* encode token */
-  bufferlist token_buff;
-  bufferlist token_encoded;
-  token_buff.append(auth_token);
-  token_buff.encode_base64(token_encoded);
-  token_encoded.append((char)0);
-
-  /* create json credentials request body */
-  JSONFormatter credentials(false);
-  credentials.open_object_section("");
-  credentials.open_object_section("credentials");
-  credentials.dump_string("access", auth_id);
-  credentials.dump_string("token", token_encoded.c_str());
-  credentials.dump_string("signature", auth_sign);
-  credentials.close_section();
-  credentials.close_section();
-
-  std::stringstream os;
-  credentials.flush(os);
-  set_tx_buffer(os.str());
-
-  /* send request */
-  int ret = process("POST", keystone_url.c_str());
-  if (ret < 0) {
-    dout(2) << "s3 keystone: token validation ERROR: " << rx_buffer.c_str()
-            << dendl;
-    return -EPERM;
-  }
-
-  /* if the supplied signature is wrong, we will get 401 from Keystone */
-  if (get_http_status() == HTTP_STATUS_UNAUTHORIZED) {
-    return -ERR_SIGNATURE_NO_MATCH;
-  }
-
-  /* now parse response */
-  if (response.parse(cct, string(), rx_buffer) < 0) {
-    dout(2) << "s3 keystone: token parsing failed" << dendl;
-    return -EPERM;
-  }
-
-  /* check if we have a valid role */
-  bool found = false;
-  for (const auto& role : accepted_roles) {
-    if (response.has_role(role) == true) {
-      found = true;
-      break;
+    if (info.args.get("X-Amz-Algorithm") == AWS4_HMAC_SHA256_STR) {
+      /* AWS v4 */
+      version = AwsVersion::V4;
+    } else if (!info.args.get("AWSAccessKeyId").empty()) {
+      /* AWS v2 */
+      version = AwsVersion::V2;
     }
   }
 
-  if (!found) {
-    ldout(cct, 5) << "s3 keystone: user does not hold a matching role;"
-                     " required roles: "
-                  << cct->_conf->rgw_keystone_accepted_roles << dendl;
-    return -ERR_INVALID_ACCESS_KEY;
-  }
-
-  /* everything seems fine, continue with this user */
-  ldout(cct, 5) << "s3 keystone: validated token: " << response.get_project_name()
-                << ":" << response.get_user_name()
-                << " expires: " << response.get_expires() << dendl;
-  return 0;
+  return std::make_pair(version, route);
 }
 
 static void init_anon_user(struct req_state *s)
@@ -3362,7 +3332,9 @@ static void init_anon_user(struct req_state *s)
  *
  * it tries AWS v4 before AWS v2
  */
-int RGW_Auth_S3::authorize(RGWRados *store, struct req_state *s)
+int RGW_Auth_S3::authorize(RGWRados* const store,
+                           const rgw::auth::StrategyRegistry& auth_registry,
+                           struct req_state* const s)
 {
 
   /* neither keystone and rados enabled; warn and exit! */
@@ -3378,798 +3350,34 @@ int RGW_Auth_S3::authorize(RGWRados *store, struct req_state *s)
     return 0;
   }
 
-  if (!s->http_auth || !(*s->http_auth)) {
+  AwsVersion version;
+  AwsRoute route;
+  std::tie(version, route) = discover_aws_flavour(s->info);
 
-    /* AWS4 */
-
-    string algorithm = s->info.args.get("X-Amz-Algorithm");
-    if (algorithm.size()) {
-      if (algorithm != "AWS4-HMAC-SHA256") {
-        return -EPERM;
-      }
-      /* compute first aws4 signature (stick to the boto2 implementation) */
-      int err = authorize_v4(store, s);
-      if ((err==-ERR_SIGNATURE_NO_MATCH) && !store->ctx()->_conf->rgw_s3_auth_aws4_force_boto2_compat) {
-        /* compute second aws4 signature (no bugs supported) */
-        ldout(s->cct, 10) << "computing second aws4 signature..." << dendl;
-        return authorize_v4(store, s, false);
-      }
-      return err;
-    }
-
-    /* AWS2 */
-
-    string auth_id = s->info.args.get("AWSAccessKeyId");
-    if (auth_id.size()) {
-      return authorize_v2(store, s);
-    }
-
-    /* anonymous access */
-
-    init_anon_user(s);
+  if (route == AwsRoute::QUERY_STRING && version == AwsVersion::UNKOWN) {
+    /* FIXME(rzarzynski): handle anon user. */
+    init_anon_user(const_cast<req_state*>(s));
     return 0;
-
-  } else {
-
-    /* AWS4 */
-
-    if (!strncmp(s->http_auth, "AWS4-HMAC-SHA256", 16)) {
-      return authorize_v4(store, s);
-    }
-
-    /* AWS2 */
-
-    if (!strncmp(s->http_auth, "AWS ", 4)) {
-      return authorize_v2(store, s);
-    }
-
   }
 
-  return -EINVAL;
+  return authorize_v2(store, auth_registry, s);
 }
 
-int RGW_Auth_S3::authorize_aws4_auth_complete(RGWRados *store, struct req_state *s)
-{
-  return authorize_v4_complete(store, s, "", false);
-}
-
-int RGW_Auth_S3::authorize_v4_complete(RGWRados *store, struct req_state *s, const string& request_payload, bool unsigned_payload)
-{
-  size_t pos;
-
-  /* craft canonical request */
-
-  string canonical_req;
-  string canonical_req_hash;
-
-  rgw_create_s3_v4_canonical_request(s, s->aws4_auth->canonical_uri, s->aws4_auth->canonical_qs,
-      s->aws4_auth->canonical_hdrs, s->aws4_auth->signed_hdrs, request_payload, unsigned_payload,
-      canonical_req, canonical_req_hash);
-
-  /* Validate x-amz-sha256 */
-
-  if (s->aws4_auth_needs_complete) {
-    const char *expected_request_payload_hash = s->info.env->get("HTTP_X_AMZ_CONTENT_SHA256");
-    if (expected_request_payload_hash &&
-        s->aws4_auth->payload_hash.compare(expected_request_payload_hash) != 0) {
-      ldout(s->cct, 10) << "ERROR: x-amz-content-sha256 does not match" << dendl;
-      return -ERR_AMZ_CONTENT_SHA256_MISMATCH;
-    }
-  }
-
-  /*
-   * create a string to sign
-   *
-   * http://docs.aws.amazon.com/general/latest/gr/sigv4-create-string-to-sign.html
-   */
-
-  string string_to_sign;
-
-  rgw_create_s3_v4_string_to_sign(s->cct, "AWS4-HMAC-SHA256", s->aws4_auth->date, s->aws4_auth->credential_scope,
-      canonical_req_hash, string_to_sign);
-
-  /*
-   * calculate the AWS signature
-   *
-   * http://docs.aws.amazon.com/general/latest/gr/sigv4-calculate-signature.html
-   */
-
-  string cs_aux = s->aws4_auth->credential_scope;
-
-  string date_cs = cs_aux;
-  pos = date_cs.find("/");
-  date_cs = date_cs.substr(0, pos);
-  cs_aux = cs_aux.substr(pos + 1, cs_aux.length());
-
-  string region_cs = cs_aux;
-  pos = region_cs.find("/");
-  region_cs = region_cs.substr(0, pos);
-  cs_aux = cs_aux.substr(pos + 1, cs_aux.length());
-
-  string service_cs = cs_aux;
-  pos = service_cs.find("/");
-  service_cs = service_cs.substr(0, pos);
-
-  int err = rgw_calculate_s3_v4_aws_signature(s, s->aws4_auth->access_key_id, date_cs,
-      region_cs, service_cs, string_to_sign, s->aws4_auth->new_signature);
-
-  ldout(s->cct, 10) << "----------------------------- Verifying signatures" << dendl;
-  ldout(s->cct, 10) << "Signature     = " << s->aws4_auth->signature << dendl;
-  ldout(s->cct, 10) << "New Signature = " << s->aws4_auth->new_signature << dendl;
-  ldout(s->cct, 10) << "-----------------------------" << dendl;
-
-  if (err) {
-    return err;
-  }
-
-  s->aws4_auth->seed_signature = s->aws4_auth->new_signature;
-
-  return 0;
-
-}
-
-static inline bool is_base64_for_content_md5(unsigned char c) {
-  return (isalnum(c) || isspace(c) || (c == '+') || (c == '/') || (c == '='));
-}
-
-static bool char_needs_aws4_escaping(char c)
-{
-  if ((c >= 'a' && c <= 'z') ||
-      (c >= 'A' && c <= 'Z') ||
-      (c >= '0' && c <= '9')) {
-    return false;
-  }
-
-  switch (c) {
-    case '-':
-    case '_':
-    case '.':
-    case '~':
-      return false;
-  }
-  return true;
-}
-
-static void aws4_uri_encode(const string& src, string& dst)
-{
-  const char *p = src.c_str();
-  for (unsigned i = 0; i < src.size(); i++, p++) {
-    if (char_needs_aws4_escaping(*p)) {
-      rgw_uri_escape_char(*p, dst);
-      continue;
-    }
-
-    dst.append(p, 1);
-  }
-}
-
-static std::array<string, 3> aws4_presigned_required_keys = { "Credential", "SignedHeaders", "Signature" };
-
-/*
- * handle v4 signatures (rados auth only)
- */
-int RGW_Auth_S3::authorize_v4(RGWRados *store, struct req_state *s, bool force_boto2_compat /* = true */)
-{
-  string::size_type pos;
-  bool using_qs;
-
-  uint64_t now_req = 0;
-  uint64_t now = ceph_clock_now();
-
-  /* v4 requires rados auth */
-  if (!store->ctx()->_conf->rgw_s3_auth_use_rados) {
-    return -EPERM;
-  }
-
-  try {
-    s->aws4_auth = std::unique_ptr<rgw_aws4_auth>(new rgw_aws4_auth);
-  } catch (std::bad_alloc&) {
-    return -ENOMEM;
-  }
-
-  if ((!s->http_auth) || !(*s->http_auth)) {
-
-    /* auth ships with req params ... */
-
-    /* look for required params */
-
-    using_qs = true;
-    s->aws4_auth->credential = s->info.args.get("X-Amz-Credential");
-    if (s->aws4_auth->credential.size() == 0) {
-      return -EPERM;
-    }
-
-    s->aws4_auth->date = s->info.args.get("X-Amz-Date");
-    struct tm date_t;
-    if (!parse_iso8601(s->aws4_auth->date.c_str(), &date_t, NULL, false))
-      return -EPERM;
-
-    s->aws4_auth->expires = s->info.args.get("X-Amz-Expires");
-    if (s->aws4_auth->expires.size() != 0) {
-      /* X-Amz-Expires provides the time period, in seconds, for which
-         the generated presigned URL is valid. The minimum value
-         you can set is 1, and the maximum is 604800 (seven days) */
-      time_t exp = atoll(s->aws4_auth->expires.c_str());
-      if ((exp < 1) || (exp > 604800)) {
-        dout(10) << "NOTICE: exp out of range, exp = " << exp << dendl;
-        return -EPERM;
-      }
-      /* handle expiration in epoch time */
-      now_req = (uint64_t)timegm(&date_t);
-      if (now >= now_req + exp) {
-        dout(10) << "NOTICE: now = " << now << ", now_req = " << now_req << ", exp = " << exp << dendl;
-        return -EPERM;
-      }
-    }
-
-    if ( (now_req < now - RGW_AUTH_GRACE_MINS * 60) ||
-         (now_req > now + RGW_AUTH_GRACE_MINS * 60) ) {
-      dout(10) << "NOTICE: request time skew too big." << dendl;
-      dout(10) << "now_req = " << now_req << " now = " << now << "; now - RGW_AUTH_GRACE_MINS=" << now - RGW_AUTH_GRACE_MINS * 60 << "; now + RGW_AUTH_GRACE_MINS=" << now + RGW_AUTH_GRACE_MINS * 60 << dendl;
-      return -ERR_REQUEST_TIME_SKEWED;
-    }
-
-    s->aws4_auth->signedheaders = s->info.args.get("X-Amz-SignedHeaders");
-    if (s->aws4_auth->signedheaders.size() == 0) {
-      return -EPERM;
-    }
-
-    s->aws4_auth->signature = s->info.args.get("X-Amz-Signature");
-    if (s->aws4_auth->signature.size() == 0) {
-      return -EPERM;
-    }
-
-  } else {
-
-    /* auth ships in headers ... */
-
-    /* ------------------------- handle Credential header */
-
-    using_qs = false;
-
-    string auth_str = s->http_auth;
-
-#define AWS4_HMAC_SHA256_STR "AWS4-HMAC-SHA256"
-#define CREDENTIALS_PREFIX_LEN (sizeof(AWS4_HMAC_SHA256_STR) - 1)
-    uint64_t min_len = CREDENTIALS_PREFIX_LEN + 1;
-    if (auth_str.length() < min_len) {
-      ldout(store->ctx(), 10) << "credentials string is too short" << dendl;
-      return -EINVAL;
-    }
-
-    list<string> auth_list;
-    get_str_list(auth_str.substr(min_len), ",", auth_list);
-
-    map<string, string> kv;
-
-    for (string& s : auth_list) {
-      string key, val;
-      int ret = parse_key_value(s, key, val);
-      if (ret < 0) {
-        ldout(store->ctx(), 10) << "NOTICE: failed to parse auth header (s=" << s << ")" << dendl;
-        return -EINVAL;
-      }
-      kv[key] = std::move(val);
-    }
-
-    for (string& k : aws4_presigned_required_keys) {
-      if (kv.find(k) == kv.end()) {
-        ldout(store->ctx(), 10) << "NOTICE: auth header missing key: " << k << dendl;
-        return -EINVAL;
-      }
-    }
-
-    s->aws4_auth->credential = std::move(kv["Credential"]);
-    s->aws4_auth->signedheaders = std::move(kv["SignedHeaders"]);
-    s->aws4_auth->signature = std::move(kv["Signature"]);
-
-    /* sig hex str */
-    dout(10) << "v4 signature format = " << s->aws4_auth->signature << dendl;
-
-    /* ------------------------- handle x-amz-date header */
-
-    /* grab date */
-
-    const char *d = s->info.env->get("HTTP_X_AMZ_DATE");
-    struct tm t;
-    if (!parse_iso8601(d, &t, NULL, false)) {
-      dout(10) << "error reading date via http_x_amz_date" << dendl;
-      return -EACCES;
-    }
-    s->aws4_auth->date = d;
-  }
-
-  /* AKIAIVKTAZLOCF43WNQD/AAAAMMDD/region/host/aws4_request */
-  dout(10) << "v4 credential format = " << s->aws4_auth->credential << dendl;
-
-  if (std::count(s->aws4_auth->credential.begin(), s->aws4_auth->credential.end(), '/') != 4) {
-    return -EINVAL;
-  }
-
-  /* credential must end with 'aws4_request' */
-  if (s->aws4_auth->credential.find("aws4_request") == std::string::npos) {
-    return -EINVAL;
-  }
-
-  /* grab access key id */
-
-  pos = s->aws4_auth->credential.find("/");
-  s->aws4_auth->access_key_id = s->aws4_auth->credential.substr(0, pos);
-
-  dout(10) << "access key id = " << s->aws4_auth->access_key_id << dendl;
-
-  /* grab credential scope */
-
-  s->aws4_auth->credential_scope = s->aws4_auth->credential.substr(pos + 1, s->aws4_auth->credential.length());
-
-  dout(10) << "credential scope = " << s->aws4_auth->credential_scope << dendl;
-
-  /* grab user information */
-
-  if (rgw_get_user_info_by_access_key(store, s->aws4_auth->access_key_id, *s->user) < 0) {
-    dout(10) << "error reading user info, uid=" << s->aws4_auth->access_key_id
-              << " can't authenticate" << dendl;
-    return -ERR_INVALID_ACCESS_KEY;
-  }
-
-  /*
-   * create a canonical request
-   *
-   * http://docs.aws.amazon.com/general/latest/gr/sigv4-create-canonical-request.html
-   */
-
-  /* craft canonical uri */
-
-  /* here code should normalize via rfc3986 but S3 does **NOT** do path normalization
-   * that SigV4 typically does. this code follows the same approach that boto library
-   * see auth.py:canonical_uri(...) */
-
-  s->aws4_auth->canonical_uri = s->info.request_uri_aws4;
-
-  if (s->aws4_auth->canonical_uri.empty()) {
-    s->aws4_auth->canonical_uri = "/";
-  } else {
-    boost::replace_all(s->aws4_auth->canonical_uri, "+", "%20");
-  }
-
-  /* craft canonical query string */
-
-  s->aws4_auth->canonical_qs = s->info.request_params;
-
-  if (!s->aws4_auth->canonical_qs.empty()) {
-
-    /* handle case when query string exists. Step 3 in
-     * http://docs.aws.amazon.com/general/latest/gr/sigv4-create-canonical-request.html */
-
-    map<string, string> canonical_qs_map;
-    istringstream cqs(s->aws4_auth->canonical_qs);
-    string keyval;
-
-    while (getline(cqs, keyval, '&')) {
-      string key, val;
-      istringstream kv(keyval);
-      getline(kv, key, '=');
-      getline(kv, val, '=');
-      if (!using_qs || key != "X-Amz-Signature") {
-        string encoded_key;
-        string encoded_val;
-        if (key != "X-Amz-Credential") {
-          string key_decoded;
-          url_decode(key, key_decoded);
-          if (key.length() != key_decoded.length()) {
-            encoded_key = key;
-          } else {
-            aws4_uri_encode(key, encoded_key);
-          }
-          string val_decoded;
-          url_decode(val, val_decoded);
-          if (val.length() != val_decoded.length()) {
-            encoded_val = val;
-          } else {
-            aws4_uri_encode(val, encoded_val);
-          }
-        } else {
-          encoded_key = key;
-          encoded_val = val;
-        }
-        canonical_qs_map[encoded_key] = encoded_val;
-      }
-    }
-
-    s->aws4_auth->canonical_qs = "";
-
-    map<string, string>::iterator last = canonical_qs_map.end();
-    --last;
-
-    for (map<string, string>::iterator it = canonical_qs_map.begin();
-        it != canonical_qs_map.end(); ++it) {
-      s->aws4_auth->canonical_qs.append(it->first + "=" + it->second);
-      if (it != last) {
-        s->aws4_auth->canonical_qs.append("&");
-      }
-    }
-
-  }
-
-  /* craft canonical headers */
-
-  map<string, string> canonical_hdrs_map;
-  istringstream sh(s->aws4_auth->signedheaders);
-  string token;
-  string port = s->info.env->get("SERVER_PORT", "");
-  string secure_port = s->info.env->get("SERVER_PORT_SECURE", "");
-
-  while (getline(sh, token, ';')) {
-    string token_env = "HTTP_" + token;
-    transform(token_env.begin(), token_env.end(), token_env.begin(), ::toupper);
-    replace(token_env.begin(), token_env.end(), '-', '_');
-    if (token_env == "HTTP_CONTENT_LENGTH") {
-      token_env = "CONTENT_LENGTH";
-    }
-    if (token_env == "HTTP_CONTENT_TYPE") {
-      token_env = "CONTENT_TYPE";
-    }
-    const char *t = s->info.env->get(token_env.c_str());
-    if (!t) {
-      dout(10) << "warning env var not available" << dendl;
-      continue;
-    }
-    if (token_env == "HTTP_CONTENT_MD5") {
-      for (const char *p = t; *p; p++) {
-	if (!is_base64_for_content_md5(*p)) {
-	  dout(0) << "NOTICE: bad content-md5 provided (not base64), aborting request p=" << *p << " " << (int)*p << dendl;
-	  return -EPERM;
-	}
-      }
-    }
-    string token_value = string(t);
-    if (force_boto2_compat && using_qs && (token == "host")) {
-      if (!secure_port.empty()) {
-	if (secure_port != "443")
-	  token_value = token_value + ":" + secure_port;
-      } else if (!port.empty()) {
-	if (port != "80")
-	  token_value = token_value + ":" + port;
-      }
-    }
-    canonical_hdrs_map[token] = rgw_trim_whitespace(token_value);
-  }
-
-  for (map<string, string>::iterator it = canonical_hdrs_map.begin();
-      it != canonical_hdrs_map.end(); ++it) {
-    s->aws4_auth->canonical_hdrs.append(it->first + ":" + it->second + "\n");
-  }
-
-  dout(10) << "canonical headers format = " << s->aws4_auth->canonical_hdrs << dendl;
-
-  /* craft signed headers */
-
-  s->aws4_auth->signed_hdrs = s->aws4_auth->signedheaders;
-
-  /* handle request payload */
-
-  s->aws4_auth->payload_hash = "";
-
-  string request_payload;
-
-  bool unsigned_payload = false;
-  s->aws4_auth_streaming_mode = false;
-
-  if (using_qs) {
-    /* query parameters auth */
-    unsigned_payload = true;
-  } else {
-    /* header auth */
-    const char *request_payload_hash = s->info.env->get("HTTP_X_AMZ_CONTENT_SHA256");
-    if (request_payload_hash) {
-      unsigned_payload = string("UNSIGNED-PAYLOAD").compare(request_payload_hash) == 0;
-      if (!unsigned_payload) {
-        s->aws4_auth_streaming_mode = string("STREAMING-AWS4-HMAC-SHA256-PAYLOAD").compare(request_payload_hash) == 0;
-      }
-    }
-  }
-
-  /* from rfc2616 - 4.3 Message Body
-   *
-   * "The presence of a message-body in a request is signaled by the inclusion of a
-   *  Content-Length or Transfer-Encoding header field in the request's message-headers."
-   */
-  bool body_available = s->content_length != 0 || s->info.env->get("HTTP_TRANSFER_ENCODING") != NULL;
-
-  if (unsigned_payload || !body_available) {
-
-    /* requests lacking of body or shipping with 'UNSIGNED-PAYLOAD' are authenticated now */
-
-    /* complete aws4 auth */
-
-    int err = authorize_v4_complete(store, s, request_payload, unsigned_payload);
-    if (err) {
-      return err;
-    }
-
-    /* verify signature */
-
-    if (s->aws4_auth->signature != s->aws4_auth->new_signature) {
-      return -ERR_SIGNATURE_NO_MATCH;
-    }
-
-    /* authorization ok */
-
-    dout(10) << "v4 auth ok" << dendl;
-
-    /* aws4 auth completed */
-
-    s->aws4_auth_needs_complete = false;
-
-  } else {
-
-    /* aws4 auth not completed... delay aws4 auth */
-
-    if (!s->aws4_auth_streaming_mode) {
-
-      dout(10) << "delaying v4 auth" << dendl;
-
-      /* payload in a single chunk */
-
-      switch (s->op_type)
-      {
-        case RGW_OP_CREATE_BUCKET:
-        case RGW_OP_PUT_OBJ:
-        case RGW_OP_PUT_ACLS:
-        case RGW_OP_PUT_CORS:
-        case RGW_OP_COMPLETE_MULTIPART:
-        case RGW_OP_SET_BUCKET_VERSIONING:
-        case RGW_OP_DELETE_MULTI_OBJ:
-        case RGW_OP_ADMIN_SET_METADATA:
-        case RGW_OP_SET_BUCKET_WEBSITE:
-          break;
-        default:
-          dout(10) << "ERROR: AWS4 completion for this operation NOT IMPLEMENTED" << dendl;
-          return -ERR_NOT_IMPLEMENTED;
-      }
-
-      s->aws4_auth_needs_complete = true;
-
-    } else {
-
-      dout(10) << "body content detected in multiple chunks" << dendl;
-
-      /* payload in multiple chunks */
-
-      switch(s->op_type)
-      {
-        case RGW_OP_PUT_OBJ:
-          break;
-        default:
-          dout(10) << "ERROR: AWS4 completion for this operation NOT IMPLEMENTED (streaming mode)" << dendl;
-          return -ERR_NOT_IMPLEMENTED;
-      }
-
-      /* calculate seed */
-
-      int err = authorize_v4_complete(store, s, "", unsigned_payload);
-      if (err) {
-        return err;
-      }
-
-      /* verify seed signature */
-
-      if (s->aws4_auth->signature != s->aws4_auth->new_signature) {
-        dout(10) << "ERROR: AWS4 seed signature does NOT match!" << dendl;
-        return -ERR_SIGNATURE_NO_MATCH;
-      }
-
-      dout(10) << "aws4 seed signature ok... delaying v4 auth" << dendl;
-
-      s->aws4_auth_needs_complete = false;
-
-    }
-
-  }
-
-  map<string, RGWAccessKey>::iterator iter = s->user->access_keys.find(s->aws4_auth->access_key_id);
-  if (iter == s->user->access_keys.end()) {
-    dout(0) << "ERROR: access key not encoded in user info" << dendl;
-    return -EPERM;
-  }
-
-  RGWAccessKey& k = iter->second;
-
-  if (!k.subuser.empty()) {
-    map<string, RGWSubUser>::iterator uiter = s->user->subusers.find(k.subuser);
-    if (uiter == s->user->subusers.end()) {
-      dout(0) << "NOTICE: could not find subuser: " << k.subuser << dendl;
-      return -EPERM;
-    }
-    RGWSubUser& subuser = uiter->second;
-    s->perm_mask = subuser.perm_mask;
-  } else {
-    s->perm_mask = RGW_PERM_FULL_CONTROL;
-  }
-
-  if (s->user->system) {
-    s->system_request = true;
-    dout(20) << "system request" << dendl;
-    s->info.args.set_system();
-    string euid = s->info.args.get(RGW_SYS_PARAM_PREFIX "uid");
-    rgw_user effective_uid(euid);
-    RGWUserInfo effective_user;
-    if (!effective_uid.empty()) {
-      int ret = rgw_get_user_info_by_uid(store, effective_uid, effective_user);
-      if (ret < 0) {
-        ldout(s->cct, 0) << "User lookup failed!" << dendl;
-        return -EACCES;
-      }
-      *(s->user) = effective_user;
-    }
-  }
-
-  // populate the owner info
-  s->owner.set_id(s->user->user_id);
-  s->owner.set_name(s->user->display_name);
-
-  return 0;
-}
 
 /*
  * handle v2 signatures
  */
-int RGW_Auth_S3::authorize_v2(RGWRados *store, struct req_state *s)
+int RGW_Auth_S3::authorize_v2(RGWRados* const store,
+                              const rgw::auth::StrategyRegistry& auth_registry,
+                              struct req_state* const s)
 {
-  bool qsr = false;
-  string auth_id;
-  string auth_sign;
-
-  time_t now;
-  time(&now);
-
-  if (!s->http_auth || !(*s->http_auth)) {
-    auth_id = s->info.args.get("AWSAccessKeyId");
-    auth_sign = s->info.args.get("Signature");
-    string date = s->info.args.get("Expires");
-    time_t exp = atoll(date.c_str());
-    if (now >= exp)
-      return -EPERM;
-    qsr = true;
-  } else {
-    string auth_str(s->http_auth + 4);
-    int pos = auth_str.rfind(':');
-    if (pos < 0)
-      return -EINVAL;
-    auth_id = auth_str.substr(0, pos);
-    auth_sign = auth_str.substr(pos + 1);
+  const auto ret = rgw::auth::Strategy::apply(auth_registry.get_s3_main(), s);
+  if (ret == 0) {
+    /* Populate the owner info. */
+    s->owner.set_id(s->user->user_id);
+    s->owner.set_name(s->user->display_name);
   }
-
-  /* try keystone auth first */
-  int external_auth_result = -ERR_INVALID_ACCESS_KEY;
-  if (store->ctx()->_conf->rgw_s3_auth_use_keystone
-      && !store->ctx()->_conf->rgw_keystone_url.empty()) {
-    dout(20) << "s3 keystone: trying keystone auth" << dendl;
-
-    RGW_Auth_S3_Keystone_ValidateToken keystone_validator(store->ctx());
-    string token;
-
-    if (!rgw_create_s3_canonical_header(s->info,
-                                        &s->header_time, token, qsr)) {
-      dout(10) << "failed to create auth header\n" << token << dendl;
-      external_auth_result = -EPERM;
-    } else {
-      external_auth_result = keystone_validator.validate_s3token(auth_id, token,
-							    auth_sign);
-      if (external_auth_result == 0) {
-	// Check for time skew first
-	time_t req_sec = s->header_time.sec();
-
-	if ((req_sec < now - RGW_AUTH_GRACE_MINS * 60 ||
-	     req_sec > now + RGW_AUTH_GRACE_MINS * 60) && !qsr) {
-	  ldout(s->cct, 10) << "req_sec=" << req_sec << " now=" << now
-                            << "; now - RGW_AUTH_GRACE_MINS="
-                            << now - RGW_AUTH_GRACE_MINS * 60
-                            << "; now + RGW_AUTH_GRACE_MINS="
-                            << now + RGW_AUTH_GRACE_MINS * 60
-                            << dendl;
-
-	  ldout(s->cct, 0)  << "NOTICE: request time skew too big now="
-                            << utime_t(now, 0)
-                            << " req_time=" << s->header_time
-                            << dendl;
-	  return -ERR_REQUEST_TIME_SKEWED;
-	}
-
-        string project_id = keystone_validator.response.get_project_id();
-        s->user->user_id = project_id;
-        s->user->display_name = keystone_validator.response.get_project_name(); // wow.
-
-        rgw_user uid(project_id);
-        /* try to store user if it not already exists */
-        if (rgw_get_user_info_by_uid(store, uid, *(s->user)) < 0) {
-          int ret = rgw_store_user_info(store, *(s->user), NULL, NULL, real_time(), true);
-          if (ret < 0)
-            dout(10) << "NOTICE: failed to store new user's info: ret="
-		     << ret << dendl;
-        }
-
-        s->perm_mask = RGW_PERM_FULL_CONTROL;
-      }
-    }
-  }
-
-  S3AuthFactory aplfact(store, s->account_name);
-  RGWS3V2Extractor extr(s);
-  RGWLDAPAuthEngine ldap(s->cct, store, extr, &aplfact);
-
-  if (ldap.is_applicable()) {
-    try {
-      auto applier = ldap.authenticate();
-      if (! applier) {
-        external_auth_result = -EACCES;
-      } else {
-        try {
-          applier->load_acct_info(*s->user);
-          s->perm_mask = applier->get_perm_mask();
-          applier->modify_request_state(s);
-          s->auth_identity = std::move(applier);
-          external_auth_result = 0;
-        } catch (int err) {
-          ldout(s->cct, 5) << "applier threw err=" << err << dendl;
-          external_auth_result = err;
-        }
-      }
-    } catch (int err) {
-      ldout(s->cct, 5) << "ldap auth engine threw err=" << err << dendl;
-      external_auth_result = err;
-    }
-  }
-
-  /* now try rados backend, but only if keystone did not succeed */
-  if (external_auth_result < 0) {
-      RGWS3V2LocalAuthEngine localauth(s, store, extr, &aplfact);
-
-      if (! localauth.is_applicable()) {
-        return external_auth_result;
-      }
-      try {
-        auto applier = localauth.authenticate();
-        if (! applier) {
-          return external_auth_result;
-        }
-        try {
-          applier->load_acct_info(*s->user);
-          s->perm_mask = applier->get_perm_mask();
-          applier->modify_request_state(s);
-          s->auth_identity = std::move(applier);
-        } catch (int err) {
-          ldout(s->cct, 5) << "applier threw err=" << err << dendl;
-          return err;
-        }
-      } catch (int err) {
-          ldout(s->cct, 5) << "local auth engine threw err=" << err << dendl;
-          return err;
-      }
-    if (s->user->system) {
-      s->system_request = true;
-      dout(20) << "system request" << dendl;
-      s->info.args.set_system();
-      string effective_uid = s->info.args.get(RGW_SYS_PARAM_PREFIX "uid");
-      RGWUserInfo effective_user;
-      if (!effective_uid.empty()) {
-        rgw_user euid(effective_uid);
-        int ret = rgw_get_user_info_by_uid(store, euid, effective_user);
-        if (ret < 0) {
-          ldout(s->cct, 0) << "User lookup failed!" << dendl;
-          return -EACCES;
-        }
-        *(s->user) = effective_user;
-      }
-    }
-
-  } /* if external_auth_result < 0 */
-
-  // populate the owner info
-  s->owner.set_id(s->user->user_id);
-  s->owner.set_name(s->user->display_name);
-
-  return  0;
+  return ret;
 }
 
 int RGWHandler_Auth_S3::init(RGWRados *store, struct req_state *state,
@@ -4184,6 +3392,7 @@ int RGWHandler_Auth_S3::init(RGWRados *store, struct req_state *state,
 }
 
 RGWHandler_REST* RGWRESTMgr_S3::get_handler(struct req_state* const s,
+                                            const rgw::auth::StrategyRegistry& auth_registry,
                                             const std::string& frontend_prefix)
 {
   bool is_s3website = enable_s3website && (s->prot_flags & RGW_REST_WEBSITE);
@@ -4198,25 +3407,50 @@ RGWHandler_REST* RGWRESTMgr_S3::get_handler(struct req_state* const s,
   // TODO: Make this more readable
   if (is_s3website) {
     if (s->init_state.url_bucket.empty()) {
-      handler = new RGWHandler_REST_Service_S3Website;
+      handler = new RGWHandler_REST_Service_S3Website(auth_registry);
     } else if (s->object.empty()) {
-      handler = new RGWHandler_REST_Bucket_S3Website;
+      handler = new RGWHandler_REST_Bucket_S3Website(auth_registry);
     } else {
-      handler = new RGWHandler_REST_Obj_S3Website;
+      handler = new RGWHandler_REST_Obj_S3Website(auth_registry);
     }
   } else {
     if (s->init_state.url_bucket.empty()) {
-      handler = new RGWHandler_REST_Service_S3;
+      handler = new RGWHandler_REST_Service_S3(auth_registry);
     } else if (s->object.empty()) {
-      handler = new RGWHandler_REST_Bucket_S3;
+      handler = new RGWHandler_REST_Bucket_S3(auth_registry);
     } else {
-      handler = new RGWHandler_REST_Obj_S3;
+      handler = new RGWHandler_REST_Obj_S3(auth_registry);
     }
   }
 
   ldout(s->cct, 20) << __func__ << " handler=" << typeid(*handler).name()
 		    << dendl;
   return handler;
+}
+
+bool RGWHandler_REST_S3Website::web_dir() const {
+  std::string subdir_name = url_decode(s->object.name);
+
+  if (subdir_name.empty()) {
+    return false;
+  } else if (subdir_name.back() == '/') {
+    subdir_name.pop_back();
+  }
+
+  rgw_obj obj(s->bucket, subdir_name);
+
+  RGWObjectCtx& obj_ctx = *static_cast<RGWObjectCtx *>(s->obj_ctx);
+  obj_ctx.obj.set_atomic(obj);
+  obj_ctx.obj.set_prefetch_data(obj);
+
+  RGWObjState* state = nullptr;
+  if (store->get_obj_state(&obj_ctx, s->bucket_info, obj, &state, false) < 0) {
+    return false;
+  }
+  if (! state->exists) {
+    return false;
+  }
+  return state->exists;
 }
 
 int RGWHandler_REST_S3Website::retarget(RGWOp* op, RGWOp** new_op) {
@@ -4240,7 +3474,7 @@ int RGWHandler_REST_S3Website::retarget(RGWOp* op, RGWOp** new_op) {
   }
 
   rgw_obj_key new_obj;
-  s->bucket_info.website_conf.get_effective_key(s->object.name, &new_obj.name);
+  s->bucket_info.website_conf.get_effective_key(s->object.name, &new_obj.name, web_dir());
   ldout(s->cct, 10) << "retarget get_effective_key " << s->object << " -> "
 		    << new_obj << dendl;
 
@@ -4288,7 +3522,7 @@ int RGWHandler_REST_S3Website::serve_errordoc(int http_ret, const string& errord
   int ret = 0;
   s->formatter->reset(); /* Try to throw it all away */
 
-  std::shared_ptr<RGWGetObj_ObjStore_S3Website> getop( (RGWGetObj_ObjStore_S3Website*) op_get() );
+  std::shared_ptr<RGWGetObj_ObjStore_S3Website> getop( static_cast<RGWGetObj_ObjStore_S3Website*>(op_get()));
   if (getop.get() == NULL) {
     return -1; // Trigger double error handler
   }
@@ -4358,11 +3592,11 @@ int RGWHandler_REST_S3Website::serve_errordoc(int http_ret, const string& errord
 int RGWHandler_REST_S3Website::error_handler(int err_no,
 					    string* error_content) {
   int new_err_no = -1;
-  const struct rgw_http_errors* r;
+  rgw_http_errors::const_iterator r = rgw_http_s3_errors.find(err_no > 0 ? err_no : -err_no);
   int http_error_code = -1;
-  r = search_err(err_no > 0 ? err_no : -err_no, RGW_HTTP_ERRORS, ARRAY_LEN(RGW_HTTP_ERRORS));
-  if (r) {
-    http_error_code = r->http_ret;
+
+  if (r != rgw_http_s3_errors.end()) {
+    http_error_code = r->second.first;
   }
   ldout(s->cct, 10) << "RGWHandler_REST_S3Website::error_handler err_no=" << err_no << " http_ret=" << http_error_code << dendl;
 
@@ -4437,10 +3671,401 @@ RGWOp* RGWHandler_REST_Service_S3Website::get_obj_op(bool get_data)
   return op;
 }
 
-rgw::LDAPHelper* RGWLDAPAuthEngine::ldh = nullptr;
-std::mutex RGWLDAPAuthEngine::mtx;
 
-void RGWLDAPAuthEngine::init(CephContext* const cct)
+namespace rgw {
+namespace auth {
+namespace s3 {
+
+bool AWSGeneralAbstractor::is_time_skew_ok(const utime_t& header_time,
+                                           const bool qsr) const
+{
+  /* Check for time skew first. */
+  const time_t req_sec = header_time.sec();
+  time_t now;
+  time(&now);
+
+  if ((req_sec < now - RGW_AUTH_GRACE_MINS * 60 ||
+       req_sec > now + RGW_AUTH_GRACE_MINS * 60) && !qsr) {
+    ldout(cct, 10) << "req_sec=" << req_sec << " now=" << now
+                   << "; now - RGW_AUTH_GRACE_MINS="
+                   << now - RGW_AUTH_GRACE_MINS * 60
+                   << "; now + RGW_AUTH_GRACE_MINS="
+                   << now + RGW_AUTH_GRACE_MINS * 60
+                   << dendl;
+
+    ldout(cct, 0)  << "NOTICE: request time skew too big now="
+                   << utime_t(now, 0)
+                   << " req_time=" << header_time
+                   << dendl;
+    return false;
+  } else {
+    return true;
+  }
+}
+
+
+static rgw::auth::Completer::cmplptr_t
+null_completer_factory(const boost::optional<std::string>& secret_key)
+{
+  return nullptr;
+}
+
+
+AWSEngine::VersionAbstractor::auth_data_t
+AWSGeneralAbstractor::get_auth_data(const req_state* const s) const
+{
+  AwsVersion version;
+  AwsRoute route;
+  std::tie(version, route) = discover_aws_flavour(s->info);
+
+  if (version == AwsVersion::V2) {
+    return get_auth_data_v2(s);
+  } else if (version == AwsVersion::V4) {
+    return get_auth_data_v4(s, route == AwsRoute::QUERY_STRING);
+  } else {
+    /* FIXME(rzarzynski): handle anon user. */
+    throw -EINVAL;
+  }
+}
+
+boost::optional<std::string>
+AWSGeneralAbstractor::get_v4_canonical_headers(
+  const req_info& info,
+  const boost::string_view& signedheaders,
+  const bool using_qs) const
+{
+  return rgw::auth::s3::get_v4_canonical_headers(info, signedheaders,
+                                                 using_qs, false);
+}
+
+AWSEngine::VersionAbstractor::auth_data_t
+AWSGeneralAbstractor::get_auth_data_v4(const req_state* const s,
+                                       /* FIXME: const. */
+                                       bool using_qs) const
+{
+  boost::string_view access_key_id;
+  boost::string_view signed_hdrs;
+
+  boost::string_view date;
+  boost::string_view credential_scope;
+  boost::string_view client_signature;
+
+  int ret = rgw::auth::s3::parse_credentials(s->info,
+                                             access_key_id,
+                                             credential_scope,
+                                             signed_hdrs,
+                                             client_signature,
+                                             date,
+                                             using_qs);
+  if (ret < 0) {
+    throw ret;
+  }
+
+  /* craft canonical headers */
+  boost::optional<std::string> canonical_headers = \
+    get_v4_canonical_headers(s->info, signed_hdrs, using_qs);
+  if (canonical_headers) {
+    ldout(s->cct, 10) << "canonical headers format = " << *canonical_headers
+                      << dendl;
+  } else {
+    throw -EPERM;
+  }
+
+  /* Get the expected hash. */
+  auto exp_payload_hash = rgw::auth::s3::get_v4_exp_payload_hash(s->info);
+
+  /* Craft canonical URI. Using std::move later so let it be non-const. */
+  auto canonical_uri = rgw::auth::s3::get_v4_canonical_uri(s->info);
+
+  /* Craft canonical query string. std::moving later so non-const here. */
+  auto canonical_qs = rgw::auth::s3::get_v4_canonical_qs(s->info, using_qs);
+
+  /* Craft canonical request. */
+  auto canonical_req_hash = \
+    rgw::auth::s3::get_v4_canon_req_hash(s->cct,
+                                         s->info.method,
+                                         std::move(canonical_uri),
+                                         std::move(canonical_qs),
+                                         std::move(*canonical_headers),
+                                         signed_hdrs,
+                                         exp_payload_hash);
+
+  auto string_to_sign = \
+    rgw::auth::s3::get_v4_string_to_sign(s->cct,
+                                         AWS4_HMAC_SHA256_STR,
+                                         date,
+                                         credential_scope,
+                                         std::move(canonical_req_hash));
+
+  const auto sig_factory = std::bind(rgw::auth::s3::get_v4_signature,
+                                     credential_scope,
+                                     std::placeholders::_1,
+                                     std::placeholders::_2,
+                                     std::placeholders::_3);
+
+  /* Requests authenticated with the Query Parameters are treated as unsigned.
+   * From "Authenticating Requests: Using Query Parameters (AWS Signature
+   * Version 4)":
+   *
+   *   You don't include a payload hash in the Canonical Request, because
+   *   when you create a presigned URL, you don't know the payload content
+   *   because the URL is used to upload an arbitrary payload. Instead, you
+   *   use a constant string UNSIGNED-PAYLOAD.
+   *
+   * This means we have absolutely no business in spawning completer. Both
+   * aws4_auth_needs_complete and aws4_auth_streaming_mode are set to false
+   * by default. We don't need to change that. */
+  if (is_v4_payload_unsigned(exp_payload_hash) || is_v4_payload_empty(s)) {
+    return {
+      access_key_id,
+      client_signature,
+      std::move(string_to_sign),
+      sig_factory,
+      null_completer_factory
+    };
+  } else {
+    /* We're going to handle a signed payload. Be aware that even empty HTTP
+     * body (no payload) requires verification:
+     *
+     *   The x-amz-content-sha256 header is required for all AWS Signature
+     *   Version 4 requests. It provides a hash of the request payload. If
+     *   there is no payload, you must provide the hash of an empty string. */
+    if (!is_v4_payload_streamed(exp_payload_hash)) {
+      ldout(s->cct, 10) << "delaying v4 auth" << dendl;
+
+      /* payload in a single chunk */
+      switch (s->op_type)
+      {
+        case RGW_OP_CREATE_BUCKET:
+        case RGW_OP_PUT_OBJ:
+        case RGW_OP_PUT_ACLS:
+        case RGW_OP_PUT_CORS:
+        case RGW_OP_COMPLETE_MULTIPART:
+        case RGW_OP_SET_BUCKET_VERSIONING:
+        case RGW_OP_DELETE_MULTI_OBJ:
+        case RGW_OP_ADMIN_SET_METADATA:
+        case RGW_OP_SET_BUCKET_WEBSITE:
+        case RGW_OP_PUT_BUCKET_POLICY:
+        case RGW_OP_PUT_OBJ_TAGGING:
+          break;
+        default:
+          dout(10) << "ERROR: AWS4 completion for this operation NOT IMPLEMENTED" << dendl;
+          throw -ERR_NOT_IMPLEMENTED;
+      }
+
+      const auto cmpl_factory = std::bind(AWSv4ComplSingle::create,
+                                          s,
+                                          std::placeholders::_1);
+      return {
+        access_key_id,
+        client_signature,
+        std::move(string_to_sign),
+        sig_factory,
+        cmpl_factory
+      };
+    } else {
+      /* IMHO "streamed" doesn't fit too good here. I would prefer to call
+       * it "chunked" but let's be coherent with Amazon's terminology. */
+
+      dout(10) << "body content detected in multiple chunks" << dendl;
+
+      /* payload in multiple chunks */
+
+      switch(s->op_type)
+      {
+        case RGW_OP_PUT_OBJ:
+          break;
+        default:
+          dout(10) << "ERROR: AWS4 completion for this operation NOT IMPLEMENTED (streaming mode)" << dendl;
+          throw -ERR_NOT_IMPLEMENTED;
+      }
+
+      dout(10) << "aws4 seed signature ok... delaying v4 auth" << dendl;
+
+      /* In the case of streamed payload client sets the x-amz-content-sha256
+       * to "STREAMING-AWS4-HMAC-SHA256-PAYLOAD" but uses "UNSIGNED-PAYLOAD"
+       * when constructing the Canonical Request. */
+
+      /* In the case of single-chunk upload client set the header's value is
+       * coherent with the one used for Canonical Request crafting. */
+
+      /* In the case of query string-based authentication there should be no
+       * x-amz-content-sha256 header and the value "UNSIGNED-PAYLOAD" is used
+       * for CanonReq. */
+      const auto cmpl_factory = std::bind(AWSv4ComplMulti::create,
+                                          s,
+                                          date,
+                                          credential_scope,
+                                          client_signature,
+                                          std::placeholders::_1);
+      return {
+        access_key_id,
+        client_signature,
+        std::move(string_to_sign),
+        sig_factory,
+        cmpl_factory
+      };
+    }
+  }
+}
+
+
+boost::optional<std::string>
+AWSGeneralBoto2Abstractor::get_v4_canonical_headers(
+  const req_info& info,
+  const boost::string_view& signedheaders,
+  const bool using_qs) const
+{
+  return rgw::auth::s3::get_v4_canonical_headers(info, signedheaders,
+                                                 using_qs, true);
+}
+
+
+AWSEngine::VersionAbstractor::auth_data_t
+AWSGeneralAbstractor::get_auth_data_v2(const req_state* const s) const
+{
+  boost::string_view access_key_id;
+  boost::string_view signature;
+  bool qsr = false;
+
+  const char* http_auth = s->info.env->get("HTTP_AUTHORIZATION");
+  if (! http_auth || http_auth[0] == '\0') {
+    /* Credentials are provided in query string. We also need to verify
+     * the "Expires" parameter now. */
+    access_key_id = s->info.args.get("AWSAccessKeyId");
+    signature = s->info.args.get("Signature");
+    qsr = true;
+
+    boost::string_view expires = s->info.args.get("Expires");
+    if (! expires.empty()) {
+      /* It looks we have the guarantee that expires is a null-terminated,
+       * and thus string_view::data() can be safely used. */
+      const time_t exp = atoll(expires.data());
+      time_t now;
+      time(&now);
+
+      if (now >= exp) {
+        throw -EPERM;
+      }
+    }
+  } else {
+    /* The "Authorization" HTTP header is being used. */
+    const boost::string_view auth_str(http_auth + strlen("AWS "));
+    const size_t pos = auth_str.rfind(':');
+    if (pos != boost::string_view::npos) {
+      access_key_id = auth_str.substr(0, pos);
+      signature = auth_str.substr(pos + 1);
+    }
+  }
+
+  /* Let's canonize the HTTP headers that are covered by the AWS auth v2. */
+  std::string string_to_sign;
+  utime_t header_time;
+  if (! rgw_create_s3_canonical_header(s->info, &header_time, string_to_sign,
+        qsr)) {
+    ldout(cct, 10) << "failed to create the canonized auth header\n"
+                   << rgw::crypt_sanitize::auth{s,string_to_sign} << dendl;
+    throw -EPERM;
+  }
+
+  ldout(cct, 10) << "string_to_sign:\n"
+                 << rgw::crypt_sanitize::auth{s,string_to_sign} << dendl;
+
+  if (! is_time_skew_ok(header_time, qsr)) {
+    throw -ERR_REQUEST_TIME_SKEWED;
+  }
+
+  return {
+    std::move(access_key_id),
+    std::move(signature),
+    std::move(string_to_sign),
+    rgw::auth::s3::get_v2_signature,
+    null_completer_factory
+  };
+}
+
+
+AWSEngine::VersionAbstractor::auth_data_t
+AWSBrowserUploadAbstractor::get_auth_data_v2(const req_state* const s) const
+{
+  return {
+    s->auth.s3_postobj_creds.access_key,
+    s->auth.s3_postobj_creds.signature,
+    s->auth.s3_postobj_creds.encoded_policy.to_str(),
+    rgw::auth::s3::get_v2_signature,
+    null_completer_factory
+  };
+}
+
+AWSEngine::VersionAbstractor::auth_data_t
+AWSBrowserUploadAbstractor::get_auth_data_v4(const req_state* const s) const
+{
+  const boost::string_view credential = s->auth.s3_postobj_creds.x_amz_credential;
+
+  /* grab access key id */
+  const size_t pos = credential.find("/");
+  const boost::string_view access_key_id = credential.substr(0, pos);
+  dout(10) << "access key id = " << access_key_id << dendl;
+
+  /* grab credential scope */
+  const boost::string_view credential_scope = credential.substr(pos + 1);
+  dout(10) << "credential scope = " << credential_scope << dendl;
+
+  const auto sig_factory = std::bind(rgw::auth::s3::get_v4_signature,
+                                     credential_scope,
+                                     std::placeholders::_1,
+                                     std::placeholders::_2,
+                                     std::placeholders::_3);
+
+  return {
+    access_key_id,
+    s->auth.s3_postobj_creds.signature,
+    s->auth.s3_postobj_creds.encoded_policy.to_str(),
+    sig_factory,
+    null_completer_factory
+  };
+}
+
+AWSEngine::VersionAbstractor::auth_data_t
+AWSBrowserUploadAbstractor::get_auth_data(const req_state* const s) const
+{
+  if (s->auth.s3_postobj_creds.x_amz_algorithm == AWS4_HMAC_SHA256_STR) {
+    ldout(s->cct, 0) << "Signature verification algorithm AWS v4"
+                     << " (AWS4-HMAC-SHA256)" << dendl;
+    return get_auth_data_v4(s);
+  } else {
+    ldout(s->cct, 0) << "Signature verification algorithm AWS v2" << dendl;
+    return get_auth_data_v2(s);
+  }
+}
+
+
+AWSEngine::result_t
+AWSEngine::authenticate(const req_state* const s) const
+{
+  /* Small reminder: an ver_abstractor is allowed to throw! */
+  const auto auth_data = ver_abstractor.get_auth_data(s);
+
+  if (auth_data.access_key_id.empty() || auth_data.client_signature.empty()) {
+    return result_t::deny(-EINVAL);
+  } else {
+    return authenticate(auth_data.access_key_id,
+		        auth_data.client_signature,
+			auth_data.string_to_sign,
+                        auth_data.signature_factory,
+			auth_data.completer_factory,
+			s);
+  }
+}
+
+} /* namespace s3 */
+} /* namespace auth */
+} /* namespace rgw */
+
+rgw::LDAPHelper* rgw::auth::s3::LDAPEngine::ldh = nullptr;
+std::mutex rgw::auth::s3::LDAPEngine::mtx;
+
+void rgw::auth::s3::LDAPEngine::init(CephContext* const cct)
 {
   if (! ldh) {
     std::lock_guard<std::mutex> lck(mtx);
@@ -4461,19 +4086,23 @@ void RGWLDAPAuthEngine::init(CephContext* const cct)
   }
 }
 
-RGWRemoteAuthApplier::acl_strategy_t RGWLDAPAuthEngine::get_acl_strategy() const
+rgw::auth::RemoteApplier::acl_strategy_t
+rgw::auth::s3::LDAPEngine::get_acl_strategy() const
 {
   //This is based on the assumption that the default acl strategy in
   // get_perms_from_aclspec, will take care. Extra acl spec is not required.
   return nullptr;
 }
 
-RGWRemoteAuthApplier::AuthInfo
-RGWLDAPAuthEngine::get_creds_info(const rgw::RGWToken& token) const noexcept
+rgw::auth::RemoteApplier::AuthInfo
+rgw::auth::s3::LDAPEngine::get_creds_info(const rgw::RGWToken& token) const noexcept
 {
-  using acct_privilege_t = RGWRemoteAuthApplier::AuthInfo::acct_privilege_t;
+  /* The short form of "using" can't be used here -- we're aliasing a class'
+   * member. */
+  using acct_privilege_t = \
+    rgw::auth::RemoteApplier::AuthInfo::acct_privilege_t;
 
-  return RGWRemoteAuthApplier::AuthInfo {
+  return rgw::auth::RemoteApplier::AuthInfo {
     rgw_user(token.id),
     token.id,
     RGW_PERM_FULL_CONTROL,
@@ -4482,25 +4111,27 @@ RGWLDAPAuthEngine::get_creds_info(const rgw::RGWToken& token) const noexcept
   };
 }
 
-bool RGWLDAPAuthEngine::is_applicable() const noexcept
+rgw::auth::Engine::result_t
+rgw::auth::s3::LDAPEngine::authenticate(
+  const boost::string_view& access_key_id,
+  const boost::string_view& signature,
+  const string_to_sign_t& string_to_sign,
+  const signature_factory_t&,
+  const completer_factory_t& completer_factory,
+  const req_state* const s) const
 {
-  if (! RGWS3V2AuthEngine::is_applicable()) {
-    return false;
+  /* boost filters and/or string_ref may throw on invalid input */
+  rgw::RGWToken base64_token;
+  try {
+    base64_token = rgw::from_base64(access_key_id);
+  } catch (...) {
+    base64_token = std::string("");
   }
 
-  if (! cct->_conf->rgw_s3_auth_use_ldap ||
-      cct->_conf->rgw_ldap_uri.empty()) {
-    return false;
+  if (! base64_token.valid()) {
+    return result_t::deny();
   }
 
-  return true;
-}
-
-RGWAuthApplier::aplptr_t RGWLDAPAuthEngine::authenticate() const
-{
-  if(! base64_token.valid()) {
-    return nullptr;
-  }
   //TODO: Uncomment, when we have a migration plan in place.
   //Check if a user of type other than 'ldap' is already present, if yes, then
   //return error.
@@ -4514,117 +4145,64 @@ RGWAuthApplier::aplptr_t RGWLDAPAuthEngine::authenticate() const
   }*/
 
   if (ldh->auth(base64_token.id, base64_token.key) != 0) {
-    return nullptr;
+    return result_t::deny();
   }
 
-  return apl_factory->create_apl_remote(cct, get_acl_strategy(), get_creds_info(base64_token));
+  auto apl = apl_factory->create_apl_remote(cct, s, get_acl_strategy(),
+                                            get_creds_info(base64_token));
+  return result_t::grant(std::move(apl), completer_factory(boost::none));
 }
 
-void RGWS3V2Extractor::get_auth_keys(std::string& access_key_id,
-                                      std::string& signature,
-                                      std::string& expires,
-                                      bool& qsr) const
+
+/* LocalEndgine */
+rgw::auth::Engine::result_t
+rgw::auth::s3::LocalEngine::authenticate(
+  const boost::string_view& _access_key_id,
+  const boost::string_view& signature,
+  const string_to_sign_t& string_to_sign,
+  const signature_factory_t& signature_factory,
+  const completer_factory_t& completer_factory,
+  const req_state* const s) const
 {
-  qsr = false;
-  if (! s->http_auth || !(*s->http_auth)) {
-    access_key_id = s->info.args.get("AWSAccessKeyId");
-    signature = s->info.args.get("Signature");
-    expires = s->info.args.get("Expires");
-    qsr = true;
-  } else {
-    string auth_str(s->http_auth + 4);
-    int pos = auth_str.rfind(':');
-    if (pos >= 0) {
-      access_key_id = auth_str.substr(0, pos);
-      signature = auth_str.substr(pos + 1);
-    }
-  }
-}
-
-bool RGWS3V2LocalAuthEngine::is_applicable() const noexcept
-{
-  if (! RGWS3V2AuthEngine::is_applicable()) {
-    return false;
-  }
-  if (! s->cct->_conf->rgw_s3_auth_use_rados) {
-    return false;
-  }
-
-  return true;
-}
-
-RGWAuthApplier::aplptr_t RGWS3V2LocalAuthEngine::authenticate() const
-{
-  if (access_key_id.empty() || signature.empty()) {
-    ldout(s->cct, 5) << "access_key_id or signature is empty" << dendl;
-    throw -EINVAL;
-  }
-
-  time_t now;
-  time(&now);
-  if (! expires.empty()) {
-    time_t exp = atoll(expires.c_str());
-    if (now >= exp) {
-      throw -EPERM;
-    }
-  }
   /* get the user info */
-  string access_key = access_key_id;
-  if (rgw_get_user_info_by_access_key(store, access_key, *(s->user)) < 0) {
-      ldout(s->cct, 5) << "error reading user info, uid=" << access_key_id
+  RGWUserInfo user_info;
+  /* TODO(rzarzynski): we need to have string-view taking variant. */
+  const std::string access_key_id = _access_key_id.to_string();
+  if (rgw_get_user_info_by_access_key(store, access_key_id, user_info) < 0) {
+      ldout(cct, 5) << "error reading user info, uid=" << access_key_id
               << " can't authenticate" << dendl;
-      return nullptr;
+      return result_t::deny(-ERR_INVALID_ACCESS_KEY);
   }
   //TODO: Uncomment, when we have a migration plan in place.
   /*else {
     if (s->user->type != TYPE_RGW) {
-      ldout(cct, 10) << "ERROR: User id of type: " << s->user->type << " is present" << dendl;
+      ldout(cct, 10) << "ERROR: User id of type: " << s->user->type
+                     << " is present" << dendl;
       throw -EPERM;
     }
   }*/
 
-  /* now verify  signature */
-  string auth_hdr;
-  if (! rgw_create_s3_canonical_header(s->info, &s->header_time, auth_hdr,
-        qsr)) {
-    ldout(s->cct, 10) << "failed to create auth header\n" << auth_hdr << dendl;
-    throw -EPERM;
+  const auto iter = user_info.access_keys.find(access_key_id);
+  if (iter == std::end(user_info.access_keys)) {
+    ldout(cct, 0) << "ERROR: access key not encoded in user info" << dendl;
+    return result_t::deny(-EPERM);
   }
-  ldout(s->cct, 10) << "auth_hdr:\n" << auth_hdr << dendl;
+  const RGWAccessKey& k = iter->second;
 
-  time_t req_sec = s->header_time.sec();
-  if ((req_sec < now - RGW_AUTH_GRACE_MINS * 60 ||
-      req_sec > now + RGW_AUTH_GRACE_MINS * 60) && !qsr) {
-    ldout(s->cct, 10) << "req_sec=" << req_sec << " now=" << now
-             << "; now - RGW_AUTH_GRACE_MINS=" << now - RGW_AUTH_GRACE_MINS * 60
-             << "; now + RGW_AUTH_GRACE_MINS=" << now + RGW_AUTH_GRACE_MINS * 60
-             << dendl;
-    ldout(s->cct, 0)  << "NOTICE: request time skew too big now=" << utime_t(now, 0)
-             << " req_time=" << s->header_time
-             << dendl;
-    throw -ERR_REQUEST_TIME_SKEWED;
-  }
+  const VersionAbstractor::server_signature_t server_signature = \
+    signature_factory(cct, k.key, string_to_sign);
 
-  map<string, RGWAccessKey>::iterator iter = s->user->access_keys.find(access_key_id);
-  if (iter == s->user->access_keys.end()) {
-    ldout(s->cct, 0) << "ERROR: access key not encoded in user info" << dendl;
-    throw -EPERM;
-  }
-  RGWAccessKey& k = iter->second;
+  ldout(cct, 15) << "string_to_sign="
+                 << rgw::crypt_sanitize::log_content{string_to_sign}
+                 << dendl;
+  ldout(cct, 15) << "server signature=" << server_signature << dendl;
+  ldout(cct, 15) << "client signature=" << signature << dendl;
+  ldout(cct, 15) << "compare=" << signature.compare(server_signature) << dendl;
 
-  string digest;
-  int ret = rgw_get_s3_header_digest(auth_hdr, k.key, digest);
-  if (ret < 0) {
-    throw -EPERM;
+  if (static_cast<boost::string_view>(server_signature) != signature) {
+    return result_t::deny(-ERR_SIGNATURE_NO_MATCH);
   }
 
-  ldout(s->cct, 15) << "calculated digest=" << digest << dendl;
-  ldout(s->cct, 15) << "auth_sign=" << signature << dendl;
-  ldout(s->cct, 15) << "compare=" << signature.compare(digest) << dendl;
-
-  if (signature != digest) {
-    throw -ERR_SIGNATURE_NO_MATCH;
-  }
-
-  return apl_factory->create_apl_local(cct, *(s->user), k.subuser);
+  auto apl = apl_factory->create_apl_local(cct, s, user_info, k.subuser);
+  return result_t::grant(std::move(apl), completer_factory(k.key));
 }

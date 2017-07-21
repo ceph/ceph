@@ -108,7 +108,7 @@ int check_mon_data_exists()
   struct stat buf;
   if (::stat(mon_data.c_str(), &buf)) {
     if (errno != ENOENT) {
-      cerr << "stat(" << mon_data << ") " << cpp_strerror(errno) << std::endl;
+      derr << "stat(" << mon_data << ") " << cpp_strerror(errno) << dendl;
     }
     return -errno;
   }
@@ -132,7 +132,7 @@ int check_mon_data_empty()
 
   DIR *dir = ::opendir(mon_data.c_str());
   if (!dir) {
-    cerr << "opendir(" << mon_data << ") " << cpp_strerror(errno) << std::endl;
+    derr << "opendir(" << mon_data << ") " << cpp_strerror(errno) << dendl;
     return -errno;
   }
   int code = 0;
@@ -147,7 +147,7 @@ int check_mon_data_empty()
     }
   }
   if (!de && errno) {
-    cerr << "readdir(" << mon_data << ") " << cpp_strerror(errno) << std::endl;
+    derr << "readdir(" << mon_data << ") " << cpp_strerror(errno) << dendl;
     code = -errno;
   }
 
@@ -158,25 +158,26 @@ int check_mon_data_empty()
 
 static void usage()
 {
-  cerr << "usage: ceph-mon -i monid [flags]" << std::endl;
-  cerr << "  --debug_mon n\n";
-  cerr << "        debug monitor level (e.g. 10)\n";
-  cerr << "  --mkfs\n";
-  cerr << "        build fresh monitor fs\n";
-  cerr << "  --force-sync\n";
-  cerr << "        force a sync from another mon by wiping local data (BE CAREFUL)\n";
-  cerr << "  --yes-i-really-mean-it\n";
-  cerr << "        mandatory safeguard for --force-sync\n";
-  cerr << "  --compact\n";
-  cerr << "        compact the monitor store\n";
-  cerr << "  --osdmap <filename>\n";
-  cerr << "        only used when --mkfs is provided: load the osdmap from <filename>\n";
-  cerr << "  --inject-monmap <filename>\n";
-  cerr << "        write the <filename> monmap to the local monitor store and exit\n";
-  cerr << "  --extract-monmap <filename>\n";
-  cerr << "        extract the monmap from the local monitor store and exit\n";
-  cerr << "  --mon-data <directory>\n";
-  cerr << "        where the mon store and keyring are located\n";
+  cout << "usage: ceph-mon -i <ID> [flags]\n"
+       << "  --debug_mon n\n"
+       << "        debug monitor level (e.g. 10)\n"
+       << "  --mkfs\n"
+       << "        build fresh monitor fs\n"
+       << "  --force-sync\n"
+       << "        force a sync from another mon by wiping local data (BE CAREFUL)\n"
+       << "  --yes-i-really-mean-it\n"
+       << "        mandatory safeguard for --force-sync\n"
+       << "  --compact\n"
+       << "        compact the monitor store\n"
+       << "  --osdmap <filename>\n"
+       << "        only used when --mkfs is provided: load the osdmap from <filename>\n"
+       << "  --inject-monmap <filename>\n"
+       << "        write the <filename> monmap to the local monitor store and exit\n"
+       << "  --extract-monmap <filename>\n"
+       << "        extract the monmap from the local monitor store and exit\n"
+       << "  --mon-data <directory>\n"
+       << "        where the mon store and keyring are located\n"
+       << std::endl;
   generic_server_usage();
 }
 
@@ -272,23 +273,23 @@ int main(int argc, const char **argv)
     }
   }
   if (!args.empty()) {
-    cerr << "too many arguments: " << args << std::endl;
+    derr << "too many arguments: " << args << dendl;
     usage();
   }
 
   if (force_sync && !yes_really) {
-    cerr << "are you SURE you want to force a sync?  this will erase local data and may\n"
-	 << "break your mon cluster.  pass --yes-i-really-mean-it if you do." << std::endl;
+    derr << "are you SURE you want to force a sync?  this will erase local data and may\n"
+	 << "break your mon cluster.  pass --yes-i-really-mean-it if you do." << dendl;
     exit(1);
   }
 
   if (g_conf->mon_data.empty()) {
-    cerr << "must specify '--mon-data=foo' data path" << std::endl;
+    derr << "must specify '--mon-data=foo' data path" << dendl;
     usage();
   }
 
   if (g_conf->name.get_id().empty()) {
-    cerr << "must specify id (--id <id> or --name mon.<id>)" << std::endl;
+    derr << "must specify id (--id <id> or --name mon.<id>)" << dendl;
     usage();
   }
 
@@ -298,25 +299,25 @@ int main(int argc, const char **argv)
     int err = check_mon_data_exists();
     if (err == -ENOENT) {
       if (::mkdir(g_conf->mon_data.c_str(), 0755)) {
-	cerr << "mkdir(" << g_conf->mon_data << ") : "
-	     << cpp_strerror(errno) << std::endl;
+	derr << "mkdir(" << g_conf->mon_data << ") : "
+	     << cpp_strerror(errno) << dendl;
 	exit(1);
       }
     } else if (err < 0) {
-      cerr << "error opening '" << g_conf->mon_data << "': "
-           << cpp_strerror(-err) << std::endl;
+      derr << "error opening '" << g_conf->mon_data << "': "
+           << cpp_strerror(-err) << dendl;
       exit(-err);
     }
 
     err = check_mon_data_empty();
     if (err == -ENOTEMPTY) {
       // Mon may exist.  Let the user know and exit gracefully.
-      cerr << "'" << g_conf->mon_data << "' already exists and is not empty"
-           << ": monitor may already exist" << std::endl;
+      derr << "'" << g_conf->mon_data << "' already exists and is not empty"
+           << ": monitor may already exist" << dendl;
       exit(0);
     } else if (err < 0) {
-      cerr << "error checking if '" << g_conf->mon_data << "' is empty: "
-           << cpp_strerror(-err) << std::endl;
+      derr << "error checking if '" << g_conf->mon_data << "' is empty: "
+           << cpp_strerror(-err) << dendl;
       exit(-err);
     }
 
@@ -333,7 +334,7 @@ int main(int argc, const char **argv)
     if (g_conf->monmap.length()) {
       int err = monmapbl.read_file(g_conf->monmap.c_str(), &error);
       if (err < 0) {
-	cerr << argv[0] << ": error reading " << g_conf->monmap << ": " << error << std::endl;
+	derr << argv[0] << ": error reading " << g_conf->monmap << ": " << error << dendl;
 	exit(1);
       }
       try {
@@ -343,13 +344,16 @@ int main(int argc, const char **argv)
 	monmap.set_epoch(0);
       }
       catch (const buffer::error& e) {
-	cerr << argv[0] << ": error decoding monmap " << g_conf->monmap << ": " << e.what() << std::endl;
+	derr << argv[0] << ": error decoding monmap " << g_conf->monmap << ": " << e.what() << dendl;
 	exit(1);
       }      
     } else {
-      int err = monmap.build_initial(g_ceph_context, cerr);
+      ostringstream oss;
+      int err = monmap.build_initial(g_ceph_context, oss);
+      if (oss.tellp())
+        derr << oss.str() << dendl;
       if (err < 0) {
-	cerr << argv[0] << ": warning: no initial monitors; must use admin socket to feed hints" << std::endl;
+	derr << argv[0] << ": warning: no initial monitors; must use admin socket to feed hints" << dendl;
       }
 
       // am i part of the initial quorum?
@@ -364,8 +368,8 @@ int main(int argc, const char **argv)
 	  string name;
 	  monmap.get_addr_name(a, name);
 	  monmap.rename(name, g_conf->name.get_id());
-	  cout << argv[0] << ": renaming mon." << name << " " << a
-	       << " to mon." << g_conf->name.get_id() << std::endl;
+	  dout(0) << argv[0] << ": renaming mon." << name << " " << a
+	       << " to mon." << g_conf->name.get_id() << dendl;
 	}
       } else {
 	// is a local address listed without a name?  if so, name myself.
@@ -378,12 +382,12 @@ int main(int argc, const char **argv)
 	  monmap.get_addr_name(local, name);
 
 	  if (name.compare(0, 7, "noname-") == 0) {
-	    cout << argv[0] << ": mon." << name << " " << local
-		 << " is local, renaming to mon." << g_conf->name.get_id() << std::endl;
+	    dout(0) << argv[0] << ": mon." << name << " " << local
+		 << " is local, renaming to mon." << g_conf->name.get_id() << dendl;
 	    monmap.rename(name, g_conf->name.get_id());
 	  } else {
-	    cout << argv[0] << ": mon." << name << " " << local
-		 << " is local, but not 'noname-' + something; not assuming it's me" << std::endl;
+	    dout(0) << argv[0] << ": mon." << name << " " << local
+		 << " is local, but not 'noname-' + something; not assuming it's me" << dendl;
 	  }
 	}
       }
@@ -391,11 +395,11 @@ int main(int argc, const char **argv)
 
     if (!g_conf->fsid.is_zero()) {
       monmap.fsid = g_conf->fsid;
-      cout << argv[0] << ": set fsid to " << g_conf->fsid << std::endl;
+      dout(0) << argv[0] << ": set fsid to " << g_conf->fsid << dendl;
     }
     
     if (monmap.fsid.is_zero()) {
-      cerr << argv[0] << ": generated monmap has no fsid; use '--fsid <uuid>'" << std::endl;
+      derr << argv[0] << ": generated monmap has no fsid; use '--fsid <uuid>'" << dendl;
       exit(10);
     }
 
@@ -405,42 +409,45 @@ int main(int argc, const char **argv)
     if (osdmapfn.length()) {
       err = osdmapbl.read_file(osdmapfn.c_str(), &error);
       if (err < 0) {
-	cerr << argv[0] << ": error reading " << osdmapfn << ": "
-	     << error << std::endl;
+	derr << argv[0] << ": error reading " << osdmapfn << ": "
+	     << error << dendl;
 	exit(1);
       }
     }
 
     // go
     MonitorDBStore store(g_conf->mon_data);
-    int r = store.create_and_open(cerr);
+    ostringstream oss;
+    int r = store.create_and_open(oss);
+    if (oss.tellp())
+      derr << oss.str() << dendl;
     if (r < 0) {
-      cerr << argv[0] << ": error opening mon data directory at '"
-           << g_conf->mon_data << "': " << cpp_strerror(r) << std::endl;
+      derr << argv[0] << ": error opening mon data directory at '"
+           << g_conf->mon_data << "': " << cpp_strerror(r) << dendl;
       exit(1);
     }
     assert(r == 0);
 
-    Monitor mon(g_ceph_context, g_conf->name.get_id(), &store, 0, &monmap);
+    Monitor mon(g_ceph_context, g_conf->name.get_id(), &store, 0, 0, &monmap);
     r = mon.mkfs(osdmapbl);
     if (r < 0) {
-      cerr << argv[0] << ": error creating monfs: " << cpp_strerror(r) << std::endl;
+      derr << argv[0] << ": error creating monfs: " << cpp_strerror(r) << dendl;
       exit(1);
     }
     store.close();
-    cout << argv[0] << ": created monfs at " << g_conf->mon_data 
-	 << " for " << g_conf->name << std::endl;
+    dout(0) << argv[0] << ": created monfs at " << g_conf->mon_data 
+	 << " for " << g_conf->name << dendl;
     return 0;
   }
 
   err = check_mon_data_exists();
   if (err < 0 && err == -ENOENT) {
-    cerr << "monitor data directory at '" << g_conf->mon_data << "'"
-         << " does not exist: have you run 'mkfs'?" << std::endl;
+    derr << "monitor data directory at '" << g_conf->mon_data << "'"
+         << " does not exist: have you run 'mkfs'?" << dendl;
     exit(1);
   } else if (err < 0) {
-    cerr << "error accessing monitor data directory at '"
-         << g_conf->mon_data << "': " << cpp_strerror(-err) << std::endl;
+    derr << "error accessing monitor data directory at '"
+         << g_conf->mon_data << "': " << cpp_strerror(-err) << dendl;
     exit(1);
   }
 
@@ -451,8 +458,8 @@ int main(int argc, const char **argv)
     exit(1);
   } else if (err < 0 && err != -ENOTEMPTY) {
     // we don't want an empty data dir by now
-    cerr << "error accessing '" << g_conf->mon_data << "': "
-         << cpp_strerror(-err) << std::endl;
+    derr << "error accessing '" << g_conf->mon_data << "': "
+         << cpp_strerror(-err) << dendl;
     exit(1);
   }
 
@@ -461,17 +468,17 @@ int main(int argc, const char **argv)
     ceph_data_stats_t stats;
     int err = get_fs_stats(stats, g_conf->mon_data.c_str());
     if (err < 0) {
-      cerr << "error checking monitor data's fs stats: " << cpp_strerror(err)
-           << std::endl;
+      derr << "error checking monitor data's fs stats: " << cpp_strerror(err)
+           << dendl;
       exit(-err);
     }
     if (stats.avail_percent <= g_conf->mon_data_avail_crit) {
-      cerr << "error: monitor data filesystem reached concerning levels of"
+      derr << "error: monitor data filesystem reached concerning levels of"
            << " available storage space (available: "
            << stats.avail_percent << "% " << prettybyte_t(stats.byte_avail)
            << ")\nyou may adjust 'mon data avail crit' to a lower value"
            << " to make this go away (default: " << g_conf->mon_data_avail_crit
-           << "%)\n" << std::endl;
+           << "%)\n" << dendl;
       exit(ENOSPC);
     }
   }
@@ -484,15 +491,16 @@ int main(int argc, const char **argv)
       string err_msg;
       err = prefork.prefork(err_msg);
       if (err < 0) {
-        cerr << err_msg << std::endl;
+        derr << err_msg << dendl;
         prefork.exit(err);
       }
       if (prefork.is_parent()) {
         err = prefork.parent_wait(err_msg);
         if (err < 0)
-          cerr << err_msg << std::endl;
+          derr << err_msg << dendl;
         prefork.exit(err);
       }
+      setsid();
       global_init_postfork_start(g_ceph_context);
     }
     common_init_finish(g_ceph_context);
@@ -506,11 +514,16 @@ int main(int argc, const char **argv)
   }
 
   MonitorDBStore *store = new MonitorDBStore(g_conf->mon_data);
-  err = store->open(std::cerr);
-  if (err < 0) {
-    derr << "error opening mon data directory at '"
-         << g_conf->mon_data << "': " << cpp_strerror(err) << dendl;
-    prefork.exit(1);
+  {
+    ostringstream oss;
+    err = store->open(oss);
+    if (oss.tellp())
+      derr << oss.str() << dendl;
+    if (err < 0) {
+      derr << "error opening mon data directory at '"
+           << g_conf->mon_data << "': " << cpp_strerror(err) << dendl;
+      prefork.exit(1);
+    }
   }
 
   bufferlist magicbl;
@@ -584,7 +597,7 @@ int main(int argc, const char **argv)
       try {
         monmap.decode(mapbl);
       } catch (const buffer::error& e) {
-        cerr << "can't decode monmap: " << e.what() << std::endl;
+        derr << "can't decode monmap: " << e.what() << dendl;
       }
     } else {
       derr << "unable to obtain a monmap: " << cpp_strerror(err) << dendl;
@@ -632,7 +645,10 @@ int main(int argc, const char **argv)
 	      << ipaddr << dendl;
     } else {
       MonMap tmpmap;
-      int err = tmpmap.build_initial(g_ceph_context, cerr);
+      ostringstream oss;
+      int err = tmpmap.build_initial(g_ceph_context, oss);
+      if (oss.tellp())
+        derr << oss.str() << dendl;
       if (err < 0) {
 	derr << argv[0] << ": error generating initial monmap: "
              << cpp_strerror(err) << dendl;
@@ -651,7 +667,7 @@ int main(int argc, const char **argv)
 
   // bind
   int rank = monmap.get_rank(g_conf->name.get_id());
-  std::string public_msgr_type = g_conf->ms_public_type.empty() ? g_conf->ms_type : g_conf->ms_public_type;
+  std::string public_msgr_type = g_conf->ms_public_type.empty() ? g_conf->get_val<std::string>("ms_type") : g_conf->ms_public_type;
   Messenger *msgr = Messenger::create(g_ceph_context, public_msgr_type,
 				      entity_name_t::MON(rank), "mon",
 				      0, Messenger::HAS_MANY_CONNECTIONS);
@@ -660,27 +676,20 @@ int main(int argc, const char **argv)
   msgr->set_cluster_protocol(CEPH_MON_PROTOCOL);
   msgr->set_default_send_priority(CEPH_MSG_PRIO_HIGH);
 
-  uint64_t supported =
-    CEPH_FEATURE_UID |
-    CEPH_FEATURE_NOSRCADDR |
-    CEPH_FEATURE_PGID64 |
-    CEPH_FEATURE_MSG_AUTH;
-  msgr->set_default_policy(Messenger::Policy::stateless_server(supported, 0));
+  msgr->set_default_policy(Messenger::Policy::stateless_server(0));
   msgr->set_policy(entity_name_t::TYPE_MON,
                    Messenger::Policy::lossless_peer_reuse(
-                       supported,
-                       CEPH_FEATURE_UID |
-                       CEPH_FEATURE_PGID64 |
-                       CEPH_FEATURE_MON_SINGLE_PAXOS));
+		     CEPH_FEATURE_UID |
+		     CEPH_FEATURE_PGID64 |
+		     CEPH_FEATURE_MON_SINGLE_PAXOS));
   msgr->set_policy(entity_name_t::TYPE_OSD,
                    Messenger::Policy::stateless_server(
-                       supported,
-                       CEPH_FEATURE_PGID64 |
-                       CEPH_FEATURE_OSDENC));
+		     CEPH_FEATURE_PGID64 |
+		     CEPH_FEATURE_OSDENC));
   msgr->set_policy(entity_name_t::TYPE_CLIENT,
-                   Messenger::Policy::stateless_server(supported, 0));
+                   Messenger::Policy::stateless_server(0));
   msgr->set_policy(entity_name_t::TYPE_MDS,
-                   Messenger::Policy::stateless_server(supported, 0));
+                   Messenger::Policy::stateless_server(0));
 
   // throttle client traffic
   Throttle *client_throttler = new Throttle(g_ceph_context, "mon_client_bytes",
@@ -698,31 +707,62 @@ int main(int argc, const char **argv)
   msgr->set_policy_throttlers(entity_name_t::TYPE_MDS, daemon_throttler,
 				     NULL);
 
+  entity_addr_t bind_addr = ipaddr;
+  entity_addr_t public_addr = ipaddr;
+
+  // check if the public_bind_addr option is set
+  if (!g_conf->public_bind_addr.is_blank_ip()) {
+    bind_addr = g_conf->public_bind_addr;
+
+    // set the default port if not already set
+    if (bind_addr.get_port() == 0) {
+      bind_addr.set_port(CEPH_MON_PORT);
+    }
+  }
+
+  dout(0) << "starting " << g_conf->name << " rank " << rank
+       << " at public addr " << public_addr
+       << " at bind addr " << bind_addr
+       << " mon_data " << g_conf->mon_data
+       << " fsid " << monmap.get_fsid()
+       << dendl;
+
+  err = msgr->bind(bind_addr);
+  if (err < 0) {
+    derr << "unable to bind monitor to " << bind_addr << dendl;
+    prefork.exit(1);
+  }
+
+  // if the public and bind addr are different set the msgr addr
+  // to the public one, now that the bind is complete.
+  if (public_addr != bind_addr) {
+    msgr->set_addr(public_addr);
+  }
+
+  Messenger *mgr_msgr = Messenger::create(g_ceph_context, public_msgr_type,
+					  entity_name_t::MON(rank), "mon-mgrc",
+					  getpid(), 0);
+  if (!mgr_msgr) {
+    derr << "unable to create mgr_msgr" << dendl;
+    prefork.exit(1);
+  }
+
   dout(0) << "starting " << g_conf->name << " rank " << rank
        << " at " << ipaddr
        << " mon_data " << g_conf->mon_data
        << " fsid " << monmap.get_fsid()
        << dendl;
 
-  err = msgr->bind(ipaddr);
-  if (err < 0) {
-    derr << "unable to bind monitor to " << ipaddr << dendl;
-    prefork.exit(1);
-  }
-
-  cout << "starting " << g_conf->name << " rank " << rank
-       << " at " << ipaddr
-       << " mon_data " << g_conf->mon_data
-       << " fsid " << monmap.get_fsid()
-       << std::endl;
-
   // start monitor
   mon = new Monitor(g_ceph_context, g_conf->name.get_id(), store,
-		    msgr, &monmap);
+		    msgr, mgr_msgr, &monmap);
 
   if (force_sync) {
     derr << "flagging a forced sync ..." << dendl;
-    mon->sync_force(NULL, cerr);
+    ostringstream oss;
+    mon->sync_force(NULL, oss);
+    if (oss.tellp())
+      derr << oss.str() << dendl;
   }
 
   err = mon->preinit();
@@ -743,6 +783,7 @@ int main(int argc, const char **argv)
   }
 
   msgr->start();
+  mgr_msgr->start();
 
   mon->init();
 
@@ -756,6 +797,7 @@ int main(int argc, const char **argv)
     kill(getpid(), SIGTERM);
 
   msgr->wait();
+  mgr_msgr->wait();
 
   store->close();
 
@@ -767,6 +809,7 @@ int main(int argc, const char **argv)
   delete mon;
   delete store;
   delete msgr;
+  delete mgr_msgr;
   delete client_throttler;
   delete daemon_throttler;
 
@@ -780,4 +823,3 @@ int main(int argc, const char **argv)
   prefork.signal_exit(0);
   return 0;
 }
-

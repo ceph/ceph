@@ -44,8 +44,9 @@ ObjectMap<I>::~ObjectMap() {
 }
 
 template <typename I>
-int ObjectMap<I>::remove(librados::IoCtx &io_ctx, const std::string &image_id) {
-  return io_ctx.remove(object_map_name(image_id, CEPH_NOSNAP));
+int ObjectMap<I>::aio_remove(librados::IoCtx &io_ctx, const std::string &image_id,
+			     librados::AioCompletion *c) {
+  return io_ctx.aio_remove(object_map_name(image_id, CEPH_NOSNAP), c);
 }
 
 template <typename I>
@@ -90,9 +91,14 @@ bool ObjectMap<I>::object_may_exist(uint64_t object_no) const
 
   // Fall back to default logic if object map is disabled or invalid
   if (!m_image_ctx.test_features(RBD_FEATURE_OBJECT_MAP,
-                                 m_image_ctx.snap_lock) ||
-      m_image_ctx.test_flags(RBD_FLAG_OBJECT_MAP_INVALID,
-                             m_image_ctx.snap_lock)) {
+                                 m_image_ctx.snap_lock)) {
+    return true;
+  }
+
+  bool flags_set;
+  int r = m_image_ctx.test_flags(RBD_FLAG_OBJECT_MAP_INVALID,
+                                 m_image_ctx.snap_lock, &flags_set);
+  if (r < 0 || flags_set) {
     return true;
   }
 
@@ -184,7 +190,7 @@ void ObjectMap<I>::aio_save(Context *on_finish) {
   cls_client::object_map_save(&op, m_object_map);
 
   std::string oid(object_map_name(m_image_ctx.id, m_snap_id));
-  librados::AioCompletion *comp = util::create_rados_safe_callback(on_finish);
+  librados::AioCompletion *comp = util::create_rados_callback(on_finish);
 
   int r = m_image_ctx.md_ctx.aio_operate(oid, comp, &op);
   assert(r == 0);
@@ -241,7 +247,7 @@ void ObjectMap<I>::detained_aio_update(UpdateOperation &&op) {
       handle_detained_aio_update(cell, r, on_finish);
     });
   aio_update(CEPH_NOSNAP, op.start_object_no, op.end_object_no, op.new_state,
-             op.current_state, ctx);
+             op.current_state, op.parent_trace, ctx);
 }
 
 template <typename I>
@@ -268,6 +274,7 @@ template <typename I>
 void ObjectMap<I>::aio_update(uint64_t snap_id, uint64_t start_object_no,
                               uint64_t end_object_no, uint8_t new_state,
                               const boost::optional<uint8_t> &current_state,
+                              const ZTracer::Trace &parent_trace,
                               Context *on_finish) {
   assert(m_image_ctx.snap_lock.is_locked());
   assert((m_image_ctx.features & RBD_FEATURE_OBJECT_MAP) != 0);
@@ -305,7 +312,7 @@ void ObjectMap<I>::aio_update(uint64_t snap_id, uint64_t start_object_no,
 
   auto req = object_map::UpdateRequest<I>::create(
     m_image_ctx, &m_object_map, snap_id, start_object_no, end_object_no,
-    new_state, current_state, on_finish);
+    new_state, current_state, parent_trace, on_finish);
   req->send();
 }
 

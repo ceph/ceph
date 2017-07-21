@@ -39,7 +39,7 @@ static ostream& _prefix(std::ostream* _dout)
 int ErasureCodePluginShec::factory(const std::string &directory,
 		      ErasureCodeProfile &profile,
 		      ErasureCodeInterfaceRef *erasure_code,
-		      ostream *ss) {
+		      std::ostream *ss) {
     ErasureCodeShec *interface;
 
     if (profile.find("technique") == profile.end())

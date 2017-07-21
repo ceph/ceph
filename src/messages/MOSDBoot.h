@@ -23,7 +23,7 @@
 class MOSDBoot : public PaxosServiceMessage {
 
   static const int HEAD_VERSION = 6;
-  static const int COMPAT_VERSION = 2;
+  static const int COMPAT_VERSION = 6;
 
  public:
   OSDSuperblock sb;
@@ -52,17 +52,17 @@ class MOSDBoot : public PaxosServiceMessage {
   { }
   
 private:
-  ~MOSDBoot() { }
+  ~MOSDBoot() override { }
 
 public:
-  const char *get_type_name() const { return "osd_boot"; }
-  void print(ostream& out) const {
+  const char *get_type_name() const override { return "osd_boot"; }
+  void print(ostream& out) const override {
     out << "osd_boot(osd." << sb.whoami << " booted " << boot_epoch
 	<< " features " << osd_features
 	<< " v" << version << ")";
   }
   
-  void encode_payload(uint64_t features) {
+  void encode_payload(uint64_t features) override {
     paxos_encode();
     ::encode(sb, payload);
     ::encode(hb_back_addr, payload, features);
@@ -72,23 +72,16 @@ public:
     ::encode(metadata, payload);
     ::encode(osd_features, payload);
   }
-  void decode_payload() {
+  void decode_payload() override {
     bufferlist::iterator p = payload.begin();
     paxos_decode(p);
     ::decode(sb, p);
     ::decode(hb_back_addr, p);
-    if (header.version >= 2)
-      ::decode(cluster_addr, p);
-    if (header.version >= 3)
-      ::decode(boot_epoch, p);
-    if (header.version >= 4)
-      ::decode(hb_front_addr, p);
-    if (header.version >= 5)
-      ::decode(metadata, p);
-    if (header.version >= 6)
-      ::decode(osd_features, p);
-    else
-      osd_features = 0;
+    ::decode(cluster_addr, p);
+    ::decode(boot_epoch, p);
+    ::decode(hb_front_addr, p);
+    ::decode(metadata, p);
+    ::decode(osd_features, p);
   }
 };
 

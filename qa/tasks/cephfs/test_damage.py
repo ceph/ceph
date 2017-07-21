@@ -140,6 +140,8 @@ class TestDamage(CephFSTestCase):
                 "400.00000000",
                 # Missing dirfrags for non-system dirs result in empty directory
                 "10000000000.00000000",
+                # PurgeQueue is auto-created if not found on startup
+                "500.00000000"
             ]:
                 expectation = NO_DAMAGE
             else:
@@ -167,14 +169,21 @@ class TestDamage(CephFSTestCase):
         ])
 
         # Truncations
-        mutations.extend([
-            MetadataMutation(
-                o,
-                "Truncate {0}".format(o),
-                lambda o=o: self.fs.rados(["truncate", o, "0"]),
-                DAMAGED_ON_START
-            ) for o in data_objects
-        ])
+        for obj_id in data_objects:
+            if obj_id == "500.00000000":
+                # The PurgeQueue is allowed to be empty: Journaler interprets
+                # an empty header object as an empty journal.
+                expectation = NO_DAMAGE
+            else:
+                expectation = DAMAGED_ON_START
+
+            mutations.append(
+                MetadataMutation(
+                    o,
+                    "Truncate {0}".format(o),
+                    lambda o=o: self.fs.rados(["truncate", o, "0"]),
+                    DAMAGED_ON_START
+            ))
 
         # OMAP value corruptions
         for o, k in omap_keys:

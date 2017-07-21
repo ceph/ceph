@@ -188,11 +188,11 @@ class MClientCaps : public Message {
 private:
   file_layout_t layout;
 
-  ~MClientCaps() {}
+  ~MClientCaps() override {}
 
 public:
-  const char *get_type_name() const { return "Cfcap";}
-  void print(ostream& out) const {
+  const char *get_type_name() const override { return "Cfcap";}
+  void print(ostream& out) const override {
     out << "client_caps(" << ceph_cap_op_name(head.op)
 	<< " ino " << inodeno_t(head.ino)
 	<< " " << head.cap_id
@@ -219,7 +219,7 @@ public:
     out << ")";
   }
   
-  void decode_payload() {
+  void decode_payload() override {
     bufferlist::iterator p = payload.begin();
     ::decode(head, p);
     ceph_mds_caps_body_legacy body;
@@ -280,7 +280,7 @@ public:
       ::decode(flags, p);
     }
   }
-  void encode_payload(uint64_t features) {
+  void encode_payload(uint64_t features) override {
     header.version = HEAD_VERSION;
     head.snap_trace_len = snapbl.length();
     head.xattr_len = xattrbl.length();
@@ -288,6 +288,7 @@ public:
     ::encode(head, payload);
     ceph_mds_caps_body_legacy body;
     if (head.op == CEPH_CAP_OP_EXPORT) {
+      memset(&body, 0, sizeof(body));
       body.peer = peer;
     } else {
       body.size = size;

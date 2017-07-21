@@ -1,5 +1,5 @@
 roles:
-    - [mon.0, client.0]
+    - [mon.a, mgr.x, client.0]
 tasks:
     - install:
         # branch has precedence over sha1

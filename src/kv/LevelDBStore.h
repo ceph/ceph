@@ -29,6 +29,9 @@
 
 #include "common/ceph_context.h"
 
+// reinclude our assert to clobber the system one
+# include "include/assert.h"
+
 class PerfCounters;
 
 enum {
@@ -74,7 +77,7 @@ class LevelDBStore : public KeyValueDB {
     LevelDBStore *db;
   public:
     explicit CompactThread(LevelDBStore *d) : db(d) {}
-    void *entry() {
+    void *entry() override {
       db->compact_thread_entry();
       return NULL;
     }
@@ -92,21 +95,21 @@ class LevelDBStore : public KeyValueDB {
 
 public:
   /// compact the underlying leveldb store
-  void compact();
+  void compact() override;
 
   /// compact db for all keys with a given prefix
-  void compact_prefix(const string& prefix) {
+  void compact_prefix(const string& prefix) override {
     compact_range(prefix, past_prefix(prefix));
   }
-  void compact_prefix_async(const string& prefix) {
+  void compact_prefix_async(const string& prefix) override {
     compact_range_async(prefix, past_prefix(prefix));
   }
   void compact_range(const string& prefix,
-		     const string& start, const string& end) {
+		     const string& start, const string& end) override {
     compact_range(combine_strings(prefix, start), combine_strings(prefix, end));
   }
   void compact_range_async(const string& prefix,
-			   const string& start, const string& end) {
+			   const string& start, const string& end) override {
     compact_range_async(combine_strings(prefix, start),
 			combine_strings(prefix, end));
   }
@@ -165,21 +168,21 @@ public:
     options()
   {}
 
-  ~LevelDBStore();
+  ~LevelDBStore() override;
 
   static int _test_init(const string& dir);
-  int init(string option_str="");
+  int init(string option_str="") override;
 
   /// Opens underlying db
-  int open(ostream &out) {
+  int open(ostream &out) override {
     return do_open(out, false);
   }
   /// Creates underlying db if missing and opens it
-  int create_and_open(ostream &out) {
+  int create_and_open(ostream &out) override {
     return do_open(out, true);
   }
 
-  void close();
+  void close() override;
 
   class LevelDBTransactionImpl : public KeyValueDB::TransactionImpl {
   public:
@@ -189,32 +192,37 @@ public:
     void set(
       const string &prefix,
       const string &k,
-      const bufferlist &bl);
+      const bufferlist &bl) override;
     using KeyValueDB::TransactionImpl::set;
     void rmkey(
       const string &prefix,
-      const string &k);
+      const string &k) override;
     void rmkeys_by_prefix(
       const string &prefix
-      );
+      ) override;
+    virtual void rm_range_keys(
+        const string &prefix,
+        const string &start,
+        const string &end) override;
+
     using KeyValueDB::TransactionImpl::rmkey;
   };
 
-  KeyValueDB::Transaction get_transaction() {
+  KeyValueDB::Transaction get_transaction() override {
     return std::make_shared<LevelDBTransactionImpl>(this);
   }
 
-  int submit_transaction(KeyValueDB::Transaction t);
-  int submit_transaction_sync(KeyValueDB::Transaction t);
+  int submit_transaction(KeyValueDB::Transaction t) override;
+  int submit_transaction_sync(KeyValueDB::Transaction t) override;
   int get(
     const string &prefix,
     const std::set<string> &key,
     std::map<string, bufferlist> *out
-    );
+    ) override;
 
   int get(const string &prefix, 
     const string &key,   
-    bufferlist *value);
+    bufferlist *value) override;
 
   using KeyValueDB::get;
 
@@ -225,22 +233,22 @@ public:
   public:
     explicit LevelDBWholeSpaceIteratorImpl(leveldb::Iterator *iter) :
       dbiter(iter) { }
-    virtual ~LevelDBWholeSpaceIteratorImpl() { }
+    ~LevelDBWholeSpaceIteratorImpl() override { }
 
-    int seek_to_first() {
+    int seek_to_first() override {
       dbiter->SeekToFirst();
       return dbiter->status().ok() ? 0 : -1;
     }
-    int seek_to_first(const string &prefix) {
+    int seek_to_first(const string &prefix) override {
       leveldb::Slice slice_prefix(prefix);
       dbiter->Seek(slice_prefix);
       return dbiter->status().ok() ? 0 : -1;
     }
-    int seek_to_last() {
+    int seek_to_last() override {
       dbiter->SeekToLast();
       return dbiter->status().ok() ? 0 : -1;
     }
-    int seek_to_last(const string &prefix) {
+    int seek_to_last(const string &prefix) override {
       string limit = past_prefix(prefix);
       leveldb::Slice slice_limit(limit);
       dbiter->Seek(slice_limit);
@@ -252,7 +260,7 @@ public:
       }
       return dbiter->status().ok() ? 0 : -1;
     }
-    int upper_bound(const string &prefix, const string &after) {
+    int upper_bound(const string &prefix, const string &after) override {
       lower_bound(prefix, after);
       if (valid()) {
 	pair<string,string> key = raw_key();
@@ -261,36 +269,36 @@ public:
       }
       return dbiter->status().ok() ? 0 : -1;
     }
-    int lower_bound(const string &prefix, const string &to) {
+    int lower_bound(const string &prefix, const string &to) override {
       string bound = combine_strings(prefix, to);
       leveldb::Slice slice_bound(bound);
       dbiter->Seek(slice_bound);
       return dbiter->status().ok() ? 0 : -1;
     }
-    bool valid() {
+    bool valid() override {
       return dbiter->Valid();
     }
-    int next() {
+    int next() override {
       if (valid())
 	dbiter->Next();
       return dbiter->status().ok() ? 0 : -1;
     }
-    int prev() {
+    int prev() override {
       if (valid())
 	dbiter->Prev();
       return dbiter->status().ok() ? 0 : -1;
     }
-    string key() {
+    string key() override {
       string out_key;
       split_key(dbiter->key(), 0, &out_key);
       return out_key;
     }
-    pair<string,string> raw_key() {
+    pair<string,string> raw_key() override {
       string prefix, key;
       split_key(dbiter->key(), &prefix, &key);
       return make_pair(prefix, key);
     }
-    bool raw_key_is_prefixed(const string &prefix) {
+    bool raw_key_is_prefixed(const string &prefix) override {
       leveldb::Slice key = dbiter->key();
       if ((key.size() > prefix.length()) && (key[prefix.length()] == '\0')) {
         return memcmp(key.data(), prefix.c_str(), prefix.length()) == 0;
@@ -298,16 +306,16 @@ public:
         return false;
       }
     }
-    bufferlist value() {
+    bufferlist value() override {
       return to_bufferlist(dbiter->value());
     }
 
-    bufferptr value_as_ptr() {
+    bufferptr value_as_ptr() override {
       leveldb::Slice data = dbiter->value();
       return bufferptr(data.data(), data.size());
     }
 
-    int status() {
+    int status() override {
       return dbiter->status().ok() ? 0 : -1;
     }
   };
@@ -322,7 +330,7 @@ public:
     return limit;
   }
 
-  virtual uint64_t get_estimated_size(map<string,uint64_t> &extra) {
+  uint64_t get_estimated_size(map<string,uint64_t> &extra) override {
     DIR *store_dir = opendir(path.c_str());
     if (!store_dir) {
       lderr(cct) << __func__ << " something happened opening the store: "
@@ -390,7 +398,7 @@ err:
 
 
 protected:
-  WholeSpaceIterator _get_iterator() {
+  WholeSpaceIterator _get_iterator() override {
     return std::make_shared<LevelDBWholeSpaceIteratorImpl>(
 	db->NewIterator(leveldb::ReadOptions()));
   }

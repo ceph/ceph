@@ -23,6 +23,7 @@
 #include "common/Finisher.h"
 #include "common/TrackedOp.h"
 #include "os/ObjectStore.h"
+#include "common/zipkin_trace.h"
 
 class PerfCounters;
 
@@ -81,6 +82,8 @@ public:
   virtual bool should_commit_now() = 0;
 
   virtual int prepare_entry(vector<ObjectStore::Transaction>& tls, bufferlist* tbl) = 0;
+
+  virtual off64_t get_journal_size_estimate() { return 0; }
 
   // reads/recovery
 

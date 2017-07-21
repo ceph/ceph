@@ -1,8 +1,11 @@
-# radostest 
+# radostest
+add_library(libradostest_obj OBJECT test.cc)
 set(libradostest_srcs 
-  test.cc 
+  test_common.cc
   TestCase.cc)
-add_library(radostest STATIC ${libradostest_srcs})
+add_library(radostest STATIC
+  ${libradostest_srcs}
+  $<TARGET_OBJECTS:libradostest_obj>)
 target_link_libraries(radostest ceph-common json_spirit ${EXTRALIBS})
 set_target_properties(radostest PROPERTIES COMPILE_FLAGS ${UNITTEST_CXX_FLAGS})
 
@@ -117,6 +120,15 @@ set_target_properties(ceph_test_rados_api_lock PROPERTIES COMPILE_FLAGS
 target_link_libraries(ceph_test_rados_api_lock
   rados_a ${UNITTEST_LIBS} radostest)
 
+# ceph_test_rados_api_service
+add_executable(ceph_test_rados_api_service
+  service.cc
+  )
+set_target_properties(ceph_test_rados_api_service PROPERTIES COMPILE_FLAGS
+  ${UNITTEST_CXX_FLAGS})
+target_link_libraries(ceph_test_rados_api_service
+  rados_a global ${UNITTEST_LIBS} radostest)
+
 # ceph_test_rados_api_tier
 add_executable(ceph_test_rados_api_tier
   tier.cc
@@ -125,7 +137,7 @@ add_executable(ceph_test_rados_api_tier
 set_target_properties(ceph_test_rados_api_tier PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS})
 target_link_libraries(ceph_test_rados_api_tier
-  global rados_a ${UNITTEST_LIBS} ${Boost_SYSTEM_LIBRARY} radostest)
+  global rados_a ${UNITTEST_LIBS} Boost::system radostest)
 
 # ceph_test_rados_api_snapshots
 add_executable(ceph_test_rados_api_snapshots
@@ -146,6 +158,7 @@ install(TARGETS
   ceph_test_rados_api_lock
   ceph_test_rados_api_misc
   ceph_test_rados_api_pool
+  ceph_test_rados_api_service
   ceph_test_rados_api_snapshots
   ceph_test_rados_api_stat
   ceph_test_rados_api_tier

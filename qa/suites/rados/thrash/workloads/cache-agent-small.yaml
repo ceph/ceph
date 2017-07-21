@@ -7,6 +7,7 @@ tasks:
 - exec:
     client.0:
       - sudo ceph osd pool create base 4
+      - sudo ceph osd pool application enable base rados
       - sudo ceph osd pool create cache 4
       - sudo ceph osd tier add base cache
       - sudo ceph osd tier cache-mode cache writeback

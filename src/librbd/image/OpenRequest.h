@@ -43,10 +43,16 @@ private:
    *            V2_GET_ID|NAME                      |
    *                |                               |
    *                v                               |
+   *            V2_GET_NAME_FROM_TRASH              |
+   *                |                               |
+   *                v                               |
    *            V2_GET_IMMUTABLE_METADATA           |
    *                |                               |
    *                v                               |
    *            V2_GET_STRIPE_UNIT_COUNT            |
+   *                |                               |
+   *                v                               |
+   *            V2_GET_CREATE_TIMESTAMP             |
    *                |                               |
    *                v                               |
    *            V2_GET_DATA_POOL                    |
@@ -93,11 +99,17 @@ private:
   void send_v2_get_name();
   Context *handle_v2_get_name(int *result);
 
+  void send_v2_get_name_from_trash();
+  Context *handle_v2_get_name_from_trash(int *result);
+
   void send_v2_get_immutable_metadata();
   Context *handle_v2_get_immutable_metadata(int *result);
 
   void send_v2_get_stripe_unit_count();
   Context *handle_v2_get_stripe_unit_count(int *result);
+
+  void send_v2_get_create_timestamp();
+  Context *handle_v2_get_create_timestamp(int *result);
 
   void send_v2_get_data_pool();
   Context *handle_v2_get_data_pool(int *result);

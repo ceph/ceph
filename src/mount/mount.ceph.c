@@ -3,8 +3,6 @@
 #include <stdlib.h>
 #include <errno.h>
 #include <sys/mount.h>
-#include <sys/types.h>
-#include <sys/wait.h>
 
 #include "common/module.h"
 #include "common/secret.h"
@@ -171,6 +169,7 @@ static char *parse_options(const char *data, int *filesys_flags)
 		} else if (strncmp(data, "secret", 6) == 0) {
 			if (!value || !*value) {
 				printf("mount option secret requires a value.\n");
+				free(saw_name);
 				return NULL;
 			}
 

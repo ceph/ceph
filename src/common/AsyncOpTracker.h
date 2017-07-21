@@ -4,7 +4,6 @@
 #ifndef CEPH_ASYNC_OP_TRACKER_H
 #define CEPH_ASYNC_OP_TRACKER_H
 
-#include "include/int_types.h"
 #include "common/Mutex.h"
 
 struct Context;

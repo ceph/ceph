@@ -67,8 +67,8 @@ class MessengerTest : public ::testing::TestWithParam<const char*> {
     lderr(g_ceph_context) << __func__ << " start set up " << GetParam() << dendl;
     server_msgr = Messenger::create(g_ceph_context, string(GetParam()), entity_name_t::OSD(0), "server", getpid(), 0);
     client_msgr = Messenger::create(g_ceph_context, string(GetParam()), entity_name_t::CLIENT(-1), "client", getpid(), 0);
-    server_msgr->set_default_policy(Messenger::Policy::stateless_server(0, 0));
-    client_msgr->set_default_policy(Messenger::Policy::lossy_client(0, 0));
+    server_msgr->set_default_policy(Messenger::Policy::stateless_server(0));
+    client_msgr->set_default_policy(Messenger::Policy::lossy_client(0));
   }
   void TearDown() override {
     ASSERT_EQ(server_msgr->get_dispatch_queue_len(), 0);
@@ -103,7 +103,7 @@ class FakeDispatcher : public Dispatcher {
                           is_server(s), got_new(false), got_remote_reset(false),
                           got_connect(false), loopback(false) {}
   bool ms_can_fast_dispatch_any() const override { return true; }
-  bool ms_can_fast_dispatch(Message *m) const override {
+  bool ms_can_fast_dispatch(const Message *m) const override {
     switch (m->get_type()) {
     case CEPH_MSG_PING:
       return true;
@@ -423,9 +423,9 @@ TEST_P(MessengerTest, StatefulTest) {
   FakeDispatcher cli_dispatcher(false), srv_dispatcher(true);
   entity_addr_t bind_addr;
   bind_addr.parse("127.0.0.1");
-  Messenger::Policy p = Messenger::Policy::stateful_server(0, 0);
+  Messenger::Policy p = Messenger::Policy::stateful_server(0);
   server_msgr->set_policy(entity_name_t::TYPE_CLIENT, p);
-  p = Messenger::Policy::lossless_client(0, 0);
+  p = Messenger::Policy::lossless_client(0);
   client_msgr->set_policy(entity_name_t::TYPE_OSD, p);
 
   server_msgr->bind(bind_addr);
@@ -518,9 +518,9 @@ TEST_P(MessengerTest, StatelessTest) {
   FakeDispatcher cli_dispatcher(false), srv_dispatcher(true);
   entity_addr_t bind_addr;
   bind_addr.parse("127.0.0.1");
-  Messenger::Policy p = Messenger::Policy::stateless_server(0, 0);
+  Messenger::Policy p = Messenger::Policy::stateless_server(0);
   server_msgr->set_policy(entity_name_t::TYPE_CLIENT, p);
-  p = Messenger::Policy::lossy_client(0, 0);
+  p = Messenger::Policy::lossy_client(0);
   client_msgr->set_policy(entity_name_t::TYPE_OSD, p);
 
   server_msgr->bind(bind_addr);
@@ -591,9 +591,9 @@ TEST_P(MessengerTest, ClientStandbyTest) {
   FakeDispatcher cli_dispatcher(false), srv_dispatcher(true);
   entity_addr_t bind_addr;
   bind_addr.parse("127.0.0.1");
-  Messenger::Policy p = Messenger::Policy::stateful_server(0, 0);
+  Messenger::Policy p = Messenger::Policy::stateful_server(0);
   server_msgr->set_policy(entity_name_t::TYPE_CLIENT, p);
-  p = Messenger::Policy::lossless_peer(0, 0);
+  p = Messenger::Policy::lossless_peer(0);
   client_msgr->set_policy(entity_name_t::TYPE_OSD, p);
 
   server_msgr->bind(bind_addr);
@@ -708,9 +708,9 @@ TEST_P(MessengerTest, MessageTest) {
   FakeDispatcher cli_dispatcher(false), srv_dispatcher(true);
   entity_addr_t bind_addr;
   bind_addr.parse("127.0.0.1");
-  Messenger::Policy p = Messenger::Policy::stateful_server(0, 0);
+  Messenger::Policy p = Messenger::Policy::stateful_server(0);
   server_msgr->set_policy(entity_name_t::TYPE_CLIENT, p);
-  p = Messenger::Policy::lossless_peer(0, 0);
+  p = Messenger::Policy::lossless_peer(0);
   client_msgr->set_policy(entity_name_t::TYPE_OSD, p);
 
   server_msgr->bind(bind_addr);
@@ -814,7 +814,7 @@ class SyntheticDispatcher : public Dispatcher {
       Dispatcher(g_ceph_context), lock("SyntheticDispatcher::lock"), is_server(s), got_new(false),
       got_remote_reset(false), got_connect(false), index(0), workload(wl) {}
   bool ms_can_fast_dispatch_any() const override { return true; }
-  bool ms_can_fast_dispatch(Message *m) const override {
+  bool ms_can_fast_dispatch(const Message *m) const override {
     switch (m->get_type()) {
     case CEPH_MSG_PING:
     case MSG_COMMAND:
@@ -1164,8 +1164,8 @@ bool SyntheticDispatcher::ms_handle_reset(Connection *con) {
 
 TEST_P(MessengerTest, SyntheticStressTest) {
   SyntheticWorkload test_msg(8, 32, GetParam(), 100,
-                             Messenger::Policy::stateful_server(0, 0),
-                             Messenger::Policy::lossless_client(0, 0));
+                             Messenger::Policy::stateful_server(0),
+                             Messenger::Policy::lossless_client(0));
   for (int i = 0; i < 100; ++i) {
     if (!(i % 10)) lderr(g_ceph_context) << "seeding connection " << i << dendl;
     test_msg.generate_connection();
@@ -1193,8 +1193,8 @@ TEST_P(MessengerTest, SyntheticStressTest) {
 
 TEST_P(MessengerTest, SyntheticStressTest1) {
   SyntheticWorkload test_msg(16, 32, GetParam(), 100,
-                             Messenger::Policy::lossless_peer_reuse(0, 0),
-                             Messenger::Policy::lossless_peer_reuse(0, 0));
+                             Messenger::Policy::lossless_peer_reuse(0),
+                             Messenger::Policy::lossless_peer_reuse(0));
   for (int i = 0; i < 10; ++i) {
     if (!(i % 10)) lderr(g_ceph_context) << "seeding connection " << i << dendl;
     test_msg.generate_connection();
@@ -1227,8 +1227,8 @@ TEST_P(MessengerTest, SyntheticInjectTest) {
   g_ceph_context->_conf->set_val("ms_inject_internal_delays", "0.1");
   g_ceph_context->_conf->set_val("ms_dispatch_throttle_bytes", "16777216");
   SyntheticWorkload test_msg(8, 32, GetParam(), 100,
-                             Messenger::Policy::stateful_server(0, 0),
-                             Messenger::Policy::lossless_client(0, 0));
+                             Messenger::Policy::stateful_server(0),
+                             Messenger::Policy::lossless_client(0));
   for (int i = 0; i < 100; ++i) {
     if (!(i % 10)) lderr(g_ceph_context) << "seeding connection " << i << dendl;
     test_msg.generate_connection();
@@ -1262,8 +1262,8 @@ TEST_P(MessengerTest, SyntheticInjectTest2) {
   g_ceph_context->_conf->set_val("ms_inject_socket_failures", "30");
   g_ceph_context->_conf->set_val("ms_inject_internal_delays", "0.1");
   SyntheticWorkload test_msg(8, 16, GetParam(), 100,
-                             Messenger::Policy::lossless_peer_reuse(0, 0),
-                             Messenger::Policy::lossless_peer_reuse(0, 0));
+                             Messenger::Policy::lossless_peer_reuse(0),
+                             Messenger::Policy::lossless_peer_reuse(0));
   for (int i = 0; i < 100; ++i) {
     if (!(i % 10)) lderr(g_ceph_context) << "seeding connection " << i << dendl;
     test_msg.generate_connection();
@@ -1295,8 +1295,8 @@ TEST_P(MessengerTest, SyntheticInjectTest3) {
   g_ceph_context->_conf->set_val("ms_inject_socket_failures", "600");
   g_ceph_context->_conf->set_val("ms_inject_internal_delays", "0.1");
   SyntheticWorkload test_msg(8, 16, GetParam(), 100,
-                             Messenger::Policy::stateless_server(0, 0),
-                             Messenger::Policy::lossy_client(0, 0));
+                             Messenger::Policy::stateless_server(0),
+                             Messenger::Policy::lossy_client(0));
   for (int i = 0; i < 100; ++i) {
     if (!(i % 10)) lderr(g_ceph_context) << "seeding connection " << i << dendl;
     test_msg.generate_connection();
@@ -1329,11 +1329,11 @@ TEST_P(MessengerTest, SyntheticInjectTest4) {
   g_ceph_context->_conf->set_val("ms_inject_socket_failures", "30");
   g_ceph_context->_conf->set_val("ms_inject_internal_delays", "0.1");
   g_ceph_context->_conf->set_val("ms_inject_delay_probability", "1");
-  g_ceph_context->_conf->set_val("ms_inject_delay_type", "client osd", false, false);
+  g_ceph_context->_conf->set_val("ms_inject_delay_type", "client osd", false);
   g_ceph_context->_conf->set_val("ms_inject_delay_max", "5");
   SyntheticWorkload test_msg(16, 32, GetParam(), 100,
-                             Messenger::Policy::lossless_peer(0, 0),
-                             Messenger::Policy::lossless_peer(0, 0));
+                             Messenger::Policy::lossless_peer(0),
+                             Messenger::Policy::lossless_peer(0));
   for (int i = 0; i < 100; ++i) {
     if (!(i % 10)) lderr(g_ceph_context) << "seeding connection " << i << dendl;
     test_msg.generate_connection();
@@ -1360,7 +1360,7 @@ TEST_P(MessengerTest, SyntheticInjectTest4) {
   g_ceph_context->_conf->set_val("ms_inject_socket_failures", "0");
   g_ceph_context->_conf->set_val("ms_inject_internal_delays", "0");
   g_ceph_context->_conf->set_val("ms_inject_delay_probability", "0");
-  g_ceph_context->_conf->set_val("ms_inject_delay_type", "", false, false);
+  g_ceph_context->_conf->set_val("ms_inject_delay_type", "", false);
   g_ceph_context->_conf->set_val("ms_inject_delay_max", "0");
 }
 
@@ -1370,11 +1370,11 @@ class MarkdownDispatcher : public Dispatcher {
   set<ConnectionRef> conns;
   bool last_mark;
  public:
-  atomic_t count;
+  std::atomic<uint64_t> count = { 0 };
   explicit MarkdownDispatcher(bool s): Dispatcher(g_ceph_context), lock("MarkdownDispatcher::lock"),
-                              last_mark(false), count(0) {}
+                              last_mark(false) {}
   bool ms_can_fast_dispatch_any() const override { return false; }
-  bool ms_can_fast_dispatch(Message *m) const override {
+  bool ms_can_fast_dispatch(const Message *m) const override {
     switch (m->get_type()) {
     case CEPH_MSG_PING:
       return true;
@@ -1395,7 +1395,7 @@ class MarkdownDispatcher : public Dispatcher {
   bool ms_dispatch(Message *m) override {
     lderr(g_ceph_context) << __func__ << " conn: " << m->get_connection() << dendl;
     Mutex::Locker l(lock);
-    count.inc();
+    count++;
     conns.insert(m->get_connection());
     if (conns.size() < 2 && !last_mark) {
       m->put();
@@ -1471,8 +1471,8 @@ TEST_P(MessengerTest, MarkdownTest) {
     ASSERT_EQ(conn1->send_message(m), 0);
     m = new MPing();
     ASSERT_EQ(conn2->send_message(m), 0);
-    CHECK_AND_WAIT_TRUE(srv_dispatcher.count.read() > last + 1);
-    if (srv_dispatcher.count.read() == last) {
+    CHECK_AND_WAIT_TRUE(srv_dispatcher.count > last + 1);
+    if (srv_dispatcher.count == last) {
       lderr(g_ceph_context) << __func__ << " last is " << last << dendl;
       equal = true;
       equal_count++;
@@ -1480,7 +1480,7 @@ TEST_P(MessengerTest, MarkdownTest) {
       equal = false;
       equal_count = 0;
     }
-    last = srv_dispatcher.count.read();
+    last = srv_dispatcher.count;
     if (equal_count)
       usleep(1000*500);
     ASSERT_FALSE(equal && equal_count > 3);

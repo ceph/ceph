@@ -6,6 +6,7 @@ meta:
    CephFS tests running on client 2,3
 roles:
 - - mon.a
+  - mgr.x
   - mds.a
   - osd.0
   - osd.1
@@ -24,4 +25,6 @@ overrides:
     - ScrubResult
     - wrongly marked
     conf:
+      global:
+        enable experimental unrecoverable data corrupting features: "*"
     fs: xfs

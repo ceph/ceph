@@ -66,9 +66,6 @@ public:
 };
 
 
-boost::pool<> CInode::pool(sizeof(CInode));
-boost::pool<> Capability::pool(sizeof(Capability));
-
 LockType CInode::versionlock_type(CEPH_LOCK_IVERSION);
 LockType CInode::authlock_type(CEPH_LOCK_IAUTH);
 LockType CInode::linklock_type(CEPH_LOCK_ILINK);
@@ -247,6 +244,10 @@ ostream& operator<<(ostream& out, const CInode& in)
     in.print_pin_set(out);
   }
 
+  if (in.inode.export_pin != MDS_RANK_NONE) {
+    out << " export_pin=" << in.inode.export_pin;
+  }
+
   out << " " << &in;
   out << "]";
   return out;
@@ -338,11 +339,16 @@ void CInode::mark_dirty_rstat()
     dout(10) << "mark_dirty_rstat" << dendl;
     state_set(STATE_DIRTYRSTAT);
     get(PIN_DIRTYRSTAT);
-    CDentry *dn = get_projected_parent_dn();
-    CDir *pdir = dn->dir;
-    pdir->dirty_rstat_inodes.push_back(&dirty_rstat_item);
-
-    mdcache->mds->locker->mark_updated_scatterlock(&pdir->inode->nestlock);
+    CDentry *pdn = get_projected_parent_dn();
+    if (pdn->is_auth()) {
+      CDir *pdir = pdn->dir;
+      pdir->dirty_rstat_inodes.push_back(&dirty_rstat_item);
+      mdcache->mds->locker->mark_updated_scatterlock(&pdir->inode->nestlock);
+    } else {
+      // under cross-MDS rename.
+      // DIRTYRSTAT flag will get cleared when rename finishes
+      assert(state_test(STATE_AMBIGUOUSAUTH));
+    }
   }
 }
 void CInode::clear_dirty_rstat()
@@ -650,6 +656,8 @@ CDir *CInode::add_dirfrag(CDir *dir)
     dir->state_set(CDir::STATE_STICKY);
     dir->get(CDir::PIN_STICKY);
   }
+
+  maybe_export_pin();
 
   return dir;
 }
@@ -990,7 +998,7 @@ void CInode::_stored(int r, version_t v, Context *fin)
   if (r < 0) {
     dout(1) << "store error " << r << " v " << v << " on " << *this << dendl;
     mdcache->mds->clog->error() << "failed to store ino " << ino() << " object,"
-				<< " errno " << r << "\n";
+				<< " errno " << r;
     mdcache->mds->handle_write_error(r);
     fin->complete(r);
     return;
@@ -1202,12 +1210,29 @@ void CInode::store_backtrace(MDSInternalContextBase *fin, int op_prio)
 
 void CInode::_stored_backtrace(int r, version_t v, Context *fin)
 {
+  if (r == -ENOENT) {
+    const int64_t pool = get_backtrace_pool();
+    bool exists = mdcache->mds->objecter->with_osdmap(
+        [pool](const OSDMap &osd_map) {
+          return osd_map.have_pg_pool(pool);
+        });
+
+    // This ENOENT is because the pool doesn't exist (the user deleted it
+    // out from under us), so the backtrace can never be written, so pretend
+    // to succeed so that the user can proceed to e.g. delete the file.
+    if (!exists) {
+      dout(4) << "store_backtrace got ENOENT: a data pool was deleted "
+                 "beneath us!" << dendl;
+      r = 0;
+    }
+  }
+
   if (r < 0) {
     dout(1) << "store backtrace error " << r << " v " << v << dendl;
     mdcache->mds->clog->error() << "failed to store backtrace on ino "
 				<< ino() << " object"
                                 << ", pool " << get_backtrace_pool()
-                                << ", errno " << r << "\n";
+                                << ", errno " << r;
     mdcache->mds->handle_write_error(r);
     if (fin)
       fin->complete(r);
@@ -1272,7 +1297,7 @@ void CInode::verify_diri_backtrace(bufferlist &bl, int err)
 
   if (err) {
     MDSRank *mds = mdcache->mds;
-    mds->clog->error() << "bad backtrace on dir ino " << ino() << "\n";
+    mds->clog->error() << "bad backtrace on dir ino " << ino();
     assert(!"bad backtrace" == (g_conf->mds_verify_backtrace > 1));
 
     _mark_dirty_parent(mds->mdlog->get_current_segment(), false);
@@ -1421,6 +1446,7 @@ void CInode::encode_lock_state(int type, bufferlist& bl)
   case CEPH_LOCK_IFILE:
     if (is_auth()) {
       ::encode(inode.version, bl);
+      ::encode(inode.ctime, bl);
       ::encode(inode.mtime, bl);
       ::encode(inode.atime, bl);
       ::encode(inode.time_warp_seq, bl);
@@ -1504,11 +1530,13 @@ void CInode::encode_lock_state(int type, bufferlist& bl)
     
   case CEPH_LOCK_IXATTR:
     ::encode(inode.version, bl);
+    ::encode(inode.ctime, bl);
     ::encode(xattrs, bl);
     break;
 
   case CEPH_LOCK_ISNAP:
     ::encode(inode.version, bl);
+    ::encode(inode.ctime, bl);
     encode_snap(bl);
     break;
 
@@ -1520,8 +1548,10 @@ void CInode::encode_lock_state(int type, bufferlist& bl)
   case CEPH_LOCK_IPOLICY:
     if (inode.is_dir()) {
       ::encode(inode.version, bl);
+      ::encode(inode.ctime, bl);
       ::encode(inode.layout, bl, mdcache->mds->mdsmap->get_up_features());
       ::encode(inode.quota, bl);
+      ::encode(inode.export_pin, bl);
     }
     break;
   
@@ -1617,6 +1647,8 @@ void CInode::decode_lock_state(int type, bufferlist& bl)
   case CEPH_LOCK_IFILE:
     if (!is_auth()) {
       ::decode(inode.version, p);
+      ::decode(tm, p);
+      if (inode.ctime < tm) inode.ctime = tm;
       ::decode(inode.mtime, p);
       ::decode(inode.atime, p);
       ::decode(inode.time_warp_seq, p);
@@ -1751,12 +1783,16 @@ void CInode::decode_lock_state(int type, bufferlist& bl)
 
   case CEPH_LOCK_IXATTR:
     ::decode(inode.version, p);
+    ::decode(tm, p);
+    if (inode.ctime < tm) inode.ctime = tm;
     ::decode(xattrs, p);
     break;
 
   case CEPH_LOCK_ISNAP:
     {
       ::decode(inode.version, p);
+      ::decode(tm, p);
+      if (inode.ctime < tm) inode.ctime = tm;
       snapid_t seq = 0;
       if (snaprealm)
 	seq = snaprealm->srnode.seq;
@@ -1774,8 +1810,13 @@ void CInode::decode_lock_state(int type, bufferlist& bl)
   case CEPH_LOCK_IPOLICY:
     if (inode.is_dir()) {
       ::decode(inode.version, p);
+      ::decode(tm, p);
+      if (inode.ctime < tm) inode.ctime = tm;
       ::decode(inode.layout, p);
       ::decode(inode.quota, p);
+      mds_rank_t old_pin = inode.export_pin;
+      ::decode(inode.export_pin, p);
+      maybe_export_pin(old_pin != inode.export_pin);
     }
     break;
 
@@ -2008,7 +2049,7 @@ void CInode::finish_scatter_gather_update(int type)
 	if (pf->fragstat.nfiles < 0 ||
 	    pf->fragstat.nsubdirs < 0) {
 	  clog->error() << "bad/negative dir size on "
-	      << dir->dirfrag() << " " << pf->fragstat << "\n";
+	      << dir->dirfrag() << " " << pf->fragstat;
 	  assert(!"bad/negative fragstat" == g_conf->mds_verify_scatter);
 	  
 	  if (pf->fragstat.nfiles < 0)
@@ -2045,7 +2086,7 @@ void CInode::finish_scatter_gather_update(int type)
 	    dout(20) << " dirstat mismatch, fixing" << dendl;
 	  } else {
 	    clog->error() << "unmatched fragstat on " << ino() << ", inode has "
-			  << pi->dirstat << ", dirfrags have " << dirstat << "\n";
+			  << pi->dirstat << ", dirfrags have " << dirstat;
 	    assert(!"unmatched fragstat" == g_conf->mds_verify_scatter);
 	  }
 	  // trust the dirfrags for now
@@ -2062,7 +2103,7 @@ void CInode::finish_scatter_gather_update(int type)
       if (pi->dirstat.nfiles < 0 ||
 	  pi->dirstat.nsubdirs < 0) {
 	clog->error() << "bad/negative fragstat on " << ino()
-	    << ", inode has " << pi->dirstat << "\n";
+	    << ", inode has " << pi->dirstat;
 	assert(!"bad/negative fragstat" == g_conf->mds_verify_scatter);
 
 	if (pi->dirstat.nfiles < 0)
@@ -2152,7 +2193,7 @@ void CInode::finish_scatter_gather_update(int type)
 	    dout(20) << " rstat mismatch, fixing" << dendl;
 	  } else {
 	    clog->error() << "unmatched rstat on " << ino() << ", inode has "
-			  << pi->rstat << ", dirfrags have " << rstat << "\n";
+			  << pi->rstat << ", dirfrags have " << rstat;
 	    assert(!"unmatched rstat" == g_conf->mds_verify_scatter);
 	  }
 	  // trust the dirfrag for now
@@ -2591,9 +2632,9 @@ void CInode::close_snaprealm(bool nojoin)
   }
 }
 
-SnapRealm *CInode::find_snaprealm()
+SnapRealm *CInode::find_snaprealm() const
 {
-  CInode *cur = this;
+  const CInode *cur = this;
   while (!cur->snaprealm) {
     if (cur->get_parent_dn())
       cur = cur->get_parent_dn()->get_dir()->get_inode();
@@ -2761,7 +2802,6 @@ Capability *CInode::add_client_cap(client_t client, Session *session, SnapRealm 
     dout(10) << "add_client_cap first cap, joining realm " << *containing_realm << dendl;
   }
 
-  mdcache->num_caps++;
   if (client_caps.empty())
     mdcache->num_inodes_with_caps++;
   
@@ -2803,7 +2843,6 @@ void CInode::remove_client_cap(client_t client)
     item_open_file.remove_myself();  // unpin logsegment
     mdcache->num_inodes_with_caps--;
   }
-  mdcache->num_caps--;
 
   //clean up advisory locks
   bool fcntl_removed = fcntl_locks ? fcntl_locks->remove_all_from(client) : false;
@@ -3046,23 +3085,11 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
 			     unsigned max_bytes,
 			     int getattr_caps)
 {
-  int client = session->info.inst.name.num();
+  client_t client = session->info.inst.name.num();
   assert(snapid);
   assert(session->connection);
   
   bool valid = true;
-
-  // do not issue caps if inode differs from readdir snaprealm
-  SnapRealm *realm = find_snaprealm();
-  bool no_caps = session->is_stale() ||
-		 (realm && dir_realm && realm != dir_realm) ||
-		 is_frozen() || state_test(CInode::STATE_EXPORTINGCAPS);
-  if (no_caps)
-    dout(20) << "encode_inodestat no caps"
-	     << (session->is_stale()?", session stale ":"")
-	     << ((realm && dir_realm && realm != dir_realm)?", snaprealm differs ":"")
-	     << (state_test(CInode::STATE_EXPORTINGCAPS)?", exporting caps":"")
-	     << (is_frozen()?", frozen inode":"") << dendl;
 
   // pick a version!
   inode_t *oi = &inode;
@@ -3102,6 +3129,23 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
 	      << " not match snapid " << snapid << dendl;
     }
   }
+
+  SnapRealm *realm = find_snaprealm();
+
+  bool no_caps = !valid ||
+		 session->is_stale() ||
+		 (dir_realm && realm != dir_realm) ||
+		 is_frozen() ||
+		 state_test(CInode::STATE_EXPORTINGCAPS);
+  if (no_caps)
+    dout(20) << "encode_inodestat no caps"
+	     << (!valid?", !valid":"")
+	     << (session->is_stale()?", session stale ":"")
+	     << ((dir_realm && realm != dir_realm)?", snaprealm differs ":"")
+	     << (is_frozen()?", frozen inode":"")
+	     << (state_test(CInode::STATE_EXPORTINGCAPS)?", exporting caps":"")
+	     << dendl;
+
   
   // "fake" a version that is old (stable) version, +1 if projected.
   version_t version = (oi->version * 2) + is_projected();
@@ -3224,7 +3268,7 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
     ecap.mseq = 0;
     ecap.realm = 0;
   } else {
-    if (!no_caps && valid && !cap) {
+    if (!no_caps && !cap) {
       // add a new cap
       cap = add_client_cap(client, session, realm);
       if (is_auth()) {
@@ -3235,12 +3279,26 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
       }
     }
 
-    if (!no_caps && valid && cap) {
+    int issue = 0;
+    if (!no_caps && cap) {
       int likes = get_caps_liked();
       int allowed = get_caps_allowed_for_client(session, file_i);
-      int issue = (cap->wanted() | likes) & allowed;
+      issue = (cap->wanted() | likes) & allowed;
       cap->issue_norevoke(issue);
       issue = cap->pending();
+      dout(10) << "encode_inodestat issuing " << ccap_string(issue)
+	       << " seq " << cap->get_last_seq() << dendl;
+    } else if (cap && cap->is_new() && !dir_realm) {
+      // alway issue new caps to client, otherwise the caps get lost
+      assert(cap->is_stale());
+      issue = cap->pending() | CEPH_CAP_PIN;
+      cap->issue_norevoke(issue);
+      dout(10) << "encode_inodestat issuing " << ccap_string(issue)
+	       << " seq " << cap->get_last_seq()
+	       << "(stale|new caps)" << dendl;
+    }
+
+    if (issue) {
       cap->set_last_issue();
       cap->set_last_issue_stamp(ceph_clock_now());
       cap->clear_new();
@@ -3248,13 +3306,9 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
       ecap.wanted = cap->wanted();
       ecap.cap_id = cap->get_cap_id();
       ecap.seq = cap->get_last_seq();
-      dout(10) << "encode_inodestat issuing " << ccap_string(issue)
-	       << " seq " << cap->get_last_seq() << dendl;
       ecap.mseq = cap->get_mseq();
       ecap.realm = realm->inode->ino();
     } else {
-      if (cap)
-	cap->clear_new();
       ecap.cap_id = 0;
       ecap.caps = 0;
       ecap.seq = 0;
@@ -3595,7 +3649,8 @@ void CInode::decode_import(bufferlist::iterator& p,
 
   unsigned s;
   ::decode(s, p);
-  state |= (s & MASK_STATE_EXPORTED);
+  state_set(STATE_AUTH | (s & MASK_STATE_EXPORTED));
+
   if (is_dirty()) {
     get(PIN_DIRTY);
     _mark_dirty(ls);
@@ -3610,6 +3665,7 @@ void CInode::decode_import(bufferlist::iterator& p,
   ::decode(replica_map, p);
   if (!replica_map.empty())
     get(PIN_REPLICATED);
+  replica_nonce = 0;
 
   // decode fragstat info on bounding cdirs
   bufferlist bounding;
@@ -3726,7 +3782,7 @@ void CInode::validate_disk_state(CInode::validated_data *results,
       set_callback(DIRFRAGS, static_cast<Continuation::stagePtr>(&ValidationContinuation::_dirfrags));
     }
 
-    ~ValidationContinuation() {
+    ~ValidationContinuation() override {
       delete shadow_in;
     }
 
@@ -4354,5 +4410,83 @@ int64_t CInode::get_backtrace_pool() const
     // a pool
     assert(inode.layout.pool_id != -1);
     return inode.layout.pool_id;
+  }
+}
+
+void CInode::maybe_export_pin(bool update)
+{
+  if (!g_conf->mds_bal_export_pin)
+    return;
+  if (!is_dir() || !is_normal())
+    return;
+
+  mds_rank_t export_pin = get_export_pin(false);
+  if (export_pin == MDS_RANK_NONE && !update)
+    return;
+
+  if (state_test(CInode::STATE_QUEUEDEXPORTPIN))
+    return;
+
+  bool queue = false;
+  for (auto p = dirfrags.begin(); p != dirfrags.end(); p++) {
+    CDir *dir = p->second;
+    if (!dir->is_auth())
+      continue;
+    if (export_pin != MDS_RANK_NONE) {
+      if (dir->is_subtree_root()) {
+	// set auxsubtree bit or export it
+	if (!dir->state_test(CDir::STATE_AUXSUBTREE) ||
+	    export_pin != dir->get_dir_auth().first)
+	  queue = true;
+      } else {
+	// create aux subtree or export it
+	queue = true;
+      }
+    } else {
+      // clear aux subtrees ?
+      queue = dir->state_test(CDir::STATE_AUXSUBTREE);
+    }
+    if (queue) {
+      state_set(CInode::STATE_QUEUEDEXPORTPIN);
+      mdcache->export_pin_queue.insert(this);
+      break;
+    }
+  }
+}
+
+void CInode::set_export_pin(mds_rank_t rank)
+{
+  assert(is_dir());
+  assert(is_projected());
+  get_projected_inode()->export_pin = rank;
+  maybe_export_pin(true);
+}
+
+mds_rank_t CInode::get_export_pin(bool inherit) const
+{
+  /* An inode that is export pinned may not necessarily be a subtree root, we
+   * need to traverse the parents. A base or system inode cannot be pinned.
+   * N.B. inodes not yet linked into a dir (i.e. anonymous inodes) will not
+   * have a parent yet.
+   */
+  for (const CInode *in = this; !in->is_base() && !in->is_system() && in->get_projected_parent_dn(); in = in->get_projected_parent_dn()->dir->inode) {
+    mds_rank_t pin = in->get_projected_inode()->export_pin;
+    if (pin >= 0) {
+      return pin;
+    }
+    if (!inherit) break;
+  }
+  return MDS_RANK_NONE;
+}
+
+bool CInode::is_exportable(mds_rank_t dest) const
+{
+  mds_rank_t pin = get_export_pin();
+  if (pin == dest) {
+    return true;
+  } else if (pin >= 0) {
+    return false;
+  } else {
+    return true;
   }
 }

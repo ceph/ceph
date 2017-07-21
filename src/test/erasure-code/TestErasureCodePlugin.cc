@@ -42,7 +42,7 @@ protected:
       ErasureCodeInterfaceRef erasure_code;
       pthread_cleanup_push(cleanup, NULL);
       instance.factory("hangs",
-		       g_conf->erasure_code_dir,
+		       g_conf->get_val<std::string>("erasure_code_dir"),
 		       profile, &erasure_code, &cerr);
       pthread_cleanup_pop(0);
       return NULL;
@@ -88,31 +88,31 @@ TEST_F(ErasureCodePluginRegistryTest, all)
   ErasureCodePluginRegistry &instance = ErasureCodePluginRegistry::instance();
   EXPECT_FALSE(erasure_code);
   EXPECT_EQ(-EIO, instance.factory("invalid",
-				   g_conf->erasure_code_dir,
+				   g_conf->get_val<std::string>("erasure_code_dir"),
 				   profile, &erasure_code, &cerr));
   EXPECT_FALSE(erasure_code);
   EXPECT_EQ(-EXDEV, instance.factory("missing_version",
-				     g_conf->erasure_code_dir,
+				     g_conf->get_val<std::string>("erasure_code_dir"),
 				     profile,
 				     &erasure_code, &cerr));
   EXPECT_FALSE(erasure_code);
   EXPECT_EQ(-ENOENT, instance.factory("missing_entry_point",
-				      g_conf->erasure_code_dir,
+				      g_conf->get_val<std::string>("erasure_code_dir"),
 				      profile,
 				      &erasure_code, &cerr));
   EXPECT_FALSE(erasure_code);
   EXPECT_EQ(-ESRCH, instance.factory("fail_to_initialize",
-				     g_conf->erasure_code_dir,
+				     g_conf->get_val<std::string>("erasure_code_dir"),
 				     profile,
 				     &erasure_code, &cerr));
   EXPECT_FALSE(erasure_code);
   EXPECT_EQ(-EBADF, instance.factory("fail_to_register",
-				     g_conf->erasure_code_dir,
+				     g_conf->get_val<std::string>("erasure_code_dir"),
 				     profile,
 				     &erasure_code, &cerr));
   EXPECT_FALSE(erasure_code);
   EXPECT_EQ(0, instance.factory("example",
-				g_conf->erasure_code_dir,
+				g_conf->get_val<std::string>("erasure_code_dir"),
 				profile, &erasure_code, &cerr));
   EXPECT_TRUE(erasure_code.get());
   ErasureCodePlugin *plugin = 0;

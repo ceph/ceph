@@ -23,6 +23,8 @@
 #include "common/errno.h"
 #include "gtest/gtest.h"
 
+extern std::string exec(const char* cmd); // defined in test_hostname.cc
+
 class test_md_config_t : public md_config_t, public ::testing::Test {
 public:
   void test_expand_meta() {
@@ -37,6 +39,16 @@ public:
       EXPECT_EQ(before + "/var/run/ceph/var/run/ceph" + after, val);
       EXPECT_EQ("", oss.str());
     }
+    {
+      ostringstream oss;
+      std::string before = " BEFORE ";
+      std::string after = " AFTER ";
+      std::string val(before + "$host${host}" + after);
+      EXPECT_TRUE(expand_meta(val, &oss));
+      std::string hostname = exec("hostname -s");
+      EXPECT_EQ(before + hostname + hostname + after, val);
+      EXPECT_EQ("", oss.str());
+    }
     // no meta expansion if variables are unknown
     {
       ostringstream oss;
@@ -48,6 +60,9 @@ public:
     }
     // recursive variable expansion
     {
+      std::string host = "localhost";
+      EXPECT_EQ(0, set_val("host", host.c_str(), false));
+
       std::string mon_host = "$cluster_network";
       EXPECT_EQ(0, set_val("mon_host", mon_host.c_str(), false));
 

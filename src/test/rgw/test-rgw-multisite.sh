@@ -12,25 +12,19 @@ num_clusters=$1
 set -e
 
 realm_name=earth
-zg=us
-
-i=1
-while [ $i -le $num_clusters ]; do
-  eval zone$i=${zg}-$i
-  eval zone${i}_port=$((8000+$i))
-  i=$((i+1))
-done
+zg=zg1
 
 system_access_key="1234567890"
 system_secret="pencil"
 
 # bring up first cluster
-x $(start_ceph_cluster 1) -n
+x $(start_ceph_cluster c1) -n
 
 # create realm, zonegroup, zone, start rgw
-init_first_zone 1 $realm_name $zg $zone1 $zone1_port $system_access_key $system_secret
+init_first_zone c1 $realm_name $zg ${zg}-1 8001 $system_access_key $system_secret
+x $(rgw c1 8001)
 
-output=`$(rgw_admin 1) realm get`
+output=`$(rgw_admin c1) realm get`
 
 echo realm_status=$output
 
@@ -38,18 +32,19 @@ echo realm_status=$output
 
 i=2
 while [ $i -le $num_clusters ]; do
-  x $(start_ceph_cluster $i) -n
-
+  x $(start_ceph_cluster c$i) -n
 
   # create new zone, start rgw
-  zone_port=eval echo '$'zone${i}_port
-  init_zone_in_existing_zg $i $realm_name $zg $zone1 $zone1_port $zone_port $system_access_key $system_secret
+  init_zone_in_existing_zg c$i $realm_name $zg ${zg}-${i} 8001 $((8000+$i)) $zone_port $system_access_key $system_secret
+  x $(rgw c$i $((8000+$i)))
 
   i=$((i+1))
 done
 
 i=2
 while [ $i -le $num_clusters ]; do
-  wait_for_meta_sync 1 $i $realm_name
+  wait_for_meta_sync c1 c$i $realm_name
+
+  i=$((i+1))
 done
 

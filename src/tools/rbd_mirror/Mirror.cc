@@ -7,6 +7,7 @@
 #include "common/admin_socket.h"
 #include "common/debug.h"
 #include "common/errno.h"
+#include "librbd/ImageCtx.h"
 #include "Mirror.h"
 #include "Threads.h"
 #include "ImageSync.h"
@@ -203,8 +204,8 @@ Mirror::Mirror(CephContext *cct, const std::vector<const char*> &args) :
   m_local(new librados::Rados()),
   m_asok_hook(new MirrorAdminSocketHook(cct, this))
 {
-  cct->lookup_or_create_singleton_object<Threads>(m_threads,
-                                                  "rbd_mirror::threads");
+  cct->lookup_or_create_singleton_object<Threads<librbd::ImageCtx> >(
+    m_threads, "rbd_mirror::threads");
 }
 
 Mirror::~Mirror()
@@ -214,7 +215,7 @@ Mirror::~Mirror()
 
 void Mirror::handle_signal(int signum)
 {
-  m_stopping.set(1);
+  m_stopping = true;
   {
     Mutex::Locker l(m_lock);
     m_cond.Signal();
@@ -241,30 +242,27 @@ int Mirror::init()
                                          m_threads->timer,
                                          &m_threads->timer_lock));
 
-  m_image_sync_throttler.reset(new ImageSyncThrottler<>());
-
   return r;
 }
 
 void Mirror::run()
 {
   dout(20) << "enter" << dendl;
-  while (!m_stopping.read()) {
+  while (!m_stopping) {
     m_local_cluster_watcher->refresh_pools();
     Mutex::Locker l(m_lock);
     if (!m_manual_stop) {
-      update_replayers(m_local_cluster_watcher->get_pool_peers());
+      update_pool_replayers(m_local_cluster_watcher->get_pool_peers());
     }
     m_cond.WaitInterval(
       m_lock,
       utime_t(m_cct->_conf->rbd_mirror_pool_replayers_refresh_interval, 0));
   }
 
-  // stop all replayers in parallel
+  // stop all pool replayers in parallel
   Mutex::Locker locker(m_lock);
-  for (auto it = m_replayers.begin(); it != m_replayers.end(); it++) {
-    auto &replayer = it->second;
-    replayer->stop(false);
+  for (auto &pool_replayer : m_pool_replayers) {
+    pool_replayer.second->stop(false);
   }
   dout(20) << "return" << dendl;
 }
@@ -275,18 +273,17 @@ void Mirror::print_status(Formatter *f, stringstream *ss)
 
   Mutex::Locker l(m_lock);
 
-  if (m_stopping.read()) {
+  if (m_stopping) {
     return;
   }
 
   if (f) {
     f->open_object_section("mirror_status");
-    f->open_array_section("replayers");
+    f->open_array_section("pool_replayers");
   };
 
-  for (auto it = m_replayers.begin(); it != m_replayers.end(); it++) {
-    auto &replayer = it->second;
-    replayer->print_status(f, ss);
+  for (auto &pool_replayer : m_pool_replayers) {
+    pool_replayer.second->print_status(f, ss);
   }
 
   if (f) {
@@ -295,19 +292,6 @@ void Mirror::print_status(Formatter *f, stringstream *ss)
   }
 
   m_image_deleter->print_status(f, ss);
-
-  if (f) {
-    f->close_section();
-    f->open_object_section("sync_throttler");
-  }
-
-  m_image_sync_throttler->print_status(f, ss);
-
-  if (f) {
-    f->close_section();
-    f->close_section();
-    f->flush(*ss);
-  }
 }
 
 void Mirror::start()
@@ -315,15 +299,14 @@ void Mirror::start()
   dout(20) << "enter" << dendl;
   Mutex::Locker l(m_lock);
 
-  if (m_stopping.read()) {
+  if (m_stopping) {
     return;
   }
 
   m_manual_stop = false;
 
-  for (auto it = m_replayers.begin(); it != m_replayers.end(); it++) {
-    auto &replayer = it->second;
-    replayer->start();
+  for (auto &pool_replayer : m_pool_replayers) {
+    pool_replayer.second->start();
   }
 }
 
@@ -332,15 +315,14 @@ void Mirror::stop()
   dout(20) << "enter" << dendl;
   Mutex::Locker l(m_lock);
 
-  if (m_stopping.read()) {
+  if (m_stopping) {
     return;
   }
 
   m_manual_stop = true;
 
-  for (auto it = m_replayers.begin(); it != m_replayers.end(); it++) {
-    auto &replayer = it->second;
-    replayer->stop(true);
+  for (auto &pool_replayer : m_pool_replayers) {
+    pool_replayer.second->stop(true);
   }
 }
 
@@ -349,15 +331,14 @@ void Mirror::restart()
   dout(20) << "enter" << dendl;
   Mutex::Locker l(m_lock);
 
-  if (m_stopping.read()) {
+  if (m_stopping) {
     return;
   }
 
   m_manual_stop = false;
 
-  for (auto it = m_replayers.begin(); it != m_replayers.end(); it++) {
-    auto &replayer = it->second;
-    replayer->restart();
+  for (auto &pool_replayer : m_pool_replayers) {
+    pool_replayer.second->restart();
   }
 }
 
@@ -366,13 +347,12 @@ void Mirror::flush()
   dout(20) << "enter" << dendl;
   Mutex::Locker l(m_lock);
 
-  if (m_stopping.read() || m_manual_stop) {
+  if (m_stopping || m_manual_stop) {
     return;
   }
 
-  for (auto it = m_replayers.begin(); it != m_replayers.end(); it++) {
-    auto &replayer = it->second;
-    replayer->flush();
+  for (auto &pool_replayer : m_pool_replayers) {
+    pool_replayer.second->flush();
   }
 }
 
@@ -381,34 +361,33 @@ void Mirror::release_leader()
   dout(20) << "enter" << dendl;
   Mutex::Locker l(m_lock);
 
-  if (m_stopping.read()) {
+  if (m_stopping) {
     return;
   }
 
-  for (auto it = m_replayers.begin(); it != m_replayers.end(); it++) {
-    auto &replayer = it->second;
-    replayer->release_leader();
+  for (auto &pool_replayer : m_pool_replayers) {
+    pool_replayer.second->release_leader();
   }
 }
 
-void Mirror::update_replayers(const PoolPeers &pool_peers)
+void Mirror::update_pool_replayers(const PoolPeers &pool_peers)
 {
   dout(20) << "enter" << dendl;
   assert(m_lock.is_locked());
 
-  // remove stale replayers before creating new replayers
-  for (auto it = m_replayers.begin(); it != m_replayers.end();) {
+  // remove stale pool replayers before creating new pool replayers
+  for (auto it = m_pool_replayers.begin(); it != m_pool_replayers.end();) {
     auto &peer = it->first.second;
     auto pool_peer_it = pool_peers.find(it->first.first);
     if (it->second->is_blacklisted()) {
-      derr << "removing blacklisted replayer for " << peer << dendl;
+      derr << "removing blacklisted pool replayer for " << peer << dendl;
       // TODO: make async
-      it = m_replayers.erase(it);
+      it = m_pool_replayers.erase(it);
     } else if (pool_peer_it == pool_peers.end() ||
                pool_peer_it->second.find(peer) == pool_peer_it->second.end()) {
-      dout(20) << "removing replayer for " << peer << dendl;
+      dout(20) << "removing pool replayer for " << peer << dendl;
       // TODO: make async
-      it = m_replayers.erase(it);
+      it = m_pool_replayers.erase(it);
     } else {
       ++it;
     }
@@ -417,19 +396,21 @@ void Mirror::update_replayers(const PoolPeers &pool_peers)
   for (auto &kv : pool_peers) {
     for (auto &peer : kv.second) {
       PoolPeer pool_peer(kv.first, peer);
-      if (m_replayers.find(pool_peer) == m_replayers.end()) {
-        dout(20) << "starting replayer for " << peer << dendl;
-        unique_ptr<Replayer> replayer(new Replayer(m_threads, m_image_deleter,
-                                                   m_image_sync_throttler,
-                                                   kv.first, peer, m_args));
-        // TODO: make async, and retry connecting within replayer
-        int r = replayer->init();
+      if (m_pool_replayers.find(pool_peer) == m_pool_replayers.end()) {
+        dout(20) << "starting pool replayer for " << peer << dendl;
+        unique_ptr<PoolReplayer> pool_replayer(new PoolReplayer(
+	  m_threads, m_image_deleter, kv.first, peer, m_args));
+
+        // TODO: make async, and retry connecting within pool replayer
+        int r = pool_replayer->init();
         if (r < 0) {
 	  continue;
         }
-        m_replayers.insert(std::make_pair(pool_peer, std::move(replayer)));
+        m_pool_replayers.emplace(pool_peer, std::move(pool_replayer));
       }
     }
+
+    // TODO currently only support a single peer
   }
 }
 

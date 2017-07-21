@@ -26,7 +26,6 @@ def check_stuck(manager, num_inactive, num_unclean, num_stale, timeout=10):
     inactive = manager.get_stuck_pgs('inactive', timeout)
     unclean = manager.get_stuck_pgs('unclean', timeout)
     stale = manager.get_stuck_pgs('stale', timeout)
-    log.info('hi mom')
     log.info('inactive %s / %d,  unclean %s / %d,  stale %s / %d',
              len(inactive), num_inactive,
              len(unclean), num_unclean,
@@ -34,19 +33,6 @@ def check_stuck(manager, num_inactive, num_unclean, num_stale, timeout=10):
     assert len(inactive) == num_inactive
     assert len(unclean) == num_unclean
     assert len(stale) == num_stale
-
-    # check health output as well
-    health = manager.raw_cluster_cmd('health')
-    log.debug('ceph health is: %s', health)
-    if num_inactive > 0:
-        m = re.search('(\d+) pgs stuck inactive', health)
-        assert int(m.group(1)) == num_inactive
-    if num_unclean > 0:
-        m = re.search('(\d+) pgs stuck unclean', health)
-        assert int(m.group(1)) == num_unclean
-    if num_stale > 0:
-        m = re.search('(\d+) pgs stuck stale', health)
-        assert int(m.group(1)) == num_stale
 
 def task(ctx, config):
     """
@@ -70,14 +56,14 @@ def task(ctx, config):
         logger=log.getChild('ceph_manager'),
         )
 
-    manager.raw_cluster_cmd('tell', 'osd.0', 'flush_pg_stats')
-    manager.raw_cluster_cmd('tell', 'osd.1', 'flush_pg_stats')
+    manager.flush_pg_stats([0, 1])
     manager.wait_for_clean(timeout)
 
     manager.raw_cluster_cmd('tell', 'mon.0', 'injectargs', '--',
 #                            '--mon-osd-report-timeout 90',
                             '--mon-pg-stuck-threshold 10')
 
+    # all active+clean
     check_stuck(
         manager,
         num_inactive=0,
@@ -88,21 +74,22 @@ def task(ctx, config):
 
     manager.mark_out_osd(0)
     time.sleep(timeout)
-    manager.raw_cluster_cmd('tell', 'osd.1', 'flush_pg_stats')
+    manager.flush_pg_stats([1])
     manager.wait_for_recovery(timeout)
 
+    # all active+clean+remapped
     check_stuck(
         manager,
         num_inactive=0,
-        num_unclean=num_pgs,
+        num_unclean=0,
         num_stale=0,
         )
 
     manager.mark_in_osd(0)
-    manager.raw_cluster_cmd('tell', 'osd.0', 'flush_pg_stats')
-    manager.raw_cluster_cmd('tell', 'osd.1', 'flush_pg_stats')
+    manager.flush_pg_stats([0, 1])
     manager.wait_for_clean(timeout)
 
+    # all active+clean
     check_stuck(
         manager,
         num_inactive=0,
@@ -159,8 +146,7 @@ def task(ctx, config):
         manager.mark_in_osd(id_)
     while True:
         try:
-            manager.raw_cluster_cmd('tell', 'osd.0', 'flush_pg_stats')
-            manager.raw_cluster_cmd('tell', 'osd.1', 'flush_pg_stats')
+            manager.flush_pg_stats([0, 1])
             break
         except Exception:
             log.exception('osds must not be started yet, waiting...')

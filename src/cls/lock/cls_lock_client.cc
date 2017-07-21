@@ -15,16 +15,10 @@
 #include "include/types.h"
 #include "msg/msg_types.h"
 #include "include/rados/librados.hpp"
-
+#include "include/utime.h"
+ 
 using namespace librados;
 
-#include <iostream>
-
-#include <errno.h>
-#include <stdlib.h>
-#include <time.h>
-
-#include "cls/lock/cls_lock_types.h"
 #include "cls/lock/cls_lock_ops.h"
 #include "cls/lock/cls_lock_client.h"
 

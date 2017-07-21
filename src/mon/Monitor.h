@@ -23,15 +23,21 @@
 #ifndef CEPH_MONITOR_H
 #define CEPH_MONITOR_H
 
+#include <errno.h>
+#include <cmath>
+
 #include "include/types.h"
+#include "include/health.h"
 #include "msg/Messenger.h"
 
 #include "common/Timer.h"
 
+#include "health_check.h"
 #include "MonMap.h"
 #include "Elector.h"
 #include "Paxos.h"
 #include "Session.h"
+#include "PGStatService.h"
 
 #include "common/LogClient.h"
 #include "auth/cephx/CephxKeyServer.h"
@@ -40,8 +46,7 @@
 #include "messages/MMonCommand.h"
 #include "mon/MonitorDBStore.h"
 #include "include/memory.h"
-#include <errno.h>
-#include <cmath>
+#include "mgr/MgrClient.h"
 
 #include "mon/MonOpRequest.h"
 #include "common/WorkQueue.h"
@@ -112,6 +117,14 @@ struct MonCommand;
 
 #define COMPAT_SET_LOC "feature_set"
 
+class C_MonContext final : public FunctionContext {
+  const Monitor *mon;
+public:
+  explicit C_MonContext(Monitor *m, boost::function<void(int)>&& callback)
+    : FunctionContext(std::move(callback)), mon(m) {}
+  void finish(int r) override;
+};
+
 class Monitor : public Dispatcher,
                 public md_config_obs_t {
 public:
@@ -122,6 +135,7 @@ public:
   ConnectionRef con_self;
   Mutex lock;
   SafeTimer timer;
+  Finisher finisher;
   ThreadPool cpu_tp;  ///< threadpool for CPU intensive work
   
   /// true if we have ever joined a quorum.  if false, we are either a
@@ -154,9 +168,14 @@ public:
   const MonCommand *leader_supported_mon_commands;
   int leader_supported_mon_commands_size;
 
+  Messenger *mgr_messenger;
+  MgrClient mgr_client;
+  uint64_t mgr_proxy_bytes = 0;  // in-flight proxied mgr command message bytes
+
+  const MonPGStatService *pgservice;
+
 private:
   void new_tick();
-  friend class C_Mon_Tick;
 
   // -- local storage --
 public:
@@ -216,6 +235,11 @@ private:
   set<int> quorum;       // current active set of monitors (if !starting)
   utime_t leader_since;  // when this monitor became the leader, if it is the leader
   utime_t exited_quorum; // time detected as not in quorum; 0 if in
+
+  // map of counts of connected clients, by type and features, for
+  // each quorum mon
+  map<int,FeatureMap> quorum_feature_map;
+
   /**
    * Intersection of quorum member's connection feature bits.
    */
@@ -328,14 +352,6 @@ private:
    * sync and never going backwards.
    */
   version_t sync_last_committed_floor;
-
-  struct C_SyncTimeout : public Context {
-    Monitor *mon;
-    explicit C_SyncTimeout(Monitor *m) : mon(m) {}
-    void finish(int r) {
-      mon->sync_timeout();
-    }
-  };
 
   /**
    * Obtain the synchronization target prefixes in set form.
@@ -482,6 +498,7 @@ private:
   version_t timecheck_round;
   unsigned int timecheck_acks;
   utime_t timecheck_round_start;
+  friend class HealthMonitor;
   /* When we hit a skew we will start a new round based off of
    * 'mon_timecheck_skew_interval'. Each new round will be backed off
    * until we hit 'mon_timecheck_interval' -- which is the typical
@@ -495,14 +512,6 @@ private:
    * Time Check event.
    */
   Context *timecheck_event;
-
-  struct C_TimeCheck : public Context {
-    Monitor *mon;
-    explicit C_TimeCheck(Monitor *m) : mon(m) { }
-    void finish(int r) {
-      mon->timecheck_start_round();
-    }
-  };
 
   void timecheck_start();
   void timecheck_finish();
@@ -539,15 +548,7 @@ private:
    */
   void handle_ping(MonOpRequestRef op);
 
-  Context *probe_timeout_event;  // for probing
-
-  struct C_ProbeTimeout : public Context {
-    Monitor *mon;
-    explicit C_ProbeTimeout(Monitor *m) : mon(m) {}
-    void finish(int r) {
-      mon->probe_timeout(r);
-    }
-  };
+  Context *probe_timeout_event = nullptr;  // for probing
 
   void reset_probe_timeout();
   void cancel_probe_timeout();
@@ -557,8 +558,11 @@ private:
 
 public:
   epoch_t get_epoch();
-  int get_leader() { return leader; }
-  const set<int>& get_quorum() { return quorum; }
+  int get_leader() const { return leader; }
+  string get_leader_name() {
+    return quorum.empty() ? string() : monmap->get_name(*quorum.begin());
+  }
+  const set<int>& get_quorum() const { return quorum; }
   list<string> get_quorum_names() {
     list<string> q;
     for (set<int>::iterator p = quorum.begin(); p != quorum.end(); ++p)
@@ -581,6 +585,8 @@ public:
   void apply_monmap_to_compatset_features();
   void calc_quorum_requirements();
 
+  void get_combined_feature_map(FeatureMap *fm);
+
 private:
   void _reset();   ///< called from bootstrap, start_, or join_election
   void wait_for_paxos_write();
@@ -594,6 +600,7 @@ public:
   void win_election(epoch_t epoch, set<int>& q,
 		    uint64_t features,
                     const mon_feature_t& mon_features,
+		    const map<int,Metadata>& metadata,
 		    const MonCommand *cmdset, int cmdsize);
   void lose_election(epoch_t epoch, set<int>& q, int l,
 		     uint64_t features,
@@ -611,8 +618,6 @@ public:
    * Vector holding the Services serviced by this Monitor.
    */
   vector<PaxosService*> paxos_service;
-
-  PaxosService *get_paxos_service_by_name(const string& name);
 
   class PGMonitor *pgmon() {
     return (class PGMonitor *)paxos_service[PAXOS_PGMAP];
@@ -642,20 +647,35 @@ public:
     return (class MgrMonitor*) paxos_service[PAXOS_MGR];
   }
 
+  class MgrStatMonitor *mgrstatmon() {
+    return (class MgrStatMonitor*) paxos_service[PAXOS_MGRSTAT];
+  }
+
+  class MgrStatMonitor *healthmon() {
+    return (class MgrStatMonitor*) paxos_service[PAXOS_MGRSTAT];
+  }
+
   friend class Paxos;
   friend class OSDMonitor;
   friend class MDSMonitor;
   friend class MonmapMonitor;
   friend class PGMonitor;
   friend class LogMonitor;
+  friend class ConfigKeyService;
 
   QuorumService *health_monitor;
   QuorumService *config_key_service;
 
   // -- sessions --
   MonSessionMap session_map;
+  Mutex session_map_lock{"Monitor::session_map_lock"};
   AdminSocketHook *admin_hook;
 
+  template<typename Func, typename...Args>
+  void with_session_map(Func&& func) {
+    Mutex::Locker l(session_map_lock);
+    std::forward<Func>(func)(session_map);
+  }
   void send_latest_monmap(Connection *con);
 
   // messages
@@ -682,6 +702,7 @@ public:
   int print_nodes(Formatter *f, ostream& err);
 
   // Accumulate metadata across calls to update_mon_metadata
+  map<int, Metadata> mon_metadata;
   map<int, Metadata> pending_metadata;
 
   /**
@@ -699,29 +720,8 @@ public:
     }
   } health_status_cache;
 
-  struct C_HealthToClogTick : public Context {
-    Monitor *mon;
-    explicit C_HealthToClogTick(Monitor *m) : mon(m) { }
-    void finish(int r) {
-      if (r < 0)
-        return;
-      mon->do_health_to_clog();
-      mon->health_tick_start();
-    }
-  };
-
-  struct C_HealthToClogInterval : public Context {
-    Monitor *mon;
-    explicit C_HealthToClogInterval(Monitor *m) : mon(m) { }
-    void finish(int r) {
-      if (r < 0)
-        return;
-      mon->do_health_to_clog_interval();
-    }
-  };
-
-  Context *health_tick_event;
-  Context *health_interval_event;
+  Context *health_tick_event = nullptr;
+  Context *health_interval_event = nullptr;
 
   void health_tick_start();
   void health_tick_stop();
@@ -744,6 +744,18 @@ public:
    */
   health_status_t get_health(list<string>& status, bufferlist *detailbl,
                              Formatter *f);
+
+  health_status_t get_health_status(
+    bool want_detail,
+    Formatter *f,
+    std::string *plain,
+    const char *sep1 = " ",
+    const char *sep2 = "; ");
+  void log_health(
+    const health_check_map_t& updated,
+    const health_check_map_t& previous,
+    MonitorDBStore::TransactionRef t);
+
   void get_cluster_status(stringstream &ss, Formatter *f);
 
   void reply_command(MonOpRequestRef op, int rc, const string &rs, version_t version);
@@ -812,7 +824,7 @@ public:
     C_Command(Monitor *_mm, MonOpRequestRef _op, int r, string s, bufferlist rd, version_t v) :
       C_MonOp(_op), mon(_mm), rc(r), rs(s), rdata(rd), version(v){}
 
-    virtual void _finish(int r) {
+    void _finish(int r) override {
       MMonCommand *m = static_cast<MMonCommand*>(op->get_req());
       if (r >= 0) {
         ostringstream ss;
@@ -850,7 +862,7 @@ public:
     C_RetryMessage(Monitor *m, MonOpRequestRef op) :
       C_MonOp(op), mon(m) { }
 
-    virtual void _finish(int r) {
+    void _finish(int r) override {
       if (r == -EAGAIN || r >= 0)
         mon->dispatch_op(op);
       else if (r == -ECANCELED)
@@ -872,10 +884,10 @@ public:
   void dispatch_op(MonOpRequestRef op);
   //mon_caps is used for un-connected messages from monitors
   MonCap * mon_caps;
-  bool ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer, bool force_new);
+  bool ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer, bool force_new) override;
   bool ms_verify_authorizer(Connection *con, int peer_type,
 			    int protocol, bufferlist& authorizer_data, bufferlist& authorizer_reply,
-			    bool& isvalid, CryptoKey& session_key);
+			    bool& isvalid, CryptoKey& session_key) override;
   bool ms_handle_reset(Connection *con) override;
   void ms_handle_remote_reset(Connection *con) override {}
   bool ms_handle_refused(Connection *con) override;
@@ -883,8 +895,10 @@ public:
   int write_default_keyring(bufferlist& bl);
   void extract_save_mon_key(KeyRing& keyring);
 
+  void collect_metadata(Metadata *m);
   void update_mon_metadata(int from, Metadata&& m);
-  int load_metadata(map<int, Metadata>& m);
+  int load_metadata();
+  void count_metadata(const string& field, Formatter *f);
 
   // features
   static CompatSet get_initial_supported_features();
@@ -899,8 +913,8 @@ public:
 
  public:
   Monitor(CephContext *cct_, string nm, MonitorDBStore *s,
-	  Messenger *m, MonMap *map);
-  ~Monitor();
+	  Messenger *m, Messenger *mgr_m, MonMap *map);
+  ~Monitor() override;
 
   static int check_features(MonitorDBStore *store);
 
@@ -949,7 +963,8 @@ public:
   static void format_command_descriptions(const MonCommand *commands,
 					  unsigned commands_size,
 					  Formatter *f,
-					  bufferlist *rdata);
+					  bufferlist *rdata,
+					  bool hide_mgr_flag=false);
   void get_locally_supported_monitor_commands(const MonCommand **cmds, int *count);
   /// the Monitor owns this pointer once you pass it in
   void set_leader_supported_commands(const MonCommand *cmds, int size);
@@ -966,8 +981,6 @@ public:
 #define CEPH_MON_FEATURE_INCOMPAT_KRAKEN CompatSet::Feature(8, "support monmap features")
 // make sure you add your feature to Monitor::get_supported_features
 
-long parse_pos_long(const char *s, ostream *pss = NULL);
-
 struct MonCommand {
   string cmdstring;
   string helpstring;
@@ -981,7 +994,8 @@ struct MonCommand {
   static const uint64_t FLAG_NOFORWARD  = 1 << 0;
   static const uint64_t FLAG_OBSOLETE   = 1 << 1;
   static const uint64_t FLAG_DEPRECATED = 1 << 2;
-  
+  static const uint64_t FLAG_MGR        = 1 << 3;
+
   bool has_flag(uint64_t flag) const { return (flags & flag) != 0; }
   void set_flag(uint64_t flag) { flags |= flag; }
   void unset_flag(uint64_t flag) { flags &= ~flag; }
@@ -1021,6 +1035,10 @@ struct MonCommand {
 
   bool is_deprecated() const {
     return has_flag(MonCommand::FLAG_DEPRECATED);
+  }
+
+  bool is_mgr() const {
+    return has_flag(MonCommand::FLAG_MGR);
   }
 
   static void encode_array(const MonCommand *cmds, int size, bufferlist &bl) {

@@ -70,6 +70,7 @@ struct UpdateRequest<MockTestImageCtx> {
                                uint64_t start_object_no, uint64_t end_object_no,
                                uint8_t new_state,
                                const boost::optional<uint8_t> &current_state,
+                               const ZTracer::Trace &parent_trace,
                                Context *on_finish) {
     assert(s_instance != nullptr);
     s_instance->on_finish = on_finish;
@@ -180,8 +181,8 @@ TEST_F(TestMockObjectMap, NonDetainedUpdate) {
   {
     RWLock::RLocker snap_locker(mock_image_ctx.snap_lock);
     RWLock::WLocker object_map_locker(mock_image_ctx.object_map_lock);
-    mock_object_map.aio_update(CEPH_NOSNAP, 0, 1, {}, &update_ctx1);
-    mock_object_map.aio_update(CEPH_NOSNAP, 1, 1, {}, &update_ctx2);
+    mock_object_map.aio_update(CEPH_NOSNAP, 0, 1, {}, {}, &update_ctx1);
+    mock_object_map.aio_update(CEPH_NOSNAP, 1, 1, {}, {}, &update_ctx2);
   }
 
   finish_update_2->complete(0);
@@ -238,10 +239,10 @@ TEST_F(TestMockObjectMap, DetainedUpdate) {
   {
     RWLock::RLocker snap_locker(mock_image_ctx.snap_lock);
     RWLock::WLocker object_map_locker(mock_image_ctx.object_map_lock);
-    mock_object_map.aio_update(CEPH_NOSNAP, 1, 4, 1, {}, &update_ctx1);
-    mock_object_map.aio_update(CEPH_NOSNAP, 1, 3, 1, {}, &update_ctx2);
-    mock_object_map.aio_update(CEPH_NOSNAP, 2, 3, 1, {}, &update_ctx3);
-    mock_object_map.aio_update(CEPH_NOSNAP, 0, 2, 1, {}, &update_ctx4);
+    mock_object_map.aio_update(CEPH_NOSNAP, 1, 4, 1, {}, {}, &update_ctx1);
+    mock_object_map.aio_update(CEPH_NOSNAP, 1, 3, 1, {}, {}, &update_ctx2);
+    mock_object_map.aio_update(CEPH_NOSNAP, 2, 3, 1, {}, {}, &update_ctx3);
+    mock_object_map.aio_update(CEPH_NOSNAP, 0, 2, 1, {}, {}, &update_ctx4);
   }
 
   // updates 2, 3, and 4 are blocked on update 1

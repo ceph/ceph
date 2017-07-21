@@ -42,15 +42,95 @@ Ceph configuration file.
 :Type: 32-bit Integer
 :Default: ``300``
 
+``mon pg min inactive``
 
-``osd pg bits`` 
+:Description: Issue a ``HEALTH_ERR`` in cluster log if the number of PGs stay
+              inactive longer than ``mon_pg_stuck_threshold`` exceeds this
+              setting. A non-positive number means disabled, never go into ERR.
+:Type: Integer
+:Default: ``1``
+
+
+``mon pg warn min per osd``
+
+:Description: Issue a ``HEALTH_WARN`` in cluster log if the average number
+              of PGs per (in) OSD is under this number. (a non-positive number
+              disables this)
+:Type: Integer
+:Default: ``30``
+
+
+``mon pg warn max per osd``
+
+:Description: Issue a ``HEALTH_WARN`` in cluster log if the average number
+              of PGs per (in) OSD is above this number. (a non-positive number
+              disables this)
+:Type: Integer
+:Default: ``300``
+
+
+``mon pg warn min objects``
+
+:Description: Do not warn if the total number of objects in cluster is below
+              this number
+:Type: Integer
+:Default: ``1000``
+
+
+``mon pg warn min pool objects``
+
+:Description: Do not warn on pools whose object number is below this number
+:Type: Integer
+:Default: ``1000``
+
+
+``mon pg check down all threshold``
+
+:Description: Threshold of down OSDs percentage after which we check all PGs
+              for stale ones.
+:Type: Float
+:Default: ``0.5``
+
+
+``mon pg warn max object skew``
+
+:Description: Issue a ``HEALTH_WARN`` in cluster log if the average object number
+              of a certain pool is greater than ``mon pg warn max object skew`` times
+              the average object number of the whole pool. (a non-positive number
+              disables this)
+:Type: Float
+:Default: ``10``
+
+
+``mon delta reset interval``
+
+:Description: Seconds of inactivity before we reset the pg delta to 0. We keep
+              track of the delta of the used space of each pool, so, for
+              example, it would be easier for us to understand the progress of
+              recovery or the performance of cache tier. But if there's no
+              activity reported for a certain pool, we just reset the history of
+              deltas of that pool.
+:Type: Integer
+:Default: ``10``
+
+
+``mon osd max op age``
+
+:Description: Maximum op age before we get concerned (make it a power of 2).
+              A ``HEALTH_WARN`` will be issued if a request has been blocked longer
+              than this limit.
+:Type: Float
+:Default: ``32.0``
+
+
+``osd pg bits``
 
 :Description: Placement group bits per Ceph OSD Daemon.
 :Type: 32-bit Integer
 :Default: ``6`` 
 
 
-``osd pgp bits`` 
+``osd pgp bits``
 
 :Description: The number of bits per Ceph OSD Daemon for PGPs.
 :Type: 32-bit Integer
@@ -85,14 +165,18 @@ Ceph configuration file.
           make pool creation work in the absence of ruleset 0.
 
 
-``osd pool erasure code stripe width`` 
+``osd pool erasure code stripe unit``
 
-:Description: Sets the desired size, in bytes, of an object stripe on every
-              erasure coded pools. Every object if size S will be stored as 
-              N stripes and each stripe will be encoded/decoded individually.
+:Description: Sets the default size, in bytes, of a chunk of an object
+              stripe for erasure coded pools. Every object of size S
+              will be stored as N stripes, with each data chunk
+              receiving ``stripe unit`` bytes. Each stripe of ``N *
+              stripe unit`` bytes will be encoded/decoded
+              individually. This option can is overridden by the
+              ``stripe_unit`` setting in an erasure code profile.
 
 :Type: Unsigned 32-bit Integer
-:Default: ``4096`` 
+:Default: ``4096``
 
 
 ``osd pool default size``

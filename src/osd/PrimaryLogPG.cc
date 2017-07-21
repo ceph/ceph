@@ -37,9 +37,11 @@
 #include "messages/MOSDPGScan.h"
 #include "messages/MOSDRepScrub.h"
 #include "messages/MOSDPGBackfill.h"
+#include "messages/MOSDPGBackfillRemove.h"
 #include "messages/MOSDPGUpdateLogMissing.h"
 #include "messages/MOSDPGUpdateLogMissingReply.h"
 #include "messages/MCommandReply.h"
+#include "messages/MOSDScrubReserve.h"
 #include "mds/inode_backtrace.h" // Ugh
 #include "common/EventTrace.h"
 
@@ -122,7 +124,7 @@ protected:
 
 public:
   /// Provide the final size of the copied object to the CopyCallback
-  ~CopyCallback() {}
+  ~CopyCallback() override {}
 };
 
 template <typename T>
@@ -209,7 +211,7 @@ struct OnReadComplete : public Context {
       opcontext->async_read_result = r;
     opcontext->finish_read(pg);
   }
-  ~OnReadComplete() {}
+  ~OnReadComplete() override {}
 };
 
 class PrimaryLogPG::C_OSD_AppliedRecoveredObject : public Context {
@@ -280,7 +282,7 @@ public:
     : results(NULL),
       retval(0),
       ctx(ctx_) {}
-  ~CopyFromCallback() {}
+  ~CopyFromCallback() override {}
 
   void finish(PrimaryLogPG::CopyCallbackResults results_) override {
     results = results_.get<1>();
@@ -324,6 +326,7 @@ void PrimaryLogPG::on_local_recover(
   const hobject_t &hoid,
   const ObjectRecoveryInfo &_recovery_info,
   ObjectContextRef obc,
+  bool is_delete,
   ObjectStore::Transaction *t
   )
 {
@@ -331,19 +334,28 @@ void PrimaryLogPG::on_local_recover(
 
   ObjectRecoveryInfo recovery_info(_recovery_info);
   clear_object_snap_mapping(t, hoid);
-  if (recovery_info.soid.snap < CEPH_NOSNAP) {
-    assert(recovery_info.oi.snaps.size());
+  if (!is_delete && recovery_info.soid.is_snap()) {
     OSDriver::OSTransaction _t(osdriver.get_transaction(t));
-    set<snapid_t> snaps(
-      recovery_info.oi.snaps.begin(),
-      recovery_info.oi.snaps.end());
+    set<snapid_t> snaps;
+    dout(20) << " snapset " << recovery_info.ss
+	     << " legacy_snaps " << recovery_info.oi.legacy_snaps << dendl;
+    if (recovery_info.ss.is_legacy() ||
+	recovery_info.ss.seq == 0 /* jewel osd doesn't populate this */) {
+      assert(recovery_info.oi.legacy_snaps.size());
+      snaps.insert(recovery_info.oi.legacy_snaps.begin(),
+		   recovery_info.oi.legacy_snaps.end());
+    } else {
+      auto p = recovery_info.ss.clone_snaps.find(hoid.snap);
+      assert(p != recovery_info.ss.clone_snaps.end());  // hmm, should we warn?
+      snaps.insert(p->second.begin(), p->second.end());
+    }
+    dout(20) << " snaps " << snaps << dendl;
     snap_mapper.add_oid(
       recovery_info.soid,
       snaps,
       &_t);
   }
-
-  if (pg_log.get_missing().is_missing(recovery_info.soid) &&
+  if (!is_delete && pg_log.get_missing().is_missing(recovery_info.soid) &&
       pg_log.get_missing().get_items().find(recovery_info.soid)->second.need > recovery_info.version) {
     assert(is_primary());
     const pg_log_entry_t *latest = pg_log.get_log().objects.find(recovery_info.soid)->second;
@@ -380,24 +392,25 @@ void PrimaryLogPG::on_local_recover(
   recover_got(recovery_info.soid, recovery_info.version);
 
   if (is_primary()) {
-    assert(obc);
-    obc->obs.exists = true;
-    obc->ondisk_write_lock();
+    if (!is_delete) {
+      obc->obs.exists = true;
+      obc->ondisk_write_lock();
 
-    bool got = obc->get_recovery_read();
-    assert(got);
+      bool got = obc->get_recovery_read();
+      assert(got);
 
-    assert(recovering.count(obc->obs.oi.soid));
-    recovering[obc->obs.oi.soid] = obc;
-    obc->obs.oi = recovery_info.oi;  // may have been updated above
-
+      assert(recovering.count(obc->obs.oi.soid));
+      recovering[obc->obs.oi.soid] = obc;
+      obc->obs.oi = recovery_info.oi;  // may have been updated above
+      t->register_on_applied_sync(new C_OSD_OndiskWriteUnlock(obc));
+    }
 
     t->register_on_applied(new C_OSD_AppliedRecoveredObject(this, obc));
-    t->register_on_applied_sync(new C_OSD_OndiskWriteUnlock(obc));
 
     publish_stats_to_osd();
     assert(missing_loc.needs_recovery(hoid));
-    missing_loc.add_location(hoid, pg_whoami);
+    if (!is_delete)
+      missing_loc.add_location(hoid, pg_whoami);
     release_backoffs(hoid);
     if (!is_unreadable_object(hoid)) {
       auto unreadable_object_entry = waiting_for_unreadable_object.find(hoid);
@@ -406,10 +419,6 @@ void PrimaryLogPG::on_local_recover(
 	requeue_ops(unreadable_object_entry->second);
 	waiting_for_unreadable_object.erase(unreadable_object_entry);
       }
-    }
-    if (pg_log.get_missing().get_items().size() == 0) {
-      requeue_ops(waiting_for_all_missing);
-      waiting_for_all_missing.clear();
     }
   } else {
     t->register_on_applied(
@@ -426,12 +435,12 @@ void PrimaryLogPG::on_local_recover(
   // update pg
   dirty_info = true;
   write_if_dirty(*t);
-
 }
 
 void PrimaryLogPG::on_global_recover(
   const hobject_t &soid,
-  const object_stat_sum_t &stat_diff)
+  const object_stat_sum_t &stat_diff,
+  bool is_delete)
 {
   info.stats.stats.sum.add(stat_diff);
   missing_loc.recovered(soid);
@@ -440,12 +449,14 @@ void PrimaryLogPG::on_global_recover(
   map<hobject_t, ObjectContextRef>::iterator i = recovering.find(soid);
   assert(i != recovering.end());
 
-  // recover missing won't have had an obc, but it gets filled in
-  // during on_local_recover
-  assert(i->second);
-  list<OpRequestRef> requeue_list;
-  i->second->drop_recovery_read(&requeue_list);
-  requeue_ops(requeue_list);
+  if (!is_delete) {
+    // recover missing won't have had an obc, but it gets filled in
+    // during on_local_recover
+    assert(i->second);
+    list<OpRequestRef> requeue_list;
+    i->second->drop_recovery_read(&requeue_list);
+    requeue_ops(requeue_list);
+  }
 
   backfills_in_flight.erase(soid);
 
@@ -508,6 +519,17 @@ void PrimaryLogPG::send_message_osd_cluster(
   osd->send_message_osd_cluster(m, con);
 }
 
+void PrimaryLogPG::on_primary_error(
+  const hobject_t &oid,
+  eversion_t v)
+{
+  dout(0) << __func__ << ": oid " << oid << " version " << v << dendl;
+  primary_failed(oid);
+  primary_error(oid, v);
+  backfills_in_flight.erase(oid);
+  missing_loc.add_missing(oid, v, eversion_t());
+}
+
 ConnectionRef PrimaryLogPG::get_con_osd_cluster(
   int peer, epoch_t from_epoch)
 {
@@ -545,6 +567,8 @@ void PrimaryLogPG::maybe_kick_recovery(
     PGBackend::RecoveryHandle *h = pgbackend->open_recovery_op();
     if (is_missing_object(soid)) {
       recover_missing(soid, v, cct->_conf->osd_client_op_priority, h);
+    } else if (missing_loc.is_deleted(soid)) {
+      prep_object_replica_deletes(soid, v, h);
     } else {
       prep_object_replica_pushes(soid, v, h);
     }
@@ -559,12 +583,6 @@ void PrimaryLogPG::wait_for_unreadable_object(
   maybe_kick_recovery(soid);
   waiting_for_unreadable_object[soid].push_back(op);
   op->mark_delayed("waiting for missing object");
-}
-
-void PrimaryLogPG::wait_for_all_missing(OpRequestRef op)
-{
-  waiting_for_all_missing.push_back(op);
-  op->mark_delayed("waiting for all missing");
 }
 
 bool PrimaryLogPG::is_degraded_or_backfilling_object(const hobject_t& soid)
@@ -617,6 +635,15 @@ void PrimaryLogPG::block_write_on_full_cache(
   objects_blocked_on_cache_full.insert(oid);
   waiting_for_cache_not_full.push_back(op);
   op->mark_delayed("waiting for cache not full");
+}
+
+void PrimaryLogPG::block_for_clean(
+  const hobject_t& oid, OpRequestRef op)
+{
+  dout(20) << __func__ << ": blocking object " << oid
+	   << " on primary repair" << dendl;
+  waiting_for_clean_to_primary_repair.push_back(op);
+  op->mark_delayed("waiting for clean to repair");
 }
 
 void PrimaryLogPG::block_write_on_snap_rollback(
@@ -675,6 +702,48 @@ void PrimaryLogPG::wait_for_blocked_object(const hobject_t& soid, OpRequestRef o
   op->mark_delayed("waiting for blocked object");
 }
 
+void PrimaryLogPG::maybe_force_recovery()
+{
+  // no force if not in degraded/recovery/backfill stats
+  if (!is_degraded() &&
+      !state_test(PG_STATE_RECOVERING |
+                  PG_STATE_RECOVERY_WAIT |
+		  PG_STATE_BACKFILL |
+		  PG_STATE_BACKFILL_WAIT |
+		  PG_STATE_BACKFILL_TOOFULL))
+    return;
+
+  if (pg_log.get_log().approx_size() <
+      cct->_conf->osd_max_pg_log_entries *
+        cct->_conf->osd_force_recovery_pg_log_entries_factor)
+    return;
+
+  // find the oldest missing object
+  version_t min_version = 0;
+  hobject_t soid;
+  if (!pg_log.get_missing().get_items().empty()) {
+    min_version = pg_log.get_missing().get_rmissing().begin()->first;
+    soid = pg_log.get_missing().get_rmissing().begin()->second;
+  }
+  assert(!actingbackfill.empty());
+  for (set<pg_shard_t>::iterator it = actingbackfill.begin();
+       it != actingbackfill.end();
+       ++it) {
+    if (*it == get_primary()) continue;
+    pg_shard_t peer = *it;
+    if (peer_missing.count(peer) &&
+	!peer_missing[peer].get_items().empty() &&
+	min_version > peer_missing[peer].get_rmissing().begin()->first) {
+      min_version = peer_missing[peer].get_rmissing().begin()->first;
+      soid = peer_missing[peer].get_rmissing().begin()->second;
+    }
+  }
+
+  // recover it
+  if (soid != hobject_t())
+    maybe_kick_recovery(soid);
+}
+
 class PGLSPlainFilter : public PGLSFilter {
   string val;
 public:
@@ -689,7 +758,7 @@ public:
 
     return 0;
   }
-  ~PGLSPlainFilter() {}
+  ~PGLSPlainFilter() override {}
   bool filter(const hobject_t &obj, bufferlist& xattr_data,
                       bufferlist& outdata) override;
 };
@@ -712,7 +781,7 @@ public:
 
     return 0;
   }
-  ~PGLSParentFilter() {}
+  ~PGLSParentFilter() override {}
   bool filter(const hobject_t &obj, bufferlist& xattr_data,
                       bufferlist& outdata) override;
 };
@@ -940,7 +1009,7 @@ int PrimaryLogPG::do_command(
       return -EROFS;
     }
 
-    int unfound = missing_loc.num_unfound();
+    uint64_t unfound = missing_loc.num_unfound();
     if (!unfound) {
       ss << "pg has no unfound objects";
       return 0;  // make command idempotent
@@ -1022,7 +1091,9 @@ int PrimaryLogPG::do_command(
 
 void PrimaryLogPG::do_pg_op(OpRequestRef op)
 {
-  MOSDOp *m = static_cast<MOSDOp *>(op->get_req());
+  // NOTE: this is non-const because we modify the OSDOp.outdata in
+  // place
+  MOSDOp *m = static_cast<MOSDOp *>(op->get_nonconst_req());
   assert(m->get_type() == CEPH_MSG_OSD_OP);
   dout(10) << "do_pg_op " << *m << dendl;
 
@@ -1528,8 +1599,8 @@ void PrimaryLogPG::get_src_oloc(const object_t& oid, const object_locator_t& olo
 
 void PrimaryLogPG::handle_backoff(OpRequestRef& op)
 {
-  MOSDBackoff *m = static_cast<MOSDBackoff*>(op->get_req());
-  SessionRef session((Session *)m->get_connection()->get_priv());
+  const MOSDBackoff *m = static_cast<const MOSDBackoff*>(op->get_req());
+  SessionRef session = static_cast<Session*>(m->get_connection()->get_priv());
   if (!session)
     return;  // drop it.
   session->put();  // get_priv takes a ref, and so does the SessionRef
@@ -1550,15 +1621,36 @@ void PrimaryLogPG::do_request(
   OpRequestRef& op,
   ThreadPool::TPHandle &handle)
 {
-  assert(!op_must_wait_for_map(get_osdmap()->get_epoch(), op));
+  if (op->osd_trace) {
+    op->pg_trace.init("pg op", &trace_endpoint, &op->osd_trace);
+    op->pg_trace.event("do request");
+  }
+  // make sure we have a new enough map
+  auto p = waiting_for_map.find(op->get_source());
+  if (p != waiting_for_map.end()) {
+    // preserve ordering
+    dout(20) << __func__ << " waiting_for_map "
+	     << p->first << " not empty, queueing" << dendl;
+    p->second.push_back(op);
+    op->mark_delayed("waiting_for_map not empty");
+    return;
+  }
+  if (!have_same_or_newer_map(op->min_epoch)) {
+    dout(20) << __func__ << " min " << op->min_epoch
+	     << ", queue on waiting_for_map " << op->get_source() << dendl;
+    waiting_for_map[op->get_source()].push_back(op);
+    op->mark_delayed("op must wait for map");
+    return;
+  }
+
   if (can_discard_request(op)) {
     return;
   }
 
   // pg-wide backoffs
-  Message *m = op->get_req();
+  const Message *m = op->get_req();
   if (m->get_connection()->has_feature(CEPH_FEATURE_RADOS_BACKOFF)) {
-    SessionRef session((Session *)m->get_connection()->get_priv());
+    SessionRef session = static_cast<Session*>(m->get_connection()->get_priv());
     if (!session)
       return;  // drop it.
     session->put();  // get_priv takes a ref, and so does the SessionRef
@@ -1585,7 +1677,7 @@ void PrimaryLogPG::do_request(
     }
     // pg backoff acks at pg-level
     if (op->get_req()->get_type() == CEPH_MSG_OSD_BACKOFF) {
-      MOSDBackoff *ba = static_cast<MOSDBackoff*>(m);
+      const MOSDBackoff *ba = static_cast<const MOSDBackoff*>(m);
       if (ba->begin != ba->end) {
 	handle_backoff(op);
 	return;
@@ -1661,8 +1753,37 @@ void PrimaryLogPG::do_request(
     do_backfill(op);
     break;
 
+  case MSG_OSD_PG_BACKFILL_REMOVE:
+    do_backfill_remove(op);
+    break;
+
+  case MSG_OSD_SCRUB_RESERVE:
+    {
+      const MOSDScrubReserve *m =
+	static_cast<const MOSDScrubReserve*>(op->get_req());
+      switch (m->type) {
+      case MOSDScrubReserve::REQUEST:
+	handle_scrub_reserve_request(op);
+	break;
+      case MOSDScrubReserve::GRANT:
+	handle_scrub_reserve_grant(op, m->from);
+	break;
+      case MOSDScrubReserve::REJECT:
+	handle_scrub_reserve_reject(op, m->from);
+	break;
+      case MOSDScrubReserve::RELEASE:
+	handle_scrub_reserve_release(op);
+	break;
+      }
+    }
+    break;
+
   case MSG_OSD_REP_SCRUB:
     replica_scrub(op, handle);
+    break;
+
+  case MSG_OSD_REP_SCRUBMAP:
+    do_replica_scrub_map(op);
     break;
 
   case MSG_OSD_PG_UPDATE_LOG_MISSING:
@@ -1700,24 +1821,36 @@ hobject_t PrimaryLogPG::earliest_backfill() const
 void PrimaryLogPG::do_op(OpRequestRef& op)
 {
   FUNCTRACE();
-  MOSDOp *m = static_cast<MOSDOp*>(op->get_req());
+  // NOTE: take a non-const pointer here; we must be careful not to
+  // change anything that will break other reads on m (operator<<).
+  MOSDOp *m = static_cast<MOSDOp*>(op->get_nonconst_req());
   assert(m->get_type() == CEPH_MSG_OSD_OP);
-
   if (m->finish_decode()) {
     op->reset_desc();   // for TrackedOp
+    m->clear_payload();
   }
-  m->clear_payload();
 
   dout(20) << __func__ << ": op " << *m << dendl;
 
   hobject_t head = m->get_hobj();
   head.snap = CEPH_NOSNAP;
 
+  if (!info.pgid.pgid.contains(
+	info.pgid.pgid.get_split_bits(pool.info.get_pg_num()), head)) {
+    derr << __func__ << " " << info.pgid.pgid << " does not contain "
+	 << head << " pg_num " << pool.info.get_pg_num() << " hash "
+	 << std::hex << head.get_hash() << std::dec << dendl;
+    osd->clog->warn() << info.pgid.pgid << " does not contain " << head
+		      << " op " << *m;
+    assert(!cct->_conf->osd_debug_misdirected_ops);
+    return;
+  }
+
   bool can_backoff =
     m->get_connection()->has_feature(CEPH_FEATURE_RADOS_BACKOFF);
   SessionRef session;
   if (can_backoff) {
-    session = ((Session *)m->get_connection()->get_priv());
+    session = static_cast<Session*>(m->get_connection()->get_priv());
     if (!session.get()) {
       dout(10) << __func__ << " no session" << dendl;
       return;
@@ -1761,13 +1894,13 @@ void PrimaryLogPG::do_op(OpRequestRef& op)
     }
   }
 
-  if (op->includes_pg_op()) {
-    return do_pg_op(op);
-  }
-
   if (!op_has_sufficient_caps(op)) {
     osd->reply_op_error(op, -EPERM);
     return;
+  }
+
+  if (op->includes_pg_op()) {
+    return do_pg_op(op);
   }
 
   // object name too long?
@@ -1813,19 +1946,26 @@ void PrimaryLogPG::do_op(OpRequestRef& op)
   // discard due to cluster full transition?  (we discard any op that
   // originates before the cluster or pool is marked full; the client
   // will resend after the full flag is removed or if they expect the
-  // op to succeed despite being full).  The except is FULL_FORCE ops,
-  // which there is no reason to discard because they bypass all full
-  // checks anyway.
-  // If this op isn't write or read-ordered, we skip
+  // op to succeed despite being full).  The except is FULL_FORCE and
+  // FULL_TRY ops, which there is no reason to discard because they
+  // bypass all full checks anyway.  If this op isn't write or
+  // read-ordered, we skip.
   // FIXME: we exclude mds writes for now.
-  if (write_ordered && !( m->get_source().is_mds() || m->has_flag(CEPH_OSD_FLAG_FULL_FORCE)) &&
+  if (write_ordered && !(m->get_source().is_mds() ||
+			 m->has_flag(CEPH_OSD_FLAG_FULL_TRY) ||
+			 m->has_flag(CEPH_OSD_FLAG_FULL_FORCE)) &&
       info.history.last_epoch_marked_full > m->get_map_epoch()) {
     dout(10) << __func__ << " discarding op sent before full " << m << " "
 	     << *m << dendl;
     return;
   }
-  if (!(m->get_source().is_mds()) && osd->check_failsafe_full() && write_ordered) {
+  // mds should have stopped writing before this point.
+  // We can't allow OSD to become non-startable even if mds
+  // could be writing as part of file removals.
+  ostringstream ss;
+  if (write_ordered && osd->check_failsafe_full(ss)) {
     dout(10) << __func__ << " fail-safe full check failed, dropping request"
+             << ss.str()
 	     << dendl;
     return;
   }
@@ -1866,6 +2006,10 @@ void PrimaryLogPG::do_op(OpRequestRef& op)
 
   // missing object?
   if (is_unreadable_object(head)) {
+    if (!is_primary()) {
+      osd->reply_op_error(op, -EAGAIN);
+      return;
+    }
     if (can_backoff &&
 	(g_conf->osd_backoff_on_degraded ||
 	 (g_conf->osd_backoff_on_unfound && missing_loc.is_unfound(head)))) {
@@ -1929,13 +2073,6 @@ void PrimaryLogPG::do_op(OpRequestRef& op)
   // degraded object?
   if (write_ordered && is_degraded_or_backfilling_object(snapdir)) {
     wait_for_degraded_object(snapdir, op);
-    return;
-  }
- 
-  // asking for SNAPDIR is only ok for reads
-  if (m->get_snapid() == CEPH_SNAPDIR && op->may_write()) {
-    dout(20) << __func__ << ": write to snapdir not valid " << *m << dendl;
-    osd->reply_op_error(op, -EINVAL);
     return;
   }
 
@@ -2034,6 +2171,13 @@ void PrimaryLogPG::do_op(OpRequestRef& op)
       return;
   }
 
+  if (obc.get() && obc->obs.exists && obc->obs.oi.has_manifest()) {
+    if (maybe_handle_manifest(op,
+			       write_ordered,
+			       obc))
+    return;
+  }
+
   if (maybe_handle_cache(op,
 			 write_ordered,
 			 obc,
@@ -2046,18 +2190,13 @@ void PrimaryLogPG::do_op(OpRequestRef& op)
   if (r && (r != -ENOENT || !obc)) {
     // copy the reqids for copy get on ENOENT
     if (r == -ENOENT &&
-	(m->ops[0].op.op == CEPH_OSD_OP_COPY_GET_CLASSIC ||
-	 m->ops[0].op.op == CEPH_OSD_OP_COPY_GET)) {
-      bool classic = false;
-      if (m->ops[0].op.op == CEPH_OSD_OP_COPY_GET_CLASSIC) {
-	classic = true;
-      }
-      fill_in_copy_get_noent(op, oid, m->ops[0], classic);
+	(m->ops[0].op.op == CEPH_OSD_OP_COPY_GET)) {
+      fill_in_copy_get_noent(op, oid, m->ops[0]);
       return;
     }
-    dout(20) << __func__ << "find_object_context got error " << r << dendl;
+    dout(20) << __func__ << ": find_object_context got error " << r << dendl;
     if (op->may_write() &&
-	get_osdmap()->test_flag(CEPH_OSDMAP_REQUIRE_KRAKEN)) {
+	get_osdmap()->require_osd_release >= CEPH_RELEASE_KRAKEN) {
       record_write_error(op, oid, nullptr, r);
     } else {
       osd->reply_op_error(op, r);
@@ -2072,7 +2211,7 @@ void PrimaryLogPG::do_op(OpRequestRef& op)
 	     << " != object's " << obc->obs.oi.soid << dendl;
     osd->clog->warn() << "bad locator " << m->get_object_locator() 
 		     << " on object " << oloc
-		     << " op " << *m << "\n";
+		      << " op " << *m;
   }
 
   // io blocked on obc?
@@ -2134,7 +2273,7 @@ void PrimaryLogPG::do_op(OpRequestRef& op)
     dout(20) << __func__ << " returned an error: " << r << dendl;
     close_op_ctx(ctx);
     if (op->may_write() &&
-	get_osdmap()->test_flag(CEPH_OSDMAP_REQUIRE_KRAKEN)) {
+	get_osdmap()->require_osd_release >= CEPH_RELEASE_KRAKEN) {
       record_write_error(op, oid, nullptr, r);
     } else {
       osd->reply_op_error(op, r);
@@ -2159,13 +2298,8 @@ void PrimaryLogPG::do_op(OpRequestRef& op)
        ((m->get_snapid() != CEPH_SNAPDIR) &&
 	obc->obs.oi.is_whiteout()))) {
     // copy the reqids for copy get on ENOENT
-    if (m->ops[0].op.op == CEPH_OSD_OP_COPY_GET_CLASSIC ||
-	m->ops[0].op.op == CEPH_OSD_OP_COPY_GET) {
-      bool classic = false;
-      if (m->ops[0].op.op == CEPH_OSD_OP_COPY_GET_CLASSIC) {
-	classic = true;
-      }
-      fill_in_copy_get_noent(op, oid, m->ops[0], classic);
+    if (m->ops[0].op.op == CEPH_OSD_OP_COPY_GET) {
+      fill_in_copy_get_noent(op, oid, m->ops[0]);
       close_op_ctx(ctx);
       return;
     }
@@ -2186,6 +2320,56 @@ void PrimaryLogPG::do_op(OpRequestRef& op)
   } else if (op->may_write() || op->may_cache()) {
     osd->logger->tinc(l_osd_op_w_prepare_lat, prepare_latency);
   }
+
+  // force recovery of the oldest missing object if too many logs
+  maybe_force_recovery();
+}
+PrimaryLogPG::cache_result_t PrimaryLogPG::maybe_handle_manifest_detail(
+  OpRequestRef op,
+  bool write_ordered,
+  ObjectContextRef obc)
+{
+  if (static_cast<const MOSDOp *>(op->get_req())->get_flags() &
+      CEPH_OSD_FLAG_IGNORE_REDIRECT) {
+    dout(20) << __func__ << ": ignoring redirect due to flag" << dendl;
+    return cache_result_t::NOOP;
+  }
+
+  if (obc)
+    dout(10) << __func__ << " " << obc->obs.oi << " "
+       << (obc->obs.exists ? "exists" : "DNE")
+       << dendl;
+
+  // if it is write-ordered and blocked, stop now
+  if (obc.get() && obc->is_blocked() && write_ordered) {
+    // we're already doing something with this object
+    dout(20) << __func__ << " blocked on " << obc->obs.oi.soid << dendl;
+    return cache_result_t::NOOP;
+  }
+
+  vector<OSDOp> ops = static_cast<const MOSDOp*>(op->get_req())->ops;
+  for (vector<OSDOp>::iterator p = ops.begin(); p != ops.end(); ++p) {
+    OSDOp& osd_op = *p;
+    ceph_osd_op& op = osd_op.op;
+    if (op.op == CEPH_OSD_OP_SET_REDIRECT) {
+      return cache_result_t::NOOP;
+    }
+  }
+
+  switch (obc->obs.oi.manifest.type) {
+  case object_manifest_t::TYPE_REDIRECT:
+    if (op->may_write() || write_ordered) {
+      do_proxy_write(op, obc->obs.oi.soid, obc);
+    } else {
+      do_proxy_read(op, obc);
+    }
+    return cache_result_t::HANDLED_PROXY;
+  case object_manifest_t::TYPE_CHUNKED:
+  default:
+    assert(0 == "unrecognized manifest type");
+  }
+
+  return cache_result_t::NOOP;
 }
 
 void PrimaryLogPG::record_write_error(OpRequestRef op, const hobject_t &soid,
@@ -2193,9 +2377,9 @@ void PrimaryLogPG::record_write_error(OpRequestRef op, const hobject_t &soid,
 {
   dout(20) << __func__ << " r=" << r << dendl;
   assert(op->may_write());
-  const osd_reqid_t &reqid = static_cast<MOSDOp*>(op->get_req())->get_reqid();
+  const osd_reqid_t &reqid = static_cast<const MOSDOp*>(op->get_req())->get_reqid();
   ObjectContextRef obc;
-  mempool::osd::list<pg_log_entry_t> entries;
+  mempool::osd_pglog::list<pg_log_entry_t> entries;
   entries.push_back(pg_log_entry_t(pg_log_entry_t::ERROR, soid,
 				   get_next_version(), eversion_t(), 0,
 				   reqid, utime_t(), r));
@@ -2215,7 +2399,7 @@ void PrimaryLogPG::record_write_error(OpRequestRef op, const hobject_t &soid,
       {}
     void operator()() {
       ldpp_dout(pg, 20) << "finished " << __func__ << " r=" << r << dendl;
-      MOSDOp *m = static_cast<MOSDOp*>(op->get_req());
+      const MOSDOp *m = static_cast<const MOSDOp*>(op->get_req());
       int flags = m->get_flags() & (CEPH_OSD_FLAG_ACK | CEPH_OSD_FLAG_ONDISK);
       MOSDOpReply *reply = orig_reply.detach();
       if (reply == nullptr) {
@@ -2249,7 +2433,7 @@ PrimaryLogPG::cache_result_t PrimaryLogPG::maybe_handle_cache_detail(
   if (op &&
       op->get_req() &&
       op->get_req()->get_type() == CEPH_MSG_OSD_OP &&
-      (static_cast<MOSDOp *>(op->get_req())->get_flags() &
+      (static_cast<const MOSDOp *>(op->get_req())->get_flags() &
        CEPH_OSD_FLAG_IGNORE_CACHE)) {
     dout(20) << __func__ << ": ignoring cache due to flag" << dendl;
     return cache_result_t::NOOP;
@@ -2295,7 +2479,7 @@ PrimaryLogPG::cache_result_t PrimaryLogPG::maybe_handle_cache_detail(
     missing_oid = obc->obs.oi.soid;
   }
 
-  MOSDOp *m = static_cast<MOSDOp*>(op->get_req());
+  const MOSDOp *m = static_cast<const MOSDOp*>(op->get_req());
   const object_locator_t oloc = m->get_object_locator();
 
   if (op->need_skip_handle_cache()) {
@@ -2508,7 +2692,7 @@ bool PrimaryLogPG::maybe_promote(ObjectContextRef obc,
 
 void PrimaryLogPG::do_cache_redirect(OpRequestRef op)
 {
-  MOSDOp *m = static_cast<MOSDOp*>(op->get_req());
+  const MOSDOp *m = static_cast<const MOSDOp*>(op->get_req());
   int flags = m->get_flags() & (CEPH_OSD_FLAG_ACK|CEPH_OSD_FLAG_ONDISK);
   MOSDOpReply *reply = new MOSDOpReply(m, -ENOENT,
 				       get_osdmap()->get_epoch(), flags, false);
@@ -2548,13 +2732,30 @@ struct C_ProxyRead : public Context {
   }
 };
 
-void PrimaryLogPG::do_proxy_read(OpRequestRef op)
+void PrimaryLogPG::do_proxy_read(OpRequestRef op, ObjectContextRef obc)
 {
-  MOSDOp *m = static_cast<MOSDOp*>(op->get_req());
-  object_locator_t oloc(m->get_object_locator());
-  oloc.pool = pool.info.tier_of;
-
-  const hobject_t& soid = m->get_hobj();
+  // NOTE: non-const here because the ProxyReadOp needs mutable refs to
+  // stash the result in the request's OSDOp vector
+  MOSDOp *m = static_cast<MOSDOp*>(op->get_nonconst_req());
+  object_locator_t oloc;
+  hobject_t soid;
+  /* extensible tier */
+  if (obc && obc->obs.exists && obc->obs.oi.has_manifest()) {
+    switch (obc->obs.oi.manifest.type) {
+      case object_manifest_t::TYPE_REDIRECT:
+	  oloc = object_locator_t(obc->obs.oi.manifest.redirect_target);
+	  soid = obc->obs.oi.manifest.redirect_target;  
+	  break;
+      case object_manifest_t::TYPE_CHUNKED:
+      default:
+	assert(0 == "unrecognized manifest type");
+    }
+  } else {
+  /* proxy */
+    soid = m->get_hobj();
+    oloc = object_locator_t(m->get_object_locator());
+    oloc.pool = pool.info.tier_of;
+  }
   unsigned flags = CEPH_OSD_FLAG_IGNORE_CACHE | CEPH_OSD_FLAG_IGNORE_OVERLAY;
 
   // pass through some original flags that make sense.
@@ -2581,6 +2782,7 @@ void PrimaryLogPG::do_proxy_read(OpRequestRef op)
 	case CEPH_OSD_OP_READ:
 	case CEPH_OSD_OP_SYNC_READ:
 	case CEPH_OSD_OP_SPARSE_READ:
+	case CEPH_OSD_OP_CHECKSUM:
 	  op.flags = (op.flags | CEPH_OSD_OP_FLAG_FADVISE_SEQUENTIAL) &
 		       ~(CEPH_OSD_OP_FLAG_FADVISE_DONTNEED | CEPH_OSD_OP_FLAG_FADVISE_NOCACHE);
       }
@@ -2643,7 +2845,7 @@ void PrimaryLogPG::finish_proxy_read(hobject_t oid, ceph_tid_t tid, int r)
 
   osd->logger->inc(l_osd_tier_proxy_read);
 
-  MOSDOp *m = static_cast<MOSDOp*>(op->get_req());
+  const MOSDOp *m = static_cast<const MOSDOp*>(op->get_req());
   OpContext *ctx = new OpContext(op, m->get_reqid(), prdop->ops, this);
   ctx->reply = new MOSDOpReply(m, 0, get_osdmap()->get_epoch(), 0, false);
   ctx->user_at_version = prdop->user_version;
@@ -2737,15 +2939,35 @@ struct C_ProxyWrite_Commit : public Context {
   }
 };
 
-void PrimaryLogPG::do_proxy_write(OpRequestRef op, const hobject_t& missing_oid)
+void PrimaryLogPG::do_proxy_write(OpRequestRef op, const hobject_t& missing_oid, ObjectContextRef obc)
 {
-  MOSDOp *m = static_cast<MOSDOp*>(op->get_req());
-  object_locator_t oloc(m->get_object_locator());
-  oloc.pool = pool.info.tier_of;
+  // NOTE: non-const because ProxyWriteOp takes a mutable ref
+  MOSDOp *m = static_cast<MOSDOp*>(op->get_nonconst_req());
+  object_locator_t oloc;
   SnapContext snapc(m->get_snap_seq(), m->get_snaps());
+  hobject_t soid;
+  /* extensible tier */
+  if (obc && obc->obs.exists && obc->obs.oi.has_manifest()) {
+    switch (obc->obs.oi.manifest.type) {
+      case object_manifest_t::TYPE_REDIRECT:
+	  oloc = object_locator_t(obc->obs.oi.manifest.redirect_target);
+	  soid = obc->obs.oi.manifest.redirect_target;  
+	  break;
+      case object_manifest_t::TYPE_CHUNKED:
+      default:
+	assert(0 == "unrecognized manifest type");
+    }
+  } else {
+  /* proxy */
+    soid = m->get_hobj();
+    oloc = object_locator_t(m->get_object_locator());
+    oloc.pool = pool.info.tier_of;
+  }
 
-  const hobject_t& soid = m->get_hobj();
   unsigned flags = CEPH_OSD_FLAG_IGNORE_CACHE | CEPH_OSD_FLAG_IGNORE_OVERLAY;
+  if (!(op->may_write() || op->may_cache())) {
+    flags |= CEPH_OSD_FLAG_RWORDERED;
+  }
   dout(10) << __func__ << " Start proxy write for " << *m << dendl;
 
   ProxyWriteOpRef pwop(std::make_shared<ProxyWriteOp>(op, soid, m->ops, m->get_reqid()));
@@ -2804,10 +3026,10 @@ void PrimaryLogPG::finish_proxy_write(hobject_t oid, ceph_tid_t tid, int r)
 
   osd->logger->inc(l_osd_tier_proxy_write);
 
-  MOSDOp *m = static_cast<MOSDOp*>(pwop->op->get_req());
+  const MOSDOp *m = static_cast<const MOSDOp*>(pwop->op->get_req());
   assert(m != NULL);
 
-  if (m->wants_ondisk() && !pwop->sent_disk) {
+  if (!pwop->sent_reply) {
     // send commit.
     MOSDOpReply *reply = pwop->ctx->reply;
     if (reply)
@@ -2819,21 +3041,8 @@ void PrimaryLogPG::finish_proxy_write(hobject_t oid, ceph_tid_t tid, int r)
     reply->add_flags(CEPH_OSD_FLAG_ACK | CEPH_OSD_FLAG_ONDISK);
     dout(10) << " sending commit on " << pwop << " " << reply << dendl;
     osd->send_message_osd_client(reply, m->get_connection());
-    pwop->sent_disk = true;
+    pwop->sent_reply = true;
     pwop->ctx->op->mark_commit_sent();
-  } else if (m->wants_ack() && !pwop->sent_ack && !pwop->sent_disk) {
-    // send ack
-    MOSDOpReply *reply = pwop->ctx->reply;
-    if (reply)
-      pwop->ctx->reply = NULL;
-    else {
-      reply = new MOSDOpReply(m, r, get_osdmap()->get_epoch(), 0, true);
-      reply->set_reply_versions(eversion_t(), pwop->user_version);
-    }
-    reply->add_flags(CEPH_OSD_FLAG_ACK);
-    dout(10) << " sending ack on " << pwop << " " << reply << dendl;
-    osd->send_message_osd_client(reply, m->get_connection());
-    pwop->sent_ack = true;
   }
 
   delete pwop->ctx;
@@ -2938,7 +3147,7 @@ void PrimaryLogPG::execute_ctx(OpContext *ctx)
   ctx->reset_obs(ctx->obc);
   ctx->update_log_only = false; // reset in case finish_copyfrom() is re-running execute_ctx
   OpRequestRef op = ctx->op;
-  MOSDOp *m = static_cast<MOSDOp*>(op->get_req());
+  const MOSDOp *m = static_cast<const MOSDOp*>(op->get_req());
   ObjectContextRef obc = ctx->obc;
   const hobject_t& soid = obc->obs.oi.soid;
 
@@ -2956,6 +3165,7 @@ void PrimaryLogPG::execute_ctx(OpContext *ctx)
       // client specified snapc
       ctx->snapc.seq = m->get_snap_seq();
       ctx->snapc.snaps = m->get_snaps();
+      filter_snapc(ctx->snapc.snaps);
     }
     if ((m->has_flag(CEPH_OSD_FLAG_ORDERSNAP)) &&
 	ctx->snapc.seq < obc->ssc->snapset.seq) {
@@ -2970,13 +3180,13 @@ void PrimaryLogPG::execute_ctx(OpContext *ctx)
     ctx->at_version = get_next_version();
     ctx->mtime = m->get_mtime();
 
-    dout(10) << "do_op " << soid << " " << ctx->ops
+    dout(10) << __func__ << " " << soid << " " << ctx->ops
 	     << " ov " << obc->obs.oi.version << " av " << ctx->at_version 
 	     << " snapc " << ctx->snapc
 	     << " snapset " << obc->ssc->snapset
 	     << dendl;  
   } else {
-    dout(10) << "do_op " << soid << " " << ctx->ops
+    dout(10) << __func__ << " " << soid << " " << ctx->ops
 	     << " ov " << obc->obs.oi.version
 	     << dendl;  
   }
@@ -3116,10 +3326,10 @@ void PrimaryLogPG::execute_ctx(OpContext *ctx)
 	log_op_stats(
 	  ctx);
 
-      if (m && (m->wants_ondisk() || m->wants_ack()) && !ctx->sent_reply) {
+      if (m && !ctx->sent_reply) {
 	MOSDOpReply *reply = ctx->reply;
 	if (reply)
-	  ctx->reply = NULL;
+	  ctx->reply = nullptr;
 	else {
 	  reply = new MOSDOpReply(m, 0, get_osdmap()->get_epoch(), 0, true);
 	  reply->set_reply_versions(ctx->at_version,
@@ -3171,7 +3381,7 @@ void PrimaryLogPG::reply_ctx(OpContext *ctx, int r, eversion_t v, version_t uv)
 void PrimaryLogPG::log_op_stats(OpContext *ctx)
 {
   OpRequestRef op = ctx->op;
-  MOSDOp *m = static_cast<MOSDOp*>(op->get_req());
+  const MOSDOp *m = static_cast<const MOSDOp*>(op->get_req());
 
   utime_t now = ceph_clock_now();
   utime_t latency = now;
@@ -3220,7 +3430,7 @@ void PrimaryLogPG::log_op_stats(OpContext *ctx)
 
 void PrimaryLogPG::do_sub_op(OpRequestRef op)
 {
-  MOSDSubOp *m = static_cast<MOSDSubOp*>(op->get_req());
+  const MOSDSubOp *m = static_cast<const MOSDSubOp*>(op->get_req());
   assert(have_same_or_newer_map(m->map_epoch));
   assert(m->get_type() == MSG_OSD_SUBOP);
   dout(15) << "do_sub_op " << *op->get_req() << dendl;
@@ -3231,7 +3441,7 @@ void PrimaryLogPG::do_sub_op(OpRequestRef op)
     return;
   }
 
-  OSDOp *first = NULL;
+  const OSDOp *first = NULL;
   if (m->ops.size() >= 1) {
     first = &m->ops[0];
   }
@@ -3242,10 +3452,10 @@ void PrimaryLogPG::do_sub_op(OpRequestRef op)
       sub_op_remove(op);
       return;
     case CEPH_OSD_OP_SCRUB_RESERVE:
-      sub_op_scrub_reserve(op);
+      handle_scrub_reserve_request(op);
       return;
     case CEPH_OSD_OP_SCRUB_UNRESERVE:
-      sub_op_scrub_unreserve(op);
+      handle_scrub_reserve_release(op);
       return;
     case CEPH_OSD_OP_SCRUB_MAP:
       sub_op_scrub_map(op);
@@ -3256,13 +3466,23 @@ void PrimaryLogPG::do_sub_op(OpRequestRef op)
 
 void PrimaryLogPG::do_sub_op_reply(OpRequestRef op)
 {
-  MOSDSubOpReply *r = static_cast<MOSDSubOpReply *>(op->get_req());
+  const MOSDSubOpReply *r = static_cast<const MOSDSubOpReply *>(op->get_req());
   assert(r->get_type() == MSG_OSD_SUBOPREPLY);
   if (r->ops.size() >= 1) {
-    OSDOp& first = r->ops[0];
+    const OSDOp& first = r->ops[0];
     switch (first.op.op) {
     case CEPH_OSD_OP_SCRUB_RESERVE:
-      sub_op_scrub_reserve_reply(op);
+      {
+	pg_shard_t from = r->from;
+	bufferlist::iterator p = const_cast<bufferlist&>(r->get_data()).begin();
+	bool reserved;
+	::decode(reserved, p);
+	if (reserved) {
+	  handle_scrub_reserve_grant(op, from);
+	} else {
+	  handle_scrub_reserve_reject(op, from);
+	}
+      }
       return;
     }
   }
@@ -3272,7 +3492,7 @@ void PrimaryLogPG::do_scan(
   OpRequestRef op,
   ThreadPool::TPHandle &handle)
 {
-  MOSDPGScan *m = static_cast<MOSDPGScan*>(op->get_req());
+  const MOSDPGScan *m = static_cast<const MOSDPGScan*>(op->get_req());
   assert(m->get_type() == MSG_OSD_PG_SCAN);
   dout(10) << "do_scan " << *m << dendl;
 
@@ -3281,10 +3501,9 @@ void PrimaryLogPG::do_scan(
   switch (m->op) {
   case MOSDPGScan::OP_SCAN_GET_DIGEST:
     {
-      double ratio, full_ratio;
-      if (osd->too_full_for_backfill(&ratio, &full_ratio)) {
-	dout(1) << __func__ << ": Canceling backfill, current usage is "
-		<< ratio << ", which exceeds " << full_ratio << dendl;
+      ostringstream ss;
+      if (osd->check_backfill_full(ss)) {
+	dout(1) << __func__ << ": Canceling backfill, " << ss.str() << dendl;
 	queue_peering_event(
 	  CephPeeringEvtRef(
 	    std::make_shared<CephPeeringEvt>(
@@ -3323,7 +3542,7 @@ void PrimaryLogPG::do_scan(
       BackfillInterval& bi = peer_backfill_info[from];
       bi.begin = m->begin;
       bi.end = m->end;
-      bufferlist::iterator p = m->get_data().begin();
+      bufferlist::iterator p = const_cast<bufferlist&>(m->get_data()).begin();
 
       // take care to preserve ordering!
       bi.clear_objects();
@@ -3345,7 +3564,7 @@ void PrimaryLogPG::do_scan(
 
 void PrimaryLogPG::do_backfill(OpRequestRef op)
 {
-  MOSDPGBackfill *m = static_cast<MOSDPGBackfill*>(op->get_req());
+  const MOSDPGBackfill *m = static_cast<const MOSDPGBackfill*>(op->get_req());
   assert(m->get_type() == MSG_OSD_PG_BACKFILL);
   dout(10) << "do_backfill " << *m << dendl;
 
@@ -3377,11 +3596,7 @@ void PrimaryLogPG::do_backfill(OpRequestRef op)
       assert(cct->_conf->osd_kill_backfill_at != 2);
 
       info.set_last_backfill(m->last_backfill);
-      if (m->compat_stat_sum) {
-	info.stats.stats = m->stats.stats; // Previously, we only sent sum
-      } else {
-	info.stats = m->stats;
-      }
+      info.stats = m->stats;
 
       ObjectStore::Transaction t;
       dirty_info = true;
@@ -3401,38 +3616,76 @@ void PrimaryLogPG::do_backfill(OpRequestRef op)
   }
 }
 
-PrimaryLogPG::OpContextUPtr PrimaryLogPG::trim_object(bool first, const hobject_t &coid)
+void PrimaryLogPG::do_backfill_remove(OpRequestRef op)
 {
+  const MOSDPGBackfillRemove *m = static_cast<const MOSDPGBackfillRemove*>(
+    op->get_req());
+  assert(m->get_type() == MSG_OSD_PG_BACKFILL_REMOVE);
+  dout(7) << __func__ << " " << m->ls << dendl;
+
+  op->mark_started();
+
+  ObjectStore::Transaction t;
+  for (auto& p : m->ls) {
+    remove_snap_mapped_object(t, p.first);
+  }
+  int r = osd->store->queue_transaction(osr.get(), std::move(t), NULL);
+  assert(r == 0);
+}
+
+int PrimaryLogPG::trim_object(
+  bool first, const hobject_t &coid, PrimaryLogPG::OpContextUPtr *ctxp)
+{
+  *ctxp = NULL;
   // load clone info
   bufferlist bl;
   ObjectContextRef obc = get_object_context(coid, false, NULL);
-  if (!obc) {
-    derr << __func__ << " could not find coid " << coid << dendl;
-    ceph_abort();
+  if (!obc || !obc->ssc || !obc->ssc->exists) {
+    osd->clog->error() << __func__ << ": Can not trim " << coid
+      << " repair needed " << (obc ? "(no obc->ssc or !exists)" : "(no obc)");
+    return -ENOENT;
   }
-  assert(obc->ssc);
 
   hobject_t snapoid(
     coid.oid, coid.get_key(),
     obc->ssc->snapset.head_exists ? CEPH_NOSNAP:CEPH_SNAPDIR, coid.get_hash(),
     info.pgid.pool(), coid.get_namespace());
   ObjectContextRef snapset_obc = get_object_context(snapoid, false);
-  assert(snapset_obc);
-
-  object_info_t &coi = obc->obs.oi;
-  set<snapid_t> old_snaps(coi.snaps.begin(), coi.snaps.end());
-  if (old_snaps.empty()) {
-    osd->clog->error() << __func__ << " No object info snaps for " << coid << "\n";
-    return NULL;
+  if (!snapset_obc) {
+    osd->clog->error() << __func__ << ": Can not trim " << coid
+      << " repair needed, no snapset obc for " << snapoid;
+    return -ENOENT;
   }
 
   SnapSet& snapset = obc->ssc->snapset;
 
+  bool legacy = snapset.is_legacy() ||
+    get_osdmap()->require_osd_release < CEPH_RELEASE_LUMINOUS;
+
+  object_info_t &coi = obc->obs.oi;
+  set<snapid_t> old_snaps;
+  if (legacy) {
+    old_snaps.insert(coi.legacy_snaps.begin(), coi.legacy_snaps.end());
+  } else {
+    auto p = snapset.clone_snaps.find(coid.snap);
+    if (p == snapset.clone_snaps.end()) {
+      osd->clog->error() << __func__ << " No clone_snaps in snapset " << snapset
+			 << " for " << coid << "\n";
+      return -ENOENT;
+    }
+    old_snaps.insert(snapset.clone_snaps[coid.snap].begin(),
+		     snapset.clone_snaps[coid.snap].end());
+  }
+  if (old_snaps.empty()) {
+    osd->clog->error() << __func__ << " No object info snaps for " << coid;
+    return -ENOENT;
+  }
+
   dout(10) << coid << " old_snaps " << old_snaps
 	   << " old snapset " << snapset << dendl;
   if (snapset.seq == 0) {
-    osd->clog->error() << __func__ << " No snapset.seq for " << coid << "\n";
-    return NULL;
+    osd->clog->error() << __func__ << " No snapset.seq for " << coid;
+    return -ENOENT;
   }
 
   set<snapid_t> new_snaps;
@@ -3448,8 +3701,8 @@ PrimaryLogPG::OpContextUPtr PrimaryLogPG::trim_object(bool first, const hobject_
   if (new_snaps.empty()) {
     p = std::find(snapset.clones.begin(), snapset.clones.end(), coid.snap);
     if (p == snapset.clones.end()) {
-      osd->clog->error() << __func__ << " Snap " << coid.snap << " not in clones" << "\n";
-      return NULL;
+      osd->clog->error() << __func__ << " Snap " << coid.snap << " not in clones";
+      return -ENOENT;
     }
   }
 
@@ -3462,7 +3715,7 @@ PrimaryLogPG::OpContextUPtr PrimaryLogPG::trim_object(bool first, const hobject_
 	first)) {
     close_op_ctx(ctx.release());
     dout(10) << __func__ << ": Unable to get a wlock on " << coid << dendl;
-    return NULL;
+    return -ENOLCK;
   }
 
   if (!ctx->lock_manager.get_snaptrimmer_write(
@@ -3471,7 +3724,7 @@ PrimaryLogPG::OpContextUPtr PrimaryLogPG::trim_object(bool first, const hobject_
 	first)) {
     close_op_ctx(ctx.release());
     dout(10) << __func__ << ": Unable to get a wlock on " << snapoid << dendl;
-    return NULL;
+    return -ENOLCK;
   }
 
   ctx->at_version = get_next_version();
@@ -3522,6 +3775,7 @@ PrimaryLogPG::OpContextUPtr PrimaryLogPG::trim_object(bool first, const hobject_
     snapset.clones.erase(p);
     snapset.clone_overlap.erase(last);
     snapset.clone_size.erase(last);
+    snapset.clone_snaps.erase(last);
 	
     ctx->log.push_back(
       pg_log_entry_t(
@@ -3539,12 +3793,21 @@ PrimaryLogPG::OpContextUPtr PrimaryLogPG::trim_object(bool first, const hobject_
       coid,
       old_snaps,
       new_snaps);
+
+    coi = object_info_t(coid);
+
     ctx->at_version.version++;
   } else {
     // save adjusted snaps for this object
-    dout(10) << coid << " snaps " << old_snaps
-	     << " -> " << new_snaps << dendl;
-    coi.snaps = vector<snapid_t>(new_snaps.rbegin(), new_snaps.rend());
+    dout(10) << coid << " snaps " << old_snaps << " -> " << new_snaps << dendl;
+    if (legacy) {
+      coi.legacy_snaps = vector<snapid_t>(new_snaps.rbegin(), new_snaps.rend());
+    } else {
+      snapset.clone_snaps[coid.snap] = vector<snapid_t>(new_snaps.rbegin(),
+							new_snaps.rend());
+      // we still do a 'modify' event on this object just to trigger a
+      // snapmapper.update ... :(
+    }
 
     coi.prior_version = coi.version;
     coi.version = ctx->at_version;
@@ -3563,18 +3826,26 @@ PrimaryLogPG::OpContextUPtr PrimaryLogPG::trim_object(bool first, const hobject_
 	ctx->mtime,
 	0)
       );
+    ctx->at_version.version++;
 
     t->update_snaps(
       coid,
       old_snaps,
       new_snaps);
-    ctx->at_version.version++;
   }
 
   // save head snapset
-  dout(10) << coid << " new snapset " << snapset << dendl;
-
-  if (snapset.clones.empty() && !snapset.head_exists) {
+  dout(10) << coid << " new snapset " << snapset << " on "
+	   << snapset_obc->obs.oi << dendl;
+  if (snapset.clones.empty() &&
+      (!snapset.head_exists ||
+       (snapset_obc->obs.oi.is_whiteout() &&
+	!(snapset_obc->obs.oi.is_dirty() && pool.info.is_tier()) &&
+	!snapset_obc->obs.oi.is_cache_pinned()))) {
+    // NOTE: this arguably constitutes minor interference with the
+    // tiering agent if this is a cache tier since a snap trim event
+    // is effectively evicting a whiteout we might otherwise want to
+    // keep around.
     dout(10) << coid << " removing " << snapoid << dendl;
     ctx->log.push_back(
       pg_log_entry_t(
@@ -3587,9 +3858,25 @@ PrimaryLogPG::OpContextUPtr PrimaryLogPG::trim_object(bool first, const hobject_
 	ctx->mtime,
 	0)
       );
-
+    if (snapoid.is_head()) {
+      derr << "removing snap head" << dendl;
+      object_info_t& oi = ctx->snapset_obc->obs.oi;
+      ctx->delta_stats.num_objects--;
+      if (oi.is_dirty()) {
+	ctx->delta_stats.num_objects_dirty--;
+      }
+      if (oi.is_omap())
+	ctx->delta_stats.num_objects_omap--;
+      if (oi.is_whiteout()) {
+	dout(20) << __func__ << " trimming whiteout on " << oi.soid << dendl;
+	ctx->delta_stats.num_whiteouts--;
+      }
+      if (oi.is_cache_pinned()) {
+	ctx->delta_stats.num_objects_pinned--;
+      }
+    }
     ctx->snapset_obc->obs.exists = false;
-    
+    ctx->snapset_obc->obs.oi = object_info_t(snapoid);
     t->remove(snapoid);
   } else {
     dout(10) << coid << " filtering snapset on " << snapoid << dendl;
@@ -3624,7 +3911,8 @@ PrimaryLogPG::OpContextUPtr PrimaryLogPG::trim_object(bool first, const hobject_
     t->setattrs(snapoid, attrs);
   }
 
-  return ctx;
+  *ctxp = std::move(ctx);
+  return 0;
 }
 
 void PrimaryLogPG::kick_snap_trim()
@@ -3649,14 +3937,6 @@ void PrimaryLogPG::snap_trimmer(epoch_t queued)
 {
   if (deleting || pg_has_reset_since(queued)) {
     return;
-  }
-  if (cct->_conf->osd_snap_trim_sleep > 0) {
-    unlock();
-    utime_t t;
-    t.set_from_double(cct->_conf->osd_snap_trim_sleep);
-    t.sleep();
-    lock();
-    dout(20) << __func__ << " slept for " << t << dendl;
   }
 
   assert(is_primary());
@@ -3721,6 +4001,37 @@ int PrimaryLogPG::do_xattr_cmp_str(int op, string& v1s, bufferlist& xattr)
   }
 }
 
+int PrimaryLogPG::do_extent_cmp(OpContext *ctx, OSDOp& osd_op)
+{
+  ceph_osd_op& op = osd_op.op;
+  vector<OSDOp> read_ops(1);
+  OSDOp& read_op = read_ops[0];
+  int result = 0;
+
+  read_op.op.op = CEPH_OSD_OP_SYNC_READ;
+  read_op.op.extent.offset = op.extent.offset;
+  read_op.op.extent.length = op.extent.length;
+  read_op.op.extent.truncate_seq = op.extent.truncate_seq;
+  read_op.op.extent.truncate_size = op.extent.truncate_size;
+
+  result = do_osd_ops(ctx, read_ops);
+  if (result < 0) {
+    derr << "do_extent_cmp do_osd_ops failed " << result << dendl;
+    return result;
+  }
+
+  if (read_op.outdata.length() != osd_op.indata.length())
+    return -EINVAL;
+
+  for (uint64_t p = 0; p < osd_op.indata.length(); p++) {
+    if (read_op.outdata[p] != osd_op.indata[p]) {
+      return (-MAX_ERRNO - p);
+    }
+  }
+
+  return result;
+}
+
 int PrimaryLogPG::do_writesame(OpContext *ctx, OSDOp& osd_op)
 {
   ceph_osd_op& op = osd_op.op;
@@ -3741,7 +4052,7 @@ int PrimaryLogPG::do_writesame(OpContext *ctx, OSDOp& osd_op)
   }
 
   while (write_length) {
-    write_op.indata.append(osd_op.indata.c_str(), op.writesame.data_length);
+    write_op.indata.append(osd_op.indata);
     write_length -= op.writesame.data_length;
   }
 
@@ -4075,7 +4386,7 @@ struct FillInVerifyExtent : public Context {
       if (maybe_crc != crc) {
         osd->clog->error() << std::hex << " full-object read crc 0x" << crc
 			   << " != expected 0x" << *maybe_crc
-			   << std::dec << " on " << soid << "\n";
+			   << std::dec << " on " << soid;
         if (!(flags & CEPH_OSD_OP_FLAG_FAILOK)) {
 	  *rval = -EIO;
 	  *r = 0;
@@ -4134,6 +4445,7 @@ void PrimaryLogPG::maybe_create_new_object(
   if (!obs.exists) {
     ctx->delta_stats.num_objects++;
     obs.exists = true;
+    assert(!obs.oi.is_whiteout());
     obs.oi.new_object();
     if (!ignore_transaction)
       ctx->op_t->create(obs.oi.soid);
@@ -4142,6 +4454,204 @@ void PrimaryLogPG::maybe_create_new_object(
     ctx->new_obs.oi.clear_flag(object_info_t::FLAG_WHITEOUT);
     --ctx->delta_stats.num_whiteouts;
   }
+}
+
+struct C_ChecksumRead : public Context {
+  PrimaryLogPG *primary_log_pg;
+  OSDOp &osd_op;
+  Checksummer::CSumType csum_type;
+  bufferlist init_value_bl;
+  ceph_le64 read_length;
+  bufferlist read_bl;
+  Context *fill_extent_ctx;
+
+  C_ChecksumRead(PrimaryLogPG *primary_log_pg, OSDOp &osd_op,
+		 Checksummer::CSumType csum_type, bufferlist &&init_value_bl,
+		 boost::optional<uint32_t> maybe_crc, uint64_t size,
+		 OSDService *osd, hobject_t soid, __le32 flags)
+    : primary_log_pg(primary_log_pg), osd_op(osd_op),
+      csum_type(csum_type), init_value_bl(std::move(init_value_bl)),
+      fill_extent_ctx(new FillInVerifyExtent(&read_length, &osd_op.rval,
+					     &read_bl, maybe_crc, size,
+					     osd, soid, flags)) {
+  }
+
+  void finish(int r) override {
+    fill_extent_ctx->complete(r);
+
+    if (osd_op.rval >= 0) {
+      bufferlist::iterator init_value_bl_it = init_value_bl.begin();
+      osd_op.rval = primary_log_pg->finish_checksum(osd_op, csum_type,
+						    &init_value_bl_it,
+						    read_bl);
+    }
+  }
+};
+
+int PrimaryLogPG::do_checksum(OpContext *ctx, OSDOp& osd_op,
+			      bufferlist::iterator *bl_it, bool *async_read)
+{
+  dout(20) << __func__ << dendl;
+
+  auto& op = osd_op.op;
+  if (op.checksum.chunk_size > 0) {
+    if (op.checksum.length == 0) {
+      dout(10) << __func__ << ": length required when chunk size provided"
+	       << dendl;
+      return -EINVAL;
+    }
+    if (op.checksum.length % op.checksum.chunk_size != 0) {
+      dout(10) << __func__ << ": length not aligned to chunk size" << dendl;
+      return -EINVAL;
+    }
+  }
+
+  auto& oi = ctx->new_obs.oi;
+  if (op.checksum.offset == 0 && op.checksum.length == 0) {
+    // zeroed offset+length implies checksum whole object
+    op.checksum.length = oi.size;
+  } else if (op.checksum.offset + op.checksum.length > oi.size) {
+    return -EOVERFLOW;
+  }
+
+  Checksummer::CSumType csum_type;
+  switch (op.checksum.type) {
+  case CEPH_OSD_CHECKSUM_OP_TYPE_XXHASH32:
+    csum_type = Checksummer::CSUM_XXHASH32;
+    break;
+  case CEPH_OSD_CHECKSUM_OP_TYPE_XXHASH64:
+    csum_type = Checksummer::CSUM_XXHASH64;
+    break;
+  case CEPH_OSD_CHECKSUM_OP_TYPE_CRC32C:
+    csum_type = Checksummer::CSUM_CRC32C;
+    break;
+  default:
+    dout(10) << __func__ << ": unknown crc type ("
+	     << static_cast<uint32_t>(op.checksum.type) << ")" << dendl;
+    return -EINVAL;
+  }
+
+  size_t csum_init_value_size = Checksummer::get_csum_init_value_size(csum_type);
+  if (bl_it->get_remaining() < csum_init_value_size) {
+    dout(10) << __func__ << ": init value not provided" << dendl;
+    return -EINVAL;
+  }
+
+  bufferlist init_value_bl;
+  init_value_bl.substr_of(bl_it->get_bl(), bl_it->get_off(),
+			  csum_init_value_size);
+  bl_it->advance(csum_init_value_size);
+
+  if (pool.info.require_rollback() && op.checksum.length > 0) {
+    // If there is a data digest and it is possible we are reading
+    // entire object, pass the digest.
+    boost::optional<uint32_t> maybe_crc;
+    if (oi.is_data_digest() && op.checksum.offset == 0 &&
+        op.checksum.length >= oi.size) {
+      maybe_crc = oi.data_digest;
+    }
+
+    // async read
+    auto& soid = oi.soid;
+    auto checksum_ctx = new C_ChecksumRead(this, osd_op, csum_type,
+					   std::move(init_value_bl), maybe_crc,
+					   oi.size, osd, soid, op.flags);
+    ctx->pending_async_reads.push_back({
+      {op.checksum.offset, op.checksum.length, op.flags},
+      {&checksum_ctx->read_bl, checksum_ctx}});
+
+    dout(10) << __func__ << ": async_read noted for " << soid << dendl;
+    *async_read = true;
+    return 0;
+  }
+
+  // sync read
+  *async_read = false;
+  std::vector<OSDOp> read_ops(1);
+  auto& read_op = read_ops[0];
+  if (op.checksum.length > 0) {
+    read_op.op.op = CEPH_OSD_OP_READ;
+    read_op.op.flags = op.flags;
+    read_op.op.extent.offset = op.checksum.offset;
+    read_op.op.extent.length = op.checksum.length;
+    read_op.op.extent.truncate_size = 0;
+    read_op.op.extent.truncate_seq = 0;
+
+    int r = do_osd_ops(ctx, read_ops);
+    if (r < 0) {
+      derr << __func__ << ": do_osd_ops failed: " << cpp_strerror(r) << dendl;
+      return r;
+    }
+  }
+
+  bufferlist::iterator init_value_bl_it = init_value_bl.begin();
+  return finish_checksum(osd_op, csum_type, &init_value_bl_it,
+			 read_op.outdata);
+}
+
+int PrimaryLogPG::finish_checksum(OSDOp& osd_op,
+				  Checksummer::CSumType csum_type,
+				  bufferlist::iterator *init_value_bl_it,
+				  const bufferlist &read_bl) {
+  dout(20) << __func__ << dendl;
+
+  auto& op = osd_op.op;
+
+  if (op.checksum.length > 0 && read_bl.length() != op.checksum.length) {
+    derr << __func__ << ": bytes read " << read_bl.length() << " != "
+	 << op.checksum.length << dendl;
+    return -EINVAL;
+  }
+
+  size_t csum_chunk_size = (op.checksum.chunk_size != 0 ?
+			      op.checksum.chunk_size : read_bl.length());
+  uint32_t csum_count = (csum_chunk_size > 0 ?
+			   read_bl.length() / csum_chunk_size : 0);
+
+  bufferlist csum;
+  bufferptr csum_data;
+  if (csum_count > 0) {
+    size_t csum_value_size = Checksummer::get_csum_value_size(csum_type);
+    csum_data = buffer::create(csum_value_size * csum_count);
+    csum_data.zero();
+    csum.append(csum_data);
+
+    switch (csum_type) {
+    case Checksummer::CSUM_XXHASH32:
+      {
+        Checksummer::xxhash32::init_value_t init_value;
+        ::decode(init_value, *init_value_bl_it);
+        Checksummer::calculate<Checksummer::xxhash32>(
+	  init_value, csum_chunk_size, 0, read_bl.length(), read_bl,
+	  &csum_data);
+      }
+      break;
+    case Checksummer::CSUM_XXHASH64:
+      {
+        Checksummer::xxhash64::init_value_t init_value;
+        ::decode(init_value, *init_value_bl_it);
+        Checksummer::calculate<Checksummer::xxhash64>(
+	  init_value, csum_chunk_size, 0, read_bl.length(), read_bl,
+	  &csum_data);
+      }
+      break;
+    case Checksummer::CSUM_CRC32C:
+      {
+        Checksummer::crc32c::init_value_t init_value;
+        ::decode(init_value, *init_value_bl_it);
+        Checksummer::calculate<Checksummer::crc32c>(
+  	  init_value, csum_chunk_size, 0, read_bl.length(), read_bl,
+	  &csum_data);
+      }
+      break;
+    default:
+      break;
+    }
+  }
+
+  ::encode(csum_count, osd_op.outdata);
+  osd_op.outdata.claim_append(csum);
+  return 0;
 }
 
 int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
@@ -4183,6 +4693,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
     case CEPH_OSD_OP_COPY_FROM:  // we handle user_version update explicitly
     case CEPH_OSD_OP_CACHE_PIN:
     case CEPH_OSD_OP_CACHE_UNPIN:
+    case CEPH_OSD_OP_SET_REDIRECT:
       break;
     default:
       if (op.op & CEPH_OSD_OP_MODE_WR)
@@ -4216,6 +4727,12 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
     switch (op.op) {
       
       // --- READS ---
+
+    case CEPH_OSD_OP_CMPEXT:
+      ++ctx->num_read;
+      tracepoint(osd, do_osd_op_pre_extent_cmp, soid.oid.name.c_str(), soid.snap.val, oi.size, oi.truncate_seq, op.extent.offset, op.extent.length, op.extent.truncate_size, op.extent.truncate_seq);
+      result = do_extent_cmp(ctx, osd_op);
+      break;
 
     case CEPH_OSD_OP_SYNC_READ:
       if (pool.info.require_rollback()) {
@@ -4272,6 +4789,9 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	} else {
 	  int r = pgbackend->objects_read_sync(
 	    soid, op.extent.offset, op.extent.length, op.flags, &osd_op.outdata);
+	  if (r == -EIO) {
+	    r = rep_repair_primary_object(soid, ctx->op);
+	  }
 	  if (r >= 0)
 	    op.extent.length = r;
 	  else {
@@ -4307,6 +4827,22 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	if (async)
 	  continue;
 
+      }
+      break;
+
+    case CEPH_OSD_OP_CHECKSUM:
+      ++ctx->num_read;
+      {
+	tracepoint(osd, do_osd_op_pre_checksum, soid.oid.name.c_str(),
+		   soid.snap.val, oi.size, oi.truncate_seq, op.checksum.type,
+		   op.checksum.offset, op.checksum.length,
+		   op.checksum.chunk_size);
+
+	bool async_read;
+	result = do_checksum(ctx, osd_op, &bp, &async_read);
+	if (result == 0 && async_read) {
+	  continue;
+	}
       }
       break;
 
@@ -4369,18 +4905,15 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	}
       } else {
 	// read into a buffer
-	bufferlist bl;
+        map<uint64_t, uint64_t> m;
         uint32_t total_read = 0;
 	int r = osd->store->fiemap(ch, ghobject_t(soid, ghobject_t::NO_GEN,
 						  info.pgid.shard),
-				   op.extent.offset, op.extent.length, bl);
+				   op.extent.offset, op.extent.length, m);
 	if (r < 0)  {
 	  result = r;
           break;
 	}
-        map<uint64_t, uint64_t> m;
-        bufferlist::iterator iter = bl.begin();
-        ::decode(m, iter);
         map<uint64_t, uint64_t>::iterator miter;
         bufferlist data_bl;
 	uint64_t last = op.extent.offset;
@@ -4391,20 +4924,25 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	    bufferlist t;
 	    uint64_t len = miter->first - last;
 	    r = pgbackend->objects_read_sync(soid, last, len, op.flags, &t);
+	    if (r == -EIO) {
+	      r = rep_repair_primary_object(soid, ctx->op);
+	    }
 	    if (r < 0) {
 	      osd->clog->error() << coll << " " << soid
 				 << " sparse-read failed to read: "
-				 << r << "\n";
+				 << r;
 	    } else if (!t.is_zero()) {
 	      osd->clog->error() << coll << " " << soid << " sparse-read found data in hole "
-				<< last << "~" << len << "\n";
+				 << last << "~" << len;
 	    }
 	  }
 
           bufferlist tmpbl;
 	  r = pgbackend->objects_read_sync(soid, miter->first, miter->second, op.flags, &tmpbl);
-          if (r < 0)
+          if (r < 0) {
+            result = r;
             break;
+          }
 
           if (r < (int)miter->second) /* this is usually happen when we get extent that exceeds the actual file size */
             miter->second = r;
@@ -4429,10 +4967,10 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	    if (r < 0) {
 	      osd->clog->error() << coll << " " << soid
 				 << " sparse-read failed to read: "
-				 << r << "\n";
+				 << r;
 	    } else if (!t.is_zero()) {
 	      osd->clog->error() << coll << " " << soid << " sparse-read found data in hole "
-				<< last << "~" << len << "\n";
+				 << last << "~" << len;
 	    }
 	  }
 	}
@@ -4669,7 +5207,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  if (result < 0)
 	    break;
 	}
-	result = _delete_oid(ctx, true);
+	result = _delete_oid(ctx, true, false);
 	if (result >= 0) {
 	  // mark that this is a cache eviction to avoid triggering normal
 	  // make_writeable() clone or snapdir object creation in finish_ctx()
@@ -4842,7 +5380,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
         if (ssc->snapset.head_exists)
           clonecount++;
         resp.clones.reserve(clonecount);
-        for (vector<snapid_t>::const_iterator clone_iter = ssc->snapset.clones.begin();
+        for (auto clone_iter = ssc->snapset.clones.begin();
 	     clone_iter != ssc->snapset.clones.end(); ++clone_iter) {
           clone_info ci;
           ci.cloneid = *clone_iter;
@@ -4850,42 +5388,58 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  hobject_t clone_oid = soid;
 	  clone_oid.snap = *clone_iter;
 
-	  /* No need to take a lock here.  We are only inspecting state cached on
-	   * in the ObjectContext, so we aren't performing an actual read unless
-	   * the clone obc is not already loaded (in which case, it cannot have
-	   * an in progress write).  We also do not risk exposing uncommitted
-	   * state since we do have a read lock on the head object or snapdir,
-	   * which we would have to write lock in order to make user visible
-	   * modifications to the snapshot state (snap trim related mutations
-	   * are not user visible).
-	   */
-	  if (is_missing_object(clone_oid)) {
-	    dout(20) << "LIST_SNAPS " << clone_oid << " missing" << dendl;
-	    wait_for_unreadable_object(clone_oid, ctx->op);
-	    result = -EAGAIN;
-	    break;
-	  }
-
-	  ObjectContextRef clone_obc = get_object_context(clone_oid, false);
-	  if (!clone_obc) {
-	    if (maybe_handle_cache(
-		  ctx->op, true, clone_obc, -ENOENT, clone_oid, true)) {
-	      // promoting the clone
-	      result = -EAGAIN;
-	    } else {
+	  if (!ssc->snapset.is_legacy()) {
+	    auto p = ssc->snapset.clone_snaps.find(*clone_iter);
+	    if (p == ssc->snapset.clone_snaps.end()) {
 	      osd->clog->error() << "osd." << osd->whoami
-				 << ": missing clone " << clone_oid
-				 << " for oid "
-				 << soid;
-	      // should not happen
-	      result = -ENOENT;
+				 << ": inconsistent clone_snaps found for oid "
+				 << soid << " clone " << *clone_iter
+				 << " snapset " << ssc->snapset;
+	      result = -EINVAL;
+	      break;
 	    }
-	    break;
-	  }
-	  for (vector<snapid_t>::reverse_iterator p = clone_obc->obs.oi.snaps.rbegin();
-	       p != clone_obc->obs.oi.snaps.rend();
-	       ++p) {
-	    ci.snaps.push_back(*p);
+	    for (auto q = p->second.rbegin(); q != p->second.rend(); ++q) {
+	      ci.snaps.push_back(*q);
+	    }
+	  } else {
+	    /* No need to take a lock here.  We are only inspecting state cached on
+	     * in the ObjectContext, so we aren't performing an actual read unless
+	     * the clone obc is not already loaded (in which case, it cannot have
+	     * an in progress write).  We also do not risk exposing uncommitted
+	     * state since we do have a read lock on the head object or snapdir,
+	     * which we would have to write lock in order to make user visible
+	     * modifications to the snapshot state (snap trim related mutations
+	     * are not user visible).
+	     */
+	    if (is_missing_object(clone_oid)) {
+	      dout(20) << "LIST_SNAPS " << clone_oid << " missing" << dendl;
+	      wait_for_unreadable_object(clone_oid, ctx->op);
+	      result = -EAGAIN;
+	      break;
+	    }
+
+	    ObjectContextRef clone_obc = get_object_context(clone_oid, false);
+	    if (!clone_obc) {
+	      if (maybe_handle_cache(
+		    ctx->op, true, clone_obc, -ENOENT, clone_oid, true)) {
+		// promoting the clone
+		result = -EAGAIN;
+	      } else {
+		osd->clog->error() << "osd." << osd->whoami
+				   << ": missing clone " << clone_oid
+				   << " for oid "
+				   << soid;
+		// should not happen
+		result = -ENOENT;
+	      }
+	      break;
+	    }
+	    for (vector<snapid_t>::reverse_iterator p =
+		   clone_obc->obs.oi.legacy_snaps.rbegin();
+		 p != clone_obc->obs.oi.legacy_snaps.rend();
+		 ++p) {
+	      ci.snaps.push_back(*p);
+	    }
 	  }
 
           dout(20) << " clone " << *clone_iter << " snaps " << ci.snaps << dendl;
@@ -4893,7 +5447,8 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
           map<snapid_t, interval_set<uint64_t> >::const_iterator coi;
           coi = ssc->snapset.clone_overlap.find(ci.cloneid);
           if (coi == ssc->snapset.clone_overlap.end()) {
-            osd->clog->error() << "osd." << osd->whoami << ": inconsistent clone_overlap found for oid "
+            osd->clog->error() << "osd." << osd->whoami
+			       << ": inconsistent clone_overlap found for oid "
 			      << soid << " clone " << *clone_iter;
             result = -EINVAL;
             break;
@@ -4902,14 +5457,16 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
           ci.overlap.reserve(o.num_intervals());
           for (interval_set<uint64_t>::const_iterator r = o.begin();
                r != o.end(); ++r) {
-            ci.overlap.push_back(pair<uint64_t,uint64_t>(r.get_start(), r.get_len()));
+            ci.overlap.push_back(pair<uint64_t,uint64_t>(r.get_start(),
+							 r.get_len()));
           }
 
           map<snapid_t, uint64_t>::const_iterator si;
           si = ssc->snapset.clone_size.find(ci.cloneid);
           if (si == ssc->snapset.clone_size.end()) {
-            osd->clog->error() << "osd." << osd->whoami << ": inconsistent clone_size found for oid "
-			      << soid << " clone " << *clone_iter;
+            osd->clog->error() << "osd." << osd->whoami
+			       << ": inconsistent clone_size found for oid "
+			       << soid << " clone " << *clone_iter;
             result = -EINVAL;
             break;
           }
@@ -5102,7 +5659,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	else
 	  obs.oi.clear_data_digest();
 	write_update_size_and_usage(ctx->delta_stats, oi, ctx->modified_ranges,
-				    op.extent.offset, op.extent.length, true);
+				    op.extent.offset, op.extent.length);
 
       }
       break;
@@ -5135,7 +5692,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	obs.oi.set_data_digest(osd_op.indata.crc32c(-1));
 
 	write_update_size_and_usage(ctx->delta_stats, oi, ctx->modified_ranges,
-	    0, op.extent.length, true, op.extent.length != oi.size ? true : false);
+	    0, op.extent.length, true);
       }
       break;
 
@@ -5262,7 +5819,9 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
     case CEPH_OSD_OP_DELETE:
       ++ctx->num_write;
       tracepoint(osd, do_osd_op_pre_delete, soid.oid.name.c_str(), soid.snap.val);
-      result = _delete_oid(ctx, ctx->ignore_cache);
+      {
+	result = _delete_oid(ctx, false, ctx->ignore_cache);
+      }
       break;
 
     case CEPH_OSD_OP_WATCH:
@@ -5396,6 +5955,75 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
       }
       break;
 
+    case CEPH_OSD_OP_SET_REDIRECT:
+      ++ctx->num_write;
+      {
+	if (pool.info.is_tier()) {
+	  result = -EINVAL;
+	  break;
+	}
+	if (!obs.exists) {
+	  result = -ENOENT;
+	  break;
+	}
+	if (get_osdmap()->require_osd_release < CEPH_RELEASE_LUMINOUS) {
+	  result = -EOPNOTSUPP;
+	  break;
+	}
+
+	object_t target_name;
+	object_locator_t target_oloc;
+	snapid_t target_snapid = (uint64_t)op.copy_from.snapid;
+	version_t target_version = op.copy_from.src_version;
+	try {
+	  ::decode(target_name, bp);
+	  ::decode(target_oloc, bp);
+	}
+	catch (buffer::error& e) {
+	  result = -EINVAL;
+	  goto fail;
+	}
+	pg_t raw_pg;
+	get_osdmap()->object_locator_to_pg(target_name, target_oloc, raw_pg);
+	hobject_t target(target_name, target_oloc.key, target_snapid,
+		raw_pg.ps(), raw_pg.pool(),
+		target_oloc.nspace);
+	if (target == soid) {
+	  dout(20) << " set-redirect self is invalid" << dendl;
+	  result = -EINVAL;
+	  break;
+	}
+        oi.set_flag(object_info_t::FLAG_MANIFEST);
+	oi.manifest.redirect_target = target;
+	oi.manifest.type = object_manifest_t::TYPE_REDIRECT;
+	t->truncate(soid, 0);
+	if (oi.is_omap() && pool.info.supports_omap()) {
+	  t->omap_clear(soid);
+	  obs.oi.clear_omap_digest();
+	  obs.oi.clear_flag(object_info_t::FLAG_OMAP);
+	}
+	ctx->delta_stats.num_bytes -= oi.size;
+	oi.size = 0;
+	oi.new_object();
+	oi.user_version = target_version;
+	ctx->user_at_version = target_version;
+	/* rm_attrs */
+	map<string,bufferlist> rmattrs;
+	result = getattrs_maybe_cache(ctx->obc,
+		    &rmattrs,
+		    true);
+	if (result < 0) {
+	  return result;
+	}
+	map<string, bufferlist>::iterator iter;
+	for (iter = rmattrs.begin(); iter != rmattrs.end(); ++iter) {
+	  const string& name = iter->first;
+	  t->rmattr(soid, name);
+	}
+	dout(10) << "set-redirect oid:" << oi.soid << " user_version: " << oi.user_version << dendl;
+      }
+
+      break;
 
       // -- object attrs --
       
@@ -5878,16 +6506,10 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
       obs.oi.clear_omap_digest();
       break;
 
-    case CEPH_OSD_OP_COPY_GET_CLASSIC:
-      ++ctx->num_read;
-      tracepoint(osd, do_osd_op_pre_copy_get_classic, soid.oid.name.c_str(), soid.snap.val);
-      result = fill_in_copy_get(ctx, bp, osd_op, ctx->obc, true);
-      break;
-
     case CEPH_OSD_OP_COPY_GET:
       ++ctx->num_read;
       tracepoint(osd, do_osd_op_pre_copy_get, soid.oid.name.c_str(), soid.snap.val);
-      result = fill_in_copy_get(ctx, bp, osd_op, ctx->obc, false);
+      result = fill_in_copy_get(ctx, bp, osd_op, ctx->obc);
       break;
 
     case CEPH_OSD_OP_COPY_FROM:
@@ -6028,7 +6650,10 @@ int PrimaryLogPG::_verify_no_head_clones(const hobject_t& soid,
   return 0;
 }
 
-inline int PrimaryLogPG::_delete_oid(OpContext *ctx, bool no_whiteout)
+inline int PrimaryLogPG::_delete_oid(
+  OpContext *ctx,
+  bool no_whiteout,     // no whiteouts, no matter what.
+  bool try_no_whiteout) // try not to whiteout
 {
   SnapSet& snapset = ctx->new_snapset;
   ObjectState& obs = ctx->new_obs;
@@ -6036,7 +6661,38 @@ inline int PrimaryLogPG::_delete_oid(OpContext *ctx, bool no_whiteout)
   const hobject_t& soid = oi.soid;
   PGTransaction* t = ctx->op_t.get();
 
-  if (!obs.exists || (obs.oi.is_whiteout() && !no_whiteout))
+  // cache: cache: set whiteout on delete?
+  bool whiteout = false;
+  if (pool.info.cache_mode != pg_pool_t::CACHEMODE_NONE
+      && !no_whiteout
+      && !try_no_whiteout) {
+    whiteout = true;
+  }
+  bool legacy;
+  if (get_osdmap()->require_osd_release >= CEPH_RELEASE_LUMINOUS) {
+    legacy = false;
+    // in luminous or later, we can't delete the head if there are
+    // clones. we trust the caller passing no_whiteout has already
+    // verified they don't exist.
+    if (!snapset.clones.empty() ||
+	(!ctx->snapc.snaps.empty() && ctx->snapc.snaps[0] > snapset.seq)) {
+      if (no_whiteout) {
+	dout(20) << __func__ << " has or will have clones but no_whiteout=1"
+		 << dendl;
+      } else {
+	dout(20) << __func__ << " has or will have clones; will whiteout"
+		 << dendl;
+	whiteout = true;
+      }
+    }
+  } else {
+    legacy = false;
+  }
+  dout(20) << __func__ << " " << soid << " whiteout=" << (int)whiteout
+	   << " no_whiteout=" << (int)no_whiteout
+	   << " try_no_whiteout=" << (int)try_no_whiteout
+	   << dendl;
+  if (!obs.exists || (obs.oi.is_whiteout() && whiteout))
     return -ENOENT;
 
   t->remove(soid);
@@ -6068,8 +6724,7 @@ inline int PrimaryLogPG::_delete_oid(OpContext *ctx, bool no_whiteout)
   }
   oi.watchers.clear();
 
-  // cache: cache: set whiteout on delete?
-  if (pool.info.cache_mode != pg_pool_t::CACHEMODE_NONE && !no_whiteout) {
+  if (whiteout) {
     dout(20) << __func__ << " setting whiteout on " << soid << dendl;
     oi.set_flag(object_info_t::FLAG_WHITEOUT);
     ctx->delta_stats.num_whiteouts++;
@@ -6078,18 +6733,21 @@ inline int PrimaryLogPG::_delete_oid(OpContext *ctx, bool no_whiteout)
     return 0;
   }
 
+  // delete the head
   ctx->delta_stats.num_objects--;
   if (soid.is_snap())
     ctx->delta_stats.num_object_clones--;
   if (oi.is_whiteout()) {
     dout(20) << __func__ << " deleting whiteout on " << soid << dendl;
     ctx->delta_stats.num_whiteouts--;
+    oi.clear_flag(object_info_t::FLAG_WHITEOUT);
   }
   if (oi.is_cache_pinned()) {
     ctx->delta_stats.num_objects_pinned--;
   }
-  if (soid.is_head())
+  if ((legacy || snapset.is_legacy()) && soid.is_head()) {
     snapset.head_exists = false;
+  }
   obs.exists = false;
   return 0;
 }
@@ -6113,24 +6771,34 @@ int PrimaryLogPG::_rollback_to(OpContext *ctx, ceph_osd_op& op)
     &rollback_to, false, false, &missing_oid);
   if (ret == -EAGAIN) {
     /* clone must be missing */
-    assert(is_missing_object(missing_oid));
-    dout(20) << "_rollback_to attempted to roll back to a missing object "
+    assert(is_degraded_or_backfilling_object(missing_oid));
+    dout(20) << "_rollback_to attempted to roll back to a missing or backfilling clone "
 	     << missing_oid << " (requested snapid: ) " << snapid << dendl;
     block_write_on_degraded_snap(missing_oid, ctx->op);
     return ret;
   }
   {
     ObjectContextRef promote_obc;
-    switch (
-      maybe_handle_cache_detail(
-	ctx->op,
-	true,
-	rollback_to,
-	ret,
-	missing_oid,
-	true,
-	false,
-	&promote_obc)) {
+    cache_result_t tier_mode_result;
+    if (obs.exists && obs.oi.has_manifest()) { 
+      tier_mode_result = 
+	maybe_handle_manifest_detail(
+	  ctx->op,
+	  true,
+	  rollback_to);
+    } else {
+      tier_mode_result = 
+	maybe_handle_cache_detail(
+	  ctx->op,
+	  true,
+	  rollback_to,
+	  ret,
+	  missing_oid,
+	  true,
+	  false,
+	  &promote_obc);
+    }
+    switch (tier_mode_result) {
     case cache_result_t::NOOP:
       break;
     case cache_result_t::BLOCKED_PROMOTE:
@@ -6155,7 +6823,7 @@ int PrimaryLogPG::_rollback_to(OpContext *ctx, ceph_osd_op& op)
       // Cannot delete an object with watchers
       ret = -EBUSY;
     } else {
-      _delete_oid(ctx, false);
+      _delete_oid(ctx, false, false);
       ret = 0;
     }
   } else if (ret) {
@@ -6253,7 +6921,7 @@ void PrimaryLogPG::make_writeable(OpContext *ctx)
 
   // clone?
   assert(soid.snap == CEPH_NOSNAP);
-  dout(20) << "make_writeable " << soid << " snapset=" << ctx->snapset
+  dout(20) << "make_writeable " << soid << " snapset=" << ctx->new_snapset
 	   << "  snapc=" << snapc << dendl;
   
   bool was_dirty = ctx->obc->obs.oi.is_dirty();
@@ -6296,12 +6964,10 @@ void PrimaryLogPG::make_writeable(OpContext *ctx)
   if (ctx->new_snapset.seq > snapc.seq) {
     snapc.seq = ctx->new_snapset.seq;
     snapc.snaps = ctx->new_snapset.snaps;
+    filter_snapc(snapc.snaps);
     dout(10) << " using newer snapc " << snapc << dendl;
   }
 
-  if (ctx->obs->exists)
-    filter_snapc(snapc.snaps);
-  
   if ((ctx->obs->exists && !ctx->obs->oi.is_whiteout()) && // head exist(ed)
       snapc.snaps.size() &&                 // there are snaps
       !ctx->cache_evict &&
@@ -6342,7 +7008,12 @@ void PrimaryLogPG::make_writeable(OpContext *ctx)
     snap_oi->version = ctx->at_version;
     snap_oi->prior_version = ctx->obs->oi.version;
     snap_oi->copy_user_bits(ctx->obs->oi);
-    snap_oi->snaps = snaps;
+
+    bool legacy = ctx->new_snapset.is_legacy() ||
+      get_osdmap()->require_osd_release < CEPH_RELEASE_LUMINOUS;
+    if (legacy) {
+      snap_oi->legacy_snaps = snaps;
+    }
 
     _make_clone(ctx, ctx->op_t.get(), ctx->clone_obc, soid, coid, snap_oi);
     
@@ -6358,6 +7029,9 @@ void PrimaryLogPG::make_writeable(OpContext *ctx)
     ctx->delta_stats.num_object_clones++;
     ctx->new_snapset.clones.push_back(coid.snap);
     ctx->new_snapset.clone_size[coid.snap] = ctx->obs->oi.size;
+    if (!legacy) {
+      ctx->new_snapset.clone_snaps[coid.snap] = snaps;
+    }
 
     // clone_overlap should contain an entry for each clone 
     // (an empty interval_set if there is no overlap)
@@ -6368,7 +7042,8 @@ void PrimaryLogPG::make_writeable(OpContext *ctx)
     // log clone
     dout(10) << " cloning v " << ctx->obs->oi.version
 	     << " to " << coid << " v " << ctx->at_version
-	     << " snaps=" << snaps << dendl;
+	     << " snaps=" << snaps
+	     << " snapset=" << ctx->new_snapset << dendl;
     ctx->log.push_back(pg_log_entry_t(pg_log_entry_t::CLONE, coid, ctx->at_version,
 				      ctx->obs->oi.version,
 				      ctx->obs->oi.user_version,
@@ -6396,28 +7071,37 @@ void PrimaryLogPG::make_writeable(OpContext *ctx)
   // update snapset with latest snap context
   ctx->new_snapset.seq = snapc.seq;
   ctx->new_snapset.snaps = snapc.snaps;
-  ctx->new_snapset.head_exists = ctx->new_obs.exists;
-  dout(20) << "make_writeable " << soid << " done, snapset=" << ctx->new_snapset << dendl;
+  if (get_osdmap()->require_osd_release < CEPH_RELEASE_LUMINOUS) {
+    // pessimistic assumption that this is a net-new legacy SnapSet
+    ctx->delta_stats.num_legacy_snapsets++;
+    ctx->new_snapset.head_exists = ctx->new_obs.exists;
+  } else if (ctx->new_snapset.is_legacy()) {
+    ctx->new_snapset.head_exists = ctx->new_obs.exists;
+  }
+  dout(20) << "make_writeable " << soid
+	   << " done, snapset=" << ctx->new_snapset << dendl;
 }
 
 
 void PrimaryLogPG::write_update_size_and_usage(object_stat_sum_t& delta_stats, object_info_t& oi,
 					       interval_set<uint64_t>& modified, uint64_t offset,
-					       uint64_t length, bool count_bytes, bool force_changesize)
+					       uint64_t length, bool write_full)
 {
   interval_set<uint64_t> ch;
-  if (length)
+  if (write_full) {
+    if (oi.size)
+      ch.insert(0, oi.size);
+  } else if (length)
     ch.insert(offset, length);
   modified.union_of(ch);
-  if (force_changesize || offset + length > oi.size) {
+  if (write_full || offset + length > oi.size) {
     uint64_t new_size = offset + length;
     delta_stats.num_bytes -= oi.size;
     delta_stats.num_bytes += new_size;
     oi.size = new_size;
   }
   delta_stats.num_wr++;
-  if (count_bytes)
-    delta_stats.num_wr_kb += SHIFT_ROUND_UP(length, 10);
+  delta_stats.num_wr_kb += SHIFT_ROUND_UP(length, 10);
 }
 
 void PrimaryLogPG::add_interval_usage(interval_set<uint64_t>& s, object_stat_sum_t& delta_stats)
@@ -6534,24 +7218,27 @@ void PrimaryLogPG::do_osd_op_effects(OpContext *ctx, const ConnectionRef& conn)
   }
 }
 
-hobject_t PrimaryLogPG::generate_temp_object()
+hobject_t PrimaryLogPG::generate_temp_object(const hobject_t& target)
 {
   ostringstream ss;
-  ss << "temp_" << info.pgid << "_" << get_role() << "_" << osd->monc->get_global_id() << "_" << (++temp_seq);
-  hobject_t hoid = info.pgid.make_temp_hobject(ss.str());
+  ss << "temp_" << info.pgid << "_" << get_role()
+     << "_" << osd->monc->get_global_id() << "_" << (++temp_seq);
+  hobject_t hoid = target.make_temp_hobject(ss.str());
   dout(20) << __func__ << " " << hoid << dendl;
   return hoid;
 }
 
-hobject_t PrimaryLogPG::get_temp_recovery_object(eversion_t version, snapid_t snap)
+hobject_t PrimaryLogPG::get_temp_recovery_object(
+  const hobject_t& target,
+  eversion_t version)
 {
   ostringstream ss;
   ss << "temp_recovering_" << info.pgid  // (note this includes the shardid)
      << "_" << version
      << "_" << info.history.same_interval_since
-     << "_" << snap;
+     << "_" << target.snap;
   // pgid + version + interval + snapid is unique, and short
-  hobject_t hoid = info.pgid.make_temp_hobject(ss.str());
+  hobject_t hoid = target.make_temp_hobject(ss.str());
   dout(20) << __func__ << " " << hoid << dendl;
   return hoid;
 }
@@ -6572,7 +7259,7 @@ int PrimaryLogPG::prepare_transaction(OpContext *ctx)
   int result = do_osd_ops(ctx, ctx->ops);
   if (result < 0) {
     if (ctx->op->may_write() &&
-	get_osdmap()->test_flag(CEPH_OSDMAP_REQUIRE_KRAKEN)) {
+	get_osdmap()->require_osd_release >= CEPH_RELEASE_KRAKEN) {
       // need to save the error code in the pg log, to detect dup ops,
       // but do nothing else
       ctx->update_log_only = true;
@@ -6584,7 +7271,7 @@ int PrimaryLogPG::prepare_transaction(OpContext *ctx)
   if (ctx->op_t->empty() && !ctx->modify) {
     unstable_stats.add(ctx->delta_stats);
     if (ctx->op->may_write() &&
-	get_osdmap()->test_flag(CEPH_OSDMAP_REQUIRE_KRAKEN)) {
+	get_osdmap()->require_osd_release >= CEPH_RELEASE_KRAKEN) {
       ctx->update_log_only = true;
     }
     return result;
@@ -6595,7 +7282,7 @@ int PrimaryLogPG::prepare_transaction(OpContext *ctx)
        ctx->delta_stats.num_objects > 0) &&  // FIXME: keys?
       (pool.info.has_flag(pg_pool_t::FLAG_FULL) ||
        get_osdmap()->test_flag(CEPH_OSDMAP_FULL))) {
-    MOSDOp *m = static_cast<MOSDOp*>(ctx->op->get_req());
+    const MOSDOp *m = static_cast<const MOSDOp*>(ctx->op->get_req());
     if (ctx->reqid.name.is_mds() ||   // FIXME: ignore MDS for now
 	m->has_flag(CEPH_OSD_FLAG_FULL_FORCE)) {
       dout(20) << __func__ << " full, but proceeding due to FULL_FORCE or MDS"
@@ -6635,32 +7322,35 @@ void PrimaryLogPG::finish_ctx(OpContext *ctx, int log_op_type, bool maintain_ssc
 
   if (soid.snap == CEPH_NOSNAP && maintain_ssc) {
     ::encode(ctx->new_snapset, bss);
-    assert(ctx->new_obs.exists == ctx->new_snapset.head_exists);
+    assert(ctx->new_obs.exists == ctx->new_snapset.head_exists ||
+	   !ctx->new_snapset.is_legacy());
 
     if (ctx->new_obs.exists) {
       if (!ctx->obs->exists) {
 	if (ctx->snapset_obc && ctx->snapset_obc->obs.exists) {
 	  hobject_t snapoid = soid.get_snapdir();
+	  dout(10) << " removing unneeded snapdir " << snapoid << dendl;
 	  ctx->log.push_back(pg_log_entry_t(pg_log_entry_t::DELETE, snapoid,
 	      ctx->at_version,
 	      ctx->snapset_obc->obs.oi.version,
 	      0, osd_reqid_t(), ctx->mtime, 0));
 	  ctx->op_t->remove(snapoid);
-	  dout(10) << " removing old " << snapoid << dendl;
 
 	  ctx->at_version.version++;
 
 	  ctx->snapset_obc->obs.exists = false;
 	}
       }
-    } else if (ctx->new_snapset.clones.size() &&
+    } else if (!ctx->new_snapset.clones.empty() &&
 	       !ctx->cache_evict &&
+	       !ctx->new_snapset.head_exists &&
 	       (!ctx->snapset_obc || !ctx->snapset_obc->obs.exists)) {
       // save snapset on _snap
       hobject_t snapoid(soid.oid, soid.get_key(), CEPH_SNAPDIR, soid.get_hash(),
 			info.pgid.pool(), soid.get_namespace());
       dout(10) << " final snapset " << ctx->new_snapset
 	       << " in " << snapoid << dendl;
+      assert(get_osdmap()->require_osd_release < CEPH_RELEASE_LUMINOUS);
       ctx->log.push_back(pg_log_entry_t(pg_log_entry_t::MODIFY, snapoid,
 					ctx->at_version,
 	                                eversion_t(),
@@ -6747,6 +7437,9 @@ void PrimaryLogPG::finish_ctx(OpContext *ctx, int log_op_type, bool maintain_ssc
     ctx->new_obs.oi = object_info_t(ctx->obc->obs.oi.soid);
   }
 
+  bool legacy_snapset = ctx->new_snapset.is_legacy() ||
+    get_osdmap()->require_osd_release < CEPH_RELEASE_LUMINOUS;
+
   // append to log
   ctx->log.push_back(pg_log_entry_t(log_op_type, soid, ctx->at_version,
 				    ctx->obs->oi.version,
@@ -6757,9 +7450,16 @@ void PrimaryLogPG::finish_ctx(OpContext *ctx, int log_op_type, bool maintain_ssc
     case pg_log_entry_t::MODIFY:
     case pg_log_entry_t::PROMOTE:
     case pg_log_entry_t::CLEAN:
-      dout(20) << __func__ << " encoding snaps " << ctx->new_obs.oi.snaps
-	       << dendl;
-      ::encode(ctx->new_obs.oi.snaps, ctx->log.back().snaps);
+      if (legacy_snapset) {
+	dout(20) << __func__ << " encoding legacy_snaps "
+		 << ctx->new_obs.oi.legacy_snaps
+		 << dendl;
+	::encode(ctx->new_obs.oi.legacy_snaps, ctx->log.back().snaps);
+      } else {
+	dout(20) << __func__ << " encoding snaps from " << ctx->new_snapset
+		 << dendl;
+	::encode(ctx->new_snapset.clone_snaps[soid.snap], ctx->log.back().snaps);
+      }
       break;
     default:
       break;
@@ -6803,14 +7503,19 @@ void PrimaryLogPG::apply_stats(
 
   if (is_primary() && scrubber.active) {
     if (soid < scrubber.start) {
+      dout(20) << __func__ << " " << soid << " < [" << scrubber.start
+	       << "," << scrubber.end << ")" << dendl;
       scrub_cstat.add(delta_stats);
+    } else {
+      dout(20) << __func__ << " " << soid << " >= [" << scrubber.start
+	       << "," << scrubber.end << ")" << dendl;
     }
   }
 }
 
 void PrimaryLogPG::complete_read_ctx(int result, OpContext *ctx)
 {
-  MOSDOp *m = static_cast<MOSDOp*>(ctx->op->get_req());
+  const MOSDOp *m = static_cast<const MOSDOp*>(ctx->op->get_req());
   assert(ctx->async_reads_complete());
 
   for (vector<OSDOp>::iterator p = ctx->ops.begin();
@@ -6825,7 +7530,7 @@ void PrimaryLogPG::complete_read_ctx(int result, OpContext *ctx)
   ctx->reply->get_header().data_off = ctx->data_off;
 
   MOSDOpReply *reply = ctx->reply;
-  ctx->reply = NULL;
+  ctx->reply = nullptr;
 
   if (result >= 0) {
     if (!ctx->ignore_log_op_stats) {
@@ -6879,21 +7584,16 @@ struct C_CopyFrom_AsyncReadCb : public Context {
   OSDOp *osd_op;
   object_copy_data_t reply_obj;
   uint64_t features;
-  bool classic;
   size_t len;
-  C_CopyFrom_AsyncReadCb(OSDOp *osd_op, uint64_t features, bool classic) :
-    osd_op(osd_op), features(features), classic(classic), len(0) {}
+  C_CopyFrom_AsyncReadCb(OSDOp *osd_op, uint64_t features) :
+    osd_op(osd_op), features(features), len(0) {}
   void finish(int r) override {
     assert(len > 0);
     assert(len <= reply_obj.data.length());
     bufferlist bl;
     bl.substr_of(reply_obj.data, 0, len);
     reply_obj.data.swap(bl);
-    if (classic) {
-      reply_obj.encode_classic(osd_op->outdata);
-    } else {
-      ::encode(reply_obj, osd_op->outdata, features);
-    }
+    ::encode(reply_obj, osd_op->outdata, features);
   }
 };
 
@@ -6901,8 +7601,7 @@ int PrimaryLogPG::fill_in_copy_get(
   OpContext *ctx,
   bufferlist::iterator& bp,
   OSDOp& osd_op,
-  ObjectContextRef &obc,
-  bool classic)
+  ObjectContextRef &obc)
 {
   object_info_t& oi = obc->obs.oi;
   hobject_t& soid = oi.soid;
@@ -6918,23 +7617,29 @@ int PrimaryLogPG::fill_in_copy_get(
     return result;
   }
 
-  MOSDOp *op = reinterpret_cast<MOSDOp*>(ctx->op->get_req());
+  const MOSDOp *op = reinterpret_cast<const MOSDOp*>(ctx->op->get_req());
   uint64_t features = op->get_features();
 
   bool async_read_started = false;
   object_copy_data_t _reply_obj;
   C_CopyFrom_AsyncReadCb *cb = NULL;
   if (pool.info.require_rollback()) {
-    cb = new C_CopyFrom_AsyncReadCb(&osd_op, features, classic);
+    cb = new C_CopyFrom_AsyncReadCb(&osd_op, features);
   }
   object_copy_data_t &reply_obj = cb ? cb->reply_obj : _reply_obj;
   // size, mtime
   reply_obj.size = oi.size;
   reply_obj.mtime = oi.mtime;
+  assert(obc->ssc);
   if (soid.snap < CEPH_NOSNAP) {
-    reply_obj.snaps = oi.snaps;
+    if (obc->ssc->snapset.is_legacy()) {
+      reply_obj.snaps = oi.legacy_snaps;
+    } else {
+      auto p = obc->ssc->snapset.clone_snaps.find(soid.snap);
+      assert(p != obc->ssc->snapset.clone_snaps.end()); // warn?
+      reply_obj.snaps = p->second;
+    }
   } else {
-    assert(obc->ssc);
     reply_obj.snap_seq = obc->ssc->snapset.seq;
   }
   if (oi.is_data_digest()) {
@@ -7051,11 +7756,7 @@ int PrimaryLogPG::fill_in_copy_get(
 	   << dendl;
   reply_obj.cursor = cursor;
   if (!async_read_started) {
-    if (classic) {
-      reply_obj.encode_classic(osd_op.outdata);
-    } else {
-      ::encode(reply_obj, osd_op.outdata, features);
-    }
+    ::encode(reply_obj, osd_op.outdata, features);
   }
   if (cb && !async_read_started) {
     delete cb;
@@ -7065,19 +7766,18 @@ int PrimaryLogPG::fill_in_copy_get(
 }
 
 void PrimaryLogPG::fill_in_copy_get_noent(OpRequestRef& op, hobject_t oid,
-                                          OSDOp& osd_op, bool classic)
+                                          OSDOp& osd_op)
 {
-  MOSDOp *m = static_cast<MOSDOp*>(op->get_req());
+  // NOTE: we take non-const ref here for claim_op_out_data below; we must
+  // be careful not to modify anything else that will upset a racing
+  // operator<<
+  MOSDOp *m = static_cast<MOSDOp*>(op->get_nonconst_req());
   uint64_t features = m->get_features();
   object_copy_data_t reply_obj;
 
   pg_log.get_log().get_object_reqids(oid, 10, &reply_obj.reqids);
   dout(20) << __func__ << " got reqids " << reply_obj.reqids << dendl;
-  if (classic) {
-    reply_obj.encode_classic(osd_op.outdata);
-  } else {
-    ::encode(reply_obj, osd_op.outdata, features);
-  }
+  ::encode(reply_obj, osd_op.outdata, features);
   osd_op.rval = -ENOENT;
   MOSDOpReply *reply = new MOSDOpReply(m, 0, get_osdmap()->get_epoch(), 0, false);
   reply->claim_op_out_data(m->ops);
@@ -7272,7 +7972,7 @@ void PrimaryLogPG::process_copy_chunk(hobject_t oid, ceph_tid_t tid, int r)
     if (cop->temp_cursor.is_initial()) {
       assert(!cop->results.started_temp_obj);
       cop->results.started_temp_obj = true;
-      cop->results.temp_oid = generate_temp_object();
+      cop->results.temp_oid = generate_temp_object(oid);
       dout(20) << __func__ << " using temp " << cop->results.temp_oid << dendl;
     }
     ObjectContextRef tempobc = get_object_context(cop->results.temp_oid, true);
@@ -7582,15 +8282,22 @@ void PrimaryLogPG::finish_promote(int r, CopyResults *results,
     tctx->at_version = get_next_version();
     filter_snapc(tctx->new_snapset.snaps);
     vector<snapid_t> new_clones;
+    map<snapid_t, vector<snapid_t>> new_clone_snaps;
     for (vector<snapid_t>::iterator i = tctx->new_snapset.clones.begin();
 	 i != tctx->new_snapset.clones.end();
 	 ++i) {
-      if (*i != soid.snap)
+      if (*i != soid.snap) {
 	new_clones.push_back(*i);
+	auto p = tctx->new_snapset.clone_snaps.find(*i);
+	if (p != tctx->new_snapset.clone_snaps.end()) {
+	  new_clone_snaps[*i] = p->second;
+	}
+      }
     }
     tctx->new_snapset.clones.swap(new_clones);
     tctx->new_snapset.clone_overlap.erase(soid.snap);
     tctx->new_snapset.clone_size.erase(soid.snap);
+    tctx->new_snapset.clone_snaps.swap(new_clone_snaps);
 
     // take RWWRITE lock for duration of our local write.  ignore starvation.
     if (!tctx->lock_manager.take_write_lock(
@@ -7642,6 +8349,9 @@ void PrimaryLogPG::finish_promote(int r, CopyResults *results,
 
   tctx->extra_reqids = results->reqids;
 
+  bool legacy_snapset = tctx->new_snapset.is_legacy() ||
+    get_osdmap()->require_osd_release < CEPH_RELEASE_LUMINOUS;
+
   if (whiteout) {
     // create a whiteout
     tctx->op_t->create(soid);
@@ -7671,8 +8381,13 @@ void PrimaryLogPG::finish_promote(int r, CopyResults *results,
     tctx->new_obs.oi.truncate_size = results->truncate_size;
 
     if (soid.snap != CEPH_NOSNAP) {
-      tctx->new_obs.oi.snaps = results->snaps;
-      assert(!tctx->new_obs.oi.snaps.empty());
+      if (legacy_snapset) {
+	tctx->new_obs.oi.legacy_snaps = results->snaps;
+	assert(!tctx->new_obs.oi.legacy_snaps.empty());
+      } else {
+	// it's already in the snapset
+	assert(obc->ssc->snapset.clone_snaps.count(soid.snap));
+      }
       assert(obc->ssc->snapset.clone_size.count(soid.snap));
       assert(obc->ssc->snapset.clone_size[soid.snap] ==
 	     results->object_size);
@@ -7686,7 +8401,9 @@ void PrimaryLogPG::finish_promote(int r, CopyResults *results,
 
   if (results->mirror_snapset) {
     assert(tctx->new_obs.oi.soid.snap == CEPH_NOSNAP);
-    tctx->new_snapset.from_snap_set(results->snapset);
+    tctx->new_snapset.from_snap_set(
+      results->snapset,
+      get_osdmap()->require_osd_release < CEPH_RELEASE_LUMINOUS);
   }
   tctx->new_snapset.head_exists = true;
   dout(20) << __func__ << " new_snapset " << tctx->new_snapset << dendl;
@@ -7886,26 +8603,39 @@ int PrimaryLogPG::start_flush(
   }
 
   /**
-   * In general, we need to send two deletes and a copyfrom.
+   * In general, we need to send a delete and a copyfrom.
    * Consider snapc 10:[10, 9, 8, 4, 3, 2]:[10(10, 9), 4(4,3,2)]
    * where 4 is marked as clean.  To flush 10, we have to:
-   * 1) delete 4:[4,3,2] -- ensure head is created at cloneid 4
-   * 2) delete (8-1):[4,3,2] -- ensure that the object does not exist at 8
-   * 3) copyfrom 8:[8,4,3,2] -- flush object excluding snap 8
+   * 1) delete 4:[4,3,2] -- Logically, the object does not exist after 4
+   * 2) copyfrom 8:[8,4,3,2] -- flush object after snap 8
    *
-   * The second delete is required in case at some point in the past
-   * there had been a clone 7(7,6), which we had flushed.  Without
-   * the second delete, the object would appear in the base pool to
-   * have existed.
+   * There is a complicating case.  Supposed there had been a clone 7
+   * for snaps [7, 6] which has been trimmed since they no longer exist.
+   * In the base pool, we'd have 5:[4,3,2]:[4(4,3,2)]+head.  When we submit
+   * the delete, the snap will be promoted to 5, and the head will become
+   * a snapdir.  When the copy-from goes through, we'll end up with
+   * 8:[8,4,3,2]:[4(4,3,2)]+head.
+   *
+   * Another complication is the case where there is an interval change
+   * after doing the delete and the flush but before marking the object
+   * clean.  We'll happily delete head and then recreate it at the same
+   * sequence number, which works out ok.
    */
 
-  SnapContext snapc, dsnapc, dsnapc2;
+  SnapContext snapc, dsnapc;
   if (snapset.seq != 0) {
     if (soid.snap == CEPH_NOSNAP) {
       snapc.seq = snapset.seq;
       snapc.snaps = snapset.snaps;
     } else {
-      snapid_t min_included_snap = oi.snaps.back();
+      snapid_t min_included_snap;
+      if (snapset.is_legacy()) {
+	min_included_snap = oi.legacy_snaps.back();
+      } else {
+	auto p = snapset.clone_snaps.find(soid.snap);
+	assert(p != snapset.clone_snaps.end());
+	min_included_snap = p->second.back();
+      }
       snapc = snapset.get_ssc_as_of(min_included_snap - 1);
     }
 
@@ -7919,19 +8649,13 @@ int PrimaryLogPG::start_flush(
       }
     }
 
-    if (prev_snapc != snapc.seq) {
-      dsnapc = snapset.get_ssc_as_of(prev_snapc);
-      snapid_t first_snap_after_prev_snapc =
-	snapset.get_first_snap_after(prev_snapc, snapc.seq);
-      dsnapc2 = snapset.get_ssc_as_of(
-	first_snap_after_prev_snapc - 1);
-    }
+    dsnapc = snapset.get_ssc_as_of(prev_snapc);
   }
 
   object_locator_t base_oloc(soid);
   base_oloc.pool = pool.info.tier_of;
 
-  if (dsnapc.seq > 0 && dsnapc.seq < snapc.seq) {
+  if (dsnapc.seq < snapc.seq) {
     ObjectOperation o;
     o.remove();
     osd->objecter->mutate(
@@ -7941,22 +8665,6 @@ int PrimaryLogPG::start_flush(
       dsnapc,
       ceph::real_clock::from_ceph_timespec(oi.mtime),
       (CEPH_OSD_FLAG_IGNORE_OVERLAY |
-       CEPH_OSD_FLAG_ORDERSNAP |
-       CEPH_OSD_FLAG_ENFORCE_SNAPC),
-      NULL /* no callback, we'll rely on the ordering w.r.t the next op */);
-  }
-
-  if (dsnapc2.seq > dsnapc.seq && dsnapc2.seq < snapc.seq) {
-    ObjectOperation o;
-    o.remove();
-    osd->objecter->mutate(
-      soid.oid,
-      base_oloc,
-      o,
-      dsnapc2,
-      ceph::real_clock::from_ceph_timespec(oi.mtime),
-      (CEPH_OSD_FLAG_IGNORE_OVERLAY |
-       CEPH_OSD_FLAG_ORDERSNAP |
        CEPH_OSD_FLAG_ENFORCE_SNAPC),
       NULL /* no callback, we'll rely on the ordering w.r.t the next op */);
   }
@@ -8280,19 +8988,23 @@ void PrimaryLogPG::op_applied(const eversion_t &applied_version)
   if (is_primary()) {
     if (scrubber.active) {
       if (last_update_applied == scrubber.subset_last_update) {
-        requeue_scrub();
+        if (ops_blocked_by_scrub()) {
+          requeue_scrub(true);
+        } else {
+          requeue_scrub(false);
+        }
+
       }
     } else {
       assert(scrubber.start == scrubber.end);
     }
   } else {
     if (scrubber.active_rep_scrub) {
-      if (last_update_applied == static_cast<MOSDRepScrub*>(
+      if (last_update_applied == static_cast<const MOSDRepScrub*>(
 	    scrubber.active_rep_scrub->get_req())->scrub_to) {
-	osd->op_wq.queue(
-	  make_pair(
-	    this,
-	    scrubber.active_rep_scrub));
+	osd->enqueue_back(
+	  info.pgid,
+	  PGQueueable(scrubber.active_rep_scrub, get_osdmap()->get_epoch()));
 	scrubber.active_rep_scrub = OpRequestRef();
       }
     }
@@ -8301,13 +9013,12 @@ void PrimaryLogPG::op_applied(const eversion_t &applied_version)
 
 void PrimaryLogPG::eval_repop(RepGather *repop)
 {
-  MOSDOp *m = NULL;
+  const MOSDOp *m = NULL;
   if (repop->op)
-    m = static_cast<MOSDOp *>(repop->op->get_req());
+    m = static_cast<const MOSDOp *>(repop->op->get_req());
 
   if (m)
     dout(10) << "eval_repop " << *repop
-	     << " wants=" << (m->wants_ack() ? "a":"") << (m->wants_ondisk() ? "d":"")
 	     << (repop->rep_done ? " DONE" : "")
 	     << dendl;
   else
@@ -8537,12 +9248,13 @@ void PrimaryLogPG::simple_opc_submit(OpContextUPtr ctx)
   dout(20) << __func__ << " " << repop << dendl;
   issue_repop(repop, ctx.get());
   eval_repop(repop);
+  calc_trim_to();
   repop->put();
 }
 
 
 void PrimaryLogPG::submit_log_entries(
-  const mempool::osd::list<pg_log_entry_t> &entries,
+  const mempool::osd_pglog::list<pg_log_entry_t> &entries,
   ObcLockManager &&manager,
   boost::optional<std::function<void(void)> > &&_on_complete,
   OpRequestRef op,
@@ -8559,7 +9271,7 @@ void PrimaryLogPG::submit_log_entries(
 
   boost::intrusive_ptr<RepGather> repop;
   boost::optional<std::function<void(void)> > on_complete;
-  if (get_osdmap()->test_flag(CEPH_OSDMAP_REQUIRE_JEWEL)) {
+  if (get_osdmap()->require_osd_release >= CEPH_RELEASE_JEWEL) {
     repop = new_repop(
       version,
       r,
@@ -8585,13 +9297,14 @@ void PrimaryLogPG::submit_log_entries(
 	if (peer == pg_whoami) continue;
 	assert(peer_missing.count(peer));
 	assert(peer_info.count(peer));
-	if (get_osdmap()->test_flag(CEPH_OSDMAP_REQUIRE_JEWEL)) {
+	if (get_osdmap()->require_osd_release >= CEPH_RELEASE_JEWEL) {
 	  assert(repop);
 	  MOSDPGUpdateLogMissing *m = new MOSDPGUpdateLogMissing(
 	    entries,
 	    spg_t(info.pgid.pgid, i->shard),
 	    pg_whoami.shard,
 	    get_osdmap()->get_epoch(),
+	    last_peering_reset,
 	    repop->rep_tid);
 	  osd->send_message_osd_cluster(
 	    peer.osd, m, get_osdmap()->get_epoch());
@@ -8608,7 +9321,7 @@ void PrimaryLogPG::submit_log_entries(
 	    peer.osd, m, get_osdmap()->get_epoch());
 	}
       }
-      if (get_osdmap()->test_flag(CEPH_OSDMAP_REQUIRE_JEWEL)) {
+      if (get_osdmap()->require_osd_release >= CEPH_RELEASE_JEWEL) {
 	ceph_tid_t rep_tid = repop->rep_tid;
 	waiting_on.insert(pg_whoami);
 	log_entry_update_waiting_on.insert(
@@ -8861,9 +9574,10 @@ ObjectContextRef PrimaryLogPG::create_object_context(const object_info_t& oi,
   return obc;
 }
 
-ObjectContextRef PrimaryLogPG::get_object_context(const hobject_t& soid,
-						  bool can_create,
-						  map<string, bufferlist> *attrs)
+ObjectContextRef PrimaryLogPG::get_object_context(
+  const hobject_t& soid,
+  bool can_create,
+  const map<string, bufferlist> *attrs)
 {
   assert(
     attrs || !pg_log.get_missing().is_missing(soid) ||
@@ -8901,6 +9615,7 @@ ObjectContextRef PrimaryLogPG::get_object_context(const hobject_t& soid,
 	object_info_t oi(soid);
 	SnapSetContext *ssc = get_snapset_context(
 	  soid, true, 0, false);
+        assert(ssc);
 	obc = create_object_context(oi, ssc);
 	dout(10) << __func__ << ": " << obc << " " << soid
 		 << " " << obc->rwstate
@@ -8948,10 +9663,17 @@ ObjectContextRef PrimaryLogPG::get_object_context(const hobject_t& soid,
     dout(10) << __func__ << ": creating obc from disk: " << obc
 	     << dendl;
   }
-  assert(obc->ssc);
+
+  // XXX: Caller doesn't expect this
+  if (obc->ssc == NULL) {
+    derr << __func__ << ": obc->ssc not available, not returning context" << dendl;
+    return ObjectContextRef();   // -ENOENT!
+  }
+
   dout(10) << __func__ << ": " << obc << " " << soid
 	   << " " << obc->rwstate
 	   << " oi: " << obc->obs.oi
+	   << " exists: " << (int)obc->obs.exists
 	   << " ssc: " << obc->ssc
 	   << " snapset: " << obc->ssc->snapset << dendl;
   return obc;
@@ -9168,11 +9890,16 @@ int PrimaryLogPG::find_object_context(const hobject_t& oid,
 
   ObjectContextRef obc = get_object_context(soid, false);
   if (!obc || !obc->obs.exists) {
-    dout(20) << __func__ << " missing clone " << soid << dendl;
     if (pmissing)
       *pmissing = soid;
     put_snapset_context(ssc);
-    return -ENOENT;
+    if (is_degraded_or_backfilling_object(soid)) {
+      dout(20) << __func__ << " clone is degraded or backfilling " << soid << dendl;
+      return -EAGAIN;
+    } else {
+      dout(20) << __func__ << " missing clone " << soid << dendl;
+      return -ENOENT;
+    }
   }
 
   if (!obc->ssc) {
@@ -9184,10 +9911,20 @@ int PrimaryLogPG::find_object_context(const hobject_t& oid,
   ssc = 0;
 
   // clone
-  dout(20) << "find_object_context  " << soid << " snaps " << obc->obs.oi.snaps
+  dout(20) << "find_object_context  " << soid
+	   << " snapset " << obc->ssc->snapset
+	   << " legacy_snaps " << obc->obs.oi.legacy_snaps
 	   << dendl;
-  snapid_t first = obc->obs.oi.snaps[obc->obs.oi.snaps.size()-1];
-  snapid_t last = obc->obs.oi.snaps[0];
+  snapid_t first, last;
+  if (obc->ssc->snapset.is_legacy()) {
+    first = obc->obs.oi.legacy_snaps.back();
+    last = obc->obs.oi.legacy_snaps.front();
+  } else {
+    auto p = obc->ssc->snapset.clone_snaps.find(soid.snap);
+    assert(p != obc->ssc->snapset.clone_snaps.end());
+    first = p->second.back();
+    last = p->second.front();
+  }
   if (first <= oid.snap) {
     dout(20) << "find_object_context  " << soid << " [" << first << "," << last
 	     << "] contains " << oid.snap << " -- HIT " << obc->obs << dendl;
@@ -9280,7 +10017,7 @@ void PrimaryLogPG::kick_object_context_blocked(ObjectContextRef obc)
 SnapSetContext *PrimaryLogPG::get_snapset_context(
   const hobject_t& oid,
   bool can_create,
-  map<string, bufferlist> *attrs,
+  const map<string, bufferlist> *attrs,
   bool oid_existed)
 {
   Mutex::Locker l(snapset_contexts_lock);
@@ -9301,10 +10038,10 @@ SnapSetContext *PrimaryLogPG::get_snapset_context(
 	r = pgbackend->objects_get_attr(oid.get_head(), SS_ATTR, &bv);
       if (r < 0) {
 	// try _snapset
-      if (!(oid.is_snapdir() && !oid_existed))
-	r = pgbackend->objects_get_attr(oid.get_snapdir(), SS_ATTR, &bv);
-      if (r < 0 && !can_create)
-	return NULL;
+	if (!(oid.is_snapdir() && !oid_existed))
+	  r = pgbackend->objects_get_attr(oid.get_snapdir(), SS_ATTR, &bv);
+	if (r < 0 && !can_create)
+	  return NULL;
       }
     } else {
       assert(attrs->count(SS_ATTR));
@@ -9314,7 +10051,12 @@ SnapSetContext *PrimaryLogPG::get_snapset_context(
     _register_snapset_context(ssc);
     if (bv.length()) {
       bufferlist::iterator bvp = bv.begin();
-      ssc->snapset.decode(bvp);
+      try {
+	ssc->snapset.decode(bvp);
+      } catch (buffer::error& e) {
+        dout(0) << __func__ << " Can't decode snapset: " << e << dendl;
+	return NULL;
+      }
       ssc->exists = true;
     } else {
       ssc->exists = false;
@@ -9357,6 +10099,40 @@ int PrimaryLogPG::recover_missing(
 	    << " v " << v 
 	    << " but it is unfound" << dendl;
     return PULL_NONE;
+  }
+
+  if (missing_loc.is_deleted(soid)) {
+    start_recovery_op(soid);
+    assert(!recovering.count(soid));
+    recovering.insert(make_pair(soid, ObjectContextRef()));
+    epoch_t cur_epoch = get_osdmap()->get_epoch();
+    remove_missing_object(soid, v, new FunctionContext(
+     [=](int) {
+       lock();
+       if (!pg_has_reset_since(cur_epoch)) {
+	 bool object_missing = false;
+	 for (const auto& shard : actingbackfill) {
+	   if (shard == pg_whoami)
+	     continue;
+	   if (peer_missing[shard].is_missing(soid)) {
+	     dout(20) << __func__ << ": soid " << soid << " needs to be deleted from replica " << shard << dendl;
+	     object_missing = true;
+	     break;
+	   }
+	 }
+	 if (!object_missing) {
+	   object_stat_sum_t stat_diff;
+	   stat_diff.num_objects_recovered = 1;
+	   on_global_recover(soid, stat_diff, true);
+	 } else {
+	   auto recovery_handle = pgbackend->open_recovery_op();
+	   pgbackend->recover_delete_object(soid, v, recovery_handle);
+	   pgbackend->run_recovery_op(recovery_handle, priority);
+	 }
+       }
+       unlock();
+     }));
+    return PULL_YES;
   }
 
   // is this a snapped object?  if so, consult the snapset.. we may not need the entire object!
@@ -9408,12 +10184,14 @@ int PrimaryLogPG::recover_missing(
   start_recovery_op(soid);
   assert(!recovering.count(soid));
   recovering.insert(make_pair(soid, obc));
-  pgbackend->recover_object(
+  int r = pgbackend->recover_object(
     soid,
     v,
     head_obc,
     obc,
     h);
+  // This is only a pull which shouldn't return an error
+  assert(r >= 0);
   return PULL_YES;
 }
 
@@ -9436,11 +10214,39 @@ void PrimaryLogPG::send_remove_op(
   osd->send_message_osd_cluster(peer.osd, subop, get_osdmap()->get_epoch());
 }
 
+void PrimaryLogPG::remove_missing_object(const hobject_t &soid,
+					 eversion_t v, Context *on_complete)
+{
+  dout(20) << __func__ << " " << soid << " " << v << dendl;
+  assert(on_complete != nullptr);
+  // delete locally
+  ObjectStore::Transaction t;
+  remove_snap_mapped_object(t, soid);
+
+  ObjectRecoveryInfo recovery_info;
+  recovery_info.soid = soid;
+  recovery_info.version = v;
+
+  epoch_t cur_epoch = get_osdmap()->get_epoch();
+  t.register_on_complete(new FunctionContext(
+     [=](int) {
+       lock();
+       if (!pg_has_reset_since(cur_epoch)) {
+	 ObjectStore::Transaction t2;
+	 on_local_recover(soid, recovery_info, ObjectContextRef(), true, &t2);
+	 t2.register_on_complete(on_complete);
+	 int r = osd->store->queue_transaction(osr.get(), std::move(t2), nullptr);
+	 assert(r == 0);
+       }
+       unlock();
+     }));
+  int r = osd->store->queue_transaction(osr.get(), std::move(t), nullptr);
+  assert(r == 0);
+}
 
 void PrimaryLogPG::finish_degraded_object(const hobject_t& oid)
 {
   dout(10) << "finish_degraded_object " << oid << dendl;
-  ObjectContextRef obc(object_contexts.lookup(oid));
   if (callbacks_for_degraded_object.count(oid)) {
     list<Context*> contexts;
     contexts.swap(callbacks_for_degraded_object[oid]);
@@ -9478,9 +10284,7 @@ void PrimaryLogPG::_committed_pushed_object(
 	    last_complete_ondisk),
 	  get_osdmap()->get_epoch());
       } else {
-	// we are the primary.  tell replicas to trim?
-	if (calc_min_last_complete_ondisk())
-	  trim_peers();
+	calc_min_last_complete_ondisk();
       }
     }
 
@@ -9494,39 +10298,41 @@ void PrimaryLogPG::_committed_pushed_object(
 void PrimaryLogPG::_applied_recovered_object(ObjectContextRef obc)
 {
   lock();
-  dout(10) << "_applied_recovered_object " << *obc << dendl;
-
+  dout(20) << __func__ << dendl;
+  if (obc) {
+    dout(20) << "obc = " << *obc << dendl;
+  }
   assert(active_pushes >= 1);
   --active_pushes;
 
   // requeue an active chunky scrub waiting on recovery ops
   if (!deleting && active_pushes == 0
       && scrubber.is_chunky_scrub_active()) {
-    requeue_scrub();
+    if (ops_blocked_by_scrub()) {
+      requeue_scrub(true);
+    } else {
+      requeue_scrub(false);
+    }
   }
-
   unlock();
 }
 
 void PrimaryLogPG::_applied_recovered_object_replica()
 {
   lock();
-  dout(10) << "_applied_recovered_object_replica" << dendl;
-
+  dout(20) << __func__ << dendl;
   assert(active_pushes >= 1);
   --active_pushes;
 
   // requeue an active chunky scrub waiting on recovery ops
   if (!deleting && active_pushes == 0 &&
-      scrubber.active_rep_scrub && static_cast<MOSDRepScrub*>(
+      scrubber.active_rep_scrub && static_cast<const MOSDRepScrub*>(
 	scrubber.active_rep_scrub->get_req())->chunky) {
-    osd->op_wq.queue(
-      make_pair(
-	this,
-	scrubber.active_rep_scrub));
+    osd->enqueue_back(
+      info.pgid,
+      PGQueueable(scrubber.active_rep_scrub, get_osdmap()->get_epoch()));
     scrubber.active_rep_scrub = OpRequestRef();
   }
-
   unlock();
 }
 
@@ -9545,6 +10351,12 @@ void PrimaryLogPG::recover_got(hobject_t oid, eversion_t v)
     //assert(missing.num_missing() == 0);  // otherwise, complete_to was wrong.
     assert(info.last_complete == info.last_update);
   }
+}
+
+void PrimaryLogPG::primary_failed(const hobject_t &soid)
+{
+  list<pg_shard_t> fl = { pg_whoami };
+  failed_push(fl, soid);
 }
 
 void PrimaryLogPG::failed_push(const list<pg_shard_t> &from, const hobject_t &soid)
@@ -9568,7 +10380,7 @@ void PrimaryLogPG::failed_push(const list<pg_shard_t> &from, const hobject_t &so
 
 void PrimaryLogPG::sub_op_remove(OpRequestRef op)
 {
-  MOSDSubOp *m = static_cast<MOSDSubOp*>(op->get_req());
+  const MOSDSubOp *m = static_cast<const MOSDSubOp*>(op->get_req());
   assert(m->get_type() == MSG_OSD_SUBOP);
   dout(7) << "sub_op_remove " << m->poid << dendl;
 
@@ -9596,7 +10408,6 @@ eversion_t PrimaryLogPG::pick_newest_available(const hobject_t& oid)
     if (*i == get_primary()) continue;
     pg_shard_t peer = *i;
     if (!peer_missing[peer].is_missing(oid)) {
-      assert(is_backfill_targets(peer));
       continue;
     }
     eversion_t h = peer_missing[peer].get_items().at(oid).have;
@@ -9611,7 +10422,7 @@ eversion_t PrimaryLogPG::pick_newest_available(const hobject_t& oid)
 
 void PrimaryLogPG::do_update_log_missing(OpRequestRef &op)
 {
-  MOSDPGUpdateLogMissing *m = static_cast<MOSDPGUpdateLogMissing*>(
+  const MOSDPGUpdateLogMissing *m = static_cast<const MOSDPGUpdateLogMissing*>(
     op->get_req());
   assert(m->get_type() == MSG_OSD_PG_UPDATE_LOG_MISSING);
   ObjectStore::Transaction t;
@@ -9619,7 +10430,7 @@ void PrimaryLogPG::do_update_log_missing(OpRequestRef &op)
 
   Context *complete = new FunctionContext(
     [=](int) {
-      MOSDPGUpdateLogMissing *msg = static_cast<MOSDPGUpdateLogMissing*>(
+      const MOSDPGUpdateLogMissing *msg = static_cast<const MOSDPGUpdateLogMissing*>(
 	op->get_req());
       lock();
       if (!pg_has_reset_since(msg->get_epoch())) {
@@ -9628,6 +10439,7 @@ void PrimaryLogPG::do_update_log_missing(OpRequestRef &op)
 	    spg_t(info.pgid.pgid, primary_shard().shard),
 	    pg_whoami.shard,
 	    msg->get_epoch(),
+	    msg->min_epoch,
 	    msg->get_tid());
 	reply->set_priority(CEPH_MSG_PRIO_HIGH);
 	msg->get_connection()->send_message(reply);
@@ -9635,7 +10447,7 @@ void PrimaryLogPG::do_update_log_missing(OpRequestRef &op)
       unlock();
     });
 
-  if (get_osdmap()->test_flag(CEPH_OSDMAP_REQUIRE_KRAKEN)) {
+  if (get_osdmap()->require_osd_release >= CEPH_RELEASE_KRAKEN) {
     t.register_on_commit(complete);
   } else {
     /* Hack to work around the fact that ReplicatedBackend sends
@@ -9660,8 +10472,8 @@ void PrimaryLogPG::do_update_log_missing(OpRequestRef &op)
 
 void PrimaryLogPG::do_update_log_missing_reply(OpRequestRef &op)
 {
-  MOSDPGUpdateLogMissingReply *m =
-    static_cast<MOSDPGUpdateLogMissingReply*>(
+  const MOSDPGUpdateLogMissingReply *m =
+    static_cast<const MOSDPGUpdateLogMissingReply*>(
     op->get_req());
   dout(20) << __func__ << " got reply from "
 	   << m->get_from() << dendl;
@@ -9696,12 +10508,13 @@ void PrimaryLogPG::mark_all_unfound_lost(
   ceph_tid_t tid)
 {
   dout(3) << __func__ << " " << pg_log_entry_t::get_op_name(what) << dendl;
+  list<hobject_t> oids;
 
   dout(30) << __func__ << ": log before:\n";
   pg_log.get_log().print(*_dout);
   *_dout << dendl;
 
-  mempool::osd::list<pg_log_entry_t> log_entries;
+  mempool::osd_pglog::list<pg_log_entry_t> log_entries;
 
   utime_t mtime = ceph_clock_now();
   map<hobject_t, pg_missing_item>::const_iterator m =
@@ -9712,7 +10525,7 @@ void PrimaryLogPG::mark_all_unfound_lost(
   ObcLockManager manager;
   eversion_t v = get_next_version();
   v.epoch = get_osdmap()->get_epoch();
-  unsigned num_unfound = missing_loc.num_unfound();
+  uint64_t num_unfound = missing_loc.num_unfound();
   while (m != mend) {
     const hobject_t &oid(m->first);
     if (!missing_loc.is_unfound(oid)) {
@@ -9751,7 +10564,7 @@ void PrimaryLogPG::mark_all_unfound_lost(
       {
 	pg_log_entry_t e(pg_log_entry_t::LOST_DELETE, oid, v, m->second.need,
 			 0, osd_reqid_t(), mtime, 0);
-	if (get_osdmap()->test_flag(CEPH_OSDMAP_REQUIRE_JEWEL)) {
+	if (get_osdmap()->require_osd_release >= CEPH_RELEASE_JEWEL) {
 	  if (pool.info.require_rollback()) {
 	    e.mod_desc.try_rmobject(v.version);
 	  } else {
@@ -9760,6 +10573,7 @@ void PrimaryLogPG::mark_all_unfound_lost(
 	} // otherwise, just do what we used to do
 	dout(10) << e << dendl;
 	log_entries.push_back(e);
+        oids.push_back(oid);
 
 	++v.version;
 	++m;
@@ -9777,9 +10591,16 @@ void PrimaryLogPG::mark_all_unfound_lost(
     log_entries,
     std::move(manager),
     boost::optional<std::function<void(void)> >(
-      [=]() {
-	requeue_ops(waiting_for_all_missing);
-	waiting_for_all_missing.clear();
+      [this, oids, con, num_unfound, tid]() {
+	if (perform_deletes_during_peering()) {
+	  for (auto oid : oids) {
+	    // clear old locations - merge_new_log_entries will have
+	    // handled rebuilding missing_loc for each of these
+	    // objects if we have the RECOVERY_DELETES flag
+	    missing_loc.recovered(oid);
+	  }
+	}
+
 	for (auto& p : waiting_for_unreadable_object) {
 	  release_backoffs(p.first);
 	}
@@ -9791,7 +10612,7 @@ void PrimaryLogPG::mark_all_unfound_lost(
 	   << " objects unfound and apparently lost marking";
 	string rs = ss.str();
 	dout(0) << "do_command r=" << 0 << " " << rs << dendl;
-	osd->clog->info() << rs << "\n";
+	osd->clog->info() << rs;
 	if (con) {
 	  MCommandReply *reply = new MCommandReply(0, rs);
 	  reply->set_tid(tid);
@@ -9906,7 +10727,8 @@ void PrimaryLogPG::on_removal(ObjectStore::Transaction *t)
 
   write_if_dirty(*t);
 
-  on_shutdown();
+  if (!deleting)
+    on_shutdown();
 }
 
 void PrimaryLogPG::on_shutdown()
@@ -9915,11 +10737,15 @@ void PrimaryLogPG::on_shutdown()
 
   // remove from queues
   osd->pg_stat_queue_dequeue(this);
-  osd->dequeue_pg(this, 0);
   osd->peering_wq.dequeue(this);
 
   // handles queue races
   deleting = true;
+
+  if (recovery_queued) {
+    recovery_queued = false;
+    osd->clear_queued_recovery(this);
+  }
 
   clear_scrub_reserved();
   scrub_clear_state();
@@ -9930,6 +10756,10 @@ void PrimaryLogPG::on_shutdown()
   cancel_proxy_ops(false);
   apply_and_flush_repops(false);
   cancel_log_updates();
+  // we must remove PGRefs, so do this this prior to release_backoffs() callers
+  clear_backoffs(); 
+  // clean up snap trim references
+  snap_trimmer_machine.process_event(Reset());
 
   pgbackend->on_change();
 
@@ -9964,6 +10794,7 @@ void PrimaryLogPG::on_activate()
 	  RequestBackfill())));
   } else {
     dout(10) << "activate all replicas clean, no recovery" << dendl;
+    eio_errors_to_process = false;
     queue_peering_event(
       CephPeeringEvtRef(
 	std::make_shared<CephPeeringEvt>(
@@ -9995,6 +10826,12 @@ void PrimaryLogPG::on_activate()
 
 void PrimaryLogPG::_on_new_interval()
 {
+  dout(20) << __func__ << "checking missing set deletes flag. missing = " << pg_log.get_missing() << dendl;
+  if (!pg_log.get_missing().may_include_deletes &&
+      get_osdmap()->test_flag(CEPH_OSDMAP_RECOVERY_DELETES)) {
+    pg_log.rebuild_missing_set_with_deletes(osd->store, coll, info);
+  }
+  assert(pg_log.get_missing().may_include_deletes == get_osdmap()->test_flag(CEPH_OSDMAP_RECOVERY_DELETES));
 }
 
 void PrimaryLogPG::on_change(ObjectStore::Transaction *t)
@@ -10062,10 +10899,8 @@ void PrimaryLogPG::on_change(ObjectStore::Transaction *t)
 
   if (is_primary()) {
     requeue_ops(waiting_for_cache_not_full);
-    requeue_ops(waiting_for_all_missing);
   } else {
     waiting_for_cache_not_full.clear();
-    waiting_for_all_missing.clear();
   }
   objects_blocked_on_cache_full.clear();
 
@@ -10283,8 +11118,8 @@ bool PrimaryLogPG::start_recovery_ops(
 
   const pg_missing_t &missing = pg_log.get_missing();
 
-  int num_missing = missing.num_missing();
-  int num_unfound = get_num_unfound();
+  unsigned int num_missing = missing.num_missing();
+  uint64_t num_unfound = get_num_unfound();
 
   if (num_missing == 0) {
     info.last_complete = info.last_update;
@@ -10363,14 +11198,14 @@ bool PrimaryLogPG::start_recovery_ops(
   if (missing.num_missing() > 0) {
     // this shouldn't happen!
     osd->clog->error() << info.pgid << " recovery ending with " << missing.num_missing()
-		       << ": " << missing.get_items() << "\n";
+		       << ": " << missing.get_items();
     return work_in_progress;
   }
 
   if (needs_recovery()) {
     // this shouldn't happen!
     // We already checked num_missing() so we must have missing replicas
-    osd->clog->error() << info.pgid << " recovery ending with missing replicas\n";
+    osd->clog->error() << info.pgid << " recovery ending with missing replicas";
     return work_in_progress;
   }
 
@@ -10386,6 +11221,7 @@ bool PrimaryLogPG::start_recovery_ops(
             RequestBackfill())));
     } else {
       dout(10) << "recovery done, no backfill" << dendl;
+      eio_errors_to_process = false;
       queue_peering_event(
         CephPeeringEvtRef(
           std::make_shared<CephPeeringEvt>(
@@ -10396,6 +11232,7 @@ bool PrimaryLogPG::start_recovery_ops(
   } else { // backfilling
     state_clear(PG_STATE_BACKFILL);
     dout(10) << "recovery done, backfill done" << dendl;
+    eio_errors_to_process = false;
     queue_peering_event(
       CephPeeringEvtRef(
         std::make_shared<CephPeeringEvt>(
@@ -10437,7 +11274,7 @@ uint64_t PrimaryLogPG::recover_primary(uint64_t max, ThreadPool::TPHandle &handl
 
     if (pg_log.get_log().objects.count(p->second)) {
       latest = pg_log.get_log().objects.find(p->second)->second;
-      assert(latest->is_update());
+      assert(latest->is_update() || latest->is_delete());
       soid = latest->soid;
     } else {
       latest = 0;
@@ -10446,8 +11283,7 @@ uint64_t PrimaryLogPG::recover_primary(uint64_t max, ThreadPool::TPHandle &handl
     const pg_missing_item& item = missing.get_items().find(p->second)->second;
     ++p;
 
-    hobject_t head = soid;
-    head.snap = CEPH_NOSNAP;
+    hobject_t head = soid.get_head();
 
     eversion_t need = item.need;
 
@@ -10567,6 +11403,49 @@ uint64_t PrimaryLogPG::recover_primary(uint64_t max, ThreadPool::TPHandle &handl
   return started;
 }
 
+bool PrimaryLogPG::primary_error(
+  const hobject_t& soid, eversion_t v)
+{
+  pg_log.missing_add(soid, v, eversion_t());
+  pg_log.set_last_requested(0);
+  missing_loc.remove_location(soid, pg_whoami);
+  bool uhoh = true;
+  assert(!actingbackfill.empty());
+  for (set<pg_shard_t>::iterator i = actingbackfill.begin();
+       i != actingbackfill.end();
+       ++i) {
+    if (*i == get_primary()) continue;
+    pg_shard_t peer = *i;
+    if (!peer_missing[peer].is_missing(soid, v)) {
+      missing_loc.add_location(soid, peer);
+      dout(10) << info.pgid << " unexpectedly missing " << soid << " v" << v
+	       << ", there should be a copy on shard " << peer << dendl;
+      uhoh = false;
+    }
+  }
+  if (uhoh)
+    osd->clog->error() << info.pgid << " missing primary copy of " << soid << ", unfound";
+  else
+    osd->clog->error() << info.pgid << " missing primary copy of " << soid
+			 << ", will try copies on " << missing_loc.get_locations(soid);
+  return uhoh;
+}
+
+int PrimaryLogPG::prep_object_replica_deletes(
+  const hobject_t& soid, eversion_t v,
+  PGBackend::RecoveryHandle *h)
+{
+  assert(is_primary());
+  dout(10) << __func__ << ": on " << soid << dendl;
+
+  start_recovery_op(soid);
+  assert(!recovering.count(soid));
+  recovering.insert(make_pair(soid, ObjectContextRef()));
+
+  pgbackend->recover_delete_object(soid, v, h);
+  return 1;
+}
+
 int PrimaryLogPG::prep_object_replica_pushes(
   const hobject_t& soid, eversion_t v,
   PGBackend::RecoveryHandle *h)
@@ -10577,28 +11456,7 @@ int PrimaryLogPG::prep_object_replica_pushes(
   // NOTE: we know we will get a valid oloc off of disk here.
   ObjectContextRef obc = get_object_context(soid, false);
   if (!obc) {
-    pg_log.missing_add(soid, v, eversion_t());
-    missing_loc.remove_location(soid, pg_whoami);
-    bool uhoh = true;
-    assert(!actingbackfill.empty());
-    for (set<pg_shard_t>::iterator i = actingbackfill.begin();
-	 i != actingbackfill.end();
-	 ++i) {
-      if (*i == get_primary()) continue;
-      pg_shard_t peer = *i;
-      if (!peer_missing[peer].is_missing(soid, v)) {
-	missing_loc.add_location(soid, peer);
-	dout(10) << info.pgid << " unexpectedly missing " << soid << " v" << v
-		 << ", there should be a copy on shard " << peer << dendl;
-	uhoh = false;
-      }
-    }
-    if (uhoh)
-      osd->clog->error() << info.pgid << " missing primary copy of " << soid << ", unfound\n";
-    else
-      osd->clog->error() << info.pgid << " missing primary copy of " << soid
-			<< ", will try copies on " << missing_loc.get_locations(soid)
-			<< "\n";
+    primary_error(soid, v);
     return 0;
   }
 
@@ -10621,13 +11479,19 @@ int PrimaryLogPG::prep_object_replica_pushes(
    * In almost all cases, therefore, this lock should be uncontended.
    */
   obc->ondisk_read_lock();
-  pgbackend->recover_object(
+  int r = pgbackend->recover_object(
     soid,
     v,
     ObjectContextRef(),
     obc, // has snapset context
     h);
   obc->ondisk_read_unlock();
+  if (r < 0) {
+    dout(0) << __func__ << " Error " << r << " on oid " << soid << dendl;
+    primary_failed(soid);
+    primary_error(soid, v);
+    return 0;
+  }
   return 1;
 }
 
@@ -10662,8 +11526,14 @@ uint64_t PrimaryLogPG::recover_replicas(uint64_t max, ThreadPool::TPHandle &hand
       handle.reset_tp_timeout();
       const hobject_t soid(p->second);
 
+      if (missing_loc.is_unfound(soid)) {
+	dout(10) << __func__ << ": " << soid << " still unfound" << dendl;
+	continue;
+      }
+
       if (soid > pi->second.last_backfill) {
 	if (!recovering.count(soid)) {
+          derr << __func__ << ": object " << soid << " last_backfill " << pi->second.last_backfill << dendl;
 	  derr << __func__ << ": object added to missing set for backfill, but "
 	       << "is not in recovering, error!" << dendl;
 	  ceph_abort();
@@ -10676,8 +11546,10 @@ uint64_t PrimaryLogPG::recover_replicas(uint64_t max, ThreadPool::TPHandle &hand
 	continue;
       }
 
-      if (missing_loc.is_unfound(soid)) {
-	dout(10) << __func__ << ": " << soid << " still unfound" << dendl;
+      if (missing_loc.is_deleted(soid)) {
+	dout(10) << __func__ << ": " << soid << " is a delete, removing" << dendl;
+	map<hobject_t,pg_missing_item>::const_iterator r = m.get_items().find(soid);
+	started += prep_object_replica_deletes(soid, r->second.need, h);
 	continue;
       }
 
@@ -10818,8 +11690,6 @@ uint64_t PrimaryLogPG::recover_backfill(
   update_range(&backfill_info, handle);
 
   unsigned ops = 0;
-  vector<boost::tuple<hobject_t, eversion_t,
-                      ObjectContextRef, vector<pg_shard_t> > > to_push;
   vector<boost::tuple<hobject_t, eversion_t, pg_shard_t> > to_remove;
   set<hobject_t> add_to_stat;
 
@@ -10831,6 +11701,7 @@ uint64_t PrimaryLogPG::recover_backfill(
   }
   backfill_info.trim_to(last_backfill_started);
 
+  PGBackend::RecoveryHandle *h = pgbackend->open_recovery_op();
   while (ops < max) {
     if (backfill_info.begin <= earliest_peer_backfill() &&
 	!backfill_info.extends_to_end() && backfill_info.empty()) {
@@ -10856,7 +11727,7 @@ uint64_t PrimaryLogPG::recover_backfill(
 	dout(10) << " scanning peer osd." << bt << " from " << pbi.end << dendl;
 	epoch_t e = get_osdmap()->get_epoch();
 	MOSDPGScan *m = new MOSDPGScan(
-	  MOSDPGScan::OP_SCAN_GET_DIGEST, pg_whoami, e, e,
+	  MOSDPGScan::OP_SCAN_GET_DIGEST, pg_whoami, e, last_peering_reset,
 	  spg_t(info.pgid.pgid, bt.shard),
 	  pbi.end, hobject_t());
 	osd->send_message_osd_cluster(bt.osd, m, get_osdmap()->get_epoch());
@@ -11010,10 +11881,13 @@ uint64_t PrimaryLogPG::recover_backfill(
 	  vector<pg_shard_t> all_push = need_ver_targs;
 	  all_push.insert(all_push.end(), missing_targs.begin(), missing_targs.end());
 
-	  to_push.push_back(
-	    boost::tuple<hobject_t, eversion_t, ObjectContextRef, vector<pg_shard_t> >
-	    (backfill_info.begin, obj_v, obc, all_push));
-	  // Count all simultaneous pushes of the same object as a single op
+	  handle.reset_tp_timeout();
+	  int r = prep_backfill_object_push(backfill_info.begin, obj_v, obc, all_push, h);
+	  if (r < 0) {
+	    *work_started = true;
+	    dout(0) << __func__ << " Error " << r << " trying to backfill " << backfill_info.begin << dendl;
+	    break;
+	  }
 	  ops++;
 	} else {
 	  *work_started = true;
@@ -11055,22 +11929,45 @@ uint64_t PrimaryLogPG::recover_backfill(
     add_object_context_to_pg_stat(obc, &stat);
     pending_backfill_updates[*i] = stat;
   }
-  for (unsigned i = 0; i < to_remove.size(); ++i) {
-    handle.reset_tp_timeout();
+  if (HAVE_FEATURE(get_min_upacting_features(), SERVER_LUMINOUS)) {
+    map<pg_shard_t,MOSDPGBackfillRemove*> reqs;
+    for (unsigned i = 0; i < to_remove.size(); ++i) {
+      handle.reset_tp_timeout();
+      const hobject_t& oid = to_remove[i].get<0>();
+      eversion_t v = to_remove[i].get<1>();
+      pg_shard_t peer = to_remove[i].get<2>();
+      MOSDPGBackfillRemove *m;
+      auto it = reqs.find(peer);
+      if (it != reqs.end()) {
+	m = it->second;
+      } else {
+	m = reqs[peer] = new MOSDPGBackfillRemove(
+	  spg_t(info.pgid.pgid, peer.shard),
+	  get_osdmap()->get_epoch());
+      }
+      m->ls.push_back(make_pair(oid, v));
 
-    // ordered before any subsequent updates
-    send_remove_op(to_remove[i].get<0>(), to_remove[i].get<1>(), to_remove[i].get<2>());
+      if (oid <= last_backfill_started)
+	pending_backfill_updates[oid]; // add empty stat!
+    }
+    for (auto p : reqs) {
+      osd->send_message_osd_cluster(p.first.osd, p.second,
+				    get_osdmap()->get_epoch());
+    }
+  } else {
+    // for jewel targets
+    for (unsigned i = 0; i < to_remove.size(); ++i) {
+      handle.reset_tp_timeout();
 
-    if (to_remove[i].get<0>() <= last_backfill_started)
-      pending_backfill_updates[to_remove[i].get<0>()]; // add empty stat!
+      // ordered before any subsequent updates
+      send_remove_op(to_remove[i].get<0>(), to_remove[i].get<1>(),
+		     to_remove[i].get<2>());
+
+      if (to_remove[i].get<0>() <= last_backfill_started)
+	pending_backfill_updates[to_remove[i].get<0>()]; // add empty stat!
+    }
   }
 
-  PGBackend::RecoveryHandle *h = pgbackend->open_recovery_op();
-  for (unsigned i = 0; i < to_push.size(); ++i) {
-    handle.reset_tp_timeout();
-    prep_backfill_object_push(to_push[i].get<0>(), to_push[i].get<1>(),
-	    to_push[i].get<2>(), to_push[i].get<3>(), h);
-  }
   pgbackend->run_recovery_op(h, get_recovery_op_priority());
 
   dout(5) << "backfill_pos is " << backfill_pos << dendl;
@@ -11131,7 +12028,7 @@ uint64_t PrimaryLogPG::recover_backfill(
         m = new MOSDPGBackfill(
 	  MOSDPGBackfill::OP_BACKFILL_FINISH,
 	  e,
-	  e,
+	  last_peering_reset,
 	  spg_t(info.pgid.pgid, bt.shard));
         // Use default priority here, must match sub_op priority
         /* pinfo.stats might be wrong if we did log-based recovery on the
@@ -11143,7 +12040,7 @@ uint64_t PrimaryLogPG::recover_backfill(
         m = new MOSDPGBackfill(
 	  MOSDPGBackfill::OP_BACKFILL_PROGRESS,
 	  e,
-	  e,
+	  last_peering_reset,
 	  spg_t(info.pgid.pgid, bt.shard));
         // Use default priority here, must match sub_op priority
       }
@@ -11161,20 +12058,20 @@ uint64_t PrimaryLogPG::recover_backfill(
   return ops;
 }
 
-void PrimaryLogPG::prep_backfill_object_push(
+int PrimaryLogPG::prep_backfill_object_push(
   hobject_t oid, eversion_t v,
   ObjectContextRef obc,
   vector<pg_shard_t> peers,
   PGBackend::RecoveryHandle *h)
 {
-  dout(10) << "push_backfill_object " << oid << " v " << v << " to peers " << peers << dendl;
+  dout(10) << __func__ << " " << oid << " v " << v << " to peers " << peers << dendl;
   assert(!peers.empty());
 
   backfills_in_flight.insert(oid);
   for (unsigned int i = 0 ; i < peers.size(); ++i) {
     map<pg_shard_t, pg_missing_t>::iterator bpm = peer_missing.find(peers[i]);
     assert(bpm != peer_missing.end());
-    bpm->second.add(oid, eversion_t(), eversion_t());
+    bpm->second.add(oid, eversion_t(), eversion_t(), false);
   }
 
   assert(!recovering.count(oid));
@@ -11184,13 +12081,21 @@ void PrimaryLogPG::prep_backfill_object_push(
 
   // We need to take the read_lock here in order to flush in-progress writes
   obc->ondisk_read_lock();
-  pgbackend->recover_object(
+  int r = pgbackend->recover_object(
     oid,
     v,
     ObjectContextRef(),
     obc,
     h);
   obc->ondisk_read_unlock();
+  if (r < 0) {
+    dout(0) << __func__ << " Error " << r << " on oid " << oid << dendl;
+    primary_failed(oid);
+    primary_error(oid, v);
+    backfills_in_flight.erase(oid);
+    missing_loc.add_missing(oid, v, eversion_t());
+  }
+  return r;
 }
 
 void PrimaryLogPG::update_range(
@@ -11326,7 +12231,7 @@ void PrimaryLogPG::check_local()
       continue;
     did.insert(p->soid);
 
-    if (p->is_delete()) {
+    if (p->is_delete() && !is_missing_object(p->soid)) {
       dout(10) << " checking " << p->soid
 	       << " at " << p->version << dendl;
       struct stat st;
@@ -12110,7 +13015,7 @@ bool PrimaryLogPG::agent_maybe_evict(ObjectContextRef& obc, bool after_flush)
 
   ctx->at_version = get_next_version();
   assert(ctx->new_obs.exists);
-  int r = _delete_oid(ctx.get(), true);
+  int r = _delete_oid(ctx.get(), true, false);
   if (obc->obs.oi.is_omap())
     ctx->delta_stats.num_objects_omap--;
   ctx->delta_stats.num_evict++;
@@ -12579,6 +13484,9 @@ void PrimaryLogPG::scrub_snapshot_metadata(
   const char *mode = (repair ? "repair": (deep_scrub ? "deep-scrub" : "scrub"));
   boost::optional<snapid_t> all_clones;   // Unspecified snapid_t or boost::none
 
+  /// snapsets to repair
+  map<hobject_t,SnapSet> snapset_to_repair;
+
   // traverse in reverse order.
   boost::optional<hobject_t> head;
   boost::optional<SnapSet> snapset; // If initialized so will head (above)
@@ -12660,6 +13568,10 @@ void PrimaryLogPG::scrub_snapshot_metadata(
 	if (oi->is_cache_pinned())
 	  ++stat.num_objects_pinned;
       }
+    } else {
+      // pessimistic assumption that this object might contain a
+      // legacy SnapSet
+      stat.num_legacy_snapsets++;
     }
 
     // Check for any problems while processing clones
@@ -12742,7 +13654,7 @@ void PrimaryLogPG::scrub_snapshot_metadata(
 	bl.push_back(p->second.attrs[SS_ATTR]);
 	bufferlist::iterator blp = bl.begin();
         try {
-	   snapset = SnapSet(); // Initialize optional<> before decoding into it
+	  snapset = SnapSet(); // Initialize optional<> before decoding into it
 	  ::decode(snapset.get(), blp);
         } catch (buffer::error& e) {
 	  snapset = boost::none;
@@ -12779,6 +13691,23 @@ void PrimaryLogPG::scrub_snapshot_metadata(
 	  ++scrubber.shallow_errors;
 	  head_error.set_head_mismatch();
 	}
+
+	if (get_osdmap()->require_osd_release >= CEPH_RELEASE_LUMINOUS) {
+	  if (soid.is_snapdir()) {
+	    dout(10) << " will move snapset to head from " << soid << dendl;
+	    snapset_to_repair[soid.get_head()] = *snapset;
+	  } else if (snapset->is_legacy()) {
+	    dout(10) << " will convert legacy snapset on " << soid << " " << *snapset
+		     << dendl;
+	    snapset_to_repair[soid.get_head()] = *snapset;
+	  }
+	} else {
+	  stat.num_legacy_snapsets++;
+	}
+      } else {
+	// pessimistic assumption that this object might contain a
+	// legacy SnapSet
+	stat.num_legacy_snapsets++;
       }
     } else {
       assert(soid.is_snap());
@@ -12834,6 +13763,21 @@ void PrimaryLogPG::scrub_snapshot_metadata(
             stat.num_bytes += snapset->get_clone_bytes(soid.snap);
 	  }
         }
+      }
+
+      // migrate legacy_snaps to snapset?
+      auto p = snapset_to_repair.find(soid.get_head());
+      if (p != snapset_to_repair.end()) {
+	if (!oi || oi->legacy_snaps.empty()) {
+	  osd->clog->error() << mode << " " << info.pgid << " " << soid
+			     << " has no oi or legacy_snaps; cannot convert "
+			     << *snapset;
+	  ++scrubber.shallow_errors;
+	} else {
+	  dout(20) << __func__ << "   copying legacy_snaps " << oi->legacy_snaps
+		   << " to snapset " << p->second << dendl;
+	  p->second.clone_snaps[soid.snap] = oi->legacy_snaps;
+	}
       }
 
       // what's next?
@@ -12900,6 +13844,90 @@ void PrimaryLogPG::scrub_snapshot_metadata(
     simple_opc_submit(std::move(ctx));
     ++scrubber.num_digest_updates_pending;
   }
+  for (auto& p : snapset_to_repair) {
+    // cache pools may not have the clones, which means we won't know
+    // what snaps they have.  fake out the clone_snaps entries anyway (with
+    // blank snap lists).
+    p.second.head_exists = true;
+    if (pool.info.allow_incomplete_clones()) {
+      for (auto s : p.second.clones) {
+	if (p.second.clone_snaps.count(s) == 0) {
+	  dout(10) << __func__ << " " << p.first << " faking clone_snaps for "
+		   << s << dendl;
+	  p.second.clone_snaps[s];
+	}
+      }
+    }
+    if (p.second.clones.size() != p.second.clone_snaps.size() ||
+	p.second.is_legacy()) {
+      // this happens if we encounter other errors above, like a missing
+      // or extra clone.
+      dout(10) << __func__ << " not writing snapset to " << p.first
+	       << " snapset " << p.second << " clones " << p.second.clones
+	       << "; didn't convert fully" << dendl;
+      scrub_cstat.sum.num_legacy_snapsets++;
+      continue;
+    }
+    dout(10) << __func__ << " writing snapset to " << p.first
+	     << " " << p.second << dendl;
+    ObjectContextRef obc = get_object_context(p.first, true);
+    if (!obc) {
+      osd->clog->error() << info.pgid << " " << mode
+			 << " cannot get object context for "
+			 << p.first;
+      continue;
+    } else if (obc->obs.oi.soid != p.first) {
+      osd->clog->error() << info.pgid << " " << mode
+			 << " object " << p.first
+			 << " has a valid oi attr with a mismatched name, "
+			 << " obc->obs.oi.soid: " << obc->obs.oi.soid;
+      continue;
+    }
+    ObjectContextRef snapset_obc;
+    if (!obc->obs.exists) {
+      snapset_obc = get_object_context(p.first.get_snapdir(), false);
+      if (!snapset_obc) {
+	osd->clog->error() << info.pgid << " " << mode
+			   << " cannot get object context for "
+			   << p.first.get_snapdir();
+	continue;
+      }
+    }
+    OpContextUPtr ctx = simple_opc_create(obc);
+    PGTransaction *t = ctx->op_t.get();
+    ctx->snapset_obc = snapset_obc;
+    ctx->at_version = get_next_version();
+    ctx->mtime = utime_t();      // do not update mtime
+    ctx->new_snapset = p.second;
+    if (!ctx->new_obs.exists) {
+      dout(20) << __func__ << "   making " << p.first << " a whiteout" << dendl;
+      ctx->new_obs.exists = true;
+      ctx->new_snapset.head_exists = true;
+      ctx->new_obs.oi.set_flag(object_info_t::FLAG_WHITEOUT);
+      ++ctx->delta_stats.num_whiteouts;
+      ++ctx->delta_stats.num_objects;
+      t->create(p.first);
+      if (p.first < scrubber.start) {
+	dout(20) << __func__ << " kludging around update outside of scrub range"
+		 << dendl;
+      } else {
+	scrub_cstat.add(ctx->delta_stats);
+      }
+    }
+    dout(20) << __func__ << "   final snapset " << ctx->new_snapset << dendl;
+    assert(!ctx->new_snapset.is_legacy());
+    finish_ctx(ctx.get(), pg_log_entry_t::MODIFY);
+    ctx->register_on_success(
+      [this]() {
+	dout(20) << "updating snapset" << dendl;
+	if (--scrubber.num_digest_updates_pending == 0) {
+	  requeue_scrub();
+	}
+      });
+
+    simple_opc_submit(std::move(ctx));
+    ++scrubber.num_digest_updates_pending;
+  }
 
   dout(10) << __func__ << " (" << mode << ") finish" << dendl;
 }
@@ -12958,7 +13986,7 @@ void PrimaryLogPG::_scrub_finish()
 		      << scrub_cstat.sum.num_objects_hit_set_archive << "/" << info.stats.stats.sum.num_objects_hit_set_archive << " hit_set_archive, "
 		      << scrub_cstat.sum.num_whiteouts << "/" << info.stats.stats.sum.num_whiteouts << " whiteouts, "
 		      << scrub_cstat.sum.num_bytes << "/" << info.stats.stats.sum.num_bytes << " bytes, "
-		      << scrub_cstat.sum.num_bytes_hit_set_archive << "/" << info.stats.stats.sum.num_bytes_hit_set_archive << " hit_set_archive bytes.\n";
+		      << scrub_cstat.sum.num_bytes_hit_set_archive << "/" << info.stats.stats.sum.num_bytes_hit_set_archive << " hit_set_archive bytes.";
     ++scrubber.shallow_errors;
 
     if (repair) {
@@ -12971,17 +13999,95 @@ void PrimaryLogPG::_scrub_finish()
       publish_stats_to_osd();
       share_pg_info();
     }
+  } else if (scrub_cstat.sum.num_legacy_snapsets !=
+	     info.stats.stats.sum.num_legacy_snapsets) {
+    osd->clog->info() << info.pgid << " " << mode << " updated num_legacy_snapsets"
+		      << " from " << info.stats.stats.sum.num_legacy_snapsets
+		      << " -> " << scrub_cstat.sum.num_legacy_snapsets << "\n";
+    info.stats.stats.sum.num_legacy_snapsets = scrub_cstat.sum.num_legacy_snapsets;
+    publish_stats_to_osd();
+    share_pg_info();
   }
+  // Clear object context cache to get repair information
+  if (repair)
+    object_contexts.clear();
+}
+
+bool PrimaryLogPG::check_osdmap_full(const set<pg_shard_t> &missing_on)
+{
+    return osd->check_osdmap_full(missing_on);
+}
+
+int PrimaryLogPG::rep_repair_primary_object(const hobject_t& soid, OpRequestRef op)
+{
+  // Only supports replicated pools
+  assert(!pool.info.require_rollback());
+  assert(is_primary());
+
+  dout(10) << __func__ << " " << soid
+	   << " peers osd.{" << actingbackfill << "}" << dendl;
+
+  if (!is_clean()) {
+    block_for_clean(soid, op);
+    return -EAGAIN;
+  }
+
+  assert(!pg_log.get_missing().is_missing(soid));
+  bufferlist bv;
+  object_info_t oi;
+  eversion_t v;
+  int r = get_pgbackend()->objects_get_attr(soid, OI_ATTR, &bv);
+  if (r < 0) {
+    // Leave v and try to repair without a version, getting attr failed
+    dout(0) << __func__ << ": Need version of replica, objects_get_attr failed: "
+	    << soid << " error=" << r << dendl;
+  } else try {
+    bufferlist::iterator bliter = bv.begin();
+    ::decode(oi, bliter);
+    v = oi.version;
+  } catch (...) {
+    // Leave v as default constructed. This will fail when sent to older OSDs, but
+    // not much worse than failing here.
+    dout(0) << __func__ << ": Need version of replica, bad object_info_t: " << soid << dendl;
+  }
+
+  missing_loc.add_missing(soid, v, eversion_t());
+  if (primary_error(soid, v)) {
+    dout(0) << __func__ << " No other replicas available for " << soid << dendl;
+    // XXX: If we knew that there is no down osd which could include this
+    // object, it would be nice if we could return EIO here.
+    // If a "never fail" flag was available, that could be used
+    // for rbd to NOT return EIO until object marked lost.
+
+    // Drop through to save this op in case an osd comes up with the object.
+  }
+
+  // Restart the op after object becomes readable again
+  waiting_for_unreadable_object[soid].push_back(op);
+  op->mark_delayed("waiting for missing object");
+
+  if (!eio_errors_to_process) {
+    eio_errors_to_process = true;
+    assert(is_clean());
+    queue_peering_event(
+        CephPeeringEvtRef(
+	  std::make_shared<CephPeeringEvt>(
+	  get_osdmap()->get_epoch(),
+	  get_osdmap()->get_epoch(),
+	  DoRecovery())));
+  } else {
+    // A prior error must have already cleared clean state and queued recovery
+    // or a map change has triggered re-peering.
+    // Not inlining the recovery by calling maybe_kick_recovery(soid);
+    dout(5) << __func__<< ": Read error on " << soid << ", but already seen errors" << dendl;
+  }
+
+  return -EAGAIN;
 }
 
 /*---SnapTrimmer Logging---*/
 #undef dout_prefix
 #define dout_prefix *_dout << pg->gen_prefix() 
-
-PrimaryLogPG::SnapTrimmer::~SnapTrimmer()
-{
-  in_flight.clear();
-}
 
 void PrimaryLogPG::SnapTrimmer::log_enter(const char *state_name)
 {
@@ -13001,7 +14107,7 @@ void PrimaryLogPG::SnapTrimmer::log_exit(const char *state_name, utime_t enter_t
 /* NotTrimming */
 PrimaryLogPG::NotTrimming::NotTrimming(my_context ctx)
   : my_base(ctx), 
-    NamedState(context< SnapTrimmer >().pg->cct, "NotTrimming")
+    NamedState(context< SnapTrimmer >().pg, "NotTrimming")
 {
   context< SnapTrimmer >().log_enter(state_name);
 }
@@ -13016,52 +14122,63 @@ boost::statechart::result PrimaryLogPG::NotTrimming::react(const KickTrim&)
   PrimaryLogPG *pg = context< SnapTrimmer >().pg;
   ldout(pg->cct, 10) << "NotTrimming react KickTrim" << dendl;
 
-  assert(pg->is_primary() && pg->is_active());
+  if (!(pg->is_primary() && pg->is_active())) {
+    ldout(pg->cct, 10) << "NotTrimming not primary or active" << dendl;
+    return discard_event();
+  }
   if (!pg->is_clean() ||
       pg->snap_trimq.empty()) {
     ldout(pg->cct, 10) << "NotTrimming not clean or nothing to trim" << dendl;
     return discard_event();
   }
-
   if (pg->scrubber.active) {
     ldout(pg->cct, 10) << " scrubbing, will requeue snap_trimmer after" << dendl;
-    pg->scrubber.queue_snap_trim = true;
     return transit< WaitScrub >();
   } else {
-    context<SnapTrimmer>().snap_to_trim = pg->snap_trimq.range_start();
-    ldout(pg->cct, 10) << "NotTrimming: trimming "
-	     << pg->snap_trimq.range_start()
-	     << dendl;
-    return transit< AwaitAsyncWork >();
+    return transit< Trimming >();
   }
+}
+
+boost::statechart::result PrimaryLogPG::WaitReservation::react(const SnapTrimReserved&)
+{
+  PrimaryLogPG *pg = context< SnapTrimmer >().pg;
+  ldout(pg->cct, 10) << "WaitReservation react SnapTrimReserved" << dendl;
+
+  pending = nullptr;
+  if (!context< SnapTrimmer >().can_trim()) {
+    post_event(KickTrim());
+    return transit< NotTrimming >();
+  }
+
+  context<Trimming>().snap_to_trim = pg->snap_trimq.range_start();
+  ldout(pg->cct, 10) << "NotTrimming: trimming "
+		     << pg->snap_trimq.range_start()
+		     << dendl;
+  return transit< AwaitAsyncWork >();
 }
 
 /* AwaitAsyncWork */
 PrimaryLogPG::AwaitAsyncWork::AwaitAsyncWork(my_context ctx)
   : my_base(ctx),
-    NamedState(context< SnapTrimmer >().pg->cct, "Trimming/AwaitAsyncWork")
+    NamedState(context< SnapTrimmer >().pg, "Trimming/AwaitAsyncWork")
 {
+  auto *pg = context< SnapTrimmer >().pg;
   context< SnapTrimmer >().log_enter(state_name);
-  context< SnapTrimmer >().pg->osd->queue_for_snap_trim(
-    context< SnapTrimmer >().pg);
-}
-
-void PrimaryLogPG::AwaitAsyncWork::exit()
-{
-  context< SnapTrimmer >().log_exit(state_name, enter_time);
+  context< SnapTrimmer >().pg->osd->queue_for_snap_trim(pg);
+  pg->state_set(PG_STATE_SNAPTRIM);
+  pg->state_clear(PG_STATE_SNAPTRIM_ERROR);
+  pg->publish_stats_to_osd();
 }
 
 boost::statechart::result PrimaryLogPG::AwaitAsyncWork::react(const DoSnapWork&)
 {
   PrimaryLogPGRef pg = context< SnapTrimmer >().pg;
-  ldout(pg->cct, 10) << "AwaitAsyncWork react" << dendl;
-  snapid_t snap_to_trim = context<SnapTrimmer>().snap_to_trim;
-  auto &in_flight = context<SnapTrimmer>().in_flight;
+  snapid_t snap_to_trim = context<Trimming>().snap_to_trim;
+  auto &in_flight = context<Trimming>().in_flight;
   assert(in_flight.empty());
 
   assert(pg->is_primary() && pg->is_active());
-  if (!pg->is_clean() ||
-      pg->scrubber.active) {
+  if (!context< SnapTrimmer >().can_trim()) {
     ldout(pg->cct, 10) << "something changed, reverting to NotTrimming" << dendl;
     post_event(KickTrim());
     return transit< NotTrimming >();
@@ -13108,19 +14225,26 @@ boost::statechart::result PrimaryLogPG::AwaitAsyncWork::react(const DoSnapWork&)
   for (auto &&object: to_trim) {
     // Get next
     ldout(pg->cct, 10) << "AwaitAsyncWork react trimming " << object << dendl;
-    OpContextUPtr ctx = pg->trim_object(in_flight.empty(), object);
-    if (!ctx) {
-      ldout(pg->cct, 10) << "could not get write lock on obj "
-			 << object << dendl;
-      if (in_flight.empty()) {
+    OpContextUPtr ctx;
+    int error = pg->trim_object(in_flight.empty(), object, &ctx);
+    if (error) {
+      if (error == -ENOLCK) {
+	ldout(pg->cct, 10) << "could not get write lock on obj "
+			   << object << dendl;
+      } else {
+	pg->state_set(PG_STATE_SNAPTRIM_ERROR);
+	ldout(pg->cct, 10) << "Snaptrim error=" << error << dendl;
+      }
+      if (!in_flight.empty()) {
+	ldout(pg->cct, 10) << "letting the ones we already started finish" << dendl;
+	return transit< WaitRepops >();
+      }
+      if (error == -ENOLCK) {
 	ldout(pg->cct, 10) << "waiting for it to clear"
 			   << dendl;
 	return transit< WaitRWLock >();
-
       } else {
-	ldout(pg->cct, 10) << "letting the ones we already started finish"
-			   << dendl;
-	return transit< WaitRepops >();
+        return transit< NotTrimming >();
       }
     }
 
@@ -13129,8 +14253,13 @@ boost::statechart::result PrimaryLogPG::AwaitAsyncWork::react(const DoSnapWork&)
       [pg, object, &in_flight]() {
 	assert(in_flight.find(object) != in_flight.end());
 	in_flight.erase(object);
-	if (in_flight.empty())
-	  pg->snap_trimmer_machine.process_event(RepopsComplete());
+	if (in_flight.empty()) {
+	  if (pg->state_test(PG_STATE_SNAPTRIM_ERROR)) {
+	    pg->snap_trimmer_machine.process_event(Reset());
+	  } else {
+	    pg->snap_trimmer_machine.process_event(RepopsComplete());
+	  }
+	}
       });
 
     pg->simple_opc_submit(std::move(ctx));
@@ -13208,6 +14337,10 @@ int PrimaryLogPG::getattrs_maybe_cache(
     tmp.swap(*out);
   }
   return r;
+}
+
+bool PrimaryLogPG::check_failsafe_full(ostream &ss) {
+    return osd->check_failsafe_full(ss);
 }
 
 void intrusive_ptr_add_ref(PrimaryLogPG *pg) { pg->get("intptr"); }

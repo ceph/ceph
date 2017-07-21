@@ -154,7 +154,7 @@ class AsyncConnection : public Connection {
                              DispatchQueue *q, uint64_t cid)
       : msgr(omsgr), center(c), dispatch_queue(q), conn_id(cid),
         stop_dispatch(false) { }
-    ~DelayedDelivery() {
+    ~DelayedDelivery() override {
       assert(register_time_events.empty());
       assert(delay_queue.empty());
     }
@@ -187,7 +187,7 @@ class AsyncConnection : public Connection {
 
  public:
   AsyncConnection(CephContext *cct, AsyncMessenger *m, DispatchQueue *q, Worker *w);
-  ~AsyncConnection();
+  ~AsyncConnection() override;
   void maybe_start_delay_thread();
 
   ostream& _conn_prefix(std::ostream *_dout);
@@ -294,8 +294,8 @@ class AsyncConnection : public Connection {
   PerfCounters *logger;
   int global_seq;
   __u32 connect_seq, peer_global_seq;
-  atomic64_t out_seq;
-  atomic64_t ack_left, in_seq;
+  std::atomic<uint64_t> out_seq{0};
+  std::atomic<uint64_t> ack_left{0}, in_seq{0};
   int state;
   int state_after_send;
   ConnectedSocket cs;
@@ -303,6 +303,10 @@ class AsyncConnection : public Connection {
   Messenger::Policy policy;
 
   DispatchQueue *dispatch_queue;
+
+  // lockfree, only used in own thread
+  bufferlist outcoming_bl;
+  bool open_write = false;
 
   std::mutex write_lock;
   enum class WriteStatus {
@@ -312,10 +316,8 @@ class AsyncConnection : public Connection {
     CLOSED
   };
   std::atomic<WriteStatus> can_write;
-  bool open_write;
-  map<int, list<pair<bufferlist, Message*> > > out_q;  // priority queue for outbound msgs
   list<Message*> sent; // the first bufferlist need to inject seq
-  bufferlist outcoming_bl;
+  map<int, list<pair<bufferlist, Message*> > > out_q;  // priority queue for outbound msgs
   bool keepalive;
 
   std::mutex lock;

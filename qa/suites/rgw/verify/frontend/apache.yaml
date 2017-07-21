@@ -1,3 +1,0 @@
-overrides:
-  rgw:
-    frontend: apache

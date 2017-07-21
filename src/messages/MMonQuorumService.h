@@ -28,7 +28,7 @@ struct MMonQuorumService : public Message
   { }
 
 protected:
-  ~MMonQuorumService() { }
+  ~MMonQuorumService() override { }
 
 public:
 
@@ -58,15 +58,15 @@ public:
     ::decode(round, p);
   }
 
-  void encode_payload(uint64_t features) {
+  void encode_payload(uint64_t features) override {
     assert(0 == "MMonQuorumService message must always be a base class");
   }
 
-  void decode_payload() {
+  void decode_payload() override {
     assert(0 == "MMonQuorumService message must always be a base class");
   }
 
-  const char *get_type_name() const { return "quorum_service"; }
+  const char *get_type_name() const override { return "quorum_service"; }
 };
 
 #endif /* CEPH_MMON_QUORUM_SERVICE_H */

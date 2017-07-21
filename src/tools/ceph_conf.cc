@@ -51,7 +51,7 @@ If there is no action given, the action will default to --lookup.\n\
 \n\
 EXAMPLES\n\
 $ ceph-conf --name mon.0 -c /etc/ceph/ceph.conf 'mon addr'\n\
-Find out what the value of 'mon add' is for monitor 0.\n\
+Find out what the value of 'mon addr' is for monitor 0.\n\
 \n\
 $ ceph-conf -l mon\n\
 List sections beginning with 'mon'.\n\

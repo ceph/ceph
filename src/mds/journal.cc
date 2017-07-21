@@ -54,9 +54,6 @@
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_mds
-#undef DOUT_COND
-#define DOUT_COND(cct, l) (l<=cct->_conf->debug_mds || l <= cct->_conf->debug_mds_log \
-			      || l <= cct->_conf->debug_mds_log_expire)
 #undef dout_prefix
 #define dout_prefix *_dout << "mds." << mds->get_nodeid() << ".journal "
 
@@ -298,9 +295,6 @@ void LogSegment::try_to_expire(MDSRank *mds, MDSGatherBuilder &gather_bld, int o
   }
 }
 
-#undef DOUT_COND
-#define DOUT_COND(cct, l) (l<=cct->_conf->debug_mds || l <= cct->_conf->debug_mds_log)
-
 
 // -----------------------
 // EMetaBlob
@@ -335,13 +329,27 @@ void EMetaBlob::add_dir_context(CDir *dir, int mode)
 
     if (mode == TO_AUTH_SUBTREE_ROOT) {
       // subtree root?
-      if (dir->is_subtree_root() && !dir->state_test(CDir::STATE_EXPORTBOUND)) {
-	if (dir->is_auth() && !dir->is_ambiguous_auth()) {
-	  // it's an auth subtree, we don't need maybe (if any), and we're done.
-	  dout(20) << "EMetaBlob::add_dir_context(" << dir << ") reached unambig auth subtree, don't need " << maybe
-		   << " at " << *dir << dendl;
-	  maybe.clear();
-	  break;
+      if (dir->is_subtree_root()) {
+	// match logic in MDCache::create_subtree_map()
+	if (dir->get_dir_auth().first == mds->get_nodeid()) {
+	  mds_authority_t parent_auth = parent ? parent->authority() : CDIR_AUTH_UNDEF;
+	  if (parent_auth.first == dir->get_dir_auth().first) {
+	    if (parent_auth.second == CDIR_AUTH_UNKNOWN &&
+		!dir->is_ambiguous_dir_auth() &&
+		!dir->state_test(CDir::STATE_EXPORTBOUND) &&
+		!dir->state_test(CDir::STATE_AUXSUBTREE) &&
+		!diri->state_test(CInode::STATE_AMBIGUOUSAUTH)) {
+	      dout(0) << "EMetaBlob::add_dir_context unexpected subtree " << *dir << dendl;
+	      assert(0);
+	    }
+	    dout(20) << "EMetaBlob::add_dir_context(" << dir << ") ambiguous or transient subtree " << dendl;
+	  } else {
+	    // it's an auth subtree, we don't need maybe (if any), and we're done.
+	    dout(20) << "EMetaBlob::add_dir_context(" << dir << ") reached unambig auth subtree, don't need " << maybe
+		     << " at " << *dir << dendl;
+	    maybe.clear();
+	    break;
+	  }
 	} else {
 	  dout(20) << "EMetaBlob::add_dir_context(" << dir << ") reached ambig or !auth subtree, need " << maybe
 		   << " at " << *dir << dendl;
@@ -350,7 +358,7 @@ void EMetaBlob::add_dir_context(CDir *dir, int mode)
 	  maybenot = false;
 	}
       }
-      
+
       // was the inode journaled in this blob?
       if (event_seq && diri->last_journaled == event_seq) {
 	dout(20) << "EMetaBlob::add_dir_context(" << dir << ") already have diri this blob " << *diri << dendl;
@@ -548,6 +556,7 @@ void EMetaBlob::fullbit::update_inode(MDSRank *mds, CInode *in)
 {
   in->inode = inode;
   in->xattrs = xattrs;
+  in->maybe_export_pin();
   if (in->inode.is_dir()) {
     if (!(in->dirfragtree == dirfragtree)) {
       dout(10) << "EMetaBlob::fullbit::update_inode dft " << in->dirfragtree << " -> "
@@ -1304,8 +1313,7 @@ void EMetaBlob::replay(MDSRank *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
 	    dout(0) << ss.str() << dendl;
 	    mds->clog->warn(ss);
 	  }
-	  dir->unlink_inode(dn);
-          mds->mdcache->touch_dentry_bottom(dn);
+	  dir->unlink_inode(dn, false);
 	}
 	if (unlinked.count(in))
 	  linked.insert(in);
@@ -1317,9 +1325,7 @@ void EMetaBlob::replay(MDSRank *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
 	if (dn->get_linkage()->get_inode() != in && in->get_parent_dn()) {
 	  dout(10) << "EMetaBlob.replay unlinking " << *in << dendl;
 	  unlinked[in] = in->get_parent_dir();
-          CDentry *unlinked_dn = in->get_parent_dn();
 	  in->get_parent_dir()->unlink_inode(in->get_parent_dn());
-          mds->mdcache->touch_dentry_bottom(unlinked_dn);
 	}
 	if (dn->get_linkage()->get_inode() != in) {
 	  if (!dn->get_linkage()->is_null()) { // note: might be remote.  as with stray reintegration.
@@ -1331,8 +1337,7 @@ void EMetaBlob::replay(MDSRank *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
 	      dout(0) << ss.str() << dendl;
 	      mds->clog->warn(ss);
 	    }
-	    dir->unlink_inode(dn);
-            mds->mdcache->touch_dentry_bottom(dn);
+	    dir->unlink_inode(dn, false);
 	  }
 	  if (unlinked.count(in))
 	    linked.insert(in);
@@ -1377,8 +1382,7 @@ void EMetaBlob::replay(MDSRank *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
 	       << " " << *dn->get_linkage()->get_inode() << " should be remote " << p->ino;
 	    dout(0) << ss.str() << dendl;
 	  }
-	  dir->unlink_inode(dn);
-          mds->mdcache->touch_dentry_bottom(dn);
+	  dir->unlink_inode(dn, false);
 	}
 	dir->link_remote_inode(dn, p->ino, p->d_type);
 	dn->set_version(p->dnv);
@@ -1413,7 +1417,6 @@ void EMetaBlob::replay(MDSRank *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
 	    if (dn->get_linkage()->is_primary())
 	      unlinked[in] = dir;
 	    dir->unlink_inode(dn);
-            mds->mdcache->touch_dentry_bottom(dn);
 	  }
 	}
 	dn->set_version(p->dnv);
@@ -1427,7 +1430,6 @@ void EMetaBlob::replay(MDSRank *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
 
       // Make null dentries the first things we trim
       dout(10) << "EMetaBlob.replay pushing to bottom of lru " << *dn << dendl;
-      mds->mdcache->touch_dentry_bottom(dn);
     }
   }
 
@@ -1486,7 +1488,7 @@ void EMetaBlob::replay(MDSRank *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
 	dir = renamed_diri->get_or_open_dirfrag(mds->mdcache, *p);
 	dout(10) << " creating new rename import bound " << *dir << dendl;
 	dir->state_clear(CDir::STATE_AUTH);
-	mds->mdcache->adjust_subtree_auth(dir, CDIR_AUTH_UNDEF, false);
+	mds->mdcache->adjust_subtree_auth(dir, CDIR_AUTH_UNDEF);
       }
     }
 
@@ -1550,7 +1552,7 @@ void EMetaBlob::replay(MDSRank *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
       // [repair bad inotable updates]
       if (inotablev > mds->inotable->get_version()) {
 	mds->clog->error() << "journal replay inotablev mismatch "
-	    << mds->inotable->get_version() << " -> " << inotablev << "\n";
+	    << mds->inotable->get_version() << " -> " << inotablev;
 	mds->inotable->force_replay_version(inotablev);
       }
 
@@ -1576,7 +1578,7 @@ void EMetaBlob::replay(MDSRank *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
 	    inodeno_t i = session->take_ino(used_preallocated_ino);
 	    if (next != i)
 	      mds->clog->warn() << " replayed op " << client_reqs << " used ino " << i
-			       << " but session next is " << next << "\n";
+			       << " but session next is " << next;
 	    assert(i == used_preallocated_ino);
 	    session->info.used_inos.clear();
 	  }
@@ -1598,7 +1600,7 @@ void EMetaBlob::replay(MDSRank *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
       assert(sessionmapv == mds->sessionmap.get_version());
     } else {
       mds->clog->error() << "journal replay sessionmap v " << sessionmapv
-			<< " -(1|2) > table " << mds->sessionmap.get_version() << "\n";
+			<< " -(1|2) > table " << mds->sessionmap.get_version();
       assert(g_conf->mds_wipe_sessions);
       mds->sessionmap.wipe();
       mds->sessionmap.set_version(sessionmapv);
@@ -1636,7 +1638,6 @@ void EMetaBlob::replay(MDSRank *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
       if (parent) {
         dout(10) << "EMetaBlob.replay unlinked from dentry " << *parent << dendl;
         assert(parent->get_linkage()->is_null());
-        mds->mdcache->touch_dentry_bottom(parent);
       }
     } else {
       dout(10) << "EMetaBlob.replay destroyed " << *p << ", not in cache" << dendl;
@@ -2105,6 +2106,9 @@ void EUpdate::update_segment()
 {
   metablob.update_segment(_segment);
 
+  if (client_map.length())
+    _segment->sessionmapv = cmapv;
+
   if (had_slaves)
     _segment->uncommitted_masters.insert(reqid);
 }
@@ -2137,6 +2141,7 @@ void EUpdate::replay(MDSRank *mds)
       mds->sessionmap.set_projected(mds->sessionmap.get_version());
     }
   }
+  update_segment();
 }
 
 
@@ -2869,11 +2874,12 @@ void EExport::replay(MDSRank *mds)
 
 void EExport::encode(bufferlist& bl, uint64_t features) const
 {
-  ENCODE_START(3, 3, bl);
+  ENCODE_START(4, 3, bl);
   ::encode(stamp, bl);
   ::encode(metablob, bl, features);
   ::encode(base, bl);
   ::encode(bounds, bl);
+  ::encode(target, bl);
   ENCODE_FINISH(bl);
 }
 
@@ -2885,6 +2891,8 @@ void EExport::decode(bufferlist::iterator &bl)
   ::decode(metablob, bl);
   ::decode(base, bl);
   ::decode(bounds, bl);
+  if (struct_v >= 4)
+    ::decode(target, bl);
   DECODE_FINISH(bl);
 }
 
@@ -2963,13 +2971,14 @@ void EImportStart::replay(MDSRank *mds)
 }
 
 void EImportStart::encode(bufferlist &bl, uint64_t features) const {
-  ENCODE_START(3, 3, bl);
+  ENCODE_START(4, 3, bl);
   ::encode(stamp, bl);
   ::encode(base, bl);
   ::encode(metablob, bl, features);
   ::encode(bounds, bl);
   ::encode(cmapv, bl);
   ::encode(client_map, bl);
+  ::encode(from, bl);
   ENCODE_FINISH(bl);
 }
 
@@ -2982,6 +2991,8 @@ void EImportStart::decode(bufferlist::iterator &bl) {
   ::decode(bounds, bl);
   ::decode(cmapv, bl);
   ::decode(client_map, bl);
+  if (struct_v >= 4)
+    ::decode(from, bl);
   DECODE_FINISH(bl);
 }
 

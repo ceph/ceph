@@ -420,7 +420,7 @@ recovery operations to ensure optimal performance during recovery.
               ``osd client op priority``.
 
 :Type: 32-bit Integer
-:Default: ``10`` 
+:Default: ``3`` 
 :Valid Range: 1-63
 
 
@@ -448,7 +448,7 @@ recovery operations to ensure optimal performance during recovery.
 
 :Description: The Ceph OSD Daemon operation thread timeout in seconds.
 :Type: 32-bit Integer
-:Default: ``30`` 
+:Default: ``15`` 
 
 
 ``osd op complaint time`` 
@@ -560,15 +560,6 @@ priority than requests to read or write data.
 :Default: ``512`` 
 
 
-``osd backfill full ratio``
-
-:Description: Refuse to accept backfill requests when the Ceph OSD Daemon's 
-              full ratio is above this value.
-
-:Type: Float
-:Default: ``0.85``
-
-
 ``osd backfill retry interval``
 
 :Description: The number of seconds to wait before retrying backfill requests.
@@ -663,7 +654,7 @@ perform well in a degraded state.
               increased load on the cluster.
 
 :Type: 32-bit Integer
-:Default: ``15``
+:Default: ``3``
 
 
 ``osd recovery max chunk`` 
@@ -673,10 +664,11 @@ perform well in a degraded state.
 :Default: ``8 << 20`` 
 
 
-``osd recovery threads`` 
+``osd recovery max single start``
 
-:Description: The number of threads for recovering data.
-:Type: 32-bit Integer
+:Description: The maximum number of recovery operations per OSD that will be
+              newly started when an OSD is recovering.
+:Type: 64-bit Integer Unsigned
 :Default: ``1``
 
 
@@ -696,6 +688,35 @@ perform well in a degraded state.
 :Default: ``true``
 
 
+``osd recovery sleep``
+
+:Description: Time to sleep before next recovery. Increasing this value will
+              slow down recovery operation while client operations will be
+              less impacted.
+
+:Type: Float
+:Default: ``0.01``
+
+Tiering
+=======
+
+``osd agent max ops``
+
+:Description: The maximum number of simultaneous flushing ops per tiering agent
+              in the high speed mode.
+:Type: 32-bit Integer
+:Default: ``4``
+
+
+``osd agent max low ops``
+
+:Description: The maximum number of simultaneous flushing ops per tiering agent
+              in the low speed mode.
+:Type: 32-bit Integer
+:Default: ``2``
+
+See `cache target dirty high ratio`_ for when the tiering agent flushes dirty
+objects within the high speed mode.
 
 Miscellaneous
 =============
@@ -764,13 +785,6 @@ Miscellaneous
 :Default: ``false`` 
 
 
-``osd preserve trimmed log``
-
-:Description: Preserves trimmed log files, but uses more disk space.
-:Type: Boolean
-:Default: ``false``
-
-
 ``osd fast fail on connection refused``
 
 :Description: If this option is enabled, crashed OSDs are marked down
@@ -788,3 +802,4 @@ Miscellaneous
 .. _Monitoring OSDs and PGs: ../../operations/monitoring-osd-pg#peering
 .. _Pool & PG Config Reference: ../pool-pg-config-ref
 .. _Journal Config Reference: ../journal-ref
+.. _cache target dirty high ratio: ../../operations/pools#cache-target-dirty-high-ratio

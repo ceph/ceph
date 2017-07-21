@@ -26,8 +26,7 @@
 struct MOSDPGCreate : public Message {
 
   const static int HEAD_VERSION = 3;
-  // At head_version 2 the unspecified compat_version was set to 2
-  const static int COMPAT_VERSION = 2;
+  const static int COMPAT_VERSION = 3;
 
   version_t          epoch;
   map<pg_t,pg_create_t> mkpg;
@@ -39,48 +38,24 @@ struct MOSDPGCreate : public Message {
     : Message(MSG_OSD_PG_CREATE, HEAD_VERSION, COMPAT_VERSION),
       epoch(e) { }
 private:
-  ~MOSDPGCreate() {}
+  ~MOSDPGCreate() override {}
 
 public:  
-  const char *get_type_name() const { return "pg_create"; }
+  const char *get_type_name() const override { return "pg_create"; }
 
-  void encode_payload(uint64_t features) {
+  void encode_payload(uint64_t features) override {
     ::encode(epoch, payload);
     ::encode(mkpg, payload);
     ::encode(ctimes, payload);
   }
-  void decode_payload() {
+  void decode_payload() override {
     bufferlist::iterator p = payload.begin();
     ::decode(epoch, p);
-    if (header.version >= 2) {
-      ::decode(mkpg, p);
-    } else {
-      __u32 n;
-      ::decode(n, p);
-      while (n--) {
-	pg_t pgid;
-	epoch_t created;   // epoch pg created
-	pg_t parent;       // split from parent (if != pg_t())
-	__s32 split_bits;
-	::decode(pgid, p);
-	::decode(created, p);
-	::decode(parent, p);
-	::decode(split_bits, p);
-	mkpg[pgid] = pg_create_t(created, parent, split_bits);
-      }
-    }
-    if (header.version >= 3) {
-      ::decode(ctimes, p);
-    } else {
-      // To make other code simpler create map with time of 0,0 for each pg
-      for (map<pg_t,pg_create_t>::const_iterator i = mkpg.begin();
-	   i != mkpg.end(); ++i) {
-	ctimes[i->first] = utime_t();
-      }
-    }
+    ::decode(mkpg, p);
+    ::decode(ctimes, p);
   }
 
-  void print(ostream& out) const {
+  void print(ostream& out) const override {
     out << "osd_pg_create(e" << epoch;
     for (map<pg_t,pg_create_t>::const_iterator i = mkpg.begin();
          i != mkpg.end();

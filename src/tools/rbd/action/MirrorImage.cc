@@ -60,7 +60,7 @@ int execute_enable_disable(const po::variables_map &vm, bool enable,
   librados::Rados rados;
   librados::IoCtx io_ctx;
   librbd::Image image;
-  r = utils::init_and_open_image(pool_name, image_name, "", false,
+  r = utils::init_and_open_image(pool_name, image_name, "", "", false,
                                  &rados, &io_ctx, &image);
   if (r < 0) {
     return r;
@@ -109,7 +109,7 @@ int execute_promote(const po::variables_map &vm) {
   librados::Rados rados;
   librados::IoCtx io_ctx;
   librbd::Image image;
-  r = utils::init_and_open_image(pool_name, image_name, "", false,
+  r = utils::init_and_open_image(pool_name, image_name, "", "", false,
                                  &rados, &io_ctx, &image);
   if (r < 0) {
     return r;
@@ -140,7 +140,7 @@ int execute_demote(const po::variables_map &vm) {
   librados::Rados rados;
   librados::IoCtx io_ctx;
   librbd::Image image;
-  r = utils::init_and_open_image(pool_name, image_name, "", false,
+  r = utils::init_and_open_image(pool_name, image_name, "", "", false,
                                  &rados, &io_ctx, &image);
   if (r < 0) {
     return r;
@@ -171,7 +171,7 @@ int execute_resync(const po::variables_map &vm) {
   librados::Rados rados;
   librados::IoCtx io_ctx;
   librbd::Image image;
-  r = utils::init_and_open_image(pool_name, image_name, "", false,
+  r = utils::init_and_open_image(pool_name, image_name, "", "", false,
                                  &rados, &io_ctx, &image);
   if (r < 0) {
     return r;
@@ -214,7 +214,7 @@ int execute_status(const po::variables_map &vm) {
   librados::Rados rados;
   librados::IoCtx io_ctx;
   librbd::Image image;
-  r = utils::init_and_open_image(pool_name, image_name, "", false,
+  r = utils::init_and_open_image(pool_name, image_name, "", "", false,
                                  &rados, &io_ctx, &image);
   if (r < 0) {
     return r;
@@ -229,7 +229,8 @@ int execute_status(const po::variables_map &vm) {
   }
 
   std::string state = utils::mirror_image_status_state(status);
-  std::string last_update = utils::timestr(status.last_update);
+  std::string last_update = (
+    status.last_update == 0 ? "" : utils::timestr(status.last_update));
 
   if (formatter != nullptr) {
     formatter->open_object_section("image");

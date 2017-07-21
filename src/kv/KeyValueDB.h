@@ -117,6 +117,12 @@ public:
       const std::string &prefix ///< [in] Prefix by which to remove keys
       ) = 0;
 
+    virtual void rm_range_keys(
+      const string &prefix,    ///< [in] Prefix by which to remove keys
+      const string &start,     ///< [in] The start bound of remove keys
+      const string &end        ///< [in] The start bound of remove keys
+      ) = 0;
+
     /// Merge value into key
     virtual void merge(
       const std::string &prefix,   ///< [in] Prefix ==> MUST match some established merge operator
@@ -226,28 +232,28 @@ public:
   public:
     IteratorImpl(const std::string &prefix, WholeSpaceIterator iter) :
       prefix(prefix), generic_iter(iter) { }
-    virtual ~IteratorImpl() { }
+    ~IteratorImpl() override { }
 
-    int seek_to_first() {
+    int seek_to_first() override {
       return generic_iter->seek_to_first(prefix);
     }
     int seek_to_last() {
       return generic_iter->seek_to_last(prefix);
     }
-    int upper_bound(const std::string &after) {
+    int upper_bound(const std::string &after) override {
       return generic_iter->upper_bound(prefix, after);
     }
-    int lower_bound(const std::string &to) {
+    int lower_bound(const std::string &to) override {
       return generic_iter->lower_bound(prefix, to);
     }
-    bool valid() {
+    bool valid() override {
       if (!generic_iter->valid())
 	return false;
       return generic_iter->raw_key_is_prefixed(prefix);
     }
     // Note that next() and prev() shouldn't validate iters,
     // it's responsibility of caller to ensure they're valid.
-    int next(bool validate=true) {
+    int next(bool validate=true) override {
       if (validate) {
         if (valid())
           return generic_iter->next();
@@ -266,19 +272,19 @@ public:
         return generic_iter->prev();  
       }      
     }
-    std::string key() {
+    std::string key() override {
       return generic_iter->key();
     }
     std::pair<std::string, std::string> raw_key() {
       return generic_iter->raw_key();
     }
-    bufferlist value() {
+    bufferlist value() override {
       return generic_iter->value();
     }
     bufferptr value_as_ptr() {
       return generic_iter->value_as_ptr();
     }
-    int status() {
+    int status() override {
       return generic_iter->status();
     }
   };
@@ -295,6 +301,10 @@ public:
 
   virtual uint64_t get_estimated_size(std::map<std::string,uint64_t> &extra) = 0;
   virtual int get_statfs(struct store_statfs_t *buf) {
+    return -EOPNOTSUPP;
+  }
+
+  virtual int set_cache_size(uint64_t) {
     return -EOPNOTSUPP;
   }
 

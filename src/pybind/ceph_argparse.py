@@ -23,6 +23,9 @@ import threading
 import uuid
 
 
+FLAG_MGR = 8   # command is intended for mgr
+
+
 try:
     basestring
 except NameError:
@@ -390,6 +393,10 @@ class CephName(CephArgtype):
             return
         elif s == "mgr":
             self.nametype = "mgr"
+            self.val = s
+            return
+        elif s == "mon":
+            self.nametype = "mon"
             self.val = s
             return
         if s.find('.') == -1:
@@ -884,9 +891,9 @@ def store_arg(desc, d):
         d[desc.name] = desc.instance.val
 
 
-def validate(args, signature, partial=False):
+def validate(args, signature, flags=0, partial=False):
     """
-    validate(args, signature, partial=False)
+    validate(args, signature, flags=0, partial=False)
 
     args is a list of either words or k,v pairs representing a possible
     command input following format of signature.  Runs a validation; no
@@ -917,12 +924,12 @@ def validate(args, signature, partial=False):
 
             # no arg, but not required?  Continue consuming mysig
             # in case there are later required args
-            if not myarg and not desc.req:
+            if myarg in (None, []) and not desc.req:
                 break
 
             # out of arguments for a required param?
             # Either return (if partial validation) or raise
-            if not myarg and desc.req:
+            if myarg in (None, []) and desc.req:
                 if desc.N and desc.numseen < 1:
                     # wanted N, didn't even get 1
                     if partial:
@@ -982,6 +989,9 @@ def validate(args, signature, partial=False):
             print(save_exception[0], 'not valid: ', save_exception[1], file=sys.stderr)
         raise ArgumentError("unused arguments: " + str(myargs))
 
+    if flags & FLAG_MGR:
+        d['target'] = ('mgr','')
+
     # Finally, success
     return d
 
@@ -1037,7 +1047,7 @@ def validate_command(sigdict, args, verbose=False):
             for cmd in cmdsig.values():
                 sig = cmd['sig']
                 try:
-                    valid_dict = validate(args, sig)
+                    valid_dict = validate(args, sig, flags=cmd.get('flags', 0))
                     found = cmd
                     break
                 except ArgumentPrefix:
@@ -1078,7 +1088,7 @@ def find_cmd_target(childargs):
     should be sent to a monitor or an osd.  We do this before even
     asking for the 'real' set of command signatures, so we can ask the
     right daemon.
-    Returns ('osd', osdid), ('pg', pgid), or ('mon', '')
+    Returns ('osd', osdid), ('pg', pgid), ('mgr', '') or ('mon', '')
     """
     sig = parse_funcsig(['tell', {'name': 'target', 'type': 'CephName'}])
     try:
@@ -1256,7 +1266,7 @@ def send_command(cluster, target=('mon', ''), cmd=None, inbuf=b'', timeout=0,
             if verbose:
                 print('{0} to {1}'.format(cmd, target[0]),
                       file=sys.stderr)
-            if target[1] == '':
+            if len(target) < 2 or target[1] == '':
                 ret, outbuf, outs = run_in_thread(
                     cluster.mon_command, cmd, inbuf, timeout)
             else:
@@ -1307,6 +1317,8 @@ def json_command(cluster, target=('mon', ''), prefix=None, argdict=None,
         cmddict.update({'prefix': prefix})
     if argdict:
         cmddict.update(argdict)
+        if 'target' in argdict:
+            target = argdict.get('target')
 
     # grab prefix for error messages
     prefix = cmddict['prefix']

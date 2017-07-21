@@ -20,6 +20,11 @@
 #include "common/Mutex.h"
 #include "common/Thread.h"
 
+#include "osdc/Objecter.h"
+#include "client/Client.h"
+#include "common/LogClient.h"
+#include "mon/MgrMap.h"
+
 #include "DaemonState.h"
 #include "ClusterState.h"
 
@@ -27,40 +32,51 @@ class ServeThread;
 
 class PyModules
 {
-  protected:
-  std::map<std::string, MgrPyModule*> modules;
-  std::map<std::string, ServeThread*> serve_threads;
-
+  std::map<std::string, std::unique_ptr<MgrPyModule>> modules;
+  std::map<std::string, std::unique_ptr<ServeThread>> serve_threads;
   DaemonStateIndex &daemon_state;
   ClusterState &cluster_state;
   MonClient &monc;
+  LogChannelRef clog;
+  Objecter &objecter;
+  Client   &client;
   Finisher &finisher;
 
-  mutable Mutex lock;
+  mutable Mutex lock{"PyModules"};
 
   std::string get_site_packages();
 
+  PyThreadState *pMainThreadState = nullptr;
+
 public:
-  static constexpr auto config_prefix = "mgr.";
+  static std::string config_prefix;
 
   PyModules(DaemonStateIndex &ds, ClusterState &cs, MonClient &mc,
-            Finisher &f)
-    : daemon_state(ds), cluster_state(cs), monc(mc), finisher(f),
-      lock("PyModules")
-  {
-  }
+            LogChannelRef clog_, Objecter &objecter_, Client &client_,
+            Finisher &f);
+
+  ~PyModules();
 
   // FIXME: wrap for send_command?
   MonClient &get_monc() {return monc;}
+  Objecter  &get_objecter() {return objecter;}
+  Client    &get_client() {return client;}
 
   PyObject *get_python(const std::string &what);
   PyObject *get_server_python(const std::string &hostname);
   PyObject *list_servers_python();
-  PyObject *get_metadata_python(std::string const &handle,
-      entity_type_t svc_type, const std::string &svc_id);
-  PyObject *get_counter_python(std::string const &handle,
-      entity_type_t svc_type, const std::string &svc_id,
-      const std::string &path);
+  PyObject *get_metadata_python(
+    std::string const &handle,
+    const std::string &svc_name, const std::string &svc_id);
+  PyObject *get_daemon_status_python(
+    std::string const &handle,
+    const std::string &svc_name, const std::string &svc_id);
+  PyObject *get_counter_python(
+    std::string const &handle,
+    const std::string &svc_name,
+    const std::string &svc_id,
+    const std::string &path);
+  PyObject *get_context();
 
   std::map<std::string, std::string> config_cache;
 
@@ -73,6 +89,7 @@ public:
   // send it to only the module that sent the command, not everyone
   void notify_all(const std::string &notify_type,
                   const std::string &notify_id);
+  void notify_all(const LogEntry &log_entry);
 
   int init();
   void start();
@@ -84,11 +101,15 @@ public:
 
   bool get_config(const std::string &handle,
       const std::string &key, std::string *val) const;
+  PyObject *get_config_prefix(const std::string &handle,
+			      const std::string &prefix) const;
   void set_config(const std::string &handle,
       const std::string &key, const std::string &val);
 
   void log(const std::string &handle,
            int level, const std::string &record);
+
+  static void list_modules(std::set<std::string> *modules);
 };
 
 #endif

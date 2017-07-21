@@ -15,14 +15,15 @@
 #ifndef CEPH_RBD_MIRROR_IMAGEDELETER_H
 #define CEPH_RBD_MIRROR_IMAGEDELETER_H
 
-#include <deque>
-#include <vector>
-#include "include/atomic.h"
 #include "common/Mutex.h"
 #include "common/Cond.h"
 #include "common/Thread.h"
 #include "common/Timer.h"
 #include "types.h"
+
+#include <deque>
+#include <vector>
+#include <atomic>
 
 class ContextWQ;
 
@@ -45,7 +46,6 @@ public:
 
   void schedule_image_delete(RadosRef local_rados,
                              int64_t local_pool_id,
-                             const std::string& local_image_id,
                              const std::string& global_image_id);
   void wait_for_scheduled_deletion(int64_t local_pool_id,
                                    const std::string &global_image_id,
@@ -77,20 +77,16 @@ private:
   struct DeleteInfo {
     RadosRef local_rados;
     int64_t local_pool_id;
-    std::string local_image_id;
     std::string global_image_id;
-    int error_code;
-    int retries;
-    bool notify_on_failed_retry;
-    Context *on_delete;
+    int error_code = 0;
+    int retries = 0;
+    bool notify_on_failed_retry = true;
+    Context *on_delete = nullptr;
 
     DeleteInfo(RadosRef local_rados, int64_t local_pool_id,
-               const std::string& local_image_id,
                const std::string& global_image_id) :
       local_rados(local_rados), local_pool_id(local_pool_id),
-      local_image_id(local_image_id), global_image_id(global_image_id),
-      error_code(0), retries(0), notify_on_failed_retry(true),
-      on_delete(nullptr) {
+      global_image_id(global_image_id) {
     }
 
     bool match(int64_t local_pool_id, const std::string &global_image_id) {
@@ -103,7 +99,7 @@ private:
                       bool print_failure_info=false);
   };
 
-  atomic_t m_running;
+  std::atomic<unsigned> m_running { 0 };
 
   ContextWQ *m_work_queue;
 

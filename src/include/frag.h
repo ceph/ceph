@@ -148,7 +148,7 @@ class frag_t {
   }
 };
 
-inline std::ostream& operator<<(std::ostream& out, frag_t hb)
+inline std::ostream& operator<<(std::ostream& out, const frag_t& hb)
 {
   //out << std::hex << hb.value() << std::dec << "/" << hb.bits() << '=';
   unsigned num = hb.bits();

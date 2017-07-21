@@ -4,6 +4,7 @@
 #include "include/rados/librados.hpp"
 #include "include/stringify.h"
 #include "test/librados/test.h"
+#include "test/librados/test_common.h"
 #include "test/librados/TestCase.h"
 #include "global/global_context.h"
 
@@ -16,10 +17,10 @@
 
 using namespace librados;
 
-typedef RadosTestNS LibRadosList;
-typedef RadosTestPPNS LibRadosListPP;
-typedef RadosTestECNS LibRadosListEC;
-typedef RadosTestECPPNS LibRadosListECPP;
+typedef RadosTestNSCleanup LibRadosList;
+typedef RadosTestPPNSCleanup LibRadosListPP;
+typedef RadosTestECNSCleanup LibRadosListEC;
+typedef RadosTestECPPNSCleanup LibRadosListECPP;
 typedef RadosTestNP LibRadosListNP;
 
 
@@ -138,16 +139,14 @@ TEST_F(LibRadosListPP, ListObjectsEndIter) {
   ASSERT_TRUE(iter2 == iter_end2);
 }
 
-static void check_list(std::set<std::string>& myset, rados_list_ctx_t& ctx, std::string check_nspace)
+static void check_list(
+  std::set<std::string>& myset,
+  rados_list_ctx_t& ctx,
+  std::string check_nspace)
 {
   const char *entry, *nspace;
-  std::set<std::string> orig_set(myset);
-  /**
-   * During splitting, we might see duplicate items.
-   * We assert that every object returned is in myset and that
-   * we don't hit ENOENT until we have hit every item in myset
-   * at least once.
-   */
+  cout << "myset " << myset << std::endl;
+  // we should see every item exactly once.
   int ret;
   while ((ret = rados_nobjects_list_next(ctx, &entry, NULL, &nspace)) == 0) {
     std::string test_name;
@@ -157,8 +156,9 @@ static void check_list(std::set<std::string>& myset, rados_list_ctx_t& ctx, std:
       ASSERT_TRUE(std::string(nspace) == check_nspace);
       test_name = std::string(entry);
     }
+    cout << test_name << std::endl;
 
-    ASSERT_TRUE(orig_set.end() != orig_set.find(test_name));
+    ASSERT_TRUE(myset.end() != myset.find(test_name));
     myset.erase(test_name);
   }
   ASSERT_EQ(-ENOENT, ret);
@@ -387,6 +387,224 @@ TEST_F(LibRadosListPP, ListObjectsStartPP) {
     std::cout << "have " << it->get_oid() << " expect one of " << p->second << std::endl;
     ASSERT_TRUE(p->second.count(it->get_oid()));
     ++p;
+  }
+}
+
+TEST_F(LibRadosListPP, ListObjectsCursorNSPP) {
+  char buf[128];
+  memset(buf, 0xcc, sizeof(buf));
+  bufferlist bl;
+  bl.append(buf, sizeof(buf));
+
+  const int max_objs = 16;
+
+  map<string, string> oid_to_ns;
+
+  for (int i=0; i<max_objs; ++i) {
+    stringstream ss;
+    ss << "ns" << i / 4;
+    ioctx.set_namespace(ss.str());
+    string oid = stringify(i);
+    ASSERT_EQ(0, ioctx.write(oid, bl, bl.length(), 0));
+
+    oid_to_ns[oid] = ss.str();
+  }
+
+  ioctx.set_namespace(all_nspaces);
+
+  librados::NObjectIterator it = ioctx.nobjects_begin();
+  std::map<librados::ObjectCursor, string> cursor_to_obj;
+
+  int count = 0;
+
+  librados::ObjectCursor seek_cursor;
+
+  map<string, list<librados::ObjectCursor> > ns_to_cursors;
+
+  for (it = ioctx.nobjects_begin(); it != ioctx.nobjects_end(); ++it) {
+    librados::ObjectCursor cursor = it.get_cursor();
+    string oid = it->get_oid();
+    cout << "> oid=" << oid << " cursor=" << it.get_cursor() << std::endl;
+  }
+
+  vector<string> objs_order;
+
+  for (it = ioctx.nobjects_begin(); it != ioctx.nobjects_end(); ++it, ++count) {
+    librados::ObjectCursor cursor = it.get_cursor();
+    string oid = it->get_oid();
+    std::cout << oid << " " << it.get_pg_hash_position() << std::endl;
+    cout << ": oid=" << oid << " cursor=" << it.get_cursor() << std::endl;
+    cursor_to_obj[cursor] = oid;
+
+    ASSERT_EQ(oid_to_ns[oid], it->get_nspace());
+
+    it.seek(cursor);
+    cout << ": seek to " << cursor << " it.cursor=" << it.get_cursor() << std::endl;
+    ASSERT_EQ(oid, it->get_oid());
+    ASSERT_LT(count, max_objs); /* avoid infinite loops due to bad seek */
+
+    ns_to_cursors[it->get_nspace()].push_back(cursor);
+
+    if (count == max_objs/2) {
+      seek_cursor = cursor;
+    }
+    objs_order.push_back(it->get_oid());
+  }
+
+  ASSERT_EQ(count, max_objs);
+
+  /* check that reading past seek also works */
+  cout << "seek_cursor=" << seek_cursor << std::endl;
+  it.seek(seek_cursor);
+  for (count = max_objs/2; count < max_objs; ++count, ++it) {
+    ASSERT_EQ(objs_order[count], it->get_oid());
+  }
+
+  /* seek to all cursors, check that we get expected obj */
+  for (auto& niter : ns_to_cursors) {
+    const string& ns = niter.first;
+    list<librados::ObjectCursor>& cursors = niter.second;
+
+    for (auto& cursor : cursors) {
+      cout << ": seek to " << cursor << std::endl;
+      it.seek(cursor);
+      ASSERT_EQ(cursor, it.get_cursor());
+      string& expected_oid = cursor_to_obj[cursor];
+      cout << ": it->get_cursor()=" << it.get_cursor() << " expected=" << cursor << std::endl;
+      cout << ": it->get_oid()=" << it->get_oid() << " expected=" << expected_oid << std::endl;
+      cout << ": it->get_nspace()=" << it->get_oid() << " expected=" << ns << std::endl;
+      ASSERT_EQ(expected_oid, it->get_oid());
+      ASSERT_EQ(it->get_nspace(), ns);
+    }
+  }
+}
+
+TEST_F(LibRadosListPP, ListObjectsCursorPP) {
+  char buf[128];
+  memset(buf, 0xcc, sizeof(buf));
+  bufferlist bl;
+  bl.append(buf, sizeof(buf));
+
+  const int max_objs = 16;
+
+  for (int i=0; i<max_objs; ++i) {
+    stringstream ss;
+    ss << "ns" << i / 4;
+    ioctx.set_namespace(ss.str());
+    ASSERT_EQ(0, ioctx.write(stringify(i), bl, bl.length(), 0));
+  }
+
+  ioctx.set_namespace(all_nspaces);
+
+  librados::NObjectIterator it = ioctx.nobjects_begin();
+  std::map<librados::ObjectCursor, string> cursor_to_obj;
+
+  int count = 0;
+
+  for (; it != ioctx.nobjects_end(); ++it, ++count) {
+    librados::ObjectCursor cursor = it.get_cursor();
+    string oid = it->get_oid();
+    std::cout << oid << " " << it.get_pg_hash_position() << std::endl;
+    cout << ": oid=" << oid << " cursor=" << it.get_cursor() << std::endl;
+    cursor_to_obj[cursor] = oid;
+
+    it.seek(cursor);
+    cout << ": seek to " << cursor << std::endl;
+    ASSERT_EQ(oid, it->get_oid());
+    ASSERT_LT(count, max_objs); /* avoid infinite loops due to bad seek */
+  }
+
+  ASSERT_EQ(count, max_objs);
+
+  auto p = cursor_to_obj.rbegin();
+  it = ioctx.nobjects_begin();
+  while (p != cursor_to_obj.rend()) {
+    cout << ": seek to " << p->first << std::endl;
+    it.seek(p->first);
+    ASSERT_EQ(p->first, it.get_cursor());
+    cout << ": it->get_cursor()=" << it.get_cursor() << " expected=" << p->first << std::endl;
+    cout << ": it->get_oid()=" << it->get_oid() << " expected=" << p->second << std::endl;
+    ASSERT_EQ(p->second, it->get_oid());
+
+    librados::NObjectIterator it2 = ioctx.nobjects_begin(it.get_cursor());
+    ASSERT_EQ(it2->get_oid(), it->get_oid());
+
+    ++p;
+  }
+}
+
+TEST_F(LibRadosList, ListObjectsCursor) {
+  char buf[128];
+  memset(buf, 0xcc, sizeof(buf));
+
+  const int max_objs = 16;
+
+  for (int i=0; i<max_objs; ++i) {
+    string n = stringify(i);
+    ASSERT_EQ(0, rados_write(ioctx, n.c_str(), buf, sizeof(buf), 0));
+  }
+
+  {
+    rados_list_ctx_t ctx;
+    const char *entry;
+    rados_object_list_cursor cursor;
+    ASSERT_EQ(0, rados_nobjects_list_open(ioctx, &ctx));
+    ASSERT_EQ(rados_nobjects_list_get_cursor(ctx, &cursor), 0);
+    rados_object_list_cursor first_cursor = cursor;
+    cout << "x cursor=" << ObjectCursor(cursor) << std::endl;
+    while (rados_nobjects_list_next(ctx, &entry, NULL, NULL) == 0) {
+      string oid = entry;
+      ASSERT_EQ(rados_nobjects_list_get_cursor(ctx, &cursor), 0);
+      cout << "> oid=" << oid << " cursor=" << ObjectCursor(cursor) << std::endl;
+    }
+    rados_nobjects_list_seek_cursor(ctx, first_cursor);
+    ASSERT_EQ(rados_nobjects_list_next(ctx, &entry, NULL, NULL), 0);
+    cout << "FIRST> seek to " << ObjectCursor(first_cursor) << " oid=" << string(entry) << std::endl;
+  }
+  rados_list_ctx_t ctx;
+  ASSERT_EQ(0, rados_nobjects_list_open(ioctx, &ctx));
+
+  std::map<rados_object_list_cursor, string> cursor_to_obj;
+  int count = 0;
+
+  const char *entry;
+  while (rados_nobjects_list_next(ctx, &entry, NULL, NULL) == 0) {
+    rados_object_list_cursor cursor;
+    ASSERT_EQ(rados_nobjects_list_get_cursor(ctx, &cursor), 0);
+    string oid = entry;
+    cout << ": oid=" << oid << " cursor=" << ObjectCursor(cursor) << std::endl;
+    cursor_to_obj[cursor] = oid;
+
+    rados_nobjects_list_seek_cursor(ctx, cursor);
+    cout << ": seek to " << ObjectCursor(cursor) << std::endl;
+    ASSERT_EQ(rados_nobjects_list_next(ctx, &entry, NULL, NULL), 0);
+    cout << "> " << ObjectCursor(cursor) << " -> " << entry << std::endl;
+    ASSERT_EQ(string(entry), oid);
+    ASSERT_LT(count, max_objs); /* avoid infinite loops due to bad seek */
+
+    ++count;
+  }
+
+  ASSERT_EQ(count, max_objs);
+
+  auto p = cursor_to_obj.rbegin();
+  ASSERT_EQ(0, rados_nobjects_list_open(ioctx, &ctx));
+  while (p != cursor_to_obj.rend()) {
+    cout << ": seek to " << ObjectCursor(p->first) << std::endl;
+    rados_object_list_cursor cursor;
+    rados_object_list_cursor oid(p->first);
+    rados_nobjects_list_seek_cursor(ctx, oid);
+    ASSERT_EQ(rados_nobjects_list_get_cursor(ctx, &cursor), 0);
+    cout << ": cursor()=" << ObjectCursor(cursor) << " expected=" << oid << std::endl;
+    // ASSERT_EQ(ObjectCursor(oid), ObjectCursor(cursor));
+    ASSERT_EQ(rados_nobjects_list_next(ctx, &entry, NULL, NULL), 0);
+    cout << "> " << ObjectCursor(cursor) << " -> " << entry << std::endl;
+    cout << ": entry=" << entry << " expected=" << p->second << std::endl;
+    ASSERT_EQ(p->second, string(entry));
+
+    ++p;
+
+    rados_object_list_cursor_free(ctx, cursor);
   }
 }
 
@@ -747,7 +965,18 @@ TEST_F(LibRadosListNP, ListObjectsError) {
   memset(buf, 0xcc, sizeof(buf));
   rados_ioctx_set_namespace(ioctx, "");
   ASSERT_EQ(0, rados_write(ioctx, "foo", buf, sizeof(buf), 0));
-  ASSERT_EQ(0, rados_pool_delete(cluster, pool_name.c_str()));
+
+  //ASSERT_EQ(0, rados_pool_delete(cluster, pool_name.c_str()));
+  {
+    char *buf, *st;
+    size_t buflen, stlen;
+    string c = "{\"prefix\":\"osd pool rm\",\"pool\": \"" + pool_name +
+      "\",\"pool2\":\"" + pool_name +
+      "\",\"sure\": \"--yes-i-really-really-mean-it-not-faking\"}";
+    const char *cmd[2] = { c.c_str(), 0 };
+    ASSERT_EQ(0, rados_mon_command(cluster, (const char **)cmd, 1, "", 0, &buf, &buflen, &st, &stlen));
+    ASSERT_EQ(0, rados_wait_for_latest_osdmap(cluster));
+  }
 
   rados_list_ctx_t ctx;
   ASSERT_EQ(0, rados_nobjects_list_open(ioctx, &ctx));
@@ -1025,6 +1254,3 @@ TEST_F(LibRadosListPP, EnumerateObjectsFilterPP) {
   }
   ASSERT_TRUE(foundit);
 }
-
-#pragma GCC diagnostic pop
-#pragma GCC diagnostic warning "-Wpragmas"

@@ -108,7 +108,7 @@ void InoTable::replay_alloc_id(inodeno_t id)
     projected_free.erase(id);
   } else {
     mds->clog->error() << "journal replay alloc " << id
-      << " not in free " << free << "\n";
+      << " not in free " << free;
   }
   projected_version = ++version;
 }
@@ -124,7 +124,7 @@ void InoTable::replay_alloc_ids(interval_set<inodeno_t>& ids)
     projected_free.subtract(ids);
   } else {
     mds->clog->error() << "journal replay alloc " << ids << ", only "
-	<< is << " is in free " << free << "\n";
+	<< is << " is in free " << free;
     free.subtract(is);
     projected_free.subtract(is);
   }
@@ -198,6 +198,17 @@ bool InoTable::is_marked_free(inodeno_t id) const
   return free.contains(id) || projected_free.contains(id);
 }
 
+bool InoTable::intersects_free(
+    const interval_set<inodeno_t> &other,
+    interval_set<inodeno_t> *intersection)
+{
+  interval_set<inodeno_t> i;
+  i.intersection_of(free, other);
+  if (intersection != nullptr) {
+    *intersection = i;
+  }
+  return !(i.empty());
+}
 
 bool InoTable::repair(inodeno_t id)
 {

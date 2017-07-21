@@ -30,10 +30,6 @@
 
 #include <spdk/nvme.h>
 
-#include <rte_config.h>
-#include <rte_cycles.h>
-#include <rte_mempool.h>
-#include <rte_malloc.h>
 #include <rte_lcore.h>
 
 #include "include/stringify.h"
@@ -43,6 +39,7 @@
 #include "common/errno.h"
 #include "common/debug.h"
 #include "common/perf_counters.h"
+#include "common/io_priority.h"
 
 #include "NVMEDevice.h"
 
@@ -51,13 +48,13 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "bdev(" << sn << ") "
 
-std::vector<void*> data_buf_mempool;
-
 static constexpr uint16_t data_buffer_default_num = 2048;
 
 static constexpr uint32_t data_buffer_size = 8192;
 
 static constexpr uint16_t inline_segment_num = 32;
+
+static thread_local int queue_id = -1;
 
 enum {
   l_bluestore_nvmedevice_first = 632430,
@@ -94,83 +91,23 @@ struct IORequest {
   void **extra_segs = nullptr;
 };
 
-struct Task {
-  NVMEDevice *device;
-  IOContext *ctx = nullptr;
-  IOCommand command;
-  uint64_t offset;
-  uint64_t len;
-  bufferlist write_bl;
-  std::function<void()> fill_cb;
-  Task *next = nullptr;
-  int64_t return_code;
-  ceph::coarse_real_clock::time_point start;
-  IORequest io_request;
-  Task(NVMEDevice *dev, IOCommand c, uint64_t off, uint64_t l, int64_t rc = 0)
-    : device(dev), command(c), offset(off), len(l),
-      return_code(rc),
-      start(ceph::coarse_real_clock::now()) {}
-  ~Task() {
-    assert(!io_request.nseg);
-  }
-  void release_segs() {
-    if (io_request.extra_segs) {
-      for (uint16_t i = 0; i < io_request.nseg; i++)
-        data_buf_mempool.push_back(io_request.extra_segs[i]);
-      delete io_request.extra_segs;
-    } else if (io_request.nseg) {
-      for (uint16_t i = 0; i < io_request.nseg; i++)
-        data_buf_mempool.push_back(io_request.inline_segs[i]);
-    }
-    io_request.nseg = 0;
-  }
-
-  void copy_to_buf(char *buf, uint64_t off, uint64_t len) {
-    uint64_t copied = 0;
-    uint64_t left = len;
-    void **segs = io_request.extra_segs ? io_request.extra_segs : io_request.inline_segs;
-    uint16_t i = 0;
-    while (left > 0) {
-      char *src = static_cast<char*>(segs[i++]);
-      uint64_t need_copy = std::min(left, data_buffer_size-off);
-      memcpy(buf+copied, src+off, need_copy);
-      off = 0;
-      left -= need_copy;
-      copied += need_copy;
-    }
-  }
-};
-
-class SharedDriverData {
-  unsigned id;
-  std::string sn;
+class SharedDriverQueueData {
+  SharedDriverData *driver;
   spdk_nvme_ctrlr *ctrlr;
   spdk_nvme_ns *ns;
+  std::string sn;
+  uint64_t block_size;
+  uint32_t sector_size;
+  uint32_t core_id;
+  uint32_t queueid;
   struct spdk_nvme_qpair *qpair;
   std::function<void ()> run_func;
-
-  uint64_t block_size = 0;
-  uint32_t sector_size = 0;
-  uint64_t size = 0;
-  std::vector<NVMEDevice*> registered_devices;
   friend class AioCompletionThread;
 
   bool aio_stop = false;
   void _aio_thread();
-  void _aio_start() {
-    int r = rte_eal_remote_launch(dpdk_thread_adaptor, static_cast<void*>(&run_func), id);
-    assert(r == 0);
-  }
-  void _aio_stop() {
-    {
-      Mutex::Locker l(queue_lock);
-      aio_stop = true;
-      queue_cond.Signal();
-    }
-    int r = rte_eal_wait_lcore(id);
-    assert(r == 0);
-    aio_stop = false;
-  }
+  int alloc_buf_from_pool(Task *t, bool write);
+
   std::atomic_bool queue_empty;
   Mutex queue_lock;
   Cond queue_cond;
@@ -181,16 +118,21 @@ class SharedDriverData {
   std::atomic_int flush_waiters;
   std::set<uint64_t> flush_waiter_seqs;
 
- public:
-  std::atomic_ulong completed_op_seq, queue_op_seq;
-  PerfCounters *logger = nullptr;
+  public:
+    std::atomic_ulong completed_op_seq, queue_op_seq;
+    std::vector<void*> data_buf_mempool;
+    PerfCounters *logger = nullptr;
 
-  SharedDriverData(unsigned i, const std::string &sn_tag,
-                   spdk_nvme_ctrlr *c, spdk_nvme_ns *ns)
-      : id(i),
-        sn(sn_tag),
+    SharedDriverQueueData(SharedDriverData *driver, spdk_nvme_ctrlr *c, spdk_nvme_ns *ns, uint64_t block_size,
+                          const std::string &sn_tag, uint32_t sector_size, uint32_t core, uint32_t queue_id)
+      : driver(driver),
         ctrlr(c),
         ns(ns),
+	sn(sn_tag),
+        block_size(block_size),
+        sector_size(sector_size),
+        core_id(core),
+        queueid(queue_id),
         run_func([this]() { _aio_thread(); }),
         queue_empty(false),
         queue_lock("NVMEDevice::queue_lock"),
@@ -198,11 +140,7 @@ class SharedDriverData {
         flush_waiters(0),
         completed_op_seq(0), queue_op_seq(0) {
 
-    sector_size = spdk_nvme_ns_get_sector_size(ns);
-    block_size = std::max(CEPH_PAGE_SIZE, sector_size);
-    size = ((uint64_t)sector_size) * spdk_nvme_ns_get_num_sectors(ns);
-    qpair = spdk_nvme_ctrlr_alloc_io_qpair(c, SPDK_NVME_QPRIO_URGENT);
-
+    qpair = spdk_nvme_ctrlr_alloc_io_qpair(ctrlr, SPDK_NVME_QPRIO_URGENT);
     PerfCountersBuilder b(g_ceph_context, string("NVMEDevice-AIOThread-"+stringify(this)),
                           l_bluestore_nvmedevice_first, l_bluestore_nvmedevice_last);
     b.add_time_avg(l_bluestore_nvmedevice_aio_write_lat, "aio_write_lat", "Average write completing latency");
@@ -216,42 +154,9 @@ class SharedDriverData {
     b.add_u64_counter(l_bluestore_nvmedevice_buffer_alloc_failed, "buffer_alloc_failed", "Alloc data buffer failed count");
     logger = b.create_perf_counters();
     g_ceph_context->get_perfcounters_collection()->add(logger);
-    _aio_start();
-  }
-  ~SharedDriverData() {
-    g_ceph_context->get_perfcounters_collection()->remove(logger);
-    if (!qpair) {
-      spdk_nvme_ctrlr_free_io_qpair(qpair); 
-    }
-    delete logger;
-  }
+   }
 
-  bool is_equal(const string &tag) const { return sn == tag; }
-  void register_device(NVMEDevice *device) {
-    // in case of registered_devices, we stop thread now.
-    // Because release is really a rare case, we could bear this
-    _aio_stop();
-    registered_devices.push_back(device);
-    _aio_start();
-  }
-  void remove_device(NVMEDevice *device) {
-    _aio_stop();
-    std::vector<NVMEDevice*> new_devices;
-    for (auto &&it : registered_devices) {
-      if (it != device)
-        new_devices.push_back(it);
-    }
-    registered_devices.swap(new_devices);
-    _aio_start();
-  }
-
-  uint64_t get_block_size() {
-    return block_size;
-  }
-  uint64_t get_size() {
-    return size;
-  }
-  void queue_task(Task *t, uint64_t ops = 1) {
+   void queue_task(Task *t, uint64_t ops = 1) {
     queue_op_seq += ops;
     Mutex::Locker l(queue_lock);
     task_queue.push(t);
@@ -271,11 +176,177 @@ class SharedDriverData {
       ++flush_waiters;
       flush_waiter_seqs.insert(cur_seq);
       while (cur_seq > completed_op_seq.load()) {
-        flush_cond.Wait(flush_lock);
+       flush_cond.Wait(flush_lock);
       }
       flush_waiter_seqs.erase(cur_seq);
       --flush_waiters;
     }
+  }
+
+  void start() {
+    int r = rte_eal_remote_launch(dpdk_thread_adaptor, static_cast<void*>(&run_func),
+                                  core_id);
+    assert(r == 0);
+
+  }
+
+  void stop() {
+    {
+      Mutex::Locker l(queue_lock);
+      aio_stop = true;
+      queue_cond.Signal();
+    }
+    int r = rte_eal_wait_lcore(core_id);
+    assert(r == 0);
+    aio_stop = false;
+  }
+
+  ~SharedDriverQueueData() {
+    g_ceph_context->get_perfcounters_collection()->remove(logger);
+    if (!qpair) {
+      spdk_nvme_ctrlr_free_io_qpair(qpair); 
+    }
+    delete logger;
+  }
+};
+
+class SharedDriverData {
+  unsigned id;
+  uint32_t core_id;
+
+  std::string sn;
+  spdk_nvme_ctrlr *ctrlr;
+  spdk_nvme_ns *ns;
+  uint64_t block_size = 0;
+  uint32_t sector_size = 0;
+  uint64_t size = 0;
+  uint32_t queue_number;
+  std::vector<SharedDriverQueueData*> queues;
+
+  void _aio_start() {
+     for (auto &&it : queues)
+	      it->start();
+  }
+  void _aio_stop() {
+      for (auto &&it : queues)
+	      it->stop();
+  }
+
+  public:
+  std::vector<NVMEDevice*> registered_devices;
+  SharedDriverData(unsigned _id, const std::string &sn_tag,
+                   spdk_nvme_ctrlr *c, spdk_nvme_ns *ns)
+      : id(_id),
+        sn(sn_tag),
+        ctrlr(c),
+        ns(ns) {
+    int i;
+    sector_size = spdk_nvme_ns_get_sector_size(ns);
+    block_size = std::max(CEPH_PAGE_SIZE, sector_size);
+    size = ((uint64_t)sector_size) * spdk_nvme_ns_get_num_sectors(ns);
+
+    RTE_LCORE_FOREACH_SLAVE(i) {
+      queues.push_back(new SharedDriverQueueData(this, ctrlr, ns, block_size, sn, sector_size, i, queue_number++));
+   }
+
+   _aio_start();
+  }
+
+  bool is_equal(const string &tag) const { return sn == tag; }
+  ~SharedDriverData() {
+    for (auto p : queues) {
+      delete p;
+   }
+  }
+
+  SharedDriverQueueData *get_queue(uint32_t i) {
+	return queues.at(i%queue_number);
+  }
+
+  void register_device(NVMEDevice *device) {
+    // in case of registered_devices, we stop thread now.
+    // Because release is really a rare case, we could bear this
+    _aio_stop();
+    registered_devices.push_back(device);
+    _aio_start();
+  }
+
+  void remove_device(NVMEDevice *device) {
+    _aio_stop();
+    std::vector<NVMEDevice*> new_devices;
+    for (auto &&it : registered_devices) {
+      if (it != device)
+        new_devices.push_back(it);
+    }
+    registered_devices.swap(new_devices);
+    _aio_start();
+  }
+
+  uint64_t get_block_size() {
+    return block_size;
+  }
+  uint64_t get_size() {
+    return size;
+  }
+};
+
+struct Task {
+  NVMEDevice *device;
+  IOContext *ctx = nullptr;
+  IOCommand command;
+  uint64_t offset;
+  uint64_t len;
+  bufferlist write_bl;
+  std::function<void()> fill_cb;
+  Task *next = nullptr;
+  int64_t return_code;
+  ceph::coarse_real_clock::time_point start;
+  IORequest io_request;
+  std::mutex lock;
+  std::condition_variable cond;
+  SharedDriverQueueData *queue;
+  Task(NVMEDevice *dev, IOCommand c, uint64_t off, uint64_t l, int64_t rc = 0)
+    : device(dev), command(c), offset(off), len(l),
+      return_code(rc),
+      start(ceph::coarse_real_clock::now()) {}
+  ~Task() {
+    assert(!io_request.nseg);
+  }
+  void release_segs(SharedDriverQueueData *queue_data) {
+    if (io_request.extra_segs) {
+      for (uint16_t i = 0; i < io_request.nseg; i++)
+        queue_data->data_buf_mempool.push_back(io_request.extra_segs[i]);
+      delete io_request.extra_segs;
+    } else if (io_request.nseg) {
+      for (uint16_t i = 0; i < io_request.nseg; i++)
+        queue_data->data_buf_mempool.push_back(io_request.inline_segs[i]);
+    }
+    io_request.nseg = 0;
+  }
+
+  void copy_to_buf(char *buf, uint64_t off, uint64_t len) {
+    uint64_t copied = 0;
+    uint64_t left = len;
+    void **segs = io_request.extra_segs ? io_request.extra_segs : io_request.inline_segs;
+    uint16_t i = 0;
+    while (left > 0) {
+      char *src = static_cast<char*>(segs[i++]);
+      uint64_t need_copy = std::min(left, data_buffer_size-off);
+      memcpy(buf+copied, src+off, need_copy);
+      off = 0;
+      left -= need_copy;
+      copied += need_copy;
+    }
+  }
+
+  void io_wait() {
+    std::unique_lock<std::mutex> l(lock);
+    cond.wait(l);
+  }
+
+  void io_wake() {
+    std::lock_guard<std::mutex> l(lock);
+    cond.notify_all();
   }
 };
 
@@ -334,7 +405,7 @@ static int data_buf_next_sge(void *cb_arg, void **address, uint32_t *length)
   return 0;
 }
 
-static int alloc_buf_from_pool(Task *t, bool write)
+int SharedDriverQueueData::alloc_buf_from_pool(Task *t, bool write)
 {
   uint64_t count = t->len / data_buffer_size;
   if (t->len % data_buffer_size)
@@ -367,7 +438,7 @@ static int alloc_buf_from_pool(Task *t, bool write)
   return 0;
 }
 
-void SharedDriverData::_aio_thread()
+void SharedDriverQueueData::_aio_thread()
 {
   dout(1) << __func__ << " start" << dendl;
 
@@ -384,8 +455,8 @@ void SharedDriverData::_aio_thread()
 
   Task *t = nullptr;
   int r = 0;
-  const int max = 4;
   uint64_t lba_off, lba_count;
+
   ceph::coarse_real_clock::time_point cur, start
     = ceph::coarse_real_clock::now();
   while (true) {
@@ -393,13 +464,14 @@ void SharedDriverData::_aio_thread()
  again:
     dout(40) << __func__ << " polling" << dendl;
     if (inflight) {
-      if (!spdk_nvme_qpair_process_completions(qpair, max)) {
+      if (!spdk_nvme_qpair_process_completions(qpair, g_conf->bluestore_spdk_max_io_completion)) {
         dout(30) << __func__ << " idle, have a pause" << dendl;
         _mm_pause();
       }
     }
 
     for (; t; t = t->next) {
+      t->queue = this;
       lba_off = t->offset / sector_size;
       lba_count = t->len / sector_size;
       switch (t->command) {
@@ -416,10 +488,10 @@ void SharedDriverData::_aio_thread()
               ns, qpair, lba_off, lba_count, io_complete, t, 0,
               data_buf_reset_sgl, data_buf_next_sge);
           if (r < 0) {
-            t->ctx->nvme_task_first = t->ctx->nvme_task_last = nullptr;
-            t->release_segs();
-            delete t;
             derr << __func__ << " failed to do write command" << dendl;
+            t->ctx->nvme_task_first = t->ctx->nvme_task_last = nullptr;
+            t->release_segs(this);
+            delete t;
             ceph_abort();
           }
           cur = ceph::coarse_real_clock::now();
@@ -429,7 +501,7 @@ void SharedDriverData::_aio_thread()
         }
         case IOCommand::READ_COMMAND:
         {
-          dout(20) << __func__ << " read command issueed " << lba_off << "~" << lba_count << dendl;
+          dout(20) << __func__ << " read command issued " << lba_off << "~" << lba_count << dendl;
           r = alloc_buf_from_pool(t, false);
           if (r < 0) {
             logger->inc(l_bluestore_nvmedevice_buffer_alloc_failed);
@@ -441,11 +513,9 @@ void SharedDriverData::_aio_thread()
               data_buf_reset_sgl, data_buf_next_sge);
           if (r < 0) {
             derr << __func__ << " failed to read" << dendl;
-            --t->ctx->num_reading;
-            t->return_code = r;
-            t->release_segs();
-            std::unique_lock<std::mutex> l(t->ctx->lock);
-            t->ctx->cond.notify_all();
+            t->release_segs(this);
+            delete t;
+            ceph_abort();
           } else {
             cur = ceph::coarse_real_clock::now();
             auto dur = std::chrono::duration_cast<std::chrono::nanoseconds>(cur - start);
@@ -459,10 +529,9 @@ void SharedDriverData::_aio_thread()
           r = spdk_nvme_ns_cmd_flush(ns, qpair, io_complete, t);
           if (r < 0) {
             derr << __func__ << " failed to flush" << dendl;
-            t->return_code = r;
-            t->release_segs();
-            std::unique_lock<std::mutex> l(t->ctx->lock);
-            t->ctx->cond.notify_all();
+            t->release_segs(this);
+            delete t;
+            ceph_abort();
           } else {
             cur = ceph::coarse_real_clock::now();
             auto dur = std::chrono::duration_cast<std::chrono::nanoseconds>(cur - start);
@@ -489,10 +558,13 @@ void SharedDriverData::_aio_thread()
           flush_cond.Signal();
       }
 
-
       if (!inflight) {
-        for (auto &&it : registered_devices)
-          it->reap_ioc();
+        // be careful, here we need to let each thread reap its own, currently it is done
+        // by only one dedicatd dpdk thread
+        if(!queueid) {
+          for (auto &&it : driver->registered_devices)
+            it->reap_ioc();
+        }
 
         Mutex::Locker l(queue_lock);
         if (queue_empty.load()) {
@@ -614,6 +686,13 @@ static void attach_cb(void *cb_ctx, const struct spdk_nvme_transport_id *trid,
   struct spdk_pci_device *pci_dev = NULL;
 
   spdk_pci_addr_parse(&pci_addr, trid->traddr);
+
+  pci_dev = spdk_pci_get_device(&pci_addr);
+  if (!pci_dev) {
+    dout(0) << __func__ << " failed to get pci device" << dendl; 
+    assert(pci_dev);
+  }
+
   NVMEManager::ProbeContext *ctx = static_cast<NVMEManager::ProbeContext*>(cb_ctx);
   ctx->manager->register_ctrlr(ctx->sn_tag, ctrlr, pci_dev, &ctx->driver);
 }
@@ -622,20 +701,35 @@ int NVMEManager::try_get(const string &sn_tag, SharedDriverData **driver)
 {
   Mutex::Locker l(lock);
   int r = 0;
-
-  string prefix = "--file-prefix=";
-  string sock_mem = "--socket-mem=";
-  string coremask = "-c ";
-  prefix += sn_tag;
-  sock_mem += g_conf->bluestore_spdk_socket_mem;
-  coremask += g_conf->bluestore_spdk_coremask;
-  char *prefix_arg = (char *)prefix.c_str();
-  char *sock_mem_arg = (char *)sock_mem.c_str();
-  char *coremask_arg = (char *)coremask.c_str();
+  unsigned long long core_value;
+  uint32_t core_num = 0;
+  int m_core_arg = -1;
+  uint32_t mem_size_arg = g_conf->bluestore_spdk_mem;
+  char *coremask_arg = (char *)g_conf->bluestore_spdk_coremask.c_str();
 
   if (sn_tag.empty()) {
     r = -ENOENT;
     derr << __func__ << " empty serial number: " << cpp_strerror(r) << dendl;
+    return r;
+  }
+
+  core_value = strtoll(coremask_arg, NULL, 16);
+  for (uint32_t i = 0; i < sizeof(long long) * 8; i++) {
+    bool tmp = (core_value >> i) & 0x1;
+    if (tmp) {
+      core_num += 1;
+      // select the least signficant bit as the master core
+      if(m_core_arg < 0) {
+        m_core_arg = i;
+      }
+    }
+  }
+
+  // at least two cores are needed for using spdk
+  if (core_num < 2) {
+    r = -ENOENT;
+    derr << __func__ << " invalid spdk coremask, at least two cores are needed: "
+         << cpp_strerror(r) << dendl;
     return r;
   }
 
@@ -649,20 +743,16 @@ int NVMEManager::try_get(const string &sn_tag, SharedDriverData **driver)
   if (!init) {
     init = true;
     dpdk_thread = std::thread(
-      [this, prefix_arg, sock_mem_arg, coremask_arg]() {
-        static const char *ealargs[] = {
-            "ceph-osd",
-            coremask_arg, /* This must be the second parameter. It is overwritten by index in main(). */
-            "-n 4",
-	    sock_mem_arg,
-	    prefix_arg
-        };
+      [this, coremask_arg, m_core_arg, mem_size_arg]() {
+        static struct spdk_env_opts opts;
+        int r;
 
-        int r = rte_eal_init(sizeof(ealargs) / sizeof(ealargs[0]), (char **)(void *)(uintptr_t)ealargs);
-        if (r < 0) {
-          derr << __func__ << " failed to do rte_eal_init" << dendl;
-          ceph_abort();
-        }
+        spdk_env_opts_init(&opts);
+        opts.name = "ceph-osd";
+        opts.core_mask = coremask_arg;
+        opts.dpdk_master_core = m_core_arg;
+        opts.dpdk_mem_size = mem_size_arg;
+        spdk_env_init(&opts);
 
         spdk_nvme_retry_count = g_ceph_context->_conf->bdev_nvme_retry_count;
         if (spdk_nvme_retry_count < 0)
@@ -707,52 +797,57 @@ void io_complete(void *t, const struct spdk_nvme_cpl *completion)
 {
   Task *task = static_cast<Task*>(t);
   IOContext *ctx = task->ctx;
-  SharedDriverData *driver = task->device->get_driver();
-  ++driver->completed_op_seq;
+  SharedDriverQueueData *queue = task->queue;
+
+  assert(queue != NULL);
+  assert(ctx != NULL);
+  ++queue->completed_op_seq;
   auto dur = std::chrono::duration_cast<std::chrono::nanoseconds>(
       ceph::coarse_real_clock::now() - task->start);
   if (task->command == IOCommand::WRITE_COMMAND) {
-    driver->logger->tinc(l_bluestore_nvmedevice_aio_write_lat, dur);
+    queue->logger->tinc(l_bluestore_nvmedevice_aio_write_lat, dur);
     assert(!spdk_nvme_cpl_is_error(completion));
     dout(20) << __func__ << " write/zero op successfully, left "
-             << driver->queue_op_seq - driver->completed_op_seq << dendl;
+             << queue->queue_op_seq - queue->completed_op_seq << dendl;
     // check waiting count before doing callback (which may
     // destroy this ioc).
-    if (ctx && !--ctx->num_running) {
-      ctx->aio_wake();
-      if (task->device->aio_callback && ctx->priv) {
+    if (ctx->priv) {
+      if (!--ctx->num_running) {
         task->device->aio_callback(task->device->aio_callback_priv, ctx->priv);
       }
+    } else {
+      ctx->try_aio_wake();
     }
-    task->release_segs();
+    task->release_segs(queue);
     delete task;
   } else if (task->command == IOCommand::READ_COMMAND) {
-    driver->logger->tinc(l_bluestore_nvmedevice_read_lat, dur);
-    --ctx->num_reading;
+    queue->logger->tinc(l_bluestore_nvmedevice_read_lat, dur);
     assert(!spdk_nvme_cpl_is_error(completion));
     dout(20) << __func__ << " read op successfully" << dendl;
-    if (spdk_nvme_cpl_is_error(completion))
-      task->return_code = -1; // FIXME
-    else
-      task->return_code = 0;
     task->fill_cb();
-    task->release_segs();
-    {
-      std::unique_lock<std::mutex> l(ctx->lock);
-      ctx->cond.notify_all();
+    task->release_segs(queue);
+    // read submitted by AIO
+    if(!task->return_code) {
+      if (ctx->priv) {
+	if (!--ctx->num_running) {
+          task->device->aio_callback(task->device->aio_callback_priv, ctx->priv);
+	}
+      } else {
+	ctx->try_aio_wake();
+      }
+      delete task;
+    } else {
+      task->return_code = 0;
+      if (!--ctx->num_running) {
+        task->io_wake();
+      }
     }
   } else {
     assert(task->command == IOCommand::FLUSH_COMMAND);
-    driver->logger->tinc(l_bluestore_nvmedevice_flush_lat, dur);
+    assert(!spdk_nvme_cpl_is_error(completion));
+    queue->logger->tinc(l_bluestore_nvmedevice_flush_lat, dur);
     dout(20) << __func__ << " flush op successfully" << dendl;
-    if (spdk_nvme_cpl_is_error(completion))
-      task->return_code = -1; // FIXME
-    else
-      task->return_code = 0;
-    {
-      std::unique_lock<std::mutex> l(ctx->lock);
-      ctx->cond.notify_all();
-    }
+    task->return_code = 0;
   }
 }
 
@@ -814,6 +909,7 @@ int NVMEDevice::open(const string& p)
   driver->register_device(this);
   block_size = driver->get_block_size();
   size = driver->get_size();
+  name = serial_number;
 
   //nvme is non-rotational device.
   rotational = false;
@@ -838,14 +934,32 @@ void NVMEDevice::close()
   dout(1) << __func__ << " end" << dendl;
 }
 
+int NVMEDevice::collect_metadata(string prefix, map<string,string> *pm) const
+{
+  (*pm)[prefix + "rotational"] = "0";
+  (*pm)[prefix + "size"] = stringify(get_size());
+  (*pm)[prefix + "block_size"] = stringify(get_block_size());
+  (*pm)[prefix + "driver"] = "NVMEDevice";
+  (*pm)[prefix + "type"] = "nvme";
+  (*pm)[prefix + "access_mode"] = "spdk";
+  (*pm)[prefix + "nvme_serial_number"] = name;
+
+  return 0;
+}
+
 int NVMEDevice::flush()
 {
   dout(10) << __func__ << " start" << dendl;
   auto start = ceph::coarse_real_clock::now();
-  driver->flush_wait();
+
+  if(queue_id == -1)
+    queue_id = ceph_gettid();
+  SharedDriverQueueData *queue = driver->get_queue(queue_id);
+  assert(queue != NULL);
+  queue->flush_wait();
   auto dur = std::chrono::duration_cast<std::chrono::nanoseconds>(
       ceph::coarse_real_clock::now() - start);
-  driver->logger->tinc(l_bluestore_nvmedevice_flush_lat, dur);
+  queue->logger->tinc(l_bluestore_nvmedevice_flush_lat, dur);
   return 0;
 }
 
@@ -861,7 +975,9 @@ void NVMEDevice::aio_submit(IOContext *ioc)
     ioc->num_pending -= pending;
     assert(ioc->num_pending.load() == 0);  // we should be only thread doing this
     // Only need to push the first entry
-    driver->queue_task(t, pending);
+  if(queue_id == -1)
+    queue_id = ceph_gettid();
+    driver->get_queue(queue_id)->queue_task(t, pending);
     ioc->nvme_task_first = ioc->nvme_task_last = nullptr;
   }
 }
@@ -889,7 +1005,9 @@ int NVMEDevice::aio_write(
 
   if (buffered) {
     // Only need to push the first entry
-    driver->queue_task(t);
+    if(queue_id == -1)
+      queue_id = ceph_gettid();
+    driver->get_queue(queue_id)->queue_task(t);
   } else {
     t->ctx = ioc;
     Task *first = static_cast<Task*>(ioc->nvme_task_first);
@@ -904,6 +1022,15 @@ int NVMEDevice::aio_write(
 
   dout(5) << __func__ << " " << off << "~" << len << dendl;
 
+  return 0;
+}
+
+int NVMEDevice::write(uint64_t off, bufferlist &bl, bool buffered)
+{
+  // FIXME: there is presumably a more efficient way to do this...
+  IOContext ioc(cct, NULL);
+  aio_write(off, bl, &ioc, buffered);
+  ioc.aio_wait();
   return 0;
 }
 
@@ -926,18 +1053,17 @@ int NVMEDevice::read(uint64_t off, uint64_t len, bufferlist *pbl,
   t->fill_cb = [buf, t]() {
     t->copy_to_buf(buf, 0, t->len);
   };
-  ++ioc->num_reading;
-  driver->queue_task(t);
+  ++ioc->num_running;
+  if(queue_id == -1)
+    queue_id = ceph_gettid();
+  driver->get_queue(queue_id)->queue_task(t);
 
-  {
-    std::unique_lock<std::mutex> l(ioc->lock);
-    while (t->return_code > 0)
-      ioc->cond.wait(l);
+  while(t->return_code > 0) {
+    t->io_wait();
   }
   pbl->push_back(std::move(p));
   r = t->return_code;
   delete t;
-  ioc->aio_wake();
   return r;
 }
 
@@ -976,8 +1102,6 @@ int NVMEDevice::aio_read(
   return 0;
 }
 
-
-
 int NVMEDevice::read_random(uint64_t off, uint64_t len, char *buf, bool buffered)
 {
   assert(len > 0);
@@ -995,17 +1119,16 @@ int NVMEDevice::read_random(uint64_t off, uint64_t len, char *buf, bool buffered
   t->fill_cb = [buf, t, off, len]() {
     t->copy_to_buf(buf, off-t->offset, len);
   };
-  ++ioc.num_reading;
-  driver->queue_task(t);
+  ++ioc.num_running;
+  if(queue_id == -1)
+    queue_id = ceph_gettid();
+  driver->get_queue(queue_id)->queue_task(t);
 
-  {
-    std::unique_lock<std::mutex> l(ioc.lock);
-    while (t->return_code > 0)
-      ioc.cond.wait(l);
+  while(t->return_code > 0) {
+    t->io_wait();
   }
   r = t->return_code;
   delete t;
-  ioc.aio_wake();
   return r;
 }
 

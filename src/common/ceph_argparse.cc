@@ -13,23 +13,10 @@
  */
 
 #include "auth/Auth.h"
-#include "common/ConfUtils.h"
 #include "common/ceph_argparse.h"
-#include "common/common_init.h"
 #include "common/config.h"
-#include "common/strtol.h"
 #include "common/version.h"
-#include "include/intarith.h"
 #include "include/str_list.h"
-#include "msg/msg_types.h"
-
-#include <errno.h>
-#include <stdarg.h>
-#include <stdlib.h>
-#include <string>
-#include <string.h>
-#include <sstream>
-#include <vector>
 
 /*
  * Ceph argument parsing library
@@ -456,7 +443,7 @@ bool ceph_argparse_witharg(std::vector<const char*> &args,
 }
 
 CephInitParameters ceph_argparse_early_args
-	  (std::vector<const char*>& args, uint32_t module_type, int flags,
+	  (std::vector<const char*>& args, uint32_t module_type,
 	   std::string *cluster, std::string *conf_file_list)
 {
   CephInitParameters iparams(module_type);

@@ -1,0 +1,43 @@
+roles:
+- - mon.a
+  - mgr.x
+  - osd.0
+  - osd.1
+  - osd.2
+- - osd.3
+  - osd.4
+  - osd.5
+  - client.0
+openstack:
+  - volumes: # attached to each instance
+      count: 3
+      size: 10 # GB
+override:
+  ceph:
+    conf:
+      mon:
+        osd default pool size: 3
+tasks:
+- install:
+- ceph:
+    log-whitelist:
+    - wrongly marked me down
+    - missing primary copy of
+    - objects unfound and apparently lost
+    - overall HEALTH_
+    - (OSDMAP_FLAGS)
+    - (REQUEST_SLOW)
+    - (PG_
+    - (OSD_
+- thrashosds:
+    op_delay: 30
+    clean_interval: 120
+    chance_down: .5
+    random_eio: .33
+    min_live: 5
+    min_in: 5
+- radosbench:
+    clients: [client.0]
+    time: 720
+    type: rand
+    objectsize: 1048576

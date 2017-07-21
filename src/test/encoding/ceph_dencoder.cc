@@ -104,7 +104,7 @@ public:
     : m_object(new T),
       stray_okay(stray_okay),
       nondeterministic(nondeterministic) {}
-  ~DencoderBase() {
+  ~DencoderBase() override {
     delete m_object;
   }
 
@@ -142,9 +142,7 @@ public:
       i = m_list.size();
     if ((i == 0) || (i > m_list.size()))
       return "invalid id for generated object";
-    typename list<T*>::iterator p = m_list.begin();
-    for (i--; i > 0 && p != m_list.end(); ++p, --i) ;
-    m_object = *p;
+    m_object = *(std::next(m_list.begin(), i-1));
     return string();
   }
 
@@ -220,7 +218,7 @@ public:
   MessageDencoderImpl() {
     m_object = new T;
   }
-  ~MessageDencoderImpl() {
+  ~MessageDencoderImpl() override {
     m_object->put();
   }
 
@@ -270,10 +268,8 @@ public:
       i = m_list.size();
     if ((i == 0) || (i > m_list.size()))
       return "invalid id for generated object";
-    typename list<T*>::iterator p = m_list.begin();
-    for (i--; i > 0 && p != m_list.end(); ++p, --i) ;
     m_object->put();
-    m_object = *p;
+    m_object = *(std::next(m_list.begin(), i-1));
     return string();
   }
   bool is_deterministic() override {

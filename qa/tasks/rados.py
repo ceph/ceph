@@ -29,6 +29,8 @@ def task(ctx, config):
           runs: <number of times to run> - the pool is remade between runs
           ec_pool: use an ec pool
           erasure_code_profile: profile to use with the erasure coded pool
+          fast_read: enable ec_pool's fast_read
+          min_size: set the min_size of created pool
           pool_snaps: use pool snapshots instead of selfmanaged snapshots
 	  write_fadvise_dontneed: write behavior like with LIBRADOS_OP_FLAG_FADVISE_DONTNEED.
 	                          This mean data don't access in the near future.
@@ -55,14 +57,12 @@ def task(ctx, config):
               rollback: 2
               snap_remove: 0
             ec_pool: create an ec pool, defaults to False
-            erasure_code_use_hacky_overwrites: use the whitebox
-                                               testing experimental
-                                               overwrites mode
+            erasure_code_use_overwrites: test overwrites, default false
             erasure_code_profile:
               name: teuthologyprofile
               k: 2
               m: 1
-              ruleset-failure-domain: osd
+              crush-failure-domain: osd
             pool_snaps: true
 	    write_fadvise_dontneed: true
             runs: 10
@@ -139,12 +139,12 @@ def task(ctx, config):
         'ceph_test_rados']
     if config.get('ec_pool', False):
         args.extend(['--no-omap'])
-        if config.get('erasure_code_use_hacky_overwrites', False):
-            args.extend(['--no-sparse'])
-        else:
+        if not config.get('erasure_code_use_overwrites', False):
             args.extend(['--ec-pool'])
     if config.get('write_fadvise_dontneed', False):
         args.extend(['--write-fadvise-dontneed'])
+    if config.get('set_redirect', False):
+        args.extend(['--set_redirect'])
     if config.get('pool_snaps', False):
         args.extend(['--pool-snaps'])
     args.extend([
@@ -230,13 +230,17 @@ def task(ctx, config):
                 else:
                     pool = manager.create_pool_with_unique_name(
                         erasure_code_profile_name=profile_name,
-                        erasure_code_use_hacky_overwrites=
-                          config.get('erasure_code_use_hacky_overwrites', False)
+                        erasure_code_use_overwrites=
+                          config.get('erasure_code_use_overwrites', False)
                     )
                     created_pools.append(pool)
                     if config.get('fast_read', False):
                         manager.raw_cluster_cmd(
                             'osd', 'pool', 'set', pool, 'fast_read', 'true')
+                    min_size = config.get('min_size', None);
+                    if min_size is not None:
+                        manager.raw_cluster_cmd(
+                            'osd', 'pool', 'set', pool, 'min_size', str(min_size))
 
                 (remote,) = ctx.cluster.only(role).remotes.iterkeys()
                 proc = remote.run(
@@ -250,6 +254,7 @@ def task(ctx, config):
             run.wait(tests.itervalues())
 
             for pool in created_pools:
+                manager.wait_snap_trimming_complete(pool);
                 manager.remove_pool(pool)
 
     running = gevent.spawn(thread)

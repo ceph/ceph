@@ -242,6 +242,19 @@ void MemDB::MDBTransactionImpl::rmkeys_by_prefix(const string &prefix)
   }
 }
 
+void MemDB::MDBTransactionImpl::rm_range_keys(const string &prefix, const string &start, const string &end)
+{
+  KeyValueDB::Iterator it = m_db->get_iterator(prefix);
+  it->lower_bound(start);
+  while (it->valid()) {
+    if (it->key() >= end) {
+      break;
+    }
+    rmkey(prefix, it->key());
+    it->next();
+  }
+}
+
 void MemDB::MDBTransactionImpl::merge(
   const std::string &prefix, const std::string &key, const bufferlist  &value)
 {

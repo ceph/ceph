@@ -18,6 +18,7 @@
     key create                 create access key
     key rm                     remove access key
     bucket list                list buckets
+    bucket limit check         show bucket sharding stats
     bucket link                link bucket to specified user
     bucket unlink              unlink bucket from specified user
     bucket stats               returns bucket statistics
@@ -42,6 +43,10 @@
     quota set                  set quota params
     quota enable               enable quota
     quota disable              disable quota
+    global quota get           view global quota params
+    global quota set           set global quota params
+    global quota enable        enable a global quota
+    global quota disable       disable a global quota
     realm create               create a new realm
     realm delete               delete a realm
     realm get                  show realm info
@@ -68,8 +73,6 @@
     zonegroup placement modify modify a placement target of a specific zonegroup
     zonegroup placement rm     remove a placement target from a zonegroup
     zonegroup placement default  set a zonegroup's default placement target
-    zonegroup-map get          show zonegroup-map
-    zonegroup-map set          set zonegroup-map (requires infile)
     zone create                create a new zone
     zone delete                delete a zone
     zone get                   show zone cluster params
@@ -131,6 +134,10 @@
     role-policy list           list policies attached to a role
     role-policy get            get the specified inline policy document embedded with the given role
     role-policy delete         delete policy attached to a role
+    reshard add                schedule a resharding of a bucket
+    reshard list               list all bucket resharding or scheduled to be reshared
+    reshard process            process of scheduled reshard jobs
+    reshard cancel             cancel resharding a bucket
   options:
      --tenant=<tenant>         tenant name
      --uid=<id>                user id
@@ -146,7 +153,7 @@
      --access=<access>         Set access permissions for sub-user, should be one
                                of read, write, readwrite, full
      --display-name=<name>
-     --max_buckets             max number of buckets for a user
+     --max-buckets             max number of buckets for a user
      --admin                   set the admin flag on the user
      --system                  set the system flag on the user
      --bucket=<bucket>
@@ -176,6 +183,8 @@
      --realm-new-name=<name>   realm new name
      --rgw-zonegroup=<name>    zonegroup name
      --zonegroup-id=<id>       zonegroup id
+     --zonegroup-new-name=<name>
+                               zonegroup new name
      --rgw-zone=<name>         name of zone in which radosgw is running
      --zone-id=<id>            zone id
      --zone-new-name=<name>    zone new name
@@ -187,9 +196,9 @@
      --tags-add=<list>         list of tags to add for zonegroup placement modify command
      --tags-rm=<list>          list of tags to remove for zonegroup placement modify command
      --endpoints=<list>        zone endpoints
-     --index_pool=<pool>       placement target index pool
-     --data_pool=<pool>        placement target data pool
-     --data_extra_pool=<pool>  placement target data extra (non-ec) pool
+     --index-pool=<pool>       placement target index pool
+     --data-pool=<pool>        placement target data pool
+     --data-extra-pool=<pool>  placement target data extra (non-ec) pool
      --placement-index-type=<type>
                                placement target index type (normal, indexless, or #id)
      --compression=<type>      placement target compression type (plugin name or empty/none)
@@ -198,7 +207,6 @@
                                set zone tier config keys, values
      --tier-config-rm=<k>[,...]
                                unset zone tier config keys
-     --tier_type=<type>        zone tier type
      --sync-from-all[=false]   set/reset whether zone syncs from all zonegroup peers
      --sync-from=[zone-name][,...]
                                set list of zones to sync from
@@ -228,7 +236,9 @@
      --categories=<list>       comma separated list of categories, used in usage show
      --caps=<caps>             list of caps (e.g., "usage=read, write; user=read")
      --yes-i-really-mean-it    required for certain operations
-     --reset-regions           reset regionmap when regionmap update
+     --warnings-only           when specified with bucket limit check, list
+                               only buckets nearing or over the current max
+                               objects per shard value
      --bypass-gc               when specified with bucket deletion, triggers
                                object deletions by not involving GC
      --inconsistent-index      when specified with bucket deletion and bypass-gc set to true,

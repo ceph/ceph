@@ -12,31 +12,12 @@
  *
  */
 
-#include "include/int_types.h"
-
 #include "common/admin_socket.h"
-#include "common/ceph_context.h"
 #include "common/errno.h"
 #include "common/safe_io.h"
 #include "common/admin_socket_client.h"
 
-#include <arpa/inet.h>
-#include <errno.h>
-#include <fcntl.h>
-#include <map>
-#include <poll.h>
-#include <sstream>
-#include <stdint.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <string>
-#include <sys/socket.h>
-#include <sys/types.h>
 #include <sys/un.h>
-#include <time.h>
-#include <unistd.h>
-#include <vector>
 
 using std::ostringstream;
 
@@ -138,8 +119,7 @@ std::string AdminSocketClient::ping(bool *ok)
 std::string AdminSocketClient::do_request(std::string request, std::string *result)
 {
   int socket_fd = 0, res;
-  std::vector<uint8_t> vec(65536, 0);
-  uint8_t *buffer = &vec[0];
+  std::string buffer;
   uint32_t message_size_raw, message_size;
 
   std::string err = asok_connect(m_path, &socket_fd);
@@ -161,7 +141,8 @@ std::string AdminSocketClient::do_request(std::string request, std::string *resu
     goto done;
   }
   message_size = ntohl(message_size_raw);
-  res = safe_read_exact(socket_fd, buffer, message_size);
+  buffer.resize(message_size, 0);
+  res = safe_read_exact(socket_fd, &buffer[0], message_size);
   if (res < 0) {
     int e = res;
     ostringstream oss;
@@ -169,8 +150,8 @@ std::string AdminSocketClient::do_request(std::string request, std::string *resu
     err = oss.str();
     goto done;
   }
-  //printf("MESSAGE FROM SERVER: %s\n", buffer);
-  result->assign((const char*)buffer);
+  //printf("MESSAGE FROM SERVER: %s\n", buffer.c_str());
+  std::swap(*result, buffer);
 done:
   close(socket_fd);
  out:

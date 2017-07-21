@@ -253,7 +253,7 @@ class ClientStub : public TestStub
     assert(messenger.get() != NULL);
 
     messenger->set_default_policy(
-	Messenger::Policy::lossy_client(0, CEPH_FEATURE_OSDREPLYMUX));
+	Messenger::Policy::lossy_client(CEPH_FEATURE_OSDREPLYMUX));
     dout(10) << "ClientStub::" << __func__ << " starting messenger at "
 	    << messenger->get_myaddr() << dendl;
 
@@ -361,27 +361,24 @@ class OSDStub : public TestStub
 	     << cct->_conf->auth_supported << dendl;
     stringstream ss;
     ss << "client-osd" << whoami;
-    std::string public_msgr_type = cct->_conf->ms_public_type.empty() ? cct->_conf->ms_type : cct->_conf->ms_public_type;
+    std::string public_msgr_type = cct->_conf->ms_public_type.empty() ? cct->_conf->get_val<std::string>("ms_type") : cct->_conf->ms_public_type;
     messenger.reset(Messenger::create(cct, public_msgr_type, entity_name_t::OSD(whoami),
 				      ss.str().c_str(), getpid(), 0));
 
     Throttle throttler(g_ceph_context, "osd_client_bytes",
 	g_conf->osd_client_message_size_cap);
-    uint64_t supported =
-      CEPH_FEATURE_UID |
-      CEPH_FEATURE_NOSRCADDR |
-      CEPH_FEATURE_PGID64;
 
     messenger->set_default_policy(
-	Messenger::Policy::stateless_server(supported, 0));
+	Messenger::Policy::stateless_server(0));
     messenger->set_policy_throttlers(entity_name_t::TYPE_CLIENT,
 				    &throttler, NULL);
     messenger->set_policy(entity_name_t::TYPE_MON,
-	Messenger::Policy::lossy_client(supported, CEPH_FEATURE_UID |
+	Messenger::Policy::lossy_client(
+	  CEPH_FEATURE_UID |
 	  CEPH_FEATURE_PGID64 |
 	  CEPH_FEATURE_OSDENC));
     messenger->set_policy(entity_name_t::TYPE_OSD,
-	Messenger::Policy::stateless_server(0,0));
+	Messenger::Policy::stateless_server(0));
 
     dout(10) << __func__ << " public addr " << g_conf->public_addr << dendl;
     int err = messenger->bind(g_conf->public_addr);
@@ -498,12 +495,11 @@ class OSDStub : public TestStub
       return;
     }
 
-    const map<int64_t,pg_pool_t> &osdmap_pools = osdmap.get_pools();
-    map<int64_t,pg_pool_t>::const_iterator pit;
-    for (pit = osdmap_pools.begin(); pit != osdmap_pools.end(); ++pit) {
+    auto& osdmap_pools = osdmap.get_pools();
+    for (auto pit = osdmap_pools.begin(); pit != osdmap_pools.end(); ++pit) {
       const int64_t pool_id = pit->first;
       const pg_pool_t &pool = pit->second;
-      int ruleno = pool.get_crush_ruleset();
+      int ruleno = pool.get_crush_rule();
 
       if (!osdmap.crush->rule_exists(ruleno)) {
 	dout(20) << __func__
@@ -677,9 +673,8 @@ class OSDStub : public TestStub
 
     JSONFormatter f(true);
     f.open_array_section("pools");
-    const map<int64_t,pg_pool_t> &osdmap_pools = osdmap.get_pools();
-    map<int64_t,pg_pool_t>::const_iterator pit;
-    for (pit = osdmap_pools.begin(); pit != osdmap_pools.end(); ++pit) {
+    auto& osdmap_pools = osdmap.get_pools();
+    for (auto pit = osdmap_pools.begin(); pit != osdmap_pools.end(); ++pit) {
       const int64_t pool_id = pit->first;
       const pg_pool_t &pool = pit->second;
       f.open_object_section("pool");

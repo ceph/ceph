@@ -12,36 +12,19 @@
  * 
  */
 
-#include "include/int_types.h"
-
-#include "common/Thread.h"
 #include "common/admin_socket.h"
 #include "common/admin_socket_client.h"
-#include "common/config.h"
-#include "common/cmdparse.h"
-#include "common/dout.h"
 #include "common/errno.h"
-#include "common/perf_counters.h"
 #include "common/pipe.h"
 #include "common/safe_io.h"
 #include "common/version.h"
-#include "common/Formatter.h"
-
-#include <errno.h>
-#include <fcntl.h>
-#include <map>
-#include <poll.h>
-#include <set>
-#include <sstream>
-#include <stdint.h>
-#include <string.h>
-#include <string>
-#include <sys/socket.h>
-#include <sys/types.h>
-#include <sys/un.h>
-#include <unistd.h>
-
 #include "include/compat.h"
+
+#include <poll.h>
+#include <sys/un.h>
+
+// re-include our assert to clobber the system one; fix dout:
+#include "include/assert.h"
 
 #define dout_subsys ceph_subsys_asok
 #undef dout_prefix
@@ -299,6 +282,18 @@ void AdminSocket::chown(uid_t uid, gid_t gid)
   }
 }
 
+void AdminSocket::chmod(mode_t mode)
+{
+  if (m_sock_fd >= 0) {
+    int r = ::chmod(m_path.c_str(), mode);
+    if (r < 0) {
+      r = -errno;
+      lderr(m_cct) << "AdminSocket: failed to chmod socket: "
+                   << cpp_strerror(r) << dendl;
+    }
+  }
+}
+
 bool AdminSocket::do_accept()
 {
   struct sockaddr_un address;
@@ -320,8 +315,10 @@ bool AdminSocket::do_accept()
   while (1) {
     int ret = safe_read(connection_fd, &cmd[pos], 1);
     if (ret <= 0) {
-      lderr(m_cct) << "AdminSocket: error reading request code: "
-		   << cpp_strerror(ret) << dendl;
+      if (ret < 0) {
+        lderr(m_cct) << "AdminSocket: error reading request code: "
+		     << cpp_strerror(ret) << dendl;
+      }
       VOID_TEMP_FAILURE_RETRY(close(connection_fd));
       return false;
     }
@@ -495,10 +492,13 @@ public:
     } else {
       JSONFormatter jf;
       jf.open_object_section("version");
-      if (command == "version")
+      if (command == "version") {
 	jf.dump_string("version", ceph_version_to_str());
-      else if (command == "git_version")
+	jf.dump_string("release", ceph_release_name(ceph_release()));
+	jf.dump_string("release_type", ceph_release_type());
+      } else if (command == "git_version") {
 	jf.dump_string("git_version", git_version_to_str());
+      }
       ostringstream ss;
       jf.close_section();
       jf.flush(ss);

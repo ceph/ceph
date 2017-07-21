@@ -126,12 +126,15 @@ private:
   OpEvents m_op_events;
   uint64_t m_in_flight_op_events = 0;
 
+  bool m_shut_down = false;
   Context *m_flush_ctx = nullptr;
   Context *m_on_aio_ready = nullptr;
 
   void handle_event(const AioDiscardEvent &event, Context *on_ready,
                     Context *on_safe);
   void handle_event(const AioWriteEvent &event, Context *on_ready,
+                    Context *on_safe);
+  void handle_event(const AioWriteSameEvent &event, Context *on_ready,
                     Context *on_safe);
   void handle_event(const AioFlushEvent &event, Context *on_ready,
                     Context *on_safe);
@@ -155,10 +158,10 @@ private:
                     Context *on_safe);
   void handle_event(const FlattenEvent &event, Context *on_ready,
                     Context *on_safe);
-  void handle_event(const DemoteEvent &event, Context *on_ready,
+  void handle_event(const DemotePromoteEvent &event, Context *on_ready,
                     Context *on_safe);
   void handle_event(const SnapLimitEvent &event, Context *on_ready,
-		    Context *on_safe);
+                    Context *on_safe);
   void handle_event(const UpdateFeaturesEvent &event, Context *on_ready,
                     Context *on_safe);
   void handle_event(const MetadataSetEvent &event, Context *on_ready,

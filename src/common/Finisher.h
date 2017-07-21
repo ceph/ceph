@@ -15,10 +15,8 @@
 #ifndef CEPH_FINISHER_H
 #define CEPH_FINISHER_H
 
-#include "include/atomic.h"
 #include "common/Mutex.h"
 #include "common/Cond.h"
-#include "common/Thread.h"
 #include "common/perf_counters.h"
 
 class CephContext;
@@ -43,6 +41,7 @@ class Finisher {
   Cond         finisher_empty_cond; ///< Signaled when the finisher has nothing more to process.
   bool         finisher_stop; ///< Set when the finisher should stop.
   bool         finisher_running; ///< True when the finisher is currently executing contexts.
+  bool	       finisher_empty_wait; ///< True mean someone wait finisher empty.
   /// Queue for contexts for which complete(0) will be called.
   /// NULLs in this queue indicate that an item from finisher_queue_rval
   /// should be completed in that place instead.
@@ -63,7 +62,7 @@ class Finisher {
   struct FinisherThread : public Thread {
     Finisher *fin;    
     explicit FinisherThread(Finisher *f) : fin(f) {}
-    void* entry() { return (void*)fin->finisher_thread_entry(); }
+    void* entry() override { return (void*)fin->finisher_thread_entry(); }
   } finisher_thread;
 
  public:
@@ -136,14 +135,14 @@ class Finisher {
   /// Anonymous finishers do not log their queue length.
   explicit Finisher(CephContext *cct_) :
     cct(cct_), finisher_lock("Finisher::finisher_lock"),
-    finisher_stop(false), finisher_running(false),
+    finisher_stop(false), finisher_running(false), finisher_empty_wait(false),
     thread_name("fn_anonymous"), logger(0),
     finisher_thread(this) {}
 
   /// Construct a named Finisher that logs its queue length.
   Finisher(CephContext *cct_, string name, string tn) :
-    cct(cct_), finisher_lock("Finisher::finisher_lock"),
-    finisher_stop(false), finisher_running(false),
+    cct(cct_), finisher_lock("Finisher::" + name),
+    finisher_stop(false), finisher_running(false), finisher_empty_wait(false),
     thread_name(tn), logger(0),
     finisher_thread(this) {
     PerfCountersBuilder b(cct, string("finisher-") + name,
@@ -174,14 +173,14 @@ public:
     assert(con != NULL);
   }
 
-  ~C_OnFinisher() {
+  ~C_OnFinisher() override {
     if (con != nullptr) {
       delete con;
       con = nullptr;
     }
   }
 
-  void finish(int r) {
+  void finish(int r) override {
     fin->queue(con, r);
     con = nullptr;
   }

@@ -48,8 +48,7 @@ def task(ctx, config):
     # kludge to make sure they get a map
     rados(ctx, mon, ['-p', POOL, 'put', 'dummy', dummyfile])
 
-    manager.raw_cluster_cmd('tell', 'osd.0', 'flush_pg_stats')
-    manager.raw_cluster_cmd('tell', 'osd.1', 'flush_pg_stats')
+    manager.flush_pg_stats([0, 1])
     manager.wait_for_recovery()
 
     # create old objects
@@ -84,8 +83,7 @@ def task(ctx, config):
     manager.mark_in_osd(0)
     manager.wait_till_osd_is_up(0)
 
-    manager.raw_cluster_cmd('tell', 'osd.1', 'flush_pg_stats')
-    manager.raw_cluster_cmd('tell', 'osd.0', 'flush_pg_stats')
+    manager.flush_pg_stats([1, 0])
     manager.wait_till_active()
 
     # take out osd.1 and the only copy of those objects.
@@ -99,11 +97,9 @@ def task(ctx, config):
     manager.mark_in_osd(2)
     manager.wait_till_osd_is_up(2)
 
-    manager.raw_cluster_cmd('tell', 'osd.0', 'flush_pg_stats')
-    manager.raw_cluster_cmd('tell', 'osd.2', 'flush_pg_stats')
+    manager.flush_pg_stats([0, 2])
     manager.wait_till_active()
-    manager.raw_cluster_cmd('tell', 'osd.0', 'flush_pg_stats')
-    manager.raw_cluster_cmd('tell', 'osd.2', 'flush_pg_stats')
+    manager.flush_pg_stats([0, 2])
 
     # verify that there are unfound objects
     unfound = manager.get_num_unfound_objects()
@@ -160,8 +156,7 @@ def task(ctx, config):
 
     manager.raw_cluster_cmd('tell', 'osd.0', 'debug', 'kick_recovery_wq', '5')
     manager.raw_cluster_cmd('tell', 'osd.2', 'debug', 'kick_recovery_wq', '5')
-    manager.raw_cluster_cmd('tell', 'osd.0', 'flush_pg_stats')
-    manager.raw_cluster_cmd('tell', 'osd.2', 'flush_pg_stats')
+    manager.flush_pg_stats([0, 2])
     manager.wait_for_recovery()
 
     # verify result

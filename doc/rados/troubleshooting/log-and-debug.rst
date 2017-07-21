@@ -88,8 +88,6 @@ particular daemons are set under the daemon section in your configuration file
 	[mds]
 		debug mds = 1
 		debug mds balancer = 1
-		debug mds log = 1
-		debug mds migrator = 1
 
 
 See `Subsystem, Log and Debug Settings`_ for details.
@@ -171,7 +169,7 @@ as ``debug ms = 1/5``. For example:
 
 	debug {subsystem} = {log-level}/{memory-level}
 	#for example
-	debug mds log = 1/20
+	debug mds balancer = 1/20
 
 
 The following table provides a list of Ceph subsystems and their default log and
@@ -395,13 +393,6 @@ OSD
 :Type: Double
 :Required: No
 :Default: 1
-
-``osd preserve trimmed log``
-
-:Description: Preserves trimmed logs after trimming.
-:Type: Boolean
-:Required: No
-:Default: ``false``
 
 
 ``osd tmapput sets uses tmap``

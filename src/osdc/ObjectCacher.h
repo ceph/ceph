@@ -11,6 +11,7 @@
 #include "common/Cond.h"
 #include "common/Finisher.h"
 #include "common/Thread.h"
+#include "common/zipkin_trace.h"
 
 #include "Objecter.h"
 #include "Striper.h"
@@ -350,7 +351,7 @@ class ObjectCacher {
                  map<loff_t, BufferHead*>& rx,
 		 map<loff_t, BufferHead*>& errors);
     BufferHead *map_write(ObjectExtent &ex, ceph_tid_t tid);
-    
+
     void replace_journal_tid(BufferHead *bh, ceph_tid_t tid);
     void truncate(loff_t s);
     void discard(loff_t off, loff_t len);
@@ -403,6 +404,8 @@ class ObjectCacher {
   ceph::timespan max_dirty_age;
   bool block_writes_upfront;
 
+  ZTracer::Endpoint trace_endpoint;
+
   flush_set_callback_t flush_set_callback;
   void *flush_set_callback_arg;
 
@@ -424,7 +427,7 @@ class ObjectCacher {
     ObjectCacher *oc;
   public:
     explicit FlusherThread(ObjectCacher *o) : oc(o) {}
-    void *entry() {
+    void *entry() override {
       oc->flusher_entry();
       return 0;
     }
@@ -519,14 +522,15 @@ class ObjectCacher {
   void bh_remove(Object *ob, BufferHead *bh);
 
   // io
-  void bh_read(BufferHead *bh, int op_flags);
-  void bh_write(BufferHead *bh);
+  void bh_read(BufferHead *bh, int op_flags,
+               const ZTracer::Trace &parent_trace);
+  void bh_write(BufferHead *bh, const ZTracer::Trace &parent_trace);
   void bh_write_scattered(list<BufferHead*>& blist);
   void bh_write_adjacencies(BufferHead *bh, ceph::real_time cutoff,
 			    int64_t *amount, int *max_count);
 
   void trim();
-  void flush(loff_t amount=0);
+  void flush(ZTracer::Trace *trace, loff_t amount=0);
 
   /**
    * flush a range of buffers
@@ -539,7 +543,8 @@ class ObjectCacher {
    * @param len extent length, or 0 for entire object
    * @return true if object was already clean/flushed.
    */
-  bool flush(Object *o, loff_t off, loff_t len);
+  bool flush(Object *o, loff_t off, loff_t len,
+             ZTracer::Trace *trace);
   loff_t release(Object *o);
   void purge(Object *o);
 
@@ -547,7 +552,7 @@ class ObjectCacher {
   Cond read_cond;
 
   int _readx(OSDRead *rd, ObjectSet *oset, Context *onfinish,
-	     bool external_call);
+	     bool external_call, ZTracer::Trace *trace);
   void retry_waiting_reads();
 
  public:
@@ -597,16 +602,18 @@ class ObjectCacher {
    * @note total read size must be <= INT_MAX, since
    * the return value is total bytes read
    */
-  int readx(OSDRead *rd, ObjectSet *oset, Context *onfinish);
-  int writex(OSDWrite *wr, ObjectSet *oset, Context *onfreespace);
+  int readx(OSDRead *rd, ObjectSet *oset, Context *onfinish,
+	    ZTracer::Trace *parent_trace = nullptr);
+  int writex(OSDWrite *wr, ObjectSet *oset, Context *onfreespace,
+	     ZTracer::Trace *parent_trace = nullptr);
   bool is_cached(ObjectSet *oset, vector<ObjectExtent>& extents,
 		 snapid_t snapid);
 
 private:
   // write blocking
   int _wait_for_write(OSDWrite *wr, uint64_t len, ObjectSet *oset,
-		      Context *onfreespace);
-  void maybe_wait_for_writeback(uint64_t len);
+                      ZTracer::Trace *trace, Context *onfreespace);
+  void maybe_wait_for_writeback(uint64_t len, ZTracer::Trace *trace);
   bool _flush_set_finish(C_GatherBuilder *gather, Context *onfinish);
 
 public:
@@ -616,7 +623,7 @@ public:
 
   bool flush_set(ObjectSet *oset, Context *onfinish=0);
   bool flush_set(ObjectSet *oset, vector<ObjectExtent>& ex,
-		 Context *onfinish = 0);
+                 ZTracer::Trace *trace, Context *onfinish = 0);
   bool flush_all(Context *onfinish = 0);
 
   void purge_set(ObjectSet *oset);
@@ -689,7 +696,8 @@ public:
     vector<ObjectExtent> extents;
     Striper::file_to_extents(cct, oset->ino, layout, offset, len,
 			     oset->truncate_size, extents);
-    return flush_set(oset, extents, onfinish);
+    ZTracer::Trace trace;
+    return flush_set(oset, extents, &trace, onfinish);
   }
 };
 

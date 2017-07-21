@@ -32,8 +32,8 @@ public:
 		    CrossProcessSem *pool_setup_sem,
 		    CrossProcessSem *delete_pool_sem,
 		    const std::string &pool_name);
-  ~StRadosDeletePool();
-  virtual int run();
+  ~StRadosDeletePool() override;
+  int run() override;
 private:
   CrossProcessSem *m_pool_setup_sem;
   CrossProcessSem *m_delete_pool_sem;

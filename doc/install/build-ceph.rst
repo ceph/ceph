@@ -28,9 +28,8 @@ Ceph is built using cmake. To build Ceph, navigate to your cloned Ceph
 repository and execute the following::
 
     cd ceph
-    mkdir build
+    ./do_cmake.sh
     cd build
-    cmake ..
     make
 
 .. topic:: Hyperthreading

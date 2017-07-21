@@ -4,6 +4,7 @@ tasks:
     ops: 4000
     objects: 50
     ec_pool: true
+    min_size: 2
     write_append_excl: false
     erasure_code_profile:
       name: isaprofile
@@ -11,7 +12,7 @@ tasks:
       k: 2
       m: 1
       technique: reed_sol_van
-      ruleset-failure-domain: osd
+      crush-failure-domain: osd
     op_weights:
       read: 100
       write: 0

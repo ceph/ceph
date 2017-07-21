@@ -12,35 +12,17 @@
  *
  */
 
-#include "auth/Auth.h"
-#include "common/ConfUtils.h"
 #include "common/ceph_argparse.h"
 #include "common/common_init.h"
 #include "common/config.h"
 #include "common/config_validators.h"
-#include "common/static_assert.h"
-#include "common/strtol.h"
-#include "common/version.h"
 #include "include/str_list.h"
-#include "include/types.h"
 #include "include/stringify.h"
-#include "msg/msg_types.h"
 #include "osd/osd_types.h"
 #include "common/errno.h"
+#include "common/hostname.h"
 
-#include "include/assert.h"
-
-#include <errno.h>
-#include <sstream>
-#include <stdlib.h>
-#include <string.h>
-#include <sys/stat.h>
-#include <sys/types.h>
-
-#include <type_traits>
-#include <utility>
 #include <boost/type_traits.hpp>
-#include <boost/utility/enable_if.hpp>
 
 /* Don't use standard Ceph logging in this file.
  * We can't use logging until it's initialized, and a lot of the necessary
@@ -56,13 +38,15 @@
 
 using std::map;
 using std::list;
-using std::multimap;
 using std::ostringstream;
 using std::pair;
-using std::set;
 using std::string;
 
-const char *CEPH_CONF_FILE_DEFAULT = "$data_dir/config, /etc/ceph/$cluster.conf, ~/.ceph/$cluster.conf, $cluster.conf";
+const char *CEPH_CONF_FILE_DEFAULT = "$data_dir/config, /etc/ceph/$cluster.conf, ~/.ceph/$cluster.conf, $cluster.conf"
+#if defined(__FreeBSD__)
+    ", /usr/local/etc/ceph/$cluster.conf"
+#endif
+    ;
 
 #define _STR(x) #x
 #define STRINGIFY(x) _STR(x)
@@ -301,8 +285,9 @@ int md_config_t::parse_config_files_impl(const std::list<std::string> &conf_file
     else if (ret != -ENOENT)
       return ret;
   }
+  // it must have been all ENOENTs, that's the only way we got here
   if (c == conf_files.end())
-    return -EINVAL;
+    return -ENOENT;
 
   if (cluster.size() == 0) {
     /*
@@ -618,6 +603,7 @@ int md_config_t::parse_option(std::vector<const char*>& args,
   }
 
   if (ret != 0 || !error_message.empty()) {
+    assert(option_name);
     if (oss) {
       *oss << "Parse error setting " << option_name << " to '"
            << val << "' using injectargs";
@@ -725,11 +711,11 @@ void md_config_t::call_all_observers()
 
     expand_all_meta();
 
-    for (obs_map_t::iterator r = observers.begin(); r != observers.end(); ++r) {
+    for (auto r = observers.begin(); r != observers.end(); ++r) {
       obs[r->second].insert(r->first);
     }
   }
-  for (std::map<md_config_obs_t*,std::set<std::string> >::iterator p = obs.begin();
+  for (auto p = obs.begin();
        p != obs.end();
        ++p) {
     p->first->handle_conf_change(this, p->second);
@@ -817,7 +803,7 @@ md_config_t::config_option const *md_config_t::find_config_option(const std::str
   return config_options->end() == opt_it ? nullptr : &(*opt_it);
 }
 
-int md_config_t::set_val(const char *key, const char *val, bool meta, bool safe)
+int md_config_t::set_val(const char *key, const char *val, bool meta)
 {
   Mutex::Locker l(lock);
   if (!key)
@@ -853,7 +839,7 @@ int md_config_t::set_val(const char *key, const char *val, bool meta, bool safe)
 
   config_option const *opt = find_config_option(k);
   if (opt) {
-    if ((!opt->is_safe()) && safe && internal_safe_to_start_threads) {
+    if ((!opt->is_safe()) && internal_safe_to_start_threads) {
       // If threads have been started and the option is not thread safe
       if (observers.find(opt->name) == observers.end()) {
         // And there is no observer to safely change it...
@@ -920,6 +906,10 @@ int md_config_t::_get_val(const char *key, std::string *value) const {
     ostringstream oss;
     if (bool *flag = boost::get<bool>(&config_value)) {
       oss << (*flag ? "true" : "false");
+    } else if (float *fp = boost::get<float>(&config_value)) {
+      oss << std::fixed << *fp ;
+    } else if (double *dp = boost::get<double>(&config_value)) {
+      oss << std::fixed << *dp ;
     } else {
       oss << config_value;
     }
@@ -936,29 +926,21 @@ int md_config_t::_get_val(const char *key, char **buf, int len) const
   if (!key)
     return -EINVAL;
 
-  string k(ConfFile::normalize_key_name(key));
-
-  config_value_t cval = _get_val(k.c_str());
-  if (!boost::get<invalid_config_value_t>(&cval)) {
-    ostringstream oss;
-    if (bool *flagp = boost::get<bool>(&cval)) {
-      oss << (*flagp ? "true" : "false");
-    } else {
-      oss << cval;
-    }
-    string str(oss.str());
-    int l = strlen(str.c_str()) + 1;
+  string val ;
+  if (!_get_val(key, &val)) {
+    int l = val.length() + 1;
     if (len == -1) {
       *buf = (char*)malloc(l);
       if (!*buf)
         return -ENOMEM;
-      strcpy(*buf, str.c_str());
+      strncpy(*buf, val.c_str(), l);
       return 0;
     }
-    snprintf(*buf, len, "%s", str.c_str());
+    snprintf(*buf, len, "%s", val.c_str());
     return (l > len) ? -ENAMETOOLONG : 0;
   }
 
+  string k(ConfFile::normalize_key_name(key));
   // subsys?
   for (int o = 0; o < subsys.get_num(); o++) {
     std::string as_option = "debug_" + subsys.get_name(o);
@@ -1267,9 +1249,14 @@ bool md_config_t::expand_meta(std::string &origval,
 	else if (var == "cluster")
 	  out += cluster;
 	else if (var == "name")
-	  out += name.to_cstr();
+          out += name.to_cstr();
 	else if (var == "host")
-	  out += host;
+        {
+          if (host == "")
+            out += ceph_get_short_hostname();
+          else
+	    out += host;
+        }
 	else if (var == "num")
 	  out += name.get_id().c_str();
 	else if (var == "id")
@@ -1331,15 +1318,35 @@ bool md_config_t::expand_meta(std::string &origval,
 }
 
 void md_config_t::diff(
+  const md_config_t *other,
+  map<string, pair<string, string> > *diff,
+  set<string> *unknown) 
+{
+  diff_helper(other, diff, unknown);
+}
+void md_config_t::diff(
+  const md_config_t *other,
+  map<string, pair<string, string> > *diff,
+  set<string> *unknown, const string& setting) 
+{
+  diff_helper(other, diff, unknown, setting);
+}
+
+void md_config_t::diff_helper(
     const md_config_t *other,
     map<string,pair<string,string> > *diff,
-    set<string> *unknown)
+    set<string> *unknown, const string& setting)
 {
   Mutex::Locker l(lock);
 
   char local_buf[4096];
   char other_buf[4096];
-  for (auto& opt: *config_options) {
+  for (auto& opt : *config_options) {
+    if (!setting.empty()) {
+      if (setting != opt.name) {
+        continue;
+      }
+    }
     memset(local_buf, 0, sizeof(local_buf));
     memset(other_buf, 0, sizeof(other_buf));
 
@@ -1359,6 +1366,10 @@ void md_config_t::diff(
 
     if (strcmp(local_val, other_val))
       diff->insert(make_pair(opt.name, make_pair(local_val, other_val)));
+    else if (!setting.empty()) {
+        diff->insert(make_pair(opt.name, make_pair(local_val, other_val)));
+        break;
+    }
   }
 }
 

@@ -74,7 +74,7 @@ public:
   }
 
 protected:
-  virtual void finish(int r) {
+  void finish(int r) override {
     if (r >= 0) {
       if (m_exists) {
         m_exists = !m_read_data.is_zero();
@@ -275,7 +275,7 @@ int execute_diff(const po::variables_map &vm) {
   librados::Rados rados;
   librados::IoCtx io_ctx;
   librbd::Image image;
-  r = utils::init_and_open_image(pool_name, image_name, snap_name, true,
+  r = utils::init_and_open_image(pool_name, image_name, "", snap_name, true,
                                  &rados, &io_ctx, &image);
   if (r < 0) {
     return r;
@@ -568,7 +568,7 @@ int execute(const po::variables_map &vm) {
   librados::Rados rados;
   librados::IoCtx io_ctx;
   librbd::Image image;
-  r = utils::init_and_open_image(pool_name, image_name, snap_name, true,
+  r = utils::init_and_open_image(pool_name, image_name, "", snap_name, true,
                                  &rados, &io_ctx, &image);
   if (r < 0) {
     return r;

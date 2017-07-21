@@ -31,7 +31,7 @@ public:
 
   ErasureCodeTest(unsigned int _k, unsigned int _m, unsigned int _chunk_size) :
     k(_k), m(_m), chunk_size(_chunk_size) {}
-  ~ErasureCodeTest() {}
+  ~ErasureCodeTest() override {}
 
   int init(ErasureCodeProfile &profile, ostream *ss) override {
     return 0;
@@ -47,10 +47,9 @@ public:
     encode_chunks_encoded = *encoded;
     return 0;
   }
-  int create_ruleset(const string &name,
-			     CrushWrapper &crush,
-			     ostream *ss) const override { return 0; }
-
+  int create_rule(const string &name,
+		  CrushWrapper &crush,
+		  ostream *ss) const override { return 0; }
 };
 
 /*

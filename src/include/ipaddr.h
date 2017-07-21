@@ -1,10 +1,6 @@
 #ifndef CEPH_IPADDR_H
 #define CEPH_IPADDR_H
 
-#include <netinet/in.h>
-#include <sys/types.h>
-#include <ifaddrs.h>
-
 /*
   Find an IP address that is in the wanted subnet.
 
@@ -16,6 +12,6 @@ const struct sockaddr *find_ip_in_subnet(const struct ifaddrs *addrs,
 					 unsigned int prefix_len);
 
 
-bool parse_network(const char *s, struct sockaddr *network, unsigned int *prefix_len);
+bool parse_network(const char *s, struct sockaddr_storage *network, unsigned int *prefix_len);
 
 #endif

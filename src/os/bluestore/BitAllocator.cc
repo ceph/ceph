@@ -11,8 +11,8 @@
  * at a time single thread can be active as well as single biggest
  * contiguous allocation that can be requested.
  *
- * Rest of the nodes are classified into three catagories:
- *   root note or Allocator
+ * Rest of the nodes are classified into three categories:
+ *   root node or Allocator
  *   internal nodes or BitMapAreaIN
  *   final nodes that contains Zones called BitMapAreaLeaf
  * This classification is according to their own implmentation of some
@@ -41,94 +41,15 @@ int64_t BitMapAreaLeaf::count = 0;
 int64_t BitMapZone::count = 0;
 int64_t BitMapZone::total_blocks = 0;
 
-bool BmapEntry::m_bit_mask_init = false;
-bmap_mask_vec_t BmapEntry::m_bit_to_mask;
 
-/*
- * BmapEntityList functions.
- */
-void BmapEntityListIter::init(BitMapAreaList *list, int64_t start_idx, bool wrap)
-{
-  m_list = list;
-  m_start_idx = start_idx;
-  m_cur_idx = m_start_idx;
-  m_wrap = wrap;
-  m_wrapped = false;
-  m_end = false;
-}
-
-BmapEntityListIter::BmapEntityListIter(BitMapAreaList *list, int64_t start_idx)
-{
-  init(list, start_idx, false);
-}
-
-BmapEntityListIter::BmapEntityListIter(BitMapAreaList *list, int64_t start_idx, bool wrap)
-{
-  init(list, start_idx, wrap);
-}
-
-BitMapArea* BmapEntityListIter::next()
-{
-  int64_t cur_idx = m_cur_idx;
-
-  if (m_wrapped &&
-    cur_idx == m_start_idx) {
-    /*
-     * End of wrap cycle + 1
-     */
-    if (!m_end) {
-      m_end = true;
-      return m_list->get_nth_item(cur_idx);
-    }
-    return NULL;
-  }
-  m_cur_idx++;
-
-  if (m_cur_idx == m_list->size() &&
-      m_wrap) {
-    m_cur_idx = 0;
-    m_wrapped = true;
-  }
-  if (cur_idx == m_list->size()) {
-    /*
-     * End of list
-     */
-    return NULL;
-  }
-  alloc_assert(cur_idx < m_list->size());
-  return m_list->get_nth_item(cur_idx);
-}
 
 int64_t BmapEntityListIter::index()
 {
   return m_cur_idx;
 }
 
-/*
- * Bitmap Entry functions.
- */
-void BmapEntry::_init_bit_mask()
+BmapEntry::BmapEntry(CephContext*, const bool full)
 {
-
-  if (m_bit_mask_init) {
-    return;
-  }
-
-  m_bit_to_mask.reserve(BmapEntry::size());
-
-  uint64_t bmask = ((bmap_t) 0x1 << (BmapEntry::size() - 1));
-  for (int i = 0; i < BmapEntry::size(); i++) {
-    m_bit_to_mask[i] = bmask >> i;
-  }
-  BmapEntry::m_bit_mask_init = true;
-}
-
-BmapEntry::BmapEntry(CephContext* cct, bool full)
-  : cct(cct)
-{
-
-  BmapEntry::_init_bit_mask();
-
   if (full) {
     m_bits = BmapEntry::full_bmask();
   } else {
@@ -141,35 +62,9 @@ BmapEntry::~BmapEntry()
 
 }
 
-bmap_t BmapEntry::full_bmask() {
-  return (bmap_t) -1;
-}
-
-int64_t BmapEntry::size() {
-  return (sizeof(bmap_t) * 8);
-}
-
-bmap_t BmapEntry::empty_bmask() {
-  return (bmap_t) 0;
-}
-
-bmap_t BmapEntry::align_mask(int x)
-{
-  return ((x) >= BmapEntry::size()? (bmap_t) -1 : (~(((bmap_t) -1) >> (x))));
-}
-
-bmap_t BmapEntry::bit_mask(int bit)
-{
-  return m_bit_to_mask[bit];
-}
 bool BmapEntry::check_bit(int bit)
 {
   return (atomic_fetch() & bit_mask(bit));
-}
-
-bmap_t BmapEntry::atomic_fetch()
-{
-  return m_bits;
 }
 
 bool BmapEntry::is_allocated(int64_t offset, int64_t num_bits)
@@ -334,7 +229,7 @@ BmapEntry::find_first_set_bits(int64_t required_blocks,
   return allocated;
 }
 
-void BmapEntry::dump_state(int& count)
+void BmapEntry::dump_state(CephContext* const cct, const int& count)
 {
   dout(0) << count << ":: 0x" << std::hex << m_bits << std::dec << dendl;
 }
@@ -342,12 +237,14 @@ void BmapEntry::dump_state(int& count)
 /*
  * Zone related functions.
  */
-void BitMapZone::init(int64_t zone_num, int64_t total_blocks, bool def)
+void BitMapZone::init(CephContext* const cct,
+                      const int64_t zone_num,
+                      const int64_t total_blocks,
+                      const bool def)
 {
   m_area_index = zone_num;
   BitMapZone::total_blocks = total_blocks;
   alloc_assert(size() > 0);
-  m_type = ZONE;
 
   m_used_blocks = def? total_blocks: 0;
 
@@ -356,8 +253,7 @@ void BitMapZone::init(int64_t zone_num, int64_t total_blocks, bool def)
   alloc_assert(total_blocks < std::numeric_limits<int32_t>::max());
   alloc_assert(!(total_blocks % BmapEntry::size()));
 
-  BmapEntryVector *bmaps = new BmapEntryVector(num_bmaps, BmapEntry(cct, def));
-  m_bmap_list = bmaps;
+  m_bmap_vec.resize(num_bmaps, BmapEntry(cct, def));
   incr_count();
 }
 
@@ -371,7 +267,8 @@ int64_t BitMapZone::add_used_blocks(int64_t num_blocks)
   return std::atomic_fetch_add(&m_used_blocks, (int32_t)num_blocks) + num_blocks;
 }
 
-int64_t BitMapZone::get_used_blocks()
+/* Intensionally hinted because BitMapAreaLeaf::child_check_n_lock. */
+inline int64_t BitMapZone::get_used_blocks()
 {
   return std::atomic_load(&m_used_blocks);
 }
@@ -397,14 +294,14 @@ BitMapZone::BitMapZone(CephContext* cct, int64_t total_blocks,
 		       int64_t zone_num)
   : BitMapArea(cct)
 {
-  init(zone_num, total_blocks, false);
+  init(cct, zone_num, total_blocks, false);
 }
 
 BitMapZone::BitMapZone(CephContext* cct, int64_t total_blocks,
 		       int64_t zone_num, bool def)
   : BitMapArea(cct)
 {
-  init(zone_num, total_blocks, def);
+  init(cct, zone_num, total_blocks, def);
 }
 
 void BitMapZone::shutdown()
@@ -413,16 +310,20 @@ void BitMapZone::shutdown()
 
 BitMapZone::~BitMapZone()
 {
-  delete m_bmap_list;
 }
 
 /*
  * Check if some search took zone marker to end.
+ *
+ * The inline hint has been added intensionally because of importance of this
+ * method for BitMapAreaLeaf::child_check_n_lock, and thus for the overall
+ * allocator's performance. Examination of disassemblies coming from GCC 5.4.0
+ * showed that the compiler really needs that hint.
  */
-bool BitMapZone::is_exhausted()
+inline bool BitMapZone::is_exhausted()
 {
-  alloc_assert(check_locked());
-  return get_used_blocks() == size();
+  /* BitMapZone::get_used_blocks operates atomically. No need for lock. */
+  return BitMapZone::get_used_blocks() == BitMapZone::size();
 }
 
 bool BitMapZone::is_allocated(int64_t start_block, int64_t num_blocks)
@@ -433,7 +334,7 @@ bool BitMapZone::is_allocated(int64_t start_block, int64_t num_blocks)
 
   while (num_blocks) {
     bit = start_block % BmapEntry::size();
-    bmap = &(*m_bmap_list)[start_block / BmapEntry::size()];
+    bmap = &m_bmap_vec[start_block / BmapEntry::size()];
     falling_in_bmap = MIN(num_blocks, BmapEntry::size() - bit);
 
     if (!bmap->is_allocated(bit, falling_in_bmap)) {
@@ -456,7 +357,7 @@ void BitMapZone::set_blocks_used(int64_t start_block, int64_t num_blocks)
 
   while (blks) {
     bit = start_block % BmapEntry::size();
-    bmap = &(*m_bmap_list)[start_block / BmapEntry::size()];
+    bmap = &m_bmap_vec[start_block / BmapEntry::size()];
     falling_in_bmap = MIN(blks, BmapEntry::size() - bit);
 
     bmap->set_bits(bit, falling_in_bmap);
@@ -482,7 +383,7 @@ void BitMapZone::free_blocks_int(int64_t start_block, int64_t num_blocks)
 
   while (count) {
     bit = first_blk % BmapEntry::size();
-    bmap = &(*m_bmap_list)[first_blk / BmapEntry::size()];
+    bmap = &m_bmap_vec[first_blk / BmapEntry::size()];
     falling_in_bmap = MIN(count, BmapEntry::size() - bit);
 
     bmap->clear_bits(bit, falling_in_bmap);
@@ -542,7 +443,7 @@ int64_t BitMapZone::alloc_blocks_dis(int64_t num_blocks,
   alloc_assert(check_locked());
 
   BitMapEntityIter <BmapEntry> iter = BitMapEntityIter<BmapEntry>(
-          m_bmap_list, bmap_idx);
+          &m_bmap_vec, bmap_idx);
   bmap = iter.next();
   if (!bmap) {
     return 0;
@@ -620,15 +521,15 @@ int64_t BitMapZone::alloc_blocks_dis(int64_t num_blocks,
 
 
 
-void BitMapZone::dump_state(int& count)
+void BitMapZone::dump_state(CephContext* const cct, int& count)
 {
   BmapEntry *bmap = NULL;
   int bmap_idx = 0;
   BitMapEntityIter <BmapEntry> iter = BitMapEntityIter<BmapEntry>(
-          m_bmap_list, 0);
+          &m_bmap_vec, 0);
   dout(0) << __func__ << " zone " << count << " dump start " << dendl;
-  while ((bmap = (BmapEntry *) iter.next())) {
-    bmap->dump_state(bmap_idx);
+  while ((bmap = static_cast<BmapEntry *>(iter.next()))) {
+    bmap->dump_state(cct, bmap_idx);
     bmap_idx++;
   }
   dout(0) << __func__ << " zone " << count << " dump end " << dendl;
@@ -647,17 +548,6 @@ int64_t BitMapArea::get_zone_size(CephContext* cct)
 int64_t BitMapArea::get_span_size(CephContext* cct)
 {
   return cct->_conf->bluestore_bitmapallocator_span_size;
-}
-
-bmap_area_type_t BitMapArea::level_to_type(int level)
-{
-  if (level == 0) {
-    return ZONE;
-  } else if (level == 1) {
-    return LEAF;
-  } else {
-    return NON_LEAF;
-  }
 }
 
 int BitMapArea::get_level(CephContext* cct, int64_t total_blocks)
@@ -696,37 +586,37 @@ int64_t BitMapArea::get_index()
   return m_area_index;
 }
 
-bmap_area_type_t BitMapArea::get_type()
-{
-  return m_type;
-}
-
 /*
  * BitMapArea Leaf and Internal
  */
 BitMapAreaIN::BitMapAreaIN(CephContext* cct)
-  : BitMapArea(cct), m_child_list(nullptr)
+  : BitMapArea(cct)
 {
   // nothing
 }
 
-void BitMapAreaIN::init_common(int64_t total_blocks, int64_t area_idx, bool def)
+void BitMapAreaIN::init_common(CephContext* const cct,
+                               const int64_t total_blocks,
+                               const int64_t area_idx,
+                               const bool def)
 {
   m_area_index = area_idx;
   m_total_blocks = total_blocks;
   m_level = BitMapArea::get_level(cct, total_blocks);
-  m_type = BitMapArea::level_to_type(m_level);
   m_reserved_blocks = 0;
 
   m_used_blocks = def? total_blocks: 0;
 }
 
-void BitMapAreaIN::init(int64_t total_blocks, int64_t area_idx, bool def)
+void BitMapAreaIN::init(CephContext* const cct,
+                        int64_t total_blocks,
+                        const int64_t area_idx,
+                        const bool def)
 {
   int64_t num_child = 0;
   alloc_assert(!(total_blocks % BmapEntry::size()));
 
-  init_common(total_blocks, area_idx, def);
+  init_common(cct, total_blocks, area_idx, def);
   int64_t level_factor = BitMapArea::get_level_factor(cct, m_level);
 
   num_child = (total_blocks + level_factor - 1) / level_factor;
@@ -734,40 +624,39 @@ void BitMapAreaIN::init(int64_t total_blocks, int64_t area_idx, bool def)
 
   m_child_size_blocks = level_factor;
 
-  BitMapArea **children = new BitMapArea*[num_child];
+  std::vector<BitMapArea*> children;
+  children.reserve(num_child);
   int i = 0;
   for (i = 0; i < num_child - 1; i++) {
     if (m_level <= 2) {
-      children[i] = new BitMapAreaLeaf(cct, m_child_size_blocks, i, def);
+      children.push_back(new BitMapAreaLeaf(cct, m_child_size_blocks, i, def));
     } else {
-      children[i] = new BitMapAreaIN(cct, m_child_size_blocks, i, def);
+      children.push_back(new BitMapAreaIN(cct, m_child_size_blocks, i, def));
     }
     total_blocks -= m_child_size_blocks;
   }
 
   int last_level = BitMapArea::get_level(cct, total_blocks);
   if (last_level == 1) {
-    children[i] = new BitMapAreaLeaf(cct, total_blocks, i, def);
+    children.push_back(new BitMapAreaLeaf(cct, total_blocks, i, def));
   } else {
-    children[i] = new BitMapAreaIN(cct, total_blocks, i, def);
+    children.push_back(new BitMapAreaIN(cct, total_blocks, i, def));
   }
-  BitMapAreaList *list = new BitMapAreaList(children, num_child);
-  m_child_list = list;
-  m_num_child = num_child;
+  m_child_list = BitMapAreaList(std::move(children));
 }
 
 BitMapAreaIN::BitMapAreaIN(CephContext* cct,int64_t total_blocks,
 			   int64_t area_idx)
   : BitMapArea(cct)
 {
-  init(total_blocks, area_idx, false);
+  init(cct, total_blocks, area_idx, false);
 }
 
 BitMapAreaIN::BitMapAreaIN(CephContext* cct, int64_t total_blocks,
 			   int64_t area_idx, bool def)
   : BitMapArea(cct)
 {
-  init(total_blocks, area_idx, def);
+  init(cct, total_blocks, area_idx, def);
 }
 
 BitMapAreaIN::~BitMapAreaIN()
@@ -782,11 +671,18 @@ void BitMapAreaIN::shutdown()
   unlock();
 }
 
-bool BitMapAreaIN::child_check_n_lock(BitMapArea *child)
+bool BitMapAreaIN::child_check_n_lock(BitMapArea *child, int64_t required)
 {
   child->lock_shared();
 
   if (child->is_exhausted()) {
+    child->unlock();
+    return false;
+  }
+
+  int64_t child_used_blocks = child->get_used_blocks();
+  int64_t child_total_blocks = child->size();
+  if ((child_total_blocks - child_used_blocks) < required) {
     child->unlock();
     return false;
   }
@@ -874,8 +770,8 @@ bool BitMapAreaIN::is_allocated(int64_t start_block, int64_t num_blocks)
   }
 
   while (num_blocks) {
-    area = (BitMapArea *) m_child_list->get_nth_item(
-                    start_block / m_child_size_blocks);
+    area = static_cast<BitMapArea *>(m_child_list.get_nth_item(
+                    start_block / m_child_size_blocks));
 
     area_block_offset = start_block % m_child_size_blocks;
     falling_in_area = MIN(m_child_size_blocks - area_block_offset,
@@ -897,10 +793,10 @@ int64_t BitMapAreaIN::alloc_blocks_dis_int_work(bool wrap, int64_t num_blocks, i
   int64_t blk_off = 0;
 
   BmapEntityListIter iter = BmapEntityListIter(
-        m_child_list, hint / m_child_size_blocks, wrap);
+        &m_child_list, hint / m_child_size_blocks, wrap);
 
-  while ((child = (BitMapArea *) iter.next())) {
-    if (!child_check_n_lock(child)) {
+  while ((child = static_cast<BitMapArea *>(iter.next()))) {
+    if (!child_check_n_lock(child, 1)) {
       hint = 0;
       continue;
     }
@@ -950,8 +846,8 @@ void BitMapAreaIN::set_blocks_used_int(int64_t start_block, int64_t num_blocks)
   alloc_assert(start_block >= 0);
 
   while (blks) {
-    child = (BitMapArea *) m_child_list->get_nth_item(
-                  start_blk / m_child_size_blocks);
+    child = static_cast<BitMapArea *>(m_child_list.get_nth_item(
+                  start_blk / m_child_size_blocks));
 
     child_block_offset = start_blk % child->size();
     falling_in_child = MIN(m_child_size_blocks - child_block_offset,
@@ -990,8 +886,8 @@ void BitMapAreaIN::free_blocks_int(int64_t start_block, int64_t num_blocks)
   }
 
   while (num_blocks) {
-    child = (BitMapArea *) m_child_list->get_nth_item(
-          start_block / m_child_size_blocks);
+    child = static_cast<BitMapArea *>(m_child_list.get_nth_item(
+          start_block / m_child_size_blocks));
 
     child_block_offset = start_block % m_child_size_blocks;
 
@@ -1017,15 +913,15 @@ void BitMapAreaIN::free_blocks(int64_t start_block, int64_t num_blocks)
   unlock();
 }
 
-void BitMapAreaIN::dump_state(int& count)
+void BitMapAreaIN::dump_state(CephContext* const cct, int& count)
 {
   BitMapArea *child = NULL;
 
   BmapEntityListIter iter = BmapEntityListIter(
-        m_child_list, 0, false);
+        &m_child_list, 0, false);
 
-  while ((child = (BitMapArea *) iter.next())) {
-    child->dump_state(count);
+  while ((child = static_cast<BitMapArea *>(iter.next()))) {
+    child->dump_state(cct, count);
   }
 }
 
@@ -1036,23 +932,25 @@ BitMapAreaLeaf::BitMapAreaLeaf(CephContext* cct, int64_t total_blocks,
 			       int64_t area_idx)
   : BitMapAreaIN(cct)
 {
-  init(total_blocks, area_idx, false);
+  init(cct, total_blocks, area_idx, false);
 }
 
 BitMapAreaLeaf::BitMapAreaLeaf(CephContext* cct, int64_t total_blocks,
 			       int64_t area_idx, bool def)
   : BitMapAreaIN(cct)
 {
-  init(total_blocks, area_idx, def);
+  init(cct, total_blocks, area_idx, def);
 }
 
-void BitMapAreaLeaf::init(int64_t total_blocks, int64_t area_idx,
-			  bool def)
+void BitMapAreaLeaf::init(CephContext* const cct,
+                          const int64_t total_blocks,
+                          const int64_t area_idx,
+                          const bool def)
 {
   int64_t num_child = 0;
   alloc_assert(!(total_blocks % BmapEntry::size()));
 
-  init_common(total_blocks, area_idx, def);
+  init_common(cct, total_blocks, area_idx, def);
   alloc_assert(m_level == 1);
   int zone_size_block = get_zone_size(cct);
   alloc_assert(zone_size_block > 0);
@@ -1060,15 +958,13 @@ void BitMapAreaLeaf::init(int64_t total_blocks, int64_t area_idx,
   alloc_assert(num_child);
   m_child_size_blocks = total_blocks / num_child;
 
-  BitMapArea **children = new BitMapArea*[num_child];
+  std::vector<BitMapArea*> children;
+  children.reserve(num_child);
   for (int i = 0; i < num_child; i++) {
-    children[i] = new BitMapZone(cct, m_child_size_blocks, i, def);
+    children.emplace_back(new BitMapZone(cct, m_child_size_blocks, i, def));
   }
 
-  BitMapAreaList *list = new BitMapAreaList(children, num_child);
-
-  m_child_list = list;
-  m_num_child = num_child;
+  m_child_list = BitMapAreaList(std::move(children));
 
   BitMapAreaLeaf::incr_count();
 }
@@ -1077,50 +973,57 @@ BitMapAreaLeaf::~BitMapAreaLeaf()
 {
   lock_excl();
 
-  BitMapAreaList *list = m_child_list;
-  for (int64_t i = 0; i < list->size(); i++) {
-    BitMapArea *child = (BitMapArea *) list->get_nth_item(i);
+  for (int64_t i = 0; i < m_child_list.size(); i++) {
+    auto child = static_cast<BitMapArea *>(m_child_list.get_nth_item(i));
     delete child;
   }
-
-  delete [] list->get_item_list();
-  delete list;
 
   unlock();
 }
 
-bool BitMapAreaLeaf::child_check_n_lock(BitMapArea *child, bool lock)
+/* Intensionally hinted because BitMapAreaLeaf::alloc_blocks_dis_int. */
+inline bool BitMapAreaLeaf::child_check_n_lock(BitMapZone* const child,
+                                               const int64_t required,
+                                               const bool lock)
 {
+  /* The exhausted check can be performed without acquiring the lock. This
+   * is because 1) BitMapZone::is_exhausted() actually operates atomically
+   * and 2) it's followed by the exclusive, required-aware re-verification. */
+  if (child->BitMapZone::is_exhausted()) {
+    return false;
+  }
+
   if (lock) {
     child->lock_excl();
   } else if (!child->lock_excl_try()) {
     return false;
   }
 
-  if (child->is_exhausted()) {
+  int64_t child_used_blocks = child->get_used_blocks();
+  int64_t child_total_blocks = child->size();
+  if ((child_total_blocks - child_used_blocks) < required) {
     child->unlock();
     return false;
   }
-  return true;
-}
 
-void BitMapAreaLeaf::child_unlock(BitMapArea *child)
-{
-  child->unlock();
+  return true;
 }
 
 int64_t BitMapAreaLeaf::alloc_blocks_dis_int(int64_t num_blocks, int64_t min_alloc, 
                                  int64_t hint, int64_t area_blk_off, ExtentList *block_list)
 {
-  BitMapArea *child = NULL;
+  BitMapZone* child = nullptr;
   int64_t allocated = 0;
   int64_t blk_off = 0;
 
   BmapEntityListIter iter = BmapEntityListIter(
-        m_child_list, hint / m_child_size_blocks, false);
+        &m_child_list, hint / m_child_size_blocks, false);
 
-  while ((child = (BitMapArea *) iter.next())) {
-    if (!child_check_n_lock(child, false)) {
+  /* We're sure the only element type we aggregate is BitMapZone,
+   * so there is no business to go through vptr and thus prohibit
+   * compiler to inline the stuff. Consult BitMapAreaLeaf::init. */
+  while ((child = static_cast<BitMapZone*>(iter.next()))) {
+    if (!child_check_n_lock(child, 1, false)) {
       hint = 0;
       continue;
     }
@@ -1128,7 +1031,7 @@ int64_t BitMapAreaLeaf::alloc_blocks_dis_int(int64_t num_blocks, int64_t min_all
     blk_off = child->get_index() * m_child_size_blocks + area_blk_off;
     allocated += child->alloc_blocks_dis(num_blocks - allocated, min_alloc,
                                          hint % m_child_size_blocks, blk_off, block_list);
-    child_unlock(child);
+    child->unlock();
     if (allocated == num_blocks) {
       break;
     }
@@ -1151,8 +1054,8 @@ void BitMapAreaLeaf::free_blocks_int(int64_t start_block, int64_t num_blocks)
   }
 
   while (num_blocks) {
-    child = (BitMapArea *) m_child_list->get_nth_item(
-          start_block / m_child_size_blocks);
+    child = static_cast<BitMapArea *>(m_child_list.get_nth_item(
+          start_block / m_child_size_blocks));
 
     child_block_offset = start_block % m_child_size_blocks;
 
@@ -1168,21 +1071,12 @@ void BitMapAreaLeaf::free_blocks_int(int64_t start_block, int64_t num_blocks)
 }
 
 /*
- * BitMapArea List related functions
- */
-BitMapAreaList::BitMapAreaList(BitMapArea **list, int64_t len)
-{
-  m_items = list;
-  m_num_items = len;
-  return;
-}
-
-/*
  * Main allocator functions.
  */
 BitAllocator::BitAllocator(CephContext* cct, int64_t total_blocks,
 			   int64_t zone_size_block, bmap_alloc_mode_t mode)
-  : BitMapAreaIN(cct)
+  : BitMapAreaIN(cct),
+    cct(cct)
 {
   init_check(total_blocks, zone_size_block, mode, false, false);
 }
@@ -1190,7 +1084,8 @@ BitAllocator::BitAllocator(CephContext* cct, int64_t total_blocks,
 BitAllocator::BitAllocator(CephContext* cct, int64_t total_blocks,
 			   int64_t zone_size_block, bmap_alloc_mode_t mode,
 			   bool def)
-  : BitMapAreaIN(cct)
+  : BitMapAreaIN(cct),
+    cct(cct)
 {
   init_check(total_blocks, zone_size_block, mode, def, false);
 }
@@ -1198,7 +1093,8 @@ BitAllocator::BitAllocator(CephContext* cct, int64_t total_blocks,
 BitAllocator::BitAllocator(CephContext* cct, int64_t total_blocks,
 			   int64_t zone_size_block, bmap_alloc_mode_t mode,
 			   bool def, bool stats_on)
-  : BitMapAreaIN(cct)
+  : BitMapAreaIN(cct),
+    cct(cct)
 {
   init_check(total_blocks, zone_size_block, mode, def, stats_on);
 }
@@ -1235,7 +1131,7 @@ void BitAllocator::init_check(int64_t total_blocks, int64_t zone_size_block,
   }
 
   pthread_rwlock_init(&m_rw_lock, NULL);
-  init(total_blocks, 0, def);
+  init(cct, total_blocks, 0, def);
   if (!def && unaligned_blocks) {
     /*
      * Mark extra padded blocks used from beginning.
@@ -1273,14 +1169,10 @@ BitAllocator::~BitAllocator()
 {
   lock_excl();
 
-  BitMapAreaList *list = m_child_list;
-  for (int64_t i = 0; i < list->size(); i++) {
-    BitMapArea *child = (BitMapArea *) list->get_nth_item(i);
+  for (int64_t i = 0; i < m_child_list.size(); i++) {
+    auto child = static_cast<BitMapArea *>(m_child_list.get_nth_item(i));
     delete child;
   }
-
-  delete [] list->get_item_list();
-  delete list;
 
   unlock();
   pthread_rwlock_destroy(&m_rw_lock);
@@ -1329,7 +1221,7 @@ bool BitAllocator::try_serial_lock()
   return get_lock;
 }
 
-bool BitAllocator::child_check_n_lock(BitMapArea *child)
+bool BitAllocator::child_check_n_lock(BitMapArea *child, int64_t required)
 {
   child->lock_shared();
 
@@ -1338,6 +1230,12 @@ bool BitAllocator::child_check_n_lock(BitMapArea *child)
     return false;
   }
 
+  int64_t child_used_blocks = child->get_used_blocks();
+  int64_t child_total_blocks = child->size();
+  if ((child_total_blocks - child_used_blocks) < required) {
+    child->unlock();
+    return false;
+  }
 
   return true;
 }
@@ -1517,6 +1415,6 @@ void BitAllocator::dump()
 {
   int count = 0;
   serial_lock(); 
-  dump_state(count);
+  dump_state(cct, count);
   serial_unlock(); 
 }

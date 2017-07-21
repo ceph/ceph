@@ -76,7 +76,7 @@ struct OpRequest : public TrackedOp {
     return classes_;
   }
 
-  void _dump(Formatter *f) const;
+  void _dump(Formatter *f) const override;
 
   bool has_feature(uint64_t f) const {
     return request->get_connection()->has_feature(f);
@@ -100,19 +100,31 @@ private:
   OpRequest(Message *req, OpTracker *tracker);
 
 protected:
-  void _dump_op_descriptor_unlocked(ostream& stream) const;
-  void _unregistered();
+  void _dump_op_descriptor_unlocked(ostream& stream) const override;
+  void _unregistered() override;
 
 public:
-  ~OpRequest() {
+  ~OpRequest() override {
     request->put();
   }
-  bool send_map_update;
-  epoch_t sent_epoch;
-  bool hitset_inserted;
-  Message *get_req() const { return request; }
 
-  const char *state_string() const {
+  bool check_send_map = true; ///< true until we check if sender needs a map
+  epoch_t sent_epoch = 0;     ///< client's map epoch
+  epoch_t min_epoch = 0;      ///< min epoch needed to handle this msg
+
+  bool hitset_inserted;
+  const Message *get_req() const { return request; }
+  Message *get_nonconst_req() { return request; }
+
+  entity_name_t get_source() {
+    if (request) {
+      return request->get_source();
+    } else {
+      return entity_name_t();
+    }
+  }
+
+  const char *state_string() const override {
     switch(latest_flag_point) {
     case flag_queued_for_pg: return "queued for pg";
     case flag_reached_pg: return "reached pg";

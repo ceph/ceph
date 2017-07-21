@@ -12,19 +12,13 @@
  *
  */
 
-#include "fd.h"
-
-#include <sys/types.h>
-#include <unistd.h>
-#include <dirent.h>
-#include <errno.h>
-
+#include "include/compat.h"
 #include "debug.h"
 #include "errno.h"
 
 void dump_open_fds(CephContext *cct)
 {
-  const char *fn = "/proc/self/fd";
+  const char *fn = PROCPREFIX "/proc/self/fd";
   DIR *d = opendir(fn);
   if (!d) {
     lderr(cct) << "dump_open_fds unable to open " << fn << dendl;

@@ -92,7 +92,7 @@ public:
     : TrackedOp(tracker, initiated),
       reqid(ri), attempt(att),
       slave_to_mds(slave_to) { }
-  virtual ~MutationImpl() {
+  ~MutationImpl() override {
     assert(locking == NULL);
     assert(pins.empty());
     assert(auth_pins.empty());
@@ -230,6 +230,7 @@ struct MDRequestImpl : public MutationImpl {
 
     bool has_journaled_slaves;
     bool slave_update_journaled;
+    bool slave_rolling_back;
     
     // for rename
     set<mds_rank_t> extra_witnesses; // replica list from srcdn auth (rename)
@@ -270,6 +271,7 @@ struct MDRequestImpl : public MutationImpl {
     More() : 
       slave_error(0),
       has_journaled_slaves(false), slave_update_journaled(false),
+      slave_rolling_back(false),
       srcdn_auth_mds(-1), inode_import_v(0), rename_inode(0),
       is_freeze_authpin(false), is_ambiguous_auth(false),
       is_remote_frozen_authpin(false), is_inode_exporter(false),
@@ -311,12 +313,13 @@ struct MDRequestImpl : public MutationImpl {
     if (!params.dispatched.is_zero())
       mark_event("dispatched", params.dispatched);
   }
-  ~MDRequestImpl();
+  ~MDRequestImpl() override;
   
   More* more();
   bool has_more() const;
   bool has_witnesses();
   bool slave_did_prepare();
+  bool slave_rolling_back();
   bool did_ino_allocation() const;
   bool freeze_auth_pin(CInode *inode);
   void unfreeze_auth_pin(bool clear_inode=false);
@@ -329,6 +332,7 @@ struct MDRequestImpl : public MutationImpl {
   const filepath& get_filepath2();
   void set_filepath(const filepath& fp);
   void set_filepath2(const filepath& fp);
+  bool is_replay() const;
 
   void print(ostream &out) const override;
   void dump(Formatter *f) const override;
@@ -336,8 +340,8 @@ struct MDRequestImpl : public MutationImpl {
   // TrackedOp stuff
   typedef boost::intrusive_ptr<MDRequestImpl> Ref;
 protected:
-  void _dump(Formatter *f) const;
-  void _dump_op_descriptor_unlocked(ostream& stream) const;
+  void _dump(Formatter *f) const override;
+  void _dump_op_descriptor_unlocked(ostream& stream) const override;
 };
 
 typedef boost::intrusive_ptr<MDRequestImpl> MDRequestRef;

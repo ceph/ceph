@@ -20,9 +20,6 @@
 
 #include "erasure-code/ErasureCode.h"
 
-#define DEFAULT_RULESET_ROOT "default"
-#define DEFAULT_RULESET_FAILURE_DOMAIN "host"
-
 class ErasureCodeJerasure : public ErasureCode {
 public:
   int k;
@@ -32,8 +29,8 @@ public:
   int w;
   std::string DEFAULT_W;
   const char *technique;
-  string ruleset_root;
-  string ruleset_failure_domain;
+  std::string rule_root;
+  std::string rule_failure_domain;
   bool per_chunk_alignment;
 
   explicit ErasureCodeJerasure(const char *_technique) :
@@ -44,35 +41,29 @@ public:
     w(0),
     DEFAULT_W("8"),
     technique(_technique),
-    ruleset_root(DEFAULT_RULESET_ROOT),
-    ruleset_failure_domain(DEFAULT_RULESET_FAILURE_DOMAIN),
     per_chunk_alignment(false)
   {}
 
-  virtual ~ErasureCodeJerasure() {}
+  ~ErasureCodeJerasure() override {}
   
-  virtual int create_ruleset(const string &name,
-			     CrushWrapper &crush,
-			     ostream *ss) const;
-
-  virtual unsigned int get_chunk_count() const {
+  unsigned int get_chunk_count() const override {
     return k + m;
   }
 
-  virtual unsigned int get_data_chunk_count() const {
+  unsigned int get_data_chunk_count() const override {
     return k;
   }
 
-  virtual unsigned int get_chunk_size(unsigned int object_size) const;
+  unsigned int get_chunk_size(unsigned int object_size) const override;
 
-  virtual int encode_chunks(const set<int> &want_to_encode,
-			    map<int, bufferlist> *encoded);
+  int encode_chunks(const std::set<int> &want_to_encode,
+			    std::map<int, bufferlist> *encoded) override;
 
-  virtual int decode_chunks(const set<int> &want_to_read,
-			    const map<int, bufferlist> &chunks,
-			    map<int, bufferlist> *decoded);
+  int decode_chunks(const std::set<int> &want_to_read,
+			    const std::map<int, bufferlist> &chunks,
+			    std::map<int, bufferlist> *decoded) override;
 
-  virtual int init(ErasureCodeProfile &profile, ostream *ss);
+  int init(ErasureCodeProfile &profile, std::ostream *ss) override;
 
   virtual void jerasure_encode(char **data,
                                char **coding,
@@ -85,7 +76,7 @@ public:
   virtual void prepare() = 0;
   static bool is_prime(int value);
 protected:
-  virtual int parse(ErasureCodeProfile &profile, ostream *ss);
+  virtual int parse(ErasureCodeProfile &profile, std::ostream *ss);
 };
 
 class ErasureCodeJerasureReedSolomonVandermonde : public ErasureCodeJerasure {
@@ -100,22 +91,22 @@ public:
     DEFAULT_M = "3";
     DEFAULT_W = "8";
   }
-  virtual ~ErasureCodeJerasureReedSolomonVandermonde() {
+  ~ErasureCodeJerasureReedSolomonVandermonde() override {
     if (matrix)
       free(matrix);
   }
 
-  virtual void jerasure_encode(char **data,
+  void jerasure_encode(char **data,
                                char **coding,
-                               int blocksize);
-  virtual int jerasure_decode(int *erasures,
+                               int blocksize) override;
+  int jerasure_decode(int *erasures,
                                char **data,
                                char **coding,
-                               int blocksize);
-  virtual unsigned get_alignment() const;
-  virtual void prepare();
+                               int blocksize) override;
+  unsigned get_alignment() const override;
+  void prepare() override;
 private:
-  virtual int parse(ErasureCodeProfile &profile, ostream *ss);
+  int parse(ErasureCodeProfile &profile, std::ostream *ss) override;
 };
 
 class ErasureCodeJerasureReedSolomonRAID6 : public ErasureCodeJerasure {
@@ -129,22 +120,22 @@ public:
     DEFAULT_K = "7";
     DEFAULT_W = "8";
   }
-  virtual ~ErasureCodeJerasureReedSolomonRAID6() {
+  ~ErasureCodeJerasureReedSolomonRAID6() override {
     if (matrix)
       free(matrix);
   }
 
-  virtual void jerasure_encode(char **data,
+  void jerasure_encode(char **data,
                                char **coding,
-                               int blocksize);
-  virtual int jerasure_decode(int *erasures,
+                               int blocksize) override;
+  int jerasure_decode(int *erasures,
                                char **data,
                                char **coding,
-                               int blocksize);
-  virtual unsigned get_alignment() const;
-  virtual void prepare();
+                               int blocksize) override;
+  unsigned get_alignment() const override;
+  void prepare() override;
 private:
-  virtual int parse(ErasureCodeProfile &profile, ostream *ss);
+  int parse(ErasureCodeProfile &profile, std::ostream *ss) override;
 };
 
 #define DEFAULT_PACKETSIZE "2048"
@@ -165,24 +156,24 @@ public:
     DEFAULT_M = "3";
     DEFAULT_W = "8";
   }
-  virtual ~ErasureCodeJerasureCauchy() {
+  ~ErasureCodeJerasureCauchy() override {
     if (bitmatrix)
       free(bitmatrix);
     if (schedule)
       free(schedule);
   }
 
-  virtual void jerasure_encode(char **data,
+  void jerasure_encode(char **data,
                                char **coding,
-                               int blocksize);
-  virtual int jerasure_decode(int *erasures,
+                               int blocksize) override;
+  int jerasure_decode(int *erasures,
                                char **data,
                                char **coding,
-                               int blocksize);
-  virtual unsigned get_alignment() const;
+                               int blocksize) override;
+  unsigned get_alignment() const override;
   void prepare_schedule(int *matrix);
 private:
-  virtual int parse(ErasureCodeProfile &profile, ostream *ss);
+  int parse(ErasureCodeProfile &profile, std::ostream *ss) override;
 };
 
 class ErasureCodeJerasureCauchyOrig : public ErasureCodeJerasureCauchy {
@@ -191,7 +182,7 @@ public:
     ErasureCodeJerasureCauchy("cauchy_orig")
   {}
 
-  virtual void prepare();
+  void prepare() override;
 };
 
 class ErasureCodeJerasureCauchyGood : public ErasureCodeJerasureCauchy {
@@ -200,7 +191,7 @@ public:
     ErasureCodeJerasureCauchy("cauchy_good")
   {}
 
-  virtual void prepare();
+  void prepare() override;
 };
 
 class ErasureCodeJerasureLiberation : public ErasureCodeJerasure {
@@ -219,25 +210,25 @@ public:
     DEFAULT_M = "2";
     DEFAULT_W = "7";
   }
-  virtual ~ErasureCodeJerasureLiberation();
+  ~ErasureCodeJerasureLiberation() override;
 
-  virtual void jerasure_encode(char **data,
+  void jerasure_encode(char **data,
                                char **coding,
-                               int blocksize);
-  virtual int jerasure_decode(int *erasures,
+                               int blocksize) override;
+  int jerasure_decode(int *erasures,
                                char **data,
                                char **coding,
-                               int blocksize);
-  virtual unsigned get_alignment() const;
-  virtual bool check_k(ostream *ss) const;
-  virtual bool check_w(ostream *ss) const;
-  virtual bool check_packetsize_set(ostream *ss) const;
-  virtual bool check_packetsize(ostream *ss) const;
+                               int blocksize) override;
+  unsigned get_alignment() const override;
+  virtual bool check_k(std::ostream *ss) const;
+  virtual bool check_w(std::ostream *ss) const;
+  virtual bool check_packetsize_set(std::ostream *ss) const;
+  virtual bool check_packetsize(std::ostream *ss) const;
   virtual int revert_to_default(ErasureCodeProfile &profile,
-				ostream *ss);
-  virtual void prepare();
+				std::ostream *ss);
+  void prepare() override;
 private:
-  virtual int parse(ErasureCodeProfile &profile, ostream *ss);
+  int parse(ErasureCodeProfile &profile, std::ostream *ss) override;
 };
 
 class ErasureCodeJerasureBlaumRoth : public ErasureCodeJerasureLiberation {
@@ -247,8 +238,8 @@ public:
   {
   }
 
-  virtual bool check_w(ostream *ss) const;
-  virtual void prepare();
+  bool check_w(std::ostream *ss) const override;
+  void prepare() override;
 };
 
 class ErasureCodeJerasureLiber8tion : public ErasureCodeJerasureLiberation {
@@ -261,9 +252,9 @@ public:
     DEFAULT_W = "8";
   }
 
-  virtual void prepare();
+  void prepare() override;
 private:
-  virtual int parse(ErasureCodeProfile &profile, ostream *ss);
+  int parse(ErasureCodeProfile &profile, std::ostream *ss) override;
 };
 
 #endif

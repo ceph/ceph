@@ -262,7 +262,7 @@ public:
     return 0;
   }
 
-  ~PGLSHelloFilter() {}
+  ~PGLSHelloFilter() override {}
   bool filter(const hobject_t &obj, bufferlist& xattr_data,
                       bufferlist& outdata) override
   {

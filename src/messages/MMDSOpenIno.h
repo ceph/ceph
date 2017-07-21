@@ -22,21 +22,23 @@ struct MMDSOpenIno : public Message {
   vector<inode_backpointer_t> ancestors;
 
   MMDSOpenIno() : Message(MSG_MDS_OPENINO) {}
-  MMDSOpenIno(ceph_tid_t t, inodeno_t i, vector<inode_backpointer_t>& a) :
-    Message(MSG_MDS_OPENINO), ino(i), ancestors(a) {
+  MMDSOpenIno(ceph_tid_t t, inodeno_t i, vector<inode_backpointer_t>* pa) :
+    Message(MSG_MDS_OPENINO), ino(i) {
     header.tid = t;
+    if (pa)
+      ancestors = *pa;
   }
 
-  const char *get_type_name() const { return "openino"; }
-  void print(ostream &out) const {
+  const char *get_type_name() const override { return "openino"; }
+  void print(ostream &out) const override {
     out << "openino(" << header.tid << " " << ino << " " << ancestors << ")";
   }
 
-  void encode_payload(uint64_t features) {
+  void encode_payload(uint64_t features) override {
     ::encode(ino, payload);
     ::encode(ancestors, payload);
   }
-  void decode_payload() {
+  void decode_payload() override {
     bufferlist::iterator p = payload.begin();
     ::decode(ino, p);
     ::decode(ancestors, p);

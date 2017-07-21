@@ -46,7 +46,7 @@ public:
     ldout(image_ctx.cct, 10) << "removing (with copyup) " << oid << dendl;
 
     auto req = new io::ObjectTrimRequest(&image_ctx, oid, m_object_no,
-                                         m_snapc, this, false);
+                                         m_snapc, false, this);
     req->send();
     return 0;
   }
@@ -82,7 +82,7 @@ public:
     ldout(image_ctx.cct, 10) << "removing " << oid << dendl;
 
     librados::AioCompletion *rados_completion =
-      util::create_rados_safe_callback(this);
+      util::create_rados_callback(this);
     int r = image_ctx.data_ctx.aio_remove(oid, rados_completion);
     assert(r == 0);
     rados_completion->release();
@@ -277,7 +277,7 @@ void TrimRequest<I>::send_pre_copyup() {
       RWLock::WLocker object_map_locker(image_ctx.object_map_lock);
       if (image_ctx.object_map->template aio_update<AsyncRequest<I> >(
             CEPH_NOSNAP, m_copyup_start, m_copyup_end, OBJECT_PENDING,
-            OBJECT_EXISTS, this)) {
+            OBJECT_EXISTS, {}, this)) {
         return;
       }
     }
@@ -309,7 +309,7 @@ void TrimRequest<I>::send_pre_remove() {
       RWLock::WLocker object_map_locker(image_ctx.object_map_lock);
       if (image_ctx.object_map->template aio_update<AsyncRequest<I> >(
             CEPH_NOSNAP, m_delete_start, m_num_objects, OBJECT_PENDING,
-            OBJECT_EXISTS, this)) {
+            OBJECT_EXISTS, {}, this)) {
         return;
       }
     }
@@ -337,7 +337,7 @@ void TrimRequest<I>::send_post_copyup() {
       RWLock::WLocker object_map_locker(image_ctx.object_map_lock);
       if (image_ctx.object_map->template aio_update<AsyncRequest<I> >(
             CEPH_NOSNAP, m_copyup_start, m_copyup_end, OBJECT_NONEXISTENT,
-            OBJECT_PENDING, this)) {
+            OBJECT_PENDING, {}, this)) {
         return;
       }
     }
@@ -365,7 +365,7 @@ void TrimRequest<I>::send_post_remove() {
       RWLock::WLocker object_map_locker(image_ctx.object_map_lock);
       if (image_ctx.object_map->template aio_update<AsyncRequest<I> >(
             CEPH_NOSNAP, m_delete_start, m_num_objects, OBJECT_NONEXISTENT,
-            OBJECT_PENDING, this)) {
+            OBJECT_PENDING, {}, this)) {
         return;
       }
     }
@@ -416,10 +416,10 @@ void TrimRequest<I>::send_clean_boundary() {
     io::ObjectRequest<> *req;
     if (p->offset == 0) {
       req = new io::ObjectTrimRequest(&image_ctx, p->oid.name, p->objectno,
-                                      snapc, req_comp, true);
+                                      snapc, true, req_comp);
     } else {
       req = new io::ObjectTruncateRequest(&image_ctx, p->oid.name, p->objectno,
-                                          p->offset, snapc, req_comp);
+                                          p->offset, snapc, {}, req_comp);
     }
     req->send();
   }

@@ -10,6 +10,7 @@
 #include "cls/lock/cls_lock_types.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/Utils.h"
+#include "librbd/managed_lock/GetLockerRequest.h"
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
@@ -20,8 +21,7 @@ namespace librbd {
 namespace managed_lock {
 
 using util::create_context_callback;
-using util::create_rados_ack_callback;
-using util::create_rados_safe_callback;
+using util::create_rados_callback;
 
 namespace {
 
@@ -49,12 +49,12 @@ struct C_BlacklistClient : public Context {
 template <typename I>
 BreakRequest<I>::BreakRequest(librados::IoCtx& ioctx, ContextWQ *work_queue,
                               const std::string& oid, const Locker &locker,
-                              bool blacklist_locker,
+                              bool exclusive, bool blacklist_locker,
                               uint32_t blacklist_expire_seconds,
                               bool force_break_lock, Context *on_finish)
   : m_ioctx(ioctx), m_cct(reinterpret_cast<CephContext *>(m_ioctx.cct())),
     m_work_queue(work_queue), m_oid(oid), m_locker(locker),
-    m_blacklist_locker(blacklist_locker),
+    m_exclusive(exclusive), m_blacklist_locker(blacklist_locker),
     m_blacklist_expire_seconds(blacklist_expire_seconds),
     m_force_break_lock(force_break_lock), m_on_finish(on_finish) {
 }
@@ -73,7 +73,7 @@ void BreakRequest<I>::send_get_watchers() {
 
   using klass = BreakRequest<I>;
   librados::AioCompletion *rados_completion =
-    create_rados_ack_callback<klass, &klass::handle_get_watchers>(this);
+    create_rados_callback<klass, &klass::handle_get_watchers>(this);
   m_out_bl.clear();
   int r = m_ioctx.aio_operate(m_oid, rados_completion, &op, &m_out_bl);
   assert(r == 0);
@@ -94,19 +94,60 @@ void BreakRequest<I>::handle_get_watchers(int r) {
     return;
   }
 
+  bool found_alive_locker = false;
   for (auto &watcher : m_watchers) {
+    ldout(m_cct, 20) << "watcher=["
+                     << "addr=" << watcher.addr << ", "
+                     << "entity=client." << watcher.watcher_id << "]" << dendl;
+
     if ((strncmp(m_locker.address.c_str(),
                  watcher.addr, sizeof(watcher.addr)) == 0) &&
         (m_locker.handle == watcher.cookie)) {
       ldout(m_cct, 10) << "lock owner is still alive" << dendl;
-
-      if (m_force_break_lock) {
-        break;
-      } else {
-        finish(-EAGAIN);
-        return;
-      }
+      found_alive_locker = true;
     }
+  }
+
+  if (!m_force_break_lock && found_alive_locker) {
+    finish(-EAGAIN);
+    return;
+  }
+
+  send_get_locker();
+}
+
+template <typename I>
+void BreakRequest<I>::send_get_locker() {
+  ldout(m_cct, 10) << dendl;
+
+  using klass = BreakRequest<I>;
+  Context *ctx = create_context_callback<klass, &klass::handle_get_locker>(
+    this);
+  auto req = GetLockerRequest<I>::create(m_ioctx, m_oid, m_exclusive,
+                                         &m_refreshed_locker, ctx);
+  req->send();
+}
+
+template <typename I>
+void BreakRequest<I>::handle_get_locker(int r) {
+  ldout(m_cct, 10) << "r=" << r << dendl;
+
+  if (r == -ENOENT) {
+    ldout(m_cct, 5) << "no lock owner" << dendl;
+    finish(0);
+    return;
+  } else if (r < 0 && r != -EBUSY) {
+    lderr(m_cct) << "failed to retrieve lockers: " << cpp_strerror(r) << dendl;
+    finish(r);
+    return;
+  } else if (r < 0) {
+    m_refreshed_locker = {};
+  }
+
+  if (m_refreshed_locker != m_locker || m_refreshed_locker == Locker{}) {
+    ldout(m_cct, 5) << "no longer lock owner" << dendl;
+    finish(-EAGAIN);
+    return;
   }
 
   send_blacklist();
@@ -161,7 +202,7 @@ void BreakRequest<I>::send_break_lock() {
 
   using klass = BreakRequest<I>;
   librados::AioCompletion *rados_completion =
-    create_rados_safe_callback<klass, &klass::handle_break_lock>(this);
+    create_rados_callback<klass, &klass::handle_break_lock>(this);
   int r = m_ioctx.aio_operate(m_oid, rados_completion, &op);
   assert(r == 0);
   rados_completion->release();

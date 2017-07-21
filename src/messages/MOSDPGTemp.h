@@ -27,23 +27,23 @@ class MOSDPGTemp : public PaxosServiceMessage {
   MOSDPGTemp(epoch_t e) : PaxosServiceMessage(MSG_OSD_PGTEMP, e), map_epoch(e) { }
   MOSDPGTemp() : PaxosServiceMessage(MSG_OSD_PGTEMP, 0) {}
 private:
-  ~MOSDPGTemp() {}
+  ~MOSDPGTemp() override {}
 
 public:
-  void encode_payload(uint64_t features) {
+  void encode_payload(uint64_t features) override {
     paxos_encode();
     ::encode(map_epoch, payload);
     ::encode(pg_temp, payload);
   }
-  void decode_payload() {
+  void decode_payload() override {
     bufferlist::iterator p = payload.begin();
     paxos_decode(p);
     ::decode(map_epoch, p);
     ::decode(pg_temp, p);
   }
 
-  const char *get_type_name() const { return "osd_pgtemp"; }
-  void print(ostream &out) const {
+  const char *get_type_name() const override { return "osd_pgtemp"; }
+  void print(ostream &out) const override {
     out << "osd_pgtemp(e" << map_epoch << " " << pg_temp << " v" << version << ")";
   }
   

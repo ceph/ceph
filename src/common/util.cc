@@ -12,14 +12,13 @@
  * 
  */
 
-#include <errno.h>
 #include <sys/utsname.h>
 #include <boost/lexical_cast.hpp>
 
+#include "include/compat.h"
 #include "include/util.h"
 #include "common/debug.h"
 #include "common/errno.h"
-#include "common/strtol.h"
 #include "common/version.h"
 
 #ifdef HAVE_SYS_VFS_H
@@ -202,7 +201,7 @@ void collect_sys_info(map<string, string> *m, CephContext *cct)
   }
 
   // memory
-  FILE *f = fopen("/proc/meminfo", "r");
+  FILE *f = fopen(PROCPREFIX "/proc/meminfo", "r");
   if (f) {
     char buf[100];
     while (!feof(f)) {
@@ -223,7 +222,7 @@ void collect_sys_info(map<string, string> *m, CephContext *cct)
   }
 
   // processor
-  f = fopen("/proc/cpuinfo", "r");
+  f = fopen(PROCPREFIX "/proc/cpuinfo", "r");
   if (f) {
     char buf[100];
     while (!feof(f)) {

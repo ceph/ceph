@@ -15,13 +15,13 @@
 #ifndef __CEPH_OS_HOBJECT_H
 #define __CEPH_OS_HOBJECT_H
 
-#include <string.h>
 #include "include/types.h"
-#include "include/object.h"
 #include "include/cmp.h"
 
 #include "json_spirit/json_spirit_value.h"
 #include "include/assert.h"   // spirit clobbers it!
+
+#include "reverse.h"
 
 namespace ceph {
   class Formatter;
@@ -199,27 +199,10 @@ public:
   }
 
   static uint32_t _reverse_bits(uint32_t v) {
-    if (v == 0)
-      return v;
-    // reverse bits
-    // swap odd and even bits
-    v = ((v >> 1) & 0x55555555) | ((v & 0x55555555) << 1);
-    // swap consecutive pairs
-    v = ((v >> 2) & 0x33333333) | ((v & 0x33333333) << 2);
-    // swap nibbles ...
-    v = ((v >> 4) & 0x0F0F0F0F) | ((v & 0x0F0F0F0F) << 4);
-    // swap bytes
-    v = ((v >> 8) & 0x00FF00FF) | ((v & 0x00FF00FF) << 8);
-    // swap 2-byte long pairs
-    v = ( v >> 16             ) | ( v               << 16);
-    return v;
+    return reverse_bits(v);
   }
   static uint32_t _reverse_nibbles(uint32_t retval) {
-    // reverse nibbles
-    retval = ((retval & 0x0f0f0f0f) << 4) | ((retval & 0xf0f0f0f0) >> 4);
-    retval = ((retval & 0x00ff00ff) << 8) | ((retval & 0xff00ff00) >> 8);
-    retval = ((retval & 0x0000ffff) << 16) | ((retval & 0xffff0000) >> 16);
-    return retval;
+    return reverse_nibbles(retval);
   }
 
   /**
@@ -270,6 +253,12 @@ public:
     if (key.length())
       return key;
     return oid.name;
+  }
+
+  hobject_t make_temp_hobject(const string& name) const {
+    return hobject_t(object_t(name), "", CEPH_NOSNAP,
+		     hash,
+		     hobject_t::POOL_TEMP_START - pool, "");
   }
 
   void swap(hobject_t &o) {

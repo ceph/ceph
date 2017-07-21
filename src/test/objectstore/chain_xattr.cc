@@ -23,6 +23,7 @@
 #include <signal.h>
 #include "os/filestore/chain_xattr.h"
 #include "include/Context.h"
+#include "include/coredumpctl.h"
 #include "common/errno.h"
 #include "common/ceph_argparse.h"
 #include "global/global_init.h"
@@ -120,6 +121,7 @@ TEST(chain_xattr, get_and_set) {
   {
     int x;
     const string name = user + string(CHAIN_XATTR_MAX_NAME_LEN * 2, '@');
+    PrCtl unset_dumpable;
     ASSERT_DEATH(chain_setxattr(file, name.c_str(), &x, sizeof(x)), "");
     ASSERT_DEATH(chain_fsetxattr(fd, name.c_str(), &x, sizeof(x)), "");
   }
@@ -349,7 +351,7 @@ TEST(chain_xattr, fskip_chain_cleanup_and_ensure_single_attr)
 
   std::size_t existing_xattrs = get_xattrs(fd).size();
   char buf[800];
-  memset(buf, sizeof(buf), 0x1F);
+  memset(buf, 0x1F, sizeof(buf));
   // set chunked without either
   {
     std::size_t r = chain_fsetxattr(fd, name, buf, sizeof(buf));
@@ -394,7 +396,7 @@ TEST(chain_xattr, skip_chain_cleanup_and_ensure_single_attr)
   ::close(fd);
 
   char buf[3000];
-  memset(buf, sizeof(buf), 0x1F);
+  memset(buf, 0x1F, sizeof(buf));
   // set chunked without either
   {
     std::size_t r = chain_setxattr(file, name, buf, sizeof(buf));

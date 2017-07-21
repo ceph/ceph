@@ -16,14 +16,20 @@
 namespace rbd {
 namespace mirror {
 
-using librbd::util::create_rados_ack_callback;
+using librbd::util::create_rados_callback;
 
-MirrorStatusWatcher::MirrorStatusWatcher(librados::IoCtx &io_ctx,
-                                         ContextWQ *work_queue)
+template <typename I>
+MirrorStatusWatcher<I>::MirrorStatusWatcher(librados::IoCtx &io_ctx,
+                                            ContextWQ *work_queue)
   : Watcher(io_ctx, work_queue, RBD_MIRRORING) {
 }
 
-void MirrorStatusWatcher::init(Context *on_finish) {
+template <typename I>
+MirrorStatusWatcher<I>::~MirrorStatusWatcher() {
+}
+
+template <typename I>
+void MirrorStatusWatcher<I>::init(Context *on_finish) {
   dout(20) << dendl;
 
   on_finish = new FunctionContext(
@@ -38,21 +44,24 @@ void MirrorStatusWatcher::init(Context *on_finish) {
 
   librados::ObjectWriteOperation op;
   librbd::cls_client::mirror_image_status_remove_down(&op);
-  librados::AioCompletion *aio_comp = create_rados_ack_callback(on_finish);
+  librados::AioCompletion *aio_comp = create_rados_callback(on_finish);
 
   int r = m_ioctx.aio_operate(RBD_MIRRORING, aio_comp, &op);
   assert(r == 0);
   aio_comp->release();
 }
 
-void MirrorStatusWatcher::shut_down(Context *on_finish) {
+template <typename I>
+void MirrorStatusWatcher<I>::shut_down(Context *on_finish) {
   dout(20) << dendl;
 
   unregister_watch(on_finish);
 }
 
-void MirrorStatusWatcher::handle_notify(uint64_t notify_id, uint64_t handle,
-                                        uint64_t notifier_id, bufferlist &bl) {
+template <typename I>
+void MirrorStatusWatcher<I>::handle_notify(uint64_t notify_id, uint64_t handle,
+                                           uint64_t notifier_id,
+                                           bufferlist &bl) {
   dout(20) << dendl;
 
   bufferlist out;
@@ -61,3 +70,5 @@ void MirrorStatusWatcher::handle_notify(uint64_t notify_id, uint64_t handle,
 
 } // namespace mirror
 } // namespace rbd
+
+template class rbd::mirror::MirrorStatusWatcher<librbd::ImageCtx>;

@@ -14,11 +14,8 @@
 
 #include "common/errno.h"
 
-#include <errno.h>
 #include <sstream>
 #include <stdarg.h>
-#include <stdlib.h>
-#include <sys/types.h>
 #include <sys/wait.h>
 #include <unistd.h>
 #include <vector>

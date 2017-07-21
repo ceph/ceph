@@ -241,7 +241,10 @@ def build_ceph_cluster(ctx, config):
         mds_nodes = " ".join(mds_nodes)
         mon_node = get_nodes_using_role(ctx, 'mon')
         mon_nodes = " ".join(mon_node)
+        mgr_nodes = get_nodes_using_role(ctx, 'mgr')
+        mgr_nodes = " ".join(mgr_nodes)
         new_mon = './ceph-deploy new' + " " + mon_nodes
+        mgr_create = './ceph-deploy mgr create' + " " + mgr_nodes
         mon_hostname = mon_nodes.split(' ')[0]
         mon_hostname = str(mon_hostname)
         gather_keys = './ceph-deploy gatherkeys' + " " + mon_hostname
@@ -294,6 +297,7 @@ def build_ceph_cluster(ctx, config):
         # are taking way more than a minute/monitor to form quorum, so lets
         # try the next block which will wait up to 15 minutes to gatherkeys.
         execute_ceph_deploy(mon_create_nodes)
+        execute_ceph_deploy(mgr_create)
 
         # create-keys is explicit now
         # http://tracker.ceph.com/issues/16036
@@ -567,14 +571,20 @@ def cli_test(ctx, config):
                                                 sudo=True)
     new_mon_install = 'install {branch} --mon '.format(
         branch=test_branch) + nodename
+    new_mgr_install = 'install {branch} --mgr '.format(
+        branch=test_branch) + nodename
     new_osd_install = 'install {branch} --osd '.format(
         branch=test_branch) + nodename
     new_admin = 'install {branch} --cli '.format(branch=test_branch) + nodename
     create_initial = 'mon create-initial '
+    # either use create-keys or push command
+    push_keys = 'admin ' + nodename
     execute_cdeploy(admin, new_mon_install, path)
+    execute_cdeploy(admin, new_mgr_install, path)
     execute_cdeploy(admin, new_osd_install, path)
     execute_cdeploy(admin, new_admin, path)
     execute_cdeploy(admin, create_initial, path)
+    execute_cdeploy(admin, push_keys, path)
 
     for i in range(3):
         zap_disk = 'disk zap ' + "{n}:{d}".format(n=nodename, d=devs[i])

@@ -22,7 +22,7 @@ struct C_AsyncCallback : public Context {
   C_AsyncCallback(M journal_metadata, Context *on_finish)
     : journal_metadata(journal_metadata), on_finish(on_finish) {
   }
-  virtual void finish(int r) {
+  void finish(int r) override {
     journal_metadata->queue(on_finish, r);
   }
 };

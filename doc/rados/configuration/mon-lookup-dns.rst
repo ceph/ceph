@@ -12,6 +12,13 @@ This allows for less configuration on clients and monitors. Using a DNS update c
 
 By default clients and daemons will look for the TCP service called *ceph-mon* which is configured by the *mon_dns_srv_name* configuration directive.
 
+
+``mon dns srv name``
+
+:Description: the service name used querying the DNS for the monitor hosts/addresses
+:Type: String
+:Default: ``ceph-mon``
+
 Example
 -------
 When the DNS search domain is set to *example.com* a DNS zone file might contain the following elements.
@@ -39,8 +46,6 @@ With those records now existing we can create the SRV TCP records with the name 
     _ceph-mon._tcp.example.com. 60 IN SRV 10 60 6789 mon2.example.com.
     _ceph-mon._tcp.example.com. 60 IN SRV 10 60 6789 mon3.example.com.
 
-In this case the Monitors are running on port *6789*.
+In this case the Monitors are running on port *6789*, and their priority and weight are all *10* and *60* respectively.
 
-The current implementation in clients and daemons does *not* honor nor respect the weight or priority set in SRV records.
-
-All records returned will be treated equally in a Round Robin fashion.
+The current implementation in clients and daemons will *only* respect the priority set in SRV records, and they will only connect to the monitors with lowest-numbered priority. The targets with the same priority will be selected at random.

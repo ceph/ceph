@@ -15,7 +15,6 @@
 #ifndef CEPH_SAFE_IO
 #define CEPH_SAFE_IO
 
-#include "acconfig.h"
 #include "common/compiler_extensions.h"
 #include <sys/types.h>
 

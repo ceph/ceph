@@ -655,6 +655,14 @@ static int update_pgmap_meta(MonitorDBStore& st)
     t->put(prefix, "full_ratio", bl);
   }
   {
+    auto backfillfull_ratio = g_ceph_context->_conf->mon_osd_backfillfull_ratio;
+    if (backfillfull_ratio > 1.0)
+      backfillfull_ratio /= 100.0;
+    bufferlist bl;
+    ::encode(backfillfull_ratio, bl);
+    t->put(prefix, "backfillfull_ratio", bl);
+  }
+  {
     auto nearfull_ratio = g_ceph_context->_conf->mon_osd_nearfull_ratio;
     if (nearfull_ratio > 1.0)
       nearfull_ratio /= 100.0;

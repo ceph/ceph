@@ -52,6 +52,7 @@
 #define MDS_INO_LOG_OFFSET        (2*MAX_MDS)
 #define MDS_INO_LOG_BACKUP_OFFSET (3*MAX_MDS)
 #define MDS_INO_LOG_POINTER_OFFSET    (4*MAX_MDS)
+#define MDS_INO_PURGE_QUEUE       (5*MAX_MDS)
 
 #define MDS_INO_SYSTEM_BASE       ((6*MAX_MDS) + (MAX_MDS * NUM_STRAY))
 
@@ -72,8 +73,6 @@
 
 typedef int32_t mds_rank_t;
 typedef int32_t fs_cluster_id_t;
-
-
 
 BOOST_STRONG_TYPEDEF(uint64_t, mds_gid_t)
 extern const mds_gid_t MDS_GID_NONE;
@@ -111,11 +110,6 @@ class mds_role_t
   }
 };
 std::ostream& operator<<(std::ostream &out, const mds_role_t &role);
-
-
-extern long g_num_ino, g_num_dir, g_num_dn, g_num_cap;
-extern long g_num_inoa, g_num_dira, g_num_dna, g_num_capa;
-extern long g_num_inos, g_num_dirs, g_num_dns, g_num_caps;
 
 
 // CAPS
@@ -512,6 +506,8 @@ struct inode_t {
   nest_info_t accounted_rstat; // protected by parent's nestlock
 
   quota_info_t quota;
+
+  mds_rank_t export_pin;
  
   // special stuff
   version_t version;           // auth only
@@ -533,6 +529,7 @@ struct inode_t {
 	      truncate_seq(0), truncate_size(0), truncate_from(0),
 	      truncate_pending(0),
 	      time_warp_seq(0), change_attr(0),
+              export_pin(MDS_RANK_NONE),
 	      version(0), file_data_version(0), xattr_version(0),
 	      last_scrub_version(0), backtrace_version(0) {
     clear_layout();

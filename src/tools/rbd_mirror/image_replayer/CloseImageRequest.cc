@@ -22,10 +22,8 @@ namespace image_replayer {
 using librbd::util::create_context_callback;
 
 template <typename I>
-CloseImageRequest<I>::CloseImageRequest(I **image_ctx, ContextWQ *work_queue,
-                                        bool destroy_only, Context *on_finish)
-  : m_image_ctx(image_ctx), m_work_queue(work_queue),
-    m_destroy_only(destroy_only), m_on_finish(on_finish) {
+CloseImageRequest<I>::CloseImageRequest(I **image_ctx, Context *on_finish)
+  : m_image_ctx(image_ctx), m_on_finish(on_finish) {
 }
 
 template <typename I>
@@ -35,11 +33,6 @@ void CloseImageRequest<I>::send() {
 
 template <typename I>
 void CloseImageRequest<I>::close_image() {
-  if (m_destroy_only) {
-    switch_thread_context();
-    return;
-  }
-
   dout(20) << dendl;
 
   Context *ctx = create_context_callback<
@@ -55,26 +48,6 @@ void CloseImageRequest<I>::handle_close_image(int r) {
     derr << ": error encountered while closing image: " << cpp_strerror(r)
          << dendl;
   }
-
-  switch_thread_context();
-}
-
-template <typename I>
-void CloseImageRequest<I>::switch_thread_context() {
-  dout(20) << dendl;
-
-  // swap the librbd thread context for the rbd-mirror thread context
-  Context *ctx = create_context_callback<
-    CloseImageRequest<I>, &CloseImageRequest<I>::handle_switch_thread_context>(
-      this);
-  m_work_queue->queue(ctx, 0);
-}
-
-template <typename I>
-void CloseImageRequest<I>::handle_switch_thread_context(int r) {
-  dout(20) << dendl;
-
-  assert(r == 0);
 
   delete *m_image_ctx;
   *m_image_ctx = nullptr;

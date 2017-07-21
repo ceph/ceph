@@ -15,7 +15,6 @@
 
 #include <string>
 #include <errno.h>
-#include <sstream>
 
 #include "objclass/objclass.h"
 
@@ -145,7 +144,7 @@ public:
     return 0;
   }
 
-  ~PGLSCephFSFilter() {}
+  ~PGLSCephFSFilter() override {}
   bool reject_empty_xattr() override { return false; }
   bool filter(const hobject_t &obj, bufferlist& xattr_data,
                       bufferlist& outdata) override;

@@ -27,7 +27,7 @@ protected:
 
 public:
   explicit WholeSpaceMemIterator(KeyValueDBMemory *db) : db(db), ready(false) { }
-  ~WholeSpaceMemIterator() { }
+  ~WholeSpaceMemIterator() override { }
 
   int seek_to_first() override {
     if (db->db.empty()) {
@@ -217,6 +217,24 @@ int KeyValueDBMemory::rmkeys_by_prefix(const string &prefix) {
   return 0;
 }
 
+int KeyValueDBMemory::rm_range_keys(const string &prefix, const string &start, const string &end) {
+  map<std::pair<string,string>,bufferlist>::iterator i;
+  i = db.lower_bound(make_pair(prefix, start));
+  if (i == db.end())
+    return 0;
+
+  while (i != db.end()) {
+    std::pair<string,string> key = (*i).first;
+    if (key.first != prefix)
+      break;
+    if (key.second >= end)
+      break;
+    ++i;
+    rmkey(key.first, key.second);
+  }
+  return 0;
+}
+
 KeyValueDB::WholeSpaceIterator KeyValueDBMemory::_get_iterator() {
   return ceph::shared_ptr<KeyValueDB::WholeSpaceIteratorImpl>(
     new WholeSpaceMemIterator(this)
@@ -240,7 +258,7 @@ public:
 
   explicit WholeSpaceSnapshotMemIterator(KeyValueDBMemory *db) :
     WholeSpaceMemIterator(db) { }
-  ~WholeSpaceSnapshotMemIterator() {
+  ~WholeSpaceSnapshotMemIterator() override {
     delete db;
   }
 };

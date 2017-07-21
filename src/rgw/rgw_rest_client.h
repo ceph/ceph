@@ -47,9 +47,9 @@ public:
       params = *_params;
   }
 
-  int receive_header(void *ptr, size_t len);
-  virtual int receive_data(void *ptr, size_t len);
-  virtual int send_data(void *ptr, size_t len);
+  int receive_header(void *ptr, size_t len) override;
+  int receive_data(void *ptr, size_t len) override;
+  int send_data(void *ptr, size_t len) override;
 
   bufferlist& get_response() { return response; }
 
@@ -70,12 +70,12 @@ class RGWRESTStreamWriteRequest : public RGWRESTSimpleRequest {
   RGWHTTPManager http_manager;
 public:
   int add_output_data(bufferlist& bl);
-  int send_data(void *ptr, size_t len);
+  int send_data(void *ptr, size_t len) override;
 
   RGWRESTStreamWriteRequest(CephContext *_cct, const string& _url, param_vec_t *_headers,
 		param_vec_t *_params) : RGWRESTSimpleRequest(_cct, _url, _headers, _params),
                 lock("RGWRESTStreamWriteRequest"), cb(NULL), http_manager(_cct) {}
-  ~RGWRESTStreamWriteRequest();
+  ~RGWRESTStreamWriteRequest() override;
   int put_obj_init(RGWAccessKey& key, rgw_obj& obj, uint64_t obj_size, map<string, bufferlist>& attrs);
   int complete(string& etag, real_time *mtime);
 
@@ -93,20 +93,20 @@ class RGWRESTStreamRWRequest : public RGWRESTSimpleRequest {
   const char *method;
   uint64_t write_ofs;
 protected:
-  int handle_header(const string& name, const string& val);
+  int handle_header(const string& name, const string& val) override;
 public:
-  int send_data(void *ptr, size_t len);
-  int receive_data(void *ptr, size_t len);
+  int send_data(void *ptr, size_t len) override;
+  int receive_data(void *ptr, size_t len) override;
 
   RGWRESTStreamRWRequest(CephContext *_cct, const char *_method, const string& _url, RGWGetDataCB *_cb,
 		param_vec_t *_headers, param_vec_t *_params) : RGWRESTSimpleRequest(_cct, _url, _headers, _params),
                 lock("RGWRESTStreamReadRequest"), cb(_cb),
                 chunk_ofs(0), ofs(0), http_manager(_cct), method(_method), write_ofs(0) {
   }
-  virtual ~RGWRESTStreamRWRequest() {}
-  int get_obj(RGWAccessKey& key, map<string, string>& extra_headers, rgw_obj& obj);
-  int get_resource(RGWAccessKey& key, map<string, string>& extra_headers, const string& resource, RGWHTTPManager *mgr = NULL);
-  int complete(string& etag, real_time *mtime, uint64_t *psize, map<string, string>& attrs);
+  virtual ~RGWRESTStreamRWRequest() override {}
+  int send_request(RGWAccessKey& key, map<string, string>& extra_headers, rgw_obj& obj, RGWHTTPManager *mgr = NULL);
+  int send_request(RGWAccessKey *key, map<string, string>& extra_headers, const string& resource, bufferlist *send_data = NULL /* optional input data */, RGWHTTPManager *mgr = NULL);
+  int complete_request(string& etag, real_time *mtime, uint64_t *psize, map<string, string>& attrs);
 
   void set_outbl(bufferlist& _outbl) {
     outbl.swap(_outbl);

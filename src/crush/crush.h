@@ -143,7 +143,7 @@ enum crush_algorithm {
          * can contain items with arbitrary weights.  To place a
          * replica, CRUSH begins at the head of the list with the most
          * recently added item and compares its weight to the sum of
-         * all remaining items’ weights.  Depending on the value of
+         * all remaining items' weights.  Depending on the value of
          * hash( x , r , item), either the current item is chosen with
          * the appropriate probability, or the process continues
          * recursively down the list.  This is a natural and intuitive
@@ -168,19 +168,19 @@ enum crush_algorithm {
          * they divide and conquer in a way that either gives certain
          * items precedence (e. g., those at the beginning of a list)
          * or obviates the need to consider entire subtrees of items
-         * at all. That im- proves the performance of the replica
+         * at all. That improves the performance of the replica
          * placement process, but can also introduce suboptimal
          * reorganization behavior when the contents of a bucket
          * change due an addition, removal, or re-weighting of an
          * item.
          *
-         * The straw2 bucket type allows all items to fairly “compete”
+         * The straw2 bucket type allows all items to fairly "compete"
          * against each other for replica placement through a process
          * analogous to a draw of straws.  To place a replica, a straw
          * of random length is drawn for each item in the bucket.  The
          * item with the longest straw wins.  The length of each straw
          * is initially a value in a fixed range.  Each straw length
-         * is scaled by a factor based on the item’s weight so that
+         * is scaled by a factor based on the item's weight so that
          * heavily weighted items are more likely to win the draw.
          * Although this process is almost twice as slow (on average)
          * than a list bucket and even slower than a tree bucket
@@ -236,6 +236,61 @@ struct crush_bucket {
 	__u32 weight;    /*!< 16.16 fixed point cumulated children weight */
 	__u32 size;      /*!< size of the __items__ array */
         __s32 *items;    /*!< array of children: < 0 are buckets, >= 0 items */
+};
+
+/** @ingroup API
+ *
+ * Replacement weights for each item in a bucket. The size of the
+ * array must be exactly the size of the straw2 bucket, just as the
+ * item_weights array.
+ *
+ */
+struct crush_weight_set {
+  __u32 *weights; /*!< 16.16 fixed point weights in the same order as items */
+  __u32 size;     /*!< size of the __weights__ array */
+};
+
+/** @ingroup API
+ *
+ * Replacement weights and ids for a given straw2 bucket, for
+ * placement purposes.
+ *
+ * When crush_do_rule() chooses the Nth item from a straw2 bucket, the
+ * replacement weights found at __weight_set[N]__ are used instead of
+ * the weights from __item_weights__. If __N__ is greater than
+ * __weight_set_size__, the weights found at __weight_set_size-1__ are
+ * used instead. For instance if __weight_set__ is:
+ *
+ *    [ [ 0x10000, 0x20000 ],   // position 0
+ *      [ 0x20000, 0x40000 ] ]  // position 1
+ *
+ * choosing the 0th item will use position 0 weights [ 0x10000, 0x20000 ]
+ * choosing the 1th item will use position 1 weights [ 0x20000, 0x40000 ]
+ * choosing the 2th item will use position 1 weights [ 0x20000, 0x40000 ]
+ * etc.
+ *
+ */
+struct crush_choose_arg {
+  __s32 *ids;                           /*!< values to use instead of items */
+  __u32 ids_size;                       /*!< size of the __ids__ array */
+  struct crush_weight_set *weight_set;  /*!< weight replacements for a given position */
+  __u32 weight_set_size;                /*!< size of the __weight_set__ array */
+};
+
+/** @ingroup API
+ *
+ * Replacement weights and ids for each bucket in the crushmap. The
+ * __size__ of the __args__ array must be exactly the same as the
+ * __map->max_buckets__.
+ *
+ * The __crush_choose_arg__ at index N will be used when choosing
+ * an item from the bucket __map->buckets[N]__ bucket, provided it
+ * is a straw2 bucket.
+ *
+ */
+struct crush_choose_arg_map {
+  struct crush_choose_arg *args; /*!< replacement for each bucket in the crushmap */
+  __u32 size;                    /*!< size of the __args__ array */
 };
 
 /** @ingroup API
@@ -315,28 +370,54 @@ struct crush_map {
          */
 	__s32 max_devices;
 
-	/*! choose local retries before re-descent */
+	/*! Backward compatibility tunable. It implements a bad solution
+         * and must always be set to 0 except for backward compatibility
+         * purposes
+         */
 	__u32 choose_local_tries;
-	/*! choose local attempts using a fallback permutation before
-	 *! re-descent */
+	/*! Backward compatibility tunable. It implements a bad solution
+         * and must always be set to 0 except for backward compatibility
+         * purposes
+         */
 	__u32 choose_local_fallback_tries;
-	/*! choose attempts before giving up */
+	/*! Tunable. The default value when the CHOOSE_TRIES or
+         * CHOOSELEAF_TRIES steps are omitted in a rule. See the
+         * documentation for crush_rule_set_step() for more
+         * information
+         */
 	__u32 choose_total_tries;
-	/*! attempt chooseleaf inner descent once for firstn mode; on
-	 *! reject retry outer descent.  Note that this does *not*
-	 *! apply to a collision: in that case we will retry as we used
-	 *! to. */
+	/*! Backward compatibility tunable. It should always be set
+         *  to 1 except for backward compatibility. Implemented in 2012
+         *  it was generalized late 2013 and is mostly unused except
+         *  in one border case, reason why it must be set to 1.
+         *
+         *  Attempt chooseleaf inner descent once for firstn mode; on
+         *  reject retry outer descent.  Note that this does *not*
+         *  apply to a collision: in that case we will retry as we
+         *  used to.
+         */
 	__u32 chooseleaf_descend_once;
-
-	/*! if non-zero, feed r into chooseleaf, bit-shifted right by (r-1)
-	 *! bits.  a value of 1 is best for new clusters.  for legacy clusters
-	 *! that want to limit reshuffling, a value of 3 or 4 will make the
-	 *! mappings line up a bit better with previous mappings. */
+	/*! Backward compatibility tunable. It is a fix for bad
+         *  mappings implemented in 2014 at
+         *  https://github.com/ceph/ceph/pull/1185. It should always
+         *  be set to 1 except for backward compatibility.
+         *
+         *  If non-zero, feed r into chooseleaf, bit-shifted right by
+	 *  (r-1) bits.  a value of 1 is best for new clusters.  for
+	 *  legacy clusters that want to limit reshuffling, a value of
+	 *  3 or 4 will make the mappings line up a bit better with
+	 *  previous mappings.
+         */
 	__u8 chooseleaf_vary_r;
 
-	/*! if true, it makes chooseleaf firstn to return stable results (if
-	 *! no local retry) so that data migrations would be optimal when some
-	 *! device fails. */
+	/*! Backward compatibility tunable. It is an improvement that
+         *  avoids unnecessary mapping changes, implemented at
+         *  https://github.com/ceph/ceph/pull/6572 and explained in
+         *  this post: "chooseleaf may cause some unnecessary pg
+         *  migrations" in October 2015
+         *  https://www.mail-archive.com/ceph-devel@vger.kernel.org/msg26075.html
+         *  It should always be set to 1 except for backward compatibility.
+         */
 	__u8 chooseleaf_stable;
 
         /*! @cond INTERNAL */
@@ -354,12 +435,17 @@ struct crush_map {
 	size_t working_size;
 
 #ifndef __KERNEL__
-	/*
-	 * version 0 (original) of straw_calc has various flaws.  version 1
-	 * fixes a few of them.
+	/*! @endcond */
+	/*! Backward compatibility tunable. It is a fix for the straw
+         *  scaler values for the straw algorithm which is deprecated
+         *  (straw2 replaces it) implemented at
+         *  https://github.com/ceph/ceph/pull/3057. It should always
+         *  be set to 1 except for backward compatibility.
+         *
 	 */
 	__u8 straw_calc_version;
 
+        /*! @cond INTERNAL */
 	/*
 	 * allowed bucket algs is a bitmask, here the bit positions
 	 * are CRUSH_BUCKET_*.  note that these are *bits* and
@@ -397,7 +483,7 @@ extern void crush_destroy_bucket_straw2(struct crush_bucket_straw2 *b);
  *
  * Deallocate a bucket created via crush_add_bucket().
  *
- * @param bucket the bucket to deallocate
+ * @param b the bucket to deallocate
  */
 extern void crush_destroy_bucket(struct crush_bucket *b);
 /** @ingroup API
@@ -418,6 +504,24 @@ extern void crush_destroy(struct crush_map *map);
 static inline int crush_calc_tree_node(int i)
 {
 	return ((i+1) << 1)-1;
+}
+
+static inline const char *crush_alg_name(int alg)
+{
+	switch (alg) {
+	case CRUSH_BUCKET_UNIFORM:
+		return "uniform";
+	case CRUSH_BUCKET_LIST:
+		return "list";
+	case CRUSH_BUCKET_TREE:
+		return "tree";
+	case CRUSH_BUCKET_STRAW:
+		return "straw";
+	case CRUSH_BUCKET_STRAW2:
+		return "straw2";
+	default:
+		return "unknown";
+	}
 }
 
 /* ---------------------------------------------------------------------

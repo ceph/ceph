@@ -22,13 +22,14 @@
 
 using namespace std;
 
-#include "include/atomic.h"
 #include "common/ceph_argparse.h"
 #include "common/debug.h"
 #include "common/Cycles.h"
 #include "global/global_init.h"
 #include "msg/Messenger.h"
 #include "messages/MOSDOp.h"
+
+#include <atomic>
 
 class MessengerClient {
   class ClientThread;
@@ -39,7 +40,7 @@ class MessengerClient {
    public:
     ClientDispatcher(uint64_t delay, ClientThread *t): Dispatcher(g_ceph_context), think_time(delay), thread(t) {}
     bool ms_can_fast_dispatch_any() const override { return true; }
-    bool ms_can_fast_dispatch(Message *m) const override {
+    bool ms_can_fast_dispatch(const Message *m) const override {
       switch (m->get_type()) {
       case CEPH_MSG_OSD_OPREPLY:
         return true;
@@ -67,7 +68,7 @@ class MessengerClient {
     Messenger *msgr;
     int concurrent;
     ConnectionRef conn;
-    atomic_t client_inc;
+    std::atomic<unsigned> client_inc = { 0 };
     object_t oid;
     object_locator_t oloc;
     pg_t pgid;
@@ -82,8 +83,8 @@ class MessengerClient {
     uint64_t inflight;
 
     ClientThread(Messenger *m, int c, ConnectionRef con, int len, int ops, int think_time_us):
-        msgr(m), concurrent(c), conn(con), client_inc(0), oid("object-name"), oloc(1, 1), msg_len(len), ops(ops),
-        dispatcher(think_time_us, this), lock("MessengerBenchmark::ClientThread::lock") {
+        msgr(m), concurrent(c), conn(con), oid("object-name"), oloc(1, 1), msg_len(len), ops(ops),
+        dispatcher(think_time_us, this), lock("MessengerBenchmark::ClientThread::lock"), inflight(0) {
       m->add_dispatcher_head(&dispatcher);
       bufferptr ptr(msg_len);
       memset(ptr.c_str(), 0, msg_len);
@@ -98,7 +99,7 @@ class MessengerClient {
 	hobject_t hobj(oid, oloc.key, CEPH_NOSNAP, pgid.ps(), pgid.pool(),
 		       oloc.nspace);
 	spg_t spgid(pgid);
-        MOSDOp *m = new MOSDOp(client_inc.read(), 0, hobj, spgid, 0, 0, 0);
+        MOSDOp *m = new MOSDOp(client_inc, 0, hobj, spgid, 0, 0, 0);
         m->write(0, msg_len, data);
         inflight++;
         conn->send_message(m);
@@ -134,7 +135,7 @@ class MessengerClient {
     addr.set_nonce(0);
     for (int i = 0; i < jobs; ++i) {
       Messenger *msgr = Messenger::create(g_ceph_context, type, entity_name_t::CLIENT(0), "client", getpid()+i, 0);
-      msgr->set_default_policy(Messenger::Policy::lossless_client(0, 0));
+      msgr->set_default_policy(Messenger::Policy::lossless_client(0));
       entity_inst_t inst(entity_name_t::OSD(0), addr);
       ConnectionRef conn = msgr->get_connection(inst);
       ClientThread *t = new ClientThread(msgr, c, conn, msg_len, ops, think_time_us);
@@ -192,7 +193,7 @@ int main(int argc, char **argv)
   int think_time = atoi(args[4]);
   int len = atoi(args[5]);
 
-  std::string public_msgr_type = g_ceph_context->_conf->ms_public_type.empty() ? g_ceph_context->_conf->ms_type : g_ceph_context->_conf->ms_public_type;
+  std::string public_msgr_type = g_ceph_context->_conf->ms_public_type.empty() ? g_ceph_context->_conf->get_val<std::string>("ms_type") : g_ceph_context->_conf->ms_public_type;
 
   cerr << " using ms-public-type " << public_msgr_type << std::endl;
   cerr << "       server ip:port " << args[0] << std::endl;

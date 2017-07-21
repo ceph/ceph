@@ -18,22 +18,19 @@
 #include <map>
 #include <string>
 #include <iosfwd>
-#include <expat.h>
 
 #include <include/types.h>
 #include <common/Formatter.h>
 #include "rgw_xml.h"
 #include "rgw_cors.h"
 
-using namespace std;
-
 class RGWCORSRule_S3 : public RGWCORSRule, public XMLObj
 {
   public:
     RGWCORSRule_S3() {}
-    ~RGWCORSRule_S3() {}
+    ~RGWCORSRule_S3() override {}
     
-    bool xml_end(const char *el);
+    bool xml_end(const char *el) override;
     void to_xml(XMLFormatter& f);
 };
 
@@ -41,9 +38,9 @@ class RGWCORSConfiguration_S3 : public RGWCORSConfiguration, public XMLObj
 {
   public:
     RGWCORSConfiguration_S3() {}
-    ~RGWCORSConfiguration_S3() {}
+    ~RGWCORSConfiguration_S3() override {}
 
-    bool xml_end(const char *el);
+    bool xml_end(const char *el) override;
     void to_xml(ostream& out);
 };
 
@@ -51,7 +48,7 @@ class RGWCORSXMLParser_S3 : public RGWXMLParser
 {
   CephContext *cct;
 
-  XMLObj *alloc_obj(const char *el);
+  XMLObj *alloc_obj(const char *el) override;
 public:
   explicit RGWCORSXMLParser_S3(CephContext *_cct) : cct(_cct) {}
 };

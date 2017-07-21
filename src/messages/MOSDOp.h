@@ -130,14 +130,14 @@ public:
     else
       return object_locator_t(hobj);
   }
-  object_t& get_oid() {
+  const object_t& get_oid() const {
     assert(!final_decode_needed);
     return hobj.oid;
   }
   const hobject_t &get_hobj() const {
     return hobj;
   }
-  snapid_t get_snapid() {
+  snapid_t get_snapid() const {
     assert(!final_decode_needed);
     return hobj.snap;
   }
@@ -188,7 +188,7 @@ public:
     reqid.inc = inc;
   }
 private:
-  ~MOSDOp() {}
+  ~MOSDOp() override {}
 
 public:
   void set_mtime(utime_t mt) { mtime = mt; }
@@ -231,14 +231,7 @@ public:
     add_simple_op(CEPH_OSD_OP_STAT, 0, 0);
   }
 
-  bool has_flag(__u32 flag) { return flags & flag; };
-  bool wants_ack() const { return flags & CEPH_OSD_FLAG_ACK; }
-  bool wants_ondisk() const { return flags & CEPH_OSD_FLAG_ONDISK; }
-  bool wants_onnvram() const { return flags & CEPH_OSD_FLAG_ONNVRAM; }
-
-  void set_want_ack(bool b) { flags |= CEPH_OSD_FLAG_ACK; }
-  void set_want_onnvram(bool b) { flags |= CEPH_OSD_FLAG_ONNVRAM; }
-  void set_want_ondisk(bool b) { flags |= CEPH_OSD_FLAG_ONDISK; }
+  bool has_flag(__u32 flag) const { return flags & flag; };
 
   bool is_retry_attempt() const { return flags & CEPH_OSD_FLAG_RETRY; }
   void set_retry_attempt(unsigned a) { 
@@ -250,7 +243,7 @@ public:
   }
 
   // marshalling
-  virtual void encode_payload(uint64_t features) {
+  void encode_payload(uint64_t features) override {
 
     OSDOp::merge_osd_op_vector_in_data(ops, data);
 
@@ -368,6 +361,10 @@ struct ceph_osd_request_head {
       ::encode(osdmap_epoch, payload);
       ::encode(flags, payload);
       ::encode(reqid, payload);
+      encode_trace(payload, features);
+
+      // -- above decoded up front; below decoded post-dispatch thread --
+
       ::encode(client_inc, payload);
       ::encode(mtime, payload);
       ::encode(get_object_locator(), payload);
@@ -387,7 +384,7 @@ struct ceph_osd_request_head {
     }
   }
 
-  virtual void decode_payload() {
+  void decode_payload() override {
     assert(partial_decode_needed && final_decode_needed);
     p = payload.begin();
 
@@ -400,6 +397,7 @@ struct ceph_osd_request_head {
       ::decode(osdmap_epoch, p);
       ::decode(flags, p);
       ::decode(reqid, p);
+      decode_trace(p);
     } else if (header.version == 7) {
       ::decode(pgid.pgid, p);      // raw pgid
       hobj.set_hash(pgid.pgid.ps());
@@ -560,12 +558,12 @@ struct ceph_osd_request_head {
     return true;
   }
 
-  void clear_buffers() {
-    ops.clear();
+  void clear_buffers() override {
+    OSDOp::clear_data(ops);
   }
 
-  const char *get_type_name() const { return "osd_op"; }
-  void print(ostream& out) const {
+  const char *get_type_name() const override { return "osd_op"; }
+  void print(ostream& out) const override {
     out << "osd_op(";
     if (!partial_decode_needed) {
       out << get_reqid() << ' ';

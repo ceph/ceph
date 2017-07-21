@@ -261,7 +261,7 @@ void parse_syn_options(vector<const char*>& args)
 }
 
 
-SyntheticClient::SyntheticClient(Client *client, int w)
+SyntheticClient::SyntheticClient(StandaloneClient *client, int w)
 {
   this->client = client;
   whoami = w;
@@ -2656,7 +2656,7 @@ int SyntheticClient::random_walk(int num_req)
     }
 
     // descend?
-    if (.9*roll_die(::pow((double).9,(double)cwd.depth())) && !subdirs.empty()) {
+    if (roll_die(::pow((double).9,(double)cwd.depth())) && !subdirs.empty()) {
       string s = get_random_subdir();
       cwd.push_dentry( s );
       dout(DBL) << "cd " << s << " -> " << cwd << dendl;
@@ -3354,8 +3354,6 @@ int SyntheticClient::chunk_file(string &filename)
   uint64_t size = st.st_size;
   dout(0) << "file " << filename << " size is " << size << dendl;
 
-  Filer *filer = client->filer;
-
   inode_t inode;
   memset(&inode, 0, sizeof(inode));
   inode.ino = st.st_ino;
@@ -3374,7 +3372,8 @@ int SyntheticClient::chunk_file(string &filename)
     
     flock.Lock();
     Context *onfinish = new C_SafeCond(&flock, &cond, &done);
-    filer->read(inode.ino, &inode.layout, CEPH_NOSNAP, pos, get, &bl, 0, onfinish);
+    client->filer->read(inode.ino, &inode.layout, CEPH_NOSNAP, pos, get, &bl, 0,
+			onfinish);
     while (!done)
       cond.Wait(flock);
     flock.Unlock();

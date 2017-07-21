@@ -6,6 +6,8 @@ set(working_dir ${CMAKE_BINARY_DIR}/include)
 set(header_dir ${working_dir}/tracing)
 file(MAKE_DIRECTORY ${header_dir})
 
+add_custom_target(tracepoint_libraries)
+
 file(GLOB tps "*.tp")
 foreach(tp ${tps})
   get_filename_component(name ${tp} NAME_WE)
@@ -36,6 +38,7 @@ function(add_tracing_library name tracings version)
     VERSION ${version}
     SOVERSION ${soversion}
     INSTALL_RPATH "")
+  add_dependencies(tracepoint_libraries ${name})
 endfunction()
 
 set(osd_traces oprequest.tp osd.tp pg.tp)
@@ -45,6 +48,10 @@ add_tracing_library(rbd_tp librbd.tp 1.0.0)
 add_tracing_library(os_tp objectstore.tp 1.0.0)
 
 install(TARGETS rados_tp osd_tp rbd_tp os_tp DESTINATION ${CMAKE_INSTALL_LIBDIR})
+if(WITH_OSD_INSTRUMENT_FUNCTIONS)
+  add_tracing_library(cyg_profile_tp cyg_profile.tp 1.0.0)
+  install(TARGETS cyg_profile_tp DESTINATION ${CMAKE_INSTALL_LIBDIR})
+endif()
 if(WITH_LTTNG AND WITH_EVENTTRACE)
   add_tracing_library(eventtrace_tp eventtrace.tp 1.0.0)
   install(TARGETS eventtrace_tp DESTINATION ${CMAKE_INSTALL_LIBDIR})

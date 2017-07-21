@@ -23,7 +23,11 @@ namespace ceph {
   namespace crypto {
     void assert_init();
     void init(CephContext *cct);
-    void shutdown();
+    // @param shared true if the the underlying crypto library could be shared
+    //               with the application linked against the Ceph library.
+    // @note we do extra global cleanup specific to the underlying crypto
+    //       library, if @c shared is @c false.
+    void shutdown(bool shared=true);
 
     using CryptoPP::Weak::MD5;
     using CryptoPP::SHA1;
@@ -67,7 +71,7 @@ namespace ceph {
   namespace crypto {
     void assert_init();
     void init(CephContext *cct);
-    void shutdown();
+    void shutdown(bool shared=true);
     class Digest {
     private:
       PK11Context *ctx;
@@ -177,6 +181,7 @@ namespace ceph {
 }
 
 #else
+// cppcheck-suppress preprocessorErrorDirective
 # error "No supported crypto implementation found."
 #endif
 

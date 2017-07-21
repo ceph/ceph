@@ -283,6 +283,7 @@ TEST_F(LibRadosWatchNotify, Watch2Delete) {
   ASSERT_EQ(-ENOTCONN, notify_err);
   ASSERT_EQ(-ENOTCONN, rados_watch_check(ioctx, handle));
   rados_unwatch2(ioctx, handle);
+  rados_watch_flush(cluster);
 }
 
 TEST_F(LibRadosWatchNotify, AioWatchDelete) {
@@ -317,91 +318,6 @@ TEST_F(LibRadosWatchNotify, AioWatchDelete) {
   ASSERT_EQ(0, rados_aio_wait_for_complete(comp));
   ASSERT_EQ(-ENOENT, rados_aio_get_return_value(comp));
   rados_aio_release(comp);
-}
-
-TEST_F(LibRadosWatchNotify, Watch2Timeout) {
-  notify_io = ioctx;
-  notify_oid = "foo";
-  notify_cookies.clear();
-  notify_err = 0;
-  char buf[128];
-  memset(buf, 0xcc, sizeof(buf));
-  ASSERT_EQ(0, rados_write(ioctx, notify_oid, buf, sizeof(buf), 0));
-  uint64_t handle;
-  time_t start = time(0);
-  ASSERT_EQ(0,
-	    rados_watch2(ioctx, notify_oid, &handle,
-			 watch_notify2_test_cb,
-			 watch_notify2_test_errcb, this));
-  int age = rados_watch_check(ioctx, handle);
-  time_t age_bound = time(0) + 1 - start;
-  ASSERT_LT(age, age_bound * 1000);
-  ASSERT_GT(age, 0);
-  rados_conf_set(cluster, "objecter_inject_no_watch_ping", "true");
-  int left = 900;
-  std::cout << "waiting up to " << left << " for osd to time us out ..."
-	    << std::endl;
-  while (notify_err == 0 && --left) {
-    sleep(1);
-  }
-  ASSERT_TRUE(left > 0);
-  rados_conf_set(cluster, "objecter_inject_no_watch_ping", "false");
-  ASSERT_EQ(-ENOTCONN, notify_err);
-  ASSERT_EQ(-ENOTCONN, rados_watch_check(ioctx, handle));
-
-  // a subsequent notify should not reach us
-  char *reply_buf = 0;
-  size_t reply_buf_len;
-  ASSERT_EQ(0, rados_notify2(ioctx, notify_oid,
-			     "notify", 6, 300000,
-			     &reply_buf, &reply_buf_len));
-  {
-    bufferlist reply;
-    reply.append(reply_buf, reply_buf_len);
-    std::map<std::pair<uint64_t,uint64_t>, bufferlist> reply_map;
-    std::set<std::pair<uint64_t,uint64_t> > missed_map;
-    bufferlist::iterator reply_p = reply.begin();
-    ::decode(reply_map, reply_p);
-    ::decode(missed_map, reply_p);
-    ASSERT_EQ(0u, reply_map.size());
-    ASSERT_EQ(0u, missed_map.size());
-  }
-  ASSERT_EQ(0u, notify_cookies.size());
-  ASSERT_EQ(-ENOTCONN, rados_watch_check(ioctx, handle));
-  rados_buffer_free(reply_buf);
-
-  // re-watch
-  rados_unwatch2(ioctx, handle);
-  handle = 0;
-  ASSERT_EQ(0,
-	    rados_watch2(ioctx, notify_oid, &handle,
-			 watch_notify2_test_cb,
-			 watch_notify2_test_errcb, this));
-  ASSERT_GT(rados_watch_check(ioctx, handle), 0);
-
-  // and now a notify will work.
-  ASSERT_EQ(0, rados_notify2(ioctx, notify_oid,
-			     "notify", 6, 300000,
-			     &reply_buf, &reply_buf_len));
-  {
-    bufferlist reply;
-    reply.append(reply_buf, reply_buf_len);
-    std::map<std::pair<uint64_t,uint64_t>, bufferlist> reply_map;
-    std::set<std::pair<uint64_t,uint64_t> > missed_map;
-    bufferlist::iterator reply_p = reply.begin();
-    ::decode(reply_map, reply_p);
-    ::decode(missed_map, reply_p);
-    ASSERT_EQ(1u, reply_map.size());
-    ASSERT_EQ(0u, missed_map.size());
-    ASSERT_EQ(1u, notify_cookies.count(handle));
-    ASSERT_EQ(5u, reply_map.begin()->second.length());
-    ASSERT_EQ(0, strncmp("reply", reply_map.begin()->second.c_str(), 5));
-  }
-  ASSERT_EQ(1u, notify_cookies.size());
-  ASSERT_GT(rados_watch_check(ioctx, handle), 0);
-
-  rados_buffer_free(reply_buf);
-  rados_unwatch2(ioctx, handle);
 }
 
 // --
@@ -449,6 +365,7 @@ TEST_F(LibRadosWatchNotify, WatchNotify2) {
   ASSERT_EQ(0u, reply_buf_len);
 
   rados_unwatch2(ioctx, handle);
+  rados_watch_flush(cluster);
 }
 
 TEST_F(LibRadosWatchNotify, AioWatchNotify2) {
@@ -556,6 +473,7 @@ TEST_F(LibRadosWatchNotify, AioNotify) {
   ASSERT_EQ(0u, reply_buf_len);
 
   rados_unwatch2(ioctx, handle);
+  rados_watch_flush(cluster);
 }
 
 TEST_P(LibRadosWatchNotifyPP, WatchNotify2) {
@@ -670,6 +588,7 @@ TEST_P(LibRadosWatchNotifyPP, AioNotify) {
   ASSERT_EQ(0u, missed_map.size());
   ASSERT_GT(ioctx.watch_check(handle), 0);
   ioctx.unwatch2(handle);
+  cluster.watch_flush();
 }
 
 // --
@@ -717,6 +636,7 @@ TEST_F(LibRadosWatchNotify, WatchNotify2Multi) {
   rados_buffer_free(reply_buf);
   rados_unwatch2(ioctx, handle1);
   rados_unwatch2(ioctx, handle2);
+  rados_watch_flush(cluster);
 }
 
 // --
@@ -833,7 +753,9 @@ TEST_P(LibRadosWatchNotifyPP, WatchNotify3) {
     ASSERT_EQ(it->timeout_seconds, timeout);
   }
   bufferlist bl2, bl_reply;
+  std::cout << "notify2" << std::endl;
   ASSERT_EQ(0, ioctx.notify2(notify_oid, bl2, 300000, &bl_reply));
+  std::cout << "notify2 done" << std::endl;
   bufferlist::iterator p = bl_reply.begin();
   std::map<std::pair<uint64_t,uint64_t>,bufferlist> reply_map;
   std::set<std::pair<uint64_t,uint64_t> > missed_map;
@@ -845,8 +767,116 @@ TEST_P(LibRadosWatchNotifyPP, WatchNotify3) {
   ASSERT_EQ(5u, reply_map.begin()->second.length());
   ASSERT_EQ(0, strncmp("reply", reply_map.begin()->second.c_str(), 5));
   ASSERT_EQ(0u, missed_map.size());
+  std::cout << "watch_check" << std::endl;
   ASSERT_GT(ioctx.watch_check(handle), 0);
+  std::cout << "unwatch2" << std::endl;
   ioctx.unwatch2(handle);
+
+  std::cout << " flushing" << std::endl;
+  cluster.watch_flush();
+  std::cout << "done" << std::endl;
+}
+
+TEST_F(LibRadosWatchNotify, Watch3Timeout) {
+  notify_io = ioctx;
+  notify_oid = "foo";
+  notify_cookies.clear();
+  notify_err = 0;
+  char buf[128];
+  memset(buf, 0xcc, sizeof(buf));
+  ASSERT_EQ(0, rados_write(ioctx, notify_oid, buf, sizeof(buf), 0));
+  uint64_t handle;
+  time_t start = time(0);
+  const uint32_t timeout = 4;
+  {
+    // make sure i timeout before the messenger reconnects to the OSD,
+    // it will resend a watch request on behalf of the client, and the
+    // timer of timeout on OSD side will be reset by the new request.
+    char conf[128];
+    ASSERT_EQ(0, rados_conf_get(cluster,
+                                "ms_tcp_read_timeout",
+                                conf, sizeof(conf)));
+    auto tcp_read_timeout = std::stoll(conf);
+    ASSERT_LT(timeout, tcp_read_timeout);
+  }
+  ASSERT_EQ(0,
+	    rados_watch3(ioctx, notify_oid, &handle,
+                     watch_notify2_test_cb, watch_notify2_test_errcb,
+                     timeout, this));
+  int age = rados_watch_check(ioctx, handle);
+  time_t age_bound = time(0) + 1 - start;
+  ASSERT_LT(age, age_bound * 1000);
+  ASSERT_GT(age, 0);
+  rados_conf_set(cluster, "objecter_inject_no_watch_ping", "true");
+  // allow a long time here since an osd peering event will renew our
+  // watch.
+  int left = 16 * timeout;
+  std::cout << "waiting up to " << left << " for osd to time us out ..."
+	    << std::endl;
+  while (notify_err == 0 && --left) {
+    sleep(1);
+  }
+  ASSERT_GT(left, 0);
+  rados_conf_set(cluster, "objecter_inject_no_watch_ping", "false");
+  ASSERT_EQ(-ENOTCONN, notify_err);
+  ASSERT_EQ(-ENOTCONN, rados_watch_check(ioctx, handle));
+
+  // a subsequent notify should not reach us
+  char *reply_buf = nullptr;
+  size_t reply_buf_len;
+  ASSERT_EQ(0, rados_notify2(ioctx, notify_oid,
+			     "notify", 6, 300000,
+			     &reply_buf, &reply_buf_len));
+  {
+    bufferlist reply;
+    reply.append(reply_buf, reply_buf_len);
+    std::map<std::pair<uint64_t,uint64_t>, bufferlist> reply_map;
+    std::set<std::pair<uint64_t,uint64_t> > missed_map;
+    bufferlist::iterator reply_p = reply.begin();
+    ::decode(reply_map, reply_p);
+    ::decode(missed_map, reply_p);
+    ASSERT_EQ(0u, reply_map.size());
+    ASSERT_EQ(0u, missed_map.size());
+  }
+  ASSERT_EQ(0u, notify_cookies.size());
+  ASSERT_EQ(-ENOTCONN, rados_watch_check(ioctx, handle));
+  rados_buffer_free(reply_buf);
+
+  // re-watch
+  rados_unwatch2(ioctx, handle);
+  rados_watch_flush(cluster);
+
+  handle = 0;
+  ASSERT_EQ(0,
+	    rados_watch2(ioctx, notify_oid, &handle,
+			 watch_notify2_test_cb,
+			 watch_notify2_test_errcb, this));
+  ASSERT_GT(rados_watch_check(ioctx, handle), 0);
+
+  // and now a notify will work.
+  ASSERT_EQ(0, rados_notify2(ioctx, notify_oid,
+			     "notify", 6, 300000,
+			     &reply_buf, &reply_buf_len));
+  {
+    bufferlist reply;
+    reply.append(reply_buf, reply_buf_len);
+    std::map<std::pair<uint64_t,uint64_t>, bufferlist> reply_map;
+    std::set<std::pair<uint64_t,uint64_t> > missed_map;
+    bufferlist::iterator reply_p = reply.begin();
+    ::decode(reply_map, reply_p);
+    ::decode(missed_map, reply_p);
+    ASSERT_EQ(1u, reply_map.size());
+    ASSERT_EQ(0u, missed_map.size());
+    ASSERT_EQ(1u, notify_cookies.count(handle));
+    ASSERT_EQ(5u, reply_map.begin()->second.length());
+    ASSERT_EQ(0, strncmp("reply", reply_map.begin()->second.c_str(), 5));
+  }
+  ASSERT_EQ(1u, notify_cookies.size());
+  ASSERT_GT(rados_watch_check(ioctx, handle), 0);
+
+  rados_buffer_free(reply_buf);
+  rados_unwatch2(ioctx, handle);
+  rados_watch_flush(cluster);
 }
 
 TEST_F(LibRadosWatchNotify, AioWatchDelete2) {

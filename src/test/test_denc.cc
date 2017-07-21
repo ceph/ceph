@@ -15,6 +15,7 @@
  */
 
 #include <stdio.h>
+#include <numeric>
 
 #include "global/global_init.h"
 #include "common/ceph_argparse.h"
@@ -576,5 +577,123 @@ TEST(denc, optional)
     denc(out, bpi);
     ASSERT_FALSE(!!out);
     ASSERT_EQ(bpi.get_pos(), bl.c_str() + bl.length());
+  }
+}
+
+// unlike legacy_t, Legacy supports denc() also.
+struct Legacy {
+  static unsigned n_denc;
+  static unsigned n_decode;
+  uint8_t value = 0;
+  DENC(Legacy, v, p) {
+    n_denc++;
+    denc(v.value, p);
+  }
+  void decode(buffer::list::iterator& p) {
+    n_decode++;
+    ::decode(value, p);
+  }
+  static void reset() {
+    n_denc = n_decode = 0;
+  }
+  static bufferlist encode_n(unsigned n, const vector<unsigned>& segments);
+};
+WRITE_CLASS_DENC(Legacy)
+unsigned Legacy::n_denc = 0;
+unsigned Legacy::n_decode = 0;
+
+bufferlist Legacy::encode_n(unsigned n, const vector<unsigned>& segments) {
+  vector<Legacy> v;
+  for (unsigned i = 0; i < n; i++) {
+    v.push_back(Legacy());
+  }
+  bufferlist bl(n * sizeof(uint8_t));
+  ::encode(v, bl);
+  bufferlist segmented;
+  auto p = bl.begin();
+
+  auto sum = std::accumulate(segments.begin(), segments.end(), 0u);
+  assert(sum != 0u);
+  for (auto i : segments) {
+    buffer::ptr seg;
+    p.copy_deep(bl.length() * i / sum, seg);
+    segmented.push_back(seg);
+  }
+  p.copy_all(segmented);
+  return segmented;
+}
+
+TEST(denc, no_copy_if_segmented_and_lengthy)
+{
+  static_assert(_denc::has_legacy_denc<Legacy>::value,
+                "Legacy do have legacy denc");
+  {
+    // use denc() which shallow_copy() if the buffer is small
+    constexpr unsigned N_COPIES = 42;
+    const vector<unsigned> segs{50, 50}; // half-half
+    bufferlist segmented = Legacy::encode_n(N_COPIES, segs);
+    ASSERT_GT(segmented.get_num_buffers(), 1u);
+    ASSERT_LT(segmented.length(), CEPH_PAGE_SIZE);
+    auto p = segmented.begin();
+    vector<Legacy> v;
+    // denc() is shared by encode() and decode(), so reset() right before
+    // decode()
+    Legacy::reset();
+    ::decode(v, p);
+    ASSERT_EQ(N_COPIES, v.size());
+    ASSERT_EQ(N_COPIES, Legacy::n_denc);
+    ASSERT_EQ(0u, Legacy::n_decode);
+  }
+  {
+    // use denc() which shallow_copy() if the buffer is not segmented and large
+    const unsigned N_COPIES = CEPH_PAGE_SIZE * 2;
+    const vector<unsigned> segs{100};
+    bufferlist segmented = Legacy::encode_n(N_COPIES, segs);
+    ASSERT_EQ(segmented.get_num_buffers(), 1u);
+    ASSERT_GT(segmented.length(), CEPH_PAGE_SIZE);
+    auto p = segmented.begin();
+    vector<Legacy> v;
+    Legacy::reset();
+    ::decode(v, p);
+    ASSERT_EQ(N_COPIES, v.size());
+    ASSERT_EQ(N_COPIES, Legacy::n_denc);
+    ASSERT_EQ(0u, Legacy::n_decode);
+  }
+  {
+    // use denc() which shallow_copy() if the buffer is segmented and large,
+    // but the total size of the chunks to be decoded is smallish.
+    bufferlist large_bl = Legacy::encode_n(CEPH_PAGE_SIZE * 2, {50, 50});
+    bufferlist small_bl = Legacy::encode_n(100, {50, 50});
+    bufferlist segmented;
+    segmented.append(large_bl);
+    segmented.append(small_bl);
+    ASSERT_GT(segmented.get_num_buffers(), 1u);
+    ASSERT_GT(segmented.length(), CEPH_PAGE_SIZE);
+    auto p = segmented.begin();
+    p.advance(large_bl.length());
+    ASSERT_LT(segmented.length() - p.get_off(), CEPH_PAGE_SIZE);
+    vector<Legacy> v;
+    Legacy::reset();
+    ::decode(v, p);
+    ASSERT_EQ(Legacy::n_denc, 100u);
+    ASSERT_EQ(0u, Legacy::n_decode);
+  }
+  {
+    // use decode() which avoids deep copy if the buffer is segmented and large
+    bufferlist small_bl = Legacy::encode_n(100, {50, 50});
+    bufferlist large_bl = Legacy::encode_n(CEPH_PAGE_SIZE * 2, {50, 50});
+    bufferlist segmented;
+    segmented.append(small_bl);
+    segmented.append(large_bl);
+    ASSERT_GT(segmented.get_num_buffers(), 1u);
+    ASSERT_GT(segmented.length(), CEPH_PAGE_SIZE);
+    auto p = segmented.begin();
+    p.advance(small_bl.length());
+    ASSERT_GT(segmented.length() - p.get_off(), CEPH_PAGE_SIZE);
+    vector<Legacy> v;
+    Legacy::reset();
+    ::decode(v, p);
+    ASSERT_EQ(0u, Legacy::n_denc);
+    ASSERT_EQ(CEPH_PAGE_SIZE * 2, Legacy::n_decode);
   }
 }

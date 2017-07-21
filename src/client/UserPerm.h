@@ -68,10 +68,10 @@ public:
 
   uid_t uid() const { return m_uid != (uid_t)-1 ? m_uid : ::geteuid(); }
   gid_t gid() const { return m_gid != (gid_t)-1 ? m_gid : ::getegid(); }
-  bool gid_in_groups(gid_t gid) const {
-    if (gid == m_gid) return true;
+  bool gid_in_groups(gid_t id) const {
+    if (id == gid()) return true;
     for (int i = 0; i < gid_count; ++i) {
-      if (gid == gids[i]) return true;
+      if (id == gids[i]) return true;
     }
     return false;
   }

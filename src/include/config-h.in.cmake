@@ -84,8 +84,8 @@
 /* Define if you have res_nquery */
 #cmakedefine HAVE_RES_NQUERY
 
-/* Defined if you don't have atomic_ops */
-#cmakedefine NO_ATOMIC_OPS
+/* Defined if you have LZ4 */
+#cmakedefine HAVE_LZ4
 
 /* Defined if you have libaio */
 #cmakedefine HAVE_LIBAIO
@@ -104,6 +104,9 @@
 
 /* DPDK conditional compilation */
 #cmakedefine HAVE_DPDK
+
+/* PMEM conditional compilation */
+#cmakedefine HAVE_PMEM
 
 /* Defined if LevelDB supports bloom filters */
 #cmakedefine HAVE_LEVELDB_FILTER_POLICY
@@ -157,8 +160,8 @@
 /* define if leveldb is enabled */
 #cmakedefine WITH_LEVELDB
 
-/* define if radosgw's asio frontend enabled */
-#cmakedefine WITH_RADOSGW_ASIO_FRONTEND
+/* define if radosgw's beast frontend enabled */
+#cmakedefine WITH_RADOSGW_BEAST_FRONTEND
 
 /* define if HAVE_THREAD_SAFE_RES_QUERY */
 #cmakedefine HAVE_THREAD_SAFE_RES_QUERY
@@ -168,6 +171,9 @@
 
 /* Define if you want to use LTTng */
 #cmakedefine WITH_LTTNG
+
+/* Define if you want to OSD function instrumentation */
+#cmakedefine WITH_OSD_INSTRUMENT_FUNCTIONS
 
 /* Define if you want to use Babeltrace */
 #cmakedefine WITH_BABELTRACE
@@ -199,23 +205,14 @@
 /* LTTng is disabled, so define this macro to be nothing. */
 #cmakedefine tracepoint
 
-/* have boost::asio::coroutine */
-#cmakedefine HAVE_BOOST_ASIO_COROUTINE
-
 /* Define to 1 if you have fdatasync. */
 #cmakedefine HAVE_FDATASYNC 1
-
-/* Define to 1 if you have the <inttypes.h> header file. */
-#cmakedefine HAVE_INTTYPES_H 1
 
 /* Defined if you have librocksdb enabled */
 #cmakedefine HAVE_LIBROCKSDB
 
 /* Define to 1 if you have the <valgrind/helgrind.h> header file. */
 #cmakedefine HAVE_VALGRIND_HELGRIND_H 1
-
-/* Define to 1 if you have the <stdint.h> header file. */
-#cmakedefine HAVE_STDINT_H 1
 
 /* Define to 1 if you have the <sys/prctl.h> header file. */
 #cmakedefine HAVE_SYS_PRCTL_H 1
@@ -301,10 +298,27 @@
 /* Defined if pthread_setname_np() is available */
 #cmakedefine HAVE_PTHREAD_SETNAME_NP 1
 
+/* Defined if blkin enabled */
+#cmakedefine WITH_BLKIN
+
 /* Defined if pthread_set_name_np() is available */
 #cmakedefine HAVE_PTHREAD_SET_NAME_NP
 
 /* Defined if pthread_getname_np() is available */
 #cmakedefine HAVE_PTHREAD_GETNAME_NP 1
+
+/* Support POWER8 instructions */
+#cmakedefine HAVE_POWER8
+
+/* Define if endian type is big endian */
+#cmakedefine CEPH_BIG_ENDIAN
+
+/* Define if endian type is little endian */
+#cmakedefine CEPH_LITTLE_ENDIAN
+
+#cmakedefine PYTHON_EXECUTABLE "@PYTHON_EXECUTABLE@"
+
+/* Define to 1 if you have the `getprogname' function. */
+#cmakedefine HAVE_GETPROGNAME 1
 
 #endif /* CONFIG_H */

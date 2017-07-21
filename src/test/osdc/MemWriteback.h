@@ -3,11 +3,12 @@
 #ifndef CEPH_TEST_OSDC_MEMWRITEBACK_H
 #define CEPH_TEST_OSDC_MEMWRITEBACK_H
 
-#include "include/atomic.h"
 #include "include/Context.h"
 #include "include/types.h"
 #include "osd/osd_types.h"
 #include "osdc/WritebackHandler.h"
+
+#include <atomic>
 
 class Finisher;
 class Mutex;
@@ -15,24 +16,27 @@ class Mutex;
 class MemWriteback : public WritebackHandler {
 public:
   MemWriteback(CephContext *cct, Mutex *lock, uint64_t delay_ns);
-  virtual ~MemWriteback();
+  ~MemWriteback() override;
 
-  virtual void read(const object_t& oid, uint64_t object_no,
+  void read(const object_t& oid, uint64_t object_no,
 		    const object_locator_t& oloc, uint64_t off, uint64_t len,
 		    snapid_t snapid, bufferlist *pbl, uint64_t trunc_size,
-		    __u32 trunc_seq, int op_flags, Context *onfinish);
+		    __u32 trunc_seq, int op_flags,
+                    const ZTracer::Trace &parent_trace,
+                    Context *onfinish) override;
 
-  virtual ceph_tid_t write(const object_t& oid, const object_locator_t& oloc,
+  ceph_tid_t write(const object_t& oid, const object_locator_t& oloc,
 			   uint64_t off, uint64_t len,
 			   const SnapContext& snapc, const bufferlist &bl,
 			   ceph::real_time mtime, uint64_t trunc_size,
 			   __u32 trunc_seq, ceph_tid_t journal_tid,
-			   Context *oncommit);
+                           const ZTracer::Trace &parent_trace,
+			   Context *oncommit) override;
 
   using WritebackHandler::write;
 
-  virtual bool may_copy_on_write(const object_t&, uint64_t, uint64_t,
-				 snapid_t);
+  bool may_copy_on_write(const object_t&, uint64_t, uint64_t,
+				 snapid_t) override;
   void write_object_data(const object_t& oid, uint64_t off, uint64_t len,
 			 const bufferlist& data_bl);
   int read_object_data(const object_t& oid, uint64_t off, uint64_t len,
@@ -42,7 +46,7 @@ private:
   CephContext *m_cct;
   Mutex *m_lock;
   uint64_t m_delay_ns;
-  atomic_t m_tid;
+  std::atomic<unsigned> m_tid = { 0 };
   Finisher *m_finisher;
 };
 

@@ -151,8 +151,8 @@ def cat_file(level, filename):
 
 def vstart(new, opt=""):
     print("vstarting....", end="")
-    NEW = new and "-n" or ""
-    call("MON=1 OSD=4 CEPH_PORT=7400 {path}/src/vstart.sh --short -l {new} -d mon osd {opt} > /dev/null 2>&1".format(new=NEW, opt=opt, path=CEPH_ROOT), shell=True)
+    NEW = new and "-n" or "-N"
+    call("MON=1 OSD=4 MDS=0 MGR=1 CEPH_PORT=7400 {path}/src/vstart.sh --short -l {new} -d {opt} > /dev/null 2>&1".format(new=NEW, opt=opt, path=CEPH_ROOT), shell=True)
     print("DONE")
 
 
@@ -399,7 +399,7 @@ CEPH_DIR = CEPH_BUILD_DIR + "/cot_dir"
 CEPH_CONF = os.path.join(CEPH_DIR, 'ceph.conf')
 
 def kill_daemons():
-    call("{path}/init-ceph -c {conf} stop osd mon > /dev/null 2>&1".format(conf=CEPH_CONF, path=CEPH_BIN), shell=True)
+    call("{path}/init-ceph -c {conf} stop > /dev/null 2>&1".format(conf=CEPH_CONF, path=CEPH_BIN), shell=True)
 
 
 def check_data(DATADIR, TMPFILE, OSDDIR, SPLIT_NAME):
@@ -713,7 +713,7 @@ def main(argv):
 
     print("Created Replicated pool #{repid}".format(repid=REPID))
 
-    cmd = "{path}/ceph osd erasure-code-profile set {prof} ruleset-failure-domain=osd".format(prof=PROFNAME, path=CEPH_BIN)
+    cmd = "{path}/ceph osd erasure-code-profile set {prof} crush-failure-domain=osd".format(prof=PROFNAME, path=CEPH_BIN)
     logging.debug(cmd)
     call(cmd, shell=True, stdout=nullfd, stderr=nullfd)
     cmd = "{path}/ceph osd erasure-code-profile get {prof}".format(prof=PROFNAME, path=CEPH_BIN)

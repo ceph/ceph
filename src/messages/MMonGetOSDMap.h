@@ -31,7 +31,7 @@ public:
       inc_first(0),
       inc_last(0) { }
 private:
-  ~MMonGetOSDMap() {}
+  ~MMonGetOSDMap() override {}
 
 public:
   void request_full(epoch_t first, epoch_t last) {
@@ -57,8 +57,8 @@ public:
     return inc_last;
   }
 
-  const char *get_type_name() const { return "mon_get_osdmap"; }
-  void print(ostream& out) const {
+  const char *get_type_name() const override { return "mon_get_osdmap"; }
+  void print(ostream& out) const override {
     out << "mon_get_osdmap(";
     if (full_first && full_last)
       out << "full " << full_first << "-" << full_last;
@@ -67,14 +67,14 @@ public:
     out << ")";
   }
 
-  void encode_payload(uint64_t features) {
+  void encode_payload(uint64_t features) override {
     paxos_encode();
     ::encode(full_first, payload);
     ::encode(full_last, payload);
     ::encode(inc_first, payload);
     ::encode(inc_last, payload);
   }
-  void decode_payload() {
+  void decode_payload() override {
     bufferlist::iterator p = payload.begin();
     paxos_decode(p);
     ::decode(full_first, p);

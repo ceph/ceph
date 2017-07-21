@@ -29,26 +29,28 @@ public:
 protected:
   dirfrag_t      base;
   set<dirfrag_t> bounds;
+  mds_rank_t target;
   
 public:
-  EExport() : LogEvent(EVENT_EXPORT) { }
-  EExport(MDLog *mdlog, CDir *dir) : 
+  EExport() :
+    LogEvent(EVENT_EXPORT), target(MDS_RANK_NONE) { }
+  EExport(MDLog *mdlog, CDir *dir, mds_rank_t t) :
     LogEvent(EVENT_EXPORT), metablob(mdlog),
-    base(dir->dirfrag()) { }
+    base(dir->dirfrag()), target(t) { }
   
   set<dirfrag_t> &get_bounds() { return bounds; }
   
-  void print(ostream& out) const {
-    out << "EExport " << base << " " << metablob;
+  void print(ostream& out) const override {
+    out << "EExport " << base << " to mds." << target << " " << metablob;
   }
 
-  EMetaBlob *get_metablob() { return &metablob; }
+  EMetaBlob *get_metablob() override { return &metablob; }
 
-  void encode(bufferlist& bl, uint64_t features) const;
-  void decode(bufferlist::iterator &bl);
-  void dump(Formatter *f) const;
+  void encode(bufferlist& bl, uint64_t features) const override;
+  void decode(bufferlist::iterator &bl) override;
+  void dump(Formatter *f) const override;
   static void generate_test_instances(list<EExport*>& ls);
-  void replay(MDSRank *mds);
+  void replay(MDSRank *mds) override;
 
 };
 WRITE_CLASS_ENCODER_FEATURES(EExport)
