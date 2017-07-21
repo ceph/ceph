@@ -1741,7 +1741,7 @@ class Device(object):
         if num == 0:
             num = get_free_partition_index(dev=self.path)
         if size > 0:
-            new = '--new={num}:0:+{size}M'.format(num=num, size=size)
+            end = '{size}M'.format(size=size)
             if size > self.get_dev_size():
                 LOG.error('refusing to create %s on %s' % (name, self.path))
                 LOG.error('%s size (%sM) is bigger than device (%sM)'
@@ -1749,18 +1749,25 @@ class Device(object):
                 raise Error('%s device size (%sM) is not big enough for %s'
                             % (self.path, self.get_dev_size(), name))
         else:
-            new = '--largest-new={num}'.format(num=num)
+            end = '100%%'
 
         LOG.debug('Creating %s partition num %d size %d on %s',
                   name, num, size, self.path)
         command_check_call(
             [
+                'parted',
+                self.path,
+                'mkpart',
+                '{num}:ceph {name}'.format(num=num, name=name),
+                '0:{end}'.format(end=end),
+            ],
+            exit=True
+        )
+        command_check_call(
+            [
                 'sgdisk',
-                new,
-                '--change-name={num}:ceph {name}'.format(num=num, name=name),
                 '--partition-guid={num}:{uuid}'.format(num=num, uuid=uuid),
                 '--typecode={num}:{uuid}'.format(num=num, uuid=ptype),
-                '--mbrtogpt',
                 '--',
                 self.path,
             ],
