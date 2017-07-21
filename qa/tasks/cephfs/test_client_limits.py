@@ -62,7 +62,7 @@ class TestClientLimits(CephFSTestCase):
         # MDS should not be happy about that, as the client is failing to comply
         # with the SESSION_RECALL messages it is being sent
         mds_recall_state_timeout = float(self.fs.get_config("mds_recall_state_timeout"))
-        self.wait_for_health("MDS_HEALTH_CLIENT_RECALL",
+        self.wait_for_health("MDS_CLIENT_RECALL",
                 mds_recall_state_timeout + 10)
 
         # We can also test that the MDS health warning for oversized
