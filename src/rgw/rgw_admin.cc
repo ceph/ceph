@@ -2998,7 +2998,7 @@ int main(int argc, const char **argv)
           if (!conn) {
             cerr << "failed to find a zone or zonegroup for remote "
                 << remote << std::endl;
-            return -ENOENT;
+            return ENOENT;
           }
           remote_conn = &*conn;
         }
@@ -3784,7 +3784,7 @@ int main(int argc, const char **argv)
           if (!zonegroup.placement_targets.count(placement_id)) {
             cerr << "failed to find a zonegroup placement target named '"
                 << placement_id << "'" << std::endl;
-            return -ENOENT;
+            return ENOENT;
           }
           zonegroup.default_placement = placement_id;
         }
@@ -4220,7 +4220,7 @@ int main(int argc, const char **argv)
           if (p == zone.placement_pools.end()) {
             cerr << "ERROR: zone placement target '" << placement_id
                 << "' not found" << std::endl;
-            return -ENOENT;
+            return ENOENT;
           }
           auto& info = p->second;
           if (index_pool && !index_pool->empty()) {
@@ -4539,12 +4539,12 @@ int main(int argc, const char **argv)
     {
       if (role_name.empty()) {
         cerr << "ERROR: role name is empty" << std::endl;
-        return -EINVAL;
+        return EINVAL;
       }
 
       if (assume_role_doc.empty()) {
         cerr << "ERROR: assume role policy document is empty" << std::endl;
-        return -EINVAL;
+        return EINVAL;
       }
       /* The following two calls will be replaced by read_decode_json or something
          similar when the code for AWS Policies is in places */
@@ -4552,12 +4552,12 @@ int main(int argc, const char **argv)
       int ret = read_input(assume_role_doc, bl);
       if (ret < 0) {
         cerr << "ERROR: failed to read input: " << cpp_strerror(-ret) << std::endl;
-        return ret;
+        return -ret;
       }
       JSONParser p;
       if (!p.parse(bl.c_str(), bl.length())) {
         cout << "ERROR: failed to parse JSON: " << assume_role_doc << std::endl;
-        return -EINVAL;
+        return EINVAL;
       }
       string trust_policy = bl.to_str();
       RGWRole role(g_ceph_context, store, role_name, path, trust_policy, tenant);
@@ -4572,7 +4572,7 @@ int main(int argc, const char **argv)
     {
       if (role_name.empty()) {
         cerr << "ERROR: empty role name" << std::endl;
-        return -EINVAL;
+        return EINVAL;
       }
       RGWRole role(g_ceph_context, store, role_name, tenant);
       ret = role.delete_obj();
@@ -4586,7 +4586,7 @@ int main(int argc, const char **argv)
     {
       if (role_name.empty()) {
         cerr << "ERROR: empty role name" << std::endl;
-        return -EINVAL;
+        return EINVAL;
       }
       RGWRole role(g_ceph_context, store, role_name, tenant);
       ret = role.get();
@@ -4600,12 +4600,12 @@ int main(int argc, const char **argv)
     {
       if (role_name.empty()) {
         cerr << "ERROR: role name is empty" << std::endl;
-        return -EINVAL;
+        return EINVAL;
       }
 
       if (assume_role_doc.empty()) {
         cerr << "ERROR: assume role policy document is empty" << std::endl;
-        return -EINVAL;
+        return EINVAL;
       }
 
       /* The following two calls will be replaced by read_decode_json or something
@@ -4614,12 +4614,12 @@ int main(int argc, const char **argv)
       int ret = read_input(assume_role_doc, bl);
       if (ret < 0) {
         cerr << "ERROR: failed to read input: " << cpp_strerror(-ret) << std::endl;
-        return ret;
+        return -ret;
       }
       JSONParser p;
       if (!p.parse(bl.c_str(), bl.length())) {
         cout << "ERROR: failed to parse JSON: " << assume_role_doc << std::endl;
-        return -EINVAL;
+        return EINVAL;
       }
       string trust_policy = bl.to_str();
       RGWRole role(g_ceph_context, store, role_name, tenant);
@@ -4649,17 +4649,17 @@ int main(int argc, const char **argv)
     {
       if (role_name.empty()) {
         cerr << "role name is empty" << std::endl;
-        return -EINVAL;
+        return EINVAL;
       }
 
       if (policy_name.empty()) {
         cerr << "policy name is empty" << std::endl;
-        return -EINVAL;
+        return EINVAL;
       }
 
       if (perm_policy_doc.empty()) {
         cerr << "permission policy document is empty" << std::endl;
-        return -EINVAL;
+        return EINVAL;
       }
 
       /* The following two calls will be replaced by read_decode_json or something
@@ -4668,12 +4668,12 @@ int main(int argc, const char **argv)
       int ret = read_input(perm_policy_doc, bl);
       if (ret < 0) {
         cerr << "ERROR: failed to read input: " << cpp_strerror(-ret) << std::endl;
-        return ret;
+        return -ret;
       }
       JSONParser p;
       if (!p.parse(bl.c_str(), bl.length())) {
         cout << "ERROR: failed to parse JSON: " << std::endl;
-        return -EINVAL;
+        return EINVAL;
       }
       string perm_policy;
       perm_policy = bl.c_str();
@@ -4695,7 +4695,7 @@ int main(int argc, const char **argv)
     {
       if (role_name.empty()) {
         cerr << "ERROR: Role name is empty" << std::endl;
-        return -EINVAL;
+        return EINVAL;
       }
       RGWRole role(g_ceph_context, store, role_name, tenant);
       ret = role.get();
@@ -4710,12 +4710,12 @@ int main(int argc, const char **argv)
     {
       if (role_name.empty()) {
         cerr << "ERROR: role name is empty" << std::endl;
-        return -EINVAL;
+        return EINVAL;
       }
 
       if (policy_name.empty()) {
         cerr << "ERROR: policy name is empty" << std::endl;
-        return -EINVAL;
+        return EINVAL;
       }
       RGWRole role(g_ceph_context, store, role_name, tenant);
       int ret = role.get();
@@ -4734,12 +4734,12 @@ int main(int argc, const char **argv)
     {
       if (role_name.empty()) {
         cerr << "ERROR: role name is empty" << std::endl;
-        return -EINVAL;
+        return EINVAL;
       }
 
       if (policy_name.empty()) {
         cerr << "ERROR: policy name is empty" << std::endl;
-        return -EINVAL;
+        return EINVAL;
       }
       RGWRole role(g_ceph_context, store, role_name, tenant);
       ret = role.get();
@@ -5540,7 +5540,7 @@ next:
 					  bucket_info,
 					  attrs);
     if (ret < 0) {
-      return ret;
+      return -ret;
     }
 
     RGWBucketReshard br(store, bucket_info, attrs);
@@ -5570,7 +5570,7 @@ next:
 					  bucket_info,
 					  attrs);
     if (ret < 0) {
-      return ret;
+      return -ret;
     }
 
     int num_source_shards = (bucket_info.num_shards > 0 ? bucket_info.num_shards : 1);
@@ -5608,7 +5608,7 @@ next:
         ret = reshard.list(i, marker, max_entries, entries, &is_truncated);
         if (ret < 0) {
           cerr << "Error listing resharding buckets: " << cpp_strerror(-ret) << std::endl;
-          return ret;
+          return -ret;
         }
         for (auto iter=entries.begin(); iter != entries.end(); ++iter) {
           cls_rgw_reshard_entry& entry = *iter;
@@ -5681,7 +5681,7 @@ next:
     int ret = reshard.get(entry);
     if (ret < 0) {
       cerr << "Error in getting bucket " << bucket_name << ": " << cpp_strerror(-ret) << std::endl;
-      return ret;
+      return -ret;
     }
 
     /* TBD stop running resharding */
@@ -5690,7 +5690,7 @@ next:
     if (ret < 0) {
       cerr << "Error removing bucket " << bucket_name << " for resharding queue: " << cpp_strerror(-ret) <<
 	std::endl;
-      return ret;
+      return -ret;
     }
   }
 
