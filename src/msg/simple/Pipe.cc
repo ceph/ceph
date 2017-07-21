@@ -1090,8 +1090,8 @@ int Pipe::connect()
 	      << paddr << " not " << peer_addr << " - presumably this is the same node!" << dendl;
     } else {
       ldout(msgr->cct,10) << "connect claims to be "
-	      << paddr << " not " << peer_addr
-              << " (peer is possibly using public_bind_addr?) " << dendl;
+			  << paddr << " not " << peer_addr << dendl;
+      goto fail;
     }
   }
 
