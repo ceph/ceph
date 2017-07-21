@@ -8564,17 +8564,22 @@ int Client::_read(Fh *f, int64_t offset, uint64_t size, bufferlist *bl)
 
   if (in->inline_version == 0) {
     int r = _getattr(in, CEPH_STAT_CAP_INLINE_DATA, f->actor_perms, true);
-    if (r < 0)
+    if (r < 0) {
+      if (movepos)
+        unlock_fh_pos(f);
       return r;
+    }
     assert(in->inline_version > 0);
   }
 
 retry:
   int have;
   int r = get_caps(in, CEPH_CAP_FILE_RD, CEPH_CAP_FILE_CACHE, &have, -1);
-  if (r < 0)
+  if (r < 0) {
+    if (movepos)
+        unlock_fh_pos(f);
     return r;
-
+  }
   if (f->flags & O_DIRECT)
     have &= ~CEPH_CAP_FILE_CACHE;
 
@@ -8676,7 +8681,12 @@ done:
 
   if (have)
     put_cap_ref(in, CEPH_CAP_FILE_RD);
-  return r < 0 ? r : bl->length();
+  if (r < 0) {
+    if (movepos)
+        unlock_fh_pos(f);
+    return r;
+  } else
+    return bl->length();
 }
 
 Client::C_Readahead::C_Readahead(Client *c, Fh *f) :
