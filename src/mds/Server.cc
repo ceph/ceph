@@ -939,14 +939,9 @@ void Server::handle_client_reconnect(MClientReconnect *m)
     if (in && in->state_test(CInode::STATE_PURGING))
       continue;
     if (in) {
-      assert(in->snaprealm);
-      if (in->snaprealm->have_past_parents_open()) {
-	dout(15) << "open snaprealm (w/ past parents) on " << *in << dendl;
-	mdcache->finish_snaprealm_reconnect(from, in->snaprealm, snapid_t(p->seq));
-      } else {
-	dout(15) << "open snaprealm (w/o past parents) on " << *in << dendl;
-	mdcache->add_reconnected_snaprealm(from, inodeno_t(p->ino), snapid_t(p->seq));
-      }
+      assert(in->snaprealm || !in->is_auth());
+      dout(15) << "open snaprealm (w inode) on " << *in << dendl;
+      mdcache->add_reconnected_snaprealm(from, inodeno_t(p->ino), snapid_t(p->seq));
     } else {
       dout(15) << "open snaprealm (w/o inode) on " << inodeno_t(p->ino)
 	       << " seq " << p->seq << dendl;
