@@ -289,34 +289,7 @@ void InstanceReplayer<I>::start_image_replayer(
     return;
   }
 
-  FunctionContext *ctx = new FunctionContext(
-    [this, global_image_id] (int r) {
-      dout(20) << "image deleter result: r=" << r << ", "
-               << "global_image_id=" << global_image_id << dendl;
-
-      Mutex::Locker locker(m_lock);
-      m_async_op_tracker.finish_op();
-
-      if (r == -ESTALE || r == -ECANCELED) {
-        return;
-      }
-
-      auto it = m_image_replayers.find(global_image_id);
-      if (it == m_image_replayers.end()) {
-        return;
-      }
-
-      auto image_replayer = it->second;
-      if (r >= 0) {
-        image_replayer->start(nullptr, false);
-      } else {
-        start_image_replayer(image_replayer);
-      }
-    });
-
-  m_async_op_tracker.start_op();
-  m_image_deleter->wait_for_scheduled_deletion(
-    m_local_pool_id, image_replayer->get_global_image_id(), ctx, false);
+  image_replayer->start(nullptr, false);
 }
 
 template <typename I>

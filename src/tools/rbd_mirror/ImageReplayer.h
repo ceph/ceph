@@ -15,7 +15,6 @@
 #include "librbd/ImageCtx.h"
 #include "librbd/journal/Types.h"
 #include "librbd/journal/TypeTraits.h"
-#include "ImageDeleter.h"
 #include "ProgressContext.h"
 #include "types.h"
 #include "tools/rbd_mirror/image_replayer/Types.h"
@@ -48,6 +47,7 @@ namespace journal { template <typename> class Replay; }
 namespace rbd {
 namespace mirror {
 
+template <typename> struct ImageDeleter;
 template <typename> struct InstanceWatcher;
 template <typename> struct Threads;
 
@@ -127,6 +127,9 @@ protected:
    *    |                                                   ^
    *    v                                                   *
    * <starting>                                             *
+   *    |                                                   *
+   *    v                                                   *
+   * WAIT_FOR_DELETION                                      *
    *    |                                                   *
    *    v                                           (error) *
    * PREPARE_LOCAL_IMAGE  * * * * * * * * * * * * * * * * * *
@@ -369,6 +372,9 @@ private:
   void shut_down(int r);
   void handle_shut_down(int r);
   void handle_remote_journal_metadata_updated();
+
+  void wait_for_deletion();
+  void handle_wait_for_deletion(int r);
 
   void prepare_local_image();
   void handle_prepare_local_image(int r);

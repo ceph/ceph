@@ -42,10 +42,6 @@ struct Threads<librbd::MockTestImageCtx> {
 
 template <>
 struct ImageDeleter<librbd::MockTestImageCtx> {
-  MOCK_METHOD4(schedule_image_delete, void(RadosRef, int64_t,
-                                           const std::string&, bool));
-  MOCK_METHOD4(wait_for_scheduled_deletion,
-               void(int64_t, const std::string&, Context*, bool));
 };
 
 template<>
@@ -139,16 +135,6 @@ public:
     TestMockFixture::TearDown();
   }
 
-  void expect_wait_for_scheduled_deletion(MockImageDeleter& mock_image_deleter,
-                                          const std::string& global_image_id,
-                                          int r) {
-    EXPECT_CALL(mock_image_deleter,
-                wait_for_scheduled_deletion(_, global_image_id, _, false))
-      .WillOnce(WithArg<2>(Invoke([this, r](Context *ctx) {
-                             m_threads->work_queue->queue(ctx, r);
-                           })));
-  }
-
   MockThreads *m_mock_threads;
 };
 
@@ -168,8 +154,6 @@ TEST_F(TestMockInstanceReplayer, AcquireReleaseImage) {
     .WillRepeatedly(ReturnRef(global_image_id));
   EXPECT_CALL(mock_image_replayer, is_blacklisted())
     .WillRepeatedly(Return(false));
-
-  expect_wait_for_scheduled_deletion(mock_image_deleter, "global_image_id", 0);
 
   InSequence seq;
 
