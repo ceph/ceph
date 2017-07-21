@@ -698,6 +698,62 @@ PyObject* PyModules::get_counter_python(
   return f.get();
 }
 
+PyObject* PyModules::get_perf_schema_python(
+    const std::string &handle,
+    const std::string svc_type,
+    const std::string &svc_id)
+{
+  PyThreadState *tstate = PyEval_SaveThread();
+  Mutex::Locker l(lock);
+  PyEval_RestoreThread(tstate);
+
+  DaemonStateCollection states;
+
+  if (svc_type == "") {
+    states = daemon_state.get_all();
+  } else if (svc_id.empty()) {
+    states = daemon_state.get_by_service(svc_type);
+  } else {
+    auto key = DaemonKey(svc_type, svc_id);
+    // so that the below can be a loop in all cases
+    if (daemon_state.exists(key)) {
+      states[key] = daemon_state.get(key);
+    }
+  }
+
+  PyFormatter f;
+  f.open_object_section("perf_schema");
+
+  // FIXME: this is unsafe, I need to either be inside DaemonStateIndex's
+  // lock or put a lock on individual DaemonStates
+  if (!states.empty()) {
+    for (auto statepair : states) {
+      std::ostringstream daemon_name;
+      auto key = statepair.first;
+      auto state = statepair.second;
+      daemon_name << key.first << "." << key.second;
+      f.open_object_section(daemon_name.str().c_str());
+
+      for (auto typestr : state->perf_counters.declared_types) {
+	f.open_object_section(typestr.c_str());
+	auto type = state->perf_counters.types[typestr];
+	f.dump_string("description", type.description);
+	if (!type.nick.empty()) {
+	  f.dump_string("nick", type.nick);
+	}
+	f.dump_unsigned("type", type.type);
+	f.close_section();
+      }
+      f.close_section();
+    }
+  } else {
+    dout(4) << __func__ << ": No daemon state found for "
+              << svc_type << "." << svc_id << ")" << dendl;
+  }
+  f.close_section();
+  return f.get();
+}
+
 PyObject *PyModules::get_context()
 {
   PyThreadState *tstate = PyEval_SaveThread();

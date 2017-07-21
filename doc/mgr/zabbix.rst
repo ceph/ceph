@@ -10,14 +10,14 @@ The Zabbix plugin actively sends information to a Zabbix server like:
 - Storage utilization
 
 Requirements
-============
+------------
 
 The plugin requires that the *zabbix_sender* executable is present on *all*
 machines running ceph-mgr. It can be installed on most distributions using
 the package manager.
 
 Dependencies
-------------
+^^^^^^^^^^^^
 Installing zabbix_sender can be done under Ubuntu or CentOS using either apt
 or dnf.
 
@@ -35,7 +35,7 @@ On Fedora:
 
 
 Enabling
-========
+--------
 
 Add this to your ceph.conf on nodes where you run ceph-mgr:
 
@@ -50,7 +50,7 @@ Restart the ceph-mgr daemon after modifying the setting to load the module.
 
 
 Configuration
-=============
+-------------
 
 Two configuration keys are mandatory for the module to work:
 
@@ -71,8 +71,8 @@ Additional configuration keys which can be configured and their default values:
 - mgr/zabbix/zabbix_sender: /usr/bin/zabbix_sender
 - mgr/zabbix/interval: 60
 
-Configurations keys
--------------------
+Configuration keys
+^^^^^^^^^^^^^^^^^^^
 
 Configuration keys can be set on any machine with the proper cephx credentials,
 these are usually Monitors where the *client.admin* key is present.
@@ -89,7 +89,7 @@ For example:
     ceph config-key put mgr/zabbix/identifier ceph.eu-ams02.local
 
 Debugging
-=========
+---------
 
 Should you want to debug the Zabbix module increase the logging level for
 ceph-mgr and check the logs.
