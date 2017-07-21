@@ -10,6 +10,7 @@ import logging
 import time
 from cStringIO import StringIO
 
+from teuthology.orchestra import run
 from teuthology import misc as teuthology
 from util.rados import rados
 import os
