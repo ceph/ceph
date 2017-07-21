@@ -29,5 +29,6 @@ sensible.
     Dashboard plugin <dashboard>
     RESTful plugin <restful>
     Zabbix plugin <zabbix>
+    Prometheus plugin <prometheus>
     Writing plugins <plugins>
 
