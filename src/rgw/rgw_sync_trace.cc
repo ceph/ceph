@@ -111,7 +111,8 @@ int RGWSyncTraceManager::hook_to_admin_command()
 
   admin_commands = { { "sync trace show", "sync trace show name=search,type=CephString,req=false", "sync trace show [filter_str]: show current multisite tracing information" },
                      { "sync trace history", "sync trace history name=search,type=CephString,req=false", "sync trace history [filter_str]: show history of multisite tracing information" },
-                     { "sync trace active", "sync trace active name=search,type=CephString,req=false", "show active multisite sync entities information" } };
+                     { "sync trace active", "sync trace active name=search,type=CephString,req=false", "show active multisite sync entities information" },
+                     { "sync trace active_short", "sync trace active_short name=search,type=CephString,req=false", "show active multisite sync entities entries" } };
   for (auto cmd : admin_commands) {
     int r = admin_socket->register_command(cmd[0], cmd[1], this,
                                            cmd[2]);
@@ -141,7 +142,8 @@ bool RGWSyncTraceManager::call(std::string command, cmdmap_t& cmdmap, std::strin
 	    bufferlist& out) {
 
   bool show_history = (command == "sync trace history");
-  bool show_active = (command == "sync trace active");
+  bool show_short = (command == "sync trace active_short");
+  bool show_active = (command == "sync trace active") || show_short;
 
   string search;
 
@@ -166,7 +168,14 @@ bool RGWSyncTraceManager::call(std::string command, cmdmap_t& cmdmap, std::strin
     if (show_active && !entry->test_flags(RGW_SNS_FLAG_ACTIVE)) {
       continue;
     }
-    dump_node(entry.get(), show_history, f);
+    if (show_short) {
+      const string& name = entry->get_resource_name();
+      if (!name.empty()) {
+        ::encode_json("entry", name, &f);
+      }
+    } else {
+      dump_node(entry.get(), show_history, f);
+    }
     f.flush(ss);
   }
   f.close_section();

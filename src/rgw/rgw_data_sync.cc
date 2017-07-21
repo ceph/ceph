@@ -907,6 +907,19 @@ std::ostream& operator<<(std::ostream& out, const bucket_str& rhs) {
   return out;
 }
 
+struct bucket_str_noinstance {
+  const rgw_bucket& b;
+  bucket_str_noinstance(const rgw_bucket& b) : b(b) {}
+};
+std::ostream& operator<<(std::ostream& out, const bucket_str_noinstance& rhs) {
+  auto& b = rhs.b;
+  if (!b.tenant.empty()) {
+    out << b.tenant << '/';
+  }
+  out << b.name;
+  return out;
+}
+
 struct bucket_shard_str {
   const rgw_bucket_shard& bs;
   bucket_shard_str(const rgw_bucket_shard& bs) : bs(bs) {}
@@ -1175,14 +1188,18 @@ public:
       case rgw_data_sync_marker::FullSync:
         r = full_sync();
         if (r < 0) {
-          tn->log(10, SSTR("ERROR: r=" << r));
+          if (r != -EBUSY) {
+            tn->log(10, SSTR("full sync failed (r=" << r << ")"));
+          }
           return set_cr_error(r);
         }
         return 0;
       case rgw_data_sync_marker::IncrementalSync:
         r  = incremental_sync();
         if (r < 0) {
-          tn->log(10, SSTR("ERROR: r=" << r));
+          if (r != -EBUSY) {
+            tn->log(10, SSTR("incremental sync failed (r=" << r << ")"));
+          }
           return set_cr_error(r);
         }
         return 0;
@@ -2378,6 +2395,7 @@ public:
             tn->log(10, SSTR("creating delete marker: obj: " << sync_env->source_zone << "/" << bucket_info->bucket << "/" << key << "[" << versioned_epoch << "]"));
             call(data_sync_module->create_delete_marker(sync_env, *bucket_info, key, timestamp, owner, versioned, versioned_epoch, &zones_trace));
           }
+          tn->set_resource_name(SSTR(bucket_str_noinstance(bucket_info->bucket) << "/" << key));
         }
       } while (marker_tracker->need_retry(key));
       {

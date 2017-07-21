@@ -47,12 +47,22 @@ protected:
 
   std::string prefix;
 
+  std::string resource_name;
+
   uint64_t handle;
 
   boost::circular_buffer<string> history;
 public:
   RGWSyncTraceNode(CephContext *_cct, RGWSyncTraceManager *_manager, const RGWSyncTraceNodeRef& _parent,
            const std::string& _type, const std::string& _id);
+
+  void set_resource_name(const string& s) {
+    resource_name = s;
+  }
+
+  const string& get_resource_name() {
+    return resource_name;
+  }
 
   void set_flag(uint16_t s) {
     state |= s;
@@ -104,6 +114,14 @@ public:
 
   RGWSyncTraceNodeRef& operator->() {
     return tn;
+  }
+
+  void set_resource_name(const string& s) {
+    tn->set_resource_name(s);
+  }
+
+  const string& get_resource_name() {
+    return tn->get_resource_name();
   }
 
   void set_flag(uint16_t flag) {
