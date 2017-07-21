@@ -3324,32 +3324,6 @@ int RGW_Auth_S3::authorize(RGWRados* const store,
     return -EPERM;
   }
 
-  if (s->op == OP_OPTIONS) {
-    init_anon_user(s);
-    return 0;
-  }
-
-  AwsVersion version;
-  AwsRoute route;
-  std::tie(version, route) = discover_aws_flavour(s->info);
-
-  if (route == AwsRoute::QUERY_STRING && version == AwsVersion::UNKOWN) {
-    /* FIXME(rzarzynski): handle anon user. */
-    init_anon_user(const_cast<req_state*>(s));
-    return 0;
-  }
-
-  return authorize_v2(store, auth_registry, s);
-}
-
-
-/*
- * handle v2 signatures
- */
-int RGW_Auth_S3::authorize_v2(RGWRados* const store,
-                              const rgw::auth::StrategyRegistry& auth_registry,
-                              struct req_state* const s)
-{
   const auto ret = rgw::auth::Strategy::apply(auth_registry.get_s3_main(), s);
   if (ret == 0) {
     /* Populate the owner info. */
@@ -4184,4 +4158,18 @@ rgw::auth::s3::LocalEngine::authenticate(
 
   auto apl = apl_factory->create_apl_local(cct, s, user_info, k.subuser);
   return result_t::grant(std::move(apl), completer_factory(k.key));
+}
+
+bool rgw::auth::s3::S3AnonymousEngine::is_applicable(
+  const req_state* s
+) const noexcept {
+  if (s->op == OP_OPTIONS) {
+    return true;
+  }
+
+  AwsVersion version;
+  AwsRoute route;
+  std::tie(version, route) = discover_aws_flavour(s->info);
+
+  return route == AwsRoute::QUERY_STRING && version == AwsVersion::UNKOWN;
 }
