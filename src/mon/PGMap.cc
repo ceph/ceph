@@ -3837,7 +3837,10 @@ int process_pg_map_command(
         break;
       } else {
         int filter = pg_string_state(state_str);
-        assert(filter != -1);
+        if (filter < 0) {
+          *ss << "'" << state_str << "' is not a valid pg state";
+          return -EINVAL;
+        }
         state |= filter;
       }
 
