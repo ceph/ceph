@@ -526,10 +526,10 @@ static void generic_usage(bool is_server)
 void generic_server_usage()
 {
   generic_usage(true);
-  exit(1);
+  exit(0);
 }
 void generic_client_usage()
 {
   generic_usage(false);
-  exit(1);
+  exit(0);
 }
