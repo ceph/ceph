@@ -5173,10 +5173,10 @@ void Locker::handle_file_lock(ScatterLock *lock, MLock *m)
 	mds->mdlog->flush();
       break;
     } 
-    
+
     // ok
-    lock->decode_locked_state(m->get_data());
     lock->set_state(LOCK_MIX);
+    lock->decode_locked_state(m->get_data());
 
     if (caps)
       issue_caps(in);
