@@ -20,6 +20,7 @@
 #include "PGStatService.h"
 #include "include/stringify.h"
 #include "mgr/MgrContext.h"
+#include "mgr/mgr_commands.h"
 #include "OSDMonitor.h"
 
 #include "MgrMonitor.h"
@@ -35,13 +36,20 @@ static ostream& _prefix(std::ostream *_dout, Monitor *mon,
 }
 
 
+// Prefix for mon store of active mgr's command descriptions
+const static std::string command_descs_prefix = "mgr_command_descs";
+
+
 void MgrMonitor::create_initial()
 {
   boost::tokenizer<> tok(g_conf->mgr_initial_modules);
   for (auto& m : tok) {
     pending_map.modules.insert(m);
   }
-  dout(10) << __func__ << " initial modules " << pending_map.modules << dendl;
+  pending_command_descs = mgr_commands;
+  dout(10) << __func__ << " initial modules " << pending_map.modules
+	   << ", " << pending_command_descs.size() << " commands"
+	   << dendl;
 }
 
 void MgrMonitor::update_from_paxos(bool *need_bootstrap)
@@ -53,6 +61,9 @@ void MgrMonitor::update_from_paxos(bool *need_bootstrap)
     bufferlist bl;
     int err = get_version(version, bl);
     assert(err == 0);
+
+    bool old_available = map.get_available();
+    uint64_t old_gid = map.get_active_gid();
 
     bufferlist::iterator p = bl.begin();
     map.decode(p);
@@ -71,6 +82,21 @@ void MgrMonitor::update_from_paxos(bool *need_bootstrap)
     }
 
     check_subs();
+
+    if (version == 1
+	|| (map.get_available()
+	    && (!old_available || old_gid != map.get_active_gid()))) {
+      dout(4) << "mkfs or daemon transitioned to available, loading commands"
+	      << dendl;
+      bufferlist loaded_commands;
+      int r = mon->store->get(command_descs_prefix, "", loaded_commands);
+      if (r < 0) {
+        derr << "Failed to load mgr commands: " << cpp_strerror(r) << dendl;
+      } else {
+        auto p = loaded_commands.begin();
+        ::decode(command_descs, p);
+      }
+    }
   }
 
   // feed our pet MgrClient
@@ -125,6 +151,18 @@ void MgrMonitor::encode_pending(MonitorDBStore::TransactionRef t)
     put_value(t, "ever_had_active_mgr", 1);
   }
   encode_health(next, t);
+
+  if (pending_command_descs.size()) {
+    dout(4) << __func__ << " encoding " << pending_command_descs.size()
+            << " command_descs" << dendl;
+    for (auto& p : pending_command_descs) {
+      p.set_flag(MonCommand::FLAG_MGR);
+    }
+    bufferlist bl;
+    ::encode(pending_command_descs, bl);
+    t->put(command_descs_prefix, "", bl);
+    pending_command_descs.clear();
+  }
 }
 
 bool MgrMonitor::check_caps(MonOpRequestRef op, const uuid_d& fsid)
@@ -255,6 +293,21 @@ bool MgrMonitor::prepare_beacon(MonOpRequestRef op)
       dout(4) << "available " << m->get_gid() << dendl;
       mon->clog->info() << "Manager daemon " << pending_map.active_name
                         << " is now available";
+
+      // This beacon should include command descriptions
+      pending_command_descs = m->get_command_descs();
+      if (pending_command_descs.empty()) {
+        // This should not happen, but it also isn't fatal: we just
+        // won't successfully update our list of commands.
+        dout(4) << "First available beacon from " << pending_map.active_name
+                << "(" << m->get_gid() << ") does not include command descs"
+                << dendl;
+      } else {
+        dout(4) << "First available beacon from " << pending_map.active_name
+                << "(" << m->get_gid() << ") includes "
+                << pending_command_descs.size() << " command descs" << dendl;
+      }
+
       pending_map.available = m->get_available();
       updated = true;
     }

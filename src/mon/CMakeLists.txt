@@ -20,7 +20,8 @@ set(lib_mon_srcs
   DataHealthService.cc
   PGMonitor.cc
   PGMap.cc
-  ConfigKeyService.cc)
+  ConfigKeyService.cc
+  ../mgr/mgr_commands.cc)
 add_library(mon STATIC
   ${lib_mon_srcs}
   $<TARGET_OBJECTS:kv_objs>

@@ -197,22 +197,6 @@ inline void encode(const char *s, bufferlist& bl)
 }
 
 
-// array
-template<class A>
-inline void encode_array_nohead(const A a[], int n, bufferlist &bl)
-{
-  for (int i=0; i<n; i++)
-    encode(a[i], bl);
-}
-template<class A>
-inline void decode_array_nohead(A a[], int n, bufferlist::iterator &p)
-{
-  for (int i=0; i<n; i++)
-    decode(a[i], p);
-}
-
-
-
 // -----------------------------
 // buffers
 
