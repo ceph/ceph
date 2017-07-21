@@ -10731,6 +10731,18 @@ void PrimaryLogPG::on_removal(ObjectStore::Transaction *t)
     on_shutdown();
 }
 
+void PrimaryLogPG::clear_async_reads()
+{
+  dout(10) << __func__ << dendl;
+  for(auto& i : in_progress_async_reads) {
+    dout(10) << "clear ctx: "
+             << "OpRequestRef " << i.first
+             << " OpContext " << i.second
+             << dendl;
+    close_op_ctx(i.second);
+  }
+}
+
 void PrimaryLogPG::on_shutdown()
 {
   dout(10) << "on_shutdown" << dendl;
@@ -10765,6 +10777,8 @@ void PrimaryLogPG::on_shutdown()
 
   context_registry_on_change();
   object_contexts.clear();
+
+  clear_async_reads();
 
   osd->remote_reserver.cancel_reservation(info.pgid);
   osd->local_reserver.cancel_reservation(info.pgid);
