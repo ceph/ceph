@@ -2962,65 +2962,7 @@ public:
   }
 };
 
-class RGWRadosThread {
-  class Worker : public Thread {
-    CephContext *cct;
-    RGWRadosThread *processor;
-    Mutex lock;
-    Cond cond;
-
-    void wait() {
-      Mutex::Locker l(lock);
-      cond.Wait(lock);
-    };
-
-    void wait_interval(const utime_t& wait_time) {
-      Mutex::Locker l(lock);
-      cond.WaitInterval(lock, wait_time);
-    }
-
-  public:
-    Worker(CephContext *_cct, RGWRadosThread *_p) : cct(_cct), processor(_p), lock("RGWRadosThread::Worker") {}
-    void *entry() override;
-    void signal() {
-      Mutex::Locker l(lock);
-      cond.Signal();
-    }
-  };
-
-  Worker *worker;
-
-protected:
-  CephContext *cct;
-  RGWRados *store;
-
-  std::atomic<bool> down_flag = { false };
-
-  string thread_name;
-
-  virtual uint64_t interval_msec() = 0;
-  virtual void stop_process() {}
-public:
-  RGWRadosThread(RGWRados *_store, const string& thread_name = "radosgw") 
-    : worker(NULL), cct(_store->ctx()), store(_store), thread_name(thread_name) {}
-  virtual ~RGWRadosThread() {
-    stop();
-  }
-
-  virtual int init() { return 0; }
-  virtual int process() = 0;
-
-  bool going_down() { return down_flag; }
-
-  void start();
-  void stop();
-
-  void signal() {
-    if (worker) {
-      worker->signal();
-    }
-  }
-};
+/* class RGWRadosThread */
 
 void RGWRadosThread::start()
 {
@@ -3818,6 +3760,17 @@ int RGWRados::register_to_service_map(const string& daemon_type, const map<strin
   return 0;
 }
 
+int RGWRados::update_service_map(const std::map<std::string, std::string>& status)
+{
+  int ret = rados[0].service_daemon_update_status(status);
+  if (ret < 0) {
+    ldout(cct, 0) << "ERROR: service_daemon_update_status() returned ret=" << ret << ": " << cpp_strerror(-ret) << dendl;
+    return ret;
+  }
+
+  return 0;
+}
+
 /**
  * Add new connection to connections map
  * @param zonegroup_conn_map map which new connection will be added to
@@ -4527,6 +4480,7 @@ int RGWRados::init_complete()
 
   /* init it anyway, might run sync through radosgw-admin explicitly */
   sync_tracer = new RGWSyncTraceManager(cct, cct->_conf->rgw_sync_trace_history_size);
+  sync_tracer->init(this);
   ret = sync_tracer->hook_to_admin_command();
   if (ret < 0) {
     return ret;

@@ -7,20 +7,20 @@
 #include "common/ceph_json.h"
 
 #include "rgw_sync_trace.h"
+#include "rgw_rados.h"
 
 using namespace std;
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw_sync
 
-#warning history size configurable
 RGWSyncTraceNode::RGWSyncTraceNode(CephContext *_cct, RGWSyncTraceManager *_manager,
                                    const RGWSyncTraceNodeRef& _parent,
                                    const string& _type, const string& _id) : cct(_cct),
                                                                              manager(_manager),
                                                                              parent(_parent),
                                                                              type(_type),
-                                                                             id(_id), history(32)
+                                                                             id(_id), history(cct->_conf->rgw_sync_trace_per_node_log_size)
 {
   if (parent.get()) {
     prefix = parent->get_prefix();
@@ -53,6 +53,31 @@ void RGWSyncTraceNode::finish()
   manager->finish_node(this);
 }
 
+
+class RGWSyncTraceServiceMapThread : public RGWRadosThread {
+  RGWRados *store;
+  RGWSyncTraceManager *manager;
+
+  uint64_t interval_msec() override {
+    return cct->_conf->rgw_sync_trace_servicemap_update_interval * 1000;
+  }
+public:
+  RGWSyncTraceServiceMapThread(RGWRados *_store, RGWSyncTraceManager *_manager)
+    : RGWRadosThread(_store, "sync-trace"), store(_store), manager(_manager) {}
+
+  int process() override;
+};
+
+int RGWSyncTraceServiceMapThread::process()
+{
+  map<string, string> status;
+  status["current_sync"] = manager->get_active_names();
+  int ret = store->update_service_map(status);
+  if (ret < 0) {
+    ldout(store->ctx(), 0) << "ERROR: update_service_map() returned ret=" << ret << dendl;
+  }
+  return 0;
+}
 
 RGWSTNCRef RGWSyncTraceManager::add_node(RGWSyncTraceNode *node)
 {
@@ -97,12 +122,21 @@ bool RGWSyncTraceNode::match(const string& search_term, bool search_history)
   return false;
 }
 
+void RGWSyncTraceManager::init(RGWRados *store)
+{
+  service_map_thread = new RGWSyncTraceServiceMapThread(store, this);
+  service_map_thread->start();
+}
+
 RGWSyncTraceManager::~RGWSyncTraceManager()
 {
   AdminSocket *admin_socket = cct->get_admin_socket();
   for (auto cmd : admin_commands) {
     admin_socket->unregister_command(cmd[0]);
   }
+
+  service_map_thread->stop();
+  delete service_map_thread;
 }
 
 int RGWSyncTraceManager::hook_to_admin_command()
@@ -136,6 +170,30 @@ static void dump_node(RGWSyncTraceNode *entry, bool show_history, JSONFormatter&
     f.close_section();
   }
   f.close_section();
+}
+
+string RGWSyncTraceManager::get_active_names()
+{
+  stringstream ss;
+  JSONFormatter f;
+
+  f.open_array_section("result");
+  for (auto n : nodes) {
+    auto& entry = n.second;
+
+    if (!entry->test_flags(RGW_SNS_FLAG_ACTIVE)) {
+      continue;
+    }
+    const string& name = entry->get_resource_name();
+    if (!name.empty()) {
+      ::encode_json("entry", name, &f);
+    }
+    f.flush(ss);
+  }
+  f.close_section();
+  f.flush(ss);
+
+  return ss.str();
 }
 
 bool RGWSyncTraceManager::call(std::string command, cmdmap_t& cmdmap, std::string format,

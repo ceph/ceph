@@ -21,9 +21,11 @@
 #define RGW_SNS_FLAG_ACTIVE   1
 #define RGW_SNS_FLAG_ERROR    2
 
+class RGWRados;
 class RGWSyncTraceManager;
 class RGWSyncTraceNode;
 class RGWSyncTraceNodeContainer;
+class RGWSyncTraceServiceMapThread;
 
 using RGWSyncTraceNodeRef = std::shared_ptr<RGWSyncTraceNode>;
 using RGWSTNCRef = std::shared_ptr<RGWSyncTraceNodeContainer>;
@@ -146,6 +148,7 @@ class RGWSyncTraceManager : public AdminSocketHook {
   friend class RGWSyncTraceNode;
 
   CephContext *cct;
+  RGWSyncTraceServiceMapThread *service_map_thread{nullptr};
 
   std::map<uint64_t, RGWSyncTraceNodeRef> nodes;
   boost::circular_buffer<RGWSyncTraceNodeRef> complete_nodes;
@@ -161,9 +164,10 @@ protected:
   }
 
 public:
-#warning complete_nodes size configurable
-  RGWSyncTraceManager(CephContext *_cct, int max_lru) : cct(_cct), complete_nodes(512) {}
+  RGWSyncTraceManager(CephContext *_cct, int max_lru) : cct(_cct), complete_nodes(max_lru) {}
   ~RGWSyncTraceManager();
+
+  void init(RGWRados *store);
 
   const RGWSyncTraceNodeRef root_node;
 
@@ -172,6 +176,7 @@ public:
 
   int hook_to_admin_command();
   bool call(std::string command, cmdmap_t& cmdmap, std::string format, bufferlist& out);
+  string get_active_names();
 };
 
 
