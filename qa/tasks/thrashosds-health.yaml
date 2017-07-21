@@ -1,6 +1,7 @@
 overrides:
   ceph:
     log-whitelist:
+      - mon_osd_down_out_interval set to 0
       - overall HEALTH_
       - (OSDMAP_FLAGS)
       - (OSD_
