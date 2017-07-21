@@ -62,6 +62,9 @@ int MemStore::_save()
 {
   dout(10) << __func__ << dendl;
   dump_all();
+  if (!cct->_conf->memstore_persistent_collections)
+    return 0;
+
   set<coll_t> collections;
   for (ceph::unordered_map<coll_t,CollectionRef>::iterator p = coll_map.begin();
        p != coll_map.end();
@@ -163,6 +166,17 @@ int MemStore::_load()
     c->decode(p);
     coll_map[*q] = c;
     used_bytes += c->used_bytes();
+    if (!cct->_conf->memstore_persistent_collections)
+      ::unlink(fn.c_str());
+  }
+
+  if (!cct->_conf->memstore_persistent_collections) {
+    collections.clear();
+    bl.clear();
+    ::encode(collections, bl); 
+    r = bl.write_file(fn.c_str());
+    if (r < 0) 
+      return r;
   }
 
   dump_all();
@@ -1387,7 +1401,14 @@ int MemStore::_destroy_collection(const coll_t& cid)
     cp->second->exists = false;
   }
   used_bytes -= cp->second->used_bytes();
+
   coll_map.erase(cp);
+  // remove data file if it is existed
+  string fn = path + "/" + stringify(cp->first);
+  int r = ::unlink(fn.c_str());
+  if (r < 0)
+    return -errno;
+
   return 0;
 }
 

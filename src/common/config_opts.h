@@ -1052,6 +1052,7 @@ OPTION(osd_discard_disconnected_ops, OPT_BOOL, true)
 OPTION(memstore_device_bytes, OPT_U64, 1024*1024*1024)
 OPTION(memstore_page_set, OPT_BOOL, true)
 OPTION(memstore_page_size, OPT_U64, 64 << 10)
+OPTION(memstore_persistent_collections, OPT_BOOL, true)
 
 OPTION(bdev_debug_inflight_ios, OPT_BOOL, false)
 OPTION(bdev_inject_crash, OPT_INT, 0)  // if N>0, then ~ 1/N IOs will complete before we crash on flush.
