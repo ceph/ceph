@@ -389,15 +389,15 @@ bool ARN::match(const ARN& candidate) const {
     return false;
   }
 
-  if (!::match(region, candidate.region, MATCH_POLICY_ARN)) {
+  if (!match_policy(region, candidate.region, MATCH_POLICY_ARN)) {
     return false;
   }
 
-  if (!::match(account, candidate.account, MATCH_POLICY_ARN)) {
+  if (!match_policy(account, candidate.account, MATCH_POLICY_ARN)) {
     return false;
   }
 
-  if (!::match(resource, candidate.resource, MATCH_POLICY_ARN)) {
+  if (!match_policy(resource, candidate.resource, MATCH_POLICY_ARN)) {
     return false;
   }
 
@@ -802,7 +802,7 @@ bool ParseState::do_string(CephContext* cct, const char* s, size_t l) {
   } else if ((w->id == TokenID::Action) ||
 	     (w->id == TokenID::NotAction)) {
     for (auto& p : actpairs) {
-      if (match({s, l}, p.name, MATCH_POLICY_ACTION)) {
+      if (match_policy({s, l}, p.name, MATCH_POLICY_ACTION)) {
 	(w->id == TokenID::Action ? t->action : t->notaction) |= p.bit;
       }
     }
