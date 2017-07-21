@@ -170,7 +170,7 @@ void MgrStandby::send_beacon()
                                  addr,
                                  available,
 				 modules,
-				 metadata);
+				 std::move(metadata));
 
   if (available && !available_in_map) {
     // We are informing the mon that we are done initializing: inform

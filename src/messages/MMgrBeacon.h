@@ -48,10 +48,10 @@ public:
   MMgrBeacon(const uuid_d& fsid_, uint64_t gid_, const std::string &name_,
              entity_addr_t server_addr_, bool available_,
 	     const std::set<std::string>& module_list,
-	     const map<string,string>& metadata)
+	     map<string,string>&& metadata)
     : PaxosServiceMessage(MSG_MGR_BEACON, 0, HEAD_VERSION, COMPAT_VERSION),
       gid(gid_), server_addr(server_addr_), available(available_), name(name_),
-      fsid(fsid_), available_modules(module_list), metadata(metadata)
+      fsid(fsid_), available_modules(module_list), metadata(std::move(metadata))
   {
   }
 
