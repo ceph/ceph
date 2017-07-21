@@ -3518,9 +3518,8 @@ ReplicatedPG::OpContextUPtr ReplicatedPG::trim_object(const hobject_t &coid)
       ctx->log.back().mod_desc.update_snaps(snaps);
       if (ctx->log.back().mod_desc.rmobject(ctx->at_version.version)) {
 	t->stash(coid, ctx->at_version.version);
-      } else {
-	t->remove(coid);
       }
+      t->remove(coid);
     } else {
       t->remove(coid);
       ctx->log.back().mod_desc.mark_unrollbackable();
@@ -3585,9 +3584,8 @@ ReplicatedPG::OpContextUPtr ReplicatedPG::trim_object(const hobject_t &coid)
     if (pool.info.require_rollback()) {
       if (ctx->log.back().mod_desc.rmobject(ctx->at_version.version)) {
 	t->stash(snapoid, ctx->at_version.version);
-      } else {
-	t->remove(snapoid);
       }
+      t->remove(snapoid);
     } else {
       t->remove(snapoid);
       ctx->log.back().mod_desc.mark_unrollbackable();
@@ -6044,9 +6042,9 @@ inline int ReplicatedPG::_delete_oid(OpContext *ctx, bool no_whiteout)
   if (pool.info.require_rollback()) {
     if (ctx->mod_desc.rmobject(ctx->at_version.version)) {
       t->stash(soid, ctx->at_version.version);
-    } else {
-      t->remove(soid);
     }
+    t->remove(soid);
+
     map<string, bufferlist> new_attrs;
     replace_cached_attrs(ctx, ctx->obc, new_attrs);
   } else {
@@ -6196,9 +6194,8 @@ int ReplicatedPG::_rollback_to(OpContext *ctx, ceph_osd_op& op)
 	if (obs.exists) {
 	  if (ctx->mod_desc.rmobject(ctx->at_version.version)) {
 	    t->stash(soid, ctx->at_version.version);
-	  } else {
-	    t->remove(soid);
 	  }
+	  t->remove(soid);
 	}
 	replace_cached_attrs(ctx, ctx->obc, rollback_to->attr_cache);
       } else {
@@ -6667,9 +6664,8 @@ void ReplicatedPG::finish_ctx(OpContext *ctx, int log_op_type, bool maintain_ssc
 	  if (pool.info.require_rollback()) {
 	    if (ctx->log.back().mod_desc.rmobject(ctx->at_version.version)) {
 	      ctx->op_t->stash(snapoid, ctx->at_version.version);
-	    } else {
-	      ctx->op_t->remove(snapoid);
 	    }
+	    ctx->op_t->remove(snapoid);
 	  } else {
 	    ctx->op_t->remove(snapoid);
 	    ctx->log.back().mod_desc.mark_unrollbackable();
@@ -7512,9 +7508,8 @@ void ReplicatedPG::finish_copyfrom(OpContext *ctx)
     if (obs.exists) {
       if (ctx->mod_desc.rmobject(ctx->at_version.version)) {
 	ctx->op_t->stash(obs.oi.soid, ctx->at_version.version);
-      } else {
-	ctx->op_t->remove(obs.oi.soid);
       }
+      ctx->op_t->remove(obs.oi.soid);
     }
     ctx->mod_desc.create();
     replace_cached_attrs(ctx, ctx->obc, cb->results->attrs);
@@ -11913,9 +11908,8 @@ void ReplicatedPG::hit_set_trim(OpContextUPtr &ctx, unsigned max)
       if (ctx->log.back().mod_desc.rmobject(
 	  ctx->at_version.version)) {
 	ctx->op_t->stash(oid, ctx->at_version.version);
-      } else {
-	ctx->op_t->remove(oid);
       }
+      ctx->op_t->remove(oid);
     } else {
       ctx->op_t->remove(oid);
       ctx->log.back().mod_desc.mark_unrollbackable();
