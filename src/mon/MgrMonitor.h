@@ -17,6 +17,7 @@
 #include "include/Context.h"
 #include "MgrMap.h"
 #include "PaxosService.h"
+#include "MonCommand.h"
 
 class MgrMonitor: public PaxosService
 {
@@ -44,6 +45,10 @@ class MgrMonitor: public PaxosService
   bool check_caps(MonOpRequestRef op, const uuid_d& fsid);
 
   health_status_t should_warn_about_mgr_down();
+
+  // Command descriptions we've learned from the active mgr
+  std::vector<MonCommand> command_descs;
+  std::vector<MonCommand> pending_command_descs;
 
 public:
   MgrMonitor(Monitor *mn, Paxos *p, const string& service_name)
@@ -87,6 +92,10 @@ public:
   void tick() override;
 
   void print_summary(Formatter *f, std::ostream *ss) const;
+
+  const std::vector<MonCommand> &get_command_descs() const {
+    return command_descs;
+  }
 
   friend class C_Updated;
 };

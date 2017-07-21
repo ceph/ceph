@@ -608,12 +608,12 @@ void PyModules::set_config(const std::string &handle,
   }
 }
 
-std::vector<ModuleCommand> PyModules::get_commands()
+std::vector<ModuleCommand> PyModules::get_py_commands() const
 {
   Mutex::Locker l(lock);
 
   std::vector<ModuleCommand> result;
-  for (auto& i : modules) {
+  for (const auto& i : modules) {
     auto module = i.second.get();
     auto mod_commands = module->get_commands();
     for (auto j : mod_commands) {
@@ -621,6 +621,17 @@ std::vector<ModuleCommand> PyModules::get_commands()
     }
   }
 
+  return result;
+}
+
+std::vector<MonCommand> PyModules::get_commands() const
+{
+  std::vector<ModuleCommand> commands = get_py_commands();
+  std::vector<MonCommand> result;
+  for (auto &pyc: commands) {
+    result.push_back({pyc.cmdstring, pyc.helpstring, "mgr",
+                        pyc.perm, "cli", MonCommand::FLAG_MGR});
+  }
   return result;
 }
 

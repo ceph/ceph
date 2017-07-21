@@ -35,7 +35,7 @@ class MMgrReport;
 class MMgrOpen;
 class MMonMgrReport;
 class MCommand;
-struct MgrCommand;
+struct MonCommand;
 
 
 /**
@@ -74,13 +74,13 @@ protected:
 
   static void _generate_command_map(map<string,cmd_vartype>& cmdmap,
                                     map<string,string> &param_str_map);
-  static const MgrCommand *_get_mgrcommand(const string &cmd_prefix,
-                                           MgrCommand *cmds, int cmds_size);
+  static const MonCommand *_get_mgrcommand(const string &cmd_prefix,
+                                           const std::vector<MonCommand> &commands);
   bool _allowed_command(
     MgrSession *s, const string &module, const string &prefix,
     const map<string,cmd_vartype>& cmdmap,
     const map<string,string>& param_str_map,
-    const MgrCommand *this_cmd);
+    const MonCommand *this_cmd);
 
 private:
   friend class ReplyOnFinish;

@@ -17,6 +17,9 @@
 #include "auth/RotatingKeyRing.h"
 #include "json_spirit/json_spirit_writer.h"
 
+#include "mgr/mgr_commands.h"
+#include "mon/MonCommand.h"
+
 #include "messages/MMgrOpen.h"
 #include "messages/MMgrConfigure.h"
 #include "messages/MMonMgrReport.h"
@@ -30,6 +33,8 @@
 #define dout_subsys ceph_subsys_mgr
 #undef dout_prefix
 #define dout_prefix *_dout << "mgr.server " << __func__ << " "
+
+
 
 DaemonServer::DaemonServer(MonClient *monc_,
                            Finisher &finisher_,
@@ -402,24 +407,6 @@ bool DaemonServer::handle_report(MMgrReport *m)
   return true;
 }
 
-struct MgrCommand {
-  string cmdstring;
-  string helpstring;
-  string module;
-  string perm;
-  string availability;
-
-  bool requires_perm(char p) const {
-    return (perm.find(p) != string::npos);
-  }
-
-} mgr_commands[] = {
-
-#define COMMAND(parsesig, helptext, module, perm, availability) \
-  {parsesig, helptext, module, perm, availability},
-#include "MgrCommands.h"
-#undef COMMAND
-};
 
 void DaemonServer::_generate_command_map(
   map<string,cmd_vartype>& cmdmap,
@@ -444,16 +431,14 @@ void DaemonServer::_generate_command_map(
   }
 }
 
-const MgrCommand *DaemonServer::_get_mgrcommand(
+const MonCommand *DaemonServer::_get_mgrcommand(
   const string &cmd_prefix,
-  MgrCommand *cmds,
-  int cmds_size)
+  const std::vector<MonCommand> &cmds)
 {
-  MgrCommand *this_cmd = NULL;
-  for (MgrCommand *cp = cmds;
-       cp < &cmds[cmds_size]; cp++) {
-    if (cp->cmdstring.compare(0, cmd_prefix.size(), cmd_prefix) == 0) {
-      this_cmd = cp;
+  const MonCommand *this_cmd = nullptr;
+  for (const auto &cmd : cmds) {
+    if (cmd.cmdstring.compare(0, cmd_prefix.size(), cmd_prefix) == 0) {
+      this_cmd = &cmd;
       break;
     }
   }
@@ -466,7 +451,7 @@ bool DaemonServer::_allowed_command(
   const string &prefix,
   const map<string,cmd_vartype>& cmdmap,
   const map<string,string>& param_str_map,
-  const MgrCommand *this_cmd) {
+  const MonCommand *this_cmd) {
 
   if (s->entity_name.is_mon()) {
     // mon is all-powerful.  even when it is forwarding commands on behalf of
@@ -593,30 +578,29 @@ bool DaemonServer::handle_command(MCommand *m)
   dout(4) << "prefix=" << prefix << dendl;
 
   if (prefix == "get_command_descriptions") {
-    int cmdnum = 0;
-
     dout(10) << "reading commands from python modules" << dendl;
-    auto py_commands = py_modules.get_commands();
+    const auto py_commands = py_modules.get_commands();
 
+    int cmdnum = 0;
     JSONFormatter f;
     f.open_object_section("command_descriptions");
-    for (const auto &pyc : py_commands) {
+
+    auto dump_cmd = [&cmdnum, &f](const MonCommand &mc){
       ostringstream secname;
       secname << "cmd" << setfill('0') << std::setw(3) << cmdnum;
-      dout(20) << "Dumping " << pyc.cmdstring << " (" << pyc.helpstring
-               << ")" << dendl;
-      dump_cmddesc_to_json(&f, secname.str(), pyc.cmdstring, pyc.helpstring,
-			   "mgr", pyc.perm, "cli", 0);
+      dump_cmddesc_to_json(&f, secname.str(), mc.cmdstring, mc.helpstring,
+                           mc.module, mc.req_perms, mc.availability, 0);
       cmdnum++;
+    };
+
+    for (const auto &pyc : py_commands) {
+      dump_cmd(pyc);
     }
 
-    for (const auto &cp : mgr_commands) {
-      ostringstream secname;
-      secname << "cmd" << setfill('0') << std::setw(3) << cmdnum;
-      dump_cmddesc_to_json(&f, secname.str(), cp.cmdstring, cp.helpstring,
-			   cp.module, cp.perm, cp.availability, 0);
-      cmdnum++;
+    for (const auto &mgr_cmd : mgr_commands) {
+      dump_cmd(mgr_cmd);
     }
+
     f.close_section();	// command_descriptions
     f.flush(cmdctx->odata);
     cmdctx->reply(0, ss);
@@ -624,11 +608,10 @@ bool DaemonServer::handle_command(MCommand *m)
   }
 
   // lookup command
-  const MgrCommand *mgr_cmd = _get_mgrcommand(prefix, mgr_commands,
-                                              ARRAY_SIZE(mgr_commands));
+  const MonCommand *mgr_cmd = _get_mgrcommand(prefix, mgr_commands);
   _generate_command_map(cmdctx->cmdmap, param_str_map);
   if (!mgr_cmd) {
-    MgrCommand py_command = {"", "", "py", "rw", "cli"};
+    MonCommand py_command = {"", "", "py", "rw", "cli"};
     if (!_allowed_command(session.get(), py_command.module, prefix, cmdctx->cmdmap,
                           param_str_map, &py_command)) {
       dout(1) << " access denied" << dendl;
@@ -937,7 +920,7 @@ bool DaemonServer::handle_command(MCommand *m)
 
   // None of the special native commands, 
   MgrPyModule *handler = nullptr;
-  auto py_commands = py_modules.get_commands();
+  auto py_commands = py_modules.get_py_commands();
   for (const auto &pyc : py_commands) {
     auto pyc_prefix = cmddesc_get_prefix(pyc.cmdstring);
     dout(1) << "pyc_prefix: '" << pyc_prefix << "'" << dendl;

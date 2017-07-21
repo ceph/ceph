@@ -53,7 +53,7 @@ protected:
   Client    *client;
   Messenger *client_messenger;
 
-  Mutex lock;
+  mutable Mutex lock;
   SafeTimer timer;
   Finisher finisher;
 
@@ -98,6 +98,8 @@ public:
 
   void background_init(Context *completion);
   void shutdown();
+
+  std::vector<MonCommand> get_command_set() const;
 };
 
 #endif

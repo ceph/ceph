@@ -30,7 +30,7 @@ class Root(RestController):
         return {
             'api_version': 1,
             'auth':
-                'Use "ceph tell mgr restful create_key <key>" to create a key pair, '
+                'Use "ceph restful create_key <key>" to create a key pair, '
                 'pass it as HTTP Basic auth to authenticate',
             'doc': 'See /doc endpoint',
             'info': "Ceph Manager RESTful API server",
