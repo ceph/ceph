@@ -785,18 +785,23 @@ class TestStrays(CephFSTestCase):
 
         # Remove the snapshot
         self.mount_a.run_shell(["rmdir", "snapdir/.snap/snap1"])
-        self.mount_a.umount_wait()
 
         # Purging file_a doesn't happen until after we've flushed the journal, because
         # it is referenced by the snapshotted subdir, and the snapshot isn't really
         # gone until the journal references to it are gone
         self.fs.mds_asok(["flush", "journal"])
 
+        # Wait for purging to complete, which requires the OSDMap to propagate to the OSDs.
+        # See also: http://tracker.ceph.com/issues/20072
+        self.wait_until_true(
+            lambda: self.fs.data_objects_absent(file_a_ino, size_mb * 1024 * 1024),
+            timeout=60
+        )
+
         # See that a purge happens now
         self._wait_for_counter("mds_cache", "strays_enqueued", 2)
         self._wait_for_counter("purge_queue", "pq_executed", 2)
 
-        self.assertTrue(self.fs.data_objects_absent(file_a_ino, size_mb * 1024 * 1024))
         self.await_data_pool_empty()
 
     def test_fancy_layout(self):
