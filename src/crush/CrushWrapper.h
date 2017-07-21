@@ -1329,6 +1329,7 @@ public:
   void create_choose_args(int id, int positions) {
     if (choose_args.count(id))
       return;
+    assert(positions);
     auto &cmap = choose_args[id];
     cmap.args = (crush_choose_arg*)calloc(sizeof(crush_choose_arg),
 					  crush->max_buckets);
