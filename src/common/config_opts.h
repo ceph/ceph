@@ -991,6 +991,12 @@ OPTION(filestore_rocksdb_options, OPT_STR, "")
 // rocksdb options that will be used in monstore
 OPTION(mon_rocksdb_options, OPT_STR, "write_buffer_size=33554432,compression=kNoCompression")
 
+OPTION(lmdb_map_size, OPT_U64, 1000*1024*1024*1024) // size of memory map, default 1000 GB
+OPTION(lmdb_max_readers, OPT_U64, 126) // max number of threads/reader 
+OPTION(lmdb_noreadahead, OPT_BOOL, false) // turn off read ahead 
+OPTION(lmdb_nomeminit, OPT_BOOL, false) // do not initialize new-allocated memory 
+OPTION(lmdb_writemap, OPT_BOOL, false) // diable writemap
+
 /**
  * osd_*_priority adjust the relative priority of client io, recovery io,
  * snaptrim io, etc
