@@ -381,6 +381,13 @@ public:
                                                   "global image id"));
   }
 
+  void expect_schedule_image_delete(MockImageDeleter& mock_image_deleter,
+                                    const std::string& global_image_id,
+                                    bool ignore_orphan) {
+    EXPECT_CALL(mock_image_deleter,
+                schedule_image_delete(_, _, global_image_id, ignore_orphan));
+  }
+
   bufferlist encode_tag_data(const librbd::journal::TagData &tag_data) {
     bufferlist bl;
     ::encode(tag_data, bl);
@@ -745,6 +752,7 @@ TEST_F(TestMockImageReplayer, GetRemoteImageIdDNE) {
               "remote mirror uuid", 0);
   expect_send(mock_prepare_remote_image_request, "remote mirror uuid",
               "", -ENOENT);
+  expect_schedule_image_delete(mock_image_deleter, "global image id", false);
 
   create_image_replayer(mock_threads, mock_image_deleter);
 
@@ -1307,6 +1315,7 @@ TEST_F(TestMockImageReplayer, DelayedReplay) {
   m_image_replayer->stop(&stop_ctx);
   ASSERT_EQ(0, stop_ctx.wait());
 }
+
 
 } // namespace mirror
 } // namespace rbd
