@@ -24,11 +24,10 @@
 #include "rapidjson/error/error.h"
 #include "rapidjson/error/en.h"
 
-#include "fnmatch.h"
-
 #include "rgw_acl.h"
 #include "rgw_basic_types.h"
 #include "rgw_iam_policy_keywords.h"
+#include "rgw_string.h"
 
 #include "include/assert.h" // razzin' frazzin' ...grrr.
 
@@ -362,6 +361,14 @@ struct Condition {
     }
   };
 
+  struct string_like : public std::binary_function<const std::string,
+                                                   const std::string,
+                                                   bool> {
+    bool operator ()(const std::string& input,
+                     const std::string& pattern) const {
+      return match_wildcards(pattern, input, 0);
+    }
+  };
 
   template<typename F>
   static bool orrible(F&& f, const std::string& c,
