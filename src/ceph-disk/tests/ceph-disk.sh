@@ -25,7 +25,7 @@ if [ -z "$CEPH_ROOT" ] || [ -z "$CEPH_BIN" ] || [ -z "$CEPH_LIB" ]; then
     CEPH_BIN=$CEPH_ROOT
     CEPH_LIB=$CEPH_ROOT/.libs
 fi
-source $CEPH_ROOT/qa/workunits/ceph-helpers.sh
+source $CEPH_ROOT/qa/standalone/ceph-helpers.sh
 
 set -x
 

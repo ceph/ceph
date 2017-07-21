@@ -6,7 +6,7 @@
 
 # Includes
 source $(dirname $0)/detect-build-env-vars.sh
-source ../qa/workunits/ceph-helpers.sh
+source ../qa/standalone/ceph-helpers.sh
 function run() {
     local dir=$1
     shift
