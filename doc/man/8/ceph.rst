@@ -442,6 +442,63 @@ Usage::
 
 	ceph mon_status
 
+mgr
+---
+
+Ceph manager daemon configuration and management.
+
+Subcommand ``dump`` dumps the latest MgrMap, which describes the active
+and standby manager daemons.
+
+Usage::
+
+  ceph mgr dump
+
+Subcommand ``fail`` will mark a manager daemon as failed, removing it
+from the manager map.  If it is the active manager daemon a standby
+will take its place.
+
+Usage::
+
+  ceph mgr fail <name>
+
+Subcommand ``module ls`` will list currently enabled manager modules (plugins).
+
+Usage::
+
+  ceph mgr module ls
+
+Subcommand ``module enable`` will enable a manager module.  Available modules are included in MgrMap and visible via ``mgr dump``.
+
+Usage::
+
+  ceph mgr module enable <module>
+
+Subcommand ``module disable`` will disable an active manager module.
+
+Usage::
+
+  ceph mgr module disable <module>
+
+Subcommand ``metadata`` will report metadata about all manager daemons or, if the name is specified, a single manager daemon.
+
+Usage::
+
+  ceph mgr metadata [name]
+
+Subcommand ``versions`` will report a count of running daemon versions.
+
+Usage::
+
+  ceph mgr versions
+
+Subcommand ``count-metadata`` will report a count of any daemon metadata field.
+
+Usage::
+
+  ceph mgr count-metadata <field>
+
+
 osd
 ---
 
