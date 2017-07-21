@@ -4137,6 +4137,8 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
 	  filter |= OSDMap::DUMP_IN;
 	} else if (s == "out") {
 	  filter |= OSDMap::DUMP_OUT;
+	} else if (s == "destroyed") {
+	  filter |= OSDMap::DUMP_DESTROYED;
 	} else {
 	  ss << "unrecognized state '" << s << "'";
 	  r = -EINVAL;
@@ -4144,10 +4146,18 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
 	}
       }
       if ((filter & (OSDMap::DUMP_IN|OSDMap::DUMP_OUT)) ==
-	  (OSDMap::DUMP_IN|OSDMap::DUMP_OUT) ||
-	  (filter & (OSDMap::DUMP_UP|OSDMap::DUMP_DOWN)) ==
-	  (OSDMap::DUMP_UP|OSDMap::DUMP_DOWN)) {
-	ss << "cannot specify both up and down or both in and out";
+	  (OSDMap::DUMP_IN|OSDMap::DUMP_OUT)) {
+        ss << "cannot specify both 'in' and 'out'";
+        r = -EINVAL;
+        goto reply;
+      }
+      if (((filter & (OSDMap::DUMP_UP|OSDMap::DUMP_DOWN)) ==
+	   (OSDMap::DUMP_UP|OSDMap::DUMP_DOWN)) ||
+           ((filter & (OSDMap::DUMP_UP|OSDMap::DUMP_DESTROYED)) ==
+           (OSDMap::DUMP_UP|OSDMap::DUMP_DESTROYED)) ||
+           ((filter & (OSDMap::DUMP_DOWN|OSDMap::DUMP_DESTROYED)) ==
+           (OSDMap::DUMP_DOWN|OSDMap::DUMP_DESTROYED))) {
+	ss << "can specify only one of 'up', 'down' and 'destroyed'";
 	r = -EINVAL;
 	goto reply;
       }
