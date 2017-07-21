@@ -120,10 +120,11 @@ void HealthMonitor::encode_pending(MonitorDBStore::TransactionRef t)
     }
     pending_health.merge(p.second);
   }
-  for (auto p : pending_health.checks) {
+  for (auto &p : pending_health.checks) {
     p.second.summary = boost::regex_replace(
       p.second.summary,
-      boost::regex("%num%"), stringify(names[p.first].size()));
+      boost::regex("%hasorhave%"),
+      names[p.first].size() > 1 ? "have" : "has");
     p.second.summary = boost::regex_replace(
       p.second.summary,
       boost::regex("%names%"), stringify(names[p.first]));
@@ -236,7 +237,7 @@ bool HealthMonitor::check_member_health()
   } else if (stats.fs_stats.avail_percent <= g_conf->mon_data_avail_warn) {
     stringstream ss, ss2;
     ss << "mon%plurals% %names% %isorare% low on available space";
-    auto& d = next.add("MON_DISK_LOW", HEALTH_ERR, ss.str());
+    auto& d = next.add("MON_DISK_LOW", HEALTH_WARN, ss.str());
     ss2 << "mon." << mon->name << " has " << stats.fs_stats.avail_percent
 	<< "% avail";
     d.detail.push_back(ss2.str());
@@ -250,20 +251,6 @@ bool HealthMonitor::check_member_health()
 	<< " >= mon_data_size_warn ("
 	<< prettybyte_t(g_conf->mon_data_size_warn) << ")";
     d.detail.push_back(ss2.str());
-  }
-
-  auto p = quorum_checks.find(mon->rank);
-  if (p == quorum_checks.end() ||
-      p->second != next) {
-    if (mon->is_leader()) {
-      // prepare to propose
-      quorum_checks[mon->rank] = next;
-      changed = true;
-    } else {
-      // tell the leader
-      mon->messenger->send_message(new MMonHealthChecks(next),
-				   mon->monmap->get_inst(mon->get_leader()));
-    }
   }
 
   // OSD_NO_DOWN_OUT_INTERVAL
@@ -283,10 +270,24 @@ bool HealthMonitor::check_member_health()
     if (g_conf->mon_warn_on_osd_down_out_interval_zero &&
         g_conf->mon_osd_down_out_interval == 0) {
       ostringstream ss, ds;
-      ss << "mon%plurals% %names %hasorhave% mon_osd_down_out_interval set to 0";
+      ss << "mon%plurals% %names% %hasorhave% mon_osd_down_out_interval set to 0";
       auto& d = next.add("OSD_NO_DOWN_OUT_INTERVAL", HEALTH_WARN, ss.str());
       ds << "mon." << mon->name << " has mon_osd_down_out_interval set to 0";
       d.detail.push_back(ds.str());
+    }
+  }
+
+  auto p = quorum_checks.find(mon->rank);
+  if (p == quorum_checks.end() ||
+      p->second != next) {
+    if (mon->is_leader()) {
+      // prepare to propose
+      quorum_checks[mon->rank] = next;
+      changed = true;
+    } else {
+      // tell the leader
+      mon->messenger->send_message(new MMonHealthChecks(next),
+				   mon->monmap->get_inst(mon->get_leader()));
     }
   }
 
@@ -366,8 +367,7 @@ bool HealthMonitor::check_leader_health()
 	if (!warns.empty())
 	  ss << ",";
       }
-      auto& d = next.add("MON_CLOCK_SKEW", HEALTH_WARN,
-			 "monitor clock skew detected");
+      auto& d = next.add("MON_CLOCK_SKEW", HEALTH_WARN, ss.str());
       d.detail.swap(details);
     }
   }
