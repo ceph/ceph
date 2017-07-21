@@ -6,8 +6,8 @@ from teuthology.config import config
 
 doc = """
 usage: teuthology-suite --help
-       teuthology-suite [-v | -vv ] --ceph <ceph> --suite <suite> [options] [<config_yaml>...]
-       teuthology-suite [-v | -vv ] --ceph <ceph> --rerun <name>  [options] [<config_yaml>...]
+       teuthology-suite [-v | -vv ] --machine-type <type> --ceph <ceph> --suite <suite> [options] [<config_yaml>...]
+       teuthology-suite [-v | -vv ] --machine-type <type> --ceph <ceph> --rerun <name>  [options] [<config_yaml>...]
 
 Run a suite of ceph integration tests. A suite is a directory containing
 facets. A facet is a directory containing config snippets. Running a suite
