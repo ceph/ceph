@@ -1,7 +1,7 @@
 #ifndef CEPH_RGW_SYNC_LOG_H
 #define CEPH_RGW_SYNC_LOG_H
 
-#include "include/atomic.h"
+#include <atomic>
 
 #include "common/Mutex.h"
 #include "common/RWLock.h"
@@ -152,12 +152,12 @@ class RGWSyncTraceManager : public AdminSocketHook {
 
   RWLock lock{"RGWSyncTraceManager::lock"};
 
-  atomic64_t count;
+  std::atomic<uint64_t> count = { 0 };
 
   std::list<std::array<string, 3> > admin_commands;
 protected:
   uint64_t alloc_handle() {
-    return count.inc();
+    return ++count;
   }
 
 public:
