@@ -90,6 +90,16 @@ public:
   std::string get_name() { Mutex::Locker l(m_lock); return m_name; };
   void set_state_description(int r, const std::string &desc);
 
+  // TODO temporary until policy handles release of image replayers
+  inline bool is_finished() const {
+    Mutex::Locker locker(m_lock);
+    return m_finished;
+  }
+  inline void set_finished(bool finished) {
+    Mutex::Locker locker(m_lock);
+    m_finished = finished;
+  }
+
   inline bool is_blacklisted() const {
     Mutex::Locker locker(m_lock);
     return (m_last_r == -EBLACKLISTED);
@@ -278,6 +288,7 @@ private:
   std::string m_local_image_id;
   std::string m_global_image_id;
   std::string m_name;
+
   mutable Mutex m_lock;
   State m_state = STATE_STOPPED;
   std::string m_state_desc;
@@ -286,7 +297,11 @@ private:
   int m_last_r = 0;
 
   BootstrapProgressContext m_progress_cxt;
+
+  bool m_finished = false;
+  bool m_delete_requested = false;
   bool m_resync_requested = false;
+
   image_replayer::EventPreprocessor<ImageCtxT> *m_event_preprocessor = nullptr;
   image_replayer::ReplayStatusFormatter<ImageCtxT> *m_replay_status_formatter =
     nullptr;
