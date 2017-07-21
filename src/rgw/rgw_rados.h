@@ -130,6 +130,7 @@ class rgw_obj_select {
   bool is_raw;
 
 public:
+  bool using_tail_data_pool;
   rgw_obj_select() : is_raw(false) {}
   rgw_obj_select(const rgw_obj& _obj) : obj(_obj), is_raw(false) {}
   rgw_obj_select(const rgw_raw_obj& _raw_obj) : raw_obj(_raw_obj), is_raw(true) {}
@@ -423,8 +424,10 @@ protected:
     end_iter.seek(obj_size);
   }
 public:
+  bool using_tail_data_pool;
 
   RGWObjManifest() : explicit_objs(false), obj_size(0), head_size(0), max_head_size(0),
+                     using_tail_data_pool(false),
                      begin_iter(this), end_iter(this) {}
   RGWObjManifest(const RGWObjManifest& rhs) {
     *this = rhs;
@@ -446,6 +449,8 @@ public:
 
     begin_iter.seek(rhs.begin_iter.get_ofs());
     end_iter.seek(rhs.end_iter.get_ofs());
+
+    using_tail_data_pool = rhs.using_tail_data_pool;
 
     return *this;
   }
@@ -477,7 +482,7 @@ public:
   }
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(7, 6, bl);
+    ENCODE_START(8, 6, bl);
     ::encode(obj_size, bl);
     ::encode(objs, bl);
     ::encode(explicit_objs, bl);
@@ -498,6 +503,7 @@ public:
     }
     ::encode(head_placement_rule, bl);
     ::encode(tail_placement.placement_rule, bl);
+    ::encode(using_tail_data_pool, bl);
     ENCODE_FINISH(bl);
   }
 
@@ -568,6 +574,10 @@ public:
     if (struct_v >= 7) {
       ::decode(head_placement_rule, bl);
       ::decode(tail_placement.placement_rule, bl);
+    }
+
+    if (struct_v >= 8) {
+      ::decode(using_tail_data_pool, bl);
     }
 
     update_iterators();
@@ -1295,7 +1305,7 @@ struct RGWZoneParams : RGWSystemMetaObj {
   /*
    * return data pool of the head object
    */
-  bool get_head_data_pool(const string& placement_id, const rgw_obj& obj, rgw_pool *pool) const {
+  bool get_head_data_pool(const string& placement_id, const rgw_obj& obj, rgw_pool *pool, bool using_tail_data_pool = false) const {
     const rgw_data_placement_target& explicit_placement = obj.bucket.explicit_placement;
     if (!explicit_placement.data_pool.empty()) {
       if (!obj.in_extra_data) {
@@ -1313,7 +1323,10 @@ struct RGWZoneParams : RGWSystemMetaObj {
       return false;
     }
     if (!obj.in_extra_data) {
-      *pool = iter->second.data_pool;
+      if (using_tail_data_pool)
+        *pool = iter->second.tail_data_pool;
+      else
+        *pool = iter->second.data_pool;
     } else {
       *pool = iter->second.get_data_extra_pool();
     }
@@ -2600,8 +2613,8 @@ public:
   int select_bucket_location_by_rule(const string& location_rule, RGWZonePlacementInfo *rule_info);
   void create_bucket_id(string *bucket_id);
 
-  bool get_obj_data_pool(const string& placement_rule, const rgw_obj& obj, rgw_pool *pool);
-  bool obj_to_raw(const string& placement_rule, const rgw_obj& obj, rgw_raw_obj *raw_obj);
+  bool get_obj_data_pool(const string& placement_rule, const rgw_obj& obj, rgw_pool *pool, bool using_tail_data_pool = false);
+  bool obj_to_raw(const string& placement_rule, const rgw_obj& obj, rgw_raw_obj *raw_obj, bool using_tail_data_pool = false);
 
   int create_bucket(RGWUserInfo& owner, rgw_bucket& bucket,
                             const string& zonegroup_id,

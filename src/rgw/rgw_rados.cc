@@ -121,16 +121,20 @@ static string RGW_DEFAULT_PERIOD_ROOT_POOL = "rgw.root";
 
 
 static bool rgw_get_obj_data_pool(const RGWZoneGroup& zonegroup, const RGWZoneParams& zone_params,
-                                  const string& placement_id, const rgw_obj& obj, rgw_pool *pool)
+                                  const string& placement_id, const rgw_obj& obj, rgw_pool *pool,
+                                  bool using_tail_data_pool = false)
 {
-  if (!zone_params.get_head_data_pool(placement_id, obj, pool)) {
+  if (!zone_params.get_head_data_pool(placement_id, obj, pool, using_tail_data_pool)) {
     RGWZonePlacementInfo placement;
     if (!zone_params.get_placement(zonegroup.default_placement, &placement)) {
       return false;
     }
 
     if (!obj.in_extra_data) {
-      *pool = placement.data_pool;
+      if (using_tail_data_pool)
+        *pool = placement.tail_data_pool;
+      else
+        *pool = placement.data_pool;
     } else {
       *pool = placement.get_data_extra_pool();
     }
@@ -161,7 +165,7 @@ rgw_raw_obj rgw_obj_select::get_raw_obj(RGWRados *store) const
 {
   if (!is_raw) {
     rgw_raw_obj r;
-    store->obj_to_raw(placement_rule, obj, &r);
+    store->obj_to_raw(placement_rule, obj, &r, using_tail_data_pool);
     return r;
   }
   return raw_obj;
@@ -6060,16 +6064,17 @@ read_omap:
   return 0;
 }
 
-bool RGWRados::get_obj_data_pool(const string& placement_rule, const rgw_obj& obj, rgw_pool *pool)
+bool RGWRados::get_obj_data_pool(const string& placement_rule, const rgw_obj& obj, rgw_pool *pool,
+                                 bool using_tail_data_pool)
 {
-  return rgw_get_obj_data_pool(zonegroup, zone_params, placement_rule, obj, pool);
+  return rgw_get_obj_data_pool(zonegroup, zone_params, placement_rule, obj, pool, using_tail_data_pool);
 }
 
-bool RGWRados::obj_to_raw(const string& placement_rule, const rgw_obj& obj, rgw_raw_obj *raw_obj)
+bool RGWRados::obj_to_raw(const string& placement_rule, const rgw_obj& obj, rgw_raw_obj *raw_obj, bool using_tail_data_pool)
 {
   get_obj_bucket_and_oid_loc(obj, raw_obj->oid, raw_obj->loc);
 
-  return get_obj_data_pool(placement_rule, obj, &raw_obj->pool);
+  return get_obj_data_pool(placement_rule, obj, &raw_obj->pool, using_tail_data_pool);
 }
 
 int RGWRados::update_placement_map()
