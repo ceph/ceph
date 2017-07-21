@@ -88,3 +88,71 @@ never fail.
 Injectargs, parse_argv, and parse_env are three other functions which modify
 the configuration. Just like with set_val, you should call apply_changes after
 calling these functions to make sure your changes get applied.
+
+
+Defining config options
+=======================
+
+New-style config options are defined in common/options.cc.  All new config
+options should go here (and not into legacy_config_opts.h).
+
+Levels
+------
+
+The Option constructor takes a "level" value:
+
+* *LEVEL_BASIC* is for basic config options that a normal operator is likely to adjust.
+* *LEVEL_ADVANCED* is for options that an operator *can* adjust, but should not touch unless they understand what they are doing.  Adjusting advanced options poorly can lead to problems (performance or even data loss) if done incorrectly.
+* *LEVEL_DEV* is for options in place for use by developers only, either for testing purposes, or to describe constants that no user should adjust but we prefer not to compile into the code.
+
+Description and long description
+--------------------------------
+
+Short description of the option.  Sentence fragment.  e.g.,::
+
+  .set_description("Default checksum algorithm to use")
+
+The long description is complete sentences, perhaps even multiple
+paragraphs, and may include other detailed information or notes.::
+
+  .set_long_description("crc32c, xxhash32, and xxhash64 are available.  The _16 and _8 variants use only a subset of the bits for more compact (but less reliable) checksumming.")
+
+Default values
+--------------
+
+There is a default value for every config option.  In some cases, there may
+also be a *daemon default* that only applies to code that declares itself
+as a daemon (in thise case, the regular default only applies to non-daemons).
+
+Safety
+------
+
+If an option can be safely changed at runtime,::
+
+  .set_safe()
+
+Service
+-------
+
+Service is a component name, like "common", "osd", "rgw", "mds", etc.  It may
+be a list of components, like::
+
+  .add_service("mon mds osd mgr"),
+
+For example, the rocksdb options affect both the osd and mon.
+
+Tags
+----
+
+Tags identify options across services that relate in some way. Example include;
+
+  - network -- options affecting network configuration
+  - mkfs -- options that only matter at mkfs time
+
+
+Enums
+-----
+
+For options with a defined set of allowed values::
+
+  .set_enum_allowed({"none", "crc32c", "crc32c_16", "crc32c_8", "xxhash32", "xxhash64"}),
