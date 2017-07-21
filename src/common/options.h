@@ -187,20 +187,28 @@ struct Option {
   Option& set_daemon_default(const T& v) {
     return set_value(daemon_value, v);
   }
-  Option& add_tag(const char* tags_str) {
-    for (const auto t: get_str_vec(tags_str)) {
-      tags.push_back(t);
-    }
+  Option& add_tag(const char* tag) {
+    tags.push_back(tag);
     return *this;
   }
-  Option& add_service(const std::string &services_str) {
-    for (const auto s: get_str_vec(services_str)) {
-      services.push_back(s);
-    }
+  Option& add_tag(std::initializer_list<const char*> ts) {
+    tags.insert(tags.end(), ts.begin(), ts.end());
+    return *this;
+  }
+  Option& add_service(const char* service) {
+    services.push_back(service);
+    return *this;
+  }
+  Option& add_service(std::initializer_list<const char*> ss) {
+    services.insert(services.end(), ss.begin(), ss.end());
     return *this;
   }
   Option& add_see_also(const char* t) {
     see_also.push_back(t);
+    return *this;
+  }
+  Option& add_see_also(std::initializer_list<const char*> ts) {
+    see_also.insert(see_also.end(), ts.begin(), ts.end());
     return *this;
   }
   Option& set_description(const char* new_desc) {
