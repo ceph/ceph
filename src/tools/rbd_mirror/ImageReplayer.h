@@ -62,7 +62,7 @@ template <typename ImageCtxT = librbd::ImageCtx>
 class ImageReplayer {
 public:
   static ImageReplayer *create(
-    Threads<librbd::ImageCtx> *threads, ImageDeleter<ImageCtxT>* image_deleter,
+    Threads<ImageCtxT> *threads, ImageDeleter<ImageCtxT>* image_deleter,
     InstanceWatcher<ImageCtxT> *instance_watcher,
     RadosRef local, const std::string &local_mirror_uuid, int64_t local_pool_id,
     const std::string &global_image_id) {
@@ -74,7 +74,7 @@ public:
     delete this;
   }
 
-  ImageReplayer(Threads<librbd::ImageCtx> *threads,
+  ImageReplayer(Threads<ImageCtxT> *threads,
                 ImageDeleter<ImageCtxT>* image_deleter,
                 InstanceWatcher<ImageCtxT> *instance_watcher,
                 RadosRef local, const std::string &local_mirror_uuid,
@@ -265,7 +265,7 @@ private:
     ImageReplayer<ImageCtxT> *replayer;
   };
 
-  Threads<librbd::ImageCtx> *m_threads;
+  Threads<ImageCtxT> *m_threads;
   ImageDeleter<ImageCtxT>* m_image_deleter;
   InstanceWatcher<ImageCtxT> *m_instance_watcher;
 

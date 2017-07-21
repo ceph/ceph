@@ -272,7 +272,7 @@ void ImageReplayer<I>::RemoteJournalerListener::handle_update(
 }
 
 template <typename I>
-ImageReplayer<I>::ImageReplayer(Threads<librbd::ImageCtx> *threads,
+ImageReplayer<I>::ImageReplayer(Threads<I> *threads,
                                 ImageDeleter<I>* image_deleter,
                                 InstanceWatcher<I> *instance_watcher,
                                 RadosRef local,
