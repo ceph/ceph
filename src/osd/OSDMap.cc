@@ -3074,7 +3074,7 @@ public:
     tbl->define_column("CLASS", TextTable::LEFT, TextTable::RIGHT);
     tbl->define_column("WEIGHT", TextTable::LEFT, TextTable::RIGHT);
     tbl->define_column("TYPE NAME", TextTable::LEFT, TextTable::LEFT);
-    tbl->define_column("UP/DOWN", TextTable::LEFT, TextTable::RIGHT);
+    tbl->define_column("STATUS", TextTable::LEFT, TextTable::RIGHT);
     tbl->define_column("REWEIGHT", TextTable::LEFT, TextTable::RIGHT);
     tbl->define_column("PRI-AFF", TextTable::LEFT, TextTable::RIGHT);
 
@@ -3112,7 +3112,15 @@ protected:
 	*tbl << "DNE"
 	     << 0;
       } else {
-	*tbl << (osdmap->is_up(qi.id) ? "up" : "down")
+        string s;
+        if (osdmap->is_up(qi.id)) {
+          s = "up";
+        } else if (osdmap->is_destroyed(qi.id)) {
+          s = "destroyed";
+        } else {
+          s = "down";
+        }
+	*tbl << s
 	     << weightf_t(osdmap->get_weightf(qi.id))
 	     << weightf_t(osdmap->get_primary_affinityf(qi.id));
       }
@@ -3164,8 +3172,16 @@ protected:
     Parent::dump_item_fields(qi, f);
     if (!qi.is_bucket())
     {
+      string s;
+      if (osdmap->is_up(qi.id)) {
+        s = "up";
+      } else if (osdmap->is_destroyed(qi.id)) {
+        s = "destroyed";
+      } else {
+        s = "down";
+      }
       f->dump_unsigned("exists", (int)osdmap->exists(qi.id));
-      f->dump_string("status", osdmap->is_up(qi.id) ? "up" : "down");
+      f->dump_string("status", s);
       f->dump_float("reweight", osdmap->get_weightf(qi.id));
       f->dump_float("primary_affinity", osdmap->get_primary_affinityf(qi.id));
     }
