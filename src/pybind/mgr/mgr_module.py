@@ -169,6 +169,30 @@ class MgrModule(object):
         """
         ceph_state.send_command(self._handle, *args, **kwargs)
 
+    def set_health_checks(self, checks):
+        """
+        Set module's health checks
+
+        Set the module's current map of health checks.  Argument is a
+        dict of check names to info, in this form:
+
+           {
+             'CHECK_FOO': {
+               'severity': 'warning',           # or 'error'
+               'summary': 'summary string',
+               'detail': [ 'list', 'of', 'detail', 'strings' ],
+              },
+             'CHECK_BAR': {
+               'severity': 'error',
+               'summary': 'bars are bad',
+               'detail': [ 'too hard' ],
+             },
+           }
+
+        :param list: dict of health check dicts
+        """
+        ceph_state.set_health_checks(self._handle, checks)
+
     def handle_command(self, cmd):
         """
         Called by ceph-mgr to request the plugin to handle one
