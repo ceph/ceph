@@ -5529,7 +5529,7 @@ static std::vector<Option> build_options()
 {
   std::vector<Option> result = global_options;
 
-  auto ingest = [&result](std::vector<Option> &options, const std::string &svc) {
+  auto ingest = [&result](std::vector<Option> &options, const char* svc) {
     for (const auto &o_in : options) {
       Option o(o_in);
       o.add_service(svc);
