@@ -43,6 +43,7 @@ function TEST_copy_from() {
     run_mgr $dir x || return 1
     run_osd $dir 0 || return 1
     run_osd $dir 1 || return 1
+    create_rbd_pool || return 1
 
     # success
     rados -p rbd put foo $(which rados)

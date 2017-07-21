@@ -39,6 +39,7 @@ function TEST_reuse_id() {
     run_mgr $dir x || return 1
     run_osd $dir 0 || return 1
     run_osd $dir 1 || return 1
+    create_rbd_pool || return 1
     wait_for_clean || return 1
     destroy_osd $dir 1 || return 1
     run_osd $dir 1 || return 1

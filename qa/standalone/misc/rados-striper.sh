@@ -33,6 +33,7 @@ function run() {
     run_osd $dir 0 || return 1
     run_osd $dir 1 || return 1
     run_osd $dir 2 || return 1
+    create_rbd_pool || return 1
 
     # create toyfile
     dd if=/dev/urandom of=$dir/toyfile bs=1234 count=1

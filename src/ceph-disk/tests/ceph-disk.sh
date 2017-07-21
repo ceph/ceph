@@ -171,6 +171,7 @@ function test_mark_init() {
     shift
 
     run_mon $dir a
+    create_rbd_pool
 
     local osd_data=$dir/dir
     $mkdir -p $osd_data
@@ -292,6 +293,7 @@ function test_reuse_osd_id() {
 
     run_mon $dir a || return 1
     run_mgr $dir x || return 1
+    create_rbd_pool
 
     test_activate $dir $dir/dir1 --osd-uuid $(uuidgen) || return 1
 
@@ -335,6 +337,7 @@ function test_activate_dir() {
 
     run_mon $dir a || return 1
     run_mgr $dir x || return 1
+    create_rbd_pool
     $@
 
     test_activate $dir $dir/dir || return 1
@@ -345,6 +348,7 @@ function test_activate_dir_bluestore() {
 
     run_mon $dir a || return 1
     run_mgr $dir x || return 1
+    create_rbd_pool
 
     local osd_data=$dir/dir
     $mkdir -p $osd_data
@@ -416,6 +420,7 @@ function test_crush_device_class() {
     shift
 
     run_mon $dir a
+    create_rbd_pool
 
     local osd_data=$dir/dir
     $mkdir -p $osd_data

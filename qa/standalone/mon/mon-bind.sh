@@ -62,7 +62,7 @@ function TEST_mon_client_connect_fails() {
     # from the public-addr.
     CEPH_ARGS+="--mon-initial-members=a "
     CEPH_ARGS+="--mon-host=${MON_IP}:${MONA_PUBLIC} "
-    run_mon_no_pool $dir a --mon-host=${MON_IP}:${MONA_PUBLIC} --public-bind-addr=${MON_IP}:${MONA_BIND} || return 1
+    run_mon $dir a --mon-host=${MON_IP}:${MONA_PUBLIC} --public-bind-addr=${MON_IP}:${MONA_BIND} || return 1
 
     # now attempt to ping it that should fail.
     timeout 3 ceph ping mon.a || return 0
@@ -76,7 +76,7 @@ function TEST_mon_client_connect() {
     # from the public-addr.
     CEPH_ARGS+="--mon-initial-members=a "
     CEPH_ARGS+="--mon-host=${MON_IP}:${MONA_PUBLIC} "
-    run_mon_no_pool $dir a --mon-host=${MON_IP}:${MONA_PUBLIC} --public-bind-addr=${MON_IP}:${MONA_BIND} || return 1
+    run_mon $dir a --mon-host=${MON_IP}:${MONA_PUBLIC} --public-bind-addr=${MON_IP}:${MONA_BIND} || return 1
 
     # now forward the public port to the bind port.
     port_forward ${MONA_PUBLIC} ${MONA_BIND}
@@ -92,9 +92,9 @@ function TEST_mon_quorum() {
     # from the public-addr.
     CEPH_ARGS+="--mon-initial-members=a,b,c "
     CEPH_ARGS+="--mon-host=${MON_IP}:${MONA_PUBLIC},${MON_IP}:${MONB_PUBLIC},${MON_IP}:${MONC_PUBLIC} "
-    run_mon_no_pool $dir a --public-addr=${MON_IP}:${MONA_PUBLIC} --public-bind-addr=${MON_IP}:${MONA_BIND} || return 1
-    run_mon_no_pool $dir b --public-addr=${MON_IP}:${MONB_PUBLIC} --public-bind-addr=${MON_IP}:${MONB_BIND} || return 1
-    run_mon_no_pool $dir c --public-addr=${MON_IP}:${MONC_PUBLIC} --public-bind-addr=${MON_IP}:${MONC_BIND} || return 1
+    run_mon $dir a --public-addr=${MON_IP}:${MONA_PUBLIC} --public-bind-addr=${MON_IP}:${MONA_BIND} || return 1
+    run_mon $dir b --public-addr=${MON_IP}:${MONB_PUBLIC} --public-bind-addr=${MON_IP}:${MONB_BIND} || return 1
+    run_mon $dir c --public-addr=${MON_IP}:${MONC_PUBLIC} --public-bind-addr=${MON_IP}:${MONC_BIND} || return 1
 
     # now forward the public port to the bind port.
     port_forward ${MONA_PUBLIC} ${MONA_BIND}
@@ -119,9 +119,9 @@ function TEST_put_get() {
     # from the public-addr.
     CEPH_ARGS+="--mon-initial-members=a,b,c "
     CEPH_ARGS+="--mon-host=${MON_IP}:${MONA_PUBLIC},${MON_IP}:${MONB_PUBLIC},${MON_IP}:${MONC_PUBLIC} "
-    run_mon_no_pool $dir a --public-addr=${MON_IP}:${MONA_PUBLIC} --public-bind-addr=${MON_IP}:${MONA_BIND} || return 1
-    run_mon_no_pool $dir b --public-addr=${MON_IP}:${MONB_PUBLIC} --public-bind-addr=${MON_IP}:${MONB_BIND} || return 1
-    run_mon_no_pool $dir c --public-addr=${MON_IP}:${MONC_PUBLIC} --public-bind-addr=${MON_IP}:${MONC_BIND} || return 1
+    run_mon $dir a --public-addr=${MON_IP}:${MONA_PUBLIC} --public-bind-addr=${MON_IP}:${MONA_BIND} || return 1
+    run_mon $dir b --public-addr=${MON_IP}:${MONB_PUBLIC} --public-bind-addr=${MON_IP}:${MONB_BIND} || return 1
+    run_mon $dir c --public-addr=${MON_IP}:${MONC_PUBLIC} --public-bind-addr=${MON_IP}:${MONC_BIND} || return 1
 
     # now forward the public port to the bind port.
     port_forward ${MONA_PUBLIC} ${MONA_BIND}

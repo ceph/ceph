@@ -64,6 +64,7 @@ function TEST_classes() {
     run_osd $dir 0 || return 1
     run_osd $dir 1 || return 1
     run_osd $dir 2 || return 1
+    create_rbd_pool || return 1
 
     test "$(get_osds_up rbd SOMETHING)" == "1 2 0" || return 1
     add_something $dir SOMETHING || return 1

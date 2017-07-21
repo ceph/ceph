@@ -96,6 +96,7 @@ function TEST_ec_profile_warning() {
     for id in $(seq 0 2) ; do
         run_osd $dir $id || return 1
     done
+    create_rbd_pool || return 1
     wait_for_clean || return 1
 
     for plugin in ${legacy_jerasure_plugins[*]}; do
