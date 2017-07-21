@@ -1049,6 +1049,9 @@ void ReplicatedPG::do_pg_op(OpRequestRef op)
 	  if (candidate.snap < snapid)
 	    continue;
 
+	  if (missing_loc.is_deleted(candidate))
+	    continue;
+
 	  if (snapid != CEPH_NOSNAP) {
 	    bufferlist bl;
 	    if (candidate.snap == CEPH_NOSNAP) {
@@ -1231,6 +1234,9 @@ void ReplicatedPG::do_pg_op(OpRequestRef op)
 	    continue;
 
 	  if (candidate.snap < snapid)
+	    continue;
+
+	  if (missing_loc.is_deleted(candidate))
 	    continue;
 
 	  if (snapid != CEPH_NOSNAP) {
