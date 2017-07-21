@@ -3056,13 +3056,17 @@ public:
     : Parent(crush, osdmap_->get_pool_names()), osdmap(osdmap_), filter(f) { }
 
   bool should_dump_leaf(int i) const override {
-    if (((filter & OSDMap::DUMP_UP) && !osdmap->is_up(i)) ||
-	((filter & OSDMap::DUMP_DOWN) && !osdmap->is_down(i)) ||
-	((filter & OSDMap::DUMP_IN) && !osdmap->is_in(i)) ||
-	((filter & OSDMap::DUMP_OUT) && !osdmap->is_out(i))) {
-      return false;
+    if (!filter) {
+      return true; // normal case
     }
-    return true;
+    if (((filter & OSDMap::DUMP_UP) && osdmap->is_up(i)) ||
+	((filter & OSDMap::DUMP_DOWN) && osdmap->is_down(i)) ||
+	((filter & OSDMap::DUMP_IN) && osdmap->is_in(i)) ||
+	((filter & OSDMap::DUMP_OUT) && osdmap->is_out(i)) ||
+        ((filter & OSDMap::DUMP_DESTROYED) && osdmap->is_destroyed(i))) {
+      return true;
+    }
+    return false;
   }
 
   bool should_dump_empty_bucket() const override {
@@ -3142,13 +3146,17 @@ public:
     : Parent(crush, osdmap_->get_pool_names()), osdmap(osdmap_), filter(f) { }
 
   bool should_dump_leaf(int i) const override {
-    if (((filter & OSDMap::DUMP_UP) && !osdmap->is_up(i)) ||
-	((filter & OSDMap::DUMP_DOWN) && !osdmap->is_down(i)) ||
-	((filter & OSDMap::DUMP_IN) && !osdmap->is_in(i)) ||
-	((filter & OSDMap::DUMP_OUT) && !osdmap->is_out(i))) {
-      return false;
+    if (!filter) {
+      return true; // normal case
     }
-    return true;
+    if (((filter & OSDMap::DUMP_UP) && osdmap->is_up(i)) ||
+        ((filter & OSDMap::DUMP_DOWN) && osdmap->is_down(i)) ||
+        ((filter & OSDMap::DUMP_IN) && osdmap->is_in(i)) ||
+        ((filter & OSDMap::DUMP_OUT) && osdmap->is_out(i)) ||
+        ((filter & OSDMap::DUMP_DESTROYED) && osdmap->is_destroyed(i))) {
+      return true;
+    }
+    return false;
   }
 
   bool should_dump_empty_bucket() const override {
