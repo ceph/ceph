@@ -2695,7 +2695,15 @@ const std::vector<Option> ceph_options = {
   .set_description(""),
 
   Option("osd_recovery_sleep", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
-  .set_default(0.01)
+  .set_default(0)                                                              
+  .set_description(""),                                                        
+                                                                               
+  Option("osd_recovery_sleep_hdd", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED) 
+  .set_default(0.1)                                                            
+  .set_description(""),                                                        
+                                                                               
+  Option("osd_recovery_sleep_ssd", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED) 
+  .set_default(0)   
   .set_description(""),
 
   Option("osd_snap_trim_sleep", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
