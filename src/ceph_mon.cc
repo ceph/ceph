@@ -203,10 +203,10 @@ int main(int argc, const char **argv)
   // We need to specify some default values that may be overridden by the
   // user, that are specific to the monitor.  The options we are overriding
   // are also used on the OSD (or in any other component that uses leveldb),
-  // so changing them directly in common/config_opts.h is not an option.
+  // so changing the global defaults is not an option.
   // This is not the prettiest way of doing this, especially since it has us
-  // having a different place than common/config_opts.h defining default
-  // values, but it's not horribly wrong enough to prevent us from doing it :)
+  // having a different place defining default values, but it's not horribly
+  // wrong enough to prevent us from doing it :)
   //
   // NOTE: user-defined options will take precedence over ours.
   //

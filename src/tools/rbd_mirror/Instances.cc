@@ -228,7 +228,7 @@ void Instances<I>::schedule_remove_task(Instance &instance) {
 
   cancel_remove_task(instance);
 
-  int after = max(1, m_cct->_conf->rbd_mirror_leader_heartbeat_interval) *
+  int after = m_cct->_conf->rbd_mirror_leader_heartbeat_interval *
     (1 + m_cct->_conf->rbd_mirror_leader_max_missed_heartbeats +
      m_cct->_conf->rbd_mirror_leader_max_acquire_attempts_before_break);
 

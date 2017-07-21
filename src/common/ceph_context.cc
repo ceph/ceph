@@ -448,6 +448,27 @@ void CephContext::do_command(std::string command, cmdmap_t& cmdmap,
 	    f->dump_string(var.c_str(), buf);
 	}
       }
+    } else if (command == "config help") {
+      std::string var;
+      if (cmd_getval(this, cmdmap, "var", var)) {
+        // Output a single one
+        std::string key = ConfFile::normalize_key_name(var);
+        const auto &i = _conf->schema.find(key);
+        if (i == _conf->schema.end()) {
+          std::ostringstream msg;
+          msg << "Setting not found: '" << key << "'";
+          f->dump_string("error", msg.str());
+        } else {
+          i->second.dump(f);
+        }
+      } else {
+        // Output all
+        f->open_array_section("options");
+        for (const auto &option : ceph_options) {
+          option.dump(f);
+        }
+        f->close_section();
+      }
     } else if (command == "config diff") {
       md_config_t def_conf;
       def_conf.set_val("cluster", _conf->cluster);
@@ -530,9 +551,20 @@ void CephContext::do_command(std::string command, cmdmap_t& cmdmap,
 }
 
 
+static bool is_daemon(uint32_t module_type)
+{
+  if (module_type == CEPH_ENTITY_TYPE_OSD ||
+      module_type == CEPH_ENTITY_TYPE_MDS ||
+      module_type == CEPH_ENTITY_TYPE_MON) {
+    return true;
+  } else {
+    return false;
+  }
+}
+
 CephContext::CephContext(uint32_t module_type_, int init_flags_)
   : nref(1),
-    _conf(new md_config_t()),
+    _conf(new md_config_t(is_daemon(module_type_))),
     _log(NULL),
     _module_type(module_type_),
     _init_flags(init_flags_),
@@ -590,6 +622,7 @@ CephContext::CephContext(uint32_t module_type_, int init_flags_)
   _admin_socket->register_command("perf histogram schema", "perf histogram schema", _admin_hook, "dump perf histogram schema");
   _admin_socket->register_command("perf reset", "perf reset name=var,type=CephString", _admin_hook, "perf reset <name>: perf reset all or one perfcounter name");
   _admin_socket->register_command("config show", "config show", _admin_hook, "dump current config settings");
+  _admin_socket->register_command("config help", "config help name=var,type=CephString,req=false", _admin_hook, "get config setting schema and descriptions");
   _admin_socket->register_command("config set", "config set name=var,type=CephString name=val,type=CephString,n=N",  _admin_hook, "config set <field> <val> [<val> ...]: set a config variable");
   _admin_socket->register_command("config get", "config get name=var,type=CephString", _admin_hook, "config get <field>: get the config value");
   _admin_socket->register_command("config diff",
@@ -637,6 +670,7 @@ CephContext::~CephContext()
   _admin_socket->unregister_command("config show");
   _admin_socket->unregister_command("config set");
   _admin_socket->unregister_command("config get");
+  _admin_socket->unregister_command("config help");
   _admin_socket->unregister_command("config diff");
   _admin_socket->unregister_command("config diff get");
   _admin_socket->unregister_command("log flush");

@@ -37,7 +37,7 @@ struct ImportDiffContext {
   ImportDiffContext(librbd::Image *image, int fd, size_t size, bool no_progress)
     : image(image), fd(fd), size(size), pc("Importing image diff", no_progress),
       throttle((fd == STDIN_FILENO) ? 1 :
-               max(g_conf->rbd_concurrent_management_ops, 1), false), last_offset(0) {
+               g_conf->rbd_concurrent_management_ops, false), last_offset(0) {
   }
 
   void update_size(size_t new_size)
@@ -653,7 +653,7 @@ static int do_import_v1(int fd, librbd::Image &image, uint64_t size,
     throttle.reset(new SimpleThrottle(1, false));
   } else {
     throttle.reset(new SimpleThrottle(
-                     max(g_conf->rbd_concurrent_management_ops, 1), false));
+                     g_conf->rbd_concurrent_management_ops, false));
   }
 
   reqlen = min<uint64_t>(reqlen, size);

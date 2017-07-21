@@ -27,6 +27,11 @@ extern std::string exec(const char* cmd); // defined in test_hostname.cc
 
 class test_md_config_t : public md_config_t, public ::testing::Test {
 public:
+
+  test_md_config_t()
+    : md_config_t(true), Test()
+  {}
+
   void test_expand_meta() {
     Mutex::Locker l(lock);
     // successfull meta expansion $run_dir and ${run_dir}
@@ -34,6 +39,7 @@ public:
       ostringstream oss;
       std::string before = " BEFORE ";
       std::string after = " AFTER ";
+
       std::string val(before + "$run_dir${run_dir}" + after);
       EXPECT_TRUE(expand_meta(val, &oss));
       EXPECT_EQ(before + "/var/run/ceph/var/run/ceph" + after, val);
@@ -112,31 +118,32 @@ public:
   void test_expand_all_meta() {
     Mutex::Locker l(lock);
     int before_count = 0, data_dir = 0;
-    for (auto& opt: *config_options) {
-      std::string *str;
-      opt.conf_ptr(str, this);
-      if (str) {
-        if (str->find("$") != string::npos)
+    for (const auto &i : schema) {
+      const Option &opt = i.second;
+      if (opt.type == Option::TYPE_STR) {
+        const auto &str = boost::get<std::string>(opt.value);
+        if (str.find("$") != string::npos)
           before_count++;
-        if (str->find("$data_dir") != string::npos)
+        if (str.find("$data_dir") != string::npos)
           data_dir++;
       }
     }
+
     // if there are no meta variables in the default configuration,
     // something must be done to check the expected side effect
     // of expand_all_meta
     ASSERT_LT(0, before_count);
     expand_all_meta();
     int after_count = 0;
-    for (auto& opt: *config_options) {
-      std::string *str;
-      opt.conf_ptr(str, this);
-      if (str) {
+    for (auto& i : values) {
+      const auto &opt = schema.at(i.first);
+      if (opt.type == Option::TYPE_STR) {
+        const std::string &str = boost::get<std::string>(i.second);
         size_t pos = 0;
-        while ((pos = str->find("$", pos)) != string::npos) {
-          if (str->substr(pos, 8) != "$channel") {
+        while ((pos = str.find("$", pos)) != string::npos) {
+          if (str.substr(pos, 8) != "$channel") {
             std::cout << "unexpected meta-variable found at pos " << pos
-                      << " of '" << *str << "'" << std::endl;
+                      << " of '" << str << "'" << std::endl;
             after_count++;
           }
           pos++;
@@ -181,6 +188,47 @@ TEST(md_config_t, set_val)
     free(run_dir);
     free(admin_socket);
   }
+}
+
+TEST(Option, validation)
+{
+  Option opt_int("foo", Option::TYPE_INT, Option::LEVEL_BASIC);
+  opt_int.set_min_max(5, 10);
+
+  std::string msg;
+  EXPECT_EQ(-EINVAL, opt_int.validate(Option::value_t(int64_t(4)), &msg));
+  EXPECT_EQ(-EINVAL, opt_int.validate(Option::value_t(int64_t(11)), &msg));
+  EXPECT_EQ(0, opt_int.validate(Option::value_t(int64_t(7)), &msg));
+
+  Option opt_enum("foo", Option::TYPE_STR, Option::LEVEL_BASIC);
+  opt_enum.set_enum_allowed({"red", "blue"});
+  EXPECT_EQ(0, opt_enum.validate(Option::value_t(std::string("red")), &msg));
+  EXPECT_EQ(0, opt_enum.validate(Option::value_t(std::string("blue")), &msg));
+  EXPECT_EQ(-EINVAL, opt_enum.validate(Option::value_t(std::string("green")), &msg));
+
+  Option opt_validator("foo", Option::TYPE_INT, Option::LEVEL_BASIC);
+  opt_validator.set_validator([](std::string *value, std::string *error_message){
+      if (*value == std::string("one")) {
+        *value = "1";
+        return 0;
+      } else if (*value == std::string("666")) {
+        return -EINVAL;
+      } else {
+        return 0;
+      }
+  });
+
+  std::string input = "666";  // An explicitly forbidden value
+  EXPECT_EQ(-EINVAL, opt_validator.pre_validate(&input, &msg));
+  EXPECT_EQ(input, "666");
+
+  input = "123";  // A permitted value with no special behaviour
+  EXPECT_EQ(0, opt_validator.pre_validate(&input, &msg));
+  EXPECT_EQ(input, "123");
+
+  input = "one";  // A value that has a magic conversion
+  EXPECT_EQ(0, opt_validator.pre_validate(&input, &msg));
+  EXPECT_EQ(input, "1");
 }
 
 /*

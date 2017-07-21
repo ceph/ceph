@@ -24,7 +24,7 @@ void RGWGC::initialize(CephContext *_cct, RGWRados *_store) {
   cct = _cct;
   store = _store;
 
-  max_objs = min(cct->_conf->rgw_gc_max_objs, rgw_shards_max());
+  max_objs = min(static_cast<int>(cct->_conf->rgw_gc_max_objs), rgw_shards_max());
 
   obj_names = new string[max_objs];
 

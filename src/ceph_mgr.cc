@@ -45,7 +45,7 @@ int main(int argc, const char **argv)
 			 CODE_ENVIRONMENT_DAEMON, 0,
 			 "mgr_data");
   // For consumption by KeyRing::from_ceph_context in MonClient
-  g_conf->set_val("keyring", "$mgr_data/keyring", false);
+  g_conf->set_val_or_die("keyring", "$mgr_data/keyring");
 
   // Handle --help
   if ((args.size() == 1 && (std::string(args[0]) == "--help" || std::string(args[0]) == "-h"))) {

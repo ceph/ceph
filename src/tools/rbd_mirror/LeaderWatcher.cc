@@ -370,8 +370,7 @@ void LeaderWatcher<I>::schedule_timer_task(const std::string &name,
       m_timer_gate->timer_callback = timer_callback;
     });
 
-  int after = delay_factor *
-    max(1, m_cct->_conf->rbd_mirror_leader_heartbeat_interval);
+  int after = delay_factor * m_cct->_conf->rbd_mirror_leader_heartbeat_interval;
 
   dout(20) << "scheduling " << name << " after " << after << " sec (task "
            << m_timer_task << ")" << dendl;
