@@ -235,3 +235,8 @@
   events to a Zabbix server containing high-level information of the Ceph
   cluster. This makes it easy to monitor a Ceph cluster's status and send
   out notifications in case of a malfunction.
+
+* The 'mon_warn_osd_usage_min_max_delta' config option has been
+  removed and the associated health warning has been disabled because
+  it does not address clusters undergoing recovery or CRUSH rules that do
+  not target all devices in the cluster.

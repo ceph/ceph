@@ -2812,40 +2812,6 @@ void PGMap::get_health_checks(
     }
   }
 
-  // OSD_SKEWED_USAGE
-  if (cct->_conf->mon_warn_osd_usage_min_max_delta) {
-    int max_osd = -1, min_osd = -1;
-    float max_osd_usage = 0.0, min_osd_usage = 1.0;
-    for (auto p = osd_stat.begin(); p != osd_stat.end(); ++p) {
-      // kb should never be 0, but avoid divide by zero in case of corruption
-      if (p->second.kb <= 0)
-        continue;
-      float usage = ((float)p->second.kb_used) / ((float)p->second.kb);
-      if (usage > max_osd_usage) {
-        max_osd_usage = usage;
-	max_osd = p->first;
-      }
-      if (usage < min_osd_usage) {
-        min_osd_usage = usage;
-	min_osd = p->first;
-      }
-    }
-    float diff = max_osd_usage - min_osd_usage;
-    if (diff > cct->_conf->mon_warn_osd_usage_min_max_delta) {
-      auto& d = checks->add("OSD_SKEWED_USAGE", HEALTH_WARN,
-			    "skewed osd utilization");
-      ostringstream ss;
-      ss << "difference between min (osd." << min_osd << " at "
-	 << roundf(min_osd_usage*1000.0)/100.0
-	 << "%) and max (osd." << max_osd << " at "
-	 << roundf(max_osd_usage*1000.0)/100.0
-	 << "%) osd usage " << roundf(diff*1000.0)/100.0 << "% > "
-	 << roundf(cct->_conf->mon_warn_osd_usage_min_max_delta*1000.0)/100.0
-	 << " (mon_warn_osd_usage_min_max_delta)";
-      d.detail.push_back(ss.str());
-    }
-  }
-
   // OSD_SCRUB_ERRORS
   if (pg_sum.stats.sum.num_scrub_errors) {
     ostringstream ss;
@@ -3440,32 +3406,6 @@ void PGMap::get_health(
 	  detail->push_back(make_pair(HEALTH_WARN, ss2.str()));
 	}
       }
-    }
-  }
-
-  if (cct->_conf->mon_warn_osd_usage_min_max_delta) {
-    float max_osd_usage = 0.0, min_osd_usage = 1.0;
-    for (auto p = osd_stat.begin(); p != osd_stat.end(); ++p) {
-      // kb should never be 0, but avoid divide by zero in case of corruption
-      if (p->second.kb <= 0)
-        continue;
-      float usage = ((float)p->second.kb_used) / ((float)p->second.kb);
-      if (usage > max_osd_usage)
-        max_osd_usage = usage;
-      if (usage < min_osd_usage)
-        min_osd_usage = usage;
-    }
-    float diff = max_osd_usage - min_osd_usage;
-    if (diff > cct->_conf->mon_warn_osd_usage_min_max_delta) {
-      ostringstream ss;
-      ss << "difference between min (" << roundf(min_osd_usage*1000.0)/10.0
-	 << "%) and max (" << roundf(max_osd_usage*1000.0)/10.0
-	 << "%) osd usage " << roundf(diff*1000.0)/10.0 << "% > "
-	 << roundf(cct->_conf->mon_warn_osd_usage_min_max_delta*1000.0)/10.0
-	 << "% (mon_warn_osd_usage_min_max_delta)";
-      summary.push_back(make_pair(HEALTH_WARN, ss.str()));
-      if (detail)
-        detail->push_back(make_pair(HEALTH_WARN, ss.str()));
     }
   }
 
