@@ -49,6 +49,8 @@ Major Changes from Kraken
     - The *ceph-mgr* daemon includes a REST-based management API.  The
       API is still experimental and somewhat limited but will form the basis
       for API-based management of Ceph going forward.  FIXME DOCS
+    - *ceph-mgr* also includes a Prometheus exporter plugin, which can
+      provide Ceph perfcounters to Prometheus.  See ceph-mgr docs.
 
   * The overall *scalability* of the cluster has improved. We have
     successfully tested clusters with up to 10,000 OSDs.
