@@ -20,6 +20,7 @@
 #include "librbd/Operations.h"
 #include "librbd/Utils.h"
 #include "librbd/journal/Replay.h"
+#include "ImageDeleter.h"
 #include "ImageReplayer.h"
 #include "Threads.h"
 #include "tools/rbd_mirror/image_replayer/BootstrapRequest.h"
@@ -405,6 +406,31 @@ void ImageReplayer<I>::start(Context *on_finish, bool manual)
     return;
   }
 
+  wait_for_deletion();
+}
+
+template <typename I>
+void ImageReplayer<I>::wait_for_deletion() {
+  dout(20) << dendl;
+
+  Context *ctx = create_context_callback<
+    ImageReplayer, &ImageReplayer<I>::handle_wait_for_deletion>(this);
+  m_image_deleter->wait_for_scheduled_deletion(
+    m_local_pool_id, m_global_image_id, ctx, false);
+}
+
+template <typename I>
+void ImageReplayer<I>::handle_wait_for_deletion(int r) {
+  dout(20) << "r=" << r << dendl;
+
+  if (r == -ECANCELED) {
+    on_start_fail(0, "");
+    return;
+  } else if (r < 0) {
+    on_start_fail(r, "error waiting for image deletion");
+    return;
+  }
+
   prepare_local_image();
 }
 
@@ -679,12 +705,6 @@ void ImageReplayer<I>::handle_start_replay(int r) {
   update_mirror_image_status(true, boost::none);
   reschedule_update_status_task(30);
 
-  dout(20) << "start succeeded" << dendl;
-  if (on_finish != nullptr) {
-    dout(20) << "on finish complete, r=" << r << dendl;
-    on_finish->complete(r);
-  }
-
   if (on_replay_interrupted()) {
     return;
   }
@@ -700,6 +720,11 @@ void ImageReplayer<I>::handle_start_replay(int r) {
     dout(20) << "m_remote_journaler=" << *m_remote_journaler << dendl;
   }
 
+  dout(20) << "start succeeded" << dendl;
+  if (on_finish != nullptr) {
+    dout(20) << "on finish complete, r=" << r << dendl;
+    on_finish->complete(r);
+  }
 }
 
 template <typename I>
@@ -745,6 +770,8 @@ void ImageReplayer<I>::stop(Context *on_finish, bool manual, int r,
 {
   dout(20) << "on_finish=" << on_finish << ", manual=" << manual
 	   << ", desc=" << desc << dendl;
+
+  m_image_deleter->cancel_waiter(m_local_pool_id, m_global_image_id);
 
   image_replayer::BootstrapRequest<I> *bootstrap_request = nullptr;
   bool shut_down_replay = false;
