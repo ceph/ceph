@@ -388,7 +388,7 @@ function test_kill_daemons() {
 # @param ... can be any option valid for ceph-mon
 # @return 0 on success, 1 on error
 #
-function run_mon_no_pool() {
+function run_mon() {
     local dir=$1
     shift
     local id=$1
@@ -420,6 +420,7 @@ function run_mon_no_pool() {
         --run-dir=$dir \
         --pid-file=$dir/\$name.pid \
 	--mon-allow-pool-delete \
+	--mon-osd-backfillfull-ratio .99 \
         "$@" || return 1
 
     cat > $dir/ceph.conf <<EOF
@@ -429,35 +430,19 @@ mon host = $(get_config mon $id mon_host)
 EOF
 }
 
-function run_mon() {
-    local dir=$1
-    shift
-    local id=$1
-    shift
-
-    run_mon_no_pool $dir $id "$@" || return 1
-
-    ceph osd pool create rbd 8
-
-    if test -z "$(get_config mon $id mon_initial_members)" ; then
-        ceph osd pool delete rbd rbd --yes-i-really-really-mean-it || return 1
-        ceph osd pool create rbd $PG_NUM || return 1
-        ceph osd set-backfillfull-ratio .99
-	rbd pool init rbd
-    fi
-}
-
 function test_run_mon() {
     local dir=$1
 
     setup $dir || return 1
 
     run_mon $dir a --mon-initial-members=a || return 1
+    create_rbd_pool || return 1
     # rbd has not been deleted / created, hence it has pool id 0
     ceph osd dump | grep "pool 1 'rbd'" || return 1
     kill_daemons $dir || return 1
 
     run_mon $dir a || return 1
+    create_rbd_pool || return 1
     # rbd has been deleted / created, hence it does not have pool id 0
     ! ceph osd dump | grep "pool 1 'rbd'" || return 1
     local size=$(CEPH_ARGS='' ceph --format=json daemon $(get_asok_path mon.a) \
@@ -483,6 +468,12 @@ function test_run_mon() {
     kill_daemons $dir || return 1
 
     teardown $dir || return 1
+}
+
+function create_rbd_pool() {
+    ceph osd pool delete rbd rbd --yes-i-really-really-mean-it || return 1
+    ceph osd pool create rbd $PG_NUM || return 1
+    rbd pool init rbd
 }
 
 #######################################################################
@@ -813,7 +804,9 @@ function test_get_osds() {
     run_mgr $dir x || return 1
     run_osd $dir 0 || return 1
     run_osd $dir 1 || return 1
+    create_rbd_pool || return 1
     wait_for_clean || return 1
+    create_rbd_pool || return 1
     get_osds rbd GROUP | grep --quiet '^[0-1] [0-1]$' || return 1
     teardown $dir || return 1
 }
@@ -879,6 +872,7 @@ function test_get_pg() {
     run_mon $dir a --osd_pool_default_size=1 || return 1
     run_mgr $dir x || return 1
     run_osd $dir 0 || return 1
+    create_rbd_pool || return 1
     wait_for_clean || return 1
     get_pg rbd GROUP | grep --quiet '^[0-9]\.[0-9a-f][0-9a-f]*$' || return 1
     teardown $dir || return 1
@@ -983,6 +977,7 @@ function test_get_primary() {
     local osd=0
     run_mgr $dir x || return 1
     run_osd $dir $osd || return 1
+    create_rbd_pool || return 1
     wait_for_clean || return 1
     test $(get_primary rbd GROUP) = $osd || return 1
     teardown $dir || return 1
@@ -1016,6 +1011,7 @@ function test_get_not_primary() {
     run_mgr $dir x || return 1
     run_osd $dir 0 || return 1
     run_osd $dir 1 || return 1
+    create_rbd_pool || return 1
     wait_for_clean || return 1
     local primary=$(get_primary rbd GROUP)
     local not_primary=$(get_not_primary rbd GROUP)
@@ -1073,6 +1069,7 @@ function test_objectstore_tool() {
     local osd=0
     run_mgr $dir x || return 1
     run_osd $dir $osd || return 1
+    create_rbd_pool || return 1
     wait_for_clean || return 1
     rados --pool rbd put GROUP /etc/group || return 1
     objectstore_tool $dir $osd GROUP get-bytes | \
@@ -1136,6 +1133,7 @@ function test_get_num_active_clean() {
     run_mon $dir a --osd_pool_default_size=1 || return 1
     run_mgr $dir x || return 1
     run_osd $dir 0 || return 1
+    create_rbd_pool || return 1
     wait_for_clean || return 1
     local num_active_clean=$(get_num_active_clean)
     test "$num_active_clean" = $PG_NUM || return 1
@@ -1162,6 +1160,7 @@ function test_get_num_pgs() {
     run_mon $dir a --osd_pool_default_size=1 || return 1
     run_mgr $dir x || return 1
     run_osd $dir 0 || return 1
+    create_rbd_pool || return 1
     wait_for_clean || return 1
     local num_pgs=$(get_num_pgs)
     test "$num_pgs" -gt 0 || return 1
@@ -1191,6 +1190,7 @@ function test_get_osd_id_used_by_pgs() {
     run_mon $dir a --osd_pool_default_size=1 || return 1
     run_mgr $dir x || return 1
     run_osd $dir 0 || return 1
+    create_rbd_pool || return 1
     wait_for_clean || return 1
     local osd_ids=$(get_osd_id_used_by_pgs | uniq)
     test "$osd_ids" = "0" || return 1
@@ -1232,6 +1232,7 @@ function test_wait_osd_id_used_by_pgs() {
     run_mon $dir a --osd_pool_default_size=1 || return 1
     run_mgr $dir x || return 1
     run_osd $dir 0 || return 1
+    create_rbd_pool || return 1
     wait_for_clean || return 1
     wait_osd_id_used_by_pgs 0 8 || return 1
     ! TIMEOUT=1 wait_osd_id_used_by_pgs 123 5 || return 1
@@ -1263,6 +1264,7 @@ function test_get_last_scrub_stamp() {
     run_mon $dir a --osd_pool_default_size=1 || return 1
     run_mgr $dir x || return 1
     run_osd $dir 0 || return 1
+    create_rbd_pool || return 1
     wait_for_clean || return 1
     stamp=$(get_last_scrub_stamp 2.0)
     test -n "$stamp" || return 1
@@ -1290,6 +1292,7 @@ function test_is_clean() {
     run_mon $dir a --osd_pool_default_size=1 || return 1
     run_mgr $dir x || return 1
     run_osd $dir 0 || return 1
+    create_rbd_pool || return 1
     wait_for_clean || return 1
     is_clean || return 1
     teardown $dir || return 1
@@ -1388,6 +1391,7 @@ function test_wait_for_clean() {
     setup $dir || return 1
     run_mon $dir a --osd_pool_default_size=1 || return 1
     run_mgr $dir x || return 1
+    create_rbd_pool || return 1
     ! TIMEOUT=1 wait_for_clean || return 1
     run_osd $dir 0 || return 1
     wait_for_clean || return 1
@@ -1460,6 +1464,7 @@ function test_repair() {
     run_mon $dir a --osd_pool_default_size=1 || return 1
     run_mgr $dir x || return 1
     run_osd $dir 0 || return 1
+    create_rbd_pool || return 1
     wait_for_clean || return 1
     repair 2.0 || return 1
     kill_daemons $dir KILL osd || return 1
@@ -1499,6 +1504,7 @@ function test_pg_scrub() {
     run_mon $dir a --osd_pool_default_size=1 || return 1
     run_mgr $dir x || return 1
     run_osd $dir 0 || return 1
+    create_rbd_pool || return 1
     wait_for_clean || return 1
     pg_scrub 2.0 || return 1
     kill_daemons $dir KILL osd || return 1
@@ -1590,6 +1596,7 @@ function test_wait_for_scrub() {
     run_mon $dir a --osd_pool_default_size=1 || return 1
     run_mgr $dir x || return 1
     run_osd $dir 0 || return 1
+    create_rbd_pool || return 1
     wait_for_clean || return 1
     local pgid=2.0
     ceph pg repair $pgid
@@ -1781,6 +1788,7 @@ function test_flush_pg_stats()
     run_mon $dir a --osd_pool_default_size=1 || return 1
     run_mgr $dir x || return 1
     run_osd $dir 0 || return 1
+    create_rbd_pool || return 1
     rados -p rbd put obj /etc/group
     flush_pg_stats
     local jq_filter='.pools | .[] | select(.name == "rbd") | .stats'

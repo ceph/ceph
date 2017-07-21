@@ -83,6 +83,7 @@ function TEST_corrupt_and_repair_replicated() {
     run_mgr $dir x || return 1
     run_osd $dir 0 || return 1
     run_osd $dir 1 || return 1
+    create_rbd_pool || return 1
     wait_for_clean || return 1
 
     add_something $dir $poolname || return 1
@@ -213,6 +214,7 @@ function auto_repair_erasure_coded() {
             run_osd $dir $id $ceph_osd_args || return 1
 	fi
     done
+    create_rbd_pool || return 1
     wait_for_clean || return 1
 
     # Create an EC pool
@@ -265,6 +267,7 @@ function corrupt_and_repair_jerasure() {
             run_osd $dir $id || return 1
 	fi
     done
+    create_rbd_pool || return 1
     wait_for_clean || return 1
 
     create_ec_pool $poolname $allow_overwrites k=2 m=2 || return 1
@@ -298,6 +301,7 @@ function corrupt_and_repair_lrc() {
             run_osd $dir $id || return 1
 	fi
     done
+    create_rbd_pool || return 1
     wait_for_clean || return 1
 
     create_ec_pool $poolname $allow_overwrites k=4 m=2 l=3 plugin=lrc || return 1
@@ -332,6 +336,7 @@ function unfound_erasure_coded() {
             run_osd $dir $id || return 1
 	fi
     done
+    create_rbd_pool || return 1
     wait_for_clean || return 1
 
     create_ec_pool $poolname $allow_overwrites k=2 m=2 || return 1
@@ -402,6 +407,7 @@ function list_missing_erasure_coded() {
             run_osd $dir $id || return 1
 	fi
     done
+    create_rbd_pool || return 1
     wait_for_clean || return 1
 
     create_ec_pool $poolname $allow_overwrites k=2 m=1 || return 1
@@ -436,6 +442,7 @@ function list_missing_erasure_coded() {
     for id in $(seq 0 2) ; do
         activate_osd $dir $id >&2 || return 1
     done
+    create_rbd_pool || return 1
     wait_for_clean || return 1
 
     # Get get - both objects should in the same PG
@@ -477,6 +484,7 @@ function TEST_corrupt_scrub_replicated() {
     run_mgr $dir x || return 1
     run_osd $dir 0 || return 1
     run_osd $dir 1 || return 1
+    create_rbd_pool || return 1
     wait_for_clean || return 1
 
     ceph osd pool create $poolname 1 1 || return 1
@@ -1605,6 +1613,7 @@ function corrupt_scrub_erasure() {
             run_osd $dir $id || return 1
 	fi
     done
+    create_rbd_pool || return 1
     wait_for_clean || return 1
 
     create_ec_pool $poolname $allow_overwrites k=2 m=1 stripe_unit=2K --force || return 1
@@ -2535,6 +2544,7 @@ function TEST_periodic_scrub_replicated() {
     local ceph_osd_args="--osd-scrub-interval-randomize-ratio=0 --osd-deep-scrub-randomize-ratio=0"
     run_osd $dir 0 $ceph_osd_args || return 1
     run_osd $dir 1 $ceph_osd_args || return 1
+    create_rbd_pool || return 1
     wait_for_clean || return 1
 
     ceph osd pool create $poolname 1 1 || return 1

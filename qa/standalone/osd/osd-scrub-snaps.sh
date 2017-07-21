@@ -42,6 +42,7 @@ function TEST_scrub_snaps() {
     run_mgr $dir x || return 1
     run_osd $dir 0 || return 1
 
+    create_rbd_pool || return 1
     wait_for_clean || return 1
 
     # Create a pool with a single pg
@@ -153,6 +154,7 @@ function TEST_scrub_snaps() {
     rm -f $dir/bad
 
     run_osd $dir 0 || return 1
+    create_rbd_pool || return 1
     wait_for_clean || return 1
 
     local pgid="${poolid}.0"

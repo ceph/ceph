@@ -36,6 +36,7 @@ function run() {
     for id in $(seq 0 10) ; do
         run_osd $dir $id || return 1
     done
+    create_rbd_pool || return 1
     wait_for_clean || return 1
     # check that erasure code plugins are preloaded
     CEPH_ARGS='' ceph --admin-daemon $(get_asok_path osd.0) log flush || return 1
