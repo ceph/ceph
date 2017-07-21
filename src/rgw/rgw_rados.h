@@ -2986,7 +2986,7 @@ public:
     public:
       explicit List(RGWRados::Bucket *_target) : target(_target) {}
 
-      int list_objects(int max, vector<rgw_bucket_dir_entry> *result, map<string, bool> *common_prefixes, bool *is_truncated);
+      int list_objects(int64_t max, vector<rgw_bucket_dir_entry> *result, map<string, bool> *common_prefixes, bool *is_truncated);
       rgw_obj_key& get_next_marker() {
         return next_marker;
       }

@@ -641,6 +641,10 @@ COMMAND("injectargs " \
 	"name=injected_args,type=CephString,n=N",
 	"inject configuration arguments into running MDS",
 	"mds", "*", "cli,rest")
+COMMAND("config set " \
+	"name=key,type=CephString name=value,type=CephString",
+	"Set a configuration option at runtime (not persistent)",
+	"mds", "*", "cli,rest")
 COMMAND("exit",
 	"Terminate this MDS",
 	"mds", "*", "cli,rest")
@@ -757,6 +761,12 @@ int MDSDaemon::_handle_command(
     for (vector<string>::iterator a = ++argsvec.begin(); a != argsvec.end(); ++a)
       args += " " + *a;
     r = cct->_conf->injectargs(args, &ss);
+  } else if (prefix == "config set") {
+    std::string key;
+    cmd_getval(cct, cmdmap, "key", key);
+    std::string val;
+    cmd_getval(cct, cmdmap, "value", val);
+    r = cct->_conf->set_val(key, val, true, &ss);
   } else if (prefix == "exit") {
     // We will send response before executing
     ss << "Exiting...";

@@ -20,7 +20,6 @@ OPTION(public_bind_addr, OPT_ADDR, entity_addr_t())
 OPTION(cluster_addr, OPT_ADDR, entity_addr_t())
 OPTION(public_network, OPT_STR, "")
 OPTION(cluster_network, OPT_STR, "")
-OPTION(num_client, OPT_INT, 1)
 OPTION(monmap, OPT_STR, "")
 OPTION(mon_host, OPT_STR, "")
 OPTION(mon_dns_srv_name, OPT_STR, "ceph-mon")
@@ -36,7 +35,6 @@ OPTION(setgroup, OPT_STR, "")        // gid or group name
 OPTION(setuser_match_path, OPT_STR, "")  // make setuser/group conditional on this path matching ownership
 OPTION(pid_file, OPT_STR, "") // default changed by common_preinit()
 OPTION(chdir, OPT_STR, "/")
-OPTION(max_open_files, OPT_LONGLONG, 0)
 OPTION(restapi_log_level, OPT_STR, "") 	// default set by Python code
 OPTION(restapi_base_url, OPT_STR, "")	// "
 OPTION(fatal_signal_handlers, OPT_BOOL, true)
@@ -111,64 +109,7 @@ OPTION(plugin_crypto_accelerator, OPT_STR, "crypto_isal")
 
 OPTION(mempool_debug, OPT_BOOL, false)
 
-DEFAULT_SUBSYS(0, 5)
-SUBSYS(lockdep, 0, 1)
-SUBSYS(context, 0, 1)
-SUBSYS(crush, 1, 1)
-SUBSYS(mds, 1, 5)
-SUBSYS(mds_balancer, 1, 5)
-SUBSYS(mds_locker, 1, 5)
-SUBSYS(mds_log, 1, 5)
-SUBSYS(mds_log_expire, 1, 5)
-SUBSYS(mds_migrator, 1, 5)
-SUBSYS(buffer, 0, 1)
-SUBSYS(timer, 0, 1)
-SUBSYS(filer, 0, 1)
-SUBSYS(striper, 0, 1)
-SUBSYS(objecter, 0, 1)
-SUBSYS(rados, 0, 5)
-SUBSYS(rbd, 0, 5)
-SUBSYS(rbd_mirror, 0, 5)
-SUBSYS(rbd_replay, 0, 5)
-SUBSYS(journaler, 0, 5)
-SUBSYS(objectcacher, 0, 5)
-SUBSYS(client, 0, 5)
-SUBSYS(osd, 1, 5)
-SUBSYS(optracker, 0, 5)
-SUBSYS(objclass, 0, 5)
-SUBSYS(filestore, 1, 3)
-SUBSYS(journal, 1, 3)
-SUBSYS(ms, 0, 5)
-SUBSYS(mon, 1, 5)
-SUBSYS(monc, 0, 10)
-SUBSYS(paxos, 1, 5)
-SUBSYS(tp, 0, 5)
-SUBSYS(auth, 1, 5)
-SUBSYS(crypto, 1, 5)
-SUBSYS(finisher, 1, 1)
-SUBSYS(heartbeatmap, 1, 5)
-SUBSYS(perfcounter, 1, 5)
-SUBSYS(rgw, 1, 5)                 // log level for the Rados gateway
-SUBSYS(civetweb, 1, 10)
-SUBSYS(javaclient, 1, 5)
-SUBSYS(asok, 1, 5)
-SUBSYS(throttle, 1, 1)
-SUBSYS(refs, 0, 0)
-SUBSYS(xio, 1, 5)
-SUBSYS(compressor, 1, 5)
-SUBSYS(bluestore, 1, 5)
-SUBSYS(bluefs, 1, 5)
-SUBSYS(bdev, 1, 3)
-SUBSYS(kstore, 1, 5)
-SUBSYS(rocksdb, 4, 5)
-SUBSYS(leveldb, 4, 5)
-SUBSYS(memdb, 4, 5)
-SUBSYS(kinetic, 1, 5)
-SUBSYS(fuse, 1, 5)
-SUBSYS(mgr, 1, 5)
-SUBSYS(mgrc, 1, 5)
-SUBSYS(dpdk, 1, 5)
-SUBSYS(eventtrace, 1, 5)
+
 
 OPTION(key, OPT_STR, "")
 OPTION(keyfile, OPT_STR, "")
@@ -1423,7 +1364,6 @@ OPTION(rbd_mirroring_resync_after_disconnect, OPT_BOOL, false) // automatically 
 OPTION(rbd_mirroring_replay_delay, OPT_INT, 0) // time-delay in seconds for rbd-mirror asynchronous replication
 
 OPTION(rbd_default_pool, OPT_STR, "rbd") // default pool for storing images
-OPTION_VALIDATOR(rbd_default_pool)
 
 /*
  * The following options change the behavior for librbd's image creation methods that
@@ -1446,7 +1386,6 @@ OPTION(rbd_default_order, OPT_INT, 22)
 OPTION(rbd_default_stripe_count, OPT_U64, 0) // changing requires stripingv2 feature
 OPTION(rbd_default_stripe_unit, OPT_U64, 0) // changing to non-object size requires stripingv2 feature
 OPTION(rbd_default_data_pool, OPT_STR, "") // optional default pool for storing image data blocks
-OPTION_VALIDATOR(rbd_default_data_pool)
 
 /**
  * RBD features are only applicable for v2 images. This setting accepts either
@@ -1464,7 +1403,6 @@ OPTION_VALIDATOR(rbd_default_data_pool)
  *  +128 -> data-pool
  */
 SAFE_OPTION(rbd_default_features, OPT_STR, "layering,exclusive-lock,object-map,fast-diff,deep-flatten")
-OPTION_VALIDATOR(rbd_default_features)
 
 OPTION(rbd_default_map_options, OPT_STR, "") // default rbd map -o / --options
 

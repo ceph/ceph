@@ -15,7 +15,6 @@
 #include "common/ceph_argparse.h"
 #include "common/common_init.h"
 #include "common/config.h"
-#include "common/config_validators.h"
 #include "include/str_list.h"
 #include "include/stringify.h"
 #include "osd/osd_types.h"
@@ -73,101 +72,108 @@ int ceph_resolve_file_search(const std::string& filename_list,
   return ret;
 }
 
-#define OPTION(name, type, def_val)
-#define OPTION_VALIDATOR(name)              \
-struct md_config_t::option_##name##_t {     \
-  typedef decltype(md_config_t::name) type; \
-};
-#define SAFE_OPTION(name, type, def_val)
-#define SUBSYS(name, log, gather)
-#define DEFAULT_SUBSYS(log, gather)
-#include "common/config_opts.h"
-#undef OPTION
-#undef OPTION_VALIDATOR
-#undef SAFE_OPTION
-#undef SUBSYS
-#undef DEFAULT_SUBSYS
 
-namespace {
 
-template <typename T>
-typename std::enable_if<!std::is_destructible<T>::value,
-                        md_config_t::validator_t>::type create_validator() {
-  return md_config_t::validator_t();
-}
-
-template <typename T>
-typename std::enable_if<std::is_destructible<T>::value,
-                        md_config_t::validator_t>::type create_validator() {
-  // if T is defined (and not just forward declared), it implies
-  // that a validator function exists. use a dummy typed pointer to
-  // pick the correct validator function
-  return [](std::string *value, std::string *error_message) {
-      return ::validate(reinterpret_cast<T*>(0), value, error_message);
-    };
-}
-
-} // anonymous namespace
-
-md_config_t::md_config_t()
+md_config_t::md_config_t(bool is_daemon)
   : cluster(""),
-
-#define OPTION_OPT_INT(name, def_val) name(def_val),
-#define OPTION_OPT_LONGLONG(name, def_val) name((1LL) * def_val),
-#define OPTION_OPT_STR(name, def_val) name(def_val),
-#define OPTION_OPT_DOUBLE(name, def_val) name(def_val),
-#define OPTION_OPT_FLOAT(name, def_val) name(def_val),
-#define OPTION_OPT_BOOL(name, def_val) name(def_val),
-#define OPTION_OPT_ADDR(name, def_val) name(def_val),
-#define OPTION_OPT_U32(name, def_val) name(def_val),
-#define OPTION_OPT_U64(name, def_val) name(((uint64_t)1) * def_val),
-#define OPTION_OPT_UUID(name, def_val) name(def_val),
-#define OPTION(name, type, def_val) OPTION_##type(name, def_val)
-#define OPTION_VALIDATOR(name)
-#define SAFE_OPTION(name, type, def_val) OPTION(name, type, def_val)
-#define SUBSYS(name, log, gather)
-#define DEFAULT_SUBSYS(log, gather)
-#include "common/config_opts.h"
-#undef OPTION_OPT_INT
-#undef OPTION_OPT_LONGLONG
-#undef OPTION_OPT_STR
-#undef OPTION_OPT_DOUBLE
-#undef OPTION_OPT_FLOAT
-#undef OPTION_OPT_BOOL
-#undef OPTION_OPT_ADDR
-#undef OPTION_OPT_U32
-#undef OPTION_OPT_U64
-#undef OPTION_OPT_UUID
-#undef OPTION
-#undef OPTION_VALIDATOR
-#undef SAFE_OPTION
-#undef SUBSYS
-#undef DEFAULT_SUBSYS
   lock("md_config_t", true, false)
 {
-  static const std::vector<md_config_t::config_option> s_config_options = {
+  init_subsys();
+
+  // Load the compile-time list of Option into
+  // a map so that we can resolve keys quickly.
+  for (const auto &i : ceph_options) {
+    if (schema.count(i.name)) {
+      // We may be instantiated pre-logging so send 
+      std::cerr << "Duplicate config key in schema: '" << i.name << "'"
+                << std::endl;
+      assert(false);
+    }
+    schema.insert({i.name, i});
+  }
+
+  // Populate list of legacy_values according to the OPTION() definitions
+  // Note that this is just setting up our map of name->member ptr.  The
+  // default values etc will get loaded in along with new-style data,
+  // as all loads write to both the values map, and the legacy
+  // members if present.
+  legacy_values = {
 #define OPTION4(name, type, def_val, safe) \
-        config_option{ STRINGIFY(name), type, &md_config_t::name, safe, \
-                       create_validator<option_##name##_t>() },
+    {std::string(STRINGIFY(name)), &md_config_t::name},
 #define OPTION(name, type, def_val) OPTION4(name, type, def_val, false)
-#define OPTION_VALIDATOR(name)
 #define SAFE_OPTION(name, type, def_val) OPTION4(name, type, def_val, true)
-#define SUBSYS(name, log, gather)
-#define DEFAULT_SUBSYS(log, gather)
-#include "common/config_opts.h"
+#include "common/legacy_config_opts.h"
 #undef OPTION4
 #undef OPTION
-#undef OPTION_VALIDATOR
 #undef SAFE_OPTION
-#undef SUBSYS
-#undef DEFAULT_SUBSYS
   };
-  static std::shared_ptr<decltype(s_config_options)>
-    s_tbl(new std::vector<md_config_t::config_option>(std::move(s_config_options)));
-  config_options = s_tbl;
 
-  validate_default_settings();
-  init_subsys();
+  validate_schema();
+
+  // Load default values from the schema
+  for (const auto &i : schema) {
+    const Option &opt = i.second;
+    bool has_daemon_default = !boost::get<boost::blank>(&opt.daemon_value);
+    Option::value_t default_val;
+    if (is_daemon && has_daemon_default) {
+      default_val = opt.daemon_value;
+    } else {
+      default_val = opt.value;
+    }
+
+    if (opt.type == Option::TYPE_STR) {
+      // We call pre_validate as a sanity check, but also to get any
+      // side effect (value modification) from the validator.
+      std::string *def_str = boost::get<std::string>(&default_val);
+      std::string err;
+      if (opt.pre_validate(def_str, &err) != 0) {
+        std::cerr << "Default value " << opt.name << "=" << *def_str << " is "
+                     "invalid: " << err << std::endl;
+
+        // This is the compiled-in default that is failing its own option's
+        // validation, so this is super-invalid and should never make it
+        // past a pull request: crash out.
+        assert(false);
+      }
+    }
+
+    values[i.first] = default_val;
+  }
+
+  // Copy out values (defaults) into any legacy (C struct member) fields
+  for (const auto &i : legacy_values) {
+    const auto &name = i.first;
+    const auto &option = schema.at(name);
+    auto ptr = i.second;
+
+    update_legacy_val(option, ptr);
+  }
+}
+
+/**
+ * Sanity check schema.  Assert out on failures, to ensure any bad changes
+ * cannot possibly pass any testing and make it into a release.
+ */
+void md_config_t::validate_schema()
+{
+  for (const auto &i : schema) {
+    const auto &opt = i.second;
+    for (const auto &see_also_key : opt.see_also) {
+      if (schema.count(see_also_key) == 0) {
+        std::cerr << "Non-existent see-also key '" << see_also_key
+                  << "' on option '" << opt.name << "'" << std::endl;
+        assert(false);
+      }
+    }
+  }
+
+  for (const auto &i : legacy_values) {
+    if (schema.count(i.first) == 0) {
+      std::cerr << "Schema is missing legacy field '" << i.first << "'"
+                << std::endl;
+      assert(false);
+    }
+  }
 }
 
 void md_config_t::init_subsys()
@@ -176,13 +182,7 @@ void md_config_t::init_subsys()
   subsys.add(ceph_subsys_##name, STRINGIFY(name), log, gather);
 #define DEFAULT_SUBSYS(log, gather) \
   subsys.add(ceph_subsys_, "none", log, gather);
-#define OPTION(a, b, c)
-#define OPTION_VALIDATOR(a)
-#define SAFE_OPTION(a, b, c)
-#include "common/config_opts.h"
-#undef OPTION
-#undef OPTION_VALIDATOR
-#undef SAFE_OPTION
+#include "common/subsys.h"
 #undef SUBSYS
 #undef DEFAULT_SUBSYS
 }
@@ -255,7 +255,7 @@ int md_config_t::parse_config_files(const char *conf_files,
     string &s = *p;
     if (s.find("$data_dir") != string::npos) {
       if (data_dir_option.length()) {
-	list<config_option const *> stack;
+	list<const Option *> stack;
 	expand_meta(s, NULL, stack, warnings);
 	p++;
       } else {
@@ -310,12 +310,13 @@ int md_config_t::parse_config_files_impl(const std::list<std::string> &conf_file
 
   std::vector <std::string> my_sections;
   _get_my_sections(my_sections);
-  for (auto& opt: *config_options) {
+  for (const auto &i : schema) {
+    const auto &opt = i.second;
     std::string val;
     int ret = _get_val_from_conf_file(my_sections, opt.name, val, false);
     if (ret == 0) {
       std::string error_message;
-      int r = set_val_impl(val, &opt, &error_message);
+      int r = set_val_impl(val, opt, &error_message);
       if (warnings != nullptr && (r != 0 || !error_message.empty())) {
         *warnings << "parse error setting '" << opt.name << "' to '" << val
                   << "'";
@@ -328,7 +329,7 @@ int md_config_t::parse_config_files_impl(const std::list<std::string> &conf_file
   }
 
   // subsystems?
-  for (int o = 0; o < subsys.get_num(); o++) {
+  for (size_t o = 0; o < subsys.get_num(); o++) {
     std::string as_option("debug_");
     as_option += subsys.get_name(o);
     std::string val;
@@ -402,7 +403,7 @@ void md_config_t::_show_config(std::ostream *out, Formatter *f)
     f->dump_string("name", stringify(name));
     f->dump_string("cluster", cluster);
   }
-  for (int o = 0; o < subsys.get_num(); o++) {
+  for (size_t o = 0; o < subsys.get_num(); o++) {
     if (out)
       *out << "debug_" << subsys.get_name(o)
 	   << " = " << subsys.get_log_level(o)
@@ -416,13 +417,14 @@ void md_config_t::_show_config(std::ostream *out, Formatter *f)
       f->dump_string(debug_name.c_str(), ss.str());
     }
   }
-  for (auto& opt: *config_options) {
+  for (const auto& i: schema) {
+    const Option &opt = i.second;
     char *buf;
     _get_val(opt.name, &buf, -1);
     if (out)
       *out << opt.name << " = " << buf << std::endl;
     if (f)
-      f->dump_string(opt.name, buf);
+      f->dump_string(opt.name.c_str(), buf);
     free(buf);
   }
 }
@@ -528,7 +530,7 @@ int md_config_t::parse_option(std::vector<const char*>& args,
 			       ostream *oss)
 {
   int ret = 0;
-  int o;
+  size_t o = 0;
   std::string val;
 
   // subsystems?
@@ -556,16 +558,16 @@ int md_config_t::parse_option(std::vector<const char*>& args,
     return ret;
   }
 
-  const char *option_name = nullptr;
+  std::string option_name;
   std::string error_message;
   o = 0;
-  for (auto& opt_ref: *config_options) {
+  for (const auto& opt_iter: schema) {
+    const Option &opt = opt_iter.second;
     ostringstream err;
-    config_option const *opt = &opt_ref;
     std::string as_option("--");
-    as_option += opt->name;
-    option_name = opt->name;
-    if (opt->type == OPT_BOOL) {
+    as_option += opt.name;
+    option_name = opt.name;
+    if (opt.type == Option::TYPE_BOOL) {
       int res;
       if (ceph_argparse_binary_flag(args, i, &res, oss, as_option.c_str(),
 				    (char*)NULL)) {
@@ -578,7 +580,7 @@ int md_config_t::parse_option(std::vector<const char*>& args,
 	break;
       } else {
 	std::string no("--no-");
-	no += opt->name;
+	no += opt.name;
 	if (ceph_argparse_flag(args, i, no.c_str(), (char*)NULL)) {
 	  ret = set_val_impl("false", opt, &error_message);
 	  break;
@@ -591,9 +593,9 @@ int md_config_t::parse_option(std::vector<const char*>& args,
 	ret = -EINVAL;
 	break;
       }
-      if (oss && ((!opt->is_safe()) &&
-		  (observers.find(opt->name) == observers.end()))) {
-	*oss << "You cannot change " << opt->name << " using injectargs.\n";
+      if (oss && ((!opt.is_safe()) &&
+		  (observers.find(opt.name) == observers.end()))) {
+	*oss << "You cannot change " << opt.name << " using injectargs.\n";
         return -ENOSYS;
       }
       ret = set_val_impl(val, opt, &error_message);
@@ -603,7 +605,7 @@ int md_config_t::parse_option(std::vector<const char*>& args,
   }
 
   if (ret != 0 || !error_message.empty()) {
-    assert(option_name);
+    assert(!option_name.empty());
     if (oss) {
       *oss << "Parse error setting " << option_name << " to '"
            << val << "' using injectargs";
@@ -621,7 +623,7 @@ int md_config_t::parse_option(std::vector<const char*>& args,
     }
   }
 
-  if (o == (int)config_options->size()) {
+  if (o == schema.size()) {
     // ignore
     ++i;
   }
@@ -665,6 +667,15 @@ void md_config_t::_apply_changes(std::ostream *oss)
   typedef std::map < md_config_obs_t*, std::set <std::string> > rev_obs_map_t;
 
   expand_all_meta();
+
+  // expand_all_meta could have modified anything.  Copy it all out again.
+  for (const auto &i : legacy_values) {
+    const auto &name = i.first;
+    const auto &option = schema.at(name);
+    auto ptr = i.second;
+
+    update_legacy_val(option, ptr);
+  }
 
   // create the reverse observer mapping, mapping observers to the set of
   // changed keys that they'll get.
@@ -754,62 +765,29 @@ int md_config_t::injectargs(const std::string& s, std::ostream *oss)
   return ret;
 }
 
-void md_config_t::set_val_or_die(const char *key, const char *val)
+void md_config_t::set_val_or_die(const std::string &key,
+                                 const std::string &val,
+                                 bool meta)
 {
-  int ret = set_val(key, val);
+  std::stringstream err;
+  int ret = set_val(key, val, meta, &err);
+  if (ret != 0) {
+    std::cerr << "set_val_or_die(" << key << "): " << err.str();
+  }
   assert(ret == 0);
 }
 
-struct is_integer_member : public boost::static_visitor<bool> {
-  template<typename T,
-           typename boost::enable_if<boost::is_integral<T>, int>::type = 0>
-  bool operator()(const T md_config_t::* /* member_ptr */) const {
-    return true;
-  }
-  template<typename T,
-           typename boost::enable_if_c<!boost::is_integral<T>::value, int>::type = 0>
-  bool operator()(const T md_config_t::* /* member_ptr */) const {
-    return false;
-  }
-};
-
-struct is_float_member : public boost::static_visitor<bool> {
-  template<typename T,
-           typename boost::enable_if<boost::is_float<T>, int>::type = 0>
-  bool operator()(const T md_config_t::* /* member_ptr */) const {
-    return true;
-  }
-  template<typename T,
-           typename boost::enable_if_c<!boost::is_float<T>::value, int>::type = 0>
-  bool operator()(const T md_config_t::* /* member_ptr */) const {
-    return false;
-  }
-};
-
-bool md_config_t::config_option::is_safe() const {
-  // for now integer and floating point options considered thread safe
-  return safe ||
-    boost::apply_visitor(is_integer_member(), md_member_ptr) ||
-    boost::apply_visitor(is_float_member(), md_member_ptr);
-}
-
-md_config_t::config_option const *md_config_t::find_config_option(const std::string &normalized_key) const
-{
-  auto opt_it = std::find_if(config_options->begin(),
-                             config_options->end(),
-			     [normalized_key](const config_option &opt) -> bool {
-			       return strcmp(normalized_key.c_str(), opt.name) == 0;
-			     });
-  return config_options->end() == opt_it ? nullptr : &(*opt_it);
-}
-
-int md_config_t::set_val(const char *key, const char *val, bool meta)
+int md_config_t::set_val(const std::string &key, const char *val,
+    bool meta, std::stringstream *err_ss)
 {
   Mutex::Locker l(lock);
-  if (!key)
+  if (key.empty()) {
+    if (err_ss) *err_ss << "No key specified";
     return -EINVAL;
-  if (!val)
+  }
+  if (!val) {
     return -EINVAL;
+  }
 
   std::string v(val);
   if (meta)
@@ -819,97 +797,101 @@ int md_config_t::set_val(const char *key, const char *val, bool meta)
 
   // subsystems?
   if (strncmp(k.c_str(), "debug_", 6) == 0) {
-    for (int o = 0; o < subsys.get_num(); o++) {
+    for (size_t o = 0; o < subsys.get_num(); o++) {
       std::string as_option = "debug_" + subsys.get_name(o);
       if (k == as_option) {
 	int log, gather;
 	int r = sscanf(v.c_str(), "%d/%d", &log, &gather);
 	if (r >= 1) {
-	  if (r < 2)
+	  if (r < 2) {
 	    gather = log;
-	  //	  cout << "subsys " << subsys.get_name(o) << " log " << log << " gather " << gather << std::endl;
+          }
 	  subsys.set_log_level(o, log);
 	  subsys.set_gather_level(o, gather);
+          if (err_ss) *err_ss << "Set " << k << " to " << log << "/" << gather;
 	  return 0;
 	}
+        if (err_ss) {
+          *err_ss << "Invalid debug level, should be <int> or <int>/<int>";
+        }
 	return -EINVAL;
       }
     }	
   }
 
-  config_option const *opt = find_config_option(k);
-  if (opt) {
-    if ((!opt->is_safe()) && internal_safe_to_start_threads) {
+  const auto &opt_iter = schema.find(k);
+  if (opt_iter != schema.end()) {
+    const Option &opt = opt_iter->second;
+    if ((!opt.is_safe()) && internal_safe_to_start_threads) {
       // If threads have been started and the option is not thread safe
-      if (observers.find(opt->name) == observers.end()) {
+      if (observers.find(opt.name) == observers.end()) {
         // And there is no observer to safely change it...
         // You lose.
+        if (err_ss) *err_ss << "Configuration option '" << key << "' may "
+                    "not be modified at runtime";
         return -ENOSYS;
       }
     }
 
     std::string error_message;
     int r = set_val_impl(v, opt, &error_message);
+    if (r == 0) {
+      if (err_ss) *err_ss << "Set " << opt.name << " to " << v;
+    } else {
+      if (err_ss) *err_ss << error_message;
+    }
     return r;
   }
 
-  // couldn't find a configuration option with key 'key'
+  if (err_ss) *err_ss << "Configuration option not found: '" << key << "'";
   return -ENOENT;
 }
 
 
-int md_config_t::get_val(const char *key, char **buf, int len) const
+int md_config_t::get_val(const std::string &key, char **buf, int len) const
 {
   Mutex::Locker l(lock);
   return _get_val(key, buf,len);
 }
 
-md_config_t::config_value_t md_config_t::get_val_generic(const char *key) const
+Option::value_t md_config_t::get_val_generic(const std::string &key) const
 {
   Mutex::Locker l(lock);
   return _get_val(key);
 }
 
-class get_value_generic_visitor : public boost::static_visitor<md_config_t::config_value_t> {
-  md_config_t const *conf;
-public:
-  explicit get_value_generic_visitor(md_config_t const *conf_) : conf(conf_) { }
-  template<typename T> md_config_t::config_value_t operator()(const T md_config_t::* member_ptr) {
-    return md_config_t::config_value_t(conf->*member_ptr);
-  }
-};
-
-md_config_t::config_value_t md_config_t::_get_val(const char *key) const
+Option::value_t md_config_t::_get_val(const std::string &key) const
 {
   assert(lock.is_locked());
 
-  if (!key)
-    return config_value_t(invalid_config_value_t());
+  if (key.empty()) {
+    return Option::value_t(boost::blank());
+  }
 
   // In key names, leading and trailing whitespace are not significant.
   string k(ConfFile::normalize_key_name(key));
 
-  config_option const *opt = find_config_option(k);
-  if (!opt) {
-      return config_value_t(invalid_config_value_t());
+  const auto &opt_iter = schema.find(k);
+  if (opt_iter != schema.end()) {
+    // Using .at() is safe because all keys in the schema always have
+    // entries in ::values
+    return values.at(k);
+  } else {
+    return Option::value_t(boost::blank());
   }
-  get_value_generic_visitor gvv(this);
-  return boost::apply_visitor(gvv, opt->md_member_ptr);
 }
 
-int md_config_t::_get_val(const char *key, std::string *value) const {
+int md_config_t::_get_val(const std::string &key, std::string *value) const {
   assert(lock.is_locked());
 
   std::string normalized_key(ConfFile::normalize_key_name(key));
-  config_value_t config_value = _get_val(normalized_key.c_str());
-  if (!boost::get<invalid_config_value_t>(&config_value)) {
+  Option::value_t config_value = _get_val(normalized_key.c_str());
+  if (!boost::get<boost::blank>(&config_value)) {
     ostringstream oss;
     if (bool *flag = boost::get<bool>(&config_value)) {
       oss << (*flag ? "true" : "false");
-    } else if (float *fp = boost::get<float>(&config_value)) {
-      oss << std::fixed << *fp ;
     } else if (double *dp = boost::get<double>(&config_value)) {
-      oss << std::fixed << *dp ;
+      oss << std::fixed << *dp;
     } else {
       oss << config_value;
     }
@@ -919,15 +901,15 @@ int md_config_t::_get_val(const char *key, std::string *value) const {
   return -ENOENT;
 }
 
-int md_config_t::_get_val(const char *key, char **buf, int len) const
+int md_config_t::_get_val(const std::string &key, char **buf, int len) const
 {
   assert(lock.is_locked());
 
-  if (!key)
+  if (key.empty())
     return -EINVAL;
 
   string val ;
-  if (!_get_val(key, &val)) {
+  if (_get_val(key, &val) == 0) {
     int l = val.length() + 1;
     if (len == -1) {
       *buf = (char*)malloc(l);
@@ -942,7 +924,7 @@ int md_config_t::_get_val(const char *key, char **buf, int len) const
 
   string k(ConfFile::normalize_key_name(key));
   // subsys?
-  for (int o = 0; o < subsys.get_num(); o++) {
+  for (size_t o = 0; o < subsys.get_num(); o++) {
     std::string as_option = "debug_" + subsys.get_name(o);
     if (k == as_option) {
       if (len == -1) {
@@ -962,14 +944,15 @@ void md_config_t::get_all_keys(std::vector<std::string> *keys) const {
   const std::string negative_flag_prefix("no_");
 
   keys->clear();
-  keys->reserve(config_options->size());
-  for (auto& opt: *config_options) {
+  keys->reserve(schema.size());
+  for (const auto &i: schema) {
+    const Option &opt = i.second;
     keys->push_back(opt.name);
-    if (opt.type == OPT_BOOL) {
+    if (opt.type == Option::TYPE_BOOL) {
       keys->push_back(negative_flag_prefix + opt.name);
     }
   }
-  for (int i = 0; i < subsys.get_num(); ++i) {
+  for (size_t i = 0; i < subsys.get_num(); ++i) {
     keys->push_back("debug_" + subsys.get_name(i));
   }
 }
@@ -1007,14 +990,14 @@ int md_config_t::get_all_sections(std::vector <std::string> &sections) const
 }
 
 int md_config_t::get_val_from_conf_file(const std::vector <std::string> &sections,
-		    const char *key, std::string &out, bool emeta) const
+		    const std::string &key, std::string &out, bool emeta) const
 {
   Mutex::Locker l(lock);
   return _get_val_from_conf_file(sections, key, out, emeta);
 }
 
 int md_config_t::_get_val_from_conf_file(const std::vector <std::string> &sections,
-					 const char *key, std::string &out, bool emeta) const
+					 const std::string &key, std::string &out, bool emeta) const
 {
   assert(lock.is_locked());
   std::vector <std::string>::const_iterator s = sections.begin();
@@ -1032,116 +1015,121 @@ int md_config_t::_get_val_from_conf_file(const std::vector <std::string> &sectio
   return -ENOENT;
 }
 
-int md_config_t::set_val_impl(const std::string &val, config_option const *opt,
+int md_config_t::set_val_impl(const std::string &raw_val, const Option &opt,
                               std::string *error_message)
 {
   assert(lock.is_locked());
-  std::string value(val);
-  if (opt->validator) {
-    int r = opt->validator(&value, error_message);
-    if (r < 0) {
-      return r;
-    }
+
+  std::string val = raw_val;
+
+  int r = opt.pre_validate(&val, error_message);
+  if (r != 0) {
+    return r;
   }
 
-  int ret = set_val_raw(value.c_str(), opt);
-  if (ret)
-    return ret;
-  changed.insert(opt->name);
+  Option::value_t new_value;
+  if (opt.type == Option::TYPE_INT) {
+    int64_t f = strict_si_cast<int64_t>(val.c_str(), error_message);
+    if (!error_message->empty()) {
+      return -EINVAL;
+    }
+    new_value = f;
+  } else if (opt.type == Option::TYPE_UINT) {
+    uint64_t f = strict_si_cast<uint64_t>(val.c_str(), error_message);
+    if (!error_message->empty()) {
+      return -EINVAL;
+    }
+    new_value = f;
+  } else if (opt.type == Option::TYPE_STR) {
+    new_value = val;
+  } else if (opt.type == Option::TYPE_FLOAT) {
+    double f = strict_strtod(val.c_str(), error_message);
+    if (!error_message->empty()) {
+      return -EINVAL;
+    } else {
+      new_value = f;
+    }
+  } else if (opt.type == Option::TYPE_BOOL) {
+    if (strcasecmp(val.c_str(), "false") == 0) {
+      new_value = false;
+    } else if (strcasecmp(val.c_str(), "true") == 0) {
+      new_value = true;
+    } else {
+      int b = strict_strtol(val.c_str(), 10, error_message);
+      if (!error_message->empty()) {
+	return -EINVAL;
+      }
+      new_value = !!b;
+    }
+  } else if (opt.type == Option::TYPE_ADDR) {
+    entity_addr_t addr;
+    if (!addr.parse(val.c_str())){
+      return -EINVAL;
+    }
+    new_value = addr;
+  } else if (opt.type == Option::TYPE_UUID) {
+    uuid_d uuid;
+    if (!uuid.parse(val.c_str())) {
+      return -EINVAL;
+    }
+    new_value = uuid;
+  } else {
+    ceph_abort();
+  }
+
+  r = opt.validate(new_value, error_message);
+  if (r != 0) {
+    return r;
+  }
+
+
+  // Apply the value to its entry in the `values` map
+  values[opt.name] = new_value;
+
+  // Apply the value to its legacy field, if it has one
+  auto legacy_ptr_iter = legacy_values.find(std::string(opt.name));
+  if (legacy_ptr_iter != legacy_values.end()) {
+    update_legacy_val(opt, legacy_ptr_iter->second);
+  }
+
+  changed.insert(opt.name);
   return 0;
 }
 
-template<typename T> struct strtox_helper;
-
-template<> struct strtox_helper<float> {
-  static inline void apply(const char *val, float &x, std::string &err) {
-    x = strict_strtof(val, &err);
-  }
-};
-
-template<> struct strtox_helper<double> {
-  static inline void apply(const char *val, double &x, std::string &err) {
-    x = strict_strtod(val, &err);
-  }
-};
-
-template<typename T> static inline int strict_strtox(const char *val, T &x) {
-  std::string err;
-  strtox_helper<T>::apply(val, x, err);
-  return err.empty() ? 0 : -EINVAL;
-}
-
-class set_value_visitor : public boost::static_visitor<int> {
-  md_config_t const *conf;
-  const char *val;
-public:
-  explicit set_value_visitor(md_config_t const *conf_, const char *val_) :
-    conf(conf_), val(val_) { }
-
-  int operator()(const std::string md_config_t::* member_ptr) {
-    auto *ptr = const_cast<std::string *>(&(conf->*member_ptr));
-    *ptr = val ? val : "";
-    return 0;
-  }
-
-  int operator()(const bool md_config_t::* member_ptr) {
-    bool *ptr = const_cast<bool *>(&(conf->*member_ptr));
-    if (strcasecmp(val, "false") == 0) {
-      *ptr = false;
-    } else if (strcasecmp(val, "true") == 0) {
-      *ptr = true;
-    } else {
-      std::string err;
-      int b = strict_strtol(val, 10, &err);
-      if (!err.empty()) {
-	return -EINVAL;
-      }
-      *ptr = !!b;
-    }
-    return 0;
-  }
-    
-  // type has parse() member function
-  template<typename T,
-    typename boost::enable_if<boost::is_member_function_pointer<decltype(&T::parse)>, int>::type = 0>
-      int operator()(const T md_config_t::* member_ptr) {
-	T *obj = const_cast<T *>(&(conf->*member_ptr));
-	if (!obj->parse(val)) {
-	  return -EINVAL;
-	}
-	return 0;
-      }
-
-  // float, double
-  template<typename T,
-    typename boost::enable_if<boost::is_floating_point<T>, int>::type = 0>
-      int operator()(const T md_config_t::* member_ptr) {
-	T* ptr = const_cast<T *>(&(conf->*member_ptr));
-	return strict_strtox(val, *ptr);
-      }
-
-  // integers
-  template<typename T,
-    typename boost::enable_if_c<boost::is_integral<T>::value &&
-      !boost::is_same<T, bool>::value, int>::type = 0>
-      int operator()(const T md_config_t::* member_ptr) {
-	std::string err;
-	T f = strict_si_cast<T>(val, &err);
-	if (!err.empty()) {
-	  return -EINVAL;
-	}
-	T *ptr = const_cast<T *>(&(conf->*member_ptr));
-	*ptr = f;
-	return 0;
-  }
-};
-
-int md_config_t::set_val_raw(const char *val, config_option const *opt)
+/**
+ * Handles assigning from a variant-of-types to a variant-of-pointers-to-types
+ */
+class assign_visitor : public boost::static_visitor<>
 {
-  assert(lock.is_locked());
-  set_value_visitor svv(this, val);
-  return boost::apply_visitor(svv, opt->md_member_ptr);
+  md_config_t *conf;
+  Option::value_t val;
+  public:
+
+  assign_visitor(md_config_t *conf_, Option::value_t val_)
+    : conf(conf_), val(val_)
+  {}
+
+  template <typename T>
+  void operator()( T md_config_t::* ptr) const
+  {
+    T *member = const_cast<T *>(&(conf->*(boost::get<const T md_config_t::*>(ptr))));
+
+    *member = boost::get<T>(val);
+  }
+};
+
+void md_config_t::update_legacy_val(const Option &opt,
+                                    md_config_t::member_ptr_t member_ptr)
+{
+  if (boost::get<boost::blank>(&values.at(opt.name))) {
+    // This shouldn't happen, but if it does then just don't even
+    // try to assign to the legacy field.
+    return;
+  }
+
+  boost::apply_visitor(assign_visitor(this, values.at(opt.name)), member_ptr);
 }
+
 
 static const char *CONF_METAVARIABLES[] = {
   "data_dir", // put this first: it may contain some of the others
@@ -1154,27 +1142,29 @@ void md_config_t::expand_all_meta()
 {
   // Expand all metavariables
   ostringstream oss;
-  for (auto& opt: *config_options) {
-    std::string *str;
-    opt.conf_ptr(str, this);
-    if (str) {
-      list<config_option const *> stack;
+  for (const auto &i : schema) {
+    const Option &opt = i.second;
+
+    if (opt.type == Option::TYPE_STR) {
+      list<const Option*> stack;
+      std::string *str = boost::get<std::string>(&(values.at(opt.name)));
+      assert(str != nullptr);  // Non-string values should never get in
       expand_meta(*str, &opt, stack, &oss);
     }
   }
   cerr << oss.str();
 }
 
-bool md_config_t::expand_meta(std::string &origval,
+bool md_config_t::expand_meta(std::string &val,
 			      std::ostream *oss) const
 {
-  list<config_option const *> stack;
-  return expand_meta(origval, NULL, stack, oss);
+  list<const Option*> stack;
+  return expand_meta(val, NULL, stack, oss);
 }
 
 bool md_config_t::expand_meta(std::string &origval,
-			      config_option const *opt,
-			      std::list<config_option const *> stack,
+			      const Option *opt,
+			      std::list<const Option *> stack,
 			      std::ostream *oss) const
 {
   assert(lock.is_locked());
@@ -1186,25 +1176,22 @@ bool md_config_t::expand_meta(std::string &origval,
   // ignore an expansion loop and create a human readable
   // message about it
   if (opt) {
-    for (list<config_option const *>::iterator i = stack.begin();
-	 i != stack.end();
-	 ++i) {
-      if (strcmp(opt->name, (*i)->name) == 0) {
+    for (const auto stack_ptr : stack) {
+      if (opt->name == stack_ptr->name) {
 	*oss << "variable expansion loop at "
 	     << opt->name << "=" << origval << std::endl;
 	*oss << "expansion stack: " << std::endl;
-	for (list<config_option const *>::iterator j = stack.begin();
-	     j != stack.end();
-	     ++j) {
-	  *oss << (*j)->name << "=" << *((*j)->conf_ptr<std::string>(this)) << std::endl;
+	for (const auto j : stack) {
+          std::string val;
+          _get_val(j->name, &val);
+	  *oss << j->name << "=" << val << std::endl;
 	}
 	return false;
       }
     }
-  }
 
-  if (opt)
     stack.push_front(opt);
+  }
 
   bool found_meta = false;
   string out;
@@ -1285,22 +1272,25 @@ bool md_config_t::expand_meta(std::string &origval,
 
       if (!expanded) {
 	// config option?
-        for (auto& opt: *config_options) {
-	  if (var == opt.name) {
-	    string *origval;
-	    opt.conf_ptr(origval, const_cast<md_config_t *>(this));
-	    if (origval) {
-	      expand_meta(*origval, &opt, stack, oss);
-	      out += *origval;
-	    } else {
-	      char *vv = NULL;
-	      _get_val(opt.name, &vv, -1);
-	      out += vv;
-	      free(vv);
-	    }
-	    expanded = true;
-	    break;
-	  }
+        const auto other_opt_iter = schema.find(var);
+        if (other_opt_iter != schema.end()) {
+          const Option &other_opt = other_opt_iter->second;
+          if (other_opt.type == Option::TYPE_STR) {
+            // The referenced option is a string, it may need substitution
+            // before inserting.
+            Option::value_t *other_val_ptr = const_cast<Option::value_t*>(&(values.at(other_opt.name)));
+            std::string *other_opt_val = boost::get<std::string>(other_val_ptr);
+            expand_meta(*other_opt_val, &other_opt, stack, oss);
+            out += *other_opt_val;
+          } else {
+            // The referenced option is not a string: retrieve and insert
+            // its stringized form.
+            char *vv = NULL;
+            _get_val(other_opt.name, &vv, -1);
+            out += vv;
+            free(vv);
+          }
+          expanded = true;
 	}
       }
     }
@@ -1341,7 +1331,8 @@ void md_config_t::diff_helper(
 
   char local_buf[4096];
   char other_buf[4096];
-  for (auto& opt : *config_options) {
+  for (const auto &i : schema) {
+    const Option &opt = i.second;
     if (!setting.empty()) {
       if (setting != opt.name) {
         continue;
@@ -1378,18 +1369,3 @@ void md_config_t::complain_about_parse_errors(CephContext *cct)
   ::complain_about_parse_errors(cct, &parse_errors);
 }
 
-void md_config_t::validate_default_settings() {
-  Mutex::Locker l(lock);
-  for (auto &opt : *config_options) {
-    // normalize config defaults using their validator
-    if (opt.validator) {
-      std::string value;
-      int r = _get_val(opt.name, &value);
-      assert(r == 0);
-
-      std::string error_message;
-      r = set_val_impl(value.c_str(), &opt, &error_message);
-      assert(r == 0);
-    }
-  }
-}

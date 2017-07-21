@@ -5034,12 +5034,12 @@ static void usage_log_hash(CephContext *cct, const string& name, string& hash, u
   uint32_t val = index;
 
   if (!name.empty()) {
-    int max_user_shards = max(cct->_conf->rgw_usage_max_user_shards, 1);
+    int max_user_shards = cct->_conf->rgw_usage_max_user_shards;
     val %= max_user_shards;
     val += ceph_str_hash_linux(name.c_str(), name.size());
   }
   char buf[17];
-  int max_shards = max(cct->_conf->rgw_usage_max_shards, 1);
+  int max_shards = cct->_conf->rgw_usage_max_shards;
   snprintf(buf, sizeof(buf), RGW_USAGE_OBJ_PREFIX "%u", (unsigned)(val % max_shards));
   hash = buf;
 }
@@ -5540,7 +5540,8 @@ int RGWRados::Bucket::update_bucket_id(const string& new_bucket_id)
  * common_prefixes: if delim is filled in, any matching prefixes are placed here.
  * is_truncated: if number of objects in the bucket is bigger than max, then truncated.
  */
-int RGWRados::Bucket::List::list_objects(int max, vector<rgw_bucket_dir_entry> *result,
+int RGWRados::Bucket::List::list_objects(int64_t max,
+                                         vector<rgw_bucket_dir_entry> *result,
                                          map<string, bool> *common_prefixes,
                                          bool *is_truncated)
 {
