@@ -51,6 +51,7 @@
                     <th>Size</th>
                     <th>Objects</th>
                     <th>Object size</th>
+                    <th>Features</th>
                     <th>Parent</th>
                 </tr>
                 </thead>
@@ -60,6 +61,7 @@
                     <td>{image.size | dimless_binary}</td>
                     <td>{image.num_objs | dimless}</td>
                     <td>{image.obj_size | dimless_binary}</td>
+                    <td>{image.features_name}</td>
                     <td>{image.parent}</td>
                 </tr>
                 </tbody>
