@@ -15,15 +15,22 @@
 #include <unistd.h>
 
 #include "include/compat.h"
-#include "global/signal_handler.h"
-
 #include "include/types.h"
 #include "include/str_list.h"
-#include "common/entity_name.h"
+
 #include "common/Clock.h"
-#include "common/signal.h"
+#include "common/HeartbeatMap.h"
+#include "common/Timer.h"
+#include "common/backport14.h"
 #include "common/ceph_argparse.h"
+#include "common/config.h"
+#include "common/entity_name.h"
 #include "common/errno.h"
+#include "common/perf_counters.h"
+#include "common/signal.h"
+#include "common/version.h"
+
+#include "global/signal_handler.h"
 
 #include "msg/Messenger.h"
 #include "mon/MonClient.h"
@@ -39,12 +46,6 @@
 #include "SnapServer.h"
 #include "SnapClient.h"
 
-#include "common/HeartbeatMap.h"
-
-#include "common/perf_counters.h"
-
-#include "common/Timer.h"
-
 #include "events/ESession.h"
 #include "events/ESubtreeMap.h"
 
@@ -59,8 +60,6 @@
 #include "auth/AuthAuthorizeHandler.h"
 #include "auth/RotatingKeyRing.h"
 #include "auth/KeyRing.h"
-
-#include "common/config.h"
 
 #include "perfglue/cpu_profiler.h"
 #include "perfglue/heap_profiler.h"
@@ -674,6 +673,7 @@ COMMAND("damage ls",
 	"List detected metadata damage", "mds", "r", "cli,rest")
 COMMAND("damage rm name=damage_id,type=CephInt",
 	"Remove a damage table entry", "mds", "rw", "cli,rest")
+COMMAND("version", "report version of MDS", "mds", "r", "cli,rest")
 COMMAND("heap " \
 	"name=heapcmd,type=CephChoices,strings=dump|start_profiler|stop_profiler|release|stats", \
 	"show heap usage info (available only if compiled with tcmalloc)", \
@@ -727,27 +727,41 @@ int MDSDaemon::_handle_command(
   std::stringstream ds;
   std::stringstream ss;
   std::string prefix;
+  std::string format;
+  std::unique_ptr<Formatter> f(Formatter::create(format));
   cmd_getval(cct, cmdmap, "prefix", prefix);
 
   int r = 0;
 
   if (prefix == "get_command_descriptions") {
     int cmdnum = 0;
-    JSONFormatter *f = new JSONFormatter();
+    std::unique_ptr<JSONFormatter> f(ceph::make_unique<JSONFormatter>());
     f->open_object_section("command_descriptions");
     for (MDSCommand *cp = mds_commands;
 	 cp < &mds_commands[ARRAY_SIZE(mds_commands)]; cp++) {
 
       ostringstream secname;
       secname << "cmd" << setfill('0') << std::setw(3) << cmdnum;
-      dump_cmddesc_to_json(f, secname.str(), cp->cmdstring, cp->helpstring,
+      dump_cmddesc_to_json(f.get(), secname.str(), cp->cmdstring, cp->helpstring,
 			   cp->module, cp->perm, cp->availability, 0);
       cmdnum++;
     }
     f->close_section();	// command_descriptions
 
     f->flush(ds);
-    delete f;
+    goto out; 
+  }
+
+  cmd_getval(cct, cmdmap, "format", format);
+  if (prefix == "version") {
+    if (f) {
+      f->open_object_section("version");
+      f->dump_string("version", pretty_version_to_str());
+      f->close_section();
+      f->flush(ds);
+    } else {
+      ds << pretty_version_to_str();
+    }
   } else if (prefix == "injectargs") {
     vector<string> argsvec;
     cmd_getval(cct, cmdmap, "injected_args", argsvec);
@@ -771,8 +785,7 @@ int MDSDaemon::_handle_command(
     // We will send response before executing
     ss << "Exiting...";
     *run_later = new SuicideLater(this);
-  }
-  else if (prefix == "respawn") {
+  } else if (prefix == "respawn") {
     // We will send response before executing
     ss << "Respawning...";
     *run_later = new RespawnLater(this);
