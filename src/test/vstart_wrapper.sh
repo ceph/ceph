@@ -22,6 +22,7 @@ export CEPH_VSTART_WRAPPER=1
 export CEPH_DIR="${TMPDIR:-$PWD}/td/t-$CEPH_PORT"
 export CEPH_DEV_DIR="$CEPH_DIR/dev"
 export CEPH_OUT_DIR="$CEPH_DIR/out"
+export CEPH_ASOK_DIR="$CEPH_DIR/out"
 
 export MGR_PYTHON_PATH=$CEPH_ROOT/src/pybind/mgr
 

@@ -94,6 +94,22 @@ fi
 #
 
 
+function get_asok_dir() {
+    if [ -n "$CEPH_ASOK_DIR" ]; then
+        echo "$CEPH_ASOK_DIR"
+    else
+        echo ${TMPDIR:-/tmp}/ceph-asok.$$
+    fi
+}
+
+function get_asok_path() {
+    local name=$1
+    if [ -n "$name" ]; then
+        echo $(get_asok_dir)/ceph-$name.asok
+    else
+        echo $(get_asok_dir)/\$cluster-\$name.asok
+    fi
+}
 ##
 # Cleanup any leftovers found in **dir** via **teardown**
 # and reset **dir** as an empty environment.
@@ -105,6 +121,7 @@ function setup() {
     local dir=$1
     teardown $dir || return 1
     mkdir -p $dir
+    mkdir -p $(get_asok_dir)
 }
 
 function test_setup() {
@@ -134,6 +151,7 @@ function teardown() {
         __teardown_btrfs $dir
     fi
     rm -fr $dir
+    rm -rf $(get_asok_dir)
 }
 
 function __teardown_btrfs() {
@@ -391,7 +409,7 @@ function run_mon_no_pool() {
         --chdir= \
         --mon-data=$data \
         --log-file=$dir/\$name.log \
-        --admin-socket=$dir/\$cluster-\$name.asok \
+        --admin-socket=$(get_asok_path) \
         --mon-cluster-log-file=$dir/log \
         --run-dir=$dir \
         --pid-file=$dir/\$name.pid \
@@ -436,7 +454,7 @@ function test_run_mon() {
     run_mon $dir a || return 1
     # rbd has been deleted / created, hence it does not have pool id 0
     ! ceph osd dump | grep "pool 1 'rbd'" || return 1
-    local size=$(CEPH_ARGS='' ceph --format=json daemon $dir/ceph-mon.a.asok \
+    local size=$(CEPH_ARGS='' ceph --format=json daemon $(get_asok_path mon.a) \
         config get osd_pool_default_size)
     test "$size" = '{"osd_pool_default_size":"3"}' || return 1
 
@@ -446,14 +464,14 @@ function test_run_mon() {
     kill_daemons $dir || return 1
 
     run_mon $dir a --osd_pool_default_size=1 || return 1
-    local size=$(CEPH_ARGS='' ceph --format=json daemon $dir/ceph-mon.a.asok \
+    local size=$(CEPH_ARGS='' ceph --format=json daemon $(get_asok_path mon.a) \
         config get osd_pool_default_size)
     test "$size" = '{"osd_pool_default_size":"1"}' || return 1
     kill_daemons $dir || return 1
 
     CEPH_ARGS="$CEPH_ARGS --osd_pool_default_size=2" \
         run_mon $dir a || return 1
-    local size=$(CEPH_ARGS='' ceph --format=json daemon $dir/ceph-mon.a.asok \
+    local size=$(CEPH_ARGS='' ceph --format=json daemon $(get_asok_path mon.a) \
         config get osd_pool_default_size)
     test "$size" = '{"osd_pool_default_size":"2"}' || return 1
     kill_daemons $dir || return 1
@@ -481,7 +499,7 @@ function run_mgr() {
         --chdir= \
         --mgr-data=$data \
         --log-file=$dir/\$name.log \
-        --admin-socket=$dir/\$cluster-\$name.asok \
+        --admin-socket=$(get_asok_path) \
         --run-dir=$dir \
         --pid-file=$dir/\$name.pid \
         "$@" || return 1
@@ -567,17 +585,17 @@ function test_run_osd() {
     run_mgr $dir x || return 1
 
     run_osd $dir 0 || return 1
-    local backfills=$(CEPH_ARGS='' ceph --format=json daemon $dir//ceph-osd.0.asok \
+    local backfills=$(CEPH_ARGS='' ceph --format=json daemon $(get_asok_path osd.0) \
         config get osd_max_backfills)
     echo "$backfills" | grep --quiet 'osd_max_backfills' || return 1
 
     run_osd $dir 1 --osd-max-backfills 20 || return 1
-    local backfills=$(CEPH_ARGS='' ceph --format=json daemon $dir//ceph-osd.1.asok \
+    local backfills=$(CEPH_ARGS='' ceph --format=json daemon $(get_asok_path osd.1) \
         config get osd_max_backfills)
     test "$backfills" = '{"osd_max_backfills":"20"}' || return 1
 
     CEPH_ARGS="$CEPH_ARGS --osd-max-backfills 30" run_osd $dir 2 || return 1
-    local backfills=$(CEPH_ARGS='' ceph --format=json daemon $dir//ceph-osd.2.asok \
+    local backfills=$(CEPH_ARGS='' ceph --format=json daemon $(get_asok_path osd.2) \
         config get osd_max_backfills)
     test "$backfills" = '{"osd_max_backfills":"30"}' || return 1
 
@@ -680,6 +698,7 @@ function activate_osd() {
     ceph_args+=" --plugin-dir=$CEPH_LIB"
     ceph_args+=" --osd-class-dir=$CEPH_LIB"
     ceph_args+=" --run-dir=$dir"
+    ceph_args+=" --admin-socket=$(get_asok_path)"
     ceph_args+=" --debug-osd=20"
     ceph_args+=" --log-file=$dir/\$name.log"
     ceph_args+=" --pid-file=$dir/\$name.pid"
@@ -708,14 +727,14 @@ function test_activate_osd() {
     run_mgr $dir x || return 1
 
     run_osd $dir 0 || return 1
-    local backfills=$(CEPH_ARGS='' ceph --format=json daemon $dir//ceph-osd.0.asok \
+    local backfills=$(CEPH_ARGS='' ceph --format=json daemon $(get_asok_path osd.0) \
         config get osd_max_backfills)
     echo "$backfills" | grep --quiet 'osd_max_backfills' || return 1
 
     kill_daemons $dir TERM osd || return 1
 
     activate_osd $dir 0 --osd-max-backfills 20 || return 1
-    local backfills=$(CEPH_ARGS='' ceph --format=json daemon $dir//ceph-osd.0.asok \
+    local backfills=$(CEPH_ARGS='' ceph --format=json daemon $(get_asok_path osd.0) \
         config get osd_max_backfills)
     test "$backfills" = '{"osd_max_backfills":"20"}' || return 1
 
@@ -880,7 +899,7 @@ function get_config() {
     local config=$3
 
     CEPH_ARGS='' \
-        ceph --format json daemon $dir/ceph-$daemon.$id.asok \
+        ceph --format json daemon $(get_asok_path $daemon.$id) \
         config get $config 2> /dev/null | \
         jq -r ".$config"
 }
@@ -916,7 +935,7 @@ function set_config() {
     local config=$3
     local value=$4
 
-    test $(env CEPH_ARGS='' ceph --format json daemon $dir/ceph-$daemon.$id.asok \
+    test $(env CEPH_ARGS='' ceph --format json daemon $(get_asok_path $daemon.$id) \
                config set $config $value 2> /dev/null | \
            jq 'has("success")') == true
 }

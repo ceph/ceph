@@ -327,6 +327,8 @@ if [ $kill_all -eq 1 ]; then
 fi
 
 if [ "$overwrite_conf" -eq 0 ]; then
+    CEPH_ASOK_DIR=`dirname $($CEPH_BIN/ceph-conf --show-config-value admin_socket)`
+    mkdir -p $CEPH_ASOK_DIR
     MON=`$CEPH_BIN/ceph-conf -c $conf_fn --name $VSTART_SEC num_mon 2>/dev/null` && \
         CEPH_NUM_MON="$MON"
     OSD=`$CEPH_BIN/ceph-conf -c $conf_fn --name $VSTART_SEC num_osd 2>/dev/null` && \
@@ -340,8 +342,14 @@ if [ "$overwrite_conf" -eq 0 ]; then
 else
     if [ "$new" -ne 0 ]; then
         # only delete if -n
+        asok_dir=`dirname $($CEPH_BIN/ceph-conf --show-config-value admin_socket)`
+        [ -d $asok_dir ] && rm -f $asok_dir/* && rmdir $asok_dir
+        if [ -z "$CEPH_ASOK_DIR" ]; then
+            CEPH_ASOK_DIR=`mktemp -u -d "${TMPDIR:-/tmp}/ceph-asok.XXXXXX"`
+        fi
         [ -e "$conf_fn" ] && rm -- "$conf_fn"
     else
+        CEPH_ASOK_DIR=`dirname $($CEPH_BIN/ceph-conf --show-config-value admin_socket)`
         # -k is implied... (doesn't make sense otherwise)
         overwrite_conf=0
     fi
@@ -386,7 +394,7 @@ wconf() {
 prepare_conf() {
     local DAEMONOPTS="
         log file = $CEPH_OUT_DIR/\$name.log
-        admin socket = $CEPH_OUT_DIR/\$name.asok
+        admin socket = $CEPH_ASOK_DIR/\$name.asok
         chdir = \"\"
         pid file = $CEPH_OUT_DIR/\$name.pid
         heartbeat file = $CEPH_OUT_DIR/\$name.heartbeat
@@ -453,7 +461,7 @@ EOF
 [client]
         keyring = $keyring_fn
         log file = $CEPH_OUT_DIR/\$name.\$pid.log
-        admin socket = $CEPH_OUT_DIR/\$name.\$pid.asok
+        admin socket = $CEPH_ASOK_DIR/\$name.\$pid.asok
 
 [client.rgw]
 
@@ -808,6 +816,7 @@ test -d $CEPH_DEV_DIR/osd0/. && test -e $CEPH_DEV_DIR/sudo && SUDO="sudo"
 
 prun $SUDO rm -f core*
 
+test -d $CEPH_ASOK_DIR || mkdir $CEPH_ASOK_DIR
 test -d $CEPH_OUT_DIR || mkdir $CEPH_OUT_DIR
 test -d $CEPH_DEV_DIR || mkdir $CEPH_DEV_DIR
 $SUDO rm -rf $CEPH_OUT_DIR/*

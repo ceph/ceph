@@ -114,7 +114,7 @@ function TEST_crush_rule_create_erasure() {
     ceph osd erasure-code-profile rm default || return 1
     ! ceph osd erasure-code-profile ls | grep default || return 1
     ceph osd crush rule create-erasure $ruleset || return 1
-    CEPH_ARGS='' ceph --admin-daemon $dir/ceph-mon.a.asok log flush || return 1
+    CEPH_ARGS='' ceph --admin-daemon $(get_asok_path mon.a) log flush || return 1
     grep 'profile set default' $dir/mon.a.log || return 1
     ceph osd erasure-code-profile ls | grep default || return 1
     ceph osd crush rule rm $ruleset || return 1
