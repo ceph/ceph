@@ -1401,6 +1401,10 @@ OPTION(rbd_cache_max_dirty_age, OPT_FLOAT, 1.0)      // seconds in cache before 
 OPTION(rbd_cache_max_dirty_object, OPT_INT, 0)       // dirty limit for objects - set to 0 for auto calculate from rbd_cache_size
 OPTION(rbd_cache_block_writes_upfront, OPT_BOOL, false) // whether to block writes to the cache before the aio_write call completes (true), or block before the aio completion is called (false)
 OPTION(rbd_concurrent_management_ops, OPT_INT, 10) // how many operations can be in flight for a management operation like deleting or resizing an image
+OPTION(rbd_max_write_iops, OPT_U64, 0) // the max write iops an image can reach, 0 means unlimited.
+                                      //  It can be adjusted by "rbd image-meta set conf_rbd_max_write_iops"
+OPTION(rbd_max_read_iops, OPT_U64, 0) // the max read iops an image can reach, 0 means unlimited.
+                                      //  It can be adjusted by "rbd image-meta set conf_rbd_max_read_iops"
 OPTION(rbd_balance_snap_reads, OPT_BOOL, false)
 OPTION(rbd_localize_snap_reads, OPT_BOOL, false)
 OPTION(rbd_balance_parent_reads, OPT_BOOL, false)

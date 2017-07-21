@@ -197,7 +197,9 @@ struct C_InvalidateCache : public Context {
       state(new ImageState<>(this)),
       operations(new Operations<>(*this)),
       exclusive_lock(nullptr), object_map(nullptr),
-      io_work_queue(nullptr), op_work_queue(nullptr),
+      io_work_queue(nullptr),
+      m_timer(nullptr), m_timer_lock(nullptr),
+      op_work_queue(nullptr),
       asok_hook(nullptr),
       trace_endpoint("librbd")
   {
@@ -210,6 +212,7 @@ struct C_InvalidateCache : public Context {
 
     ThreadPool *thread_pool;
     get_thread_pool_instance(cct, &thread_pool, &op_work_queue);
+    get_timer_instance(cct, &m_timer, &m_timer_lock);
     io_work_queue = new io::ImageRequestWQ<>(
       this, "librbd::io_work_queue", cct->_conf->rbd_op_thread_timeout,
       thread_pool);
@@ -994,7 +997,9 @@ struct C_InvalidateCache : public Context {
         "rbd_journal_max_concurrent_object_sets", false)(
         "rbd_mirroring_resync_after_disconnect", false)(
         "rbd_mirroring_replay_delay", false)(
-        "rbd_skip_partial_discard", false);
+        "rbd_skip_partial_discard", false)(
+        "rbd_max_write_iops", false)(
+        "rbd_max_read_iops", false);
 
     md_config_t local_config_t;
     std::map<std::string, bufferlist> res;
@@ -1054,6 +1059,8 @@ struct C_InvalidateCache : public Context {
     ASSIGN_OPTION(mirroring_resync_after_disconnect);
     ASSIGN_OPTION(mirroring_replay_delay);
     ASSIGN_OPTION(skip_partial_discard);
+    ASSIGN_OPTION(max_write_iops);
+    ASSIGN_OPTION(max_read_iops);
   }
 
   ExclusiveLock<ImageCtx> *ImageCtx::create_exclusive_lock() {

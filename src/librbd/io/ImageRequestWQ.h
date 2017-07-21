@@ -22,6 +22,31 @@ class AioCompletion;
 template <typename> class ImageRequest;
 class ReadResult;
 
+class ImageQosStatus {
+public:
+  ImageQosStatus() : throttling_active(false) {}
+
+  utime_t get_prev_limit() const {
+    return prev_limit;
+  }
+
+  void set_prev_limit(utime_t limit) {
+    prev_limit = limit;
+  }
+
+  void set_throttling_flag(bool flag) {
+    throttling_active = flag;
+  }
+
+  bool get_throttling_flag() {
+    return throttling_active;
+  }
+
+private:
+  utime_t prev_limit;
+  bool throttling_active;
+};
+
 template <typename ImageCtxT = librbd::ImageCtx>
 class ImageRequestWQ
   : public ThreadPool::PointerWQ<ImageRequest<ImageCtxT> > {
@@ -61,6 +86,7 @@ public:
   void unblock_writes();
 
   void set_require_lock(Direction direction, bool enabled);
+  void update_throttling(int r, ImageQosStatus* qos_status);
 
 protected:
   void *_void_dequeue() override;
@@ -72,6 +98,7 @@ private:
   struct C_AcquireLock;
   struct C_BlockedWrites;
   struct C_RefreshFinish;
+  struct C_ThrottlingTask;
 
   ImageCtxT &m_image_ctx;
   mutable RWLock m_lock;
@@ -89,6 +116,8 @@ private:
   Context *m_on_shutdown = nullptr;
 
   bool is_lock_required(bool write_op) const;
+
+  ImageQosStatus write_qos_status, read_qos_status;
 
   inline bool require_lock_on_read() const {
     RWLock::RLocker locker(m_lock);
@@ -111,6 +140,10 @@ private:
   void handle_acquire_lock(int r, ImageRequest<ImageCtxT> *req);
   void handle_refreshed(int r, ImageRequest<ImageCtxT> *req);
   void handle_blocked_writes(int r);
+  void schedule_throttling_task(ImageQosStatus* qos_status, utime_t ts);
+  bool reserve_throttle_iops(bool is_write);
+  bool check_throttle_iops(ImageQosStatus* qos_status, uint64_t max_iops);
+  
 };
 
 } // namespace io
