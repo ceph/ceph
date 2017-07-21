@@ -2,7 +2,7 @@
 # -*- mode:shell-script; tab-width:8; sh-basic-offset:2; indent-tabs-mode:t -*-
 # vim: ts=8 sw=8 ft=bash smarttab
 
-source $(dirname $0)/../ceph-helpers.sh
+source $(dirname $0)/../../standalone/ceph-helpers.sh
 
 set -e
 set -o functrace
