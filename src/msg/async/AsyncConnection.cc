@@ -978,8 +978,8 @@ ssize_t AsyncConnection::_process_connection()
                                 << " - presumably this is the same node!" << dendl;
           } else {
             ldout(async_msgr->cct, 10) << __func__ << " connect claims to be "
-                                << paddr << " not " << peer_addr
-                                << " (peer is possibly using public_bind_addr?) " << dendl;
+				       << paddr << " not " << peer_addr << dendl;
+	    goto fail;
           }
         }
 
