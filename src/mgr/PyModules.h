@@ -77,6 +77,10 @@ public:
     const std::string &svc_name,
     const std::string &svc_id,
     const std::string &path);
+  PyObject *get_perf_schema_python(
+     const std::string &handle,
+     const std::string svc_type,
+     const std::string &svc_id);
   PyObject *get_context();
 
   std::map<std::string, std::string> config_cache;

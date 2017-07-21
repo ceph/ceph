@@ -391,6 +391,12 @@ bool DaemonServer::handle_report(MMgrReport *m)
   assert(daemon != nullptr);
   auto &daemon_counters = daemon->perf_counters;
   daemon_counters.update(m);
+  // if there are any schema updates, notify the python modules
+  if (!m->declare_types.empty() || !m->undeclare_types.empty()) {
+    ostringstream oss;
+    oss << key.first << '.' << key.second;
+    py_modules.notify_all("perf_schema_update", oss.str());
+  }
 
   if (daemon->service_daemon) {
     utime_t now = ceph_clock_now();
