@@ -39,7 +39,9 @@ ceph osd crush rule rm foo  # idempotent
 ceph osd crush rule rm bar
 
 # can't delete in-use rules, tho:
+ceph osd pool create pinning_pool 1
 expect_false ceph osd crush rule rm replicated_rule
+ceph osd pool rm pinning_pool pinning_pool --yes-i-really-really-mean-it
 
 # build a simple map
 expect_false ceph osd crush add-bucket foo osd
