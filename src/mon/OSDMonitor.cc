@@ -6435,6 +6435,12 @@ int OSDMonitor::prepare_command_pool_application(const string &prefix,
       return -EPERM;
     }
 
+    if (!app_exists) {
+      ss << "application '" << app << "' is not enabled on pool '" << pool_name
+         << "'";
+      return 0; // idempotent
+    }
+
     p.application_metadata.erase(app);
     ss << "disable application '" << app << "' on pool '" << pool_name << "'";
 
