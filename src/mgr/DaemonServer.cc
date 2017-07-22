@@ -398,9 +398,11 @@ bool DaemonServer::handle_report(MMgrReport *m)
     // always contains metadata.
   }
   assert(daemon != nullptr);
-  Mutex::Locker l(daemon->lock);
   auto &daemon_counters = daemon->perf_counters;
-  daemon_counters.update(m);
+  {
+    Mutex::Locker l(daemon->lock);
+    daemon_counters.update(m);
+  }
   // if there are any schema updates, notify the python modules
   if (!m->declare_types.empty() || !m->undeclare_types.empty()) {
     ostringstream oss;
