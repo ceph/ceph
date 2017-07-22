@@ -21,21 +21,21 @@ COMMAND("pg dump_pools_json", "show pg pools info in json only",\
 
 COMMAND("pg ls-by-pool "		\
         "name=poolstr,type=CephString " \
-	"name=states,type=CephChoices,strings=active|clean|down|scrubbing|degraded|inconsistent|peering|repair|recovering|backfill_wait|incomplete|stale|remapped|deep_scrub|backfill|backfill_toofull|recovery_wait|undersized|activating|peered,n=N,req=false ", \
+	"name=states,type=CephString,n=N,req=false", \
 	"list pg with pool = [poolname]", "pg", "r", "cli,rest")
 COMMAND("pg ls-by-primary " \
         "name=osd,type=CephOsdName " \
         "name=pool,type=CephInt,req=false " \
-	"name=states,type=CephChoices,strings=active|clean|down|scrubbing|degraded|inconsistent|peering|repair|recovering|backfill_wait|incomplete|stale|remapped|deep_scrub|backfill|backfill_toofull|recovery_wait|undersized|activating|peered,n=N,req=false ", \
+	"name=states,type=CephString,n=N,req=false", \
 	"list pg with primary = [osd]", "pg", "r", "cli,rest")
 COMMAND("pg ls-by-osd " \
         "name=osd,type=CephOsdName " \
         "name=pool,type=CephInt,req=false " \
-	"name=states,type=CephChoices,strings=active|clean|down|scrubbing|degraded|inconsistent|peering|repair|recovering|backfill_wait|incomplete|stale|remapped|deep_scrub|backfill|backfill_toofull|recovery_wait|undersized|activating|peered,n=N,req=false ", \
+	"name=states,type=CephString,n=N,req=false", \
 	"list pg on osd [osd]", "pg", "r", "cli,rest")
 COMMAND("pg ls " \
         "name=pool,type=CephInt,req=false " \
-	"name=states,type=CephChoices,strings=active|clean|down|scrubbing|degraded|inconsistent|peering|repair|recovering|backfill_wait|incomplete|stale|remapped|deep_scrub|backfill|backfill_toofull|recovery_wait|undersized|activating|peered,n=N,req=false ", \
+	"name=states,type=CephString,n=N,req=false", \
 	"list pg with specific pool, osd, state", "pg", "r", "cli,rest")
 COMMAND("pg dump_stuck " \
 	"name=stuckops,type=CephChoices,strings=inactive|unclean|stale|undersized|degraded,n=N,req=false " \
@@ -82,7 +82,7 @@ COMMAND("osd test-reweight-by-utilization " \
 	"name=max_osds,type=CephInt,req=false "			\
 	"name=no_increasing,type=CephChoices,strings=--no-increasing,req=false",\
 	"dry run of reweight OSDs by utilization [overload-percentage-for-consideration, default 120]", \
-	"osd", "rw", "cli,rest")
+	"osd", "r", "cli,rest")
 COMMAND("osd reweight-by-pg " \
 	"name=oload,type=CephInt,req=false " \
 	"name=max_change,type=CephFloat,req=false "			\
@@ -96,7 +96,7 @@ COMMAND("osd test-reweight-by-pg " \
 	"name=max_osds,type=CephInt,req=false "			\
 	"name=pools,type=CephPoolname,n=N,req=false",			\
 	"dry run of reweight OSDs by PG distribution [overload-percentage-for-consideration, default 120]", \
-	"osd", "rw", "cli,rest")
+	"osd", "r", "cli,rest")
 
 COMMAND("osd scrub " \
 	"name=who,type=CephString", \
