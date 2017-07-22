@@ -98,8 +98,7 @@ int rgw_user_get_all_buckets_stats(RGWRados *store, const rgw_user& user_id, map
 {
   CephContext *cct = store->ctx();
   size_t max_entries = cct->_conf->rgw_list_buckets_max_chunk;
-  bool done;
-  bool is_truncated;
+  bool is_truncated = false;
   string marker;
   int ret;
 
@@ -124,8 +123,7 @@ int rgw_user_get_all_buckets_stats(RGWRados *store, const rgw_user& user_id, map
       }
       buckets_usage_map.emplace(bucket_ent.bucket.name, entry);
     }
-    done = (buckets.size() < max_entries);
-  } while (!done);
+  } while (is_truncated);
 
   return 0;
 }
